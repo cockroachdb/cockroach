@@ -23,11 +23,11 @@ func init() {
 					}
 					return &scop.SetTriggerForwardReferences{Deps: *protoutil.Clone(this).(*scpb.TriggerDeps)}
 				}),
-				emit(func(this *scpb.TriggerDeps) *scop.UpdateTableBackReferencesInRelations {
+				emit(func(this *scpb.TriggerDeps) *scop.UpdateTriggerBackReferencesInRelations {
 					if len(this.UsesRelations) == 0 {
 						return nil
 					}
-					return &scop.UpdateTableBackReferencesInRelations{
+					return &scop.UpdateTriggerBackReferencesInRelations{
 						TableID:            this.TableID,
 						TriggerID:          this.TriggerID,
 						RelationReferences: this.UsesRelations,
@@ -57,11 +57,11 @@ func init() {
 		toAbsent(
 			scpb.Status_PUBLIC,
 			to(scpb.Status_ABSENT,
-				emit(func(this *scpb.TriggerDeps) *scop.UpdateTableBackReferencesInRelations {
+				emit(func(this *scpb.TriggerDeps) *scop.UpdateTriggerBackReferencesInRelations {
 					if len(this.UsesRelations) == 0 {
 						return nil
 					}
-					return &scop.UpdateTableBackReferencesInRelations{
+					return &scop.UpdateTriggerBackReferencesInRelations{
 						TableID:            this.TableID,
 						TriggerID:          this.TriggerID,
 						RelationReferences: this.UsesRelations,

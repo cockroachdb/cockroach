@@ -152,7 +152,7 @@ type ImmediateMutationVisitor interface {
 	SetFunctionSecurity(context.Context, SetFunctionSecurity) error
 	UpdateFunctionTypeReferences(context.Context, UpdateFunctionTypeReferences) error
 	UpdateFunctionRelationReferences(context.Context, UpdateFunctionRelationReferences) error
-	UpdateTableBackReferencesInRelations(context.Context, UpdateTableBackReferencesInRelations) error
+	UpdateTriggerBackReferencesInRelations(context.Context, UpdateTriggerBackReferencesInRelations) error
 	SetObjectParentID(context.Context, SetObjectParentID) error
 	UpdateUserPrivileges(context.Context, UpdateUserPrivileges) error
 	UpdateOwner(context.Context, UpdateOwner) error
@@ -859,8 +859,8 @@ func (op UpdateFunctionRelationReferences) Visit(ctx context.Context, v Immediat
 }
 
 // Visit is part of the ImmediateMutationOp interface.
-func (op UpdateTableBackReferencesInRelations) Visit(ctx context.Context, v ImmediateMutationVisitor) error {
-	return v.UpdateTableBackReferencesInRelations(ctx, op)
+func (op UpdateTriggerBackReferencesInRelations) Visit(ctx context.Context, v ImmediateMutationVisitor) error {
+	return v.UpdateTriggerBackReferencesInRelations(ctx, op)
 }
 
 // Visit is part of the ImmediateMutationOp interface.

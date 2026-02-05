@@ -2835,7 +2835,8 @@ func PrimaryKeyIndexName(tableName string) string {
 }
 
 // UpdateColumnsDependedOnBy creates, updates or deletes a depended-on-by column
-// reference by ID.
+// reference by ID. This only operates on generic backrefs (TriggerID=0), not
+// trigger-specific backrefs which are managed separately.
 func (desc *Mutable) UpdateColumnsDependedOnBy(id descpb.ID, colIDs catalog.TableColSet) {
 	ref := descpb.TableDescriptor_Reference{
 		ID:        id,
@@ -2844,7 +2845,9 @@ func (desc *Mutable) UpdateColumnsDependedOnBy(id descpb.ID, colIDs catalog.Tabl
 	}
 	for i := range desc.DependedOnBy {
 		by := &desc.DependedOnBy[i]
-		if by.ID == id {
+		// Only match generic backrefs (TriggerID=0). Trigger-specific backrefs
+		// are managed by UpdateTriggerBackReferencesInRelations.
+		if by.ID == id && by.TriggerID == 0 {
 			if colIDs.Empty() {
 				desc.DependedOnBy = append(desc.DependedOnBy[:i], desc.DependedOnBy[i+1:]...)
 				return

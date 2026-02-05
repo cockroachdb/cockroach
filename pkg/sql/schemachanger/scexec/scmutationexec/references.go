@@ -541,10 +541,13 @@ func updateBackReferencesInSequences(
 		return err
 	}
 	var current, updated catalog.TableColSet
-	var hasExistingFwdRef bool
+	var hasExistingGenericBackRef bool
 	_ = seq.ForeachDependedOnBy(func(dep *descpb.TableDescriptor_Reference) error {
-		if dep.ID == tblID {
-			hasExistingFwdRef = true
+		// Only consider generic backrefs (TriggerID=0) as existing. Trigger-specific
+		// backrefs are managed separately and should not prevent policies/views from
+		// creating their own generic backrefs.
+		if dep.ID == tblID && dep.TriggerID == 0 {
+			hasExistingGenericBackRef = true
 			current = catalog.MakeTableColSet(dep.ColumnIDs...)
 			return iterutil.StopIteration()
 		}
@@ -555,7 +558,7 @@ func updateBackReferencesInSequences(
 		// current reference is sufficient. We can skip updating if the forward reference
 		// already points to the correct column (if specified) or, if no column is given,
 		// the table itself has an existing reference.
-		if current.Contains(colID) || (colID == 0 && hasExistingFwdRef) {
+		if current.Contains(colID) || (colID == 0 && hasExistingGenericBackRef) {
 			return nil
 		}
 		updated.UnionWith(current)
@@ -566,7 +569,7 @@ func updateBackReferencesInSequences(
 		// The sequence should no longer reference the table—either for the specified
 		// column (if provided) or for the entire table if no column is given. Check
 		// if an update is needed.
-		if (colID != 0 && !current.Contains(colID)) || (colID == 0 && !hasExistingFwdRef) {
+		if (colID != 0 && !current.Contains(colID)) || (colID == 0 && !hasExistingGenericBackRef) {
 			return nil
 		}
 		current.ForEach(func(id descpb.ColumnID) {
@@ -747,17 +750,15 @@ func updateBackReferencesInRelation(
 	return nil
 }
 
-func (i *immediateVisitor) UpdateTableBackReferencesInRelations(
-	ctx context.Context, op scop.UpdateTableBackReferencesInRelations,
+func (i *immediateVisitor) UpdateTriggerBackReferencesInRelations(
+	ctx context.Context, op scop.UpdateTriggerBackReferencesInRelations,
 ) error {
 	backRefTbl, err := i.checkOutTable(ctx, op.TableID)
 	if err != nil {
 		return err
 	}
-	// Collect all forward references from this table, excluding foreign keys.
-	// Foreign key dependencies are not tracked via DependedOnBy, so we skip them here.
-	// References are separated by source to allow trigger-specific backref management.
-	refsByTriggerID, refsByPolicyID, refsFromView := backRefTbl.GetAllReferencedRelationIDsExceptFKs()
+	// Get all trigger forward references from this table.
+	refsByTriggerID, _, _ := backRefTbl.GetAllReferencedRelationIDsExceptFKs()
 
 	for _, ref := range op.RelationReferences {
 		referenced, err := i.checkOutTable(ctx, ref.ID)
@@ -773,20 +774,11 @@ func (i *immediateVisitor) UpdateTableBackReferencesInRelations(
 			TriggerID: op.TriggerID,
 		}
 
-		// Check if this relation is still referenced by this specific trigger,
-		// any policy, or the view's direct dependencies.
+		// Check if this relation is still referenced by THIS trigger.
 		isInForwardRefs := false
-		if op.TriggerID != 0 {
-			// For trigger-based references, only check if THIS trigger still refs it.
-			if triggerRefs, ok := refsByTriggerID[op.TriggerID]; ok {
-				isInForwardRefs = triggerRefs.Contains(ref.ID)
-			}
+		if triggerRefs, ok := refsByTriggerID[op.TriggerID]; ok {
+			isInForwardRefs = triggerRefs.Contains(ref.ID)
 		}
-		// Also check policies and view dependencies.
-		for _, policyRefs := range refsByPolicyID {
-			isInForwardRefs = isInForwardRefs || policyRefs.Contains(ref.ID)
-		}
-		isInForwardRefs = isInForwardRefs || refsFromView.Contains(ref.ID)
 
 		removeBackRefs := !isInForwardRefs
 		newDependedOnBy := referenced.DependedOnBy[:0]
