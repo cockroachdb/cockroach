@@ -497,6 +497,13 @@ func TestRepeatableReadLogic_crdb_internal_catalog(
 	runLogicTest(t, "crdb_internal_catalog")
 }
 
+func TestRepeatableReadLogic_crdb_internal_decode_key(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "crdb_internal_decode_key")
+}
+
 func TestRepeatableReadLogic_crdb_internal_default_privileges(
 	t *testing.T,
 ) {
