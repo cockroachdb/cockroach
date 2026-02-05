@@ -9,6 +9,7 @@ import (
 	"bytes"
 	"context"
 	"strings"
+	"testing"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -19,8 +20,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/lexbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowenc/keyside"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/spanutils"
+	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
+	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
@@ -89,7 +93,116 @@ func encodeColumnName(columnName string) string {
 	return buf.String()
 }
 
+// extractRegionFromSpan extracts the value of the leading (region) column from
+// a span on a regional by row table.
+func extractRegionFromSpan(
+	ctx context.Context,
+	cfg *execinfra.ServerConfig,
+	span roachpb.Span,
+	tableDesc catalog.TableDescriptor,
+) (string, error) {
+	if !tableDesc.IsLocalityRegionalByRow() {
+		if !buildutil.CrdbTestBuild && !testing.Testing() { // For ease of testing, allow faked multi-region databases.
+			return "", errors.Newf("table is not REGIONAL BY ROW, cannot extract region from span")
+		}
+	}
+
+	priIndex := tableDesc.GetPrimaryIndex()
+
+	indexPrefix := cfg.Codec.IndexPrefix(uint32(tableDesc.GetID()), uint32(priIndex.GetID()))
+
+	if len(span.Key) <= len(indexPrefix) {
+		return "", errors.Newf("span does not contain region column data")
+	}
+
+	regionColID := priIndex.GetKeyColumnID(0)
+	regionCol, err := catalog.MustFindColumnByID(tableDesc, regionColID)
+	if err != nil {
+		return "", err
+	}
+
+	// Decode the region value from the span key.
+	remainingKey := span.Key[len(indexPrefix):]
+	var regionDatum tree.Datum
+	regionDatum, _, err = keyside.Decode(
+		nil, /* alloc */
+		regionCol.GetType(),
+		remainingKey,
+		encoding.Ascending,
+	)
+	if err != nil {
+		return "", errors.Wrap(err, "decoding region from span")
+	}
+
+	regionEnum, ok := regionDatum.(*tree.DEnum)
+	if !ok {
+		return "", errors.Newf("region column is not an enum type")
+	}
+
+	return regionEnum.LogicalRep, nil
+}
+
+// spanForRegion returns an equivalent span with the region column set to the specific region.
+func spanForRegion(
+	ctx context.Context,
+	cfg *execinfra.ServerConfig,
+	span roachpb.Span,
+	tableDesc catalog.TableDescriptor,
+	region string,
+) (roachpb.Span, error) {
+	priIndex := tableDesc.GetPrimaryIndex()
+
+	indexPrefix := cfg.Codec.IndexPrefix(uint32(tableDesc.GetID()), uint32(priIndex.GetID()))
+
+	regionColID := priIndex.GetKeyColumnID(0)
+	regionCol, err := catalog.MustFindColumnByID(tableDesc, regionColID)
+	if err != nil {
+		return roachpb.Span{}, err
+	}
+
+	regionDatum, err := tree.MakeDEnumFromLogicalRepresentation(regionCol.GetType(), region)
+	if err != nil {
+		return roachpb.Span{}, errors.Wrapf(err, "invalid region %q", region)
+	}
+
+	regionPrefixBytes, err := keyside.Encode(indexPrefix, &regionDatum, encoding.Ascending)
+	if err != nil {
+		return roachpb.Span{}, errors.Wrap(err, "encoding region")
+	}
+	regionPrefix := roachpb.Key(regionPrefixBytes)
+
+	startKeyAfterIndex := span.Key[len(indexPrefix):]
+	endKeyAfterIndex := span.EndKey[len(indexPrefix):]
+
+	// Decode and skip the region column from the original span
+	_, startSuffix, err := keyside.Decode(
+		nil, /* alloc */
+		regionCol.GetType(),
+		startKeyAfterIndex,
+		encoding.Ascending,
+	)
+	if err != nil {
+		return roachpb.Span{}, errors.Wrap(err, "decoding region from start key")
+	}
+
+	_, endSuffix, err := keyside.Decode(
+		nil, /* alloc */
+		regionCol.GetType(),
+		endKeyAfterIndex,
+		encoding.Ascending,
+	)
+	if err != nil {
+		return roachpb.Span{}, errors.Wrap(err, "decoding region from end key")
+	}
+
+	return roachpb.Span{
+		Key:    append(regionPrefix, startSuffix...),
+		EndKey: append(regionPrefix, endSuffix...),
+	}, nil
+}
+
 // getPredicateAndQueryArgs generates query bounds from the span to limit the query to the specified range.
+// When no rows are found in a span, an empty predicate is returned.
 func getPredicateAndQueryArgs(
 	ctx context.Context,
 	cfg *execinfra.ServerConfig,
