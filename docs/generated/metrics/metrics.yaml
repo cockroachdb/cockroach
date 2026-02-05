@@ -10351,6 +10351,346 @@ layers:
   categories:
   - name: OVERLOAD
     metrics:
+    - name: admission.elastic_cpu.nanos_exhausted_duration
+      exported_name: admission_elastic_cpu_nanos_exhausted_duration
+      description: Total duration when elastic CPU tokens (tokens measured in nanoseconds) were exhausted, as observed by the token granter (not waiters). This is reported in nanoseconds from 26.1 onwards, and was microseconds before that.
+      y_axis_label: Nanoseconds
+      type: COUNTER
+      unit: NANOSECONDS
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+      how_to_use: This metric indicates when elastic CPU tokens are exhausted. Extended periods of elastic CPU token exhaustion may indicate high CPU utilization affecting elastic workloads.
+      visibility: ESSENTIAL
+    - name: admission.granter.elastic_io_tokens_exhausted_duration.kv
+      exported_name: admission_granter_elastic_io_tokens_exhausted_duration_kv
+      description: Total duration when Elastic IO tokens were exhausted, as observed by the token granter (not waiters). This is reported in nanoseconds from 26.1 onwards, and was microseconds before that.
+      y_axis_label: Nanoseconds
+      type: COUNTER
+      unit: NANOSECONDS
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+      how_to_use: This metric indicates when elastic I/O tokens are exhausted. Extended periods of elastic token exhaustion may indicate I/O bandwidth saturation affecting elastic workloads.
+      visibility: ESSENTIAL
+    - name: admission.granter.io_tokens_exhausted_duration.kv
+      exported_name: admission_granter_io_tokens_exhausted_duration_kv
+      description: Total duration when IO tokens were exhausted, as observed by the token granter (not waiters). This is reported in nanoseconds from 26.1 onwards, and was microseconds before that.
+      y_axis_label: Nanoseconds
+      type: COUNTER
+      unit: NANOSECONDS
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+      how_to_use: This metric indicates when I/O tokens are exhausted. Extended periods of token exhaustion may indicate I/O bandwidth saturation or high disk utilization requiring attention.
+      visibility: ESSENTIAL
+    - name: admission.granter.slots_exhausted_duration.kv
+      exported_name: admission_granter_slots_exhausted_duration_kv
+      description: Total duration when KV slots were exhausted, as observed by the slot granter (not waiters). This is reported in nanoseconds from 26.1 onwards, and was microseconds before that.
+      y_axis_label: Nanoseconds
+      type: COUNTER
+      unit: NANOSECONDS
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+      how_to_use: This metric indicates when KV slots are exhausted. Extended periods of slot exhaustion (over 5 seconds) may indicate insufficient slot allocation or high request concurrency requiring attention.
+      visibility: ESSENTIAL
+    - name: admission.wait_durations.cpu
+      exported_name: admission_wait_durations_cpu
+      description: Wait time durations for requests that waited
+      y_axis_label: Wait time Duration
+      type: HISTOGRAM
+      unit: NANOSECONDS
+      aggregation: AVG
+      derivative: NONE
+      how_to_use: This metric shows if admission control is working effectively or potentially overaggressive. This is a latency histogram of how much delay was added to the workload due to throttling. If observing over 100ms waits for over 5 seconds while there was excess capacity available, then the admission control is overly aggressive.
+      visibility: ESSENTIAL
+    - name: admission.wait_durations.cpu.bulk-low-pri
+      exported_name: admission_wait_durations_cpu_bulk_low_pri
+      description: Wait time durations for requests that waited
+      y_axis_label: Wait time Duration
+      type: HISTOGRAM
+      unit: NANOSECONDS
+      aggregation: AVG
+      derivative: NONE
+      how_to_use: This metric shows if admission control is working effectively or potentially overaggressive. This is a latency histogram of how much delay was added to the workload due to throttling. If observing over 100ms waits for over 5 seconds while there was excess capacity available, then the admission control is overly aggressive.
+      visibility: ESSENTIAL
+    - name: admission.wait_durations.cpu.bulk-normal-pri
+      exported_name: admission_wait_durations_cpu_bulk_normal_pri
+      description: Wait time durations for requests that waited
+      y_axis_label: Wait time Duration
+      type: HISTOGRAM
+      unit: NANOSECONDS
+      aggregation: AVG
+      derivative: NONE
+      how_to_use: This metric shows if admission control is working effectively or potentially overaggressive. This is a latency histogram of how much delay was added to the workload due to throttling. If observing over 100ms waits for over 5 seconds while there was excess capacity available, then the admission control is overly aggressive.
+      visibility: ESSENTIAL
+    - name: admission.wait_durations.cpu.high-pri
+      exported_name: admission_wait_durations_cpu_high_pri
+      description: Wait time durations for requests that waited
+      y_axis_label: Wait time Duration
+      type: HISTOGRAM
+      unit: NANOSECONDS
+      aggregation: AVG
+      derivative: NONE
+      how_to_use: This metric shows if admission control is working effectively or potentially overaggressive. This is a latency histogram of how much delay was added to the workload due to throttling. If observing over 100ms waits for over 5 seconds while there was excess capacity available, then the admission control is overly aggressive.
+      visibility: ESSENTIAL
+    - name: admission.wait_durations.cpu.locking-normal-pri
+      exported_name: admission_wait_durations_cpu_locking_normal_pri
+      description: Wait time durations for requests that waited
+      y_axis_label: Wait time Duration
+      type: HISTOGRAM
+      unit: NANOSECONDS
+      aggregation: AVG
+      derivative: NONE
+      how_to_use: This metric shows if admission control is working effectively or potentially overaggressive. This is a latency histogram of how much delay was added to the workload due to throttling. If observing over 100ms waits for over 5 seconds while there was excess capacity available, then the admission control is overly aggressive.
+      visibility: ESSENTIAL
+    - name: admission.wait_durations.cpu.locking-pri
+      exported_name: admission_wait_durations_cpu_locking_pri
+      description: Wait time durations for requests that waited
+      y_axis_label: Wait time Duration
+      type: HISTOGRAM
+      unit: NANOSECONDS
+      aggregation: AVG
+      derivative: NONE
+      how_to_use: This metric shows if admission control is working effectively or potentially overaggressive. This is a latency histogram of how much delay was added to the workload due to throttling. If observing over 100ms waits for over 5 seconds while there was excess capacity available, then the admission control is overly aggressive.
+      visibility: ESSENTIAL
+    - name: admission.wait_durations.cpu.low-pri
+      exported_name: admission_wait_durations_cpu_low_pri
+      description: Wait time durations for requests that waited
+      y_axis_label: Wait time Duration
+      type: HISTOGRAM
+      unit: NANOSECONDS
+      aggregation: AVG
+      derivative: NONE
+      how_to_use: This metric shows if admission control is working effectively or potentially overaggressive. This is a latency histogram of how much delay was added to the workload due to throttling. If observing over 100ms waits for over 5 seconds while there was excess capacity available, then the admission control is overly aggressive.
+      visibility: ESSENTIAL
+    - name: admission.wait_durations.cpu.normal-pri
+      exported_name: admission_wait_durations_cpu_normal_pri
+      description: Wait time durations for requests that waited
+      y_axis_label: Wait time Duration
+      type: HISTOGRAM
+      unit: NANOSECONDS
+      aggregation: AVG
+      derivative: NONE
+      how_to_use: This metric shows if admission control is working effectively or potentially overaggressive. This is a latency histogram of how much delay was added to the workload due to throttling. If observing over 100ms waits for over 5 seconds while there was excess capacity available, then the admission control is overly aggressive.
+      visibility: ESSENTIAL
+    - name: admission.wait_durations.cpu.user-high-pri
+      exported_name: admission_wait_durations_cpu_user_high_pri
+      description: Wait time durations for requests that waited
+      y_axis_label: Wait time Duration
+      type: HISTOGRAM
+      unit: NANOSECONDS
+      aggregation: AVG
+      derivative: NONE
+      how_to_use: This metric shows if admission control is working effectively or potentially overaggressive. This is a latency histogram of how much delay was added to the workload due to throttling. If observing over 100ms waits for over 5 seconds while there was excess capacity available, then the admission control is overly aggressive.
+      visibility: ESSENTIAL
+    - name: admission.wait_durations.cpu.user-low-pri
+      exported_name: admission_wait_durations_cpu_user_low_pri
+      description: Wait time durations for requests that waited
+      y_axis_label: Wait time Duration
+      type: HISTOGRAM
+      unit: NANOSECONDS
+      aggregation: AVG
+      derivative: NONE
+      how_to_use: This metric shows if admission control is working effectively or potentially overaggressive. This is a latency histogram of how much delay was added to the workload due to throttling. If observing over 100ms waits for over 5 seconds while there was excess capacity available, then the admission control is overly aggressive.
+      visibility: ESSENTIAL
+    - name: admission.wait_durations.elastic-cpu
+      exported_name: admission_wait_durations_elastic_cpu
+      description: Wait time durations for requests that waited
+      y_axis_label: Wait time Duration
+      type: HISTOGRAM
+      unit: NANOSECONDS
+      aggregation: AVG
+      derivative: NONE
+      how_to_use: This metric shows if admission control is working effectively or potentially overaggressive. This is a latency histogram of how much delay was added to the workload due to throttling. If observing over 100ms waits for over 5 seconds while there was excess capacity available, then the admission control is overly aggressive.
+      visibility: ESSENTIAL
+    - name: admission.wait_durations.elastic-cpu.bulk-low-pri
+      exported_name: admission_wait_durations_elastic_cpu_bulk_low_pri
+      description: Wait time durations for requests that waited
+      y_axis_label: Wait time Duration
+      type: HISTOGRAM
+      unit: NANOSECONDS
+      aggregation: AVG
+      derivative: NONE
+      how_to_use: This metric shows if admission control is working effectively or potentially overaggressive. This is a latency histogram of how much delay was added to the workload due to throttling. If observing over 100ms waits for over 5 seconds while there was excess capacity available, then the admission control is overly aggressive.
+      visibility: ESSENTIAL
+    - name: admission.wait_durations.elastic-cpu.bulk-normal-pri
+      exported_name: admission_wait_durations_elastic_cpu_bulk_normal_pri
+      description: Wait time durations for requests that waited
+      y_axis_label: Wait time Duration
+      type: HISTOGRAM
+      unit: NANOSECONDS
+      aggregation: AVG
+      derivative: NONE
+      how_to_use: This metric shows if admission control is working effectively or potentially overaggressive. This is a latency histogram of how much delay was added to the workload due to throttling. If observing over 100ms waits for over 5 seconds while there was excess capacity available, then the admission control is overly aggressive.
+      visibility: ESSENTIAL
+    - name: admission.wait_durations.elastic-cpu.high-pri
+      exported_name: admission_wait_durations_elastic_cpu_high_pri
+      description: Wait time durations for requests that waited
+      y_axis_label: Wait time Duration
+      type: HISTOGRAM
+      unit: NANOSECONDS
+      aggregation: AVG
+      derivative: NONE
+      how_to_use: This metric shows if admission control is working effectively or potentially overaggressive. This is a latency histogram of how much delay was added to the workload due to throttling. If observing over 100ms waits for over 5 seconds while there was excess capacity available, then the admission control is overly aggressive.
+      visibility: ESSENTIAL
+    - name: admission.wait_durations.elastic-cpu.locking-normal-pri
+      exported_name: admission_wait_durations_elastic_cpu_locking_normal_pri
+      description: Wait time durations for requests that waited
+      y_axis_label: Wait time Duration
+      type: HISTOGRAM
+      unit: NANOSECONDS
+      aggregation: AVG
+      derivative: NONE
+      how_to_use: This metric shows if admission control is working effectively or potentially overaggressive. This is a latency histogram of how much delay was added to the workload due to throttling. If observing over 100ms waits for over 5 seconds while there was excess capacity available, then the admission control is overly aggressive.
+      visibility: ESSENTIAL
+    - name: admission.wait_durations.elastic-cpu.locking-pri
+      exported_name: admission_wait_durations_elastic_cpu_locking_pri
+      description: Wait time durations for requests that waited
+      y_axis_label: Wait time Duration
+      type: HISTOGRAM
+      unit: NANOSECONDS
+      aggregation: AVG
+      derivative: NONE
+      how_to_use: This metric shows if admission control is working effectively or potentially overaggressive. This is a latency histogram of how much delay was added to the workload due to throttling. If observing over 100ms waits for over 5 seconds while there was excess capacity available, then the admission control is overly aggressive.
+      visibility: ESSENTIAL
+    - name: admission.wait_durations.elastic-cpu.low-pri
+      exported_name: admission_wait_durations_elastic_cpu_low_pri
+      description: Wait time durations for requests that waited
+      y_axis_label: Wait time Duration
+      type: HISTOGRAM
+      unit: NANOSECONDS
+      aggregation: AVG
+      derivative: NONE
+      how_to_use: This metric shows if admission control is working effectively or potentially overaggressive. This is a latency histogram of how much delay was added to the workload due to throttling. If observing over 100ms waits for over 5 seconds while there was excess capacity available, then the admission control is overly aggressive.
+      visibility: ESSENTIAL
+    - name: admission.wait_durations.elastic-cpu.normal-pri
+      exported_name: admission_wait_durations_elastic_cpu_normal_pri
+      description: Wait time durations for requests that waited
+      y_axis_label: Wait time Duration
+      type: HISTOGRAM
+      unit: NANOSECONDS
+      aggregation: AVG
+      derivative: NONE
+      how_to_use: This metric shows if admission control is working effectively or potentially overaggressive. This is a latency histogram of how much delay was added to the workload due to throttling. If observing over 100ms waits for over 5 seconds while there was excess capacity available, then the admission control is overly aggressive.
+      visibility: ESSENTIAL
+    - name: admission.wait_durations.elastic-cpu.user-high-pri
+      exported_name: admission_wait_durations_elastic_cpu_user_high_pri
+      description: Wait time durations for requests that waited
+      y_axis_label: Wait time Duration
+      type: HISTOGRAM
+      unit: NANOSECONDS
+      aggregation: AVG
+      derivative: NONE
+      how_to_use: This metric shows if admission control is working effectively or potentially overaggressive. This is a latency histogram of how much delay was added to the workload due to throttling. If observing over 100ms waits for over 5 seconds while there was excess capacity available, then the admission control is overly aggressive.
+      visibility: ESSENTIAL
+    - name: admission.wait_durations.elastic-cpu.user-low-pri
+      exported_name: admission_wait_durations_elastic_cpu_user_low_pri
+      description: Wait time durations for requests that waited
+      y_axis_label: Wait time Duration
+      type: HISTOGRAM
+      unit: NANOSECONDS
+      aggregation: AVG
+      derivative: NONE
+      how_to_use: This metric shows if admission control is working effectively or potentially overaggressive. This is a latency histogram of how much delay was added to the workload due to throttling. If observing over 100ms waits for over 5 seconds while there was excess capacity available, then the admission control is overly aggressive.
+      visibility: ESSENTIAL
+    - name: admission.wait_durations.elastic-stores
+      exported_name: admission_wait_durations_elastic_stores
+      description: Wait time durations for requests that waited
+      y_axis_label: Wait time Duration
+      type: HISTOGRAM
+      unit: NANOSECONDS
+      aggregation: AVG
+      derivative: NONE
+      how_to_use: This metric shows if admission control is working effectively or potentially overaggressive. This is a latency histogram of how much delay was added to the workload due to throttling. If observing over 100ms waits for over 5 seconds while there was excess capacity available, then the admission control is overly aggressive.
+      visibility: ESSENTIAL
+    - name: admission.wait_durations.elastic-stores.bulk-low-pri
+      exported_name: admission_wait_durations_elastic_stores_bulk_low_pri
+      description: Wait time durations for requests that waited
+      y_axis_label: Wait time Duration
+      type: HISTOGRAM
+      unit: NANOSECONDS
+      aggregation: AVG
+      derivative: NONE
+      how_to_use: This metric shows if admission control is working effectively or potentially overaggressive. This is a latency histogram of how much delay was added to the workload due to throttling. If observing over 100ms waits for over 5 seconds while there was excess capacity available, then the admission control is overly aggressive.
+      visibility: ESSENTIAL
+    - name: admission.wait_durations.elastic-stores.bulk-normal-pri
+      exported_name: admission_wait_durations_elastic_stores_bulk_normal_pri
+      description: Wait time durations for requests that waited
+      y_axis_label: Wait time Duration
+      type: HISTOGRAM
+      unit: NANOSECONDS
+      aggregation: AVG
+      derivative: NONE
+      how_to_use: This metric shows if admission control is working effectively or potentially overaggressive. This is a latency histogram of how much delay was added to the workload due to throttling. If observing over 100ms waits for over 5 seconds while there was excess capacity available, then the admission control is overly aggressive.
+      visibility: ESSENTIAL
+    - name: admission.wait_durations.elastic-stores.high-pri
+      exported_name: admission_wait_durations_elastic_stores_high_pri
+      description: Wait time durations for requests that waited
+      y_axis_label: Wait time Duration
+      type: HISTOGRAM
+      unit: NANOSECONDS
+      aggregation: AVG
+      derivative: NONE
+      how_to_use: This metric shows if admission control is working effectively or potentially overaggressive. This is a latency histogram of how much delay was added to the workload due to throttling. If observing over 100ms waits for over 5 seconds while there was excess capacity available, then the admission control is overly aggressive.
+      visibility: ESSENTIAL
+    - name: admission.wait_durations.elastic-stores.locking-normal-pri
+      exported_name: admission_wait_durations_elastic_stores_locking_normal_pri
+      description: Wait time durations for requests that waited
+      y_axis_label: Wait time Duration
+      type: HISTOGRAM
+      unit: NANOSECONDS
+      aggregation: AVG
+      derivative: NONE
+      how_to_use: This metric shows if admission control is working effectively or potentially overaggressive. This is a latency histogram of how much delay was added to the workload due to throttling. If observing over 100ms waits for over 5 seconds while there was excess capacity available, then the admission control is overly aggressive.
+      visibility: ESSENTIAL
+    - name: admission.wait_durations.elastic-stores.locking-pri
+      exported_name: admission_wait_durations_elastic_stores_locking_pri
+      description: Wait time durations for requests that waited
+      y_axis_label: Wait time Duration
+      type: HISTOGRAM
+      unit: NANOSECONDS
+      aggregation: AVG
+      derivative: NONE
+      how_to_use: This metric shows if admission control is working effectively or potentially overaggressive. This is a latency histogram of how much delay was added to the workload due to throttling. If observing over 100ms waits for over 5 seconds while there was excess capacity available, then the admission control is overly aggressive.
+      visibility: ESSENTIAL
+    - name: admission.wait_durations.elastic-stores.low-pri
+      exported_name: admission_wait_durations_elastic_stores_low_pri
+      description: Wait time durations for requests that waited
+      y_axis_label: Wait time Duration
+      type: HISTOGRAM
+      unit: NANOSECONDS
+      aggregation: AVG
+      derivative: NONE
+      how_to_use: This metric shows if admission control is working effectively or potentially overaggressive. This is a latency histogram of how much delay was added to the workload due to throttling. If observing over 100ms waits for over 5 seconds while there was excess capacity available, then the admission control is overly aggressive.
+      visibility: ESSENTIAL
+    - name: admission.wait_durations.elastic-stores.normal-pri
+      exported_name: admission_wait_durations_elastic_stores_normal_pri
+      description: Wait time durations for requests that waited
+      y_axis_label: Wait time Duration
+      type: HISTOGRAM
+      unit: NANOSECONDS
+      aggregation: AVG
+      derivative: NONE
+      how_to_use: This metric shows if admission control is working effectively or potentially overaggressive. This is a latency histogram of how much delay was added to the workload due to throttling. If observing over 100ms waits for over 5 seconds while there was excess capacity available, then the admission control is overly aggressive.
+      visibility: ESSENTIAL
+    - name: admission.wait_durations.elastic-stores.user-high-pri
+      exported_name: admission_wait_durations_elastic_stores_user_high_pri
+      description: Wait time durations for requests that waited
+      y_axis_label: Wait time Duration
+      type: HISTOGRAM
+      unit: NANOSECONDS
+      aggregation: AVG
+      derivative: NONE
+      how_to_use: This metric shows if admission control is working effectively or potentially overaggressive. This is a latency histogram of how much delay was added to the workload due to throttling. If observing over 100ms waits for over 5 seconds while there was excess capacity available, then the admission control is overly aggressive.
+      visibility: ESSENTIAL
+    - name: admission.wait_durations.elastic-stores.user-low-pri
+      exported_name: admission_wait_durations_elastic_stores_user_low_pri
+      description: Wait time durations for requests that waited
+      y_axis_label: Wait time Duration
+      type: HISTOGRAM
+      unit: NANOSECONDS
+      aggregation: AVG
+      derivative: NONE
+      how_to_use: This metric shows if admission control is working effectively or potentially overaggressive. This is a latency histogram of how much delay was added to the workload due to throttling. If observing over 100ms waits for over 5 seconds while there was excess capacity available, then the admission control is overly aggressive.
+      visibility: ESSENTIAL
     - name: admission.wait_durations.kv
       exported_name: admission_wait_durations_kv
       description: Wait time durations for requests that waited
@@ -10370,6 +10710,416 @@ layers:
       aggregation: AVG
       derivative: NONE
       how_to_use: This metric shows if I/O utilization-based admission control feature is working effectively or potentially overaggressive. This is a latency histogram of how much delay was added to the workload due to throttling. If observing over 100ms waits for over 5 seconds while there was excess capacity available, then the admission control is overly aggressive.
+      visibility: ESSENTIAL
+    - name: admission.wait_durations.kv-stores.bulk-low-pri
+      exported_name: admission_wait_durations_kv_stores_bulk_low_pri
+      description: Wait time durations for requests that waited
+      y_axis_label: Wait time Duration
+      type: HISTOGRAM
+      unit: NANOSECONDS
+      aggregation: AVG
+      derivative: NONE
+      how_to_use: This metric shows if admission control is working effectively or potentially overaggressive. This is a latency histogram of how much delay was added to the workload due to throttling. If observing over 100ms waits for over 5 seconds while there was excess capacity available, then the admission control is overly aggressive.
+      visibility: ESSENTIAL
+    - name: admission.wait_durations.kv-stores.bulk-normal-pri
+      exported_name: admission_wait_durations_kv_stores_bulk_normal_pri
+      description: Wait time durations for requests that waited
+      y_axis_label: Wait time Duration
+      type: HISTOGRAM
+      unit: NANOSECONDS
+      aggregation: AVG
+      derivative: NONE
+      how_to_use: This metric shows if admission control is working effectively or potentially overaggressive. This is a latency histogram of how much delay was added to the workload due to throttling. If observing over 100ms waits for over 5 seconds while there was excess capacity available, then the admission control is overly aggressive.
+      visibility: ESSENTIAL
+    - name: admission.wait_durations.kv-stores.high-pri
+      exported_name: admission_wait_durations_kv_stores_high_pri
+      description: Wait time durations for requests that waited
+      y_axis_label: Wait time Duration
+      type: HISTOGRAM
+      unit: NANOSECONDS
+      aggregation: AVG
+      derivative: NONE
+      how_to_use: This metric shows if admission control is working effectively or potentially overaggressive. This is a latency histogram of how much delay was added to the workload due to throttling. If observing over 100ms waits for over 5 seconds while there was excess capacity available, then the admission control is overly aggressive.
+      visibility: ESSENTIAL
+    - name: admission.wait_durations.kv-stores.locking-normal-pri
+      exported_name: admission_wait_durations_kv_stores_locking_normal_pri
+      description: Wait time durations for requests that waited
+      y_axis_label: Wait time Duration
+      type: HISTOGRAM
+      unit: NANOSECONDS
+      aggregation: AVG
+      derivative: NONE
+      how_to_use: This metric shows if admission control is working effectively or potentially overaggressive. This is a latency histogram of how much delay was added to the workload due to throttling. If observing over 100ms waits for over 5 seconds while there was excess capacity available, then the admission control is overly aggressive.
+      visibility: ESSENTIAL
+    - name: admission.wait_durations.kv-stores.locking-pri
+      exported_name: admission_wait_durations_kv_stores_locking_pri
+      description: Wait time durations for requests that waited
+      y_axis_label: Wait time Duration
+      type: HISTOGRAM
+      unit: NANOSECONDS
+      aggregation: AVG
+      derivative: NONE
+      how_to_use: This metric shows if admission control is working effectively or potentially overaggressive. This is a latency histogram of how much delay was added to the workload due to throttling. If observing over 100ms waits for over 5 seconds while there was excess capacity available, then the admission control is overly aggressive.
+      visibility: ESSENTIAL
+    - name: admission.wait_durations.kv-stores.low-pri
+      exported_name: admission_wait_durations_kv_stores_low_pri
+      description: Wait time durations for requests that waited
+      y_axis_label: Wait time Duration
+      type: HISTOGRAM
+      unit: NANOSECONDS
+      aggregation: AVG
+      derivative: NONE
+      how_to_use: This metric shows if admission control is working effectively or potentially overaggressive. This is a latency histogram of how much delay was added to the workload due to throttling. If observing over 100ms waits for over 5 seconds while there was excess capacity available, then the admission control is overly aggressive.
+      visibility: ESSENTIAL
+    - name: admission.wait_durations.kv-stores.normal-pri
+      exported_name: admission_wait_durations_kv_stores_normal_pri
+      description: Wait time durations for requests that waited
+      y_axis_label: Wait time Duration
+      type: HISTOGRAM
+      unit: NANOSECONDS
+      aggregation: AVG
+      derivative: NONE
+      how_to_use: This metric shows if admission control is working effectively or potentially overaggressive. This is a latency histogram of how much delay was added to the workload due to throttling. If observing over 100ms waits for over 5 seconds while there was excess capacity available, then the admission control is overly aggressive.
+      visibility: ESSENTIAL
+    - name: admission.wait_durations.kv-stores.user-high-pri
+      exported_name: admission_wait_durations_kv_stores_user_high_pri
+      description: Wait time durations for requests that waited
+      y_axis_label: Wait time Duration
+      type: HISTOGRAM
+      unit: NANOSECONDS
+      aggregation: AVG
+      derivative: NONE
+      how_to_use: This metric shows if admission control is working effectively or potentially overaggressive. This is a latency histogram of how much delay was added to the workload due to throttling. If observing over 100ms waits for over 5 seconds while there was excess capacity available, then the admission control is overly aggressive.
+      visibility: ESSENTIAL
+    - name: admission.wait_durations.kv-stores.user-low-pri
+      exported_name: admission_wait_durations_kv_stores_user_low_pri
+      description: Wait time durations for requests that waited
+      y_axis_label: Wait time Duration
+      type: HISTOGRAM
+      unit: NANOSECONDS
+      aggregation: AVG
+      derivative: NONE
+      how_to_use: This metric shows if admission control is working effectively or potentially overaggressive. This is a latency histogram of how much delay was added to the workload due to throttling. If observing over 100ms waits for over 5 seconds while there was excess capacity available, then the admission control is overly aggressive.
+      visibility: ESSENTIAL
+    - name: admission.wait_durations.kv.bulk-low-pri
+      exported_name: admission_wait_durations_kv_bulk_low_pri
+      description: Wait time durations for requests that waited
+      y_axis_label: Wait time Duration
+      type: HISTOGRAM
+      unit: NANOSECONDS
+      aggregation: AVG
+      derivative: NONE
+      how_to_use: This metric shows if admission control is working effectively or potentially overaggressive. This is a latency histogram of how much delay was added to the workload due to throttling. If observing over 100ms waits for over 5 seconds while there was excess capacity available, then the admission control is overly aggressive.
+      visibility: ESSENTIAL
+    - name: admission.wait_durations.kv.bulk-normal-pri
+      exported_name: admission_wait_durations_kv_bulk_normal_pri
+      description: Wait time durations for requests that waited
+      y_axis_label: Wait time Duration
+      type: HISTOGRAM
+      unit: NANOSECONDS
+      aggregation: AVG
+      derivative: NONE
+      how_to_use: This metric shows if admission control is working effectively or potentially overaggressive. This is a latency histogram of how much delay was added to the workload due to throttling. If observing over 100ms waits for over 5 seconds while there was excess capacity available, then the admission control is overly aggressive.
+      visibility: ESSENTIAL
+    - name: admission.wait_durations.kv.high-pri
+      exported_name: admission_wait_durations_kv_high_pri
+      description: Wait time durations for requests that waited
+      y_axis_label: Wait time Duration
+      type: HISTOGRAM
+      unit: NANOSECONDS
+      aggregation: AVG
+      derivative: NONE
+      how_to_use: This metric shows if admission control is working effectively or potentially overaggressive. This is a latency histogram of how much delay was added to the workload due to throttling. If observing over 100ms waits for over 5 seconds while there was excess capacity available, then the admission control is overly aggressive.
+      visibility: ESSENTIAL
+    - name: admission.wait_durations.kv.locking-normal-pri
+      exported_name: admission_wait_durations_kv_locking_normal_pri
+      description: Wait time durations for requests that waited
+      y_axis_label: Wait time Duration
+      type: HISTOGRAM
+      unit: NANOSECONDS
+      aggregation: AVG
+      derivative: NONE
+      how_to_use: This metric shows if admission control is working effectively or potentially overaggressive. This is a latency histogram of how much delay was added to the workload due to throttling. If observing over 100ms waits for over 5 seconds while there was excess capacity available, then the admission control is overly aggressive.
+      visibility: ESSENTIAL
+    - name: admission.wait_durations.kv.locking-pri
+      exported_name: admission_wait_durations_kv_locking_pri
+      description: Wait time durations for requests that waited
+      y_axis_label: Wait time Duration
+      type: HISTOGRAM
+      unit: NANOSECONDS
+      aggregation: AVG
+      derivative: NONE
+      how_to_use: This metric shows if admission control is working effectively or potentially overaggressive. This is a latency histogram of how much delay was added to the workload due to throttling. If observing over 100ms waits for over 5 seconds while there was excess capacity available, then the admission control is overly aggressive.
+      visibility: ESSENTIAL
+    - name: admission.wait_durations.kv.low-pri
+      exported_name: admission_wait_durations_kv_low_pri
+      description: Wait time durations for requests that waited
+      y_axis_label: Wait time Duration
+      type: HISTOGRAM
+      unit: NANOSECONDS
+      aggregation: AVG
+      derivative: NONE
+      how_to_use: This metric shows if admission control is working effectively or potentially overaggressive. This is a latency histogram of how much delay was added to the workload due to throttling. If observing over 100ms waits for over 5 seconds while there was excess capacity available, then the admission control is overly aggressive.
+      visibility: ESSENTIAL
+    - name: admission.wait_durations.kv.normal-pri
+      exported_name: admission_wait_durations_kv_normal_pri
+      description: Wait time durations for requests that waited
+      y_axis_label: Wait time Duration
+      type: HISTOGRAM
+      unit: NANOSECONDS
+      aggregation: AVG
+      derivative: NONE
+      how_to_use: This metric shows if admission control is working effectively or potentially overaggressive. This is a latency histogram of how much delay was added to the workload due to throttling. If observing over 100ms waits for over 5 seconds while there was excess capacity available, then the admission control is overly aggressive.
+      visibility: ESSENTIAL
+    - name: admission.wait_durations.kv.user-high-pri
+      exported_name: admission_wait_durations_kv_user_high_pri
+      description: Wait time durations for requests that waited
+      y_axis_label: Wait time Duration
+      type: HISTOGRAM
+      unit: NANOSECONDS
+      aggregation: AVG
+      derivative: NONE
+      how_to_use: This metric shows if admission control is working effectively or potentially overaggressive. This is a latency histogram of how much delay was added to the workload due to throttling. If observing over 100ms waits for over 5 seconds while there was excess capacity available, then the admission control is overly aggressive.
+      visibility: ESSENTIAL
+    - name: admission.wait_durations.kv.user-low-pri
+      exported_name: admission_wait_durations_kv_user_low_pri
+      description: Wait time durations for requests that waited
+      y_axis_label: Wait time Duration
+      type: HISTOGRAM
+      unit: NANOSECONDS
+      aggregation: AVG
+      derivative: NONE
+      how_to_use: This metric shows if admission control is working effectively or potentially overaggressive. This is a latency histogram of how much delay was added to the workload due to throttling. If observing over 100ms waits for over 5 seconds while there was excess capacity available, then the admission control is overly aggressive.
+      visibility: ESSENTIAL
+    - name: admission.wait_durations.sql-kv-response
+      exported_name: admission_wait_durations_sql_kv_response
+      description: Wait time durations for requests that waited
+      y_axis_label: Wait time Duration
+      type: HISTOGRAM
+      unit: NANOSECONDS
+      aggregation: AVG
+      derivative: NONE
+      how_to_use: This metric shows if admission control is working effectively or potentially overaggressive. This is a latency histogram of how much delay was added to the workload due to throttling. If observing over 100ms waits for over 5 seconds while there was excess capacity available, then the admission control is overly aggressive.
+      visibility: ESSENTIAL
+    - name: admission.wait_durations.sql-kv-response.bulk-low-pri
+      exported_name: admission_wait_durations_sql_kv_response_bulk_low_pri
+      description: Wait time durations for requests that waited
+      y_axis_label: Wait time Duration
+      type: HISTOGRAM
+      unit: NANOSECONDS
+      aggregation: AVG
+      derivative: NONE
+      how_to_use: This metric shows if admission control is working effectively or potentially overaggressive. This is a latency histogram of how much delay was added to the workload due to throttling. If observing over 100ms waits for over 5 seconds while there was excess capacity available, then the admission control is overly aggressive.
+      visibility: ESSENTIAL
+    - name: admission.wait_durations.sql-kv-response.bulk-normal-pri
+      exported_name: admission_wait_durations_sql_kv_response_bulk_normal_pri
+      description: Wait time durations for requests that waited
+      y_axis_label: Wait time Duration
+      type: HISTOGRAM
+      unit: NANOSECONDS
+      aggregation: AVG
+      derivative: NONE
+      how_to_use: This metric shows if admission control is working effectively or potentially overaggressive. This is a latency histogram of how much delay was added to the workload due to throttling. If observing over 100ms waits for over 5 seconds while there was excess capacity available, then the admission control is overly aggressive.
+      visibility: ESSENTIAL
+    - name: admission.wait_durations.sql-kv-response.high-pri
+      exported_name: admission_wait_durations_sql_kv_response_high_pri
+      description: Wait time durations for requests that waited
+      y_axis_label: Wait time Duration
+      type: HISTOGRAM
+      unit: NANOSECONDS
+      aggregation: AVG
+      derivative: NONE
+      how_to_use: This metric shows if admission control is working effectively or potentially overaggressive. This is a latency histogram of how much delay was added to the workload due to throttling. If observing over 100ms waits for over 5 seconds while there was excess capacity available, then the admission control is overly aggressive.
+      visibility: ESSENTIAL
+    - name: admission.wait_durations.sql-kv-response.locking-normal-pri
+      exported_name: admission_wait_durations_sql_kv_response_locking_normal_pri
+      description: Wait time durations for requests that waited
+      y_axis_label: Wait time Duration
+      type: HISTOGRAM
+      unit: NANOSECONDS
+      aggregation: AVG
+      derivative: NONE
+      how_to_use: This metric shows if admission control is working effectively or potentially overaggressive. This is a latency histogram of how much delay was added to the workload due to throttling. If observing over 100ms waits for over 5 seconds while there was excess capacity available, then the admission control is overly aggressive.
+      visibility: ESSENTIAL
+    - name: admission.wait_durations.sql-kv-response.locking-pri
+      exported_name: admission_wait_durations_sql_kv_response_locking_pri
+      description: Wait time durations for requests that waited
+      y_axis_label: Wait time Duration
+      type: HISTOGRAM
+      unit: NANOSECONDS
+      aggregation: AVG
+      derivative: NONE
+      how_to_use: This metric shows if admission control is working effectively or potentially overaggressive. This is a latency histogram of how much delay was added to the workload due to throttling. If observing over 100ms waits for over 5 seconds while there was excess capacity available, then the admission control is overly aggressive.
+      visibility: ESSENTIAL
+    - name: admission.wait_durations.sql-kv-response.low-pri
+      exported_name: admission_wait_durations_sql_kv_response_low_pri
+      description: Wait time durations for requests that waited
+      y_axis_label: Wait time Duration
+      type: HISTOGRAM
+      unit: NANOSECONDS
+      aggregation: AVG
+      derivative: NONE
+      how_to_use: This metric shows if admission control is working effectively or potentially overaggressive. This is a latency histogram of how much delay was added to the workload due to throttling. If observing over 100ms waits for over 5 seconds while there was excess capacity available, then the admission control is overly aggressive.
+      visibility: ESSENTIAL
+    - name: admission.wait_durations.sql-kv-response.normal-pri
+      exported_name: admission_wait_durations_sql_kv_response_normal_pri
+      description: Wait time durations for requests that waited
+      y_axis_label: Wait time Duration
+      type: HISTOGRAM
+      unit: NANOSECONDS
+      aggregation: AVG
+      derivative: NONE
+      how_to_use: This metric shows if admission control is working effectively or potentially overaggressive. This is a latency histogram of how much delay was added to the workload due to throttling. If observing over 100ms waits for over 5 seconds while there was excess capacity available, then the admission control is overly aggressive.
+      visibility: ESSENTIAL
+    - name: admission.wait_durations.sql-kv-response.user-high-pri
+      exported_name: admission_wait_durations_sql_kv_response_user_high_pri
+      description: Wait time durations for requests that waited
+      y_axis_label: Wait time Duration
+      type: HISTOGRAM
+      unit: NANOSECONDS
+      aggregation: AVG
+      derivative: NONE
+      how_to_use: This metric shows if admission control is working effectively or potentially overaggressive. This is a latency histogram of how much delay was added to the workload due to throttling. If observing over 100ms waits for over 5 seconds while there was excess capacity available, then the admission control is overly aggressive.
+      visibility: ESSENTIAL
+    - name: admission.wait_durations.sql-kv-response.user-low-pri
+      exported_name: admission_wait_durations_sql_kv_response_user_low_pri
+      description: Wait time durations for requests that waited
+      y_axis_label: Wait time Duration
+      type: HISTOGRAM
+      unit: NANOSECONDS
+      aggregation: AVG
+      derivative: NONE
+      how_to_use: This metric shows if admission control is working effectively or potentially overaggressive. This is a latency histogram of how much delay was added to the workload due to throttling. If observing over 100ms waits for over 5 seconds while there was excess capacity available, then the admission control is overly aggressive.
+      visibility: ESSENTIAL
+    - name: admission.wait_durations.sql-sql-response
+      exported_name: admission_wait_durations_sql_sql_response
+      description: Wait time durations for requests that waited
+      y_axis_label: Wait time Duration
+      type: HISTOGRAM
+      unit: NANOSECONDS
+      aggregation: AVG
+      derivative: NONE
+      how_to_use: This metric shows if admission control is working effectively or potentially overaggressive. This is a latency histogram of how much delay was added to the workload due to throttling. If observing over 100ms waits for over 5 seconds while there was excess capacity available, then the admission control is overly aggressive.
+      visibility: ESSENTIAL
+    - name: admission.wait_durations.sql-sql-response.bulk-low-pri
+      exported_name: admission_wait_durations_sql_sql_response_bulk_low_pri
+      description: Wait time durations for requests that waited
+      y_axis_label: Wait time Duration
+      type: HISTOGRAM
+      unit: NANOSECONDS
+      aggregation: AVG
+      derivative: NONE
+      how_to_use: This metric shows if admission control is working effectively or potentially overaggressive. This is a latency histogram of how much delay was added to the workload due to throttling. If observing over 100ms waits for over 5 seconds while there was excess capacity available, then the admission control is overly aggressive.
+      visibility: ESSENTIAL
+    - name: admission.wait_durations.sql-sql-response.bulk-normal-pri
+      exported_name: admission_wait_durations_sql_sql_response_bulk_normal_pri
+      description: Wait time durations for requests that waited
+      y_axis_label: Wait time Duration
+      type: HISTOGRAM
+      unit: NANOSECONDS
+      aggregation: AVG
+      derivative: NONE
+      how_to_use: This metric shows if admission control is working effectively or potentially overaggressive. This is a latency histogram of how much delay was added to the workload due to throttling. If observing over 100ms waits for over 5 seconds while there was excess capacity available, then the admission control is overly aggressive.
+      visibility: ESSENTIAL
+    - name: admission.wait_durations.sql-sql-response.high-pri
+      exported_name: admission_wait_durations_sql_sql_response_high_pri
+      description: Wait time durations for requests that waited
+      y_axis_label: Wait time Duration
+      type: HISTOGRAM
+      unit: NANOSECONDS
+      aggregation: AVG
+      derivative: NONE
+      how_to_use: This metric shows if admission control is working effectively or potentially overaggressive. This is a latency histogram of how much delay was added to the workload due to throttling. If observing over 100ms waits for over 5 seconds while there was excess capacity available, then the admission control is overly aggressive.
+      visibility: ESSENTIAL
+    - name: admission.wait_durations.sql-sql-response.locking-normal-pri
+      exported_name: admission_wait_durations_sql_sql_response_locking_normal_pri
+      description: Wait time durations for requests that waited
+      y_axis_label: Wait time Duration
+      type: HISTOGRAM
+      unit: NANOSECONDS
+      aggregation: AVG
+      derivative: NONE
+      how_to_use: This metric shows if admission control is working effectively or potentially overaggressive. This is a latency histogram of how much delay was added to the workload due to throttling. If observing over 100ms waits for over 5 seconds while there was excess capacity available, then the admission control is overly aggressive.
+      visibility: ESSENTIAL
+    - name: admission.wait_durations.sql-sql-response.locking-pri
+      exported_name: admission_wait_durations_sql_sql_response_locking_pri
+      description: Wait time durations for requests that waited
+      y_axis_label: Wait time Duration
+      type: HISTOGRAM
+      unit: NANOSECONDS
+      aggregation: AVG
+      derivative: NONE
+      how_to_use: This metric shows if admission control is working effectively or potentially overaggressive. This is a latency histogram of how much delay was added to the workload due to throttling. If observing over 100ms waits for over 5 seconds while there was excess capacity available, then the admission control is overly aggressive.
+      visibility: ESSENTIAL
+    - name: admission.wait_durations.sql-sql-response.low-pri
+      exported_name: admission_wait_durations_sql_sql_response_low_pri
+      description: Wait time durations for requests that waited
+      y_axis_label: Wait time Duration
+      type: HISTOGRAM
+      unit: NANOSECONDS
+      aggregation: AVG
+      derivative: NONE
+      how_to_use: This metric shows if admission control is working effectively or potentially overaggressive. This is a latency histogram of how much delay was added to the workload due to throttling. If observing over 100ms waits for over 5 seconds while there was excess capacity available, then the admission control is overly aggressive.
+      visibility: ESSENTIAL
+    - name: admission.wait_durations.sql-sql-response.normal-pri
+      exported_name: admission_wait_durations_sql_sql_response_normal_pri
+      description: Wait time durations for requests that waited
+      y_axis_label: Wait time Duration
+      type: HISTOGRAM
+      unit: NANOSECONDS
+      aggregation: AVG
+      derivative: NONE
+      how_to_use: This metric shows if admission control is working effectively or potentially overaggressive. This is a latency histogram of how much delay was added to the workload due to throttling. If observing over 100ms waits for over 5 seconds while there was excess capacity available, then the admission control is overly aggressive.
+      visibility: ESSENTIAL
+    - name: admission.wait_durations.sql-sql-response.user-high-pri
+      exported_name: admission_wait_durations_sql_sql_response_user_high_pri
+      description: Wait time durations for requests that waited
+      y_axis_label: Wait time Duration
+      type: HISTOGRAM
+      unit: NANOSECONDS
+      aggregation: AVG
+      derivative: NONE
+      how_to_use: This metric shows if admission control is working effectively or potentially overaggressive. This is a latency histogram of how much delay was added to the workload due to throttling. If observing over 100ms waits for over 5 seconds while there was excess capacity available, then the admission control is overly aggressive.
+      visibility: ESSENTIAL
+    - name: admission.wait_durations.sql-sql-response.user-low-pri
+      exported_name: admission_wait_durations_sql_sql_response_user_low_pri
+      description: Wait time durations for requests that waited
+      y_axis_label: Wait time Duration
+      type: HISTOGRAM
+      unit: NANOSECONDS
+      aggregation: AVG
+      derivative: NONE
+      how_to_use: This metric shows if admission control is working effectively or potentially overaggressive. This is a latency histogram of how much delay was added to the workload due to throttling. If observing over 100ms waits for over 5 seconds while there was excess capacity available, then the admission control is overly aggressive.
+      visibility: ESSENTIAL
+    - name: kvflowcontrol.eval_wait.elastic.duration
+      exported_name: kvflowcontrol_eval_wait_elastic_duration
+      description: Latency histogram for time elastic requests spent waiting for flow tokens to evaluate
+      y_axis_label: Nanoseconds
+      type: HISTOGRAM
+      unit: NANOSECONDS
+      aggregation: AVG
+      derivative: NONE
+      how_to_use: This metric shows how long requests are waiting for flow tokens before evaluation. Extended wait times may indicate flow control token exhaustion or replication lag.
+      visibility: ESSENTIAL
+    - name: kvflowcontrol.eval_wait.regular.duration
+      exported_name: kvflowcontrol_eval_wait_regular_duration
+      description: Latency histogram for time regular requests spent waiting for flow tokens to evaluate
+      y_axis_label: Nanoseconds
+      type: HISTOGRAM
+      unit: NANOSECONDS
+      aggregation: AVG
+      derivative: NONE
+      how_to_use: This metric shows how long requests are waiting for flow tokens before evaluation. Extended wait times may indicate flow control token exhaustion or replication lag.
+      visibility: ESSENTIAL
+    - name: kvflowcontrol.send_queue.bytes
+      exported_name: kvflowcontrol_send_queue_bytes
+      description: Byte size of all raft entries queued for sending to followers, waiting on available elastic send tokens
+      y_axis_label: Bytes
+      type: GAUGE
+      unit: BYTES
+      aggregation: AVG
+      derivative: NONE
+      how_to_use: This metric indicates the size of queued raft entries waiting for elastic send tokens. Large or growing queue sizes may indicate replication backlog or follower lag.
       visibility: ESSENTIAL
   - name: REPLICATION
     metrics:
@@ -11305,14 +12055,6 @@ layers:
       unit: NANOSECONDS
       aggregation: AVG
       derivative: NON_NEGATIVE_DERIVATIVE
-    - name: admission.elastic_cpu.nanos_exhausted_duration
-      exported_name: admission_elastic_cpu_nanos_exhausted_duration
-      description: Total duration when elastic CPU tokens (tokens measured in nanoseconds) were exhausted, as observed by the token granter (not waiters). This is reported in nanoseconds from 26.1 onwards, and was microseconds before that.
-      y_axis_label: Nanoseconds
-      type: COUNTER
-      unit: NANOSECONDS
-      aggregation: AVG
-      derivative: NON_NEGATIVE_DERIVATIVE
     - name: admission.elastic_cpu.over_limit_durations
       exported_name: admission_elastic_cpu_over_limit_durations
       description: Measurement of how much over the prescribed limit elastic requests ran (not recorded if requests don't run over)
@@ -11961,14 +12703,6 @@ layers:
       unit: COUNT
       aggregation: AVG
       derivative: NONE
-    - name: admission.granter.elastic_io_tokens_exhausted_duration.kv
-      exported_name: admission_granter_elastic_io_tokens_exhausted_duration_kv
-      description: Total duration when Elastic IO tokens were exhausted, as observed by the token granter (not waiters). This is reported in nanoseconds from 26.1 onwards, and was microseconds before that.
-      y_axis_label: Nanoseconds
-      type: COUNTER
-      unit: NANOSECONDS
-      aggregation: AVG
-      derivative: NON_NEGATIVE_DERIVATIVE
     - name: admission.granter.io_tokens_available.kv
       exported_name: admission_granter_io_tokens_available_kv
       description: Number of tokens available
@@ -11983,14 +12717,6 @@ layers:
       y_axis_label: Tokens
       type: COUNTER
       unit: COUNT
-      aggregation: AVG
-      derivative: NON_NEGATIVE_DERIVATIVE
-    - name: admission.granter.io_tokens_exhausted_duration.kv
-      exported_name: admission_granter_io_tokens_exhausted_duration_kv
-      description: Total duration when IO tokens were exhausted, as observed by the token granter (not waiters). This is reported in nanoseconds from 26.1 onwards, and was microseconds before that.
-      y_axis_label: Nanoseconds
-      type: COUNTER
-      unit: NANOSECONDS
       aggregation: AVG
       derivative: NON_NEGATIVE_DERIVATIVE
     - name: admission.granter.io_tokens_returned.kv
@@ -12023,14 +12749,6 @@ layers:
       y_axis_label: Slots
       type: COUNTER
       unit: COUNT
-      aggregation: AVG
-      derivative: NON_NEGATIVE_DERIVATIVE
-    - name: admission.granter.slots_exhausted_duration.kv
-      exported_name: admission_granter_slots_exhausted_duration_kv
-      description: Total duration when KV slots were exhausted, as observed by the slot granter (not waiters). This is reported in nanoseconds from 26.1 onwards, and was microseconds before that.
-      y_axis_label: Nanoseconds
-      type: COUNTER
-      unit: NANOSECONDS
       aggregation: AVG
       derivative: NON_NEGATIVE_DERIVATIVE
     - name: admission.granter.total_slots.kv
@@ -12657,553 +13375,9 @@ layers:
       unit: NANOSECONDS
       aggregation: AVG
       derivative: NONE
-    - name: admission.wait_durations.cpu
-      exported_name: admission_wait_durations_cpu
-      description: Wait time durations for requests that waited
-      y_axis_label: Wait time Duration
-      type: HISTOGRAM
-      unit: NANOSECONDS
-      aggregation: AVG
-      derivative: NONE
-    - name: admission.wait_durations.cpu.bulk-low-pri
-      exported_name: admission_wait_durations_cpu_bulk_low_pri
-      description: Wait time durations for requests that waited
-      y_axis_label: Wait time Duration
-      type: HISTOGRAM
-      unit: NANOSECONDS
-      aggregation: AVG
-      derivative: NONE
-    - name: admission.wait_durations.cpu.bulk-normal-pri
-      exported_name: admission_wait_durations_cpu_bulk_normal_pri
-      description: Wait time durations for requests that waited
-      y_axis_label: Wait time Duration
-      type: HISTOGRAM
-      unit: NANOSECONDS
-      aggregation: AVG
-      derivative: NONE
-    - name: admission.wait_durations.cpu.high-pri
-      exported_name: admission_wait_durations_cpu_high_pri
-      description: Wait time durations for requests that waited
-      y_axis_label: Wait time Duration
-      type: HISTOGRAM
-      unit: NANOSECONDS
-      aggregation: AVG
-      derivative: NONE
-    - name: admission.wait_durations.cpu.locking-normal-pri
-      exported_name: admission_wait_durations_cpu_locking_normal_pri
-      description: Wait time durations for requests that waited
-      y_axis_label: Wait time Duration
-      type: HISTOGRAM
-      unit: NANOSECONDS
-      aggregation: AVG
-      derivative: NONE
-    - name: admission.wait_durations.cpu.locking-pri
-      exported_name: admission_wait_durations_cpu_locking_pri
-      description: Wait time durations for requests that waited
-      y_axis_label: Wait time Duration
-      type: HISTOGRAM
-      unit: NANOSECONDS
-      aggregation: AVG
-      derivative: NONE
-    - name: admission.wait_durations.cpu.low-pri
-      exported_name: admission_wait_durations_cpu_low_pri
-      description: Wait time durations for requests that waited
-      y_axis_label: Wait time Duration
-      type: HISTOGRAM
-      unit: NANOSECONDS
-      aggregation: AVG
-      derivative: NONE
-    - name: admission.wait_durations.cpu.normal-pri
-      exported_name: admission_wait_durations_cpu_normal_pri
-      description: Wait time durations for requests that waited
-      y_axis_label: Wait time Duration
-      type: HISTOGRAM
-      unit: NANOSECONDS
-      aggregation: AVG
-      derivative: NONE
-    - name: admission.wait_durations.cpu.user-high-pri
-      exported_name: admission_wait_durations_cpu_user_high_pri
-      description: Wait time durations for requests that waited
-      y_axis_label: Wait time Duration
-      type: HISTOGRAM
-      unit: NANOSECONDS
-      aggregation: AVG
-      derivative: NONE
-    - name: admission.wait_durations.cpu.user-low-pri
-      exported_name: admission_wait_durations_cpu_user_low_pri
-      description: Wait time durations for requests that waited
-      y_axis_label: Wait time Duration
-      type: HISTOGRAM
-      unit: NANOSECONDS
-      aggregation: AVG
-      derivative: NONE
-    - name: admission.wait_durations.elastic-cpu
-      exported_name: admission_wait_durations_elastic_cpu
-      description: Wait time durations for requests that waited
-      y_axis_label: Wait time Duration
-      type: HISTOGRAM
-      unit: NANOSECONDS
-      aggregation: AVG
-      derivative: NONE
-    - name: admission.wait_durations.elastic-cpu.bulk-low-pri
-      exported_name: admission_wait_durations_elastic_cpu_bulk_low_pri
-      description: Wait time durations for requests that waited
-      y_axis_label: Wait time Duration
-      type: HISTOGRAM
-      unit: NANOSECONDS
-      aggregation: AVG
-      derivative: NONE
-    - name: admission.wait_durations.elastic-cpu.bulk-normal-pri
-      exported_name: admission_wait_durations_elastic_cpu_bulk_normal_pri
-      description: Wait time durations for requests that waited
-      y_axis_label: Wait time Duration
-      type: HISTOGRAM
-      unit: NANOSECONDS
-      aggregation: AVG
-      derivative: NONE
-    - name: admission.wait_durations.elastic-cpu.high-pri
-      exported_name: admission_wait_durations_elastic_cpu_high_pri
-      description: Wait time durations for requests that waited
-      y_axis_label: Wait time Duration
-      type: HISTOGRAM
-      unit: NANOSECONDS
-      aggregation: AVG
-      derivative: NONE
-    - name: admission.wait_durations.elastic-cpu.locking-normal-pri
-      exported_name: admission_wait_durations_elastic_cpu_locking_normal_pri
-      description: Wait time durations for requests that waited
-      y_axis_label: Wait time Duration
-      type: HISTOGRAM
-      unit: NANOSECONDS
-      aggregation: AVG
-      derivative: NONE
-    - name: admission.wait_durations.elastic-cpu.locking-pri
-      exported_name: admission_wait_durations_elastic_cpu_locking_pri
-      description: Wait time durations for requests that waited
-      y_axis_label: Wait time Duration
-      type: HISTOGRAM
-      unit: NANOSECONDS
-      aggregation: AVG
-      derivative: NONE
-    - name: admission.wait_durations.elastic-cpu.low-pri
-      exported_name: admission_wait_durations_elastic_cpu_low_pri
-      description: Wait time durations for requests that waited
-      y_axis_label: Wait time Duration
-      type: HISTOGRAM
-      unit: NANOSECONDS
-      aggregation: AVG
-      derivative: NONE
-    - name: admission.wait_durations.elastic-cpu.normal-pri
-      exported_name: admission_wait_durations_elastic_cpu_normal_pri
-      description: Wait time durations for requests that waited
-      y_axis_label: Wait time Duration
-      type: HISTOGRAM
-      unit: NANOSECONDS
-      aggregation: AVG
-      derivative: NONE
-    - name: admission.wait_durations.elastic-cpu.user-high-pri
-      exported_name: admission_wait_durations_elastic_cpu_user_high_pri
-      description: Wait time durations for requests that waited
-      y_axis_label: Wait time Duration
-      type: HISTOGRAM
-      unit: NANOSECONDS
-      aggregation: AVG
-      derivative: NONE
-    - name: admission.wait_durations.elastic-cpu.user-low-pri
-      exported_name: admission_wait_durations_elastic_cpu_user_low_pri
-      description: Wait time durations for requests that waited
-      y_axis_label: Wait time Duration
-      type: HISTOGRAM
-      unit: NANOSECONDS
-      aggregation: AVG
-      derivative: NONE
-    - name: admission.wait_durations.elastic-stores
-      exported_name: admission_wait_durations_elastic_stores
-      description: Wait time durations for requests that waited
-      y_axis_label: Wait time Duration
-      type: HISTOGRAM
-      unit: NANOSECONDS
-      aggregation: AVG
-      derivative: NONE
-    - name: admission.wait_durations.elastic-stores.bulk-low-pri
-      exported_name: admission_wait_durations_elastic_stores_bulk_low_pri
-      description: Wait time durations for requests that waited
-      y_axis_label: Wait time Duration
-      type: HISTOGRAM
-      unit: NANOSECONDS
-      aggregation: AVG
-      derivative: NONE
-    - name: admission.wait_durations.elastic-stores.bulk-normal-pri
-      exported_name: admission_wait_durations_elastic_stores_bulk_normal_pri
-      description: Wait time durations for requests that waited
-      y_axis_label: Wait time Duration
-      type: HISTOGRAM
-      unit: NANOSECONDS
-      aggregation: AVG
-      derivative: NONE
-    - name: admission.wait_durations.elastic-stores.high-pri
-      exported_name: admission_wait_durations_elastic_stores_high_pri
-      description: Wait time durations for requests that waited
-      y_axis_label: Wait time Duration
-      type: HISTOGRAM
-      unit: NANOSECONDS
-      aggregation: AVG
-      derivative: NONE
-    - name: admission.wait_durations.elastic-stores.locking-normal-pri
-      exported_name: admission_wait_durations_elastic_stores_locking_normal_pri
-      description: Wait time durations for requests that waited
-      y_axis_label: Wait time Duration
-      type: HISTOGRAM
-      unit: NANOSECONDS
-      aggregation: AVG
-      derivative: NONE
-    - name: admission.wait_durations.elastic-stores.locking-pri
-      exported_name: admission_wait_durations_elastic_stores_locking_pri
-      description: Wait time durations for requests that waited
-      y_axis_label: Wait time Duration
-      type: HISTOGRAM
-      unit: NANOSECONDS
-      aggregation: AVG
-      derivative: NONE
-    - name: admission.wait_durations.elastic-stores.low-pri
-      exported_name: admission_wait_durations_elastic_stores_low_pri
-      description: Wait time durations for requests that waited
-      y_axis_label: Wait time Duration
-      type: HISTOGRAM
-      unit: NANOSECONDS
-      aggregation: AVG
-      derivative: NONE
-    - name: admission.wait_durations.elastic-stores.normal-pri
-      exported_name: admission_wait_durations_elastic_stores_normal_pri
-      description: Wait time durations for requests that waited
-      y_axis_label: Wait time Duration
-      type: HISTOGRAM
-      unit: NANOSECONDS
-      aggregation: AVG
-      derivative: NONE
-    - name: admission.wait_durations.elastic-stores.user-high-pri
-      exported_name: admission_wait_durations_elastic_stores_user_high_pri
-      description: Wait time durations for requests that waited
-      y_axis_label: Wait time Duration
-      type: HISTOGRAM
-      unit: NANOSECONDS
-      aggregation: AVG
-      derivative: NONE
-    - name: admission.wait_durations.elastic-stores.user-low-pri
-      exported_name: admission_wait_durations_elastic_stores_user_low_pri
-      description: Wait time durations for requests that waited
-      y_axis_label: Wait time Duration
-      type: HISTOGRAM
-      unit: NANOSECONDS
-      aggregation: AVG
-      derivative: NONE
-    - name: admission.wait_durations.kv-stores.bulk-low-pri
-      exported_name: admission_wait_durations_kv_stores_bulk_low_pri
-      description: Wait time durations for requests that waited
-      y_axis_label: Wait time Duration
-      type: HISTOGRAM
-      unit: NANOSECONDS
-      aggregation: AVG
-      derivative: NONE
-    - name: admission.wait_durations.kv-stores.bulk-normal-pri
-      exported_name: admission_wait_durations_kv_stores_bulk_normal_pri
-      description: Wait time durations for requests that waited
-      y_axis_label: Wait time Duration
-      type: HISTOGRAM
-      unit: NANOSECONDS
-      aggregation: AVG
-      derivative: NONE
-    - name: admission.wait_durations.kv-stores.high-pri
-      exported_name: admission_wait_durations_kv_stores_high_pri
-      description: Wait time durations for requests that waited
-      y_axis_label: Wait time Duration
-      type: HISTOGRAM
-      unit: NANOSECONDS
-      aggregation: AVG
-      derivative: NONE
-    - name: admission.wait_durations.kv-stores.locking-normal-pri
-      exported_name: admission_wait_durations_kv_stores_locking_normal_pri
-      description: Wait time durations for requests that waited
-      y_axis_label: Wait time Duration
-      type: HISTOGRAM
-      unit: NANOSECONDS
-      aggregation: AVG
-      derivative: NONE
-    - name: admission.wait_durations.kv-stores.locking-pri
-      exported_name: admission_wait_durations_kv_stores_locking_pri
-      description: Wait time durations for requests that waited
-      y_axis_label: Wait time Duration
-      type: HISTOGRAM
-      unit: NANOSECONDS
-      aggregation: AVG
-      derivative: NONE
-    - name: admission.wait_durations.kv-stores.low-pri
-      exported_name: admission_wait_durations_kv_stores_low_pri
-      description: Wait time durations for requests that waited
-      y_axis_label: Wait time Duration
-      type: HISTOGRAM
-      unit: NANOSECONDS
-      aggregation: AVG
-      derivative: NONE
-    - name: admission.wait_durations.kv-stores.normal-pri
-      exported_name: admission_wait_durations_kv_stores_normal_pri
-      description: Wait time durations for requests that waited
-      y_axis_label: Wait time Duration
-      type: HISTOGRAM
-      unit: NANOSECONDS
-      aggregation: AVG
-      derivative: NONE
-    - name: admission.wait_durations.kv-stores.user-high-pri
-      exported_name: admission_wait_durations_kv_stores_user_high_pri
-      description: Wait time durations for requests that waited
-      y_axis_label: Wait time Duration
-      type: HISTOGRAM
-      unit: NANOSECONDS
-      aggregation: AVG
-      derivative: NONE
-    - name: admission.wait_durations.kv-stores.user-low-pri
-      exported_name: admission_wait_durations_kv_stores_user_low_pri
-      description: Wait time durations for requests that waited
-      y_axis_label: Wait time Duration
-      type: HISTOGRAM
-      unit: NANOSECONDS
-      aggregation: AVG
-      derivative: NONE
-    - name: admission.wait_durations.kv.bulk-low-pri
-      exported_name: admission_wait_durations_kv_bulk_low_pri
-      description: Wait time durations for requests that waited
-      y_axis_label: Wait time Duration
-      type: HISTOGRAM
-      unit: NANOSECONDS
-      aggregation: AVG
-      derivative: NONE
-    - name: admission.wait_durations.kv.bulk-normal-pri
-      exported_name: admission_wait_durations_kv_bulk_normal_pri
-      description: Wait time durations for requests that waited
-      y_axis_label: Wait time Duration
-      type: HISTOGRAM
-      unit: NANOSECONDS
-      aggregation: AVG
-      derivative: NONE
-    - name: admission.wait_durations.kv.high-pri
-      exported_name: admission_wait_durations_kv_high_pri
-      description: Wait time durations for requests that waited
-      y_axis_label: Wait time Duration
-      type: HISTOGRAM
-      unit: NANOSECONDS
-      aggregation: AVG
-      derivative: NONE
-    - name: admission.wait_durations.kv.locking-normal-pri
-      exported_name: admission_wait_durations_kv_locking_normal_pri
-      description: Wait time durations for requests that waited
-      y_axis_label: Wait time Duration
-      type: HISTOGRAM
-      unit: NANOSECONDS
-      aggregation: AVG
-      derivative: NONE
-    - name: admission.wait_durations.kv.locking-pri
-      exported_name: admission_wait_durations_kv_locking_pri
-      description: Wait time durations for requests that waited
-      y_axis_label: Wait time Duration
-      type: HISTOGRAM
-      unit: NANOSECONDS
-      aggregation: AVG
-      derivative: NONE
-    - name: admission.wait_durations.kv.low-pri
-      exported_name: admission_wait_durations_kv_low_pri
-      description: Wait time durations for requests that waited
-      y_axis_label: Wait time Duration
-      type: HISTOGRAM
-      unit: NANOSECONDS
-      aggregation: AVG
-      derivative: NONE
-    - name: admission.wait_durations.kv.normal-pri
-      exported_name: admission_wait_durations_kv_normal_pri
-      description: Wait time durations for requests that waited
-      y_axis_label: Wait time Duration
-      type: HISTOGRAM
-      unit: NANOSECONDS
-      aggregation: AVG
-      derivative: NONE
-    - name: admission.wait_durations.kv.user-high-pri
-      exported_name: admission_wait_durations_kv_user_high_pri
-      description: Wait time durations for requests that waited
-      y_axis_label: Wait time Duration
-      type: HISTOGRAM
-      unit: NANOSECONDS
-      aggregation: AVG
-      derivative: NONE
-    - name: admission.wait_durations.kv.user-low-pri
-      exported_name: admission_wait_durations_kv_user_low_pri
-      description: Wait time durations for requests that waited
-      y_axis_label: Wait time Duration
-      type: HISTOGRAM
-      unit: NANOSECONDS
-      aggregation: AVG
-      derivative: NONE
     - name: admission.wait_durations.snapshot_ingest
       exported_name: admission_wait_durations_snapshot_ingest
       description: Wait time for snapshot ingest requests that waited
-      y_axis_label: Wait time Duration
-      type: HISTOGRAM
-      unit: NANOSECONDS
-      aggregation: AVG
-      derivative: NONE
-    - name: admission.wait_durations.sql-kv-response
-      exported_name: admission_wait_durations_sql_kv_response
-      description: Wait time durations for requests that waited
-      y_axis_label: Wait time Duration
-      type: HISTOGRAM
-      unit: NANOSECONDS
-      aggregation: AVG
-      derivative: NONE
-    - name: admission.wait_durations.sql-kv-response.bulk-low-pri
-      exported_name: admission_wait_durations_sql_kv_response_bulk_low_pri
-      description: Wait time durations for requests that waited
-      y_axis_label: Wait time Duration
-      type: HISTOGRAM
-      unit: NANOSECONDS
-      aggregation: AVG
-      derivative: NONE
-    - name: admission.wait_durations.sql-kv-response.bulk-normal-pri
-      exported_name: admission_wait_durations_sql_kv_response_bulk_normal_pri
-      description: Wait time durations for requests that waited
-      y_axis_label: Wait time Duration
-      type: HISTOGRAM
-      unit: NANOSECONDS
-      aggregation: AVG
-      derivative: NONE
-    - name: admission.wait_durations.sql-kv-response.high-pri
-      exported_name: admission_wait_durations_sql_kv_response_high_pri
-      description: Wait time durations for requests that waited
-      y_axis_label: Wait time Duration
-      type: HISTOGRAM
-      unit: NANOSECONDS
-      aggregation: AVG
-      derivative: NONE
-    - name: admission.wait_durations.sql-kv-response.locking-normal-pri
-      exported_name: admission_wait_durations_sql_kv_response_locking_normal_pri
-      description: Wait time durations for requests that waited
-      y_axis_label: Wait time Duration
-      type: HISTOGRAM
-      unit: NANOSECONDS
-      aggregation: AVG
-      derivative: NONE
-    - name: admission.wait_durations.sql-kv-response.locking-pri
-      exported_name: admission_wait_durations_sql_kv_response_locking_pri
-      description: Wait time durations for requests that waited
-      y_axis_label: Wait time Duration
-      type: HISTOGRAM
-      unit: NANOSECONDS
-      aggregation: AVG
-      derivative: NONE
-    - name: admission.wait_durations.sql-kv-response.low-pri
-      exported_name: admission_wait_durations_sql_kv_response_low_pri
-      description: Wait time durations for requests that waited
-      y_axis_label: Wait time Duration
-      type: HISTOGRAM
-      unit: NANOSECONDS
-      aggregation: AVG
-      derivative: NONE
-    - name: admission.wait_durations.sql-kv-response.normal-pri
-      exported_name: admission_wait_durations_sql_kv_response_normal_pri
-      description: Wait time durations for requests that waited
-      y_axis_label: Wait time Duration
-      type: HISTOGRAM
-      unit: NANOSECONDS
-      aggregation: AVG
-      derivative: NONE
-    - name: admission.wait_durations.sql-kv-response.user-high-pri
-      exported_name: admission_wait_durations_sql_kv_response_user_high_pri
-      description: Wait time durations for requests that waited
-      y_axis_label: Wait time Duration
-      type: HISTOGRAM
-      unit: NANOSECONDS
-      aggregation: AVG
-      derivative: NONE
-    - name: admission.wait_durations.sql-kv-response.user-low-pri
-      exported_name: admission_wait_durations_sql_kv_response_user_low_pri
-      description: Wait time durations for requests that waited
-      y_axis_label: Wait time Duration
-      type: HISTOGRAM
-      unit: NANOSECONDS
-      aggregation: AVG
-      derivative: NONE
-    - name: admission.wait_durations.sql-sql-response
-      exported_name: admission_wait_durations_sql_sql_response
-      description: Wait time durations for requests that waited
-      y_axis_label: Wait time Duration
-      type: HISTOGRAM
-      unit: NANOSECONDS
-      aggregation: AVG
-      derivative: NONE
-    - name: admission.wait_durations.sql-sql-response.bulk-low-pri
-      exported_name: admission_wait_durations_sql_sql_response_bulk_low_pri
-      description: Wait time durations for requests that waited
-      y_axis_label: Wait time Duration
-      type: HISTOGRAM
-      unit: NANOSECONDS
-      aggregation: AVG
-      derivative: NONE
-    - name: admission.wait_durations.sql-sql-response.bulk-normal-pri
-      exported_name: admission_wait_durations_sql_sql_response_bulk_normal_pri
-      description: Wait time durations for requests that waited
-      y_axis_label: Wait time Duration
-      type: HISTOGRAM
-      unit: NANOSECONDS
-      aggregation: AVG
-      derivative: NONE
-    - name: admission.wait_durations.sql-sql-response.high-pri
-      exported_name: admission_wait_durations_sql_sql_response_high_pri
-      description: Wait time durations for requests that waited
-      y_axis_label: Wait time Duration
-      type: HISTOGRAM
-      unit: NANOSECONDS
-      aggregation: AVG
-      derivative: NONE
-    - name: admission.wait_durations.sql-sql-response.locking-normal-pri
-      exported_name: admission_wait_durations_sql_sql_response_locking_normal_pri
-      description: Wait time durations for requests that waited
-      y_axis_label: Wait time Duration
-      type: HISTOGRAM
-      unit: NANOSECONDS
-      aggregation: AVG
-      derivative: NONE
-    - name: admission.wait_durations.sql-sql-response.locking-pri
-      exported_name: admission_wait_durations_sql_sql_response_locking_pri
-      description: Wait time durations for requests that waited
-      y_axis_label: Wait time Duration
-      type: HISTOGRAM
-      unit: NANOSECONDS
-      aggregation: AVG
-      derivative: NONE
-    - name: admission.wait_durations.sql-sql-response.low-pri
-      exported_name: admission_wait_durations_sql_sql_response_low_pri
-      description: Wait time durations for requests that waited
-      y_axis_label: Wait time Duration
-      type: HISTOGRAM
-      unit: NANOSECONDS
-      aggregation: AVG
-      derivative: NONE
-    - name: admission.wait_durations.sql-sql-response.normal-pri
-      exported_name: admission_wait_durations_sql_sql_response_normal_pri
-      description: Wait time durations for requests that waited
-      y_axis_label: Wait time Duration
-      type: HISTOGRAM
-      unit: NANOSECONDS
-      aggregation: AVG
-      derivative: NONE
-    - name: admission.wait_durations.sql-sql-response.user-high-pri
-      exported_name: admission_wait_durations_sql_sql_response_user_high_pri
-      description: Wait time durations for requests that waited
-      y_axis_label: Wait time Duration
-      type: HISTOGRAM
-      unit: NANOSECONDS
-      aggregation: AVG
-      derivative: NONE
-    - name: admission.wait_durations.sql-sql-response.user-low-pri
-      exported_name: admission_wait_durations_sql_sql_response_user_low_pri
-      description: Wait time durations for requests that waited
       y_axis_label: Wait time Duration
       type: HISTOGRAM
       unit: NANOSECONDS
@@ -14825,14 +14999,6 @@ layers:
       unit: COUNT
       aggregation: AVG
       derivative: NON_NEGATIVE_DERIVATIVE
-    - name: kvflowcontrol.eval_wait.elastic.duration
-      exported_name: kvflowcontrol_eval_wait_elastic_duration
-      description: Latency histogram for time elastic requests spent waiting for flow tokens to evaluate
-      y_axis_label: Nanoseconds
-      type: HISTOGRAM
-      unit: NANOSECONDS
-      aggregation: AVG
-      derivative: NONE
     - name: kvflowcontrol.eval_wait.elastic.requests.admitted
       exported_name: kvflowcontrol_eval_wait_elastic_requests_admitted
       description: Number of elastic requests admitted by the flow controller
@@ -14863,14 +15029,6 @@ layers:
       y_axis_label: Requests
       type: GAUGE
       unit: COUNT
-      aggregation: AVG
-      derivative: NONE
-    - name: kvflowcontrol.eval_wait.regular.duration
-      exported_name: kvflowcontrol_eval_wait_regular_duration
-      description: Latency histogram for time regular requests spent waiting for flow tokens to evaluate
-      y_axis_label: Nanoseconds
-      type: HISTOGRAM
-      unit: NANOSECONDS
       aggregation: AVG
       derivative: NONE
     - name: kvflowcontrol.eval_wait.regular.requests.admitted
@@ -14911,14 +15069,6 @@ layers:
       y_axis_label: Count
       type: GAUGE
       unit: COUNT
-      aggregation: AVG
-      derivative: NONE
-    - name: kvflowcontrol.send_queue.bytes
-      exported_name: kvflowcontrol_send_queue_bytes
-      description: Byte size of all raft entries queued for sending to followers, waiting on available elastic send tokens
-      y_axis_label: Bytes
-      type: GAUGE
-      unit: BYTES
       aggregation: AVG
       derivative: NONE
     - name: kvflowcontrol.send_queue.count

@@ -320,6 +320,9 @@ var ( // granter-side metrics (some of these have parallels on the requester sid
 			"nanoseconds from 26.1 onwards, and was microseconds before that.",
 		Measurement: "Nanoseconds",
 		Unit:        metric.Unit_NANOSECONDS,
+		Visibility:  metric.Metadata_ESSENTIAL,
+		Category:    metric.Metadata_OVERLOAD,
+		HowToUse:    "This metric indicates when elastic CPU tokens are exhausted. Extended periods of elastic CPU token exhaustion may indicate high CPU utilization affecting elastic workloads.",
 	}
 
 	elasticCPUOverLimitDurations = metric.Metadata{

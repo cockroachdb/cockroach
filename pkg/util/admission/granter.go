@@ -1032,6 +1032,9 @@ var (
 			"and was microseconds before that.",
 		Measurement: "Nanoseconds",
 		Unit:        metric.Unit_NANOSECONDS,
+		Visibility:  metric.Metadata_ESSENTIAL,
+		Category:    metric.Metadata_OVERLOAD,
+		HowToUse:    "This metric indicates when KV slots are exhausted. Extended periods of slot exhaustion (over 5 seconds) may indicate insufficient slot allocation or high request concurrency requiring attention.",
 	}
 	// We have a metric for both short and long period. These metrics use the
 	// period provided in CPULoad and not wall time. So if the sum of the rate
@@ -1070,6 +1073,9 @@ var (
 			"microseconds before that.",
 		Measurement: "Nanoseconds",
 		Unit:        metric.Unit_NANOSECONDS,
+		Visibility:  metric.Metadata_ESSENTIAL,
+		Category:    metric.Metadata_OVERLOAD,
+		HowToUse:    "This metric indicates when I/O tokens are exhausted. Extended periods of token exhaustion may indicate I/O bandwidth saturation or high disk utilization requiring attention.",
 	}
 	kvElasticIOTokensExhaustedDuration = metric.Metadata{
 		Name: "admission.granter.elastic_io_tokens_exhausted_duration.kv",
@@ -1078,6 +1084,9 @@ var (
 			"microseconds before that.",
 		Measurement: "Nanoseconds",
 		Unit:        metric.Unit_NANOSECONDS,
+		Visibility:  metric.Metadata_ESSENTIAL,
+		Category:    metric.Metadata_OVERLOAD,
+		HowToUse:    "This metric indicates when elastic I/O tokens are exhausted. Extended periods of elastic token exhaustion may indicate I/O bandwidth saturation affecting elastic workloads.",
 	}
 	kvIOTokensTaken = metric.Metadata{
 		Name:        "admission.granter.io_tokens_taken.kv",
