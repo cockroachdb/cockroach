@@ -4566,7 +4566,7 @@ func (ex *connExecutor) maybeRecordRetrySerializableContention(
 			contentionEvent := contentionpb.ExtendedContentionEvent{
 				ContentionType: contentionpb.ContentionType_SERIALIZATION_CONFLICT,
 				BlockingEvent: kvpb.ContentionEvent{
-					Key:     retryErr.ConflictingTxn.Key,
+					Key:     retryErr.ConflictKey,
 					TxnMeta: *retryErr.ConflictingTxn,
 					// Duration is not relevant for SERIALIZATION conflicts.
 				},
