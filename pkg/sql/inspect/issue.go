@@ -106,4 +106,8 @@ const (
 	// RowCountMismatch occurs when a index's row count doesn't match the
 	// expected value.
 	RowCountMismatch inspectErrorType = "row_count_mismatch"
+
+	// DuplicateUniqueValue occurs when a value is duplicated in violation of a
+	// unique index or constraint.
+	DuplicateUniqueValue inspectErrorType = "duplicate_unique_value"
 )
