@@ -5,7 +5,7 @@
 
 import { CaretDown } from "@cockroachlabs/icons";
 import classnames from "classnames/bind";
-import React from "react";
+import React, { useState } from "react";
 
 import { Button, ButtonProps } from "src/button";
 
@@ -37,10 +37,6 @@ export interface DropdownProps<T> {
   menuPosition?: "left" | "right";
   className?: string;
   itemsClassname?: string;
-}
-
-interface DropdownState {
-  isOpen: boolean;
 }
 
 interface DropdownButtonProps {
@@ -85,36 +81,28 @@ function DropdownItem<T = string>(props: DropdownItemProps<T>) {
   );
 }
 
-export class Dropdown<T = string> extends React.Component<
-  DropdownProps<T>,
-  DropdownState
-> {
-  state = {
-    isOpen: false,
+export function Dropdown<T = string>({
+  items,
+  onChange,
+  children,
+  customToggleButton,
+  customToggleButtonOptions,
+  menuPosition = "left",
+  className,
+  itemsClassname,
+}: DropdownProps<T>): React.ReactElement {
+  const [isOpen, setIsOpen] = useState(false);
+
+  const handleMenuOpen = (): void => {
+    setIsOpen(prev => !prev);
   };
 
-  handleMenuOpen = (): void => {
-    this.setState({
-      isOpen: !this.state.isOpen,
-    });
+  const handleItemSelection = (value: T): void => {
+    onChange(value);
+    setIsOpen(prev => !prev);
   };
 
-  changeMenuState = (nextState: boolean): void => {
-    this.setState({
-      isOpen: nextState,
-    });
-  };
-
-  handleItemSelection = (value: T): void => {
-    this.props.onChange(value);
-    this.handleMenuOpen();
-  };
-
-  renderDropdownToggleButton = (): React.ReactChild => {
-    const { children, customToggleButton, customToggleButtonOptions } =
-      this.props;
-    const { isOpen } = this.state;
-
+  const renderDropdownToggleButton = (): React.ReactChild => {
     if (customToggleButton) {
       return customToggleButton;
     } else {
@@ -126,51 +114,38 @@ export class Dropdown<T = string> extends React.Component<
     }
   };
 
-  render(): React.ReactElement {
-    const {
-      items,
-      menuPosition = "left",
-      className,
-      itemsClassname,
-    } = this.props;
-    const { isOpen } = this.state;
+  const menuStyles = cx(
+    "crl-dropdown__menu",
+    `crl-dropdown__menu--align-${menuPosition}`,
+    {
+      "crl-dropdown__menu--open": isOpen,
+    },
+  );
 
-    const menuStyles = cx(
-      "crl-dropdown__menu",
-      `crl-dropdown__menu--align-${menuPosition}`,
-      {
-        "crl-dropdown__menu--open": isOpen,
-      },
-    );
+  const menuItems = items.map((menuItem, idx) => (
+    <DropdownItem<T>
+      value={menuItem.value}
+      onClick={handleItemSelection}
+      key={idx}
+      disabled={menuItem.disabled}
+      className={itemsClassname}
+    >
+      {menuItem.name}
+    </DropdownItem>
+  ));
 
-    const menuItems = items.map((menuItem, idx) => (
-      <DropdownItem<T>
-        value={menuItem.value}
-        onClick={this.handleItemSelection}
-        key={idx}
-        disabled={menuItem.disabled}
-        className={itemsClassname}
-      >
-        {menuItem.name}
-      </DropdownItem>
-    ));
-
-    return (
-      <div className={cx("crl-dropdown", className)}>
-        <OutsideEventHandler onOutsideClick={() => this.changeMenuState(false)}>
-          <div
-            className={cx("crl-dropdown__handler")}
-            onClick={this.handleMenuOpen}
-          >
-            {this.renderDropdownToggleButton()}
+  return (
+    <div className={cx("crl-dropdown", className)}>
+      <OutsideEventHandler onOutsideClick={() => setIsOpen(false)}>
+        <div className={cx("crl-dropdown__handler")} onClick={handleMenuOpen}>
+          {renderDropdownToggleButton()}
+        </div>
+        <div className={cx("crl-dropdown__overlay")}>
+          <div className={menuStyles}>
+            <div className={cx("crl-dropdown__container")}>{menuItems}</div>
           </div>
-          <div className={cx("crl-dropdown__overlay")}>
-            <div className={menuStyles}>
-              <div className={cx("crl-dropdown__container")}>{menuItems}</div>
-            </div>
-          </div>
-        </OutsideEventHandler>
-      </div>
-    );
-  }
+        </div>
+      </OutsideEventHandler>
+    </div>
+  );
 }

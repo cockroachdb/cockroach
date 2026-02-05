@@ -49,7 +49,7 @@ export interface SimplifiedEvent {
   content: React.ReactNode;
 }
 
-class EventSortedTable extends SortedTable<SimplifiedEvent> {}
+const EventSortedTable = SortedTable<SimplifiedEvent>;
 
 export interface EventRowProps {
   event: clusterUiApi.EventColumns;
@@ -168,18 +168,20 @@ export class EventPageUnconnected extends React.Component<EventPageProps, {}> {
           <EventSortedTable
             data={simplifiedEvents}
             sortSetting={sortSetting}
-            onChangeSortSetting={setting => this.props.setSort(setting)}
+            onChangeSortSetting={(setting: SortSetting) =>
+              this.props.setSort(setting)
+            }
             columns={[
               {
                 title: "Event",
                 name: "event",
-                cell: e => e.content,
+                cell: (e: SimplifiedEvent) => e.content,
               },
               {
                 title: "Timestamp",
                 name: "timestamp",
-                cell: e => e.fromNowString,
-                sort: e => e.sortableTimestamp,
+                cell: (e: SimplifiedEvent) => e.fromNowString,
+                sort: (e: SimplifiedEvent) => e.sortableTimestamp,
               },
             ]}
           />
