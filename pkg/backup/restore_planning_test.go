@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -27,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/funcdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemadesc"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/exprutil"
@@ -329,7 +331,8 @@ func TestAllocateDescriptorRewrites(t *testing.T) {
 				0,
 				tree.RestoreOptions{},
 				"",
-				"")
+				"",
+				false)
 			require.NoError(t, err)
 			require.Equal(t, jobspb.DescRewriteMap{}, rewrites)
 		})
@@ -359,7 +362,8 @@ func TestAllocateDescriptorRewrites(t *testing.T) {
 				0,
 				tree.RestoreOptions{},
 				db2.GetName(),
-				"")
+				"",
+				false)
 			require.NoError(t, err)
 
 			// DB objects are not reallocated
@@ -419,7 +423,8 @@ func TestAllocateDescriptorRewrites(t *testing.T) {
 				0,
 				tree.RestoreOptions{},
 				"",
-				"db3")
+				"db3",
+				false)
 			require.NoError(t, err)
 
 			require.NoError(t, validateSelfIDs(rewrites, []catalog.Descriptor{
@@ -477,7 +482,8 @@ func TestAllocateDescriptorRewrites(t *testing.T) {
 				0,
 				tree.RestoreOptions{},
 				"",
-				"db3")
+				"db3",
+				false)
 
 			require.NoError(t, err)
 
@@ -534,7 +540,8 @@ func TestAllocateDescriptorRewrites(t *testing.T) {
 				0,
 				tree.RestoreOptions{},
 				"",
-				"")
+				"",
+				false)
 			require.NoError(t, err)
 
 			// DB objects are reallocated
@@ -571,6 +578,52 @@ func TestAllocateDescriptorRewrites(t *testing.T) {
 				require.Equalf(t, newSchema1ID, rewrite.ParentSchemaID,
 					"expected rewrite to have new parent schema, descriptor: %v, rewrite: %v", obj, rewrite,
 				)
+			}
+		})
+		t.Run("allocates system descriptors with setupTempDB", func(t *testing.T) {
+			namespaceTable := systemschema.NamespaceTable.
+				NewBuilder().BuildExistingMutable().(*tabledesc.Mutable)
+			usersTable := systemschema.UsersTable.
+				NewBuilder().BuildExistingMutable().(*tabledesc.Mutable)
+
+			rewrites, tempSysDBID, err := allocateDescriptorRewrites(
+				ctx,
+				planner,
+				nil,
+				nil,
+				map[descpb.ID]*tabledesc.Mutable{
+					namespaceTable.GetID(): namespaceTable,
+					usersTable.GetID():     usersTable,
+				},
+				nil,
+				nil,
+				nil,
+				0,
+				tree.RestoreOptions{},
+				"",
+				"",
+				true,
+			)
+
+			require.NoError(t, err)
+			require.NotEqual(t, descpb.InvalidID, tempSysDBID,
+				"tempSysDBID should be allocated when setupTempDB=true")
+			require.Len(t, rewrites, 2, "should have rewrites for both system tables")
+
+			for _, table := range []*tabledesc.Mutable{namespaceTable, usersTable} {
+				rewrite, ok := rewrites[table.GetID()]
+				require.True(t, ok, "no rewrite found for system table %s", table.GetName())
+
+				require.Equal(t, tempSysDBID, rewrite.ParentID,
+					"system table %s should have tempSysDBID as parent", table.GetName())
+
+				require.Equal(t, descpb.ID(keys.PublicSchemaIDForBackup), rewrite.ParentSchemaID,
+					"system table %s should have public schema as parent schema", table.GetName())
+
+				require.NotEqual(t, descpb.InvalidID, rewrite.ID,
+					"system table %s should be assigned new ID", table.GetName())
+				require.NotEqual(t, table.GetID(), rewrite.ID,
+					"system table %s should be assigned new ID different from original", table.GetName())
 			}
 		})
 	})

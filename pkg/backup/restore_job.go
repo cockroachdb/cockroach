@@ -132,6 +132,10 @@ const (
 	// droppedDescsOnFailKey is an info key that is set for a restore job when it
 	// has finished dropping its descriptors on failure.
 	droppedDescsOnFailKey = "dropped_descs_on_fail"
+
+	// restoreTempSystemDBPrefix is the prefix used for the temporary system
+	// database created during restore.
+	restoreTempSystemDBPrefix = "crdb_temp_system"
 )
 
 var restoreStatsInsertionConcurrency = settings.RegisterIntSetting(
@@ -154,7 +158,6 @@ func restoreTempSystemName(
 	jobCreationClusterVersion roachpb.Version, restoreJobID jobspb.JobID,
 ) string {
 
-	const restoreTempSystemDBPrefix = "crdb_temp_system"
 	if jobCreationClusterVersion.AtLeast(clusterversion.V26_2.Version()) {
 		return fmt.Sprintf("%s_%d", restoreTempSystemDBPrefix, restoreJobID)
 	}
@@ -1370,7 +1373,6 @@ func createRestoreFlows(
 
 	postRestoreTables := make([]catalog.TableDescriptor, 0)
 	preRestoreTables := make([]catalog.TableDescriptor, 0)
-	oldTableIDs := make([]descpb.ID, 0)
 	tablesToPreRestore := getSystemTablesToRestoreBeforeData()
 
 	shouldPreRestore := func(tableDesc catalog.TableDescriptor) bool {
@@ -1392,7 +1394,6 @@ func createRestoreFlows(
 			}
 		}
 		if tableDesc, ok := desc.(catalog.TableDescriptor); ok {
-			oldTableIDs = append(oldTableIDs, tableDesc.GetID())
 			if shouldPreRestore(tableDesc) {
 				preRestoreTables = append(preRestoreTables, tableDesc)
 			} else {
@@ -1421,6 +1422,11 @@ func createRestoreFlows(
 		}
 	}
 
+	newIDToOldID := make(map[descpb.ID]descpb.ID)
+	for oldID, rewrite := range details.DescriptorRewrites {
+		newIDToOldID[rewrite.ID] = oldID
+	}
+
 	tempSystemDBID := tempSystemDatabaseID(details, postRestoreTables, r.job.Payload().CreationClusterVersion)
 
 	var rekeys []execinfrapb.TableRekey
@@ -1433,7 +1439,7 @@ func createRestoreFlows(
 				"marshaling descriptor")
 		}
 		rekeys = append(rekeys, execinfrapb.TableRekey{
-			OldID:   uint32(oldTableIDs[i]),
+			OldID:   uint32(newIDToOldID[desc.GetID()]),
 			NewDesc: newDescBytes,
 		})
 		if desc.GetParentID() == tempSystemDBID {
@@ -2372,7 +2378,6 @@ func (r *restoreResumer) doResume(ctx context.Context, execCtx interface{}) erro
 		}
 	}
 
-	// Reload the details as we may have updated the job.
 	details = r.job.Details().(jobspb.RestoreDetails)
 	p.ExecCfg().JobRegistry.NotifyToAdoptJobs()
 
@@ -2386,21 +2391,17 @@ func (r *restoreResumer) doResume(ctx context.Context, execCtx interface{}) erro
 		); err != nil {
 			return err
 		}
-		// Reload the details as we may have updated the job.
 		details = r.job.Details().(jobspb.RestoreDetails)
-
-		if err := r.cleanupTempSystemTables(ctx); err != nil {
-			return err
-		}
 	} else if isSystemUserRestore(details) {
 		if err := r.restoreSystemUsers(ctx, p.ExecCfg().InternalDB, mainData.getSystemTables()); err != nil {
 			return err
 		}
-		details = r.job.Details().(jobspb.RestoreDetails)
+	}
 
-		if err := r.cleanupTempSystemTables(ctx); err != nil {
-			return err
-		}
+	// Reload the details as we may have updated the job.
+	details = r.job.Details().(jobspb.RestoreDetails)
+	if err := r.maybeCleanupTempSystemDB(ctx); err != nil {
+		return err
 	}
 
 	if err := p.ExecCfg().JobRegistry.CheckPausepoint(
@@ -3209,12 +3210,8 @@ func (r *restoreResumer) OnFailOrCancel(
 		}
 	}
 
-	if details.DescriptorCoverage == tree.AllDescriptors || isSystemUserRestore(details) {
-		// The temporary system table descriptors should already have been dropped
-		// in `dropDescriptors` but we still need to drop the temporary system db.
-		if err := r.cleanupTempSystemTables(ctx); err != nil {
-			return err
-		}
+	if err := r.maybeCleanupTempSystemDB(ctx); err != nil {
+		return err
 	}
 
 	// Emit to the event log that the job has completed reverting.
@@ -3874,7 +3871,7 @@ func (r *restoreResumer) restoreSystemTables(
 	return nil
 }
 
-func (r *restoreResumer) cleanupTempSystemTables(ctx context.Context) error {
+func (r *restoreResumer) maybeCleanupTempSystemDB(ctx context.Context) error {
 	executor := r.execCfg.InternalDB.Executor()
 
 	dbName := restoreTempSystemName(r.job.Payload().CreationClusterVersion, r.job.ID())
