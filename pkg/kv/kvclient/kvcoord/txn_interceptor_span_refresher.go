@@ -502,6 +502,7 @@ func newRetryErrorOnFailedPreemptiveRefresh(
 	txn *roachpb.Transaction, pErr *kvpb.Error,
 ) *kvpb.Error {
 	var conflictingTxn *enginepb.TxnMeta
+	var conflictKey roachpb.Key
 	msg := redact.StringBuilder{}
 	msg.SafeString("failed preemptive refresh")
 	if pErr != nil {
@@ -509,17 +510,19 @@ func newRetryErrorOnFailedPreemptiveRefresh(
 			if refreshErr.ConflictingTxn != nil {
 				conflictingTxn = refreshErr.ConflictingTxn
 			}
+			conflictKey = refreshErr.Key
 			msg.Printf(" due to %s", refreshErr)
 		} else if wiErr, ok := pErr.GetDetail().(*kvpb.WriteIntentError); ok {
 			if len(wiErr.Locks) > 0 {
 				conflictingTxn = &wiErr.Locks[0].Txn
+				conflictKey = wiErr.Locks[0].Key
 			}
 			msg.Printf(" due to %s", wiErr)
 		} else {
 			msg.Printf(" - unknown error: %s", pErr)
 		}
 	}
-	retryErr := kvpb.NewTransactionRetryError(kvpb.RETRY_SERIALIZABLE, msg.RedactableString(), kvpb.WithConflictingTxn(conflictingTxn))
+	retryErr := kvpb.NewTransactionRetryError(kvpb.RETRY_SERIALIZABLE, msg.RedactableString(), kvpb.WithConflictingTxn(conflictingTxn), kvpb.WithConflictKey(conflictKey))
 	return kvpb.NewErrorWithTxn(retryErr, txn)
 }
 
