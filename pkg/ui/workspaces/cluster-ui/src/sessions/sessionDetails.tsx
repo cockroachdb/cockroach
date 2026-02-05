@@ -8,7 +8,7 @@ import { Col, Row } from "antd";
 import classNames from "classnames/bind";
 import isNil from "lodash/isNil";
 import moment from "moment-timezone";
-import React from "react";
+import React, { useEffect, useCallback, useRef } from "react";
 import { Helmet } from "react-helmet";
 import { RouteComponentProps } from "react-router-dom";
 
@@ -92,176 +92,96 @@ export const MemoryUsageItem: React.FC<{
   />
 );
 
-export class SessionDetails extends React.Component<SessionDetailsProps> {
-  terminateSessionRef: React.RefObject<TerminateSessionModalRef>;
-  terminateQueryRef: React.RefObject<TerminateQueryModalRef>;
+export function SessionDetails(props: SessionDetailsProps): React.ReactElement {
+  const {
+    history,
+    match,
+    session: sessionInfo,
+    sessionError,
+    refreshSessions,
+    refreshNodes,
+    refreshNodesLiveness,
+    cancelSession,
+    cancelQuery,
+    uiConfig,
+    isTenant,
+    nodeNames,
+    onBackButtonClick,
+    onTerminateSessionClick,
+    onTerminateStatementClick,
+    setTimeScale,
+  } = props;
 
-  componentDidMount(): void {
-    if (!this.props.isTenant) {
-      this.props.refreshNodes();
-      this.props.refreshNodesLiveness();
+  const terminateSessionRef = useRef<TerminateSessionModalRef>(null);
+  const terminateQueryRef = useRef<TerminateQueryModalRef>(null);
+
+  // Refs to hold latest values for mount effect, avoiding stale closures
+  // while preserving "run once on mount" semantics.
+  const isTenantRef = useRef(isTenant);
+  const refreshNodesRef = useRef(refreshNodes);
+  const refreshNodesLivenessRef = useRef(refreshNodesLiveness);
+  const refreshSessionsRef = useRef(refreshSessions);
+
+  // Keep refs up to date on each render
+  isTenantRef.current = isTenant;
+  refreshNodesRef.current = refreshNodes;
+  refreshNodesLivenessRef.current = refreshNodesLiveness;
+  refreshSessionsRef.current = refreshSessions;
+
+  // componentDidMount
+  useEffect(() => {
+    if (!isTenantRef.current) {
+      refreshNodesRef.current();
+      refreshNodesLivenessRef.current();
     }
-    this.props.refreshSessions();
-  }
+    refreshSessionsRef.current();
+  }, []);
 
-  componentDidUpdate(): void {
-    // Normally, we would refresh the sessions here, but we don't want to
-    // have the per-session page update whenever our data source updates
-    // because in real workloads, sessions change what they're doing very
-    // regularly, leading to a confusing and too-fast-refreshing page
-    // experience for people trying to understand what is happening in a
-    // particular session.
-    // this.props.refreshSessions();
-  }
-
-  constructor(props: SessionDetailsProps) {
-    super(props);
-    this.terminateSessionRef = React.createRef();
-    this.terminateQueryRef = React.createRef();
-  }
-
-  backToSessionsPage = (): void => {
-    const { history, onBackButtonClick } = this.props;
+  const backToSessionsPage = useCallback((): void => {
     onBackButtonClick && onBackButtonClick();
     history.push("/sql-activity?tab=Sessions");
-  };
+  }, [history, onBackButtonClick]);
 
-  render(): React.ReactElement {
-    const sessionID = getMatchParamByName(this.props.match, sessionAttr);
-    const {
-      sessionError,
-      cancelSession,
-      cancelQuery,
-      onTerminateSessionClick,
-      onTerminateStatementClick,
-    } = this.props;
-    const session = this.props.session?.session;
-    const showActionButtons = !!session && !sessionError;
-    return (
-      <div className={cx("sessions-details")}>
-        <Helmet title={`Details | ${sessionID} | Sessions`} />
-        <div className={`${statementsPageCx("section")} ${cx("page--header")}`}>
-          <Button
-            onClick={this.backToSessionsPage}
-            type="unstyled-link"
-            size="small"
-            icon={<ArrowLeft fontSize={"10px"} />}
-            iconPosition="left"
-            className="small-margin"
-          >
-            Sessions
-          </Button>
-          <div className={cx("heading-with-controls")}>
-            <h3
-              className={`${commonStyles("base-heading")} ${cx(
-                "page--header__title",
-              )}`}
-            >
-              Session Details
-            </h3>
-            {showActionButtons && (
-              <div className={cx("heading-controls-group")}>
-                <Button
-                  disabled={session.active_queries?.length === 0}
-                  onClick={() => {
-                    onTerminateStatementClick && onTerminateStatementClick();
-                    if (session.active_queries?.length > 0) {
-                      this.terminateQueryRef?.current?.showModalFor({
-                        query_id: session.active_queries[0].id,
-                        node_id: session.node_id.toString(),
-                      });
-                    }
-                  }}
-                  type="secondary"
-                  size="small"
-                >
-                  Cancel Statement
-                </Button>
-                <Button
-                  onClick={() => {
-                    onTerminateSessionClick && onTerminateSessionClick();
-                    this.terminateSessionRef?.current?.showModalFor({
-                      session_id: session.id,
-                      node_id: session.node_id.toString(),
-                    });
-                  }}
-                  type="secondary"
-                  size="small"
-                >
-                  Cancel Session
-                </Button>
-              </div>
-            )}
-          </div>
-        </div>
-        <section
-          className={`${statementsPageCx("section")} ${cx(
-            "section--container",
-          )}`}
-        >
-          <Loading
-            loading={isNil(this.props.session)}
-            page={"sessions details"}
-            error={this.props.sessionError}
-            render={this.renderContent}
-            renderError={() =>
-              LoadingError({
-                statsType: "sessions",
-                error: this.props.sessionError,
-              })
-            }
-          />
-        </section>
-        <TerminateSessionModal
-          ref={this.terminateSessionRef}
-          cancel={cancelSession}
-        />
-        <TerminateQueryModal
-          ref={this.terminateQueryRef}
-          cancel={cancelQuery}
-        />
-      </div>
-    );
-  }
+  const onCachedTransactionFingerprintClick = useCallback(
+    (fingerprintDec: string): void => {
+      const session = sessionInfo?.session;
+      if (session == null) return;
 
-  onCachedTransactionFingerprintClick(fingerprintDec: string): void {
-    const session = this.props.session?.session;
-    if (session == null) return;
+      const now = moment.utc();
+      const end = session.end ? TimestampToMoment(session.end) : now;
 
-    const now = moment.utc();
-    const end = session.end ? TimestampToMoment(session.end) : now;
+      // Round to the next hour if it is not in the future.
+      const roundToNextHour =
+        end.clone().endOf("hour").isBefore(now) &&
+        (end.minute() || end.second() || end.millisecond());
 
-    // Round to the next hour if it is not in the future.
-    const roundToNextHour =
-      end.clone().endOf("hour").isBefore(now) &&
-      (end.minute() || end.second() || end.millisecond());
+      if (roundToNextHour) {
+        end.add(1, "hour").startOf("hour");
+      }
 
-    if (roundToNextHour) {
-      end.add(1, "hour").startOf("hour");
-    }
+      const start = TimestampToMoment(session.start).startOf("hour");
+      const range = { start, end };
+      const timeScale = createTimeScaleFromDateRange(range);
+      setTimeScale(timeScale);
+      history.push(`/transaction/${fingerprintDec}`);
+    },
+    [sessionInfo, setTimeScale, history],
+  );
 
-    const start = TimestampToMoment(session.start).startOf("hour");
-    const range = { start, end };
-    const timeScale = createTimeScaleFromDateRange(range);
-    this.props.setTimeScale(timeScale);
-    this.props.history.push(`/transaction/${fingerprintDec}`);
-  }
-
-  renderContent = (): React.ReactElement => {
-    if (!this.props.session) {
+  const renderContent = useCallback((): React.ReactElement => {
+    if (!sessionInfo) {
       return null;
     }
-    const { isTenant } = this.props;
-    const { session } = this.props.session;
+    const { session } = sessionInfo;
 
     if (!session) {
       return (
         <section className={cx("section")}>
           <h3>Unable to find session</h3>
           There is no session with the id{" "}
-          {getMatchParamByName(this.props.match, sessionAttr)}.
+          {getMatchParamByName(match, sessionAttr)}.
           <br />
-          {`The session’s details may no longer be available because they were
+          {`The session's details may no longer be available because they were
           removed from cache, which is controlled by the cluster settings
           'sql.closed_session_cache.capacity' and
           'sql.closed_session_cache.time_to_live'.`}
@@ -398,11 +318,11 @@ export class SessionDetails extends React.Component<SessionDetailsProps> {
                 <SummaryCardItem
                   label={"Gateway Node"}
                   value={
-                    this.props.uiConfig?.showGatewayNodeLink ? (
+                    uiConfig?.showGatewayNodeLink ? (
                       <div className={cx("session-details-link")}>
                         <NodeLink
                           nodeId={session.node_id.toString()}
-                          nodeNames={this.props.nodeNames}
+                          nodeNames={nodeNames}
                         />
                       </div>
                     ) : (
@@ -470,7 +390,7 @@ export class SessionDetails extends React.Component<SessionDetailsProps> {
                 type="unstyled-link"
                 className={cx("link-txn-fingerprint-id")}
                 onClick={() =>
-                  this.onCachedTransactionFingerprintClick(
+                  onCachedTransactionFingerprintClick(
                     txnFingerprintID.toString(10),
                   )
                 }
@@ -483,7 +403,96 @@ export class SessionDetails extends React.Component<SessionDetailsProps> {
         </div>
       </>
     );
-  };
+  }, [
+    sessionInfo,
+    match,
+    isTenant,
+    uiConfig?.showGatewayNodeLink,
+    nodeNames,
+    onCachedTransactionFingerprintClick,
+  ]);
+
+  const sessionID = getMatchParamByName(match, sessionAttr);
+  const session = sessionInfo?.session;
+  const showActionButtons = !!session && !sessionError;
+
+  return (
+    <div className={cx("sessions-details")}>
+      <Helmet title={`Details | ${sessionID} | Sessions`} />
+      <div className={`${statementsPageCx("section")} ${cx("page--header")}`}>
+        <Button
+          onClick={backToSessionsPage}
+          type="unstyled-link"
+          size="small"
+          icon={<ArrowLeft fontSize={"10px"} />}
+          iconPosition="left"
+          className="small-margin"
+        >
+          Sessions
+        </Button>
+        <div className={cx("heading-with-controls")}>
+          <h3
+            className={`${commonStyles("base-heading")} ${cx(
+              "page--header__title",
+            )}`}
+          >
+            Session Details
+          </h3>
+          {showActionButtons && (
+            <div className={cx("heading-controls-group")}>
+              <Button
+                disabled={session.active_queries?.length === 0}
+                onClick={() => {
+                  onTerminateStatementClick && onTerminateStatementClick();
+                  if (session.active_queries?.length > 0) {
+                    terminateQueryRef?.current?.showModalFor({
+                      query_id: session.active_queries[0].id,
+                      node_id: session.node_id.toString(),
+                    });
+                  }
+                }}
+                type="secondary"
+                size="small"
+              >
+                Cancel Statement
+              </Button>
+              <Button
+                onClick={() => {
+                  onTerminateSessionClick && onTerminateSessionClick();
+                  terminateSessionRef?.current?.showModalFor({
+                    session_id: session.id,
+                    node_id: session.node_id.toString(),
+                  });
+                }}
+                type="secondary"
+                size="small"
+              >
+                Cancel Session
+              </Button>
+            </div>
+          )}
+        </div>
+      </div>
+      <section
+        className={`${statementsPageCx("section")} ${cx("section--container")}`}
+      >
+        <Loading
+          loading={isNil(sessionInfo)}
+          page={"sessions details"}
+          error={sessionError}
+          render={renderContent}
+          renderError={() =>
+            LoadingError({
+              statsType: "sessions",
+              error: sessionError,
+            })
+          }
+        />
+      </section>
+      <TerminateSessionModal ref={terminateSessionRef} cancel={cancelSession} />
+      <TerminateQueryModal ref={terminateQueryRef} cancel={cancelQuery} />
+    </div>
+  );
 }
 
 export default SessionDetails;
