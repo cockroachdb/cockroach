@@ -748,6 +748,29 @@ CREATE TABLE users(id UUID DEFAULT gen_random_uuid() PRIMARY KEY, promo_id INT R
 		)
 	})
 
+	t.Run("types_arr", func(t *testing.T) {
+		r.Exec(t, "CREATE TYPE test_type3 AS ENUM ('hello','world');")
+		r.Exec(t, "CREATE TYPE test_type4 AS (x INT, y INT);")
+		r.Exec(t, "CREATE TABLE arrtypt (k INT PRIMARY KEY, c test_type3[], d test_type4[]);")
+		rows := r.QueryStr(t, "EXPLAIN ANALYZE (DEBUG) SELECT * FROM arrtypt;")
+		checkBundle(
+			t, fmt.Sprint(rows), "test_type3", func(name, contents string) error {
+				if name == "schema.sql" {
+					reg := regexp.MustCompile(`CREATE TYPE .*\.test_type3`)
+					if reg.FindString(contents) == "" {
+						return errors.Errorf("could not find definition for 'test_type3' type in schema.sql")
+					}
+					reg = regexp.MustCompile(`CREATE TYPE .*\.test_type4`)
+					if reg.FindString(contents) == "" {
+						return errors.Errorf("could not find definition for 'test_type4' type in schema.sql")
+					}
+				}
+				return nil
+			}, false, /* expectErrors */
+			base, plans, "distsql.html vec.txt vec-v.txt stats-defaultdb.public.arrtypt.sql",
+		)
+	})
+
 	t.Run("udfs", func(t *testing.T) {
 		r.Exec(t, "CREATE FUNCTION add_func(a INT, b INT) RETURNS INT IMMUTABLE LEAKPROOF LANGUAGE SQL AS 'SELECT a + b';")
 		r.Exec(t, "CREATE FUNCTION subtract_func(a INT, b INT) RETURNS INT IMMUTABLE LEAKPROOF LANGUAGE SQL AS 'SELECT a - b';")
