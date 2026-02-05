@@ -24,23 +24,11 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-// parquetConversionFunc is a function that converts a Parquet value to a CRDB datum.
-// The function is determined once per column based on the Parquet file's type annotations
-// (LogicalType for modern files, ConvertedType for legacy files).
-type parquetConversionFunc func(value any, targetType *types.T, metadata *parquetColumnMetadata) (tree.Datum, error)
-
 // parquetColumnMetadata caches immutable schema information for a column.
 // This is populated once when the file is opened and reused across all batches.
-//
-// The converter is stored per-column rather than at the file level because while
-// most Parquet files use consistent type annotations (all LogicalType or all
-// ConvertedType) across columns, the Parquet specification allows mixing annotation
-// types within a single file. Storing the converter per-column handles this edge case
-// without requiring file-level validation of annotation consistency.
 type parquetColumnMetadata struct {
-	logicalType   schema.LogicalType
-	convertedType schema.ConvertedType
-	converter     parquetConversionFunc // Pre-determined conversion strategy
+	logicalType   schema.LogicalType   // Always populated (derived from ConvertedType if needed)
+	convertedType schema.ConvertedType // Original annotation (for reference/debugging)
 }
 
 // Helper functions for common Parquet type conversions.

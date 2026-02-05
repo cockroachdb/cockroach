@@ -145,6 +145,7 @@ go_test(
         "read_import_avro_test.go",
         "read_import_base_test.go",
         "read_import_parquet_batch_test.go",
+        "read_import_parquet_legacy_test.go",
         "read_import_parquet_logical_test.go",
         "read_import_parquet_test.go",
         "testutils_test.go",

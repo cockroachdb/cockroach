@@ -15,7 +15,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/errors"
 )
 
@@ -85,6 +84,27 @@ type parquetRowProducer struct {
 	err error
 }
 
+// deriveLogicalType returns the LogicalType for a Parquet column.
+// For legacy files with ConvertedType but no LogicalType, it converts the
+// ConvertedType to LogicalType using Apache Arrow's ToLogicalType() method.
+// This allows a single conversion code path for both modern and legacy files.
+func deriveLogicalType(col *schema.Column) schema.LogicalType {
+	logicalType := col.LogicalType()
+	convertedType := col.ConvertedType()
+
+	// If no LogicalType (legacy file), derive it from ConvertedType
+	if logicalType == nil && convertedType != schema.ConvertedTypes.None {
+		// Get decimal metadata for proper decimal conversion
+		decimalMeta := schema.DecimalMetadata{}
+		if node, ok := col.SchemaNode().(*schema.PrimitiveNode); ok {
+			decimalMeta = node.DecimalMetadata()
+		}
+		logicalType = convertedType.ToLogicalType(decimalMeta)
+	}
+
+	return logicalType
+}
+
 // newParquetRowProducer creates a new Parquet row producer from a fileReader.
 // It opens the Parquet file and determines which columns to read based on importCtx.
 // If importCtx is nil, all columns are read (useful for tests).
@@ -130,15 +150,12 @@ func newParquetRowProducer(
 	}
 
 	// Cache schema metadata once per file for all columns we'll read.
-	// This avoids repeated schema lookups in the hot path and determines the
-	// conversion strategy (LogicalType vs ConvertedType) once per column.
 	columnMetadata := make(map[int]*parquetColumnMetadata)
 	for _, colIdx := range columnsToRead {
 		col := parquetSchema.Column(colIdx)
 		columnMetadata[colIdx] = &parquetColumnMetadata{
-			logicalType:   col.LogicalType(),
-			convertedType: col.ConvertedType(),
-			converter:     determineConverter(col),
+			logicalType:   deriveLogicalType(col),
+			convertedType: col.ConvertedType(), // Keep for reference/debugging
 		}
 	}
 
@@ -457,8 +474,9 @@ func (p *parquetRowProducer) validateAndBuildColumnMapping(
 		targetCol := visibleCols[tableColIdx]
 		targetType := targetCol.GetType()
 
-		// Validate type compatibility
-		if err := validateParquetTypeCompatibility(parquetCol, targetType); err != nil {
+		// Validate type compatibility using cached metadata
+		metadata := p.columnMetadata[parquetColIdx]
+		if err := validateWithLogicalType(parquetCol.PhysicalType(), metadata.logicalType, targetType); err != nil {
 			return nil, errors.Wrapf(err, "column %q", parquetColName)
 		}
 	}
@@ -539,25 +557,6 @@ func determineColumnsToRead(
 	}
 
 	return columnsToRead, nil
-}
-
-// determineConverter selects the appropriate conversion function based on what type
-// annotations are available in the Parquet file. Modern files use LogicalType.
-// Legacy ConvertedType support will be available in read_import_parquet_legacy.go.
-func determineConverter(col *schema.Column) parquetConversionFunc {
-	// For now, only support modern LogicalType
-	// If LogicalType is not present, we'll error during conversion
-	return convertWithLogicalType
-}
-
-// validateParquetTypeCompatibility checks if a Parquet column can be converted to a target CockroachDB type.
-// Uses LogicalType for modern Parquet files. Legacy ConvertedType support is in read_import_parquet_legacy.go.
-func validateParquetTypeCompatibility(parquetCol *schema.Column, targetType *types.T) error {
-	physicalType := parquetCol.PhysicalType()
-	logicalType := parquetCol.LogicalType()
-
-	// Use LogicalType (modern annotation system)
-	return validateWithLogicalType(physicalType, logicalType, targetType)
 }
 
 // parquetRowConsumer implements importRowConsumer for Parquet files.
@@ -656,10 +655,10 @@ func (c *parquetRowConsumer) FillDatums(
 		if isNull {
 			datum = tree.DNull
 		} else {
-			// Convert Parquet value to datum using the pre-determined conversion function
+			// Convert Parquet value to datum using unified LogicalType conversion
 			targetType := conv.VisibleColTypes[tableColIdx]
 			metadata := c.columnMetadata[parquetColIdx]
-			datum, err = metadata.converter(value, targetType, metadata)
+			datum, err = convertWithLogicalType(value, targetType, metadata)
 			if err != nil {
 				return newImportRowError(err, fmt.Sprintf("row %d", rowNum), rowNum)
 			}
