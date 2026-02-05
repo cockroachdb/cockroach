@@ -116,59 +116,6 @@ regions: <hidden>
 ·
 Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJzsm-1u2swSx7-fq1jtp1Q1hfULEEuVaNOeo_Q0UOWlUnUURQ6eEgtjU-8SkhPlsp4beK7skU1IsDeYDCE2Yp0PFdhr4_nNeGb3v9M7yv_41KYnX79_PTglw-sPQ40414O94fTD8B3593HviAyvybfeYZcMp6TXTYaQjyQ-T_5z3Dv7QT7_Sg5SjQahC11nBJza_6OMalSnGjWoRk2qUYuea3QchX3gPIziIXfJBYfuDbUbGvWC8UTEh8812g8joPYdFZ7wgdr01Ln04RgcF6J6g2rUBeF4fvIzw-vO8PpiPIRbqtGD0J-MAm6T-GlOxk78sVaPn-K_P0n8Y9wmAZt9jWDghfEAAVzMDglvBDZp_P0XfxgSTjlxoR-64Nrk4brLWwGcROC4NmmTz7ODg-MfB6Tv-D5_HDd2vGg-Ln6Co58HB4QLGJN-OAkE2YMbUfcC8c4mjcSo2QCA4bIBI-eGjGAURrfE8f2w74j4sRrJM1w6on8FnIQTMZ4Im8Tjk8efH2D0_F6js28z-HO4l7fkyuFXaaydePy5RrlwBkBttuC6wy_Ubtxr63mvmfHetDOc5nmvzir_bcB_esZ_zaX-e7pvGLkQgZu97_v4QV406plQOIJoAN9CL4CozjJvsg-_xV6HvX_3MfIGV7OPVKO92PoO0zqxE-AG-hPhhUHa13lk43P8j08EjMbE9fiQTLgzgLXBP0E1MlAZ6q34NBhEMHBEGNWZJTlPo70Z2Nh2qtFP3V8X3d7pRffs-_e9DovBnJwd7XX0-NNB76x7-vB5DUJvHHtmFpP1uuDLZ6k3Xsfy5Ozo4jCmacTfjiFwIUrij3T0escoiPATPStDT18eZE88JsFz_J5F1w1r4biuZyJwiY0r7bCW2tHM2pGOAvbyEsKQE4C6XqsbVQnZ9BSAreu_FnYKUPnvLaYAraX-K3AKwHZtCoB6KxanAE2lpgDN1wXfiikA2_EpQDrI9JenXh1bOo1a3axS76ZLp76u_9rY0ln57y1KZ3up_wosnfqulU7UW7FYOltKlc7W64JvRenUd7x0poPMeHnqNbCl06zVrSr1brp0Guv6bx9bOiv_vUXp3F_qvwJLp7FrpRP1ViyWzrZSpbP9uuBbUTqNHS-d6SAzX556TWzptGpV4t104TTX9Z6FLJy1OiNO4BJGQnEFUeXJTZdQa6knCyyh5q6VUNT7sVhC95UqofuvC74VJdTc8RJqYhoEjoGPw4BDZg_3-Z9qZH6qxmLW4A5g5hseTqI-_IjCfjJ29rWX3CipFS5wMTurz74cBvNTXDgib1P4LV_gBk1MjMAZPbYdvdyU9lJTAhDTMBoS3xEQ9G8fbZkfnzqeSFvpAofIc3zv_46MYH5Z8uwR9MG7ThgsnJqXrsdzCYD52RHwmEv2YiwfhgTEjJIJsRxC7Y0QYmlCOpaQcjFkIAnpZcdQ4YRMiRBDZFR9qzJqE2dKe6kpO-prhgSUyajFEyo-o2IJKRdDBpKQXnYMFZ9RJUJ6llBjkVAaUGPxVpaUnI1c2OY2TXczr5Zl4WxhDdVKcRPpbWYpRwgZQ7pyMdRCxpCuXAy1pBgyc9PzM4Dmt2pLsK3cW-lNOdVvzeRZsqW5prKyo3HDcHyWL7XLdzVD2lK6slK4s3UsIfWUFSSh0pWVwteSpkSotaaysqMh1MLxWb7U3oKMirSldGWl-IyKJaSesoIkVLqyUnxGlQi1c-fb-znKipSc99dUVnY0Gi1JxcoHlCPXlK89NZHeVlBZQbpbQWUFGUMKKivy1oC027pKWtntAtaWYohhdlsViCEdCUi5dTfDEsoRb8pfN-loa8p2eOE5w8AiKl1pKX7HVUYkbbmqLbW0kYCUW3wzLKEcBWcL0iramrIdXnxaxSIqXW4pPq3KiKTN5NR8npk5gouco6V9V8UVF0ndWkFIwQ4ZbBDlCDlboEphHa6g6IJ1uIKqixxF-V0oZRMqXnWRg6jqbUlPhpCAlFuEMywhBVtm0Ii2uUXKwFqjoOoiI6oaXFKE9pGAlFuEMywhBftm0Ii2uU_KwFqjoOoiI8rvcmF5bS5yjq76XNKqiyxyrd3osqOImtggUrB9BhtFOVJO-cJUC-twBVUXyeF61euSVl2kINK3u9el-HZWJKCyVZfiN2WxhBRUXdCIlIsiA4soR8opfwVlytZsd69L4WlV-v-9KwCVrboUn1axhBRUXdCIlIsiA4soR8rZgrQqW5Pf66Ln9brIObrqdUnnaEnkWkFIQdUFG0QKqi7YKFKwgQYbRTlSzhYIU7LDq16XtOpi3p9r9LcfTi88l9q08fBXe-af-R-NL3AGnNp39OQqnCa0Tm_HwKn92_E5aPTIGcIXEBCNvMDjwutTW0QTuL__1z8BAAD__6GIEHc=
 
-skipif littleendian
-query T
-EXPLAIN ANALYZE (DISTSQL) SELECT kv.k, avg(kw.k) FROM kv JOIN kw ON kv.k=kw.k GROUP BY kv.k
-----
-planning time: 10µs
-execution time: 100µs
-distribution: <hidden>
-plan type: custom
-rows decoded from KV: 10 (80 B, 20 KVs, 10 gRPC calls)
-DistSQL network usage: <hidden>
-regions: <hidden>
-·
-• group (streaming)
-│ sql nodes: <hidden>
-│ regions: <hidden>
-│ execution time: 0µs
-│ actual row count: 5
-│ group by: k
-│ ordered: +k
-│
-└── • merge join
-    │ sql nodes: <hidden>
-    │ regions: <hidden>
-    │ execution time: 0µs
-    │ actual row count: 5
-    │ equality: (k) = (k)
-    │ left cols are key
-    │ right cols are key
-    │
-    ├── • scan
-    │     sql nodes: <hidden>
-    │     kv nodes: <hidden>
-    │     regions: <hidden>
-    │     KV time: 0µs
-    │     KV rows decoded: 5
-    │     actual row count: 5
-    │     missing stats
-    │     table: kv@kv_pkey
-    │     spans: FULL SCAN
-    │
-    └── • scan
-          sql nodes: <hidden>
-          kv nodes: <hidden>
-          regions: <hidden>
-          KV time: 0µs
-          KV rows decoded: 5
-          actual row count: 5
-          missing stats
-          table: kw@kw_pkey
-          spans: FULL SCAN
-·
-Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJzsm-1u2kgXx78_VzGaT6lqiscvQCxVok37rNJtoMpLpWoVRQ4-JRbGpvYQko1yWXsDe2UrQ2iwJzYcILaToR8qwAP4_M7x-TN_n9zR6JdHLXry-evng1MyuH43UIh93d8bTN4N3pD_H3ePyOCafOkedshgQrqd6RLynsTHyR_H3bNv5OOP6YtUoX7gQMceQkStvyijCtWoQnWqUIMq1KTnCh2FQQ-iKAjjJXfTNxw6N9RSFer6ozGPXz5XaC8IgVp3lLvcA2rRU_vSg2OwHQjrKlWoA9x2venXDK7bg-uL0QBuqUIPAm889COLxGdzMrLjh7V6fBZ_fifxl0UW8dnsaQh9N4gXcIj47CXuDsEi6r__RA9LgklEHOgFDjgWeXjf5S2HiIRgOxZpkY-zF_vH3w5Iz_a86Pe6ke2G83XxGRx9PzggEYcR6QVjn5M9uOF11-dvLKJOg5otABhkLRjaN2QIwyC8JbbnBT2bx6elTs_h0ua9K4hIMOajMbdIvH56-vMXGD2_V-js2Qz-HO7lLbmyo6sk1na8_lyhEbf7QC22kLrDT9RS75X1stdIZW_SHkzysldnu_xtIX9aKn-NzPw9fm4QOhCCk_7ct_GJrLTqiVI4grAPXwLXh7DOUleyBz_5Xpu9ffM-dPtXs4dUod04-jZT2nES4AZ6Y-4GfjLXeWTjY9Evj3AYjojjRgMyjuw-rA3-EaqegspQV8WHfj-Evs2DsM5MIXkK7c7AxrFThX7o_LjodE8vOmdfv-61WQzm5Oxor63Fjw66Z53Th8cZhJ65vow0CnOzAsvnpamb8To5O7o4jInp8bNj8B0IpzVG2lq9rW-R4iMhM0VIyy6Wx5jH_lOMnsTTCWrBqK6lKmndOMzMOBrpOJKZZqtLAUMKeV2r1fWdFGxbytm6-WtipXyXv-eQ8mZm_gqUcvYipFxfXcpRV8WilDfKl_J0mBtKeWOzAlsi5ayqUp5dLIKUJ4tFW72FalgJ1Gt1Y9dCty2B2rr5a2ElcJe_55DAVmb-CpRA7UVIoLq6BKKuikUJbJYvgekwN5TA5mYFtkQCtapKYHaxCBKYLBZ99RaqYyXQqNXNXQvdtgTq6-ZvHyuBu_w9hwTuZ-avQAnUX4QEIgxd1FWxKIGt8iVwy4Zua7MCWyKBelUlEGHoJovFWL2FGlgJNGu7BrptATTWzZ6JFMBanRHbdwgjAb-CcJfJbUuhmZnJAqXQeBFSiNgNoq6PRSncL18Kt7wb3N-swJZIoVFVKUTsBg3MjfBjiEaBH0HqHufTX6WmvqrGYp7g9GHGPwrGYQ--hUFvunb2tDv9oGnPdyDis6Pa7MmhPz8UcZvn3TR95gsxPoEQ7OHv8ZrVQ2llhuIDnwThgHg2B793-zuW-esT2-XJKB2IIHRtz_3bFhHM3zY99xB64F7P1Wd-aC5B82MzGZofHUIUc1lcoK6oEIt8GBIQ00smpOYQUrdCKFVBGpZQ2TVUOCEdSUiTroYMgRBDdFStUh21gQullRnKa-2oSECpjlo8oeI7KpZQ2TVUfEdFEtKkqyFDIKSlCamLhJKA1MWPMoXmrOfCNqr0czfVfEwTFwtTZZPiBjLbzJSOELKGNOlqqImsIU26GmoKNWTktucnAM0_qiXANnM_SmuIrb4yP56FWBprOiuvtG4Yjk_2Vrv8VDNkLBI6K1hCZTsrhe8ldSQhCZ0VgVBzTWfllQJq4vhkb7Ur0FGRsUjorGAJle2sFN9RkYQkdFYEQq3c39v7Oc6K0Jz313RWXilrU3Cx8gHl2DXl_BFYwjdAZltCZwWZbgmdFWQNSeisiLcGhLuty6yVQgnpOYQ0YxkitkYjaglFxDC3WyXYV2pIQGVvvIv3obCEctyb8jdOGjoa6RKuYxFJaLWIiIR7rpXyWgpvqy0koLJ338W3VSyhHAunAm0VHY10CdexiCT0W0REwt3kxA96ZuQ4LmKPFm68Sm65CPbWEkISjshgiyjHySm_SzewCZfQdcEmXELbRayi_DEU6Qi1xCLaDbckfwwhAZW9CS9-dB5LSMKZGTSiKs9I6dhoJHRdRES7CZcEoX0koLI34cW3VSwhCQdn0IiqPCilY6OR0HUREeWPubC8ORexR-8GXZKui2hyrT3p8koRNbBFJOH8DLaKcqyc8v9Wr4lNuISui5BwrdrDLsXfchSKSKv2rEvxSo8EJJ_rgiUkoeuCRlR2FRVvbmIR5Vg55e-gDDGaas-6FP-LHglIPtcFS0hC1wWNqOwqKr6tYhHlWDkVaKtiNPmzLlrerIvYo3ezLskeLZhcSwhJ6Lpgi0hC1wVbRRIO0GCrKMfKKb9LN8WE72Zdkq6LcX-u0J9eMLlwHWpR9eFf7Yn_5v9o_Aa7H1Hrjp5cBZMprdPbEUTU-ml7ESj0yB7AJ-AQDl3fjbjboxYPx3B__7__AgAA__-14bUf
-
 # This query verifies stats collection for the hashJoiner, distinct and sorter.
 
 skipif bigendian
