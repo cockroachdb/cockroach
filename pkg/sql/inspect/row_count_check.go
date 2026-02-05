@@ -147,6 +147,7 @@ func (c *rowCountCheck) CheckSpan(
 		c.tableDesc.GetPrimaryIndex(),
 		c.asOf,
 		c.tableDesc.TableDesc().PrimaryIndex.KeyColumnNames,
+		1, /* endPlaceholderOffset */
 	)
 	if err != nil {
 		return err
