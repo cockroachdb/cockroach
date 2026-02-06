@@ -1682,6 +1682,13 @@ func (r *DistSQLReceiver) pushMeta(meta *execinfrapb.ProducerMetadata) execinfra
 	}
 	if len(meta.TraceData) > 0 {
 		if span := tracing.SpanFromContext(r.ctx); span != nil {
+			// Note(davidh): I believe this import can be triggered multiple times
+			// during distsql execution and cause duplicate spans. This has only
+			// been triggered by test flakes so far. If we observe this in production
+			// we should consider adding some deduplication logic or accept that
+			// duplicate spans can occur. For now I'm leaving the behavior as-is
+			// because I don't introduce more allocation to the tracing logic.
+			// see also: exec_util.go:getMessagesForSubtrace which detects the dupe.
 			span.ImportRemoteRecording(meta.TraceData)
 		}
 	}
