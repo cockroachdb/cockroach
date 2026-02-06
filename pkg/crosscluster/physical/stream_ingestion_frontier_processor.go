@@ -27,6 +27,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
+	"github.com/cockroachdb/cockroach/pkg/util/rangescanstats"
+	"github.com/cockroachdb/cockroach/pkg/util/rangescanstats/rangescanstatspb"
 	"github.com/cockroachdb/cockroach/pkg/util/span"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
@@ -85,7 +87,7 @@ type streamIngestionFrontier struct {
 	// last time the lagging node checker detected a lagging node.
 	replicatedTimeAtLastPositiveLagNodeCheck hlc.Timestamp
 
-	rangeStats replicationutils.AggregateRangeStatsCollector
+	rangeStats rangescanstats.AggregateRangeStatsCollector
 }
 
 var _ execinfra.Processor = &streamIngestionFrontier{}
@@ -141,7 +143,7 @@ func newStreamIngestionFrontierProcessor(
 			return crosscluster.StreamReplicationConsumerHeartbeatFrequency.Get(&flowCtx.Cfg.Settings.SV)
 		}),
 		persistedReplicatedTime: spec.ReplicatedTimeAtStart,
-		rangeStats: replicationutils.NewAggregateRangeStatsCollector(
+		rangeStats: rangescanstats.NewAggregateRangeStatsCollector(
 			int(spec.NumIngestionProcessors),
 		),
 	}
@@ -198,6 +200,7 @@ func (sf *streamIngestionFrontier) Next() (
 		}
 		if row == nil {
 			sf.MoveToDrainingAndLogError(nil /* err */)
+
 			break
 		}
 
@@ -429,7 +432,7 @@ func (sf *streamIngestionFrontier) maybeCollectRangeStats(
 		return nil
 	}
 
-	var stats streampb.StreamEvent_RangeStats
+	var stats rangescanstatspb.RangeStats
 	if err := pbtypes.UnmarshalAny(&meta.BulkProcessorProgress.ProgressDetails, &stats); err != nil {
 		return errors.Wrap(err, "unable to unmarshal progress details")
 	}

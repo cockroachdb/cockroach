@@ -40,6 +40,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
+	"github.com/cockroachdb/cockroach/pkg/util/rangescanstats"
+	"github.com/cockroachdb/cockroach/pkg/util/rangescanstats/rangescanstatspb"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/span"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
@@ -311,7 +313,7 @@ func (r *logicalReplicationResumer) ingest(
 			settings:              &execCfg.Settings.SV,
 			job:                   r.job,
 			frontierUpdates:       heartbeatSender.FrontierUpdates,
-			rangeStats: replicationutils.NewAggregateRangeStatsCollector(
+			rangeStats: rangescanstats.NewAggregateRangeStatsCollector(
 				planInfo.writeProcessorCount,
 			),
 			r: r,
@@ -790,7 +792,7 @@ type rowHandler struct {
 	job                   *jobs.Job
 	frontierUpdates       chan hlc.Timestamp
 
-	rangeStats replicationutils.AggregateRangeStatsCollector
+	rangeStats rangescanstats.AggregateRangeStatsCollector
 
 	lastPartitionUpdate time.Time
 
@@ -819,7 +821,7 @@ func (rh *rowHandler) handleMeta(ctx context.Context, meta *execinfrapb.Producer
 		return nil
 	}
 
-	var stats streampb.StreamEvent_RangeStats
+	var stats rangescanstatspb.RangeStats
 	if err := pbtypes.UnmarshalAny(&meta.BulkProcessorProgress.ProgressDetails, &stats); err != nil {
 		return errors.Wrap(err, "unable to unmarshal progress details")
 	}

@@ -3,42 +3,41 @@
 // Use of this software is governed by the CockroachDB Software License
 // included in the /LICENSE file.
 
-package producer
+package rangescanstats
 
 import (
 	"context"
 	"sync/atomic"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/repstream/streampb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/rangedesc"
+	"github.com/cockroachdb/cockroach/pkg/util/rangescanstats/rangescanstatspb"
 	"github.com/cockroachdb/cockroach/pkg/util/span"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
 
-const laggingSpanThreshold = 2 * time.Minute
-
-// rangeStatsPoller manages a goroutine that polls the total number of ranges
+// RangeStatsPoller manages a goroutine that polls the total number of ranges
 // and their scanning status. Close must be called to avoid leaking the
 // goroutine.
-type rangeStatsPoller struct {
+type RangeStatsPoller struct {
 	cancel func()
 	g      ctxgroup.Group
-	stats  atomic.Pointer[streampb.StreamEvent_RangeStats]
+	stats  atomic.Pointer[rangescanstatspb.RangeStats]
 }
 
-func startStatsPoller(
+func StartStatsPoller(
 	ctx context.Context,
 	interval time.Duration,
 	spans []roachpb.Span,
 	frontier span.Frontier,
 	ranges rangedesc.IteratorFactory,
-) *rangeStatsPoller {
+	laggingSpanThreshold time.Duration,
+) *RangeStatsPoller {
 	ctx, cancel := context.WithCancel(ctx)
-	poller := &rangeStatsPoller{
+	poller := &RangeStatsPoller{
 		cancel: cancel,
 		g:      ctxgroup.WithContext(ctx),
 	}
@@ -46,14 +45,14 @@ func startStatsPoller(
 		tick := time.NewTicker(interval)
 		defer tick.Stop()
 		for {
-			stats, err := computeRangeStats(ctx, spans, frontier, ranges)
+			stats, err := computeRangeStats(ctx, spans, frontier, ranges, laggingSpanThreshold)
 			if err != nil {
-				log.Dev.Warningf(ctx, "event stream unable to calculate range stats: %v", err)
+				log.Dev.Warningf(ctx, "unable to calculate range scan stats: %v", err)
 			} else {
 				poller.stats.Store(&stats)
 			}
 
-			log.VEventf(ctx, 1, "publishing range stats: %+v", stats)
+			log.VEventf(ctx, 1, "publishing range scan stats: %+v", stats)
 
 			select {
 			case <-ctx.Done():
@@ -67,14 +66,14 @@ func startStatsPoller(
 }
 
 // Close cancels the internal context and waits for the goroutine to exit.
-func (r *rangeStatsPoller) Close() {
+func (r *RangeStatsPoller) Close() {
 	r.cancel()
 	_ = r.g.Wait()
 }
 
 // MaybeStats returns the most recent stats if they are available or null if
 // the initial stats calculation is not ready.
-func (r *rangeStatsPoller) MaybeStats() *streampb.StreamEvent_RangeStats {
+func (r *RangeStatsPoller) MaybeStats() *rangescanstatspb.RangeStats {
 	return r.stats.Load()
 }
 
@@ -83,12 +82,13 @@ func computeRangeStats(
 	spans []roachpb.Span,
 	frontier span.Frontier,
 	ranges rangedesc.IteratorFactory,
-) (streampb.StreamEvent_RangeStats, error) {
-	var stats streampb.StreamEvent_RangeStats
+	laggingSpanThreshold time.Duration,
+) (rangescanstatspb.RangeStats, error) {
+	var stats rangescanstatspb.RangeStats
 	for _, initialSpan := range spans {
 		lazyIterator, err := ranges.NewLazyIterator(ctx, initialSpan, 100)
 		if err != nil {
-			return streampb.StreamEvent_RangeStats{}, err
+			return rangescanstatspb.RangeStats{}, err
 		}
 		for ; lazyIterator.Valid(); lazyIterator.Next() {
 			now := timeutil.Now()
@@ -108,7 +108,7 @@ func computeRangeStats(
 			}
 		}
 		if lazyIterator.Error() != nil {
-			return streampb.StreamEvent_RangeStats{}, lazyIterator.Error()
+			return rangescanstatspb.RangeStats{}, lazyIterator.Error()
 		}
 	}
 	return stats, nil

@@ -41,6 +41,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/rangedesc"
+	"github.com/cockroachdb/cockroach/pkg/util/rangescanstats"
+	"github.com/cockroachdb/cockroach/pkg/util/rangescanstats/rangescanstatspb"
 	"github.com/cockroachdb/cockroach/pkg/util/span"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
@@ -289,7 +291,7 @@ type streamIngestionProcessor struct {
 	aggTimer timeutil.Timer
 
 	// Pipelines to report range stats down to frontier processor.
-	rangeStatsCh chan *streampb.StreamEvent_RangeStats
+	rangeStatsCh chan *rangescanstatspb.RangeStats
 }
 
 // PartitionEvent augments a normal event with the partition it came from.
@@ -313,7 +315,7 @@ func newStreamIngestionDataProcessor(
 	post *execinfrapb.PostProcessSpec,
 ) (execinfra.Processor, error) {
 	rekeyer, err := backup.MakeKeyRewriterFromRekeys(flowCtx.Codec(),
-		nil /* tableRekeys */, []execinfrapb.TenantRekey{spec.TenantRekey},
+		nil  /* tableRekeys */, []execinfrapb.TenantRekey{spec.TenantRekey},
 		true /* restoreTenantFromStream */)
 	if err != nil {
 		return nil, err
@@ -346,7 +348,7 @@ func newStreamIngestionDataProcessor(
 		flushCh:          make(chan flushableBuffer),
 		checkpointCh:     make(chan *jobspb.ResolvedSpans),
 		errCh:            make(chan error, 1),
-		rangeStatsCh:     make(chan *streampb.StreamEvent_RangeStats),
+		rangeStatsCh:     make(chan *rangescanstatspb.RangeStats),
 		rekeyer:          rekeyer,
 		rewriteToDiffKey: spec.TenantRekey.NewID != spec.TenantRekey.OldID,
 		logBufferEvery:   log.Every(30 * time.Second),
@@ -541,7 +543,7 @@ func (sip *streamIngestionProcessor) Next() (rowenc.EncDatumRow, *execinfrapb.Pr
 		return nil, bulkutil.ConstructTracingAggregatorProducerMeta(sip.Ctx(),
 			sip.FlowCtx.NodeID.SQLInstanceID(), sip.FlowCtx.ID, sip.agg)
 	case stats := <-sip.rangeStatsCh:
-		meta, err := replicationutils.StreamRangeStatsToProgressMeta(sip.FlowCtx, sip.ProcessorID, stats)
+		meta, err := rangescanstats.StreamRangeStatsToProgressMeta(sip.FlowCtx, sip.ProcessorID, stats)
 		if err != nil {
 			sip.MoveToDrainingAndLogError(err)
 			return nil, sip.DrainHelper()
@@ -1059,7 +1061,7 @@ func (r *rangeKeyBatcher) flush(ctx context.Context, toFlush mvccRangeKeyValues)
 
 		log.Dev.Infof(ctx, "sending SSTable [%s, %s) of size %d (as write: %v)", start, end, len(data), ingestAsWrites)
 		_, _, err := r.db.AddSSTable(ctx, start, end, data,
-			false, /* disallowConflicts */
+			false,               /* disallowConflicts */
 			hlc.Timestamp{}, nil /* stats */, ingestAsWrites,
 			r.db.Clock().Now())
 		if err != nil {

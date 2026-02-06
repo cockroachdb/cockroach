@@ -1,0 +1,45 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "rangescanstats",
+    srcs = [
+        "aggregator.go",
+        "poller.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/util/rangescanstats",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/roachpb",
+        "//pkg/sql/execinfra",
+        "//pkg/sql/execinfrapb",
+        "//pkg/util/ctxgroup",
+        "//pkg/util/log",
+        "//pkg/util/rangedesc",
+        "//pkg/util/rangescanstats/rangescanstatspb",
+        "//pkg/util/span",
+        "//pkg/util/syncutil",
+        "//pkg/util/timeutil",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_gogo_protobuf//types",
+    ],
+)
+
+go_test(
+    name = "rangescanstats_test",
+    srcs = [
+        "aggregator_test.go",
+        "poller_test.go",
+    ],
+    embed = [":rangescanstats"],
+    deps = [
+        "//pkg/roachpb",
+        "//pkg/testutils",
+        "//pkg/util/hlc",
+        "//pkg/util/leaktest",
+        "//pkg/util/rangedesc",
+        "//pkg/util/rangescanstats/rangescanstatspb",
+        "//pkg/util/span",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_stretchr_testify//require",
+    ],
+)
