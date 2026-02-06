@@ -3,7 +3,7 @@
 // Use of this software is governed by the CockroachDB Software License
 // included in the /LICENSE file.
 
-package rowexec
+package bulksst
 
 import (
 	"bytes"
@@ -15,7 +15,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
-	"github.com/cockroachdb/cockroach/pkg/sql/bulksst"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -24,7 +23,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestSSTIndexBackfillSinkEmitsManifests(t *testing.T) {
+func TestSSTSinkEmitsManifests(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
@@ -32,10 +31,10 @@ func TestSSTIndexBackfillSinkEmitsManifests(t *testing.T) {
 	settings := cluster.MakeTestingClusterSettings()
 	allocator := &manifestTrackingAllocator{}
 
-	writer := bulksst.NewUnsortedSSTBatcher(settings, allocator)
+	writer := NewUnsortedSSTBatcher(settings, allocator)
 	ts := hlc.Timestamp{WallTime: 42}
 	writer.SetWriteTS(ts)
-	sink := &sstIndexBackfillSink{
+	sink := &SSTSink{
 		writer:           writer,
 		allocator:        allocator,
 		writeTS:          ts,
@@ -59,18 +58,18 @@ func TestSSTIndexBackfillSinkEmitsManifests(t *testing.T) {
 	require.Nil(t, sink.ConsumeFlushManifests(), "manifests buffer should be cleared")
 }
 
-func TestSSTIndexBackfillSinkOnFlushCollectsCurrentManifests(t *testing.T) {
+func TestSSTSinkOnFlushCollectsCurrentManifests(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
 	settings := cluster.MakeTestingClusterSettings()
 	allocator := &manifestTrackingAllocator{}
-	writer := bulksst.NewUnsortedSSTBatcher(settings, allocator)
+	writer := NewUnsortedSSTBatcher(settings, allocator)
 	ts := hlc.Timestamp{WallTime: 42}
 	writer.SetWriteTS(ts)
 	var fromCallback []jobspb.BulkSSTManifest
-	sink := &sstIndexBackfillSink{
+	sink := &SSTSink{
 		writer:           writer,
 		allocator:        allocator,
 		writeTS:          ts,
@@ -92,11 +91,11 @@ func TestSSTIndexBackfillSinkOnFlushCollectsCurrentManifests(t *testing.T) {
 }
 
 type manifestTrackingAllocator struct {
-	files bulksst.SSTFiles
+	files SSTFiles
 	next  int
 }
 
-var _ bulksst.FileAllocator = (*manifestTrackingAllocator)(nil)
+var _ FileAllocator = (*manifestTrackingAllocator)(nil)
 
 func (m *manifestTrackingAllocator) AddFile(
 	ctx context.Context,
@@ -109,7 +108,7 @@ func (m *manifestTrackingAllocator) AddFile(
 func (m *manifestTrackingAllocator) CommitFile(
 	uri string, span roachpb.Span, rowSample roachpb.Key, fileSize uint64, keyCount uint64,
 ) {
-	m.files.SST = append(m.files.SST, &bulksst.SSTFileInfo{
+	m.files.SST = append(m.files.SST, &SSTFileInfo{
 		URI:       uri,
 		StartKey:  append([]byte(nil), span.Key...),
 		EndKey:    append([]byte(nil), span.EndKey...),
@@ -120,7 +119,7 @@ func (m *manifestTrackingAllocator) CommitFile(
 	m.files.RowSamples = append(m.files.RowSamples, string(rowSample))
 }
 
-func (m *manifestTrackingAllocator) GetFileList() *bulksst.SSTFiles {
+func (m *manifestTrackingAllocator) GetFileList() *SSTFiles {
 	return &m.files
 }
 
