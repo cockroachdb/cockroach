@@ -1,7 +1,7 @@
 # This test verifies that MMA can balance disks when the write patterns are
 # skewed towards a single node/set of nodes such that it leads to imbalanced
 # disk usage in the long run. It creates two nodes with 20 GiB store capacity.
-# It creates 100 ranges of 1 MiB each on both nodest . The first node is targeted
+# It creates 100 ranges of 1 MiB each on both nodes. The first node is targeted
 # with a read-only workload and the second with a write-only workload keeping
 # the CPU utilization the same.
 #
@@ -35,42 +35,9 @@ gen_load rate=5000 rw_ratio=0 min_block=1024 max_block=1024 request_cpu_per_acce
 setting split_queue_enabled=false
 ----
 
-eval duration=100m samples=1 seed=42 cfgs=(sma-count,mma-only,mma-count) metrics=(cpu,cpu_util,write_bytes_per_second,replicas,leases,disk_fraction_used)
+eval duration=100m samples=1 seed=42 cfgs=(mma-count) metrics=(cpu,cpu_util,write_bytes_per_second,replicas,leases,disk_fraction_used)
 ----
-cpu#1: last:  [s1=1101177255, s2=899909536] (stddev=100633859.50, mean=1000543395.50, sum=2001086791)
-cpu#1: thrash_pct: [s1=183%, s2=186%]  (sum=369%)
-cpu_util#1: last:  [s1=0.55, s2=0.45] (stddev=0.05, mean=0.50, sum=1)
-cpu_util#1: thrash_pct: [s1=183%, s2=186%]  (sum=369%)
-disk_fraction_used#1: first: [s1=0.01, s2=0.01] (stddev=0.00, mean=0.01, sum=0)
-disk_fraction_used#1: last:  [s1=0.86, s2=0.94] (stddev=0.04, mean=0.90, sum=2)
-disk_fraction_used#1: thrash_pct: [s1=76%, s2=208%]  (sum=284%)
-leases#1: first: [s1=100, s2=100] (stddev=0.00, mean=100.00, sum=200)
-leases#1: last:  [s1=110, s2=90] (stddev=10.00, mean=100.00, sum=200)
-leases#1: thrash_pct: [s1=155%, s2=155%]  (sum=310%)
-replicas#1: first: [s1=100, s2=100] (stddev=0.00, mean=100.00, sum=200)
-replicas#1: last:  [s1=110, s2=90] (stddev=10.00, mean=100.00, sum=200)
-replicas#1: thrash_pct: [s1=155%, s2=155%]  (sum=310%)
-write_bytes_per_second#1: last:  [s1=2460442, s2=2662464] (stddev=101011.00, mean=2561453.00, sum=5122906)
-write_bytes_per_second#1: thrash_pct: [s1=67%, s2=52%]  (sum=119%)
-artifacts[sma-count]: 29a2b75d6f831d0f
-==========================
-cpu#1: last:  [s1=1200213081, s2=800259210] (stddev=199976935.50, mean=1000236145.50, sum=2000472291)
-cpu#1: thrash_pct: [s1=233%, s2=258%]  (sum=491%)
-cpu_util#1: last:  [s1=0.60, s2=0.40] (stddev=0.10, mean=0.50, sum=1)
-cpu_util#1: thrash_pct: [s1=233%, s2=258%]  (sum=491%)
-disk_fraction_used#1: first: [s1=0.01, s2=0.01] (stddev=0.00, mean=0.01, sum=0)
-disk_fraction_used#1: last:  [s1=0.87, s2=0.93] (stddev=0.03, mean=0.90, sum=2)
-disk_fraction_used#1: thrash_pct: [s1=0%, s2=71%]  (sum=71%)
-leases#1: first: [s1=100, s2=100] (stddev=0.00, mean=100.00, sum=200)
-leases#1: last:  [s1=120, s2=80] (stddev=20.00, mean=100.00, sum=200)
-leases#1: thrash_pct: [s1=168%, s2=168%]  (sum=336%)
-replicas#1: first: [s1=100, s2=100] (stddev=0.00, mean=100.00, sum=200)
-replicas#1: last:  [s1=120, s2=80] (stddev=20.00, mean=100.00, sum=200)
-replicas#1: thrash_pct: [s1=168%, s2=168%]  (sum=336%)
-write_bytes_per_second#1: last:  [s1=2456009, s2=2663506] (stddev=103748.50, mean=2559757.50, sum=5119515)
-write_bytes_per_second#1: thrash_pct: [s1=28%, s2=6%]  (sum=33%)
-artifacts[mma-only]: 9753cb28594683ff
-==========================
+mma-count:
 cpu#1: last:  [s1=1219322086, s2=780398932] (stddev=219461577.00, mean=999860509.00, sum=1999721018)
 cpu#1: thrash_pct: [s1=324%, s2=346%]  (sum=669%)
 cpu_util#1: last:  [s1=0.61, s2=0.39] (stddev=0.11, mean=0.50, sum=1)
@@ -86,5 +53,5 @@ replicas#1: last:  [s1=122, s2=78] (stddev=22.00, mean=100.00, sum=200)
 replicas#1: thrash_pct: [s1=245%, s2=245%]  (sum=490%)
 write_bytes_per_second#1: last:  [s1=2405580, s2=2715840] (stddev=155130.00, mean=2560710.00, sum=5121420)
 write_bytes_per_second#1: thrash_pct: [s1=75%, s2=56%]  (sum=131%)
-artifacts[mma-count]: df73a26bc5cb0bd9
+hash: df73a26bc5cb0bd9
 ==========================
