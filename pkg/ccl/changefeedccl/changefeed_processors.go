@@ -51,6 +51,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log/logcrash"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
+	"github.com/cockroachdb/cockroach/pkg/util/rangescanstats"
+	"github.com/cockroachdb/cockroach/pkg/util/rangescanstats/rangescanstatspb"
 	"github.com/cockroachdb/cockroach/pkg/util/span"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
@@ -122,6 +124,9 @@ type changeAggregator struct {
 	// changeAggregator's trace recording.
 	agg      *tracing.TracingAggregator
 	aggTimer timeutil.Timer
+
+	statsPoller              *rangescanstats.RangeStatsPoller
+	updateRangeStatsCallback func(stats *rangescanstatspb.RangeStats)
 
 	metrics                *Metrics
 	sliMetrics             *sliMetrics
@@ -470,6 +475,9 @@ func (ca *changeAggregator) Start(ctx context.Context) {
 		ca.cancel()
 		return
 	}
+
+	ca.startRangeStatsPoller(ctx, spans, execCfg, opts)
+
 	ca.sink = &errorWrapperSink{wrapped: ca.sink}
 	ca.eventConsumer, ca.sink, err = newEventConsumer(
 		ctx, ca.FlowCtx.Cfg, ca.spec, feed, ca.frontier, kvFeedHighWater,
@@ -622,15 +630,7 @@ func makeKVFeedMonitoringCfg(
 	opts changefeedbase.StatementOptions,
 	settings *cluster.Settings,
 ) (kvfeed.MonitoringConfig, error) {
-	laggingRangesThreshold, laggingRangesInterval, err := opts.GetLaggingRangesConfig(ctx, settings)
-	if err != nil {
-		return kvfeed.MonitoringConfig{}, err
-	}
 	return kvfeed.MonitoringConfig{
-		LaggingRangesCallback:        sliMetrics.getLaggingRangesCallback(),
-		LaggingRangesThreshold:       laggingRangesThreshold,
-		LaggingRangesPollingInterval: laggingRangesInterval,
-
 		OnBackfillCallback:      sliMetrics.getBackfillCallback(),
 		OnBackfillRangeCallback: sliMetrics.getBackfillRangeCallback(),
 	}, nil
@@ -731,6 +731,7 @@ func (ca *changeAggregator) close() {
 		ca.sliMetrics.closeId(ca.sliMetricsID)
 	}
 
+	ca.closeRangeStatsPoller()
 	ca.memAcc.Close(ca.Ctx())
 	ca.MemMonitor.Stop(ca.Ctx())
 	ca.InternalClose()
@@ -995,7 +996,9 @@ func (ca *changeAggregator) emitResolved(batch jobspb.ResolvedSpans) error {
 	progressUpdate := jobspb.ResolvedSpans{
 		ResolvedSpans: batch.ResolvedSpans,
 		Stats: jobspb.ResolvedSpans_Stats{
+			SenderID:      ca.spec.ProcessorID,
 			RecentKvCount: ca.recentKVCount,
+			RangeStats:    ca.statsPoller.MaybeStats(),
 		},
 	}
 	if log.V(2) {
@@ -1031,6 +1034,43 @@ const (
 	emitAllResolved = 0
 	emitNoResolved  = -1
 )
+
+func (ca *changeAggregator) startRangeStatsPoller(ctx context.Context, spans []roachpb.Span, execCfg *sql.ExecutorConfig, opts changefeedbase.StatementOptions) {
+	laggingRangesThreshold, laggingRangesInterval, err := opts.GetLaggingRangesConfig(ctx, ca.FlowCtx.Cfg.Settings)
+	if err != nil {
+		log.Changefeed.Warningf(ca.Ctx(), "moving to draining due to error getting lagging ranges config: %v", err)
+		ca.MoveToDraining(err)
+		ca.cancel()
+		return
+	}
+	// We want to consume our polled metrics in two ways:
+	//
+	// 1. Report per aggregator stats as metrics. This per node granularity allows us to
+	// 		diagnose things such as unbalanced plans. This is handled by the callback function.
+	//
+	// 2. Sent to the changefeed frontier to be aggregated and reported as a job status
+	// 		message. This allows users to see the progress of initial/catchup scans. This is
+	// 		done by piggybacking our range stats when we emit resolved spans to the frontier.
+	ca.updateRangeStatsCallback = ca.sliMetrics.getRangeStatsCallback()
+	ca.statsPoller = rangescanstats.StartStatsPoller(
+		ctx,
+		laggingRangesInterval,
+		spans,
+		ca.frontier,
+		execCfg.RangeDescIteratorFactory,
+		laggingRangesThreshold,
+		ca.updateRangeStatsCallback,
+	)
+}
+
+func (ca *changeAggregator) closeRangeStatsPoller() {
+	if ca.statsPoller == nil {
+		return
+	}
+	ca.statsPoller.Close()
+	// Reset metrics on shutdown.
+	ca.updateRangeStatsCallback(&rangescanstatspb.RangeStats{})
+}
 
 type changeFrontier struct {
 	execinfra.ProcessorBase
@@ -1110,6 +1150,9 @@ type changeFrontier struct {
 	usageWgCancel context.CancelFunc
 
 	targets changefeedbase.Targets
+
+	// rangeStatsCollector aggregates range stats from all aggregators.
+	rangeStatsCollector rangescanstats.AggregateRangeStatsCollector
 }
 
 const (
@@ -1263,11 +1306,12 @@ func newChangeFrontierProcessor(
 	cf := &changeFrontier{
 		// We might modify the ChangefeedState field in the eval.Context, so we
 		// need to make a copy.
-		evalCtx:       flowCtx.NewEvalCtx(),
-		spec:          spec,
-		memAcc:        memMonitor.MakeBoundAccount(),
-		input:         input,
-		usageWgCancel: func() {},
+		evalCtx:             flowCtx.NewEvalCtx(),
+		spec:                spec,
+		memAcc:              memMonitor.MakeBoundAccount(),
+		input:               input,
+		usageWgCancel:       func() {},
+		rangeStatsCollector: rangescanstats.NewAggregateRangeStatsCollector(int(spec.NumAggregators)),
 	}
 
 	defer func() {
@@ -1739,6 +1783,10 @@ func (cf *changeFrontier) noteAggregatorProgress(ctx context.Context, d rowenc.E
 
 	cf.maybeMarkJobIdle(resolvedSpans.Stats.RecentKvCount)
 
+	if resolvedSpans.Stats.RangeStats != nil {
+		cf.rangeStatsCollector.Add(resolvedSpans.Stats.SenderID, resolvedSpans.Stats.RangeStats)
+	}
+
 	for _, resolved := range resolvedSpans.ResolvedSpans {
 		// Inserting a timestamp less than the one the changefeed flow started at
 		// could potentially regress the job progress. This is not expected, but it
@@ -1789,6 +1837,9 @@ func (cf *changeFrontier) forwardFrontier(resolved jobspb.ResolvedSpan) error {
 		// all feeds in the scope.
 		cf.sliMetrics.setCheckpoint(cf.sliMetricsID, newResolved)
 
+		// Update our initial/catchup scan job progress.
+		cf.updateRangeStatsStatus(cf.Ctx())
+
 		return cf.maybeEmitResolved(cf.Ctx(), newResolved)
 	}
 
@@ -1811,6 +1862,19 @@ func (cf *changeFrontier) maybeMarkJobIdle(recentKVCount uint64) {
 
 	isIdle := timeutil.Since(cf.latestResolvedKV) > idleTimeout
 	cf.js.job.MarkIdle(isIdle)
+}
+
+// updateRangeStatsStatus aggregates range stats from all aggregators
+// and updates the job status.
+func (cf *changeFrontier) updateRangeStatsStatus(ctx context.Context) {
+	_, percent, status := cf.rangeStatsCollector.RollupStats()
+	// Update job status message with range stats.
+	if status != "" && cf.js.job != nil {
+		msg := fmt.Sprintf("%.0f%%: %s", 100*percent, status)
+		if err := cf.js.job.NoTxn().UpdateStatusMessage(ctx, jobs.StatusMessage(msg)); err != nil {
+			log.Dev.Warningf(ctx, "failed to report initial/catchup scan progress: %v", err)
+		}
+	}
 }
 
 func (cf *changeFrontier) maybeCheckpointJob(

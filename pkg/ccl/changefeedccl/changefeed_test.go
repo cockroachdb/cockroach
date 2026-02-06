@@ -1955,6 +1955,9 @@ func TestChangefeedLaggingRangesMetrics(t *testing.T) {
 			context.Background(), &s.Server.ClusterSettings().SV, 20*time.Millisecond)
 		closedts.TargetDuration.Override(
 			context.Background(), &s.Server.ClusterSettings().SV, 20*time.Millisecond)
+		// Disable quantizing as we are asserting our timestamps are within a 250ms threshold.
+		changefeedbase.Quantize.Override(
+			context.Background(), &s.Server.ClusterSettings().SV, 0)
 
 		skipMu := syncutil.Mutex{}
 		skippedRanges := map[string]struct{}{}
@@ -2109,7 +2112,7 @@ func TestChangefeedTotalRangesMetric(t *testing.T) {
 	cdcTest(t, testFn, feedTestEnterpriseSinks)
 }
 
-func TestChangefeedBackfillObservability(t *testing.T) {
+func TestChangefeedInitialBackfillObservability(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
@@ -2120,7 +2123,10 @@ func TestChangefeedBackfillObservability(t *testing.T) {
 		registry := s.Server.JobRegistry().(*jobs.Registry)
 		sli, err := registry.MetricsStruct().Changefeed.(*Metrics).getSLIMetrics(defaultSLIScope)
 		require.NoError(t, err)
+		// The two metrics should be equivalent during initial scans.
+		// TODO(darryl): we should add a test for BackfillPendingRanges during schemachanges.
 		pendingRanges := sli.BackfillPendingRanges
+		scanningRanges := sli.ScanningRanges
 
 		// Create a table with multiple ranges
 		numRanges := 10
@@ -2147,7 +2153,9 @@ func TestChangefeedBackfillObservability(t *testing.T) {
 		}
 
 		require.Equal(t, pendingRanges.Value(), int64(0))
-		foo := feed(t, f, `CREATE CHANGEFEED FOR foo`)
+		require.Equal(t, scanningRanges.Value(), int64(0))
+
+		foo := feed(t, f, `CREATE CHANGEFEED FOR foo WITH lagging_ranges_polling_interval="25ms"`)
 		defer closeFeed(t, foo)
 
 		// Progress the initial backfill halfway through its ranges
@@ -2155,9 +2163,10 @@ func TestChangefeedBackfillObservability(t *testing.T) {
 			scanChan <- struct{}{}
 		}
 		testutils.SucceedsSoon(t, func() error {
-			count := pendingRanges.Value()
-			if count != int64(numRanges/2) {
-				return fmt.Errorf("range count %d should be %d", count, numRanges/2)
+			for _, count := range []int64{pendingRanges.Value(), scanningRanges.Value()} {
+				if count != int64(numRanges/2) {
+					return fmt.Errorf("range count %d should be %d", count, numRanges/2)
+				}
 			}
 			return nil
 		})
@@ -2166,9 +2175,10 @@ func TestChangefeedBackfillObservability(t *testing.T) {
 		// regardless of successful scans
 		scanCancel()
 		testutils.SucceedsSoon(t, func() error {
-			count := pendingRanges.Value()
-			if count > 0 {
-				return fmt.Errorf("range count %d should be 0", count)
+			for _, count := range []int64{pendingRanges.Value(), scanningRanges.Value()} {
+				if count > 0 {
+					return fmt.Errorf("range count %d should be 0", count)
+				}
 			}
 			return nil
 		})

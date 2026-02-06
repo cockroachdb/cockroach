@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log/logcrash"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/metric/aggmetric"
+	"github.com/cockroachdb/cockroach/pkg/util/rangescanstats/rangescanstatspb"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/crlib/crstrings"
@@ -88,6 +89,7 @@ type AggMetrics struct {
 	SchemaRegistryRetries       *aggmetric.AggCounter
 	AggregatorProgress          *aggmetric.AggGauge
 	CheckpointProgress          *aggmetric.AggGauge
+	ScanningRanges              *aggmetric.AggGauge
 	LaggingRanges               *aggmetric.AggGauge
 	TotalRanges                 *aggmetric.AggGauge
 	CloudstorageBufferedBytes   *aggmetric.AggGauge
@@ -179,6 +181,7 @@ type sliMetrics struct {
 	SchemaRegistryRetries       *aggmetric.Counter
 	AggregatorProgress          *aggmetric.Gauge
 	CheckpointProgress          *aggmetric.Gauge
+	ScanningRanges              *aggmetric.Gauge
 	LaggingRanges               *aggmetric.Gauge
 	TotalRanges                 *aggmetric.Gauge
 	CloudstorageBufferedBytes   *aggmetric.Gauge
@@ -1117,6 +1120,13 @@ func newAggregateMetrics(histogramWindow time.Duration, lookup *cidr.Lookup) *Ag
 		Unit:        metric.Unit_TIMESTAMP_NS,
 		Category:    metric.Metadata_CHANGEFEEDS,
 	}
+	metaScanningRanges := metric.Metadata{
+		Name:        "changefeed.scanning_ranges",
+		Help:        "The number of ranges undergoing an initial scan",
+		Measurement: "Ranges",
+		Unit:        metric.Unit_COUNT,
+		Category:    metric.Metadata_CHANGEFEEDS,
+	}
 	metaLaggingRanges := metric.Metadata{
 		Name:        "changefeed.lagging_ranges",
 		Help:        "The number of ranges considered to be lagging behind",
@@ -1284,6 +1294,7 @@ func newAggregateMetrics(histogramWindow time.Duration, lookup *cidr.Lookup) *Ag
 		SchemaRegistrations:       b.Counter(metaSchemaRegistryRegistrations),
 		AggregatorProgress:        b.FunctionalGauge(metaAggregatorProgress, functionalGaugeMinFn),
 		CheckpointProgress:        b.FunctionalGauge(metaCheckpointProgress, functionalGaugeMinFn),
+		ScanningRanges:            b.Gauge(metaScanningRanges),
 		LaggingRanges:             b.Gauge(metaLaggingRanges),
 		TotalRanges:               b.Gauge(metaTotalRanges),
 		CloudstorageBufferedBytes: b.Gauge(metaCloudstorageBufferedBytes),
@@ -1367,6 +1378,7 @@ func (a *AggMetrics) getOrCreateScope(scope string) (*sliMetrics, error) {
 		InternalRetryMessageCount:   a.InternalRetryMessageCount.AddChild(scope),
 		SchemaRegistryRetries:       a.SchemaRegistryRetries.AddChild(scope),
 		SchemaRegistrations:         a.SchemaRegistrations.AddChild(scope),
+		ScanningRanges:              a.ScanningRanges.AddChild(scope),
 		LaggingRanges:               a.LaggingRanges.AddChild(scope),
 		TotalRanges:                 a.TotalRanges.AddChild(scope),
 		CloudstorageBufferedBytes:   a.CloudstorageBufferedBytes.AddChild(scope),
@@ -1435,10 +1447,9 @@ func (a *AggMetrics) getOrCreateScope(scope string) (*sliMetrics, error) {
 	return sm, nil
 }
 
-// getLaggingRangesCallback returns a function which can be called to update the
-// lagging ranges metric. It should be called with the current number of lagging
-// ranges.
-func (m *sliMetrics) getLaggingRangesCallback() func(lagging int64, total int64) {
+// getRangeStatsCallback returns a function which can be called to update our
+// range stats metrics: lagging ranges, scanning ranges, and total ranges.
+func (m *sliMetrics) getRangeStatsCallback() func(stats *rangescanstatspb.RangeStats) {
 	// Because this gauge is shared between changefeeds in the same metrics scope,
 	// we must instead modify it using `Inc` and `Dec` (as opposed to `Update`) to
 	// ensure values written by others are not overwritten. The code below is used
@@ -1455,18 +1466,22 @@ func (m *sliMetrics) getLaggingRangesCallback() func(lagging int64, total int64)
 	// If 1 lagging range is deleted, last=7,i=10: X.Dec(11-10) = X.Dec(1)
 	last := struct {
 		syncutil.Mutex
-		lagging int64
-		total   int64
+		lagging  int64
+		scanning int64
+		total    int64
 	}{}
-	return func(lagging int64, total int64) {
+	return func(stats *rangescanstatspb.RangeStats) {
 		last.Lock()
 		defer last.Unlock()
 
-		m.LaggingRanges.Dec(last.lagging - lagging)
-		last.lagging = lagging
+		m.LaggingRanges.Dec(last.lagging - stats.LaggingRangeCount)
+		last.lagging = stats.LaggingRangeCount
 
-		m.TotalRanges.Dec(last.total - total)
-		last.total = total
+		m.ScanningRanges.Dec(last.scanning - stats.ScanningRangeCount)
+		last.scanning = stats.ScanningRangeCount
+
+		m.TotalRanges.Dec(last.total - stats.RangeCount)
+		last.total = stats.RangeCount
 	}
 }
 

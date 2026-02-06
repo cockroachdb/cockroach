@@ -23,6 +23,7 @@ import "google/protobuf/timestamp.proto";
 import "util/tracing/tracingpb/recorded_span.proto";
 import "sql/catalog/externalcatalog/externalpb/external.proto";
 import "google/protobuf/empty.proto";
+import "util/rangescanstats/rangescanstatspb/stats.proto";
 
 enum EncryptionMode {
   Passphrase = 0;
@@ -1258,7 +1259,9 @@ message ResolvedSpans {
   repeated ResolvedSpan resolved_spans = 1 [(gogoproto.nullable) = false];
 
   message Stats {
+    int32 sender_id = 3 [(gogoproto.customname) = "SenderID"];
     uint64 recent_kv_count = 1;
+    util.rangescanstats.rangescanstatspb.RangeStats range_stats = 2;
   }
 
   Stats stats = 2 [(gogoproto.nullable) = false];

@@ -315,7 +315,7 @@ func newStreamIngestionDataProcessor(
 	post *execinfrapb.PostProcessSpec,
 ) (execinfra.Processor, error) {
 	rekeyer, err := backup.MakeKeyRewriterFromRekeys(flowCtx.Codec(),
-		nil  /* tableRekeys */, []execinfrapb.TenantRekey{spec.TenantRekey},
+		nil /* tableRekeys */, []execinfrapb.TenantRekey{spec.TenantRekey},
 		true /* restoreTenantFromStream */)
 	if err != nil {
 		return nil, err
@@ -1061,7 +1061,7 @@ func (r *rangeKeyBatcher) flush(ctx context.Context, toFlush mvccRangeKeyValues)
 
 		log.Dev.Infof(ctx, "sending SSTable [%s, %s) of size %d (as write: %v)", start, end, len(data), ingestAsWrites)
 		_, _, err := r.db.AddSSTable(ctx, start, end, data,
-			false,               /* disallowConflicts */
+			false, /* disallowConflicts */
 			hlc.Timestamp{}, nil /* stats */, ingestAsWrites,
 			r.db.Clock().Now())
 		if err != nil {

@@ -825,6 +825,7 @@ changefeed_progress_skew_span: changefeed.progress_skew.span
 changefeed_progress_skew_table: changefeed.progress_skew.table
 changefeed_queue_time_nanos: changefeed.queue_time
 changefeed_running: changefeed.running
+changefeed_scanning_ranges: changefeed.scanning_ranges
 changefeed_schema_registry_registrations: changefeed.schema_registry.registrations
 changefeed_schema_registry_retry_count: changefeed.schema_registry.retry
 changefeed_schemafeed_table_history_scans: changefeed.schemafeed.table_history_scans
