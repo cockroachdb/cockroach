@@ -15,6 +15,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/backup/backuptestutils"
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/cloud/nodelocal"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/sql"
@@ -537,4 +538,49 @@ func TestRestoreRevisionHistoryWithCompactions(t *testing.T) {
 			th.sqlDB.Exec(t, "DROP TABLE restored.t")
 		}
 	})
+}
+
+func TestRestorePausepointSkipsRetries(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	tmpDir := t.TempDir()
+	defer nodelocal.ReplaceNodeLocalForTesting(tmpDir)()
+
+	mu := struct {
+		syncutil.Mutex
+		attemptCount int
+	}{}
+	testKnobs := &sql.BackupRestoreTestingKnobs{
+		RunBeforeRestoreFlow: func() error {
+			mu.Lock()
+			defer mu.Unlock()
+			mu.attemptCount++
+			return nil
+		},
+	}
+	var params base.TestClusterArgs
+	params.ServerArgs.Knobs.BackupRestore = testKnobs
+
+	const numAccounts = 10
+	_, sqlDB, _, cleanupFn := backuptestutils.StartBackupRestoreTestCluster(
+		t, singleNode, backuptestutils.WithParams(params), backuptestutils.WithBank(numAccounts),
+	)
+	defer cleanupFn()
+
+	sqlDB.Exec(t, "SET CLUSTER SETTING jobs.debug.pausepoints = 'restore.before_link'")
+	sqlDB.Exec(t, "BACKUP DATABASE data INTO 'nodelocal://1/backup'")
+
+	sqlDB.ExpectErr(
+		t,
+		"pause point",
+		`RESTORE DATABASE data FROM LATEST IN 'nodelocal://1/backup'
+		WITH experimental deferred copy, new_db_name = 'restored'`,
+	)
+
+	mu.Lock()
+	defer mu.Unlock()
+	require.Equal(
+		t, 1, mu.attemptCount, "expected only 1 restore attempt since pausepoint should skip retries",
+	)
 }
