@@ -37,6 +37,7 @@ go_library(
         "//pkg/kv/kvpb",
         "//pkg/kv/kvserver/kvserverbase",
         "//pkg/roachpb",
+        "//pkg/security/username",
         "//pkg/settings",
         "//pkg/settings/cluster",
         "//pkg/sql/execinfrapb",
@@ -56,6 +57,7 @@ go_test(
     srcs = [
         "combine_file_info_test.go",
         "main_test.go",
+        "sink_test.go",
         "sst_file_allocator_test.go",
         "sst_writer_test.go",
     ],
@@ -65,6 +67,7 @@ go_test(
         "//pkg/cloud/cloudpb",
         "//pkg/cloud/impl:cloudimpl",
         "//pkg/cloud/nodelocal",
+        "//pkg/jobs/jobspb",
         "//pkg/keys",
         "//pkg/kv/kvpb",
         "//pkg/roachpb",

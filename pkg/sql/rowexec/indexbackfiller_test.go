@@ -86,7 +86,7 @@ func TestIndexBackfillSinkSelection(t *testing.T) {
 
 		sink, err = ib.makeIndexBackfillSink(ctx)
 		require.NoError(t, err)
-		require.IsType(t, &sstIndexBackfillSink{}, sink)
+		require.IsType(t, &bulksst.SSTSink{}, sink)
 		sink.Close(ctx)
 	})
 }
@@ -134,11 +134,20 @@ func TestSSTFileNamingConvention(t *testing.T) {
 	writeTS := hlc.Timestamp{WallTime: 1000000000}
 
 	prefix := fmt.Sprintf("nodelocal://%d/%s", nodeID, spec.DistributedMergeFilePrefix)
-	sink, err := newSSTIndexBackfillSink(ctx, flowCtx, prefix, writeTS, processorID, false /* checkDuplicates */)
+	sink, err := bulksst.NewSSTSink(
+		ctx,
+		flowCtx.Cfg.Settings,
+		flowCtx.Cfg.ExternalStorageFromURI,
+		flowCtx.Cfg.DB.KV().Clock(),
+		prefix,
+		writeTS,
+		processorID,
+		false, /* checkDuplicates */
+	)
 	require.NoError(t, err)
 	defer sink.Close(ctx)
 
-	sstSink := sink.(*sstIndexBackfillSink)
+	sstSink := sink.(*bulksst.SSTSink)
 
 	// Add some data to trigger SST file creation.
 	key := roachpb.Key("test-key-1")
