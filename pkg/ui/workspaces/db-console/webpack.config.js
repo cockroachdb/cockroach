@@ -261,6 +261,9 @@ module.exports = (env, argv) => {
       static: {
         directory: path.join(__dirname, `dist${env.dist}`),
       },
+      client: {
+        overlay: false,
+      },
       devMiddleware: {
         index: false,
       },

@@ -328,7 +328,6 @@ export function* batchAndSendRequests(requests: WithID<TSRequest>[]) {
   // Construct queryable batches from the set of queued queries. Queries can
   // be dispatched in a batch if they are querying over the same timespan.
   const batches = groupBy(requests, qr => timespanKey(qr.data));
-  requests = [];
 
   yield put(fetchMetrics());
   yield all(map(batches, batch => call(sendRequestBatch, batch)));
