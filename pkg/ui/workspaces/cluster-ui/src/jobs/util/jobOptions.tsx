@@ -20,6 +20,9 @@ export enum JobStatusVisual {
 
 export function jobToVisual(job: Job): JobStatusVisual {
   if (job.type === "CHANGEFEED") {
+    if (job.fraction_completed > 0 && job.status === JOB_STATUS_RUNNING) {
+      return JobStatusVisual.ProgressBarWithDuration;
+    }
     return JobStatusVisual.BadgeOnly;
   }
   if (job.type === "REPLICATION STREAM PRODUCER") {

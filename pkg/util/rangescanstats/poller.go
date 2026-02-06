@@ -28,6 +28,9 @@ type RangeStatsPoller struct {
 	stats  atomic.Pointer[rangescanstatspb.RangeStats]
 }
 
+// StatsHandlerFunc is a callback function that consumes polled range stats.
+type StatsHandlerFunc func(stats *rangescanstatspb.RangeStats)
+
 func StartStatsPoller(
 	ctx context.Context,
 	interval time.Duration,
@@ -35,6 +38,7 @@ func StartStatsPoller(
 	frontier span.Frontier,
 	ranges rangedesc.IteratorFactory,
 	laggingSpanThreshold time.Duration,
+	callbackFuncs ...StatsHandlerFunc,
 ) *RangeStatsPoller {
 	ctx, cancel := context.WithCancel(ctx)
 	poller := &RangeStatsPoller{
@@ -50,6 +54,9 @@ func StartStatsPoller(
 				log.Dev.Warningf(ctx, "unable to calculate range scan stats: %v", err)
 			} else {
 				poller.stats.Store(&stats)
+				for _, callback := range callbackFuncs {
+					callback(&stats)
+				}
 			}
 
 			log.VEventf(ctx, 1, "publishing range scan stats: %+v", stats)
