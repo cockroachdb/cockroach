@@ -10,9 +10,11 @@ import (
 	gosql "database/sql"
 	"encoding/json"
 	"fmt"
+	"io"
 	"math/rand"
 	"net/url"
 	"os"
+	"path"
 	"path/filepath"
 	"reflect"
 	"regexp"
@@ -2463,10 +2465,10 @@ func (d *BackupRestoreTestDriver) deleteSSTFromBackupLayers(
 			"deleting sst %s at %s: covering %d bytes and %d rows in [%s, %s)",
 			sst.path, uri, sst.bytes, sst.rows, sst.start, sst.end,
 		)
-		if err := storage.Delete(ctx, sst.path); err != nil {
+		err := renameSSTToDeleted(ctx, l, storage, sst.path)
+		if err != nil {
 			return errors.Wrapf(
-				err,
-				"failed to delete sst %s from backup %s at %s",
+				err, "failed to rename sst %s from backup %s in collection %s",
 				sst.path,
 				collection.name,
 				uri,
@@ -2474,6 +2476,43 @@ func (d *BackupRestoreTestDriver) deleteSSTFromBackupLayers(
 		}
 	}
 	return nil
+}
+
+func renameSSTToDeleted(
+	ctx context.Context, l *logger.Logger, storage cloud.ExternalStorage, sstPath string,
+) error {
+	dir, basename := path.Split(sstPath)
+	basename = "DELETED_" + basename
+	deletedPath := path.Join(dir, basename)
+	writer, err := storage.Writer(ctx, deletedPath)
+	if err != nil {
+		return errors.Wrap(err, "opening writer for deleted path")
+	}
+	defer writer.Close()
+
+	reader, _, err := storage.ReadFile(ctx, sstPath, cloud.ReadOptions{NoFileSize: true})
+	if err != nil {
+		return errors.Wrapf(err, "opening reader for sst %s", sstPath)
+	}
+	defer reader.Close(ctx)
+
+	scratch := make([]byte, 512)
+	for {
+		n, err := reader.Read(ctx, scratch)
+		if n > 0 {
+			if _, werr := writer.Write(scratch[:n]); werr != nil {
+				return errors.Wrap(werr, "writing to deleted sst")
+			}
+		}
+
+		if err == io.EOF {
+			break
+		} else if err != nil {
+			return errors.Wrap(err, "reading from sst")
+		}
+	}
+
+	return errors.Wrap(storage.Delete(ctx, sstPath), "deleting original sst")
 }
 
 // sentinelFilePath returns the path to the file that prevents job
