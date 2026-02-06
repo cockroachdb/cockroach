@@ -9,15 +9,28 @@ import (
 	"bytes"
 	"context"
 	"slices"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
+	"github.com/cockroachdb/cockroach/pkg/util/retry"
+	"github.com/cockroachdb/errors"
+)
+
+// InstanceUnavailabilityTimeout is the duration after which the job will be
+// marked as permanently failed if required SQL instances remain unavailable.
+var InstanceUnavailabilityTimeout = settings.RegisterDurationSetting(
+	settings.ApplicationLevel,
+	"bulkmerge.instance_unavailability.timeout",
+	"duration to wait for unavailable SQL instances before permanently failing the job",
+	30*time.Minute,
 )
 
 // MergeOptions contains configuration for the distributed merge operation.
@@ -61,6 +74,12 @@ func Merge(
 	opts MergeOptions,
 ) ([]execinfrapb.BulkMergeSpec_SST, error) {
 	logMergeInputs(ctx, ssts, opts.Iteration, opts.MaxIterations)
+
+	// Proactive availability gate: wait for all required nodes to be alive
+	// before planning or executing the merge.
+	if err := waitForRequiredInstances(ctx, execCtx, ssts); err != nil {
+		return nil, err
+	}
 
 	plan, planCtx, err := newBulkMergePlan(ctx, execCtx, ssts, spans, genOutputURIAndRecordPrefix, opts)
 	if err != nil {
@@ -167,6 +186,54 @@ func logMergeInputs(
 			i, sst.KeyCount, sst.StartKey, sst.EndKey, sst.URI)
 	}
 	log.Dev.Infof(ctx, "  total input keys: %d", totalInputKeys)
+}
+
+// waitForRequiredInstances checks that all SQL instances owning SST files
+// needed for the merge are alive. If any are unavailable, it retries with
+// exponential backoff until they come back or the configured timeout is
+// exceeded.
+func waitForRequiredInstances(
+	ctx context.Context, execCtx sql.JobExecContext, ssts []execinfrapb.BulkMergeSpec_SST,
+) error {
+	sv := &execCtx.ExecCfg().Settings.SV
+	timeout := InstanceUnavailabilityTimeout.Get(sv)
+
+	retryOpts := retry.Options{
+		InitialBackoff: 5 * time.Second,
+		MaxBackoff:     1 * time.Minute,
+		Multiplier:     2,
+		MaxDuration:    timeout,
+	}
+
+	var lastErr error
+	for r := retry.StartWithCtx(ctx, retryOpts); r.Next(); {
+		instances, err := execCtx.DistSQLPlanner().GetAllInstancesByLocality(
+			ctx, roachpb.Locality{},
+		)
+		if err != nil {
+			return errors.Wrap(err, "getting SQL instances for availability check")
+		}
+
+		lastErr = CheckRequiredInstancesAvailable(ssts, instances)
+		if lastErr == nil {
+			return nil
+		}
+
+		log.Dev.Warningf(ctx,
+			"distributed merge waiting for unavailable SQL instances "+
+				"(attempt %d, timeout %s): %v",
+			r.CurrentAttempt(), timeout, lastErr,
+		)
+	}
+
+	// Distinguish context cancellation from timeout expiry.
+	if ctx.Err() != nil {
+		return ctx.Err()
+	}
+	return errors.Wrapf(lastErr,
+		"distributed merge failed: required SQL instances remain unavailable after %s",
+		timeout,
+	)
 }
 
 func init() {
