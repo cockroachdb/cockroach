@@ -666,3 +666,133 @@ ORDER BY trigger_id
 exec-sql
 DROP DATABASE db4_new;
 ----
+
+# ==============================================================================
+# Regression test for restoring a schema that contains both a table with
+# triggers and the function referenced by one of the triggers. This is a
+# table-level restore where some trigger functions ARE present in the restore
+# target.
+# ==============================================================================
+
+exec-sql
+CREATE DATABASE db3;
+----
+
+exec-sql
+USE db3;
+----
+
+exec-sql
+CREATE SCHEMA sc_keep;
+----
+
+exec-sql
+CREATE SCHEMA sc_drop;
+----
+
+exec-sql
+CREATE TABLE sc_keep.tbl1(a INT PRIMARY KEY, b INT);
+----
+
+exec-sql
+CREATE TABLE sc_keep.tbl2(a INT, b INT);
+----
+
+exec-sql
+CREATE FUNCTION sc_keep.f1() RETURNS TRIGGER LANGUAGE PLpgSQL AS $$
+  BEGIN
+    SELECT a FROM sc_keep.tbl2;
+    RETURN NEW;
+  END
+$$;
+----
+
+exec-sql
+CREATE FUNCTION sc_drop.f2() RETURNS TRIGGER LANGUAGE PLpgSQL AS $$
+  BEGIN
+    SELECT b FROM sc_keep.tbl2;
+    RETURN NEW;
+  END
+$$;
+----
+
+# Create two triggers on the same table, each referencing a function in a
+# different schema.
+exec-sql
+CREATE TRIGGER tr1 AFTER INSERT ON sc_keep.tbl1 FOR EACH ROW EXECUTE FUNCTION sc_keep.f1();
+----
+
+exec-sql
+CREATE TRIGGER tr2 AFTER INSERT ON sc_keep.tbl1 FOR EACH ROW EXECUTE FUNCTION sc_drop.f2();
+----
+
+query-sql
+WITH descs AS (
+  SELECT relname, tab->'table'->'triggers' AS triggers FROM (
+    SELECT relname, crdb_internal.pb_to_json('cockroach.sql.sqlbase.Descriptor', descriptor, false) AS tab
+    FROM system.descriptor d INNER JOIN pg_class c ON d.id = c.oid::INT
+    WHERE relname = 'tbl1'
+  )
+)
+SELECT relname, t.name FROM descs, LATERAL (
+  SELECT value->'name' FROM jsonb_array_elements(descs.triggers)
+) AS t(name)
+ORDER BY relname, t.name
+----
+tbl1 "tr1"
+tbl1 "tr2"
+
+exec-sql
+BACKUP DATABASE db3 INTO 'nodelocal://1/test_schema_restore/'
+----
+
+# Drop and recreate the schemas to set up for the restore.
+exec-sql
+DROP SCHEMA sc_keep CASCADE;
+----
+
+exec-sql
+DROP FUNCTION sc_drop.f2;
+----
+
+# Restore only sc_keep.* which includes f1 but NOT f2.
+# This should work: tr1 should be kept (its function f1 is restored),
+# tr2 should be dropped (its function f2 is missing).
+exec-sql
+RESTORE TABLE db3.sc_keep.* FROM LATEST IN 'nodelocal://1/test_schema_restore/' WITH skip_missing_udfs;
+----
+
+# Verify that tr1 is present (function was restored) and tr2 is dropped
+# (function was missing).
+query-sql
+WITH descs AS (
+  SELECT relname, tab->'table'->'triggers' AS triggers FROM (
+    SELECT relname, crdb_internal.pb_to_json('cockroach.sql.sqlbase.Descriptor', descriptor, false) AS tab
+    FROM system.descriptor d INNER JOIN pg_class c ON d.id = c.oid::INT
+    WHERE relname = 'tbl1'
+  )
+)
+SELECT relname, t.name FROM descs, LATERAL (
+  SELECT value->'name' FROM jsonb_array_elements(descs.triggers)
+) AS t(name)
+ORDER BY relname, t.name
+----
+tbl1 "tr1"
+
+# Verify that the trigger and function work correctly.
+exec-sql
+INSERT INTO sc_keep.tbl1 VALUES (1, 1);
+----
+
+# Clean up.
+exec-sql
+DROP TRIGGER tr1 ON sc_keep.tbl1;
+----
+
+exec-sql
+DROP FUNCTION sc_keep.f1;
+----
+
+exec-sql
+DROP DATABASE db3;
+----

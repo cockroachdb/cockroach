@@ -473,12 +473,36 @@ func TableDescs(
 	// references from the view, which cannot have triggers and thus are not
 	// included in relationBackrefRemovalCandidates.
 	if len(relationBackrefRemovalCandidates) > 0 {
+		// Build a lookup map from rewritten table ID to table descriptor, so we
+		// can check whether a trigger still exists on a referencing table.
+		tablesByID := make(map[descpb.ID]*tabledesc.Mutable, len(tables))
+		for _, t := range tables {
+			tablesByID[t.ID] = t
+		}
+
 		for _, table := range tables {
 			if refsToRemove, ok := relationBackrefRemovalCandidates[table.ID]; ok {
 				newDependedOnBy := table.DependedOnBy[:0]
 				for _, ref := range table.DependedOnBy {
 					if _, remove := refsToRemove[ref.ID]; !remove {
 						newDependedOnBy = append(newDependedOnBy, ref)
+					} else if ref.TriggerID != 0 {
+						// This backref is for a specific trigger. Only remove
+						// it if that trigger no longer exists on the
+						// referencing table (i.e., it was dropped due to
+						// missing dependencies).
+						if refTable, ok := tablesByID[ref.ID]; ok {
+							triggerStillExists := false
+							for i := range refTable.Triggers {
+								if refTable.Triggers[i].ID == ref.TriggerID {
+									triggerStillExists = true
+									break
+								}
+							}
+							if triggerStillExists {
+								newDependedOnBy = append(newDependedOnBy, ref)
+							}
+						}
 					} else {
 						// Sequences are a special case: we remove only the backref created
 						// by the trigger or policy. This is represented as a
