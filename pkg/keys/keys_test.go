@@ -698,6 +698,31 @@ func TestRangeBatchWithGCRequests(t *testing.T) {
 	}
 }
 
+// TestRangeBatchWithGCClearRangeLocalRangeIDError verifies that calling Range
+// with a GC request with a ClearRange that spans LocalRangeID keys results in
+// an error.
+func TestRangeBatchWithGCClearRangeLocalRangeIDError(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	localRangeIDKey := roachpb.Key(LocalRangeIDPrefix)
+	req := kvpb.GCRequest{
+		RequestHeader: kvpb.RequestHeader{
+			Key:    roachpb.Key("a"),
+			EndKey: roachpb.Key("z"),
+		},
+		ClearRange: &kvpb.GCRequest_GCClearRange{
+			StartKey: localRangeIDKey,
+			EndKey:   append(localRangeIDKey, byte('z')),
+		},
+	}
+	var ba kvpb.BatchRequest
+	ba.Add(&req)
+	_, err := Range(ba.Requests)
+	require.Error(t, err)
+	require.True(t, testutils.IsError(err, "ClearRange request cannot span LocalRangeID keys"),
+		"expected error about LocalRangeID keys, got: %v", err)
+}
+
 // TestBatchError verifies that Range returns an error if a request has an invalid range.
 func TestBatchError(t *testing.T) {
 	testCases := []struct {
