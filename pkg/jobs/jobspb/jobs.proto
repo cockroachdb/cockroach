@@ -819,6 +819,7 @@ message TypeSchemaChangeProgress {
 enum IndexBackfillDistributedMergeMode {
   INDEX_BACKFILL_DISTRIBUTED_MERGE_MODE_DISABLED = 0 [(gogoproto.enumvalue_customname) = "Disabled"];
   INDEX_BACKFILL_DISTRIBUTED_MERGE_MODE_ENABLED = 1 [(gogoproto.enumvalue_customname) = "Enabled"];
+  INDEX_BACKFILL_DISTRIBUTED_MERGE_MODE_FORCE = 2 [(gogoproto.enumvalue_customname) = "Force"];
 }
 
 // NewSchemaChangeDetails is the job detail information for the new schema change job.

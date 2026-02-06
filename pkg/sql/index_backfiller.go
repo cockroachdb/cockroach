@@ -135,7 +135,10 @@ func (ib *IndexBackfillPlanner) BackfillIndexes(
 		}
 		return tracker.SetBackfillProgress(ctx, progress)
 	}
-	useDistributedMerge := mode == jobspb.IndexBackfillDistributedMergeMode_Enabled
+	useDistributedMerge, err := shouldUseDistributedMerge(ctx, mode, descriptor, progress)
+	if err != nil {
+		return err
+	}
 
 	// addStoragePrefix records storage prefixes before any SST is written to those
 	// locations, ensuring cleanup can occur even if the job fails mid-backfill or
@@ -363,6 +366,44 @@ func getIndexBackfillDistributedMergeMode(
 			errors.AssertionFailedf("expected new schema change details on job %d", job.ID())
 	}
 	return details.DistributedMergeMode, nil
+}
+
+// shouldUseDistributedMerge decides whether the backfill should run through
+// the distributed merge pipeline. Force mode always enables it. Enabled mode
+// falls back to the regular path when every destination index shares leading
+// key columns with the source, since the SSTs are already non-overlapping.
+func shouldUseDistributedMerge(
+	ctx context.Context,
+	mode jobspb.IndexBackfillDistributedMergeMode,
+	descriptor catalog.TableDescriptor,
+	progress scexec.BackfillProgress,
+) (bool, error) {
+	if mode == jobspb.IndexBackfillDistributedMergeMode_Force {
+		return true, nil
+	}
+	if mode != jobspb.IndexBackfillDistributedMergeMode_Enabled {
+		return false, nil
+	}
+	// Mode is Enabled: check whether the backfill data is already sorted
+	// relative to the PK. If every destination index shares leading key
+	// columns with the source index, the SSTs from different PK ranges are
+	// non-overlapping and distributed merge adds only overhead.
+	sourceIndex, err := catalog.MustFindIndexByID(descriptor, progress.SourceIndexID)
+	if err != nil {
+		return false, err
+	}
+	for _, destIndexID := range progress.DestIndexIDs {
+		destIndex, err := catalog.MustFindIndexByID(descriptor, destIndexID)
+		if err != nil {
+			return false, err
+		}
+		if !backfill.IsBackfillDataSorted(sourceIndex, destIndex) {
+			return true, nil
+		}
+	}
+	log.Dev.Infof(ctx, "index backfill data is sorted relative to source index %d; "+
+		"falling back to non-distributed merge", progress.SourceIndexID)
+	return false, nil
 }
 
 // runDistributedMerge runs a multi-pass distributed merge of the provided SSTs.
