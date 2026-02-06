@@ -35,7 +35,7 @@ type sstIndexBackfillSink struct {
 	pendingManifests []jobspb.BulkSSTManifest
 }
 
-var _ indexBackfillSink = (*sstIndexBackfillSink)(nil)
+var _ bulksst.BulkSink = (*sstIndexBackfillSink)(nil)
 
 func newSSTIndexBackfillSink(
 	ctx context.Context,
@@ -44,7 +44,7 @@ func newSSTIndexBackfillSink(
 	writeAsOf hlc.Timestamp,
 	processorID int32,
 	checkDuplicates bool,
-) (indexBackfillSink, error) {
+) (bulksst.BulkSink, error) {
 	if distributedMergeFilePrefix == "" {
 		return nil, errors.AssertionFailedf("distributed merge sink requires file prefix")
 	}
@@ -72,12 +72,12 @@ func newSSTIndexBackfillSink(
 	}, nil
 }
 
-// Add implements the indexBackfillSink interface.
+// Add implements the bulksst.BulkSink interface.
 func (s *sstIndexBackfillSink) Add(ctx context.Context, key roachpb.Key, value []byte) error {
 	return s.writer.Add(ctx, key, value)
 }
 
-// Flush implements the indexBackfillSink interface.
+// Flush implements the bulksst.BulkSink interface.
 func (s *sstIndexBackfillSink) Flush(ctx context.Context) error {
 	// Callers must use SetOnFlush before calling Flush in order to properly track
 	// the pending manifests.
@@ -87,7 +87,7 @@ func (s *sstIndexBackfillSink) Flush(ctx context.Context) error {
 	return s.writer.Flush(ctx)
 }
 
-// SetOnFlush implements the indexBackfillSink interface.
+// SetOnFlush implements the bulksst.BulkSink interface.
 func (s *sstIndexBackfillSink) SetOnFlush(fn func(summary kvpb.BulkOpSummary)) {
 	s.onFlush = fn
 	s.writer.SetOnFlush(func(summary kvpb.BulkOpSummary) {
@@ -98,7 +98,7 @@ func (s *sstIndexBackfillSink) SetOnFlush(fn func(summary kvpb.BulkOpSummary)) {
 	})
 }
 
-// ComsumeFlushManifests implements the indexBackfillSink interface.
+// ConsumeFlushManifests implements the bulksst.BulkSink interface.
 func (s *sstIndexBackfillSink) ConsumeFlushManifests() []jobspb.BulkSSTManifest {
 	if len(s.pendingManifests) == 0 {
 		return nil
