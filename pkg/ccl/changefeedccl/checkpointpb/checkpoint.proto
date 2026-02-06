@@ -16,6 +16,9 @@ message ChangefeedCheckpoint {
 
   message Stats {
     uint64 recent_kv_count = 1;
+    int64 total_ranges = 2;
+    int64 backfill_pending_ranges = 3;
+    int32 aggregator_id = 4 [(gogoproto.customname) = "AggregatorID"];
   }
 
   Stats stats = 2 [(gogoproto.nullable) = false];
