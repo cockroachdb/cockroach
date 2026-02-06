@@ -23,6 +23,8 @@ go_library(
     name = "bulksst",
     srcs = [
         "combine_file_info.go",
+        "manifest_conversion.go",
+        "sink.go",
         "sst_file_allocator.go",
         "sst_writer.go",
     ],
