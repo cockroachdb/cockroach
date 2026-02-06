@@ -5,9 +5,8 @@
 import { Nodes, MagnifyingGlass } from "@cockroachlabs/icons";
 import { Tooltip } from "@cockroachlabs/ui-components";
 import classNames from "classnames/bind";
-import isEqual from "lodash/isEqual";
 import map from "lodash/map";
-import React from "react";
+import React, { useState, useEffect } from "react";
 import { Link } from "react-router-dom";
 
 import { Anchor } from "src/anchor";
@@ -22,7 +21,7 @@ import { Timestamp, Timezone } from "../../timestamp";
 import styles from "../schedules.module.scss";
 const cx = classNames.bind(styles);
 
-class SchedulesSortedTable extends SortedTable<Schedule> {}
+const SchedulesSortedTable = SortedTable<Schedule>;
 
 const schedulesTableColumns: ColumnDescriptor<Schedule>[] = [
   {
@@ -186,39 +185,37 @@ export interface ScheduleTableProps {
   isUsedFilter: boolean;
 }
 
-export interface ScheduleTableState {
-  pagination: {
-    pageSize: number;
-    current: number;
+export function ScheduleTable({
+  sort,
+  setSort,
+  schedules,
+  pageSize = 20,
+  current = 1,
+  isUsedFilter,
+}: ScheduleTableProps): React.ReactElement {
+  const [pagination, setPagination] = useState({
+    pageSize,
+    current,
+  });
+
+  // Reset to page 1 when schedules change.
+  useEffect(() => {
+    setPagination(prev => ({ ...prev, current: 1 }));
+  }, [
+    // Using a stable comparison of schedule IDs to detect changes.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    JSON.stringify(map(schedules, s => s.id)),
+  ]);
+
+  const onChangePage = (newCurrent: number, newPageSize: number): void => {
+    setPagination(prev => ({
+      ...prev,
+      current: newCurrent,
+      pageSize: newPageSize,
+    }));
   };
-}
 
-export class ScheduleTable extends React.Component<
-  ScheduleTableProps,
-  ScheduleTableState
-> {
-  constructor(props: ScheduleTableProps) {
-    super(props);
-
-    this.state = {
-      pagination: {
-        pageSize: props.pageSize || 20,
-        current: props.current || 1,
-      },
-    };
-  }
-
-  componentDidUpdate(prevProps: Readonly<ScheduleTableProps>): void {
-    this.setCurrentPageToOneIfSchedulesChanged(prevProps);
-  }
-
-  onChangePage = (current: number, pageSize: number) => {
-    const { pagination } = this.state;
-    this.setState({ pagination: { ...pagination, current, pageSize } });
-  };
-
-  renderEmptyState = () => {
-    const { isUsedFilter, schedules } = this.props;
+  const renderEmptyState = () => {
     const hasData = schedules?.length > 0;
 
     if (hasData) {
@@ -243,63 +240,34 @@ export class ScheduleTable extends React.Component<
     }
   };
 
-  render() {
-    const schedules = this.props.schedules;
-    const { pagination } = this.state;
-
-    return (
-      <React.Fragment>
-        <div className={cx("cl-table-statistic schedules-table-summary")}>
-          <h4 className={cx("cl-count-title")}>
-            <ResultsPerPageLabel
-              pagination={{ ...pagination, total: schedules.length }}
-              pageName="schedules"
-            />
-          </h4>
-        </div>
-        <SchedulesSortedTable
-          data={schedules}
-          sortSetting={this.props.sort}
-          onChangeSortSetting={this.props.setSort}
-          className={cx("schedules-table")}
-          rowClass={schedule => cx("schedules-table__row--" + schedule.status)}
-          columns={schedulesTableColumns}
-          renderNoResult={this.renderEmptyState()}
-          pagination={pagination}
-          tableWrapperClassName={cx("sorted-table")}
-        />
-        <Pagination
-          pageSize={pagination.pageSize}
-          current={pagination.current}
-          total={schedules.length}
-          onChange={this.onChangePage}
-          onShowSizeChange={this.onChangePage}
-        />
-      </React.Fragment>
-    );
-  }
-
-  private setCurrentPageToOneIfSchedulesChanged(
-    prevProps: Readonly<ScheduleTableProps>,
-  ) {
-    if (
-      !isEqual(
-        map(prevProps.schedules, j => {
-          return j.id;
-        }),
-        map(this.props.schedules, j => {
-          return j.id;
-        }),
-      )
-    ) {
-      this.setState((prevState: Readonly<ScheduleTableState>) => {
-        return {
-          pagination: {
-            ...prevState.pagination,
-            current: 1,
-          },
-        };
-      });
-    }
-  }
+  return (
+    <React.Fragment>
+      <div className={cx("cl-table-statistic schedules-table-summary")}>
+        <h4 className={cx("cl-count-title")}>
+          <ResultsPerPageLabel
+            pagination={{ ...pagination, total: schedules.length }}
+            pageName="schedules"
+          />
+        </h4>
+      </div>
+      <SchedulesSortedTable
+        data={schedules}
+        sortSetting={sort}
+        onChangeSortSetting={setSort}
+        className={cx("schedules-table")}
+        rowClass={schedule => cx("schedules-table__row--" + schedule.status)}
+        columns={schedulesTableColumns}
+        renderNoResult={renderEmptyState()}
+        pagination={pagination}
+        tableWrapperClassName={cx("sorted-table")}
+      />
+      <Pagination
+        pageSize={pagination.pageSize}
+        current={pagination.current}
+        total={schedules.length}
+        onChange={onChangePage}
+        onShowSizeChange={onChangePage}
+      />
+    </React.Fragment>
+  );
 }

@@ -4,8 +4,7 @@
 // included in the /LICENSE file.
 
 import "@testing-library/jest-dom";
-import { render } from "@testing-library/react";
-import { shallow } from "enzyme";
+import { act, render } from "@testing-library/react";
 import moment from "moment";
 import React from "react";
 import { MemoryRouter, Route, Switch } from "react-router-dom";
@@ -13,6 +12,14 @@ import { MemoryRouter, Route, Switch } from "react-router-dom";
 import { IndexDetailsPage, IndexDetailsPageProps, util } from "../index";
 
 describe("IndexDetailsPage", () => {
+  beforeEach(() => {
+    jest.useFakeTimers();
+  });
+
+  afterEach(() => {
+    jest.useRealTimers();
+  });
+
   const props: IndexDetailsPageProps = {
     databaseName: "DATABASE",
     tableName: "TABLE",
@@ -44,33 +51,57 @@ describe("IndexDetailsPage", () => {
     onTimeScaleChange: () => {},
     refreshIndexStats: () => {},
   };
+
   it("should call refreshNodes if isTenant is false", () => {
     const mockCallback = jest.fn(() => {});
-    shallow(<IndexDetailsPage {...props} refreshNodes={mockCallback} />);
-    expect(mockCallback.mock.calls).toHaveLength(1);
+    act(() => {
+      render(
+        <MemoryRouter initialEntries={["/"]}>
+          <Switch>
+            <Route path="/">
+              <IndexDetailsPage {...props} refreshNodes={mockCallback} />
+            </Route>
+          </Switch>
+        </MemoryRouter>,
+      );
+    });
+    expect(mockCallback).toHaveBeenCalled();
   });
+
   it("should not call refreshNodes if isTenant is true", () => {
     const mockCallback = jest.fn(() => {});
-
-    shallow(
-      <IndexDetailsPage
-        {...props}
-        refreshNodes={mockCallback}
-        isTenant={true}
-      />,
-    );
-    expect(mockCallback.mock.calls).toHaveLength(0);
+    act(() => {
+      render(
+        <MemoryRouter initialEntries={["/"]}>
+          <Switch>
+            <Route path="/">
+              <IndexDetailsPage
+                {...props}
+                refreshNodes={mockCallback}
+                isTenant={true}
+              />
+            </Route>
+          </Switch>
+        </MemoryRouter>,
+      );
+    });
+    expect(mockCallback).not.toHaveBeenCalled();
   });
+
   it("should render bread crumbs", () => {
-    const { container } = render(
-      <MemoryRouter initialEntries={["/"]}>
-        <Switch>
-          <Route path="/">
-            <IndexDetailsPage {...props} isTenant={false} />
-          </Route>
-        </Switch>
-      </MemoryRouter>,
-    );
+    let container: HTMLElement;
+    act(() => {
+      const result = render(
+        <MemoryRouter initialEntries={["/"]}>
+          <Switch>
+            <Route path="/">
+              <IndexDetailsPage {...props} isTenant={false} />
+            </Route>
+          </Switch>
+        </MemoryRouter>,
+      );
+      container = result.container;
+    });
     const itemLinks = container.getElementsByClassName("item-link");
     expect(itemLinks).toHaveLength(3);
     expect(itemLinks[0].getAttribute("href")).toEqual("/databases");

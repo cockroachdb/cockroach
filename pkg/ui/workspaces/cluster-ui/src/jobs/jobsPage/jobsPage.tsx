@@ -6,7 +6,7 @@ import { cockroach, google } from "@cockroachlabs/crdb-protobuf-client";
 import { InlineAlert } from "@cockroachlabs/ui-components";
 import classNames from "classnames/bind";
 import moment from "moment-timezone";
-import React from "react";
+import React, { useState, useEffect, useCallback, useRef } from "react";
 import { Helmet } from "react-helmet";
 import { RouteComponentProps } from "react-router-dom";
 
@@ -63,10 +63,6 @@ export interface JobsPageDispatchProps {
   refreshJobs: (req: JobsRequest) => void;
 }
 
-interface PageState {
-  pagination: ISortedTablePagination;
-}
-
 export type JobsPageProps = JobsPageStateProps &
   JobsPageDispatchProps &
   RouteComponentProps;
@@ -82,163 +78,160 @@ const reqFromProps = (
   });
 };
 
-export class JobsPage extends React.Component<JobsPageProps, PageState> {
-  refreshDataInterval: NodeJS.Timeout;
+export function JobsPage(props: JobsPageProps): React.ReactElement {
+  const {
+    sort,
+    status,
+    type,
+    show,
+    columns: columnsToDisplay,
+    onColumnsChange,
+    setSort,
+    setStatus,
+    setShow,
+    setType,
+    jobsResponse,
+    refreshJobs,
+    history,
+  } = props;
 
-  constructor(props: JobsPageProps) {
-    super(props);
-    this.state = {
-      pagination: {
-        pageSize: 20,
-        current: 1,
-      },
-    };
-    const { history } = this.props;
+  const [pagination, setPagination] = useState<ISortedTablePagination>({
+    pageSize: 20,
+    current: 1,
+  });
+
+  const refreshDataIntervalRef = useRef<NodeJS.Timeout>(null);
+
+  // Sync URL params to state on mount.
+  useEffect(() => {
     const searchParams = new URLSearchParams(history.location.search);
 
     // Sort Settings.
     const ascending = (searchParams.get("ascending") || undefined) === "true";
     const columnTitle = searchParams.get("columnTitle") || undefined;
-    const sortSetting = this.props.sort;
     if (
-      this.props.setSort &&
+      setSort &&
       columnTitle &&
-      (sortSetting.columnTitle !== columnTitle ||
-        sortSetting.ascending !== ascending)
+      (sort.columnTitle !== columnTitle || sort.ascending !== ascending)
     ) {
-      this.props.setSort({ columnTitle, ascending });
+      setSort({ columnTitle, ascending });
     }
 
     // Filter Status.
-    const status = searchParams.get("status");
-    if (this.props.setStatus && status && status !== this.props.status) {
-      this.props.setStatus(status);
+    const urlStatus = searchParams.get("status");
+    if (setStatus && urlStatus && urlStatus !== status) {
+      setStatus(urlStatus);
     }
 
     // Filter Show.
-    const show = searchParams.get("show") || undefined;
-    if (this.props.setShow && show && show !== this.props.show) {
-      this.props.setShow(show);
+    const urlShow = searchParams.get("show") || undefined;
+    if (setShow && urlShow && urlShow !== show) {
+      setShow(urlShow);
     }
 
     // Filter Type.
-    const type = parseInt(searchParams.get("type"), 10) || undefined;
-    if (this.props.setType && type && type !== this.props.type) {
-      this.props.setType(type);
+    const urlType = parseInt(searchParams.get("type"), 10) || undefined;
+    if (setType && urlType && urlType !== type) {
+      setType(urlType);
     }
-  }
+    // Only run on mount.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
-  scheduleFetch(): void {
-    clearTimeout(this.refreshDataInterval);
+  const scheduleFetch = useCallback(() => {
+    clearTimeout(refreshDataIntervalRef.current);
     const now = moment.utc();
     const nextRefresh =
-      !this.props.jobsResponse?.valid && !this.props.jobsResponse?.error
+      !jobsResponse?.valid && !jobsResponse?.error
         ? now
-        : this.props.jobsResponse.lastUpdated?.clone().add(10, "seconds") ??
-          now;
+        : jobsResponse.lastUpdated?.clone().add(10, "seconds") ?? now;
     const msToNextRefresh = Math.max(0, nextRefresh.diff(now, "millisecond"));
-    this.refreshDataInterval = setTimeout(() => {
-      const req = reqFromProps(this.props);
-      this.props.refreshJobs(req);
+    refreshDataIntervalRef.current = setTimeout(() => {
+      const req = reqFromProps(props);
+      refreshJobs(req);
     }, msToNextRefresh);
-  }
+  }, [jobsResponse, props, refreshJobs]);
 
-  componentDidMount(): void {
-    this.scheduleFetch();
-  }
+  // Schedule fetch on mount and when relevant props change.
+  useEffect(() => {
+    scheduleFetch();
+  }, [scheduleFetch, jobsResponse?.lastUpdated, show, status, type]);
 
-  componentDidUpdate(prevProps: JobsPageProps): void {
-    // Because we removed the retrying status, we add this check
-    // just in case there exists an app that attempts to load a non-existent
-    // status.
-    if (!isValidJobStatus(this.props.status)) {
-      this.onStatusSelected(defaultRequestOptions.status);
+  // Cleanup on unmount.
+  useEffect(() => {
+    return () => {
+      clearTimeout(refreshDataIntervalRef.current);
+    };
+  }, []);
+
+  // Validate status and type on every render.
+  useEffect(() => {
+    if (!isValidJobStatus(status)) {
+      setStatus(defaultRequestOptions.status);
+      syncHistory({ status: defaultRequestOptions.status }, history);
     }
+  }, [status, setStatus, history]);
 
-    if (!isValidJobType(this.props.type)) {
-      this.onTypeSelected(defaultRequestOptions.type.toString());
+  useEffect(() => {
+    if (!isValidJobType(type)) {
+      setType(defaultRequestOptions.type);
+      syncHistory({ type: defaultRequestOptions.type.toString() }, history);
     }
+  }, [type, setType, history]);
 
-    if (
-      prevProps.jobsResponse.lastUpdated !==
-        this.props.jobsResponse.lastUpdated ||
-      prevProps.show !== this.props.show ||
-      prevProps.status !== this.props.status ||
-      prevProps.type !== this.props.type
-    ) {
-      this.scheduleFetch();
-    }
-  }
-
-  componentWillUnmount(): void {
-    clearTimeout(this.refreshDataInterval);
-  }
-
-  setPagination = (current: number, pageSize: number): void => {
-    const { pagination } = this.state;
-    this.setState({ pagination: { ...pagination, current, pageSize } });
+  const handleSetPagination = (current: number, pageSize: number): void => {
+    setPagination(prev => ({ ...prev, current, pageSize }));
   };
 
-  resetPagination = (): void => {
-    this.setState((prevState: PageState) => {
-      return {
-        pagination: {
-          current: 1,
-          pageSize: prevState.pagination.pageSize,
+  const resetPagination = useCallback((): void => {
+    setPagination(prev => ({ current: 1, pageSize: prev.pageSize }));
+  }, []);
+
+  const onStatusSelected = useCallback(
+    (item: string): void => {
+      setStatus(item);
+      resetPagination();
+      syncHistory({ status: item }, history);
+    },
+    [setStatus, resetPagination, history],
+  );
+
+  const onTypeSelected = useCallback(
+    (item: string): void => {
+      const typeVal = parseInt(item, 10);
+      setType(typeVal);
+      resetPagination();
+      syncHistory({ type: typeVal.toString() }, history);
+    },
+    [setType, resetPagination, history],
+  );
+
+  const onShowSelected = useCallback(
+    (item: string): void => {
+      setShow(item);
+      resetPagination();
+      syncHistory({ show: item }, history);
+    },
+    [setShow, resetPagination, history],
+  );
+
+  const changeSortSetting = useCallback(
+    (ss: SortSetting): void => {
+      if (setSort) {
+        setSort(ss);
+      }
+      syncHistory(
+        {
+          ascending: ss.ascending.toString(),
+          columnTitle: ss.columnTitle,
         },
-      };
-    });
-  };
+        history,
+      );
+    },
+    [setSort, history],
+  );
 
-  onStatusSelected = (item: string): void => {
-    this.props.setStatus(item);
-    this.resetPagination();
-    syncHistory(
-      {
-        status: item,
-      },
-      this.props.history,
-    );
-  };
-
-  onTypeSelected = (item: string): void => {
-    const type = parseInt(item, 10);
-    this.props.setType(type);
-    this.resetPagination();
-    syncHistory(
-      {
-        type: type.toString(),
-      },
-      this.props.history,
-    );
-  };
-
-  onShowSelected = (item: string): void => {
-    this.props.setShow(item);
-    this.resetPagination();
-    syncHistory(
-      {
-        show: item,
-      },
-      this.props.history,
-    );
-  };
-
-  changeSortSetting = (ss: SortSetting): void => {
-    if (this.props.setSort) {
-      this.props.setSort(ss);
-    }
-
-    syncHistory(
-      {
-        ascending: ss.ascending.toString(),
-        columnTitle: ss.columnTitle,
-      },
-      this.props.history,
-    );
-  };
-
-  formatJobsRetentionMessage = (earliestRetainedTime: ITimestamp) => {
+  const formatJobsRetentionMessage = (earliestRetainedTime: ITimestamp) => {
     return (
       <>
         Since{" "}
@@ -250,141 +243,128 @@ export class JobsPage extends React.Component<JobsPageProps, PageState> {
     );
   };
 
-  render(): React.ReactElement {
-    const {
-      sort,
-      status,
-      type,
-      show,
-      columns: columnsToDisplay,
-      onColumnsChange,
-    } = this.props;
-    const jobs = this.props.jobsResponse?.data;
-    const jobsError = this.props.jobsResponse?.error;
+  const jobs = jobsResponse?.data;
+  const jobsError = jobsResponse?.error;
 
-    const isLoading =
-      this.props.jobsResponse?.inFlight &&
-      (!this.props.jobsResponse?.valid || !jobs);
+  const isLoading = jobsResponse?.inFlight && (!jobsResponse?.valid || !jobs);
 
-    const { pagination } = this.state;
-    const filteredJobs = jobs?.jobs ?? [];
-    const columns = makeJobsColumns();
-    // Iterate over all available columns and create list of SelectOptions with initial selection
-    // values based on stored user selections in local storage and default column configs.
-    // Columns that are set to alwaysShow are filtered from the list.
-    const tableColumns = columns
-      .filter(c => !c.alwaysShow)
-      .map(
-        (c): SelectOption => ({
-          label: jobsColumnLabels[c.name],
-          value: c.name,
-          isSelected: isSelectedColumn(columnsToDisplay, c),
-        }),
-      );
-
-    // List of all columns that will be displayed based on the column selection.
-    const displayColumns = columns.filter(c =>
-      isSelectedColumn(this.props.columns, c),
+  const filteredJobs = jobs?.jobs ?? [];
+  const columns = makeJobsColumns();
+  // Iterate over all available columns and create list of SelectOptions with initial selection
+  // values based on stored user selections in local storage and default column configs.
+  // Columns that are set to alwaysShow are filtered from the list.
+  const tableColumns = columns
+    .filter(c => !c.alwaysShow)
+    .map(
+      (c): SelectOption => ({
+        label: jobsColumnLabels[c.name],
+        value: c.name,
+        isSelected: isSelectedColumn(columnsToDisplay, c),
+      }),
     );
 
-    return (
+  // List of all columns that will be displayed based on the column selection.
+  const displayColumns = columns.filter(c =>
+    isSelectedColumn(columnsToDisplay, c),
+  );
+
+  return (
+    <div>
+      <Helmet title="Jobs" />
+      <h3 className={commonStyles("base-heading")}>Jobs</h3>
       <div>
-        <Helmet title="Jobs" />
-        <h3 className={commonStyles("base-heading")}>Jobs</h3>
-        <div>
-          <PageConfig>
-            <PageConfigItem>
-              <Dropdown items={statusOptions} onChange={this.onStatusSelected}>
-                Status:{" "}
-                {statusOptions.find(option => option.value === status)?.name}
-              </Dropdown>
-            </PageConfigItem>
-            <PageConfigItem>
-              <Dropdown items={typeOptions} onChange={this.onTypeSelected}>
-                Type:{" "}
-                {
-                  typeOptions.find(option => option.value === type.toString())
-                    ?.name
-                }
-              </Dropdown>
-            </PageConfigItem>
-            <PageConfigItem>
-              <Dropdown items={showOptions} onChange={this.onShowSelected}>
-                Show: {showOptions.find(option => option.value === show)?.name}
-              </Dropdown>
-            </PageConfigItem>
-          </PageConfig>
-        </div>
-        <div className={cx("table-area")}>
-          {jobsError && jobs && (
-            <InlineAlert intent="danger" title={jobsError.message} />
-          )}
-          <Loading
-            loading={isLoading}
-            page={"jobs"}
-            error={!jobs ? jobsError : null}
-          >
-            <div>
-              <section className={sortableTableCx("cl-table-container")}>
-                <div className={sortableTableCx("cl-table-statistic")}>
-                  <ColumnsSelector
-                    options={tableColumns}
-                    onSubmitColumns={onColumnsChange}
-                    size={"small"}
-                  />
-                  <div className={cx("jobs-table-summary")}>
-                    <h4 className={cx("cl-count-title")}>
-                      <ResultsPerPageLabel
-                        pagination={{
-                          ...pagination,
-                          total: filteredJobs.length,
-                        }}
-                        pageName="jobs"
-                      />
-                      {jobs?.earliest_retained_time && (
-                        <>
-                          <span
-                            className={cx(
-                              "jobs-table-summary__retention-divider",
-                            )}
-                          >
-                            |
-                          </span>
-                          {this.formatJobsRetentionMessage(
-                            jobs?.earliest_retained_time,
-                          )}
-                        </>
-                      )}
-                    </h4>
-                  </div>
-                </div>
-                <JobsTable
-                  jobs={filteredJobs}
-                  sortSetting={sort}
-                  onChangeSortSetting={this.changeSortSetting}
-                  visibleColumns={displayColumns}
-                  pagination={pagination}
-                />
-              </section>
-              <Pagination
-                pageSize={pagination.pageSize}
-                onShowSizeChange={this.setPagination}
-                current={pagination.current}
-                total={filteredJobs.length}
-                onChange={this.setPagination}
-              />
-            </div>
-          </Loading>
-          {isLoading && !jobsError && (
-            <Delayed delay={moment.duration(2, "s")}>
-              <InlineAlert
-                intent="info"
-                title="If the Jobs table contains a large amount of data, this page might take a while to load."
-              />
-            </Delayed>
-          )}
-        </div>
+        <PageConfig>
+          <PageConfigItem>
+            <Dropdown items={statusOptions} onChange={onStatusSelected}>
+              Status:{" "}
+              {statusOptions.find(option => option.value === status)?.name}
+            </Dropdown>
+          </PageConfigItem>
+          <PageConfigItem>
+            <Dropdown items={typeOptions} onChange={onTypeSelected}>
+              Type:{" "}
+              {
+                typeOptions.find(option => option.value === type.toString())
+                  ?.name
+              }
+            </Dropdown>
+          </PageConfigItem>
+          <PageConfigItem>
+            <Dropdown items={showOptions} onChange={onShowSelected}>
+              Show: {showOptions.find(option => option.value === show)?.name}
+            </Dropdown>
+          </PageConfigItem>
+        </PageConfig>
       </div>
-    );
-  }
+      <div className={cx("table-area")}>
+        {jobsError && jobs && (
+          <InlineAlert intent="danger" title={jobsError.message} />
+        )}
+        <Loading
+          loading={isLoading}
+          page={"jobs"}
+          error={!jobs ? jobsError : null}
+        >
+          <div>
+            <section className={sortableTableCx("cl-table-container")}>
+              <div className={sortableTableCx("cl-table-statistic")}>
+                <ColumnsSelector
+                  options={tableColumns}
+                  onSubmitColumns={onColumnsChange}
+                  size={"small"}
+                />
+                <div className={cx("jobs-table-summary")}>
+                  <h4 className={cx("cl-count-title")}>
+                    <ResultsPerPageLabel
+                      pagination={{
+                        ...pagination,
+                        total: filteredJobs.length,
+                      }}
+                      pageName="jobs"
+                    />
+                    {jobs?.earliest_retained_time && (
+                      <>
+                        <span
+                          className={cx(
+                            "jobs-table-summary__retention-divider",
+                          )}
+                        >
+                          |
+                        </span>
+                        {formatJobsRetentionMessage(
+                          jobs?.earliest_retained_time,
+                        )}
+                      </>
+                    )}
+                  </h4>
+                </div>
+              </div>
+              <JobsTable
+                jobs={filteredJobs}
+                sortSetting={sort}
+                onChangeSortSetting={changeSortSetting}
+                visibleColumns={displayColumns}
+                pagination={pagination}
+              />
+            </section>
+            <Pagination
+              pageSize={pagination.pageSize}
+              onShowSizeChange={handleSetPagination}
+              current={pagination.current}
+              total={filteredJobs.length}
+              onChange={handleSetPagination}
+            />
+          </div>
+        </Loading>
+        {isLoading && !jobsError && (
+          <Delayed delay={moment.duration(2, "s")}>
+            <InlineAlert
+              intent="info"
+              title="If the Jobs table contains a large amount of data, this page might take a while to load."
+            />
+          </Delayed>
+        )}
+      </div>
+    </div>
+  );
 }
