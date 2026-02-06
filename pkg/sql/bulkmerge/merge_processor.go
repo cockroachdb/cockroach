@@ -14,6 +14,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cloud/nodelocal"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/bulk"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/bulksst"
@@ -70,6 +71,11 @@ type bulkMergeProcessor struct {
 	flowCtx    *execinfra.FlowCtx
 	storageMux *bulkutil.ExternalStorageMux
 	iter       storage.SimpleMVCCIterator
+	// usingSuffixedIter tracks whether the iterator has suffixed keys.
+	// This is set during iterator creation in Start() and used by
+	// processMergedData to decide whether to strip suffixes and check
+	// for cross-SST duplicates.
+	usingSuffixedIter bool
 }
 
 type mergeProcessorInput struct {
@@ -269,15 +275,26 @@ func (m *bulkMergeProcessor) mergeSSTs(
 	return m.processMergedData(ctx, m.iter, mergeSpan, writer)
 }
 
-// processMergedData is a unified function for iterating over merged data and
-// writing it using a mergeWriter implementation. The iterator must already be
-// positioned at or before the start of mergeSpan.
+// processMergedData iterates over merged data and writes it using the provided
+// mergeWriter. The iterator must already be positioned at or before the start
+// of mergeSpan.
+//
+// When EnforceUniqueness is true, this function detects duplicate keys by
+// comparing consecutive base keys and returns DuplicateKeyError if found. For
+// suffixed iterators (multiple SSTs), suffixes are stripped before comparison;
+// for non-suffixed iterators, keys are compared directly.
 func (m *bulkMergeProcessor) processMergedData(
 	ctx context.Context, iter storage.SimpleMVCCIterator, mergeSpan roachpb.Span, writer mergeWriter,
 ) (execinfrapb.BulkMergeSpec_Output, error) {
 	knobs, _ := m.flowCtx.Cfg.TestingKnobs.BulkMergeTestingKnobs.(*TestingKnobs)
 	var endKey roachpb.Key
 	duplicateInjected := false
+
+	// When enforcing uniqueness with multiple SSTs, keys are suffixed to prevent
+	// shadowing. Track previous base key for duplicate detection.
+	var prevBaseKeyBuf []byte
+	var baseKey roachpb.Key
+	var keyToWrite storage.MVCCKey
 
 	for {
 		ok, err := iter.Valid()
@@ -289,26 +306,35 @@ func (m *bulkMergeProcessor) processMergedData(
 		}
 
 		key := iter.UnsafeKey()
-		if mergeSpan.EndKey.Compare(key.Key) <= 0 {
-			// We've reached the end of the span.
-			break
-		}
-
 		val, err := iter.UnsafeValue()
 		if err != nil {
 			return execinfrapb.BulkMergeSpec_Output{}, err
 		}
 
+		// Extract base key and check for duplicates when using suffixed iterators.
+		baseKey, keyToWrite, prevBaseKeyBuf, err = m.extractKeyAndCheckDuplicate(
+			key, val, prevBaseKeyBuf,
+		)
+		if err != nil {
+			return execinfrapb.BulkMergeSpec_Output{}, err
+		}
+
+		// Check span boundary using the base key (without suffix).
+		if mergeSpan.EndKey.Compare(baseKey) <= 0 {
+			// We've reached the end of the span.
+			break
+		}
+
 		// If we've selected an endKey and this key is at or beyond that point,
 		// complete the current output unit before adding this key.
-		if endKey != nil && key.Key.Compare(endKey) >= 0 {
+		if endKey != nil && baseKey.Compare(endKey) >= 0 {
 			if _, err := writer.Complete(ctx, endKey); err != nil {
 				return execinfrapb.BulkMergeSpec_Output{}, err
 			}
 			endKey = nil
 		}
 
-		shouldSplit, err := writer.Add(ctx, key, val)
+		shouldSplit, err := writer.Add(ctx, keyToWrite, val)
 		if err != nil {
 			return execinfrapb.BulkMergeSpec_Output{}, err
 		}
@@ -316,7 +342,7 @@ func (m *bulkMergeProcessor) processMergedData(
 		// If the writer wants to split and we haven't selected an endKey yet,
 		// pick a safe split point after the current key.
 		if shouldSplit && endKey == nil {
-			safeKey, err := keys.EnsureSafeSplitKey(key.Key)
+			safeKey, err := keys.EnsureSafeSplitKey(baseKey)
 			if err != nil {
 				return execinfrapb.BulkMergeSpec_Output{}, err
 			}
@@ -339,6 +365,40 @@ func (m *bulkMergeProcessor) processMergedData(
 	return writer.Finish(ctx, mergeSpan.EndKey)
 }
 
+// extractKeyAndCheckDuplicate extracts the base key from a potentially
+// suffixed key and checks for duplicates when enforcing uniqueness.
+func (m *bulkMergeProcessor) extractKeyAndCheckDuplicate(
+	key storage.MVCCKey, val []byte, prevBaseKeyBuf []byte,
+) (roachpb.Key, storage.MVCCKey, []byte, error) {
+	if !m.spec.EnforceUniqueness {
+		return key.Key, key, prevBaseKeyBuf, nil
+	}
+
+	var baseKey roachpb.Key
+	var keyToWrite storage.MVCCKey
+
+	if m.usingSuffixedIter {
+		// Remove suffix to get base key.
+		var err error
+		baseKey, err = removeKeySuffix(key.Key)
+		if err != nil {
+			return nil, storage.MVCCKey{}, prevBaseKeyBuf, err
+		}
+		keyToWrite = storage.MVCCKey{Key: baseKey, Timestamp: key.Timestamp}
+	} else {
+		baseKey = key.Key
+		keyToWrite = key
+	}
+
+	// Check for duplicates.
+	if len(prevBaseKeyBuf) > 0 && baseKey.Equal(prevBaseKeyBuf) {
+		return nil, storage.MVCCKey{}, prevBaseKeyBuf, kvserverbase.NewDuplicateKeyError(baseKey, val)
+	}
+
+	prevBaseKeyBuf = append(prevBaseKeyBuf[:0], baseKey...)
+	return baseKey, keyToWrite, prevBaseKeyBuf, nil
+}
+
 func (m *bulkMergeProcessor) ingestFinalIteration(
 	ctx context.Context, iter storage.SimpleMVCCIterator, mergeSpan roachpb.Span,
 ) (execinfrapb.BulkMergeSpec_Output, error) {
@@ -348,10 +408,9 @@ func (m *bulkMergeProcessor) ingestFinalIteration(
 	}
 
 	// For unique indexes, enable duplicate detection by setting
-	// disallowShadowingBelow to the write timestamp.
-	// TODO(161447): cross-SST duplicates within the same merge are NOT detected
-	// here; they are silently shadowed by ExternalSSTReader before reaching the
-	// batcher.
+	// disallowShadowingBelow to the write timestamp. This catches conflicts
+	// with pre-existing KV data. Cross-SST duplicates within the same merge
+	// are detected earlier in processMergedData using suffixed iterators.
 	disallowShadowingBelow := hlc.Timestamp{}
 	if m.spec.EnforceUniqueness {
 		disallowShadowingBelow = writeTS
@@ -381,11 +440,10 @@ func (m *bulkMergeProcessor) ingestFinalIteration(
 	return m.processMergedData(ctx, iter, mergeSpan, writer)
 }
 
-// createIter builds an iterator over all input SSTs. Actual access to the SSTs
-// is deferred until the iterator seeks to one based on the merge span used for
-// a given task ID.
+// createIter builds an iterator over all input SSTs. When EnforceUniqueness
+// is true with multiple SSTs, individual iterators are wrapped with suffixes
+// and merged using a custom iterator to ensure duplicate keys are surfaced.
 func (m *bulkMergeProcessor) createIter(ctx context.Context) (storage.SimpleMVCCIterator, error) {
-	// If there are no SSTs, there's nothing to merge.
 	if len(m.spec.SSTs) == 0 {
 		return nil, nil
 	}
@@ -393,10 +451,27 @@ func (m *bulkMergeProcessor) createIter(ctx context.Context) (storage.SimpleMVCC
 		return nil, errors.AssertionFailedf("no spans specified for merge processor")
 	}
 
-	var storeFiles []storageccl.StoreFile
+	iterOpts := storage.IterOptions{
+		KeyTypes: storage.IterKeyTypePointsAndRanges,
+		// Bounds are required by iterator validation. Use full span range.
+		LowerBound: m.spec.Spans[0].Key,
+		UpperBound: m.spec.Spans[len(m.spec.Spans)-1].EndKey,
+	}
 
-	// Create store files for all SSTs. We access the ones needed for each task
-	// in mergeSSTs.
+	// Use suffixed iterators for cross-SST duplicate detection.
+	if m.spec.EnforceUniqueness && len(m.spec.SSTs) > 1 {
+		return m.createSuffixedIter(ctx, m.spec.SSTs, iterOpts)
+	}
+
+	// Standard merged iterator for non-unique indexes or single SST.
+	return m.createStandardIter(ctx, iterOpts)
+}
+
+// createStandardIter creates a standard merged iterator over all SSTs.
+func (m *bulkMergeProcessor) createStandardIter(
+	ctx context.Context, iterOpts storage.IterOptions,
+) (storage.SimpleMVCCIterator, error) {
+	var storeFiles []storageccl.StoreFile
 	for _, sst := range m.spec.SSTs {
 		file, err := m.storageMux.StoreFile(ctx, sst.URI)
 		if err != nil {
@@ -404,25 +479,55 @@ func (m *bulkMergeProcessor) createIter(ctx context.Context) (storage.SimpleMVCC
 		}
 		storeFiles = append(storeFiles, file)
 	}
+	return storageccl.ExternalSSTReader(ctx, storeFiles, nil, iterOpts)
+}
 
-	iterOpts := storage.IterOptions{
-		KeyTypes: storage.IterKeyTypePointsAndRanges,
-		// We don't really need bounds here because the merge iterator covers the
-		// entire input data set, but the iterator has validation ensuring they
-		// are set. These bounds work because the spans are non-overlapping and
-		// sorted.
-		LowerBound: m.spec.Spans[0].Key,
-		UpperBound: m.spec.Spans[len(m.spec.Spans)-1].EndKey,
+// createSuffixedIter creates individual iterators for each SST, wraps them
+// with suffixing iterators, and merges them using a custom iterator to ensure
+// duplicate keys are surfaced. This is used when EnforceUniqueness is true.
+func (m *bulkMergeProcessor) createSuffixedIter(
+	ctx context.Context, ssts []execinfrapb.BulkMergeSpec_SST, iterOpts storage.IterOptions,
+) (storage.SimpleMVCCIterator, error) {
+	var iters []storage.SimpleMVCCIterator
+
+	// Cleanup any opened iterators on error.
+	cleanup := func() {
+		for _, it := range iters {
+			it.Close()
+		}
 	}
-	iter, err := storageccl.ExternalSSTReader(ctx, storeFiles, nil, iterOpts)
-	if err != nil {
-		return nil, err
+
+	for _, sstSpec := range ssts {
+		file, err := m.storageMux.StoreFile(ctx, sstSpec.URI)
+		if err != nil {
+			cleanup()
+			return nil, err
+		}
+
+		// Create iterator for single SST.
+		baseIter, err := storageccl.ExternalSSTReader(
+			ctx, []storageccl.StoreFile{file}, nil, iterOpts,
+		)
+		if err != nil {
+			cleanup()
+			return nil, err
+		}
+
+		// Wrap with suffix adder using SST URI (globally unique).
+		iters = append(iters, newSuffixingIterator(baseIter, sstSpec.URI))
 	}
-	return iter, nil
+
+	m.usingSuffixedIter = true
+
+	// Merge all suffixed iterators using our custom merging iterator
+	// that surfaces all keys (including duplicates).
+	return newMergingIterator(iters, iterOpts), nil
 }
 
 // createIterLocalOnly builds an iterator over only the SSTs from the specified
-// local instance. This is used for non-final iterations.
+// local instance. This is used for non-final iterations. When
+// EnforceUniqueness is true and multiple local SSTs are present, a suffixed
+// iterator is used so cross-SST duplicate detection works correctly.
 func (m *bulkMergeProcessor) createIterLocalOnly(
 	ctx context.Context, localInstanceID base.SQLInstanceID,
 ) (storage.SimpleMVCCIterator, error) {
@@ -433,7 +538,7 @@ func (m *bulkMergeProcessor) createIterLocalOnly(
 		return nil, errors.AssertionFailedf("no spans specified for merge processor")
 	}
 
-	var storeFiles []storageccl.StoreFile
+	var localSSTs []execinfrapb.BulkMergeSpec_SST
 	for _, sst := range m.spec.SSTs {
 		sourceID, err := nodelocal.ParseInstanceID(sst.URI)
 		if err != nil {
@@ -442,17 +547,13 @@ func (m *bulkMergeProcessor) createIterLocalOnly(
 		if sourceID != localInstanceID {
 			continue
 		}
-		file, err := m.storageMux.StoreFile(ctx, sst.URI)
-		if err != nil {
-			return nil, err
-		}
-		storeFiles = append(storeFiles, file)
+		localSSTs = append(localSSTs, sst)
 	}
 
 	log.Dev.Infof(ctx, "local-only iterator: selected %d/%d SSTs from instance %d",
-		len(storeFiles), len(m.spec.SSTs), localInstanceID)
+		len(localSSTs), len(m.spec.SSTs), localInstanceID)
 
-	if len(storeFiles) == 0 {
+	if len(localSSTs) == 0 {
 		return nil, nil
 	}
 
@@ -460,6 +561,20 @@ func (m *bulkMergeProcessor) createIterLocalOnly(
 		KeyTypes:   storage.IterKeyTypePointsAndRanges,
 		LowerBound: m.spec.Spans[0].Key,
 		UpperBound: m.spec.Spans[len(m.spec.Spans)-1].EndKey,
+	}
+
+	// Use suffixed iterators for cross-SST duplicate detection when needed.
+	if m.spec.EnforceUniqueness && len(localSSTs) > 1 {
+		return m.createSuffixedIter(ctx, localSSTs, iterOpts)
+	}
+
+	var storeFiles []storageccl.StoreFile
+	for _, sst := range localSSTs {
+		file, err := m.storageMux.StoreFile(ctx, sst.URI)
+		if err != nil {
+			return nil, err
+		}
+		storeFiles = append(storeFiles, file)
 	}
 	return storageccl.ExternalSSTReader(ctx, storeFiles, nil, iterOpts)
 }
