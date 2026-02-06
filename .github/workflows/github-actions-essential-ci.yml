@@ -55,7 +55,7 @@ concurrency:
   cancel-in-progress: true
 jobs:
   acceptance:
-    runs-on: [self-hosted, ubuntu_big_2004]
+    runs-on: [self-hosted, ubuntu_big_2404]
     timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4
@@ -76,7 +76,7 @@ jobs:
         run: ./build/github/cleanup-engflow-keys.sh
         if: always()
   check_generated_code:
-    runs-on: [self-hosted, ubuntu_2004]
+    runs-on: [self-hosted, ubuntu_2404]
     timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4
@@ -91,7 +91,7 @@ jobs:
         run: ./build/github/cleanup-engflow-keys.sh
         if: always()
   docker_image_amd64:
-    runs-on: [self-hosted, ubuntu_2004]
+    runs-on: [self-hosted, ubuntu_2404]
     timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4
@@ -112,7 +112,7 @@ jobs:
         run: ./build/github/cleanup-engflow-keys.sh
         if: always()
   examples_orms:
-    runs-on: [self-hosted, ubuntu_big_2004]
+    runs-on: [self-hosted, ubuntu_big_2404]
     timeout-minutes: 120
     steps:
       - uses: actions/checkout@v4
@@ -146,7 +146,7 @@ jobs:
             echo "Label validation passed for release branch"
           fi
   lint:
-    runs-on: [self-hosted, ubuntu_huge_2004]
+    runs-on: [self-hosted, ubuntu_huge_2404]
     timeout-minutes: 120
     steps:
       - uses: actions/checkout@v4
@@ -170,7 +170,7 @@ jobs:
         run: ./build/github/cleanup-engflow-keys.sh
         if: always()
   local_roachtest:
-    runs-on: [self-hosted, ubuntu_big_2004]
+    runs-on: [self-hosted, ubuntu_big_2404]
     timeout-minutes: 120
     steps:
       - uses: actions/checkout@v4
@@ -195,7 +195,7 @@ jobs:
         run: ./build/github/cleanup-engflow-keys.sh
         if: always()
   local_roachtest_fips:
-    runs-on: [self-hosted, ubuntu_2004_fips]
+    runs-on: [self-hosted, ubuntu_big_2404]
     timeout-minutes: 120
     steps:
       - uses: actions/checkout@v4
@@ -220,7 +220,7 @@ jobs:
         run: ./build/github/cleanup-engflow-keys.sh
         if: always()
   linux_amd64_build:
-    runs-on: [self-hosted, ubuntu_2004]
+    runs-on: [self-hosted, ubuntu_2404]
     timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4
@@ -241,7 +241,7 @@ jobs:
         run: ./build/github/cleanup-engflow-keys.sh
         if: always()
   linux_amd64_fips_build:
-    runs-on: [self-hosted, ubuntu_2004]
+    runs-on: [self-hosted, ubuntu_2404]
     timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4
@@ -262,7 +262,7 @@ jobs:
         run: ./build/github/cleanup-engflow-keys.sh
         if: always()
   unit_tests:
-    runs-on: [self-hosted, ubuntu_2004]
+    runs-on: [self-hosted, ubuntu_2404]
     timeout-minutes: 120
     steps:
       - uses: actions/checkout@v4

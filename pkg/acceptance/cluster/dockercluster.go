@@ -600,7 +600,7 @@ func (l *DockerCluster) processEvent(ctx context.Context, event events.Message) 
 		// There is a very tiny race here: the signal handler might be closing the
 		// stopper simultaneously.
 		log.Dev.Errorf(ctx, "stopping due to unexpected event: %+v", event)
-		if rc, err := l.client.ContainerLogs(context.Background(), event.Actor.ID, types.ContainerLogsOptions{
+		if rc, err := l.client.ContainerLogs(context.Background(), event.Actor.ID, types.ContainerLogsOptions{ //lint:ignore SA1019 grandfathered
 			ShowStdout: true,
 			ShowStderr: true,
 		}); err == nil {
