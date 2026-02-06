@@ -675,11 +675,11 @@ DROP DATABASE db4_new;
 # ==============================================================================
 
 exec-sql
-CREATE DATABASE db3;
+CREATE DATABASE db5;
 ----
 
 exec-sql
-USE db3;
+USE db5;
 ----
 
 exec-sql
@@ -743,7 +743,7 @@ tbl1 "tr1"
 tbl1 "tr2"
 
 exec-sql
-BACKUP DATABASE db3 INTO 'nodelocal://1/test_schema_restore/'
+BACKUP DATABASE db5 INTO 'nodelocal://1/test_schema_restore/'
 ----
 
 # Drop and recreate the schemas to set up for the restore.
@@ -759,7 +759,7 @@ DROP FUNCTION sc_drop.f2;
 # This should work: tr1 should be kept (its function f1 is restored),
 # tr2 should be dropped (its function f2 is missing).
 exec-sql
-RESTORE TABLE db3.sc_keep.* FROM LATEST IN 'nodelocal://1/test_schema_restore/' WITH skip_missing_udfs;
+RESTORE TABLE db5.sc_keep.* FROM LATEST IN 'nodelocal://1/test_schema_restore/' WITH skip_missing_udfs;
 ----
 
 # Verify that tr1 is present (function was restored) and tr2 is dropped
@@ -794,5 +794,428 @@ DROP FUNCTION sc_keep.f1;
 ----
 
 exec-sql
-DROP DATABASE db3;
+DROP DATABASE db5;
+----
+
+# ==============================================================================
+# Test function collision detection during table-level restore. When restoring
+# a schema's objects into a schema that already has the trigger's function, the
+# restore should detect the collision and remap the function to the existing one
+# rather than creating a duplicate.
+# ==============================================================================
+
+exec-sql
+CREATE DATABASE db6;
+----
+
+exec-sql
+USE db6;
+----
+
+exec-sql
+CREATE SCHEMA sc;
+----
+
+exec-sql
+CREATE TABLE sc.tbl1(a INT PRIMARY KEY);
+----
+
+exec-sql
+CREATE FUNCTION sc.f1() RETURNS TRIGGER LANGUAGE PLpgSQL AS $$
+  BEGIN
+    RAISE NOTICE 'trigger fired';
+    RETURN NEW;
+  END
+$$;
+----
+
+exec-sql
+CREATE TRIGGER tr1 AFTER INSERT ON sc.tbl1 FOR EACH ROW EXECUTE FUNCTION sc.f1();
+----
+
+exec-sql
+BACKUP DATABASE db6 INTO 'nodelocal://1/test_func_collision/';
+----
+
+# Drop the schema and recreate it with just the function. This means the schema
+# exists (with a new ID) and the function exists (with a new ID), but the table
+# is missing.
+exec-sql
+DROP SCHEMA sc CASCADE;
+----
+
+exec-sql
+CREATE SCHEMA sc;
+----
+
+exec-sql
+CREATE FUNCTION sc.f1() RETURNS TRIGGER LANGUAGE PLpgSQL AS $$
+  BEGIN
+    RAISE NOTICE 'trigger fired';
+    RETURN NEW;
+  END
+$$;
+----
+
+# Restore all objects from sc. The schema and function f1 already exist in the
+# target, so the restore should detect the collision and remap the function to
+# the existing descriptor.
+exec-sql
+RESTORE TABLE db6.sc.* FROM LATEST IN 'nodelocal://1/test_func_collision/';
+----
+
+# Verify the trigger is present on the restored table.
+query-sql
+WITH descs AS (
+  SELECT relname, tab->'table'->'triggers' AS triggers FROM (
+    SELECT relname, crdb_internal.pb_to_json('cockroach.sql.sqlbase.Descriptor', descriptor, false) AS tab
+    FROM system.descriptor d INNER JOIN pg_class c ON d.id = c.oid::INT
+    WHERE relname = 'tbl1'
+  )
+)
+SELECT relname, t.name FROM descs, LATERAL (
+  SELECT value->'name' FROM jsonb_array_elements(descs.triggers)
+) AS t(name)
+ORDER BY relname, t.name
+----
+tbl1 "tr1"
+
+# Verify the trigger fires correctly (the function is correctly linked).
+exec-sql
+INSERT INTO sc.tbl1 VALUES (1);
+----
+NOTICE: trigger fired
+
+# Verify that the function can be dropped only after removing its dependents.
+exec-sql
+DROP FUNCTION sc.f1;
+----
+pq: cannot drop function "f1" because other objects ([db6.sc.tbl1]) still depend on it
+
+# Clean up.
+exec-sql
+DROP TRIGGER tr1 ON sc.tbl1;
+----
+
+exec-sql
+DROP FUNCTION sc.f1;
+----
+
+exec-sql
+DROP DATABASE db6;
+----
+
+# ==============================================================================
+# Test function collision detection with overloaded function names. When the
+# target schema has both f1() (trigger function) and f1(my_enum) (regular
+# function with a UDT parameter), restoring a table with a trigger calling f1()
+# should correctly match to the existing f1() overload and not be confused by
+# f1(my_enum).
+# ==============================================================================
+
+exec-sql
+CREATE DATABASE db7;
+----
+
+exec-sql
+USE db7;
+----
+
+exec-sql
+CREATE SCHEMA sc;
+----
+
+exec-sql
+CREATE TABLE sc.tbl1(a INT PRIMARY KEY);
+----
+
+exec-sql
+CREATE FUNCTION sc.f1() RETURNS TRIGGER LANGUAGE PLpgSQL AS $$
+  BEGIN
+    RAISE NOTICE 'trigger fired';
+    RETURN NEW;
+  END
+$$;
+----
+
+exec-sql
+CREATE TRIGGER tr1 AFTER INSERT ON sc.tbl1 FOR EACH ROW EXECUTE FUNCTION sc.f1();
+----
+
+exec-sql
+BACKUP DATABASE db7 INTO 'nodelocal://1/test_func_overload_match/';
+----
+
+# Drop the schema and recreate it with f1() (trigger) AND f1(my_enum) (regular
+# function with a user-defined enum parameter). The restore should match to
+# the existing f1() and ignore f1(my_enum).
+exec-sql
+DROP SCHEMA sc CASCADE;
+----
+
+exec-sql
+CREATE SCHEMA sc;
+----
+
+exec-sql
+CREATE TYPE sc.my_enum AS ENUM ('a', 'b', 'c');
+----
+
+exec-sql
+CREATE FUNCTION sc.f1() RETURNS TRIGGER LANGUAGE PLpgSQL AS $$
+  BEGIN
+    RAISE NOTICE 'trigger fired';
+    RETURN NEW;
+  END
+$$;
+----
+
+exec-sql
+CREATE FUNCTION sc.f1(a sc.my_enum) RETURNS TEXT LANGUAGE PLpgSQL AS $$
+  BEGIN
+    RETURN a::TEXT;
+  END
+$$;
+----
+
+exec-sql
+RESTORE TABLE db7.sc.* FROM LATEST IN 'nodelocal://1/test_func_overload_match/';
+----
+
+# Verify the trigger is present on the restored table.
+query-sql
+WITH descs AS (
+  SELECT relname, tab->'table'->'triggers' AS triggers FROM (
+    SELECT relname, crdb_internal.pb_to_json('cockroach.sql.sqlbase.Descriptor', descriptor, false) AS tab
+    FROM system.descriptor d INNER JOIN pg_class c ON d.id = c.oid::INT
+    WHERE relname = 'tbl1'
+  )
+)
+SELECT relname, t.name FROM descs, LATERAL (
+  SELECT value->'name' FROM jsonb_array_elements(descs.triggers)
+) AS t(name)
+ORDER BY relname, t.name
+----
+tbl1 "tr1"
+
+# Verify the trigger fires correctly.
+exec-sql
+INSERT INTO sc.tbl1 VALUES (1);
+----
+NOTICE: trigger fired
+
+# Verify both function overloads exist in the schema descriptor: f1() and
+# f1(my_enum). We query the schema descriptor's functions map and check the
+# number of arguments for each overload.
+let $db7_sc_id
+WITH db_id AS (
+  SELECT id FROM system.namespace WHERE name = 'db7'
+),
+schema_id AS (
+  SELECT ns.id
+  FROM system.namespace AS ns
+  JOIN db_id ON ns."parentID" = db_id.id
+  WHERE ns.name = 'sc'
+)
+SELECT id FROM schema_id;
+----
+
+query-sql
+WITH to_json AS (
+    SELECT
+      crdb_internal.pb_to_json(
+        'cockroach.sql.sqlbase.Descriptor',
+        descriptor,
+        false
+      ) AS d
+    FROM system.descriptor
+    WHERE id = $db7_sc_id
+),
+sigs AS (
+  SELECT jsonb_array_elements(d->'schema'->'functions'->'f1'->'signatures') AS sig
+  FROM to_json
+)
+SELECT
+  COALESCE(jsonb_array_length(sig->'argTypes'), 0) AS num_args
+FROM sigs
+ORDER BY num_args;
+----
+0
+1
+
+# The f1() trigger function can't be dropped while the trigger depends on it.
+exec-sql
+DROP FUNCTION sc.f1();
+----
+pq: cannot drop function "f1" because other objects ([db7.sc.tbl1]) still depend on it
+
+# The f1(my_enum) overload can be dropped independently.
+exec-sql
+DROP FUNCTION sc.f1(sc.my_enum);
+----
+
+# Clean up.
+exec-sql
+DROP TRIGGER tr1 ON sc.tbl1;
+----
+
+exec-sql
+DROP FUNCTION sc.f1;
+----
+
+exec-sql
+DROP DATABASE db7;
+----
+
+# ==============================================================================
+# Test that when the target schema has a function with the same name but a
+# different signature (f1(int) but not f1()), restoring a table with a trigger
+# calling f1() should NOT match the existing f1(int). Instead, it should create
+# a new f1() overload.
+# ==============================================================================
+
+exec-sql
+CREATE DATABASE db8;
+----
+
+exec-sql
+USE db8;
+----
+
+exec-sql
+CREATE SCHEMA sc;
+----
+
+exec-sql
+CREATE TABLE sc.tbl1(a INT PRIMARY KEY);
+----
+
+exec-sql
+CREATE FUNCTION sc.f1() RETURNS TRIGGER LANGUAGE PLpgSQL AS $$
+  BEGIN
+    RAISE NOTICE 'trigger fired';
+    RETURN NEW;
+  END
+$$;
+----
+
+exec-sql
+CREATE TRIGGER tr1 AFTER INSERT ON sc.tbl1 FOR EACH ROW EXECUTE FUNCTION sc.f1();
+----
+
+exec-sql
+BACKUP DATABASE db8 INTO 'nodelocal://1/test_func_no_sig_match/';
+----
+
+# Drop the schema and recreate it with only f1(int) (a regular function, not a
+# trigger function). The restore should see "f1" in the schema's function map
+# but find no matching signature, so it should create the trigger function f1()
+# as a new overload.
+exec-sql
+DROP SCHEMA sc CASCADE;
+----
+
+exec-sql
+CREATE SCHEMA sc;
+----
+
+exec-sql
+CREATE FUNCTION sc.f1(a INT) RETURNS INT LANGUAGE PLpgSQL AS $$
+  BEGIN
+    RETURN a + 1;
+  END
+$$;
+----
+
+exec-sql
+RESTORE TABLE db8.sc.* FROM LATEST IN 'nodelocal://1/test_func_no_sig_match/';
+----
+
+# Verify the trigger is present on the restored table.
+query-sql
+WITH descs AS (
+  SELECT relname, tab->'table'->'triggers' AS triggers FROM (
+    SELECT relname, crdb_internal.pb_to_json('cockroach.sql.sqlbase.Descriptor', descriptor, false) AS tab
+    FROM system.descriptor d INNER JOIN pg_class c ON d.id = c.oid::INT
+    WHERE relname = 'tbl1'
+  )
+)
+SELECT relname, t.name FROM descs, LATERAL (
+  SELECT value->'name' FROM jsonb_array_elements(descs.triggers)
+) AS t(name)
+ORDER BY relname, t.name
+----
+tbl1 "tr1"
+
+# Verify the trigger fires correctly.
+exec-sql
+INSERT INTO sc.tbl1 VALUES (1);
+----
+NOTICE: trigger fired
+
+# Verify both overloads exist in the schema descriptor: the restored f1() and
+# the pre-existing f1(int).
+let $db8_sc_id
+WITH db_id AS (
+  SELECT id FROM system.namespace WHERE name = 'db8'
+),
+schema_id AS (
+  SELECT ns.id
+  FROM system.namespace AS ns
+  JOIN db_id ON ns."parentID" = db_id.id
+  WHERE ns.name = 'sc'
+)
+SELECT id FROM schema_id;
+----
+
+query-sql
+WITH to_json AS (
+    SELECT
+      crdb_internal.pb_to_json(
+        'cockroach.sql.sqlbase.Descriptor',
+        descriptor,
+        false
+      ) AS d
+    FROM system.descriptor
+    WHERE id = $db8_sc_id
+),
+sigs AS (
+  SELECT jsonb_array_elements(d->'schema'->'functions'->'f1'->'signatures') AS sig
+  FROM to_json
+)
+SELECT
+  COALESCE(jsonb_array_length(sig->'argTypes'), 0) AS num_args,
+  CASE
+    WHEN jsonb_array_length(sig->'argTypes') > 0
+    THEN (SELECT string_agg(elem->>'oid', ', ' ORDER BY ordinality) FROM jsonb_array_elements(sig->'argTypes') WITH ORDINALITY AS t(elem, ordinality))
+    ELSE 'none'
+  END AS arg_oids
+FROM sigs
+ORDER BY num_args;
+----
+0 none
+1 20
+
+# The restored f1() can't be dropped while the trigger depends on it.
+exec-sql
+DROP FUNCTION sc.f1();
+----
+pq: cannot drop function "f1" because other objects ([db8.sc.tbl1]) still depend on it
+
+# The pre-existing f1(int) can be dropped independently.
+exec-sql
+DROP FUNCTION sc.f1(INT);
+----
+
+# Clean up.
+exec-sql
+DROP TRIGGER tr1 ON sc.tbl1;
+----
+
+exec-sql
+DROP FUNCTION sc.f1;
+----
+
+exec-sql
+DROP DATABASE db8;
 ----
