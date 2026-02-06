@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/backfill"
+	"github.com/cockroachdb/cockroach/pkg/sql/bulksst"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
@@ -61,7 +62,7 @@ func TestIndexBackfillSinkSelection(t *testing.T) {
 		ib.spec.UseDistributedMergeSink = false
 		sink, err := ib.makeIndexBackfillSink(ctx)
 		require.NoError(t, err)
-		require.IsType(t, &bulkAdderIndexBackfillSink{}, sink)
+		require.IsType(t, &bulksst.BulkAdderSink{}, sink)
 		sink.Close(ctx)
 
 		tempDir := t.TempDir()
