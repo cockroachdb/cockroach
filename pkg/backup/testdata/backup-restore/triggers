@@ -675,11 +675,11 @@ DROP DATABASE db4_new;
 # ==============================================================================
 
 exec-sql
-CREATE DATABASE db3;
+CREATE DATABASE db5;
 ----
 
 exec-sql
-USE db3;
+USE db5;
 ----
 
 exec-sql
@@ -743,7 +743,7 @@ tbl1 "tr1"
 tbl1 "tr2"
 
 exec-sql
-BACKUP DATABASE db3 INTO 'nodelocal://1/test_schema_restore/'
+BACKUP DATABASE db5 INTO 'nodelocal://1/test_schema_restore/'
 ----
 
 # Drop and recreate the schemas to set up for the restore.
@@ -759,7 +759,7 @@ DROP FUNCTION sc_drop.f2;
 # This should work: tr1 should be kept (its function f1 is restored),
 # tr2 should be dropped (its function f2 is missing).
 exec-sql
-RESTORE TABLE db3.sc_keep.* FROM LATEST IN 'nodelocal://1/test_schema_restore/' WITH skip_missing_udfs;
+RESTORE TABLE db5.sc_keep.* FROM LATEST IN 'nodelocal://1/test_schema_restore/' WITH skip_missing_udfs;
 ----
 
 # Verify that tr1 is present (function was restored) and tr2 is dropped
@@ -794,5 +794,113 @@ DROP FUNCTION sc_keep.f1;
 ----
 
 exec-sql
-DROP DATABASE db3;
+DROP DATABASE db5;
+----
+
+# ==============================================================================
+# Test function collision detection during table-level restore. When restoring
+# a schema's objects into a schema that already has the trigger's function, the
+# restore should detect the collision and remap the function to the existing one
+# rather than creating a duplicate.
+# ==============================================================================
+
+exec-sql
+CREATE DATABASE db6;
+----
+
+exec-sql
+USE db6;
+----
+
+exec-sql
+CREATE SCHEMA sc;
+----
+
+exec-sql
+CREATE TABLE sc.tbl1(a INT PRIMARY KEY);
+----
+
+exec-sql
+CREATE FUNCTION sc.f1() RETURNS TRIGGER LANGUAGE PLpgSQL AS $$
+  BEGIN
+    RAISE NOTICE 'trigger fired';
+    RETURN NEW;
+  END
+$$;
+----
+
+exec-sql
+CREATE TRIGGER tr1 AFTER INSERT ON sc.tbl1 FOR EACH ROW EXECUTE FUNCTION sc.f1();
+----
+
+exec-sql
+BACKUP DATABASE db6 INTO 'nodelocal://1/test_func_collision/';
+----
+
+# Drop the schema and recreate it with just the function. This means the schema
+# exists (with a new ID) and the function exists (with a new ID), but the table
+# is missing.
+exec-sql
+DROP SCHEMA sc CASCADE;
+----
+
+exec-sql
+CREATE SCHEMA sc;
+----
+
+exec-sql
+CREATE FUNCTION sc.f1() RETURNS TRIGGER LANGUAGE PLpgSQL AS $$
+  BEGIN
+    RAISE NOTICE 'trigger fired';
+    RETURN NEW;
+  END
+$$;
+----
+
+# Restore all objects from sc. The schema and function f1 already exist in the
+# target, so the restore should detect the collision and remap the function to
+# the existing descriptor.
+exec-sql
+RESTORE TABLE db6.sc.* FROM LATEST IN 'nodelocal://1/test_func_collision/';
+----
+
+# Verify the trigger is present on the restored table.
+query-sql
+WITH descs AS (
+  SELECT relname, tab->'table'->'triggers' AS triggers FROM (
+    SELECT relname, crdb_internal.pb_to_json('cockroach.sql.sqlbase.Descriptor', descriptor, false) AS tab
+    FROM system.descriptor d INNER JOIN pg_class c ON d.id = c.oid::INT
+    WHERE relname = 'tbl1'
+  )
+)
+SELECT relname, t.name FROM descs, LATERAL (
+  SELECT value->'name' FROM jsonb_array_elements(descs.triggers)
+) AS t(name)
+ORDER BY relname, t.name
+----
+tbl1 "tr1"
+
+# Verify the trigger fires correctly (the function is correctly linked).
+exec-sql
+INSERT INTO sc.tbl1 VALUES (1);
+----
+NOTICE: trigger fired
+
+# Verify that the function can be dropped only after removing its dependents.
+exec-sql
+DROP FUNCTION sc.f1;
+----
+pq: cannot drop function "f1" because other objects ([db6.sc.tbl1]) still depend on it
+
+# Clean up.
+exec-sql
+DROP TRIGGER tr1 ON sc.tbl1;
+----
+
+exec-sql
+DROP FUNCTION sc.f1;
+----
+
+exec-sql
+DROP DATABASE db6;
 ----

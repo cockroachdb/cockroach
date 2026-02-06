@@ -1711,20 +1711,20 @@ func createImportingDescriptors(
 		return err
 	}
 
-	// Functions are only restored as part of full database restores and are not
-	// yet referenced by other object types in ways that would require remapping.
-	// This avoids the need for collision resolution between restored functions
-	// and existing ones in the target database.
-	//
-	// For table-level restores, function dependencies are handled by existing
-	// safeguards: if the target DB already has the function, the dependent table
-	// must be dropped before restore; if the function is missing, restore fails
-	// unless skip_missing_udfs is set, in which case the function is omitted.
-	functionsToWrite := make([]*funcdesc.Mutable, len(functions))
-	writtenFunctions := make([]catalog.FunctionDescriptor, len(functions))
-	for i, fn := range functions {
-		functionsToWrite[i] = fn
-		writtenFunctions[i] = fn
+	// Filter out functions that are remapped to existing descriptors (e.g.,
+	// when restoring into a schema that already has a function with the same
+	// name and signature).
+	var functionsToWrite []*funcdesc.Mutable
+	var writtenFunctions []catalog.FunctionDescriptor
+	existingFunctionIDs := make(map[descpb.ID]struct{})
+	for _, fn := range functions {
+		fnRewrite := details.DescriptorRewrites[fn.GetID()]
+		if fnRewrite.ToExisting {
+			existingFunctionIDs[fnRewrite.ID] = struct{}{}
+			continue
+		}
+		functionsToWrite = append(functionsToWrite, fn)
+		writtenFunctions = append(writtenFunctions, fn)
 	}
 	if err := rewrite.FunctionDescs(functions, details.DescriptorRewrites, details.OverrideDB); err != nil {
 		return err
@@ -1876,6 +1876,34 @@ func createImportingDescriptors(
 					ctx, kvTrace, typDesc, b,
 				); err != nil {
 					return err
+				}
+			}
+		}
+
+		// We could be restoring tables with triggers that reference existing
+		// functions. We need to ensure that those existing functions are updated
+		// with back references pointing to the new tables being restored.
+		for _, table := range mutableTables {
+			for i := range table.Triggers {
+				trigger := &table.Triggers[i]
+				for _, routineID := range trigger.DependsOnRoutines {
+					if _, ok := existingFunctionIDs[routineID]; !ok {
+						continue
+					}
+					// The function already exists in the cluster, so we need to
+					// add a back-reference to the restored table.
+					fnDesc, err := descsCol.MutableByID(txn.KV()).Function(ctx, routineID)
+					if err != nil {
+						return err
+					}
+					if err := fnDesc.AddTriggerReference(table.GetID(), trigger.ID); err != nil {
+						return err
+					}
+					if err := descsCol.WriteDescToBatch(
+						ctx, kvTrace, fnDesc, b,
+					); err != nil {
+						return err
+					}
 				}
 			}
 		}
