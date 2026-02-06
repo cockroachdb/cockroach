@@ -766,9 +766,9 @@ func importPlanHook(
 		// StartableJob which we attached to the connExecutor somehow.
 
 		useDistributedMerge := UseDistributedMergeForImport.Get(&p.ExecCfg().Settings.SV)
-		if useDistributedMerge && !p.ExecCfg().Settings.Version.IsActive(ctx, clusterversion.V26_1) {
+		if useDistributedMerge && !p.ExecCfg().Settings.Version.IsActive(ctx, clusterversion.V26_2) {
 			return pgerror.New(pgcode.FeatureNotSupported,
-				"distributed merge for IMPORT requires all nodes to be running version 26.1 or later")
+				"distributed merge for IMPORT requires all nodes to be running version 26.2 or later")
 		}
 
 		importDetails := jobspb.ImportDetails{
