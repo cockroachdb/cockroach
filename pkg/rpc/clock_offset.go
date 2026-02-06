@@ -175,7 +175,8 @@ type RemoteClockMonitor struct {
 		connCount    map[roachpb.NodeID]uint
 	}
 
-	metrics RemoteClockMetrics
+	uncertainOffsetLog log.EveryN
+	metrics            RemoteClockMetrics
 }
 
 // TestingResetLatencyInfos will clear all latency info from the clock monitor.
@@ -213,9 +214,10 @@ func newRemoteClockMonitor(
 	histogramWindowInterval time.Duration,
 ) *RemoteClockMonitor {
 	r := RemoteClockMonitor{
-		clock:           clock,
-		toleratedOffset: toleratedOffset,
-		offsetTTL:       offsetTTL,
+		clock:              clock,
+		toleratedOffset:    toleratedOffset,
+		offsetTTL:          offsetTTL,
+		uncertainOffsetLog: log.Every(time.Second * 10),
 	}
 	r.mu.offsets = make(map[roachpb.NodeID]RemoteOffset)
 	r.mu.latencyInfos = make(map[roachpb.NodeID]*latencyInfo)
@@ -435,8 +437,16 @@ func (r *RemoteClockMonitor) VerifyClockOffset(ctx context.Context) error {
 			off2 := float64(offset.Offset - offset.Uncertainty)
 			sum += off1 + off2
 			offs = append(offs, off1, off2)
-			if offset.isHealthy(ctx, r.toleratedOffset) {
+			switch h := offset.isHealthy(r.toleratedOffset); h {
+
+			case definitelyHealthy, ambiguousHealth:
+				// NB: We err on the side of not spuriously killing nodes when the health is ambiguous.
 				healthyOffsetCount++
+				if h == ambiguousHealth && r.uncertainOffsetLog.ShouldLog() {
+					log.Health.Warningf(ctx, "n%d has uncertain remote offset %s for maximum tolerated offset %s, treating as healthy",
+						id, offset, r.toleratedOffset)
+				}
+			default:
 			}
 		}
 		return offs, len(r.mu.offsets)
@@ -466,7 +476,18 @@ func (r *RemoteClockMonitor) VerifyClockOffset(ctx context.Context) error {
 	return nil
 }
 
-func (r RemoteOffset) isHealthy(ctx context.Context, toleratedOffset time.Duration) bool {
+type remoteHealth int8
+
+const (
+	// definitelyHealthy means that the maximum possible true offset does not exceed the tolerated offset.
+	definitelyHealthy remoteHealth = iota
+	// definitelyUnhealthy means that the minimum possible true offset exceeds the tolerated offset.
+	definitelyUnhealthy
+	// ambiguousHealth means that the tolerated offset is in the uncertainty window of the measured offset.
+	ambiguousHealth
+)
+
+func (r RemoteOffset) isHealthy(toleratedOffset time.Duration) remoteHealth {
 	// Offset may be negative, but Uncertainty is always positive.
 	absOffset := r.Offset
 	if absOffset < 0 {
@@ -474,21 +495,14 @@ func (r RemoteOffset) isHealthy(ctx context.Context, toleratedOffset time.Durati
 	}
 	switch {
 	case time.Duration(absOffset-r.Uncertainty)*time.Nanosecond > toleratedOffset:
-		// The minimum possible true offset exceeds the tolerated offset; definitely
-		// unhealthy.
-		return false
-
+		// The minimum possible true offset exceeds the tolerated offset.
+		return definitelyUnhealthy
 	case time.Duration(absOffset+r.Uncertainty)*time.Nanosecond < toleratedOffset:
-		// The maximum possible true offset does not exceed the tolerated offset;
-		// definitely healthy.
-		return true
-
+		// The maximum possible true offset does not exceed the tolerated offset.
+		return definitelyHealthy
 	default:
-		// The tolerated offset is in the uncertainty window of the measured offset;
-		// health is ambiguous. For now, we err on the side of not spuriously
-		// killing nodes.
-		log.Health.Warningf(ctx, "uncertain remote offset %s for maximum tolerated offset %s, treating as healthy", r, toleratedOffset)
-		return true
+		// The tolerated offset is in the uncertainty window of the measured offset.
+		return ambiguousHealth
 	}
 }
 
