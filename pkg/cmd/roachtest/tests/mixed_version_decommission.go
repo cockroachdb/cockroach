@@ -10,7 +10,6 @@ import (
 	gosql "database/sql"
 	"fmt"
 	"math/rand"
-	"strings"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
@@ -26,10 +25,9 @@ import (
 )
 
 func runDecommissionMixedVersions(ctx context.Context, t test.Test, c cluster.Cluster) {
-	// NB: The suspect duration must be at least 10s, as versions 23.2 and
-	// beyond will reset to the default of 30s if it fails validation, even if
-	// set by a previous version.
-	const suspectDuration = 10 * time.Second
+	// NB: The default value for both the store liveness and node liveness
+	// suspect duration settings is 30s.
+	const suspectDuration = 30 * time.Second
 
 	mvt := mixedversion.NewTest(ctx, t, t.L(), c, c.All(),
 		// We test only upgrades from 23.2 in this test because it uses
@@ -39,32 +37,6 @@ func runDecommissionMixedVersions(ctx context.Context, t test.Test, c cluster.Cl
 	)
 	n1 := 1
 	n2 := 2
-
-	mvt.OnStartup(
-		"set suspect duration",
-		func(ctx context.Context, l *logger.Logger, rng *rand.Rand, h *mixedversion.Helper) error {
-			if err := h.System.Exec(
-				rng,
-				"SET CLUSTER SETTING server.time_after_store_suspect = $1",
-				suspectDuration.String(),
-			); err != nil {
-				return err
-			}
-			// server.time_after_store_suspect_in_store_liveness was added in 26.1.
-			// Ignore the error if the setting doesn't exist on older versions.
-			if err := h.System.Exec(
-				rng,
-				"SET CLUSTER SETTING server.time_after_store_suspect_in_store_liveness = $1",
-				suspectDuration.String(),
-			); err != nil {
-				if strings.Contains(err.Error(), "unknown cluster setting") {
-					l.Printf("skipping server.time_after_store_suspect_in_store_liveness (not available on this version)")
-					return nil
-				}
-				return err
-			}
-			return nil
-		})
 
 	mvt.OnStartup(
 		"preload data",
