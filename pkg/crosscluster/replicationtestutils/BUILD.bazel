@@ -59,6 +59,7 @@ go_library(
         "//pkg/util/metamorphic",
         "//pkg/util/protoutil",
         "//pkg/util/randutil",
+        "//pkg/util/rangescanstats/rangescanstatspb",
         "//pkg/util/retry",
         "//pkg/util/timeutil",
         "//pkg/util/uuid",
