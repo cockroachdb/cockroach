@@ -13,9 +13,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/bulkutil"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/idxtype"
 	"github.com/cockroachdb/errors"
 )
 
@@ -112,8 +114,49 @@ func DetermineDistributedMergeMode(
 	if err != nil {
 		return jobspb.IndexBackfillDistributedMergeMode_Disabled, err
 	}
-	if useDistributedMerge {
-		return jobspb.IndexBackfillDistributedMergeMode_Enabled, nil
+	if !useDistributedMerge {
+		return jobspb.IndexBackfillDistributedMergeMode_Disabled, nil
 	}
-	return jobspb.IndexBackfillDistributedMergeMode_Disabled, nil
+	// When the setting specifically selects the declarative consumer,
+	// return Force to skip the sorted-data optimization — the user
+	// is explicitly opting in.
+	mode := DistributedMergeIndexBackfillMode.Get(&st.SV)
+	if mode == distributedMergeModeDeclarative {
+		return jobspb.IndexBackfillDistributedMergeMode_Force, nil
+	}
+	return jobspb.IndexBackfillDistributedMergeMode_Enabled, nil
+}
+
+// IsBackfillDataSorted reports whether the data produced by scanning
+// sourceIndex will be sorted in the key order of destIndex. When data
+// is sorted, SSTs from different PK ranges are non-overlapping in the
+// destination index key space, making distributed merge unnecessary.
+//
+// The check compares leading key columns of both indexes. If every
+// overlapping column (up to the shorter index's key column count)
+// shares the same column ID, the data is considered sorted. Direction
+// is intentionally ignored: matching column IDs means the data is
+// ordered in the destination key space regardless of sort direction.
+//
+// Inverted indexes always return false because their key encoding
+// expands each row into multiple entries.
+func IsBackfillDataSorted(sourceIndex, destIndex catalog.Index) bool {
+	if destIndex.GetType() == idxtype.INVERTED {
+		return false
+	}
+	srcCols := sourceIndex.NumKeyColumns()
+	dstCols := destIndex.NumKeyColumns()
+	if srcCols == 0 || dstCols == 0 {
+		return false
+	}
+	n := srcCols
+	if dstCols < n {
+		n = dstCols
+	}
+	for i := 0; i < n; i++ {
+		if sourceIndex.GetKeyColumnID(i) != destIndex.GetKeyColumnID(i) {
+			return false
+		}
+	}
+	return true
 }
