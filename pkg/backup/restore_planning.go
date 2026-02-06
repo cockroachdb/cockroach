@@ -76,10 +76,6 @@ const (
 	restoreOptSkipLocalitiesCheck       = "skip_localities_check"
 	restoreOptAsTenant                  = "virtual_cluster_name"
 	restoreOptForceTenantID             = "virtual_cluster"
-
-	// The temporary database system tables will be restored into for full
-	// cluster backups.
-	restoreTempSystemDB = "crdb_temp_system"
 )
 
 // featureRestoreEnabled is used to enable and disable the RESTORE feature.
@@ -254,6 +250,7 @@ func remapSystemDBDescsToTempDB(
 	schemasByID map[descpb.ID]*schemadesc.Mutable,
 	tablesByID map[descpb.ID]*tabledesc.Mutable,
 	typesByID map[descpb.ID]*typedesc.Mutable,
+	funcsByID map[descpb.ID]*funcdesc.Mutable,
 	tempSysDBID catid.DescID,
 	descriptorRewrites jobspb.DescRewriteMap,
 ) {
@@ -275,6 +272,13 @@ func remapSystemDBDescsToTempDB(
 			descriptorRewrites[typ.GetID()] = &jobspb.DescriptorRewrite{
 				ParentID:       tempSysDBID,
 				ParentSchemaID: keys.PublicSchemaIDForBackup,
+			}
+		}
+	}
+	for _, fn := range funcsByID {
+		if fn.GetParentID() == systemschema.SystemDB.GetID() {
+			descriptorRewrites[fn.GetID()] = &jobspb.DescriptorRewrite{
+				ParentID: tempSysDBID,
 			}
 		}
 	}
@@ -788,7 +792,7 @@ func allocateDescriptorRewrites(
 	opts tree.RestoreOptions,
 	intoDB string,
 	newDBName string,
-) (jobspb.DescRewriteMap, error) {
+) (jobspb.DescRewriteMap, descpb.ID, error) {
 	descriptorRewrites := make(jobspb.DescRewriteMap)
 
 	restoreDBNames := make(map[string]catalog.DatabaseDescriptor, len(restoreDBs))
@@ -797,7 +801,7 @@ func allocateDescriptorRewrites(
 	}
 
 	if len(restoreDBNames) > 0 && intoDB != "" {
-		return nil, errors.Errorf("cannot use %q option when restoring database(s)", restoreOptIntoDB)
+		return nil, 0, errors.Errorf("cannot use %q option when restoring database(s)", restoreOptIntoDB)
 	}
 
 	// The logic at the end of this function leaks table IDs, so fail fast if
@@ -806,7 +810,7 @@ func allocateDescriptorRewrites(
 	// Fail fast if the tables to restore are incompatible with the specified
 	// options.
 	if err := validateTableDependenciesForOptions(tablesByID, typesByID, functionsByID, &opts); err != nil {
-		return nil, err
+		return nil, 0, err
 	}
 
 	txn := p.InternalSQLTxn()
@@ -817,32 +821,34 @@ func allocateDescriptorRewrites(
 	if newDBName != "" {
 		dbID, err := col.LookupDatabaseID(ctx, txn.KV(), newDBName)
 		if err != nil {
-			return nil, err
+			return nil, 0, err
 		}
 		if dbID != descpb.InvalidID {
-			return nil, errors.Errorf("database %q already exists", newDBName)
+			return nil, 0, errors.Errorf("database %q already exists", newDBName)
 		}
 	} else {
 		for name := range restoreDBNames {
 			dbID, err := col.LookupDatabaseID(ctx, txn.KV(), name)
 			if err != nil {
-				return nil, err
+				return nil, 0, err
 			}
 			if dbID != descpb.InvalidID {
-				return nil, errors.Errorf("database %q already exists", name)
+				return nil, 0, errors.Errorf("database %q already exists", name)
 			}
 		}
 	}
 
+	tempSysDBID := descpb.InvalidID
 	if descriptorCoverage == tree.AllDescriptors || descriptorCoverage == tree.SystemUsers {
 		// Increment the DescIDSequenceKey so that it is higher than both the max desc ID
 		// in the backup and current max desc ID in the restoring cluster. This generator
 		// keeps produced the next descriptor ID.
-		tempSysDBID, err := p.ExecCfg().DescIDGenerator.GenerateUniqueDescID(ctx)
+		var err error
+		tempSysDBID, err = p.ExecCfg().DescIDGenerator.GenerateUniqueDescID(ctx)
 		if err != nil {
-			return nil, err
+			return nil, 0, err
 		}
-		remapSystemDBDescsToTempDB(schemasByID, tablesByID, typesByID, tempSysDBID, descriptorRewrites)
+		remapSystemDBDescsToTempDB(schemasByID, tablesByID, typesByID, functionsByID, tempSysDBID, descriptorRewrites)
 	}
 
 	var shouldBufferDeprecatedPrivilegeNotice bool
@@ -852,7 +858,7 @@ func allocateDescriptorRewrites(
 		ctx, p, databasesByID, schemasByID, descriptorCoverage, intoDB, restoreDBNames,
 		databasesWithDeprecatedPrivileges, descriptorRewrites,
 	); err != nil {
-		return nil, err
+		return nil, 0, err
 	} else {
 		shouldBufferDeprecatedPrivilegeNotice = b || shouldBufferDeprecatedPrivilegeNotice
 	}
@@ -861,7 +867,7 @@ func allocateDescriptorRewrites(
 		ctx, p, databasesByID, tablesByID, descriptorCoverage, intoDB, restoreDBNames,
 		databasesWithDeprecatedPrivileges, descriptorRewrites,
 	); err != nil {
-		return nil, err
+		return nil, 0, err
 	} else {
 		shouldBufferDeprecatedPrivilegeNotice = b || shouldBufferDeprecatedPrivilegeNotice
 	}
@@ -870,7 +876,7 @@ func allocateDescriptorRewrites(
 		ctx, p, databasesByID, typesByID, descriptorCoverage, intoDB, restoreDBNames,
 		databasesWithDeprecatedPrivileges, descriptorRewrites,
 	); err != nil {
-		return nil, err
+		return nil, 0, err
 	} else {
 		shouldBufferDeprecatedPrivilegeNotice = b || shouldBufferDeprecatedPrivilegeNotice
 	}
@@ -878,7 +884,7 @@ func allocateDescriptorRewrites(
 	if err := remapFunctions(
 		databasesByID, functionsByID, descriptorCoverage, intoDB, restoreDBNames, descriptorRewrites,
 	); err != nil {
-		return nil, err
+		return nil, 0, err
 	}
 
 	remapDatabases(restoreDBs, newDBName, descriptorRewrites)
@@ -901,10 +907,10 @@ func allocateDescriptorRewrites(
 		typesByID,
 		functionsByID,
 		descriptorRewrites); err != nil {
-		return nil, err
+		return nil, 0, err
 	}
 
-	return descriptorRewrites, nil
+	return descriptorRewrites, tempSysDBID, nil
 }
 
 func getDatabaseIDAndDesc(
@@ -954,15 +960,11 @@ func resolveTargetDB(
 	if intoDB != "" {
 		return intoDB, nil
 	}
-
 	if descriptorCoverage == tree.AllDescriptors && catalog.IsSystemDescriptor(descriptor) {
-		var targetDB string
 		if descriptor.GetParentID() == systemschema.SystemDB.GetID() {
-			// For full cluster backups, put the system tables in the temporary
-			// system table.
-			targetDB = restoreTempSystemDB
+			return "", errors.AssertionFailedf("system descriptors should have been processed")
 		}
-		return targetDB, nil
+		return "", nil
 	}
 
 	database, ok := databasesByID[descriptor.GetParentID()]
@@ -1885,7 +1887,7 @@ func doRestorePlan(
 		}
 	}
 
-	descriptorRewrites, err := allocateDescriptorRewrites(
+	descriptorRewrites, tempSysDBID, err := allocateDescriptorRewrites(
 		ctx,
 		p,
 		databasesByID,
@@ -2003,6 +2005,7 @@ func doRestorePlan(
 		ExperimentalCopy:                 restoreStmt.Options.ExperimentalCopy,
 		RemoveRegions:                    restoreStmt.Options.RemoveRegions,
 		UnsafeRestoreIncompatibleVersion: restoreStmt.Options.UnsafeRestoreIncompatibleVersion,
+		TempSystemID:                     tempSysDBID,
 	}
 
 	jr := jobs.Record{

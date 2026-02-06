@@ -908,8 +908,7 @@ func rekeySystemTable(
 		// these tables we will need to cast to int to do the addition/subtraction
 		// of the offset, and then cast back to the desired type determined here.
 		typ := "int"
-		switch tempTableName {
-		case "crdb_temp_system.database_role_settings":
+		if strings.HasSuffix(tempTableName, "database_role_settings") {
 			typ = "oid"
 		}
 
