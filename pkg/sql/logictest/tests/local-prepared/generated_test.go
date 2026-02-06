@@ -346,6 +346,13 @@ func TestLogic_connect_privilege(
 	runLogicTest(t, "connect_privilege")
 }
 
+func TestLogic_crdb_internal_decode_key(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "crdb_internal_decode_key")
+}
+
 func TestLogic_crdb_internal_default_privileges(
 	t *testing.T,
 ) {

@@ -5619,7 +5619,10 @@ DO NOT USE -- USE 'CREATE VIRTUAL CLUSTER' INSTEAD`,
 	),
 
 	"crdb_internal.encode_key": makeBuiltin(
-		tree.FunctionProperties{Category: builtinconstants.CategorySystemInfo},
+		tree.FunctionProperties{
+			Category:         builtinconstants.CategorySystemInfo,
+			DistsqlBlocklist: true,
+		},
 		tree.Overload{
 			Types: tree.ParamTypes{
 				{Name: "table_id", Typ: types.Int},
