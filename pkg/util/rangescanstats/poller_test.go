@@ -3,7 +3,7 @@
 // Use of this software is governed by the CockroachDB Software License
 // included in the /LICENSE file.
 
-package producer
+package rangescanstats
 
 import (
 	"context"
@@ -11,12 +11,12 @@ import (
 	"testing"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/repstream/streampb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/rangedesc"
+	"github.com/cockroachdb/cockroach/pkg/util/rangescanstats/rangescanstatspb"
 	"github.com/cockroachdb/cockroach/pkg/util/span"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
@@ -71,14 +71,14 @@ func (r *rangeIteratorFactory) NewIterator(
 
 func TestNewPoller(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-
+	const laggingSpanThreshold = 2 * time.Minute
 	type testCase struct {
 		name          string
 		ranges        []string
 		tracked       []string
 		completed     []string
 		lagging       []string
-		expectedStats streampb.StreamEvent_RangeStats
+		expectedStats rangescanstatspb.RangeStats
 	}
 	tests := []testCase{
 		{
@@ -95,7 +95,7 @@ func TestNewPoller(t *testing.T) {
 				// note the gap of "d,e"
 				"e,f",
 			},
-			expectedStats: streampb.StreamEvent_RangeStats{
+			expectedStats: rangescanstatspb.RangeStats{
 				RangeCount:         1,
 				ScanningRangeCount: 1,
 			},
@@ -105,7 +105,7 @@ func TestNewPoller(t *testing.T) {
 			ranges:    []string{"a,b", "c,d"},
 			tracked:   []string{"a,b", "c,d"},
 			completed: []string{"a,b"},
-			expectedStats: streampb.StreamEvent_RangeStats{
+			expectedStats: rangescanstatspb.RangeStats{
 				RangeCount:         2,
 				ScanningRangeCount: 1,
 			},
@@ -115,7 +115,7 @@ func TestNewPoller(t *testing.T) {
 			ranges:    []string{"a,c", "d,e"},
 			tracked:   []string{"a,c", "d,e"},
 			completed: []string{"a,b"},
-			expectedStats: streampb.StreamEvent_RangeStats{
+			expectedStats: rangescanstatspb.RangeStats{
 				RangeCount:         2,
 				ScanningRangeCount: 2,
 			},
@@ -127,7 +127,7 @@ func TestNewPoller(t *testing.T) {
 			completed: []string{"a,b"},
 			lagging:   []string{"c,d"},
 
-			expectedStats: streampb.StreamEvent_RangeStats{
+			expectedStats: rangescanstatspb.RangeStats{
 				RangeCount:         3,
 				ScanningRangeCount: 1,
 				LaggingRangeCount:  1,
@@ -158,7 +158,7 @@ func TestNewPoller(t *testing.T) {
 				require.NoError(t, err)
 			}
 
-			poller := startStatsPoller(context.Background(), time.Minute, trackedSpans, frontier, ranges)
+			poller := StartStatsPoller(context.Background(), time.Minute, trackedSpans, frontier, ranges, laggingSpanThreshold)
 			testutils.SucceedsSoon(t, func() error {
 				stats := poller.stats.Load()
 				if stats == nil {

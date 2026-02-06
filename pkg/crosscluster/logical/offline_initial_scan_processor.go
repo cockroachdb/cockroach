@@ -33,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log/logcrash"
 	"github.com/cockroachdb/cockroach/pkg/util/pprofutil"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
+	"github.com/cockroachdb/cockroach/pkg/util/rangescanstats/rangescanstatspb"
 	"github.com/cockroachdb/cockroach/pkg/util/span"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
@@ -67,7 +68,7 @@ type offlineInitialScanProcessor struct {
 
 	checkpointCh chan offlineCheckpoint
 
-	rangeStatsCh chan *streampb.StreamEvent_RangeStats
+	rangeStatsCh chan *rangescanstatspb.RangeStats
 
 	rekey *backup.KeyRewriter
 
@@ -108,7 +109,7 @@ func newNewOfflineInitialScanProcessor(
 		processorID:  processorID,
 		stopCh:       make(chan struct{}),
 		checkpointCh: make(chan offlineCheckpoint),
-		rangeStatsCh: make(chan *streampb.StreamEvent_RangeStats),
+		rangeStatsCh: make(chan *rangescanstatspb.RangeStats),
 		errCh:        make(chan error, 1),
 		rekey:        rekeyer,
 		lastKeyAdded: roachpb.Key{},

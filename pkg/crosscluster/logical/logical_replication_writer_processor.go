@@ -49,6 +49,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log/logcrash"
 	"github.com/cockroachdb/cockroach/pkg/util/pprofutil"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
+	"github.com/cockroachdb/cockroach/pkg/util/rangescanstats/rangescanstatspb"
 	"github.com/cockroachdb/cockroach/pkg/util/span"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
@@ -131,7 +132,7 @@ type logicalReplicationWriterProcessor struct {
 
 	checkpointCh chan []jobspb.ResolvedSpan
 
-	rangeStatsCh chan *streampb.StreamEvent_RangeStats
+	rangeStatsCh chan *rangescanstatspb.RangeStats
 
 	agg      *tracing.TracingAggregator
 	aggTimer timeutil.Timer
@@ -223,7 +224,7 @@ func newLogicalReplicationWriterProcessor(
 		frontier:       frontier,
 		stopCh:         make(chan struct{}),
 		checkpointCh:   make(chan []jobspb.ResolvedSpan),
-		rangeStatsCh:   make(chan *streampb.StreamEvent_RangeStats),
+		rangeStatsCh:   make(chan *rangescanstatspb.RangeStats),
 		errCh:          make(chan error, 1),
 		logBufferEvery: log.Every(30 * time.Second),
 		debug: streampb.DebugLogicalConsumerStatus{
@@ -576,7 +577,7 @@ func (lrw *logicalReplicationWriterProcessor) maybeCheckpoint(
 }
 
 func (lrw *logicalReplicationWriterProcessor) rangeStats(
-	ctx context.Context, stats *streampb.StreamEvent_RangeStats,
+	ctx context.Context, stats *rangescanstatspb.RangeStats,
 ) error {
 	select {
 	case <-ctx.Done():
