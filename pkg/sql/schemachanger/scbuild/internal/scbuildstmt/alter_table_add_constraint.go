@@ -330,13 +330,24 @@ func alterTableAddForeignKey(
 	// implicit columns.
 	if len(fkDef.ToCols) == 0 {
 		primaryIndexIDInReferencedTable := getCurrentPrimaryIndexID(b, referencedTableID)
-		numImplicitCols := 0
+
+		// Explicit columns in the primary index come after all internal columns.
+		explicitColStartIdx := 0
+
+		// Account for partitioning implicit columns.
 		primaryIndexPartitioningElemInReferencedTable := maybeRetrieveIndexPartitioningElem(b, referencedTableID, primaryIndexIDInReferencedTable)
 		if primaryIndexPartitioningElemInReferencedTable != nil {
-			numImplicitCols = int(primaryIndexPartitioningElemInReferencedTable.NumImplicitColumns)
+			explicitColStartIdx = int(primaryIndexPartitioningElemInReferencedTable.NumImplicitColumns)
 		}
+
+		// Account for hash shard column.
+		primaryIndexElem := mustRetrieveCurrentPrimaryIndexElement(b, referencedTableID)
+		if primaryIndexElem.Sharding != nil {
+			explicitColStartIdx++
+		}
+
 		keyColIDsOfPrimaryIndexInReferencedTable, _, _ := getSortedColumnIDsInIndexByKind(b, referencedTableID, primaryIndexIDInReferencedTable)
-		for i := numImplicitCols; i < len(keyColIDsOfPrimaryIndexInReferencedTable); i++ {
+		for i := explicitColStartIdx; i < len(keyColIDsOfPrimaryIndexInReferencedTable); i++ {
 			fkDef.ToCols = append(
 				fkDef.ToCols,
 				tree.Name(mustRetrieveColumnNameElem(b, referencedTableID, keyColIDsOfPrimaryIndexInReferencedTable[i]).Name),

@@ -2303,3 +2303,111 @@ statement ok
 RESET create_table_with_schema_locked;
 
 subtest end
+
+# Test foreign keys with implicit column references on regional by row tables.
+# This verifies implicit FK references correctly skip the crdb_region column.
+subtest fk_implicit_rbr
+
+statement ok
+CREATE TABLE parent_rbr_implicit (
+  k INT PRIMARY KEY,
+  v INT
+) LOCALITY REGIONAL BY ROW
+
+statement ok
+INSERT INTO parent_rbr_implicit (k, v, crdb_region) VALUES
+  (1, 10, 'ca-central-1'),
+  (2, 20, 'ap-southeast-2'),
+  (3, 30, 'us-east-1')
+
+# FK without explicit column list should skip crdb_region implicit column
+statement ok
+CREATE TABLE child_rbr_implicit (
+  k INT PRIMARY KEY,
+  parent_k INT,
+  FOREIGN KEY (parent_k) REFERENCES parent_rbr_implicit
+) LOCALITY REGIONAL BY ROW
+
+statement ok
+INSERT INTO child_rbr_implicit (k, parent_k, crdb_region) VALUES
+  (1, 1, 'ca-central-1'),
+  (2, 2, 'ap-southeast-2')
+
+# Verify FK constraint enforcement
+statement error pq: insert on table "child_rbr_implicit" violates foreign key constraint
+INSERT INTO child_rbr_implicit (k, parent_k, crdb_region) VALUES (99, 99, 'ca-central-1')
+
+# Cleanup
+statement ok
+DROP TABLE child_rbr_implicit
+
+statement ok
+DROP TABLE parent_rbr_implicit
+
+subtest end
+
+# Test implicit keys with a combination of features that result in the
+# primary key index having internal/implicit columns.
+subtest fk_implicit_rbr_hash_sharded_combined
+
+# Parent table is regional by row with a hash-sharded primary key
+statement ok
+CREATE TABLE parent_combined (
+  k INT NOT NULL,
+  v INT NOT NULL,
+  data INT,
+  PRIMARY KEY (k, v) USING HASH
+) LOCALITY REGIONAL BY ROW
+
+statement ok
+INSERT INTO parent_combined (k, v, data, crdb_region) VALUES
+  (1, 1, 100, 'ca-central-1'),
+  (2, 2, 200, 'ap-southeast-2'),
+  (3, 3, 300, 'us-east-1')
+
+statement ok
+CREATE TABLE child_combined (
+  k INT,
+  v INT,
+  FOREIGN KEY (k, v) REFERENCES parent_combined
+) LOCALITY REGIONAL BY ROW
+
+statement ok
+INSERT INTO child_combined (k, v, crdb_region) VALUES
+  (1, 1, 'ca-central-1'),
+  (2, 2, 'ap-southeast-2')
+
+# Verify FK constraint enforcement
+statement error pq: insert on table "child_combined" violates foreign key constraint
+INSERT INTO child_combined (k, v, crdb_region) VALUES (99, 99, 'ca-central-1')
+
+# Verify this also works using ALTER TABLE
+statement ok
+CREATE TABLE child_combined2 (
+  k INT,
+  v INT
+) LOCALITY REGIONAL BY ROW
+
+statement ok
+ALTER TABLE child_combined2 ADD FOREIGN KEY (k, v) REFERENCES parent_combined
+
+statement ok
+INSERT INTO child_combined2 (k, v, crdb_region) VALUES
+  (1, 1, 'ca-central-1'),
+  (2, 2, 'ap-southeast-2')
+
+# Verify FK constraint enforcement
+statement error pq: insert on table "child_combined2" violates foreign key constraint
+INSERT INTO child_combined2 (k, v, crdb_region) VALUES (99, 99, 'ca-central-1')
+
+# Cleanup
+statement ok
+DROP TABLE child_combined
+
+statement ok
+DROP TABLE child_combined2
+
+statement ok
+DROP TABLE parent_combined
+
+subtest end
