@@ -856,6 +856,11 @@ func (r *restoreResumer) doDownloadFilesWithRetry(
 	}); rt.Next(); {
 		err = r.doDownloadFiles(ctx, execCtx)
 		if err == nil {
+			if err := r.execCfg.InternalDB.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+				return jobs.StatusStorage(r.job.ID()).Clear(ctx, txn)
+			}); err != nil {
+				log.Dev.Warningf(ctx, "failed to clear download phase job status on success: %v", err)
+			}
 			return nil
 		}
 		if errors.HasType(err, &kvpb.InsufficientSpaceError{}) {
@@ -868,6 +873,7 @@ func (r *restoreResumer) doDownloadFilesWithRetry(
 			log.Dev.Infof(ctx, "download progress has advanced since last retry, resetting retry counter")
 		}
 	}
+
 	return errors.Wrapf(err, "retries exhausted for downloading files")
 }
 
@@ -896,6 +902,7 @@ func (r *restoreResumer) doDownloadFiles(ctx context.Context, execCtx sql.JobExe
 			return errors.Wrap(err, "testing knob RunBeforeDownloadCleanup failed")
 		}
 	}
+
 	return r.cleanupAfterDownload(ctx, details)
 }
 
