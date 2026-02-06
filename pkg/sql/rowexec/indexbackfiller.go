@@ -317,6 +317,8 @@ func (ib *indexBackfiller) maybeReencodeAndWriteVectorIndexEntry(
 // execinfrapb.BackfillerSpec.
 func (ib *indexBackfiller) makeIndexBackfillSink(ctx context.Context) (indexBackfillSink, error) {
 	if ib.spec.UseDistributedMergeSink {
+		log.Dev.Infof(ctx, "distributed merge: map phase starting with %d spans", len(ib.spec.Spans))
+
 		// Construct the full nodelocal URI using this processors's node ID. The spec
 		// stores just the path portion so that each processor writes to its own
 		// node's local storage.

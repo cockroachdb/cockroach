@@ -44,6 +44,11 @@ type MergeOptions struct {
 	// Should be true when building unique indexes. Callers are responsible for
 	// wrapping errors into user-friendly messages.
 	EnforceUniqueness bool
+
+	// OnProgress is called when progress metadata is received from the
+	// distributed merge flow. This allows the caller to track task completion
+	// during merge iterations.
+	OnProgress func(context.Context, *execinfrapb.ProducerMetadata) error
 }
 
 // Merge creates and waits on a DistSQL flow that merges the provided SSTs into
@@ -58,8 +63,6 @@ func Merge(
 ) ([]execinfrapb.BulkMergeSpec_SST, error) {
 	logMergeInputs(ctx, ssts, opts.Iteration, opts.MaxIterations)
 
-	execCfg := execCtx.ExecCfg()
-
 	plan, planCtx, err := newBulkMergePlan(ctx, execCtx, ssts, spans, genOutputURIAndRecordPrefix, opts)
 	if err != nil {
 		return nil, err
@@ -70,22 +73,15 @@ func Merge(
 		return protoutil.Unmarshal([]byte(*row[0].(*tree.DBytes)), &result)
 	})
 
-	sqlReciever := sql.MakeDistSQLReceiver(
-		ctx,
-		rowWriter,
-		tree.Rows,
-		execCfg.RangeDescriptorCache,
-		nil,
-		nil,
-		execCtx.ExtendedEvalContext().Tracing)
-	defer sqlReciever.Release()
+	sqlReceiver := makeMergeReceiver(ctx, execCtx, rowWriter, opts.OnProgress)
+	defer sqlReceiver.Release()
 
 	execCtx.DistSQLPlanner().Run(
 		ctx,
 		planCtx,
 		nil,
 		plan,
-		sqlReciever,
+		sqlReceiver,
 		&execCtx.ExtendedEvalContext().Context,
 		nil,
 	)
@@ -109,22 +105,61 @@ func Merge(
 	return result.SSTs, nil
 }
 
+// makeMergeReceiver creates a DistSQLReceiver for the merge flow. If an
+// onProgress callback is provided, the receiver is wrapped to invoke the
+// callback on metadata messages (used for tracking task completion).
+//
+// Note: The two MakeDistSQLReceiver calls cannot be unified because the
+// rowResultWriter interface (which both *CallbackResultWriter and
+// *MetadataCallbackWriter implement) is unexported from the sql package.
+// We cannot declare a variable of that interface type here to conditionally
+// assign either writer type.
+func makeMergeReceiver(
+	ctx context.Context,
+	execCtx sql.JobExecContext,
+	rowWriter *sql.CallbackResultWriter,
+	onProgress func(context.Context, *execinfrapb.ProducerMetadata) error,
+) *sql.DistSQLReceiver {
+	execCfg := execCtx.ExecCfg()
+	if onProgress != nil {
+		return sql.MakeDistSQLReceiver(
+			ctx,
+			sql.NewMetadataCallbackWriter(rowWriter, onProgress),
+			tree.Rows,
+			execCfg.RangeDescriptorCache,
+			nil,
+			nil,
+			execCtx.ExtendedEvalContext().Tracing)
+	}
+	return sql.MakeDistSQLReceiver(
+		ctx,
+		rowWriter,
+		tree.Rows,
+		execCfg.RangeDescriptorCache,
+		nil,
+		nil,
+		execCtx.ExtendedEvalContext().Tracing)
+}
+
 // logMergeInputs logs the input SSTs for the current merge iteration.
-// All logging is opt-in via log.V(2) for detailed iteration tracking.
+// The main iteration message is always logged; detailed per-SST logging
+// is opt-in via log.V(2).
 func logMergeInputs(
 	ctx context.Context, ssts []execinfrapb.BulkMergeSpec_SST, iteration int, maxIterations int,
 ) {
-	// All iteration logging is verbose (opt-in).
-	if !log.V(2) {
-		return
-	}
-
 	iterType := "local"
 	if iteration == maxIterations {
 		iterType = "final"
 	}
-	log.Dev.Infof(ctx, "Distributed merge iteration %d (%s) starting with %d input SSTs",
-		iteration, iterType, len(ssts))
+
+	// Always log the phase transition.
+	log.Dev.Infof(ctx, "distributed merge: starting iteration %d of %d (%s) with %d input SSTs",
+		iteration, maxIterations, iterType, len(ssts))
+
+	// Detailed per-SST logging is verbose (opt-in).
+	if !log.V(2) {
+		return
+	}
 
 	var totalInputKeys uint64
 	for i, sst := range ssts {
@@ -132,7 +167,7 @@ func logMergeInputs(
 		log.Dev.Infof(ctx, "  input SST[%d]: %d keys, span=[%s, %s), uri=%s",
 			i, sst.KeyCount, sst.StartKey, sst.EndKey, sst.URI)
 	}
-	log.Dev.Infof(ctx, "  Total input keys: %d", totalInputKeys)
+	log.Dev.Infof(ctx, "  total input keys: %d", totalInputKeys)
 }
 
 func init() {
@@ -149,12 +184,14 @@ func init() {
 		maxIterations int,
 		writeTimestamp *hlc.Timestamp,
 		enforceUniqueness bool,
+		onProgress func(context.Context, *execinfrapb.ProducerMetadata) error,
 	) ([]execinfrapb.BulkMergeSpec_SST, error) {
 		return Merge(ctx, execCtx, ssts, spans, genOutputURIAndRecordPrefix, MergeOptions{
 			Iteration:         iteration,
 			MaxIterations:     maxIterations,
 			WriteTimestamp:    writeTimestamp,
 			EnforceUniqueness: enforceUniqueness,
+			OnProgress:        onProgress,
 		})
 	})
 }

@@ -63,6 +63,16 @@ var IndexBackfillCheckpointInterval = settings.RegisterDurationSetting(
 	30*time.Second,
 )
 
+// IndexBackfillProgressInterval is the duration between backfill progress
+// fraction updates. This is distinct from the checkpoint interval which
+// controls how often the backfill progress details are persisted.
+var IndexBackfillProgressInterval = settings.RegisterDurationSetting(
+	settings.ApplicationLevel,
+	"bulkio.index_backfill.progress_interval",
+	"the amount of time between index backfill progress fraction updates",
+	10*time.Second,
+)
+
 // MutationFilter is the type of a simple predicate on a mutation.
 type MutationFilter func(catalog.Mutation) bool
 
