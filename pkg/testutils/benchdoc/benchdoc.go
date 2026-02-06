@@ -18,23 +18,37 @@ import (
 
 type (
 	BenchmarkInfo struct {
-		Name    string
-		Package string
-		Team    string
-		Args    RunArgs
+		Name        string      `json:"name"`
+		Package     string      `json:"package"`
+		Team        string      `json:"team"`
+		RunArgs     RunArgs     `json:"run_args"`
+		CompareArgs CompareArgs `json:"compare_args"`
 	}
 
 	RunArgs struct {
-		Suite     string
-		Timeout   time.Duration
-		Count     int
-		BenchTime string
+		Suite     string        `json:"suite,omitempty"`
+		Timeout   time.Duration `json:"timeout,omitempty"`
+		Count     int           `json:"count,omitempty"`
+		BenchTime string        `json:"bench_time,omitempty"`
 	}
 
-	nameResolver func() (string, error)
+	CompareArgs struct {
+		PostIssue PostIssue `json:"post_issue,omitempty"`
+		Threshold float64   `json:"threshold,omitempty"`
+	}
+
+	NameResolver func() (string, error)
+	PostIssue    string
 )
 
-const docMarker = "benchmark-ci:"
+const (
+	PostIssueNone    PostIssue = "none"
+	PostIssueBlocker PostIssue = "blocker"
+)
+
+const (
+	docMarker = "benchmark-ci:"
+)
 
 // AnalyzeBenchmarkDocs traverses the provided AST to identify benchmark functions and extract their associated
 // configuration from documentation comments.
@@ -42,7 +56,7 @@ const docMarker = "benchmark-ci:"
 // benchmark-ci: count=10, benchtime=50x, timeout=20m, suite=manual
 func AnalyzeBenchmarkDocs(
 	f *ast.File,
-	packageResolver, teamResolver nameResolver,
+	packageResolver, teamResolver NameResolver,
 	lenient bool,
 	reportFailure func(token.Pos, error),
 ) (benchmarkInfoList []BenchmarkInfo, err error) {
@@ -66,8 +80,9 @@ func AnalyzeBenchmarkDocs(
 			return true
 		}
 
-		var args RunArgs
-		args, err = analyzeBenchmarkArgs(fd)
+		var runArgs RunArgs
+		var compareArgs CompareArgs
+		runArgs, compareArgs, err = analyzeBenchmarkArgs(fd)
 		if err != nil {
 			if !lenient {
 				report(fd.Pos(), err)
@@ -89,10 +104,11 @@ func AnalyzeBenchmarkDocs(
 		}
 
 		benchmarkInfoList = append(benchmarkInfoList, BenchmarkInfo{
-			Name:    fd.Name.Name,
-			Package: pkg,
-			Team:    team,
-			Args:    args,
+			Name:        fd.Name.Name,
+			Package:     pkg,
+			Team:        team,
+			RunArgs:     runArgs,
+			CompareArgs: compareArgs,
 		})
 		return true
 	})
@@ -120,10 +136,11 @@ func isTestingB(t ast.Expr) bool {
 
 // analyzeBenchmarkArgs extracts benchmark configuration from a function's documentation comments.
 // Returns an error if the benchmark-ci documentation is malformed.
-func analyzeBenchmarkArgs(fn *ast.FuncDecl) (RunArgs, error) {
-	var args RunArgs
+func analyzeBenchmarkArgs(fn *ast.FuncDecl) (RunArgs, CompareArgs, error) {
+	var runArgs RunArgs
+	var compareArgs CompareArgs
 	if fn.Doc == nil {
-		return args, nil
+		return runArgs, compareArgs, nil
 	}
 	for _, line := range strings.Split(fn.Doc.Text(), "\n") {
 		line = strings.TrimSpace(line)
@@ -140,7 +157,8 @@ func analyzeBenchmarkArgs(fn *ast.FuncDecl) (RunArgs, error) {
 			}
 			kv := strings.SplitN(part, "=", 2)
 			if len(kv) != 2 {
-				return RunArgs{}, errors.Newf("malformed key-value pair in %s: %q", fn.Name.Name, part)
+				return RunArgs{}, CompareArgs{},
+					errors.Newf("malformed key-value pair in %s: %q", fn.Name.Name, part)
 			}
 			key := strings.TrimSpace(kv[0])
 			val := strings.TrimSpace(kv[1])
@@ -148,23 +166,49 @@ func analyzeBenchmarkArgs(fn *ast.FuncDecl) (RunArgs, error) {
 			case "count":
 				var count int
 				if n, err := fmt.Sscanf(val, "%d", &count); err != nil || n != 1 {
-					return RunArgs{}, errors.Newf("invalid count value in %s: %q", fn.Name.Name, val)
+					return RunArgs{}, CompareArgs{},
+						errors.Newf("invalid count value in %s: %q", fn.Name.Name, val)
 				}
-				args.Count = count
+				runArgs.Count = count
 			case "benchtime":
-				args.BenchTime = val
+				runArgs.BenchTime = val
 			case "timeout":
 				d, err := time.ParseDuration(val)
 				if err != nil {
-					return RunArgs{}, errors.Wrapf(err, "invalid timeout value in %s", fn.Name.Name)
+					return RunArgs{}, CompareArgs{},
+						errors.Wrapf(err, "invalid timeout value in %s", fn.Name.Name)
 				}
-				args.Timeout = d
+				runArgs.Timeout = d
 			case "suite":
-				args.Suite = val
+				runArgs.Suite = val
+			case "post":
+				switch val {
+				case "":
+					// use defaults
+				case "none":
+					compareArgs.PostIssue = PostIssueNone
+				case "blocker":
+					compareArgs.PostIssue = PostIssueBlocker
+				default:
+					return RunArgs{}, CompareArgs{},
+						errors.Newf("invalid post issue value in %s: %q", fn.Name.Name, val)
+				}
+			case "threshold":
+				var threshold float64
+				if n, err := fmt.Sscanf(val, "%f", &threshold); err != nil || n != 1 {
+					return RunArgs{}, CompareArgs{},
+						errors.Newf("invalid threshold value in %s: %q", fn.Name.Name, val)
+				}
+				if threshold < 0 || threshold > 1.0 {
+					return RunArgs{}, CompareArgs{},
+						errors.Newf("threshold must be in range [0.0, 1.0] in %s: %f", fn.Name.Name, threshold)
+				}
+				compareArgs.Threshold = threshold
 			default:
-				return RunArgs{}, errors.Newf("unknown benchmark config key in %s: %q", fn.Name.Name, key)
+				return RunArgs{}, CompareArgs{},
+					errors.Newf("unknown benchmark config key in %s: %q", fn.Name.Name, key)
 			}
 		}
 	}
-	return args, nil
+	return runArgs, compareArgs, nil
 }
