@@ -1164,6 +1164,16 @@ func extendRangeForGCRequest(gcReq *kvpb.GCRequest, rs roachpb.RSpan) (roachpb.R
 	var err error
 	// Check point keys.
 	for _, gcKey := range gcReq.Keys {
+		// Skip range-ID local keys, as such keys aren't addressable in the
+		// global key map. As such, they don't contribute to the key span
+		// touched by the GC request. As a result, we cannot compare them
+		// against a replica's key span to determine whether or not they've been
+		// routed to the right place; instead, we handle them during evaluation
+		// time by checking whether they match the replica's RangeID or not. See
+		// the call to  ContainsKey() in cmd_gc.go for more details.
+		if bytes.HasPrefix(gcKey.Key, LocalRangeIDPrefix) {
+			continue
+		}
 		rs, err = extend(rs, gcKey.Key, nil)
 		if err != nil {
 			return roachpb.RSpan{}, err
@@ -1178,6 +1188,16 @@ func extendRangeForGCRequest(gcReq *kvpb.GCRequest, rs roachpb.RSpan) (roachpb.R
 	}
 	// Check clear range.
 	if gcReq.ClearRange != nil {
+		// NB: We create a new gcKeyBatcher for each "plane" of a replica's
+		// spans, so a GC request should never span LocalRangeID keys and (say)
+		// user keys. At the time of writing, all LocalRangeID keys are inline keys
+		// which aren't versioned -- so we should never be constructing a ClearRange
+		// request over them. Assert this, because if we were, we would need
+		// extra validation in GC evaluation to ensure we're not touching keys
+		// that don't belong to our range.
+		if bytes.HasPrefix(gcReq.ClearRange.StartKey, LocalRangeIDPrefix) || bytes.HasPrefix(gcReq.ClearRange.EndKey, LocalRangeIDPrefix) {
+			return rs, errors.AssertionFailedf("ClearRange request cannot span LocalRangeID keys")
+		}
 		rs, err = extend(rs, gcReq.ClearRange.StartKey, gcReq.ClearRange.EndKey)
 		if err != nil {
 			return roachpb.RSpan{}, err

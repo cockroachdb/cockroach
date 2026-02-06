@@ -1902,7 +1902,13 @@ func TestLogGrowthWhenRefreshingPendingCommands(t *testing.T) {
 				RaftProposalQuota: int64(64 << 10),
 				// RaftMaxInflightMsgs * RaftMaxSizePerMsg cannot exceed RaftProposalQuota.
 				RaftMaxInflightMsgs: 16,
-				RaftMaxSizePerMsg:   1 << 10, // 1 KB
+				RaftMaxSizePerMsg: 1 << 10, // 1 KB
+				// Prevent lease expiration during test setup. This is particularly
+				// important for the LeaseLeader && proposeOnFollower case, where the
+				// follower gets an expiration-based lease that could expire during the
+				// long test setup (especially with race detector), causing writes to
+				// fail instead of blocking.
+				RangeLeaseDuration: time.Hour,
 			}
 
 			const numServers int = 5
