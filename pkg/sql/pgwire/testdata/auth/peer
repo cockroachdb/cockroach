@@ -1,0 +1,208 @@
+# This test file validates the 'peer' authentication method.
+# It should only run in secure mode, as it's a security feature.
+config secure
+----
+
+# Create a user to test with.
+sql
+CREATE USER testpeer;
+----
+ok
+
+#
+# subtest: simple_peer_auth
+#
+# Test direct 1-to-1 peer authentication without an identity map.
+#
+
+subtest simple_peer_auth/success
+
+# HBA Rule: Allow 'testpeer' to connect via socket if the OS user is mapped via 'os_map'.
+# NOTE: This test is made portable by using the %CURRENT_OS_USER% placeholder,
+# which is substituted by the test runner at runtime.
+set_hba
+local all testpeer peer map=os_map
+----
+# Active authentication configuration on this node:
+# Original configuration:
+# loopback all all all trust       # built-in CockroachDB default
+# host  all root all cert-password # CockroachDB mandatory rule
+# local all testpeer peer map=os_map
+#
+# Interpreted configuration:
+# TYPE   DATABASE USER     ADDRESS METHOD        OPTIONS
+loopback all      all      all     trust
+host     all      root     all     cert-password
+local    all      testpeer         peer          map=os_map
+
+# Identity Map: Map the current OS user to the DB user 'testpeer'.
+set_identity_map
+os_map %CURRENT_OS_USER% testpeer
+----
+# Active authentication configuration on this node:
+# Original configuration:
+# loopback all all all trust       # built-in CockroachDB default
+# host  all root all cert-password # CockroachDB mandatory rule
+# local all testpeer peer map=os_map
+#
+# Interpreted configuration:
+# TYPE   DATABASE USER     ADDRESS METHOD        OPTIONS
+loopback all      all      all     trust
+host     all      root     all     cert-password
+local    all      testpeer         peer          map=os_map
+# Active identity mapping on this node:
+# Original configuration:
+# os_map %CURRENT_OS_USER% testpeer
+# Active configuration:
+# map-name system-username database-username
+os_map     ^%CURRENT_OS_USER%$       testpeer
+
+# Connect as 'testpeer'. The server will get the real OS user
+# via syscall and use the map to authorize the connection.
+connect_unix user=testpeer show_authentication_method
+----
+ok defaultdb peer
+
+authlog 5
+.*client_connection_end
+----
+4 {"EventType":"client_authentication_info","Info":"peer authentication: determined OS user as \"%CURRENT_OS_USER%\"","InstanceID":1,"Method":"peer","Network":"unix","RemoteAddress":"XXX","SessionID":"XXX","SystemIdentity":"testpeer","Timestamp":"XXX","Transport":"local"}
+5 {"EventType":"client_authentication_ok","InstanceID":1,"Method":"peer","Network":"unix","RemoteAddress":"XXX","SessionID":"XXX","SystemIdentity":"%CURRENT_OS_USER%","Timestamp":"XXX","Transport":"local","User":"testpeer"}
+6 {"EventType":"client_authentication_info","Info":"session created with SessionDefaults=[database=defaultdb] and CustomOptions=[]","InstanceID":1,"Method":"peer","Network":"unix","RemoteAddress":"XXX","SessionID":"XXX","SystemIdentity":"%CURRENT_OS_USER%","Timestamp":"XXX","Transport":"local","User":"testpeer"}
+7 {"Duration":"NNN","EventType":"client_session_end","InstanceID":1,"Network":"unix","RemoteAddress":"XXX","SessionID":"XXX","Timestamp":"XXX"}
+8 {"Duration":"NNN","EventType":"client_connection_end","InstanceID":1,"Network":"unix","RemoteAddress":"XXX","SessionID":"XXX","Timestamp":"XXX"}
+
+subtest end
+
+subtest simple_peer_auth/failure_user_mismatch
+
+# HBA rule for a direct mapping that will fail.
+set_hba
+local all testpeer peer
+----
+# Active authentication configuration on this node:
+# Original configuration:
+# loopback all all all trust       # built-in CockroachDB default
+# host  all root all cert-password # CockroachDB mandatory rule
+# local all testpeer peer
+#
+# Interpreted configuration:
+# TYPE   DATABASE USER     ADDRESS METHOD        OPTIONS
+loopback all      all      all     trust
+host     all      root     all     cert-password
+local    all      testpeer         peer
+# Active identity mapping on this node:
+# Original configuration:
+# os_map %CURRENT_OS_USER% testpeer
+# Active configuration:
+# map-name system-username database-username
+os_map     ^%CURRENT_OS_USER%$       testpeer
+
+# Attempt to connect as 'testpeer'. This must fail because the real OS user
+# will not match the requested DB user 'testpeer'.
+connect_unix user=testpeer
+----
+ERROR: requested user identity "testpeer" does not correspond to any mapping for system identity "%CURRENT_OS_USER%" (SQLSTATE 28000)
+
+authlog 4
+.*client_connection_end
+----
+11 {"EventType":"client_authentication_info","Info":"peer authentication: determined OS user as \"%CURRENT_OS_USER%\"","InstanceID":1,"Method":"peer","Network":"unix","RemoteAddress":"XXX","SessionID":"XXX","SystemIdentity":"testpeer","Timestamp":"XXX","Transport":"local"}
+12 {"Detail":"requested user identity \"testpeer\" does not correspond to any mapping for system identity \"%CURRENT_OS_USER%\"","EventType":"client_authentication_failed","InstanceID":1,"Method":"peer","Network":"unix","Reason":"USER_NOT_FOUND","RemoteAddress":"XXX","SessionID":"XXX","SystemIdentity":"%CURRENT_OS_USER%","Timestamp":"XXX","Transport":"local"}
+13 {"Duration":"NNN","EventType":"client_session_end","InstanceID":1,"Network":"unix","RemoteAddress":"XXX","SessionID":"XXX","Timestamp":"XXX"}
+14 {"Duration":"NNN","EventType":"client_connection_end","InstanceID":1,"Network":"unix","RemoteAddress":"XXX","SessionID":"XXX","Timestamp":"XXX"}
+
+subtest end
+
+#
+# subtest: mapped_peer_auth
+#
+
+subtest mapped_peer_auth/failure_map_mismatch
+
+# HBA Rule: Allow DB user 'testpeer' if the OS user is in the 'os_map'.
+set_hba
+local all testpeer peer map=os_map
+----
+# Active authentication configuration on this node:
+# Original configuration:
+# loopback all all all trust       # built-in CockroachDB default
+# host  all root all cert-password # CockroachDB mandatory rule
+# local all testpeer peer map=os_map
+#
+# Interpreted configuration:
+# TYPE   DATABASE USER     ADDRESS METHOD        OPTIONS
+loopback all      all      all     trust
+host     all      root     all     cert-password
+local    all      testpeer         peer          map=os_map
+# Active identity mapping on this node:
+# Original configuration:
+# os_map %CURRENT_OS_USER% testpeer
+# Active configuration:
+# map-name system-username database-username
+os_map     ^%CURRENT_OS_USER%$       testpeer
+
+# Identity Map: Map a fake OS user to the DB user 'testpeer'.
+set_identity_map
+os_map fake_os_user testpeer
+----
+# Active authentication configuration on this node:
+# Original configuration:
+# loopback all all all trust       # built-in CockroachDB default
+# host  all root all cert-password # CockroachDB mandatory rule
+# local all testpeer peer map=os_map
+#
+# Interpreted configuration:
+# TYPE   DATABASE USER     ADDRESS METHOD        OPTIONS
+loopback all      all      all     trust
+host     all      root     all     cert-password
+local    all      testpeer         peer          map=os_map
+# Active identity mapping on this node:
+# Original configuration:
+# os_map fake_os_user testpeer
+# Active configuration:
+# map-name system-username database-username
+os_map     ^fake_os_user$  testpeer
+
+# Connect as 'testpeer'. The syscall will get the real OS user,
+# which is not in the map, so the connection must fail.
+connect_unix user=testpeer
+----
+ERROR: system identity "%CURRENT_OS_USER%" did not map to a database role (SQLSTATE 28000)
+
+subtest end
+
+#
+# subtest: security_checks
+#
+
+subtest security_checks/peer_over_tcp_is_rejected
+
+# HBA Rule: A misconfigured rule allowing 'peer' for a TCP connection.
+# The server must reject this because 'peer' is registered for 'local' only.
+set_hba
+host all testpeer 127.0.0.1/32 peer
+----
+# Active authentication configuration on this node:
+# Original configuration:
+# loopback all all all trust       # built-in CockroachDB default
+# host  all root all cert-password # CockroachDB mandatory rule
+# host all testpeer 127.0.0.1/32 peer
+#
+# Interpreted configuration:
+# TYPE   DATABASE USER     ADDRESS      METHOD        OPTIONS
+loopback all      all      all          trust
+host     all      root     all          cert-password
+host     all      testpeer 127.0.0.1/32 peer
+# Active identity mapping on this node:
+# Original configuration:
+# os_map fake_os_user testpeer
+# Active configuration:
+# map-name system-username database-username
+os_map     ^fake_os_user$  testpeer
+
+connect user=testpeer
+----
+ERROR: method "peer" required for this user, but unusable over this connection type (SQLSTATE 28000)
+
+subtest end
