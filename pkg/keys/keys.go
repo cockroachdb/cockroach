@@ -1164,6 +1164,16 @@ func extendRangeForGCRequest(gcReq *kvpb.GCRequest, rs roachpb.RSpan) (roachpb.R
 	var err error
 	// Check point keys.
 	for _, gcKey := range gcReq.Keys {
+		// Skip range-ID local keys, as such keys aren't addressable in the
+		// global key map. As such, they don't contribute to the key span
+		// touched by the GC request. As a result, we cannot compare them
+		// against a replica's key span to determine whether or not they've been
+		// routed to the right place; instead, we handle them during evaluation
+		// time by checking whether they match the replica's RangeID or not. See
+		// the call to  ContainsKey() in cmd_gc.go for more details.
+		if bytes.HasPrefix(gcKey.Key, LocalRangeIDPrefix) {
+			continue
+		}
 		rs, err = extend(rs, gcKey.Key, nil)
 		if err != nil {
 			return roachpb.RSpan{}, err
@@ -1178,6 +1188,27 @@ func extendRangeForGCRequest(gcReq *kvpb.GCRequest, rs roachpb.RSpan) (roachpb.R
 	}
 	// Check clear range.
 	if gcReq.ClearRange != nil {
+		// NB: We create a new gcKeyBatcher for each "plane" of a replica's
+		// spans, so a GC request should never span LocalRangeID keys and (say)
+		// user keys. Moreover, if the StartKey is a LocalRangeID key, the
+		// EndKey should be one too. This makes our job easier -- we don't need
+		// to worry about the clear range span overlapping with the LocalRangeID
+		// span in general ways.
+		if bytes.HasPrefix(gcReq.ClearRange.StartKey, LocalRangeIDPrefix) {
+			if !bytes.HasPrefix(gcReq.ClearRange.EndKey, LocalRangeIDPrefix) {
+				return roachpb.RSpan{}, errors.Errorf("start key is a LocalRangeID key but end key is not")
+			}
+			// Much like above, we don't need to worry about addressing
+			// LocalRangeID keys and checking them against a replica's key span. 
+			// TODO(arul): We should add some handling for this case during GC
+			// command evaluation. In particular, we should no-op if the GC 
+			// request is targeting a different RangeID. I think a misrouting
+			// is possible if there is a range split which then causes the DistSender
+			// to split the GC request intended for the LHS into two -- one to the
+			// LHS and another to the RHS, where the request that goes to the RHS
+			// should no-op. Write a test for this to prove/disprove.
+			return rs, nil
+		}
 		rs, err = extend(rs, gcReq.ClearRange.StartKey, gcReq.ClearRange.EndKey)
 		if err != nil {
 			return roachpb.RSpan{}, err
