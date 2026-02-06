@@ -280,15 +280,23 @@ func (ib *indexBackfiller) maybeReencodeAndWriteVectorIndexEntry(
 // execinfrapb.BackfillerSpec.
 func (ib *indexBackfiller) makeIndexBackfillSink(ctx context.Context) (bulksst.BulkSink, error) {
 	if ib.spec.UseDistributedMergeSink {
-		// Construct the full nodelocal URI using this processors's node ID. The spec
+		// Construct the full nodelocal URI using this processor's node ID. The spec
 		// stores just the path portion so that each processor writes to its own
 		// node's local storage.
 		nodeID := ib.flowCtx.NodeID.SQLInstanceID()
 		prefix := fmt.Sprintf("nodelocal://%d/%s", nodeID, ib.spec.DistributedMergeFilePrefix)
 
 		checkDuplicates := ib.ContainsUniqueIndex()
-		return newSSTIndexBackfillSink(
-			ctx, ib.flowCtx, prefix, ib.spec.WriteAsOf, ib.processorID, checkDuplicates)
+		return bulksst.NewSSTSink(
+			ctx,
+			ib.flowCtx.Cfg.Settings,
+			ib.flowCtx.Cfg.ExternalStorageFromURI,
+			ib.flowCtx.Cfg.DB.KV().Clock(),
+			prefix,
+			ib.spec.WriteAsOf,
+			ib.processorID,
+			checkDuplicates,
+		)
 	}
 
 	minBufferSize := backfillerBufferSize.Get(&ib.flowCtx.Cfg.Settings.SV)
