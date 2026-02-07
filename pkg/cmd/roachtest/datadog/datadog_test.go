@@ -316,52 +316,132 @@ func TestNewDatadogContextDatadogSiteSet(t *testing.T) {
 }
 
 func TestShouldUploadLogs(t *testing.T) {
-	// Save and restore env var and flag
+	// Save and restore env var and flags
 	originalBranch := os.Getenv(envTCBuildBranch)
-	originalFlag := roachtestflags.DatadogAlwaysUpload
+	originalSendLogsAnyBranch := roachtestflags.DatadogSendLogsAnyBranch
+	originalSendLogsAnyResult := roachtestflags.DatadogSendLogsAnyResult
 	defer func() {
 		_ = os.Setenv(envTCBuildBranch, originalBranch)
-		roachtestflags.DatadogAlwaysUpload = originalFlag
+		roachtestflags.DatadogSendLogsAnyBranch = originalSendLogsAnyBranch
+		roachtestflags.DatadogSendLogsAnyResult = originalSendLogsAnyResult
 	}()
 
 	tests := []struct {
 		name                 string
 		branch               string
-		datadogAlwaysUpload  bool
+		testFailed           bool
+		sendLogsAnyBranch    bool
+		sendLogsAnyResult    bool
 		expectedShouldUpload bool
 	}{
+		// Default behavior (no flags): upload only failures from master/release
 		{
-			name:                 "always upload flag set",
-			branch:               "feature-branch",
-			datadogAlwaysUpload:  true,
-			expectedShouldUpload: true,
-		},
-		{
-			name:                 "master branch",
+			name:                 "default: master branch, test passed",
 			branch:               "master",
-			datadogAlwaysUpload:  false,
-			expectedShouldUpload: true,
-		},
-		{
-			name:                 "release branch",
-			branch:               "release-24.1",
-			datadogAlwaysUpload:  false,
-			expectedShouldUpload: true,
-		},
-		{
-			name:                 "feature branch",
-			branch:               "feature-new-stuff",
-			datadogAlwaysUpload:  false,
+			testFailed:           false,
+			sendLogsAnyBranch:    false,
+			sendLogsAnyResult:    false,
 			expectedShouldUpload: false,
+		},
+		{
+			name:                 "default: master branch, test failed",
+			branch:               "master",
+			testFailed:           true,
+			sendLogsAnyBranch:    false,
+			sendLogsAnyResult:    false,
+			expectedShouldUpload: true,
+		},
+		{
+			name:                 "default: release branch, test failed",
+			branch:               "release-24.1",
+			testFailed:           true,
+			sendLogsAnyBranch:    false,
+			sendLogsAnyResult:    false,
+			expectedShouldUpload: true,
+		},
+		{
+			name:                 "default: feature branch, test failed",
+			branch:               "feature-new-stuff",
+			testFailed:           true,
+			sendLogsAnyBranch:    false,
+			sendLogsAnyResult:    false,
+			expectedShouldUpload: false,
+		},
+		// send-logs-any-branch only: upload failures from any branch
+		{
+			name:                 "send-logs-any-branch: feature branch, test passed",
+			branch:               "feature-branch",
+			testFailed:           false,
+			sendLogsAnyBranch:    true,
+			sendLogsAnyResult:    false,
+			expectedShouldUpload: false,
+		},
+		{
+			name:                 "send-logs-any-branch: feature branch, test failed",
+			branch:               "feature-branch",
+			testFailed:           true,
+			sendLogsAnyBranch:    true,
+			sendLogsAnyResult:    false,
+			expectedShouldUpload: true,
+		},
+		// send-logs-any-result only: upload all results from master/release
+		{
+			name:                 "send-logs-any-result: master branch, test passed",
+			branch:               "master",
+			testFailed:           false,
+			sendLogsAnyBranch:    false,
+			sendLogsAnyResult:    true,
+			expectedShouldUpload: true,
+		},
+		{
+			name:                 "send-logs-any-result: master branch, test failed",
+			branch:               "master",
+			testFailed:           true,
+			sendLogsAnyBranch:    false,
+			sendLogsAnyResult:    true,
+			expectedShouldUpload: true,
+		},
+		{
+			name:                 "send-logs-any-result: feature branch, test passed",
+			branch:               "feature-branch",
+			testFailed:           false,
+			sendLogsAnyBranch:    false,
+			sendLogsAnyResult:    true,
+			expectedShouldUpload: false,
+		},
+		{
+			name:                 "send-logs-any-result: feature branch, test failed",
+			branch:               "feature-branch",
+			testFailed:           true,
+			sendLogsAnyBranch:    false,
+			sendLogsAnyResult:    true,
+			expectedShouldUpload: false,
+		},
+		// Both flags: upload all results from any branch
+		{
+			name:                 "both flags: feature branch, test passed",
+			branch:               "feature-branch",
+			testFailed:           false,
+			sendLogsAnyBranch:    true,
+			sendLogsAnyResult:    true,
+			expectedShouldUpload: true,
+		},
+		{
+			name:                 "both flags: feature branch, test failed",
+			branch:               "feature-branch",
+			testFailed:           true,
+			sendLogsAnyBranch:    true,
+			sendLogsAnyResult:    true,
+			expectedShouldUpload: true,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			_ = os.Setenv(envTCBuildBranch, tt.branch)
-			roachtestflags.DatadogAlwaysUpload = tt.datadogAlwaysUpload
-
-			result := ShouldUploadLogs()
+			roachtestflags.DatadogSendLogsAnyBranch = tt.sendLogsAnyBranch
+			roachtestflags.DatadogSendLogsAnyResult = tt.sendLogsAnyResult
+			result := ShouldUploadLogs(tt.testFailed)
 			require.Equal(t, tt.expectedShouldUpload, result)
 		})
 	}
