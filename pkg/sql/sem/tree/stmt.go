@@ -88,6 +88,7 @@ const (
 )
 
 const (
+	AlterSequenceTag       = "ALTER SEQUENCE"
 	AlterTableTag          = "ALTER TABLE"
 	AlterPolicyTag         = "ALTER POLICY"
 	BackupTag              = "BACKUP"
@@ -650,7 +651,7 @@ func (*AlterSequence) StatementReturnType() StatementReturnType { return DDL }
 func (*AlterSequence) StatementType() StatementType { return TypeDDL }
 
 // StatementTag returns a short string identifying the type of statement.
-func (*AlterSequence) StatementTag() string { return "ALTER SEQUENCE" }
+func (*AlterSequence) StatementTag() string { return AlterSequenceTag }
 
 // StatementReturnType implements the Statement interface.
 func (*AlterRole) StatementReturnType() StatementReturnType { return DDL }
