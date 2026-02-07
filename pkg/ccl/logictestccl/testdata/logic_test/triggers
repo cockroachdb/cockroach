@@ -5490,14 +5490,8 @@ CREATE TRIGGER audit_trigger AFTER INSERT OR UPDATE OR DELETE ON t1 FOR EACH ROW
 statement error pq: cannot drop column "j" because trigger "audit_trigger" on table "t1" depends on it
 alter table t1 drop column j;
 
-statement error pq: unimplemented: ALTER TABLE DROP COLUMN cascade not supported with triggers
-alter table other drop column j cascade;
-
 statement error pq: cannot drop column "j" because trigger "audit_trigger" on table "t1" depends on it
 alter table other drop column j;
-
-statement error pq: unimplemented: ALTER TABLE DROP COLUMN cascade not supported with triggers
-alter table other drop column j cascade;
 
 statement error pq: cannot alter type of column "j" because trigger "audit_trigger" on table "t1" depends on it
 alter table t1 alter column j set data type text;
@@ -5510,9 +5504,6 @@ drop index t1@i1;
 
 statement error pq: cannot drop index "i1" because trigger "audit_trigger" on table "t1" depends on it
 drop index other@i1;
-
-statement error pq: unimplemented: DROP INDEX cascade is not supported with triggers
-drop index other@i1 cascade;
 
 statement error pq: cannot drop function "f1" because other objects \(\[test.public.t1\]\) still depend on it
 DROP FUNCTION f1;
@@ -5565,26 +5556,14 @@ alter table other rename column j to j2;
 statement error pq: cannot drop column "j" because trigger "audit_trigger" on table "t1" depends on it
 alter table t1 drop column j;
 
-statement error pq: unimplemented: drop column cascade is not supported with triggers
-alter table t1 drop column j cascade;
-
 statement error pq: cannot drop column "j" because trigger "audit_trigger" on table "t1" depends on it
 alter table other drop column j;
-
-statement error pq: unimplemented: drop column cascade is not supported with triggers
-alter table other drop column j cascade;
 
 statement error pq: cannot drop index "i1" because trigger "audit_trigger" on table "t1" depends on it
 drop index t1@i1;
 
-statement error pq: unimplemented: drop index cascade is not supported with triggers
-drop index t1@i1 CASCADE;
-
 statement error pq: cannot drop index "i1" because trigger "audit_trigger" on table "t1" depends on it
 drop index other@i1;
-
-statement error pq: unimplemented: drop index cascade is not supported with triggers
-drop index other@i1 CASCADE;
 
 statement error pq: cannot drop function "f1" because other objects \(\[test.public.t1\]\) still depend on it
 DROP FUNCTION f1;
@@ -5604,10 +5583,11 @@ DROP TABLE other;
 statement ok
 set use_declarative_schema_changer = $use_decl_sc;
 
-# Verify the trigger still works
+# Verify the trigger still works after all the failed operations above.
 statement ok
 INSERT INTO t1(n,k) VALUES (1,1);
 
+# DROP TABLE CASCADE on a referenced table should drop the dependent trigger.
 statement ok
 DROP TABLE other CASCADE;
 
@@ -5621,12 +5601,249 @@ SELECT * FROM t1;
 
 statement ok
 DROP TABLE t1;
-
-statement ok
 DROP TYPE e;
+DROP FUNCTION f1;
+DROP FUNCTION audit_changes;
+
+# Test DROP COLUMN CASCADE on a referenced table with trigger dependencies.
+statement ok
+CREATE TABLE t_col(n INT PRIMARY KEY, j INT, k INT);
 
 statement ok
-DROP FUNCTION f1;
+CREATE TABLE t_col_other(n INT PRIMARY KEY, j INT);
+
+statement ok
+CREATE FUNCTION trigger_col() RETURNS TRIGGER AS $$
+BEGIN
+  SELECT * FROM t_col_other WHERE j=1;
+  RETURN NULL;
+END;
+$$ LANGUAGE PLpgSQL;
+
+statement ok
+CREATE TRIGGER trg_col AFTER INSERT ON t_col FOR EACH ROW EXECUTE FUNCTION trigger_col();
+
+# Without CASCADE, dropping the column should be blocked.
+statement error pq: cannot drop column "j" because trigger "trg_col" on table "t_col" depends on it
+ALTER TABLE t_col_other DROP COLUMN j;
+
+# With CASCADE, the column and trigger should be dropped.
+statement ok
+ALTER TABLE t_col_other DROP COLUMN j CASCADE;
+
+# The trigger was dropped.
+statement error pq: trigger "trg_col" for table "t_col" does not exist
+DROP TRIGGER trg_col ON t_col;
+
+# DML still works.
+statement ok
+INSERT INTO t_col VALUES (1, 1, 1);
+
+statement ok
+DROP TABLE t_col;
+DROP TABLE t_col_other;
+DROP FUNCTION trigger_col;
+
+# Test DROP INDEX CASCADE with trigger dependencies.
+statement ok
+CREATE TABLE t_idx(n INT PRIMARY KEY, k INT);
+
+statement ok
+CREATE INDEX idx1 ON t_idx(k ASC);
+
+statement ok
+CREATE FUNCTION trigger_idx() RETURNS TRIGGER AS $$
+BEGIN
+  SELECT * FROM t_idx@idx1 WHERE k=1;
+  RETURN NULL;
+END;
+$$ LANGUAGE PLpgSQL;
+
+statement ok
+CREATE TRIGGER trg_idx AFTER INSERT ON t_idx FOR EACH ROW EXECUTE FUNCTION trigger_idx();
+
+# Without CASCADE, dropping the index should be blocked.
+statement error pq: cannot drop index "idx1" because trigger "trg_idx" on table "t_idx" depends on it
+DROP INDEX t_idx@idx1;
+
+# With CASCADE, the index and trigger should be dropped.
+statement ok
+DROP INDEX t_idx@idx1 CASCADE;
+
+# The trigger was dropped.
+statement error pq: trigger "trg_idx" for table "t_idx" does not exist
+DROP TRIGGER trg_idx ON t_idx;
+
+# DML still works.
+statement ok
+INSERT INTO t_idx VALUES (1, 1);
+
+statement ok
+DROP TABLE t_idx;
+DROP FUNCTION trigger_idx;
+
+# Test DROP COLUMN CASCADE on the trigger's own table (the exact scenario
+# from issue #142370).
+statement ok
+CREATE TABLE t1(n INT PRIMARY KEY, j INT);
+
+statement ok
+CREATE OR REPLACE FUNCTION audit_changes()
+RETURNS TRIGGER AS $$
+BEGIN
+  SELECT * FROM t1 WHERE j=32;
+  RETURN NULL;
+END;
+$$ LANGUAGE PLpgSQL;
+
+statement ok
+CREATE TRIGGER audit_trigger AFTER INSERT OR UPDATE OR DELETE ON t1 FOR EACH ROW EXECUTE FUNCTION audit_changes();
+
+# Without CASCADE, dropping the column should be blocked.
+statement error pq: cannot drop column "j" because trigger "audit_trigger" on table "t1" depends on it
+ALTER TABLE t1 DROP COLUMN j;
+
+# With CASCADE, the column and trigger should be dropped.
+statement ok
+ALTER TABLE t1 DROP COLUMN j CASCADE;
+
+# The trigger was dropped.
+statement error pq: trigger "audit_trigger" for table "t1" does not exist
+DROP TRIGGER audit_trigger ON t1;
+
+# Inserts work after the column and trigger are dropped.
+statement ok
+INSERT INTO t1 VALUES (32);
+
+statement ok
+DROP TABLE t1;
+DROP FUNCTION audit_changes;
+
+# Test CASCADE with the legacy schema changer. Triggers are created with the
+# declarative schema changer, then DDL CASCADE is run with legacy.
+
+# Test DROP COLUMN CASCADE on a referenced table (legacy).
+statement ok
+CREATE TABLE t_lcol(n INT PRIMARY KEY, j INT, k INT);
+CREATE TABLE t_lcol_other(n INT PRIMARY KEY, j INT);
+
+statement ok
+CREATE FUNCTION trigger_lcol() RETURNS TRIGGER AS $$
+BEGIN
+  SELECT * FROM t_lcol_other WHERE j=1;
+  RETURN NULL;
+END;
+$$ LANGUAGE PLpgSQL;
+
+statement ok
+CREATE TRIGGER trg_lcol AFTER INSERT ON t_lcol FOR EACH ROW EXECUTE FUNCTION trigger_lcol();
+
+statement ok
+SET use_declarative_schema_changer = 'off';
+
+statement ok
+ALTER TABLE t_lcol_other SET (schema_locked = false);
+
+statement ok
+ALTER TABLE t_lcol_other DROP COLUMN j CASCADE;
+
+statement ok
+SET use_declarative_schema_changer = 'on';
+
+# The trigger was dropped.
+statement error pq: trigger "trg_lcol" for table "t_lcol" does not exist
+DROP TRIGGER trg_lcol ON t_lcol;
+
+statement ok
+INSERT INTO t_lcol VALUES (1, 1, 1);
+
+statement ok
+DROP TABLE t_lcol;
+DROP TABLE t_lcol_other;
+DROP FUNCTION trigger_lcol;
+
+# Test DROP INDEX CASCADE (legacy).
+statement ok
+CREATE TABLE t_lidx(n INT PRIMARY KEY, k INT);
+CREATE INDEX lidx1 ON t_lidx(k ASC);
+
+statement ok
+CREATE FUNCTION trigger_lidx() RETURNS TRIGGER AS $$
+BEGIN
+  SELECT * FROM t_lidx@lidx1 WHERE k=1;
+  RETURN NULL;
+END;
+$$ LANGUAGE PLpgSQL;
+
+statement ok
+CREATE TRIGGER trg_lidx AFTER INSERT ON t_lidx FOR EACH ROW EXECUTE FUNCTION trigger_lidx();
+
+statement ok
+SET use_declarative_schema_changer = 'off';
+
+statement ok
+ALTER TABLE t_lidx SET (schema_locked = false);
+
+statement ok
+DROP INDEX t_lidx@lidx1 CASCADE;
+
+statement ok
+SET use_declarative_schema_changer = 'on';
+
+# The trigger was dropped.
+statement error pq: trigger "trg_lidx" for table "t_lidx" does not exist
+DROP TRIGGER trg_lidx ON t_lidx;
+
+statement ok
+INSERT INTO t_lidx VALUES (1, 1);
+
+statement ok
+DROP TABLE t_lidx;
+DROP FUNCTION trigger_lidx;
+
+# Test DROP COLUMN CASCADE on the trigger's own table (legacy, #142370).
+statement ok
+CREATE TABLE t1(n INT PRIMARY KEY, j INT);
+
+statement ok
+CREATE OR REPLACE FUNCTION audit_changes()
+RETURNS TRIGGER AS $$
+BEGIN
+  SELECT * FROM t1 WHERE j=32;
+  RETURN NULL;
+END;
+$$ LANGUAGE PLpgSQL;
+
+statement ok
+CREATE TRIGGER audit_trigger AFTER INSERT OR UPDATE OR DELETE ON t1 FOR EACH ROW EXECUTE FUNCTION audit_changes();
+
+statement ok
+SET use_declarative_schema_changer = 'off';
+
+statement ok
+ALTER TABLE t1 SET (schema_locked = false);
+
+# Without CASCADE, dropping the column should be blocked.
+statement error pq: cannot drop column "j" because trigger "audit_trigger" on table "t1" depends on it
+ALTER TABLE t1 DROP COLUMN j;
+
+# With CASCADE, the column and trigger should be dropped.
+statement ok
+ALTER TABLE t1 DROP COLUMN j CASCADE;
+
+statement ok
+SET use_declarative_schema_changer = 'on';
+
+# The trigger was dropped.
+statement error pq: trigger "audit_trigger" for table "t1" does not exist
+DROP TRIGGER audit_trigger ON t1;
+
+statement ok
+INSERT INTO t1 VALUES (32);
+
+statement ok
+DROP TABLE t1;
+DROP FUNCTION audit_changes;
 
 subtest end
 

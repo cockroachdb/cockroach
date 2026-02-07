@@ -882,6 +882,27 @@ func (p *planner) disallowDroppingPrimaryIndexReferencedInUDFOrView(
 	currentPrimaryIndex := tableDesc.GetPrimaryIndex()
 	for _, tableRef := range tableDesc.DependedOnBy {
 		if tableRef.IndexID == currentPrimaryIndex.GetID() {
+			// Handle trigger dependencies directly.
+			if tableRef.TriggerID != 0 {
+				depDesc, err := p.Descriptors().MutableByID(p.txn).Table(ctx, tableRef.ID)
+				if err != nil {
+					return err
+				}
+				var triggerName string
+				for i := range depDesc.Triggers {
+					if depDesc.Triggers[i].ID == tableRef.TriggerID {
+						triggerName = depDesc.Triggers[i].Name
+						break
+					}
+				}
+				return errors.WithDetail(
+					sqlerrors.NewDependentObjectErrorf(
+						"cannot drop index %q because trigger %q on table %q depends on it",
+						currentPrimaryIndex.GetName(), triggerName, depDesc.Name,
+					),
+					sqlerrors.PrimaryIndexSwapDetail,
+				)
+			}
 			// canRemoveDependent with `DropDefault` will return the right error.
 			err := p.canRemoveDependent(
 				ctx, "index", currentPrimaryIndex.GetName(), tableDesc.ID, tableDesc.ParentID, tableRef, tree.DropDefault,

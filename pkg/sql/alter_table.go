@@ -2046,6 +2046,30 @@ func dropColumnImpl(
 		if !found {
 			continue
 		}
+		// Handle trigger dependencies directly — drop the trigger, not the table.
+		if ref.TriggerID != 0 {
+			if t.DropBehavior != tree.DropCascade {
+				depDesc, err := params.p.Descriptors().MutableByID(params.p.txn).Table(params.ctx, ref.ID)
+				if err != nil {
+					return nil, err
+				}
+				var triggerName string
+				for i := range depDesc.Triggers {
+					if depDesc.Triggers[i].ID == ref.TriggerID {
+						triggerName = depDesc.Triggers[i].Name
+						break
+					}
+				}
+				return nil, sqlerrors.NewDependentObjectErrorf(
+					"cannot drop column %q because trigger %q on table %q depends on it",
+					t.Column, triggerName, depDesc.Name,
+				)
+			}
+			if err := params.p.removeTriggerDependency(params.ctx, tableDesc, ref); err != nil {
+				return nil, err
+			}
+			continue
+		}
 		err := params.p.canRemoveDependent(
 			params.ctx, "column", string(t.Column), tableDesc.ID, tableDesc.ParentID, ref, t.DropBehavior,
 			true, /* blockOnTriggerDependency */

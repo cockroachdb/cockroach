@@ -19,7 +19,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
-	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 	"github.com/cockroachdb/errors"
@@ -220,14 +219,16 @@ func (p *planner) canRemoveDependentViewGeneric(
 		return p.dependentRelationError(ctx, typeName, objName, parentID, desc, targetID, "drop")
 	}
 
-	// In general, drop cascade is only support with triggers for drop table/database.
+	// Guard against trigger dependencies that weren't handled at the caller
+	// level. Callers are expected to handle trigger backreferences (those with
+	// TriggerID != 0) before reaching this point, but this check is retained as
+	// a safety net.
 	if blockOnTriggerDependency {
 		for i := range desc.Triggers {
 			trigger := &desc.Triggers[i]
 			for _, id := range trigger.DependsOn {
 				if id == targetID {
-					return unimplemented.NewWithIssuef(
-						146667, "drop %s cascade is not supported with triggers", typeName)
+					return p.dependentRelationError(ctx, typeName, objName, parentID, desc, targetID, "drop")
 				}
 			}
 		}
