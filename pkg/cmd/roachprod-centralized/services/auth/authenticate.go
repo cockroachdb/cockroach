@@ -36,7 +36,7 @@ func (s *Service) AuthenticateToken(
 		} else if errors.Is(err, authtypes.ErrInvalidToken) {
 			s.metrics.RecordTokenValidation("revoked", timeutil.Since(start))
 		} else if errors.Is(err, authtypes.ErrIPNotAllowed) {
-			s.metrics.RecordTokenValidation("invalid", timeutil.Since(start))
+			s.metrics.RecordTokenValidation("ip_blocked", timeutil.Since(start))
 		} else {
 			s.metrics.RecordTokenValidation("invalid", timeutil.Since(start))
 		}

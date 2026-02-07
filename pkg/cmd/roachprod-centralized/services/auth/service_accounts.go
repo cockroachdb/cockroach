@@ -146,21 +146,12 @@ func (s *Service) ListServiceAccounts(
 		return s.repo.ListServiceAccounts(ctx, l, filterSet)
 	}
 
-	// Security: Remove any user-provided filters on user_id or service_account_id.
-	// While the controller DTO should not include these fields, this ensures
-	// that even if a bug is introduced or a new controller is added, we enforce
-	// the security boundary at the service layer.
-	// These fields are implicitly set based on the authenticated principal
-	// and should never be controllable by users, as they could be used
-	// to access other users' tokens (especially when combined with LogicOr).
-	var sanitizedFilters []filtertypes.FieldFilter
-	for _, filter := range filterSet.Filters {
-		if filter.Field != "user_id" && filter.Field != "service_account_id" {
-			sanitizedFilters = append(sanitizedFilters, filter)
-		}
-	}
-	filterSet.Filters = sanitizedFilters
-	filterSet.Logic = filtertypes.LogicAnd
+	// Wrap user-provided filters into a subgroup, then add mandatory
+	// ownership filter at the top level. No sanitization needed —
+	// the outer AND ensures the ownership constraint regardless of what
+	// the user's filters contain.
+	filterSet.NestFiltersAsSubGroup()
+	filterSet.SetLogic(filtertypes.LogicAnd)
 
 	// Set ownership filter
 	if principal.UserID != nil {

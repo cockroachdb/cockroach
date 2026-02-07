@@ -75,15 +75,14 @@ func (b *BearerTokenSource) ClearToken() error {
 
 // GetHTTPClient returns an HTTP client configured with bearer token authentication.
 func (b *BearerTokenSource) GetHTTPClient() (*http.Client, error) {
-	token, err := b.GetToken()
-	if err != nil {
+	// Verify a token exists now (fail fast), but don't capture it.
+	if _, err := b.GetToken(); err != nil {
 		return nil, err
 	}
-
 	return &http.Client{
 		Transport: &bearerAuthTransport{
-			token: token,
-			base:  http.DefaultTransport,
+			source: b,
+			base:   http.DefaultTransport,
 		},
 	}, nil
 }
@@ -124,16 +123,21 @@ func (b *BearerTokenSource) HasToken() bool {
 	return b.keyringStore.HasToken()
 }
 
-// bearerAuthTransport is an http.RoundTripper that adds bearer token auth to requests.
+// bearerAuthTransport adds a bearer token to every outgoing request.
+// It calls source.GetToken() per-request so the token is always fresh
+// (e.g. if the user runs `roachprod login` in another terminal).
 type bearerAuthTransport struct {
-	token string
-	base  http.RoundTripper
+	source *BearerTokenSource
+	base   http.RoundTripper
 }
 
 func (t *bearerAuthTransport) RoundTrip(req *http.Request) (*http.Response, error) {
-	// Clone the request to avoid modifying the original
+	token, err := t.source.GetToken()
+	if err != nil {
+		return nil, errors.Wrap(err, "bearer token")
+	}
 	reqClone := req.Clone(req.Context())
-	reqClone.Header.Set("Authorization", "Bearer "+t.token)
+	reqClone.Header.Set("Authorization", "Bearer "+token)
 	return t.base.RoundTrip(reqClone)
 }
 

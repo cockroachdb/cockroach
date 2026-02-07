@@ -13,7 +13,6 @@ go_library(
         "//pkg/cmd/roachprod-centralized/models/auth",
         "//pkg/cmd/roachprod-centralized/utils/filters",
         "//pkg/cmd/roachprod-centralized/utils/filters/types",
-        "//pkg/util/syncutil",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_scim2_filter_parser_v2//:filter-parser",
     ],

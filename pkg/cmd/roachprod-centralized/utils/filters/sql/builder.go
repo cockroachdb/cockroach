@@ -53,21 +53,47 @@ func (qb *QueryBuilder) BuildWhere(fs *types.FilterSet) (string, []interface{}, 
 
 	qb.whereClause.WriteString("WHERE ")
 
-	for i, filter := range fs.Filters {
-		if i > 0 {
-			if fs.Logic == types.LogicAnd {
-				qb.whereClause.WriteString(" AND ")
-			} else {
-				qb.whereClause.WriteString(" OR ")
-			}
-		}
-
-		if err := qb.buildFilterCondition(filter, qb.filteredType); err != nil {
-			return "", nil, errors.Wrapf(err, "failed to build condition for filter %d", i)
-		}
+	if err := qb.buildFilterGroup(fs); err != nil {
+		return "", nil, err
 	}
 
 	return qb.whereClause.String(), qb.args, nil
+}
+
+// buildFilterGroup writes the SQL for a FilterSet's Filters and
+// SubGroups, joined by the FilterSet's Logic operator.
+// Does NOT write "WHERE" — that's BuildWhere's job.
+func (qb *QueryBuilder) buildFilterGroup(fs *types.FilterSet) error {
+	logic := " AND "
+	if fs.Logic == types.LogicOr {
+		logic = " OR "
+	}
+
+	partIndex := 0
+
+	for i, filter := range fs.Filters {
+		if partIndex > 0 {
+			qb.whereClause.WriteString(logic)
+		}
+		if err := qb.buildFilterCondition(filter, qb.filteredType); err != nil {
+			return errors.Wrapf(err, "filter %d", i)
+		}
+		partIndex++
+	}
+
+	for i, sg := range fs.SubGroups {
+		if partIndex > 0 {
+			qb.whereClause.WriteString(logic)
+		}
+		qb.whereClause.WriteString("(")
+		if err := qb.buildFilterGroup(&sg); err != nil {
+			return errors.Wrapf(err, "sub_group %d", i)
+		}
+		qb.whereClause.WriteString(")")
+		partIndex++
+	}
+
+	return nil
 }
 
 // buildFilterCondition builds a single filter condition for SQL.

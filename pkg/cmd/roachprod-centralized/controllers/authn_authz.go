@@ -230,18 +230,8 @@ func setLegacySessionKeys(c *gin.Context, principal *auth.Principal) {
 		return
 	}
 
-	// For JWT auth or any auth type with Claims
-	// Prefer User.Email if available, otherwise fall back to Claims
-	if principal.User != nil && principal.User.Email != "" {
-		c.Set(SessionUserEmail, principal.User.Email)
-		// For JWT auth, use sub claim as user ID if available
-		if principal.Claims != nil {
-			if sub, ok := principal.Claims["sub"].(string); ok {
-				c.Set(SessionUserID, sub)
-			}
-		}
-	} else if principal.Claims != nil {
-		// Fallback to Claims if User is not populated
+	// For JWT auth where User/ServiceAccount are not populated
+	if principal.Claims != nil {
 		if email, ok := principal.Claims["email"].(string); ok {
 			c.Set(SessionUserEmail, email)
 		}

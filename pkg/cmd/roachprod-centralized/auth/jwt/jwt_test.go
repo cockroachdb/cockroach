@@ -30,8 +30,9 @@ func TestJWTAuthenticator_Authenticate_InvalidToken(t *testing.T) {
 	}
 
 	mockAuthService := authmocks.NewIService(t)
-	mockAuthService.On("RecordAuthentication", "error", "jwt", mock.Anything).Return()
-	authenticator := NewJWTAuthenticator(config, mockAuthService)
+	mockMetrics := &authmocks.IAuthMetricsRecorder{}
+	mockMetrics.On("RecordAuthentication", "error", "jwt", mock.Anything).Return()
+	authenticator := NewJWTAuthenticator(config, mockAuthService, mockMetrics)
 
 	principal, err := authenticator.Authenticate(context.Background(), "invalid-token", "127.0.0.1")
 	require.Error(t, err)
@@ -48,8 +49,9 @@ func TestJWTAuthenticator_Authenticate_EmptyToken(t *testing.T) {
 	}
 
 	mockAuthService := authmocks.NewIService(t)
-	mockAuthService.On("RecordAuthentication", "error", "none", mock.Anything).Return()
-	authenticator := NewJWTAuthenticator(config, mockAuthService)
+	mockMetrics := &authmocks.IAuthMetricsRecorder{}
+	mockMetrics.On("RecordAuthentication", "error", "none", mock.Anything).Return()
+	authenticator := NewJWTAuthenticator(config, mockAuthService, mockMetrics)
 
 	principal, err := authenticator.Authenticate(context.Background(), "", "127.0.0.1")
 	require.Error(t, err)
@@ -66,7 +68,8 @@ func TestJWTAuthenticator_ValidateToken_InvalidToken(t *testing.T) {
 	}
 
 	mockAuthService := authmocks.NewIService(t)
-	authenticator := NewJWTAuthenticator(config, mockAuthService)
+	mockMetrics := &authmocks.IAuthMetricsRecorder{}
+	authenticator := NewJWTAuthenticator(config, mockAuthService, mockMetrics)
 
 	// Use a clearly invalid token format
 	_, err := authenticator.validateToken(context.Background(), "invalid-token")
@@ -81,7 +84,8 @@ func TestJWTAuthenticator_ValidateToken_MalformedToken(t *testing.T) {
 	}
 
 	mockAuthService := authmocks.NewIService(t)
-	authenticator := NewJWTAuthenticator(config, mockAuthService)
+	mockMetrics := &authmocks.IAuthMetricsRecorder{}
+	authenticator := NewJWTAuthenticator(config, mockAuthService, mockMetrics)
 
 	// Test with various malformed tokens
 	testCases := []string{

@@ -9,7 +9,6 @@ import (
 	"reflect"
 	"strings"
 
-	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/errors"
 )
 
@@ -19,7 +18,6 @@ import (
 type FieldMapper struct {
 	scimToInternal map[string]string   // SCIM field -> internal field
 	internalToScim map[string][]string // internal field -> SCIM fields
-	mu             syncutil.RWMutex
 }
 
 // NewFieldMapper creates a new field mapper.
@@ -41,9 +39,6 @@ func NewFieldMapper() *FieldMapper {
 //
 // This creates two mappings: userName->email and emails->email
 func (fm *FieldMapper) BuildMapping(structType reflect.Type) error {
-	fm.mu.Lock()
-	defer fm.mu.Unlock()
-
 	// Clear existing mappings
 	fm.scimToInternal = make(map[string]string)
 	fm.internalToScim = make(map[string][]string)
@@ -93,9 +88,6 @@ func (fm *FieldMapper) BuildMapping(structType reflect.Type) error {
 // GetInternalField returns the internal field name for a SCIM field.
 // Returns (fieldName, true) if found, ("", false) otherwise.
 func (fm *FieldMapper) GetInternalField(scimField string) (string, bool) {
-	fm.mu.RLock()
-	defer fm.mu.RUnlock()
-
 	internal, ok := fm.scimToInternal[scimField]
 	return internal, ok
 }
@@ -103,9 +95,6 @@ func (fm *FieldMapper) GetInternalField(scimField string) (string, bool) {
 // GetSCIMFields returns the SCIM field names for an internal field.
 // Returns ([]string, true) if found, (nil, false) otherwise.
 func (fm *FieldMapper) GetSCIMFields(internalField string) ([]string, bool) {
-	fm.mu.RLock()
-	defer fm.mu.RUnlock()
-
 	scimFields, ok := fm.internalToScim[internalField]
 	return scimFields, ok
 }
@@ -113,9 +102,6 @@ func (fm *FieldMapper) GetSCIMFields(internalField string) ([]string, bool) {
 // ToMap returns the SCIM->Internal mapping as a map.
 // This creates a copy to prevent external modification of internal state.
 func (fm *FieldMapper) ToMap() map[string]string {
-	fm.mu.RLock()
-	defer fm.mu.RUnlock()
-
 	result := make(map[string]string, len(fm.scimToInternal))
 	for k, v := range fm.scimToInternal {
 		result[k] = v

@@ -40,31 +40,47 @@ func (mfe *FilterEvaluator) Evaluate(obj interface{}, fs *types.FilterSet) (bool
 		objValue = objValue.Elem()
 	}
 
-	results := make([]bool, len(fs.Filters))
+	return mfe.evaluateGroup(objValue, fs)
+}
+
+// evaluateGroup evaluates all Filters and SubGroups in a FilterSet,
+// combining results with short-circuit evaluation.
+func (mfe *FilterEvaluator) evaluateGroup(
+	objValue reflect.Value, fs *types.FilterSet,
+) (bool, error) {
+	isOr := fs.Logic == types.LogicOr
+
 	for i, filter := range fs.Filters {
 		match, err := mfe.evaluateFilter(objValue, filter)
 		if err != nil {
-			return false, errors.Wrapf(err, "failed to evaluate filter %d", i)
+			return false, errors.Wrapf(err, "filter %d", i)
 		}
-		results[i] = match
+		if isOr && match {
+			return true, nil
+		}
+		if !isOr && !match {
+			return false, nil
+		}
 	}
 
-	// Combine results based on logic operator
-	if fs.Logic == types.LogicOr {
-		for _, result := range results {
-			if result {
-				return true, nil
-			}
+	for i, sg := range fs.SubGroups {
+		match, err := mfe.evaluateGroup(objValue, &sg)
+		if err != nil {
+			return false, errors.Wrapf(err, "sub_group %d", i)
 		}
-		return false, nil
-	} else { // LogicAnd
-		for _, result := range results {
-			if !result {
-				return false, nil
-			}
+		if isOr && match {
+			return true, nil
 		}
-		return true, nil
+		if !isOr && !match {
+			return false, nil
+		}
 	}
+
+	// OR with parts but none matched -> false. Everything else -> true.
+	if isOr && (len(fs.Filters) > 0 || len(fs.SubGroups) > 0) {
+		return false, nil
+	}
+	return true, nil
 }
 
 // evaluateFilter evaluates a single filter against an object.

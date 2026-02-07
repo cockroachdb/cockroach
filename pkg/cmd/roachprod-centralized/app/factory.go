@@ -338,7 +338,7 @@ func NewAuthenticatorFromConfig(
 			slog.String("audience", authConfig.Audience),
 			slog.String("issuer", authConfig.Issuer),
 		)
-		return jwt.NewJWTAuthenticator(authConfig, authService), nil
+		return jwt.NewJWTAuthenticator(authConfig, authService, authService), nil
 
 	case auth.AuthenticationTypeBearer:
 		authConfig := auth.AuthConfig{
@@ -350,7 +350,7 @@ func NewAuthenticatorFromConfig(
 			slog.String("type", string(authType)),
 			slog.String("header", authConfig.Header),
 		)
-		return bearer.NewBearerAuthenticator(authConfig, authService, l), nil
+		return bearer.NewBearerAuthenticator(authConfig, authService, authService, l), nil
 
 	default:
 		return nil, fmt.Errorf("invalid authentication type: %s (must be 'disabled', 'jwt', or 'bearer')", cfg.Api.Authentication.Type)

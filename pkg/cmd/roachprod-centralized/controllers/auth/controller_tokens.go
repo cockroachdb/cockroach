@@ -83,7 +83,7 @@ func (ctrl *ControllerBearerAuth) ExchangeOktaToken(c *gin.Context) {
 	}
 
 	// Exchange Okta token for opaque token (no principal needed - this is the authentication endpoint)
-	token, tokenString, err := ctrl.authService.ExchangeOktaToken(ctx, l, req.OktaAccessToken)
+	token, tokenString, err := ctrl.authService.ExchangeOktaToken(ctx, l, req.OktaIDToken)
 	if err != nil {
 		l.Warn("okta token exchange failed", "error", err, "path", c.Request.URL.Path)
 		ctrl.Render(c, types.NewAuthResult(nil, err))

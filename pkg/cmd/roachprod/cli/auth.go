@@ -8,12 +8,14 @@ package cli
 import (
 	"context"
 	"fmt"
+	"net/http"
 	"os/exec"
 	"runtime"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/client"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/client/auth"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/spf13/cobra"
@@ -66,7 +68,7 @@ This command:
 2. For service account tokens: only clears local credentials (use --revoke to also revoke on server)
 3. Clears the stored token from the OS keyring
 
-Note: If using ROACHPROD_API_TOKEN environment variable, you must unset it manually.
+Note: If using the ` + auth.EnvAPIToken + ` environment variable, you must unset it manually.
 `,
 		Args: cobra.NoArgs,
 		Run: Wrap(func(cmd *cobra.Command, args []string) error {
@@ -104,24 +106,76 @@ Shows:
 	return cmd
 }
 
-// loginWithToken stores a service account token directly.
+// loginWithToken validates a token against the server and stores it with
+// its expiration date. If validation fails for any reason (bad token,
+// network error, misconfigured client), the token is not stored.
 func loginWithToken(token string) error {
 	tokenSource, err := auth.NewBearerTokenSource()
 	if err != nil {
 		return errors.Wrap(err, "failed to initialize token storage")
 	}
 
-	// Store the token (without expiration - service account tokens are managed externally)
+	// Store the token temporarily so the HTTP client can use it for validation.
 	storedToken := auth.StoredToken{
 		Token: token,
 	}
-
 	if err := tokenSource.StoreToken(storedToken); err != nil {
 		return errors.Wrap(err, "failed to store token")
 	}
 
+	// Validate the token against the server.
+	c, l, err := newAuthClient()
+	if err != nil {
+		_ = tokenSource.ClearToken()
+		return errors.Wrap(err, "failed to create API client")
+	}
+
+	whoamiResp, err := c.WhoAmI(context.Background(), l)
+	if err != nil {
+		_ = tokenSource.ClearToken()
+		if isAuthError(err) {
+			return errors.Wrap(err, "token is invalid or expired")
+		}
+		return errors.Wrap(err, "failed to validate token with server")
+	}
+
+	// Token is valid. Update stored token with expiration from server.
+	if whoamiResp.Token.ExpiresAt != "" {
+		expiresAt, parseErr := time.Parse(
+			"2006-01-02T15:04:05Z07:00", whoamiResp.Token.ExpiresAt,
+		)
+		if parseErr == nil {
+			storedToken.ExpiresAt = expiresAt
+			if storeErr := tokenSource.StoreToken(storedToken); storeErr != nil {
+				fmt.Printf("Warning: Could not update token expiration: %v\n", storeErr)
+			}
+		}
+	}
+
 	fmt.Println("Token stored successfully.")
+	if whoamiResp.User != nil {
+		fmt.Printf("Authenticated as: %s (%s)\n",
+			whoamiResp.User.Email, whoamiResp.User.Name)
+	} else if whoamiResp.ServiceAccount != nil {
+		fmt.Printf("Authenticated as service account: %s\n",
+			whoamiResp.ServiceAccount.Name)
+	}
+	if whoamiResp.Token.ExpiresAt != "" {
+		fmt.Printf("Token expires: %s\n", whoamiResp.Token.ExpiresAt)
+	}
+
 	return nil
+}
+
+// isAuthError returns true if the error indicates the token itself is
+// invalid (as opposed to a network or server error).
+func isAuthError(err error) bool {
+	var httpErr *client.HTTPError
+	if errors.As(err, &httpErr) {
+		return httpErr.StatusCode == http.StatusUnauthorized ||
+			httpErr.StatusCode == http.StatusForbidden
+	}
+	return false
 }
 
 // loginWithOkta performs the Okta Device Authorization Grant flow.
@@ -172,8 +226,7 @@ func loginWithOkta(ctx context.Context) error {
 	fmt.Println()
 	fmt.Print("Exchanging token with roachprod-centralized...")
 
-	apiClient := auth.NewAPIClient(client.LoadConfigFromEnv().BaseURL)
-	exchangeResp, err := apiClient.ExchangeOktaToken(ctx, tokenResp.IDToken)
+	exchangeResp, err := auth.ExchangeOktaToken(ctx, client.LoadConfigFromEnv().BaseURL, tokenResp.IDToken)
 	if err != nil {
 		fmt.Println(" failed!")
 		return errors.Wrap(err, "token exchange failed")
@@ -228,9 +281,9 @@ func logout(revokeServiceAccount bool) error {
 	// Check if token is from env var (we can't clear those)
 	envToken := auth.GetEnvToken()
 	if envToken != "" {
-		fmt.Println("Warning: Token is set via ROACHPROD_API_TOKEN environment variable.")
+		fmt.Printf("Warning: Token is set via %s environment variable.\n", auth.EnvAPIToken)
 		fmt.Println("Cannot clear environment variable tokens. Unset the variable manually:")
-		fmt.Println("  unset ROACHPROD_API_TOKEN")
+		fmt.Printf("  unset %s\n", auth.EnvAPIToken)
 		return nil
 	}
 
@@ -247,28 +300,32 @@ func logout(revokeServiceAccount bool) error {
 	// Try to get token info from server to determine type and ID
 	var tokenRevoked bool
 	if !storedToken.IsExpired() {
-		apiClient := auth.NewAPIClient(client.LoadConfigFromEnv().BaseURL).WithToken(storedToken.Token)
-		whoamiResp, err := apiClient.WhoAmI(ctx)
-		if err == nil && whoamiResp.Token.ID != "" {
-			isServiceAccount := whoamiResp.ServiceAccount != nil
-			shouldRevoke := !isServiceAccount || revokeServiceAccount
+		c, l, err := newAuthClient()
+		if err != nil {
+			fmt.Printf("Warning: Could not create API client: %v\n", err)
+		} else {
+			whoamiResp, err := c.WhoAmI(ctx, l)
+			if err == nil && whoamiResp.Token.ID != "" {
+				isServiceAccount := whoamiResp.ServiceAccount != nil
+				shouldRevoke := !isServiceAccount || revokeServiceAccount
 
-			if shouldRevoke {
-				if err := apiClient.RevokeToken(ctx, whoamiResp.Token.ID); err != nil {
-					fmt.Printf("Warning: Could not revoke token on server: %v\n", err)
-				} else {
-					tokenRevoked = true
-					if isServiceAccount {
-						fmt.Println("Service account token revoked on server.")
+				if shouldRevoke {
+					if err := c.RevokeToken(ctx, l, whoamiResp.Token.ID); err != nil {
+						fmt.Printf("Warning: Could not revoke token on server: %v\n", err)
 					} else {
-						fmt.Println("User token revoked on server.")
+						tokenRevoked = true
+						if isServiceAccount {
+							fmt.Println("Service account token revoked on server.")
+						} else {
+							fmt.Println("User token revoked on server.")
+						}
 					}
+				} else {
+					fmt.Println("Service account token not revoked (use --revoke to revoke on server).")
 				}
-			} else {
-				fmt.Println("Service account token not revoked (use --revoke to revoke on server).")
+			} else if err != nil {
+				fmt.Printf("Warning: Could not verify token with server: %v\n", err)
 			}
-		} else if err != nil {
-			fmt.Printf("Warning: Could not verify token with server: %v\n", err)
 		}
 	} else {
 		fmt.Println("Token already expired, skipping server revocation.")
@@ -311,8 +368,11 @@ func whoami() error {
 	}
 
 	// Call the server to get principal info
-	apiClient := auth.NewAPIClient(client.LoadConfigFromEnv().BaseURL).WithToken(storedToken.Token)
-	whoamiResp, err := apiClient.WhoAmI(context.Background())
+	c, l, err := newAuthClient()
+	if err != nil {
+		return errors.Wrap(err, "failed to create API client")
+	}
+	whoamiResp, err := c.WhoAmI(context.Background(), l)
 	if err != nil {
 		// If we can't reach the server, display local info
 		fmt.Println("Warning: Could not reach server to verify authentication.")
@@ -379,6 +439,25 @@ func displayLocalTokenInfo(storedToken *auth.StoredToken) {
 	if len(storedToken.Token) > 20 {
 		fmt.Printf("Token: %s...%s\n", storedToken.Token[:10], storedToken.Token[len(storedToken.Token)-6:])
 	}
+}
+
+// newAuthClient creates a client.Client configured for auth CLI commands.
+// It loads config from environment and forces the client to be enabled.
+func newAuthClient() (*client.Client, *logger.Logger, error) {
+	cfg := client.LoadConfigFromEnv()
+	cfg.Enabled = true
+	cfg.SilentFailures = true
+	c, err := client.NewClient(client.WithConfig(cfg))
+	if err != nil {
+		return nil, nil, err
+	}
+
+	l, err := (&logger.Config{}).NewLogger("")
+	if err != nil {
+		return nil, nil, errors.Wrap(err, "create logger")
+	}
+
+	return c, l, nil
 }
 
 // openBrowser tries to open the default browser to the given URL.

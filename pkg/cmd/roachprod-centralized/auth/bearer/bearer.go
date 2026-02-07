@@ -20,16 +20,21 @@ import (
 type BearerAuthenticator struct {
 	config      auth.AuthConfig
 	authService authtypes.IService
+	metrics     authtypes.IAuthMetricsRecorder
 	logger      *logger.Logger
 }
 
 // NewBearerAuthenticator creates a new bearer token authenticator.
 func NewBearerAuthenticator(
-	config auth.AuthConfig, authService authtypes.IService, logger *logger.Logger,
+	config auth.AuthConfig,
+	authService authtypes.IService,
+	metrics authtypes.IAuthMetricsRecorder,
+	logger *logger.Logger,
 ) *BearerAuthenticator {
 	return &BearerAuthenticator{
 		config:      config,
 		authService: authService,
+		metrics:     metrics,
 		logger:      logger,
 	}
 }
@@ -43,17 +48,17 @@ func (a *BearerAuthenticator) Authenticate(
 	start := timeutil.Now()
 
 	if tokenString == "" {
-		a.authService.RecordAuthentication("error", "none", timeutil.Since(start))
+		a.metrics.RecordAuthentication("error", "none", timeutil.Since(start))
 		return nil, authtypes.ErrNotAuthenticated
 	}
 
 	principal, err := a.authService.AuthenticateToken(ctx, a.logger, tokenString, clientIP)
 	if err != nil {
-		a.authService.RecordAuthentication("error", "bearer", timeutil.Since(start))
+		a.metrics.RecordAuthentication("error", "bearer", timeutil.Since(start))
 		return nil, err
 	}
 
-	a.authService.RecordAuthentication("success", principal.GetAuthMethod(), timeutil.Since(start))
+	a.metrics.RecordAuthentication("success", principal.GetAuthMethod(), timeutil.Since(start))
 	return principal, nil
 }
 
@@ -71,19 +76,19 @@ func (a *BearerAuthenticator) Authorize(
 
 	// Check AnyOf permissions (OR logic)
 	if len(requirement.AnyOf) > 0 && !principal.HasAnyPermission(requirement.AnyOf) {
-		a.authService.RecordAuthzDecision("deny", "missing_permission", endpoint, authMethod)
-		a.authService.RecordAuthzLatency(endpoint, timeutil.Since(start))
+		a.metrics.RecordAuthzDecision("deny", "missing_permission", endpoint, authMethod)
+		a.metrics.RecordAuthzLatency(endpoint, timeutil.Since(start))
 		return authtypes.ErrForbidden
 	}
 
 	// Check required permissions (AND logic)
 	if len(requirement.RequiredPermissions) > 0 && !principal.HasAllPermissions(requirement.RequiredPermissions) {
-		a.authService.RecordAuthzDecision("deny", "missing_permission", endpoint, authMethod)
-		a.authService.RecordAuthzLatency(endpoint, timeutil.Since(start))
+		a.metrics.RecordAuthzDecision("deny", "missing_permission", endpoint, authMethod)
+		a.metrics.RecordAuthzLatency(endpoint, timeutil.Since(start))
 		return authtypes.ErrForbidden
 	}
 
-	a.authService.RecordAuthzDecision("allow", "", endpoint, authMethod)
-	a.authService.RecordAuthzLatency(endpoint, timeutil.Since(start))
+	a.metrics.RecordAuthzDecision("allow", "", endpoint, authMethod)
+	a.metrics.RecordAuthzLatency(endpoint, timeutil.Since(start))
 	return nil
 }

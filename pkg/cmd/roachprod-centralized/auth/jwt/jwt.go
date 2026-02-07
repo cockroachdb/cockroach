@@ -23,13 +23,17 @@ import (
 type JWTAuthenticator struct {
 	config      auth.AuthConfig
 	authService authtypes.IService
+	metrics     authtypes.IAuthMetricsRecorder
 }
 
 // NewJWTAuthenticator creates a new JWT-based authenticator.
-func NewJWTAuthenticator(config auth.AuthConfig, authService authtypes.IService) *JWTAuthenticator {
+func NewJWTAuthenticator(
+	config auth.AuthConfig, authService authtypes.IService, metrics authtypes.IAuthMetricsRecorder,
+) *JWTAuthenticator {
 	return &JWTAuthenticator{
 		config:      config,
 		authService: authService,
+		metrics:     metrics,
 	}
 }
 
@@ -42,14 +46,14 @@ func (a *JWTAuthenticator) Authenticate(
 	start := timeutil.Now()
 
 	if token == "" {
-		a.authService.RecordAuthentication("error", "none", timeutil.Since(start))
+		a.metrics.RecordAuthentication("error", "none", timeutil.Since(start))
 		return nil, authtypes.ErrNotAuthenticated
 	}
 
 	// Validate the JWT token
 	payload, err := a.validateToken(ctx, token)
 	if err != nil {
-		a.authService.RecordAuthentication("error", "jwt", timeutil.Since(start))
+		a.metrics.RecordAuthentication("error", "jwt", timeutil.Since(start))
 		return nil, errors.CombineErrors(authtypes.ErrInvalidToken, err)
 	}
 
@@ -102,7 +106,7 @@ func (a *JWTAuthenticator) Authenticate(
 		},
 	}
 
-	a.authService.RecordAuthentication("success", "jwt", timeutil.Since(start))
+	a.metrics.RecordAuthentication("success", "jwt", timeutil.Since(start))
 	return principal, nil
 }
 
@@ -141,19 +145,19 @@ func (a *JWTAuthenticator) Authorize(
 
 	// Check AnyOf permissions (OR logic)
 	if len(requirement.AnyOf) > 0 && !principal.HasAnyPermission(requirement.AnyOf) {
-		a.authService.RecordAuthzDecision("deny", "missing_permission", endpoint, authMethod)
-		a.authService.RecordAuthzLatency(endpoint, timeutil.Since(start))
+		a.metrics.RecordAuthzDecision("deny", "missing_permission", endpoint, authMethod)
+		a.metrics.RecordAuthzLatency(endpoint, timeutil.Since(start))
 		return authtypes.ErrForbidden
 	}
 
 	// Check required permissions (AND logic)
 	if len(requirement.RequiredPermissions) > 0 && !principal.HasAllPermissions(requirement.RequiredPermissions) {
-		a.authService.RecordAuthzDecision("deny", "missing_permission", endpoint, authMethod)
-		a.authService.RecordAuthzLatency(endpoint, timeutil.Since(start))
+		a.metrics.RecordAuthzDecision("deny", "missing_permission", endpoint, authMethod)
+		a.metrics.RecordAuthzLatency(endpoint, timeutil.Since(start))
 		return authtypes.ErrForbidden
 	}
 
-	a.authService.RecordAuthzDecision("allow", "", endpoint, authMethod)
-	a.authService.RecordAuthzLatency(endpoint, timeutil.Since(start))
+	a.metrics.RecordAuthzDecision("allow", "", endpoint, authMethod)
+	a.metrics.RecordAuthzLatency(endpoint, timeutil.Since(start))
 	return nil
 }

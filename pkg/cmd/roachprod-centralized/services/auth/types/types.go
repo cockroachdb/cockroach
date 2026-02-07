@@ -46,20 +46,31 @@ const (
 )
 
 // IService defines the interface for the authentication service.
+// It covers auth business logic consumed by controllers and the bearer
+// authenticator. Lifecycle methods (RegisterTasks, StartService, etc.)
+// live in the base services.IService interface; metrics recording lives
+// in IAuthMetricsRecorder.
 type IService interface {
-	// AuthenticateToken validates a bearer token and returns the fully-loaded principal.
-	// This combines: token validation, user/SA lookup, status checks, and permission resolution.
-	// Used by the bearer authenticator as a single entry point for authentication.
+	// --- Authentication ---
+
 	AuthenticateToken(ctx context.Context, l *logger.Logger, tokenString string, clientIP string) (*pkgauth.Principal, error)
 
-	// Token Management - Self-Service Operations
-	ListSelfTokens(context.Context, *logger.Logger, *pkgauth.Principal, InputListTokensDTO) ([]*auth.ApiToken, int, error)
-	RevokeSelfToken(context.Context, *logger.Logger, *pkgauth.Principal, uuid.UUID) error // Self revocation of own token
+	// --- Okta Token Exchange ---
 
-	// Okta exchange
 	ExchangeOktaToken(context.Context, *logger.Logger, string) (*auth.ApiToken, string, error)
 
-	// User Management (SCIM + admin)
+	// --- Token Self-Service ---
+
+	ListSelfTokens(context.Context, *logger.Logger, *pkgauth.Principal, InputListTokensDTO) ([]*auth.ApiToken, int, error)
+	RevokeSelfToken(context.Context, *logger.Logger, *pkgauth.Principal, uuid.UUID) error
+
+	// --- Token Administration ---
+
+	ListAllTokens(context.Context, *logger.Logger, *pkgauth.Principal, InputListTokensDTO) ([]*auth.ApiToken, int, error)
+	RevokeUserToken(context.Context, *logger.Logger, *pkgauth.Principal, uuid.UUID, uuid.UUID) error
+
+	// --- User Management (SCIM + admin) ---
+
 	ListUsers(context.Context, *logger.Logger, *pkgauth.Principal, InputListUsersDTO) ([]*auth.User, int, error)
 	GetUser(context.Context, *logger.Logger, *pkgauth.Principal, uuid.UUID) (*auth.User, error)
 	CreateUser(context.Context, *logger.Logger, *pkgauth.Principal, *auth.User) error
@@ -67,7 +78,8 @@ type IService interface {
 	PatchUser(context.Context, *logger.Logger, *pkgauth.Principal, uuid.UUID, PatchUserInput) (*auth.User, error)
 	DeleteUser(context.Context, *logger.Logger, *pkgauth.Principal, uuid.UUID) error
 
-	// Service Account Management
+	// --- Service Account Management ---
+
 	ListServiceAccounts(context.Context, *logger.Logger, *pkgauth.Principal, InputListServiceAccountsDTO) ([]*auth.ServiceAccount, int, error)
 	GetServiceAccount(context.Context, *logger.Logger, *pkgauth.Principal, uuid.UUID) (*auth.ServiceAccount, error)
 	CreateServiceAccount(context.Context, *logger.Logger, *pkgauth.Principal, *auth.ServiceAccount, bool) error
@@ -83,18 +95,16 @@ type IService interface {
 	MintServiceAccountToken(context.Context, *logger.Logger, *pkgauth.Principal, uuid.UUID, time.Duration) (*auth.ApiToken, string, error)
 	RevokeServiceAccountToken(context.Context, *logger.Logger, *pkgauth.Principal, uuid.UUID, uuid.UUID) error
 
-	// Token Management - Admin Operations
-	ListAllTokens(context.Context, *logger.Logger, *pkgauth.Principal, InputListTokensDTO) ([]*auth.ApiToken, int, error)
-	RevokeUserToken(context.Context, *logger.Logger, *pkgauth.Principal, uuid.UUID, uuid.UUID) error
+	// --- Group Permissions (Admin) ---
 
-	// Group Permissions (Admin)
 	ListGroupPermissions(context.Context, *logger.Logger, *pkgauth.Principal, InputListGroupPermissionsDTO) ([]*auth.GroupPermission, int, error)
 	CreateGroupPermission(context.Context, *logger.Logger, *pkgauth.Principal, *auth.GroupPermission) error
 	UpdateGroupPermission(context.Context, *logger.Logger, *pkgauth.Principal, *auth.GroupPermission) error
 	DeleteGroupPermission(context.Context, *logger.Logger, *pkgauth.Principal, uuid.UUID) error
 	ReplaceGroupPermissions(context.Context, *logger.Logger, *pkgauth.Principal, []*auth.GroupPermission) error
 
-	// Groups
+	// --- Groups (SCIM + admin) ---
+
 	ListGroups(context.Context, *logger.Logger, *pkgauth.Principal, InputListGroupsDTO) ([]*auth.Group, int, error)
 	GetGroup(context.Context, *logger.Logger, *pkgauth.Principal, uuid.UUID) (*auth.Group, error)
 	GetGroupByExternalID(context.Context, *logger.Logger, *pkgauth.Principal, string) (*auth.Group, error)
@@ -104,16 +114,16 @@ type IService interface {
 	PatchGroup(context.Context, *logger.Logger, *pkgauth.Principal, uuid.UUID, PatchGroupInput) (*PatchGroupOutput, error)
 	DeleteGroup(context.Context, *logger.Logger, *pkgauth.Principal, uuid.UUID) error
 
-	// Lifecycle methods (implicitly required by app factory via interface matching)
-	RegisterTasks(ctx context.Context) error
-	StartService(ctx context.Context, l *logger.Logger) error
-	StartBackgroundWork(ctx context.Context, l *logger.Logger, errChan chan<- error) error
-	Shutdown(ctx context.Context) error
+	// --- Token Cleanup (internal, used by background tasks) ---
 
-	// Task service interface
 	CleanupRevokedAndExpiredTokens(ctx context.Context, l *logger.Logger, retention time.Duration) (int, error)
+}
 
-	// Metrics recording (for authenticator layer)
+// IAuthMetricsRecorder records authentication and authorization metrics.
+// Implemented by the auth Service. Consumed by the bearer authenticator
+// separately from IService to keep metrics concerns out of the business
+// logic interface.
+type IAuthMetricsRecorder interface {
 	RecordAuthentication(result, authMethod string, latency time.Duration)
 	RecordAuthzDecision(result, reason, endpoint, provider string)
 	RecordAuthzLatency(endpoint string, latency time.Duration)

@@ -22,37 +22,25 @@ const (
 	KeyringTokenKey = "api_token"
 )
 
-// Environment variable names.
+// envPrefix is the common prefix for all roachprod API env vars.
+// This mirrors client.EnvPrefix; both are verified by a test.
+const envPrefix = "ROACHPROD_API_"
+
+// Environment variable names for authentication.
 const (
 	// EnvAPIToken is the environment variable for the API token.
 	// When set, it takes precedence over the keyring.
-	EnvAPIToken = "ROACHPROD_API_TOKEN"
-	// EnvAuthMode is the environment variable for the authentication mode.
-	EnvAuthMode = "ROACHPROD_AUTH_MODE"
+	EnvAPIToken = envPrefix + "TOKEN"
 	// EnvOktaIssuer is the environment variable for the Okta issuer URL.
-	EnvOktaIssuer = "ROACHPROD_OKTA_ISSUER"
+	EnvOktaIssuer = envPrefix + "OKTA_ISSUER"
 	// EnvOktaClientID is the environment variable for the Okta OAuth client ID.
-	EnvOktaClientID = "ROACHPROD_OKTA_CLIENT_ID"
-	// EnvAPIBaseURL is the environment variable for the API base URL.
-	EnvAPIBaseURL = "ROACHPROD_API_BASE_URL"
-)
-
-// Authentication modes.
-const (
-	// AuthModeBearer uses opaque bearer tokens from keyring or environment.
-	AuthModeBearer = "bearer"
-	// AuthModeIAP uses Google Cloud Identity-Aware Proxy authentication.
-	AuthModeIAP = "iap"
-	// AuthModeDisabled disables authentication.
-	AuthModeDisabled = "disabled"
+	EnvOktaClientID = envPrefix + "OKTA_CLIENT_ID"
 )
 
 // Default values.
 const (
 	// DefaultOktaIssuer is the default Okta tenant URL.
 	DefaultOktaIssuer = "https://cockroachlabs.okta.com"
-	// DefaultAuthMode is the default authentication mode.
-	DefaultAuthMode = AuthModeBearer
 	// ExpirationWarningThreshold is the duration before expiration to start warning.
 	ExpirationWarningThreshold = 48 * time.Hour
 )

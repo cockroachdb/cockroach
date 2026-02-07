@@ -27,7 +27,7 @@ const (
 
 // ExchangeOktaTokenRequest is the request body for exchanging an Okta token.
 type ExchangeOktaTokenRequest struct {
-	OktaAccessToken string `json:"okta_access_token" binding:"required"`
+	OktaIDToken string `json:"okta_id_token" binding:"required"`
 }
 
 // ExchangeOktaTokenResponse is the response for successful token exchange.

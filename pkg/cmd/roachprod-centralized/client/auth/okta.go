@@ -78,7 +78,7 @@ func (o *OktaDeviceFlow) StartDeviceAuthorization(
 	ctx context.Context,
 ) (*DeviceCodeResponse, error) {
 	if o.ClientID == "" {
-		return nil, errors.New("Okta client ID is required; set ROACHPROD_OKTA_CLIENT_ID")
+		return nil, errors.Newf("Okta client ID is required; set %s", EnvOktaClientID)
 	}
 
 	// Build the device authorization endpoint URL

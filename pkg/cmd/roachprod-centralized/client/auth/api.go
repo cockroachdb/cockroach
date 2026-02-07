@@ -9,7 +9,6 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"fmt"
 	"io"
 	"net/http"
 	"time"
@@ -17,11 +16,11 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-// API response types that mirror server controller types.
+// API response/request types that mirror server controller types.
 
 // ExchangeTokenRequest is the request body for exchanging an Okta token.
 type ExchangeTokenRequest struct {
-	OktaAccessToken string `json:"okta_access_token"`
+	OktaIDToken string `json:"okta_id_token"`
 }
 
 // ExchangeTokenResponse is the response for successful token exchange.
@@ -83,67 +82,50 @@ type APIResponse[T any] struct {
 	Error string `json:"error,omitempty"`
 }
 
-// APIClient provides methods to call the roachprod-centralized API.
-type APIClient struct {
-	baseURL    string
-	httpClient *http.Client
-	token      string
-}
-
-// NewAPIClient creates a new API client.
-func NewAPIClient(baseURL string) *APIClient {
-	return &APIClient{
-		baseURL: baseURL,
-		httpClient: &http.Client{
-			Timeout: 30 * time.Second,
-		},
-	}
-}
-
-// WithToken sets the bearer token for authenticated requests.
-func (c *APIClient) WithToken(token string) *APIClient {
-	c.token = token
-	return c
-}
-
-// ExchangeOktaToken exchanges an Okta ID token for an opaque bearer token.
+// ExchangeOktaToken exchanges an Okta ID token for a roachprod opaque
+// bearer token. This is an unauthenticated call used during login.
 // POST /v1/auth/okta/exchange
-func (c *APIClient) ExchangeOktaToken(
-	ctx context.Context, oktaIDToken string,
+func ExchangeOktaToken(
+	ctx context.Context, baseURL string, oktaIDToken string,
 ) (*ExchangeTokenResponse, error) {
 	reqBody := ExchangeTokenRequest{
-		OktaAccessToken: oktaIDToken,
+		OktaIDToken: oktaIDToken,
 	}
 
 	bodyBytes, err := json.Marshal(reqBody)
 	if err != nil {
-		return nil, errors.Wrap(err, "failed to marshal request")
+		return nil, errors.Wrap(err, "marshal request")
 	}
 
-	req, err := http.NewRequestWithContext(ctx, "POST", c.baseURL+"/v1/auth/okta/exchange", bytes.NewReader(bodyBytes))
+	req, err := http.NewRequestWithContext(
+		ctx, "POST", baseURL+"/v1/auth/okta/exchange", bytes.NewReader(bodyBytes),
+	)
 	if err != nil {
-		return nil, errors.Wrap(err, "failed to create request")
+		return nil, errors.Wrap(err, "create request")
 	}
 	req.Header.Set("Content-Type", "application/json")
 
-	resp, err := c.httpClient.Do(req)
+	httpClient := &http.Client{Timeout: 30 * time.Second}
+	resp, err := httpClient.Do(req)
 	if err != nil {
-		return nil, errors.Wrap(err, "failed to send request")
+		return nil, errors.Wrap(err, "send request")
 	}
 	defer resp.Body.Close()
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return nil, errors.Wrap(err, "failed to read response")
+		return nil, errors.Wrap(err, "read response")
 	}
 
 	if resp.StatusCode != http.StatusOK {
-		return nil, errors.Newf("token exchange failed: %s (status %d)", string(body), resp.StatusCode)
+		return nil, errors.Newf(
+			"token exchange failed: %s (status %d)", string(body), resp.StatusCode,
+		)
 	}
 
 	var apiResp APIResponse[ExchangeTokenResponse]
 	if err := json.Unmarshal(body, &apiResp); err != nil {
-		return nil, errors.Wrap(err, "failed to parse response")
+		return nil, errors.Wrap(err, "parse response")
 	}
 
 	if apiResp.Error != "" {
@@ -151,81 +133,4 @@ func (c *APIClient) ExchangeOktaToken(
 	}
 
 	return &apiResp.Data, nil
-}
-
-// WhoAmI returns information about the current authenticated principal.
-// GET /v1/auth/whoami
-func (c *APIClient) WhoAmI(ctx context.Context) (*WhoAmIResponse, error) {
-	req, err := http.NewRequestWithContext(ctx, "GET", c.baseURL+"/v1/auth/whoami", nil)
-	if err != nil {
-		return nil, errors.Wrap(err, "failed to create request")
-	}
-
-	if c.token != "" {
-		req.Header.Set("Authorization", "Bearer "+c.token)
-	}
-
-	resp, err := c.httpClient.Do(req)
-	if err != nil {
-		return nil, errors.Wrap(err, "failed to send request")
-	}
-	defer resp.Body.Close()
-
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, errors.Wrap(err, "failed to read response")
-	}
-
-	if resp.StatusCode == http.StatusUnauthorized {
-		return nil, errors.New("not authenticated or token expired")
-	}
-
-	if resp.StatusCode != http.StatusOK {
-		return nil, errors.Newf("whoami request failed: %s (status %d)", string(body), resp.StatusCode)
-	}
-
-	var apiResp APIResponse[WhoAmIResponse]
-	if err := json.Unmarshal(body, &apiResp); err != nil {
-		return nil, errors.Wrap(err, "failed to parse response")
-	}
-
-	if apiResp.Error != "" {
-		return nil, errors.Newf("whoami request failed: %s", apiResp.Error)
-	}
-
-	return &apiResp.Data, nil
-}
-
-// RevokeToken revokes a specific token by ID.
-// DELETE /v1/auth/tokens/:id
-func (c *APIClient) RevokeToken(ctx context.Context, tokenID string) error {
-	req, err := http.NewRequestWithContext(ctx, "DELETE", fmt.Sprintf("%s/v1/auth/tokens/%s", c.baseURL, tokenID), nil)
-	if err != nil {
-		return errors.Wrap(err, "failed to create request")
-	}
-
-	if c.token != "" {
-		req.Header.Set("Authorization", "Bearer "+c.token)
-	}
-
-	resp, err := c.httpClient.Do(req)
-	if err != nil {
-		return errors.Wrap(err, "failed to send request")
-	}
-	defer resp.Body.Close()
-
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return errors.Wrap(err, "failed to read response")
-	}
-
-	if resp.StatusCode == http.StatusUnauthorized {
-		return errors.New("not authenticated or token expired")
-	}
-
-	if resp.StatusCode != http.StatusOK {
-		return errors.Newf("token revocation failed: %s (status %d)", string(body), resp.StatusCode)
-	}
-
-	return nil
 }

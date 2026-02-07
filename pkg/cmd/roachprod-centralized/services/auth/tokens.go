@@ -165,26 +165,12 @@ func (s *Service) ListSelfTokens(
 	// Start with the filters from the input DTO
 	filterSet := inputDTO.Filters
 
-	// Security: Remove any user-provided filters on user_id or service_account_id.
-	// While the controller DTO should not include these fields, this ensures
-	// that even if a bug is introduced or a new controller is added, we enforce
-	// the security boundary at the service layer.
-	// These fields are implicitly set based on the authenticated principal
-	// and should never be controllable by users, as they could be used
-	// to access other users' tokens (especially when combined with LogicOr).
-	var sanitizedFilters []filtertypes.FieldFilter
-	for _, filter := range filterSet.Filters {
-		if filter.Field != "user_id" && filter.Field != "service_account_id" {
-			sanitizedFilters = append(sanitizedFilters, filter)
-		}
-	}
-	filterSet.Filters = sanitizedFilters
-
-	// Security: Force AND logic to prevent privilege escalation via OR queries.
-	// This ensures the principal filter is always enforced as a conjunction with other filters.
-	// Without this, a malicious SCIM query like "userName eq 'admin' or userName eq 'victim'"
-	// could bypass authorization checks.
-	filterSet.Logic = filtertypes.LogicAnd
+	// Wrap user-provided filters into a subgroup, then add mandatory
+	// ownership filter at the top level. No sanitization needed —
+	// the outer AND ensures the ownership constraint regardless of what
+	// the user's filters contain.
+	filterSet.NestFiltersAsSubGroup()
+	filterSet.SetLogic(filtertypes.LogicAnd)
 
 	// Add mandatory filter to restrict tokens to the authenticated principal
 	switch principal.Token.Type {
@@ -193,12 +179,6 @@ func (s *Service) ListSelfTokens(
 		filterSet.AddFilter("UserID", filtertypes.OpEqual, principal.UserID)
 
 	case auth.TokenTypeServiceAccount:
-
-		// Service accounts that are DelegatedFrom a user principal should maybe
-		// be able to see tokens created by that user as well?
-		// We currently have a limitation that prevents us from grouping filters
-		// with OR logic, so we only allow seeing tokens created by the service account
-		// itself as a precaution.
 		filterSet.AddFilter("ServiceAccountID", filtertypes.OpEqual, principal.ServiceAccountID)
 
 	default:

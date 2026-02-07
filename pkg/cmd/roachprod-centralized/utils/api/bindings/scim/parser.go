@@ -78,15 +78,14 @@ func attributeExpressionToFilterSet(
 func logicalExpressionToFilterSet(expr filter.LogicalExpression) (filtertypes.FilterSet, error) {
 	leftFS, err := expressionToFilterSet(expr.Left)
 	if err != nil {
-		return *filters.NewFilterSet(), errors.Wrap(err, "failed to convert left expression")
+		return *filters.NewFilterSet(), errors.Wrap(err, "left expression")
 	}
 
 	rightFS, err := expressionToFilterSet(expr.Right)
 	if err != nil {
-		return *filters.NewFilterSet(), errors.Wrap(err, "failed to convert right expression")
+		return *filters.NewFilterSet(), errors.Wrap(err, "right expression")
 	}
 
-	// Map SCIM logical operator
 	var logic filtertypes.LogicOperator
 	opStr := strings.ToLower(string(expr.Operator))
 	switch opStr {
@@ -98,13 +97,27 @@ func logicalExpressionToFilterSet(expr filter.LogicalExpression) (filtertypes.Fi
 		return *filters.NewFilterSet(), errors.Newf("unsupported logical operator: %s", expr.Operator)
 	}
 
-	// Combine filters
-	combinedFS := filtertypes.FilterSet{
-		Logic:   logic,
-		Filters: append(leftFS.Filters, rightFS.Filters...),
+	result := filtertypes.FilterSet{Logic: logic}
+
+	// If a child can be safely inlined, append its filters directly.
+	// This is safe when:
+	//   - Same logic operator and no SubGroups (associativity: A and (B and C) = A and B and C)
+	//   - Single filter with no SubGroups (logic is irrelevant for a single predicate)
+	// Otherwise, nest it as a SubGroup to preserve grouping.
+	mergeOrNest := func(child filtertypes.FilterSet) {
+		canInline := len(child.SubGroups) == 0 &&
+			(child.Logic == logic || len(child.Filters) <= 1)
+		if canInline {
+			result.Filters = append(result.Filters, child.Filters...)
+		} else {
+			result.SubGroups = append(result.SubGroups, child)
+		}
 	}
 
-	return combinedFS, nil
+	mergeOrNest(leftFS)
+	mergeOrNest(rightFS)
+
+	return result, nil
 }
 
 // notExpressionToFilterSet handles NOT expressions
