@@ -345,7 +345,7 @@ func NewAlterColTypeInTxnNotSupportedErr() error {
 			"not supported inside a transaction")
 }
 
-const PrimaryIndexSwapDetail = `CRDB's implementation for "ADD COLUMN", "DROP COLUMN", and "ALTER PRIMARY KEY" will drop the old/current primary index and create a new one.`
+const PrimaryIndexSwapDetail = `"ADD COLUMN", "DROP COLUMN", and "ALTER PRIMARY KEY" will drop the old/current primary index and create a new one.`
 
 // NewColumnReferencedByPrimaryKeyError is returned when attempting to drop a
 // column which is a part of the table's primary key.

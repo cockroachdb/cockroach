@@ -882,10 +882,19 @@ func (p *planner) disallowDroppingPrimaryIndexReferencedInUDFOrView(
 	currentPrimaryIndex := tableDesc.GetPrimaryIndex()
 	for _, tableRef := range tableDesc.DependedOnBy {
 		if tableRef.IndexID == currentPrimaryIndex.GetID() {
+			// Handle trigger dependencies directly. This produces a
+			// trigger-specific error message. Without this, canRemoveDependent
+			// below would still block (DropDefault always errors), but the error
+			// would be a generic dependency message without naming the trigger.
+			if tableRef.TriggerID != 0 {
+				return errors.WithDetail(
+					p.triggerDependencyError(ctx, tableRef, "index", currentPrimaryIndex.GetName()),
+					sqlerrors.PrimaryIndexSwapDetail,
+				)
+			}
 			// canRemoveDependent with `DropDefault` will return the right error.
 			err := p.canRemoveDependent(
-				ctx, "index", currentPrimaryIndex.GetName(), tableDesc.ID, tableDesc.ParentID, tableRef, tree.DropDefault,
-				true /* blockOnTriggerDependency */)
+				ctx, "index", currentPrimaryIndex.GetName(), tableDesc.ID, tableDesc.ParentID, tableRef, tree.DropDefault)
 			if err != nil {
 				return errors.WithDetail(err, sqlerrors.PrimaryIndexSwapDetail)
 			}
