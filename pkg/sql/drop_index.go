@@ -435,10 +435,20 @@ func (p *planner) dropIndexByName(
 	var depsToDrop catalog.DescriptorIDSet
 	for _, tableRef := range tableDesc.DependedOnBy {
 		if tableRef.IndexID == idx.GetID() {
-			// Ensure that we have DROP privilege on all dependent relations
+			// Handle trigger dependencies directly — drop the trigger, not the table.
+			if tableRef.TriggerID != 0 {
+				if behavior != tree.DropCascade {
+					return p.triggerDependencyError(ctx, tableRef, "index", idx.GetName())
+				}
+				if err := p.removeTriggerDependency(ctx, tableDesc, tableRef); err != nil {
+					return err
+				}
+				continue
+			}
+			// Ensure that we have DROP privilege on all dependent relations.
 			err := p.canRemoveDependent(
 				ctx, "index", idx.GetName(), tableDesc.ID, tableDesc.ParentID,
-				tableRef, behavior, true /* blockOnTriggerDependency */)
+				tableRef, behavior)
 			if err != nil {
 				return err
 			}
