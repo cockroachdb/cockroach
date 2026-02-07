@@ -13,6 +13,7 @@ import (
 	"fmt"
 	"regexp"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
@@ -196,6 +197,14 @@ func registerRubyPG(r registry.Registry) {
 		totalTests := int64(0)
 		for scanner.Scan() {
 			line := scanner.Text()
+
+			// If Ruby hit a segfault, the rest of the output is unreliable.
+			// The test runner occasionally hits this bug, but we have no way to
+			// diagnose it further (at least not without spending much more time).
+			if strings.Contains(line, "[BUG] Segmentation fault") {
+				t.Skipf("ruby process hit a segfault; see logs for details")
+			}
+
 			testSummaryMatch := testSummaryRegexp.FindStringSubmatch(line)
 			if testSummaryMatch != nil {
 				totalTests, err = strconv.ParseInt(testSummaryMatch[1], 10, 64)
