@@ -2032,9 +2032,9 @@ func dropColumnImpl(
 		return nil, err
 	}
 
-	// You can't drop a column depended on by a view unless CASCADE was
-	// specified.
-	var depsToDrop catalog.DescriptorIDSet
+	// Drop or error on dependents (views, functions, triggers) that reference
+	// this column, honoring the CASCADE behavior.
+	var viewAndFuncDepsToDrop catalog.DescriptorIDSet
 	for _, ref := range tableDesc.DependedOnBy {
 		found := false
 		for _, colID := range ref.ColumnIDs {
@@ -2046,18 +2046,27 @@ func dropColumnImpl(
 		if !found {
 			continue
 		}
+		// Handle trigger dependencies directly — drop the trigger, not the table.
+		if ref.TriggerID != 0 {
+			if t.DropBehavior != tree.DropCascade {
+				return nil, params.p.triggerDependencyError(params.ctx, ref, "column", string(t.Column))
+			}
+			if err := params.p.removeTriggerDependency(params.ctx, tableDesc, ref); err != nil {
+				return nil, err
+			}
+			continue
+		}
 		err := params.p.canRemoveDependent(
 			params.ctx, "column", string(t.Column), tableDesc.ID, tableDesc.ParentID, ref, t.DropBehavior,
-			true, /* blockOnTriggerDependency */
 		)
 		if err != nil {
 			return nil, err
 		}
-		depsToDrop.Add(ref.ID)
+		viewAndFuncDepsToDrop.Add(ref.ID)
 	}
 
 	droppedViews, err = params.p.removeDependents(
-		params.ctx, tableDesc, depsToDrop, "column", colToDrop.GetName(), t.DropBehavior,
+		params.ctx, tableDesc, viewAndFuncDepsToDrop, "column", colToDrop.GetName(), t.DropBehavior,
 	)
 	if err != nil {
 		return nil, err

@@ -265,3 +265,89 @@ WHERE fd.descriptor_name = 'trigger_dep_t2'
 ORDER BY fd.dependedonby_details
 ----
 trigger_dep_t2  trigger_dep_t1  trigger  Columns=[1 3], TriggerID=2
+
+# Regression test: dropping a column CASCADE should only remove the
+# backreference for the specific trigger that depends on that column, not all
+# trigger backreferences from the referenced table to the trigger's owner table.
+# This test runs in all configs. Trigger creation requires the declarative
+# schema changer, so we temporarily enable it, then restore the original setting
+# for the DROP COLUMN CASCADE (which exercises the legacy path under
+# local-legacy-schema-changer).
+
+let $use_decl_sc
+SHOW use_declarative_schema_changer
+
+statement ok
+SET use_declarative_schema_changer = 'on'
+
+statement ok
+CREATE TABLE col_cascade_t1 (id INT PRIMARY KEY)
+
+statement ok
+CREATE TABLE col_cascade_t2 (id INT PRIMARY KEY, a INT, b INT)
+
+# f1 references column a of col_cascade_t2.
+statement ok
+CREATE FUNCTION col_cascade_f1() RETURNS TRIGGER LANGUAGE PLpgSQL AS $$
+DECLARE
+  x INT;
+BEGIN
+  SELECT a INTO x FROM col_cascade_t2 LIMIT 1;
+  RETURN NEW;
+END;
+$$
+
+# f2 references column b of col_cascade_t2.
+statement ok
+CREATE FUNCTION col_cascade_f2() RETURNS TRIGGER LANGUAGE PLpgSQL AS $$
+DECLARE
+  x INT;
+BEGIN
+  SELECT b INTO x FROM col_cascade_t2 LIMIT 1;
+  RETURN NEW;
+END;
+$$
+
+statement ok
+CREATE TRIGGER col_cascade_tr1 AFTER INSERT ON col_cascade_t1 FOR EACH ROW EXECUTE FUNCTION col_cascade_f1()
+
+statement ok
+CREATE TRIGGER col_cascade_tr2 AFTER INSERT ON col_cascade_t1 FOR EACH ROW EXECUTE FUNCTION col_cascade_f2()
+
+# Both triggers should have backrefs from col_cascade_t2.
+query TTTT
+SELECT fd.descriptor_name, n.name, fd.dependedonby_type, fd.dependedonby_details
+FROM crdb_internal.forward_dependencies fd
+JOIN system.namespace n ON fd.dependedonby_id = n.id
+WHERE fd.descriptor_name = 'col_cascade_t2'
+ORDER BY fd.dependedonby_details
+----
+col_cascade_t2  col_cascade_t1  trigger  Columns=[2], TriggerID=1
+col_cascade_t2  col_cascade_t1  trigger  Columns=[3], TriggerID=2
+
+# Restore the original schema changer setting and unlock tables so the DROP
+# COLUMN CASCADE uses whichever schema changer the config dictates.
+statement ok
+SET use_declarative_schema_changer = $use_decl_sc
+
+statement ok
+ALTER TABLE col_cascade_t2 SET (schema_locked = false)
+
+statement ok
+ALTER TABLE col_cascade_t1 SET (schema_locked = false)
+
+# Drop column a CASCADE. This should drop only trigger col_cascade_tr1 (which
+# depends on column a), leaving col_cascade_tr2 intact.
+statement ok
+ALTER TABLE col_cascade_t2 DROP COLUMN a CASCADE
+
+# After dropping column a (and trigger col_cascade_tr1), col_cascade_t2 should
+# still have exactly 1 backref: from col_cascade_tr2 which depends on column b.
+query TTTT
+SELECT fd.descriptor_name, n.name, fd.dependedonby_type, fd.dependedonby_details
+FROM crdb_internal.forward_dependencies fd
+JOIN system.namespace n ON fd.dependedonby_id = n.id
+WHERE fd.descriptor_name = 'col_cascade_t2'
+ORDER BY fd.dependedonby_details
+----
+col_cascade_t2  col_cascade_t1  trigger  Columns=[3], TriggerID=2
