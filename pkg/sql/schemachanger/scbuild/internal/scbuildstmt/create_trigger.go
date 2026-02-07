@@ -11,7 +11,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/errors"
 )
 
@@ -19,9 +18,6 @@ import (
 // changer. It expects that the CREATE TRIGGER statement has already been
 // validated, except for cross-DB references.
 func CreateTrigger(b BuildCtx, n *tree.CreateTrigger) {
-	if n.Replace {
-		panic(unimplemented.NewWithIssue(128422, "CREATE OR REPLACE TRIGGER is not supported"))
-	}
 	b.IncrementSchemaChangeCreateCounter("trigger")
 
 	refProvider := b.BuildReferenceProvider(n)
@@ -37,6 +33,26 @@ func CreateTrigger(b BuildCtx, n *tree.CreateTrigger) {
 	validateFunctionToFunctionReferences(b, refProvider, namespace.DatabaseID)
 
 	_, _, tbl := scpb.FindTable(relationElements)
+
+	// If OR REPLACE is specified, check for an existing trigger with the same
+	// name and drop it before creating the replacement.
+	if n.Replace {
+		triggerElems := b.ResolveTrigger(tbl.TableID, n.Name, ResolveParams{
+			IsExistenceOptional: true,
+		})
+		if triggerElems != nil {
+			// Drop the old trigger elements, following the same pattern as
+			// DropTrigger: only Trigger and TriggerDeps need explicit drops;
+			// other dependent elements are cleaned up by dependency rules.
+			triggerElems.ForEach(func(_ scpb.Status, _ scpb.TargetStatus, e scpb.Element) {
+				switch e.(type) {
+				case *scpb.Trigger, *scpb.TriggerDeps:
+					b.Drop(e)
+				}
+			})
+		}
+	}
+
 	tableID, triggerID := tbl.TableID, b.NextTableTriggerID(tbl.TableID)
 
 	trigger := &scpb.Trigger{
