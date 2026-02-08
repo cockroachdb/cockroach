@@ -6,6 +6,7 @@
 package log
 
 import (
+	"bufio"
 	"bytes"
 	"encoding/json"
 	"fmt"
@@ -502,7 +503,7 @@ func escapeString(buf *buffer, s string) {
 }
 
 type entryDecoderJSON struct {
-	decoder         *json.Decoder
+	scanner         *bufio.Scanner
 	sensitiveEditor redactEditor
 	compact         bool
 }
@@ -648,39 +649,55 @@ func (e *JSONCompactEntry) toEntry(entry *JSONEntry) {
 }
 
 // Decode decodes the next log entry into the provided protobuf message.
+// It reads one line at a time using a bufio.Scanner, then unmarshals
+// the JSON from that line. This ensures that a malformed line can be
+// skipped without corrupting the decoder state for subsequent lines
+// (unlike json.Decoder, whose internal stream position becomes
+// indeterminate after a syntax error).
 func (d *entryDecoderJSON) Decode(entry *logpb.Entry) (err error) {
 	defer func() {
-		// Wrap all errors except EOF as a malformed entries to make it easier to
+		// Wrap all errors except EOF as malformed entries to make it easier to
 		// handle this type of error later on.
 		if err != nil && err != io.EOF {
 			err = errors.CombineErrors(ErrMalformedLogEntry, err)
 		}
 	}()
-	var rp *redactablePackage
-	var e JSONEntry
-	if d.compact {
-		var compact JSONCompactEntry
-		err = d.decoder.Decode(&compact)
+
+	for d.scanner.Scan() {
+		line := d.scanner.Bytes()
+		// Skip blank lines.
+		if len(line) == 0 {
+			continue
+		}
+
+		var e JSONEntry
+		if d.compact {
+			var compact JSONCompactEntry
+			if err := json.Unmarshal(line, &compact); err != nil {
+				return err
+			}
+			compact.toEntry(&e)
+		} else {
+			if err := json.Unmarshal(line, &e); err != nil {
+				return err
+			}
+		}
+
+		rp, err := e.populate(entry, d)
 		if err != nil {
 			return err
 		}
-		compact.toEntry(&e)
-	} else {
-		err := d.decoder.Decode(&e)
-		if err != nil {
-			return err
-		}
+
+		r := d.sensitiveEditor(*rp)
+		entry.Message = string(r.msg)
+		entry.Redactable = r.redactable
+		return nil
 	}
-	rp, err = e.populate(entry, d)
-	if err != nil {
+
+	if err := d.scanner.Err(); err != nil {
 		return err
 	}
-
-	r := d.sensitiveEditor(*rp)
-	entry.Message = string(r.msg)
-	entry.Redactable = r.redactable
-
-	return nil
+	return io.EOF
 }
 
 // fromFluent parses a fluentbit timestamp format into nanoseconds since
