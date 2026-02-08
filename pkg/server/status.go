@@ -1390,6 +1390,16 @@ func (s *statusServer) LogFile(
 			if err == io.EOF {
 				break
 			}
+			if errors.Is(err, log.ErrMalformedJSON) {
+				resp.ParseErrors = append(resp.ParseErrors, err.Error())
+				//Append log generated from malformed line.
+				resp.Entries = append(resp.Entries, entry)
+				// The current implementation of decoding JSON formatted logs cannot
+				// recover from malformed lines. Hence, we break out of the loop and
+				// return the logs parsed until now, along with the parse error. This
+				// is better than returning no logs at all.
+				return &resp, nil
+			}
 			if errors.Is(err, log.ErrMalformedLogEntry) {
 				resp.ParseErrors = append(resp.ParseErrors, err.Error())
 				//Append log generated from malformed line.
