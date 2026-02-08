@@ -145,6 +145,7 @@ go_test(
         "fluent_client_test.go",
         "format_crdb_v1_test.go",
         "format_crdb_v2_test.go",
+        "format_json_recovery_test.go",
         "format_json_test.go",
         "formats_test.go",
         "formattable_tags_test.go",
