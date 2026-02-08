@@ -8,7 +8,6 @@ package log
 import (
 	"bufio"
 	"bytes"
-	"encoding/json"
 	"io"
 	"regexp"
 
@@ -100,12 +99,14 @@ func NewEntryDecoderWithFormat(
 		d = decoder
 	case "json":
 		d = &entryDecoderJSON{
-			decoder:         json.NewDecoder(in),
+			// scanner must always be a liner scanner (default bufio.Scanner)
+			scanner:         bufio.NewScanner(in),
 			sensitiveEditor: getEditor(editMode),
 		}
 	case "json-compact":
 		d = &entryDecoderJSON{
-			decoder:         json.NewDecoder(in),
+			// scanner must always be a liner scanner (default bufio.Scanner)
+			scanner:         bufio.NewScanner(in),
 			sensitiveEditor: getEditor(editMode),
 			compact:         true,
 		}
