@@ -70,8 +70,12 @@ COCKROACH_CA_KEY=$CLIENT/ca.key COCKROACH_CERTS_DIR=$CLIENT $COCKROACH cert crea
 echo Start test directory server
 $COCKROACH mt test-directory --port=$DIR_P --log="{sinks: {file-groups: {default: {dir: $DIR, channels: ALL}}}}" -- /bin/bash -c $(dirname "$0")'/run_tenant.sh "$@"' "" "$COCKROACH" "$BASE" 0 --kv-addrs=localhost:$HOST_P 2>"$DIR"/stderr.log &
 
-echo "Start the sql proxy server (with self signed client facing cert)"
-$COCKROACH mt start-proxy  --listen-addr=localhost:$PROXY_P --listen-cert=* --listen-key=* --directory=:$DIR_P --listen-metrics=:$PROXY_HTTP_P --skip-verify --log="{sinks: {file-groups: {default: {dir: $PROXY, channels: ALL}}}}" 2>"$PROXY"/stderr.log &
+echo Create proxy cert
+cp "$HOST"/ca.crt "$PROXY"/ca.crt
+COCKROACH_CA_KEY=$HOST/ca.key COCKROACH_CERTS_DIR=$PROXY $COCKROACH cert create-node 127.0.0.1 localhost
+
+echo "Start the sql proxy server"
+$COCKROACH mt start-proxy  --listen-addr=localhost:$PROXY_P --listen-cert="$PROXY"/node.crt --listen-key="$PROXY"/node.key --directory=:$DIR_P --listen-metrics=:$PROXY_HTTP_P --skip-verify --log="{sinks: {file-groups: {default: {dir: $PROXY, channels: ALL}}}}" 2>"$PROXY"/stderr.log &
 
 echo "All files are in $BASE"
 echo "To connect to a specific tenant (123 for example):"
