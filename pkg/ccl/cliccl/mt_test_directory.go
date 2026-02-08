@@ -84,10 +84,12 @@ func startTenant(
 	if err != nil {
 		return "", err
 	}
+	sqlAddress = sqlListener.Addr().String()
 	httpListener, err := net.Listen("tcp", "")
 	if err != nil {
 		return "", err
 	}
+	httpAddress := httpListener.Addr().String()
 
 	if len(args) == 0 {
 		cockroachExecutable, err := os.Executable()
@@ -99,8 +101,8 @@ func startTenant(
 		}
 	}
 	args = append(args,
-		fmt.Sprintf("--sql-addr=%s", sqlListener.Addr().String()),
-		fmt.Sprintf("--http-addr=%s", httpListener.Addr().String()),
+		fmt.Sprintf("--sql-addr=%s", sqlAddress),
+		fmt.Sprintf("--http-addr=%s", httpAddress),
 		fmt.Sprintf("--tenant-id=%d", tenantID),
 	)
 	if err = sqlListener.Close(); err != nil {

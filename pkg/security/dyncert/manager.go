@@ -8,7 +8,6 @@ package dyncert
 import (
 	"context"
 	"os"
-	"os/signal"
 
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
@@ -64,7 +63,6 @@ func NewManager(ctx context.Context, stopper *stop.Stopper) (*Manager, error) {
 					log.Ops.Warningf(ctx, "cert reload failed on SIGHUP: %v", err)
 				}
 			case <-stopper.ShouldQuiesce():
-				signal.Stop(sigCh)
 				return
 			}
 		}
