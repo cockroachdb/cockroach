@@ -71,6 +71,7 @@ echo Create client host root cert
 COCKROACH_CA_KEY=$CLIENT/ca.key COCKROACH_CERTS_DIR=$CLIENT $COCKROACH cert create-client root
 echo Connect as root to the host cluster and create tenant
 COCKROACH_CA_KEY=$CLIENT/ca.key COCKROACH_CERTS_DIR=$CLIENT $COCKROACH sql --port=$HOST_P  -e " 
+SET allow_unsafe_internals = true;
 SELECT CASE WHEN NOT EXISTS(SELECT * FROM system.tenants WHERE id = 123)
 THEN crdb_internal.create_tenant(123)
 END" > /dev/null
@@ -82,7 +83,7 @@ echo Start the tenant to set a root password
 $COCKROACH mt start-sql  --certs-dir="$TENANT" --kv-addrs=:$HOST_P --sql-addr=:$TENANT_P --http-addr=:$TENANT_HTTP_P --tenant-id=123 --store="$TENANT"/store.0.123 --log="{sinks: {stderr: {}}}" 2>"$TENANT"/tenant.stderr.log &
 TENANT_PID=$!
 echo Tenant PID is $TENANT_PID
-sleep 1
+sleep 5
 
 echo Create client tenant root cert
 COCKROACH_CA_KEY=$TENANT/ca.key COCKROACH_CERTS_DIR=$TENANT $COCKROACH cert create-client root
@@ -93,11 +94,15 @@ echo Shutdown the tenant
 kill $TENANT_PID
 sleep 1
 
-echo Start test directory server 
+echo Start test directory server
 $COCKROACH mt test-directory --port=$DIR_P --log="{sinks: {file-groups: {default: {dir: $DIR, channels: ALL}}}}" -- "$COCKROACH" mt start-sql --kv-addrs=localhost:$HOST_P --certs-dir="$TENANT" --store="$TENANT"/store.0.123 2>"$DIR"/stderr.log &
 
-echo "Start the sql proxy server (with self signed client facing cert)"
-$COCKROACH mt start-proxy  --listen-addr=localhost:$PROXY_P --listen-cert=* --listen-key=* --directory=:$DIR_P --listen-metrics=:$PROXY_HTTP_P --skip-verify --log="{sinks: {file-groups: {default: {dir: $PROXY, channels: ALL}}}}" 2>"$PROXY"/stderr.log &
+echo Create proxy cert
+cp "$HOST"/ca.crt "$PROXY"/ca.crt
+COCKROACH_CA_KEY=$HOST/ca.key COCKROACH_CERTS_DIR=$PROXY $COCKROACH cert create-node 127.0.0.1 localhost
+
+echo "Start the sql proxy server"
+$COCKROACH mt start-proxy  --listen-addr=localhost:$PROXY_P --listen-cert="$PROXY"/node.crt --listen-key="$PROXY"/node.key --directory=:$DIR_P --listen-metrics=:$PROXY_HTTP_P --skip-verify --log="{sinks: {file-groups: {default: {dir: $PROXY, channels: ALL}}}}" 2>"$PROXY"/stderr.log &
 
 echo "All files are in $BASE"
 echo "To connect:"
