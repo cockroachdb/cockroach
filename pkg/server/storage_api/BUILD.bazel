@@ -61,6 +61,7 @@ go_test(
         "//pkg/ts",
         "//pkg/util/leaktest",
         "//pkg/util/log",
+        "//pkg/util/log/logconfig",
         "//pkg/util/log/logpb",
         "//pkg/util/stop",
         "//pkg/util/timeutil",
