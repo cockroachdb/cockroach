@@ -1165,7 +1165,15 @@ func (b *Builder) buildSelectStmtWithoutParens(
 		}
 		orderByScope := b.analyzeOrderBy(orderBy, outScope, projectionsScope, exprKindOrderBy,
 			tree.RejectGenerators|tree.RejectAggregates|tree.RejectWindowApplications)
+		preProjectionScope := b.buildOrderByPreProjection(outScope, projectionsScope, orderByScope)
 		b.buildOrderBy(outScope, projectionsScope, orderByScope)
+
+		// Construct the pre-projection for the ordering expressions.
+		if preProjectionScope != nil {
+			b.constructProjectForScope(outScope, preProjectionScope)
+			outScope.expr = preProjectionScope.expr
+		}
+
 		b.constructProjectForScope(outScope, projectionsScope)
 		outScope = projectionsScope
 	}
@@ -1240,6 +1248,7 @@ func (b *Builder) buildSelectClause(
 	}
 
 	b.buildProjectionList(fromScope, projectionsScope, nil /* colRefs */)
+	preProjectionScope := b.buildOrderByPreProjection(fromScope, projectionsScope, orderByScope)
 	b.buildOrderBy(fromScope, projectionsScope, orderByScope)
 	b.buildDistinctOnArgs(fromScope, projectionsScope, distinctOnScope)
 	b.buildLockArgs(fromScope, projectionsScope, lockScope)
@@ -1256,6 +1265,12 @@ func (b *Builder) buildSelectClause(
 
 	b.buildWindow(outScope, fromScope)
 	b.validateLockingInFrom(sel, lockCtx.locking, fromScope)
+
+	if preProjectionScope != nil {
+		// Construct the pre-projection for the ordering expressions.
+		b.constructProjectForScope(outScope, preProjectionScope)
+		outScope = preProjectionScope
+	}
 
 	// Construct the projection.
 	b.constructProjectForScope(outScope, projectionsScope)
