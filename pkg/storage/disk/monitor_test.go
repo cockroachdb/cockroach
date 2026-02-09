@@ -29,6 +29,12 @@ func (s *spyCollector) collect(
 	return len(disks), nil
 }
 
+func (s *spyCollector) collectInstantaneous(
+	disks []*monitoredDisk, now time.Time, recorder func(traceEvent), buf []byte,
+) (countCollected int, _ []byte, err error) {
+	return len(disks), buf, nil
+}
+
 func TestMonitorManager_monitorDisks(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -37,8 +43,8 @@ func TestMonitorManager_monitorDisks(t *testing.T) {
 	testDisk := &monitoredDisk{
 		manager: manager,
 		deviceID: DeviceID{
-			major: 0,
-			minor: 0,
+			Major: 0,
+			Minor: 0,
 		},
 	}
 	manager.mu.disks = []*monitoredDisk{testDisk}
@@ -124,6 +130,91 @@ func TestMonitor_IncrementalStats(t *testing.T) {
 	require.Equal(t, expectedWindow, rollingWindow)
 }
 
+func TestMonitorManager_CollectInstantaneous(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	t.Run("no collector returns error", func(t *testing.T) {
+		manager := NewMonitorManager(vfs.NewMem())
+		// No statsCollector set, should return error.
+		stats, buf, err := manager.CollectInstantaneous(nil, nil)
+		require.Error(t, err)
+		require.Contains(t, err.Error(), "no disks are being monitored")
+		require.Empty(t, stats)
+		require.Nil(t, buf)
+	})
+
+	t.Run("returns stats from collector", func(t *testing.T) {
+		manager := NewMonitorManager(vfs.NewMem())
+		testDisk := &monitoredDisk{
+			manager:  manager,
+			deviceID: DeviceID{Major: 8, Minor: 0},
+		}
+		manager.mu.disks = []*monitoredDisk{testDisk}
+
+		// Use a collector that returns actual stats.
+		collector := &statsReturningCollector{
+			stats: []Stats{
+				{DeviceID: DeviceID{Major: 8, Minor: 0}, ReadsCount: 100, WritesCount: 200},
+			},
+		}
+		manager.mu.statsCollector = collector
+
+		stats, _, err := manager.CollectInstantaneous(nil, nil)
+		require.NoError(t, err)
+		require.Len(t, stats, 1)
+		require.EqualValues(t, 100, stats[0].ReadsCount)
+		require.EqualValues(t, 200, stats[0].WritesCount)
+	})
+
+	t.Run("reuses provided buffers", func(t *testing.T) {
+		manager := NewMonitorManager(vfs.NewMem())
+		testDisk := &monitoredDisk{
+			manager:  manager,
+			deviceID: DeviceID{Major: 8, Minor: 0},
+		}
+		manager.mu.disks = []*monitoredDisk{testDisk}
+
+		collector := &statsReturningCollector{
+			stats: []Stats{
+				{DeviceID: DeviceID{Major: 8, Minor: 0}, ReadsCount: 50},
+			},
+		}
+		manager.mu.statsCollector = collector
+
+		// Provide pre-allocated buffers.
+		statsBuf := make([]Stats, 1, 10)
+		byteBuf := make([]byte, 64)
+
+		stats, returnedByteBuf, err := manager.CollectInstantaneous(statsBuf, byteBuf)
+		require.NoError(t, err)
+		require.Len(t, stats, 1)
+		require.Equal(t, &statsBuf[0], &stats[0])
+		require.Equal(t, &byteBuf, &returnedByteBuf)
+		require.Equal(t, &byteBuf[0], &returnedByteBuf[0])
+	})
+}
+
+// statsReturningCollector is a test collector that returns configured stats.
+type statsReturningCollector struct {
+	stats []Stats
+}
+
+func (s *statsReturningCollector) collect(
+	disks []*monitoredDisk, now time.Time,
+) (countCollected int, err error) {
+	return len(disks), nil
+}
+
+func (s *statsReturningCollector) collectInstantaneous(
+	disks []*monitoredDisk, now time.Time, recorder func(traceEvent), buf []byte,
+) (countCollected int, _ []byte, err error) {
+	for _, stat := range s.stats {
+		recorder(traceEvent{time: now, stats: stat})
+	}
+	return len(s.stats), buf, nil
+}
+
 func TestMonitor_Close(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -132,8 +223,8 @@ func TestMonitor_Close(t *testing.T) {
 	testDisk := &monitoredDisk{
 		manager: manager,
 		deviceID: DeviceID{
-			major: 0,
-			minor: 0,
+			Major: 0,
+			Minor: 0,
 		},
 		refCount: 2,
 	}

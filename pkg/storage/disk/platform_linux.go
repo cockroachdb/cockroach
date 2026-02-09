@@ -40,26 +40,77 @@ func (s *linuxStatsCollector) collect(
 	disks []*monitoredDisk, now time.Time,
 ) (countCollected int, err error) {
 	var n int
+	n, s.buf, err = readProcDiskstats(s.File, s.buf)
+	if err != nil {
+		return 0, err
+	}
+
+	return parseDiskStats(s.buf[:n], disks, now, nil)
+}
+
+// collectInstantaneous reads /proc/diskstats synchronously and invokes the
+// recorder callback for each monitored disk. Unlike collect() which writes to
+// the tracer ring buffer, this method allows callers to handle stats directly.
+//
+// Parameters:
+//   - disks: Monitored disks to collect stats for.
+//   - now: Timestamp to associate with collected stats.
+//   - recorder: Callback invoked for each disk with a traceEvent containing
+//     stats or an error.
+//   - buf: Byte buffer for reading /proc/diskstats; reallocated if too small.
+//
+// Returns:
+//   - countCollected: Number of disks for which stats were collected.
+//   - []byte: The (possibly reallocated) byte buffer for reuse.
+//   - error: Non-nil if reading /proc/diskstats fails.
+func (s *linuxStatsCollector) collectInstantaneous(
+	disks []*monitoredDisk, now time.Time, recorder func(traceEvent), buf []byte,
+) (countCollected int, _ []byte, err error) {
+	buf = ensureMinSizeBuffer(buf)
+
+	var n int
+	n, buf, err = readProcDiskstats(s.File, buf)
+	if err != nil {
+		return 0, buf, err
+	}
+
+	countCollected, err = parseDiskStats(buf[:n], disks, now, recorder)
+	return countCollected, buf, err
+}
+
+func ensureMinSizeBuffer(buf []byte) []byte {
+	if len(buf) < 64 {
+		buf = make([]byte, 64)
+	}
+	return buf
+}
+
+func readProcDiskstats(file vfs.File, buf []byte) (int, []byte, error) {
+	var n int
+	var err error
 	for {
-		n, err = s.File.ReadAt(s.buf, 0)
+		n, err = file.ReadAt(buf, 0)
 		if errors.Is(err, io.EOF) {
 			break
 		} else if err != nil {
-			return 0, err
+			return 0, buf, err
 		}
 		// err == nil
 		//
 		// NB: ReadAt is required to return a non-nil error when it returns n <
-		// len(s.buf). A nil error indicates a full len(s.buf) bytes were read,
+		// len(buf). A nil error indicates a full len(buf) bytes were read,
 		// and the diskstats file does not fit in our current buffer.
 		//
 		// We want to grow the buffer to be large enough to fit the entirety of
 		// the file. This is required for consistency. We're only guaranteed a
 		// consistent read if we read the entirety of the diskstats file in a
 		// single read. Reallocate (doubling) the buffer and continue.
-		s.buf = make([]byte, len(s.buf)*2)
+		buf = make([]byte, len(buf)*2)
 	}
-	return parseDiskStats(s.buf[:n], disks, now)
+	if n == 0 {
+		panic(errors.AssertionFailedf("n must not be 0"))
+	}
+	return n, buf, nil
 }
 
 func newStatsCollector(fs vfs.FS) (*linuxStatsCollector, error) {
@@ -69,7 +120,7 @@ func newStatsCollector(fs vfs.FS) (*linuxStatsCollector, error) {
 	}
 	return &linuxStatsCollector{
 		File: file,
-		buf:  make([]byte, 64),
+		buf:  ensureMinSizeBuffer(nil),
 	}, nil
 }
 
@@ -102,8 +153,8 @@ func deviceIDFromFileInfo(finfo fs.FileInfo, path string) DeviceID {
 			}
 
 			id := DeviceID{
-				major: major,
-				minor: minor,
+				Major: major,
+				Minor: minor,
 			}
 			return id
 
@@ -136,8 +187,8 @@ func deviceIDFromFileInfo(finfo fs.FileInfo, path string) DeviceID {
 	}
 
 	id := DeviceID{
-		major: major,
-		minor: minor,
+		Major: major,
+		Minor: minor,
 	}
 	return id
 }

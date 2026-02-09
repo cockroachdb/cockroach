@@ -22,6 +22,12 @@ func (darwinCollector) collect(disks []*monitoredDisk, time time.Time) (int, err
 	return len(disks), nil
 }
 
+func (darwinCollector) collectInstantaneous(
+	disks []*monitoredDisk, now time.Time, recorder func(traceEvent), buf []byte,
+) (countCollected int, _ []byte, err error) {
+	return len(disks), buf, nil
+}
+
 func newStatsCollector(fs vfs.FS) (*darwinCollector, error) {
 	return &darwinCollector{}, nil
 }
@@ -29,8 +35,8 @@ func newStatsCollector(fs vfs.FS) (*darwinCollector, error) {
 func deviceIDFromFileInfo(finfo fs.FileInfo, path string) DeviceID {
 	statInfo := finfo.Sys().(*sysutil.StatT)
 	id := DeviceID{
-		major: unix.Major(uint64(statInfo.Dev)),
-		minor: unix.Minor(uint64(statInfo.Dev)),
+		Major: unix.Major(uint64(statInfo.Dev)),
+		Minor: unix.Minor(uint64(statInfo.Dev)),
 	}
 	return id
 }
