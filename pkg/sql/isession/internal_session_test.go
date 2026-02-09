@@ -213,6 +213,11 @@ func TestInternalSession(t *testing.T) {
 	s := serverutils.StartServerOnly(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(ctx)
 
+	hostRunner := sqlutils.MakeSQLRunner(s.SystemLayer().SQLConn(t))
+	// If we have buffered writes enabled, we must have the split lock
+	// reliability enabled (which can be tweaked metamorphically, #161614).
+	hostRunner.Exec(t, "SET CLUSTER SETTING kv.lock_table.unreplicated_lock_reliability.split.enabled = true")
+
 	// This is a collection of tests that should all leave the internal session
 	// in a valid state. The order is randomized to ensure there is no accidental
 	// dependency on the order of operations. If the test fails, it is likely that
