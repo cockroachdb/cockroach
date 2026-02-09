@@ -281,6 +281,7 @@ func (f *FlowBase) Setup(
 func (f *FlowBase) SetTxn(txn *kv.Txn) {
 	f.FlowCtx.Txn = txn
 	f.EvalCtx.Txn = txn
+	f.EvalCtx.CatalogBuiltins.SetTxn(txn)
 }
 
 // ConcurrentTxnUse is part of the Flow interface.
