@@ -4559,6 +4559,10 @@ func (m *sessionDataMutator) SetDistSQLPreventPartitioningSoftLimitedScans(val b
 	m.data.DistSQLPreventPartitioningSoftLimitedScans = val
 }
 
+func (m *sessionDataMutator) SetOptimizerUseMinRowCountAntiJoinFix(val bool) {
+	m.data.OptimizerUseMinRowCountAntiJoinFix = val
+}
+
 // Utility functions related to scrubbing sensitive information on SQL Stats.
 
 // quantizeCounts ensures that the Count field in the
