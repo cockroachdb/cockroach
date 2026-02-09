@@ -828,8 +828,9 @@ func intentsToResolveToStr(toResolve []roachpb.LockUpdate, startOnNewLine bool) 
 	}
 	fmt.Fprintf(&buf, "Intents to resolve:")
 	for i := range toResolve {
-		fmt.Fprintf(&buf, "\n key=%s txn=%s status=%s", toResolve[i].Key,
-			toResolve[i].Txn.ID.Short(), toResolve[i].Status)
+		txn := toResolve[i].Txn
+		fmt.Fprintf(&buf, "\n key=%s txn=%s epoch=%d ts=%s status=%s", toResolve[i].Key,
+			txn.ID, txn.Epoch, txn.WriteTimestamp, toResolve[i].Status)
 	}
 	return buf.String()
 }

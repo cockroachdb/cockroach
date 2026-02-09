@@ -148,8 +148,8 @@ guard-state r=req4
 ----
 new: state=doneWaiting
 Intents to resolve:
- key="b" txn=00000000 status=PENDING
- key="c" txn=00000000 status=PENDING
+ key="b" txn=00000000-0000-0000-0000-000000000002 epoch=0 ts=11.000000000,1 status=PENDING
+ key="c" txn=00000000-0000-0000-0000-000000000002 epoch=0 ts=11.000000000,1 status=PENDING
 
 update txn=txn2 ts=11,1 epoch=0 span=b
 ----
