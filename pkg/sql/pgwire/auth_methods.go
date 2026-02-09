@@ -1196,23 +1196,10 @@ func AuthLDAP(
 
 	b.SetProvisioner(func(ctx context.Context) error {
 		c.LogAuthInfof(ctx, "LDAP authentication succeeded; attempting to provision user")
-		telemetry.Inc(provisioning.BeginLDAPProvisionUseCounter)
-		// Provision the user in the system.
-		idpString := entry.Method.String() + ":" + entry.GetOption("ldapserver")
-		provisioningSource, err := provisioning.ParseProvisioningSource(idpString)
-		if err != nil {
-			err = errors.Wrapf(err, "LDAP provisioning: invalid provisioning source IDP %s", idpString)
+		if err := ProvisionLDAPHelper(ctx, execCfg, sessionUser, entry); err != nil {
 			c.LogAuthFailed(ctx, eventpb.AuthFailReason_PROVISIONING_ERROR, err)
 			return err
 		}
-
-		if err := sql.CreateRoleForProvisioning(ctx, execCfg, sessionUser, provisioningSource.String()); err != nil {
-			err = errors.Wrapf(err, "LDAP provisioning: error provisioning user %s", sessionUser)
-			c.LogAuthFailed(ctx, eventpb.AuthFailReason_PROVISIONING_ERROR, err)
-			return err
-		}
-
-		telemetry.Inc(provisioning.ProvisionLDAPSuccessCounter)
 		return nil
 	})
 
@@ -1298,4 +1285,28 @@ func AuthorizeLDAPHelper(
 		return redact.Sprint(detailedErr), clientErr
 	}
 	return "", nil
+}
+
+// ProvisionLDAPHelper provisions a user based on a successful LDAP
+// authentication. It creates the user if it doesn't exist and sets the
+// PROVISIONSRC role option. This function is used by both the SQL shell
+// and DB Console LDAP authentication paths.
+func ProvisionLDAPHelper(
+	ctx context.Context, execCfg *sql.ExecutorConfig, user username.SQLUsername, entry *hba.Entry,
+) error {
+	telemetry.Inc(provisioning.BeginLDAPProvisionUseCounter)
+	idpString := entry.Method.String() + ":" + entry.GetOption("ldapserver")
+	provisioningSource, err := provisioning.ParseProvisioningSource(idpString)
+	if err != nil {
+		return errors.Wrapf(err,
+			"LDAP provisioning: invalid provisioning source IDP %s", idpString)
+	}
+	if err := sql.CreateRoleForProvisioning(
+		ctx, execCfg, user, provisioningSource.String(),
+	); err != nil {
+		return errors.Wrapf(err,
+			"LDAP provisioning: error provisioning user %s", user)
+	}
+	telemetry.Inc(provisioning.ProvisionLDAPSuccessCounter)
+	return nil
 }
