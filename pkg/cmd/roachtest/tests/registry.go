@@ -183,4 +183,5 @@ func RegisterTests(r registry.Registry) {
 	registerDBConsoleEndpointsMixedVersion(r)
 	registerTTLRestart(r)
 	perturbation.RegisterTests(r)
+	registerRustSqlx(r)
 }
