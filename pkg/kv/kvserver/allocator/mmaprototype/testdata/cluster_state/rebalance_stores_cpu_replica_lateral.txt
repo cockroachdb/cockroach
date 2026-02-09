@@ -128,7 +128,7 @@ rebalance-stores store-id=1
 [mmaid=1] cannot add load to n3s4: due to target_summary(overloadSlow)>=loadNoChange,target-node(overloadSlow)>target-store(loadNormal)
 [mmaid=1] [target_sls:(store=loadNormal worst=ByteSize cpu=loadLow writes=loadLow bytes=loadNormal node=overloadSlow frac_pending=0.00,0.00(true)),src_sls:(store=overloadSlow worst=WriteBandwidth cpu=loadLow writes=overloadSlow bytes=loadNormal node=loadNormal frac_pending=0.00,0.00(true))]
 [mmaid=1] result(failed): cannot shed from s3 to s4 for r1: delta load [cpu:10ns/s, write-bandwidth:10 MB/s, byte-size:0 B]
-[mmaid=1] rebalancing pass failures (store,reason:count): (s1,no-cand-load:1), (s3,no-cand-to-accept-load:1)
+[mmaid=1] rebalancing pass failures (store,reason:count...,total_ranges): (s1,no-cand:1,no-cand-load:1,2), (s3,no-cand-to-accept-load:1,1)
 pending(0)
 
 # Advance time beyond the lease shedding grace period.
@@ -218,5 +218,5 @@ rebalance-stores store-id=1
 [mmaid=2] cannot add load to n3s4: due to target_summary(overloadSlow)>=loadNoChange,target-node(overloadSlow)>target-store(loadNormal)
 [mmaid=2] [target_sls:(store=loadNormal worst=ByteSize cpu=loadLow writes=loadLow bytes=loadNormal node=overloadSlow frac_pending=0.00,0.00(true)),src_sls:(store=overloadSlow worst=WriteBandwidth cpu=loadLow writes=overloadSlow bytes=loadNormal node=loadNormal frac_pending=0.00,0.00(true))]
 [mmaid=2] result(failed): cannot shed from s3 to s4 for r1: delta load [cpu:10ns/s, write-bandwidth:10 MB/s, byte-size:0 B]
-[mmaid=2] rebalancing pass failures (store,reason:count): (s1,no-cand-load:1), (s2,no-cand:1), (s3,no-cand-to-accept-load:1)
+[mmaid=2] rebalancing pass failures (store,reason:count...,total_ranges): (s1,no-cand:1,no-cand-load:1,2), (s2,no-cand:1,1), (s3,no-cand-to-accept-load:1,1)
 pending(0)
