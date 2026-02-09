@@ -1761,7 +1761,7 @@ vectorized: true
         │
         └── • lookup join (anti)
             │ columns: (fk_lookup_crdb_region, column1)
-            │ estimated row count: 0 (missing stats)
+            │ estimated row count: 1 (missing stats)
             │ table: parent_rbr@parent_rbr_pkey
             │ equality: (fk_lookup_crdb_region, column1) = (crdb_region, k)
             │ equality cols are key
@@ -1847,7 +1847,7 @@ vectorized: true
         │
         └── • lookup join (anti)
             │ columns: (fk_lookup_crdb_region, k_new)
-            │ estimated row count: 0 (missing stats)
+            │ estimated row count: 1 (missing stats)
             │ table: parent_rbr@parent_rbr_pkey
             │ equality: (fk_lookup_crdb_region, k_new) = (crdb_region, k)
             │ equality cols are key
@@ -1973,7 +1973,7 @@ vectorized: true
         │
         └── • lookup join (anti)
             │ columns: (fk_lookup_crdb_region, column1, column2)
-            │ estimated row count: 0 (missing stats)
+            │ estimated row count: 1 (missing stats)
             │ table: parent_unique_nullable@parent_unique_nullable_x_y_key
             │ equality: (fk_lookup_crdb_region, column1, column2) = (crdb_region, x, y)
             │ equality cols are key
@@ -2101,7 +2101,7 @@ vectorized: true
         │
         └── • lookup join (anti)
             │ columns: (fk_lookup_crdb_region, x, y_new)
-            │ estimated row count: 0 (missing stats)
+            │ estimated row count: 1 (missing stats)
             │ table: parent_unique_nullable@parent_unique_nullable_x_y_key
             │ equality: (fk_lookup_crdb_region, x, y_new) = (crdb_region, x, y)
             │ equality cols are key

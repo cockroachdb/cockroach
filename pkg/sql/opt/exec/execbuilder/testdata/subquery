@@ -346,7 +346,7 @@ vectorized: true
 ·
 • merge join (anti)
 │ columns: (x, y)
-│ estimated row count: 0 (missing stats)
+│ estimated row count: 1 (missing stats)
 │ equality: (x) = (x)
 │ left cols are key
 │ right cols are key
@@ -374,7 +374,7 @@ vectorized: true
 ·
 • hash join (anti)
 │ columns: (x, z)
-│ estimated row count: 0 (missing stats)
+│ estimated row count: 1 (missing stats)
 │ equality: (x) = (column14)
 │ left cols are key
 │

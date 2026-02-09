@@ -671,7 +671,7 @@ vectorized: true
     │
     └── • lookup join (anti)
         │ columns: (column1, column2, column3, d_comp)
-        │ estimated row count: 0 (missing stats)
+        │ estimated row count: 1 (missing stats)
         │ table: indexed@secondary
         │ equality: (d_comp, column2) = (d, b)
         │ equality cols are key

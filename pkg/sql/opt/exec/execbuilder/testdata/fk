@@ -2003,7 +2003,7 @@ distribution: local
     └── • error if rows
         │
         └── • lookup join (anti)
-            │ estimated row count: 0
+            │ estimated row count: 1
             │ table: small_parent@small_parent_pkey
             │ equality: (?column?) = (p)
             │ equality cols are key
