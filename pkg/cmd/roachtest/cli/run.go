@@ -3,11 +3,13 @@
 // Use of this software is governed by the CockroachDB Software License
 // included in the /LICENSE file.
 
-package main
+package cli
 
 import (
 	"context"
 	"fmt"
+	"io"
+	"math"
 	"math/rand"
 	"net/http"
 	"os"
@@ -26,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestflags"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/testselector"
 	"github.com/cockroachdb/cockroach/pkg/internal/team"
 	"github.com/cockroachdb/cockroach/pkg/roachprod"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
@@ -547,4 +550,246 @@ func getDatadogTags() []string {
 	}
 
 	return strings.Split(rawTags, ",")
+}
+
+// testsToRun determines which tests should be executed based on the filter
+// and configuration flags.
+func testsToRun(
+	r testRegistryImpl,
+	filter *registry.TestFilter,
+	runSkipped bool,
+	selectProbability float64,
+	print bool,
+) ([]registry.TestSpec, error) {
+	specs, hint := filter.FilterWithHint(r.AllTests())
+	if len(specs) == 0 {
+		msg := filter.NoMatchesHintString(hint)
+		if hint == registry.IncompatibleCloud {
+			msg += "\nTo include tests that are not compatible with this cloud, use --force-cloud-compat."
+		}
+		return nil, errors.Newf("%s", msg)
+	}
+
+	if roachtestflags.SelectiveTests {
+		fmt.Printf("selective Test enabled\n")
+		// the test categorization must be complete in 30 seconds
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
+		updateSpecForSelectiveTests(ctx, specs, func(format string, args ...interface{}) {
+			fmt.Fprintf(os.Stdout, format, args...)
+		})
+	}
+
+	var notSkipped []registry.TestSpec
+	for _, s := range specs {
+		if s.Skip == "" || runSkipped {
+			notSkipped = append(notSkipped, s)
+		} else {
+			if print && roachtestflags.TeamCity {
+				fmt.Fprintf(os.Stdout, "##teamcity[testIgnored name='%s' message='%s']\n",
+					s.Name, TeamCityEscape(s.Skip))
+			}
+			skipDetails := s.Skip
+			if skipDetails != "" {
+				skipDetails = " (" + s.SkipDetails + ")"
+			}
+			if print {
+				fmt.Fprintf(os.Stdout, "--- SKIP: %s (%s)\n\t%s\n", s.Name, "0.00s", skipDetails)
+			}
+		}
+	}
+
+	if print {
+		// We want to show information about all tests/benchmarks which match the
+		// pattern(s) but were excluded for other reasons.
+		relaxedFilter := registry.TestFilter{
+			Name:           filter.Name,
+			OnlyBenchmarks: filter.OnlyBenchmarks,
+		}
+		for _, s := range relaxedFilter.Filter(r.AllTests()) {
+			if matches, r := filter.Matches(&s); !matches {
+				reason := filter.MatchFailReasonString(r)
+				// This test matches the "relaxed" filter but not the original filter.
+				if roachtestflags.TeamCity {
+					fmt.Fprintf(os.Stdout, "##teamcity[testIgnored name='%s' message='%s']\n", s.Name, reason)
+				}
+				fmt.Fprintf(os.Stdout, "--- SKIP: %s (%s)\n\t%s\n", s.Name, "0.00s", reason)
+			}
+		}
+	}
+
+	var stdout io.Writer
+	if print {
+		stdout = os.Stdout
+	}
+	rng, _ := randutil.NewPseudoRand()
+	return selectSpecs(notSkipped, rng, selectProbability, true, stdout), nil
+}
+
+// updateSpecForSelectiveTests is responsible for updating the test spec skip and skip details
+// based on the test categorization criteria.
+// The following steps are performed in this function:
+//  1. Queries Snowflake for the test run data.
+//  2. The snowflake data sets "selected=true" based on the following criteria:
+//     a. the test that has failed at least once in last 30 days
+//     b. the test is newer than 20 days
+//     c. the test has not been run for more than 7 days
+//  2. The rest of the tests returned by snowflake are the successful tests marked as "selected=false".
+//  3. Now, an intersection of the tests that are selected by the build (specs) and tests returned by snowflake
+//     as successful is taken. This is done to select tests on the next criteria of selecting the 35% of
+//     the successful tests.
+//  4. The tests that meet the 35% criteria, are marked as "selected=true"
+//  5. All tests that are marked "selected=true" are considered for the test run.
+func updateSpecForSelectiveTests(
+	ctx context.Context, specs []registry.TestSpec, logFunc func(format string, args ...interface{}),
+) {
+	selectedTestsCount := 0
+	allTests, err := testselector.CategoriseTests(ctx,
+		testselector.NewDefaultSelectTestsReq(roachtestflags.Cloud, roachtestflags.Suite))
+	if err != nil {
+		logFunc("running all tests! error selecting tests: %v\n", err)
+		return
+	}
+
+	// successfulTests are the tests considered by snowflake to not run, but, part of the testSpecs.
+	// So, it is an intersection of all tests that are part of the run and all tests that are returned
+	// by snowflake as successful.
+	// This is why we need the intersection:
+	// - testSpec contains all the tests that are currently considered as a part of the current run.
+	// - The list of tests returned by selector can contain tests may not be part of the test spec. This can
+	//   be because of tests getting decommissioned.
+	// Now, we want to take the tests common to both. These are the tests from which we need to select
+	// "successfulTestsSelectPct" percent tests to run.
+	successfulTests := make([]*testselector.TestDetails, 0)
+
+	// allTestsMap is maintained to check for the test details while skipping a test
+	allTestsMap := make(map[string]*testselector.TestDetails)
+	// all tests from specs are added as nil to the map
+	// this is used in identifying the tests that are part of the build
+	for _, test := range specs {
+		allTestsMap[test.Name] = nil
+	}
+	for i := 0; i < len(allTests); i++ {
+		td := allTests[i]
+		if _, ok := allTestsMap[td.Name]; ok && !td.Selected {
+			// adding only the unselected tests that are part of the specs
+			// These are tests that have been running successfully
+			successfulTests = append(successfulTests, td)
+		}
+		// populate the test details for the tests returned from snowflake
+		allTestsMap[td.Name] = td
+	}
+	// numberOfTestsToSelect is the number of tests to be selected from the successfulTests based on percentage selection
+	numberOfTestsToSelect := int(math.Ceil(float64(len(successfulTests)) * roachtestflags.SuccessfulTestsSelectPct))
+	for i := 0; i < numberOfTestsToSelect; i++ {
+		successfulTests[i].Selected = true
+	}
+	logFunc("%d selected out of %d successful tests.\n", numberOfTestsToSelect, len(successfulTests))
+	for i := range specs {
+		if testShouldBeSkipped(allTestsMap, specs[i], roachtestflags.Suite) {
+			if specs[i].Skip == "" {
+				// updating only if the test not already skipped
+				specs[i].Skip = "test selector"
+				specs[i].SkipDetails = "test skipped because it is stable and selective-tests is set."
+			}
+		} else {
+			selectedTestsCount++
+		}
+		if td, ok := allTestsMap[specs[i].Name]; ok && td != nil {
+			// populate the stats as obtained from the test selector
+			specs[i].SetStats(td.AvgDurationInMillis, td.LastFailureIsPreempt)
+		}
+	}
+	logFunc("%d out of %d tests selected for the run!\n", selectedTestsCount, len(specs))
+}
+
+// testShouldBeSkipped decides whether a test should be skipped based on test details and suite
+func testShouldBeSkipped(
+	testNamesToRun map[string]*testselector.TestDetails, test registry.TestSpec, suite string,
+) bool {
+	if test.Randomized {
+		return false
+	}
+
+	for test.TestSelectionOptOutSuites.IsInitialized() && test.TestSelectionOptOutSuites.Contains(suite) {
+		// test should not be skipped for this suite
+		return false
+	}
+
+	td := testNamesToRun[test.Name]
+	return td != nil && !td.Selected
+}
+
+// selectSpecs returns a random sample of the given test specs.
+// If atLeastOnePerPrefix is true, it guarantees that at least one test is
+// selected for each prefix (e.g. kv0/, acceptance/).
+// This assumes that specs are sorted by name, which is the case for
+// testRegistryImpl.AllTests().
+// TODO(smg260): Perhaps expose `atLeastOnePerPrefix` via CLI
+func selectSpecs(
+	specs []registry.TestSpec,
+	rng *rand.Rand,
+	samplePct float64,
+	atLeastOnePerPrefix bool,
+	stdout io.Writer,
+) []registry.TestSpec {
+	if samplePct == 1 || len(specs) == 0 {
+		return specs
+	}
+
+	var sampled []registry.TestSpec
+	selectedIndexes := make(map[int]struct{})
+
+	prefix := strings.Split(specs[0].Name, "/")[0]
+	prefixSelected := false
+	prefixIdx := 0
+
+	// Selects one random spec from the range [start, end) and appends it to sampled.
+	collectRandomSpecFromRange := func(start, end int) {
+		i := start + rng.Intn(end-start)
+		sampled = append(sampled, specs[i])
+		selectedIndexes[i] = struct{}{}
+	}
+	for i, s := range specs {
+		if atLeastOnePerPrefix {
+			currPrefix := strings.Split(s.Name, "/")[0]
+			// New prefix. Check we've at least one selected test for the previous prefix.
+			if currPrefix != prefix {
+				if !prefixSelected {
+					collectRandomSpecFromRange(prefixIdx, i)
+				}
+				prefix = currPrefix
+				prefixIdx = i
+				prefixSelected = false
+			}
+		}
+
+		if rng.Float64() < samplePct {
+			sampled = append(sampled, s)
+			selectedIndexes[i] = struct{}{}
+			prefixSelected = true
+			continue
+		}
+
+		if atLeastOnePerPrefix && i == len(specs)-1 && !prefixSelected {
+			// i + 1 since we want to include the last element
+			collectRandomSpecFromRange(prefixIdx, i+1)
+		}
+	}
+
+	// Print a skip message for all tests that are not selected.
+	for i, s := range specs {
+		if _, ok := selectedIndexes[i]; !ok {
+			if stdout != nil && roachtestflags.TeamCity {
+				fmt.Fprintf(stdout, "##teamcity[testIgnored name='%s' message='excluded via sampling']\n",
+					s.Name)
+			}
+
+			if stdout != nil {
+				fmt.Fprintf(stdout, "--- SKIP: %s (%s)\n\texcluded via sampling\n", s.Name, "0.00s")
+			}
+		}
+	}
+
+	return sampled
 }

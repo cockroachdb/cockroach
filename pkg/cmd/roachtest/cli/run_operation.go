@@ -3,13 +3,14 @@
 // Use of this software is governed by the CockroachDB Software License
 // included in the /LICENSE file.
 
-package main
+package cli
 
 import (
 	"context"
 	"fmt"
 	"math/rand"
 	"os"
+	"regexp"
 	"runtime/debug"
 	"sync"
 	"time"
@@ -20,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestflags"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil/operations"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil/task"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/roachprod"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
@@ -28,11 +30,23 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
-	"golang.org/x/sync/errgroup"
 	"gopkg.in/yaml.v2"
 )
 
 const baseSleepTime = 15
+
+// opsToRun returns the list of operations that match the given filter.
+func opsToRun(r testRegistryImpl, filter string) ([]registry.OperationSpec, error) {
+	regex, err := regexp.Compile(filter)
+	if err != nil {
+		return nil, err
+	}
+	filteredOps := r.FilteredOperations(regex)
+	if len(filteredOps) == 0 {
+		return nil, errors.New("no matching operations to run")
+	}
+	return filteredOps, nil
+}
 
 type opsRunner struct {
 	clusterName string
@@ -113,17 +127,19 @@ func runOperations(register func(registry.Registry), filter, clusterName string)
 		or.workloadNodes = workloadCluster.VMs.Len()
 	}
 
-	var wg errgroup.Group
+	taskMgr := task.NewManager(ctx, l)
+	defer taskMgr.Terminate(l)
+	wg := taskMgr.NewErrorGroup()
 	runForever := roachtestflags.RunForever
 	parallelism := min(roachtestflags.OperationParallelism, roachtestflags.MaxOperationParallelism)
 	for i := 1; i <= parallelism; i++ {
 		idx := i
-		wg.Go(func() error {
+		wg.Go(func(ctx context.Context, l *logger.Logger) error {
 			or.runWorker(ctx, idx, runForever)
 			return nil
 		})
 	}
-	return wg.Wait()
+	return wg.WaitE()
 }
 
 // runWorker manages the infinite loop for one operation runner worker.

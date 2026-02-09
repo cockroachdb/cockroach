@@ -3,7 +3,7 @@
 // Use of this software is governed by the CockroachDB Software License
 // included in the /LICENSE file.
 
-package main
+package cli
 
 import (
 	"context"
@@ -467,7 +467,7 @@ func (t *testImpl) addFailure(depth int, format string, args ...interface{}) {
 	if format == "" {
 		format = strings.Repeat(" %v", len(args))[1:]
 	}
-	reportFailure := newFailure(errors.NewWithDepthf(depth+1, format, args...), collectErrors(args))
+	reportFailure := newFailure(errors.NewWithDepthf(depth+1, format, args...), collectErrors(args)) //nolint:fmtsafe
 
 	t.mu.Lock()
 	defer t.mu.Unlock()
