@@ -70,6 +70,13 @@ const TimeScaleDropdownWithSearchParams = (
         if (!presetTimescale) {
           return;
         }
+        // Don't dispatch if scale is already set to this preset.
+        if (
+          props.currentScale?.key === presetTimescale &&
+          !props.currentScale?.fixedWindowEnd
+        ) {
+          return;
+        }
         const presetOption = defaultTimeScaleOptions[presetTimescale];
 
         props.setTimeScale({
@@ -137,7 +144,7 @@ const TimeScaleDropdownWithSearchParams = (
     } else {
       // Set query params from the redux store if there aren't any
       // present in the URL.
-      onTimeScaleChange(props.currentScale);
+      updateUrlParams(props.currentScale);
     }
 
     setQueryParamsRead(true);
