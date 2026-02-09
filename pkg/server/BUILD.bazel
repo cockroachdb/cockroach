@@ -222,6 +222,7 @@ go_library(
         "//pkg/sql/appstatspb",
         "//pkg/sql/auditlogging",
         "//pkg/sql/bulkmerge",
+        "//pkg/sql/bulkutil",
         "//pkg/sql/catalog/bootstrap",
         "//pkg/sql/catalog/catalogkeys",
         "//pkg/sql/catalog/catsessiondata",

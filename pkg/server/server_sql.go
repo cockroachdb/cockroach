@@ -69,6 +69,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfigsqlwatcher"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/auditlogging"
+	"github.com/cockroachdb/cockroach/pkg/sql/bulkutil"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catsessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descidgen"
@@ -1656,6 +1657,7 @@ func (s *SQLServer) preStart(
 
 	s.execCfg.GCJobNotifier.Start(ctx)
 	s.temporaryObjectCleaner.Start(ctx, stopper)
+	s.startOrphanedBulkFileCleanup(ctx, stopper)
 	s.distSQLServer.Start()
 	s.pgServer.Start(ctx, stopper)
 
@@ -1851,6 +1853,14 @@ func (s *SQLServer) startJobScheduler(ctx context.Context, knobs base.TestingKno
 		},
 		scheduledjobs.ProdJobSchedulerEnv,
 	)
+}
+
+func (s *SQLServer) startOrphanedBulkFileCleanup(ctx context.Context, stopper *stop.Stopper) {
+	_ = stopper.RunAsyncTask(ctx, "bulk-file-cleaner", func(ctx context.Context) {
+		if err := bulkutil.CleanupOrphanedFiles(ctx, s.distSQLServer.ExternalStorageFromURI, s.internalDB); err != nil {
+			log.Dev.Warningf(ctx, "bulk file cleanup encountered errors: %v", err)
+		}
+	})
 }
 
 // startCheckService verifies that the tenant has the right
