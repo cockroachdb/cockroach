@@ -25,10 +25,10 @@ import (
 )
 
 func compareDeviceIDs(a, b DeviceID) int {
-	if v := cmp.Compare(a.major, b.major); v != 0 {
+	if v := cmp.Compare(a.Major, b.Major); v != 0 {
 		return v
 	}
-	return cmp.Compare(a.minor, b.minor)
+	return cmp.Compare(a.Minor, b.Minor)
 }
 
 func TestLinux_CollectDiskStats(t *testing.T) {
@@ -44,10 +44,10 @@ func TestLinux_CollectDiskStats(t *testing.T) {
 				var deviceID DeviceID
 				v, err := strconv.ParseUint(cmdArg.Vals[0], 10, 32)
 				require.NoError(t, err)
-				deviceID.major = uint32(v)
+				deviceID.Major = uint32(v)
 				v, err = strconv.ParseUint(cmdArg.Vals[1], 10, 32)
 				require.NoError(t, err)
-				deviceID.minor = uint32(v)
+				deviceID.Minor = uint32(v)
 				tracer := newMonitorTracer(1000)
 				disks = append(disks, &monitoredDisk{deviceID: deviceID, tracer: tracer})
 			}

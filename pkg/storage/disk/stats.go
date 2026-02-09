@@ -15,6 +15,8 @@ const SectorSizeBytes = 512
 
 // Stats describes statistics for an individual disk or volume.
 type Stats struct {
+	DeviceID DeviceID
+
 	DeviceName string
 	// ReadsCount is the count of read operations completed successfully.
 	ReadsCount int

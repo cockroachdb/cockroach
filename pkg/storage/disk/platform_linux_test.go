@@ -239,3 +239,28 @@ func TestLinux_parseDeviceID(t *testing.T) {
 		})
 	}
 }
+
+func TestEnsureMinSizeBuffer(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    []byte
+	}{
+		{name: "nil buffer", input: nil},
+		{name: "empty buffer", input: []byte{}},
+		{name: "small buffer", input: make([]byte, 5)},
+		{name: "exact size buffer", input: make([]byte, 64)},
+		{name: "large buffer", input: make([]byte, 65)},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			got := ensureMinSizeBuffer(test.input)
+			require.NotNil(t, got)
+			if len(test.input) <= 64 {
+				require.Equal(t, len(got), 64)
+			} else {
+				require.Greater(t, len(got), 64)
+			}
+		})
+	}
+}
