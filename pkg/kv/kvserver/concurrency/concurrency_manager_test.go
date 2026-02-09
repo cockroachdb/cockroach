@@ -90,6 +90,7 @@ import (
 // debug-advance-clock       ts=<secs>
 // debug-set-discovered-locks-threshold-to-consult-txn-status-cache n=<count>
 // debug-set-batch-pushed-lock-resolution-enabled ok=<enabled>
+// debug-set-push-using-cached-clock-observation-enabled ok=<enabled>
 // debug-set-max-locks n=<count>
 // reset [namespace|force]
 func TestConcurrencyManagerBasic(t *testing.T) {
@@ -604,6 +605,11 @@ func TestConcurrencyManagerBasic(t *testing.T) {
 				c.setBatchPushedLockResolutionEnabled(ok)
 				return ""
 
+			case "debug-set-push-using-cached-clock-observation-enabled":
+				ok := dd.ScanArg[bool](t, d, "ok")
+				c.setPushUsingCachedClockObservationEnabled(ok)
+				return ""
+
 			case "debug-set-max-locks":
 				n := dd.ScanArg[int64](t, d, "n")
 				m.SetMaxLockTableSize(n)
@@ -1006,6 +1012,10 @@ func (c *cluster) setDiscoveredLocksThresholdToConsultTxnStatusCache(n int) {
 
 func (c *cluster) setBatchPushedLockResolutionEnabled(ok bool) {
 	concurrency.BatchPushedLockResolution.Override(context.Background(), &c.st.SV, ok)
+}
+
+func (c *cluster) setPushUsingCachedClockObservationEnabled(ok bool) {
+	concurrency.PushUsingCachedClockObservation.Override(context.Background(), &c.st.SV, ok)
 }
 
 // reset clears all request state in the cluster. This avoids portions of tests
