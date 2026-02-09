@@ -251,3 +251,337 @@ finish req=req2-retry
 
 reset namespace
 ----
+
+# -------------------------------------------------------------
+# A transactional (txn2) read-only request with an uncertainty
+# interval runs into multiple replicated intents from the same
+# transaction (txn1). After pushing the first intent, the request
+# should be able to proceed past all remaining intents without
+# additional pushes, using the cached push result.
+#
+# This tests the optimization in conflictsWithLockHolders that
+# allows readers with uncertainty intervals to use cached push
+# results if their observed timestamp on the push node is <=
+# the clock observation recorded when the push occurred.
+# -------------------------------------------------------------
+
+new-txn name=txn1 ts=10,1 epoch=0
+----
+
+# txn2 has an uncertainty interval [12,1 to 15,1] and an observed timestamp
+# on node 1 at time 123,1 (the test clock's initial time). This observed
+# timestamp will be <= the clock observation captured before pushing, which
+# allows the optimization in conflictsWithLockHolders to apply.
+new-txn name=txn2 ts=12,1 epoch=0 uncertainty-limit=15,1 observed-ts=1@123,1
+----
+
+new-request name=req1 txn=txn2 ts=12,1
+  scan key=a endkey=z
+----
+
+sequence req=req1
+----
+[1] sequence req1: sequencing request
+[1] sequence req1: acquiring latches
+[1] sequence req1: scanning lock table for conflicting locks
+[1] sequence req1: sequencing complete, returned guard
+
+# Discover 3 intents from txn1 at keys a, b, c.
+handle-lock-conflict-error req=req1 lease-seq=1
+  lock txn=txn1 key=a
+  lock txn=txn1 key=b
+  lock txn=txn1 key=c
+----
+[2] handle lock conflict error req1: handled conflicting locks on ‹"a"›, ‹"b"›, ‹"c"›, released latches
+
+debug-lock-table
+----
+num=3
+ lock: "a"
+  holder: txn: 00000001-0000-0000-0000-000000000000 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: repl [Intent]
+ lock: "b"
+  holder: txn: 00000001-0000-0000-0000-000000000000 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: repl [Intent]
+ lock: "c"
+  holder: txn: 00000001-0000-0000-0000-000000000000 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: repl [Intent]
+
+# Re-sequence. The request will wait on the first intent and push txn1.
+sequence req=req1
+----
+[3] sequence req1: re-sequencing request
+[3] sequence req1: acquiring latches
+[3] sequence req1: scanning lock table for conflicting locks
+[3] sequence req1: waiting in lock wait-queues
+[3] sequence req1: lock wait-queue event: wait for txn 00000001 holding lock @ key ‹"a"› (queuedLockingRequests: 0, queuedReaders: 1)
+[3] sequence req1: pushing after 0s for: deadlock/liveness detection = true, timeout enforcement = false, priority enforcement = false, wait policy error = false
+[3] sequence req1: pushing timestamp of txn 00000001 above 15.000000000,1
+[3] sequence req1: blocked on select in concurrency_test.(*cluster).PushTransaction
+
+# Push succeeds - txn1 is pushed above the reader's uncertainty limit.
+on-txn-updated txn=txn1 status=pending ts=15,2
+----
+[-] update txn: increasing timestamp of txn1
+[3] sequence req1: resolving intent ‹"a"› for txn 00000001 with PENDING status and clock observation {1 135.000000000,7}
+[3] sequence req1: lock wait-queue event: done waiting
+[3] sequence req1: conflicted with 00000001-0000-0000-0000-000000000000 on ‹"a"› for 0.000s
+[3] sequence req1: resolving a batch of 2 intent(s)
+[3] sequence req1: resolving intent ‹"b"› for txn 00000001 with PENDING status and clock observation {1 135.000000000,7}
+[3] sequence req1: resolving intent ‹"c"› for txn 00000001 with PENDING status and clock observation {1 135.000000000,7}
+[3] sequence req1: acquiring latches
+[3] sequence req1: scanning lock table for conflicting locks
+[3] sequence req1: sequencing complete, returned guard
+
+finish req=req1
+----
+[-] finish req1: finishing request
+
+reset namespace
+----
+
+# -------------------------------------------------------------
+# A transactional (txn2) read-only request WITHOUT an uncertainty
+# interval runs into multiple replicated intents from the same
+# transaction (txn1). After pushing the first intent, the request
+# can proceed past remaining intents using the cached push result,
+# without needing a clock observation check.
+#
+# This tests that readers without uncertainty intervals can always
+# use cached push results in pendingPushedTransactionCanBeResolved.
+# -------------------------------------------------------------
+
+new-txn name=txn1 ts=10,1 epoch=0
+----
+
+# txn2 has NO uncertainty interval (read timestamp equals global uncertainty limit).
+# It also has no observed timestamps.
+new-txn name=txn2 ts=12,1 epoch=0
+----
+
+new-request name=req1 txn=txn2 ts=12,1
+  scan key=a endkey=z
+----
+
+sequence req=req1
+----
+[1] sequence req1: sequencing request
+[1] sequence req1: acquiring latches
+[1] sequence req1: scanning lock table for conflicting locks
+[1] sequence req1: sequencing complete, returned guard
+
+# Discover 3 intents from txn1 at keys a, b, c.
+handle-lock-conflict-error req=req1 lease-seq=1
+  lock txn=txn1 key=a
+  lock txn=txn1 key=b
+  lock txn=txn1 key=c
+----
+[2] handle lock conflict error req1: handled conflicting locks on ‹"a"›, ‹"b"›, ‹"c"›, released latches
+
+debug-lock-table
+----
+num=3
+ lock: "a"
+  holder: txn: 00000001-0000-0000-0000-000000000000 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: repl [Intent]
+ lock: "b"
+  holder: txn: 00000001-0000-0000-0000-000000000000 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: repl [Intent]
+ lock: "c"
+  holder: txn: 00000001-0000-0000-0000-000000000000 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: repl [Intent]
+
+# Re-sequence. The request will wait on the first intent and push txn1.
+sequence req=req1
+----
+[3] sequence req1: re-sequencing request
+[3] sequence req1: acquiring latches
+[3] sequence req1: scanning lock table for conflicting locks
+[3] sequence req1: waiting in lock wait-queues
+[3] sequence req1: lock wait-queue event: wait for txn 00000001 holding lock @ key ‹"a"› (queuedLockingRequests: 0, queuedReaders: 1)
+[3] sequence req1: pushing after 0s for: deadlock/liveness detection = true, timeout enforcement = false, priority enforcement = false, wait policy error = false
+[3] sequence req1: pushing timestamp of txn 00000001 above 12.000000000,1
+[3] sequence req1: blocked on select in concurrency_test.(*cluster).PushTransaction
+
+# Push succeeds - txn1 is pushed above the reader's timestamp.
+# Because there's no uncertainty interval, the batch-resolved intents (b, c)
+# don't include the clock observation. The first intent (a) is resolved
+# directly after the push, which always includes the clock observation.
+on-txn-updated txn=txn1 status=pending ts=12,2
+----
+[-] update txn: increasing timestamp of txn1
+[3] sequence req1: resolving intent ‹"a"› for txn 00000001 with PENDING status and clock observation {1 135.000000000,9}
+[3] sequence req1: lock wait-queue event: done waiting
+[3] sequence req1: conflicted with 00000001-0000-0000-0000-000000000000 on ‹"a"› for 0.000s
+[3] sequence req1: resolving a batch of 2 intent(s)
+[3] sequence req1: resolving intent ‹"b"› for txn 00000001 with PENDING status
+[3] sequence req1: resolving intent ‹"c"› for txn 00000001 with PENDING status
+[3] sequence req1: acquiring latches
+[3] sequence req1: scanning lock table for conflicting locks
+[3] sequence req1: sequencing complete, returned guard
+
+finish req=req1
+----
+[-] finish req1: finishing request
+
+reset namespace
+----
+
+# -------------------------------------------------------------
+# A transactional (txn2) read-only request with an uncertainty
+# interval has an observed timestamp on a DIFFERENT node than
+# the one where the push occurred.
+#
+# The optimization cannot apply because the request doesn't have an
+# observation for the push node. The request must wait and push again for
+# subsequent intents.
+#
+# This test case is contrived. If txn2 is processing a request on node 1 it
+# _should_ have _some_ clock observation from node 1.
+# -------------------------------------------------------------
+
+new-txn name=txn1 ts=10,1 epoch=0
+----
+
+# txn2 has an uncertainty interval and an observed timestamp on node 2,
+# but the push will record a clock observation for node 1 (our node).
+# Since there's no observation for node 1, the optimization doesn't apply.
+new-txn name=txn2 ts=12,1 epoch=0 uncertainty-limit=15,1 observed-ts=2@100,0
+----
+
+new-request name=req1 txn=txn2 ts=12,1
+  scan key=a endkey=z
+----
+
+sequence req=req1
+----
+[1] sequence req1: sequencing request
+[1] sequence req1: acquiring latches
+[1] sequence req1: scanning lock table for conflicting locks
+[1] sequence req1: sequencing complete, returned guard
+
+# Discover 2 intents from txn1 at keys a and b.
+handle-lock-conflict-error req=req1 lease-seq=1
+  lock txn=txn1 key=a
+  lock txn=txn1 key=b
+----
+[2] handle lock conflict error req1: handled conflicting locks on ‹"a"›, ‹"b"›, released latches
+
+debug-lock-table
+----
+num=2
+ lock: "a"
+  holder: txn: 00000001-0000-0000-0000-000000000000 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: repl [Intent]
+ lock: "b"
+  holder: txn: 00000001-0000-0000-0000-000000000000 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: repl [Intent]
+
+# Re-sequence. The request will wait on the first intent and push txn1.
+sequence req=req1
+----
+[3] sequence req1: re-sequencing request
+[3] sequence req1: acquiring latches
+[3] sequence req1: scanning lock table for conflicting locks
+[3] sequence req1: waiting in lock wait-queues
+[3] sequence req1: lock wait-queue event: wait for txn 00000001 holding lock @ key ‹"a"› (queuedLockingRequests: 0, queuedReaders: 1)
+[3] sequence req1: pushing after 0s for: deadlock/liveness detection = true, timeout enforcement = false, priority enforcement = false, wait policy error = false
+[3] sequence req1: pushing timestamp of txn 00000001 above 15.000000000,1
+[3] sequence req1: blocked on select in concurrency_test.(*cluster).PushTransaction
+
+# Push succeeds. Because txn2 has an observed timestamp on the wrong node,
+# the optimization doesn't apply.
+on-txn-updated txn=txn1 status=pending ts=15,2
+----
+[-] update txn: increasing timestamp of txn1
+[3] sequence req1: resolving intent ‹"a"› for txn 00000001 with PENDING status and clock observation {1 135.000000000,11}
+[3] sequence req1: lock wait-queue event: wait for txn 00000001 holding lock @ key ‹"b"› (queuedLockingRequests: 0, queuedReaders: 1)
+[3] sequence req1: conflicted with 00000001-0000-0000-0000-000000000000 on ‹"a"› for 0.000s
+[3] sequence req1: pushing after 0s for: deadlock/liveness detection = true, timeout enforcement = false, priority enforcement = false, wait policy error = false
+[3] sequence req1: pushing timestamp of txn 00000001 above 15.000000000,1
+[3] sequence req1: resolving intent ‹"b"› for txn 00000001 with PENDING status and clock observation {1 135.000000000,13}
+[3] sequence req1: lock wait-queue event: done waiting
+[3] sequence req1: conflicted with 00000001-0000-0000-0000-000000000000 on ‹"b"› for 0.000s
+[3] sequence req1: acquiring latches
+[3] sequence req1: scanning lock table for conflicting locks
+[3] sequence req1: sequencing complete, returned guard
+
+finish req=req1
+----
+[-] finish req1: finishing request
+
+reset namespace
+----
+
+# -------------------------------------------------------------
+# A transactional (txn2) read-only request with an uncertainty
+# interval has an observed timestamp on the correct node, but
+# the observed timestamp is GREATER than the clock observation
+# recorded when the push occurred. The optimization cannot apply
+# because the request might have started after the push.
+# -------------------------------------------------------------
+
+new-txn name=txn1 ts=10,1 epoch=0
+----
+
+# txn2 has an uncertainty interval and an observed timestamp on node 1
+# at time 200,0 which is GREATER than the clock observation that will
+# be recorded when pushing (around 135,x). The optimization doesn't apply.
+new-txn name=txn2 ts=12,1 epoch=0 uncertainty-limit=15,1 observed-ts=1@200,0
+----
+
+new-request name=req1 txn=txn2 ts=12,1
+  scan key=a endkey=z
+----
+
+sequence req=req1
+----
+[1] sequence req1: sequencing request
+[1] sequence req1: acquiring latches
+[1] sequence req1: scanning lock table for conflicting locks
+[1] sequence req1: sequencing complete, returned guard
+
+# Discover 2 intents from txn1 at keys a and b.
+handle-lock-conflict-error req=req1 lease-seq=1
+  lock txn=txn1 key=a
+  lock txn=txn1 key=b
+----
+[2] handle lock conflict error req1: handled conflicting locks on ‹"a"›, ‹"b"›, released latches
+
+debug-lock-table
+----
+num=2
+ lock: "a"
+  holder: txn: 00000001-0000-0000-0000-000000000000 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: repl [Intent]
+ lock: "b"
+  holder: txn: 00000001-0000-0000-0000-000000000000 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: repl [Intent]
+
+# Re-sequence. The request will wait on the first intent and push txn1.
+sequence req=req1
+----
+[3] sequence req1: re-sequencing request
+[3] sequence req1: acquiring latches
+[3] sequence req1: scanning lock table for conflicting locks
+[3] sequence req1: waiting in lock wait-queues
+[3] sequence req1: lock wait-queue event: wait for txn 00000001 holding lock @ key ‹"a"› (queuedLockingRequests: 0, queuedReaders: 1)
+[3] sequence req1: pushing after 0s for: deadlock/liveness detection = true, timeout enforcement = false, priority enforcement = false, wait policy error = false
+[3] sequence req1: pushing timestamp of txn 00000001 above 15.000000000,1
+[3] sequence req1: blocked on select in concurrency_test.(*cluster).PushTransaction
+
+# Push succeeds. Because txn2's observed timestamp (200,0) is greater than
+# the clock observation captured during push (135,x), the optimization
+# doesn't apply. The push for "b" completes immediately since the txn
+# is already pushed.
+on-txn-updated txn=txn1 status=pending ts=15,2
+----
+[-] update txn: increasing timestamp of txn1
+[3] sequence req1: resolving intent ‹"a"› for txn 00000001 with PENDING status and clock observation {1 135.000000000,15}
+[3] sequence req1: lock wait-queue event: wait for txn 00000001 holding lock @ key ‹"b"› (queuedLockingRequests: 0, queuedReaders: 1)
+[3] sequence req1: conflicted with 00000001-0000-0000-0000-000000000000 on ‹"a"› for 0.000s
+[3] sequence req1: pushing after 0s for: deadlock/liveness detection = true, timeout enforcement = false, priority enforcement = false, wait policy error = false
+[3] sequence req1: pushing timestamp of txn 00000001 above 15.000000000,1
+[3] sequence req1: resolving intent ‹"b"› for txn 00000001 with PENDING status and clock observation {1 135.000000000,17}
+[3] sequence req1: lock wait-queue event: done waiting
+[3] sequence req1: conflicted with 00000001-0000-0000-0000-000000000000 on ‹"b"› for 0.000s
+[3] sequence req1: acquiring latches
+[3] sequence req1: scanning lock table for conflicting locks
+[3] sequence req1: sequencing complete, returned guard
+
+finish req=req1
+----
+[-] finish req1: finishing request
+
+reset namespace
+----

@@ -112,8 +112,10 @@ func (v verifyingLockTable) UpdateLocks(up *roachpb.LockUpdate) error {
 }
 
 // PushedTransactionUpdated implements the lockTable interface.
-func (v verifyingLockTable) PushedTransactionUpdated(txn *roachpb.Transaction) {
-	v.lt.PushedTransactionUpdated(txn)
+func (v verifyingLockTable) PushedTransactionUpdated(
+	txn *roachpb.Transaction, clockObs roachpb.ObservedTimestamp,
+) {
+	v.lt.PushedTransactionUpdated(txn, clockObs)
 }
 
 // QueryLockTableState implements the lockTable interface.

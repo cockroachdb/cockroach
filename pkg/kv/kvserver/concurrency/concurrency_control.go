@@ -775,7 +775,11 @@ type lockTable interface {
 	// This is used by the lock table in a best-effort manner to avoid waiting on
 	// locks of finalized or pushed transactions and telling the caller via
 	// lockTableGuard.ResolveBeforeScanning to resolve a batch of intents.
-	PushedTransactionUpdated(*roachpb.Transaction)
+	//
+	// The clockObs parameter is the clock observation taken before the push. It
+	// is used to establish a lower bound on when the transaction was known to be
+	// pending. This can be zero for finalized transactions.
+	PushedTransactionUpdated(txn *roachpb.Transaction, clockObs roachpb.ObservedTimestamp)
 
 	// QueryLockTableState returns detailed metadata on locks managed by the lockTable.
 	QueryLockTableState(span roachpb.Span, opts QueryLockTableOptions) ([]roachpb.LockStateInfo, QueryLockTableResumeState)

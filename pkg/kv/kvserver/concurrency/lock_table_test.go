@@ -187,6 +187,7 @@ func TestLockTableBasic(t *testing.T) {
 	datadriven.Walk(t, datapathutils.TestDataPath(t, "lock_table"), func(t *testing.T, path string) {
 		var lt lockTable
 		var txnsByName map[string]*enginepb.TxnMeta
+		var uncertaintyLimitsByTxn map[string]hlc.Timestamp
 		var txnCounter uint128.Uint128
 		var requestsByName map[string]Request
 		var guardsByReqName map[string]lockTableGuard
@@ -206,6 +207,7 @@ func TestLockTableBasic(t *testing.T) {
 				ltImpl.lockTableLimitsMu.minKeysLocked = 0
 				lt = maybeWrapInVerifyingLockTable(ltImpl)
 				txnsByName = make(map[string]*enginepb.TxnMeta)
+				uncertaintyLimitsByTxn = make(map[string]hlc.Timestamp)
 				txnCounter = uint128.FromInts(0, 0)
 				requestsByName = make(map[string]Request)
 				guardsByReqName = make(map[string]lockTableGuard)
@@ -243,6 +245,9 @@ func TestLockTableBasic(t *testing.T) {
 					WriteTimestamp: ts,
 					IsoLevel:       iso,
 				}
+				if d.HasArg("uncertainty-limit") {
+					uncertaintyLimitsByTxn[txnName] = scanTimestampWithName(t, d, "uncertainty-limit")
+				}
 				return ""
 
 			case "pushed-txn-updated":
@@ -268,7 +273,8 @@ func TestLockTableBasic(t *testing.T) {
 					ts := scanTimestamp(t, d)
 					txn.WriteTimestamp.Forward(ts)
 				}
-				lt.PushedTransactionUpdated(txn)
+				var clockObs roachpb.ObservedTimestamp
+				lt.PushedTransactionUpdated(txn, clockObs)
 				return ""
 
 			case "new-request":
@@ -316,6 +322,27 @@ func TestLockTableBasic(t *testing.T) {
 					}
 					if !updateRetainedTxn {
 						ba.Txn.WriteTimestamp = ts
+					}
+					// Apply uncertainty limit if one was specified on the transaction.
+					if ul, ok := uncertaintyLimitsByTxn[txnName]; ok {
+						ba.Txn.GlobalUncertaintyLimit = ul
+					}
+					// Add observed timestamp if specified. Format: "nodeID@ts"
+					if d.HasArg("observed-ts") {
+						obsStr := dd.ScanArg[string](t, d, "observed-ts")
+						parts := strings.Split(obsStr, "@")
+						nodeID, err := strconv.Atoi(parts[0])
+						if err != nil {
+							d.Fatalf(t, "invalid node ID in observed-ts: %s", obsStr)
+						}
+						obsTs, err := hlc.ParseTimestamp(parts[1])
+						if err != nil {
+							d.Fatalf(t, "invalid timestamp in observed-ts: %s", obsStr)
+						}
+						ba.Txn.UpdateObservedTimestamp(
+							roachpb.NodeID(nodeID),
+							obsTs.UnsafeToClockTimestamp(),
+						)
 					}
 
 					req.Txn = ba.Txn
@@ -639,6 +666,14 @@ func nextUUID(counter *uint128.Uint128) uuid.UUID {
 
 func scanTimestamp(t *testing.T, d *datadriven.TestData) hlc.Timestamp {
 	ts, err := hlc.ParseTimestamp(dd.ScanArg[string](t, d, "ts"))
+	if err != nil {
+		d.Fatalf(t, "%v", err)
+	}
+	return ts
+}
+
+func scanTimestampWithName(t *testing.T, d *datadriven.TestData, name string) hlc.Timestamp {
+	ts, err := hlc.ParseTimestamp(dd.ScanArg[string](t, d, name))
 	if err != nil {
 		d.Fatalf(t, "%v", err)
 	}
