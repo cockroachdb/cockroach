@@ -85,6 +85,8 @@ ElementState:
     functionId: 110
     lang:
       lang: SQL
+    params: []
+    returnType: null
     usesFunctionIds: []
     usesSequenceIds:
     - 105
