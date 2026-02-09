@@ -891,8 +891,8 @@ anti-join (lookup abc_part@bc_idx [as=a2])
  │         ├── a2.r:7 = 'west' [outer=(7), constraints=(/7: [/'west' - /'west']; tight), fd=()-->(7)]
  │         └── a1.a:2 = a2.b:9 [outer=(2,9), constraints=(/2: (/NULL - ]; /9: (/NULL - ]), fd=(2)==(9), (9)==(2)]
  ├── cardinality: [0 - 1]
- ├── stats: [rows=1e-10]
- ├── cost: 15.4398
+ ├── stats: [rows=1]
+ ├── cost: 23.4486
  ├── key: ()
  ├── fd: ()-->(1-4)
  ├── distribution: east
@@ -903,7 +903,7 @@ anti-join (lookup abc_part@bc_idx [as=a2])
  │    │         ├── a2.r:7 = 'east' [outer=(7), constraints=(/7: [/'east' - /'east']; tight), fd=()-->(7)]
  │    │         └── a1.a:2 = a2.b:9 [outer=(2,9), constraints=(/2: (/NULL - ]; /9: (/NULL - ]), fd=(2)==(9), (9)==(2)]
  │    ├── cardinality: [0 - 1]
- │    ├── stats: [rows=1e-10, distinct(2)=1e-10, null(2)=0]
+ │    ├── stats: [rows=1, distinct(2)=1, null(2)=0]
  │    ├── cost: 14.5778
  │    ├── key: ()
  │    ├── fd: ()-->(1-4)

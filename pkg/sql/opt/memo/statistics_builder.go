@@ -1551,8 +1551,10 @@ func (sb *statisticsBuilder) buildJoin(
 		if sb.evalCtx.SessionData().OptimizerUseMinRowCountAntiJoinFix {
 			// Make sure to use ApplySelectivity instead of setting the selectivity and
 			// row count directly so that min_row_count is respected.
+			originalSel := s.Selectivity
 			s.RowCount = leftStats.RowCount
-			s.ApplySelectivity(props.MakeSelectivity(1 - s.Selectivity.AsFloat()))
+			s.Selectivity = props.OneSelectivity
+			s.ApplySelectivity(props.MakeSelectivity(1 - originalSel.AsFloat()))
 		} else {
 			s.RowCount = max(leftStats.RowCount-s.RowCount, epsilon)
 			s.Selectivity = props.MakeSelectivity(1 - s.Selectivity.AsFloat())
