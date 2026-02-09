@@ -1046,6 +1046,15 @@ message FunctionBody {
   repeated uint32 uses_sequence_ids = 6 [(gogoproto.customname) = "UsesSequenceIDs", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.DescID"];
   repeated uint32 uses_type_ids = 7 [(gogoproto.customname) = "UsesTypeIDs", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.DescID"];
   repeated uint32 uses_function_ids = 8   [(gogoproto.customname) = "UsesFunctionIDs", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.DescID"];
+  // params is only populated during CREATE OR REPLACE to carry the updated
+  // parameter list to the execution layer, where the descriptor's Params field
+  // is updated.
+  repeated Function.Parameter params = 9 [(gogoproto.nullable) = false];
+  // return_type is only populated during CREATE OR REPLACE when the return
+  // type is a user-defined type whose internal representation may have
+  // changed (e.g., a table type after ALTER TABLE ADD COLUMN). The execution
+  // layer updates the descriptor's ReturnType field with this value.
+  TypeT return_type = 10 [(gogoproto.nullable) = true];
 }
 
 message FunctionSecurity {

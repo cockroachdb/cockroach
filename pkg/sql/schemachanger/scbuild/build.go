@@ -508,6 +508,11 @@ func (b buildCtx) Drop(element scpb.Element) {
 	b.Ensure(element, scpb.ToAbsent, b.TargetMetadata())
 }
 
+// Replace implements the scbuildstmt.BuildCtx interface.
+func (b buildCtx) Replace(element scpb.Element) {
+	b.BuilderState.(*builderState).replaceElement(element, b.TargetMetadata())
+}
+
 // WithNewSourceElementID implements the scbuildstmt.BuildCtx interface.
 func (b buildCtx) WithNewSourceElementID() scbuildstmt.BuildCtx {
 	return buildCtx{

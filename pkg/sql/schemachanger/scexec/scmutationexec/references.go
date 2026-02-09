@@ -670,6 +670,13 @@ func (i *immediateVisitor) UpdateFunctionRelationReferences(
 	if err != nil {
 		return err
 	}
+
+	// Capture old references before updating, so we can clean up stale
+	// back-references from relations and functions that are no longer
+	// depended on (needed for CREATE OR REPLACE FUNCTION).
+	oldRelIDs := catalog.MakeDescriptorIDSet(fn.DependsOn...)
+	oldFunctionIDs := catalog.MakeDescriptorIDSet(fn.DependsOnFunctions...)
+
 	relIDs := catalog.DescriptorIDSet{}
 	relIDToReferences := make(map[descpb.ID][]descpb.TableDescriptor_Reference)
 	functionIDs := catalog.DescriptorIDSet{}
@@ -703,6 +710,15 @@ func (i *immediateVisitor) UpdateFunctionRelationReferences(
 	}
 
 	for _, functionRef := range op.FunctionReferences {
+		functionIDs.Add(functionRef)
+	}
+
+	// Set DependsOnFunctions before adding back-references so that cycle
+	// detection in AddFunctionReference works correctly (it checks the
+	// caller's DependsOnFunctions to detect cycles).
+	fn.DependsOnFunctions = functionIDs.Ordered()
+
+	for _, functionRef := range op.FunctionReferences {
 		backRefFunc, err := i.checkOutFunction(ctx, functionRef)
 		if err != nil {
 			return err
@@ -710,9 +726,36 @@ func (i *immediateVisitor) UpdateFunctionRelationReferences(
 		if err := backRefFunc.AddFunctionReference(op.FunctionID); err != nil {
 			return err
 		}
-		functionIDs.Add(functionRef)
 	}
-	fn.DependsOnFunctions = functionIDs.Ordered()
+
+	// Remove back-references from old relations no longer in the new set.
+	oldRelIDs.ForEach(func(id descpb.ID) {
+		if !relIDs.Contains(id) {
+			if err2 := removeBackReferencesInRelation(ctx, i, id, op.FunctionID); err2 != nil {
+				err = err2
+			}
+		}
+	})
+	if err != nil {
+		return err
+	}
+
+	// Remove back-references from old functions no longer in the new set.
+	oldFunctionIDs.ForEach(func(id descpb.ID) {
+		if !functionIDs.Contains(id) {
+			backRefFunc, err2 := i.checkOutFunction(ctx, id)
+			if err2 != nil {
+				err = err2
+				return
+			}
+			if err2 := backRefFunc.RemoveFunctionReference(op.FunctionID); err2 != nil {
+				err = err2
+			}
+		}
+	})
+	if err != nil {
+		return err
+	}
 
 	for relID, refs := range relIDToReferences {
 		if err := updateBackReferencesInRelation(ctx, i, relID, op.FunctionID, refs); err != nil {

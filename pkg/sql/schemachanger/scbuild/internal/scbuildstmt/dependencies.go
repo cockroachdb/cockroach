@@ -64,6 +64,14 @@ type BuildCtx interface {
 	// Drop sets the ABSENT target on an existing element in the BuilderState.
 	Drop(element scpb.Element)
 
+	// Replace replaces an existing PUBLIC element's content while preserving
+	// its key. It sets initial=ABSENT, current=ABSENT, target=ToPublic so
+	// the planner emits "add" operations that update the already-existing
+	// descriptor.
+	// Note: When the element keys match, Drop/Add is preferred over Replace since
+	// it is idempotent.
+	Replace(element scpb.Element)
+
 	// WithNewSourceElementID wraps BuilderStateWithNewSourceElementID in a
 	// BuildCtx return type.
 	WithNewSourceElementID() BuildCtx
