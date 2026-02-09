@@ -720,10 +720,10 @@ build
 SELECT v, count(k) FROM kv GROUP BY v ORDER BY v-count(k)
 ----
 sort
- ├── columns: v:2 count:7!null  [hidden: column8:8]
+ ├── columns: v:2 count:7!null  [hidden: "v - count(k)":8]
  ├── ordering: +8
  └── project
-      ├── columns: column8:8 v:2 count:7!null
+      ├── columns: "v - count(k)":8 v:2 count:7!null
       ├── group-by (hash)
       │    ├── columns: v:2 count:7!null
       │    ├── grouping columns: v:2
@@ -735,7 +735,7 @@ sort
       │         └── count [as=count:7]
       │              └── k:1
       └── projections
-           └── v:2 - count:7 [as=column8:8]
+           └── v:2 - count:7 [as="v - count(k)":8]
 
 build
 SELECT v FROM kv GROUP BY v ORDER BY sum(k)
@@ -3623,16 +3623,16 @@ scalar-group-by
  ├── columns: array_agg:7
  ├── internal-ordering: +6
  ├── sort
- │    ├── columns: y:2 column6:6
+ │    ├── columns: y:2 "x + y":6
  │    ├── ordering: +6
  │    └── project
- │         ├── columns: y:2 column6:6
+ │         ├── columns: y:2 "x + y":6
  │         └── project
- │              ├── columns: column6:6 x:1!null y:2 z:3
+ │              ├── columns: "x + y":6 x:1!null y:2 z:3
  │              ├── scan xyz
  │              │    └── columns: x:1!null y:2 z:3 crdb_internal_mvcc_timestamp:4 tableoid:5
  │              └── projections
- │                   └── x:1 + y:2 [as=column6:6]
+ │                   └── x:1 + y:2 [as="x + y":6]
  └── aggregations
       └── array-agg [as=array_agg:7]
            └── y:2
