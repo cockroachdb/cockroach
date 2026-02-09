@@ -18,6 +18,7 @@ go_library(
         "//pkg/roachpb",
         "//pkg/security",
         "//pkg/security/password",
+        "//pkg/security/provisioning",
         "//pkg/security/username",
         "//pkg/server/apiutil",
         "//pkg/server/serverpb",
@@ -54,6 +55,7 @@ go_library(
 
 go_test(
     name = "authserver_test",
+    size = "large",
     srcs = [
         "authentication_test.go",
         "main_test.go",
