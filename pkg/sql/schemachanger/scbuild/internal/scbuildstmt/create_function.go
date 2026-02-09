@@ -8,8 +8,10 @@ package scbuildstmt
 import (
 	"fmt"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/funcdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/funcinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -26,7 +28,10 @@ import (
 
 func CreateFunction(b BuildCtx, n *tree.CreateRoutine) {
 	if n.Replace {
-		panic(scerrors.NotImplementedError(n))
+		if !b.ClusterSettings().Version.IsActive(b, clusterversion.V26_2) {
+			// CREATE OR REPLACE depends on new dependency rules in v26.2.
+			panic(scerrors.NotImplementedError(n))
+		}
 	}
 	b.IncrementSchemaChangeCreateCounter("function")
 
@@ -59,6 +64,11 @@ func CreateFunction(b BuildCtx, n *tree.CreateRoutine) {
 		},
 		tree.UDFRoutine|tree.ProcedureRoutine,
 	)
+
+	if existingFn != nil && n.Replace {
+		replaceFunction(b, n, existingFn, db, sc)
+		return
+	}
 	if existingFn != nil {
 		panic(pgerror.Newf(
 			pgcode.DuplicateFunction,
@@ -204,7 +214,356 @@ func CreateFunction(b BuildCtx, n *tree.CreateRoutine) {
 	validateFunctionRelationReferences(b, refProvider, db.DatabaseID)
 	validateFunctionToFunctionReferences(b, refProvider, db.DatabaseID)
 	b.Add(b.WrapFunctionBody(fnID, fnBodyStr, lang, typ, refProvider))
+	b.Add(&scpb.FunctionParams{
+		FunctionID: fnID,
+		Params:     fn.Params,
+	})
 	b.LogEventForExistingTarget(&fn)
+}
+
+// replaceFunction implements the CREATE OR REPLACE path. It reuses the existing
+// function descriptor (same ID) and replaces the mutable sub-elements
+// (FunctionBody, FunctionVolatility, FunctionLeakProof, FunctionNullInputBehavior,
+// FunctionSecurity) while leaving Function, SchemaChild, FunctionName, Owner,
+// and UserPrivileges untouched.
+func replaceFunction(
+	b BuildCtx,
+	n *tree.CreateRoutine,
+	existingFnElts ElementResultSet,
+	db *scpb.Database,
+	sc *scpb.Schema,
+) {
+	_, _, existingFnElem := scpb.FindFunction(existingFnElts)
+	fnID := existingFnElem.FunctionID
+
+	// Validate compatibility: routine kind must match.
+	if n.IsProcedure != existingFnElem.IsProcedure {
+		formatStr := "%q is a function"
+		if existingFnElem.IsProcedure {
+			formatStr = "%q is a procedure"
+		}
+		panic(errors.WithDetailf(
+			pgerror.Newf(pgcode.WrongObjectType, "cannot change routine kind"),
+			formatStr,
+			n.Name.Object(),
+		))
+	}
+
+	// Validate compatibility: return type must match.
+	// Derive the return type from OUT parameters when needed, matching the
+	// logic in the CREATE path.
+	var newReturnType scpb.TypeT
+	setof := false
+	if n.IsProcedure {
+		typ := tree.ResolvableTypeReference(types.Void)
+		outParamTypes, outParamNames := getOutputParameters(b, n.Params)
+		if len(outParamTypes) > 0 {
+			typ = types.MakeLabeledTuple(outParamTypes, outParamNames)
+		}
+		newReturnType = b.ResolveTypeRef(typ)
+	} else if n.ReturnType != nil {
+		typ := n.ReturnType.Type
+		if returnType := b.ResolveTypeRef(typ); returnType.Type.Oid() == oid.T_record {
+			outParamTypes, outParamNames := getOutputParameters(b, n.Params)
+			if len(outParamTypes) > 1 {
+				typ = types.MakeLabeledTuple(outParamTypes, outParamNames)
+			}
+		}
+		newReturnType = b.ResolveTypeRef(typ)
+		setof = n.ReturnType.SetOf
+	} else {
+		newReturnType = b.ResolveTypeRef(types.Void)
+	}
+	isSameUDT := types.IsOIDUserDefinedType(newReturnType.Type.Oid()) &&
+		newReturnType.Type.Oid() == existingFnElem.ReturnType.Type.Oid()
+	if setof != existingFnElem.ReturnSet ||
+		(!newReturnType.Type.Equal(existingFnElem.ReturnType.Type) && !isSameUDT) {
+		if existingFnElem.IsProcedure &&
+			(newReturnType.Type.Family() == types.VoidFamily ||
+				existingFnElem.ReturnType.Type.Family() == types.VoidFamily) {
+			panic(pgerror.Newf(
+				pgcode.InvalidFunctionDefinition,
+				"cannot change whether a procedure has output parameters",
+			))
+		}
+		panic(pgerror.Newf(
+			pgcode.InvalidFunctionDefinition,
+			"cannot change return type of existing function",
+		))
+	}
+
+	// Validate: trigger function with active triggers cannot be replaced.
+	if newReturnType.Type.Identical(types.Trigger) {
+		// Check if there are back-references (triggers) that depend on this
+		// function. If there are, we cannot replace it.
+		backRefs := b.BackReferences(fnID)
+		if backRefs.Filter(func(_ scpb.Status, _ scpb.TargetStatus, e scpb.Element) bool {
+			_, ok := e.(*scpb.TriggerFunctionCall)
+			return ok
+		}).IsEmpty() {
+			// No active triggers, safe to replace.
+		} else {
+			panic(errors.WithHint(
+				unimplemented.NewWithIssue(134555,
+					"cannot replace a trigger function with an active trigger"),
+				"consider dropping and recreating the trigger",
+			))
+		}
+	}
+
+	// Build new params.
+	newParams := make([]scpb.Function_Parameter, len(n.Params))
+	for i, param := range n.Params {
+		paramCls, err := funcinfo.ParamClassToProto(param.Class)
+		if err != nil {
+			panic(err)
+		}
+		newParams[i] = scpb.Function_Parameter{
+			Name:  string(param.Name),
+			Class: catpb.FunctionParamClass{Class: paramCls},
+			Type:  b.ResolveTypeRef(param.Type),
+		}
+		if param.DefaultVal != nil {
+			texpr, err := tree.TypeCheck(b, param.DefaultVal, b.SemaCtx(), newParams[i].Type.Type)
+			if err != nil {
+				panic(err)
+			}
+			newParams[i].DefaultExpr = tree.Serialize(texpr)
+			n.Params[i].DefaultVal = texpr
+		}
+	}
+
+	// Validate parameter changes.
+	validateReplaceParams(existingFnElem.Params, newParams, n.Params)
+
+	// Determine the return type for FunctionBody construction.
+	typ := tree.ResolvableTypeReference(types.Void)
+	if n.IsProcedure {
+		outParamTypes, outParamNames := getOutputParameters(b, n.Params)
+		if len(outParamTypes) > 0 {
+			typ = types.MakeLabeledTuple(outParamTypes, outParamNames)
+		}
+	} else if n.ReturnType != nil {
+		typ = n.ReturnType.Type
+		if returnType := b.ResolveTypeRef(typ); returnType.Type.Oid() == oid.T_record {
+			outParamTypes, outParamNames := getOutputParameters(b, n.Params)
+			if len(outParamTypes) == 1 {
+				panic(errors.AssertionFailedf(
+					"we shouldn't get the RECORD return type with a single OUT parameter, expected %s",
+					outParamTypes[0].SQLStringForError(),
+				))
+			} else if len(outParamTypes) > 1 {
+				typ = types.MakeLabeledTuple(outParamTypes, outParamNames)
+			}
+		}
+	}
+
+	// Drop+add all mutable sub-elements. Options not explicitly specified in
+	// the CREATE OR REPLACE statement are reset to their defaults (matching
+	// legacy behavior). This mirrors the legacy resetFuncOption + setFuncOptions
+	// pattern.
+	validateFunctionLeakProof(n.Options, funcinfo.MakeDefaultVolatilityProperties())
+
+	// Start with defaults for all options.
+	var lang catpb.Function_Language
+	var fnBodyStr string
+	volatility := catpb.Function_VOLATILE
+	leakProof := false
+	nullInputBehavior := catpb.Function_CALLED_ON_NULL_INPUT
+	security := catpb.Function_INVOKER
+
+	for _, option := range n.Options {
+		switch t := option.(type) {
+		case tree.RoutineVolatility:
+			v, err := funcinfo.VolatilityToProto(t)
+			if err != nil {
+				panic(err)
+			}
+			volatility = v
+		case tree.RoutineLeakproof:
+			leakProof = bool(t)
+		case tree.RoutineNullInputBehavior:
+			v, err := funcinfo.NullInputBehaviorToProto(t)
+			if err != nil {
+				panic(err)
+			}
+			nullInputBehavior = v
+		case tree.RoutineLanguage:
+			v, err := funcinfo.FunctionLangToProto(t)
+			if err != nil {
+				panic(err)
+			}
+			lang = v
+		case tree.RoutineBodyStr:
+			fnBodyStr = string(t)
+		case tree.RoutineSecurity:
+			s, err := funcinfo.SecurityToProto(t)
+			if err != nil {
+				panic(err)
+			}
+			security = s
+		}
+	}
+
+	// Drop+add function property elements. The old element is dropped
+	// (target ABSENT) and a new one is added (target PUBLIC). The attr
+	// values (Int32Value/BoolValue) serve as distinguishing keys, so old
+	// and new elements are distinct when their values differ. When values
+	// are identical, b.Drop followed by b.Add on the same key is valid:
+	// the element transitions through ABSENT and back to PUBLIC.
+	dropAndAdd := func(old, new scpb.Element) {
+		b.Drop(old)
+		b.Add(new)
+	}
+
+	_, _, oldVolatility := scpb.FindFunctionVolatility(existingFnElts)
+	dropAndAdd(oldVolatility, &scpb.FunctionVolatility{
+		FunctionID: fnID,
+		Volatility: catpb.FunctionVolatility{Volatility: volatility},
+	})
+
+	_, _, oldLeakProof := scpb.FindFunctionLeakProof(existingFnElts)
+	dropAndAdd(oldLeakProof, &scpb.FunctionLeakProof{
+		FunctionID: fnID,
+		LeakProof:  leakProof,
+	})
+
+	_, _, oldNullInput := scpb.FindFunctionNullInputBehavior(existingFnElts)
+	dropAndAdd(oldNullInput, &scpb.FunctionNullInputBehavior{
+		FunctionID:        fnID,
+		NullInputBehavior: catpb.FunctionNullInputBehavior{NullInputBehavior: nullInputBehavior},
+	})
+
+	_, _, oldSecurity := scpb.FindFunctionSecurity(existingFnElts)
+	dropAndAdd(oldSecurity, &scpb.FunctionSecurity{
+		FunctionID: fnID,
+		Security:   catpb.FunctionSecurity{Security: security},
+	})
+
+	refProvider := b.BuildReferenceProvider(n)
+	validateTypeReferences(b, refProvider, db.DatabaseID)
+	validateFunctionRelationReferences(b, refProvider, db.DatabaseID)
+	validateFunctionToFunctionReferences(b, refProvider, db.DatabaseID)
+
+	// Drop the old FunctionBody and add the new one.
+	_, _, oldBody := scpb.FindFunctionBody(existingFnElts)
+	b.Drop(oldBody)
+
+	fnBody := b.WrapFunctionBody(fnID, fnBodyStr, lang, typ, refProvider)
+	// SeqNum=1 distinguishes the new element from the old one (SeqNum=0)
+	// in the schema changer graph, even when the body text is unchanged.
+	fnBody.SeqNum = 1
+	b.Add(fnBody)
+
+	// Drop+add FunctionParams to update the descriptor's parameter list.
+	_, _, oldParams := scpb.FindFunctionParams(existingFnElts)
+	b.Drop(oldParams)
+	newFnParams := &scpb.FunctionParams{
+		FunctionID: fnID,
+		Params:     newParams,
+		SeqNum:     1,
+	}
+	// When the return type is a UDT, its internal representation may have
+	// changed (e.g., table type after ALTER TABLE ADD COLUMN). Carry the
+	// refreshed type so the execution layer updates the descriptor.
+	if isSameUDT {
+		newFnParams.ReturnType = &newReturnType
+	}
+	b.Add(newFnParams)
+
+	b.LogEventForExistingTarget(existingFnElem)
+}
+
+// validateReplaceParams validates that parameter changes in CREATE OR REPLACE
+// are allowed, mirroring the legacy validateParameters logic.
+func validateReplaceParams(
+	origParams []scpb.Function_Parameter,
+	newParams []scpb.Function_Parameter,
+	astParams tree.RoutineParams,
+) {
+	// Separate IN and OUT params from original.
+	var origInParams []scpb.Function_Parameter
+	var origOutParams []scpb.Function_Parameter
+	for _, p := range origParams {
+		class := funcdesc.ToTreeRoutineParamClass(p.Class.Class)
+		if tree.IsInParamClass(class) {
+			origInParams = append(origInParams, p)
+		}
+		if tree.IsOutParamClass(class) {
+			origOutParams = append(origOutParams, p)
+		}
+	}
+
+	// Separate IN and OUT params from new.
+	var newInParams []scpb.Function_Parameter
+	var newOutParams []scpb.Function_Parameter
+	for _, p := range newParams {
+		class := funcdesc.ToTreeRoutineParamClass(p.Class.Class)
+		if tree.IsInParamClass(class) {
+			newInParams = append(newInParams, p)
+		}
+		if tree.IsOutParamClass(class) {
+			newOutParams = append(newOutParams, p)
+		}
+	}
+
+	// IN parameter count must match (enforced by ResolveRoutine).
+	if len(origInParams) != len(newInParams) {
+		panic(errors.AssertionFailedf(
+			"different number of IN parameters: old %d, new %d",
+			len(origInParams), len(newInParams),
+		))
+	}
+
+	// Verify IN parameter names are not changed (unless originally empty).
+	for i := range origInParams {
+		if origInParams[i].Name != newInParams[i].Name && origInParams[i].Name != "" {
+			panic(pgerror.Newf(
+				pgcode.InvalidFunctionDefinition,
+				"cannot change name of input parameter %q",
+				origInParams[i].Name,
+			))
+		}
+	}
+
+	// OUT parameter validation: if we have multiple on either side,
+	// they must match exactly.
+	if len(origOutParams) > 1 || len(newOutParams) > 1 {
+		mismatch := len(origOutParams) != len(newOutParams)
+		if !mismatch {
+			for i := range origOutParams {
+				if origOutParams[i].Name != newOutParams[i].Name {
+					if origOutParams[i].Name != "" && newOutParams[i].Name != "" {
+						mismatch = true
+						break
+					}
+				}
+			}
+		}
+		if mismatch {
+			panic(errors.AssertionFailedf(
+				"different return types should've been caught earlier: old %v, new %v",
+				origOutParams, newOutParams,
+			))
+		}
+	}
+
+	// Verify no DEFAULT expressions have been removed.
+	// Collect IN params from the AST to check their DefaultVal.
+	var newInAstParams tree.RoutineParams
+	for _, p := range astParams {
+		if p.IsInParam() {
+			newInAstParams = append(newInAstParams, p)
+		}
+	}
+	for i := range origInParams {
+		if origInParams[i].DefaultExpr != "" && newInAstParams[i].DefaultVal == nil {
+			panic(pgerror.Newf(
+				pgcode.InvalidFunctionDefinition,
+				"cannot remove parameter defaults from existing function",
+			))
+		}
+	}
 }
 
 func getOutputParameters(

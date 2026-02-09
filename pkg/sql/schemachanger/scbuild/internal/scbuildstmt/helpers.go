@@ -245,8 +245,8 @@ func dropCascadeDescriptor(b BuildCtx, id catid.DescID) {
 		case *scpb.Column, *scpb.ColumnType:
 			// These only have type references.
 			break
-		case *scpb.Namespace, *scpb.Function, *scpb.SecondaryIndex, *scpb.PrimaryIndex,
-			*scpb.TableLocalitySecondaryRegion, *scpb.Trigger:
+		case *scpb.Namespace, *scpb.Function, *scpb.FunctionParams, *scpb.SecondaryIndex,
+			*scpb.PrimaryIndex, *scpb.TableLocalitySecondaryRegion, *scpb.Trigger:
 			// These can be safely skipped and will be cleaned up on their own because
 			// of dependents cleaned up above.
 		case

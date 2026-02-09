@@ -1,4 +1,4 @@
-// Copyright 2024 The Cockroach Authors.
+// Copyright 2025 The Cockroach Authors.
 //
 // Use of this software is governed by the CockroachDB Software License
 // included in the /LICENSE file.
@@ -11,14 +11,15 @@ import (
 )
 
 func init() {
-	opRegistry.register((*scpb.FunctionSecurity)(nil),
+	opRegistry.register((*scpb.FunctionParams)(nil),
 		toPublic(
 			scpb.Status_ABSENT,
 			to(scpb.Status_PUBLIC,
-				emit(func(this *scpb.FunctionSecurity) *scop.SetFunctionSecurity {
-					return &scop.SetFunctionSecurity{
+				emit(func(this *scpb.FunctionParams) *scop.SetFunctionParams {
+					return &scop.SetFunctionParams{
 						FunctionID: this.FunctionID,
-						Security:   this.Security.Security,
+						Params:     this.Params,
+						ReturnType: this.ReturnType,
 					}
 				}),
 			),

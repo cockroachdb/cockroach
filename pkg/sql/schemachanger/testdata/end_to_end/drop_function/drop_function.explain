@@ -24,7 +24,7 @@ EXPLAIN (DDL) DROP FUNCTION f;
 Schema change plan for DROP FUNCTION ‹""›.‹""›.‹f›;
  ├── StatementPhase
  │    └── Stage 1 of 1 in StatementPhase
- │         ├── 12 elements transitioning toward ABSENT
+ │         ├── 13 elements transitioning toward ABSENT
  │         │    ├── PUBLIC → ABSENT  Owner:{DescID: 109 (f-)}
  │         │    ├── PUBLIC → ABSENT  UserPrivileges:{DescID: 109 (f-), Name: "admin"}
  │         │    ├── PUBLIC → ABSENT  UserPrivileges:{DescID: 109 (f-), Name: "public"}
@@ -32,19 +32,16 @@ Schema change plan for DROP FUNCTION ‹""›.‹""›.‹f›;
  │         │    ├── PUBLIC → DROPPED Function:{DescID: 109 (f-)}
  │         │    ├── PUBLIC → ABSENT  SchemaChild:{DescID: 109 (f-), ReferencedDescID: 101 (public)}
  │         │    ├── PUBLIC → ABSENT  FunctionName:{DescID: 109 (f-)}
- │         │    ├── PUBLIC → ABSENT  FunctionVolatility:{DescID: 109 (f-)}
- │         │    ├── PUBLIC → ABSENT  FunctionLeakProof:{DescID: 109 (f-)}
- │         │    ├── PUBLIC → ABSENT  FunctionNullInputBehavior:{DescID: 109 (f-)}
- │         │    ├── PUBLIC → ABSENT  FunctionSecurity:{DescID: 109 (f-)}
- │         │    └── PUBLIC → ABSENT  FunctionBody:{DescID: 109 (f-)}
- │         └── 14 Mutation operations
+ │         │    ├── PUBLIC → ABSENT  FunctionVolatility:{DescID: 109 (f-), Int32Value: VOLATILE}
+ │         │    ├── PUBLIC → ABSENT  FunctionLeakProof:{DescID: 109 (f-), BoolValue: false}
+ │         │    ├── PUBLIC → ABSENT  FunctionNullInputBehavior:{DescID: 109 (f-), Int32Value: CALLED_ON_NULL_INPUT}
+ │         │    ├── PUBLIC → ABSENT  FunctionSecurity:{DescID: 109 (f-), Int32Value: INVOKER}
+ │         │    ├── PUBLIC → ABSENT  FunctionParams:{DescID: 109 (f-), SeqNum: 0}
+ │         │    └── PUBLIC → ABSENT  FunctionBody:{DescID: 109 (f-), SeqNum: 0, Value: "SELECT a FROM defaultdb.public.t;\nSELECT b FROM defaultdb.public.t@t_idx_b;\nSELECT c FROM defaultdb.public.t@t_idx_c;\nSELECT a FROM defaultdb.public.v;\nSELECT nextval(105:::REGCLASS);"}
+ │         └── 10 Mutation operations
  │              ├── MarkDescriptorAsDropped {"DescriptorID":109}
  │              ├── RemoveObjectParent {"ObjectID":109,"ParentSchemaID":101}
  │              ├── NotImplementedForPublicObjects {"DescID":109,"ElementType":"scpb.FunctionNam..."}
- │              ├── NotImplementedForPublicObjects {"DescID":109,"ElementType":"scpb.FunctionVol..."}
- │              ├── NotImplementedForPublicObjects {"DescID":109,"ElementType":"scpb.FunctionLea..."}
- │              ├── NotImplementedForPublicObjects {"DescID":109,"ElementType":"scpb.FunctionNul..."}
- │              ├── NotImplementedForPublicObjects {"DescID":109,"ElementType":"scpb.FunctionSec..."}
  │              ├── RemoveBackReferenceInTypes {"BackReferencedDescriptorID":109}
  │              ├── RemoveBackReferencesInRelations {"BackReferencedID":109}
  │              ├── RemoveBackReferenceInFunctions {"BackReferencedDescriptorID":109}
@@ -54,7 +51,7 @@ Schema change plan for DROP FUNCTION ‹""›.‹""›.‹f›;
  │              └── RemoveUserPrivileges {"DescriptorID":109,"User":"root"}
  ├── PreCommitPhase
  │    ├── Stage 1 of 2 in PreCommitPhase
- │    │    ├── 12 elements transitioning toward ABSENT
+ │    │    ├── 13 elements transitioning toward ABSENT
  │    │    │    ├── ABSENT  → PUBLIC Owner:{DescID: 109 (f-)}
  │    │    │    ├── ABSENT  → PUBLIC UserPrivileges:{DescID: 109 (f-), Name: "admin"}
  │    │    │    ├── ABSENT  → PUBLIC UserPrivileges:{DescID: 109 (f-), Name: "public"}
@@ -62,15 +59,16 @@ Schema change plan for DROP FUNCTION ‹""›.‹""›.‹f›;
  │    │    │    ├── DROPPED → PUBLIC Function:{DescID: 109 (f-)}
  │    │    │    ├── ABSENT  → PUBLIC SchemaChild:{DescID: 109 (f-), ReferencedDescID: 101 (public)}
  │    │    │    ├── ABSENT  → PUBLIC FunctionName:{DescID: 109 (f-)}
- │    │    │    ├── ABSENT  → PUBLIC FunctionVolatility:{DescID: 109 (f-)}
- │    │    │    ├── ABSENT  → PUBLIC FunctionLeakProof:{DescID: 109 (f-)}
- │    │    │    ├── ABSENT  → PUBLIC FunctionNullInputBehavior:{DescID: 109 (f-)}
- │    │    │    ├── ABSENT  → PUBLIC FunctionSecurity:{DescID: 109 (f-)}
- │    │    │    └── ABSENT  → PUBLIC FunctionBody:{DescID: 109 (f-)}
+ │    │    │    ├── ABSENT  → PUBLIC FunctionVolatility:{DescID: 109 (f-), Int32Value: VOLATILE}
+ │    │    │    ├── ABSENT  → PUBLIC FunctionLeakProof:{DescID: 109 (f-), BoolValue: false}
+ │    │    │    ├── ABSENT  → PUBLIC FunctionNullInputBehavior:{DescID: 109 (f-), Int32Value: CALLED_ON_NULL_INPUT}
+ │    │    │    ├── ABSENT  → PUBLIC FunctionSecurity:{DescID: 109 (f-), Int32Value: INVOKER}
+ │    │    │    ├── ABSENT  → PUBLIC FunctionParams:{DescID: 109 (f-), SeqNum: 0}
+ │    │    │    └── ABSENT  → PUBLIC FunctionBody:{DescID: 109 (f-), SeqNum: 0, Value: "SELECT a FROM defaultdb.public.t;\nSELECT b FROM defaultdb.public.t@t_idx_b;\nSELECT c FROM defaultdb.public.t@t_idx_c;\nSELECT a FROM defaultdb.public.v;\nSELECT nextval(105:::REGCLASS);"}
  │    │    └── 1 Mutation operation
  │    │         └── UndoAllInTxnImmediateMutationOpSideEffects
  │    └── Stage 2 of 2 in PreCommitPhase
- │         ├── 12 elements transitioning toward ABSENT
+ │         ├── 13 elements transitioning toward ABSENT
  │         │    ├── PUBLIC → ABSENT  Owner:{DescID: 109 (f-)}
  │         │    ├── PUBLIC → ABSENT  UserPrivileges:{DescID: 109 (f-), Name: "admin"}
  │         │    ├── PUBLIC → ABSENT  UserPrivileges:{DescID: 109 (f-), Name: "public"}
@@ -78,19 +76,16 @@ Schema change plan for DROP FUNCTION ‹""›.‹""›.‹f›;
  │         │    ├── PUBLIC → DROPPED Function:{DescID: 109 (f-)}
  │         │    ├── PUBLIC → ABSENT  SchemaChild:{DescID: 109 (f-), ReferencedDescID: 101 (public)}
  │         │    ├── PUBLIC → ABSENT  FunctionName:{DescID: 109 (f-)}
- │         │    ├── PUBLIC → ABSENT  FunctionVolatility:{DescID: 109 (f-)}
- │         │    ├── PUBLIC → ABSENT  FunctionLeakProof:{DescID: 109 (f-)}
- │         │    ├── PUBLIC → ABSENT  FunctionNullInputBehavior:{DescID: 109 (f-)}
- │         │    ├── PUBLIC → ABSENT  FunctionSecurity:{DescID: 109 (f-)}
- │         │    └── PUBLIC → ABSENT  FunctionBody:{DescID: 109 (f-)}
- │         └── 21 Mutation operations
+ │         │    ├── PUBLIC → ABSENT  FunctionVolatility:{DescID: 109 (f-), Int32Value: VOLATILE}
+ │         │    ├── PUBLIC → ABSENT  FunctionLeakProof:{DescID: 109 (f-), BoolValue: false}
+ │         │    ├── PUBLIC → ABSENT  FunctionNullInputBehavior:{DescID: 109 (f-), Int32Value: CALLED_ON_NULL_INPUT}
+ │         │    ├── PUBLIC → ABSENT  FunctionSecurity:{DescID: 109 (f-), Int32Value: INVOKER}
+ │         │    ├── PUBLIC → ABSENT  FunctionParams:{DescID: 109 (f-), SeqNum: 0}
+ │         │    └── PUBLIC → ABSENT  FunctionBody:{DescID: 109 (f-), SeqNum: 0, Value: "SELECT a FROM defaultdb.public.t;\nSELECT b FROM defaultdb.public.t@t_idx_b;\nSELECT c FROM defaultdb.public.t@t_idx_c;\nSELECT a FROM defaultdb.public.v;\nSELECT nextval(105:::REGCLASS);"}
+ │         └── 17 Mutation operations
  │              ├── MarkDescriptorAsDropped {"DescriptorID":109}
  │              ├── RemoveObjectParent {"ObjectID":109,"ParentSchemaID":101}
  │              ├── NotImplementedForPublicObjects {"DescID":109,"ElementType":"scpb.FunctionNam..."}
- │              ├── NotImplementedForPublicObjects {"DescID":109,"ElementType":"scpb.FunctionVol..."}
- │              ├── NotImplementedForPublicObjects {"DescID":109,"ElementType":"scpb.FunctionLea..."}
- │              ├── NotImplementedForPublicObjects {"DescID":109,"ElementType":"scpb.FunctionNul..."}
- │              ├── NotImplementedForPublicObjects {"DescID":109,"ElementType":"scpb.FunctionSec..."}
  │              ├── RemoveBackReferenceInTypes {"BackReferencedDescriptorID":109}
  │              ├── RemoveBackReferencesInRelations {"BackReferencedID":109}
  │              ├── RemoveBackReferenceInFunctions {"BackReferencedDescriptorID":109}

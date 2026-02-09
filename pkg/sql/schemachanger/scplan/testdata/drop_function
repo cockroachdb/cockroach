@@ -21,7 +21,7 @@ $$;
 ops
 DROP FUNCTION f;
 ----
-StatementPhase stage 1 of 1 with 14 MutationType ops
+StatementPhase stage 1 of 1 with 10 MutationType ops
   transitions:
     [[Owner:{DescID: 109}, ABSENT], PUBLIC] -> ABSENT
     [[UserPrivileges:{DescID: 109, Name: admin}, ABSENT], PUBLIC] -> ABSENT
@@ -34,7 +34,8 @@ StatementPhase stage 1 of 1 with 14 MutationType ops
     [[FunctionLeakProof:{DescID: 109, BoolValue: false}, ABSENT], PUBLIC] -> ABSENT
     [[FunctionNullInputBehavior:{DescID: 109, Int32Value: CALLED_ON_NULL_INPUT}, ABSENT], PUBLIC] -> ABSENT
     [[FunctionSecurity:{DescID: 109, Int32Value: INVOKER}, ABSENT], PUBLIC] -> ABSENT
-    [[FunctionBody:{DescID: 109, Value: SELECT a FROM defaultdb.public.t;
+    [[FunctionParams:{DescID: 109, SeqNum: 0}, ABSENT], PUBLIC] -> ABSENT
+    [[FunctionBody:{DescID: 109, SeqNum: 0, Value: SELECT a FROM defaultdb.public.t;
     SELECT b FROM defaultdb.public.t@t_idx_b;
     SELECT c FROM defaultdb.public.t@t_idx_c;
     SELECT a FROM defaultdb.public.v;
@@ -48,18 +49,6 @@ StatementPhase stage 1 of 1 with 14 MutationType ops
     *scop.NotImplementedForPublicObjects
       DescID: 109
       ElementType: scpb.FunctionName
-    *scop.NotImplementedForPublicObjects
-      DescID: 109
-      ElementType: scpb.FunctionVolatility
-    *scop.NotImplementedForPublicObjects
-      DescID: 109
-      ElementType: scpb.FunctionLeakProof
-    *scop.NotImplementedForPublicObjects
-      DescID: 109
-      ElementType: scpb.FunctionNullInputBehavior
-    *scop.NotImplementedForPublicObjects
-      DescID: 109
-      ElementType: scpb.FunctionSecurity
     *scop.RemoveBackReferenceInTypes
       BackReferencedDescriptorID: 109
       TypeIDs:
@@ -100,7 +89,8 @@ PreCommitPhase stage 1 of 2 with 1 MutationType op
     [[FunctionLeakProof:{DescID: 109, BoolValue: false}, ABSENT], ABSENT] -> PUBLIC
     [[FunctionNullInputBehavior:{DescID: 109, Int32Value: CALLED_ON_NULL_INPUT}, ABSENT], ABSENT] -> PUBLIC
     [[FunctionSecurity:{DescID: 109, Int32Value: INVOKER}, ABSENT], ABSENT] -> PUBLIC
-    [[FunctionBody:{DescID: 109, Value: SELECT a FROM defaultdb.public.t;
+    [[FunctionParams:{DescID: 109, SeqNum: 0}, ABSENT], ABSENT] -> PUBLIC
+    [[FunctionBody:{DescID: 109, SeqNum: 0, Value: SELECT a FROM defaultdb.public.t;
     SELECT b FROM defaultdb.public.t@t_idx_b;
     SELECT c FROM defaultdb.public.t@t_idx_c;
     SELECT a FROM defaultdb.public.v;
@@ -108,7 +98,7 @@ PreCommitPhase stage 1 of 2 with 1 MutationType op
   ops:
     *scop.UndoAllInTxnImmediateMutationOpSideEffects
       {}
-PreCommitPhase stage 2 of 2 with 21 MutationType ops
+PreCommitPhase stage 2 of 2 with 17 MutationType ops
   transitions:
     [[Owner:{DescID: 109}, ABSENT], PUBLIC] -> ABSENT
     [[UserPrivileges:{DescID: 109, Name: admin}, ABSENT], PUBLIC] -> ABSENT
@@ -121,7 +111,8 @@ PreCommitPhase stage 2 of 2 with 21 MutationType ops
     [[FunctionLeakProof:{DescID: 109, BoolValue: false}, ABSENT], PUBLIC] -> ABSENT
     [[FunctionNullInputBehavior:{DescID: 109, Int32Value: CALLED_ON_NULL_INPUT}, ABSENT], PUBLIC] -> ABSENT
     [[FunctionSecurity:{DescID: 109, Int32Value: INVOKER}, ABSENT], PUBLIC] -> ABSENT
-    [[FunctionBody:{DescID: 109, Value: SELECT a FROM defaultdb.public.t;
+    [[FunctionParams:{DescID: 109, SeqNum: 0}, ABSENT], PUBLIC] -> ABSENT
+    [[FunctionBody:{DescID: 109, SeqNum: 0, Value: SELECT a FROM defaultdb.public.t;
     SELECT b FROM defaultdb.public.t@t_idx_b;
     SELECT c FROM defaultdb.public.t@t_idx_c;
     SELECT a FROM defaultdb.public.v;
@@ -135,18 +126,6 @@ PreCommitPhase stage 2 of 2 with 21 MutationType ops
     *scop.NotImplementedForPublicObjects
       DescID: 109
       ElementType: scpb.FunctionName
-    *scop.NotImplementedForPublicObjects
-      DescID: 109
-      ElementType: scpb.FunctionVolatility
-    *scop.NotImplementedForPublicObjects
-      DescID: 109
-      ElementType: scpb.FunctionLeakProof
-    *scop.NotImplementedForPublicObjects
-      DescID: 109
-      ElementType: scpb.FunctionNullInputBehavior
-    *scop.NotImplementedForPublicObjects
-      DescID: 109
-      ElementType: scpb.FunctionSecurity
     *scop.RemoveBackReferenceInTypes
       BackReferencedDescriptorID: 109
       TypeIDs:

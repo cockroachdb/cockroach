@@ -164,6 +164,7 @@ message ElementProto {
     FunctionNullInputBehavior function_null_input_behavior = 163 [(gogoproto.moretags) = "parent:\"Function\""];
     FunctionBody function_body = 164 [(gogoproto.moretags) = "parent:\"Function\""];
     FunctionSecurity function_security = 165 [(gogoproto.moretags) = "parent:\"Function\""];
+    FunctionParams function_params = 166 [(gogoproto.moretags) = "parent:\"Function\""];
 
     // Type elements.
     TypeComment type_comment = 180 [(gogoproto.moretags) = "parent:\"CompositeType,EnumType\""];
@@ -1046,6 +1047,18 @@ message FunctionBody {
   repeated uint32 uses_sequence_ids = 6 [(gogoproto.customname) = "UsesSequenceIDs", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.DescID"];
   repeated uint32 uses_type_ids = 7 [(gogoproto.customname) = "UsesTypeIDs", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.DescID"];
   repeated uint32 uses_function_ids = 8   [(gogoproto.customname) = "UsesFunctionIDs", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.DescID"];
+  // SeqNum differentiates FunctionBody elements during CREATE OR REPLACE.
+  // The old element has seq_num=0 and the replacement has seq_num=1, ensuring
+  // they have different element keys even when the body text is unchanged.
+  uint32 seq_num = 9 [(gogoproto.customname) = "SeqNum"];
+}
+
+message FunctionParams {
+  uint32 function_id = 1 [(gogoproto.customname) = "FunctionID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.DescID"];
+  repeated Function.Parameter params = 2 [(gogoproto.nullable) = false];
+  TypeT return_type = 3 [(gogoproto.nullable) = true];
+  // SeqNum differentiates FunctionParams elements during CREATE OR REPLACE.
+  uint32 seq_num = 4 [(gogoproto.customname) = "SeqNum"];
 }
 
 message FunctionSecurity {

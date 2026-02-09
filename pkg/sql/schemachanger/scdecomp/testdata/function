@@ -85,6 +85,7 @@ ElementState:
     functionId: 110
     lang:
       lang: SQL
+    seqNum: 0
     usesFunctionIds: []
     usesSequenceIds:
     - 105
@@ -121,6 +122,38 @@ ElementState:
     functionId: 110
     nullInputBehavior:
       nullInputBehavior: CALLED_ON_NULL_INPUT
+  Status: PUBLIC
+- FunctionParams:
+    functionId: 110
+    params:
+    - class:
+        class: DEFAULT
+      defaultExpr: ""
+      name: a
+      type:
+        closedTypeIds:
+        - 108
+        - 109
+        type:
+          arrayContents: null
+          arrayDimensions: []
+          arrayElemType: null
+          family: EnumFamily
+          geoMetadata: null
+          intervalDurationField: null
+          locale: null
+          oid: 100108
+          precision: 0
+          timePrecisionIsSet: false
+          tupleContents: []
+          tupleLabels: []
+          udtMetadata:
+            arrayTypeOid: 100109
+          visibleType: 0
+          width: 0
+        typeName: public.notmyworkday
+    returnType: null
+    seqNum: 0
   Status: PUBLIC
 - FunctionSecurity:
     functionId: 110

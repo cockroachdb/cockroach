@@ -21,7 +21,7 @@ CREATE PROCEDURE p(a notmyworkday) LANGUAGE SQL AS $$
   SELECT nextval('sq1');
 $$;
 ----
-StatementPhase stage 1 of 1 with 11 MutationType ops
+StatementPhase stage 1 of 1 with 12 MutationType ops
   transitions:
     [[Function:{DescID: 109}, PUBLIC], ABSENT] -> PUBLIC
     [[SchemaChild:{DescID: 109, ReferencedDescID: 101}, PUBLIC], ABSENT] -> PUBLIC
@@ -30,12 +30,13 @@ StatementPhase stage 1 of 1 with 11 MutationType ops
     [[UserPrivileges:{DescID: 109, Name: admin}, PUBLIC], ABSENT] -> PUBLIC
     [[UserPrivileges:{DescID: 109, Name: public}, PUBLIC], ABSENT] -> PUBLIC
     [[UserPrivileges:{DescID: 109, Name: root}, PUBLIC], ABSENT] -> PUBLIC
-    [[FunctionBody:{DescID: 109, Value: SELECT a FROM t;
+    [[FunctionBody:{DescID: 109, SeqNum: 0, Value: SELECT a FROM t;
     SELECT b FROM t@t_idx_b;
     SELECT c FROM t@t_idx_c;
     SELECT a FROM v;
     SELECT b'@':::@100107;
     SELECT nextval(105:::REGCLASS);}, PUBLIC], ABSENT] -> PUBLIC
+    [[FunctionParams:{DescID: 109, SeqNum: 0}, PUBLIC], ABSENT] -> PUBLIC
   ops:
     *scop.CreateFunctionDescriptor
       Function:
@@ -151,6 +152,29 @@ StatementPhase stage 1 of 1 with 11 MutationType ops
       - viewid: 106
         columnids:
         - 1
+    *scop.SetFunctionParams
+      FunctionID: 109
+      Params:
+      - name: a
+        class:
+          class: 0
+        type:
+          type: |
+            family: EnumFamily
+            width: 0
+            precision: 0
+            locale: ""
+            visible_type: 0
+            oid: 100107
+            time_precision_is_set: false
+            udt_metadata: <
+              array_type_oid: 100108
+            >
+          closedtypeids:
+          - 107
+          - 108
+          typename: public.notmyworkday
+        defaultexpr: ""
     *scop.SetObjectParentID
       ObjParent:
         ChildObjectID: 109
@@ -166,16 +190,17 @@ PreCommitPhase stage 1 of 2 with 1 MutationType op
     [[UserPrivileges:{DescID: 109, Name: admin}, PUBLIC], PUBLIC] -> ABSENT
     [[UserPrivileges:{DescID: 109, Name: public}, PUBLIC], PUBLIC] -> ABSENT
     [[UserPrivileges:{DescID: 109, Name: root}, PUBLIC], PUBLIC] -> ABSENT
-    [[FunctionBody:{DescID: 109, Value: SELECT a FROM t;
+    [[FunctionBody:{DescID: 109, SeqNum: 0, Value: SELECT a FROM t;
     SELECT b FROM t@t_idx_b;
     SELECT c FROM t@t_idx_c;
     SELECT a FROM v;
     SELECT b'@':::@100107;
     SELECT nextval(105:::REGCLASS);}, PUBLIC], PUBLIC] -> ABSENT
+    [[FunctionParams:{DescID: 109, SeqNum: 0}, PUBLIC], PUBLIC] -> ABSENT
   ops:
     *scop.UndoAllInTxnImmediateMutationOpSideEffects
       {}
-PreCommitPhase stage 2 of 2 with 11 MutationType ops
+PreCommitPhase stage 2 of 2 with 12 MutationType ops
   transitions:
     [[Function:{DescID: 109}, PUBLIC], ABSENT] -> PUBLIC
     [[SchemaChild:{DescID: 109, ReferencedDescID: 101}, PUBLIC], ABSENT] -> PUBLIC
@@ -184,12 +209,13 @@ PreCommitPhase stage 2 of 2 with 11 MutationType ops
     [[UserPrivileges:{DescID: 109, Name: admin}, PUBLIC], ABSENT] -> PUBLIC
     [[UserPrivileges:{DescID: 109, Name: public}, PUBLIC], ABSENT] -> PUBLIC
     [[UserPrivileges:{DescID: 109, Name: root}, PUBLIC], ABSENT] -> PUBLIC
-    [[FunctionBody:{DescID: 109, Value: SELECT a FROM t;
+    [[FunctionBody:{DescID: 109, SeqNum: 0, Value: SELECT a FROM t;
     SELECT b FROM t@t_idx_b;
     SELECT c FROM t@t_idx_c;
     SELECT a FROM v;
     SELECT b'@':::@100107;
     SELECT nextval(105:::REGCLASS);}, PUBLIC], ABSENT] -> PUBLIC
+    [[FunctionParams:{DescID: 109, SeqNum: 0}, PUBLIC], ABSENT] -> PUBLIC
   ops:
     *scop.CreateFunctionDescriptor
       Function:
@@ -305,6 +331,29 @@ PreCommitPhase stage 2 of 2 with 11 MutationType ops
       - viewid: 106
         columnids:
         - 1
+    *scop.SetFunctionParams
+      FunctionID: 109
+      Params:
+      - name: a
+        class:
+          class: 0
+        type:
+          type: |
+            family: EnumFamily
+            width: 0
+            precision: 0
+            locale: ""
+            visible_type: 0
+            oid: 100107
+            time_precision_is_set: false
+            udt_metadata: <
+              array_type_oid: 100108
+            >
+          closedtypeids:
+          - 107
+          - 108
+          typename: public.notmyworkday
+        defaultexpr: ""
     *scop.SetObjectParentID
       ObjParent:
         ChildObjectID: 109
@@ -323,7 +372,7 @@ CREATE PROCEDURE p(a notmyworkday) LANGUAGE SQL AS $$
 $$;
 ----
 - from: [Function:{DescID: 110}, DESCRIPTOR_ADDED]
-  to:   [FunctionBody:{DescID: 110, Value: SELECT a FROM t;
+  to:   [FunctionBody:{DescID: 110, SeqNum: 0, Value: SELECT a FROM t;
 SELECT b FROM t@t_idx_b;
 SELECT c FROM t@t_idx_c;
 SELECT a FROM v;
@@ -333,6 +382,10 @@ SELECT nextval(105:::REGCLASS);}, PUBLIC]
   rule: descriptor existence precedes dependents
 - from: [Function:{DescID: 110}, DESCRIPTOR_ADDED]
   to:   [FunctionName:{DescID: 110}, PUBLIC]
+  kind: Precedence
+  rule: descriptor existence precedes dependents
+- from: [Function:{DescID: 110}, DESCRIPTOR_ADDED]
+  to:   [FunctionParams:{DescID: 110, SeqNum: 0}, PUBLIC]
   kind: Precedence
   rule: descriptor existence precedes dependents
 - from: [Function:{DescID: 110}, DESCRIPTOR_ADDED]
@@ -355,7 +408,7 @@ SELECT nextval(105:::REGCLASS);}, PUBLIC]
   to:   [UserPrivileges:{DescID: 110, Name: root}, PUBLIC]
   kind: Precedence
   rule: descriptor existence precedes dependents
-- from: [FunctionBody:{DescID: 110, Value: SELECT a FROM t;
+- from: [FunctionBody:{DescID: 110, SeqNum: 0, Value: SELECT a FROM t;
 SELECT b FROM t@t_idx_b;
 SELECT c FROM t@t_idx_c;
 SELECT a FROM v;
@@ -372,6 +425,10 @@ SELECT nextval(105:::REGCLASS);}, PUBLIC]
   to:   [SchemaChild:{DescID: 110, ReferencedDescID: 101}, PUBLIC]
   kind: Precedence
   rule: function name should be set before parent ids
+- from: [FunctionParams:{DescID: 110, SeqNum: 0}, PUBLIC]
+  to:   [Function:{DescID: 110}, PUBLIC]
+  kind: Precedence
+  rule: dependents exist before descriptor becomes public
 - from: [Owner:{DescID: 110}, PUBLIC]
   to:   [Function:{DescID: 110}, PUBLIC]
   kind: Precedence
@@ -405,7 +462,7 @@ CREATE PROCEDURE p(a notmyworkday) LANGUAGE PLpgSQL AS $$
   END
 $$;
 ----
-StatementPhase stage 1 of 1 with 11 MutationType ops
+StatementPhase stage 1 of 1 with 12 MutationType ops
   transitions:
     [[Function:{DescID: 111}, PUBLIC], ABSENT] -> PUBLIC
     [[SchemaChild:{DescID: 111, ReferencedDescID: 101}, PUBLIC], ABSENT] -> PUBLIC
@@ -414,7 +471,7 @@ StatementPhase stage 1 of 1 with 11 MutationType ops
     [[UserPrivileges:{DescID: 111, Name: admin}, PUBLIC], ABSENT] -> PUBLIC
     [[UserPrivileges:{DescID: 111, Name: public}, PUBLIC], ABSENT] -> PUBLIC
     [[UserPrivileges:{DescID: 111, Name: root}, PUBLIC], ABSENT] -> PUBLIC
-    [[FunctionBody:{DescID: 111, Value: BEGIN
+    [[FunctionBody:{DescID: 111, SeqNum: 0, Value: BEGIN
     SELECT a FROM t;
     SELECT b FROM t@t_idx_b;
     SELECT c FROM t@t_idx_c;
@@ -423,6 +480,7 @@ StatementPhase stage 1 of 1 with 11 MutationType ops
     SELECT nextval(105:::REGCLASS);
     END;
     }, PUBLIC], ABSENT] -> PUBLIC
+    [[FunctionParams:{DescID: 111, SeqNum: 0}, PUBLIC], ABSENT] -> PUBLIC
   ops:
     *scop.CreateFunctionDescriptor
       Function:
@@ -540,6 +598,29 @@ StatementPhase stage 1 of 1 with 11 MutationType ops
       - viewid: 106
         columnids:
         - 1
+    *scop.SetFunctionParams
+      FunctionID: 111
+      Params:
+      - name: a
+        class:
+          class: 0
+        type:
+          type: |
+            family: EnumFamily
+            width: 0
+            precision: 0
+            locale: ""
+            visible_type: 0
+            oid: 100107
+            time_precision_is_set: false
+            udt_metadata: <
+              array_type_oid: 100108
+            >
+          closedtypeids:
+          - 107
+          - 108
+          typename: public.notmyworkday
+        defaultexpr: ""
     *scop.SetObjectParentID
       ObjParent:
         ChildObjectID: 111
@@ -555,7 +636,7 @@ PreCommitPhase stage 1 of 2 with 1 MutationType op
     [[UserPrivileges:{DescID: 111, Name: admin}, PUBLIC], PUBLIC] -> ABSENT
     [[UserPrivileges:{DescID: 111, Name: public}, PUBLIC], PUBLIC] -> ABSENT
     [[UserPrivileges:{DescID: 111, Name: root}, PUBLIC], PUBLIC] -> ABSENT
-    [[FunctionBody:{DescID: 111, Value: BEGIN
+    [[FunctionBody:{DescID: 111, SeqNum: 0, Value: BEGIN
     SELECT a FROM t;
     SELECT b FROM t@t_idx_b;
     SELECT c FROM t@t_idx_c;
@@ -564,10 +645,11 @@ PreCommitPhase stage 1 of 2 with 1 MutationType op
     SELECT nextval(105:::REGCLASS);
     END;
     }, PUBLIC], PUBLIC] -> ABSENT
+    [[FunctionParams:{DescID: 111, SeqNum: 0}, PUBLIC], PUBLIC] -> ABSENT
   ops:
     *scop.UndoAllInTxnImmediateMutationOpSideEffects
       {}
-PreCommitPhase stage 2 of 2 with 11 MutationType ops
+PreCommitPhase stage 2 of 2 with 12 MutationType ops
   transitions:
     [[Function:{DescID: 111}, PUBLIC], ABSENT] -> PUBLIC
     [[SchemaChild:{DescID: 111, ReferencedDescID: 101}, PUBLIC], ABSENT] -> PUBLIC
@@ -576,7 +658,7 @@ PreCommitPhase stage 2 of 2 with 11 MutationType ops
     [[UserPrivileges:{DescID: 111, Name: admin}, PUBLIC], ABSENT] -> PUBLIC
     [[UserPrivileges:{DescID: 111, Name: public}, PUBLIC], ABSENT] -> PUBLIC
     [[UserPrivileges:{DescID: 111, Name: root}, PUBLIC], ABSENT] -> PUBLIC
-    [[FunctionBody:{DescID: 111, Value: BEGIN
+    [[FunctionBody:{DescID: 111, SeqNum: 0, Value: BEGIN
     SELECT a FROM t;
     SELECT b FROM t@t_idx_b;
     SELECT c FROM t@t_idx_c;
@@ -585,6 +667,7 @@ PreCommitPhase stage 2 of 2 with 11 MutationType ops
     SELECT nextval(105:::REGCLASS);
     END;
     }, PUBLIC], ABSENT] -> PUBLIC
+    [[FunctionParams:{DescID: 111, SeqNum: 0}, PUBLIC], ABSENT] -> PUBLIC
   ops:
     *scop.CreateFunctionDescriptor
       Function:
@@ -702,6 +785,29 @@ PreCommitPhase stage 2 of 2 with 11 MutationType ops
       - viewid: 106
         columnids:
         - 1
+    *scop.SetFunctionParams
+      FunctionID: 111
+      Params:
+      - name: a
+        class:
+          class: 0
+        type:
+          type: |
+            family: EnumFamily
+            width: 0
+            precision: 0
+            locale: ""
+            visible_type: 0
+            oid: 100107
+            time_precision_is_set: false
+            udt_metadata: <
+              array_type_oid: 100108
+            >
+          closedtypeids:
+          - 107
+          - 108
+          typename: public.notmyworkday
+        defaultexpr: ""
     *scop.SetObjectParentID
       ObjParent:
         ChildObjectID: 111
@@ -722,7 +828,7 @@ CREATE PROCEDURE p(a notmyworkday) LANGUAGE PLpgSQL AS $$
 $$;
 ----
 - from: [Function:{DescID: 112}, DESCRIPTOR_ADDED]
-  to:   [FunctionBody:{DescID: 112, Value: BEGIN
+  to:   [FunctionBody:{DescID: 112, SeqNum: 0, Value: BEGIN
 SELECT a FROM t;
 SELECT b FROM t@t_idx_b;
 SELECT c FROM t@t_idx_c;
@@ -735,6 +841,10 @@ END;
   rule: descriptor existence precedes dependents
 - from: [Function:{DescID: 112}, DESCRIPTOR_ADDED]
   to:   [FunctionName:{DescID: 112}, PUBLIC]
+  kind: Precedence
+  rule: descriptor existence precedes dependents
+- from: [Function:{DescID: 112}, DESCRIPTOR_ADDED]
+  to:   [FunctionParams:{DescID: 112, SeqNum: 0}, PUBLIC]
   kind: Precedence
   rule: descriptor existence precedes dependents
 - from: [Function:{DescID: 112}, DESCRIPTOR_ADDED]
@@ -757,7 +867,7 @@ END;
   to:   [UserPrivileges:{DescID: 112, Name: root}, PUBLIC]
   kind: Precedence
   rule: descriptor existence precedes dependents
-- from: [FunctionBody:{DescID: 112, Value: BEGIN
+- from: [FunctionBody:{DescID: 112, SeqNum: 0, Value: BEGIN
 SELECT a FROM t;
 SELECT b FROM t@t_idx_b;
 SELECT c FROM t@t_idx_c;
@@ -777,6 +887,10 @@ END;
   to:   [SchemaChild:{DescID: 112, ReferencedDescID: 101}, PUBLIC]
   kind: Precedence
   rule: function name should be set before parent ids
+- from: [FunctionParams:{DescID: 112, SeqNum: 0}, PUBLIC]
+  to:   [Function:{DescID: 112}, PUBLIC]
+  kind: Precedence
+  rule: dependents exist before descriptor becomes public
 - from: [Owner:{DescID: 112}, PUBLIC]
   to:   [Function:{DescID: 112}, PUBLIC]
   kind: Precedence

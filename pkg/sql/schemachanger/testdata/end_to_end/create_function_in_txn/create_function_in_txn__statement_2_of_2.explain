@@ -34,7 +34,7 @@ Schema change plan for CREATE UNIQUE INDEX ‹idx› ON ‹defaultdb›.‹publi
  │              └── AddColumnToIndex {"ColumnID":1,"IndexID":3,"Kind":1,"TableID":104}
  ├── PreCommitPhase
  │    ├── Stage 1 of 2 in PreCommitPhase
- │    │    ├── 13 elements transitioning toward PUBLIC
+ │    │    ├── 14 elements transitioning toward PUBLIC
  │    │    │    ├── PUBLIC        → ABSENT Owner:{DescID: 105 (t+)}
  │    │    │    ├── PUBLIC        → ABSENT UserPrivileges:{DescID: 105 (t+), Name: "admin"}
  │    │    │    ├── PUBLIC        → ABSENT UserPrivileges:{DescID: 105 (t+), Name: "public"}
@@ -42,7 +42,8 @@ Schema change plan for CREATE UNIQUE INDEX ‹idx› ON ‹defaultdb›.‹publi
  │    │    │    ├── PUBLIC        → ABSENT Function:{DescID: 105 (t+)}
  │    │    │    ├── PUBLIC        → ABSENT SchemaChild:{DescID: 105 (t+), ReferencedDescID: 101 (public)}
  │    │    │    ├── PUBLIC        → ABSENT FunctionName:{DescID: 105 (t+)}
- │    │    │    ├── PUBLIC        → ABSENT FunctionBody:{DescID: 105 (t+)}
+ │    │    │    ├── PUBLIC        → ABSENT FunctionParams:{DescID: 105 (t+), SeqNum: 0}
+ │    │    │    ├── PUBLIC        → ABSENT FunctionBody:{DescID: 105 (t+), SeqNum: 0, Value: "SELECT 1;"}
  │    │    │    ├── BACKFILL_ONLY → ABSENT SecondaryIndex:{DescID: 104 (t), IndexID: 2 (idx+), ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1 (t_pkey), RecreateSourceIndexID: 0, RecreateTargetIndexID: 0}
  │    │    │    ├── PUBLIC        → ABSENT IndexColumn:{DescID: 104 (t), ColumnID: 2 (b), IndexID: 2 (idx+)}
  │    │    │    ├── PUBLIC        → ABSENT IndexColumn:{DescID: 104 (t), ColumnID: 1 (a), IndexID: 2 (idx+)}
@@ -57,7 +58,7 @@ Schema change plan for CREATE UNIQUE INDEX ‹idx› ON ‹defaultdb›.‹publi
  │    │    └── 1 Mutation operation
  │    │         └── UndoAllInTxnImmediateMutationOpSideEffects
  │    └── Stage 2 of 2 in PreCommitPhase
- │         ├── 13 elements transitioning toward PUBLIC
+ │         ├── 14 elements transitioning toward PUBLIC
  │         │    ├── ABSENT → PUBLIC           Owner:{DescID: 105 (t+)}
  │         │    ├── ABSENT → PUBLIC           UserPrivileges:{DescID: 105 (t+), Name: "admin"}
  │         │    ├── ABSENT → PUBLIC           UserPrivileges:{DescID: 105 (t+), Name: "public"}
@@ -65,7 +66,8 @@ Schema change plan for CREATE UNIQUE INDEX ‹idx› ON ‹defaultdb›.‹publi
  │         │    ├── ABSENT → DESCRIPTOR_ADDED Function:{DescID: 105 (t+)}
  │         │    ├── ABSENT → PUBLIC           SchemaChild:{DescID: 105 (t+), ReferencedDescID: 101 (public)}
  │         │    ├── ABSENT → PUBLIC           FunctionName:{DescID: 105 (t+)}
- │         │    ├── ABSENT → PUBLIC           FunctionBody:{DescID: 105 (t+)}
+ │         │    ├── ABSENT → PUBLIC           FunctionParams:{DescID: 105 (t+), SeqNum: 0}
+ │         │    ├── ABSENT → PUBLIC           FunctionBody:{DescID: 105 (t+), SeqNum: 0, Value: "SELECT 1;"}
  │         │    ├── ABSENT → BACKFILL_ONLY    SecondaryIndex:{DescID: 104 (t), IndexID: 2 (idx+), ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1 (t_pkey), RecreateSourceIndexID: 0, RecreateTargetIndexID: 0}
  │         │    ├── ABSENT → PUBLIC           IndexColumn:{DescID: 104 (t), ColumnID: 2 (b), IndexID: 2 (idx+)}
  │         │    ├── ABSENT → PUBLIC           IndexColumn:{DescID: 104 (t), ColumnID: 1 (a), IndexID: 2 (idx+)}
@@ -77,9 +79,10 @@ Schema change plan for CREATE UNIQUE INDEX ‹idx› ON ‹defaultdb›.‹publi
  │         │    └── ABSENT → PUBLIC           IndexColumn:{DescID: 104 (t), ColumnID: 1 (a), IndexID: 3}
  │         ├── 1 element transitioning toward TRANSIENT_PUBLIC
  │         │    └── PUBLIC → ABSENT           TableSchemaLocked:{DescID: 104 (t)}
- │         └── 23 Mutation operations
+ │         └── 24 Mutation operations
  │              ├── CreateFunctionDescriptor {"Function":{"FunctionID":105}}
  │              ├── SetFunctionName {"FunctionID":105,"Name":"t"}
+ │              ├── SetFunctionParams {"FunctionID":105}
  │              ├── SetFunctionBody {"Body":{"Body":"SELECT 1;","FunctionID":105}}
  │              ├── UpdateFunctionTypeReferences {"FunctionID":105}
  │              ├── UpdateFunctionRelationReferences {"FunctionID":105}

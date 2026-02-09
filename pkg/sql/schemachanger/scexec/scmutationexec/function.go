@@ -12,6 +12,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/funcdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scop"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 )
 
 func (i *immediateVisitor) CreateFunctionDescriptor(
@@ -95,7 +97,65 @@ func (i *immediateVisitor) SetFunctionBody(ctx context.Context, op scop.SetFunct
 	}
 	fn.SetFuncBody(op.Body.Body)
 	fn.SetLang(op.Body.Lang.Lang)
+	return nil
+}
 
+func (i *immediateVisitor) SetFunctionParams(ctx context.Context, op scop.SetFunctionParams) error {
+	fn, err := i.checkOutFunction(ctx, op.FunctionID)
+	if err != nil {
+		return err
+	}
+
+	// Update the return type if provided (e.g. a UDT whose internal
+	// representation may have changed).
+	if op.ReturnType != nil {
+		fn.ReturnType.Type = op.ReturnType.Type
+	}
+
+	// Update the function's params on the descriptor and rebuild the
+	// schema's overload entry.
+	params := make([]descpb.FunctionDescriptor_Parameter, len(op.Params))
+	for idx, p := range op.Params {
+		params[idx] = descpb.FunctionDescriptor_Parameter{
+			Name:  p.Name,
+			Class: p.Class.Class,
+			Type:  p.Type.Type,
+		}
+		if p.DefaultExpr != "" {
+			params[idx].DefaultExpr = &p.DefaultExpr
+		}
+	}
+	fn.Params = params
+
+	// Update the schema descriptor's overload entry.
+	if fn.ParentSchemaID != descpb.InvalidID {
+		sc, err := i.checkOutSchema(ctx, fn.ParentSchemaID)
+		if err != nil {
+			return err
+		}
+		sc.RemoveFunction(fn.GetName(), fn.GetID())
+		ol := descpb.SchemaDescriptor_FunctionSignature{
+			ID:          fn.GetID(),
+			ArgTypes:    make([]*types.T, 0, len(fn.Params)),
+			ReturnType:  fn.ReturnType.Type,
+			ReturnSet:   fn.ReturnType.ReturnSet,
+			IsProcedure: fn.IsProcedure(),
+		}
+		for pIdx, p := range fn.Params {
+			class := funcdesc.ToTreeRoutineParamClass(p.Class)
+			if tree.IsInParamClass(class) {
+				ol.ArgTypes = append(ol.ArgTypes, p.Type)
+			}
+			if class == tree.RoutineParamOut {
+				ol.OutParamOrdinals = append(ol.OutParamOrdinals, int32(pIdx))
+				ol.OutParamTypes = append(ol.OutParamTypes, p.Type)
+			}
+			if p.DefaultExpr != nil {
+				ol.DefaultExprs = append(ol.DefaultExprs, *p.DefaultExpr)
+			}
+		}
+		sc.AddFunction(fn.GetName(), ol)
+	}
 	return nil
 }
 

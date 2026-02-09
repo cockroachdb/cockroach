@@ -19,30 +19,12 @@ $$;
 ----
 
 build
-DROP FUNCTION f;
+CREATE OR REPLACE FUNCTION f(a notmyworkday) RETURNS INT IMMUTABLE LANGUAGE SQL AS $$
+  SELECT 1;
+$$;
 ----
-- [[Owner:{DescID: 109}, ABSENT], PUBLIC]
-  {descriptorId: 109, owner: root}
-- [[UserPrivileges:{DescID: 109, Name: admin}, ABSENT], PUBLIC]
-  {descriptorId: 109, privileges: "2", userName: admin, withGrantOption: "2"}
-- [[UserPrivileges:{DescID: 109, Name: public}, ABSENT], PUBLIC]
-  {descriptorId: 109, privileges: "1048576", userName: public}
-- [[UserPrivileges:{DescID: 109, Name: root}, ABSENT], PUBLIC]
-  {descriptorId: 109, privileges: "2", userName: root, withGrantOption: "2"}
-- [[Function:{DescID: 109}, ABSENT], PUBLIC]
-  {functionId: 109, params: [{class: {}, name: a, type: {closedTypeIds: [107, 108], type: {family: EnumFamily, oid: 100107, udtMetadata: {arrayTypeOid: 100108}}, typeName: public.notmyworkday}}], returnType: {type: {family: IntFamily, oid: 20, width: 64}, typeName: INT8}}
-- [[SchemaChild:{DescID: 109, ReferencedDescID: 101}, ABSENT], PUBLIC]
-  {childObjectId: 109, schemaId: 101}
-- [[FunctionName:{DescID: 109}, ABSENT], PUBLIC]
-  {functionId: 109, name: f}
 - [[FunctionVolatility:{DescID: 109, Int32Value: VOLATILE}, ABSENT], PUBLIC]
   {functionId: 109, volatility: {volatility: VOLATILE}}
-- [[FunctionLeakProof:{DescID: 109, BoolValue: false}, ABSENT], PUBLIC]
-  {functionId: 109}
-- [[FunctionNullInputBehavior:{DescID: 109, Int32Value: CALLED_ON_NULL_INPUT}, ABSENT], PUBLIC]
-  {functionId: 109, nullInputBehavior: {nullInputBehavior: CALLED_ON_NULL_INPUT}}
-- [[FunctionSecurity:{DescID: 109, Int32Value: INVOKER}, ABSENT], PUBLIC]
-  {functionId: 109, security: {}}
 - [[FunctionParams:{DescID: 109, SeqNum: 0}, ABSENT], PUBLIC]
   {functionId: 109, params: [{class: {}, name: a, type: {closedTypeIds: [107, 108], type: {family: EnumFamily, oid: 100107, udtMetadata: {arrayTypeOid: 100108}}, typeName: public.notmyworkday}}]}
 - [[FunctionBody:{DescID: 109, SeqNum: 0, Value: SELECT a FROM defaultdb.public.t;
@@ -51,3 +33,9 @@ SELECT c FROM defaultdb.public.t@t_idx_c;
 SELECT a FROM defaultdb.public.v;
 SELECT nextval(105:::REGCLASS);}, ABSENT], PUBLIC]
   {body: "SELECT a FROM defaultdb.public.t;\nSELECT b FROM defaultdb.public.t@t_idx_b;\nSELECT c FROM defaultdb.public.t@t_idx_c;\nSELECT a FROM defaultdb.public.v;\nSELECT nextval(105:::REGCLASS);", functionId: 109, lang: {lang: SQL}, usesSequenceIds: [105], usesTables: [{columnIds: [1], tableId: 104}, {columnIds: [2], indexId: 2, tableId: 104}, {columnIds: [3], indexId: 3, tableId: 104}], usesTypeIds: [107, 108], usesViews: [{columnIds: [1], viewId: 106}]}
+- [[FunctionVolatility:{DescID: 109, Int32Value: IMMUTABLE}, PUBLIC], ABSENT]
+  {functionId: 109, volatility: {volatility: IMMUTABLE}}
+- [[FunctionBody:{DescID: 109, SeqNum: 1, Value: SELECT 1;}, PUBLIC], ABSENT]
+  {body: SELECT 1;, functionId: 109, lang: {lang: SQL}, seqNum: 1, usesTypeIds: [107, 108]}
+- [[FunctionParams:{DescID: 109, SeqNum: 1}, PUBLIC], ABSENT]
+  {functionId: 109, params: [{class: {}, name: a, type: {closedTypeIds: [107, 108], type: {family: EnumFamily, oid: 100107, udtMetadata: {arrayTypeOid: 100108}}, typeName: public.notmyworkday}}], seqNum: 1}

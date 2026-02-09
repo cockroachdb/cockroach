@@ -4349,6 +4349,76 @@ deprules
     - $new-constraint-name-Node[CurrentStatus] = PUBLIC
     - joinTargetNode($old-constraint-name, $old-constraint-name-Target, $old-constraint-name-Node)
     - joinTargetNode($new-constraint-name, $new-constraint-name-Target, $new-constraint-name-Node)
+- name: old function body is dropped before the new one is added
+  from: old-function-body-Node
+  kind: SameStagePrecedence
+  to: new-function-body-Node
+  query:
+    - $old-function-body[Type] = '*scpb.FunctionBody'
+    - $new-function-body[Type] = '*scpb.FunctionBody'
+    - joinOnDescID($old-function-body, $new-function-body, $function-id)
+    - $old-function-body-Target[TargetStatus] = ABSENT
+    - $old-function-body-Node[CurrentStatus] = ABSENT
+    - $new-function-body-Target[TargetStatus] = PUBLIC
+    - $new-function-body-Node[CurrentStatus] = PUBLIC
+    - joinTargetNode($old-function-body, $old-function-body-Target, $old-function-body-Node)
+    - joinTargetNode($new-function-body, $new-function-body-Target, $new-function-body-Node)
+- name: old function leakproof is dropped before the new one is added
+  from: old-function-leakproof-Node
+  kind: SameStagePrecedence
+  to: new-function-leakproof-Node
+  query:
+    - $old-function-leakproof[Type] = '*scpb.FunctionLeakProof'
+    - $new-function-leakproof[Type] = '*scpb.FunctionLeakProof'
+    - joinOnDescID($old-function-leakproof, $new-function-leakproof, $function-id)
+    - $old-function-leakproof-Target[TargetStatus] = ABSENT
+    - $old-function-leakproof-Node[CurrentStatus] = ABSENT
+    - $new-function-leakproof-Target[TargetStatus] = PUBLIC
+    - $new-function-leakproof-Node[CurrentStatus] = PUBLIC
+    - joinTargetNode($old-function-leakproof, $old-function-leakproof-Target, $old-function-leakproof-Node)
+    - joinTargetNode($new-function-leakproof, $new-function-leakproof-Target, $new-function-leakproof-Node)
+- name: old function null input behavior is dropped before the new one is added
+  from: old-function-null-input-Node
+  kind: SameStagePrecedence
+  to: new-function-null-input-Node
+  query:
+    - $old-function-null-input[Type] = '*scpb.FunctionNullInputBehavior'
+    - $new-function-null-input[Type] = '*scpb.FunctionNullInputBehavior'
+    - joinOnDescID($old-function-null-input, $new-function-null-input, $function-id)
+    - $old-function-null-input-Target[TargetStatus] = ABSENT
+    - $old-function-null-input-Node[CurrentStatus] = ABSENT
+    - $new-function-null-input-Target[TargetStatus] = PUBLIC
+    - $new-function-null-input-Node[CurrentStatus] = PUBLIC
+    - joinTargetNode($old-function-null-input, $old-function-null-input-Target, $old-function-null-input-Node)
+    - joinTargetNode($new-function-null-input, $new-function-null-input-Target, $new-function-null-input-Node)
+- name: old function security is dropped before the new one is added
+  from: old-function-security-Node
+  kind: SameStagePrecedence
+  to: new-function-security-Node
+  query:
+    - $old-function-security[Type] = '*scpb.FunctionSecurity'
+    - $new-function-security[Type] = '*scpb.FunctionSecurity'
+    - joinOnDescID($old-function-security, $new-function-security, $function-id)
+    - $old-function-security-Target[TargetStatus] = ABSENT
+    - $old-function-security-Node[CurrentStatus] = ABSENT
+    - $new-function-security-Target[TargetStatus] = PUBLIC
+    - $new-function-security-Node[CurrentStatus] = PUBLIC
+    - joinTargetNode($old-function-security, $old-function-security-Target, $old-function-security-Node)
+    - joinTargetNode($new-function-security, $new-function-security-Target, $new-function-security-Node)
+- name: old function volatility is dropped before the new one is added
+  from: old-function-volatility-Node
+  kind: SameStagePrecedence
+  to: new-function-volatility-Node
+  query:
+    - $old-function-volatility[Type] = '*scpb.FunctionVolatility'
+    - $new-function-volatility[Type] = '*scpb.FunctionVolatility'
+    - joinOnDescID($old-function-volatility, $new-function-volatility, $function-id)
+    - $old-function-volatility-Target[TargetStatus] = ABSENT
+    - $old-function-volatility-Node[CurrentStatus] = ABSENT
+    - $new-function-volatility-Target[TargetStatus] = PUBLIC
+    - $new-function-volatility-Node[CurrentStatus] = PUBLIC
+    - joinTargetNode($old-function-volatility, $old-function-volatility-Target, $old-function-volatility-Node)
+    - joinTargetNode($new-function-volatility, $new-function-volatility-Target, $new-function-volatility-Node)
 - name: old index absent before new index public when swapping with transient
   from: old-primary-index-Node
   kind: Precedence
@@ -9628,6 +9698,76 @@ deprules
     - $new-constraint-name-Node[CurrentStatus] = PUBLIC
     - joinTargetNode($old-constraint-name, $old-constraint-name-Target, $old-constraint-name-Node)
     - joinTargetNode($new-constraint-name, $new-constraint-name-Target, $new-constraint-name-Node)
+- name: old function body is dropped before the new one is added
+  from: old-function-body-Node
+  kind: SameStagePrecedence
+  to: new-function-body-Node
+  query:
+    - $old-function-body[Type] = '*scpb.FunctionBody'
+    - $new-function-body[Type] = '*scpb.FunctionBody'
+    - joinOnDescID($old-function-body, $new-function-body, $function-id)
+    - $old-function-body-Target[TargetStatus] = ABSENT
+    - $old-function-body-Node[CurrentStatus] = ABSENT
+    - $new-function-body-Target[TargetStatus] = PUBLIC
+    - $new-function-body-Node[CurrentStatus] = PUBLIC
+    - joinTargetNode($old-function-body, $old-function-body-Target, $old-function-body-Node)
+    - joinTargetNode($new-function-body, $new-function-body-Target, $new-function-body-Node)
+- name: old function leakproof is dropped before the new one is added
+  from: old-function-leakproof-Node
+  kind: SameStagePrecedence
+  to: new-function-leakproof-Node
+  query:
+    - $old-function-leakproof[Type] = '*scpb.FunctionLeakProof'
+    - $new-function-leakproof[Type] = '*scpb.FunctionLeakProof'
+    - joinOnDescID($old-function-leakproof, $new-function-leakproof, $function-id)
+    - $old-function-leakproof-Target[TargetStatus] = ABSENT
+    - $old-function-leakproof-Node[CurrentStatus] = ABSENT
+    - $new-function-leakproof-Target[TargetStatus] = PUBLIC
+    - $new-function-leakproof-Node[CurrentStatus] = PUBLIC
+    - joinTargetNode($old-function-leakproof, $old-function-leakproof-Target, $old-function-leakproof-Node)
+    - joinTargetNode($new-function-leakproof, $new-function-leakproof-Target, $new-function-leakproof-Node)
+- name: old function null input behavior is dropped before the new one is added
+  from: old-function-null-input-Node
+  kind: SameStagePrecedence
+  to: new-function-null-input-Node
+  query:
+    - $old-function-null-input[Type] = '*scpb.FunctionNullInputBehavior'
+    - $new-function-null-input[Type] = '*scpb.FunctionNullInputBehavior'
+    - joinOnDescID($old-function-null-input, $new-function-null-input, $function-id)
+    - $old-function-null-input-Target[TargetStatus] = ABSENT
+    - $old-function-null-input-Node[CurrentStatus] = ABSENT
+    - $new-function-null-input-Target[TargetStatus] = PUBLIC
+    - $new-function-null-input-Node[CurrentStatus] = PUBLIC
+    - joinTargetNode($old-function-null-input, $old-function-null-input-Target, $old-function-null-input-Node)
+    - joinTargetNode($new-function-null-input, $new-function-null-input-Target, $new-function-null-input-Node)
+- name: old function security is dropped before the new one is added
+  from: old-function-security-Node
+  kind: SameStagePrecedence
+  to: new-function-security-Node
+  query:
+    - $old-function-security[Type] = '*scpb.FunctionSecurity'
+    - $new-function-security[Type] = '*scpb.FunctionSecurity'
+    - joinOnDescID($old-function-security, $new-function-security, $function-id)
+    - $old-function-security-Target[TargetStatus] = ABSENT
+    - $old-function-security-Node[CurrentStatus] = ABSENT
+    - $new-function-security-Target[TargetStatus] = PUBLIC
+    - $new-function-security-Node[CurrentStatus] = PUBLIC
+    - joinTargetNode($old-function-security, $old-function-security-Target, $old-function-security-Node)
+    - joinTargetNode($new-function-security, $new-function-security-Target, $new-function-security-Node)
+- name: old function volatility is dropped before the new one is added
+  from: old-function-volatility-Node
+  kind: SameStagePrecedence
+  to: new-function-volatility-Node
+  query:
+    - $old-function-volatility[Type] = '*scpb.FunctionVolatility'
+    - $new-function-volatility[Type] = '*scpb.FunctionVolatility'
+    - joinOnDescID($old-function-volatility, $new-function-volatility, $function-id)
+    - $old-function-volatility-Target[TargetStatus] = ABSENT
+    - $old-function-volatility-Node[CurrentStatus] = ABSENT
+    - $new-function-volatility-Target[TargetStatus] = PUBLIC
+    - $new-function-volatility-Node[CurrentStatus] = PUBLIC
+    - joinTargetNode($old-function-volatility, $old-function-volatility-Target, $old-function-volatility-Node)
+    - joinTargetNode($new-function-volatility, $new-function-volatility-Target, $new-function-volatility-Node)
 - name: old index absent before new index public when swapping with transient
   from: old-primary-index-Node
   kind: Precedence

@@ -24,11 +24,7 @@ func init() {
 		),
 		toAbsent(
 			scpb.Status_PUBLIC,
-			to(scpb.Status_ABSENT,
-				emit(func(this *scpb.FunctionNullInputBehavior) *scop.NotImplementedForPublicObjects {
-					return notImplementedForPublicObjects(this)
-				}),
-			),
+			to(scpb.Status_ABSENT),
 		),
 	)
 }
