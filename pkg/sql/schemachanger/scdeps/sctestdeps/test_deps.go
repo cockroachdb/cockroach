@@ -1627,7 +1627,52 @@ func (s *TestState) GetRegions(ctx context.Context) (*serverpb.RegionsResponse, 
 func (s *TestState) SynthesizeRegionConfig(
 	ctx context.Context, dbID descpb.ID, opts ...multiregion.SynthesizeRegionConfigOption,
 ) (multiregion.RegionConfig, error) {
-	return multiregion.RegionConfig{}, nil
+	var o multiregion.SynthesizeRegionConfigOptions
+	for _, opt := range opts {
+		opt(&o)
+	}
+
+	// Read the database descriptor.
+	dbDesc, err := s.mustReadImmutableDescriptor(dbID)
+	if err != nil {
+		return multiregion.RegionConfig{}, err
+	}
+
+	db, err := catalog.AsDatabaseDescriptor(dbDesc)
+	if err != nil {
+		return multiregion.RegionConfig{}, err
+	}
+
+	// Return empty config if the database is not multi-region.
+	if !db.IsMultiRegion() {
+		return multiregion.RegionConfig{}, nil
+	}
+
+	// Get the region enum type ID.
+	regionEnumID, err := db.MultiRegionEnumID()
+	if err != nil {
+		return multiregion.RegionConfig{}, err
+	}
+
+	// Read the region enum type descriptor.
+	typeDesc, err := s.mustReadImmutableDescriptor(regionEnumID)
+	if err != nil {
+		return multiregion.RegionConfig{}, err
+	}
+
+	typ, err := catalog.AsTypeDescriptor(typeDesc)
+	if err != nil {
+		return multiregion.RegionConfig{}, err
+	}
+
+	regionEnumDesc := typ.AsRegionEnumTypeDescriptor()
+	if regionEnumDesc == nil {
+		return multiregion.RegionConfig{}, errors.AssertionFailedf(
+			"expected region enum type, not %s for type %q (%d)",
+			typ.GetKind(), typ.GetName(), typ.GetID())
+	}
+
+	return multiregion.SynthesizeRegionConfig(regionEnumDesc, db, o)
 }
 
 func (s *TestState) GetDefaultZoneConfig() *zonepb.ZoneConfig {
