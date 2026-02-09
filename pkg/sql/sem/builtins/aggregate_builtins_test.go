@@ -573,6 +573,9 @@ func runBenchmarkAggregate(
 ) {
 	evalCtx := eval.NewTestingEvalContext(cluster.MakeTestingClusterSettings())
 	defer evalCtx.Stop(context.Background())
+	acc := evalCtx.TestingMon.MakeBoundAccount()
+	defer acc.Close(context.Background())
+	evalCtx.SingleDatumAggMemAccount = &acc
 	argTypes := []*types.T{firstArgs[0].ResolvedType()}
 	otherArgs = flattenArgs(otherArgs...)
 	if len(otherArgs) == 0 {
