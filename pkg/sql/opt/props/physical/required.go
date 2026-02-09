@@ -62,6 +62,10 @@ type Required struct {
 	// locality-optimized search. If the local branch fulfills the query, the
 	// remote branch is not executed.
 	RemoteBranch bool
+
+	// PlanGram is a pattern describing the approved optimizer plans. If possible,
+	// the optimizer will favor expressions matching the PlanGram.
+	PlanGram *PlanGram
 }
 
 // MinRequired are the default physical properties that require nothing and
@@ -72,7 +76,7 @@ var MinRequired = &Required{}
 // this is an instance of MinRequired.
 func (p *Required) Defined() bool {
 	return !p.Presentation.Any() || !p.Ordering.Any() || !p.Distribution.Any() ||
-		p.LimitHint != 0 || p.RemoteBranch
+		p.LimitHint != 0 || p.RemoteBranch || !p.PlanGram.Any()
 }
 
 // ColSet returns the set of columns used by any of the physical properties.
