@@ -38,8 +38,8 @@ func TestFrontendAdmitWithNoBytes(t *testing.T) {
 	testutilsccl.ServerlessOnly(t)
 
 	cli, srv := net.Pipe()
-	require.NoError(t, srv.SetReadDeadline(timeutil.Now().Add(3e9)))
-	require.NoError(t, cli.SetReadDeadline(timeutil.Now().Add(3e9)))
+	require.NoError(t, srv.SetReadDeadline(timeutil.Now().Add(9e9)))
+	require.NoError(t, cli.SetReadDeadline(timeutil.Now().Add(9e9)))
 
 	// Close the connection to simulate no bytes.
 	cli.Close()
@@ -55,8 +55,8 @@ func TestFrontendAdmitWithClientSSLDisableAndCustomParam(t *testing.T) {
 	testutilsccl.ServerlessOnly(t)
 
 	cli, srv := net.Pipe()
-	require.NoError(t, srv.SetReadDeadline(timeutil.Now().Add(3e9)))
-	require.NoError(t, cli.SetReadDeadline(timeutil.Now().Add(3e9)))
+	require.NoError(t, srv.SetReadDeadline(timeutil.Now().Add(9e9)))
+	require.NoError(t, cli.SetReadDeadline(timeutil.Now().Add(9e9)))
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -90,8 +90,8 @@ func TestFrontendAdmitWithClientSSLRequire(t *testing.T) {
 	testutilsccl.ServerlessOnly(t)
 
 	cli, srv := net.Pipe()
-	require.NoError(t, srv.SetReadDeadline(timeutil.Now().Add(3e9)))
-	require.NoError(t, cli.SetReadDeadline(timeutil.Now().Add(3e9)))
+	require.NoError(t, srv.SetReadDeadline(timeutil.Now().Add(9e9)))
+	require.NoError(t, cli.SetReadDeadline(timeutil.Now().Add(9e9)))
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -128,8 +128,8 @@ func TestFrontendAdmitRequireEncryption(t *testing.T) {
 	testutilsccl.ServerlessOnly(t)
 
 	cli, srv := net.Pipe()
-	require.NoError(t, srv.SetReadDeadline(timeutil.Now().Add(3e9)))
-	require.NoError(t, cli.SetReadDeadline(timeutil.Now().Add(3e9)))
+	require.NoError(t, srv.SetReadDeadline(timeutil.Now().Add(9e9)))
+	require.NoError(t, cli.SetReadDeadline(timeutil.Now().Add(9e9)))
 
 	go func() {
 		startup := pgproto3.StartupMessage{
@@ -163,8 +163,8 @@ func TestFrontendAdmitWithCancel(t *testing.T) {
 		remoteAddr: &net.TCPAddr{IP: net.IP{1, 2, 3, 4}},
 		localAddr:  &net.TCPAddr{IP: net.IP{4, 5, 6, 7}},
 	}
-	require.NoError(t, srv.SetReadDeadline(timeutil.Now().Add(3e9)))
-	require.NoError(t, cli.SetReadDeadline(timeutil.Now().Add(3e9)))
+	require.NoError(t, srv.SetReadDeadline(timeutil.Now().Add(9e9)))
+	require.NoError(t, cli.SetReadDeadline(timeutil.Now().Add(9e9)))
 
 	go func() {
 		cancelRequest := pgproto3.CancelRequest{ProcessID: 1, SecretKey: 2}
@@ -192,8 +192,8 @@ func TestFrontendAdmitWithSSLAndCancel(t *testing.T) {
 		remoteAddr: &net.TCPAddr{IP: net.IP{1, 2, 3, 4}},
 		localAddr:  &net.TCPAddr{IP: net.IP{4, 5, 6, 7}},
 	}
-	require.NoError(t, srv.SetReadDeadline(timeutil.Now().Add(3e9)))
-	require.NoError(t, cli.SetReadDeadline(timeutil.Now().Add(3e9)))
+	require.NoError(t, srv.SetReadDeadline(timeutil.Now().Add(9e9)))
+	require.NoError(t, cli.SetReadDeadline(timeutil.Now().Add(9e9)))
 
 	go func() {
 		sslRequest := pgproto3.SSLRequest{}
@@ -227,8 +227,8 @@ func TestFrontendAdmitSessionRevivalToken(t *testing.T) {
 	testutilsccl.ServerlessOnly(t)
 
 	cli, srv := net.Pipe()
-	require.NoError(t, srv.SetReadDeadline(timeutil.Now().Add(3e9)))
-	require.NoError(t, cli.SetReadDeadline(timeutil.Now().Add(3e9)))
+	require.NoError(t, srv.SetReadDeadline(timeutil.Now().Add(9e9)))
+	require.NoError(t, cli.SetReadDeadline(timeutil.Now().Add(9e9)))
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
