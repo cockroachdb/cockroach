@@ -60,6 +60,38 @@ delete abcde
       │         └── a:9
       └── flags: avoid-full-scan
 
+# Use ORDER BY with NULLS LAST and LIMIT.
+build
+DELETE FROM abcde WHERE a>0 ORDER BY b NULLS LAST LIMIT 10
+----
+delete abcde
+ ├── columns: <none>
+ ├── fetch columns: a:9 b:10 c:11 d:12 e:13 rowid:14
+ └── limit
+      ├── columns: a:9!null b:10 c:11 d:12 e:13 rowid:14!null crdb_internal_mvcc_timestamp:15 tableoid:16 nulls_ordering_b:17!null
+      ├── internal-ordering: +17,+10
+      ├── sort
+      │    ├── columns: a:9!null b:10 c:11 d:12 e:13 rowid:14!null crdb_internal_mvcc_timestamp:15 tableoid:16 nulls_ordering_b:17!null
+      │    ├── ordering: +17,+10
+      │    ├── limit hint: 10.00
+      │    └── project
+      │         ├── columns: nulls_ordering_b:17!null a:9!null b:10 c:11 d:12 e:13 rowid:14!null crdb_internal_mvcc_timestamp:15 tableoid:16
+      │         ├── select
+      │         │    ├── columns: a:9!null b:10 c:11 d:12 e:13 rowid:14!null crdb_internal_mvcc_timestamp:15 tableoid:16
+      │         │    ├── scan abcde
+      │         │    │    ├── columns: a:9!null b:10 c:11 d:12 e:13 rowid:14!null crdb_internal_mvcc_timestamp:15 tableoid:16
+      │         │    │    ├── computed column expressions
+      │         │    │    │    ├── d:12
+      │         │    │    │    │    └── (b:10 + c:11) + 1
+      │         │    │    │    └── e:13
+      │         │    │    │         └── a:9
+      │         │    │    └── flags: avoid-full-scan
+      │         │    └── filters
+      │         │         └── a:9 > 0
+      │         └── projections
+      │              └── b:10 IS NULL [as=nulls_ordering_b:17]
+      └── 10
+
 # Use WHERE, ORDER BY, LIMIT.
 build
 DELETE FROM abcde WHERE a>0 ORDER BY a LIMIT 10
