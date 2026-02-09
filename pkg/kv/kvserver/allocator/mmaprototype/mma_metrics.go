@@ -296,12 +296,17 @@ const (
 // storePassState contains all the state gathered for a store for
 // which shedding was attempted.
 type storePassState struct {
-	overloadKind overloadKind
-	shedCounts   [numShedKinds][numShedResults]int
+	overloadKind       overloadKind
+	shedCounts         [numShedKinds][numShedResults]int
+	numRangesEvaluated int
 }
 
 func (s *storePassState) summarize() storePassSummary {
 	var sum storePassSummary
+	sum.numRangesEvaluated = s.numRangesEvaluated
+	for i := 0; i < int(numShedResults); i++ {
+		sum.reasonCounts[i].reason = shedResult(i)
+	}
 	for kindIdx := range s.shedCounts {
 		for resultIdx := range s.shedCounts[kindIdx] {
 			count := s.shedCounts[kindIdx][resultIdx]
@@ -314,12 +319,12 @@ func (s *storePassState) summarize() storePassSummary {
 			} else {
 				sum.numShedFailures += count
 			}
-			if count > sum.mostCommonCount {
-				sum.mostCommonReason = result
-				sum.mostCommonCount = count
-			}
+			sum.reasonCounts[resultIdx].count += count
 		}
 	}
+	slices.SortFunc(sum.reasonCounts[:], func(a, b reasonCount) int {
+		return cmp.Compare(b.count, a.count)
+	})
 	return sum
 }
 
@@ -327,13 +332,18 @@ func (s *storePassState) summarize() storePassSummary {
 // store.
 type storePassSummary struct {
 	// Overloaded store ID.
-	storeID          roachpb.StoreID
-	numShedSuccesses int
-	numShedFailures  int
-	// mostCommonReason/mostCommonCount track the most frequent shedResult for
-	// this overloaded store, used in failure logging.
-	mostCommonReason shedResult
-	mostCommonCount  int
+	storeID            roachpb.StoreID
+	numShedSuccesses   int
+	numShedFailures    int
+	numRangesEvaluated int
+	// reasonCounts tracks the counts of shedResult for this overloaded store
+	// in the descending order based on counts, used in failure logging
+	reasonCounts [numShedResults]reasonCount
+}
+
+type reasonCount struct {
+	count  int
+	reason shedResult
 }
 
 var (
@@ -525,6 +535,16 @@ func (sr shedResult) SafeFormat(w redact.SafePrinter, _ rune) {
 	}
 }
 
+// startEvaluatingRange is called when a range is beginning to be evaluated for
+// shedding, and is used to count how many total ranges were evaluated for an
+// overloaded store.
+func (g *rebalancingPassMetricsAndLogger) startEvaluatingRange() {
+	if g == nil {
+		return
+	}
+	g.curState.numRangesEvaluated++
+}
+
 // leaseShed is sandwiched between storeOverloaded and finishStore, and
 // provides the result of the shedding attempt.
 func (g *rebalancingPassMetricsAndLogger) leaseShed(result shedResult) {
@@ -657,14 +677,20 @@ func (g *rebalancingPassMetricsAndLogger) finishRebalancingPass(ctx context.Cont
 		if b.Len() == 0 {
 			fmt.Fprintf(&b, "rebalancing pass")
 		}
-		fmt.Fprintf(&b, " failures (store,reason:count): ")
-		for i := 0; i < n; i++ {
+		fmt.Fprintf(&b, " failures (store,reason:count...,total_ranges): ")
+		for i, summary := range g.failedSummaries[:n] {
 			prefix := ", "
 			if i == 0 {
 				prefix = ""
 			}
-			fmt.Fprintf(&b, "%s(s%v,%v:%d)", prefix, g.failedSummaries[i].storeID,
-				g.failedSummaries[i].mostCommonReason, g.failedSummaries[i].mostCommonCount)
+			fmt.Fprintf(&b, "%s(s%v", prefix, summary.storeID)
+			for _, reasonCount := range summary.reasonCounts {
+				if reasonCount.count == 0 {
+					break
+				}
+				fmt.Fprintf(&b, ", %v:%v", reasonCount.reason, reasonCount.count)
+			}
+			fmt.Fprintf(&b, ", %v)", summary.numRangesEvaluated)
 		}
 		if omitted {
 			fmt.Fprintf(&b, ",...")

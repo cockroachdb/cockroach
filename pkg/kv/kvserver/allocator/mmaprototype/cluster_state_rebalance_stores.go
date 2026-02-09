@@ -474,6 +474,7 @@ func (re *rebalanceEnv) rebalanceReplicas(
 			return
 		}
 
+		re.passObs.startEvaluatingRange()
 		rangeID := topKRanges.index(i)
 		// TODO(sumeer): the following code belongs in a closure, since we will
 		// repeat it for some random selection of non topKRanges.
@@ -669,6 +670,7 @@ func (re *rebalanceEnv) rebalanceLeasesFromLocalStoreID(
 			return leaseTransferCount
 		}
 
+		re.passObs.startEvaluatingRange()
 		rangeID := topKRanges.index(i)
 		rstate := re.ranges[rangeID]
 		if len(rstate.pendingChanges) > 0 {
