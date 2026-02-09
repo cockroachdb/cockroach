@@ -76,7 +76,7 @@ var TimeAfterNodeSuspect = settings.RegisterDurationSetting(
 	timeAfterNodeSuspectSettingName,
 	"the amount of time we consider a node suspect for after it becomes unavailable."+
 		" A suspect node is typically treated the same as an unavailable node.",
-	30*time.Second,
+	time.Minute,
 	settings.DurationInRange(minTimeUntilNodeSuspect, maxTimeAfterNodeSuspect),
 )
 
