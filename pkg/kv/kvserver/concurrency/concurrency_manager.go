@@ -177,6 +177,16 @@ var VirtualIntentResolution = settings.RegisterBoolSetting(
 	}),
 )
 
+// PushUsingCachedClockObservation controls whether we allow intents from
+// PENDING transactions to be resolved by requests with uncertainty intervals by
+// using a cached clock observation from the original pusher.
+var PushUsingCachedClockObservation = settings.RegisterBoolSetting(
+	settings.SystemOnly,
+	"kv.concurrency.push_pending_from_cache.enabled",
+	"whether read-only, non-locking requests should virtually resolve intents",
+	true,
+)
+
 // MaxLockFlushSize is the maximum number of lock bytes that we will attempt to
 // flush during merge and transfer operations.
 func GetMaxLockFlushSize(sv *settings.Values) int64 {
