@@ -59,7 +59,58 @@ func (s *linuxStatsCollector) collect(
 		// single read. Reallocate (doubling) the buffer and continue.
 		s.buf = make([]byte, len(s.buf)*2)
 	}
-	return parseDiskStats(s.buf[:n], disks, now)
+	if n == 0 {
+		panic(errors.AssertionFailedf("n must not be 0"))
+	}
+	return parseDiskStats(s.buf[:n], disks, now, nil)
+}
+
+// collectInstantaneous reads /proc/diskstats synchronously and invokes the
+// recorder callback for each monitored disk. Unlike collect() which writes to
+// the tracer ring buffer, this method allows callers to handle stats directly.
+//
+// Parameters:
+//   - disks: Monitored disks to collect stats for.
+//   - now: Timestamp to associate with collected stats.
+//   - recorder: Callback invoked for each disk with a traceEvent containing
+//     stats or an error.
+//   - buf: Byte buffer for reading /proc/diskstats; reallocated if too small.
+//
+// Returns:
+//   - countCollected: Number of disks for which stats were collected.
+//   - []byte: The (possibly reallocated) byte buffer for reuse.
+//   - error: Non-nil if reading /proc/diskstats fails.
+func (s *linuxStatsCollector) collectInstantaneous(
+	disks []*monitoredDisk, now time.Time, recorder func(traceEvent), buf []byte,
+) (countCollected int, _ []byte, err error) {
+	if len(buf) < 64 {
+		buf = make([]byte, 64)
+	}
+	var n int
+	for {
+		n, err = s.File.ReadAt(buf, 0)
+		if errors.Is(err, io.EOF) {
+			break
+		} else if err != nil {
+			return 0, buf, err
+		}
+		// err == nil
+		//
+		// NB: ReadAt is required to return a non-nil error when it returns n <
+		// len(buf). A nil error indicates a full len(buf) bytes were read,
+		// and the diskstats file does not fit in our current buffer.
+		//
+		// We want to grow the buffer to be large enough to fit the entirety of
+		// the file. This is required for consistency. We're only guaranteed a
+		// consistent read if we read the entirety of the diskstats file in a
+		// single read. Reallocate (doubling) the buffer and continue.
+		buf = make([]byte, len(buf)*2)
+	}
+	if n == 0 {
+		panic(errors.AssertionFailedf("n must not be 0"))
+	}
+	countCollected, err = parseDiskStats(buf[:n], disks, now, recorder)
+	return countCollected, buf, err
 }
 
 func newStatsCollector(fs vfs.FS) (*linuxStatsCollector, error) {
@@ -102,8 +153,8 @@ func deviceIDFromFileInfo(finfo fs.FileInfo, path string) DeviceID {
 			}
 
 			id := DeviceID{
-				major: major,
-				minor: minor,
+				Major: major,
+				Minor: minor,
 			}
 			return id
 
@@ -136,8 +187,8 @@ func deviceIDFromFileInfo(finfo fs.FileInfo, path string) DeviceID {
 	}
 
 	id := DeviceID{
-		major: major,
-		minor: minor,
+		Major: major,
+		Minor: minor,
 	}
 	return id
 }
