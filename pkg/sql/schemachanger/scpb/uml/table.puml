@@ -206,6 +206,8 @@ FunctionBody : []UsesViews
 FunctionBody : []UsesSequenceIDs
 FunctionBody : []UsesTypeIDs
 FunctionBody : []UsesFunctionIDs
+FunctionBody : []Params
+FunctionBody :  ReturnType
 
 object FunctionLeakProof
 

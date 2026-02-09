@@ -221,6 +221,30 @@ func (b *builderState) ensureDescriptors(e scpb.Element) {
 	})
 }
 
+// replaceElement replaces an existing PUBLIC element's content with new
+// content while preserving its key. It sets initial=ABSENT, current=ABSENT,
+// target=ToPublic so the planner emits "add" operations that update the
+// already-existing descriptor. This is used for CREATE OR REPLACE FUNCTION.
+func (b *builderState) replaceElement(e scpb.Element, meta scpb.TargetMetadata) {
+	existing := b.getExistingElementState(e)
+	if existing == nil {
+		panic(errors.AssertionFailedf(
+			"Replace called on non-existent element %s", screl.ElementString(e),
+		))
+	}
+	b.ensureDescriptors(e)
+	id := screl.GetDescID(e)
+	c := b.descCache[id]
+	c.cachedCollection = nil
+	b.upsertElementState(elementState{
+		element:  e,
+		initial:  scpb.Status_ABSENT,
+		current:  scpb.Status_ABSENT,
+		target:   scpb.ToPublic,
+		metadata: meta,
+	})
+}
+
 func (b *builderState) upsertElementState(es elementState) {
 	if existing := b.getExistingElementState(es.element); existing != nil {
 		if err := b.localMemAcc.Grow(b.ctx, es.byteSize()-existing.byteSize()); err != nil {
