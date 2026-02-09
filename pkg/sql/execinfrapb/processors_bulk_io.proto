@@ -185,7 +185,13 @@ message ReadImportDataSpec {
   // distributed merge pipeline. Determined at planning time.
   optional bool use_distributed_merge = 21 [(gogoproto.nullable) = false];
 
-  // NEXTID: 22.
+  // distributed_merge_file_prefix is the ExternalStorage URI path (without
+  // nodelocal://nodeID prefix) to use when writing map outputs for the
+  // distributed merge pipeline. Each processor constructs its full nodelocal
+  // URI using its own node ID at runtime.
+  optional string distributed_merge_file_prefix = 22 [(gogoproto.nullable) = false];
+
+  // NEXTID: 23.
 }
 
 message MergeCoordinatorSpec {

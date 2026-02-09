@@ -466,6 +466,10 @@ func makeImportReaderSpecs(
 		// Round robin assign CSV files to processors. Files 0 through len(specs)-1
 		// creates the spec. Future files just add themselves to the Uris.
 		if i < cap(inputSpecs) {
+			var distributedMergeFilePrefix string
+			if details.UseDistributedMerge {
+				distributedMergeFilePrefix = bulkutil.NewDistMergePaths(job.ID()).MapPath()
+			}
 			spec := &execinfrapb.ReadImportDataSpec{
 				JobID:  int64(job.ID()),
 				Table:  table,
@@ -476,13 +480,14 @@ func makeImportReaderSpecs(
 					JobID: job.ID(),
 					Slot:  int32(i),
 				},
-				WalltimeNanos:         walltime,
-				Uri:                   make(map[int32]string),
-				ResumePos:             make(map[int32]int64),
-				UserProto:             user.EncodeProto(),
-				DatabasePrimaryRegion: details.DatabasePrimaryRegion,
-				InitialSplits:         int32(initialSplitsPerProc),
-				UseDistributedMerge:   details.UseDistributedMerge,
+				WalltimeNanos:              walltime,
+				Uri:                        make(map[int32]string),
+				ResumePos:                  make(map[int32]int64),
+				UserProto:                  user.EncodeProto(),
+				DatabasePrimaryRegion:      details.DatabasePrimaryRegion,
+				InitialSplits:              int32(initialSplitsPerProc),
+				UseDistributedMerge:        details.UseDistributedMerge,
+				DistributedMergeFilePrefix: distributedMergeFilePrefix,
 			}
 			inputSpecs = append(inputSpecs, spec)
 		}

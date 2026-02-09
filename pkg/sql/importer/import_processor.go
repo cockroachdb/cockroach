@@ -8,13 +8,10 @@ package importer
 import (
 	"context"
 	"fmt"
-	"math"
 	"runtime"
-	"strings"
-	"sync/atomic"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/cloud"
+	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
@@ -23,14 +20,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/bulksst"
-	"github.com/cockroachdb/cockroach/pkg/sql/bulkutil"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowexec"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -116,7 +112,8 @@ func importBufferConfigSizes(st *cluster.Settings, isPKAdder bool) (int64, func(
 type readImportDataProcessor struct {
 	execinfra.ProcessorBase
 
-	spec execinfrapb.ReadImportDataSpec
+	spec        execinfrapb.ReadImportDataSpec
+	processorID int32
 
 	cancel context.CancelFunc
 	wg     ctxgroup.Group
@@ -126,7 +123,6 @@ type readImportDataProcessor struct {
 
 	importErr error
 	summary   *kvpb.BulkOpSummary
-	files     *bulksst.SSTFiles
 }
 
 var (
@@ -142,8 +138,9 @@ func newReadImportDataProcessor(
 	post *execinfrapb.PostProcessSpec,
 ) (execinfra.Processor, error) {
 	idp := &readImportDataProcessor{
-		spec:   spec,
-		progCh: make(chan execinfrapb.RemoteProducerMetadata_BulkProcessorProgress),
+		spec:        spec,
+		processorID: processorID,
+		progCh:      make(chan execinfrapb.RemoteProducerMetadata_BulkProcessorProgress),
 	}
 	outputTypes := csvOutputTypes
 	if spec.UseDistributedMerge {
@@ -186,8 +183,8 @@ func (idp *readImportDataProcessor) Start(ctx context.Context) {
 	idp.wg.GoCtx(func(ctx context.Context) error {
 		defer close(idp.progCh)
 
-		idp.summary, idp.files, idp.importErr = runImport(ctx, idp.FlowCtx, &idp.spec, idp.progCh,
-			idp.seqChunkProvider)
+		idp.summary, idp.importErr = runImport(ctx, idp.FlowCtx, &idp.spec, idp.processorID,
+			idp.progCh, idp.seqChunkProvider)
 
 		// All SST manifests are now sent via the OnFlush callback synchronized
 		// with flush events, eliminating the need for final manifest emission.
@@ -347,116 +344,98 @@ func ingestKvs(
 	ctx context.Context,
 	flowCtx *execinfra.FlowCtx,
 	spec *execinfrapb.ReadImportDataSpec,
+	processorID int32,
 	tableName string,
 	progCh chan execinfrapb.RemoteProducerMetadata_BulkProcessorProgress,
 	kvCh <-chan row.KVBatch,
-) (*kvpb.BulkOpSummary, *bulksst.SSTFiles, error) {
+) (*kvpb.BulkOpSummary, error) {
 	ctx, span := tracing.ChildSpan(ctx, "import-ingest-kvs")
 	defer span.Finish()
-
 	defer flowCtx.Cfg.JobRegistry.MarkAsIngesting(spec.Progress.JobID)()
 
-	writeTS := hlc.Timestamp{WallTime: spec.WalltimeNanos}
-	writtenRow := make([]int64, len(spec.Uri))
-
-	// Setup external storage on node local for our generated SSTs.
-	importAdder, err := makeIngestHelper(ctx, flowCtx, spec, writeTS, writtenRow)
-	if err != nil {
-		return nil, nil, err
-	}
-	defer importAdder.Close(ctx)
-
-	// Setup progress tracking:
-	//  - offsets maps source file IDs to offsets in the slices below.
-	//  - writtenRow contains LastRow of batch most recently added to the buffer.
-	//  - writtenFraction contains % of the input finished as of last batch.
-	//  - pkFlushedRow contains `writtenRow` as of the last pk adder flush.
-	//  - idxFlushedRow contains `writtenRow` as of the last index adder flush.
-	// In pkFlushedRow, idxFlushedRow and writtenFaction values are written via
-	// `atomic` so the progress reporting go goroutine can read them.
-	writtenFraction := make([]uint32, len(spec.Uri))
-
-	// offsets maps input file ID to a slot in our progress tracking slices.
-	offsets := make(map[int32]int, len(spec.Uri))
-	var offset int
-	for i := range spec.Uri {
-		offsets[i] = offset
-		offset++
-	}
-
-	// Protected state for progress tracking, following index backfiller pattern.
-	// OnFlush callback collects this state synchronously; pushProgress consumes it.
-	var mu struct {
-		syncutil.Mutex
-		resumePos         map[int32]int64
-		completedFraction map[int32]float32
-		summary           kvpb.BulkOpSummary
-		manifests         []jobspb.BulkSSTManifest
-	}
-	mu.resumePos = make(map[int32]int64)
-	mu.completedFraction = make(map[int32]float32)
-
-	// flushProgress collects state synchronously during flush.
-	flushProgress := func(summary kvpb.BulkOpSummary) {
-		mu.Lock()
-		defer mu.Unlock()
-
-		// Update resume positions and fractions from current state.
-		for file, offset := range offsets {
-			mu.resumePos[file] = writtenRow[offset]
-			mu.completedFraction[file] = math.Float32frombits(atomic.LoadUint32(&writtenFraction[offset]))
-		}
-
-		// Accumulate bulk summary.
-		mu.summary.Add(summary)
-
-		// Collect SST manifests for distributed merge.
-		if spec.UseDistributedMerge {
-			mu.manifests = append(mu.manifests, importAdder.ConsumeFlushManifests()...)
-		}
-	}
-
-	// Install the flush callback.
-	importAdder.SetOnFlush(flushProgress)
-
-	// Initialize resume positions from spec if resuming. This ensures the first
-	// progress update doesn't reset positions to zero on resume.
-	if spec.ResumePos != nil {
-		for file := range offsets {
-			if resumePos, ok := spec.ResumePos[file]; ok {
-				mu.resumePos[file] = resumePos
-			}
-		}
-	}
-
+	// Protected state for progress tracking.
+	progressTracker := newImportProgressTracker(flowCtx, spec)
 	pushProgress := func(ctx context.Context) {
-		mu.Lock()
-		var prog execinfrapb.RemoteProducerMetadata_BulkProcessorProgress
-		prog.ResumePos = make(map[int32]int64)
-		prog.CompletedFraction = make(map[int32]float32)
-		for file := range offsets {
-			prog.ResumePos[file] = mu.resumePos[file]
-			prog.CompletedFraction[file] = mu.completedFraction[file]
-		}
-		prog.BulkSummary = mu.summary
-		mu.summary.Reset()
-
-		var manifests []jobspb.BulkSSTManifest
-		if spec.UseDistributedMerge {
-			prog.NodeID = flowCtx.Cfg.NodeID.SQLInstanceID()
-			manifests = append([]jobspb.BulkSSTManifest(nil), mu.manifests...)
-			mu.manifests = nil
-		}
-		mu.Unlock()
-
-		if len(manifests) > 0 {
-			prog.SSTMetadata = manifests
-		}
-
+		prog := progressTracker.formatProgress()
 		select {
 		case progCh <- prog:
 		case <-ctx.Done():
 		}
+	}
+
+	writeTS := hlc.Timestamp{WallTime: spec.WalltimeNanos}
+
+	var pkIndexID descpb.IndexID
+	var pkSink, indexSink bulksst.BulkSink
+	var err error
+	if spec.UseDistributedMerge {
+		nodeID := flowCtx.NodeID.SQLInstanceID()
+		prefix := fmt.Sprintf("nodelocal://%d/%s", nodeID, spec.DistributedMergeFilePrefix)
+		pkSink, err = bulksst.NewSSTSink(
+			ctx,
+			flowCtx.Cfg.Settings,
+			flowCtx.Cfg.ExternalStorageFromURI,
+			flowCtx.Cfg.DB.KV().Clock(),
+			prefix,
+			writeTS,
+			processorID,
+			false, /*checkDuplicates */
+		)
+		if err != nil {
+			return nil, err
+		}
+		defer pkSink.Close(ctx)
+	} else {
+		table := getTableFromSpec(spec)
+		pkIndexID = table.Desc.PrimaryIndex.ID
+		minBufferSize, maxBufferSize := importBufferConfigSizes(flowCtx.Cfg.Settings, true /* isPKAdder */)
+
+		var adder kvserverbase.BulkAdder
+		adder, err = flowCtx.Cfg.BulkAdder(ctx, flowCtx.Cfg.DB.KV(), writeTS, kvserverbase.BulkAdderOptions{
+			Name:                     fmt.Sprintf("%s_indexes", table.Desc.Name),
+			DisallowShadowingBelow:   writeTS,
+			SkipDuplicates:           true,
+			MinBufferSize:            minBufferSize,
+			MaxBufferSize:            maxBufferSize,
+			InitialSplitsIfUnordered: int(spec.InitialSplits),
+			WriteAtBatchTimestamp:    true,
+			ImportEpoch:              table.Desc.ImportEpoch,
+		})
+		if err != nil {
+			return nil, err
+		}
+		indexSink = &bulksst.BulkAdderSink{BulkAdder: adder}
+		defer indexSink.Close(ctx)
+		progressTracker.registerSink(indexSink)
+
+		adder, err = flowCtx.Cfg.BulkAdder(ctx, flowCtx.Cfg.DB.KV(), writeTS, kvserverbase.BulkAdderOptions{
+			Name:                     fmt.Sprintf("%s_rows", table.Desc.Name),
+			DisallowShadowingBelow:   writeTS,
+			SkipDuplicates:           true,
+			MinBufferSize:            minBufferSize,
+			MaxBufferSize:            maxBufferSize,
+			InitialSplitsIfUnordered: int(spec.InitialSplits),
+			WriteAtBatchTimestamp:    true,
+			ImportEpoch:              table.Desc.ImportEpoch,
+		})
+		if err != nil {
+			return nil, err
+		}
+		pkSink = &bulksst.BulkAdderSink{BulkAdder: adder}
+		defer pkSink.Close(ctx)
+	}
+	progressTracker.registerSink(pkSink)
+
+	flush := func() error {
+		if err := pkSink.Flush(ctx); err != nil {
+			return errors.Wrapf(err, "flushing primary key")
+		}
+		if indexSink != nil {
+			if err := indexSink.Flush(ctx); err != nil {
+				return errors.Wrapf(err, "flushing secondary index")
+			}
+		}
+		return nil
 	}
 
 	// stopProgress will be closed when there is no more progress to report.
@@ -507,20 +486,21 @@ func ingestKvs(
 				if indexErr != nil {
 					return indexErr
 				}
-				importAdder.SetIndexID(catid.IndexID(indexID))
-				if err := importAdder.Add(ctx, kv.Key, kv.Value.RawBytes); err != nil {
+				sink := pkSink
+				if indexSink != nil && descpb.IndexID(indexID) != pkIndexID {
+					sink = indexSink
+				}
+				if err := sink.Add(ctx, kv.Key, kv.Value.RawBytes); err != nil {
 					if errors.HasType(err, (*kvserverbase.DuplicateKeyError)(nil)) {
-						return errors.Wrapf(err, "duplicate key in %s", importAdder.ErrTarget())
+						return errors.Wrapf(err, "duplicate key")
 					}
 					return err
 				}
 			}
-			offset := offsets[kvBatch.Source]
-			writtenRow[offset] = kvBatch.LastRow
-			atomic.StoreUint32(&writtenFraction[offset], math.Float32bits(kvBatch.Progress))
+			progressTracker.recordKVBatch(kvBatch)
 			if flowCtx.Cfg.TestingKnobs.BulkAdderFlushesEveryBatch {
-				if err := importAdder.Flush(ctx); err != nil {
-					log.Dev.Warningf(ctx, "flushing importAdder: %v", err)
+				if err := flush(); err != nil {
+					log.Dev.Warningf(ctx, "%v", err)
 				}
 				pushProgress(ctx)
 			}
@@ -529,392 +509,127 @@ func ingestKvs(
 	})
 
 	if err := g.Wait(); err != nil {
-		return nil, nil, err
+		return nil, err
 	}
 
-	if err := importAdder.Flush(ctx); err != nil {
+	if err := flush(); err != nil {
 		if errors.HasType(err, (*kvserverbase.DuplicateKeyError)(nil)) {
-			return nil, nil, errors.Wrapf(err, "duplicate key in %s", importAdder.ErrTarget())
+			return nil, errors.Wrapf(err, "duplicate key")
 		}
-		return nil, nil, err
+		return nil, err
 	}
 
 	// Send final progress update to ensure all flush state is reported.
 	pushProgress(ctx)
 
-	addedSummary := importAdder.GetSummary()
-	// SST file list is only relevant for legacy mode (returns via BulkAdder.GetSummary()).
-	// For distributed merge, manifests are sent via progress updates.
-	return &addedSummary, nil, nil
+	finalSummary := progressTracker.fetchSummary()
+
+	return &finalSummary, nil
 }
 
-// ingestHelper abstracts the BulkAdder interfaces used by the importer so
-// that we can have a unified codepath that encompasses import both with
-// and without distributed merge.
-type ingestHelper interface {
-	kvserverbase.BulkAdder
+type importProgressTracker struct {
+	syncutil.Mutex
+	flushedRows       [][]int64
+	completedFraction map[int32]float32
+	summary           kvpb.BulkOpSummary
+	totalSummary      kvpb.BulkOpSummary
+	manifests         []jobspb.BulkSSTManifest
 
-	// Set the index to target with further operations.
-	SetIndexID(indexID catid.IndexID)
+	nodeID  base.SQLInstanceID
+	offsets map[int32]int
 
-	// SetOnFlush installs a callback that is invoked after the helper flushes a
-	// batch. The callback receives the bulk operation summary and should be used
-	// to collect progress state synchronously. This mirrors the indexBackfillSink
-	// pattern to avoid race conditions with async progress reporting.
-	SetOnFlush(func(summary kvpb.BulkOpSummary))
-
-	// ConsumeFlushManifests returns any SST manifests produced since the last
-	// call. This is only relevant for distributed merge mode.
-	ConsumeFlushManifests() []jobspb.BulkSSTManifest
-
-	// In the event of an error in Add() or Flush(), this is the target that
-	// errored.
-	ErrTarget() string
+	unflushedRows     []int64
+	unflushedFraction []float32
 }
 
-// makeIngestHelper() creates a struct that abstracts the differences between
-// import with and without distributed merge. The majority of this is making
-// the dual BulkAdders of the non-distributed case look like a single
-// BulkAdder. In the distributed case, we have just the single BulkAdder, so
-// the implementation of the import helper is much simpler.
-func makeIngestHelper(
-	ctx context.Context,
-	flowCtx *execinfra.FlowCtx,
-	spec *execinfrapb.ReadImportDataSpec,
-	writeTS hlc.Timestamp,
-	writtenRow []int64,
-) (helper ingestHelper, err error) {
-	table := getTableFromSpec(spec)
+func newImportProgressTracker(
+	flowCtx *execinfra.FlowCtx, spec *execinfrapb.ReadImportDataSpec,
+) *importProgressTracker {
+	var ipt importProgressTracker
+	ipt.flushedRows = make([][]int64, 0, 2)
+	ipt.completedFraction = make(map[int32]float32)
+	ipt.nodeID = flowCtx.Cfg.NodeID.SQLInstanceID()
+	ipt.offsets = make(map[int32]int, len(spec.Uri))
 
-	baseProgress := &baseBulkAdderProgress{
-		indexFlushedRow: make([]int64, len(spec.Uri)),
+	// ipt.offsets maps input file ID to a slot in our progress tracking slices.
+	var off int
+	for i := range spec.Uri {
+		ipt.offsets[i] = off
+		off++
 	}
 
-	var indexAdder kvserverbase.BulkAdder
-	if spec.UseDistributedMerge {
-		uri := fmt.Sprintf("nodelocal://%d/%s%s_rows/", flowCtx.Cfg.NodeID.SQLInstanceID(),
-			bulkutil.NewDistMergePaths(jobspb.JobID(spec.JobID)).MapPath(), table.Desc.Name)
+	ipt.unflushedRows = make([]int64, len(spec.Uri))
+	ipt.unflushedFraction = make([]float32, len(spec.Uri))
 
-		rowStorage, err := flowCtx.Cfg.ExternalStorageFromURI(ctx, uri, spec.User())
-		if err != nil {
-			return nil, err
-		}
-		// Ensure rowStorage is closed if we encounter an error after this point
-		defer func() {
-			if err != nil {
-				rowStorage.Close()
-			}
-		}()
-
-		fileAllocator := bulksst.NewExternalFileAllocator(rowStorage, uri, flowCtx.Cfg.DB.KV().Clock())
-		batcher := bulksst.NewUnsortedSSTBatcher(flowCtx.Cfg.Settings, fileAllocator)
-		batcher.SetWriteTS(writeTS)
-
-		adder := &mergeImportBulkAdder{
-			Writer:                *batcher,
-			rowStorage:            rowStorage,
-			fileAllocator:         fileAllocator,
-			baseBulkAdderProgress: baseProgress,
-		}
-
-		// On resume, discover any SST files created in previous runs. These files
-		// exist in external storage but their metadata may not have been persisted
-		// to CompletedMapWork before the pause. We need to include them in manifests
-		// to ensure they get merged.
-		//
-		// CRITICAL: We populate these into pendingManifests but do NOT set emittedFileCount.
-		// The fileAllocator will discover existing files and number new files starting
-		// after them. Setting emittedFileCount would prevent collectNewManifests from
-		// reporting new files created during this run.
-		if spec.ResumePos != nil {
-			var existingFiles []*bulksst.SSTFileInfo
-			err := rowStorage.List(ctx, "", cloud.ListOptions{}, func(f string) error {
-				if strings.HasSuffix(f, ".sst") {
-					// Create a basic file info - the merge phase only needs the URI
-					existingFiles = append(existingFiles, &bulksst.SSTFileInfo{
-						URI: uri + f,
-					})
-				}
-				return nil
-			})
-			if err != nil {
-				return nil, err
-			}
-
-			if len(existingFiles) > 0 {
-				ssts := &bulksst.SSTFiles{SST: existingFiles}
-				adder.pendingManifests = bulksst.SSTFilesToManifests(ssts, nil /* writeTS */)
-				// DO NOT set emittedFileCount here - let collectNewManifests track new files
-			}
-		}
-
-		helper = adder
-		indexAdder = helper
-	} else {
-		// We create two bulk adders so as to combat the excessive flushing of small
-		// SSTs which was observed when using a single adder for both primary and
-		// secondary index kvs. The number of secondary index kvs are small, and so we
-		// expect the indexAdder to flush much less frequently than the pkIndexAdder.
-		//
-		// It is highly recommended that the cluster setting controlling the max size
-		// of the pkIndexAdder buffer be set below that of the indexAdder buffer.
-		// Otherwise, as a consequence of filling up faster the pkIndexAdder buffer
-		// will hog memory as it tries to grow more aggressively.
-		minBufferSize, maxBufferSize := importBufferConfigSizes(flowCtx.Cfg.Settings, true /* isPKAdder */)
-
-		var pkIndexAdder kvserverbase.BulkAdder
-		pkIndexAdder, err = flowCtx.Cfg.BulkAdder(ctx, flowCtx.Cfg.DB.KV(), writeTS, kvserverbase.BulkAdderOptions{
-			Name:                     fmt.Sprintf("%s_rows", table.Desc.Name),
-			DisallowShadowingBelow:   writeTS,
-			SkipDuplicates:           true,
-			MinBufferSize:            minBufferSize,
-			MaxBufferSize:            maxBufferSize,
-			InitialSplitsIfUnordered: int(spec.InitialSplits),
-			WriteAtBatchTimestamp:    true,
-			ImportEpoch:              table.Desc.ImportEpoch,
-		})
-		if err != nil {
-			return nil, err
-		}
-
-		indexAdder, err = flowCtx.Cfg.BulkAdder(ctx, flowCtx.Cfg.DB.KV(), writeTS, kvserverbase.BulkAdderOptions{
-			Name:                     fmt.Sprintf("%s_indexes", table.Desc.Name),
-			DisallowShadowingBelow:   writeTS,
-			SkipDuplicates:           true,
-			MinBufferSize:            minBufferSize,
-			MaxBufferSize:            maxBufferSize,
-			InitialSplitsIfUnordered: int(spec.InitialSplits),
-			WriteAtBatchTimestamp:    true,
-			ImportEpoch:              table.Desc.ImportEpoch,
-		})
-		if err != nil {
-			pkIndexAdder.Close(ctx)
-			return nil, err
-		}
-
-		adder := legacyImportBulkAdder{
-			pkIndexID:             table.Desc.PrimaryIndex.ID,
-			pkIndexAdder:          pkIndexAdder,
-			indexAdder:            indexAdder,
-			pkFlushedRow:          make([]int64, len(spec.Uri)),
-			baseBulkAdderProgress: baseProgress,
-		}
-
-		// When the PK adder flushes, everything written has been flushed, so we set
-		// pkFlushedRow to writtenRow. Additionally if the indexAdder is empty then we
-		// can treat it as flushed as well (in case we're not adding anything to it).
-		pkIndexAdder.SetOnFlush(func(summary kvpb.BulkOpSummary) {
-			for i, emitted := range writtenRow {
-				atomic.StoreInt64(&adder.pkFlushedRow[i], emitted)
-			}
-			baseProgress.mu.Lock()
-			baseProgress.summary.Add(summary)
-			baseProgress.mu.Unlock()
-
-			if adder.indexAdder.IsEmpty() {
-				for i, emitted := range writtenRow {
-					atomic.StoreInt64(&baseProgress.indexFlushedRow[i], emitted)
-				}
-			}
-		})
-		helper = &adder
-	}
-
-	indexAdder.SetOnFlush(func(summary kvpb.BulkOpSummary) {
-		for i, emitted := range writtenRow {
-			atomic.StoreInt64(&baseProgress.indexFlushedRow[i], emitted)
-		}
-		baseProgress.mu.Lock()
-		baseProgress.summary.Add(summary)
-		baseProgress.mu.Unlock()
-	})
-
-	return helper, nil
+	return &ipt
 }
 
-// baseBulkAdderProgress provides common state for tracking import progress.
-type baseBulkAdderProgress struct {
-	indexFlushedRow []int64 // Accessed via atomics only.
+func (ipt *importProgressTracker) registerSink(sink bulksst.BulkSink) {
+	ipt.Lock()
+	defer ipt.Unlock()
 
-	mu      syncutil.Mutex     // Protects summary.
-	summary kvpb.BulkOpSummary // Incremental summary.
-}
+	thisSinksFlushedRows := make([]int64, len(ipt.unflushedRows))
+	ipt.flushedRows = append(ipt.flushedRows, thisSinksFlushedRows)
+	sink.SetOnFlush(func(summary kvpb.BulkOpSummary) {
+		ipt.Lock()
+		defer ipt.Unlock()
 
-// legacyImportBulkAdder implements the importHelper interface for the
-// case where we're not using distributed merge and so want to have
-// separate BulkAdders for the PK and non-PK indexes for performance
-// reasons.
-type legacyImportBulkAdder struct {
-	targetID  catid.IndexID
-	pkIndexID catid.IndexID
-
-	pkIndexAdder kvserverbase.BulkAdder
-	indexAdder   kvserverbase.BulkAdder
-
-	pkFlushedRow []int64
-
-	*baseBulkAdderProgress
-
-	errTarget string
-}
-
-var _ ingestHelper = &legacyImportBulkAdder{}
-
-// SetIndexID() implements the importHelper interface.
-func (liba *legacyImportBulkAdder) SetIndexID(indexID catid.IndexID) {
-	liba.targetID = indexID
-}
-
-// SetOnFlush() implements the ingestHelper interface.
-func (liba *legacyImportBulkAdder) SetOnFlush(fn func(summary kvpb.BulkOpSummary)) {
-	// The callback is installed on the underlying BulkAdders during construction
-	// in makeIngestHelper, so this is a no-op for legacy mode.
-}
-
-// ConsumeFlushManifests() implements the ingestHelper interface.
-func (liba *legacyImportBulkAdder) ConsumeFlushManifests() []jobspb.BulkSSTManifest {
-	// Legacy BulkAdder does not produce SST manifests.
-	return nil
-}
-
-// ErrTarget() implements the ingestHelper interface.
-func (liba *legacyImportBulkAdder) ErrTarget() string {
-	return liba.errTarget
-}
-
-// Add() implements the BulkAdder interface.
-func (liba *legacyImportBulkAdder) Add(ctx context.Context, key roachpb.Key, value []byte) error {
-	if liba.targetID == liba.pkIndexID {
-		if err := liba.pkIndexAdder.Add(ctx, key, value); err != nil {
-			liba.errTarget = "primary index"
-			return err
-		}
-	} else {
-		if err := liba.indexAdder.Add(ctx, key, value); err != nil {
-			liba.errTarget = "index"
-			return err
-		}
-	}
-	return nil
-}
-
-// Flush() implements the BulkAdder interface.
-func (liba *legacyImportBulkAdder) Flush(ctx context.Context) error {
-	if err := liba.pkIndexAdder.Flush(ctx); err != nil {
-		liba.errTarget = "primary index"
-		return err
-	}
-
-	if err := liba.indexAdder.Flush(ctx); err != nil {
-		liba.errTarget = "index"
-		return err
-	}
-
-	return nil
-}
-
-// IsEmpty() implements the BulkAdder interface.
-func (liba *legacyImportBulkAdder) IsEmpty() bool {
-	return liba.pkIndexAdder.IsEmpty() && liba.indexAdder.IsEmpty()
-}
-
-// CurrentBufferFill() implements the BulkAdder interface.
-func (liba *legacyImportBulkAdder) CurrentBufferFill() float32 {
-	panic("unimplemented")
-}
-
-// GetSummary() implements the BulkAdder interface.
-func (liba *legacyImportBulkAdder) GetSummary() kvpb.BulkOpSummary {
-	summary := liba.pkIndexAdder.GetSummary()
-	summary.Add(liba.indexAdder.GetSummary())
-	return summary
-}
-
-// Close() implements the BulkAdder interface.
-func (liba *legacyImportBulkAdder) Close(ctx context.Context) {
-	liba.pkIndexAdder.Close(ctx)
-	liba.indexAdder.Close(ctx)
-}
-
-type mergeImportBulkAdder struct {
-	bulksst.Writer
-
-	rowStorage    cloud.ExternalStorage
-	fileAllocator bulksst.FileAllocator
-
-	*baseBulkAdderProgress
-
-	// Manifest buffering (matches index backfiller pattern).
-	manifestsMu      syncutil.Mutex
-	pendingManifests []jobspb.BulkSSTManifest
-	emittedFileCount int
-}
-
-var _ ingestHelper = &mergeImportBulkAdder{}
-
-// SetIndexID() implements the ingestHelper interface.
-func (miba *mergeImportBulkAdder) SetIndexID(_ catid.IndexID) {}
-
-// SetOnFlush() implements the ingestHelper interface.
-func (miba *mergeImportBulkAdder) SetOnFlush(fn func(summary kvpb.BulkOpSummary)) {
-	miba.Writer.SetOnFlush(func(summary kvpb.BulkOpSummary) {
-		// Collect manifests synchronously during flush, matching index backfiller pattern.
-		miba.manifestsMu.Lock()
-		newManifests := miba.collectNewManifests()
-		if len(newManifests) > 0 {
-			miba.pendingManifests = append(miba.pendingManifests, newManifests...)
-		}
-		miba.manifestsMu.Unlock()
-
-		// Call the user-provided callback.
-		if fn != nil {
-			fn(summary)
-		}
+		copy(thisSinksFlushedRows, ipt.unflushedRows)
+		ipt.summary.Add(summary)
+		ipt.totalSummary.Add(summary)
+		ipt.manifests = append(ipt.manifests, sink.ConsumeFlushManifests()...)
 	})
 }
 
-// ConsumeFlushManifests() implements the ingestHelper interface.
-func (miba *mergeImportBulkAdder) ConsumeFlushManifests() []jobspb.BulkSSTManifest {
-	miba.manifestsMu.Lock()
-	defer miba.manifestsMu.Unlock()
+func (ipt *importProgressTracker) formatProgress() (
+	prog execinfrapb.RemoteProducerMetadata_BulkProcessorProgress,
+) {
+	prog.ResumePos = make(map[int32]int64)
+	prog.CompletedFraction = make(map[int32]float32)
 
-	if len(miba.pendingManifests) == 0 {
-		return nil
+	ipt.Lock()
+	defer ipt.Unlock()
+
+	for file := range ipt.offsets {
+		// Report the resume position of the least advanced BulkAdder
+		prog.ResumePos[file] = ipt.flushedRows[0][file]
+		for adder := 1; adder < len(ipt.flushedRows); adder++ {
+			if prog.ResumePos[file] > ipt.flushedRows[adder][file] {
+				prog.ResumePos[file] = ipt.flushedRows[adder][file]
+			}
+		}
+
+		prog.CompletedFraction[file] = ipt.completedFraction[file]
 	}
-	out := miba.pendingManifests
-	miba.pendingManifests = nil
-	return out
+	prog.BulkSummary = ipt.summary
+	ipt.summary.Reset()
+
+	prog.NodeID = ipt.nodeID
+	if len(ipt.manifests) > 0 {
+		prog.SSTMetadata = append([]jobspb.BulkSSTManifest(nil), ipt.manifests...)
+		ipt.manifests = nil
+	}
+
+	return prog
 }
 
-// collectNewManifests() returns SST manifests produced since the last call.
-// Must be called with manifestsMu held.
-func (miba *mergeImportBulkAdder) collectNewManifests() []jobspb.BulkSSTManifest {
-	files := miba.fileAllocator.GetFileList()
-	if len(files.SST) <= miba.emittedFileCount {
-		return nil
-	}
-	// Extract only the new files since last collection.
-	newFiles := &bulksst.SSTFiles{
-		SST: files.SST[miba.emittedFileCount:],
-	}
-	miba.emittedFileCount = len(files.SST)
+func (ipt *importProgressTracker) recordKVBatch(batch row.KVBatch) {
+	ipt.Lock()
+	defer ipt.Unlock()
 
-	// Convert to manifests (no writeTS for distributed merge).
-	return bulksst.SSTFilesToManifests(newFiles, nil /* writeTS */)
+	offset, ok := ipt.offsets[batch.Source]
+	if !ok {
+		panic(fmt.Sprintf("Unknown source %d!", batch.Source))
+	}
+	ipt.unflushedRows[offset] = batch.LastRow
+	ipt.unflushedFraction[offset] = batch.Progress
 }
 
-// ErrTarget() implements the ingestHelper interface.
-func (miba *mergeImportBulkAdder) ErrTarget() string {
-	return "index"
-}
+func (ipt *importProgressTracker) fetchSummary() kvpb.BulkOpSummary {
+	ipt.Lock()
+	defer ipt.Unlock()
 
-// Close closes the merge import bulk adder, ensuring both the SST writer and
-// the external storage are properly closed to prevent resource leaks.
-func (miba *mergeImportBulkAdder) Close(ctx context.Context) {
-	miba.Writer.Close(ctx)
-	if err := miba.rowStorage.Close(); err != nil {
-		log.Dev.Warningf(ctx, "closing merge import row storage: %v", err)
-	}
+	return ipt.totalSummary.DeepCopy()
 }
 
 func init() {
