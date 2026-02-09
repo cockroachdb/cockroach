@@ -36,7 +36,7 @@ EXPLAIN SELECT * FROM t ORDER BY v <-> '[1, 2, 3]' LIMIT 1;
 distribution: local
 ·
 • top-k
-│ order: +column7
+│ order: +"v <-> '[1,2,3]'"
 │ k: 1
 │
 └── • render
@@ -60,14 +60,14 @@ vectorized: true
 │ columns: (k, v)
 │
 └── • top-k
-    │ columns: (column7, k, v)
+    │ columns: ("v <-> '[1,2,3]'", k, v)
     │ estimated row count: 1 (missing stats)
-    │ order: +column7
+    │ order: +"v <-> '[1,2,3]'"
     │ k: 1
     │
     └── • render
-        │ columns: (column7, k, v)
-        │ render column7: v <-> '[1,2,3]'
+        │ columns: ("v <-> '[1,2,3]'", k, v)
+        │ render v <-> '[1,2,3]': v <-> '[1,2,3]'
         │ render k: k
         │ render v: v
         │
@@ -96,14 +96,14 @@ vectorized: true
 │ columns: (k, v)
 │
 └── • top-k
-    │ columns: (column7, k, v)
+    │ columns: ("v <-> '[1,2,3]'", k, v)
     │ estimated row count: 5 (missing stats)
-    │ order: +column7
+    │ order: +"v <-> '[1,2,3]'"
     │ k: 5
     │
     └── • render
-        │ columns: (column7, k, v)
-        │ render column7: v <-> '[1,2,3]'
+        │ columns: ("v <-> '[1,2,3]'", k, v)
+        │ render v <-> '[1,2,3]': v <-> '[1,2,3]'
         │ render k: k
         │ render v: v
         │
@@ -132,14 +132,14 @@ vectorized: true
 │ columns: (x, y, a, b, c, v)
 │
 └── • top-k
-    │ columns: (column11, x, y, a, b, c, v)
+    │ columns: ("v <-> '[1,2,3]'", x, y, a, b, c, v)
     │ estimated row count: 1 (missing stats)
-    │ order: +column11
+    │ order: +"v <-> '[1,2,3]'"
     │ k: 1
     │
     └── • render
-        │ columns: (column11, x, y, a, b, c, v)
-        │ render column11: v <-> '[1,2,3]'
+        │ columns: ("v <-> '[1,2,3]'", x, y, a, b, c, v)
+        │ render v <-> '[1,2,3]': v <-> '[1,2,3]'
         │ render x: x
         │ render y: y
         │ render a: a
@@ -173,14 +173,14 @@ vectorized: true
 │ columns: (x, y, a, b, c, v)
 │
 └── • top-k
-    │ columns: (column11, x, y, a, b, c, v)
+    │ columns: ("v <-> '[1,2,3]'", x, y, a, b, c, v)
     │ estimated row count: 1 (missing stats)
-    │ order: +column11
+    │ order: +"v <-> '[1,2,3]'"
     │ k: 1
     │
     └── • render
-        │ columns: (column11, x, y, a, b, c, v)
-        │ render column11: v <-> '[1,2,3]'
+        │ columns: ("v <-> '[1,2,3]'", x, y, a, b, c, v)
+        │ render v <-> '[1,2,3]': v <-> '[1,2,3]'
         │ render x: x
         │ render y: y
         │ render a: a
@@ -211,7 +211,7 @@ EXPLAIN SELECT * FROM t_multi_idx ORDER BY v <=> '[1, 2, 3]' LIMIT 1;
 distribution: local
 ·
 • top-k
-│ order: +column7
+│ order: +"v <=> '[1,2,3]'"
 │ k: 1
 │
 └── • render
@@ -232,7 +232,7 @@ EXPLAIN SELECT * FROM t_multi_idx ORDER BY v <#> '[1, 2, 3]' LIMIT 1;
 distribution: local
 ·
 • top-k
-│ order: +column7
+│ order: +"v <#> '[1,2,3]'"
 │ k: 1
 │
 └── • render

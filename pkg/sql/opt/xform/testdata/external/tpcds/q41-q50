@@ -1200,7 +1200,7 @@ opt
 		100;
 ----
 with &1 (v1)
- ├── columns: s_store_name:144!null s_company_name:145!null d_year:146!null avg_monthly_sales:147!null sum_sales:148 psum:149 nsum:150  [hidden: column151:151]
+ ├── columns: s_store_name:144!null s_company_name:145!null d_year:146!null avg_monthly_sales:147!null sum_sales:148 psum:149 nsum:150  [hidden: "sum_sales - avg_monthly_sales":151]
  ├── cardinality: [0 - 100]
  ├── immutable
  ├── fd: ()-->(146), (147,148)-->(151)
@@ -1265,7 +1265,7 @@ with &1 (v1)
  │    └── windows
  │         └── rank [as=rank:113]
  └── top-k
-      ├── columns: s_store_name:144!null s_company_name:145!null d_year:146!null avg_monthly_sales:147!null sum_sales:148 psum:149 nsum:150 column151:151
+      ├── columns: s_store_name:144!null s_company_name:145!null d_year:146!null avg_monthly_sales:147!null sum_sales:148 psum:149 nsum:150 "sum_sales - avg_monthly_sales":151
       ├── internal-ordering: +151,+150 opt(146)
       ├── k: 100
       ├── cardinality: [0 - 100]
@@ -1273,7 +1273,7 @@ with &1 (v1)
       ├── fd: ()-->(146), (147,148)-->(151)
       ├── ordering: +151,+150 opt(146) [actual: +151,+150]
       └── project
-           ├── columns: column151:151 s_store_name:144!null s_company_name:145!null d_year:146!null avg_monthly_sales:147!null sum_sales:148 psum:149 nsum:150
+           ├── columns: "sum_sales - avg_monthly_sales":151 s_store_name:144!null s_company_name:145!null d_year:146!null avg_monthly_sales:147!null sum_sales:148 psum:149 nsum:150
            ├── immutable
            ├── fd: ()-->(146), (147,148)-->(151)
            ├── project
@@ -1362,7 +1362,7 @@ with &1 (v1)
            │         ├── sum_sales:129 [as=psum:149, outer=(129)]
            │         └── sum_sales:138 [as=nsum:150, outer=(138)]
            └── projections
-                └── sum_sales:148 - avg_monthly_sales:147 [as=column151:151, outer=(147,148), immutable]
+                └── sum_sales:148 - avg_monthly_sales:147 [as="sum_sales - avg_monthly_sales":151, outer=(147,148), immutable]
 
 # --------------------------------------------------
 # Q48

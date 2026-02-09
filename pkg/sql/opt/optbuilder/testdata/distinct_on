@@ -517,8 +517,10 @@ distinct-on
  │    ├── ordering: +6,+3,+7,+1
  │    └── project
  │         ├── columns: nulls_ordering_genre:6!null nulls_ordering_id:7!null id:1!null name:2 genre:3
- │         ├── scan author
- │         │    └── columns: id:1!null name:2 genre:3 crdb_internal_mvcc_timestamp:4 tableoid:5
+ │         ├── project
+ │         │    ├── columns: id:1!null name:2 genre:3
+ │         │    └── scan author
+ │         │         └── columns: id:1!null name:2 genre:3 crdb_internal_mvcc_timestamp:4 tableoid:5
  │         └── projections
  │              ├── genre:3 IS NULL [as=nulls_ordering_genre:6]
  │              └── id:1 IS NULL [as=nulls_ordering_id:7]
@@ -554,14 +556,16 @@ sort
       ├── grouping columns: t2.id:6!null nulls_ordering_id:11!null
       ├── project
       │    ├── columns: nulls_ordering_id:11!null t1.id:1!null str:2 t2.id:6!null
-      │    ├── inner-join (hash)
-      │    │    ├── columns: t1.id:1!null str:2 t1.rowid:3!null t1.crdb_internal_mvcc_timestamp:4 t1.tableoid:5 t2.id:6!null num:7 t2.rowid:8!null t2.crdb_internal_mvcc_timestamp:9 t2.tableoid:10
-      │    │    ├── scan t1
-      │    │    │    └── columns: t1.id:1 str:2 t1.rowid:3!null t1.crdb_internal_mvcc_timestamp:4 t1.tableoid:5
-      │    │    ├── scan t2
-      │    │    │    └── columns: t2.id:6 num:7 t2.rowid:8!null t2.crdb_internal_mvcc_timestamp:9 t2.tableoid:10
-      │    │    └── filters
-      │    │         └── t1.id:1 = t2.id:6
+      │    ├── project
+      │    │    ├── columns: t1.id:1!null str:2 t2.id:6!null
+      │    │    └── inner-join (hash)
+      │    │         ├── columns: t1.id:1!null str:2 t1.rowid:3!null t1.crdb_internal_mvcc_timestamp:4 t1.tableoid:5 t2.id:6!null num:7 t2.rowid:8!null t2.crdb_internal_mvcc_timestamp:9 t2.tableoid:10
+      │    │         ├── scan t1
+      │    │         │    └── columns: t1.id:1 str:2 t1.rowid:3!null t1.crdb_internal_mvcc_timestamp:4 t1.tableoid:5
+      │    │         ├── scan t2
+      │    │         │    └── columns: t2.id:6 num:7 t2.rowid:8!null t2.crdb_internal_mvcc_timestamp:9 t2.tableoid:10
+      │    │         └── filters
+      │    │              └── t1.id:1 = t2.id:6
       │    └── projections
       │         └── t2.id:6 IS NULL [as=nulls_ordering_id:11]
       └── aggregations
@@ -577,17 +581,17 @@ build
 SELECT DISTINCT ON (id) * FROM t1 ORDER BY id IS NULL, id
 ----
 sort
- ├── columns: id:1 str:2  [hidden: column6:6!null]
+ ├── columns: id:1 str:2  [hidden: "id IS NULL":6!null]
  ├── ordering: +6,+1
  └── distinct-on
-      ├── columns: id:1 str:2 column6:6!null
-      ├── grouping columns: id:1 column6:6!null
+      ├── columns: id:1 str:2 "id IS NULL":6!null
+      ├── grouping columns: id:1 "id IS NULL":6!null
       ├── project
-      │    ├── columns: column6:6!null id:1 str:2
+      │    ├── columns: "id IS NULL":6!null id:1 str:2
       │    ├── scan t1
       │    │    └── columns: id:1 str:2 rowid:3!null crdb_internal_mvcc_timestamp:4 tableoid:5
       │    └── projections
-      │         └── id:1 IS NULL [as=column6:6]
+      │         └── id:1 IS NULL [as="id IS NULL":6]
       └── aggregations
            └── first-agg [as=str:2]
                 └── str:2

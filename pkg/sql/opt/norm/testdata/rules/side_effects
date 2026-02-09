@@ -17,13 +17,13 @@ norm
 SELECT * FROM a ORDER BY length('foo'), random()+1.0
 ----
 sort
- ├── columns: k:1!null i:2 f:3 s:4 j:5  [hidden: column9:9]
+ ├── columns: k:1!null i:2 f:3 s:4 j:5  [hidden: "random() + 1.0":9]
  ├── volatile
  ├── key: (1)
  ├── fd: (1)-->(2-5,9)
  ├── ordering: +9
  └── project
-      ├── columns: column9:9 k:1!null i:2 f:3 s:4 j:5
+      ├── columns: "random() + 1.0":9 k:1!null i:2 f:3 s:4 j:5
       ├── volatile
       ├── key: (1)
       ├── fd: (1)-->(2-5,9)
@@ -32,7 +32,7 @@ sort
       │    ├── key: (1)
       │    └── fd: (1)-->(2-5)
       └── projections
-           └── random() + 1.0 [as=column9:9, volatile]
+           └── random() + 1.0 [as="random() + 1.0":9, volatile]
 
 # Don't allow GROUP BY column to be eliminated if it has a side effect.
 norm
