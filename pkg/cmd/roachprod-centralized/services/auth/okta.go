@@ -14,11 +14,8 @@ import (
 
 // OktaValidatorConfig holds the configuration for Okta token validation.
 type OktaValidatorConfig struct {
-	Domain       string
-	ClientID     string
-	ClientSecret string
-	Issuer       string
-	Audience     string
+	Issuer   string
+	Audience string
 }
 
 // OktaValidator validates Okta ID tokens using OIDC.

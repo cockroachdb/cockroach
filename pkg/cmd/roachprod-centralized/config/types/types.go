@@ -46,11 +46,8 @@ type Config struct {
 				Issuer   string `env:"ISSUER" default:"https://cloud.google.com/iap" description:"JWT issuer for authentication"`
 			} `env:"JWT" description:"JWT authentication configuration"`
 			Bearer struct {
-				OktaDomain       string `env:"OKTA_DOMAIN" default:"" description:"Okta domain (e.g., dev-123456.okta.com)"`
-				OktaClientID     string `env:"OKTA_CLIENT_ID" default:"" description:"Okta OAuth2 client ID"`
-				OktaClientSecret string `env:"OKTA_CLIENT_SECRET" default:"" description:"Okta OAuth2 client secret"`
-				OktaIssuer       string `env:"OKTA_ISSUER" default:"" description:"Okta issuer URL (e.g., https://dev-123456.okta.com/oauth2/default)"`
-				OktaAudience     string `env:"OKTA_AUDIENCE" default:"" description:"Okta audience for token validation"`
+				OktaIssuer   string `env:"OKTA_ISSUER" default:"" description:"Okta issuer URL (e.g., https://dev-123456.okta.com/oauth2/default)"`
+				OktaAudience string `env:"OKTA_AUDIENCE" default:"" description:"Okta audience for token validation"`
 			} `env:"BEARER" description:"Bearer token authentication configuration"`
 		} `env:"AUTHENTICATION" description:"API authentication configuration"`
 	} `env:"API" description:"API configuration"`

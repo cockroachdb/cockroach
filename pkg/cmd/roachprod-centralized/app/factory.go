@@ -275,11 +275,8 @@ func NewServicesFromConfig(
 	authType := auth.AuthenticationType(strings.ToLower(cfg.Api.Authentication.Type))
 	if authType == auth.AuthenticationTypeBearer && cfg.Api.Authentication.Bearer.OktaIssuer != "" {
 		oktaValidator, err := sauth.NewOktaValidator(sauth.OktaValidatorConfig{
-			Domain:       cfg.Api.Authentication.Bearer.OktaDomain,
-			ClientID:     cfg.Api.Authentication.Bearer.OktaClientID,
-			ClientSecret: cfg.Api.Authentication.Bearer.OktaClientSecret,
-			Issuer:       cfg.Api.Authentication.Bearer.OktaIssuer,
-			Audience:     cfg.Api.Authentication.Bearer.OktaAudience,
+			Issuer:   cfg.Api.Authentication.Bearer.OktaIssuer,
+			Audience: cfg.Api.Authentication.Bearer.OktaAudience,
 		})
 		if err != nil {
 			l.Error("failed to create Okta validator",
