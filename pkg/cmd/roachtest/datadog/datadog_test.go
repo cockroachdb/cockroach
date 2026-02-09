@@ -8,10 +8,12 @@ package datadog
 import (
 	"bufio"
 	"context"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/DataDog/datadog-api-client-go/v2/api/datadog"
 	"github.com/DataDog/datadog-api-client-go/v2/api/datadogV2"
@@ -78,13 +80,210 @@ func TestParseTimestamp(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result, err := parseTimestamp(tt.input)
+			result, err := parseRoachtestTimestamp(tt.input)
 			if tt.expectError {
 				require.Error(t, err)
 			} else {
 				require.NoError(t, err)
 				require.Equal(t, tt.expected, result)
 			}
+		})
+	}
+}
+
+func TestParseDmesgTimestamp(t *testing.T) {
+	tests := []struct {
+		name        string
+		input       string
+		expected    string
+		expectError bool
+	}{
+		{
+			name:     "valid dmesg timestamp",
+			input:    "Mon Feb  9 07:14:51 2026",
+			expected: "2026-02-09T07:14:51Z",
+		},
+		{
+			name:     "double digit day",
+			input:    "Wed Dec 25 23:59:59 2025",
+			expected: "2025-12-25T23:59:59Z",
+		},
+		{
+			name:        "invalid format",
+			input:       "2025/11/12 07:19:40",
+			expectError: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result, err := parseDmesgTimestamp(tt.input)
+			if tt.expectError {
+				require.Error(t, err)
+			} else {
+				require.NoError(t, err)
+				require.Equal(t, tt.expected, result)
+			}
+		})
+	}
+}
+
+func TestParseJournalctlTimestamp(t *testing.T) {
+	result, err := parseJournalctlTimestamp("Feb 09 07:14:54")
+	require.NoError(t, err)
+	// Journalctl timestamps lack a year; the parser assumes the current year.
+	expectedYear := time.Now().UTC().Year()
+	expected := fmt.Sprintf("%d-02-09T07:14:54Z", expectedYear)
+	require.Equal(t, expected, result)
+}
+
+func TestParseCrdbV2Timestamp(t *testing.T) {
+	tests := []struct {
+		input string
+		want  string
+	}{
+		{"260210 23:00:19.379701", "2026-02-10T23:00:19Z"},
+		{"260211 01:03:31.169693", "2026-02-11T01:03:31Z"},
+		{"250101 00:00:00.000000", "2025-01-01T00:00:00Z"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.input, func(t *testing.T) {
+			got, err := parseCrdbV2Timestamp(tt.input)
+			require.NoError(t, err)
+			require.Equal(t, tt.want, got)
+		})
+	}
+}
+
+func TestShouldUploadArtifactFile(t *testing.T) {
+	tests := []struct {
+		name     string
+		fileName string
+		expected bool
+	}{
+		{"test.log", "test.log", true},
+		{"test-post-assertions.log", "test-post-assertions.log", true},
+		{"failure log", "failure_1.log", true},
+		{"run log", "run_073000.071743733_n1-4_mkdir-p-storedir.log", true},
+		{"node-ips.log", "node-ips.log", true},
+		{"params.log", "params.log", true},
+		{"dmesg txt", "1.dmesg.txt", true},
+		{"journalctl txt", "1.journalctl.txt", true},
+		{"failed suffix excluded", "run_073006.872795339_n1-4_test-e-v2537cockroac.failed", false},
+		{"mixed-version-test.log excluded", "mixed-version-test.log", false},
+		{"datadog.log", "datadog.log", true},
+		{"test-teardown.log", "test-teardown.log", true},
+		{"tsdump excluded", "tsdump.gob", false},
+		{"tsdump yaml excluded", "tsdump.gob.yaml", false},
+		{"json file excluded", "cluster.json", false},
+		{"random txt excluded", "diskusage.txt", false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			require.Equal(t, tt.expected, shouldUploadArtifactFile(tt.fileName))
+		})
+	}
+}
+
+func TestShouldUploadNodeFile(t *testing.T) {
+	tests := []struct {
+		name     string
+		fileName string
+		expected bool
+	}{
+		{"cockroach.exit.log", "cockroach.exit.log", true},
+		{"cockroach.stderr.log", "cockroach.stderr.log", true},
+		{"cockroach.stdout.log", "cockroach.stdout.log", true},
+		{"diskusage.txt", "diskusage.txt", true},
+		{"roachprod.log", "roachprod.log", true},
+		// Segment and base-name files are not handled by shouldUploadNodeFile.
+		{"segment file", "cockroach.teamcity-xxx.log", false},
+		{"base-name file", "cockroach-health.log", false},
+		{".DS_Store", ".DS_Store", false},
+		{"pprof file", "memprof.2026-02-10.pprof", false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			require.Equal(t, tt.expected, shouldUploadNodeFile(tt.fileName))
+		})
+	}
+}
+
+func TestIsNodeSegmentFile(t *testing.T) {
+	tests := []struct {
+		name     string
+		fileName string
+		expected bool
+	}{
+		{"segment cockroach", "cockroach.teamcity-xxx.ubuntu.2026-02-10T23_00_19Z.004918.log", true},
+		{"segment health", "cockroach-health.teamcity-xxx.ubuntu.2026-02-10T23_00_19Z.004918.log", true},
+		{"segment pebble", "cockroach-pebble.teamcity-xxx.ubuntu.2026-02-10T23_00_19Z.004918.log", true},
+		{"segment kv-distribution", "cockroach-kv-distribution.teamcity-xxx.ubuntu.2026-02-10T23_00_19Z.004918.log", true},
+		// Special files like cockroach.exit.log have a "." but are not segments.
+		// They are handled by shouldUploadNodeFile, so isNodeSegmentFile returning
+		// true for them is acceptable (they won't reach this check in practice).
+		{"cockroach.exit.log", "cockroach.exit.log", true},
+		// Base-name files are not segments.
+		{"base cockroach.log", "cockroach.log", false},
+		{"base cockroach-health", "cockroach-health.log", false},
+		// Non-.log files are not segments.
+		{".DS_Store", ".DS_Store", false},
+		{"pprof file", "memprof.2026-02-10.pprof", false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			require.Equal(t, tt.expected, isNodeSegmentFile(tt.fileName))
+		})
+	}
+}
+
+func TestIsNodeBaseFile(t *testing.T) {
+	tests := []struct {
+		name     string
+		fileName string
+		expected bool
+	}{
+		{"cockroach.log", "cockroach.log", true},
+		{"cockroach-health.log", "cockroach-health.log", true},
+		{"cockroach-pebble.log", "cockroach-pebble.log", true},
+		{"cockroach-kv-distribution.log", "cockroach-kv-distribution.log", true},
+		{"cockroach-sql-exec.log", "cockroach-sql-exec.log", true},
+		// Special files are not base files.
+		{"cockroach.exit.log", "cockroach.exit.log", false},
+		{"cockroach.stderr.log", "cockroach.stderr.log", false},
+		{"cockroach.stdout.log", "cockroach.stdout.log", false},
+		// Segment files are not base files.
+		{"segment file", "cockroach-health.teamcity-xxx.log", false},
+		// Non-.log files are not base files.
+		{".DS_Store", ".DS_Store", false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			require.Equal(t, tt.expected, isNodeBaseFile(tt.fileName))
+		})
+	}
+}
+
+func TestNodeFileChannel(t *testing.T) {
+	tests := []struct {
+		name     string
+		fileName string
+		expected string
+	}{
+		{"segment cockroach", "cockroach.teamcity-xxx.ubuntu.2026-02-10T23_00_19Z.004918.log", "cockroach"},
+		{"segment health", "cockroach-health.teamcity-xxx.ubuntu.2026-02-10T23_00_19Z.004918.log", "cockroach-health"},
+		{"base cockroach", "cockroach.log", "cockroach"},
+		{"base health", "cockroach-health.log", "cockroach-health"},
+		{"base kv-distribution", "cockroach-kv-distribution.log", "cockroach-kv-distribution"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			require.Equal(t, tt.expected, nodeFileChannel(tt.fileName))
 		})
 	}
 }
@@ -142,36 +341,67 @@ func TestParseLogFile(t *testing.T) {
 
 	unittestLogMetadata.Tags = unittestLogMetadata.makeTags()
 
-	testLogPath := filepath.Join("testdata", "test_log_example")
+	testLogPath := filepath.Join("testdata", "test_log_simple")
 	file, err := os.Open(testLogPath)
 	require.NoError(t, err)
 	defer file.Close()
 
+	// Accumulate multiline entries the same way parseAndUploadLogFile does:
+	// lines matching roachtestLineRegex start a new entry; non-matching lines are
+	// appended as continuations of the current entry.
 	scanner := bufio.NewScanner(file)
 	validEntries := make([]datadogV2.HTTPLogItem, 0)
-	skippedEntries := make([]string, 0)
-	for scanner.Scan() {
-		line := scanner.Text()
-		entry, err := parseLogLine(line, unittestLogMetadata)
+	skipCount := 0
+	var currentLines []string
+
+	finalize := func() {
+		if len(currentLines) == 0 {
+			return
+		}
+		message := strings.Join(currentLines, "\n")
+		entry, err := parseLogLine(message, unittestLogMetadata, roachtestParser)
 		if err != nil {
-			skippedEntries = append(skippedEntries, line)
+			skipCount++
 		} else {
 			validEntries = append(validEntries, *entry)
 		}
 	}
 
-	// The test log has 56 lines, but only well-formed lines should be parsed
-	// Lines without timestamps: 9-10, 21-24, 28-29, 36, 42, 46
-	// Total Skip Count: 11
-	require.Equal(t, len(validEntries), 55-11, "should skip non well-formatted lines")
+	for scanner.Scan() {
+		line := scanner.Text()
+		if roachtestLineRegex.MatchString(line) {
+			finalize()
+			currentLines = []string{line}
+		} else {
+			if len(currentLines) > 0 {
+				currentLines = append(currentLines, line)
+			} else {
+				skipCount++
+			}
+		}
+	}
+	finalize()
 
-	// Verify the first entry
+	// The test log has 55 lines of content. 44 lines start with a timestamp
+	// and the remaining 11 are continuation lines absorbed into the preceding
+	// entry. No lines are skipped.
+	require.Equal(t, 44, len(validEntries), "expected 44 multiline entries")
+	require.Equal(t, 0, skipCount, "all non-timestamp lines should be absorbed as continuations")
+
+	// Verify the first entry (single-line).
 	require.Equal(t, "2025/11/12 07:19:40 test_impl.go:197: Runtime assertions enabled", validEntries[0].Message)
 
-	// Verify skipped log lines
-	require.Contains(t, skippedEntries, "teamcity-20723220-1762931616-18-n4cpu4: initializing certs")
-	require.Contains(t, skippedEntries, "SET CLUSTER SETTING")
-	require.Len(t, skippedEntries, 11)
+	// Verify multiline entries contain their continuation lines.
+	// Entry starting at line 8 should include continuation lines 9-10.
+	require.Contains(t, validEntries[7].Message, "checking certs.tar")
+	require.Contains(t, validEntries[7].Message, "initializing certs")
+	require.Contains(t, validEntries[7].Message, "distributing certs")
+
+	// Entry starting at line 20 (18th timestamp = index 17) should include
+	// NOTICE and SET CLUSTER SETTING continuation lines (21-24).
+	require.Contains(t, validEntries[17].Message, "SET CLUSTER SETTING")
+	require.Contains(t, validEntries[17].Message, "NOTICE:")
+	require.Contains(t, validEntries[17].Message, "executing sql")
 
 	// Check that entry fields are set correctly
 	require.Equal(t, defaultDDSource, *validEntries[0].Ddsource)
@@ -192,6 +422,386 @@ func TestParseLogFile(t *testing.T) {
 	timestamp, ok := validEntries[0].AdditionalProperties["timestamp"]
 	require.True(t, ok, "timestamp should be in AdditionalProperties")
 	require.Equal(t, "2025-11-12T07:19:40Z", timestamp)
+}
+
+func TestParseLogFileMixedVersion(t *testing.T) {
+	originalLogMetadata := unittestLogMetadata
+	defer func() {
+		unittestLogMetadata = originalLogMetadata
+		unittestLogMetadata.Tags = map[string]string{}
+	}()
+	l, err := logger.RootLogger(os.DevNull, logger.NoTee)
+	require.NoError(t, err)
+	defer l.Close()
+
+	unittestLogMetadata.Tags = unittestLogMetadata.makeTags()
+
+	testLogPath := filepath.Join("testdata", "test_log_mixedversion")
+	file, err := os.Open(testLogPath)
+	require.NoError(t, err)
+	defer file.Close()
+
+	scanner := bufio.NewScanner(file)
+	buf := make([]byte, 0, 64*1024)
+	scanner.Buffer(buf, 1024*1024)
+
+	validEntries := make([]datadogV2.HTTPLogItem, 0)
+	skipCount := 0
+	var currentLines []string
+
+	finalize := func() {
+		if len(currentLines) == 0 {
+			return
+		}
+		message := strings.Join(currentLines, "\n")
+		entry, err := parseLogLine(message, unittestLogMetadata, roachtestParser)
+		if err != nil {
+			skipCount++
+		} else {
+			validEntries = append(validEntries, *entry)
+		}
+	}
+
+	for scanner.Scan() {
+		line := scanner.Text()
+		if roachtestLineRegex.MatchString(line) {
+			finalize()
+			currentLines = []string{line}
+		} else {
+			if len(currentLines) > 0 {
+				currentLines = append(currentLines, line)
+			} else {
+				skipCount++
+			}
+		}
+	}
+	finalize()
+	require.NoError(t, scanner.Err())
+
+	// The mixed-version test log has 3729 lines of content. 1731 lines
+	// match the timestamp pattern (388 standard + 1343 bracket-prefixed)
+	// and the remaining 1998 are continuation lines absorbed into
+	// preceding entries. No lines are skipped.
+	require.Equal(t, 1731, len(validEntries), "expected 1731 entries")
+	require.Equal(t, 0, skipCount, "all non-timestamp lines should be absorbed as continuations")
+
+	// Verify a standard-prefix entry (line 1).
+	require.Equal(t,
+		"2026/02/08 07:29:33 test_impl.go:208: Runtime assertions disabled",
+		validEntries[0].Message)
+
+	// Verify a bracket-prefixed entry (line 6) has correct timestamp
+	// and retains the bracket prefix in the message.
+	require.Contains(t, validEntries[5].Message, "[mixed-version-test]")
+	ts, ok := validEntries[5].AdditionalProperties["timestamp"]
+	require.True(t, ok)
+	require.Equal(t, "2026-02-08T07:30:00Z", ts)
+
+	// Verify multiline grouping: entry at line 7 includes the plan tree
+	// continuation lines (lines 8-165).
+	require.Contains(t, validEntries[6].Message, "mixed-version test:")
+	require.Contains(t, validEntries[6].Message, "Seed:")
+	require.Contains(t, validEntries[6].Message, "├── install fixtures")
+}
+
+func TestParseLogFileFailure(t *testing.T) {
+	originalLogMetadata := unittestLogMetadata
+	defer func() {
+		unittestLogMetadata = originalLogMetadata
+		unittestLogMetadata.Tags = map[string]string{}
+	}()
+	l, err := logger.RootLogger(os.DevNull, logger.NoTee)
+	require.NoError(t, err)
+	defer l.Close()
+
+	unittestLogMetadata.LogName = "failure_1.log"
+	unittestLogMetadata.Tags = unittestLogMetadata.makeTags()
+
+	testLogPath := filepath.Join("testdata", "test_failure_log")
+	file, err := os.Open(testLogPath)
+	require.NoError(t, err)
+	defer file.Close()
+
+	scanner := bufio.NewScanner(file)
+	validEntries := make([]datadogV2.HTTPLogItem, 0)
+	skipCount := 0
+	var currentLines []string
+
+	finalize := func() {
+		if len(currentLines) == 0 {
+			return
+		}
+		message := strings.Join(currentLines, "\n")
+		entry, err := parseLogLine(message, unittestLogMetadata, roachtestParser)
+		if err != nil {
+			skipCount++
+		} else {
+			validEntries = append(validEntries, *entry)
+		}
+	}
+
+	for scanner.Scan() {
+		line := scanner.Text()
+		if roachtestLineRegex.MatchString(line) {
+			finalize()
+			currentLines = []string{line}
+		} else {
+			if len(currentLines) > 0 {
+				currentLines = append(currentLines, line)
+			} else {
+				skipCount++
+			}
+		}
+	}
+	finalize()
+	require.NoError(t, scanner.Err())
+
+	// failure_*.log files contain raw stack traces with no timestamps.
+	// No lines match the timestamp regex, so 0 entries are produced and
+	// all 14 lines are skipped. In production, parseAndUploadLogFile
+	// handles this by falling back to uploading the entire file as a
+	// single raw log entry.
+	require.Equal(t, 0, len(validEntries), "no lines should match the timestamp regex")
+	require.Equal(t, 14, skipCount, "all lines should be skipped")
+
+	// Verify the file content can be read as a single raw entry (the
+	// fallback path in parseAndUploadLogFile).
+	content, err := os.ReadFile(testLogPath)
+	require.NoError(t, err)
+	require.Contains(t, string(content), "test monitor: EOF")
+	require.Contains(t, string(content), "stack trace")
+	require.Contains(t, string(content), "withstack.withStack")
+}
+
+func TestParseLogFileDmesg(t *testing.T) {
+	originalLogMetadata := unittestLogMetadata
+	defer func() {
+		unittestLogMetadata = originalLogMetadata
+		unittestLogMetadata.Tags = map[string]string{}
+	}()
+	l, err := logger.RootLogger(os.DevNull, logger.NoTee)
+	require.NoError(t, err)
+	defer l.Close()
+
+	unittestLogMetadata.LogName = "1.dmesg.txt"
+	unittestLogMetadata.Tags = unittestLogMetadata.makeTags()
+
+	testLogPath := filepath.Join("testdata", "test_log_dmesg")
+	file, err := os.Open(testLogPath)
+	require.NoError(t, err)
+	defer file.Close()
+
+	scanner := bufio.NewScanner(file)
+	buf := make([]byte, 0, 64*1024)
+	scanner.Buffer(buf, 1024*1024)
+
+	validEntries := make([]datadogV2.HTTPLogItem, 0)
+	skipCount := 0
+	var currentLines []string
+
+	finalize := func() {
+		if len(currentLines) == 0 {
+			return
+		}
+		message := strings.Join(currentLines, "\n")
+		entry, err := parseLogLine(message, unittestLogMetadata, dmesgParser)
+		if err != nil {
+			skipCount++
+		} else {
+			validEntries = append(validEntries, *entry)
+		}
+	}
+
+	for scanner.Scan() {
+		line := scanner.Text()
+		if dmesgLineRegex.MatchString(line) {
+			finalize()
+			currentLines = []string{line}
+		} else {
+			if len(currentLines) > 0 {
+				currentLines = append(currentLines, line)
+			} else {
+				skipCount++
+			}
+		}
+	}
+	finalize()
+	require.NoError(t, scanner.Err())
+
+	// The dmesg test log has 553 lines, all matching the dmesg timestamp
+	// pattern. No continuation lines, no skipped lines.
+	require.Equal(t, 553, len(validEntries), "expected 553 dmesg entries")
+	require.Equal(t, 0, skipCount, "no lines should be skipped")
+
+	// Verify the first entry message and timestamp.
+	require.Contains(t, validEntries[0].Message, "Linux version 6.5.0-1016-gcp")
+	ts, ok := validEntries[0].AdditionalProperties["timestamp"]
+	require.True(t, ok)
+	require.Equal(t, "2026-02-09T07:14:51Z", ts)
+
+	// Verify a later entry with a different second-level timestamp (line 359).
+	require.Contains(t, validEntries[358].Message, "i8042 KBD port")
+	ts359, ok := validEntries[358].AdditionalProperties["timestamp"]
+	require.True(t, ok)
+	require.Equal(t, "2026-02-09T07:14:52Z", ts359)
+
+	// Verify tags include the dmesg file name.
+	ddTags := validEntries[0].Ddtags
+	require.Contains(t, *ddTags, "log_file:1.dmesg.txt")
+}
+
+func TestParseLogFileJournalctl(t *testing.T) {
+	originalLogMetadata := unittestLogMetadata
+	defer func() {
+		unittestLogMetadata = originalLogMetadata
+		unittestLogMetadata.Tags = map[string]string{}
+	}()
+	l, err := logger.RootLogger(os.DevNull, logger.NoTee)
+	require.NoError(t, err)
+	defer l.Close()
+
+	unittestLogMetadata.LogName = "1.journalctl.txt"
+	unittestLogMetadata.Tags = unittestLogMetadata.makeTags()
+
+	testLogPath := filepath.Join("testdata", "test_log_journalctl")
+	file, err := os.Open(testLogPath)
+	require.NoError(t, err)
+	defer file.Close()
+
+	scanner := bufio.NewScanner(file)
+	buf := make([]byte, 0, 64*1024)
+	scanner.Buffer(buf, 1024*1024)
+
+	validEntries := make([]datadogV2.HTTPLogItem, 0)
+	skipCount := 0
+	var currentLines []string
+
+	finalize := func() {
+		if len(currentLines) == 0 {
+			return
+		}
+		message := strings.Join(currentLines, "\n")
+		entry, err := parseLogLine(message, unittestLogMetadata, journalctlParser)
+		if err != nil {
+			skipCount++
+		} else {
+			validEntries = append(validEntries, *entry)
+		}
+	}
+
+	for scanner.Scan() {
+		line := scanner.Text()
+		if journalctlLineRegex.MatchString(line) {
+			finalize()
+			currentLines = []string{line}
+		} else {
+			if len(currentLines) > 0 {
+				currentLines = append(currentLines, line)
+			} else {
+				skipCount++
+			}
+		}
+	}
+	finalize()
+	require.NoError(t, scanner.Err())
+
+	// The journalctl test log has 2981 lines, all matching the journalctl
+	// timestamp pattern. No continuation lines, no skipped lines.
+	require.Equal(t, 2981, len(validEntries), "expected 2981 journalctl entries")
+	require.Equal(t, 0, skipCount, "no lines should be skipped")
+
+	// Verify the first entry message and timestamp.
+	require.Contains(t, validEntries[0].Message, "ubuntu kernel: Linux version 6.5.0-1016-gcp")
+	ts, ok := validEntries[0].AdditionalProperties["timestamp"]
+	require.True(t, ok)
+	// Journalctl timestamps lack a year; the parser uses the current year.
+	expectedYear := time.Now().UTC().Year()
+	require.Equal(t, fmt.Sprintf("%d-02-09T07:14:54Z", expectedYear), ts)
+
+	// Verify the last entry.
+	last := validEntries[len(validEntries)-1]
+	require.Contains(t, last.Message, "pam_unix(sudo:session): session opened for user root")
+
+	// Verify tags include the journalctl file name.
+	ddTags := validEntries[0].Ddtags
+	require.Contains(t, *ddTags, "log_file:1.journalctl.txt")
+}
+
+func TestParseLogFileCockroach(t *testing.T) {
+	originalLogMetadata := unittestLogMetadata
+	defer func() {
+		unittestLogMetadata = originalLogMetadata
+		unittestLogMetadata.Tags = map[string]string{}
+	}()
+	l, err := logger.RootLogger(os.DevNull, logger.NoTee)
+	require.NoError(t, err)
+	defer l.Close()
+
+	unittestLogMetadata.LogName = "cockroach.teamcity-xxx.ubuntu.2026-02-11T00_19_40Z.log"
+	unittestLogMetadata.Tags = unittestLogMetadata.makeTags()
+
+	testLogPath := filepath.Join("testdata", "test_cockroach_log")
+	file, err := os.Open(testLogPath)
+	require.NoError(t, err)
+	defer file.Close()
+
+	scanner := bufio.NewScanner(file)
+	buf := make([]byte, 0, 64*1024)
+	scanner.Buffer(buf, 1024*1024)
+
+	validEntries := make([]datadogV2.HTTPLogItem, 0)
+	skipCount := 0
+	var currentLines []string
+
+	finalize := func() {
+		if len(currentLines) == 0 {
+			return
+		}
+		message := strings.Join(currentLines, "\n")
+		entry, err := parseLogLine(message, unittestLogMetadata, crdbV2Parser)
+		if err != nil {
+			skipCount++
+		} else {
+			validEntries = append(validEntries, *entry)
+		}
+	}
+
+	for scanner.Scan() {
+		line := scanner.Text()
+		if crdbV2LineRegex.MatchString(line) {
+			finalize()
+			currentLines = []string{line}
+		} else {
+			if len(currentLines) > 0 {
+				currentLines = append(currentLines, line)
+			} else {
+				skipCount++
+			}
+		}
+	}
+	finalize()
+	require.NoError(t, scanner.Err())
+
+	// All 7 lines match the crdb-v2 timestamp pattern.
+	require.Equal(t, 7, len(validEntries), "expected 7 crdb-v2 entries")
+	require.Equal(t, 0, skipCount, "no lines should be skipped")
+
+	// Verify the first entry timestamp and content.
+	require.Contains(t, validEntries[0].Message, "file created at:")
+	ts, ok := validEntries[0].AdditionalProperties["timestamp"]
+	require.True(t, ok)
+	require.Equal(t, "2026-02-11T00:19:40Z", ts)
+
+	// Verify the last entry is the structured JSON event log.
+	last := validEntries[len(validEntries)-1]
+	require.Contains(t, last.Message, "aggregated_contention_info")
+	tsLast, ok := last.AdditionalProperties["timestamp"]
+	require.True(t, ok)
+	require.Equal(t, "2026-02-11T00:19:40Z", tsLast)
+
+	// Verify tags include the cockroach segment file name.
+	ddTags := validEntries[0].Ddtags
+	require.Contains(t, *ddTags, "log_file:cockroach.teamcity-xxx.ubuntu.2026-02-11T00_19_40Z.log")
 }
 
 func TestMakeTags(t *testing.T) {
@@ -315,7 +925,7 @@ func TestNewDatadogContextDatadogSiteSet(t *testing.T) {
 	require.Equal(t, "1234", apiKeyMap["apiKeyAuth"].Key)
 }
 
-func TestShouldUploadLogs(t *testing.T) {
+func TestShouldUploadLogsToDatadog(t *testing.T) {
 	// Save and restore env var and flags
 	originalBranch := os.Getenv(envTCBuildBranch)
 	originalSendLogsAnyBranch := roachtestflags.DatadogSendLogsAnyBranch
@@ -441,7 +1051,7 @@ func TestShouldUploadLogs(t *testing.T) {
 			_ = os.Setenv(envTCBuildBranch, tt.branch)
 			roachtestflags.DatadogSendLogsAnyBranch = tt.sendLogsAnyBranch
 			roachtestflags.DatadogSendLogsAnyResult = tt.sendLogsAnyResult
-			result := ShouldUploadLogs(tt.testFailed)
+			result := ShouldUploadLogsToDatadog(tt.testFailed)
 			require.Equal(t, tt.expectedShouldUpload, result)
 		})
 	}
