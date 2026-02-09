@@ -12,6 +12,7 @@ import (
 	"github.com/VividCortex/ewma"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/status"
+	"github.com/cockroachdb/cockroach/pkg/util/admission"
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
@@ -52,7 +53,10 @@ type NodeCapacityProviderConfig struct {
 // NewNodeCapacityProvider creates a new NodeCapacityProvider that monitors CPU
 // metrics using the provided stores aggregator and configuration.
 func NewNodeCapacityProvider(
-	stopper *stop.Stopper, stores StoresStatsAggregator, config NodeCapacityProviderConfig,
+	stopper *stop.Stopper,
+	stores StoresStatsAggregator,
+	sqlCPUProvider admission.SQLCPUProvider,
+	config NodeCapacityProviderConfig,
 ) *NodeCapacityProvider {
 	if stopper == nil || stores == nil {
 		panic("programming error: stopper or stores aggregator cannot be nil")
@@ -60,6 +64,7 @@ func NewNodeCapacityProvider(
 
 	monitor := &runtimeLoadMonitor{
 		stopper:                 stopper,
+		SQLCPUProvider:          sqlCPUProvider,
 		usageRefreshInterval:    config.CPUUsageRefreshInterval,
 		capacityRefreshInterval: config.CPUCapacityRefreshInterval,
 	}
@@ -112,6 +117,7 @@ func (n *NodeCapacityProvider) GetNodeCapacity(useCached bool) (roachpb.NodeCapa
 // runtimeLoadMonitor polls cpu usage and capacity stats of the node
 // periodically and maintaining a moving average.
 type runtimeLoadMonitor struct {
+	admission.SQLCPUProvider
 	usageRefreshInterval    time.Duration
 	capacityRefreshInterval time.Duration
 	stopper                 *stop.Stopper
