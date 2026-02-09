@@ -1252,14 +1252,14 @@ vectorized: true
 │ columns: (a, b)
 │
 └── • sort
-    │ columns: (nulls_ordering_b, nulls_ordering_c, a, b, c)
+    │ columns: (nulls_ordering_b, nulls_ordering_column3, a, b, c)
     │ estimated row count: 1,000 (missing stats)
-    │ order: -nulls_ordering_b,-b,+nulls_ordering_c,+c
+    │ order: -nulls_ordering_b,-b,+nulls_ordering_column3,+c
     │
     └── • render
-        │ columns: (nulls_ordering_b, nulls_ordering_c, a, b, c)
+        │ columns: (nulls_ordering_b, nulls_ordering_column3, a, b, c)
         │ render nulls_ordering_b: b IS NULL
-        │ render nulls_ordering_c: c IS NULL
+        │ render nulls_ordering_column3: c IS NULL
         │ render a: a
         │ render b: b
         │ render c: c

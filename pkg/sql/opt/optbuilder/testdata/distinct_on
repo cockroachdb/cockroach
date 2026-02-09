@@ -517,8 +517,10 @@ distinct-on
  │    ├── ordering: +6,+3,+7,+1
  │    └── project
  │         ├── columns: nulls_ordering_genre:6!null nulls_ordering_id:7!null id:1!null name:2 genre:3
- │         ├── scan author
- │         │    └── columns: id:1!null name:2 genre:3 crdb_internal_mvcc_timestamp:4 tableoid:5
+ │         ├── project
+ │         │    ├── columns: id:1!null name:2 genre:3
+ │         │    └── scan author
+ │         │         └── columns: id:1!null name:2 genre:3 crdb_internal_mvcc_timestamp:4 tableoid:5
  │         └── projections
  │              ├── genre:3 IS NULL [as=nulls_ordering_genre:6]
  │              └── id:1 IS NULL [as=nulls_ordering_id:7]
@@ -547,23 +549,25 @@ FROM t1 JOIN t2 ON t1.id = t2.id
 ORDER BY t2.id DESC NULLS FIRST
 ----
 sort
- ├── columns: id:1!null str:2  [hidden: t2.id:6!null nulls_ordering_id:11!null]
+ ├── columns: id:1!null str:2  [hidden: t2.id:6!null nulls_ordering_column6:11!null]
  ├── ordering: -11,-6
  └── distinct-on
-      ├── columns: t1.id:1!null str:2 t2.id:6!null nulls_ordering_id:11!null
-      ├── grouping columns: t2.id:6!null nulls_ordering_id:11!null
+      ├── columns: t1.id:1!null str:2 t2.id:6!null nulls_ordering_column6:11!null
+      ├── grouping columns: t2.id:6!null nulls_ordering_column6:11!null
       ├── project
-      │    ├── columns: nulls_ordering_id:11!null t1.id:1!null str:2 t2.id:6!null
-      │    ├── inner-join (hash)
-      │    │    ├── columns: t1.id:1!null str:2 t1.rowid:3!null t1.crdb_internal_mvcc_timestamp:4 t1.tableoid:5 t2.id:6!null num:7 t2.rowid:8!null t2.crdb_internal_mvcc_timestamp:9 t2.tableoid:10
-      │    │    ├── scan t1
-      │    │    │    └── columns: t1.id:1 str:2 t1.rowid:3!null t1.crdb_internal_mvcc_timestamp:4 t1.tableoid:5
-      │    │    ├── scan t2
-      │    │    │    └── columns: t2.id:6 num:7 t2.rowid:8!null t2.crdb_internal_mvcc_timestamp:9 t2.tableoid:10
-      │    │    └── filters
-      │    │         └── t1.id:1 = t2.id:6
+      │    ├── columns: nulls_ordering_column6:11!null t1.id:1!null str:2 t2.id:6!null
+      │    ├── project
+      │    │    ├── columns: t1.id:1!null str:2 t2.id:6!null
+      │    │    └── inner-join (hash)
+      │    │         ├── columns: t1.id:1!null str:2 t1.rowid:3!null t1.crdb_internal_mvcc_timestamp:4 t1.tableoid:5 t2.id:6!null num:7 t2.rowid:8!null t2.crdb_internal_mvcc_timestamp:9 t2.tableoid:10
+      │    │         ├── scan t1
+      │    │         │    └── columns: t1.id:1 str:2 t1.rowid:3!null t1.crdb_internal_mvcc_timestamp:4 t1.tableoid:5
+      │    │         ├── scan t2
+      │    │         │    └── columns: t2.id:6 num:7 t2.rowid:8!null t2.crdb_internal_mvcc_timestamp:9 t2.tableoid:10
+      │    │         └── filters
+      │    │              └── t1.id:1 = t2.id:6
       │    └── projections
-      │         └── t2.id:6 IS NULL [as=nulls_ordering_id:11]
+      │         └── t2.id:6 IS NULL [as=nulls_ordering_column6:11]
       └── aggregations
            ├── first-agg [as=t1.id:1]
            │    └── t1.id:1

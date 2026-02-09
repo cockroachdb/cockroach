@@ -2028,12 +2028,12 @@ norm expect=FoldIsNullProject
 SELECT x FROM a ORDER BY y DESC NULLS FIRST, x DESC NULLS FIRST
 ----
 sort
- ├── columns: x:1!null  [hidden: y:2 nulls_ordering_y:7!null]
+ ├── columns: x:1!null  [hidden: y:2 nulls_ordering_column2:7!null]
  ├── key: (1)
  ├── fd: (1)-->(2), (2)-->(7)
  ├── ordering: -7,-2,-1
  └── project
-      ├── columns: nulls_ordering_y:7!null x:1!null y:2
+      ├── columns: nulls_ordering_column2:7!null x:1!null y:2
       ├── key: (1)
       ├── fd: (1)-->(2), (2)-->(7)
       ├── scan a
@@ -2041,7 +2041,7 @@ sort
       │    ├── key: (1)
       │    └── fd: (1)-->(2)
       └── projections
-           └── y:2 IS NULL [as=nulls_ordering_y:7, outer=(2)]
+           └── y:2 IS NULL [as=nulls_ordering_column2:7, outer=(2)]
 
 # --------------------------------------------------
 # PushLeakproofProjectionsIntoPermeableBarrier
