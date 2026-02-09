@@ -8,7 +8,7 @@ scan
 ----
 - r1:/Meta{1-2}
 - r2:/Meta2{-/middle}
-- r81:/{Meta2/middle-System/NodeLiveness}
+- r82:/{Meta2/middle-System/NodeLiveness}
 - r3:/System/NodeLiveness{-Max}
 - r4:/System/{NodeLivenessMax-tsd}
 - r5:/System{/tsd-tse}
@@ -86,19 +86,20 @@ scan
 - r77:/Table/7{4-5}
 - r78:/Table/7{5-6}
 - r79:/Table/7{6-7}
-- r80:/{Table/77-Max}
-scan through /M{in-ax} (page-size=1) found 81/81 descriptors
+- r80:/Table/7{7-8}
+- r81:/{Table/78-Max}
+scan through /M{in-ax} (page-size=1) found 82/82 descriptors
 
 # Scanning through just meta1 is unnaffected by these splits.
 scan scope=3
 ----
 - r1:/Meta{1-2}
-scan through /M{in-eta2} (page-size=1) found 1/81 descriptors
+scan through /M{in-eta2} (page-size=1) found 1/82 descriptors
 
 # Scanning through both meta{1,2} does surface these descriptors.
 scan scope=4 page-size=2
 ----
 - r1:/Meta{1-2}
 - r2:/Meta2{-/middle}
-- r81:/{Meta2/middle-System/NodeLiveness}
-scan through /{Meta1-System} (page-size=2) found 3/81 descriptors
+- r82:/{Meta2/middle-System/NodeLiveness}
+scan through /{Meta1-System} (page-size=2) found 3/82 descriptors
