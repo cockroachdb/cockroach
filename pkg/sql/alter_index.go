@@ -40,8 +40,32 @@ func (p *planner) AlterIndex(ctx context.Context, n *tree.AlterIndex) (planNode,
 		return nil, err
 	}
 
-	_, tableDesc, index, err := p.GetTableAndIndex(ctx, &n.Index, privilege.CREATE, true /* skipCache */)
+	// Check if the table actually exists. expandMutableIndexName returns the
+	// underlying table.
+	_, tableDesc, err := expandMutableIndexName(ctx, p, &n.Index, !n.IfExists /* requireTable */)
 	if err != nil {
+		// Error if no table is found and IfExists is false.
+		return nil, err
+	}
+
+	if tableDesc == nil {
+		// No error if no table but IfExists is true.
+		return newZeroNode(nil /* columns */), nil
+	}
+
+	// Check if the index actually exists. MustFindIndexByName returns the first
+	// catalog.Index in tableDesc.AllIndexes().
+	index, err := catalog.MustFindIndexByName(tableDesc, string(n.Index.Index))
+	if err != nil {
+		if n.IfExists {
+			// Nothing needed if no index exists and IfExists is true.
+			return newZeroNode(nil /* columns */), nil
+		}
+		// Error if no index exists and IfExists is not specified.
+		return nil, pgerror.WithCandidateCode(err, pgcode.UndefinedObject)
+	}
+
+	if err := p.CheckPrivilege(ctx, tableDesc, privilege.CREATE); err != nil {
 		return nil, err
 	}
 
