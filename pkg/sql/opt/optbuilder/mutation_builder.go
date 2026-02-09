@@ -421,7 +421,12 @@ func (mb *mutationBuilder) buildInputForUpdate(
 	projectionsScope.appendColumnsFromScope(mb.outScope)
 	orderByScope := mb.b.analyzeOrderBy(orderBy, mb.outScope, projectionsScope,
 		exprKindOrderByUpdate, tree.RejectGenerators|tree.RejectAggregates)
+	preProjectionScope := mb.b.buildOrderByPreProjection(mb.outScope, projectionsScope, orderByScope)
 	mb.b.buildOrderBy(mb.outScope, projectionsScope, orderByScope)
+	if preProjectionScope != nil {
+		mb.b.constructProjectForScope(mb.outScope, preProjectionScope)
+		mb.outScope.expr = preProjectionScope.expr
+	}
 	mb.b.constructProjectForScope(mb.outScope, projectionsScope)
 
 	// LIMIT
@@ -542,7 +547,12 @@ func (mb *mutationBuilder) buildInputForDelete(
 	projectionsScope.appendColumnsFromScope(mb.outScope)
 	orderByScope := mb.b.analyzeOrderBy(orderBy, mb.outScope, projectionsScope,
 		exprKindOrderByDelete, tree.RejectGenerators|tree.RejectAggregates)
+	preProjectionScope := mb.b.buildOrderByPreProjection(mb.outScope, projectionsScope, orderByScope)
 	mb.b.buildOrderBy(mb.outScope, projectionsScope, orderByScope)
+	if preProjectionScope != nil {
+		mb.b.constructProjectForScope(mb.outScope, preProjectionScope)
+		mb.outScope.expr = preProjectionScope.expr
+	}
 	mb.b.constructProjectForScope(mb.outScope, projectionsScope)
 
 	// LIMIT
