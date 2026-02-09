@@ -964,13 +964,14 @@ func ResolveFK(
 	referencedColNames := d.ToCols
 	// If no columns are specified, attempt to default to PK, ignoring implicit columns.
 	if len(referencedColNames) == 0 {
-		numImplicitCols := target.GetPrimaryIndex().ImplicitPartitioningColumnCount()
+		// Use ExplicitColumnStartIdx() to skip over all internal columns.
+		explicitColStartIdx := target.GetPrimaryIndex().ExplicitColumnStartIdx()
 		referencedColNames = make(
 			tree.NameList,
 			0,
-			target.GetPrimaryIndex().NumKeyColumns()-numImplicitCols,
+			target.GetPrimaryIndex().NumKeyColumns()-explicitColStartIdx,
 		)
-		for i := numImplicitCols; i < target.GetPrimaryIndex().NumKeyColumns(); i++ {
+		for i := explicitColStartIdx; i < target.GetPrimaryIndex().NumKeyColumns(); i++ {
 			referencedColNames = append(
 				referencedColNames,
 				tree.Name(target.GetPrimaryIndex().GetKeyColumnName(i)),

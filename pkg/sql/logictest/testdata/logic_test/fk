@@ -4843,3 +4843,64 @@ DROP TABLE t2_fk;
 DROP TABLE t1_fk;
 
 subtest end
+
+# Test foreign keys with implicit column references to hash-sharded primary keys
+subtest fk_implicit_hash_sharded
+
+# Parent table with hash-sharded primary key
+statement ok
+CREATE TABLE parent_hash_sharded (
+  c1 INT NOT NULL,
+  c2 INT NOT NULL,
+  c3 INT,
+  PRIMARY KEY (c1, c2) USING HASH
+)
+
+statement ok
+INSERT INTO parent_hash_sharded VALUES (1, 1, 1), (2, 2, 2), (3, 3, 3)
+
+# FK without explicit column list should skip the shard column
+statement ok
+CREATE TABLE child_implicit (
+  z INT,
+  y INT,
+  x INT,
+  FOREIGN KEY (z, y) REFERENCES parent_hash_sharded
+)
+
+statement ok
+INSERT INTO child_implicit VALUES (1, 1, 1), (2, 2, 2)
+
+# Verify FK constraint enforcement
+statement error pq: insert on table "child_implicit" violates foreign key constraint
+INSERT INTO child_implicit VALUES (99, 99, 99)
+
+# Verify this also works using ALTER TABLE
+statement ok
+CREATE TABLE child_implicit2 (
+  z INT,
+  y INT,
+  x INT
+)
+
+statement ok
+ALTER TABLE child_implicit2 ADD FOREIGN KEY (z, y) REFERENCES parent_hash_sharded
+
+statement ok
+INSERT INTO child_implicit2 VALUES (1, 1, 1), (2, 2, 2)
+
+# Verify FK constraint enforcement
+statement error pq: insert on table "child_implicit2" violates foreign key constraint
+INSERT INTO child_implicit2 VALUES (99, 99, 99)
+
+# Cleanup
+statement ok
+DROP TABLE child_implicit
+
+statement ok
+DROP TABLE child_implicit2
+
+statement ok
+DROP TABLE parent_hash_sharded
+
+subtest end
