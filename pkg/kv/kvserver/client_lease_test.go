@@ -1312,6 +1312,7 @@ func TestLeasesDontThrashWhenNodeBecomesSuspect(t *testing.T) {
 	// rather than relying on the default (which may be too long for the
 	// SucceedsSoon timeout when combined with HybridManualClock wall time).
 	liveness.TimeAfterNodeSuspect.Override(ctx, &st.SV, 20*time.Second)
+	liveness.TimeAfterStoreSuspectInStoreLiveness.Override(ctx, &st.SV, 20*time.Second)
 
 	// Speed up lease transfers.
 	stickyRegistry := fs.NewStickyRegistry()
