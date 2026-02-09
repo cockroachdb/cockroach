@@ -501,7 +501,11 @@ func registerKVRangefeed(r registry.Registry) {
 			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 				runKVRangefeed(ctx, t, c, opts)
 			},
-			CompatibleClouds: registry.AllClouds,
+			// This test is compatible with all clouds, but suspected disk
+			// throughput issues (e.g. gp3 on AWS) and lower observability
+			// (no Grafana on AWS) prompted us to restrict to GCE for the
+			// time being. See #163197.
+			CompatibleClouds: registry.OnlyGCE,
 			Suites:           registry.Suites(registry.Nightly),
 		})
 	}
