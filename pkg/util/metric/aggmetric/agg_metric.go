@@ -32,9 +32,6 @@ const (
 	// defaultCacheSize is the default maximum number of distinct label value combinations
 	// before eviction starts in high cardinality metrics.
 	defaultCacheSize = 5000
-	// defaultRetentionTimeTillEviction is the default duration after which unused
-	// label value combinations can be evicted from high cardinality metrics.
-	defaultRetentionTimeTillEviction = 20 * time.Second
 )
 
 // This is a no-op context used during logging.
@@ -109,14 +106,18 @@ func (cs *childSet) initWithBTreeStorageType(labels []string) {
 	}
 }
 
-func (cs *childSet) initWithCacheStorageType(
-	labels []string,
-) {
+func (cs *childSet) initWithCacheStorageType(labels []string) {
 	cs.labels = labels
+
+	// Use CacheNone policy with no ShouldEvict callback. Eviction of stale
+	// metrics is handled explicitly by EvictStaleMetrics() which protects the
+	// special "_evicted" accumulator child from being removed.
+	cacheConfig := cache.Config{
+		Policy: cache.CacheNone,
+	}
+
 	cs.mu.children = &UnorderedCacheWrapper{
-		cache: cache.NewUnorderedCache(cache.Config{
-			Policy: cache.CacheNone,
-		}),
+		cache: cache.NewUnorderedCache(cacheConfig),
 	}
 }
 
@@ -262,6 +263,43 @@ func (cs *childSet) clear() {
 	cs.mu.Lock()
 	defer cs.mu.Unlock()
 	cs.mu.children.Clear()
+}
+
+// evictStaleMetrics removes child metrics that haven't been updated within the
+// retention threshold (metric.LabelValueTTL). This method is designed
+// for high cardinality metrics that use LabelSliceCachedChildMetric to prevent
+// unbounded memory growth from abandoned label combinations.
+// Eviction only occurs when maxLabelValues is exceeded (maxLabelValues > 0).
+func (cs *childSet) evictStaleMetrics(maxLabelValues int) {
+	cs.mu.Lock()
+	defer cs.mu.Unlock()
+
+	// Only evict if maxLabelValues is configured and exceeded
+	currentSize := cs.mu.children.Len()
+	if currentSize <= maxLabelValues {
+		return
+	}
+
+	now := time.Now().Unix()
+	threshold := now - int64(metric.LabelValueTTL.Seconds())
+
+	var toEvict []ChildMetric
+	cs.mu.children.ForEach(func(cm ChildMetric) {
+		if cachedChild, ok := cm.(LabelSliceCachedChildMetric); ok {
+			if cachedChild.UpdatedAt() < threshold {
+				toEvict = append(toEvict, cm)
+			}
+		}
+	})
+
+	for _, cm := range toEvict {
+		// Remove from storage before decrementing label cache reference,
+		// since Del relies on labelValues() which reads from the label cache.
+		cs.mu.children.Del(cm)
+		if cachedChild, ok := cm.(LabelSliceCachedChildMetric); ok {
+			cachedChild.DecrementLabelSliceCacheReference()
+		}
+	}
 }
 
 type SQLMetric struct {
@@ -439,6 +477,8 @@ type ChildrenStorage interface {
 	// ForEach calls f for each child metric, in arbitrary order.
 	ForEach(f func(metric ChildMetric))
 	Clear()
+	// Len returns the number of children in the storage.
+	Len() int
 }
 
 var _ ChildrenStorage = &UnorderedCacheWrapper{}
@@ -499,6 +539,10 @@ func (ucw *UnorderedCacheWrapper) Clear() {
 	ucw.cache.Clear()
 }
 
+func (ucw *UnorderedCacheWrapper) Len() int {
+	return ucw.cache.Len()
+}
+
 type BtreeWrapper struct {
 	tree *btree.BTreeG[MetricItem]
 }
@@ -546,4 +590,8 @@ func (b BtreeWrapper) ForEach(f func(metric ChildMetric)) {
 
 func (b BtreeWrapper) Clear() {
 	b.tree.Clear(false)
+}
+
+func (b BtreeWrapper) Len() int {
+	return b.tree.Len()
 }

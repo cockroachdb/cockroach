@@ -1,0 +1,4 @@
+echo
+----
+test_counter{tenant_id="_evicted"} 60
+test_counter{tenant_id="tenant4"} 5

@@ -404,6 +404,7 @@ type HighCardinalityCounter struct {
 	childSet
 	labelSliceCache *metric.LabelSliceCache
 	opts            metric.HighCardinalityMetricOptions
+	evictedChild    *HighCardinalityChildCounter
 }
 
 var _ metric.Iterable = (*HighCardinalityCounter)(nil)
@@ -416,6 +417,11 @@ var _ metric.PrometheusEvictable = (*HighCardinalityCounter)(nil)
 func NewHighCardinalityCounter(metadata metric.Metadata,
 	opts metric.HighCardinalityMetricOptions, childLabels []string,
 ) *HighCardinalityCounter {
+	// Use the global MaxLabelValues as default when not set.
+	if opts.MaxLabelValues <= 0 {
+		opts.MaxLabelValues = metric.MaxLabelValues
+	}
+
 	c := &HighCardinalityCounter{
 		g:    *metric.NewCounter(metadata),
 		opts: opts,
@@ -482,15 +488,51 @@ func (c *HighCardinalityCounter) Inc(i int64, labelValues ...string) {
 func (c *HighCardinalityCounter) Each(
 	labels []*io_prometheus_client.LabelPair, f func(metric *io_prometheus_client.Metric),
 ) {
-	c.EachWithLabels(labels, f, c.labelSliceCache)
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	c.mu.children.ForEach(func(cm ChildMetric) {
+		child := cm.(*HighCardinalityChildCounter)
+
+		// Skip the evicted child if its value is zero
+		if c.evictedChild != nil && child == c.evictedChild && child.Value() == 0 {
+			return
+		}
+
+		m := cm.ToPrometheusMetric()
+		childLabels := make([]*io_prometheus_client.LabelPair, 0, len(labels)+len(c.labels))
+		childLabels = append(childLabels, labels...)
+		lvs := cm.labelValues()
+		key := metricKey(lvs...)
+		labelValueCacheValues, ok := c.labelSliceCache.Get(metric.LabelSliceCacheKey(key))
+		if ok {
+			for i := range c.labels {
+				childLabels = append(childLabels, &io_prometheus_client.LabelPair{
+					Name:  &c.labels[i],
+					Value: &labelValueCacheValues.LabelValues[i],
+				})
+			}
+		}
+
+		m.Label = childLabels
+		f(m)
+	})
 }
 
 // InitializeMetrics is part of the PrometheusEvictable interface.
 func (c *HighCardinalityCounter) InitializeMetrics(labelCache *metric.LabelSliceCache) {
 	c.mu.Lock()
-	defer c.mu.Unlock()
-
 	c.labelSliceCache = labelCache
+	c.mu.Unlock()
+
+	// Create the evicted child with all label values set to "_evicted"
+	evictedLabelVals := make([]string, len(c.labels))
+	for i := range evictedLabelVals {
+		evictedLabelVals[i] = "_evicted"
+	}
+
+	// Use GetOrAddChild to create and store the evicted child
+	c.evictedChild = c.GetOrAddChild(evictedLabelVals...)
 }
 
 // GetOrAddChild returns the existing child counter for the given label values,
@@ -517,9 +559,63 @@ func (c *HighCardinalityCounter) GetOrAddChild(labelVals ...string) *HighCardina
 func (c *HighCardinalityCounter) createHighCardinalityChildCounter(
 	key uint64, cache *metric.LabelSliceCache,
 ) LabelSliceCachedChildMetric {
-	return &HighCardinalityChildCounter{
+	child := &HighCardinalityChildCounter{
 		LabelSliceCacheKey: metric.LabelSliceCacheKey(key),
 		LabelSliceCache:    cache,
+	}
+	child.updatedAt.Store(time.Now().Unix())
+	return child
+}
+
+// EvictStaleMetrics removes child metrics that haven't been updated within the
+// retention threshold (metric.LabelValueTTL). This helps prevent
+// unbounded memory growth from abandoned label combinations.
+// Eviction only occurs when maxLabelValues is exceeded.
+func (c *HighCardinalityCounter) EvictStaleMetrics() {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	// Only evict if maxLabelValues is configured and exceeded
+	currentSize := c.mu.children.Len()
+	if currentSize <= c.opts.MaxLabelValues {
+		return
+	}
+
+	now := time.Now().Unix()
+	threshold := now - int64(metric.LabelValueTTL.Seconds())
+
+	var toEvict []ChildMetric
+	c.mu.children.ForEach(func(cm ChildMetric) {
+		child := cm.(*HighCardinalityChildCounter)
+
+		// Don't evict the evicted child itself
+		if c.evictedChild != nil && child == c.evictedChild {
+			return
+		}
+
+		if child.UpdatedAt() < threshold {
+			toEvict = append(toEvict, cm)
+		}
+	})
+
+	// Check once if we should accumulate evicted values
+	hasEvictedChild := c.evictedChild != nil
+
+	// Accumulate evicted values and remove evicted children
+	for _, cm := range toEvict {
+		child := cm.(*HighCardinalityChildCounter)
+
+		// Accumulate into evicted child
+		if hasEvictedChild {
+			c.evictedChild.Inc(child.Value())
+		}
+
+		// Remove from storage before decrementing label cache reference,
+		// since Del relies on labelValues() which reads from the label cache.
+		c.mu.children.Del(cm)
+		if cachedChild, ok := cm.(LabelSliceCachedChildMetric); ok {
+			cachedChild.DecrementLabelSliceCacheReference()
+		}
 	}
 }
 

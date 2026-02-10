@@ -1,0 +1,5 @@
+echo
+----
+test_gauge{tenant_id="tenant1"} 10
+test_gauge{tenant_id="tenant2"} 20
+test_gauge{tenant_id="tenant3"} 30

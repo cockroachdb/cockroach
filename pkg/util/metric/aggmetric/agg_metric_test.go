@@ -470,9 +470,6 @@ func TestSQLMetricsReinitialise(t *testing.T) {
 
 }
 
-// TestConcurrentUpdatesAndReinitialiseMetric tests that concurrent updates to a metric
-// do not cause a panic when the metric is reinitialised and scraped. The test case
-// validates the fix for the bug #147475.
 func TestConcurrentUpdatesAndReinitialiseMetric(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	r := metric.NewRegistry()
@@ -494,4 +491,140 @@ func TestConcurrentUpdatesAndReinitialiseMetric(t *testing.T) {
 	require.NotPanics(t, func() {
 		pe.ScrapeRegistry(r, metric.WithIncludeChildMetrics(true), metric.WithIncludeAggregateMetrics(true))
 	})
+}
+
+// TestConcurrentUpdatesAndReinitialiseMetric tests that concurrent updates to a metric
+// do not cause a panic when the metric is reinitialised and scraped.
+func TestConcurrentHighCardinalityMetrics(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	r := metric.NewRegistry()
+	writePrometheusMetrics := WritePrometheusMetricsFunc(r)
+
+	labelCache := metric.NewLabelSliceCache()
+
+	// Create high cardinality metrics with enough headroom for all labels.
+	counter := NewHighCardinalityCounter(
+		metric.Metadata{Name: "hc_counter"},
+		metric.HighCardinalityMetricOptions{MaxLabelValues: 100},
+		[]string{"tenant_id"},
+	)
+	gauge := NewHighCardinalityGauge(
+		metric.Metadata{Name: "hc_gauge"},
+		metric.HighCardinalityMetricOptions{MaxLabelValues: 100},
+		[]string{"tenant_id"},
+	)
+	histogram := NewHighCardinalityHistogram(
+		metric.HistogramOptions{
+			Metadata:     metric.Metadata{Name: "hc_histogram"},
+			Duration:     base.DefaultHistogramWindowInterval(),
+			MaxVal:       1000,
+			SigFigs:      1,
+			BucketConfig: metric.Percent100Buckets,
+			HighCardinalityOpts: metric.HighCardinalityMetricOptions{
+				MaxLabelValues: 100,
+			},
+		},
+		"tenant_id",
+	)
+
+	r.AddMetric(counter)
+	r.AddMetric(gauge)
+	r.AddMetric(histogram)
+	counter.InitializeMetrics(labelCache)
+	gauge.InitializeMetrics(labelCache)
+	histogram.InitializeMetrics(labelCache)
+
+	const (
+		numTenants    = 10
+		numGoroutines = 50
+		incPerOp      = 1
+	)
+
+	var wg sync.WaitGroup
+
+	// Spawn goroutines that concurrently update metrics across tenants.
+	for g := 0; g < numGoroutines; g++ {
+		wg.Add(1)
+		go func(id int) {
+			defer wg.Done()
+			tenant := "tenant_" + strconv.Itoa(id%numTenants)
+			counter.Inc(incPerOp, tenant)
+			gauge.Inc(incPerOp, tenant)
+			histogram.RecordValue(int64(id%100), tenant)
+		}(g)
+	}
+
+	// Concurrently scrape prometheus metrics while updates are in flight
+	// to stress concurrent read/write access.
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		require.NotPanics(t, func() {
+			writePrometheusMetrics(t)
+		})
+	}()
+
+	wg.Wait()
+
+	// Verify deterministic aggregate values after all goroutines complete.
+	// Each goroutine increments the counter by 1, so total should be numGoroutines.
+	require.Equal(t, int64(numGoroutines), counter.Count())
+	require.Equal(t, int64(numGoroutines), gauge.Value())
+
+	// Verify per-tenant counter values sum to the aggregate.
+	var counterSum, gaugeSum int64
+	counter.mu.Lock()
+	counter.mu.children.ForEach(func(cm ChildMetric) {
+		child := cm.(*HighCardinalityChildCounter)
+		if child != counter.evictedChild {
+			counterSum += child.Value()
+		}
+	})
+	counter.mu.Unlock()
+	require.Equal(t, int64(numGoroutines), counterSum)
+
+	gauge.mu.Lock()
+	gauge.mu.children.ForEach(func(cm ChildMetric) {
+		child := cm.(*HighCardinalityChildGauge)
+		if child != gauge.evictedChild {
+			gaugeSum += child.Value()
+		}
+	})
+	gauge.mu.Unlock()
+	require.Equal(t, int64(numGoroutines), gaugeSum)
+
+	// Each tenant should have exactly numGoroutines/numTenants increments.
+	expectedPerTenant := int64(numGoroutines / numTenants)
+	counter.mu.Lock()
+	counter.mu.children.ForEach(func(cm ChildMetric) {
+		child := cm.(*HighCardinalityChildCounter)
+		if child != counter.evictedChild {
+			require.Equal(t, expectedPerTenant, child.Value())
+		}
+	})
+	counter.mu.Unlock()
+
+	gauge.mu.Lock()
+	gauge.mu.children.ForEach(func(cm ChildMetric) {
+		child := cm.(*HighCardinalityChildGauge)
+		if child != gauge.evictedChild {
+			require.Equal(t, expectedPerTenant, child.Value())
+		}
+	})
+	gauge.mu.Unlock()
+
+	// Verify final prometheus scrape does not panic and produces output.
+	output := writePrometheusMetrics(t)
+	require.Contains(t, output, "hc_counter")
+	require.Contains(t, output, "hc_gauge")
+	require.Contains(t, output, "hc_histogram")
+
+	// Verify all tenants are present in the label cache.
+	for i := 0; i < numTenants; i++ {
+		tenant := "tenant_" + strconv.Itoa(i)
+		key := metric.LabelSliceCacheKey(metricKey(tenant))
+		_, ok := labelCache.Get(key)
+		require.True(t, ok, "expected label cache entry for %s", tenant)
+	}
 }

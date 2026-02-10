@@ -43,6 +43,7 @@ type PrometheusExporter struct {
 // MakePrometheusExporter returns an initialized prometheus exporter.
 func MakePrometheusExporter() PrometheusExporter {
 	return PrometheusExporter{families: map[string]*prometheusgo.MetricFamily{}}
+
 }
 
 // MakePrometheusExporterForSelectedMetrics returns an initialized prometheus
@@ -145,6 +146,24 @@ func (pm *PrometheusExporter) ScrapeRegistry(registry *Registry, options ...Scra
 				family := pm.findOrCreateFamily(prom, o)
 				family.Metric = append(family.Metric, m)
 			}
+
+		// PrometheusEvictable captures the bounded high cardinality child metrics.
+		// Unlike PrometheusExportable, PrometheusEvictable should either emit aggregated value
+		// or all child metric values based on includeChildMetrics.
+		case PrometheusEvictable:
+			m := prom.ToPrometheusMetric()
+			m.Label = append(labels, prom.GetLabels(o.useStaticLabels)...)
+			family := pm.findOrCreateFamily(prom, o)
+
+			promIter, ok := v.(PrometheusIterable)
+			if ok && o.includeChildMetrics {
+				promIter.Each(m.Label, func(metric *prometheusgo.Metric) {
+					family.Metric = append(family.Metric, metric)
+				})
+				return
+			}
+			family.Metric = append(family.Metric, m)
+			return
 
 		case PrometheusExportable:
 			if _, ok := v.(PrometheusReinitialisable); ok && o.reinitialisableBugFixEnabled {

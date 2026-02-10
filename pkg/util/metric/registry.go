@@ -276,6 +276,20 @@ func (r *Registry) ReinitialiseChildMetrics(isDBNameEnabled, isAppNameEnabled bo
 
 }
 
+// EvictStaleMetrics iterates over all tracked metrics and calls EvictStaleMetrics
+// on those implementing the PrometheusEvictable interface. This removes stale
+// child metrics from high-cardinality metrics to prevent unbounded memory growth.
+func (r *Registry) EvictStaleMetrics() {
+	r.Lock()
+	defer r.Unlock()
+
+	for _, metric := range r.tracked {
+		if evictableMetric, ok := metric.(PrometheusEvictable); ok {
+			evictableMetric.EvictStaleMetrics()
+		}
+	}
+}
+
 var (
 	// Prometheus metric names and labels have fairly strict rules, they
 	// must match the regexp [a-zA-Z_:][a-zA-Z0-9_:]*

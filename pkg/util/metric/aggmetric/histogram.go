@@ -420,12 +420,26 @@ var _ metric.CumulativeHistogram = (*HighCardinalityHistogram)(nil)
 func NewHighCardinalityHistogram(
 	opts metric.HistogramOptions, childLabels ...string,
 ) *HighCardinalityHistogram {
+	// Use the global MaxLabelValues as default when not set.
+	if opts.HighCardinalityOpts.MaxLabelValues <= 0 {
+		opts.HighCardinalityOpts.MaxLabelValues = metric.MaxLabelValues
+	}
+
+	// Create parent histogram with original name
 	create := func() metric.IHistogram {
 		return metric.NewHistogram(opts)
 	}
+
+	// Create a modified version for child histograms with ".child" suffix
+	childOpts := opts
+	childOpts.Metadata.Name = opts.Metadata.Name + ".child"
+	createChild := func() metric.IHistogram {
+		return metric.NewHistogram(childOpts)
+	}
+
 	h := &HighCardinalityHistogram{
 		h:      create(),
-		create: create,
+		create: createChild,
 		opts:   opts.HighCardinalityOpts,
 	}
 	h.ticker.Ticker = tick.NewTicker(
@@ -517,10 +531,33 @@ func (h *HighCardinalityHistogram) RecordValue(v int64, labelValues ...string) {
 }
 
 // Each is part of the metric.PrometheusIterable interface.
+// For HighCardinalityHistogram, children are exported with ".child" suffix,
+// while the parent uses the original metric name.
 func (h *HighCardinalityHistogram) Each(
 	labels []*prometheusgo.LabelPair, f func(metric *prometheusgo.Metric),
 ) {
-	h.EachWithLabels(labels, f, h.labelSliceCache)
+	h.mu.Lock()
+	defer h.mu.Unlock()
+
+	h.mu.children.ForEach(func(cm ChildMetric) {
+		m := cm.ToPrometheusMetric()
+		childLabels := make([]*prometheusgo.LabelPair, 0, len(labels)+len(h.labels))
+		childLabels = append(childLabels, labels...)
+		lvs := cm.labelValues()
+		key := metricKey(lvs...)
+		labelValueCacheValues, ok := h.labelSliceCache.Get(metric.LabelSliceCacheKey(key))
+		if ok {
+			for i := range h.labels {
+				childLabels = append(childLabels, &prometheusgo.LabelPair{
+					Name:  &h.labels[i],
+					Value: &labelValueCacheValues.LabelValues[i],
+				})
+			}
+		}
+
+		m.Label = childLabels
+		f(m)
+	})
 }
 
 // InitializeMetrics is part of the PrometheusEvictable interface.
@@ -563,6 +600,14 @@ func (h *HighCardinalityHistogram) createHighCardinalityChildHistogram(
 	}
 	child.updatedAt.Store(timeutil.Now().Unix())
 	return child
+}
+
+// EvictStaleMetrics removes child metrics that haven't been updated within the
+// retention threshold (metric.LabelValueTTL). This helps prevent
+// unbounded memory growth from abandoned label combinations.
+// Eviction only occurs when maxLabelValues is exceeded.
+func (h *HighCardinalityHistogram) EvictStaleMetrics() {
+	h.evictStaleMetrics(h.opts.MaxLabelValues)
 }
 
 // HighCardinalityChildHistogram is a child of a HighCardinalityHistogram. When metrics are

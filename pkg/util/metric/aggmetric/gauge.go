@@ -532,6 +532,7 @@ type HighCardinalityGauge struct {
 	childSet
 	labelSliceCache *metric.LabelSliceCache
 	opts            metric.HighCardinalityMetricOptions
+	evictedChild    *HighCardinalityChildGauge
 }
 
 var _ metric.Iterable = (*HighCardinalityGauge)(nil)
@@ -544,6 +545,11 @@ var _ metric.PrometheusEvictable = (*HighCardinalityGauge)(nil)
 func NewHighCardinalityGauge(metadata metric.Metadata,
 	opts metric.HighCardinalityMetricOptions, childLabels []string,
 ) *HighCardinalityGauge {
+	// Use the global MaxLabelValues as default when not set.
+	if opts.MaxLabelValues <= 0 {
+		opts.MaxLabelValues = metric.MaxLabelValues
+	}
+
 	g := &HighCardinalityGauge{
 		g:    *metric.NewGauge(metadata),
 		opts: opts,
@@ -642,15 +648,51 @@ func (g *HighCardinalityGauge) Update(val int64, labelValues ...string) {
 func (g *HighCardinalityGauge) Each(
 	labels []*io_prometheus_client.LabelPair, f func(metric *io_prometheus_client.Metric),
 ) {
-	g.EachWithLabels(labels, f, g.labelSliceCache)
+	g.mu.Lock()
+	defer g.mu.Unlock()
+
+	g.mu.children.ForEach(func(cm ChildMetric) {
+		child := cm.(*HighCardinalityChildGauge)
+
+		// Skip the evicted child if its value is zero
+		if g.evictedChild != nil && child == g.evictedChild && child.Value() == 0 {
+			return
+		}
+
+		m := cm.ToPrometheusMetric()
+		childLabels := make([]*io_prometheus_client.LabelPair, 0, len(labels)+len(g.labels))
+		childLabels = append(childLabels, labels...)
+		lvs := cm.labelValues()
+		key := metricKey(lvs...)
+		labelValueCacheValues, ok := g.labelSliceCache.Get(metric.LabelSliceCacheKey(key))
+		if ok {
+			for i := range g.labels {
+				childLabels = append(childLabels, &io_prometheus_client.LabelPair{
+					Name:  &g.labels[i],
+					Value: &labelValueCacheValues.LabelValues[i],
+				})
+			}
+		}
+
+		m.Label = childLabels
+		f(m)
+	})
 }
 
 // InitializeMetrics is part of the PrometheusEvictable interface.
 func (g *HighCardinalityGauge) InitializeMetrics(labelCache *metric.LabelSliceCache) {
 	g.mu.Lock()
-	defer g.mu.Unlock()
-
 	g.labelSliceCache = labelCache
+	g.mu.Unlock()
+
+	// Create the evicted child with all label values set to "_evicted"
+	evictedLabelVals := make([]string, len(g.labels))
+	for i := range evictedLabelVals {
+		evictedLabelVals[i] = "_evicted"
+	}
+
+	// Use GetOrAddChild to create and store the evicted child
+	g.evictedChild = g.GetOrAddChild(evictedLabelVals...)
 }
 
 // GetOrAddChild returns the existing child gauge for the given label values,
@@ -683,6 +725,58 @@ func (g *HighCardinalityGauge) createHighCardinalityChildGauge(
 	}
 	child.updatedAt.Store(timeutil.Now().Unix())
 	return child
+}
+
+// EvictStaleMetrics removes child metrics that haven't been updated within the
+// retention threshold (metric.LabelValueTTL). This helps prevent
+// unbounded memory growth from abandoned label combinations.
+// Eviction only occurs when maxLabelValues is exceeded.
+func (g *HighCardinalityGauge) EvictStaleMetrics() {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+
+	// Only evict if maxLabelValues is configured and exceeded
+	currentSize := g.mu.children.Len()
+	if currentSize <= g.opts.MaxLabelValues {
+		return
+	}
+
+	now := time.Now().Unix()
+	threshold := now - int64(metric.LabelValueTTL.Seconds())
+
+	var toEvict []ChildMetric
+	g.mu.children.ForEach(func(cm ChildMetric) {
+		child := cm.(*HighCardinalityChildGauge)
+
+		// Don't evict the evicted child itself
+		if g.evictedChild != nil && child == g.evictedChild {
+			return
+		}
+
+		if child.UpdatedAt() < threshold {
+			toEvict = append(toEvict, cm)
+		}
+	})
+
+	// Check once if we should accumulate evicted values
+	hasEvictedChild := g.evictedChild != nil
+
+	// Accumulate evicted values and remove evicted children
+	for _, cm := range toEvict {
+		child := cm.(*HighCardinalityChildGauge)
+
+		// Accumulate into evicted child
+		if hasEvictedChild {
+			g.evictedChild.Inc(child.Value())
+		}
+
+		// Remove from storage before decrementing label cache reference,
+		// since Del relies on labelValues() which reads from the label cache.
+		g.mu.children.Del(cm)
+		if cachedChild, ok := cm.(LabelSliceCachedChildMetric); ok {
+			cachedChild.DecrementLabelSliceCacheReference()
+		}
+	}
 }
 
 // HighCardinalityChildGauge is a child of a HighCardinalityGauge. When metrics are

@@ -1,0 +1,14 @@
+echo
+----
+test_histogram_bucket{tenant_id="tenant1",le="+Inf"} 1
+test_histogram_bucket{tenant_id="tenant1",le="1"} 1
+test_histogram_bucket{tenant_id="tenant2",le="+Inf"} 1
+test_histogram_bucket{tenant_id="tenant2",le="5"} 1
+test_histogram_bucket{tenant_id="tenant3",le="+Inf"} 1
+test_histogram_bucket{tenant_id="tenant3",le="10"} 1
+test_histogram_count{tenant_id="tenant1"} 1
+test_histogram_count{tenant_id="tenant2"} 1
+test_histogram_count{tenant_id="tenant3"} 1
+test_histogram_sum{tenant_id="tenant1"} 1
+test_histogram_sum{tenant_id="tenant2"} 5
+test_histogram_sum{tenant_id="tenant3"} 10

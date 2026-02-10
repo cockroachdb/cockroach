@@ -2025,6 +2025,11 @@ func (s *topLevelServer) PreStart(ctx context.Context) error {
 		return err
 	}
 
+	// Start periodic eviction of stale high-cardinality metrics.
+	if err := s.recorder.StartMetricEviction(workersCtx, s.stopper); err != nil {
+		return err
+	}
+
 	// Begin recording time series data collected by the status monitor.
 	// The writes will be async; we'll wait for the first one to go through
 	// later in this method, using the returned channel.

@@ -148,6 +148,8 @@ type PrometheusEvictable interface {
 	PrometheusIterable
 
 	InitializeMetrics(*LabelSliceCache)
+	// EvictStaleMetrics removes stale child metrics based on the eviction policy.
+	EvictStaleMetrics()
 }
 
 // WindowedHistogram represents a histogram with data over recent window of
@@ -341,6 +343,14 @@ const maxLabelValuesEnvVar = "COCKROACH_HIGH_CARDINALITY_METRICS_MAX_LABEL_VALUE
 // MaxLabelValues is the configured maximum number of distinct label value combinations
 // for high cardinality metrics before eviction starts, read from the environment variable.
 var MaxLabelValues = envutil.EnvOrDefaultInt(maxLabelValuesEnvVar, 10000)
+
+// labelValueTTLEnvVar can be used to configure the duration after which unused
+// label values can be evicted from high cardinality metrics.
+const labelValueTTLEnvVar = "COCKROACH_HIGH_CARDINALITY_METRICS_LABEL_VALUE_TTL"
+
+// LabelValueTTL is the configured duration after which unused label values
+// can be evicted from high cardinality metrics, read from the environment variable.
+var LabelValueTTL = envutil.EnvOrDefaultDuration(labelValueTTLEnvVar, 5*time.Minute)
 
 type HistogramMode byte
 

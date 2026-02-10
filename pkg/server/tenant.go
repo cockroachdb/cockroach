@@ -797,6 +797,11 @@ func (s *SQLServerWrapper) PreStart(ctx context.Context) error {
 		}
 	}
 
+	// Start periodic eviction of stale high-cardinality metrics.
+	if err := s.recorder.StartMetricEviction(workersCtx, s.stopper); err != nil {
+		return err
+	}
+
 	// After setting modeOperational, we can block until all stores are fully
 	// initialized.
 	s.grpc.setMode(modeOperational)

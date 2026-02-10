@@ -13,6 +13,7 @@ import (
 	"hash/fnv"
 	"io"
 	"math"
+	"math/rand"
 	"os"
 	"runtime"
 	"strconv"
@@ -46,6 +47,7 @@ import (
 	_ "github.com/cockroachdb/cockroach/pkg/util/log/logmetrics"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/metric/aggmetric"
+	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/system"
 	"github.com/cockroachdb/errors"
@@ -120,6 +122,18 @@ var ChildMetricsStorageEnabled = settings.RegisterBoolSetting(
 	"enables the collection of high-cardinality child metrics into the time series database",
 	false,
 	settings.WithVisibility(settings.Reserved))
+
+// MetricEvictionInterval controls the interval at which stale high-cardinality
+// metrics are evicted from memory. This applies to metrics implementing the
+// PrometheusEvictable interface, which use cache-based storage and evict entries
+// based on TTL and cardinality thresholds.
+var MetricEvictionInterval = settings.RegisterDurationSetting(
+	settings.ApplicationLevel,
+	"server.metrics.eviction_interval",
+	"interval at which stale high-cardinality metrics are evicted from all registries",
+	5*time.Minute,
+	settings.NonNegativeDurationWithMaximum(24*time.Hour),
+	settings.WithPublic)
 
 // MetricsRecorder is used to periodically record the information in a number of
 // metric registries.
@@ -355,6 +369,77 @@ func (mr *MetricsRecorder) AddStore(store storeMetrics) {
 	}
 	mr.mu.storeRegistries[storeID] = store.Registry()
 	mr.mu.stores[storeID] = store
+}
+
+// evictStaleMetrics iterates over all registries and evicts stale child metrics
+// from high-cardinality metrics that implement the PrometheusEvictable interface.
+// This prevents unbounded memory growth from abandoned label combinations.
+func (mr *MetricsRecorder) evictStaleMetrics() {
+	mr.mu.RLock()
+	defer mr.mu.RUnlock()
+
+	// Collect all registries to iterate over
+	registries := make([]*metric.Registry, 0, len(mr.mu.storeRegistries)+len(mr.mu.tenantRegistries))
+	if mr.mu.nodeRegistry != nil {
+		registries = append(registries, mr.mu.nodeRegistry)
+	}
+	if mr.mu.appRegistry != nil {
+		registries = append(registries, mr.mu.appRegistry)
+	}
+	if mr.mu.sysRegistry != nil {
+		registries = append(registries, mr.mu.sysRegistry)
+	}
+	if mr.mu.logRegistry != nil {
+		registries = append(registries, mr.mu.logRegistry)
+	}
+
+	// Add store registries
+	for _, reg := range mr.mu.storeRegistries {
+		registries = append(registries, reg)
+	}
+
+	// Add tenant registries
+	for _, reg := range mr.mu.tenantRegistries {
+		registries = append(registries, reg)
+	}
+
+	// Iterate over each registry and evict stale metrics
+	for _, registry := range registries {
+		if registry == nil {
+			continue
+		}
+		registry.EvictStaleMetrics()
+	}
+}
+
+// jitteredInterval returns a randomly jittered (+/-25%) duration
+// from the interval to avoid thundering herd effects.
+func jitteredInterval(interval time.Duration) time.Duration {
+	return time.Duration(float64(interval) * (0.75 + 0.5*rand.Float64()))
+}
+
+// StartMetricEviction starts a background task that periodically evicts stale
+// high-cardinality metrics from all registries. The eviction interval is
+// controlled by the server.metrics.eviction_interval cluster setting.
+func (mr *MetricsRecorder) StartMetricEviction(
+	ctx context.Context, stopper *stop.Stopper,
+) error {
+	return stopper.RunAsyncTaskEx(ctx,
+		stop.TaskOpts{
+			TaskName: "stale-metric-eviction",
+			SpanOpt:  stop.SterileRootSpan,
+		},
+		func(ctx context.Context) {
+			for {
+				interval := MetricEvictionInterval.Get(&mr.settings.SV)
+				select {
+				case <-stopper.ShouldQuiesce():
+					return
+				case <-time.After(jitteredInterval(interval)):
+					mr.evictStaleMetrics()
+				}
+			}
+		})
 }
 
 // MarshalJSON returns an appropriate JSON representation of the current values
