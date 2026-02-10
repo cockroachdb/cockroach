@@ -80,7 +80,7 @@ func (r resumer) Resume(ctx context.Context, execCtxI interface{}) error {
 	}
 	switch m := m.(type) {
 	case *upgrade.SystemUpgrade:
-		err = m.Run(ctx, v, mc.SystemDeps())
+		err = m.Run(ctx, v, mc.SystemDeps(), r.j)
 	case *upgrade.TenantUpgrade:
 		tenantDeps := upgrade.TenantDeps{
 			Codec:              execCtx.ExecCfg().Codec,
