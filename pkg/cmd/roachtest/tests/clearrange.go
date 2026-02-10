@@ -24,6 +24,7 @@ import (
 
 func registerClearRange(r registry.Registry) {
 	for _, checks := range []bool{true, false} {
+		checks := checks
 		r.Add(registry.TestSpec{
 			Name:  fmt.Sprintf(`clearrange/checks=%t`, checks),
 			Owner: registry.OwnerStorage,
@@ -35,86 +36,21 @@ func registerClearRange(r registry.Registry) {
 			Suites:           registry.Suites(registry.Nightly),
 			Leases:           registry.MetamorphicLeases,
 			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
-				opts := clearRangeOptions{
-					BigBankPayloadBytes: 10240,
-					BigBankRows:         65104166,
-					KVBlockBytes:        1,
-					NodesInitial:        c.Range(1, 10),
-					WorkloadConcurrency: 32,
-					WorkloadDuration:    time.Hour,
-				}
-				if checks {
-					// Run with an env var that runs a synchronous consistency
-					// check after each rebalance and merge.  This slows down
-					// merges, so it might hide some races.
-					//
-					// NB: the below invocation was found to actually make it to
-					// the server at the time of writing.
-					opts.Env = append(opts.Env, "COCKROACH_CONSISTENCY_AGGRESSIVE=true")
-				}
-				runClearRange(ctx, t, c, opts)
+				runClearRange(ctx, t, c, checks)
 			},
 		})
 	}
-	r.Add(registry.TestSpec{
-		Name:  `clearrange/dense`,
-		Owner: registry.OwnerStorage,
-		// 12h for import, 4h for the test.
-		Timeout:          12*time.Hour + 4*time.Hour,
-		Cluster:          r.MakeClusterSpec(6, spec.CPU(32), spec.VolumeSize(12000)),
-		CompatibleClouds: registry.AllExceptAWS,
-		Suites:           registry.Suites(registry.Weekly),
-		Leases:           registry.LeaderLeases,
-		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
-			runClearRange(ctx, t, c, clearRangeOptions{
-				// Experimentally, this big bank IMPORT results in about ~4.75
-				// TiB usage on each of the 5 initial nodes.
-				BigBankPayloadBytes: 20480,
-				BigBankRows:         400_000_000,
-				KVBlockBytes:        1024,
-				// We initially use only the first 5 nodes during the IMPORT.
-				// After the IMPORT, the test will start the cluster with all
-				// nodes, and n6 will join the cluster.
-				//
-				// This is done to exercise rebalancing. Rebalancing will result
-				// in replica removals on the original 5 nodes, and the disk
-				// space corresponding to those replicas should be reclaimed.
-				// This isn't yet part of the test's assertions.
-				NodesInitial:        c.Range(1, 5),
-				WorkloadConcurrency: 64,
-				WorkloadDuration:    2 * time.Hour,
-			})
-		},
-	})
 }
 
-type clearRangeOptions struct {
-	Env                 []string
-	BigBankRows         int
-	BigBankPayloadBytes int
-	KVBlockBytes        int
-	NodesInitial        option.NodeListOption
-	WorkloadConcurrency int
-	WorkloadDuration    time.Duration
-}
-
-func runClearRange(ctx context.Context, t test.Test, c cluster.Cluster, opts clearRangeOptions) {
+func runClearRange(ctx context.Context, t test.Test, c cluster.Cluster, aggressiveChecks bool) {
 	t.Status("restoring fixture")
-	settings := install.MakeClusterSettings()
-	settings.ClusterSettings["kv.snapshot_rebalance.max_rate"] = "512MiB"
-	c.Start(ctx, t.L(), option.DefaultStartOpts(), settings, opts.NodesInitial)
+	c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings())
 	m := c.NewDeprecatedMonitor(ctx)
 	m.Go(func(ctx context.Context) error {
-		// NB: The bank table imports data sequentially, enabling this import to
-		// run in a reasonable amount of time despite importing a large volume
-		// of data.
+		// NB: on a 10 node cluster, this should take well below 3h.
 		tBegin := timeutil.Now()
 		c.Run(ctx, option.WithNodes(c.Node(1)), "./cockroach", "workload", "fixtures", "import", "bank",
-			"--import-concurrency-limit=48",
-			"--ranges=10", "--seed=4", "--db=bigbank",
-			fmt.Sprintf("--payload-bytes=%d", opts.BigBankPayloadBytes),
-			fmt.Sprintf("--rows=%d", opts.BigBankRows),
-			"{pgurl:1}")
+			"--payload-bytes=10240", "--ranges=10", "--rows=65104166", "--seed=4", "--db=bigbank", "{pgurl:1}")
 		t.L().Printf("import took %.2fs", timeutil.Since(tBegin).Seconds())
 		return nil
 	})
@@ -122,7 +58,15 @@ func runClearRange(ctx context.Context, t test.Test, c cluster.Cluster, opts cle
 	c.Stop(ctx, t.L(), option.DefaultStopOpts())
 	t.Status()
 
-	settings.Env = append(settings.Env, opts.Env...)
+	settings := install.MakeClusterSettings()
+	if aggressiveChecks {
+		// Run with an env var that runs a synchronous consistency check after each rebalance and merge.
+		// This slows down merges, so it might hide some races.
+		//
+		// NB: the below invocation was found to actually make it to the server at the time of writing.
+		settings.Env = append(settings.Env, "COCKROACH_CONSISTENCY_AGGRESSIVE=true")
+	}
+
 	c.Start(ctx, t.L(), option.DefaultStartOpts(), settings)
 	m = c.NewDeprecatedMonitor(ctx)
 
@@ -137,7 +81,7 @@ func runClearRange(ctx context.Context, t test.Test, c cluster.Cluster, opts cle
 	// https://github.com/cockroachdb/cockroach/issues/34897#issuecomment-465089057
 	c.Run(ctx, option.WithNodes(c.Node(1)), `COCKROACH_CONNECT_TIMEOUT=120 ./cockroach sql --url={pgurl:1} -e "DROP DATABASE IF EXISTS tinybank"`)
 	c.Run(ctx, option.WithNodes(c.Node(1)), "./cockroach", "workload", "fixtures", "import", "bank", "--db=tinybank",
-		"--payload-bytes=100", "--rows=800", "--seed=1", "--ranges=1", "{pgurl:1}")
+		"--payload-bytes=100", "--ranges=10", "--rows=800", "--seed=1", "{pgurl:1}")
 
 	t.Status()
 
@@ -156,13 +100,7 @@ func runClearRange(ctx context.Context, t test.Test, c cluster.Cluster, opts cle
 
 	m.Go(func(ctx context.Context) error {
 		c.Run(ctx, option.WithNodes(c.Node(1)), `./cockroach workload init kv {pgurl:1}`)
-		c.Run(ctx, option.WithNodes(c.All()), `./cockroach`, `workload`, `run`, `kv`,
-			`--tolerate-errors`,
-			fmt.Sprintf(`--concurrency=%d`, opts.WorkloadConcurrency),
-			fmt.Sprintf(`--duration=%s`, opts.WorkloadDuration.String()),
-			fmt.Sprintf(`--min-block-bytes=%d`, opts.KVBlockBytes),
-			fmt.Sprintf(`--max-block-bytes=%d`, opts.KVBlockBytes),
-			fmt.Sprintf(`{pgurl%s}`, c.All()))
+		c.Run(ctx, option.WithNodes(c.All()), fmt.Sprintf(`./cockroach workload run kv --concurrency=32 --duration=1h --tolerate-errors {pgurl%s}`, c.All()))
 		return nil
 	})
 	m.Go(func(ctx context.Context) error {
