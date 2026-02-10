@@ -1120,6 +1120,53 @@ func GetTableStatisticsStmt(
 `, delayDeleteColumn, ordering)
 }
 
+// allocateDeferredPartialStats allocates USING EXTREME partial
+// statistics to either the canary or stable cache based on their parent
+// full statistics ID.
+//
+// USING EXTREME partial stats reference a parent full stats via
+// FullStatisticID. When we have dual caches, these partial stats should
+// be allocated to the same cache as their parent full stats. However,
+// since the iterator returns stats in descending CreatedAt order, we
+// encounter partial stats before knowing which full stat is the latest.
+// Therefore, we defer their allocation until after identifying the
+// latest full stat ID, with the descending time order maintained in
+// both caches.
+func allocateDeferredPartialStats(
+	deferredPartials []*TableStatistic,
+	latestFullStatsID uint64,
+	canaryStats []*TableStatistic,
+	stableStats []*TableStatistic,
+) ([]*TableStatistic, []*TableStatistic) {
+	if len(deferredPartials) == 0 {
+		return canaryStats, stableStats
+	}
+
+	var canaryPartials, stablePartials []*TableStatistic
+	for _, ps := range deferredPartials {
+		// Partial stats with parent matching the latest full stat go to
+		// canary cache. All others go to stable cache, even if their parent
+		// doesn't exist there. Having such "orphaned partial stats" is
+		// fine, since they will be ignored during merging anyway.
+		if ps.FullStatisticID == latestFullStatsID {
+			canaryPartials = append(canaryPartials, ps)
+		} else {
+			stablePartials = append(stablePartials, ps)
+		}
+	}
+
+	// Prepend the USING EXTREMES partials to maintain descending time ordering.
+	if len(canaryPartials) > 0 {
+		canaryStats = append(canaryPartials, canaryStats...)
+	}
+
+	if len(stablePartials) > 0 {
+		stableStats = append(stablePartials, stableStats...)
+	}
+
+	return canaryStats, stableStats
+}
+
 // getTableStatsFromDB retrieves the statistics in system.table_statistics
 // for the given table ID.
 //
@@ -1167,6 +1214,8 @@ func (sc *TableStatisticsCache) getTableStatsFromDB(
 	// set this once when we encounter the first full stat.
 	var latestFullStatsCreatedAt time.Time
 	var latestStableFullStatsCreatedAt time.Time
+	var latestFullStatsID uint64
+	var usingExtremePartialStats []*TableStatistic
 	for ok, queryErr = it.Next(ctx); ok; ok, queryErr = it.Next(ctx) {
 		stats, udt, decodingErr := sc.parseStats(ctx, it.Cur(), typeResolver)
 		if decodingErr != nil {
@@ -1176,12 +1225,20 @@ func (sc *TableStatisticsCache) getTableStatsFromDB(
 
 		if latestFullStatsCreatedAt.IsZero() && !stats.IsPartial() {
 			latestFullStatsCreatedAt = stats.CreatedAt
+			latestFullStatsID = stats.StatisticID
 		}
 
 		if !stats.DelayDelete {
-			// statsList contains the freshest valid stats, so it should never contain
-			// stats that is marked delayDelete.
-			statsList = append(statsList, stats)
+			// Deal with the case where the USING EXTREME partial stats might be bound
+			// to a full stats that is older than the latest stats. We defer the allocation
+			// after we know the ID of the full stats in the canary stats cache.
+			if stats.FullStatisticID != 0 {
+				usingExtremePartialStats = append(usingExtremePartialStats, stats)
+			} else {
+				// statsList contains the freshest valid stats, so it should never contain
+				// stats that is marked delayDelete.
+				statsList = append(statsList, stats)
+			}
 		}
 
 		// Stats that is delayed for deletion always go in to stable stats list;
@@ -1213,6 +1270,11 @@ func (sc *TableStatisticsCache) getTableStatsFromDB(
 	if queryErr != nil {
 		return nil, nil, hlc.Timestamp{}, hlc.Timestamp{}, nil, queryErr
 	}
+
+	// Allocate the deferred USING EXTREME partial stats to the appropriate cache.
+	statsList, stableStatsList = allocateDeferredPartialStats(
+		usingExtremePartialStats, latestFullStatsID, statsList, stableStatsList,
+	)
 
 	merged := MergedStatistics(ctx, statsList, st)
 	statsList = append(merged, statsList...)
