@@ -11734,44 +11734,44 @@ func TestReplicaShouldTransferRaftLeadershipToLeaseholder(t *testing.T) {
 	}
 
 	testcases := map[string]struct {
-		expect bool
+		expect raftLeaderTransferOutcome
 		modify func(*params)
 	}{
 		"leader": {
-			true, func(p *params) {},
+			raftLeaderTransferOK, func(p *params) {},
 		},
-		"follower": {false, func(p *params) {
+		"follower": {raftLeaderTransferNotNeeded, func(p *params) {
 			p.raftStatus.SoftState.RaftState = raftpb.StateFollower
 			p.raftStatus.Lead = remoteID
 		}},
-		"pre-candidate": {false, func(p *params) {
+		"pre-candidate": {raftLeaderTransferNotNeeded, func(p *params) {
 			p.raftStatus.SoftState.RaftState = raftpb.StatePreCandidate
 			p.raftStatus.Lead = raft.None
 		}},
-		"candidate": {false, func(p *params) {
+		"candidate": {raftLeaderTransferNotNeeded, func(p *params) {
 			p.raftStatus.SoftState.RaftState = raftpb.StateCandidate
 			p.raftStatus.Lead = raft.None
 		}},
-		"invalid lease": {false, func(p *params) {
+		"invalid lease": {raftLeaderTransferNotNeeded, func(p *params) {
 			p.leaseStatus.State = kvserverpb.LeaseState_EXPIRED
 		}},
-		"local lease": {false, func(p *params) {
+		"local lease": {raftLeaderTransferNotNeeded, func(p *params) {
 			p.leaseStatus.Lease.Replica.StoreID = localID
 		}},
-		"lease request pending": {false, func(p *params) {
+		"lease request pending": {raftLeaderTransferBlockedByPendingAcquisition, func(p *params) {
 			p.leaseAcquisitionPending = true
 		}},
-		"no progress": {false, func(p *params) {
+		"no progress": {raftLeaderTransferBlockedByLeaseholderBehind, func(p *params) {
 			p.progress = nil
 		}},
-		"insufficient progress": {false, func(p *params) {
+		"insufficient progress": {raftLeaderTransferBlockedByLeaseholderBehind, func(p *params) {
 			p.progress = &tracker.Progress{Match: 9}
 		}},
-		"no progress, draining": {true, func(p *params) {
+		"no progress, draining": {raftLeaderTransferOK, func(p *params) {
 			p.progress = nil
 			p.draining = true
 		}},
-		"insufficient progress, draining": {true, func(p *params) {
+		"insufficient progress, draining": {raftLeaderTransferOK, func(p *params) {
 			p.progress = &tracker.Progress{Match: 9}
 			p.draining = true
 		}},
