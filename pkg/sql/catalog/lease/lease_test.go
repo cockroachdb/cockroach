@@ -4213,3 +4213,69 @@ func TestLeaseBeforeGC(t *testing.T) {
 	require.NoError(t, err)
 	defer systemDesc.Release(ctx)
 }
+
+// TestLeasedDescriptorTypeHydration verifies that leased descriptors hydrated
+// with concurrent schema changes never encounter errors.
+func TestLeasedDescriptorTypeHydration(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	srv, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	defer srv.Stopper().Stop(ctx)
+
+	tdb := sqlutils.MakeSQLRunner(sqlDB)
+
+	// Setup: Create TWO schemas
+	// schema_types: contains the types that will be dropped
+	// schema_funcs: contains functions that reference types from schema_types
+	// This creates a cross-schema dependency
+	tdb.Exec(t, `DROP SCHEMA IF EXISTS schema_types CASCADE`)
+	tdb.Exec(t, `DROP SCHEMA IF EXISTS schema_funcs CASCADE`)
+
+	tdb.Exec(t, `CREATE SCHEMA schema_types`)
+	tdb.Exec(t, `CREATE TYPE schema_types.my_enum AS ENUM ('a', 'b', 'c')`)
+	tdb.Exec(t, `CREATE TYPE schema_types.my_composite AS (f1 int, f2 text)`)
+
+	tdb.Exec(t, `CREATE SCHEMA schema_funcs`)
+	// Function in schema_funcs that references type from schema_types
+	tdb.Exec(t, `
+		CREATE FUNCTION schema_funcs.use_enum(e schema_types.my_enum)
+		RETURNS schema_types.my_enum AS $$ SELECT e; $$ LANGUAGE SQL
+	`)
+	tdb.Exec(t, `
+		CREATE FUNCTION schema_funcs.use_composite(c schema_types.my_composite)
+		RETURNS schema_types.my_composite AS $$ SELECT c; $$ LANGUAGE SQL
+	`)
+
+	grp := ctxgroup.WithContext(ctx)
+	stopExec := make(chan struct{})
+	for i := 0; i < 20; i++ {
+		grp.GoCtx(func(ctx context.Context) error {
+			for {
+				select {
+				case <-stopExec:
+					return nil
+				default:
+					var result string
+					// Query for schema_funcs OR any schema - schema_funcs will be returned
+					err := sqlDB.QueryRow(`
+					SELECT schema_name
+					FROM information_schema.schemata
+					WHERE schema_name LIKE 'schema_%' OR schema_name = 'public'
+					ORDER BY random()
+					LIMIT 1
+				`).Scan(&result)
+					if err != nil {
+						return err
+					}
+				}
+			}
+		})
+	}
+
+	// Drop the schema_types schema, while the concurrent selects are running.
+	tdb.Exec(t, `DROP SCHEMA schema_types CASCADE`)
+	close(stopExec)
+	require.NoError(t, grp.Wait())
+}
