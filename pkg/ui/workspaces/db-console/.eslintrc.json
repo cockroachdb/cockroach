@@ -13,7 +13,7 @@
     "@typescript-eslint",
     "local-rules"
   ],
-  "ignorePatterns": ["protos.d.ts", "protos.js"],
+  "ignorePatterns": ["protos.d.ts", "protos.js", "src/api/api-types.ts"],
   "rules": {
     "no-restricted-imports": ["error", {
       "patterns": ["@cockroachlabs/cluster-ui/src/*"]

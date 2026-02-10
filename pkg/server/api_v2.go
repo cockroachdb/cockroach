@@ -42,6 +42,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/apiconstants"
 	"github.com/cockroachdb/cockroach/pkg/server/apiutil"
 	"github.com/cockroachdb/cockroach/pkg/server/authserver"
+	"github.com/cockroachdb/cockroach/pkg/server/dbconsole"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/server/srverrors"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
@@ -130,7 +131,10 @@ func newAPIV2Server(ctx context.Context, opts *apiV2ServerOpts) http.Handler {
 			systemAdmin:  systemAdmin,
 			systemStatus: systemStatus,
 		}
-		registerRoutes(innerMux, authMux, inner, a)
+		dbconsoleAPI := &dbconsole.ApiV2DBConsole{
+			Status: systemStatus.statusServer,
+		}
+		registerRoutes(innerMux, authMux, inner, a, dbconsoleAPI)
 		return a
 	} else {
 		a := &apiV2Server{
@@ -142,14 +146,21 @@ func newAPIV2Server(ctx context.Context, opts *apiV2ServerOpts) http.Handler {
 			sqlServer:        opts.sqlServer,
 			db:               opts.db,
 		}
-		registerRoutes(innerMux, authMux, a, a)
+		dbconsoleAPI := &dbconsole.ApiV2DBConsole{
+			Status: a.status,
+		}
+		registerRoutes(innerMux, authMux, a, a, dbconsoleAPI)
 		return a
 	}
 }
 
 // registerRoutes registers endpoints under the current API server.
 func registerRoutes(
-	innerMux *mux.Router, authMux http.Handler, a *apiV2Server, systemRoutes ApiV2System,
+	innerMux *mux.Router,
+	authMux http.Handler,
+	a *apiV2Server,
+	systemRoutes ApiV2System,
+	dbconsoleAPI *dbconsole.ApiV2DBConsole,
 ) {
 	// Add any new API endpoint definitions here, even if a sub-server handles
 	// them. Arguments:
@@ -205,6 +216,9 @@ func registerRoutes(
 		{"table_metadata/updatejob/", a.TableMetadataJob, true, authserver.RegularRole, true},
 		{fmt.Sprintf("grants/databases/{%s:[0-9]+}/", dbIdPathVar), a.getDatabaseGrants, true, authserver.RegularRole, true},
 		{fmt.Sprintf("grants/tables/{%s:[0-9]+}/", tableIdPathVar), a.getTableGrants, true, authserver.RegularRole, true},
+
+		// DB Console BFF endpoints.
+		{"dbconsole/nodes/", dbconsoleAPI.GetNodes, true, authserver.ViewClusterMetadataRole, true},
 	}
 
 	// For all routes requiring authentication, have the outer mux (a.mux)

@@ -44,6 +44,7 @@ func makeGenerateCmd(runE func(cmd *cobra.Command, args []string) error) *cobra.
         dev generate stringer      # stringer targets (subset of 'dev generate go')
         dev generate testlogic     # logictest generated code (includes 'dev generate schemachanger')
         dev generate ui            # Create UI assets to be consumed by 'go build'
+        dev generate http-schema   # Generate OpenAPI schema and TypeScript types from Go API annotations
 `,
 		Args: cobra.MinimumNArgs(0),
 		// TODO(irfansharif): Errors but default just eaten up. Let's wrap these
@@ -71,6 +72,7 @@ func (d *dev) generate(cmd *cobra.Command, targets []string) error {
 		"diagrams":      d.generateDiagrams,
 		"docs":          d.generateDocs,
 		"execgen":       d.generateExecgen,
+		"http-schema":   d.generateHTTPSchema,
 		"js":            d.generateJs,
 		"go":            d.generateGo,
 		"go_full":       d.generateGoFull,
@@ -341,4 +343,75 @@ func (d *dev) generateJs(cmd *cobra.Command) error {
 
 	// Generate crdb-api-client package.
 	return makeUICrdbApiClientCmd(d).RunE(cmd, []string{})
+}
+
+func (d *dev) generateHTTPSchema(cmd *cobra.Command) error {
+	ctx := cmd.Context()
+	workspace, err := d.getWorkspace(ctx)
+	if err != nil {
+		return err
+	}
+
+	outputDir := filepath.Join(workspace, "pkg", "ui", "workspaces",
+		"db-console", "src", "api")
+
+	// Step 1: Generate swagger.json via Bazel-managed swag.
+	// Use --run_under to set the working directory and add the Bazel Go SDK
+	// to PATH so that swag can invoke `go list` for --parseDependency.
+	d.log.Printf("Generating swagger.json...")
+	outputBase, err := d.getBazelInfo(ctx, "output_base", nil)
+	if err != nil {
+		return err
+	}
+	goBinDir := filepath.Join(outputBase, "external", "go_sdk", "bin")
+	args := []string{
+		"run", "@com_github_swaggo_swag//cmd/swag",
+		fmt.Sprintf("--run_under=cd %s && PATH=%s:$PATH ", workspace, goBinDir),
+		"--",
+		"init",
+		"--dir", "pkg/server/dbconsole",
+		"--generalInfo", "dbconsole.go",
+		"--output", outputDir,
+		"--parseDependency",
+		"--parseInternal",
+		"--outputTypes", "json",
+	}
+	logCommand("bazel", args...)
+	if err := d.exec.CommandContextInheritingStdStreams(ctx, "bazel", args...); err != nil {
+		return fmt.Errorf("generating swagger.json: %w", err)
+	}
+
+	// Step 2: Convert Swagger 2.0 -> OpenAPI 3.0 using Bazel-managed swagger2openapi.
+	swaggerFile := filepath.Join(outputDir, "swagger.json")
+	openapiFile := filepath.Join(outputDir, "openapi.json")
+	d.log.Printf("Converting to OpenAPI 3.0...")
+	args = []string{
+		"run", "//pkg/ui/workspaces/db-console:swagger2openapi",
+		"--",
+		swaggerFile, "-o", openapiFile,
+	}
+	logCommand("bazel", args...)
+	if err := d.exec.CommandContextInheritingStdStreams(ctx, "bazel", args...); err != nil {
+		return fmt.Errorf("converting to OpenAPI 3.0: %w", err)
+	}
+
+	// Step 3: Generate TypeScript types using Bazel-managed openapi-typescript.
+	apiTypesFile := filepath.Join(outputDir, "api-types.ts")
+	d.log.Printf("Generating TypeScript types...")
+	args = []string{
+		"run", "//pkg/ui/workspaces/db-console:openapi-typescript",
+		"--",
+		openapiFile, "-o", apiTypesFile,
+	}
+	logCommand("bazel", args...)
+	if err := d.exec.CommandContextInheritingStdStreams(ctx, "bazel", args...); err != nil {
+		return fmt.Errorf("generating TypeScript types: %w", err)
+	}
+
+	d.log.Printf("HTTP schema generation complete")
+	d.log.Printf("Generated files:")
+	d.log.Printf("  - %s", swaggerFile)
+	d.log.Printf("  - %s", openapiFile)
+	d.log.Printf("  - %s", apiTypesFile)
+	return nil
 }
