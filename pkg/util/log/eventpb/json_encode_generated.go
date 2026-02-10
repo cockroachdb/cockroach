@@ -743,6 +743,69 @@ func (m *AlterTypeOwner) AppendJSONFields(printComma bool, b redact.RedactableBy
 }
 
 // AppendJSONFields implements the EventPayload interface.
+func (m *BulkIngestCompleted) AppendJSONFields(printComma bool, b redact.RedactableBytes) (bool, redact.RedactableBytes) {
+
+	printComma, b = m.CommonEventDetails.AppendJSONFields(printComma, b)
+
+	if m.JobID != 0 {
+		if printComma {
+			b = append(b, ',')
+		}
+		printComma = true
+		b = append(b, "\"JobID\":"...)
+		b = strconv.AppendUint(b, uint64(m.JobID), 10)
+	}
+
+	if m.JobType != "" {
+		if printComma {
+			b = append(b, ',')
+		}
+		printComma = true
+		b = append(b, "\"JobType\":\""...)
+		b = redact.RedactableBytes(jsonbytes.EncodeString([]byte(b), string(m.JobType)))
+		b = append(b, '"')
+	}
+
+	if m.NumRows != 0 {
+		if printComma {
+			b = append(b, ',')
+		}
+		printComma = true
+		b = append(b, "\"NumRows\":"...)
+		b = strconv.AppendInt(b, int64(m.NumRows), 10)
+	}
+
+	if m.DurationSeconds != 0 {
+		if printComma {
+			b = append(b, ',')
+		}
+		printComma = true
+		b = append(b, "\"DurationSeconds\":"...)
+		b = strconv.AppendInt(b, int64(m.DurationSeconds), 10)
+	}
+
+	if m.DataSizeMb != 0 {
+		if printComma {
+			b = append(b, ',')
+		}
+		printComma = true
+		b = append(b, "\"DataSizeMb\":"...)
+		b = strconv.AppendInt(b, int64(m.DataSizeMb), 10)
+	}
+
+	if m.NodeCount != 0 {
+		if printComma {
+			b = append(b, ',')
+		}
+		printComma = true
+		b = append(b, "\"NodeCount\":"...)
+		b = strconv.AppendInt(b, int64(m.NodeCount), 10)
+	}
+
+	return printComma, b
+}
+
+// AppendJSONFields implements the EventPayload interface.
 func (m *CapturedIndexUsageStats) AppendJSONFields(printComma bool, b redact.RedactableBytes) (bool, redact.RedactableBytes) {
 
 	printComma, b = m.CommonEventDetails.AppendJSONFields(printComma, b)

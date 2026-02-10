@@ -74,6 +74,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logutil"
+	"github.com/cockroachdb/cockroach/pkg/util/log/severity"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
@@ -2253,19 +2254,17 @@ func (r *restoreResumer) doResume(ctx context.Context, execCtx interface{}) erro
 		const mb = 1 << 20
 		sizeMb := resTotal.DataSize / mb
 		sec := int64(timeutil.Since(timeutil.FromUnixMicros(r.job.Payload().StartedMicros)).Seconds())
-		var mbps int64
-		if sec > 0 {
-			mbps = mb / sec
+
+		// Log structured event with performance metrics
+		event := &eventpb.BulkIngestCompleted{
+			JobID:           uint64(r.job.ID()),
+			JobType:         "RESTORE",
+			NumRows:         resTotal.Rows,
+			DurationSeconds: sec,
+			DataSizeMb:      sizeMb,
+			NodeCount:       int32(numNodes),
 		}
-		telemetry.CountBucketed("restore.duration-sec.succeeded", sec)
-		telemetry.CountBucketed("restore.size-mb.full", sizeMb)
-		telemetry.CountBucketed("restore.speed-mbps.total", mbps)
-		telemetry.CountBucketed("restore.speed-mbps.per-node", mbps/int64(numNodes))
-		// Tiny restores may skew throughput numbers due to overhead.
-		if sizeMb > 10 {
-			telemetry.CountBucketed("restore.speed-mbps.over10mb", mbps)
-			telemetry.CountBucketed("restore.speed-mbps.over10mb.per-node", mbps/int64(numNodes))
-		}
+		log.StructuredEvent(ctx, severity.INFO, event)
 		logutil.LogJobCompletion(ctx, restoreJobEventType, r.job.ID(), true, nil, resTotal.Rows)
 	}
 	return nil
