@@ -56,7 +56,7 @@ Schema change plan for CREATE SEQUENCE ‹db›.‹sc›.‹sq1› MINVALUE 1 MA
  │              └── MarkDescriptorAsPublic {"DescriptorID":108}
  └── PreCommitPhase
       ├── Stage 1 of 2 in PreCommitPhase
-      │    ├── 43 elements transitioning toward PUBLIC
+      │    ├── 44 elements transitioning toward PUBLIC
       │    │    ├── PUBLIC → ABSENT Namespace:{DescID: 104 (db+), Name: "db", IntValue: 0}
       │    │    ├── PUBLIC → ABSENT Owner:{DescID: 104 (db+)}
       │    │    ├── PUBLIC → ABSENT UserPrivileges:{DescID: 104 (db+), Name: "admin"}
@@ -84,6 +84,7 @@ Schema change plan for CREATE SEQUENCE ‹db›.‹sc›.‹sq1› MINVALUE 1 MA
       │    │    ├── PUBLIC → ABSENT Function:{DescID: 107 (t+)}
       │    │    ├── PUBLIC → ABSENT SchemaChild:{DescID: 107 (t+), ReferencedDescID: 101 (public)}
       │    │    ├── PUBLIC → ABSENT FunctionName:{DescID: 107 (t+)}
+      │    │    ├── PUBLIC → ABSENT FunctionParams:{DescID: 107 (t+)}
       │    │    ├── PUBLIC → ABSENT FunctionBody:{DescID: 107 (t+)}
       │    │    ├── PUBLIC → ABSENT Sequence:{DescID: 108 (sq1+)}
       │    │    ├── PUBLIC → ABSENT Namespace:{DescID: 108 (sq1+), Name: "sq1", ReferencedDescID: 104 (db+), IntValue: 106}
@@ -103,7 +104,7 @@ Schema change plan for CREATE SEQUENCE ‹db›.‹sc›.‹sq1› MINVALUE 1 MA
       │    └── 1 Mutation operation
       │         └── UndoAllInTxnImmediateMutationOpSideEffects
       └── Stage 2 of 2 in PreCommitPhase
-           ├── 43 elements transitioning toward PUBLIC
+           ├── 44 elements transitioning toward PUBLIC
            │    ├── ABSENT → PUBLIC Namespace:{DescID: 104 (db+), Name: "db", IntValue: 0}
            │    ├── ABSENT → PUBLIC Owner:{DescID: 104 (db+)}
            │    ├── ABSENT → PUBLIC UserPrivileges:{DescID: 104 (db+), Name: "admin"}
@@ -131,6 +132,7 @@ Schema change plan for CREATE SEQUENCE ‹db›.‹sc›.‹sq1› MINVALUE 1 MA
            │    ├── ABSENT → PUBLIC Function:{DescID: 107 (t+)}
            │    ├── ABSENT → PUBLIC SchemaChild:{DescID: 107 (t+), ReferencedDescID: 101 (public)}
            │    ├── ABSENT → PUBLIC FunctionName:{DescID: 107 (t+)}
+           │    ├── ABSENT → PUBLIC FunctionParams:{DescID: 107 (t+)}
            │    ├── ABSENT → PUBLIC FunctionBody:{DescID: 107 (t+)}
            │    ├── ABSENT → PUBLIC Sequence:{DescID: 108 (sq1+)}
            │    ├── ABSENT → PUBLIC Namespace:{DescID: 108 (sq1+), Name: "sq1", ReferencedDescID: 104 (db+), IntValue: 106}
@@ -147,12 +149,13 @@ Schema change plan for CREATE SEQUENCE ‹db›.‹sc›.‹sq1› MINVALUE 1 MA
            │    ├── ABSENT → PUBLIC Owner:{DescID: 108 (sq1+)}
            │    ├── ABSENT → PUBLIC UserPrivileges:{DescID: 108 (sq1+), Name: "admin"}
            │    └── ABSENT → PUBLIC UserPrivileges:{DescID: 108 (sq1+), Name: "root"}
-           └── 61 Mutation operations
+           └── 62 Mutation operations
                 ├── CreateDatabaseDescriptor {"DatabaseID":104}
                 ├── CreateSchemaDescriptor {"SchemaID":105}
                 ├── CreateSchemaDescriptor {"SchemaID":106}
                 ├── CreateFunctionDescriptor {"Function":{"FunctionID":107}}
                 ├── SetFunctionName {"FunctionID":107,"Name":"t"}
+                ├── SetFunctionParams {"Params":{"FunctionID":107}}
                 ├── SetFunctionBody {"Body":{"Body":"SELECT 1;","FunctionID":107}}
                 ├── UpdateFunctionTypeReferences {"FunctionID":107}
                 ├── UpdateFunctionRelationReferences {"FunctionID":107}

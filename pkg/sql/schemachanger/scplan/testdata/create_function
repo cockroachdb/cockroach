@@ -21,7 +21,7 @@ CREATE FUNCTION f(a notmyworkday) RETURNS INT VOLATILE LANGUAGE SQL AS $$
   SELECT nextval('sq1');
 $$;
 ----
-StatementPhase stage 1 of 1 with 12 MutationType ops
+StatementPhase stage 1 of 1 with 13 MutationType ops
   transitions:
     [[Function:{DescID: 109}, PUBLIC], ABSENT] -> PUBLIC
     [[SchemaChild:{DescID: 109, ReferencedDescID: 101}, PUBLIC], ABSENT] -> PUBLIC
@@ -32,6 +32,7 @@ StatementPhase stage 1 of 1 with 12 MutationType ops
     [[UserPrivileges:{DescID: 109, Name: public}, PUBLIC], ABSENT] -> PUBLIC
     [[UserPrivileges:{DescID: 109, Name: root}, PUBLIC], ABSENT] -> PUBLIC
     [[FunctionBody:{DescID: 109}, PUBLIC], ABSENT] -> PUBLIC
+    [[FunctionParams:{DescID: 109}, PUBLIC], ABSENT] -> PUBLIC
   ops:
     *scop.CreateFunctionDescriptor
       Function:
@@ -150,6 +151,30 @@ StatementPhase stage 1 of 1 with 12 MutationType ops
       - viewid: 106
         columnids:
         - 1
+    *scop.SetFunctionParams
+      Params:
+        FunctionID: 109
+        Params:
+        - name: a
+          class:
+            class: 0
+          type:
+            type: |
+              family: EnumFamily
+              width: 0
+              precision: 0
+              locale: ""
+              visible_type: 0
+              oid: 100107
+              time_precision_is_set: false
+              udt_metadata: <
+                array_type_oid: 100108
+              >
+            closedtypeids:
+            - 107
+            - 108
+            typename: public.notmyworkday
+          defaultexpr: ""
     *scop.SetObjectParentID
       ObjParent:
         ChildObjectID: 109
@@ -167,10 +192,11 @@ PreCommitPhase stage 1 of 2 with 1 MutationType op
     [[UserPrivileges:{DescID: 109, Name: public}, PUBLIC], PUBLIC] -> ABSENT
     [[UserPrivileges:{DescID: 109, Name: root}, PUBLIC], PUBLIC] -> ABSENT
     [[FunctionBody:{DescID: 109}, PUBLIC], PUBLIC] -> ABSENT
+    [[FunctionParams:{DescID: 109}, PUBLIC], PUBLIC] -> ABSENT
   ops:
     *scop.UndoAllInTxnImmediateMutationOpSideEffects
       {}
-PreCommitPhase stage 2 of 2 with 12 MutationType ops
+PreCommitPhase stage 2 of 2 with 13 MutationType ops
   transitions:
     [[Function:{DescID: 109}, PUBLIC], ABSENT] -> PUBLIC
     [[SchemaChild:{DescID: 109, ReferencedDescID: 101}, PUBLIC], ABSENT] -> PUBLIC
@@ -181,6 +207,7 @@ PreCommitPhase stage 2 of 2 with 12 MutationType ops
     [[UserPrivileges:{DescID: 109, Name: public}, PUBLIC], ABSENT] -> PUBLIC
     [[UserPrivileges:{DescID: 109, Name: root}, PUBLIC], ABSENT] -> PUBLIC
     [[FunctionBody:{DescID: 109}, PUBLIC], ABSENT] -> PUBLIC
+    [[FunctionParams:{DescID: 109}, PUBLIC], ABSENT] -> PUBLIC
   ops:
     *scop.CreateFunctionDescriptor
       Function:
@@ -299,6 +326,30 @@ PreCommitPhase stage 2 of 2 with 12 MutationType ops
       - viewid: 106
         columnids:
         - 1
+    *scop.SetFunctionParams
+      Params:
+        FunctionID: 109
+        Params:
+        - name: a
+          class:
+            class: 0
+          type:
+            type: |
+              family: EnumFamily
+              width: 0
+              precision: 0
+              locale: ""
+              visible_type: 0
+              oid: 100107
+              time_precision_is_set: false
+              udt_metadata: <
+                array_type_oid: 100108
+              >
+            closedtypeids:
+            - 107
+            - 108
+            typename: public.notmyworkday
+          defaultexpr: ""
     *scop.SetObjectParentID
       ObjParent:
         ChildObjectID: 109
@@ -322,6 +373,10 @@ $$;
   rule: descriptor existence precedes dependents
 - from: [Function:{DescID: 110}, DESCRIPTOR_ADDED]
   to:   [FunctionName:{DescID: 110}, PUBLIC]
+  kind: Precedence
+  rule: descriptor existence precedes dependents
+- from: [Function:{DescID: 110}, DESCRIPTOR_ADDED]
+  to:   [FunctionParams:{DescID: 110}, PUBLIC]
   kind: Precedence
   rule: descriptor existence precedes dependents
 - from: [Function:{DescID: 110}, DESCRIPTOR_ADDED]
@@ -360,6 +415,10 @@ $$;
   to:   [SchemaChild:{DescID: 110, ReferencedDescID: 101}, PUBLIC]
   kind: Precedence
   rule: function name should be set before parent ids
+- from: [FunctionParams:{DescID: 110}, PUBLIC]
+  to:   [Function:{DescID: 110}, PUBLIC]
+  kind: Precedence
+  rule: dependents exist before descriptor becomes public
 - from: [FunctionVolatility:{DescID: 110}, PUBLIC]
   to:   [Function:{DescID: 110}, PUBLIC]
   kind: Precedence
@@ -397,7 +456,7 @@ CREATE FUNCTION f(a notmyworkday) RETURNS INT VOLATILE LANGUAGE PLpgSQL AS $$
   END
 $$;
 ----
-StatementPhase stage 1 of 1 with 12 MutationType ops
+StatementPhase stage 1 of 1 with 13 MutationType ops
   transitions:
     [[Function:{DescID: 111}, PUBLIC], ABSENT] -> PUBLIC
     [[SchemaChild:{DescID: 111, ReferencedDescID: 101}, PUBLIC], ABSENT] -> PUBLIC
@@ -408,6 +467,7 @@ StatementPhase stage 1 of 1 with 12 MutationType ops
     [[UserPrivileges:{DescID: 111, Name: public}, PUBLIC], ABSENT] -> PUBLIC
     [[UserPrivileges:{DescID: 111, Name: root}, PUBLIC], ABSENT] -> PUBLIC
     [[FunctionBody:{DescID: 111}, PUBLIC], ABSENT] -> PUBLIC
+    [[FunctionParams:{DescID: 111}, PUBLIC], ABSENT] -> PUBLIC
   ops:
     *scop.CreateFunctionDescriptor
       Function:
@@ -528,6 +588,30 @@ StatementPhase stage 1 of 1 with 12 MutationType ops
       - viewid: 106
         columnids:
         - 1
+    *scop.SetFunctionParams
+      Params:
+        FunctionID: 111
+        Params:
+        - name: a
+          class:
+            class: 0
+          type:
+            type: |
+              family: EnumFamily
+              width: 0
+              precision: 0
+              locale: ""
+              visible_type: 0
+              oid: 100107
+              time_precision_is_set: false
+              udt_metadata: <
+                array_type_oid: 100108
+              >
+            closedtypeids:
+            - 107
+            - 108
+            typename: public.notmyworkday
+          defaultexpr: ""
     *scop.SetObjectParentID
       ObjParent:
         ChildObjectID: 111
@@ -545,10 +629,11 @@ PreCommitPhase stage 1 of 2 with 1 MutationType op
     [[UserPrivileges:{DescID: 111, Name: public}, PUBLIC], PUBLIC] -> ABSENT
     [[UserPrivileges:{DescID: 111, Name: root}, PUBLIC], PUBLIC] -> ABSENT
     [[FunctionBody:{DescID: 111}, PUBLIC], PUBLIC] -> ABSENT
+    [[FunctionParams:{DescID: 111}, PUBLIC], PUBLIC] -> ABSENT
   ops:
     *scop.UndoAllInTxnImmediateMutationOpSideEffects
       {}
-PreCommitPhase stage 2 of 2 with 12 MutationType ops
+PreCommitPhase stage 2 of 2 with 13 MutationType ops
   transitions:
     [[Function:{DescID: 111}, PUBLIC], ABSENT] -> PUBLIC
     [[SchemaChild:{DescID: 111, ReferencedDescID: 101}, PUBLIC], ABSENT] -> PUBLIC
@@ -559,6 +644,7 @@ PreCommitPhase stage 2 of 2 with 12 MutationType ops
     [[UserPrivileges:{DescID: 111, Name: public}, PUBLIC], ABSENT] -> PUBLIC
     [[UserPrivileges:{DescID: 111, Name: root}, PUBLIC], ABSENT] -> PUBLIC
     [[FunctionBody:{DescID: 111}, PUBLIC], ABSENT] -> PUBLIC
+    [[FunctionParams:{DescID: 111}, PUBLIC], ABSENT] -> PUBLIC
   ops:
     *scop.CreateFunctionDescriptor
       Function:
@@ -679,6 +765,30 @@ PreCommitPhase stage 2 of 2 with 12 MutationType ops
       - viewid: 106
         columnids:
         - 1
+    *scop.SetFunctionParams
+      Params:
+        FunctionID: 111
+        Params:
+        - name: a
+          class:
+            class: 0
+          type:
+            type: |
+              family: EnumFamily
+              width: 0
+              precision: 0
+              locale: ""
+              visible_type: 0
+              oid: 100107
+              time_precision_is_set: false
+              udt_metadata: <
+                array_type_oid: 100108
+              >
+            closedtypeids:
+            - 107
+            - 108
+            typename: public.notmyworkday
+          defaultexpr: ""
     *scop.SetObjectParentID
       ObjParent:
         ChildObjectID: 111
@@ -704,6 +814,10 @@ $$;
   rule: descriptor existence precedes dependents
 - from: [Function:{DescID: 112}, DESCRIPTOR_ADDED]
   to:   [FunctionName:{DescID: 112}, PUBLIC]
+  kind: Precedence
+  rule: descriptor existence precedes dependents
+- from: [Function:{DescID: 112}, DESCRIPTOR_ADDED]
+  to:   [FunctionParams:{DescID: 112}, PUBLIC]
   kind: Precedence
   rule: descriptor existence precedes dependents
 - from: [Function:{DescID: 112}, DESCRIPTOR_ADDED]
@@ -742,6 +856,10 @@ $$;
   to:   [SchemaChild:{DescID: 112, ReferencedDescID: 101}, PUBLIC]
   kind: Precedence
   rule: function name should be set before parent ids
+- from: [FunctionParams:{DescID: 112}, PUBLIC]
+  to:   [Function:{DescID: 112}, PUBLIC]
+  kind: Precedence
+  rule: dependents exist before descriptor becomes public
 - from: [FunctionVolatility:{DescID: 112}, PUBLIC]
   to:   [Function:{DescID: 112}, PUBLIC]
   kind: Precedence

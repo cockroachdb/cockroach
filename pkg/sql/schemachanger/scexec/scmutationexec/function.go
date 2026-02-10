@@ -97,60 +97,65 @@ func (i *immediateVisitor) SetFunctionBody(ctx context.Context, op scop.SetFunct
 	}
 	fn.SetFuncBody(op.Body.Body)
 	fn.SetLang(op.Body.Lang.Lang)
+	return nil
+}
 
-	// During CREATE OR REPLACE, update the return type if it's a UDT whose
-	// internal representation may have changed.
-	if op.Body.ReturnType != nil {
-		fn.ReturnType.Type = op.Body.ReturnType.Type
+func (i *immediateVisitor) SetFunctionParams(ctx context.Context, op scop.SetFunctionParams) error {
+	fn, err := i.checkOutFunction(ctx, op.Params.FunctionID)
+	if err != nil {
+		return err
 	}
 
-	// During CREATE OR REPLACE, update the function's params on the descriptor
-	// and rebuild the schema's overload entry.
-	if len(op.Body.Params) > 0 {
-		params := make([]descpb.FunctionDescriptor_Parameter, len(op.Body.Params))
-		for idx, p := range op.Body.Params {
-			params[idx] = descpb.FunctionDescriptor_Parameter{
-				Name:  p.Name,
-				Class: p.Class.Class,
-				Type:  p.Type.Type,
-			}
-			if p.DefaultExpr != "" {
-				params[idx].DefaultExpr = &p.DefaultExpr
-			}
-		}
-		fn.Params = params
-
-		// Update the schema descriptor's overload entry.
-		if fn.ParentSchemaID != descpb.InvalidID {
-			sc, err := i.checkOutSchema(ctx, fn.ParentSchemaID)
-			if err != nil {
-				return err
-			}
-			sc.RemoveFunction(fn.GetName(), fn.GetID())
-			ol := descpb.SchemaDescriptor_FunctionSignature{
-				ID:          fn.GetID(),
-				ArgTypes:    make([]*types.T, 0, len(fn.Params)),
-				ReturnType:  fn.ReturnType.Type,
-				ReturnSet:   fn.ReturnType.ReturnSet,
-				IsProcedure: fn.IsProcedure(),
-			}
-			for pIdx, p := range fn.Params {
-				class := funcdesc.ToTreeRoutineParamClass(p.Class)
-				if tree.IsInParamClass(class) {
-					ol.ArgTypes = append(ol.ArgTypes, p.Type)
-				}
-				if class == tree.RoutineParamOut {
-					ol.OutParamOrdinals = append(ol.OutParamOrdinals, int32(pIdx))
-					ol.OutParamTypes = append(ol.OutParamTypes, p.Type)
-				}
-				if p.DefaultExpr != nil {
-					ol.DefaultExprs = append(ol.DefaultExprs, *p.DefaultExpr)
-				}
-			}
-			sc.AddFunction(fn.GetName(), ol)
-		}
+	// Update the return type if it's a UDT whose internal representation may
+	// have changed (e.g., a table type after ALTER TABLE ADD COLUMN).
+	if op.Params.ReturnType != nil {
+		fn.ReturnType.Type = op.Params.ReturnType.Type
 	}
 
+	// Update the function's params on the descriptor and rebuild the schema's
+	// overload entry.
+	params := make([]descpb.FunctionDescriptor_Parameter, len(op.Params.Params))
+	for idx, p := range op.Params.Params {
+		params[idx] = descpb.FunctionDescriptor_Parameter{
+			Name:  p.Name,
+			Class: p.Class.Class,
+			Type:  p.Type.Type,
+		}
+		if p.DefaultExpr != "" {
+			params[idx].DefaultExpr = &p.DefaultExpr
+		}
+	}
+	fn.Params = params
+
+	// Update the schema descriptor's overload entry.
+	if fn.ParentSchemaID != descpb.InvalidID {
+		sc, err := i.checkOutSchema(ctx, fn.ParentSchemaID)
+		if err != nil {
+			return err
+		}
+		sc.RemoveFunction(fn.GetName(), fn.GetID())
+		ol := descpb.SchemaDescriptor_FunctionSignature{
+			ID:          fn.GetID(),
+			ArgTypes:    make([]*types.T, 0, len(fn.Params)),
+			ReturnType:  fn.ReturnType.Type,
+			ReturnSet:   fn.ReturnType.ReturnSet,
+			IsProcedure: fn.IsProcedure(),
+		}
+		for pIdx, p := range fn.Params {
+			class := funcdesc.ToTreeRoutineParamClass(p.Class)
+			if tree.IsInParamClass(class) {
+				ol.ArgTypes = append(ol.ArgTypes, p.Type)
+			}
+			if class == tree.RoutineParamOut {
+				ol.OutParamOrdinals = append(ol.OutParamOrdinals, int32(pIdx))
+				ol.OutParamTypes = append(ol.OutParamTypes, p.Type)
+			}
+			if p.DefaultExpr != nil {
+				ol.DefaultExprs = append(ol.DefaultExprs, *p.DefaultExpr)
+			}
+		}
+		sc.AddFunction(fn.GetName(), ol)
+	}
 	return nil
 }
 

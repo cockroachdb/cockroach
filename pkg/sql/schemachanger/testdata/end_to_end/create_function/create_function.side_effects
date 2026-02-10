@@ -39,7 +39,7 @@ write *eventpb.CreateFunction to event log:
     statement: "CREATE FUNCTION ‹defaultdb›.‹public›.‹f›(‹a› ‹notmyworkday›)\n\tRETURNS INT8\n\tVOLATILE\n\tLANGUAGE SQL\n\tAS $$SELECT ‹a› FROM ‹defaultdb›.‹public›.‹t›; SELECT ‹b› FROM ‹defaultdb›.‹public›.‹t›@‹t_idx_b›; SELECT ‹c› FROM ‹defaultdb›.‹public›.‹t›@‹t_idx_c›; SELECT ‹a› FROM ‹defaultdb›.‹public›.‹v›; SELECT nextval(‹'sq1'›);$$"
     tag: CREATE FUNCTION
     user: root
-## StatementPhase stage 1 of 1 with 12 MutationType ops
+## StatementPhase stage 1 of 1 with 13 MutationType ops
 upsert descriptor #110
   -
   +function:
@@ -182,7 +182,7 @@ upsert descriptor #108
 ## PreCommitPhase stage 1 of 2 with 1 MutationType op
 undo all catalog changes within txn #1
 persist all catalog changes to storage
-## PreCommitPhase stage 2 of 2 with 12 MutationType ops
+## PreCommitPhase stage 2 of 2 with 13 MutationType ops
 upsert descriptor #110
   -
   +function:
