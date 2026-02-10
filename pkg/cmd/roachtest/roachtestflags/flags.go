@@ -342,11 +342,16 @@ var (
 		Usage: `flag to pass custom labels to pass to openmetrics for performance metrics,`,
 	})
 
-	DatadogAlwaysUpload bool = false
-	_                        = registerRunFlag(&DatadogAlwaysUpload, FlagInfo{
-		Name: "datadog-always-upload",
-		Usage: `Always upload roachtest run log data to Datadog. Logs from master and release branches are uploaded by
-				default.`,
+	DatadogSendLogsAnyBranch bool = false
+	_                             = registerRunFlag(&DatadogSendLogsAnyBranch, FlagInfo{
+		Name:  "datadog-send-logs-any-branch",
+		Usage: `Upload roachtest logs to Datadog from any branch. By default, only logs from master and release branches are uploaded.`,
+	})
+
+	DatadogSendLogsAnyResult bool = false
+	_                             = registerRunFlag(&DatadogSendLogsAnyResult, FlagInfo{
+		Name:  "datadog-send-logs-any-result",
+		Usage: `Upload roachtest logs to Datadog regardless of test result. By default, only failed test logs are uploaded.`,
 	})
 
 	DatadogSite string = "us5.datadoghq.com"
@@ -511,6 +516,25 @@ var (
 		Usage: `
 						On Darwin, prevent the system from sleeping while roachtest is running
 						by invoking caffeinate -i -w <pid>. Default is true.`,
+	})
+
+	StartEnv []string
+	_        = registerRunFlag(&StartEnv, FlagInfo{
+		Name: "start-env",
+		Usage: `
+			Environment variable to inject at cluster Start() time. Can be specified
+			multiple times. These are applied before test-specific settings, so tests
+			may override them. Example: --start-env=GODEBUG=gctrace=1`,
+	})
+
+	StartSettings map[string]string
+	_             = registerRunFlag(&StartSettings, FlagInfo{
+		Name: "start-setting",
+		Usage: `
+			Cluster setting to apply at cluster Start() time (key=value format). Can
+			be specified multiple times. These are applied via SQL after cluster
+			startup but before the test body runs, so tests may override them.
+			Example: --start-setting=kv.range_split.by_load_enabled=false`,
 	})
 )
 

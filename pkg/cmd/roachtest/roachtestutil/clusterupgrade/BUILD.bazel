@@ -7,6 +7,7 @@ go_library(
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/build",
+        "//pkg/clusterversion",
         "//pkg/cmd/roachtest/cluster",
         "//pkg/cmd/roachtest/option",
         "//pkg/cmd/roachtest/roachtestutil",
@@ -16,6 +17,7 @@ go_library(
         "//pkg/roachprod/logger",
         "//pkg/roachprod/vm",
         "//pkg/testutils/release",
+        "//pkg/util/protoutil",
         "//pkg/util/retry",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_cockroachdb_version//:version",

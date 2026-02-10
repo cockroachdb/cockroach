@@ -1,6 +1,7 @@
 ---
 name: reduce-unoptimized-query-oracle
 description: Reduce an unoptimized-query-oracle test failure log to the simplest possible reproduction case. Use when you have unoptimized-query-oracle*.log files from a failed roachtest and need to find the minimal SQL to reproduce the bug.
+disable-model-invocation: true
 ---
 
 # Reduce Unoptimized Query Oracle Test Failure

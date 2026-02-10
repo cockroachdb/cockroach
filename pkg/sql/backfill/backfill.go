@@ -63,6 +63,16 @@ var IndexBackfillCheckpointInterval = settings.RegisterDurationSetting(
 	30*time.Second,
 )
 
+// IndexBackfillProgressInterval is the duration between backfill progress
+// fraction updates. This is distinct from the checkpoint interval which
+// controls how often the backfill progress details are persisted.
+var IndexBackfillProgressInterval = settings.RegisterDurationSetting(
+	settings.ApplicationLevel,
+	"bulkio.index_backfill.progress_interval",
+	"the amount of time between index backfill progress fraction updates",
+	10*time.Second,
+)
+
 // MutationFilter is the type of a simple predicate on a mutation.
 type MutationFilter func(catalog.Mutation) bool
 
@@ -162,10 +172,6 @@ func (cb *ColumnBackfiller) init(
 		return err
 	}
 
-	// Create a bound account associated with the column backfiller.
-	if mon == nil {
-		return errors.AssertionFailedf("no memory monitor linked to ColumnBackfiller during init")
-	}
 	cb.mon = mon
 	cb.rowMetrics = rowMetrics
 
@@ -987,9 +993,6 @@ func (ib *IndexBackfiller) InitForLocalUse(
 	mon *mon.BytesMonitor,
 	vecIndexManager *vecindex.Manager,
 ) (retErr error) {
-	if mon == nil {
-		return errors.AssertionFailedf("memory monitor must be provided")
-	}
 	defer func() {
 		if retErr != nil {
 			mon.Stop(ctx)
@@ -1144,9 +1147,6 @@ func (ib *IndexBackfiller) InitForDistributedUse(
 	sourceIndexID catid.IndexID,
 	mon *mon.BytesMonitor,
 ) (retErr error) {
-	if mon == nil {
-		return errors.AssertionFailedf("memory monitor must be provided")
-	}
 	defer func() {
 		if retErr != nil {
 			mon.Stop(ctx)

@@ -725,10 +725,16 @@ func selectLocalityMatchingURI(
 		}
 		if localitySinkURI != "" {
 			destURI = localitySinkURI
-			log.Dev.Infof(ctx, "processor backing up to destination URI %s with locality %s", destURI, destLocalityKV)
+			log.Dev.Infof(ctx,
+				"processor backing up to destination URI %s with locality %s",
+				destURI, destLocalityKV,
+			)
 		} else if strict {
 			// This shouldn't happen unless there was a bug in distsql planning.
-			return "", "", errors.Errorf("sql processor locality %s does not match any of the backup localities %v: cannot proceed with strict locality", processorLocality, urisByLocalityKV)
+			return "", "", errors.Errorf(
+				"sql processor locality %s does not match any of the backup localities %v: cannot proceed with strict locality",
+				processorLocality, urisByLocalityKV,
+			)
 		}
 	}
 

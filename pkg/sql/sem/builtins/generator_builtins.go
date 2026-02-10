@@ -1274,7 +1274,11 @@ func makeVariadicUnnestGenerator(
 ) (eval.ValueGenerator, error) {
 	var arrays []*tree.DArray
 	for _, a := range args {
-		arrays = append(arrays, tree.MustBeDArray(a))
+		arr, err := checkIfDArrayErrOnDString(a)
+		if err != nil {
+			return nil, err
+		}
+		arrays = append(arrays, arr)
 	}
 	g := &multipleArrayValueGenerator{arrays: arrays}
 	return g, nil
@@ -1424,7 +1428,10 @@ func (w *WorkloadIndexRecsGenerator) Close(ctx context.Context) {
 func makeArrayGenerator(
 	_ context.Context, _ *eval.Context, args tree.Datums,
 ) (eval.ValueGenerator, error) {
-	arr := tree.MustBeDArray(args[0])
+	arr, err := checkIfDArrayErrOnDString(args[0])
+	if err != nil {
+		return nil, err
+	}
 	return &arrayValueGenerator{array: arr}, nil
 }
 
@@ -1466,7 +1473,10 @@ func (s *arrayValueGenerator) Values() (tree.Datums, error) {
 func makeExpandArrayGenerator(
 	_ context.Context, _ *eval.Context, args tree.Datums,
 ) (eval.ValueGenerator, error) {
-	arr := tree.MustBeDArray(args[0])
+	arr, err := checkIfDArrayErrOnDString(args[0])
+	if err != nil {
+		return nil, err
+	}
 	g := &expandArrayValueGenerator{avg: arrayValueGenerator{array: arr}}
 	g.buf[1] = tree.NewDInt(tree.DInt(-1))
 	return g, nil
@@ -1522,7 +1532,11 @@ func makeGenerateSubscriptsGenerator(
 	}
 	// We sadly only support 1D arrays right now.
 	if dim == 1 {
-		arr = tree.MustBeDArray(args[0])
+		var err error
+		arr, err = checkIfDArrayErrOnDString(args[0])
+		if err != nil {
+			return nil, err
+		}
 	} else {
 		arr = &tree.DArray{}
 	}
@@ -2577,7 +2591,7 @@ type spanKeyIterator struct {
 
 func newSpanKeyIterator(evalCtx *eval.Context, span roachpb.Span) *spanKeyIterator {
 	return &spanKeyIterator{
-		acc:  evalCtx.Planner.Mon().MakeBoundAccount(),
+		acc:  evalCtx.Planner.ExecMon().MakeBoundAccount(),
 		span: span,
 	}
 }
@@ -2683,7 +2697,7 @@ func makeRangeKeyIterator(
 	rangeID := roachpb.RangeID(tree.MustBeDInt(args[0]))
 	return &rangeKeyIterator{
 		spanKeyIterator: spanKeyIterator{
-			acc: planner.Mon().MakeBoundAccount(),
+			acc: planner.ExecMon().MakeBoundAccount(),
 		},
 		rangeID: rangeID,
 		planner: planner,
@@ -2998,7 +3012,7 @@ func makeShowCreateAllSchemasGenerator(
 	return &showCreateAllSchemasGenerator{
 		evalPlanner: evalCtx.Planner,
 		dbName:      dbName,
-		acc:         evalCtx.Planner.Mon().MakeBoundAccount(),
+		acc:         evalCtx.Planner.ExecMon().MakeBoundAccount(),
 	}, nil
 }
 
@@ -3154,7 +3168,7 @@ func makeShowCreateAllTablesGenerator(
 	return &showCreateAllTablesGenerator{
 		evalPlanner: evalCtx.Planner,
 		dbName:      dbName,
-		acc:         evalCtx.Planner.Mon().MakeBoundAccount(),
+		acc:         evalCtx.Planner.ExecMon().MakeBoundAccount(),
 		sessionData: evalCtx.SessionData(),
 	}, nil
 }
@@ -3232,7 +3246,7 @@ func makeShowCreateAllTriggersGenerator(
 	return &showCreateAllTriggersGenerator{
 		evalPlanner: evalCtx.Planner,
 		dbName:      dbName,
-		acc:         evalCtx.Planner.Mon().MakeBoundAccount(),
+		acc:         evalCtx.Planner.ExecMon().MakeBoundAccount(),
 	}, nil
 }
 
@@ -3312,7 +3326,7 @@ func makeShowCreateAllTypesGenerator(
 	return &showCreateAllTypesGenerator{
 		evalPlanner: evalCtx.Planner,
 		dbName:      dbName,
-		acc:         evalCtx.Planner.Mon().MakeBoundAccount(),
+		acc:         evalCtx.Planner.ExecMon().MakeBoundAccount(),
 	}, nil
 }
 
@@ -3404,7 +3418,7 @@ func makeShowCreateAllRoutinesGenerator(
 	return &showCreateAllRoutinesGenerator{
 		evalPlanner: evalCtx.Planner,
 		dbName:      dbName,
-		acc:         evalCtx.Planner.Mon().MakeBoundAccount(),
+		acc:         evalCtx.Planner.ExecMon().MakeBoundAccount(),
 	}, nil
 }
 
@@ -3540,7 +3554,7 @@ func makeIdentGenerator(
 	rand := rand.New(rand.NewSource(seed))
 	return &identGenerator{
 		gen:   randident.NewNameGenerator(&cfg, rand, pattern),
-		acc:   evalCtx.Planner.Mon().MakeBoundAccount(),
+		acc:   evalCtx.Planner.ExecMon().MakeBoundAccount(),
 		count: count,
 	}, nil
 }

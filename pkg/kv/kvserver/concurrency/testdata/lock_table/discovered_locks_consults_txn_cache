@@ -57,7 +57,7 @@ guard-state r=req1
 ----
 new: state=doneWaiting
 Intents to resolve:
- key="a" txn=00000000 status=ABORTED
+ key="a" txn=00000000-0000-0000-0000-000000000002 epoch=0 ts=10.000000000,0 status=ABORTED
 
 print
 ----
@@ -105,8 +105,8 @@ num=2
 resolve-before-scanning r=req1
 ----
 Intents to resolve:
- key="b" txn=00000000 status=ABORTED
- key="c" txn=00000000 status=ABORTED
+ key="b" txn=00000000-0000-0000-0000-000000000003 epoch=0 ts=10.000000000,0 status=ABORTED
+ key="c" txn=00000000-0000-0000-0000-000000000003 epoch=0 ts=10.000000000,0 status=ABORTED
 
 scan r=req1
 ----
@@ -159,7 +159,7 @@ guard-state r=req2
 ----
 new: state=doneWaiting
 Intents to resolve:
- key="e" txn=00000000 status=PENDING
+ key="e" txn=00000000-0000-0000-0000-000000000005 epoch=0 ts=11.000000000,0 status=PENDING
 
 update txn=txn5 ts=11,1 epoch=0 span=e
 ----
@@ -193,8 +193,8 @@ num=1
 resolve-before-scanning r=req2
 ----
 Intents to resolve:
- key="f" txn=00000000 status=PENDING
- key="g" txn=00000000 status=ABORTED
+ key="f" txn=00000000-0000-0000-0000-000000000005 epoch=0 ts=11.000000000,0 status=PENDING
+ key="g" txn=00000000-0000-0000-0000-000000000006 epoch=0 ts=10.000000000,0 status=ABORTED
 
 scan r=req2
 ----

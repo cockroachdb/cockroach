@@ -8,7 +8,6 @@ go_library(
     srcs = [
         "aggregators_util.go",
         "buffer.go",
-        "builtin_funcs.go",
         "case.go",
         "columnarizer.go",
         "constants.go",
@@ -24,7 +23,6 @@ go_library(
         "ordered_aggregator.go",
         "parallel_unordered_synchronizer.go",
         "partially_ordered_distinct.go",
-        "range_stats.go",
         "serial_unordered_synchronizer.go",
         "sort.go",
         "sort_chunks.go",
@@ -44,7 +42,6 @@ go_library(
         "//pkg/col/coldataext",  # keep
         "//pkg/col/typeconv",  # keep
         "//pkg/kv/kvserver/kvserverbase",
-        "//pkg/roachpb",
         "//pkg/server/telemetry",  # keep
         "//pkg/settings",
         "//pkg/sql/catalog",
@@ -72,12 +69,11 @@ go_library(
         "//pkg/sql/rowenc",
         "//pkg/sql/sem/builtins",  # keep
         "//pkg/sql/sem/catid",
-        "//pkg/sql/sem/eval",
+        "//pkg/sql/sem/eval",  # keep
         "//pkg/sql/sem/tree",
         "//pkg/sql/sessiondata",
         "//pkg/sql/sqltelemetry",  # keep
         "//pkg/sql/types",
-        "//pkg/storage/enginepb",
         "//pkg/util/buildutil",
         "//pkg/util/cancelchecker",
         "//pkg/util/duration",  # keep
@@ -102,7 +98,6 @@ go_test(
         "aggregators_test.go",
         "and_or_projection_test.go",
         "buffer_test.go",
-        "builtin_funcs_test.go",
         "case_test.go",
         "coalesce_test.go",
         "columnarizer_test.go",
@@ -166,11 +161,9 @@ go_test(
         "//pkg/sql/execinfra",
         "//pkg/sql/execinfrapb",
         "//pkg/sql/memsize",
-        "//pkg/sql/parser",
         "//pkg/sql/randgen",
         "//pkg/sql/rowenc",
         "//pkg/sql/rowexec",
-        "//pkg/sql/sem/builtins",
         "//pkg/sql/sem/eval",
         "//pkg/sql/sem/tree",
         "//pkg/sql/types",
@@ -207,7 +200,6 @@ targets = [
     ("select_in.eg.go", "select_in_tmpl.go"),
     ("sort.eg.go", "sort_tmpl.go"),
     ("sorttopk.eg.go", "sorttopk_tmpl.go"),
-    ("substring.eg.go", "substring_tmpl.go"),
     ("values_differ.eg.go", "values_differ_tmpl.go"),
     ("vec_comparators.eg.go", "vec_comparators_tmpl.go"),
 ]

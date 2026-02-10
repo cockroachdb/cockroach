@@ -11,7 +11,6 @@ import (
 	"fmt"
 	"os"
 	"regexp"
-	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -1168,6 +1167,200 @@ func TestMultiMergeIndexBackfill(t *testing.T) {
 	require.GreaterOrEqual(t, manifestCountByIteration[1], 12)
 }
 
+// TestDistributedMergePhasedProgress verifies the 3-phase progress model for
+// distributed merge backfills. The model divides progress as:
+//   - Phase 0 (map): 0-33% (span-based progress during backfill)
+//   - Phase 1 (merge iteration 1): 34-66%
+//   - Phase 2 (merge iteration 2): 67-100%
+//
+// This test verifies that after each phase completes, the DistributedMergePhase
+// and task tracking fields are correctly set in the job payload, and that the
+// fraction_completed reported by SHOW JOBS reflects the expected progress.
+func TestDistributedMergePhasedProgress(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	skip.UnderDuress(t, "slow timing sensitive test")
+
+	ctx := context.Background()
+	tempDir := t.TempDir()
+
+	// Coordination channels for controlling test flow.
+	mapPhaseCh := make(chan struct{})
+	iterationCh := make(chan struct{})
+	var mapPhaseComplete atomic.Bool
+	var currentIteration atomic.Int32
+
+	srv, db, _ := serverutils.StartServer(t, base.TestServerArgs{
+		ExternalIODir: tempDir,
+		Knobs: base.TestingKnobs{
+			JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
+			DistSQL: &execinfra.TestingKnobs{
+				BulkAdderFlushesEveryBatch: true,
+				AfterDistributedMergeMapPhase: func(ctx context.Context, manifests []jobspb.IndexBackfillSSTManifest) {
+					t.Logf("map phase complete, manifests=%d", len(manifests))
+					mapPhaseComplete.Store(true)
+					// Block to allow test to check progress after map phase.
+					select {
+					case <-mapPhaseCh:
+					case <-ctx.Done():
+					}
+				},
+				AfterDistributedMergeIteration: func(ctx context.Context, iteration int, manifests []jobspb.IndexBackfillSSTManifest) {
+					currentIteration.Store(int32(iteration))
+					t.Logf("iteration %d complete, manifests=%d", iteration, len(manifests))
+					// Block after iteration 1 (which has manifests) to check progress.
+					if iteration == 1 && len(manifests) > 0 {
+						select {
+						case <-iterationCh:
+						case <-ctx.Done():
+						}
+					}
+				},
+			},
+		},
+	})
+	defer srv.Stopper().Stop(ctx)
+
+	tdb := sqlutils.MakeSQLRunner(db)
+
+	tdb.Exec(t, `SET CLUSTER SETTING bulkio.index_backfill.distributed_merge.mode = 'declarative'`)
+	tdb.Exec(t, `SET CLUSTER SETTING bulkio.merge.file_size = '50KiB'`)
+	tdb.Exec(t, `SET CLUSTER SETTING bulkio.index_backfill.checkpoint_interval = '10ms'`)
+	tdb.Exec(t, `SET CLUSTER SETTING bulkio.index_backfill.progress_interval = '100ms'`)
+
+	tdb.Exec(t, `CREATE TABLE t (k INT PRIMARY KEY, v TEXT)`)
+	tdb.Exec(t, `INSERT INTO t SELECT i, repeat('x', 100) || i::text FROM generate_series(1, 5000) AS g(i)`)
+
+	// Run CREATE INDEX in background.
+	var jobID int64
+	g := ctxgroup.WithContext(ctx)
+	g.GoCtx(func(ctx context.Context) error {
+		_, err := db.ExecContext(ctx, `CREATE INDEX idx ON t (v)`)
+		return err
+	})
+
+	// Wait for the job to be created.
+	testutils.SucceedsWithin(t, func() error {
+		row := db.QueryRow(`
+			SELECT job_id FROM crdb_internal.jobs
+			WHERE job_type = 'NEW SCHEMA CHANGE'
+			AND description LIKE '%CREATE INDEX idx%'
+			ORDER BY created DESC LIMIT 1
+		`)
+		return row.Scan(&jobID)
+	}, 30*time.Second)
+
+	// Helper to get fraction_completed from SHOW JOBS.
+	getFractionCompleted := func() float32 {
+		var fraction float32
+		err := db.QueryRow(
+			`SELECT fraction_completed FROM [SHOW JOBS] WHERE job_id = $1`, jobID,
+		).Scan(&fraction)
+		require.NoError(t, err)
+		return fraction
+	}
+
+	// === Verify progress after map phase (~33%) ===
+	testutils.SucceedsWithin(t, func() error {
+		if mapPhaseComplete.Load() {
+			return nil
+		}
+		return errors.New("waiting for map phase")
+	}, 60*time.Second)
+
+	// Helper to check the fraction is within epsilon of expected.
+	fractionInEpsilon := func(fraction, expected float32) bool {
+		const epsilon float32 = 0.01
+		return fraction >= expected-epsilon && fraction <= expected+epsilon
+	}
+
+	// Wait for progress to be flushed and verify it's ~33% (after map phase = 1/3).
+	var fractionAfterMap float32
+	testutils.SucceedsWithin(t, func() error {
+		fractionAfterMap = getFractionCompleted()
+		if fractionInEpsilon(fractionAfterMap, 0.33) {
+			return nil
+		}
+		return errors.Errorf("waiting for fraction ~0.33, got %.4f", fractionAfterMap)
+	}, 10*time.Second)
+	t.Logf("fraction_completed after map phase: %.4f", fractionAfterMap)
+
+	// Unblock map phase.
+	close(mapPhaseCh)
+
+	// === Verify progress after iteration 1 (~66%) ===
+	// Wait for iteration 1 to complete and block.
+	testutils.SucceedsWithin(t, func() error {
+		if currentIteration.Load() >= 1 {
+			return nil
+		}
+		return errors.New("waiting for iteration 1")
+	}, 60*time.Second)
+
+	// Wait for checkpoint to reflect iteration 1 completion.
+	testutils.SucceedsWithin(t, func() error {
+		phase, _, _ := getMergeIterationProgress(t, db, int(jobID))
+		if phase >= 1 {
+			return nil
+		}
+		return errors.New("waiting for iteration 1 checkpoint")
+	}, 10*time.Second)
+
+	// Verify the phased progress fields after iteration 1.
+	// After an iteration completes, task tracking fields are cleared to ensure
+	// accurate progress calculation for the next iteration.
+	phase, tasksTotal, completedTasks := getMergeIterationProgress(t, db, int(jobID))
+	t.Logf("after iteration 1: phase=%d, tasksTotal=%d, completedTasks=%v", phase, tasksTotal, completedTasks)
+
+	require.Equal(t, int32(1), phase,
+		"DistributedMergePhase should be 1 after iteration 1")
+	require.Equal(t, int64(0), tasksTotal,
+		"MergeIterationTasksTotal should be cleared after iteration completion")
+	require.Equal(t, 0, len(completedTasks),
+		"MergeIterationCompletedTasks should be cleared after iteration completion")
+
+	// Verify fraction_completed from SHOW JOBS reflects iteration 1 progress (~66%).
+	// Wait for the progress flusher to update the job's fraction_completed.
+	var fractionAfterIter1 float32
+	testutils.SucceedsWithin(t, func() error {
+		fractionAfterIter1 = getFractionCompleted()
+		// After iteration 1, progress should be ~66% (phase 1 complete = 2/3).
+		if fractionInEpsilon(fractionAfterIter1, 0.66) {
+			return nil
+		}
+		return errors.Errorf("waiting for fraction >= 0.60, got %.4f", fractionAfterIter1)
+	}, 10*time.Second)
+	t.Logf("fraction_completed after iteration 1: %.4f", fractionAfterIter1)
+	require.GreaterOrEqual(t, fractionAfterIter1, float32(0.60),
+		"fraction_completed after iteration 1 should be >= 60%%")
+	require.LessOrEqual(t, fractionAfterIter1, float32(0.72),
+		"fraction_completed after iteration 1 should be <= 72%%")
+
+	// Unblock iteration 1 and let job complete.
+	close(iterationCh)
+
+	require.NoError(t, g.Wait())
+
+	// Verify the final state after completion.
+	phaseFinal, tasksTotalFinal, completedTasksFinal := getMergeIterationProgress(t, db, int(jobID))
+	t.Logf("after completion: phase=%d, tasksTotal=%d, completedTasks=%v",
+		phaseFinal, tasksTotalFinal, completedTasksFinal)
+
+	// After final iteration, phase should be 2, tasks fields cleared (since completion resets them).
+	require.Equal(t, int32(2), phaseFinal,
+		"DistributedMergePhase should be 2 after completion")
+	// Final iteration clears task tracking fields.
+	require.Equal(t, int64(0), tasksTotalFinal,
+		"MergeIterationTasksTotal should be 0 after completion")
+	require.Empty(t, completedTasksFinal,
+		"MergeIterationCompletedTasks should be empty after completion")
+
+	// Verify final fraction_completed is ~100%.
+	fractionFinal := getFractionCompleted()
+	require.InEpsilon(t, float32(1.0), fractionFinal, 0.01,
+		"fraction_completed should be ~100%% after completion")
+}
+
 // TestDistributedMergeAcrossNodes verifies that the distributed merge pipeline
 // involves multiple nodes. It creates a multi-node cluster, distributes data
 // across nodes via split/scatter, and verifies that multiple nodes participate
@@ -1386,6 +1579,28 @@ func waitForCheckpointPersisted(
 		t.Logf("checkpoint contains %d SST manifests", len(ssts))
 		return nil
 	}, 5*time.Second)
+}
+
+// getMergeIterationProgress extracts merge iteration progress fields from
+// the job payload. Returns the distributed merge phase, total tasks count,
+// and completed task IDs.
+func getMergeIterationProgress(
+	t *testing.T, db *gosql.DB, jobID int,
+) (phase int32, tasksTotal int64, completedTasks []int64) {
+	t.Helper()
+	var payloadBytes []byte
+	err := db.QueryRow(`SELECT payload FROM crdb_internal.system_jobs WHERE id = $1`, jobID).Scan(&payloadBytes)
+	require.NoError(t, err, "failed to query job payload")
+
+	payload := &jobspb.Payload{}
+	require.NoError(t, protoutil.Unmarshal(payloadBytes, payload), "failed to unmarshal job payload")
+
+	details := payload.Details.(*jobspb.Payload_NewSchemaChange).NewSchemaChange
+	if len(details.BackfillProgress) == 0 {
+		return 0, 0, nil
+	}
+	bp := details.BackfillProgress[0]
+	return bp.DistributedMergePhase, bp.MergeIterationTasksTotal, bp.MergeIterationCompletedTasks
 }
 
 // TestDistributedMergeResumePreservesProgress tests that spans completed during
@@ -1658,6 +1873,18 @@ func TestDistributedMergeResumePreservesProgress(t *testing.T) {
 
 				if tc.waitForCheckpoint {
 					waitForCheckpointPersisted(t, ctx, db, jobID, nil)
+
+					// Verify merge iteration progress is checkpointed before pause.
+					// After an iteration completes, task tracking fields are cleared.
+					phase, tasksTotal, completedTasks := getMergeIterationProgress(t, db, jobID)
+					require.Equal(t, int32(tc.pauseAfterIteration), phase,
+						"DistributedMergePhase should match pause iteration")
+					require.Equal(t, int64(0), tasksTotal,
+						"MergeIterationTasksTotal should be cleared after iteration completion")
+					require.Equal(t, 0, len(completedTasks),
+						"MergeIterationCompletedTasks should be cleared after iteration completion")
+					t.Logf("before pause: phase=%d, tasksTotal=%d, completedTasks=%v",
+						phase, tasksTotal, completedTasks)
 				}
 
 				// Pause the job while it's blocked in the hook.
@@ -1727,15 +1954,13 @@ func TestMergeSameSSTDuplicateDetection(t *testing.T) {
 			name:            "non-final iteration duplicate at start",
 			injectIteration: 1,
 			injectAfterRows: 0,
-			// TODO(156934): have this emit a duplicate key error instead.
-			expErrRegex: `pebble: keys must be added in strictly increasing order`,
+			expErrRegex:     `duplicate key:`,
 		},
 		{
 			name:            "non-final iteration duplicate after few rows",
 			injectIteration: 1,
 			injectAfterRows: 80,
-			// TODO(156934): have this emit a duplicate key error instead.
-			expErrRegex: `pebble: keys must be added in strictly increasing order`,
+			expErrRegex:     `duplicate key:`,
 		},
 		{
 			name:            "final iteration duplicate at start",
@@ -1912,22 +2137,11 @@ func TestKVWriteCrossSSTDuplicateDetection(t *testing.T) {
 
 			require.Error(t, err, "expected duplicate key error for cross-SST duplicates")
 
-			// Verify the error indicates a duplicate key violation.
-			errStr := err.Error()
-			require.True(t,
-				strings.Contains(errStr, "duplicate key value violates unique constraint"),
-				"expected error indicating duplicate key, got: %v", err)
-
-			// Verify that the error comes from ValidateForwardIndexes (which doesn't
-			// include the offending key detail) rather than from
-			// NewUniquenessConstraintViolationError (which includes
-			// "Key (...)=(...) already exists.").
-			// TODO(161447): this error comes from the validation step in CREATE INDEX,
-			// which is _after_ the distributed merge pipeline. As such, it doesn't
-			// indicate the offending key. We should enhance the duplicate detection to
-			// surface the error sooner in the merge process and have it emit what the
-			// offending key was.
-			require.NotRegexp(t, `Key \(.*\)=\(.*\) already exists`, errStr)
+			// Verify the error indicates a duplicate key violation with key details
+			// (e.g., "/Table/104/2/100/0" or "/Tenant/10/Table/104/2/100/0"). The error
+			// is now detected during the merge process and includes the offending key.
+			require.Regexp(t, `duplicate key: (/Tenant/\d+)?/Table/\d+/\d+/\d+`, err.Error(),
+				"expected error to include key details, got: %v", err)
 		})
 	}
 }

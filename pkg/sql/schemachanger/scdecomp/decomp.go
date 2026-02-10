@@ -890,11 +890,12 @@ func (w *walkCtx) walkTrigger(tbl catalog.TableDescriptor, t *descpb.TriggerDesc
 		TriggerID: t.ID,
 		Name:      t.Name,
 	})
-	w.ev(scpb.Status_PUBLIC, &scpb.TriggerEnabled{
-		TableID:   tbl.GetID(),
-		TriggerID: t.ID,
-		Enabled:   t.Enabled,
-	})
+	if t.Enabled {
+		w.ev(scpb.Status_PUBLIC, &scpb.TriggerEnabled{
+			TableID:   tbl.GetID(),
+			TriggerID: t.ID,
+		})
+	}
 	w.ev(scpb.Status_PUBLIC, &scpb.TriggerTiming{
 		TableID:    tbl.GetID(),
 		TriggerID:  t.ID,

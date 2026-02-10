@@ -317,7 +317,7 @@ func TestAllocateDescriptorRewrites(t *testing.T) {
 
 	t.Run("allocateDescriptorRewrite", func(t *testing.T) {
 		t.Run("succeeds on empty input", func(t *testing.T) {
-			rewrites, err := allocateDescriptorRewrites(
+			rewrites, _, err := allocateDescriptorRewrites(
 				ctx,
 				planner,
 				nil,
@@ -334,7 +334,7 @@ func TestAllocateDescriptorRewrites(t *testing.T) {
 			require.Equal(t, jobspb.DescRewriteMap{}, rewrites)
 		})
 		t.Run("allocates into existing db", func(t *testing.T) {
-			rewrites, err := allocateDescriptorRewrites(
+			rewrites, _, err := allocateDescriptorRewrites(
 				ctx,
 				planner,
 				map[descpb.ID]*dbdesc.Mutable{
@@ -392,7 +392,7 @@ func TestAllocateDescriptorRewrites(t *testing.T) {
 		})
 
 		t.Run("allocates into new db", func(t *testing.T) {
-			rewrites, err := allocateDescriptorRewrites(
+			rewrites, _, err := allocateDescriptorRewrites(
 				ctx,
 				planner,
 				map[descpb.ID]*dbdesc.Mutable{
@@ -460,7 +460,7 @@ func TestAllocateDescriptorRewrites(t *testing.T) {
 		})
 
 		t.Run("allocates functions into new db", func(t *testing.T) {
-			rewrites, err := allocateDescriptorRewrites(
+			rewrites, _, err := allocateDescriptorRewrites(
 				ctx,
 				planner,
 				map[descpb.ID]*dbdesc.Mutable{
@@ -504,7 +504,7 @@ func TestAllocateDescriptorRewrites(t *testing.T) {
 			// Get a new plan state after dropping the DB.
 			setupPlanner()
 
-			rewrites, err := allocateDescriptorRewrites(
+			rewrites, _, err := allocateDescriptorRewrites(
 				ctx,
 				planner,
 				map[descpb.ID]*dbdesc.Mutable{
@@ -618,7 +618,7 @@ func TestRestoreWithBackupIDs(t *testing.T) {
 	//				i.   t0 (0 rows)
 	//				ii.  t1 (1 row)
 	//				iii. t2 (2 rows)
-	//	b. Incremental backup @ t4
+	//		b. Incremental backup @ t4
 	//				i.   t3 (3 row)
 	//				ii.  t4 (4 rows)
 	{
@@ -824,12 +824,24 @@ func TestRestoreWithBackupIDs(t *testing.T) {
 			expectedErr: "not a revision history backup and cannot be used for AS OF SYSTEM TIME restores",
 		},
 		{
+			name:         "legacy/restore works on subdir",
+			collection:   classicColl,
+			token:        backupSubdirsByColl[classicColl][0],
+			expectedRows: 3,
+		},
+		{
+			name:         "legacy/LATEST resolves to legacy path",
+			collection:   classicColl,
+			token:        "LATEST",
+			expectedRows: 2,
+			disableIDs:   true,
+		},
+		{
 			name:         "legacy/AOST restore works on subdir",
 			collection:   classicColl,
 			token:        backupSubdirsByColl[classicColl][0],
 			aost:         classicTimes[2],
 			expectedRows: 2,
-			disableIDs:   true,
 		},
 		{
 			name:         "legacy/AOST restore works on LATEST",
@@ -838,12 +850,6 @@ func TestRestoreWithBackupIDs(t *testing.T) {
 			aost:         classicTimes[2],
 			expectedRows: 2,
 			disableIDs:   true,
-		},
-		{
-			name:        "subdir is not a valid backup ID",
-			collection:  classicColl,
-			token:       backupSubdirsByColl[classicColl][0],
-			expectedErr: "failed decoding backup ID",
 		},
 	}
 

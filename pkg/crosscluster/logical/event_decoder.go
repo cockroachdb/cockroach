@@ -10,6 +10,7 @@ import (
 	"sort"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdcevent"
+	"github.com/cockroachdb/cockroach/pkg/crosscluster/logical/sqlwriter"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/repstream/streampb"
@@ -79,12 +80,12 @@ func newEventDecoder(
 				return err
 			}
 
-			columns := getColumnSchema(descriptor)
+			columns := sqlwriter.GetColumnSchema(descriptor)
 			columnNames := make([]string, 0, len(columns))
 			columnTypes := make([]*types.T, 0, len(columns))
 			for _, column := range columns {
-				columnNames = append(columnNames, column.column.GetName())
-				columnTypes = append(columnTypes, column.column.GetType().Canonical())
+				columnNames = append(columnNames, column.Column.GetName())
+				columnTypes = append(columnTypes, column.Column.GetType().Canonical())
 			}
 
 			srcToDest[s.srcDesc.GetID()] = &destinationTable{

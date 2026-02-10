@@ -198,6 +198,12 @@ type Context struct {
 	// where each aggregate function struct grows its own memory account by
 	// tiny amount, yet the account reserves a lot more resulting in
 	// significantly overestimating the memory usage.
+	//
+	// Additionally, this memory account is touched by some aggregate builtins
+	// that store multiple datums in order to access the memory monitor this
+	// account is bound to.
+	//
+	// It **must** be bound to an unlimited memory monitor.
 	SingleDatumAggMemAccount *mon.BoundAccount
 
 	SQLLivenessReader sqlliveness.Reader
@@ -537,8 +543,13 @@ type fakePlannerWithMonitor struct {
 	monitor *mon.BytesMonitor
 }
 
-// Mon is part of the Planner interface.
-func (p *fakePlannerWithMonitor) Mon() *mon.BytesMonitor {
+// TxnMon is part of the Planner interface.
+func (p *fakePlannerWithMonitor) TxnMon() *mon.BytesMonitor {
+	return p.monitor
+}
+
+// ExecMon is part of the Planner interface.
+func (p *fakePlannerWithMonitor) ExecMon() *mon.BytesMonitor {
 	return p.monitor
 }
 
@@ -1042,4 +1053,23 @@ type StreamIngestManager interface {
 		tenantName roachpb.TenantName,
 		revertTo hlc.Timestamp,
 	) error
+}
+
+// triggerDepthKey is the context key for storing the current trigger nesting
+// depth. This is used by pg_trigger_depth() and for enforcing recursion limits.
+type triggerDepthKey struct{}
+
+// GetTriggerDepth returns the current trigger nesting depth from the context.
+// Returns 0 if not currently executing within a trigger.
+func GetTriggerDepth(ctx context.Context) int {
+	if v := ctx.Value(triggerDepthKey{}); v != nil {
+		return v.(int)
+	}
+	return 0
+}
+
+// ContextWithIncrementedTriggerDepth returns a new context with the trigger
+// depth incremented by 1.
+func ContextWithIncrementedTriggerDepth(ctx context.Context) context.Context {
+	return context.WithValue(ctx, triggerDepthKey{}, GetTriggerDepth(ctx)+1)
 }

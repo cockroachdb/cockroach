@@ -485,9 +485,9 @@ type PlanningCtx struct {
 	// path it will get called.
 	onFlowCleanup []func()
 
-	// OverridePlannerMon, if set, will be used instead of the Planner.Mon() as
-	// the parent monitor for the DistSQL flow.
-	OverridePlannerMon *mon.BytesMonitor
+	// OverridePlannerExecMon, if set, will be used instead of the
+	// Planner.ExecMon() as the parent monitor for the DistSQL flow.
+	OverridePlannerExecMon *mon.BytesMonitor
 }
 
 var _ physicalplan.ExprContext = &PlanningCtx{}
@@ -3575,6 +3575,14 @@ func (dsp *DistSQLPlanner) planJoiners(
 	return p
 }
 
+type noopMetadataForwarder struct{}
+
+var _ metadataForwarder = &noopMetadataForwarder{}
+
+func (n noopMetadataForwarder) forwardMetadata(*execinfrapb.ProducerMetadata) {}
+
+var singletonNoopMetadataForwarder = &noopMetadataForwarder{}
+
 // createPhysPlan creates a PhysicalPlan as well as returns a non-nil cleanup
 // function that must be called after the flow has been cleaned up.
 func (dsp *DistSQLPlanner) createPhysPlan(
@@ -3584,6 +3592,22 @@ func (dsp *DistSQLPlanner) createPhysPlan(
 		// Note that planCtx.getCleanupFunc() is already set in
 		// plan.physPlan.onClose, so here we return a noop cleanup function.
 		return plan.physPlan.PhysicalPlan, func() {}, nil
+	}
+	// If we happen to evaluate an expression with a routine during the physical
+	// planning, we haven't yet set the metadata forwarder (we do that later,
+	// during the flow setup). So to prevent expected nil pointer internal
+	// errors we set a noop forwarder and then unset it once the physical
+	// planning is done.
+	//
+	// The only exception is if we're running parallel CHECKs, we'll avoid
+	// mutating the planner (since it's shared between goroutines) - similar to
+	// what we do in DistSQLPlanner.Run. (We can't have routines in post-query
+	// CHECKs since only FK and UNIQUE checks are run in parallel.)
+	if planCtx.flowConcurrency&distsql.ConcurrencyParallelChecks == 0 {
+		planCtx.planner.routineMetadataForwarder = singletonNoopMetadataForwarder
+		defer func() {
+			planCtx.planner.routineMetadataForwarder = nil
+		}()
 	}
 	physPlan, err = dsp.createPhysPlanForPlanNode(ctx, planCtx, plan.planNode)
 	return physPlan, planCtx.getCleanupFunc(), err

@@ -3,9 +3,12 @@
 // Use of this software is governed by the CockroachDB Software License
 // included in the /LICENSE file.
 
-package colexec
+package colexecbuiltins
 
 import (
+	"hash"
+	"hash/fnv"
+
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/sql/colconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecutils"
@@ -129,26 +132,25 @@ func NewBuiltinFunctionOperator(
 		return newSubstringOperator(
 			allocator, columnTypes, argumentCols, outputIdx, input,
 		), nil
-	case tree.CrdbInternalRangeStats:
+	case tree.CrdbInternalRangeStats, tree.CrdbInternalRangeStatsWithErrors:
 		if len(argumentCols) != 1 {
 			return nil, errors.AssertionFailedf(
 				"expected 1 input column to crdb_internal.range_stats, got %d",
 				len(argumentCols),
 			)
 		}
+		withErrors := overload.SpecializedVecBuiltin == tree.CrdbInternalRangeStatsWithErrors
 		return newRangeStatsOperator(
-			evalCtx.RangeStatsFetcher, allocator, argumentCols[0], outputIdx, input, false, /* withErrors */
-		)
-	case tree.CrdbInternalRangeStatsWithErrors:
-		if len(argumentCols) != 1 {
-			return nil, errors.AssertionFailedf(
-				"expected 1 input column to crdb_internal.range_stats, got %d",
-				len(argumentCols),
-			)
+			evalCtx.RangeStatsFetcher, allocator, argumentCols[0], outputIdx, input, withErrors,
+		), nil
+	case tree.FNV64, tree.FNV64a:
+		var hash hash.Hash64
+		if overload.SpecializedVecBuiltin == tree.FNV64 {
+			hash = fnv.New64()
+		} else {
+			hash = fnv.New64a()
 		}
-		return newRangeStatsOperator(
-			evalCtx.RangeStatsFetcher, allocator, argumentCols[0], outputIdx, input, true, /* withErrors */
-		)
+		return newFNV64Op(argumentCols, outputIdx, input, hash), nil
 	default:
 		return &defaultBuiltinFuncOperator{
 			OneInputHelper:      colexecop.MakeOneInputHelper(input),

@@ -31,9 +31,16 @@ type parquetConversionFunc func(value any, targetType *types.T, metadata *parque
 
 // parquetColumnMetadata caches immutable schema information for a column.
 // This is populated once when the file is opened and reused across all batches.
+//
+// The converter is stored per-column rather than at the file level because while
+// most Parquet files use consistent type annotations (all LogicalType or all
+// ConvertedType) across columns, the Parquet specification allows mixing annotation
+// types within a single file. Storing the converter per-column handles this edge case
+// without requiring file-level validation of annotation consistency.
 type parquetColumnMetadata struct {
 	logicalType   schema.LogicalType
 	convertedType schema.ConvertedType
+	converter     parquetConversionFunc // Pre-determined conversion strategy
 }
 
 // Helper functions for common Parquet type conversions.

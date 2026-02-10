@@ -189,6 +189,10 @@ func makeImmutableTypeLookupFunc(
 		mc.UpsertDescriptor(desc)
 	}
 	immutableLookupFunc := func(ctx context.Context, id descpb.ID, skipHydration bool) (catalog.Descriptor, error) {
+		witoutDropped := true
+		if !flags.layerFilters.withoutLeased {
+			witoutDropped = false
+		}
 		f := getterFlags{
 			layerFilters: layerFilters{
 				withoutSynthetic: true,
@@ -196,7 +200,7 @@ func makeImmutableTypeLookupFunc(
 				withoutHydration: skipHydration,
 			},
 			descFilters: descFilters{
-				withoutDropped: true,
+				withoutDropped: witoutDropped,
 				// For hydration, we will allow offline descriptors for lookups
 				// of type descriptors. A descriptor can be offline either due to:
 				// 1) IMPORT in which case we are looking at an implicit record type
@@ -210,6 +214,27 @@ func makeImmutableTypeLookupFunc(
 		desc, err := g.Desc(ctx, id)
 		if err != nil {
 			return nil, err
+		}
+		// If the descriptor is dropped, and we are using leased descriptors,
+		// then check if its valid against our lease timestamp. If our lease timestamp is
+		// before the drop, force a retry error, which should cause us to see a
+		// newer version of the dependent object.
+		// Note: This is a special case because type hydration cannot tolerate
+		// dropped descriptors. This already could occur by leasing any schema
+		// with type references that are being dropped.
+		if !witoutDropped && !flags.layerFilters.withoutLeased && desc.Dropped() {
+			if tc.leased.leaseTimestampSet &&
+				tc.leased.leaseTimestamp.GetTimestamp().Less(desc.GetModificationTime()) {
+				return nil, &retryOnModifiedDescriptor{
+					descID:        desc.GetID(),
+					descName:      desc.GetName(),
+					expiration:    desc.GetModificationTime(),
+					readTimestamp: txn.ReadTimestamp(),
+					// Force a retry, so that the txn epoch gets bumped for us.
+					forcedErr: txn.GenerateForcedRetryableErr(ctx, "forcing txn to retry due to dropped type descriptor"),
+				}
+			}
+			return nil, catalog.FilterDroppedDescriptor(desc)
 		}
 		// Sanity: If offline descriptors were asked to be ignored, then we should
 		// only observe ones caused by IMPORT.

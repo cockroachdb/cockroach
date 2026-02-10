@@ -291,6 +291,12 @@ type BackfillProgress struct {
 	// N (N >= 1) = merge iteration N completed.
 	// See jobspb.BackfillProgress.DistributedMergePhase for full semantics.
 	DistributedMergePhase int32
+
+	// MergeIterationTasksTotal is the total number of tasks in current iteration.
+	MergeIterationTasksTotal int64
+
+	// MergeIterationCompletedTasks contains IDs of completed tasks for resumability.
+	MergeIterationCompletedTasks []int64
 }
 
 // Backfill corresponds to a definition of a backfill from a source

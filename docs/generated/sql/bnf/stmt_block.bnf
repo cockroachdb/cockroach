@@ -3868,6 +3868,12 @@ alter_table_cmd ::=
 	| 'SET' '(' storage_parameter_list ')'
 	| 'RESET' '(' storage_parameter_key_list ')'
 	| table_rls_mode 'ROW' 'LEVEL' 'SECURITY'
+	| 'ENABLE' 'TRIGGER' name
+	| 'ENABLE' 'TRIGGER' 'ALL'
+	| 'ENABLE' 'TRIGGER' 'USER'
+	| 'DISABLE' 'TRIGGER' name
+	| 'DISABLE' 'TRIGGER' 'ALL'
+	| 'DISABLE' 'TRIGGER' 'USER'
 
 var_set_list ::=
 	( var_name '=' 'COPY' 'FROM' 'PARENT' | var_name '=' var_value ) ( ( ',' var_name '=' var_value | ',' var_name '=' 'COPY' 'FROM' 'PARENT' ) )*

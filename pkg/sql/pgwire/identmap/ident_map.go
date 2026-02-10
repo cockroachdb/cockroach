@@ -164,6 +164,61 @@ func (c *Conf) Map(mapName, systemIdentity string) ([]username.SQLUsername, bool
 	return names, true, nil
 }
 
+// IdentityMapping represents a system identity mapped to a database user
+type IdentityMapping struct {
+	SystemIdentity string               // The external identity (e.g., "SAN:DNS:example.com")
+	MappedUser     username.SQLUsername // The database user it maps to
+}
+
+// MapMultiple maps multiple system identities (e.g., multiple SANs) to database users.
+// It returns the association between each identity and its mapped user(s).
+// This allows callers to determine which specific identity was successfully mapped.
+// The mapping is done in order of the system identities provided, if there are rules
+// which generate identical mappings, only the first one will be returned,
+// the returned list will be deduplicated, preferring the first instance.
+// A boolean will be returned which indicates if there are any rows that
+// correspond to the given mapName.
+// The function implementation is very similar to Map,
+// primarily implemented for SAN but will slowly transition
+// to replace the Map function itself.
+func (c *Conf) MapMultiple(
+	mapName string, systemIdentities []string,
+) ([]IdentityMapping, bool, error) {
+	if c.data == nil {
+		return nil, false, nil
+	}
+	elts := c.data[mapName]
+	if elts == nil {
+		return nil, false, nil
+	}
+
+	var mappings []IdentityMapping
+	seen := make(map[string]bool)
+
+	for _, sysID := range systemIdentities {
+		for _, elt := range elts {
+			if n := elt.substitute(sysID); n != "" {
+				// We're returning this as a for-validation username since a
+				// pattern-based mapping could still result in invalid characters
+				// being incorporated into the input.
+				u, err := username.MakeSQLUsernameFromUserInput(n, username.PurposeValidation)
+				if err != nil {
+					return nil, true, err
+				}
+				normalized := u.Normalized()
+				if !seen[normalized] {
+					mappings = append(mappings, IdentityMapping{
+						SystemIdentity: sysID,
+						MappedUser:     u,
+					})
+					seen[normalized] = true
+				}
+			}
+		}
+	}
+	return mappings, true, nil
+}
+
 func (c *Conf) String() string {
 	if len(c.data) == 0 {
 		return "# (empty configuration)"

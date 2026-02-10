@@ -9,9 +9,9 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/cockroachdb/cockroach/pkg/crosscluster/logical/sqlwriter"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
-	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
@@ -20,23 +20,14 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
-	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
-	"github.com/cockroachdb/cockroach/pkg/util/metamorphic"
 	"github.com/cockroachdb/errors"
-)
-
-var useSwapMutations = settings.RegisterBoolSetting(
-	settings.ApplicationLevel,
-	"logical_replication.consumer.use_swap_mutations.enabled",
-	"determines whether the consumer uses swap mutations for update and delete operations",
-	metamorphic.ConstantWithTestBool("logical_replication.consumer.use_swap_mutations.enabled", true),
 )
 
 // tableHandler applies batches of replication events that are destined for a
 // sinlgle table.
 type tableHandler struct {
-	sqlReader        sqlRowReader
-	sqlWriter        *sqlRowWriter
+	sqlReader        sqlwriter.RowReader
+	sqlWriter        *sqlwriter.RowWriter
 	session          isql.Session
 	db               descs.DB
 	tombstoneUpdater *tombstoneUpdater
@@ -85,18 +76,6 @@ func (t *tableBatchStats) AddTo(bs *batchStats) {
 	}
 }
 
-func tableHandlerSessionSettings(
-	sd *sessiondata.SessionData, settings *cluster.Settings,
-) *sessiondata.SessionData {
-	sd = sd.Clone()
-	sd.PlanCacheMode = sessiondatapb.PlanCacheModeForceGeneric
-	sd.VectorizeMode = sessiondatapb.VectorizeOff
-	sd.UseSwapMutations = useSwapMutations.Get(&settings.SV)
-	sd.BufferedWritesEnabled = false
-	sd.OriginIDForLogicalDataReplication = 1
-	return sd
-}
-
 // newTableHandler creates a new tableHandler for the given table descriptor ID.
 // It internally constructs the sqlReader and sqlWriter components.
 func newTableHandler(
@@ -110,8 +89,7 @@ func newTableHandler(
 	settings *cluster.Settings,
 ) (_ *tableHandler, err error) {
 	var table catalog.TableDescriptor
-	sd = tableHandlerSessionSettings(sd, settings)
-	session, err := db.Session(ctx, "logical-data-replication", isql.WithSessionData(sd))
+	session, err := sqlwriter.NewInternalSession(ctx, db, sd, settings)
 	if err != nil {
 		return nil, err
 	}
@@ -138,12 +116,12 @@ func newTableHandler(
 	sessionOverride := ieOverrideBase
 	sessionOverride.ApplicationName = fmt.Sprintf("%s-logical-replication-%d", sd.ApplicationName, jobID)
 
-	reader, err := newSQLRowReader(ctx, table, session)
+	reader, err := sqlwriter.NewRowReader(ctx, table, session)
 	if err != nil {
 		return nil, err
 	}
 
-	writer, err := newSQLRowWriter(ctx, table, session)
+	writer, err := sqlwriter.NewRowWriter(ctx, table, session)
 	if err != nil {
 		return nil, err
 	}
@@ -192,8 +170,7 @@ func (t *tableHandler) attemptBatch(
 	var stats tableBatchStats
 
 	var hasTombstoneUpdates bool
-	session := t.sqlWriter.session
-	err := session.Txn(ctx, func(ctx context.Context) error {
+	err := t.session.Txn(ctx, func(ctx context.Context) error {
 		for _, event := range batch {
 			switch {
 			case event.isDelete && len(event.prevRow) != 0:
@@ -207,7 +184,7 @@ func (t *tableHandler) attemptBatch(
 				// Skip: handled in its own transaction.
 			case event.prevRow == nil:
 				stats.inserts++
-				err := session.Savepoint(ctx, func(ctx context.Context) error {
+				err := t.session.Savepoint(ctx, func(ctx context.Context) error {
 					return t.sqlWriter.InsertRow(ctx, event.originTimestamp, event.row)
 				})
 				if isLwwLoser(err) {
@@ -283,7 +260,7 @@ func (t *tableHandler) refreshPrevRows(
 	for i, event := range batch {
 		var prevRow tree.Datums
 		if refreshed, found := refreshedRows[i]; found {
-			if !refreshed.logicalTimestamp.Less(event.originTimestamp) {
+			if !refreshed.LogicalTimestamp.Less(event.originTimestamp) {
 				// TODO(jeffswenson): update this logic when its time to handle
 				// ties.
 				// Skip the row because it is a lww loser. Note: we can only identify LWW
@@ -295,7 +272,7 @@ func (t *tableHandler) refreshPrevRows(
 				stats.refreshLwwLosers++
 				continue
 			}
-			prevRow = refreshed.row
+			prevRow = refreshed.Row
 		}
 		refreshedEvent := decodedEvent{
 			dstDescID:       event.dstDescID,

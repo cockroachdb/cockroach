@@ -2955,17 +2955,16 @@ func columnBackfillInTxn(
 	if tableDesc.Adding() {
 		return nil
 	}
-	var columnBackfillerMon *mon.BytesMonitor
-	if evalCtx.Planner.Mon() != nil {
-		columnBackfillerMon = execinfra.NewMonitor(ctx, evalCtx.Planner.Mon(),
-			mon.MakeName("local-column-backfill-mon"))
-	}
+	columnBackfillerMon := execinfra.NewMonitor(
+		ctx, evalCtx.Planner.TxnMon(), mon.MakeName("local-column-backfill-mon"),
+	)
 
 	rowMetrics := execCfg.GetRowMetrics(evalCtx.SessionData().Internal)
 	var backfiller backfill.ColumnBackfiller
 	if err := backfiller.InitForLocalUse(
 		ctx, txn, evalCtx, semaCtx, tableDesc, columnBackfillerMon, rowMetrics, traceKV,
 	); err != nil {
+		columnBackfillerMon.Stop(ctx)
 		return err
 	}
 	defer backfiller.Close(ctx)
@@ -3000,7 +2999,7 @@ func indexBackfillInTxn(
 	traceKV bool,
 ) error {
 	indexBackfillerMon := execinfra.NewMonitor(
-		ctx, evalCtx.Planner.Mon(), mon.MakeName("local-index-backfill-mon"),
+		ctx, evalCtx.Planner.TxnMon(), mon.MakeName("local-index-backfill-mon"),
 	)
 
 	var backfiller backfill.IndexBackfiller

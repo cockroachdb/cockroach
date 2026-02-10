@@ -413,3 +413,335 @@ func TestParquetColumnBatchRealFiles(t *testing.T) {
 		})
 	}
 }
+
+// TestParquetColumnBatchGetValueAt tests the GetValueAt method for all physical types
+func TestParquetColumnBatchGetValueAt(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	testCases := []struct {
+		name         string
+		arrowType    arrow.DataType
+		parquetType  parquet.Type
+		buildValues  func(*array.RecordBuilder)
+		validateFunc func(*testing.T, *parquetColumnBatch)
+	}{
+		{
+			name:        "Boolean",
+			arrowType:   arrow.FixedWidthTypes.Boolean,
+			parquetType: parquet.Types.Boolean,
+			buildValues: func(builder *array.RecordBuilder) {
+				b := builder.Field(0).(*array.BooleanBuilder)
+				b.Append(true)
+				b.AppendNull()
+				b.Append(false)
+			},
+			validateFunc: func(t *testing.T, batch *parquetColumnBatch) {
+				// Row 0: true
+				val, isNull, err := batch.GetValueAt(0)
+				require.NoError(t, err)
+				require.False(t, isNull)
+				require.Equal(t, true, val)
+
+				// Row 1: NULL
+				val, isNull, err = batch.GetValueAt(1)
+				require.NoError(t, err)
+				require.True(t, isNull)
+				require.Nil(t, val)
+
+				// Row 2: false
+				val, isNull, err = batch.GetValueAt(2)
+				require.NoError(t, err)
+				require.False(t, isNull)
+				require.Equal(t, false, val)
+			},
+		},
+		{
+			name:        "Int32",
+			arrowType:   arrow.PrimitiveTypes.Int32,
+			parquetType: parquet.Types.Int32,
+			buildValues: func(builder *array.RecordBuilder) {
+				b := builder.Field(0).(*array.Int32Builder)
+				b.Append(42)
+				b.AppendNull()
+				b.Append(-100)
+			},
+			validateFunc: func(t *testing.T, batch *parquetColumnBatch) {
+				val, isNull, err := batch.GetValueAt(0)
+				require.NoError(t, err)
+				require.False(t, isNull)
+				require.Equal(t, int32(42), val)
+
+				val, isNull, err = batch.GetValueAt(1)
+				require.NoError(t, err)
+				require.True(t, isNull)
+				require.Nil(t, val)
+
+				val, isNull, err = batch.GetValueAt(2)
+				require.NoError(t, err)
+				require.False(t, isNull)
+				require.Equal(t, int32(-100), val)
+			},
+		},
+		{
+			name:        "Int64",
+			arrowType:   arrow.PrimitiveTypes.Int64,
+			parquetType: parquet.Types.Int64,
+			buildValues: func(builder *array.RecordBuilder) {
+				b := builder.Field(0).(*array.Int64Builder)
+				b.Append(9223372036854775807)
+				b.Append(-9223372036854775808)
+				b.AppendNull()
+			},
+			validateFunc: func(t *testing.T, batch *parquetColumnBatch) {
+				val, isNull, err := batch.GetValueAt(0)
+				require.NoError(t, err)
+				require.False(t, isNull)
+				require.Equal(t, int64(9223372036854775807), val)
+
+				val, isNull, err = batch.GetValueAt(1)
+				require.NoError(t, err)
+				require.False(t, isNull)
+				require.Equal(t, int64(-9223372036854775808), val)
+
+				val, isNull, err = batch.GetValueAt(2)
+				require.NoError(t, err)
+				require.True(t, isNull)
+				require.Nil(t, val)
+			},
+		},
+		{
+			name:        "Float",
+			arrowType:   arrow.PrimitiveTypes.Float32,
+			parquetType: parquet.Types.Float,
+			buildValues: func(builder *array.RecordBuilder) {
+				b := builder.Field(0).(*array.Float32Builder)
+				b.Append(3.14)
+				b.AppendNull()
+				b.Append(-2.71)
+			},
+			validateFunc: func(t *testing.T, batch *parquetColumnBatch) {
+				val, isNull, err := batch.GetValueAt(0)
+				require.NoError(t, err)
+				require.False(t, isNull)
+				require.InDelta(t, 3.14, val.(float32), 0.01)
+
+				val, isNull, err = batch.GetValueAt(1)
+				require.NoError(t, err)
+				require.True(t, isNull)
+				require.Nil(t, val)
+
+				val, isNull, err = batch.GetValueAt(2)
+				require.NoError(t, err)
+				require.False(t, isNull)
+				require.InDelta(t, -2.71, val.(float32), 0.01)
+			},
+		},
+		{
+			name:        "Double",
+			arrowType:   arrow.PrimitiveTypes.Float64,
+			parquetType: parquet.Types.Double,
+			buildValues: func(builder *array.RecordBuilder) {
+				b := builder.Field(0).(*array.Float64Builder)
+				b.Append(3.141592653589793)
+				b.AppendNull()
+				b.Append(-2.718281828459045)
+			},
+			validateFunc: func(t *testing.T, batch *parquetColumnBatch) {
+				val, isNull, err := batch.GetValueAt(0)
+				require.NoError(t, err)
+				require.False(t, isNull)
+				require.InDelta(t, 3.141592653589793, val.(float64), 1e-10)
+
+				val, isNull, err = batch.GetValueAt(1)
+				require.NoError(t, err)
+				require.True(t, isNull)
+				require.Nil(t, val)
+
+				val, isNull, err = batch.GetValueAt(2)
+				require.NoError(t, err)
+				require.False(t, isNull)
+				require.InDelta(t, -2.718281828459045, val.(float64), 1e-10)
+			},
+		},
+		{
+			name:        "ByteArray",
+			arrowType:   arrow.BinaryTypes.String,
+			parquetType: parquet.Types.ByteArray,
+			buildValues: func(builder *array.RecordBuilder) {
+				b := builder.Field(0).(*array.StringBuilder)
+				b.Append("hello")
+				b.AppendNull()
+				b.Append("world")
+			},
+			validateFunc: func(t *testing.T, batch *parquetColumnBatch) {
+				val, isNull, err := batch.GetValueAt(0)
+				require.NoError(t, err)
+				require.False(t, isNull)
+				require.Equal(t, []byte("hello"), val)
+
+				val, isNull, err = batch.GetValueAt(1)
+				require.NoError(t, err)
+				require.True(t, isNull)
+				require.Nil(t, val)
+
+				val, isNull, err = batch.GetValueAt(2)
+				require.NoError(t, err)
+				require.False(t, isNull)
+				require.Equal(t, []byte("world"), val)
+			},
+		},
+		{
+			name:        "FixedLenByteArray",
+			arrowType:   &arrow.FixedSizeBinaryType{ByteWidth: 4},
+			parquetType: parquet.Types.FixedLenByteArray,
+			buildValues: func(builder *array.RecordBuilder) {
+				b := builder.Field(0).(*array.FixedSizeBinaryBuilder)
+				b.Append([]byte{0x01, 0x02, 0x03, 0x04})
+				b.AppendNull()
+				b.Append([]byte{0xFF, 0xFE, 0xFD, 0xFC})
+			},
+			validateFunc: func(t *testing.T, batch *parquetColumnBatch) {
+				val, isNull, err := batch.GetValueAt(0)
+				require.NoError(t, err)
+				require.False(t, isNull)
+				require.Equal(t, parquet.FixedLenByteArray{0x01, 0x02, 0x03, 0x04}, val)
+
+				val, isNull, err = batch.GetValueAt(1)
+				require.NoError(t, err)
+				require.True(t, isNull)
+				require.Nil(t, val)
+
+				val, isNull, err = batch.GetValueAt(2)
+				require.NoError(t, err)
+				require.False(t, isNull)
+				require.Equal(t, parquet.FixedLenByteArray{0xFF, 0xFE, 0xFD, 0xFC}, val)
+			},
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			// Create a minimal Parquet file with one column
+			schema := arrow.NewSchema(
+				[]arrow.Field{{Name: "col", Type: tc.arrowType, Nullable: true}},
+				nil,
+			)
+
+			var buf bytes.Buffer
+			writer, err := pqarrow.NewFileWriter(
+				schema,
+				&buf,
+				parquet.NewWriterProperties(parquet.WithCompression(compress.Codecs.Uncompressed)),
+				pqarrow.DefaultWriterProps(),
+			)
+			require.NoError(t, err)
+
+			recordBuilder := array.NewRecordBuilder(memory.DefaultAllocator, schema)
+			tc.buildValues(recordBuilder)
+			record := recordBuilder.NewRecord()
+			defer record.Release()
+
+			err = writer.Write(record)
+			require.NoError(t, err)
+
+			err = writer.Close()
+			require.NoError(t, err)
+
+			// Read the file and extract the batch
+			reader, err := file.NewParquetReader(bytes.NewReader(buf.Bytes()))
+			require.NoError(t, err)
+			defer func() { _ = reader.Close() }()
+
+			rowGroup := reader.RowGroup(0)
+			colReader, err := rowGroup.Column(0)
+			require.NoError(t, err)
+
+			buffers := newParquetBatchBuffers(record.NumRows())
+			batch, err := newParquetColumnBatch(colReader, buffers, record.NumRows())
+			require.NoError(t, err)
+
+			err = batch.Read()
+			require.NoError(t, err)
+
+			// Validate values using the test-specific function
+			tc.validateFunc(t, batch)
+		})
+	}
+}
+
+// TestParquetColumnBatchGetValueAtBoundsChecking tests bounds checking in GetValueAt
+func TestParquetColumnBatchGetValueAtBoundsChecking(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	// Create a simple Parquet file with 3 rows
+	schema := arrow.NewSchema(
+		[]arrow.Field{{Name: "col", Type: arrow.PrimitiveTypes.Int32, Nullable: true}},
+		nil,
+	)
+
+	var buf bytes.Buffer
+	writer, err := pqarrow.NewFileWriter(
+		schema,
+		&buf,
+		parquet.NewWriterProperties(parquet.WithCompression(compress.Codecs.Uncompressed)),
+		pqarrow.DefaultWriterProps(),
+	)
+	require.NoError(t, err)
+
+	recordBuilder := array.NewRecordBuilder(memory.DefaultAllocator, schema)
+	b := recordBuilder.Field(0).(*array.Int32Builder)
+	b.Append(1)
+	b.Append(2)
+	b.Append(3)
+	record := recordBuilder.NewRecord()
+	defer record.Release()
+
+	err = writer.Write(record)
+	require.NoError(t, err)
+
+	err = writer.Close()
+	require.NoError(t, err)
+
+	// Read the file
+	reader, err := file.NewParquetReader(bytes.NewReader(buf.Bytes()))
+	require.NoError(t, err)
+	defer func() { _ = reader.Close() }()
+
+	rowGroup := reader.RowGroup(0)
+	colReader, err := rowGroup.Column(0)
+	require.NoError(t, err)
+
+	buffers := newParquetBatchBuffers(record.NumRows())
+	batch, err := newParquetColumnBatch(colReader, buffers, record.NumRows())
+	require.NoError(t, err)
+
+	err = batch.Read()
+	require.NoError(t, err)
+
+	// Test valid indices
+	_, _, err = batch.GetValueAt(0)
+	require.NoError(t, err)
+
+	_, _, err = batch.GetValueAt(1)
+	require.NoError(t, err)
+
+	_, _, err = batch.GetValueAt(2)
+	require.NoError(t, err)
+
+	// Test negative index
+	_, _, err = batch.GetValueAt(-1)
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "out of bounds")
+
+	// Test index at boundary (should fail)
+	_, _, err = batch.GetValueAt(3)
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "out of bounds")
+
+	// Test index beyond boundary
+	_, _, err = batch.GetValueAt(100)
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "out of bounds")
+}

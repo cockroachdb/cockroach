@@ -1395,11 +1395,13 @@ var regularBuiltins = map[string]builtinDefinition{
 	"fnv64": hash64Builtin(
 		func() hash.Hash64 { return fnv.New64() },
 		"Calculates the 64-bit FNV-1 hash value of a set of values.",
+		tree.FNV64,
 	),
 
 	"fnv64a": hash64Builtin(
 		func() hash.Hash64 { return fnv.New64a() },
 		"Calculates the 64-bit FNV-1a hash value of a set of values.",
+		tree.FNV64a,
 	),
 
 	"crc32ieee": hash32Builtin(
@@ -3711,7 +3713,10 @@ value if you rely on the HLC for accuracy.`,
 				if args[0] == tree.DNull || args[1] == tree.DNull {
 					return tree.DNull, nil
 				}
-				arr := tree.MustBeDArray(args[0])
+				arr, err := checkIfDArrayErrOnDString(args[0])
+				if err != nil {
+					return nil, err
+				}
 				delim := string(tree.MustBeDString(args[1]))
 				return arrayToString(evalCtx, arr, delim, nil)
 			},
@@ -3726,7 +3731,10 @@ value if you rely on the HLC for accuracy.`,
 				if args[0] == tree.DNull || args[1] == tree.DNull {
 					return tree.DNull, nil
 				}
-				arr := tree.MustBeDArray(args[0])
+				arr, err := checkIfDArrayErrOnDString(args[0])
+				if err != nil {
+					return nil, err
+				}
 				delim := string(tree.MustBeDString(args[1]))
 				nullStr := stringOrNil(args[2])
 				return arrayToString(evalCtx, arr, delim, nullStr)
@@ -3742,7 +3750,10 @@ value if you rely on the HLC for accuracy.`,
 			Types:      tree.ParamTypes{{Name: "input", Typ: types.AnyArray}, {Name: "array_dimension", Typ: types.Int}},
 			ReturnType: tree.FixedReturnType(types.Int),
 			Fn: func(_ context.Context, _ *eval.Context, args tree.Datums) (tree.Datum, error) {
-				arr := tree.MustBeDArray(args[0])
+				arr, err := checkIfDArrayErrOnDString(args[0])
+				if err != nil {
+					return nil, err
+				}
 				dimen := int64(tree.MustBeDInt(args[1]))
 				return arrayLength(arr, dimen), nil
 			},
@@ -3758,7 +3769,10 @@ value if you rely on the HLC for accuracy.`,
 			Types:      tree.ParamTypes{{Name: "input", Typ: types.AnyArray}},
 			ReturnType: tree.FixedReturnType(types.Int),
 			Fn: func(_ context.Context, _ *eval.Context, args tree.Datums) (tree.Datum, error) {
-				arr := tree.MustBeDArray(args[0])
+				arr, err := checkIfDArrayErrOnDString(args[0])
+				if err != nil {
+					return nil, err
+				}
 				return cardinality(arr), nil
 			},
 			Info:       "Calculates the number of elements contained in `input`",
@@ -3771,7 +3785,10 @@ value if you rely on the HLC for accuracy.`,
 			Types:      tree.ParamTypes{{Name: "input", Typ: types.AnyArray}, {Name: "array_dimension", Typ: types.Int}},
 			ReturnType: tree.FixedReturnType(types.Int),
 			Fn: func(_ context.Context, _ *eval.Context, args tree.Datums) (tree.Datum, error) {
-				arr := tree.MustBeDArray(args[0])
+				arr, err := checkIfDArrayErrOnDString(args[0])
+				if err != nil {
+					return nil, err
+				}
 				dimen := int64(tree.MustBeDInt(args[1]))
 				return arrayLower(arr, dimen), nil
 			},
@@ -3787,7 +3804,10 @@ value if you rely on the HLC for accuracy.`,
 			Types:      tree.ParamTypes{{Name: "input", Typ: types.AnyArray}, {Name: "array_dimension", Typ: types.Int}},
 			ReturnType: tree.FixedReturnType(types.Int),
 			Fn: func(_ context.Context, _ *eval.Context, args tree.Datums) (tree.Datum, error) {
-				arr := tree.MustBeDArray(args[0])
+				arr, err := checkIfDArrayErrOnDString(args[0])
+				if err != nil {
+					return nil, err
+				}
 				dimen := int64(tree.MustBeDInt(args[1]))
 				return arrayLength(arr, dimen), nil
 			},
@@ -5599,7 +5619,10 @@ DO NOT USE -- USE 'CREATE VIRTUAL CLUSTER' INSTEAD`,
 	),
 
 	"crdb_internal.encode_key": makeBuiltin(
-		tree.FunctionProperties{Category: builtinconstants.CategorySystemInfo},
+		tree.FunctionProperties{
+			Category:         builtinconstants.CategorySystemInfo,
+			DistsqlBlocklist: true,
+		},
 		tree.Overload{
 			Types: tree.ParamTypes{
 				{Name: "table_id", Typ: types.Int},
@@ -11181,11 +11204,14 @@ func hash32Builtin(newHash func() hash.Hash32, info string) builtinDefinition {
 	)
 }
 
-func hash64Builtin(newHash func() hash.Hash64, info string) builtinDefinition {
+func hash64Builtin(
+	newHash func() hash.Hash64, info string, vecBuiltin tree.SpecializedVectorizedBuiltin,
+) builtinDefinition {
 	return makeBuiltin(defProps(),
 		tree.Overload{
-			Types:      tree.VariadicType{VarType: types.String},
-			ReturnType: tree.FixedReturnType(types.Int),
+			Types:                 tree.VariadicType{VarType: types.String},
+			SpecializedVecBuiltin: vecBuiltin,
+			ReturnType:            tree.FixedReturnType(types.Int),
 			Fn: func(_ context.Context, _ *eval.Context, args tree.Datums) (tree.Datum, error) {
 				h := newHash()
 				if ok, err := feedHash(h, args); !ok || err != nil {
@@ -11198,8 +11224,9 @@ func hash64Builtin(newHash func() hash.Hash64, info string) builtinDefinition {
 			CalledOnNullInput: true,
 		},
 		tree.Overload{
-			Types:      tree.VariadicType{VarType: types.Bytes},
-			ReturnType: tree.FixedReturnType(types.Int),
+			Types:                 tree.VariadicType{VarType: types.Bytes},
+			SpecializedVecBuiltin: vecBuiltin,
+			ReturnType:            tree.FixedReturnType(types.Int),
 			Fn: func(_ context.Context, _ *eval.Context, args tree.Datums) (tree.Datum, error) {
 				h := newHash()
 				if ok, err := feedHash(h, args); !ok || err != nil {
@@ -11862,6 +11889,29 @@ func stringOrNil(d tree.Datum) *string {
 	return &s
 }
 
+var anyArrayEmptyStringErr = pgerror.Newf(
+	pgcode.DatatypeMismatch,
+	"could not determine polymorphic type because input has type unknown",
+)
+
+// checkIfDArrayErrOnDString checks whether d corresponds to an empty array
+// stored as DString and returns an error if so, otherwise it checks whether d
+// is a DArray and returns an assertion failure if not.
+//
+// It should only be called when d corresponds to an argument of AnyArray type.
+func checkIfDArrayErrOnDString(d tree.Datum) (*tree.DArray, error) {
+	if s, ok := d.(*tree.DString); ok {
+		if *s == "{}" {
+			return nil, anyArrayEmptyStringErr
+		}
+	}
+	a, ok := d.(*tree.DArray)
+	if !ok {
+		return nil, errors.AssertionFailedf("expected *DArray, found %T", d)
+	}
+	return a, nil
+}
+
 // stringToArray implements the string_to_array builtin - str is split on delim to form an array of strings.
 // If nullStr is set, any elements equal to it will be NULL.
 func stringToArray(str string, delimPtr *string, nullStr *string) (tree.Datum, error) {
@@ -12434,7 +12484,10 @@ func arrayNumInvertedIndexEntries(
 	if val == tree.DNull {
 		return tree.DZero, nil
 	}
-	arr := tree.MustBeDArray(val)
+	arr, err := checkIfDArrayErrOnDString(val)
+	if err != nil {
+		return nil, err
+	}
 
 	v := descpb.EmptyArraysInInvertedIndexesVersion
 	if version != tree.DNull {

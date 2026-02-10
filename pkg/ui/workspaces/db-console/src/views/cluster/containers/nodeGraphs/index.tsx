@@ -255,7 +255,10 @@ export class NodeGraphs extends React.Component<
         path += dashName + nodeMatchParam(nodeID) + tenantMatchParam(value);
         break;
     }
-    history.push(path);
+    history.push({
+      pathname: path,
+      search: history.location.search,
+    });
   };
 
   componentDidMount() {

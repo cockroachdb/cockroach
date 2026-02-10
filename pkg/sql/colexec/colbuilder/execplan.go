@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecagg"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecargs"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecbuiltins"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecdisk"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecjoin"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecproj"
@@ -1166,8 +1167,13 @@ func NewColOperator(
 					args.CloserRegistry.AddCloser(diskSpiller)
 				}
 			} else {
-				evalCtx.SingleDatumAggMemAccount = getStreamingMemAccount(args, flowCtx)
-				newAggArgs.Allocator = getStreamingAllocator(ctx, args, flowCtx)
+				// Create an unlimited memory monitor and two accounts bound to
+				// it to attribute the memory usage to the aggregator correctly.
+				accounts := args.MonitorRegistry.CreateUnlimitedMemAccounts(
+					ctx, flowCtx, "ordered-aggregator" /* opName */, spec.ProcessorID, 2, /* numAccounts */
+				)
+				evalCtx.SingleDatumAggMemAccount = accounts[0]
+				newAggArgs.Allocator = colmem.NewAllocator(ctx, accounts[1], factory)
 				result.Root = colexec.NewOrderedAggregator(ctx, newAggArgs)
 				args.CloserRegistry.AddCloser(result.Root.(colexecop.Closer))
 			}
@@ -2623,7 +2629,7 @@ func planProjectionOperators(
 			inputCols = append(inputCols, resultIdx)
 		}
 		resultIdx = len(typs)
-		op, err = colexec.NewBuiltinFunctionOperator(
+		op, err = colexecbuiltins.NewBuiltinFunctionOperator(
 			allocator, evalCtx, t, typs, inputCols, resultIdx, op,
 		)
 		if r, ok := op.(execreleasable.Releasable); ok {

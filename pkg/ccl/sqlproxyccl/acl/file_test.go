@@ -493,15 +493,31 @@ allowlist:
 	for _, tc := range testCases {
 		require.NoError(t, os.WriteFile(filename, []byte(tc.input), 0777))
 
-		controller := <-channel
-		for _, ioPairs := range tc.specs {
-			err := controller.CheckConnection(ctx, ioPairs.connection)
-			if ioPairs.outcome == "" {
-				require.Nil(t, err)
-			} else {
-				require.EqualError(t, err, ioPairs.outcome)
+		// Keep polling until we get the controller we expect. It's possible
+		// that occasionally things run too slowly, and a stale controller
+		// without the most recent data gets pushed because the polling
+		// interval passes. However, we do know that eventually we expect to
+		// read our desired controller.
+		testutils.SucceedsSoon(t, func() error {
+			select {
+			case controller := <-channel:
+				for _, ioPairs := range tc.specs {
+					err := controller.CheckConnection(ctx, ioPairs.connection)
+					if ioPairs.outcome == "" {
+						if err != nil {
+							return errors.Newf("expected no error, but got %v", err) // nolint:errwrap
+						}
+					} else {
+						if err == nil || err.Error() != ioPairs.outcome {
+							return errors.Newf("expected %v, but got %v", ioPairs.outcome, err) // nolint:errwrap
+						}
+					}
+				}
+				return nil
+			default:
+				return errors.New("no data")
 			}
-		}
+		})
 	}
 }
 
@@ -558,9 +574,7 @@ func TestParsingErrorHandling(t *testing.T) {
 		testutils.SucceedsSoon(t, func() error {
 			select {
 			case <-next:
-				t.Fatal("should not have gotten a new controller")
-				// We need to return something to make the compiler happy, but t.Fatal will end execution.
-				return nil
+				return fmt.Errorf("Received new controller; discarding")
 			default:
 				errorCount := errorCountMetric.Value()
 				// If error count isn't one, then it hasn't happened yet.

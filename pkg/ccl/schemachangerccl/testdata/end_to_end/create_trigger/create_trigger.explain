@@ -27,7 +27,7 @@ Schema change plan for CREATE TRIGGER tr BEFORE INSERT OR UPDATE OR DELETE ON �
  │              ├── SetTableSchemaLocked {"TableID":104}
  │              ├── AddTrigger {"Trigger":{"TableID":104,"TriggerID":1}}
  │              ├── SetTriggerName {"Name":{"Name":"tr","TableID":104,"TriggerID":1}}
- │              ├── SetTriggerEnabled {"Enabled":{"Enabled":true,"TableID":104,"TriggerID":1}}
+ │              ├── SetTriggerEnabled {"Enabled":true,"TableID":104,"TriggerID":1}
  │              ├── SetTriggerTiming {"Timing":{"ActionTime":1,"ForEachRow":true,"TableID":104,"TriggerID":1}}
  │              ├── SetTriggerEvents {"Events":{"TableID":104,"TriggerID":1}}
  │              ├── SetTriggerFunctionCall {"FunctionCall":{"FuncBody":"BEGIN\nRAISE NOTI...","FuncID":105,"TableID":104,"TriggerID":1}}
@@ -63,7 +63,7 @@ Schema change plan for CREATE TRIGGER tr BEFORE INSERT OR UPDATE OR DELETE ON �
  │              ├── SetTableSchemaLocked {"TableID":104}
  │              ├── AddTrigger {"Trigger":{"TableID":104,"TriggerID":1}}
  │              ├── SetTriggerName {"Name":{"Name":"tr","TableID":104,"TriggerID":1}}
- │              ├── SetTriggerEnabled {"Enabled":{"Enabled":true,"TableID":104,"TriggerID":1}}
+ │              ├── SetTriggerEnabled {"Enabled":true,"TableID":104,"TriggerID":1}
  │              ├── SetTriggerTiming {"Timing":{"ActionTime":1,"ForEachRow":true,"TableID":104,"TriggerID":1}}
  │              ├── SetTriggerEvents {"Events":{"TableID":104,"TriggerID":1}}
  │              ├── SetTriggerFunctionCall {"FunctionCall":{"FuncBody":"BEGIN\nRAISE NOTI...","FuncID":105,"TableID":104,"TriggerID":1}}

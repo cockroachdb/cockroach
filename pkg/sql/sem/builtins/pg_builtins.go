@@ -637,6 +637,20 @@ var pgBuiltins = map[string]builtinDefinition{
 		},
 	),
 
+	// See https://www.postgresql.org/docs/current/functions-info.html.
+	"pg_trigger_depth": makeBuiltin(defProps(),
+		tree.Overload{
+			Types:      tree.ParamTypes{},
+			ReturnType: tree.FixedReturnType(types.Int),
+			Fn: func(ctx context.Context, _ *eval.Context, _ tree.Datums) (tree.Datum, error) {
+				return tree.NewDInt(tree.DInt(eval.GetTriggerDepth(ctx))), nil
+			},
+			Info:             "Returns the current nesting level of PostgreSQL triggers (0 if not called, directly or indirectly, from inside a trigger).",
+			Volatility:       volatility.Volatile,
+			DistsqlBlocklist: true,
+		},
+	),
+
 	// See https://www.postgresql.org/docs/9.3/static/catalog-pg-database.html.
 	"pg_encoding_to_char": makeBuiltin(defProps(),
 		tree.Overload{

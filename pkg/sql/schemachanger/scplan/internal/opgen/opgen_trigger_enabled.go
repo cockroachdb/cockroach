@@ -8,7 +8,6 @@ package opgen
 import (
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scop"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
-	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 )
 
 func init() {
@@ -17,15 +16,23 @@ func init() {
 			scpb.Status_ABSENT,
 			to(scpb.Status_PUBLIC,
 				emit(func(this *scpb.TriggerEnabled) *scop.SetTriggerEnabled {
-					return &scop.SetTriggerEnabled{Enabled: *protoutil.Clone(this).(*scpb.TriggerEnabled)}
+					return &scop.SetTriggerEnabled{
+						TableID:   this.TableID,
+						TriggerID: this.TriggerID,
+						Enabled:   true,
+					}
 				}),
 			),
 		),
 		toAbsent(
 			scpb.Status_PUBLIC,
 			to(scpb.Status_ABSENT,
-				emit(func(this *scpb.TriggerEnabled) *scop.NotImplementedForPublicObjects {
-					return notImplementedForPublicTriggers(this, this.TriggerID)
+				emit(func(this *scpb.TriggerEnabled) *scop.SetTriggerEnabled {
+					return &scop.SetTriggerEnabled{
+						TableID:   this.TableID,
+						TriggerID: this.TriggerID,
+						Enabled:   false,
+					}
 				}),
 			),
 		),

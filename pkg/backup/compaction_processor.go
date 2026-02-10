@@ -211,8 +211,7 @@ func (p *compactBackupsProcessor) runCompactBackups(ctx context.Context) error {
 
 	destURI, destLocalityKV, err := selectLocalityMatchingURI(
 		ctx, p.spec.DefaultURI, p.spec.URIsByLocalityKV,
-		// TODO(at): replace with spec field when strict is implemented
-		false, /* strict */
+		p.spec.StrictLocality,
 		p.FlowCtx.EvalCtx.Locality,
 	)
 	if err != nil {
@@ -289,10 +288,15 @@ func (p *compactBackupsProcessor) processSpanEntries(
 				continue
 			}
 
-			// TODO(at): assertion fail if this doesn't match the processor and strict is set
 			entryLocality, err := entryLocality(entry)
 			if err != nil {
 				return errors.Wrap(err, "finding entry locality")
+			}
+			if entryLocality != destLocality && p.spec.StrictLocality {
+				return errors.Newf(
+					"entry locality %s does not match destination locality %s in strict locality-aware compaction",
+					entryLocality, destLocality,
+				)
 			}
 			if backupKnobs, ok := p.FlowCtx.TestingKnobs().BackupRestoreTestingKnobs.(*sql.BackupRestoreTestingKnobs); ok {
 				if backupKnobs.OnCompactionFileAccess != nil && *backupKnobs.OnCompactionFileAccess != nil {

@@ -150,6 +150,17 @@ var replanFrequency = settings.RegisterDurationSetting(
 	settings.PositiveDuration,
 )
 
+func restoreTempSystemName(
+	jobCreationClusterVersion roachpb.Version, restoreJobID jobspb.JobID,
+) string {
+
+	const restoreTempSystemDBPrefix = "crdb_temp_system"
+	if jobCreationClusterVersion.AtLeast(clusterversion.V26_2.Version()) {
+		return fmt.Sprintf("%s_%d", restoreTempSystemDBPrefix, restoreJobID)
+	}
+	return restoreTempSystemDBPrefix
+}
+
 var laggingRestoreProcErr = errors.New("try re-planning due to lagging restore processors")
 
 // rewriteBackupSpanKey rewrites a backup span start key for the purposes of
@@ -1067,13 +1078,32 @@ func spansForAllRestoreTableIndexes(
 	return spans, nil
 }
 
-func shouldPreRestore(table *tabledesc.Mutable) bool {
-	if table.GetParentID() != keys.SystemDatabaseID {
-		return false
+// checkOfflineDescriptorHandling decides which offline tables to include in the
+// restore:
+//
+//   - An offline table created by RESTORE is fully discarded. The table
+//     will not exist in the restoring cluster.
+//
+//   - An offline table undergoing an IMPORT INTO in traditional
+//     restore has all importing data elided in the restore
+//     processor and is restored online to its pre import state.
+//
+//   - An offline table undergoing an IMPORT INTO in online
+//     restore with no ImportEpoch cannot be restored and an error
+//     is returned.
+//
+//   - An offline table undergoing an IMPORT INTO in online
+//     restore with an ImportEpoch is restored with an Offline
+//     table and a revert job is queued that will bring the table
+//     back online.
+func checkOfflineDescriptorHandling(desc catalog.Descriptor, onlineRestoreImpl bool) (bool, error) {
+	if backedUpDescriptorWithInProgressImportInto(desc) {
+		if onlineRestoreImpl && !epochBasedInProgressImport(desc) {
+			return false, errors.Newf("table %s (id %d) in restoring backup has an in-progress import, but online restore cannot be run on a table with an in progress import", desc.GetName(), desc.GetID())
+		}
+		return true, nil
 	}
-	tablesToPreRestore := getSystemTablesToRestoreBeforeData()
-	_, ok := tablesToPreRestore[table.GetName()]
-	return ok
+	return false, nil
 }
 
 // backedUpDescriptorWithInProgressImportInto returns true if the backed up descriptor represents a table with an in
@@ -1318,8 +1348,8 @@ func synthesizeZoneConfigsForPartialRestore(
 	return nil
 }
 
-// createImportingDescriptors creates the tables that we will restore into and returns up to three
-// configurations for separate restoration flows. The three restoration flows are:
+// createRestoreFlows returns up to three configurations for separate
+// restoration flows. The three restoration flows are:
 //
 //  1. dataToPreRestore: a restoration flow cfg to ingest a subset of
 //     system tables (e.g. zone configs) during a cluster restore that are
@@ -1332,115 +1362,43 @@ func synthesizeZoneConfigsForPartialRestore(
 //  3. trackedRestore: a restoration flow cfg to ingest the remainder of
 //     restore targets. This flow should get executed last and should contain the
 //     bulk of the work, as it is used for job progress tracking.
-func createImportingDescriptors(
-	ctx context.Context,
-	p sql.JobExecContext,
-	backupCodec keys.SQLCodec,
-	sqlDescs []catalog.Descriptor,
-	r *restoreResumer,
-	manifest backuppb.BackupManifest,
+func createRestoreFlows(
+	ctx context.Context, r *restoreResumer, backupCodec keys.SQLCodec, sqlDescs []catalog.Descriptor,
 ) (preRestore restorationData, preValid restorationData, mainRestore restorationData, err error) {
+
 	details := r.job.Details().(jobspb.RestoreDetails)
-	const kvTrace = false
 
-	var allMutableDescs []catalog.MutableDescriptor
-	var databases []catalog.DatabaseDescriptor
-	var writtenTypes []catalog.TypeDescriptor
-	var schemas []*schemadesc.Mutable
-	var types []*typedesc.Mutable
-	var functions []*funcdesc.Mutable
-
-	// Store the tables as both the concrete mutable structs and the interface
-	// to deal with the lack of slice covariance in go. We want the slice of
-	// mutable descriptors for rewriting but ultimately want to return the
-	// tables as the slice of interfaces.
-	var mutableTables []*tabledesc.Mutable
-	var mutableDatabases []*dbdesc.Mutable
-
-	oldTableIDs := make([]descpb.ID, 0)
-
-	// offlineSchemas is a slice of all the backed up schemas in a database that
-	// were in an offline state at the time of the backup. These offline schemas
-	// are not restored and need to be elided from the list of schemas when
-	// constructing the database descriptor.
-	offlineSchemas := make(map[descpb.ID]struct{})
-
-	tables := make([]catalog.TableDescriptor, 0)
 	postRestoreTables := make([]catalog.TableDescriptor, 0)
-
 	preRestoreTables := make([]catalog.TableDescriptor, 0)
+	oldTableIDs := make([]descpb.ID, 0)
+	tablesToPreRestore := getSystemTablesToRestoreBeforeData()
+
+	shouldPreRestore := func(tableDesc catalog.TableDescriptor) bool {
+		if tableDesc.GetParentID() != keys.SystemDatabaseID {
+			return false
+		}
+		_, ok := tablesToPreRestore[tableDesc.GetName()]
+		return ok
+	}
 
 	for _, desc := range sqlDescs {
-		// Decide which offline tables to include in the restore:
-		//
-		// - An offline table created by RESTORE is fully discarded. The table
-		//   will not exist in the restoring cluster.
-		//
-		// - An offline table undergoing an IMPORT INTO in traditional
-		//   restore has all importing data elided in the restore
-		//   processor and is restored online to its pre import state.
-		//
-		// - An offline table undergoing an IMPORT INTO in online
-		//   restore with no ImportEpoch cannot be restored and an error
-		//   is returned.
-		//
-		// - An offline table undergoing an IMPORT INTO in online
-		//   restore with an ImportEpoch is restored with an Offline
-		//   table and a revert job is queued that will bring the table
-		//   back online.
 		if desc.Offline() {
-			if schema, ok := desc.(catalog.SchemaDescriptor); ok {
-				offlineSchemas[schema.GetID()] = struct{}{}
+			toRestore, err := checkOfflineDescriptorHandling(desc, details.OnlineImpl())
+			if err != nil {
+				return nil, nil, nil, err
 			}
-
-			if backedUpDescriptorWithInProgressImportInto(desc) {
-				if details.OnlineImpl() && !epochBasedInProgressImport(desc) {
-					return nil, nil, nil, errors.Newf("table %s (id %d) in restoring backup has an in-progress import, but online restore cannot be run on a table with an in progress import", desc.GetName(), desc.GetID())
-				}
-			} else {
+			if !toRestore {
 				continue
 			}
 		}
-
-		switch desc := desc.(type) {
-		case catalog.TableDescriptor:
-			mut := tabledesc.NewBuilder(desc.TableDesc()).BuildCreatedMutableTable()
-			if shouldPreRestore(mut) {
-				preRestoreTables = append(preRestoreTables, mut)
+		if tableDesc, ok := desc.(catalog.TableDescriptor); ok {
+			oldTableIDs = append(oldTableIDs, tableDesc.GetID())
+			if shouldPreRestore(tableDesc) {
+				preRestoreTables = append(preRestoreTables, tableDesc)
 			} else {
-				postRestoreTables = append(postRestoreTables, mut)
+				postRestoreTables = append(postRestoreTables, tableDesc)
 			}
-			tables = append(tables, mut)
-			mutableTables = append(mutableTables, mut)
-			allMutableDescs = append(allMutableDescs, mut)
-			oldTableIDs = append(oldTableIDs, mut.GetID())
-		case catalog.DatabaseDescriptor:
-			if _, ok := details.DescriptorRewrites[desc.GetID()]; ok {
-				mut := dbdesc.NewBuilder(desc.DatabaseDesc()).BuildCreatedMutableDatabase()
-				databases = append(databases, mut)
-				mutableDatabases = append(mutableDatabases, mut)
-				allMutableDescs = append(allMutableDescs, mut)
-			}
-		case catalog.SchemaDescriptor:
-			mut := schemadesc.NewBuilder(desc.SchemaDesc()).BuildCreatedMutableSchema()
-			schemas = append(schemas, mut)
-			allMutableDescs = append(allMutableDescs, mut)
-		case catalog.TypeDescriptor:
-			mut := typedesc.NewBuilder(desc.TypeDesc()).BuildCreatedMutableType()
-			types = append(types, mut)
-			allMutableDescs = append(allMutableDescs, mut)
-		case catalog.FunctionDescriptor:
-			mut := funcdesc.NewBuilder(desc.FuncDesc()).BuildCreatedMutableFunction()
-			functions = append(functions, mut)
-			allMutableDescs = append(allMutableDescs, mut)
 		}
-	}
-
-	tempSystemDBID := tempSystemDatabaseID(details, tables)
-	if tempSystemDBID != descpb.InvalidID {
-		tempSystemDB := dbdesc.NewInitial(tempSystemDBID, restoreTempSystemDB,
-			username.AdminRoleName(), dbdesc.WithPublicSchemaID(keys.SystemPublicSchemaID))
-		databases = append(databases, tempSystemDB)
 	}
 
 	// We get the spans of the restoring tables _as they appear in the backup_,
@@ -1463,11 +1421,220 @@ func createImportingDescriptors(
 		}
 	}
 
+	tempSystemDBID := tempSystemDatabaseID(details, postRestoreTables, r.job.Payload().CreationClusterVersion)
+
+	var rekeys []execinfrapb.TableRekey
+	var systemTables []catalog.TableDescriptor
+	for i := range details.TableDescs {
+		desc := tabledesc.NewBuilder(details.TableDescs[i]).BuildImmutableTable()
+		newDescBytes, err := protoutil.Marshal(desc.DescriptorProto())
+		if err != nil {
+			return nil, nil, nil, errors.NewAssertionErrorWithWrappedErrf(err,
+				"marshaling descriptor")
+		}
+		rekeys = append(rekeys, execinfrapb.TableRekey{
+			OldID:   uint32(oldTableIDs[i]),
+			NewDesc: newDescBytes,
+		})
+		if desc.GetParentID() == tempSystemDBID {
+			systemTables = append(systemTables, desc)
+		}
+	}
+
+	_, backupTenantID, err := keys.DecodeTenantPrefix(backupCodec.TenantPrefix())
+	if err != nil {
+		return nil, nil, nil, err
+	}
+	if !backupCodec.TenantPrefix().Equal(r.execCfg.Codec.TenantPrefix()) {
+		// Ensure old processors fail if this is a previously unsupported restore of
+		// a tenant backup by the system tenant, which the old rekey processor would
+		// mishandle since it assumed the system tenant always restored tenant keys
+		// to tenant prefixes, i.e. as tenant restore.
+		if backupTenantID != roachpb.SystemTenantID && r.execCfg.Codec.ForSystemTenant() {
+			// This empty table rekey acts as a poison-pill, which will be ignored by
+			// a current processor but reliably cause an older processor, which would
+			// otherwise mishandle tenant-made backup keys, to fail as it will be
+			// unable to decode the zero ID table desc.
+			rekeys = append(rekeys, execinfrapb.TableRekey{})
+		}
+	}
+
+	// If, and only if, the backup was made by a system tenant, can it contain
+	// backed up tenants, which the processor needs to know when is rekeying -- if
+	// the backup contains tenants, then a key with a tenant prefix should be
+	// restored if, and only if, we're restoring that tenant, and restored to a
+	// tenant. Otherwise, if this backup was not made by a system tenant, it does
+	// not contain tenants, so the rekey will assume if a key has a tenant prefix,
+	// it is because the tenant produced the backup, and it should be removed to
+	// then decode the remainder of the key. We communicate this distinction to
+	// the processor with a special tenant rekey _into_ the system tenant, which
+	// would never otherwise be valid. It will discard this rekey but it signals
+	// to it that we're rekeying a system-made backup.
+	var tenantRekeys []execinfrapb.TenantRekey
+	if backupTenantID == roachpb.SystemTenantID {
+		tenantRekeys = append(tenantRekeys, isBackupFromSystemTenantRekey)
+	}
+
+	pkIDs := make(map[uint64]bool)
+	for _, tbl := range details.TableDescs {
+		pkIDs[kvpb.BulkOpSummaryID(uint64(tbl.GetID()), uint64(tbl.GetPrimaryIndex().ID))] = true
+	}
+
+	dataToPreRestore := &restorationDataBase{
+		spans:        preRestoreSpans,
+		tableRekeys:  rekeys,
+		tenantRekeys: tenantRekeys,
+		pkIDs:        pkIDs,
+	}
+
+	trackedRestore := &mainRestorationData{
+		restorationDataBase{
+			spans:        postRestoreSpans,
+			tableRekeys:  rekeys,
+			tenantRekeys: tenantRekeys,
+			pkIDs:        pkIDs,
+		},
+	}
+
+	preValidation := &restorationDataBase{}
+	// During a RESTORE with verify_backup_table_data data, progress on
+	// verifySpans should be the source of job progress (as it will take the most time); therefore,
+	// wrap them in a mainRestoration struct and unwrap postRestoreSpans
+	// (only relevant during a cluster restore).
+	if details.VerifyData {
+		trackedRestore.restorationDataBase.spans = verifySpans
+		trackedRestore.restorationDataBase.validateOnly = true
+
+		// Before the main (validation) flow, during a cluster level restore,
+		// we still need to restore system tables that do NOT get restored in the dataToPreRestore
+		// flow. This restoration will not get tracked during job progress.
+		if (details.DescriptorCoverage != tree.AllDescriptors) && len(postRestoreSpans) != 0 {
+			return nil, nil, nil, errors.AssertionFailedf(
+				"no spans should get restored in a non cluster, verify_backup_table_data restore")
+		}
+		preValidation.spans = postRestoreSpans
+		preValidation.tableRekeys = rekeys
+		preValidation.pkIDs = pkIDs
+	}
+
+	for _, sysTable := range systemTables {
+		if _, ok := tablesToPreRestore[sysTable.GetName()]; ok {
+			dataToPreRestore.systemTables = append(dataToPreRestore.systemTables, sysTable)
+		} else {
+			if details.VerifyData {
+				// During a verify_backup_table_data RESTORE, system tables are
+				// restored pre validation. Note that the system tables are still
+				// added to the trackedRestore flow because after ingestion, the
+				// restore job uses systemTable metadata hanging from the
+				// trackedRestore object.
+				preValidation.systemTables = append(preValidation.systemTables, sysTable)
+			}
+			trackedRestore.systemTables = append(trackedRestore.systemTables, sysTable)
+		}
+	}
+
+	for _, tenant := range details.Tenants {
+		to, err := roachpb.MakeTenantID(tenant.ID)
+		if err != nil {
+			return nil, nil, nil, err
+		}
+		from := to
+		if details.PreRewriteTenantId != nil {
+			from = *details.PreRewriteTenantId
+		}
+		trackedRestore.addTenant(from, to)
+	}
+	return dataToPreRestore, preValidation, trackedRestore, nil
+}
+
+// createImportingDescriptors creates the tables that we will restore into.
+func createImportingDescriptors(
+	ctx context.Context, p sql.JobExecContext, sqlDescs []catalog.Descriptor, r *restoreResumer,
+) error {
+	details := r.job.Details().(jobspb.RestoreDetails)
+	if details.PrepareCompleted {
+		return nil
+	}
+	const kvTrace = false
+
+	var allMutableDescs []catalog.MutableDescriptor
+	var databases []catalog.DatabaseDescriptor
+	var writtenTypes []catalog.TypeDescriptor
+	var schemas []*schemadesc.Mutable
+	var types []*typedesc.Mutable
+	var functions []*funcdesc.Mutable
+
+	// Store the tables as both the concrete mutable structs and the interface
+	// to deal with the lack of slice covariance in go. We want the slice of
+	// mutable descriptors for rewriting but ultimately want to return the
+	// tables as the slice of interfaces.
+	var mutableTables []*tabledesc.Mutable
+	var mutableDatabases []*dbdesc.Mutable
+
+	// offlineSchemas is a slice of all the backed up schemas in a database that
+	// were in an offline state at the time of the backup. These offline schemas
+	// are not restored and need to be elided from the list of schemas when
+	// constructing the database descriptor.
+	offlineSchemas := make(map[descpb.ID]struct{})
+
+	tables := make([]catalog.TableDescriptor, 0)
+
+	for _, desc := range sqlDescs {
+
+		if desc.Offline() {
+			if schema, ok := desc.(catalog.SchemaDescriptor); ok {
+				offlineSchemas[schema.GetID()] = struct{}{}
+			}
+			toRestore, err := checkOfflineDescriptorHandling(desc, details.OnlineImpl())
+			if err != nil {
+				return err
+			}
+			if !toRestore {
+				continue
+			}
+		}
+
+		switch desc := desc.(type) {
+		case catalog.TableDescriptor:
+			mut := tabledesc.NewBuilder(desc.TableDesc()).BuildCreatedMutableTable()
+			tables = append(tables, mut)
+			mutableTables = append(mutableTables, mut)
+			allMutableDescs = append(allMutableDescs, mut)
+		case catalog.DatabaseDescriptor:
+			if _, ok := details.DescriptorRewrites[desc.GetID()]; ok {
+				mut := dbdesc.NewBuilder(desc.DatabaseDesc()).BuildCreatedMutableDatabase()
+				databases = append(databases, mut)
+				mutableDatabases = append(mutableDatabases, mut)
+				allMutableDescs = append(allMutableDescs, mut)
+			}
+		case catalog.SchemaDescriptor:
+			mut := schemadesc.NewBuilder(desc.SchemaDesc()).BuildCreatedMutableSchema()
+			schemas = append(schemas, mut)
+			allMutableDescs = append(allMutableDescs, mut)
+		case catalog.TypeDescriptor:
+			mut := typedesc.NewBuilder(desc.TypeDesc()).BuildCreatedMutableType()
+			types = append(types, mut)
+			allMutableDescs = append(allMutableDescs, mut)
+		case catalog.FunctionDescriptor:
+			mut := funcdesc.NewBuilder(desc.FuncDesc()).BuildCreatedMutableFunction()
+			functions = append(functions, mut)
+			allMutableDescs = append(allMutableDescs, mut)
+		}
+	}
+
+	tempSystemDBID := tempSystemDatabaseID(details, tables, r.job.Payload().CreationClusterVersion)
+	tempSystemDBName := restoreTempSystemName(r.job.Payload().CreationClusterVersion, r.job.ID())
+	if tempSystemDBID != descpb.InvalidID {
+		tempSystemDB := dbdesc.NewInitial(tempSystemDBID, tempSystemDBName,
+			username.AdminRoleName(), dbdesc.WithPublicSchemaID(keys.SystemPublicSchemaID))
+		databases = append(databases, tempSystemDB)
+	}
+
 	log.Eventf(ctx, "starting restore for %d tables", len(mutableTables))
 
 	// Assign new IDs to the database descriptors.
 	if err := rewrite.DatabaseDescs(mutableDatabases, details.DescriptorRewrites, offlineSchemas); err != nil {
-		return nil, nil, nil, err
+		return err
 	}
 
 	databaseDescs := make([]*descpb.DatabaseDescriptor, len(mutableDatabases))
@@ -1490,11 +1657,11 @@ func createImportingDescriptors(
 	}
 
 	if err := rewrite.SchemaDescs(schemasToWrite, details.DescriptorRewrites); err != nil {
-		return nil, nil, nil, err
+		return err
 	}
 
 	if err := remapPublicSchemas(ctx, p, mutableDatabases, &schemasToWrite, &writtenSchemas, &details); err != nil {
-		return nil, nil, nil, err
+		return err
 	}
 
 	// Assign new IDs and privileges to the tables, and update all references to
@@ -1503,7 +1670,7 @@ func createImportingDescriptors(
 		mutableTables, details.DescriptorRewrites, details.OverrideDB,
 	)
 	if err != nil {
-		return nil, nil, nil, err
+		return err
 	}
 	tableDescs := make([]*descpb.TableDescriptor, len(mutableTables))
 	for i, table := range mutableTables {
@@ -1541,7 +1708,7 @@ func createImportingDescriptors(
 	// descriptors will not be written to disk, and is only for accurate,
 	// in-memory resolution hereon out.
 	if err := rewrite.TypeDescs(types, details.DescriptorRewrites, typeBackrefsToRemove); err != nil {
-		return nil, nil, nil, err
+		return err
 	}
 
 	// Functions are only restored as part of full database restores and are not
@@ -1560,13 +1727,13 @@ func createImportingDescriptors(
 		writtenFunctions[i] = fn
 	}
 	if err := rewrite.FunctionDescs(functions, details.DescriptorRewrites, details.OverrideDB); err != nil {
-		return nil, nil, nil, err
+		return err
 	}
 
 	// Finally, clean up / update any schema changer state inside descriptors
 	// globally.
 	if err := rewrite.MaybeClearSchemaChangerStateInDescs(allMutableDescs); err != nil {
-		return nil, nil, nil, err
+		return err
 	}
 
 	// Set the new descriptors' states to offline.
@@ -1618,9 +1785,9 @@ func createImportingDescriptors(
 		typesByID,
 		dbsByID,
 		details.RemoveRegions,
-		restoreTempSystemDB,
+		tempSystemDBName,
 	); err != nil {
-		return nil, nil, nil, err
+		return err
 	}
 
 	// Allocate no schedule to the row-level TTL.
@@ -1631,296 +1798,164 @@ func createImportingDescriptors(
 		}
 	}
 
-	if !details.PrepareCompleted {
+	return p.ExecCfg().InternalDB.DescsTxn(ctx, func(
+		ctx context.Context, txn descs.Txn,
+	) error {
 
-		err := p.ExecCfg().InternalDB.DescsTxn(ctx, func(
-			ctx context.Context, txn descs.Txn,
-		) error {
+		descsCol := txn.Descriptors()
+		includePublicSchemaCreatePriv := sqlclustersettings.PublicSchemaCreatePrivilegeEnabled.Get(&p.ExecCfg().Settings.SV)
+		if err := ingesting.WriteDescriptors(
+			ctx, txn.KV(), p.User(), descsCol, databases, writtenSchemas, tables, writtenTypes, writtenFunctions,
+			details.DescriptorCoverage, nil /* extra */, tempSystemDBName, includePublicSchemaCreatePriv,
+			true, /* deprecatedAllowCrossDatabaseRefs */
+		); err != nil {
+			return errors.Wrapf(err, "restoring %d TableDescriptors from %d databases", len(tables), len(databases))
+		}
 
-			descsCol := txn.Descriptors()
-			// Write the new descriptors which are set in the OFFLINE state.
-			includePublicSchemaCreatePriv := sqlclustersettings.PublicSchemaCreatePrivilegeEnabled.Get(&p.ExecCfg().Settings.SV)
-			if err := ingesting.WriteDescriptors(
-				ctx, txn.KV(), p.User(), descsCol, databases, writtenSchemas, tables, writtenTypes, writtenFunctions,
-				details.DescriptorCoverage, nil /* extra */, restoreTempSystemDB, includePublicSchemaCreatePriv,
-				true, /* deprecatedAllowCrossDatabaseRefs */
+		b := txn.KV().NewBatch()
+
+		// For new schemas with existing parent databases, the schema map on the
+		// database descriptor needs to be updated.
+		existingDBsWithNewSchemas := make(map[descpb.ID][]catalog.SchemaDescriptor)
+		for _, sc := range writtenSchemas {
+			parentID := sc.GetParentID()
+			if _, ok := dbsByID[parentID]; !ok {
+				existingDBsWithNewSchemas[parentID] = append(existingDBsWithNewSchemas[parentID], sc)
+			}
+		}
+		// Write the updated databases.
+		for dbID, schemas := range existingDBsWithNewSchemas {
+			log.Dev.Infof(ctx, "writing %d schema entries to database %d", len(schemas), dbID)
+			desc, err := descsCol.MutableByID(txn.KV()).Desc(ctx, dbID)
+			if err != nil {
+				return err
+			}
+			db := desc.(*dbdesc.Mutable)
+			for _, sc := range schemas {
+				db.AddSchemaToDatabase(sc.GetName(), descpb.DatabaseDescriptor_SchemaInfo{ID: sc.GetID()})
+			}
+			if err := descsCol.WriteDescToBatch(
+				ctx, kvTrace, db, b,
 			); err != nil {
-				return errors.Wrapf(err, "restoring %d TableDescriptors from %d databases", len(tables), len(databases))
+				return err
 			}
+		}
 
-			b := txn.KV().NewBatch()
-
-			// For new schemas with existing parent databases, the schema map on the
-			// database descriptor needs to be updated.
-			existingDBsWithNewSchemas := make(map[descpb.ID][]catalog.SchemaDescriptor)
-			for _, sc := range writtenSchemas {
-				parentID := sc.GetParentID()
-				if _, ok := dbsByID[parentID]; !ok {
-					existingDBsWithNewSchemas[parentID] = append(existingDBsWithNewSchemas[parentID], sc)
+		// We could be restoring tables that point to existing types. We need to
+		// ensure that those existing types are updated with back references pointing
+		// to the new tables being restored.
+		for _, table := range mutableTables {
+			dbDesc, err := descsCol.ByIDWithoutLeased(txn.KV()).WithoutDropped().Get().Database(ctx, table.GetParentID())
+			if err != nil {
+				return err
+			}
+			typeIDs, _, err := table.GetAllReferencedTypeIDs(dbDesc, func(id descpb.ID) (catalog.TypeDescriptor, error) {
+				t, ok := typesByID[id]
+				if !ok {
+					return nil, errors.AssertionFailedf("type with id %d was not found in rewritten type mapping", id)
 				}
+				return t, nil
+			})
+			if err != nil {
+				return err
 			}
-			// Write the updated databases.
-			for dbID, schemas := range existingDBsWithNewSchemas {
-				log.Dev.Infof(ctx, "writing %d schema entries to database %d", len(schemas), dbID)
-				desc, err := descsCol.MutableByID(txn.KV()).Desc(ctx, dbID)
+			for _, id := range typeIDs {
+				// If the type was restored as part of the backup, then the backreference
+				// already exists.
+				_, ok := existingTypeIDs[id]
+				if !ok {
+					continue
+				}
+				// Otherwise, add a backreference to this table.
+				typDesc, err := descsCol.MutableByID(txn.KV()).Type(ctx, id)
 				if err != nil {
 					return err
 				}
-				db := desc.(*dbdesc.Mutable)
-				for _, sc := range schemas {
-					db.AddSchemaToDatabase(sc.GetName(), descpb.DatabaseDescriptor_SchemaInfo{ID: sc.GetID()})
-				}
+				_ = typDesc.AddReferencingDescriptorID(table.GetID())
 				if err := descsCol.WriteDescToBatch(
-					ctx, kvTrace, db, b,
+					ctx, kvTrace, typDesc, b,
 				); err != nil {
 					return err
 				}
 			}
+		}
+		if err := txn.KV().Run(ctx, b); err != nil {
+			return err
+		}
 
-			// We could be restoring tables that point to existing types. We need to
-			// ensure that those existing types are updated with back references pointing
-			// to the new tables being restored.
-			for _, table := range mutableTables {
-				// Collect all types used by this table.
-				dbDesc, err := descsCol.ByIDWithoutLeased(txn.KV()).WithoutDropped().Get().Database(ctx, table.GetParentID())
-				if err != nil {
-					return err
-				}
-				typeIDs, _, err := table.GetAllReferencedTypeIDs(dbDesc, func(id descpb.ID) (catalog.TypeDescriptor, error) {
-					t, ok := typesByID[id]
-					if !ok {
-						return nil, errors.AssertionFailedf("type with id %d was not found in rewritten type mapping", id)
-					}
-					return t, nil
-				})
-				if err != nil {
-					return err
-				}
-				for _, id := range typeIDs {
-					// If the type was restored as part of the backup, then the backreference
-					// already exists.
-					_, ok := existingTypeIDs[id]
-					if !ok {
-						continue
-					}
-					// Otherwise, add a backreference to this table.
-					typDesc, err := descsCol.MutableByID(txn.KV()).Type(ctx, id)
-					if err != nil {
-						return err
-					}
-					_ = typDesc.AddReferencingDescriptorID(table.GetID())
-					if err := descsCol.WriteDescToBatch(
-						ctx, kvTrace, typDesc, b,
-					); err != nil {
-						return err
-					}
-				}
-			}
-			if err := txn.KV().Run(ctx, b); err != nil {
+		if len(details.Tenants) > 0 {
+			initialTenantZoneConfig, err := zoneconfig.GetHydratedForTenantsRange(ctx, txn.KV(), descsCol)
+			if err != nil {
 				return err
 			}
-
-			if len(details.Tenants) > 0 {
-				initialTenantZoneConfig, err := zoneconfig.GetHydratedForTenantsRange(ctx, txn.KV(), descsCol)
-				if err != nil {
-					return err
+			for _, tenantInfoCopy := range details.Tenants {
+				switch tenantInfoCopy.DataState {
+				case mtinfopb.DataStateReady:
+					// If the tenant was backed up in the `READY` state then we create
+					// the restored record in an `ADD` state and mark it `READY` at
+					// the end of the restore.
+					tenantInfoCopy.ServiceMode = mtinfopb.ServiceModeNone
+					tenantInfoCopy.DataState = mtinfopb.DataStateAdd
+				case mtinfopb.DataStateDrop, mtinfopb.DataStateAdd:
+				// If the tenant was backed up in a `DROP` or `ADD` state then we must
+				// create the restored tenant record in that state as well.
+				default:
+					return errors.AssertionFailedf("unknown tenant data state %v", tenantInfoCopy)
 				}
-				for _, tenantInfoCopy := range details.Tenants {
-					switch tenantInfoCopy.DataState {
-					case mtinfopb.DataStateReady:
-						// If the tenant was backed up in the `READY` state then we create
-						// the restored record in an `ADD` state and mark it `READY` at
-						// the end of the restore.
-						tenantInfoCopy.ServiceMode = mtinfopb.ServiceModeNone
-						tenantInfoCopy.DataState = mtinfopb.DataStateAdd
-					case mtinfopb.DataStateDrop, mtinfopb.DataStateAdd:
-					// If the tenant was backed up in a `DROP` or `ADD` state then we must
-					// create the restored tenant record in that state as well.
-					default:
-						return errors.AssertionFailedf("unknown tenant data state %v", tenantInfoCopy)
-					}
-					spanConfigs := p.ExecCfg().SpanConfigKVAccessor.WithTxn(ctx, txn.KV())
-					if _, err := sql.CreateTenantRecord(
-						ctx,
-						p.ExecCfg().Codec,
-						p.ExecCfg().Settings,
-						txn,
-						spanConfigs,
-						&tenantInfoCopy,
-						initialTenantZoneConfig,
-						false, /* ifNotExists */
-						p.ExecCfg().TenantTestingKnobs,
-					); err != nil {
-						return err
-					}
-				}
-			}
-
-			if details.DescriptorCoverage != tree.AllDescriptors {
-				if err := synthesizeZoneConfigsForPartialRestore(
+				spanConfigs := p.ExecCfg().SpanConfigKVAccessor.WithTxn(ctx, txn.KV())
+				if _, err := sql.CreateTenantRecord(
 					ctx,
-					p,
+					p.ExecCfg().Codec,
+					p.ExecCfg().Settings,
 					txn,
-					databases,
-					tables,
-					typesByID,
-					details.RemoveRegions,
-					details.SkipLocalitiesCheck); err != nil {
+					spanConfigs,
+					&tenantInfoCopy,
+					initialTenantZoneConfig,
+					false, /* ifNotExists */
+					p.ExecCfg().TenantTestingKnobs,
+				); err != nil {
 					return err
 				}
 			}
-
-			details.PrepareCompleted = true
-			details.DatabaseDescs = databaseDescs
-			details.TableDescs = tableDescs
-			details.TypeDescs = make([]*descpb.TypeDescriptor, len(typesToWrite))
-			for i := range typesToWrite {
-				details.TypeDescs[i] = typesToWrite[i].TypeDesc()
-			}
-			details.SchemaDescs = make([]*descpb.SchemaDescriptor, len(schemasToWrite))
-			for i := range schemasToWrite {
-				details.SchemaDescs[i] = schemasToWrite[i].SchemaDesc()
-			}
-			details.FunctionDescs = make([]*descpb.FunctionDescriptor, len(functionsToWrite))
-			for i, fn := range functionsToWrite {
-				details.FunctionDescs[i] = fn.FuncDesc()
-			}
-
-			// Update the job once all descs have been prepared for ingestion.
-			err := r.job.WithTxn(txn).SetDetails(ctx, details)
-
-			// Emit to the event log now that the job has finished preparing descs.
-			emitRestoreJobEvent(ctx, p, jobs.StateRunning, r.job)
-			return err
-		})
-		if err != nil {
-			return nil, nil, nil, err
 		}
-	}
 
-	// Get TableRekeys to use when importing raw data.
-	var rekeys []execinfrapb.TableRekey
-	for i := range tables {
-		tableToSerialize := tables[i]
-		newDescBytes, err := protoutil.Marshal(tableToSerialize.DescriptorProto())
-		if err != nil {
-			return nil, nil, nil, errors.NewAssertionErrorWithWrappedErrf(err,
-				"marshaling descriptor")
-		}
-		rekeys = append(rekeys, execinfrapb.TableRekey{
-			OldID:   uint32(oldTableIDs[i]),
-			NewDesc: newDescBytes,
-		})
-	}
-
-	_, backupTenantID, err := keys.DecodeTenantPrefix(backupCodec.TenantPrefix())
-	if err != nil {
-		return nil, nil, nil, err
-	}
-	if !backupCodec.TenantPrefix().Equal(p.ExecCfg().Codec.TenantPrefix()) {
-		// Ensure old processors fail if this is a previously unsupported restore of
-		// a tenant backup by the system tenant, which the old rekey processor would
-		// mishandle since it assumed the system tenant always restored tenant keys
-		// to tenant prefixes, i.e. as tenant restore.
-		if backupTenantID != roachpb.SystemTenantID && p.ExecCfg().Codec.ForSystemTenant() {
-			// This empty table rekey acts as a poison-pill, which will be ignored by
-			// a current processor but reliably cause an older processor, which would
-			// otherwise mishandle tenant-made backup keys, to fail as it will be
-			// unable to decode the zero ID table desc.
-			rekeys = append(rekeys, execinfrapb.TableRekey{})
-		}
-	}
-
-	// If, and only if, the backup was made by a system tenant, can it contain
-	// backed up tenants, which the processor needs to know when is rekeying -- if
-	// the backup contains tenants, then a key with a tenant prefix should be
-	// restored if, and only if, we're restoring that tenant, and restored to a
-	// tenant. Otherwise, if this backup was not made by a system tenant, it does
-	// not contain tenants, so the rekey will assume if a key has a tenant prefix,
-	// it is because the tenant produced the backup, and it should be removed to
-	// then decode the remainder of the key. We communicate this distinction to
-	// the processor with a special tenant rekey _into_ the system tenant, which
-	// would never otherwise be valid. It will discard this rekey but it signals
-	// to it that we're rekeying a system-made backup.
-	var tenantRekeys []execinfrapb.TenantRekey
-	if backupTenantID == roachpb.SystemTenantID {
-		tenantRekeys = append(tenantRekeys, isBackupFromSystemTenantRekey)
-	}
-
-	pkIDs := make(map[uint64]bool)
-	for _, tbl := range tables {
-		pkIDs[kvpb.BulkOpSummaryID(uint64(tbl.GetID()), uint64(tbl.GetPrimaryIndexID()))] = true
-	}
-
-	dataToPreRestore := &restorationDataBase{
-		spans:        preRestoreSpans,
-		tableRekeys:  rekeys,
-		tenantRekeys: tenantRekeys,
-		pkIDs:        pkIDs,
-	}
-
-	trackedRestore := &mainRestorationData{
-		restorationDataBase{
-			spans:        postRestoreSpans,
-			tableRekeys:  rekeys,
-			tenantRekeys: tenantRekeys,
-			pkIDs:        pkIDs,
-		},
-	}
-
-	preValidation := &restorationDataBase{}
-	// During a RESTORE with verify_backup_table_data data, progress on
-	// verifySpans should be the source of job progress (as it will take the most time); therefore,
-	// wrap them in a mainRestoration struct and unwrap postRestoreSpans
-	// (only relevant during a cluster restore).
-	if details.VerifyData {
-		trackedRestore.restorationDataBase.spans = verifySpans
-		trackedRestore.restorationDataBase.validateOnly = true
-
-		// Before the main (validation) flow, during a cluster level restore,
-		// we still need to restore system tables that do NOT get restored in the dataToPreRestore
-		// flow. This restoration will not get tracked during job progress.
-		if (details.DescriptorCoverage != tree.AllDescriptors) && len(postRestoreSpans) != 0 {
-			return nil, nil, nil, errors.AssertionFailedf(
-				"no spans should get restored in a non cluster, verify_backup_table_data restore")
-		}
-		preValidation.spans = postRestoreSpans
-		preValidation.tableRekeys = rekeys
-		preValidation.pkIDs = pkIDs
-	}
-
-	if tempSystemDBID != descpb.InvalidID {
-		for _, table := range preRestoreTables {
-			if table.GetParentID() == tempSystemDBID {
-				dataToPreRestore.systemTables = append(dataToPreRestore.systemTables, table)
+		if details.DescriptorCoverage != tree.AllDescriptors {
+			if err := synthesizeZoneConfigsForPartialRestore(
+				ctx,
+				p,
+				txn,
+				databases,
+				tables,
+				typesByID,
+				details.RemoveRegions,
+				details.SkipLocalitiesCheck); err != nil {
+				return err
 			}
 		}
-		for _, table := range postRestoreTables {
-			if table.GetParentID() == tempSystemDBID {
-				if details.VerifyData {
-					// During a verify_backup_table_data RESTORE, system tables are
-					// restored pre validation. Note that the system tables are still
-					// added to the trackedRestore flow because after ingestion, the
-					// restore job uses systemTable metadata hanging from the
-					// trackedRestore object.
-					preValidation.systemTables = append(preValidation.systemTables, table)
-				}
-				trackedRestore.systemTables = append(trackedRestore.systemTables, table)
-			}
+
+		details.PrepareCompleted = true
+		details.DatabaseDescs = databaseDescs
+		details.TableDescs = tableDescs
+		details.TypeDescs = make([]*descpb.TypeDescriptor, len(typesToWrite))
+		for i := range typesToWrite {
+			details.TypeDescs[i] = typesToWrite[i].TypeDesc()
 		}
-	}
-	for _, tenant := range details.Tenants {
-		to, err := roachpb.MakeTenantID(tenant.ID)
-		if err != nil {
-			return nil, nil, nil, err
+		details.SchemaDescs = make([]*descpb.SchemaDescriptor, len(schemasToWrite))
+		for i := range schemasToWrite {
+			details.SchemaDescs[i] = schemasToWrite[i].SchemaDesc()
 		}
-		from := to
-		if details.PreRewriteTenantId != nil {
-			from = *details.PreRewriteTenantId
+		details.FunctionDescs = make([]*descpb.FunctionDescriptor, len(functionsToWrite))
+		for i, fn := range functionsToWrite {
+			details.FunctionDescs[i] = fn.FuncDesc()
 		}
-		trackedRestore.addTenant(from, to)
-	}
-	return dataToPreRestore, preValidation, trackedRestore, nil
+
+		// Update the job once all descs have been prepared for ingestion.
+		err := r.job.WithTxn(txn).SetDetails(ctx, details)
+
+		// Emit to the event log now that the job has finished preparing descs.
+		emitRestoreJobEvent(ctx, p, jobs.StateRunning, r.job)
+		return err
+	})
 }
 
 // protectRestoreTargets issues a protected timestamp over the targets we seek
@@ -2105,11 +2140,13 @@ func (r *restoreResumer) doResume(ctx context.Context, execCtx interface{}) erro
 	if err != nil {
 		return err
 	}
-	preData, preValidateData, mainData, err := createImportingDescriptors(ctx, p, backupCodec, sqlDescs, r, latestBackupManifest)
+	if err := createImportingDescriptors(ctx, p, sqlDescs, r); err != nil {
+		return err
+	}
+	preData, preValidateData, mainData, err := createRestoreFlows(ctx, r, backupCodec, sqlDescs)
 	if err != nil {
 		return err
 	}
-
 	if details.OnlineImpl() && len(details.DownloadSpans) == 0 {
 		// Persist the download spans before the link phase begins as OnFailOrCancel
 		// could use them if called.
@@ -2698,8 +2735,14 @@ func (r *restoreResumer) MaybeWaitForSpanConfigConformance(
 // the new parent assigned in the rewrites during planning. Returns InvalidID if
 // no such table appears in the rewrites.
 func tempSystemDatabaseID(
-	details jobspb.RestoreDetails, tables []catalog.TableDescriptor,
+	details jobspb.RestoreDetails,
+	tables []catalog.TableDescriptor,
+	jobCreationClusterVersion roachpb.Version,
 ) descpb.ID {
+	if jobCreationClusterVersion.AtLeast(clusterversion.V26_2.Version()) {
+		return details.TempSystemID
+	}
+
 	if details.DescriptorCoverage != tree.AllDescriptors && !isSystemUserRestore(details) {
 		return descpb.InvalidID
 	}
@@ -2711,7 +2754,6 @@ func tempSystemDatabaseID(
 			}
 		}
 	}
-
 	return descpb.InvalidID
 }
 
@@ -3167,7 +3209,7 @@ func (r *restoreResumer) OnFailOrCancel(
 		}
 	}
 
-	if details.DescriptorCoverage == tree.AllDescriptors {
+	if details.DescriptorCoverage == tree.AllDescriptors || isSystemUserRestore(details) {
 		// The temporary system table descriptors should already have been dropped
 		// in `dropDescriptors` but we still need to drop the temporary system db.
 		if err := r.cleanupTempSystemTables(ctx); err != nil {
@@ -3639,8 +3681,10 @@ func (r *restoreResumer) restoreSystemUsers(
 	ctx context.Context, db isql.DB, systemTables []catalog.TableDescriptor,
 ) error {
 	return db.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
-		selectNonExistentUsers := "SELECT * FROM crdb_temp_system.users temp " +
-			"WHERE NOT EXISTS (SELECT * FROM system.users u WHERE temp.username = u.username)"
+		tempSystemDBName := restoreTempSystemName(r.job.Payload().CreationClusterVersion, r.job.ID())
+		selectNonExistentUsers := fmt.Sprintf("SELECT * FROM %s.users temp "+
+			"WHERE NOT EXISTS (SELECT * FROM system.users u WHERE temp.username = u.username)",
+			tempSystemDBName)
 		users, err := txn.QueryBuffered(ctx, "get-users",
 			txn.KV(), selectNonExistentUsers)
 		if err != nil {
@@ -3668,8 +3712,9 @@ func (r *restoreResumer) restoreSystemUsers(
 
 		// We skip granting roles if the backup does not contain system.role_members.
 		if hasSystemRoleMembersTable(systemTables) {
-			selectNonExistentRoleMembers := "SELECT * FROM crdb_temp_system.role_members temp_rm WHERE " +
-				"NOT EXISTS (SELECT * FROM system.role_members rm WHERE temp_rm.role = rm.role AND temp_rm.member = rm.member)"
+			selectNonExistentRoleMembers := fmt.Sprintf("SELECT * FROM %s.role_members temp_rm WHERE "+
+				"NOT EXISTS (SELECT * FROM system.role_members rm WHERE temp_rm.role = rm.role AND temp_rm.member = rm.member)",
+				tempSystemDBName)
 			roleMembers, err := txn.QueryBuffered(ctx, "get-role-members",
 				txn.KV(), selectNonExistentRoleMembers)
 			if err != nil {
@@ -3696,8 +3741,9 @@ VALUES ($1, $2, $3, (SELECT user_id FROM system.users WHERE username = $1), (SEL
 		}
 
 		if hasSystemRoleOptionsTable(systemTables) {
-			selectNonExistentRoleOptions := "SELECT * FROM crdb_temp_system.role_options temp_ro WHERE " +
-				"NOT EXISTS (SELECT * FROM system.role_options ro WHERE temp_ro.username = ro.username AND temp_ro.option = ro.option)"
+			selectNonExistentRoleOptions := fmt.Sprintf("SELECT * FROM %s.role_options temp_ro WHERE "+
+				"NOT EXISTS (SELECT * FROM system.role_options ro WHERE temp_ro.username = ro.username AND temp_ro.option = ro.option)",
+				tempSystemDBName)
 			roleOptions, err := txn.QueryBuffered(ctx, "get-role-options", txn.KV(), selectNonExistentRoleOptions)
 			if err != nil {
 				return err
@@ -3749,9 +3795,10 @@ func (r *restoreResumer) restoreSystemTables(
 	// to the temporary system DB then populate the metadata required to restore
 	// to the real system table.
 	systemTablesToRestore := make([]systemTableNameWithConfig, 0)
+	tempSystemDBName := restoreTempSystemName(r.job.Payload().CreationClusterVersion, r.job.ID())
 	for _, table := range tables {
 		systemTableName := table.GetName()
-		stagingTableName := restoreTempSystemDB + "." + systemTableName
+		stagingTableName := tempSystemDBName + "." + systemTableName
 
 		config, ok := systemTableBackupConfiguration[systemTableName]
 		if !ok {
@@ -3829,26 +3876,33 @@ func (r *restoreResumer) restoreSystemTables(
 
 func (r *restoreResumer) cleanupTempSystemTables(ctx context.Context) error {
 	executor := r.execCfg.InternalDB.Executor()
+
+	dbName := restoreTempSystemName(r.job.Payload().CreationClusterVersion, r.job.ID())
+
 	// Check if the temp system database has already been dropped. This can happen
 	// if the restore job fails after the system database has cleaned up.
 	checkIfDatabaseExists := "SELECT database_name FROM [SHOW DATABASES] WHERE database_name=$1"
-	if row, err := executor.QueryRow(ctx, "checking-for-temp-system-db" /* opName */, nil /* txn */, checkIfDatabaseExists, restoreTempSystemDB); err != nil {
-		return errors.Wrap(err, "checking for temporary system db")
-	} else if row == nil {
-		// Temporary system DB might already have been dropped by the restore job.
+	row, err := executor.QueryRow(ctx, "checking-for-temp-system-db" /* opName */, nil /* txn */, checkIfDatabaseExists, dbName)
+	if err != nil {
+		return errors.Wrapf(err, "checking for temporary system db %q", dbName)
+	}
+	if row == nil {
+		// Temporary system DB doesn't exist, nothing to clean up.
 		return nil
 	}
 
 	// After restoring the system tables, drop the temporary database holding the
 	// system tables.
-	gcTTLQuery := fmt.Sprintf("ALTER DATABASE %s CONFIGURE ZONE USING gc.ttlseconds=1", restoreTempSystemDB)
+	gcTTLQuery := fmt.Sprintf("ALTER DATABASE %s CONFIGURE ZONE USING gc.ttlseconds=1", dbName)
 	if _, err := executor.Exec(ctx, "altering-gc-ttl-temp-system" /* opName */, nil /* txn */, gcTTLQuery); err != nil {
-		log.Dev.Errorf(ctx, "failed to update the GC TTL of %q: %+v", restoreTempSystemDB, err)
+		log.Dev.Errorf(ctx, "failed to update the GC TTL of %q: %+v", dbName, err)
 	}
-	dropTableQuery := fmt.Sprintf("DROP DATABASE %s CASCADE", restoreTempSystemDB)
+
+	dropTableQuery := fmt.Sprintf("DROP DATABASE %s CASCADE", dbName)
 	if _, err := executor.Exec(ctx, "drop-temp-system-db" /* opName */, nil /* txn */, dropTableQuery); err != nil {
-		return errors.Wrap(err, "dropping temporary system db")
+		return errors.Wrapf(err, "dropping temporary system db %q", dbName)
 	}
+
 	return nil
 }
 

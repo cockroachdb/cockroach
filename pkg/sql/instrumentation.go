@@ -1078,6 +1078,9 @@ func (m execNodeTraceMetadata) annotateExplain(
 	makeDeterministic bool,
 	p *planner,
 ) {
+	// TODO(yuzefovich): we currently call ExtractStatsFromSpans twice: once in
+	// execstats.GetQueryLevelStats, and again here. I think there is an
+	// opportunity to consolidate that into a single call.
 	statsMap := execinfrapb.ExtractStatsFromSpans(spans, makeDeterministic)
 
 	// Retrieve which region each node is on.

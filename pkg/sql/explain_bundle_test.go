@@ -748,6 +748,29 @@ CREATE TABLE users(id UUID DEFAULT gen_random_uuid() PRIMARY KEY, promo_id INT R
 		)
 	})
 
+	t.Run("types_arr", func(t *testing.T) {
+		r.Exec(t, "CREATE TYPE test_type3 AS ENUM ('hello','world');")
+		r.Exec(t, "CREATE TYPE test_type4 AS (x INT, y INT);")
+		r.Exec(t, "CREATE TABLE arrtypt (k INT PRIMARY KEY, c test_type3[], d test_type4[]);")
+		rows := r.QueryStr(t, "EXPLAIN ANALYZE (DEBUG) SELECT * FROM arrtypt;")
+		checkBundle(
+			t, fmt.Sprint(rows), "test_type3", func(name, contents string) error {
+				if name == "schema.sql" {
+					reg := regexp.MustCompile(`CREATE TYPE .*\.test_type3`)
+					if reg.FindString(contents) == "" {
+						return errors.Errorf("could not find definition for 'test_type3' type in schema.sql")
+					}
+					reg = regexp.MustCompile(`CREATE TYPE .*\.test_type4`)
+					if reg.FindString(contents) == "" {
+						return errors.Errorf("could not find definition for 'test_type4' type in schema.sql")
+					}
+				}
+				return nil
+			}, false, /* expectErrors */
+			base, plans, "distsql.html vec.txt vec-v.txt stats-defaultdb.public.arrtypt.sql",
+		)
+	})
+
 	t.Run("udfs", func(t *testing.T) {
 		r.Exec(t, "CREATE FUNCTION add_func(a INT, b INT) RETURNS INT IMMUTABLE LEAKPROOF LANGUAGE SQL AS 'SELECT a + b';")
 		r.Exec(t, "CREATE FUNCTION subtract_func(a INT, b INT) RETURNS INT IMMUTABLE LEAKPROOF LANGUAGE SQL AS 'SELECT a - b';")
@@ -929,12 +952,12 @@ CREATE TABLE users(id UUID DEFAULT gen_random_uuid() PRIMARY KEY, promo_id INT R
 
 	t.Run("multiple databases and special characters", func(t *testing.T) {
 		r.Exec(t, `CREATE DATABASE "db""name";`)
-		r.Exec(t, `CREATE DATABASE "db''name";`)
+		r.Exec(t, `CREATE DATABASE "db''Name";`)
 		r.Exec(t, `CREATE SCHEMA "db""name"."sc""name"`)
-		r.Exec(t, `CREATE SCHEMA "db''name"."sc''name"`)
+		r.Exec(t, `CREATE SCHEMA "db''Name"."sc''name"`)
 		r.Exec(t, `CREATE TABLE "db""name"."sc""name".t (pk INT PRIMARY KEY);`)
-		r.Exec(t, `CREATE TABLE "db''name"."sc''name".t (pk INT PRIMARY KEY);`)
-		rows := r.QueryStr(t, `EXPLAIN ANALYZE (DEBUG) SELECT * FROM "db""name"."sc""name".t, "db''name"."sc''name".t;`)
+		r.Exec(t, `CREATE TABLE "db''Name"."sc''name".t (pk INT PRIMARY KEY);`)
+		rows := r.QueryStr(t, `EXPLAIN ANALYZE (DEBUG) SELECT * FROM "db""name"."sc""name".t, "db''Name"."sc''name".t;`)
 		checkBundle(
 			t, fmt.Sprint(rows), `"sc""name".t`, nil, false, /* expectErrors */
 			base, plans, `distsql.html vec.txt vec-v.txt stats-_db__name_._sc__name_.t.sql stats-_db__name_._sc__name_.t_2.sql`,

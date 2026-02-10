@@ -79,6 +79,7 @@ func (*AlterTableSetIdentity) alterTableCmd()        {}
 func (*AlterTableIdentity) alterTableCmd()           {}
 func (*AlterTableDropIdentity) alterTableCmd()       {}
 func (*AlterTableSetRLSMode) alterTableCmd()         {}
+func (*AlterTableSetTrigger) alterTableCmd()         {}
 
 var _ AlterTableCmd = &AlterTableAddColumn{}
 var _ AlterTableCmd = &AlterTableAddConstraint{}
@@ -105,6 +106,7 @@ var _ AlterTableCmd = &AlterTableSetIdentity{}
 var _ AlterTableCmd = &AlterTableIdentity{}
 var _ AlterTableCmd = &AlterTableDropIdentity{}
 var _ AlterTableCmd = &AlterTableSetRLSMode{}
+var _ AlterTableCmd = &AlterTableSetTrigger{}
 
 // ColumnMutationCmd is the subset of AlterTableCmds that modify an
 // existing column.
@@ -965,6 +967,50 @@ func (node *AlterTableSetRLSMode) Format(ctx *FmtCtx) {
 	ctx.WriteString(" ")
 	ctx.WriteString(node.Mode.String())
 	ctx.WriteString(" ROW LEVEL SECURITY")
+}
+
+// TriggerScope indicates which triggers are affected by ENABLE/DISABLE TRIGGER.
+type TriggerScope int
+
+const (
+	// TriggerScopeName affects a specific named trigger.
+	TriggerScopeName TriggerScope = iota
+	// TriggerScopeAll affects all triggers on the table.
+	TriggerScopeAll
+	// TriggerScopeUser affects all user triggers (same as All in CockroachDB).
+	TriggerScopeUser
+)
+
+// AlterTableSetTrigger represents ALTER TABLE ENABLE/DISABLE TRIGGER.
+type AlterTableSetTrigger struct {
+	Enable bool         // true for ENABLE, false for DISABLE
+	Scope  TriggerScope // Which triggers to affect
+	Name   Name         // Trigger name (only when Scope == TriggerScopeName)
+}
+
+// TelemetryName implements the AlterTableCmd interface.
+func (node *AlterTableSetTrigger) TelemetryName() string {
+	if node.Enable {
+		return "enable_trigger"
+	}
+	return "disable_trigger"
+}
+
+// Format implements the NodeFormatter interface.
+func (node *AlterTableSetTrigger) Format(ctx *FmtCtx) {
+	if node.Enable {
+		ctx.WriteString(" ENABLE TRIGGER ")
+	} else {
+		ctx.WriteString(" DISABLE TRIGGER ")
+	}
+	switch node.Scope {
+	case TriggerScopeAll:
+		ctx.WriteString("ALL")
+	case TriggerScopeUser:
+		ctx.WriteString("USER")
+	default:
+		ctx.FormatNode(&node.Name)
+	}
 }
 
 // GetTableType returns a string representing the type of table the command

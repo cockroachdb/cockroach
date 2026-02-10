@@ -8,6 +8,7 @@ package logical
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/crosscluster/logical/sqlwriter"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -169,10 +170,10 @@ func (tu *tombstoneUpdater) getDeleter(ctx context.Context, txn *kv.Txn) (row.De
 		}
 
 		table := tu.leased.descriptor.Underlying().(catalog.TableDescriptor)
-		schema := getColumnSchema(table)
+		schema := sqlwriter.GetColumnSchema(table)
 		cols := make([]catalog.Column, len(schema))
 		for i, cs := range schema {
-			cols[i] = cs.column
+			cols[i] = cs.Column
 		}
 
 		tu.leased.deleter = row.MakeDeleter(tu.codec, tu.leased.descriptor.Underlying().(catalog.TableDescriptor), nil /* lockedIndexes */, cols, tu.sd, &tu.settings.SV, nil /* metrics */)

@@ -178,7 +178,7 @@ func (ls *Stores) GetReplicaForRangeID(
 // SendWithWriteBytes sends a batch request. The store is looked up from the
 // store map using the ID specified in the request.
 func (ls *Stores) SendWithWriteBytes(
-	ctx context.Context, ba *kvpb.BatchRequest,
+	ctx context.Context, ba *kvpb.BatchRequest, admissionInfo kvadmission.AdmissionInfo,
 ) (*kvpb.BatchResponse, *kvadmission.StoreWriteBytes, *kvpb.Error) {
 	if err := ba.ValidateForEvaluation(); err != nil {
 		return nil, nil, kvpb.NewError(errors.Wrapf(err, "invalid batch (%s)", ba))
@@ -189,7 +189,7 @@ func (ls *Stores) SendWithWriteBytes(
 		return nil, nil, kvpb.NewError(err)
 	}
 
-	br, writeBytes, pErr := store.SendWithWriteBytes(ctx, ba)
+	br, writeBytes, pErr := store.SendWithWriteBytes(ctx, ba, admissionInfo)
 	if br != nil && br.Error != nil {
 		panic(kvpb.ErrorUnexpectedlySet(store, br))
 	}

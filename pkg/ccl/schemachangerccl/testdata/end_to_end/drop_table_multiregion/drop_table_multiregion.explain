@@ -10,7 +10,7 @@ EXPLAIN (DDL) DROP TABLE multi_region_test_db.public.table_regional_by_row;
 Schema change plan for DROP TABLE ‹multi_region_test_db›.‹public›.‹table_regional_by_row›;
  ├── StatementPhase
  │    └── Stage 1 of 1 in StatementPhase
- │         ├── 41 elements transitioning toward ABSENT
+ │         ├── 45 elements transitioning toward ABSENT
  │         │    ├── PUBLIC → ABSENT  Namespace:{DescID: 108 (table_regional_by_row-), Name: "table_regional_by_row", ReferencedDescID: 104 (multi_region_test_db), IntValue: 105}
  │         │    ├── PUBLIC → ABSENT  Owner:{DescID: 108 (table_regional_by_row-)}
  │         │    ├── PUBLIC → ABSENT  UserPrivileges:{DescID: 108 (table_regional_by_row-), Name: "admin"}
@@ -51,6 +51,10 @@ Schema change plan for DROP TABLE ‹multi_region_test_db›.‹public›.‹tab
  │         │    ├── PUBLIC → ABSENT  PrimaryIndex:{DescID: 108 (table_regional_by_row-), IndexID: 1 (table_regional_by_row_pkey-), ConstraintID: 1}
  │         │    ├── PUBLIC → ABSENT  IndexPartitioning:{DescID: 108 (table_regional_by_row-), IndexID: 1 (table_regional_by_row_pkey-)}
  │         │    ├── PUBLIC → ABSENT  IndexName:{DescID: 108 (table_regional_by_row-), Name: "table_regional_by_row_pkey", IndexID: 1 (table_regional_by_row_pkey-)}
+ │         │    ├── PUBLIC → ABSENT  TableZoneConfig:{DescID: 108 (table_regional_by_row-), SeqNum: 0}
+ │         │    ├── PUBLIC → ABSENT  PartitionZoneConfig:{DescID: 108 (table_regional_by_row-), IndexID: 1 (table_regional_by_row_pkey-), SeqNum: 0, PartitionName: "us-east1"}
+ │         │    ├── PUBLIC → ABSENT  PartitionZoneConfig:{DescID: 108 (table_regional_by_row-), IndexID: 1 (table_regional_by_row_pkey-), SeqNum: 0, PartitionName: "us-east2"}
+ │         │    ├── PUBLIC → ABSENT  PartitionZoneConfig:{DescID: 108 (table_regional_by_row-), IndexID: 1 (table_regional_by_row_pkey-), SeqNum: 0, PartitionName: "us-east3"}
  │         │    └── PUBLIC → ABSENT  TableSchemaLocked:{DescID: 108 (table_regional_by_row-)}
  │         └── 52 Mutation operations
  │              ├── MarkDescriptorAsDropped {"DescriptorID":108}
@@ -107,7 +111,7 @@ Schema change plan for DROP TABLE ‹multi_region_test_db›.‹public›.‹tab
  │              └── MakeDeleteOnlyColumnAbsent {"ColumnID":2,"TableID":108}
  ├── PreCommitPhase
  │    ├── Stage 1 of 2 in PreCommitPhase
- │    │    ├── 41 elements transitioning toward ABSENT
+ │    │    ├── 45 elements transitioning toward ABSENT
  │    │    │    ├── ABSENT  → PUBLIC Namespace:{DescID: 108 (table_regional_by_row-), Name: "table_regional_by_row", ReferencedDescID: 104 (multi_region_test_db), IntValue: 105}
  │    │    │    ├── ABSENT  → PUBLIC Owner:{DescID: 108 (table_regional_by_row-)}
  │    │    │    ├── ABSENT  → PUBLIC UserPrivileges:{DescID: 108 (table_regional_by_row-), Name: "admin"}
@@ -148,11 +152,15 @@ Schema change plan for DROP TABLE ‹multi_region_test_db›.‹public›.‹tab
  │    │    │    ├── ABSENT  → PUBLIC PrimaryIndex:{DescID: 108 (table_regional_by_row-), IndexID: 1 (table_regional_by_row_pkey-), ConstraintID: 1}
  │    │    │    ├── ABSENT  → PUBLIC IndexPartitioning:{DescID: 108 (table_regional_by_row-), IndexID: 1 (table_regional_by_row_pkey-)}
  │    │    │    ├── ABSENT  → PUBLIC IndexName:{DescID: 108 (table_regional_by_row-), Name: "table_regional_by_row_pkey", IndexID: 1 (table_regional_by_row_pkey-)}
+ │    │    │    ├── ABSENT  → PUBLIC TableZoneConfig:{DescID: 108 (table_regional_by_row-), SeqNum: 0}
+ │    │    │    ├── ABSENT  → PUBLIC PartitionZoneConfig:{DescID: 108 (table_regional_by_row-), IndexID: 1 (table_regional_by_row_pkey-), SeqNum: 0, PartitionName: "us-east1"}
+ │    │    │    ├── ABSENT  → PUBLIC PartitionZoneConfig:{DescID: 108 (table_regional_by_row-), IndexID: 1 (table_regional_by_row_pkey-), SeqNum: 0, PartitionName: "us-east2"}
+ │    │    │    ├── ABSENT  → PUBLIC PartitionZoneConfig:{DescID: 108 (table_regional_by_row-), IndexID: 1 (table_regional_by_row_pkey-), SeqNum: 0, PartitionName: "us-east3"}
  │    │    │    └── ABSENT  → PUBLIC TableSchemaLocked:{DescID: 108 (table_regional_by_row-)}
  │    │    └── 1 Mutation operation
  │    │         └── UndoAllInTxnImmediateMutationOpSideEffects
  │    └── Stage 2 of 2 in PreCommitPhase
- │         ├── 41 elements transitioning toward ABSENT
+ │         ├── 45 elements transitioning toward ABSENT
  │         │    ├── PUBLIC → ABSENT  Namespace:{DescID: 108 (table_regional_by_row-), Name: "table_regional_by_row", ReferencedDescID: 104 (multi_region_test_db), IntValue: 105}
  │         │    ├── PUBLIC → ABSENT  Owner:{DescID: 108 (table_regional_by_row-)}
  │         │    ├── PUBLIC → ABSENT  UserPrivileges:{DescID: 108 (table_regional_by_row-), Name: "admin"}
@@ -193,6 +201,10 @@ Schema change plan for DROP TABLE ‹multi_region_test_db›.‹public›.‹tab
  │         │    ├── PUBLIC → ABSENT  PrimaryIndex:{DescID: 108 (table_regional_by_row-), IndexID: 1 (table_regional_by_row_pkey-), ConstraintID: 1}
  │         │    ├── PUBLIC → ABSENT  IndexPartitioning:{DescID: 108 (table_regional_by_row-), IndexID: 1 (table_regional_by_row_pkey-)}
  │         │    ├── PUBLIC → ABSENT  IndexName:{DescID: 108 (table_regional_by_row-), Name: "table_regional_by_row_pkey", IndexID: 1 (table_regional_by_row_pkey-)}
+ │         │    ├── PUBLIC → ABSENT  TableZoneConfig:{DescID: 108 (table_regional_by_row-), SeqNum: 0}
+ │         │    ├── PUBLIC → ABSENT  PartitionZoneConfig:{DescID: 108 (table_regional_by_row-), IndexID: 1 (table_regional_by_row_pkey-), SeqNum: 0, PartitionName: "us-east1"}
+ │         │    ├── PUBLIC → ABSENT  PartitionZoneConfig:{DescID: 108 (table_regional_by_row-), IndexID: 1 (table_regional_by_row_pkey-), SeqNum: 0, PartitionName: "us-east2"}
+ │         │    ├── PUBLIC → ABSENT  PartitionZoneConfig:{DescID: 108 (table_regional_by_row-), IndexID: 1 (table_regional_by_row_pkey-), SeqNum: 0, PartitionName: "us-east3"}
  │         │    └── PUBLIC → ABSENT  TableSchemaLocked:{DescID: 108 (table_regional_by_row-)}
  │         └── 56 Mutation operations
  │              ├── MarkDescriptorAsDropped {"DescriptorID":108}

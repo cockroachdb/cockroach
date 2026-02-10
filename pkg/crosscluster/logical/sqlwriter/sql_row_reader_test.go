@@ -3,7 +3,7 @@
 // Use of this software is governed by the CockroachDB Software License
 // included in the /LICENSE file.
 
-package logical
+package sqlwriter
 
 import (
 	"context"
@@ -12,11 +12,11 @@ import (
 
 	"github.com/cockroachdb/apd/v3"
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/crosscluster/replicationtestutils"
-	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/desctestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
+	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessionmutator"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
@@ -34,44 +34,36 @@ func TestSQLRowReader(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	server, s, dbSource, dbDest := setupLogicalTestServer(t, ctx, base.TestClusterArgs{
-		ServerArgs: testClusterBaseClusterArgs.ServerArgs,
-	}, 1)
-	defer server.Stopper().Stop(ctx)
+	s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	defer s.Stopper().Stop(ctx)
+	sqlRunner := sqlutils.MakeSQLRunner(sqlDB)
+	sqlRunner.Exec(t, "CREATE TABLE defaultdb.tab (pk INT PRIMARY KEY, payload STRING)")
 
-	srcURL := replicationtestutils.GetExternalConnectionURI(t, s, s, serverutils.DBName("a"))
+	session := newInternalSession(t, s)
+	defer session.Close(ctx)
 
-	// Create LDR stream from A to B
-	var jobID jobspb.JobID
-	dbDest.QueryRow(t, "CREATE LOGICAL REPLICATION STREAM FROM TABLE tab ON $1 INTO TABLE tab", srcURL.String()).Scan(&jobID)
+	// Insert one row with an origin timetamp
+	insertStmt, err := parser.ParseOne("INSERT INTO defaultdb.tab (pk, payload) VALUES ($1, $2)")
+	require.NoError(t, err)
+	prepared, err := session.Prepare(ctx, "insert", insertStmt, []*types.T{types.Int, types.String})
+	require.NoError(t, err)
+	require.NoError(t, session.ModifySession(ctx, func(m sessionmutator.SessionDataMutator) {
+		m.Data.OriginTimestampForLogicalDataReplication = s.Clock().Now()
+	}))
+	_, err = session.ExecutePrepared(ctx, prepared, tree.Datums{tree.NewDInt(10), tree.NewDString("remote")})
+	require.NoError(t, err)
 
-	// Write initial data and wait for replication to catch up
-	dbSource.Exec(t, "INSERT INTO tab VALUES (10, 'one'), (20, 'two'), (30, 'three')")
-	dbSource.Exec(t, "DELETE FROM tab WHERE pk = 20")
-	now := s.Clock().Now()
-	WaitUntilReplicatedTime(t, now, dbSource, jobID)
+	// Insert one row without an origin timestamp
+	sqlRunner.Exec(t, "INSERT INTO defaultdb.tab (pk, payload) VALUES (20, 'local')")
 
 	// Create sqlRowReader for source table
-	srcDesc := desctestutils.TestingGetPublicTableDescriptor(s.DB(), s.Codec(), "a", "tab")
-	srcSession := newInternalSession(t, s)
-	defer srcSession.Close(ctx)
-	srcReader, err := newSQLRowReader(ctx, srcDesc, srcSession)
+	desc := desctestutils.TestingGetPublicTableDescriptor(s.DB(), s.Codec(), "defaultdb", "tab")
+	srcReader, err := NewRowReader(ctx, desc, session)
 	require.NoError(t, err)
 
-	// Create sqlRowReader for destination table
-	dstDesc := desctestutils.TestingGetPublicTableDescriptor(s.DB(), s.Codec(), "b", "tab")
-	dstSession := newInternalSession(t, server.Server(0))
-	defer dstSession.Close(ctx)
-	dstReader, err := newSQLRowReader(ctx, dstDesc, dstSession)
-	require.NoError(t, err)
-
-	// Create test rows to look up
-
-	// Use sqlRowReader to get prior rows from both tables
 	db := s.InternalDB().(isql.DB)
-
-	readRows := func(t *testing.T, db isql.DB, rows []tree.Datums, reader sqlRowReader) map[int]priorRow {
-		var result map[int]priorRow
+	readRows := func(t *testing.T, db isql.DB, rows []tree.Datums, reader RowReader) map[int]PriorRow {
+		var result map[int]PriorRow
 		require.NoError(t, db.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
 			result, err = reader.ReadRows(ctx, rows)
 			require.NoError(t, err)
@@ -80,7 +72,7 @@ func TestSQLRowReader(t *testing.T) {
 		return result
 	}
 
-	readRowsSql := func(t *testing.T, db *sqlutils.SQLRunner, primaryKeys []int) map[int]priorRow {
+	readRowsSql := func(t *testing.T, db *sqlutils.SQLRunner, primaryKeys []int) map[int]PriorRow {
 		sqlRows := db.Query(t, `
 			SELECT pk,
 				   payload,
@@ -90,7 +82,7 @@ func TestSQLRowReader(t *testing.T) {
 			WHERE pk = ANY($1::int[])
 			ORDER BY pk`, pq.Array(primaryKeys))
 
-		result := make(map[int]priorRow, len(primaryKeys))
+		result := make(map[int]PriorRow, len(primaryKeys))
 
 		for sqlRows.Next() {
 			var pk int
@@ -105,10 +97,10 @@ func TestSQLRowReader(t *testing.T) {
 			logicalTimestamp, err := hlc.DecimalToHLC(mvccDec)
 			require.NoError(t, err)
 
-			result[slices.Index(primaryKeys, pk)] = priorRow{
-				row:              []tree.Datum{tree.NewDInt(tree.DInt(pk)), tree.NewDString(payload)},
-				logicalTimestamp: logicalTimestamp,
-				isLocal:          isLocal,
+			result[slices.Index(primaryKeys, pk)] = PriorRow{
+				Row:              []tree.Datum{tree.NewDInt(tree.DInt(pk)), tree.NewDString(payload)},
+				LogicalTimestamp: logicalTimestamp,
+				IsLocal:          isLocal,
 			}
 		}
 
@@ -116,30 +108,16 @@ func TestSQLRowReader(t *testing.T) {
 	}
 
 	testRows := []tree.Datums{
-		{tree.NewDInt(0), tree.NewDString("one")},    // Existing row
-		{tree.NewDInt(10), tree.NewDString("two")},   // Deleted row
-		{tree.NewDInt(20), tree.NewDString("three")}, // Existing row
-		{tree.NewDInt(30), tree.NewDString("four")},  // Never existed
+		{tree.NewDInt(10), tree.NewDString("one")},   // Row with origin timestamp
+		{tree.NewDInt(20), tree.NewDString("two")},   // Row without origin timestamp
+		{tree.NewDInt(30), tree.NewDString("three")}, // Does not exist
 	}
-	primaryKeys := []int{0, 10, 20, 30}
+	primaryKeys := []int{10, 20, 30}
 
-	dbSource.CheckQueryResults(t, `SELECT * FROM tab`, [][]string{
-		{"10", "one"},
-		{"30", "three"},
-	})
 	require.Equal(t,
 		readRows(t, db, testRows, srcReader),
-		readRowsSql(t, dbSource, primaryKeys),
+		readRowsSql(t, sqlRunner, primaryKeys),
 		"reading source did not yield expected rows")
-
-	dbDest.CheckQueryResults(t, `SELECT * FROM tab`, [][]string{
-		{"10", "one"},
-		{"30", "three"},
-	})
-	require.Equal(t,
-		readRows(t, db, testRows, dstReader),
-		readRowsSql(t, dbDest, primaryKeys),
-		"reading destination did not yield expected rows")
 }
 
 func TestSQLRowReaderWithArrayColumn(t *testing.T) {
@@ -164,7 +142,7 @@ func TestSQLRowReaderWithArrayColumn(t *testing.T) {
 	desc := desctestutils.TestingGetPublicTableDescriptor(s.DB(), s.Codec(), "defaultdb", "tab_array")
 	session := newInternalSession(t, s)
 	defer session.Close(ctx)
-	reader, err := newSQLRowReader(ctx, desc, session)
+	reader, err := NewRowReader(ctx, desc, session)
 	require.NoError(t, err)
 
 	db := s.InternalDB().(isql.DB)
@@ -180,7 +158,7 @@ func TestSQLRowReaderWithArrayColumn(t *testing.T) {
 		},
 	}
 
-	var result map[int]priorRow
+	var result map[int]PriorRow
 	require.NoError(t, db.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
 		result, err = reader.ReadRows(ctx, testRows)
 		return err
@@ -189,6 +167,6 @@ func TestSQLRowReaderWithArrayColumn(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, result)
 	require.Len(t, result, 2)
-	require.Equal(t, result[0].row[1], tree.NewDInt(10))
-	require.Equal(t, result[1].row[1], tree.NewDInt(20))
+	require.Equal(t, result[0].Row[1], tree.NewDInt(10))
+	require.Equal(t, result[1].Row[1], tree.NewDInt(20))
 }

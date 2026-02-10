@@ -10,7 +10,7 @@ EXPLAIN (DDL) DROP DATABASE multi_region_test_db CASCADE;
 Schema change plan for DROP DATABASE ‹multi_region_test_db› CASCADE;
  ├── StatementPhase
  │    └── Stage 1 of 1 in StatementPhase
- │         ├── 64 elements transitioning toward ABSENT
+ │         ├── 66 elements transitioning toward ABSENT
  │         │    ├── PUBLIC → ABSENT  Namespace:{DescID: 104 (multi_region_test_db-), Name: "multi_region_test_db", IntValue: 0}
  │         │    ├── PUBLIC → ABSENT  Owner:{DescID: 104 (multi_region_test_db-)}
  │         │    ├── PUBLIC → ABSENT  UserPrivileges:{DescID: 104 (multi_region_test_db-), Name: "admin"}
@@ -19,6 +19,7 @@ Schema change plan for DROP DATABASE ‹multi_region_test_db› CASCADE;
  │         │    ├── PUBLIC → DROPPED Database:{DescID: 104 (multi_region_test_db-)}
  │         │    ├── PUBLIC → ABSENT  DatabaseRoleSetting:{DescID: 104 (multi_region_test_db-), Name: "__placeholder_role_name__"}
  │         │    ├── PUBLIC → ABSENT  DatabaseRegionConfig:{DescID: 104 (multi_region_test_db-), ReferencedDescID: 106 (crdb_internal_region-)}
+ │         │    ├── PUBLIC → ABSENT  DatabaseZoneConfig:{DescID: 104 (multi_region_test_db-), SeqNum: 0}
  │         │    ├── PUBLIC → ABSENT  Namespace:{DescID: 106 (crdb_internal_region-), Name: "crdb_internal_region", ReferencedDescID: 104 (multi_region_test_db-), IntValue: 105}
  │         │    ├── PUBLIC → ABSENT  Owner:{DescID: 106 (crdb_internal_region-)}
  │         │    ├── PUBLIC → ABSENT  UserPrivileges:{DescID: 106 (crdb_internal_region-), Name: "admin"}
@@ -74,6 +75,7 @@ Schema change plan for DROP DATABASE ‹multi_region_test_db› CASCADE;
  │         │    ├── PUBLIC → ABSENT  IndexColumn:{DescID: 108 (table_regional_by_table-), ColumnID: 1 (a-), IndexID: 1 (table_regional_by_table_pkey-)}
  │         │    ├── PUBLIC → ABSENT  PrimaryIndex:{DescID: 108 (table_regional_by_table-), IndexID: 1 (table_regional_by_table_pkey-), ConstraintID: 1}
  │         │    ├── PUBLIC → ABSENT  IndexName:{DescID: 108 (table_regional_by_table-), Name: "table_regional_by_table_pkey", IndexID: 1 (table_regional_by_table_pkey-)}
+ │         │    ├── PUBLIC → ABSENT  TableZoneConfig:{DescID: 108 (table_regional_by_table-), SeqNum: 0}
  │         │    └── PUBLIC → ABSENT  TableSchemaLocked:{DescID: 108 (table_regional_by_table-)}
  │         └── 70 Mutation operations
  │              ├── MarkDescriptorAsDropped {"DescriptorID":106}
@@ -148,7 +150,7 @@ Schema change plan for DROP DATABASE ‹multi_region_test_db› CASCADE;
  │              └── MakeDeleteOnlyColumnAbsent {"ColumnID":1,"TableID":108}
  ├── PreCommitPhase
  │    ├── Stage 1 of 2 in PreCommitPhase
- │    │    ├── 64 elements transitioning toward ABSENT
+ │    │    ├── 66 elements transitioning toward ABSENT
  │    │    │    ├── ABSENT  → PUBLIC Namespace:{DescID: 104 (multi_region_test_db-), Name: "multi_region_test_db", IntValue: 0}
  │    │    │    ├── ABSENT  → PUBLIC Owner:{DescID: 104 (multi_region_test_db-)}
  │    │    │    ├── ABSENT  → PUBLIC UserPrivileges:{DescID: 104 (multi_region_test_db-), Name: "admin"}
@@ -157,6 +159,7 @@ Schema change plan for DROP DATABASE ‹multi_region_test_db› CASCADE;
  │    │    │    ├── DROPPED → PUBLIC Database:{DescID: 104 (multi_region_test_db-)}
  │    │    │    ├── ABSENT  → PUBLIC DatabaseRoleSetting:{DescID: 104 (multi_region_test_db-), Name: "__placeholder_role_name__"}
  │    │    │    ├── ABSENT  → PUBLIC DatabaseRegionConfig:{DescID: 104 (multi_region_test_db-), ReferencedDescID: 106 (crdb_internal_region-)}
+ │    │    │    ├── ABSENT  → PUBLIC DatabaseZoneConfig:{DescID: 104 (multi_region_test_db-), SeqNum: 0}
  │    │    │    ├── ABSENT  → PUBLIC Namespace:{DescID: 106 (crdb_internal_region-), Name: "crdb_internal_region", ReferencedDescID: 104 (multi_region_test_db-), IntValue: 105}
  │    │    │    ├── ABSENT  → PUBLIC Owner:{DescID: 106 (crdb_internal_region-)}
  │    │    │    ├── ABSENT  → PUBLIC UserPrivileges:{DescID: 106 (crdb_internal_region-), Name: "admin"}
@@ -212,11 +215,12 @@ Schema change plan for DROP DATABASE ‹multi_region_test_db› CASCADE;
  │    │    │    ├── ABSENT  → PUBLIC IndexColumn:{DescID: 108 (table_regional_by_table-), ColumnID: 1 (a-), IndexID: 1 (table_regional_by_table_pkey-)}
  │    │    │    ├── ABSENT  → PUBLIC PrimaryIndex:{DescID: 108 (table_regional_by_table-), IndexID: 1 (table_regional_by_table_pkey-), ConstraintID: 1}
  │    │    │    ├── ABSENT  → PUBLIC IndexName:{DescID: 108 (table_regional_by_table-), Name: "table_regional_by_table_pkey", IndexID: 1 (table_regional_by_table_pkey-)}
+ │    │    │    ├── ABSENT  → PUBLIC TableZoneConfig:{DescID: 108 (table_regional_by_table-), SeqNum: 0}
  │    │    │    └── ABSENT  → PUBLIC TableSchemaLocked:{DescID: 108 (table_regional_by_table-)}
  │    │    └── 1 Mutation operation
  │    │         └── UndoAllInTxnImmediateMutationOpSideEffects
  │    └── Stage 2 of 2 in PreCommitPhase
- │         ├── 64 elements transitioning toward ABSENT
+ │         ├── 66 elements transitioning toward ABSENT
  │         │    ├── PUBLIC → ABSENT  Namespace:{DescID: 104 (multi_region_test_db-), Name: "multi_region_test_db", IntValue: 0}
  │         │    ├── PUBLIC → ABSENT  Owner:{DescID: 104 (multi_region_test_db-)}
  │         │    ├── PUBLIC → ABSENT  UserPrivileges:{DescID: 104 (multi_region_test_db-), Name: "admin"}
@@ -225,6 +229,7 @@ Schema change plan for DROP DATABASE ‹multi_region_test_db› CASCADE;
  │         │    ├── PUBLIC → DROPPED Database:{DescID: 104 (multi_region_test_db-)}
  │         │    ├── PUBLIC → ABSENT  DatabaseRoleSetting:{DescID: 104 (multi_region_test_db-), Name: "__placeholder_role_name__"}
  │         │    ├── PUBLIC → ABSENT  DatabaseRegionConfig:{DescID: 104 (multi_region_test_db-), ReferencedDescID: 106 (crdb_internal_region-)}
+ │         │    ├── PUBLIC → ABSENT  DatabaseZoneConfig:{DescID: 104 (multi_region_test_db-), SeqNum: 0}
  │         │    ├── PUBLIC → ABSENT  Namespace:{DescID: 106 (crdb_internal_region-), Name: "crdb_internal_region", ReferencedDescID: 104 (multi_region_test_db-), IntValue: 105}
  │         │    ├── PUBLIC → ABSENT  Owner:{DescID: 106 (crdb_internal_region-)}
  │         │    ├── PUBLIC → ABSENT  UserPrivileges:{DescID: 106 (crdb_internal_region-), Name: "admin"}
@@ -280,6 +285,7 @@ Schema change plan for DROP DATABASE ‹multi_region_test_db› CASCADE;
  │         │    ├── PUBLIC → ABSENT  IndexColumn:{DescID: 108 (table_regional_by_table-), ColumnID: 1 (a-), IndexID: 1 (table_regional_by_table_pkey-)}
  │         │    ├── PUBLIC → ABSENT  PrimaryIndex:{DescID: 108 (table_regional_by_table-), IndexID: 1 (table_regional_by_table_pkey-), ConstraintID: 1}
  │         │    ├── PUBLIC → ABSENT  IndexName:{DescID: 108 (table_regional_by_table-), Name: "table_regional_by_table_pkey", IndexID: 1 (table_regional_by_table_pkey-)}
+ │         │    ├── PUBLIC → ABSENT  TableZoneConfig:{DescID: 108 (table_regional_by_table-), SeqNum: 0}
  │         │    └── PUBLIC → ABSENT  TableSchemaLocked:{DescID: 108 (table_regional_by_table-)}
  │         └── 77 Mutation operations
  │              ├── MarkDescriptorAsDropped {"DescriptorID":106}

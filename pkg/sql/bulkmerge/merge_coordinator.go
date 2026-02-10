@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/taskset"
 	"github.com/cockroachdb/errors"
+	pbtypes "github.com/gogo/protobuf/types"
 )
 
 var (
@@ -43,6 +44,10 @@ type mergeCoordinator struct {
 
 	done    bool
 	results execinfrapb.BulkMergeSpec_Output
+
+	// progressReceiver is captured from Run() so that handleRow() can push
+	// progress metadata to report task completion.
+	progressReceiver execinfra.RowReceiver
 }
 
 type mergeCoordinatorInput struct {
@@ -154,7 +159,7 @@ func (m *mergeCoordinator) closeLoopback() {
 }
 
 // handleRow accepts a row output by the merge processor, marks its task as
-// complete
+// complete, and pushes progress metadata to track task completion.
 func (m *mergeCoordinator) handleRow(row rowenc.EncDatumRow) error {
 	input, err := parseCoordinatorInput(row)
 	if err != nil {
@@ -162,6 +167,23 @@ func (m *mergeCoordinator) handleRow(row rowenc.EncDatumRow) error {
 	}
 
 	m.results.SSTs = append(m.results.SSTs, input.outputSSTs...)
+
+	// Push progress metadata to report task completion.
+	if m.progressReceiver != nil {
+		progress := &execinfrapb.MergeIterationProgress{
+			CompletedTaskID: int64(input.taskID),
+			TasksTotal:      m.spec.TaskCount,
+		}
+		progressAny, err := pbtypes.MarshalAny(progress)
+		if err != nil {
+			return errors.Wrap(err, "unable to marshal merge iteration progress")
+		}
+		_ = m.progressReceiver.Push(nil, &execinfrapb.ProducerMetadata{
+			BulkProcessorProgress: &execinfrapb.RemoteProducerMetadata_BulkProcessorProgress{
+				ProgressDetails: *progressAny,
+			},
+		})
+	}
 
 	next := m.tasks.ClaimNext(input.taskID)
 	if next.IsDone() {
@@ -182,6 +204,13 @@ func (m *mergeCoordinator) Start(ctx context.Context) {
 	m.StartInternal(ctx, "mergeCoordinator")
 	m.input.Start(ctx)
 	m.publishInitialTasks()
+}
+
+// Run implements execinfra.Processor. It captures the output receiver so that
+// handleRow can push progress metadata, then delegates to the base processor.
+func (m *mergeCoordinator) Run(ctx context.Context, output execinfra.RowReceiver) {
+	m.progressReceiver = output
+	m.ProcessorBase.Run(ctx, output)
 }
 
 func init() {

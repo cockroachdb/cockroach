@@ -2001,12 +2001,13 @@ func (og *operationGenerator) dropConstraint(ctx context.Context, tx pgx.Tx) (*o
 	}
 
 	// DROP INDEX CASCADE is preferred for dropping unique constraints, and
-	// dropping the constraint with ALTER TABLE ... DROP CONSTRAINT is unsupported.
+	// dropping the constraint with ALTER TABLE ... DROP CONSTRAINT is not
+	// supported by the legacy schema changer.
 	constraintIsUnique, err := og.constraintIsUnique(ctx, tx, tableName, constraintName)
 	if err != nil {
 		return nil, err
 	}
-	if constraintIsUnique {
+	if constraintIsUnique && !og.useDeclarativeSchemaChanger {
 		stmt.expectedExecErrors.add(pgcode.FeatureNotSupported)
 	}
 
@@ -3569,7 +3570,9 @@ type column struct {
 	generated           bool
 	generatedExpression string
 	ordinal             int
-	hasOnUpdate         bool
+	// Only populated on 26.2 and newer, otherwise this is always
+	// true.
+	hasOnUpdate bool
 }
 
 func (og *operationGenerator) getTableColumns(
@@ -3723,14 +3726,22 @@ ORDER BY random()
 func (og *operationGenerator) randChildColumnForFkRelation(
 	ctx context.Context, tx pgx.Tx, isNotComputed bool, typ string,
 ) (*tree.TableName, *column, error) {
-
+	// In a mixed version cluster always act like a column on update expression exists.
+	missingColumnOnUpdate, err := isClusterVersionLessThan(ctx, tx, clusterversion.V26_2.Version())
+	if err != nil {
+		return nil, nil, err
+	}
+	columnOnUpdateExpr := "'expr'"
+	if !missingColumnOnUpdate {
+		columnOnUpdateExpr = "column_on_update"
+	}
 	query := strings.Builder{}
-	query.WriteString(`
-    SELECT table_schema, table_name, column_name, crdb_sql_type, is_nullable, column_on_update IS NOT NULL
+	query.WriteString(fmt.Sprintf(`
+    SELECT table_schema, table_name, column_name, crdb_sql_type, is_nullable, %s IS NOT NULL
       FROM information_schema.columns
-		 WHERE table_name SIMILAR TO 'table_w[0-9]_+%' AND column_name <> 'rowid'
+		 WHERE table_name SIMILAR TO 'table_w[0-9]_+%%' AND column_name <> 'rowid'
 		       AND column_name NOT LIKE 'crdb_internal%%'
-  `)
+  `, columnOnUpdateExpr))
 	query.WriteString(fmt.Sprintf(`
 			AND crdb_sql_type = '%s'
 	`, typ))
@@ -3748,7 +3759,7 @@ func (og *operationGenerator) randChildColumnForFkRelation(
 	var nullable string
 	var hasOnUpdate bool
 
-	err := tx.QueryRow(ctx, query.String()).Scan(&tableSchema, &tableName, &columnName, &typName, &nullable, &hasOnUpdate)
+	err = tx.QueryRow(ctx, query.String()).Scan(&tableSchema, &tableName, &columnName, &typName, &nullable, &hasOnUpdate)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -5822,6 +5833,15 @@ func (og *operationGenerator) setTableStorageParam(
 		stmt.expectedExecErrors.add(pgcode.InvalidParameterValue)
 		stmt.expectedExecErrors.add(pgcode.InvalidTextRepresentation)
 		stmt.expectedExecErrors.add(pgcode.InvalidDatetimeFormat)
+		// Before version 26.2 we did not properly handle invalid float values
+		// for certain parameters.
+		hasInvalidValueBug, err := isClusterVersionLessThan(ctx, tx, clusterversion.V26_2.Version())
+		if err != nil {
+			return nil, err
+		}
+		if hasInvalidValueBug {
+			stmt.potentialExecErrors.add(pgcode.Uncategorized)
+		}
 	} else if isSchemaLockedParam(param) {
 		// set schema_locked cannot be combined with other operations
 		// and will return an error if it does.

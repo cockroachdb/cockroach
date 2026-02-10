@@ -611,9 +611,9 @@ func registerBackupFixtures(r registry.Registry) {
 			hardware: makeHardwareSpecs(hardwareSpecs{
 				workloadNode: true,
 			}),
-			// Fingerprinting is measured to take about 40 minutes on a 350 GB
-			// fixture on top of the allocated 2 hours for the test.
-			timeout: 3 * time.Hour,
+			// Fingerprinting is measured to take about 40 minutes, and occasionally longer than an hour,
+			// on a 350 GB fixture on top of the allocated 2 hours for the test.
+			timeout: 4 * time.Hour,
 			suites:  registry.Suites(registry.Nightly),
 			clouds:  []spec.Cloud{spec.AWS, spec.Azure, spec.GCE},
 		},

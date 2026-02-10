@@ -2228,6 +2228,10 @@ func TestImportIntoCSV(t *testing.T) {
 			JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
 		},
 		ExternalIODir: baseDir,
+		// This test can take very long time under both shared-process and
+		// external-process configs, so we abuse the "system tenant" option to
+		// only allow running in the single-tenant mode.
+		DefaultTestTenant: base.TestIsSpecificToStorageLayerAndNeedsASystemTenant,
 	}})
 	defer tc.Stopper().Stop(ctx)
 	conn := tc.ServerConn(0)
@@ -5397,7 +5401,11 @@ func TestImportJobEventLogging(t *testing.T) {
 	sqlDB.QueryRow(t, importQuery, simpleOcf).Scan(&jobID, &unused, &unused, &unused, &unused,
 		&unused)
 
-	expectedStatus := []string{string(jobs.StateSucceeded), string(jobs.StateRunning)}
+	expectedStatus := []string{
+		string(jobs.StateSucceeded),
+		string(jobs.StateRunning), // after row count check
+		string(jobs.StateRunning), // after prepare
+	}
 	expectedRecoveryEvent := eventpb.RecoveryEvent{
 		RecoveryType: importJobRecoveryEventType,
 		NumRows:      int64(1000),
@@ -5416,8 +5424,10 @@ func TestImportJobEventLogging(t *testing.T) {
 	row.Scan(&jobID)
 
 	expectedStatus = []string{
-		string(jobs.StateFailed), string(jobs.StateReverting),
-		string(jobs.StateRunning),
+		string(jobs.StateFailed),
+		string(jobs.StateReverting),
+		string(jobs.StateRunning), // after row count check
+		string(jobs.StateRunning), // after prepare
 	}
 	expectedRecoveryEvent = eventpb.RecoveryEvent{
 		RecoveryType: importJobRecoveryEventType,

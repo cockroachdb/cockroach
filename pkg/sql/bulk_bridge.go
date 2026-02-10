@@ -25,6 +25,7 @@ type bulkMergeFunc func(
 	maxIterations int,
 	writeTimestamp *hlc.Timestamp,
 	enforceUniqueness bool,
+	onProgress func(context.Context, *execinfrapb.ProducerMetadata) error,
 ) ([]execinfrapb.BulkMergeSpec_SST, error)
 
 var registeredBulkMerge bulkMergeFunc
@@ -45,6 +46,7 @@ func invokeBulkMerge(
 	maxIterations int,
 	writeTimestamp *hlc.Timestamp,
 	enforceUniqueness bool,
+	onProgress func(context.Context, *execinfrapb.ProducerMetadata) error,
 ) ([]execinfrapb.BulkMergeSpec_SST, error) {
 	if registeredBulkMerge == nil {
 		return nil, errors.AssertionFailedf("bulk merge implementation not registered")
@@ -52,5 +54,6 @@ func invokeBulkMerge(
 	return registeredBulkMerge(
 		ctx, execCtx, ssts, spans, genOutputURIAndRecordPrefix,
 		iteration, maxIterations, writeTimestamp, enforceUniqueness,
+		onProgress,
 	)
 }

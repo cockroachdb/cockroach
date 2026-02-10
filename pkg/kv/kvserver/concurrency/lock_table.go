@@ -404,6 +404,9 @@ type lockTableGuardImpl struct {
 	spans              *lockspanset.LockSpanSet
 	waitPolicy         lock.WaitPolicy
 	maxWaitQueueLength int
+	// virtuallyResolveIntents represents the state of VirtuallyDeferrerIntents at
+	// the outset of this request.
+	virtuallyResolveIntents bool
 
 	// Snapshot of the tree for which this request has some spans. Note that
 	// the lockStates in this snapshot may have been removed from
@@ -812,6 +815,68 @@ func (g *lockTableGuardImpl) txnMeta() *enginepb.TxnMeta {
 
 func (g *lockTableGuardImpl) hasUncertaintyInterval() bool {
 	return g.txn != nil && g.txn.ReadTimestamp.Less(g.txn.GlobalUncertaintyLimit)
+}
+
+func (g *lockTableGuardImpl) hasObservationAtOrBefore(o roachpb.ObservedTimestamp) bool {
+	if o.Timestamp.IsEmpty() {
+		return false
+	}
+	if ts, ok := g.txn.GetObservedTimestamp(o.NodeID); ok {
+		return ts.LessEq(o.Timestamp)
+	}
+	return false
+}
+
+// canResolveKeyForHoldingTransaction returns true and the appropriate
+// LockUpdate if we are able to resolve locks for the given holding
+// transaction.
+//
+// We are able to resolve locks if:
+//
+// 1. The holding transaction is known to be finalized, or
+//
+// 2. The holding transaction is pending and we either have no uncertainty
+// interval or the transaction was known to be pending concurrent with our own
+// transaction.
+//
+// We only allow (2) if lock resolution batching is enabled.
+func (g *lockTableGuardImpl) canResolveKeyForHoldingTransaction(
+	lockHolderTxn *enginepb.TxnMeta, str lock.Strength, key roachpb.Key,
+) (bool, roachpb.LockUpdate) {
+	// If the transaction is known to be finalized, then we are good to go.
+	finalizedTxn, ok := g.lt.txnStatusCache.finalizedTxns.get(lockHolderTxn.ID)
+	if ok {
+		return true, roachpb.MakeLockUpdate(finalizedTxn, roachpb.Span{Key: key})
+	}
+
+	// If the transaction is pending, we only consider resolution if we are a
+	// non-locking reader and batch resolution is enabled.
+	if str == lock.None && g.lt.batchPushedLockResolution() {
+		pushedTxnEntry, ok := g.lt.txnStatusCache.pendingTxns.get(lockHolderTxn.ID)
+		if ok && g.pendingPushedTransactionCanBeResolved(pushedTxnEntry) {
+			up := roachpb.MakeLockUpdate(pushedTxnEntry.Txn, roachpb.Span{Key: key})
+			if g.hasUncertaintyInterval() {
+				up.ClockWhilePending = pushedTxnEntry.ClockWhilePending
+			}
+			return true, up
+		}
+	}
+	return false, roachpb.LockUpdate{}
+}
+
+func (g *lockTableGuardImpl) pendingPushedTransactionCanBeResolved(
+	pushed *pendingTxnCacheEntry,
+) bool {
+	// Txn needs to be pushed above our WriteTimestamp.
+	if !g.ts.Less(pushed.Txn.WriteTimestamp) {
+		return false
+	}
+
+	// In order to usefully resolve a pending transaction, we either need no
+	// uncertainty interval, or we need to be sure that the request was concurrent
+	// with our transaction so that rewritten intent can be ignored even if it is
+	// inside our uncertainty interval.
+	return !g.hasUncertaintyInterval() || g.hasObservationAtOrBefore(pushed.ClockWhilePending)
 }
 
 func (g *lockTableGuardImpl) isSameTxn(txn *enginepb.TxnMeta) bool {
@@ -2691,59 +2756,25 @@ func (kl *keyLocks) conflictsWithLockHolders(g *lockTableGuardImpl) bool {
 			continue // no conflict with a lock held by our own transaction
 		}
 
-		finalizedTxn, ok := g.lt.txnStatusCache.finalizedTxns.get(lockHolderTxn.ID)
-		if ok {
-			up := roachpb.MakeLockUpdate(finalizedTxn, roachpb.Span{Key: kl.key})
-			// The lock belongs to a finalized transaction. There's no conflict, but
-			// the lock must be resolved -- accumulate it on the appropriate slice.
-			if !tl.isHeldReplicated() { // only held unreplicated
+		if canResolve, up := g.canResolveKeyForHoldingTransaction(lockHolderTxn, g.curStrength(), kl.key); canResolve {
+			if !tl.isHeldReplicated() {
+				// Only held unreplicated. Accumulate it as an unreplicated lock to
+				// resolve, in case any other waiting readers can benefit from the
+				// pushed timestamp.
+				//
+				// TODO(arul): this case is only possible while non-locking reads
+				// block on Exclusive locks. Once non-locking reads start only
+				// blocking on intents, it can be removed and asserted against.
 				g.toResolveUnreplicated = append(g.toResolveUnreplicated, up)
 			} else {
+				// Resolve to push the replicated intent.
 				g.toResolve = append(g.toResolve, up)
 			}
 			continue // check next lock
 		}
 
-		// The lock is held by a different, un-finalized transaction.
-
-		if g.curStrength() == lock.None {
-			// If the non-locking reader is reading at a higher timestamp than the
-			// lock holder, but it knows that the lock holder has been pushed above
-			// its read timestamp, it can proceed after rewriting the lock at its
-			// transaction's pushed timestamp. Intent resolution can be deferred to
-			// maximize batching opportunities.
-			//
-			// This fast-path is only enabled for readers without uncertainty
-			// intervals, as readers with uncertainty intervals must contend with the
-			// possibility of pushing a conflicting intent up into their uncertainty
-			// interval and causing more work for themselves, which is avoided with
-			// care by the lockTableWaiter but difficult to coordinate through the
-			// txnStatusCache. This limitation is acceptable because the most
-			// important case here is optimizing the Export requests issued by backup.
-			if !g.hasUncertaintyInterval() && g.lt.batchPushedLockResolution() {
-				pushedTxn, ok := g.lt.txnStatusCache.pendingTxns.get(lockHolderTxn.ID)
-				if ok && g.ts.Less(pushedTxn.WriteTimestamp) {
-					up := roachpb.MakeLockUpdate(pushedTxn, roachpb.Span{Key: kl.key})
-					if !tl.isHeldReplicated() {
-						// Only held unreplicated. Accumulate it as an unreplicated lock to
-						// resolve, in case any other waiting readers can benefit from the
-						// pushed timestamp.
-						//
-						// TODO(arul): this case is only possible while non-locking reads
-						// block on Exclusive locks. Once non-locking reads start only
-						// blocking on intents, it can be removed and asserted against.
-						g.toResolveUnreplicated = append(g.toResolveUnreplicated, up)
-					} else {
-						// Resolve to push the replicated intent.
-						g.toResolve = append(g.toResolve, up)
-					}
-					continue // check next lock
-				}
-			}
-		}
-
 		// The held lock neither belongs to the request's transaction (which has
-		// special handling above) nor to a transaction that has been finalized.
+		// special handling above) nor to a transaction whose keys we can resolve.
 		// Check for conflicts.
 		if lock.Conflicts(tl.getLockMode(), g.curLockMode(), &g.lt.settings.SV) {
 			return true
@@ -4269,6 +4300,7 @@ func (t *lockTableImpl) newGuardForReq(req Request) *lockTableGuardImpl {
 	g.maxWaitQueueLength = req.MaxLockWaitQueueLength
 	g.str = lock.MaxStrength
 	g.index = -1
+	g.virtuallyResolveIntents = VirtualIntentResolution.Get(&g.lt.settings.SV) && req.canVirtuallyResolve()
 	return g
 }
 
@@ -4364,24 +4396,9 @@ func (t *lockTableImpl) AddDiscoveredLock(
 		return false, err
 	}
 	if consultTxnStatusCache {
-		finalizedTxn, ok := t.txnStatusCache.finalizedTxns.get(foundLock.Txn.ID)
-		if ok {
-			g.toResolve = append(
-				g.toResolve, roachpb.MakeLockUpdate(finalizedTxn, roachpb.Span{Key: key}))
+		if canResolve, up := g.canResolveKeyForHoldingTransaction(&foundLock.Txn, str, key); canResolve {
+			g.toResolve = append(g.toResolve, up)
 			return true, nil
-		}
-
-		// If the discoverer is a non-locking read, also check whether the lock's
-		// holder is known to have been pushed above the reader's timestamp. See the
-		// comment in scanAndMaybeEnqueue for more details, including why we include
-		// the hasUncertaintyInterval condition.
-		if str == lock.None && !g.hasUncertaintyInterval() && t.batchPushedLockResolution() {
-			pushedTxn, ok := g.lt.txnStatusCache.pendingTxns.get(foundLock.Txn.ID)
-			if ok && g.ts.Less(pushedTxn.WriteTimestamp) {
-				g.toResolve = append(
-					g.toResolve, roachpb.MakeLockUpdate(pushedTxn, roachpb.Span{Key: key}))
-				return true, nil
-			}
 		}
 	}
 	var l *keyLocks
@@ -4760,13 +4777,15 @@ func (t *lockTableImpl) batchPushedLockResolution() bool {
 }
 
 // PushedTransactionUpdated implements the lockTable interface.
-func (t *lockTableImpl) PushedTransactionUpdated(txn *roachpb.Transaction) {
+func (t *lockTableImpl) PushedTransactionUpdated(
+	txn *roachpb.Transaction, clockObs roachpb.ObservedTimestamp,
+) {
 	// TODO(sumeer): We don't take any action for requests that are already
 	// waiting on locks held by txn. They need to take some action, like
 	// pushing, and resume their scan, to notice the change to this txn. We
 	// could be more proactive if we knew which locks in lockTableImpl were held
 	// by txn.
-	t.txnStatusCache.add(txn)
+	t.txnStatusCache.add(txn, clockObs)
 }
 
 // Enable implements the lockTable interface.

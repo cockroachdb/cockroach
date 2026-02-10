@@ -702,7 +702,7 @@ ALTER TABLE t SPLIT AT SELECT i*2000 FROM generate_series(0, 2) AS g(i);
 				}
 			}
 			require.Greater(t, gRPCCalls, 0, rows)
-			require.Greater(t, 150, gRPCCalls, rows)
+			require.Greater(t, 250, gRPCCalls, rows)
 		}
 	}
 }

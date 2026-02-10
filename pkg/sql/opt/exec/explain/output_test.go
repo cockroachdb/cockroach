@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/grunning"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/datadriven"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -429,9 +430,10 @@ func TestRetryFields(t *testing.T) {
 	}
 }
 
-// TestMaximumMemoryUsage verifies that "maximum memory usage" statistic is
-// reported correctly in distributed plans. It is a regression test for #143617.
-func TestMaximumMemoryUsage(t *testing.T) {
+// TestExplainAnalyzeMemoryUsage verifies that "maximum memory usage" and
+// "estimated max memory usage" statistics are reported correctly in distributed
+// plans. One of the test cases is a regression test for #143617.
+func TestExplainAnalyzeMemoryUsage(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
@@ -439,7 +441,7 @@ func TestMaximumMemoryUsage(t *testing.T) {
 	skip.UnderRace(t, "multinode cluster setup times out under race")
 
 	const numNodes = 3
-	tc := testcluster.StartTestCluster(t, numNodes, base.TestClusterArgs{
+	c := testcluster.StartTestCluster(t, numNodes, base.TestClusterArgs{
 		ServerArgs: base.TestServerArgs{
 			Knobs: base.TestingKnobs{
 				SQLEvalContext: &eval.TestingKnobs{
@@ -455,17 +457,18 @@ func TestMaximumMemoryUsage(t *testing.T) {
 		},
 	})
 	ctx := context.Background()
-	defer tc.Stopper().Stop(ctx)
+	defer c.Stopper().Stop(ctx)
 
-	if tc.DefaultTenantDeploymentMode().IsExternal() {
-		tc.GrantTenantCapabilities(ctx, t, serverutils.TestTenantID(),
+	if c.DefaultTenantDeploymentMode().IsExternal() {
+		c.GrantTenantCapabilities(ctx, t, serverutils.TestTenantID(),
 			map[tenantcapabilitiespb.ID]string{tenantcapabilitiespb.CanAdminRelocateRange: "true"})
 	}
+	rng, _ := randutil.NewTestRand()
 
 	// Set up such a distributed plan where memory-intensive aggregation occurs
 	// on the remote nodes whereas the gateway only merges streams of final
 	// results from remote nodes.
-	db := sqlutils.MakeSQLRunner(tc.Conns[0])
+	db := sqlutils.MakeSQLRunner(c.Conns[0])
 	db.Query(t, "CREATE TABLE t (k INT PRIMARY KEY, bucket INT, v STRING);")
 	db.Query(t, "INSERT INTO t SELECT i, i % 4, repeat('a', 1000) FROM generate_series(1, 10000) AS g(i);")
 	db.Query(t, "ALTER TABLE t SPLIT AT VALUES (5001);")
@@ -476,19 +479,58 @@ func TestMaximumMemoryUsage(t *testing.T) {
 		return err
 	})
 
-	rows := db.QueryStr(t, "EXPLAIN ANALYZE (VERBOSE) SELECT max(v) FROM t GROUP BY bucket;")
-	var output strings.Builder
-	maxMemoryRE := regexp.MustCompile(`maximum memory usage: ([\d\.]+) MiB`)
-	var maxMemoryUsage float64
-	for _, row := range rows {
-		output.WriteString(row[0])
-		output.WriteString("\n")
-		s := strings.TrimSpace(row[0])
-		if matches := maxMemoryRE.FindStringSubmatch(s); len(matches) > 0 {
-			var err error
-			maxMemoryUsage, err = strconv.ParseFloat(matches[1], 64)
-			require.NoError(t, err)
+	const bulletChr = '•'
+	for _, tc := range []struct {
+		query string
+		// planNode, if set, indicates that the regex should apply only within
+		// the specified target planNode. If not set, it's applied to the
+		// top-level query stats.
+		planNode    string
+		regex       string
+		minExpected float64
+	}{
+		{
+			query:       "SELECT max(v) FROM t GROUP BY bucket;",
+			regex:       `maximum memory usage: ([\d\.]+) MiB`,
+			minExpected: 5.0,
+		},
+		{
+			query:       "SELECT array_agg(v) FROM t",
+			planNode:    "group",
+			regex:       `estimated max memory allocated: ([\d\.]+) MiB`,
+			minExpected: 10.0,
+		},
+	} {
+		if rng.Float64() < 0.5 {
+			db.Exec(t, "SET distsql = off")
+		} else {
+			db.Exec(t, "RESET distsql")
 		}
+		rows := db.QueryStr(t, "EXPLAIN ANALYZE (VERBOSE) "+tc.query)
+		var output strings.Builder
+		re := regexp.MustCompile(tc.regex)
+		var memUsage float64
+		inTargetNode := tc.planNode == ""
+		for _, row := range rows {
+			output.WriteString(row[0])
+			output.WriteString("\n")
+			s := strings.TrimSpace(row[0])
+			if strings.Contains(s, string(bulletChr)) {
+				if tc.planNode != "" {
+					inTargetNode = strings.Contains(s, tc.planNode)
+				} else {
+					inTargetNode = false
+				}
+			}
+			if matches := re.FindStringSubmatch(s); inTargetNode && len(matches) > 0 {
+				var err error
+				memUsage, err = strconv.ParseFloat(matches[1], 64)
+				require.NoError(t, err)
+			}
+		}
+		require.Greaterf(
+			t, memUsage, tc.minExpected, "expected %q to be at least %.1f, "+
+				"full output:\n\n%s", strings.Split(tc.regex, ":")[0], tc.minExpected, output.String(),
+		)
 	}
-	require.Greaterf(t, maxMemoryUsage, 5.0, "expected maximum memory usage to be at least 5 MiB, full output:\n\n%s", output.String())
 }

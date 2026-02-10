@@ -573,7 +573,9 @@ type SetTriggerName struct {
 // whether it will be executed in response to a triggering event.
 type SetTriggerEnabled struct {
 	immediateMutationOp
-	Enabled scpb.TriggerEnabled
+	TableID   catid.DescID
+	TriggerID catid.TriggerID
+	Enabled   bool
 }
 
 // SetTriggerTiming sets the timing of a trigger, which indicates when it

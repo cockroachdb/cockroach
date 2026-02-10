@@ -1372,7 +1372,15 @@ func (desc *Mutable) DropConstraint(
 			desc.SetPrimaryIndex(primaryIndex)
 			return nil
 		}
-		return unimplemented.NewWithIssueDetailf(42840, "drop-constraint-unique",
+		// The declarative schema changer supports this already. Supporting it in
+		// the legacy schema changer is more complex because dropping an index
+		// requires managing the mutation lifecycle, handling FK back-references,
+		// cleaning up dependent views/functions/triggers, and managing sharded or
+		// expression index cleanup. This logic exists in dropIndexByName but is
+		// tightly coupled to DROP INDEX statement processing. Given the legacy
+		// schema changer is being deprecated, we direct users to DROP INDEX CASCADE
+		// rather than handling unique constraints here.
+		return unimplemented.Newf("drop-constraint-unique",
 			"cannot drop UNIQUE constraint %q using ALTER TABLE DROP CONSTRAINT, use DROP INDEX CASCADE instead",
 			tree.ErrNameString(u.GetName()))
 	}

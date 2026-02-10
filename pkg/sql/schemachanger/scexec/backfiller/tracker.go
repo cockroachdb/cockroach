@@ -356,12 +356,89 @@ func (b *Tracker) getFractionRangesFinished(
 	if totalRanges == 0 {
 		return true, 0, nil
 	}
+
+	// Check if any backfill is using distributed merge and calculate phase-aware
+	// progress.
+	for _, p := range progresses {
+		if p.useDistributedMerge {
+			progress := calculatePhasedProgress(
+				p.distributedMergePhase,
+				completedRanges, totalRanges,
+				p.mergeIterationTasksCompleted, p.mergeIterationTasksTotal,
+			)
+			return true, progress, nil
+		}
+	}
+
 	return true, float32(completedRanges) / float32(totalRanges), nil
+}
+
+// calculatePhasedProgress computes the overall fraction complete for a
+// distributed merge backfill using a 3-phase model:
+//   - Phase 0 (map): 0-33%
+//   - Phase 1 (merge iteration 1): 33-66%
+//   - Phase 2 (merge iteration 2): 66-100%
+//
+// The completedPhase parameter represents the last COMPLETED iteration:
+//   - 0: Map phase complete, merge iterations not started or in progress
+//   - 1: Merge iteration 1 complete, iteration 2 not started or in progress
+//   - 2: Merge iteration 2 complete (distributed merge finished)
+//
+// To determine if we're actively processing the next iteration, we check if
+// tasksTotal > 0. If so, progress is calculated for iteration completedPhase+1.
+func calculatePhasedProgress(
+	completedPhase int32, completedRanges, totalRanges int, tasksCompleted, tasksTotal int64,
+) float32 {
+	const phaseWidth = float32(1.0) / 3.0
+
+	// Handle final complete state.
+	if completedPhase == 2 {
+		return 1.0
+	}
+
+	// completedPhase == 1: Iteration 1 complete.
+	if completedPhase == 1 {
+		// Base progress: 2 phases complete = 66%.
+		base := 2.0 * phaseWidth
+		if tasksTotal > 0 {
+			// Actively processing iteration 2.
+			return base + (float32(tasksCompleted)/float32(tasksTotal))*phaseWidth
+		}
+		// Iteration 1 just finished, iteration 2 not yet started.
+		return base
+	}
+
+	// completedPhase == 0: Map complete, iteration 1 may be in progress.
+	if tasksTotal > 0 {
+		// Actively processing iteration 1.
+		base := phaseWidth // Map phase complete = 33%
+		return base + (float32(tasksCompleted)/float32(tasksTotal))*phaseWidth
+	}
+
+	// Map phase in progress (span-based progress).
+	if totalRanges > 0 {
+		return (float32(completedRanges) / float32(totalRanges)) * phaseWidth
+	}
+	return 0
 }
 
 type fractionProgressSpans struct {
 	total     roachpb.Span
 	completed []roachpb.Span
+
+	// useDistributedMerge indicates whether the distributed merge pipeline is
+	// active for this backfill.
+	useDistributedMerge bool
+
+	// distributedMergePhase tracks which phase of distributed merge we're in.
+	// 0 = map phase, 1 = merge iteration 1, 2 = merge iteration 2.
+	distributedMergePhase int32
+
+	// mergeIterationTasksTotal is the total number of tasks in current iteration.
+	mergeIterationTasksTotal int64
+
+	// mergeIterationTasksCompleted is len(MergeIterationCompletedTasks).
+	mergeIterationTasksCompleted int64
 }
 
 func (b *Tracker) collectFractionProgressSpansForFlush() (
@@ -383,8 +460,12 @@ func (b *Tracker) collectFractionProgressSpansForFlush() (
 	for _, p := range b.mu.backfillProgress {
 		p.needsFractionFlush = false
 		progress = append(progress, fractionProgressSpans{
-			total:     p.totalSpan,
-			completed: p.CompletedSpans,
+			total:                        p.totalSpan,
+			completed:                    p.CompletedSpans,
+			useDistributedMerge:          len(p.SSTStoragePrefixes) > 0,
+			distributedMergePhase:        p.DistributedMergePhase,
+			mergeIterationTasksTotal:     p.MergeIterationTasksTotal,
+			mergeIterationTasksCompleted: int64(len(p.MergeIterationCompletedTasks)),
 		})
 	}
 	for _, p := range b.mu.mergeProgress {

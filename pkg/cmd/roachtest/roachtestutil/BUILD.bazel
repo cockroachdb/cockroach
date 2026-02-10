@@ -29,6 +29,7 @@ go_library(
         "//pkg/kv/kvpb",
         "//pkg/roachprod",
         "//pkg/roachprod/config",
+        "//pkg/roachprod/errors",
         "//pkg/roachprod/failureinjection/failures",
         "//pkg/roachprod/install",
         "//pkg/roachprod/logger",

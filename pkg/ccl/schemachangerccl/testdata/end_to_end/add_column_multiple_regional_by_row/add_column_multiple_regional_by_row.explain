@@ -12,7 +12,7 @@ EXPLAIN (DDL) ALTER TABLE multiregion_db.public.table_regional_by_row DROP COLUM
 Schema change plan for ALTER TABLE ‹multiregion_db›.‹public›.‹table_regional_by_row› DROP COLUMN ‹v›, ADD COLUMN ‹j› INT8 UNIQUE DEFAULT unique_rowid(), DROP COLUMN ‹m›, ADD COLUMN ‹l› INT8 UNIQUE DEFAULT unique_rowid();
  ├── StatementPhase
  │    └── Stage 1 of 1 in StatementPhase
- │         ├── 15 elements transitioning toward PUBLIC
+ │         ├── 18 elements transitioning toward PUBLIC
  │         │    ├── ABSENT → BACKFILL_ONLY    PrimaryIndex:{DescID: 108 (table_regional_by_row), IndexID: 8 (table_regional_by_row_pkey+), ConstraintID: 8, TemporaryIndexID: 9, SourceIndexID: 6 (table_regional_by_row_pkey~)}
  │         │    ├── ABSENT → PUBLIC           IndexPartitioning:{DescID: 108 (table_regional_by_row), IndexID: 8 (table_regional_by_row_pkey+)}
  │         │    ├── ABSENT → PUBLIC           IndexColumn:{DescID: 108 (table_regional_by_row), ColumnID: 4 (crdb_region), IndexID: 8 (table_regional_by_row_pkey+)}
@@ -23,11 +23,14 @@ Schema change plan for ALTER TABLE ‹multiregion_db›.‹public›.‹table_re
  │         │    ├── ABSENT → PUBLIC           ColumnType:{DescID: 108 (table_regional_by_row), ColumnFamilyID: 0 (primary), ColumnID: 5 (j+), TypeName: "INT8"}
  │         │    ├── ABSENT → PUBLIC           ColumnDefaultExpression:{DescID: 108 (table_regional_by_row), ColumnID: 5 (j+), Expr: unique_rowid()}
  │         │    ├── ABSENT → PUBLIC           IndexColumn:{DescID: 108 (table_regional_by_row), ColumnID: 5 (j+), IndexID: 8 (table_regional_by_row_pkey+)}
+ │         │    ├── ABSENT → PUBLIC           TableZoneConfig:{DescID: 108 (table_regional_by_row), SeqNum: 1}
  │         │    ├── ABSENT → DELETE_ONLY      Column:{DescID: 108 (table_regional_by_row), ColumnID: 6 (l+)}
  │         │    ├── ABSENT → PUBLIC           ColumnName:{DescID: 108 (table_regional_by_row), Name: "l", ColumnID: 6 (l+)}
  │         │    ├── ABSENT → PUBLIC           ColumnType:{DescID: 108 (table_regional_by_row), ColumnFamilyID: 0 (primary), ColumnID: 6 (l+), TypeName: "INT8"}
  │         │    ├── ABSENT → PUBLIC           ColumnDefaultExpression:{DescID: 108 (table_regional_by_row), ColumnID: 6 (l+), Expr: unique_rowid()}
- │         │    └── ABSENT → PUBLIC           IndexColumn:{DescID: 108 (table_regional_by_row), ColumnID: 6 (l+), IndexID: 8 (table_regional_by_row_pkey+)}
+ │         │    ├── ABSENT → PUBLIC           IndexColumn:{DescID: 108 (table_regional_by_row), ColumnID: 6 (l+), IndexID: 8 (table_regional_by_row_pkey+)}
+ │         │    ├── ABSENT → PUBLIC           TableZoneConfig:{DescID: 108 (table_regional_by_row), SeqNum: 2}
+ │         │    └── ABSENT → PUBLIC           TableZoneConfig:{DescID: 108 (table_regional_by_row), SeqNum: 3}
  │         ├── 17 elements transitioning toward TRANSIENT_ABSENT
  │         │    ├── ABSENT → BACKFILL_ONLY    PrimaryIndex:{DescID: 108 (table_regional_by_row), IndexID: 6 (table_regional_by_row_pkey~), ConstraintID: 6, TemporaryIndexID: 7, SourceIndexID: 1 (table_regional_by_row_pkey-)}
  │         │    ├── ABSENT → PUBLIC           IndexPartitioning:{DescID: 108 (table_regional_by_row), IndexID: 6 (table_regional_by_row_pkey~)}
@@ -53,16 +56,19 @@ Schema change plan for ALTER TABLE ‹multiregion_db›.‹public›.‹table_re
  │         │    ├── PUBLIC → ABSENT           ColumnName:{DescID: 108 (table_regional_by_row), Name: "v", ColumnID: 2 (v-)}
  │         │    ├── PUBLIC → WRITE_ONLY       Column:{DescID: 108 (table_regional_by_row), ColumnID: 3 (m-)}
  │         │    └── PUBLIC → ABSENT           ColumnName:{DescID: 108 (table_regional_by_row), Name: "m", ColumnID: 3 (m-)}
- │         └── 35 Mutation operations
+ │         └── 38 Mutation operations
  │              ├── SetTableSchemaLocked {"TableID":108}
  │              ├── MakeAbsentColumnDeleteOnly {"Column":{"ColumnID":5,"TableID":108}}
  │              ├── SetColumnName {"ColumnID":5,"Name":"j","TableID":108}
  │              ├── UpsertColumnType {"ColumnType":{"ColumnID":5,"TableID":108}}
  │              ├── AddColumnDefaultExpression {"Default":{"ColumnID":5,"TableID":108}}
+ │              ├── AddTableZoneConfig {"TableID":108}
  │              ├── MakeAbsentColumnDeleteOnly {"Column":{"ColumnID":6,"TableID":108}}
  │              ├── SetColumnName {"ColumnID":6,"Name":"l","TableID":108}
  │              ├── UpsertColumnType {"ColumnType":{"ColumnID":6,"TableID":108}}
  │              ├── AddColumnDefaultExpression {"Default":{"ColumnID":6,"TableID":108}}
+ │              ├── AddTableZoneConfig {"TableID":108}
+ │              ├── AddTableZoneConfig {"TableID":108}
  │              ├── MakeAbsentIndexBackfilling {"Index":{"ConstraintID":6,"IndexID":6,"IsUnique":true,"SourceIndexID":1,"TableID":108,"TemporaryIndexID":7}}
  │              ├── AddIndexPartitionInfo {"Partitioning":{"IndexID":6,"TableID":108}}
  │              ├── AddColumnToIndex {"ColumnID":4,"IndexID":6,"TableID":108}
@@ -91,7 +97,7 @@ Schema change plan for ALTER TABLE ‹multiregion_db›.‹public›.‹table_re
  │              └── SetColumnName {"ColumnID":3,"Name":"crdb_internal_co...","TableID":108}
  ├── PreCommitPhase
  │    ├── Stage 1 of 2 in PreCommitPhase
- │    │    ├── 15 elements transitioning toward PUBLIC
+ │    │    ├── 18 elements transitioning toward PUBLIC
  │    │    │    ├── BACKFILL_ONLY    → ABSENT PrimaryIndex:{DescID: 108 (table_regional_by_row), IndexID: 8 (table_regional_by_row_pkey+), ConstraintID: 8, TemporaryIndexID: 9, SourceIndexID: 6 (table_regional_by_row_pkey~)}
  │    │    │    ├── PUBLIC           → ABSENT IndexPartitioning:{DescID: 108 (table_regional_by_row), IndexID: 8 (table_regional_by_row_pkey+)}
  │    │    │    ├── PUBLIC           → ABSENT IndexColumn:{DescID: 108 (table_regional_by_row), ColumnID: 4 (crdb_region), IndexID: 8 (table_regional_by_row_pkey+)}
@@ -102,11 +108,14 @@ Schema change plan for ALTER TABLE ‹multiregion_db›.‹public›.‹table_re
  │    │    │    ├── PUBLIC           → ABSENT ColumnType:{DescID: 108 (table_regional_by_row), ColumnFamilyID: 0 (primary), ColumnID: 5 (j+), TypeName: "INT8"}
  │    │    │    ├── PUBLIC           → ABSENT ColumnDefaultExpression:{DescID: 108 (table_regional_by_row), ColumnID: 5 (j+), Expr: unique_rowid()}
  │    │    │    ├── PUBLIC           → ABSENT IndexColumn:{DescID: 108 (table_regional_by_row), ColumnID: 5 (j+), IndexID: 8 (table_regional_by_row_pkey+)}
+ │    │    │    ├── PUBLIC           → ABSENT TableZoneConfig:{DescID: 108 (table_regional_by_row), SeqNum: 1}
  │    │    │    ├── DELETE_ONLY      → ABSENT Column:{DescID: 108 (table_regional_by_row), ColumnID: 6 (l+)}
  │    │    │    ├── PUBLIC           → ABSENT ColumnName:{DescID: 108 (table_regional_by_row), Name: "l", ColumnID: 6 (l+)}
  │    │    │    ├── PUBLIC           → ABSENT ColumnType:{DescID: 108 (table_regional_by_row), ColumnFamilyID: 0 (primary), ColumnID: 6 (l+), TypeName: "INT8"}
  │    │    │    ├── PUBLIC           → ABSENT ColumnDefaultExpression:{DescID: 108 (table_regional_by_row), ColumnID: 6 (l+), Expr: unique_rowid()}
- │    │    │    └── PUBLIC           → ABSENT IndexColumn:{DescID: 108 (table_regional_by_row), ColumnID: 6 (l+), IndexID: 8 (table_regional_by_row_pkey+)}
+ │    │    │    ├── PUBLIC           → ABSENT IndexColumn:{DescID: 108 (table_regional_by_row), ColumnID: 6 (l+), IndexID: 8 (table_regional_by_row_pkey+)}
+ │    │    │    ├── PUBLIC           → ABSENT TableZoneConfig:{DescID: 108 (table_regional_by_row), SeqNum: 2}
+ │    │    │    └── PUBLIC           → ABSENT TableZoneConfig:{DescID: 108 (table_regional_by_row), SeqNum: 3}
  │    │    ├── 17 elements transitioning toward TRANSIENT_ABSENT
  │    │    │    ├── BACKFILL_ONLY    → ABSENT PrimaryIndex:{DescID: 108 (table_regional_by_row), IndexID: 6 (table_regional_by_row_pkey~), ConstraintID: 6, TemporaryIndexID: 7, SourceIndexID: 1 (table_regional_by_row_pkey-)}
  │    │    │    ├── PUBLIC           → ABSENT IndexPartitioning:{DescID: 108 (table_regional_by_row), IndexID: 6 (table_regional_by_row_pkey~)}
@@ -135,7 +144,7 @@ Schema change plan for ALTER TABLE ‹multiregion_db›.‹public›.‹table_re
  │    │    └── 1 Mutation operation
  │    │         └── UndoAllInTxnImmediateMutationOpSideEffects
  │    └── Stage 2 of 2 in PreCommitPhase
- │         ├── 15 elements transitioning toward PUBLIC
+ │         ├── 18 elements transitioning toward PUBLIC
  │         │    ├── ABSENT → BACKFILL_ONLY    PrimaryIndex:{DescID: 108 (table_regional_by_row), IndexID: 8 (table_regional_by_row_pkey+), ConstraintID: 8, TemporaryIndexID: 9, SourceIndexID: 6 (table_regional_by_row_pkey~)}
  │         │    ├── ABSENT → PUBLIC           IndexPartitioning:{DescID: 108 (table_regional_by_row), IndexID: 8 (table_regional_by_row_pkey+)}
  │         │    ├── ABSENT → PUBLIC           IndexColumn:{DescID: 108 (table_regional_by_row), ColumnID: 4 (crdb_region), IndexID: 8 (table_regional_by_row_pkey+)}
@@ -146,11 +155,14 @@ Schema change plan for ALTER TABLE ‹multiregion_db›.‹public›.‹table_re
  │         │    ├── ABSENT → PUBLIC           ColumnType:{DescID: 108 (table_regional_by_row), ColumnFamilyID: 0 (primary), ColumnID: 5 (j+), TypeName: "INT8"}
  │         │    ├── ABSENT → PUBLIC           ColumnDefaultExpression:{DescID: 108 (table_regional_by_row), ColumnID: 5 (j+), Expr: unique_rowid()}
  │         │    ├── ABSENT → PUBLIC           IndexColumn:{DescID: 108 (table_regional_by_row), ColumnID: 5 (j+), IndexID: 8 (table_regional_by_row_pkey+)}
+ │         │    ├── ABSENT → PUBLIC           TableZoneConfig:{DescID: 108 (table_regional_by_row), SeqNum: 1}
  │         │    ├── ABSENT → DELETE_ONLY      Column:{DescID: 108 (table_regional_by_row), ColumnID: 6 (l+)}
  │         │    ├── ABSENT → PUBLIC           ColumnName:{DescID: 108 (table_regional_by_row), Name: "l", ColumnID: 6 (l+)}
  │         │    ├── ABSENT → PUBLIC           ColumnType:{DescID: 108 (table_regional_by_row), ColumnFamilyID: 0 (primary), ColumnID: 6 (l+), TypeName: "INT8"}
  │         │    ├── ABSENT → PUBLIC           ColumnDefaultExpression:{DescID: 108 (table_regional_by_row), ColumnID: 6 (l+), Expr: unique_rowid()}
- │         │    └── ABSENT → PUBLIC           IndexColumn:{DescID: 108 (table_regional_by_row), ColumnID: 6 (l+), IndexID: 8 (table_regional_by_row_pkey+)}
+ │         │    ├── ABSENT → PUBLIC           IndexColumn:{DescID: 108 (table_regional_by_row), ColumnID: 6 (l+), IndexID: 8 (table_regional_by_row_pkey+)}
+ │         │    ├── ABSENT → PUBLIC           TableZoneConfig:{DescID: 108 (table_regional_by_row), SeqNum: 2}
+ │         │    └── ABSENT → PUBLIC           TableZoneConfig:{DescID: 108 (table_regional_by_row), SeqNum: 3}
  │         ├── 17 elements transitioning toward TRANSIENT_ABSENT
  │         │    ├── ABSENT → BACKFILL_ONLY    PrimaryIndex:{DescID: 108 (table_regional_by_row), IndexID: 6 (table_regional_by_row_pkey~), ConstraintID: 6, TemporaryIndexID: 7, SourceIndexID: 1 (table_regional_by_row_pkey-)}
  │         │    ├── ABSENT → PUBLIC           IndexPartitioning:{DescID: 108 (table_regional_by_row), IndexID: 6 (table_regional_by_row_pkey~)}
@@ -176,16 +188,19 @@ Schema change plan for ALTER TABLE ‹multiregion_db›.‹public›.‹table_re
  │         │    ├── PUBLIC → ABSENT           ColumnName:{DescID: 108 (table_regional_by_row), Name: "v", ColumnID: 2 (v-)}
  │         │    ├── PUBLIC → WRITE_ONLY       Column:{DescID: 108 (table_regional_by_row), ColumnID: 3 (m-)}
  │         │    └── PUBLIC → ABSENT           ColumnName:{DescID: 108 (table_regional_by_row), Name: "m", ColumnID: 3 (m-)}
- │         └── 40 Mutation operations
+ │         └── 43 Mutation operations
  │              ├── SetTableSchemaLocked {"TableID":108}
  │              ├── MakeAbsentColumnDeleteOnly {"Column":{"ColumnID":5,"TableID":108}}
  │              ├── SetColumnName {"ColumnID":5,"Name":"j","TableID":108}
  │              ├── UpsertColumnType {"ColumnType":{"ColumnID":5,"TableID":108}}
  │              ├── AddColumnDefaultExpression {"Default":{"ColumnID":5,"TableID":108}}
+ │              ├── AddTableZoneConfig {"TableID":108}
  │              ├── MakeAbsentColumnDeleteOnly {"Column":{"ColumnID":6,"TableID":108}}
  │              ├── SetColumnName {"ColumnID":6,"Name":"l","TableID":108}
  │              ├── UpsertColumnType {"ColumnType":{"ColumnID":6,"TableID":108}}
  │              ├── AddColumnDefaultExpression {"Default":{"ColumnID":6,"TableID":108}}
+ │              ├── AddTableZoneConfig {"TableID":108}
+ │              ├── AddTableZoneConfig {"TableID":108}
  │              ├── MakeAbsentIndexBackfilling {"Index":{"ConstraintID":6,"IndexID":6,"IsUnique":true,"SourceIndexID":1,"TableID":108,"TemporaryIndexID":7}}
  │              ├── MaybeAddSplitForIndex {"IndexID":6,"TableID":108}
  │              ├── AddIndexPartitionInfo {"Partitioning":{"IndexID":6,"TableID":108}}

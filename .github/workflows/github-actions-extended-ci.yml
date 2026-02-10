@@ -29,7 +29,7 @@ concurrency:
 jobs:
   maybe_stress:
     if: github.event.pull_request.draft == false
-    runs-on: [self-hosted, ubuntu_2004]
+    runs-on: [self-hosted, ubuntu_2404]
     timeout-minutes: 180
     steps:
       - name: calculate commit depth
@@ -56,7 +56,7 @@ jobs:
         if: always()
   maybe_stressrace:
     if: github.event.pull_request.draft == false
-    runs-on: [self-hosted, ubuntu_2004]
+    runs-on: [self-hosted, ubuntu_2404]
     timeout-minutes: 180
     steps:
       - name: calculate commit depth

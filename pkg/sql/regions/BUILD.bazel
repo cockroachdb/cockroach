@@ -22,8 +22,10 @@ go_library(
         "//pkg/sql/catalog/descs",
         "//pkg/sql/catalog/lease",
         "//pkg/sql/catalog/multiregion",
+        "//pkg/sql/sem/tree",
         "//pkg/util/hlc",
         "@com_github_cockroachdb_errors//:errors",
+        "@com_github_gogo_protobuf//proto",
     ],
 )
 

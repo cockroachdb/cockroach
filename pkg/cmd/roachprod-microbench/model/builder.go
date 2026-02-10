@@ -89,7 +89,7 @@ func (b *Builder) ComputeMetricMap() MetricMap {
 // from. Iff either run does not exist, nil is returned.
 func (m *Metric) ComputeComparison(benchmarkName, oldID, newID string) *Comparison {
 	benchmarkEntry := m.BenchmarkEntries[benchmarkName]
-	// Check that an entry for both runs exist. If not, return nil.
+	// Check that entries for both runs exist. If not, return nil.
 	for _, run := range []string{oldID, newID} {
 		if benchmarkEntry.Samples[run] == nil || benchmarkEntry.Summaries[run] == nil {
 			return nil

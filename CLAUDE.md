@@ -847,15 +847,10 @@ if !ok {
 
 ### When generating PRs and commit records
 
-- Follow the format:
-  - Separate the subject from the body with a blank line.
-  - Use the body of the commit record to explain what existed before your change, what you changed, and why.
-  - Require the user to specify whether or not there should be release notes. Release notes should be specified after the body, following "Release Notes:".
-  - When writing release notes, please follow the guidance here: https://cockroachlabs.atlassian.net/wiki/spaces/CRDB/pages/186548364/Release+notes
-  - Require the user to specify an epic number (or None) which should be included at the bottom of the commit record following "Epic:".
-  - Prefix the subject line with the package in which the bulk of the changes occur.
-  - For multi-commit PRs, summarize each commit in the PR record.
-  - Do not include a test plan unless explicitly asked by the user.
+Use the `commit-helper` skill (invoked via `/commit-helper`) when creating commits and PRs.
+
+- For multi-commit PRs, summarize each commit in the PR record.
+- Do not include a test plan unless explicitly asked by the user.
 
 # Interaction Style
 

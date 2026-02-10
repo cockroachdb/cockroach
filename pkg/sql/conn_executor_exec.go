@@ -291,7 +291,7 @@ func (ex *connExecutor) execPortal(
 	defer func() {
 		if portal.isPausable() {
 			if !portal.pauseInfo.exhaustPortal.cleanup.isComplete {
-				portal.pauseInfo.exhaustPortal.cleanup.appendFunc(func(_ context.Context) {
+				portal.pauseInfo.exhaustPortal.cleanup.appendFunc(func(context.Context) {
 					ex.exhaustPortal(portal.Name)
 				})
 				portal.pauseInfo.exhaustPortal.cleanup.isComplete = true
@@ -340,6 +340,59 @@ func (ex *connExecutor) execPortal(
 	default:
 		return ex.execStmt(ctx, portal.Stmt.Statement, &portal, pinfo, stmtRes, canAutoCommit)
 	}
+}
+
+func (ex *connExecutor) checkUDTStaleness(
+	ctx context.Context, prep *prep.Statement,
+) (stale bool, staleEnumNames []string, err error) {
+	if len(prep.UDTs) == 0 {
+		return false, nil, nil
+	}
+	staleEnumNames = make([]string, 0)
+	for i, typ := range prep.UDTs {
+		toCheck, err := ex.planner.ResolveTypeByOID(ctx, typ.Oid())
+		if err != nil {
+			return stale, nil, err
+		}
+		if typ.TypeMeta.Version != toCheck.TypeMeta.Version {
+			stale = true
+			prep.UDTs[i] = toCheck
+			staleEnumNames = append(staleEnumNames, typ.Name())
+		}
+	}
+	return stale, staleEnumNames, nil
+}
+
+// maybeReparsePrepStmt is to reparse the prepared statement so that the
+// stored udt datum is up-to-date. The reparse is needed because AST can
+// be modified at type chekcing, with tree.StrVal component replaced
+// with a versioned tree.DEnum. If the UDT's version changed, this
+// tree.DEnum would be outdated.
+func (ex *connExecutor) maybeReparsePrepStmt(
+	ctx context.Context, prep *prep.Statement, name string,
+) error {
+	stale, staleEnumNames, err := ex.checkUDTStaleness(ctx, prep)
+	if err != nil {
+		return err
+	}
+	if !stale {
+		return nil
+	}
+	log.Eventf(ctx, "reparsing prepared statament %q for the user defined types are stale: %s", name, staleEnumNames)
+	newStmt, err := parser.ParseOne(prep.SQL)
+	if err != nil {
+		return err
+	}
+	prep.Statement = newStmt
+	prep.AST = newStmt.AST
+	// Since the udt is outdated, the stored memo will be stale and we will need to
+	// regenerate the memo anyways, so we just reset all the memo related fields as well.
+	prep.BaseMemo = nil
+	prep.GenericMemo = nil
+	prep.IdealGenericPlan = false
+	prep.Costs.Reset()
+	prep.HintsGeneration = 0
+	return nil
 }
 
 // execStmtInOpenState executes one statement in the context of the session's
@@ -553,6 +606,10 @@ func (ex *connExecutor) execStmtInOpenState(
 		ps, ok := ex.extraTxnState.prepStmtsNamespace.prepStmts.Get(name)
 		if !ok {
 			return makeErrEvent(newPreparedStmtDNEError(ex.sessionData(), name))
+		}
+
+		if err := ex.maybeReparsePrepStmt(ctx, ps, name); err != nil {
+			return makeErrEvent(err)
 		}
 
 		var err error
@@ -1208,7 +1265,7 @@ func (ex *connExecutor) execStmtInOpenStateWithPausablePortal(
 		if !portal.isPausable() {
 			f()
 		} else if !portal.pauseInfo.execStmtInOpenState.cleanup.isComplete {
-			portal.pauseInfo.execStmtInOpenState.cleanup.appendFunc(func(_ context.Context) {
+			portal.pauseInfo.execStmtInOpenState.cleanup.appendFunc(func(context.Context) {
 				f()
 				// Some cleanup steps modify the retErr and retPayload. We need to
 				// ensure that cleanup after them can see the update.
@@ -1465,6 +1522,10 @@ func (ex *connExecutor) execStmtInOpenStateWithPausablePortal(
 		ps, ok := ex.extraTxnState.prepStmtsNamespace.prepStmts.Get(name)
 		if !ok {
 			return makeErrEvent(newPreparedStmtDNEError(ex.sessionData(), name))
+		}
+
+		if err := ex.maybeReparsePrepStmt(ctx, ps, name); err != nil {
+			return makeErrEvent(err)
 		}
 
 		var err error
@@ -2744,15 +2805,31 @@ func (ex *connExecutor) dispatchReadCommittedStmtToExecutionEngine(
 func (ex *connExecutor) dispatchToExecutionEngine(
 	ctx context.Context, planner *planner, res RestrictedCommandResult,
 ) (retErr error) {
+	if ppInfo := getPausablePortalInfo(planner); ppInfo != nil {
+		// This is ugly, but we need to override the execMon to the specific one
+		// owned by the pausable portals.
+		planner.execMon = ex.ppExecMon
+	} else {
+		// Guarantee that we use the global execMon in case we had some pausable
+		// portal executions in between.
+		planner.execMon = ex.execMon
+		planner.execMon.StartNoReserved(ctx, planner.txnMon)
+	}
 	defer func() {
 		if ppInfo := getPausablePortalInfo(planner); ppInfo != nil {
 			if !ppInfo.dispatchToExecutionEngine.cleanup.isComplete {
+				ppInfo.dispatchToExecutionEngine.cleanup.appendFunc(func(context.Context) {
+					// Restore the original execMon since we overrode it.
+					planner.execMon = ex.execMon
+				})
 				ppInfo.dispatchToExecutionEngine.cleanup.isComplete = true
 			}
 			if retErr != nil || res.Err() != nil {
 				ppInfo.resumableFlow.cleanup.run(ctx)
 				ppInfo.dispatchToExecutionEngine.cleanup.run(ctx)
 			}
+		} else {
+			planner.execMon.Stop(ctx)
 		}
 	}()
 
@@ -2834,6 +2911,14 @@ func (ex *connExecutor) dispatchToExecutionEngine(
 					}
 					// This stmt is not supported via the pausable portals model
 					// - set it back to an un-pausable (normal) portal.
+					//
+					// But before we do that, we need to set the right execMon.
+					// Note that we might have made reservations against the
+					// pausable portal execMon when creating the logical plan,
+					// and that's ok - those will be released when the plan is
+					// closed in a defer below.
+					planner.execMon = ex.execMon
+					planner.execMon.StartNoReserved(ctx, planner.txnMon)
 					ex.disablePortalPausability(planner.pausablePortal)
 					planner.pausablePortal = nil
 					err = res.RevokePortalPausability()
@@ -2846,9 +2931,9 @@ func (ex *connExecutor) dispatchToExecutionEngine(
 				} else {
 					ppInfo.dispatchToExecutionEngine.planTop = planner.curPlan
 					defer func() {
-						ppInfo.dispatchToExecutionEngine.cleanup.appendFunc(func(ctx context.Context) {
-							ppInfo.dispatchToExecutionEngine.planTop.close(ctx)
-						})
+						ppInfo.dispatchToExecutionEngine.cleanup.appendFunc(
+							ppInfo.dispatchToExecutionEngine.planTop.close,
+						)
 					}()
 				}
 			} else {
@@ -3080,6 +3165,13 @@ func populateQueryLevelStats(
 			// is non-deterministic, so if we need deterministic EXPLAIN, then
 			// we need to zero it out.
 			ih.queryLevelStatsWithErr.Stats.AdmissionWaitTime = 0
+		}
+		if p.ExecMon().MaximumBytes() > ih.queryLevelStatsWithErr.Stats.MaxMemUsage {
+			// For the query-level stats, for MaxMemUsage we want to include the
+			// memory usage during the logical planning, so we check whether the
+			// exec monitor (which includes that in addition to the gateway
+			// flow's memory usage) has higher watermark than any of the flows.
+			ih.queryLevelStatsWithErr.Stats.MaxMemUsage = p.execMon.MaximumBytes()
 		}
 	}
 	if ih.traceMetadata != nil && ih.explainPlan != nil {
@@ -3496,6 +3588,10 @@ func (ex *connExecutor) beginTransactionTimestampsAndReadMode(
 	now := ex.server.cfg.Clock.PhysicalTime()
 	p := &ex.planner
 	ex.resetPlanner(ctx, p, nil, now)
+	// Note that here we don't use the txnMon (we use its parent) given that
+	// we're in the NoTxn txn state, so the txnMon hasn't been started yet.
+	ex.execMon.StartNoReserved(ctx, ex.sessionMon)
+	defer ex.execMon.Stop(ctx)
 	var modes tree.TransactionModes
 	if s != nil {
 		modes = s.Modes

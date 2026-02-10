@@ -60,6 +60,7 @@ go_test(
         "datadriven_util_test.go",
         "lock_table_test.go",
         "lock_table_waiter_test.go",
+        "request_test.go",
         ":keylocks_interval_btree_test.go",  # keep
     ],
     data = glob(["testdata/**"]),
