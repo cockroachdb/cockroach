@@ -133,6 +133,12 @@ func (sgc *StoreGrantCoordinators) SetPebbleMetricsProvider(
 		gc.pebbleMetricsTick(startupCtx, m)
 		gc.allocateIOTokensTick(unloadedDuration.ticksInAdjustmentInterval())
 	}
+
+	var diskBuf DiskMetricsBuf
+	_ = sgc.adjustDiskTokenErrorForAllStores(
+		startupCtx, &pebbleMetricsProvider, &diskBuf,
+	)
+
 	if sgc.disableTickerForTesting {
 		return
 	}
@@ -151,7 +157,6 @@ func (sgc *StoreGrantCoordinators) SetPebbleMetricsProvider(
 		for !done {
 			select {
 			case <-t.ticker.C:
-				remainingTicks = t.remainingTicks()
 				// We do error accounting for disk reads and writes. This is important
 				// since disk token accounting is based on estimates over adjustment
 				// intervals. Like any model, these linear models have error terms, and
@@ -162,17 +167,14 @@ func (sgc *StoreGrantCoordinators) SetPebbleMetricsProvider(
 				// NB: We always do error calculation prior to making adjustments to
 				// make sure we account for errors prior to starting a new adjustment
 				// interval.
+				diskStatsLen := 0
 				if t.shouldAdjustForError(remainingTicks, systemLoaded) {
-					metrics = pebbleMetricsProvider.GetPebbleMetrics()
-					for _, m := range metrics {
-						if gc, ok := sgc.gcMap.Load(m.StoreID); ok {
-							gc.adjustDiskTokenError(m)
-						} else {
-							log.Dev.Warningf(ctx,
-								"seeing metrics for unknown storeID %d", m.StoreID)
-						}
-					}
+					diskStatsLen = sgc.adjustDiskTokenErrorForAllStores(
+						ctx, &pebbleMetricsProvider, &diskBuf,
+					)
 				}
+
+				remainingTicks = t.remainingTicks()
 
 				// Start a new adjustment interval.
 				if remainingTicks == 0 {
@@ -180,6 +182,10 @@ func (sgc *StoreGrantCoordinators) SetPebbleMetricsProvider(
 					if len(metrics) != sgc.numStores {
 						log.Dev.Warningf(ctx,
 							"expected %d store metrics and found %d metrics", sgc.numStores, len(metrics))
+					}
+					if len(metrics) != diskStatsLen {
+						log.Dev.Warningf(ctx,
+							"expected %d disk stats and found %d stats", sgc.numStores, diskStatsLen)
 					}
 					for _, m := range metrics {
 						if gc, ok := sgc.gcMap.Load(m.StoreID); ok {
@@ -297,6 +303,25 @@ func (sgc *StoreGrantCoordinators) initGrantCoordinator(
 		ioLoadListener: ioll,
 	}
 	return coord
+}
+
+func (sgc *StoreGrantCoordinators) adjustDiskTokenErrorForAllStores(
+	ctx context.Context, pebbleMetricsProvider *PebbleMetricsProvider, diskBuf *DiskMetricsBuf,
+) (diskStatsLen int) {
+	err := (*pebbleMetricsProvider).GetDiskStats(diskBuf)
+	if err != nil {
+		log.Dev.Warningf(ctx, "unable to get disk stats for token error adjustment: %v", err)
+		return 0
+	}
+
+	for _, ds := range diskBuf.Stats {
+		if gc, ok := sgc.gcMap.Load(ds.StoreID); ok {
+			gc.adjustDiskTokenError(ds.Stats)
+		} else {
+			panic(errors.AssertionFailedf("storeID %d found in disk stats but no store grant coordinator", ds.StoreID))
+		}
+	}
+	return len(diskBuf.Stats)
 }
 
 // TryGetQueueForStore returns a WorkQueue for the given storeID, or nil if
@@ -422,8 +447,8 @@ func (coord *storeGrantCoordinator) allocateIOTokensTick(remainingTicks int64) {
 // adjustDiskTokenError is used to account for errors in disk read and write
 // token estimation. Refer to the comment in adjustDiskTokenErrorLocked for more
 // details.
-func (coord *storeGrantCoordinator) adjustDiskTokenError(m StoreMetrics) {
-	coord.granter.adjustDiskTokenError(m)
+func (coord *storeGrantCoordinator) adjustDiskTokenError(stats DiskStats) {
+	coord.granter.adjustDiskTokenError(stats)
 }
 
 func (coord *storeGrantCoordinator) String() string {

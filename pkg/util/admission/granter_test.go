@@ -404,10 +404,10 @@ func TestStoreGranterBasic(t *testing.T) {
 			var readBytes, writeBytes int
 			d.ScanArgs(t, "actual-write-bytes", &writeBytes)
 			d.ScanArgs(t, "actual-read-bytes", &readBytes)
-			m := StoreMetrics{DiskStats: DiskStats{
+			m := DiskStats{
 				BytesRead:    uint64(readBytes),
 				BytesWritten: uint64(writeBytes),
-			}}
+			}
 			coord.adjustDiskTokenError(m)
 			return flushAndReset()
 
