@@ -26,6 +26,8 @@ import (
 // Setter observes storage parameters for indexes.
 type Setter struct {
 	IndexDesc *descpb.IndexDescriptor
+	// NewObject tracks if this is a newly created index.
+	NewObject bool
 }
 
 var _ storageparam.Setter = (*Setter)(nil)
@@ -131,6 +133,50 @@ func (po *Setter) applyVectorIndexSetting(
 	return nil
 }
 
+// validateParam validates that a storage parameter can be used in the current
+// context. It checks in order whether the parameter exists, is unimplemented,
+// or can be modified based on whether the index is being created.
+//
+// Parameters:
+//   - key: the parameter name
+//   - isCreating: true if this is index creation, false if altering/resetting
+//   - isReset: true if this is a RESET operation, false if SET
+//
+// Returns an error if validation fails, or nil if the parameter is valid.
+func validateParam(key string, isCreating, isReset bool) error {
+	switch key {
+	// Unimplemented parameters.
+	case `vacuum_cleanup_index_scale_factor`,
+		`buffering`,
+		`fastupdate`,
+		`gin_pending_list_limit`,
+		`pages_per_range`,
+		`autosummarize`:
+		return unimplemented.NewWithIssuef(43299, "storage parameter %q", key)
+
+	// Creation-time-only parameters.
+	case `fillfactor`, `s2_max_level`, `s2_level_mod`, `s2_max_cells`,
+		`geometry_min_x`, `geometry_max_x`, `geometry_min_y`, `geometry_max_y`,
+		`bucket_count`, `shard_columns`,
+		`build_beam_size`, `min_partition_size`, `max_partition_size`:
+		if !isCreating {
+			if isReset {
+				return pgerror.Newf(pgcode.InvalidParameterValue,
+					"storage parameter %q must be set at index creation time and cannot be reset", key,
+				)
+			}
+			return pgerror.Newf(pgcode.InvalidParameterValue,
+				"storage parameter %q must be set at index creation time and cannot be altered", key,
+			)
+		}
+		return nil
+
+	// Unknown parameter.
+	default:
+		return pgerror.Newf(pgcode.InvalidParameterValue, "invalid storage parameter %q", key)
+	}
+}
+
 // Set implements the Setter interface.
 func (po *Setter) Set(
 	ctx context.Context,
@@ -139,6 +185,10 @@ func (po *Setter) Set(
 	key string,
 	expr tree.Datum,
 ) error {
+	// Validate the parameter.
+	if err := validateParam(key, po.NewObject, false /* isReset */); err != nil {
+		return err
+	}
 	switch key {
 	case `fillfactor`:
 		return storageparam.SetFillFactor(ctx, evalCtx, key, expr)
@@ -150,13 +200,13 @@ func (po *Setter) Set(
 		return po.applyS2ConfigSetting(ctx, evalCtx, key, expr, 1, 32)
 	case `geometry_min_x`, `geometry_max_x`, `geometry_min_y`, `geometry_max_y`:
 		return po.applyGeometryIndexSetting(ctx, evalCtx, key, expr)
-	// `bucket_count` is handled in schema changer when creating hash sharded
-	// indexes.
 	case `bucket_count`:
+		// `bucket_count` is handled in schema changer when creating hash sharded
+		// indexes.
 		return nil
-	// `shard_columns` is handled in schema changer when creating hash sharded
-	// indexes.
 	case `shard_columns`:
+		// `shard_columns` is handled in schema changer when creating hash sharded
+		// indexes.
 		return nil
 	case `build_beam_size`:
 		return po.applyVectorIndexSetting(ctx, evalCtx, key, expr, 1, 512)
@@ -164,20 +214,18 @@ func (po *Setter) Set(
 		return po.applyVectorIndexSetting(ctx, evalCtx, key, expr, 1, 1024)
 	case `max_partition_size`:
 		return po.applyVectorIndexSetting(ctx, evalCtx, key, expr, 4, 4096)
-	case `vacuum_cleanup_index_scale_factor`,
-		`buffering`,
-		`fastupdate`,
-		`gin_pending_list_limit`,
-		`pages_per_range`,
-		`autosummarize`:
-		return unimplemented.NewWithIssuef(43299, "storage parameter %q", key)
 	}
-	return pgerror.Newf(pgcode.InvalidParameterValue, "invalid storage parameter %q", key)
+	return errors.AssertionFailedf("unhandled storage parameter %q", key)
 }
 
-// Reset implements the StorageParameterObserver interface.
+// Reset implements the Setter interface.
 func (po *Setter) Reset(ctx context.Context, evalCtx *eval.Context, key string) error {
-	return errors.AssertionFailedf("non-implemented codepath")
+	// Validate the parameter. Note that Reset is never called during index
+	// creation, so isCreating is always false.
+	if err := validateParam(key, false /* isCreating */, true /* isReset */); err != nil {
+		return err
+	}
+	return errors.AssertionFailedf("unhandled storage parameter %q", key)
 }
 
 // RunPostChecks implements the Setter interface.
@@ -228,8 +276,7 @@ func (po *Setter) RunPostChecks() error {
 	return nil
 }
 
-// IsNewTableObject implements the Setter interface.
-func (po *Setter) IsNewTableObject() bool {
-	//Not applicable to indexes.
-	return false
+// IsNewObject implements the Setter interface.
+func (po *Setter) IsNewObject() bool {
+	return po.NewObject
 }

@@ -82,8 +82,8 @@ func (po *Setter) RunPostChecks() error {
 	return nil
 }
 
-// IsNewTableObject implements the Setter interface.
-func (po *Setter) IsNewTableObject() bool {
+// IsNewObject implements the Setter interface.
+func (po *Setter) IsNewObject() bool {
 	return po.NewObject
 }
 
