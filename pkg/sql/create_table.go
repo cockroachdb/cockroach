@@ -1861,6 +1861,7 @@ func NewTableDesc(
 					d.PrimaryKey.StorageParams,
 					&indexstorageparam.Setter{
 						IndexDesc: &descpb.IndexDescriptor{},
+						NewObject: true,
 					}); err != nil {
 					return nil, err
 				}
@@ -1994,7 +1995,7 @@ func NewTableDesc(
 				semaCtx,
 				evalCtx,
 				d.StorageParams,
-				&indexstorageparam.Setter{IndexDesc: &idx},
+				&indexstorageparam.Setter{IndexDesc: &idx, NewObject: true},
 			); err != nil {
 				return nil, err
 			}
@@ -2135,7 +2136,7 @@ func NewTableDesc(
 				semaCtx,
 				evalCtx,
 				d.StorageParams,
-				&indexstorageparam.Setter{IndexDesc: &idx},
+				&indexstorageparam.Setter{IndexDesc: &idx, NewObject: true},
 			); err != nil {
 				return nil, err
 			}

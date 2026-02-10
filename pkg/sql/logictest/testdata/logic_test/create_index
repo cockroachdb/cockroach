@@ -726,6 +726,137 @@ CREATE INVERTED INDEX IF NOT EXISTS idx_b ON create_inverted_index_duplicate_sto
 
 subtest end
 
+# Storage parameter tests for CREATE INDEX.
+subtest create_index_storage_params
+
+statement ok
+CREATE TABLE t_storage_params (
+  id INT PRIMARY KEY,
+  x INT,
+  y INT,
+  geom GEOMETRY,
+  v VECTOR(3)
+)
+
+# Test that fillfactor can be set at index creation time.
+statement ok
+CREATE INDEX idx_fillfactor ON t_storage_params(x) WITH (fillfactor = 70)
+
+# Test invalid fillfactor values.
+statement error "fillfactor" must be between 0 and 100
+CREATE INDEX idx_fillfactor_invalid ON t_storage_params(x) WITH (fillfactor = -1)
+
+statement error "fillfactor" must be between 0 and 100
+CREATE INDEX idx_fillfactor_invalid ON t_storage_params(x) WITH (fillfactor = 101)
+
+# Test spatial index parameters (s2_*).
+statement ok
+CREATE INDEX idx_geom_s2 ON t_storage_params USING GIST(geom) WITH (s2_max_level = 16, s2_level_mod = 2, s2_max_cells = 10)
+
+# Test that s2_* parameters cannot be used on non-spatial indexes.
+statement error index setting "s2_max_level" can only be set on GEOMETRY or GEOGRAPHY spatial indexes
+CREATE INDEX idx_s2_invalid ON t_storage_params(x) WITH (s2_max_level = 15)
+
+statement error index setting "s2_level_mod" can only be set on GEOMETRY or GEOGRAPHY spatial indexes
+CREATE INDEX idx_s2_invalid ON t_storage_params(x) WITH (s2_level_mod = 2)
+
+statement error index setting "s2_max_cells" can only be set on GEOMETRY or GEOGRAPHY spatial indexes
+CREATE INDEX idx_s2_invalid ON t_storage_params(x) WITH (s2_max_cells = 10)
+
+# Test invalid s2_* parameter values.
+statement error "s2_max_level" value must be between 0 and 30 inclusive
+CREATE INDEX idx_s2_invalid ON t_storage_params USING GIST(geom) WITH (s2_max_level = 31)
+
+statement error "s2_level_mod" value must be between 1 and 3 inclusive
+CREATE INDEX idx_s2_invalid ON t_storage_params USING GIST(geom) WITH (s2_level_mod = 0)
+
+statement error "s2_level_mod" value must be between 1 and 3 inclusive
+CREATE INDEX idx_s2_invalid ON t_storage_params USING GIST(geom) WITH (s2_level_mod = 4)
+
+statement error "s2_max_cells" value must be between 1 and 32 inclusive
+CREATE INDEX idx_s2_invalid ON t_storage_params USING GIST(geom) WITH (s2_max_cells = 0)
+
+statement error "s2_max_cells" value must be between 1 and 32 inclusive
+CREATE INDEX idx_s2_invalid ON t_storage_params USING GIST(geom) WITH (s2_max_cells = 33)
+
+# Test that s2_max_level must be divisible by s2_level_mod.
+statement error s2_max_level \(17\) must be divisible by s2_level_mod \(2\)
+CREATE INDEX idx_s2_divisible ON t_storage_params USING GIST(geom) WITH (s2_max_level = 17, s2_level_mod = 2)
+
+statement ok
+CREATE INDEX idx_s2_divisible_ok ON t_storage_params USING GIST(geom) WITH (s2_max_level = 18, s2_level_mod = 2)
+
+# Test geometry_* parameters.
+statement ok
+CREATE INDEX idx_geom_bounds ON t_storage_params USING GIST(geom) WITH (geometry_min_x = -180.0, geometry_max_x = 180.0, geometry_min_y = -90.0, geometry_max_y = 90.0)
+
+# Test that geometry_* parameters cannot be used on non-geometry indexes.
+statement error "geometry_min_x" can only be applied to GEOMETRY spatial indexes
+CREATE INDEX idx_geom_invalid ON t_storage_params(x) WITH (geometry_min_x = -180.0)
+
+# Test that geometry_max_x must be greater than geometry_min_x.
+statement error geometry_max_x \(.*\) must be greater than geometry_min_x \(.*\)
+CREATE INDEX idx_geom_invalid ON t_storage_params USING GIST(geom) WITH (geometry_min_x = 180.0, geometry_max_x = -180.0)
+
+# Test that geometry_max_y must be greater than geometry_min_y.
+statement error geometry_max_y \(.*\) must be greater than geometry_min_y \(.*\)
+CREATE INDEX idx_geom_invalid ON t_storage_params USING GIST(geom) WITH (geometry_min_y = 90.0, geometry_max_y = -90.0)
+
+# Test vector index parameters.
+statement ok
+CREATE INDEX idx_vec_params ON t_storage_params USING HNSW(v) WITH (build_beam_size = 100, min_partition_size = 50, max_partition_size = 200)
+
+# Test invalid vector index parameter values.
+statement error "build_beam_size" value must be between 1 and 512 inclusive
+CREATE INDEX idx_vec_invalid ON t_storage_params USING HNSW(v) WITH (build_beam_size = 0)
+
+statement error "build_beam_size" value must be between 1 and 512 inclusive
+CREATE INDEX idx_vec_invalid ON t_storage_params USING HNSW(v) WITH (build_beam_size = 513)
+
+statement error "min_partition_size" value must be between 1 and 1024 inclusive
+CREATE INDEX idx_vec_invalid ON t_storage_params USING HNSW(v) WITH (min_partition_size = 0)
+
+statement error "min_partition_size" value must be between 1 and 1024 inclusive
+CREATE INDEX idx_vec_invalid ON t_storage_params USING HNSW(v) WITH (min_partition_size = 1025)
+
+statement error "max_partition_size" value must be between 4 and 4096 inclusive
+CREATE INDEX idx_vec_invalid ON t_storage_params USING HNSW(v) WITH (max_partition_size = 3)
+
+statement error "max_partition_size" value must be between 4 and 4096 inclusive
+CREATE INDEX idx_vec_invalid ON t_storage_params USING HNSW(v) WITH (max_partition_size = 4097)
+
+# Test unimplemented parameters.
+statement error pgcode 0A000 unimplemented: storage parameter "vacuum_cleanup_index_scale_factor"
+CREATE INDEX idx_unimpl ON t_storage_params(x) WITH (vacuum_cleanup_index_scale_factor = 0.5)
+
+statement error pgcode 0A000 unimplemented: storage parameter "buffering"
+CREATE INDEX idx_unimpl ON t_storage_params(x) WITH (buffering = auto)
+
+statement error pgcode 0A000 unimplemented: storage parameter "fastupdate"
+CREATE INDEX idx_unimpl ON t_storage_params(x) WITH (fastupdate = on)
+
+statement error pgcode 0A000 unimplemented: storage parameter "gin_pending_list_limit"
+CREATE INDEX idx_unimpl ON t_storage_params(x) WITH (gin_pending_list_limit = 4096)
+
+statement error pgcode 0A000 unimplemented: storage parameter "pages_per_range"
+CREATE INDEX idx_unimpl ON t_storage_params(x) WITH (pages_per_range = 128)
+
+statement error pgcode 0A000 unimplemented: storage parameter "autosummarize"
+CREATE INDEX idx_unimpl ON t_storage_params(x) WITH (autosummarize = on)
+
+# Test invalid parameters.
+statement error pgcode 22023 invalid storage parameter "invalid_param"
+CREATE INDEX idx_invalid ON t_storage_params(x) WITH (invalid_param = 100)
+
+# Test multiple parameters at once.
+statement ok
+CREATE INDEX idx_multi ON t_storage_params(x) WITH (fillfactor = 80)
+
+# Test with IF NOT EXISTS.
+statement ok
+CREATE INDEX IF NOT EXISTS idx_exists ON t_storage_params(x) WITH (fillfactor = 70)
+
+subtest end
 
 subtest create_index_expression_with_default_collation
 
