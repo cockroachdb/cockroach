@@ -31,5 +31,7 @@ $$;
   {functionId: 109, nullInputBehavior: {nullInputBehavior: CALLED_ON_NULL_INPUT}}
 - [[FunctionSecurity:{DescID: 109}, PUBLIC], ABSENT]
   {functionId: 109, security: {}}
+- [[FunctionParams:{DescID: 109}, PUBLIC], ABSENT]
+  {functionId: 109, params: [{class: {}, name: a, type: {closedTypeIds: [107, 108], type: {family: EnumFamily, oid: 100107, udtMetadata: {arrayTypeOid: 100108}}, typeName: public.notmyworkday}}]}
 - [[FunctionBody:{DescID: 109}, PUBLIC], ABSENT]
-  {body: SELECT 1;, functionId: 109, lang: {lang: SQL}, params: [{class: {}, name: a, type: {closedTypeIds: [107, 108], type: {family: EnumFamily, oid: 100107, udtMetadata: {arrayTypeOid: 100108}}, typeName: public.notmyworkday}}], usesTypeIds: [107, 108]}
+  {body: SELECT 1;, functionId: 109, lang: {lang: SQL}, usesTypeIds: [107, 108]}

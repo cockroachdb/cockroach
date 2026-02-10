@@ -12,7 +12,7 @@ Schema change plan for CREATE FUNCTION ‹defaultdb›.‹public›.‹t›()
 	AS $$SELECT ‹1›;$$; following CREATE DATABASE ‹db›; CREATE SCHEMA ‹db›.‹sc› AUTHORIZATION foo;
  ├── StatementPhase
  │    └── Stage 1 of 1 in StatementPhase
- │         ├── 8 elements transitioning toward PUBLIC
+ │         ├── 9 elements transitioning toward PUBLIC
  │         │    ├── ABSENT → PUBLIC Function:{DescID: 107 (t+)}
  │         │    ├── ABSENT → PUBLIC SchemaChild:{DescID: 107 (t+), ReferencedDescID: 101 (public)}
  │         │    ├── ABSENT → PUBLIC FunctionName:{DescID: 107 (t+)}
@@ -20,8 +20,9 @@ Schema change plan for CREATE FUNCTION ‹defaultdb›.‹public›.‹t›()
  │         │    ├── ABSENT → PUBLIC UserPrivileges:{DescID: 107 (t+), Name: "admin"}
  │         │    ├── ABSENT → PUBLIC UserPrivileges:{DescID: 107 (t+), Name: "public"}
  │         │    ├── ABSENT → PUBLIC UserPrivileges:{DescID: 107 (t+), Name: "root"}
- │         │    └── ABSENT → PUBLIC FunctionBody:{DescID: 107 (t+)}
- │         └── 11 Mutation operations
+ │         │    ├── ABSENT → PUBLIC FunctionBody:{DescID: 107 (t+)}
+ │         │    └── ABSENT → PUBLIC FunctionParams:{DescID: 107 (t+)}
+ │         └── 12 Mutation operations
  │              ├── CreateFunctionDescriptor {"Function":{"FunctionID":107}}
  │              ├── SetFunctionName {"FunctionID":107,"Name":"t"}
  │              ├── UpdateOwner {"Owner":{"DescriptorID":107,"Owner":"root"}}
@@ -31,11 +32,12 @@ Schema change plan for CREATE FUNCTION ‹defaultdb›.‹public›.‹t›()
  │              ├── SetFunctionBody {"Body":{"Body":"SELECT 1;","FunctionID":107}}
  │              ├── UpdateFunctionTypeReferences {"FunctionID":107}
  │              ├── UpdateFunctionRelationReferences {"FunctionID":107}
+ │              ├── SetFunctionParams {"Params":{"FunctionID":107}}
  │              ├── SetObjectParentID {"ObjParent":{"ChildObjectID":107,"SchemaID":101}}
  │              └── MarkDescriptorAsPublic {"DescriptorID":107}
  └── PreCommitPhase
       ├── Stage 1 of 2 in PreCommitPhase
-      │    ├── 28 elements transitioning toward PUBLIC
+      │    ├── 29 elements transitioning toward PUBLIC
       │    │    ├── PUBLIC → ABSENT Namespace:{DescID: 104 (db+), Name: "db", IntValue: 0}
       │    │    ├── PUBLIC → ABSENT Owner:{DescID: 104 (db+)}
       │    │    ├── PUBLIC → ABSENT UserPrivileges:{DescID: 104 (db+), Name: "admin"}
@@ -63,11 +65,12 @@ Schema change plan for CREATE FUNCTION ‹defaultdb›.‹public›.‹t›()
       │    │    ├── PUBLIC → ABSENT UserPrivileges:{DescID: 107 (t+), Name: "admin"}
       │    │    ├── PUBLIC → ABSENT UserPrivileges:{DescID: 107 (t+), Name: "public"}
       │    │    ├── PUBLIC → ABSENT UserPrivileges:{DescID: 107 (t+), Name: "root"}
-      │    │    └── PUBLIC → ABSENT FunctionBody:{DescID: 107 (t+)}
+      │    │    ├── PUBLIC → ABSENT FunctionBody:{DescID: 107 (t+)}
+      │    │    └── PUBLIC → ABSENT FunctionParams:{DescID: 107 (t+)}
       │    └── 1 Mutation operation
       │         └── UndoAllInTxnImmediateMutationOpSideEffects
       └── Stage 2 of 2 in PreCommitPhase
-           ├── 28 elements transitioning toward PUBLIC
+           ├── 29 elements transitioning toward PUBLIC
            │    ├── ABSENT → PUBLIC Namespace:{DescID: 104 (db+), Name: "db", IntValue: 0}
            │    ├── ABSENT → PUBLIC Owner:{DescID: 104 (db+)}
            │    ├── ABSENT → PUBLIC UserPrivileges:{DescID: 104 (db+), Name: "admin"}
@@ -95,8 +98,9 @@ Schema change plan for CREATE FUNCTION ‹defaultdb›.‹public›.‹t›()
            │    ├── ABSENT → PUBLIC UserPrivileges:{DescID: 107 (t+), Name: "admin"}
            │    ├── ABSENT → PUBLIC UserPrivileges:{DescID: 107 (t+), Name: "public"}
            │    ├── ABSENT → PUBLIC UserPrivileges:{DescID: 107 (t+), Name: "root"}
-           │    └── ABSENT → PUBLIC FunctionBody:{DescID: 107 (t+)}
-           └── 36 Mutation operations
+           │    ├── ABSENT → PUBLIC FunctionBody:{DescID: 107 (t+)}
+           │    └── ABSENT → PUBLIC FunctionParams:{DescID: 107 (t+)}
+           └── 37 Mutation operations
                 ├── CreateDatabaseDescriptor {"DatabaseID":104}
                 ├── CreateSchemaDescriptor {"SchemaID":105}
                 ├── CreateSchemaDescriptor {"SchemaID":106}
@@ -109,6 +113,7 @@ Schema change plan for CREATE FUNCTION ‹defaultdb›.‹public›.‹t›()
                 ├── SetFunctionBody {"Body":{"Body":"SELECT 1;","FunctionID":107}}
                 ├── UpdateFunctionTypeReferences {"FunctionID":107}
                 ├── UpdateFunctionRelationReferences {"FunctionID":107}
+                ├── SetFunctionParams {"Params":{"FunctionID":107}}
                 ├── SetNameInDescriptor {"DescriptorID":104,"Name":"db"}
                 ├── AddDescriptorName {"Namespace":{"DescriptorID":104,"Name":"db"}}
                 ├── UpdateOwner {"Owner":{"DescriptorID":104,"Owner":"root"}}

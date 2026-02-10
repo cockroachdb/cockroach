@@ -23,12 +23,13 @@ CREATE OR REPLACE FUNCTION f(a notmyworkday) RETURNS INT IMMUTABLE LANGUAGE SQL 
   SELECT 1;
 $$;
 ----
-StatementPhase stage 1 of 1 with 7 MutationType ops
+StatementPhase stage 1 of 1 with 8 MutationType ops
   transitions:
     [[FunctionVolatility:{DescID: 109}, PUBLIC], ABSENT] -> PUBLIC
     [[FunctionLeakProof:{DescID: 109}, PUBLIC], ABSENT] -> PUBLIC
     [[FunctionNullInputBehavior:{DescID: 109}, PUBLIC], ABSENT] -> PUBLIC
     [[FunctionSecurity:{DescID: 109}, PUBLIC], ABSENT] -> PUBLIC
+    [[FunctionParams:{DescID: 109}, PUBLIC], ABSENT] -> PUBLIC
     [[FunctionBody:{DescID: 109}, PUBLIC], ABSENT] -> PUBLIC
   ops:
     *scop.SetFunctionVolatility
@@ -41,12 +42,9 @@ StatementPhase stage 1 of 1 with 7 MutationType ops
       NullInputBehavior: 1
     *scop.SetFunctionSecurity
       FunctionID: 109
-    *scop.SetFunctionBody
-      Body:
-        Body: SELECT 1;
+    *scop.SetFunctionParams
+      Params:
         FunctionID: 109
-        Lang:
-          Lang: 1
         Params:
         - name: a
           class:
@@ -68,6 +66,12 @@ StatementPhase stage 1 of 1 with 7 MutationType ops
             - 108
             typename: public.notmyworkday
           defaultexpr: ""
+    *scop.SetFunctionBody
+      Body:
+        Body: SELECT 1;
+        FunctionID: 109
+        Lang:
+          Lang: 1
         UsesTypeIDs:
         - 107
         - 108
@@ -84,16 +88,18 @@ PreCommitPhase stage 1 of 2 with 1 MutationType op
     [[FunctionLeakProof:{DescID: 109}, PUBLIC], PUBLIC] -> ABSENT
     [[FunctionNullInputBehavior:{DescID: 109}, PUBLIC], PUBLIC] -> ABSENT
     [[FunctionSecurity:{DescID: 109}, PUBLIC], PUBLIC] -> ABSENT
+    [[FunctionParams:{DescID: 109}, PUBLIC], PUBLIC] -> ABSENT
     [[FunctionBody:{DescID: 109}, PUBLIC], PUBLIC] -> ABSENT
   ops:
     *scop.UndoAllInTxnImmediateMutationOpSideEffects
       {}
-PreCommitPhase stage 2 of 2 with 7 MutationType ops
+PreCommitPhase stage 2 of 2 with 8 MutationType ops
   transitions:
     [[FunctionVolatility:{DescID: 109}, PUBLIC], ABSENT] -> PUBLIC
     [[FunctionLeakProof:{DescID: 109}, PUBLIC], ABSENT] -> PUBLIC
     [[FunctionNullInputBehavior:{DescID: 109}, PUBLIC], ABSENT] -> PUBLIC
     [[FunctionSecurity:{DescID: 109}, PUBLIC], ABSENT] -> PUBLIC
+    [[FunctionParams:{DescID: 109}, PUBLIC], ABSENT] -> PUBLIC
     [[FunctionBody:{DescID: 109}, PUBLIC], ABSENT] -> PUBLIC
   ops:
     *scop.SetFunctionVolatility
@@ -106,12 +112,9 @@ PreCommitPhase stage 2 of 2 with 7 MutationType ops
       NullInputBehavior: 1
     *scop.SetFunctionSecurity
       FunctionID: 109
-    *scop.SetFunctionBody
-      Body:
-        Body: SELECT 1;
+    *scop.SetFunctionParams
+      Params:
         FunctionID: 109
-        Lang:
-          Lang: 1
         Params:
         - name: a
           class:
@@ -133,6 +136,12 @@ PreCommitPhase stage 2 of 2 with 7 MutationType ops
             - 108
             typename: public.notmyworkday
           defaultexpr: ""
+    *scop.SetFunctionBody
+      Body:
+        Body: SELECT 1;
+        FunctionID: 109
+        Lang:
+          Lang: 1
         UsesTypeIDs:
         - 107
         - 108

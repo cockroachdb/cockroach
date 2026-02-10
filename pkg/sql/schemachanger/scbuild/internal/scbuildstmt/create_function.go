@@ -8,6 +8,7 @@ package scbuildstmt
 import (
 	"fmt"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/funcdesc"
@@ -15,6 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
@@ -58,6 +60,9 @@ func CreateFunction(b BuildCtx, n *tree.CreateRoutine) {
 	)
 
 	if existingFn != nil && n.Replace {
+		if !b.EvalCtx().Settings.Version.ActiveVersion(b).IsActive(clusterversion.V26_2) {
+			panic(scerrors.NotImplementedError(n))
+		}
 		replaceFunction(b, n, existingFn, db, sc)
 		return
 	}
@@ -206,6 +211,12 @@ func CreateFunction(b BuildCtx, n *tree.CreateRoutine) {
 	validateFunctionRelationReferences(b, refProvider, db.DatabaseID)
 	validateFunctionToFunctionReferences(b, refProvider, db.DatabaseID)
 	b.Add(b.WrapFunctionBody(fnID, fnBodyStr, lang, typ, refProvider))
+	if b.EvalCtx().Settings.Version.ActiveVersion(b).IsActive(clusterversion.V26_2) {
+		b.Add(&scpb.FunctionParams{
+			FunctionID: fnID,
+			Params:     fn.Params,
+		})
+	}
 	b.LogEventForExistingTarget(&fn)
 }
 
@@ -418,15 +429,20 @@ func replaceFunction(
 
 	// Build the FunctionBody element with the new body and references.
 	fnBody := b.WrapFunctionBody(fnID, fnBodyStr, lang, typ, refProvider)
-	// Carry the updated params so the execution layer updates the descriptor.
-	fnBody.Params = newParams
+	b.Replace(fnBody)
+
+	// Replace the FunctionParams element with the updated params.
+	funcParams := &scpb.FunctionParams{
+		FunctionID: fnID,
+		Params:     newParams,
+	}
 	// When the return type is a UDT, its internal representation may have
 	// changed (e.g., table type after ALTER TABLE ADD COLUMN). Carry the
 	// refreshed type so the execution layer updates the descriptor.
 	if isSameUDT {
-		fnBody.ReturnType = &newReturnType
+		funcParams.ReturnType = &newReturnType
 	}
-	b.Replace(fnBody)
+	b.Replace(funcParams)
 
 	b.LogEventForExistingTarget(existingFnElem)
 }

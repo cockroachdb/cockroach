@@ -580,6 +580,9 @@ var elementSchemaOptions = []rel.SchemaOption{
 	rel.EntityMapping(t((*scpb.FunctionSecurity)(nil)),
 		rel.EntityAttr(DescID, "FunctionID"),
 	),
+	rel.EntityMapping(t((*scpb.FunctionParams)(nil)),
+		rel.EntityAttr(DescID, "FunctionID"),
+	),
 }
 
 // Schema is the schema exported by this package covering the elements of scpb.

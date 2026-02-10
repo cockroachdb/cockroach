@@ -206,8 +206,6 @@ FunctionBody : []UsesViews
 FunctionBody : []UsesSequenceIDs
 FunctionBody : []UsesTypeIDs
 FunctionBody : []UsesFunctionIDs
-FunctionBody : []Params
-FunctionBody :  ReturnType
 
 object FunctionLeakProof
 
@@ -223,6 +221,12 @@ object FunctionNullInputBehavior
 
 FunctionNullInputBehavior :  FunctionID
 FunctionNullInputBehavior :  NullInputBehavior
+
+object FunctionParams
+
+FunctionParams :  FunctionID
+FunctionParams : []Params
+FunctionParams :  ReturnType
 
 object FunctionSecurity
 
@@ -627,6 +631,7 @@ Function <|-- FunctionBody
 Function <|-- FunctionLeakProof
 Function <|-- FunctionName
 Function <|-- FunctionNullInputBehavior
+Function <|-- FunctionParams
 Function <|-- FunctionSecurity
 Function <|-- FunctionVolatility
 PrimaryIndex <|-- IndexColumn
