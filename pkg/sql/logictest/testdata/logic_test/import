@@ -1,0 +1,41 @@
+# LogicTest: local
+
+subtest import_into_non_empty_table
+
+statement ok
+CREATE DATABASE d
+
+statement ok
+CREATE TABLE d.t_for_import(
+  i INT PRIMARY KEY,
+  a INT NULL,
+  FAMILY f0 (i),
+  FAMILY f1 (a)
+)
+
+statement ok
+INSERT INTO d.t_for_import (i, a) VALUES (1, 100)
+
+statement ok
+INSERT INTO d.t_for_import (i, a)
+SELECT i, CASE WHEN i % 3 = 0 THEN NULL ELSE i * 10 END
+FROM generate_series(4, 22000) AS i;
+
+let $exp_file
+WITH cte AS (EXPORT INTO CSV 'nodelocal://1/import_test_data' WITH nullas = '' FROM SELECT 2 AS i, 200 AS a UNION ALL SELECT 3, NULL) SELECT filename FROM cte;
+
+statement ok
+IMPORT INTO d.t_for_import (i, a) CSV DATA ('nodelocal://1/import_test_data/$exp_file')
+
+query I rowsort
+SELECT count(*) FROM d.t_for_import
+----
+22000
+
+statement ok
+DROP TABLE d.t_for_import
+
+statement ok
+DROP DATABASE d
+
+subtest end

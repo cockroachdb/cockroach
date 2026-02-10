@@ -5401,7 +5401,11 @@ func TestImportJobEventLogging(t *testing.T) {
 	sqlDB.QueryRow(t, importQuery, simpleOcf).Scan(&jobID, &unused, &unused, &unused, &unused,
 		&unused)
 
-	expectedStatus := []string{string(jobs.StateSucceeded), string(jobs.StateRunning)}
+	expectedStatus := []string{
+		string(jobs.StateSucceeded),
+		string(jobs.StateRunning), // after row count check
+		string(jobs.StateRunning), // after prepare
+	}
 	expectedRecoveryEvent := eventpb.RecoveryEvent{
 		RecoveryType: importJobRecoveryEventType,
 		NumRows:      int64(1000),
@@ -5420,8 +5424,10 @@ func TestImportJobEventLogging(t *testing.T) {
 	row.Scan(&jobID)
 
 	expectedStatus = []string{
-		string(jobs.StateFailed), string(jobs.StateReverting),
-		string(jobs.StateRunning),
+		string(jobs.StateFailed),
+		string(jobs.StateReverting),
+		string(jobs.StateRunning), // after row count check
+		string(jobs.StateRunning), // after prepare
 	}
 	expectedRecoveryEvent = eventpb.RecoveryEvent{
 		RecoveryType: importJobRecoveryEventType,

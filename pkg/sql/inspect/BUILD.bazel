@@ -19,6 +19,7 @@ go_library(
         "runner.go",
         "span_source.go",
         "table_sink.go",
+        "uniqueness_check.go",
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/sql/inspect",
     visibility = ["//visibility:public"],
@@ -58,6 +59,7 @@ go_library(
         "//pkg/sql/sessiondatapb",
         "//pkg/sql/spanutils",
         "//pkg/sql/types",
+        "//pkg/util/buildutil",
         "//pkg/util/ctxgroup",
         "//pkg/util/hlc",
         "//pkg/util/log",
@@ -88,6 +90,7 @@ go_test(
         "row_count_check_test.go",
         "runner_test.go",
         "table_sink_test.go",
+        "uniqueness_check_test.go",
     ],
     embed = [":inspect"],
     exec_properties = select({
