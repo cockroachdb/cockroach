@@ -41,8 +41,10 @@ func _() {
 	_ = x[Usage-26]
 	_ = x[PolicyID-27]
 	_ = x[GeneratedAsIdentityType-28]
-	_ = x[IntValue-29]
-	_ = x[AttrMax-29]
+	_ = x[BoolValue-29]
+	_ = x[Int32Value-30]
+	_ = x[UInt32Value-31]
+	_ = x[AttrMax-31]
 }
 
 func (i Attr) String() string {
@@ -103,8 +105,12 @@ func (i Attr) String() string {
 		return "PolicyID"
 	case GeneratedAsIdentityType:
 		return "GeneratedAsIdentityType"
-	case IntValue:
-		return "IntValue"
+	case BoolValue:
+		return "BoolValue"
+	case Int32Value:
+		return "Int32Value"
+	case UInt32Value:
+		return "UInt32Value"
 	default:
 		return "Attr(" + strconv.FormatInt(int64(i), 10) + ")"
 	}

@@ -26,12 +26,17 @@ StatementPhase stage 1 of 1 with 12 MutationType ops
     [[Function:{DescID: 109}, PUBLIC], ABSENT] -> PUBLIC
     [[SchemaChild:{DescID: 109, ReferencedDescID: 101}, PUBLIC], ABSENT] -> PUBLIC
     [[FunctionName:{DescID: 109}, PUBLIC], ABSENT] -> PUBLIC
-    [[FunctionVolatility:{DescID: 109}, PUBLIC], ABSENT] -> PUBLIC
+    [[FunctionVolatility:{DescID: 109, Int32Value: VOLATILE}, PUBLIC], ABSENT] -> PUBLIC
     [[Owner:{DescID: 109}, PUBLIC], ABSENT] -> PUBLIC
     [[UserPrivileges:{DescID: 109, Name: admin}, PUBLIC], ABSENT] -> PUBLIC
     [[UserPrivileges:{DescID: 109, Name: public}, PUBLIC], ABSENT] -> PUBLIC
     [[UserPrivileges:{DescID: 109, Name: root}, PUBLIC], ABSENT] -> PUBLIC
-    [[FunctionBody:{DescID: 109}, PUBLIC], ABSENT] -> PUBLIC
+    [[FunctionBody:{DescID: 109, Value: SELECT a FROM t;
+    SELECT b FROM t@t_idx_b;
+    SELECT c FROM t@t_idx_c;
+    SELECT a FROM v;
+    SELECT b'@':::@100107;
+    SELECT nextval(105:::REGCLASS);}, PUBLIC], ABSENT] -> PUBLIC
   ops:
     *scop.CreateFunctionDescriptor
       Function:
@@ -161,12 +166,17 @@ PreCommitPhase stage 1 of 2 with 1 MutationType op
     [[Function:{DescID: 109}, PUBLIC], PUBLIC] -> ABSENT
     [[SchemaChild:{DescID: 109, ReferencedDescID: 101}, PUBLIC], PUBLIC] -> ABSENT
     [[FunctionName:{DescID: 109}, PUBLIC], PUBLIC] -> ABSENT
-    [[FunctionVolatility:{DescID: 109}, PUBLIC], PUBLIC] -> ABSENT
+    [[FunctionVolatility:{DescID: 109, Int32Value: VOLATILE}, PUBLIC], PUBLIC] -> ABSENT
     [[Owner:{DescID: 109}, PUBLIC], PUBLIC] -> ABSENT
     [[UserPrivileges:{DescID: 109, Name: admin}, PUBLIC], PUBLIC] -> ABSENT
     [[UserPrivileges:{DescID: 109, Name: public}, PUBLIC], PUBLIC] -> ABSENT
     [[UserPrivileges:{DescID: 109, Name: root}, PUBLIC], PUBLIC] -> ABSENT
-    [[FunctionBody:{DescID: 109}, PUBLIC], PUBLIC] -> ABSENT
+    [[FunctionBody:{DescID: 109, Value: SELECT a FROM t;
+    SELECT b FROM t@t_idx_b;
+    SELECT c FROM t@t_idx_c;
+    SELECT a FROM v;
+    SELECT b'@':::@100107;
+    SELECT nextval(105:::REGCLASS);}, PUBLIC], PUBLIC] -> ABSENT
   ops:
     *scop.UndoAllInTxnImmediateMutationOpSideEffects
       {}
@@ -175,12 +185,17 @@ PreCommitPhase stage 2 of 2 with 12 MutationType ops
     [[Function:{DescID: 109}, PUBLIC], ABSENT] -> PUBLIC
     [[SchemaChild:{DescID: 109, ReferencedDescID: 101}, PUBLIC], ABSENT] -> PUBLIC
     [[FunctionName:{DescID: 109}, PUBLIC], ABSENT] -> PUBLIC
-    [[FunctionVolatility:{DescID: 109}, PUBLIC], ABSENT] -> PUBLIC
+    [[FunctionVolatility:{DescID: 109, Int32Value: VOLATILE}, PUBLIC], ABSENT] -> PUBLIC
     [[Owner:{DescID: 109}, PUBLIC], ABSENT] -> PUBLIC
     [[UserPrivileges:{DescID: 109, Name: admin}, PUBLIC], ABSENT] -> PUBLIC
     [[UserPrivileges:{DescID: 109, Name: public}, PUBLIC], ABSENT] -> PUBLIC
     [[UserPrivileges:{DescID: 109, Name: root}, PUBLIC], ABSENT] -> PUBLIC
-    [[FunctionBody:{DescID: 109}, PUBLIC], ABSENT] -> PUBLIC
+    [[FunctionBody:{DescID: 109, Value: SELECT a FROM t;
+    SELECT b FROM t@t_idx_b;
+    SELECT c FROM t@t_idx_c;
+    SELECT a FROM v;
+    SELECT b'@':::@100107;
+    SELECT nextval(105:::REGCLASS);}, PUBLIC], ABSENT] -> PUBLIC
   ops:
     *scop.CreateFunctionDescriptor
       Function:
@@ -317,7 +332,12 @@ CREATE FUNCTION f(a notmyworkday) RETURNS INT VOLATILE LANGUAGE SQL AS $$
 $$;
 ----
 - from: [Function:{DescID: 110}, DESCRIPTOR_ADDED]
-  to:   [FunctionBody:{DescID: 110}, PUBLIC]
+  to:   [FunctionBody:{DescID: 110, Value: SELECT a FROM t;
+SELECT b FROM t@t_idx_b;
+SELECT c FROM t@t_idx_c;
+SELECT a FROM v;
+SELECT b'@':::@100107;
+SELECT nextval(105:::REGCLASS);}, PUBLIC]
   kind: Precedence
   rule: descriptor existence precedes dependents
 - from: [Function:{DescID: 110}, DESCRIPTOR_ADDED]
@@ -325,7 +345,7 @@ $$;
   kind: Precedence
   rule: descriptor existence precedes dependents
 - from: [Function:{DescID: 110}, DESCRIPTOR_ADDED]
-  to:   [FunctionVolatility:{DescID: 110}, PUBLIC]
+  to:   [FunctionVolatility:{DescID: 110, Int32Value: VOLATILE}, PUBLIC]
   kind: Precedence
   rule: descriptor existence precedes dependents
 - from: [Function:{DescID: 110}, DESCRIPTOR_ADDED]
@@ -348,7 +368,12 @@ $$;
   to:   [UserPrivileges:{DescID: 110, Name: root}, PUBLIC]
   kind: Precedence
   rule: descriptor existence precedes dependents
-- from: [FunctionBody:{DescID: 110}, PUBLIC]
+- from: [FunctionBody:{DescID: 110, Value: SELECT a FROM t;
+SELECT b FROM t@t_idx_b;
+SELECT c FROM t@t_idx_c;
+SELECT a FROM v;
+SELECT b'@':::@100107;
+SELECT nextval(105:::REGCLASS);}, PUBLIC]
   to:   [Function:{DescID: 110}, PUBLIC]
   kind: Precedence
   rule: dependents exist before descriptor becomes public
@@ -360,7 +385,7 @@ $$;
   to:   [SchemaChild:{DescID: 110, ReferencedDescID: 101}, PUBLIC]
   kind: Precedence
   rule: function name should be set before parent ids
-- from: [FunctionVolatility:{DescID: 110}, PUBLIC]
+- from: [FunctionVolatility:{DescID: 110, Int32Value: VOLATILE}, PUBLIC]
   to:   [Function:{DescID: 110}, PUBLIC]
   kind: Precedence
   rule: dependents exist before descriptor becomes public
@@ -402,12 +427,20 @@ StatementPhase stage 1 of 1 with 12 MutationType ops
     [[Function:{DescID: 111}, PUBLIC], ABSENT] -> PUBLIC
     [[SchemaChild:{DescID: 111, ReferencedDescID: 101}, PUBLIC], ABSENT] -> PUBLIC
     [[FunctionName:{DescID: 111}, PUBLIC], ABSENT] -> PUBLIC
-    [[FunctionVolatility:{DescID: 111}, PUBLIC], ABSENT] -> PUBLIC
+    [[FunctionVolatility:{DescID: 111, Int32Value: VOLATILE}, PUBLIC], ABSENT] -> PUBLIC
     [[Owner:{DescID: 111}, PUBLIC], ABSENT] -> PUBLIC
     [[UserPrivileges:{DescID: 111, Name: admin}, PUBLIC], ABSENT] -> PUBLIC
     [[UserPrivileges:{DescID: 111, Name: public}, PUBLIC], ABSENT] -> PUBLIC
     [[UserPrivileges:{DescID: 111, Name: root}, PUBLIC], ABSENT] -> PUBLIC
-    [[FunctionBody:{DescID: 111}, PUBLIC], ABSENT] -> PUBLIC
+    [[FunctionBody:{DescID: 111, Value: BEGIN
+    SELECT a FROM t;
+    SELECT b FROM t@t_idx_b;
+    SELECT c FROM t@t_idx_c;
+    SELECT a FROM v;
+    SELECT b'@':::@100107;
+    RETURN nextval(105:::REGCLASS);
+    END;
+    }, PUBLIC], ABSENT] -> PUBLIC
   ops:
     *scop.CreateFunctionDescriptor
       Function:
@@ -539,12 +572,20 @@ PreCommitPhase stage 1 of 2 with 1 MutationType op
     [[Function:{DescID: 111}, PUBLIC], PUBLIC] -> ABSENT
     [[SchemaChild:{DescID: 111, ReferencedDescID: 101}, PUBLIC], PUBLIC] -> ABSENT
     [[FunctionName:{DescID: 111}, PUBLIC], PUBLIC] -> ABSENT
-    [[FunctionVolatility:{DescID: 111}, PUBLIC], PUBLIC] -> ABSENT
+    [[FunctionVolatility:{DescID: 111, Int32Value: VOLATILE}, PUBLIC], PUBLIC] -> ABSENT
     [[Owner:{DescID: 111}, PUBLIC], PUBLIC] -> ABSENT
     [[UserPrivileges:{DescID: 111, Name: admin}, PUBLIC], PUBLIC] -> ABSENT
     [[UserPrivileges:{DescID: 111, Name: public}, PUBLIC], PUBLIC] -> ABSENT
     [[UserPrivileges:{DescID: 111, Name: root}, PUBLIC], PUBLIC] -> ABSENT
-    [[FunctionBody:{DescID: 111}, PUBLIC], PUBLIC] -> ABSENT
+    [[FunctionBody:{DescID: 111, Value: BEGIN
+    SELECT a FROM t;
+    SELECT b FROM t@t_idx_b;
+    SELECT c FROM t@t_idx_c;
+    SELECT a FROM v;
+    SELECT b'@':::@100107;
+    RETURN nextval(105:::REGCLASS);
+    END;
+    }, PUBLIC], PUBLIC] -> ABSENT
   ops:
     *scop.UndoAllInTxnImmediateMutationOpSideEffects
       {}
@@ -553,12 +594,20 @@ PreCommitPhase stage 2 of 2 with 12 MutationType ops
     [[Function:{DescID: 111}, PUBLIC], ABSENT] -> PUBLIC
     [[SchemaChild:{DescID: 111, ReferencedDescID: 101}, PUBLIC], ABSENT] -> PUBLIC
     [[FunctionName:{DescID: 111}, PUBLIC], ABSENT] -> PUBLIC
-    [[FunctionVolatility:{DescID: 111}, PUBLIC], ABSENT] -> PUBLIC
+    [[FunctionVolatility:{DescID: 111, Int32Value: VOLATILE}, PUBLIC], ABSENT] -> PUBLIC
     [[Owner:{DescID: 111}, PUBLIC], ABSENT] -> PUBLIC
     [[UserPrivileges:{DescID: 111, Name: admin}, PUBLIC], ABSENT] -> PUBLIC
     [[UserPrivileges:{DescID: 111, Name: public}, PUBLIC], ABSENT] -> PUBLIC
     [[UserPrivileges:{DescID: 111, Name: root}, PUBLIC], ABSENT] -> PUBLIC
-    [[FunctionBody:{DescID: 111}, PUBLIC], ABSENT] -> PUBLIC
+    [[FunctionBody:{DescID: 111, Value: BEGIN
+    SELECT a FROM t;
+    SELECT b FROM t@t_idx_b;
+    SELECT c FROM t@t_idx_c;
+    SELECT a FROM v;
+    SELECT b'@':::@100107;
+    RETURN nextval(105:::REGCLASS);
+    END;
+    }, PUBLIC], ABSENT] -> PUBLIC
   ops:
     *scop.CreateFunctionDescriptor
       Function:
@@ -699,7 +748,15 @@ CREATE FUNCTION f(a notmyworkday) RETURNS INT VOLATILE LANGUAGE PLpgSQL AS $$
 $$;
 ----
 - from: [Function:{DescID: 112}, DESCRIPTOR_ADDED]
-  to:   [FunctionBody:{DescID: 112}, PUBLIC]
+  to:   [FunctionBody:{DescID: 112, Value: BEGIN
+SELECT a FROM t;
+SELECT b FROM t@t_idx_b;
+SELECT c FROM t@t_idx_c;
+SELECT a FROM v;
+SELECT b'@':::@100107;
+RETURN nextval(105:::REGCLASS);
+END;
+}, PUBLIC]
   kind: Precedence
   rule: descriptor existence precedes dependents
 - from: [Function:{DescID: 112}, DESCRIPTOR_ADDED]
@@ -707,7 +764,7 @@ $$;
   kind: Precedence
   rule: descriptor existence precedes dependents
 - from: [Function:{DescID: 112}, DESCRIPTOR_ADDED]
-  to:   [FunctionVolatility:{DescID: 112}, PUBLIC]
+  to:   [FunctionVolatility:{DescID: 112, Int32Value: VOLATILE}, PUBLIC]
   kind: Precedence
   rule: descriptor existence precedes dependents
 - from: [Function:{DescID: 112}, DESCRIPTOR_ADDED]
@@ -730,7 +787,15 @@ $$;
   to:   [UserPrivileges:{DescID: 112, Name: root}, PUBLIC]
   kind: Precedence
   rule: descriptor existence precedes dependents
-- from: [FunctionBody:{DescID: 112}, PUBLIC]
+- from: [FunctionBody:{DescID: 112, Value: BEGIN
+SELECT a FROM t;
+SELECT b FROM t@t_idx_b;
+SELECT c FROM t@t_idx_c;
+SELECT a FROM v;
+SELECT b'@':::@100107;
+RETURN nextval(105:::REGCLASS);
+END;
+}, PUBLIC]
   to:   [Function:{DescID: 112}, PUBLIC]
   kind: Precedence
   rule: dependents exist before descriptor becomes public
@@ -742,7 +807,7 @@ $$;
   to:   [SchemaChild:{DescID: 112, ReferencedDescID: 101}, PUBLIC]
   kind: Precedence
   rule: function name should be set before parent ids
-- from: [FunctionVolatility:{DescID: 112}, PUBLIC]
+- from: [FunctionVolatility:{DescID: 112, Int32Value: VOLATILE}, PUBLIC]
   to:   [Function:{DescID: 112}, PUBLIC]
   kind: Precedence
   rule: dependents exist before descriptor becomes public

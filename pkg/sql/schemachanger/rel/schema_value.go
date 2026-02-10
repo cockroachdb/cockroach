@@ -38,9 +38,23 @@ func makeComparableValue(val interface{}) (typedValue, error) {
 			typ:   vv.Type(),
 			value: vvNew.Convert(reflect.PointerTo(compType)).Interface(),
 		}, nil
+	case typ.Kind() == reflect.Bool:
+		compType := getComparableType(typ)
+		vvNew := reflect.New(vv.Type())
+		vvNew.Elem().Set(vv)
+		return typedValue{
+			typ:   vv.Type(),
+			value: vvNew.Convert(reflect.PointerTo(compType)).Interface(),
+		}, nil
 	case typ.Kind() == reflect.Ptr:
 		switch {
 		case isIntKind(typ.Elem().Kind()), isUintKind(typ.Elem().Kind()):
+			compType := getComparableType(typ.Elem())
+			return typedValue{
+				typ:   vv.Type().Elem(),
+				value: vv.Convert(reflect.PointerTo(compType)).Interface(),
+			}, nil
+		case typ.Elem().Kind() == reflect.Bool:
 			compType := getComparableType(typ.Elem())
 			return typedValue{
 				typ:   vv.Type().Elem(),

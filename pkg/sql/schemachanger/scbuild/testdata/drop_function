@@ -35,13 +35,17 @@ DROP FUNCTION f;
   {childObjectId: 109, schemaId: 101}
 - [[FunctionName:{DescID: 109}, ABSENT], PUBLIC]
   {functionId: 109, name: f}
-- [[FunctionVolatility:{DescID: 109}, ABSENT], PUBLIC]
+- [[FunctionVolatility:{DescID: 109, Int32Value: VOLATILE}, ABSENT], PUBLIC]
   {functionId: 109, volatility: {volatility: VOLATILE}}
-- [[FunctionLeakProof:{DescID: 109}, ABSENT], PUBLIC]
+- [[FunctionLeakProof:{DescID: 109, BoolValue: false}, ABSENT], PUBLIC]
   {functionId: 109}
-- [[FunctionNullInputBehavior:{DescID: 109}, ABSENT], PUBLIC]
+- [[FunctionNullInputBehavior:{DescID: 109, Int32Value: CALLED_ON_NULL_INPUT}, ABSENT], PUBLIC]
   {functionId: 109, nullInputBehavior: {nullInputBehavior: CALLED_ON_NULL_INPUT}}
-- [[FunctionSecurity:{DescID: 109}, ABSENT], PUBLIC]
+- [[FunctionSecurity:{DescID: 109, Int32Value: INVOKER}, ABSENT], PUBLIC]
   {functionId: 109, security: {}}
-- [[FunctionBody:{DescID: 109}, ABSENT], PUBLIC]
+- [[FunctionBody:{DescID: 109, Value: SELECT a FROM defaultdb.public.t;
+SELECT b FROM defaultdb.public.t@t_idx_b;
+SELECT c FROM defaultdb.public.t@t_idx_c;
+SELECT a FROM defaultdb.public.v;
+SELECT nextval(105:::REGCLASS);}, ABSENT], PUBLIC]
   {body: "SELECT a FROM defaultdb.public.t;\nSELECT b FROM defaultdb.public.t@t_idx_b;\nSELECT c FROM defaultdb.public.t@t_idx_c;\nSELECT a FROM defaultdb.public.v;\nSELECT nextval(105:::REGCLASS);", functionId: 109, lang: {lang: SQL}, usesSequenceIds: [105], usesTables: [{columnIds: [1], tableId: 104}, {columnIds: [2], indexId: 2, tableId: 104}, {columnIds: [3], indexId: 3, tableId: 104}], usesTypeIds: [107, 108], usesViews: [{columnIds: [1], viewId: 106}]}

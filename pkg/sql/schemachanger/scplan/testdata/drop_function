@@ -30,11 +30,15 @@ StatementPhase stage 1 of 1 with 14 MutationType ops
     [[Function:{DescID: 109}, ABSENT], PUBLIC] -> DROPPED
     [[SchemaChild:{DescID: 109, ReferencedDescID: 101}, ABSENT], PUBLIC] -> ABSENT
     [[FunctionName:{DescID: 109}, ABSENT], PUBLIC] -> ABSENT
-    [[FunctionVolatility:{DescID: 109}, ABSENT], PUBLIC] -> ABSENT
-    [[FunctionLeakProof:{DescID: 109}, ABSENT], PUBLIC] -> ABSENT
-    [[FunctionNullInputBehavior:{DescID: 109}, ABSENT], PUBLIC] -> ABSENT
-    [[FunctionSecurity:{DescID: 109}, ABSENT], PUBLIC] -> ABSENT
-    [[FunctionBody:{DescID: 109}, ABSENT], PUBLIC] -> ABSENT
+    [[FunctionVolatility:{DescID: 109, Int32Value: VOLATILE}, ABSENT], PUBLIC] -> ABSENT
+    [[FunctionLeakProof:{DescID: 109, BoolValue: false}, ABSENT], PUBLIC] -> ABSENT
+    [[FunctionNullInputBehavior:{DescID: 109, Int32Value: CALLED_ON_NULL_INPUT}, ABSENT], PUBLIC] -> ABSENT
+    [[FunctionSecurity:{DescID: 109, Int32Value: INVOKER}, ABSENT], PUBLIC] -> ABSENT
+    [[FunctionBody:{DescID: 109, Value: SELECT a FROM defaultdb.public.t;
+    SELECT b FROM defaultdb.public.t@t_idx_b;
+    SELECT c FROM defaultdb.public.t@t_idx_c;
+    SELECT a FROM defaultdb.public.v;
+    SELECT nextval(105:::REGCLASS);}, ABSENT], PUBLIC] -> ABSENT
   ops:
     *scop.MarkDescriptorAsDropped
       DescriptorID: 109
@@ -92,11 +96,15 @@ PreCommitPhase stage 1 of 2 with 1 MutationType op
     [[Function:{DescID: 109}, ABSENT], DROPPED] -> PUBLIC
     [[SchemaChild:{DescID: 109, ReferencedDescID: 101}, ABSENT], ABSENT] -> PUBLIC
     [[FunctionName:{DescID: 109}, ABSENT], ABSENT] -> PUBLIC
-    [[FunctionVolatility:{DescID: 109}, ABSENT], ABSENT] -> PUBLIC
-    [[FunctionLeakProof:{DescID: 109}, ABSENT], ABSENT] -> PUBLIC
-    [[FunctionNullInputBehavior:{DescID: 109}, ABSENT], ABSENT] -> PUBLIC
-    [[FunctionSecurity:{DescID: 109}, ABSENT], ABSENT] -> PUBLIC
-    [[FunctionBody:{DescID: 109}, ABSENT], ABSENT] -> PUBLIC
+    [[FunctionVolatility:{DescID: 109, Int32Value: VOLATILE}, ABSENT], ABSENT] -> PUBLIC
+    [[FunctionLeakProof:{DescID: 109, BoolValue: false}, ABSENT], ABSENT] -> PUBLIC
+    [[FunctionNullInputBehavior:{DescID: 109, Int32Value: CALLED_ON_NULL_INPUT}, ABSENT], ABSENT] -> PUBLIC
+    [[FunctionSecurity:{DescID: 109, Int32Value: INVOKER}, ABSENT], ABSENT] -> PUBLIC
+    [[FunctionBody:{DescID: 109, Value: SELECT a FROM defaultdb.public.t;
+    SELECT b FROM defaultdb.public.t@t_idx_b;
+    SELECT c FROM defaultdb.public.t@t_idx_c;
+    SELECT a FROM defaultdb.public.v;
+    SELECT nextval(105:::REGCLASS);}, ABSENT], ABSENT] -> PUBLIC
   ops:
     *scop.UndoAllInTxnImmediateMutationOpSideEffects
       {}
@@ -109,11 +117,15 @@ PreCommitPhase stage 2 of 2 with 21 MutationType ops
     [[Function:{DescID: 109}, ABSENT], PUBLIC] -> DROPPED
     [[SchemaChild:{DescID: 109, ReferencedDescID: 101}, ABSENT], PUBLIC] -> ABSENT
     [[FunctionName:{DescID: 109}, ABSENT], PUBLIC] -> ABSENT
-    [[FunctionVolatility:{DescID: 109}, ABSENT], PUBLIC] -> ABSENT
-    [[FunctionLeakProof:{DescID: 109}, ABSENT], PUBLIC] -> ABSENT
-    [[FunctionNullInputBehavior:{DescID: 109}, ABSENT], PUBLIC] -> ABSENT
-    [[FunctionSecurity:{DescID: 109}, ABSENT], PUBLIC] -> ABSENT
-    [[FunctionBody:{DescID: 109}, ABSENT], PUBLIC] -> ABSENT
+    [[FunctionVolatility:{DescID: 109, Int32Value: VOLATILE}, ABSENT], PUBLIC] -> ABSENT
+    [[FunctionLeakProof:{DescID: 109, BoolValue: false}, ABSENT], PUBLIC] -> ABSENT
+    [[FunctionNullInputBehavior:{DescID: 109, Int32Value: CALLED_ON_NULL_INPUT}, ABSENT], PUBLIC] -> ABSENT
+    [[FunctionSecurity:{DescID: 109, Int32Value: INVOKER}, ABSENT], PUBLIC] -> ABSENT
+    [[FunctionBody:{DescID: 109, Value: SELECT a FROM defaultdb.public.t;
+    SELECT b FROM defaultdb.public.t@t_idx_b;
+    SELECT c FROM defaultdb.public.t@t_idx_c;
+    SELECT a FROM defaultdb.public.v;
+    SELECT nextval(105:::REGCLASS);}, ABSENT], PUBLIC] -> ABSENT
   ops:
     *scop.MarkDescriptorAsDropped
       DescriptorID: 109

@@ -30,7 +30,12 @@ StatementPhase stage 1 of 1 with 11 MutationType ops
     [[UserPrivileges:{DescID: 109, Name: admin}, PUBLIC], ABSENT] -> PUBLIC
     [[UserPrivileges:{DescID: 109, Name: public}, PUBLIC], ABSENT] -> PUBLIC
     [[UserPrivileges:{DescID: 109, Name: root}, PUBLIC], ABSENT] -> PUBLIC
-    [[FunctionBody:{DescID: 109}, PUBLIC], ABSENT] -> PUBLIC
+    [[FunctionBody:{DescID: 109, Value: SELECT a FROM t;
+    SELECT b FROM t@t_idx_b;
+    SELECT c FROM t@t_idx_c;
+    SELECT a FROM v;
+    SELECT b'@':::@100107;
+    SELECT nextval(105:::REGCLASS);}, PUBLIC], ABSENT] -> PUBLIC
   ops:
     *scop.CreateFunctionDescriptor
       Function:
@@ -161,7 +166,12 @@ PreCommitPhase stage 1 of 2 with 1 MutationType op
     [[UserPrivileges:{DescID: 109, Name: admin}, PUBLIC], PUBLIC] -> ABSENT
     [[UserPrivileges:{DescID: 109, Name: public}, PUBLIC], PUBLIC] -> ABSENT
     [[UserPrivileges:{DescID: 109, Name: root}, PUBLIC], PUBLIC] -> ABSENT
-    [[FunctionBody:{DescID: 109}, PUBLIC], PUBLIC] -> ABSENT
+    [[FunctionBody:{DescID: 109, Value: SELECT a FROM t;
+    SELECT b FROM t@t_idx_b;
+    SELECT c FROM t@t_idx_c;
+    SELECT a FROM v;
+    SELECT b'@':::@100107;
+    SELECT nextval(105:::REGCLASS);}, PUBLIC], PUBLIC] -> ABSENT
   ops:
     *scop.UndoAllInTxnImmediateMutationOpSideEffects
       {}
@@ -174,7 +184,12 @@ PreCommitPhase stage 2 of 2 with 11 MutationType ops
     [[UserPrivileges:{DescID: 109, Name: admin}, PUBLIC], ABSENT] -> PUBLIC
     [[UserPrivileges:{DescID: 109, Name: public}, PUBLIC], ABSENT] -> PUBLIC
     [[UserPrivileges:{DescID: 109, Name: root}, PUBLIC], ABSENT] -> PUBLIC
-    [[FunctionBody:{DescID: 109}, PUBLIC], ABSENT] -> PUBLIC
+    [[FunctionBody:{DescID: 109, Value: SELECT a FROM t;
+    SELECT b FROM t@t_idx_b;
+    SELECT c FROM t@t_idx_c;
+    SELECT a FROM v;
+    SELECT b'@':::@100107;
+    SELECT nextval(105:::REGCLASS);}, PUBLIC], ABSENT] -> PUBLIC
   ops:
     *scop.CreateFunctionDescriptor
       Function:
@@ -308,7 +323,12 @@ CREATE PROCEDURE p(a notmyworkday) LANGUAGE SQL AS $$
 $$;
 ----
 - from: [Function:{DescID: 110}, DESCRIPTOR_ADDED]
-  to:   [FunctionBody:{DescID: 110}, PUBLIC]
+  to:   [FunctionBody:{DescID: 110, Value: SELECT a FROM t;
+SELECT b FROM t@t_idx_b;
+SELECT c FROM t@t_idx_c;
+SELECT a FROM v;
+SELECT b'@':::@100107;
+SELECT nextval(105:::REGCLASS);}, PUBLIC]
   kind: Precedence
   rule: descriptor existence precedes dependents
 - from: [Function:{DescID: 110}, DESCRIPTOR_ADDED]
@@ -335,7 +355,12 @@ $$;
   to:   [UserPrivileges:{DescID: 110, Name: root}, PUBLIC]
   kind: Precedence
   rule: descriptor existence precedes dependents
-- from: [FunctionBody:{DescID: 110}, PUBLIC]
+- from: [FunctionBody:{DescID: 110, Value: SELECT a FROM t;
+SELECT b FROM t@t_idx_b;
+SELECT c FROM t@t_idx_c;
+SELECT a FROM v;
+SELECT b'@':::@100107;
+SELECT nextval(105:::REGCLASS);}, PUBLIC]
   to:   [Function:{DescID: 110}, PUBLIC]
   kind: Precedence
   rule: dependents exist before descriptor becomes public
@@ -389,7 +414,15 @@ StatementPhase stage 1 of 1 with 11 MutationType ops
     [[UserPrivileges:{DescID: 111, Name: admin}, PUBLIC], ABSENT] -> PUBLIC
     [[UserPrivileges:{DescID: 111, Name: public}, PUBLIC], ABSENT] -> PUBLIC
     [[UserPrivileges:{DescID: 111, Name: root}, PUBLIC], ABSENT] -> PUBLIC
-    [[FunctionBody:{DescID: 111}, PUBLIC], ABSENT] -> PUBLIC
+    [[FunctionBody:{DescID: 111, Value: BEGIN
+    SELECT a FROM t;
+    SELECT b FROM t@t_idx_b;
+    SELECT c FROM t@t_idx_c;
+    SELECT a FROM v;
+    SELECT b'@':::@100107;
+    SELECT nextval(105:::REGCLASS);
+    END;
+    }, PUBLIC], ABSENT] -> PUBLIC
   ops:
     *scop.CreateFunctionDescriptor
       Function:
@@ -522,7 +555,15 @@ PreCommitPhase stage 1 of 2 with 1 MutationType op
     [[UserPrivileges:{DescID: 111, Name: admin}, PUBLIC], PUBLIC] -> ABSENT
     [[UserPrivileges:{DescID: 111, Name: public}, PUBLIC], PUBLIC] -> ABSENT
     [[UserPrivileges:{DescID: 111, Name: root}, PUBLIC], PUBLIC] -> ABSENT
-    [[FunctionBody:{DescID: 111}, PUBLIC], PUBLIC] -> ABSENT
+    [[FunctionBody:{DescID: 111, Value: BEGIN
+    SELECT a FROM t;
+    SELECT b FROM t@t_idx_b;
+    SELECT c FROM t@t_idx_c;
+    SELECT a FROM v;
+    SELECT b'@':::@100107;
+    SELECT nextval(105:::REGCLASS);
+    END;
+    }, PUBLIC], PUBLIC] -> ABSENT
   ops:
     *scop.UndoAllInTxnImmediateMutationOpSideEffects
       {}
@@ -535,7 +576,15 @@ PreCommitPhase stage 2 of 2 with 11 MutationType ops
     [[UserPrivileges:{DescID: 111, Name: admin}, PUBLIC], ABSENT] -> PUBLIC
     [[UserPrivileges:{DescID: 111, Name: public}, PUBLIC], ABSENT] -> PUBLIC
     [[UserPrivileges:{DescID: 111, Name: root}, PUBLIC], ABSENT] -> PUBLIC
-    [[FunctionBody:{DescID: 111}, PUBLIC], ABSENT] -> PUBLIC
+    [[FunctionBody:{DescID: 111, Value: BEGIN
+    SELECT a FROM t;
+    SELECT b FROM t@t_idx_b;
+    SELECT c FROM t@t_idx_c;
+    SELECT a FROM v;
+    SELECT b'@':::@100107;
+    SELECT nextval(105:::REGCLASS);
+    END;
+    }, PUBLIC], ABSENT] -> PUBLIC
   ops:
     *scop.CreateFunctionDescriptor
       Function:
@@ -673,7 +722,15 @@ CREATE PROCEDURE p(a notmyworkday) LANGUAGE PLpgSQL AS $$
 $$;
 ----
 - from: [Function:{DescID: 112}, DESCRIPTOR_ADDED]
-  to:   [FunctionBody:{DescID: 112}, PUBLIC]
+  to:   [FunctionBody:{DescID: 112, Value: BEGIN
+SELECT a FROM t;
+SELECT b FROM t@t_idx_b;
+SELECT c FROM t@t_idx_c;
+SELECT a FROM v;
+SELECT b'@':::@100107;
+SELECT nextval(105:::REGCLASS);
+END;
+}, PUBLIC]
   kind: Precedence
   rule: descriptor existence precedes dependents
 - from: [Function:{DescID: 112}, DESCRIPTOR_ADDED]
@@ -700,7 +757,15 @@ $$;
   to:   [UserPrivileges:{DescID: 112, Name: root}, PUBLIC]
   kind: Precedence
   rule: descriptor existence precedes dependents
-- from: [FunctionBody:{DescID: 112}, PUBLIC]
+- from: [FunctionBody:{DescID: 112, Value: BEGIN
+SELECT a FROM t;
+SELECT b FROM t@t_idx_b;
+SELECT c FROM t@t_idx_c;
+SELECT a FROM v;
+SELECT b'@':::@100107;
+SELECT nextval(105:::REGCLASS);
+END;
+}, PUBLIC]
   to:   [Function:{DescID: 112}, PUBLIC]
   kind: Precedence
   rule: dependents exist before descriptor becomes public

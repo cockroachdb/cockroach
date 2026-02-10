@@ -96,18 +96,20 @@ type fieldInfo struct {
 type fieldFlags int8
 
 func (f fieldFlags) isPtr() bool     { return f&pointerField != 0 }
-func (f fieldFlags) isScalar() bool  { return f&(intField|stringField|uintField) != 0 }
+func (f fieldFlags) isScalar() bool  { return f&(intField|stringField|uintField|boolField) != 0 }
 func (f fieldFlags) isStruct() bool  { return f&structField != 0 }
 func (f fieldFlags) isInt() bool     { return f&intField != 0 }
 func (f fieldFlags) isUint() bool    { return f&uintField != 0 }
 func (f fieldFlags) isIntLike() bool { return f&(intField|uintField) != 0 }
 func (f fieldFlags) isString() bool  { return f&stringField != 0 }
+func (f fieldFlags) isBool() bool    { return f&boolField != 0 }
 func (f fieldFlags) isSlice() bool   { return f&sliceField != 0 }
 
 const (
 	intField fieldFlags = 1 << iota
 	uintField
 	stringField
+	boolField
 	structField
 	pointerField
 	sliceField
@@ -189,7 +191,17 @@ func checkType(typ, exp reflect.Type) error {
 			return errors.Errorf("%v does not implement %v", typ, exp)
 		}
 	default:
-		if typ != exp {
+		// For scalar kinds (int, uint, string, bool), compare by the
+		// comparable base type rather than the named type. This allows
+		// different named types of the same kind (e.g. Function_Volatility
+		// and Function_NullInputBehavior, both int32) to share a single
+		// attribute. The rel system already normalizes values to their base
+		// kind type for storage and comparison.
+		if _, ok := kindTypeMap[typ.Kind()]; ok {
+			if getComparableType(typ) != getComparableType(exp) {
+				return errors.Errorf("%v is not %v", typ, exp)
+			}
+		} else if typ != exp {
 			return errors.Errorf("%v is not %v", typ, exp)
 		}
 	}
@@ -254,6 +266,8 @@ func makeFieldFlags(t reflect.Type) (fieldFlags, bool) {
 		f |= structField
 	case kind == reflect.String:
 		f |= stringField
+	case kind == reflect.Bool:
+		f |= boolField
 	case isIntKind(kind):
 		f |= intField
 	case isUintKind(kind):
@@ -405,6 +419,13 @@ func (sb *schemaBuilder) addTypeAttrMapping(
 						return 0, false
 					}
 					return uintptr(got.Elem().Elem().Uint()), true
+				}
+			case f.isBool():
+				f.inline = func(u unsafe.Pointer) (uintptr, bool) {
+					if vg(u).Elem().Bool() {
+						return 1, true
+					}
+					return 0, true
 				}
 			case f.isInt():
 				f.inline = func(u unsafe.Pointer) (uintptr, bool) {

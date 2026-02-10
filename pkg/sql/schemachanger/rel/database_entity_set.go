@@ -97,6 +97,12 @@ func (t *entitySet) insert(v interface{}, es entityStore) (int, error) {
 			if !ok {
 				continue
 			}
+		case field.isBool():
+			var ok bool
+			val, ok = field.inline(vp)
+			if !ok {
+				continue
+			}
 		case field.isString():
 			s, ok := field.comparableValue(vp).(*string)
 			if !ok {

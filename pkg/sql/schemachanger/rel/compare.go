@@ -87,6 +87,13 @@ func compareNotNil(a, b interface{}) (less, eq bool) {
 			return true, false
 		}
 		return false, *a == *b
+	case *bool:
+		b := b.(*bool)
+		// false < true
+		if !*a && *b {
+			return true, false
+		}
+		return false, *a == *b
 	case reflect.Type:
 		return compareTypes(a, b.(reflect.Type))
 
@@ -138,8 +145,9 @@ var (
 	}
 
 	kindTypeMap = func() kindMap {
-		m := make(kindMap, len(intKindMap)+len(uintKindMap)+1)
+		m := make(kindMap, len(intKindMap)+len(uintKindMap)+2)
 		m[reflect.String] = reflect.TypeOf((*string)(nil)).Elem()
+		m[reflect.Bool] = reflect.TypeOf((*bool)(nil)).Elem()
 		for _, src := range []kindMap{uintKindMap, intKindMap} {
 			for k, t := range src {
 				m[k] = t

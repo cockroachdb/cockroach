@@ -124,13 +124,22 @@ const (
 	// It's value must be in catpb.GeneratedAsIdentityType.
 	GeneratedAsIdentityType
 
-	// IntValue A int64 used only for element uniqueness, and this can map out
-	// to any int64 attribute. It is currently used for:
+	// UInt32Value is an unsigned 32-bit integer used only for element uniqueness.
+	// It is currently used for:
 	// 1) SchemaID in the namespace element.
-	IntValue
-
+	UInt32Value
+	// BoolValue is a bool used only for element uniqueness. It is
+	// currently used for:
+	// 1) LeakProof in FunctionLeakProof.
+	BoolValue
+	// Int32Value is a 32-bit integer used only for element uniqueness.
+	// It is currently used for:
+	// 1) Volatility in FunctionVolatility.
+	// 2) NullInputBehavior in FunctionNullInputBehavior.
+	// 3) Security in FunctionSecurity.
+	Int32Value
 	// AttrMax is the largest possible Attr value.
-	// Note: add any new enum values before IntValue, leave these at the end.
+	// Note: add any new enum values before UInt32Value, leave these at the end.
 	AttrMax = iota - 1
 )
 
@@ -440,7 +449,7 @@ var elementSchemaOptions = []rel.SchemaOption{
 	rel.EntityMapping(t((*scpb.Namespace)(nil)),
 		rel.EntityAttr(DescID, "DescriptorID"),
 		rel.EntityAttr(ReferencedDescID, "DatabaseID"),
-		rel.EntityAttr(IntValue, "SchemaID"),
+		rel.EntityAttr(UInt32Value, "SchemaID"),
 		rel.EntityAttr(Name, "Name"),
 	),
 	rel.EntityMapping(t((*scpb.Owner)(nil)),
@@ -567,18 +576,23 @@ var elementSchemaOptions = []rel.SchemaOption{
 	),
 	rel.EntityMapping(t((*scpb.FunctionVolatility)(nil)),
 		rel.EntityAttr(DescID, "FunctionID"),
+		rel.EntityAttr(Int32Value, "Volatility.Volatility"),
 	),
 	rel.EntityMapping(t((*scpb.FunctionLeakProof)(nil)),
 		rel.EntityAttr(DescID, "FunctionID"),
+		rel.EntityAttr(BoolValue, "LeakProof"),
 	),
 	rel.EntityMapping(t((*scpb.FunctionNullInputBehavior)(nil)),
 		rel.EntityAttr(DescID, "FunctionID"),
+		rel.EntityAttr(Int32Value, "NullInputBehavior.NullInputBehavior"),
 	),
 	rel.EntityMapping(t((*scpb.FunctionBody)(nil)),
 		rel.EntityAttr(DescID, "FunctionID"),
+		rel.EntityAttr(Value, "Body"),
 	),
 	rel.EntityMapping(t((*scpb.FunctionSecurity)(nil)),
 		rel.EntityAttr(DescID, "FunctionID"),
+		rel.EntityAttr(Int32Value, "Security.Security"),
 	),
 }
 
