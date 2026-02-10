@@ -346,7 +346,6 @@ func (f *Factory) AssignPlaceholders(from *memo.Memo) (retErr error) {
 	// Copy the "from" memo to this memo, replacing any Placeholder operators as
 	// the copy proceeds.
 	var replaceFn ReplaceFunc
-	var recursiveRoutines map[*memo.UDFDefinition]struct{}
 	var newRoutineDefs map[*memo.UDFDefinition]*memo.UDFDefinition
 	replaceFn = func(e opt.Expr) opt.Expr {
 		switch t := e.(type) {
@@ -359,39 +358,46 @@ func (f *Factory) AssignPlaceholders(from *memo.Memo) (retErr error) {
 		case *memo.UDFCallExpr:
 			// Statements in the body of a UDF cannot have placeholders, but
 			// they must be copied so that they reference the new memo.
-			if t.Def.IsRecursive {
-				// It is possible for a routine to recursively invoke itself (e.g. for a
-				// loop), so we have to keep track of which recursive routines we have
-				// seen to avoid infinite recursion.
-				if _, seen := recursiveRoutines[t.Def]; seen {
+			if newRoutineDefs == nil {
+				newRoutineDefs = make(map[*memo.UDFDefinition]*memo.UDFDefinition)
+			}
+
+			newDef, ok := newRoutineDefs[t.Def]
+			if ok {
+				if newDef == nil {
+					// A nil sentinel means we're currently processing this definition.
+					// This is a recursive call - return the original to break the cycle.
 					return e
 				}
-				if recursiveRoutines == nil {
-					recursiveRoutines = make(map[*memo.UDFDefinition]struct{})
+				// Memoization hit - reuse the cached definition, just copy the arguments.
+				var newArgs memo.ScalarListExpr
+				if t.Args != nil {
+					copiedArgs := f.CopyAndReplaceDefault(&t.Args, replaceFn).(*memo.ScalarListExpr)
+					newArgs = *copiedArgs
 				}
-				recursiveRoutines[t.Def] = struct{}{}
+				return f.ConstructUDFCall(newArgs, &memo.UDFCallPrivate{Def: newDef})
 			}
+
+			// Add a nil sentinel before copying the body to detect recursive calls.
+			newRoutineDefs[t.Def] = nil
+
 			// Copy the arguments, if any.
 			var newArgs memo.ScalarListExpr
 			if t.Args != nil {
 				copiedArgs := f.CopyAndReplaceDefault(&t.Args, replaceFn).(*memo.ScalarListExpr)
 				newArgs = *copiedArgs
 			}
-			if newRoutineDefs == nil {
-				newRoutineDefs = make(map[*memo.UDFDefinition]*memo.UDFDefinition)
+
+			// Make sure to copy the slice that stores the body statements, rather
+			// than mutating the original.
+			defCopy := *t.Def
+			defCopy.Body = make([]memo.RelExpr, len(t.Def.Body))
+			for i := range t.Def.Body {
+				defCopy.Body[i] = f.CopyAndReplaceDefault(t.Def.Body[i], replaceFn).(memo.RelExpr)
 			}
-			newDef, ok := newRoutineDefs[t.Def]
-			if !ok {
-				// Make sure to copy the slice that stores the body statements, rather
-				// than mutating the original.
-				defCopy := *t.Def
-				defCopy.Body = make([]memo.RelExpr, len(t.Def.Body))
-				for i := range t.Def.Body {
-					defCopy.Body[i] = f.CopyAndReplaceDefault(t.Def.Body[i], replaceFn).(memo.RelExpr)
-				}
-				newDef = &defCopy
-				newRoutineDefs[t.Def] = newDef
-			}
+			newDef = &defCopy
+			newRoutineDefs[t.Def] = newDef
+
 			return f.ConstructUDFCall(newArgs, &memo.UDFCallPrivate{Def: newDef})
 		case *memo.RecursiveCTEExpr:
 			// A recursive CTE may have the stats change on its Initial expression
