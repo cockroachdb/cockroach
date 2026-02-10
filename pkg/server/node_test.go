@@ -994,6 +994,10 @@ type testDiskStatsMonitor struct {
 	stats disk.Stats
 }
 
+func (t *testDiskStatsMonitor) DeviceID() disk.DeviceID {
+	return disk.DeviceID{}
+}
+
 func (t *testDiskStatsMonitor) CumulativeStats() (disk.Stats, error) {
 	return t.stats, nil
 }
