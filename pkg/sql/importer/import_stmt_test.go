@@ -2228,6 +2228,10 @@ func TestImportIntoCSV(t *testing.T) {
 			JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
 		},
 		ExternalIODir: baseDir,
+		// This test can take very long time under both shared-process and
+		// external-process configs, so we abuse the "system tenant" option to
+		// only allow running in the single-tenant mode.
+		DefaultTestTenant: base.TestIsSpecificToStorageLayerAndNeedsASystemTenant,
 	}})
 	defer tc.Stopper().Stop(ctx)
 	conn := tc.ServerConn(0)
