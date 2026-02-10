@@ -306,6 +306,8 @@ type kvStoreTokenGranter struct {
 			// delta.
 			prevObservedWrites uint64
 			prevObservedReads  uint64
+			// staleStats tracks consecutive intervals where disk stats don't change.
+			staleStats staleStatTracker
 			// alreadyDeductedTokens is the number of tokens deducted that can be
 			// used to partially explain the observed writes and reads. The write
 			// tokens here correspond to deductions from
@@ -600,6 +602,70 @@ func (sg *kvStoreTokenGranter) adjustDiskTokenError(stats DiskStats) {
 	sg.adjustDiskTokenErrorLocked(stats.BytesRead, stats.BytesWritten)
 }
 
+// staleStatTracker tracks consecutive intervals where disk stats don't change,
+// and rate-limits logging at configurable thresholds. This helps assess whether
+// the 1ms error correction tick rate is effective given the kernel's disk stat
+// update frequency.
+type staleStatTracker struct {
+	// consecutiveCount is the current number of consecutive ticks where disk
+	// stats have not changed.
+	consecutiveCount int
+	// thresholds defines the consecutive count values at which we log warnings.
+	thresholds []int // e.g., [20, 50, 100]
+	// cumExceededCounts tracks how many times consecutiveCount exceeded each
+	// threshold before stats changed. Index i corresponds to thresholds[i].
+	cumExceededCounts []uint64
+	logLimiter        log.EveryN
+}
+
+func newStaleStatTracker() staleStatTracker {
+	return staleStatTracker{
+		thresholds:        []int{20, 50, 100},
+		cumExceededCounts: make([]uint64, 3),
+		logLimiter:        log.Every(time.Minute),
+	}
+}
+
+// recordNoChange increments consecutiveCount and logs if a threshold is exceeded.
+func (t *staleStatTracker) recordNoChange(ctx context.Context) {
+	t.consecutiveCount++
+	if t.shouldLog() {
+		log.Dev.Infof(ctx,
+			"disk token error adjustment: no stat change for %d consecutive intervals "+
+				"(cumulative runs exceeding 20/50/100: %d/%d/%d)",
+			t.consecutiveCount, t.cumExceededCounts[0], t.cumExceededCounts[1], t.cumExceededCounts[2])
+	}
+}
+
+// recordChange records the completed run in the appropriate threshold bucket
+// and resets consecutiveCount.
+func (t *staleStatTracker) recordChange() {
+	if t.consecutiveCount == 0 {
+		return
+	}
+
+	// Record in highest matching threshold bucket.
+	for i := len(t.thresholds) - 1; i >= 0; i-- {
+		if t.consecutiveCount >= t.thresholds[i] {
+			t.cumExceededCounts[i]++
+			break
+		}
+	}
+	t.consecutiveCount = 0
+}
+
+func (t *staleStatTracker) shouldLog() bool {
+	for _, thresh := range t.thresholds {
+		if t.consecutiveCount == thresh {
+			// Always log if we've just exceeded a threshold
+			return true
+		} else if t.consecutiveCount > thresh {
+			return t.logLimiter.ShouldLog()
+		}
+	}
+	return false
+}
+
 // adjustDiskTokenErrorLocked is used to account for extra reads and writes that
 // are in excess of tokens already deducted.
 //
@@ -631,6 +697,12 @@ func (sg *kvStoreTokenGranter) adjustDiskTokenErrorLocked(readBytes uint64, writ
 
 	intWrites := int64(writeBytes - sg.mu.diskTokensError.prevObservedWrites)
 	intReads := int64(readBytes - sg.mu.diskTokensError.prevObservedReads)
+
+	if intWrites == 0 && intReads == 0 {
+		sg.mu.diskTokensError.staleStats.recordNoChange(context.Background())
+	} else {
+		sg.mu.diskTokensError.staleStats.recordChange()
+	}
 
 	errorAdjFunc := func(
 		intObserved int64, intTokensDeducted int64, cumError *int64, absError *int64, accountedError *int64) {
