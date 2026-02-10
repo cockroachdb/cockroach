@@ -71,26 +71,31 @@ func TestMetricsRelease(t *testing.T) {
 	// added/deleted).
 	require.Equal(t, expectedCount, verifyAllFields(m, 0))
 	// Verify that a new peer's metrics all get registered.
-	pm, lm := m.acquire(k1, l1)
+	pm, lm := m.acquire(k1, l1, rpcProtocolGrpc)
 	require.Equal(t, expectedCount, verifyAllFields(m, 1))
 	// Acquire the same peer. The count remains at 1.
-	pm2, lm2 := m.acquire(k1, l1)
+	pm2, lm2 := m.acquire(k1, l1, rpcProtocolGrpc)
 	require.Equal(t, expectedCount, verifyAllFields(m, 1))
 	require.Equal(t, pm, pm2)
 	require.Equal(t, lm, lm2)
 
 	// Acquire a different peer but the same locality.
-	pm3, lm3 := m.acquire(k2, l1)
+	pm3, lm3 := m.acquire(k2, l1, rpcProtocolGrpc)
 	require.NotEqual(t, pm, pm3)
 	require.Equal(t, lm, lm3)
 
 	// Acquire a different locality but the same peer.
-	pm4, lm4 := m.acquire(k1, l2)
+	pm4, lm4 := m.acquire(k1, l2, rpcProtocolGrpc)
 	require.Equal(t, pm, pm4)
 	require.NotEqual(t, lm, lm4)
 
 	// We added one extra peer and one extra locality, verify counts.
 	require.Equal(t, expectedCount, verifyAllFields(m, 2))
+
+	// Acquire the same peer and locality with drpc protocol
+	pm5, lm5 := m.acquire(k1, l1, rpcProtocolDrpc)
+	require.NotEqual(t, pm, pm5)
+	require.Equal(t, lm, lm5)
 }
 
 func TestServerRequestInstrumentInterceptor(t *testing.T) {
@@ -105,39 +110,42 @@ func TestServerRequestInstrumentInterceptor(t *testing.T) {
 	testcase := []struct {
 		methodName   string
 		statusCode   codes.Code
+		rpcProtocol  string
 		shouldRecord bool
 	}{
-		{"rpc/test/method", codes.OK, true},
-		{"rpc/test/method", codes.Internal, true},
-		{"rpc/test/method", codes.Aborted, true},
-		{"rpc/test/notRecorded", codes.OK, false},
+		{"rpc/test/method", codes.OK, rpcProtocolGrpc, true},
+		{"rpc/test/method", codes.Internal, rpcProtocolGrpc, true},
+		{"rpc/test/method", codes.Aborted, rpcProtocolGrpc, true},
+		{"rpc/test/notRecorded", codes.OK, rpcProtocolGrpc, false},
 	}
 
 	for _, tc := range testcase {
-		t.Run(fmt.Sprintf("%s %s", tc.methodName, tc.statusCode), func(t *testing.T) {
-			info := &grpc.UnaryServerInfo{FullMethod: tc.methodName}
-			handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-				if tc.statusCode == codes.OK {
-					time.Sleep(time.Millisecond)
-					return struct{}{}, nil
+		t.Run(fmt.Sprintf("%s %s %s", tc.methodName, tc.statusCode, tc.rpcProtocol),
+			func(t *testing.T) {
+				info := &grpc.UnaryServerInfo{FullMethod: tc.methodName}
+				handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+					if tc.statusCode == codes.OK {
+						time.Sleep(time.Millisecond)
+						return struct{}{}, nil
+					}
+					return nil, status.Error(tc.statusCode, tc.statusCode.String())
 				}
-				return nil, status.Error(tc.statusCode, tc.statusCode.String())
-			}
-			interceptor := NewRequestMetricsInterceptor(requestMetrics, func(fullMethodName string) bool {
-				return tc.shouldRecord
+				interceptor := NewRequestMetricsInterceptor(requestMetrics, func(fullMethodName string) bool {
+					return tc.shouldRecord
+				})
+				_, err := interceptor(ctx, req, info, handler)
+				if err != nil {
+					require.Equal(t, tc.statusCode, status.Code(err))
+				}
+				var expectedCount uint64
+				if tc.shouldRecord {
+					expectedCount = 1
+				}
+				assertRpcMetrics(t, requestMetrics.Duration.ToPrometheusMetrics(), map[string]uint64{
+					fmt.Sprintf("%s %s %s", tc.methodName, tc.statusCode,
+						tc.rpcProtocol): expectedCount,
+				})
 			})
-			_, err := interceptor(ctx, req, info, handler)
-			if err != nil {
-				require.Equal(t, tc.statusCode, status.Code(err))
-			}
-			var expectedCount uint64
-			if tc.shouldRecord {
-				expectedCount = 1
-			}
-			assertRpcMetrics(t, requestMetrics.Duration.ToPrometheusMetrics(), map[string]uint64{
-				fmt.Sprintf("%s %s", tc.methodName, tc.statusCode): expectedCount,
-			})
-		})
 	}
 }
 
@@ -215,18 +223,20 @@ func assertRpcMetrics(
 	t.Helper()
 	actual := map[string]*io_prometheus_client.Histogram{}
 	for _, m := range metrics {
-		var method, statusCode string
+		var method, statusCode, protocol string
 		for _, l := range m.Label {
 			switch *l.Name {
 			case RpcMethodLabel:
 				method = *l.Value
 			case RpcStatusCodeLabel:
 				statusCode = *l.Value
+			case RpcProtocolLabel:
+				protocol = *l.Value
 			}
 		}
 		histogram := m.Histogram
 		require.NotNil(t, histogram, "expected histogram")
-		key := fmt.Sprintf("%s %s", method, statusCode)
+		key := fmt.Sprintf("%s %s %s", method, statusCode, protocol)
 		actual[key] = histogram
 	}
 
