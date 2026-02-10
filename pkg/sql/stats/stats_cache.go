@@ -1204,6 +1204,14 @@ func (sc *TableStatisticsCache) getTableStatsFromDB(
 			latestFullStatsCreatedAt = stats.CreatedAt
 		}
 
+		// For USING EXTREME partial stats, since they are only merged with full stats
+		// with matching ID, it is fine for them to be in both caches.
+		if stats.FullStatisticID != 0 {
+			stableStatsList = append(stableStatsList, stats)
+			statsList = append(statsList, stats)
+			continue
+		}
+
 		if !stats.DelayDelete {
 			// statsList contains the freshest valid stats, so it should never contain
 			// stats that is marked delayDelete.
