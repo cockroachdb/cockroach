@@ -1,0 +1,284 @@
+setup
+CREATE SEQUENCE defaultdb.sq1;
+----
+
+ops
+ALTER SEQUENCE defaultdb.sq1 INCREMENT BY 2;
+----
+StatementPhase stage 1 of 1 with 2 MutationType ops
+  transitions:
+    [[SequenceOption:{DescID: 104, Name: INCREMENT, Value: 2}, PUBLIC], ABSENT] -> PUBLIC
+    [[SequenceValue:{DescID: 104}, TRANSIENT_ABSENT], ABSENT] -> TRANSIENT_ABSENT
+  ops:
+    *scop.SetSequenceOption
+      Key: INCREMENT
+      SequenceID: 104
+      Value: "2"
+    *scop.MaybeUpdateSequenceValue
+      PrevIncrement: 1
+      PrevMaxValue: 9223372036854775807
+      PrevMinValue: 1
+      PrevStart: 1
+      SequenceID: 104
+      UpdatedIncrement: 2
+      UpdatedMaxValue: 9223372036854775807
+      UpdatedMinValue: 1
+      UpdatedStart: 1
+PreCommitPhase stage 1 of 2 with 1 MutationType op
+  transitions:
+    [[SequenceOption:{DescID: 104, Name: INCREMENT, Value: 2}, PUBLIC], PUBLIC] -> ABSENT
+    [[SequenceValue:{DescID: 104}, TRANSIENT_ABSENT], TRANSIENT_ABSENT] -> ABSENT
+  ops:
+    *scop.UndoAllInTxnImmediateMutationOpSideEffects
+      {}
+PreCommitPhase stage 2 of 2 with 2 MutationType ops
+  transitions:
+    [[SequenceOption:{DescID: 104, Name: INCREMENT, Value: 2}, PUBLIC], ABSENT] -> PUBLIC
+    [[SequenceValue:{DescID: 104}, TRANSIENT_ABSENT], ABSENT] -> TRANSIENT_ABSENT
+  ops:
+    *scop.SetSequenceOption
+      Key: INCREMENT
+      SequenceID: 104
+      Value: "2"
+    *scop.MaybeUpdateSequenceValue
+      PrevIncrement: 1
+      PrevMaxValue: 9223372036854775807
+      PrevMinValue: 1
+      PrevStart: 1
+      SequenceID: 104
+      UpdatedIncrement: 2
+      UpdatedMaxValue: 9223372036854775807
+      UpdatedMinValue: 1
+      UpdatedStart: 1
+
+ops
+ALTER SEQUENCE defaultdb.sq1 MINVALUE 10 MAXVALUE 1000 START WITH 50;
+----
+StatementPhase stage 1 of 1 with 4 MutationType ops
+  transitions:
+    [[SequenceOption:{DescID: 104, Name: MINVALUE, Value: 10}, PUBLIC], ABSENT] -> PUBLIC
+    [[SequenceOption:{DescID: 104, Name: MAXVALUE, Value: 1000}, PUBLIC], ABSENT] -> PUBLIC
+    [[SequenceOption:{DescID: 104, Name: START, Value: 50}, PUBLIC], ABSENT] -> PUBLIC
+    [[SequenceValue:{DescID: 104}, TRANSIENT_ABSENT], ABSENT] -> TRANSIENT_ABSENT
+  ops:
+    *scop.SetSequenceOption
+      Key: MINVALUE
+      SequenceID: 104
+      Value: "10"
+    *scop.SetSequenceOption
+      Key: MAXVALUE
+      SequenceID: 104
+      Value: "1000"
+    *scop.SetSequenceOption
+      Key: START
+      SequenceID: 104
+      Value: "50"
+    *scop.MaybeUpdateSequenceValue
+      PrevIncrement: 1
+      PrevMaxValue: 9223372036854775807
+      PrevMinValue: 1
+      PrevStart: 1
+      SequenceID: 104
+      UpdatedIncrement: 1
+      UpdatedMaxValue: 1000
+      UpdatedMinValue: 10
+      UpdatedStart: 50
+PreCommitPhase stage 1 of 2 with 1 MutationType op
+  transitions:
+    [[SequenceOption:{DescID: 104, Name: MINVALUE, Value: 10}, PUBLIC], PUBLIC] -> ABSENT
+    [[SequenceOption:{DescID: 104, Name: MAXVALUE, Value: 1000}, PUBLIC], PUBLIC] -> ABSENT
+    [[SequenceOption:{DescID: 104, Name: START, Value: 50}, PUBLIC], PUBLIC] -> ABSENT
+    [[SequenceValue:{DescID: 104}, TRANSIENT_ABSENT], TRANSIENT_ABSENT] -> ABSENT
+  ops:
+    *scop.UndoAllInTxnImmediateMutationOpSideEffects
+      {}
+PreCommitPhase stage 2 of 2 with 4 MutationType ops
+  transitions:
+    [[SequenceOption:{DescID: 104, Name: MINVALUE, Value: 10}, PUBLIC], ABSENT] -> PUBLIC
+    [[SequenceOption:{DescID: 104, Name: MAXVALUE, Value: 1000}, PUBLIC], ABSENT] -> PUBLIC
+    [[SequenceOption:{DescID: 104, Name: START, Value: 50}, PUBLIC], ABSENT] -> PUBLIC
+    [[SequenceValue:{DescID: 104}, TRANSIENT_ABSENT], ABSENT] -> TRANSIENT_ABSENT
+  ops:
+    *scop.SetSequenceOption
+      Key: MINVALUE
+      SequenceID: 104
+      Value: "10"
+    *scop.SetSequenceOption
+      Key: MAXVALUE
+      SequenceID: 104
+      Value: "1000"
+    *scop.SetSequenceOption
+      Key: START
+      SequenceID: 104
+      Value: "50"
+    *scop.MaybeUpdateSequenceValue
+      PrevIncrement: 1
+      PrevMaxValue: 9223372036854775807
+      PrevMinValue: 1
+      PrevStart: 1
+      SequenceID: 104
+      UpdatedIncrement: 1
+      UpdatedMaxValue: 1000
+      UpdatedMinValue: 10
+      UpdatedStart: 50
+
+ops
+ALTER SEQUENCE defaultdb.sq1 RESTART WITH 100;
+----
+StatementPhase stage 1 of 1 with 2 MutationType ops
+  transitions:
+    [[SequenceOption:{DescID: 104, Name: RESTART, Value: 99}, TRANSIENT_ABSENT], ABSENT] -> TRANSIENT_ABSENT
+  ops:
+    *scop.SetSequenceOption
+      Key: RESTART
+      SequenceID: 104
+      Value: "99"
+    *scop.UnsetSequenceOption
+      Key: RESTART
+      SequenceID: 104
+PreCommitPhase stage 1 of 2 with 1 MutationType op
+  transitions:
+    [[SequenceOption:{DescID: 104, Name: RESTART, Value: 99}, TRANSIENT_ABSENT], TRANSIENT_ABSENT] -> ABSENT
+  ops:
+    *scop.UndoAllInTxnImmediateMutationOpSideEffects
+      {}
+PreCommitPhase stage 2 of 2 with 2 MutationType ops
+  transitions:
+    [[SequenceOption:{DescID: 104, Name: RESTART, Value: 99}, TRANSIENT_ABSENT], ABSENT] -> TRANSIENT_ABSENT
+  ops:
+    *scop.SetSequenceOption
+      Key: RESTART
+      SequenceID: 104
+      Value: "99"
+    *scop.UnsetSequenceOption
+      Key: RESTART
+      SequenceID: 104
+
+ops
+ALTER SEQUENCE defaultdb.sq1 CACHE 10;
+----
+StatementPhase stage 1 of 1 with 1 MutationType op
+  transitions:
+    [[SequenceOption:{DescID: 104, Name: PER NODE CACHE, Value: 10}, PUBLIC], ABSENT] -> PUBLIC
+  ops:
+    *scop.SetSequenceOption
+      Key: PER NODE CACHE
+      SequenceID: 104
+      Value: "10"
+PreCommitPhase stage 1 of 2 with 1 MutationType op
+  transitions:
+    [[SequenceOption:{DescID: 104, Name: PER NODE CACHE, Value: 10}, PUBLIC], PUBLIC] -> ABSENT
+  ops:
+    *scop.UndoAllInTxnImmediateMutationOpSideEffects
+      {}
+PreCommitPhase stage 2 of 2 with 1 MutationType op
+  transitions:
+    [[SequenceOption:{DescID: 104, Name: PER NODE CACHE, Value: 10}, PUBLIC], ABSENT] -> PUBLIC
+  ops:
+    *scop.SetSequenceOption
+      Key: PER NODE CACHE
+      SequenceID: 104
+      Value: "10"
+
+setup
+CREATE TABLE defaultdb.t1 (id INT PRIMARY KEY, val INT);
+----
+
+ops
+ALTER SEQUENCE defaultdb.sq1 OWNED BY defaultdb.t1.val;
+----
+StatementPhase stage 1 of 1 with 2 MutationType ops
+  transitions:
+    [[SequenceOwner:{DescID: 105, ColumnID: 2, ReferencedDescID: 104}, PUBLIC], ABSENT] -> PUBLIC
+  ops:
+    *scop.AddSequenceOwner
+      ColumnID: 2
+      OwnedSequenceID: 104
+      TableID: 105
+    *scop.AddOwnerBackReferenceInSequence
+      ColumnID: 2
+      SequenceID: 104
+      TableID: 105
+PreCommitPhase stage 1 of 2 with 1 MutationType op
+  transitions:
+    [[SequenceOwner:{DescID: 105, ColumnID: 2, ReferencedDescID: 104}, PUBLIC], PUBLIC] -> ABSENT
+  ops:
+    *scop.UndoAllInTxnImmediateMutationOpSideEffects
+      {}
+PreCommitPhase stage 2 of 2 with 2 MutationType ops
+  transitions:
+    [[SequenceOwner:{DescID: 105, ColumnID: 2, ReferencedDescID: 104}, PUBLIC], ABSENT] -> PUBLIC
+  ops:
+    *scop.AddSequenceOwner
+      ColumnID: 2
+      OwnedSequenceID: 104
+      TableID: 105
+    *scop.AddOwnerBackReferenceInSequence
+      ColumnID: 2
+      SequenceID: 104
+      TableID: 105
+
+ops
+ALTER SEQUENCE defaultdb.sq1 OWNED BY NONE;
+----
+StatementPhase stage 1 of 1 with no ops
+  transitions:
+  no ops
+PreCommitPhase stage 1 of 1 with 1 MutationType op
+  transitions:
+  ops:
+    *scop.UndoAllInTxnImmediateMutationOpSideEffects
+      {}
+
+setup
+CREATE SEQUENCE defaultdb.sq2 OWNED BY defaultdb.t1.id;
+----
+
+ops
+ALTER SEQUENCE defaultdb.sq2 OWNED BY defaultdb.t1.val;
+----
+StatementPhase stage 1 of 1 with 4 MutationType ops
+  transitions:
+    [[SequenceOwner:{DescID: 105, ColumnID: 1, ReferencedDescID: 106}, ABSENT], PUBLIC] -> ABSENT
+    [[SequenceOwner:{DescID: 105, ColumnID: 2, ReferencedDescID: 106}, PUBLIC], ABSENT] -> PUBLIC
+  ops:
+    *scop.RemoveSequenceOwner
+      ColumnID: 1
+      OwnedSequenceID: 106
+      TableID: 105
+    *scop.RemoveOwnerBackReferenceInSequence
+      SequenceID: 106
+    *scop.AddSequenceOwner
+      ColumnID: 2
+      OwnedSequenceID: 106
+      TableID: 105
+    *scop.AddOwnerBackReferenceInSequence
+      ColumnID: 2
+      SequenceID: 106
+      TableID: 105
+PreCommitPhase stage 1 of 2 with 1 MutationType op
+  transitions:
+    [[SequenceOwner:{DescID: 105, ColumnID: 1, ReferencedDescID: 106}, ABSENT], ABSENT] -> PUBLIC
+    [[SequenceOwner:{DescID: 105, ColumnID: 2, ReferencedDescID: 106}, PUBLIC], PUBLIC] -> ABSENT
+  ops:
+    *scop.UndoAllInTxnImmediateMutationOpSideEffects
+      {}
+PreCommitPhase stage 2 of 2 with 4 MutationType ops
+  transitions:
+    [[SequenceOwner:{DescID: 105, ColumnID: 1, ReferencedDescID: 106}, ABSENT], PUBLIC] -> ABSENT
+    [[SequenceOwner:{DescID: 105, ColumnID: 2, ReferencedDescID: 106}, PUBLIC], ABSENT] -> PUBLIC
+  ops:
+    *scop.RemoveSequenceOwner
+      ColumnID: 1
+      OwnedSequenceID: 106
+      TableID: 105
+    *scop.RemoveOwnerBackReferenceInSequence
+      SequenceID: 106
+    *scop.AddSequenceOwner
+      ColumnID: 2
+      OwnedSequenceID: 106
+      TableID: 105
+    *scop.AddOwnerBackReferenceInSequence
+      ColumnID: 2
+      SequenceID: 106
+      TableID: 105

@@ -5,6 +5,7 @@ go_library(
     name = "scbuildstmt",
     srcs = [
         "alter_policy.go",
+        "alter_sequence.go",
         "alter_table.go",
         "alter_table_add_column.go",
         "alter_table_add_constraint.go",
