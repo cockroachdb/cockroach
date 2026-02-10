@@ -30,8 +30,6 @@ WEBPACK_SRCS = [
     "webpack.config.js",
 ]
 
-WEBPACK_DATA_OSS = WEBPACK_DATA_COMMON
-
 WEBPACK_DATA_CCL = WEBPACK_DATA_COMMON + glob(["ccl/**"])
 
 # We want to perform only type-checking (with absolutely no files emitted).
@@ -97,63 +95,6 @@ webpack_bin.webpack_cli(
         "production",
         "--env",
         "output=./db-console-ccl",
-    ],
-    chdir = package_name(),
-    env = {
-        "NODE_OPTIONS": "--max-old-space-size=5000",
-    },
-    exec_properties = {
-        "Pool": "large",
-    },
-    visibility = ["//visibility:public"],
-)
-
-webpack_bin.webpack_cli(
-    name = "db-console-oss",
-    srcs = WEBPACK_SRCS + WEBPACK_DATA_OSS + [
-        ":node_modules",
-    ],
-    outs = [
-        "db-console-oss/assets/Inconsolata-Regular.woff",
-        "db-console-oss/assets/Inconsolata-Regular.woff2",
-        "db-console-oss/assets/Lato-Bold.woff",
-        "db-console-oss/assets/Lato-Bold.woff2",
-        "db-console-oss/assets/Lato-Light.woff",
-        "db-console-oss/assets/Lato-Light.woff2",
-        "db-console-oss/assets/Lato-Medium.woff",
-        "db-console-oss/assets/Lato-Medium.woff2",
-        "db-console-oss/assets/Lato-Regular.woff",
-        "db-console-oss/assets/Lato-Regular.woff2",
-        "db-console-oss/assets/RobotoMono-Bold.woff",
-        "db-console-oss/assets/RobotoMono-Bold.woff2",
-        "db-console-oss/assets/RobotoMono-Medium.woff",
-        "db-console-oss/assets/RobotoMono-Medium.woff2",
-        "db-console-oss/assets/RobotoMono-Regular.woff",
-        "db-console-oss/assets/RobotoMono-Regular.woff2",
-        "db-console-oss/assets/SFMono-Semibold.woff",
-        "db-console-oss/assets/SFMono-Semibold.woff2",
-        "db-console-oss/assets/SourceSansPro-Bold.woff",
-        "db-console-oss/assets/SourceSansPro-Bold.woff2",
-        "db-console-oss/assets/SourceSansPro-Regular.woff",
-        "db-console-oss/assets/SourceSansPro-Regular.woff2",
-        "db-console-oss/assets/SourceSansPro-SemiBold.woff",
-        "db-console-oss/assets/SourceSansPro-SemiBold.woff2",
-        "db-console-oss/assets/bundle.js",
-        "db-console-oss/assets/email_signup_bg.png",
-        "db-console-oss/assets/favicon.ico",
-        "db-console-oss/assets/heroBannerLp.png",
-        "db-console-oss/assets/login-background.png",
-        "db-console-oss/assets/not-found.svg",
-    ],
-    args = [
-        "--config",
-        "webpack.config.js",
-        "--env",
-        "dist=oss",
-        "--mode",
-        "production",
-        "--env",
-        "output=./db-console-oss",
     ],
     chdir = package_name(),
     env = {
