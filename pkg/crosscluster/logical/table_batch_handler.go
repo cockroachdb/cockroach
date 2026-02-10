@@ -9,6 +9,7 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/cockroachdb/cockroach/pkg/crosscluster/logical/ldrdecoder"
 	"github.com/cockroachdb/cockroach/pkg/crosscluster/logical/sqlwriter"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -142,7 +143,7 @@ func (t *tableHandler) Close(ctx context.Context) {
 }
 
 func (t *tableHandler) handleDecodedBatch(
-	ctx context.Context, batch []decodedEvent,
+	ctx context.Context, batch []ldrdecoder.DecodedRow,
 ) (tableBatchStats, error) {
 	stats, err := t.attemptBatch(ctx, batch)
 	if err == nil {
@@ -165,7 +166,7 @@ func (t *tableHandler) handleDecodedBatch(
 }
 
 func (t *tableHandler) attemptBatch(
-	ctx context.Context, batch []decodedEvent,
+	ctx context.Context, batch []ldrdecoder.DecodedRow,
 ) (tableBatchStats, error) {
 	var stats tableBatchStats
 
@@ -173,19 +174,19 @@ func (t *tableHandler) attemptBatch(
 	err := t.session.Txn(ctx, func(ctx context.Context) error {
 		for _, event := range batch {
 			switch {
-			case event.isDelete && len(event.prevRow) != 0:
+			case event.IsDelete && len(event.PrevRow) != 0:
 				stats.deletes++
-				err := t.sqlWriter.DeleteRow(ctx, event.originTimestamp, event.prevRow)
+				err := t.sqlWriter.DeleteRow(ctx, event.RowTimestamp, event.PrevRow)
 				if err != nil {
 					return err
 				}
-			case event.isDelete && len(event.prevRow) == 0:
+			case event.IsDelete && len(event.PrevRow) == 0:
 				hasTombstoneUpdates = true
 				// Skip: handled in its own transaction.
-			case event.prevRow == nil:
+			case event.PrevRow == nil:
 				stats.inserts++
 				err := t.session.Savepoint(ctx, func(ctx context.Context) error {
-					return t.sqlWriter.InsertRow(ctx, event.originTimestamp, event.row)
+					return t.sqlWriter.InsertRow(ctx, event.RowTimestamp, event.Row)
 				})
 				if isLwwLoser(err) {
 					// Insert may observe a LWW failure if it attempts to write over a tombstone.
@@ -195,9 +196,9 @@ func (t *tableHandler) attemptBatch(
 				if err != nil {
 					return err
 				}
-			case event.prevRow != nil:
+			case event.PrevRow != nil:
 				stats.updates++
-				err := t.sqlWriter.UpdateRow(ctx, event.originTimestamp, event.prevRow, event.row)
+				err := t.sqlWriter.UpdateRow(ctx, event.RowTimestamp, event.PrevRow, event.Row)
 				if err != nil {
 					return err
 				}
@@ -218,9 +219,9 @@ func (t *tableHandler) attemptBatch(
 		// efficiency. The transactions are not needed for correctness.
 		err = t.db.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
 			for _, event := range batch {
-				if event.isDelete && len(event.prevRow) == 0 {
+				if event.IsDelete && len(event.PrevRow) == 0 {
 					stats.tombstoneUpdates++
-					tombstoneUpdateStats, err := t.tombstoneUpdater.updateTombstone(ctx, txn, event.originTimestamp, event.row)
+					tombstoneUpdateStats, err := t.tombstoneUpdater.updateTombstone(ctx, txn, event.RowTimestamp, event.Row)
 					if err != nil {
 						return err
 					}
@@ -241,14 +242,14 @@ func (t *tableHandler) attemptBatch(
 // any event is known to be a lww loser based on the read, its dropped from the
 // batch.
 func (t *tableHandler) refreshPrevRows(
-	ctx context.Context, batch []decodedEvent,
-) ([]decodedEvent, tableBatchStats, error) {
+	ctx context.Context, batch []ldrdecoder.DecodedRow,
+) ([]ldrdecoder.DecodedRow, tableBatchStats, error) {
 	var stats tableBatchStats
 	stats.refreshedRows = int64(len(batch))
 
 	rows := make([]tree.Datums, 0, len(batch))
 	for _, event := range batch {
-		rows = append(rows, event.row)
+		rows = append(rows, event.Row)
 	}
 
 	refreshedRows, err := t.sqlReader.ReadRows(ctx, rows)
@@ -256,11 +257,11 @@ func (t *tableHandler) refreshPrevRows(
 		return nil, tableBatchStats{}, err
 	}
 
-	refreshedBatch := make([]decodedEvent, 0, len(batch))
+	refreshedBatch := make([]ldrdecoder.DecodedRow, 0, len(batch))
 	for i, event := range batch {
 		var prevRow tree.Datums
 		if refreshed, found := refreshedRows[i]; found {
-			if !refreshed.LogicalTimestamp.Less(event.originTimestamp) {
+			if !refreshed.LogicalTimestamp.Less(event.RowTimestamp) {
 				// TODO(jeffswenson): update this logic when its time to handle
 				// ties.
 				// Skip the row because it is a lww loser. Note: we can only identify LWW
@@ -274,12 +275,12 @@ func (t *tableHandler) refreshPrevRows(
 			}
 			prevRow = refreshed.Row
 		}
-		refreshedEvent := decodedEvent{
-			dstDescID:       event.dstDescID,
-			isDelete:        event.isDelete,
-			row:             event.row,
-			originTimestamp: event.originTimestamp,
-			prevRow:         prevRow,
+		refreshedEvent := ldrdecoder.DecodedRow{
+			TableID:      event.TableID,
+			IsDelete:     event.IsDelete,
+			Row:          event.Row,
+			RowTimestamp: event.RowTimestamp,
+			PrevRow:      prevRow,
 		}
 		refreshedBatch = append(refreshedBatch, refreshedEvent)
 	}
