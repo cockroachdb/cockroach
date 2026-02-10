@@ -11,7 +11,14 @@ import classNames from "classnames/bind";
 import isNil from "lodash/isNil";
 import Long from "long";
 import moment from "moment-timezone";
-import React, { ReactNode, useContext } from "react";
+import React, {
+  ReactNode,
+  useCallback,
+  useContext,
+  useState,
+  useEffect,
+  useRef,
+} from "react";
 import { Helmet } from "react-helmet";
 import { Link, RouteComponentProps } from "react-router-dom";
 import { AlignedData, Options } from "uplot";
@@ -218,286 +225,272 @@ function renderTransactionType(implicitTxn: boolean) {
   return "Explicit";
 }
 
-export class StatementDetails extends React.Component<
-  StatementDetailsProps,
-  StatementDetailsState
-> {
-  activateDiagnosticsRef: React.RefObject<ActivateDiagnosticsModalRef>;
+export function StatementDetails(
+  props: StatementDetailsProps,
+): React.ReactElement {
+  const {
+    history,
+    location,
+    statementFingerprintID,
+    statementDetails,
+    isLoading,
+    statementsError,
+    lastUpdated,
+    timeScale,
+    nodeRegions,
+    diagnosticsReports,
+    uiConfig,
+    isTenant,
+    hasViewActivityRedactedRole,
+    hasAdminRole,
+    statementFingerprintInsights,
+    requestTime,
+    refreshStatementDetails,
+    refreshStatementDiagnosticsRequests,
+    refreshUserSQLRoles,
+    refreshNodes,
+    refreshNodesLiveness,
+    refreshStatementFingerprintInsights,
+    createStatementDiagnosticsReport,
+    dismissStatementDiagnosticsAlertMessage,
+    onTabChanged,
+    onTimeScaleChange,
+    onDiagnosticsModalOpen,
+    onDiagnosticBundleDownload,
+    onDiagnosticCancelRequest,
+    onSortingChange,
+    onBackToStatementsClick,
+    onRequestTimeChange,
+  } = props;
 
-  constructor(props: StatementDetailsProps) {
-    super(props);
-    const searchParams = new URLSearchParams(props.history.location.search);
-    this.state = {
-      currentTab: searchParams.get("tab") || "overview",
-      cardWidth: 700,
-      query: this.props.statementDetails?.statement?.metadata?.query,
-      formattedQuery:
-        this.props.statementDetails?.statement?.metadata?.formatted_query,
-    };
-    this.activateDiagnosticsRef = React.createRef();
+  const activateDiagnosticsRef = useRef<ActivateDiagnosticsModalRef>(null);
 
-    // In case the user selected a option not available on this page,
-    // force a selection of a valid option. This is necessary for the case
-    // where the value 10/30 min is selected on the Metrics page.
-    const ts = getValidOption(this.props.timeScale, timeScale1hMinOptions);
-    if (ts !== this.props.timeScale) {
-      this.changeTimeScale(ts);
-    }
-  }
+  // Refs to hold latest values for mount effects, avoiding stale closures
+  // while preserving "run once on mount" semantics.
+  const timeScaleRef = useRef(timeScale);
+  const lastUpdatedRef = useRef(lastUpdated);
+  const refreshUserSQLRolesRef = useRef(refreshUserSQLRoles);
+  const isTenantRef = useRef(isTenant);
+  const refreshNodesRef = useRef(refreshNodes);
+  const refreshNodesLivenessRef = useRef(refreshNodesLiveness);
+  const hasViewActivityRedactedRoleRef = useRef(hasViewActivityRedactedRole);
+  const refreshStatementDiagnosticsRequestsRef = useRef(
+    refreshStatementDiagnosticsRequests,
+  );
 
-  hasDiagnosticReports = (): boolean =>
-    this.props.diagnosticsReports.length > 0;
+  // Keep refs up to date on each render
+  timeScaleRef.current = timeScale;
+  lastUpdatedRef.current = lastUpdated;
+  refreshUserSQLRolesRef.current = refreshUserSQLRoles;
+  isTenantRef.current = isTenant;
+  refreshNodesRef.current = refreshNodes;
+  refreshNodesLivenessRef.current = refreshNodesLiveness;
+  hasViewActivityRedactedRoleRef.current = hasViewActivityRedactedRole;
+  refreshStatementDiagnosticsRequestsRef.current =
+    refreshStatementDiagnosticsRequests;
 
-  changeTimeScale = (ts: TimeScale): void => {
-    if (this.props.onTimeScaleChange) {
-      this.props.onTimeScaleChange(ts);
-    }
-    this.props.onRequestTimeChange(moment());
+  // Context must be called at the top level of the component
+  const isCockroachCloud = useContext(CockroachCloudContext);
+
+  // Initialize state from URL and props
+  const getInitialTab = (): string => {
+    const searchParams = new URLSearchParams(history.location.search);
+    return searchParams.get("tab") || "overview";
   };
 
-  refreshStatementDetails = (): void => {
-    const req = getStatementDetailsRequestFromProps(this.props);
-    this.props.refreshStatementDetails(req);
-    this.refreshStatementInsights();
-  };
+  const [currentTab, setCurrentTab] = useState<string>(getInitialTab);
+  const [cardWidth, setCardWidth] = useState<number>(700);
+  const [query, setQuery] = useState<string>(
+    statementDetails?.statement?.metadata?.query,
+  );
+  const [formattedQuery, setFormattedQuery] = useState<string>(
+    statementDetails?.statement?.metadata?.formatted_query,
+  );
 
-  refreshStatementInsights = (): void => {
-    const [startTime, endTime] = toRoundedDateRange(this.props.timeScale);
-    const id = BigInt(this.props.statementFingerprintID).toString(16);
+  // Track previous values for componentDidUpdate logic
+  const prevTimeScaleRef = useRef<TimeScale>(timeScale);
+  const prevStatementFingerprintIDRef = useRef<string>(statementFingerprintID);
+  const prevLocationRef = useRef(location);
+
+  const hasDiagnosticReports = (): boolean => diagnosticsReports.length > 0;
+
+  const changeTimeScale = useCallback(
+    (ts: TimeScale): void => {
+      if (onTimeScaleChange) {
+        onTimeScaleChange(ts);
+      }
+      onRequestTimeChange(moment());
+    },
+    [onRequestTimeChange, onTimeScaleChange],
+  );
+
+  const refreshStatementInsights = useCallback((): void => {
+    const [startTime, endTime] = toRoundedDateRange(timeScale);
+    const id = BigInt(statementFingerprintID).toString(16);
     const req: StmtInsightsReq = {
       start: startTime,
       end: endTime,
       stmtFingerprintId: id,
     };
-    this.props.refreshStatementFingerprintInsights(req);
-  };
+    refreshStatementFingerprintInsights(req);
+  }, [refreshStatementFingerprintInsights, statementFingerprintID, timeScale]);
 
-  handleResize = (): void => {
+  const refreshStatementDetailsInternal = useCallback((): void => {
+    const req = getStatementDetailsRequestFromProps(props);
+    refreshStatementDetails(req);
+    refreshStatementInsights();
+  }, [props, refreshStatementDetails, refreshStatementInsights]);
+
+  const handleResize = useCallback((): void => {
     // Use the same size as the summary card and remove a space for margin (22).
-    const cardWidth = document.getElementById("first-card")
-      ? document.getElementById("first-card")?.offsetWidth - 22
-      : 700;
-    if (cardWidth !== this.state.cardWidth) {
-      this.setState({
-        cardWidth: cardWidth,
-      });
+    const cardElement = document.getElementById("first-card");
+    const newCardWidth = cardElement ? cardElement.offsetWidth - 22 : 700;
+    if (newCardWidth !== cardWidth) {
+      setCardWidth(newCardWidth);
     }
-  };
+  }, [cardWidth]);
 
-  componentDidMount(): void {
-    this.refreshStatementDetails();
+  // Refs for local functions used in mount effect
+  const refreshStatementDetailsInternalRef = useRef(
+    refreshStatementDetailsInternal,
+  );
+  const handleResizeRef = useRef(handleResize);
+  refreshStatementDetailsInternalRef.current = refreshStatementDetailsInternal;
+  handleResizeRef.current = handleResize;
 
-    window.addEventListener("resize", this.handleResize);
-    this.handleResize();
-    // For the first data fetch for this page, we refresh if there are:
-    // - Last updated is null (no statement details fetched previously)
-    // - The time interval is not custom, i.e. we have a moving window
-    // in which case we poll every 5 minutes. For the first fetch we will
-    // calculate the next time to refresh based on when the data was last
-    // updated.
-    if (this.props.timeScale.key !== "Custom" || !this.props.lastUpdated) {
-      const now = moment();
-      const nextRefresh =
-        this.props.lastUpdated?.clone().add(5, "minutes") || now;
-      setTimeout(
-        this.refreshStatementDetails,
-        Math.max(0, nextRefresh.diff(now, "milliseconds")),
-      );
-    }
-    this.props.refreshUserSQLRoles();
-    if (!this.props.isTenant) {
-      this.props.refreshNodes();
-      this.props.refreshNodesLiveness();
-    }
-    if (!this.props.hasViewActivityRedactedRole) {
-      this.props.refreshStatementDiagnosticsRequests();
-    }
-  }
-
-  componentDidUpdate(prevProps: StatementDetailsProps): void {
-    this.handleResize();
-    if (
-      prevProps.timeScale !== this.props.timeScale ||
-      prevProps.statementFingerprintID !== this.props.statementFingerprintID ||
-      prevProps.location !== this.props.location
-    ) {
-      this.refreshStatementDetails();
-    }
-
-    if (!this.props.isTenant) {
-      this.props.refreshNodes();
-      this.props.refreshNodesLiveness();
-    }
-    if (!this.props.hasViewActivityRedactedRole) {
-      this.props.refreshStatementDiagnosticsRequests();
-    }
-
-    // If a new, non-empty-string query text is available
-    // (derived from the statement details response), save the query text.
-    const newQuery =
-      this.props.statementDetails?.statement?.metadata?.query ||
-      this.state.query;
-    const newFormattedQuery =
-      this.props.statementDetails?.statement?.metadata?.formatted_query ||
-      this.state.formattedQuery;
-    if (
-      newQuery !== this.state.query ||
-      newFormattedQuery !== this.state.formattedQuery
-    ) {
-      this.setState({
-        query: newQuery,
-        formattedQuery: newFormattedQuery,
-      });
-    }
-
-    // If the statementFingerprintID (derived from the URL) changes, invalidate the cached query texts.
-    // This is necessary for when the new statementFingerprintID does not have data for the given time frame.
-    // The new query text and the formatted query text would be an empty string, and we need to invalidate the old
-    // query text and formatted query text.
-    if (
-      this.props.statementFingerprintID !== prevProps.statementFingerprintID
-    ) {
-      this.setState({ query: null, formattedQuery: null });
-    }
-  }
-
-  onTabChange = (tabId: string): void => {
-    const { history } = this.props;
+  const onTabChange = (tabId: string): void => {
     const searchParams = new URLSearchParams(history.location.search);
     searchParams.set("tab", tabId);
     history.replace({
       ...history.location,
       search: searchParams.toString(),
     });
-    this.setState({
-      currentTab: tabId,
-    });
-    this.props.onTabChanged && this.props.onTabChanged(tabId);
+    setCurrentTab(tabId);
+    onTabChanged && onTabChanged(tabId);
   };
 
-  backToStatementsClick = (): void => {
-    this.props.history.push("/sql-activity?tab=Statements&view=fingerprints");
-    if (this.props.onBackToStatementsClick) {
-      this.props.onBackToStatementsClick();
+  const backToStatementsClick = (): void => {
+    history.push("/sql-activity?tab=Statements&view=fingerprints");
+    if (onBackToStatementsClick) {
+      onBackToStatementsClick();
     }
   };
 
-  render(): React.ReactElement {
-    const {
-      refreshStatementDiagnosticsRequests,
-      createStatementDiagnosticsReport,
-      onDiagnosticsModalOpen,
-    } = this.props;
-    const app = queryByName(this.props.location, appAttr);
-    const longLoadingMessage = this.props.isLoading &&
-      isNil(this.props.statementDetails) &&
-      isNil(getValidErrorsList(this.props.statementsError)) && (
-        <Delayed delay={moment.duration(2, "s")}>
-          <InlineAlert
-            intent="info"
-            title="If the selected time interval contains a large amount of data, this page might take a few minutes to load."
-          />
-        </Delayed>
+  // componentDidMount
+  useEffect(() => {
+    // In case the user selected a option not available on this page,
+    // force a selection of a valid option. This is necessary for the case
+    // where the value 10/30 min is selected on the Metrics page.
+    const ts = getValidOption(timeScaleRef.current, timeScale1hMinOptions);
+    if (ts !== timeScaleRef.current) {
+      changeTimeScale(ts);
+    }
+
+    refreshStatementDetailsInternalRef.current();
+
+    const resizeHandler = handleResizeRef.current;
+    window.addEventListener("resize", resizeHandler);
+    handleResizeRef.current();
+
+    // For the first data fetch for this page, we refresh if there are:
+    // - Last updated is null (no statement details fetched previously)
+    // - The time interval is not custom, i.e. we have a moving window
+    // in which case we poll every 5 minutes. For the first fetch we will
+    // calculate the next time to refresh based on when the data was last
+    // updated.
+    if (timeScaleRef.current.key !== "Custom" || !lastUpdatedRef.current) {
+      const now = moment();
+      const nextRefresh =
+        lastUpdatedRef.current?.clone().add(5, "minutes") || now;
+      setTimeout(
+        () => refreshStatementDetailsInternalRef.current(),
+        Math.max(0, nextRefresh.diff(now, "milliseconds")),
       );
+    }
+    refreshUserSQLRolesRef.current();
+    if (!isTenantRef.current) {
+      refreshNodesRef.current();
+      refreshNodesLivenessRef.current();
+    }
+    if (!hasViewActivityRedactedRoleRef.current) {
+      refreshStatementDiagnosticsRequestsRef.current();
+    }
 
-    const hasTimeout = this.props.statementsError?.name
-      ?.toLowerCase()
-      .includes("timeout");
-    const error = hasTimeout ? null : this.props.statementsError;
+    return () => {
+      window.removeEventListener("resize", resizeHandler);
+    };
+  }, [changeTimeScale]);
 
-    return (
-      <div className={cx("root")}>
-        <Helmet title={`Details | ${app ? `${app} App |` : ""} Statements`} />
-        <div className={cx("section", "page--header")}>
-          <Button
-            onClick={this.backToStatementsClick}
-            type="unstyled-link"
-            size="small"
-            icon={<ArrowLeft fontSize={"10px"} />}
-            iconPosition="left"
-            className="small-margin"
-          >
-            Statements
-          </Button>
-          <h3 className={commonStyles("base-heading", "no-margin-bottom")}>
-            Statement Fingerprint
-          </h3>
-        </div>
-        <section className={cx("section", "section--container")}>
-          <Loading
-            loading={this.props.isLoading}
-            page={"statement fingerprint"}
-            error={error}
-            render={this.renderTabs}
-            renderError={() =>
-              LoadingError({
-                statsType: "statements",
-                error: error,
-              })
-            }
-          />
-          {longLoadingMessage}
-          <ActivateStatementDiagnosticsModal
-            ref={this.activateDiagnosticsRef}
-            activate={createStatementDiagnosticsReport}
-            refreshDiagnosticsReports={refreshStatementDiagnosticsRequests}
-            onOpenModal={onDiagnosticsModalOpen}
-          />
-        </section>
-      </div>
-    );
-  }
+  // componentDidUpdate - handle resize and refresh data on prop changes
+  useEffect(() => {
+    handleResize();
 
-  renderTabs = (): React.ReactElement => {
-    const { currentTab } = this.state;
-    const hasTimeout = this.props.statementsError?.name
-      ?.toLowerCase()
-      .includes("timeout");
-    const hasData =
-      Number(this.props.statementDetails?.statement?.stats?.count) > 0;
+    if (
+      prevTimeScaleRef.current !== timeScale ||
+      prevStatementFingerprintIDRef.current !== statementFingerprintID ||
+      prevLocationRef.current !== location
+    ) {
+      refreshStatementDetailsInternal();
+    }
 
-    return (
-      <Tabs
-        defaultActiveKey="1"
-        className={commonStyles("cockroach--tabs")}
-        onChange={this.onTabChange}
-        activeKey={currentTab}
-      >
-        <TabPane tab="Overview" key="overview">
-          {this.renderOverviewTabContent(hasTimeout, hasData)}
-        </TabPane>
-        <TabPane tab="Explain Plans" key="explain-plan">
-          {this.renderExplainPlanTabContent(hasTimeout, hasData)}
-        </TabPane>
-        {!this.props.hasViewActivityRedactedRole && (
-          <TabPane
-            tab={`Diagnostics${
-              this.hasDiagnosticReports()
-                ? ` (${
-                    filterByTimeScale(
-                      this.props.diagnosticsReports,
-                      this.props.timeScale,
-                    ).length
-                  })`
-                : ""
-            }`}
-            key="diagnostics"
-          >
-            {this.renderDiagnosticsTabContent(hasData)}
-          </TabPane>
-        )}
-      </Tabs>
-    );
-  };
+    if (!isTenant) {
+      refreshNodes();
+      refreshNodesLiveness();
+    }
+    if (!hasViewActivityRedactedRole) {
+      refreshStatementDiagnosticsRequests();
+    }
 
-  renderNoDataTabContent = (): React.ReactElement => (
+    // Update refs
+    prevTimeScaleRef.current = timeScale;
+    prevStatementFingerprintIDRef.current = statementFingerprintID;
+    prevLocationRef.current = location;
+  }, [
+    timeScale,
+    statementFingerprintID,
+    location,
+    handleResize,
+    refreshStatementDetailsInternal,
+    isTenant,
+    refreshNodes,
+    refreshNodesLiveness,
+    hasViewActivityRedactedRole,
+    refreshStatementDiagnosticsRequests,
+  ]);
+
+  // Update query state when statementDetails changes
+  useEffect(() => {
+    const newQuery =
+      statementDetails?.statement?.metadata?.query || query || null;
+    const newFormattedQuery =
+      statementDetails?.statement?.metadata?.formatted_query ||
+      formattedQuery ||
+      null;
+    if (newQuery !== query || newFormattedQuery !== formattedQuery) {
+      setQuery(newQuery);
+      setFormattedQuery(newFormattedQuery);
+    }
+  }, [statementDetails, query, formattedQuery]);
+
+  // Invalidate cached query texts when statementFingerprintID changes
+  useEffect(() => {
+    if (
+      prevStatementFingerprintIDRef.current !== statementFingerprintID &&
+      prevStatementFingerprintIDRef.current !== undefined
+    ) {
+      setQuery(null);
+      setFormattedQuery(null);
+    }
+  }, [statementFingerprintID]);
+
+  const renderNoDataTabContent = (): React.ReactElement => (
     <>
       <PageConfig>
         <PageConfigItem>
           <TimeScaleDropdown
             options={timeScale1hMinOptions}
-            currentScale={this.props.timeScale}
-            setTimeScale={this.changeTimeScale}
+            currentScale={timeScale}
+            setTimeScale={changeTimeScale}
           />
         </PageConfigItem>
       </PageConfig>
@@ -507,7 +500,7 @@ export class StatementDetails extends React.Component<
     </>
   );
 
-  renderNoDataWithTimeScaleAndSqlBoxTabContent = (
+  const renderNoDataWithTimeScaleAndSqlBoxTabContent = (
     hasTimeout: boolean,
   ): React.ReactElement => (
     <>
@@ -515,17 +508,17 @@ export class StatementDetails extends React.Component<
         <PageConfigItem>
           <TimeScaleDropdown
             options={timeScale1hMinOptions}
-            currentScale={this.props.timeScale}
-            setTimeScale={this.changeTimeScale}
+            currentScale={timeScale}
+            setTimeScale={changeTimeScale}
           />
         </PageConfigItem>
       </PageConfig>
       <section className={cx("section")}>
-        {this.state.formattedQuery && (
+        {formattedQuery && (
           <Row gutter={24}>
             <Col className="gutter-row" span={24}>
               <SqlBox
-                value={this.state.formattedQuery}
+                value={formattedQuery}
                 size={SqlBoxSize.CUSTOM}
                 format={true}
               />
@@ -537,7 +530,7 @@ export class StatementDetails extends React.Component<
             intent="danger"
             title={LoadingError({
               statsType: "statements",
-              error: this.props.statementsError,
+              error: statementsError,
             })}
           />
         )}
@@ -551,16 +544,14 @@ export class StatementDetails extends React.Component<
     </>
   );
 
-  renderOverviewTabContent = (
+  const renderOverviewTabContent = (
     hasTimeout: boolean,
     hasData: boolean,
   ): React.ReactElement => {
     if (!hasData) {
-      return this.renderNoDataWithTimeScaleAndSqlBoxTabContent(hasTimeout);
+      return renderNoDataWithTimeScaleAndSqlBoxTabContent(hasTimeout);
     }
-    const { cardWidth } = this.state;
-    const { nodeRegions, isTenant, statementFingerprintInsights } = this.props;
-    const { stats } = this.props.statementDetails.statement;
+    const { stats } = statementDetails.statement;
     const {
       app_names: appNames,
       databases,
@@ -569,12 +560,12 @@ export class StatementDetails extends React.Component<
       vec_count: vecCount,
       total_count: totalCount,
       implicit_txn: implicitTxn,
-    } = this.props.statementDetails.statement.metadata;
+    } = statementDetails.statement.metadata;
     const statementStatisticsPerAggregatedTs =
-      this.props.statementDetails.statement_statistics_per_aggregated_ts;
+      statementDetails.statement_statistics_per_aggregated_ts;
 
     const nodes: string[] = unique(
-      (stats.nodes || []).map(node => node.toString()),
+      (stats.nodes || []).map((node: Long) => node.toString()),
     ).sort();
     // TODO(yuzefovich): use kv_node_ids to show KV regions.
     const regions = unique(
@@ -676,10 +667,9 @@ export class StatementDetails extends React.Component<
       width: cardWidth,
     };
 
-    const isCockroachCloud = useContext(CockroachCloudContext);
     const insightsColumns = makeInsightsColumns(
       isCockroachCloud,
-      this.props.hasAdminRole,
+      hasAdminRole,
       true,
       true,
     );
@@ -698,7 +688,7 @@ export class StatementDetails extends React.Component<
     }
 
     const duration = (v: number) => Duration(v * 1e9);
-    const [chartsStart, chartsEnd] = toRoundedDateRange(this.props.timeScale);
+    const [chartsStart, chartsEnd] = toRoundedDateRange(timeScale);
     const xScale = {
       graphTsStartMillis: chartsStart.valueOf(),
       graphTsEndMillis: chartsEnd.valueOf(),
@@ -710,22 +700,22 @@ export class StatementDetails extends React.Component<
           <PageConfigItem>
             <TimeScaleDropdown
               options={timeScale1hMinOptions}
-              currentScale={this.props.timeScale}
-              setTimeScale={this.changeTimeScale}
+              currentScale={timeScale}
+              setTimeScale={changeTimeScale}
             />
           </PageConfigItem>
         </PageConfig>
         <p className={timeScaleStylesCx("time-label", "label-margin")}>
           <TimeScaleLabel
-            timeScale={this.props.timeScale}
-            requestTime={moment(this.props.requestTime)}
+            timeScale={timeScale}
+            requestTime={moment(requestTime)}
           />
         </p>
         <section className={cx("section")}>
           <Row gutter={24}>
             <Col className="gutter-row" span={24}>
               <SqlBox
-                value={this.state.formattedQuery}
+                value={formattedQuery}
                 size={SqlBoxSize.CUSTOM}
                 format={true}
               />
@@ -798,8 +788,8 @@ export class StatementDetails extends React.Component<
                     stats?.run_lat.mean,
                     duration,
                   )} /
-                  Planning: 
-                  ${formatNumberForDisplay(stats?.plan_lat.mean, duration)}`}
+                    Planning:
+                    ${formatNumberForDisplay(stats?.plan_lat.mean, duration)}`}
                 </span>
                 <SummaryCardItem
                   label="Rows Processed"
@@ -969,20 +959,19 @@ export class StatementDetails extends React.Component<
     );
   };
 
-  renderExplainPlanTabContent = (
+  const renderExplainPlanTabContent = (
     hasTimeout: boolean,
     hasData: boolean,
   ): React.ReactElement => {
     if (!hasData) {
-      return this.renderNoDataWithTimeScaleAndSqlBoxTabContent(hasTimeout);
+      return renderNoDataWithTimeScaleAndSqlBoxTabContent(hasTimeout);
     }
     const statementStatisticsPerPlanHash =
-      this.props.statementDetails.statement_statistics_per_plan_hash;
+      statementDetails.statement_statistics_per_plan_hash;
     const statementStatisticsPerAggregatedTsAndPlanHash =
-      this.props.statementDetails
-        .statement_statistics_per_aggregated_ts_and_plan_hash;
-    const formattedQuery =
-      this.props.statementDetails.statement.metadata.formatted_query;
+      statementDetails.statement_statistics_per_aggregated_ts_and_plan_hash;
+    const formattedQueryValue =
+      statementDetails.statement.metadata.formatted_query;
 
     // Generate plan distribution data for the chart
     const { alignedData: planDistData, planGists } =
@@ -1001,7 +990,7 @@ export class StatementDetails extends React.Component<
       ],
     };
 
-    const [chartsStart, chartsEnd] = toRoundedDateRange(this.props.timeScale);
+    const [chartsStart, chartsEnd] = toRoundedDateRange(timeScale);
     const xScale = {
       graphTsStartMillis: chartsStart.valueOf(),
       graphTsEndMillis: chartsEnd.valueOf(),
@@ -1013,8 +1002,8 @@ export class StatementDetails extends React.Component<
           <PageConfigItem>
             <TimeScaleDropdown
               options={timeScale1hMinOptions}
-              currentScale={this.props.timeScale}
-              setTimeScale={this.changeTimeScale}
+              currentScale={timeScale}
+              setTimeScale={changeTimeScale}
             />
           </PageConfigItem>
         </PageConfig>
@@ -1022,8 +1011,8 @@ export class StatementDetails extends React.Component<
           Showing explain plans from{" "}
           <span className={timeScaleStylesCx("bold")}>
             <FormattedTimescale
-              ts={this.props.timeScale}
-              requestTime={moment(this.props.requestTime)}
+              ts={timeScale}
+              requestTime={moment(requestTime)}
             />
           </span>
         </p>
@@ -1031,7 +1020,7 @@ export class StatementDetails extends React.Component<
           <Row gutter={24}>
             <Col className="gutter-row" span={24}>
               <SqlBox
-                value={formattedQuery}
+                value={formattedQueryValue}
                 size={SqlBoxSize.CUSTOM}
                 format={true}
               />
@@ -1062,43 +1051,135 @@ export class StatementDetails extends React.Component<
             </>
           )}
           <PlanDetails
-            statementFingerprintID={this.props.statementFingerprintID}
+            statementFingerprintID={statementFingerprintID}
             plans={statementStatisticsPerPlanHash}
-            hasAdminRole={this.props.hasAdminRole}
+            hasAdminRole={hasAdminRole}
           />
         </section>
       </>
     );
   };
 
-  renderDiagnosticsTabContent = (hasData: boolean): React.ReactElement => {
-    if (!hasData && !this.state.query) {
-      return this.renderNoDataTabContent();
+  const renderDiagnosticsTabContent = (
+    hasData: boolean,
+  ): React.ReactElement => {
+    if (!hasData && !query) {
+      return renderNoDataTabContent();
     }
 
     const fingerprint =
-      this.props.statementDetails?.statement?.metadata?.query.length === 0
-        ? this.state.formattedQuery
-        : this.props.statementDetails?.statement?.metadata?.query;
+      statementDetails?.statement?.metadata?.query.length === 0
+        ? formattedQuery
+        : statementDetails?.statement?.metadata?.query;
     return (
       <DiagnosticsView
-        activateDiagnosticsRef={this.activateDiagnosticsRef}
-        diagnosticsReports={this.props.diagnosticsReports}
-        dismissAlertMessage={this.props.dismissStatementDiagnosticsAlertMessage}
+        activateDiagnosticsRef={activateDiagnosticsRef}
+        diagnosticsReports={diagnosticsReports}
+        dismissAlertMessage={dismissStatementDiagnosticsAlertMessage}
         statementFingerprint={fingerprint}
-        requestTime={moment(this.props.requestTime)}
-        onDownloadDiagnosticBundleClick={this.props.onDiagnosticBundleDownload}
+        requestTime={moment(requestTime)}
+        onDownloadDiagnosticBundleClick={onDiagnosticBundleDownload}
         onDiagnosticCancelRequestClick={report =>
-          this.props.onDiagnosticCancelRequest(report)
+          onDiagnosticCancelRequest(report)
         }
-        showDiagnosticsViewLink={
-          this.props.uiConfig?.showStatementDiagnosticsLink
-        }
-        onSortingChange={this.props.onSortingChange}
-        currentScale={this.props.timeScale}
-        onChangeTimeScale={this.changeTimeScale}
-        planGists={this.props.statementDetails.statement.stats.plan_gists}
+        showDiagnosticsViewLink={uiConfig?.showStatementDiagnosticsLink}
+        onSortingChange={onSortingChange}
+        currentScale={timeScale}
+        onChangeTimeScale={changeTimeScale}
+        planGists={statementDetails.statement.stats.plan_gists}
       />
     );
   };
+
+  const renderTabs = (): React.ReactElement => {
+    const hasTimeout = statementsError?.name?.toLowerCase().includes("timeout");
+    const hasData = Number(statementDetails?.statement?.stats?.count) > 0;
+
+    return (
+      <Tabs
+        defaultActiveKey="1"
+        className={commonStyles("cockroach--tabs")}
+        onChange={onTabChange}
+        activeKey={currentTab}
+      >
+        <TabPane tab="Overview" key="overview">
+          {renderOverviewTabContent(hasTimeout, hasData)}
+        </TabPane>
+        <TabPane tab="Explain Plans" key="explain-plan">
+          {renderExplainPlanTabContent(hasTimeout, hasData)}
+        </TabPane>
+        {!hasViewActivityRedactedRole && (
+          <TabPane
+            tab={`Diagnostics${
+              hasDiagnosticReports()
+                ? ` (${
+                    filterByTimeScale(diagnosticsReports, timeScale).length
+                  })`
+                : ""
+            }`}
+            key="diagnostics"
+          >
+            {renderDiagnosticsTabContent(hasData)}
+          </TabPane>
+        )}
+      </Tabs>
+    );
+  };
+
+  const app = queryByName(location, appAttr);
+  const longLoadingMessage = isLoading &&
+    isNil(statementDetails) &&
+    isNil(getValidErrorsList(statementsError)) && (
+      <Delayed delay={moment.duration(2, "s")}>
+        <InlineAlert
+          intent="info"
+          title="If the selected time interval contains a large amount of data, this page might take a few minutes to load."
+        />
+      </Delayed>
+    );
+
+  const hasTimeout = statementsError?.name?.toLowerCase().includes("timeout");
+  const error = hasTimeout ? null : statementsError;
+
+  return (
+    <div className={cx("root")}>
+      <Helmet title={`Details | ${app ? `${app} App |` : ""} Statements`} />
+      <div className={cx("section", "page--header")}>
+        <Button
+          onClick={backToStatementsClick}
+          type="unstyled-link"
+          size="small"
+          icon={<ArrowLeft fontSize={"10px"} />}
+          iconPosition="left"
+          className="small-margin"
+        >
+          Statements
+        </Button>
+        <h3 className={commonStyles("base-heading", "no-margin-bottom")}>
+          Statement Fingerprint
+        </h3>
+      </div>
+      <section className={cx("section", "section--container")}>
+        <Loading
+          loading={isLoading}
+          page={"statement fingerprint"}
+          error={error}
+          render={renderTabs}
+          renderError={() =>
+            LoadingError({
+              statsType: "statements",
+              error: error,
+            })
+          }
+        />
+        {longLoadingMessage}
+        <ActivateStatementDiagnosticsModal
+          ref={activateDiagnosticsRef}
+          activate={createStatementDiagnosticsReport}
+          refreshDiagnosticsReports={refreshStatementDiagnosticsRequests}
+          onOpenModal={onDiagnosticsModalOpen}
+        />
+      </section>
+    </div>
+  );
 }
