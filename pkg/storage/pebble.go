@@ -2028,7 +2028,8 @@ func (p *Pebble) Capacity() (roachpb.StoreCapacity, error) {
 	// Pebble has detailed accounting of its own disk space usage, and it's
 	// incrementally updated which helps avoid O(# files) work here.
 	m := p.db.Metrics()
-	totalUsedBytes := int64(m.DiskSpaceUsage())
+	pebbleDiskUsage := int64(m.DiskSpaceUsage())
+	totalUsedBytes := pebbleDiskUsage
 
 	auxiliarySize, err := p.auxiliaryDirSize()
 	if err != nil {
@@ -2041,9 +2042,10 @@ func (p *Pebble) Capacity() (roachpb.StoreCapacity, error) {
 	// totals.
 	if ((p.cfg.maxSize.bytes == 0 || p.cfg.maxSize.bytes >= fsuTotal) && p.cfg.maxSize.percent == 0) || p.cfg.env.Dir == "" {
 		return roachpb.StoreCapacity{
-			Capacity:  fsuTotal,
-			Available: fsuAvail,
-			Used:      totalUsedBytes,
+			Capacity:       fsuTotal,
+			Available:      fsuAvail,
+			Used:           totalUsedBytes,
+			DiskUsageSpace: pebbleDiskUsage,
 		}, nil
 	}
 
@@ -2061,9 +2063,10 @@ func (p *Pebble) Capacity() (roachpb.StoreCapacity, error) {
 	}
 
 	return roachpb.StoreCapacity{
-		Capacity:  maxSize,
-		Available: available,
-		Used:      totalUsedBytes,
+		Capacity:       maxSize,
+		Available:      available,
+		Used:           totalUsedBytes,
+		DiskUsageSpace: pebbleDiskUsage,
 	}, nil
 }
 
