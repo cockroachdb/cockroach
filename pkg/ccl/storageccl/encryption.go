@@ -39,14 +39,12 @@ var encryptionPreamble = []byte("encrypt")
 
 const encryptionSaltSize = 16
 
-// v1 is just the IV and then one sealed GCM message.
-const encryptionVersionIVPrefix = 1
-
 // v2 is an IV followed by 1 or more sealed GCM messages representing chunks of
 // the original input. The last chunk is always less than full size (and may be
 // empty) prior to being sealed, which is verified by the reader to
 // authticate against truncation at a chunk boundary.
-const encryptionVersionChunk = 2
+// v1 is no longer supported.
+const encryptionVersion = 2
 
 // encryptionChunkSizeV2 is the chunk-size used by v2, i.E. 64kb, which should
 // minimize overhead while still while still limiting the size of buffers and
@@ -128,7 +126,7 @@ func EncryptingWriter(ciphertext objstorage.Writable, key []byte) (objstorage.Wr
 
 	header := make([]byte, len(encryptionPreamble)+1+nonceSize)
 	copy(header, encryptionPreamble)
-	header[len(encryptionPreamble)] = encryptionVersionChunk
+	header[len(encryptionPreamble)] = encryptionVersion
 
 	// Pick a unique IV for this file and write it in the header.
 	ivStart := len(encryptionPreamble) + 1
@@ -245,22 +243,11 @@ func decryptingReader(ciphertext readerAndReaderAt, key []byte) (objstorage.Read
 	}
 
 	version := header[len(encryptionPreamble)]
-	if version < encryptionVersionIVPrefix || version > encryptionVersionChunk {
+	if version != encryptionVersion {
 		return nil, errors.Errorf("unexpected encryption scheme/config version %d", version)
 	}
 	iv := header[len(encryptionPreamble)+1:]
 
-	// If this version is not chunked, the entire file is one GCM message so we
-	// need to read all of it to open it, and can then just return a simple bytes
-	// reader on the decrypted body.
-	if version == encryptionVersionIVPrefix {
-		buf, err := io.ReadAll(ciphertext)
-		if err != nil {
-			return nil, err
-		}
-		buf, err = gcm.Open(buf[:0], iv, buf, nil)
-		return vfs.NewMemFile(buf), errors.Wrap(err, "failed to decrypt — maybe incorrect key")
-	}
 	buf := make([]byte, nonceSize, encryptionChunkSizeV2+tagSize+nonceSize)
 	ivScratch := buf[:nonceSize]
 	buf = buf[nonceSize:]
