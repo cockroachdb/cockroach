@@ -3405,6 +3405,14 @@ func getMessagesForSubtrace(
 	span spanWithIndex, allSpans []tracingpb.RecordedSpan, seenSpans map[tracingpb.SpanID]struct{},
 ) ([]logRecordRow, error) {
 	if _, ok := seenSpans[span.SpanID]; ok {
+		// Note(davidh): If you're investigating a test flake that's
+		// triggering this error I believe it's triggered by behavior in
+		// DistSQLReceiver.pushMeta which calls span.ImportRemoteRecording.
+		// Consider changing this code to log the error and continue, or
+		// implement span deduplication on import. I've left this as-is for now
+		// since the problem occurs very rarely and only in tests and I think
+		// the consequences for a user would require tracing the same execution
+		// again, which can usually be done.
 		return nil, errors.Errorf("duplicate span %d", span.SpanID)
 	}
 	var allLogs []logRecordRow
