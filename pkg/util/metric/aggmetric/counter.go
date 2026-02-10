@@ -10,7 +10,6 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
-	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/gogo/protobuf/proto"
 	io_prometheus_client "github.com/prometheus/client_model/go"
 )
@@ -404,6 +403,7 @@ type HighCardinalityCounter struct {
 	g metric.Counter
 	childSet
 	labelSliceCache *metric.LabelSliceCache
+	opts            metric.HighCardinalityMetricOptions
 }
 
 var _ metric.Iterable = (*HighCardinalityCounter)(nil)
@@ -413,11 +413,14 @@ var _ metric.PrometheusEvictable = (*HighCardinalityCounter)(nil)
 // with eviction for child metrics. The opts parameter contains the metadata and allows configuring
 // the maximum number of label combinations (MaxLabelValues) and retention time (RetentionTimeTillEviction).
 // If opts has zero values for MaxLabelValues or RetentionTimeTillEviction, defaults will be used.
-func NewHighCardinalityCounter(
-	opts metric.HighCardinalityMetricOptions, childLabels ...string,
+func NewHighCardinalityCounter(metadata metric.Metadata,
+	opts metric.HighCardinalityMetricOptions, childLabels []string,
 ) *HighCardinalityCounter {
-	c := &HighCardinalityCounter{g: *metric.NewCounter(opts.Metadata)}
-	c.initWithCacheStorageType(childLabels, opts.Metadata.Name, opts)
+	c := &HighCardinalityCounter{
+		g:    *metric.NewCounter(metadata),
+		opts: opts,
+	}
+	c.initWithCacheStorageType(childLabels)
 	return c
 }
 
@@ -517,7 +520,6 @@ func (c *HighCardinalityCounter) createHighCardinalityChildCounter(
 	return &HighCardinalityChildCounter{
 		LabelSliceCacheKey: metric.LabelSliceCacheKey(key),
 		LabelSliceCache:    cache,
-		createdAt:          timeutil.Now(),
 	}
 }
 
@@ -528,11 +530,11 @@ type HighCardinalityChildCounter struct {
 	metric.LabelSliceCacheKey
 	value metric.Counter
 	*metric.LabelSliceCache
-	createdAt time.Time
+	updatedAt atomic.Int64
 }
 
-func (c *HighCardinalityChildCounter) CreatedAt() time.Time {
-	return c.createdAt
+func (c *HighCardinalityChildCounter) UpdatedAt() int64 {
+	return c.updatedAt.Load()
 }
 
 func (c *HighCardinalityChildCounter) DecrementLabelSliceCacheReference() {
@@ -564,4 +566,5 @@ func (c *HighCardinalityChildCounter) Value() int64 {
 // Inc increments the HighCardinalityChildCounter's value.
 func (c *HighCardinalityChildCounter) Inc(i int64) {
 	c.value.Inc(i)
+	c.updatedAt.Store(time.Now().Unix())
 }

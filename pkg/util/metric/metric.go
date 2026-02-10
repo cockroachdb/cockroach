@@ -340,17 +340,7 @@ const maxLabelValuesEnvVar = "COCKROACH_HIGH_CARDINALITY_METRICS_MAX_LABEL_VALUE
 
 // MaxLabelValues is the configured maximum number of distinct label value combinations
 // for high cardinality metrics before eviction starts, read from the environment variable.
-var MaxLabelValues = envutil.EnvOrDefaultInt(maxLabelValuesEnvVar, 0)
-
-// retentionTimeTillEvictionEnvVar can be used to configure the time duration
-// after which unused label value combinations can be evicted from the cache.
-const retentionTimeTillEvictionEnvVar = "COCKROACH_HIGH_CARDINALITY_METRICS_RETENTION_TIME_TILL_EVICTION"
-
-// RetentionTimeTillEviction is the configured time duration after which unused
-// label value combinations can be evicted from the cache, read from the environment variable.
-// We are making sure that metrics would be scraped in at least one scrape as we have a default 10 second
-// scrape interval.
-var RetentionTimeTillEviction = envutil.EnvOrDefaultDuration(retentionTimeTillEvictionEnvVar, 10*time.Second)
+var MaxLabelValues = envutil.EnvOrDefaultInt(maxLabelValuesEnvVar, 10000)
 
 type HistogramMode byte
 
@@ -378,19 +368,11 @@ const (
 // (Counter, Gauge, Histogram) that use cache storage. This allows fine-grained control over
 // eviction policies to manage memory usage for metrics with many distinct label combinations.
 type HighCardinalityMetricOptions struct {
-	// Metadata is the metric Metadata associated with the high cardinality metric.
-	Metadata Metadata
 	// MaxLabelValues sets the maximum number of distinct label value combinations
 	// that can be stored in the cache before eviction starts. When this limit is reached,
 	// the cache will evict entries based on the configured eviction policy.
 	// If set to 0, the default 5000 value is used.
 	MaxLabelValues int
-	// RetentionTimeTillEviction specifies the time duration after which unused
-	// label value combinations can be evicted from the cache. Entries that haven't
-	// been accessed for longer than this duration may be evicted.
-	// If set to 0, the default value of 20 seconds is used to ensure the label value is
-	// scraped at least once with default scrape interval of 10 seconds.
-	RetentionTimeTillEviction time.Duration
 }
 
 type HistogramOptions struct {

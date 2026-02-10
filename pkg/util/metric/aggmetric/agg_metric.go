@@ -18,7 +18,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
-	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
 	"github.com/google/btree"
@@ -111,52 +110,12 @@ func (cs *childSet) initWithBTreeStorageType(labels []string) {
 }
 
 func (cs *childSet) initWithCacheStorageType(
-	labels []string, metricName string, opts metric.HighCardinalityMetricOptions,
+	labels []string,
 ) {
 	cs.labels = labels
-
-	// Determine maxLabelValues: use the maximum of env variable and metric defined opts.
-	maxLabelValues := opts.MaxLabelValues
-	if maxLabelValues == 0 {
-		maxLabelValues = defaultCacheSize
-	}
-	maxLabelValues = max(maxLabelValues, metric.MaxLabelValues)
-
-	// Determine retentionDuration: use the maximum of env variable and metric defined opts.
-	retentionDuration := opts.RetentionTimeTillEviction
-	if retentionDuration == 0 {
-		retentionDuration = defaultRetentionTimeTillEviction
-	}
-	retentionDuration = max(retentionDuration, metric.RetentionTimeTillEviction)
-
 	cs.mu.children = &UnorderedCacheWrapper{
 		cache: cache.NewUnorderedCache(cache.Config{
-			Policy: cache.CacheLRU,
-			ShouldEvict: func(size int, key, value any) bool {
-				if childMetric, ok := value.(ChildMetric); ok {
-					// Check if the child metric has exceeded the retention time and cache size is greater than max
-					if labelSliceCachedChildMetric, ok := childMetric.(LabelSliceCachedChildMetric); ok {
-						currentTime := timeutil.Now()
-						age := currentTime.Sub(labelSliceCachedChildMetric.CreatedAt())
-						return size > maxLabelValues && age > retentionDuration
-					}
-				}
-				return size > maxLabelValues
-			},
-			OnEvictedEntry: func(entry *cache.Entry) {
-				if childMetric, ok := entry.Value.(ChildMetric); ok {
-					labelValues := childMetric.labelValues()
-
-					// log metric name and label values of evicted entry
-					log.Dev.Infof(noOpCtx, "evicted child of metric %s with label values: %s\n",
-						redact.SafeString(metricName), redact.SafeString(strings.Join(labelValues, ",")))
-
-					// Invoke DecrementAndDeleteIfZero from ChildMetric which relies on LabelSliceCache
-					if boundedChild, ok := childMetric.(LabelSliceCachedChildMetric); ok {
-						boundedChild.DecrementLabelSliceCacheReference()
-					}
-				}
-			},
+			Policy: cache.CacheNone,
 		}),
 	}
 }
@@ -450,7 +409,7 @@ type ChildMetric interface {
 // reducing memory usage and improving performance in scenarios with many similar metrics.
 type LabelSliceCachedChildMetric interface {
 	ChildMetric
-	CreatedAt() time.Time
+	UpdatedAt() int64
 	DecrementLabelSliceCacheReference()
 }
 
