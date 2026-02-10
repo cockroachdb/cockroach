@@ -501,3 +501,83 @@ func TestLDAPProvisioningDBConsole(t *testing.T) {
 			"user should not have been provisioned with invalid LDAP credentials")
 	})
 }
+
+func TestLDAPEstimatedLastLoginTimeDBConsole(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	// Intercept the call to NewLDAPUtil and return the mocked NewLDAPUtil function.
+	mockLDAP, newMockLDAPUtil := LDAPMocks()
+	defer testutils.TestingHook(
+		&NewLDAPUtil,
+		newMockLDAPUtil,
+	)()
+
+	ctx := context.Background()
+	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	defer s.Stopper().Stop(ctx)
+	ts := s.ApplicationLayer()
+	tdb := sqlutils.MakeSQLRunner(db)
+
+	const hbaConf = `host all all all ldap ldapserver=localhost ldapport=636 ` +
+		`ldapbasedn="dc=crdb,dc=io" ldapbinddn="cn=admin,dc=crdb,dc=io" ` +
+		`ldapbindpasswd=admin ldapsearchattribute=cn ` +
+		`"ldapsearchfilter=(objectClass=*)" ` +
+		`"ldapgrouplistfilter=(objectClass=groupOfNames)"`
+	tdb.Exec(t, "SET CLUSTER SETTING server.host_based_authentication.configuration = $1", hbaConf)
+	tdb.Exec(t, "CREATE ROLE db_admins")
+
+	httpLogin := func(user, password string) error {
+		req := &serverpb.UserLoginRequest{
+			Username: user,
+			Password: password,
+		}
+		var resp serverpb.UserLoginResponse
+		httpClient, err := ts.GetUnauthenticatedHTTPClient()
+		if err != nil {
+			return err
+		}
+		return httputil.PostJSON(
+			httpClient,
+			ts.AdminURL().WithPath(authserver.LoginPath).String(),
+			req,
+			&resp,
+		)
+	}
+
+	t.Run("provisioning enabled, estimated_last_login_time is populated", func(t *testing.T) {
+		tdb.Exec(t, "SET CLUSTER SETTING security.provisioning.ldap.enabled = true")
+		mockLDAP.SetGroups("cn=loginuser1", []string{"cn=db_admins"})
+
+		err := httpLogin("loginuser1", "password")
+		require.NoError(t, err, "DB Console login should succeed")
+
+		// The estimated_last_login_time update is asynchronous, so poll until
+		// it is populated.
+		testutils.SucceedsSoon(t, func() error {
+			rows := tdb.QueryStr(t,
+				`SELECT count(*) FROM system.users WHERE username = 'loginuser1' AND estimated_last_login_time IS NOT NULL`)
+			if len(rows) == 0 || rows[0][0] != "1" {
+				return errors.New("estimated_last_login_time not yet updated for loginuser1")
+			}
+			return nil
+		})
+	})
+
+	t.Run("provisioning disabled, estimated_last_login_time is not populated", func(t *testing.T) {
+		tdb.Exec(t, "SET CLUSTER SETTING security.provisioning.ldap.enabled = false")
+		// Create the user manually since provisioning is disabled.
+		tdb.Exec(t, "CREATE USER loginuser2")
+		mockLDAP.SetGroups("cn=loginuser2", []string{"cn=db_admins"})
+
+		err := httpLogin("loginuser2", "password")
+		require.NoError(t, err, "DB Console login should succeed for existing user")
+
+		// Verify that estimated_last_login_time remains NULL since provisioning
+		// is disabled.
+		rows := tdb.QueryStr(t,
+			`SELECT count(*) FROM system.users WHERE username = 'loginuser2' AND estimated_last_login_time IS NOT NULL`)
+		require.Equal(t, "0", rows[0][0],
+			"estimated_last_login_time should not be populated when provisioning is disabled")
+	})
+}
