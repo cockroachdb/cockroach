@@ -8,6 +8,7 @@ on:
 
 jobs:
   notify:
+    if: github.repository == 'cockroachdb/cockroach'
     runs-on: [self-hosted, ubuntu_2004]
     timeout-minutes: 30
     permissions:

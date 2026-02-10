@@ -10,18 +10,21 @@ permissions:
 jobs:
 
   linux:
+    if: github.repository == 'cockroachdb/cockroach'
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v3
     - run: cd build/release/bincheck && ./test-linux ${{ github.ref_name }} ${{ github.sha }}
 
   darwin-arm64:
+    if: github.repository == 'cockroachdb/cockroach'
     runs-on: macos-latest
     steps:
     - uses: actions/checkout@v3
     - run: cd build/release/bincheck && ./test-macos-arm64 ${{ github.ref_name }} ${{ github.sha }}
 
   windows:
+    if: github.repository == 'cockroachdb/cockroach'
     runs-on: windows-latest
     steps:
     - run: git config --system core.longpaths true

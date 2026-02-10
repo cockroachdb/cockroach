@@ -6,6 +6,7 @@ on:
 
 jobs:
   auto-merge:
+    if: github.repository == 'cockroachdb/cockroach'
     runs-on: ubuntu-latest
 
     permissions:
