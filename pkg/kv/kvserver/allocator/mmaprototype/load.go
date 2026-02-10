@@ -689,6 +689,20 @@ func highDiskSpaceUtilization(load LoadValue, capacity LoadValue, threshold floa
 		log.KvDistribution.Errorf(context.Background(), "disk capacity is unknown")
 		return false
 	}
+	// load and capacity are both in terms of logical bytes.
+	//
+	//   load     = LogicalBytes
+	//   diskUtil = FractionUsed()  (i.e. Used/(Available+Used), or
+	//                               (Capacity-Available)/Capacity as fallback)
+	//   capacity = LogicalBytes / diskUtil
+	//
+	// Therefore:
+	//   fractionUsed = load / capacity
+	//                = LogicalBytes / (LogicalBytes / diskUtil)
+	//                = diskUtil
+	//
+	// This recovers the actual disk utilization as reported by the store
+	// descriptor, expressed in terms of the logical byte load and capacity.
 	fractionUsed := float64(load) / float64(capacity)
 	return fractionUsed >= threshold
 }
