@@ -8,7 +8,6 @@ package aggmetric
 import (
 	"math"
 	"sync/atomic"
-	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -505,6 +504,7 @@ type HighCardinalityGauge struct {
 	g *metric.Gauge
 	*baseAggMetric
 	labelSliceCache *metric.LabelSliceCache
+	opts            metric.HighCardinalityMetricOptions
 }
 
 var _ metric.Iterable = (*HighCardinalityGauge)(nil)
@@ -515,12 +515,12 @@ var _ metric.PrometheusEvictable = (*HighCardinalityGauge)(nil)
 // the maximum number of label combinations (MaxLabelValues) and retention time (RetentionTimeTillEviction).
 // If opts has zero values for MaxLabelValues or RetentionTimeTillEviction, defaults will be used.
 func NewHighCardinalityGauge(
-	opts metric.HighCardinalityMetricOptions, childLabels ...string,
+	metadata metric.Metadata, opts metric.HighCardinalityMetricOptions, childLabels []string,
 ) *HighCardinalityGauge {
-	gauge := metric.NewGauge(opts.Metadata)
+	gauge := metric.NewGauge(metadata)
 	base := newBaseAggMetric(gauge)
-	g := &HighCardinalityGauge{g: gauge, baseAggMetric: base}
-	g.initWithCacheStorageType(childLabels, opts.Metadata.Name, opts)
+	g := &HighCardinalityGauge{g: gauge, baseAggMetric: base, opts: opts}
+	g.initWithCacheStorageType(childLabels)
 	return g
 }
 
@@ -617,11 +617,12 @@ func (g *HighCardinalityGauge) GetOrAddChild(labelVals ...string) *HighCardinali
 func (g *HighCardinalityGauge) createHighCardinalityChildGauge(
 	key uint64, cache *metric.LabelSliceCache,
 ) LabelSliceCachedChildMetric {
-	return &HighCardinalityChildGauge{
+	child := &HighCardinalityChildGauge{
 		LabelSliceCacheKey: metric.LabelSliceCacheKey(key),
 		LabelSliceCache:    cache,
-		createdAt:          timeutil.Now(),
 	}
+	child.updatedAt.Store(timeutil.Now().Unix())
+	return child
 }
 
 // HighCardinalityChildGauge is a child of a HighCardinalityGauge. When metrics are
@@ -631,11 +632,11 @@ type HighCardinalityChildGauge struct {
 	metric.LabelSliceCacheKey
 	value metric.Gauge
 	*metric.LabelSliceCache
-	createdAt time.Time
+	updatedAt atomic.Int64
 }
 
-func (g *HighCardinalityChildGauge) CreatedAt() time.Time {
-	return g.createdAt
+func (g *HighCardinalityChildGauge) UpdatedAt() int64 {
+	return g.updatedAt.Load()
 }
 
 func (g *HighCardinalityChildGauge) DecrementLabelSliceCacheReference() {
@@ -667,14 +668,17 @@ func (g *HighCardinalityChildGauge) Value() int64 {
 // Inc increments the HighCardinalityChildGauge's value.
 func (g *HighCardinalityChildGauge) Inc(i int64) {
 	g.value.Inc(i)
+	g.updatedAt.Store(timeutil.Now().Unix())
 }
 
 // Dec decrements the HighCardinalityChildGauge's value.
 func (g *HighCardinalityChildGauge) Dec(i int64) {
 	g.value.Dec(i)
+	g.updatedAt.Store(timeutil.Now().Unix())
 }
 
 // Update sets the HighCardinalityChildGauge's value.
 func (g *HighCardinalityChildGauge) Update(val int64) {
 	g.value.Update(val)
+	g.updatedAt.Store(timeutil.Now().Unix())
 }
