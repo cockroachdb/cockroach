@@ -1294,30 +1294,20 @@ func maybeForceDBLevelChangefeed(
 	return create, args, nil
 }
 
-// isUsingDefaultInitialScan returns true if the changefeed is does not specify
+// isUsingDefaultInitialScan returns true if the changefeed does not specify
 // an initial scan type and does not have a cursor, resulting in the default
 // behavior of the initial scan.
 func isUsingDefaultInitialScan(opts []tree.KVOption) bool {
-	initialScanType := ""
-	hasCursor := false
 	for _, opt := range opts {
-		key := opt.Key.String()
-		if strings.EqualFold(key, "initial_scan") {
-			if opt.Value != nil {
-				initialScanType = opt.Value.String()
-			}
-		}
-		if strings.EqualFold(key, "no_initial_scan") {
-			initialScanType = "'no'"
-		}
-		if strings.EqualFold(key, "initial_scan_only") {
-			initialScanType = "'only'"
-		}
-		if strings.EqualFold(key, "cursor") {
-			hasCursor = true
+		switch strings.ToLower(opt.Key.String()) {
+		case "cursor":
+			return false
+		case "initial_scan", "no_initial_scan", "initial_scan_only":
+			return false
 		}
 	}
-	return initialScanType == "" && !hasCursor
+
+	return true
 }
 
 func maybeForceEnrichedEnvelope(
