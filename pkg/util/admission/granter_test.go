@@ -620,8 +620,21 @@ type testMetricsProvider struct {
 	metrics []StoreMetrics
 }
 
+var _ PebbleMetricsProvider = &testMetricsProvider{}
+
 func (m *testMetricsProvider) GetPebbleMetrics() []StoreMetrics {
 	return m.metrics
+}
+
+func (m *testMetricsProvider) GetDiskStats(buf *DiskMetricsBuf) error {
+	buf.Stats = (buf.Stats)[:0]
+	for _, sm := range m.metrics {
+		buf.Stats = append(buf.Stats, StoreIDAndStats{
+			StoreID: sm.StoreID,
+			Stats:   sm.DiskStats,
+		})
+	}
+	return nil
 }
 
 func (m *testMetricsProvider) Close() {}
