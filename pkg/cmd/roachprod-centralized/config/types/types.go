@@ -71,6 +71,7 @@ type Config struct {
 // CloudProvider represents a cloud provider configuration.
 type CloudProvider struct {
 	Type          string                `env:"TYPE" default:"" description:"Cloud provider type (aws, azure, gce, ibm)"`
+	Environment   string                `env:"ENVIRONMENT" default:"" description:"Environment name for authorization scope (e.g., gcp-engineering, aws-staging)"`
 	AWS           aws.ProviderOptions   `env:"AWS" description:"AWS cloud provider options"`
 	Azure         azure.ProviderOptions `env:"AZURE" description:"Azure cloud provider options"`
 	GCE           gce.ProviderOptions   `env:"GCE" description:"GCE cloud provider options"`

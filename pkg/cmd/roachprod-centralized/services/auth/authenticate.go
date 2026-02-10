@@ -83,6 +83,8 @@ func (s *Service) AuthenticateToken(
 			}
 			return nil, err
 		}
+	default:
+		return nil, authtypes.ErrInvalidTokenType
 	}
 
 	// Record successful token validation
@@ -117,14 +119,15 @@ func (s *Service) loadUserPrincipal(
 		return errors.Wrap(err, "failed to get user permissions from groups")
 	}
 
-	// Convert GroupPermissions to Permission interface (via UserPermission)
+	// Convert GroupPermissions to Permission interface (via UserPermission).
+	// These are ephemeral permission objects used only within this request's
+	// principal; they are never persisted, so they use a zero UUID.
 	permissions := make([]authmodels.Permission, len(groupPerms))
 	for i, gp := range groupPerms {
 		permissions[i] = &authmodels.UserPermission{
-			ID:         uuid.MakeV4(),
+			ID:         uuid.UUID{},
 			UserID:     userID,
-			Provider:   gp.Provider,
-			Account:    gp.Account,
+			Scope:      gp.Scope,
 			Permission: gp.Permission,
 		}
 	}
@@ -180,13 +183,14 @@ func (s *Service) loadServiceAccountPrincipal(
 			return errors.Wrap(err, "failed to get user permissions from groups")
 		}
 
+		// Ephemeral permission objects for this request's principal; never
+		// persisted, so they use a zero UUID.
 		permissions = make([]authmodels.Permission, len(saPerms))
 		for i, gp := range saPerms {
 			permissions[i] = &authmodels.UserPermission{
-				ID:         uuid.MakeV4(),
+				ID:         uuid.UUID{},
 				UserID:     *sa.DelegatedFrom,
-				Provider:   gp.Provider,
-				Account:    gp.Account,
+				Scope:      gp.Scope,
 				Permission: gp.Permission,
 			}
 		}

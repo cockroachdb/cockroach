@@ -600,12 +600,12 @@ func (r *MemAuthRepo) GetUserPermissionsFromGroups(
 		groupSet[g] = struct{}{}
 	}
 
-	// Find matching permissions and deduplicate by provider+account+permission
+	// Find matching permissions and deduplicate by scope+permission
 	seen := make(map[string]struct{})
 	var result []*auth.GroupPermission
 	for _, m := range r.groupPermissions {
 		if _, ok := groupSet[m.GroupName]; ok {
-			key := m.Provider + ":" + m.Account + ":" + m.Permission
+			key := m.Scope + "\x00" + m.Permission
 			if _, exists := seen[key]; !exists {
 				seen[key] = struct{}{}
 				result = append(result, m)
@@ -613,16 +613,10 @@ func (r *MemAuthRepo) GetUserPermissionsFromGroups(
 		}
 	}
 
-	// Sort by provider, account, permission
+	// Sort by scope, permission
 	slices.SortFunc(result, func(a, b *auth.GroupPermission) int {
-		if a.Provider != b.Provider {
-			if a.Provider < b.Provider {
-				return -1
-			}
-			return 1
-		}
-		if a.Account != b.Account {
-			if a.Account < b.Account {
+		if a.Scope != b.Scope {
+			if a.Scope < b.Scope {
 				return -1
 			}
 			return 1
@@ -682,8 +676,8 @@ func (r *MemAuthRepo) ListServiceAccountPermissions(
 
 	totalCount := len(filteredPerms)
 
-	// 2. Apply sorting (with provider as default)
-	_ = memoryfilters.SortByField(filteredPerms, filterSet.Sort, "provider")
+	// 2. Apply sorting (with scope as default)
+	_ = memoryfilters.SortByField(filteredPerms, filterSet.Sort, "scope")
 
 	// 3. Apply pagination
 	filteredPerms = memoryfilters.ApplyPagination(filteredPerms, filterSet.Pagination)
@@ -1037,7 +1031,7 @@ func (r *MemAuthRepo) GetPermissionsForGroups(
 		}
 	}
 
-	// Sort by group_name, provider, account, permission
+	// Sort by group_name, scope, permission
 	slices.SortFunc(result, func(a, b *auth.GroupPermission) int {
 		if a.GroupName != b.GroupName {
 			if a.GroupName < b.GroupName {
@@ -1045,14 +1039,8 @@ func (r *MemAuthRepo) GetPermissionsForGroups(
 			}
 			return 1
 		}
-		if a.Provider != b.Provider {
-			if a.Provider < b.Provider {
-				return -1
-			}
-			return 1
-		}
-		if a.Account != b.Account {
-			if a.Account < b.Account {
+		if a.Scope != b.Scope {
+			if a.Scope < b.Scope {
 				return -1
 			}
 			return 1

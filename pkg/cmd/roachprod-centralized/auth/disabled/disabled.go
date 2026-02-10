@@ -51,8 +51,7 @@ func (a *DisabledAuthenticator) Authenticate(
 			&authmodels.UserPermission{
 				ID:         uuid.UUID{},
 				UserID:     uuid.UUID{},
-				Provider:   "*",
-				Account:    "*",
+				Scope:      "*",
 				Permission: "*", // Wildcard permission grants access to everything
 			},
 		},

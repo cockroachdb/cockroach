@@ -128,5 +128,32 @@ CREATE INDEX IF NOT EXISTS idx_tokens_sa_status ON api_tokens (service_account_i
 CREATE INDEX IF NOT EXISTS idx_tokens_status_updated ON api_tokens (status, updated_at);
 `,
 		},
+		{
+			Version:     2,
+			Description: "Replace provider+account with scope",
+			SQL: `
+-- group_permissions: replace provider+account with scope
+-- DEFAULT '*' grants wildcard scope to existing rows. This is safe because the
+-- system has not been deployed to production, so no real data needs migration.
+-- All statements use IF NOT EXISTS / IF EXISTS to be idempotent in case a
+-- partial run left the schema in an intermediate state.
+ALTER TABLE group_permissions ADD COLUMN IF NOT EXISTS scope VARCHAR(255) NOT NULL DEFAULT '*';
+DROP INDEX IF EXISTS group_permissions_group_name_provider_account_permission_key CASCADE;
+ALTER TABLE group_permissions DROP COLUMN IF EXISTS provider;
+ALTER TABLE group_permissions DROP COLUMN IF EXISTS account;
+CREATE UNIQUE INDEX IF NOT EXISTS group_permissions_group_name_scope_permission_key
+    ON group_permissions (group_name, scope, permission);
+
+-- service_account_permissions: replace provider+account with scope
+-- DEFAULT '*' grants wildcard scope to existing rows. This is safe because the
+-- system has not been deployed to production, so no real data needs migration.
+ALTER TABLE service_account_permissions ADD COLUMN IF NOT EXISTS scope VARCHAR(255) NOT NULL DEFAULT '*';
+DROP INDEX IF EXISTS service_account_permissions_service_account_id_provider_acco_key CASCADE;
+ALTER TABLE service_account_permissions DROP COLUMN IF EXISTS provider;
+ALTER TABLE service_account_permissions DROP COLUMN IF EXISTS account;
+CREATE UNIQUE INDEX IF NOT EXISTS service_account_permissions_sa_scope_permission_key
+    ON service_account_permissions (service_account_id, scope, permission);
+`,
+		},
 	}
 }

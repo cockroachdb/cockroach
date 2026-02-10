@@ -164,8 +164,7 @@ func TestJWTAuthenticator_PrincipalConstruction(t *testing.T) {
 			&authmodels.UserPermission{
 				ID:         uuid.MakeV4(),
 				UserID:     uuid.MakeV4(),
-				Provider:   "*",
-				Account:    "*",
+				Scope:      "*",
 				Permission: "*",
 			},
 		},

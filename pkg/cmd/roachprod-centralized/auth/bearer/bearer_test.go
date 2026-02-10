@@ -129,8 +129,7 @@ func TestBearerAuthenticator_Authenticate_ValidUserToken(t *testing.T) {
 		},
 		Permissions: []authmodels.Permission{
 			&authmodels.UserPermission{
-				Provider:   "gcp",
-				Account:    "test-account",
+				Scope:      "gcp-engineering",
 				Permission: "clusters:read",
 			},
 		},
@@ -154,7 +153,7 @@ func TestBearerAuthenticator_Authenticate_ValidUserToken(t *testing.T) {
 	assert.Equal(t, "test@example.com", principal.User.Email)
 	assert.Equal(t, "Test User", principal.User.FullName)
 	assert.Len(t, principal.Permissions, 1)
-	assert.Equal(t, "gcp", principal.Permissions[0].GetProvider())
+	assert.Equal(t, "gcp-engineering", principal.Permissions[0].GetScope())
 
 	mockService.AssertExpectations(t)
 	mockMetrics.AssertExpectations(t)
@@ -188,8 +187,7 @@ func TestBearerAuthenticator_Authenticate_ValidServiceAccountToken(t *testing.T)
 		},
 		Permissions: []authmodels.Permission{
 			&authmodels.ServiceAccountPermission{
-				Provider:   "gcp",
-				Account:    "test-account",
+				Scope:      "gcp-engineering",
 				Permission: "clusters:write",
 			},
 		},
@@ -212,7 +210,7 @@ func TestBearerAuthenticator_Authenticate_ValidServiceAccountToken(t *testing.T)
 	assert.NotNil(t, principal.ServiceAccount)
 	assert.Equal(t, "test-sa", principal.ServiceAccount.Name)
 	assert.Len(t, principal.Permissions, 1)
-	assert.Equal(t, "gcp", principal.Permissions[0].GetProvider())
+	assert.Equal(t, "gcp-engineering", principal.Permissions[0].GetScope())
 
 	mockService.AssertExpectations(t)
 	mockMetrics.AssertExpectations(t)

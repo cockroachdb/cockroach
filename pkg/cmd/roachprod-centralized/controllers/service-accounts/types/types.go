@@ -219,8 +219,7 @@ func BuildRemoveOriginResponse() RemoveOriginResponse {
 
 // InputListPermissionsDTO is the input data transfer object for listing permissions.
 type InputListPermissionsDTO struct {
-	Provider   stripe.FilterValue[string] `stripe:"provider" validate:"omitempty,max=50"`
-	Account    stripe.FilterValue[string] `stripe:"account" validate:"omitempty,max=50"`
+	Scope      stripe.FilterValue[string] `stripe:"scope" validate:"omitempty,max=255"`
 	Permission stripe.FilterValue[string] `stripe:"permission" validate:"omitempty,max=100"`
 }
 
@@ -238,8 +237,7 @@ func (dto *InputListPermissionsDTO) ToServiceInputListPermissionsDTO() authtypes
 
 // AddPermissionRequest is the request body for adding a single permission.
 type AddPermissionRequest struct {
-	Provider   string `json:"provider" binding:"required"`
-	Account    string `json:"account" binding:"required"`
+	Scope      string `json:"scope" binding:"required"`
 	Permission string `json:"permission" binding:"required"`
 }
 
@@ -251,8 +249,7 @@ type ReplacePermissionsRequest struct {
 // PermissionResponse is the response for permission operations.
 type PermissionResponse struct {
 	ID         string `json:"id"`
-	Provider   string `json:"provider"`
-	Account    string `json:"account"`
+	Scope      string `json:"scope"`
 	Permission string `json:"permission"`
 	CreatedAt  string `json:"created_at"`
 }
@@ -320,8 +317,7 @@ type ReplacePermissionsResponse struct {
 func BuildPermissionResponse(perm *auth.ServiceAccountPermission) PermissionResponse {
 	return PermissionResponse{
 		ID:         perm.ID.String(),
-		Provider:   perm.Provider,
-		Account:    perm.Account,
+		Scope:      perm.Scope,
 		Permission: perm.Permission,
 		CreatedAt:  perm.CreatedAt.Format("2006-01-02T15:04:05Z07:00"),
 	}

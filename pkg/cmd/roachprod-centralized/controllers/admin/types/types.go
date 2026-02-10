@@ -207,8 +207,7 @@ func (dto *InputListTokensDTO) ToServiceInputListTokensDTO() authtypes.InputList
 type GroupPermissionResponse struct {
 	ID         string `json:"id"`
 	GroupName  string `json:"group_name"`
-	Provider   string `json:"provider"`
-	Account    string `json:"account"`
+	Scope      string `json:"scope"`
 	Permission string `json:"permission"`
 	CreatedAt  string `json:"created_at"`
 	UpdatedAt  string `json:"updated_at"`
@@ -223,16 +222,14 @@ type GroupPermissionsListResponse struct {
 // CreateGroupPermissionRequest is the request body for creating a group permission.
 type CreateGroupPermissionRequest struct {
 	GroupName  string `json:"group_name" binding:"required"`
-	Provider   string `json:"provider" binding:"required"`
-	Account    string `json:"account" binding:"required"`
+	Scope      string `json:"scope" binding:"required"`
 	Permission string `json:"permission" binding:"required"`
 }
 
 // UpdateGroupPermissionRequest is the request body for updating a group permission.
 type UpdateGroupPermissionRequest struct {
 	GroupName  string `json:"group_name"`
-	Provider   string `json:"provider"`
-	Account    string `json:"account"`
+	Scope      string `json:"scope"`
 	Permission string `json:"permission"`
 }
 
@@ -256,8 +253,7 @@ func BuildGroupPermissionResponse(permission *authmodels.GroupPermission) GroupP
 	return GroupPermissionResponse{
 		ID:         permission.ID.String(),
 		GroupName:  permission.GroupName,
-		Provider:   permission.Provider,
-		Account:    permission.Account,
+		Scope:      permission.Scope,
 		Permission: permission.Permission,
 		CreatedAt:  permission.CreatedAt.Format("2006-01-02T15:04:05Z07:00"),
 		UpdatedAt:  permission.UpdatedAt.Format("2006-01-02T15:04:05Z07:00"),
@@ -296,8 +292,7 @@ func BuildReplaceGroupPermissionsResponse() ReplaceGroupPermissionsResponse {
 // for the group permissions list controller.
 type InputListGroupPermissionsDTO struct {
 	GroupName  stripe.FilterValue[string] `stripe:"group_name" validate:"omitempty,max=255"`
-	Provider   stripe.FilterValue[string] `stripe:"provider" validate:"omitempty,max=50"`
-	Account    stripe.FilterValue[string] `stripe:"account" validate:"omitempty,max=100"`
+	Scope      stripe.FilterValue[string] `stripe:"scope" validate:"omitempty,max=255"`
 	Permission stripe.FilterValue[string] `stripe:"permission" validate:"omitempty,max=100"`
 }
 

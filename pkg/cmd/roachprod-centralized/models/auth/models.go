@@ -95,8 +95,7 @@ type GroupMember struct {
 type GroupPermission struct {
 	ID         uuid.UUID `json:"id" db:"id"`
 	GroupName  string    `json:"group_name" db:"group_name" binding:"required"`
-	Provider   string    `json:"provider" db:"provider" binding:"required"`
-	Account    string    `json:"account" db:"account" binding:"required"`
+	Scope      string    `json:"scope" db:"scope" binding:"required"`
 	Permission string    `json:"permission" db:"permission" binding:"required"`
 	CreatedAt  time.Time `json:"created_at" db:"created_at"`
 	UpdatedAt  time.Time `json:"updated_at" db:"updated_at"`
@@ -106,8 +105,7 @@ type GroupPermission struct {
 type UserPermission struct {
 	ID         uuid.UUID `json:"id" db:"id"`
 	UserID     uuid.UUID `json:"user_id" db:"user_id" binding:"required"`
-	Provider   string    `json:"provider" db:"provider" binding:"required"`
-	Account    string    `json:"account" db:"account" binding:"required"`
+	Scope      string    `json:"scope" db:"scope" binding:"required"`
 	Permission string    `json:"permission" db:"permission" binding:"required"`
 	CreatedAt  time.Time `json:"created_at" db:"created_at"`
 	UpdatedAt  time.Time `json:"updated_at" db:"updated_at"`
@@ -128,32 +126,25 @@ type ServiceAccountOrigin struct {
 type ServiceAccountPermission struct {
 	ID               uuid.UUID `json:"id" db:"id"`
 	ServiceAccountID uuid.UUID `json:"service_account_id" db:"service_account_id" binding:"required"`
-	Provider         string    `json:"provider" db:"provider" binding:"required"`
+	Scope            string    `json:"scope" db:"scope" binding:"required"`
 	Permission       string    `json:"permission" db:"permission" binding:"required"`
-	Account          string    `json:"account,omitempty" db:"account"`
 	CreatedAt        time.Time `json:"created_at" db:"created_at"`
 }
 
-// Permission represents a permission grant with optional provider/account scope.
+// Permission represents a permission grant with a scope.
 // Both UserPermission and ServiceAccountPermission implement this interface,
 // allowing unified permission checking logic in the auth package.
 type Permission interface {
-	GetProvider() string
-	GetAccount() string
+	GetScope() string
 	GetPermission() string
 }
 
-// Ensure UserPermission implements Permission interface
-func (p *UserPermission) GetProvider() string   { return p.Provider }
-func (p *UserPermission) GetAccount() string    { return p.Account }
+// Compile-time interface verification.
+var _ Permission = (*UserPermission)(nil)
+var _ Permission = (*ServiceAccountPermission)(nil)
+
+func (p *UserPermission) GetScope() string      { return p.Scope }
 func (p *UserPermission) GetPermission() string { return p.Permission }
 
-// Ensure ServiceAccountPermission implements Permission interface
-func (p *ServiceAccountPermission) GetProvider() string { return p.Provider }
-func (p *ServiceAccountPermission) GetAccount() string {
-	if p.Account == "" {
-		return "*" // Default to wildcard if not specified
-	}
-	return p.Account
-}
+func (p *ServiceAccountPermission) GetScope() string      { return p.Scope }
 func (p *ServiceAccountPermission) GetPermission() string { return p.Permission }

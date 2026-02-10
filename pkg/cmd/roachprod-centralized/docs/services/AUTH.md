@@ -222,7 +222,7 @@ curl -X POST /api/v1/service-accounts \
 
 # Then grant explicit permissions
 curl -X POST /api/v1/service-accounts/:id/permissions \
-  -d '{"provider": "gcp", "account": "my-project", "permission": "clusters:create"}'
+  -d '{"scope": "gcp-my-project", "permission": "clusters:create"}'
 ```
 
 **Permission resolution:**
@@ -420,8 +420,8 @@ clusters:view:own
 // Simple check (any scope)
 if principal.HasPermission("clusters:create") { ... }
 
-// Scoped check (specific provider/account)
-if principal.HasPermissionScoped("clusters:create", "gcp", "my-project") { ... }
+// Scoped check (specific scope/environment)
+if principal.HasPermissionScoped("clusters:create", "gcp-my-project") { ... }
 
 // Any of multiple permissions (OR)
 if principal.HasAnyPermission([]string{"clusters:view:all", "clusters:view:own"}) { ... }
@@ -475,8 +475,8 @@ Groups are mapped to permissions via `group_permissions` table:
 
 ```sql
 -- Okta group "Division-Engineering" gets clusters:create for all GCP projects
-INSERT INTO group_permissions (group_name, provider, account, permission)
-VALUES ('Division-Engineering', 'gcp', '*', 'clusters:create');
+INSERT INTO group_permissions (group_name, scope, permission)
+VALUES ('Division-Engineering', 'gcp-engineering', 'clusters:create');
 ```
 
 The `group_name` column matches the `display_name` of groups in the `groups` table.

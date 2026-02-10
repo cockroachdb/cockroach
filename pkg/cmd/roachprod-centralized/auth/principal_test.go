@@ -26,8 +26,7 @@ func TestPrincipal_HasPermission(t *testing.T) {
 			principal: &Principal{
 				Permissions: []authmodels.Permission{
 					&authmodels.UserPermission{
-						Provider:   "gcp",
-						Account:    "project1",
+						Scope:      "gcp-engineering",
 						Permission: "clusters:create",
 					},
 				},
@@ -40,8 +39,7 @@ func TestPrincipal_HasPermission(t *testing.T) {
 			principal: &Principal{
 				Permissions: []authmodels.Permission{
 					&authmodels.UserPermission{
-						Provider:   "*",
-						Account:    "*",
+						Scope:      "*",
 						Permission: "admin",
 					},
 				},
@@ -54,8 +52,7 @@ func TestPrincipal_HasPermission(t *testing.T) {
 			principal: &Principal{
 				Permissions: []authmodels.Permission{
 					&authmodels.UserPermission{
-						Provider:   "gcp",
-						Account:    "project1",
+						Scope:      "gcp-engineering",
 						Permission: "clusters:create",
 					},
 				},
@@ -68,8 +65,7 @@ func TestPrincipal_HasPermission(t *testing.T) {
 			principal: &Principal{
 				Permissions: []authmodels.Permission{
 					&authmodels.ServiceAccountPermission{
-						Provider:   "aws",
-						Account:    "account123",
+						Scope:      "aws-staging",
 						Permission: "scim:manage-user",
 					},
 				},
@@ -90,8 +86,7 @@ func TestPrincipal_HasPermission(t *testing.T) {
 			principal: &Principal{
 				Permissions: []authmodels.Permission{
 					&authmodels.UserPermission{
-						Provider:   "gcp",
-						Account:    "project1",
+						Scope:      "gcp-engineering",
 						Permission: "tokens:mine:view",
 					},
 				},
@@ -115,136 +110,77 @@ func TestPrincipal_HasPermissionScoped(t *testing.T) {
 		name       string
 		principal  *Principal
 		permission string
-		provider   string
-		account    string
+		scope      string
 		expected   bool
 	}{
 		{
-			name: "exact match - all fields",
+			name: "exact match",
 			principal: &Principal{
 				Permissions: []authmodels.Permission{
 					&authmodels.UserPermission{
-						Provider:   "gcp",
-						Account:    "project1",
+						Scope:      "gcp-engineering",
 						Permission: "clusters:create",
 					},
 				},
 			},
 			permission: "clusters:create",
-			provider:   "gcp",
-			account:    "project1",
+			scope:      "gcp-engineering",
 			expected:   true,
 		},
 		{
-			name: "wildcard provider in principal",
+			name: "wildcard scope in principal",
 			principal: &Principal{
 				Permissions: []authmodels.Permission{
 					&authmodels.UserPermission{
-						Provider:   "*",
-						Account:    "project1",
+						Scope:      "*",
 						Permission: "clusters:create",
 					},
 				},
 			},
 			permission: "clusters:create",
-			provider:   "gcp",
-			account:    "project1",
+			scope:      "gcp-engineering",
 			expected:   true,
 		},
 		{
-			name: "wildcard account in principal",
+			name: "wildcard scope in request",
 			principal: &Principal{
 				Permissions: []authmodels.Permission{
 					&authmodels.UserPermission{
-						Provider:   "gcp",
-						Account:    "*",
+						Scope:      "gcp-engineering",
 						Permission: "clusters:create",
 					},
 				},
 			},
 			permission: "clusters:create",
-			provider:   "gcp",
-			account:    "project1",
+			scope:      "*",
 			expected:   true,
 		},
 		{
-			name: "wildcard provider and account in principal",
+			name: "wildcard scope in both",
 			principal: &Principal{
 				Permissions: []authmodels.Permission{
 					&authmodels.UserPermission{
-						Provider:   "*",
-						Account:    "*",
+						Scope:      "*",
 						Permission: "admin",
 					},
 				},
 			},
 			permission: "admin",
-			provider:   "gcp",
-			account:    "project1",
+			scope:      "*",
 			expected:   true,
 		},
 		{
-			name: "wildcard provider in request",
+			name: "scope mismatch",
 			principal: &Principal{
 				Permissions: []authmodels.Permission{
 					&authmodels.UserPermission{
-						Provider:   "gcp",
-						Account:    "project1",
+						Scope:      "gcp-engineering",
 						Permission: "clusters:create",
 					},
 				},
 			},
 			permission: "clusters:create",
-			provider:   "*",
-			account:    "project1",
-			expected:   true,
-		},
-		{
-			name: "wildcard account in request",
-			principal: &Principal{
-				Permissions: []authmodels.Permission{
-					&authmodels.UserPermission{
-						Provider:   "gcp",
-						Account:    "project1",
-						Permission: "clusters:create",
-					},
-				},
-			},
-			permission: "clusters:create",
-			provider:   "gcp",
-			account:    "*",
-			expected:   true,
-		},
-		{
-			name: "provider mismatch",
-			principal: &Principal{
-				Permissions: []authmodels.Permission{
-					&authmodels.UserPermission{
-						Provider:   "gcp",
-						Account:    "project1",
-						Permission: "clusters:create",
-					},
-				},
-			},
-			permission: "clusters:create",
-			provider:   "aws",
-			account:    "project1",
-			expected:   false,
-		},
-		{
-			name: "account mismatch",
-			principal: &Principal{
-				Permissions: []authmodels.Permission{
-					&authmodels.UserPermission{
-						Provider:   "gcp",
-						Account:    "project1",
-						Permission: "clusters:create",
-					},
-				},
-			},
-			permission: "clusters:create",
-			provider:   "gcp",
-			account:    "project2",
+			scope:      "aws-staging",
 			expected:   false,
 		},
 		{
@@ -252,31 +188,27 @@ func TestPrincipal_HasPermissionScoped(t *testing.T) {
 			principal: &Principal{
 				Permissions: []authmodels.Permission{
 					&authmodels.UserPermission{
-						Provider:   "gcp",
-						Account:    "project1",
+						Scope:      "gcp-engineering",
 						Permission: "clusters:create",
 					},
 				},
 			},
 			permission: "clusters:delete",
-			provider:   "gcp",
-			account:    "project1",
+			scope:      "gcp-engineering",
 			expected:   false,
 		},
 		{
-			name: "service account with default wildcard account",
+			name: "service account with explicit scope",
 			principal: &Principal{
 				Permissions: []authmodels.Permission{
 					&authmodels.ServiceAccountPermission{
-						Provider:   "gcp",
-						Account:    "", // Empty account defaults to "*"
+						Scope:      "gcp-engineering",
 						Permission: "clusters:create",
 					},
 				},
 			},
 			permission: "clusters:create",
-			provider:   "gcp",
-			account:    "any-account",
+			scope:      "gcp-engineering",
 			expected:   true,
 		},
 		{
@@ -284,25 +216,21 @@ func TestPrincipal_HasPermissionScoped(t *testing.T) {
 			principal: &Principal{
 				Permissions: []authmodels.Permission{
 					&authmodels.UserPermission{
-						Provider:   "aws",
-						Account:    "account1",
+						Scope:      "aws-staging",
 						Permission: "clusters:read",
 					},
 					&authmodels.UserPermission{
-						Provider:   "gcp",
-						Account:    "project1",
+						Scope:      "gcp-engineering",
 						Permission: "clusters:create",
 					},
 					&authmodels.UserPermission{
-						Provider:   "azure",
-						Account:    "subscription1",
+						Scope:      "azure-prod",
 						Permission: "clusters:delete",
 					},
 				},
 			},
 			permission: "clusters:create",
-			provider:   "gcp",
-			account:    "project1",
+			scope:      "gcp-engineering",
 			expected:   true,
 		},
 		{
@@ -310,22 +238,20 @@ func TestPrincipal_HasPermissionScoped(t *testing.T) {
 			principal: &Principal{
 				Permissions: []authmodels.Permission{
 					&authmodels.UserPermission{
-						Provider:   "gcp",
-						Account:    "project1",
+						Scope:      "gcp-engineering",
 						Permission: "tokens:mine:view",
 					},
 				},
 			},
 			permission: "tokens:mine:view",
-			provider:   "gcp",
-			account:    "project1",
+			scope:      "gcp-engineering",
 			expected:   true,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := tt.principal.HasPermissionScoped(tt.permission, tt.provider, tt.account)
+			result := tt.principal.HasPermissionScoped(tt.permission, tt.scope)
 			assert.Equal(t, tt.expected, result)
 		})
 	}
@@ -344,8 +270,7 @@ func TestPrincipal_HasAnyPermission(t *testing.T) {
 			principal: &Principal{
 				Permissions: []authmodels.Permission{
 					&authmodels.UserPermission{
-						Provider:   "gcp",
-						Account:    "project1",
+						Scope:      "gcp-engineering",
 						Permission: "clusters:create",
 					},
 				},
@@ -358,13 +283,11 @@ func TestPrincipal_HasAnyPermission(t *testing.T) {
 			principal: &Principal{
 				Permissions: []authmodels.Permission{
 					&authmodels.UserPermission{
-						Provider:   "gcp",
-						Account:    "project1",
+						Scope:      "gcp-engineering",
 						Permission: "clusters:create",
 					},
 					&authmodels.UserPermission{
-						Provider:   "gcp",
-						Account:    "project1",
+						Scope:      "gcp-engineering",
 						Permission: "clusters:delete",
 					},
 				},
@@ -377,8 +300,7 @@ func TestPrincipal_HasAnyPermission(t *testing.T) {
 			principal: &Principal{
 				Permissions: []authmodels.Permission{
 					&authmodels.UserPermission{
-						Provider:   "gcp",
-						Account:    "project1",
+						Scope:      "gcp-engineering",
 						Permission: "clusters:read",
 					},
 				},
@@ -391,8 +313,7 @@ func TestPrincipal_HasAnyPermission(t *testing.T) {
 			principal: &Principal{
 				Permissions: []authmodels.Permission{
 					&authmodels.UserPermission{
-						Provider:   "gcp",
-						Account:    "project1",
+						Scope:      "gcp-engineering",
 						Permission: "admin",
 					},
 				},
@@ -423,18 +344,15 @@ func TestPrincipal_HasAllPermissions(t *testing.T) {
 			principal: &Principal{
 				Permissions: []authmodels.Permission{
 					&authmodels.UserPermission{
-						Provider:   "gcp",
-						Account:    "project1",
+						Scope:      "gcp-engineering",
 						Permission: "clusters:create",
 					},
 					&authmodels.UserPermission{
-						Provider:   "gcp",
-						Account:    "project1",
+						Scope:      "gcp-engineering",
 						Permission: "clusters:delete",
 					},
 					&authmodels.UserPermission{
-						Provider:   "gcp",
-						Account:    "project1",
+						Scope:      "gcp-engineering",
 						Permission: "clusters:read",
 					},
 				},
@@ -447,8 +365,7 @@ func TestPrincipal_HasAllPermissions(t *testing.T) {
 			principal: &Principal{
 				Permissions: []authmodels.Permission{
 					&authmodels.UserPermission{
-						Provider:   "gcp",
-						Account:    "project1",
+						Scope:      "gcp-engineering",
 						Permission: "clusters:create",
 					},
 				},
@@ -461,8 +378,7 @@ func TestPrincipal_HasAllPermissions(t *testing.T) {
 			principal: &Principal{
 				Permissions: []authmodels.Permission{
 					&authmodels.UserPermission{
-						Provider:   "gcp",
-						Account:    "project1",
+						Scope:      "gcp-engineering",
 						Permission: "clusters:read",
 					},
 				},
@@ -475,8 +391,7 @@ func TestPrincipal_HasAllPermissions(t *testing.T) {
 			principal: &Principal{
 				Permissions: []authmodels.Permission{
 					&authmodels.UserPermission{
-						Provider:   "gcp",
-						Account:    "project1",
+						Scope:      "gcp-engineering",
 						Permission: "admin",
 					},
 				},
@@ -500,8 +415,7 @@ func TestPrincipal_HasPermission_Wildcard(t *testing.T) {
 	principal := &Principal{
 		Permissions: []authmodels.Permission{
 			&authmodels.UserPermission{
-				Provider:   "*",
-				Account:    "*",
+				Scope:      "*",
 				Permission: "*", // Wildcard permission
 			},
 		},
@@ -519,10 +433,10 @@ func TestPrincipal_HasPermission_Wildcard(t *testing.T) {
 
 	t.Run("wildcard grants any HasPermissionScoped check", func(t *testing.T) {
 		// Wildcard should grant access to any scoped permission check
-		assert.True(t, principal.HasPermissionScoped("clusters:create", "gcp", "project1"))
-		assert.True(t, principal.HasPermissionScoped("clusters:delete", "aws", "account123"))
-		assert.True(t, principal.HasPermissionScoped("admin", "azure", "subscription1"))
-		assert.True(t, principal.HasPermissionScoped("any:permission", "any-provider", "any-account"))
+		assert.True(t, principal.HasPermissionScoped("clusters:create", "gcp-engineering"))
+		assert.True(t, principal.HasPermissionScoped("clusters:delete", "aws-staging"))
+		assert.True(t, principal.HasPermissionScoped("admin", "azure-prod"))
+		assert.True(t, principal.HasPermissionScoped("any:permission", "any-scope"))
 	})
 
 	t.Run("wildcard grants HasAnyPermission check", func(t *testing.T) {
@@ -544,15 +458,13 @@ func TestPermission_Interface(t *testing.T) {
 		userPerm := &authmodels.UserPermission{
 			ID:         uuid.MakeV4(),
 			UserID:     uuid.MakeV4(),
-			Provider:   "gcp",
-			Account:    "project1",
+			Scope:      "gcp-engineering",
 			Permission: "clusters:create",
 		}
 
 		var perm authmodels.Permission = userPerm
 
-		assert.Equal(t, "gcp", perm.GetProvider())
-		assert.Equal(t, "project1", perm.GetAccount())
+		assert.Equal(t, "gcp-engineering", perm.GetScope())
 		assert.Equal(t, "clusters:create", perm.GetPermission())
 	})
 
@@ -560,27 +472,13 @@ func TestPermission_Interface(t *testing.T) {
 		saPerm := &authmodels.ServiceAccountPermission{
 			ID:               uuid.MakeV4(),
 			ServiceAccountID: uuid.MakeV4(),
-			Provider:         "aws",
-			Account:          "account123",
+			Scope:            "aws-staging",
 			Permission:       "scim:manage-user",
 		}
 
 		var perm authmodels.Permission = saPerm
 
-		assert.Equal(t, "aws", perm.GetProvider())
-		assert.Equal(t, "account123", perm.GetAccount())
+		assert.Equal(t, "aws-staging", perm.GetScope())
 		assert.Equal(t, "scim:manage-user", perm.GetPermission())
-	})
-
-	t.Run("ServiceAccountPermission with empty account defaults to wildcard", func(t *testing.T) {
-		saPerm := &authmodels.ServiceAccountPermission{
-			ID:               uuid.MakeV4(),
-			ServiceAccountID: uuid.MakeV4(),
-			Provider:         "gcp",
-			Account:          "", // Empty account
-			Permission:       "clusters:create",
-		}
-
-		assert.Equal(t, "*", saPerm.GetAccount())
 	})
 }

@@ -295,8 +295,7 @@ func TestMemoryRepository_ServiceAccountPermissions(t *testing.T) {
 	perm := &auth.ServiceAccountPermission{
 		ID:               uuid.MakeV4(),
 		ServiceAccountID: saID,
-		Provider:         "gcp",
-		Account:          "project1",
+		Scope:            "gcp-project1",
 		Permission:       "clusters:create",
 	}
 	err := repo.AddServiceAccountPermission(ctx, l, perm)
@@ -493,8 +492,7 @@ func TestMemoryRepository_GetUserPermissionsFromGroups(t *testing.T) {
 	perm1 := &auth.GroupPermission{
 		ID:         uuid.MakeV4(),
 		GroupName:  "Engineering",
-		Provider:   "gcp",
-		Account:    "project1",
+		Scope:      "gcp-project1",
 		Permission: "clusters:create",
 	}
 	require.NoError(t, repo.CreateGroupPermission(ctx, l, perm1))
@@ -502,8 +500,7 @@ func TestMemoryRepository_GetUserPermissionsFromGroups(t *testing.T) {
 	perm2 := &auth.GroupPermission{
 		ID:         uuid.MakeV4(),
 		GroupName:  "Engineering",
-		Provider:   "gcp",
-		Account:    "project1",
+		Scope:      "gcp-project1",
 		Permission: "clusters:delete",
 	}
 	require.NoError(t, repo.CreateGroupPermission(ctx, l, perm2))
@@ -523,8 +520,7 @@ func TestMemoryRepository_GroupPermissionsCRUD(t *testing.T) {
 	perm := &auth.GroupPermission{
 		ID:         uuid.MakeV4(),
 		GroupName:  "admin",
-		Provider:   "*",
-		Account:    "*",
+		Scope:      "*",
 		Permission: "*",
 	}
 

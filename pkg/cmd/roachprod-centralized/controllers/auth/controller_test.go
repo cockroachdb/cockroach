@@ -51,8 +51,7 @@ func TestWhoAmI_BearerTokenUser(t *testing.T) {
 		},
 		Permissions: []authmodels.Permission{
 			&authmodels.UserPermission{
-				Provider:   "gcp",
-				Account:    "project1",
+				Scope:      "gcp-engineering",
 				Permission: clusterstypes.PermissionCreate,
 			},
 		},
@@ -100,8 +99,7 @@ func TestWhoAmI_BearerTokenUser(t *testing.T) {
 
 	// Verify permissions
 	require.Len(t, response.Permissions, 1)
-	assert.Equal(t, "gcp", response.Permissions[0].Provider)
-	assert.Equal(t, "project1", response.Permissions[0].Account)
+	assert.Equal(t, "gcp-engineering", response.Permissions[0].Scope)
 	assert.Equal(t, clusterstypes.PermissionCreate, response.Permissions[0].Permission)
 }
 
@@ -131,8 +129,7 @@ func TestWhoAmI_BearerTokenServiceAccount(t *testing.T) {
 		},
 		Permissions: []authmodels.Permission{
 			&authmodels.ServiceAccountPermission{
-				Provider:   "gcp",
-				Account:    "project1",
+				Scope:      "gcp-engineering",
 				Permission: clusterstypes.PermissionViewAll,
 			},
 		},
@@ -196,8 +193,7 @@ func TestWhoAmI_JWTToken(t *testing.T) {
 		},
 		Permissions: []authmodels.Permission{
 			&authmodels.UserPermission{
-				Provider:   "*",
-				Account:    "*",
+				Scope:      "*",
 				Permission: "*",
 			},
 		},
@@ -266,8 +262,7 @@ func TestWhoAmI_DisabledAuth(t *testing.T) {
 		},
 		Permissions: []authmodels.Permission{
 			&authmodels.UserPermission{
-				Provider:   "*",
-				Account:    "*",
+				Scope:      "*",
 				Permission: "*",
 			},
 		},
@@ -358,23 +353,19 @@ func TestWhoAmI_MultiplePermissions(t *testing.T) {
 		},
 		Permissions: []authmodels.Permission{
 			&authmodels.UserPermission{
-				Provider:   "gcp",
-				Account:    "project1",
+				Scope:      "gcp-engineering",
 				Permission: clusterstypes.PermissionViewAll,
 			},
 			&authmodels.UserPermission{
-				Provider:   "gcp",
-				Account:    "project1",
+				Scope:      "gcp-engineering",
 				Permission: clusterstypes.PermissionCreate,
 			},
 			&authmodels.UserPermission{
-				Provider:   "gcp",
-				Account:    "project2",
+				Scope:      "gcp-staging",
 				Permission: clusterstypes.PermissionViewOwn,
 			},
 			&authmodels.UserPermission{
-				Provider:   "aws",
-				Account:    "account123",
+				Scope:      "aws-production",
 				Permission: clusterstypes.PermissionUpdateAll,
 			},
 		},
@@ -398,24 +389,65 @@ func TestWhoAmI_MultiplePermissions(t *testing.T) {
 	require.Len(t, response.Permissions, 4)
 
 	// Verify first permission
-	assert.Equal(t, "gcp", response.Permissions[0].Provider)
-	assert.Equal(t, "project1", response.Permissions[0].Account)
+	assert.Equal(t, "gcp-engineering", response.Permissions[0].Scope)
 	assert.Equal(t, clusterstypes.PermissionViewAll, response.Permissions[0].Permission)
 
 	// Verify second permission
-	assert.Equal(t, "gcp", response.Permissions[1].Provider)
-	assert.Equal(t, "project1", response.Permissions[1].Account)
+	assert.Equal(t, "gcp-engineering", response.Permissions[1].Scope)
 	assert.Equal(t, clusterstypes.PermissionCreate, response.Permissions[1].Permission)
 
 	// Verify third permission
-	assert.Equal(t, "gcp", response.Permissions[2].Provider)
-	assert.Equal(t, "project2", response.Permissions[2].Account)
+	assert.Equal(t, "gcp-staging", response.Permissions[2].Scope)
 	assert.Equal(t, clusterstypes.PermissionViewOwn, response.Permissions[2].Permission)
 
-	// Verify fourth permission (wildcard on AWS)
-	assert.Equal(t, "aws", response.Permissions[3].Provider)
-	assert.Equal(t, "account123", response.Permissions[3].Account)
+	// Verify fourth permission
+	assert.Equal(t, "aws-production", response.Permissions[3].Scope)
 	assert.Equal(t, clusterstypes.PermissionUpdateAll, response.Permissions[3].Permission)
+}
+
+// TestWhoAmI_EmptyPermissions tests that an empty permissions slice serializes as
+// [] in the JSON response, not null.
+func TestWhoAmI_EmptyPermissions(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	tokenID := uuid.MakeV4()
+	userID := uuid.MakeV4()
+	createdAt := timeutil.Now().Add(-1 * time.Hour)
+	expiresAt := timeutil.Now().Add(24 * time.Hour)
+
+	principal := &auth.Principal{
+		Token: auth.TokenInfo{
+			ID:        tokenID,
+			Type:      authmodels.TokenTypeUser,
+			CreatedAt: &createdAt,
+			ExpiresAt: &expiresAt,
+		},
+		UserID: &userID,
+		User: &authmodels.User{
+			ID:       userID,
+			Email:    "noperm@example.com",
+			FullName: "No Permissions User",
+			Active:   true,
+		},
+		Permissions: []authmodels.Permission{},
+	}
+
+	mockService := &authmock.IService{}
+	ctrl := NewController(mockService)
+	c, w := createTestGinContext(principal)
+
+	ctrl.WhoAmI(c)
+
+	assert.Equal(t, http.StatusOK, w.Code)
+
+	response := parseWhoAmIResponse(t, w.Body.Bytes())
+	require.NotNil(t, response.Permissions)
+	assert.Empty(t, response.Permissions)
+
+	// Verify JSON contains "permissions":[] not "permissions":null
+	rawJSON := w.Body.String()
+	assert.Contains(t, rawJSON, `"permissions":[]`)
+	assert.NotContains(t, rawJSON, `"permissions":null`)
 }
 
 // Helper functions

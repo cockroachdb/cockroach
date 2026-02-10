@@ -59,7 +59,7 @@ func TestService_AuthenticateToken_ValidUserToken(t *testing.T) {
 
 	mockRepo.On("GetUserPermissionsFromGroups", mock.Anything, mock.Anything, userID).
 		Return([]*authmodels.GroupPermission{
-			{ID: uuid.MakeV4(), GroupName: "devs", Provider: "gcp", Account: "project1", Permission: "clusters:create"},
+			{ID: uuid.MakeV4(), GroupName: "devs", Scope: "gcp-engineering", Permission: "clusters:create"},
 		}, nil)
 
 	// Execute
@@ -76,8 +76,7 @@ func TestService_AuthenticateToken_ValidUserToken(t *testing.T) {
 	assert.Equal(t, "test@example.com", principal.User.Email)
 	assert.Equal(t, "Test User", principal.User.FullName)
 	assert.Len(t, principal.Permissions, 1)
-	assert.Equal(t, "gcp", principal.Permissions[0].GetProvider())
-	assert.Equal(t, "project1", principal.Permissions[0].GetAccount())
+	assert.Equal(t, "gcp-engineering", principal.Permissions[0].GetScope())
 	assert.Equal(t, "clusters:create", principal.Permissions[0].GetPermission())
 	mockRepo.AssertExpectations(t)
 }
@@ -167,7 +166,7 @@ func TestService_AuthenticateToken_ValidServiceAccountToken(t *testing.T) {
 		Return(&authmodels.ServiceAccount{ID: saID, Name: "ci-bot", Description: "CI automation", Enabled: true}, nil)
 	mockRepo.On("ListServiceAccountPermissions", mock.Anything, mock.Anything, saID, mock.Anything).
 		Return([]*authmodels.ServiceAccountPermission{
-			{ID: uuid.MakeV4(), ServiceAccountID: saID, Provider: "gcp", Account: "*", Permission: "clusters:create"},
+			{ID: uuid.MakeV4(), ServiceAccountID: saID, Scope: "*", Permission: "clusters:create"},
 		}, 0, nil)
 
 	principal, err := service.AuthenticateToken(context.Background(), l, "sa-token", "127.0.0.1")
@@ -270,9 +269,9 @@ func TestService_AuthenticateToken_UserWithMultiplePermissions(t *testing.T) {
 		Return(&authmodels.User{ID: userID, Email: "poweruser@example.com", Active: true}, nil)
 	mockRepo.On("GetUserPermissionsFromGroups", mock.Anything, mock.Anything, userID).
 		Return([]*authmodels.GroupPermission{
-			{ID: uuid.MakeV4(), Provider: "gcp", Account: "project1", Permission: "clusters:create"},
-			{ID: uuid.MakeV4(), Provider: "gcp", Account: "project1", Permission: "clusters:delete"},
-			{ID: uuid.MakeV4(), Provider: "aws", Account: "account1", Permission: "clusters:view"},
+			{ID: uuid.MakeV4(), Scope: "gcp-engineering", Permission: "clusters:create"},
+			{ID: uuid.MakeV4(), Scope: "gcp-engineering", Permission: "clusters:delete"},
+			{ID: uuid.MakeV4(), Scope: "aws-staging", Permission: "clusters:view"},
 		}, nil)
 
 	principal, err := service.AuthenticateToken(context.Background(), l, "token", "127.0.0.1")

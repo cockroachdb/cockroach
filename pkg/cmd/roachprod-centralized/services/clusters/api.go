@@ -8,7 +8,6 @@ package clusters
 import (
 	"context"
 	"log/slog"
-	"strings"
 
 	pkgauth "github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/auth"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/models/tasks"
@@ -51,7 +50,7 @@ func (s *Service) GetAllClusters(
 	// Filter clusters based on view permissions.
 	filteredClusters := make(cloudcluster.Clusters, 0)
 	for name, cluster := range c {
-		if !checkClusterAccessPermission(principal, cluster, types.PermissionView) {
+		if !checkClusterAccessPermission(principal, cluster, types.PermissionView, s.providerEnvironments) {
 			continue
 		}
 
@@ -78,7 +77,7 @@ func (s *Service) GetCluster(
 	}
 
 	// Check view permissions
-	if !checkClusterAccessPermission(principal, &c, types.PermissionView) {
+	if !checkClusterAccessPermission(principal, &c, types.PermissionView, s.providerEnvironments) {
 		l.Warn("principal not authorized to access cluster",
 			slog.String("principal_email", func() string {
 				if principal.User != nil {
@@ -103,7 +102,7 @@ func (s *Service) RegisterCluster(
 ) (*cloudcluster.Cluster, error) {
 
 	// Check create permissions
-	if !checkClusterAccessPermission(principal, &input.Cluster, types.PermissionCreate) {
+	if !checkClusterAccessPermission(principal, &input.Cluster, types.PermissionCreate, s.providerEnvironments) {
 		return nil, types.ErrForbidden
 	}
 
@@ -191,7 +190,7 @@ func (s *Service) RegisterClusterUpdate(
 ) (*cloudcluster.Cluster, error) {
 
 	// Check update permissions, don't reveal existence otherwise
-	if !checkClusterAccessPermission(principal, &input.Cluster, types.PermissionUpdate) {
+	if !checkClusterAccessPermission(principal, &input.Cluster, types.PermissionUpdate, s.providerEnvironments) {
 		return nil, types.ErrClusterNotFound
 	}
 
@@ -276,7 +275,7 @@ func (s *Service) RegisterClusterDelete(
 	}
 
 	// Check delete permissions, don't reveal existence otherwise
-	if !checkClusterAccessPermission(principal, &c, types.PermissionDelete) {
+	if !checkClusterAccessPermission(principal, &c, types.PermissionDelete, s.providerEnvironments) {
 		return types.ErrClusterNotFound
 	}
 
@@ -333,42 +332,22 @@ func (s *Service) RegisterClusterDelete(
 	return nil
 }
 
-// extractProviderAccounts parses CloudProviders strings into provider:account pairs
-func extractProviderAccounts(cloudProviders []string) map[string]map[string]struct{} {
-	result := make(map[string]map[string]struct{})
-	for _, providerAccount := range cloudProviders {
-		elems := strings.SplitN(providerAccount, "-", 2)
-		if len(elems) != 2 {
-			continue
-		}
-
-		provider := elems[0]
-		account := elems[1]
-
-		if _, ok := result[provider]; !ok {
-			result[provider] = make(map[string]struct{})
-		}
-		result[provider][account] = struct{}{}
-	}
-	return result
-}
-
-// checkClusterAccessPermission is a helper function that verifies the principal
-// has the required permission for all provider:account pairs in the cluster.
-// It handles both "all" and "own" variants of the permission.
+// checkClusterAccessPermission verifies the principal has the required
+// permission for all cloud providers in the cluster. Each providerID in
+// cluster.CloudProviders is resolved to an environment name via the
+// providerEnvironments map; this environment name is then used as the
+// permission scope when calling HasPermissionScoped. Access is denied if
+// a providerID has no mapped environment.
 func checkClusterAccessPermission(
 	principal *pkgauth.Principal,
 	cluster *cloudcluster.Cluster,
 	requiredPermission string, // e.g., "clusters:view", "clusters:delete"
+	providerEnvironments map[string]string,
 ) bool {
-	providerAccounts := extractProviderAccounts(cluster.CloudProviders)
-
-	// Check ownership. for users compare email, for service accounts compare name
-	// For users, check ownership by email
+	// Check ownership. For users compare email, for service accounts
+	// compare name or delegated user email.
 	isUserOwner := principal.User != nil && principal.User.Email == cluster.User
 
-	// For service accounts, check ownership by service account name
-	// or delegated user email if the service account is delegated.
 	isSAOwner := false
 	if principal.ServiceAccount != nil {
 		if principal.ServiceAccount.Name == cluster.User {
@@ -382,18 +361,22 @@ func checkClusterAccessPermission(
 	allClustersPermission := requiredPermission + ":all"
 	ownClustersPermission := requiredPermission + ":own"
 
-	for provider, accounts := range providerAccounts {
-		for account := range accounts {
-			hasPermission := principal.HasPermissionScoped(allClustersPermission, provider, account)
+	for _, providerID := range cluster.CloudProviders {
+		env, ok := providerEnvironments[providerID]
+		if !ok {
+			// No environment mapping for this provider — deny access.
+			return false
+		}
 
-			// Check "own" variant if allowed and user is owner
-			if !hasPermission && isOwner {
-				hasPermission = principal.HasPermissionScoped(ownClustersPermission, provider, account)
-			}
+		hasPermission := principal.HasPermissionScoped(allClustersPermission, env)
 
-			if !hasPermission {
-				return false
-			}
+		// Check "own" variant if allowed and user is owner
+		if !hasPermission && isOwner {
+			hasPermission = principal.HasPermissionScoped(ownClustersPermission, env)
+		}
+
+		if !hasPermission {
+			return false
 		}
 	}
 

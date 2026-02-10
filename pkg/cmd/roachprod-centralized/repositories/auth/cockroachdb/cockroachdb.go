@@ -164,6 +164,9 @@ func (r *CRDBAuthRepo) ListUsers(
 		}
 		usersList = append(usersList, user)
 	}
+	if err := rows.Err(); err != nil {
+		return nil, 0, errors.Wrap(err, "error iterating users")
+	}
 	return usersList, totalCount, nil
 }
 
@@ -400,6 +403,9 @@ func (r *CRDBAuthRepo) ListServiceAccounts(
 		}
 		saList = append(saList, sa)
 	}
+	if err := rows.Err(); err != nil {
+		return nil, 0, errors.Wrap(err, "error iterating service accounts")
+	}
 	return saList, totalCount, nil
 }
 
@@ -587,6 +593,9 @@ func (r *CRDBAuthRepo) ListServiceAccountOrigins(
 
 		origins = append(origins, origin)
 	}
+	if err := rows.Err(); err != nil {
+		return nil, 0, errors.Wrap(err, "error iterating service account origins")
+	}
 
 	return origins, totalCount, nil
 }
@@ -719,6 +728,9 @@ func (r *CRDBAuthRepo) ListAllTokens(
 		}
 		tokens = append(tokens, token)
 	}
+	if err := rows.Err(); err != nil {
+		return nil, 0, errors.Wrap(err, "error iterating tokens")
+	}
 	return tokens, totalCount, nil
 }
 
@@ -817,17 +829,17 @@ func (r *CRDBAuthRepo) CleanupTokens(
 func (r *CRDBAuthRepo) GetUserPermissionsFromGroups(
 	ctx context.Context, l *logger.Logger, userID uuid.UUID,
 ) ([]*auth.GroupPermission, error) {
-	// Use DISTINCT ON to deduplicate by (provider, account, permission)
+	// Use DISTINCT ON to deduplicate by (scope, permission)
 	// This ensures a user gets each permission only once, even if granted by multiple groups
-	// New query: joins group_members → groups → group_permissions
+	// Joins group_members → groups → group_permissions
 	query := `
-		SELECT DISTINCT ON (gp.provider, gp.account, gp.permission)
-			gp.id, gp.group_name, gp.provider, gp.account, gp.permission, gp.created_at, gp.updated_at
+		SELECT DISTINCT ON (gp.scope, gp.permission)
+			gp.id, gp.group_name, gp.scope, gp.permission, gp.created_at, gp.updated_at
 		FROM group_members gm
 		JOIN groups g ON gm.group_id = g.id
 		JOIN group_permissions gp ON g.display_name = gp.group_name
 		WHERE gm.user_id = $1
-		ORDER BY gp.provider, gp.account, gp.permission, gp.created_at
+		ORDER BY gp.scope, gp.permission, gp.created_at
 	`
 	rows, err := r.db.QueryContext(ctx, query, userID.String())
 	if err != nil {
@@ -847,7 +859,7 @@ func (r *CRDBAuthRepo) ListServiceAccountPermissions(
 		reflect.TypeOf(auth.ServiceAccountPermission{}),
 	)
 	baseSelectQuery := `
-		SELECT id, service_account_id, provider, permission, account, created_at
+		SELECT id, service_account_id, scope, permission, created_at
 		FROM service_account_permissions
 	`
 	baseCountQuery := "SELECT count(*) FROM service_account_permissions"
@@ -856,9 +868,9 @@ func (r *CRDBAuthRepo) ListServiceAccountPermissions(
 	filterSet.AddFilter("ServiceAccountID", filtertypes.OpEqual, saID)
 	filterSet.Logic = filtertypes.LogicAnd
 
-	// Default sort by provider
+	// Default sort by scope
 	defaultSort := &filtertypes.SortParams{
-		SortBy:    "Provider",
+		SortBy:    "Scope",
 		SortOrder: filtertypes.SortAscending,
 	}
 
@@ -882,11 +894,10 @@ func (r *CRDBAuthRepo) ListServiceAccountPermissions(
 
 	var perms []*auth.ServiceAccountPermission
 	for rows.Next() {
-		var id, saIDStr, provider, permission string
-		var account gosql.NullString
+		var id, saIDStr, scope, permission string
 		var createdAt time.Time
 
-		if err := rows.Scan(&id, &saIDStr, &provider, &permission, &account, &createdAt); err != nil {
+		if err := rows.Scan(&id, &saIDStr, &scope, &permission, &createdAt); err != nil {
 			return nil, 0, errors.Wrap(err, "failed to scan service account permission")
 		}
 
@@ -899,18 +910,16 @@ func (r *CRDBAuthRepo) ListServiceAccountPermissions(
 			return nil, 0, errors.Wrap(err, "invalid service_account_id UUID in database")
 		}
 
-		p := &auth.ServiceAccountPermission{
+		perms = append(perms, &auth.ServiceAccountPermission{
 			ID:               permID,
 			ServiceAccountID: sid,
-			Provider:         provider,
+			Scope:            scope,
 			Permission:       permission,
 			CreatedAt:        createdAt,
-		}
-		if account.Valid {
-			p.Account = account.String
-		}
-
-		perms = append(perms, p)
+		})
+	}
+	if err := rows.Err(); err != nil {
+		return nil, 0, errors.Wrap(err, "error iterating service account permissions")
 	}
 
 	return perms, totalCount, nil
@@ -948,23 +957,17 @@ func (r *CRDBAuthRepo) UpdateServiceAccountPermissions(
 
 	// 2. Insert new permissions
 	insertQuery := `
-		INSERT INTO service_account_permissions (id, service_account_id, provider, permission, account, created_at)
-		VALUES ($1, $2, $3, $4, $5, $6)
+		INSERT INTO service_account_permissions (id, service_account_id, scope, permission, created_at)
+		VALUES ($1, $2, $3, $4, $5)
 	`
 	now := timeutil.Now()
 
 	for _, perm := range permissions {
-		var account interface{}
-		if perm.Account != "" {
-			account = perm.Account
-		}
-
 		_, err := tx.ExecContext(ctx, insertQuery,
 			perm.ID.String(),
 			perm.ServiceAccountID.String(),
-			perm.Provider,
+			perm.Scope,
 			perm.Permission,
-			account,
 			now,
 		)
 		if err != nil {
@@ -985,21 +988,15 @@ func (r *CRDBAuthRepo) AddServiceAccountPermission(
 	ctx context.Context, l *logger.Logger, perm *auth.ServiceAccountPermission,
 ) error {
 	query := `
-		INSERT INTO service_account_permissions (id, service_account_id, provider, permission, account, created_at)
-		VALUES ($1, $2, $3, $4, $5, $6)
+		INSERT INTO service_account_permissions (id, service_account_id, scope, permission, created_at)
+		VALUES ($1, $2, $3, $4, $5)
 	`
-
-	var account interface{}
-	if perm.Account != "" {
-		account = perm.Account
-	}
 
 	_, err := r.db.ExecContext(ctx, query,
 		perm.ID.String(),
 		perm.ServiceAccountID.String(),
-		perm.Provider,
+		perm.Scope,
 		perm.Permission,
-		account,
 		perm.CreatedAt,
 	)
 	if err != nil {
@@ -1014,31 +1011,35 @@ func (r *CRDBAuthRepo) GetServiceAccountPermission(
 	ctx context.Context, l *logger.Logger, id uuid.UUID,
 ) (*auth.ServiceAccountPermission, error) {
 	query := `
-		SELECT id, service_account_id, provider, permission, account, created_at
+		SELECT id, service_account_id, scope, permission, created_at
 		FROM service_account_permissions WHERE id = $1
 	`
 	row := r.db.QueryRowContext(ctx, query, id.String())
 
-	var idStr, saIDStr, provider, permission string
-	var account gosql.NullString
+	var idStr, saIDStr, scope, permission string
 	var createdAt time.Time
 
-	if err := row.Scan(&idStr, &saIDStr, &provider, &permission, &account, &createdAt); err != nil {
+	if err := row.Scan(&idStr, &saIDStr, &scope, &permission, &createdAt); err != nil {
 		if errors.Is(err, gosql.ErrNoRows) {
 			return nil, rauth.ErrNotFound
 		}
 		return nil, errors.Wrap(err, "failed to scan service account permission")
 	}
 
-	permID, _ := uuid.FromString(idStr)
-	saID, _ := uuid.FromString(saIDStr)
+	permID, err := uuid.FromString(idStr)
+	if err != nil {
+		return nil, errors.Wrap(err, "invalid permission id UUID in database")
+	}
+	saID, err := uuid.FromString(saIDStr)
+	if err != nil {
+		return nil, errors.Wrap(err, "invalid service_account_id UUID in database")
+	}
 
 	return &auth.ServiceAccountPermission{
 		ID:               permID,
 		ServiceAccountID: saID,
-		Provider:         provider,
+		Scope:            scope,
 		Permission:       permission,
-		Account:          account.String,
 		CreatedAt:        createdAt,
 	}, nil
 }
@@ -1179,6 +1180,9 @@ func (r *CRDBAuthRepo) ListGroups(
 		}
 		groupsList = append(groupsList, group)
 	}
+	if err := rows.Err(); err != nil {
+		return nil, 0, errors.Wrap(err, "error iterating groups")
+	}
 	return groupsList, totalCount, nil
 }
 
@@ -1270,9 +1274,18 @@ func (r *CRDBAuthRepo) GetGroupMembers(
 			return nil, 0, errors.Wrap(err, "failed to scan group member")
 		}
 
-		memberID, _ := uuid.FromString(id)
-		gID, _ := uuid.FromString(gIDStr)
-		uID, _ := uuid.FromString(uIDStr)
+		memberID, err := uuid.FromString(id)
+		if err != nil {
+			return nil, 0, errors.Wrap(err, "invalid member id UUID in database")
+		}
+		gID, err := uuid.FromString(gIDStr)
+		if err != nil {
+			return nil, 0, errors.Wrap(err, "invalid group_id UUID in database")
+		}
+		uID, err := uuid.FromString(uIDStr)
+		if err != nil {
+			return nil, 0, errors.Wrap(err, "invalid user_id UUID in database")
+		}
 
 		members = append(members, &auth.GroupMember{
 			ID:        memberID,
@@ -1280,6 +1293,9 @@ func (r *CRDBAuthRepo) GetGroupMembers(
 			UserID:    uID,
 			CreatedAt: createdAt,
 		})
+	}
+	if err := rows.Err(); err != nil {
+		return nil, 0, errors.Wrap(err, "error iterating group members")
 	}
 
 	return members, totalCount, nil
@@ -1428,7 +1444,7 @@ func (r *CRDBAuthRepo) ListGroupPermissions(
 		reflect.TypeOf(auth.GroupPermission{}),
 	)
 	baseSelectQuery := `
-		SELECT id, group_name, provider, account, permission, created_at, updated_at
+		SELECT id, group_name, scope, permission, created_at, updated_at
 		FROM group_permissions
 	`
 	baseCountQuery := "SELECT count(*) FROM group_permissions"
@@ -1481,10 +1497,10 @@ func (r *CRDBAuthRepo) GetPermissionsForGroups(
 	}
 
 	query := `
-		SELECT id, group_name, provider, account, permission, created_at, updated_at
+		SELECT id, group_name, scope, permission, created_at, updated_at
 		FROM group_permissions
 		WHERE group_name IN (` + strings.Join(placeholders, ", ") + `)
-		ORDER BY group_name, provider, account, permission
+		ORDER BY group_name, scope, permission
 	`
 	rows, err := r.db.QueryContext(ctx, query, args...)
 	if err != nil {
@@ -1498,10 +1514,10 @@ func (r *CRDBAuthRepo) GetPermissionsForGroups(
 func (r *CRDBAuthRepo) scanGroupPermissions(rows *gosql.Rows) ([]*auth.GroupPermission, error) {
 	var perms []*auth.GroupPermission
 	for rows.Next() {
-		var id, groupName, provider, account, permission string
+		var id, groupName, scope, permission string
 		var createdAt, updatedAt time.Time
 
-		if err := rows.Scan(&id, &groupName, &provider, &account, &permission, &createdAt, &updatedAt); err != nil {
+		if err := rows.Scan(&id, &groupName, &scope, &permission, &createdAt, &updatedAt); err != nil {
 			return nil, errors.Wrap(err, "failed to scan group permission")
 		}
 
@@ -1513,12 +1529,14 @@ func (r *CRDBAuthRepo) scanGroupPermissions(rows *gosql.Rows) ([]*auth.GroupPerm
 		perms = append(perms, &auth.GroupPermission{
 			ID:         permID,
 			GroupName:  groupName,
-			Provider:   provider,
-			Account:    account,
+			Scope:      scope,
 			Permission: permission,
 			CreatedAt:  createdAt,
 			UpdatedAt:  updatedAt,
 		})
+	}
+	if err := rows.Err(); err != nil {
+		return nil, errors.Wrap(err, "error iterating group permissions")
 	}
 
 	return perms, nil
@@ -1528,14 +1546,13 @@ func (r *CRDBAuthRepo) CreateGroupPermission(
 	ctx context.Context, l *logger.Logger, perm *auth.GroupPermission,
 ) error {
 	query := `
-		INSERT INTO group_permissions (id, group_name, provider, account, permission, created_at, updated_at)
-		VALUES ($1, $2, $3, $4, $5, $6, $7)
+		INSERT INTO group_permissions (id, group_name, scope, permission, created_at, updated_at)
+		VALUES ($1, $2, $3, $4, $5, $6)
 	`
 	_, err := r.db.ExecContext(ctx, query,
 		perm.ID.String(),
 		perm.GroupName,
-		perm.Provider,
-		perm.Account,
+		perm.Scope,
 		perm.Permission,
 		perm.CreatedAt,
 		perm.UpdatedAt,
@@ -1551,14 +1568,13 @@ func (r *CRDBAuthRepo) UpdateGroupPermission(
 ) error {
 	query := `
 		UPDATE group_permissions
-		SET group_name = $2, provider = $3, account = $4, permission = $5, updated_at = $6
+		SET group_name = $2, scope = $3, permission = $4, updated_at = $5
 		WHERE id = $1
 	`
 	result, err := r.db.ExecContext(ctx, query,
 		perm.ID.String(),
 		perm.GroupName,
-		perm.Provider,
-		perm.Account,
+		perm.Scope,
 		perm.Permission,
 		perm.UpdatedAt,
 	)
@@ -1599,14 +1615,22 @@ func (r *CRDBAuthRepo) DeleteGroupPermission(
 
 func (r *CRDBAuthRepo) ReplaceGroupPermissions(
 	ctx context.Context, l *logger.Logger, perms []*auth.GroupPermission,
-) error {
+) (retErr error) {
 	tx, err := r.db.BeginTx(ctx, nil)
 	if err != nil {
 		return errors.Wrap(err, "failed to begin transaction")
 	}
+
+	committed := false
 	defer func() {
-		if err != nil {
-			_ = tx.Rollback()
+		if !committed {
+			if rollbackErr := tx.Rollback(); rollbackErr != nil {
+				if retErr != nil {
+					retErr = errors.CombineErrors(retErr, errors.Wrap(rollbackErr, "rollback error"))
+				} else {
+					retErr = errors.Wrap(rollbackErr, "rollback error")
+				}
+			}
 		}
 	}()
 
@@ -1618,15 +1642,14 @@ func (r *CRDBAuthRepo) ReplaceGroupPermissions(
 
 	// Insert new permissions
 	insertQuery := `
-		INSERT INTO group_permissions (id, group_name, provider, account, permission, created_at, updated_at)
-		VALUES ($1, $2, $3, $4, $5, $6, $7)
+		INSERT INTO group_permissions (id, group_name, scope, permission, created_at, updated_at)
+		VALUES ($1, $2, $3, $4, $5, $6)
 	`
 	for _, perm := range perms {
 		_, err = tx.ExecContext(ctx, insertQuery,
 			perm.ID.String(),
 			perm.GroupName,
-			perm.Provider,
-			perm.Account,
+			perm.Scope,
 			perm.Permission,
 			perm.CreatedAt,
 			perm.UpdatedAt,
@@ -1640,6 +1663,7 @@ func (r *CRDBAuthRepo) ReplaceGroupPermissions(
 		return errors.Wrap(err, "failed to commit transaction")
 	}
 
+	committed = true
 	return nil
 }
 
@@ -1652,16 +1676,15 @@ func (r *CRDBAuthRepo) GetStatistics(
 	}
 
 	// Users by status
-	userQuery := `SELECT active, count(*) FROM users GROUP BY active`
-	rows, err := r.db.QueryContext(ctx, userQuery)
+	userRows, err := r.db.QueryContext(ctx, `SELECT active, count(*) FROM users GROUP BY active`)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to get user statistics")
 	}
-	defer rows.Close()
-	for rows.Next() {
+	defer userRows.Close()
+	for userRows.Next() {
 		var active bool
 		var count int
-		if err := rows.Scan(&active, &count); err != nil {
+		if err := userRows.Scan(&active, &count); err != nil {
 			return nil, errors.Wrap(err, "failed to scan user statistics")
 		}
 		if active {
@@ -1670,6 +1693,9 @@ func (r *CRDBAuthRepo) GetStatistics(
 			stats.UsersInactive = count
 		}
 	}
+	if err := userRows.Err(); err != nil {
+		return nil, errors.Wrap(err, "error iterating user statistics")
+	}
 
 	// Groups count
 	if err := r.db.QueryRowContext(ctx, `SELECT count(*) FROM groups`).Scan(&stats.Groups); err != nil {
@@ -1677,16 +1703,15 @@ func (r *CRDBAuthRepo) GetStatistics(
 	}
 
 	// Service accounts by enabled
-	saQuery := `SELECT enabled, count(*) FROM service_accounts GROUP BY enabled`
-	rows, err = r.db.QueryContext(ctx, saQuery)
+	saRows, err := r.db.QueryContext(ctx, `SELECT enabled, count(*) FROM service_accounts GROUP BY enabled`)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to get service account statistics")
 	}
-	defer rows.Close()
-	for rows.Next() {
+	defer saRows.Close()
+	for saRows.Next() {
 		var enabled bool
 		var count int
-		if err := rows.Scan(&enabled, &count); err != nil {
+		if err := saRows.Scan(&enabled, &count); err != nil {
 			return nil, errors.Wrap(err, "failed to scan service account statistics")
 		}
 		if enabled {
@@ -1695,24 +1720,29 @@ func (r *CRDBAuthRepo) GetStatistics(
 			stats.ServiceAccountsDisabled = count
 		}
 	}
+	if err := saRows.Err(); err != nil {
+		return nil, errors.Wrap(err, "error iterating service account statistics")
+	}
 
 	// Tokens by type and status
-	tokenQuery := `SELECT token_type, status, count(*) FROM api_tokens GROUP BY token_type, status`
-	rows, err = r.db.QueryContext(ctx, tokenQuery)
+	tokenRows, err := r.db.QueryContext(ctx, `SELECT token_type, status, count(*) FROM api_tokens GROUP BY token_type, status`)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to get token statistics")
 	}
-	defer rows.Close()
-	for rows.Next() {
+	defer tokenRows.Close()
+	for tokenRows.Next() {
 		var tokenType, status string
 		var count int
-		if err := rows.Scan(&tokenType, &status, &count); err != nil {
+		if err := tokenRows.Scan(&tokenType, &status, &count); err != nil {
 			return nil, errors.Wrap(err, "failed to scan token statistics")
 		}
 		if stats.TokensByTypeAndStatus[tokenType] == nil {
 			stats.TokensByTypeAndStatus[tokenType] = make(map[string]int)
 		}
 		stats.TokensByTypeAndStatus[tokenType][status] = count
+	}
+	if err := tokenRows.Err(); err != nil {
+		return nil, errors.Wrap(err, "error iterating token statistics")
 	}
 
 	return stats, nil

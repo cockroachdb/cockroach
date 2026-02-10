@@ -532,7 +532,7 @@ Returns information about the current authenticated principal.
       "active": true
     },
     "permissions": [
-      {"provider": "gcp", "account": "my-project", "permission": "clusters:create"}
+      {"scope": "gcp-my-project", "permission": "clusters:create"}
     ],
     "token": {
       "id": "22222222-2222-2222-2222-222222222222",
@@ -739,16 +739,14 @@ Add a permission to an orphan service account.
 **Request Body**:
 ```json
 {
-  "provider": "gcp",
-  "account": "my-project",
+  "scope": "gcp-my-project",
   "permission": "clusters:create"
 }
 ```
 
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
-| `provider` | string | Yes | Cloud provider (`gcp`, `aws`, `azure`, or `*` for all) |
-| `account` | string | Yes | Provider account/project (or `*` for all) |
+| `scope` | string | Yes | Scope/environment for the permission (e.g., `gcp-my-project`, `aws-engineering`, or `*` for all) |
 | `permission` | string | Yes | Permission string (e.g., `clusters:create`) |
 
 **Response**: `201 Created`

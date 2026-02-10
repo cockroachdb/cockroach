@@ -268,8 +268,7 @@ func makeTestPrincipal() *pkgauth.Principal {
 		},
 		Permissions: []authmodels.Permission{
 			&authmodels.UserPermission{
-				Provider:   "*",
-				Account:    "*",
+				Scope:      "*",
 				Permission: "*", // Wildcard grants access to everything
 			},
 		},

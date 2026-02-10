@@ -45,8 +45,7 @@ func TestDisabledAuthenticator_Authenticate_AlwaysSucceeds(t *testing.T) {
 
 		// Verify wildcard permissions
 		assert.Len(t, principal.Permissions, 1)
-		assert.Equal(t, "*", principal.Permissions[0].GetProvider())
-		assert.Equal(t, "*", principal.Permissions[0].GetAccount())
+		assert.Equal(t, "*", principal.Permissions[0].GetScope())
 		assert.Equal(t, "*", principal.Permissions[0].GetPermission())
 	}
 }
@@ -66,9 +65,9 @@ func TestDisabledAuthenticator_WildcardPermissions(t *testing.T) {
 	assert.True(t, principal.HasPermission("any:permission"))
 
 	// Verify scoped permission checks also work
-	assert.True(t, principal.HasPermissionScoped("clusters:create", "gcp", "project1"))
-	assert.True(t, principal.HasPermissionScoped("clusters:read", "aws", "account2"))
-	assert.True(t, principal.HasPermissionScoped("any:permission", "any:provider", "any:account"))
+	assert.True(t, principal.HasPermissionScoped("clusters:create", "gcp-engineering"))
+	assert.True(t, principal.HasPermissionScoped("clusters:read", "aws-staging"))
+	assert.True(t, principal.HasPermissionScoped("any:permission", "any-scope"))
 }
 
 func TestDisabledAuthenticator_Claims(t *testing.T) {

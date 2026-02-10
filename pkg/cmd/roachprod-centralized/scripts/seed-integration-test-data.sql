@@ -150,84 +150,84 @@ VALUES
 -- 4. Create group permissions
 -- ============================================================================
 -- These define what permissions each group grants.
--- Permissions are matched by group display_name, provider, and account.
+-- Permissions are matched by group display_name and scope.
 
 -- Test Engineering team gets admin permissions everywhere (SCIM management + all cluster access)
-INSERT INTO group_permissions (id, group_name, provider, account, permission, created_at, updated_at)
+INSERT INTO group_permissions (id, group_name, scope, permission, created_at, updated_at)
 VALUES
-  (gen_random_uuid(), 'Test-SubTeam-TestEngineering', '*', '*', 'clusters:create', now(), now()),
-  (gen_random_uuid(), 'Test-SubTeam-TestEngineering', '*', '*', 'clusters:view:all', now(), now()),
-  (gen_random_uuid(), 'Test-SubTeam-TestEngineering', '*', '*', 'clusters:update:all', now(), now()),
-  (gen_random_uuid(), 'Test-SubTeam-TestEngineering', '*', '*', 'clusters:delete:all', now(), now()),
-  (gen_random_uuid(), 'Test-SubTeam-TestEngineering', '*', '*', 'clusters:sync', now(), now()),
-  (gen_random_uuid(), 'Test-SubTeam-TestEngineering', '*', '*', 'tasks:view:all', now(), now()),
-  (gen_random_uuid(), 'Test-SubTeam-TestEngineering', '*', '*', 'auth:scim:manage-user', now(), now()),
-  (gen_random_uuid(), 'Test-SubTeam-TestEngineering', '*', '*', 'auth:service-accounts:create', now(), now()),
-  (gen_random_uuid(), 'Test-SubTeam-TestEngineering', '*', '*', 'auth:service-accounts:view:all', now(), now()),
-  (gen_random_uuid(), 'Test-SubTeam-TestEngineering', '*', '*', 'auth:service-accounts:update:all', now(), now()),
-  (gen_random_uuid(), 'Test-SubTeam-TestEngineering', '*', '*', 'auth:service-accounts:delete:all', now(), now()),
-  (gen_random_uuid(), 'Test-SubTeam-TestEngineering', '*', '*', 'auth:service-accounts:mint:all', now(), now()),
-  (gen_random_uuid(), 'Test-SubTeam-TestEngineering', '*', '*', 'auth:tokens:view:all', now(), now()),
-  (gen_random_uuid(), 'Test-SubTeam-TestEngineering', '*', '*', 'auth:tokens:view:own', now(), now()),
-  (gen_random_uuid(), 'Test-SubTeam-TestEngineering', '*', '*', 'auth:tokens:revoke:all', now(), now()),
-  (gen_random_uuid(), 'Test-SubTeam-TestEngineering', '*', '*', 'auth:tokens:revoke:own', now(), now());
+  (gen_random_uuid(), 'Test-SubTeam-TestEngineering', '*', 'clusters:create', now(), now()),
+  (gen_random_uuid(), 'Test-SubTeam-TestEngineering', '*', 'clusters:view:all', now(), now()),
+  (gen_random_uuid(), 'Test-SubTeam-TestEngineering', '*', 'clusters:update:all', now(), now()),
+  (gen_random_uuid(), 'Test-SubTeam-TestEngineering', '*', 'clusters:delete:all', now(), now()),
+  (gen_random_uuid(), 'Test-SubTeam-TestEngineering', '*', 'clusters:sync', now(), now()),
+  (gen_random_uuid(), 'Test-SubTeam-TestEngineering', '*', 'tasks:view:all', now(), now()),
+  (gen_random_uuid(), 'Test-SubTeam-TestEngineering', '*', 'auth:scim:manage-user', now(), now()),
+  (gen_random_uuid(), 'Test-SubTeam-TestEngineering', '*', 'auth:service-accounts:create', now(), now()),
+  (gen_random_uuid(), 'Test-SubTeam-TestEngineering', '*', 'auth:service-accounts:view:all', now(), now()),
+  (gen_random_uuid(), 'Test-SubTeam-TestEngineering', '*', 'auth:service-accounts:update:all', now(), now()),
+  (gen_random_uuid(), 'Test-SubTeam-TestEngineering', '*', 'auth:service-accounts:delete:all', now(), now()),
+  (gen_random_uuid(), 'Test-SubTeam-TestEngineering', '*', 'auth:service-accounts:mint:all', now(), now()),
+  (gen_random_uuid(), 'Test-SubTeam-TestEngineering', '*', 'auth:tokens:view:all', now(), now()),
+  (gen_random_uuid(), 'Test-SubTeam-TestEngineering', '*', 'auth:tokens:view:own', now(), now()),
+  (gen_random_uuid(), 'Test-SubTeam-TestEngineering', '*', 'auth:tokens:revoke:all', now(), now()),
+  (gen_random_uuid(), 'Test-SubTeam-TestEngineering', '*', 'auth:tokens:revoke:own', now(), now());
 
 -- Security Engineering team also gets admin permissions everywhere
-INSERT INTO group_permissions (id, group_name, provider, account, permission, created_at, updated_at)
+INSERT INTO group_permissions (id, group_name, scope, permission, created_at, updated_at)
 VALUES
-  (gen_random_uuid(), 'Test-SubTeam-SecurityEngineering', '*', '*', 'clusters:create', now(), now()),
-  (gen_random_uuid(), 'Test-SubTeam-SecurityEngineering', '*', '*', 'clusters:view:all', now(), now()),
-  (gen_random_uuid(), 'Test-SubTeam-SecurityEngineering', '*', '*', 'clusters:update:all', now(), now()),
-  (gen_random_uuid(), 'Test-SubTeam-SecurityEngineering', '*', '*', 'clusters:delete:all', now(), now()),
-  (gen_random_uuid(), 'Test-SubTeam-SecurityEngineering', '*', '*', 'tasks:view:all', now(), now()),
-  (gen_random_uuid(), 'Test-SubTeam-SecurityEngineering', '*', '*', 'auth:scim:manage-user', now(), now()),
-  (gen_random_uuid(), 'Test-SubTeam-SecurityEngineering', '*', '*', 'auth:service-accounts:view:all', now(), now()),
-  (gen_random_uuid(), 'Test-SubTeam-SecurityEngineering', '*', '*', 'auth:tokens:view:all', now(), now()),
-  (gen_random_uuid(), 'Test-SubTeam-SecurityEngineering', '*', '*', 'auth:tokens:revoke:all', now(), now());
+  (gen_random_uuid(), 'Test-SubTeam-SecurityEngineering', '*', 'clusters:create', now(), now()),
+  (gen_random_uuid(), 'Test-SubTeam-SecurityEngineering', '*', 'clusters:view:all', now(), now()),
+  (gen_random_uuid(), 'Test-SubTeam-SecurityEngineering', '*', 'clusters:update:all', now(), now()),
+  (gen_random_uuid(), 'Test-SubTeam-SecurityEngineering', '*', 'clusters:delete:all', now(), now()),
+  (gen_random_uuid(), 'Test-SubTeam-SecurityEngineering', '*', 'tasks:view:all', now(), now()),
+  (gen_random_uuid(), 'Test-SubTeam-SecurityEngineering', '*', 'auth:scim:manage-user', now(), now()),
+  (gen_random_uuid(), 'Test-SubTeam-SecurityEngineering', '*', 'auth:service-accounts:view:all', now(), now()),
+  (gen_random_uuid(), 'Test-SubTeam-SecurityEngineering', '*', 'auth:tokens:view:all', now(), now()),
+  (gen_random_uuid(), 'Test-SubTeam-SecurityEngineering', '*', 'auth:tokens:revoke:all', now(), now());
 
 -- Engineering division gets access to GCP and AWS engineering accounts
-INSERT INTO group_permissions (id, group_name, provider, account, permission, created_at, updated_at)
+INSERT INTO group_permissions (id, group_name, scope, permission, created_at, updated_at)
 VALUES
-  (gen_random_uuid(), 'Test-Division-Engineering', 'gcp', 'cockroach-ephemeral', 'clusters:create', now(), now()),
-  (gen_random_uuid(), 'Test-Division-Engineering', 'gcp', 'cockroach-ephemeral', 'clusters:view:all', now(), now()),
-  (gen_random_uuid(), 'Test-Division-Engineering', 'gcp', 'cockroach-ephemeral', 'clusters:update:all', now(), now()),
-  (gen_random_uuid(), 'Test-Division-Engineering', 'gcp', 'cockroach-ephemeral', 'clusters:delete:all', now(), now()),
-  (gen_random_uuid(), 'Test-Division-Engineering', 'aws', 'engineering-account', 'clusters:create', now(), now()),
-  (gen_random_uuid(), 'Test-Division-Engineering', 'aws', 'engineering-account', 'clusters:view:all', now(), now()),
-  (gen_random_uuid(), 'Test-Division-Engineering', 'aws', 'engineering-account', 'clusters:update:all', now(), now()),
-  (gen_random_uuid(), 'Test-Division-Engineering', 'aws', 'engineering-account', 'clusters:delete:all', now(), now()),
-  (gen_random_uuid(), 'Test-Division-Engineering', '*', '*', 'clusters:view:own', now(), now()),
-  (gen_random_uuid(), 'Test-Division-Engineering', '*', '*', 'clusters:delete:own', now(), now()),
-  (gen_random_uuid(), 'Test-Division-Engineering', '*', '*', 'tasks:view:own', now(), now()),
-  (gen_random_uuid(), 'Test-Division-Engineering', '*', '*', 'auth:tokens:view:own', now(), now()),
-  (gen_random_uuid(), 'Test-Division-Engineering', '*', '*', 'auth:tokens:revoke:own', now(), now()),
-  (gen_random_uuid(), 'Test-Division-Engineering', '*', '*', 'auth:service-accounts:view:own', now(), now());
+  (gen_random_uuid(), 'Test-Division-Engineering', 'gcp-cockroach-ephemeral', 'clusters:create', now(), now()),
+  (gen_random_uuid(), 'Test-Division-Engineering', 'gcp-cockroach-ephemeral', 'clusters:view:all', now(), now()),
+  (gen_random_uuid(), 'Test-Division-Engineering', 'gcp-cockroach-ephemeral', 'clusters:update:all', now(), now()),
+  (gen_random_uuid(), 'Test-Division-Engineering', 'gcp-cockroach-ephemeral', 'clusters:delete:all', now(), now()),
+  (gen_random_uuid(), 'Test-Division-Engineering', 'aws-engineering-account', 'clusters:create', now(), now()),
+  (gen_random_uuid(), 'Test-Division-Engineering', 'aws-engineering-account', 'clusters:view:all', now(), now()),
+  (gen_random_uuid(), 'Test-Division-Engineering', 'aws-engineering-account', 'clusters:update:all', now(), now()),
+  (gen_random_uuid(), 'Test-Division-Engineering', 'aws-engineering-account', 'clusters:delete:all', now(), now()),
+  (gen_random_uuid(), 'Test-Division-Engineering', '*', 'clusters:view:own', now(), now()),
+  (gen_random_uuid(), 'Test-Division-Engineering', '*', 'clusters:delete:own', now(), now()),
+  (gen_random_uuid(), 'Test-Division-Engineering', '*', 'tasks:view:own', now(), now()),
+  (gen_random_uuid(), 'Test-Division-Engineering', '*', 'auth:tokens:view:own', now(), now()),
+  (gen_random_uuid(), 'Test-Division-Engineering', '*', 'auth:tokens:revoke:own', now(), now()),
+  (gen_random_uuid(), 'Test-Division-Engineering', '*', 'auth:service-accounts:view:own', now(), now());
 
 -- Revenue division gets access only to AWS revenue account
-INSERT INTO group_permissions (id, group_name, provider, account, permission, created_at, updated_at)
+INSERT INTO group_permissions (id, group_name, scope, permission, created_at, updated_at)
 VALUES
-  (gen_random_uuid(), 'Test-Division-Revenue', 'aws', 'revenue-account', 'clusters:create', now(), now()),
-  (gen_random_uuid(), 'Test-Division-Revenue', 'aws', 'revenue-account', 'clusters:view:all', now(), now()),
-  (gen_random_uuid(), 'Test-Division-Revenue', 'aws', 'revenue-account', 'clusters:update:all', now(), now()),
-  (gen_random_uuid(), 'Test-Division-Revenue', 'aws', 'revenue-account', 'clusters:delete:all', now(), now()),
-  (gen_random_uuid(), 'Test-Division-Revenue', '*', '*', 'clusters:view:own', now(), now()),
-  (gen_random_uuid(), 'Test-Division-Revenue', '*', '*', 'auth:tokens:view:own', now(), now()),
-  (gen_random_uuid(), 'Test-Division-Revenue', '*', '*', 'auth:tokens:revoke:own', now(), now());
+  (gen_random_uuid(), 'Test-Division-Revenue', 'aws-revenue-account', 'clusters:create', now(), now()),
+  (gen_random_uuid(), 'Test-Division-Revenue', 'aws-revenue-account', 'clusters:view:all', now(), now()),
+  (gen_random_uuid(), 'Test-Division-Revenue', 'aws-revenue-account', 'clusters:update:all', now(), now()),
+  (gen_random_uuid(), 'Test-Division-Revenue', 'aws-revenue-account', 'clusters:delete:all', now(), now()),
+  (gen_random_uuid(), 'Test-Division-Revenue', '*', 'clusters:view:own', now(), now()),
+  (gen_random_uuid(), 'Test-Division-Revenue', '*', 'auth:tokens:view:own', now(), now()),
+  (gen_random_uuid(), 'Test-Division-Revenue', '*', 'auth:tokens:revoke:own', now(), now());
 
 -- Contractors have limited permissions (only view and delete their own clusters)
-INSERT INTO group_permissions (id, group_name, provider, account, permission, created_at, updated_at)
+INSERT INTO group_permissions (id, group_name, scope, permission, created_at, updated_at)
 VALUES
-  (gen_random_uuid(), 'Test-SubTeam-Contractors', 'gcp', 'cockroach-ephemeral', 'clusters:view:own', now(), now()),
-  (gen_random_uuid(), 'Test-SubTeam-Contractors', 'gcp', 'cockroach-ephemeral', 'clusters:delete:own', now(), now()),
-  (gen_random_uuid(), 'Test-SubTeam-Contractors', '*', '*', 'auth:tokens:view:own', now(), now()),
-  (gen_random_uuid(), 'Test-SubTeam-Contractors', '*', '*', 'auth:tokens:revoke:own', now(), now());
+  (gen_random_uuid(), 'Test-SubTeam-Contractors', 'gcp-cockroach-ephemeral', 'clusters:view:own', now(), now()),
+  (gen_random_uuid(), 'Test-SubTeam-Contractors', 'gcp-cockroach-ephemeral', 'clusters:delete:own', now(), now()),
+  (gen_random_uuid(), 'Test-SubTeam-Contractors', '*', 'auth:tokens:view:own', now(), now()),
+  (gen_random_uuid(), 'Test-SubTeam-Contractors', '*', 'auth:tokens:revoke:own', now(), now());
 
 -- All-Employees group gets basic self-service permissions
-INSERT INTO group_permissions (id, group_name, provider, account, permission, created_at, updated_at)
+INSERT INTO group_permissions (id, group_name, scope, permission, created_at, updated_at)
 VALUES
-  (gen_random_uuid(), 'Test-All-Employees', '*', '*', 'clusters:view:own', now(), now()),
-  (gen_random_uuid(), 'Test-All-Employees', '*', '*', 'auth:tokens:view:own', now(), now()),
-  (gen_random_uuid(), 'Test-All-Employees', '*', '*', 'auth:tokens:revoke:own', now(), now());
+  (gen_random_uuid(), 'Test-All-Employees', '*', 'clusters:view:own', now(), now()),
+  (gen_random_uuid(), 'Test-All-Employees', '*', 'auth:tokens:view:own', now(), now()),
+  (gen_random_uuid(), 'Test-All-Employees', '*', 'auth:tokens:revoke:own', now(), now());
 
 -- ============================================================================
 -- 5. Create service accounts
@@ -253,36 +253,36 @@ VALUES
 -- ============================================================================
 
 -- SCIM provisioner needs scim:manage-user permission and service account management
-INSERT INTO service_account_permissions (id, service_account_id, provider, account, permission, created_at)
+INSERT INTO service_account_permissions (id, service_account_id, scope, permission, created_at)
 VALUES
-  (gen_random_uuid(), 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', '*', '*', 'auth:scim:manage-user', now()),
-  (gen_random_uuid(), 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', '*', '*', 'auth:service-accounts:create', now());
+  (gen_random_uuid(), 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', '*', 'auth:scim:manage-user', now()),
+  (gen_random_uuid(), 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', '*', 'auth:service-accounts:create', now());
 
 -- CI automation needs full cluster permissions on GCP ephemeral
-INSERT INTO service_account_permissions (id, service_account_id, provider, account, permission, created_at)
+INSERT INTO service_account_permissions (id, service_account_id, scope, permission, created_at)
 VALUES
-  (gen_random_uuid(), 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb', 'gcp', 'cockroach-ephemeral', 'clusters:create', now()),
-  (gen_random_uuid(), 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb', 'gcp', 'cockroach-ephemeral', 'clusters:view:all', now()),
-  (gen_random_uuid(), 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb', 'gcp', 'cockroach-ephemeral', 'clusters:update:all', now()),
-  (gen_random_uuid(), 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb', 'gcp', 'cockroach-ephemeral', 'clusters:delete:all', now()),
-  (gen_random_uuid(), 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb', '*', '*', 'auth:tokens:view:own', now());
+  (gen_random_uuid(), 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb', 'gcp-cockroach-ephemeral', 'clusters:create', now()),
+  (gen_random_uuid(), 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb', 'gcp-cockroach-ephemeral', 'clusters:view:all', now()),
+  (gen_random_uuid(), 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb', 'gcp-cockroach-ephemeral', 'clusters:update:all', now()),
+  (gen_random_uuid(), 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb', 'gcp-cockroach-ephemeral', 'clusters:delete:all', now()),
+  (gen_random_uuid(), 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb', '*', 'auth:tokens:view:own', now());
 
 -- Monitoring service account has read-only permissions everywhere
-INSERT INTO service_account_permissions (id, service_account_id, provider, account, permission, created_at)
+INSERT INTO service_account_permissions (id, service_account_id, scope, permission, created_at)
 VALUES
-  (gen_random_uuid(), 'cccccccc-cccc-cccc-cccc-cccccccccccc', '*', '*', 'clusters:view:all', now()),
-  (gen_random_uuid(), 'cccccccc-cccc-cccc-cccc-cccccccccccc', '*', '*', 'tasks:view:all', now());
+  (gen_random_uuid(), 'cccccccc-cccc-cccc-cccc-cccccccccccc', '*', 'clusters:view:all', now()),
+  (gen_random_uuid(), 'cccccccc-cccc-cccc-cccc-cccccccccccc', '*', 'tasks:view:all', now());
 
 -- Disabled SA has permissions but is disabled (should fail auth)
-INSERT INTO service_account_permissions (id, service_account_id, provider, account, permission, created_at)
+INSERT INTO service_account_permissions (id, service_account_id, scope, permission, created_at)
 VALUES
-  (gen_random_uuid(), 'dddddddd-dddd-dddd-dddd-dddddddddddd', '*', '*', 'clusters:view:all', now());
+  (gen_random_uuid(), 'dddddddd-dddd-dddd-dddd-dddddddddddd', '*', 'clusters:view:all', now());
 
 -- No-origins SA has permissions but no IP restrictions
-INSERT INTO service_account_permissions (id, service_account_id, provider, account, permission, created_at)
+INSERT INTO service_account_permissions (id, service_account_id, scope, permission, created_at)
 VALUES
-  (gen_random_uuid(), 'eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee', '*', '*', 'clusters:view:all', now()),
-  (gen_random_uuid(), 'eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee', '*', '*', 'tasks:view:all', now());
+  (gen_random_uuid(), 'eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee', '*', 'clusters:view:all', now()),
+  (gen_random_uuid(), 'eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee', '*', 'tasks:view:all', now());
 
 -- ============================================================================
 -- 7. Create service account IP allowlists (origins)
@@ -538,29 +538,29 @@ WHERE g.display_name LIKE 'Test-%'
 ORDER BY g.display_name, u.email;
 
 SELECT '=== GROUP PERMISSIONS ===' AS section;
-SELECT group_name, provider, account, permission
+SELECT group_name, scope, permission
 FROM group_permissions
 WHERE group_name LIKE 'Test-%'
-ORDER BY group_name, provider, account, permission;
+ORDER BY group_name, scope, permission;
 
 SELECT '=== USER EFFECTIVE PERMISSIONS (via groups) ===' AS section;
-SELECT DISTINCT u.email, gp.provider, gp.account, gp.permission
+SELECT DISTINCT u.email, gp.scope, gp.permission
 FROM users u
 JOIN group_members gm ON gm.user_id = u.id
 JOIN groups g ON g.id = gm.group_id
 JOIN group_permissions gp ON gp.group_name = g.display_name
 WHERE u.email LIKE '%@test.example.com'
-ORDER BY u.email, gp.provider, gp.account, gp.permission;
+ORDER BY u.email, gp.scope, gp.permission;
 
 SELECT '=== SERVICE ACCOUNTS ===' AS section;
 SELECT id, name, description, enabled FROM service_accounts WHERE name LIKE 'test-%' ORDER BY name;
 
 SELECT '=== SERVICE ACCOUNT PERMISSIONS ===' AS section;
-SELECT sa.name, sap.provider, sap.account, sap.permission
+SELECT sa.name, sap.scope, sap.permission
 FROM service_account_permissions sap
 JOIN service_accounts sa ON sap.service_account_id = sa.id
 WHERE sa.name LIKE 'test-%'
-ORDER BY sa.name, sap.provider, sap.account, sap.permission;
+ORDER BY sa.name, sap.scope, sap.permission;
 
 SELECT '=== SERVICE ACCOUNT ORIGINS (IP ALLOWLISTS) ===' AS section;
 SELECT sa.name, sao.cidr, sao.description

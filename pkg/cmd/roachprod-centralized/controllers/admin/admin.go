@@ -370,8 +370,7 @@ func (ctrl *Controller) CreateGroupPermission(c *gin.Context) {
 	permission := &authmodels.GroupPermission{
 		ID:         uuid.MakeV4(),
 		GroupName:  req.GroupName,
-		Provider:   req.Provider,
-		Account:    req.Account,
+		Scope:      req.Scope,
 		Permission: req.Permission,
 	}
 
@@ -408,8 +407,7 @@ func (ctrl *Controller) UpdateGroupPermission(c *gin.Context) {
 	permission := &authmodels.GroupPermission{
 		ID:         id,
 		GroupName:  req.GroupName,
-		Provider:   req.Provider,
-		Account:    req.Account,
+		Scope:      req.Scope,
 		Permission: req.Permission,
 	}
 
@@ -463,8 +461,7 @@ func (ctrl *Controller) ReplaceGroupPermissions(c *gin.Context) {
 		permissions[i] = &authmodels.GroupPermission{
 			ID:         uuid.MakeV4(),
 			GroupName:  p.GroupName,
-			Provider:   p.Provider,
-			Account:    p.Account,
+			Scope:      p.Scope,
 			Permission: p.Permission,
 		}
 	}

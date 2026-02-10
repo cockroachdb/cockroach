@@ -7,7 +7,6 @@ package auth
 
 import (
 	"context"
-	"errors"
 
 	pkgauth "github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/auth"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/models/auth"
@@ -16,6 +15,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/utils/logger"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
+	"github.com/cockroachdb/errors"
 )
 
 // ListGroupPermissions retrieves all group permissions with filtering/pagination (admin operation).
@@ -56,8 +56,7 @@ func (s *Service) CreateGroupPermission(
 	s.auditEvent(ctx, l, principal, AuditGroupPermissionCreated, "success", map[string]interface{}{
 		"permission_id": permission.ID.String(),
 		"group_name":    permission.GroupName,
-		"provider":      permission.Provider,
-		"account":       permission.Account,
+		"scope":         permission.Scope,
 		"permission":    permission.Permission,
 	})
 

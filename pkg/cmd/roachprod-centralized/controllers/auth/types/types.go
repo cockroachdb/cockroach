@@ -42,9 +42,9 @@ type TokenInfo struct {
 	Token      string `json:"token"`
 	Type       string `json:"type"`
 	Status     string `json:"status,omitempty"`       // e.g., "valid", "expired", "revoked"
-	CreatedAt  string `json:"created_at,omitempty"`   // ISO 8601 format, omitted for JWT auth
-	ExpiresAt  string `json:"expires_at,omitempty"`   // ISO 8601 format, omitted for JWT auth
-	LastUsedAt string `json:"last_used_at,omitempty"` // ISO 8601 format, omitted for JWT auth
+	CreatedAt  string `json:"created_at,omitempty"`   // ISO 8601 format, from iat/exp claim for JWT
+	ExpiresAt  string `json:"expires_at,omitempty"`   // ISO 8601 format, from iat/exp claim for JWT
+	LastUsedAt string `json:"last_used_at,omitempty"` // ISO 8601 format, not populated for JWT
 }
 
 // WhoAmIResponse contains information about the current authenticated principal.
@@ -73,8 +73,7 @@ type ServiceAccountInfo struct {
 
 // PermissionInfo contains permission details.
 type PermissionInfo struct {
-	Provider   string `json:"provider"`
-	Account    string `json:"account"`
+	Scope      string `json:"scope"`
 	Permission string `json:"permission"`
 }
 
@@ -133,16 +132,14 @@ func (dto *AuthResultError) GetAssociatedStatusCode() int {
 	case err == nil:
 		return http.StatusOK
 	// Auth-specific error mappings
-	case errors.Is(err, authtypes.ErrNotAuthenticated):
+	case errors.Is(err, authtypes.ErrNotAuthenticated),
+		errors.Is(err, authtypes.ErrInvalidToken),
+		errors.Is(err, authtypes.ErrTokenExpired),
+		errors.Is(err, authtypes.ErrInvalidTokenType):
 		return http.StatusUnauthorized
-	case errors.Is(err, authtypes.ErrUserNotProvisioned):
+	case errors.Is(err, authtypes.ErrUserNotProvisioned),
+		errors.Is(err, authtypes.ErrUserDeactivated):
 		return http.StatusForbidden
-	case errors.Is(err, authtypes.ErrUserDeactivated):
-		return http.StatusForbidden
-	case errors.Is(err, authtypes.ErrInvalidToken):
-		return http.StatusUnauthorized
-	case errors.Is(err, authtypes.ErrTokenExpired):
-		return http.StatusUnauthorized
 	default:
 		// Fall back to generic error handling
 		return controllers.GetGenericStatusCode(err)
@@ -289,10 +286,10 @@ func BuildWhoAmIResponse(principal *auth.Principal) WhoAmIResponse {
 	}
 
 	// Map permissions
+	response.Permissions = make([]PermissionInfo, 0, len(principal.Permissions))
 	for _, perm := range principal.Permissions {
 		response.Permissions = append(response.Permissions, PermissionInfo{
-			Provider:   perm.GetProvider(),
-			Account:    perm.GetAccount(),
+			Scope:      perm.GetScope(),
 			Permission: perm.GetPermission(),
 		})
 	}

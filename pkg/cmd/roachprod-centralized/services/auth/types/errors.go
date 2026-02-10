@@ -23,6 +23,7 @@ var (
 	ErrInvalidUUID       = utils.NewPublicError(errors.New("invalid UUID format"))
 	ErrInvalidTTL        = utils.NewPublicError(errors.New("invalid TTL"))
 	ErrInvalidOriginCIDR = utils.NewPublicError(errors.New("invalid CIDR format for service account origin"))
+	ErrInvalidTokenType  = utils.NewPublicError(errors.New("invalid token type"))
 )
 
 // Resource not found errors (PUBLIC - shown to users)

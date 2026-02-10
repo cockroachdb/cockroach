@@ -618,8 +618,7 @@ func (ctrl *Controller) AddPermission(c *gin.Context) {
 	// Create permission model (service will generate UUID and set timestamps)
 	permission := &authmodels.ServiceAccountPermission{
 		ServiceAccountID: saID,
-		Provider:         req.Provider,
-		Account:          req.Account,
+		Scope:            req.Scope,
 		Permission:       req.Permission,
 	}
 
@@ -688,8 +687,7 @@ func (ctrl *Controller) ReplacePermissions(c *gin.Context) {
 	for i, p := range req.Permissions {
 		permissions[i] = &authmodels.ServiceAccountPermission{
 			ServiceAccountID: saID,
-			Provider:         p.Provider,
-			Account:          p.Account,
+			Scope:            p.Scope,
 			Permission:       p.Permission,
 		}
 	}

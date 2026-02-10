@@ -412,9 +412,8 @@ func TestCRDBAuthRepo_ServiceAccounts(t *testing.T) {
 		perm1 := &auth.ServiceAccountPermission{
 			ID:               uuid.MakeV4(),
 			ServiceAccountID: sa.ID,
-			Provider:         "gcp",
+			Scope:            "gcp-engineering",
 			Permission:       "admin",
-			Account:          "project-" + uuid.MakeV4().Short().String(),
 			CreatedAt:        now,
 		}
 		err := repo.AddServiceAccountPermission(ctx, logger.DefaultLogger, perm1)
@@ -424,9 +423,8 @@ func TestCRDBAuthRepo_ServiceAccounts(t *testing.T) {
 		retrieved, err := repo.GetServiceAccountPermission(ctx, logger.DefaultLogger, perm1.ID)
 		require.NoError(t, err)
 		require.Equal(t, perm1.ID, retrieved.ID)
-		require.Equal(t, perm1.Provider, retrieved.Provider)
+		require.Equal(t, perm1.Scope, retrieved.Scope)
 		require.Equal(t, perm1.Permission, retrieved.Permission)
-		require.Equal(t, perm1.Account, retrieved.Account)
 
 		// Get all permissions for service account
 		perms, totalCount, err := repo.ListServiceAccountPermissions(ctx, logger.DefaultLogger, sa.ID, *filters.NewFilterSet())
@@ -440,17 +438,15 @@ func TestCRDBAuthRepo_ServiceAccounts(t *testing.T) {
 			{
 				ID:               uuid.MakeV4(),
 				ServiceAccountID: sa.ID,
-				Provider:         "aws",
+				Scope:            "aws-staging",
 				Permission:       "read",
-				Account:          "account-" + uuid.MakeV4().Short().String(),
 				CreatedAt:        now,
 			},
 			{
 				ID:               uuid.MakeV4(),
 				ServiceAccountID: sa.ID,
-				Provider:         "gcp",
+				Scope:            "gcp-engineering",
 				Permission:       "write",
-				Account:          "project-" + uuid.MakeV4().Short().String(),
 				CreatedAt:        now,
 			},
 		}
@@ -867,13 +863,12 @@ func TestCRDBAuthRepo_Groups(t *testing.T) {
 		require.NoError(t, err)
 
 		// Create group permissions
-		projectID := "project-" + uuid.MakeV4().Short().String()
-		accountID := "account-" + uuid.MakeV4().Short().String()
+		scope1 := "gcp-engineering"
+		scope2 := "aws-staging"
 		perm1 := &auth.GroupPermission{
 			ID:         uuid.MakeV4(),
 			GroupName:  group1Name,
-			Provider:   "gcp",
-			Account:    projectID,
+			Scope:      scope1,
 			Permission: "admin",
 			CreatedAt:  now,
 			UpdatedAt:  now,
@@ -881,8 +876,7 @@ func TestCRDBAuthRepo_Groups(t *testing.T) {
 		perm2 := &auth.GroupPermission{
 			ID:         uuid.MakeV4(),
 			GroupName:  group2Name,
-			Provider:   "aws",
-			Account:    accountID,
+			Scope:      scope2,
 			Permission: "deploy",
 			CreatedAt:  now,
 			UpdatedAt:  now,
@@ -891,9 +885,8 @@ func TestCRDBAuthRepo_Groups(t *testing.T) {
 		perm3 := &auth.GroupPermission{
 			ID:         uuid.MakeV4(),
 			GroupName:  group2Name,
-			Provider:   "gcp",
-			Account:    projectID,
-			Permission: "admin", // Same as perm1
+			Scope:      scope1,
+			Permission: "admin", // Same scope+permission as perm1
 			CreatedAt:  now,
 			UpdatedAt:  now,
 		}
@@ -904,16 +897,16 @@ func TestCRDBAuthRepo_Groups(t *testing.T) {
 		// Get user permissions from groups (should deduplicate)
 		userPerms, err := repo.GetUserPermissionsFromGroups(ctx, logger.DefaultLogger, user.ID)
 		require.NoError(t, err)
-		require.Len(t, userPerms, 2) // Deduplicated: only 2 unique (provider, account, permission) tuples
+		require.Len(t, userPerms, 2) // Deduplicated: only 2 unique (scope, permission) tuples
 
 		// Verify permissions contain expected values
 		permSet := make(map[string]bool)
 		for _, p := range userPerms {
-			key := p.Provider + ":" + p.Account + ":" + p.Permission
+			key := p.Scope + ":" + p.Permission
 			permSet[key] = true
 		}
-		require.True(t, permSet["gcp:"+projectID+":admin"])
-		require.True(t, permSet["aws:"+accountID+":deploy"])
+		require.True(t, permSet[scope1+":admin"])
+		require.True(t, permSet[scope2+":deploy"])
 	})
 }
 
@@ -933,8 +926,7 @@ func TestCRDBAuthRepo_GroupPermissions(t *testing.T) {
 		perm := &auth.GroupPermission{
 			ID:         uuid.MakeV4(),
 			GroupName:  groupName,
-			Provider:   "gcp",
-			Account:    "test-project-" + uuid.MakeV4().Short().String(),
+			Scope:      "gcp-engineering",
 			Permission: "viewer",
 			CreatedAt:  now,
 			UpdatedAt:  now,
@@ -991,8 +983,7 @@ func TestCRDBAuthRepo_GroupPermissions(t *testing.T) {
 			{
 				ID:         uuid.MakeV4(),
 				GroupName:  oldGroupName,
-				Provider:   "gcp",
-				Account:    "old-project-" + uuid.MakeV4().Short().String(),
+				Scope:      "gcp-old",
 				Permission: "viewer",
 				CreatedAt:  now,
 				UpdatedAt:  now,
@@ -1009,8 +1000,7 @@ func TestCRDBAuthRepo_GroupPermissions(t *testing.T) {
 			{
 				ID:         uuid.MakeV4(),
 				GroupName:  newGroup1,
-				Provider:   "aws",
-				Account:    "new-account-" + uuid.MakeV4().Short().String(),
+				Scope:      "aws-staging",
 				Permission: "admin",
 				CreatedAt:  now,
 				UpdatedAt:  now,
@@ -1018,8 +1008,7 @@ func TestCRDBAuthRepo_GroupPermissions(t *testing.T) {
 			{
 				ID:         uuid.MakeV4(),
 				GroupName:  newGroup2,
-				Provider:   "gcp",
-				Account:    "new-project-" + uuid.MakeV4().Short().String(),
+				Scope:      "gcp-engineering",
 				Permission: "editor",
 				CreatedAt:  now,
 				UpdatedAt:  now,

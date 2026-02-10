@@ -47,7 +47,7 @@ type IAuthenticator interface {
 // AuthorizationRequirement defines what authorization is needed for an endpoint.
 type AuthorizationRequirement struct {
 	// RequiredPermissions specifies permissions that the principal must have.
-	// These are just permission names (NOT including provider/account scope).
+	// These are just permission names (NOT including scope).
 	// If multiple permissions are specified, the principal must have ALL of them (AND logic).
 	//
 	// Format: Simple permission strings like "clusters:create", "scim:manage-user", "tokens:mine:view"
@@ -58,7 +58,7 @@ type AuthorizationRequirement struct {
 	//   - "admin" - Admin permissions
 	//
 	// Note: Middleware only checks if the permission exists. Services are responsible
-	// for validating provider/account scope using principal.HasPermissionScoped().
+	// for validating scope using principal.HasPermissionScoped().
 	RequiredPermissions []string
 
 	// AnyOf allows OR logic for permissions. If specified, the principal must have
@@ -67,8 +67,8 @@ type AuthorizationRequirement struct {
 }
 
 // TokenInfo contains metadata about the authentication token.
-// For bearer tokens, all fields are populated.
-// For JWT tokens, only Type is meaningful (ID/CreatedAt/ExpiresAt are nil/zero).
+// For bearer tokens, all fields are populated from the database.
+// For JWT tokens, ID is a zero UUID, and CreatedAt/ExpiresAt are populated from iat/exp claims.
 type TokenInfo struct {
 	// ID is the unique identifier for the token (zero UUID for JWT)
 	ID uuid.UUID
@@ -76,10 +76,10 @@ type TokenInfo struct {
 	// Type indicates whether this is a user or service account token
 	Type authmodels.TokenType
 
-	// CreatedAt is when the token was created (nil for JWT auth)
+	// CreatedAt is when the token was created (from iat claim for JWT)
 	CreatedAt *time.Time
 
-	// ExpiresAt is when the token expires (nil for JWT auth)
+	// ExpiresAt is when the token expires (from exp claim for JWT)
 	ExpiresAt *time.Time
 }
 
@@ -121,7 +121,7 @@ type Principal struct {
 // This is used by middleware to verify the user can attempt this action.
 // Supports wildcard: if the principal has a permission with value "*", it matches any permission.
 // Example: HasPermission("clusters:create") returns true if the user has this permission
-// with any provider/account scope, or if the user has the "*" wildcard permission.
+// with any scope, or if the user has the "*" wildcard permission.
 func (p *Principal) HasPermission(permission string) bool {
 	for _, perm := range p.Permissions {
 		permValue := perm.GetPermission()
@@ -136,26 +136,20 @@ func (p *Principal) HasPermission(permission string) bool {
 	return false
 }
 
-// HasPermissionScoped checks if the principal has a permission for a specific provider/account.
+// HasPermissionScoped checks if the principal has a permission for a specific scope.
 // This is used by services to enforce scope-based access control.
 // Supports wildcard matching: "*" in either principal's permission or required scope matches any value.
-// Example: HasPermissionScoped("clusters:create", "gcp", "project1")
-func (p *Principal) HasPermissionScoped(permission, provider, account string) bool {
+// Example: HasPermissionScoped("clusters:create", "gcp-engineering")
+func (p *Principal) HasPermissionScoped(permission, scope string) bool {
 	for _, perm := range p.Permissions {
 		// Check permission match
 		if perm.GetPermission() != "*" && perm.GetPermission() != permission {
 			continue
 		}
 
-		// Check provider match (supports wildcard on either side)
-		permProvider := perm.GetProvider()
-		if permProvider != "*" && provider != "*" && permProvider != provider {
-			continue
-		}
-
-		// Check account match (supports wildcard on either side)
-		permAccount := perm.GetAccount()
-		if permAccount != "*" && account != "*" && permAccount != account {
+		// Check scope match (supports wildcard on either side)
+		permScope := perm.GetScope()
+		if permScope != "*" && scope != "*" && permScope != scope {
 			continue
 		}
 

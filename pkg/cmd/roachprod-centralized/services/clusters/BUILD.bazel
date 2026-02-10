@@ -5,6 +5,7 @@ go_library(
     srcs = [
         "api.go",
         "coordination.go",
+        "environment.go",
         "registry.go",
         "service.go",
         "sync.go",

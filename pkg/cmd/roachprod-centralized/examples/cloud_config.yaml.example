@@ -14,6 +14,7 @@
 providers:
   # GCE Providers
   - type: gce
+    environment: ephemeral  # authorization scope name for permission checks
     gce:
       project: cockroach-ephemeral
       metadata_project: cockroach-ephemeral
@@ -24,6 +25,7 @@ providers:
       dns_managed_domain: roachprod-managed.crdb.io
   
   - type: gce
+    environment: roachstress  # authorization scope name for permission checks
     gce:
       project: cockroach-roachstress
       metadata_project: cockroach-ephemeral
@@ -34,6 +36,7 @@ providers:
       dns_managed_domain: roachprod-managed.crdb.io
   
   - type: gce
+    environment: drt  # authorization scope name for permission checks
     gce:
       project: cockroach-drt
       metadata_project: cockroach-ephemeral
@@ -45,27 +48,33 @@ providers:
 
   # AWS Providers
   - type: aws
+    environment: aws-default  # authorization scope name for permission checks
     aws:
       account_id: "541263489771"
       assume_sts_role: true
-  
+
   - type: aws
+    environment: aws-secondary  # authorization scope name for permission checks
     aws:
       account_id: "337380398238"
       assume_sts_role: true
 
   # IBM Provider
   - type: ibm
+    environment: ibm-default  # authorization scope name for permission checks
 
   # Azure Providers
   - type: azure
+    environment: azure-adhoc  # authorization scope name for permission checks
     azure:
       subscription_name: e2e-adhoc
-  
+
   - type: azure
+    environment: azure-infra  # authorization scope name for permission checks
     azure:
       subscription_name: e2e-infra
-  
+
   - type: azure
+    environment: azure-sponsorship  # authorization scope name for permission checks
     azure:
       subscription_name: Microsoft Azure Sponsorship

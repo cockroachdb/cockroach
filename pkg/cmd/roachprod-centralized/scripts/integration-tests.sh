@@ -415,7 +415,7 @@ else
 fi
 
 log_test "3.4e Cannot add permissions to delegated SA"
-ADD_PERM_DATA='{"provider":"gcp","account":"test-account","permission":"clusters:view:all"}'
+ADD_PERM_DATA='{"scope":"gcp-test-account","permission":"clusters:view:all"}'
 HTTP_CODE=$(get_http_status POST "${API_URL}/service-accounts/${CREATED_DELEGATED_SA_ID}/permissions" "$TOKEN_ALICE" "$ADD_PERM_DATA")
 assert_http_status "$HTTP_CODE" "403" "Cannot add permissions to delegated SA"
 
@@ -436,7 +436,7 @@ else
 fi
 
 log_test "3.6 Add permission to service account"
-ADD_PERM_DATA='{"provider":"gcp","account":"test-account","permission":"clusters:view:all"}'
+ADD_PERM_DATA='{"scope":"gcp-test-account","permission":"clusters:view:all"}'
 RESP=$(api_call POST "${API_URL}/service-accounts/${CREATED_SA_ID}/permissions" "$TOKEN_ALICE" "$ADD_PERM_DATA")
 assert_status "$RESP" "success" "Add permission succeeds"
 CREATED_PERM_ID=$(echo "$RESP" | jq -r '.data.id // .data.permission.id // empty' 2>/dev/null)
@@ -498,14 +498,14 @@ assert_status "$RESP" "success" "List group permissions succeeds"
 assert_json_array_min_length "$RESP" '.data' 10 "At least 10 group permissions"
 
 log_test "4.2 Create group permission"
-CREATE_GP_DATA='{"group_name":"Test-Manual-Group","provider":"azure","account":"test-sub","permission":"clusters:view:all"}'
+CREATE_GP_DATA='{"group_name":"Test-Manual-Group","scope":"azure-test-sub","permission":"clusters:view:all"}'
 RESP=$(api_call POST "${API_URL}/admin/group-permissions" "$TOKEN_ALICE" "$CREATE_GP_DATA")
 assert_status "$RESP" "success" "Create group permission succeeds"
 CREATED_GP_ID=$(echo "$RESP" | jq -r '.data.id // .data.group_permission.id // empty' 2>/dev/null)
 log_info "Created group permission ID: $CREATED_GP_ID"
 
 log_test "4.3 Update group permission"
-UPDATE_GP_DATA='{"group_name":"Test-Manual-Group","provider":"azure","account":"updated-sub","permission":"clusters:view:all"}'
+UPDATE_GP_DATA='{"group_name":"Test-Manual-Group","scope":"azure-updated-sub","permission":"clusters:view:all"}'
 RESP=$(api_call PUT "${API_URL}/admin/group-permissions/${CREATED_GP_ID}" "$TOKEN_ALICE" "$UPDATE_GP_DATA")
 assert_status "$RESP" "success" "Update group permission succeeds"
 
@@ -1528,27 +1528,27 @@ else
     log_fail "Filtered results group_name" "Test-Division-Engineering" "$FIRST_GP_NAME"
 fi
 
-log_test "19.14 Group Permissions - Filter by provider"
-RESP=$(api_call GET "${API_URL}/admin/group-permissions?provider=gcp" "$TOKEN_ALICE")
-assert_status "$RESP" "success" "Filter by provider=gcp succeeds"
+log_test "19.14 Group Permissions - Filter by scope"
+RESP=$(api_call GET "${API_URL}/admin/group-permissions?scope=gcp-cockroach-ephemeral" "$TOKEN_ALICE")
+assert_status "$RESP" "success" "Filter by scope=gcp-cockroach-ephemeral succeeds"
 TOTAL=$(echo "$RESP" | jq -r '.data | length' 2>/dev/null)
-FIRST_PROVIDER=$(echo "$RESP" | jq -r '.data[0].provider // empty' 2>/dev/null)
-if [[ "$FIRST_PROVIDER" == "gcp" ]]; then
-    log_pass "Filter by provider returns gcp permissions ($TOTAL items)"
+FIRST_SCOPE=$(echo "$RESP" | jq -r '.data[0].scope // empty' 2>/dev/null)
+if [[ "$FIRST_SCOPE" == "gcp-cockroach-ephemeral" ]]; then
+    log_pass "Filter by scope returns gcp-cockroach-ephemeral permissions ($TOTAL items)"
 else
-    log_fail "Filter by provider" "gcp" "$FIRST_PROVIDER"
+    log_fail "Filter by scope" "gcp-cockroach-ephemeral" "$FIRST_SCOPE"
 fi
 
 log_test "19.15 Group Permissions - Combined filter and sort"
-RESP=$(api_call GET "${API_URL}/admin/group-permissions?provider=gcp&sortBy=group_name&sortOrder=ascending" "$TOKEN_ALICE")
+RESP=$(api_call GET "${API_URL}/admin/group-permissions?scope=gcp-cockroach-ephemeral&sortBy=group_name&sortOrder=ascending" "$TOKEN_ALICE")
 assert_status "$RESP" "success" "Combined filter and sort succeeds"
 FIRST_GP_COMBINED=$(echo "$RESP" | jq -r '.data[0].group_name // empty' 2>/dev/null)
-FIRST_PROVIDER_COMBINED=$(echo "$RESP" | jq -r '.data[0].provider // empty' 2>/dev/null)
-if [[ "$FIRST_PROVIDER_COMBINED" == "gcp" && -n "$FIRST_GP_COMBINED" ]]; then
+FIRST_SCOPE_COMBINED=$(echo "$RESP" | jq -r '.data[0].scope // empty' 2>/dev/null)
+if [[ "$FIRST_SCOPE_COMBINED" == "gcp-cockroach-ephemeral" && -n "$FIRST_GP_COMBINED" ]]; then
     log_pass "Combined filter+sort works"
-    log_info "First: group_name=$FIRST_GP_COMBINED, provider=$FIRST_PROVIDER_COMBINED"
+    log_info "First: group_name=$FIRST_GP_COMBINED, scope=$FIRST_SCOPE_COMBINED"
 else
-    log_fail "Combined filter+sort" "gcp provider with group_name" "provider=$FIRST_PROVIDER_COMBINED"
+    log_fail "Combined filter+sort" "gcp-cockroach-ephemeral scope with group_name" "scope=$FIRST_SCOPE_COMBINED"
 fi
 
 log_test "19.16 Group Permissions - Pagination with count"
@@ -1985,7 +1985,7 @@ else
 fi
 
 log_test "22.8 Cannot add permissions to seeded delegated SA"
-ADD_PERM_DATA='{"provider":"aws","account":"test","permission":"clusters:view:all"}'
+ADD_PERM_DATA='{"scope":"aws-test","permission":"clusters:view:all"}'
 HTTP_CODE=$(get_http_status POST "${API_URL}/service-accounts/${SA_ALICE_DELEGATED}/permissions" "$TOKEN_ALICE" "$ADD_PERM_DATA")
 assert_http_status "$HTTP_CODE" "403" "Cannot add permissions to delegated SA"
 
@@ -2012,7 +2012,7 @@ if [[ -z "$PRIV_ESCAL_SA_ID" || "$PRIV_ESCAL_SA_ID" == "null" ]]; then
 fi
 
 # Alice has clusters:view:all, so she should be able to grant clusters:view:own
-ADD_PERM_DATA='{"provider":"gcp","account":"cockroach-ephemeral","permission":"clusters:view:own"}'
+ADD_PERM_DATA='{"scope":"gcp-cockroach-ephemeral","permission":"clusters:view:own"}'
 RESP=$(api_call POST "${API_URL}/service-accounts/${PRIV_ESCAL_SA_ID}/permissions" "$TOKEN_ALICE" "$ADD_PERM_DATA")
 assert_status "$RESP" "success" "Alice can grant permission she has (clusters:view:own via :all)"
 

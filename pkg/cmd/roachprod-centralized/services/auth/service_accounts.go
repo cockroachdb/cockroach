@@ -656,8 +656,7 @@ func (s *Service) UpdateServiceAccountPermissions(
 		if !canGrantPermission(principal, perm) {
 			s.auditEvent(ctx, l, principal, AuditSAPermissionsReplaced, "denied", map[string]interface{}{
 				"sa_id":      saID.String(),
-				"provider":   perm.Provider,
-				"account":    perm.Account,
+				"scope":      perm.Scope,
 				"permission": perm.Permission,
 				"reason":     "privilege_escalation",
 			})
@@ -713,8 +712,7 @@ func (s *Service) AddServiceAccountPermission(
 	if !canGrantPermission(principal, permission) {
 		s.auditEvent(ctx, l, principal, AuditSAPermissionAdded, "denied", map[string]interface{}{
 			"sa_id":      saID.String(),
-			"provider":   permission.Provider,
-			"account":    permission.Account,
+			"scope":      permission.Scope,
 			"permission": permission.Permission,
 			"reason":     types.ErrPermissionEscalation.Error(),
 		})
@@ -732,7 +730,7 @@ func (s *Service) AddServiceAccountPermission(
 		return errors.Wrap(err, "failed to check existing permissions")
 	}
 	for _, p := range existing {
-		if p.Provider == permission.Provider && p.Account == permission.Account && p.Permission == permission.Permission {
+		if p.Scope == permission.Scope && p.Permission == permission.Permission {
 			return types.ErrPermissionAlreadyExists
 		}
 	}
@@ -744,8 +742,7 @@ func (s *Service) AddServiceAccountPermission(
 	s.auditEvent(ctx, l, principal, AuditSAPermissionAdded, "success", map[string]interface{}{
 		"sa_id":         saID.String(),
 		"permission_id": permission.ID.String(),
-		"provider":      permission.Provider,
-		"account":       permission.Account,
+		"scope":         permission.Scope,
 		"permission":    permission.Permission,
 	})
 
@@ -814,16 +811,15 @@ func (s *Service) RemoveServiceAccountPermission(
 // Rules:
 // 1. Principal must have the permission (or a higher-scoped version)
 // 2. :all scope can grant :own, but :own cannot grant :all
-// 3. For provider/account-scoped permissions, principal must have access to that scope (or wildcard)
+// 3. For scoped permissions, principal must have access to that scope (or wildcard)
 func canGrantPermission(
 	principal *pkgauth.Principal, permission *auth.ServiceAccountPermission,
 ) bool {
 	permStr := permission.Permission
-	provider := permission.Provider
-	account := permission.Account
+	scope := permission.Scope
 
 	// Check if principal has exact permission with matching or broader scope
-	if principal.HasPermissionScoped(permStr, provider, account) {
+	if principal.HasPermissionScoped(permStr, scope) {
 		return true
 	}
 
@@ -831,7 +827,7 @@ func canGrantPermission(
 	// check if principal has :all
 	if strings.HasSuffix(permStr, ":own") {
 		allVersion := strings.TrimSuffix(permStr, ":own") + ":all"
-		if principal.HasPermissionScoped(allVersion, provider, account) {
+		if principal.HasPermissionScoped(allVersion, scope) {
 			return true
 		}
 	}

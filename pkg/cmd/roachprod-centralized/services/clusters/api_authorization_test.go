@@ -15,6 +15,11 @@ import (
 )
 
 func TestCheckClusterAccessPermission(t *testing.T) {
+	providerEnvironments := map[string]string{
+		"gcp-project1": "gcp-engineering",
+		"aws-account1": "aws-staging",
+	}
+
 	tests := []struct {
 		name               string
 		principal          *pkgauth.Principal
@@ -28,8 +33,7 @@ func TestCheckClusterAccessPermission(t *testing.T) {
 				User: &authmodels.User{Email: "other@example.com"},
 				Permissions: []authmodels.Permission{
 					&authmodels.UserPermission{
-						Provider:   "gcp",
-						Account:    "project1",
+						Scope:      "gcp-engineering",
 						Permission: "clusters:view:all",
 					},
 				},
@@ -47,8 +51,7 @@ func TestCheckClusterAccessPermission(t *testing.T) {
 				User: &authmodels.User{Email: "test@example.com"},
 				Permissions: []authmodels.Permission{
 					&authmodels.UserPermission{
-						Provider:   "gcp",
-						Account:    "project1",
+						Scope:      "gcp-engineering",
 						Permission: "clusters:view:own",
 					},
 				},
@@ -66,8 +69,7 @@ func TestCheckClusterAccessPermission(t *testing.T) {
 				User: &authmodels.User{Email: "other@example.com"},
 				Permissions: []authmodels.Permission{
 					&authmodels.UserPermission{
-						Provider:   "gcp",
-						Account:    "project1",
+						Scope:      "gcp-engineering",
 						Permission: "clusters:view:own",
 					},
 				},
@@ -80,13 +82,12 @@ func TestCheckClusterAccessPermission(t *testing.T) {
 			expected:           false,
 		},
 		{
-			name: "user without permission for provider cannot access",
+			name: "user without permission for environment cannot access",
 			principal: &pkgauth.Principal{
 				User: &authmodels.User{Email: "test@example.com"},
 				Permissions: []authmodels.Permission{
 					&authmodels.UserPermission{
-						Provider:   "aws",
-						Account:    "account1",
+						Scope:      "aws-staging",
 						Permission: "clusters:view:all",
 					},
 				},
@@ -102,7 +103,7 @@ func TestCheckClusterAccessPermission(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := checkClusterAccessPermission(tt.principal, tt.cluster, tt.requiredPermission)
+			result := checkClusterAccessPermission(tt.principal, tt.cluster, tt.requiredPermission, providerEnvironments)
 			assert.Equal(t, tt.expected, result)
 		})
 	}
