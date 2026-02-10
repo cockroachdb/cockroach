@@ -217,9 +217,15 @@ func maybeEnv(envKey, defaultValue string) string {
 }
 
 // CanPost returns true if the github API token environment variable is set to
-// a nontrivial value.
+// a nontrivial value and if the GITHUB_REPOSITORY environment variable is set
+// to an appropriate value.
 func (o *Options) CanPost() bool {
-	return o.Token != ""
+	const cockroach = "cockroachdb/cockroach"
+	// NB: GitHub Actions sets the GITHUB_REPOSITORY environment variable.
+	// We don't want issue posting to run on forks, so this will keep that
+	// from happening. Note we check the GITHUB_REPO env var below, which is
+	// different. It's manually set in TeamCity in various places.
+	return maybeEnv("GITHUB_REPOSITORY", cockroach) == cockroach && o.Token != ""
 }
 
 // IsReleaseBranch returns true for branches that we want to treat as
