@@ -17,12 +17,48 @@ http_archive(
     ],
 )
 
+# bazel_lib is a dependency of aspect_rules_js v2.8+
+# NB: The name of the `aspect_bazel_lib` library changed to `bazel_lib` in v3.0.0.
+# In the future as these libraries get updated we should be able to consolidate on
+# `bazel_lib` for everything. For now, we need two versions of the library installed
+# at different versions for both names.
+http_archive(
+    name = "bazel_lib",
+    sha256 = "6fd3b1e1a38ca744f9664be4627ced80895c7d2ee353891c172f1ab61309c933",
+    strip_prefix = "bazel-lib-3.0.0",
+    url = "https://storage.googleapis.com/public-bazel-artifacts/bazel/bazel-lib-v3.0.0.tar.gz",
+)
+
+# tar.bzl is a dependency of aspect_bazel_lib v2.22.5
+http_archive(
+    name = "tar.bzl",
+    sha256 = "8bac5a2b43f9988e4e69bb03a242b9cbed2c53f9cd4c989f879aaa441bda03f4",
+    strip_prefix = "tar.bzl-0.8.1",
+    url = "https://storage.googleapis.com/public-bazel-artifacts/tar/tar.bzl-v0.8.1.tar.gz",
+)
+
+# jq.bzl is a dependency of aspect_bazel_lib v2.22.5
+http_archive(
+    name = "jq.bzl",
+    sha256 = "ec80ea87132eada066fe6efe838b68feebc578626ba8fef7d620a8fc5a1279be",
+    strip_prefix = "jq.bzl-0.5.1",
+    url = "https://storage.googleapis.com/public-bazel-artifacts/bazel/jq.bzl-v0.5.1.tar.gz",
+)
+
+# aspect_tools_telemetry_report is a dependency of aspect_rules_js v2.8+
+http_archive(
+    name = "aspect_tools_telemetry_report",
+    sha256 = "fea3bc2f9b7896ab222756c27147b1f1b8f489df8114e03d252ffff475f8bce6",
+    strip_prefix = "tools_telemetry-0.2.8",
+    url = "https://storage.googleapis.com/public-bazel-artifacts/bazel/tools_telemetry-v0.2.8.tar.gz",
+)
+
 # Like the above, but for JS.
 http_archive(
     name = "aspect_rules_js",
-    sha256 = "83e5af4d17385d1c3268c31ae217dbfc8525aa7bcf52508dc6864baffc8b9501",
-    strip_prefix = "rules_js-2.3.7",
-    url = "https://storage.googleapis.com/public-bazel-artifacts/js/rules_js-v2.3.7.tar.gz",
+    sha256 = "1774702556e1d0b83b7f5eb58ec95676afe6481c62596b53f5b96575bacccf73",
+    strip_prefix = "rules_js-2.9.2",
+    url = "https://storage.googleapis.com/public-bazel-artifacts/js/rules_js-v2.9.2.tar.gz",
 )
 
 http_archive(
@@ -249,9 +285,9 @@ http_archive(
 # Do this AFTER, not BEFORE, upgrading the library.
 http_archive(
     name = "aspect_bazel_lib",
-    sha256 = "349aabd3c2b96caeda6181eb0ae1f14f2a1d9f3cd3c8b05d57f709ceb12e9fb3",
-    strip_prefix = "bazel-lib-2.9.4",
-    url = "https://storage.googleapis.com/public-bazel-artifacts/bazel/bazel-lib-v2.9.4.tar.gz",
+    sha256 = "94e192033ca8027f26de71c9000a67ef9c73695c2b88e2c559045170917ead0c",
+    strip_prefix = "bazel-lib-2.22.5",
+    url = "https://storage.googleapis.com/public-bazel-artifacts/bazel/bazel-lib-v2.22.5.tar.gz",
 )
 
 # Load custom toolchains.
