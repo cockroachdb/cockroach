@@ -222,6 +222,12 @@ object FunctionNullInputBehavior
 FunctionNullInputBehavior :  FunctionID
 FunctionNullInputBehavior :  NullInputBehavior
 
+object FunctionParams
+
+FunctionParams :  FunctionID
+FunctionParams : []Params
+FunctionParams :  ReturnType
+
 object FunctionSecurity
 
 FunctionSecurity :  FunctionID
@@ -625,6 +631,7 @@ Function <|-- FunctionBody
 Function <|-- FunctionLeakProof
 Function <|-- FunctionName
 Function <|-- FunctionNullInputBehavior
+Function <|-- FunctionParams
 Function <|-- FunctionSecurity
 Function <|-- FunctionVolatility
 PrimaryIndex <|-- IndexColumn

@@ -1044,6 +1044,11 @@ type SetFunctionBody struct {
 	Body scpb.FunctionBody
 }
 
+type SetFunctionParams struct {
+	immediateMutationOp
+	Params scpb.FunctionParams
+}
+
 type SetFunctionSecurity struct {
 	immediateMutationOp
 	FunctionID descpb.ID

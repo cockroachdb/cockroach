@@ -1,0 +1,37 @@
+setup
+CREATE TABLE t(
+  a INT PRIMARY KEY,
+  b INT,
+  C INT,
+  INDEX t_idx_b(b),
+  INDEX t_idx_c(c)
+);
+CREATE SEQUENCE sq1;
+CREATE VIEW v AS SELECT a FROM t;
+CREATE TYPE notmyworkday AS ENUM ('Monday', 'Tuesday');
+CREATE FUNCTION f(a notmyworkday) RETURNS INT VOLATILE LANGUAGE SQL AS $$
+  SELECT a FROM t;
+  SELECT b FROM t@t_idx_b;
+  SELECT c FROM t@t_idx_c;
+  SELECT a FROM v;
+  SELECT nextval('sq1');
+$$;
+----
+
+build
+CREATE OR REPLACE FUNCTION f(a notmyworkday) RETURNS INT IMMUTABLE LANGUAGE SQL AS $$
+  SELECT 1;
+$$;
+----
+- [[FunctionVolatility:{DescID: 109}, PUBLIC], ABSENT]
+  {functionId: 109, volatility: {volatility: IMMUTABLE}}
+- [[FunctionLeakProof:{DescID: 109}, PUBLIC], ABSENT]
+  {functionId: 109}
+- [[FunctionNullInputBehavior:{DescID: 109}, PUBLIC], ABSENT]
+  {functionId: 109, nullInputBehavior: {nullInputBehavior: CALLED_ON_NULL_INPUT}}
+- [[FunctionSecurity:{DescID: 109}, PUBLIC], ABSENT]
+  {functionId: 109, security: {}}
+- [[FunctionParams:{DescID: 109}, PUBLIC], ABSENT]
+  {functionId: 109, params: [{class: {}, name: a, type: {closedTypeIds: [107, 108], type: {family: EnumFamily, oid: 100107, udtMetadata: {arrayTypeOid: 100108}}, typeName: public.notmyworkday}}]}
+- [[FunctionBody:{DescID: 109}, PUBLIC], ABSENT]
+  {body: SELECT 1;, functionId: 109, lang: {lang: SQL}, usesTypeIds: [107, 108]}

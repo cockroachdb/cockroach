@@ -1130,6 +1130,12 @@ func (w *walkCtx) walkFunction(fnDesc catalog.FunctionDescriptor) {
 		FunctionID: fnDesc.GetID(),
 		Security:   catpb.FunctionSecurity{Security: fnDesc.GetSecurity()},
 	})
+	if w.clusterVersion.IsActive(clusterversion.V26_2) {
+		w.ev(scpb.Status_PUBLIC, &scpb.FunctionParams{
+			FunctionID: fnDesc.GetID(),
+			Params:     fn.Params,
+		})
+	}
 
 	fnBody := &scpb.FunctionBody{
 		FunctionID:  fnDesc.GetID(),
