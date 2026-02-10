@@ -307,6 +307,15 @@ func (s *authenticationServer) userLogin(
 		}
 	}
 
+	// Update estimated_last_login_time for LDAP-authenticated users when
+	// LDAP provisioning is enabled.
+	if ldapAuthSuccess {
+		execCfg := s.sqlServer.ExecutorConfig()
+		if provisioning.ClusterProvisioningConfig(execCfg.Settings).Enabled("ldap") {
+			sql.UpdateLastLoginTime(ctx, execCfg, []secuser.SQLUsername{username})
+		}
+	}
+
 	cookie, err := s.createSessionFor(ctx, username)
 	if err != nil {
 		return nil, srverrors.APIInternalError(ctx, err)
