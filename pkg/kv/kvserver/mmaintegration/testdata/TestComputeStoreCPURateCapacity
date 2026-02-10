@@ -1,0 +1,79 @@
+# All CPU values are in cores (1 core = 1e9 ns/s).
+
+# Normal case: node at 50% CPU, single store, all CPU from stores.
+# cpuUtil = 8/16 = 0.5, nodeCapacity = 8/0.5 = 16, storeCapacity = 16/1 = 16
+compute store-load=8 node-cpu-usage=8 node-cpu-capacity=16 total-stores-cpu-usage=8 num-stores=1
+----
+kv-capacity: 16.00 cores (total: 16.00 cores)
+kv-util: 50.00% (8.00/16.00 cores)
+
+# Normal case: node at 80%, 2 stores with uneven load (7 + 3 = 10 cores).
+# Both stores get the same capacity = (10/0.8)/2 = 6.25 cores.
+# The hot store (this one, 7 cores) is at 112% and will shed load to the
+# lighter store (3 cores, 48%), driving rebalancing.
+compute store-load=7 node-cpu-usage=12.8 node-cpu-capacity=16 total-stores-cpu-usage=10 num-stores=2
+----
+kv-capacity: 6.25 cores (total: 8.00 cores)
+kv-util: 112.00% (7.00/6.25 cores)
+
+# Auxiliary CPU dominates: store uses 1 core, but node is fully utilized at 16 cores.
+# The store gets capacity=1, so it appears 100% utilized and will shed load.
+# cpuUtil = 16/16 = 1.0, nodeCapacity = 1/1.0 = 1, storeCapacity = 1/1 = 1
+compute store-load=1 node-cpu-usage=16 node-cpu-capacity=16 total-stores-cpu-usage=1 num-stores=1
+----
+kv-capacity: 1.00 cores (total: 16.00 cores)
+kv-util: 100.00% (1.00/1.00 cores)
+
+# Low utilization fallback: cpuUtil < 1%.
+# Falls back to nodeCapacity/2/numStores = 16/2/2 = 4.
+compute store-load=0.1 node-cpu-usage=0.1 node-cpu-capacity=16 total-stores-cpu-usage=0.1 num-stores=2
+----
+kv-capacity: 4.00 cores (total: 8.00 cores)
+kv-util: 2.50% (0.10/4.00 cores)
+
+# StoresCPURate is zero (no replicas reporting CPU yet).
+# Falls back to nodeCapacity/2/numStores = 16/2/1 = 8.
+compute store-load=0.5 node-cpu-usage=8 node-cpu-capacity=16 total-stores-cpu-usage=0 num-stores=1
+----
+kv-capacity: 8.00 cores (total: 16.00 cores)
+kv-util: 6.25% (0.50/8.00 cores)
+
+# Unknown capacity: nodeCapacity is 0 (mixed version cluster?).
+# Falls back to storeCPULoad * 2, i.e. 50% utilization.
+compute store-load=4 node-cpu-usage=0 node-cpu-capacity=0 total-stores-cpu-usage=0 num-stores=1
+----
+kv-capacity: 8.00 cores (total: 0.00 cores)
+kv-util: 50.00% (4.00/8.00 cores)
+
+# ---------------------------------------------------------------------------
+# Problems with the current model
+# ---------------------------------------------------------------------------
+# The current formula assumes ALL node CPU usage is caused (directly or
+# indirectly) by MMA-tracked store work:
+#
+#   mma-capacity = total-stores-cpu-usage / (node-cpu-usage / node-cpu-capacity) / num-stores
+#
+# This means a store's MMA utilization always equals the node's CPU utilization,
+# regardless of how much of the node CPU usage is actually store-related.
+# When there is significant non-store CPU (SQL gateway, background jobs,
+# GC, etc.), the model assigns an unrealistically low capacity to the
+# store, causing premature load shedding.
+
+# Problem case 1: store uses 0.1 cores, node uses 6.4 cores (40% util). The
+# implied multiplier is 64x (= 6.4 / 0.1) - the model blames the store for 64x
+# its direct load. The store gets mma-capacity=0.25 and appears 40% utilized
+# despite consuming 0.1 out of 16 available cores. The node has 9.6 idle cores.
+compute store-load=0.1 node-cpu-usage=6.4 node-cpu-capacity=16 total-stores-cpu-usage=0.1 num-stores=1
+----
+kv-capacity: 0.25 cores (total: 16.00 cores)
+kv-util: 40.00% (0.10/0.25 cores)
+
+# Problem case 2: multi-store node. 4 stores using 1.0 cores total, but the
+# node uses 6.4 of 16 cores (40% util) — 5.4 cores are non-store work.
+# The model gives each store capacity = (1.0/0.4)/4 = 0.62 cores instead of
+# a fair share of 16/4 = 4 cores. This store uses only 0.1 cores but reports
+# 16% util, inflated by non-store CPU that the model attributes to the stores.
+compute store-load=0.1 node-cpu-usage=6.4 node-cpu-capacity=16 total-stores-cpu-usage=1.0 num-stores=4
+----
+kv-capacity: 0.62 cores (total: 4.00 cores)
+kv-util: 16.00% (0.10/0.62 cores)
