@@ -11414,13 +11414,13 @@ func TestBackupEmptyRevisionHistoryIncs(t *testing.T) {
 	})
 }
 
-// TestDatabaseRestoreDownloadsZoneConfig verifies that when restoring a
-// database from a backup that contains the zones table, the restore creates
-// the temporary system database and downloads the zones table into it.
-// testZoneConfigDownload verifies that a restore operation downloads zone configs
-// into a temporary system database.
-func testZoneConfigDownload(t *testing.T, sqlDB *sqlutils.SQLRunner, restoreQuery string) {
+func testZoneConfigDownload(
+	t *testing.T, sqlDB *sqlutils.SQLRunner, restoreQuery string, restoredTableName string,
+) {
 	sqlDB.Exec(t, `SET CLUSTER SETTING jobs.debug.pausepoints = 'restore.after_pre_data'`)
+
+	var initialZoneCount int
+	sqlDB.QueryRow(t, `SELECT count(*) FROM system.zones`).Scan(&initialZoneCount)
 
 	var jobID jobspb.JobID
 	sqlDB.QueryRow(t, restoreQuery).Scan(&jobID)
@@ -11436,9 +11436,10 @@ func testZoneConfigDownload(t *testing.T, sqlDB *sqlutils.SQLRunner, restoreQuer
 		fmt.Sprintf(`SELECT table_name FROM [SHOW TABLES FROM %s]`, tmpDBName),
 		[][]string{{"zones"}})
 
-	var zoneCount int
-	sqlDB.QueryRow(t, fmt.Sprintf(`SELECT count(*) FROM %s.zones`, tmpDBName)).Scan(&zoneCount)
-	require.Greater(t, zoneCount, 0, "zones table should contain data")
+	var pausedZoneCount int
+	sqlDB.QueryRow(t, `SELECT count(*) FROM system.zones`).Scan(&pausedZoneCount)
+	require.Greater(t, pausedZoneCount, initialZoneCount,
+		"system.zones count should increase after zone config download during restore")
 
 	sqlDB.Exec(t, `SET CLUSTER SETTING jobs.debug.pausepoints = ''`)
 
@@ -11446,8 +11447,22 @@ func testZoneConfigDownload(t *testing.T, sqlDB *sqlutils.SQLRunner, restoreQuer
 	jobutils.WaitForJobToSucceed(t, sqlDB, jobID)
 
 	sqlDB.CheckQueryResults(t, checkTempDBExists, [][]string{{"0"}})
+
+	var target, rawConfigSQL string
+	sqlDB.QueryRow(t,
+		fmt.Sprintf(`SHOW ZONE CONFIGURATION FROM TABLE %s`, restoredTableName)).
+		Scan(&target, &rawConfigSQL)
+
+	// Verify the zone config contains the expected TTL.
+	require.Contains(t, rawConfigSQL, "gc.ttlseconds = 7200",
+		"zone config should contain the expected gc.ttlseconds value")
 }
 
+// TestRestoreDownloadsZoneConfig verifies that when restoring a
+// database/table from a backup that contains the zones table, the restore creates
+// the temporary system database and downloads the zones table into it.
+// testZoneConfigDownload verifies that a restore operation downloads zone configs
+// into a temporary system database.
 func TestRestoreDownloadsZoneConfig(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -11456,16 +11471,20 @@ func TestRestoreDownloadsZoneConfig(t *testing.T) {
 	_, sqlDB, _, cleanupFn := backupRestoreTestSetup(t, singleNode, numAccounts, InitManualReplication)
 	defer cleanupFn()
 
+	sqlDB.Exec(t, `ALTER TABLE data.bank CONFIGURE ZONE USING gc.ttlseconds = 7200`)
+
 	sqlDB.Exec(t, `BACKUP INTO 'nodelocal://1/test'`)
 
 	t.Run("database-restore", func(t *testing.T) {
 		testZoneConfigDownload(t, sqlDB,
-			`RESTORE DATABASE data FROM LATEST IN 'nodelocal://1/test' WITH new_db_name = 'data2', detached`)
+			`RESTORE DATABASE data FROM LATEST IN 'nodelocal://1/test' WITH new_db_name = 'data2', detached`,
+			"data2.bank")
 	})
 
 	t.Run("table-restore", func(t *testing.T) {
 		sqlDB.Exec(t, `CREATE DATABASE data3`)
 		testZoneConfigDownload(t, sqlDB,
-			`RESTORE TABLE data.bank FROM LATEST IN 'nodelocal://1/test' WITH into_db = 'data3', detached`)
+			`RESTORE TABLE data.bank FROM LATEST IN 'nodelocal://1/test' WITH into_db = 'data3', detached`,
+			"data3.bank")
 	})
 }
