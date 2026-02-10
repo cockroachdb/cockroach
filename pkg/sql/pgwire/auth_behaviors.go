@@ -13,6 +13,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security/provisioning"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/identmap"
 	"github.com/cockroachdb/errors"
 	"github.com/go-ldap/ldap/v3"
 )
@@ -29,6 +30,7 @@ type AuthBehaviors struct {
 	replacementIdentity string
 	replacedIdentity    bool
 	roleMapper          RoleMapper
+	enhancedRoleMapper  EnhancedRoleMapper
 	authorizer          Authorizer
 	provisioningManager struct {
 		sync.Once
@@ -36,12 +38,14 @@ type AuthBehaviors struct {
 	}
 	provisioner      Provisioner
 	externalAuthTime time.Duration
+	sanIdentities    []string
 }
 
 // Ensure that an AuthBehaviors is easily composable with itself.
 var _ Authenticator = (*AuthBehaviors)(nil).Authenticate
 var _ func() = (*AuthBehaviors)(nil).ConnClose
 var _ RoleMapper = (*AuthBehaviors)(nil).MapRole
+var _ EnhancedRoleMapper = (*AuthBehaviors)(nil).EnhancedMapRole
 var _ Authorizer = (*AuthBehaviors)(nil).MaybeAuthorize
 
 // This is a hack for the unused-symbols linter. These two functions
@@ -112,9 +116,27 @@ func (b *AuthBehaviors) MapRole(
 	return nil, errors.New("no RoleMapper provided to AuthBehaviors")
 }
 
+// EnhancedMapRole delegates to the EnhancedRoleMapper passed to SetEnhancedRoleMapper
+// or returns an error if SetEnhancedRoleMapper has not been called.
+func (b *AuthBehaviors) EnhancedMapRole(
+	ctx context.Context,
+	systemIdentities []string,
+) ([]identmap.IdentityMapping, error) {
+	if found := b.enhancedRoleMapper; found != nil {
+		return found(ctx, systemIdentities)
+	}
+	return nil, errors.New("no SAN RoleMapper provided to AuthBehaviors.")
+}
+
 // SetRoleMapper updates the RoleMapper to be used.
 func (b *AuthBehaviors) SetRoleMapper(m RoleMapper) {
 	b.roleMapper = m
+}
+
+// SetEnhancedRoleMapper sets the enhanced mapper that returns identity associations.
+// This is used when multiple system identities exist (e.g., certificate SANs).
+func (a *AuthBehaviors) SetEnhancedRoleMapper(fn EnhancedRoleMapper) {
+	a.enhancedRoleMapper = fn
 }
 
 // SetAuthorizer updates the SetAuthorizer to be used.
@@ -193,4 +215,14 @@ func (b *AuthBehaviors) AddExternalAuthTime(t time.Duration) {
 // service during authentication.
 func (b *AuthBehaviors) GetTotalExternalAuthTime() time.Duration {
 	return b.externalAuthTime
+}
+
+// SetSANIdentities sets the SAN identities extracted from the client certificate.
+func (b *AuthBehaviors) SetSANIdentities(sans []string) {
+	b.sanIdentities = sans
+}
+
+// GetSANIdentities returns the SAN identities extracted from the client certificate.
+func (b *AuthBehaviors) GetSANIdentities() []string {
+	return b.sanIdentities
 }

@@ -7,6 +7,7 @@ package rpc
 
 import (
 	"context"
+	"crypto/x509"
 
 	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -63,4 +64,13 @@ func TestingAuthorizeTenantRequest(
 		tenantID:               tenID,
 		capabilitiesAuthorizer: authorizer,
 	}.authorize(ctx, sv, tenID, method, request)
+}
+
+// TestingValidateRootOrNodeClientCert performs root/node client certificate
+// validation for testing.
+func TestingValidateRootOrNodeClientCert(
+	ctx context.Context, sv *settings.Values, cert interface{},
+) error {
+	kvAuthObject := kvAuth{sv: sv, tenant: tenantAuthorizer{tenantID: roachpb.SystemTenantID}}
+	return kvAuthObject.validateRootOrNodeClientCert(cert.(*x509.Certificate))
 }
