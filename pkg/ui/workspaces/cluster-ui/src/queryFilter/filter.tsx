@@ -7,7 +7,7 @@ import { CaretDown, Cancel } from "@cockroachlabs/icons";
 import { Input } from "antd";
 import { History } from "history";
 import isEqual from "lodash/isEqual";
-import React from "react";
+import React, { useState, useRef, useEffect, useCallback } from "react";
 import Select from "react-select";
 
 import { Button } from "../button";
@@ -29,7 +29,7 @@ import {
   clearBnt,
 } from "./filterClasses";
 
-interface QueryFilter {
+export interface QueryFilterProps {
   onSubmitFilters: (filters: Filters) => void;
   smth?: string;
   appNames?: string[];
@@ -56,10 +56,6 @@ interface QueryFilter {
   showRegions?: boolean;
   showNodes?: boolean;
   timeLabel?: string;
-}
-interface FilterState {
-  hide: boolean;
-  filters: Filters;
 }
 
 export interface Filters extends Record<string, string | boolean> {
@@ -293,521 +289,500 @@ export const getTimeValueInSeconds = (filters: Filters): number | "empty" => {
   }
 };
 
-export class Filter extends React.Component<QueryFilter, FilterState> {
-  state: FilterState = {
-    hide: true,
-    filters: {
-      ...this.props.filters,
-    },
-  };
+export function Filter({
+  onSubmitFilters,
+  appNames,
+  activeFilters,
+  filters: propsFilters,
+  dbNames,
+  usernames,
+  sessionStatuses,
+  executionStatuses,
+  schemaInsightTypes,
+  workloadInsightTypes,
+  regions,
+  nodes,
+  hideAppNames,
+  hideTimeLabel,
+  showDB,
+  showUsername,
+  showSessionStatus,
+  showExecutionStatus,
+  showSchemaInsightTypes,
+  showWorkloadInsightTypes,
+  showSqlType,
+  showScan,
+  showRegions,
+  showNodes,
+  timeLabel,
+}: QueryFilterProps): React.ReactElement {
+  const [hide, setHide] = useState(true);
+  const [filters, setFilters] = useState<Filters>({ ...propsFilters });
 
-  dropdownRef: React.RefObject<HTMLDivElement> = React.createRef();
+  const dropdownRef = useRef<HTMLDivElement>(null);
 
-  componentDidMount(): void {
-    window.addEventListener("click", this.outsideClick, false);
-  }
-  componentWillUnmount(): void {
-    window.removeEventListener("click", this.outsideClick, false);
-  }
-  componentDidUpdate(prevProps: QueryFilter): void {
-    if (prevProps.filters !== this.props.filters) {
-      this.setState({
-        filters: {
-          ...this.props.filters,
-        },
-      });
-    }
-  }
-  outsideClick = (): void => {
-    this.setState({ hide: true });
-  };
+  useEffect(() => {
+    setFilters({ ...propsFilters });
+  }, [propsFilters]);
 
-  insideClick = (event: React.MouseEvent<HTMLDivElement>): void => {
+  const outsideClick = useCallback((): void => {
+    setHide(true);
+  }, []);
+
+  useEffect(() => {
+    window.addEventListener("click", outsideClick, false);
+    return () => {
+      window.removeEventListener("click", outsideClick, false);
+    };
+  }, [outsideClick]);
+
+  const insideClick = (event: React.MouseEvent<HTMLDivElement>): void => {
     event.stopPropagation();
   };
 
-  toggleFilters = (): void => {
-    this.setState({
-      hide: !this.state.hide,
-    });
+  const toggleFilters = (): void => {
+    setHide(prev => !prev);
   };
 
-  handleSubmit = (): void => {
-    this.props.onSubmitFilters(this.state.filters);
-    this.setState({ hide: true });
+  const handleSubmit = (): void => {
+    onSubmitFilters(filters);
+    setHide(true);
   };
 
-  handleSelectChange = (
+  const handleSelectChange = (
     event: { label: string; value: string },
     field: string,
   ): void => {
-    this.setState({
-      filters: {
-        ...this.state.filters,
-        [field]: event.value,
-      },
-    });
+    setFilters(prev => ({
+      ...prev,
+      [field]: event.value,
+    }));
   };
 
-  handleChange = (
-    event: React.ChangeEvent<HTMLInputElement>,
-    field: string,
-  ): void => {
-    this.setState({
-      filters: {
-        ...this.state.filters,
-        [field]: event.target.checked || this.validateInput(event.target.value),
-      },
-    });
-  };
-
-  toggleFullScan = (event: React.ChangeEvent<HTMLInputElement>): void => {
-    this.setState({
-      filters: {
-        ...this.state.filters,
-        fullScan: event.target.checked,
-      },
-    });
-  };
-
-  validateInput = (value: string): string => {
+  const validateInput = (value: string): string => {
     const isInteger = /^[0-9]+$/;
     return (value === "" || isInteger.test(value)) && value.length <= 3
       ? value
-      : this.state.filters.timeNumber ?? "";
+      : filters.timeNumber ?? "";
   };
 
-  clearInput = (): void => {
-    this.setState({
-      filters: {
-        ...this.state.filters,
-        timeNumber: "",
-      },
-    });
+  const handleChange = (
+    event: React.ChangeEvent<HTMLInputElement>,
+    field: string,
+  ): void => {
+    setFilters(prev => ({
+      ...prev,
+      [field]: event.target.checked || validateInput(event.target.value),
+    }));
   };
 
-  isOptionSelected = (option: string, field: string): boolean => {
+  const toggleFullScan = (event: React.ChangeEvent<HTMLInputElement>): void => {
+    setFilters(prev => ({
+      ...prev,
+      fullScan: event.target.checked,
+    }));
+  };
+
+  const clearInput = (): void => {
+    setFilters(prev => ({
+      ...prev,
+      timeNumber: "",
+    }));
+  };
+
+  const isOptionSelected = (option: string, field: string): boolean => {
     const selection = field?.split(",");
     return selection?.length > 0 && selection?.includes(option);
   };
 
-  render(): React.ReactElement {
-    const { hide, filters } = this.state;
-    const {
-      appNames,
-      dbNames,
-      usernames,
-      sessionStatuses,
-      executionStatuses,
-      schemaInsightTypes,
-      workloadInsightTypes,
-      regions,
-      nodes,
-      activeFilters,
-      hideAppNames,
-      showDB,
-      showSqlType,
-      showScan,
-      showRegions,
-      showNodes,
-      timeLabel,
-      hideTimeLabel,
-      showUsername,
-      showSessionStatus,
-      showExecutionStatus,
-      showSchemaInsightTypes,
-      showWorkloadInsightTypes,
-    } = this.props;
-    const dropdownArea = hide ? hidden : dropdown;
-    const customStylesSmall = { ...selectCustomStyles };
-    customStylesSmall.container = (provided: any) => ({
-      ...provided,
-      width: "141px",
-      border: "none",
-    });
+  const handleMultiSelectChange = (field: string, selected: string): void => {
+    setFilters(prev => ({
+      ...prev,
+      [field]: selected,
+    }));
+  };
 
-    const appFilters = filters.app ?? "";
-    const appsOptions =
-      !hideAppNames && appNames
-        ? appNames.map(app => ({
-            label: app,
-            value: app,
-            isSelected: this.isOptionSelected(app, appFilters),
-          }))
-        : [];
+  const dropdownArea = hide ? hidden : dropdown;
+  const customStylesSmall = { ...selectCustomStyles };
+  customStylesSmall.container = (provided: any) => ({
+    ...provided,
+    width: "141px",
+    border: "none",
+  });
 
-    const selectedApps = appFilters.split(",");
-    const appValue = appsOptions.filter(option => {
-      return selectedApps.includes(option.label);
-    });
-    const appFilter = (
-      <div>
-        <div className={filterLabel.margin}>{getLabelFromKey("app")}</div>
-        <MultiSelectCheckbox
-          options={appsOptions}
-          placeholder="All"
-          field="app"
-          parent={this}
-          value={appValue}
-        />
-      </div>
-    );
-
-    const databaseFilters = filters.database ?? "";
-    const databasesOptions =
-      showDB && dbNames
-        ? dbNames.map(db => ({
-            label: db,
-            value: db,
-            isSelected: this.isOptionSelected(db, databaseFilters),
-          }))
-        : [];
-
-    const selectedDatabases = databaseFilters.split(",");
-    const databaseValue = databasesOptions.filter(option => {
-      return selectedDatabases.includes(option.label);
-    });
-    const dbFilter = (
-      <div>
-        <div className={filterLabel.margin}>{getLabelFromKey("database")}</div>
-        <MultiSelectCheckbox
-          options={databasesOptions}
-          placeholder="All"
-          field="database"
-          parent={this}
-          value={databaseValue}
-        />
-      </div>
-    );
-
-    const usernameFilters = filters.username ?? "";
-    const usernameOptions =
-      showUsername && usernames
-        ? usernames.map(username => ({
-            label: username,
-            value: username,
-            isSelected: this.isOptionSelected(username, usernameFilters),
-          }))
-        : [];
-
-    const selectedUsernames = usernameFilters.split(",");
-    const usernameValue = usernameOptions.filter(option => {
-      return selectedUsernames.includes(option.label);
-    });
-    const usernameFilter = (
-      <div>
-        <div className={filterLabel.margin}>{getLabelFromKey("username")}</div>
-        <MultiSelectCheckbox
-          options={usernameOptions}
-          placeholder="All"
-          field="username"
-          parent={this}
-          value={usernameValue}
-        />
-      </div>
-    );
-
-    const sessionStatusFilters = filters.sessionStatus ?? "";
-    const sessionStatusOptions =
-      showSessionStatus && sessionStatuses
-        ? sessionStatuses.map(sessionStatus => ({
-            label: sessionStatus,
-            value: sessionStatus,
-            isSelected: this.isOptionSelected(
-              sessionStatus,
-              sessionStatusFilters,
-            ),
-          }))
-        : [];
-
-    const selectedSessionStatuses = sessionStatusFilters.split(",");
-    const sessionStatusValue = sessionStatusOptions.filter(option => {
-      return selectedSessionStatuses.includes(option.label);
-    });
-    const sessionStatusFilter = (
-      <div>
-        <div className={filterLabel.margin}>
-          {getLabelFromKey("sessionStatus")}
-        </div>
-        <MultiSelectCheckbox
-          options={sessionStatusOptions}
-          placeholder="All"
-          field="sessionStatus"
-          parent={this}
-          value={sessionStatusValue}
-        />
-      </div>
-    );
-
-    const executionStatusFilters = filters.executionStatus ?? "";
-    const executionStatusOptions =
-      showExecutionStatus && executionStatuses
-        ? executionStatuses.map(executionStatus => ({
-            label: executionStatus,
-            value: executionStatus,
-            isSelected: this.isOptionSelected(
-              executionStatus,
-              executionStatusFilters,
-            ),
-          }))
-        : [];
-
-    const selectedExecutionStatuses = executionStatusFilters.split(",");
-    const executionStatusValue = executionStatusOptions.filter(option =>
-      selectedExecutionStatuses.includes(option.label),
-    );
-    const executionStatusFilter = (
-      <div>
-        <div className={filterLabel.margin}>
-          {getLabelFromKey("executionStatus")}
-        </div>
-        <MultiSelectCheckbox
-          options={executionStatusOptions}
-          placeholder="All"
-          field="executionStatus"
-          parent={this}
-          value={executionStatusValue}
-        />
-      </div>
-    );
-
-    const schemaInsightType = filters.schemaInsightType ?? "";
-    const schemaInsightTypeOptions =
-      showSchemaInsightTypes && schemaInsightTypes
-        ? schemaInsightTypes.map(schemaInsight => ({
-            label: schemaInsight,
-            value: schemaInsight,
-            isSelected: this.isOptionSelected(schemaInsight, schemaInsightType),
-          }))
-        : [];
-    const selectedSchemaInsightTypes = schemaInsightType.split(",");
-    const schemaInsightTypeValue = schemaInsightTypeOptions.filter(option =>
-      selectedSchemaInsightTypes.includes(option.label),
-    );
-    const schemaInsightTypeFilter = (
-      <div>
-        <div className={filterLabel.margin}>
-          {getLabelFromKey("schemaInsightType")}
-        </div>
-        <MultiSelectCheckbox
-          options={schemaInsightTypeOptions}
-          placeholder="All"
-          field="schemaInsightType"
-          parent={this}
-          value={schemaInsightTypeValue}
-        />
-      </div>
-    );
-
-    const workloadInsightTypeFilters = filters.workloadInsightType ?? "";
-    const workloadInsightTypeOptions =
-      showWorkloadInsightTypes && workloadInsightTypes
-        ? workloadInsightTypes.map(workloadInsight => ({
-            label: workloadInsight,
-            value: workloadInsight,
-            isSelected: this.isOptionSelected(
-              workloadInsight,
-              workloadInsightTypeFilters,
-            ),
-          }))
-        : [];
-
-    const selectedWorkloadInsightTypes = workloadInsightTypeFilters.split(",");
-    const workloadInsightTypeValue = workloadInsightTypeOptions.filter(
-      option => {
-        return selectedWorkloadInsightTypes.includes(option.label);
-      },
-    );
-    const workloadInsightTypeFilter = (
-      <div>
-        <div className={filterLabel.margin}>
-          {getLabelFromKey("workloadInsightType")}
-        </div>
-        <MultiSelectCheckbox
-          options={workloadInsightTypeOptions}
-          placeholder="All"
-          field="workloadInsightType"
-          parent={this}
-          value={workloadInsightTypeValue}
-        />
-      </div>
-    );
-
-    const regionsFilters = filters.regions ?? "";
-    const regionsOptions =
-      showRegions && regions
-        ? regions.map(region => ({
-            label: region,
-            value: region,
-            isSelected: this.isOptionSelected(region, regionsFilters),
-          }))
-        : [];
-    const selectedRegions = regionsFilters.split(",");
-    const regionsValue = regionsOptions.filter(option =>
-      selectedRegions.includes(option.label),
-    );
-    const regionsFilter = (
-      <div>
-        <div className={filterLabel.margin}>{getLabelFromKey("regions")}</div>
-        <MultiSelectCheckbox
-          options={regionsOptions}
-          placeholder="All"
-          field="regions"
-          parent={this}
-          value={regionsValue}
-        />
-      </div>
-    );
-
-    const nodeFilters = filters.nodes ?? "";
-    const nodesOptions =
-      showNodes && nodes
-        ? nodes.map(node => ({
-            label: node,
-            value: node,
-            isSelected: this.isOptionSelected(node, nodeFilters),
-          }))
-        : [];
-
-    const selectedNodes = nodeFilters.split(",");
-    const nodesValue = nodesOptions.filter(option => {
-      return selectedNodes.includes(option.label);
-    });
-    const nodesFilter = (
-      <div>
-        <div className={filterLabel.margin}>{getLabelFromKey("nodes")}</div>
-        <MultiSelectCheckbox
-          options={nodesOptions}
-          placeholder="All"
-          field="nodes"
-          parent={this}
-          value={nodesValue}
-        />
-      </div>
-    );
-
-    const sqlTypeFilters = filters.sqlType ?? "";
-    const sqlTypes = showSqlType
-      ? [
-          {
-            label: "DDL",
-            value: "TypeDDL",
-            isSelected: this.isOptionSelected("DDL", sqlTypeFilters),
-          },
-          {
-            label: "DML",
-            value: "TypeDML",
-            isSelected: this.isOptionSelected("DML", sqlTypeFilters),
-          },
-          {
-            label: "DCL",
-            value: "TypeDCL",
-            isSelected: this.isOptionSelected("DCL", sqlTypeFilters),
-          },
-          {
-            label: "TCL",
-            value: "TypeTCL",
-            isSelected: this.isOptionSelected("TCL", sqlTypeFilters),
-          },
-        ]
+  const appFilters = filters.app ?? "";
+  const appsOptions =
+    !hideAppNames && appNames
+      ? appNames.map(app => ({
+          label: app,
+          value: app,
+          isSelected: isOptionSelected(app, appFilters),
+        }))
       : [];
 
-    const selectedSqlTypes = sqlTypeFilters.split(",");
-    const sqlTypeValue = sqlTypes?.filter(option => {
-      return selectedSqlTypes.includes(option.label);
-    });
-    const sqlTypeFilter = (
-      <div>
-        <div className={filterLabel.margin}>{getLabelFromKey("sqlType")}</div>
-        <MultiSelectCheckbox
-          options={sqlTypes}
-          placeholder="All"
-          field="sqlType"
-          parent={this}
-          value={sqlTypeValue}
-        />
-      </div>
-    );
+  const selectedApps = appFilters.split(",");
+  const appValue = appsOptions.filter(option => {
+    return selectedApps.includes(option.label);
+  });
+  const appFilter = (
+    <div>
+      <div className={filterLabel.margin}>{getLabelFromKey("app")}</div>
+      <MultiSelectCheckbox
+        options={appsOptions}
+        placeholder="All"
+        field="app"
+        onChange={handleMultiSelectChange}
+        value={appValue}
+      />
+    </div>
+  );
 
-    const fullScanFilter = (
+  const databaseFilters = filters.database ?? "";
+  const databasesOptions =
+    showDB && dbNames
+      ? dbNames.map(db => ({
+          label: db,
+          value: db,
+          isSelected: isOptionSelected(db, databaseFilters),
+        }))
+      : [];
+
+  const selectedDatabases = databaseFilters.split(",");
+  const databaseValue = databasesOptions.filter(option => {
+    return selectedDatabases.includes(option.label);
+  });
+  const dbFilter = (
+    <div>
+      <div className={filterLabel.margin}>{getLabelFromKey("database")}</div>
+      <MultiSelectCheckbox
+        options={databasesOptions}
+        placeholder="All"
+        field="database"
+        onChange={handleMultiSelectChange}
+        value={databaseValue}
+      />
+    </div>
+  );
+
+  const usernameFilters = filters.username ?? "";
+  const usernameOptions =
+    showUsername && usernames
+      ? usernames.map(username => ({
+          label: username,
+          value: username,
+          isSelected: isOptionSelected(username, usernameFilters),
+        }))
+      : [];
+
+  const selectedUsernames = usernameFilters.split(",");
+  const usernameValue = usernameOptions.filter(option => {
+    return selectedUsernames.includes(option.label);
+  });
+  const usernameFilter = (
+    <div>
+      <div className={filterLabel.margin}>{getLabelFromKey("username")}</div>
+      <MultiSelectCheckbox
+        options={usernameOptions}
+        placeholder="All"
+        field="username"
+        onChange={handleMultiSelectChange}
+        value={usernameValue}
+      />
+    </div>
+  );
+
+  const sessionStatusFilters = filters.sessionStatus ?? "";
+  const sessionStatusOptions =
+    showSessionStatus && sessionStatuses
+      ? sessionStatuses.map(sessionStatus => ({
+          label: sessionStatus,
+          value: sessionStatus,
+          isSelected: isOptionSelected(sessionStatus, sessionStatusFilters),
+        }))
+      : [];
+
+  const selectedSessionStatuses = sessionStatusFilters.split(",");
+  const sessionStatusValue = sessionStatusOptions.filter(option => {
+    return selectedSessionStatuses.includes(option.label);
+  });
+  const sessionStatusFilter = (
+    <div>
       <div className={filterLabel.margin}>
-        <input
-          type="checkbox"
-          id="full-table-scan-toggle"
-          checked={filters.fullScan}
-          onChange={e => this.toggleFullScan(e)}
-          className={checkbox.input}
-        />
-        <label htmlFor="full-table-scan-toggle" className={checkbox.label}>
-          Only show statements with full table scans
-        </label>
+        {getLabelFromKey("sessionStatus")}
       </div>
-    );
-    // TODO replace all onChange actions in Selects and Checkboxes with one onSubmit in <form />
+      <MultiSelectCheckbox
+        options={sessionStatusOptions}
+        placeholder="All"
+        field="sessionStatus"
+        onChange={handleMultiSelectChange}
+        value={sessionStatusValue}
+      />
+    </div>
+  );
 
-    return (
-      <div onClick={this.insideClick} ref={this.dropdownRef}>
-        <div className={dropdownButton} onClick={this.toggleFilters}>
-          Filters ({activeFilters})&nbsp;
-          <CaretDown className={caretDown} />
-        </div>
-        <div className={dropdownArea}>
-          <div className={dropdownContentWrapper}>
-            {!hideAppNames ? appFilter : ""}
-            {showDB ? dbFilter : ""}
-            {showUsername ? usernameFilter : ""}
-            {showSessionStatus ? sessionStatusFilter : ""}
-            {showExecutionStatus ? executionStatusFilter : ""}
-            {showSchemaInsightTypes ? schemaInsightTypeFilter : ""}
-            {showWorkloadInsightTypes ? workloadInsightTypeFilter : ""}
-            {showSqlType ? sqlTypeFilter : ""}
-            {showRegions ? regionsFilter : ""}
-            {showNodes ? nodesFilter : ""}
-            {hideTimeLabel
-              ? ""
-              : filters.timeUnit && (
-                  <>
-                    <div className={filterLabel.margin}>
-                      {timeLabel
-                        ? `${timeLabel} runs longer than`
-                        : "Statement fingerprint runs longer than"}
-                    </div>
-                    <section className={timePair.wrapper}>
-                      <Input
-                        value={filters.timeNumber}
-                        onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
-                          this.handleChange(e, "timeNumber")
-                        }
-                        onFocus={this.clearInput}
-                        className={timePair.timeNumber}
-                      />
-                      <Select
-                        options={timeUnit}
-                        value={timeUnit.filter(
-                          unit => unit.label === filters.timeUnit,
-                        )}
-                        onChange={e => this.handleSelectChange(e, "timeUnit")}
-                        className={timePair.timeUnit}
-                        styles={customStylesSmall}
-                      />
-                    </section>
-                  </>
-                )}
-            {showScan ? fullScanFilter : ""}
-            <div className={applyBtn.wrapper}>
-              <Button
-                className={applyBtn.btn}
-                textAlign="center"
-                onClick={this.handleSubmit}
-              >
-                Apply
-              </Button>
-            </div>
+  const executionStatusFilters = filters.executionStatus ?? "";
+  const executionStatusOptions =
+    showExecutionStatus && executionStatuses
+      ? executionStatuses.map(executionStatus => ({
+          label: executionStatus,
+          value: executionStatus,
+          isSelected: isOptionSelected(executionStatus, executionStatusFilters),
+        }))
+      : [];
+
+  const selectedExecutionStatuses = executionStatusFilters.split(",");
+  const executionStatusValue = executionStatusOptions.filter(option =>
+    selectedExecutionStatuses.includes(option.label),
+  );
+  const executionStatusFilter = (
+    <div>
+      <div className={filterLabel.margin}>
+        {getLabelFromKey("executionStatus")}
+      </div>
+      <MultiSelectCheckbox
+        options={executionStatusOptions}
+        placeholder="All"
+        field="executionStatus"
+        onChange={handleMultiSelectChange}
+        value={executionStatusValue}
+      />
+    </div>
+  );
+
+  const schemaInsightType = filters.schemaInsightType ?? "";
+  const schemaInsightTypeOptions =
+    showSchemaInsightTypes && schemaInsightTypes
+      ? schemaInsightTypes.map(schemaInsight => ({
+          label: schemaInsight,
+          value: schemaInsight,
+          isSelected: isOptionSelected(schemaInsight, schemaInsightType),
+        }))
+      : [];
+  const selectedSchemaInsightTypes = schemaInsightType.split(",");
+  const schemaInsightTypeValue = schemaInsightTypeOptions.filter(option =>
+    selectedSchemaInsightTypes.includes(option.label),
+  );
+  const schemaInsightTypeFilter = (
+    <div>
+      <div className={filterLabel.margin}>
+        {getLabelFromKey("schemaInsightType")}
+      </div>
+      <MultiSelectCheckbox
+        options={schemaInsightTypeOptions}
+        placeholder="All"
+        field="schemaInsightType"
+        onChange={handleMultiSelectChange}
+        value={schemaInsightTypeValue}
+      />
+    </div>
+  );
+
+  const workloadInsightTypeFilters = filters.workloadInsightType ?? "";
+  const workloadInsightTypeOptions =
+    showWorkloadInsightTypes && workloadInsightTypes
+      ? workloadInsightTypes.map(workloadInsight => ({
+          label: workloadInsight,
+          value: workloadInsight,
+          isSelected: isOptionSelected(
+            workloadInsight,
+            workloadInsightTypeFilters,
+          ),
+        }))
+      : [];
+
+  const selectedWorkloadInsightTypes = workloadInsightTypeFilters.split(",");
+  const workloadInsightTypeValue = workloadInsightTypeOptions.filter(option => {
+    return selectedWorkloadInsightTypes.includes(option.label);
+  });
+  const workloadInsightTypeFilter = (
+    <div>
+      <div className={filterLabel.margin}>
+        {getLabelFromKey("workloadInsightType")}
+      </div>
+      <MultiSelectCheckbox
+        options={workloadInsightTypeOptions}
+        placeholder="All"
+        field="workloadInsightType"
+        onChange={handleMultiSelectChange}
+        value={workloadInsightTypeValue}
+      />
+    </div>
+  );
+
+  const regionsFilters = filters.regions ?? "";
+  const regionsOptions =
+    showRegions && regions
+      ? regions.map(region => ({
+          label: region,
+          value: region,
+          isSelected: isOptionSelected(region, regionsFilters),
+        }))
+      : [];
+  const selectedRegions = regionsFilters.split(",");
+  const regionsValue = regionsOptions.filter(option =>
+    selectedRegions.includes(option.label),
+  );
+  const regionsFilter = (
+    <div>
+      <div className={filterLabel.margin}>{getLabelFromKey("regions")}</div>
+      <MultiSelectCheckbox
+        options={regionsOptions}
+        placeholder="All"
+        field="regions"
+        onChange={handleMultiSelectChange}
+        value={regionsValue}
+      />
+    </div>
+  );
+
+  const nodeFilters = filters.nodes ?? "";
+  const nodesOptions =
+    showNodes && nodes
+      ? nodes.map(node => ({
+          label: node,
+          value: node,
+          isSelected: isOptionSelected(node, nodeFilters),
+        }))
+      : [];
+
+  const selectedNodes = nodeFilters.split(",");
+  const nodesValue = nodesOptions.filter(option => {
+    return selectedNodes.includes(option.label);
+  });
+  const nodesFilter = (
+    <div>
+      <div className={filterLabel.margin}>{getLabelFromKey("nodes")}</div>
+      <MultiSelectCheckbox
+        options={nodesOptions}
+        placeholder="All"
+        field="nodes"
+        onChange={handleMultiSelectChange}
+        value={nodesValue}
+      />
+    </div>
+  );
+
+  const sqlTypeFilters = filters.sqlType ?? "";
+  const sqlTypes = showSqlType
+    ? [
+        {
+          label: "DDL",
+          value: "TypeDDL",
+          isSelected: isOptionSelected("DDL", sqlTypeFilters),
+        },
+        {
+          label: "DML",
+          value: "TypeDML",
+          isSelected: isOptionSelected("DML", sqlTypeFilters),
+        },
+        {
+          label: "DCL",
+          value: "TypeDCL",
+          isSelected: isOptionSelected("DCL", sqlTypeFilters),
+        },
+        {
+          label: "TCL",
+          value: "TypeTCL",
+          isSelected: isOptionSelected("TCL", sqlTypeFilters),
+        },
+      ]
+    : [];
+
+  const selectedSqlTypes = sqlTypeFilters.split(",");
+  const sqlTypeValue = sqlTypes?.filter(option => {
+    return selectedSqlTypes.includes(option.label);
+  });
+  const sqlTypeFilter = (
+    <div>
+      <div className={filterLabel.margin}>{getLabelFromKey("sqlType")}</div>
+      <MultiSelectCheckbox
+        options={sqlTypes}
+        placeholder="All"
+        field="sqlType"
+        onChange={handleMultiSelectChange}
+        value={sqlTypeValue}
+      />
+    </div>
+  );
+
+  const fullScanFilter = (
+    <div className={filterLabel.margin}>
+      <input
+        type="checkbox"
+        id="full-table-scan-toggle"
+        checked={filters.fullScan}
+        onChange={e => toggleFullScan(e)}
+        className={checkbox.input}
+      />
+      <label htmlFor="full-table-scan-toggle" className={checkbox.label}>
+        Only show statements with full table scans
+      </label>
+    </div>
+  );
+  // TODO replace all onChange actions in Selects and Checkboxes with one onSubmit in <form />
+
+  return (
+    <div onClick={insideClick} ref={dropdownRef}>
+      <div className={dropdownButton} onClick={toggleFilters}>
+        Filters ({activeFilters})&nbsp;
+        <CaretDown className={caretDown} />
+      </div>
+      <div className={dropdownArea}>
+        <div className={dropdownContentWrapper}>
+          {!hideAppNames ? appFilter : ""}
+          {showDB ? dbFilter : ""}
+          {showUsername ? usernameFilter : ""}
+          {showSessionStatus ? sessionStatusFilter : ""}
+          {showExecutionStatus ? executionStatusFilter : ""}
+          {showSchemaInsightTypes ? schemaInsightTypeFilter : ""}
+          {showWorkloadInsightTypes ? workloadInsightTypeFilter : ""}
+          {showSqlType ? sqlTypeFilter : ""}
+          {showRegions ? regionsFilter : ""}
+          {showNodes ? nodesFilter : ""}
+          {hideTimeLabel
+            ? ""
+            : filters.timeUnit && (
+                <>
+                  <div className={filterLabel.margin}>
+                    {timeLabel
+                      ? `${timeLabel} runs longer than`
+                      : "Statement fingerprint runs longer than"}
+                  </div>
+                  <section className={timePair.wrapper}>
+                    <Input
+                      value={filters.timeNumber}
+                      onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
+                        handleChange(e, "timeNumber")
+                      }
+                      onFocus={clearInput}
+                      className={timePair.timeNumber}
+                    />
+                    <Select
+                      options={timeUnit}
+                      value={timeUnit.filter(
+                        unit => unit.label === filters.timeUnit,
+                      )}
+                      onChange={e => handleSelectChange(e, "timeUnit")}
+                      className={timePair.timeUnit}
+                      styles={customStylesSmall}
+                    />
+                  </section>
+                </>
+              )}
+          {showScan ? fullScanFilter : ""}
+          <div className={applyBtn.wrapper}>
+            <Button
+              className={applyBtn.btn}
+              textAlign="center"
+              onClick={handleSubmit}
+            >
+              Apply
+            </Button>
           </div>
         </div>
       </div>
-    );
-  }
+    </div>
+  );
 }
 
 interface SelectedFilterProps {
