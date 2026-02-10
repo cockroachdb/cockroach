@@ -57,7 +57,7 @@ type GRPCConnection = Connection[*grpc.ClientConn]
 func newGRPCPeerOptions(
 	rpcCtx *Context, k peerKey, locality roachpb.Locality,
 ) *peerOptions[*grpc.ClientConn] {
-	pm, lm := rpcCtx.metrics.acquire(k, locality, rpcProtocolGrpc)
+	pm, lm := rpcCtx.metrics.acquire(k, locality, rpcProtocolGRPC)
 	return &peerOptions[*grpc.ClientConn]{
 		locality: locality,
 		peers:    &rpcCtx.peers,

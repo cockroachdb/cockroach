@@ -71,21 +71,21 @@ func TestMetricsRelease(t *testing.T) {
 	// added/deleted).
 	require.Equal(t, expectedCount, verifyAllFields(m, 0))
 	// Verify that a new peer's metrics all get registered.
-	pm, lm := m.acquire(k1, l1, rpcProtocolGrpc)
+	pm, lm := m.acquire(k1, l1, rpcProtocolGRPC)
 	require.Equal(t, expectedCount, verifyAllFields(m, 1))
 	// Acquire the same peer. The count remains at 1.
-	pm2, lm2 := m.acquire(k1, l1, rpcProtocolGrpc)
+	pm2, lm2 := m.acquire(k1, l1, rpcProtocolGRPC)
 	require.Equal(t, expectedCount, verifyAllFields(m, 1))
 	require.Equal(t, pm, pm2)
 	require.Equal(t, lm, lm2)
 
 	// Acquire a different peer but the same locality.
-	pm3, lm3 := m.acquire(k2, l1, rpcProtocolGrpc)
+	pm3, lm3 := m.acquire(k2, l1, rpcProtocolGRPC)
 	require.NotEqual(t, pm, pm3)
 	require.Equal(t, lm, lm3)
 
 	// Acquire a different locality but the same peer.
-	pm4, lm4 := m.acquire(k1, l2, rpcProtocolGrpc)
+	pm4, lm4 := m.acquire(k1, l2, rpcProtocolGRPC)
 	require.Equal(t, pm, pm4)
 	require.NotEqual(t, lm, lm4)
 
@@ -93,7 +93,7 @@ func TestMetricsRelease(t *testing.T) {
 	require.Equal(t, expectedCount, verifyAllFields(m, 2))
 
 	// Acquire the same peer and locality with drpc protocol
-	pm5, lm5 := m.acquire(k1, l1, rpcProtocolDrpc)
+	pm5, lm5 := m.acquire(k1, l1, rpcProtocolDRPC)
 	require.NotEqual(t, pm, pm5)
 	require.Equal(t, lm, lm5)
 }
@@ -113,10 +113,10 @@ func TestServerRequestInstrumentInterceptor(t *testing.T) {
 		rpcProtocol  string
 		shouldRecord bool
 	}{
-		{"rpc/test/method", codes.OK, rpcProtocolGrpc, true},
-		{"rpc/test/method", codes.Internal, rpcProtocolGrpc, true},
-		{"rpc/test/method", codes.Aborted, rpcProtocolGrpc, true},
-		{"rpc/test/notRecorded", codes.OK, rpcProtocolGrpc, false},
+		{"rpc/test/method", codes.OK, rpcProtocolGRPC, true},
+		{"rpc/test/method", codes.Internal, rpcProtocolGRPC, true},
+		{"rpc/test/method", codes.Aborted, rpcProtocolGRPC, true},
+		{"rpc/test/notRecorded", codes.OK, rpcProtocolGRPC, false},
 	}
 
 	for _, tc := range testcase {

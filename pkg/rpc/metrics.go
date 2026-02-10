@@ -439,8 +439,8 @@ const (
 	RpcStatusCodeLabel = "statusCode"
 	RpcProtocolLabel   = "protocol"
 
-	rpcProtocolGrpc = "grpc"
-	rpcProtocolDrpc = "drpc"
+	rpcProtocolGRPC = "grpc"
+	rpcProtocolDRPC = "drpc"
 )
 
 // RequestMetrics contains metrics for RPC requests.
@@ -490,7 +490,7 @@ func NewRequestMetricsInterceptor(
 		requestMetrics.Duration.Observe(map[string]string{
 			RpcMethodLabel:     info.FullMethod,
 			RpcStatusCodeLabel: code.String(),
-			RpcProtocolLabel:   rpcProtocolGrpc,
+			RpcProtocolLabel:   rpcProtocolGRPC,
 		}, float64(duration.Nanoseconds()))
 		return resp, err
 	}
@@ -526,7 +526,7 @@ func NewDRPCRequestMetricsInterceptor(
 		requestMetrics.Duration.Observe(map[string]string{
 			RpcMethodLabel:     rpc,
 			RpcStatusCodeLabel: code.String(),
-			RpcProtocolLabel:   rpcProtocolDrpc,
+			RpcProtocolLabel:   rpcProtocolDRPC,
 		}, float64(duration.Nanoseconds()))
 		return resp, err
 	}
