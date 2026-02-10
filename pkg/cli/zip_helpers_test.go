@@ -17,6 +17,7 @@ func TestFileSelection(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	type s = string
+	// Tests for base-name-only patterns (just filename, no directory).
 	testCases := []struct {
 		incl    []s
 		excl    []s
@@ -44,6 +45,142 @@ func TestFileSelection(t *testing.T) {
 				t.Errorf("incl=%+v, excl=%+v: mistakenly includes %q", sel.includePatterns, sel.excludePatterns, f)
 			}
 		}
+	}
+}
+
+func TestFileSelectionWithPaths(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	type s = string
+	var zt time.Time
+
+	testCases := []struct {
+		name     string
+		incl     []s
+		excl     []s
+		zipPath  s
+		included bool
+	}{
+		{
+			name:     "path include with wildcard node",
+			incl:     []s{"debug/nodes/*/*.json"},
+			zipPath:  "debug/nodes/1/details.json",
+			included: true,
+		},
+		{
+			name:     "path include rejects wrong node",
+			incl:     []s{"debug/nodes/1/*.json"},
+			zipPath:  "debug/nodes/2/details.json",
+			included: false,
+		},
+		{
+			name:     "path exclude on per-node spares cluster-wide same name",
+			excl:     []s{"debug/nodes/*/ranges.json"},
+			zipPath:  "debug/ranges.json",
+			included: true,
+		},
+		{
+			name:     "base include with path exclude removes targeted file",
+			incl:     []s{"*.json"},
+			excl:     []s{"debug/nodes/*/ranges.json"},
+			zipPath:  "debug/nodes/1/ranges.json",
+			included: false,
+		},
+		{
+			name:     "path include distinguishes cluster-wide vs per-node",
+			incl:     []s{"debug/events.json"},
+			zipPath:  "debug/nodes/1/events.json",
+			included: false,
+		},
+		{
+			name:     "path pattern does not match bare filename",
+			incl:     []s{"debug/nodes/*/cpu.pprof"},
+			zipPath:  "cpu.pprof",
+			included: false,
+		},
+		{
+			name:     "base-only zipPath with base pattern",
+			incl:     []s{"*.pprof"},
+			zipPath:  "cpu.pprof",
+			included: true,
+		},
+		{
+			name:     "mixed base and path include rejects non-matching node",
+			incl:     []s{"*.txt", "debug/nodes/1/*.json"},
+			zipPath:  "debug/nodes/2/details.json",
+			included: false,
+		},
+		{
+			name:     "deep path include matches heapprof subdirectory",
+			incl:     []s{"debug/nodes/*/heapprof/*.pprof"},
+			zipPath:  "debug/nodes/1/heapprof/memprof.2026-02-10.pprof",
+			included: true,
+		},
+		{
+			name:     "deep path exclude spares non-matching files in same dir",
+			excl:     []s{"debug/nodes/*/heapprof/*.pprof"},
+			zipPath:  "debug/nodes/1/heapprof/memmonitoring.2026-02-10.txt",
+			included: true,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			sel := fileSelection{includePatterns: tc.incl, excludePatterns: tc.excl}
+			actual := sel.isIncluded(tc.zipPath, zt, zt)
+			if actual != tc.included {
+				t.Errorf("incl=%+v, excl=%+v, path=%q: expected included=%v, got %v",
+					sel.includePatterns, sel.excludePatterns, tc.zipPath, tc.included, actual)
+			}
+		})
+	}
+}
+
+func TestRetrievalPatternsWithPaths(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	type s = string
+	testCases := []struct {
+		name     string
+		incl     []s
+		expected []s
+	}{
+		{
+			name:     "no patterns returns wildcard",
+			incl:     nil,
+			expected: []s{"*"},
+		},
+		{
+			name:     "base-name patterns returned as-is",
+			incl:     []s{"*.json", "*.txt"},
+			expected: []s{"*.json", "*.txt"},
+		},
+		{
+			name:     "path patterns filtered out, only base-name sent to server",
+			incl:     []s{"*.json", "debug/nodes/1/*.txt"},
+			expected: []s{"*.json"},
+		},
+		{
+			name:     "all path patterns returns wildcard",
+			incl:     []s{"debug/nodes/1/*.json", "debug/nodes/*/stacks.txt"},
+			expected: []s{"*"},
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			sel := fileSelection{includePatterns: tc.incl}
+			actual := sel.retrievalPatterns()
+			if len(actual) != len(tc.expected) {
+				t.Fatalf("expected %v, got %v", tc.expected, actual)
+			}
+			for i := range actual {
+				if actual[i] != tc.expected[i] {
+					t.Errorf("expected %v, got %v", tc.expected, actual)
+					break
+				}
+			}
+		})
 	}
 }
 
