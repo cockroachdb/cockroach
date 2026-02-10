@@ -153,7 +153,7 @@ func TestPrincipal_HasPermissionScoped(t *testing.T) {
 			},
 			permission: "clusters:create",
 			scope:      "*",
-			expected:   true,
+			expected:   false,
 		},
 		{
 			name: "wildcard scope in both",

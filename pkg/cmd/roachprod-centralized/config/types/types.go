@@ -38,6 +38,7 @@ type Config struct {
 			Path    string `env:"PATH" default:"/metrics" description:"Metrics endpoint path"`
 			Port    int    `env:"PORT" default:"8081" description:"Metrics HTTP port"`
 		} `env:"METRICS" description:"Metrics configuration"`
+		TrustedProxies []string `env:"TRUSTED_PROXIES" description:"Trusted proxy CIDRs for X-Forwarded-For parsing (empty = trust no proxies, use RemoteAddr)"`
 		Authentication struct {
 			Type   string `env:"TYPE" default:"jwt" description:"Authentication type (disabled, jwt, bearer)"`
 			Header string `env:"HEADER" default:"Authorization" description:"HTTP header for authentication token"`

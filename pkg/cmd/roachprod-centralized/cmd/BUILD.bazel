@@ -11,6 +11,7 @@ go_library(
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/cmd/roachprod-centralized/app",
+        "//pkg/cmd/roachprod-centralized/auth",
         "//pkg/cmd/roachprod-centralized/config",
         "//pkg/cmd/roachprod-centralized/controllers/admin",
         "//pkg/cmd/roachprod-centralized/controllers/auth",

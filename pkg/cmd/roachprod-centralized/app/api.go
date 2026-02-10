@@ -44,6 +44,10 @@ type Api struct {
 	metrics     bool
 	metricsPort int
 
+	// trustedProxies is the list of trusted proxy CIDRs for X-Forwarded-For parsing.
+	// When nil, Gin uses RemoteAddr directly (no proxy headers trusted).
+	trustedProxies []string
+
 	// authHeader is the HTTP header to extract authentication tokens from
 	authHeader string
 
@@ -64,6 +68,19 @@ func (a *Api) Init(l *logger.Logger) {
 
 	// Full API mode: create gin engine with all middlewares
 	ginEngine := gin.New()
+
+	// Configure trusted proxies for correct ClientIP() resolution.
+	// Without this, Gin trusts all proxies by default, allowing X-Forwarded-For
+	// spoofing which bypasses service account IP origin checks.
+	if err := ginEngine.SetTrustedProxies(a.trustedProxies); err != nil {
+		l.Error("invalid trusted proxy configuration", slog.Any("error", err))
+		panic(errors.Wrap(err, "invalid trusted proxy CIDRs"))
+	}
+	if len(a.trustedProxies) == 0 {
+		l.Warn("no trusted proxies configured; ClientIP() will use RemoteAddr directly")
+	} else {
+		l.Info("trusted proxies configured", slog.Any("cidrs", a.trustedProxies))
+	}
 	ginEngine.Use(gin.Recovery())
 	ginEngine.Use(a.securityHeaders())
 	ginEngine.Use(a.requestSizeLimit())

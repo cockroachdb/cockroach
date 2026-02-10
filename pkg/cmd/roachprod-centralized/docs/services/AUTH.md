@@ -427,6 +427,29 @@ if principal.HasPermissionScoped("clusters:create", "gcp-my-project") { ... }
 if principal.HasAnyPermission([]string{"clusters:view:all", "clusters:view:own"}) { ... }
 ```
 
+### Authorization Boundary (Controller vs Service)
+
+Authorization is intentionally split across two layers:
+
+1. Controller layer (coarse gate):
+   - Declare required permission family on the route with `AuthorizationRequirement`.
+   - Keep controller checks generic and easy to audit.
+2. Service layer (fine-grained decision):
+   - Enforce scope/environment constraints via `HasPermissionScoped(...)`.
+   - Enforce ownership/resource checks using trusted persisted data.
+   - Apply final authorization decision before mutations.
+
+#### Practical rules when adding endpoints
+
+1. Route declaration should express coarse intent only:
+   - Example: `clusters:create`, `clusters:view:all|own`, `clusters:update:all|own`.
+2. Service implementation must enforce resource-specific constraints:
+   - For create: validate scopes against provider environments from server config.
+   - For update/delete/read: load resource first, then authorize using stored resource attributes.
+3. Do not authorize from untrusted request fields alone:
+   - Request payload can be malformed or malicious.
+   - Authorization-critical checks should use trusted state (database + server config).
+
 ### Controller Handler Registration
 
 Permissions are declared on controller handlers:

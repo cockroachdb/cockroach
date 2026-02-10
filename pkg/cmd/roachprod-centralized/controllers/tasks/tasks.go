@@ -37,7 +37,6 @@ func NewController(service stypes.IService) *Controller {
 			Authorization: &auth.AuthorizationRequirement{
 				AnyOf: []string{
 					stypes.PermissionViewAll,
-					stypes.PermissionViewOwn,
 				},
 			},
 		},
@@ -48,7 +47,6 @@ func NewController(service stypes.IService) *Controller {
 			Authorization: &auth.AuthorizationRequirement{
 				AnyOf: []string{
 					stypes.PermissionViewAll,
-					stypes.PermissionViewOwn,
 				},
 			},
 		},

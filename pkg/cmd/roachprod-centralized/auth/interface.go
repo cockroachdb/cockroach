@@ -138,7 +138,7 @@ func (p *Principal) HasPermission(permission string) bool {
 
 // HasPermissionScoped checks if the principal has a permission for a specific scope.
 // This is used by services to enforce scope-based access control.
-// Supports wildcard matching: "*" in either principal's permission or required scope matches any value.
+// Supports directional wildcard matching: "*" in the principal scope matches any required scope.
 // Example: HasPermissionScoped("clusters:create", "gcp-engineering")
 func (p *Principal) HasPermissionScoped(permission, scope string) bool {
 	for _, perm := range p.Permissions {
@@ -147,13 +147,12 @@ func (p *Principal) HasPermissionScoped(permission, scope string) bool {
 			continue
 		}
 
-		// Check scope match (supports wildcard on either side)
 		permScope := perm.GetScope()
-		if permScope != "*" && scope != "*" && permScope != scope {
-			continue
+		// Directional scope check:
+		// principal "*" grants any scope, but requested "*" does NOT match narrow principal scopes.
+		if permScope == "*" || permScope == scope {
+			return true
 		}
-
-		return true // All conditions met
 	}
 
 	return false

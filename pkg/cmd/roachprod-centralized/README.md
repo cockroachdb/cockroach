@@ -247,6 +247,11 @@ The service follows a clean architecture pattern:
 - **Models**: Data structures and entities (`models/`)
 - **Utils**: Shared utilities and helpers (`utils/`)
 
+**Authorization Boundary (Important):**
+- Controllers enforce coarse endpoint access (authentication + required permission family).
+- Services enforce fine-grained authorization (scope/environment, ownership, and resource-level checks).
+- Service-layer authorization must use trusted data (stored resource state or server config), not only request payload.
+
 For detailed architecture information, see [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 
 ## Deployment

@@ -46,6 +46,7 @@ go_test(
         "authenticate_test.go",
         "helpers_test.go",
         "okta_test.go",
+        "service_accounts_authorization_test.go",
         "tokens_test.go",
         "validation_test.go",
     ],

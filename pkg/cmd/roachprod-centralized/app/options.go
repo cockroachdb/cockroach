@@ -92,6 +92,14 @@ func WithServices(values []services.IService) OptionFunc {
 	}
 }
 
+// WithApiTrustedProxies sets the trusted proxy CIDRs for X-Forwarded-For parsing.
+// When nil or empty, Gin uses RemoteAddr directly (no proxy headers trusted).
+func WithApiTrustedProxies(proxies []string) OptionFunc {
+	return func(a *App) {
+		a.api.trustedProxies = proxies
+	}
+}
+
 // WithApiAuthenticationHeader sets the HTTP header to extract authentication tokens from.
 func WithApiAuthenticationHeader(header string) OptionFunc {
 	return func(a *App) {

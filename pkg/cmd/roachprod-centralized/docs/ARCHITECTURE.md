@@ -106,6 +106,7 @@ The roachprod-centralized service is designed as a modern, cloud-native REST API
 - Response formatting with `request_id` and `result_type`
 - Error handling and HTTP status code mapping
 - Authentication middleware integration
+- Coarse authorization gate via `AuthorizationRequirement` on handlers (`RequiredPermissions` / `AnyOf`)
 
 ### 2. Services (`services/`)
 
@@ -147,6 +148,25 @@ Each service package contains:
 - Cross-service coordination
 - Background job scheduling
 - Cloud provider orchestration
+- Fine-grained authorization (scope/environment checks, ownership checks, resource-level checks)
+
+### Authorization Boundary Contract
+
+To keep authorization understandable and maintainable:
+
+1. Controllers handle coarse access control:
+   - Authenticate request.
+   - Check required permission family for the endpoint.
+   - Do not implement scope-specific or resource ownership authorization logic.
+2. Services handle fine-grained authorization:
+   - Resolve scope from trusted server-side data.
+   - Enforce ownership/resource checks.
+   - Make final allow/deny decision before performing mutations.
+3. Authorization decisions must be based on trusted state:
+   - Use persisted resources and server config.
+   - Do not rely only on request payload fields for authorization-critical checks.
+
+This split keeps route declarations simple while preventing authorization bypasses in complex business flows.
 
 ### 3. Repositories (`repositories/`)
 

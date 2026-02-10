@@ -102,7 +102,7 @@ func (s *Service) RegisterCluster(
 ) (*cloudcluster.Cluster, error) {
 
 	// Check create permissions
-	if !checkClusterAccessPermission(principal, &input.Cluster, types.PermissionCreate, s.providerEnvironments) {
+	if !checkClusterCreatePermission(principal, &input.Cluster, s.providerEnvironments) {
 		return nil, types.ErrForbidden
 	}
 
@@ -189,11 +189,6 @@ func (s *Service) RegisterClusterUpdate(
 	input types.InputRegisterClusterUpdateDTO,
 ) (*cloudcluster.Cluster, error) {
 
-	// Check update permissions, don't reveal existence otherwise
-	if !checkClusterAccessPermission(principal, &input.Cluster, types.PermissionUpdate, s.providerEnvironments) {
-		return nil, types.ErrClusterNotFound
-	}
-
 	// Check that the cluster exists.
 	c, err := s._store.GetCluster(ctx, l, input.Cluster.Name)
 	if err != nil {
@@ -201,6 +196,11 @@ func (s *Service) RegisterClusterUpdate(
 			return nil, types.ErrClusterNotFound
 		}
 		return nil, err
+	}
+
+	// Check update permissions, don't reveal existence otherwise
+	if !checkClusterAccessPermission(principal, &c, types.PermissionUpdate, s.providerEnvironments) {
+		return nil, types.ErrClusterNotFound
 	}
 
 	// Preserve immutable fields
@@ -330,6 +330,28 @@ func (s *Service) RegisterClusterDelete(
 	}
 
 	return nil
+}
+
+// checkClusterCreatePermission verifies the principal has permission to create
+// the cluster based on their scoped permissions for the cluster's cloud providers.
+func checkClusterCreatePermission(
+	principal *pkgauth.Principal,
+	cluster *cloudcluster.Cluster,
+	providerEnvironments map[string]string,
+) bool {
+	for _, providerID := range cluster.CloudProviders {
+		env, ok := providerEnvironments[providerID]
+		if !ok {
+			// No environment mapping for this provider — deny access.
+			return false
+		}
+
+		if !principal.HasPermissionScoped(types.PermissionCreate, env) {
+			return false
+		}
+	}
+
+	return true
 }
 
 // checkClusterAccessPermission verifies the principal has the required

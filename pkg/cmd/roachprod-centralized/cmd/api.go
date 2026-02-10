@@ -11,6 +11,7 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/app"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/auth"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/config"
 	admincontroller "github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/controllers/admin"
 	authcontroller "github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/controllers/auth"
@@ -91,6 +92,7 @@ func runAPI(cmd *cobra.Command, args []string) error {
 
 	options := []app.IAppOption{
 		app.WithLogger(l),
+		app.WithApiTrustedProxies(cfg.Api.TrustedProxies),
 		app.WithApiPort(cfg.Api.Port),
 		app.WithApiBaseURL(cfg.Api.BasePath),
 		app.WithApiMetrics(cfg.Api.Metrics.Enabled),
@@ -105,7 +107,7 @@ func runAPI(cmd *cobra.Command, args []string) error {
 		app.WithApiController(authcontroller.NewController(services.Auth)),
 	}
 
-	if cfg.Api.Authentication.Type == "bearer" {
+	if auth.AuthenticationType(strings.ToLower(cfg.Api.Authentication.Type)) == auth.AuthenticationTypeBearer {
 		options = append(options,
 			app.WithApiController(authcontroller.NewControllerBearerAuth(services.Auth)),
 			app.WithApiController(admincontroller.NewController(services.Auth)),
