@@ -250,6 +250,7 @@ func (sgc *StoreGrantCoordinators) initGrantCoordinator(
 	kvg.mu.availableIOTokens[admissionpb.RegularWorkClass] = unlimitedTokens / unloadedDuration.ticksInAdjustmentInterval()
 	kvg.mu.availableIOTokens[admissionpb.ElasticWorkClass] = kvg.mu.availableIOTokens[admissionpb.RegularWorkClass]
 	kvg.mu.diskTokensAvailable.writeByteTokens = unlimitedTokens / unloadedDuration.ticksInAdjustmentInterval()
+	kvg.mu.diskTokensError.staleStats = newStaleStatTracker()
 
 	opts := makeWorkQueueOptions(KVWork)
 	// This is IO work, so override the mode value.
