@@ -2487,16 +2487,8 @@ func (sb *statisticsBuilder) buildOffset(offset *OffsetExpr, relProps *props.Rel
 	// Update row count if offset is a constant and row count is non-zero.
 	if cnst, ok := offset.Offset.(*ConstExpr); ok && inputStats.RowCount > 0 {
 		hardOffset := *cnst.Value.(*tree.DInt)
-		if float64(hardOffset) >= inputStats.RowCount {
-			// The correct estimate for row count here is 0, but we don't ever want
-			// row count to be zero unless the cardinality is zero. This is because
-			// the stats may be stale, and we can end up with weird and inefficient
-			// plans if we estimate 0 rows. Use a small number instead.
-			s.RowCount = min(1, inputStats.RowCount)
-		} else if hardOffset > 0 {
-			s.RowCount = inputStats.RowCount - float64(hardOffset)
-		}
-		s.Selectivity = props.MakeSelectivity(s.RowCount / inputStats.RowCount)
+		expectedRowCount := max(inputStats.RowCount-float64(hardOffset), 0)
+		s.ApplySelectivity(props.MakeSelectivity(expectedRowCount / inputStats.RowCount))
 	}
 
 	sb.finalizeFromCardinality(relProps)
