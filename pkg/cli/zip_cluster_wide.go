@@ -8,6 +8,7 @@ package cli
 import (
 	"context"
 	"fmt"
+	"path"
 	"sort"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
@@ -44,7 +45,7 @@ func makeClusterWideZipRequests(
 ) []zipRequest {
 	var zipRequests []zipRequest
 
-	if zipCtx.files.shouldIncludeFile(eventsFile) {
+	if zipCtx.files.shouldIncludeFile(path.Join(prefix, eventsFile)) {
 		zipRequests = append(zipRequests, zipRequest{
 			fn: func(ctx context.Context) (interface{}, error) {
 				return admin.Events(ctx, &serverpb.EventsRequest{})
@@ -55,7 +56,7 @@ func makeClusterWideZipRequests(
 		zr.info("skipping %s due to file filters", eventsFile)
 	}
 
-	if zipCtx.files.shouldIncludeFile(rangeLogFile) {
+	if zipCtx.files.shouldIncludeFile(path.Join(prefix, rangeLogFile)) {
 		zipRequests = append(zipRequests, zipRequest{
 			fn: func(ctx context.Context) (interface{}, error) {
 				return admin.RangeLog(ctx, &serverpb.RangeLogRequest{})
@@ -66,7 +67,7 @@ func makeClusterWideZipRequests(
 		zr.info("skipping %s due to file filters", rangeLogFile)
 	}
 
-	if zipCtx.files.shouldIncludeFile(settingsFile) {
+	if zipCtx.files.shouldIncludeFile(path.Join(prefix, settingsFile)) {
 		zipRequests = append(zipRequests, zipRequest{
 			fn: func(ctx context.Context) (interface{}, error) {
 				return admin.Settings(ctx, &serverpb.SettingsRequest{})
@@ -78,7 +79,7 @@ func makeClusterWideZipRequests(
 	}
 
 	if zipCtx.includeRangeInfo {
-		if zipCtx.files.shouldIncludeFile(problemRangesFile) {
+		if zipCtx.files.shouldIncludeFile(path.Join(prefix, problemRangesName+".json")) {
 			zipRequests = append(zipRequests, zipRequest{
 				fn: func(ctx context.Context) (interface{}, error) {
 					return status.ProblemRanges(ctx, &serverpb.ProblemRangesRequest{})
@@ -147,7 +148,7 @@ func (zc *debugZipContext) collectClusterData(
 			return err
 		})
 
-		if zipCtx.files.shouldIncludeFile(nodesFile) {
+		if zipCtx.files.shouldIncludeFile(path.Join(debugBase, nodesFile)) {
 			if code := status.Code(errors.Cause(err)); code == codes.Unimplemented {
 				// running on non system tenant, use data from redacted NodesList()
 				if cErr := zc.z.createJSONOrError(s, debugBase+"/"+nodesFile, nodesListRedacted, err); cErr != nil {
@@ -187,7 +188,7 @@ func (zc *debugZipContext) collectClusterData(
 			lresponse, err = zc.admin.Liveness(ctx, &serverpb.LivenessRequest{})
 			return err
 		})
-		if zipCtx.files.shouldIncludeFile(livenessFile) {
+		if zipCtx.files.shouldIncludeFile(path.Join(zc.prefix, livenessFile)) {
 			if cErr := zc.z.createJSONOrError(s, zc.prefix+"/"+livenessFile, nodes, err); cErr != nil {
 				return &serverpb.NodesListResponse{}, &serverpb.NodesListResponse{}, nil, cErr
 			}
@@ -236,7 +237,7 @@ func (zc *debugZipContext) getTenantRange(ctx context.Context) error {
 				})
 				sLocality := zc.clusterPrinter.start(redact.Sprintf("writing tenant ranges for locality: %s", locality))
 				name := fmt.Sprintf("%s/%s/%s", zc.prefix, tenantRangesName, locality)
-				if !zipCtx.files.shouldIncludeFile(locality + ".json") {
+				if !zipCtx.files.shouldIncludeFile(name + ".json") {
 					s.info("skipping tenant ranges for locality %s due to file filters", locality)
 					continue
 				}
