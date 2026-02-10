@@ -35,9 +35,9 @@ type Setter interface {
 	// This allows checking whether multiple storage parameters together
 	// form a valid configuration.
 	RunPostChecks() error
-	// IsNewTableObject returns true if the storage parameter is being set on a new
-	// table.
-	IsNewTableObject() bool
+	// IsNewObject returns true if the storage parameter is being set on a new
+	// table or index (depending on the Setter implementation).
+	IsNewObject() bool
 }
 
 // Set sets the given storage parameters using the
@@ -49,7 +49,7 @@ func Set(
 	params tree.StorageParams,
 	setter Setter,
 ) error {
-	if err := StorageParamPreChecks(ctx, evalCtx, setter.IsNewTableObject(), params, nil /* resetParams */); err != nil {
+	if err := StorageParamPreChecks(ctx, evalCtx, setter.IsNewObject(), params, nil /* resetParams */); err != nil {
 		return err
 	}
 	for _, sp := range params {
@@ -110,7 +110,7 @@ func Set(
 func Reset(
 	ctx context.Context, evalCtx *eval.Context, params []string, paramObserver Setter,
 ) error {
-	if err := StorageParamPreChecks(ctx, evalCtx, paramObserver.IsNewTableObject(), nil /* setParam */, params); err != nil {
+	if err := StorageParamPreChecks(ctx, evalCtx, paramObserver.IsNewObject(), nil /* setParam */, params); err != nil {
 		return err
 	}
 	for _, p := range params {
@@ -146,7 +146,7 @@ func SetFillFactor(ctx context.Context, evalCtx *eval.Context, key string, datum
 func StorageParamPreChecks(
 	ctx context.Context,
 	evalCtx *eval.Context,
-	isNewTableObject bool,
+	isNewObject bool,
 	setParams tree.StorageParams,
 	resetParams []string,
 ) error {
@@ -179,7 +179,7 @@ func StorageParamPreChecks(
 			// since later operations cannot unset schema_locked (i.e. only implicit single
 			// statement transactions are allowed to manipulate schema_locked, see
 			// checkSchemaChangeIsAllowed).
-			if !isNewTableObject && (len(keys) > 1 || !evalCtx.TxnImplicit || !evalCtx.TxnIsSingleStmt) {
+			if !isNewObject && (len(keys) > 1 || !evalCtx.TxnImplicit || !evalCtx.TxnIsSingleStmt) {
 				return pgerror.Newf(pgcode.InvalidParameterValue, "%q can only be set/reset on "+
 					"its own without other parameters in a single-statement implicit transaction.", key)
 			}

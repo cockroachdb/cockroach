@@ -815,28 +815,6 @@ ALTER TABLE nonexistent UNSPLIT ALL
 statement error pgcode 42P01 relation "nonexistent" does not exist
 ALTER INDEX nonexistent@noindex UNSPLIT ALL
 
-statement ok
-ALTER INDEX IF EXISTS nonexistent VISIBLE
-
-statement ok
-ALTER INDEX IF EXISTS nonexistent RENAME TO foo
-
-# Regression test for #163252: ALTER INDEX IF EXISTS should succeed when index
-# doesn't exist. This was previously broken for PARTITION BY.
-statement ok
-ALTER INDEX IF EXISTS nonexistent PARTITION BY NOTHING
-
-# Also works when the table doesn't exist:
-statement ok
-ALTER INDEX IF EXISTS nonexistenttable@nonexistentindex PARTITION BY NOTHING
-
-# Without IF EXISTS, should still error appropriately:
-statement error relation "nonexistenttable" does not exist
-ALTER INDEX nonexistenttable@nonexistentindex PARTITION BY NOTHING
-
-statement error index "nonexistent" does not exist
-ALTER INDEX nonexistent PARTITION BY NOTHING
-
 user root
 
 statement ok

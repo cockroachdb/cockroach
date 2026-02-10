@@ -17,6 +17,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
+	"github.com/cockroachdb/cockroach/pkg/sql/storageparam"
+	"github.com/cockroachdb/cockroach/pkg/sql/storageparam/indexstorageparam"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 	"github.com/cockroachdb/errors"
@@ -162,6 +164,47 @@ func (n *alterIndexNode) startExec(params runParams) error {
 					return err
 				}
 			}
+		case *tree.AlterIndexSetStorageParams:
+			telemetry.Inc(sqltelemetry.SchemaChangeAlterCounterWithExtra("index", "set_storage_params"))
+			indexDesc := n.index.IndexDescDeepCopy()
+			setter := indexstorageparam.Setter{IndexDesc: &indexDesc, NewObject: false}
+			if err := storageparam.Set(
+				params.ctx,
+				params.p.SemaCtx(),
+				params.EvalContext(),
+				t.StorageParams,
+				&setter,
+			); err != nil {
+				return err
+			}
+			if n.index.Primary() {
+				n.tableDesc.SetPrimaryIndex(*setter.IndexDesc)
+			} else {
+				n.tableDesc.SetPublicNonPrimaryIndex(n.index.Ordinal(), *setter.IndexDesc)
+			}
+			n.index = n.tableDesc.ActiveIndexes()[n.index.Ordinal()]
+			descriptorChanged = true
+
+		case *tree.AlterIndexResetStorageParams:
+			telemetry.Inc(sqltelemetry.SchemaChangeAlterCounterWithExtra("index", "reset_storage_params"))
+			indexDesc := n.index.IndexDescDeepCopy()
+			setter := indexstorageparam.Setter{IndexDesc: &indexDesc, NewObject: false}
+			if err := storageparam.Reset(
+				params.ctx,
+				params.EvalContext(),
+				t.Params,
+				&setter,
+			); err != nil {
+				return err
+			}
+			if n.index.Primary() {
+				n.tableDesc.SetPrimaryIndex(*setter.IndexDesc)
+			} else {
+				n.tableDesc.SetPublicNonPrimaryIndex(n.index.Ordinal(), *setter.IndexDesc)
+			}
+			n.index = n.tableDesc.ActiveIndexes()[n.index.Ordinal()]
+			descriptorChanged = true
+
 		default:
 			return errors.AssertionFailedf(
 				"unsupported alter command: %T", cmd)

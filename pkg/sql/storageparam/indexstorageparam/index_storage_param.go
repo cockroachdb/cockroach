@@ -26,6 +26,8 @@ import (
 // Setter observes storage parameters for indexes.
 type Setter struct {
 	IndexDesc *descpb.IndexDescriptor
+	// NewObject tracks if this is a newly created index.
+	NewObject bool
 }
 
 var _ storageparam.Setter = (*Setter)(nil)
@@ -131,6 +133,33 @@ func (po *Setter) applyVectorIndexSetting(
 	return nil
 }
 
+// isCreationTimeOnlyParam returns true if the parameter can only be set at
+// index creation time and cannot be altered or reset afterwards.
+func isCreationTimeOnlyParam(key string) bool {
+	switch key {
+	case `fillfactor`, `s2_max_level`, `s2_level_mod`, `s2_max_cells`,
+		`geometry_min_x`, `geometry_max_x`, `geometry_min_y`, `geometry_max_y`,
+		`build_beam_size`, `min_partition_size`, `max_partition_size`:
+		return true
+	}
+	return false
+}
+
+// isUnimplementedParam returns true if the parameter is recognized but not
+// yet implemented.
+func isUnimplementedParam(key string) bool {
+	switch key {
+	case `vacuum_cleanup_index_scale_factor`,
+		`buffering`,
+		`fastupdate`,
+		`gin_pending_list_limit`,
+		`pages_per_range`,
+		`autosummarize`:
+		return true
+	}
+	return false
+}
+
 // Set implements the Setter interface.
 func (po *Setter) Set(
 	ctx context.Context,
@@ -139,6 +168,15 @@ func (po *Setter) Set(
 	key string,
 	expr tree.Datum,
 ) error {
+	// Check if this parameter can only be set at index creation time.
+	if !po.NewObject && isCreationTimeOnlyParam(key) {
+		return pgerror.Newf(pgcode.InvalidParameterValue,
+			"storage parameter %q must be set at index creation time and cannot be altered", key,
+		)
+	}
+	if isUnimplementedParam(key) {
+		return unimplemented.NewWithIssuef(43299, "storage parameter %q", key)
+	}
 	switch key {
 	case `fillfactor`:
 		return storageparam.SetFillFactor(ctx, evalCtx, key, expr)
@@ -164,20 +202,21 @@ func (po *Setter) Set(
 		return po.applyVectorIndexSetting(ctx, evalCtx, key, expr, 1, 1024)
 	case `max_partition_size`:
 		return po.applyVectorIndexSetting(ctx, evalCtx, key, expr, 4, 4096)
-	case `vacuum_cleanup_index_scale_factor`,
-		`buffering`,
-		`fastupdate`,
-		`gin_pending_list_limit`,
-		`pages_per_range`,
-		`autosummarize`:
-		return unimplemented.NewWithIssuef(43299, "storage parameter %q", key)
 	}
 	return pgerror.Newf(pgcode.InvalidParameterValue, "invalid storage parameter %q", key)
 }
 
-// Reset implements the StorageParameterObserver interface.
+// Reset implements the Setter interface.
 func (po *Setter) Reset(ctx context.Context, evalCtx *eval.Context, key string) error {
-	return errors.AssertionFailedf("non-implemented codepath")
+	if isCreationTimeOnlyParam(key) {
+		return pgerror.Newf(pgcode.InvalidParameterValue,
+			"storage parameter %q must be set at index creation time and cannot be reset", key,
+		)
+	}
+	if isUnimplementedParam(key) {
+		return unimplemented.NewWithIssuef(43299, "storage parameter %q", key)
+	}
+	return pgerror.Newf(pgcode.InvalidParameterValue, "invalid storage parameter %q", key)
 }
 
 // RunPostChecks implements the Setter interface.
@@ -228,8 +267,7 @@ func (po *Setter) RunPostChecks() error {
 	return nil
 }
 
-// IsNewTableObject implements the Setter interface.
-func (po *Setter) IsNewTableObject() bool {
-	//Not applicable to indexes.
-	return false
+// IsNewObject implements the Setter interface.
+func (po *Setter) IsNewObject() bool {
+	return po.NewObject
 }

@@ -1,0 +1,206 @@
+# Tests for ALTER INDEX commands.
+
+# Storage parameter tests.
+
+# Test indexes created as part of table definition
+statement ok
+CREATE TABLE t (
+  id INT PRIMARY KEY,
+  x INT,
+  y INT,
+  geom GEOMETRY,
+  INDEX idx_inline (x)
+)
+
+# Test indexes created after table exists
+statement ok
+CREATE INDEX idx_x ON t(x)
+
+statement ok
+CREATE INDEX idx_geom ON t USING GIST(geom)
+
+# Test that parameters that must be set at creation time cannot be altered via SET.
+# Test on index created with table definition.
+
+statement error pgcode 22023 storage parameter "fillfactor" must be set at index creation time and cannot be altered
+ALTER INDEX idx_inline SET (fillfactor = 70)
+
+# Test on index created after table.
+
+statement error pgcode 22023 storage parameter "fillfactor" must be set at index creation time and cannot be altered
+ALTER INDEX idx_x SET (fillfactor = 70)
+
+statement error pgcode 22023 storage parameter "s2_max_level" must be set at index creation time and cannot be altered
+ALTER INDEX idx_geom SET (s2_max_level = 15)
+
+statement error pgcode 22023 storage parameter "s2_level_mod" must be set at index creation time and cannot be altered
+ALTER INDEX idx_geom SET (s2_level_mod = 2)
+
+statement error pgcode 22023 storage parameter "s2_max_cells" must be set at index creation time and cannot be altered
+ALTER INDEX idx_geom SET (s2_max_cells = 10)
+
+statement error pgcode 22023 storage parameter "geometry_min_x" must be set at index creation time and cannot be altered
+ALTER INDEX idx_geom SET (geometry_min_x = -180.0)
+
+statement error pgcode 22023 storage parameter "geometry_max_x" must be set at index creation time and cannot be altered
+ALTER INDEX idx_geom SET (geometry_max_x = 180.0)
+
+statement error pgcode 22023 storage parameter "geometry_min_y" must be set at index creation time and cannot be altered
+ALTER INDEX idx_geom SET (geometry_min_y = -90.0)
+
+statement error pgcode 22023 storage parameter "geometry_max_y" must be set at index creation time and cannot be altered
+ALTER INDEX idx_geom SET (geometry_max_y = 90.0)
+
+# Test vector index parameters
+statement ok
+CREATE TABLE vt (
+  id INT PRIMARY KEY,
+  v VECTOR(3)
+)
+
+statement ok
+CREATE INDEX vidx ON vt USING HNSW(v)
+
+statement error pgcode 22023 storage parameter "build_beam_size" must be set at index creation time and cannot be altered
+ALTER INDEX vidx SET (build_beam_size = 100)
+
+statement error pgcode 22023 storage parameter "min_partition_size" must be set at index creation time and cannot be altered
+ALTER INDEX vidx SET (min_partition_size = 50)
+
+statement error pgcode 22023 storage parameter "max_partition_size" must be set at index creation time and cannot be altered
+ALTER INDEX vidx SET (max_partition_size = 200)
+
+# Test that parameters that must be set at creation time cannot be reset.
+# Test on index created with table definition.
+
+statement error pgcode 22023 storage parameter "fillfactor" must be set at index creation time and cannot be reset
+ALTER INDEX idx_inline RESET (fillfactor)
+
+# Test on index created after table.
+
+statement error pgcode 22023 storage parameter "fillfactor" must be set at index creation time and cannot be reset
+ALTER INDEX idx_x RESET (fillfactor)
+
+statement error pgcode 22023 storage parameter "s2_max_level" must be set at index creation time and cannot be reset
+ALTER INDEX idx_geom RESET (s2_max_level)
+
+statement error pgcode 22023 storage parameter "s2_level_mod" must be set at index creation time and cannot be reset
+ALTER INDEX idx_geom RESET (s2_level_mod)
+
+statement error pgcode 22023 storage parameter "s2_max_cells" must be set at index creation time and cannot be reset
+ALTER INDEX idx_geom RESET (s2_max_cells)
+
+statement error pgcode 22023 storage parameter "geometry_min_x" must be set at index creation time and cannot be reset
+ALTER INDEX idx_geom RESET (geometry_min_x)
+
+statement error pgcode 22023 storage parameter "geometry_max_x" must be set at index creation time and cannot be reset
+ALTER INDEX idx_geom RESET (geometry_max_x)
+
+statement error pgcode 22023 storage parameter "geometry_min_y" must be set at index creation time and cannot be reset
+ALTER INDEX idx_geom RESET (geometry_min_y)
+
+statement error pgcode 22023 storage parameter "geometry_max_y" must be set at index creation time and cannot be reset
+ALTER INDEX idx_geom RESET (geometry_max_y)
+
+statement error pgcode 22023 storage parameter "build_beam_size" must be set at index creation time and cannot be reset
+ALTER INDEX vidx RESET (build_beam_size)
+
+statement error pgcode 22023 storage parameter "min_partition_size" must be set at index creation time and cannot be reset
+ALTER INDEX vidx RESET (min_partition_size)
+
+statement error pgcode 22023 storage parameter "max_partition_size" must be set at index creation time and cannot be reset
+ALTER INDEX vidx RESET (max_partition_size)
+
+# Test unimplemented parameters.
+
+statement error pgcode 0A000 unimplemented: storage parameter "vacuum_cleanup_index_scale_factor"
+ALTER INDEX idx_x SET (vacuum_cleanup_index_scale_factor = 0.5)
+
+statement error pgcode 0A000 unimplemented: storage parameter "buffering"
+ALTER INDEX idx_x SET (buffering = auto)
+
+statement error pgcode 0A000 unimplemented: storage parameter "fastupdate"
+ALTER INDEX idx_x SET (fastupdate = on)
+
+statement error pgcode 0A000 unimplemented: storage parameter "gin_pending_list_limit"
+ALTER INDEX idx_x SET (gin_pending_list_limit = 4096)
+
+statement error pgcode 0A000 unimplemented: storage parameter "pages_per_range"
+ALTER INDEX idx_x SET (pages_per_range = 128)
+
+statement error pgcode 0A000 unimplemented: storage parameter "autosummarize"
+ALTER INDEX idx_x SET (autosummarize = on)
+
+statement error pgcode 0A000 unimplemented: storage parameter "vacuum_cleanup_index_scale_factor"
+ALTER INDEX idx_x RESET (vacuum_cleanup_index_scale_factor)
+
+statement error pgcode 0A000 unimplemented: storage parameter "buffering"
+ALTER INDEX idx_x RESET (buffering)
+
+statement error pgcode 0A000 unimplemented: storage parameter "fastupdate"
+ALTER INDEX idx_x RESET (fastupdate)
+
+statement error pgcode 0A000 unimplemented: storage parameter "gin_pending_list_limit"
+ALTER INDEX idx_x RESET (gin_pending_list_limit)
+
+statement error pgcode 0A000 unimplemented: storage parameter "pages_per_range"
+ALTER INDEX idx_x RESET (pages_per_range)
+
+statement error pgcode 0A000 unimplemented: storage parameter "autosummarize"
+ALTER INDEX idx_x RESET (autosummarize)
+
+# Test invalid parameters.
+
+statement error pgcode 22023 invalid storage parameter "invalid_param"
+ALTER INDEX idx_x SET (invalid_param = 100)
+
+statement error pgcode 22023 invalid storage parameter "invalid_param"
+ALTER INDEX idx_x RESET (invalid_param)
+
+# Test with IF EXISTS for storage parameters.
+
+statement ok
+ALTER INDEX IF EXISTS nonexistent SET (fillfactor = 70)
+
+statement ok
+ALTER INDEX IF EXISTS nonexistent RESET (fillfactor)
+
+# Test on primary index.
+
+statement error pgcode 22023 storage parameter "fillfactor" must be set at index creation time and cannot be altered
+ALTER INDEX t@t_pkey SET (fillfactor = 70)
+
+statement error pgcode 22023 storage parameter "fillfactor" must be set at index creation time and cannot be reset
+ALTER INDEX t@t_pkey RESET (fillfactor)
+
+# Test with multiple parameters.
+
+statement error pgcode 22023 storage parameter "fillfactor" must be set at index creation time and cannot be altered
+ALTER INDEX idx_x SET (fillfactor = 70, vacuum_cleanup_index_scale_factor = 0.5)
+
+statement error pgcode 22023 storage parameter "fillfactor" must be set at index creation time and cannot be reset
+ALTER INDEX idx_x RESET (fillfactor, vacuum_cleanup_index_scale_factor)
+
+# IF EXISTS tests for other ALTER INDEX commands.
+
+statement ok
+ALTER INDEX IF EXISTS nonexistent VISIBLE
+
+statement ok
+ALTER INDEX IF EXISTS nonexistent RENAME TO foo
+
+# Regression test for #163252: ALTER INDEX IF EXISTS should succeed when index
+# doesn't exist. This was previously broken for PARTITION BY.
+statement ok
+ALTER INDEX IF EXISTS nonexistent PARTITION BY NOTHING
+
+# Also works when the table doesn't exist:
+statement ok
+ALTER INDEX IF EXISTS nonexistenttable@nonexistentindex PARTITION BY NOTHING
+
+# Without IF EXISTS, should still error appropriately:
+statement error relation "nonexistenttable" does not exist
+ALTER INDEX nonexistenttable@nonexistentindex PARTITION BY NOTHING
+
+statement error index "nonexistent" does not exist
+ALTER INDEX nonexistent PARTITION BY NOTHING
