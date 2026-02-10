@@ -35,7 +35,7 @@ go_library(
 
 go_test(
     name = "ldapccl_test",
-    size = "small",
+    size = "large",
     srcs = [
         "authentication_ldap_test.go",
         "authorization_ldap_test.go",
@@ -53,9 +53,13 @@ go_test(
         "//pkg/security/securitytest",
         "//pkg/security/username",
         "//pkg/server",
+        "//pkg/server/authserver",
+        "//pkg/server/serverpb",
         "//pkg/testutils",
         "//pkg/testutils/serverutils",
+        "//pkg/testutils/sqlutils",
         "//pkg/testutils/testcluster",
+        "//pkg/util/httputil",
         "//pkg/util/leaktest",
         "//pkg/util/log",
         "//pkg/util/randutil",
