@@ -16,6 +16,8 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/jobs"
+	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -234,4 +236,69 @@ INSERT INTO shifts VALUES ('Bob', ARRAY['Tuesday', 'Thursday'], ARRAY['Tu', 'Th'
 		".*tables with multiple user-defined types with the same name are currently unsupported.*",
 		"IMPORT INTO shifts CSV DATA ('nodelocal://1/export2/export*-n*.0.csv');",
 	)
+}
+
+// TestImportIntoWithCompetingTransactionCommits verifies that IMPORT INTO
+// succeeds when a competing transaction tries to commit and insert rows into the
+// table being imported to.
+func TestImportIntoWithCompetingTransactionCommits(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	dir, dirCleanupFn := testutils.TempDir(t)
+	defer dirCleanupFn()
+
+	srv, db, _ := serverutils.StartServer(t, base.TestServerArgs{
+		ExternalIODir: dir,
+	})
+	defer srv.Stopper().Stop(ctx)
+
+	runner := sqlutils.MakeSQLRunner(db)
+
+	// Create and populate test table.
+	runner.Exec(t, `CREATE TABLE foo (k INT PRIMARY KEY, v STRING)`)
+	runner.Exec(t, `INSERT INTO foo VALUES (1, 'initial')`)
+
+	// Export the data.
+	runner.Exec(t, `EXPORT INTO CSV 'nodelocal://1/export/' FROM SELECT 2, 'imported'`)
+
+	// Track whether the knob was invoked.
+	var knobInvoked bool
+	knobCh := make(chan struct{})
+
+	// Set up the testing knob to inject a competing transaction.
+	s := srv.ApplicationLayer()
+	registry := s.JobRegistry().(*jobs.Registry)
+	registry.TestingWrapResumerConstructor(
+		jobspb.TypeImport,
+		func(resumer jobs.Resumer) jobs.Resumer {
+			resumer.(interface {
+				TestingSetBeforeInitialRowCountKnob(fn func() error)
+			}).TestingSetBeforeInitialRowCountKnob(func() error {
+				if !knobInvoked {
+					knobInvoked = true
+					// Start a competing transaction that tries and fails to insert to the table.
+					go func() {
+						innerDB := srv.ApplicationLayer().SQLConn(t)
+						_, err := innerDB.Exec(`INSERT INTO foo VALUES (3, 'competing')`)
+						require.ErrorContains(t, err, "pq: relation \"foo\" is offline: importing")
+						close(knobCh)
+					}()
+					// Wait for the competing transaction to complete.
+					<-knobCh
+				}
+				return nil
+			})
+			return resumer
+		})
+
+	runner.Exec(t, `IMPORT INTO foo (k, v) CSV DATA ('nodelocal://1/export/export*-n*.0.csv')`)
+
+	require.True(t, knobInvoked, "expected knob to be invoked")
+
+	runner.CheckQueryResults(t, `SELECT * FROM foo ORDER BY k`, [][]string{
+		{"1", "initial"},
+		{"2", "imported"},
+	})
 }
