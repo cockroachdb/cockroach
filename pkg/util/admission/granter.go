@@ -6,10 +6,13 @@
 package admission
 
 import (
+	"context"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
+	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -297,6 +300,7 @@ type kvStoreTokenGranter struct {
 		// The capacity of the token bucket for disk write bytes.
 		diskWriteByteTokensCapacity int64
 		diskTokensError             struct {
+			initialized bool
 			// prevObserved{Writes,Reads} is the observed disk metrics in the last
 			// call to adjustDiskTokenErrorLocked. These are used to compute the
 			// delta.
@@ -590,10 +594,10 @@ func (sg *kvStoreTokenGranter) subtractTokensForStoreWorkTypeLocked(
 	}
 }
 
-func (sg *kvStoreTokenGranter) adjustDiskTokenError(m StoreMetrics) {
+func (sg *kvStoreTokenGranter) adjustDiskTokenError(stats DiskStats) {
 	sg.mu.Lock()
 	defer sg.mu.Unlock()
-	sg.adjustDiskTokenErrorLocked(m.DiskStats.BytesRead, m.DiskStats.BytesWritten)
+	sg.adjustDiskTokenErrorLocked(stats.BytesRead, stats.BytesWritten)
 }
 
 // adjustDiskTokenErrorLocked is used to account for extra reads and writes that
@@ -613,7 +617,18 @@ func (sg *kvStoreTokenGranter) adjustDiskTokenError(m StoreMetrics) {
 // For both reads and writes, we reset the alreadyDeductedTokens to 0 for the
 // next error tick interval, since we will use those to compare with the
 // observed disk reads and writes for the next error tick interval.
+// readBytes and writeBytes are the cumulative values retrieved from the disk stats.
 func (sg *kvStoreTokenGranter) adjustDiskTokenErrorLocked(readBytes uint64, writeBytes uint64) {
+	// On the first call, we only record the baseline cumulative values. We can't
+	// compute error yet because we need a valid previous observation to compute
+	// the delta (otherwise we'd treat total bytes since boot as "error").
+	if !sg.mu.diskTokensError.initialized {
+		sg.mu.diskTokensError.prevObservedWrites = writeBytes
+		sg.mu.diskTokensError.prevObservedReads = readBytes
+		sg.mu.diskTokensError.initialized = true
+		return
+	}
+
 	intWrites := int64(writeBytes - sg.mu.diskTokensError.prevObservedWrites)
 	intReads := int64(readBytes - sg.mu.diskTokensError.prevObservedReads)
 
@@ -626,15 +641,14 @@ func (sg *kvStoreTokenGranter) adjustDiskTokenErrorLocked(readBytes uint64, writ
 			absIntError = -absIntError
 		}
 		*absError += absIntError
-		// Account for a fraction of the unaccounted error accumulated so far.
-		// This is a heuristic to reduce fluctuations in available tokens.
+
+		// Account for all of the unaccounted error accumulated so far.
 		cumUnaccountedError := *cumError - *accountedError
-		intErrorToAccount := cumUnaccountedError / adjustmentInterval
-		if intErrorToAccount != 0 {
-			*accountedError += intErrorToAccount
+		if cumUnaccountedError != 0 {
+			*accountedError += cumUnaccountedError
 			// NB: the following also updates alreadyDeductedTokens.writeByteTokens,
 			// which is harmless, since we reset it to 0 later in this function.
-			sg.subtractDiskWriteTokensLocked(intErrorToAccount, false)
+			sg.subtractDiskWriteTokensLocked(cumUnaccountedError, false)
 		}
 	}
 	// Compensate for error due to writes.
@@ -837,6 +851,10 @@ func (sg *kvStoreTokenGranter) addAvailableTokens(
 		// which case we want availableIOTokens[ElasticWorkClass] to not exceed it.
 		sg.mu.availableIOTokens[admissionpb.ElasticWorkClass] =
 			min(sg.mu.availableIOTokens[admissionpb.ElasticWorkClass], sg.mu.availableIOTokens[admissionpb.RegularWorkClass])
+		writeTokensPerSec := sg.mu.diskTokensAvailable.writeByteTokens / adjustmentInterval
+		if writeTokensPerSec < 0 {
+			log.Dev.Infof(context.Background(), "Potential overadmission=%s/s", humanizeutil.IBytes(-writeTokensPerSec))
+		}
 		// We also want to avoid very negative disk write tokens, so we reset them.
 		sg.mu.diskTokensAvailable.writeByteTokens = max(sg.mu.diskTokensAvailable.writeByteTokens, 0)
 	}
