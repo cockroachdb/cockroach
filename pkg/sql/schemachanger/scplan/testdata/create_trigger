@@ -72,12 +72,13 @@ StatementPhase stage 1 of 1 with 9 MutationType ops
           indexid: 0
         UsesRoutineIDs:
         - 105
-    *scop.UpdateTableBackReferencesInRelations
+    *scop.UpdateTriggerBackReferencesInRelations
       RelationReferences:
       - id: 104
         columnids: []
         indexid: 0
       TableID: 104
+      TriggerID: 1
     *scop.AddTriggerBackReferencesInRoutines
       BackReferencedTableID: 104
       BackReferencedTriggerID: 1
@@ -156,12 +157,13 @@ PreCommitPhase stage 2 of 2 with 9 MutationType ops
           indexid: 0
         UsesRoutineIDs:
         - 105
-    *scop.UpdateTableBackReferencesInRelations
+    *scop.UpdateTriggerBackReferencesInRelations
       RelationReferences:
       - id: 104
         columnids: []
         indexid: 0
       TableID: 104
+      TriggerID: 1
     *scop.AddTriggerBackReferencesInRoutines
       BackReferencedTableID: 104
       BackReferencedTriggerID: 1

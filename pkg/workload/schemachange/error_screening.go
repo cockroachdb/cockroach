@@ -158,9 +158,10 @@ func (og *operationGenerator) columnIsDependedOn(
 	// pg_catalog.pg_constraint respectively.
 	//
 	// crdb_internal.forward_dependencies.dependedonby_details is an array of ordinal positions
-	// stored as a list of numbers in a string, so SQL functions are used to parse these values
-	// into arrays. unnest is used to flatten rows with this column of array type into multiple rows,
-	// so performing unions and joins is easier.
+	// stored as a list of numbers in a string (e.g. "Columns=[1 2]" or
+	// "Columns=[1 2], TriggerID=3"), so SQL functions are used to parse these values into
+	// arrays. unnest is used to flatten rows with this column of array type into multiple
+	// rows, so performing unions and joins is easier.
 	//
 	// To check if any foreign key references exist to this table, we use pg_constraint
 	// and check if any columns are dependent. We check both confrelid (table is referenced)
@@ -172,12 +173,15 @@ func (og *operationGenerator) columnIsDependedOn(
 			     FROM (
 			           SELECT unnest(
 			                   string_to_array(
-			                    rtrim(
-			                     ltrim(
-			                      fd.dependedonby_details,
-			                      'Columns: ['
+			                    NULLIF(
+			                     rtrim(
+			                      ltrim(
+			                       split_part(fd.dependedonby_details, ', TriggerID=', 1),
+			                       'Columns:= ['
+			                      ),
+			                      ']'
 			                     ),
-			                     ']'
+			                     ''
 			                    ),
 			                    ' '
 			                   )::INT8[]

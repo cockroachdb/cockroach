@@ -404,21 +404,23 @@ func ForEachExprStringInTableDesc(
 }
 
 // GetAllReferencedRelationIDsExceptFKs implements the TableDescriptor interface.
-func (desc *wrapper) GetAllReferencedRelationIDsExceptFKs() descpb.IDs {
-	var ids catalog.DescriptorIDSet
-
-	// Add trigger dependencies.
+func (desc *wrapper) GetAllReferencedRelationIDsExceptFKs() (
+	byTriggerID map[descpb.TriggerID]catalog.DescriptorIDSet,
+	byPolicyID map[descpb.PolicyID]catalog.DescriptorIDSet,
+	fromView catalog.DescriptorIDSet,
+) {
+	byTriggerID = make(map[descpb.TriggerID]catalog.DescriptorIDSet, len(desc.Triggers))
 	for i := range desc.Triggers {
-		ids = ids.Union(catalog.MakeDescriptorIDSet(desc.Triggers[i].DependsOn...))
+		byTriggerID[desc.Triggers[i].ID] = catalog.MakeDescriptorIDSet(desc.Triggers[i].DependsOn...)
 	}
-	// Add policy dependencies.
-	for i := range desc.Policies {
-		ids = ids.Union(catalog.MakeDescriptorIDSet(desc.Policies[i].DependsOnRelations...))
-	}
-	// Add view dependencies.
-	ids = ids.Union(catalog.MakeDescriptorIDSet(desc.DependsOn...))
 
-	return ids.Ordered()
+	byPolicyID = make(map[descpb.PolicyID]catalog.DescriptorIDSet, len(desc.Policies))
+	for i := range desc.Policies {
+		byPolicyID[desc.Policies[i].ID] = catalog.MakeDescriptorIDSet(desc.Policies[i].DependsOnRelations...)
+	}
+
+	fromView = catalog.MakeDescriptorIDSet(desc.DependsOn...)
+	return byTriggerID, byPolicyID, fromView
 }
 
 // GetAllReferencedTypeIDs implements the TableDescriptor interface.
@@ -2833,7 +2835,8 @@ func PrimaryKeyIndexName(tableName string) string {
 }
 
 // UpdateColumnsDependedOnBy creates, updates or deletes a depended-on-by column
-// reference by ID.
+// reference by ID. This only operates on generic backrefs (TriggerID=0), not
+// trigger-specific backrefs which are managed separately.
 func (desc *Mutable) UpdateColumnsDependedOnBy(id descpb.ID, colIDs catalog.TableColSet) {
 	ref := descpb.TableDescriptor_Reference{
 		ID:        id,
@@ -2842,7 +2845,9 @@ func (desc *Mutable) UpdateColumnsDependedOnBy(id descpb.ID, colIDs catalog.Tabl
 	}
 	for i := range desc.DependedOnBy {
 		by := &desc.DependedOnBy[i]
-		if by.ID == id {
+		// Only match generic backrefs (TriggerID=0). Trigger-specific backrefs
+		// are managed by UpdateTriggerBackReferencesInRelations.
+		if by.ID == id && by.TriggerID == 0 {
 			if colIDs.Empty() {
 				desc.DependedOnBy = append(desc.DependedOnBy[:i], desc.DependedOnBy[i+1:]...)
 				return

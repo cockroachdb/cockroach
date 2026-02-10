@@ -480,12 +480,13 @@ StatementPhase stage 1 of 1 with 150 MutationType ops
       DescID: 109
       ElementType: scpb.TriggerFunctionCall
       TriggerID: 1
-    *scop.UpdateTableBackReferencesInRelations
+    *scop.UpdateTriggerBackReferencesInRelations
       RelationReferences:
       - id: 109
         columnids: []
         indexid: 0
       TableID: 109
+      TriggerID: 1
     *scop.UpdateTableBackReferencesInTypes
       BackReferencedTableID: 109
       TypeIDs:
@@ -1234,12 +1235,13 @@ PreCommitPhase stage 2 of 2 with 161 MutationType ops
       DescID: 109
       ElementType: scpb.TriggerFunctionCall
       TriggerID: 1
-    *scop.UpdateTableBackReferencesInRelations
+    *scop.UpdateTriggerBackReferencesInRelations
       RelationReferences:
       - id: 109
         columnids: []
         indexid: 0
       TableID: 109
+      TriggerID: 1
     *scop.UpdateTableBackReferencesInTypes
       BackReferencedTableID: 109
       TypeIDs:

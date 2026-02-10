@@ -1,0 +1,173 @@
+# LogicTest: cockroach-go-testserver-configs
+
+# This test verifies that triggers created before the upgrade (which have zero
+# trigger_id in their backreferences) are correctly repaired during upgrade.
+# Prior to v26.2, trigger dependencies in DependedOnBy had TriggerID=0, making
+# them indistinguishable from view dependencies. The V26_2_TriggerBackrefRepair
+# upgrade fixes this by setting the correct TriggerID on each backref.
+
+statement ok
+CREATE TABLE trigger_dep_t1 (id INT PRIMARY KEY)
+
+statement ok
+CREATE TABLE trigger_dep_t2 (id INT PRIMARY KEY, a INT, b INT)
+
+statement ok
+CREATE FUNCTION trigger_dep_f1() RETURNS TRIGGER LANGUAGE PLpgSQL AS $$
+DECLARE
+  x INT;
+BEGIN
+  SELECT id - b INTO x FROM trigger_dep_t2 LIMIT 1;
+  RETURN NEW;
+END;
+$$
+
+statement ok
+CREATE FUNCTION trigger_dep_f2() RETURNS TRIGGER LANGUAGE PLpgSQL AS $$
+DECLARE
+  x INT;
+BEGIN
+  SELECT id + b INTO x FROM trigger_dep_t2 LIMIT 1;
+  RETURN NEW;
+END;
+$$
+
+statement ok
+CREATE TRIGGER trigger_dep_tr1 AFTER INSERT ON trigger_dep_t1 FOR EACH ROW EXECUTE FUNCTION trigger_dep_f1()
+
+statement ok
+CREATE TRIGGER trigger_dep_tr2 AFTER INSERT ON trigger_dep_t1 FOR EACH ROW EXECUTE FUNCTION trigger_dep_f2()
+
+# Before upgrade, both triggers have backrefs with zero trigger_id, so they
+# appear as 'view' type. With the old format, both backrefs are identical, so
+# they get deduplicated into one.
+query TTT
+SELECT descriptor_name, dependedonby_type, dependedonby_details
+FROM crdb_internal.forward_dependencies
+WHERE descriptor_name = 'trigger_dep_t2'
+ORDER BY dependedonby_details
+----
+trigger_dep_t2  view  Columns: [1 3]
+
+# Check the raw descriptor JSON to see the dependedOnBy backref directly.
+# Before upgrade, trigger_id is not set (zero value omitted from JSON).
+query T
+SELECT jsonb_pretty(crdb_internal.pb_to_json(
+  'cockroach.sql.sqlbase.Descriptor',
+  descriptor
+)->'table'->'dependedOnBy')
+FROM system.descriptor
+WHERE id = 'trigger_dep_t2'::REGCLASS::OID::INT
+----
+[
+    {
+        "columnIds": [
+            1,
+            3
+        ],
+        "id": 106
+    }
+]
+
+# Also test the single-trigger case: when only one trigger references a table,
+# the upgrade should preserve the column IDs since there's no ambiguity.
+statement ok
+CREATE TABLE trigger_dep_single_t1 (id INT PRIMARY KEY)
+
+statement ok
+CREATE TABLE trigger_dep_single_t2 (id INT PRIMARY KEY, a INT, b INT)
+
+statement ok
+CREATE FUNCTION trigger_dep_single_f1() RETURNS TRIGGER LANGUAGE PLpgSQL AS $$
+DECLARE
+  x INT;
+BEGIN
+  SELECT id + a INTO x FROM trigger_dep_single_t2 LIMIT 1;
+  RETURN NEW;
+END;
+$$
+
+statement ok
+CREATE TRIGGER trigger_dep_single_tr1 AFTER INSERT ON trigger_dep_single_t1 FOR EACH ROW EXECUTE FUNCTION trigger_dep_single_f1()
+
+# Before upgrade, the single trigger has a backref with zero trigger_id.
+query TTT
+SELECT descriptor_name, dependedonby_type, dependedonby_details
+FROM crdb_internal.forward_dependencies
+WHERE descriptor_name = 'trigger_dep_single_t2'
+ORDER BY dependedonby_details
+----
+trigger_dep_single_t2  view  Columns: [1 2]
+
+upgrade all
+
+statement ok
+SET CLUSTER SETTING version = crdb_internal.node_executable_version()
+
+# After upgrade, the V26_2_TriggerBackrefRepair upgrade repairs the backrefs.
+# The single legacy backref is split into two backrefs with correct TriggerIDs.
+# Column IDs are cleared for both because we can't determine which columns each
+# trigger references; empty means "depends on the whole table", which is a
+# conservative best guess.
+query TTT
+SELECT descriptor_name, dependedonby_type, dependedonby_details
+FROM crdb_internal.forward_dependencies
+WHERE descriptor_name = 'trigger_dep_t2'
+ORDER BY dependedonby_details
+----
+trigger_dep_t2  trigger  Columns=[], TriggerID=1
+trigger_dep_t2  trigger  Columns=[], TriggerID=2
+
+# For the single-trigger case, the upgrade should preserve the column IDs
+# since there's no ambiguity about which columns belong to which trigger.
+query TTT
+SELECT descriptor_name, dependedonby_type, dependedonby_details
+FROM crdb_internal.forward_dependencies
+WHERE descriptor_name = 'trigger_dep_single_t2'
+ORDER BY dependedonby_details
+----
+trigger_dep_single_t2  trigger  Columns=[1 2], TriggerID=1
+
+# Verify the single trigger still works.
+statement ok
+INSERT INTO trigger_dep_single_t1 VALUES (1)
+
+# Drop the single trigger and verify no backrefs remain.
+statement ok
+DROP TRIGGER trigger_dep_single_tr1 ON trigger_dep_single_t1
+
+query TTT
+SELECT descriptor_name, dependedonby_type, dependedonby_details
+FROM crdb_internal.forward_dependencies
+WHERE descriptor_name = 'trigger_dep_single_t2'
+ORDER BY dependedonby_details
+----
+
+# Drop tr1. This should correctly remove only tr1's backref.
+statement ok
+DROP TRIGGER trigger_dep_tr1 ON trigger_dep_t1
+
+# After dropping tr1, only tr2's backref should remain.
+query TTT
+SELECT descriptor_name, dependedonby_type, dependedonby_details
+FROM crdb_internal.forward_dependencies
+WHERE descriptor_name = 'trigger_dep_t2'
+ORDER BY dependedonby_details
+----
+trigger_dep_t2  trigger  Columns=[], TriggerID=2
+
+# Verify the remaining trigger still works.
+statement ok
+INSERT INTO trigger_dep_t1 VALUES (1)
+
+# Drop tr2 as well.
+statement ok
+DROP TRIGGER trigger_dep_tr2 ON trigger_dep_t1
+
+# No backrefs should remain.
+query TTT
+SELECT descriptor_name, dependedonby_type, dependedonby_details
+FROM crdb_internal.forward_dependencies
+WHERE descriptor_name = 'trigger_dep_t2'
+ORDER BY dependedonby_details
+----
