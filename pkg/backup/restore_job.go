@@ -1925,7 +1925,9 @@ func createImportingDescriptors(
 			}
 		}
 
-		if details.DescriptorCoverage != tree.AllDescriptors {
+		// If there's a temp system database, then we assume that zone configs will
+		// be restored via the pre data restore flow.
+		if tempSystemDBID == descpb.InvalidID {
 			if err := synthesizeZoneConfigsForPartialRestore(
 				ctx,
 				p,
@@ -2256,7 +2258,12 @@ func (r *restoreResumer) doResume(ctx context.Context, execCtx interface{}) erro
 
 		resTotal.Add(res)
 
-		if details.DescriptorCoverage == tree.AllDescriptors {
+		if isSystemUserRestore(details) {
+			return errors.AssertionFailedf("system user restore should not have pre-data to restore")
+		}
+
+		tempSystemDBID := tempSystemDatabaseID(details, preData.getSystemTables(), r.job.Payload().CreationClusterVersion)
+		if tempSystemDBID != descpb.InvalidID {
 			if err := r.restoreSystemTables(
 				ctx, p.ExecCfg().InternalDB, preData.getSystemTables(),
 			); err != nil {
@@ -2381,7 +2388,12 @@ func (r *restoreResumer) doResume(ctx context.Context, execCtx interface{}) erro
 	details = r.job.Details().(jobspb.RestoreDetails)
 	p.ExecCfg().JobRegistry.NotifyToAdoptJobs()
 
-	if details.DescriptorCoverage == tree.AllDescriptors {
+	tempSystemDBID := tempSystemDatabaseID(details, mainData.getSystemTables(), r.job.Payload().CreationClusterVersion)
+	if isSystemUserRestore(details) {
+		if err := r.restoreSystemUsers(ctx, p.ExecCfg().InternalDB, mainData.getSystemTables()); err != nil {
+			return err
+		}
+	} else if tempSystemDBID != descpb.InvalidID {
 		// We restore the system tables from the main data bundle so late because it
 		// includes the jobs that are being restored. As soon as we restore these
 		// jobs, they become accessible to the user, and may start executing. We
@@ -2389,11 +2401,6 @@ func (r *restoreResumer) doResume(ctx context.Context, execCtx interface{}) erro
 		if err := r.restoreSystemTables(
 			ctx, p.ExecCfg().InternalDB, mainData.getSystemTables(),
 		); err != nil {
-			return err
-		}
-		details = r.job.Details().(jobspb.RestoreDetails)
-	} else if isSystemUserRestore(details) {
-		if err := r.restoreSystemUsers(ctx, p.ExecCfg().InternalDB, mainData.getSystemTables()); err != nil {
 			return err
 		}
 	}
@@ -3785,6 +3792,8 @@ func (r *restoreResumer) restoreSystemTables(
 	ctx context.Context, db isql.DB, tables []catalog.TableDescriptor,
 ) error {
 	details := r.job.Details().(jobspb.RestoreDetails)
+	isClusterRestore := details.DescriptorCoverage == tree.AllDescriptors
+
 	if details.SystemTablesMigrated == nil {
 		details.SystemTablesMigrated = make(map[string]bool)
 	}
@@ -3817,13 +3826,22 @@ func (r *restoreResumer) restoreSystemTables(
 
 	// Copy the data from the temporary system DB to the real system table.
 	for _, systemTable := range systemTablesToRestore {
-		if systemTable.config.migrationFunc != nil {
+		var migrationFunc func(context.Context, isql.Txn, string, jobspb.DescRewriteMap) error
+		if isClusterRestore {
+			migrationFunc = systemTable.config.migrationFunc
+		} else if systemTable.config.nonClusterMigrationFunc != nil {
+			migrationFunc = systemTable.config.nonClusterMigrationFunc
+		} else {
+			return errors.New("found system table in non cluster without a non cluster migration func")
+		}
+
+		if migrationFunc != nil {
 			if details.SystemTablesMigrated[systemTable.systemTableName] {
 				continue
 			}
 
 			if err := db.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
-				if err := systemTable.config.migrationFunc(
+				if err := migrationFunc(
 					ctx, txn, systemTable.stagingTableName, details.DescriptorRewrites,
 				); err != nil {
 					return err
@@ -3839,14 +3857,20 @@ func (r *restoreResumer) restoreSystemTables(
 			}
 		}
 
+		restoreFunc := defaultSystemTableRestoreFunc
+		if isClusterRestore {
+			if systemTable.config.customRestoreFunc != nil {
+				restoreFunc = systemTable.config.customRestoreFunc
+			}
+		} else if systemTable.config.nonClusterRestoreFunc != nil {
+			restoreFunc = systemTable.config.nonClusterRestoreFunc
+		} else {
+			return errors.New("found system table in non cluster without a non cluster restore func")
+		}
+
 		if err := db.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
 			txn.KV().SetDebugName("system-restore-txn")
 
-			restoreFunc := defaultSystemTableRestoreFunc
-			if systemTable.config.customRestoreFunc != nil {
-				restoreFunc = systemTable.config.customRestoreFunc
-				log.Eventf(ctx, "using custom restore function for table %s", systemTable.systemTableName)
-			}
 			deps := customRestoreFuncDeps{
 				settings: r.execCfg.Settings,
 				codec:    r.execCfg.Codec,
