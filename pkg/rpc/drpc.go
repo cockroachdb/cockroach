@@ -392,7 +392,7 @@ func (srv *drpcOffServer) Register(interface{}, drpc.Description) error {
 func newDRPCPeerOptions(
 	rpcCtx *Context, k peerKey, locality roachpb.Locality,
 ) *peerOptions[drpc.Conn] {
-	pm, _ := rpcCtx.metrics.acquire(k, locality)
+	pm, _ := rpcCtx.metrics.acquire(k, locality, rpcProtocolDRPC)
 	return &peerOptions[drpc.Conn]{
 		locality: locality,
 		peers:    &rpcCtx.drpcPeers,
