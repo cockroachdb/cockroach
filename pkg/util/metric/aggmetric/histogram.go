@@ -6,6 +6,7 @@
 package aggmetric
 
 import (
+	"sync/atomic"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
@@ -338,6 +339,7 @@ type HighCardinalityHistogram struct {
 		syncutil.RWMutex
 		*tick.Ticker
 	}
+	opts metric.HighCardinalityMetricOptions
 }
 
 var _ metric.Iterable = (*HighCardinalityHistogram)(nil)
@@ -350,7 +352,7 @@ var _ metric.CumulativeHistogram = (*HighCardinalityHistogram)(nil)
 // the maximum number of label combinations (MaxLabelValues) and retention time (RetentionTimeTillEviction).
 // If HighCardinalityOpts is not provided or has zero values, defaults will be used.
 func NewHighCardinalityHistogram(
-	opts metric.HistogramOptions, childLabels ...string,
+	opts metric.HistogramOptions, childLabels []string,
 ) *HighCardinalityHistogram {
 	create := func() metric.IHistogram {
 		return metric.NewHistogram(opts)
@@ -379,7 +381,7 @@ func NewHighCardinalityHistogram(
 				childHist.h.Tick()
 			})
 		})
-	h.initWithCacheStorageType(childLabels, opts.Metadata.Name, opts.HighCardinalityOpts)
+	h.initWithCacheStorageType(childLabels)
 	return h
 }
 
@@ -458,12 +460,13 @@ func (h *HighCardinalityHistogram) GetOrAddChild(
 func (h *HighCardinalityHistogram) createHighCardinalityChildHistogram(
 	key uint64, cache *metric.LabelSliceCache,
 ) LabelSliceCachedChildMetric {
-	return &HighCardinalityChildHistogram{
+	child := &HighCardinalityChildHistogram{
 		LabelSliceCacheKey: metric.LabelSliceCacheKey(key),
 		LabelSliceCache:    cache,
 		h:                  h.create(),
-		createdAt:          timeutil.Now(),
 	}
+	child.updatedAt.Store(timeutil.Now().Unix())
+	return child
 }
 
 // HighCardinalityChildHistogram is a child of a HighCardinalityHistogram. When metrics are
@@ -473,11 +476,11 @@ type HighCardinalityChildHistogram struct {
 	metric.LabelSliceCacheKey
 	h metric.IHistogram
 	*metric.LabelSliceCache
-	createdAt time.Time
+	updatedAt atomic.Int64
 }
 
-func (h *HighCardinalityChildHistogram) CreatedAt() time.Time {
-	return h.createdAt
+func (h *HighCardinalityChildHistogram) UpdatedAt() int64 {
+	return h.updatedAt.Load()
 }
 
 func (h *HighCardinalityChildHistogram) DecrementLabelSliceCacheReference() {
@@ -500,6 +503,7 @@ func (h *HighCardinalityChildHistogram) labelValues() []string {
 // RecordValue records the histogram value.
 func (h *HighCardinalityChildHistogram) RecordValue(v int64) {
 	h.h.RecordValue(v)
+	h.updatedAt.Store(timeutil.Now().Unix())
 }
 
 // CumulativeSnapshot returns the cumulative histogram snapshot.
