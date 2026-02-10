@@ -546,11 +546,12 @@ func (sc StoreCapacity) String() string {
 
 // SafeFormat implements the redact.SafeFormatter interface.
 func (sc StoreCapacity) SafeFormat(w redact.SafePrinter, _ rune) {
-	w.Printf("disk (capacity=%s, available=%s, used=%s, logicalBytes=%s), "+
+	w.Printf("disk (capacity=%s, available=%s, used=%s, logicalBytes=%s, diskUsageSpace=%s), "+
 		"ranges=%d, leases=%d, queries=%.2f, writes=%.2f, "+
 		"ioThreshold={%v} bytesPerReplica={%s}, writesPerReplica={%s}",
 		humanizeutil.IBytes(sc.Capacity), humanizeutil.IBytes(sc.Available),
 		humanizeutil.IBytes(sc.Used), humanizeutil.IBytes(sc.LogicalBytes),
+		humanizeutil.IBytes(sc.DiskUsageSpace),
 		sc.RangeCount, sc.LeaseCount, sc.QueriesPerSecond, sc.WritesPerSecond,
 		sc.IOThreshold, sc.BytesPerReplica, sc.WritesPerReplica)
 }

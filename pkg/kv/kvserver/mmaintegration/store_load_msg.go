@@ -12,8 +12,6 @@ import (
 )
 
 // MakeStoreLoadMsg makes a store load message.
-//
-// TODO(wenyihu6): Add more tests for this function.
 func MakeStoreLoadMsg(
 	desc roachpb.StoreDescriptor, origTimestampNanos int64,
 ) mmaprototype.StoreLoadMsg {
@@ -110,13 +108,15 @@ func MakeStoreLoadMsg(
 	load[mmaprototype.WriteBandwidth] = mmaprototype.LoadValue(desc.Capacity.WriteBytesPerSecond)
 	capacity[mmaprototype.WriteBandwidth] = mmaprototype.UnknownCapacity
 	// ByteSize is based on LogicalBytes since that is how we measure the size
-	// of each range
+	// of each range.
 	load[mmaprototype.ByteSize] = mmaprototype.LoadValue(desc.Capacity.LogicalBytes)
-	// Available does not compensate for the ballast, so utilization will look
-	// higher than actual. This is fine since the ballast is small (default is
-	// 1% of capacity) and is for use in an emergency.
-	byteSizeUtil :=
-		float64(desc.Capacity.Capacity-desc.Capacity.Available) / float64(desc.Capacity.Capacity)
+	//   DiskUsageSpace ≈ constant * LogicalBytes  (scales proportionally)
+	diskUsed := desc.Capacity.DiskUsageSpace
+	diskAvail := desc.Capacity.Available
+	var byteSizeUtil float64
+	if diskUsed+diskAvail > 0 {
+		byteSizeUtil = float64(diskUsed) / float64(diskUsed+diskAvail)
+	}
 	almostZeroUtil := byteSizeUtil < 0.01
 	if load[mmaprototype.ByteSize] != 0 && !almostZeroUtil {
 		// Normal case. The store has some ranges, and is not almost empty.

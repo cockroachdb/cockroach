@@ -363,6 +363,13 @@ message StoreCapacity {
   // This information can be used for rebalancing decisions.
   optional Percentiles bytes_per_replica = 6 [(gogoproto.nullable) = false];
   optional Percentiles writes_per_replica = 7 [(gogoproto.nullable) = false];
+  // disk_usage_space is the amount of disk space used by Pebble data files
+  // only (SSTables, WAL, manifests, etc.), as reported by
+  // pebble.Metrics.DiskSpaceUsage(). Unlike 'used', this excludes the
+  // auxiliary directory and any non-Pebble store files. This field is used by
+  // MMA to compute disk utilization that scales proportionally with logical
+  // bytes, avoiding inflation from auxiliary files.
+  optional int64 disk_usage_space = 17 [(gogoproto.nullable) = false];
   reserved 11;
   reserved 12;
 }

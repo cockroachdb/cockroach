@@ -282,6 +282,7 @@ func (s *state) capacity(storeID StoreID) roachpb.StoreCapacity {
 	capacity.LeaseCount = 0
 	capacity.RangeCount = 0
 	capacity.Used = 0
+	capacity.DiskUsageSpace = 0
 	capacity.Available = 0
 
 	for _, repl := range s.Replicas(storeID) {
@@ -306,6 +307,9 @@ func (s *state) capacity(storeID StoreID) roachpb.StoreCapacity {
 	used := int64(float64(capacity.LogicalBytes) * 1.25)
 	available := capacity.Capacity - used
 	capacity.Used = used
+	// In simulation, DiskUsageSpace (pebble-only) is approximately Used minus
+	// a small auxiliary overhead. For simplicity, use the same value.
+	capacity.DiskUsageSpace = used
 	capacity.Available = available
 	return capacity
 }
