@@ -137,7 +137,7 @@ func makePerNodeZipRequests(
 ) []zipRequest {
 	var zipRequests []zipRequest
 
-	if zipCtx.files.shouldIncludeFile(detailsFileName) {
+	if zipCtx.files.shouldIncludeFile(detailsFileName, prefix+"/"+detailsFileName) {
 		zipRequests = append(zipRequests, zipRequest{
 			fn: func(ctx context.Context) (interface{}, error) {
 				return status.Details(ctx, &serverpb.DetailsRequest{NodeId: id, Redact: zipCtx.redact})
@@ -149,7 +149,7 @@ func makePerNodeZipRequests(
 		zr.info("skipping %s due to file filters", detailsFileName)
 	}
 
-	if zipCtx.files.shouldIncludeFile(gossipFileName) {
+	if zipCtx.files.shouldIncludeFile(gossipFileName, prefix+"/"+gossipFileName) {
 		zipRequests = append(zipRequests, zipRequest{
 			fn: func(ctx context.Context) (interface{}, error) {
 				return status.Gossip(ctx, &serverpb.GossipRequest{NodeId: id, Redact: zipCtx.redact})
@@ -187,7 +187,7 @@ func (zc *debugZipContext) collectCPUProfiles(
 	}
 
 	zc.clusterPrinter.info("requesting CPU profiles")
-	if !zipCtx.files.shouldIncludeFile(cpuProfileFileName) {
+	if !zipCtx.files.shouldIncludeFile(cpuProfileFileName, "" /* zipPath not yet known */) {
 		zc.clusterPrinter.info("skipping %s due to file filters", cpuProfileFileName)
 		return nil
 	}
@@ -310,7 +310,7 @@ func (zc *debugZipContext) collectFileList(
 		nodePrinter.info("%d %ss found", len(files.Files), fileKind)
 		for _, file := range files.Files {
 			ctime := extractTimeFromFileName(file.Name)
-			if !zipCtx.files.isIncluded(file.Name, ctime, ctime) {
+			if !zipCtx.files.isIncluded(file.Name, prefix+"/"+file.Name, ctime, ctime) {
 				nodePrinter.info("skipping excluded %s: %s due to file filters", fileKind, file.Name)
 				continue
 			}
@@ -354,7 +354,7 @@ func (zc *debugZipContext) getRangeInformation(
 	ctx context.Context, nodePrinter *zipReporter, id string, prefix string,
 ) error {
 	if zipCtx.includeRangeInfo {
-		if !zipCtx.files.shouldIncludeFile(rangesInfoFileName) {
+		if !zipCtx.files.shouldIncludeFile(rangesInfoFileName, prefix+"/"+rangesInfoFileName) {
 			nodePrinter.info("skipping %s due to file filters", rangesInfoFileName)
 			return nil
 		}
@@ -419,7 +419,7 @@ func (zc *debugZipContext) getLogFiles(
 		for _, file := range logs.Files {
 			ctime := extractTimeFromFileName(file.Name)
 			mtime := timeutil.Unix(0, file.ModTimeNanos)
-			if !zipCtx.files.isIncluded(file.Name, ctime, mtime) {
+			if !zipCtx.files.isIncluded(file.Name, prefix+"/logs/"+file.Name, ctime, mtime) {
 				nodePrinter.info("skipping excluded log file: %s due to file filters", file.Name)
 				continue
 			}
@@ -530,7 +530,7 @@ func (zc *debugZipContext) getProfiles(
 func (zc *debugZipContext) getEngineStats(
 	ctx context.Context, nodePrinter *zipReporter, id string, prefix string,
 ) error {
-	if !zipCtx.files.shouldIncludeFile(lsmFileName) {
+	if !zipCtx.files.shouldIncludeFile(lsmFileName, prefix+"/"+lsmFileName) {
 		nodePrinter.info("skipping %s due to file filters", lsmFileName)
 		return nil
 	}
@@ -554,7 +554,7 @@ func (zc *debugZipContext) getEngineStats(
 func (zc *debugZipContext) getCurrentHeapProfile(
 	ctx context.Context, nodePrinter *zipReporter, id string, prefix string,
 ) error {
-	if !zipCtx.files.shouldIncludeFile(heapPprofFileName) {
+	if !zipCtx.files.shouldIncludeFile(heapPprofFileName, prefix+"/"+heapPprofFileName) {
 		nodePrinter.info("skipping %s due to file filters", heapPprofFileName)
 		return nil
 	}
@@ -587,7 +587,7 @@ func (zc *debugZipContext) getStackInformation(
 	// binary goroutine profile (debug=3 or debug=0), as these do not have that
 	// same stop-the-world disruption.
 	if zipCtx.includeStacks {
-		if zipCtx.files.shouldIncludeFile(stacksFileName) {
+		if zipCtx.files.shouldIncludeFile(stacksFileName, prefix+"/"+stacksFileName) {
 			var stacksData []byte
 			s := nodePrinter.start("requesting stacks")
 			requestErr := zc.runZipFn(ctx, s,
@@ -612,7 +612,7 @@ func (zc *debugZipContext) getStackInformation(
 	}
 
 	var stacksDataWithLabels []byte
-	if zipCtx.files.shouldIncludeFile(stacksWithLabelFileName) {
+	if zipCtx.files.shouldIncludeFile(stacksWithLabelFileName, prefix+"/"+stacksWithLabelFileName) {
 		s := nodePrinter.start("requesting stacks with labels")
 		requestErr := zc.runZipFn(ctx, s,
 			func(ctx context.Context) error {
@@ -635,7 +635,7 @@ func (zc *debugZipContext) getStackInformation(
 		nodePrinter.info("skipping %s due to file filters", stacksWithLabelFileName)
 	}
 
-	if zipCtx.files.shouldIncludeFile(stacksPprofFileName) {
+	if zipCtx.files.shouldIncludeFile(stacksPprofFileName, prefix+"/"+stacksPprofFileName) {
 		var stacksPprofData []byte
 		s := nodePrinter.start("requesting goroutine profile")
 		requestErr := zc.runZipFn(ctx, s,
@@ -706,7 +706,7 @@ func (zc *debugZipContext) getNodeStatus(
 	prefix string,
 	redactedNodeDetails serverpb.NodeDetails,
 ) error {
-	if !zipCtx.files.shouldIncludeFile(statusFileName) {
+	if !zipCtx.files.shouldIncludeFile(statusFileName, prefix+"/"+statusFileName) {
 		nodePrinter.info("skipping %s due to file filters", statusFileName)
 		return nil
 	}

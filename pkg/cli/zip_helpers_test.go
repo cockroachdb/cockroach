@@ -17,6 +17,7 @@ func TestFileSelection(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	type s = string
+	// Tests for base-name-only patterns (no zip path provided).
 	testCases := []struct {
 		incl    []s
 		excl    []s
@@ -35,15 +36,177 @@ func TestFileSelection(t *testing.T) {
 	for _, tc := range testCases {
 		sel := fileSelection{includePatterns: tc.incl, excludePatterns: tc.excl}
 		for _, f := range tc.accepts {
-			if !sel.isIncluded(f, zt, zt) {
+			if !sel.isIncluded(f, "" /* no zip path */, zt, zt) {
 				t.Errorf("incl=%+v, excl=%+v: mistakenly does not include %q", sel.includePatterns, sel.excludePatterns, f)
 			}
 		}
 		for _, f := range tc.rejects {
-			if sel.isIncluded(f, zt, zt) {
+			if sel.isIncluded(f, "" /* no zip path */, zt, zt) {
 				t.Errorf("incl=%+v, excl=%+v: mistakenly includes %q", sel.includePatterns, sel.excludePatterns, f)
 			}
 		}
+	}
+}
+
+func TestFileSelectionWithPaths(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	type s = string
+	var zt time.Time
+
+	testCases := []struct {
+		name     string
+		incl     []s
+		excl     []s
+		filename s
+		zipPath  s
+		included bool
+	}{
+		{
+			name:     "path include with wildcard node",
+			incl:     []s{"debug/nodes/*/*.json"},
+			filename: "details.json",
+			zipPath:  "debug/nodes/1/details.json",
+			included: true,
+		},
+		{
+			name:     "path include rejects wrong node",
+			incl:     []s{"debug/nodes/1/*.json"},
+			filename: "details.json",
+			zipPath:  "debug/nodes/2/details.json",
+			included: false,
+		},
+		// Path exclude targets per-node files but spares the same
+		// base name at a different location (cluster-wide).
+		{
+			name:     "path exclude scoped to per-node only",
+			excl:     []s{"debug/nodes/*/ranges.json"},
+			filename: "ranges.json",
+			zipPath:  "debug/ranges.json",
+			included: true,
+		},
+		// Base-name include + path exclude: the path exclude only
+		// removes the targeted file, not other files with the same
+		// base-name extension.
+		{
+			name:     "base include with path exclude",
+			incl:     []s{"*.json"},
+			excl:     []s{"debug/nodes/*/ranges.json"},
+			filename: "ranges.json",
+			zipPath:  "debug/nodes/1/ranges.json",
+			included: false,
+		},
+		// Path include distinguishes cluster-wide vs per-node files
+		// that share the same base name.
+		{
+			name:     "path include distinguishes location",
+			incl:     []s{"debug/events.json"},
+			filename: "events.json",
+			zipPath:  "debug/nodes/1/events.json",
+			included: false,
+		},
+		// When zipPath is empty, falls back to matching the base
+		// component of the path pattern against the filename.
+		{
+			name:     "empty zipPath fallback matches base",
+			incl:     []s{"debug/nodes/*/cpu.pprof"},
+			filename: "cpu.pprof",
+			zipPath:  "",
+			included: true,
+		},
+		{
+			name:     "empty zipPath fallback rejects mismatch",
+			incl:     []s{"debug/nodes/*/details.json"},
+			filename: "cpu.pprof",
+			zipPath:  "",
+			included: false,
+		},
+		// Mixed base-name + path include: path-specific pattern
+		// limits which nodes match for json, while base-name pattern
+		// includes all txt files.
+		{
+			name:     "mixed base and path include",
+			incl:     []s{"*.txt", "debug/nodes/1/*.json"},
+			filename: "details.json",
+			zipPath:  "debug/nodes/2/details.json",
+			included: false,
+		},
+		// Deep path patterns work for subdirectories like heapprof.
+		{
+			name:     "deep path include for heapprof",
+			incl:     []s{"debug/nodes/*/heapprof/*.pprof"},
+			filename: "memprof.2026-02-10.pprof",
+			zipPath:  "debug/nodes/1/heapprof/memprof.2026-02-10.pprof",
+			included: true,
+		},
+		// Deep path exclude targets a subdirectory without affecting
+		// files elsewhere.
+		{
+			name:     "deep path exclude spares other files",
+			excl:     []s{"debug/nodes/*/heapprof/*.pprof"},
+			filename: "memmonitoring.2026-02-10.txt",
+			zipPath:  "debug/nodes/1/heapprof/memmonitoring.2026-02-10.txt",
+			included: true,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			sel := fileSelection{includePatterns: tc.incl, excludePatterns: tc.excl}
+			actual := sel.isIncluded(tc.filename, tc.zipPath, zt, zt)
+			if actual != tc.included {
+				t.Errorf("incl=%+v, excl=%+v, file=%q, path=%q: expected included=%v, got %v",
+					sel.includePatterns, sel.excludePatterns, tc.filename, tc.zipPath, tc.included, actual)
+			}
+		})
+	}
+}
+
+func TestRetrievalPatternsWithPaths(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	type s = string
+	testCases := []struct {
+		name     string
+		incl     []s
+		expected []s
+	}{
+		{
+			name:     "no patterns returns wildcard",
+			incl:     nil,
+			expected: []s{"*"},
+		},
+		{
+			name:     "base-name patterns returned as-is",
+			incl:     []s{"*.json", "*.txt"},
+			expected: []s{"*.json", "*.txt"},
+		},
+		{
+			name:     "path patterns filtered out, only base-name sent to server",
+			incl:     []s{"*.json", "debug/nodes/1/*.txt"},
+			expected: []s{"*.json"},
+		},
+		{
+			name:     "all path patterns returns wildcard",
+			incl:     []s{"debug/nodes/1/*.json", "debug/nodes/*/stacks.txt"},
+			expected: []s{"*"},
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			sel := fileSelection{includePatterns: tc.incl}
+			actual := sel.retrievalPatterns()
+			if len(actual) != len(tc.expected) {
+				t.Fatalf("expected %v, got %v", tc.expected, actual)
+			}
+			for i := range actual {
+				if actual[i] != tc.expected[i] {
+					t.Errorf("expected %v, got %v", tc.expected, actual)
+					break
+				}
+			}
+		})
 	}
 }
 
@@ -87,7 +250,7 @@ func TestFileTimeBounds(t *testing.T) {
 	for i, tc := range testCases {
 		ct, _ := time.ParseInLocation(tfmt, tc.ctime, time.UTC)
 		mt, _ := time.ParseInLocation(tfmt, tc.mtime, time.UTC)
-		if expected, actual := tc.included, fs.isIncluded("unused", ct, mt); expected != actual {
+		if expected, actual := tc.included, fs.isIncluded("unused", "" /* no zip path */, ct, mt); expected != actual {
 			t.Errorf("%d: file(ctime=%s,mtime=%s) expected included %v, got %v", i, ct, mt, expected, actual)
 		}
 	}

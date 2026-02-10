@@ -134,7 +134,7 @@ func runDebugListFiles(cmd *cobra.Command, _ []string) error {
 		for _, logFile := range logFiles[nodeID] {
 			ctime := extractTimeFromFileName(logFile.Name)
 			mtime := timeutil.Unix(0, logFile.ModTimeNanos)
-			if !zipCtx.files.isIncluded(logFile.Name, ctime, mtime) {
+			if !zipCtx.files.isIncluded(logFile.Name, "" /* no zip path */, ctime, mtime) {
 				continue
 			}
 			totalSize += logFile.SizeBytes
@@ -146,7 +146,7 @@ func runDebugListFiles(cmd *cobra.Command, _ []string) error {
 			fileType := int32(ft)
 			for _, other := range otherFiles[nodeID][fileType] {
 				ctime := extractTimeFromFileName(other.Name)
-				if !zipCtx.files.isIncluded(other.Name, ctime, ctime) {
+				if !zipCtx.files.isIncluded(other.Name, "" /* no zip path */, ctime, ctime) {
 					continue
 				}
 				totalSize += other.FileSize
