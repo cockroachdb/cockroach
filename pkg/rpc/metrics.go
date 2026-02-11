@@ -250,7 +250,7 @@ func (m *Metrics) makeLabels(k peerKey, remoteLocality roachpb.Locality) []strin
 }
 
 func newMetrics(locality roachpb.Locality) *Metrics {
-	childLabels := []string{"remote_node_id", "remote_addr", "class"}
+	childLabels := []string{"remote_node_id", "remote_addr", "class", "protocol"}
 	localityLabels := []string{}
 	for _, tier := range locality.Tiers {
 		localityLabels = append(localityLabels, "source_"+tier.Key)
@@ -390,10 +390,12 @@ type localityMetrics struct {
 	ConnectionBytesRecv *aggmetric.Counter
 }
 
-func (m *Metrics) acquire(k peerKey, l roachpb.Locality) (peerMetrics, localityMetrics) {
+func (m *Metrics) acquire(
+	k peerKey, l roachpb.Locality, rpcProtocol string,
+) (peerMetrics, localityMetrics) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	labelVals := []string{k.NodeID.String(), k.TargetAddr, k.Class.String()}
+	labelVals := []string{k.NodeID.String(), k.TargetAddr, k.Class.String(), rpcProtocol}
 	labelKey := strings.Join(labelVals, ",")
 	pm, ok := m.mu.peerMetrics[labelKey]
 	if !ok {
@@ -435,6 +437,10 @@ func (m *Metrics) acquire(k peerKey, l roachpb.Locality) (peerMetrics, localityM
 const (
 	RpcMethodLabel     = "methodName"
 	RpcStatusCodeLabel = "statusCode"
+	RpcProtocolLabel   = "protocol"
+
+	rpcProtocolGRPC = "grpc"
+	rpcProtocolDRPC = "drpc"
 )
 
 // RequestMetrics contains metrics for RPC requests.
@@ -447,7 +453,7 @@ func NewRequestMetrics() *RequestMetrics {
 		Duration: metric.NewExportedHistogramVec(
 			metaRequestDuration,
 			metric.ResponseTime30sBuckets,
-			[]string{RpcMethodLabel, RpcStatusCodeLabel}),
+			[]string{RpcMethodLabel, RpcStatusCodeLabel, RpcProtocolLabel}),
 	}
 }
 
@@ -484,6 +490,7 @@ func NewRequestMetricsInterceptor(
 		requestMetrics.Duration.Observe(map[string]string{
 			RpcMethodLabel:     info.FullMethod,
 			RpcStatusCodeLabel: code.String(),
+			RpcProtocolLabel:   rpcProtocolGRPC,
 		}, float64(duration.Nanoseconds()))
 		return resp, err
 	}
@@ -519,6 +526,7 @@ func NewDRPCRequestMetricsInterceptor(
 		requestMetrics.Duration.Observe(map[string]string{
 			RpcMethodLabel:     rpc,
 			RpcStatusCodeLabel: code.String(),
+			RpcProtocolLabel:   rpcProtocolDRPC,
 		}, float64(duration.Nanoseconds()))
 		return resp, err
 	}
