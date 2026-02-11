@@ -2700,22 +2700,34 @@ func (p *Provider) getLoadBalancerTags(
 		return nil, nil
 	}
 
-	args := []string{
-		"elbv2", "describe-tags",
-		"--resource-arns",
-	}
-	args = append(args, arns...)
-	args = append(args, "--region", region)
-
-	var output describeTagsOutput
-	if err := p.runJSONCommandWithContext(ctx, l, args, &output); err != nil {
-		return nil, err
-	}
-
 	result := make(map[string]map[string]string)
-	for _, td := range output.TagDescriptions {
-		result[td.ResourceArn] = td.Tags.MakeMap()
+
+	// AWS DescribeTags API has a limit of 20 resources per call.
+	const maxResourcesPerCall = 20
+	for i := 0; i < len(arns); i += maxResourcesPerCall {
+		end := i + maxResourcesPerCall
+		if end > len(arns) {
+			end = len(arns)
+		}
+		batch := arns[i:end]
+
+		args := []string{
+			"elbv2", "describe-tags",
+			"--resource-arns",
+		}
+		args = append(args, batch...)
+		args = append(args, "--region", region)
+
+		var output describeTagsOutput
+		if err := p.runJSONCommandWithContext(ctx, l, args, &output); err != nil {
+			return nil, err
+		}
+
+		for _, td := range output.TagDescriptions {
+			result[td.ResourceArn] = td.Tags.MakeMap()
+		}
 	}
+
 	return result, nil
 }
 
