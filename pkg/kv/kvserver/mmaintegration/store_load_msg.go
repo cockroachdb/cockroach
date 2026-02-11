@@ -19,13 +19,15 @@ func MakeStoreLoadMsg(
 	var load, capacity mmaprototype.LoadVector
 
 	load[mmaprototype.CPURate] = mmaprototype.LoadValue(desc.Capacity.CPUPerSecond)
-	capacity[mmaprototype.CPURate] = computeStoreCPURateCapacity(
+	cpuCap := computeCPUCapacityWithCap(
 		load[mmaprototype.CPURate],
+		float64(desc.NodeCapacity.StoresCPURate),
 		float64(desc.NodeCapacity.NodeCPURateUsage),
 		float64(desc.NodeCapacity.NodeCPURateCapacity),
-		float64(desc.NodeCapacity.StoresCPURate),
 		desc.NodeCapacity.NumStores,
+		func(_ float64, _ float64, _ float64, _ float64) {},
 	)
+	capacity[mmaprototype.CPURate] = mmaprototype.LoadValue(cpuCap)
 
 	load[mmaprototype.WriteBandwidth] = mmaprototype.LoadValue(desc.Capacity.WriteBytesPerSecond)
 	capacity[mmaprototype.WriteBandwidth] = mmaprototype.UnknownCapacity

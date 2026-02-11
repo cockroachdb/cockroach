@@ -41,6 +41,10 @@ func TestComputeStoreCPURateCapacity(t *testing.T) {
 	// All CPU inputs are in cores (1 core = 1e9 ns/s).
 	const nsPerCore = 1e9
 
+	fmtUtil := func(load, cap float64) string {
+		return fmt.Sprintf("%.2f%%", load/cap*100)
+	}
+
 	datadriven.RunTest(t, datapathutils.TestDataPath(t, t.Name()),
 		func(t *testing.T, d *datadriven.TestData) string {
 			switch d.Cmd {
@@ -56,26 +60,74 @@ func TestComputeStoreCPURateCapacity(t *testing.T) {
 				d.ScanArgs(t, "total-stores-cpu-usage", &storesCPUCores)
 				d.ScanArgs(t, "num-stores", &numStores)
 
-				result := computeStoreCPURateCapacity(
+				totalPerStore := nodeCapCores / float64(numStores)
+
+				// Naive model: assumes all node CPU scales directly with store work.
+				naiveResult := computeStoreCPURateCapacity(
 					mmaprototype.LoadValue(storeCPUCores*nsPerCore),
 					nodeUsageCores*nsPerCore,
 					nodeCapCores*nsPerCore,
 					storesCPUCores*nsPerCore,
 					int32(numStores),
 				)
-				capacityCores := float64(result) / nsPerCore
-				fairShareCores := nodeCapCores / float64(numStores)
+				naiveCap := float64(naiveResult) / nsPerCore
 
-				var storeUtil string
-				if result > 0 {
-					storeUtil = fmt.Sprintf("%.2f%%", storeCPUCores/capacityCores*100)
+				// Capped model: caps the indirect overhead multiplier.
+				var cappedMult, bgLoad, mmaShare, mmaDirect float64
+				cappedCapNs := computeCPUCapacityWithCap(
+					mmaprototype.LoadValue(storeCPUCores*nsPerCore),
+					storesCPUCores*nsPerCore,
+					nodeUsageCores*nsPerCore,
+					nodeCapCores*nsPerCore,
+					int32(numStores),
+					func(mult, backgroundLoad, mmaShareOfCapacity, mmaDirectCapacity float64) {
+						cappedMult = mult
+						bgLoad = backgroundLoad / nsPerCore
+						mmaShare = mmaShareOfCapacity / nsPerCore
+						mmaDirect = mmaDirectCapacity / nsPerCore
+					},
+				)
+				cappedCap := cappedCapNs / nsPerCore
+
+				var cappedSteps string
+				if numStores <= 0 {
+					cappedSteps = fmt.Sprintf(
+						"capped_mult: (early return: num-stores=%d)\n"+
+							"  kv-capacity: %.2f cores, kv-util: %s (%.2f/%.2f cores)\n",
+						numStores,
+						cappedCap, fmtUtil(storeCPUCores, cappedCap), storeCPUCores, cappedCap,
+					)
+				} else if nodeCapCores <= 0 {
+					cappedSteps = fmt.Sprintf(
+						"capped_mult: (node-cpu-capacity unknown, assuming 50%% util)\n"+
+							"  kv-capacity: %.2f cores, kv-util: %s (%.2f/%.2f cores)\n",
+						cappedCap, fmtUtil(storeCPUCores, cappedCap), storeCPUCores, cappedCap,
+					)
 				} else {
-					storeUtil = "N/A"
+					cappedSteps = fmt.Sprintf(
+						"capped_mult: (steps below)\n"+
+							"  mult        = max(1, min(%.2f/%.2f, %.0f)) = %.1f\n"+
+							"  background  = max(0, %.2f - %.2f*%.1f) = %.2f cores\n"+
+							"  mma-share   = %.2f - %.2f = %.2f cores\n"+
+							"  mma-direct  = %.2f / %.1f = %.2f cores\n"+
+							"  per-store   = %.2f / %d = %.2f cores\n"+
+							"  kv-capacity: %.2f cores, kv-util: %s (%.2f/%.2f cores)\n",
+						nodeUsageCores, storesCPUCores, cpuIndirectOverheadMultiplier, cappedMult,
+						nodeUsageCores, storesCPUCores, cappedMult, bgLoad,
+						nodeCapCores, bgLoad, mmaShare,
+						mmaShare, cappedMult, mmaDirect,
+						mmaDirect, numStores, cappedCap,
+						cappedCap, fmtUtil(storeCPUCores, cappedCap), storeCPUCores, cappedCap,
+					)
 				}
+
 				return fmt.Sprintf(
-					"kv-capacity: %.2f cores (total: %.2f cores)\nkv-util: %s (%.2f/%.2f cores)\n",
-					capacityCores, fairShareCores,
-					storeUtil, storeCPUCores, capacityCores,
+					"              node-cpu-capacity/num-stores: %.2f cores/store\n"+
+						"naive:        kv-capacity: %.2f cores, kv-util: %s (%.2f/%.2f cores)\n"+
+						"%s",
+					totalPerStore,
+					naiveCap, fmtUtil(storeCPUCores, naiveCap), storeCPUCores, naiveCap,
+					cappedSteps,
 				)
 
 			default:
