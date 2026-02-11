@@ -11413,3 +11413,59 @@ func TestBackupEmptyRevisionHistoryIncs(t *testing.T) {
 		require.Zero(t, revStartTime)
 	})
 }
+
+// TestDatabaseRestoreDownloadsZoneConfig verifies that when restoring a
+// database from a backup that contains the zones table, the restore creates
+// the temporary system database and downloads the zones table into it.
+// testZoneConfigDownload verifies that a restore operation downloads zone configs
+// into a temporary system database.
+func testZoneConfigDownload(t *testing.T, sqlDB *sqlutils.SQLRunner, restoreQuery string) {
+	sqlDB.Exec(t, `SET CLUSTER SETTING jobs.debug.pausepoints = 'restore.after_pre_data'`)
+
+	var jobID jobspb.JobID
+	sqlDB.QueryRow(t, restoreQuery).Scan(&jobID)
+
+	jobutils.WaitForJobToPause(t, sqlDB, jobID)
+
+	tmpDBName := "crdb_temp_system_" + strconv.Itoa(int(jobID))
+	checkTempDBExists := fmt.Sprintf("SELECT count(*) FROM [SHOW DATABASES] WHERE database_name = '%s'", tmpDBName)
+
+	sqlDB.CheckQueryResults(t, checkTempDBExists, [][]string{{"1"}})
+
+	sqlDB.CheckQueryResults(t,
+		fmt.Sprintf(`SELECT table_name FROM [SHOW TABLES FROM %s]`, tmpDBName),
+		[][]string{{"zones"}})
+
+	var zoneCount int
+	sqlDB.QueryRow(t, fmt.Sprintf(`SELECT count(*) FROM %s.zones`, tmpDBName)).Scan(&zoneCount)
+	require.Greater(t, zoneCount, 0, "zones table should contain data")
+
+	sqlDB.Exec(t, `SET CLUSTER SETTING jobs.debug.pausepoints = ''`)
+
+	sqlDB.Exec(t, `RESUME JOB $1`, jobID)
+	jobutils.WaitForJobToSucceed(t, sqlDB, jobID)
+
+	sqlDB.CheckQueryResults(t, checkTempDBExists, [][]string{{"0"}})
+}
+
+func TestRestoreDownloadsZoneConfig(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	const numAccounts = 10
+	_, sqlDB, _, cleanupFn := backupRestoreTestSetup(t, singleNode, numAccounts, InitManualReplication)
+	defer cleanupFn()
+
+	sqlDB.Exec(t, `BACKUP INTO 'nodelocal://1/test'`)
+
+	t.Run("database-restore", func(t *testing.T) {
+		testZoneConfigDownload(t, sqlDB,
+			`RESTORE DATABASE data FROM LATEST IN 'nodelocal://1/test' WITH new_db_name = 'data2', detached`)
+	})
+
+	t.Run("table-restore", func(t *testing.T) {
+		sqlDB.Exec(t, `CREATE DATABASE data3`)
+		testZoneConfigDownload(t, sqlDB,
+			`RESTORE TABLE data.bank FROM LATEST IN 'nodelocal://1/test' WITH into_db = 'data3', detached`)
+	})
+}

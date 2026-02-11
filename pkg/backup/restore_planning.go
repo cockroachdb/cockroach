@@ -792,6 +792,7 @@ func allocateDescriptorRewrites(
 	opts tree.RestoreOptions,
 	intoDB string,
 	newDBName string,
+	setupTempDB bool,
 ) (jobspb.DescRewriteMap, descpb.ID, error) {
 	descriptorRewrites := make(jobspb.DescRewriteMap)
 
@@ -839,7 +840,7 @@ func allocateDescriptorRewrites(
 	}
 
 	tempSysDBID := descpb.InvalidID
-	if descriptorCoverage == tree.AllDescriptors || descriptorCoverage == tree.SystemUsers {
+	if setupTempDB {
 		// Increment the DescIDSequenceKey so that it is higher than both the max desc ID
 		// in the backup and current max desc ID in the restoring cluster. This generator
 		// keeps produced the next descriptor ID.
@@ -1750,7 +1751,7 @@ func doRestorePlan(
 		return err
 	}
 
-	sqlDescs, restoreDBs, descsByTablePattern, tenants, err := selectTargets(
+	sqlDescs, restoreDBs, descsByTablePattern, tenants, setupTempDB, err := selectTargets(
 		ctx, p, mainBackupManifests, layerToIterFactory, restoreStmt.Targets, restoreStmt.DescriptorCoverage, endTime,
 	)
 	if err != nil {
@@ -1899,7 +1900,8 @@ func doRestorePlan(
 		restoreStmt.DescriptorCoverage,
 		restoreStmt.Options,
 		intoDB,
-		newDBName)
+		newDBName,
+		setupTempDB)
 	if err != nil {
 		return err
 	}

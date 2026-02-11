@@ -14,9 +14,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/backup/backupinfo"
 	"github.com/cockroachdb/cockroach/pkg/backup/backuppb"
 	"github.com/cockroachdb/cockroach/pkg/backup/backupresolver"
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/multitenant/mtinfopb"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
@@ -308,6 +310,7 @@ func fullClusterTargetsRestore(
 	defer span.Finish()
 
 	fullClusterDescs, fullClusterDBs, err := fullClusterTargets(allDescs)
+	fullClusterDescs, fullClusterDBs = filterTempSystemDBDescriptors(fullClusterDescs, fullClusterDBs)
 	var filteredDescs []catalog.Descriptor
 	var filteredDBs []catalog.DatabaseDescriptor
 	for _, desc := range fullClusterDescs {
@@ -368,6 +371,7 @@ func fullClusterTargetsBackup(
 //   - A map of table patterns to the resolved descriptor IFF the user is
 //     restoring on the table level.
 //   - A list of tenants to restore, if applicable.
+//   - A bool indicating to setup the tempDB.
 func selectTargets(
 	ctx context.Context,
 	p sql.PlanHookState,
@@ -381,18 +385,19 @@ func selectTargets(
 	[]catalog.DatabaseDescriptor,
 	map[tree.TablePattern]catalog.Descriptor,
 	[]mtinfopb.TenantInfoWithUsage,
+	bool,
 	error,
 ) {
 	ctx, span := tracing.ChildSpan(ctx, "backup.selectTargets")
 	defer span.Finish()
 	allDescs, lastBackupManifest, err := backupinfo.LoadSQLDescsFromBackupsAtTime(ctx, backupManifests, layerToIterFactory, asOf)
 	if err != nil {
-		return nil, nil, nil, nil, err
+		return nil, nil, nil, nil, false, err
 	}
 
 	if descriptorCoverage == tree.AllDescriptors {
 		tables, dbs, patterns, err := fullClusterTargetsRestore(ctx, allDescs, lastBackupManifest)
-		return tables, dbs, patterns, nil, err
+		return tables, dbs, patterns, nil, true, err
 	}
 
 	if descriptorCoverage == tree.SystemUsers {
@@ -412,9 +417,9 @@ func selectTargets(
 			}
 		}
 		if users == nil {
-			return nil, nil, nil, nil, errors.Errorf("cannot restore system users as no system.users table in the backup")
+			return nil, nil, nil, nil, false, errors.Errorf("cannot restore system users as no system.users table in the backup")
 		}
-		return systemTables, nil, nil, nil, nil
+		return systemTables, nil, nil, nil, true, nil
 	}
 
 	if targets.TenantID.IsSet() {
@@ -422,29 +427,105 @@ func selectTargets(
 			// TODO(dt): for now it is zero-or-one but when that changes, we should
 			// either keep it sorted or build a set here.
 			if tenant.ID == targets.TenantID.ID {
-				return nil, nil, nil, []mtinfopb.TenantInfoWithUsage{tenant}, nil
+				return nil, nil, nil, []mtinfopb.TenantInfoWithUsage{tenant}, false, nil
 			}
 		}
-		return nil, nil, nil, nil, errors.Errorf("tenant %d not in backup", targets.TenantID.ID)
+		return nil, nil, nil, nil, false, errors.Errorf("tenant %d not in backup", targets.TenantID.ID)
 	}
 
 	matched, err := backupresolver.DescriptorsMatchingTargets(ctx,
 		p.CurrentDatabase(), p.CurrentSearchPath(), allDescs, targets, asOf)
 	if err != nil {
-		return nil, nil, nil, nil, err
+		return nil, nil, nil, nil, false, err
 	}
 
 	if len(matched.Descs) == 0 {
-		return nil, nil, nil, nil, errors.Errorf("no tables or databases matched the given targets: %s", tree.ErrString(&targets))
+		return nil, nil, nil, nil, false, errors.Errorf("no tables or databases matched the given targets: %s", tree.ErrString(&targets))
 	}
 
 	if lastBackupManifest.FormatVersion >= backupinfo.BackupFormatDescriptorTrackingVersion {
 		if err := matched.CheckExpansions(lastBackupManifest.CompleteDbs); err != nil {
-			return nil, nil, nil, nil, err
+			return nil, nil, nil, nil, false, err
 		}
 	}
 
-	return matched.Descs, matched.RequestedDBs, matched.DescsByTablePattern, nil, nil
+	setupTempDB := setupTempDBNonClusterRestore(p.ExecCfg().Settings.Version.ActiveVersion(ctx).Version, descriptorCoverage, lastBackupManifest.DescriptorCoverage, matched.Descs)
+	if setupTempDB {
+		for _, desc := range allDescs {
+			if desc.GetID() == keys.ZonesTableID {
+				matched.Descs = append(matched.Descs, desc)
+				break
+			}
+		}
+	}
+
+	return matched.Descs, matched.RequestedDBs, matched.DescsByTablePattern, nil, setupTempDB, nil
+}
+
+// filterTempSystemDBDescriptors filters out temporary system databases (those
+// starting with restoreTempSystemDBPrefix) and all their child descriptors
+// from the provided descriptor lists.
+func filterTempSystemDBDescriptors(
+	fullClusterDescs []catalog.Descriptor, fullClusterDBs []catalog.DatabaseDescriptor,
+) ([]catalog.Descriptor, []catalog.DatabaseDescriptor) {
+
+	tempDBIDs := make(map[descpb.ID]struct{})
+	for _, dbDesc := range fullClusterDBs {
+		if strings.HasPrefix(dbDesc.GetName(), restoreTempSystemDBPrefix) {
+			tempDBIDs[dbDesc.GetID()] = struct{}{}
+		}
+	}
+
+	if len(tempDBIDs) == 0 {
+		return fullClusterDescs, fullClusterDBs
+	}
+
+	filteredDescs := make([]catalog.Descriptor, 0, len(fullClusterDescs))
+	for _, desc := range fullClusterDescs {
+		if _, isTempDesc := tempDBIDs[desc.GetParentID()]; isTempDesc {
+			continue
+		}
+		if _, isTempDB := tempDBIDs[desc.GetID()]; isTempDB {
+			continue
+		}
+		filteredDescs = append(filteredDescs, desc)
+	}
+
+	filteredDBs := make([]catalog.DatabaseDescriptor, 0, len(fullClusterDBs))
+	for _, dbDesc := range fullClusterDBs {
+		if _, isTempDB := tempDBIDs[dbDesc.GetID()]; !isTempDB {
+			filteredDBs = append(filteredDBs, dbDesc)
+		}
+	}
+
+	return filteredDescs, filteredDBs
+}
+
+func setupTempDBNonClusterRestore(
+	clusterVersion roachpb.Version,
+	restoreCoverage tree.DescriptorCoverage,
+	backupCoverage tree.DescriptorCoverage,
+	matchedDescs []catalog.Descriptor,
+) bool {
+	if clusterVersion.Less(clusterversion.V26_2.Version()) {
+		return false
+	}
+	if restoreCoverage != tree.RequestedDescriptors {
+		// tempDB logic handled elswhere
+		return false
+	}
+	if backupCoverage != tree.AllDescriptors {
+		// Unable to restore system tables without cluster backup
+		return false
+	}
+
+	for _, desc := range matchedDescs {
+		// If we're explicitly restoring a system table, don't use temp db.
+		if desc.GetParentID() == keys.SystemDatabaseID {
+			return false
+		}
+	}
+	return true
 }
 
 // EntryFiles is a group of sst files of a backup table range
