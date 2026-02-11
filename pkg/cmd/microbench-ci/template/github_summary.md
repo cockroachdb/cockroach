@@ -20,7 +20,15 @@ chmod +x {{index $benchdiff.BinDest $rev}}
 ```
 **benchdiff command**:
 ```shell
-benchdiff --run=^{{$benchdiff.Run}}$ --old={{index $benchdiff.TrimmedSHA $benchdiff.Old}} --new={{index $benchdiff.TrimmedSHA $benchdiff.New}} ./{{$benchdiff.Package}}
+# NB: for best (most stable) results, also add a suitable `--benchtime` that
+# results in ~1s to ~5s of benchmark runs. For example, if ops average ~3ms, a
+# benchtime of `1000x` is appropriate.
+#
+# Some benchmarks (in particular BenchmarkSysbench) output additional memory
+# profiles covering only the execution (excluding the setup/teardown) - those
+# should be preferred for analysis since they more closely correspond to what's
+# reported as B/op and alloc/op.
+benchdiff --run=^{{$benchdiff.Run}}$ --old={{index $benchdiff.TrimmedSHA $benchdiff.Old}} --new={{index $benchdiff.TrimmedSHA $benchdiff.New}} --memprofile ./{{$benchdiff.Package}}
 ```
 
 </details>
