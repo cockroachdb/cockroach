@@ -12,9 +12,11 @@ import "github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/mmaprototype"
 // extracted here so they can be unit tested directly.
 
 // computeStoreCPURateCapacity computes the CPU rate capacity for a single store
-// given node-level CPU metrics. The model ensures that the per-store utilization
-// (load/capacity) equals the node-level CPU utilization, so that overload is
-// detected at the store level exactly when it is detected at the node level.
+// given node-level CPU metrics. The model ensures that the mean store
+// utilization (sum of store loads / sum of store capacities) equals the
+// node-level CPU utilization, so that overload is detected at the store level
+// exactly when it is detected at the node level. Individual stores may have
+// different utilizations depending on their load.
 //
 // The three cases are:
 //
@@ -137,9 +139,9 @@ func computeStoreCPURateCapacity(
 //
 //  1. Normal: logicalBytes > 0 and diskFractionUsed >= 0.01.
 //     capacity = logicalBytes / diskFractionUsed.
-//     This encodes the space amplification factor (physical/logical) into
-//     the capacity, so that highDiskSpaceUtilization(load, capacity, threshold)
-//     recovers the real disk utilization.
+//     This ensures that logicalBytes/capacity equals the observed physical
+//     disk utilization, encoding the space amplification factor
+//     (physical/logical) into the capacity.
 //
 //  2. Empty/new store: logicalBytes is 0 or diskFractionUsed < 0.01.
 //     We fall back to availableBytes (compressed/physical), which is
@@ -162,4 +164,95 @@ func computeStoreByteSizeCapacity(
 	}
 	// Normal case. The store has some ranges, and is not almost empty.
 	return mmaprototype.LoadValue(float64(logicalBytes) / diskFractionUsed)
+}
+
+// cpuIndirectOverheadMultiplier is the maximum ratio of total CPU caused by
+// store work to the directly-tracked store CPU. For example, a value of 3
+// means we assume each unit of direct MMA load (replica CPU) can cause up to 2
+// additional units of indirect CPU (RPC handling, compactions, etc.), for a
+// total of 3 units. Any node CPU usage beyond storesCPURate * multiplier is
+// treated as background load unrelated to MMA.
+const cpuIndirectOverheadMultiplier = 3.0
+
+// computeCPUCapacityWithCap computes per-store CPU capacity using a clamped
+// multiplier. Unlike computeStoreCPURateCapacity (which assumes all node CPU
+// usage is caused by MMA-tracked store work), this model distinguishes between
+// MMA-attributed load and background load.
+//
+// The formula:
+//
+//  1. clampedMult = clamp(nodeCPURateUsage / storesCPURate, 1, cpuIndirectOverheadMultiplier)
+//     When the implicit multiplier is low (<= cap), we assume all non-store
+//     CPU is indirectly caused by store work (e.g. RPC overhead, compactions)
+//     and will scale linearly with MMA's direct load.
+//     When the implicit multiplier exceeds the cap, we stop attributing
+//     unrelated CPU consumption (SQL gateway work, GC, background jobs) to
+//     the stores.
+//
+//  2. backgroundLoad = nodeCPURateUsage - storesCPURate * clampedMult
+//     The portion of node CPU usage that we assume is independent of
+//     MMA-tracked work. This is zero when the implicit multiplier is below
+//     the cap, and grows as auxiliary CPU usage increases.
+//
+//  3. mmaShareOfCapacity = nodeCPURateCapacity - backgroundLoad
+//     The number of cores available for MMA-related work (both direct store
+//     load and its indirect overhead).
+//
+//  4. mmaDirectCapacity = mmaShareOfCapacity / clampedMult
+//     The capacity in terms of direct MMA load. Dividing by the multiplier
+//     accounts for the indirect overhead: each unit of direct load consumes
+//     clampedMult units of actual CPU.
+//
+//  5. storeCapacity = mmaDirectCapacity / numStores
+//     Split evenly across stores on the node.
+//
+// When storesCPURate is 0 (no replicas reporting CPU yet), we use the limiting
+// behavior: MMA attributes none of the node usage to itself (all is
+// background), and divides the idle capacity by the multiplier across stores.
+func computeCPUCapacityWithCap(
+	currentStoreCPUUsage mmaprototype.LoadValue,
+	storesCPURate, nodeCPURateUsage, nodeCPURateCapacity float64,
+	numStores int32,
+	observer func(mult float64, backgroundLoad float64, mmaShareOfCapacity float64, mmaDirectCapacity float64),
+) (capacity float64) {
+	mult := 0.0
+	if numStores <= 0 || nodeCPURateCapacity <= 0 {
+		// TODO(sumeer): remove this hack of defaulting to 50% utilization, since
+		// NodeCPURateCapacity should never be 0.
+		return float64(currentStoreCPUUsage) * 2
+	}
+
+	if storesCPURate <= 0 {
+		// When MMA has zero load, the implicit multiplier is infinite, so we
+		// use the cap. MMA attributes 0 * cap = 0 of the node usage to itself,
+		// meaning all node usage is "background". MMA gets the remaining idle
+		// capacity, scaled down by the multiplier.
+		mult = cpuIndirectOverheadMultiplier
+	} else {
+		// Compute the implicit multiplier and clamp it to [1, cap].
+		// - Clamping from above prevents pathological behavior when MMA tracks
+		//   little load but the node has high CPU usage from other sources.
+		// - Clamping from below (at 1) handles the case where MMA load exceeds
+		//   node usage (shouldn't happen, but can due to measurement lag).
+		//   Without this, MMA would get unreasonably high capacity.
+		implicitMult := nodeCPURateUsage / storesCPURate
+		mult = max(1, min(implicitMult, cpuIndirectOverheadMultiplier))
+	}
+
+	// Background load is the portion of node usage NOT attributed to MMA.
+	// This is clamped to be non-negative.
+	mmaAttributedLoad := storesCPURate * mult
+	backgroundLoad := max(0.0, nodeCPURateUsage-mmaAttributedLoad)
+
+	// MMA's share of capacity is what remains after background load.
+	mmaShareOfCapacity := nodeCPURateCapacity - backgroundLoad
+
+	// MMA's direct capacity is scaled down by the multiplier to account
+	// for indirect overhead.
+	mmaDirectCapacity := mmaShareOfCapacity / mult
+
+	// Divide evenly across stores.
+	capacity = mmaDirectCapacity / float64(numStores)
+	observer(mult, backgroundLoad, mmaShareOfCapacity, mmaDirectCapacity)
+	return capacity
 }
