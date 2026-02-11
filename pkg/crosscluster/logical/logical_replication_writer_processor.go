@@ -749,6 +749,10 @@ func getWriterType(
 			return sqlclustersettings.LDRWriterTypeSQL, nil
 		}
 		return sqlclustersettings.LDRWriterTypeCRUD, nil
+	case jobspb.LogicalReplicationDetails_Transactional:
+		// Transaction mode uses TxnLdrCoordinator instead of a writer processor,
+		// but we return a placeholder to avoid errors during job setup.
+		return "", nil
 	default:
 		return "", errors.Newf("unknown logical replication writer type: %s", mode)
 	}

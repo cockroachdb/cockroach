@@ -458,6 +458,9 @@ func runDistributedApplier(
 	// resolved timestamps that serve this role.
 	maxCheckpoint := maxTs.Add(1, 0)
 
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
 	appliers := make(map[ldrdecoder.ApplierID]*Applier)
 	inputs := make(map[ldrdecoder.ApplierID]chan ApplierEvent)
 	for _, id := range ids {
@@ -465,7 +468,7 @@ func runDistributedApplier(
 		for i := range writers {
 			writers[i] = sharedWriter
 		}
-		a, err := NewApplier(id, writers, depTracker, ids)
+		a, err := NewApplier(ctx, id, writers, depTracker, ids)
 		require.NoError(t, err)
 
 		inputs[id] = make(chan ApplierEvent, 2*len(dag)+len(ids)+1)
@@ -477,9 +480,6 @@ func runDistributedApplier(
 		coord.send(node)
 	}
 	coord.finalize(maxCheckpoint)
-
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
 
 	group := ctxgroup.WithContext(ctx)
 
@@ -610,6 +610,9 @@ func runBenchApplier(b *testing.B, dag []txnNode, numWritersPerApplier int, rngS
 
 	rng := rand.New(rand.NewSource(rngSeed))
 
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
 	appliers := make(map[ldrdecoder.ApplierID]*Applier)
 	inputs := make(map[ldrdecoder.ApplierID]chan ApplierEvent)
 	for _, id := range ids {
@@ -617,7 +620,7 @@ func runBenchApplier(b *testing.B, dag []txnNode, numWritersPerApplier int, rngS
 		for i := range writers {
 			writers[i] = sharedWriter
 		}
-		a, err := NewApplier(id, writers, depTracker, ids)
+		a, err := NewApplier(ctx, id, writers, depTracker, ids)
 		require.NoError(b, err)
 		inputs[id] = make(chan ApplierEvent, 2*len(dag)+len(ids)+1)
 		appliers[id] = a
@@ -628,9 +631,6 @@ func runBenchApplier(b *testing.B, dag []txnNode, numWritersPerApplier int, rngS
 		coord.send(node)
 	}
 	coord.finalize(maxCheckpoint)
-
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
 
 	group := ctxgroup.WithContext(ctx)
 

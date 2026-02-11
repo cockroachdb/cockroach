@@ -1,4 +1,39 @@
-load("@io_bazel_rules_go//go:def.bzl", "go_test")
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "txnmode",
+    srcs = ["txnmode.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/crosscluster/logical/txnmode",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/crosscluster",
+        "//pkg/crosscluster/logical/ldrdecoder",
+        "//pkg/crosscluster/logical/txnapply",
+        "//pkg/crosscluster/logical/txnfeed",
+        "//pkg/crosscluster/logical/txnlock",
+        "//pkg/crosscluster/logical/txnscheduler",
+        "//pkg/crosscluster/logical/txnwriter",
+        "//pkg/crosscluster/streamclient",
+        "//pkg/jobs",
+        "//pkg/jobs/jobspb",
+        "//pkg/repstream/streampb",
+        "//pkg/settings",
+        "//pkg/sql",
+        "//pkg/sql/catalog/descpb",
+        "//pkg/sql/catalog/descs",
+        "//pkg/sql/catalog/tabledesc",
+        "//pkg/sql/catalog/typedesc",
+        "//pkg/sql/isql",
+        "//pkg/sql/sem/eval",
+        "//pkg/util/besteffort",
+        "//pkg/util/ctxgroup",
+        "//pkg/util/hlc",
+        "//pkg/util/log",
+        "//pkg/util/span",
+        "//pkg/util/timeutil",
+        "@com_github_cockroachdb_errors//:errors",
+    ],
+)
 
 go_test(
     name = "txnmode_test",
@@ -16,7 +51,6 @@ go_test(
         "//pkg/security/securityassets",
         "//pkg/security/securitytest",
         "//pkg/server",
-        "//pkg/testutils/jobutils",
         "//pkg/testutils/serverutils",
         "//pkg/testutils/skip",
         "//pkg/testutils/sqlutils",
@@ -24,6 +58,5 @@ go_test(
         "//pkg/util/leaktest",
         "//pkg/util/log",
         "//pkg/util/randutil",
-        "@com_github_stretchr_testify//require",
     ],
 )

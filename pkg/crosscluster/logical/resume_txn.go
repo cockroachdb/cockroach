@@ -7,10 +7,10 @@ package logical
 
 import (
 	"context"
+	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/jobs"
+	"github.com/cockroachdb/cockroach/pkg/crosscluster/logical/txnmode"
 	"github.com/cockroachdb/cockroach/pkg/sql"
-	"github.com/cockroachdb/errors"
 )
 
 // resumeTransactionalLdr runs the transactional LDR ingestion loop.
@@ -40,8 +40,9 @@ func (r *logicalReplicationResumer) runTxnCoordinator(
 	// TODO(jeffswenson): checkpoint partition URIs via
 	// r.checkpointPartitionURIs once plan generation is added.
 
-	// TODO(jeffswenson): replace with txnmode.NewTxnLdrCoordinator once implemented.
-	return jobs.MarkAsPermanentJobError(errors.WithHint(
-		errors.New("transactional replication mode is not yet implemented"),
-		"use MODE = 'immediate' instead"))
+	heartbeatInterval := func() time.Duration {
+		return heartbeatFrequency.Get(&jobExecCtx.ExecCfg().Settings.SV)
+	}
+	coordinator := txnmode.NewTxnLdrCoordinator(jobExecCtx, r.job, client, heartbeatInterval)
+	return coordinator.Resume(ctx)
 }
