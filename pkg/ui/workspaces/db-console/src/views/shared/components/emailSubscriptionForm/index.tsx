@@ -3,58 +3,30 @@
 // Use of this software is governed by the CockroachDB Software License
 // included in the /LICENSE file.
 
-import React from "react";
+import React, { useState } from "react";
 
 import { TextInput, Button } from "src/components";
 import { isValidEmail } from "src/util/validation/isValidEmail";
 
 import "./emailSubscriptionForm.scss";
 
-interface EmailSubscriptionFormState {
-  emailAddress: string | undefined;
-  canSubmit: boolean;
-}
-
 interface EmailSubscriptionFormProps {
   onSubmit?: (emailAddress: string) => void;
 }
 
-export class EmailSubscriptionForm extends React.Component<
-  EmailSubscriptionFormProps,
-  EmailSubscriptionFormState
-> {
-  constructor(props: EmailSubscriptionFormProps) {
-    super(props);
-    this.state = {
-      emailAddress: undefined,
-      canSubmit: false,
-    };
-  }
+export function EmailSubscriptionForm({
+  onSubmit,
+}: EmailSubscriptionFormProps): React.ReactElement {
+  const [emailAddress, setEmailAddress] = useState<string | undefined>(
+    undefined,
+  );
+  const [canSubmit, setCanSubmit] = useState(false);
 
-  handleSubmit = () => {
-    if (this.state.canSubmit) {
-      this.props.onSubmit(this.state.emailAddress);
-      this.setState({
-        emailAddress: "",
-        canSubmit: false,
-      });
-    }
-  };
-
-  handleChange = (value: string) => {
-    this.handleEmailValidation(value);
-    this.setState({
-      emailAddress: value,
-    });
-  };
-
-  handleEmailValidation = (value: string) => {
+  const handleEmailValidation = (value: string) => {
     const isCorrectEmail = isValidEmail(value);
     const isEmpty = value.length === 0;
 
-    this.setState({
-      canSubmit: isCorrectEmail && !isEmpty,
-    });
+    setCanSubmit(isCorrectEmail && !isEmpty);
 
     if (isCorrectEmail || isEmpty) {
       return undefined;
@@ -62,27 +34,37 @@ export class EmailSubscriptionForm extends React.Component<
     return "Invalid email address.";
   };
 
-  render() {
-    const { canSubmit, emailAddress } = this.state;
-    return (
-      <div className="email-subscription-form">
-        <TextInput
-          name="email"
-          className="email-subscription-form__input"
-          placeholder="Enter your email"
-          validate={this.handleEmailValidation}
-          onChange={this.handleChange}
-          value={emailAddress}
-        />
-        <Button
-          type={"primary"}
-          onClick={this.handleSubmit}
-          disabled={!canSubmit}
-          className="email-subscription-form__submit-button"
-        >
-          Sign up
-        </Button>
-      </div>
-    );
-  }
+  const handleChange = (value: string) => {
+    handleEmailValidation(value);
+    setEmailAddress(value);
+  };
+
+  const handleSubmit = () => {
+    if (canSubmit) {
+      onSubmit(emailAddress);
+      setEmailAddress("");
+      setCanSubmit(false);
+    }
+  };
+
+  return (
+    <div className="email-subscription-form">
+      <TextInput
+        name="email"
+        className="email-subscription-form__input"
+        placeholder="Enter your email"
+        validate={handleEmailValidation}
+        onChange={handleChange}
+        value={emailAddress}
+      />
+      <Button
+        type={"primary"}
+        onClick={handleSubmit}
+        disabled={!canSubmit}
+        className="email-subscription-form__submit-button"
+      >
+        Sign up
+      </Button>
+    </div>
+  );
 }

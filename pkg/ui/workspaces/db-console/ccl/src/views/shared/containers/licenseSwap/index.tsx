@@ -47,10 +47,7 @@ export default function swapByLicense<
   OSSProps,
   CCLProps,
   TProps = OSSProps | CCLProps,
->(
-  OSSComponent: React.ComponentClass<OSSProps>,
-  CCLComponent: React.ComponentClass<CCLProps>,
-) {
+>(OSSComponent: Component<OSSProps>, CCLComponent: Component<CCLProps>) {
   const ossName = getComponentName(OSSComponent);
   const cclName = getComponentName(CCLComponent);
 
