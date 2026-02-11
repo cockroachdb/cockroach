@@ -174,29 +174,28 @@ func (t *tableHandler) attemptBatch(
 	err := t.session.Txn(ctx, func(ctx context.Context) error {
 		for _, event := range batch {
 			switch {
-			case event.IsDelete && len(event.PrevRow) != 0:
+			case event.IsDeleteRow():
 				stats.deletes++
 				err := t.sqlWriter.DeleteRow(ctx, event.RowTimestamp, event.PrevRow)
 				if err != nil {
 					return err
 				}
-			case event.IsDelete && len(event.PrevRow) == 0:
+			case event.IsTombstoneUpdate():
 				hasTombstoneUpdates = true
 				// Skip: handled in its own transaction.
-			case event.PrevRow == nil:
+			case event.IsInsertRow():
 				stats.inserts++
-				err := t.session.Savepoint(ctx, func(ctx context.Context) error {
-					return t.sqlWriter.InsertRow(ctx, event.RowTimestamp, event.Row)
-				})
+				err := t.sqlWriter.InsertRow(ctx, event.RowTimestamp, event.Row)
 				if isLwwLoser(err) {
-					// Insert may observe a LWW failure if it attempts to write over a tombstone.
+					// Insert may observe a LWW failure if it loses to an existing
+					// row or to a tombstone with a higher timestamp.
 					stats.kvLwwLosers++
 					continue
 				}
 				if err != nil {
 					return err
 				}
-			case event.PrevRow != nil:
+			case event.IsUpdateRow():
 				stats.updates++
 				err := t.sqlWriter.UpdateRow(ctx, event.RowTimestamp, event.PrevRow, event.Row)
 				if err != nil {
@@ -219,7 +218,7 @@ func (t *tableHandler) attemptBatch(
 		// efficiency. The transactions are not needed for correctness.
 		err = t.db.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
 			for _, event := range batch {
-				if event.IsDelete && len(event.PrevRow) == 0 {
+				if event.IsTombstoneUpdate() {
 					stats.tombstoneUpdates++
 					tombstoneUpdateStats, err := t.tombstoneUpdater.updateTombstone(ctx, txn, event.RowTimestamp, event.Row)
 					if err != nil {
