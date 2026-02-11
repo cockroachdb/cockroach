@@ -230,21 +230,21 @@ function aggregateLatestValuesFromMetrics(
  * SummaryHeadlineStat is similar to a normal SummaryStat, but is visually laid
  * out to draw attention to the numerical statistic.
  */
-export class SummaryHeadlineStat extends React.Component<
-  SummaryHeadlineStatProps,
-  {}
-> {
-  render() {
-    return (
-      <div className="summary-headline-stat">
-        <div className="summary-headline-stat__value">
-          {formatNumberForDisplay(this.props.value, this.props.format)}
-        </div>
-        <div className="summary-headline-stat__title">
-          {this.props.title}
-          <InfoTooltip text={this.props.tooltip} />
-        </div>
+export function SummaryHeadlineStat({
+  value,
+  format,
+  title,
+  tooltip,
+}: SummaryHeadlineStatProps): React.ReactElement {
+  return (
+    <div className="summary-headline-stat">
+      <div className="summary-headline-stat__value">
+        {formatNumberForDisplay(value, format)}
       </div>
-    );
-  }
+      <div className="summary-headline-stat__title">
+        {title}
+        <InfoTooltip text={tooltip} />
+      </div>
+    </div>
+  );
 }

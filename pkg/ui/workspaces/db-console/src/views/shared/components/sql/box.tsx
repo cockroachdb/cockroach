@@ -16,13 +16,11 @@ export interface SqlBoxProps {
 
 const cx = classNames.bind(styles);
 
-class SqlBox extends React.Component<SqlBoxProps> {
-  render() {
-    return (
-      <div className={cx("box-highlight")}>
-        <Highlight {...this.props} />
-      </div>
-    );
-  }
+function SqlBox({ value, secondaryValue }: SqlBoxProps): React.ReactElement {
+  return (
+    <div className={cx("box-highlight")}>
+      <Highlight value={value} secondaryValue={secondaryValue} />
+    </div>
+  );
 }
 export default SqlBox;
