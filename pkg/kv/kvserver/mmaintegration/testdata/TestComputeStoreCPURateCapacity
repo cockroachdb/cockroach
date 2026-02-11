@@ -151,3 +151,18 @@ capped_mult: (steps below)
   mma-direct  = 12.60 / 3.0 = 4.20 cores
   per-store   = 4.20 / 4 = 1.05 cores
   kv-capacity: 1.05 cores, kv-util: 9.52% (0.10/1.05 cores)
+
+# Overloaded node: node CPU usage exceeds capacity (nodeCPURateUsage > nodeCPURateCapacity).
+# When backgroundLoad exceeds nodeCPURateCapacity, mmaShareOfCapacity would be negative
+# without clamping. The fix clamps it to 0, resulting in 0 capacity (correct behavior).
+compute store-load=1 node-cpu-usage=32 node-cpu-capacity=16 total-stores-cpu-usage=2 num-stores=1
+----
+              node-cpu-capacity/num-stores: 16.00 cores/store
+naive:        kv-capacity: 1.00 cores, kv-util: 100.00% (1.00/1.00 cores)
+capped_mult: (steps below)
+  mult        = max(1, min(32.00/2.00, 3)) = 3.0
+  background  = max(0, 32.00 - 2.00*3.0) = 26.00 cores
+  mma-share   = 16.00 - 26.00 = 0.00 cores
+  mma-direct  = 0.00 / 3.0 = 0.00 cores
+  per-store   = 0.00 / 1 = 0.00 cores
+  kv-capacity: 0.00 cores, kv-util: +Inf% (1.00/0.00 cores)
