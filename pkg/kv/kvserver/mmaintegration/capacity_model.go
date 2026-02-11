@@ -245,7 +245,9 @@ func computeCPUCapacityWithCap(
 	backgroundLoad := max(0.0, nodeCPURateUsage-mmaAttributedLoad)
 
 	// MMA's share of capacity is what remains after background load.
-	mmaShareOfCapacity := nodeCPURateCapacity - backgroundLoad
+	// Clamp to non-negative to handle overloaded nodes where backgroundLoad
+	// exceeds nodeCPURateCapacity.
+	mmaShareOfCapacity := max(0.0, nodeCPURateCapacity-backgroundLoad)
 
 	// MMA's direct capacity is scaled down by the multiplier to account
 	// for indirect overhead.
