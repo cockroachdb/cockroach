@@ -913,6 +913,147 @@ DROP FUNCTION depth_a_tf, depth_b_tf, depth_c_tf;
 
 subtest end
 
+# ==============================================================================
+# Test replacing a trigger function with active triggers (issue #134555).
+# The new function body should take effect for all dependent triggers.
+# ==============================================================================
+
+subtest replace_trigger_function_with_active_triggers
+
+statement ok
+CREATE TABLE t_replace (a INT PRIMARY KEY, b TEXT);
+
+statement ok
+CREATE TABLE audit_log (op TEXT, val TEXT);
+
+# Create a trigger function that logs 'v1' to identify the original version.
+statement ok
+CREATE FUNCTION tf_replace() RETURNS TRIGGER LANGUAGE PLpgSQL AS $$
+  BEGIN
+    INSERT INTO audit_log VALUES (tg_op, 'v1');
+    RETURN NEW;
+  END
+$$;
+
+statement ok
+CREATE TRIGGER tr_replace BEFORE INSERT ON t_replace FOR EACH ROW EXECUTE FUNCTION tf_replace();
+
+# Verify the trigger fires with the original function body.
+statement ok
+INSERT INTO t_replace VALUES (1, 'hello');
+
+query TT
+SELECT * FROM audit_log ORDER BY op;
+----
+INSERT  v1
+
+statement count 1
+DELETE FROM audit_log;
+
+# Replace the trigger function with a new body that logs 'v2'.
+statement ok
+CREATE OR REPLACE FUNCTION tf_replace() RETURNS TRIGGER LANGUAGE PLpgSQL AS $$
+  BEGIN
+    INSERT INTO audit_log VALUES (tg_op, 'v2');
+    RETURN NEW;
+  END
+$$;
+
+# Verify the trigger fires with the new function body.
+statement ok
+INSERT INTO t_replace VALUES (2, 'world');
+
+query TT
+SELECT * FROM audit_log ORDER BY op;
+----
+INSERT  v2
+
+statement ok
+DROP TRIGGER tr_replace ON t_replace;
+
+statement ok
+DROP TABLE t_replace, audit_log;
+
+statement ok
+DROP FUNCTION tf_replace;
+
+subtest end
+
+subtest replace_trigger_function_multiple_triggers
+
+statement ok
+CREATE TABLE t_m1 (a INT PRIMARY KEY);
+
+statement ok
+CREATE TABLE t_m2 (a INT PRIMARY KEY);
+
+statement ok
+CREATE TABLE audit_log (src TEXT, val TEXT);
+
+statement ok
+CREATE FUNCTION tf_multi() RETURNS TRIGGER LANGUAGE PLpgSQL AS $$
+  BEGIN
+    INSERT INTO audit_log VALUES (tg_table_name, 'v1');
+    RETURN NEW;
+  END
+$$;
+
+statement ok
+CREATE TRIGGER tr1 BEFORE INSERT ON t_m1 FOR EACH ROW EXECUTE FUNCTION tf_multi();
+
+statement ok
+CREATE TRIGGER tr2 BEFORE INSERT ON t_m2 FOR EACH ROW EXECUTE FUNCTION tf_multi();
+
+statement ok
+INSERT INTO t_m1 VALUES (1);
+
+statement ok
+INSERT INTO t_m2 VALUES (1);
+
+query TT rowsort
+SELECT * FROM audit_log;
+----
+t_m1  v1
+t_m2  v1
+
+statement count 2
+DELETE FROM audit_log;
+
+# Replace the function — both triggers should pick up the new body.
+statement ok
+CREATE OR REPLACE FUNCTION tf_multi() RETURNS TRIGGER LANGUAGE PLpgSQL AS $$
+  BEGIN
+    INSERT INTO audit_log VALUES (tg_table_name, 'v2');
+    RETURN NEW;
+  END
+$$;
+
+statement ok
+INSERT INTO t_m1 VALUES (2);
+
+statement ok
+INSERT INTO t_m2 VALUES (2);
+
+query TT rowsort
+SELECT * FROM audit_log;
+----
+t_m1  v2
+t_m2  v2
+
+statement ok
+DROP TRIGGER tr1 ON t_m1;
+
+statement ok
+DROP TRIGGER tr2 ON t_m2;
+
+statement ok
+DROP TABLE t_m1, t_m2, audit_log;
+
+statement ok
+DROP FUNCTION tf_multi;
+
+subtest end
+
 subtest regression_134630
 
 statement ok
@@ -4261,7 +4402,8 @@ select "eventType" from system.eventlog WHERE "eventType" <> 'finish_schema_chan
 ----
 create_trigger
 
-statement error pgcode 0A000 pq: unimplemented: cannot replace a trigger function with an active trigger
+# Replacing a trigger function with active triggers is now supported (#134555).
+statement ok
 CREATE OR REPLACE FUNCTION f() RETURNS TRIGGER LANGUAGE PLpgSQL AS $$ BEGIN RETURN NEW; END $$;
 
 statement ok
@@ -4272,10 +4414,6 @@ query T retry
 select "eventType" from system.eventlog order by timestamp desc limit 1;
 ----
 drop_trigger
-
-# CREATE OR REPLACE still works if there are no referencing triggers.
-statement ok
-CREATE OR REPLACE FUNCTION f() RETURNS TRIGGER LANGUAGE PLpgSQL AS $$ BEGIN RETURN NEW; END $$;
 
 # ==============================================================================
 # Test that descriptor backreferences are cleaned up.

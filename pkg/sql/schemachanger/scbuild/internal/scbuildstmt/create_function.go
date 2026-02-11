@@ -291,25 +291,6 @@ func replaceFunction(
 		))
 	}
 
-	// Validate: trigger function with active triggers cannot be replaced.
-	if newReturnType.Type.Identical(types.Trigger) {
-		// Check if there are back-references (triggers) that depend on this
-		// function. If there are, we cannot replace it.
-		backRefs := b.BackReferences(fnID)
-		if backRefs.Filter(func(_ scpb.Status, _ scpb.TargetStatus, e scpb.Element) bool {
-			_, ok := e.(*scpb.TriggerFunctionCall)
-			return ok
-		}).IsEmpty() {
-			// No active triggers, safe to replace.
-		} else {
-			panic(errors.WithHint(
-				unimplemented.NewWithIssue(134555,
-					"cannot replace a trigger function with an active trigger"),
-				"consider dropping and recreating the trigger",
-			))
-		}
-	}
-
 	// Build new params.
 	newParams := make([]scpb.Function_Parameter, len(n.Params))
 	for i, param := range n.Params {
@@ -444,7 +425,66 @@ func replaceFunction(
 	}
 	b.Replace(funcParams)
 
+	// If this is a trigger function, propagate the new body to dependent
+	// triggers so their inlined copies stay in sync.
+	if newReturnType.Type.Identical(types.Trigger) {
+		updateDependentTriggers(b, fnID, fnBodyStr, refProvider)
+	}
+
 	b.LogEventForExistingTarget(existingFnElem)
+}
+
+// updateDependentTriggers finds all triggers that reference the given function
+// and updates their inlined function body and dependency tracking to reflect the
+// new function body.
+func updateDependentTriggers(
+	b BuildCtx, fnID descpb.ID, fnBodyStr string, refProvider ReferenceProvider,
+) {
+	backRefs := b.BackReferences(fnID)
+	backRefs.FilterTriggerFunctionCall().ForEach(
+		func(_ scpb.Status, target scpb.TargetStatus, e *scpb.TriggerFunctionCall) {
+			if target != scpb.ToPublic || e.FuncID != fnID {
+				return
+			}
+			tableID := e.TableID
+			triggerID := e.TriggerID
+
+			// Replace TriggerFunctionCall with the new function body.
+			b.Replace(&scpb.TriggerFunctionCall{
+				TableID:   tableID,
+				TriggerID: triggerID,
+				FuncID:    fnID,
+				FuncBody:  b.ReplaceSeqTypeNamesInStatements(fnBodyStr, catpb.Function_PLPGSQL),
+				FuncArgs:  e.FuncArgs,
+			})
+
+			// Update TriggerDeps with new dependencies from the new function body.
+			// TriggerDeps has UsesRoutineIDs and UsesTypeIDs as identity attributes,
+			// so we need to drop the old element and add a new one rather than using
+			// Replace (which would fail if those fields changed).
+			tableElts := b.QueryByID(tableID)
+			oldDeps := tableElts.FilterTriggerDeps().Filter(
+				func(_ scpb.Status, target scpb.TargetStatus, d *scpb.TriggerDeps) bool {
+					return target == scpb.ToPublic && d.TriggerID == triggerID
+				},
+			).MustGetZeroOrOneElement()
+			if oldDeps != nil {
+				b.Drop(oldDeps)
+			}
+
+			// Build the new dependency set from the function body's references.
+			// The trigger function itself is always a dependency.
+			routineIDs := refProvider.ReferencedRoutines()
+			routineIDs.Add(fnID)
+			b.Add(&scpb.TriggerDeps{
+				TableID:        tableID,
+				TriggerID:      triggerID,
+				UsesRelations:  buildRelationDeps(tableID, refProvider),
+				UsesTypeIDs:    refProvider.ReferencedTypes().Ordered(),
+				UsesRoutineIDs: routineIDs.Ordered(),
+			})
+		},
+	)
 }
 
 // validateReplaceParams validates that parameter changes in CREATE OR REPLACE
