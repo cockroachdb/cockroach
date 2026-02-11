@@ -334,6 +334,10 @@ func selectAllChannelsExceptSeparated() []logpb.Channel {
 // To ensure that output always goes to one file, use
 // log.ScopeWithoutShowLogs().
 func (l *TestLogScope) SetupSingleFileLogging() (cleanup func()) {
+	return l.SetupSingleFileLoggingFormatted("")
+}
+
+func (l *TestLogScope) SetupSingleFileLoggingFormatted(format string) (cleanup func()) {
 	if l.logDir == "" {
 		// No log directory: no-op.
 		return func() {}
@@ -341,10 +345,17 @@ func (l *TestLogScope) SetupSingleFileLogging() (cleanup func()) {
 
 	// Set up a logging configuration with just one file sink.
 	cfg := logconfig.DefaultConfig()
-	cfg.Sinks.FileGroups = map[string]*logconfig.FileSinkConfig{
-		"default": {
-			Channels: logconfig.SelectChannels(logconfig.AllChannels()...)},
+	defaultSinkConfig := &logconfig.FileSinkConfig{
+		Channels: logconfig.SelectChannels(logconfig.AllChannels()...),
 	}
+
+	if format != "" {
+		defaultSinkConfig.Format = &format
+	}
+	cfg.Sinks.FileGroups = map[string]*logconfig.FileSinkConfig{
+		"default": defaultSinkConfig,
+	}
+
 	// Disable the -stderr.log output so there's really just 1 file.
 	cfg.CaptureFd2.Enable = false
 
