@@ -13,6 +13,7 @@ import React, {
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useState,
 } from "react";
 import Helmet from "react-helmet";
@@ -227,59 +228,84 @@ export interface JobDetailsDispatchProps {
   refreshUserSQLRoles: () => void;
 }
 
-export interface JobDetailsState {
-  currentTab?: string;
-}
-
 export type JobDetailsProps = JobDetailsStateProps &
   JobDetailsDispatchProps &
   RouteComponentProps;
 
-export class JobDetails extends React.Component<
-  JobDetailsProps,
-  JobDetailsState
-> {
-  refreshDataInterval: NodeJS.Timeout;
+export function JobDetails(props: JobDetailsProps): React.ReactElement {
+  const { jobRequest, refreshJob, refreshUserSQLRoles, history, match } = props;
 
-  constructor(props: JobDetailsProps) {
-    super(props);
-    const searchParams = new URLSearchParams(props.history.location.search);
-    this.state = {
-      currentTab: searchParams.get("tab") || "overview",
-    };
-  }
+  const searchParams = useMemo(
+    () => new URLSearchParams(history.location.search),
+    [history.location.search],
+  );
+  const [currentTab, setCurrentTab] = useState<string>(
+    searchParams.get("tab") || "overview",
+  );
 
-  private refresh(): void {
-    if (isTerminalState(this.props.jobRequest.data?.status)) {
-      clearInterval(this.refreshDataInterval);
+  const refreshDataIntervalRef = useRef<NodeJS.Timeout>(null);
+
+  const refresh = useCallback(() => {
+    if (isTerminalState(jobRequest.data?.status)) {
+      clearInterval(refreshDataIntervalRef.current);
       return;
     }
 
-    this.props.refreshJob(
+    refreshJob(
       new cockroach.server.serverpb.JobRequest({
-        job_id: long.fromString(getMatchParamByName(this.props.match, idAttr)),
+        job_id: long.fromString(getMatchParamByName(match, idAttr)),
       }),
     );
-  }
+  }, [jobRequest.data?.status, refreshJob, match]);
 
-  componentDidMount(): void {
-    this.props.refreshUserSQLRoles();
-    if (!this.props.jobRequest.data) {
-      this.refresh();
+  useEffect(() => {
+    refreshUserSQLRoles();
+  }, [refreshUserSQLRoles]);
+
+  // Keep a ref to the latest refresh so the interval doesn't need
+  // to be torn down and recreated on every poll result.
+  const refreshRef = useRef(refresh);
+  refreshRef.current = refresh;
+
+  // Initial fetch if no data is available yet.
+  useEffect(() => {
+    if (!jobRequest.data) {
+      refreshRef.current();
     }
-    // Refresh every 10s.
-    this.refreshDataInterval = setInterval(() => this.refresh(), 10 * 1000);
-  }
+  }, [jobRequest.data, refreshRef]);
 
-  componentWillUnmount(): void {
-    if (this.refreshDataInterval) {
-      clearInterval(this.refreshDataInterval);
-    }
-  }
+  // Stable 10s polling interval.
+  useEffect(() => {
+    refreshDataIntervalRef.current = setInterval(
+      () => refreshRef.current(),
+      10 * 1000,
+    );
 
-  prevPage = (): void => this.props.history.goBack();
+    return () => {
+      if (refreshDataIntervalRef.current) {
+        clearInterval(refreshDataIntervalRef.current);
+      }
+    };
+  }, [refreshRef]);
 
-  renderOverviewTabContent = (job: JobResponse): React.ReactElement => {
+  const prevPage = (): void => {
+    history.goBack();
+  };
+
+  const onTabChange = useCallback(
+    (tabId: string): void => {
+      const params = new URLSearchParams(history.location.search);
+      params.set("tab", tabId);
+      history.replace({
+        ...history.location,
+        search: params.toString(),
+      });
+      setCurrentTab(tabId);
+    },
+    [history],
+  );
+
+  const renderOverviewTabContent = (job: JobResponse): React.ReactElement => {
     if (!job) {
       return null;
     }
@@ -401,76 +427,60 @@ export class JobDetails extends React.Component<
     );
   };
 
-  onTabChange = (tabId: string): void => {
-    const { history } = this.props;
-    const searchParams = new URLSearchParams(history.location.search);
-    searchParams.set("tab", tabId);
-    history.replace({
-      ...history.location,
-      search: searchParams.toString(),
-    });
-    this.setState({
-      currentTab: tabId,
-    });
-  };
+  const isLoading = jobRequest.inFlight && !jobRequest.data;
+  const error = jobRequest.error;
+  const job = jobRequest.data;
 
-  render(): React.ReactElement {
-    const isLoading =
-      this.props.jobRequest.inFlight && !this.props.jobRequest.data;
-    const error = this.props.jobRequest.error;
-    const job = this.props.jobRequest.data;
-    const { currentTab } = this.state;
-    return (
-      <div className={jobCx("job-details")}>
-        <Helmet title={"Details | Job"} />
-        <div className={jobCx("section page--header")}>
-          <Button
-            onClick={this.prevPage}
-            type="unstyled-link"
-            size="small"
-            icon={<ArrowLeft fontSize={"10px"} />}
-            iconPosition="left"
-            className={commonStyles("small-margin")}
-          >
-            Jobs
-          </Button>
-          <h3 className={jobCx("page--header__title")}>{`Job ID: ${String(
-            getMatchParamByName(this.props.match, idAttr),
-          )}`}</h3>
-        </div>
-        <section className={jobCx("section section--container")}>
-          <Loading
-            loading={isLoading}
-            page={"job details"}
-            error={error}
-            render={() => (
-              <>
-                <section className={cardCx("summary-card")}>
-                  <Row gutter={24}>
-                    <Col className="gutter-row" span={24}>
-                      <SqlBox
-                        value={job?.description ?? "Job not found."}
-                        size={SqlBoxSize.CUSTOM}
-                        format={true}
-                      />
-                    </Col>
-                  </Row>
-                </section>
-                <Tabs
-                  className={commonStyles("cockroach--tabs")}
-                  defaultActiveKey={TabKeysEnum.OVERVIEW}
-                  onChange={this.onTabChange}
-                  activeKey={currentTab}
-                >
-                  <TabPane tab={TabKeysEnum.OVERVIEW} key="overview">
-                    {this.renderOverviewTabContent(job)}
-                  </TabPane>
-                </Tabs>
-              </>
-            )}
-          />
-        </section>
+  return (
+    <div className={jobCx("job-details")}>
+      <Helmet title={"Details | Job"} />
+      <div className={jobCx("section page--header")}>
+        <Button
+          onClick={prevPage}
+          type="unstyled-link"
+          size="small"
+          icon={<ArrowLeft fontSize={"10px"} />}
+          iconPosition="left"
+          className={commonStyles("small-margin")}
+        >
+          Jobs
+        </Button>
+        <h3 className={jobCx("page--header__title")}>{`Job ID: ${String(
+          getMatchParamByName(match, idAttr),
+        )}`}</h3>
       </div>
-    );
-  }
+      <section className={jobCx("section section--container")}>
+        <Loading
+          loading={isLoading}
+          page={"job details"}
+          error={error}
+          render={() => (
+            <>
+              <section className={cardCx("summary-card")}>
+                <Row gutter={24}>
+                  <Col className="gutter-row" span={24}>
+                    <SqlBox
+                      value={job?.description ?? "Job not found."}
+                      size={SqlBoxSize.CUSTOM}
+                      format={true}
+                    />
+                  </Col>
+                </Row>
+              </section>
+              <Tabs
+                className={commonStyles("cockroach--tabs")}
+                defaultActiveKey={TabKeysEnum.OVERVIEW}
+                onChange={onTabChange}
+                activeKey={currentTab}
+              >
+                <TabPane tab={TabKeysEnum.OVERVIEW} key="overview">
+                  {renderOverviewTabContent(job)}
+                </TabPane>
+              </Tabs>
+            </>
+          )}
+        />
+      </section>
+    </div>
+  );
 }
