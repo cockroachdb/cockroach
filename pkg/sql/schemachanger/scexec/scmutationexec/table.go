@@ -127,7 +127,10 @@ func (i *immediateVisitor) SetTableLocalitySecondaryRegion(
 func (i *immediateVisitor) UnsetTableLocality(
 	ctx context.Context, op scop.UnsetTableLocality,
 ) error {
-	// todo (shadi): add logic for RBR table
+	// todo (shadi): add logic for RBR table.
+	// This function should reset partitionAllBy and RBR constraint.
+	// There's nothing to do when transfering from Global ro RBT.
+	// Support for RBR will be added in a separate commit.
 	// no-op
 	return nil
 }

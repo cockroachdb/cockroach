@@ -1671,12 +1671,21 @@ func applyZoneConfigForMultiRegionTable(
 	deleteZoneConfig := newZoneConfigIsEmpty && !currentZoneConfigIsEmpty
 
 	if deleteZoneConfig {
-		currentZoneConfigElem := b.QueryByID(tableID).FilterTableZoneConfig().MustGetZeroOrOneElement()
-		// since current zoneconfig is not empty, we should have an element present
-		// Check for nil anyways to avoid unexpected errors.
-		if currentZoneConfigElem != nil {
-			b.Drop(currentZoneConfigElem)
+		// Since current zoneconfig is not empty, we should have at least one element present.
+		// There might be more if an index change is happening.
+		currentZoneConfigElems := b.QueryByID(tableID).FilterTableZoneConfig()
+		if currentZoneConfigElems == nil {
+			return errors.AssertionFailedf(
+				"Current zone config for tableID %d is not empty but no elements were found", tableID)
 		}
+		currentZoneConfigElems.ForEach(func(_ scpb.Status, _ scpb.TargetStatus, e *scpb.TableZoneConfig) {
+			// This scenario only happens during an ALTER TABLE LOCALTIY.
+			// We must reset the table zoneconfig to make sure it will be dropped.
+			// No need to drop subzone elements. They will be cleaned up if an index
+			// change is happening.
+			e.ZoneConfig.DeleteTableConfig()
+			b.Drop(e)
+		})
 	}
 	if !rewriteZoneConfig {
 		return nil
@@ -1807,8 +1816,7 @@ func applyZoneConfigForMultiRegionTableOptionTableAndIndexes(
 		zc.CopyFromZone(localityZoneConfig, zonepb.MultiRegionZoneConfigFields)
 
 		// For REGIONAL BY ROW tables, correctly configure relevant zone configurations.
-		localityRBR := b.QueryByID(tableID).FilterTableLocalityRegionalByRow().MustGetZeroOrOneElement()
-		if localityRBR != nil {
+		if localityConfig.GetRegionalByRow() != nil {
 			dbID := b.QueryByID(tableID).FilterNamespace().MustGetOneElement().DatabaseID
 			regionConfig, err := b.SynthesizeRegionConfig(b, dbID)
 			if err != nil {
@@ -1819,7 +1827,7 @@ func applyZoneConfigForMultiRegionTableOptionTableAndIndexes(
 			b.QueryByID(tableID).FilterIndexName().
 				ForEach(func(status scpb.Status, target scpb.TargetStatus, e *scpb.IndexName) {
 					// Only include indexes that are public or being added
-					if status != scpb.Status_ABSENT && target == scpb.ToPublic {
+					if status != scpb.Status_ABSENT || target == scpb.ToPublic {
 						indexIDs = append(indexIDs, e.IndexID)
 					}
 				})
@@ -1898,7 +1906,7 @@ func (v *zoneConfigForMultiRegionValidatorModifiedByUser) wrapErr(err error) err
 	)
 	return errors.WithHint(
 		err,
-		"to proceed with the overwrite, SET override_multi_region_zone_config d = true, "+
+		"to proceed with the overwrite, SET override_multi_region_zone_config = true, "+
 			"and reissue the statement",
 	)
 }

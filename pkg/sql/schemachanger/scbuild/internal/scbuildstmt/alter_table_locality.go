@@ -214,7 +214,7 @@ func buildLocalityConfig(locality *tree.Locality) catpb.LocalityConfig {
 			},
 		}
 	default:
-		panic(errors.AssertionFailedf("unknown locality level: %v", locality.LocalityLevel))
+		panic(errors.AssertionFailedf("Unknown locality level: %v", locality.LocalityLevel))
 	}
 }
 
@@ -252,6 +252,8 @@ func addTargetLocalityElements(
 			TableID: tableID,
 			As:      string(colName),
 		})
+	default:
+		panic(errors.AssertionFailedf("Unknown locality level: %v", locality.LocalityLevel))
 	}
 }
 

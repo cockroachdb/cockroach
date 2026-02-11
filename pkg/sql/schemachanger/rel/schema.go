@@ -189,7 +189,7 @@ func checkType(typ, exp reflect.Type) error {
 			return errors.Errorf("%v does not implement %v", typ, exp)
 		}
 	default:
-		if typ != exp && typ.Kind() != exp.Kind() {
+		if typ != exp && (typ.Kind() != exp.Kind() || !typ.ConvertibleTo(exp)) {
 			return errors.Errorf("%v is not %v", typ, exp)
 		}
 	}
