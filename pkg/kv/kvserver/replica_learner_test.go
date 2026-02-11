@@ -1055,9 +1055,6 @@ func TestSnapshotsToDrainingNodes(t *testing.T) {
 		tc := testcluster.StartTestCluster(
 			t, 2, base.TestClusterArgs{
 				ReplicationMode: base.ReplicationManual,
-				ServerArgs: base.TestServerArgs{
-					DefaultDRPCOption: base.TestDRPCDisabled,
-				},
 			},
 		)
 		defer tc.Stopper().Stop(ctx)
