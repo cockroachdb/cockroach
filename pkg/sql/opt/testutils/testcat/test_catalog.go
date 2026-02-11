@@ -1873,9 +1873,8 @@ func (u *UniqueConstraint) Validated() bool {
 	return u.validated
 }
 
-// UniquenessGuaranteedByAnotherIndex is part of the cat.UniqueConstraint
-// interface.
-func (u *UniqueConstraint) UniquenessGuaranteedByAnotherIndex() bool {
+// CanElideUniqueCheck is part of the cat.UniqueConstraint interface.
+func (u *UniqueConstraint) CanElideUniqueCheck() bool {
 	return false
 }
 

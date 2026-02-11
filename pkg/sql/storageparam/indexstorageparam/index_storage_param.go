@@ -202,6 +202,13 @@ func (po *Setter) Set(
 		return po.applyVectorIndexSetting(ctx, evalCtx, key, expr, 1, 1024)
 	case `max_partition_size`:
 		return po.applyVectorIndexSetting(ctx, evalCtx, key, expr, 4, 4096)
+	case `skip_unique_checks`:
+		val, err := paramparse.DatumAsBool(ctx, evalCtx, key, expr)
+		if err != nil {
+			return errors.Wrapf(err, "error decoding %q", key)
+		}
+		po.IndexDesc.SkipUniqueChecks = val
+		return nil
 	}
 	return pgerror.Newf(pgcode.InvalidParameterValue, "invalid storage parameter %q", key)
 }
@@ -215,6 +222,10 @@ func (po *Setter) Reset(ctx context.Context, evalCtx *eval.Context, key string) 
 	}
 	if isUnimplementedParam(key) {
 		return unimplemented.NewWithIssuef(43299, "storage parameter %q", key)
+	}
+	if key == `skip_unique_checks` {
+		po.IndexDesc.SkipUniqueChecks = false
+		return nil
 	}
 	return pgerror.Newf(pgcode.InvalidParameterValue, "invalid storage parameter %q", key)
 }
@@ -262,6 +273,13 @@ func (po *Setter) RunPostChecks() error {
 				cfg.MinPartitionSize,
 			)
 		}
+	}
+
+	if po.IndexDesc.SkipUniqueChecks && !po.IndexDesc.Unique {
+		return pgerror.Newf(
+			pgcode.InvalidParameterValue,
+			"skip_unique_checks can only be set on UNIQUE indexes",
+		)
 	}
 
 	return nil

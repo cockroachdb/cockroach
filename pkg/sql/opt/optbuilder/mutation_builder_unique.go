@@ -45,7 +45,7 @@ func (mb *mutationBuilder) buildUniqueChecksForInsert() {
 		// If this constraint is already enforced by an index, we don't need to plan
 		// a check.
 		u := mb.tab.Unique(i)
-		if !u.WithoutIndex() || u.UniquenessGuaranteedByAnotherIndex() {
+		if !u.WithoutIndex() || u.CanElideUniqueCheck() {
 			continue
 		}
 
@@ -100,7 +100,7 @@ func (mb *mutationBuilder) buildUniqueChecksForUpdate() {
 		// If this constraint is already enforced by an index, we don't need to plan
 		// a check.
 		u := mb.tab.Unique(i)
-		if !u.WithoutIndex() || u.UniquenessGuaranteedByAnotherIndex() {
+		if !u.WithoutIndex() || u.CanElideUniqueCheck() {
 			continue
 		}
 		// If this constraint doesn't include the updated columns we don't need to
@@ -147,7 +147,7 @@ func (mb *mutationBuilder) buildUniqueChecksForUpsert() {
 		// If this constraint is already enforced by an index, we don't need to plan
 		// a check.
 		u := mb.tab.Unique(i)
-		if !u.WithoutIndex() || u.UniquenessGuaranteedByAnotherIndex() {
+		if !u.WithoutIndex() || u.CanElideUniqueCheck() {
 			continue
 		}
 		// For non-serializable transactions, we guarantee uniqueness by writing tombstones in all
@@ -192,7 +192,7 @@ func (mb *mutationBuilder) buildUniqueChecksForUpsert() {
 func (mb *mutationBuilder) hasUniqueWithoutIndexConstraints() bool {
 	for i, n := 0, mb.tab.UniqueCount(); i < n; i++ {
 		u := mb.tab.Unique(i)
-		if u.WithoutIndex() && !u.UniquenessGuaranteedByAnotherIndex() {
+		if u.WithoutIndex() && !u.CanElideUniqueCheck() {
 			return true
 		}
 	}
