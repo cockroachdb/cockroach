@@ -22,7 +22,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod/grafana"
 	"github.com/cockroachdb/cockroach/pkg/roachprod"
-	"github.com/cockroachdb/cockroach/pkg/roachprod/cloud"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/config"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/roachprodutil"
@@ -123,8 +122,11 @@ Local Clusters
 		Args: cobra.ExactArgs(1),
 		Run: Wrap(func(cmd *cobra.Command, args []string) (retErr error) {
 			createVMOpts.ClusterName = args[0]
-			opts := cloud.ClusterCreateOpts{Nodes: numNodes, CreateOpts: createVMOpts, ProviderOptsContainer: providerOptsContainer}
-			return roachprod.Create(context.Background(), config.Logger, username, &opts)
+			opts, err := buildClusterCreateOpts(numNodes, createVMOpts, providerOptsContainer)
+			if err != nil {
+				return err
+			}
+			return roachprod.Create(context.Background(), config.Logger, username, opts...)
 		}),
 	}
 	cr.addToExcludeFromBashCompletion(createCmd)
