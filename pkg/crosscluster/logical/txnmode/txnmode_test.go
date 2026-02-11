@@ -7,7 +7,6 @@ package txnmode_test
 
 import (
 	"context"
-	"fmt"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
@@ -15,57 +14,233 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/crosscluster/replicationtestutils"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
-	"github.com/cockroachdb/cockroach/pkg/testutils/jobutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
-	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/stretchr/testify/require"
 )
 
-func TestTransactionalModeUnimplemented(t *testing.T) {
+func TestTxnModeSmoketest(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	skip.UnderDeadlock(t)
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	clusterArgs := base.TestClusterArgs{
-		ServerArgs: base.TestServerArgs{
-			DefaultTestTenant: base.TestDoesNotWorkWithExternalProcessMode(134857),
-			Knobs: base.TestingKnobs{
-				JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
-			},
+
+	srv, conn, _ := serverutils.StartServer(t, base.TestServerArgs{
+		DefaultTestTenant: base.TestDoesNotWorkWithExternalProcessMode(134857),
+		Knobs: base.TestingKnobs{
+			JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
 		},
+	})
+	defer srv.Stopper().Stop(ctx)
+
+	s := srv.ApplicationLayer()
+	runner := sqlutils.MakeSQLRunner(conn)
+
+	// Configure low latency replication settings
+	sysRunner := sqlutils.MakeSQLRunner(srv.SystemLayer().SQLConn(t))
+	ldrtestutils.ApplyLowLatencyReplicationSettings(t, sysRunner, runner)
+
+	// Create source and destination databases
+	runner.Exec(t, "CREATE DATABASE source_db")
+	runner.Exec(t, "CREATE DATABASE dest_db")
+
+	sourceDB := sqlutils.MakeSQLRunner(s.SQLConn(t, serverutils.DBName("source_db")))
+	destDB := sqlutils.MakeSQLRunner(s.SQLConn(t, serverutils.DBName("dest_db")))
+
+	for _, db := range [](*sqlutils.SQLRunner){sourceDB, destDB} {
+		db.Exec(t, "CREATE TABLE parent (id INT PRIMARY KEY)")
+		db.Exec(t, "CREATE TABLE child (id INT PRIMARY KEY, parent_id INT)")
+		// TODO(jeffswenson): add fk support to lock derivation then uncomment this.
+		// db.Exec(t, "CREATE TABLE child (id INT PRIMARY KEY, parent_id INT REFERENCES parent(id))")
 	}
 
-	tc := testcluster.StartTestCluster(t, 1, clusterArgs)
-	defer tc.Stopper().Stop(ctx)
-	s := tc.Server(0).ApplicationLayer()
-
-	for _, dbName := range []string{"a", "b"} {
-		_, err := tc.Conns[0].Exec(fmt.Sprintf("CREATE DATABASE %s", dbName))
-		require.NoError(t, err)
-	}
-
-	dbA := sqlutils.MakeSQLRunner(s.SQLConn(t, serverutils.DBName("a")))
-	dbB := sqlutils.MakeSQLRunner(s.SQLConn(t, serverutils.DBName("b")))
-	sysDB := sqlutils.MakeSQLRunner(tc.SystemLayer(0).SQLConn(t))
-	ldrtestutils.ApplyLowLatencyReplicationSettings(t, sysDB, dbA)
-
-	dbA.Exec(t, "CREATE TABLE tab (pk INT PRIMARY KEY, payload STRING)")
-	dbB.Exec(t, "CREATE TABLE tab (pk INT PRIMARY KEY, payload STRING)")
-
-	dbBURL := replicationtestutils.GetExternalConnectionURI(t, s, s, serverutils.DBName("b"))
+	sourceURL := replicationtestutils.GetExternalConnectionURI(t, s, s, serverutils.DBName("source_db"))
 
 	var jobID jobspb.JobID
-	dbA.QueryRow(t,
-		"CREATE LOGICAL REPLICATION STREAM FROM TABLE tab ON $1 INTO TABLE tab WITH MODE = 'transactional'",
-		dbBURL.String(),
+	destDB.QueryRow(t,
+		"CREATE LOGICAL REPLICATION STREAM FROM TABLES (parent, child) ON $1 INTO TABLES (parent, child) WITH MODE = 'transactional'",
+		sourceURL.String(),
 	).Scan(&jobID)
 
-	jobutils.WaitForJobToFail(t, dbA, jobID)
-	payload := jobutils.GetJobPayload(t, dbA, jobID)
-	require.Contains(t, payload.Error, "transactional replication mode is not yet implemented")
+	// Insert parent and children. Lock derivation must order inserts so that
+	// the parent row is written before the child rows.
+	sourceDB.Exec(t, "INSERT INTO parent (id) VALUES (1); INSERT INTO child (id, parent_id) VALUES (1, 1), (2, 1), (3, 1)")
+
+	now := s.Clock().Now()
+	ldrtestutils.WaitUntilReplicatedTime(t, now, destDB, jobID)
+
+	destDB.CheckQueryResults(t, "SELECT * FROM child ORDER BY id", [][]string{
+		{"1", "1"},
+		{"2", "1"},
+		{"3", "1"},
+	})
+
+	// Delete children and parent. Lock derivation must order deletes so that
+	// child rows are removed before the parent row.
+	sourceDB.Exec(t, "DELETE FROM child WHERE parent_id = 1; DELETE FROM parent WHERE id = 1")
+
+	now = s.Clock().Now()
+	ldrtestutils.WaitUntilReplicatedTime(t, now, destDB, jobID)
+
+	destDB.CheckQueryResults(t, "SELECT * FROM parent ORDER BY id", [][]string{})
+	destDB.CheckQueryResults(t, "SELECT * FROM child ORDER BY id", [][]string{})
+}
+
+func TestTxnModeUniqueConstraintUpdate(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	skip.UnderDeadlock(t)
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+
+	srv, conn, _ := serverutils.StartServer(t, base.TestServerArgs{
+		DefaultTestTenant: base.TestDoesNotWorkWithExternalProcessMode(134857),
+		Knobs: base.TestingKnobs{
+			JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
+		},
+	})
+	defer srv.Stopper().Stop(ctx)
+
+	s := srv.ApplicationLayer()
+	runner := sqlutils.MakeSQLRunner(conn)
+
+	// Configure low latency replication settings
+	sysRunner := sqlutils.MakeSQLRunner(srv.SystemLayer().SQLConn(t))
+	ldrtestutils.ApplyLowLatencyReplicationSettings(t, sysRunner, runner)
+
+	// Create source and destination databases
+	runner.Exec(t, "CREATE DATABASE source_db")
+	runner.Exec(t, "CREATE DATABASE dest_db")
+
+	sourceDB := sqlutils.MakeSQLRunner(s.SQLConn(t, serverutils.DBName("source_db")))
+	destDB := sqlutils.MakeSQLRunner(s.SQLConn(t, serverutils.DBName("dest_db")))
+
+	// Create table with UUID primary key and unique int column
+	for _, db := range [](*sqlutils.SQLRunner){sourceDB, destDB} {
+		db.Exec(t, "CREATE TABLE test_table (uuid UUID PRIMARY KEY, unique_value INT UNIQUE)")
+	}
+
+	// Get connection URL for source database
+	sourceURL := replicationtestutils.GetExternalConnectionURI(t, s, s, serverutils.DBName("source_db"))
+
+	// Create logical replication stream with transactional mode
+	var jobID jobspb.JobID
+	destDB.QueryRow(t,
+		"CREATE LOGICAL REPLICATION STREAM FROM TABLES (source_db.test_table) ON $1 INTO TABLES (dest_db.test_table) WITH MODE = 'transactional'",
+		sourceURL.String(),
+	).Scan(&jobID)
+
+	// Insert initial rows after starting replication
+	sourceDB.Exec(t, "INSERT INTO test_table (uuid, unique_value) VALUES (gen_random_uuid(), 1337)")
+
+	// Update the UUID (primary key) of the row with unique_value = 1337
+	// This tests that lock synthesis correctly orders the delete and insert operations
+	now := s.Clock().Now()
+	sourceDB.Exec(t, "UPDATE test_table SET uuid = gen_random_uuid() WHERE unique_value = 1337")
+
+	ldrtestutils.WaitUntilReplicatedTime(t, now, destDB, jobID)
+
+	// Verify the update was replicated (row with unique_value = 1337 still exists with new UUID)
+	destDB.CheckQueryResults(t, "SELECT unique_value FROM test_table ORDER BY unique_value", [][]string{
+		{"1337"},
+	})
+
+	// Verify we can still query by unique_value
+	var count int
+	destDB.QueryRow(t, "SELECT count(*) FROM test_table WHERE unique_value = 1337").Scan(&count)
+	if count != 1 {
+		t.Fatalf("expected 1 row with unique_value = 1337, got %d", count)
+	}
+}
+
+func TestTxnModeCreateLogicallyReplicated(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	skip.UnderDeadlock(t)
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+
+	srv, conn, _ := serverutils.StartServer(t, base.TestServerArgs{
+		DefaultTestTenant: base.TestDoesNotWorkWithExternalProcessMode(134857),
+		Knobs: base.TestingKnobs{
+			JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
+		},
+	})
+	defer srv.Stopper().Stop(ctx)
+
+	s := srv.ApplicationLayer()
+	runner := sqlutils.MakeSQLRunner(conn)
+
+	// Configure low latency replication settings
+	sysRunner := sqlutils.MakeSQLRunner(srv.SystemLayer().SQLConn(t))
+	ldrtestutils.ApplyLowLatencyReplicationSettings(t, sysRunner, runner)
+
+	// Create source database
+	runner.Exec(t, "CREATE DATABASE source_db")
+
+	sourceDB := sqlutils.MakeSQLRunner(s.SQLConn(t, serverutils.DBName("source_db")))
+
+	// Create a table in source with some initial data
+	sourceDB.Exec(t, "CREATE TABLE orders (id INT PRIMARY KEY, customer_id INT, amount DECIMAL)")
+	sourceDB.Exec(t, "INSERT INTO orders VALUES (1, 100, 50.00)")
+
+	// Create destination database
+	runner.Exec(t, "CREATE DATABASE dest_db")
+	destDB := sqlutils.MakeSQLRunner(s.SQLConn(t, serverutils.DBName("dest_db")))
+
+	// Get connection URL for source database
+	sourceURL := replicationtestutils.GetExternalConnectionURI(t, s, s, serverutils.DBName("source_db"))
+
+	// Create logically replicated table with transactional mode and unidirectional replication
+	var jobID jobspb.JobID
+	destDB.QueryRow(t,
+		"CREATE LOGICALLY REPLICATED TABLE orders FROM TABLE orders ON $1 WITH MODE = 'transactional', UNIDIRECTIONAL",
+		sourceURL.String(),
+	).Scan(&jobID)
+
+	// Check job status
+	var status string
+	destDB.QueryRow(t, "SELECT status FROM [SHOW JOB $1]", jobID).Scan(&status)
+	t.Logf("Job %d status: %s", jobID, status)
+
+	// Insert more data in a transaction after replication starts
+	now := s.Clock().Now()
+	sourceDB.Exec(t, `
+		BEGIN;
+		INSERT INTO orders VALUES (2, 100, 75.00);
+		INSERT INTO orders VALUES (3, 101, 100.00);
+		COMMIT;
+	`)
+
+	// Wait for replication to catch up
+	ldrtestutils.WaitUntilReplicatedTime(t, now, destDB, jobID)
+
+	// Verify all data was replicated including initial scan and transactional inserts
+	destDB.CheckQueryResults(t, "SELECT * FROM orders ORDER BY id", [][]string{
+		{"1", "100", "50.00"},
+		{"2", "100", "75.00"},
+		{"3", "101", "100.00"},
+	})
+
+	// Test that a multi-statement transaction is replicated atomically
+	now = s.Clock().Now()
+	sourceDB.Exec(t, `
+		BEGIN;
+		UPDATE orders SET amount = amount + 10 WHERE customer_id = 100;
+		INSERT INTO orders VALUES (4, 102, 200.00);
+		COMMIT;
+	`)
+
+	ldrtestutils.WaitUntilReplicatedTime(t, now, destDB, jobID)
+
+	// Verify the transaction was applied atomically
+	destDB.CheckQueryResults(t, "SELECT * FROM orders ORDER BY id", [][]string{
+		{"1", "100", "60.00"},
+		{"2", "100", "85.00"},
+		{"3", "101", "100.00"},
+		{"4", "102", "200.00"},
+	})
 }
