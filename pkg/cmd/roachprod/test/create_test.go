@@ -16,56 +16,25 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// ========================================
+// Deterministic tests
+// ========================================
 // TestCreate tests creating a cloud cluster with a basic configuration
 func TestCreate(t *testing.T) {
 	t.Parallel()
 	rpt := framework.NewRoachprodTest(t, framework.WithTimeout(10*time.Minute))
 
-	// Create a 3-node GCE cluster
+	// Create a 1-node GCE cluster
 	rpt.RunExpectSuccess("create", rpt.ClusterName(),
-		"-n", "3",
+		"-n", "1",
 		"--clouds", "gce",
 		"--lifetime", "1h",
 	)
 
 	// Verify cluster exists and has correct configuration
 	rpt.AssertClusterExists()
-	rpt.AssertClusterNodeCount(3)
+	rpt.AssertClusterNodeCount(1)
 	rpt.AssertClusterCloud("gce")
-}
-
-// TestCreateRandomized tests creating clusters with randomized GCE options
-func TestCreateRandomized(t *testing.T) {
-	t.Parallel()
-	rpt := framework.NewRoachprodTest(t, framework.WithTimeout(15*time.Minute))
-
-	// Generate random GCE create options using the test's seeded RNG
-	opts := framework.RandomGCECreateOptions(rpt.Rand())
-	t.Logf("Creating cluster with random options (seed=%d): %s", rpt.Seed(), opts.String())
-
-	// Create cluster with randomized options
-	args := opts.ToCreateArgs(rpt.ClusterName())
-	rpt.RunExpectSuccess(args...)
-
-	// Verify cluster exists with correct configuration
-	rpt.AssertClusterExists()
-	rpt.AssertClusterCloud("gce")
-	rpt.AssertClusterNodeCount(opts.NumNodes)
-
-	// Type assert to GCE options for verification
-	gceOpts := opts.ProviderOpts.(*gce.ProviderOpts)
-	rpt.AssertClusterMachineType(gceOpts.MachineType)
-	if len(gceOpts.Zones) > 0 {
-		// If specific zones were requested, verify first node is in one of them
-		info := rpt.GetClusterInfo()
-		require.NotEmpty(t, info.VMs, "Cluster should have VMs")
-		require.Contains(t, gceOpts.Zones, info.VMs[0].Zone,
-			"VM zone %s should be in requested zones %v", info.VMs[0].Zone, gceOpts.Zones)
-	}
-
-	// Verify we can get cluster status
-	status := rpt.Status()
-	require.True(t, status.Success(), "Status should succeed")
 }
 
 // TestCreateWithSpecificZone tests creating a cluster in a specific GCE zone
@@ -401,4 +370,42 @@ func TestCreateManaged(t *testing.T) {
 	rpt.AssertClusterNodeCount(2)
 	rpt.AssertClusterCloud("gce")
 	rpt.AssertClusterHasLabel("managed", "true")
+}
+
+// ========================================
+// Randomized tests
+// ========================================
+
+// TestCreateRandomized tests creating clusters with randomized GCE options
+func TestCreateRandomized(t *testing.T) {
+	t.Parallel()
+	rpt := framework.NewRoachprodTest(t, framework.WithTimeout(15*time.Minute))
+
+	// Generate random GCE create options using the test's seeded RNG
+	opts := framework.RandomGCECreateOptions(rpt.Rand())
+	t.Logf("Creating cluster with random options (seed=%d): %s", rpt.Seed(), opts.String())
+
+	// Create cluster with randomized options
+	args := opts.ToCreateArgs(rpt.ClusterName())
+	rpt.RunExpectSuccess(args...)
+
+	// Verify cluster exists with correct configuration
+	rpt.AssertClusterExists()
+	rpt.AssertClusterCloud("gce")
+	rpt.AssertClusterNodeCount(opts.NumNodes)
+
+	// Type assert to GCE options for verification
+	gceOpts := opts.ProviderOpts.(*gce.ProviderOpts)
+	rpt.AssertClusterMachineType(gceOpts.MachineType)
+	if len(gceOpts.Zones) > 0 {
+		// If specific zones were requested, verify first node is in one of them
+		info := rpt.GetClusterInfo()
+		require.NotEmpty(t, info.VMs, "Cluster should have VMs")
+		require.Contains(t, gceOpts.Zones, info.VMs[0].Zone,
+			"VM zone %s should be in requested zones %v", info.VMs[0].Zone, gceOpts.Zones)
+	}
+
+	// Verify we can get cluster status
+	status := rpt.Status()
+	require.True(t, status.Success(), "Status should succeed")
 }
