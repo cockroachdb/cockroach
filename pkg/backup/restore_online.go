@@ -18,7 +18,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/backup/backupsink"
 	"github.com/cockroachdb/cockroach/pkg/cloud"
 	"github.com/cockroachdb/cockroach/pkg/cloud/externalconn"
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -491,10 +490,6 @@ func checkManifestsForOnlineCompat(
 ) error {
 	if len(manifests) < 1 {
 		return errors.AssertionFailedf("expected at least 1 backup manifest")
-	}
-
-	if len(manifests) > 1 && !clusterversion.V24_1.Version().Less(manifests[0].ClusterVersion) {
-		return errors.Newf("the backup must be on a cluster version greater than %s to run online restore with an incremental backup", clusterversion.V24_1.String())
 	}
 
 	// TODO(online-restore): Remove once we support layer ordering and have tested some reasonable number of layers.
