@@ -4,7 +4,7 @@
 // included in the /LICENSE file.
 
 import isNil from "lodash/isNil";
-import React from "react";
+import React, { useState } from "react";
 
 import { trustIcon } from "src/util/trust";
 
@@ -20,58 +20,46 @@ interface ExpandableStringProps {
   long: string;
 }
 
-interface ExpandableStringState {
-  expanded: boolean;
-}
-
 // ExpandableString displays a short string with a clickable ellipsis. When
 // clicked, the component displays long. If short is not specified, it uses
 // the first 50 chars of long.
-export class ExpandableString extends React.Component<
-  ExpandableStringProps,
-  ExpandableStringState
-> {
-  state: ExpandableStringState = {
-    expanded: false,
-  };
+export function ExpandableString({
+  short,
+  long,
+}: ExpandableStringProps): React.ReactElement {
+  const [expanded, setExpanded] = useState(false);
 
-  onClick = (ev: any) => {
+  const onClick = (ev: any) => {
     ev.preventDefault();
-    this.setState({ expanded: !this.state.expanded });
+    setExpanded(prev => !prev);
   };
 
-  renderText(expanded: boolean) {
+  const renderText = () => {
     if (expanded) {
       return (
         <span className="expandable__text expandable__text--expanded">
-          {this.props.long}
+          {long}
         </span>
       );
     }
 
-    const short =
-      this.props.short || this.props.long.substr(0, truncateLength).trim();
-    return <span className="expandable__text">{short}&nbsp;&hellip;</span>;
+    const shortText = short || long.substr(0, truncateLength).trim();
+    return <span className="expandable__text">{shortText}&nbsp;&hellip;</span>;
+  };
+
+  const neverCollapse = isNil(short) && long.length <= truncateLength + 2;
+  if (neverCollapse) {
+    return <span className="expandable__long">{long}</span>;
   }
 
-  render() {
-    const { short, long } = this.props;
-
-    const neverCollapse = isNil(short) && long.length <= truncateLength + 2;
-    if (neverCollapse) {
-      return <span className="expandable__long">{this.props.long}</span>;
-    }
-
-    const { expanded } = this.state;
-    const icon = expanded ? collapseIcon : expandIcon;
-    return (
-      <div className="expandable" onClick={this.onClick}>
-        <span className="expandable__long">{this.renderText(expanded)}</span>
-        <span
-          className="expandable__icon"
-          dangerouslySetInnerHTML={trustIcon(icon)}
-        />
-      </div>
-    );
-  }
+  const icon = expanded ? collapseIcon : expandIcon;
+  return (
+    <div className="expandable" onClick={onClick}>
+      <span className="expandable__long">{renderText()}</span>
+      <span
+        className="expandable__icon"
+        dangerouslySetInnerHTML={trustIcon(icon)}
+      />
+    </div>
+  );
 }

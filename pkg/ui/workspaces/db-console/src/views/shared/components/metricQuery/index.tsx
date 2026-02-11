@@ -59,15 +59,18 @@ export interface AxisProps {
  * component should contain axes as children and use them only informationally
  * without rendering them.
  */
-export class Axis extends React.Component<AxisProps, {}> {
-  static defaultProps: AxisProps = {
-    units: AxisUnits.Count,
-  };
-
-  render(): React.ReactElement<any> {
-    throw new Error("Component <Axis /> should never render.");
-  }
+export function Axis(
+  _props: React.PropsWithChildren<AxisProps>,
+): React.ReactElement {
+  throw new Error("Component <Axis /> should never render.");
 }
+// defaultProps is used instead of default parameter values because Axis is a
+// data container that throws on render — the function body never executes.
+// React applies defaultProps to the element before calling the component,
+// so parent components reading element.props will see the defaults.
+Axis.defaultProps = {
+  units: AxisUnits.Count,
+} as AxisProps;
 
 /**
  * MetricProps represents the properties of a Metric being selected as part of
@@ -120,10 +123,8 @@ export interface MetricProps {
  * component should contain axes as children and use them only informationally
  * without rendering them.
  */
-export class Metric extends React.Component<MetricProps> {
-  render(): React.ReactElement<any> {
-    throw new Error("Component <Metric /> should never render.");
-  }
+export function Metric(_props: MetricProps): React.ReactElement {
+  throw new Error("Component <Metric /> should never render.");
 }
 
 /**
