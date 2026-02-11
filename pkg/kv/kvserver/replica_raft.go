@@ -55,6 +55,18 @@ import (
 var raftDisableLeaderFollowsLeaseholder = envutil.EnvOrDefaultBool(
 	"COCKROACH_DISABLE_LEADER_FOLLOWS_LEASEHOLDER", false)
 
+// leaderTransferStuckThreshold is the minimum duration a leadership transfer
+// must be blocked before diagnostic logging is emitted.
+const leaderTransferStuckThreshold = time.Minute
+
+// Rate limiters for leadership transfer diagnostic logging, shared across all
+// ranges on the process. These limit log volume when many ranges simultaneously
+// experience a leader/leaseholder split.
+var (
+	logLeaderTransferStuck    = log.Every(200 * time.Millisecond) // 5/s
+	logLeaderTransferResolved = log.Every(200 * time.Millisecond) // 5/s
+)
+
 // ReplicaLeaderlessUnavailableThreshold is the duration after which leaderless
 // replicas are considered unavailable. Set to 0 to disable.
 var ReplicaLeaderlessUnavailableThreshold = settings.RegisterDurationSettingWithExplicitUnit(
@@ -1430,7 +1442,30 @@ func (r *Replica) tick(
 		return false, nil
 	}
 
-	r.maybeTransferRaftLeadershipToLeaseholderLocked(ctx, leaseStatus)
+	{
+		outcome, lhRepID := r.maybeTransferRaftLeadershipToLeaseholderLocked(ctx, leaseStatus)
+		if outcome == raftLeaderTransferOK {
+			log.VEventf(ctx, 1, "transferring raft leadership to replica ID %v", lhRepID)
+		}
+		cumTickDur := time.Duration(r.mu.ticks) * r.store.cfg.RaftTickInterval
+		if logStuck, logResolved, elapsed, prev := r.mu.leaderTransferDiag.update(
+			outcome, cumTickDur,
+		); logStuck {
+			if logLeaderTransferStuck.ShouldLog() {
+				lhProg := r.mu.internalRaftGroup.ReplicaProgress(lhRepID)
+				log.KvExec.Infof(ctx,
+					"have been waiting %s to transfer raft leadership to replica ID %d; blocked: %s; "+
+						"leaseholder progress: %v",
+					elapsed, lhRepID, outcome, lhProg)
+			}
+		} else if logResolved {
+			if logLeaderTransferResolved.ShouldLog() {
+				log.KvExec.Infof(ctx,
+					"raft leadership transfer to replica ID %d unblocked after %s (%s)",
+					lhRepID, elapsed, prev)
+			}
+		}
+	}
 
 	// Eagerly acquire or extend leases. This only works for unquiesced ranges. We
 	// never quiesce expiration leases, but for epoch leases we fall back to the
@@ -2638,6 +2673,58 @@ func (o raftLeaderTransferOutcome) isBlocked() bool {
 		o == raftLeaderTransferBlockedByLeaseholderBehind
 }
 
+// leaderTransferDiagState tracks the state machine for Raft leadership transfer
+// diagnostics. It is updated on the tick path (by the caller of
+// maybeTransferRaftLeadershipToLeaseholderLocked) and used to determine when
+// rate-limited log messages about a stuck leadership/leaseholder split should
+// be emitted.
+type leaderTransferDiagState struct {
+	// outcome is the last observed raftLeaderTransferOutcome.
+	outcome raftLeaderTransferOutcome
+	// since is the cumulative tick duration at which outcome last changed. This
+	// is a monotonic value derived from ticks * RaftTickInterval.
+	since time.Duration
+	// loggedOnce is set after a "stuck" log message has been emitted for the
+	// current blocked state, preventing repeat logs for the same episode.
+	loggedOnce bool
+}
+
+// update advances the state machine given a new outcome and the current
+// cumulative tick duration. It returns whether the caller should log a "stuck"
+// or "resolved" message, the elapsed duration in the blocked state, and the
+// previous outcome (useful for "resolved" log messages).
+func (s *leaderTransferDiagState) update(
+	outcome raftLeaderTransferOutcome, cumTickDur time.Duration,
+) (logStuck, logResolved bool, elapsed time.Duration, prevOutcome raftLeaderTransferOutcome) {
+	prevOutcome = s.outcome
+	if outcome != s.outcome {
+		// State changed. Only reset the timer when transitioning into a blocked
+		// state from a non-blocked one. Transitions between different blocked
+		// reasons (e.g. leaseholder-behind -> pending-acquisition) update the
+		// tracked reason but keep the original timer, so that a flip-flopping
+		// reason doesn't prevent the "stuck" log from ever firing.
+		if s.outcome.isBlocked() && outcome == raftLeaderTransferOK {
+			elapsed = cumTickDur - s.since
+			logResolved = elapsed >= leaderTransferStuckThreshold
+		}
+		s.outcome = outcome
+		if !prevOutcome.isBlocked() {
+			s.since = cumTickDur
+			s.loggedOnce = false
+		}
+		return logStuck, logResolved, elapsed, prevOutcome
+	}
+	// State unchanged.
+	if outcome.isBlocked() && !s.loggedOnce {
+		elapsed = cumTickDur - s.since
+		if elapsed >= leaderTransferStuckThreshold {
+			logStuck = true
+			s.loggedOnce = true
+		}
+	}
+	return logStuck, logResolved, elapsed, prevOutcome
+}
+
 // maybeTransferRaftLeadershipToLeaseholderLocked attempts to transfer the
 // leadership away from this node to the leaseholder, if this node is the
 // current raft leader but not the leaseholder. We don't attempt to transfer
@@ -2675,7 +2762,6 @@ func (r *Replica) maybeTransferRaftLeadershipToLeaseholderLocked(
 		raftStatus, r.mu.internalRaftGroup.ReplicaProgress(lhReplicaID), leaseStatus,
 		leaseAcquisitionPending, r.StoreID(), r.store.IsDraining())
 	if outcome == raftLeaderTransferOK {
-		log.VEventf(ctx, 1, "transferring raft leadership to replica ID %v", lhReplicaID)
 		r.store.metrics.RangeRaftLeaderTransfers.Inc(1)
 		r.mu.internalRaftGroup.TransferLeader(lhReplicaID)
 	}
