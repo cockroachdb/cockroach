@@ -49,7 +49,6 @@ func TestSettingWatcherOnTenant(t *testing.T) {
 	ctx := context.Background()
 	srv, sqlDB, db := serverutils.StartServer(t, base.TestServerArgs{
 		DefaultTestTenant: base.TestIsSpecificToStorageLayerAndNeedsASystemTenant,
-		DefaultDRPCOption: base.TestDRPCDisabled,
 	})
 	defer srv.Stopper().Stop(ctx)
 	s0 := srv.ApplicationLayer()
