@@ -1498,38 +1498,49 @@ func sumAndFilterDiskCounters(disksStats []DiskStats) (DiskStats, error) {
 	return output, nil
 }
 
-// subtractDiskCounters subtracts the counters in `baseline` from the
-// counters in `stats`, saving the results in `stats`. If any counter
-// in `stats` is lower than the corresponding counter in `baseline`
-// (indicating a reset), the value for all metrics in `baseline`
-// is updated to the current value in `stats` to establish a new
-// baseline.
-func subtractDiskCounters(ctx context.Context, stats *DiskStats, baseline *DiskStats) {
-	if stats.WriteBytes < baseline.WriteBytes ||
-		stats.writeCount < baseline.writeCount ||
-		stats.writeTime < baseline.writeTime ||
-		stats.ReadBytes < baseline.ReadBytes ||
-		stats.readCount < baseline.readCount ||
-		stats.readTime < baseline.readTime ||
-		stats.ioTime < baseline.ioTime ||
-		stats.weightedIOTime < baseline.weightedIOTime {
-		*baseline = *stats
-		*stats = DiskStats{}
-		log.Ops.Info(ctx, "runtime: new baseline in disk stats from host. disk metric counters have been reset.")
-		return
+// subtractDiskStat subtracts base from stat. If stat < base (indicating a
+// counter wrap, e.g. on s390x where /proc/diskstats counters are 32-bit
+// unsigned), base is reset to stat and stat is zeroed.
+func subtractDiskStat(ctx context.Context, stat, base *int64, name string) {
+	if *stat < *base {
+		log.Ops.Infof(ctx,
+			"runtime: disk stats counter wrap detected for %s, resetting baseline", name)
+		*base = *stat
+		*stat = 0
+	} else {
+		*stat -= *base
 	}
+}
 
-	// Perform normal subtraction
-	stats.writeCount -= baseline.writeCount
-	stats.WriteBytes -= baseline.WriteBytes
-	stats.writeTime -= baseline.writeTime
+// subtractDiskStatDuration is like subtractDiskStat but for time.Duration
+// fields.
+func subtractDiskStatDuration(ctx context.Context, stat, base *time.Duration, name string) {
+	if *stat < *base {
+		log.Ops.Infof(ctx,
+			"runtime: disk stats counter wrap detected for %s, resetting baseline", name)
+		*base = *stat
+		*stat = 0
+	} else {
+		*stat -= *base
+	}
+}
 
-	stats.readCount -= baseline.readCount
-	stats.ReadBytes -= baseline.ReadBytes
-	stats.readTime -= baseline.readTime
-
-	stats.ioTime -= baseline.ioTime
-	stats.weightedIOTime -= baseline.weightedIOTime
+// subtractDiskCounters subtracts the counters in `baseline` from the
+// counters in `stats`, saving the results in `stats`. Each counter is
+// handled independently: if a counter in `stats` is lower than the
+// corresponding counter in `baseline` (indicating a wrap on s390x
+// where /proc/diskstats counters are 32-bit unsigned), that counter's
+// baseline is reset to the current value and the result for that
+// counter is zeroed. Counters that haven't wrapped subtract normally.
+func subtractDiskCounters(ctx context.Context, stats *DiskStats, baseline *DiskStats) {
+	subtractDiskStat(ctx, &stats.ReadBytes, &baseline.ReadBytes, "host-disk-read-bytes")
+	subtractDiskStat(ctx, &stats.readCount, &baseline.readCount, "host-disk-read-count")
+	subtractDiskStatDuration(ctx, &stats.readTime, &baseline.readTime, "host-disk-read-time")
+	subtractDiskStat(ctx, &stats.WriteBytes, &baseline.WriteBytes, "host-disk-write-bytes")
+	subtractDiskStat(ctx, &stats.writeCount, &baseline.writeCount, "host-disk-write-count")
+	subtractDiskStatDuration(ctx, &stats.writeTime, &baseline.writeTime, "host-disk-write-time")
+	subtractDiskStatDuration(ctx, &stats.ioTime, &baseline.ioTime, "host-disk-io-time")
+	subtractDiskStatDuration(ctx, &stats.weightedIOTime, &baseline.weightedIOTime, "host-disk-weighted-io-time")
 }
 
 // sumNetworkCounters returns a new net.IOCountersStat whose values are the sum of the

@@ -4898,6 +4898,20 @@ func (sm *StoreMetrics) updateEnvStats(stats fs.EnvStats) {
 	sm.EncryptionAlgorithm.Update(int64(stats.EncryptionType))
 }
 
+// updateDiskCounter updates a disk stat counter with a cumulative value from
+// the OS. On s390x, /proc/diskstats counters are 32-bit unsigned and wrap
+// after ~2^32. If the new value is lower than the current counter value
+// (indicating a wrap), the counter is cleared before updating to avoid a
+// panic in test builds.
+func updateDiskCounter(ctx context.Context, counter *metric.Counter, val int64) {
+	if counter.Count() > val {
+		log.Ops.Infof(ctx,
+			"disk stats counter wrap detected for %s, resetting", counter.GetMetadata().Name)
+		counter.Clear()
+	}
+	counter.Update(val)
+}
+
 func (sm *StoreMetrics) updateDiskStats(
 	ctx context.Context,
 	rollingStats disk.StatsWindow,
@@ -4905,14 +4919,14 @@ func (sm *StoreMetrics) updateDiskStats(
 	cumulativeStatsErr error,
 ) {
 	if cumulativeStatsErr == nil {
-		sm.DiskReadCount.Update(int64(cumulativeStats.ReadsCount))
-		sm.DiskReadBytes.Update(int64(cumulativeStats.BytesRead()))
-		sm.DiskReadTime.Update(int64(cumulativeStats.ReadsDuration))
-		sm.DiskWriteCount.Update(int64(cumulativeStats.WritesCount))
-		sm.DiskWriteBytes.Update(int64(cumulativeStats.BytesWritten()))
-		sm.DiskWriteTime.Update(int64(cumulativeStats.WritesDuration))
-		sm.DiskIOTime.Update(int64(cumulativeStats.CumulativeDuration))
-		sm.DiskWeightedIOTime.Update(int64(cumulativeStats.WeightedIODuration))
+		updateDiskCounter(ctx, sm.DiskReadCount, int64(cumulativeStats.ReadsCount))
+		updateDiskCounter(ctx, sm.DiskReadBytes, int64(cumulativeStats.BytesRead()))
+		updateDiskCounter(ctx, sm.DiskReadTime, int64(cumulativeStats.ReadsDuration))
+		updateDiskCounter(ctx, sm.DiskWriteCount, int64(cumulativeStats.WritesCount))
+		updateDiskCounter(ctx, sm.DiskWriteBytes, int64(cumulativeStats.BytesWritten()))
+		updateDiskCounter(ctx, sm.DiskWriteTime, int64(cumulativeStats.WritesDuration))
+		updateDiskCounter(ctx, sm.DiskIOTime, int64(cumulativeStats.CumulativeDuration))
+		updateDiskCounter(ctx, sm.DiskWeightedIOTime, int64(cumulativeStats.WeightedIODuration))
 		sm.DiskIopsInProgress.Update(int64(cumulativeStats.InProgressCount))
 	} else {
 		// Don't update cumulative stats to the useless zero value.
