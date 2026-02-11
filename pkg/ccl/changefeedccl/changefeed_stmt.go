@@ -1786,17 +1786,11 @@ func (b *changefeedResumer) resumeWithRetries(
 		}
 	}
 
-	// Grab a "reference" to this nodes job registry in order to make sure
+	// Grab a "reference" to this node's job registry in order to make sure
 	// this resumer has enough time to persist up to date checkpoint in case
 	// of node drain.
 	drainCh, cleanup := execCfg.JobRegistry.OnDrain()
 	defer cleanup()
-
-	// We'd like to avoid failing a changefeed unnecessarily, so when an error
-	// bubbles up to this level, we'd like to "retry" the flow if possible. This
-	// could be because the sink is down or because a cockroach node has crashed
-	// or for many other reasons.
-	var lastRunStatusUpdate time.Time
 
 	// Setup local state information.
 	// This information is used by dist flow process to communicate back
@@ -1822,13 +1816,21 @@ func (b *changefeedResumer) resumeWithRetries(
 		b.mu.perNodeAggregatorStats[componentID] = *meta
 	}
 
-	maxBackoff := changefeedbase.MaxRetryBackoff.Get(&execCfg.Settings.SV)
-	backoffReset := changefeedbase.RetryBackoffReset.Get(&execCfg.Settings.SV)
-
 	// Create memory monitor for tableset watcher. Similar to how processors create
 	// their monitors at function start, we create this unconditionally.
 	watcherMemMonitor := execinfra.NewMonitor(ctx, execCfg.DistSQLSrv.ChangefeedMonitor, mon.MakeName("changefeed-tableset-watcher-mem"))
 	defer watcherMemMonitor.Stop(ctx)
+
+	// We'd like to avoid failing a changefeed unnecessarily, so when an error
+	// bubbles up to this level, we'd like to "retry" the flow if possible. This
+	// could be because the sink is down or because a cockroach node has crashed
+	// or for many other reasons.
+	maxBackoff := changefeedbase.MaxRetryBackoff.Get(&execCfg.Settings.SV)
+	backoffReset := changefeedbase.RetryBackoffReset.Get(&execCfg.Settings.SV)
+
+	// lastRunStatusUpdate is used to track the last time the job status was updated
+	// to avoid updating the job status too frequently.
+	var lastRunStatusUpdate time.Time
 
 	for r := getRetry(ctx, maxBackoff, backoffReset); r.Next(); {
 		flowErr := maybeUpgradePreProductionReadyExpression(ctx, jobID, details, jobExec)
