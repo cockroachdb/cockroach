@@ -980,10 +980,9 @@ func (c *pendingTxnCache) add(
 			newEntry.Txn = txn
 		}
 
-		// Always keep the earliest ClockWhilePending available.
-		if (currentEntry.ClockWhilePending == roachpb.ObservedTimestamp{}) ||
-			((clockObservation != roachpb.ObservedTimestamp{}) &&
-				clockObservation.Timestamp.Less(currentEntry.ClockWhilePending.Timestamp)) {
+		// Always keep the latest ClockWhilePending available.
+		if !clockObservation.Timestamp.IsEmpty() &&
+			currentEntry.ClockWhilePending.Timestamp.Less(clockObservation.Timestamp) {
 			newEntry.ClockWhilePending = clockObservation
 		}
 

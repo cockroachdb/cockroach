@@ -982,7 +982,7 @@ func TestPendingTxnCacheClockWhilePending(t *testing.T) {
 		require.Equal(t, roachpb.ObservedTimestamp{}, entry.ClockWhilePending)
 	})
 
-	t.Run("oldest ClockWhilePending observation is preserved when WriteTimestamp advances", func(t *testing.T) {
+	t.Run("newest ClockWhilePending observation is preserved when WriteTimestamp advances", func(t *testing.T) {
 		var c pendingTxnCache
 		txn := makeTxnProto("txn")
 		obs1 := makeObs(1, 100)
@@ -992,7 +992,7 @@ func TestPendingTxnCacheClockWhilePending(t *testing.T) {
 		c.add(txn.Clone(), obs1)
 
 		// Add same txn with higher write timestamp but newer observation.
-		// WriteTimestamp updates, but older observation is kept.
+		// WriteTimestamp updates, and newer observation is kept.
 		txnPushed := txn.Clone()
 		txnPushed.WriteTimestamp = txnPushed.WriteTimestamp.Add(1, 0)
 		c.add(txnPushed, obs2)
@@ -1000,10 +1000,10 @@ func TestPendingTxnCacheClockWhilePending(t *testing.T) {
 		entry, ok := c.get(txn.ID)
 		require.True(t, ok)
 		require.Equal(t, txnPushed.WriteTimestamp, entry.Txn.WriteTimestamp)
-		require.Equal(t, obs1, entry.ClockWhilePending)
+		require.Equal(t, obs2, entry.ClockWhilePending)
 	})
 
-	t.Run("oldest ClockWhilePending wins when transaction doesn't change", func(t *testing.T) {
+	t.Run("newest ClockWhilePending wins when transaction doesn't change", func(t *testing.T) {
 		var c pendingTxnCache
 		txn := makeTxnProto("txn")
 		obs1 := makeObs(1, 200)
@@ -1012,12 +1012,12 @@ func TestPendingTxnCacheClockWhilePending(t *testing.T) {
 		// Add txn with newer observation.
 		c.add(txn.Clone(), obs1)
 
-		// Add same txn with older observation. Older observation replaces.
+		// Add same txn with older observation. Newer observation stays.
 		c.add(txn.Clone(), obs2)
 
 		entry, ok := c.get(txn.ID)
 		require.True(t, ok)
-		require.Equal(t, obs2, entry.ClockWhilePending)
+		require.Equal(t, obs1, entry.ClockWhilePending)
 	})
 
 	t.Run("empty observation does not replace existing", func(t *testing.T) {
