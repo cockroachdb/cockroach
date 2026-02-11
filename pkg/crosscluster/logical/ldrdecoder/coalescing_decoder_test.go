@@ -106,21 +106,21 @@ func TestEventDecoder_Deduplication(t *testing.T) {
 	require.Len(t, events, 3)
 
 	// Row 1: Multiple updates coalesced
-	require.False(t, events[0].IsDelete)
+	require.True(t, events[0].IsUpdateRow())
 	require.Equal(t, times[3], events[0].RowTimestamp)
 	require.Equal(t, tree.NewDString("v3_final"), events[0].Row[1])
 	require.Equal(t, tree.NewDString("original"), events[0].PrevRow[1])
 
 	// Row 2: Single update unchanged
-	require.False(t, events[1].IsDelete)
+	require.True(t, events[1].IsUpdateRow())
 	require.Equal(t, times[4], events[1].RowTimestamp)
 	require.Equal(t, tree.NewDString("single_value"), events[1].Row[1])
 	require.Equal(t, tree.NewDString("single_prev"), events[1].PrevRow[1])
 
-	// Row 3: Insert -> Update -> Delete coalesced
-	require.True(t, events[2].IsDelete)
+	// Row 3: Insert -> Update -> Delete coalesced to a delete with no prev value
+	// because the original insert had no prev value.
+	require.True(t, events[2].IsTombstoneUpdate())
 	require.Equal(t, times[7], events[2].RowTimestamp)
-	require.Equal(t, tree.DNull, events[2].PrevRow[1])
 }
 
 func TestEventDecoder_DeduplicationWithDiscardDelete(t *testing.T) {
@@ -185,18 +185,19 @@ func TestEventDecoder_DeduplicationWithDiscardDelete(t *testing.T) {
 
 	require.Len(t, events, 2)
 	for _, e := range events {
-		require.False(t, e.IsDelete, "expected no deletes when discarding deletes")
+		require.False(t, e.IsDeleteRow() || e.IsTombstoneUpdate(), "expected no deletes when discarding deletes")
 	}
 
-	// Row 3: Insert -> Update -> Delete coalesced
+	// Row 2: Update -> Delete coalesced to an update.
+	require.True(t, events[0].IsUpdateRow())
 	require.Equal(t, times[2], events[0].RowTimestamp)
 	require.Equal(t, tree.NewDString("v2"), events[0].Row[1])
 	require.Equal(t, tree.NewDString("v1"), events[0].PrevRow[1])
 
-	// Row 2: Coalesces to insert
+	// Row 3: Delete -> Insert -> Delete coalesced to insert (no prev value).
+	require.True(t, events[1].IsInsertRow())
 	require.Equal(t, times[5], events[1].RowTimestamp)
 	require.Equal(t, tree.NewDString("inserted"), events[1].Row[1])
-	require.Equal(t, tree.DNull, events[1].PrevRow[1])
 }
 
 func TestEventDecoder_UserDefinedTypes(t *testing.T) {
