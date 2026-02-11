@@ -79,6 +79,9 @@ func (g *mockLockTableGuard) CurState() (waitingState, error) {
 func (g *mockLockTableGuard) ResolveBeforeScanning() []roachpb.LockUpdate {
 	return g.toResolve
 }
+func (g *mockLockTableGuard) IntentsToResolveVirtually() []roachpb.LockUpdate {
+	return g.toResolve
+}
 func (g *mockLockTableGuard) CheckOptimisticNoConflicts(*lockspanset.LockSpanSet) (ok bool) {
 	return true
 }
