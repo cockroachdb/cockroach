@@ -1336,7 +1336,9 @@ func newClusterState(ts timeutil.TimeSource, interner *stringInterner) *clusterS
 	return cs
 }
 
-func (cs *clusterState) processStoreLoadMsg(ctx context.Context, storeMsg *StoreLoadMsg) {
+func (cs *clusterState) processStoreLoadMsg(
+	ctx context.Context, storeMsg *StoreLoadMsg, metrics *loadAndCapacityMetrics,
+) {
 	now := cs.ts.Now()
 	cs.gcPendingChanges(ctx, now)
 
@@ -1369,6 +1371,26 @@ func (cs *clusterState) processStoreLoadMsg(ctx context.Context, storeMsg *Store
 	ss.adjusted.load = storeMsg.Load
 	ss.adjusted.secondaryLoad = storeMsg.SecondaryLoad
 	ss.maxFractionPendingIncrease, ss.maxFractionPendingDecrease = 0, 0
+
+	// Report the load and capacity that was just applied if we have a valid
+	// metrics handle.
+	if metrics != nil {
+		cpuLoad := int64(storeMsg.Load[CPURate])
+		cpuCapacity := int64(storeMsg.Capacity[CPURate])
+		cpuUtil := float64(cpuLoad) / float64(cpuCapacity)
+		writeBandwidth := int64(storeMsg.Load[WriteBandwidth])
+		diskLoad := int64(storeMsg.Load[ByteSize])
+		diskCapacity := int64(storeMsg.Capacity[ByteSize])
+		diskUtil := float64(diskLoad) / float64(diskCapacity)
+
+		metrics.CPULoad.Update(cpuLoad)
+		metrics.CPUCapacity.Update(cpuCapacity)
+		metrics.CPUUtilization.Update(cpuUtil)
+		metrics.WriteBandwidth.Update(writeBandwidth)
+		metrics.DiskLoad.Update(diskLoad)
+		metrics.DiskCapacity.Update(diskCapacity)
+		metrics.DiskUtilization.Update(diskUtil)
+	}
 
 	// Find any load pending changes for ranges which involve this store, that
 	// can now be removed from the loadPendingChanges. We don't need to undo the
