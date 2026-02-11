@@ -7,6 +7,7 @@ package services
 
 import (
 	"context"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/utils/logger"
 )
@@ -27,4 +28,11 @@ type IService interface {
 	// Shutdown gracefully terminates the service and cleans up any resources.
 	// This is called during application shutdown to ensure clean termination.
 	Shutdown(ctx context.Context) error
+}
+
+// IServiceWithShutdownTimeout is an optional interface that services can
+// implement to override the default shutdown timeout. Services that don't
+// implement this interface use the app-level default.
+type IServiceWithShutdownTimeout interface {
+	GetShutdownTimeout() time.Duration
 }

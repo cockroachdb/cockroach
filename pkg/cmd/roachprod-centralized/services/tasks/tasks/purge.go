@@ -67,5 +67,5 @@ func (t *TaskPurge) Process(ctx context.Context, l *logger.Logger) error {
 
 // GetTimeout returns the timeout for the purge task.
 func (t *TaskPurge) GetTimeout() time.Duration {
-	return 5 * time.Minute
+	return 1 * time.Minute
 }

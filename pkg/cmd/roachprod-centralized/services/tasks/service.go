@@ -15,6 +15,7 @@ import (
 	configtypes "github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/config/types"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/models/tasks"
 	tasksrepo "github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/repositories/tasks"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/services"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/services/tasks/internal/metrics"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/services/tasks/internal/processor"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/services/tasks/internal/scheduler"
@@ -29,12 +30,18 @@ import (
 // service.go contains the main Service struct, lifecycle management, and orchestration
 // of all task service components (processor, scheduler, metrics, registry).
 
+// shutdownTimeoutMargin is the extra time added on top of the maximum task
+// timeout to allow for cleanup work during shutdown.
+const shutdownTimeoutMargin = 10 * time.Second
+
 var (
 	// DefaultTasksTimeout is the default timeout for tasks.
 	DefaultTasksTimeout = 30 * time.Second
 	// DefaultTasksWorkers is the default number of workers processing tasks.
 	DefaultTasksWorkers = 1
 )
+
+var _ services.IServiceWithShutdownTimeout = (*Service)(nil)
 
 // Service implements the tasks service interface and manages background task processing.
 // It coordinates between task producers (other services) and task consumers (workers)
@@ -53,6 +60,10 @@ type Service struct {
 	managedTaskTypes []string
 	// taskServices maps task type names to their managing service
 	taskServices map[string]types.ITasksService
+
+	// maxTaskTimeout tracks the highest timeout across all registered tasks,
+	// updated at registration time. Used to derive the service shutdown timeout.
+	maxTaskTimeout time.Duration
 
 	backgroundJobsCancelFunc context.CancelFunc
 	backgroundJobsWg         *sync.WaitGroup
@@ -258,6 +269,7 @@ func (s *Service) StartBackgroundWork(
 	ctx, s.backgroundJobsCancelFunc = context.WithCancel(context.WithoutCancel(ctx))
 
 	// Start task processor
+	s.backgroundJobsWg.Add(1)
 	err := processor.StartProcessing(
 		ctx,
 		l,
@@ -265,9 +277,11 @@ func (s *Service) StartBackgroundWork(
 		s.options.Workers,
 		s.instanceID,
 		s.store,
-		s, // Service implements processor.TaskExecutor interface
+		s,                       // Service implements processor.TaskExecutor interface
+		s.backgroundJobsWg.Done, // Call Done() when all processor goroutines exit
 	)
 	if err != nil {
+		s.backgroundJobsWg.Done()
 		return err
 	}
 
@@ -344,6 +358,16 @@ func (s *Service) Shutdown(ctx context.Context) error {
 		// If all workers finish successfully, return nil
 		return nil
 	}
+}
+
+// GetShutdownTimeout returns a shutdown timeout derived from the maximum
+// timeout across all registered tasks, plus a margin for cleanup.
+func (s *Service) GetShutdownTimeout() time.Duration {
+	maxTimeout := s.options.DefaultTasksTimeout
+	if s.maxTaskTimeout > maxTimeout {
+		maxTimeout = s.maxTaskTimeout
+	}
+	return maxTimeout + shutdownTimeoutMargin
 }
 
 // GetTaskServiceName returns the name of the task service.
