@@ -1827,3 +1827,576 @@ a  b  k
 1  2  3
 3  4  7
 
+subtest test_storage_params_validation
+
+statement ok
+CREATE TABLE t_test_param (
+  a INT PRIMARY KEY,
+  b INT NOT NULL,
+  FAMILY fam_0_a_b (a, b)
+);
+
+statement error pq: invalid storage param "s2_max_level" on primary key
+ALTER TABLE t_test_param ALTER PRIMARY KEY USING COLUMNS (b) WITH (s2_max_level=20);
+
+statement error pq: invalid storage param "s2_max_level" on primary key
+ALTER TABLE t_test_param ALTER PRIMARY KEY USING COLUMNS (b) USING HASH WITH (s2_max_level=20);
+
+statement error pq: "bucket_count" storage param should only be set with "USING HASH" for hash sharded index
+ALTER TABLE t_test_param ALTER PRIMARY KEY USING COLUMNS (b) WITH (bucket_count=5);
+
+statement error pq: "bucket_count" storage parameter and "BUCKET_COUNT" cannot be set at the same time
+ALTER TABLE t_test_param ALTER PRIMARY KEY USING COLUMNS (b) USING HASH WITH BUCKET_COUNT = 5 WITH (bucket_count=5);
+
+skipif config local-mixed-25.4 local-mixed-26.1
+statement error pq: skip_unique_checks can only be set on implicitly partitioned indexes
+ALTER TABLE t_test_param ALTER PRIMARY KEY USING COLUMNS (b) WITH (skip_unique_checks = true);
+
+# Make sure old BUCKET_COUNT syntax still works
+statement ok
+ALTER TABLE t_test_param ALTER PRIMARY KEY USING COLUMNS (b) USING HASH WITH BUCKET_COUNT = 5;
+
+onlyif config schema-locked-disabled
+query T
+SELECT create_statement FROM [SHOW CREATE TABLE t_test_param]
+----
+CREATE TABLE public.t_test_param (
+  a INT8 NOT NULL,
+  b INT8 NOT NULL,
+  crdb_internal_b_shard_5 INT8 NOT VISIBLE NOT NULL AS (mod(fnv32(md5(crdb_internal.datums_to_bytes(b))), 5:::INT8)) VIRTUAL,
+  CONSTRAINT t_test_param_pkey PRIMARY KEY (b ASC) USING HASH WITH (bucket_count=5),
+  UNIQUE INDEX t_test_param_a_key (a ASC),
+  FAMILY fam_0_a_b (a, b)
+);
+
+skipif config schema-locked-disabled
+query T
+SELECT create_statement FROM [SHOW CREATE TABLE t_test_param]
+----
+CREATE TABLE public.t_test_param (
+  a INT8 NOT NULL,
+  b INT8 NOT NULL,
+  crdb_internal_b_shard_5 INT8 NOT VISIBLE NOT NULL AS (mod(fnv32(md5(crdb_internal.datums_to_bytes(b))), 5:::INT8)) VIRTUAL,
+  CONSTRAINT t_test_param_pkey PRIMARY KEY (b ASC) USING HASH WITH (bucket_count=5),
+  UNIQUE INDEX t_test_param_a_key (a ASC),
+  FAMILY fam_0_a_b (a, b)
+) WITH (schema_locked = true);
+
+subtest pkey-comment-carry-over
+
+# Create a table with a primary key and add a comment on it.
+statement ok
+CREATE TABLE pkey_comment (a INT8, b INT8, c INT8, CONSTRAINT pkey PRIMARY KEY (a, b));
+
+statement ok
+COMMENT ON INDEX pkey IS 'idx';
+COMMENT ON CONSTRAINT pkey ON pkey_comment IS 'const';
+
+# Create a unique secondary index and add a comment on it.
+statement ok
+CREATE UNIQUE INDEX i2 ON pkey_comment(c);
+
+statement ok
+COMMENT ON INDEX i2 IS 'idx2';
+COMMENT ON CONSTRAINT i2 ON pkey_comment IS 'idx3';
+
+# Comment should exist inside the create statement, so filter it out
+query T
+SELECT substring(create_statement, strpos(create_statement, 'COMMENT')) FROM [SHOW CREATE pkey_comment];
+----
+COMMENT ON INDEX public.pkey_comment@pkey IS 'idx';
+COMMENT ON INDEX public.pkey_comment@i2 IS 'idx2';
+COMMENT ON CONSTRAINT pkey ON public.pkey_comment IS 'const';
+COMMENT ON CONSTRAINT i2 ON public.pkey_comment IS 'idx3';
+
+# Altering the primary key should carry over the comment.
+statement ok
+ALTER TABLE pkey_comment ALTER PRIMARY KEY USING COLUMNS (b);
+
+# Verify that all comments are appropriately carried over. The order of comments
+# from `SHOW CREATE` between LSC and DSC are slightly different so we used
+# slightly complicated query to extract all comments from `SHOW CREATE` and
+# order them by comments for a unified output.
+query T
+SELECT trim(trailing ';' from unnest(regexp_split_to_array(substring(create_statement, strpos(create_statement, 'COMMENT')), '\n', 'g'))) AS comment
+FROM [SHOW CREATE pkey_comment]
+ORDER BY comment;
+----
+COMMENT ON CONSTRAINT i2 ON public.pkey_comment IS 'idx3'
+COMMENT ON CONSTRAINT pkey ON public.pkey_comment IS 'const'
+COMMENT ON INDEX public.pkey_comment@i2 IS 'idx2'
+COMMENT ON INDEX public.pkey_comment@pkey IS 'idx'
+
+subtest end
+
+subtest test-index-deduplication
+
+# Regression for #78046: `ALTER PRIMARY KEY` should not create a secondary
+# index on the (old) primary key columns when there is already a secondary
+# index thereof.
+statement ok
+DROP TABLE IF EXISTS t;
+
+statement ok
+CREATE TABLE t (a INT PRIMARY KEY, b INT NOT NULL, UNIQUE INDEX t_a_key (a));
+
+statement ok
+ALTER TABLE t ALTER PRIMARY KEY USING COLUMNS (b);
+
+query TTT rowsort
+SELECT index_name, column_name, direction FROM [SHOW INDEXES FROM t]
+----
+t_pkey   b  ASC
+t_a_key  b  ASC
+t_a_key  a  ASC
+t_pkey   a  N/A
+
+# But if the existing index is not strictly equal to the (old) primary key
+# (even if, for example, the (old) primary key is a strict prefix of an
+# existing index), a secondary index on the (old) PK columns will still be
+# created.
+statement ok
+DROP TABLE IF EXISTS t;
+
+statement ok
+CREATE TABLE t (a INT PRIMARY KEY, b INT NOT NULL, UNIQUE INDEX t_a_b_key (a, b));
+
+statement ok
+ALTER TABLE t ALTER PRIMARY KEY USING COLUMNS (b);
+
+# Note that index `t_a_b_key` and `t_a_key` shall not be deemed as identical
+# even if they both have columns (a, b) in the sense that one enforces uniqueness
+# on only (a) but the other on (a, b).
+query TTTB
+SELECT index_name, column_name, direction, storing FROM [SHOW INDEXES FROM t] ORDER BY 1,2,3,4;
+----
+t_a_b_key  a  ASC  false
+t_a_b_key  b  ASC  false
+t_a_key    a  ASC  false
+t_a_key    b  ASC  true
+t_pkey     a  N/A  true
+t_pkey     b  ASC  false
+
+# The following regression test makes sure that when the new PK columns
+# is a (strict) subset of the old PK columns, all existing secondary indexes
+# were rewritten, and hence dropping a column from the old PK columns does not
+# unexpectedly drop an existing secondary index.
+subtest regression_#84040
+
+statement ok
+DROP TABLE IF EXISTS t
+
+statement ok
+CREATE TABLE t (
+  a INT NOT NULL,
+  b INT NOT NULL,
+  c INT NOT NULL,
+  PRIMARY KEY (a, b),
+  UNIQUE INDEX uniq_idx (c)
+);
+
+statement ok
+ALTER TABLE t ALTER PRIMARY KEY USING COLUMNS (a)
+
+statement ok
+ALTER TABLE t DROP COLUMN b
+
+query TTT
+SELECT index_name, column_name, direction FROM [SHOW INDEXES FROM t] ORDER BY 1,2,3
+----
+t_pkey    a  ASC
+t_pkey    c  N/A
+uniq_idx  a  ASC
+uniq_idx  c  ASC
+
+# Alter primary key on a hash-sharded primary key to be non-hash-sharded.
+# This had unexpectedly caused all unique indexes to be dropped silently on v21.2.
+# See the support issue https://github.com/cockroachlabs/support/issues/1687
+statement ok
+DROP TABLE IF EXISTS t;
+
+statement ok
+CREATE TABLE t (
+	i INT PRIMARY KEY USING HASH WITH (bucket_count=7) DEFAULT unique_rowid(),
+	j INT NOT NULL UNIQUE
+)
+
+# Because of #146725 we can't have schema_locked set, since this
+# fallback to the legacy schema changer.
+skipif config schema-locked-disabled
+statement ok
+ALTER TABLE t SET (schema_locked = false);
+
+# Assert that the primary key is hash-sharded and the unique index is created.
+query TTT
+SELECT index_name, column_name, direction FROM [SHOW INDEXES FROM t] ORDER BY 1,2,3
+----
+t_j_key  crdb_internal_i_shard_7  ASC
+t_j_key  i                        ASC
+t_j_key  j                        ASC
+t_pkey   crdb_internal_i_shard_7  ASC
+t_pkey   i                        ASC
+t_pkey   j                        N/A
+
+# Alter the primary key to be no longer hash-sharded.
+statement ok
+ALTER TABLE t ALTER PRIMARY KEY USING COLUMNS (i)
+
+# Now assert that the primary key has been modified to non-hash-sharded,
+# and the unique index still exists.
+query TTT
+SELECT index_name,column_name,direction FROM [SHOW INDEXES FROM t] ORDER BY 1,2,3
+----
+t_j_key  i  ASC
+t_j_key  j  ASC
+t_pkey   i  ASC
+t_pkey   j  N/A
+
+
+subtest alter_primary_key_with_more_than_one_column_families
+statement ok
+CREATE TABLE t_multiple_cf (i INT PRIMARY KEY, j INT NOT NULL, FAMILY (i), FAMILY (j))
+
+statement ok
+INSERT INTO t_multiple_cf VALUES (23, 24)
+
+statement ok
+ALTER TABLE t_multiple_cf ALTER PRIMARY KEY USING COLUMNS (j)
+
+subtest alter_primary_key_removes_rowid
+
+statement ok
+CREATE TABLE t_rowid (k INT NOT NULL, v STRING)
+
+# Weird but legal: a reference is held to the hidden rowid column.
+statement ok
+CREATE TABLE t_child (id INT8 PRIMARY KEY, CONSTRAINT fk FOREIGN KEY (id) REFERENCES t_rowid (rowid))
+
+# In this case, we expect the rowid column to NOT be dropped,
+# furthermore it should be covered by a unique index.
+skipif config local-legacy-schema-changer
+statement ok
+ALTER TABLE t_rowid ALTER PRIMARY KEY USING COLUMNS (k)
+
+query T
+SELECT column_name FROM [SHOW COLUMNS FROM t_rowid] ORDER BY column_name;
+----
+k
+rowid
+v
+
+# Recreate the table but without any references to rowid.
+statement ok
+DROP TABLE t_rowid CASCADE;
+CREATE TABLE t_rowid (k INT NOT NULL, v STRING)
+
+# Now we expect the rowid column to be dropped.
+statement ok
+ALTER TABLE t_rowid ALTER PRIMARY KEY USING COLUMNS (k)
+
+# Row ID isn't removed by legacy schema changer.
+skipif config local-legacy-schema-changer
+query T
+SELECT column_name FROM [SHOW COLUMNS FROM t_rowid] ORDER BY column_name;
+----
+k
+v
+
+subtest check_constraint_name
+
+statement ok
+CREATE TABLE t_name_check (a INT NOT NULL, CONSTRAINT ctcheck CHECK (a > 0))
+
+skipif config local-legacy-schema-changer
+statement error pgcode 42P07 constraint with name "ctcheck" already exists
+ALTER TABLE t_name_check ADD CONSTRAINT ctcheck PRIMARY KEY (a)
+
+statement ok
+ALTER TABLE t_name_check ADD CONSTRAINT t_name_check_pkey PRIMARY KEY (a)
+
+statement ok
+DROP TABLE t_name_check
+
+statement ok
+CREATE TABLE t_name_check (a INT NOT NULL, CONSTRAINT ctuniq UNIQUE (a))
+
+skipif config local-legacy-schema-changer
+statement error pgcode 42P07 constraint with name "ctuniq" already exists
+ALTER TABLE t_name_check ADD CONSTRAINT ctuniq PRIMARY KEY (a)
+
+statement ok
+DROP TABLE t_name_check
+
+statement ok
+CREATE TABLE t_name_check (a INT NOT NULL, INDEX idx (a))
+
+skipif config local-legacy-schema-changer
+statement error pgcode 42P07 constraint with name "idx" already exists
+ALTER TABLE t_name_check ADD CONSTRAINT idx PRIMARY KEY (a)
+
+# The following subtest tests the case when the new primary key
+# intersects with the old primary key.
+subtest regression_85877
+
+statement ok
+CREATE TABLE t_85877(i INT NOT NULL, j INT NOT NULL, PRIMARY KEY (i))
+
+statement ok
+ALTER TABLE t_85877 ALTER PRIMARY KEY USING COLUMNS (i, j)
+
+statement ok
+DROP TABLE t_85877
+
+statement ok
+CREATE TABLE t_85877 (i INT NOT NULL, j INT NOT NULL, PRIMARY KEY (i, j))
+
+statement ok
+ALTER TABLE t_85877 ALTER PRIMARY KEY USING COLUMNS (i)
+
+statement ok
+DROP TABLE t_85877
+
+statement ok
+CREATE TABLE t_85877 (i INT NOT NULL, j INT NOT NULL, k INT NOT NULL, PRIMARY KEY (i, j))
+
+statement ok
+ALTER TABLE t_85877 ALTER PRIMARY KEY USING COLUMNS (j, k)
+
+# The following subtest tests validating an inverted index while
+# a column is being dropped.
+subtest regression_90306
+
+statement ok
+CREATE TABLE t_90306 (j INT[], k INT NOT NULL, INVERTED INDEX (j));
+
+statement ok
+ALTER TABLE t_90306 ALTER PRIMARY KEY USING COLUMNS (k);
+
+subtest regression_90836
+
+statement ok
+CREATE TABLE t_90836(a INT NOT NULL, b INT NOT NULL, CONSTRAINT "constraint" PRIMARY KEY (a)) WITH (schema_locked = false);
+
+statement ok
+BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE;
+SET LOCAL autocommit_before_ddl = false;
+ALTER TABLE t_90836 DROP CONSTRAINT "constraint";
+ALTER TABLE t_90836 ADD CONSTRAINT "constraint" PRIMARY KEY (b);
+COMMIT;
+
+
+# The following sub test validates a primary key swap,
+# where the recreated secondary indexes will have suffix
+# columns.
+subtest regression_97296
+
+statement ok
+CREATE TABLE t_97296 (a DECIMAL PRIMARY KEY, b INT NOT NULL, c INT NOT NULL, INDEX i4(c));
+
+statement ok
+INSERT INTO t_97296 VALUES (0.0, 5, 32);
+
+statement ok
+ALTER TABLE t_97296 ALTER PRIMARY KEY USING COLUMNS (b, a);
+
+# This subtest ensures we properly support ALTER PRIMARY KEY USING HASH
+subtest alter_primary_key_using_hash_96730
+
+statement ok
+CREATE TABLE t_96730 (i INT PRIMARY KEY, j INT NOT NULL, k STRING NOT NULL, FAMILY "primary" (i, j, k));
+
+statement ok
+ALTER TABLE t_96730 ALTER PRIMARY KEY USING COLUMNS (j, k) USING HASH
+
+onlyif config schema-locked-disabled
+query TT
+SHOW CREATE TABLE t_96730
+----
+t_96730  CREATE TABLE public.t_96730 (
+           i INT8 NOT NULL,
+           j INT8 NOT NULL,
+           k STRING NOT NULL,
+           crdb_internal_j_k_shard_16 INT8 NOT VISIBLE NOT NULL AS (mod(fnv32(md5(crdb_internal.datums_to_bytes(j, k))), 16:::INT8)) VIRTUAL,
+           CONSTRAINT t_96730_pkey PRIMARY KEY (j ASC, k ASC) USING HASH WITH (bucket_count=16),
+           UNIQUE INDEX t_96730_i_key (i ASC)
+         );
+
+skipif config schema-locked-disabled
+query TT
+SHOW CREATE TABLE t_96730
+----
+t_96730  CREATE TABLE public.t_96730 (
+           i INT8 NOT NULL,
+           j INT8 NOT NULL,
+           k STRING NOT NULL,
+           crdb_internal_j_k_shard_16 INT8 NOT VISIBLE NOT NULL AS (mod(fnv32(md5(crdb_internal.datums_to_bytes(j, k))), 16:::INT8)) VIRTUAL,
+           CONSTRAINT t_96730_pkey PRIMARY KEY (j ASC, k ASC) USING HASH WITH (bucket_count=16),
+           UNIQUE INDEX t_96730_i_key (i ASC)
+         ) WITH (schema_locked = true);
+
+# If we had a partial unique index on the old primary key columns, and after a
+# ALTER PRIMARY KEY, we will create a unique secondary index on the old primary
+# key columns. This subtest ensures that such a partial unique index is NOT a
+# good candidate and a new, non-partial, unique secondary will be created.
+subtest 99303
+
+statement ok
+CREATE TABLE t_99303 (i INT NOT NULL PRIMARY KEY, j INT NOT NULL, UNIQUE INDEX (i) WHERE (i > 0), FAMILY "primary" (i, j));
+
+statement ok
+ALTER TABLE t_99303 ALTER PRIMARY KEY USING COLUMNS (j);
+
+onlyif config schema-locked-disabled
+query TT
+SHOW CREATE t_99303
+----
+t_99303  CREATE TABLE public.t_99303 (
+           i INT8 NOT NULL,
+           j INT8 NOT NULL,
+           CONSTRAINT t_99303_pkey PRIMARY KEY (j ASC),
+           UNIQUE INDEX t_99303_i_key (i ASC) WHERE i > 0:::INT8,
+           UNIQUE INDEX t_99303_i_key1 (i ASC)
+         );
+
+skipif config schema-locked-disabled
+query TT
+SHOW CREATE t_99303
+----
+t_99303  CREATE TABLE public.t_99303 (
+           i INT8 NOT NULL,
+           j INT8 NOT NULL,
+           CONSTRAINT t_99303_pkey PRIMARY KEY (j ASC),
+           UNIQUE INDEX t_99303_i_key (i ASC) WHERE i > 0:::INT8,
+           UNIQUE INDEX t_99303_i_key1 (i ASC)
+         ) WITH (schema_locked = true);
+
+subtest end
+
+# This subtest ensures that if we ALTER PK on a table with unique secondary
+# indexes on the new-pk-cols, then ALTER PK rewrites those unique secondary
+# indexes so that they have no reference to old-pk-cols anymore (previously,
+# before the ALTER PK, old-pk-cols are in their keySuffixColumn). This ensures
+# subsequent dropping of old-pk-cols will not impact any of these unique
+# secondary indexes.
+subtest 114436
+
+statement ok
+CREATE TABLE t_114436 (j INT NOT NULL, UNIQUE INDEX idx (j));
+
+statement ok
+ALTER TABLE t_114436 ALTER PRIMARY KEY USING COLUMNS (j);
+
+statement ok
+ALTER TABLE t_114436 DROP COLUMN IF EXISTS rowid;
+
+query TTT
+SELECT index_name, column_name, direction FROM [SHOW INDEXES FROM t_114436] ORDER BY 1,2,3
+----
+idx j ASC
+t_114436_pkey j ASC
+
+# Repeat the same thing but on a non-rowid column this time.
+statement ok
+DROP TABLE t_114436;
+
+statement ok
+CREATE TABLE t_114436 (i INT PRIMARY KEY, j INT NOT NULL, UNIQUE INDEX idx (j));
+
+statement ok
+ALTER TABLE t_114436 ALTER PRIMARY KEY USING COLUMNS (j);
+
+statement ok
+ALTER TABLE t_114436 DROP COLUMN i;
+
+query TTT
+SELECT index_name, column_name, direction FROM [SHOW INDEXES FROM t_114436] ORDER BY 1,2,3
+----
+idx j ASC
+t_114436_pkey j ASC
+
+subtest end
+
+subtest column_not_indexable
+
+statement ok
+CREATE TABLE tab_122871 (
+  col0_4         TSVECTOR NOT NULL,
+  col0_6         OID,
+  col0_18        REGTYPE,
+  PRIMARY KEY (col0_18 DESC)
+);
+
+statement error column col0_4 has type tsvector, which is not indexable
+ALTER TABLE tab_122871 ALTER PRIMARY KEY USING COLUMNS (col0_4);
+
+subtest end
+
+# In #123017 we noticed that ALTER PRIMARY KEY does not work correctly
+# if there are either view or function references to an index due to validation
+# errors in both the legacy and declarative schema changer. Long term we can
+# support this in the declarative schema changer.
+subtest alter_primary_key_block_func_view_ref
+
+statement ok
+CREATE TABLE t_view_func_ref_123017 (
+    a STRING NOT NULL,
+    b INT2,
+    UNIQUE (b ASC)
+);
+CREATE FUNCTION f_123017() RETURNS RECORD LANGUAGE SQL AS $$
+  SELECT NULL FROM t_view_func_ref_123017@t_view_func_ref_123017_b_key
+$$;
+CREATE VIEW t_view_123017 AS (SELECT b FROM t_view_func_ref_123017@t_view_func_ref_123017_b_key);
+
+statement error pq: unimplemented: table \"t_view_func_ref_123017\" has an index \(t_view_func_ref_123017_b_key\) that is still referenced by \"f_123017\"
+ALTER TABLE t_view_func_ref_123017 ALTER PRIMARY KEY USING COLUMNS (a);
+
+statement ok
+DROP FUNCTION f_123017;
+
+statement error pq: unimplemented: table \"t_view_func_ref_123017\" has an index \(t_view_func_ref_123017_b_key\) that is still referenced by \"t_view_123017\"
+ALTER TABLE t_view_func_ref_123017 ALTER PRIMARY KEY USING COLUMNS (a);
+
+statement ok
+DROP VIEW t_view_123017;
+
+statement ok
+ALTER TABLE t_view_func_ref_123017 ALTER PRIMARY KEY USING COLUMNS (a);
+
+subtest end
+
+subtest special_characters
+
+statement ok
+CREATE TABLE table_w0_66 ( "Abc" INT4 PRIMARY KEY, "ab\f" INT2 NOT NULL, FAMILY ("Abc", "ab\f"));
+
+statement ok
+ALTER TABLE public.table_w0_66 ALTER PRIMARY KEY USING COLUMNS ("Abc", "ab\f") USING HASH;
+
+onlyif config schema-locked-disabled
+query T
+SELECT create_statement FROM [SHOW CREATE TABLE public.table_w0_66]
+----
+CREATE TABLE public.table_w0_66 (
+  "Abc" INT4 NOT NULL,
+  "ab\f" INT2 NOT NULL,
+  "crdb_internal_Abc_ab\f_shard_16" INT8 NOT VISIBLE NOT NULL AS (mod(fnv32(md5(crdb_internal.datums_to_bytes("Abc", "ab\f"))), 16:::INT8)) VIRTUAL,
+  CONSTRAINT table_w0_66_pkey PRIMARY KEY ("Abc" ASC, "ab\f" ASC) USING HASH WITH (bucket_count=16),
+  UNIQUE INDEX "table_w0_66_Abc_key" ("Abc" ASC),
+  FAMILY "fam_0_Abc_ab\f" ("Abc", "ab\f")
+);
+
+skipif config schema-locked-disabled
+query T
+SELECT create_statement FROM [SHOW CREATE TABLE public.table_w0_66]
+----
+CREATE TABLE public.table_w0_66 (
+  "Abc" INT4 NOT NULL,
+  "ab\f" INT2 NOT NULL,
+  "crdb_internal_Abc_ab\f_shard_16" INT8 NOT VISIBLE NOT NULL AS (mod(fnv32(md5(crdb_internal.datums_to_bytes("Abc", "ab\f"))), 16:::INT8)) VIRTUAL,
+  CONSTRAINT table_w0_66_pkey PRIMARY KEY ("Abc" ASC, "ab\f" ASC) USING HASH WITH (bucket_count=16),
+  UNIQUE INDEX "table_w0_66_Abc_key" ("Abc" ASC),
+  FAMILY "fam_0_Abc_ab\f" ("Abc", "ab\f")
+) WITH (schema_locked = true);
+
+subtest end

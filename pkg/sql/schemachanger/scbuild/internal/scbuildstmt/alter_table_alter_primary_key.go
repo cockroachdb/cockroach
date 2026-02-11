@@ -55,6 +55,11 @@ type alterPrimaryKeySpec struct {
 	Name          tree.Name
 	StorageParams tree.StorageParams
 	Partitioning  *partitioningSpec
+	// IsLocalitySwap is true when the ALTER PRIMARY KEY is triggered by an ALTER
+	// TABLE SET LOCALITY that changes between RBR variants. When true,
+	// skip_unique_checks is preserved from old indexes if the new indexes retain
+	// implicit partitioning.
+	IsLocalitySwap bool
 }
 
 // partitioningSpec specifies partitioning to apply during ALTER PRIMARY KEY.
@@ -128,6 +133,12 @@ func alterPrimaryKey(
 	alterPKInPrimaryIndexAndItsTemp(b, tn, tbl.TableID, &prevSpec, &inflatedChain.inter2Spec, t, false /* isIndexFinal */)
 	prevSpec = makeIndexSpec(b, tbl.TableID, inflatedChain.inter1Spec.primary.IndexID)
 	alterPKInPrimaryIndexAndItsTemp(b, tn, tbl.TableID, &prevSpec, &inflatedChain.finalSpec, t, true /* isIndexFinal */)
+
+	// Validate and apply storage parameters from WITH clause.
+	setupStorageParams(
+		b, t, inflatedChain.oldSpec.primary, inflatedChain.inter2Spec.primary,
+		inflatedChain.finalSpec.primary, inflatedChain.finalSpec.partitioning,
+	)
 
 	b.LogEventForExistingTarget(inflatedChain.finalSpec.primary)
 
@@ -221,6 +232,52 @@ func setupSharding(
 	final.Sharding = sharding
 	finalTemp := mustRetrieveTemporaryIndexElem(b, tbl.TableID, final.TemporaryIndexID)
 	finalTemp.Sharding = sharding
+}
+
+// setupStorageParams validates and applies storage parameters from the WITH
+// clause to the new primary indexes, rejecting unknown or invalid ones.
+// Parameters default to their zero values when no WITH clause is specified.
+// When no WITH clause is provided but the new index retains implicit
+// partitioning (e.g. RBR-to-RBR locality change), skip_unique_checks is
+// preserved from the old primary index.
+func setupStorageParams(
+	b BuildCtx,
+	t alterPrimaryKeySpec,
+	old, inter2, final *scpb.PrimaryIndex,
+	partitioning *scpb.IndexPartitioning,
+) {
+	// Reset to defaults first, since the new PK should not inherit storage
+	// params from the old PK unless explicitly specified in the WITH clause.
+	// For RBR-to-RBR locality swaps, preserve skip_unique_checks from the old
+	// PK since the index remains implicitly partitioned.
+	if t.IsLocalitySwap && partitioning != nil && partitioning.NumImplicitColumns > 0 {
+		final.SkipUniqueChecks = old.SkipUniqueChecks
+	} else {
+		final.SkipUniqueChecks = false
+	}
+
+	// Validate and apply storage parameters from the WITH clause.
+	if err := paramparse.ValidateIndexStorageParams(
+		b,
+		t.StorageParams,
+		paramparse.IndexStorageParamContext{
+			IsPrimaryKey:            true,
+			IsUnique:                true,
+			IsSharded:               t.Sharded != nil,
+			HasImplicitPartitioning: partitioning != nil && partitioning.NumImplicitColumns > 0,
+			Version:                 b.EvalCtx().Settings.Version,
+		},
+	); err != nil {
+		panic(err)
+	}
+	maybeApplyStorageParameters(b, t.StorageParams, &final.Index, partitioning)
+
+	// Propagate the parsed values to the other indexes in the chain.
+	inter2.SkipUniqueChecks = final.SkipUniqueChecks
+	inter2Temp := mustRetrieveTemporaryIndexElem(b, inter2.TableID, inter2.TemporaryIndexID)
+	inter2Temp.SkipUniqueChecks = final.SkipUniqueChecks
+	finalTemp := mustRetrieveTemporaryIndexElem(b, final.TableID, final.TemporaryIndexID)
+	finalTemp.SkipUniqueChecks = final.SkipUniqueChecks
 }
 
 func getprimaryIndexShardColumn(
@@ -340,18 +397,6 @@ func alterPKInPrimaryIndexAndItsTemp(
 //
 // Panic if any precondition is found unmet.
 func checkForEarlyExit(b BuildCtx, tbl *scpb.Table, t alterPrimaryKeySpec) {
-	if err := paramparse.ValidateUniqueConstraintParams(
-		t.StorageParams,
-		paramparse.UniqueConstraintParamContext{
-			IsPrimaryKey: true,
-			IsSharded:    t.Sharded != nil,
-		},
-	); err != nil {
-		panic(err)
-	}
-
-	maybeApplyStorageParameters(b, t.StorageParams, &indexSpec{})
-
 	usedColumns := make(map[tree.Name]bool, len(t.Columns))
 	for _, col := range t.Columns {
 		if col.Column == "" && col.Expr != nil {
@@ -831,6 +876,13 @@ func recreateAllSecondaryIndexes(
 			}
 		}
 		in, temp := makeSwapIndexSpec(b, out, sourcePrimaryIndex.IndexID, inColumns, false /* inUseTempIDs */)
+		// Clear skip_unique_checks if the recreated index will no longer have
+		// implicit partitioning, since it's only valid on implicitly partitioned
+		// indexes.
+		if in.partitioning == nil || in.partitioning.NumImplicitColumns == 0 {
+			in.secondary.SkipUniqueChecks = false
+			temp.temporary.SkipUniqueChecks = false
+		}
 		// Set RecreateSourceIndexID only if the original index is already public.
 		// This enables index swapping: the new index will replace the old one when
 		// the old index becomes non-public.
@@ -888,6 +940,12 @@ func maybeAddUniqueIndexForOldPrimaryKey(
 		return
 	}
 	sec, temp := addNewUniqueSecondaryIndexAndTempIndex(b, tbl, oldPrimaryIndex, newPrimaryIndex)
+	// Clear skip_unique_checks if partitioning is being overridden and the new
+	// index will not have implicit partitioning (e.g. REGIONAL BY ROW to GLOBAL).
+	if t.Partitioning != nil && len(t.Partitioning.NewImplicitColumns) == 0 {
+		sec.SkipUniqueChecks = false
+		temp.SkipUniqueChecks = false
+	}
 	addIndexColumnsForNewUniqueSecondaryIndexAndTempIndex(b, tn, tbl, t,
 		oldPrimaryIndex.IndexID, newPrimaryIndex.IndexID, sec.IndexID, temp.IndexID)
 	addIndexNameForNewUniqueSecondaryIndex(b, tbl, sec.IndexID)
@@ -913,6 +971,7 @@ func addNewUniqueSecondaryIndexAndTempIndex(
 		ConstraintID:        b.NextTableConstraintID(tbl.TableID),
 		SourceIndexID:       newPrimaryIndexElem.IndexID,
 		TemporaryIndexID:    0,
+		SkipUniqueChecks:    oldPrimaryIndexElem.SkipUniqueChecks,
 	}}
 	temp := &scpb.TemporaryIndex{
 		Index:                    protoutil.Clone(sec).(*scpb.SecondaryIndex).Index,

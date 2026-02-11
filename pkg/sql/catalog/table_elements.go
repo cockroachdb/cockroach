@@ -167,6 +167,7 @@ type Index interface {
 	GetName() string
 	IsPartial() bool
 	IsUnique() bool
+	SkipUniqueChecks() bool
 	IsDisabled() bool
 	IsSharded() bool
 	IsNotVisible() bool

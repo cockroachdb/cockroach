@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemaexpr"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
+	"github.com/cockroachdb/cockroach/pkg/sql/paramparse"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -192,9 +193,23 @@ func CreateIndex(b BuildCtx, n *tree.CreateIndex) {
 	maybeAddPartitionDescriptorForIndex(b, n, &idxSpec)
 	// If necessary set up a partial predicate.
 	maybeAddIndexPredicate(b, n, &idxSpec)
-	// Picks up any geoconfig/vecconfig parameters, hash sharded ones are
-	// picked independently.
-	maybeApplyStorageParameters(b, n.StorageParams, &idxSpec)
+	// Validate and apply storage parameters specified in the WITH clause.
+	if err := paramparse.ValidateIndexStorageParams(
+		b,
+		n.StorageParams,
+		paramparse.IndexStorageParamContext{
+			IsUnique:                n.Unique,
+			IsSharded:               n.Sharded != nil,
+			HasImplicitPartitioning: idxSpec.partitioning != nil && idxSpec.partitioning.NumImplicitColumns > 0,
+			Version:                 b.EvalCtx().Settings.Version,
+		},
+	); err != nil {
+		panic(err)
+	}
+	maybeApplyStorageParameters(b, n.StorageParams, &idxSpec.secondary.Index, idxSpec.partitioning)
+	if idxSpec.temporary != nil {
+		idxSpec.temporary.SkipUniqueChecks = idxSpec.secondary.SkipUniqueChecks
+	}
 
 	switch n.Type {
 	case idxtype.INVERTED:
@@ -1043,39 +1058,42 @@ func maybeAddIndexPredicate(b BuildCtx, n *tree.CreateIndex, idxSpec *indexSpec)
 	}
 }
 
-// maybeApplyStorageParameters apply any storage parameters into the index spec.
-func maybeApplyStorageParameters(b BuildCtx, storageParams tree.StorageParams, idxSpec *indexSpec) {
+// maybeApplyStorageParameters parses storage params, applies them to the
+// index, and validates the result. The caller is responsible for propagating
+// values to any associated temporary indexes.
+func maybeApplyStorageParameters(
+	b BuildCtx,
+	storageParams tree.StorageParams,
+	idx *scpb.Index,
+	partitioning *scpb.IndexPartitioning,
+) {
 	if len(storageParams) == 0 {
 		return
 	}
 
-	// Handle storage params for geospatial inverted indexes and vector indexes.
 	dummyIndexDesc := &descpb.IndexDescriptor{}
-	if idxSpec.secondary != nil {
-		if idxSpec.secondary.GeoConfig != nil {
-			dummyIndexDesc.GeoConfig = *idxSpec.secondary.GeoConfig
-		} else if idxSpec.secondary.VecConfig != nil {
-			dummyIndexDesc.VecConfig = *idxSpec.secondary.VecConfig
-		}
+	if idx.GeoConfig != nil {
+		dummyIndexDesc.GeoConfig = *idx.GeoConfig
+	} else if idx.VecConfig != nil {
+		dummyIndexDesc.VecConfig = *idx.VecConfig
 	}
 	storageParamSetter := &indexstorageparam.Setter{
 		IndexDesc: dummyIndexDesc,
 		NewObject: true,
 	}
-	err := storageparam.Set(b, b.SemaCtx(), b.EvalCtx(), storageParams, storageParamSetter)
-	if err != nil {
+	if err := storageparam.Set(b, b.SemaCtx(), b.EvalCtx(), storageParams, storageParamSetter); err != nil {
 		panic(err)
 	}
-	if idxSpec.secondary != nil {
-		if idxSpec.secondary.GeoConfig != nil {
-			if !dummyIndexDesc.GeoConfig.IsEmpty() {
-				idxSpec.secondary.GeoConfig = &dummyIndexDesc.GeoConfig
-			} else {
-				idxSpec.secondary.GeoConfig = nil
-			}
-		} else if idxSpec.secondary.VecConfig != nil {
-			*idxSpec.secondary.VecConfig = dummyIndexDesc.VecConfig
+
+	idx.SkipUniqueChecks = dummyIndexDesc.SkipUniqueChecks
+	if idx.GeoConfig != nil {
+		if !dummyIndexDesc.GeoConfig.IsEmpty() {
+			idx.GeoConfig = &dummyIndexDesc.GeoConfig
+		} else {
+			idx.GeoConfig = nil
 		}
+	} else if idx.VecConfig != nil {
+		*idx.VecConfig = dummyIndexDesc.VecConfig
 	}
 }
 

@@ -512,7 +512,15 @@ message IndexDescriptor {
   // new primary index becomes public.
   optional bool hide_for_primary_key_recreate = 31  [(gogoproto.nullable) = false];
 
-  // Next ID: 32
+  // SkipUniqueChecks, if set to true, disables unique constraint checks for
+  // this index in the optimizer. This is an unsafe optimization that should
+  // only be used when the application guarantees uniqueness externally (e.g.,
+  // through application-level logic or regional isolation). When enabled, the
+  // optimizer will not plan unique checks for mutations that could violate
+  // this index's uniqueness constraint.
+  optional bool skip_unique_checks = 32 [(gogoproto.nullable) = false];
+
+  // Next ID: 33
 }
 
 // TriggerDescriptor describes a trigger on a table.

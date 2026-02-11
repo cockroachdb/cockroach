@@ -848,6 +848,18 @@ CREATE INDEX idx_unimpl ON t_storage_params(x) WITH (autosummarize = on)
 statement error pgcode 22023 invalid storage parameter "invalid_param"
 CREATE INDEX idx_invalid ON t_storage_params(x) WITH (invalid_param = 100)
 
+# Test skip_unique_checks parameter.
+
+# Test that skip_unique_checks cannot be set on a non-unique index at creation.
+skipif config local-mixed-25.4 local-mixed-26.1
+statement error pgcode 22023 skip_unique_checks can only be set on UNIQUE indexes
+CREATE INDEX idx_nonunique_skip ON t_storage_params(y) WITH (skip_unique_checks = true)
+
+# Test that skip_unique_checks cannot be set on a unique index without implicit partitioning.
+skipif config local-mixed-25.4 local-mixed-26.1
+statement error pgcode 22023 skip_unique_checks can only be set on implicitly partitioned indexes
+CREATE UNIQUE INDEX idx_unique_with_skip ON t_storage_params(y) WITH (skip_unique_checks = true)
+
 # Test multiple parameters at once.
 statement ok
 CREATE INDEX idx_multi ON t_storage_params(x) WITH (fillfactor = 80)
@@ -855,6 +867,70 @@ CREATE INDEX idx_multi ON t_storage_params(x) WITH (fillfactor = 80)
 # Test with IF NOT EXISTS.
 statement ok
 CREATE INDEX IF NOT EXISTS idx_exists ON t_storage_params(x) WITH (fillfactor = 70)
+
+subtest end
+
+subtest skip_unique_checks_create_table
+
+# Test skip_unique_checks error cases in different CREATE TABLE scenarios.
+
+skipif config local-mixed-25.4 local-mixed-26.1
+statement error pgcode 22023 skip_unique_checks can only be set on UNIQUE indexes
+CREATE TABLE t_nonunique_inline (
+  a INT,
+  INDEX idx_a (a) WITH (skip_unique_checks = true)
+)
+
+skipif config local-mixed-25.4 local-mixed-26.1
+statement error pgcode 22023 skip_unique_checks can only be set on UNIQUE indexes
+CREATE TABLE t_nonunique_later (
+  a INT,
+  b INT,
+  INDEX (a, b) WITH (skip_unique_checks = true)
+)
+
+# Cannot set skip_unique_checks on indexes without implicit partitioning.
+
+skipif config local-mixed-25.4 local-mixed-26.1
+statement error pgcode 22023 skip_unique_checks can only be set on implicitly partitioned indexes
+CREATE TABLE t_pk_inline (a INT PRIMARY KEY WITH (skip_unique_checks = true))
+
+skipif config local-mixed-25.4 local-mixed-26.1
+statement error pgcode 22023 skip_unique_checks can only be set on implicitly partitioned indexes
+CREATE TABLE t_pk_table_level (
+  a INT,
+  b INT,
+  PRIMARY KEY (a, b) WITH (skip_unique_checks = true)
+)
+
+skipif config local-mixed-25.4 local-mixed-26.1
+statement error pgcode 22023 skip_unique_checks can only be set on implicitly partitioned indexes
+CREATE TABLE t_unique_inline (
+  a INT PRIMARY KEY,
+  b INT,
+  UNIQUE INDEX idx_b (b) WITH (skip_unique_checks = true)
+)
+
+# Syntax errors (cannot use WITH on unnamed UNIQUE constraints or CHECK).
+statement error pgcode 42601 syntax error
+CREATE TABLE t_unique_constraint (
+  a INT PRIMARY KEY,
+  b INT,
+  UNIQUE (b) WITH (skip_unique_checks = true)
+)
+
+statement error pgcode 42601 syntax error
+CREATE TABLE t_check_constraint (
+  a INT PRIMARY KEY,
+  b INT,
+  CHECK (b > 0) WITH (skip_unique_checks = true)
+)
+
+statement error pgcode 42601 syntax error
+CREATE TABLE t_unique_column (
+  a INT PRIMARY KEY,
+  b INT UNIQUE WITH (skip_unique_checks = true)
+)
 
 subtest end
 

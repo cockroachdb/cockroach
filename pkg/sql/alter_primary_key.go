@@ -27,6 +27,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
+	"github.com/cockroachdb/cockroach/pkg/sql/storageparam"
+	"github.com/cockroachdb/cockroach/pkg/sql/storageparam/indexstorageparam"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/errors"
 )
@@ -61,16 +63,6 @@ func (p *planner) AlterPrimaryKey(
 		} else {
 			p.BufferClientNotice(ctx, pgnotice.Newf("ALTER PRIMARY KEY on a table with vector indexes will disable writes to the table while the index is being rebuilt"))
 		}
-	}
-
-	if err := paramparse.ValidateUniqueConstraintParams(
-		alterPKNode.StorageParams,
-		paramparse.UniqueConstraintParamContext{
-			IsPrimaryKey: true,
-			IsSharded:    alterPKNode.Sharded != nil,
-		},
-	); err != nil {
-		return err
 	}
 
 	if alterPrimaryKeyLocalitySwap != nil {
@@ -378,6 +370,39 @@ func (p *planner) AlterPrimaryKey(
 		)
 	}
 
+	// Validate and apply storage params now that partitioning is configured.
+	if len(alterPKNode.StorageParams) > 0 {
+		if err = paramparse.ValidateIndexStorageParams(
+			ctx,
+			alterPKNode.StorageParams,
+			paramparse.IndexStorageParamContext{
+				IsPrimaryKey:            true,
+				IsUnique:                true,
+				IsSharded:               alterPKNode.Sharded != nil,
+				HasImplicitPartitioning: newPrimaryIndexDesc.Partitioning.NumImplicitColumns > 0,
+				Version:                 p.EvalContext().Settings.Version,
+			},
+		); err != nil {
+			return err
+		}
+		if err = storageparam.Set(
+			ctx,
+			&p.semaCtx,
+			p.EvalContext(),
+			alterPKNode.StorageParams,
+			&indexstorageparam.Setter{IndexDesc: newPrimaryIndexDesc, NewObject: true},
+		); err != nil {
+			return err
+		}
+	}
+
+	// For RBR-to-RBR locality swaps, the PK columns aren't changing — only the
+	// implicit partitioning column is swapped. Preserve skip_unique_checks from
+	// the old PK since the index remains implicitly partitioned.
+	if isNewPartitionAllBy && dropPartitionAllBy {
+		newPrimaryIndexDesc.SkipUniqueChecks = tableDesc.PrimaryIndex.SkipUniqueChecks
+	}
+
 	// We have to rewrite all indexes that either:
 	// * depend on uniqueness from the old primary key (inverted, vector,
 	//   non-unique, or unique with nulls).
@@ -506,6 +531,12 @@ func (p *planner) AlterPrimaryKey(
 		// Drop any PARTITION ALL BY clause.
 		if dropPartitionAllBy {
 			tabledesc.UpdateIndexPartitioning(&newIndex, idx.Primary(), nil /* newImplicitCols */, catpb.PartitioningDescriptor{})
+			// Clear skip_unique_checks if the index will no longer be implicitly
+			// partitioned. For RBR-to-RBR transitions, new implicit partitioning
+			// will be added below, so skip_unique_checks can be preserved.
+			if !isNewPartitionAllBy {
+				newIndex.SkipUniqueChecks = false
+			}
 		}
 
 		// Create partitioning if we are newly adding a PARTITION BY ALL statement.
@@ -552,6 +583,11 @@ func (p *planner) AlterPrimaryKey(
 		newUniqueIdx.KeySuffixColumnIDs = nil
 		newUniqueIdx.CompositeColumnIDs = nil
 		newUniqueIdx.KeyColumnIDs = nil
+		if dropPartitionAllBy && !isNewPartitionAllBy {
+			// Clear skip_unique_checks since the index will no longer be
+			// implicitly partitioned.
+			newUniqueIdx.SkipUniqueChecks = false
+		}
 		// Set correct version and encoding type.
 		//
 		// TODO(postamar): bump version to LatestIndexDescriptorVersion in 22.2

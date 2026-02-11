@@ -391,6 +391,10 @@ func formatStorageConfigs(
 		}
 	}
 
+	if index.SkipUniqueChecks {
+		writeCustomSetting(`skip_unique_checks`, `true`)
+	}
+
 	if numCustomSettings > 0 {
 		f.WriteString(")")
 	}
