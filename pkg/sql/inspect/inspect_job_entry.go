@@ -136,27 +136,12 @@ func ChecksForTable(
 	}
 
 	if expectedRowCount != nil {
-		var includesRowCounterCheck bool
-		for _, check := range checks {
-			switch check.Type {
-			case jobspb.InspectCheckIndexConsistency:
-				includesRowCounterCheck = true
-			}
-		}
-
-		// If none of the previous checks provide a row count, skip the check.
-		if includesRowCounterCheck {
-			checks = append(checks, &jobspb.InspectDetails_Check{
-				Type:     jobspb.InspectCheckRowCount,
-				TableID:  table.GetID(),
-				RowCount: *expectedRowCount,
-			})
-		} else {
-			if p != nil {
-				p.BufferClientNotice(ctx, pgnotice.Newf(
-					"skipping row count on table %q: no other checks provide a row count", table.GetName()))
-			}
-		}
+		checks = append(checks, &jobspb.InspectDetails_Check{
+			Type:         jobspb.InspectCheckRowCount,
+			TableID:      table.GetID(),
+			TableVersion: table.GetVersion(),
+			RowCount:     *expectedRowCount,
+		})
 	}
 
 	return checks, nil
