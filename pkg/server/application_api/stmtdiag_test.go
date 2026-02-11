@@ -115,9 +115,7 @@ func TestCreateStatementDiagnosticsReportWithViewActivityOptions(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{
-		DefaultDRPCOption: base.TestDRPCDisabled,
-	})
+	s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(context.Background())
 	db := sqlutils.MakeSQLRunner(sqlDB)
 
