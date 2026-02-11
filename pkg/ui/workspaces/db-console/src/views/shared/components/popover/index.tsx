@@ -4,7 +4,7 @@
 // included in the /LICENSE file.
 
 import classNames from "classnames";
-import React from "react";
+import React, { useRef } from "react";
 
 import { OutsideEventHandler } from "src/components/outsideEventHandler";
 
@@ -17,35 +17,38 @@ export interface PopoverProps {
   children: any;
 }
 
-export default class Popover extends React.Component<PopoverProps> {
+function Popover({
+  content,
+  children,
+  visible,
+  onVisibleChange,
+}: PopoverProps): React.ReactElement {
   // contentRef is used to pass as element to avoid handling outside event handler
   // on its instance.
-  contentRef: React.RefObject<HTMLDivElement> = React.createRef();
+  const contentRef = useRef<HTMLDivElement>(null);
 
-  render() {
-    const { content, children, visible, onVisibleChange } = this.props;
+  const popoverClasses = classNames("popover", {
+    "popover--visible": visible,
+  });
 
-    const popoverClasses = classNames("popover", {
-      "popover--visible": visible,
-    });
-
-    return (
-      <React.Fragment>
-        <div
-          ref={this.contentRef}
-          className="popover__content"
-          onClick={() => onVisibleChange(!visible)}
-        >
-          {content}
-        </div>
-        <OutsideEventHandler
-          onOutsideClick={() => onVisibleChange(false)}
-          mountNodePosition={"fixed"}
-          ignoreClickOnRefs={[this.contentRef]}
-        >
-          <div className={popoverClasses}>{children}</div>
-        </OutsideEventHandler>
-      </React.Fragment>
-    );
-  }
+  return (
+    <>
+      <div
+        ref={contentRef}
+        className="popover__content"
+        onClick={() => onVisibleChange(!visible)}
+      >
+        {content}
+      </div>
+      <OutsideEventHandler
+        onOutsideClick={() => onVisibleChange(false)}
+        mountNodePosition={"fixed"}
+        ignoreClickOnRefs={[contentRef]}
+      >
+        <div className={popoverClasses}>{children}</div>
+      </OutsideEventHandler>
+    </>
+  );
 }
+
+export default Popover;
