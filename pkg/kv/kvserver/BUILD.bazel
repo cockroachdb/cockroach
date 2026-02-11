@@ -367,6 +367,7 @@ go_test(
         "replica_rangefeed_lag_observer_test.go",
         "replica_rangefeed_test.go",
         "replica_rankings_test.go",
+        "replica_read_test.go",
         "replica_sideload_test.go",
         "replica_split_load_test.go",
         "replica_store_liveness_test.go",
