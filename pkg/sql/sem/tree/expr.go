@@ -799,6 +799,12 @@ func NewPlaceholder(name string) (*Placeholder, error) {
 	return &Placeholder{Idx: PlaceholderIdx(uval - 1)}, nil
 }
 
+// NewTypedPlaceholder allocates a Placeholder with the given 0-based index and
+// type.
+func NewTypedPlaceholder(idx PlaceholderIdx, typ *types.T) *Placeholder {
+	return &Placeholder{Idx: idx, typeAnnotation: typeAnnotation{typ: typ}}
+}
+
 // Format implements the NodeFormatter interface.
 func (node *Placeholder) Format(ctx *FmtCtx) {
 	if ctx.placeholderFormat != nil {

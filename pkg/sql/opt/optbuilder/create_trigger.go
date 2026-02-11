@@ -223,8 +223,7 @@ func (b *Builder) buildFunctionForTrigger(
 	triggerFuncParams = append(triggerFuncParams, triggerFuncStaticParams...)
 	for i, param := range triggerFuncParams {
 		paramColName := funcParamColName(param.name, i)
-		col := b.synthesizeColumn(funcScope, paramColName, param.typ, nil /* expr */, nil /* scalar */)
-		col.setParamOrd(i)
+		_ = b.synthesizeParameterColumn(funcScope, paramColName, param.typ, i, nil /* scalar */)
 	}
 
 	// Now that the transition relations and table type are known, fully build and

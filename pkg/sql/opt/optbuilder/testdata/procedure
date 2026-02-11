@@ -139,3 +139,147 @@ call
                 │    └── tuple
                 │         └── null
                 └── const: 1
+
+# Regression tests for #157840.
+exec-ddl
+CREATE TABLE ab (
+  a INT PRIMARY KEY,
+  b STRING
+)
+----
+
+exec-ddl
+CREATE TABLE xy (
+  x INT PRIMARY KEY,
+  y STRING
+)
+----
+
+exec-ddl
+CREATE TABLE uv (
+  u INT PRIMARY KEY,
+  v STRING
+)
+----
+
+exec-ddl
+CREATE PROCEDURE p157840a(abs ab[]) LANGUAGE SQL AS $$
+  WITH vals AS (
+    SELECT (v).a, (v).b
+    FROM ROWS FROM (unnest(abs)) AS v
+  )
+SELECT * FROM xy JOIN vals ON x = a
+$$
+----
+
+# Join filters with parameter columns are not pull up above the join.
+norm format=show-scalars
+CALL p157840a(ARRAY[
+  ROW(1, 'one')::ab,
+  ROW(2, 'two')::ab,
+  ROW(3, 'three')::ab
+])
+----
+call
+ └── procedure: p157840a
+      ├── args
+      │    └── const: ARRAY[((1, 'one') AS a, b),((2, 'two') AS a, b),((3, 'three') AS a, b)]
+      ├── params: abs:1
+      └── body
+           ├── inner-join (hash)
+           │    ├── columns: x:5!null y:6 a:9!null b:10
+           │    ├── scan xy
+           │    │    └── columns: x:5!null y:6
+           │    ├── project
+           │    │    ├── columns: a:9 b:10
+           │    │    ├── project-set
+           │    │    │    ├── columns: unnest:2
+           │    │    │    ├── values
+           │    │    │    │    └── tuple
+           │    │    │    └── zip
+           │    │    │         └── function: unnest
+           │    │    │              └── placeholder: $1
+           │    │    └── projections
+           │    │         ├── column-access: 0 [as=a:9]
+           │    │         │    └── variable: unnest:2
+           │    │         └── column-access: 1 [as=b:10]
+           │    │              └── variable: unnest:2
+           │    └── filters
+           │         └── eq
+           │              ├── variable: x:5
+           │              └── variable: a:9
+           └── values
+                ├── columns: column1:11
+                └── tuple
+                     └── null
+
+exec-ddl
+CREATE PROCEDURE p157840b(abs ab[]) LANGUAGE SQL AS $$
+  WITH vals AS (
+    SELECT (v).a, (v).b
+    FROM ROWS FROM (unnest(abs)) AS v
+  )
+  SELECT * FROM xy
+  JOIN vals ON true
+  JOIN LATERAL (SELECT u, u/1.1 AS div FROM uv WHERE x=5 AND y=b) ON true
+$$
+----
+
+# The x=5 filter can be pushed above the xy scan and the y=b filter remains in
+# the lowest join filters possible.
+norm format=show-scalars
+CALL p157840b(ARRAY[
+  ROW(1, 'one')::ab,
+  ROW(2, 'two')::ab,
+  ROW(3, 'three')::ab
+])
+----
+call
+ └── procedure: p157840b
+      ├── args
+      │    └── const: ARRAY[((1, 'one') AS a, b),((2, 'two') AS a, b),((3, 'three') AS a, b)]
+      ├── params: abs:1
+      └── body
+           ├── project
+           │    ├── columns: div:15!null x:5!null y:6!null a:9 b:10!null u:11!null
+           │    ├── inner-join (cross)
+           │    │    ├── columns: x:5!null y:6!null a:9 b:10!null u:11!null
+           │    │    ├── inner-join (hash)
+           │    │    │    ├── columns: x:5!null y:6!null a:9 b:10!null
+           │    │    │    ├── select
+           │    │    │    │    ├── columns: x:5!null y:6
+           │    │    │    │    ├── scan xy
+           │    │    │    │    │    └── columns: x:5!null y:6
+           │    │    │    │    └── filters
+           │    │    │    │         └── eq
+           │    │    │    │              ├── variable: x:5
+           │    │    │    │              └── const: 5
+           │    │    │    ├── project
+           │    │    │    │    ├── columns: a:9 b:10
+           │    │    │    │    ├── project-set
+           │    │    │    │    │    ├── columns: unnest:2
+           │    │    │    │    │    ├── values
+           │    │    │    │    │    │    └── tuple
+           │    │    │    │    │    └── zip
+           │    │    │    │    │         └── function: unnest
+           │    │    │    │    │              └── placeholder: $1
+           │    │    │    │    └── projections
+           │    │    │    │         ├── column-access: 0 [as=a:9]
+           │    │    │    │         │    └── variable: unnest:2
+           │    │    │    │         └── column-access: 1 [as=b:10]
+           │    │    │    │              └── variable: unnest:2
+           │    │    │    └── filters
+           │    │    │         └── eq
+           │    │    │              ├── variable: y:6
+           │    │    │              └── variable: b:10
+           │    │    ├── scan uv
+           │    │    │    └── columns: u:11!null
+           │    │    └── filters (true)
+           │    └── projections
+           │         └── div [as=div:15]
+           │              ├── variable: u:11
+           │              └── const: 1.1
+           └── values
+                ├── columns: column1:16
+                └── tuple
+                     └── null

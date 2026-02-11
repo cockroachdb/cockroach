@@ -621,6 +621,10 @@ func TestMemoIsStale(t *testing.T) {
 	evalCtx.SessionData().UseImprovedRoutineDepsTriggersAndComputedCols = true
 	stale()
 	evalCtx.SessionData().UseImprovedRoutineDepsTriggersAndComputedCols = false
+
+	evalCtx.SessionData().OptimizerBuildRoutineParamsAsPlaceholders = true
+	stale()
+	evalCtx.SessionData().OptimizerBuildRoutineParamsAsPlaceholders = false
 	notStale()
 
 	// User no longer has access to view.

@@ -357,8 +357,8 @@ func (f *Factory) AssignPlaceholders(from *memo.Memo) (retErr error) {
 			}
 			return f.ConstructConstVal(d, t.DataType())
 		case *memo.UDFCallExpr:
-			// Statements in the body of a UDF cannot have placeholders, but
-			// they must be copied so that they reference the new memo.
+			// Statements in the body of a UDF must be copied so that they reference
+			// the new memo.
 			if t.Def.IsRecursive {
 				// It is possible for a routine to recursively invoke itself (e.g. for a
 				// loop), so we have to keep track of which recursive routines we have
@@ -387,7 +387,10 @@ func (f *Factory) AssignPlaceholders(from *memo.Memo) (retErr error) {
 				defCopy := *t.Def
 				defCopy.Body = make([]memo.RelExpr, len(t.Def.Body))
 				for i := range t.Def.Body {
-					defCopy.Body[i] = f.CopyAndReplaceDefault(t.Def.Body[i], replaceFn).(memo.RelExpr)
+					// Do not replace placeholders in the body of the UDF - those
+					// placeholders are references to routine paramaters not
+					// prepared statement parameters.
+					defCopy.Body[i] = f.CopyWithoutAssigningPlaceholders(t.Def.Body[i]).(memo.RelExpr)
 				}
 				newDef = &defCopy
 				newRoutineDefs[t.Def] = newDef

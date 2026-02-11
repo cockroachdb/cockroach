@@ -773,6 +773,10 @@ message LocalOnlySessionData {
   // OptimizerInlineAnyUnnestSubquery, when true, enables the InlineAnyProjectSet
   // normalization rule that inlines unnest subqueries in ANY comparisons.
   bool optimizer_inline_any_unnest_subquery = 198;
+  // OptimizerBuildRoutineParamsAsPlaceholders, when true, instructs the
+  // optimizer to build routine parameters as placeholders instead of outer
+  // columns.
+  bool optimizer_build_routine_params_as_placeholders = 199;
 
   ///////////////////////////////////////////////////////////////////////////
   // WARNING: consider whether a session parameter you're adding needs to  //

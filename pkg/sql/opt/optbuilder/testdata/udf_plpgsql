@@ -39,7 +39,7 @@ project
                      │    ├── values
                      │    │    └── tuple
                      │    └── projections
-                     │         └── variable: a:1 [as=stmt_return_1:3]
+                     │         └── placeholder: $1 [as=stmt_return_1:3]
                      └── const: 1
 
 exec-ddl
@@ -72,8 +72,8 @@ project
                      │    │    └── tuple
                      │    └── projections
                      │         └── plus [as=stmt_return_1:3]
-                     │              ├── variable: a:1
-                     │              └── variable: b:2
+                     │              ├── placeholder: $1
+                     │              └── placeholder: $2
                      └── const: 1
 
 exec-ddl
@@ -240,8 +240,8 @@ project
                      │              ├── true
                      │              ├── when
                      │              │    ├── lt
-                     │              │    │    ├── variable: a:1
-                     │              │    │    └── variable: b:2
+                     │              │    │    ├── placeholder: $1
+                     │              │    │    └── placeholder: $2
                      │              │    └── subquery
                      │              │         └── project
                      │              │              ├── columns: stmt_if_1:9
@@ -250,7 +250,7 @@ project
                      │              │              │    ├── values
                      │              │              │    │    └── tuple
                      │              │              │    └── projections
-                     │              │              │         └── variable: a:1 [as=c:8]
+                     │              │              │         └── placeholder: $1 [as=c:8]
                      │              │              └── projections
                      │              │                   └── udf: stmt_if_1 [as=stmt_if_1:9]
                      │              │                        ├── tail-call
@@ -265,7 +265,7 @@ project
                      │              │                                  ├── values
                      │              │                                  │    └── tuple
                      │              │                                  └── projections
-                     │              │                                       └── variable: c:6 [as=stmt_return_2:7]
+                     │              │                                       └── placeholder: $3 [as=stmt_return_2:7]
                      │              └── subquery
                      │                   └── project
                      │                        ├── columns: stmt_if_1:10
@@ -285,7 +285,7 @@ project
                      │                                            ├── values
                      │                                            │    └── tuple
                      │                                            └── projections
-                     │                                                 └── variable: c:6 [as=stmt_return_2:7]
+                     │                                                 └── placeholder: $3 [as=stmt_return_2:7]
                      └── const: 1
 
 exec-ddl
@@ -333,8 +333,8 @@ project
                      │              ├── true
                      │              ├── when
                      │              │    ├── lt
-                     │              │    │    ├── variable: a:1
-                     │              │    │    └── variable: b:2
+                     │              │    │    ├── placeholder: $1
+                     │              │    │    └── placeholder: $2
                      │              │    └── subquery
                      │              │         └── project
                      │              │              ├── columns: stmt_if_1:9
@@ -343,7 +343,7 @@ project
                      │              │              │    ├── values
                      │              │              │    │    └── tuple
                      │              │              │    └── projections
-                     │              │              │         └── variable: a:1 [as=c:8]
+                     │              │              │         └── placeholder: $1 [as=c:8]
                      │              │              └── projections
                      │              │                   └── udf: stmt_if_1 [as=stmt_if_1:9]
                      │              │                        ├── tail-call
@@ -358,7 +358,7 @@ project
                      │              │                                  ├── values
                      │              │                                  │    └── tuple
                      │              │                                  └── projections
-                     │              │                                       └── variable: c:6 [as=stmt_return_2:7]
+                     │              │                                       └── placeholder: $3 [as=stmt_return_2:7]
                      │              └── subquery
                      │                   └── project
                      │                        ├── columns: stmt_if_1:11
@@ -367,7 +367,7 @@ project
                      │                        │    ├── values
                      │                        │    │    └── tuple
                      │                        │    └── projections
-                     │                        │         └── variable: b:2 [as=c:10]
+                     │                        │         └── placeholder: $2 [as=c:10]
                      │                        └── projections
                      │                             └── udf: stmt_if_1 [as=stmt_if_1:11]
                      │                                  ├── tail-call
@@ -382,7 +382,7 @@ project
                      │                                            ├── values
                      │                                            │    └── tuple
                      │                                            └── projections
-                     │                                                 └── variable: c:6 [as=stmt_return_2:7]
+                     │                                                 └── placeholder: $3 [as=stmt_return_2:7]
                      └── const: 1
 
 exec-ddl
@@ -430,8 +430,8 @@ project
                      │              ├── true
                      │              ├── when
                      │              │    ├── lt
-                     │              │    │    ├── variable: a:1
-                     │              │    │    └── variable: b:2
+                     │              │    │    ├── placeholder: $1
+                     │              │    │    └── placeholder: $2
                      │              │    └── subquery
                      │              │         └── project
                      │              │              ├── columns: stmt_if_1:9
@@ -440,7 +440,7 @@ project
                      │              │              │    ├── values
                      │              │              │    │    └── tuple
                      │              │              │    └── projections
-                     │              │              │         └── variable: a:1 [as=c:8]
+                     │              │              │         └── placeholder: $1 [as=c:8]
                      │              │              └── projections
                      │              │                   └── udf: stmt_if_1 [as=stmt_if_1:9]
                      │              │                        ├── tail-call
@@ -455,7 +455,7 @@ project
                      │              │                                  ├── values
                      │              │                                  │    └── tuple
                      │              │                                  └── projections
-                     │              │                                       └── variable: c:6 [as=stmt_return_2:7]
+                     │              │                                       └── placeholder: $3 [as=stmt_return_2:7]
                      │              └── subquery
                      │                   └── project
                      │                        ├── columns: stmt_return_3:10!null
@@ -510,8 +510,8 @@ project
                      │              ├── true
                      │              ├── when
                      │              │    ├── lt
-                     │              │    │    ├── variable: a:1
-                     │              │    │    └── variable: b:2
+                     │              │    │    ├── placeholder: $1
+                     │              │    │    └── placeholder: $2
                      │              │    └── subquery
                      │              │         └── project
                      │              │              ├── columns: stmt_return_3:8!null
@@ -527,7 +527,7 @@ project
                      │                        │    ├── values
                      │                        │    │    └── tuple
                      │                        │    └── projections
-                     │                        │         └── variable: b:2 [as=c:9]
+                     │                        │         └── placeholder: $2 [as=c:9]
                      │                        └── projections
                      │                             └── udf: stmt_if_1 [as=stmt_if_1:10]
                      │                                  ├── tail-call
@@ -542,7 +542,7 @@ project
                      │                                            ├── values
                      │                                            │    └── tuple
                      │                                            └── projections
-                     │                                                 └── variable: c:6 [as=stmt_return_2:7]
+                     │                                                 └── placeholder: $3 [as=stmt_return_2:7]
                      └── const: 1
 
 exec-ddl
@@ -589,8 +589,8 @@ project
                      │              ├── true
                      │              ├── when
                      │              │    ├── lt
-                     │              │    │    ├── variable: a:1
-                     │              │    │    └── variable: b:2
+                     │              │    │    ├── placeholder: $1
+                     │              │    │    └── placeholder: $2
                      │              │    └── subquery
                      │              │         └── project
                      │              │              ├── columns: stmt_return_5:13!null
@@ -642,7 +642,7 @@ project
                      │    │    ├── values
                      │    │    │    └── tuple
                      │    │    └── projections
-                     │    │         └── variable: a:1 [as=i:3]
+                     │    │         └── placeholder: $1 [as=i:3]
                      │    └── projections
                      │         └── udf: stmt_loop_5 [as=stmt_loop_5:17]
                      │              ├── args
@@ -697,7 +697,7 @@ project
                      │    │    ├── values
                      │    │    │    └── tuple
                      │    │    └── projections
-                     │    │         └── variable: a:1 [as=i:3]
+                     │    │         └── placeholder: $1 [as=i:3]
                      │    └── projections
                      │         └── udf: stmt_loop_5 [as=stmt_loop_5:23]
                      │              ├── args
@@ -715,8 +715,8 @@ project
                      │                                  ├── true
                      │                                  ├── when
                      │                                  │    ├── lt
-                     │                                  │    │    ├── variable: a:13
-                     │                                  │    │    └── variable: b:14
+                     │                                  │    │    ├── placeholder: $1
+                     │                                  │    │    └── placeholder: $2
                      │                                  │    └── subquery
                      │                                  │         ├── tail-call
                      │                                  │         └── project
@@ -786,7 +786,7 @@ project
                      │    │    ├── values
                      │    │    │    └── tuple
                      │    │    └── projections
-                     │    │         └── variable: a:1 [as=i:3]
+                     │    │         └── placeholder: $1 [as=i:3]
                      │    └── projections
                      │         └── udf: stmt_loop_3 [as=stmt_loop_3:25]
                      │              ├── args
@@ -804,8 +804,8 @@ project
                      │                                  ├── true
                      │                                  ├── when
                      │                                  │    ├── ge
-                     │                                  │    │    ├── variable: i:10
-                     │                                  │    │    └── variable: b:9
+                     │                                  │    │    ├── placeholder: $3
+                     │                                  │    │    └── placeholder: $2
                      │                                  │    └── subquery
                      │                                  │         ├── tail-call
                      │                                  │         └── project
@@ -826,7 +826,7 @@ project
                      │                                  │                                  ├── values
                      │                                  │                                  │    └── tuple
                      │                                  │                                  └── projections
-                     │                                  │                                       └── variable: i:6 [as=stmt_return_2:7]
+                     │                                  │                                       └── placeholder: $3 [as=stmt_return_2:7]
                      │                                  └── subquery
                      │                                       ├── tail-call
                      │                                       └── project
@@ -851,7 +851,7 @@ project
                      │                                                                          ├── true
                      │                                                                          ├── when
                      │                                                                          │    ├── eq
-                     │                                                                          │    │    ├── variable: i:13
+                     │                                                                          │    │    ├── placeholder: $3
                      │                                                                          │    │    └── const: 8
                      │                                                                          │    └── subquery
                      │                                                                          │         ├── tail-call
@@ -884,7 +884,7 @@ project
                      │                                                                                                        │    │    └── tuple
                      │                                                                                                        │    └── projections
                      │                                                                                                        │         └── plus [as=i:17]
-                     │                                                                                                        │              ├── variable: i:16
+                     │                                                                                                        │              ├── placeholder: $3
                      │                                                                                                        │              └── const: 1
                      │                                                                                                        └── projections
                      │                                                                                                             └── udf: stmt_loop_3 [as=stmt_loop_3:18]
@@ -933,7 +933,7 @@ project
                      │    │    ├── values
                      │    │    │    └── tuple
                      │    │    └── projections
-                     │    │         └── variable: a:1 [as=i:3]
+                     │    │         └── placeholder: $1 [as=i:3]
                      │    └── projections
                      │         └── udf: stmt_loop_3 [as=stmt_loop_3:19]
                      │              ├── args
@@ -951,8 +951,8 @@ project
                      │                                  ├── true
                      │                                  ├── when
                      │                                  │    ├── ge
-                     │                                  │    │    ├── variable: i:10
-                     │                                  │    │    └── variable: b:9
+                     │                                  │    │    ├── placeholder: $3
+                     │                                  │    │    └── placeholder: $2
                      │                                  │    └── subquery
                      │                                  │         ├── tail-call
                      │                                  │         └── project
@@ -973,7 +973,7 @@ project
                      │                                  │                                  ├── values
                      │                                  │                                  │    └── tuple
                      │                                  │                                  └── projections
-                     │                                  │                                       └── variable: i:6 [as=stmt_return_2:7]
+                     │                                  │                                       └── placeholder: $3 [as=stmt_return_2:7]
                      │                                  └── subquery
                      │                                       ├── tail-call
                      │                                       └── project
@@ -997,7 +997,7 @@ project
                      │                                                                │    │    └── tuple
                      │                                                                │    └── projections
                      │                                                                │         └── plus [as=i:14]
-                     │                                                                │              ├── variable: i:13
+                     │                                                                │              ├── placeholder: $3
                      │                                                                │              └── const: 1
                      │                                                                └── projections
                      │                                                                     └── udf: stmt_loop_3 [as=stmt_loop_3:15]
@@ -1054,17 +1054,17 @@ project
                      │    │    │    └── projections
                      │    │    │         └── const: 0 [as=sum:3]
                      │    │    └── projections
-                     │    │         └── variable: a:1 [as=i:4]
+                     │    │         └── placeholder: $1 [as=i:4]
                      │    └── projections
                      │         └── case [as=stmt_if_7:31]
                      │              ├── true
                      │              ├── when
                      │              │    ├── and
                      │              │    │    ├── is-not
-                     │              │    │    │    ├── variable: a:1
+                     │              │    │    │    ├── placeholder: $1
                      │              │    │    │    └── null
                      │              │    │    └── is-not
-                     │              │    │         ├── variable: b:2
+                     │              │    │         ├── placeholder: $2
                      │              │    │         └── null
                      │              │    └── subquery
                      │              │         └── project
@@ -1090,8 +1090,8 @@ project
                      │              │                                            ├── true
                      │              │                                            ├── when
                      │              │                                            │    ├── ge
-                     │              │                                            │    │    ├── variable: i:18
-                     │              │                                            │    │    └── variable: b:16
+                     │              │                                            │    │    ├── placeholder: $4
+                     │              │                                            │    │    └── placeholder: $2
                      │              │                                            │    └── subquery
                      │              │                                            │         ├── tail-call
                      │              │                                            │         └── project
@@ -1127,7 +1127,7 @@ project
                      │              │                                            │                                                      ├── values
                      │              │                                            │                                                      │    └── tuple
                      │              │                                            │                                                      └── projections
-                     │              │                                            │                                                           └── variable: sum:7 [as=stmt_return_2:9]
+                     │              │                                            │                                                           └── placeholder: $3 [as=stmt_return_2:9]
                      │              │                                            └── subquery
                      │              │                                                 ├── tail-call
                      │              │                                                 └── project
@@ -1154,11 +1154,11 @@ project
                      │              │                                                                          │    │    │    └── tuple
                      │              │                                                                          │    │    └── projections
                      │              │                                                                          │    │         └── plus [as=sum:23]
-                     │              │                                                                          │    │              ├── variable: sum:21
-                     │              │                                                                          │    │              └── variable: i:22
+                     │              │                                                                          │    │              ├── placeholder: $3
+                     │              │                                                                          │    │              └── placeholder: $4
                      │              │                                                                          │    └── projections
                      │              │                                                                          │         └── plus [as=i:24]
-                     │              │                                                                          │              ├── variable: i:22
+                     │              │                                                                          │              ├── placeholder: $4
                      │              │                                                                          │              └── const: 1
                      │              │                                                                          └── projections
                      │              │                                                                               └── udf: stmt_loop_4 [as=stmt_loop_4:25]
@@ -1189,7 +1189,7 @@ project
                      │                                            ├── values
                      │                                            │    └── tuple
                      │                                            └── projections
-                     │                                                 └── variable: sum:7 [as=stmt_return_2:9]
+                     │                                                 └── placeholder: $3 [as=stmt_return_2:9]
                      └── const: 1
 
 exec-ddl
@@ -1239,7 +1239,7 @@ project
                      │    │    │    └── projections
                      │    │    │         └── const: 0 [as=sum:3]
                      │    │    └── projections
-                     │    │         └── variable: a:1 [as=i:4]
+                     │    │         └── placeholder: $1 [as=i:4]
                      │    └── projections
                      │         └── udf: stmt_loop_3 [as=stmt_loop_3:32]
                      │              ├── args
@@ -1258,8 +1258,8 @@ project
                      │                                  ├── true
                      │                                  ├── when
                      │                                  │    ├── ge
-                     │                                  │    │    ├── variable: i:13
-                     │                                  │    │    └── variable: b:11
+                     │                                  │    │    ├── placeholder: $4
+                     │                                  │    │    └── placeholder: $2
                      │                                  │    └── subquery
                      │                                  │         ├── tail-call
                      │                                  │         └── project
@@ -1281,7 +1281,7 @@ project
                      │                                  │                                  ├── values
                      │                                  │                                  │    └── tuple
                      │                                  │                                  └── projections
-                     │                                  │                                       └── variable: sum:7 [as=stmt_return_2:9]
+                     │                                  │                                       └── placeholder: $3 [as=stmt_return_2:9]
                      │                                  └── subquery
                      │                                       ├── tail-call
                      │                                       └── project
@@ -1307,7 +1307,7 @@ project
                      │                                                                          ├── true
                      │                                                                          ├── when
                      │                                                                          │    ├── eq
-                     │                                                                          │    │    ├── variable: i:17
+                     │                                                                          │    │    ├── placeholder: $4
                      │                                                                          │    │    └── const: 2
                      │                                                                          │    └── subquery
                      │                                                                          │         ├── tail-call
@@ -1319,7 +1319,7 @@ project
                      │                                                                          │              │    │    └── tuple
                      │                                                                          │              │    └── projections
                      │                                                                          │              │         └── plus [as=i:25]
-                     │                                                                          │              │              ├── variable: i:17
+                     │                                                                          │              │              ├── placeholder: $4
                      │                                                                          │              │              └── const: 1
                      │                                                                          │              └── projections
                      │                                                                          │                   └── udf: stmt_loop_3 [as=stmt_loop_3:26]
@@ -1356,11 +1356,11 @@ project
                      │                                                                                                        │    │    │    └── tuple
                      │                                                                                                        │    │    └── projections
                      │                                                                                                        │    │         └── plus [as=sum:22]
-                     │                                                                                                        │    │              ├── variable: sum:20
-                     │                                                                                                        │    │              └── variable: i:21
+                     │                                                                                                        │    │              ├── placeholder: $3
+                     │                                                                                                        │    │              └── placeholder: $4
                      │                                                                                                        │    └── projections
                      │                                                                                                        │         └── plus [as=i:23]
-                     │                                                                                                        │              ├── variable: i:21
+                     │                                                                                                        │              ├── placeholder: $4
                      │                                                                                                        │              └── const: 1
                      │                                                                                                        └── projections
                      │                                                                                                             └── udf: stmt_loop_3 [as=stmt_loop_3:24]
@@ -1424,7 +1424,7 @@ project
                      │    │    │    │    └── projections
                      │    │    │    │         └── const: 0 [as=sum:3]
                      │    │    │    └── projections
-                     │    │    │         └── variable: a:1 [as=i:4]
+                     │    │    │         └── placeholder: $1 [as=i:4]
                      │    │    └── projections
                      │    │         └── cast: INT8 [as=j:5]
                      │    │              └── null
@@ -1447,8 +1447,8 @@ project
                      │                                  ├── true
                      │                                  ├── when
                      │                                  │    ├── ge
-                     │                                  │    │    ├── variable: i:15
-                     │                                  │    │    └── variable: b:13
+                     │                                  │    │    ├── placeholder: $4
+                     │                                  │    │    └── placeholder: $2
                      │                                  │    └── subquery
                      │                                  │         ├── tail-call
                      │                                  │         └── project
@@ -1471,7 +1471,7 @@ project
                      │                                  │                                  ├── values
                      │                                  │                                  │    └── tuple
                      │                                  │                                  └── projections
-                     │                                  │                                       └── variable: sum:8 [as=stmt_return_2:11]
+                     │                                  │                                       └── placeholder: $3 [as=stmt_return_2:11]
                      │                                  └── subquery
                      │                                       ├── tail-call
                      │                                       └── project
@@ -1517,8 +1517,8 @@ project
                      │                                                                                              ├── true
                      │                                                                                              ├── when
                      │                                                                                              │    ├── ge
-                     │                                                                                              │    │    ├── variable: j:34
-                     │                                                                                              │    │    └── variable: i:33
+                     │                                                                                              │    │    ├── placeholder: $5
+                     │                                                                                              │    │    └── placeholder: $4
                      │                                                                                              │    └── subquery
                      │                                                                                              │         ├── tail-call
                      │                                                                                              │         └── project
@@ -1544,7 +1544,7 @@ project
                      │                                                                                              │                                  │    │    └── tuple
                      │                                                                                              │                                  │    └── projections
                      │                                                                                              │                                  │         └── plus [as=i:28]
-                     │                                                                                              │                                  │              ├── variable: i:26
+                     │                                                                                              │                                  │              ├── placeholder: $4
                      │                                                                                              │                                  │              └── const: 1
                      │                                                                                              │                                  └── projections
                      │                                                                                              │                                       └── udf: stmt_loop_3 [as=stmt_loop_3:29]
@@ -1583,11 +1583,11 @@ project
                      │                                                                                                                            │    │    │    └── tuple
                      │                                                                                                                            │    │    └── projections
                      │                                                                                                                            │    │         └── plus [as=sum:40]
-                     │                                                                                                                            │    │              ├── variable: sum:37
-                     │                                                                                                                            │    │              └── variable: j:39
+                     │                                                                                                                            │    │              ├── placeholder: $3
+                     │                                                                                                                            │    │              └── placeholder: $5
                      │                                                                                                                            │    └── projections
                      │                                                                                                                            │         └── plus [as=j:41]
-                     │                                                                                                                            │              ├── variable: j:39
+                     │                                                                                                                            │              ├── placeholder: $5
                      │                                                                                                                            │              └── const: 1
                      │                                                                                                                            └── projections
                      │                                                                                                                                 └── udf: stmt_loop_6 [as=stmt_loop_6:42]
@@ -1660,8 +1660,8 @@ project
                      │                                  ├── true
                      │                                  ├── when
                      │                                  │    ├── lt
-                     │                                  │    │    ├── variable: i:10
-                     │                                  │    │    └── variable: n:8
+                     │                                  │    │    ├── placeholder: $3
+                     │                                  │    │    └── placeholder: $1
                      │                                  │    └── subquery
                      │                                  │         ├── tail-call
                      │                                  │         └── project
@@ -1674,11 +1674,11 @@ project
                      │                                  │              │    │    │    └── tuple
                      │                                  │              │    │    └── projections
                      │                                  │              │    │         └── plus [as=sum:15]
-                     │                                  │              │    │              ├── variable: sum:9
-                     │                                  │              │    │              └── variable: i:10
+                     │                                  │              │    │              ├── placeholder: $2
+                     │                                  │              │    │              └── placeholder: $3
                      │                                  │              │    └── projections
                      │                                  │              │         └── plus [as=i:16]
-                     │                                  │              │              ├── variable: i:10
+                     │                                  │              │              ├── placeholder: $3
                      │                                  │              │              └── const: 1
                      │                                  │              └── projections
                      │                                  │                   └── udf: stmt_if_4 [as=stmt_if_4:17]
@@ -1721,7 +1721,7 @@ project
                      │                                                                ├── values
                      │                                                                │    └── tuple
                      │                                                                └── projections
-                     │                                                                     └── variable: sum:5 [as=stmt_return_2:7]
+                     │                                                                     └── placeholder: $2 [as=stmt_return_2:7]
                      └── const: 1
 
 exec-ddl
@@ -1784,8 +1784,8 @@ project
                      │                                  ├── true
                      │                                  ├── when
                      │                                  │    ├── gt
-                     │                                  │    │    ├── variable: i:10
-                     │                                  │    │    └── variable: n:8
+                     │                                  │    │    ├── placeholder: $3
+                     │                                  │    │    └── placeholder: $1
                      │                                  │    └── subquery
                      │                                  │         ├── tail-call
                      │                                  │         └── project
@@ -1806,7 +1806,7 @@ project
                      │                                  │                                  ├── values
                      │                                  │                                  │    └── tuple
                      │                                  │                                  └── projections
-                     │                                  │                                       └── variable: sum:5 [as=stmt_return_2:7]
+                     │                                  │                                       └── placeholder: $2 [as=stmt_return_2:7]
                      │                                  └── subquery
                      │                                       ├── tail-call
                      │                                       └── project
@@ -1832,11 +1832,11 @@ project
                      │                                                                │    │    │    └── tuple
                      │                                                                │    │    └── projections
                      │                                                                │    │         └── plus [as=sum:14]
-                     │                                                                │    │              ├── variable: sum:12
-                     │                                                                │    │              └── variable: i:13
+                     │                                                                │    │              ├── placeholder: $2
+                     │                                                                │    │              └── placeholder: $3
                      │                                                                │    └── projections
                      │                                                                │         └── plus [as=i:15]
-                     │                                                                │              ├── variable: i:13
+                     │                                                                │              ├── placeholder: $3
                      │                                                                │              └── const: 1
                      │                                                                └── projections
                      │                                                                     └── udf: stmt_loop_3 [as=stmt_loop_3:16]
@@ -1909,7 +1909,7 @@ project
                      │                                  ├── when
                      │                                  │    ├── eq
                      │                                  │    │    ├── mod
-                     │                                  │    │    │    ├── variable: i:10
+                     │                                  │    │    │    ├── placeholder: $3
                      │                                  │    │    │    └── const: 2
                      │                                  │    │    └── const: 0
                      │                                  │    └── subquery
@@ -1951,11 +1951,11 @@ project
                      │                                                                │    │    │    └── tuple
                      │                                                                │    │    └── projections
                      │                                                                │    │         └── plus [as=sum:14]
-                     │                                                                │    │              ├── variable: sum:12
-                     │                                                                │    │              └── variable: i:13
+                     │                                                                │    │              ├── placeholder: $2
+                     │                                                                │    │              └── placeholder: $3
                      │                                                                │    └── projections
                      │                                                                │         └── plus [as=i:15]
-                     │                                                                │              ├── variable: i:13
+                     │                                                                │              ├── placeholder: $3
                      │                                                                │              └── const: 1
                      │                                                                └── projections
                      │                                                                     └── udf: stmt_loop_3 [as=stmt_loop_3:16]
@@ -2838,7 +2838,7 @@ project
                      │                                                                                    ├── values
                      │                                                                                    │    └── tuple
                      │                                                                                    └── projections
-                     │                                                                                         └── variable: i:16 [as=stmt_return_9:24]
+                     │                                                                                         └── placeholder: $1 [as=stmt_return_9:24]
                      └── const: 1
 
 exec-ddl
@@ -2894,7 +2894,7 @@ project
                      │                                  ├── true
                      │                                  ├── when
                      │                                  │    ├── ge
-                     │                                  │    │    ├── variable: i:7
+                     │                                  │    │    ├── placeholder: $1
                      │                                  │    │    └── const: 5
                      │                                  │    └── subquery
                      │                                  │         ├── tail-call
@@ -2994,7 +2994,7 @@ project
                      │                                                                                    │    │    └── tuple
                      │                                                                                    │    └── projections
                      │                                                                                    │         └── plus [as=i:11]
-                     │                                                                                    │              ├── variable: i:9
+                     │                                                                                    │              ├── placeholder: $1
                      │                                                                                    │              └── const: 1
                      │                                                                                    └── projections
                      │                                                                                         └── udf: stmt_loop_5 [as=stmt_loop_5:12]
@@ -3202,7 +3202,7 @@ project
                      │                                  ├── true
                      │                                  ├── when
                      │                                  │    ├── ge
-                     │                                  │    │    ├── variable: i:7
+                     │                                  │    │    ├── placeholder: $1
                      │                                  │    │    └── const: 5
                      │                                  │    └── subquery
                      │                                  │         ├── tail-call
@@ -3274,7 +3274,7 @@ project
                      │                                                                          ├── true
                      │                                                                          ├── when
                      │                                                                          │    ├── eq
-                     │                                                                          │    │    ├── variable: i:8
+                     │                                                                          │    │    ├── placeholder: $1
                      │                                                                          │    │    └── const: 3
                      │                                                                          │    └── subquery
                      │                                                                          │         ├── tail-call
@@ -3355,7 +3355,7 @@ project
                      │                                                                          │                                                                          │    │    └── tuple
                      │                                                                          │                                                                          │    └── projections
                      │                                                                          │                                                                          │         └── plus [as=i:12]
-                     │                                                                          │                                                                          │              ├── variable: i:10
+                     │                                                                          │                                                                          │              ├── placeholder: $1
                      │                                                                          │                                                                          │              └── const: 1
                      │                                                                          │                                                                          └── projections
                      │                                                                          │                                                                               └── udf: stmt_loop_5 [as=stmt_loop_5:13]
@@ -3413,7 +3413,7 @@ project
                      │                                                                                                                            │    │    └── tuple
                      │                                                                                                                            │    └── projections
                      │                                                                                                                            │         └── plus [as=i:12]
-                     │                                                                                                                            │              ├── variable: i:10
+                     │                                                                                                                            │              ├── placeholder: $1
                      │                                                                                                                            │              └── const: 1
                      │                                                                                                                            └── projections
                      │                                                                                                                                 └── udf: stmt_loop_5 [as=stmt_loop_5:13]
@@ -3658,7 +3658,7 @@ project
                      │              ├── true
                      │              ├── when
                      │              │    ├── eq
-                     │              │    │    ├── variable: n:1
+                     │              │    │    ├── placeholder: $1
                      │              │    │    └── const: 0
                      │              │    └── subquery
                      │              │         └── project
@@ -3669,7 +3669,7 @@ project
                      │              │                   └── const: 0 [as=stmt_return_3:6]
                      │              ├── when
                      │              │    ├── eq
-                     │              │    │    ├── variable: n:1
+                     │              │    │    ├── placeholder: $1
                      │              │    │    └── const: 1
                      │              │    └── subquery
                      │              │         └── project
@@ -3693,10 +3693,10 @@ project
                      │              │                                  ├── values
                      │              │                                  │    └── tuple
                      │              │                                  └── projections
-                     │              │                                       └── variable: i:4 [as=stmt_return_2:5]
+                     │              │                                       └── placeholder: $2 [as=stmt_return_2:5]
                      │              ├── when
                      │              │    ├── eq
-                     │              │    │    ├── variable: n:1
+                     │              │    │    ├── placeholder: $1
                      │              │    │    └── const: 2
                      │              │    └── subquery
                      │              │         └── project
@@ -3727,7 +3727,7 @@ project
                      │                                            ├── values
                      │                                            │    └── tuple
                      │                                            └── projections
-                     │                                                 └── variable: i:4 [as=stmt_return_2:5]
+                     │                                                 └── placeholder: $2 [as=stmt_return_2:5]
                      └── const: 1
 
 # Testing EXCEPTION blocks.
@@ -3846,7 +3846,7 @@ project
                      │              │                   ├── true
                      │              │                   ├── when
                      │              │                   │    ├── gt
-                     │              │                   │    │    ├── variable: i:4
+                     │              │                   │    │    ├── placeholder: $1
                      │              │                   │    │    └── const: 0
                      │              │                   │    └── subquery
                      │              │                   │         ├── tail-call
@@ -3868,7 +3868,7 @@ project
                      │              │                                  └── cast: INT8 [as=stmt_return_9:11]
                      │              │                                       └── function: sqrt
                      │              │                                            └── cast: FLOAT8
-                     │              │                                                 └── variable: i:4
+                     │              │                                                 └── placeholder: $1
                      │              └── exception-handler
                      │                   ├── SQLSTATE '22012'
                      │                   │    └── project
@@ -3937,7 +3937,7 @@ project
                      │              │                   ├── true
                      │              │                   ├── when
                      │              │                   │    ├── gt
-                     │              │                   │    │    ├── variable: i:6
+                     │              │                   │    │    ├── placeholder: $1
                      │              │                   │    │    └── const: 0
                      │              │                   │    └── subquery
                      │              │                   │         ├── tail-call
@@ -3959,7 +3959,7 @@ project
                      │              │                                  └── cast: INT8 [as=stmt_return_11:13]
                      │              │                                       └── function: sqrt
                      │              │                                            └── cast: FLOAT8
-                     │              │                                                 └── variable: i:6
+                     │              │                                                 └── placeholder: $1
                      │              └── exception-handler
                      │                   ├── SQLSTATE '22012'
                      │                   │    └── project
@@ -4101,7 +4101,7 @@ project
                      │    │         └── projections
                      │    │              └── floor-div [as=i:2]
                      │    │                   ├── const: 100
-                     │    │                   └── variable: n:1
+                     │    │                   └── placeholder: $1
                      │    └── projections
                      │         └── udf: nested_block_3 [as=nested_block_3:9]
                      │              ├── args
@@ -4114,7 +4114,7 @@ project
                      │              │         ├── values
                      │              │         │    └── tuple
                      │              │         └── projections
-                     │              │              └── variable: i:7 [as=stmt_return_4:8]
+                     │              │              └── placeholder: $2 [as=stmt_return_4:8]
                      │              └── exception-handler
                      │                   └── SQLSTATE '22012'
                      │                        └── project
@@ -4189,7 +4189,7 @@ project
                      │              │         │         └── projections
                      │              │         │              └── floor-div [as=x:14]
                      │              │         │                   ├── const: 1
-                     │              │         │                   └── variable: i:10
+                     │              │         │                   └── placeholder: $1
                      │              │         └── projections
                      │              │              └── udf: assign_exception_block_4 [as=assign_exception_block_4:32]
                      │              │                   ├── tail-call
@@ -4211,7 +4211,7 @@ project
                      │              │                             │         └── projections
                      │              │                             │              └── floor-div [as=x:19]
                      │              │                             │                   ├── const: 2
-                     │              │                             │                   └── variable: j:16
+                     │              │                             │                   └── placeholder: $2
                      │              │                             └── projections
                      │              │                                  └── udf: assign_exception_block_5 [as=assign_exception_block_5:31]
                      │              │                                       ├── tail-call
@@ -4233,7 +4233,7 @@ project
                      │              │                                                 │         └── projections
                      │              │                                                 │              └── floor-div [as=x:24]
                      │              │                                                 │                   ├── const: 3
-                     │              │                                                 │                   └── variable: k:22
+                     │              │                                                 │                   └── placeholder: $3
                      │              │                                                 └── projections
                      │              │                                                      └── udf: assign_exception_block_6 [as=assign_exception_block_6:30]
                      │              │                                                           ├── tail-call
@@ -4249,7 +4249,7 @@ project
                      │              │                                                                     ├── values
                      │              │                                                                     │    └── tuple
                      │              │                                                                     └── projections
-                     │              │                                                                          └── variable: x:28 [as=stmt_return_7:29]
+                     │              │                                                                          └── placeholder: $4 [as=stmt_return_7:29]
                      │              └── exception-handler
                      │                   └── SQLSTATE '22012'
                      │                        └── project
@@ -4257,7 +4257,7 @@ project
                      │                             ├── values
                      │                             │    └── tuple
                      │                             └── projections
-                     │                                  └── variable: x:8 [as=stmt_return_2:9]
+                     │                                  └── placeholder: $4 [as=stmt_return_2:9]
                      └── const: 1
 
 exec-ddl
@@ -4322,7 +4322,7 @@ project
                      │              │                   ├── true
                      │              │                   ├── when
                      │              │                   │    ├── eq
-                     │              │                   │    │    ├── variable: i:6
+                     │              │                   │    │    ├── placeholder: $1
                      │              │                   │    │    └── const: 0
                      │              │                   │    └── subquery
                      │              │                   │         ├── tail-call
@@ -4453,7 +4453,7 @@ project
                      │                             ├── values
                      │                             │    └── tuple
                      │                             └── projections
-                     │                                  └── variable: x:4 [as=stmt_return_2:5]
+                     │                                  └── placeholder: $2 [as=stmt_return_2:5]
                      └── const: 1
 
 exec-ddl
@@ -4537,8 +4537,8 @@ project
                      │              │                                       ├── true
                      │              │                                       ├── when
                      │              │                                       │    ├── ge
-                     │              │                                       │    │    ├── variable: i:22
-                     │              │                                       │    │    └── variable: n:19
+                     │              │                                       │    │    ├── placeholder: $4
+                     │              │                                       │    │    └── placeholder: $1
                      │              │                                       │    └── subquery
                      │              │                                       │         ├── tail-call
                      │              │                                       │         └── project
@@ -4589,8 +4589,8 @@ project
                      │              │                                                                     │              └── floor-div [as=x:27]
                      │              │                                                                     │                   ├── const: 1
                      │              │                                                                     │                   └── minus
-                     │              │                                                                     │                        ├── variable: i:26
-                     │              │                                                                     │                        └── variable: a:24
+                     │              │                                                                     │                        ├── placeholder: $4
+                     │              │                                                                     │                        └── placeholder: $2
                      │              │                                                                     └── projections
                      │              │                                                                          └── udf: assign_exception_block_8 [as=assign_exception_block_8:39]
                      │              │                                                                               ├── tail-call
@@ -4611,7 +4611,7 @@ project
                      │              │                                                                                         │         │    └── tuple
                      │              │                                                                                         │         └── projections
                      │              │                                                                                         │              └── plus [as=i:32]
-                     │              │                                                                                         │                   ├── variable: i:31
+                     │              │                                                                                         │                   ├── placeholder: $4
                      │              │                                                                                         │                   └── const: 1
                      │              │                                                                                         └── projections
                      │              │                                                                                              └── udf: assign_exception_block_9 [as=assign_exception_block_9:38]
@@ -4643,7 +4643,7 @@ project
                      │                             ├── values
                      │                             │    └── tuple
                      │                             └── projections
-                     │                                  └── variable: i:8 [as=stmt_return_2:9]
+                     │                                  └── placeholder: $4 [as=stmt_return_2:9]
                      └── const: 1
 
 # Testing SQL statement execution.
@@ -4828,8 +4828,8 @@ project
                      │                                            │    └── tuple
                      │                                            └── projections
                      │                                                 └── plus [as=stmt_return_3:12]
-                     │                                                      ├── variable: i:10
-                     │                                                      └── variable: j:11
+                     │                                                      ├── placeholder: $1
+                     │                                                      └── placeholder: $2
                      └── const: 1
 
 # It is possible to reference a previous value of a target variable in a
@@ -4965,7 +4965,7 @@ project
                      │                                                                                    │         │    │    │         └── filters
                      │                                                                                    │         │    │    │              └── lt
                      │                                                                                    │         │    │    │                   ├── variable: x:12
-                     │                                                                                    │         │    │    │                   └── variable: i:11
+                     │                                                                                    │         │    │    │                   └── placeholder: $1
                      │                                                                                    │         │    │    └── const: 1
                      │                                                                                    │         │    ├── values
                      │                                                                                    │         │    │    └── tuple
@@ -5163,7 +5163,7 @@ project
                      │                                       │              └── filters
                      │                                       │                   └── eq
                      │                                       │                        ├── variable: x:5
-                     │                                       │                        └── variable: i:3
+                     │                                       │                        └── placeholder: $1
                      │                                       └── project
                      │                                            ├── columns: stmt_return_2:10!null
                      │                                            ├── values
@@ -5866,8 +5866,8 @@ project
                      │                                                                          └── body
                      │                                                                               └── project
                      │                                                                                    ├── columns: stmt_return_5:16(int)
-                     │                                                                                    ├── outer: (15)
                      │                                                                                    ├── cardinality: [1 - 1]
+                     │                                                                                    ├── has-placeholder
                      │                                                                                    ├── stats: [rows=1]
                      │                                                                                    ├── key: ()
                      │                                                                                    ├── fd: ()-->(16)
@@ -5877,7 +5877,7 @@ project
                      │                                                                                    │    ├── key: ()
                      │                                                                                    │    └── tuple [type=tuple]
                      │                                                                                    └── projections
-                     │                                                                                         └── variable: x:15 [as=stmt_return_5:16, type=int, outer=(15)]
+                     │                                                                                         └── placeholder: $2 [as=stmt_return_5:16, type=int]
                      └── const: 1 [type=int]
 
 exec-ddl
@@ -6094,7 +6094,7 @@ project
                      │                                                                                    ├── values
                      │                                                                                    │    └── tuple [type=tuple]
                      │                                                                                    └── projections
-                     │                                                                                         └── variable: foo:11 [as=stmt_return_5:13, type=tuple{int AS x, int AS y}]
+                     │                                                                                         └── placeholder: $1 [as=stmt_return_5:13, type=tuple{int AS x, int AS y}]
                      └── const: 1 [type=int]
 
 # Correctly display the OTHERS branch.
@@ -6259,7 +6259,7 @@ project
                      │                                  ├── true [type=bool]
                      │                                  ├── when [type=int]
                      │                                  │    ├── lt [type=bool]
-                     │                                  │    │    ├── variable: i:7 [type=int]
+                     │                                  │    │    ├── placeholder: $1 [type=int]
                      │                                  │    │    └── const: 10 [type=int]
                      │                                  │    └── subquery [type=int]
                      │                                  │         ├── tail-call
@@ -6271,7 +6271,7 @@ project
                      │                                  │              │    │    └── tuple [type=tuple]
                      │                                  │              │    └── projections
                      │                                  │              │         └── plus [as=i:10, type=int]
-                     │                                  │              │              ├── variable: i:7 [type=int]
+                     │                                  │              │              ├── placeholder: $1 [type=int]
                      │                                  │              │              └── const: 1 [type=int]
                      │                                  │              └── projections
                      │                                  │                   └── udf: stmt_if_6 [as=stmt_if_6:11, type=int]
@@ -6761,7 +6761,7 @@ project
                      │                                                                                                        ├── values
                      │                                                                                                        │    └── tuple
                      │                                                                                                        └── projections
-                     │                                                                                                             └── variable: outer_quantity:6 [as=stmt_return_6:8]
+                     │                                                                                                             └── placeholder: $1 [as=stmt_return_6:8]
                      └── const: 1
 
 # Use TxnControlExpr to COMMIT or ROLLBACK the current transaction, then
@@ -7040,7 +7040,7 @@ project-set
                      │    │    │                                  │    │    │    └── tuple
                      │    │    │                                  │    │    └── projections
                      │    │    │                                  │    │         └── mult [as=x:3]
-                     │    │    │                                  │    │              ├── variable: x:2
+                     │    │    │                                  │    │              ├── placeholder: $1
                      │    │    │                                  │    │              └── const: 2
                      │    │    │                                  │    └── projections
                      │    │    │                                  │         └── variable: x:3 [as=stmt_return_1:4]
@@ -7068,9 +7068,9 @@ project-set
                      │    │                        │    └── tuple
                      │    │                        └── projections
                      │    │                             └── tuple [as=stmt_return_3:8]
-                     │    │                                  ├── variable: a:6
+                     │    │                                  ├── placeholder: $1
                      │    │                                  └── unary-minus
-                     │    │                                       └── variable: a:6
+                     │    │                                       └── placeholder: $1
                      │    └── const: 1
                      └── projections
                           ├── column-access: 0 [as=column10:10]
@@ -7136,8 +7136,8 @@ values
                                                    ├── true
                                                    ├── when
                                                    │    ├── le
-                                                   │    │    ├── variable: "_loop_counter":14
-                                                   │    │    └── variable: "_loop_upper":12
+                                                   │    │    ├── placeholder: $5
+                                                   │    │    └── placeholder: $3
                                                    │    └── udf: _stmt_raise_9
                                                    │         ├── tail-call
                                                    │         ├── args
@@ -7187,8 +7187,8 @@ values
                                                    │                                       │         │    ├── columns: "_loop_counter":36
                                                    │                                       │         │    └── tuple
                                                    │                                       │         │         └── plus
-                                                   │                                       │         │              ├── variable: "_loop_counter":19
-                                                   │                                       │         │              └── variable: "_loop_step":18
+                                                   │                                       │         │              ├── placeholder: $5
+                                                   │                                       │         │              └── placeholder: $4
                                                    │                                       │         └── projections
                                                    │                                       │              └── variable: "_loop_counter":36 [as=i:37]
                                                    │                                       └── projections
@@ -7412,16 +7412,16 @@ build format=show-scalars
 SELECT f();
 ----
 project
- ├── columns: f:89
+ ├── columns: f:91
  ├── values
  │    └── tuple
  └── projections
-      └── udf: f [as=f:89]
+      └── udf: f [as=f:91]
            └── body
                 └── limit
-                     ├── columns: "_stmt_exec_1":88
+                     ├── columns: "_stmt_exec_1":90
                      ├── project
-                     │    ├── columns: "_stmt_exec_1":88
+                     │    ├── columns: "_stmt_exec_1":90
                      │    ├── barrier
                      │    │    ├── columns: x:4
                      │    │    └── barrier
@@ -7453,7 +7453,7 @@ project
                      │    │                                                           └── mapping:
                      │    │                                                                └──  random:1 => random:2
                      │    └── projections
-                     │         └── udf: _stmt_exec_1 [as="_stmt_exec_1":88]
+                     │         └── udf: _stmt_exec_1 [as="_stmt_exec_1":90]
                      │              ├── args
                      │              │    └── variable: x:4
                      │              ├── params: x:5
@@ -7477,39 +7477,39 @@ project
                      │                   │                   ├──  x:10 => x:11
                      │                   │                   └──  x:10 => x:12
                      │                   └── project
-                     │                        ├── columns: stmt_loop_6:87
+                     │                        ├── columns: stmt_loop_6:89
                      │                        ├── barrier
-                     │                        │    ├── columns: "_loop_lower":26!null "_loop_upper":27!null "_loop_step":28!null "_loop_counter":30!null i:31!null
+                     │                        │    ├── columns: "_loop_lower":27!null "_loop_upper":28!null "_loop_step":29!null "_loop_counter":31!null i:32!null
                      │                        │    └── project
-                     │                        │         ├── columns: i:31!null "_loop_lower":26!null "_loop_upper":27!null "_loop_step":28!null "_loop_counter":30!null
+                     │                        │         ├── columns: i:32!null "_loop_lower":27!null "_loop_upper":28!null "_loop_step":29!null "_loop_counter":31!null
                      │                        │         ├── project
-                     │                        │         │    ├── columns: "_loop_counter":30!null "_loop_lower":26!null "_loop_upper":27!null "_loop_step":28!null
+                     │                        │         │    ├── columns: "_loop_counter":31!null "_loop_lower":27!null "_loop_upper":28!null "_loop_step":29!null
                      │                        │         │    ├── project
-                     │                        │         │    │    ├── columns: "_loop_lower":26!null "_loop_upper":27!null "_loop_step":28!null
+                     │                        │         │    │    ├── columns: "_loop_lower":27!null "_loop_upper":28!null "_loop_step":29!null
                      │                        │         │    │    └── barrier
-                     │                        │         │    │         ├── columns: "_loop_lower":26!null "_loop_upper":27!null "_loop_step":28!null "_plpgsql_runtime_check_5":29
+                     │                        │         │    │         ├── columns: "_loop_lower":27!null "_loop_upper":28!null "_loop_step":29!null "_plpgsql_runtime_check_5":30
                      │                        │         │    │         └── project
-                     │                        │         │    │              ├── columns: "_plpgsql_runtime_check_5":29 "_loop_lower":26!null "_loop_upper":27!null "_loop_step":28!null
+                     │                        │         │    │              ├── columns: "_plpgsql_runtime_check_5":30 "_loop_lower":27!null "_loop_upper":28!null "_loop_step":29!null
                      │                        │         │    │              ├── project
-                     │                        │         │    │              │    ├── columns: "_loop_step":28!null "_loop_lower":26!null "_loop_upper":27!null
+                     │                        │         │    │              │    ├── columns: "_loop_step":29!null "_loop_lower":27!null "_loop_upper":28!null
                      │                        │         │    │              │    ├── project
-                     │                        │         │    │              │    │    ├── columns: "_loop_upper":27!null "_loop_lower":26!null
+                     │                        │         │    │              │    │    ├── columns: "_loop_upper":28!null "_loop_lower":27!null
                      │                        │         │    │              │    │    ├── project
-                     │                        │         │    │              │    │    │    ├── columns: "_loop_lower":26!null
+                     │                        │         │    │              │    │    │    ├── columns: "_loop_lower":27!null
                      │                        │         │    │              │    │    │    ├── values
                      │                        │         │    │              │    │    │    │    └── tuple
                      │                        │         │    │              │    │    │    └── projections
-                     │                        │         │    │              │    │    │         └── const: 1 [as="_loop_lower":26]
+                     │                        │         │    │              │    │    │         └── const: 1 [as="_loop_lower":27]
                      │                        │         │    │              │    │    └── projections
-                     │                        │         │    │              │    │         └── const: 3 [as="_loop_upper":27]
+                     │                        │         │    │              │    │         └── const: 3 [as="_loop_upper":28]
                      │                        │         │    │              │    └── projections
-                     │                        │         │    │              │         └── const: 1 [as="_loop_step":28]
+                     │                        │         │    │              │         └── const: 1 [as="_loop_step":29]
                      │                        │         │    │              └── projections
-                     │                        │         │    │                   └── case [as="_plpgsql_runtime_check_5":29]
+                     │                        │         │    │                   └── case [as="_plpgsql_runtime_check_5":30]
                      │                        │         │    │                        ├── true
                      │                        │         │    │                        ├── when
                      │                        │         │    │                        │    ├── is
-                     │                        │         │    │                        │    │    ├── variable: "_loop_lower":26
+                     │                        │         │    │                        │    │    ├── variable: "_loop_lower":27
                      │                        │         │    │                        │    │    └── null
                      │                        │         │    │                        │    └── function: crdb_internal.plpgsql_raise
                      │                        │         │    │                        │         ├── const: 'ERROR'
@@ -7519,7 +7519,7 @@ project
                      │                        │         │    │                        │         └── const: '22004'
                      │                        │         │    │                        ├── when
                      │                        │         │    │                        │    ├── is
-                     │                        │         │    │                        │    │    ├── variable: "_loop_upper":27
+                     │                        │         │    │                        │    │    ├── variable: "_loop_upper":28
                      │                        │         │    │                        │    │    └── null
                      │                        │         │    │                        │    └── function: crdb_internal.plpgsql_raise
                      │                        │         │    │                        │         ├── const: 'ERROR'
@@ -7529,7 +7529,7 @@ project
                      │                        │         │    │                        │         └── const: '22004'
                      │                        │         │    │                        ├── when
                      │                        │         │    │                        │    ├── is
-                     │                        │         │    │                        │    │    ├── variable: "_loop_step":28
+                     │                        │         │    │                        │    │    ├── variable: "_loop_step":29
                      │                        │         │    │                        │    │    └── null
                      │                        │         │    │                        │    └── function: crdb_internal.plpgsql_raise
                      │                        │         │    │                        │         ├── const: 'ERROR'
@@ -7539,7 +7539,7 @@ project
                      │                        │         │    │                        │         └── const: '22004'
                      │                        │         │    │                        ├── when
                      │                        │         │    │                        │    ├── le
-                     │                        │         │    │                        │    │    ├── variable: "_loop_step":28
+                     │                        │         │    │                        │    │    ├── variable: "_loop_step":29
                      │                        │         │    │                        │    │    └── const: 0
                      │                        │         │    │                        │    └── function: crdb_internal.plpgsql_raise
                      │                        │         │    │                        │         ├── const: 'ERROR'
@@ -7549,252 +7549,260 @@ project
                      │                        │         │    │                        │         └── const: '22023'
                      │                        │         │    │                        └── null
                      │                        │         │    └── projections
-                     │                        │         │         └── variable: "_loop_lower":26 [as="_loop_counter":30]
+                     │                        │         │         └── variable: "_loop_lower":27 [as="_loop_counter":31]
                      │                        │         └── projections
-                     │                        │              └── variable: "_loop_lower":26 [as=i:31]
+                     │                        │              └── variable: "_loop_lower":27 [as=i:32]
                      │                        └── projections
-                     │                             └── udf: stmt_loop_6 [as=stmt_loop_6:87]
+                     │                             └── udf: stmt_loop_6 [as=stmt_loop_6:89]
                      │                                  ├── tail-call
                      │                                  ├── args
                      │                                  │    ├── variable: x:5
-                     │                                  │    ├── variable: i:31
-                     │                                  │    ├── variable: "_loop_lower":26
-                     │                                  │    ├── variable: "_loop_upper":27
-                     │                                  │    ├── variable: "_loop_step":28
-                     │                                  │    └── variable: "_loop_counter":30
-                     │                                  ├── params: x:32 i:33 "_loop_lower":34 "_loop_upper":35 "_loop_step":36 "_loop_counter":37
+                     │                                  │    ├── variable: i:32
+                     │                                  │    ├── variable: "_loop_lower":27
+                     │                                  │    ├── variable: "_loop_upper":28
+                     │                                  │    ├── variable: "_loop_step":29
+                     │                                  │    └── variable: "_loop_counter":31
+                     │                                  ├── params: x:33 i:34 "_loop_lower":35 "_loop_upper":36 "_loop_step":37 "_loop_counter":38
                      │                                  └── body
                      │                                       └── project
-                     │                                            ├── columns: stmt_if_12:83
+                     │                                            ├── columns: stmt_if_12:85
                      │                                            ├── values
                      │                                            │    └── tuple
                      │                                            └── projections
-                     │                                                 └── case [as=stmt_if_12:83]
+                     │                                                 └── case [as=stmt_if_12:85]
                      │                                                      ├── true
                      │                                                      ├── when
                      │                                                      │    ├── le
-                     │                                                      │    │    ├── variable: "_loop_counter":37
-                     │                                                      │    │    └── variable: "_loop_upper":35
+                     │                                                      │    │    ├── placeholder: $6
+                     │                                                      │    │    └── placeholder: $4
                      │                                                      │    └── subquery
                      │                                                      │         ├── tail-call
                      │                                                      │         └── project
-                     │                                                      │              ├── columns: "_stmt_raise_9":81
+                     │                                                      │              ├── columns: "_stmt_raise_9":83
                      │                                                      │              ├── values
                      │                                                      │              │    └── tuple
                      │                                                      │              └── projections
-                     │                                                      │                   └── udf: _stmt_raise_9 [as="_stmt_raise_9":81]
+                     │                                                      │                   └── udf: _stmt_raise_9 [as="_stmt_raise_9":83]
                      │                                                      │                        ├── tail-call
                      │                                                      │                        ├── args
-                     │                                                      │                        │    ├── variable: x:32
-                     │                                                      │                        │    ├── variable: i:33
-                     │                                                      │                        │    ├── variable: "_loop_lower":34
-                     │                                                      │                        │    ├── variable: "_loop_upper":35
-                     │                                                      │                        │    ├── variable: "_loop_step":36
-                     │                                                      │                        │    └── variable: "_loop_counter":37
-                     │                                                      │                        ├── params: x:51 i:52 "_loop_lower":53 "_loop_upper":54 "_loop_step":55 "_loop_counter":56
+                     │                                                      │                        │    ├── variable: x:33
+                     │                                                      │                        │    ├── variable: i:34
+                     │                                                      │                        │    ├── variable: "_loop_lower":35
+                     │                                                      │                        │    ├── variable: "_loop_upper":36
+                     │                                                      │                        │    ├── variable: "_loop_step":37
+                     │                                                      │                        │    └── variable: "_loop_counter":38
+                     │                                                      │                        ├── params: x:52 i:53 "_loop_lower":54 "_loop_upper":55 "_loop_step":56 "_loop_counter":57
                      │                                                      │                        └── body
                      │                                                      │                             ├── project
-                     │                                                      │                             │    ├── columns: stmt_raise_10:57
+                     │                                                      │                             │    ├── columns: stmt_raise_10:58
                      │                                                      │                             │    ├── values
                      │                                                      │                             │    │    └── tuple
                      │                                                      │                             │    └── projections
-                     │                                                      │                             │         └── function: crdb_internal.plpgsql_raise [as=stmt_raise_10:57]
+                     │                                                      │                             │         └── function: crdb_internal.plpgsql_raise [as=stmt_raise_10:58]
                      │                                                      │                             │              ├── const: 'NOTICE'
                      │                                                      │                             │              ├── const: 'hello'
                      │                                                      │                             │              ├── const: ''
                      │                                                      │                             │              ├── const: ''
                      │                                                      │                             │              └── const: '00000'
                      │                                                      │                             └── project
-                     │                                                      │                                  ├── columns: "_stmt_exec_11":80
+                     │                                                      │                                  ├── columns: "_stmt_exec_11":82
                      │                                                      │                                  ├── barrier
-                     │                                                      │                                  │    ├── columns: x:60
+                     │                                                      │                                  │    ├── columns: x:62
                      │                                                      │                                  │    └── barrier
-                     │                                                      │                                  │         ├── columns: x:60
+                     │                                                      │                                  │         ├── columns: x:62
                      │                                                      │                                  │         └── project
-                     │                                                      │                                  │              ├── columns: x:60
+                     │                                                      │                                  │              ├── columns: x:62
                      │                                                      │                                  │              ├── values
                      │                                                      │                                  │              │    └── tuple
                      │                                                      │                                  │              └── projections
-                     │                                                      │                                  │                   └── subquery [as=x:60]
-                     │                                                      │                                  │                        └── max1-row
-                     │                                                      │                                  │                             ├── columns: "?column?":59
-                     │                                                      │                                  │                             └── with &4 (foo)
-                     │                                                      │                                  │                                  ├── columns: "?column?":59
-                     │                                                      │                                  │                                  ├── materialized
-                     │                                                      │                                  │                                  ├── project
-                     │                                                      │                                  │                                  │    ├── columns: "?column?":58
-                     │                                                      │                                  │                                  │    ├── values
-                     │                                                      │                                  │                                  │    │    └── tuple
-                     │                                                      │                                  │                                  │    └── projections
-                     │                                                      │                                  │                                  │         └── plus [as="?column?":58]
-                     │                                                      │                                  │                                  │              ├── variable: i:52
-                     │                                                      │                                  │                                  │              └── cast: INT8
-                     │                                                      │                                  │                                  │                   └── function: random
-                     │                                                      │                                  │                                  └── with-scan &4 (foo)
-                     │                                                      │                                  │                                       ├── columns: "?column?":59
-                     │                                                      │                                  │                                       └── mapping:
-                     │                                                      │                                  │                                            └──  "?column?":58 => "?column?":59
+                     │                                                      │                                  │                   └── subquery [as=x:62]
+                     │                                                      │                                  │                        └── with &4 (foo)
+                     │                                                      │                                  │                             ├── columns: column61:61
+                     │                                                      │                                  │                             ├── materialized
+                     │                                                      │                                  │                             ├── project
+                     │                                                      │                                  │                             │    ├── columns: "?column?":59
+                     │                                                      │                                  │                             │    ├── values
+                     │                                                      │                                  │                             │    │    └── tuple
+                     │                                                      │                                  │                             │    └── projections
+                     │                                                      │                                  │                             │         └── plus [as="?column?":59]
+                     │                                                      │                                  │                             │              ├── placeholder: $2
+                     │                                                      │                                  │                             │              └── cast: INT8
+                     │                                                      │                                  │                             │                   └── function: random
+                     │                                                      │                                  │                             └── values
+                     │                                                      │                                  │                                  ├── columns: column61:61
+                     │                                                      │                                  │                                  └── tuple
+                     │                                                      │                                  │                                       └── subquery
+                     │                                                      │                                  │                                            └── max1-row
+                     │                                                      │                                  │                                                 ├── columns: "?column?":60
+                     │                                                      │                                  │                                                 └── with-scan &4 (foo)
+                     │                                                      │                                  │                                                      ├── columns: "?column?":60
+                     │                                                      │                                  │                                                      └── mapping:
+                     │                                                      │                                  │                                                           └──  "?column?":59 => "?column?":60
                      │                                                      │                                  └── projections
-                     │                                                      │                                       └── udf: _stmt_exec_11 [as="_stmt_exec_11":80]
+                     │                                                      │                                       └── udf: _stmt_exec_11 [as="_stmt_exec_11":82]
                      │                                                      │                                            ├── tail-call
                      │                                                      │                                            ├── args
-                     │                                                      │                                            │    ├── variable: x:60
-                     │                                                      │                                            │    ├── variable: i:52
-                     │                                                      │                                            │    ├── variable: "_loop_lower":53
-                     │                                                      │                                            │    ├── variable: "_loop_upper":54
-                     │                                                      │                                            │    ├── variable: "_loop_step":55
-                     │                                                      │                                            │    └── variable: "_loop_counter":56
-                     │                                                      │                                            ├── params: x:61 i:62 "_loop_lower":63 "_loop_upper":64 "_loop_step":65 "_loop_counter":66
+                     │                                                      │                                            │    ├── variable: x:62
+                     │                                                      │                                            │    ├── variable: i:53
+                     │                                                      │                                            │    ├── variable: "_loop_lower":54
+                     │                                                      │                                            │    ├── variable: "_loop_upper":55
+                     │                                                      │                                            │    ├── variable: "_loop_step":56
+                     │                                                      │                                            │    └── variable: "_loop_counter":57
+                     │                                                      │                                            ├── params: x:63 i:64 "_loop_lower":65 "_loop_upper":66 "_loop_step":67 "_loop_counter":68
                      │                                                      │                                            └── body
                      │                                                      │                                                 ├── with &5 (foo)
                      │                                                      │                                                 │    ├── insert kv
-                     │                                                      │                                                 │    │    ├── columns: kv.k:67!null kv.v:68
+                     │                                                      │                                                 │    │    ├── columns: kv.k:69!null kv.v:70
                      │                                                      │                                                 │    │    ├── insert-mapping:
-                     │                                                      │                                                 │    │    │    ├── column1:71 => kv.k:67
-                     │                                                      │                                                 │    │    │    └── column2:72 => kv.v:68
+                     │                                                      │                                                 │    │    │    ├── column1:73 => kv.k:69
+                     │                                                      │                                                 │    │    │    └── column2:74 => kv.v:70
                      │                                                      │                                                 │    │    ├── return-mapping:
-                     │                                                      │                                                 │    │    │    ├── column1:71 => kv.k:67
-                     │                                                      │                                                 │    │    │    └── column2:72 => kv.v:68
+                     │                                                      │                                                 │    │    │    ├── column1:73 => kv.k:69
+                     │                                                      │                                                 │    │    │    └── column2:74 => kv.v:70
                      │                                                      │                                                 │    │    └── values
-                     │                                                      │                                                 │    │         ├── columns: column1:71 column2:72
+                     │                                                      │                                                 │    │         ├── columns: column1:73 column2:74
                      │                                                      │                                                 │    │         └── tuple
-                     │                                                      │                                                 │    │              ├── variable: x:61
-                     │                                                      │                                                 │    │              └── variable: x:61
+                     │                                                      │                                                 │    │              ├── placeholder: $1
+                     │                                                      │                                                 │    │              └── placeholder: $1
                      │                                                      │                                                 │    └── insert kv
                      │                                                      │                                                 │         ├── columns: <none>
                      │                                                      │                                                 │         ├── insert-mapping:
-                     │                                                      │                                                 │         │    ├── k:77 => kv.k:73
-                     │                                                      │                                                 │         │    └── v:78 => kv.v:74
+                     │                                                      │                                                 │         │    ├── k:79 => kv.k:75
+                     │                                                      │                                                 │         │    └── v:80 => kv.v:76
                      │                                                      │                                                 │         └── with-scan &5 (foo)
-                     │                                                      │                                                 │              ├── columns: k:77!null v:78
+                     │                                                      │                                                 │              ├── columns: k:79!null v:80
                      │                                                      │                                                 │              └── mapping:
-                     │                                                      │                                                 │                   ├──  kv.k:67 => k:77
-                     │                                                      │                                                 │                   └──  kv.v:68 => v:78
+                     │                                                      │                                                 │                   ├──  kv.k:69 => k:79
+                     │                                                      │                                                 │                   └──  kv.v:70 => v:80
                      │                                                      │                                                 └── project
-                     │                                                      │                                                      ├── columns: stmt_if_8:79
+                     │                                                      │                                                      ├── columns: stmt_if_8:81
                      │                                                      │                                                      ├── values
                      │                                                      │                                                      │    └── tuple
                      │                                                      │                                                      └── projections
-                     │                                                      │                                                           └── udf: stmt_if_8 [as=stmt_if_8:79]
+                     │                                                      │                                                           └── udf: stmt_if_8 [as=stmt_if_8:81]
                      │                                                      │                                                                ├── tail-call
                      │                                                      │                                                                ├── args
-                     │                                                      │                                                                │    ├── variable: x:61
-                     │                                                      │                                                                │    ├── variable: i:62
-                     │                                                      │                                                                │    ├── variable: "_loop_lower":63
-                     │                                                      │                                                                │    ├── variable: "_loop_upper":64
-                     │                                                      │                                                                │    ├── variable: "_loop_step":65
-                     │                                                      │                                                                │    └── variable: "_loop_counter":66
-                     │                                                      │                                                                ├── params: x:44 i:45 "_loop_lower":46 "_loop_upper":47 "_loop_step":48 "_loop_counter":49
+                     │                                                      │                                                                │    ├── variable: x:63
+                     │                                                      │                                                                │    ├── variable: i:64
+                     │                                                      │                                                                │    ├── variable: "_loop_lower":65
+                     │                                                      │                                                                │    ├── variable: "_loop_upper":66
+                     │                                                      │                                                                │    ├── variable: "_loop_step":67
+                     │                                                      │                                                                │    └── variable: "_loop_counter":68
+                     │                                                      │                                                                ├── params: x:45 i:46 "_loop_lower":47 "_loop_upper":48 "_loop_step":49 "_loop_counter":50
                      │                                                      │                                                                └── body
                      │                                                      │                                                                     └── project
-                     │                                                      │                                                                          ├── columns: stmt_loop_inc_7:50
+                     │                                                      │                                                                          ├── columns: stmt_loop_inc_7:51
                      │                                                      │                                                                          ├── values
                      │                                                      │                                                                          │    └── tuple
                      │                                                      │                                                                          └── projections
-                     │                                                      │                                                                               └── udf: stmt_loop_inc_7 [as=stmt_loop_inc_7:50]
+                     │                                                      │                                                                               └── udf: stmt_loop_inc_7 [as=stmt_loop_inc_7:51]
                      │                                                      │                                                                                    ├── tail-call
                      │                                                      │                                                                                    ├── args
-                     │                                                      │                                                                                    │    ├── variable: x:44
-                     │                                                      │                                                                                    │    ├── variable: i:45
-                     │                                                      │                                                                                    │    ├── variable: "_loop_lower":46
-                     │                                                      │                                                                                    │    ├── variable: "_loop_upper":47
-                     │                                                      │                                                                                    │    ├── variable: "_loop_step":48
-                     │                                                      │                                                                                    │    └── variable: "_loop_counter":49
-                     │                                                      │                                                                                    ├── params: x:38 i:39 "_loop_lower":40 "_loop_upper":41 "_loop_step":42 "_loop_counter":43
+                     │                                                      │                                                                                    │    ├── variable: x:45
+                     │                                                      │                                                                                    │    ├── variable: i:46
+                     │                                                      │                                                                                    │    ├── variable: "_loop_lower":47
+                     │                                                      │                                                                                    │    ├── variable: "_loop_upper":48
+                     │                                                      │                                                                                    │    ├── variable: "_loop_step":49
+                     │                                                      │                                                                                    │    └── variable: "_loop_counter":50
+                     │                                                      │                                                                                    ├── params: x:39 i:40 "_loop_lower":41 "_loop_upper":42 "_loop_step":43 "_loop_counter":44
                      │                                                      │                                                                                    └── body
                      │                                                      │                                                                                         └── project
-                     │                                                      │                                                                                              ├── columns: stmt_loop_6:86
+                     │                                                      │                                                                                              ├── columns: stmt_loop_6:88
                      │                                                      │                                                                                              ├── barrier
-                     │                                                      │                                                                                              │    ├── columns: "_loop_counter":84 i:85
+                     │                                                      │                                                                                              │    ├── columns: "_loop_counter":86 i:87
                      │                                                      │                                                                                              │    └── project
-                     │                                                      │                                                                                              │         ├── columns: i:85 "_loop_counter":84
+                     │                                                      │                                                                                              │         ├── columns: i:87 "_loop_counter":86
                      │                                                      │                                                                                              │         ├── project
-                     │                                                      │                                                                                              │         │    ├── columns: "_loop_counter":84
+                     │                                                      │                                                                                              │         │    ├── columns: "_loop_counter":86
                      │                                                      │                                                                                              │         │    ├── values
                      │                                                      │                                                                                              │         │    │    └── tuple
                      │                                                      │                                                                                              │         │    └── projections
-                     │                                                      │                                                                                              │         │         └── plus [as="_loop_counter":84]
-                     │                                                      │                                                                                              │         │              ├── variable: "_loop_counter":43
-                     │                                                      │                                                                                              │         │              └── variable: "_loop_step":42
+                     │                                                      │                                                                                              │         │         └── plus [as="_loop_counter":86]
+                     │                                                      │                                                                                              │         │              ├── placeholder: $6
+                     │                                                      │                                                                                              │         │              └── placeholder: $5
                      │                                                      │                                                                                              │         └── projections
-                     │                                                      │                                                                                              │              └── variable: "_loop_counter":84 [as=i:85]
+                     │                                                      │                                                                                              │              └── variable: "_loop_counter":86 [as=i:87]
                      │                                                      │                                                                                              └── projections
-                     │                                                      │                                                                                                   └── udf: stmt_loop_6 [as=stmt_loop_6:86]
+                     │                                                      │                                                                                                   └── udf: stmt_loop_6 [as=stmt_loop_6:88]
                      │                                                      │                                                                                                        ├── tail-call
                      │                                                      │                                                                                                        ├── args
-                     │                                                      │                                                                                                        │    ├── variable: x:38
-                     │                                                      │                                                                                                        │    ├── variable: i:85
-                     │                                                      │                                                                                                        │    ├── variable: "_loop_lower":40
-                     │                                                      │                                                                                                        │    ├── variable: "_loop_upper":41
-                     │                                                      │                                                                                                        │    ├── variable: "_loop_step":42
-                     │                                                      │                                                                                                        │    └── variable: "_loop_counter":84
+                     │                                                      │                                                                                                        │    ├── variable: x:39
+                     │                                                      │                                                                                                        │    ├── variable: i:87
+                     │                                                      │                                                                                                        │    ├── variable: "_loop_lower":41
+                     │                                                      │                                                                                                        │    ├── variable: "_loop_upper":42
+                     │                                                      │                                                                                                        │    ├── variable: "_loop_step":43
+                     │                                                      │                                                                                                        │    └── variable: "_loop_counter":86
                      │                                                      │                                                                                                        └── recursive-call
                      │                                                      └── subquery
                      │                                                           ├── tail-call
                      │                                                           └── project
-                     │                                                                ├── columns: loop_exit_2:82
+                     │                                                                ├── columns: loop_exit_2:84
                      │                                                                ├── values
                      │                                                                │    └── tuple
                      │                                                                └── projections
-                     │                                                                     └── udf: loop_exit_2 [as=loop_exit_2:82]
+                     │                                                                     └── udf: loop_exit_2 [as=loop_exit_2:84]
                      │                                                                          ├── tail-call
                      │                                                                          ├── args
-                     │                                                                          │    └── variable: x:32
+                     │                                                                          │    └── variable: x:33
                      │                                                                          ├── params: x:13
                      │                                                                          └── body
                      │                                                                               └── project
-                     │                                                                                    ├── columns: "_stmt_exec_3":25
+                     │                                                                                    ├── columns: "_stmt_exec_3":26
                      │                                                                                    ├── barrier
-                     │                                                                                    │    ├── columns: x:16
+                     │                                                                                    │    ├── columns: x:17
                      │                                                                                    │    └── barrier
-                     │                                                                                    │         ├── columns: x:16
+                     │                                                                                    │         ├── columns: x:17
                      │                                                                                    │         └── project
-                     │                                                                                    │              ├── columns: x:16
+                     │                                                                                    │              ├── columns: x:17
                      │                                                                                    │              ├── values
                      │                                                                                    │              │    └── tuple
                      │                                                                                    │              └── projections
-                     │                                                                                    │                   └── subquery [as=x:16]
-                     │                                                                                    │                        └── max1-row
-                     │                                                                                    │                             ├── columns: "?column?":15
-                     │                                                                                    │                             └── with &3 (foo)
-                     │                                                                                    │                                  ├── columns: "?column?":15
-                     │                                                                                    │                                  ├── materialized
-                     │                                                                                    │                                  ├── project
-                     │                                                                                    │                                  │    ├── columns: "?column?":14
-                     │                                                                                    │                                  │    ├── values
-                     │                                                                                    │                                  │    │    └── tuple
-                     │                                                                                    │                                  │    └── projections
-                     │                                                                                    │                                  │         └── mult [as="?column?":14]
-                     │                                                                                    │                                  │              ├── cast: INT8
-                     │                                                                                    │                                  │              │    └── function: random
-                     │                                                                                    │                                  │              └── variable: x:13
-                     │                                                                                    │                                  └── with-scan &3 (foo)
-                     │                                                                                    │                                       ├── columns: "?column?":15
-                     │                                                                                    │                                       └── mapping:
-                     │                                                                                    │                                            └──  "?column?":14 => "?column?":15
+                     │                                                                                    │                   └── subquery [as=x:17]
+                     │                                                                                    │                        └── with &3 (foo)
+                     │                                                                                    │                             ├── columns: column16:16
+                     │                                                                                    │                             ├── materialized
+                     │                                                                                    │                             ├── project
+                     │                                                                                    │                             │    ├── columns: "?column?":14
+                     │                                                                                    │                             │    ├── values
+                     │                                                                                    │                             │    │    └── tuple
+                     │                                                                                    │                             │    └── projections
+                     │                                                                                    │                             │         └── mult [as="?column?":14]
+                     │                                                                                    │                             │              ├── cast: INT8
+                     │                                                                                    │                             │              │    └── function: random
+                     │                                                                                    │                             │              └── placeholder: $1
+                     │                                                                                    │                             └── values
+                     │                                                                                    │                                  ├── columns: column16:16
+                     │                                                                                    │                                  └── tuple
+                     │                                                                                    │                                       └── subquery
+                     │                                                                                    │                                            └── max1-row
+                     │                                                                                    │                                                 ├── columns: "?column?":15
+                     │                                                                                    │                                                 └── with-scan &3 (foo)
+                     │                                                                                    │                                                      ├── columns: "?column?":15
+                     │                                                                                    │                                                      └── mapping:
+                     │                                                                                    │                                                           └──  "?column?":14 => "?column?":15
                      │                                                                                    └── projections
-                     │                                                                                         └── udf: _stmt_exec_3 [as="_stmt_exec_3":25]
+                     │                                                                                         └── udf: _stmt_exec_3 [as="_stmt_exec_3":26]
                      │                                                                                              ├── tail-call
                      │                                                                                              ├── args
-                     │                                                                                              │    └── variable: x:16
-                     │                                                                                              ├── params: x:17
+                     │                                                                                              │    └── variable: x:17
+                     │                                                                                              ├── params: x:18
                      │                                                                                              └── body
                      │                                                                                                   ├── insert kv
                      │                                                                                                   │    ├── columns: <none>
                      │                                                                                                   │    ├── insert-mapping:
-                     │                                                                                                   │    │    ├── column1:22 => kv.k:18
-                     │                                                                                                   │    │    └── column2:23 => kv.v:19
+                     │                                                                                                   │    │    ├── column1:23 => kv.k:19
+                     │                                                                                                   │    │    └── column2:24 => kv.v:20
                      │                                                                                                   │    └── values
-                     │                                                                                                   │         ├── columns: column1:22 column2:23
+                     │                                                                                                   │         ├── columns: column1:23 column2:24
                      │                                                                                                   │         └── tuple
-                     │                                                                                                   │              ├── variable: x:17
-                     │                                                                                                   │              └── variable: x:17
+                     │                                                                                                   │              ├── variable: x:18
+                     │                                                                                                   │              └── variable: x:18
                      │                                                                                                   └── project
-                     │                                                                                                        ├── columns: stmt_return_4:24!null
+                     │                                                                                                        ├── columns: stmt_return_4:25!null
                      │                                                                                                        ├── values
                      │                                                                                                        │    └── tuple
                      │                                                                                                        └── projections
-                     │                                                                                                             └── const: 0 [as=stmt_return_4:24]
+                     │                                                                                                             └── const: 0 [as=stmt_return_4:25]
                      └── const: 1
 
 # Case with an outer CTE.
@@ -7955,8 +7963,8 @@ project-set
                                                                        ├── true
                                                                        ├── when
                                                                        │    ├── le
-                                                                       │    │    ├── variable: i:10
-                                                                       │    │    └── variable: n:9
+                                                                       │    │    ├── placeholder: $2
+                                                                       │    │    └── placeholder: $1
                                                                        │    └── subquery
                                                                        │         ├── tail-call
                                                                        │         └── project
@@ -7986,7 +7994,7 @@ project-set
                                                                        │                                  │    │    └── tuple
                                                                        │                                  │    └── projections
                                                                        │                                  │         └── plus [as=i:17]
-                                                                       │                                  │              ├── variable: i:15
+                                                                       │                                  │              ├── placeholder: $2
                                                                        │                                  │              └── const: 1
                                                                        │                                  └── projections
                                                                        │                                       └── udf: stmt_if_4 [as=stmt_if_4:18]

@@ -146,9 +146,8 @@ call
                 │                   │         └── const: 1 [as="?column?":8, type=int]
                 │                   └── project
                 │                        ├── columns: "_implicit_return":9(tuple{int AS a, int AS b})
-                │                        ├── outer: (6,7)
                 │                        ├── cardinality: [1 - 1]
-                │                        ├── immutable
+                │                        ├── immutable, has-placeholder
                 │                        ├── key: ()
                 │                        ├── fd: ()-->(9)
                 │                        ├── values
@@ -156,8 +155,8 @@ call
                 │                        │    ├── key: ()
                 │                        │    └── tuple [type=tuple]
                 │                        └── projections
-                │                             └── cast: RECORD [as="_implicit_return":9, type=tuple{int AS a, int AS b}, outer=(6,7), immutable]
+                │                             └── cast: RECORD [as="_implicit_return":9, type=tuple{int AS a, int AS b}, immutable]
                 │                                  └── tuple [type=tuple{int, int}]
-                │                                       ├── variable: a:6 [type=int]
-                │                                       └── variable: b:7 [type=int]
+                │                                       ├── placeholder: $1 [type=int]
+                │                                       └── placeholder: $2 [type=int]
                 └── const: 1 [type=int]
