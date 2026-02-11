@@ -154,3 +154,76 @@ func (tc *TestOptions) AssertClusterLifetime(expectedLifetime time.Duration) {
 	require.Equal(tc.t, expectedLifetime, info.Lifetime,
 		"Cluster has lifetime %s, expected %s", info.Lifetime, expectedLifetime)
 }
+
+// AssertClusterPreemptible verifies all VMs have the expected preemptible status
+func (tc *TestOptions) AssertClusterPreemptible(expected bool) {
+	tc.t.Helper()
+
+	info := tc.GetClusterInfo()
+	require.NotEmpty(tc.t, info.VMs, "Cluster has no VMs")
+
+	for _, vm := range info.VMs {
+		require.Equal(tc.t, expected, vm.Preemptible,
+			"VM %s has preemptible=%v, expected %v", vm.Name, vm.Preemptible, expected)
+	}
+}
+
+// AssertClusterLocalDiskCount verifies all VMs have the expected number of local disks
+func (tc *TestOptions) AssertClusterLocalDiskCount(expected int) {
+	tc.t.Helper()
+
+	info := tc.GetClusterInfo()
+	require.NotEmpty(tc.t, info.VMs, "Cluster has no VMs")
+
+	for _, vm := range info.VMs {
+		require.Len(tc.t, vm.LocalDisks, expected,
+			"VM %s has %d local disks, expected %d", vm.Name, len(vm.LocalDisks), expected)
+	}
+}
+
+// AssertClusterNonBootVolumeCount verifies all VMs have the expected number
+// of non-boot persistent volumes
+func (tc *TestOptions) AssertClusterNonBootVolumeCount(expected int) {
+	tc.t.Helper()
+
+	info := tc.GetClusterInfo()
+	require.NotEmpty(tc.t, info.VMs, "Cluster has no VMs")
+
+	for _, vm := range info.VMs {
+		require.Len(tc.t, vm.NonBootAttachedVolumes, expected,
+			"VM %s has %d non-boot volumes, expected %d",
+			vm.Name, len(vm.NonBootAttachedVolumes), expected)
+	}
+}
+
+// AssertClusterHasLabel verifies all VMs have the expected label key-value pair
+func (tc *TestOptions) AssertClusterHasLabel(key, value string) {
+	tc.t.Helper()
+
+	info := tc.GetClusterInfo()
+	require.NotEmpty(tc.t, info.VMs, "Cluster has no VMs")
+
+	for _, vm := range info.VMs {
+		actual, ok := vm.Labels[key]
+		require.True(tc.t, ok,
+			"VM %s missing label %q", vm.Name, key)
+		require.Equal(tc.t, value, actual,
+			"VM %s label %q=%q, expected %q", vm.Name, key, actual, value)
+	}
+}
+
+// AssertClusterMultiZone verifies VMs are spread across at least minZones
+// different zones
+func (tc *TestOptions) AssertClusterMultiZone(minZones int) {
+	tc.t.Helper()
+
+	info := tc.GetClusterInfo()
+	require.NotEmpty(tc.t, info.VMs, "Cluster has no VMs")
+
+	zones := make(map[string]bool)
+	for _, vm := range info.VMs {
+		zones[vm.Zone] = true
+	}
+	require.GreaterOrEqual(tc.t, len(zones), minZones,
+		"Cluster spans %d zones, expected at least %d", len(zones), minZones)
+}

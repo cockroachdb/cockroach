@@ -1,4 +1,4 @@
-load("@io_bazel_rules_go//go:def.bzl", "go_library")
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
     name = "framework",
@@ -15,7 +15,21 @@ go_library(
         "//pkg/roachprod/cloud/types",
         "//pkg/roachprod/vm",
         "//pkg/roachprod/vm/gce",
+        "//pkg/roachprod/vm/gce/gcedb",
         "//pkg/util/randutil",
+        "@com_github_stretchr_testify//require",
+    ],
+)
+
+go_test(
+    name = "framework_test",
+    srcs = ["testconfig_test.go"],
+    embed = [":framework"],
+    deps = [
+        "//pkg/roachprod/vm",
+        "//pkg/roachprod/vm/gce",
+        "//pkg/roachprod/vm/gce/gcedb",
+        "@com_github_spf13_pflag//:pflag",
         "@com_github_stretchr_testify//require",
     ],
 )

@@ -8,10 +8,12 @@ package framework
 import (
 	"fmt"
 	"math/rand"
+	"strings"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/roachprod/vm"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/vm/gce"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/vm/gce/gcedb"
 )
 
 // Randomization probabilities and ranges for cluster configuration.
@@ -21,10 +23,8 @@ const (
 	// Cloud-agnostic randomization settings
 	// ========================================
 
-	// Architecture distribution (cumulative probabilities)
-	probArchAMD64 = 0.70 // 70% AMD64
-	probArchARM64 = 0.95 // 25% ARM64 (0.95 - 0.70)
-	// Remaining 5% is FIPS (amd64 with openssl)
+	// When the machine type is amd64, probability of using FIPS mode.
+	probFIPSOnAMD64 = 0.05
 
 	// Storage: local SSD vs persistent disk
 	probLocalSSD = 0.50 // 50% chance of using local SSD vs persistent disk
@@ -64,18 +64,11 @@ type RandomizedClusterConfig struct {
 	NumNodes     int
 }
 
-// SupportedGCEMachineTypes lists commonly used GCE machine types
-// https://docs.cloud.google.com/compute/docs/machine-resource
-// TODO: Which Machine types are people / systems using?
-// TODO: edit this list?
-// Note: Some machine types are not compatible with other settings
-// Will either need to validate the machine type and other settings before hand (meh seems like a lot)
-// Or just let roachprod fail
-// I'm liking that negative testing scenario... but how to report that
-// Maybe just catch that specific error... but what if that's masking a scenario in which we expect cluster creation
-// to succeed but it actually fails.... I guess just report the failure for now, make the error message clear
-// Maybe an LLM can verify these cases i.e. input is the settings and failure and just have it verify
+// SupportedGCEMachineTypes lists GCE machine types used in randomized tests.
+// Includes both amd64 and arm64 types. Architecture is derived from gcedb
+// at randomization time, so there is no need to maintain a separate arch list.
 var SupportedGCEMachineTypes = []string{
+	// amd64
 	"n2-standard-4", // Roachprod GCE Default
 	"n2-standard-8",
 	"n2-standard-16",
@@ -84,20 +77,15 @@ var SupportedGCEMachineTypes = []string{
 	"n2-highcpu-16",
 	"c2-standard-4",
 	"c2-standard-8",
+	// arm64
+	"t2a-standard-4",
+	"t2a-standard-8",
 }
 
-// SupportedGCEPDVolumeTypes lists persistent disk types used in randomized tests
-// Type of the persistent disk volume, only used if local-ssd=false
-// Supported: pd-ssd, pd-balanced, pd-extreme, pd-standard, hyperdisk-balanced
-// TODO: anything else to be added here?
-var SupportedGCEPDVolumeTypes = []string{
-	"pd-ssd",
-	"pd-balanced",
-	"pd-extreme",
-	"pd-standard",
-	// https://docs.cloud.google.com/compute/docs/disks/hyperdisks
-	"hyperdisk-balanced", // Only on certain machine types
-}
+// pdTypePrefixes lists prefixes that identify persistent/hyperdisk volume types
+// in a gcedb StorageTypes list. Used by filterPDTypes to select only disk types
+// that can be used as PD volumes or boot disks.
+var pdTypePrefixes = []string{"pd-", "hyperdisk-"}
 
 // SupportedGCEZones lists commonly used GCE zones for randomized tests
 // TODO: consider adding more zones
@@ -112,84 +100,97 @@ var SupportedGCEZones = []string{
 var SupportedFilesystems = []vm.Filesystem{
 	vm.Ext4,
 	vm.Zfs,
+	vm.Xfs,
+	vm.F2fs,
+	vm.Btrfs,
 }
 
-// SupportedArchitectures lists architectures used in randomized tests
-var SupportedArchitectures = []string{
-	"amd64",
-	"arm64",
-	"fips", // fips implies amd64 with openssl
+// excludedPDTypes lists persistent disk types that should not be picked during
+// randomization because they require extra provisioning (e.g. pd-extreme needs
+// provisioned IOPS).
+var excludedPDTypes = map[string]bool{
+	"pd-extreme": true,
 }
 
 // RandomGCECreateOptions generates a random valid GCE create configuration
-// using the provided random number generator.
+// using the provided random number generator. It uses gcedb.GetMachineInfo
+// to derive compatible settings (architecture, local SSD, storage types)
+// from the chosen machine type, preventing incompatible argument combinations.
 func RandomGCECreateOptions(rng *rand.Rand) *RandomizedClusterConfig {
-	// Start with defaults
 	createOpts := vm.DefaultCreateOpts()
 	providerOpts := *gce.DefaultProviderOpts()
 
-	// Weighted architecture selection
-	archRoll := rng.Float32()
-	if archRoll < probArchAMD64 {
-		createOpts.Arch = "amd64"
-	} else if archRoll < probArchARM64 {
-		createOpts.Arch = "arm64"
-	} else {
+	// 1. Pick machine type first — everything else derives from it.
+	providerOpts.MachineType = SupportedGCEMachineTypes[rng.Intn(len(SupportedGCEMachineTypes))]
+	info, err := gcedb.GetMachineInfo(providerOpts.MachineType)
+	if err != nil {
+		panic(fmt.Sprintf("unsupported machine type in SupportedGCEMachineTypes: %s: %v",
+			providerOpts.MachineType, err))
+	}
+
+	// 2. Architecture: derived from machine type. FIPS only on amd64.
+	createOpts.Arch = info.Architecture
+	if info.Architecture == gcedb.ArchAMD64 && rng.Float32() < probFIPSOnAMD64 {
 		createOpts.Arch = "fips"
 	}
 
-	// Randomize machine type
-	providerOpts.MachineType = SupportedGCEMachineTypes[rng.Intn(len(SupportedGCEMachineTypes))]
+	// 3. Local SSD: only enable when the machine type supports it.
+	if len(info.AllowedLocalSSDCount) > 0 {
+		createOpts.SSDOpts.UseLocalSSD = rng.Float32() < probLocalSSD
+	} else {
+		createOpts.SSDOpts.UseLocalSSD = false
+	}
 
-	// Random lifetime (whole hours only to avoid precision issues)
-	lifetimeHours := minLifetimeHours + rng.Intn(maxLifetimeHours-minLifetimeHours+1)
-	createOpts.Lifetime = time.Duration(lifetimeHours) * time.Hour
-
-	// Random filesystem
-	createOpts.SSDOpts.FileSystem = SupportedFilesystems[rng.Intn(len(SupportedFilesystems))]
-
-	// Local SSD vs persistent disk
-	createOpts.SSDOpts.UseLocalSSD = rng.Float32() < probLocalSSD
-
-	// If not using local SSD, configure persistent disk
-	if !createOpts.SSDOpts.UseLocalSSD {
-		providerOpts.PDVolumeType = SupportedGCEPDVolumeTypes[rng.Intn(len(SupportedGCEPDVolumeTypes))]
-		// Random size in increments
+	// 4. Persistent disk config (when not using local SSD).
+	pdTypes := filterPDTypes(info.StorageTypes)
+	if !createOpts.SSDOpts.UseLocalSSD && len(pdTypes) > 0 {
+		providerOpts.PDVolumeType = pdTypes[rng.Intn(len(pdTypes))]
 		sizeIncrements := (maxPDSizeGB - minPDSizeGB) / pdSizeIncrementGB
 		providerOpts.PDVolumeSize = minPDSizeGB + (rng.Intn(sizeIncrements+1) * pdSizeIncrementGB)
 	}
 
-	// Spot instance usage
+	// 5. Random lifetime (whole hours).
+	lifetimeHours := minLifetimeHours + rng.Intn(maxLifetimeHours-minLifetimeHours+1)
+	createOpts.Lifetime = time.Duration(lifetimeHours) * time.Hour
+
+	// 6. Random filesystem.
+	createOpts.SSDOpts.FileSystem = SupportedFilesystems[rng.Intn(len(SupportedFilesystems))]
+
+	// 7. Spot instance usage.
 	providerOpts.UseSpot = rng.Float32() < probSpotInstance
 
-	// Boot disk only (no additional volumes)
+	// 8. Boot disk only (no additional volumes).
 	providerOpts.BootDiskOnly = rng.Float32() < probBootDiskOnly
-	if providerOpts.BootDiskOnly {
-		// Randomize boot disk type when using boot disk only
-		providerOpts.BootDiskType = SupportedGCEPDVolumeTypes[rng.Intn(len(SupportedGCEPDVolumeTypes))]
+	if providerOpts.BootDiskOnly && len(pdTypes) > 0 {
+		providerOpts.BootDiskType = pdTypes[rng.Intn(len(pdTypes))]
 	}
 
-	// Cron service
+	// 9. Cron service.
 	providerOpts.EnableCron = rng.Float32() < probEnableCron
 
-	// Single zone vs multi-zone
+	// 10. Zones: T2A machine types have restricted zone availability.
+	availableZones := SupportedGCEZones
+	if strings.HasPrefix(providerOpts.MachineType, "t2a-") {
+		availableZones = gce.SupportedT2AZones
+	}
 	if rng.Float32() < probMultiZone {
-		// Multi-zone: pick 2-3 zones
 		numZones := 2 + rng.Intn(2)
+		if numZones > len(availableZones) {
+			numZones = len(availableZones)
+		}
 		zones := make([]string, numZones)
 		picked := make(map[int]bool)
 		for i := 0; i < numZones; i++ {
-			idx := rng.Intn(len(SupportedGCEZones))
+			idx := rng.Intn(len(availableZones))
 			for picked[idx] {
-				idx = rng.Intn(len(SupportedGCEZones))
+				idx = rng.Intn(len(availableZones))
 			}
 			picked[idx] = true
-			zones[i] = SupportedGCEZones[idx]
+			zones[i] = availableZones[idx]
 		}
 		providerOpts.Zones = zones
 	} else {
-		// Single zone
-		providerOpts.Zones = []string{SupportedGCEZones[rng.Intn(len(SupportedGCEZones))]}
+		providerOpts.Zones = []string{availableZones[rng.Intn(len(availableZones))]}
 	}
 
 	return &RandomizedClusterConfig{
@@ -197,6 +198,24 @@ func RandomGCECreateOptions(rng *rand.Rand) *RandomizedClusterConfig {
 		ProviderOpts: &providerOpts,
 		NumNodes:     minNodes + rng.Intn(maxNodes-minNodes+1),
 	}
+}
+
+// filterPDTypes returns persistent/hyperdisk volume types from a gcedb
+// StorageTypes list, excluding types in excludedPDTypes (e.g. pd-extreme).
+func filterPDTypes(storageTypes []string) []string {
+	var result []string
+	for _, st := range storageTypes {
+		if excludedPDTypes[st] {
+			continue
+		}
+		for _, prefix := range pdTypePrefixes {
+			if strings.HasPrefix(st, prefix) {
+				result = append(result, st)
+				break
+			}
+		}
+	}
+	return result
 }
 
 // ToCreateArgs converts RandomizedClusterConfig to roachprod create command arguments.
