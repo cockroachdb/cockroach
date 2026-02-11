@@ -1535,9 +1535,15 @@ func (s *pauseResumeTestState) reset(
 
 // waitForCheckpointPersisted waits for checkpoint data to be persisted to the job payload.
 // For map phase pauses, it verifies that expectedSpans are checkpointed.
-// For iteration pauses, it verifies that SST manifests are checkpointed.
+// For iteration pauses, it verifies that SST manifests are checkpointed and
+// that DistributedMergePhase matches expectedPhase (when non-zero).
 func waitForCheckpointPersisted(
-	t *testing.T, ctx context.Context, db *gosql.DB, jobID int, expectedSpans []roachpb.Span,
+	t *testing.T,
+	ctx context.Context,
+	db *gosql.DB,
+	jobID int,
+	expectedSpans []roachpb.Span,
+	expectedPhase int32,
 ) {
 	testutils.SucceedsWithin(t, func() error {
 		stmt := `SELECT payload FROM crdb_internal.system_jobs WHERE id = $1`
@@ -1572,11 +1578,15 @@ func waitForCheckpointPersisted(
 		}
 
 		// Otherwise, verify SST manifests are checkpointed (iteration pause case).
-		ssts := schemaChangeDetails.BackfillProgress[0].SSTManifests
-		if len(ssts) == 0 {
+		bp := schemaChangeDetails.BackfillProgress[0]
+		if len(bp.SSTManifests) == 0 {
 			return errors.Errorf("no SST manifests checkpointed yet")
 		}
-		t.Logf("checkpoint contains %d SST manifests", len(ssts))
+		if expectedPhase > 0 && bp.DistributedMergePhase != expectedPhase {
+			return errors.Errorf("waiting for phase %d, current: %d",
+				expectedPhase, bp.DistributedMergePhase)
+		}
+		t.Logf("checkpoint contains %d SST manifests", len(bp.SSTManifests))
 		return nil
 	}, 5*time.Second)
 }
@@ -1813,7 +1823,7 @@ func TestDistributedMergeResumePreservesProgress(t *testing.T) {
 				}
 
 				if tc.waitForCheckpoint {
-					waitForCheckpointPersisted(t, ctx, db, jobID, observedSpansBeforePause)
+					waitForCheckpointPersisted(t, ctx, db, jobID, observedSpansBeforePause, 0)
 				}
 
 				pauseAndResumeJob()
@@ -1846,7 +1856,7 @@ func TestDistributedMergeResumePreservesProgress(t *testing.T) {
 				}, 30*time.Second)
 
 				if tc.waitForCheckpoint {
-					waitForCheckpointPersisted(t, ctx, db, jobID, nil)
+					waitForCheckpointPersisted(t, ctx, db, jobID, nil, 0)
 				}
 
 				// Pause the job while it's blocked in the AfterDistributedMergeMapPhase hook.
@@ -1872,7 +1882,7 @@ func TestDistributedMergeResumePreservesProgress(t *testing.T) {
 				}, 30*time.Second)
 
 				if tc.waitForCheckpoint {
-					waitForCheckpointPersisted(t, ctx, db, jobID, nil)
+					waitForCheckpointPersisted(t, ctx, db, jobID, nil, int32(tc.pauseAfterIteration))
 
 					// Verify merge iteration progress is checkpointed before pause.
 					// After an iteration completes, task tracking fields are cleared.
