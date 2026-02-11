@@ -505,17 +505,17 @@ distribution: local
 ├── • virtual table
 │     table: pg_class@primary
 │
-└── • hash join
+└── • merge join
     │ equality: (indrelid) = (oid)
     │
     ├── • virtual table
-    │     table: pg_index@primary
+    │     table: pg_index@pg_index_indrelid_idx
     │
     └── • filter
         │ filter: relkind = 'r'
         │
         └── • virtual table
-              table: pg_class@primary
+              table: pg_class@pg_class_oid_idx
 
 statement ok
 RESET disallow_full_table_scans;

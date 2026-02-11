@@ -2040,6 +2040,130 @@ func makeZeroedOidVector(size int) (tree.Datum, error) {
 	return tree.NewDOidVectorFromDArray(oidArray), nil
 }
 
+// addRowForPgIndex generates a row for pg_index for a given table and index.
+func addRowForPgIndex(
+	ctx context.Context,
+	p *planner,
+	h oidHasher,
+	table catalog.TableDescriptor,
+	index catalog.Index,
+	addRow func(...tree.Datum) error,
+) error {
+	tableOid := tableOid(table.GetID())
+	isMutation, isWriteOnly :=
+		table.GetIndexMutationCapabilities(index.GetID())
+	isReady := isMutation && isWriteOnly
+
+	// Get the collations for all of the columns. To do this we require
+	// the type of the column.
+	// Also fill in indoption for each column to indicate if the index
+	// is ASC/DESC and if nulls appear first/last.
+	collationOids := tree.NewDArray(types.Oid)
+	indoption := tree.NewDArray(types.Int2)
+
+	colAttNums := make([]descpb.ColumnID, 0, index.NumKeyColumns())
+	exprs := make([]string, 0, index.NumKeyColumns())
+	for i, col := range table.IndexKeyColumns(index) {
+		// The indkey for an expression element in an index
+		// should be 0.
+		if col.IsExpressionIndexColumn() {
+			colAttNums = append(colAttNums, 0)
+			formattedExpr, err := schemaexpr.FormatExprForDisplay(
+				ctx, table, col.GetComputeExpr(), p.EvalContext(), p.SemaCtx(), p.SessionData(), tree.FmtPGCatalog,
+			)
+			if err != nil {
+				return err
+			}
+			exprs = append(exprs, fmt.Sprintf("(%s)", formattedExpr))
+		} else {
+			colAttNums = append(colAttNums, descpb.ColumnID(col.GetPGAttributeNum()))
+		}
+		if err := collationOids.Append(typColl(col.GetType(), h)); err != nil {
+			return err
+		}
+		// Currently, nulls always appear first if the order is ascending,
+		// and always appear last if the order is descending.
+		var thisIndOption tree.DInt
+		if index.GetKeyColumnDirection(i) == catenumpb.IndexColumn_ASC {
+			thisIndOption = indoptionNullsFirst
+		} else {
+			thisIndOption = indoptionDesc
+		}
+		if err := indoption.Append(tree.NewDInt(thisIndOption)); err != nil {
+			return err
+		}
+	}
+	// indnkeyatts is the number of attributes without INCLUDED columns.
+	indnkeyatts := len(colAttNums)
+	for i := 0; i < index.NumSecondaryStoredColumns(); i++ {
+		col, err := catalog.MustFindColumnByID(table, index.GetStoredColumnID(i))
+		if err != nil {
+			return err
+		}
+		colAttNums = append(colAttNums, descpb.ColumnID(col.GetPGAttributeNum()))
+	}
+	// indnatts is the number of attributes with INCLUDED columns.
+	indnatts := len(colAttNums)
+	indkey, err := colIDArrayToVector(colAttNums)
+	if err != nil {
+		return err
+	}
+	collationOidVector := tree.NewDOidVectorFromDArray(collationOids)
+	indoptionIntVector := tree.NewDIntVectorFromDArray(indoption)
+	// TODO(bram): #27763 indclass still needs to be populated but it
+	// requires pg_catalog.pg_opclass first.
+	indclass, err := makeZeroedOidVector(indnkeyatts)
+	if err != nil {
+		return err
+	}
+	indpred := tree.DNull
+	if index.IsPartial() {
+		formattedPred, err := schemaexpr.FormatExprForDisplay(
+			ctx, table, index.GetPredicate(), p.EvalContext(), p.SemaCtx(), p.SessionData(), tree.FmtPGCatalog,
+		)
+		if err != nil {
+			return err
+		}
+		indpred = tree.NewDString(formattedPred)
+	}
+	indexprs := tree.DNull
+	if len(exprs) > 0 {
+		// The column contains multiple elements, but must be stored as a
+		// string. Similar to Postgres, this is a list with one element for
+		// each zero entry in indkey.
+		arr := tree.NewDArray(types.String)
+		for _, expr := range exprs {
+			if err := arr.Append(tree.NewDString(expr)); err != nil {
+				return err
+			}
+		}
+		indexprs = tree.NewDString(tree.AsStringWithFlags(arr, tree.FmtPgwireText))
+	}
+	return addRow(
+		h.IndexOid(table.GetID(), index.GetID()),     // indexrelid
+		tableOid,                                     // indrelid
+		tree.NewDInt(tree.DInt(indnatts)),            // indnatts
+		tree.MakeDBool(tree.DBool(index.IsUnique())), // indisunique
+		tree.DBoolFalse,                              // indnullsnotdistinct
+		tree.MakeDBool(tree.DBool(index.Primary())),  // indisprimary
+		tree.DBoolFalse,                              // indisexclusion
+		tree.MakeDBool(tree.DBool(index.IsUnique())), // indimmediate
+		tree.DBoolFalse,                              // indisclustered
+		tree.MakeDBool(tree.DBool(!isMutation)),      // indisvalid
+		tree.DBoolFalse,                              // indcheckxmin
+		tree.MakeDBool(tree.DBool(isReady)),          // indisready
+		tree.DBoolTrue,                               // indislive
+		tree.DBoolFalse,                              // indisreplident
+		indkey,                                       // indkey
+		collationOidVector,                           // indcollation
+		indclass,                                     // indclass
+		indoptionIntVector,                           // indoption
+		indexprs,                                     // indexprs
+		indpred,                                      // indpred
+		tree.NewDInt(tree.DInt(indnkeyatts)),         // indnkeyatts
+	)
+}
+
 var pgCatalogIndexTable = virtualSchemaTable{
 	comment: `indexes (incomplete)
 https://www.postgresql.org/docs/9.5/catalog-pg-index.html`,
@@ -2050,123 +2174,40 @@ https://www.postgresql.org/docs/9.5/catalog-pg-index.html`,
 		return forEachTableDesc(ctx, p, dbContext, opts,
 			func(ctx context.Context, descCtx tableDescContext) error {
 				table := descCtx.table
-				tableOid := tableOid(table.GetID())
-
 				return catalog.ForEachIndex(table, catalog.IndexOpts{}, func(index catalog.Index) error {
-					isMutation, isWriteOnly :=
-						table.GetIndexMutationCapabilities(index.GetID())
-					isReady := isMutation && isWriteOnly
-
-					// Get the collations for all of the columns. To do this we require
-					// the type of the column.
-					// Also fill in indoption for each column to indicate if the index
-					// is ASC/DESC and if nulls appear first/last.
-					collationOids := tree.NewDArray(types.Oid)
-					indoption := tree.NewDArray(types.Int2)
-
-					colAttNums := make([]descpb.ColumnID, 0, index.NumKeyColumns())
-					exprs := make([]string, 0, index.NumKeyColumns())
-					for i, col := range table.IndexKeyColumns(index) {
-						// The indkey for an expression element in an index
-						// should be 0.
-						if col.IsExpressionIndexColumn() {
-							colAttNums = append(colAttNums, 0)
-							formattedExpr, err := schemaexpr.FormatExprForDisplay(
-								ctx, table, col.GetComputeExpr(), p.EvalContext(), p.SemaCtx(), p.SessionData(), tree.FmtPGCatalog,
-							)
-							if err != nil {
-								return err
-							}
-							exprs = append(exprs, fmt.Sprintf("(%s)", formattedExpr))
-						} else {
-							colAttNums = append(colAttNums, descpb.ColumnID(col.GetPGAttributeNum()))
-						}
-						if err := collationOids.Append(typColl(col.GetType(), h)); err != nil {
-							return err
-						}
-						// Currently, nulls always appear first if the order is ascending,
-						// and always appear last if the order is descending.
-						var thisIndOption tree.DInt
-						if index.GetKeyColumnDirection(i) == catenumpb.IndexColumn_ASC {
-							thisIndOption = indoptionNullsFirst
-						} else {
-							thisIndOption = indoptionDesc
-						}
-						if err := indoption.Append(tree.NewDInt(thisIndOption)); err != nil {
-							return err
-						}
-					}
-					// indnkeyatts is the number of attributes without INCLUDED columns.
-					indnkeyatts := len(colAttNums)
-					for i := 0; i < index.NumSecondaryStoredColumns(); i++ {
-						col, err := catalog.MustFindColumnByID(table, index.GetStoredColumnID(i))
-						if err != nil {
-							return err
-						}
-						colAttNums = append(colAttNums, descpb.ColumnID(col.GetPGAttributeNum()))
-					}
-					// indnatts is the number of attributes with INCLUDED columns.
-					indnatts := len(colAttNums)
-					indkey, err := colIDArrayToVector(colAttNums)
-					if err != nil {
-						return err
-					}
-					collationOidVector := tree.NewDOidVectorFromDArray(collationOids)
-					indoptionIntVector := tree.NewDIntVectorFromDArray(indoption)
-					// TODO(bram): #27763 indclass still needs to be populated but it
-					// requires pg_catalog.pg_opclass first.
-					indclass, err := makeZeroedOidVector(indnkeyatts)
-					if err != nil {
-						return err
-					}
-					indpred := tree.DNull
-					if index.IsPartial() {
-						formattedPred, err := schemaexpr.FormatExprForDisplay(
-							ctx, table, index.GetPredicate(), p.EvalContext(), p.SemaCtx(), p.SessionData(), tree.FmtPGCatalog,
-						)
-						if err != nil {
-							return err
-						}
-						indpred = tree.NewDString(formattedPred)
-					}
-					indexprs := tree.DNull
-					if len(exprs) > 0 {
-						// The column contains multiple elements, but must be stored as a
-						// string. Similar to Postgres, this is a list with one element for
-						// each zero entry in indkey.
-						arr := tree.NewDArray(types.String)
-						for _, expr := range exprs {
-							if err := arr.Append(tree.NewDString(expr)); err != nil {
-								return err
-							}
-						}
-						indexprs = tree.NewDString(tree.AsStringWithFlags(arr, tree.FmtPgwireText))
-					}
-					return addRow(
-						h.IndexOid(table.GetID(), index.GetID()),     // indexrelid
-						tableOid,                                     // indrelid
-						tree.NewDInt(tree.DInt(indnatts)),            // indnatts
-						tree.MakeDBool(tree.DBool(index.IsUnique())), // indisunique
-						tree.DBoolFalse,                              // indnullsnotdistinct
-						tree.MakeDBool(tree.DBool(index.Primary())),  // indisprimary
-						tree.DBoolFalse,                              // indisexclusion
-						tree.MakeDBool(tree.DBool(index.IsUnique())), // indimmediate
-						tree.DBoolFalse,                              // indisclustered
-						tree.MakeDBool(tree.DBool(!isMutation)),      // indisvalid
-						tree.DBoolFalse,                              // indcheckxmin
-						tree.MakeDBool(tree.DBool(isReady)),          // indisready
-						tree.DBoolTrue,                               // indislive
-						tree.DBoolFalse,                              // indisreplident
-						indkey,                                       // indkey
-						collationOidVector,                           // indcollation
-						indclass,                                     // indclass
-						indoptionIntVector,                           // indoption
-						indexprs,                                     // indexprs
-						indpred,                                      // indpred
-						tree.NewDInt(tree.DInt(indnkeyatts)),         // indnkeyatts
-					)
+					return addRowForPgIndex(ctx, p, h, table, index, addRow)
 				})
 			})
+	},
+	indexes: []virtualIndex{
+		{
+			populate: func(ctx context.Context, unwrappedConstraint tree.Datum, p *planner, db catalog.DatabaseDescriptor,
+				addRow func(...tree.Datum) error,
+			) (bool, error) {
+				h := makeOidHasher()
+				coid := tree.MustBeDOid(unwrappedConstraint)
+				tableID := descpb.ID(coid.Oid)
+				desc, err := p.byIDGetterBuilder().Get().Desc(ctx, tableID)
+				if err != nil {
+					// If the descriptor doesn't exist, return no match.
+					if errors.Is(err, catalog.ErrDescriptorNotFound) {
+						return false, nil
+					}
+					return false, err
+				}
+				table, ok := desc.(catalog.TableDescriptor)
+				if !ok {
+					// If the descriptor is not a table, return no match.
+					return false, nil
+				}
+				if err := catalog.ForEachIndex(table, catalog.IndexOpts{}, func(index catalog.Index) error {
+					return addRowForPgIndex(ctx, p, h, table, index, addRow)
+				}); err != nil {
+					return false, err
+				}
+				return true, nil
+			},
+		},
 	},
 }
 

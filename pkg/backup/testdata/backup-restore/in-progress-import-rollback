@@ -204,11 +204,11 @@ SELECT count(*) FROM d2.foofoo;
 
 
 query-sql
-select DISTINCT index_name FROM [SHOW INDEXES FROM d.foo];
+select DISTINCT index_name FROM [SHOW INDEXES FROM d.foo] ORDER BY index_name;
 ----
-foo_pkey
 foo_idx
 foo_new_idx
+foo_pkey
 
 ###########
 # Case 2: an incremental backup captures an mvcc rollback
@@ -378,11 +378,11 @@ SELECT count(*) FROM d2.foofoo2;
 1
 
 query-sql
-select DISTINCT index_name FROM [SHOW INDEXES FROM d2.foo2];
+select DISTINCT index_name FROM [SHOW INDEXES FROM d2.foo2] ORDER BY index_name;
 ----
-foo2_pkey
 foo2_idx
 foo2_new_idx
+foo2_pkey
 
 
 exec-sql
