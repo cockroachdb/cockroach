@@ -399,14 +399,14 @@ type lockTableGuardImpl struct {
 	lt     *lockTableImpl
 
 	// Information about this request.
-	txn                *roachpb.Transaction
-	ts                 hlc.Timestamp
-	spans              *lockspanset.LockSpanSet
-	waitPolicy         lock.WaitPolicy
-	maxWaitQueueLength int
+	txn        *roachpb.Transaction
+	ts         hlc.Timestamp
+	spans      *lockspanset.LockSpanSet
+	waitPolicy lock.WaitPolicy
 	// virtuallyResolveIntents represents the state of VirtuallyDeferrerIntents at
 	// the outset of this request.
 	virtuallyResolveIntents bool
+	maxWaitQueueLength      int
 
 	// Snapshot of the tree for which this request has some spans. Note that
 	// the lockStates in this snapshot may have been removed from
@@ -461,7 +461,6 @@ type lockTableGuardImpl struct {
 
 	mu struct {
 		syncutil.Mutex
-		startWait bool
 		// curLockWaitStart represents the timestamp when the request started waiting
 		// on the current lock. Multiple consecutive waitingStates might refer to
 		// the same lock, in which case the curLockWaitStart is not updated in between
@@ -504,6 +503,7 @@ type lockTableGuardImpl struct {
 		// waiting state. As such, a call to CurState() can simply return the state
 		// without doing any extra work.
 		mustComputeWaitingState bool
+		startWait               bool
 	}
 	// Locks to resolve before scanning again. Doesn't need to be protected by
 	// mu since should only be read after the caller has already synced with mu
