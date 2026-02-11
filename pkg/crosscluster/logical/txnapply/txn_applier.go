@@ -110,16 +110,26 @@ type Applier struct {
 	localResolvedTime Latest[hlc.Timestamp]
 }
 
-// NewApplier creates a new Applier with the given ID and writers. allApplierIDs
-// must include all applier IDs in the system (including this applier's own ID)
-// so that the applier can initialize the frontier map used to track when all
-// appliers have advanced past an EventHorizon.
+// NewApplier creates a new Applier with the given ID and writers. NewApplier
+// takes ownership of the writers: on success they are closed by Applier.Close;
+// on error they are closed before returning. allApplierIDs must include all
+// applier IDs in the system (including this applier's own ID) so that the
+// applier can initialize the frontier map used to track when all appliers have
+// advanced past an EventHorizon.
 func NewApplier(
+	ctx context.Context,
 	id ldrdecoder.ApplierID,
 	writers []txnwriter.TransactionWriter,
 	depResolver DependencyResolver,
 	allApplierIDs []ldrdecoder.ApplierID,
-) (*Applier, error) {
+) (_ *Applier, retErr error) {
+	defer func() {
+		if retErr != nil {
+			for _, w := range writers {
+				w.Close(ctx)
+			}
+		}
+	}()
 	if id == 0 {
 		return nil, errors.New("applier ID must be nonzero")
 	}
