@@ -100,6 +100,12 @@ func (w index) IsUnique() bool {
 	return w.desc.Unique
 }
 
+// SkipUniqueChecks returns true iff unique checks should be skipped for this
+// index.
+func (w index) SkipUniqueChecks() bool {
+	return w.desc.SkipUniqueChecks
+}
+
 // IsDisabled returns true iff the index is disabled.
 func (w index) IsDisabled() bool {
 	return w.desc.Disabled

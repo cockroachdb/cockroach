@@ -11,21 +11,22 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 )
 
-// UniqueConstraintParamContext is used as a validation context for
-// ValidateUniqueConstraintParams function.
-// IsPrimaryKey: set to true if the unique constraint for primary key.
-// IsSharded: set to true if the unique constraint has a hash sharded index.
-type UniqueConstraintParamContext struct {
-	IsPrimaryKey bool
-	IsSharded    bool
+// IndexStorageParamContext provides context for ValidateIndexStorageParams.
+type IndexStorageParamContext struct {
+	IsPrimaryKey            bool
+	IsUnique                bool
+	IsSharded               bool
+	HasImplicitPartitioning bool
 }
 
-// ValidateUniqueConstraintParams checks if there is any storage parameters
-// invalid as a param for Unique Constraint.
-func ValidateUniqueConstraintParams(
-	params tree.StorageParams, ctx UniqueConstraintParamContext,
+// ValidateIndexStorageParams checks that storage parameters are valid for the
+// given index type. For unique indexes and primary keys, only specific params
+// are allowed. For all indexes, bucket_count and shard_columns require a
+// hash-sharded index, and skip_unique_checks requires a unique, implicitly
+// partitioned index.
+func ValidateIndexStorageParams(
+	params tree.StorageParams, ctx IndexStorageParamContext,
 ) error {
-	// Only `bucket_count` and `shard_columns` are allowed for primary key and unique index.
 	for _, param := range params {
 		switch param.Key {
 		case `bucket_count`:
@@ -44,11 +45,30 @@ func ValidateUniqueConstraintParams(
 				pgcode.InvalidParameterValue,
 				`"shard_columns" storage param should only be set with "USING HASH" for hash sharded index`,
 			)
+		case `skip_unique_checks`:
+			if !ctx.IsUnique {
+				return pgerror.New(
+					pgcode.InvalidParameterValue,
+					"skip_unique_checks can only be set on UNIQUE indexes",
+				)
+			}
+			if !ctx.HasImplicitPartitioning {
+				return pgerror.New(
+					pgcode.InvalidParameterValue,
+					"skip_unique_checks can only be set on implicitly partitioned indexes",
+				)
+			}
+			continue
 		default:
 			if ctx.IsPrimaryKey {
 				return pgerror.Newf(pgcode.InvalidParameterValue, "invalid storage param %q on primary key", param.Key)
 			}
-			return pgerror.Newf(pgcode.InvalidParameterValue, "invalid storage param %q on unique index", param.Key)
+			if ctx.IsUnique {
+				return pgerror.Newf(pgcode.InvalidParameterValue, "invalid storage param %q on unique index", param.Key)
+			}
+			// Non-unique indexes accept additional params (geo config, etc.)
+			// that are validated by storageparam.Set.
+			continue
 		}
 	}
 	return nil

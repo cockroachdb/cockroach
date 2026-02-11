@@ -10,6 +10,7 @@ package indexstorageparam
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/geo/geopb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/paramparse"
@@ -171,6 +172,10 @@ func validateParam(key string, isCreating, isReset bool) error {
 		}
 		return nil
 
+	// Parameters that can be set at any time.
+	case `skip_unique_checks`:
+		return nil
+
 	// Unknown parameter.
 	default:
 		return pgerror.Newf(pgcode.InvalidParameterValue, "invalid storage parameter %q", key)
@@ -214,6 +219,17 @@ func (po *Setter) Set(
 		return po.applyVectorIndexSetting(ctx, evalCtx, key, expr, 1, 1024)
 	case `max_partition_size`:
 		return po.applyVectorIndexSetting(ctx, evalCtx, key, expr, 4, 4096)
+	case `skip_unique_checks`:
+		if !evalCtx.Settings.Version.IsActive(ctx, clusterversion.V26_2) {
+			return pgerror.Newf(pgcode.FeatureNotSupported,
+				"skip_unique_checks is not supported until the cluster is fully upgraded to 26.2")
+		}
+		val, err := paramparse.DatumAsBool(ctx, evalCtx, key, expr)
+		if err != nil {
+			return errors.Wrapf(err, "error decoding %q", key)
+		}
+		po.IndexDesc.SkipUniqueChecks = val
+		return nil
 	}
 	return errors.AssertionFailedf("unhandled storage parameter %q", key)
 }
@@ -224,6 +240,14 @@ func (po *Setter) Reset(ctx context.Context, evalCtx *eval.Context, key string) 
 	// creation, so isCreating is always false.
 	if err := validateParam(key, false /* isCreating */, true /* isReset */); err != nil {
 		return err
+	}
+	if key == `skip_unique_checks` {
+		if !evalCtx.Settings.Version.IsActive(ctx, clusterversion.V26_2) {
+			return pgerror.Newf(pgcode.FeatureNotSupported,
+				"skip_unique_checks is not supported until the cluster is fully upgraded to 26.2")
+		}
+		po.IndexDesc.SkipUniqueChecks = false
+		return nil
 	}
 	return errors.AssertionFailedf("unhandled storage parameter %q", key)
 }

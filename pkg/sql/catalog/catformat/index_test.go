@@ -116,6 +116,10 @@ func TestIndexForDisplay(t *testing.T) {
 	shardedStoringIndex := shardedIndex
 	shardedStoringIndex.StoreColumnNames = []string{"c"}
 
+	// UNIQUE INDEX baz (a ASC, b DESC) WITH (skip_unique_checks=true)
+	skipUniqueChecksIndex := uniqueIndex
+	skipUniqueChecksIndex.SkipUniqueChecks = true
+
 	// VECTOR INDEX baz (a)
 	vectorIndex := baseIndex
 	vectorIndex.Type = idxtype.VECTOR
@@ -179,6 +183,22 @@ func TestIndexForDisplay(t *testing.T) {
 			displayMode: IndexDisplayShowCreate,
 			expected:    "CREATE UNIQUE INDEX baz ON foo.public.bar (a ASC, b DESC)",
 			pgExpected:  "CREATE UNIQUE INDEX baz ON foo.public.bar USING btree (a ASC, b DESC)",
+		},
+		{
+			index:       skipUniqueChecksIndex,
+			tableName:   descpb.AnonymousTable,
+			partition:   "",
+			displayMode: IndexDisplayDefOnly,
+			expected:    "UNIQUE INDEX baz (a ASC, b DESC) WITH (skip_unique_checks=true)",
+			pgExpected:  "UNIQUE INDEX baz USING btree (a ASC, b DESC) WITH (skip_unique_checks=true)",
+		},
+		{
+			index:       skipUniqueChecksIndex,
+			tableName:   tableName,
+			partition:   "",
+			displayMode: IndexDisplayShowCreate,
+			expected:    "CREATE UNIQUE INDEX baz ON foo.public.bar (a ASC, b DESC) WITH (skip_unique_checks=true)",
+			pgExpected:  "CREATE UNIQUE INDEX baz ON foo.public.bar USING btree (a ASC, b DESC) WITH (skip_unique_checks=true)",
 		},
 		{
 			index:       jsonbInvertedIndex,

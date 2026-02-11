@@ -2108,7 +2108,7 @@ func MakeTableFuncDep(md *opt.Metadata, tabID opt.TableID) *props.FuncDepSet {
 	for i := 0; i < tab.UniqueCount(); i++ {
 		unique := tab.Unique(i)
 
-		if md.TableMeta(tabID).IgnoreUniqueWithoutIndexKeys && !unique.UniquenessGuaranteedByAnotherIndex() {
+		if md.TableMeta(tabID).IgnoreUniqueWithoutIndexKeys && !unique.CanElideUniqueCheck() {
 			continue
 		}
 

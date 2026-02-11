@@ -1,0 +1,335 @@
+# LogicTest: local local-legacy-schema-changer
+
+# Test the skip_unique_checks storage parameter on UNIQUE indexes in PARTITION
+# ALL BY tables. When a table uses PARTITION ALL BY, unique indexes have the
+# partition column implicitly added, which creates UNIQUE WITHOUT INDEX
+# constraints since global uniqueness can't be guaranteed by the partitioned
+# index.
+
+statement ok
+SET experimental_enable_implicit_column_partitioning = true
+
+# checked_index: extracts the index name from an EXPLAIN info line containing
+# "table:". Used to check which indexes have unique checks planned.
+statement ok
+CREATE FUNCTION checked_index(info STRING) RETURNS STRING LANGUAGE SQL AS $$
+  SELECT regexp_extract(info, 'table:\s+\w+@([\w_]+)')
+$$
+
+# show_index: extracts the definition of a named index from a SHOW CREATE
+# statement.
+statement ok
+CREATE FUNCTION show_index(stmt STRING, idx STRING) RETURNS STRING LANGUAGE SQL AS $$
+  SELECT regexp_extract(stmt, '(' || idx || '[^\n]*)')
+$$
+
+statement ok
+CREATE TABLE t (
+  region STRING NOT NULL,
+  a INT PRIMARY KEY,
+  b INT,
+  UNIQUE INDEX idx_b (b),
+  CHECK (region IN ('us-west', 'us-east', 'eu-west'))
+) PARTITION ALL BY LIST (region) (
+  PARTITION us_west VALUES IN (('us-west')),
+  PARTITION us_east VALUES IN (('us-east')),
+  PARTITION eu_west VALUES IN (('eu-west'))
+)
+
+# Without the storage parameter, unique checks are planned for the implicitly
+# partitioned unique index and primary key.
+query T
+SELECT DISTINCT checked_index(info)
+FROM [EXPLAIN INSERT INTO t VALUES ('us-west', 1, 10), ('us-east', 2, 20)]
+WHERE info ~ 'table:';
+----
+t_pkey
+idx_b
+
+# Set the storage parameter to skip unique checks on the secondary index.
+statement ok
+ALTER INDEX t@idx_b SET (skip_unique_checks = true)
+
+query T
+SELECT show_index(create_statement, 'idx_b') FROM [SHOW CREATE TABLE t]
+----
+idx_b (b ASC) WITH (skip_unique_checks=true),
+
+# Now unique checks should not be planned for the secondary.
+query T
+SELECT DISTINCT checked_index(info)
+FROM [EXPLAIN INSERT INTO t VALUES ('us-west', 3, 30), ('us-east', 4, 40)]
+WHERE info ~ 'table:';
+----
+t_pkey
+
+# Set the storage parameter to skip unique checks on the primary index.
+statement ok
+ALTER INDEX t@t_pkey SET (skip_unique_checks = true)
+
+query T
+SELECT show_index(create_statement, 't_pkey') FROM [SHOW CREATE TABLE t]
+----
+t_pkey PRIMARY KEY (a ASC) WITH (skip_unique_checks=true),
+
+# Now unique checks should not be planned for the primary either.
+query T
+SELECT DISTINCT checked_index(info)
+FROM [EXPLAIN INSERT INTO t VALUES ('us-west', 5, 50), ('us-east', 6, 60)]
+WHERE info ~ 'table:';
+----
+
+# Reset the parameter for the secondary.
+statement ok
+ALTER INDEX t@idx_b RESET (skip_unique_checks)
+
+query T
+SELECT show_index(create_statement, 'idx_b') FROM [SHOW CREATE TABLE t]
+----
+idx_b (b ASC),
+
+# Checks should be planned again for the secondary only.
+query T
+SELECT DISTINCT checked_index(info)
+FROM [EXPLAIN INSERT INTO t VALUES ('us-west', 7, 70), ('us-east', 8, 80)]
+WHERE info ~ 'table:';
+----
+idx_b
+
+# Reset the parameter for the primary.
+statement ok
+ALTER INDEX t@t_pkey RESET (skip_unique_checks)
+
+query T
+SELECT show_index(create_statement, 't_pkey') FROM [SHOW CREATE TABLE t]
+----
+t_pkey PRIMARY KEY (a ASC),
+
+# Checks should be planned again for both indexes.
+query T
+SELECT DISTINCT checked_index(info)
+FROM [EXPLAIN INSERT INTO t VALUES ('us-west', 9, 90), ('us-east', 10, 100)]
+WHERE info ~ 'table:';
+----
+t_pkey
+idx_b
+
+# Test creating an index with skip_unique_checks set at creation time.
+statement ok
+ALTER TABLE t ADD COLUMN c INT
+
+statement ok
+CREATE UNIQUE INDEX idx_c ON t(c) WITH (skip_unique_checks = true)
+
+query T
+SELECT show_index(create_statement, 'idx_c') FROM [SHOW CREATE TABLE t]
+----
+idx_c (c ASC) WITH (skip_unique_checks=true),
+
+# Verify that unique checks are not planned for the newly created index.
+query T
+SELECT DISTINCT checked_index(info)
+FROM [EXPLAIN INSERT INTO t VALUES ('us-west', 11, 110, 1000), ('us-east', 12, 120, 2000)]
+WHERE info ~ 'table:';
+----
+t_pkey
+idx_b
+
+# Reset the parameter for idx_c.
+statement ok
+ALTER INDEX t@idx_c RESET (skip_unique_checks)
+
+query T
+SELECT show_index(create_statement, 'idx_c') FROM [SHOW CREATE TABLE t]
+----
+idx_c (c ASC),
+
+# Checks should now be planned for idx_c as well.
+query T
+SELECT DISTINCT checked_index(info)
+FROM [EXPLAIN INSERT INTO t VALUES ('us-west', 13, 130, 3000), ('us-east', 14, 140, 4000)]
+WHERE info ~ 'table:';
+----
+t_pkey
+idx_b
+idx_c
+
+# Test ALTER PRIMARY KEY behavior with skip_unique_checks.
+# Set skip_unique_checks on the primary and secondary indexes.
+statement ok
+ALTER INDEX t@t_pkey SET (skip_unique_checks = true)
+
+query T
+SELECT show_index(create_statement, 't_pkey') FROM [SHOW CREATE TABLE t]
+----
+t_pkey PRIMARY KEY (a ASC) WITH (skip_unique_checks=true),
+
+statement ok
+ALTER INDEX t@idx_b SET (skip_unique_checks = true)
+
+query T
+SELECT show_index(create_statement, 'idx_b') FROM [SHOW CREATE TABLE t]
+----
+idx_b (b ASC) WITH (skip_unique_checks=true),
+
+statement ok
+ALTER INDEX t@idx_c SET (skip_unique_checks = true)
+
+query T
+SELECT show_index(create_statement, 'idx_c') FROM [SHOW CREATE TABLE t]
+----
+idx_c (c ASC) WITH (skip_unique_checks=true),
+
+# Verify no checks are planned.
+query T
+SELECT DISTINCT checked_index(info)
+FROM [EXPLAIN INSERT INTO t VALUES ('us-west', 15, 150, 5000), ('us-east', 16, 160, 6000)]
+WHERE info ~ 'table:';
+----
+
+# Add a new column for the new primary key.
+statement ok
+ALTER TABLE t ADD COLUMN d INT NOT NULL DEFAULT 0
+
+# ALTER PRIMARY KEY without WITH clause.
+# The old PK (becomes unique secondary) and recreated secondaries preserve
+# skip_unique_checks, but the NEW primary key does NOT inherit it (resets to
+# default false).
+statement ok
+ALTER TABLE t ALTER PRIMARY KEY USING COLUMNS (d)
+
+query T
+SELECT show_index(create_statement, 't_pkey') FROM [SHOW CREATE TABLE t]
+----
+t_pkey PRIMARY KEY (d ASC),
+
+query T
+SELECT show_index(create_statement, 't_a_key') FROM [SHOW CREATE TABLE t]
+----
+t_a_key (a ASC) WITH (skip_unique_checks=true),
+
+# New PK has checks, but secondaries don't (old PK->secondary and recreated
+# indexes preserved it).
+query T
+SELECT DISTINCT checked_index(info)
+FROM [EXPLAIN INSERT INTO t VALUES ('us-west', 17, 170, 7000, 1), ('us-east', 18, 180, 8000, 2)]
+WHERE info ~ 'table:';
+----
+t_pkey
+
+# Now ALTER PRIMARY KEY again, this time WITH (skip_unique_checks = true).
+statement ok
+ALTER TABLE t ADD COLUMN e INT NOT NULL DEFAULT 0
+
+statement ok
+ALTER TABLE t ALTER PRIMARY KEY USING COLUMNS (e) WITH (skip_unique_checks = true)
+
+query T
+SELECT show_index(create_statement, 't_pkey') FROM [SHOW CREATE TABLE t]
+----
+t_pkey PRIMARY KEY (e ASC) WITH (skip_unique_checks=true),
+
+query T
+SELECT show_index(create_statement, 't_d_key') FROM [SHOW CREATE TABLE t]
+----
+t_d_key (d ASC),
+
+# New PK has skip_unique_checks=true (from WITH), but old PK->unique secondary
+# (t_d_key) does not, so it still needs checks.
+query T
+SELECT DISTINCT checked_index(info)
+FROM [EXPLAIN INSERT INTO t VALUES ('us-west', 19, 190, 9000, 1, 1), ('us-east', 20, 200, 10000, 2, 2)]
+WHERE info ~ 'table:';
+----
+t_d_key
+
+# Test skip_unique_checks set at CREATE TABLE time in various inline forms.
+
+# Column-level PRIMARY KEY WITH.
+statement ok
+CREATE TABLE t_pk_inline (
+  region STRING NOT NULL,
+  a INT PRIMARY KEY WITH (skip_unique_checks = true),
+  CHECK (region IN ('us-west', 'us-east', 'eu-west'))
+) PARTITION ALL BY LIST (region) (
+  PARTITION us_west VALUES IN (('us-west')),
+  PARTITION us_east VALUES IN (('us-east')),
+  PARTITION eu_west VALUES IN (('eu-west'))
+)
+
+query T
+SELECT show_index(create_statement, 't_pk_inline_pkey') FROM [SHOW CREATE TABLE t_pk_inline]
+----
+t_pk_inline_pkey PRIMARY KEY (a ASC) WITH (skip_unique_checks=true),
+
+# Table-level PRIMARY KEY WITH.
+statement ok
+CREATE TABLE t_pk_table_level (
+  region STRING NOT NULL,
+  a INT,
+  b INT,
+  PRIMARY KEY (a, b) WITH (skip_unique_checks = true),
+  CHECK (region IN ('us-west', 'us-east', 'eu-west'))
+) PARTITION ALL BY LIST (region) (
+  PARTITION us_west VALUES IN (('us-west')),
+  PARTITION us_east VALUES IN (('us-east')),
+  PARTITION eu_west VALUES IN (('eu-west'))
+)
+
+query T
+SELECT show_index(create_statement, 't_pk_table_level_pkey') FROM [SHOW CREATE TABLE t_pk_table_level]
+----
+t_pk_table_level_pkey PRIMARY KEY (a ASC, b ASC) WITH (skip_unique_checks=true),
+
+# Inline UNIQUE INDEX WITH in CREATE TABLE.
+statement ok
+CREATE TABLE t_unique_inline (
+  region STRING NOT NULL,
+  a INT PRIMARY KEY,
+  b INT,
+  c INT,
+  UNIQUE INDEX idx_b (b) WITH (skip_unique_checks = true),
+  UNIQUE INDEX idx_c (c),
+  CHECK (region IN ('us-west', 'us-east', 'eu-west'))
+) PARTITION ALL BY LIST (region) (
+  PARTITION us_west VALUES IN (('us-west')),
+  PARTITION us_east VALUES IN (('us-east')),
+  PARTITION eu_west VALUES IN (('eu-west'))
+)
+
+query T
+SELECT show_index(create_statement, 'idx_b') FROM [SHOW CREATE TABLE t_unique_inline]
+----
+idx_b (b ASC) WITH (skip_unique_checks=true),
+
+query T
+SELECT show_index(create_statement, 'idx_c') FROM [SHOW CREATE TABLE t_unique_inline]
+----
+idx_c (c ASC),
+
+# idx_b has skip_unique_checks, so only t_pkey and idx_c should have checks.
+query T
+SELECT DISTINCT checked_index(info)
+FROM [EXPLAIN INSERT INTO t_unique_inline VALUES ('us-west', 1, 10, 100), ('us-east', 2, 20, 200)]
+WHERE info ~ 'table:';
+----
+t_unique_inline_pkey
+idx_c
+
+# Test UPDATE: unique checks should also be skipped for idx_b during updates.
+query T
+SELECT DISTINCT checked_index(info)
+FROM [EXPLAIN UPDATE t_unique_inline SET b = b + 1, c = c + 1 WHERE a = 1]
+WHERE info ~ 'table:' AND checked_index(info) IS NOT NULL;
+----
+t_unique_inline_pkey
+idx_c
+
+# Test UPSERT: unique checks should also be skipped for idx_b during upserts.
+query T
+SELECT DISTINCT checked_index(info)
+FROM [EXPLAIN UPSERT INTO t_unique_inline VALUES ('us-west', 1, 10, 100), ('us-east', 2, 20, 200)]
+WHERE info ~ 'table:';
+----
+t_unique_inline_pkey
+idx_c

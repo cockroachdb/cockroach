@@ -12,6 +12,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
+	"github.com/cockroachdb/cockroach/pkg/sql/paramparse"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
@@ -173,6 +174,17 @@ func (n *alterIndexNode) startExec(params runParams) error {
 				params.EvalContext(),
 				t.StorageParams,
 				&setter,
+			); err != nil {
+				return err
+			}
+			if err := paramparse.ValidateIndexStorageParams(
+				t.StorageParams,
+				paramparse.IndexStorageParamContext{
+					IsPrimaryKey:            n.index.Primary(),
+					IsUnique:                indexDesc.Unique,
+					IsSharded:               indexDesc.Sharded.IsSharded,
+					HasImplicitPartitioning: indexDesc.Partitioning.NumImplicitColumns > 0,
+				},
 			); err != nil {
 				return err
 			}

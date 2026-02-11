@@ -124,6 +124,13 @@ func TestCCLLogic_partitioning_enum(
 	runCCLLogicTest(t, "partitioning_enum")
 }
 
+func TestCCLLogic_partitioning_implicit_skip_unique_checks(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runCCLLogicTest(t, "partitioning_implicit_skip_unique_checks")
+}
+
 func TestCCLLogic_pgcrypto_builtins(
 	t *testing.T,
 ) {

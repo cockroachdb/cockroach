@@ -117,6 +117,12 @@ func alterPrimaryKey(
 	prevSpec = makeIndexSpec(b, tbl.TableID, inflatedChain.inter1Spec.primary.IndexID)
 	alterPKInPrimaryIndexAndItsTemp(b, tn, tbl.TableID, &prevSpec, &inflatedChain.finalSpec, t, true /* isIndexFinal */)
 
+	// Validate and apply storage parameters from WITH clause.
+	setupStorageParams(
+		b, t, inflatedChain.inter2Spec.primary,
+		inflatedChain.finalSpec.primary, inflatedChain.finalSpec.partitioning,
+	)
+
 	b.LogEventForExistingTarget(inflatedChain.finalSpec.primary)
 
 	// Recreate all secondary indexes.
@@ -197,6 +203,41 @@ func setupSharding(
 	final.Sharding = sharding
 	finalTemp := mustRetrieveTemporaryIndexElem(b, tbl.TableID, final.TemporaryIndexID)
 	finalTemp.Sharding = sharding
+}
+
+// setupStorageParams validates and applies storage parameters from the WITH
+// clause to the new primary indexes, rejecting unknown or invalid ones.
+// Parameters default to their zero values when no WITH clause is specified.
+func setupStorageParams(
+	b BuildCtx,
+	t alterPrimaryKeySpec,
+	inter2, final *scpb.PrimaryIndex,
+	partitioning *scpb.IndexPartitioning,
+) {
+	// Reset to defaults first, since the new PK should not inherit storage
+	// params from the old PK unless explicitly specified in the WITH clause.
+	final.SkipUniqueChecks = false
+
+	// Validate and apply storage parameters from the WITH clause.
+	if err := paramparse.ValidateIndexStorageParams(
+		t.StorageParams,
+		paramparse.IndexStorageParamContext{
+			IsPrimaryKey:            true,
+			IsUnique:                true,
+			IsSharded:               t.Sharded != nil,
+			HasImplicitPartitioning: partitioning != nil && partitioning.NumImplicitColumns > 0,
+		},
+	); err != nil {
+		panic(err)
+	}
+	maybeApplyStorageParameters(b, t.StorageParams, &final.Index, partitioning)
+
+	// Propagate the parsed values to the other indexes in the chain.
+	inter2.SkipUniqueChecks = final.SkipUniqueChecks
+	inter2Temp := mustRetrieveTemporaryIndexElem(b, inter2.TableID, inter2.TemporaryIndexID)
+	inter2Temp.SkipUniqueChecks = final.SkipUniqueChecks
+	finalTemp := mustRetrieveTemporaryIndexElem(b, final.TableID, final.TemporaryIndexID)
+	finalTemp.SkipUniqueChecks = final.SkipUniqueChecks
 }
 
 func getprimaryIndexShardColumn(
@@ -315,18 +356,6 @@ func alterPKInPrimaryIndexAndItsTemp(
 //
 // Panic if any precondition is found unmet.
 func checkForEarlyExit(b BuildCtx, tbl *scpb.Table, t alterPrimaryKeySpec) {
-	if err := paramparse.ValidateUniqueConstraintParams(
-		t.StorageParams,
-		paramparse.UniqueConstraintParamContext{
-			IsPrimaryKey: true,
-			IsSharded:    t.Sharded != nil,
-		},
-	); err != nil {
-		panic(err)
-	}
-
-	maybeApplyStorageParameters(b, t.StorageParams, &indexSpec{})
-
 	usedColumns := make(map[tree.Name]bool, len(t.Columns))
 	for _, col := range t.Columns {
 		if col.Column == "" && col.Expr != nil {
@@ -823,6 +852,7 @@ func addNewUniqueSecondaryIndexAndTempIndex(
 		ConstraintID:        b.NextTableConstraintID(tbl.TableID),
 		SourceIndexID:       newPrimaryIndexElem.IndexID,
 		TemporaryIndexID:    0,
+		SkipUniqueChecks:    oldPrimaryIndexElem.SkipUniqueChecks,
 	}}
 	temp := &scpb.TemporaryIndex{
 		Index:                    protoutil.Clone(sec).(*scpb.SecondaryIndex).Index,

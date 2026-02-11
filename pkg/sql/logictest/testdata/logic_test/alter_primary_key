@@ -1849,10 +1849,10 @@ CREATE TABLE t_test_param (
   FAMILY fam_0_a_b (a, b)
 );
 
-statement error pq: invalid storage param "s2_max_level" on primary key
+statement error pq: index setting "s2_max_level" can only be set on GEOMETRY or GEOGRAPHY spatial indexes
 ALTER TABLE t_test_param ALTER PRIMARY KEY USING COLUMNS (b) WITH (s2_max_level=20);
 
-statement error pq: invalid storage param "s2_max_level" on primary key
+statement error pq: index setting "s2_max_level" can only be set on GEOMETRY or GEOGRAPHY spatial indexes
 ALTER TABLE t_test_param ALTER PRIMARY KEY USING COLUMNS (b) USING HASH WITH (s2_max_level=20);
 
 statement error pq: "bucket_count" storage param should only be set with "USING HASH" for hash sharded index

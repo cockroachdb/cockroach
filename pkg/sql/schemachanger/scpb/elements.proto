@@ -346,7 +346,12 @@ message Index {
 
   cockroach.sql.vecindex.vecpb.Config vec_config = 27 [(gogoproto.nullable) = true];
 
-  // Next field is 28.
+  // SkipUniqueChecks disables unique constraint checks for this index when set
+  // to true. This is useful in cases when the application can statically
+  // guarantee that indexed columns will not contain duplicates.
+  bool skip_unique_checks = 28;
+
+  // Next field is 29.
 
   reserved 3, 4, 5, 6, 7;
 }
