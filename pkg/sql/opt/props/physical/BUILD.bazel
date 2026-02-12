@@ -4,6 +4,7 @@ go_library(
     name = "physical",
     srcs = [
         "distribution.go",
+        "plangram.go",
         "provided.go",
         "required.go",
     ],
