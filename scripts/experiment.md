@@ -1,5 +1,19 @@
 # Lease Preference Spike Experiment
 
+**TLDR:** We tried to reproduce the DistSender concurrency → scheduler latency
+spike described in [#162386](https://github.com/cockroachdb/cockroach/issues/162386)
+but couldn't get SQL-level workloads to produce the parallel fan-out pattern
+needed to trigger it. The SQL layer always mediates KV access in ways that
+prevent a single query from creating a large burst of concurrent DistSender
+sub-batches (scans use `TargetBytes`, deletes go through lookup joins or
+per-statement execution). As a next step, we should look at the workload that
+was originally used to tune `kv.dist_sender.concurrency_limit` — but it likely
+wasn't individual queries fanning out wildly; it was probably high-concurrency
+workloads where many queries each contributed a smaller amount of parallelism,
+and the aggregate effect oversubscribed the scheduler.
+
+---
+
 This experiment sets up a 3-node CockroachDB cluster with a 4th node running
 workload, pins all leaseholders to node 1 via zone config, and then queries
 Datadog for CPU metrics to observe the effect.
@@ -227,3 +241,50 @@ To produce true parallel fan-out across all ranges you would need:
 - A batch request without `TargetBytes`/`MaxSpanRequestKeys` (e.g. a
   `DeleteRange` or an `AdminScatter`), or
 - A custom workload that sends explicit multi-range batch requests.
+
+## Attempts to produce parallel fan-out via SQL
+
+### Attempt 1: `DELETE ... WHERE k IN (SELECT unique_rowid() FROM generate_series(1, 1000))`
+
+The idea: 1000 random-key point deletes in a single statement should produce
+a single KV batch with 1000 `DeleteRequest`s, which DistSender would
+parallelize (no `TargetBytes`/`MaxSpanRequestKeys`).
+
+**What actually happens:** The optimizer produces a **lookup join** that does
+1000 individual KV Gets (one per key), not a single batch:
+
+```
+└── • lookup join (inner)
+        table: kv@kv_pkey
+        equality: (unique_rowid) = (k)
+        parallel
+```
+
+The `parallel` annotation means the lookup joiner parallelizes with limited
+concurrency, but each lookup is a separate KV batch with a single Get. The
+query takes ~7s (1000 round-trips at ~7ms each with some parallelism).
+DistSender never sees a fat multi-range batch to fan out.
+
+### Attempt 2: 1000 individual `DELETE FROM kv WHERE k = <key>` in one txn
+
+The idea: many individual DELETE statements in an explicit `BEGIN/COMMIT`
+block; the transaction's write pipeline would dispatch them in parallel.
+
+**What actually happens:** Each DELETE is a separate SQL statement that
+produces its own single-point KV batch. The write pipeline overlaps Raft
+replication but doesn't batch them into a single DistSender dispatch. The
+1000 DELETEs complete in ~6s — similar to the subquery approach, just with
+pipelining overlap instead of lookup join parallelism. Still no goroutine
+burst at the DistSender level.
+
+### Why SQL can't easily produce this
+
+The SQL layer always mediates KV access through patterns that either:
+- Set `TargetBytes`/`MaxSpanRequestKeys` (scans), disabling parallel dispatch
+- Use lookup joins (point lookups), which issue individual KV batches
+- Execute statements one at a time (multi-statement txns)
+
+To get true DistSender-level parallel fan-out, we likely need a custom Go
+program that builds a single `roachpb.BatchRequest` containing many
+`GetRequest`s or `ScanRequest`s (without byte/key limits) and sends it
+directly through a KV client.
