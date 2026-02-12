@@ -2677,23 +2677,6 @@ func (og *operationGenerator) setColumnType(ctx context.Context, tx pgx.Tx) (*op
 		return nil, err
 	}
 
-	columnHasDependencies, err := og.columnIsDependedOn(ctx, tx, tableName, columnForTypeChange.name, true /* includeFKs */)
-	if err != nil {
-		return nil, err
-	}
-
-	colIsRefByComputed, err := og.colIsRefByComputed(ctx, tx, tableName, columnForTypeChange.name)
-	if err != nil {
-		return nil, err
-	}
-
-	// We could potentially fail since colIsRefByComputed cannot catch the case
-	// of a contention with an ongoing alter primary key schema change.
-	hasOngoingAlterPKSchemaChange, err := og.tableHasOngoingAlterPKSchemaChanges(ctx, tx, tableName)
-	if err != nil {
-		return nil, err
-	}
-
 	stmt := makeOpStmt(OpStmtDDL)
 	if newType != nil {
 		// Some type conversions are simply not supported. Instead of attempting to
@@ -2703,8 +2686,6 @@ func (og *operationGenerator) setColumnType(ctx context.Context, tx pgx.Tx) (*op
 		// Some type conversions are allowed, but the values stored with the old column
 		// type are out of range for the new type.
 		stmt.potentialExecErrors.add(pgcode.NumericValueOutOfRange)
-		// This can happen for any attempt to use the legacy schema changer.
-		stmt.potentialExecErrors.add(pgcode.FeatureNotSupported)
 		// We fail if the column we are attempting to alter has a TTL expression.
 		stmt.potentialExecErrors.add(pgcode.InvalidTableDefinition)
 		// We fail if the column we are attempting to alter is used as an
@@ -2713,17 +2694,19 @@ func (og *operationGenerator) setColumnType(ctx context.Context, tx pgx.Tx) (*op
 		// We could fail since we don't specify the USING expression, so it's
 		// possible that we could pick a data type that doesn't have an automatic cast.
 		stmt.potentialExecErrors.add(pgcode.DatatypeMismatch)
-		// Failure can occur if we attempt to alter a column that has a dependent
-		// computed column.
-		stmt.potentialExecErrors.add(pgcode.DependentObjectsStillExist)
-		// On older versions, attempts to alter the type will fail with an
-		// experimental feature failure.
-		stmt.potentialExecErrors.add(pgcode.ExperimentalFeature)
 	}
+
+	// This can happen for any attempt to use the legacy schema changer.
+	stmt.potentialExecErrors.add(pgcode.FeatureNotSupported)
+	// Failure can occur if we attempt to alter a column that has a dependent
+	// computed column.
+	stmt.potentialExecErrors.add(pgcode.DependentObjectsStillExist)
+	// On older versions, attempts to alter the type will fail with an
+	// experimental feature failure.
+	stmt.potentialExecErrors.add(pgcode.ExperimentalFeature)
 
 	stmt.potentialExecErrors.addAll(codesWithConditions{
 		{code: pgcode.UndefinedObject, condition: newType == nil},
-		{code: pgcode.DependentObjectsStillExist, condition: columnHasDependencies || colIsRefByComputed || hasOngoingAlterPKSchemaChange},
 	})
 
 	stmt.sql = fmt.Sprintf(`ALTER TABLE %s ALTER COLUMN %s SET DATA TYPE %s`,
