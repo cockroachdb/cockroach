@@ -7338,9 +7338,9 @@ func TestEntries(t *testing.T) {
 			if len(cacheEntries) != tc.expCacheCount {
 				t.Errorf("%d: expected cache count %d, got %d", i, tc.expCacheCount, len(cacheEntries))
 			}
-			repl.mu.Lock()
-			ents, err := repl.raftEntriesLocked(tc.lo, tc.hi, tc.maxBytes)
-			repl.mu.Unlock()
+			repl.mu.RLock()
+			ents, err := repl.raftEntriesRLocked(tc.lo, tc.hi, tc.maxBytes)
+			repl.mu.RUnlock()
 			if tc.expError == nil && err != nil {
 				t.Errorf("%d: expected no error, got %s", i, err)
 				continue
@@ -7359,11 +7359,11 @@ func TestEntries(t *testing.T) {
 		}
 
 		// Case 23: Lo must be less than or equal to hi.
-		repl.mu.Lock()
-		if _, err := repl.raftEntriesLocked(indexes[9], indexes[5], math.MaxUint64); err == nil {
+		repl.mu.RLock()
+		if _, err := repl.raftEntriesRLocked(indexes[9], indexes[5], math.MaxUint64); err == nil {
 			t.Errorf("23: error expected, got none")
 		}
-		repl.mu.Unlock()
+		repl.mu.RUnlock()
 	})
 }
 

@@ -204,8 +204,8 @@ func (rt *replicaLogStorageTest) truncate(
 }
 
 func (rt *replicaLogStorageTest) read(rng *rand.Rand) {
-	rt.mu.Lock()
-	defer rt.mu.Unlock()
+	rt.mu.RLock()
+	defer rt.mu.RUnlock()
 	// The readable interval is (compacted, readable].
 	prev, last := uint64(rt.ls.shMu.trunc.Index), rt.mu.readable
 	if last <= prev { // all compacted
@@ -225,7 +225,7 @@ func (rt *replicaLogStorageTest) read(rng *rand.Rand) {
 	require.Equalf(rt.t, ref, entries, "(%d,%d]", prev, last)
 }
 
-func (rt *replicaLogStorageTest) termLocked(index uint64) uint64 {
+func (rt *replicaLogStorageTest) termRLocked(index uint64) uint64 {
 	ref, err := rt.ms.Term(index)
 	require.NoError(rt.t, err)
 	term, err := rt.ls.Term(index)
@@ -269,8 +269,8 @@ func (rt *replicaLogStorageTest) genAppend(rng *rand.Rand) raft.StorageAppend {
 func (rt *replicaLogStorageTest) genTruncate(
 	rng *rand.Rand,
 ) (prev, next kvserverpb.RaftTruncatedState) {
-	rt.mu.Lock()
-	defer rt.mu.Unlock()
+	rt.mu.RLock()
+	defer rt.mu.RUnlock()
 
 	// We can only truncate entries <= committed index.
 	committed := rt.mu.committed
@@ -280,10 +280,10 @@ func (rt *replicaLogStorageTest) genTruncate(
 
 	return kvserverpb.RaftTruncatedState{
 			Index: kvpb.RaftIndex(comp),
-			Term:  kvpb.RaftTerm(rt.termLocked(comp)),
+			Term:  kvpb.RaftTerm(rt.termRLocked(comp)),
 		}, kvserverpb.RaftTruncatedState{
 			Index: kvpb.RaftIndex(index),
-			Term:  kvpb.RaftTerm(rt.termLocked(index)),
+			Term:  kvpb.RaftTerm(rt.termRLocked(index)),
 		}
 }
 
