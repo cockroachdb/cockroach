@@ -1264,14 +1264,14 @@ func maybeRelocateJobExecution(
 	jobDesc redact.SafeString,
 ) error {
 	if locality.NonEmpty() {
-		current, err := p.DistSQLPlanner().GetSQLInstanceInfo(p.ExecCfg().JobRegistry.ID())
+		current, err := p.DistSQLPlanner().GetSQLInstanceInfo(ctx, p.ExecCfg().JobRegistry.ID())
 		if err != nil {
 			return err
 		}
 		if ok, missedTier := current.Locality.Matches(locality); !ok {
 			log.Dev.Infof(ctx,
 				"%s job %d initially adopted on instance %d but it does not match locality filter %s, finding a new coordinator",
-				jobDesc, jobID, current.NodeID, missedTier.String(),
+				jobDesc, jobID, current.GetInstanceID(), missedTier.String(),
 			)
 
 			instancesInRegion, err := p.DistSQLPlanner().GetAllInstancesByLocality(ctx, locality)

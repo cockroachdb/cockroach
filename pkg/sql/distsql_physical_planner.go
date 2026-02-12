@@ -240,11 +240,11 @@ func (dsp *DistSQLPlanner) GetAllInstancesByLocality(
 	return all[:pos], nil
 }
 
-// GetSQLInstanceInfo gets a node descriptor by node ID.
+// GetSQLInstanceInfo gets SQL instance info by instance ID.
 func (dsp *DistSQLPlanner) GetSQLInstanceInfo(
-	sqlInstanceID base.SQLInstanceID,
-) (*roachpb.NodeDescriptor, error) {
-	return dsp.nodeDescs.GetNodeDescriptor(roachpb.NodeID(sqlInstanceID))
+	ctx context.Context, sqlInstanceID base.SQLInstanceID,
+) (sqlinstance.InstanceInfo, error) {
+	return dsp.sqlAddressResolver.GetInstance(ctx, sqlInstanceID)
 }
 
 // ReplicaOracleConfig returns the DSP's replicaoracle.Config.
