@@ -3968,3 +3968,41 @@ query T
 SELECT info FROM [EXPLAIN SELECT * FROM t155184 WHERE a < 8] WHERE info LIKE '%estimated row count:%'
 ----
   estimated row count: 4 (36% of the table; stats collected <hidden> ago)
+
+# Testcase for issue #125620: check that we can use histograms after a
+# metadata-only type conversion from TIMESTAMPTZ to TIMESTAMP.
+# The histogram should still provide accurate cardinality estimates because
+# TIMESTAMP and TIMESTAMPTZ have identical binary encodings.
+
+statement ok
+CREATE TABLE t125620 (ts TIMESTAMPTZ PRIMARY KEY)
+
+# Insert 100 rows with timestamps spanning a year.
+statement ok
+INSERT INTO t125620 SELECT '2020-01-01 00:00:00+00'::TIMESTAMPTZ + (i * INTERVAL '3 days') FROM generate_series(1, 100) AS g(i)
+
+statement ok
+ANALYZE t125620
+
+# Verify the histogram is being used before the ALTER.
+query T retry
+SELECT info FROM [EXPLAIN SELECT * FROM t125620 WHERE ts < '2020-04-01'::TIMESTAMPTZ] WHERE info LIKE '%estimated row count:%'
+----
+  estimated row count: 30 (30% of the table; stats collected <hidden> ago)
+
+statement ok
+ALTER TABLE t125620 ALTER COLUMN ts SET DATA TYPE TIMESTAMP
+
+# After the ALTER, the histogram (which stores TIMESTAMPTZ bucket bounds) should
+# still work correctly with TIMESTAMP comparisons because both types use
+# identical encoding. The optimizer should use the histogram for estimation.
+query T retry
+SELECT info FROM [EXPLAIN SELECT * FROM t125620 WHERE ts < '2020-04-01'::TIMESTAMP] WHERE info LIKE '%estimated row count:%'
+----
+  estimated row count: 30 (30% of the table; stats collected <hidden> ago)
+
+# Verify the query still returns correct results.
+query I
+SELECT count(*) FROM t125620 WHERE ts < '2020-04-01'::TIMESTAMP
+----
+30
