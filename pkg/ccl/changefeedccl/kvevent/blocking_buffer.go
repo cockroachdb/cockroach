@@ -15,6 +15,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log/logcrash"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/quotapool"
+	"github.com/cockroachdb/cockroach/pkg/util/ring"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/crlib/crtime"
@@ -41,7 +42,7 @@ type blockingBuffer struct {
 		drainCh    chan struct{} // Set when Drain request issued.
 		numBlocked int           // Number of waitors blocked to acquire quota.
 		canFlush   bool
-		queue      *bufferEventChunkQueue // Queue of added events.
+		queue      ring.Buffer[Event] // Queue of added events.
 	}
 
 	knobs BlockingBufferTestingKnobs
@@ -85,7 +86,6 @@ func newMemBuffer(
 		metrics:  metrics,
 		sv:       sv,
 	}
-	b.mu.queue = &bufferEventChunkQueue{}
 
 	// Quota pool notifies out of quota events through notifyOutOfQuota
 	quota := &memQuota{acc: acc, notifyOutOfQuota: b.notifyOutOfQuota}
@@ -144,7 +144,11 @@ func (b *blockingBuffer) pop() (e Event, ok bool, err error) {
 		return Event{}, false, ErrBufferClosed{reason: b.mu.reason}
 	}
 
-	e, ok = b.mu.queue.dequeue()
+	if b.mu.queue.Len() > 0 {
+		e = b.mu.queue.GetFirst()
+		b.mu.queue.RemoveFirst()
+		ok = true
+	}
 	if !ok && b.mu.canFlush {
 		// Here, we know that we are blocked, waiting for memory; yet we have nothing queued up
 		// (and thus, no resources that could be released by draining the queue).
@@ -162,7 +166,7 @@ func (b *blockingBuffer) pop() (e Event, ok bool, err error) {
 		b.mu.canFlush = false
 	}
 
-	if b.mu.drainCh != nil && b.mu.queue.empty() {
+	if b.mu.drainCh != nil && b.mu.queue.Len() == 0 {
 		close(b.mu.drainCh)
 		b.mu.drainCh = nil
 	}
@@ -244,7 +248,7 @@ func (b *blockingBuffer) enqueue(ctx context.Context, e Event) (err error) {
 
 	b.metrics.BufferEntriesIn.Inc(1)
 	b.metrics.BufferEntriesByType[e.et.Index()].Inc(1)
-	b.mu.queue.enqueue(e)
+	b.mu.queue.AddLast(e)
 
 	select {
 	case b.signalCh <- struct{}{}:
@@ -313,7 +317,7 @@ func (b *blockingBuffer) Add(ctx context.Context, e Event) error {
 func (b *blockingBuffer) tryDrain() chan struct{} {
 	b.mu.Lock()
 	defer b.mu.Unlock()
-	if b.mu.queue.empty() {
+	if b.mu.queue.Len() == 0 {
 		return nil
 	}
 
@@ -391,7 +395,7 @@ func (b *blockingBuffer) CloseWithReason(ctx context.Context, reason error) (err
 	close(b.signalCh)
 
 	// Return all queued up entries to the buffer pool.
-	b.mu.queue.purge()
+	b.mu.queue.Discard()
 
 	return nil
 }

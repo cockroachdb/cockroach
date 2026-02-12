@@ -6,6 +6,7 @@
 package schemafeed
 
 import (
+	"context"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -17,6 +18,7 @@ import (
 func TestTimestampBarrier(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
+	ctx := context.Background()
 	b := timestampBarrier{}
 
 	ts := func(wt int64) hlc.Timestamp {
@@ -24,7 +26,7 @@ func TestTimestampBarrier(t *testing.T) {
 	}
 
 	// Set initial frontier to 10.
-	require.NoError(t, b.advanceFrontier(ts(10)))
+	require.NoError(t, b.advanceFrontier(ctx, ts(10)))
 	require.Equal(t, b.frontier, ts(10))
 
 	// Trying to wait at 20 should block.
@@ -39,7 +41,7 @@ func TestTimestampBarrier(t *testing.T) {
 
 	// Advancing the frontier to 20 should unblock the waiter at 20,
 	// but not the waiter at 30.
-	require.NoError(t, b.advanceFrontier(ts(20)))
+	require.NoError(t, b.advanceFrontier(ctx, ts(20)))
 	require.Equal(t, b.frontier, ts(20))
 	expectChannelRead(t, errCh1, "")
 	expectChannelEmpty(t, errCh2)
@@ -51,7 +53,7 @@ func TestTimestampBarrier(t *testing.T) {
 
 	// Trying to revert the frontier to 10 should fail.
 	require.EqualError(t,
-		b.advanceFrontier(ts(10)),
+		b.advanceFrontier(ctx, ts(10)),
 		"cannot advance frontier to 0.000000010,0, which is earlier than the current frontier 0.000000020,0")
 	require.Equal(t, b.frontier, ts(20))
 
@@ -90,7 +92,7 @@ func TestTimestampBarrier(t *testing.T) {
 
 	// Trying to advance the frontier to 30 should fail.
 	require.EqualError(t,
-		b.advanceFrontier(ts(30)),
+		b.advanceFrontier(ctx, ts(30)),
 		"cannot advance frontier to 0.000000030,0, which is equal to or later than the current error timestamp 0.000000030,0")
 	require.Equal(t, b.frontier, ts(20))
 	require.Equal(t, b.errTS, ts(30))

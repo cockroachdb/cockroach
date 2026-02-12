@@ -21,8 +21,8 @@ type Filter struct {
 
 func newFilterFromRegistry(reg *registry) *Filter {
 	f := &Filter{
-		needPrevVals: interval.NewRangeList(),
-		needVals:     interval.NewRangeList(),
+		needPrevVals: interval.NewRangeTree(),
+		needVals:     interval.NewRangeTree(),
 	}
 	reg.tree.Do(func(i interval.Interface) (done bool) {
 		r := i.(registration)

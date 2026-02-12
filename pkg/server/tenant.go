@@ -1287,6 +1287,7 @@ func makeTenantSQLServerArgs(
 	if err != nil {
 		return sqlServerArgs{}, err
 	}
+	registry.AddMetricStruct(rangeFeedFactory.Metrics())
 
 	sTS := ts.MakeTenantServer(baseCfg.AmbientCtx, tenantConnect, rpcContext.TenantID, registry)
 

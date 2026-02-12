@@ -4,6 +4,7 @@ go_library(
     name = "kvfeed",
     srcs = [
         "kv_feed.go",
+        "metrics.go",
         "physical_kv_feed.go",
         "scanner.go",
         "testing_knobs.go",
@@ -31,6 +32,7 @@ go_library(
         "//pkg/util/hlc",
         "//pkg/util/limit",
         "//pkg/util/log",
+        "//pkg/util/metric",
         "//pkg/util/mon",
         "//pkg/util/retry",
         "//pkg/util/span",

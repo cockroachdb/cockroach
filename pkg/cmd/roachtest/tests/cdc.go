@@ -1341,7 +1341,7 @@ func runCDCFineGrainedCheckpointingBenchmark(
 		`SET CLUSTER SETTING changefeed.frontier_highwater_lag_checkpoint_threshold = '100ms'`,
 		`SET CLUSTER SETTING changefeed.frontier_checkpoint_frequency = '1s'`,
 		// We do not set timestamp quantization here since it is off by default
-		`SET CLUSTER SETTING kv.rangefeed.enabled = true`,
+		// `SET CLUSTER SETTING kv.rangefeed.enabled = true`,
 	}
 
 	values := []string{}
@@ -3167,8 +3167,16 @@ CONFIGURE ZONE USING
 						// Disable span-level checkpointing since it's not necessary
 						// when frontier persistence is on.
 						"changefeed.span_checkpoint.interval": "'0'",
+						// Set rangefeed closed timestamp refresh interval to 1s to
+						// increase checkpoint frequency.
+						"kv.rangefeed.closed_timestamp_refresh_interval": "'1s'",
+						// Set closed timestamp side transport interval to 1s.
+						"kv.closed_timestamp.side_transport_interval": "'1s'",
 						// TODO(#158779): When we add back per-table PTS, make sure that this test
-						// turns it off, to avoid it impacting the results.
+						// turns it off,  to avoid it impacting the results.
+						// TODO(#TODO): Once we have fixed single range rangefeed
+						// scalability, we should re-enable storage coalescing.
+						// "spanconfig.storage_coalesce_adjacent.enabled": "false",
 					} {
 						stmt := fmt.Sprintf(`SET CLUSTER SETTING %s = %s`, name, value)
 						if _, err := db.ExecContext(ctx, stmt); err != nil {

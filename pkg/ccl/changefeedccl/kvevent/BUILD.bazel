@@ -5,7 +5,6 @@ go_library(
     srcs = [
         "alloc.go",
         "blocking_buffer.go",
-        "chunked_event_queue.go",
         "event.go",
         "metrics.go",
         "testing_knobs.go",
@@ -26,6 +25,7 @@ go_library(
         "//pkg/util/metric",
         "//pkg/util/mon",
         "//pkg/util/quotapool",
+        "//pkg/util/ring",
         "//pkg/util/syncutil",
         "//pkg/util/timeutil",
         "@com_github_cockroachdb_crlib//crtime",
@@ -39,7 +39,6 @@ go_test(
         "alloc_test.go",
         "bench_test.go",
         "blocking_buffer_test.go",
-        "chunked_event_queue_test.go",
     ],
     embed = [":kvevent"],
     deps = [

@@ -61,7 +61,8 @@ type Config struct {
 	Spans              []roachpb.Span
 	Targets            changefeedbase.Targets
 	Writer             kvevent.Writer
-	Metrics            *kvevent.Metrics
+	BufferMetrics      *kvevent.Metrics
+	KVFeedMetrics      *Metrics
 	MonitoringCfg      MonitoringConfig
 	MM                 *mon.BytesMonitor
 	WithDiff           bool
@@ -133,7 +134,7 @@ func Run(ctx context.Context, cfg Config) error {
 	}
 
 	bf := func() kvevent.Buffer {
-		return kvevent.NewMemBuffer(cfg.MM.MakeBoundAccount(), &cfg.Settings.SV, &cfg.Metrics.RangefeedBufferMetrics)
+		return kvevent.NewMemBuffer(cfg.MM.MakeBoundAccount(), &cfg.Settings.SV, &cfg.BufferMetrics.RangefeedBufferMetrics)
 	}
 
 	g := ctxgroup.WithContext(ctx)
@@ -146,7 +147,7 @@ func Run(ctx context.Context, cfg Config) error {
 		cfg.InitialHighWater, cfg.InitialSpanTimePairs, cfg.EndTime,
 		cfg.Codec,
 		cfg.SchemaFeed,
-		sc, pff, bf, cfg.Targets, cfg.ScopedTimers, cfg.Knobs)
+		sc, pff, bf, cfg.Targets, cfg.ScopedTimers, cfg.KVFeedMetrics, cfg.Knobs)
 	f.onBackfillCallback = cfg.MonitoringCfg.OnBackfillCallback
 	f.rangeObserver = startLaggingRangesObserver(g, cfg.MonitoringCfg.LaggingRangesCallback,
 		cfg.MonitoringCfg.LaggingRangesPollingInterval, cfg.MonitoringCfg.LaggingRangesThreshold)
@@ -280,6 +281,7 @@ type kvFeed struct {
 
 	targets changefeedbase.Targets
 	timers  *timers.ScopedTimers
+	metrics *Metrics
 
 	// These dependencies are made available for test injection.
 	bufferFactory func() kvevent.Buffer
@@ -308,6 +310,7 @@ func newKVFeed(
 	bf func() kvevent.Buffer,
 	targets changefeedbase.Targets,
 	ts *timers.ScopedTimers,
+	metrics *Metrics,
 	knobs TestingKnobs,
 ) *kvFeed {
 	return &kvFeed{
@@ -331,6 +334,7 @@ func newKVFeed(
 		bufferFactory:        bf,
 		targets:              targets,
 		timers:               ts,
+		metrics:              metrics,
 		knobs:                knobs,
 	}
 }
@@ -626,6 +630,7 @@ func (f *kvFeed) runUntilTableEvent(ctx context.Context, resumeFrontier span.Fro
 		ConsumerID:           f.consumerID,
 		Knobs:                f.knobs,
 		Timers:               f.timers,
+		Metrics:              f.metrics,
 		RangeObserver:        f.rangeObserver,
 	}
 
