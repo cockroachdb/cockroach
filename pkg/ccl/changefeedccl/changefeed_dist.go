@@ -57,41 +57,35 @@ const (
 )
 
 // computeDistChangefeedTimestamps computes the initialHighWater and schemaTS
-// for a changefeed run, and mutates localState.progress when appropriate
-// (e.g., to set the high-water if initial scan should be skipped). It also
-// invokes testing knobs that observe the initial high-water.
+// for a changefeed run. The provided highWater is the most recent known
+// high-water mark (from the job record or from the previous flow's trailing
+// metadata for core changefeeds).
 func computeDistChangefeedTimestamps(
 	ctx context.Context,
 	execCtx sql.JobExecContext,
 	details jobspb.ChangefeedDetails,
-	localState *cachedState,
+	highWater hlc.Timestamp,
 ) (initialHighWater hlc.Timestamp, schemaTS hlc.Timestamp, _ error) {
 	opts := changefeedbase.MakeStatementOptions(details.Opts)
-	progress := localState.progress
 
 	// NB: A non-empty high water indicates that we have checkpointed a resolved
 	// timestamp. Skipping the initial scan is equivalent to starting the
 	// changefeed from a checkpoint at its start time. Initialize the progress
 	// based on whether we should perform an initial scan.
-	{
-		h := progress.GetHighWater()
-		noHighWater := (h == nil || h.IsEmpty())
-		// We want to set the highWater and thus avoid an initial scan if either
-		// this is a cursor and there was no request for one, or we don't have a
-		// cursor but we have a request to not have an initial scan.
+	if highWater.IsEmpty() {
 		initialScanType, err := opts.GetInitialScanType()
 		if err != nil {
 			return hlc.Timestamp{}, hlc.Timestamp{}, err
 		}
-		if noHighWater && initialScanType == changefeedbase.NoInitialScan {
+		if initialScanType == changefeedbase.NoInitialScan {
 			// If there is a cursor, the statement time has already been set to it.
-			progress.Progress = &jobspb.Progress_HighWater{HighWater: &details.StatementTime}
+			highWater = details.StatementTime
 		}
 	}
 
 	schemaTS = details.StatementTime
-	if h := progress.GetHighWater(); h != nil && !h.IsEmpty() {
-		initialHighWater = *h
+	if !highWater.IsEmpty() {
+		initialHighWater = highWater
 		// If we have a high-water set, use it to compute the spans, since the
 		// ones at the statement time may have been garbage collected by now.
 		schemaTS = initialHighWater
@@ -103,7 +97,7 @@ func computeDistChangefeedTimestamps(
 	// timestamp. However, an initial scan should be performed at exactly the
 	// timestamp specified; initial scans can be created at the timestamp of a
 	// schema change and thus should see the side-effect of the schema change.
-	if progress.GetHighWater() != nil {
+	if !highWater.IsEmpty() {
 		schemaTS = schemaTS.Next()
 	}
 
@@ -226,6 +220,7 @@ func startDistChangefeed(
 	details jobspb.ChangefeedDetails,
 	description string,
 	initialHighWater hlc.Timestamp,
+	spanLevelCheckpoint *jobspb.TimestampSpansMap,
 	localState *cachedState,
 	resultsCh chan<- tree.Datums,
 	onTracingEvent func(ctx context.Context, meta *execinfrapb.TracingAggregatorEvents),
@@ -254,12 +249,8 @@ func startDistChangefeed(
 
 	dsp := execCtx.DistSQLPlanner()
 
-	var spanLevelCheckpoint *jobspb.TimestampSpansMap
-	if progress := localState.progress.GetChangefeed(); progress != nil && progress.SpanLevelCheckpoint != nil {
-		spanLevelCheckpoint = progress.SpanLevelCheckpoint
-		if log.V(2) {
-			log.Changefeed.Infof(ctx, "span-level checkpoint: %s", spanLevelCheckpoint)
-		}
+	if spanLevelCheckpoint != nil && log.V(2) {
+		log.Changefeed.Infof(ctx, "span-level checkpoint: %s", spanLevelCheckpoint)
 	}
 
 	// Compute resolved spans to restore frontier state on startup.

@@ -277,9 +277,9 @@ message ChangefeedMeta {
   // This message is used by the aggregator to check/ping the coordinator processor.
   optional bool heartbeat = 3  [(gogoproto.nullable) = false];
 
-  // CoordinatorFrontier is set by the changeFrontier processor when it
-  // exits. Contains the full coordinator frontier state for core
-  // changefeeds to restore per-span progress on retry.
+  // CoordinatorFrontier is set by the frontier/coordinator when it exits.
+  // It contains a complete copy of the coordinator's frontier and is used by
+  // core changefeeds to restore progress on retry.
   repeated FrontierSpan coordinator_frontier = 4 [(gogoproto.nullable) = false];
 }
 

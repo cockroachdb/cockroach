@@ -1047,12 +1047,6 @@ type changeFrontier struct {
 	// span set.
 	frontier *resolvedspan.CoordinatorFrontier
 
-	// localState contains an in memory cache of progress updates.
-	// Used by core style changefeeds as well as regular changefeeds to make
-	// restarts more efficient with respects to duplicates.
-	// localState reflects an up-to-date information *after* the checkpoint.
-	localState *cachedState
-
 	// encoder is the Encoder to use for resolved timestamp serialization.
 	encoder Encoder
 	// sink is the Sink to write resolved timestamps to. Rows are never written
@@ -1148,11 +1142,21 @@ type coreProgress struct {
 	frontier []execinfrapb.ChangefeedMeta_FrontierSpan
 }
 
-// cachedState is a changefeed progress stored in memory.
-// It is used to reduce the number of duplicate events emitted during retries.
-type cachedState struct {
-	progress jobspb.Progress
+// highWater returns the high-water mark derived from the frontier (the minimum
+// timestamp across all spans). Returns an empty timestamp if the frontier is
+// empty.
+func (cp *coreProgress) highWater() hlc.Timestamp {
+	var hw hlc.Timestamp
+	for _, fs := range cp.frontier {
+		if hw.IsEmpty() || fs.Timestamp.Less(hw) {
+			hw = fs.Timestamp
+		}
+	}
+	return hw
+}
 
+// cachedState is changefeed state stored in memory between retries.
+type cachedState struct {
 	// coreProgress is non-nil only for core (sinkless) changefeeds.
 	coreProgress *coreProgress
 
@@ -1163,18 +1167,6 @@ type cachedState struct {
 	aggregatorFrontier []execinfrapb.ChangefeedMeta_FrontierSpan
 	// drainingNodes is the list of nodes that are draining.
 	drainingNodes []roachpb.NodeID
-}
-
-// SetHighwater implements the eval.ChangefeedState interface.
-func (cs *cachedState) SetHighwater(frontier hlc.Timestamp) {
-	cs.progress.Progress = &jobspb.Progress_HighWater{
-		HighWater: &frontier,
-	}
-}
-
-// SetCheckpoint implements the eval.ChangefeedState interface.
-func (cs *cachedState) SetCheckpoint(checkpoint *jobspb.TimestampSpansMap) {
-	cs.progress.Details.(*jobspb.Progress_Changefeed).Changefeed.SpanLevelCheckpoint = checkpoint
 }
 
 // AggregatorFrontierSpans returns an iterator over the spans in the aggregator
@@ -1273,8 +1265,6 @@ func newChangeFrontierProcessor(
 	memMonitor := execinfra.NewMonitor(ctx, flowCtx.Mon, mon.MakeName("changefntr-mem"))
 
 	cf := &changeFrontier{
-		// We might modify the ChangefeedState field in the eval.Context, so we
-		// need to make a copy.
 		evalCtx:       flowCtx.NewEvalCtx(),
 		spec:          spec,
 		memAcc:        memMonitor.MakeBoundAccount(),
@@ -1455,13 +1445,6 @@ func (cf *changeFrontier) Start(ctx context.Context) {
 	cf.sink = &errorWrapperSink{wrapped: cf.sink}
 
 	cf.highWaterAtStart = cf.spec.Feed.StatementTime
-	if cf.evalCtx.ChangefeedState == nil {
-		log.Changefeed.Warningf(cf.Ctx(), "moving to draining due to missing changefeed state")
-		cf.MoveToDraining(errors.AssertionFailedf("expected initialized local state"))
-		return
-	}
-
-	cf.localState = cf.evalCtx.ChangefeedState.(*cachedState)
 	cf.js = newJobState(nil, cf.FlowCtx.Cfg.Settings, cf.metrics, timeutil.DefaultTimeSource{})
 
 	var initialHighwater hlc.Timestamp
@@ -1958,9 +1941,6 @@ func (cf *changeFrontier) checkpointJobProgress(
 				frontier, spanLevelCheckpoint)
 		}
 	}
-
-	cf.localState.SetHighwater(frontier)
-	cf.localState.SetCheckpoint(spanLevelCheckpoint)
 
 	return nil
 }
