@@ -1,6 +1,13 @@
 setup
 CREATE TABLE t (i INT PRIMARY KEY, j INT);
-CREATE INDEX idx ON t(j)
+CREATE INDEX idx ON t(j);
+CREATE FUNCTION f_trigger() RETURNS TRIGGER LANGUAGE PLpgSQL AS $$
+BEGIN
+  SELECT j FROM t@idx WHERE j = 1;
+  RETURN NULL;
+END;
+$$;
+CREATE TRIGGER trg AFTER INSERT ON t FOR EACH ROW EXECUTE FUNCTION f_trigger();
 ----
 
 stage-exec phase=PostCommitNonRevertiblePhase stage=:
@@ -19,6 +26,12 @@ stage-query phase=PostCommitNonRevertiblePhase stage=:
 SELECT count(*)=$successfulStageCount*2 FROM t;
 ----
 true
+
+# Verify the trigger is gone after the schema change completes.
+stage-query phase=PostCommitNonRevertiblePhase stage=3
+SELECT count(*) FROM [SHOW TRIGGERS FROM t];
+----
+0
 
 test
 DROP INDEX idx CASCADE

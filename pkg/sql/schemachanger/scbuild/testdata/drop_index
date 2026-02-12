@@ -249,3 +249,47 @@ DROP INDEX v2@idx CASCADE
   {indexId: 1, tableId: 107}
 - [[TableData:{DescID: 107, ReferencedDescID: 100}, ABSENT], PUBLIC]
   {databaseId: 100, tableId: 107}
+
+setup
+CREATE TABLE t_trigger(n INT PRIMARY KEY, j INT);
+CREATE INDEX idx ON t_trigger(j);
+CREATE FUNCTION f_trigger() RETURNS TRIGGER LANGUAGE PLpgSQL AS $$
+BEGIN
+  SELECT j FROM t_trigger@idx WHERE j = 32;
+  RETURN NULL;
+END;
+$$;
+CREATE TRIGGER tr1 AFTER INSERT ON t_trigger FOR EACH ROW EXECUTE FUNCTION f_trigger();
+----
+
+build
+DROP INDEX t_trigger@idx CASCADE
+----
+- [[IndexData:{DescID: 108, IndexID: 1}, PUBLIC], PUBLIC]
+  {indexId: 1, tableId: 108}
+- [[IndexColumn:{DescID: 108, ColumnID: 2, IndexID: 2}, ABSENT], PUBLIC]
+  {columnId: 2, indexId: 2, tableId: 108}
+- [[IndexColumn:{DescID: 108, ColumnID: 1, IndexID: 2}, ABSENT], PUBLIC]
+  {columnId: 1, indexId: 2, kind: KEY_SUFFIX, tableId: 108}
+- [[SecondaryIndex:{DescID: 108, IndexID: 2, ConstraintID: 0, RecreateSourceIndexID: 0, RecreateTargetIndexID: 0}, ABSENT], PUBLIC]
+  {indexId: 2, isCreatedExplicitly: true, tableId: 108}
+- [[IndexName:{DescID: 108, Name: idx, IndexID: 2}, ABSENT], PUBLIC]
+  {indexId: 2, name: idx, tableId: 108}
+- [[IndexData:{DescID: 108, IndexID: 2}, ABSENT], PUBLIC]
+  {indexId: 2, tableId: 108}
+- [[Trigger:{DescID: 108, TriggerID: 1}, ABSENT], PUBLIC]
+  {tableId: 108, triggerId: 1}
+- [[TriggerName:{DescID: 108, TriggerID: 1}, ABSENT], PUBLIC]
+  {name: tr1, tableId: 108, triggerId: 1}
+- [[TriggerEnabled:{DescID: 108, TriggerID: 1}, ABSENT], PUBLIC]
+  {tableId: 108, triggerId: 1}
+- [[TriggerTiming:{DescID: 108, TriggerID: 1}, ABSENT], PUBLIC]
+  {actionTime: AFTER, forEachRow: true, tableId: 108, triggerId: 1}
+- [[TriggerEvents:{DescID: 108, TriggerID: 1}, ABSENT], PUBLIC]
+  {events: [{type: INSERT}], tableId: 108, triggerId: 1}
+- [[TriggerFunctionCall:{DescID: 108, TriggerID: 1}, ABSENT], PUBLIC]
+  {funcBody: "BEGIN\nSELECT j FROM defaultdb.public.t_trigger@idx WHERE j = 32;\nRETURN NULL;\nEND;\n", funcId: 109, tableId: 108, triggerId: 1}
+- [[TriggerDeps:{DescID: 108, TriggerID: 1, ReferencedFunctionIDs: [109]}, ABSENT], PUBLIC]
+  {tableId: 108, triggerId: 1, usesRelations: [{columnIds: [2], id: 108, indexId: 2}], usesRoutineIds: [109]}
+- [[TableData:{DescID: 108, ReferencedDescID: 100}, PUBLIC], PUBLIC]
+  {databaseId: 100, tableId: 108}

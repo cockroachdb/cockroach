@@ -50,6 +50,13 @@ func WalkConstraintIDs(e scpb.Element, f func(id *catid.ConstraintID) error) err
 	})
 }
 
+// WalkTriggerIDs calls f for every catid.TriggerID field in e.
+func WalkTriggerIDs(e scpb.Element, f func(id *catid.TriggerID) error) error {
+	return walk(reflect.TypeOf((*catid.TriggerID)(nil)), e, func(i interface{}) error {
+		return f(i.(*catid.TriggerID))
+	})
+}
+
 func WalkIndexIDs(e scpb.Element, f func(id *catid.IndexID) error) error {
 	return walk(reflect.TypeOf((*catid.IndexID)(nil)), e, func(i interface{}) error {
 		return f(i.(*catid.IndexID))

@@ -21,7 +21,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
-	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/errors"
 )
 
@@ -232,18 +231,21 @@ func dropColumn(
 			}
 			dropCascadeDescriptor(b, e.FunctionID)
 		case *scpb.TriggerDeps:
-			if behavior == tree.DropCascade {
-				panic(unimplemented.NewWithIssuef(
-					146667, "ALTER TABLE DROP COLUMN cascade not supported with triggers"))
-			}
 			triggerName := b.QueryByID(e.TableID).FilterTriggerName().Filter(func(_ scpb.Status, _ scpb.TargetStatus, tn *scpb.TriggerName) bool {
 				return tn.TriggerID == e.TriggerID
 			}).MustGetOneElement()
 			tableName := b.QueryByID(e.TableID).FilterNamespace().MustGetOneElement()
-			panic(sqlerrors.NewDependentObjectErrorf(
-				"cannot drop column %q because trigger %q on table %q depends on it",
-				cn.Name, triggerName.Name, tableName.Name,
+			if behavior != tree.DropCascade {
+				panic(sqlerrors.NewDependentObjectErrorf(
+					"cannot drop column %q because trigger %q on table %q depends on it",
+					cn.Name, triggerName.Name, tableName.Name,
+				))
+			}
+			b.EvalCtx().ClientNoticeSender.BufferClientNotice(b, pgnotice.Newf(
+				"drop cascades to trigger %s on table %s",
+				triggerName.Name, tableName.Name,
 			))
+			dropTrigger(b, e.TableID, e.TriggerID)
 		case *scpb.CheckConstraint:
 			constraintElems := b.QueryByID(e.TableID).Filter(hasConstraintIDAttrFilter(e.ConstraintID))
 			_, _, constraintName := scpb.FindConstraintWithoutIndexName(constraintElems.Filter(publicTargetFilter))

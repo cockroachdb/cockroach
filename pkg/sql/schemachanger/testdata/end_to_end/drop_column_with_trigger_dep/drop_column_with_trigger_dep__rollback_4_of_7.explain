@@ -1,0 +1,79 @@
+/* setup */
+CREATE TABLE t (i INT PRIMARY KEY, j INT, k INT);
+CREATE FUNCTION f_trigger() RETURNS TRIGGER LANGUAGE PLpgSQL AS $$
+BEGIN
+  SELECT j FROM t WHERE j = 1;
+  RETURN NULL;
+END;
+$$;
+CREATE TRIGGER trg AFTER INSERT ON t FOR EACH ROW EXECUTE FUNCTION f_trigger();
+INSERT INTO t VALUES(-1);
+INSERT INTO t VALUES(-2);
+INSERT INTO t VALUES(-3);
+
+/* test */
+ALTER TABLE t DROP COLUMN j CASCADE;
+EXPLAIN (DDL) rollback at post-commit stage 4 of 7;
+----
+Schema change plan for rolling back ALTER TABLE defaultdb.public.t DROP COLUMN j CASCADE;
+ └── PostCommitNonRevertiblePhase
+      ├── Stage 1 of 3 in PostCommitNonRevertiblePhase
+      │    ├── 9 elements transitioning toward PUBLIC
+      │    │    ├── WRITE_ONLY  → PUBLIC      Column:{DescID: 104 (t), ColumnID: 2 (j+)}
+      │    │    ├── ABSENT      → PUBLIC      ColumnName:{DescID: 104 (t), Name: "j", ColumnID: 2 (j+)}
+      │    │    ├── ABSENT      → PUBLIC      Trigger:{DescID: 104 (t), TriggerID: 1}
+      │    │    ├── ABSENT      → PUBLIC      TriggerName:{DescID: 104 (t), TriggerID: 1}
+      │    │    ├── ABSENT      → PUBLIC      TriggerEnabled:{DescID: 104 (t), TriggerID: 1}
+      │    │    ├── ABSENT      → PUBLIC      TriggerTiming:{DescID: 104 (t), TriggerID: 1}
+      │    │    ├── ABSENT      → PUBLIC      TriggerEvents:{DescID: 104 (t), TriggerID: 1}
+      │    │    ├── ABSENT      → PUBLIC      TriggerFunctionCall:{DescID: 104 (t), TriggerID: 1}
+      │    │    └── ABSENT      → PUBLIC      TriggerDeps:{DescID: 104 (t), TriggerID: 1, ReferencedFunctionIDs: [105 (f_trigger)]}
+      │    ├── 6 elements transitioning toward ABSENT
+      │    │    ├── DELETE_ONLY → ABSENT      PrimaryIndex:{DescID: 104 (t), IndexID: 2 (t_pkey-), ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1 (t_pkey+)}
+      │    │    ├── PUBLIC      → ABSENT      IndexColumn:{DescID: 104 (t), ColumnID: 1 (i), IndexID: 2 (t_pkey-)}
+      │    │    ├── PUBLIC      → ABSENT      IndexColumn:{DescID: 104 (t), ColumnID: 3 (k), IndexID: 2 (t_pkey-)}
+      │    │    ├── WRITE_ONLY  → DELETE_ONLY TemporaryIndex:{DescID: 104 (t), IndexID: 3, ConstraintID: 3, SourceIndexID: 1 (t_pkey+)}
+      │    │    ├── PUBLIC      → ABSENT      IndexColumn:{DescID: 104 (t), ColumnID: 1 (i), IndexID: 3}
+      │    │    └── PUBLIC      → ABSENT      IndexColumn:{DescID: 104 (t), ColumnID: 3 (k), IndexID: 3}
+      │    └── 21 Mutation operations
+      │         ├── SetColumnName {"ColumnID":2,"Name":"j","TableID":104}
+      │         ├── AddTrigger {"Trigger":{"TableID":104,"TriggerID":1}}
+      │         ├── SetTriggerName {"Name":{"Name":"trg","TableID":104,"TriggerID":1}}
+      │         ├── SetTriggerEnabled {"Enabled":true,"TableID":104,"TriggerID":1}
+      │         ├── SetTriggerTiming {"Timing":{"ActionTime":2,"ForEachRow":true,"TableID":104,"TriggerID":1}}
+      │         ├── SetTriggerEvents {"Events":{"TableID":104,"TriggerID":1}}
+      │         ├── SetTriggerFunctionCall {"FunctionCall":{"FuncBody":"BEGIN\nSELECT j F...","FuncID":105,"TableID":104,"TriggerID":1}}
+      │         ├── SetTriggerForwardReferences {"Deps":{"TableID":104,"TriggerID":1}}
+      │         ├── UpdateTriggerBackReferencesInRelations {"TableID":104,"TriggerID":1}
+      │         ├── AddTriggerBackReferencesInRoutines {"BackReferencedTableID":104,"BackReferencedTriggerID":1}
+      │         ├── RemoveColumnFromIndex {"ColumnID":1,"IndexID":2,"TableID":104}
+      │         ├── RemoveColumnFromIndex {"ColumnID":3,"IndexID":2,"Kind":2,"TableID":104}
+      │         ├── MakeWriteOnlyIndexDeleteOnly {"IndexID":3,"TableID":104}
+      │         ├── RemoveColumnFromIndex {"ColumnID":1,"IndexID":3,"TableID":104}
+      │         ├── RemoveColumnFromIndex {"ColumnID":3,"IndexID":3,"Kind":2,"TableID":104}
+      │         ├── MakeWriteOnlyColumnPublic {"ColumnID":2,"TableID":104}
+      │         ├── RefreshStats {"TableID":104}
+      │         ├── MakeIndexAbsent {"IndexID":2,"TableID":104}
+      │         ├── SetJobStateOnDescriptor {"DescriptorID":104}
+      │         ├── SetJobStateOnDescriptor {"DescriptorID":105}
+      │         └── UpdateSchemaChangerJob {"IsNonCancelable":true,"RunningStatus":"Pending: Updatin..."}
+      ├── Stage 2 of 3 in PostCommitNonRevertiblePhase
+      │    ├── 3 elements transitioning toward ABSENT
+      │    │    ├── PUBLIC      → ABSENT IndexData:{DescID: 104 (t), IndexID: 2 (t_pkey-)}
+      │    │    ├── DELETE_ONLY → ABSENT TemporaryIndex:{DescID: 104 (t), IndexID: 3, ConstraintID: 3, SourceIndexID: 1 (t_pkey+)}
+      │    │    └── PUBLIC      → ABSENT IndexData:{DescID: 104 (t), IndexID: 3}
+      │    └── 6 Mutation operations
+      │         ├── CreateGCJobForIndex {"IndexID":2,"TableID":104}
+      │         ├── MakeIndexAbsent {"IndexID":3,"TableID":104}
+      │         ├── CreateGCJobForIndex {"IndexID":3,"TableID":104}
+      │         ├── SetJobStateOnDescriptor {"DescriptorID":104}
+      │         ├── SetJobStateOnDescriptor {"DescriptorID":105}
+      │         └── UpdateSchemaChangerJob {"IsNonCancelable":true,"RunningStatus":"Pending: Updatin..."}
+      └── Stage 3 of 3 in PostCommitNonRevertiblePhase
+           ├── 1 element transitioning toward TRANSIENT_PUBLIC
+           │    └── ABSENT → TRANSIENT_PUBLIC TableSchemaLocked:{DescID: 104 (t)}
+           └── 4 Mutation operations
+                ├── SetTableSchemaLocked {"Locked":true,"TableID":104}
+                ├── RemoveJobStateFromDescriptor {"DescriptorID":104}
+                ├── RemoveJobStateFromDescriptor {"DescriptorID":105}
+                └── UpdateSchemaChangerJob {"IsNonCancelable":true,"RunningStatus":"all stages compl..."}
