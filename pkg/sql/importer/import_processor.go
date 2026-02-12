@@ -572,6 +572,8 @@ func makeIngestHelper(
 			rowStorage:            rowStorage,
 			fileAllocator:         fileAllocator,
 			baseBulkAdderProgress: baseProgress,
+			tableID:               uint64(table.Desc.ID),
+			entryCounts:           make(map[uint64]int64),
 		}
 		indexAdder = helper
 	} else {
@@ -787,12 +789,48 @@ type mergeImportBulkAdder struct {
 	fileAllocator bulksst.FileAllocator
 
 	*baseBulkAdderProgress
+
+	// tableID is the table descriptor ID, used to construct BulkOpSummaryID
+	// keys for entry counting.
+	tableID uint64
+	// currentIndexID tracks which index is being written to, set via
+	// SetIndexID.
+	currentIndexID catid.IndexID
+	// entryCounts tracks the number of KV entries added per
+	// BulkOpSummaryID(tableID, indexID).
+	entryCounts map[uint64]int64
 }
 
 var _ ingestHelper = &mergeImportBulkAdder{}
 
-// SetIndexID() implements the importHelper interface.
-func (miba *mergeImportBulkAdder) SetIndexID(_ catid.IndexID) {}
+// SetIndexID implements the importHelper interface.
+func (miba *mergeImportBulkAdder) SetIndexID(indexID catid.IndexID) {
+	miba.currentIndexID = indexID
+}
+
+// Add implements the BulkAdder interface, delegating to Writer.Add while
+// tracking entry counts per index.
+func (miba *mergeImportBulkAdder) Add(ctx context.Context, key roachpb.Key, value []byte) error {
+	if err := miba.Writer.Add(ctx, key, value); err != nil {
+		return err
+	}
+	summaryID := kvpb.BulkOpSummaryID(miba.tableID, uint64(miba.currentIndexID))
+	miba.entryCounts[summaryID]++
+	return nil
+}
+
+// GetSummary implements the BulkAdder interface. It returns the Writer's
+// summary augmented with entry counts tracked by this adder.
+func (miba *mergeImportBulkAdder) GetSummary() kvpb.BulkOpSummary {
+	summary := miba.Writer.GetSummary()
+	if summary.EntryCounts == nil {
+		summary.EntryCounts = make(map[uint64]int64, len(miba.entryCounts))
+	}
+	for id, count := range miba.entryCounts {
+		summary.EntryCounts[id] += count
+	}
+	return summary
+}
 
 // GetFileList() implements the importHelper interface.
 func (miba *mergeImportBulkAdder) GetFileList() *bulksst.SSTFiles {
