@@ -98,6 +98,7 @@ type cloudStorageSinkFile struct {
 	oldestMVCC    hlc.Timestamp
 	parquetCodec  *parquetWriter
 	allocCallback func(delta int64)
+	testingKnobs  *TestingKnobs
 }
 
 func (f *cloudStorageSinkFile) mergeAlloc(other *kvevent.Alloc) {
@@ -121,6 +122,9 @@ func (f *cloudStorageSinkFile) adjustBytesToTarget(ctx context.Context, targetBy
 var _ io.Writer = &cloudStorageSinkFile{}
 
 func (f *cloudStorageSinkFile) Write(p []byte) (int, error) {
+	if f.testingKnobs != nil && f.testingKnobs.RaiseRetryableError != nil {
+		return 0, f.testingKnobs.RaiseRetryableError()
+	}
 	f.rawSize += len(p)
 	if f.codec != nil {
 		return f.codec.Write(p)
@@ -549,6 +553,7 @@ func (s *cloudStorageSink) getOrCreateFile(
 		cloudStorageSinkKey: key,
 		oldestMVCC:          eventMVCC,
 		allocCallback:       s.metrics.makeCloudstorageFileAllocCallback(),
+		testingKnobs:        s.testingKnobs,
 	}
 
 	if s.compression.enabled() {
