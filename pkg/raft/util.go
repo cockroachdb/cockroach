@@ -197,7 +197,13 @@ func DescribeMessage(m pb.Message, f EntryFormatter) string {
 	fmt.Fprintf(&buf, "%s->%s %v Term:%d Log:%d/%d",
 		describeTarget(m.From), describeTarget(m.To), m.Type, m.Term, m.LogTerm, m.Index)
 	if m.Reject {
-		fmt.Fprintf(&buf, " Rejected (Hint: %d)", m.RejectHint)
+		fmt.Fprintf(&buf, " Rejected")
+	}
+	if m.RejectHint != 0 {
+		fmt.Fprintf(&buf, " Hint:%d/%d", m.LogTerm, m.RejectHint)
+	}
+	if len(m.TcEntryIDs) != 0 {
+		fmt.Fprintf(&buf, " TermCache: %v", prettyPrintLogTermCacheContents(convertEntryIDs(m.TcEntryIDs)))
 	}
 	if m.Commit != 0 {
 		fmt.Fprintf(&buf, " Commit:%d", m.Commit)

@@ -12,25 +12,40 @@ import (
 
 // ElectionTracker is used to track votes from the currently active configuration
 // and determine election results.
+// Also used for storing hints which will benefit the first round of MsgApp if
+// the candidate becomes leader.
 type ElectionTracker struct {
-	config *quorum.Config
+	config     *quorum.Config
+	votes      map[pb.PeerID]bool
+	matchGuess map[pb.PeerID]MatchGuess
+}
 
-	votes map[pb.PeerID]bool
+// MatchGuess stores information needed for the new leader to decide where to
+// send entryIDs from after winning leader election.
+type MatchGuess struct {
+	// index is the best guess on where the voter's log potentially matches the
+	// candidate's. When elected, the leader will start replicating the log from
+	// index + 1.
+	Index uint64
+	// match indicates whether the voter's log matches the candidate's at index.
+	Match bool
 }
 
 func MakeElectionTracker(config *quorum.Config) ElectionTracker {
 	return ElectionTracker{
-		config: config,
-		votes:  map[pb.PeerID]bool{},
+		config:     config,
+		votes:      map[pb.PeerID]bool{},
+		matchGuess: map[pb.PeerID]MatchGuess{},
 	}
 }
 
 // RecordVote records that the node with the given id voted for this Raft
-// instance if v == true (and declined it otherwise).
-func (e *ElectionTracker) RecordVote(id pb.PeerID, vote bool) {
+// instance if vote == true (and declined it otherwise).
+func (e *ElectionTracker) RecordVote(id pb.PeerID, vote bool, matchGuess MatchGuess) {
 	_, ok := e.votes[id]
 	if !ok {
 		e.votes[id] = vote
+		e.matchGuess[id] = matchGuess
 	}
 }
 
@@ -55,9 +70,17 @@ func (e *ElectionTracker) TallyVotes() (granted int, rejected int, _ quorum.Vote
 	return granted, rejected, result
 }
 
+// MatchGuess returns the matchGuess previously recorded for the given PeerID,
+// if it exists.
+func (e *ElectionTracker) MatchGuess(id pb.PeerID) (MatchGuess, bool) {
+	matchGuess, ok := e.matchGuess[id]
+	return matchGuess, ok
+}
+
 // ResetVotes prepares for a new round of vote counting via recordVote.
 func (e *ElectionTracker) ResetVotes() {
 	clear(e.votes)
+	clear(e.matchGuess)
 }
 
 // TestingGetVotes exports the votes map for testing.
