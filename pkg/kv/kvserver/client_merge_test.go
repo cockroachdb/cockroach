@@ -3814,6 +3814,28 @@ func TestStoreRangeMergeSlowWatcher(t *testing.T) {
 	}
 }
 
+// TestStoreRangeMergeRaftSnapshot exercises Raft snapshot application across
+// range merges and splits. It sets up a 5-node cluster (stores s1–s5) with
+// manual replication, then:
+//
+//  1. Creates a scratch range [Start, End) replicated to s1, s2, s3.
+//  2. Splits it into four ranges:
+//     r1=[Start, a)  r2=[a, b)  r3=[b, c)  r4=[c, End)
+//  3. Writes values at keys a, b, c and 10 keys past d in [d, End).
+//  4. Blocks all Raft traffic for r2 on s3 so that s3 falls behind.
+//  5. Merges r2+r3+r4 into r2=[a, End), then splits at d:
+//     r2=[a, d)  r5=[d, End)
+//  6. Truncates the Raft log on r2 so that s3 cannot catch up via log entries.
+//  7. (rebalanceRHSAway=true only) Rebalances r5 away from s1 and s3 onto
+//     s4 and s5.
+//  8. Restores Raft traffic to s3 (still filtering stale MsgApp), forcing s3
+//     to catch up via a Raft snapshot for r2.
+//  9. Verifies that the Raft snapshot was applied and that the engine key sets
+//     on s1 and s3 match for the key span both stores hold.
+//
+// The beforeSnapshotSSTIngestion hook additionally verifies the byte-level
+// contents of the SSTs that make up the snapshot, including the SSTs that
+// clear range-ID local keys and user data of the subsumed replicas (r3, r4).
 func TestStoreRangeMergeRaftSnapshot(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -3823,7 +3845,7 @@ func TestStoreRangeMergeRaftSnapshot(t *testing.T) {
 	defer kvstorage.TestingForceClearRange()()
 
 	testutils.RunTrueAndFalse(t, "rebalanceRHSAway", func(t *testing.T, rebalanceRHSAway bool) {
-		// We will be testing the SSTs written on store2's engine.
+		// We will be testing the SSTs written on store3's engine.
 		var receivingEng, sendingEng storage.Engine
 		// All of these variables will be populated later, after starting the
 		// cluster.
@@ -4052,9 +4074,9 @@ func TestStoreRangeMergeRaftSnapshot(t *testing.T) {
 				},
 			})
 		defer tc.Stopper().Stop(ctx)
-		store0, store2 := tc.GetFirstStoreFromServer(t, 0), tc.GetFirstStoreFromServer(t, 2)
-		sendingEng = store0.StateEngine()
-		receivingEng = store2.StateEngine()
+		store1, store3 := tc.GetFirstStoreFromServer(t, 0), tc.GetFirstStoreFromServer(t, 2)
+		sendingEng = store1.StateEngine()
+		receivingEng = store3.StateEngine()
 		distSender := tc.Servers[0].DistSenderI().(kv.Sender)
 
 		// This test works across 5 ranges in total. We start with a scratch
@@ -4064,7 +4086,7 @@ func TestStoreRangeMergeRaftSnapshot(t *testing.T) {
 		// range(3) = [b, c)
 		// range(4) = [c, End).
 		keyStart = tc.ScratchRange(t)
-		repl := store0.LookupReplica(roachpb.RKey(keyStart))
+		repl := store1.LookupReplica(roachpb.RKey(keyStart))
 		keyEnd = repl.Desc().EndKey.AsRawKey()
 		keyA = keyStart.Next().Next()
 		keyB = keyA.Next().Next()
@@ -4096,12 +4118,12 @@ func TestStoreRangeMergeRaftSnapshot(t *testing.T) {
 			tc.WaitForValues(t, key, []int64{1, 1, 1, 0, 0})
 		}
 
-		aRepl0 := store0.LookupReplica(roachpb.RKey(keyA))
+		aRepl1 := store1.LookupReplica(roachpb.RKey(keyA))
 
-		// Start dropping all Raft traffic to the first range on store2.
-		tc.Servers[2].RaftTransport().(*kvserver.RaftTransport).ListenIncomingRaftMessages(store2.Ident.StoreID, &kvtestutils.UnreliableRaftHandler{
-			RangeID:                    aRepl0.RangeID,
-			IncomingRaftMessageHandler: store2,
+		// Start dropping all Raft traffic to the first range on store3.
+		tc.Servers[2].RaftTransport().(*kvserver.RaftTransport).ListenIncomingRaftMessages(store3.Ident.StoreID, &kvtestutils.UnreliableRaftHandler{
+			RangeID:                    aRepl1.RangeID,
+			IncomingRaftMessageHandler: store3,
 			UnreliableRaftHandlerFuncs: kvtestutils.UnreliableRaftHandlerFuncs{
 				DropReq: func(request *kvserverpb.RaftMessageRequest) bool {
 					return true
@@ -4124,7 +4146,7 @@ func TestStoreRangeMergeRaftSnapshot(t *testing.T) {
 
 		// Truncate the logs of the LHS.
 		index := func() kvpb.RaftIndex {
-			repl := store0.LookupReplica(roachpb.RKey(keyA))
+			repl := store1.LookupReplica(roachpb.RKey(keyA))
 			index := repl.GetLastIndex()
 			truncArgs := &kvpb.TruncateLogRequest{
 				RequestHeader: kvpb.RequestHeader{Key: keyA},
@@ -4138,31 +4160,31 @@ func TestStoreRangeMergeRaftSnapshot(t *testing.T) {
 			return index
 		}()
 
-		beforeRaftSnaps := store2.Metrics().RangeSnapshotsAppliedByVoters.Count()
+		beforeRaftSnaps := store3.Metrics().RangeSnapshotsAppliedByVoters.Count()
 
-		// Rebalance the RHS away from both store0 and store2 if the version of
+		// Rebalance the RHS away from both store1 and store3 if the version of
 		// the test calls for it.
 		if rebalanceRHSAway {
 			tc.AddVotersOrFatal(t, keyD, tc.Target(4))
 			tc.RemoveVotersOrFatal(t, keyD, tc.Target(2))
 			tc.TransferRangeLeaseOrFatal(
-				t, *store0.LookupReplica(roachpb.RKey(keyD)).Desc(), tc.Target(4),
+				t, *store1.LookupReplica(roachpb.RKey(keyD)).Desc(), tc.Target(4),
 			)
 			tc.AddVotersOrFatal(t, keyD, tc.Target(3))
 			tc.RemoveVotersOrFatal(t, keyD, tc.Target(0))
 		}
 
-		// Restore Raft traffic to the LHS on store2.
-		log.KvDistribution.Infof(ctx, "restored traffic to store 2")
-		tc.Servers[2].RaftTransport().(*kvserver.RaftTransport).ListenIncomingRaftMessages(store2.Ident.StoreID, &kvtestutils.UnreliableRaftHandler{
-			RangeID:                    aRepl0.RangeID,
-			IncomingRaftMessageHandler: store2,
+		// Restore Raft traffic to the LHS on store3.
+		log.KvDistribution.Infof(ctx, "restored traffic to store 3")
+		tc.Servers[2].RaftTransport().(*kvserver.RaftTransport).ListenIncomingRaftMessages(store3.Ident.StoreID, &kvtestutils.UnreliableRaftHandler{
+			RangeID:                    aRepl1.RangeID,
+			IncomingRaftMessageHandler: store3,
 			UnreliableRaftHandlerFuncs: kvtestutils.UnreliableRaftHandlerFuncs{
 				DropReq: func(req *kvserverpb.RaftMessageRequest) bool {
 					// Make sure that even going forward no MsgApp for what we
 					// just truncated can make it through. The Raft transport is
 					// asynchronous so this is necessary to make the test pass
-					// reliably - otherwise the follower on store2 may catch up
+					// reliably - otherwise the follower on store3 may catch up
 					// without needing a snapshot, tripping up the test.
 					//
 					// NB: the Index on the message is the log index that
@@ -4177,16 +4199,27 @@ func TestStoreRangeMergeRaftSnapshot(t *testing.T) {
 		})
 
 		// Wait for all replicas to catch up to the same point. Because we
-		// truncated the log while store2 was unavailable, this will require a
+		// truncated the log while store3 was unavailable, this will require a
 		// Raft snapshot.
+		//
+		// When the RHS was rebalanced away, limit the key comparison to
+		// [keyStart, keyD) — the LHS that both stores are guaranteed to hold.
+		// store1 may retain stale data from its old RHS replica (r85) while
+		// the conf change removing it propagates and replica GC runs; store3
+		// had the corresponding key span cleared during snapshot subsumption.
+		// Comparing the full [keyStart, keyEnd) would race against the
+		// asynchronous replica GC of store1's stale RHS replica.
+		scanEnd := keyEnd
+		if rebalanceRHSAway {
+			scanEnd = keyD
+		}
 		testutils.SucceedsSoon(t, func() error {
-			afterRaftSnaps := store2.Metrics().RangeSnapshotsAppliedByVoters.Count()
+			afterRaftSnaps := store3.Metrics().RangeSnapshotsAppliedByVoters.Count()
 			if afterRaftSnaps <= beforeRaftSnaps {
-				return errors.New("expected store2 to apply at least 1 additional raft snapshot")
+				return errors.New("expected store3 to apply at least 1 additional raft snapshot")
 			}
-			// We only look at the range of keys the test has been manipulating.
 			getKeySet := func(engine storage.Engine) map[string]struct{} {
-				kvs, err := storage.Scan(context.Background(), engine, keyStart, keyEnd, 0)
+				kvs, err := storage.Scan(context.Background(), engine, keyStart, scanEnd, 0)
 				if err != nil {
 					t.Fatal(err)
 				}
@@ -4197,17 +4230,17 @@ func TestStoreRangeMergeRaftSnapshot(t *testing.T) {
 				return out
 			}
 
-			// Verify that the sets of keys in store0 and store2 are identical.
-			storeKeys0 := getKeySet(store0.TODOEngine())
-			storeKeys2 := getKeySet(store2.TODOEngine())
-			for k := range storeKeys0 {
-				if _, ok := storeKeys2[k]; !ok {
-					return fmt.Errorf("store2 missing key %s", roachpb.Key(k))
+			// Verify that the sets of keys in store1 and store3 are identical.
+			storeKeys1 := getKeySet(store1.TODOEngine())
+			storeKeys3 := getKeySet(store3.TODOEngine())
+			for k := range storeKeys1 {
+				if _, ok := storeKeys3[k]; !ok {
+					return fmt.Errorf("store3 missing key %s", roachpb.Key(k))
 				}
 			}
-			for k := range storeKeys2 {
-				if _, ok := storeKeys0[k]; !ok {
-					return fmt.Errorf("store2 has extra key %s", roachpb.Key(k))
+			for k := range storeKeys3 {
+				if _, ok := storeKeys1[k]; !ok {
+					return fmt.Errorf("store3 has extra key %s", roachpb.Key(k))
 				}
 			}
 			return nil
