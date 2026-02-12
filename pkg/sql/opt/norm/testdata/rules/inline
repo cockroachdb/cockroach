@@ -1873,3 +1873,37 @@ project-set
  │    └── ()
  └── zip
       └── x_y(1, 2) [immutable, udf]
+
+exec-ddl
+CREATE TABLE json_tab (
+  id INT PRIMARY KEY,
+  data JSONB,
+  code STRING AS (data->'seg'->>'code') STORED,
+  INDEX (code)
+)
+----
+
+# Regression test for #162504. Ensure that JSON fetch operators can be inlined
+# through projections, allowing filters to be pushed down and use indexes on
+# computed columns.
+norm expect=PushSelectIntoInlinableProject
+SELECT * FROM (SELECT id, data->'seg'->>'code' AS code FROM json_tab) WHERE code = 'foo'
+----
+project
+ ├── columns: id:1!null code:6!null
+ ├── immutable
+ ├── key: (1)
+ ├── fd: ()-->(6), (1)-->(6)
+ ├── select
+ │    ├── columns: id:1!null data:2
+ │    ├── immutable
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(2)
+ │    ├── scan json_tab
+ │    │    ├── columns: id:1!null data:2
+ │    │    ├── key: (1)
+ │    │    └── fd: (1)-->(2)
+ │    └── filters
+ │         └── (data:2->'seg'->>'code') = 'foo' [outer=(2), immutable]
+ └── projections
+      └── data:2->'seg'->>'code' [as=code:6, outer=(2), immutable]
