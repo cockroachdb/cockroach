@@ -9,6 +9,7 @@ import (
 	"context"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/crosscluster"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
@@ -27,6 +28,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlclustersettings"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlinstance"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -319,17 +322,43 @@ func (r *replicationStreamManagerImpl) buildReplicationStreamSpec(
 	}
 
 	for _, sp := range spanPartitions {
-		nodeInfo, err := dsp.GetSQLInstanceInfo(ctx, sp.SQLInstanceID)
-		if err != nil {
-			return nil, err
-		}
-		if r.knobs != nil && r.knobs.OnGetSQLInstanceInfo != nil {
-			nodeInfo = r.knobs.OnGetSQLInstanceInfo(nodeInfo)
+		var locality roachpb.Locality
+		var sqlAddr string
+		if sqlclustersettings.UseInstanceInfoForSQLInstances.Get(&r.evalCtx.Settings.SV) {
+			instanceInfo, err := dsp.GetSQLInstanceInfo(ctx, sp.SQLInstanceID)
+			if err != nil {
+				return nil, err
+			}
+			if r.knobs != nil && r.knobs.OnGetSQLInstanceInfo != nil {
+				instanceInfo = r.knobs.OnGetSQLInstanceInfo(instanceInfo)
+			}
+			locality = instanceInfo.Locality
+			sqlAddr = instanceInfo.InstanceSQLAddr
+		} else {
+			nodeDesc, err := dsp.GetNodeDescriptor(sp.SQLInstanceID)
+			if err != nil {
+				return nil, err
+			}
+			if r.knobs != nil && r.knobs.OnGetSQLInstanceInfo != nil {
+				// In order to make the knob compatible with both versions,
+				// convert NodeDescriptor to InstanceInfo here.
+				instanceInfo := sqlinstance.InstanceInfo{
+					InstanceID:      base.SQLInstanceID(nodeDesc.NodeID),
+					InstanceSQLAddr: nodeDesc.SQLAddress.String(),
+					Locality:        nodeDesc.Locality,
+				}
+				instanceInfo = r.knobs.OnGetSQLInstanceInfo(instanceInfo)
+				locality = instanceInfo.Locality
+				sqlAddr = instanceInfo.InstanceSQLAddr
+			} else {
+				locality = nodeDesc.Locality
+				sqlAddr = nodeDesc.SQLAddress.String()
+			}
 		}
 		res.Partitions = append(res.Partitions, streampb.ReplicationStreamSpec_Partition{
 			NodeID:     roachpb.NodeID(sp.SQLInstanceID),
-			SQLAddress: util.MakeUnresolvedAddr("tcp", nodeInfo.InstanceSQLAddr),
-			Locality:   nodeInfo.Locality,
+			SQLAddress: util.MakeUnresolvedAddr("tcp", sqlAddr),
+			Locality:   locality,
 			SourcePartition: &streampb.SourcePartition{
 				Spans: sp.Spans,
 			},
