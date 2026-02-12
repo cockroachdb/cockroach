@@ -48,6 +48,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/span"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlclustersettings"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlinstance"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -240,11 +241,42 @@ func (dsp *DistSQLPlanner) GetAllInstancesByLocality(
 	return all[:pos], nil
 }
 
-// GetSQLInstanceInfo gets SQL instance info by instance ID.
+// GetNodeDescriptor gets a node descriptor by treating the SQL instance ID as a node ID.
+// This only works when SQL instances map 1:1 to KV nodes (i.e., system tenant).
+// Deprecated: Use GetSQLInstanceInfo when sql.instance_info.use_instance_resolver.enabled is true.
+func (dsp *DistSQLPlanner) GetNodeDescriptor(
+	sqlInstanceID base.SQLInstanceID,
+) (*roachpb.NodeDescriptor, error) {
+	return dsp.nodeDescs.GetNodeDescriptor(roachpb.NodeID(sqlInstanceID))
+}
+
+// GetSQLInstanceInfo gets SQL instance info by instance ID. This properly handles
+// SQL instances in multi-tenant environments where instances may not map to KV nodes.
 func (dsp *DistSQLPlanner) GetSQLInstanceInfo(
 	ctx context.Context, sqlInstanceID base.SQLInstanceID,
 ) (sqlinstance.InstanceInfo, error) {
-	return dsp.sqlAddressResolver.GetInstance(ctx, sqlInstanceID)
+	if sqlclustersettings.UseInstanceInfoForSQLInstances.Get(&dsp.st.SV) {
+		return dsp.sqlAddressResolver.GetInstance(ctx, sqlInstanceID)
+	}
+
+	// Replicate the previous behavior which fetched the node descriptor
+	// as a fallback for when the instance resolver is not enabled.
+	nodeDesc, err := dsp.GetNodeDescriptor(sqlInstanceID)
+	if err != nil {
+		return sqlinstance.InstanceInfo{}, err
+	}
+	return sqlinstance.InstanceInfo{
+		InstanceID:      base.SQLInstanceID(nodeDesc.NodeID),
+		InstanceSQLAddr: nodeDesc.SQLAddress.String(),
+		InstanceRPCAddr: nodeDesc.Address.String(),
+		Locality:        nodeDesc.Locality,
+		BinaryVersion:   nodeDesc.ServerVersion,
+	}, nil
+}
+
+// Settings returns the cluster settings for this planner.
+func (dsp *DistSQLPlanner) Settings() *cluster.Settings {
+	return dsp.st
 }
 
 // ReplicaOracleConfig returns the DSP's replicaoracle.Config.
