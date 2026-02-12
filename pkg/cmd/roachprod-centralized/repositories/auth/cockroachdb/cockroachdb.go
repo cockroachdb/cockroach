@@ -1217,7 +1217,7 @@ func (r *CRDBAuthRepo) scanGroup(
 	}
 
 	if externalID.Valid {
-		group.ExternalID = externalID.String
+		group.ExternalID = &externalID.String
 	}
 
 	return group, nil

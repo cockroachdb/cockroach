@@ -385,9 +385,10 @@ func TestMemoryRepository_GroupCRUD(t *testing.T) {
 	ctx := context.Background()
 
 	groupID := uuid.MakeV4()
+	groupExternalID := "eng-team"
 	group := &auth.Group{
 		ID:          groupID,
-		ExternalID:  "eng-team",
+		ExternalID:  &groupExternalID,
 		DisplayName: "Engineering Team",
 	}
 
@@ -434,9 +435,10 @@ func TestMemoryRepository_GroupMembers(t *testing.T) {
 
 	// Create group with initial members
 	groupID := uuid.MakeV4()
+	groupExternalID := "eng-team"
 	group := &auth.Group{
 		ID:          groupID,
-		ExternalID:  "eng-team",
+		ExternalID:  &groupExternalID,
 		DisplayName: "Engineering",
 	}
 	err := repo.CreateGroupWithMembers(ctx, l, group, []uuid.UUID{user1ID})
@@ -485,7 +487,8 @@ func TestMemoryRepository_GetUserPermissionsFromGroups(t *testing.T) {
 
 	// Create group and add user
 	groupID := uuid.MakeV4()
-	group := &auth.Group{ID: groupID, ExternalID: "eng-team", DisplayName: "Engineering"}
+	groupExternalID := "eng-team"
+	group := &auth.Group{ID: groupID, ExternalID: &groupExternalID, DisplayName: "Engineering"}
 	require.NoError(t, repo.CreateGroupWithMembers(ctx, l, group, []uuid.UUID{userID}))
 
 	// Create group permissions
@@ -621,16 +624,18 @@ func TestMemoryRepository_GetStatistics(t *testing.T) {
 	require.NoError(t, repo.CreateUser(ctx, l, user3))
 
 	// Groups: 2 groups
+	group1ExternalID := "ext-group-1"
 	group1 := &auth.Group{
 		ID:          uuid.MakeV4(),
-		ExternalID:  "ext-group-1",
+		ExternalID:  &group1ExternalID,
 		DisplayName: "Group One",
 		CreatedAt:   now,
 		UpdatedAt:   now,
 	}
+	group2ExternalID := "ext-group-2"
 	group2 := &auth.Group{
 		ID:          uuid.MakeV4(),
-		ExternalID:  "ext-group-2",
+		ExternalID:  &group2ExternalID,
 		DisplayName: "Group Two",
 		CreatedAt:   now,
 		UpdatedAt:   now,

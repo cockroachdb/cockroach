@@ -95,8 +95,8 @@ func (s *Service) CreateGroupWithMembers(
 	}
 
 	// Check for duplicate external ID (SCIM requires unique externalId)
-	if input.ExternalID != "" {
-		existingGroup, err := s.repo.GetGroupByExternalID(ctx, l, input.ExternalID)
+	if input.ExternalID != nil {
+		existingGroup, err := s.repo.GetGroupByExternalID(ctx, l, *input.ExternalID)
 		if err != nil && !errors.Is(err, rauth.ErrNotFound) {
 			return nil, nil, errors.Wrap(err, "failed to check for duplicate external ID")
 		}
@@ -167,10 +167,8 @@ func (s *Service) ReplaceGroup(
 		return nil, nil, err
 	}
 
-	// Prepare group update
-	if input.ExternalID != "" {
-		group.ExternalID = input.ExternalID
-	}
+	// Prepare group update (PUT replaces the entire resource per RFC 7644 §3.5.1)
+	group.ExternalID = input.ExternalID
 	group.DisplayName = input.DisplayName
 	group.UpdatedAt = timeutil.Now()
 
@@ -268,7 +266,7 @@ func (s *Service) PatchGroup(
 			}
 		case op.Op == "replace" && op.Path == "externalId":
 			if externalID, ok := op.Value.(string); ok {
-				group.ExternalID = externalID
+				group.ExternalID = &externalID
 				needsUpdate = true
 			}
 		case op.Op == "add" && op.Path == "members":

@@ -194,7 +194,7 @@ type GroupMemberOperation struct {
 
 // CreateGroupInput is the input for creating a new group with optional initial members.
 type CreateGroupInput struct {
-	ExternalID  string      `json:"external_id"`
+	ExternalID  *string     `json:"external_id"`
 	DisplayName string      `json:"display_name"`
 	Members     []uuid.UUID `json:"members,omitempty"` // Initial member user IDs
 }
@@ -221,7 +221,7 @@ type PatchGroupOutput struct {
 
 // ReplaceGroupInput is the input for replacing a group (PUT).
 type ReplaceGroupInput struct {
-	ExternalID  string      `json:"external_id"`
+	ExternalID  *string     `json:"external_id"`
 	DisplayName string      `json:"display_name"`
 	Members     []uuid.UUID `json:"members"` // Complete list of members
 }

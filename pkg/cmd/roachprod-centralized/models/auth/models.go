@@ -73,7 +73,7 @@ type ApiToken struct {
 // Groups contain members (users) and are used to derive permissions via GroupPermission mappings.
 type Group struct {
 	ID          uuid.UUID `json:"id" db:"id" scim:"id"`
-	ExternalID  string    `json:"external_id" db:"external_id" scim:"externalId"`
+	ExternalID  *string   `json:"external_id" db:"external_id" scim:"externalId"`
 	DisplayName string    `json:"display_name" db:"display_name" scim:"displayName" binding:"required"`
 	CreatedAt   time.Time `json:"created_at" db:"created_at" scim:"meta.created"`
 	UpdatedAt   time.Time `json:"updated_at" db:"updated_at" scim:"meta.lastModified"`

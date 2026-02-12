@@ -762,7 +762,7 @@ func (r *MemAuthRepo) GetGroupByExternalID(
 	defer r.lock.Unlock()
 
 	for _, g := range r.groups {
-		if g.ExternalID == externalID {
+		if g.ExternalID != nil && *g.ExternalID == externalID {
 			return g, nil
 		}
 	}

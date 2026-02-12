@@ -475,7 +475,7 @@ func BuildDeleteUserResponse() DeleteUserResponse {
 // GroupResponse represents a group in admin API responses.
 type GroupResponse struct {
 	ID          string           `json:"id"`
-	ExternalID  string           `json:"external_id"`
+	ExternalID  *string          `json:"external_id"`
 	DisplayName string           `json:"display_name"`
 	Members     []GroupMemberDTO `json:"members,omitempty"`
 	CreatedAt   string           `json:"created_at"`
@@ -524,14 +524,14 @@ func BuildGroupResponseNoMembers(group *authmodels.Group) GroupResponse {
 
 // CreateGroupRequest is the request body for creating a group.
 type CreateGroupRequest struct {
-	ExternalID  string   `json:"external_id" binding:"required"`
+	ExternalID  *string  `json:"external_id" binding:"required"`
 	DisplayName string   `json:"display_name" binding:"required"`
 	MemberIDs   []string `json:"member_ids,omitempty"`
 }
 
 // ReplaceGroupRequest is the request body for replacing a group (PUT).
 type ReplaceGroupRequest struct {
-	ExternalID  string   `json:"external_id" binding:"required"`
+	ExternalID  *string  `json:"external_id" binding:"required"`
 	DisplayName string   `json:"display_name" binding:"required"`
 	MemberIDs   []string `json:"member_ids"`
 }

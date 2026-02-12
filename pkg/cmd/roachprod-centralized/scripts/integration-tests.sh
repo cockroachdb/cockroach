@@ -839,6 +839,40 @@ assert_http_status "$HTTP_CODE" "409" "Duplicate group returns 409"
 HTTP_CODE=$(get_http_status DELETE "${SCIM_URL}/Groups/${DUP_GROUP_ID}" "$TOKEN_SCIM")
 log_info "Cleaned up duplicate test group"
 
+log_test "11.3 Create two groups without externalId (NULL external_id is not unique-constrained)"
+# Okta group push doesn't send externalId. Multiple groups without externalId
+# must succeed — NULL values don't violate SQL UNIQUE constraints.
+CREATE_GROUP_NO_EXT_1='{
+    "schemas": ["urn:ietf:params:scim:schemas:core:2.0:Group"],
+    "displayName": "No-ExternalId-Group-1"
+}'
+RESP=$(api_call POST "${SCIM_URL}/Groups" "$TOKEN_SCIM" "$CREATE_GROUP_NO_EXT_1")
+NO_EXT_GROUP_1_ID=$(echo "$RESP" | jq -r '.id // empty' 2>/dev/null)
+NO_EXT_GROUP_1_NAME=$(echo "$RESP" | jq -r '.displayName // empty' 2>/dev/null)
+if [[ "$NO_EXT_GROUP_1_NAME" == "No-ExternalId-Group-1" ]]; then
+    log_pass "First group without externalId created"
+else
+    log_fail "First group without externalId created" "No-ExternalId-Group-1" "$NO_EXT_GROUP_1_NAME (response: $RESP)"
+fi
+
+CREATE_GROUP_NO_EXT_2='{
+    "schemas": ["urn:ietf:params:scim:schemas:core:2.0:Group"],
+    "displayName": "No-ExternalId-Group-2"
+}'
+RESP=$(api_call POST "${SCIM_URL}/Groups" "$TOKEN_SCIM" "$CREATE_GROUP_NO_EXT_2")
+NO_EXT_GROUP_2_ID=$(echo "$RESP" | jq -r '.id // empty' 2>/dev/null)
+NO_EXT_GROUP_2_NAME=$(echo "$RESP" | jq -r '.displayName // empty' 2>/dev/null)
+if [[ "$NO_EXT_GROUP_2_NAME" == "No-ExternalId-Group-2" ]]; then
+    log_pass "Second group without externalId created"
+else
+    log_fail "Second group without externalId created" "No-ExternalId-Group-2" "$NO_EXT_GROUP_2_NAME (response: $RESP)"
+fi
+
+# Cleanup
+HTTP_CODE=$(get_http_status DELETE "${SCIM_URL}/Groups/${NO_EXT_GROUP_1_ID}" "$TOKEN_SCIM")
+HTTP_CODE=$(get_http_status DELETE "${SCIM_URL}/Groups/${NO_EXT_GROUP_2_ID}" "$TOKEN_SCIM")
+log_info "Cleaned up no-externalId test groups"
+
 # ----------------------------------------------------------------------------
 log_section "12. AUTHORIZATION BOUNDARY TESTS"
 # ----------------------------------------------------------------------------
@@ -1329,13 +1363,19 @@ fi
 rm -f /tmp/scim_prefixes_$$.txt
 
 if [[ -n "$SELECTED_PREFIX" ]]; then
-    log_pass "Found prefix '$SELECTED_PREFIX' matching $EXPECTED_REMOVALS users"
-    log_info "Users with prefix '$SELECTED_PREFIX': $MATCHING_USERS"
+    log_pass "Found prefix '$SELECTED_PREFIX' matching $EXPECTED_REMOVALS batch users"
+    log_info "Batch users with prefix '$SELECTED_PREFIX': $MATCHING_USERS"
 else
     log_fail "Find common UUID prefix" "at least one prefix with >1 user" "no common prefix found"
 fi
 
 log_test "18.5 Remove multiple members using path filter with sw operator"
+# Count how many actual group members match the prefix (not just batch users —
+# grace or other seeded users may also have a UUID starting with it).
+RESP=$(api_call GET "${SCIM_URL}/Groups/${BATCH_GROUP_ID}" "$TOKEN_SCIM")
+CURRENT_MEMBER_COUNT=$(echo "$RESP" | jq -r '.members | length // 0' 2>/dev/null)
+ACTUAL_PREFIX_MATCHES=$(echo "$RESP" | jq -r "[.members[].value | select(startswith(\"$SELECTED_PREFIX\"))] | length" 2>/dev/null)
+
 PATCH_DATA='{
     "schemas": ["urn:ietf:params:scim:api:messages:2.0:PatchOp"],
     "Operations": [
@@ -1344,11 +1384,11 @@ PATCH_DATA='{
 }'
 RESP=$(api_call PATCH "${SCIM_URL}/Groups/${BATCH_GROUP_ID}" "$TOKEN_SCIM" "$PATCH_DATA")
 NEW_MEMBER_COUNT=$(echo "$RESP" | jq -r '.members | length // 0' 2>/dev/null)
-EXPECTED_COUNT=$((51 - EXPECTED_REMOVALS))
+EXPECTED_COUNT=$((CURRENT_MEMBER_COUNT - ACTUAL_PREFIX_MATCHES))
 if [[ "$NEW_MEMBER_COUNT" -eq "$EXPECTED_COUNT" ]]; then
-    log_pass "Removed $EXPECTED_REMOVALS members with UUID prefix '$SELECTED_PREFIX', now $NEW_MEMBER_COUNT members"
+    log_pass "Removed $ACTUAL_PREFIX_MATCHES members with UUID prefix '$SELECTED_PREFIX', now $NEW_MEMBER_COUNT members"
 else
-    log_fail "Remove by UUID prefix" "$EXPECTED_COUNT members" "$NEW_MEMBER_COUNT members (removed $((51 - NEW_MEMBER_COUNT)) instead of $EXPECTED_REMOVALS)"
+    log_fail "Remove by UUID prefix" "$EXPECTED_COUNT members" "$NEW_MEMBER_COUNT members (removed $((CURRENT_MEMBER_COUNT - NEW_MEMBER_COUNT)) instead of $ACTUAL_PREFIX_MATCHES)"
 fi
 
 log_test "18.6 Verify group member count persisted correctly"

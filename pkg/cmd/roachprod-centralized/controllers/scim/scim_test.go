@@ -458,18 +458,20 @@ func TestSCIMController_ListGroups(t *testing.T) {
 	groupID2 := uuid.MakeV4()
 	now := timeutil.Now()
 
+	externalIDGroup1 := "okta-group-123"
+	externalIDGroup2 := "okta-group-456"
 	groups := []*authmodels.Group{
 		{
 			ID:          groupID1,
 			DisplayName: "Engineering",
-			ExternalID:  "okta-group-123",
+			ExternalID:  &externalIDGroup1,
 			CreatedAt:   now,
 			UpdatedAt:   now,
 		},
 		{
 			ID:          groupID2,
 			DisplayName: "Marketing",
-			ExternalID:  "okta-group-456",
+			ExternalID:  &externalIDGroup2,
 			CreatedAt:   now,
 			UpdatedAt:   now,
 		},
@@ -505,10 +507,11 @@ func TestSCIMController_GetGroup(t *testing.T) {
 	userID2 := uuid.MakeV4()
 	now := timeutil.Now()
 
+	externalID := "okta-group-123"
 	group := &authmodels.Group{
 		ID:          groupID,
 		DisplayName: "Engineering",
-		ExternalID:  "okta-group-123",
+		ExternalID:  &externalID,
 		CreatedAt:   now,
 		UpdatedAt:   now,
 	}
@@ -557,9 +560,10 @@ func TestSCIMController_CreateGroup(t *testing.T) {
 	userID2 := uuid.MakeV4()
 	now := timeutil.Now()
 
+	externalID := "okta-group-999"
 	requestBody := types.CreateGroupRequest{
 		Schemas:     []string{types.SchemaGroup},
-		ExternalID:  "okta-group-999",
+		ExternalID:  &externalID,
 		DisplayName: "New Team",
 		Members: []types.GroupMemberRef{
 			{Value: userID1.String()},
@@ -572,7 +576,7 @@ func TestSCIMController_CreateGroup(t *testing.T) {
 	createdGroup := &authmodels.Group{
 		ID:          uuid.MakeV4(),
 		DisplayName: "New Team",
-		ExternalID:  "okta-group-999",
+		ExternalID:  &externalID,
 		CreatedAt:   now,
 		UpdatedAt:   now,
 	}
@@ -583,7 +587,7 @@ func TestSCIMController_CreateGroup(t *testing.T) {
 	}
 
 	mockService.On("CreateGroupWithMembers", mock.Anything, mock.Anything, mock.Anything, mock.MatchedBy(func(input authtypes.CreateGroupInput) bool {
-		return input.DisplayName == "New Team" && input.ExternalID == "okta-group-999" && len(input.Members) == 2
+		return input.DisplayName == "New Team" && input.ExternalID != nil && *input.ExternalID == externalID && len(input.Members) == 2
 	})).Return(createdGroup, members, nil)
 
 	c, w := createSCIMTestContext(scimAdminPrincipal(), "POST", "/scim/v2/Groups", bytes.NewReader(bodyBytes))
@@ -609,9 +613,10 @@ func TestSCIMController_ReplaceGroup(t *testing.T) {
 	userID := uuid.MakeV4()
 	now := timeutil.Now()
 
+	externalID := "okta-group-999"
 	requestBody := types.CreateGroupRequest{
 		Schemas:     []string{types.SchemaGroup},
-		ExternalID:  "okta-group-999",
+		ExternalID:  &externalID,
 		DisplayName: "Updated Team",
 		Members: []types.GroupMemberRef{
 			{Value: userID.String()},
@@ -623,7 +628,7 @@ func TestSCIMController_ReplaceGroup(t *testing.T) {
 	updatedGroup := &authmodels.Group{
 		ID:          groupID,
 		DisplayName: "Updated Team",
-		ExternalID:  "okta-group-999",
+		ExternalID:  &externalID,
 		CreatedAt:   now,
 		UpdatedAt:   now,
 	}
@@ -671,10 +676,11 @@ func TestSCIMController_PatchGroup(t *testing.T) {
 
 	bodyBytes, _ := json.Marshal(requestBody)
 
+	externalID := "okta-group-123"
 	patchedGroup := &authmodels.Group{
 		ID:          groupID,
 		DisplayName: "Patched Team Name",
-		ExternalID:  "okta-group-123",
+		ExternalID:  &externalID,
 		CreatedAt:   now,
 		UpdatedAt:   now,
 	}
@@ -727,10 +733,11 @@ func TestSCIMController_PatchGroup_AddMember(t *testing.T) {
 
 	bodyBytes, _ := json.Marshal(requestBody)
 
+	externalID := "okta-group-123"
 	group := &authmodels.Group{
 		ID:          groupID,
 		DisplayName: "Team",
-		ExternalID:  "okta-group-123",
+		ExternalID:  &externalID,
 		CreatedAt:   now,
 		UpdatedAt:   now,
 	}
@@ -783,10 +790,11 @@ func TestSCIMController_PatchGroup_RemoveMember(t *testing.T) {
 
 	bodyBytes, _ := json.Marshal(requestBody)
 
+	externalID := "okta-group-123"
 	group := &authmodels.Group{
 		ID:          groupID,
 		DisplayName: "Team",
-		ExternalID:  "okta-group-123",
+		ExternalID:  &externalID,
 		CreatedAt:   now,
 		UpdatedAt:   now,
 	}
@@ -1136,9 +1144,10 @@ func TestSCIMController_CreateGroup_EmptyMembers(t *testing.T) {
 
 	now := timeutil.Now()
 
+	externalID := "okta-group-999"
 	requestBody := types.CreateGroupRequest{
 		Schemas:     []string{types.SchemaGroup},
-		ExternalID:  "okta-group-999",
+		ExternalID:  &externalID,
 		DisplayName: "Empty Team",
 		Members:     []types.GroupMemberRef{}, // No members
 	}
@@ -1148,7 +1157,7 @@ func TestSCIMController_CreateGroup_EmptyMembers(t *testing.T) {
 	createdGroup := &authmodels.Group{
 		ID:          uuid.MakeV4(),
 		DisplayName: "Empty Team",
-		ExternalID:  "okta-group-999",
+		ExternalID:  &externalID,
 		CreatedAt:   now,
 		UpdatedAt:   now,
 	}
@@ -1179,11 +1188,12 @@ func TestSCIMController_ListGroups_WithFilter(t *testing.T) {
 	groupID := uuid.MakeV4()
 	now := timeutil.Now()
 
+	externalID := "okta-group-123"
 	groups := []*authmodels.Group{
 		{
 			ID:          groupID,
 			DisplayName: "Engineering",
-			ExternalID:  "okta-group-123",
+			ExternalID:  &externalID,
 			CreatedAt:   now,
 			UpdatedAt:   now,
 		},
@@ -1212,9 +1222,10 @@ func TestSCIMController_CreateGroup_InvalidMemberID(t *testing.T) {
 	mockService := &authmock.IService{}
 	ctrl := NewController(mockService)
 
+	externalID := "okta-group-999"
 	requestBody := types.CreateGroupRequest{
 		Schemas:     []string{types.SchemaGroup},
-		ExternalID:  "okta-group-999",
+		ExternalID:  &externalID,
 		DisplayName: "New Team",
 		Members: []types.GroupMemberRef{
 			{Value: "invalid-uuid"}, // Invalid UUID

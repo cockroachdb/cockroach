@@ -173,7 +173,7 @@ type GroupMemberRef struct {
 // CreateGroupRequest represents a group creation request.
 type CreateGroupRequest struct {
 	Schemas     []string         `json:"schemas"`
-	ExternalID  string           `json:"externalId"`
+	ExternalID  *string          `json:"externalId"`
 	DisplayName string           `json:"displayName" binding:"required"`
 	Members     []GroupMemberRef `json:"members"`
 }

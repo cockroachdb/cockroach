@@ -373,10 +373,15 @@ func (ctrl *Controller) toGroupResource(
 		})
 	}
 
+	externalId := ""
+	if group.ExternalID != nil {
+		externalId = *group.ExternalID
+	}
+
 	return types.GroupResource{
 		Schemas:     []string{types.SchemaGroup},
 		ID:          group.ID.String(),
-		ExternalID:  group.ExternalID,
+		ExternalID:  externalId,
 		DisplayName: group.DisplayName,
 		Members:     memberRefs,
 		Meta: map[string]string{

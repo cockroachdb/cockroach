@@ -613,7 +613,7 @@ func TestCRDBAuthRepo_Groups(t *testing.T) {
 		externalID := "okta-group-" + uuid.MakeV4().Short().String()
 		group := &auth.Group{
 			ID:          uuid.MakeV4(),
-			ExternalID:  externalID,
+			ExternalID:  &externalID,
 			DisplayName: "Engineering-" + uuid.MakeV4().Short().String(),
 			CreatedAt:   now,
 			UpdatedAt:   now,
@@ -682,9 +682,10 @@ func TestCRDBAuthRepo_Groups(t *testing.T) {
 		require.NoError(t, repo.CreateUser(ctx, logger.DefaultLogger, user1))
 		require.NoError(t, repo.CreateUser(ctx, logger.DefaultLogger, user2))
 
+		externalId := "okta-group-members-" + uuid.MakeV4().Short().String()
 		group := &auth.Group{
 			ID:          uuid.MakeV4(),
-			ExternalID:  "okta-group-members-" + uuid.MakeV4().Short().String(),
+			ExternalID:  &externalId,
 			DisplayName: "Test Group-" + uuid.MakeV4().Short().String(),
 			CreatedAt:   now,
 			UpdatedAt:   now,
@@ -742,9 +743,10 @@ func TestCRDBAuthRepo_Groups(t *testing.T) {
 		require.NoError(t, repo.CreateUser(ctx, logger.DefaultLogger, user2))
 
 		// Create group with members atomically
+		externalId := "okta-atomic-group-" + uuid.MakeV4().Short().String()
 		group := &auth.Group{
 			ID:          uuid.MakeV4(),
-			ExternalID:  "okta-atomic-group-" + uuid.MakeV4().Short().String(),
+			ExternalID:  &externalId,
 			DisplayName: "Atomic Group-" + uuid.MakeV4().Short().String(),
 			CreatedAt:   now,
 			UpdatedAt:   now,
@@ -787,9 +789,10 @@ func TestCRDBAuthRepo_Groups(t *testing.T) {
 		require.NoError(t, repo.CreateUser(ctx, logger.DefaultLogger, user2))
 
 		// Create group with one member
+		externalId := "okta-update-group-" + uuid.MakeV4().Short().String()
 		group := &auth.Group{
 			ID:          uuid.MakeV4(),
-			ExternalID:  "okta-update-group-" + uuid.MakeV4().Short().String(),
+			ExternalID:  &externalId,
 			DisplayName: "Update Group-" + uuid.MakeV4().Short().String(),
 			CreatedAt:   now,
 			UpdatedAt:   now,
@@ -834,17 +837,19 @@ func TestCRDBAuthRepo_Groups(t *testing.T) {
 
 		// Create groups with unique names
 		group1Name := "Engineering-" + uuid.MakeV4().Short().String()
+		group1ExternalID := "okta-eng-" + uuid.MakeV4().Short().String()
 		group2Name := "Operations-" + uuid.MakeV4().Short().String()
+		group2ExternalID := "okta-ops-" + uuid.MakeV4().Short().String()
 		group1 := &auth.Group{
 			ID:          uuid.MakeV4(),
-			ExternalID:  "okta-eng-" + uuid.MakeV4().Short().String(),
+			ExternalID:  &group1ExternalID,
 			DisplayName: group1Name,
 			CreatedAt:   now,
 			UpdatedAt:   now,
 		}
 		group2 := &auth.Group{
 			ID:          uuid.MakeV4(),
-			ExternalID:  "okta-ops-" + uuid.MakeV4().Short().String(),
+			ExternalID:  &group2ExternalID,
 			DisplayName: group2Name,
 			CreatedAt:   now,
 			UpdatedAt:   now,
@@ -1080,16 +1085,18 @@ func TestCRDBAuthRepo_GetStatistics(t *testing.T) {
 	require.NoError(t, repo.CreateUser(ctx, logger.DefaultLogger, user3))
 
 	// Groups: 2 groups
+	group1ExternalID := "okta-ext-group-1"
 	group1 := &auth.Group{
 		ID:          uuid.MakeV4(),
-		ExternalID:  "ext-group-1",
+		ExternalID:  &group1ExternalID,
 		DisplayName: "Group One",
 		CreatedAt:   now,
 		UpdatedAt:   now,
 	}
+	group2ExternalID := "okta-ext-group-2"
 	group2 := &auth.Group{
 		ID:          uuid.MakeV4(),
-		ExternalID:  "ext-group-2",
+		ExternalID:  &group2ExternalID,
 		DisplayName: "Group Two",
 		CreatedAt:   now,
 		UpdatedAt:   now,
