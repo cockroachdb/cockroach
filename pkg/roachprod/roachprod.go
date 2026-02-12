@@ -793,11 +793,25 @@ func UpdateTargets(
 	if err := LoadClusters(); err != nil {
 		return err
 	}
-	return updatePrometheusTargets(ctx, l, clusterName, clusterSettingsOpts...)
+	updatePrometheusTargets(ctx, l, clusterName, clusterSettingsOpts...)
+	return nil
 }
 
-// updatePrometheusTargets updates the prometheus instance cluster config. Any error is logged and ignored.
+// updatePrometheusTargets updates the prometheus instance cluster config.
+// This is best-effort: errors are logged but never propagated, since
+// monitoring failures should not cause test or start failures.
 func updatePrometheusTargets(
+	ctx context.Context,
+	l *logger.Logger,
+	clusterName string,
+	clusterSettingsOpts ...install.ClusterSettingOption,
+) {
+	if err := updatePrometheusTargetsErr(ctx, l, clusterName, clusterSettingsOpts...); err != nil {
+		l.Errorf("updating prometheus targets: %v", err)
+	}
+}
+
+func updatePrometheusTargetsErr(
 	ctx context.Context,
 	l *logger.Logger,
 	clusterName string,
@@ -888,10 +902,10 @@ func updatePrometheusTargets(
 	if len(nodeIPPorts) > 0 {
 		cl, err := promhelperclient.NewPromClient()
 		if err != nil {
-			return err
+			return errors.Wrap(err, "creating prometheus helper client")
 		}
 		if err := cl.UpdatePrometheusTargets(ctx, c.Name, nodeIPPorts, l); err != nil {
-			l.Errorf("creating cluster config failed for the ip:ports %v: %v", nodeIPPorts, err)
+			return errors.Wrapf(err, "updating targets for ip:ports %v", nodeIPPorts)
 		}
 	}
 	return nil
