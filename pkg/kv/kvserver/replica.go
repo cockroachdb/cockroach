@@ -2087,7 +2087,7 @@ func (r *Replica) assertStateRaftMuLockedReplicaMuRLocked(
 // might be ok with this if they know that they will end up checking for a
 // pending merge at some later time.
 func (r *Replica) checkExecutionCanProceedBeforeStorageSnapshot(
-	ctx context.Context, ba *kvpb.BatchRequest, g *concurrency.Guard,
+	ctx context.Context, ba *kvpb.BatchRequest, g concurrency.Guard,
 ) (kvserverpb.LeaseStatus, error) {
 	rSpan, err := keys.Range(ba.Requests)
 	if err != nil {
@@ -2144,7 +2144,7 @@ func (r *Replica) checkExecutionCanProceedBeforeStorageSnapshot(
 	// Tests such as TestClosedTimestampFrozenAfterSubsumption also rely on this late-checking of
 	// merges by checking for a NotLeaseholderError on replicas in a critical phase for certain
 	// requests.
-	if mergeInProgress && g.HoldingLatches() {
+	if mergeInProgress && g != nil && g.HoldingLatches() {
 		// We only check for a merge if we are holding latches. In practice,
 		// this means that any request where concurrency.shouldAcquireLatches()
 		// is false (e.g. RequestLeaseRequests) will not wait for a pending
@@ -2228,7 +2228,7 @@ func (r *Replica) checkExecutionCanProceedAfterStorageSnapshot(
 // checkExecutionCanProceedRWOrAdmin returns an error if a batch request going
 // through the RW or admin paths cannot be executed by the Replica.
 func (r *Replica) checkExecutionCanProceedRWOrAdmin(
-	ctx context.Context, ba *kvpb.BatchRequest, g *concurrency.Guard,
+	ctx context.Context, ba *kvpb.BatchRequest, g concurrency.Guard,
 ) (kvserverpb.LeaseStatus, error) {
 	st, err := r.checkExecutionCanProceedBeforeStorageSnapshot(ctx, ba, g)
 	if err != nil {
