@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/joberror"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
+	"github.com/cockroachdb/cockroach/pkg/jobs/jobsprofiler"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/scheduledjobs"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
@@ -903,12 +904,48 @@ func doCompaction(
 	defaultStore cloud.ExternalStorage,
 	kmsEnv cloud.KMSEnv,
 ) error {
+	plan, planCtx, err := createCompactionPlan(
+		ctx, execCtx, jobID, details, compactChain, manifest, defaultStore, kmsEnv,
+	)
+	if err != nil {
+		return errors.Wrap(err, "creating compaction plan")
+	}
+
 	progCh := make(chan *execinfrapb.RemoteProducerMetadata_BulkProcessorProgress)
 	runDistCompaction := func(ctx context.Context) error {
 		defer close(progCh)
-		return runCompactionPlan(
-			ctx, execCtx, jobID, details, compactChain, manifest, defaultStore, kmsEnv, progCh,
+
+		sql.FinalizePlan(ctx, planCtx, plan)
+
+		metaFn := func(_ context.Context, meta *execinfrapb.ProducerMetadata) error {
+			if meta.BulkProcessorProgress != nil {
+				progCh <- meta.BulkProcessorProgress
+			}
+
+			// TODO (kev-cao): Add channel for tracing aggregator events.
+			return nil
+		}
+		rowResultWriter := sql.NewRowResultWriter(nil)
+		recv := sql.MakeDistSQLReceiver(
+			ctx,
+			sql.NewMetadataCallbackWriter(rowResultWriter, metaFn),
+			tree.Rows,
+			nil, /* rangeCache */
+			nil, /* txn */
+			nil, /* clockUpdater */
+			execCtx.ExtendedEvalContext().Tracing,
 		)
+		defer recv.Release()
+
+		jobsprofiler.StorePlanDiagram(
+			ctx, execCtx.ExecCfg().DistSQLSrv.Stopper, plan, execCtx.ExecCfg().InternalDB, jobID,
+		)
+
+		evalCtxCopy := execCtx.ExtendedEvalContext().Copy()
+		execCtx.DistSQLPlanner().Run(
+			ctx, planCtx, nil /* txn */, plan, recv, evalCtxCopy, nil, /* finishedSetupFn */
+		)
+		return rowResultWriter.Err()
 	}
 	checkpointLoop := func(ctx context.Context) error {
 		return processProgress(ctx, execCtx, details, manifest, progCh, kmsEnv)
@@ -920,7 +957,9 @@ func doCompaction(
 	); err != nil {
 		return err
 	}
-	statsTable := getTableStatsForBackup(ctx, execCtx.ExecCfg().InternalDB.Executor(), execCtx.ExecCfg().Settings, manifest.Descriptors)
+	statsTable := getTableStatsForBackup(
+		ctx, execCtx.ExecCfg().InternalDB.Executor(), execCtx.ExecCfg().Settings, manifest.Descriptors,
+	)
 	return backupinfo.WriteBackupMetadata(
 		ctx, execCtx, defaultStore, details, kmsEnv, manifest, statsTable,
 	)
