@@ -161,9 +161,7 @@ setup_db() {
   fi
 
   if [[ ${#init_env_query[@]} -gt 0 ]]; then
-    if [[ ${#init_env_query[@]} -gt 0 ]]; then
     run_sql_query "${init_env_query[@]}"
-    fi
   fi
 }
 
