@@ -1632,6 +1632,7 @@ func (r *testRunner) runTest(
 
 	// Upload test logs to Datadog for failed tests on master/release branches (configurable via flags)
 	if datadog.ShouldUploadLogsToDatadog(t.Failed()) {
+		// TODO Remove after smoke test
 		// Log the artifacts directory contents for debugging.
 		if entries, err := os.ReadDir(t.artifactsDir); err == nil {
 			for _, e := range entries {
