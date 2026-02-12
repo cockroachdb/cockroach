@@ -31,11 +31,9 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-// runCompactionPlan creates and runs a distsql plan to compact the spans
-// in the backup chain that need to be compacted. It sends updates from the
-// BulkProcessor to the provided progress channel. It is the caller's
-// responsibility to close the progress channel.
-func runCompactionPlan(
+// createCompactionPlan creates an un-finalized physical plan that will
+// distribute spans from a generator across the cluster for compaction.
+func createCompactionPlan(
 	ctx context.Context,
 	execCtx sql.JobExecContext,
 	jobID jobspb.JobID,
@@ -44,8 +42,7 @@ func runCompactionPlan(
 	manifest *backuppb.BackupManifest,
 	defaultStore cloud.ExternalStorage,
 	kmsEnv cloud.KMSEnv,
-	progCh chan *execinfrapb.RemoteProducerMetadata_BulkProcessorProgress,
-) error {
+) (*sql.PhysicalPlan, *sql.PlanningCtx, error) {
 	log.Dev.Infof(
 		ctx, "planning compaction of %d backups: %s",
 		len(compactChain.chainToCompact),
@@ -57,13 +54,13 @@ func runCompactionPlan(
 		compactChain.compactedLocalityInfo, execCtx.User(),
 	)
 	if err != nil {
-		return err
+		return nil, nil, err
 	}
 	introducedSpanFrontier, err := createIntroducedSpanFrontier(
 		compactChain.backupChain, manifest.EndTime,
 	)
 	if err != nil {
-		return err
+		return nil, nil, err
 	}
 	defer introducedSpanFrontier.Release()
 	targetSize := targetRestoreSpanSize.Get(&execCtx.ExecCfg().Settings.SV)
@@ -77,14 +74,14 @@ func runCompactionPlan(
 		maxFiles,
 	)
 	if err != nil {
-		return err
+		return nil, nil, err
 	}
 
 	spansToCompact, err := getSpansToCompact(
 		ctx, execCtx, manifest, compactChain.chainToCompact, details, defaultStore, kmsEnv,
 	)
 	if err != nil {
-		return err
+		return nil, nil, err
 	}
 	genSpan := func(ctx context.Context, spanCh chan execinfrapb.RestoreSpanEntry) error {
 		return errors.Wrap(generateAndSendImportSpans(
@@ -100,57 +97,6 @@ func runCompactionPlan(
 		), "generateAndSendImportSpans")
 	}
 	dsp := execCtx.DistSQLPlanner()
-	plan, planCtx, err := createCompactionPlan(
-		ctx, execCtx, jobID, details, manifest, dsp, genSpan, spansToCompact, targetSize, maxFiles,
-	)
-	if err != nil {
-		return errors.Wrap(err, "creating compaction plan")
-	}
-	sql.FinalizePlan(ctx, planCtx, plan)
-
-	metaFn := func(_ context.Context, meta *execinfrapb.ProducerMetadata) error {
-		if meta.BulkProcessorProgress != nil {
-			progCh <- meta.BulkProcessorProgress
-		}
-
-		// TODO (kev-cao): Add channel for tracing aggregator events.
-		return nil
-	}
-	rowResultWriter := sql.NewRowResultWriter(nil)
-	recv := sql.MakeDistSQLReceiver(
-		ctx,
-		sql.NewMetadataCallbackWriter(rowResultWriter, metaFn),
-		tree.Rows,
-		nil, /* rangeCache */
-		nil, /* txn */
-		nil, /* clockUpdater */
-		execCtx.ExtendedEvalContext().Tracing,
-	)
-	defer recv.Release()
-
-	jobsprofiler.StorePlanDiagram(
-		ctx, execCtx.ExecCfg().DistSQLSrv.Stopper, plan, execCtx.ExecCfg().InternalDB, jobID,
-	)
-
-	evalCtxCopy := execCtx.ExtendedEvalContext().Copy()
-	dsp.Run(ctx, planCtx, nil /* txn */, plan, recv, evalCtxCopy, nil /* finishedSetupFn */)
-	return rowResultWriter.Err()
-}
-
-// createCompactionPlan creates an un-finalized physical plan that will
-// distribute spans from a generator across the cluster for compaction.
-func createCompactionPlan(
-	ctx context.Context,
-	execCtx sql.JobExecContext,
-	jobID jobspb.JobID,
-	details jobspb.BackupDetails,
-	manifest *backuppb.BackupManifest,
-	dsp *sql.DistSQLPlanner,
-	genSpan func(ctx context.Context, spanCh chan execinfrapb.RestoreSpanEntry) error,
-	spansToCompact roachpb.Spans,
-	targetSize int64,
-	maxFiles int64,
-) (*sql.PhysicalPlan, *sql.PlanningCtx, error) {
 	evalCtx := execCtx.ExtendedEvalContext()
 	oracle := physicalplan.DefaultReplicaChooser
 
@@ -204,6 +150,47 @@ func createCompactionPlan(
 		nil, /* finalizeLastStageCb */
 	)
 	return plan, planCtx, nil
+}
+
+func runCompactionPlan(
+	ctx context.Context,
+	execCtx sql.JobExecContext,
+	jobID jobspb.JobID,
+	planCtx *sql.PlanningCtx,
+	plan *sql.PhysicalPlan,
+	progCh chan *execinfrapb.RemoteProducerMetadata_BulkProcessorProgress,
+) error {
+	sql.FinalizePlan(ctx, planCtx, plan)
+
+	metaFn := func(_ context.Context, meta *execinfrapb.ProducerMetadata) error {
+		if meta.BulkProcessorProgress != nil {
+			progCh <- meta.BulkProcessorProgress
+		}
+
+		// TODO (kev-cao): Add channel for tracing aggregator events.
+		return nil
+	}
+	rowResultWriter := sql.NewRowResultWriter(nil)
+	recv := sql.MakeDistSQLReceiver(
+		ctx,
+		sql.NewMetadataCallbackWriter(rowResultWriter, metaFn),
+		tree.Rows,
+		nil, /* rangeCache */
+		nil, /* txn */
+		nil, /* clockUpdater */
+		execCtx.ExtendedEvalContext().Tracing,
+	)
+	defer recv.Release()
+
+	jobsprofiler.StorePlanDiagram(
+		ctx, execCtx.ExecCfg().DistSQLSrv.Stopper, plan, execCtx.ExecCfg().InternalDB, jobID,
+	)
+
+	evalCtxCopy := execCtx.ExtendedEvalContext().Copy()
+	execCtx.DistSQLPlanner().Run(
+		ctx, planCtx, nil /* txn */, plan, recv, evalCtxCopy, nil, /* finishedSetupFn */
+	)
+	return rowResultWriter.Err()
 }
 
 type localitySet struct {
