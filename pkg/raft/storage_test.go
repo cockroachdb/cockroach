@@ -75,12 +75,12 @@ func TestStorageEntries(t *testing.T) {
 		// even if maxsize is zero, the first entry should be returned
 		{4, 7, 0, nil, index(4).terms(4)},
 		// limit to 2
-		{4, 7, uint64(ents[0].Size() + ents[1].Size()), nil, index(4).terms(4, 5)},
+		{4, 7, ents[0].SizeEst() + ents[1].SizeEst(), nil, index(4).terms(4, 5)},
 		// limit to 2
-		{4, 7, uint64(ents[0].Size() + ents[1].Size() + ents[2].Size()/2), nil, index(4).terms(4, 5)},
-		{4, 7, uint64(ents[0].Size() + ents[1].Size() + ents[2].Size() - 1), nil, index(4).terms(4, 5)},
+		{4, 7, ents[0].SizeEst() + ents[1].SizeEst() + ents[2].SizeEst()/2, nil, index(4).terms(4, 5)},
+		{4, 7, ents[0].SizeEst() + ents[1].SizeEst() + ents[2].SizeEst() - 1, nil, index(4).terms(4, 5)},
 		// all
-		{4, 7, uint64(ents[0].Size() + ents[1].Size() + ents[2].Size()), nil, index(4).terms(4, 5, 6)},
+		{4, 7, ents[0].SizeEst() + ents[1].SizeEst() + ents[2].SizeEst(), nil, index(4).terms(4, 5, 6)},
 	}
 
 	for _, tt := range tests {

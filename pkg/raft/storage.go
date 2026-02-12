@@ -189,7 +189,7 @@ func (ms *MemoryStorage) Entries(lo, hi, maxSize uint64) ([]pb.Entry, error) {
 		raftlogger.GetLogger().Panicf("entries' hi(%d) is out of bound lastindex(%d)", hi, last)
 	}
 
-	ents := limitSize(ms.ls.sub(lo-1, hi-1), entryEncodingSize(maxSize))
+	ents := limitSize(ms.ls.sub(lo-1, hi-1), entrySize(maxSize))
 	// NB: use the full slice expression to limit what the caller can do with the
 	// returned slice. For example, an append will reallocate and copy this slice
 	// instead of corrupting the neighbouring entries.
