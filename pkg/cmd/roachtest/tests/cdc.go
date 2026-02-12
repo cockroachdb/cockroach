@@ -129,11 +129,11 @@ type cdcTester struct {
 // stats.json file to the artifacts directory.
 func (ct *cdcTester) startStatsCollection() func() {
 	if ct.promCfg == nil {
-		ct.t.Error("prometheus configuration is nil")
+		ct.t.Fatalf("prometheus configuration is nil")
 	}
 	promClient, err := clusterstats.SetupCollectorPromClient(ct.ctx, ct.cluster, ct.t.L(), ct.promCfg)
 	if err != nil {
-		ct.t.Errorf("error creating prometheus client for stats collector: %s", err)
+		ct.t.Fatalf("error creating prometheus client for stats collector: %s", err)
 	}
 
 	statsCollector := clusterstats.NewStatsCollector(ct.ctx, promClient)
@@ -165,6 +165,35 @@ func (ct *cdcTester) startStatsCollection() func() {
 		if err != nil {
 			ct.t.Errorf("error exporting stats file: %s", err)
 		}
+	}
+}
+
+func (ct *cdcTester) exportLatencyToRoachperf(value time.Duration, startTime time.Time) {
+	if ct.promCfg == nil {
+		ct.t.Fatalf("prometheus configuration is nil")
+	}
+	promClient, err := clusterstats.SetupCollectorPromClient(ct.ctx, ct.cluster, ct.t.L(), ct.promCfg)
+	if err != nil {
+		ct.t.Fatalf("error creating prometheus client for stats collector: %s", err)
+	}
+
+	statsCollector := clusterstats.NewStatsCollector(ct.ctx, promClient)
+	endTime := timeutil.Now()
+	if _, err := statsCollector.Exporter().Export(ct.ctx, ct.cluster, ct.t, false, /* dryRun */
+		startTime,
+		endTime,
+		[]clusterstats.AggQuery{},
+		func(stats map[string]clusterstats.StatSummary) *roachtestutil.AggregatedMetric {
+			return &roachtestutil.AggregatedMetric{
+				Name:             "Max latency (s)",
+				Value:            roachtestutil.MetricPoint(value.Seconds()),
+				Unit:             "seconds",
+				IsHigherBetter:   false,
+				AdditionalLabels: nil,
+			}
+		},
+	); err != nil {
+		ct.t.Errorf("error exporting stats file: %s", err)
 	}
 }
 
@@ -647,6 +676,12 @@ func (ct *cdcTester) verifyMetrics(
 func (ct *cdcTester) runFeedLatencyVerifier(
 	cj changefeedJob, targets latencyTargets,
 ) (waitForCompletion func()) {
+	return ct.runFeedLatencyVerifierWithCallback(cj, targets, nil)
+}
+
+func (ct *cdcTester) runFeedLatencyVerifierWithCallback(
+	cj changefeedJob, targets latencyTargets, onSteadyLatency func(value time.Duration),
+) (waitForCompletion func()) {
 	info, err := getChangefeedInfo(ct.DB(), cj.jobID)
 	if err != nil {
 		ct.t.Fatalf("failed to get changefeed info: %s", err.Error())
@@ -666,9 +701,14 @@ func (ct *cdcTester) runFeedLatencyVerifier(
 	finished := make(chan struct{})
 	ct.mon.Go(func(ctx context.Context) error {
 		defer close(finished)
+
 		err := verifier.pollLatencyUntilJobSucceeds(ctx, ct.DB(), cj.jobID, time.Second, ct.doneCh)
 		if err != nil {
 			return err
+		}
+
+		if onSteadyLatency != nil {
+			onSteadyLatency(verifier.maxSeenSteadyLatency)
 		}
 
 		verifier.assertValid(ct.t)
@@ -2620,15 +2660,17 @@ CONFIGURE ZONE USING
 			ct := newCDCTester(ctx, t, c)
 			defer ct.Close()
 
+			startTime := timeutil.Now()
 			ct.runTPCCWorkload(tpccArgs{warehouses: 100, duration: "30m"})
 
 			feed := ct.newChangefeed(feedArgs{
 				sinkType: pubsubSink,
 				targets:  allTpccTargets,
 			})
-			ct.runFeedLatencyVerifier(feed, latencyTargets{
+			ct.runFeedLatencyVerifierWithCallback(feed, latencyTargets{
 				initialScanLatency: 30 * time.Minute,
-				steadyLatency:      time.Minute,
+			}, func(value time.Duration) {
+				ct.exportLatencyToRoachperf(value, startTime)
 			})
 
 			ct.waitForWorkload()
