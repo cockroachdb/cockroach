@@ -435,7 +435,7 @@ func TestPauseOrResumePolling(t *testing.T) {
 	setFrontier := func(ts hlc.Timestamp) error {
 		sf.mu.Lock()
 		defer sf.mu.Unlock()
-		return sf.mu.ts.advanceFrontier(ts)
+		return sf.mu.ts.advanceFrontier(ctx, ts)
 	}
 
 	// Set the initial frontier to 10.
@@ -519,7 +519,7 @@ func BenchmarkPauseOrResumePolling(b *testing.B) {
 	setFrontier := func(ts hlc.Timestamp) error {
 		sf.mu.Lock()
 		defer sf.mu.Unlock()
-		return sf.mu.ts.advanceFrontier(ts)
+		return sf.mu.ts.advanceFrontier(ctx, ts)
 	}
 
 	// Set the initial frontier to 10.

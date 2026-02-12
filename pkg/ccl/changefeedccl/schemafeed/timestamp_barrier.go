@@ -6,7 +6,10 @@
 package schemafeed
 
 import (
+	"context"
+
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 )
 
@@ -39,7 +42,7 @@ type timestampWaiter struct {
 // advanceFrontier advances the frontier to the given timestamp.
 // The new frontier value must not be earlier than the current frontier,
 // nor may it be at or later than the current error timestamp.
-func (m *timestampBarrier) advanceFrontier(ts hlc.Timestamp) error {
+func (m *timestampBarrier) advanceFrontier(ctx context.Context, ts hlc.Timestamp) error {
 	if ts.Less(m.frontier) {
 		return errors.AssertionFailedf(
 			"cannot advance frontier to %s, which is earlier than the current frontier %s", ts, m.frontier)
@@ -48,6 +51,8 @@ func (m *timestampBarrier) advanceFrontier(ts hlc.Timestamp) error {
 		return errors.AssertionFailedf(
 			"cannot advance frontier to %s, which is equal to or later than the current error timestamp %s", ts, m.errTS)
 	}
+	// TODO(debug): Change to log.VEventf once debugging is complete.
+	log.Changefeed.Infof(ctx, "schema feed forwarding frontier from %s to %s", m.frontier, ts)
 	m.frontier = ts
 
 	// Signal all waiters that are waiting at or before the new frontier.
