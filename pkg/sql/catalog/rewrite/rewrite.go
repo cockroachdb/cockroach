@@ -473,12 +473,38 @@ func TableDescs(
 	// references from the view, which cannot have triggers and thus are not
 	// included in relationBackrefRemovalCandidates.
 	if len(relationBackrefRemovalCandidates) > 0 {
+		// Build a lookup map from rewritten table ID to table descriptor, so we
+		// can check whether a trigger still exists on a referencing table.
+		tablesByID := make(map[descpb.ID]*tabledesc.Mutable, len(tables))
+		for _, t := range tables {
+			tablesByID[t.ID] = t
+		}
+
 		for _, table := range tables {
 			if refsToRemove, ok := relationBackrefRemovalCandidates[table.ID]; ok {
 				newDependedOnBy := table.DependedOnBy[:0]
 				for _, ref := range table.DependedOnBy {
 					if _, remove := refsToRemove[ref.ID]; !remove {
 						newDependedOnBy = append(newDependedOnBy, ref)
+					} else if ref.TriggerID != 0 {
+						// This backref is for a specific trigger. Only remove
+						// it if that trigger no longer exists on the
+						// referencing table (i.e., it was dropped due to
+						// missing dependencies).
+						if refTable, ok := tablesByID[ref.ID]; ok {
+							triggerStillExists := false
+							for i := range refTable.Triggers {
+								if refTable.Triggers[i].ID == ref.TriggerID {
+									triggerStillExists = true
+									break
+								}
+							}
+							if triggerStillExists {
+								newDependedOnBy = append(newDependedOnBy, ref)
+							}
+						}
+						// If the referencing table is not in the restore set,
+						// the backref is stale and can be safely dropped.
 					} else {
 						// Sequences are a special case: we remove only the backref created
 						// by the trigger or policy. This is represented as a
@@ -1320,12 +1346,14 @@ func dropTriggerMissingDeps(
 			}
 
 			// Note: We do not track removed routine references here. This is
-			// intentional. Unlike types or relations, routines are only restored at
-			// the database level and cannot be selectively restored. If a routine is
-			// missing, any table that references it must be dropped prior to restore,
-			// which clears the backref from the function. This avoids any possibility
-			// of dangling function backrefs and eliminates the need for special
-			// cleanup logic here.
+			// intentional. When a trigger or policy is dropped during restore due
+			// to missing dependencies, any function it referenced either (a) was
+			// not found in descriptorRewrites and is not part of the restore, so
+			// there are no backrefs to clean up, or (b) maps to an existing
+			// function (ToExisting) that does not yet have a backref to the newly
+			// restored table. In case (b), backrefs are added separately in
+			// createImportingDescriptors. In both cases, no backref cleanup is
+			// needed for routines here.
 
 			continue
 		}
@@ -1396,12 +1424,14 @@ func dropPolicyMissingDeps(
 			}
 
 			// Note: We do not track removed routine references here. This is
-			// intentional. Unlike types or relations, routines are only restored at
-			// the database level and cannot be selectively restored. If a routine is
-			// missing, any table that references it must be dropped prior to restore,
-			// which clears the backref from the function. This avoids any possibility
-			// of dangling function backrefs and eliminates the need for special
-			// cleanup logic here.
+			// intentional. When a trigger or policy is dropped during restore due
+			// to missing dependencies, any function it referenced either (a) was
+			// not found in descriptorRewrites and is not part of the restore, so
+			// there are no backrefs to clean up, or (b) maps to an existing
+			// function (ToExisting) that does not yet have a backref to the newly
+			// restored table. In case (b), backrefs are added separately in
+			// createImportingDescriptors. In both cases, no backref cleanup is
+			// needed for routines here.
 		}
 	}
 	table.Policies = newPolicies

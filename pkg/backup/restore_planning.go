@@ -58,6 +58,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlclustersettings"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/syntheticprivilege"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
@@ -618,24 +619,24 @@ func remapTypes(
 }
 
 func remapFunctions(
+	ctx context.Context,
+	p sql.PlanHookState,
 	databasesByID map[descpb.ID]*dbdesc.Mutable,
 	functionsByID map[descpb.ID]*funcdesc.Mutable,
 	descriptorCoverage tree.DescriptorCoverage,
 	intoDB string,
 	restoreDBNames map[string]catalog.DatabaseDescriptor,
 	// Outputs
+	databasesWithDeprecatedPrivileges map[string]struct{},
 	descriptorRewrites jobspb.DescRewriteMap,
 ) error {
-	// TODO(chengxiong): we need to handle the cases of restoring tables when we
-	// start supporting udf references from other objects. Namely, we need to do
-	// collision checks similar to tables and types. However, there would be a
-	// bit shift since there is not namespace entry for functions. That means we
-	// need some function resolution for it.
+	txn := p.InternalSQLTxn()
+	col := txn.Descriptors()
+
 	for _, function := range functionsByID {
-		// User-defined functions are not allowed in tables, so restoring specific
-		// tables shouldn't match any udf descriptors.
+		// If a descriptor has already been assigned a rewrite, then move on.
 		if _, ok := descriptorRewrites[function.ID]; ok {
-			return errors.AssertionFailedf("function descriptors seen when restoring tables")
+			continue
 		}
 
 		targetDB, err := resolveTargetDB(databasesByID, intoDB, descriptorCoverage, function)
@@ -643,13 +644,145 @@ func remapFunctions(
 			return err
 		}
 
-		if _, ok := restoreDBNames[targetDB]; !ok {
-			return errors.AssertionFailedf("function descriptor seen when restoring tables")
+		// If we're restoring the database that contains this function, we don't
+		// need to look it up.
+		if _, ok := restoreDBNames[targetDB]; ok {
+			descriptorRewrites[function.ID] = &jobspb.DescriptorRewrite{}
+			continue
 		}
 
-		descriptorRewrites[function.ID] = &jobspb.DescriptorRewrite{}
+		// We're restoring a function without its parent database. This can
+		// happen when restoring tables that have triggers referencing
+		// functions. Look up the target database to get the parent ID.
+		parentID, err := col.LookupDatabaseID(ctx, txn.KV(), targetDB)
+		if err != nil {
+			return err
+		}
+		if parentID == descpb.InvalidID {
+			return errors.Errorf("a database named %q needs to exist to restore function %q",
+				targetDB, function.Name)
+		}
+
+		// Check privileges on the parent DB.
+		parentDB, err := col.ByIDWithoutLeased(txn.KV()).Get().Database(ctx, parentID)
+		if err != nil {
+			return errors.Wrapf(err,
+				"failed to lookup parent DB %d", errors.Safe(parentID))
+		}
+		if usesDeprecatedPrivileges, err := checkRestorePrivilegesOnDatabase(ctx, p, parentDB); err != nil {
+			return err
+		} else if usesDeprecatedPrivileges {
+			databasesWithDeprecatedPrivileges[parentDB.GetName()] = struct{}{}
+		}
+
+		// If restoring into an existing schema, check for function name
+		// collisions. Unlike tables and types, functions don't have namespace
+		// entries, so we look them up via the schema descriptor's Functions map.
+		// Functions support overloading, so a name match alone isn't a
+		// collision; we must also match the input parameter types.
+		if schemaRewrite, ok := descriptorRewrites[function.GetParentSchemaID()]; ok && schemaRewrite.ToExisting {
+			existingSchema, err := col.ByIDWithoutLeased(txn.KV()).Get().Schema(ctx, schemaRewrite.ID)
+			if err != nil {
+				return errors.Wrapf(err,
+					"failed to lookup parent schema %d", errors.Safe(schemaRewrite.ID))
+			}
+			if existingFunc, found := existingSchema.GetFunction(function.Name); found {
+				if existingID, ok := findMatchingFunctionSignature(
+					function, existingFunc, descriptorRewrites,
+				); ok {
+					descriptorRewrites[function.ID] = &jobspb.DescriptorRewrite{
+						ParentID:   existingSchema.GetParentID(),
+						ID:         existingID,
+						ToExisting: true,
+					}
+					continue
+				}
+			}
+		}
+
+		// Create the function rewrite with the new parent ID.
+		descriptorRewrites[function.ID] = &jobspb.DescriptorRewrite{ParentID: parentID}
+
+		// If we're restoring to a public schema of a database that already
+		// exists, we can populate the rewrite ParentSchemaID field here since
+		// we already have the database descriptor.
+		if function.GetParentSchemaID() == keys.PublicSchemaIDForBackup ||
+			function.GetParentSchemaID() == descpb.InvalidID {
+			publicSchemaID := parentDB.GetSchemaID(catconstants.PublicSchemaName)
+			descriptorRewrites[function.ID].ParentSchemaID = publicSchemaID
+		}
 	}
 	return nil
+}
+
+// findMatchingFunctionSignature checks whether the function being restored has
+// a matching overload in the target schema's existing function with the same
+// name. It compares input parameter types, accounting for type descriptor
+// rewrites (e.g., when a user-defined type has been remapped to an existing
+// type in the target cluster). Returns the descriptor ID of the matching
+// existing function overload and true if found, or 0 and false otherwise.
+//
+// We use a custom comparison here rather than the standard MatchOverload path
+// (tree.ResolvedFunctionDefinition.MatchOverload) because at this point in the
+// restore flow, the backup function's parameter types still have old descriptor
+// IDs from the backup. For user-defined types, a direct OID comparison would
+// fail; we need to apply descriptor rewrites before comparing.
+func findMatchingFunctionSignature(
+	function *funcdesc.Mutable,
+	existingFunc descpb.SchemaDescriptor_Function,
+	descriptorRewrites jobspb.DescRewriteMap,
+) (descpb.ID, bool) {
+	// Extract input parameter types from the function being restored.
+	inputTypes := make([]*types.T, 0, len(function.Params))
+	for i := range function.Params {
+		class := funcdesc.ToTreeRoutineParamClass(function.Params[i].Class)
+		if tree.IsInParamClass(class) {
+			inputTypes = append(inputTypes, function.Params[i].Type)
+		}
+	}
+
+	for _, sig := range existingFunc.Signatures {
+		if len(sig.ArgTypes) != len(inputTypes) {
+			continue
+		}
+		match := true
+		for j := range sig.ArgTypes {
+			if !typesMatchForCollision(inputTypes[j], sig.ArgTypes[j], descriptorRewrites) {
+				match = false
+				break
+			}
+		}
+		if match {
+			return sig.ID, true
+		}
+	}
+	return 0, false
+}
+
+// typesMatchForCollision compares two types for the purpose of function
+// signature collision detection during restore. For built-in types, a direct
+// comparison is used. For user-defined types, the descriptor ID is extracted
+// from the OID and compared after accounting for type descriptor rewrites.
+func typesMatchForCollision(
+	restoreType, existingType *types.T, descriptorRewrites jobspb.DescRewriteMap,
+) bool {
+	restoreUDT := catid.IsOIDUserDefined(restoreType.Oid())
+	existingUDT := catid.IsOIDUserDefined(existingType.Oid())
+	if !restoreUDT && !existingUDT {
+		return restoreType.Identical(existingType)
+	}
+	if restoreUDT != existingUDT {
+		// One is user-defined and the other is not.
+		return false
+	}
+	// Both are user-defined types. Compare descriptor IDs, applying any
+	// rewrite for the type being restored.
+	restoreID := catid.UserDefinedOIDToID(restoreType.Oid())
+	if rw, ok := descriptorRewrites[restoreID]; ok && rw.ToExisting {
+		restoreID = rw.ID
+	}
+	existingID := catid.UserDefinedOIDToID(existingType.Oid())
+	return restoreID == existingID
 }
 
 func remapDatabases(
@@ -883,7 +1016,8 @@ func allocateDescriptorRewrites(
 	}
 
 	if err := remapFunctions(
-		databasesByID, functionsByID, descriptorCoverage, intoDB, restoreDBNames, descriptorRewrites,
+		ctx, p, databasesByID, functionsByID, descriptorCoverage, intoDB, restoreDBNames,
+		databasesWithDeprecatedPrivileges, descriptorRewrites,
 	); err != nil {
 		return nil, 0, err
 	}
