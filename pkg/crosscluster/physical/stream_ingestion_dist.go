@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/physicalplan"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlclustersettings"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -801,12 +802,23 @@ func GetDestNodeLocalities(
 
 	instanceInfos := make([]sql.InstanceLocality, 0, len(instanceIDs))
 	for _, id := range instanceIDs {
-		nodeDesc, err := dsp.GetSQLInstanceInfo(id)
-		if err != nil {
-			log.Eventf(ctx, "unable to get node descriptor for sql node %s", id)
-			return nil, err
+		var locality roachpb.Locality
+		if sqlclustersettings.UseInstanceInfoForSQLInstances.Get(&dsp.Settings().SV) {
+			sqlInstanceInfo, err := dsp.GetSQLInstanceInfo(ctx, id)
+			if err != nil {
+				log.Eventf(ctx, "unable to get sql instance info for sql node %s", id)
+				return nil, err
+			}
+			locality = sqlInstanceInfo.Locality
+		} else {
+			nodeDesc, err := dsp.GetNodeDescriptor(id)
+			if err != nil {
+				log.Eventf(ctx, "unable to get node descriptor for sql node %s", id)
+				return nil, err
+			}
+			locality = nodeDesc.Locality
 		}
-		instanceInfos = append(instanceInfos, sql.MakeInstanceLocality(id, nodeDesc.Locality))
+		instanceInfos = append(instanceInfos, sql.MakeInstanceLocality(id, locality))
 	}
 	return instanceInfos, nil
 }
