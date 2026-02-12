@@ -21,6 +21,7 @@ import (
 	"path"
 	"reflect"
 	"regexp"
+	"runtime/trace"
 	"slices"
 	"sort"
 	"strconv"
@@ -5127,6 +5128,20 @@ func TestChangefeedEnrichedSourceWithDataAvro(t *testing.T) {
 }
 
 func TestChangefeedEnrichedSourceWithDataJSON(t *testing.T) {
+	tf, err := os.CreateTemp("", "")
+	require.NoError(t, err)
+	require.NoError(t, trace.Start(tf))
+	defer tf.Close()
+
+	defer func() {
+		trace.Stop()
+		if t.Failed() {
+			t.Logf("trace file: %s", tf.Name())
+		} else {
+			require.NoError(t, os.Remove(tf.Name()))
+		}
+	}()
+
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
