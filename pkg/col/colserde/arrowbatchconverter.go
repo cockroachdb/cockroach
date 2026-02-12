@@ -424,7 +424,7 @@ func (c *ArrowBatchConverter) ArrowToBatch(
 
 		case types.JsonFamily:
 			valueBytes, offsets := getValueBytesAndOffsets(d, vec.Nulls(), batchLength)
-			vec.JSON().Bytes.Deserialize(valueBytes, offsets)
+			vec.JSON().Deserialize(valueBytes, offsets)
 
 		case types.DecimalFamily:
 			// TODO(yuzefovich): this serialization is quite inefficient - improve

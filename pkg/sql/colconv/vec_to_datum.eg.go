@@ -250,6 +250,27 @@ func (c *VecToDatumConverter) GetDatumColumn(colIdx int) tree.Datums {
 	return c.convertedVecs[colIdx]
 }
 
+func countNulls(nulls *coldata.Nulls, length int, sel []int) int {
+	if !nulls.MaybeHasNulls() {
+		return 0
+	}
+	var count int
+	if sel != nil {
+		for _, idx := range sel[:length] {
+			if nulls.NullAt(idx) {
+				count++
+			}
+		}
+	} else {
+		for i := range length {
+			if nulls.NullAt(i) {
+				count++
+			}
+		}
+	}
+	return count
+}
+
 // ColVecToDatumAndDeselect converts a vector of coldata-represented values in
 // col into tree.Datum representation while performing a deselection step.
 // length specifies the number of values to be converted and sel is an optional
@@ -264,6 +285,10 @@ func ColVecToDatumAndDeselect(
 	if sel == nil {
 		ColVecToDatum(converted, col, length, sel, da)
 		return
+	}
+	var jsonScratch []json.JSONEncoded
+	if col.Type().Family() == types.JsonFamily {
+		jsonScratch = make([]json.JSONEncoded, length-countNulls(col.Nulls(), length, sel))
 	}
 	if col.MaybeHasNulls() {
 		nulls := col.Nulls()
@@ -560,14 +585,15 @@ func ColVecToDatumAndDeselect(
 						v := typedCol.Get(srcIdx)
 
 						// The following operation deliberately copies the input JSON
-						// bytes, since FromEncoding is lazy and keeps a handle on the bytes
-						// it is passed in.
+						// bytes, since FromEncodingInto is lazy and keeps a handle on the
+						// bytes it is passed in.
 						_bytes, _err := json.EncodeJSON(nil, v)
 						if _err != nil {
 							colexecerror.ExpectedError(_err)
 						}
-						var _j json.JSON
-						_j, _err = json.FromEncoding(_bytes)
+						_j := &jsonScratch[0]
+						jsonScratch = jsonScratch[1:]
+						_err = json.FromEncodingInto(_bytes, _j)
 						if _err != nil {
 							colexecerror.ExpectedError(_err)
 						}
@@ -974,14 +1000,15 @@ func ColVecToDatumAndDeselect(
 						v := typedCol.Get(srcIdx)
 
 						// The following operation deliberately copies the input JSON
-						// bytes, since FromEncoding is lazy and keeps a handle on the bytes
-						// it is passed in.
+						// bytes, since FromEncodingInto is lazy and keeps a handle on the
+						// bytes it is passed in.
 						_bytes, _err := json.EncodeJSON(nil, v)
 						if _err != nil {
 							colexecerror.ExpectedError(_err)
 						}
-						var _j json.JSON
-						_j, _err = json.FromEncoding(_bytes)
+						_j := &jsonScratch[0]
+						jsonScratch = jsonScratch[1:]
+						_err = json.FromEncodingInto(_bytes, _j)
 						if _err != nil {
 							colexecerror.ExpectedError(_err)
 						}
@@ -1136,6 +1163,10 @@ func ColVecToDatum(
 ) {
 	if length == 0 {
 		return
+	}
+	var jsonScratch []json.JSONEncoded
+	if col.Type().Family() == types.JsonFamily {
+		jsonScratch = make([]json.JSONEncoded, length-countNulls(col.Nulls(), length, sel))
 	}
 	if col.MaybeHasNulls() {
 		nulls := col.Nulls()
@@ -1421,14 +1452,15 @@ func ColVecToDatum(
 							v := typedCol.Get(srcIdx)
 
 							// The following operation deliberately copies the input JSON
-							// bytes, since FromEncoding is lazy and keeps a handle on the bytes
-							// it is passed in.
+							// bytes, since FromEncodingInto is lazy and keeps a handle on the
+							// bytes it is passed in.
 							_bytes, _err := json.EncodeJSON(nil, v)
 							if _err != nil {
 								colexecerror.ExpectedError(_err)
 							}
-							var _j json.JSON
-							_j, _err = json.FromEncoding(_bytes)
+							_j := &jsonScratch[0]
+							jsonScratch = jsonScratch[1:]
+							_err = json.FromEncodingInto(_bytes, _j)
 							if _err != nil {
 								colexecerror.ExpectedError(_err)
 							}
@@ -1889,14 +1921,15 @@ func ColVecToDatum(
 							v := typedCol.Get(srcIdx)
 
 							// The following operation deliberately copies the input JSON
-							// bytes, since FromEncoding is lazy and keeps a handle on the bytes
-							// it is passed in.
+							// bytes, since FromEncodingInto is lazy and keeps a handle on the
+							// bytes it is passed in.
 							_bytes, _err := json.EncodeJSON(nil, v)
 							if _err != nil {
 								colexecerror.ExpectedError(_err)
 							}
-							var _j json.JSON
-							_j, _err = json.FromEncoding(_bytes)
+							_j := &jsonScratch[0]
+							jsonScratch = jsonScratch[1:]
+							_err = json.FromEncodingInto(_bytes, _j)
 							if _err != nil {
 								colexecerror.ExpectedError(_err)
 							}
@@ -2305,14 +2338,15 @@ func ColVecToDatum(
 							v := typedCol.Get(srcIdx)
 
 							// The following operation deliberately copies the input JSON
-							// bytes, since FromEncoding is lazy and keeps a handle on the bytes
-							// it is passed in.
+							// bytes, since FromEncodingInto is lazy and keeps a handle on the
+							// bytes it is passed in.
 							_bytes, _err := json.EncodeJSON(nil, v)
 							if _err != nil {
 								colexecerror.ExpectedError(_err)
 							}
-							var _j json.JSON
-							_j, _err = json.FromEncoding(_bytes)
+							_j := &jsonScratch[0]
+							jsonScratch = jsonScratch[1:]
+							_err = json.FromEncodingInto(_bytes, _j)
 							if _err != nil {
 								colexecerror.ExpectedError(_err)
 							}
@@ -2689,14 +2723,15 @@ func ColVecToDatum(
 							v := typedCol.Get(srcIdx)
 
 							// The following operation deliberately copies the input JSON
-							// bytes, since FromEncoding is lazy and keeps a handle on the bytes
-							// it is passed in.
+							// bytes, since FromEncodingInto is lazy and keeps a handle on the
+							// bytes it is passed in.
 							_bytes, _err := json.EncodeJSON(nil, v)
 							if _err != nil {
 								colexecerror.ExpectedError(_err)
 							}
-							var _j json.JSON
-							_j, _err = json.FromEncoding(_bytes)
+							_j := &jsonScratch[0]
+							jsonScratch = jsonScratch[1:]
+							_err = json.FromEncodingInto(_bytes, _j)
 							if _err != nil {
 								colexecerror.ExpectedError(_err)
 							}
