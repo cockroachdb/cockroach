@@ -4179,14 +4179,25 @@ func TestStoreRangeMergeRaftSnapshot(t *testing.T) {
 		// Wait for all replicas to catch up to the same point. Because we
 		// truncated the log while store2 was unavailable, this will require a
 		// Raft snapshot.
+		//
+		// When the RHS was rebalanced away, limit the key comparison to
+		// [keyStart, keyD) — the LHS that both stores are guaranteed to hold.
+		// store0 may retain stale data from its old RHS replica (r85) while
+		// the conf change removing it propagates and replica GC runs; store2
+		// had the corresponding key span cleared during snapshot subsumption.
+		// Comparing the full [keyStart, keyEnd) would race against the
+		// asynchronous replica GC of store0's stale RHS replica.
+		scanEnd := keyEnd
+		if rebalanceRHSAway {
+			scanEnd = keyD
+		}
 		testutils.SucceedsSoon(t, func() error {
 			afterRaftSnaps := store2.Metrics().RangeSnapshotsAppliedByVoters.Count()
 			if afterRaftSnaps <= beforeRaftSnaps {
 				return errors.New("expected store2 to apply at least 1 additional raft snapshot")
 			}
-			// We only look at the range of keys the test has been manipulating.
 			getKeySet := func(engine storage.Engine) map[string]struct{} {
-				kvs, err := storage.Scan(context.Background(), engine, keyStart, keyEnd, 0)
+				kvs, err := storage.Scan(context.Background(), engine, keyStart, scanEnd, 0)
 				if err != nil {
 					t.Fatal(err)
 				}
