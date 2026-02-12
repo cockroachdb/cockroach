@@ -204,9 +204,7 @@ rebalance-stores store-id=1 max-range-move-count=999 fraction-pending-decrease-t
 [mmaid=1] load summary for dim=WriteBandwidth (s1): loadNormal, reason: load is within 5% of mean [load=0 meanLoad=0]
 [mmaid=1] load summary for dim=ByteSize (s1): loadNormal, reason: load is within 5% of mean [load=0 meanLoad=0 fractionUsed=0.00% meanUtil=0.00% capacity=1000]
 [mmaid=1] load summary for dim=CPURate (n1): loadNormal, reason: load is within 5% of mean [load=720 meanLoad=693 fractionUsed=72.00% meanUtil=83.20% capacity=1000]
-[mmaid=1] cannot add load to n5s5: due to overloadUrgent
-[mmaid=1] [target_sls:(store=overloadUrgent worst=CPURate cpu=overloadUrgent writes=loadNormal bytes=loadNormal node=overloadUrgent frac_pending=0.00,0.00(true)),src_sls:(store=loadNormal worst=CPURate cpu=loadNormal writes=loadNormal bytes=loadNormal node=loadNormal frac_pending=0.00,0.00(true))]
-[mmaid=1] result(failed): cannot shed from s1 to s5 for r3: delta load [cpu:180ns/s, write-bandwidth:0 B/s, byte-size:0 B]
+[mmaid=1] cannot add load from n1s1 to n5s5 for r3 due to overloadUrgent: delta([cpu:180ns/s, write-bandwidth:0 B/s, byte-size:0 B]) targetSLS[(store=overloadUrgent worst=CPURate cpu=overloadUrgent writes=loadNormal bytes=loadNormal node=overloadUrgent frac_pending=0.00,0.00(true))] srcSLS[(store=loadNormal worst=CPURate cpu=loadNormal writes=loadNormal bytes=loadNormal node=loadNormal frac_pending=0.00,0.00(true))]
 [mmaid=1] considering lease-transfer r2 from s1: candidates are [2 4]
 [mmaid=1] load summary for dim=CPURate (s1): overloadSlow, reason: load is >10% above mean [load=900 meanLoad=700 fractionUsed=90.00% meanUtil=84.00% capacity=1000]
 [mmaid=1] load summary for dim=WriteBandwidth (s1): loadNormal, reason: load is within 5% of mean [load=0 meanLoad=0]
@@ -230,9 +228,7 @@ rebalance-stores store-id=1 max-range-move-count=999 fraction-pending-decrease-t
 [mmaid=1] load summary for dim=WriteBandwidth (s1): loadNormal, reason: load is within 5% of mean [load=0 meanLoad=0]
 [mmaid=1] load summary for dim=ByteSize (s1): loadNormal, reason: load is within 5% of mean [load=0 meanLoad=0 fractionUsed=0.00% meanUtil=0.00% capacity=1000]
 [mmaid=1] load summary for dim=CPURate (n1): loadNormal, reason: load is within 5% of mean [load=720 meanLoad=700 fractionUsed=72.00% meanUtil=84.00% capacity=1000]
-[mmaid=1] cannot add load to n4s4: due to overloadUrgent
-[mmaid=1] [target_sls:(store=overloadUrgent worst=CPURate cpu=overloadUrgent writes=loadNormal bytes=loadNormal node=overloadUrgent frac_pending=0.00,0.00(true)),src_sls:(store=loadNormal worst=CPURate cpu=loadNormal writes=loadNormal bytes=loadNormal node=loadNormal frac_pending=0.00,0.00(true))]
-[mmaid=1] result(failed): cannot shed from s1 to s4 for r2: delta load [cpu:180ns/s, write-bandwidth:0 B/s, byte-size:0 B]
+[mmaid=1] cannot add load from n1s1 to n4s4 for r2 due to overloadUrgent: delta([cpu:180ns/s, write-bandwidth:0 B/s, byte-size:0 B]) targetSLS[(store=overloadUrgent worst=CPURate cpu=overloadUrgent writes=loadNormal bytes=loadNormal node=overloadUrgent frac_pending=0.00,0.00(true))] srcSLS[(store=loadNormal worst=CPURate cpu=loadNormal writes=loadNormal bytes=loadNormal node=loadNormal frac_pending=0.00,0.00(true))]
 [mmaid=1] considering lease-transfer r1 from s1: candidates are [2 3]
 [mmaid=1] load summary for dim=CPURate (s1): loadNormal, reason: load is within 5% of mean [load=900 meanLoad=900 fractionUsed=90.00% meanUtil=90.00% capacity=1000]
 [mmaid=1] load summary for dim=WriteBandwidth (s1): loadNormal, reason: load is within 5% of mean [load=0 meanLoad=0]
@@ -276,9 +272,7 @@ rebalance-stores store-id=1 max-range-move-count=999 fraction-pending-decrease-t
 [mmaid=1] load summary for dim=WriteBandwidth (s1): loadNormal, reason: load is within 5% of mean [load=0 meanLoad=0]
 [mmaid=1] load summary for dim=ByteSize (s1): loadNormal, reason: load is within 5% of mean [load=0 meanLoad=0 fractionUsed=0.00% meanUtil=0.00% capacity=1000]
 [mmaid=1] load summary for dim=CPURate (n1): overloadSlow, reason: load is >10% above mean [load=700 meanLoad=541 fractionUsed=70.00% meanUtil=75.80% capacity=1000]
-[mmaid=1] cannot add load to n6s6: due to overloadUrgent
-[mmaid=1] [target_sls:(store=overloadUrgent worst=CPURate cpu=overloadUrgent writes=loadNormal bytes=loadNormal node=overloadUrgent frac_pending=0.00,0.00(true)),src_sls:(store=overloadSlow worst=CPURate cpu=overloadSlow writes=loadNormal bytes=loadNormal node=overloadSlow frac_pending=0.00,0.00(true))]
-[mmaid=1] result(failed): cannot shed from s1 to s6 for r3: delta load [cpu:200ns/s, write-bandwidth:0 B/s, byte-size:0 B]
+[mmaid=1] cannot add load from n1s1 to n6s6 for r3 due to overloadUrgent: delta([cpu:200ns/s, write-bandwidth:0 B/s, byte-size:0 B]) targetSLS[(store=overloadUrgent worst=CPURate cpu=overloadUrgent writes=loadNormal bytes=loadNormal node=overloadUrgent frac_pending=0.00,0.00(true))] srcSLS[(store=overloadSlow worst=CPURate cpu=overloadSlow writes=loadNormal bytes=loadNormal node=overloadSlow frac_pending=0.00,0.00(true))]
 [mmaid=1] load summary for dim=CPURate (s1): overloadSlow, reason: fractionUsed > 75% [load=900 meanLoad=541 fractionUsed=90.00% meanUtil=75.80% capacity=1000]
 [mmaid=1] load summary for dim=WriteBandwidth (s1): loadNormal, reason: load is within 5% of mean [load=0 meanLoad=0]
 [mmaid=1] load summary for dim=ByteSize (s1): loadNormal, reason: load is within 5% of mean [load=0 meanLoad=0 fractionUsed=0.00% meanUtil=0.00% capacity=1000]
@@ -315,9 +309,7 @@ rebalance-stores store-id=1 max-range-move-count=999 fraction-pending-decrease-t
 [mmaid=1] load summary for dim=WriteBandwidth (s1): loadNormal, reason: load is within 5% of mean [load=0 meanLoad=0]
 [mmaid=1] load summary for dim=ByteSize (s1): loadNormal, reason: load is within 5% of mean [load=0 meanLoad=0 fractionUsed=0.00% meanUtil=0.00% capacity=1000]
 [mmaid=1] load summary for dim=CPURate (n1): overloadSlow, reason: load is >10% above mean [load=700 meanLoad=541 fractionUsed=70.00% meanUtil=75.80% capacity=1000]
-[mmaid=1] cannot add load to n6s6: due to overloadUrgent
-[mmaid=1] [target_sls:(store=overloadUrgent worst=CPURate cpu=overloadUrgent writes=loadNormal bytes=loadNormal node=overloadUrgent frac_pending=0.00,0.00(true)),src_sls:(store=overloadSlow worst=CPURate cpu=overloadSlow writes=loadNormal bytes=loadNormal node=overloadSlow frac_pending=0.00,0.00(true))]
-[mmaid=1] result(failed): cannot shed from s1 to s6 for r2: delta load [cpu:200ns/s, write-bandwidth:0 B/s, byte-size:0 B]
+[mmaid=1] cannot add load from n1s1 to n6s6 for r2 due to overloadUrgent: delta([cpu:200ns/s, write-bandwidth:0 B/s, byte-size:0 B]) targetSLS[(store=overloadUrgent worst=CPURate cpu=overloadUrgent writes=loadNormal bytes=loadNormal node=overloadUrgent frac_pending=0.00,0.00(true))] srcSLS[(store=overloadSlow worst=CPURate cpu=overloadSlow writes=loadNormal bytes=loadNormal node=overloadSlow frac_pending=0.00,0.00(true))]
 [mmaid=1] load summary for dim=CPURate (s1): overloadSlow, reason: fractionUsed > 75% [load=900 meanLoad=541 fractionUsed=90.00% meanUtil=75.80% capacity=1000]
 [mmaid=1] load summary for dim=WriteBandwidth (s1): loadNormal, reason: load is within 5% of mean [load=0 meanLoad=0]
 [mmaid=1] load summary for dim=ByteSize (s1): loadNormal, reason: load is within 5% of mean [load=0 meanLoad=0 fractionUsed=0.00% meanUtil=0.00% capacity=1000]
@@ -353,9 +345,7 @@ rebalance-stores store-id=1 max-range-move-count=999 fraction-pending-decrease-t
 [mmaid=1] load summary for dim=WriteBandwidth (s1): loadNormal, reason: load is within 5% of mean [load=0 meanLoad=0]
 [mmaid=1] load summary for dim=ByteSize (s1): loadNormal, reason: load is within 5% of mean [load=0 meanLoad=0 fractionUsed=0.00% meanUtil=0.00% capacity=1000]
 [mmaid=1] load summary for dim=CPURate (n1): overloadSlow, reason: load is >10% above mean [load=700 meanLoad=541 fractionUsed=70.00% meanUtil=75.80% capacity=1000]
-[mmaid=1] cannot add load to n7s7: due to overloadUrgent
-[mmaid=1] [target_sls:(store=overloadUrgent worst=CPURate cpu=overloadUrgent writes=loadNormal bytes=loadNormal node=overloadUrgent frac_pending=0.00,0.00(true)),src_sls:(store=overloadSlow worst=CPURate cpu=overloadSlow writes=loadNormal bytes=loadNormal node=overloadSlow frac_pending=0.00,0.00(true))]
-[mmaid=1] result(failed): cannot shed from s1 to s7 for r1: delta load [cpu:200ns/s, write-bandwidth:0 B/s, byte-size:0 B]
+[mmaid=1] cannot add load from n1s1 to n7s7 for r1 due to overloadUrgent: delta([cpu:200ns/s, write-bandwidth:0 B/s, byte-size:0 B]) targetSLS[(store=overloadUrgent worst=CPURate cpu=overloadUrgent writes=loadNormal bytes=loadNormal node=overloadUrgent frac_pending=0.00,0.00(true))] srcSLS[(store=overloadSlow worst=CPURate cpu=overloadSlow writes=loadNormal bytes=loadNormal node=overloadSlow frac_pending=0.00,0.00(true))]
 [mmaid=1] start processing shedding store s2: cpu node load overloadSlow, store load overloadSlow, worst dim CPURate
 [mmaid=1] top-K[CPURate] ranges for s2 with lease on local s1: r2:[cpu:20ns/s, write-bandwidth:0 B/s, byte-size:0 B] r1:[cpu:20ns/s, write-bandwidth:0 B/s, byte-size:0 B]
 [mmaid=1] skipping remote store s2: in lease shedding grace period
