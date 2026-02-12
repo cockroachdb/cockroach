@@ -278,20 +278,24 @@ func TestMrSystemDatabase(t *testing.T) {
 		})
 
 		t.Run("RegionTables", func(t *testing.T) {
+			// With the fix for stale region references, REGIONAL BY TABLE system tables
+			// use PrimaryRegionNotSpecifiedName, which means they don't get explicit
+			// zone configurations (they inherit from the primary region).
+			// Verify that these tables are correctly configured as REGIONAL BY TABLE
+			// by checking the SHOW TABLES output instead.
 			query := `
-		    SELECT target
-			FROM [SHOW ALL ZONE CONFIGURATIONS]
-			WHERE target LIKE 'TABLE system.public.%'
-			    AND raw_config_sql NOT LIKE '%global_reads = true%'
-					AND target = 'TABLE system.public.locations'
-			ORDER BY target;
+		    SELECT table_name, locality
+			FROM [SHOW TABLES FROM system]
+			WHERE locality LIKE 'REGIONAL BY TABLE%'
+					AND table_name = 'locations'
+			ORDER BY table_name;
 		`
 			tDB.CheckQueryResults(t, query, [][]string{
-				{"TABLE system.public.locations"},
+				{"locations", "REGIONAL BY TABLE IN PRIMARY REGION"},
 			})
 
 			sDB.CheckQueryResults(t, query, [][]string{
-				{"TABLE system.public.locations"},
+				{"locations", "REGIONAL BY TABLE IN PRIMARY REGION"},
 			})
 		})
 
@@ -639,4 +643,230 @@ func TestDropRegionFromUserDatabaseCleansUpSystemTables(t *testing.T) {
 	// The count should remain the same since we only dropped from userdb, not system.
 	require.Equal(t, initialCount[0][0], finalCount[0][0],
 		"sql_instances count should not change when dropping region from user database")
+}
+
+func TestDropRegionSystemDatabaseMultiTenant(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	skip.UnderDuress(t, "slow test")
+
+	ctx := context.Background()
+
+	makeSettings := func() *cluster.Settings {
+		cs := cluster.MakeTestingClusterSettings()
+		instancestorage.ReclaimLoopInterval.Override(ctx, &cs.SV, 150*time.Millisecond)
+		return cs
+	}
+
+	// Create a multi-region cluster with 3 nodes (one per region).
+	regionNames := []string{"aws-us-east-1", "aws-eu-central-1", "aws-us-east-2"}
+	tc, systemSQL, cleanup := multiregionccltestutils.TestingCreateMultiRegionClusterWithRegionList(
+		t, regionNames, 1, /* serversPerRegion */
+		base.TestingKnobs{},
+		multiregionccltestutils.WithSettings(makeSettings()))
+	defer cleanup()
+
+	// Set up the host system database as multi-region so we can verify tenant
+	// independence later.
+	sDB := sqlutils.MakeSQLRunner(systemSQL)
+	sDB.Exec(t, `ANALYZE system.sqlliveness`)
+	sDB.Exec(t, `SET CLUSTER SETTING sql.multiregion.system_database_multiregion.enabled = true`)
+	sDB.Exec(t, `ALTER DATABASE system SET PRIMARY REGION "aws-us-east-1"`)
+	sDB.Exec(t, `ALTER DATABASE system ADD REGION "aws-eu-central-1"`)
+	sDB.Exec(t, `ALTER DATABASE system ADD REGION "aws-us-east-2"`)
+
+	// Create a tenant and make its system database multi-region.
+	id, err := roachpb.MakeTenantID(11)
+	require.NoError(t, err)
+
+	connectToTenant := func() (serverutils.ApplicationLayerInterface, *sqlutils.SQLRunner) {
+		var euServer serverutils.TestServerInterface
+		for _, s := range tc.Servers {
+			loc := s.Locality()
+			if region, _ := loc.Find("region"); region == "aws-eu-central-1" {
+				euServer = s
+				break
+			}
+		}
+		require.NotNil(t, euServer)
+
+		// Start the tenant *on that server* with matching locality.
+		tenantArgs := base.TestTenantArgs{
+			Settings: makeSettings(),
+			TenantID: id,                  // your tenant 11
+			Locality: euServer.Locality(), // region=aws-eu-central-1
+		}
+		tenantServer, tenantSQL := serverutils.StartTenant(t, euServer, tenantArgs)
+		return tenantServer, sqlutils.MakeSQLRunner(tenantSQL)
+	}
+	tenantServer, tDB := connectToTenant()
+
+	tDB.Exec(t, `ANALYZE system.sqlliveness`)
+	tDB.Exec(t, `ALTER DATABASE system SET PRIMARY REGION "aws-us-east-1"`)
+	tDB.Exec(t, `ALTER DATABASE system ADD REGION "aws-eu-central-1"`)
+	tDB.Exec(t, `ALTER DATABASE system ADD REGION "aws-us-east-2"`)
+
+	// Verify the enum values for crdb_internal_region after adding all 3 regions.
+	tDB.CheckQueryResults(t,
+		`USE system; SELECT unnest(values) FROM [SHOW ENUMS] WHERE name = 'crdb_internal_region'`,
+		[][]string{{"aws-eu-central-1"}, {"aws-us-east-1"}, {"aws-us-east-2"}})
+
+	tDB.Exec(t, `ALTER DATABASE system SET PRIMARY REGION "aws-eu-central-1"`)
+
+	// Test 1: Dropping a region when there are 3 regions.
+	// Discard the database zone config first since it references all regions.
+	// Keep the override enabled for the DROP REGION operation as well.
+	tDB.Exec(t, `SET override_multi_region_zone_config = true`)
+	tDB.Exec(t, `ALTER DATABASE system CONFIGURE ZONE DISCARD`)
+	tDB.Exec(t, `ALTER DATABASE system DROP REGION "aws-us-east-2"`)
+	tDB.Exec(t, `SET override_multi_region_zone_config = false`)
+
+	tDB.CheckQueryResults(t,
+		`SELECT region FROM [SHOW REGIONS FROM DATABASE system] ORDER BY region`,
+		[][]string{{"aws-eu-central-1"}, {"aws-us-east-1"}})
+
+	// Test 2: Verify the host's system database was not affected by the tenant's
+	// region drops.
+	sDB.CheckQueryResults(t,
+		`SELECT region FROM [SHOW REGIONS FROM DATABASE system] ORDER BY region`,
+		[][]string{{"aws-eu-central-1"}, {"aws-us-east-1"}, {"aws-us-east-2"}})
+
+	// Release the tenant's sqlliveness session so we can drop its region.
+	// The session was created with crdb_region=aws-us-east-1 (the original
+	// primary) and cannot be moved, so we must delete it. Release() stops
+	// the heartbeat and deletes the session from storage.
+	provider := tenantServer.ExecutorConfig().(sql.ExecutorConfig).SQLLiveness
+	_, err = provider.Release(ctx)
+	require.NoError(t, err)
+
+	// The old SQL connection is no longer usable after releasing the session.
+	// Start a fresh tenant whose session will be in aws-eu-central-1 (the
+	// current primary region).
+	_, tDB = connectToTenant()
+
+	// Wait for any remaining live sessions in the old region to be confirmed
+	// dead across all three tables checked by checkCanDropSystemDatabaseRegion.
+	tDB.CheckQueryResultsRetry(t,
+		`SELECT count(*) FROM system.sqlliveness WHERE crdb_region = 'aws-us-east-1' AND crdb_internal.sql_liveness_is_alive(session_id, true)`,
+		[][]string{{"0"}})
+	tDB.CheckQueryResultsRetry(t,
+		`SELECT count(*) FROM system.sql_instances WHERE crdb_region = 'aws-us-east-1' AND crdb_internal.sql_liveness_is_alive(session_id, true)`,
+		[][]string{{"0"}})
+
+	// Test 3: Prove that you can keep dropping until you are down to one region.
+	// The database zone config gets recreated after each drop, so discard it again.
+	tDB.Exec(t, `SET override_multi_region_zone_config = true`)
+	tDB.Exec(t, `ALTER DATABASE system CONFIGURE ZONE DISCARD`)
+	tDB.Exec(t, `ALTER DATABASE system DROP REGION "aws-us-east-1"`)
+	tDB.Exec(t, `SET override_multi_region_zone_config = false`)
+
+	// Verify the enum values for crdb_internal_region after all drops.
+	tDB.CheckQueryResults(t,
+		`USE system; SELECT unnest(values) FROM [SHOW ENUMS] WHERE name = 'crdb_internal_region'`,
+		[][]string{{"aws-eu-central-1"}})
+
+	tDB.CheckQueryResults(t,
+		`SELECT count(*) FROM crdb_internal.zones
+		WHERE raw_config_sql LIKE '%aws-us-east%'`,
+		[][]string{{"0"}})
+}
+
+// TestSystemDBDropRegionBlocks verifies that DROP REGION is blocked when
+// system tables have explicit zone or locality referencing the region.
+func TestSystemDBDropRegionBlocks(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	skip.UnderDuress(t, "slow test")
+
+	ctx := context.Background()
+
+	makeSettings := func() *cluster.Settings {
+		cs := cluster.MakeTestingClusterSettings()
+		instancestorage.ReclaimLoopInterval.Override(ctx, &cs.SV, 150*time.Millisecond)
+		return cs
+	}
+
+	regionNames := []string{"us-east1", "us-east2", "us-east3"}
+	tc, systemSQL, cleanup := multiregionccltestutils.TestingCreateMultiRegionClusterWithRegionList(
+		t,
+		regionNames,
+		3, /* serversPerRegion */
+		base.TestingKnobs{},
+		multiregionccltestutils.WithSettings(makeSettings()))
+	defer cleanup()
+
+	sDB := sqlutils.MakeSQLRunner(systemSQL)
+	sDB.Exec(t, `SET CLUSTER SETTING sql.multiregion.system_database_multiregion.enabled = true`)
+	sDB.Exec(t, `ANALYZE system.sqlliveness`)
+	sDB.Exec(t, `ALTER DATABASE system SET PRIMARY REGION "us-east1"`)
+	sDB.Exec(t, `ALTER DATABASE system ADD REGION "us-east2"`)
+	sDB.Exec(t, `ALTER DATABASE system ADD REGION "us-east3"`)
+
+	sDB.CheckQueryResults(t, "SELECT create_statement FROM [SHOW CREATE DATABASE system]", [][]string{
+		{`CREATE DATABASE system PRIMARY REGION "us-east1" REGIONS = "us-east1", "us-east2", "us-east3" SURVIVE REGION FAILURE`},
+	})
+
+	tenantArgs := base.TestTenantArgs{
+		Settings: makeSettings(),
+		TenantID: serverutils.TestTenantID(),
+		Locality: tc.Servers[0].Locality(),
+	}
+	_, tenantSQL := serverutils.StartTenant(t, tc.Servers[0], tenantArgs)
+	tDB := sqlutils.MakeSQLRunner(tenantSQL)
+
+	tDB.Exec(t, `ALTER DATABASE system SET PRIMARY REGION "us-east1"`)
+	tDB.Exec(t, `ALTER DATABASE system ADD REGION "us-east2"`)
+	tDB.Exec(t, `ALTER DATABASE system ADD REGION "us-east3"`)
+
+	tDB.Exec(t, `SET override_multi_region_zone_config = true`)
+
+	// Test 1: Test table locality blocking region drop.
+	// Set an explicit locality on system.jobs referencing us-east3.
+	tDB.Exec(t, `ALTER TABLE system.jobs SET LOCALITY REGIONAL BY TABLE IN "us-east3"`)
+
+	// Attempt to drop us-east3 should fail due to the locality reference.
+	tDB.ExpectErr(t,
+		"cannot drop region \"us-east3\" from the system database: table jobs has REGIONAL BY TABLE locality in this region",
+		`ALTER DATABASE system DROP REGION "us-east3"`)
+
+	// Fix the locality reference.
+	tDB.Exec(t, `ALTER TABLE system.jobs SET LOCALITY REGIONAL BY TABLE IN PRIMARY REGION`)
+	tDB.Exec(t, `ALTER TABLE system.jobs CONFIGURE ZONE DISCARD`)
+
+	// Test 2: Test table zone config blocking region drop.
+	// Set an explicit zone config on system.tenants referencing us-east3.
+	tDB.Exec(t, `ALTER TABLE system.tenants CONFIGURE ZONE USING
+		lease_preferences = '[[+region=us-east3]]',
+		voter_constraints = '{+region=us-east3: 3}',
+		num_voters = 3`)
+
+	// Attempt to drop us-east3 should fail due to the table zone config reference.
+	tDB.ExpectErr(t,
+		"cannot drop region \"us-east3\" from the system database: table tenants has a zone configuration referencing this region",
+		`ALTER DATABASE system DROP REGION "us-east3"`)
+
+	// Remove the zone config from the tenants table.
+	tDB.Exec(t, `ALTER TABLE system.tenants CONFIGURE ZONE DISCARD`)
+
+	// Test 3: Test database zone config blocking region drop.
+	// Set up a database zone config that references us-east3.
+	tDB.Exec(t, `ALTER DATABASE system CONFIGURE ZONE USING
+		constraints = '{+region=us-east3: 1}',
+		voter_constraints = '{+region=us-east3: 2}',
+		lease_preferences = '[[+region=us-east3]]',
+		num_replicas = 5,
+		num_voters = 5`)
+
+	// Attempt to drop us-east3 should fail due to the database zone config reference.
+	tDB.ExpectErr(t,
+		"cannot drop region \"us-east3\" from the system database: the database zone configuration references this region",
+		`ALTER DATABASE system DROP REGION "us-east3"`)
+
+	// Remove the database zone config.
+	tDB.Exec(t, `ALTER DATABASE system CONFIGURE ZONE DISCARD`)
+
+	// Now drop us-east3 should succeed.
+	tDB.Exec(t, `ALTER DATABASE system DROP REGION "us-east3"`)
 }

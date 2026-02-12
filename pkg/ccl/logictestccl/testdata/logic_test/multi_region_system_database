@@ -63,3 +63,63 @@ SHOW REGIONS FROM DATABASE "with-primary-setting"
 ----
 database              region  primary  secondary  zones
 with-primary-setting  test1   true     false      {}
+
+subtest regional_by_table_follows_primary
+
+# Add a third region to enable multiple primary region switches.
+statement ok
+ALTER DATABASE system ADD REGION "test2"
+
+query TTBBT colnames,rowsort
+SHOW REGIONS FROM DATABASE system
+----
+database  region  primary  secondary  zones
+system    test    true     false      {}
+system    test1   false    false      {}
+system    test2   false    false      {}
+
+statement ok
+ALTER DATABASE system SET PRIMARY REGION "test1"
+
+query T
+SELECT create_statement FROM [SHOW CREATE DATABASE system]
+----
+CREATE DATABASE system PRIMARY REGION test1 REGIONS = test, test1, test2 SURVIVE REGION FAILURE
+
+# Verify system tables show "LOCALITY REGIONAL BY TABLE IN PRIMARY REGION"
+# syntax (not an explicit region like "test" or "test1").
+query B
+SELECT create_statement LIKE '%LOCALITY REGIONAL BY TABLE IN PRIMARY REGION%'
+FROM [SHOW CREATE TABLE system.jobs]
+----
+true
+
+query B
+SELECT create_statement LIKE '%LOCALITY REGIONAL BY TABLE IN PRIMARY REGION%'
+FROM [SHOW CREATE TABLE system.scheduled_jobs]
+----
+true
+
+statement ok
+ALTER DATABASE system SET PRIMARY REGION "test2"
+
+query T
+SELECT create_statement FROM [SHOW CREATE DATABASE system]
+----
+CREATE DATABASE system PRIMARY REGION test2 REGIONS = test, test1, test2 SURVIVE REGION FAILURE
+
+# Verify tables still show PRIMARY REGION syntax after the second switch.
+# This ensures they're not reverting to explicit region references.
+query B
+SELECT create_statement LIKE '%LOCALITY REGIONAL BY TABLE IN PRIMARY REGION%'
+FROM [SHOW CREATE TABLE system.jobs]
+----
+true
+
+query B
+SELECT create_statement LIKE '%LOCALITY REGIONAL BY TABLE IN PRIMARY REGION%'
+FROM [SHOW CREATE TABLE system.scheduled_jobs]
+----
+true
+
+subtest end
