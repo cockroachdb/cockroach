@@ -92,6 +92,7 @@ type IService interface {
 	AddServiceAccountOrigin(context.Context, *logger.Logger, *pkgauth.Principal, uuid.UUID, *auth.ServiceAccountOrigin) error
 	ListServiceAccountOrigins(context.Context, *logger.Logger, *pkgauth.Principal, uuid.UUID, InputListServiceAccountOriginsDTO) ([]*auth.ServiceAccountOrigin, int, error)
 	RemoveServiceAccountOrigin(context.Context, *logger.Logger, *pkgauth.Principal, uuid.UUID, uuid.UUID) error
+	ListServiceAccountTokens(context.Context, *logger.Logger, *pkgauth.Principal, uuid.UUID, InputListServiceAccountTokensDTO) ([]*auth.ApiToken, int, error)
 	MintServiceAccountToken(context.Context, *logger.Logger, *pkgauth.Principal, uuid.UUID, time.Duration) (*auth.ApiToken, string, error)
 	RevokeServiceAccountToken(context.Context, *logger.Logger, *pkgauth.Principal, uuid.UUID, uuid.UUID) error
 
@@ -274,4 +275,14 @@ type InputListServiceAccountPermissionsDTO struct {
 // NewInputListServiceAccountPermissionsDTO creates a new InputListServiceAccountPermissionsDTO with proper defaults.
 func NewInputListServiceAccountPermissionsDTO() InputListServiceAccountPermissionsDTO {
 	return InputListServiceAccountPermissionsDTO{Filters: *filters.NewFilterSet()}
+}
+
+// InputListServiceAccountTokensDTO is the data transfer object to list service account tokens.
+type InputListServiceAccountTokensDTO struct {
+	Filters filtertypes.FilterSet `json:"filters,omitempty"`
+}
+
+// NewInputListServiceAccountTokensDTO creates a new InputListServiceAccountTokensDTO with proper defaults.
+func NewInputListServiceAccountTokensDTO() InputListServiceAccountTokensDTO {
+	return InputListServiceAccountTokensDTO{Filters: *filters.NewFilterSet()}
 }

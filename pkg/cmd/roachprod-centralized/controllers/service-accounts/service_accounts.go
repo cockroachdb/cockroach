@@ -111,6 +111,17 @@ func NewController(authService authtypes.IService) *Controller {
 				},
 			},
 		},
+		&controllers.ControllerHandler{
+			Method: "GET",
+			Path:   types.ControllerPath + "/:id/tokens",
+			Func:   ctrl.ListTokens,
+			Authorization: &auth.AuthorizationRequirement{
+				AnyOf: []string{
+					authtypes.PermissionServiceAccountViewAll,
+					authtypes.PermissionServiceAccountViewOwn,
+				},
+			},
+		},
 		// Origins endpoints
 		&controllers.ControllerHandler{
 			Method: "POST",
@@ -220,7 +231,7 @@ func (ctrl *Controller) Create(c *gin.Context) {
 		ID:          uuid.MakeV4(),
 		Name:        req.Name,
 		Description: req.Description,
-		Enabled:     req.Enabled,
+		Enabled:     true,
 	}
 
 	if err := ctrl.authService.CreateServiceAccount(ctx, ctrl.GetRequestLogger(c), principal, sa, req.Orphan); err != nil {
@@ -277,8 +288,7 @@ func (ctrl *Controller) Get(c *gin.Context) {
 	principal, _ := controllers.GetPrincipal(c)
 
 	// Parse service account ID from URL
-	idStr := c.Param("id")
-	id, err := uuid.FromString(idStr)
+	id, err := uuid.FromString(c.Param("id"))
 	if err != nil {
 		ctrl.Render(c, &controllers.BadRequestResult{Error: errors.New("invalid service account ID")})
 		return
@@ -305,8 +315,7 @@ func (ctrl *Controller) Update(c *gin.Context) {
 	principal, _ := controllers.GetPrincipal(c)
 
 	// Parse service account ID from URL
-	idStr := c.Param("id")
-	id, err := uuid.FromString(idStr)
+	id, err := uuid.FromString(c.Param("id"))
 	if err != nil {
 		ctrl.Render(c, &controllers.BadRequestResult{Error: errors.New("invalid service account ID")})
 		return
@@ -345,8 +354,7 @@ func (ctrl *Controller) Delete(c *gin.Context) {
 	principal, _ := controllers.GetPrincipal(c)
 
 	// Parse service account ID from URL
-	idStr := c.Param("id")
-	id, err := uuid.FromString(idStr)
+	id, err := uuid.FromString(c.Param("id"))
 	if err != nil {
 		ctrl.Render(c, &controllers.BadRequestResult{Error: errors.New("invalid service account ID")})
 		return
@@ -402,8 +410,7 @@ func (ctrl *Controller) RevokeToken(c *gin.Context) {
 	ctx := c.Request.Context()
 
 	// Parse service account ID from URL
-	saIDStr := c.Param("id")
-	saID, err := uuid.FromString(saIDStr)
+	saID, err := uuid.FromString(c.Param("id"))
 	if err != nil {
 		ctrl.Render(c, &controllers.BadRequestResult{Error: errors.New("invalid service account ID")})
 		return
@@ -427,6 +434,44 @@ func (ctrl *Controller) RevokeToken(c *gin.Context) {
 	}
 
 	ctrl.Render(c, types.NewServiceAccountsResult(types.BuildRevokeTokenResponse(), nil))
+}
+
+// ListTokens lists all tokens for a service account.
+// GET /api/v1/service-accounts/:id/tokens
+func (ctrl *Controller) ListTokens(c *gin.Context) {
+	ctx := c.Request.Context()
+
+	principal, _ := controllers.GetPrincipal(c)
+
+	// Parse service account ID from URL
+	saID, err := uuid.FromString(c.Param("id"))
+	if err != nil {
+		ctrl.Render(c, &controllers.BadRequestResult{Error: errors.New("invalid service account ID")})
+		return
+	}
+
+	// Parse filter parameters
+	pagination, sort := query.ParseQueryParams(c, -1) // default: unlimited
+	filterSet := authtypes.NewInputListServiceAccountTokensDTO().Filters
+	filterSet.Pagination = pagination
+	filterSet.Sort = sort
+
+	// Validate FilterSet
+	if err := filterSet.Validate(); err != nil {
+		ctrl.Render(c, &controllers.BadRequestResult{Error: err})
+		return
+	}
+
+	tokens, totalCount, err := ctrl.authService.ListServiceAccountTokens(
+		ctx, ctrl.GetRequestLogger(c), principal, saID,
+		authtypes.InputListServiceAccountTokensDTO{Filters: filterSet},
+	)
+	if err != nil {
+		ctrl.Render(c, types.NewServiceAccountsResult(nil, err))
+		return
+	}
+
+	ctrl.Render(c, types.NewTokensListResult(tokens, totalCount, filterSet.Pagination, nil))
 }
 
 // AddOrigin adds an IP origin restriction to a service account.
@@ -473,8 +518,7 @@ func (ctrl *Controller) ListOrigins(c *gin.Context) {
 	principal, _ := controllers.GetPrincipal(c)
 
 	// Parse service account ID from URL
-	saIDStr := c.Param("id")
-	saID, err := uuid.FromString(saIDStr)
+	saID, err := uuid.FromString(c.Param("id"))
 	if err != nil {
 		ctrl.Render(c, &controllers.BadRequestResult{Error: errors.New("invalid service account ID")})
 		return
@@ -520,8 +564,7 @@ func (ctrl *Controller) RemoveOrigin(c *gin.Context) {
 	principal, _ := controllers.GetPrincipal(c)
 
 	// Parse service account ID from URL
-	saIDStr := c.Param("id")
-	saID, err := uuid.FromString(saIDStr)
+	saID, err := uuid.FromString(c.Param("id"))
 	if err != nil {
 		ctrl.Render(c, &controllers.BadRequestResult{Error: errors.New("invalid service account ID")})
 		return
@@ -602,8 +645,7 @@ func (ctrl *Controller) AddPermission(c *gin.Context) {
 	principal, _ := controllers.GetPrincipal(c)
 
 	// Parse service account ID from URL
-	saIDStr := c.Param("id")
-	saID, err := uuid.FromString(saIDStr)
+	saID, err := uuid.FromString(c.Param("id"))
 	if err != nil {
 		ctrl.Render(c, &controllers.BadRequestResult{Error: errors.New("invalid service account ID")})
 		return
@@ -638,8 +680,7 @@ func (ctrl *Controller) RemovePermission(c *gin.Context) {
 	principal, _ := controllers.GetPrincipal(c)
 
 	// Parse service account ID from URL
-	saIDStr := c.Param("id")
-	saID, err := uuid.FromString(saIDStr)
+	saID, err := uuid.FromString(c.Param("id"))
 	if err != nil {
 		ctrl.Render(c, &controllers.BadRequestResult{Error: errors.New("invalid service account ID")})
 		return
@@ -669,8 +710,7 @@ func (ctrl *Controller) ReplacePermissions(c *gin.Context) {
 	principal, _ := controllers.GetPrincipal(c)
 
 	// Parse service account ID from URL
-	saIDStr := c.Param("id")
-	saID, err := uuid.FromString(saIDStr)
+	saID, err := uuid.FromString(c.Param("id"))
 	if err != nil {
 		ctrl.Render(c, &controllers.BadRequestResult{Error: errors.New("invalid service account ID")})
 		return

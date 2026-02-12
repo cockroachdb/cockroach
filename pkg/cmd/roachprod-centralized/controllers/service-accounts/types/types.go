@@ -48,7 +48,6 @@ func (dto *InputListDTO) ToServiceInputGetAllDTO() authtypes.InputListServiceAcc
 type CreateServiceAccountRequest struct {
 	Name        string `json:"name" binding:"required"`
 	Description string `json:"description"`
-	Enabled     bool   `json:"enabled"`
 	Orphan      bool   `json:"orphan"`
 }
 
@@ -510,4 +509,75 @@ func BuildRevokeTokenResponse() RevokeTokenResponse {
 	return RevokeTokenResponse{
 		Message: "token revoked successfully",
 	}
+}
+
+// TokenListResponse is the response for token listing operations within service accounts.
+type TokenListResponse struct {
+	ID          string  `json:"id"`
+	TokenSuffix string  `json:"token_suffix"`
+	TokenType   string  `json:"token_type"`
+	Status      string  `json:"status"`
+	CreatedAt   string  `json:"created_at"`
+	ExpiresAt   string  `json:"expires_at"`
+	LastUsedAt  *string `json:"last_used_at,omitempty"`
+}
+
+// TokensListResult is the output data transfer object for listing service account tokens.
+type TokensListResult struct {
+	ServiceAccountsResultError
+	controllers.PaginationMetadata
+	Data []TokenListResponse `json:"data,omitempty"`
+}
+
+// GetData returns the data from the TokensListResult.
+func (dto *TokensListResult) GetData() any {
+	return dto.Data
+}
+
+// NewTokensListResult creates a new TokensListResult with pagination metadata.
+func NewTokensListResult(
+	tokens []*auth.ApiToken, totalCount int, pagination *filtertypes.PaginationParams, err error,
+) *TokensListResult {
+	result := &TokensListResult{}
+	result.ServiceAccountsResultError.Error = err
+
+	if err != nil {
+		return result
+	}
+
+	result.Data = BuildTokenList(tokens)
+	result.TotalCount = totalCount
+	result.Count = len(tokens)
+	result.StartIndex = 1
+	if pagination != nil {
+		result.StartIndex = pagination.StartIndex
+	}
+
+	return result
+}
+
+// BuildTokenListResponse converts a token model to a response DTO.
+func BuildTokenListResponse(token *auth.ApiToken) TokenListResponse {
+	resp := TokenListResponse{
+		ID:          token.ID.String(),
+		TokenSuffix: token.TokenSuffix,
+		TokenType:   string(token.TokenType),
+		Status:      string(token.Status),
+		CreatedAt:   token.CreatedAt.Format("2006-01-02T15:04:05Z07:00"),
+		ExpiresAt:   token.ExpiresAt.Format("2006-01-02T15:04:05Z07:00"),
+	}
+	if token.LastUsedAt != nil {
+		lastUsed := token.LastUsedAt.Format("2006-01-02T15:04:05Z07:00")
+		resp.LastUsedAt = &lastUsed
+	}
+	return resp
+}
+
+// BuildTokenList converts a slice of token models to response DTOs.
+func BuildTokenList(tokens []*auth.ApiToken) []TokenListResponse {
+	responses := make([]TokenListResponse, len(tokens))
+	for i, token := range tokens {
+		responses[i] = BuildTokenListResponse(token)
+	}
+	return responses
 }

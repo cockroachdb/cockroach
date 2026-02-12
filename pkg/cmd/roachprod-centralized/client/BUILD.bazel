@@ -4,6 +4,7 @@ go_library(
     name = "client",
     srcs = [
         "client.go",
+        "client_service_accounts.go",
         "config.go",
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/client",
@@ -12,6 +13,7 @@ go_library(
         "//pkg/cmd/roachprod-centralized/client/auth",
         "//pkg/cmd/roachprod-centralized/controllers/clusters/types",
         "//pkg/cmd/roachprod-centralized/controllers/public-dns/types",
+        "//pkg/cmd/roachprod-centralized/controllers/service-accounts/types",
         "//pkg/cmd/roachprod-centralized/controllers/tasks/types",
         "//pkg/cmd/roachprod-centralized/services/clusters/types",
         "//pkg/roachprod/cloud/types",

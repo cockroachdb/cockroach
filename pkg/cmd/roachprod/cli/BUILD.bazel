@@ -14,6 +14,7 @@ go_library(
         "flags.go",
         "handlers.go",
         "registry.go",
+        "service_accounts.go",
         "update.go",
         "util.go",
     ],
@@ -22,6 +23,7 @@ go_library(
     deps = [
         "//pkg/cmd/roachprod-centralized/client",
         "//pkg/cmd/roachprod-centralized/client/auth",
+        "//pkg/cmd/roachprod-centralized/controllers/service-accounts/types",
         "//pkg/cmd/roachprod/grafana",
         "//pkg/roachprod",
         "//pkg/roachprod/agents/fluentbit",

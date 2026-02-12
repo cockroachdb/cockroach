@@ -525,6 +525,41 @@ func (s *Service) ListServiceAccountOrigins(
 	return s.repo.ListServiceAccountOrigins(ctx, l, saID, input.Filters)
 }
 
+// ListServiceAccountTokens lists all tokens for a service account.
+// Enforces ownership: principals with :view:own can only view tokens for SAs they created.
+func (s *Service) ListServiceAccountTokens(
+	ctx context.Context,
+	l *logger.Logger,
+	principal *pkgauth.Principal,
+	saID uuid.UUID,
+	input types.InputListServiceAccountTokensDTO,
+) ([]*auth.ApiToken, int, error) {
+	// Get service account to check authorization
+	sa, err := s.repo.GetServiceAccount(ctx, l, saID)
+	if err != nil {
+		if errors.Is(err, rauth.ErrNotFound) {
+			return nil, 0, types.ErrServiceAccountNotFound
+		}
+		return nil, 0, errors.Wrap(err, "failed to get service account")
+	}
+
+	// If the principal only has permission to view their own service accounts,
+	// we check ownership.
+	if !principal.HasPermission(types.PermissionServiceAccountViewAll) {
+		if !isOwnedByPrincipal(sa, principal) {
+			return nil, 0, types.ErrServiceAccountNotFound
+		}
+	}
+
+	// Add mandatory filter to scope tokens to this service account
+	filterSet := input.Filters
+	filterSet.NestFiltersAsSubGroup()
+	filterSet.SetLogic(filtertypes.LogicAnd)
+	filterSet.AddFilter("ServiceAccountID", filtertypes.OpEqual, saID)
+
+	return s.repo.ListAllTokens(ctx, l, filterSet)
+}
+
 // RemoveServiceAccountOrigin removes an allowed origin from a service account.
 // Enforces ownership: principals with :update:own can only modify SAs they created.
 // Takes both saID and originID to ensure intent and prevent accidental deletion.

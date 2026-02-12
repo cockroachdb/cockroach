@@ -76,8 +76,6 @@ func (cr *commandRegistry) register() {
 		cr.buildFetchCertsDir(),
 		cr.buildChaosCmd(),
 		// Authentication commands
-		cr.buildLoginCmd(),
-		cr.buildLogoutCmd(),
-		cr.buildWhoamiCmd(),
+		cr.buildAuthCmd(),
 	})
 }
