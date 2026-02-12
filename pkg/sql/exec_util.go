@@ -1646,6 +1646,7 @@ type NodeInfo struct {
 type limitedMetricsRecorder interface {
 	GenerateNodeStatus(ctx context.Context) *statuspb.NodeStatus
 	AppRegistry() *metric.Registry
+	ClusterMetricRegistry(id roachpb.TenantID) metric.RegistryReader
 }
 
 // SystemTenantOnly wraps an object in the ExecutorConfig that is only
