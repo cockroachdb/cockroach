@@ -1412,6 +1412,7 @@ GO_TARGETS = [
     "//pkg/cmd/roachtest/datadog:datadog",
     "//pkg/cmd/roachtest/datadog:datadog_test",
     "//pkg/cmd/roachtest/grafana:grafana",
+    "//pkg/cmd/roachtest/metrics:metrics",
     "//pkg/cmd/roachtest/operation:operation",
     "//pkg/cmd/roachtest/operations/changefeeds:changefeeds",
     "//pkg/cmd/roachtest/operations/helpers:helpers",
