@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"testing"
 	"time"
@@ -221,10 +222,10 @@ func TestIsNodeSegmentFile(t *testing.T) {
 		{"segment health", "cockroach-health.teamcity-xxx.ubuntu.2026-02-10T23_00_19Z.004918.log", true},
 		{"segment pebble", "cockroach-pebble.teamcity-xxx.ubuntu.2026-02-10T23_00_19Z.004918.log", true},
 		{"segment kv-distribution", "cockroach-kv-distribution.teamcity-xxx.ubuntu.2026-02-10T23_00_19Z.004918.log", true},
-		// Special files like cockroach.exit.log have a "." but are not segments.
-		// They are handled by shouldUploadNodeFile, so isNodeSegmentFile returning
-		// true for them is acceptable (they won't reach this check in practice).
-		{"cockroach.exit.log", "cockroach.exit.log", true},
+		// Special files are not segments (no date in name).
+		{"cockroach.exit.log", "cockroach.exit.log", false},
+		{"cockroach.stderr.log", "cockroach.stderr.log", false},
+		{"cockroach.stdout.log", "cockroach.stdout.log", false},
 		// Base-name files are not segments.
 		{"base cockroach.log", "cockroach.log", false},
 		{"base cockroach-health", "cockroach-health.log", false},
@@ -286,6 +287,120 @@ func TestNodeFileChannel(t *testing.T) {
 			require.Equal(t, tt.expected, nodeFileChannel(tt.fileName))
 		})
 	}
+}
+
+func TestSelectParser(t *testing.T) {
+	tests := []struct {
+		name     string
+		fileName string
+		wantRe   string
+	}{
+		{"test.log", "test.log", roachtestLineRegex.String()},
+		{"run log", "run_073000.log", roachtestLineRegex.String()},
+		{"failure log", "failure_1.log", roachtestLineRegex.String()},
+		{"roachprod.log", "roachprod.log", roachtestLineRegex.String()},
+		{"diskusage.txt", "diskusage.txt", roachtestLineRegex.String()},
+		{"dmesg", "1.dmesg.txt", dmesgLineRegex.String()},
+		{"journalctl", "1.journalctl.txt", journalctlLineRegex.String()},
+		{"cockroach segment", "cockroach.teamcity-xxx.log", crdbV2LineRegex.String()},
+		{"cockroach-health segment", "cockroach-health.teamcity-xxx.log", crdbV2LineRegex.String()},
+		{"cockroach.exit.log", "cockroach.exit.log", crdbV2LineRegex.String()},
+		{"cockroach.stderr.log", "cockroach.stderr.log", crdbV2LineRegex.String()},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			parser := selectParser(tt.fileName)
+			require.Equal(t, tt.wantRe, parser.lineRegex.String())
+		})
+	}
+}
+
+func TestDiscoverLogFiles(t *testing.T) {
+	// Create a representative artifact directory structure:
+	//
+	//   tmpDir/
+	//   ├── test.log                  ✓ artifact
+	//   ├── run_073000.log            ✓ artifact
+	//   ├── failure_1.log             ✓ artifact
+	//   ├── 1.dmesg.txt               ✓ artifact
+	//   ├── 1.journalctl.txt          ✓ artifact
+	//   ├── cluster.json              ✗ not .log/.txt
+	//   ├── tsdump.gob                ✗ tsdump excluded
+	//   ├── run_xxx.failed            ✗ .failed excluded
+	//   ├── mixed-version-test.log    ✗ explicitly excluded
+	//   └── logs/
+	//       ├── 1.cockroach.log       ✗ not .unredacted dir
+	//       └── 1.unredacted/
+	//           ├── cockroach.teamcity-x...2026-02-10T...log    ✓ segment
+	//           ├── cockroach-health.teamcity-x...2026-...log ✓ segment
+	//           ├── cockroach-health.log               ✗ base-name (has segment)
+	//           ├── cockroach-pebble.log               ✓ base-name fallback (no segments)
+	//           ├── cockroach.exit.log                 ✓ special file
+	//           ├── diskusage.txt                      ✓ special file
+	//           ├── .DS_Store                          ✗ not a log file
+	//           └── goroutine_dump/                    ✗ directory, skipped
+	//               └── dump.pb.gz
+	tmpDir := t.TempDir()
+
+	// Helper to create an empty file, creating parent dirs as needed.
+	touch := func(relPath string) {
+		absPath := filepath.Join(tmpDir, relPath)
+		require.NoError(t, os.MkdirAll(filepath.Dir(absPath), 0777))
+		require.NoError(t, os.WriteFile(absPath, nil, 0666))
+	}
+
+	// Top-level artifact files.
+	touch("test.log")
+	touch("run_073000.log")
+	touch("failure_1.log")
+	touch("1.dmesg.txt")
+	touch("1.journalctl.txt")
+	touch("cluster.json")          // excluded
+	touch("tsdump.gob")            // excluded
+	touch("run_xxx.failed")        // excluded
+	touch("mixed-version-test.log") // excluded
+
+	// logs/ directory with node-level logs.
+	touch("logs/1.cockroach.log") // excluded (not .unredacted dir)
+
+	// 1.unredacted/ with segments, base-names, and special files.
+	touch("logs/1.unredacted/cockroach.teamcity-x.ubuntu.2026-02-10T23_00_19Z.004918.log")
+	touch("logs/1.unredacted/cockroach-health.teamcity-x.ubuntu.2026-02-10T23_00_19Z.004918.log")
+	touch("logs/1.unredacted/cockroach-health.log") // excluded (has segment)
+	touch("logs/1.unredacted/cockroach-pebble.log") // included (no segment, fallback)
+	touch("logs/1.unredacted/cockroach.exit.log")
+	touch("logs/1.unredacted/diskusage.txt")
+	touch("logs/1.unredacted/.DS_Store") // excluded
+	touch("logs/1.unredacted/goroutine_dump/dump.pb.gz") // excluded (in subdir)
+
+	l, err := logger.RootLogger(os.DevNull, logger.NoTee)
+	require.NoError(t, err)
+	files, err := discoverLogFiles(l, tmpDir)
+	require.NoError(t, err)
+
+	// Convert to relative paths for readability.
+	var relPaths []string
+	for _, f := range files {
+		rel, relErr := filepath.Rel(tmpDir, f)
+		require.NoError(t, relErr)
+		relPaths = append(relPaths, rel)
+	}
+	sort.Strings(relPaths)
+
+	expected := []string{
+		"1.dmesg.txt",
+		"1.journalctl.txt",
+		"failure_1.log",
+		"logs/1.unredacted/cockroach-health.teamcity-x.ubuntu.2026-02-10T23_00_19Z.004918.log",
+		"logs/1.unredacted/cockroach-pebble.log",
+		"logs/1.unredacted/cockroach.exit.log",
+		"logs/1.unredacted/cockroach.teamcity-x.ubuntu.2026-02-10T23_00_19Z.004918.log",
+		"logs/1.unredacted/diskusage.txt",
+		"run_073000.log",
+		"test.log",
+	}
+	require.Equal(t, expected, relPaths)
 }
 
 func TestMakePlatform(t *testing.T) {

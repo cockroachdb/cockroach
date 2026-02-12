@@ -9,6 +9,7 @@ import (
 	"bufio"
 	"context"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -305,18 +306,19 @@ func shouldUploadArtifactFile(name string) bool {
 	return false
 }
 
+// segmentDateRegex matches the ISO 8601 date embedded in segment file names.
+var segmentDateRegex = regexp.MustCompile(`\d{4}-\d{2}-\d{2}T`)
+
 // isNodeSegmentFile returns true if the file is a segment file (has a
-// hostname/timestamp in the name, e.g. cockroach-health.teamcity-xxx.log).
+// hostname/timestamp in the name, e.g. cockroach-health.teamcity-xxx.ubuntu.2026-02-10T23_00_19Z.004918.log).
 func isNodeSegmentFile(name string) bool {
 	if !strings.HasSuffix(name, ".log") {
 		return false
 	}
-	// Segment files have additional "." separators between the channel
-	// name and ".log" (e.g. cockroach-health.teamcity-xxx.ubuntu.2026-...log).
-	// Base-name files have no "." between the channel and ".log"
-	// (e.g. cockroach-health.log).
-	baseName := strings.TrimSuffix(name, ".log")
-	return strings.Contains(baseName, ".")
+	// Segment files contain an ISO 8601 date in their name.
+	// Base-name files (cockroach-health.log) and special files
+	// (cockroach.exit.log) never contain dates.
+	return segmentDateRegex.MatchString(name)
 }
 
 // isNodeBaseFile returns true if the file is a base-name log file
@@ -375,7 +377,7 @@ func shouldUploadNodeFile(name string) bool {
 // be uploaded to Datadog. Top-level files are filtered by shouldUploadArtifactFile.
 // Additionally, node-level logs from logs/N.unredacted/ directories are
 // included, filtered by shouldUploadNodeFile.
-func discoverLogFiles(artifactsDir string) ([]string, error) {
+func discoverLogFiles(l *logger.Logger, artifactsDir string) ([]string, error) {
 	entries, err := os.ReadDir(artifactsDir)
 	if err != nil {
 		return nil, errors.Wrapf(err, "reading artifacts directory %s", artifactsDir)
@@ -403,7 +405,11 @@ func discoverLogFiles(artifactsDir string) ([]string, error) {
 			continue
 		}
 		unredactedDir := filepath.Join(logsDir, nodeDirEntry.Name())
-		nodeFiles, _ := os.ReadDir(unredactedDir)
+		nodeFiles, err := os.ReadDir(unredactedDir)
+		if err != nil {
+			l.Printf("WARN: failed to read node log directory %s: %v", unredactedDir, err)
+			continue
+		}
 
 		// Collect segment files and base-name fallbacks separately.
 		// Base-name files (e.g. cockroach-health.log) duplicate the last
@@ -446,7 +452,7 @@ func discoverLogFiles(artifactsDir string) ([]string, error) {
 func MaybeUploadTestLogs(
 	ctx context.Context, l *logger.Logger, artifactsDir string, cfg LogMetadata,
 ) error {
-	uploadCtx, cancel := context.WithTimeout(ctx, 10*time.Minute)
+	uploadCtx, cancel := context.WithTimeout(ctx, 30*time.Minute)
 	defer cancel()
 	datadogCtx, err := newDatadogContext(uploadCtx)
 	if err != nil {
@@ -464,7 +470,7 @@ func MaybeUploadTestLogs(
 	apiClient := datadog.NewAPIClient(configuration)
 	logsAPI := datadogV2.NewLogsApi(apiClient)
 
-	files, err := discoverLogFiles(artifactsDir)
+	files, err := discoverLogFiles(l, artifactsDir)
 	if err != nil {
 		return err
 	}
@@ -635,9 +641,13 @@ func parseAndUploadLogFile(
 		}
 
 		// finalizeLogEvent parses the accumulated lines as a single log event
-		// and appends it to the current batch.
-		finalizeLogEvent := func(lines []string) {
+		// and appends it to the current batch. If continuation lines were
+		// dropped due to the cap, a truncation marker is appended.
+		finalizeLogEvent := func(lines []string, droppedLogLines int) {
 			message := strings.Join(lines, "\n")
+			if droppedLogLines > 0 {
+				message += fmt.Sprintf("\n[truncated %d continuation lines]", droppedLogLines)
+			}
 			entry, err := parseLogLine(message, logMeta, parser)
 			if err != nil {
 				skipCount++
@@ -649,27 +659,35 @@ func parseAndUploadLogFile(
 		// Use the parser's regex as a delimiter: lines matching the
 		// timestamp pattern start a new log event entry, and subsequent
 		// non-matching lines are appended as continuations of the current
-		// log event.
-		var currentLines []string
+		// log event. Continuation lines are capped at maxContinuationLines
+		// to bound memory usage and respect Datadog entry size limits.
+		const maxContinuationLines = 1000
+		var currentLogLines []string
+		droppedLogLines := 0
 
 		for scanner.Scan() {
-			line := scanner.Text()
+			logLine := scanner.Text()
 
-			if parser.lineRegex.MatchString(line) {
+			if parser.lineRegex.MatchString(logLine) {
 				// New log event found.
 				// Finalize the previous accumulated log event (if any).
-				if len(currentLines) > 0 {
-					finalizeLogEvent(currentLines)
+				if len(currentLogLines) > 0 {
+					finalizeLogEvent(currentLogLines, droppedLogLines)
 					if err := sendBatch(); err != nil {
 						return err
 					}
 				}
 				// Start accumulating a new log event.
-				currentLines = []string{line}
+				currentLogLines = []string{logLine}
+				droppedLogLines = 0
 			} else {
-				if len(currentLines) > 0 {
-					// Continuation line — append to current log event.
-					currentLines = append(currentLines, line)
+				if len(currentLogLines) > 0 {
+					if len(currentLogLines) <= maxContinuationLines {
+						// Continuation log line — append to current log event.
+						currentLogLines = append(currentLogLines, logLine)
+					} else {
+						droppedLogLines++
+					}
 				} else {
 					// Line before any timestamp match — no log event to attach to.
 					skipCount++
@@ -678,8 +696,8 @@ func parseAndUploadLogFile(
 		}
 
 		// Finalize the last accumulated log event after EOF.
-		if len(currentLines) > 0 {
-			finalizeLogEvent(currentLines)
+		if len(currentLogLines) > 0 {
+			finalizeLogEvent(currentLogLines, droppedLogLines)
 		}
 
 		if err = scanner.Err(); err != nil {
@@ -712,9 +730,15 @@ func parseAndUploadLogFile(
 
 	if totalEntriesSuccess == 0 && totalEntriesFailed == 0 {
 		// No lines matched the timestamp regex (e.g. failure_*.log files
-		// that contain raw stack traces). Fall back to uploading the entire
-		// file as a single log entry without an extracted timestamp.
-		content, readErr := os.ReadFile(logPath)
+		// that contain raw stack traces). Fall back to uploading up to 1MB
+		// of the file as a single log entry without an extracted timestamp.
+		const maxRawUploadBytes = 1 << 20 // 1MB
+		f, readErr := os.Open(logPath)
+		if readErr != nil {
+			return 0, errors.Wrapf(readErr, "reading %s for raw upload", logPath)
+		}
+		defer f.Close()
+		content, readErr := io.ReadAll(io.LimitReader(f, int64(maxRawUploadBytes)+1))
 		if readErr != nil {
 			return 0, errors.Wrapf(readErr, "reading %s for raw upload", logPath)
 		}
@@ -722,7 +746,16 @@ func parseAndUploadLogFile(
 			l.Printf("skipping empty file %s", logPath)
 			return 0, nil
 		}
-		entry := datadogV2.NewHTTPLogItem(string(content))
+		truncated := len(content) > maxRawUploadBytes
+		if truncated {
+			content = content[:maxRawUploadBytes]
+		}
+		msg := string(content)
+		if truncated {
+			msg += "\n[truncated]"
+			l.Printf("WARN: %s exceeds 1MB, truncating for raw upload", logPath)
+		}
+		entry := datadogV2.NewHTTPLogItem(msg)
 		entry.SetDdsource(defaultDDSource)
 		entry.SetService(defaultService)
 		entry.SetDdtags(formatTags(logMeta.Tags))
@@ -762,7 +795,7 @@ func parseRoachtestTimestamp(ts string) (string, error) {
 	return t.UTC().Format(time.RFC3339), nil
 }
 
-// parseDmesgTimestamp converts a dmesg timestamp (Mon Mon DD HH:MM:SS YYYY)
+// parseDmesgTimestamp converts a dmesg timestamp (Day Mon DD HH:MM:SS YYYY)
 // to ISO8601 (RFC3339).
 func parseDmesgTimestamp(ts string) (string, error) {
 	t, err := time.Parse("Mon Jan _2 15:04:05 2006", ts)
@@ -781,7 +814,14 @@ func parseJournalctlTimestamp(ts string) (string, error) {
 		return "", err
 	}
 	// Journalctl timestamps don't include a year; assume current year.
-	t = t.AddDate(timeutil.Now().UTC().Year(), 0, 0)
+	now := timeutil.Now().UTC()
+	t = t.AddDate(now.Year(), 0, 0)
+	// Journalctl timestamps have no year. If applying the current year
+	// produces a future date (e.g. a "Dec 31" entry parsed on Jan 1),
+	// the entry must be from the previous year.
+	if t.After(now) {
+		t = t.AddDate(-1, 0, 0)
+	}
 	return t.UTC().Format(time.RFC3339), nil
 }
 
