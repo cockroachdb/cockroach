@@ -3814,6 +3814,28 @@ func TestStoreRangeMergeSlowWatcher(t *testing.T) {
 	}
 }
 
+// TestStoreRangeMergeRaftSnapshot exercises Raft snapshot application across
+// range merges and splits. It sets up a 5-node cluster (stores s1–s5) with
+// manual replication, then:
+//
+//  1. Creates a scratch range [Start, End) replicated to s1, s2, s3.
+//  2. Splits it into four ranges:
+//     r1=[Start, a)  r2=[a, b)  r3=[b, c)  r4=[c, End)
+//  3. Writes values at keys a, b, c and 10 keys past d in [d, End).
+//  4. Blocks all Raft traffic for r2 on s3 so that s3 falls behind.
+//  5. Merges r2+r3+r4 into r2=[a, End), then splits at d:
+//     r2=[a, d)  r5=[d, End)
+//  6. Truncates the Raft log on r2 so that s3 cannot catch up via log entries.
+//  7. (rebalanceRHSAway=true only) Rebalances r5 away from s1 and s3 onto
+//     s4 and s5.
+//  8. Restores Raft traffic to s3 (still filtering stale MsgApp), forcing s3
+//     to catch up via a Raft snapshot for r2.
+//  9. Verifies that the Raft snapshot was applied and that the engine key sets
+//     on s1 and s3 match for the key span both stores hold.
+//
+// The beforeSnapshotSSTIngestion hook additionally verifies the byte-level
+// contents of the SSTs that make up the snapshot, including the SSTs that
+// clear range-ID local keys and user data of the subsumed replicas (r3, r4).
 func TestStoreRangeMergeRaftSnapshot(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
