@@ -1133,21 +1133,42 @@ type jobState struct {
 	progressUpdatesSkipped bool
 }
 
-// coreProgress holds in-memory progress for core (sinkless) changefeeds.
-// Core changefeeds have no job record, so this is their only mechanism for
-// preserving progress across retries. Populated from trailing metadata
-// emitted by the changeFrontier and changeAggregator processors on shutdown.
-type coreProgress struct {
-	// frontier is the coordinator frontier snapshot from the last flow.
-	frontier []execinfrapb.ChangefeedMeta_FrontierSpan
+// flowResult contains state collected during a changefeed DistSQL flow
+// execution. It is returned by startDistChangefeed and consumed by the
+// retry loops in coreChangefeed and resumeWithRetries.
+type flowResult struct {
+	// trackedSpans is the set of spans watched by the changefeed. Used by
+	// reconcileJobStateWithLocalState to rebuild the frontier.
+	trackedSpans roachpb.Spans
+	// aggregatorFrontier contains frontier spans emitted by aggregators
+	// during shutdown via trailing metadata.
+	aggregatorFrontier []execinfrapb.ChangefeedMeta_FrontierSpan
+	// coordinatorFrontier contains the coordinator frontier emitted by the
+	// changeFrontier processor during shutdown via trailing metadata. Used
+	// by core changefeeds to restore per-span progress on retry.
+	coordinatorFrontier []execinfrapb.ChangefeedMeta_FrontierSpan
+	// drainingNodes is the list of nodes that are draining.
+	drainingNodes []roachpb.NodeID
 }
 
-// highWater returns the high-water mark derived from the frontier (the minimum
-// timestamp across all spans). Returns an empty timestamp if the frontier is
-// empty.
-func (cp *coreProgress) highWater() hlc.Timestamp {
+// aggregatorFrontierSpans returns an iterator over the spans in the aggregator
+// frontier collected during shutdown.
+func (r *flowResult) aggregatorFrontierSpans() iter.Seq2[roachpb.Span, hlc.Timestamp] {
+	return func(yield func(roachpb.Span, hlc.Timestamp) bool) {
+		for _, entry := range r.aggregatorFrontier {
+			if !yield(entry.Span, entry.Timestamp) {
+				return
+			}
+		}
+	}
+}
+
+// coordinatorHighWater returns the high-water mark derived from the coordinator
+// frontier (the minimum timestamp across all spans). Returns an empty timestamp
+// if the frontier is empty.
+func (r *flowResult) coordinatorHighWater() hlc.Timestamp {
 	var hw hlc.Timestamp
-	for _, fs := range cp.frontier {
+	for _, fs := range r.coordinatorFrontier {
 		if hw.IsEmpty() || fs.Timestamp.Less(hw) {
 			hw = fs.Timestamp
 		}
@@ -1155,30 +1176,17 @@ func (cp *coreProgress) highWater() hlc.Timestamp {
 	return hw
 }
 
-// cachedState is changefeed state stored in memory between retries.
-type cachedState struct {
-	// coreProgress is non-nil only for core (sinkless) changefeeds.
-	coreProgress *coreProgress
-
-	// trackedSpans is the set of tracked spans for this changefeed.
-	trackedSpans roachpb.Spans
-	// aggregatorFrontier contains the list of frontier spans
-	// emitted by aggregators when they are being shut down.
-	aggregatorFrontier []execinfrapb.ChangefeedMeta_FrontierSpan
-	// drainingNodes is the list of nodes that are draining.
-	drainingNodes []roachpb.NodeID
-}
-
-// AggregatorFrontierSpans returns an iterator over the spans in the aggregator
-// frontier collected during shutdown.
-func (cs *cachedState) AggregatorFrontierSpans() iter.Seq2[roachpb.Span, hlc.Timestamp] {
-	return func(yield func(roachpb.Span, hlc.Timestamp) bool) {
-		for _, entry := range cs.aggregatorFrontier {
-			if !yield(entry.Span, entry.Timestamp) {
-				return
-			}
-		}
+// coordinatorResolvedSpans converts the coordinator frontier into resolved
+// spans for restoring frontier state on retry.
+func (r *flowResult) coordinatorResolvedSpans() []jobspb.ResolvedSpan {
+	var spans []jobspb.ResolvedSpan
+	for _, fs := range r.coordinatorFrontier {
+		spans = append(spans, jobspb.ResolvedSpan{
+			Span:      fs.Span,
+			Timestamp: fs.Timestamp,
+		})
 	}
+	return spans
 }
 
 func newJobState(

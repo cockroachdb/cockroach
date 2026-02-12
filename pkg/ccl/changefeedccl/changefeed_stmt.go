@@ -522,11 +522,11 @@ func coreChangefeed(
 	resultsCh chan<- tree.Datums,
 	targets changefeedbase.Targets,
 ) error {
-	localState := &cachedState{coreProgress: &coreProgress{}}
 	knobs, _ := p.ExecCfg().DistSQLSrv.TestingKnobs.Changefeed.(*TestingKnobs)
 
 	maxBackoff := changefeedbase.MaxRetryBackoff.Get(&p.ExecCfg().Settings.SV)
 	backoffReset := changefeedbase.RetryBackoffReset.Get(&p.ExecCfg().Settings.SV)
+	var prevResult flowResult
 	for r := getRetry(ctx, maxBackoff, backoffReset); ; {
 		if !r.Next() {
 			// Retry loop exits when context is canceled.
@@ -539,7 +539,7 @@ func coreChangefeed(
 		}
 
 		initialHighWater, schemaTS, err := computeDistChangefeedTimestamps(
-			ctx, p, details, localState.coreProgress.highWater())
+			ctx, p, details, prevResult.coordinatorHighWater())
 		if err != nil {
 			return err
 		}
@@ -547,8 +547,8 @@ func coreChangefeed(
 		if haveKnobs && maybeCfKnobs.AfterComputeDistChangefeedTimestamps != nil {
 			maybeCfKnobs.AfterComputeDistChangefeedTimestamps(ctx)
 		}
-		err = startDistChangefeed(ctx, p, 0 /* jobID */, schemaTS, details, description,
-			initialHighWater, nil /* spanLevelCheckpoint */, localState, resultsCh, nil, targets)
+		prevResult, err = startDistChangefeed(ctx, p, 0 /* jobID */, schemaTS, details, description,
+			initialHighWater, nil /* spanLevelCheckpoint */, prevResult, resultsCh, nil, targets)
 		if err == nil {
 			log.Changefeed.Infof(ctx, "core changefeed completed with no error")
 			return nil
@@ -563,8 +563,8 @@ func coreChangefeed(
 			return err
 		}
 
-		// All other errors retry; but we'll use an up-to-date progress
-		// information which is saved in the localState.
+		// All other errors retry. The coordinator frontier from the previous
+		// flow's trailing metadata is used to restore progress on the next run.
 		log.Changefeed.Infof(ctx, "core changefeed retrying due to transient error: %s", err)
 	}
 }
@@ -1798,11 +1798,7 @@ func (b *changefeedResumer) resumeWithRetries(
 	// or for many other reasons.
 	var lastRunStatusUpdate time.Time
 
-	// Setup local state information.
-	// This information is used by dist flow process to communicate back
-	// the up-to-date checkpoint and node health information in case
-	// changefeed encounters transient error.
-	localState := &cachedState{}
+	var prevResult flowResult
 	knobs, _ := execCfg.DistSQLSrv.TestingKnobs.Changefeed.(*TestingKnobs)
 
 	resolvedDest, err := resolveDest(ctx, execCfg, details.SinkURI)
@@ -1932,8 +1928,10 @@ func (b *changefeedResumer) resumeWithRetries(
 						}
 					}
 				}
-				return startDistChangefeed(ctx, jobExec, jobID, schemaTS, details, description,
-					initialHighWater, spanLevelCheckpoint, localState, startedCh, onTracingEvent, targets)
+				var err error
+				prevResult, err = startDistChangefeed(ctx, jobExec, jobID, schemaTS, details, description,
+					initialHighWater, spanLevelCheckpoint, prevResult, startedCh, onTracingEvent, targets)
+				return err
 			})
 
 			// Poll for updated configuration or new database tables if hibernating.
@@ -1998,7 +1996,7 @@ func (b *changefeedResumer) resumeWithRetries(
 			sli.ErrorRetries.Inc(1)
 		}
 
-		reconciledProgress, err := reconcileJobStateWithLocalState(ctx, jobID, localState, execCfg)
+		reconciledProgress, err := reconcileJobStateWithLocalState(ctx, jobID, prevResult, execCfg)
 		if err != nil {
 			// Any errors during reconciliation are retry-able.
 			// When retry-able error propagates to jobs registry, it will clear out
@@ -2022,7 +2020,7 @@ func (b *changefeedResumer) resumeWithRetries(
 				// We could come up with a mechanism to provide additional
 				// information to dist sql planner.  Or... we could just wait a bit.
 				log.Changefeed.Warningf(ctx, "Changefeed %d delaying restart due to %d node(s) (%v) draining",
-					jobID, len(localState.drainingNodes), localState.drainingNodes)
+					jobID, len(prevResult.drainingNodes), prevResult.drainingNodes)
 				r.Next() // default config: ~5 sec delay, plus 10 sec on the retry loop.
 			}
 		}
@@ -2061,10 +2059,13 @@ func reloadDest(ctx context.Context, id jobspb.JobID, execCfg *sql.ExecutorConfi
 }
 
 // reconcileJobStateWithLocalState ensures that the job progress information
-// is consistent with the state present in the local state. It returns
+// is consistent with the state collected from the previous flow. It returns
 // the reconciled progress for use by the next retry iteration.
 func reconcileJobStateWithLocalState(
-	ctx context.Context, jobID jobspb.JobID, localState *cachedState, execCfg *sql.ExecutorConfig,
+	ctx context.Context,
+	jobID jobspb.JobID,
+	result flowResult,
+	execCfg *sql.ExecutorConfig,
 ) (jobspb.Progress, error) {
 	// Re-load the job in order to update our progress object, which may have
 	// been updated by the changeFrontier processor since the flow started.
@@ -2083,23 +2084,22 @@ func reconcileJobStateWithLocalState(
 
 	progress := reloadedJob.Progress()
 
-	// localState contains an up-to-date checkpoint information transmitted by
-	// aggregator when flow was terminated. To be safe, we don't blindly trust
-	// local state; instead, this checkpoint is applied to the reloaded job
-	// progress, and the resulting progress record persisted back to the jobs
-	// table.
+	// The flow result contains up-to-date frontier information transmitted by
+	// aggregators when the flow was terminated. To be safe, we don't blindly
+	// trust it; instead, this is applied to the reloaded job progress, and
+	// the resulting progress record persisted back to the jobs table.
 	var highWater hlc.Timestamp
 	if hw := progress.GetHighWater(); hw != nil {
 		highWater = *hw
 	}
 
 	// Build frontier based on tracked spans.
-	sf, err := span.MakeFrontierAt(highWater, localState.trackedSpans...)
+	sf, err := span.MakeFrontierAt(highWater, result.trackedSpans...)
 	if err != nil {
 		return progress, err
 	}
 	// Advance frontier based on the information received from the aggregators.
-	for sp, ts := range localState.AggregatorFrontierSpans() {
+	for sp, ts := range result.aggregatorFrontierSpans() {
 		_, err := sf.Forward(sp, ts)
 		if err != nil {
 			return progress, err
@@ -2109,7 +2109,7 @@ func reconcileJobStateWithLocalState(
 	maxBytes := changefeedbase.SpanCheckpointMaxBytes.Get(&execCfg.Settings.SV)
 	spanLevelCheckpoint := checkpoint.Make(
 		sf.Frontier(),
-		localState.AggregatorFrontierSpans(),
+		result.aggregatorFrontierSpans(),
 		maxBytes,
 		nil, /* metrics */
 	)

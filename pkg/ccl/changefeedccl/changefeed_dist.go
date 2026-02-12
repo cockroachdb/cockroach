@@ -221,15 +221,16 @@ func startDistChangefeed(
 	description string,
 	initialHighWater hlc.Timestamp,
 	spanLevelCheckpoint *jobspb.TimestampSpansMap,
-	localState *cachedState,
+	prevResult flowResult,
 	resultsCh chan<- tree.Datums,
 	onTracingEvent func(ctx context.Context, meta *execinfrapb.TracingAggregatorEvents),
 	targets changefeedbase.Targets,
-) error {
+) (flowResult, error) {
+	var result flowResult
 	execCfg := execCtx.ExecCfg()
 	tableDescs, err := fetchTableDescriptors(ctx, execCfg, targets, schemaTS)
 	if err != nil {
-		return err
+		return result, err
 	}
 
 	if schemaTS.IsEmpty() {
@@ -237,12 +238,12 @@ func startDistChangefeed(
 	}
 	trackedSpans, err := fetchSpansForTables(ctx, execCtx, tableDescs, details, schemaTS)
 	if err != nil {
-		return err
+		return result, err
 	}
 	if log.ExpensiveLogEnabled(ctx, 2) {
 		log.Changefeed.Infof(ctx, "tracked spans: %s", trackedSpans)
 	}
-	localState.trackedSpans = trackedSpans
+	result.trackedSpans = trackedSpans
 
 	// Changefeed flows handle transactional consistency themselves.
 	var noTxn *kv.Txn
@@ -255,16 +256,11 @@ func startDistChangefeed(
 
 	// Compute resolved spans to restore frontier state on startup.
 	var resolvedSpans []jobspb.ResolvedSpan
-	if localState.coreProgress != nil {
+	if jobID == 0 {
 		// Core changefeeds get resolved spans from the coordinator frontier
 		// captured via trailing metadata on the previous flow's shutdown.
-		for _, fs := range localState.coreProgress.frontier {
-			resolvedSpans = append(resolvedSpans, jobspb.ResolvedSpan{
-				Span:      fs.Span,
-				Timestamp: fs.Timestamp,
-			})
-		}
-	} else if jobID != 0 {
+		resolvedSpans = prevResult.coordinatorResolvedSpans()
+	} else {
 		// Job-backed changefeeds load resolved spans from frontier
 		// persistence in the job_info table.
 		if err := execCfg.InternalDB.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
@@ -277,15 +273,15 @@ func startDistChangefeed(
 			}
 			return nil
 		}); err != nil {
-			return err
+			return result, err
 		}
 	}
 
 	p, planCtx, err := makePlan(execCtx, jobID, details, description, initialHighWater,
-		trackedSpans, spanLevelCheckpoint, localState.drainingNodes, schemaTS,
+		trackedSpans, spanLevelCheckpoint, prevResult.drainingNodes, schemaTS,
 		resolvedSpans)(ctx, dsp)
 	if err != nil {
-		return err
+		return result, err
 	}
 
 	execPlan := func(ctx context.Context) error {
@@ -294,20 +290,16 @@ func startDistChangefeed(
 		ctx, cancel := execCtx.ExecCfg().DistSQLSrv.Stopper.WithCancelOnQuiesce(ctx)
 		defer cancel()
 
-		// clear out previous drain/shutdown information.
-		localState.drainingNodes = localState.drainingNodes[:0]
-		localState.aggregatorFrontier = localState.aggregatorFrontier[:0]
-
 		resultRows := sql.NewMetadataCallbackWriter(
 			makeChangefeedResultWriter(resultsCh, cancel),
 			func(ctx context.Context, meta *execinfrapb.ProducerMetadata) error {
 				if meta.Changefeed != nil {
 					if meta.Changefeed.DrainInfo != nil {
-						localState.drainingNodes = append(localState.drainingNodes, meta.Changefeed.DrainInfo.NodeID)
+						result.drainingNodes = append(result.drainingNodes, meta.Changefeed.DrainInfo.NodeID)
 					}
-					localState.aggregatorFrontier = append(localState.aggregatorFrontier, meta.Changefeed.AggregatorFrontier...)
-					if len(meta.Changefeed.CoordinatorFrontier) > 0 && localState.coreProgress != nil {
-						localState.coreProgress.frontier = meta.Changefeed.CoordinatorFrontier
+					result.aggregatorFrontier = append(result.aggregatorFrontier, meta.Changefeed.AggregatorFrontier...)
+					if len(meta.Changefeed.CoordinatorFrontier) > 0 {
+						result.coordinatorFrontier = meta.Changefeed.CoordinatorFrontier
 					}
 				}
 				if meta.AggregatorEvents != nil && onTracingEvent != nil {
@@ -358,7 +350,7 @@ func startDistChangefeed(
 		return resultRows.Err()
 	}
 
-	return ctxgroup.GoAndWait(ctx, execPlan)
+	return result, ctxgroup.GoAndWait(ctx, execPlan)
 }
 
 // The bin packing choice gives preference to leaseholder replicas if possible.
