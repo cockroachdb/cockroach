@@ -9,10 +9,8 @@ import (
 	"context"
 	"fmt"
 	"runtime"
-	"strings"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/cloud"
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/kv"
@@ -387,41 +385,6 @@ func ingestKvs(
 			return nil, err
 		}
 		defer pkSink.Close(ctx)
-
-		// On resume, discover any SST files created in previous runs. These files
-		// exist in external storage but their metadata may not have been persisted
-		// to CompletedMapWork before the pause. We need to report them so they get merged.
-		if spec.ResumePos != nil {
-			procPrefix := fmt.Sprintf("%s/proc-%d/", prefix, processorID)
-			es, err := flowCtx.Cfg.ExternalStorageFromURI(ctx, procPrefix, spec.User())
-			if err != nil {
-				return nil, err
-			}
-			defer es.Close()
-
-			var existingFiles []*bulksst.SSTFileInfo
-			err = es.List(ctx, "", cloud.ListOptions{}, func(f string) error {
-				if strings.HasSuffix(f, ".sst") {
-					existingFiles = append(existingFiles, &bulksst.SSTFileInfo{
-						URI: procPrefix + f,
-					})
-				}
-				return nil
-			})
-			if err != nil {
-				return nil, err
-			}
-
-			if len(existingFiles) > 0 {
-				ssts := &bulksst.SSTFiles{SST: existingFiles}
-				existingManifests := bulksst.SSTFilesToManifests(ssts, nil /* writeTS */)
-				// Report existing manifests immediately so coordinator can track them
-				progCh <- execinfrapb.RemoteProducerMetadata_BulkProcessorProgress{
-					NodeID:      nodeID,
-					SSTMetadata: existingManifests,
-				}
-			}
-		}
 	} else {
 		table := getTableFromSpec(spec)
 		pkIndexID = table.Desc.PrimaryIndex.ID

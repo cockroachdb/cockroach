@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/backfill"
 	"github.com/cockroachdb/cockroach/pkg/sql/bulkmerge"
 	"github.com/cockroachdb/cockroach/pkg/sql/bulksst"
 	"github.com/cockroachdb/cockroach/pkg/sql/bulkutil"
@@ -202,15 +203,10 @@ func distImport(
 	rowProgress := make([]int64, len(from))
 	fractionProgress := make([]uint32, len(from))
 
-	// accumulatedSSTMetadata accumulates SST file metadata as processors complete.
-	// This is persisted periodically via updateJobProgress() for retry safety.
-	var accumulatedSSTMetadata struct {
-		syncutil.Mutex
-		manifests []jobspb.BulkSSTManifest
-		// seenURIs tracks SST URIs to deduplicate entries (belt-and-suspenders defense
-		// against processor-level deduplication bugs).
-		seenURIs map[string]struct{}
-	}
+	// manifestBuf accumulates SST file metadata as processors complete, following
+	// the index backfiller pattern. It maintains a complete cumulative list of all
+	// manifests rather than deltas, eliminating timing windows for orphaned SSTs.
+	var manifestBuf *backfill.SSTManifestBuffer
 
 	updateJobProgress := func() error {
 		return job.DebugNameNoTxn(importProgressDebugName).FractionProgressed(ctx, func(
@@ -231,14 +227,16 @@ func distImport(
 			prog.Summary = accumulatedBulkSummary.BulkOpSummary.DeepCopy()
 			accumulatedBulkSummary.Unlock()
 
-			// Persist accumulated SST metadata for distributed merge
-			if useDistributedMerge {
-				accumulatedSSTMetadata.Lock()
-				if len(accumulatedSSTMetadata.manifests) > 0 {
-					prog.CompletedMapWork = append(prog.CompletedMapWork, accumulatedSSTMetadata.manifests...)
-					accumulatedSSTMetadata.manifests = nil // Clear after persisting
+			// Persist complete SST manifest snapshot for distributed merge, following
+			// the index backfiller pattern. This replaces the entire list rather than
+			// appending deltas, ensuring job state is always complete and eliminating
+			// the timing window for orphaned SSTs.
+			if useDistributedMerge && manifestBuf != nil {
+				if manifestBuf.Dirty() {
+					prog.CompletedMapWork = manifestBuf.SnapshotAndMarkClean()
+				} else {
+					prog.CompletedMapWork = manifestBuf.Snapshot()
 				}
-				accumulatedSSTMetadata.Unlock()
 			}
 
 			return overall / float32(len(from))
@@ -252,21 +250,17 @@ func distImport(
 	// On the first attempt, this will be empty. On retries, it contains metadata
 	// from files that were fully processed in previous attempts.
 	processorOutput := make([]bulksst.SSTFiles, 0)
+	var resumeManifests []jobspb.BulkSSTManifest
 	if importProgress := job.Progress().Details.(*jobspb.Progress_Import).Import; importProgress != nil && len(importProgress.CompletedMapWork) > 0 {
+		resumeManifests = importProgress.CompletedMapWork
 		processorOutput = append(processorOutput, bulksst.ManifestsToSSTFiles(importProgress.CompletedMapWork))
+	}
 
-		// Initialize seenURIs map with SSTs from prior attempts to prevent duplicates.
-		accumulatedSSTMetadata.Lock()
-		accumulatedSSTMetadata.seenURIs = make(map[string]struct{})
-		for _, manifest := range importProgress.CompletedMapWork {
-			accumulatedSSTMetadata.seenURIs[manifest.URI] = struct{}{}
-		}
-		accumulatedSSTMetadata.Unlock()
-	} else if useDistributedMerge {
-		// Initialize empty map for first attempt with distributed merge.
-		accumulatedSSTMetadata.Lock()
-		accumulatedSSTMetadata.seenURIs = make(map[string]struct{})
-		accumulatedSSTMetadata.Unlock()
+	// Initialize manifest buffer with checkpointed manifests from prior runs,
+	// following the index backfiller pattern. The buffer maintains a complete
+	// cumulative list of all manifests.
+	if useDistributedMerge {
+		manifestBuf = backfill.NewSSTManifestBuffer(resumeManifests)
 	}
 
 	metaFn := func(ctx context.Context, meta *execinfrapb.ProducerMetadata) error {
@@ -282,26 +276,14 @@ func distImport(
 			accumulatedBulkSummary.Add(meta.BulkProcessorProgress.BulkSummary)
 			accumulatedBulkSummary.Unlock()
 
-			// Accumulate SST metadata emitted by processors during distributed merge.
-			// This metadata is persisted periodically via updateJobProgress() for retry safety.
+			// Accumulate SST metadata emitted by processors during distributed merge,
+			// following the index backfiller pattern. The buffer deduplicates and
+			// maintains a cumulative list of all manifests.
 			if len(meta.BulkProcessorProgress.SSTMetadata) > 0 {
-				accumulatedSSTMetadata.Lock()
-				// Deduplicate SST metadata as a defense-in-depth measure. While processors
-				// should already deduplicate, this provides additional safety.
-				var newManifests []jobspb.BulkSSTManifest
-				for _, manifest := range meta.BulkProcessorProgress.SSTMetadata {
-					if _, seen := accumulatedSSTMetadata.seenURIs[manifest.URI]; !seen {
-						newManifests = append(newManifests, manifest)
-						accumulatedSSTMetadata.seenURIs[manifest.URI] = struct{}{}
-					}
+				if manifestBuf != nil {
+					manifestBuf.Append(meta.BulkProcessorProgress.SSTMetadata)
 				}
-				if len(newManifests) > 0 {
-					accumulatedSSTMetadata.manifests = append(accumulatedSSTMetadata.manifests, newManifests...)
-				}
-				accumulatedSSTMetadata.Unlock()
-
-				// Add to processorOutput for the merge phase (use original metadata, not deduplicated,
-				// since processorOutput is only used temporarily and doesn't persist across retries).
+				// Add to processorOutput for the merge phase.
 				processorOutput = append(processorOutput, bulksst.ManifestsToSSTFiles(meta.BulkProcessorProgress.SSTMetadata))
 			}
 

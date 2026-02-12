@@ -51,6 +51,7 @@ go_library(
         "//pkg/settings",
         "//pkg/settings/cluster",
         "//pkg/sql",
+        "//pkg/sql/backfill",
         "//pkg/sql/bulkmerge",
         "//pkg/sql/bulksst",
         "//pkg/sql/bulkutil",
