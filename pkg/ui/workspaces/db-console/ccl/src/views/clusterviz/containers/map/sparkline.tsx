@@ -109,7 +109,7 @@ interface SparklineMetricsDataComponentProps {
 export class SparklineMetricsDataComponent extends React.Component<
   MetricsDataComponentProps & SparklineMetricsDataComponentProps
 > {
-  chart: React.ComponentClass<SparklineChartProps>;
+  chart: React.ComponentType<SparklineChartProps>;
 
   constructor(
     props: MetricsDataComponentProps & SparklineMetricsDataComponentProps,

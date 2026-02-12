@@ -7,36 +7,36 @@ import React from "react";
 
 import "./panels.scss";
 
-export class PanelSection extends React.Component {
-  render() {
-    return (
-      <table className="panel-section">
-        <tbody>{this.props.children}</tbody>
-      </table>
-    );
-  }
+export function PanelSection({
+  children,
+}: React.PropsWithChildren<object>): React.ReactElement {
+  return (
+    <table className="panel-section">
+      <tbody>{children}</tbody>
+    </table>
+  );
 }
 
-export class PanelTitle extends React.Component {
-  render() {
-    return (
-      <tr>
-        <th colSpan={2} className="panel-title">
-          {this.props.children}
-        </th>
-      </tr>
-    );
-  }
+export function PanelTitle({
+  children,
+}: React.PropsWithChildren<object>): React.ReactElement {
+  return (
+    <tr>
+      <th colSpan={2} className="panel-title">
+        {children}
+      </th>
+    </tr>
+  );
 }
 
-export class PanelPair extends React.Component {
-  render() {
-    return <tr className="panel-pair">{this.props.children}</tr>;
-  }
+export function PanelPair({
+  children,
+}: React.PropsWithChildren<object>): React.ReactElement {
+  return <tr className="panel-pair">{children}</tr>;
 }
 
-export class Panel extends React.Component {
-  render() {
-    return <td className="panel">{this.props.children}</td>;
-  }
+export function Panel({
+  children,
+}: React.PropsWithChildren<object>): React.ReactElement {
+  return <td className="panel">{children}</td>;
 }

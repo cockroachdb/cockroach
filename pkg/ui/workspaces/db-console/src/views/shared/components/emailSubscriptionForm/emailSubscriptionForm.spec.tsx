@@ -3,27 +3,26 @@
 // Use of this software is governed by the CockroachDB Software License
 // included in the /LICENSE file.
 
-import { mount, ReactWrapper } from "enzyme";
+import { render, screen, fireEvent } from "@testing-library/react";
 import React from "react";
 
 import { EmailSubscriptionForm } from "./index";
 
 describe("EmailSubscriptionForm", () => {
-  let wrapper: ReactWrapper;
   const onSubmitHandler = jest.fn();
 
   beforeEach(() => {
     onSubmitHandler.mockReset();
-    wrapper = mount(<EmailSubscriptionForm onSubmit={onSubmitHandler} />);
   });
 
   describe("when correct email", () => {
     it("provides entered email on submit callback", () => {
+      render(<EmailSubscriptionForm onSubmit={onSubmitHandler} />);
       const emailAddress = "foo@bar.com";
-      const inputComponent = wrapper.find("input.crl-input__text").first();
-      inputComponent.simulate("change", { target: { value: emailAddress } });
-      const buttonComponent = wrapper.find(`button`).first();
-      buttonComponent.simulate("click");
+      fireEvent.change(screen.getByPlaceholderText("Enter your email"), {
+        target: { value: emailAddress },
+      });
+      fireEvent.click(screen.getByRole("button", { name: "Sign up" }));
 
       expect(onSubmitHandler).toHaveBeenCalledWith(emailAddress);
     });
@@ -31,29 +30,27 @@ describe("EmailSubscriptionForm", () => {
 
   describe("when invalid email", () => {
     beforeEach(() => {
-      const emailAddress = "foo";
-      const inputComponent = wrapper.find("input.crl-input__text").first();
-      inputComponent.simulate("change", { target: { value: emailAddress } });
-      inputComponent.simulate("blur");
+      render(<EmailSubscriptionForm onSubmit={onSubmitHandler} />);
+      const input = screen.getByPlaceholderText("Enter your email");
+      fireEvent.change(input, { target: { value: "foo" } });
+      fireEvent.blur(input);
     });
 
     it("doesn't call onSubmit callback", () => {
-      const buttonComponent = wrapper.find(`button`).first();
-      buttonComponent.simulate("click");
+      fireEvent.click(screen.getByRole("button", { name: "Sign up" }));
       expect(onSubmitHandler).not.toHaveBeenCalled();
     });
 
     it("submit button is disabled", () => {
-      const buttonComponent = wrapper.find(`button[disabled]`).first();
-      expect(buttonComponent.exists()).toBe(true);
+      const button = screen.getByRole("button", {
+        name: "Sign up",
+      }) as HTMLButtonElement;
+      expect(button.disabled).toBe(true);
     });
 
     it("validation message is shown", () => {
-      const validationMessageWrapper = wrapper
-        .find(".crl-input__text--error-message")
-        .first();
-      expect(validationMessageWrapper.exists()).toBe(true);
-      expect(validationMessageWrapper.text()).toEqual("Invalid email address.");
+      const errorMessage = screen.getByText("Invalid email address.");
+      expect(errorMessage).toBeDefined();
     });
   });
 });

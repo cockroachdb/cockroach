@@ -33,46 +33,50 @@ export interface AlertBoxProps extends AlertInfo {
   dismiss(): void;
 }
 
-export class AlertBox extends React.Component<AlertBoxProps, {}> {
-  render() {
-    // build up content element, which has a wrapping anchor element that is
-    // conditionally present.
-    let content = (
-      <div>
-        <div className="alert-box__title">{this.props.title}</div>
-        <div className="alert-box__text">{this.props.text}</div>
-      </div>
-    );
+export function AlertBox({
+  title,
+  text,
+  link,
+  level,
+  dismiss,
+}: AlertBoxProps): React.ReactElement {
+  // build up content element, which has a wrapping anchor element that is
+  // conditionally present.
+  let content = (
+    <div>
+      <div className="alert-box__title">{title}</div>
+      <div className="alert-box__text">{text}</div>
+    </div>
+  );
 
-    const learnMore = this.props.link && (
-      <a className="" href={this.props.link}>
-        Learn More
-      </a>
-    );
-    content = (
-      <>
-        <div className="alert-box__content">
-          {content}
-          {learnMore}
-        </div>
-      </>
-    );
-
-    return (
-      <div
-        className={classNames(
-          "alert-box",
-          `alert-box--${AlertLevel[this.props.level].toLowerCase()}`,
-        )}
-      >
-        <div className="alert-box__icon">{alertIcon(this.props.level)}</div>
+  const learnMore = link && (
+    <a className="" href={link}>
+      Learn More
+    </a>
+  );
+  content = (
+    <>
+      <div className="alert-box__content">
         {content}
-        <div className="alert-box__dismiss">
-          <a className="alert-box__link" onClick={this.props.dismiss}>
-            ✕
-          </a>
-        </div>
+        {learnMore}
       </div>
-    );
-  }
+    </>
+  );
+
+  return (
+    <div
+      className={classNames(
+        "alert-box",
+        `alert-box--${AlertLevel[level].toLowerCase()}`,
+      )}
+    >
+      <div className="alert-box__icon">{alertIcon(level)}</div>
+      {content}
+      <div className="alert-box__dismiss">
+        <a className="alert-box__link" onClick={dismiss}>
+          ✕
+        </a>
+      </div>
+    </div>
+  );
 }

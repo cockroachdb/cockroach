@@ -10,16 +10,16 @@ import {
   WarningFilled,
 } from "@ant-design/icons";
 import { Alert } from "antd";
-import React from "react";
+import React, { useEffect, useRef } from "react";
 import { Link } from "react-router-dom";
 
 import { AlertInfo, AlertLevel } from "src/redux/alerts";
 import "./alertMessage.scss";
 
 interface AlertMessageProps extends AlertInfo {
-  autoClose: boolean;
-  autoCloseTimeout: number;
-  closable: boolean;
+  autoClose?: boolean;
+  autoCloseTimeout?: number;
+  closable?: boolean;
   dismiss(): void;
 }
 
@@ -55,51 +55,50 @@ const getIcon = (alertLevel: AlertLevel): React.ReactNode => {
   }
 };
 
-export class AlertMessage extends React.Component<AlertMessageProps> {
-  static defaultProps = {
-    closable: true,
-    autoCloseTimeout: 6000,
-  };
+export function AlertMessage({
+  autoClose = false,
+  autoCloseTimeout = 6000,
+  closable = true,
+  dismiss,
+  level,
+  link,
+  title,
+  text,
+}: AlertMessageProps): React.ReactElement {
+  const timeoutRef = useRef<number>();
 
-  timeoutHandler: number;
-
-  componentDidMount() {
-    const { autoClose, dismiss, autoCloseTimeout } = this.props;
+  useEffect(() => {
     if (autoClose) {
-      this.timeoutHandler = window.setTimeout(dismiss, autoCloseTimeout);
+      timeoutRef.current = window.setTimeout(dismiss, autoCloseTimeout);
     }
-  }
+    return () => {
+      clearTimeout(timeoutRef.current);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
-  componentWillUnmount() {
-    clearTimeout(this.timeoutHandler);
-  }
+  let description: React.ReactNode = text;
 
-  render() {
-    const { level, dismiss, link, title, text, closable } = this.props;
-
-    let description: React.ReactNode = text;
-
-    if (link) {
-      description = (
-        <Link to={link} onClick={dismiss}>
-          {text}
-        </Link>
-      );
-    }
-
-    const type = mapAlertLevelToType(level);
-    return (
-      <Alert
-        className="alert-massage"
-        message={title}
-        description={description}
-        showIcon
-        icon={getIcon(level)}
-        closable={closable}
-        onClose={dismiss}
-        type={type}
-        banner
-      />
+  if (link) {
+    description = (
+      <Link to={link} onClick={dismiss}>
+        {text}
+      </Link>
     );
   }
+
+  const type = mapAlertLevelToType(level);
+  return (
+    <Alert
+      className="alert-massage"
+      message={title}
+      description={description}
+      showIcon
+      icon={getIcon(level)}
+      closable={closable}
+      onClose={dismiss}
+      type={type}
+      banner
+    />
+  );
 }
