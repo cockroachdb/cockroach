@@ -2380,7 +2380,7 @@ func (a *Allocator) LeaseholderShouldMoveDueToPreferences(
 		}
 	}
 	if !leaseholderInExisting {
-		log.KvDistribution.Infof(ctx,
+		log.KvDistribution.VEventf(ctx, 2,
 			"expected leaseholder s%d to be in the slice of existing replicas %s",
 			leaseRepl.StoreID(), roachpb.MakeReplicaSet(allExistingReplicas))
 		return false
