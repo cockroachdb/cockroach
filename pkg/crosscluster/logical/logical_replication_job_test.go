@@ -45,6 +45,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/idxtype"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlclustersettings"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlinstance"
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/jobutils"
@@ -52,7 +53,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
-	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/allstacks"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -2417,13 +2417,9 @@ func TestLogicalReplicationGatewayRoute(t *testing.T) {
 	// config connection url was used for all streams.
 	args := testClusterBaseClusterArgs
 	args.ServerArgs.Knobs.Streaming = &sql.StreamingTestingKnobs{
-		OnGetSQLInstanceInfo: func(node *roachpb.NodeDescriptor) *roachpb.NodeDescriptor {
-			copy := *node
-			copy.SQLAddress = util.UnresolvedAddr{
-				NetworkField: "tcp",
-				AddressField: blackhole.Addr().String(),
-			}
-			return &copy
+		OnGetSQLInstanceInfo: func(node sqlinstance.InstanceInfo) sqlinstance.InstanceInfo {
+			node.InstanceSQLAddr = blackhole.Addr().String()
+			return node
 		},
 	}
 	ts, s, runners, dbs := setupServerWithNumDBs(t, context.Background(), args, 1, 2)
