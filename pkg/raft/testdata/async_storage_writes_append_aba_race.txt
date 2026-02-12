@@ -124,17 +124,17 @@ process-ready 4 5 6
   Ready:
   HardState Term:2 Vote:3 Commit:11 Lead:0 LeadEpoch:0
   OnSync:
-  4->3 MsgVoteResp Term:2 Log:0/0
+  4->3 MsgVoteResp Term:2 Log:1/0 Hint:1/11
 > 5 handling Ready
   Ready:
   HardState Term:2 Vote:3 Commit:11 Lead:0 LeadEpoch:0
   OnSync:
-  5->3 MsgVoteResp Term:2 Log:0/0
+  5->3 MsgVoteResp Term:2 Log:1/0 Hint:1/11
 > 6 handling Ready
   Ready:
   HardState Term:2 Vote:3 Commit:11 Lead:0 LeadEpoch:0
   OnSync:
-  6->3 MsgVoteResp Term:2 Log:0/0
+  6->3 MsgVoteResp Term:2 Log:1/0 Hint:1/11
 
 process-append-thread 3 4 5 6
 ----
@@ -145,15 +145,15 @@ process-append-thread 3 4 5 6
 > 4 processing append thread
   HardState {Term:2 Vote:3 Commit:11 Lead:0 LeadEpoch:0}
   OnSync:
-  4->3 MsgVoteResp Term:2 Log:0/0
+  4->3 MsgVoteResp Term:2 Log:1/0 Hint:1/11
 > 5 processing append thread
   HardState {Term:2 Vote:3 Commit:11 Lead:0 LeadEpoch:0}
   OnSync:
-  5->3 MsgVoteResp Term:2 Log:0/0
+  5->3 MsgVoteResp Term:2 Log:1/0 Hint:1/11
 > 6 processing append thread
   HardState {Term:2 Vote:3 Commit:11 Lead:0 LeadEpoch:0}
   OnSync:
-  6->3 MsgVoteResp Term:2 Log:0/0
+  6->3 MsgVoteResp Term:2 Log:1/0 Hint:1/11
 
 deliver-msgs 3
 ----
@@ -161,13 +161,13 @@ deliver-msgs 3
 3->3 StorageAppendAck Mark:{Term:0 Index:0}
 INFO 3 received MsgVoteResp from 3 at term 2
 INFO 3 has received 1 MsgVoteResp votes and 0 vote rejections
-4->3 MsgVoteResp Term:2 Log:0/0
+4->3 MsgVoteResp Term:2 Log:1/0 Hint:1/11
 INFO 3 received MsgVoteResp from 4 at term 2
 INFO 3 has received 2 MsgVoteResp votes and 0 vote rejections
-5->3 MsgVoteResp Term:2 Log:0/0
+5->3 MsgVoteResp Term:2 Log:1/0 Hint:1/11
 INFO 3 received MsgVoteResp from 5 at term 2
 INFO 3 has received 3 MsgVoteResp votes and 0 vote rejections
-6->3 MsgVoteResp Term:2 Log:0/0
+6->3 MsgVoteResp Term:2 Log:1/0 Hint:1/11
 INFO 3 received MsgVoteResp from 6 at term 2
 INFO 3 has received 4 MsgVoteResp votes and 0 vote rejections
 INFO 3 became leader at term 2
@@ -231,7 +231,7 @@ HardState Term:2 Commit:11 Lead:3 LeadEpoch:1
 Entries:
 2/12 EntryNormal ""
 OnSync:
-1->3 MsgVoteResp Term:2 Log:0/0 Rejected (Hint: 0)
+1->3 MsgVoteResp Term:2 Log:0/0 Rejected
 1->3 MsgFortifyLeaderResp Term:2 Log:0/0 LeadEpoch:1
 1->3 MsgAppResp Term:2 Log:0/12 Commit:11
 
@@ -284,17 +284,17 @@ process-ready 5 6 7
   Ready:
   HardState Term:3 Vote:4 Commit:11 Lead:0 LeadEpoch:0
   OnSync:
-  5->4 MsgVoteResp Term:3 Log:0/0
+  5->4 MsgVoteResp Term:3 Log:1/0 Hint:1/11
 > 6 handling Ready
   Ready:
   HardState Term:3 Vote:4 Commit:11 Lead:0 LeadEpoch:0
   OnSync:
-  6->4 MsgVoteResp Term:3 Log:0/0
+  6->4 MsgVoteResp Term:3 Log:1/0 Hint:1/11
 > 7 handling Ready
   Ready:
   HardState Term:3 Vote:4 Commit:11 Lead:0 LeadEpoch:0
   OnSync:
-  7->4 MsgVoteResp Term:3 Log:0/0
+  7->4 MsgVoteResp Term:3 Log:1/0 Hint:1/11
 
 process-append-thread 4 5 6 7
 ----
@@ -305,15 +305,15 @@ process-append-thread 4 5 6 7
 > 5 processing append thread
   HardState {Term:3 Vote:4 Commit:11 Lead:0 LeadEpoch:0}
   OnSync:
-  5->4 MsgVoteResp Term:3 Log:0/0
+  5->4 MsgVoteResp Term:3 Log:1/0 Hint:1/11
 > 6 processing append thread
   HardState {Term:3 Vote:4 Commit:11 Lead:0 LeadEpoch:0}
   OnSync:
-  6->4 MsgVoteResp Term:3 Log:0/0
+  6->4 MsgVoteResp Term:3 Log:1/0 Hint:1/11
 > 7 processing append thread
   HardState {Term:3 Vote:4 Commit:11 Lead:0 LeadEpoch:0}
   OnSync:
-  7->4 MsgVoteResp Term:3 Log:0/0
+  7->4 MsgVoteResp Term:3 Log:1/0 Hint:1/11
 
 deliver-msgs 4
 ----
@@ -321,13 +321,13 @@ deliver-msgs 4
 4->4 StorageAppendAck Mark:{Term:0 Index:0}
 INFO 4 received MsgVoteResp from 4 at term 3
 INFO 4 has received 1 MsgVoteResp votes and 0 vote rejections
-5->4 MsgVoteResp Term:3 Log:0/0
+5->4 MsgVoteResp Term:3 Log:1/0 Hint:1/11
 INFO 4 received MsgVoteResp from 5 at term 3
 INFO 4 has received 2 MsgVoteResp votes and 0 vote rejections
-6->4 MsgVoteResp Term:3 Log:0/0
+6->4 MsgVoteResp Term:3 Log:1/0 Hint:1/11
 INFO 4 received MsgVoteResp from 6 at term 3
 INFO 4 has received 3 MsgVoteResp votes and 0 vote rejections
-7->4 MsgVoteResp Term:3 Log:0/0
+7->4 MsgVoteResp Term:3 Log:1/0 Hint:1/11
 INFO 4 received MsgVoteResp from 7 at term 3
 INFO 4 has received 4 MsgVoteResp votes and 0 vote rejections
 INFO 4 became leader at term 3
@@ -385,9 +385,9 @@ Messages:
 4->1 MsgApp Term:3 Log:1/11 Commit:11 Entries:[3/12 EntryNormal ""]
 4->2 MsgApp Term:3 Log:1/11 Commit:11 Entries:[3/12 EntryNormal ""]
 4->3 MsgApp Term:3 Log:1/11 Commit:11 Entries:[3/12 EntryNormal ""]
-4->5 MsgApp Term:3 Log:1/11 Commit:11 Entries:[3/12 EntryNormal ""]
-4->6 MsgApp Term:3 Log:1/11 Commit:11 Entries:[3/12 EntryNormal ""]
-4->7 MsgApp Term:3 Log:1/11 Commit:11 Entries:[3/12 EntryNormal ""]
+4->5 MsgApp Term:3 Log:3/12 Commit:11
+4->6 MsgApp Term:3 Log:3/12 Commit:11
+4->7 MsgApp Term:3 Log:3/12 Commit:11
 OnSync:
 4->4 MsgFortifyLeaderResp Term:3 Log:0/0 LeadEpoch:1
 
@@ -445,7 +445,7 @@ stabilize 1
   HardState {Term:2 Commit:11 Lead:3 LeadEpoch:1}
   Entry: 2/12 EntryNormal ""
   OnSync:
-  1->3 MsgVoteResp Term:2 Log:0/0 Rejected (Hint: 0)
+  1->3 MsgVoteResp Term:2 Log:0/0 Rejected
   1->3 MsgFortifyLeaderResp Term:2 Log:0/0 LeadEpoch:1
   1->3 MsgAppResp Term:2 Log:0/12 Commit:11
   HardState {Term:3 Commit:11 Lead:4 LeadEpoch:1}
