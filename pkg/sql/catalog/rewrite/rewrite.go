@@ -1014,6 +1014,7 @@ func rewriteSchemaChangerState(
 	}()
 
 	var droppedConstraints catalog.ConstraintIDSet
+	var droppedTriggers catalog.TriggerIDSet
 	for i := 0; i < len(state.Targets); i++ {
 		t := &state.Targets[i]
 		// Since the parent database ID is never written in the descriptorRewrites
@@ -1093,16 +1094,20 @@ func rewriteSchemaChangerState(
 					continue
 				}
 			case *scpb.TriggerFunctionCall:
-				// If there is a missing function, then this was in middle of creating
-				// a trigger when the back-up was taken.
+				// If there is a missing function dependency, drop this element
+				// and record the trigger ID so sibling trigger elements are also
+				// removed.
 				if el.FuncID == missingID {
+					droppedTriggers.Add(el.TriggerID)
 					removeElementAtCurrentIdx()
 					continue
 				}
 			case *scpb.TriggerDeps:
-				// If there is a missing function, then this was in middle of creating
-				// a trigger when the back-up was taken.
+				// If there is a missing function dependency, drop this element
+				// and record the trigger ID so sibling trigger elements are also
+				// removed.
 				if catalog.MakeDescriptorIDSet(el.UsesRoutineIDs...).Contains(missingID) {
+					droppedTriggers.Add(el.TriggerID)
 					removeElementAtCurrentIdx()
 					continue
 				}
@@ -1176,6 +1181,26 @@ func rewriteSchemaChangerState(
 			return err
 		}
 	}
+
+	// Drop all sibling targets of triggers with missing dependencies.
+	if !droppedTriggers.Empty() {
+		for i := 0; i < len(state.Targets); i++ {
+			t := &state.Targets[i]
+			if err := screl.WalkTriggerIDs(t.Element(), func(id *catid.TriggerID) error {
+				if !droppedTriggers.Contains(*id) {
+					return nil
+				}
+				state.Targets = append(state.Targets[:i], state.Targets[i+1:]...)
+				state.CurrentStatuses = append(state.CurrentStatuses[:i], state.CurrentStatuses[i+1:]...)
+				state.TargetRanks = append(state.TargetRanks[:i], state.TargetRanks[i+1:]...)
+				i--
+				return nil
+			}); err != nil {
+				return err
+			}
+		}
+	}
+
 	d.SetDeclarativeSchemaChangerState(state)
 	return nil
 }
