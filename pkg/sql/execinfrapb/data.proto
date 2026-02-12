@@ -263,9 +263,9 @@ message ChangefeedMeta {
       (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.NodeID"];
   }
 
-  // Checkpoint is set by the aggregator when it exits.
+  // AggregatorFrontier is set by the aggregator when it exits.
   // It contains an up to date snapshot of its local frontier.
-  repeated FrontierSpan checkpoint = 1 [(gogoproto.nullable) = false];
+  repeated FrontierSpan aggregator_frontier = 1 [(gogoproto.nullable) = false];
 
   // DrainInfo is set by the aggregator when it detects that the node is
   // being drained.  In those cases, it emits an up to date state, containing
@@ -274,8 +274,13 @@ message ChangefeedMeta {
 
   // Heartbeat is set by the aggregators when they send heartbeat
   // metadata to the coordinator.
-// This message is used by the aggregator to check/ping the coordinator processor.
+  // This message is used by the aggregator to check/ping the coordinator processor.
   optional bool heartbeat = 3  [(gogoproto.nullable) = false];
+
+  // CoordinatorFrontier is set by the changeFrontier processor when it
+  // exits. Contains the full coordinator frontier state for core
+  // changefeeds to restore per-span progress on retry.
+  repeated FrontierSpan coordinator_frontier = 4 [(gogoproto.nullable) = false];
 }
 
 // RemoteProducerMetadata represents records that a producer wants to pass to

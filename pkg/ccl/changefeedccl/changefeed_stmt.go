@@ -523,7 +523,7 @@ func coreChangefeed(
 	resultsCh chan<- tree.Datums,
 	targets changefeedbase.Targets,
 ) error {
-	localState := &cachedState{progress: progress}
+	localState := &cachedState{progress: progress, coreProgress: &coreProgress{}}
 	p.ExtendedEvalContext().ChangefeedState = localState
 	knobs, _ := p.ExecCfg().DistSQLSrv.TestingKnobs.Changefeed.(*TestingKnobs)
 

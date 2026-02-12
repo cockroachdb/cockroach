@@ -261,8 +261,38 @@ func startDistChangefeed(
 			log.Changefeed.Infof(ctx, "span-level checkpoint: %s", spanLevelCheckpoint)
 		}
 	}
+
+	// Compute resolved spans to restore frontier state on startup.
+	var resolvedSpans []jobspb.ResolvedSpan
+	if localState.coreProgress != nil {
+		// Core changefeeds get resolved spans from the coordinator frontier
+		// captured via trailing metadata on the previous flow's shutdown.
+		for _, fs := range localState.coreProgress.frontier {
+			resolvedSpans = append(resolvedSpans, jobspb.ResolvedSpan{
+				Span:      fs.Span,
+				Timestamp: fs.Timestamp,
+			})
+		}
+	} else if jobID != 0 {
+		// Job-backed changefeeds load resolved spans from frontier
+		// persistence in the job_info table.
+		if err := execCfg.InternalDB.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+			spans, ok, err := jobfrontier.GetAllResolvedSpans(ctx, txn, jobID)
+			if err != nil {
+				return err
+			}
+			if ok {
+				resolvedSpans = spans
+			}
+			return nil
+		}); err != nil {
+			return err
+		}
+	}
+
 	p, planCtx, err := makePlan(execCtx, jobID, details, description, initialHighWater,
-		trackedSpans, spanLevelCheckpoint, localState.drainingNodes, schemaTS)(ctx, dsp)
+		trackedSpans, spanLevelCheckpoint, localState.drainingNodes, schemaTS,
+		resolvedSpans)(ctx, dsp)
 	if err != nil {
 		return err
 	}
@@ -284,7 +314,10 @@ func startDistChangefeed(
 					if meta.Changefeed.DrainInfo != nil {
 						localState.drainingNodes = append(localState.drainingNodes, meta.Changefeed.DrainInfo.NodeID)
 					}
-					localState.aggregatorFrontier = append(localState.aggregatorFrontier, meta.Changefeed.Checkpoint...)
+					localState.aggregatorFrontier = append(localState.aggregatorFrontier, meta.Changefeed.AggregatorFrontier...)
+					if len(meta.Changefeed.CoordinatorFrontier) > 0 && localState.coreProgress != nil {
+						localState.coreProgress.frontier = meta.Changefeed.CoordinatorFrontier
+					}
 				}
 				if meta.AggregatorEvents != nil && onTracingEvent != nil {
 					onTracingEvent(ctx, meta.AggregatorEvents)
@@ -390,6 +423,7 @@ func makePlan(
 	spanLevelCheckpoint *jobspb.TimestampSpansMap,
 	drainingNodes []roachpb.NodeID,
 	schemaTS hlc.Timestamp,
+	resolvedSpans []jobspb.ResolvedSpan,
 ) func(context.Context, *sql.DistSQLPlanner) (*sql.PhysicalPlan, *sql.PlanningCtx, error) {
 	return func(ctx context.Context, dsp *sql.DistSQLPlanner) (*sql.PhysicalPlan, *sql.PlanningCtx, error) {
 		sv := &execCtx.ExecCfg().Settings.SV
@@ -493,22 +527,6 @@ func makePlan(
 				// the per table pts records will be rewritten in the new format when the
 				// highwater mark is updated in manageProtectedTimestamps.
 				PerTableProtectedTimestamps: perTableTrackingEnabled && perTableProtectedTimestampsEnabled,
-			}
-		}
-
-		var resolvedSpans []jobspb.ResolvedSpan
-		if jobID != 0 {
-			if err := execCtx.ExecCfg().InternalDB.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
-				spans, ok, err := jobfrontier.GetAllResolvedSpans(ctx, txn, jobID)
-				if err != nil {
-					return err
-				}
-				if ok {
-					resolvedSpans = spans
-				}
-				return nil
-			}); err != nil {
-				return nil, nil, err
 			}
 		}
 

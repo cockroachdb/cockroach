@@ -848,7 +848,7 @@ func (ca *changeAggregator) computeTrailingMetadata(meta *execinfrapb.Changefeed
 
 	// Build out the list of frontier spans.
 	for sp, ts := range ca.frontier.Entries() {
-		meta.Checkpoint = append(meta.Checkpoint,
+		meta.AggregatorFrontier = append(meta.AggregatorFrontier,
 			execinfrapb.ChangefeedMeta_FrontierSpan{
 				Span:      sp,
 				Timestamp: ts,
@@ -1139,12 +1139,24 @@ type jobState struct {
 	progressUpdatesSkipped bool
 }
 
+// coreProgress holds in-memory progress for core (sinkless) changefeeds.
+// Core changefeeds have no job record, so this is their only mechanism for
+// preserving progress across retries. Populated from trailing metadata
+// emitted by the changeFrontier and changeAggregator processors on shutdown.
+type coreProgress struct {
+	// frontier is the coordinator frontier snapshot from the last flow.
+	frontier []execinfrapb.ChangefeedMeta_FrontierSpan
+}
+
 // cachedState is a changefeed progress stored in memory.
 // It is used to reduce the number of duplicate events emitted during retries.
 type cachedState struct {
 	progress jobspb.Progress
 
-	// set of spans for this changefeed.
+	// coreProgress is non-nil only for core (sinkless) changefeeds.
+	coreProgress *coreProgress
+
+	// trackedSpans is the set of tracked spans for this changefeed.
 	trackedSpans roachpb.Spans
 	// aggregatorFrontier contains the list of frontier spans
 	// emitted by aggregators when they are being shut down.
@@ -1292,14 +1304,28 @@ func newChangeFrontierProcessor(
 		execinfra.ProcStateOpts{
 			InputsToDrain: []execinfra.RowSource{cf.input},
 			TrailingMetaCallback: func() []execinfrapb.ProducerMetadata {
+				var metas []execinfrapb.ProducerMetadata
+
+				// For core changefeeds (no job record), emit the coordinator
+				// frontier as trailing metadata so that progress can be
+				// preserved across retries.
+				if cf.spec.JobID == 0 && cf.frontier != nil {
+					var cfMeta execinfrapb.ChangefeedMeta
+					for sp, ts := range cf.frontier.Entries() {
+						cfMeta.CoordinatorFrontier = append(cfMeta.CoordinatorFrontier,
+							execinfrapb.ChangefeedMeta_FrontierSpan{Span: sp, Timestamp: ts})
+					}
+					metas = append(metas, execinfrapb.ProducerMetadata{Changefeed: &cfMeta})
+				}
+
 				cf.close()
 
 				if cf.agg != nil {
 					meta := bulkutil.ConstructTracingAggregatorProducerMeta(ctx,
 						cf.FlowCtx.NodeID.SQLInstanceID(), cf.FlowCtx.ID, cf.agg)
-					return []execinfrapb.ProducerMetadata{*meta}
+					metas = append(metas, *meta)
 				}
-				return nil
+				return metas
 			},
 		},
 	); err != nil {
