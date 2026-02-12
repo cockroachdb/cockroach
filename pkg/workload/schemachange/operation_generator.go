@@ -1490,7 +1490,9 @@ func (og *operationGenerator) createTableAs(ctx context.Context, tx pgx.Tx) (*op
 				}
 				selectStatement.Exprs = append(selectStatement.Exprs, selectExpr)
 
-				if _, exists := uniqueColumnNames[columnNamesForTable[j]]; exists {
+				// Internal columns will always be aliased to unique names, so they can
+				// never generate duplicate column errors.
+				if _, exists := uniqueColumnNames[columnNamesForTable[j]]; exists && !usingInternalColumn {
 					duplicateColumns = true
 				} else {
 					uniqueColumnNames[columnNamesForTable[j]] = true
