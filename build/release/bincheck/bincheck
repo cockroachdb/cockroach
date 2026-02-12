@@ -20,8 +20,8 @@ readonly pidfile=/tmp/server_pid
 # Verify that the startup time is within a reasonable upper-bound. 
 # At the time of writing, the total `init` time is well under 200ms on m1pro.
 max_init_time=500
-if [[ $(uname -sm) == "Darwin x86_64" ]]; then
-  # MacOS Intel GitHub Actions runners are a bit slow
+if [[ $(uname -s) == "Darwin" ]]; then
+  # MacOS GitHub Actions runners are a bit slow
   max_init_time=3000
 fi
 init_time=`GODEBUG=inittrace=1 $cockroach version 2>&1|awk '/init/ {sum += $5} END {printf("%d\n", sum)}'`
