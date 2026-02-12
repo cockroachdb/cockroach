@@ -2867,6 +2867,9 @@ var builtinOidsArray = []string{
 	2912: `information_schema.crdb_rewrite_inline_hints(statement_fingerprint: string, donor_sql: string) -> int`,
 	2913: `crdb_internal.decode_key(key: bytes) -> jsonb`,
 	2914: `pg_trigger_depth() -> int`,
+	2915: `dmetaphone(source: string) -> string`,
+	2916: `dmetaphone_alt(source: string) -> string`,
+	2917: `daitch_mokotoff(source: string) -> string[]`,
 }
 
 var builtinOidsBySignature map[string]oid.Oid
