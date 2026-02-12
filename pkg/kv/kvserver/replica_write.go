@@ -76,11 +76,11 @@ var migrateApplicationTimeout = settings.RegisterDurationSetting(
 func (r *Replica) executeWriteBatch(
 	ctx context.Context,
 	ba *kvpb.BatchRequest,
-	g *concurrency.Guard,
+	g concurrency.Guard,
 	admissionInfo kvadmission.AdmissionInfo,
 ) (
 	br *kvpb.BatchResponse,
-	_ *concurrency.Guard,
+	_ concurrency.Guard,
 	_ *kvadmission.StoreWriteBytes,
 	pErr *kvpb.Error,
 ) {
@@ -369,7 +369,7 @@ func (r *Replica) executeWriteBatch(
 // possible to evaluate the batch as 1PC. If it does so, it will return the
 // updated batch request, which is shallow-copied on write.
 func (r *Replica) canAttempt1PCEvaluation(
-	ctx context.Context, ba *kvpb.BatchRequest, g *concurrency.Guard,
+	ctx context.Context, ba *kvpb.BatchRequest, g concurrency.Guard,
 ) (*kvpb.BatchRequest, bool) {
 	if !isOnePhaseCommit(ba) {
 		return ba, false
@@ -420,7 +420,7 @@ func (r *Replica) evaluateWriteBatch(
 	ctx context.Context,
 	idKey kvserverbase.CmdIDKey,
 	ba *kvpb.BatchRequest,
-	g *concurrency.Guard,
+	g concurrency.Guard,
 	st *kvserverpb.LeaseStatus,
 	ui uncertainty.Interval,
 ) (
@@ -522,7 +522,7 @@ func (r *Replica) evaluate1PC(
 	ctx context.Context,
 	idKey kvserverbase.CmdIDKey,
 	ba *kvpb.BatchRequest,
-	g *concurrency.Guard,
+	g concurrency.Guard,
 	st *kvserverpb.LeaseStatus,
 ) (onePCRes onePCResult) {
 	log.VEventf(ctx, 2, "attempting 1PC execution")
@@ -692,7 +692,7 @@ func (r *Replica) evaluateWriteBatchWithServersideRefreshes(
 	rec batcheval.EvalContext,
 	ms *enginepb.MVCCStats,
 	ba *kvpb.BatchRequest,
-	g *concurrency.Guard,
+	g concurrency.Guard,
 	st *kvserverpb.LeaseStatus,
 	ui uncertainty.Interval,
 	deadline hlc.Timestamp,
@@ -743,7 +743,7 @@ func (r *Replica) evaluateWriteBatchWrapper(
 	rec batcheval.EvalContext,
 	ms *enginepb.MVCCStats,
 	ba *kvpb.BatchRequest,
-	g *concurrency.Guard,
+	g concurrency.Guard,
 	st *kvserverpb.LeaseStatus,
 	ui uncertainty.Interval,
 	omitInRangefeeds bool,
@@ -766,7 +766,7 @@ func (r *Replica) evaluateWriteBatchWrapper(
 // are enabled, it also returns an engine.OpLoggerBatch. If non-nil, then this
 // OpLogger is attached to the returned engine.Batch, recording all operations.
 // Its recording should be attached to the Result of request evaluation.
-func (r *Replica) newBatchedEngine(g *concurrency.Guard) (storage.Batch, *storage.OpLoggerBatch) {
+func (r *Replica) newBatchedEngine(g concurrency.Guard) (storage.Batch, *storage.OpLoggerBatch) {
 	batch := r.store.StateEngine().NewBatch()
 	if !batch.ConsistentIterators() {
 		// This is not currently needed for correctness, but future optimizations

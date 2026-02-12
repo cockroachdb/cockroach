@@ -85,6 +85,47 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+type mockGuard struct {
+	req concurrency.Request
+}
+
+func (mg mockGuard) Req() concurrency.Request {
+	return mg.req
+}
+func (mg mockGuard) EvalKind() concurrency.RequestEvalKind {
+	return concurrency.PessimisticEval
+}
+func (mg mockGuard) LatchSpans() *spanset.SpanSet {
+	return mg.req.LatchSpans
+}
+func (mg mockGuard) TakeSpanSets() (*spanset.SpanSet, *lockspanset.LockSpanSet) {
+	return mg.req.LatchSpans, mg.req.LockSpans
+}
+func (mg mockGuard) HoldingLatches() bool {
+	return true
+}
+func (mg mockGuard) AssertLatches()   {}
+func (mg mockGuard) AssertNoLatches() {}
+func (mg mockGuard) IsolatedAtLaterTimestamps() bool {
+	return true
+}
+func (mg mockGuard) CheckOptimisticNoConflicts(*spanset.SpanSet, *lockspanset.LockSpanSet) bool {
+	return false
+}
+func (mg mockGuard) CheckOptimisticNoLatchConflicts() bool {
+	return false
+}
+func (mg mockGuard) IsKeyLockedByConflictingTxn(
+	context.Context, roachpb.Key, lock.Strength,
+) (bool, *enginepb.TxnMeta, error) {
+	return false, nil, nil
+}
+func (mg mockGuard) IntentsToResolveVirtually() []roachpb.LockUpdate {
+	return nil
+}
+
+var _ concurrency.Guard = (*mockGuard)(nil)
+
 // allSpans is a SpanSet that covers *everything* for use in tests that don't
 // care about properly declaring their spans.
 func allSpans() *spanset.SpanSet {
@@ -104,9 +145,9 @@ func allSpans() *spanset.SpanSet {
 // allSpansGuard returns a concurrency guard that indicates that it provides
 // isolation across all key spans for use in tests that don't care about
 // properly declaring their spans or sequencing with the concurrency manager.
-func allSpansGuard() *concurrency.Guard {
-	return &concurrency.Guard{
-		Req: concurrency.Request{
+func allSpansGuard() concurrency.Guard {
+	return mockGuard{
+		req: concurrency.Request{
 			LatchSpans: allSpans(),
 			LockSpans:  lockspanset.New(),
 		},

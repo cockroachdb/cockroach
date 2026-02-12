@@ -405,8 +405,8 @@ func (r *Replica) maybeAddRangeInfoToResponse(
 // the function returns one of these errors, it must also pass ownership of the
 // concurrency guard back to the caller.
 type batchExecutionFn func(
-	*Replica, context.Context, *kvpb.BatchRequest, *concurrency.Guard, kvadmission.AdmissionInfo,
-) (*kvpb.BatchResponse, *concurrency.Guard, *kvadmission.StoreWriteBytes, *kvpb.Error)
+	*Replica, context.Context, *kvpb.BatchRequest, concurrency.Guard, kvadmission.AdmissionInfo,
+) (*kvpb.BatchResponse, concurrency.Guard, *kvadmission.StoreWriteBytes, *kvpb.Error)
 
 var _ batchExecutionFn = (*Replica).executeWriteBatch
 var _ batchExecutionFn = (*Replica).executeReadOnlyBatch
@@ -435,7 +435,7 @@ func (r *Replica) executeBatchWithConcurrencyRetries(
 	var latchSpans *spanset.SpanSet
 	var lockSpans *lockspanset.LockSpanSet
 	var requestEvalKind concurrency.RequestEvalKind
-	var g *concurrency.Guard
+	var g concurrency.Guard
 	defer func() {
 		// NB: wrapped to delay g evaluation to its value when returning.
 		if g != nil {
@@ -674,7 +674,7 @@ func isConcurrencyRetryError(pErr *kvpb.Error) bool {
 		// [1] if a locking read observes a write at a later timestamp, it returns a
 		// WriteTooOld error. It's uncertainty interval does not matter.
 		// [2] in practice, this is enforced by tryBumpBatchTimestamp's call to
-		// (*concurrency.Guard).IsolatedAtLaterTimestamps.
+		// concurrency.Guard.IsolatedAtLaterTimestamps.
 	case *kvpb.InvalidLeaseError:
 		// If a request hits an InvalidLeaseError, the replica it is being
 		// evaluated against does not have a valid lease under which it can
@@ -759,10 +759,10 @@ func maybeAttachLease(pErr *kvpb.Error, lease *roachpb.Lease) *kvpb.Error {
 func (r *Replica) handleLockConflictError(
 	ctx context.Context,
 	ba *kvpb.BatchRequest,
-	g *concurrency.Guard,
+	g concurrency.Guard,
 	pErr *kvpb.Error,
 	t *kvpb.LockConflictError,
-) (*concurrency.Guard, *kvpb.Error) {
+) (concurrency.Guard, *kvpb.Error) {
 	if r.store.cfg.TestingKnobs.DontPushOnLockConflictError {
 		return g, pErr
 	}
@@ -773,10 +773,10 @@ func (r *Replica) handleLockConflictError(
 func (r *Replica) handleTransactionPushError(
 	ctx context.Context,
 	ba *kvpb.BatchRequest,
-	g *concurrency.Guard,
+	g concurrency.Guard,
 	pErr *kvpb.Error,
 	t *kvpb.TransactionPushError,
-) (*concurrency.Guard, *kvpb.Error) {
+) (concurrency.Guard, *kvpb.Error) {
 	// On a transaction push error, retry immediately if doing so will enqueue
 	// into the txnWaitQueue in order to await further updates to the unpushed
 	// txn's status. We check ShouldPushImmediately to avoid retrying
@@ -1273,7 +1273,7 @@ func (r *Replica) collectSpans(
 // or after a read-only request has finished evaluation.
 type endCmds struct {
 	repl             *Replica
-	g                *concurrency.Guard
+	g                concurrency.Guard
 	st               kvserverpb.LeaseStatus // empty for follower reads
 	replicatingSince time.Time
 }
@@ -1281,7 +1281,7 @@ type endCmds struct {
 // makeUnreplicatedEndCmds sets up an endCmds to track an unreplicated,
 // that is, read-only, command.
 func makeUnreplicatedEndCmds(
-	repl *Replica, g *concurrency.Guard, st kvserverpb.LeaseStatus,
+	repl *Replica, g concurrency.Guard, st kvserverpb.LeaseStatus,
 ) endCmds {
 	return makeReplicatedEndCmds(repl, g, st, time.Time{})
 }
@@ -1291,7 +1291,7 @@ func makeUnreplicatedEndCmds(
 // (including read-write commands that end up not queueing any mutations to the
 // state machine).
 func makeReplicatedEndCmds(
-	repl *Replica, g *concurrency.Guard, st kvserverpb.LeaseStatus, replicatingSince time.Time,
+	repl *Replica, g concurrency.Guard, st kvserverpb.LeaseStatus, replicatingSince time.Time,
 ) endCmds {
 	return endCmds{repl: repl, g: g, st: st, replicatingSince: replicatingSince}
 }

@@ -211,7 +211,7 @@ type CommandArgs struct {
 	// ScanStats should be mutated to reflect Get, Scan, ReverseScan,
 	// ExportRequest reads made by the command.
 	ScanStats             *kvpb.ScanStats
-	Concurrency           *concurrency.Guard
+	Concurrency           concurrency.Guard
 	Uncertainty           uncertainty.Interval
 	DontInterleaveIntents bool
 	OmitInRangefeeds      bool

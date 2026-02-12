@@ -202,7 +202,7 @@ func evaluateBatch(
 	rec batcheval.EvalContext,
 	ms *enginepb.MVCCStats,
 	ba *kvpb.BatchRequest,
-	g *concurrency.Guard,
+	g concurrency.Guard,
 	st *kvserverpb.LeaseStatus,
 	ui uncertainty.Interval,
 	evalPath batchEvalPath,
@@ -512,7 +512,7 @@ func evaluateCommand(
 	h kvpb.Header,
 	args kvpb.Request,
 	reply kvpb.Response,
-	g *concurrency.Guard,
+	g concurrency.Guard,
 	st *kvserverpb.LeaseStatus,
 	ui uncertainty.Interval,
 	evalPath batchEvalPath,
@@ -605,7 +605,7 @@ func canDoServersideRetry(
 	ctx context.Context,
 	pErr *kvpb.Error,
 	ba *kvpb.BatchRequest,
-	g *concurrency.Guard,
+	g concurrency.Guard,
 	deadline hlc.Timestamp,
 ) (*kvpb.BatchRequest, bool) {
 	if pErr == nil {
@@ -655,7 +655,7 @@ func canDoServersideRetry(
 // table first), bump the ts cache, release latches and then proceed with
 // evaluation. Only non-locking read requests that aren't being evaluated under
 // the `OptimisticEval` path are eligible for this optimization.
-func canReadOnlyRequestDropLatchesBeforeEval(ba *kvpb.BatchRequest, g *concurrency.Guard) bool {
+func canReadOnlyRequestDropLatchesBeforeEval(ba *kvpb.BatchRequest, g concurrency.Guard) bool {
 	if g == nil {
 		// NB: A nil guard indicates that the caller is not holding latches.
 		return false
@@ -672,7 +672,7 @@ func canReadOnlyRequestDropLatchesBeforeEval(ba *kvpb.BatchRequest, g *concurren
 	default:
 		panic(fmt.Sprintf("unexpected ReadConsistency: %s", ba.Header.ReadConsistency))
 	}
-	switch g.EvalKind {
+	switch g.EvalKind() {
 	case concurrency.PessimisticEval, concurrency.PessimisticAfterFailedOptimisticEval:
 	case concurrency.OptimisticEval:
 		// Requests going through the optimistic path are not allowed to drop their
@@ -681,7 +681,7 @@ func canReadOnlyRequestDropLatchesBeforeEval(ba *kvpb.BatchRequest, g *concurren
 		// the timestamp cache to update.
 		return false
 	default:
-		panic(fmt.Sprintf("unexpected EvalKind: %v", g.EvalKind))
+		panic(fmt.Sprintf("unexpected EvalKind: %v", g.EvalKind()))
 	}
 	// Only non-locking reads are eligible. This is because requests that need to
 	// lock the keys that they end up reading need to be isolated against other
