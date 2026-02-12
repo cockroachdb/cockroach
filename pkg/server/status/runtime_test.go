@@ -140,17 +140,18 @@ func TestSubtractDiskCounters(t *testing.T) {
 func TestSubtractDiskCountersReset(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	// Test case where current values are lower than baseline (indicating counter reset)
+	// Test per-counter wrap handling: only wrapped counters reset to zero,
+	// non-wrapped counters subtract normally.
 	stats := DiskStats{
-		ReadBytes:      2,                      // lower than sub (10)
-		readCount:      5,                      // higher than sub (3)
-		readTime:       time.Millisecond * 100, // lower than sub (200ms)
-		WriteBytes:     3,                      // lower than sub (8)
-		writeCount:     7,                      // higher than sub (4)
-		writeTime:      time.Millisecond * 150, // higher than sub (50ms)
-		ioTime:         time.Millisecond * 80,  // lower than sub (120ms)
-		weightedIOTime: time.Millisecond * 200, // higher than sub (180ms)
-		iopsInProgress: 5,                      // gauge - should not be affected
+		ReadBytes:      2,                      // wrapped: lower than baseline (10)
+		readCount:      5,                      // normal: higher than baseline (3)
+		readTime:       time.Millisecond * 100, // wrapped: lower than baseline (200ms)
+		WriteBytes:     3,                      // wrapped: lower than baseline (8)
+		writeCount:     7,                      // normal: higher than baseline (4)
+		writeTime:      time.Millisecond * 150, // normal: higher than baseline (50ms)
+		ioTime:         time.Millisecond * 80,  // wrapped: lower than baseline (120ms)
+		weightedIOTime: time.Millisecond * 200, // normal: higher than baseline (180ms)
+		iopsInProgress: 5,                      // gauge, not touched
 	}
 	baseline := DiskStats{
 		ReadBytes:      10,
@@ -164,18 +165,39 @@ func TestSubtractDiskCountersReset(t *testing.T) {
 		iopsInProgress: 2,
 	}
 
-	// Expected: all values should be reset
-	expected := DiskStats{}
+	// Wrapped counters get zeroed; non-wrapped counters subtract normally.
+	expected := DiskStats{
+		ReadBytes:      0,                      // wrapped -> 0
+		readCount:      2,                      // 5 - 3
+		readTime:       0,                      // wrapped -> 0
+		WriteBytes:     0,                      // wrapped -> 0
+		writeCount:     3,                      // 7 - 4
+		writeTime:      time.Millisecond * 100, // 150 - 50
+		ioTime:         0,                      // wrapped -> 0
+		weightedIOTime: time.Millisecond * 20,  // 200 - 180
+		iopsInProgress: 5,                      // gauge, untouched
+	}
 
-	// Verify that baselines were updated correctly for reset fields
-	expectedBaseline := stats
+	// Wrapped counters have their baseline reset to the current value;
+	// non-wrapped baselines are unchanged.
+	expectedBaseline := DiskStats{
+		ReadBytes:      2,                      // reset to current
+		readCount:      3,                      // unchanged
+		readTime:       time.Millisecond * 100, // reset to current
+		WriteBytes:     3,                      // reset to current
+		writeCount:     4,                      // unchanged
+		writeTime:      time.Millisecond * 50,  // unchanged
+		ioTime:         time.Millisecond * 80,  // reset to current
+		weightedIOTime: time.Millisecond * 180, // unchanged
+		iopsInProgress: 2,                      // unchanged
+	}
 
 	subtractDiskCounters(context.Background(), &stats, &baseline)
 	if !reflect.DeepEqual(stats, expected) {
 		t.Fatalf("expected %+v; got %+v", expected, stats)
 	}
 	if !reflect.DeepEqual(baseline, expectedBaseline) {
-		t.Fatalf("expected sub %+v; got %+v", expectedBaseline, baseline)
+		t.Fatalf("expected baseline %+v; got %+v", expectedBaseline, baseline)
 	}
 }
 
