@@ -1914,6 +1914,7 @@ func (n *Node) batchStreamImpl(stream kvpb.RPCKVBatch_BatchStreamStream) error {
 		if err != nil {
 			return err
 		}
+		log.VEventf(ctx, 2, "serving stream request: %s -> %s", args.Summary(), br.String())
 		err = stream.Send(br)
 		if err != nil {
 			return err
