@@ -124,3 +124,97 @@ query TTT
 SELECT metaphone('Night', 4), metaphone('Knight', 4), metaphone('Knives', 4);
 ----
 NFT NFT NFS
+
+# Double Metaphone
+
+query T
+SELECT dmetaphone('gumbo');
+----
+KMP
+
+query TT
+SELECT dmetaphone('Richard'), dmetaphone_alt('Richard');
+----
+RXRT  RKRT
+
+query TT
+SELECT dmetaphone('Smith'), dmetaphone_alt('Smith');
+----
+SM0  XMT
+
+query TT
+SELECT dmetaphone('Schmidt'), dmetaphone_alt('Schmidt');
+----
+XMT  SMT
+
+query T
+SELECT dmetaphone('');
+----
+·
+
+query TT
+SELECT dmetaphone(NULL), dmetaphone_alt(NULL);
+----
+NULL  NULL
+
+query TT
+SELECT dmetaphone('Jose'), dmetaphone_alt('Jose');
+----
+HS  HS
+
+query TT
+SELECT dmetaphone('danger'), dmetaphone_alt('danger');
+----
+TNJR  TNKR
+
+query TT
+SELECT dmetaphone('filipowicz'), dmetaphone_alt('filipowicz');
+----
+FLPT  FLPF
+
+query TT
+SELECT dmetaphone('knight'), dmetaphone_alt('knight');
+----
+NT  NT
+
+# Daitch-Mokotoff Soundex
+
+query T
+SELECT daitch_mokotoff('George');
+----
+{595000}
+
+query T
+SELECT daitch_mokotoff('John');
+----
+{160000,460000}
+
+query T
+SELECT daitch_mokotoff('Augsburg');
+----
+{054795}
+
+query T
+SELECT daitch_mokotoff('Breuer');
+----
+{791900}
+
+query T
+SELECT daitch_mokotoff('Halberstadt');
+----
+{587433,587943}
+
+query T
+SELECT daitch_mokotoff('Chernowitz');
+----
+{496740,596740}
+
+query T
+SELECT daitch_mokotoff('');
+----
+NULL
+
+query T
+SELECT daitch_mokotoff(NULL);
+----
+NULL
