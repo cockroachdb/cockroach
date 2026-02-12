@@ -47,10 +47,6 @@ type Watcher struct {
 	stopper *stop.Stopper
 	dec     RowDecoder
 	handler Handler
-
-	// startCh is closed once the rangefeed completes its initial scan.
-	startCh  chan struct{}
-	startErr error
 }
 
 // NewWatcher constructs a new Watcher. The provided handler callbacks are
@@ -77,10 +73,7 @@ func NewWatcher(
 // returned if the initial table scan fails, the context is canceled, or the
 // stopper is stopped before the initial data is retrieved.
 func (w *Watcher) Start(ctx context.Context, sysTableResolver catalog.SystemTableIDResolver) error {
-	w.startCh = make(chan struct{})
-	defer close(w.startCh)
-	w.startErr = w.startRangeFeed(ctx, sysTableResolver)
-	return w.startErr
+	return w.startRangeFeed(ctx, sysTableResolver)
 }
 
 func (w *Watcher) startRangeFeed(
@@ -199,19 +192,5 @@ func (w *Watcher) startRangeFeed(
 
 	case <-ctx.Done():
 		return errors.Wrap(ctx.Err(), "failed to retrieve initial cluster metrics")
-	}
-}
-
-// WaitForStart waits until the rangefeed is set up. Returns an error if the
-// rangefeed setup failed.
-func (w *Watcher) WaitForStart(ctx context.Context) error {
-	if w.startCh == nil {
-		return errors.AssertionFailedf("Start() was not yet called")
-	}
-	select {
-	case <-w.startCh:
-		return w.startErr
-	case <-ctx.Done():
-		return ctx.Err()
 	}
 }

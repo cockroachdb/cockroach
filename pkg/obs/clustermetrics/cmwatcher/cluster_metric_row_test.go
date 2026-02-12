@@ -187,7 +187,7 @@ func TestToMetric(t *testing.T) {
 			Type:   "gauge",
 			Value:  1,
 		},
-		wantErr: "no metadata found for labeled metric nonexistent.labeled",
+		wantErr: "no metadata found for metric nonexistent.labeled",
 	}}
 
 	for _, tt := range tests {
