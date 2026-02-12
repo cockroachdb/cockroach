@@ -137,6 +137,7 @@ type Options struct {
 	CollectMetrics           bool          // Enable Prometheus metrics collection
 	StatisticsUpdateInterval time.Duration // How often to update gauge metrics (default: 30s)
 	BootstrapSCIMToken       string        // If set and no service accounts exist, creates a bootstrap SCIM service account with this token
+	TokenLastUsedBufferSize  int           // Buffer size for async token last-used updates (default: 256)
 }
 
 // InputListServiceAccountsDTO is the data transfer object to get all service accounts.

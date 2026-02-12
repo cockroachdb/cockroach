@@ -39,6 +39,7 @@ type Service struct {
 	backgroundJobsCtx        context.Context
 	backgroundJobsCancelFunc context.CancelFunc
 	options                  types.Options
+	tokenLastUsedCh          chan uuid.UUID // buffered channel for async last-used updates
 }
 
 // NewService creates a new authentication service.
@@ -49,13 +50,16 @@ func NewService(
 
 	// Set defaults
 	if opts.CleanupInterval == 0 {
-		opts.CleanupInterval = 24 * time.Hour
+		opts.CleanupInterval = types.DefaultCleanupInterval
 	}
 	if opts.ExpiredTokensRetention == 0 {
-		opts.ExpiredTokensRetention = 24 * time.Hour
+		opts.ExpiredTokensRetention = types.DefaultExpiredTokensRetention
 	}
 	if opts.StatisticsUpdateInterval == 0 {
-		opts.StatisticsUpdateInterval = 30 * time.Second
+		opts.StatisticsUpdateInterval = types.DefaultStatisticsUpdateInterval
+	}
+	if opts.TokenLastUsedBufferSize == 0 {
+		opts.TokenLastUsedBufferSize = types.DefaultTokenLastUsedBufferSize
 	}
 
 	// Initialize metrics recorder
@@ -79,6 +83,7 @@ func NewService(
 		backgroundJobsCtx:        context.Background(),
 		backgroundJobsCancelFunc: nil,
 		options:                  opts,
+		tokenLastUsedCh:          make(chan uuid.UUID, opts.TokenLastUsedBufferSize),
 	}
 }
 
@@ -231,12 +236,15 @@ func (s *Service) StartBackgroundWork(
 	ctx context.Context, l *logger.Logger, errChan chan<- error,
 ) error {
 
+	s.backgroundJobsCtx, s.backgroundJobsCancelFunc = context.WithCancel(ctx)
+
+	// Always start the token last-used worker (doesn't require taskService)
+	s.startTokenLastUsedWorker(l)
+
 	if s.taskService == nil {
-		l.Debug("task service not configured, skipping background work for auth service")
+		l.Debug("task service not configured, skipping cleanup and metrics background work")
 		return nil
 	}
-
-	s.backgroundJobsCtx, s.backgroundJobsCancelFunc = context.WithCancel(ctx)
 
 	// Start the cleanup scheduler
 	s.startCleanupScheduler(l)
@@ -330,6 +338,60 @@ func (s *Service) startCleanupScheduler(l *logger.Logger) {
 						"failed to schedule cleanup task",
 						slog.Any("error", err),
 					)
+				}
+			}
+		}
+	}()
+}
+
+// startTokenLastUsedWorker starts a background goroutine that processes
+// async token last-used timestamp updates from the buffered channel.
+// Updates are best-effort: failures are logged but do not affect callers.
+// On shutdown, the worker drains any remaining buffered updates before exiting.
+func (s *Service) startTokenLastUsedWorker(l *logger.Logger) {
+	workerLogger := l.With(
+		slog.String("service", "auth"),
+		slog.String("routine", "token_last_used"),
+	)
+	workerLogger.Info(
+		"starting token last-used update worker",
+		slog.Int("buffer_size", s.options.TokenLastUsedBufferSize),
+	)
+
+	s.backgroundJobsWg.Add(1)
+	go func() {
+		defer s.backgroundJobsWg.Done()
+
+		for {
+			select {
+			case tokenID := <-s.tokenLastUsedCh:
+				if err := s.repo.UpdateTokenLastUsed(
+					context.Background(), workerLogger, tokenID,
+				); err != nil {
+					workerLogger.Warn(
+						"failed to update token last_used_at",
+						slog.String("token_id", tokenID.String()),
+						slog.Any("error", err),
+					)
+				}
+			case <-s.backgroundJobsCtx.Done():
+				// Drain remaining buffered updates before exiting.
+				for {
+					select {
+					case tokenID := <-s.tokenLastUsedCh:
+						if err := s.repo.UpdateTokenLastUsed(
+							context.Background(), workerLogger, tokenID,
+						); err != nil {
+							workerLogger.Warn(
+								"failed to update token last_used_at (drain)",
+								slog.String("token_id", tokenID.String()),
+								slog.Any("error", err),
+							)
+						}
+					default:
+						workerLogger.Info("token last-used update worker stopped")
+						return
+					}
 				}
 			}
 		}

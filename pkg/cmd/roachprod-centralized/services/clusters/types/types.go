@@ -8,6 +8,7 @@ package types
 import (
 	"context"
 	"fmt"
+	"time"
 
 	pkgauth "github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/auth"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/models/tasks"
@@ -21,6 +22,12 @@ import (
 
 const (
 	TaskServiceName = "clusters"
+)
+
+const (
+	// Options defaults
+	// DefaultPeriodicRefreshInterval is the default interval at which the clusters are refreshed.
+	DefaultPeriodicRefreshInterval = 10 * time.Minute
 )
 
 var (

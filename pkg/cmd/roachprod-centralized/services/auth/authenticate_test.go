@@ -46,9 +46,6 @@ func TestService_AuthenticateToken_ValidUserToken(t *testing.T) {
 			ExpiresAt:   expiresAt,
 		}, nil)
 
-	mockRepo.On("UpdateTokenLastUsed", mock.Anything, mock.Anything, tokenID).
-		Return(nil)
-
 	mockRepo.On("GetUser", mock.Anything, mock.Anything, userID).
 		Return(&authmodels.User{
 			ID:       userID,
@@ -99,7 +96,7 @@ func TestService_AuthenticateToken_UserNotProvisioned(t *testing.T) {
 			TokenSuffix: "rp$user$1$****test1234",
 			ExpiresAt:   timeutil.Now().Add(1 * time.Hour),
 		}, nil)
-	mockRepo.On("UpdateTokenLastUsed", mock.Anything, mock.Anything, tokenID).Return(nil)
+
 	mockRepo.On("GetUser", mock.Anything, mock.Anything, userID).
 		Return(nil, rauth.ErrNotFound)
 
@@ -129,7 +126,7 @@ func TestService_AuthenticateToken_UserDeactivated(t *testing.T) {
 			TokenSuffix: "rp$user$1$****test1234",
 			ExpiresAt:   timeutil.Now().Add(1 * time.Hour),
 		}, nil)
-	mockRepo.On("UpdateTokenLastUsed", mock.Anything, mock.Anything, tokenID).Return(nil)
+
 	mockRepo.On("GetUser", mock.Anything, mock.Anything, userID).
 		Return(&authmodels.User{ID: userID, Email: "test@example.com", Active: false}, nil)
 
@@ -159,7 +156,7 @@ func TestService_AuthenticateToken_ValidServiceAccountToken(t *testing.T) {
 			TokenSuffix:      "rp$sa$1$****test1234",
 			ExpiresAt:        timeutil.Now().Add(30 * 24 * time.Hour),
 		}, nil)
-	mockRepo.On("UpdateTokenLastUsed", mock.Anything, mock.Anything, tokenID).Return(nil)
+
 	mockRepo.On("ListServiceAccountOrigins", mock.Anything, mock.Anything, saID, mock.Anything).
 		Return([]*authmodels.ServiceAccountOrigin{}, 0, nil) // No IP restrictions
 	mockRepo.On("GetServiceAccount", mock.Anything, mock.Anything, saID).
@@ -200,7 +197,7 @@ func TestService_AuthenticateToken_ServiceAccountDisabled(t *testing.T) {
 			TokenSuffix:      "rp$sa$1$****test1234",
 			ExpiresAt:        timeutil.Now().Add(1 * time.Hour),
 		}, nil)
-	mockRepo.On("UpdateTokenLastUsed", mock.Anything, mock.Anything, tokenID).Return(nil)
+
 	mockRepo.On("ListServiceAccountOrigins", mock.Anything, mock.Anything, saID, mock.Anything).
 		Return([]*authmodels.ServiceAccountOrigin{}, 0, nil)
 	mockRepo.On("GetServiceAccount", mock.Anything, mock.Anything, saID).
@@ -232,7 +229,7 @@ func TestService_AuthenticateToken_ServiceAccountNotFound(t *testing.T) {
 			TokenSuffix:      "rp$sa$1$****test1234",
 			ExpiresAt:        timeutil.Now().Add(1 * time.Hour),
 		}, nil)
-	mockRepo.On("UpdateTokenLastUsed", mock.Anything, mock.Anything, tokenID).Return(nil)
+
 	mockRepo.On("ListServiceAccountOrigins", mock.Anything, mock.Anything, saID, mock.Anything).
 		Return([]*authmodels.ServiceAccountOrigin{}, 0, nil)
 	mockRepo.On("GetServiceAccount", mock.Anything, mock.Anything, saID).
@@ -264,7 +261,7 @@ func TestService_AuthenticateToken_UserWithMultiplePermissions(t *testing.T) {
 			TokenSuffix: "rp$user$1$****test1234",
 			ExpiresAt:   timeutil.Now().Add(1 * time.Hour),
 		}, nil)
-	mockRepo.On("UpdateTokenLastUsed", mock.Anything, mock.Anything, tokenID).Return(nil)
+
 	mockRepo.On("GetUser", mock.Anything, mock.Anything, userID).
 		Return(&authmodels.User{ID: userID, Email: "poweruser@example.com", Active: true}, nil)
 	mockRepo.On("GetUserPermissionsFromGroups", mock.Anything, mock.Anything, userID).

@@ -12,6 +12,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/models/tasks"
 	tasksrepomock "github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/repositories/tasks/mocks"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/services/tasks/types"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/utils/filters"
 	filtertypes "github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/utils/filters/types"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/utils/logger"
@@ -24,7 +25,7 @@ import (
 
 func TestCreateTaskIfNotAlreadyPlanned_ErrorGet(t *testing.T) {
 	mockRepo := &tasksrepomock.ITasksRepository{}
-	taskService := NewService(mockRepo, "test-instance", Options{})
+	taskService := NewService(mockRepo, "test-instance", types.Options{})
 	ctx := context.Background()
 
 	expectedError := errors.New("db error")
@@ -59,7 +60,7 @@ func TestCreateTaskIfNotAlreadyPlanned_ErrorGet(t *testing.T) {
 
 func TestCreateTaskIfNotAlreadyPlanned_CreatesNew(t *testing.T) {
 	mockRepo := &tasksrepomock.ITasksRepository{}
-	taskService := NewService(mockRepo, "test-instance", Options{})
+	taskService := NewService(mockRepo, "test-instance", types.Options{})
 	ctx := context.Background()
 
 	filters := filters.NewFilterSet().
@@ -82,7 +83,7 @@ func TestCreateTaskIfNotAlreadyPlanned_CreatesNew(t *testing.T) {
 
 func TestCreateTaskIfNotAlreadyPlanned_CreatesNew_FailedExists(t *testing.T) {
 	mockRepo := &tasksrepomock.ITasksRepository{}
-	taskService := NewService(mockRepo, "test-instance", Options{})
+	taskService := NewService(mockRepo, "test-instance", types.Options{})
 	ctx := context.Background()
 
 	taskType := "fake_type"
@@ -123,7 +124,7 @@ func TestCreateTaskIfNotAlreadyPlanned_CreatesNew_FailedExists(t *testing.T) {
 
 func TestCreateTaskIfNotAlreadyPlanned_ReturnsExisting(t *testing.T) {
 	mockRepo := &tasksrepomock.ITasksRepository{}
-	taskService := NewService(mockRepo, "test-instance", Options{})
+	taskService := NewService(mockRepo, "test-instance", types.Options{})
 	ctx := context.Background()
 
 	taskType := "fake_type"
@@ -173,7 +174,7 @@ func TestCreateTaskIfNotRecentlyScheduled_RecencyWindowAdjustment(t *testing.T) 
 	//                  Returns existing task (correct behavior)
 
 	mockRepo := &tasksrepomock.ITasksRepository{}
-	taskService := NewService(mockRepo, "test-instance", Options{})
+	taskService := NewService(mockRepo, "test-instance", types.Options{})
 	ctx := context.Background()
 
 	// Task was created 10 minutes ago (minus 11ms to simulate sub-second drift)
@@ -249,7 +250,7 @@ func TestCreateTaskIfNotRecentlyScheduled_RecencyWindowAdjustment(t *testing.T) 
 func TestCreateTaskIfNotRecentlyScheduled_MinimumRecencyWindow(t *testing.T) {
 	// Test that when recencyWindow is <= 1 second, it uses 1 second as minimum
 	mockRepo := &tasksrepomock.ITasksRepository{}
-	taskService := NewService(mockRepo, "test-instance", Options{})
+	taskService := NewService(mockRepo, "test-instance", types.Options{})
 	ctx := context.Background()
 
 	// Mock expects query with CreationDatetime filter at least 1 second ago

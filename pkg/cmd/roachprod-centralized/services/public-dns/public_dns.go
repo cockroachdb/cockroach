@@ -30,7 +30,7 @@ const (
 
 // Service is the implementation of the public DNS service.
 type Service struct {
-	options Options
+	options types.Options
 
 	// dnsRegistry provides access to DNS providers created by the registry.
 	// This replaces the previous infraProviders and dnsProviders maps.
@@ -41,11 +41,6 @@ type Service struct {
 	_syncing         bool
 }
 
-// Options contains the options for the public DNS service.
-type Options struct {
-	WorkersEnabled bool // Whether task workers are running
-}
-
 // NewService creates a new public DNS service.
 // The dnsRegistry parameter provides access to DNS providers that have been
 // created by the DNS registry, avoiding the circular dependency with the clusters service.
@@ -53,9 +48,8 @@ func NewService(
 	clustersService sclustermodels.IService,
 	tasksService stasks.IService,
 	dnsRegistry *dnsregistry.Registry,
-	options Options,
+	options types.Options,
 ) (*Service, error) {
-
 	service := &Service{
 		_taskService:     tasksService,
 		_clustersService: clustersService,

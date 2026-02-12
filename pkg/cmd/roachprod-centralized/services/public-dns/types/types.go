@@ -30,6 +30,11 @@ type IService interface {
 	ManageRecords(context.Context, *logger.Logger, ManageRecordsDTO) error
 }
 
+// Options contains the options for the public DNS service.
+type Options struct {
+	WorkersEnabled bool // Whether task workers are running
+}
+
 type ManageRecordsDTO struct {
 	ClusterName   string
 	Zone          string

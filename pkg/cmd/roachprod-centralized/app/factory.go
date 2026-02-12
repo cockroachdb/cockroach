@@ -37,8 +37,11 @@ import (
 	sclusters "github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/services/clusters"
 	dnsregistry "github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/services/dns/registry"
 	shealth "github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/services/health"
+	shealthtypes "github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/services/health/types"
 	spublicdns "github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/services/public-dns"
+	spublicdnstypes "github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/services/public-dns/types"
 	stasks "github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/services/tasks"
+	staskstypes "github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/services/tasks/types"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/utils/database"
 	crdbmigrator "github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/utils/database/cockroachdb"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/utils/logger"
@@ -190,7 +193,7 @@ func NewServicesFromConfig(
 	taskService := stasks.NewService(
 		tasksRepository,
 		instanceID,
-		stasks.Options{
+		staskstypes.Options{
 			Workers:        cfg.Tasks.Workers,
 			WorkersEnabled: cfg.Tasks.Workers > 0,
 			CollectMetrics: cfg.Api.Metrics.Enabled,
@@ -203,7 +206,7 @@ func NewServicesFromConfig(
 		healthRepository,
 		taskService,
 		instanceID,
-		shealth.Options{
+		shealthtypes.Options{
 			HeartbeatInterval: time.Second,
 			InstanceTimeout:   time.Duration(cfg.InstanceHealthTimeoutSeconds) * time.Second,
 			CleanupInterval:   time.Hour,
@@ -249,7 +252,7 @@ func NewServicesFromConfig(
 		clustersService,
 		taskService,
 		dnsRegistry,
-		spublicdns.Options{
+		spublicdnstypes.Options{
 			WorkersEnabled: cfg.Tasks.Workers > 0,
 		},
 	)

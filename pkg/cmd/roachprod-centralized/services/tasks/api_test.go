@@ -25,7 +25,7 @@ import (
 
 func TestGetTasks(t *testing.T) {
 	mockRepo := &tasksrepomock.ITasksRepository{}
-	taskService := NewService(mockRepo, "test-instance", Options{})
+	taskService := NewService(mockRepo, "test-instance", types.Options{})
 	ctx := context.Background()
 
 	expectedTasks := []tasks.ITask{&MockTask{}}
@@ -44,7 +44,7 @@ func TestGetTasks(t *testing.T) {
 
 func TestGetTasksFiltered(t *testing.T) {
 	mockRepo := &tasksrepomock.ITasksRepository{}
-	taskService := NewService(mockRepo, "test-instance", Options{})
+	taskService := NewService(mockRepo, "test-instance", types.Options{})
 	ctx := context.Background()
 
 	expectedTasks := []tasks.ITask{&MockTask{}}
@@ -69,7 +69,7 @@ func TestGetTasksFiltered(t *testing.T) {
 
 func TestGetTasks_Error(t *testing.T) {
 	mockRepo := &tasksrepomock.ITasksRepository{}
-	taskService := NewService(mockRepo, "test-instance", Options{})
+	taskService := NewService(mockRepo, "test-instance", types.Options{})
 	ctx := context.Background()
 
 	expectedError := errors.New("db error")
@@ -84,7 +84,7 @@ func TestGetTasks_Error(t *testing.T) {
 
 func TestGetTask(t *testing.T) {
 	mockRepo := &tasksrepomock.ITasksRepository{}
-	taskService := NewService(mockRepo, "test-instance", Options{})
+	taskService := NewService(mockRepo, "test-instance", types.Options{})
 	ctx := context.Background()
 	fakeID := uuid.MakeV4()
 	fakeTask := &MockTask{
@@ -103,7 +103,7 @@ func TestGetTask(t *testing.T) {
 
 func TestGetTask_NotFound(t *testing.T) {
 	mockRepo := &tasksrepomock.ITasksRepository{}
-	taskService := NewService(mockRepo, "test-instance", Options{})
+	taskService := NewService(mockRepo, "test-instance", types.Options{})
 	ctx := context.Background()
 	fakeID := uuid.MakeV4()
 
@@ -118,7 +118,7 @@ func TestGetTask_NotFound(t *testing.T) {
 
 func TestGetTask_PrivateError(t *testing.T) {
 	mockRepo := &tasksrepomock.ITasksRepository{}
-	taskService := NewService(mockRepo, "test-instance", Options{})
+	taskService := NewService(mockRepo, "test-instance", types.Options{})
 	ctx := context.Background()
 	fakeID := uuid.MakeV4()
 
@@ -134,7 +134,7 @@ func TestGetTask_PrivateError(t *testing.T) {
 
 func TestCreateTask(t *testing.T) {
 	mockRepo := &tasksrepomock.ITasksRepository{}
-	taskService := NewService(mockRepo, "test-instance", Options{})
+	taskService := NewService(mockRepo, "test-instance", types.Options{})
 	ctx := context.Background()
 
 	fakeTask := &MockTask{}
@@ -148,7 +148,7 @@ func TestCreateTask(t *testing.T) {
 
 func TestCreateTask_Error(t *testing.T) {
 	mockRepo := &tasksrepomock.ITasksRepository{}
-	taskService := NewService(mockRepo, "test-instance", Options{})
+	taskService := NewService(mockRepo, "test-instance", types.Options{})
 	ctx := context.Background()
 
 	fakeTask := &MockTask{}

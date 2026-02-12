@@ -8,6 +8,12 @@ package types
 import "time"
 
 const (
+	// Options defaults
+	DefaultCleanupInterval          = 24 * time.Hour
+	DefaultExpiredTokensRetention   = 24 * time.Hour
+	DefaultStatisticsUpdateInterval = 30 * time.Second
+	DefaultTokenLastUsedBufferSize  = 256
+
 	// Token limits - enforced in service layer
 	MaxTokensPerServiceAccount = 10
 

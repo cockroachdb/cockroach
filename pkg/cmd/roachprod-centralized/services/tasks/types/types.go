@@ -23,6 +23,14 @@ const (
 	TaskServiceName = "tasks"
 )
 
+const (
+	// Options defaults
+	// DefaultTasksTimeout is the default timeout for tasks.
+	DefaultTasksTimeout = 30 * time.Second
+	// DefaultTasksWorkers is the default number of workers processing tasks.
+	DefaultTasksWorkers = 1
+)
+
 var (
 	// ErrTaskNotFound is the error returned when a task is not found.
 	ErrTaskNotFound = utils.NewPublicError(fmt.Errorf("task not found"))
@@ -68,6 +76,35 @@ type IService interface {
 	GetMostRecentCompletedTaskOfType(context.Context, *logger.Logger, string) (tasks.ITask, error)
 	// WaitForTaskCompletion blocks until the task reaches a final state (done/failed) or timeout.
 	WaitForTaskCompletion(context.Context, *logger.Logger, uuid.UUID, time.Duration) error
+}
+
+// Options contains configuration parameters for the tasks service.
+type Options struct {
+	// Workers specifies the number of concurrent workers that process tasks.
+	// Higher values increase throughput but consume more resources.
+	Workers int
+
+	// WorkersEnabled indicates whether task workers are running
+	WorkersEnabled bool
+
+	// CollectMetrics is a flag to enable metrics collection.
+	CollectMetrics bool
+
+	// DefaultTasksTimeout is the timeout for tasks.
+	DefaultTasksTimeout time.Duration
+
+	// PurgeDoneTaskOlderThan is the duration after which tasks in done state
+	// are purged from the repository.
+	PurgeDoneTaskOlderThan time.Duration
+	// PurgeFailedTaskOlderThan is the duration after which tasks in failed
+	// state are purged from the repository.
+	PurgeFailedTaskOlderThan time.Duration
+	// PurgeTasksInterval is the value for how often tasks are purged from the
+	// repository.
+	PurgeTasksInterval time.Duration
+	// StatisticsUpdateInterval is the value for how often the tasks statistics
+	// are updated.
+	StatisticsUpdateInterval time.Duration
 }
 
 // InputGetAllTasksDTO is the data transfer object to get all tasks.

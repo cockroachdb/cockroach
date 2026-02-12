@@ -125,13 +125,13 @@ func (s *Service) validateToken(
 		}
 	}
 
-	// 6. Update last_used_at
-	if err := s.repo.UpdateTokenLastUsed(ctx, l, token.ID); err != nil {
-		// Log error but don't fail the validation
+	// 6. Queue async last_used_at update
+	select {
+	case s.tokenLastUsedCh <- token.ID:
+	default:
 		l.Warn(
-			"failed to update token last_used_at",
+			"token last_used_at update channel full, dropping update",
 			"token_id", token.ID.String(),
-			"error", err,
 		)
 	}
 

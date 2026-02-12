@@ -12,7 +12,6 @@ import (
 	time "time"
 
 	health "github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/models/health"
-	types "github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/services/health/types"
 	logger "github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/utils/logger"
 	mock "github.com/stretchr/testify/mock"
 )
@@ -118,28 +117,6 @@ func (_m *IHealthService) GetInstanceTimeout() time.Duration {
 		r0 = rf()
 	} else {
 		r0 = ret.Get(0).(time.Duration)
-	}
-
-	return r0
-}
-
-// GetTempDirsDiagnostics provides a mock function with given fields: ctx, l
-func (_m *IHealthService) GetTempDirsDiagnostics(
-	ctx context.Context, l *logger.Logger,
-) *types.TempDirsDiagnostics {
-	ret := _m.Called(ctx, l)
-
-	if len(ret) == 0 {
-		panic("no return value specified for GetTempDirsDiagnostics")
-	}
-
-	var r0 *types.TempDirsDiagnostics
-	if rf, ok := ret.Get(0).(func(context.Context, *logger.Logger) *types.TempDirsDiagnostics); ok {
-		r0 = rf(ctx, l)
-	} else {
-		if ret.Get(0) != nil {
-			r0 = ret.Get(0).(*types.TempDirsDiagnostics)
-		}
 	}
 
 	return r0

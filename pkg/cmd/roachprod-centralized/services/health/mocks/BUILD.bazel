@@ -7,7 +7,6 @@ go_library(
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/cmd/roachprod-centralized/models/health",
-        "//pkg/cmd/roachprod-centralized/services/health/types",
         "//pkg/cmd/roachprod-centralized/utils/logger",
         "@com_github_stretchr_testify//mock",
     ],

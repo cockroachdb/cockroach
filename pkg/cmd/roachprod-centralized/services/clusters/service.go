@@ -31,11 +31,6 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-const (
-	// DefaultPeriodicRefreshInterval is the default interval at which the clusters are refreshed.
-	DefaultPeriodicRefreshInterval = 10 * time.Minute
-)
-
 // Service implements the clusters service interface and manages cluster discovery and synchronization
 // across multiple cloud providers. It coordinates with cloud APIs to discover roachprod clusters
 // and maintains an up-to-date view of the distributed cluster infrastructure.
@@ -190,7 +185,7 @@ func NewService(
 
 	// If the periodic refresh interval is not set, use the default.
 	if service.options.PeriodicRefreshInterval == 0 {
-		service.options.PeriodicRefreshInterval = DefaultPeriodicRefreshInterval
+		service.options.PeriodicRefreshInterval = types.DefaultPeriodicRefreshInterval
 	}
 
 	return service, nil
