@@ -2466,6 +2466,7 @@ func NewTimestampExceedsBoundsError(t time.Time) error {
 }
 
 // DTimestamp is the timestamp Datum.
+// See docs/tech-notes/timestamp-types.md for details on timestamp types.
 type DTimestamp struct {
 	// DTimestamp represents a timezoneless date and time value. It is stored in
 	// the time.Time as if it had UTC location, regardless of what timezone it
@@ -2726,6 +2727,7 @@ func (d *DTimestamp) Size() uintptr {
 }
 
 // DTimestampTZ is the timestamp Datum that is rendered with session offset.
+// See docs/tech-notes/timestamp-types.md for details on timestamp types.
 type DTimestampTZ struct {
 	// Just like time.Time, DTimestampTZ represents an instant in global time that
 	// is stored internally in UTC and converted to local time when rendering.
