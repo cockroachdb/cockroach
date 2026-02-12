@@ -1,0 +1,59 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "cmwatcher",
+    srcs = [
+        "cluster_metric_row.go",
+        "watcher.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/obs/clustermetrics/cmwatcher",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/keys",
+        "//pkg/kv/kvclient/rangefeed",
+        "//pkg/kv/kvclient/rangefeed/rangefeedbuffer",
+        "//pkg/kv/kvclient/rangefeed/rangefeedcache",
+        "//pkg/kv/kvpb",
+        "//pkg/obs/clustermetrics",
+        "//pkg/roachpb",
+        "//pkg/sql/catalog",
+        "//pkg/sql/catalog/descpb",
+        "//pkg/sql/catalog/systemschema",
+        "//pkg/sql/rowenc",
+        "//pkg/sql/rowenc/valueside",
+        "//pkg/sql/sem/tree",
+        "//pkg/util/hlc",
+        "//pkg/util/log",
+        "//pkg/util/metric",
+        "//pkg/util/startup",
+        "//pkg/util/stop",
+        "@com_github_cockroachdb_errors//:errors",
+    ],
+)
+
+go_test(
+    name = "cmwatcher_test",
+    srcs = [
+        "cluster_metric_row_test.go",
+        "main_test.go",
+        "watcher_test.go",
+    ],
+    deps = [
+        ":cmwatcher",
+        "//pkg/base",
+        "//pkg/keys",
+        "//pkg/obs/clustermetrics",
+        "//pkg/roachpb",
+        "//pkg/security/securityassets",
+        "//pkg/security/securitytest",
+        "//pkg/server",
+        "//pkg/sql",
+        "//pkg/sql/catalog",
+        "//pkg/testutils/serverutils",
+        "//pkg/testutils/sqlutils",
+        "//pkg/util/leaktest",
+        "//pkg/util/log",
+        "//pkg/util/metric",
+        "@com_github_stretchr_testify//require",
+    ],
+)
