@@ -1,6 +1,13 @@
 /* setup */
 CREATE TABLE t (i INT PRIMARY KEY, j INT);
 CREATE INDEX idx ON t(j);
+CREATE FUNCTION f_trigger() RETURNS TRIGGER LANGUAGE PLpgSQL AS $$
+BEGIN
+  SELECT j FROM t@idx WHERE j = 1;
+  RETURN NULL;
+END;
+$$;
+CREATE TRIGGER trg AFTER INSERT ON t FOR EACH ROW EXECUTE FUNCTION f_trigger();
 
 /* test */
 EXPLAIN (DDL) DROP INDEX idx CASCADE;
@@ -10,28 +17,66 @@ Schema change plan for DROP INDEX ‹defaultdb›.‹public›.‹t›@‹idx›
  │    └── Stage 1 of 1 in StatementPhase
  │         ├── 1 element transitioning toward TRANSIENT_PUBLIC
  │         │    └── PUBLIC → ABSENT    TableSchemaLocked:{DescID: 104 (t)}
- │         ├── 1 element transitioning toward ABSENT
- │         │    └── PUBLIC → VALIDATED SecondaryIndex:{DescID: 104 (t), IndexID: 2 (idx-), RecreateSourceIndexID: 0, RecreateTargetIndexID: 0}
- │         └── 2 Mutation operations
+ │         ├── 8 elements transitioning toward ABSENT
+ │         │    ├── PUBLIC → VALIDATED SecondaryIndex:{DescID: 104 (t), IndexID: 2 (idx-), RecreateSourceIndexID: 0, RecreateTargetIndexID: 0}
+ │         │    ├── PUBLIC → ABSENT    Trigger:{DescID: 104 (t), TriggerID: 1}
+ │         │    ├── PUBLIC → ABSENT    TriggerName:{DescID: 104 (t), TriggerID: 1}
+ │         │    ├── PUBLIC → ABSENT    TriggerEnabled:{DescID: 104 (t), TriggerID: 1}
+ │         │    ├── PUBLIC → ABSENT    TriggerTiming:{DescID: 104 (t), TriggerID: 1}
+ │         │    ├── PUBLIC → ABSENT    TriggerEvents:{DescID: 104 (t), TriggerID: 1}
+ │         │    ├── PUBLIC → ABSENT    TriggerFunctionCall:{DescID: 104 (t), TriggerID: 1}
+ │         │    └── PUBLIC → ABSENT    TriggerDeps:{DescID: 104 (t), TriggerID: 1, ReferencedFunctionIDs: [105 (f_trigger)]}
+ │         └── 10 Mutation operations
  │              ├── SetTableSchemaLocked {"TableID":104}
- │              └── MakePublicSecondaryIndexWriteOnly {"IndexID":2,"TableID":104}
+ │              ├── MakePublicSecondaryIndexWriteOnly {"IndexID":2,"TableID":104}
+ │              ├── RemoveTrigger {"Trigger":{"TableID":104,"TriggerID":1}}
+ │              ├── NotImplementedForPublicObjects {"DescID":104,"ElementType":"scpb.TriggerName","TriggerID":1}
+ │              ├── SetTriggerEnabled {"TableID":104,"TriggerID":1}
+ │              ├── NotImplementedForPublicObjects {"DescID":104,"ElementType":"scpb.TriggerTimi...","TriggerID":1}
+ │              ├── NotImplementedForPublicObjects {"DescID":104,"ElementType":"scpb.TriggerEven...","TriggerID":1}
+ │              ├── NotImplementedForPublicObjects {"DescID":104,"ElementType":"scpb.TriggerFunc...","TriggerID":1}
+ │              ├── UpdateTriggerBackReferencesInRelations {"TableID":104,"TriggerID":1}
+ │              └── RemoveTriggerBackReferencesInRoutines {"BackReferencedTableID":104,"BackReferencedTriggerID":1}
  ├── PreCommitPhase
  │    ├── Stage 1 of 2 in PreCommitPhase
  │    │    ├── 1 element transitioning toward TRANSIENT_PUBLIC
  │    │    │    └── ABSENT    → PUBLIC TableSchemaLocked:{DescID: 104 (t)}
- │    │    ├── 1 element transitioning toward ABSENT
- │    │    │    └── VALIDATED → PUBLIC SecondaryIndex:{DescID: 104 (t), IndexID: 2 (idx-), RecreateSourceIndexID: 0, RecreateTargetIndexID: 0}
+ │    │    ├── 8 elements transitioning toward ABSENT
+ │    │    │    ├── VALIDATED → PUBLIC SecondaryIndex:{DescID: 104 (t), IndexID: 2 (idx-), RecreateSourceIndexID: 0, RecreateTargetIndexID: 0}
+ │    │    │    ├── ABSENT    → PUBLIC Trigger:{DescID: 104 (t), TriggerID: 1}
+ │    │    │    ├── ABSENT    → PUBLIC TriggerName:{DescID: 104 (t), TriggerID: 1}
+ │    │    │    ├── ABSENT    → PUBLIC TriggerEnabled:{DescID: 104 (t), TriggerID: 1}
+ │    │    │    ├── ABSENT    → PUBLIC TriggerTiming:{DescID: 104 (t), TriggerID: 1}
+ │    │    │    ├── ABSENT    → PUBLIC TriggerEvents:{DescID: 104 (t), TriggerID: 1}
+ │    │    │    ├── ABSENT    → PUBLIC TriggerFunctionCall:{DescID: 104 (t), TriggerID: 1}
+ │    │    │    └── ABSENT    → PUBLIC TriggerDeps:{DescID: 104 (t), TriggerID: 1, ReferencedFunctionIDs: [105 (f_trigger)]}
  │    │    └── 1 Mutation operation
  │    │         └── UndoAllInTxnImmediateMutationOpSideEffects
  │    └── Stage 2 of 2 in PreCommitPhase
  │         ├── 1 element transitioning toward TRANSIENT_PUBLIC
  │         │    └── PUBLIC → ABSENT    TableSchemaLocked:{DescID: 104 (t)}
- │         ├── 1 element transitioning toward ABSENT
- │         │    └── PUBLIC → VALIDATED SecondaryIndex:{DescID: 104 (t), IndexID: 2 (idx-), RecreateSourceIndexID: 0, RecreateTargetIndexID: 0}
- │         └── 4 Mutation operations
+ │         ├── 8 elements transitioning toward ABSENT
+ │         │    ├── PUBLIC → VALIDATED SecondaryIndex:{DescID: 104 (t), IndexID: 2 (idx-), RecreateSourceIndexID: 0, RecreateTargetIndexID: 0}
+ │         │    ├── PUBLIC → ABSENT    Trigger:{DescID: 104 (t), TriggerID: 1}
+ │         │    ├── PUBLIC → ABSENT    TriggerName:{DescID: 104 (t), TriggerID: 1}
+ │         │    ├── PUBLIC → ABSENT    TriggerEnabled:{DescID: 104 (t), TriggerID: 1}
+ │         │    ├── PUBLIC → ABSENT    TriggerTiming:{DescID: 104 (t), TriggerID: 1}
+ │         │    ├── PUBLIC → ABSENT    TriggerEvents:{DescID: 104 (t), TriggerID: 1}
+ │         │    ├── PUBLIC → ABSENT    TriggerFunctionCall:{DescID: 104 (t), TriggerID: 1}
+ │         │    └── PUBLIC → ABSENT    TriggerDeps:{DescID: 104 (t), TriggerID: 1, ReferencedFunctionIDs: [105 (f_trigger)]}
+ │         └── 13 Mutation operations
  │              ├── SetTableSchemaLocked {"TableID":104}
  │              ├── MakePublicSecondaryIndexWriteOnly {"IndexID":2,"TableID":104}
+ │              ├── RemoveTrigger {"Trigger":{"TableID":104,"TriggerID":1}}
+ │              ├── NotImplementedForPublicObjects {"DescID":104,"ElementType":"scpb.TriggerName","TriggerID":1}
+ │              ├── SetTriggerEnabled {"TableID":104,"TriggerID":1}
+ │              ├── NotImplementedForPublicObjects {"DescID":104,"ElementType":"scpb.TriggerTimi...","TriggerID":1}
+ │              ├── NotImplementedForPublicObjects {"DescID":104,"ElementType":"scpb.TriggerEven...","TriggerID":1}
+ │              ├── NotImplementedForPublicObjects {"DescID":104,"ElementType":"scpb.TriggerFunc...","TriggerID":1}
+ │              ├── UpdateTriggerBackReferencesInRelations {"TableID":104,"TriggerID":1}
+ │              ├── RemoveTriggerBackReferencesInRoutines {"BackReferencedTableID":104,"BackReferencedTriggerID":1}
  │              ├── SetJobStateOnDescriptor {"DescriptorID":104,"Initialize":true}
+ │              ├── SetJobStateOnDescriptor {"DescriptorID":105,"Initialize":true}
  │              └── CreateSchemaChangerJob {"NonCancelable":true,"RunningStatus":"Pending: Updatin..."}
  └── PostCommitNonRevertiblePhase
       ├── Stage 1 of 3 in PostCommitNonRevertiblePhase
@@ -40,26 +85,29 @@ Schema change plan for DROP INDEX ‹defaultdb›.‹public›.‹t›@‹idx›
       │    │    ├── PUBLIC    → ABSENT      IndexColumn:{DescID: 104 (t), ColumnID: 1 (i), IndexID: 2 (idx-)}
       │    │    ├── VALIDATED → DELETE_ONLY SecondaryIndex:{DescID: 104 (t), IndexID: 2 (idx-), RecreateSourceIndexID: 0, RecreateTargetIndexID: 0}
       │    │    └── PUBLIC    → ABSENT      IndexName:{DescID: 104 (t), Name: "idx", IndexID: 2 (idx-)}
-      │    └── 6 Mutation operations
+      │    └── 7 Mutation operations
       │         ├── MakeWriteOnlyIndexDeleteOnly {"IndexID":2,"TableID":104}
       │         ├── SetIndexName {"IndexID":2,"Name":"crdb_internal_in...","TableID":104}
       │         ├── RemoveColumnFromIndex {"ColumnID":2,"IndexID":2,"TableID":104}
       │         ├── RemoveColumnFromIndex {"ColumnID":1,"IndexID":2,"Kind":1,"TableID":104}
       │         ├── SetJobStateOnDescriptor {"DescriptorID":104}
+      │         ├── SetJobStateOnDescriptor {"DescriptorID":105}
       │         └── UpdateSchemaChangerJob {"IsNonCancelable":true,"RunningStatus":"Pending: Updatin..."}
       ├── Stage 2 of 3 in PostCommitNonRevertiblePhase
       │    ├── 2 elements transitioning toward ABSENT
       │    │    ├── DELETE_ONLY → ABSENT SecondaryIndex:{DescID: 104 (t), IndexID: 2 (idx-), RecreateSourceIndexID: 0, RecreateTargetIndexID: 0}
       │    │    └── PUBLIC      → ABSENT IndexData:{DescID: 104 (t), IndexID: 2 (idx-)}
-      │    └── 4 Mutation operations
+      │    └── 5 Mutation operations
       │         ├── MakeIndexAbsent {"IndexID":2,"TableID":104}
       │         ├── CreateGCJobForIndex {"IndexID":2,"TableID":104}
       │         ├── SetJobStateOnDescriptor {"DescriptorID":104}
+      │         ├── SetJobStateOnDescriptor {"DescriptorID":105}
       │         └── UpdateSchemaChangerJob {"IsNonCancelable":true,"RunningStatus":"Pending: Updatin..."}
       └── Stage 3 of 3 in PostCommitNonRevertiblePhase
            ├── 1 element transitioning toward TRANSIENT_PUBLIC
            │    └── ABSENT → TRANSIENT_PUBLIC TableSchemaLocked:{DescID: 104 (t)}
-           └── 3 Mutation operations
+           └── 4 Mutation operations
                 ├── SetTableSchemaLocked {"Locked":true,"TableID":104}
                 ├── RemoveJobStateFromDescriptor {"DescriptorID":104}
+                ├── RemoveJobStateFromDescriptor {"DescriptorID":105}
                 └── UpdateSchemaChangerJob {"IsNonCancelable":true,"RunningStatus":"all stages compl..."}

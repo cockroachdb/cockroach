@@ -5632,6 +5632,11 @@ statement ok
 ALTER TABLE t_col_other DROP COLUMN j CASCADE;
 
 # The trigger was dropped.
+query TB colnames
+SHOW TRIGGERS FROM t_col;
+----
+trigger_name  enabled
+
 statement error pq: trigger "trg_col" for table "t_col" does not exist
 DROP TRIGGER trg_col ON t_col;
 
@@ -5671,6 +5676,11 @@ statement ok
 DROP INDEX t_idx@idx1 CASCADE;
 
 # The trigger was dropped.
+query TB colnames
+SHOW TRIGGERS FROM t_idx;
+----
+trigger_name  enabled
+
 statement error pq: trigger "trg_idx" for table "t_idx" does not exist
 DROP TRIGGER trg_idx ON t_idx;
 
@@ -5708,6 +5718,11 @@ statement ok
 ALTER TABLE t1 DROP COLUMN j CASCADE;
 
 # The trigger was dropped.
+query TB colnames
+SHOW TRIGGERS FROM t1;
+----
+trigger_name  enabled
+
 statement error pq: trigger "audit_trigger" for table "t1" does not exist
 DROP TRIGGER audit_trigger ON t1;
 
@@ -5751,6 +5766,11 @@ statement ok
 SET use_declarative_schema_changer = 'on';
 
 # The trigger was dropped.
+query TB colnames
+SHOW TRIGGERS FROM t_lcol;
+----
+trigger_name  enabled
+
 statement error pq: trigger "trg_lcol" for table "t_lcol" does not exist
 DROP TRIGGER trg_lcol ON t_lcol;
 
@@ -5791,6 +5811,11 @@ statement ok
 SET use_declarative_schema_changer = 'on';
 
 # The trigger was dropped.
+query TB colnames
+SHOW TRIGGERS FROM t_lidx;
+----
+trigger_name  enabled
+
 statement error pq: trigger "trg_lidx" for table "t_lidx" does not exist
 DROP TRIGGER trg_lidx ON t_lidx;
 
@@ -5835,6 +5860,11 @@ statement ok
 SET use_declarative_schema_changer = 'on';
 
 # The trigger was dropped.
+query TB colnames
+SHOW TRIGGERS FROM t1;
+----
+trigger_name  enabled
+
 statement error pq: trigger "audit_trigger" for table "t1" does not exist
 DROP TRIGGER audit_trigger ON t1;
 
