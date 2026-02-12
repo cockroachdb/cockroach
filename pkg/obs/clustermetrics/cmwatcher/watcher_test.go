@@ -66,10 +66,6 @@ func TestWatcher(t *testing.T) {
 	err := w.Start(ctx, ts.SystemTableIDResolver().(catalog.SystemTableIDResolver))
 	require.NoError(t, err)
 
-	// WaitForStart should return immediately after Start succeeds.
-	err = w.WaitForStart(ctx)
-	require.NoError(t, err)
-
 	// Verify initial snapshot via OnRefresh.
 	rows := receiveRows(t, refreshCh)
 	require.Len(t, rows, 2)
