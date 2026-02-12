@@ -28,13 +28,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlinstance"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/jobutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/pgurlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
-	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -704,13 +704,9 @@ func TestPhysicalReplicationGatewayRoute(t *testing.T) {
 		DefaultTestTenant: base.TestControlsTenantsExplicitly,
 		Knobs: base.TestingKnobs{
 			Streaming: &sql.StreamingTestingKnobs{
-				OnGetSQLInstanceInfo: func(node *roachpb.NodeDescriptor) *roachpb.NodeDescriptor {
-					copy := *node
-					copy.SQLAddress = util.UnresolvedAddr{
-						NetworkField: "tcp",
-						AddressField: blackhole.Addr().String(),
-					}
-					return &copy
+				OnGetSQLInstanceInfo: func(node sqlinstance.InstanceInfo) sqlinstance.InstanceInfo {
+					node.InstanceSQLAddr = blackhole.Addr().String()
+					return node
 				},
 			},
 		},
