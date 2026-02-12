@@ -19,12 +19,16 @@ type IAuthMetricsRecorder struct {
 }
 
 // RecordAuthentication provides a mock function with given fields: result, authMethod, latency
-func (_m *IAuthMetricsRecorder) RecordAuthentication(result string, authMethod string, latency time.Duration) {
+func (_m *IAuthMetricsRecorder) RecordAuthentication(
+	result string, authMethod string, latency time.Duration,
+) {
 	_m.Called(result, authMethod, latency)
 }
 
 // RecordAuthzDecision provides a mock function with given fields: result, reason, endpoint, provider
-func (_m *IAuthMetricsRecorder) RecordAuthzDecision(result string, reason string, endpoint string, provider string) {
+func (_m *IAuthMetricsRecorder) RecordAuthzDecision(
+	result string, reason string, endpoint string, provider string,
+) {
 	_m.Called(result, reason, endpoint, provider)
 }
 
@@ -35,10 +39,12 @@ func (_m *IAuthMetricsRecorder) RecordAuthzLatency(endpoint string, latency time
 
 // NewIAuthMetricsRecorder creates a new instance of IAuthMetricsRecorder. It also registers a testing interface on the mock and a cleanup function to assert the mocks expectations.
 // The first argument is typically a *testing.T value.
-func NewIAuthMetricsRecorder(t interface {
-	mock.TestingT
-	Cleanup(func())
-}) *IAuthMetricsRecorder {
+func NewIAuthMetricsRecorder(
+	t interface {
+		mock.TestingT
+		Cleanup(func())
+	},
+) *IAuthMetricsRecorder {
 	mock := &IAuthMetricsRecorder{}
 	mock.Mock.Test(t)
 

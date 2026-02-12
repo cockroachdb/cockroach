@@ -19,6 +19,7 @@ import (
 	stasks "github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/services/tasks"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/utils"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/utils/logger"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/errors"
 )
 
@@ -192,7 +193,7 @@ func (a *App) Shutdown() error {
 
 	// Shutdown all services concurrently so that a slow service (e.g. one
 	// draining long-running tasks) does not delay the shutdown of others.
-	var mu sync.Mutex
+	var mu syncutil.Mutex
 	var wg sync.WaitGroup
 	for _, service := range a.services {
 		wg.Add(1)

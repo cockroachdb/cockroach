@@ -46,6 +46,7 @@ go_library(
         "//pkg/cmd/roachprod-centralized/utils/database",
         "//pkg/cmd/roachprod-centralized/utils/database/cockroachdb",
         "//pkg/cmd/roachprod-centralized/utils/logger",
+        "//pkg/util/syncutil",
         "//pkg/util/timeutil",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_gin_gonic_gin//:gin",

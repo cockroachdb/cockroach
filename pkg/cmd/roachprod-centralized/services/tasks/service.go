@@ -75,7 +75,9 @@ type taskMetrics struct {
 }
 
 // NewService creates a new tasks service.
-func NewService(store tasksrepo.ITasksRepository, instanceID string, options types.Options) *Service {
+func NewService(
+	store tasksrepo.ITasksRepository, instanceID string, options types.Options,
+) *Service {
 
 	// Workers < 0 means explicitly disabled (API-only mode)
 	// Workers == 0 means not set, use default
