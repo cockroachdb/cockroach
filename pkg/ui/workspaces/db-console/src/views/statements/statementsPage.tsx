@@ -129,6 +129,13 @@ export const limitSetting = new LocalSetting(
   api.DEFAULT_STATS_REQ_OPTIONS.limit,
 );
 
+// Shared across all SQL Activity pages.
+export const showInternalLocalSetting = new LocalSetting(
+  "showInternal/SQLActivity",
+  (state: AdminUIState) => state.localSettings,
+  false,
+);
+
 const fingerprintsPageActions = {
   refreshStatements: refreshStatements,
   refreshDatabases: refreshDatabases,
@@ -196,6 +203,8 @@ const fingerprintsPageActions = {
   onChangeLimit: (newLimit: number) => limitSetting.set(newLimit),
   onChangeReqSort: (sort: api.SqlStatsSortType) => reqSortSetting.set(sort),
   onApplySearchCriteria: trackApplySearchCriteriaAction,
+  onShowInternalChange: (showInternal: boolean) =>
+    showInternalLocalSetting.set(showInternal),
 };
 
 type StateProps = {
@@ -245,6 +254,7 @@ export default withRouter(
         statementDiagnostics: selectStatementDiagnostics(state)?.data,
         oldestDataAvailable:
           state.cachedData?.statements?.data?.oldest_aggregated_ts_returned,
+        showInternal: showInternalLocalSetting.selector(state),
       },
       activePageProps: mapStateToActiveStatementViewProps(state),
     }),

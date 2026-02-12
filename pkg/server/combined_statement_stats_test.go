@@ -32,6 +32,7 @@ func TestGetCombinedStatementsQueryClausesAndArgs(t *testing.T) {
 			var start int64
 			var end int64
 			var sortString string
+			var showInternal bool
 			if d.HasArg("sort") {
 				d.ScanArgs(t, "sort", &sortString)
 			}
@@ -43,6 +44,9 @@ func TestGetCombinedStatementsQueryClausesAndArgs(t *testing.T) {
 			}
 			if d.HasArg("end") {
 				d.ScanArgs(t, "end", &end)
+			}
+			if d.HasArg("show_internal") {
+				d.ScanArgs(t, "show_internal", &showInternal)
 			}
 
 			gotWhereClause, gotOrderAndLimitClause, gotArgs := getCombinedStatementsQueryClausesAndArgs(
@@ -56,7 +60,7 @@ func TestGetCombinedStatementsQueryClausesAndArgs(t *testing.T) {
 					Limit: limit,
 				},
 				testingKnobs,
-				false,
+				showInternal,
 				settings,
 			)
 

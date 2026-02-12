@@ -139,3 +139,33 @@ query sort=LAST_EXEC limit=100 start=1 end=2
  ORDER BY (statistics -> 'statistics' ->> 'lastExecAt') DESC LIMIT $3
 --ARGS--
 [1970-01-01 00:00:01 +0000 UTC 1970-01-01 00:00:02 +0000 UTC 100]
+
+
+# Check show_internal parameter
+
+query sort=SERVICE_LAT limit=100 start=1 end=2 show_internal=true
+----
+--WHERE--
+ WHERE true AND aggregated_ts >= $1 AND aggregated_ts <= $2
+--ORDER AND LIMIT--
+ ORDER BY (statistics -> 'statistics' -> 'svcLat' ->> 'mean')::FLOAT DESC LIMIT $3
+--ARGS--
+[1970-01-01 00:00:01 +0000 UTC 1970-01-01 00:00:02 +0000 UTC 100]
+
+query sort=SERVICE_LAT limit=100 show_internal=true
+----
+--WHERE--
+ WHERE true
+--ORDER AND LIMIT--
+ ORDER BY (statistics -> 'statistics' -> 'svcLat' ->> 'mean')::FLOAT DESC LIMIT $1
+--ARGS--
+[100]
+
+query sort=SERVICE_LAT limit=100 show_internal=false
+----
+--WHERE--
+ WHERE app_name NOT LIKE '$ internal%' AND app_name NOT LIKE '$$ %'
+--ORDER AND LIMIT--
+ ORDER BY (statistics -> 'statistics' -> 'svcLat' ->> 'mean')::FLOAT DESC LIMIT $1
+--ARGS--
+[100]

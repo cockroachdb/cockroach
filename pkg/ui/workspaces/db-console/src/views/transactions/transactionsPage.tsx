@@ -36,6 +36,8 @@ import { selectTimeScale } from "src/redux/timeScale";
 import { selectHasAdminRole } from "src/redux/user";
 import { PrintTime } from "src/views/reports/containers/range/print";
 
+import { showInternalLocalSetting } from "src/views/statements/statementsPage";
+
 import {
   activeTransactionsPageActionCreators,
   mapStateToActiveTransactionsPageProps,
@@ -135,6 +137,8 @@ const fingerprintsPageActions = {
   onChangeReqSort: (sort: api.SqlStatsSortType) => reqSortSetting.set(sort),
   onApplySearchCriteria: trackApplySearchCriteriaAction,
   onRequestTimeChange: (t: moment.Moment) => requestTimeLocalSetting.set(t),
+  onShowInternalChange: (showInternal: boolean) =>
+    showInternalLocalSetting.set(showInternal),
 };
 
 type StateProps = {
@@ -171,6 +175,7 @@ const TransactionsPageConnected = withRouter(
         reqSortSetting: reqSortSetting.selector(state),
         requestTime: requestTimeLocalSetting.selector(state),
         oldestDataAvailable: selectOldestDate(state),
+        showInternal: showInternalLocalSetting.selector(state),
       },
       activePageProps: mapStateToActiveTransactionsPageProps(state),
     }),

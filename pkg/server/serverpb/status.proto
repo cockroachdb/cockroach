@@ -1044,11 +1044,9 @@ message ListSessionsRequest {
   // Boolean to exclude closed sessions; if unspecified, defaults
   // to false and closed sessions are included in the response.
   bool exclude_closed_sessions = 2;
-  // Boolean to surface internal sessions in the response. Note
-  // that this param currently serves as an override for the cluster
-  // setting sql.stats.response.show_internal.enabled until #87200
-  // is addressed, and setting this param to false is equivalent
-  // to setting the value to sql.stats.response.show_internal.enabled
+  // If true, include internal sessions in the response. When false,
+  // the cluster setting sql.stats.response.show_internal.enabled is
+  // still respected.
   bool include_internal = 3;
 }
 
@@ -1748,6 +1746,11 @@ message CombinedStatementsStatsRequest {
   FetchMode fetch_mode = 5 [(gogoproto.nullable) = true];
 
   int64 limit = 6;
+
+  // If true, include statistics for internal statements and transactions
+  // in the response. When false, the cluster setting
+  // sql.stats.response.show_internal.enabled is still respected.
+  bool include_internal = 7;
 }
 
 // StatementDetailsRequest requests the details of a Statement, based on its keys.
@@ -1760,6 +1763,11 @@ message StatementDetailsRequest {
   // Unix time range for aggregated statements.
   int64 start = 3 [(gogoproto.nullable) = true];
   int64 end = 4 [(gogoproto.nullable) = true];
+
+  // If true, include statistics for internal statements in the response.
+  // When false, the cluster setting sql.stats.response.show_internal.enabled
+  // is still respected.
+  bool include_internal = 5;
 }
 
 message StatementDetailsResponse {

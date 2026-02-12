@@ -24,6 +24,7 @@ import {
 import { AdminUIState } from "src/redux/state";
 import { SessionsResponseMessage } from "src/util/api";
 import { Pick } from "src/util/pick";
+import { showInternalLocalSetting } from "src/views/statements/statementsPage";
 
 const SessionsRequest = protos.cockroach.server.serverpb.ListSessionsRequest;
 
@@ -85,9 +86,10 @@ export const filtersLocalSetting = new LocalSetting<AdminUIState, Filters>(
   defaultFiltersForSessionsPage,
 );
 
-// Interface matching cluster-ui's SessionsRequest
+// Interface matching cluster-ui's SessionsRequest.
 interface ClusterUiSessionsRequest {
   excludeClosedSessions?: boolean;
+  includeInternal?: boolean;
 }
 
 const SessionsPageConnected = withRouter(
@@ -99,14 +101,18 @@ const SessionsPageConnected = withRouter(
       sessions: selectSessions(state, props),
       sessionsError: state.cachedData.sessions.lastError,
       sortSetting: sortSettingLocalSetting.selector(state),
+      showInternal: showInternalLocalSetting.selector(state),
     }),
     (dispatch: ThunkDispatch<AdminUIState, unknown, Action>) => ({
       refreshSessions: (req?: ClusterUiSessionsRequest) => {
         const protoReq = new SessionsRequest({
           exclude_closed_sessions: req?.excludeClosedSessions,
+          include_internal: req?.includeInternal,
         });
         dispatch(refreshSessions(protoReq));
       },
+      onShowInternalChange: (showInternal: boolean) =>
+        dispatch(showInternalLocalSetting.set(showInternal)),
       cancelSession: terminateSessionAction,
       cancelQuery: terminateQueryAction,
       onSortingChange: (

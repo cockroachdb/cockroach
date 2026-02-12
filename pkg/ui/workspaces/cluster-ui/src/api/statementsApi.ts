@@ -55,6 +55,7 @@ type StmtReqFields = {
   sort: SqlStatsSortType;
   start: moment.Moment;
   end: moment.Moment;
+  includeInternal?: boolean;
 };
 
 export function createCombinedStmtsRequest({
@@ -62,6 +63,7 @@ export function createCombinedStmtsRequest({
   sort,
   start,
   end,
+  includeInternal,
 }: StmtReqFields): StatementsRequest {
   return new cockroach.server.serverpb.CombinedStatementsStatsRequest({
     start: Long.fromNumber(start.unix()),
@@ -71,6 +73,7 @@ export function createCombinedStmtsRequest({
       new cockroach.server.serverpb.CombinedStatementsStatsRequest.FetchMode({
         sort: sort,
       }),
+    include_internal: includeInternal ?? false,
   });
 }
 
@@ -83,6 +86,7 @@ export const getCombinedStatements = (
     "fetch_mode.stats_type": FetchStatsMode.StmtStatsOnly,
     "fetch_mode.sort": req.fetch_mode?.sort,
     limit: req.limit?.toInt() ?? DEFAULT_STATS_REQ_OPTIONS.limit,
+    include_internal: req.include_internal || undefined,
   });
   return fetchData(
     cockroach.server.serverpb.StatementsResponse,
@@ -102,6 +106,7 @@ export const getFlushedTxnStatsApi = (
     "fetch_mode.stats_type": FetchStatsMode.TxnStatsOnly,
     "fetch_mode.sort": req.fetch_mode?.sort,
     limit: req.limit?.toInt() ?? DEFAULT_STATS_REQ_OPTIONS.limit,
+    include_internal: req.include_internal || undefined,
   });
   return fetchData(
     cockroach.server.serverpb.StatementsResponse,
@@ -118,6 +123,7 @@ export const getStatementDetails = (
   let queryStr = propsToQueryString({
     start: req.start.toInt(),
     end: req.end.toInt(),
+    include_internal: req.include_internal || undefined,
   });
   for (const app of req.app_names) {
     queryStr += `&appNames=${encodeURIComponent(app)}`;

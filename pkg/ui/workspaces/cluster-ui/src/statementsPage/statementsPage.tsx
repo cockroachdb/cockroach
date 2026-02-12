@@ -135,6 +135,7 @@ export interface StatementsPageDispatchProps {
   onChangeReqSort: (sort: SqlStatsSortType) => void;
   onApplySearchCriteria: (ts: TimeScale, limit: number, sort: string) => void;
   onRequestTimeChange: (t: moment.Moment) => void;
+  onShowInternalChange?: (showInternal: boolean) => void;
 }
 export interface StatementsPageStateProps {
   statementsResponse: RequestState<SqlStatsResponse>;
@@ -154,6 +155,7 @@ export interface StatementsPageStateProps {
   statementDiagnostics: StatementDiagnosticsResponse | null;
   requestTime: moment.Moment;
   oldestDataAvailable: Timestamp;
+  showInternal?: boolean;
 }
 
 export interface StatementsPageState {
@@ -172,7 +174,7 @@ export type StatementsPageProps = StatementsPageDispatchProps &
 type RequestParams = Pick<
   StatementsPageState,
   "limit" | "reqSortSetting" | "timeScale"
->;
+> & { showInternal?: boolean };
 
 function stmtsRequestFromParams(params: RequestParams): StatementsRequest {
   const [start, end] = toRoundedDateRange(params.timeScale);
@@ -181,6 +183,7 @@ function stmtsRequestFromParams(params: RequestParams): StatementsRequest {
     end,
     limit: params.limit,
     sort: params.reqSortSetting,
+    includeInternal: params.showInternal,
   });
 }
 
@@ -323,7 +326,10 @@ export class StatementsPage extends React.Component<
   };
 
   refreshStatements = (): void => {
-    const req = stmtsRequestFromParams(this.state);
+    const req = stmtsRequestFromParams({
+      ...this.state,
+      showInternal: this.props.showInternal,
+    });
     this.props.refreshStatements(req);
   };
 
@@ -753,6 +759,8 @@ export class StatementsPage extends React.Component<
           onChangeBy={this.onChangeReqSort}
           onChangeTimeScale={this.changeTimeScale}
           onApply={this.updateRequestParams}
+          showInternal={this.props.showInternal}
+          onShowInternalChange={this.props.onShowInternalChange}
         />
         <div className={cx("table-area")}>
           <Loading

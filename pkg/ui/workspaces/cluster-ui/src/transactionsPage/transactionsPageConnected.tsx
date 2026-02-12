@@ -19,6 +19,7 @@ import {
   actions as localStorageActions,
   updateTxnsPageLimitAction,
   updateTxnsPageReqSortAction,
+  updateShowInternalAction,
 } from "../store/localStorage";
 import { nodeRegionsByIDSelector } from "../store/nodes";
 import { selectHasAdminRole, selectIsTenant } from "../store/uiConfig";
@@ -26,6 +27,7 @@ import {
   selectTxnsPageLimit,
   selectTxnsPageReqSort,
   selectTimeScale,
+  selectShowInternal,
 } from "../store/utils/selectors";
 import { TimeScale } from "../timeScaleDropdown";
 
@@ -88,6 +90,7 @@ export const TransactionsPageConnected = withRouter(
         requestTime: selectRequestTime(state),
         oldestDataAvailable:
           state.adminUI?.transactions?.data?.oldest_aggregated_ts_returned,
+        showInternal: selectShowInternal(state),
       },
       activePageProps: mapStateToActiveTransactionsPageProps(state),
     }),
@@ -164,6 +167,8 @@ export const TransactionsPageConnected = withRouter(
           dispatch(updateTxnsPageLimitAction(limit)),
         onChangeReqSort: (sort: SqlStatsSortType) =>
           dispatch(updateTxnsPageReqSortAction(sort)),
+        onShowInternalChange: (showInternal: boolean) =>
+          dispatch(updateShowInternalAction(showInternal)),
         onApplySearchCriteria: (ts: TimeScale, limit: number, sort: string) =>
           dispatch(
             analyticsActions.track({

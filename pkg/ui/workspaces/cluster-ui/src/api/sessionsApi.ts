@@ -16,6 +16,7 @@ export type SessionsResponseMessage =
 
 export interface SessionsRequest {
   excludeClosedSessions?: boolean;
+  includeInternal?: boolean;
 }
 
 // getSessions gets all cluster sessions.
@@ -25,6 +26,9 @@ export const getSessions = (
   const params = new URLSearchParams();
   if (req?.excludeClosedSessions) {
     params.set("exclude_closed_sessions", "true");
+  }
+  if (req?.includeInternal) {
+    params.set("include_internal", "true");
   }
   const path =
     params.toString() !== ""

@@ -111,6 +111,7 @@ export interface TransactionsPageStateProps {
   hasAdminRole?: UIConfigState["hasAdminRole"];
   requestTime: moment.Moment;
   oldestDataAvailable: Timestamp;
+  showInternal?: boolean;
 }
 
 export interface TransactionsPageDispatchProps {
@@ -131,13 +132,16 @@ export interface TransactionsPageDispatchProps {
   ) => void;
   onApplySearchCriteria: (ts: TimeScale, limit: number, sort: string) => void;
   onRequestTimeChange: (t: moment.Moment) => void;
+  onShowInternalChange?: (showInternal: boolean) => void;
 }
 
 export type TransactionsPageProps = TransactionsPageStateProps &
   TransactionsPageDispatchProps &
   RouteComponentProps;
 
-type RequestParams = Pick<TState, "timeScale" | "limit" | "reqSortSetting">;
+type RequestParams = Pick<TState, "timeScale" | "limit" | "reqSortSetting"> & {
+  showInternal?: boolean;
+};
 
 function stmtsRequestFromParams(params: RequestParams): StatementsRequest {
   const [start, end] = toRoundedDateRange(params.timeScale);
@@ -146,6 +150,7 @@ function stmtsRequestFromParams(params: RequestParams): StatementsRequest {
     end,
     limit: params.limit,
     sort: params.reqSortSetting,
+    includeInternal: params.showInternal,
   });
 }
 export class TransactionsPage extends React.Component<
@@ -207,7 +212,10 @@ export class TransactionsPage extends React.Component<
   };
 
   refreshData = (): void => {
-    const req = stmtsRequestFromParams(this.state);
+    const req = stmtsRequestFromParams({
+      ...this.state,
+      showInternal: this.props.showInternal,
+    });
     this.props.refreshData(req);
   };
 
@@ -681,6 +689,8 @@ export class TransactionsPage extends React.Component<
           onChangeBy={this.onChangeReqSort}
           onChangeTimeScale={this.changeTimeScale}
           onApply={this.updateRequestParams}
+          showInternal={this.props.showInternal}
+          onShowInternalChange={this.props.onShowInternalChange}
         />
         <div className={cx("table-area")}>
           <Loading

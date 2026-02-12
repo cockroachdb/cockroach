@@ -22,7 +22,8 @@ var SQLStatsResponseMax = settings.RegisterIntSetting(
 var SQLStatsShowInternal = settings.RegisterBoolSetting(
 	settings.ApplicationLevel,
 	"sql.stats.response.show_internal.enabled",
-	"controls if statistics for internal executions should be returned by the CombinedStatements and if "+
+	"deprecated: use the DB Console UI toggle instead. "+
+		"Controls if statistics for internal executions should be returned by the CombinedStatements and if "+
 		"internal sessions should be returned by the ListSessions endpoints. These endpoints are used to display "+
 		"statistics on the SQL Activity pages",
 	false,

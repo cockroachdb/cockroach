@@ -36,6 +36,7 @@ export enum LocalStorageKeys {
   DB_DETAILS_GRANTS_PAGE_SORT = "sortSetting/DatabasesDetailsGrantsPage",
   DB_DETAILS_VIEW_MODE = "viewMode/DatabasesDetailsPage",
   ACTIVE_EXECUTIONS_IS_AUTOREFRESH_ENABLED = "isAutoRefreshEnabled/ActiveExecutions",
+  SHOW_INTERNAL = "showInternal/SQLActivity",
 }
 
 export type LocalStorageState = {
@@ -80,6 +81,7 @@ export type LocalStorageState = {
   "statusSetting/JobsPage": string;
   "showSetting/JobsPage": string;
   [LocalStorageKeys.ACTIVE_EXECUTIONS_IS_AUTOREFRESH_ENABLED]: boolean;
+  [LocalStorageKeys.SHOW_INTERNAL]: boolean;
   "requestTime/StatementsPage": moment.Moment;
   "requestTime/TransactionsPage": moment.Moment;
 };
@@ -295,6 +297,8 @@ const initialState: LocalStorageState = {
         LocalStorageKeys.ACTIVE_EXECUTIONS_IS_AUTOREFRESH_ENABLED,
       ),
     ) || defaultIsAutoRefreshEnabledSetting,
+  [LocalStorageKeys.SHOW_INTERNAL]:
+    JSON.parse(localStorage.getItem(LocalStorageKeys.SHOW_INTERNAL)) || false,
   "requestTime/StatementsPage": null,
   "requestTime/TransactionsPage": null,
 };
@@ -347,4 +351,12 @@ export const updateTxnsPageReqSortAction = (
   localStorageSlice.actions.update({
     key: LocalStorageKeys.TXN_FINGERPRINTS_SORT,
     value: sort,
+  });
+
+export const updateShowInternalAction = (
+  showInternal: boolean,
+): PayloadAction<Payload> =>
+  localStorageSlice.actions.update({
+    key: LocalStorageKeys.SHOW_INTERNAL,
+    value: showInternal,
   });

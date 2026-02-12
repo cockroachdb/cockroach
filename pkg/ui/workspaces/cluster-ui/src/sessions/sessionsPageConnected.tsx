@@ -10,7 +10,10 @@ import { createSelector } from "reselect";
 
 import { SessionsRequest } from "src/api/sessionsApi";
 import { analyticsActions, AppState } from "src/store";
-import { actions as localStorageActions } from "src/store/localStorage";
+import {
+  actions as localStorageActions,
+  updateShowInternalAction,
+} from "src/store/localStorage";
 import { SessionsState, actions as sessionsActions } from "src/store/sessions";
 import {
   actions as terminateQueryActions,
@@ -20,7 +23,10 @@ import {
 
 import { Filters } from "../queryFilter";
 import { sqlStatsSelector } from "../store/sqlStats/sqlStats.selector";
-import { localStorageSelector } from "../store/utils/selectors";
+import {
+  localStorageSelector,
+  selectShowInternal,
+} from "../store/utils/selectors";
 
 import { SessionsPage } from "./index";
 
@@ -78,6 +84,7 @@ export const SessionsPageConnected = withRouter(
       sortSetting: selectSortSetting(state),
       columns: selectColumns(state),
       filters: selectFilters(state),
+      showInternal: selectShowInternal(state),
     }),
     (dispatch: Dispatch) => ({
       refreshSessions: (req?: SessionsRequest) =>
@@ -150,6 +157,8 @@ export const SessionsPageConnected = withRouter(
               selectedColumns.length === 0 ? " " : selectedColumns.join(","),
           }),
         ),
+      onShowInternalChange: (showInternal: boolean) =>
+        dispatch(updateShowInternalAction(showInternal)),
     }),
   )(SessionsPage),
 );

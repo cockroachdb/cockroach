@@ -75,7 +75,7 @@ func getStatementDetails(
 	testingKnobs *sqlstats.TestingKnobs,
 ) (*serverpb.StatementDetailsResponse, error) {
 	limit := SQLStatsResponseMax.Get(&settings.SV)
-	showInternal := SQLStatsShowInternal.Get(&settings.SV)
+	showInternal := SQLStatsShowInternal.Get(&settings.SV) || req.IncludeInternal
 	whereClause, args, err := getStatementDetailsQueryClausesAndArgs(req, testingKnobs, showInternal)
 	if err != nil {
 		return nil, srverrors.ServerError(ctx, err)
@@ -88,6 +88,7 @@ func getStatementDetails(
 		ie,
 		settings,
 		testingKnobs,
+		showInternal,
 		reqStartTime,
 		1,
 		serverpb.StatsSortOptions_SERVICE_LAT, //Order is not used on this endpoint, so any value can be passed here.

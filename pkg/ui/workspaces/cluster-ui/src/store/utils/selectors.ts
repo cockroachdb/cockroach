@@ -51,3 +51,8 @@ export const selectTxnsPageReqSort = createSelector(
   localStorageSelector,
   localStorage => localStorage[LocalStorageKeys.TXN_FINGERPRINTS_SORT],
 );
+
+export const selectShowInternal = createSelector(
+  localStorageSelector,
+  localStorage => localStorage[LocalStorageKeys.SHOW_INTERNAL],
+);

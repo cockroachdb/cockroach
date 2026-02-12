@@ -109,7 +109,7 @@ func getCombinedStatementStats(
 	testingKnobs *sqlstats.TestingKnobs,
 ) (*serverpb.StatementsResponse, error) {
 	var err error
-	showInternal := SQLStatsShowInternal.Get(&settings.SV)
+	showInternal := SQLStatsShowInternal.Get(&settings.SV) || req.IncludeInternal
 	whereClause, orderAndLimit, args := getCombinedStatementsQueryClausesAndArgs(
 		req, testingKnobs, showInternal, settings)
 
@@ -125,6 +125,7 @@ func getCombinedStatementStats(
 		ie,
 		settings,
 		testingKnobs,
+		showInternal,
 		reqStartTime,
 		req.Limit,
 		sort,
@@ -209,6 +210,7 @@ func activityTablesHaveFullData(
 	ie *sql.InternalExecutor,
 	settings *cluster.Settings,
 	testingKnobs *sqlstats.TestingKnobs,
+	showInternal bool,
 	reqStartTime *time.Time,
 	limit int64,
 	order serverpb.StatsSortOptions,
@@ -219,7 +221,7 @@ func activityTablesHaveFullData(
 	}
 
 	// Top Activity table doesn't store internal data.
-	if SQLStatsShowInternal.Get(&settings.SV) {
+	if showInternal {
 		return false, nil
 	}
 

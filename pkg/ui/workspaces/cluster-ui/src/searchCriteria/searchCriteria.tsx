@@ -4,7 +4,7 @@
 // included in the /LICENSE file.
 
 import { CaretDown } from "@cockroachlabs/icons";
-import { Menu, Dropdown } from "antd";
+import { Menu, Dropdown, Checkbox } from "antd";
 import classNames from "classnames/bind";
 import { MenuClickEventHandler } from "rc-menu/es/interface";
 import React from "react";
@@ -48,6 +48,8 @@ export interface SearchCriteriaProps {
   onChangeTop: (top: number) => void;
   onChangeBy: (by: SqlStatsSortType) => void;
   onApply: () => void;
+  showInternal?: boolean;
+  onShowInternalChange?: (showInternal: boolean) => void;
 }
 
 export function SearchCriteria(props: SearchCriteriaProps): React.ReactElement {
@@ -164,6 +166,16 @@ export function SearchCriteria(props: SearchCriteriaProps): React.ReactElement {
             Apply
           </Button>
         </PageConfigItem>
+        {props.onShowInternalChange !== undefined && (
+          <PageConfigItem>
+            <Checkbox
+              checked={props.showInternal}
+              onChange={e => props.onShowInternalChange(e.target.checked)}
+            >
+              Show internal
+            </Checkbox>
+          </PageConfigItem>
+        )}
       </PageConfig>
     </div>
   );

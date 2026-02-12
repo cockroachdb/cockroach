@@ -15,6 +15,7 @@ import {
   actions as localStorageActions,
   updateStmtsPageLimitAction,
   updateStmsPageReqSortAction,
+  updateShowInternalAction,
 } from "src/store/localStorage";
 import { actions as sqlStatsActions } from "src/store/sqlStats";
 import { actions as statementDiagnosticsActions } from "src/store/statementDiagnostics";
@@ -37,6 +38,7 @@ import {
   selectTimeScale,
   selectStmtsPageLimit,
   selectStmtsPageReqSort,
+  selectShowInternal,
 } from "../store/utils/selectors";
 import { TimeScale } from "../timeScaleDropdown";
 
@@ -105,6 +107,7 @@ export const ConnectedStatementsPage = withRouter(
         statementDiagnostics: state.adminUI.statementDiagnostics?.data,
         oldestDataAvailable:
           state.adminUI?.statements?.data?.oldest_aggregated_ts_returned,
+        showInternal: selectShowInternal(state),
       },
       activePageProps: mapStateToActiveStatementsPageProps(state),
     }),
@@ -256,6 +259,8 @@ export const ConnectedStatementsPage = withRouter(
           dispatch(updateStmtsPageLimitAction(limit)),
         onChangeReqSort: (sort: SqlStatsSortType) =>
           dispatch(updateStmsPageReqSortAction(sort)),
+        onShowInternalChange: (showInternal: boolean) =>
+          dispatch(updateShowInternalAction(showInternal)),
         onApplySearchCriteria: (ts: TimeScale, limit: number, sort: string) =>
           dispatch(
             analyticsActions.track({

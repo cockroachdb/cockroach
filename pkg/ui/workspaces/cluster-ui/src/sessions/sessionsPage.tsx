@@ -3,6 +3,7 @@
 // Use of this software is governed by the CockroachDB Software License
 // included in the /LICENSE file.
 
+import { Checkbox } from "antd";
 import classNames from "classnames/bind";
 import isNil from "lodash/isNil";
 import merge from "lodash/merge";
@@ -90,9 +91,11 @@ export interface OwnProps {
   internalAppNamePrefix: string;
   sessionsError: Error | Error[];
   sortSetting: SortSetting;
+  showInternal?: boolean;
   refreshSessions: (req?: SessionsRequest) => void;
   cancelSession: (payload: ICancelSessionRequest) => void;
   cancelQuery: (payload: ICancelQueryRequest) => void;
+  onShowInternalChange?: (showInternal: boolean) => void;
   onPageChanged?: (newPage: number) => void;
   onSortingChange?: (
     name: string,
@@ -232,6 +235,7 @@ export class SessionsPage extends React.Component<
     const filters = this.state.filters || this.props.filters;
     return {
       excludeClosedSessions: shouldExcludeClosedSessions(filters),
+      includeInternal: this.props.showInternal,
     };
   };
 
@@ -450,6 +454,14 @@ export class SessionsPage extends React.Component<
             filters={filters}
             timeLabel={"Session duration"}
           />
+          {this.props.onShowInternalChange !== undefined && (
+            <Checkbox
+              checked={this.props.showInternal}
+              onChange={e => this.props.onShowInternalChange(e.target.checked)}
+            >
+              Show internal
+            </Checkbox>
+          )}
           <SelectedFilters
             filters={filters}
             onRemoveFilter={this.onSubmitFilters}
