@@ -4654,10 +4654,10 @@ def go_deps():
         name = "com_github_hashicorp_go_version",
         build_file_proto_mode = "disable_global",
         importpath = "github.com/hashicorp/go-version",
-        sha256 = "a3231adb6bf029750970de2955e82e41e4c062b94eb73683e9111aa0c0841008",
-        strip_prefix = "github.com/hashicorp/go-version@v1.2.0",
+        sha256 = "341bd10080b7f7e0754bab07afb09f9a37e997b5fdb1a528266972a890309053",
+        strip_prefix = "github.com/hashicorp/go-version@v1.7.0",
         urls = [
-            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/hashicorp/go-version/com_github_hashicorp_go_version-v1.2.0.zip",
+            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/hashicorp/go-version/com_github_hashicorp_go_version-v1.7.0.zip",
         ],
     )
     go_repository(
@@ -4728,6 +4728,16 @@ def go_deps():
         strip_prefix = "github.com/hashicorp/serf@v0.9.5",
         urls = [
             "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/hashicorp/serf/com_github_hashicorp_serf-v0.9.5.zip",
+        ],
+    )
+    go_repository(
+        name = "com_github_hashicorp_terraform_json",
+        build_file_proto_mode = "disable_global",
+        importpath = "github.com/hashicorp/terraform-json",
+        sha256 = "b018fd73547a4337fdab8514fa3b718e214bf992d97b05762c6423f0c4ea46b5",
+        strip_prefix = "github.com/hashicorp/terraform-json@v0.27.2",
+        urls = [
+            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/hashicorp/terraform-json/com_github_hashicorp_terraform_json-v0.27.2.zip",
         ],
     )
     go_repository(
@@ -6438,10 +6448,10 @@ def go_deps():
         name = "com_github_mitchellh_copystructure",
         build_file_proto_mode = "disable_global",
         importpath = "github.com/mitchellh/copystructure",
-        sha256 = "4a2c9eb367a7781864e8edbd3b11781897766bcf6120f77a717d54a575392eee",
-        strip_prefix = "github.com/mitchellh/copystructure@v1.0.0",
+        sha256 = "4a1ce1f3c66bf99883e55da50fe1b3122299b79ad1d11c5407abbd74ace12550",
+        strip_prefix = "github.com/mitchellh/copystructure@v1.2.0",
         urls = [
-            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/mitchellh/copystructure/com_github_mitchellh_copystructure-v1.0.0.zip",
+            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/mitchellh/copystructure/com_github_mitchellh_copystructure-v1.2.0.zip",
         ],
     )
     go_repository(
@@ -6518,10 +6528,10 @@ def go_deps():
         name = "com_github_mitchellh_reflectwalk",
         build_file_proto_mode = "disable_global",
         importpath = "github.com/mitchellh/reflectwalk",
-        sha256 = "318ab84e22d4554a7540c7ebc9b4fb607e2608578c3a5bb72434203988048145",
-        strip_prefix = "github.com/mitchellh/reflectwalk@v1.0.0",
+        sha256 = "c96eed6b50f00b1acdc79224e8e55f66ef3e98e3f7c6373afa3e3b8c6ef440d1",
+        strip_prefix = "github.com/mitchellh/reflectwalk@v1.0.2",
         urls = [
-            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/mitchellh/reflectwalk/com_github_mitchellh_reflectwalk-v1.0.0.zip",
+            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/mitchellh/reflectwalk/com_github_mitchellh_reflectwalk-v1.0.2.zip",
         ],
     )
     go_repository(
@@ -7981,6 +7991,16 @@ def go_deps():
         strip_prefix = "github.com/sean-/seed@v0.0.0-20170313163322-e2103e2c3529",
         urls = [
             "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/sean-/seed/com_github_sean__seed-v0.0.0-20170313163322-e2103e2c3529.zip",
+        ],
+    )
+    go_repository(
+        name = "com_github_sebdah_goldie",
+        build_file_proto_mode = "disable_global",
+        importpath = "github.com/sebdah/goldie",
+        sha256 = "750ca88bfd6865811f63c7d509538d97808472e3d26a50690a4921d598fb2d6b",
+        strip_prefix = "github.com/sebdah/goldie@v1.0.0",
+        urls = [
+            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/sebdah/goldie/com_github_sebdah_goldie-v1.0.0.zip",
         ],
     )
     go_repository(

@@ -1,0 +1,25 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "tofu",
+    srcs = ["executor.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/services/provisionings/tofu",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/cmd/roachprod-centralized/utils/logger",
+        "@com_github_cockroachdb_errors//:errors",
+    ],
+)
+
+go_test(
+    name = "tofu_test",
+    srcs = ["executor_test.go"],
+    embed = [":tofu"],
+    deps = [
+        "//pkg/cmd/roachprod-centralized/services/provisionings/templates",
+        "//pkg/cmd/roachprod-centralized/utils/logger",
+        "@com_github_hashicorp_terraform_json//:terraform-json",
+        "@com_github_stretchr_testify//assert",
+        "@com_github_stretchr_testify//require",
+    ],
+)

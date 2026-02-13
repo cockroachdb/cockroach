@@ -208,7 +208,7 @@ require (
 	github.com/maruel/panicparse/v2 v2.2.2
 	github.com/marusama/semaphore v0.0.0-20190110074507-6952cef993b2
 	github.com/mattn/go-isatty v0.0.20
-	github.com/mitchellh/reflectwalk v1.0.0
+	github.com/mitchellh/reflectwalk v1.0.2
 	github.com/mkungla/bexp/v3 v3.0.1
 	github.com/montanaflynn/stats v0.7.1
 	github.com/mozillazg/go-slugify v0.2.0
@@ -390,7 +390,9 @@ require (
 	github.com/hashicorp/go-multierror v1.1.1 // indirect
 	github.com/hashicorp/go-retryablehttp v0.7.7 // indirect
 	github.com/hashicorp/go-uuid v1.0.3 // indirect
+	github.com/hashicorp/go-version v1.7.0 // indirect
 	github.com/hashicorp/hcl v1.0.0 // indirect
+	github.com/hashicorp/terraform-json v0.27.2 // indirect
 	github.com/huandu/xstrings v1.3.0 // indirect
 	github.com/ianlancetaylor/demangle v0.0.0-20230524184225-eabc099b10ab // indirect
 	github.com/imdario/mergo v0.3.13 // indirect
@@ -430,7 +432,7 @@ require (
 	github.com/minio/minio-go/v7 v7.0.21 // indirect
 	github.com/minio/minlz v1.0.2-0.20260119185444-845e64f85661 // indirect
 	github.com/minio/sha256-simd v1.0.0 // indirect
-	github.com/mitchellh/copystructure v1.0.0 // indirect
+	github.com/mitchellh/copystructure v1.2.0 // indirect
 	github.com/mitchellh/go-homedir v1.1.0 // indirect
 	github.com/mitchellh/go-wordwrap v1.0.1 // indirect
 	github.com/mitchellh/mapstructure v1.5.0 // indirect
