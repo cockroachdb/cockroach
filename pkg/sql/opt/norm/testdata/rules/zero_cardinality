@@ -104,7 +104,7 @@ values
  ├── key: ()
  └── fd: ()-->(1-5)
 
-norm expect=SimplifyZeroCardinalityGroup
+norm expect=SimplifyZeroCardinalityGroup disable=EliminateZeroCardProject
 SELECT * FROM (SELECT CASE WHEN k < 0 THEN 3 / 0 ELSE 3 END FROM b) WHERE false
 ----
 project
@@ -132,3 +132,268 @@ scan c
  │         └── false [constraints=(contradiction; tight)]
  ├── key: (1)
  └── fd: (1)-->(2)
+
+# --------------------------------------------------
+# EliminateZeroCardSelect
+# --------------------------------------------------
+
+# Select with immutable (non-leakproof) filter over zero-cardinality input.
+norm expect=EliminateZeroCardSelect
+SELECT * FROM (SELECT * FROM b WHERE false) WHERE i::FLOAT8 IS NAN
+----
+values
+ ├── columns: k:1!null i:2!null f:3!null s:4!null j:5!null
+ ├── cardinality: [0 - 0]
+ ├── key: ()
+ └── fd: ()-->(1-5)
+
+# Volatile filter over zero-cardinality input. The rule should fire even with
+# volatile expressions like random() since zero rows means the filter is never
+# evaluated.
+norm expect=EliminateZeroCardSelect
+SELECT * FROM (SELECT * FROM b WHERE false) WHERE random() < 0.5
+----
+values
+ ├── columns: k:1!null i:2!null f:3!null s:4!null j:5!null
+ ├── cardinality: [0 - 0]
+ ├── key: ()
+ └── fd: ()-->(1-5)
+
+# Multiple non-leakproof filter conditions (AND).
+norm expect=EliminateZeroCardSelect
+SELECT * FROM (SELECT * FROM b WHERE false) WHERE i::FLOAT8 > 0 AND s::CHAR = 'x'
+----
+values
+ ├── columns: k:1!null i:2!null f:3!null s:4!null j:5!null
+ ├── cardinality: [0 - 0]
+ ├── key: ()
+ └── fd: ()-->(1-5)
+
+# Zero cardinality from LIMIT 0 rather than WHERE false.
+norm expect=EliminateZeroCardSelect
+SELECT * FROM (SELECT * FROM b LIMIT 0) WHERE i::FLOAT8 IS NAN
+----
+values
+ ├── columns: k:1!null i:2!null f:3!null s:4!null j:5!null
+ ├── cardinality: [0 - 0]
+ ├── key: ()
+ └── fd: ()-->(1-5)
+
+# Filter with subquery over zero-cardinality input.
+norm expect=EliminateZeroCardSelect
+SELECT * FROM (SELECT * FROM b WHERE false) WHERE i::FLOAT8 IN (SELECT k::FLOAT8 FROM a)
+----
+values
+ ├── columns: k:1!null i:2!null f:3!null s:4!null j:5!null
+ ├── cardinality: [0 - 0]
+ ├── key: ()
+ └── fd: ()-->(1-5)
+
+# Select does not fire when input is not zero-cardinality.
+norm expect-not=EliminateZeroCardSelect
+SELECT * FROM b WHERE i::FLOAT8 IS NAN
+----
+select
+ ├── columns: k:1!null i:2 f:3 s:4!null j:5
+ ├── immutable
+ ├── key: (1)
+ ├── fd: (1)-->(2-5)
+ ├── scan b
+ │    ├── columns: k:1!null i:2 f:3 s:4!null j:5
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2-5)
+ └── filters
+      └── i:2::FLOAT8 = NaN [outer=(2), immutable]
+
+# Select does not fire when input is not leakproof.
+norm expect-not=EliminateZeroCardSelect
+SELECT * FROM (SELECT * FROM (SELECT * FROM b FOR UPDATE) WHERE false) WHERE i::FLOAT8 IS NAN
+----
+select
+ ├── columns: k:1!null i:2 f:3 s:4!null j:5
+ ├── cardinality: [0 - 0]
+ ├── volatile
+ ├── key: (1)
+ ├── fd: (1)-->(2-5)
+ ├── scan b
+ │    ├── columns: k:1!null i:2 f:3 s:4!null j:5
+ │    ├── locking: for-update
+ │    ├── volatile
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2-5)
+ └── filters
+      └── false [constraints=(contradiction; tight)]
+
+# Leakproof filter over zero-cardinality input. Both SimplifyZeroCardinalityGroup
+# and EliminateZeroCardSelect fire since EliminateZeroCardSelect has no volatility
+# restriction.
+norm expect=(SimplifyZeroCardinalityGroup,EliminateZeroCardSelect)
+SELECT * FROM (SELECT * FROM b WHERE false) WHERE i > 0
+----
+values
+ ├── columns: k:1!null i:2!null f:3!null s:4!null j:5!null
+ ├── cardinality: [0 - 0]
+ ├── key: ()
+ └── fd: ()-->(1-5)
+
+# --------------------------------------------------
+# EliminateZeroCardProject
+# --------------------------------------------------
+
+# Project with immutable (non-leakproof) projection over zero-cardinality input.
+norm expect=EliminateZeroCardProject
+SELECT i::FLOAT8 FROM (SELECT * FROM b WHERE false)
+----
+values
+ ├── columns: i:8!null
+ ├── cardinality: [0 - 0]
+ ├── key: ()
+ └── fd: ()-->(8)
+
+# Volatile projection over zero-cardinality input. Volatile expressions like
+# random() should also be eliminated.
+norm expect=EliminateZeroCardProject
+SELECT random() FROM (SELECT * FROM b WHERE false)
+----
+values
+ ├── columns: random:8!null
+ ├── cardinality: [0 - 0]
+ ├── key: ()
+ └── fd: ()-->(8)
+
+# Projection with passthrough columns. Passthrough columns should be correctly
+# included in the output Values via UnionCols.
+norm expect=EliminateZeroCardProject
+SELECT k, i::FLOAT8 FROM (SELECT * FROM b WHERE false)
+----
+values
+ ├── columns: k:1!null i:8!null
+ ├── cardinality: [0 - 0]
+ ├── key: ()
+ └── fd: ()-->(1,8)
+
+# Multiple non-leakproof projections at once.
+norm expect=EliminateZeroCardProject
+SELECT i::FLOAT8, f::INT, s::CHAR FROM (SELECT * FROM b WHERE false)
+----
+values
+ ├── columns: i:8!null f:9!null s:10!null
+ ├── cardinality: [0 - 0]
+ ├── key: ()
+ └── fd: ()-->(8-10)
+
+# Zero cardinality from contradictory WHERE clause.
+norm expect=EliminateZeroCardProject
+SELECT i::FLOAT8 FROM b WHERE k < 1 AND k > 2
+----
+values
+ ├── columns: i:8!null
+ ├── cardinality: [0 - 0]
+ ├── key: ()
+ └── fd: ()-->(8)
+
+# Project does not fire when input is not zero-cardinality.
+norm expect-not=EliminateZeroCardProject
+SELECT i::FLOAT8 FROM b
+----
+project
+ ├── columns: i:8
+ ├── immutable
+ ├── scan b
+ │    └── columns: b.i:2
+ └── projections
+      └── b.i:2::FLOAT8 [as=i:8, outer=(2), immutable]
+
+# Project does not fire when input is not leakproof.
+norm expect-not=EliminateZeroCardProject
+SELECT i::FLOAT8 FROM (SELECT * FROM (SELECT * FROM b FOR UPDATE) WHERE false)
+----
+project
+ ├── columns: i:8
+ ├── cardinality: [0 - 0]
+ ├── volatile
+ ├── select
+ │    ├── columns: b.i:2
+ │    ├── cardinality: [0 - 0]
+ │    ├── volatile
+ │    ├── scan b
+ │    │    ├── columns: b.i:2
+ │    │    ├── locking: for-update
+ │    │    └── volatile
+ │    └── filters
+ │         └── false [constraints=(contradiction; tight)]
+ └── projections
+      └── b.i:2::FLOAT8 [as=i:8, outer=(2), immutable]
+
+# Combined: Select over Project over zero-cardinality input, both non-leakproof.
+norm expect=(EliminateZeroCardSelect,EliminateZeroCardProject)
+SELECT * FROM (SELECT i::FLOAT8 AS x FROM b WHERE false) WHERE x IS NAN
+----
+values
+ ├── columns: x:8!null
+ ├── cardinality: [0 - 0]
+ ├── key: ()
+ └── fd: ()-->(8)
+
+# Project with non-leakproof projection over Select with non-leakproof filter,
+# both over zero-cardinality input.
+norm expect=(EliminateZeroCardSelect,EliminateZeroCardProject)
+SELECT i::FLOAT8 FROM (SELECT * FROM b WHERE false) WHERE s::CHAR = 'x'
+----
+values
+ ├── columns: i:8!null
+ ├── cardinality: [0 - 0]
+ ├── key: ()
+ └── fd: ()-->(8)
+
+# Regression test for #162382: redundant filter and render operators remain in
+# the plan when a join folds to norows. The normal SELECT path leaves a Select
+# and Project on top of an empty Values, while the assign-placeholders path
+# (prepared statement) correctly eliminates them.
+
+exec-ddl
+CREATE TABLE t162382_t0 (c0 INTERVAL)
+----
+
+exec-ddl
+CREATE TABLE t162382_t2 (c0 TIMETZ)
+----
+
+# Normal SELECT: the ON false condition folds the join to norows, and then
+# Select is eliminated using EliminateZeroCardSelect.
+opt
+SELECT max(1) FROM t162382_t0 INNER JOIN t162382_t2 ON false WHERE t162382_t0.c0::FLOAT8 IS NAN
+----
+scalar-group-by
+ ├── columns: max:10
+ ├── cardinality: [1 - 1]
+ ├── key: ()
+ ├── fd: ()-->(10)
+ ├── values
+ │    ├── columns: column9:9!null
+ │    ├── cardinality: [0 - 0]
+ │    ├── key: ()
+ │    └── fd: ()-->(9)
+ └── aggregations
+      └── max [as=max:10, outer=(9)]
+           └── column9:9
+
+# Prepared statement path (assign-placeholders-opt): after substituting $1 =
+# false, the optimizer re-normalizes and correctly eliminates the filter and
+# render above norows.
+assign-placeholders-opt query-args=(false)
+SELECT max(1) FROM t162382_t0 INNER JOIN t162382_t2 ON $1 WHERE t162382_t0.c0::FLOAT8 IS NAN
+----
+scalar-group-by
+ ├── columns: max:10
+ ├── cardinality: [1 - 1]
+ ├── key: ()
+ ├── fd: ()-->(10)
+ ├── values
+ │    ├── columns: column9:9!null
+ │    ├── cardinality: [0 - 0]
+ │    ├── key: ()
+ │    └── fd: ()-->(9)
+ └── aggregations
+      └── max [as=max:10, outer=(9)]
+           └── column9:9
