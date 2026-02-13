@@ -15,11 +15,10 @@ preferred to direct `go (build|test)` or `bazel` invocations.
 This is useful as a compilation check.
 
 ```bash
-# Invoke (but skip) all tests in that package, which
-# implies that both package and its tests compile.
-./dev test ./pkg/util/log -f -.
 # Build package ./pkg/util/log
-./dev build ./pkg/util/log
+./dev build pkg/util/log
+# Build the tests in package ./pkg/util/log
+./dev build pkg/util/log:log_test
 ```
 
 **Testing:**
