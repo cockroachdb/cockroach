@@ -87,6 +87,22 @@ func TestGaugeVector(t *testing.T) {
 	require.Equal(t, "value4", *metrics[1].GetLabel()[1].Value)
 }
 
+func TestDerivedGauge(t *testing.T) {
+
+	g := NewDerivedGauge(emptyMetadata, func(i int64) int64 { return i * 10 })
+
+	require.Zero(t, g.Value())
+
+	g.Update(10)
+	require.Equal(t, int64(100), g.Value())
+
+	g.Dec(1)
+	require.Equal(t, int64(90), g.Value())
+
+	g.Inc(1)
+	require.Equal(t, int64(100), g.Value())
+}
+
 func TestFunctionalGauge(t *testing.T) {
 	valToReturn := int64(10)
 	g := NewFunctionalGauge(emptyMetadata, func() int64 { return valToReturn })
@@ -97,6 +113,33 @@ func TestFunctionalGauge(t *testing.T) {
 	if v := g.Value(); v != 15 {
 		t.Fatalf("unexpected value: %d", v)
 	}
+}
+
+func TestDerivedGaugeVec(t *testing.T) {
+	g := NewDerivedExportedGaugeVec(emptyMetadata, []string{"label1", "label2"}, func(val int64) int64 { return val * 2 })
+
+	ls1 := map[string]string{"label1": "a", "label2": "b"}
+	ls2 := map[string]string{"label1": "c", "label2": "d"}
+
+	g.Update(ls1, 10)
+	g.Update(ls2, 20)
+
+	metrics := g.ToPrometheusMetrics()
+	require.Len(t, metrics, 2)
+	require.Equal(t, 20.0, *metrics[0].Gauge.Value)
+	require.Equal(t, 40.0, *metrics[1].Gauge.Value)
+
+	// Verify labels are correct.
+	require.Equal(t, "label1", *metrics[0].GetLabel()[0].Name)
+	require.Equal(t, "a", *metrics[0].GetLabel()[0].Value)
+	require.Equal(t, "label2", *metrics[0].GetLabel()[1].Name)
+	require.Equal(t, "b", *metrics[0].GetLabel()[1].Value)
+
+	// Update a value and verify the transform applies to the new value.
+	g.Update(ls1, 50)
+	metrics = g.ToPrometheusMetrics()
+	require.Equal(t, 100.0, *metrics[0].Gauge.Value)
+	require.Equal(t, 40.0, *metrics[1].Gauge.Value)
 }
 
 func TestGaugeFloat64(t *testing.T) {
