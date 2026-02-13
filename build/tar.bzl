@@ -23,6 +23,18 @@ BSDTAR_PLATFORMS = {
             "@platforms//cpu:aarch64",
         ],
     ),
+    "linux_ppc64le": struct(
+        compatible_with = [
+            "@platforms//os:linux",
+            "@platforms//cpu:ppc64le",
+        ],
+    ),
+    "linux_s390x": struct(
+        compatible_with = [
+            "@platforms//os:linux",
+            "@platforms//cpu:s390x",
+        ],
+    ),
     "windows_amd64": struct(
         release_platform = "win64",
         compatible_with = [
@@ -44,6 +56,14 @@ BSDTAR_PREBUILT = {
     "linux_arm64": (
         "https://storage.googleapis.com/public-bazel-artifacts/tar/v3.8.1/tar_linux_arm64",
         "663f498baab2a9b7758e46d0c377b311c5b058758a37958372a0503c5dda4028",
+    ),
+    "linux_ppc64le": (
+        "https://storage.googleapis.com/public-bazel-artifacts/tar/v3.8.1/tar_linux_ppc64le",
+        "12b6757a0279d4b39748ce63503f0d3dc1c5799effd3cb0a456e9db1512de781",
+    ),
+    "linux_s390x": (
+        "https://storage.googleapis.com/public-bazel-artifacts/tar/v3.8.1/tar_linux_s390x",
+        "9591a62eeeedf2d4b061f2f7aefb1a1c3e1b723213d5ce519ebf41542e72465e",
     ),
     "windows_amd64": (
         "https://storage.googleapis.com/public-bazel-artifacts/tar/v3.8.1/tar_windows_x86_64.exe",
