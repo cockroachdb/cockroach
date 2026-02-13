@@ -29,6 +29,12 @@ type storeCPURateCapacityInput struct {
 	// nodeCPURateCapacity is the total CPU capacity of the node (from OS-level
 	// metrics) in ns/sec.
 	nodeCPURateCapacity float64
+	// sqlGatewayCPUNanoPerSec is the SQL gateway CPU usage in ns/sec, measured
+	// by the runtime load monitor tracking SQL work executed at gateway nodes.
+	sqlGatewayCPUNanoPerSec float64
+	// sqlDistCPUNanoPerSec is the distributed SQL CPU usage in ns/sec, measured
+	// by the runtime load monitor tracking distributed SQL work.
+	sqlDistCPUNanoPerSec float64
 	// numStores is the number of stores on the node.
 	numStores int32
 }
@@ -153,4 +159,85 @@ func computeCPUCapacityWithCap(in storeCPURateCapacityInput) (capacity float64) 
 	// Divide evenly across stores.
 	capacity = mmaDirectCapacity / float64(in.numStores)
 	return capacity
+}
+
+// computeStoreCPURateCapacityWithSQL computes per-store CPU capacity using the
+// alternative model that accounts for SQL gateway and distributed SQL CPU
+// separately. This model fits:
+//
+//	(SSCR + SQL_DIST + SQL_G) * K1 = NCR
+//	SSCR * K2 = SQL_DIST
+//
+// Where:
+//   - SSCR = storesCPURate (aggregate KV CPU across all stores)
+//   - SQL_DIST = sqlDistCPUNanoPerSec (distributed SQL CPU)
+//   - SQL_G = sqlGatewayCPUNanoPerSec (gateway SQL CPU)
+//   - NCR = nodeCPURateUsage (total node CPU usage)
+//   - NCRC = nodeCPURateCapacity (total node CPU capacity)
+//   - K1 = multiplier for total CPU overhead
+//   - K2 = multiplier for SQL_DIST relative to SSCR
+//
+// Solving for K1 and K2:
+//
+//	K2 = SQL_DIST / SSCR (if SSCR > 0)
+//	K1 = NCR / (SSCR + SQL_DIST + SQL_G) (if denominator > 0)
+//
+// To find the maximum SSCR the node can sustain (NodeCapacity), we set total
+// CPU = NCRC. Gateway SQL is fixed background, so SQL_G stays constant while
+// SSCR grows. DistSQL scales with KV: SQL_DIST = K2 * SSCR. So at capacity:
+//
+//	(SSCR_max + K2*SSCR_max + SQL_G) * K1 = NCRC
+//	SSCR_max*(K2+1)*K1 + SQL_G*K1 = NCRC
+//	SSCR_max*(K2+1)*K1 = NCRC - SQL_G*K1
+//	SSCR_max = (NCRC - SQL_G*K1) / ((K2+1)*K1)
+//
+// In other words: subtract gateway SQL's share (SQL_G*K1) from total capacity,
+// then divide by the per-unit cost of KV work ((K2+1)*K1).
+//
+//	NodeCapacity = (NCRC - SQL_G*K1) / ((K2+1)*K1)
+//	StoreCapacity = NodeCapacity / numStores
+//
+// This model correctly attributes gateway SQL CPU (SQL_G) as background load
+// that doesn't scale with store work, while distributed SQL CPU (SQL_DIST) is
+// assumed to scale proportionally with KV work.
+func computeStoreCPURateCapacityWithSQL(
+	in storeCPURateCapacityInput,
+) (capacity float64) {
+	if in.numStores <= 0 || in.nodeCPURateCapacity <= 0 {
+		log.KvDistribution.Fatalf(context.Background(), "numStores and nodeCPURateCapacity must be > 0")
+	}
+
+	// Handle edge cases where we can't compute the model.
+	if in.storesCPURate <= 0 {
+		// No store CPU usage. Use a fallback: assume SQL_G is background and
+		// distribute remaining capacity evenly, scaled by a conservative multiplier.
+		const fallbackMultiplier = 3.0
+		backgroundLoad := in.sqlGatewayCPUNanoPerSec
+		availableCapacity := max(0.0, in.nodeCPURateCapacity-backgroundLoad)
+		nodeCapacity := availableCapacity / fallbackMultiplier
+		return nodeCapacity / float64(in.numStores)
+	}
+
+	// Compute K2: SQL_DIST scales proportionally with SSCR.
+	k2 := in.sqlDistCPUNanoPerSec / in.storesCPURate
+
+	// Compute K1: total CPU overhead multiplier.
+	// (SSCR + SQL_DIST + SQL_G) * K1 = NCR
+	totalAttributedLoad := in.storesCPURate + in.sqlDistCPUNanoPerSec + in.sqlGatewayCPUNanoPerSec
+	if totalAttributedLoad <= 0 {
+		// Fallback: assume no overhead.
+		nodeCapacity := in.nodeCPURateCapacity / (k2 + 1)
+		return nodeCapacity / float64(in.numStores)
+	}
+	// K1 represents unobserved overhead (OS-level CPU beyond attributed
+	// SQL+KV). Clamp to 1.0: if nodeCPURateUsage < totalAttributedLoad.
+	k1 := max(1.0, in.nodeCPURateUsage/totalAttributedLoad)
+
+	// effectiveMult = (K2+1)*K1: total node CPU cost per core of SSCR.
+	// NodeCapacity = (NCRC - SQL_G*K1) / effectiveMult
+	sqlGatewayAttributedLoad := in.sqlGatewayCPUNanoPerSec * k1
+	availableCapacity := max(0.0, in.nodeCPURateCapacity-sqlGatewayAttributedLoad)
+	effectiveMult := (k2 + 1) * k1
+	nodeCapacity := availableCapacity / effectiveMult
+	return nodeCapacity / float64(in.numStores)
 }

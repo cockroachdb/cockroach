@@ -28,7 +28,7 @@ func TestComputeStoreCPURateCapacity(t *testing.T) {
 	const nsPerCore = 1e9
 
 	// Accumulators for mean |capacity_err| across scenarios.
-	var naiveAbsErrs, cappedAbsErrs []float64
+	var naiveAbsErrs, cappedAbsErrs, sqlAbsErrs []float64
 
 	datadriven.RunTest(t, datapathutils.TestDataPath(t, t.Name()),
 		func(t *testing.T, d *datadriven.TestData) string {
@@ -36,29 +36,32 @@ func TestComputeStoreCPURateCapacity(t *testing.T) {
 			case "scenario":
 				// Ground-truth inputs: the true breakdown of CPU on the node.
 				var kvCPUCores float64   // direct KV replica CPU (= storesCPURate)
-				var propOverhead float64 // CPU proportional to KV (DistSQL, RPC, compactions)
+				var propOverhead float64 // indirect KV overhead (DistSQL, RPC, compactions)
 				var bgCores float64      // CPU independent of KV (gateway SQL, GC, jobs)
 				var nodeCapCores float64 // total CPU capacity of the node
 				var numStores int        // number of stores on the node
+				var sqlGatewayCores, sqlDistCores float64
 
 				d.ScanArgs(t, "kv-cpu", &kvCPUCores)
-				d.ScanArgs(t, "proportional-overhead", &propOverhead)
+				d.ScanArgs(t, "indirect-overhead", &propOverhead)
 				d.ScanArgs(t, "background", &bgCores)
 				d.ScanArgs(t, "node-cpu-capacity", &nodeCapCores)
 				d.ScanArgs(t, "num-stores", &numStores)
+				d.ScanArgs(t, "sql-gateway-cpu", &sqlGatewayCores)
+				d.ScanArgs(t, "sql-dist-cpu", &sqlDistCores)
 
 				// Input validations.
 				require.Greater(t, numStores, 0, "num-stores must be >= 1")
 				require.Greater(t, nodeCapCores, 0.0, "node-cpu-capacity must be > 0")
 				require.GreaterOrEqual(t, kvCPUCores, 0.0, "kv-cpu must be >= 0")
-				require.GreaterOrEqual(t, propOverhead, 0.0, "proportional-overhead must be >= 0")
+				require.GreaterOrEqual(t, propOverhead, 0.0, "indirect-overhead must be >= 0")
 				require.GreaterOrEqual(t, bgCores, 0.0, "background must be >= 0")
 
 				// Derive node usage from ground truth.
 				nodeUsageCores := kvCPUCores + propOverhead + bgCores
 
 				// Compute true capacity from ground truth.
-				// true-mult is the ratio of total KV-proportional CPU to direct KV CPU.
+				// true-mult is the ratio of total KV-related CPU (direct + indirect) to direct KV CPU.
 				// true-capacity = (node-capacity - background) / true-mult / num-stores
 				var trueMult float64
 				if kvCPUCores == 0 {
@@ -71,15 +74,18 @@ func TestComputeStoreCPURateCapacity(t *testing.T) {
 				// Build model input (models only see aggregate metrics, not the
 				// ground-truth breakdown).
 				in := storeCPURateCapacityInput{
-					storesCPURate:       kvCPUCores * nsPerCore,
-					nodeCPURateUsage:    nodeUsageCores * nsPerCore,
-					nodeCPURateCapacity: nodeCapCores * nsPerCore,
-					numStores:           int32(numStores),
+					storesCPURate:           kvCPUCores * nsPerCore,
+					nodeCPURateUsage:        nodeUsageCores * nsPerCore,
+					nodeCPURateCapacity:     nodeCapCores * nsPerCore,
+					sqlGatewayCPUNanoPerSec: sqlGatewayCores * nsPerCore,
+					sqlDistCPUNanoPerSec:    sqlDistCores * nsPerCore,
+					numStores:               int32(numStores),
 				}
 
 				// Run models.
 				naiveCap := float64(computeStoreCPURateCapacityNaive(in)) / nsPerCore
 				cappedCap := computeCPUCapacityWithCap(in) / nsPerCore
+				sqlCap := computeStoreCPURateCapacityWithSQL(in) / nsPerCore
 
 				// Compute error percentage.
 				// Negative = pessimistic (underestimates capacity, safer).
@@ -111,16 +117,21 @@ func TestComputeStoreCPURateCapacity(t *testing.T) {
 				if cappedPct, inf := errPct(cappedCap); !inf {
 					cappedAbsErrs = append(cappedAbsErrs, math.Abs(cappedPct))
 				}
+				if sqlPct, inf := errPct(sqlCap); !inf {
+					sqlAbsErrs = append(sqlAbsErrs, math.Abs(sqlPct))
+				}
 
 				return fmt.Sprintf(
-					"node-cpu: %.2f used / %.2f capacity (%.2f kv + %.2f proportional + %.2f background)\n"+
+					"node-cpu: %.2f used / %.2f capacity (%.2f kv + %.2f indirect + %.2f background)\n"+
 						"truth:    kv-capacity: %.2f cores/store (true-mult: %.2f)\n"+
 						"naive:    kv-capacity: %.2f cores/store, capacity_err: %s\n"+
-						"capped:   kv-capacity: %.2f cores/store, capacity_err: %s\n",
+						"capped:   kv-capacity: %.2f cores/store, capacity_err: %s\n"+
+						"sql:      kv-capacity: %.2f cores/store, capacity_err: %s\n",
 					nodeUsageCores, nodeCapCores, kvCPUCores, propOverhead, bgCores,
 					trueCapPerStore, trueMult,
 					naiveCap, fmtErr(naiveCap),
 					cappedCap, fmtErr(cappedCap),
+					sqlCap, fmtErr(sqlCap),
 				)
 
 			case "mean":
@@ -135,8 +146,8 @@ func TestComputeStoreCPURateCapacity(t *testing.T) {
 					return sum / float64(len(vals))
 				}
 				return fmt.Sprintf(
-					"Mean |capacity_err| across %d scenarios: naive: %.1f%%  capped: %.1f%%\n",
-					len(naiveAbsErrs), meanOf(naiveAbsErrs), meanOf(cappedAbsErrs),
+					"Mean |capacity_err| across %d scenarios: naive: %.1f%%  capped: %.1f%%  sql: %.1f%%\n",
+					len(naiveAbsErrs), meanOf(naiveAbsErrs), meanOf(cappedAbsErrs), meanOf(sqlAbsErrs),
 				)
 
 			default:
