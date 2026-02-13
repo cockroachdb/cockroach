@@ -7558,7 +7558,7 @@ func TestGCIncorrectRange(t *testing.T) {
 	checkKeyExists := func(repl *Replica, key roachpb.Key, ts hlc.Timestamp, shouldExist bool) {
 		getReq := getArgs(key)
 		header := kvpb.Header{RangeID: repl.RangeID, Timestamp: ts}
-		res, pErr := kv.SendWrappedWith(ctx, ToSenderForTesting(repl), header, &getReq)
+		res, pErr := kv.SendWrappedWith(ctx, repl, header, &getReq)
 		require.Nil(t, pErr)
 		resVal := res.(*kvpb.GetResponse).Value
 		if shouldExist {
@@ -7580,9 +7580,9 @@ func TestGCIncorrectRange(t *testing.T) {
 	putReq1 := putArgs(key1, val)
 	ts1Header1 := kvpb.Header{RangeID: repl1.RangeID, Timestamp: ts1}
 	ts2Header1 := kvpb.Header{RangeID: repl1.RangeID, Timestamp: ts2}
-	_, pErr := kv.SendWrappedWith(ctx, ToSenderForTesting(repl1), ts1Header1, &putReq1)
+	_, pErr := kv.SendWrappedWith(ctx, repl1, ts1Header1, &putReq1)
 	require.Nil(t, pErr)
-	_, pErr = kv.SendWrappedWith(ctx, ToSenderForTesting(repl1), ts2Header1, &putReq1)
+	_, pErr = kv.SendWrappedWith(ctx, repl1, ts2Header1, &putReq1)
 	require.Nil(t, pErr)
 
 	// Key for range 2 (after split key "c").
@@ -7590,9 +7590,9 @@ func TestGCIncorrectRange(t *testing.T) {
 	putReq2 := putArgs(key2, val)
 	ts1Header2 := kvpb.Header{RangeID: repl2.RangeID, Timestamp: ts1}
 	ts2Header2 := kvpb.Header{RangeID: repl2.RangeID, Timestamp: ts2}
-	_, pErr = kv.SendWrappedWith(ctx, ToSenderForTesting(repl2), ts1Header2, &putReq2)
+	_, pErr = kv.SendWrappedWith(ctx, repl2, ts1Header2, &putReq2)
 	require.Nil(t, pErr)
-	_, pErr = kv.SendWrappedWith(ctx, ToSenderForTesting(repl2), ts2Header2, &putReq2)
+	_, pErr = kv.SendWrappedWith(ctx, repl2, ts2Header2, &putReq2)
 	require.Nil(t, pErr)
 
 	// Send GC request to range 1 for the key on range 2. This should return a
@@ -7618,7 +7618,7 @@ func TestGCIncorrectRange(t *testing.T) {
 	gcReq1 := gcArgs(repl1.Desc().StartKey, repl1.Desc().EndKey, gKey1)
 	_, pErr = kv.SendWrappedWith(
 		ctx,
-		ToSenderForTesting(repl1),
+		repl1,
 		kvpb.Header{RangeID: repl1.RangeID, Timestamp: tc.Clock().Now()},
 		&gcReq1,
 	)
