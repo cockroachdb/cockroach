@@ -237,6 +237,14 @@ func (s *Store) ManualReplicaGC(repl *Replica) error {
 	return manualQueue(s, s.replicaGCQueue, repl)
 }
 
+// IsReplicaGCDelayedDueToLeftNeighborError returns true if the error is a
+// replicaGCDelayedDueToLeftNeighborError, i.e. the replica GC queue could not
+// GC the replica because its left neighbor hasn't caught up with meta yet.
+func IsReplicaGCDelayedDueToLeftNeighborError(err error) bool {
+	var target *replicaGCDelayedDueToLeftNeighborError
+	return errors.As(err, &target)
+}
+
 // ManualRaftSnapshot will manually send a raft snapshot to the target replica.
 func (s *Store) ManualRaftSnapshot(repl *Replica, target roachpb.ReplicaID) error {
 	_, err := s.raftSnapshotQueue.processRaftSnapshot(context.Background(), repl, target)
