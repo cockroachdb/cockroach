@@ -13,6 +13,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
@@ -198,4 +199,211 @@ func TestWaiterOnRejectedCommit(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
+}
+
+// TestRefreshingPreventsStarvation verifies that the REFRESHING transaction
+// state prevents high-priority pushers from starving a serializable
+// transaction during its refresh window.
+//
+// The scenario:
+//  1. T1 reads key A, writes key B.
+//  2. T2 (high priority) reads key B, pushing T1's write timestamp, then commits.
+//  3. T1 commits. EndTxn detects the pushed timestamp and writes a REFRESHING
+//     record instead of returning RETRY_SERIALIZABLE.
+//  4. The txnSpanRefresher refreshes T1's read spans and retries EndTxn.
+//     A request filter blocks this retry.
+//  5. T3 (high priority) reads key B, encounters T1's intent, and tries to
+//     push T1. Because T1 is REFRESHING, the push is blocked in the wait queue.
+//  6. The retry is released, T1 commits, and T3's push resolves.
+func TestRefreshingPreventsStarvation(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	ctx := context.Background()
+
+	var t1ID atomic.Value
+	var endTxnCount atomic.Int32
+	retryBlocked := make(chan struct{})
+	retryUnblocked := make(chan struct{})
+	pusherBlocked := make(chan struct{}, 1)
+
+	s, _, db := serverutils.StartServer(t, base.TestServerArgs{
+		Knobs: base.TestingKnobs{
+			Store: &kvserver.StoreTestingKnobs{
+				TestingRequestFilter: func(
+					ctx context.Context, ba *kvpb.BatchRequest,
+				) *kvpb.Error {
+					etReq, ok := ba.GetArg(kvpb.EndTxn)
+					if !ok || !etReq.(*kvpb.EndTxnRequest).Commit {
+						return nil
+					}
+					v := t1ID.Load()
+					if v == nil {
+						return nil
+					}
+					if !ba.Txn.ID.Equal(v.(uuid.UUID)) {
+						return nil
+					}
+					// The second EndTxn is the retry after a successful refresh.
+					// Block it so we can verify T3's push is blocked.
+					if endTxnCount.Add(1) == 2 {
+						close(retryBlocked)
+						<-retryUnblocked
+					}
+					return nil
+				},
+				TxnWaitKnobs: txnwait.TestingKnobs{
+					OnPusherBlocked: func(
+						ctx context.Context, push *kvpb.PushTxnRequest,
+					) {
+						v := t1ID.Load()
+						if v == nil {
+							return
+						}
+						if push.PusheeTxn.ID.Equal(v.(uuid.UUID)) {
+							select {
+							case pusherBlocked <- struct{}{}:
+							default:
+							}
+						}
+					},
+				},
+			},
+		},
+	})
+	defer s.Stopper().Stop(ctx)
+
+	kvcoord.TransactionRefreshingStatusEnabled.Override(ctx, &s.ClusterSettings().SV, true)
+
+	keyA := roachpb.Key("a")
+	keyB := roachpb.Key("b")
+
+	// T1: read key A (refresh span), write key B.
+	t1 := db.NewTxn(ctx, "t1")
+	_, err := t1.Get(ctx, keyA)
+	require.NoError(t, err)
+	require.NoError(t, t1.Put(ctx, keyB, "b-t1"))
+	t1ID.Store(t1.ID())
+
+	// T2: high priority, reads key B. This pushes T1's write timestamp
+	// because T2 has higher priority.
+	t2 := db.NewTxn(ctx, "t2")
+	require.NoError(t, t2.SetUserPriority(roachpb.MaxUserPriority))
+	_, err = t2.Get(ctx, keyB)
+	require.NoError(t, err)
+	require.NoError(t, t2.Commit(ctx))
+
+	// T1 commits in the background. The first EndTxn writes a REFRESHING
+	// record. The refresh succeeds (key A is unchanged). The retry EndTxn
+	// is blocked by the request filter.
+	t1Done := make(chan error, 1)
+	go func() {
+		t1Done <- t1.Commit(ctx)
+	}()
+	<-retryBlocked
+
+	// T3: high priority, reads key B. It encounters T1's intent and tries
+	// to push, but T1 is REFRESHING so the push blocks in the wait queue.
+	t3Done := make(chan error, 1)
+	go func() {
+		t3 := db.NewTxn(ctx, "t3")
+		if err := t3.SetUserPriority(roachpb.MaxUserPriority); err != nil {
+			t3Done <- err
+			return
+		}
+		_, err := t3.Get(ctx, keyB)
+		t3Done <- err
+	}()
+	<-pusherBlocked
+
+	// Release T1's retry. T1 commits, which unblocks T3's push.
+	close(retryUnblocked)
+	require.NoError(t, <-t1Done)
+	require.NoError(t, <-t3Done)
+}
+
+// TestRefreshingToPendingAllowsPush verifies that after a failed refresh a
+// REFRESHING transaction record is transitioned back to PENDING via
+// HeartbeatTxn, pushers can then push the transaction normally.
+//
+// The scenario:
+//  1. T1 reads key A, writes key B.
+//  2. Key A is overwritten, invalidating T1's read span.
+//  3. T2 (high priority) reads key B, pushing T1's write timestamp, then
+//     commits.
+//  4. T1 commits. EndTxn writes a REFRESHING record. The refresh fails
+//     (key A changed). The txnSpanRefresher sends HeartbeatTxn to transition
+//     the record back to PENDING, then returns RETRY_SERIALIZABLE.
+//  5. T3 (high priority) reads key B. It pushes T1, which succeeds because
+//     T1 is now PENDING (not REFRESHING).
+func TestRefreshingToPendingAllowsPush(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	ctx := context.Background()
+
+	var t1ID atomic.Value
+	var heartbeatSeen atomic.Bool
+
+	s, _, db := serverutils.StartServer(t, base.TestServerArgs{
+		Knobs: base.TestingKnobs{
+			Store: &kvserver.StoreTestingKnobs{
+				TestingRequestFilter: func(
+					ctx context.Context, ba *kvpb.BatchRequest,
+				) *kvpb.Error {
+					hbReq, ok := ba.GetArg(kvpb.HeartbeatTxn)
+					if !ok {
+						return nil
+					}
+					v := t1ID.Load()
+					if v == nil {
+						return nil
+					}
+					if !ba.Txn.ID.Equal(v.(uuid.UUID)) {
+						return nil
+					}
+					if hbReq.(*kvpb.HeartbeatTxnRequest).UpdateStatus {
+						heartbeatSeen.Store(true)
+					}
+					return nil
+				},
+			},
+		},
+	})
+	defer s.Stopper().Stop(ctx)
+
+	kvcoord.TransactionRefreshingStatusEnabled.Override(ctx, &s.ClusterSettings().SV, true)
+
+	keyA := roachpb.Key("a")
+	keyB := roachpb.Key("b")
+
+	// T1: read key A (refresh span), write key B.
+	t1 := db.NewTxn(ctx, "t1")
+	_, err := t1.Get(ctx, keyA)
+	require.NoError(t, err)
+	require.NoError(t, t1.Put(ctx, keyB, "b-t1"))
+	t1ID.Store(t1.ID())
+
+	// Invalidate T1's read.
+	require.NoError(t, db.Put(ctx, keyA, "a-overwritten"))
+
+	// T2: Push T1 with a high-priority reader.
+	t2 := db.NewTxn(ctx, "t2")
+	require.NoError(t, t2.SetUserPriority(roachpb.MaxUserPriority))
+	_, err = t2.Get(ctx, keyB)
+	require.NoError(t, err)
+	require.NoError(t, t2.Commit(ctx))
+
+	// T1 commit attempt should write REFRESHING but the refresh should fail. The
+	// txnSpanRefresher should transition us back to PENDING. Client sees
+	// RETRY_SERIALIZABLE.
+	require.Error(t, t1.Commit(ctx))
+	require.True(t, heartbeatSeen.Load(),
+		"expected HeartbeatTxn with UpdateStatus for REFRESHING→PENDING transition")
+
+	// T1 can now be pushed.
+	t3 := db.NewTxn(ctx, "t3")
+	require.NoError(t, t3.SetUserPriority(roachpb.MaxUserPriority))
+	_, err = t3.Get(ctx, keyB)
+	require.NoError(t, err)
+
+	require.NoError(t, t1.Rollback(ctx))
 }
