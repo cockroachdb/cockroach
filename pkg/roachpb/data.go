@@ -2377,8 +2377,8 @@ func (m *LockAcquisition) Empty() bool {
 }
 
 func (m LockAcquisition) SafeFormat(w redact.SafePrinter, _ rune) {
-	w.Printf("{span=%v %v durability=%v strength=%v ignored=%v}",
-		m.Span, m.Txn, m.Durability, m.Strength, m.IgnoredSeqNums)
+	w.Printf("txn %s acquiring %s %s lock on %s",
+		m.Txn.Short(), m.Durability, m.Strength, m.Span)
 }
 
 // MakeLockUpdate makes a lock update from the given txn and span.
