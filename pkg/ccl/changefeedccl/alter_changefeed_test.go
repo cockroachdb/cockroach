@@ -1695,8 +1695,8 @@ func TestAlterChangefeedFilterChangesDontEmitPreAlterEvents(t *testing.T) {
 		knobs := s.TestingKnobs.
 			DistSQL.(*execinfra.TestingKnobs).
 			Changefeed.(*TestingKnobs)
-		knobs.ShouldCheckpointToJobRecord = func(hw hlc.Timestamp) bool {
-			return false
+		knobs.ShouldCheckpointToJobRecord = func(hw hlc.Timestamp) (updateCheckpoint bool, updateHighwater bool) {
+			return false, false
 		}
 
 		testFeed := feed(t, f, `CREATE CHANGEFEED FOR DATABASE d INCLUDE TABLES foo`)
@@ -1747,8 +1747,8 @@ func TestAlterChangefeedFilterChangesWriteProgressForTablesThatWillBeAdded(t *te
 		knobs := s.TestingKnobs.
 			DistSQL.(*execinfra.TestingKnobs).
 			Changefeed.(*TestingKnobs)
-		knobs.ShouldCheckpointToJobRecord = func(hw hlc.Timestamp) bool {
-			return false
+		knobs.ShouldCheckpointToJobRecord = func(hw hlc.Timestamp) (updateCheckpoint bool, updateHighwater bool) {
+			return false, false
 		}
 
 		sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY, b STRING)`)
@@ -1805,8 +1805,8 @@ func TestAlterChangefeedFilterChangesDontWriteProgressForTablesThatWillBeDropped
 		knobs := s.TestingKnobs.
 			DistSQL.(*execinfra.TestingKnobs).
 			Changefeed.(*TestingKnobs)
-		knobs.ShouldCheckpointToJobRecord = func(hw hlc.Timestamp) bool {
-			return false
+		knobs.ShouldCheckpointToJobRecord = func(hw hlc.Timestamp) (updateCheckpoint bool, updateHighwater bool) {
+			return false, false
 		}
 
 		sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY, b STRING)`)
@@ -1855,8 +1855,8 @@ func TestAlterChangefeedFilterChangesDontOverwriteProgress(t *testing.T) {
 		knobs := s.TestingKnobs.
 			DistSQL.(*execinfra.TestingKnobs).
 			Changefeed.(*TestingKnobs)
-		knobs.ShouldCheckpointToJobRecord = func(hw hlc.Timestamp) bool {
-			return false
+		knobs.ShouldCheckpointToJobRecord = func(hw hlc.Timestamp) (updateCheckpoint bool, updateHighwater bool) {
+			return false, false
 		}
 
 		sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY, b STRING)`)

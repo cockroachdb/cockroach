@@ -51,8 +51,9 @@ type TestingKnobs struct {
 	NullSinkIsExternalIOAccounted bool
 	// OnDistflowSpec is called when specs for distflow planning have been created
 	OnDistflowSpec func(aggregatorSpecs []*execinfrapb.ChangeAggregatorSpec, frontierSpec *execinfrapb.ChangeFrontierSpec)
-	// RaiseRetryableError is a knob used to possibly return an error.
-	RaiseRetryableError func() error
+	// ShouldFailCheckpoint is called at the start of checkpointJobProgress.
+	// If it returns true, the checkpoint is aborted with a retryable error.
+	ShouldFailCheckpoint func() bool
 	// StartDistChangefeedInitialHighwater is called when starting the dist changefeed with the initial highwater
 	// of the changefeed. Note that this will be called when the changefeed starts and subsequently when the changefeed
 	// is retried.
@@ -76,9 +77,8 @@ type TestingKnobs struct {
 	// its frontier after processing a resolved span.
 	ShouldFlushFrontier func(rs jobspb.ResolvedSpan) bool
 
-	// ShouldCheckpointToJobRecord returns true if change frontier should checkpoint itself
-	// to the job record.
-	ShouldCheckpointToJobRecord func(hw hlc.Timestamp) bool
+	// ShouldCheckpointToJobRecord overrides shouldCheckpoint when set.
+	ShouldCheckpointToJobRecord func(hw hlc.Timestamp) (updateCheckpoint bool, updateHighwater bool)
 
 	// OnDrain returns the channel to select on to detect node drain
 	OnDrain func() <-chan struct{}
@@ -133,6 +133,14 @@ type TestingKnobs struct {
 	// the initial timestamps are computed and before the changefeed targets'
 	// descriptors are fetched.
 	AfterComputeDistChangefeedTimestamps func(context.Context)
+
+	// AfterDistChangefeedPlanned is called after the changefeed DistSQL plan has
+	// been created, before the flow is started.
+	AfterDistChangefeedPlanned func(plan *sql.PhysicalPlan)
+
+	// AfterPersistFrontier is called after the frontier is persisted in
+	// maybePersistFrontier (either to coreProgress or the job frontier table).
+	AfterPersistFrontier func()
 }
 
 // ModuleTestingKnobs is part of the base.ModuleTestingKnobs interface.

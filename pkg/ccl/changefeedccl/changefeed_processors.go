@@ -22,7 +22,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/kvfeed"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/resolvedspan"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/schemafeed"
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobfrontier"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
@@ -52,6 +51,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/span"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
@@ -1047,11 +1047,9 @@ type changeFrontier struct {
 	// span set.
 	frontier *resolvedspan.CoordinatorFrontier
 
-	// localState contains an in memory cache of progress updates.
-	// Used by core style changefeeds as well as regular changefeeds to make
-	// restarts more efficient with respects to duplicates.
-	// localState reflects an up-to-date information *after* the checkpoint.
-	localState *cachedState
+	// coreProgress, if non-nil, contains in-memory progress for core (sinkless)
+	// changefeeds. It is looked up from the coreProgressRegistry during Start().
+	coreProgress *coreProgress
 
 	// encoder is the Encoder to use for resolved timestamp serialization.
 	encoder Encoder
@@ -1139,42 +1137,94 @@ type jobState struct {
 	progressUpdatesSkipped bool
 }
 
-// cachedState is a changefeed progress stored in memory.
-// It is used to reduce the number of duplicate events emitted during retries.
-type cachedState struct {
-	progress jobspb.Progress
-
-	// set of spans for this changefeed.
+// flowResult contains state collected during a changefeed DistSQL flow
+// execution. It is returned by startDistChangefeed and consumed by the
+// retry loops in coreChangefeed and resumeWithRetries.
+type flowResult struct {
+	// trackedSpans is the set of spans watched by the changefeed.
 	trackedSpans roachpb.Spans
-	// aggregatorFrontier contains the list of frontier spans
-	// emitted by aggregators when they are being shut down.
+	// aggregatorFrontier contains frontier spans emitted by aggregators
+	// during shutdown via trailing metadata.
 	aggregatorFrontier []execinfrapb.ChangefeedMeta_FrontierSpan
 	// drainingNodes is the list of nodes that are draining.
 	drainingNodes []roachpb.NodeID
+	// coreProgress is the in-memory progress at the end of the flow. This
+	// is only populated for core changefeeds (jobID == 0) where there is
+	// no job record to reload progress from.
+	coreProgress *coreProgress
 }
 
-// SetHighwater implements the eval.ChangefeedState interface.
-func (cs *cachedState) SetHighwater(frontier hlc.Timestamp) {
-	cs.progress.Progress = &jobspb.Progress_HighWater{
-		HighWater: &frontier,
-	}
-}
-
-// SetCheckpoint implements the eval.ChangefeedState interface.
-func (cs *cachedState) SetCheckpoint(checkpoint *jobspb.TimestampSpansMap) {
-	cs.progress.Details.(*jobspb.Progress_Changefeed).Changefeed.SpanLevelCheckpoint = checkpoint
-}
-
-// AggregatorFrontierSpans returns an iterator over the spans in the aggregator
+// aggregatorFrontierSpans returns an iterator over the spans in the aggregator
 // frontier collected during shutdown.
-func (cs *cachedState) AggregatorFrontierSpans() iter.Seq2[roachpb.Span, hlc.Timestamp] {
+func (r *flowResult) aggregatorFrontierSpans() iter.Seq2[roachpb.Span, hlc.Timestamp] {
 	return func(yield func(roachpb.Span, hlc.Timestamp) bool) {
-		for _, entry := range cs.aggregatorFrontier {
+		for _, entry := range r.aggregatorFrontier {
 			if !yield(entry.Span, entry.Timestamp) {
 				return
 			}
 		}
 	}
+}
+
+// coreProgress is changefeed progress stored in memory for core changefeeds.
+// It is not safe for concurrent access and should only be modified by a core
+// changefeed's change frontier and read after the changefeed flow completes.
+type coreProgress struct {
+	progress      jobspb.Progress
+	frontierSpans []jobspb.ResolvedSpan
+}
+
+// SetHighwater sets the frontier timestamp for the changefeed.
+func (cp *coreProgress) SetHighwater(hw hlc.Timestamp) {
+	cp.progress.Progress = &jobspb.Progress_HighWater{
+		HighWater: &hw,
+	}
+}
+
+// SetFrontier saves a snapshot of the frontier spans.
+func (cp *coreProgress) SetFrontier(frontier *resolvedspan.CoordinatorFrontier) {
+	cp.frontierSpans = cp.frontierSpans[:0]
+	for rs := range frontier.All() {
+		cp.frontierSpans = append(cp.frontierSpans, rs)
+	}
+}
+
+// coreProgressRegistry maps flow IDs to coreProgress for core (sinkless)
+// changefeeds. Core changefeeds don't have a job record to store progress,
+// so startDistChangefeed and the changeFrontier processor share a coreProgress
+// via this registry. startDistChangefeed registers the state before running
+// the DistSQL flow and the frontier processor looks it up by flow ID during
+// initialization.
+//
+// This works because the changeFrontier processor always runs on the gateway
+// node, co-located with startDistChangefeed.
+var coreProgressRegistry struct {
+	syncutil.Mutex
+	m map[execinfrapb.FlowID]*coreProgress
+}
+
+// registerCoreProgress registers a coreProgress for a core changefeed flow.
+func registerCoreProgress(id execinfrapb.FlowID, s *coreProgress) {
+	coreProgressRegistry.Lock()
+	defer coreProgressRegistry.Unlock()
+	if coreProgressRegistry.m == nil {
+		coreProgressRegistry.m = make(map[execinfrapb.FlowID]*coreProgress)
+	}
+	coreProgressRegistry.m[id] = s
+}
+
+// deregisterCoreProgress removes the coreProgress for a completed flow.
+func deregisterCoreProgress(id execinfrapb.FlowID) {
+	coreProgressRegistry.Lock()
+	defer coreProgressRegistry.Unlock()
+	delete(coreProgressRegistry.m, id)
+}
+
+// lookupCoreProgress retrieves the coreProgress for a core changefeed flow.
+func lookupCoreProgress(id execinfrapb.FlowID) *coreProgress {
+	coreProgressRegistry.Lock()
+	defer coreProgressRegistry.Unlock()
+	return coreProgressRegistry.m[id]
 }
 
 func newJobState(
@@ -1261,8 +1311,6 @@ func newChangeFrontierProcessor(
 	memMonitor := execinfra.NewMonitor(ctx, flowCtx.Mon, mon.MakeName("changefntr-mem"))
 
 	cf := &changeFrontier{
-		// We might modify the ChangefeedState field in the eval.Context, so we
-		// need to make a copy.
 		evalCtx:       flowCtx.NewEvalCtx(),
 		spec:          spec,
 		memAcc:        memMonitor.MakeBoundAccount(),
@@ -1429,13 +1477,14 @@ func (cf *changeFrontier) Start(ctx context.Context) {
 	cf.sink = &errorWrapperSink{wrapped: cf.sink}
 
 	cf.highWaterAtStart = cf.spec.Feed.StatementTime
-	if cf.evalCtx.ChangefeedState == nil {
-		log.Changefeed.Warningf(cf.Ctx(), "moving to draining due to missing changefeed state")
-		cf.MoveToDraining(errors.AssertionFailedf("expected initialized local state"))
-		return
+	if cf.spec.JobID == 0 {
+		cf.coreProgress = lookupCoreProgress(cf.FlowCtx.ID)
+		if cf.coreProgress == nil {
+			cf.MoveToDraining(errors.AssertionFailedf(
+				"expected initialized core progress for flow %s", cf.FlowCtx.ID))
+			return
+		}
 	}
-
-	cf.localState = cf.evalCtx.ChangefeedState.(*cachedState)
 	cf.js = newJobState(nil, cf.FlowCtx.Cfg.Settings, cf.metrics, timeutil.DefaultTimeSource{})
 
 	var initialHighwater hlc.Timestamp
@@ -1839,8 +1888,8 @@ func (cf *changeFrontier) maybeMarkJobIdle(recentKVCount uint64) {
 func (cf *changeFrontier) shouldCheckpoint(
 	resolvedSpans []jobspb.ResolvedSpan, frontierChanged bool,
 ) (updateCheckpoint bool, updateHighwater bool) {
-	if cf.knobs.ShouldCheckpointToJobRecord != nil && !cf.knobs.ShouldCheckpointToJobRecord(cf.frontier.Frontier()) {
-		return false, false
+	if cf.knobs.ShouldCheckpointToJobRecord != nil {
+		return cf.knobs.ShouldCheckpointToJobRecord(cf.frontier.Frontier())
 	}
 
 	// When in a Backfill, the frontier remains unchanged at the backfill boundary
@@ -1876,10 +1925,8 @@ func (cf *changeFrontier) checkpointJobProgress(
 	defer sp.Finish()
 	defer cf.sliMetrics.Timers.CheckpointJobProgress.Start().End()
 
-	if cf.knobs.RaiseRetryableError != nil {
-		if err := cf.knobs.RaiseRetryableError(); err != nil {
-			return changefeedbase.MarkRetryableError(errors.New("cf.knobs.RaiseRetryableError"))
-		}
+	if cf.knobs.ShouldFailCheckpoint != nil && cf.knobs.ShouldFailCheckpoint() {
+		return changefeedbase.MarkRetryableError(errors.New("cf.knobs.ShouldFailCheckpoint"))
 	}
 
 	updateRunStatus := timeutil.Since(cf.js.lastRunStatusUpdate) > runStatusUpdateFrequency
@@ -1933,8 +1980,9 @@ func (cf *changeFrontier) checkpointJobProgress(
 		}
 	}
 
-	cf.localState.SetHighwater(frontier)
-	cf.localState.SetCheckpoint(spanLevelCheckpoint)
+	if cf.coreProgress != nil {
+		cf.coreProgress.SetHighwater(frontier)
+	}
 
 	return nil
 }
@@ -1943,20 +1991,27 @@ func (cf *changeFrontier) maybePersistFrontier(ctx context.Context) error {
 	ctx, sp := tracing.ChildSpan(ctx, "changefeed.frontier.maybe_persist_frontier")
 	defer sp.Finish()
 
-	if cf.spec.JobID == 0 ||
-		!cf.evalCtx.Settings.Version.IsActive(ctx, clusterversion.V25_4) ||
-		!cf.frontierPersistenceLimiter.canSave(ctx) {
+	if !cf.frontierPersistenceLimiter.canSave(ctx) {
 		return nil
 	}
 
-	timer := cf.sliMetrics.Timers.FrontierPersistence.Start()
-	if err := cf.FlowCtx.Cfg.DB.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
-		return jobfrontier.Store(ctx, txn, cf.spec.JobID, "coordinator", cf.frontier)
-	}); err != nil {
-		return err
+	if cf.coreProgress != nil {
+		cf.coreProgress.SetFrontier(cf.frontier)
+		cf.frontierPersistenceLimiter.doneSave(0 /* saveDuration */)
+	} else {
+		timer := cf.sliMetrics.Timers.FrontierPersistence.Start()
+		if err := cf.FlowCtx.Cfg.DB.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+			return jobfrontier.Store(ctx, txn, cf.spec.JobID, "coordinator", cf.frontier)
+		}); err != nil {
+			return err
+		}
+		cf.frontierPersistenceLimiter.doneSave(timer.End())
 	}
-	persistDuration := timer.End()
-	cf.frontierPersistenceLimiter.doneSave(persistDuration)
+
+	if cf.knobs.AfterPersistFrontier != nil {
+		cf.knobs.AfterPersistFrontier()
+	}
+
 	return nil
 }
 
