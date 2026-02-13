@@ -132,6 +132,7 @@ func TestCanPushWithPriority(t *testing.T) {
 	t.Run(kvpb.PUSH_ABORT.String(), testCanPushWithPriorityPushAbort)
 	t.Run(kvpb.PUSH_TIMESTAMP.String(), testCanPushWithPriorityPushTimestamp)
 	t.Run(kvpb.PUSH_TOUCH.String(), testCanPushWithPriorityPushTouch)
+	t.Run("pusheeRefreshing", testCanPushWithPriorityPusheeRefreshing)
 }
 
 func testCanPushWithPriorityPushAbort(t *testing.T) {
@@ -463,6 +464,35 @@ func testCanPushWithPriorityPushTouch(t *testing.T) {
 							canPush := CanPushWithPriority(
 								kvpb.PUSH_TOUCH, pusherIso, pusheeIso, pusherPri, pusheePri, pusheeStatus)
 							require.True(t, canPush)
+						})
+					}
+				}
+			}
+		}
+	}
+}
+
+// testCanPushWithPriorityPusheeRefreshing verifies that REFRESHING
+// transactions cannot be pushed by any push type, regardless of isolation
+// level or priority. This prevents starvation during refresh.
+func testCanPushWithPriorityPusheeRefreshing(t *testing.T) {
+	min := enginepb.MinTxnPriority
+	max := enginepb.MaxTxnPriority
+	mid1 := enginepb.TxnPriority(1)
+	mid2 := enginepb.TxnPriority(2)
+	priorities := []enginepb.TxnPriority{min, mid1, mid2, max}
+	pushTypes := []kvpb.PushTxnType{kvpb.PUSH_ABORT, kvpb.PUSH_TIMESTAMP, kvpb.PUSH_TOUCH}
+	for _, pushType := range pushTypes {
+		for _, pusherIso := range isolation.Levels() {
+			for _, pusheeIso := range isolation.Levels() {
+				for _, pusherPri := range priorities {
+					for _, pusheePri := range priorities {
+						name := fmt.Sprintf("pushType=%s/pusherIso=%s/pusheeIso=%s/pusherPri=%d/pusheePri=%d",
+							pushType, pusherIso, pusheeIso, pusherPri, pusheePri)
+						t.Run(name, func(t *testing.T) {
+							canPush := CanPushWithPriority(
+								pushType, pusherIso, pusheeIso, pusherPri, pusheePri, roachpb.REFRESHING)
+							require.False(t, canPush)
 						})
 					}
 				}
