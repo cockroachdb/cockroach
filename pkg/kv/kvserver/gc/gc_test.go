@@ -27,6 +27,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/echotest"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -34,6 +36,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/redact"
 	"github.com/stretchr/testify/require"
 )
 
@@ -2352,4 +2355,37 @@ func keySeq(keyHistory ...[]gcData) (res []gcData) {
 		res = append(res, h...)
 	}
 	return res
+}
+
+func TestInfoSafeFormat(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	info := Info{
+		NumKeysAffected:               250,
+		NumRangeKeysAffected:          10,
+		AffectedVersionsKeyBytes:      16384,
+		AffectedVersionsValBytes:      131072,
+		AffectedVersionsRangeKeyBytes: 1024,
+		AffectedVersionsRangeValBytes: 4096,
+		LocksConsidered:               50,
+		LockTxns:                      8,
+		PushTxn:                       10,
+		ResolveTotal:                  50,
+		TransactionSpanTotal:          20,
+		TransactionSpanGCAborted:      5,
+		TransactionSpanGCCommitted:    12,
+		TransactionSpanGCStaging:      1,
+		TransactionSpanGCPending:      2,
+		AbortSpanTotal:                10,
+		AbortSpanConsidered:           7,
+		AbortSpanGCNum:                5,
+		ClearRangeSpanOperations:      3,
+		ClearRangeSpanFailures:        1,
+	}
+	redacted := string(redact.Sprint(info))
+	unredacted := info.String()
+	require.Equal(t, unredacted, redacted,
+		"redacted and unredacted output should be identical (all fields are safe)")
+	echotest.Require(t, redacted,
+		datapathutils.TestDataPath(t, "info_format.txt"))
 }
