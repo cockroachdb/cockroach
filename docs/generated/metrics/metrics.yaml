@@ -16040,6 +16040,15 @@ layers:
       unit: NANOSECONDS
       aggregation: AVG
       derivative: NON_NEGATIVE_DERIVATIVE
+    - name: queue.replicagc.purgatory
+      exported_name: queue_replicagc_purgatory
+      description: Number of replicas in the replica GC queue's purgatory, waiting for a prerequisite (e.g. left neighbor GC) before they can be GC'd
+      y_axis_label: Replicas
+      type: GAUGE
+      unit: COUNT
+      aggregation: AVG
+      derivative: NONE
+      visibility: SUPPORT
     - name: queue.replicagc.removereplica
       exported_name: queue_replicagc_removereplica
       description: Number of replica removals attempted by the replica GC queue

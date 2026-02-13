@@ -1868,6 +1868,7 @@ queue_replicagc_pending: queue.replicagc.pending
 queue_replicagc_process_failure: queue.replicagc.process.failure
 queue_replicagc_process_success: queue.replicagc.process.success
 queue_replicagc_processingnanos: queue.replicagc.processingnanos
+queue_replicagc_purgatory: queue.replicagc.purgatory
 queue_replicagc_removereplica: queue.replicagc.removereplica
 queue_replicate_addnonvoterreplica: queue.replicate.addnonvoterreplica
 queue_replicate_addreplica: queue.replicate.addreplica
