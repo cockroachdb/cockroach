@@ -145,15 +145,15 @@ func (h Health) String() string {
 func (h Health) SafeFormat(w redact.SafePrinter, _ rune) {
 	switch h {
 	case HealthUnknown:
-		w.Print("unknown")
+		w.SafeString("unknown")
 	case HealthOK:
-		w.Print("ok")
+		w.SafeString("ok")
 	case HealthUnhealthy:
-		w.Print("unhealthy")
+		w.SafeString("unhealthy")
 	case HealthDead:
-		w.Print("dead")
+		w.SafeString("dead")
 	default:
-		w.Print("unknown")
+		w.SafeString("unknown")
 	}
 }
 
@@ -165,13 +165,13 @@ func (l LeaseDisposition) String() string {
 func (l LeaseDisposition) SafeFormat(w redact.SafePrinter, _ rune) {
 	switch l {
 	case LeaseDispositionOK:
-		w.Print("ok")
+		w.SafeString("ok")
 	case LeaseDispositionRefusing:
-		w.Print("refusing")
+		w.SafeString("refusing")
 	case LeaseDispositionShedding:
-		w.Print("shedding")
+		w.SafeString("shedding")
 	default:
-		w.Print("unknown")
+		w.SafeString("unknown")
 	}
 }
 
@@ -183,13 +183,13 @@ func (r ReplicaDisposition) String() string {
 func (r ReplicaDisposition) SafeFormat(w redact.SafePrinter, _ rune) {
 	switch r {
 	case ReplicaDispositionOK:
-		w.Print("ok")
+		w.SafeString("ok")
 	case ReplicaDispositionRefusing:
-		w.Print("refusing")
+		w.SafeString("refusing")
 	case ReplicaDispositionShedding:
-		w.Print("shedding")
+		w.SafeString("shedding")
 	default:
-		w.Print("unknown")
+		w.SafeString("unknown")
 	}
 }
 
@@ -200,7 +200,7 @@ func (d Disposition) String() string {
 // SafeFormat implements the redact.SafeFormatter interface.
 func (d Disposition) SafeFormat(w redact.SafePrinter, _ rune) {
 	if d.Lease == LeaseDispositionOK && d.Replica == ReplicaDispositionOK {
-		w.Print("accepting all")
+		w.SafeString("accepting all")
 		return
 	}
 
@@ -221,10 +221,10 @@ func (d Disposition) SafeFormat(w redact.SafePrinter, _ rune) {
 
 	first := true
 	if len(refusing) > 0 {
-		w.Print("refusing=")
+		w.SafeString("refusing=")
 		for i, s := range refusing {
 			if i > 0 {
-				w.Print(",")
+				w.SafeRune(',')
 			}
 			w.Print(s)
 		}
@@ -232,12 +232,12 @@ func (d Disposition) SafeFormat(w redact.SafePrinter, _ rune) {
 	}
 	if len(shedding) > 0 {
 		if !first {
-			w.Print(" ")
+			w.SafeRune(' ')
 		}
-		w.Print("shedding=")
+		w.SafeString("shedding=")
 		for i, s := range shedding {
 			if i > 0 {
-				w.Print(",")
+				w.SafeRune(',')
 			}
 			w.Print(s)
 		}
@@ -251,6 +251,6 @@ func (ss Status) String() string {
 // SafeFormat implements the redact.SafeFormatter interface.
 func (ss Status) SafeFormat(w redact.SafePrinter, _ rune) {
 	ss.Health.SafeFormat(w, 's')
-	w.Print(" ")
+	w.SafeRune(' ')
 	ss.Disposition.SafeFormat(w, 's')
 }

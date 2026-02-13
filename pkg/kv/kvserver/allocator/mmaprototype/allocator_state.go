@@ -616,7 +616,7 @@ func sortTargetCandidateSetAndPick(
 				// Past the lowestLoad set. We don't care about these.
 				if s := formatCandidatesLog(&b, cands.candidates[i:]); s != "" {
 					log.KvDistribution.VEventf(ctx, 2,
-						"discarding candidates with higher load than lowestLoadSet(%s): %s", lowestLoadSet.String(), s)
+						"discarding candidates with higher load than lowestLoadSet(%v): %s", lowestLoadSet, s)
 				}
 				break
 			}
@@ -627,7 +627,7 @@ func sortTargetCandidateSetAndPick(
 		if cand.sls > loadThreshold {
 			if s := formatCandidatesLog(&b, cands.candidates[i:]); s != "" {
 				log.KvDistribution.VEventf(ctx, 2,
-					"discarding candidates with higher load than loadThreshold(%s): %s", loadThreshold.String(), s)
+					"discarding candidates with higher load than loadThreshold(%v): %s", loadThreshold, s)
 			}
 			break
 		}
