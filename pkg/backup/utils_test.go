@@ -387,7 +387,7 @@ func waitForReplicaFieldToBeSet(
 
 func thresholdFromTrace(t *testing.T, traceString string) hlc.Timestamp {
 	t.Helper()
-	thresholdRE := regexp.MustCompile(`(?s).*Threshold:(?P<threshold>[^\s]*)`)
+	thresholdRE := regexp.MustCompile(`(?s).*Threshold=(?P<threshold>[^\s]*)`)
 	threshStr := string(thresholdRE.ExpandString(nil, "$threshold",
 		traceString, thresholdRE.FindStringSubmatchIndex(traceString)))
 	thresh, err := hlc.ParseTimestamp(threshStr)

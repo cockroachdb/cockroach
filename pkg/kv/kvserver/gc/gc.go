@@ -37,6 +37,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/redact"
 )
 
 const (
@@ -265,6 +266,47 @@ type Info struct {
 	ClearRangeSpanOperations int
 	// ClearRangeSpanFailures number of ClearRange requests GC failed to perform.
 	ClearRangeSpanFailures int
+}
+
+// SafeFormat implements the redact.SafeFormatter interface.
+// All fields in Info are safe (numeric counters and timestamps), so the
+// redacted and unredacted output is identical.
+func (info Info) SafeFormat(w redact.SafePrinter, _ rune) {
+	totalKeyBytes := info.AffectedVersionsKeyBytes + info.AffectedVersionsRangeKeyBytes
+	totalValBytes := info.AffectedVersionsValBytes + info.AffectedVersionsRangeValBytes
+	w.Printf("numKeysAffected=%d, numRangeKeysAffected=%d, "+
+		"keysReclaimedBytes=%d, valuesReclaimedBytes=%d",
+		info.NumKeysAffected, info.NumRangeKeysAffected,
+		totalKeyBytes, totalValBytes)
+	if info.LocksConsidered > 0 {
+		w.Printf(", locksConsidered=%d, lockTxns=%d, "+
+			"pushTxn=%d, resolveTotal=%d",
+			info.LocksConsidered, info.LockTxns,
+			info.PushTxn, info.ResolveTotal)
+	}
+	if info.TransactionSpanTotal > 0 {
+		w.Printf(", txnSpanTotal=%d, txnSpanGCAborted=%d, "+
+			"txnSpanGCCommitted=%d, txnSpanGCStaging=%d, "+
+			"txnSpanGCPending=%d, txnSpanGCPrepared=%d",
+			info.TransactionSpanTotal,
+			info.TransactionSpanGCAborted, info.TransactionSpanGCCommitted,
+			info.TransactionSpanGCStaging, info.TransactionSpanGCPending,
+			info.TransactionSpanGCPrepared)
+	}
+	if info.AbortSpanTotal > 0 {
+		w.Printf(", abortSpanTotal=%d, abortSpanConsidered=%d, "+
+			"abortSpanGCNum=%d",
+			info.AbortSpanTotal, info.AbortSpanConsidered, info.AbortSpanGCNum)
+	}
+	if info.ClearRangeSpanOperations > 0 {
+		w.Printf(", clearRangeSpanOps=%d, clearRangeSpanFailures=%d",
+			info.ClearRangeSpanOperations, info.ClearRangeSpanFailures)
+	}
+}
+
+// String implements the fmt.Stringer interface.
+func (info Info) String() string {
+	return redact.StringWithoutMarkers(info)
 }
 
 // RunOptions contains collection of limits that GC run applies when performing operations
