@@ -428,7 +428,7 @@ func replaceFunction(
 	// If this is a trigger function, propagate the new body to dependent
 	// triggers so their inlined copies stay in sync.
 	if newReturnType.Type.Identical(types.Trigger) {
-		updateDependentTriggers(b, fnID, fnBodyStr, refProvider)
+		updateDependentTriggers(b, fnID, fnBodyStr)
 	}
 
 	b.LogEventForExistingTarget(existingFnElem)
@@ -437,9 +437,7 @@ func replaceFunction(
 // updateDependentTriggers finds all triggers that reference the given function
 // and updates their inlined function body and dependency tracking to reflect the
 // new function body.
-func updateDependentTriggers(
-	b BuildCtx, fnID descpb.ID, fnBodyStr string, refProvider ReferenceProvider,
-) {
+func updateDependentTriggers(b BuildCtx, fnID descpb.ID, fnBodyStr string) {
 	backRefs := b.BackReferences(fnID)
 	backRefs.FilterTriggerFunctionCall().ForEach(
 		func(_ scpb.Status, target scpb.TargetStatus, e *scpb.TriggerFunctionCall) {
@@ -449,42 +447,76 @@ func updateDependentTriggers(
 			tableID := e.TableID
 			triggerID := e.TriggerID
 
-			// Replace TriggerFunctionCall with the new function body.
+			// Build a reference provider by constructing a synthetic CREATE TRIGGER
+			// statement with the new function body. This runs the optbuilder, which
+			// analyzes the function body in the trigger's table context to capture
+			// all dependencies (types, tables, routines referenced in SQL statements).
+			syntheticCT := buildSyntheticCreateTrigger(b, tableID, fnID, fnBodyStr, e.FuncArgs)
+			triggerRefProvider := b.BuildReferenceProvider(syntheticCT)
+
+			// Replace TriggerFunctionCall with the qualified function body produced
+			// by the optbuilder.
 			b.Replace(&scpb.TriggerFunctionCall{
 				TableID:   tableID,
 				TriggerID: triggerID,
 				FuncID:    fnID,
-				FuncBody:  b.ReplaceSeqTypeNamesInStatements(fnBodyStr, catpb.Function_PLPGSQL),
+				FuncBody:  syntheticCT.FuncBody,
 				FuncArgs:  e.FuncArgs,
 			})
 
-			// Update TriggerDeps with new dependencies from the new function body.
-			// TriggerDeps has UsesRoutineIDs and UsesTypeIDs as identity attributes,
-			// so we need to drop the old element and add a new one rather than using
-			// Replace (which would fail if those fields changed).
-			tableElts := b.QueryByID(tableID)
-			oldDeps := tableElts.FilterTriggerDeps().Filter(
-				func(_ scpb.Status, target scpb.TargetStatus, d *scpb.TriggerDeps) bool {
-					return target == scpb.ToPublic && d.TriggerID == triggerID
-				},
-			).MustGetZeroOrOneElement()
-			if oldDeps != nil {
-				b.Drop(oldDeps)
-			}
-
-			// Build the new dependency set from the function body's references.
-			// The trigger function itself is always a dependency.
-			routineIDs := refProvider.ReferencedRoutines()
+			// Replace TriggerDeps with new dependencies from the new function body.
+			routineIDs := triggerRefProvider.ReferencedRoutines()
 			routineIDs.Add(fnID)
-			b.Add(&scpb.TriggerDeps{
+			b.Replace(&scpb.TriggerDeps{
 				TableID:        tableID,
 				TriggerID:      triggerID,
-				UsesRelations:  buildRelationDeps(tableID, refProvider),
-				UsesTypeIDs:    refProvider.ReferencedTypes().Ordered(),
+				UsesRelations:  buildRelationDeps(tableID, triggerRefProvider),
+				UsesTypeIDs:    triggerRefProvider.ReferencedTypes().Ordered(),
 				UsesRoutineIDs: routineIDs.Ordered(),
 			})
 		},
 	)
+}
+
+// buildSyntheticCreateTrigger constructs a minimal CREATE TRIGGER AST for use
+// with BuildReferenceProvider. The FuncBodyOverride field is set so that the
+// optbuilder analyzes the new function body instead of the old one from the
+// catalog. Trigger metadata fields (ActionTime, Events, ForEach) use
+// placeholder values since validation is skipped when FuncBodyOverride is set.
+func buildSyntheticCreateTrigger(
+	b BuildCtx, tableID descpb.ID, fnID descpb.ID, fnBodyStr string, funcArgs []string,
+) *tree.CreateTrigger {
+	// Look up table name parts.
+	tableElts := b.QueryByID(tableID)
+	_, _, ns := scpb.FindNamespace(tableElts)
+	_, _, scNs := scpb.FindNamespace(b.QueryByID(ns.SchemaID))
+	_, _, dbNs := scpb.FindNamespace(b.QueryByID(ns.DatabaseID))
+	tableName, err := tree.NewUnresolvedObjectName(3,
+		[3]string{ns.Name, scNs.Name, dbNs.Name}, tree.NoAnnotation)
+	if err != nil {
+		panic(err)
+	}
+
+	// Look up function name parts.
+	fnElts := b.QueryByID(fnID)
+	_, _, fnName := scpb.FindFunctionName(fnElts)
+	_, _, fnParent := scpb.FindSchemaChild(fnElts)
+	_, _, fnScNs := scpb.FindNamespace(b.QueryByID(fnParent.SchemaID))
+	_, _, fnScParent := scpb.FindSchemaParent(b.QueryByID(fnParent.SchemaID))
+	_, _, fnDbNs := scpb.FindNamespace(b.QueryByID(fnScParent.ParentDatabaseID))
+	funcName := tree.MakeUnresolvedName(fnDbNs.Name, fnScNs.Name, fnName.Name)
+
+	return &tree.CreateTrigger{
+		Replace:          true,
+		Name:             "synthetic_trigger",
+		ActionTime:       tree.TriggerActionTimeBefore,
+		Events:           []*tree.TriggerEvent{{EventType: tree.TriggerEventInsert}},
+		TableName:        tableName,
+		ForEach:          tree.TriggerForEachRow,
+		FuncName:         &funcName,
+		FuncArgs:         funcArgs,
+		FuncBodyOverride: fnBodyStr,
+	}
 }
 
 // validateReplaceParams validates that parameter changes in CREATE OR REPLACE

@@ -35,3 +35,47 @@ $$;
   {functionId: 109, params: [{class: {}, name: a, type: {closedTypeIds: [107, 108], type: {family: EnumFamily, oid: 100107, udtMetadata: {arrayTypeOid: 100108}}, typeName: public.notmyworkday}}]}
 - [[FunctionBody:{DescID: 109}, PUBLIC], ABSENT]
   {body: SELECT 1;, functionId: 109, lang: {lang: SQL}, usesTypeIds: [107, 108]}
+
+# Replace a trigger function that has an active trigger. The trigger's
+# TriggerDeps and TriggerFunctionCall should be updated via Drop+Add.
+setup
+CREATE TABLE tr_t (a INT PRIMARY KEY);
+CREATE TABLE log1 (val TEXT);
+CREATE TABLE log2 (val TEXT);
+CREATE FUNCTION tf() RETURNS TRIGGER LANGUAGE PLpgSQL AS $$
+  BEGIN
+    INSERT INTO log1 VALUES ('fired');
+    RETURN NEW;
+  END
+$$;
+CREATE TRIGGER tr BEFORE INSERT ON tr_t FOR EACH ROW EXECUTE FUNCTION tf();
+----
+
+build
+CREATE OR REPLACE FUNCTION tf() RETURNS TRIGGER LANGUAGE PLpgSQL AS $$
+  BEGIN
+    INSERT INTO log2 VALUES ('replaced');
+    RETURN NEW;
+  END
+$$;
+----
+- [[FunctionVolatility:{DescID: 113}, PUBLIC], ABSENT]
+  {functionId: 113, volatility: {volatility: VOLATILE}}
+- [[FunctionLeakProof:{DescID: 113}, PUBLIC], ABSENT]
+  {functionId: 113}
+- [[FunctionNullInputBehavior:{DescID: 113}, PUBLIC], ABSENT]
+  {functionId: 113, nullInputBehavior: {nullInputBehavior: CALLED_ON_NULL_INPUT}}
+- [[FunctionSecurity:{DescID: 113}, PUBLIC], ABSENT]
+  {functionId: 113, security: {}}
+- [[FunctionParams:{DescID: 113}, PUBLIC], ABSENT]
+  {functionId: 113, params: []}
+- [[FunctionBody:{DescID: 113}, PUBLIC], ABSENT]
+  {body: "\n  BEGIN\n    INSERT INTO log2 VALUES ('replaced');\n    RETURN NEW;\n  END\n", functionId: 113, lang: {lang: PLPGSQL}}
+- [[IndexData:{DescID: 110, IndexID: 1}, PUBLIC], PUBLIC]
+  {indexId: 1, tableId: 110}
+- [[TriggerFunctionCall:{DescID: 110, TriggerID: 1}, PUBLIC], ABSENT]
+  {funcBody: "BEGIN\nINSERT INTO defaultdb.public.log2 VALUES ('replaced');\nRETURN new;\nEND;\n", funcId: 113, tableId: 110, triggerId: 1}
+- [[TriggerDeps:{DescID: 110, TriggerID: 1, ReferencedFunctionIDs: [113]}, PUBLIC], ABSENT]
+  {tableId: 110, triggerId: 1, usesRelations: [{columnIds: [1], id: 112}], usesRoutineIds: [113]}
+- [[TableData:{DescID: 110, ReferencedDescID: 100}, PUBLIC], PUBLIC]
+  {databaseId: 100, tableId: 110}

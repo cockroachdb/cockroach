@@ -70,13 +70,15 @@ func (b *Builder) buildCreateTrigger(ct *tree.CreateTrigger, inScope *scope) (ou
 		allEventTypes.Add(ct.Events[i].EventType)
 	}
 
-	// Validate the CREATE TRIGGER statement.
-	if err := cat.ValidateCreateTrigger(ct, ds, allEventTypes); err != nil {
-		panic(err)
+	// Validate the CREATE TRIGGER statement. Skip validation when
+	// FuncBodyOverride is set, since we're analyzing an existing trigger's new
+	// function body, not creating a new trigger.
+	if ct.FuncBodyOverride == "" {
+		if err := cat.ValidateCreateTrigger(ct, ds, allEventTypes); err != nil {
+			panic(err)
+		}
+		checkUnsupportedCreateTrigger(ct, ds)
 	}
-
-	// Check for unsupported CREATE TRIGGER statements.
-	checkUnsupportedCreateTrigger(ct, ds)
 
 	// Lookup the implicit table type. This must happen after the above checks,
 	// since virtual/system tables do not have an implicit type.
@@ -233,7 +235,13 @@ func (b *Builder) buildFunctionForTrigger(
 	// We need to disable stable function folding because we want to catch the
 	// volatility of stable functions. If folded, we only get a scalar and lose
 	// the volatility.
-	stmt, err := parser.Parse(o.Body)
+	// Use FuncBodyOverride if set; this is provided during CREATE OR REPLACE
+	// FUNCTION to analyze the new function body in the trigger's table context.
+	body := o.Body
+	if ct.FuncBodyOverride != "" {
+		body = ct.FuncBodyOverride
+	}
+	stmt, err := parser.Parse(body)
 	if err != nil {
 		panic(err)
 	}
