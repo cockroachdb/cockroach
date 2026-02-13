@@ -11,6 +11,25 @@ import "github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/mmaprototype"
 // per-store capacity from node-level and disk-level metrics. These are
 // extracted here so they can be unit tested directly.
 
+// storeCPURateCapacityInput holds the inputs needed to compute per-store CPU
+// capacity. Using a struct avoids accidentally swapping the order of parameters
+// when passing them to functions.
+type storeCPURateCapacityInput struct {
+	// currentStoreCPUUsage is the CPU usage reported by this specific store.
+	currentStoreCPUUsage mmaprototype.LoadValue
+	// storesCPURate is the aggregated CPU usage across all stores on the node
+	// (sum of per-store CPU load usage).
+	storesCPURate float64
+	// nodeCPURateUsage is the total CPU usage of the node (from OS-level
+	// metrics) in ns/sec.
+	nodeCPURateUsage float64
+	// nodeCPURateCapacity is the total CPU capacity of the node (from OS-level
+	// metrics) in ns/sec.
+	nodeCPURateCapacity float64
+	// numStores is the number of stores on the node.
+	numStores int32
+}
+
 // computeStoreCPURateCapacity computes the CPU rate capacity for a single store
 // given node-level CPU metrics. The model ensures that the mean store
 // utilization (sum of store loads / sum of store capacities) equals the
@@ -33,20 +52,14 @@ import "github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/mmaprototype"
 //  3. Unknown capacity: nodeCPURateCapacity <= 0 (should not happen in
 //     production). Falls back to assuming 50% utilization from the store's
 //     own CPU usage.
-func computeStoreCPURateCapacity(
-	currentStoreCPUUsage mmaprototype.LoadValue,
-	nodeCPURateUsage float64,
-	nodeCPURateCapacity float64,
-	storesCPURate float64,
-	numStores int32,
-) mmaprototype.LoadValue {
-	if nodeCPURateCapacity <= 0 {
+func computeStoreCPURateCapacity(in storeCPURateCapacityInput) mmaprototype.LoadValue {
+	if in.nodeCPURateCapacity <= 0 {
 		// TODO(sumeer): remove this hack of defaulting to 50% utilization, since
 		// NodeCPURateCapacity should never be 0.
 		// TODO(tbg): when do we expect to hit this branch? Mixed version cluster?
-		return currentStoreCPUUsage * 2
+		return in.currentStoreCPUUsage * 2
 	}
-	if numStores <= 0 {
+	if in.numStores <= 0 {
 		return 0
 	}
 
@@ -106,14 +119,14 @@ func computeStoreCPURateCapacity(
 	// utilization. The effect of the construction is that the store will
 	// take on responsibility for shedding load to compensate for auxiliary
 	// consumption of CPU, which is generally sensible.
-	cpuUtil := nodeCPURateUsage / nodeCPURateCapacity
+	cpuUtil := in.nodeCPURateUsage / in.nodeCPURateCapacity
 	// cpuUtil can be zero or close to zero.
 	almostZeroUtil := cpuUtil < 0.01
-	if storesCPURate == 0 || almostZeroUtil {
+	if in.storesCPURate == 0 || almostZeroUtil {
 		// almostZeroUtil or StoresCPURate is zero. We assume that only 50% of
 		// the usage can be accounted for in StoresCPURate, so we divide 50% of
 		// the NodeCPURateCapacity among all the stores.
-		return mmaprototype.LoadValue(nodeCPURateCapacity / 2 / float64(numStores))
+		return mmaprototype.LoadValue(in.nodeCPURateCapacity / 2 / float64(in.numStores))
 	}
 	// cpuUtil is distributed across the stores, by constructing a
 	// nodeCapacity, and then splitting nodeCapacity evenly across all the
@@ -125,8 +138,8 @@ func computeStoreCPURateCapacity(
 	// store to be > 100% e.g. if a node is at 80% cpu util and has 10
 	// stores, and all the cpu usage is due to store s1, then s1 will have
 	// 800% util.
-	nodeCapacity := storesCPURate / cpuUtil
-	storeCapacity := nodeCapacity / float64(numStores)
+	nodeCapacity := in.storesCPURate / cpuUtil
+	storeCapacity := nodeCapacity / float64(in.numStores)
 	return mmaprototype.LoadValue(storeCapacity)
 }
 
@@ -210,19 +223,17 @@ const cpuIndirectOverheadMultiplier = 3.0
 // behavior: MMA attributes none of the node usage to itself (all is
 // background), and divides the idle capacity by the multiplier across stores.
 func computeCPUCapacityWithCap(
-	currentStoreCPUUsage mmaprototype.LoadValue,
-	storesCPURate, nodeCPURateUsage, nodeCPURateCapacity float64,
-	numStores int32,
+	in storeCPURateCapacityInput,
 	observer func(mult float64, backgroundLoad float64, mmaShareOfCapacity float64, mmaDirectCapacity float64),
 ) (capacity float64) {
 	mult := 0.0
-	if numStores <= 0 || nodeCPURateCapacity <= 0 {
+	if in.numStores <= 0 || in.nodeCPURateCapacity <= 0 {
 		// TODO(sumeer): remove this hack of defaulting to 50% utilization, since
 		// NodeCPURateCapacity should never be 0.
-		return float64(currentStoreCPUUsage) * 2
+		return float64(in.currentStoreCPUUsage) * 2
 	}
 
-	if storesCPURate <= 0 {
+	if in.storesCPURate <= 0 {
 		// When MMA has zero load, the implicit multiplier is infinite, so we
 		// use the cap. MMA attributes 0 * cap = 0 of the node usage to itself,
 		// meaning all node usage is "background". MMA gets the remaining idle
@@ -235,26 +246,26 @@ func computeCPUCapacityWithCap(
 		// - Clamping from below (at 1) handles the case where MMA load exceeds
 		//   node usage (shouldn't happen, but can due to measurement lag).
 		//   Without this, MMA would get unreasonably high capacity.
-		implicitMult := nodeCPURateUsage / storesCPURate
+		implicitMult := in.nodeCPURateUsage / in.storesCPURate
 		mult = max(1, min(implicitMult, cpuIndirectOverheadMultiplier))
 	}
 
 	// Background load is the portion of node usage NOT attributed to MMA.
 	// This is clamped to be non-negative.
-	mmaAttributedLoad := storesCPURate * mult
-	backgroundLoad := max(0.0, nodeCPURateUsage-mmaAttributedLoad)
+	mmaAttributedLoad := in.storesCPURate * mult
+	backgroundLoad := max(0.0, in.nodeCPURateUsage-mmaAttributedLoad)
 
 	// MMA's share of capacity is what remains after background load.
 	// Clamp to non-negative to handle overloaded nodes where backgroundLoad
 	// exceeds nodeCPURateCapacity.
-	mmaShareOfCapacity := max(0.0, nodeCPURateCapacity-backgroundLoad)
+	mmaShareOfCapacity := max(0.0, in.nodeCPURateCapacity-backgroundLoad)
 
 	// MMA's direct capacity is scaled down by the multiplier to account
 	// for indirect overhead.
 	mmaDirectCapacity := mmaShareOfCapacity / mult
 
 	// Divide evenly across stores.
-	capacity = mmaDirectCapacity / float64(numStores)
+	capacity = mmaDirectCapacity / float64(in.numStores)
 	observer(mult, backgroundLoad, mmaShareOfCapacity, mmaDirectCapacity)
 	return capacity
 }
