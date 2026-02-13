@@ -17,7 +17,7 @@ This is useful as a compilation check.
 ```bash
 # Invoke (but skip) all tests in that package, which
 # implies that both package and its tests compile.
-./dev test ./pkg/util/log -f -
+./dev test ./pkg/util/log -f -.
 # Build package ./pkg/util/log
 ./dev build ./pkg/util/log
 ```
