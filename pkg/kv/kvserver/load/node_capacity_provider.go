@@ -107,13 +107,14 @@ func (n *NodeCapacityProvider) GetNodeCapacity(useCached bool) (roachpb.NodeCapa
 	// runtimeLoadMonitor to also fetch updated stats.
 	// TODO(wenyihu6): NodeCPURateCapacity <= NodeCPURateUsage fails on CI and
 	// requires more investigation.
-	cpuUsageNanoPerSec, cpuCapacityNanoPerSec, _, _ := n.runtimeLoadMonitor.GetCPUStats()
+	cpuUsageNanoPerSec, cpuCapacityNanoPerSec, sqlGatewayCPUNanoPerSec, sqlDistCPUNanoPerSec := n.runtimeLoadMonitor.GetCPUStats()
 	return roachpb.NodeCapacity{
-		StoresCPURate:               storesCPURate,
-		NumStores:                   numStores,
-		NodeCPURateCapacity:         cpuCapacityNanoPerSec,
-		NodeCPURateUsage:            cpuUsageNanoPerSec,
-		ComputedNodeCPURateCapacity: 0,
+		StoresCPURate:           storesCPURate,
+		NumStores:               numStores,
+		NodeCPURateCapacity:     cpuCapacityNanoPerSec,
+		NodeCPURateUsage:        cpuUsageNanoPerSec,
+		SQLGatewayCPUNanoPerSec: int64(sqlGatewayCPUNanoPerSec),
+		SQLDistCPUNanoPerSec:    int64(sqlDistCPUNanoPerSec),
 	}, nil
 }
 
