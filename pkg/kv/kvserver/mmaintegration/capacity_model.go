@@ -12,9 +12,11 @@ import "github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/mmaprototype"
 // extracted here so they can be unit tested directly.
 
 // computeStoreCPURateCapacity computes the CPU rate capacity for a single store
-// given node-level CPU metrics. The model ensures that the per-store utilization
-// (load/capacity) equals the node-level CPU utilization, so that overload is
-// detected at the store level exactly when it is detected at the node level.
+// given node-level CPU metrics. The model ensures that the mean store
+// utilization (sum of store loads / sum of store capacities) equals the
+// node-level CPU utilization, so that overload is detected at the store level
+// exactly when it is detected at the node level. Individual stores may have
+// different utilizations depending on their load.
 //
 // The three cases are:
 //
@@ -137,9 +139,9 @@ func computeStoreCPURateCapacity(
 //
 //  1. Normal: logicalBytes > 0 and diskFractionUsed >= 0.01.
 //     capacity = logicalBytes / diskFractionUsed.
-//     This encodes the space amplification factor (physical/logical) into
-//     the capacity, so that highDiskSpaceUtilization(load, capacity, threshold)
-//     recovers the real disk utilization.
+//     This ensures that logicalBytes/capacity equals the observed physical
+//     disk utilization, encoding the space amplification factor
+//     (physical/logical) into the capacity.
 //
 //  2. Empty/new store: logicalBytes is 0 or diskFractionUsed < 0.01.
 //     We fall back to availableBytes (compressed/physical), which is

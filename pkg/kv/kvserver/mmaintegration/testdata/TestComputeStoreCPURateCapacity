@@ -44,20 +44,20 @@ capped_mult: (steps below)
   per-store   = 16.00 / 1 = 16.00 cores
   kv-capacity: 16.00 cores, kv-util: 25.00% (4.00/16.00 cores)
 
-# Moderate indirect overhead: stores use 4 cores, node uses 8 cores (2x overhead).
+# Moderate indirect overhead: store uses 4 cores, node uses 8 cores (2x overhead).
 # Implicit multiplier is 2.0 (= 8/4), which is between 1 and 3, so it's used
 # directly. This represents moderate indirect CPU overhead (RPC, compactions, etc.).
-compute store-load=2 node-cpu-usage=8 node-cpu-capacity=16 total-stores-cpu-usage=4 num-stores=1
+compute store-load=4 node-cpu-usage=8 node-cpu-capacity=16 total-stores-cpu-usage=4 num-stores=1
 ----
               node-cpu-capacity/num-stores: 16.00 cores/store
-naive:        kv-capacity: 8.00 cores, kv-util: 25.00% (2.00/8.00 cores)
+naive:        kv-capacity: 8.00 cores, kv-util: 50.00% (4.00/8.00 cores)
 capped_mult: (steps below)
   mult        = max(1, min(8.00/4.00, 3)) = 2.0
   background  = max(0, 8.00 - 4.00*2.0) = 0.00 cores
   mma-share   = 16.00 - 0.00 = 16.00 cores
   mma-direct  = 16.00 / 2.0 = 8.00 cores
   per-store   = 8.00 / 1 = 8.00 cores
-  kv-capacity: 8.00 cores, kv-util: 25.00% (2.00/8.00 cores)
+  kv-capacity: 8.00 cores, kv-util: 50.00% (4.00/8.00 cores)
 
 # Low utilization fallback: node CPU utilization is very low (< 1%).
 # Naive model assumes 50% overhead and gives 4 cores capacity.
