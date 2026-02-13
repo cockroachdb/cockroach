@@ -416,7 +416,7 @@ func (m *sliMetrics) timers() *timers.ScopedTimers {
 // components because they don't support reliable deregistration, which is
 // desirable in this use-case.
 type JobScopedUsageMetrics struct {
-	UsageTableBytes    *metric.Gauge
+	UsageTableBytes    *metric.FunctionalGauge
 	UsageErrorCount    *metric.Counter
 	UsageQueryDuration metric.IHistogram
 
@@ -1282,8 +1282,8 @@ func newAggregateMetrics(histogramWindow time.Duration, lookup *cidr.Lookup) *Ag
 		InternalRetryMessageCount: b.Gauge(metaInternalRetryMessageCount),
 		SchemaRegistryRetries:     b.Counter(metaSchemaRegistryRetriesCount),
 		SchemaRegistrations:       b.Counter(metaSchemaRegistryRegistrations),
-		AggregatorProgress:        b.FunctionalGauge(metaAggregatorProgress, functionalGaugeMinFn),
-		CheckpointProgress:        b.FunctionalGauge(metaCheckpointProgress, functionalGaugeMinFn),
+		AggregatorProgress:        b.DerivedGauge(metaAggregatorProgress, functionalGaugeMinFn),
+		CheckpointProgress:        b.DerivedGauge(metaCheckpointProgress, functionalGaugeMinFn),
 		LaggingRanges:             b.Gauge(metaLaggingRanges),
 		TotalRanges:               b.Gauge(metaTotalRanges),
 		CloudstorageBufferedBytes: b.Gauge(metaCloudstorageBufferedBytes),
@@ -1295,9 +1295,9 @@ func newAggregateMetrics(histogramWindow time.Duration, lookup *cidr.Lookup) *Ag
 			BucketConfig: metric.ChangefeedBatchLatencyBuckets,
 		}),
 		SinkErrors:        b.Counter(metaSinkErrors),
-		MaxBehindNanos:    b.FunctionalGauge(metaChangefeedMaxBehindNanos, functionalGaugeMaxFn),
-		SpanProgressSkew:  b.FunctionalGauge(metaChangefeedSpanProgressSkew, functionalGaugeMaxFn),
-		TableProgressSkew: b.FunctionalGauge(metaChangefeedTableProgressSkew, functionalGaugeMaxFn),
+		MaxBehindNanos:    b.DerivedGauge(metaChangefeedMaxBehindNanos, functionalGaugeMaxFn),
+		SpanProgressSkew:  b.DerivedGauge(metaChangefeedSpanProgressSkew, functionalGaugeMaxFn),
+		TableProgressSkew: b.DerivedGauge(metaChangefeedTableProgressSkew, functionalGaugeMaxFn),
 		Timers:            timers.New(histogramWindow),
 		NetMetrics:        lookup.MakeNetMetrics(metaNetworkBytesOut, metaNetworkBytesIn, "sink"),
 		CheckpointMetrics: checkpoint.NewAggMetrics(b),

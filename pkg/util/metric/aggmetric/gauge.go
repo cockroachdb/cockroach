@@ -37,14 +37,14 @@ func NewGauge(metadata metric.Metadata, childLabels ...string) *AggGauge {
 	return g
 }
 
-// NewFunctionalGauge constructs a new AggGauge whose value is determined when
+// NewDerivedGauge constructs a new AggGauge whose value is determined when
 // asked for by calling the provided function with the current values of every
 // child of the AggGauge.
-func NewFunctionalGauge(
+func NewDerivedGauge(
 	metadata metric.Metadata, f func(childValues []int64) int64, childLabels ...string,
 ) *AggGauge {
 	g := &AggGauge{}
-	gaugeFn := func() int64 {
+	gaugeFn := func(_ int64) int64 {
 		values := make([]int64, 0)
 		g.childSet.mu.Lock()
 		defer g.childSet.mu.Unlock()
@@ -54,7 +54,7 @@ func NewFunctionalGauge(
 		})
 		return f(values)
 	}
-	g.g = *metric.NewFunctionalGauge(metadata, gaugeFn)
+	g.g = *metric.NewDerivedGauge(metadata, gaugeFn)
 	g.initWithBTreeStorageType(childLabels)
 	return g
 }
