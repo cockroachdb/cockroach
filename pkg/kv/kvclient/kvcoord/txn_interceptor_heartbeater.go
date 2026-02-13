@@ -460,6 +460,13 @@ func (h *txnHeartbeater) heartbeatLocked(ctx context.Context) bool {
 		return false
 	case roachpb.COMMITTED:
 		log.KvExec.Fatalf(ctx, "txn committed but heartbeat loop hasn't been signaled to stop: %s", h.mu.txn)
+	case roachpb.STAGING, roachpb.REFRESHING:
+		// The heartbeater should never observe STAGING or REFRESHING on its
+		// local txn proto. STAGING is set on the server and immediately
+		// handled by the committer. REFRESHING is set on the server and
+		// immediately handled by the span refresher. Both are transient
+		// states that don't propagate to the heartbeater's copy.
+		log.KvExec.Fatalf(ctx, "unexpected txn status in heartbeat loop: %s", h.mu.txn)
 	default:
 		log.KvExec.Fatalf(ctx, "unexpected txn status in heartbeat loop: %s", h.mu.txn)
 	}

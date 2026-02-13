@@ -61,6 +61,16 @@ var MaxMVCCStatBytesDiff = settings.RegisterIntSetting(
 		"MVCC stat to diverge; needs kv.split.estimated_mvcc_stats.enabled to be true",
 	5120000) // 5.12 MB = 1% of the max range size
 
+// TransactionRefreshingEnabled controls whether serializable transactions
+// write a REFRESHING record when pushed at commit time.
+var TransactionRefreshingEnabled = settings.RegisterBoolSetting(
+	settings.ApplicationLevel,
+	"kv.transaction.refreshing_state.enabled",
+	"when enabled, serializable transactions write a REFRESHING record "+
+		"when pushed at commit time, preventing starvation during refresh",
+	false,
+)
+
 func init() {
 	RegisterReadWriteCommand(kvpb.EndTxn, declareKeysEndTxn, EndTxn)
 }
@@ -393,6 +403,24 @@ func EndTxn(
 				panic("unreachable")
 			}
 
+		case roachpb.REFRESHING:
+			// The coordinator previously wrote a REFRESHING record and is now
+			// retrying EndTxn after a successful refresh.
+			switch {
+			case h.Txn.Epoch < reply.Txn.Epoch:
+				return result.Result{}, errors.AssertionFailedf(
+					"programming error: epoch regression: %d", h.Txn.Epoch)
+			case h.Txn.Epoch == reply.Txn.Epoch:
+				// Same epoch: the coordinator refreshed successfully and is
+				// retrying. Downgrade to PENDING and proceed.
+				reply.Txn.Status = roachpb.PENDING
+			case h.Txn.Epoch > reply.Txn.Epoch:
+				// Newer epoch: the coordinator restarted. Downgrade to PENDING.
+				reply.Txn.Status = roachpb.PENDING
+			default:
+				panic("unreachable")
+			}
+
 		default:
 			return result.Result{}, errors.AssertionFailedf("bad txn status: %s", reply.Txn)
 		}
@@ -421,6 +449,9 @@ func EndTxn(
 			// Furthermore, checking the timestamp cache and increasing the commit
 			// timestamp at this point would be incorrect, because the transaction may
 			// have entered the implicit commit state.
+		case existingTxn.Status == roachpb.REFRESHING:
+			// Don't check timestamp cache. The transaction could not have been pushed
+			// while its record was in the REFRESHING state.
 		default:
 			panic("unreachable")
 		}

@@ -220,6 +220,11 @@ func (tc *txnCommitter) SendLocked(
 		// and there were no writes in the batch request.
 		log.VEventf(ctx, 2, "parallel commit attempt for transaction %s resulted in explicit commit", br.Txn)
 		return br, nil
+	case roachpb.REFRESHING:
+		// REFRESHING is handled by the txnSpanRefresher below the committer
+		// in the interceptor stack. It should never reach the committer.
+		return nil, kvpb.NewError(errors.AssertionFailedf(
+			"unexpected REFRESHING status in txnCommitter: %v", br.Txn))
 	default:
 		return nil, kvpb.NewErrorf("unexpected response status without error: %v", br.Txn)
 	}

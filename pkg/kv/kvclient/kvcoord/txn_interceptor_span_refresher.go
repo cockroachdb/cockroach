@@ -285,6 +285,11 @@ func (sr *txnSpanRefresher) maybeRefreshAndRetrySend(
 		// to PENDING. Even though the transaction record may have a status of
 		// STAGING, we know that the transaction failed to implicitly commit.
 		refreshToTxn.Status = roachpb.PENDING
+	case roachpb.REFRESHING:
+		// REFRESHING is handled in SendLocked before reaching this point, so
+		// we should never see it here.
+		return nil, kvpb.NewError(errors.AssertionFailedf(
+			"unexpected REFRESHING status during refresh: %v", refreshToTxn))
 	default:
 		return nil, kvpb.NewError(errors.AssertionFailedf(
 			"unexpected txn status during refresh: %v", refreshToTxn))
