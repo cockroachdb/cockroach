@@ -223,9 +223,9 @@ type Info struct {
 	TransactionSpanTotal int
 	// Summary of transactions which were found GCable (assuming that
 	// potentially necessary intent resolutions did not fail).
-	TransactionSpanGCAborted, TransactionSpanGCCommitted int
-	TransactionSpanGCStaging, TransactionSpanGCPending   int
-	TransactionSpanGCPrepared                            int
+	TransactionSpanGCAborted, TransactionSpanGCCommitted   int
+	TransactionSpanGCStaging, TransactionSpanGCPending     int
+	TransactionSpanGCPrepared, TransactionSpanGCRefreshing int
 	// AbortSpanTotal is the total number of transactions present in the AbortSpan.
 	AbortSpanTotal int
 	// AbortSpanConsidered is the number of AbortSpan entries old enough to be
@@ -1272,6 +1272,8 @@ func processLocalKeyRange(
 			info.TransactionSpanGCAborted++
 		case roachpb.COMMITTED:
 			info.TransactionSpanGCCommitted++
+		case roachpb.REFRESHING:
+			info.TransactionSpanGCRefreshing++
 		default:
 			panic(fmt.Sprintf("invalid transaction state: %s", txn))
 		}
