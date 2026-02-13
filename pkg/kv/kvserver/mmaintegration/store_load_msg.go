@@ -19,15 +19,17 @@ func MakeStoreLoadMsg(
 	var load, capacity mmaprototype.LoadVector
 
 	load[mmaprototype.CPURate] = mmaprototype.LoadValue(desc.Capacity.CPUPerSecond)
-	cpuCap := computeCPUCapacityWithCap(
+	cpuCap := computeStoreCPURateCapacityWithSQL(
 		storeCPURateCapacityInput{
-			currentStoreCPUUsage: load[mmaprototype.CPURate],
-			storesCPURate:        float64(desc.NodeCapacity.StoresCPURate),
-			nodeCPURateUsage:     float64(desc.NodeCapacity.NodeCPURateUsage),
-			nodeCPURateCapacity:  float64(desc.NodeCapacity.NodeCPURateCapacity),
-			numStores:            desc.NodeCapacity.NumStores,
+			currentStoreCPUUsage:    load[mmaprototype.CPURate],
+			storesCPURate:           float64(desc.NodeCapacity.StoresCPURate),
+			nodeCPURateUsage:        float64(desc.NodeCapacity.NodeCPURateUsage),
+			nodeCPURateCapacity:     float64(desc.NodeCapacity.NodeCPURateCapacity),
+			sqlGatewayCPUNanoPerSec: float64(desc.NodeCapacity.SQLGatewayCPUNanoPerSec),
+			sqlDistCPUNanoPerSec:    float64(desc.NodeCapacity.SQLDistCPUNanoPerSec),
+			numStores:               desc.NodeCapacity.NumStores,
 		},
-		func(_ float64, _ float64, _ float64, _ float64) {},
+		func(_ float64, _ float64, _ float64) {},
 	)
 	// cpuCap can be 0 when the node is overloaded (nodeCPURateUsage >
 	// nodeCPURateCapacity). This is correct behavior - it signals that the
