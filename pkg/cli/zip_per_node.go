@@ -291,7 +291,7 @@ func (zc *debugZipContext) collectPerNodeData(
 	nodePrinter.info("using SQL connection URL: %s", curSQLConn.GetURL())
 
 	for _, table := range zipInternalTablesPerNode.GetTables() {
-		query, err := zipInternalTablesPerNode.QueryForTable(table, zipCtx.redact)
+		query, err := zipInternalTablesPerNode.QueryForTable(table, zipCtx.redact || zipCtx.redactLocally)
 		if err != nil {
 			return err
 		}
@@ -423,7 +423,7 @@ func (zc *debugZipContext) collectPerNodeData(
 					var err error
 					entries, err = zc.status.LogFile(
 						ctx, &serverpb.LogFileRequest{
-							NodeId: id, File: file.Name, Redact: zipCtx.redact,
+							NodeId: id, File: file.Name, Redact: zipCtx.redact && !zipCtx.redactLocally,
 						})
 					return err
 				}); requestErr != nil {
@@ -463,10 +463,14 @@ func (zc *debugZipContext) collectPerNodeData(
 					// most conservative way possible. (It's not great that
 					// possibly confidential data flew over the network, but
 					// at least it stops here.)
-					if zipCtx.redact && !e.Redactable {
+					if zipCtx.redact && !zipCtx.redactLocally && !e.Redactable {
 						e.Message = "REDACTEDBYZIP"
 						// We're also going to print a warning at the end.
 						warnRedactLeak = true
+					}
+					// Client-side redaction when --redact-locally is set.
+					if zipCtx.redactLocally {
+						log.RedactEntry(&e, log.WithoutSensitiveData)
 					}
 					if err := log.FormatLegacyEntry(e, logOut); err != nil {
 						return err
