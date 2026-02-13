@@ -551,6 +551,178 @@ func TestBatchRange(t *testing.T) {
 	}
 }
 
+// TestRangeBatchWithGCRequests tests the Range function with GC requests
+// containing different subtypes: point keys, range keys, and clear range.
+func TestRangeBatchWithGCRequests(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	span := func(start, end string) roachpb.Span {
+		return roachpb.Span{
+			Key:    roachpb.Key(start),
+			EndKey: roachpb.Key(end),
+		}
+	}
+
+	keys := func(ks ...string) []kvpb.GCRequest_GCKey {
+		result := make([]kvpb.GCRequest_GCKey, len(ks))
+		for i, k := range ks {
+			result[i] = kvpb.GCRequest_GCKey{Key: roachpb.Key(k)}
+		}
+		return result
+	}
+
+	testCases := []struct {
+		name       string
+		header     roachpb.Span
+		keys       []kvpb.GCRequest_GCKey
+		clearRange roachpb.Span
+		rangeKeys  roachpb.Span
+		want       roachpb.Span
+	}{
+		{
+			name:   "point keys fully contained in header span",
+			header: span("a", "z"),
+			keys:   keys("b", "c", "d"),
+			want:   span("a", "z"),
+		},
+		{
+			name:      "range keys fully contained in header span",
+			header:    span("a", "z"),
+			rangeKeys: span("b", "h"),
+			want:      span("a", "z"),
+		},
+		{
+			name:       "clear range fully contained in header span",
+			header:     span("a", "z"),
+			clearRange: span("m", "n"),
+			want:       span("a", "z"),
+		},
+		{
+			name:   "point keys at header span boundaries",
+			header: span("a", "z"),
+			keys:   keys("a", "y"),
+			want:   span("a", "z"),
+		},
+		{
+			name:      "range keys at header span boundaries",
+			header:    span("a", "z"),
+			rangeKeys: span("a", "z"),
+			want:      span("a", "z"),
+		},
+		{
+			name:       "clear range at header span boundaries",
+			header:     span("a", "z"),
+			clearRange: span("a", "z"),
+			want:       span("a", "z"),
+		},
+		// Tests for keys that straddle the request header. Such constructions
+		// were historically possible when the MVCC GC queue constructed GC
+		// requests: see https://github.com/cockroachdb/cockroach/issues/162085.
+		// The result should expand to include the straddling keys.
+		{
+			name:       "clear range straddles header on the left",
+			header:     span("c", "z"),
+			clearRange: span("a", "m"),
+			want:       span("a", "z"),
+		},
+		{
+			name:       "clear range straddles header on the right",
+			header:     span("a", "m"),
+			clearRange: span("f", "z"),
+			want:       span("a", "z"),
+		},
+		{
+			name:       "clear range straddles header on both sides",
+			header:     span("c", "m"),
+			clearRange: span("a", "z"),
+			want:       span("a", "z"),
+		},
+		{
+			name:      "range keys straddle header on the left",
+			header:    span("c", "z"),
+			rangeKeys: span("a", "f"),
+			want:      span("a", "z"),
+		},
+		{
+			name:      "range keys straddle header on the right",
+			header:    span("a", "m"),
+			rangeKeys: span("f", "z"),
+			want:      span("a", "z"),
+		},
+		{
+			name:      "range keys straddle header on both sides",
+			header:    span("c", "m"),
+			rangeKeys: span("a", "z"),
+			want:      span("a", "z"),
+		},
+		{
+			name:   "point key straddles header on the left",
+			header: span("c", "m"),
+			keys:   keys("a", "d"),
+			want:   span("a", "m"),
+		},
+		{
+			name:   "point key straddles header on the right",
+			header: span("c", "m"),
+			keys:   keys("d", "z"),
+			want:   span("c", "z\x00"),
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			req := kvpb.GCRequest{
+				RequestHeader: kvpb.RequestHeader{
+					Key:    tc.header.Key,
+					EndKey: tc.header.EndKey,
+				},
+				Keys: tc.keys,
+			}
+			if tc.clearRange.Key != nil {
+				req.ClearRange = &kvpb.GCRequest_GCClearRange{
+					StartKey: tc.clearRange.Key,
+					EndKey:   tc.clearRange.EndKey,
+				}
+			}
+			if tc.rangeKeys.Key != nil {
+				req.RangeKeys = []kvpb.GCRequest_GCRangeKey{
+					{StartKey: tc.rangeKeys.Key, EndKey: tc.rangeKeys.EndKey},
+				}
+			}
+			var ba kvpb.BatchRequest
+			ba.Add(&req)
+			rs, err := Range(ba.Requests)
+			require.NoError(t, err)
+			require.Equal(t, roachpb.RSpan{Key: roachpb.RKey(tc.want.Key), EndKey: roachpb.RKey(tc.want.EndKey)}, rs)
+		})
+	}
+}
+
+// TestRangeBatchWithGCClearRangeLocalRangeIDError verifies that calling Range
+// with a GC request with a ClearRange that spans LocalRangeID keys results in
+// an error.
+func TestRangeBatchWithGCClearRangeLocalRangeIDError(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	localRangeIDKey := roachpb.Key(LocalRangeIDPrefix)
+	req := kvpb.GCRequest{
+		RequestHeader: kvpb.RequestHeader{
+			Key:    roachpb.Key("a"),
+			EndKey: roachpb.Key("z"),
+		},
+		ClearRange: &kvpb.GCRequest_GCClearRange{
+			StartKey: localRangeIDKey,
+			EndKey:   append(localRangeIDKey, byte('z')),
+		},
+	}
+	var ba kvpb.BatchRequest
+	ba.Add(&req)
+	_, err := Range(ba.Requests)
+	require.Error(t, err)
+	require.True(t, testutils.IsError(err, "ClearRange request cannot span LocalRangeID keys"),
+		"expected error about LocalRangeID keys, got: %v", err)
+}
+
 // TestBatchError verifies that Range returns an error if a request has an invalid range.
 func TestBatchError(t *testing.T) {
 	testCases := []struct {
