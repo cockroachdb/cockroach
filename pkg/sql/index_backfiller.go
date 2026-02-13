@@ -92,7 +92,7 @@ func (ib *IndexBackfillPlanner) BackfillIndexes(
 	addCompleted(progress.CompletedSpans...)
 	sstManifestBuf := backfill.NewSSTManifestBuffer(progress.SSTManifests)
 	progress.SSTManifests = sstManifestBuf.Snapshot()
-	updateSSTManifests := func(newManifests []jobspb.IndexBackfillSSTManifest) {
+	updateSSTManifests := func(newManifests []jobspb.BulkSSTManifest) {
 		progress.SSTManifests = sstManifestBuf.Append(newManifests)
 	}
 	mode, err := getIndexBackfillDistributedMergeMode(job)
@@ -378,7 +378,7 @@ func (ib *IndexBackfillPlanner) runDistributedMerge(
 	descriptor catalog.TableDescriptor,
 	progress *scexec.BackfillProgress,
 	tracker scexec.BackfillerProgressWriter,
-	manifests []jobspb.IndexBackfillSSTManifest,
+	manifests []jobspb.BulkSSTManifest,
 	startIteration int,
 	maxIterations int,
 	addStoragePrefix func(ctx context.Context, prefixes []string) error,
@@ -542,13 +542,13 @@ func (ib *IndexBackfillPlanner) runDistributedMerge(
 		// Convert merged SSTs to manifests for checkpointing. On resume, these
 		// manifests will be used as input to complete the merge in a single
 		// iteration directly to KV.
-		newManifests := make([]jobspb.IndexBackfillSSTManifest, 0, len(merged))
+		newManifests := make([]jobspb.BulkSSTManifest, 0, len(merged))
 		for _, sst := range merged {
 			span := roachpb.Span{
 				Key:    append([]byte(nil), sst.StartKey...),
 				EndKey: append([]byte(nil), sst.EndKey...),
 			}
-			newManifests = append(newManifests, jobspb.IndexBackfillSSTManifest{
+			newManifests = append(newManifests, jobspb.BulkSSTManifest{
 				URI:      sst.URI,
 				Span:     &span,
 				KeyCount: sst.KeyCount,

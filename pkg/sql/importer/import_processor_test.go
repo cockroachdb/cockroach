@@ -446,7 +446,7 @@ func TestImportHonorsResumePosition(t *testing.T) {
 					}
 				}()
 
-				_, _, err := runImport(ctx, flowCtx, spec, progCh, nil /* seqChunkProvider */)
+				_, _, err := runImport(ctx, flowCtx, spec, progCh, nil /* seqChunkProvider */, make(map[string]struct{}))
 				if err != nil {
 					t.Fatal(err)
 				}
@@ -523,7 +523,7 @@ func TestImportHandlesDuplicateKVs(t *testing.T) {
 				}
 			}()
 
-			_, _, err := runImport(ctx, flowCtx, spec, progCh, nil /* seqChunkProvider */)
+			_, _, err := runImport(ctx, flowCtx, spec, progCh, nil /* seqChunkProvider */, make(map[string]struct{}))
 			require.True(t, errors.HasType(err, &kvserverbase.DuplicateKeyError{}))
 		})
 	}
@@ -677,13 +677,29 @@ func TestCSVImportCanBeResumed(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
+	for _, useDistributedMerge := range []bool{false, true} {
+		name := "legacy"
+		if useDistributedMerge {
+			name = "distributed_merge"
+		}
+		t.Run(name, func(t *testing.T) {
+			testCSVImportCanBeResumed(t, useDistributedMerge)
+		})
+	}
+}
+
+func testCSVImportCanBeResumed(t *testing.T, useDistributedMerge bool) {
 	defer setImportReaderParallelism(1)()
 	const batchSize = 5
 	defer TestingSetParallelImporterReaderBatchSize(batchSize)()
 	defer row.TestingSetDatumRowConverterBatchSize(2 * batchSize)()
 
+	// Create a temp directory for nodelocal storage used by distributed merge.
+	tempDir := t.TempDir()
+
 	srv, db, _ := serverutils.StartServer(t,
 		base.TestServerArgs{
+			ExternalIODir: tempDir,
 			Knobs: base.TestingKnobs{
 				JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
 				DistSQL: &execinfra.TestingKnobs{
@@ -698,6 +714,9 @@ func TestCSVImportCanBeResumed(t *testing.T) {
 
 	sqlDB := sqlutils.MakeSQLRunner(db)
 	setSmallIngestBufferSizes(t, sqlDB)
+	if useDistributedMerge {
+		sqlDB.Exec(t, `SET CLUSTER SETTING bulkio.import.distributed_merge.enabled = true`)
+	}
 	sqlDB.Exec(t, `CREATE DATABASE d`)
 	sqlDB.Exec(t, "CREATE TABLE t (id INT, data STRING)")
 	defer sqlDB.Exec(t, `DROP TABLE t`)
@@ -736,7 +755,9 @@ func TestCSVImportCanBeResumed(t *testing.T) {
 
 	// Convince distsql to use our "external" storage implementation.
 	storage := newGeneratedStorage(csv1)
-	s.DistSQLServer().(*distsql.ServerImpl).ServerConfig.ExternalStorage = storage.externalStorageFactory()
+	// Save the original factory (which knows about ExternalIODir) before replacing it
+	originalFactory := s.DistSQLServer().(*distsql.ServerImpl).ServerConfig.ExternalStorage
+	s.DistSQLServer().(*distsql.ServerImpl).ServerConfig.ExternalStorage = storage.externalStorageFactory(originalFactory)
 
 	// Execute import; ignore any errors returned
 	// (since we're aborting the first import run.).
@@ -764,7 +785,6 @@ func TestCSVImportCanBeResumed(t *testing.T) {
 	// Get updated resume position counter.
 	js = queryJobUntil(t, sqlDB.DB, jobID, func(js jobState) bool { return jobs.StatePaused == js.status })
 	resumePos := js.prog.ResumePos[0]
-	t.Logf("Resume pos: %v\n", js.prog.ResumePos[0])
 
 	// Unpause the job and wait for it to complete.
 	if err := registry.Unpause(ctx, nil, jobID); err != nil {
@@ -773,7 +793,7 @@ func TestCSVImportCanBeResumed(t *testing.T) {
 	js = queryJobUntil(t, sqlDB.DB, jobID, func(js jobState) bool { return jobs.StateSucceeded == js.status })
 
 	// Verify that the import proceeded from the resumeRow position.
-	assert.Equal(t, importSummary.Rows, int64(csv1.numRows)-resumePos)
+	require.Equal(t, int64(csv1.numRows)-resumePos, importSummary.Rows)
 
 	sqlDB.CheckQueryResults(t, `SELECT id FROM t ORDER BY id`,
 		sqlDB.QueryStr(t, `SELECT generate_series(0, $1)`, csv1.numRows-1),
@@ -889,8 +909,21 @@ func TestCSVImportMarksFilesFullyProcessed(t *testing.T) {
 	}
 }
 
-func (ses *generatedStorage) externalStorageFactory() cloud.ExternalStorageFactory {
-	return func(_ context.Context, es cloudpb.ExternalStorage, _ ...cloud.ExternalStorageOption) (cloud.ExternalStorage, error) {
+func (ses *generatedStorage) externalStorageFactory(
+	originalFactory ...cloud.ExternalStorageFactory,
+) cloud.ExternalStorageFactory {
+	return func(ctx context.Context, es cloudpb.ExternalStorage, opts ...cloud.ExternalStorageOption) (cloud.ExternalStorage, error) {
+		// For non-HTTP providers (like nodelocal used by distributed merge),
+		// fall back to the original server factory (if provided).
+		if es.Provider != cloudpb.ExternalStorageProvider_http {
+			if len(originalFactory) != 1 && originalFactory[0] != nil {
+				return originalFactory[0](ctx, es, opts...)
+			} else if len(originalFactory) > 1 {
+				return nil, errors.Newf("need at most one fallback storage factory, %d provided", len(originalFactory))
+			}
+			return nil, errors.Newf("no storage factory for provider type: %v", es.Provider)
+		}
+
 		uri, err := url.Parse(es.HttpPath.BaseUri)
 		if err != nil {
 			return nil, err

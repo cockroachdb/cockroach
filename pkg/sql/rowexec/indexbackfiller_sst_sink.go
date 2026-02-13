@@ -32,7 +32,7 @@ type sstIndexBackfillSink struct {
 	writeTS          hlc.Timestamp
 	emittedFileCount int
 	onFlush          func(summary kvpb.BulkOpSummary)
-	pendingManifests []jobspb.IndexBackfillSSTManifest
+	pendingManifests []jobspb.BulkSSTManifest
 }
 
 var _ indexBackfillSink = (*sstIndexBackfillSink)(nil)
@@ -99,7 +99,7 @@ func (s *sstIndexBackfillSink) SetOnFlush(fn func(summary kvpb.BulkOpSummary)) {
 }
 
 // ComsumeFlushManifests implements the indexBackfillSink interface.
-func (s *sstIndexBackfillSink) ConsumeFlushManifests() []jobspb.IndexBackfillSSTManifest {
+func (s *sstIndexBackfillSink) ConsumeFlushManifests() []jobspb.BulkSSTManifest {
 	if len(s.pendingManifests) == 0 {
 		return nil
 	}
@@ -108,30 +108,19 @@ func (s *sstIndexBackfillSink) ConsumeFlushManifests() []jobspb.IndexBackfillSST
 	return out
 }
 
-func (s *sstIndexBackfillSink) collectNewManifests() []jobspb.IndexBackfillSSTManifest {
+func (s *sstIndexBackfillSink) collectNewManifests() []jobspb.BulkSSTManifest {
 	files := s.allocator.GetFileList()
 	if len(files.SST) <= s.emittedFileCount {
 		return nil
 	}
-	outputs := make([]jobspb.IndexBackfillSSTManifest, 0, len(files.SST)-s.emittedFileCount)
-	for _, f := range files.SST[s.emittedFileCount:] {
-		span := &roachpb.Span{
-			Key:    append(roachpb.Key(nil), f.StartKey...),
-			EndKey: append(roachpb.Key(nil), f.EndKey...),
-		}
-		ts := s.writeTS
-		output := jobspb.IndexBackfillSSTManifest{
-			URI:            f.URI,
-			Span:           span,
-			FileSize:       f.FileSize,
-			RowSample:      append(roachpb.Key(nil), f.RowSample...),
-			WriteTimestamp: &ts,
-			KeyCount:       f.KeyCount,
-		}
-		outputs = append(outputs, output)
+	// Extract only the new files since last collection
+	newFiles := &bulksst.SSTFiles{
+		SST: files.SST[s.emittedFileCount:],
 	}
 	s.emittedFileCount = len(files.SST)
-	return outputs
+
+	// Use shared conversion function, passing writeTS for index backfill
+	return bulksst.SSTFilesToManifests(newFiles, &s.writeTS)
 }
 
 func (s *sstIndexBackfillSink) Close(ctx context.Context) {

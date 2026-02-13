@@ -24,7 +24,7 @@ func TestSSTManifestTenantPrefixConversion(t *testing.T) {
 	rowSample := append(roachpb.Key(nil), start...)
 	rowSample = append(rowSample, []byte("sample")...)
 	ts := hlc.Timestamp{WallTime: 1, Logical: 2}
-	input := []jobspb.IndexBackfillSSTManifest{{
+	input := []jobspb.BulkSSTManifest{{
 		URI:            "nodelocal://1/.index-backfill/42/1.sst",
 		Span:           &roachpb.Span{Key: start, EndKey: end},
 		FileSize:       1234,
