@@ -7466,62 +7466,87 @@ func TestGCIncorrectRange(t *testing.T) {
 	repl1 := tc.repl
 	repl2 := splitTestRange(tc.store, splitKey, t)
 
-	// Write a key to range 2 at two different timestamps so we can
+	checkKeyExists := func(repl *Replica, key roachpb.Key, ts hlc.Timestamp, shouldExist bool) {
+		getReq := getArgs(key)
+		header := kvpb.Header{RangeID: repl.RangeID, Timestamp: ts}
+		res, pErr := kv.SendWrappedWith(ctx, repl, header, &getReq)
+		require.Nil(t, pErr)
+		resVal := res.(*kvpb.GetResponse).Value
+		if shouldExist {
+			require.NotNil(t, resVal, "expected key %s to exist at %s", key, ts)
+		} else {
+			require.Nil(t, resVal, "expected key %s to not exist at %s", key, ts)
+		}
+	}
+
+	// Write a key to both ranges at two different timestamps so we can
 	// GC the earlier timestamp without needing to delete it.
-	key := splitKey.PrefixEnd().AsRawKey()
-	val := []byte("value")
-	putReq := putArgs(key, val)
 	now := tc.Clock().Now()
 	ts1 := now.Add(1, 0)
 	ts2 := now.Add(2, 0)
-	ts1Header := kvpb.Header{RangeID: repl2.RangeID, Timestamp: ts1}
-	ts2Header := kvpb.Header{RangeID: repl2.RangeID, Timestamp: ts2}
-	if _, pErr := kv.SendWrappedWith(ctx, repl2, ts1Header, &putReq); pErr != nil {
-		t.Errorf("unexpected pError on put key request: %s", pErr)
-	}
-	if _, pErr := kv.SendWrappedWith(ctx, repl2, ts2Header, &putReq); pErr != nil {
-		t.Errorf("unexpected pError on put key request: %s", pErr)
-	}
+	val := []byte("value")
 
-	// Send GC request to range 1 for the key on range 2, which
-	// should succeed even though it doesn't contain the key, because
-	// the request for the incorrect key will be silently dropped.
-	gKey := gcKey(key, ts1)
-	gcReq := gcArgs(repl1.Desc().StartKey, repl1.Desc().EndKey, gKey)
-	if _, pErr := kv.SendWrappedWith(
+	// Key for range 1 (before split key "c").
+	key1 := roachpb.Key("a")
+	putReq1 := putArgs(key1, val)
+	ts1Header1 := kvpb.Header{RangeID: repl1.RangeID, Timestamp: ts1}
+	ts2Header1 := kvpb.Header{RangeID: repl1.RangeID, Timestamp: ts2}
+	_, pErr := kv.SendWrappedWith(ctx, repl1, ts1Header1, &putReq1)
+	require.Nil(t, pErr)
+	_, pErr = kv.SendWrappedWith(ctx, repl1, ts2Header1, &putReq1)
+	require.Nil(t, pErr)
+
+	// Key for range 2 (after split key "c").
+	key2 := splitKey.PrefixEnd().AsRawKey()
+	putReq2 := putArgs(key2, val)
+	ts1Header2 := kvpb.Header{RangeID: repl2.RangeID, Timestamp: ts1}
+	ts2Header2 := kvpb.Header{RangeID: repl2.RangeID, Timestamp: ts2}
+	_, pErr = kv.SendWrappedWith(ctx, repl2, ts1Header2, &putReq2)
+	require.Nil(t, pErr)
+	_, pErr = kv.SendWrappedWith(ctx, repl2, ts2Header2, &putReq2)
+	require.Nil(t, pErr)
+
+	// Send GC request to range 1 for the key on range 2. This should return a
+	// RangeKeyMismatchError because the request spans multiple ranges.
+	gKey2 := gcKey(key2, ts1)
+	gcReq := gcArgs(repl1.Desc().StartKey, repl1.Desc().EndKey, gKey2)
+	_, pErr = kv.SendWrappedWith(
 		ctx,
 		repl1,
 		kvpb.Header{RangeID: 1, Timestamp: tc.Clock().Now()},
 		&gcReq,
-	); pErr != nil {
-		t.Errorf("unexpected pError on garbage collection request to incorrect range: %s", pErr)
-	}
+	)
+	require.NotNil(t, pErr, "expected RangeKeyMismatchError but got success")
+	_, ok := pErr.GetDetail().(*kvpb.RangeKeyMismatchError)
+	require.True(t, ok, "expected RangeKeyMismatchError, got %v", pErr)
 
-	// Make sure the key still exists on range 2.
-	getReq := getArgs(key)
-	if res, pErr := kv.SendWrappedWith(ctx, repl2, ts1Header, &getReq); pErr != nil {
-		t.Errorf("unexpected pError on get request to correct range: %s", pErr)
-	} else if resVal := res.(*kvpb.GetResponse).Value; resVal == nil {
-		t.Errorf("expected value %s to exists after GC to incorrect range but before GC to correct range, found %v", val, resVal)
-	}
+	// Verify that keys still exist on both ranges after the failed GC request.
+	checkKeyExists(repl1, key1, ts1, true /* shouldExist */)
+	checkKeyExists(repl2, key2, ts1, true /* shouldExist */)
 
-	// Send GC request to range 2 for the same key.
-	gcReq = gcArgs(repl2.Desc().StartKey, repl2.Desc().EndKey, gKey)
-	if _, pErr := kv.SendWrappedWith(
+	// Send correct GC requests to both ranges.
+	gKey1 := gcKey(key1, ts1)
+	gcReq1 := gcArgs(repl1.Desc().StartKey, repl1.Desc().EndKey, gKey1)
+	_, pErr = kv.SendWrappedWith(
+		ctx,
+		repl1,
+		kvpb.Header{RangeID: repl1.RangeID, Timestamp: tc.Clock().Now()},
+		&gcReq1,
+	)
+	require.Nil(t, pErr)
+
+	gcReq2 := gcArgs(repl2.Desc().StartKey, repl2.Desc().EndKey, gKey2)
+	_, pErr = kv.SendWrappedWith(
 		ctx,
 		repl2,
 		kvpb.Header{RangeID: repl2.RangeID, Timestamp: tc.Clock().Now()},
-		&gcReq,
-	); pErr != nil {
-		t.Errorf("unexpected pError on garbage collection request to correct range: %s", pErr)
-	}
+		&gcReq2,
+	)
+	require.Nil(t, pErr)
 
-	// Make sure the key no longer exists on range 2.
-	if res, pErr := kv.SendWrappedWith(ctx, repl2, ts1Header, &getReq); pErr != nil {
-		t.Errorf("unexpected pError on get request to correct range: %s", pErr)
-	} else if resVal := res.(*kvpb.GetResponse).Value; resVal != nil {
-		t.Errorf("expected value at key %s to no longer exist after GC to correct range, found value %v", key, resVal)
-	}
+	// Verify that keys no longer exist on both ranges after proper GC.
+	checkKeyExists(repl1, key1, ts1, false /* shouldExist */)
+	checkKeyExists(repl2, key2, ts1, false /* shouldExist */)
 }
 
 // TestReplicaCancelRaft checks that it is possible to safely abandon Raft
