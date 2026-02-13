@@ -2363,6 +2363,7 @@ func (cs *clusterState) canShedAndAddLoad(
 	ctx context.Context,
 	srcSS *storeState,
 	targetSS *storeState,
+	rangeID roachpb.RangeID,
 	delta LoadVector,
 	means *meansLoad,
 	onlyConsiderTargetCPUSummary bool,
@@ -2414,8 +2415,10 @@ func (cs *clusterState) canShedAndAddLoad(
 			log.KvDistribution.VEventf(ctx, 3, "can add load to n%vs%v: %v targetSLS[%v] srcSLS[%v]",
 				targetNS.NodeID, targetSS.StoreID, canAddLoad, targetSLS, srcSLS)
 		} else if populateFailureReason {
-			log.KvDistribution.VEventf(ctx, 2, "cannot add load to n%vs%v: due to %s", targetNS.NodeID, targetSS.StoreID, failureReason.String())
-			log.KvDistribution.VEventf(ctx, 2, "[target_sls:%v,src_sls:%v]", targetSLS, srcSLS)
+			log.KvDistribution.VEventf(ctx, 2,
+				"cannot add load from n%vs%v to n%vs%v for r%v due to %s: delta(%v) targetSLS[%v] srcSLS[%v]",
+				srcNS.NodeID, srcSS.StoreID, targetNS.NodeID, targetSS.StoreID, rangeID,
+				failureReason.String(), delta, targetSLS, srcSLS)
 		}
 	}()
 	// Check if the target would have high disk utilization after the transfer.
