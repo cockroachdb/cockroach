@@ -63,23 +63,20 @@ func TestComputeStoreCPURateCapacity(t *testing.T) {
 				totalPerStore := nodeCapCores / float64(numStores)
 
 				// Naive model: assumes all node CPU scales directly with store work.
-				naiveResult := computeStoreCPURateCapacity(
-					mmaprototype.LoadValue(storeCPUCores*nsPerCore),
-					nodeUsageCores*nsPerCore,
-					nodeCapCores*nsPerCore,
-					storesCPUCores*nsPerCore,
-					int32(numStores),
-				)
+				in := storeCPURateCapacityInput{
+					currentStoreCPUUsage: mmaprototype.LoadValue(storeCPUCores * nsPerCore),
+					storesCPURate:        storesCPUCores * nsPerCore,
+					nodeCPURateUsage:     nodeUsageCores * nsPerCore,
+					nodeCPURateCapacity:  nodeCapCores * nsPerCore,
+					numStores:            int32(numStores),
+				}
+				naiveResult := computeStoreCPURateCapacity(in)
 				naiveCap := float64(naiveResult) / nsPerCore
 
 				// Capped model: caps the indirect overhead multiplier.
 				var cappedMult, bgLoad, mmaShare, mmaDirect float64
 				cappedCapNs := computeCPUCapacityWithCap(
-					mmaprototype.LoadValue(storeCPUCores*nsPerCore),
-					storesCPUCores*nsPerCore,
-					nodeUsageCores*nsPerCore,
-					nodeCapCores*nsPerCore,
-					int32(numStores),
+					in,
 					func(mult, backgroundLoad, mmaShareOfCapacity, mmaDirectCapacity float64) {
 						cappedMult = mult
 						bgLoad = backgroundLoad / nsPerCore
