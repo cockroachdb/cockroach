@@ -89,7 +89,7 @@ func TestGaugeVector(t *testing.T) {
 
 func TestFunctionalGauge(t *testing.T) {
 	valToReturn := int64(10)
-	g := NewFunctionalGauge(emptyMetadata, func() int64 { return valToReturn })
+	g := NewFunctionalGauge(emptyMetadata, func(_ int64) int64 { return valToReturn })
 	if v := g.Value(); v != 10 {
 		t.Fatalf("unexpected value: %d", v)
 	}
@@ -97,6 +97,18 @@ func TestFunctionalGauge(t *testing.T) {
 	if v := g.Value(); v != 15 {
 		t.Fatalf("unexpected value: %d", v)
 	}
+
+	g = NewFunctionalGauge(emptyMetadata, func(val int64) int64 { return val * 10 })
+	require.Zero(t, g.Value())
+
+	g.Update(10)
+	require.Equal(t, int64(100), g.Value())
+
+	g.Inc(1)
+	require.Equal(t, int64(110), g.Value())
+
+	g.Dec(10)
+	require.Equal(t, int64(10), g.Value())
 }
 
 func TestGaugeFloat64(t *testing.T) {

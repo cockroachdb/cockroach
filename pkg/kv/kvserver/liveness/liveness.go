@@ -1158,7 +1158,7 @@ func (nl *NodeLiveness) updateLivenessAttempt(
 // That staleness could result in no nodes reporting the metric or multiple
 // nodes reporting the metric, so it's simplest to just have all live nodes
 // report it.
-func (nl *NodeLiveness) numLiveNodes() int64 {
+func (nl *NodeLiveness) numLiveNodes(_ int64) int64 {
 
 	selfID := nl.cache.selfID()
 	// if our node id isn't set, don't return a count

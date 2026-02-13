@@ -443,7 +443,7 @@ func newJobScopedUsageMetrics(histogramWindow time.Duration) *JobScopedUsageMetr
 		}),
 	}
 	m.mu.metrics = make(map[catpb.JobID]*innerJobScopedUsageMetrics)
-	m.UsageTableBytes = metric.NewFunctionalGauge(metaChangefeedTableBytes, func() int64 {
+	m.UsageTableBytes = metric.NewFunctionalGauge(metaChangefeedTableBytes, func(_ int64) int64 {
 		m.mu.Lock()
 		defer m.mu.Unlock()
 

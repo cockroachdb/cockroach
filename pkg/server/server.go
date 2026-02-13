@@ -446,10 +446,10 @@ func NewServer(cfg Config, stopper *stop.Stopper) (serverctl.ServerStartupInterf
 	// started via the server controller.
 	cfg.RuntimeStatSampler = runtimeSampler
 
-	appRegistry.AddMetric(metric.NewFunctionalGauge(base.LicenseTTLMetadata, func() int64 {
+	appRegistry.AddMetric(metric.NewFunctionalGauge(base.LicenseTTLMetadata, func(_ int64) int64 {
 		return base.GetLicenseTTL(ctx, cfg.Settings, timeutil.DefaultTimeSource{})
 	}))
-	appRegistry.AddMetric(metric.NewFunctionalGauge(base.AdditionalLicenseTTLMetadata, func() int64 {
+	appRegistry.AddMetric(metric.NewFunctionalGauge(base.AdditionalLicenseTTLMetadata, func(_ int64) int64 {
 		return base.GetLicenseTTL(ctx, cfg.Settings, timeutil.DefaultTimeSource{})
 	}))
 

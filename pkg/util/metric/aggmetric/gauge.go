@@ -44,7 +44,7 @@ func NewFunctionalGauge(
 	metadata metric.Metadata, f func(childValues []int64) int64, childLabels ...string,
 ) *AggGauge {
 	g := &AggGauge{}
-	gaugeFn := func() int64 {
+	gaugeFn := func(_ int64) int64 {
 		values := make([]int64, 0)
 		g.childSet.mu.Lock()
 		defer g.childSet.mu.Unlock()

@@ -226,7 +226,7 @@ var (
 type certClosure func() *CertInfo
 
 func expirationGauge(metadata metric.Metadata, certFunc certClosure) *metric.Gauge {
-	return metric.NewFunctionalGauge(metadata, func() int64 {
+	return metric.NewFunctionalGauge(metadata, func(_ int64) int64 {
 		ci := certFunc()
 		if ci != nil && ci.Error == nil {
 			return ci.ExpirationTime.Unix()
@@ -239,7 +239,7 @@ func expirationGauge(metadata metric.Metadata, certFunc certClosure) *metric.Gau
 func ttlGauge(
 	metadata metric.Metadata, certFunc certClosure, ts timeutil.TimeSource,
 ) *metric.Gauge {
-	return metric.NewFunctionalGauge(metadata, func() int64 {
+	return metric.NewFunctionalGauge(metadata, func(_ int64) int64 {
 		ci := certFunc()
 		if ci != nil && ci.Error == nil {
 			expiry := ci.ExpirationTime.Unix()

@@ -1073,7 +1073,7 @@ func NewCounterFloat64(metadata Metadata) *CounterFloat64 {
 type Gauge struct {
 	Metadata
 	value atomic.Int64
-	fn    func() int64
+	fn    func(val int64) int64
 }
 
 // NewGauge creates a Gauge.
@@ -1083,9 +1083,7 @@ func NewGauge(metadata Metadata) *Gauge {
 
 // NewFunctionalGauge creates a Gauge metric whose value is determined when
 // asked for by calling the provided function.
-// Note that Update, Inc, and Dec should NOT be called on a Gauge returned
-// from NewFunctionalGauge.
-func NewFunctionalGauge(metadata Metadata, f func() int64) *Gauge {
+func NewFunctionalGauge(metadata Metadata, f func(val int64) int64) *Gauge {
 	return &Gauge{Metadata: metadata, fn: f}
 }
 
@@ -1097,7 +1095,7 @@ func (g *Gauge) Update(v int64) {
 // Value returns the gauge's current value.
 func (g *Gauge) Value() int64 {
 	if g.fn != nil {
-		return g.fn()
+		return g.fn(g.value.Load())
 	}
 	return g.value.Load()
 }

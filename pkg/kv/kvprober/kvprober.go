@@ -289,7 +289,7 @@ func NewProber(opts Opts) *Prober {
 			}),
 			WriteProbeQuarantineOldestDuration: metric.NewFunctionalGauge(
 				metaWriteProbeQuarantineOldestDuration,
-				func() int64 { return qPool.oldestDuration().Nanoseconds() },
+				func(_ int64) int64 { return qPool.oldestDuration().Nanoseconds() },
 			),
 			ProbePlanAttempts: metric.NewCounter(metaProbePlanAttempts),
 			ProbePlanFailures: metric.NewCounter(metaProbePlanFailures),

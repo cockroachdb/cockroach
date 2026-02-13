@@ -303,14 +303,14 @@ func (t *RaftTransport) visitQueues(visit func(*raftSendQueue)) {
 }
 
 // queueMessageCount returns the total number of outgoing messages in the queue.
-func (t *RaftTransport) queueMessageCount() int64 {
+func (t *RaftTransport) queueMessageCount(_ int64) int64 {
 	var count int64
 	t.visitQueues(func(q *raftSendQueue) { count += int64(len(q.reqs)) })
 	return count
 }
 
 // queueByteSize returns the total bytes size of outgoing messages in the queue.
-func (t *RaftTransport) queueByteSize() int64 {
+func (t *RaftTransport) queueByteSize(_ int64) int64 {
 	var size int64
 	t.visitQueues(func(q *raftSendQueue) { size += q.bytes.Load() })
 	return size
