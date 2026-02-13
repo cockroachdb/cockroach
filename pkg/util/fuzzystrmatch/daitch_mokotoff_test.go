@@ -43,6 +43,17 @@ func TestDaitchMokotoff(t *testing.T) {
 		{"CJC", []string{
 			"400000", "440000", "450000", "540000", "545000", "550000",
 		}},
+
+		// Non-ASCII / UTF-8 inputs (PostgreSQL compatibility).
+		{"Müller", []string{"689000"}},
+		{"Schäfer", []string{"479000"}},
+		{"Straßburg", []string{"294795"}},
+		{"Éregon", []string{"095600"}},
+		{"gąszczu", []string{"540000", "564000"}},
+		{"brzęczy", []string{"744000", "746400", "794400", "794640"}},
+		{"ţamas", []string{"364000", "464000"}},
+		{"țamas", []string{"364000", "464000"}},
+		{"ZĄBEK", []string{"467500", "475000"}},
 	}
 
 	for _, tc := range tt {

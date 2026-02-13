@@ -218,3 +218,50 @@ query T
 SELECT daitch_mokotoff(NULL);
 ----
 NULL
+
+# Non-ASCII / UTF-8 inputs
+
+query T
+SELECT daitch_mokotoff('Müller');
+----
+{689000}
+
+query T
+SELECT daitch_mokotoff('Schäfer');
+----
+{479000}
+
+query T
+SELECT daitch_mokotoff('Straßburg');
+----
+{294795}
+
+query T
+SELECT daitch_mokotoff('Éregon');
+----
+{095600}
+
+query T
+SELECT daitch_mokotoff('gąszczu');
+----
+{540000,564000}
+
+query T
+SELECT daitch_mokotoff('brzęczy');
+----
+{744000,746400,794400,794640}
+
+query T
+SELECT daitch_mokotoff('ţamas');
+----
+{364000,464000}
+
+query T
+SELECT daitch_mokotoff('țamas');
+----
+{364000,464000}
+
+query T
+SELECT daitch_mokotoff('ZĄBEK');
+----
+{467500,475000}

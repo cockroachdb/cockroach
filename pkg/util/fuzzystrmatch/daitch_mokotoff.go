@@ -8,7 +8,6 @@ package fuzzystrmatch
 import (
 	"sort"
 	"strings"
-	"unicode"
 )
 
 // dmCodeLen is the number of digits in a Daitch-Mokotoff soundex code.
@@ -37,6 +36,20 @@ type dmBranch struct {
 	code      [dmCodeLen]byte
 	length    int
 	lastDigit byte
+}
+
+// dmISO8859_1ToASCII maps Latin-1 codepoints U+00C0–U+00FF to uppercase
+// ASCII base letters. Entries of 0 indicate non-letter codepoints (× and ÷)
+// which are skipped. Matches PostgreSQL's iso8859_1_to_ascii_upper table.
+var dmISO8859_1ToASCII = [64]byte{
+	'A', 'A', 'A', 'A', 'A', 'A', 'E', 'C', // 0xC0-0xC7
+	'E', 'E', 'E', 'E', 'I', 'I', 'I', 'I', // 0xC8-0xCF
+	'D', 'N', 'O', 'O', 'O', 'O', 'O', 0, //   0xD0-0xD7 (× = skip)
+	'O', 'U', 'U', 'U', 'U', 'Y', 'D', 'S', // 0xD8-0xDF
+	'A', 'A', 'A', 'A', 'A', 'A', 'E', 'C', // 0xE0-0xE7
+	'E', 'E', 'E', 'E', 'I', 'I', 'I', 'I', // 0xE8-0xEF
+	'D', 'N', 'O', 'O', 'O', 'O', 'O', 0, //   0xF0-0xF7 (÷ = skip)
+	'O', 'U', 'U', 'U', 'U', 'Y', 'D', 'Y', // 0xF8-0xFF
 }
 
 // The coding table, ported from PostgreSQL's daitch_mokotoff_coding.h.
@@ -187,6 +200,13 @@ var dmRules = []dmRule{
 	{"ZSH", []dmCodes{{"4", "4", "4"}}},
 	{"ZS", []dmCodes{{"4", "4", "4"}}},
 	{"Z", []dmCodes{{"4", "4", "4"}}},
+
+	// Polish/Romanian characters, represented by placeholder bytes.
+	// These bytes are reserved in dmNormalize and never appear from
+	// regular ASCII input.
+	{"[", []dmCodes{{"X", "X", "6"}, {"X", "X", "X"}}},  // Ą/ą
+	{"\\", []dmCodes{{"X", "X", "6"}, {"X", "X", "X"}}}, // Ę/ę
+	{"]", []dmCodes{{"3", "3", "3"}, {"4", "4", "4"}}},  // Ţ/ţ/Ț/ț
 }
 
 var dmTrie *dmTrieNode
@@ -249,7 +269,8 @@ func dmIsVowelCode(codes []dmCodes) bool {
 // DaitchMokotoff computes Daitch-Mokotoff soundex codes for the input string.
 // Returns a sorted slice of unique 6-digit code strings.
 func DaitchMokotoff(source string) []string {
-	// Convert to uppercase ASCII, stripping non-alpha characters.
+	// Transliterate to uppercase ASCII (with placeholder bytes for
+	// Polish/Romanian characters), stripping unrecognized characters.
 	input := dmNormalize(source)
 	if len(input) == 0 {
 		return nil
@@ -381,19 +402,30 @@ func dmPadCode(b dmBranch) string {
 	return string(buf[:])
 }
 
-// dmNormalize converts the input to uppercase ASCII letters only.
+// dmNormalize transliterates the input to uppercase ASCII letters and
+// placeholder bytes for Polish/Romanian characters ([, \, ] for Ą, Ę, Ţ/Ț).
+// ISO-8859-1 accented letters (U+00C0–U+00FF) are mapped to their ASCII
+// base letter. All other characters are dropped.
 func dmNormalize(s string) string {
 	var buf strings.Builder
 	buf.Grow(len(s))
 	for _, r := range s {
-		if r >= 'A' && r <= 'Z' {
+		switch {
+		case r >= 'A' && r <= 'Z':
 			buf.WriteByte(byte(r))
-		} else if r >= 'a' && r <= 'z' {
-			buf.WriteByte(byte(unicode.ToUpper(r)))
-		} else if r >= 'A' && r <= 'Z' {
-			buf.WriteByte(byte(r))
+		case r >= 'a' && r <= 'z':
+			buf.WriteByte(byte(r - 'a' + 'A'))
+		case r >= 0xC0 && r <= 0xFF:
+			if c := dmISO8859_1ToASCII[r-0xC0]; c != 0 {
+				buf.WriteByte(c)
+			}
+		case r == 0x0104 || r == 0x0105: // Ą/ą
+			buf.WriteByte('[')
+		case r == 0x0118 || r == 0x0119: // Ę/ę
+			buf.WriteByte('\\')
+		case r == 0x0162 || r == 0x0163 || r == 0x021A || r == 0x021B: // Ţ/ţ/Ț/ț
+			buf.WriteByte(']')
 		}
-		// Skip non-alpha characters.
 	}
 	return buf.String()
 }
