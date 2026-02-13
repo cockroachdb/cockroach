@@ -162,7 +162,7 @@ naive:        kv-capacity: 1.00 cores, kv-util: 100.00% (1.00/1.00 cores)
 capped_mult: (steps below)
   mult        = max(1, min(32.00/2.00, 3)) = 3.0
   background  = max(0, 32.00 - 2.00*3.0) = 26.00 cores
-  mma-share   = max(0, 16.00 - 26.00) = 0.00 cores
+  mma-share   = 16.00 - 26.00 = 0.00 cores
   mma-direct  = 0.00 / 3.0 = 0.00 cores
   per-store   = 0.00 / 1 = 0.00 cores
-  kv-capacity: 0.00 cores, kv-util: N/A (1.00/0.00 cores)
+  kv-capacity: 0.00 cores, kv-util: +Inf% (1.00/0.00 cores)
