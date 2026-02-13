@@ -238,6 +238,10 @@ func (r *Replica) updateTimestampCache(
 				// push type. So this must have been a no-op push where the PushTo
 				// timestamp was already below the prepared transaction's timestamp.
 				continue
+			case roachpb.REFRESHING:
+				// REFRESHING transactions cannot be pushed while refreshing their read
+				// spans. So this must have been a no-op push.
+				continue
 			default:
 				log.KvExec.Fatalf(ctx, "unexpected transaction status: %v", pushee.Status)
 			}
