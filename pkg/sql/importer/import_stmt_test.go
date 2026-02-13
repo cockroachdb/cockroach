@@ -109,7 +109,6 @@ func TestImportDistributedMerge(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	skip.WithIssue(t, 163425)
 	dirname, cleanup := testutils.TempDir(t)
 	t.Cleanup(cleanup)
 
@@ -5743,8 +5742,6 @@ CREATE TABLE t (
 func TestImportDistributedMergeStoragePrefixTracking(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-
-	skip.WithIssue(t, 163380)
 
 	ctx := context.Background()
 
