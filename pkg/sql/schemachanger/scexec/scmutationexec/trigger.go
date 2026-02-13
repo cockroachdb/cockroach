@@ -10,6 +10,8 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/funcdesc"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scop"
 	"github.com/cockroachdb/errors"
 )
@@ -123,13 +125,104 @@ func (i *immediateVisitor) SetTriggerForwardReferences(
 	if err != nil {
 		return err
 	}
-	relationIDs := catalog.MakeDescriptorIDSet()
+
+	// Capture old references before updating, so we can clean up stale
+	// back-references from types, relations, and routines that are no longer
+	// depended on (needed for CREATE OR REPLACE FUNCTION on trigger functions).
+	oldRelationIDs := catalog.MakeDescriptorIDSet(trigger.DependsOn...)
+	oldTypeIDs := catalog.MakeDescriptorIDSet(trigger.DependsOnTypes...)
+	oldRoutineIDs := catalog.MakeDescriptorIDSet(trigger.DependsOnRoutines...)
+
+	// Set new forward references on the trigger.
+	newRelationIDs := catalog.MakeDescriptorIDSet()
 	for _, ref := range op.Deps.UsesRelations {
-		relationIDs.Add(ref.ID)
+		newRelationIDs.Add(ref.ID)
 	}
-	trigger.DependsOn = relationIDs.Ordered()
+	trigger.DependsOn = newRelationIDs.Ordered()
 	trigger.DependsOnTypes = op.Deps.UsesTypeIDs
 	trigger.DependsOnRoutines = op.Deps.UsesRoutineIDs
+
+	// Clean up stale type back-references. We process the union of old and new
+	// type IDs against the table's current complete set of type forward refs
+	// (which now reflects the updated trigger deps). This correctly handles
+	// types that are still referenced by other triggers or columns on the table.
+	newTypeIDs := catalog.MakeDescriptorIDSet(op.Deps.UsesTypeIDs...)
+	allTypeIDs := oldTypeIDs.Union(newTypeIDs)
+	if allTypeIDs.Len() > 0 {
+		tbl, err := i.checkOutTable(ctx, op.Deps.TableID)
+		if err != nil {
+			return err
+		}
+		parent, err := i.getDescriptor(ctx, tbl.GetParentID())
+		if err != nil {
+			return err
+		}
+		db, err := catalog.AsDatabaseDescriptor(parent)
+		if err != nil {
+			return err
+		}
+		forwardRefs := catalog.DescriptorIDSet{}
+		ids, _, err := tbl.GetAllReferencedTypeIDs(db, func(id descpb.ID) (catalog.TypeDescriptor, error) {
+			d, err := i.getDescriptor(ctx, id)
+			if err != nil {
+				return nil, err
+			}
+			return catalog.AsTypeDescriptor(d)
+		})
+		if err != nil {
+			return err
+		}
+		for _, id := range ids {
+			forwardRefs.Add(id)
+		}
+		if err := updateBackReferencesInTypes(ctx, i, allTypeIDs.Ordered(), op.Deps.TableID, forwardRefs); err != nil {
+			return err
+		}
+	}
+
+	// Clean up stale relation back-references. For each old relation that is no
+	// longer referenced, remove the DependedOnBy entry from that relation.
+	staleRelationIDs := oldRelationIDs.Difference(newRelationIDs)
+	staleRelationIDs.ForEach(func(id descpb.ID) {
+		if err != nil {
+			return
+		}
+		var referenced *tabledesc.Mutable
+		referenced, err = i.checkOutTable(ctx, id)
+		if err != nil || referenced.Dropped() {
+			return
+		}
+		newDependedOnBy := referenced.DependedOnBy[:0]
+		for _, backRef := range referenced.DependedOnBy {
+			if backRef.ID == op.Deps.TableID && backRef.TriggerID == op.Deps.TriggerID {
+				continue
+			}
+			newDependedOnBy = append(newDependedOnBy, backRef)
+		}
+		referenced.DependedOnBy = newDependedOnBy
+	})
+	if err != nil {
+		return err
+	}
+
+	// Clean up stale routine back-references.
+	newRoutineIDs := catalog.MakeDescriptorIDSet(op.Deps.UsesRoutineIDs...)
+	staleRoutineIDs := oldRoutineIDs.Difference(newRoutineIDs)
+	staleRoutineIDs.ForEach(func(id descpb.ID) {
+		if err != nil {
+			return
+		}
+		var fnDesc *funcdesc.Mutable
+		fnDesc, err = i.checkOutFunction(ctx, id)
+		if err != nil {
+			return
+		}
+		fnDesc.RemoveTriggerReference(op.Deps.TableID, op.Deps.TriggerID)
+	})
+	if err != nil {
+		return err
+	}
+
 	return nil
 }
 

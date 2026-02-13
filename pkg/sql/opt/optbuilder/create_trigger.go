@@ -233,7 +233,13 @@ func (b *Builder) buildFunctionForTrigger(
 	// We need to disable stable function folding because we want to catch the
 	// volatility of stable functions. If folded, we only get a scalar and lose
 	// the volatility.
-	stmt, err := parser.Parse(o.Body)
+	// Use FuncBodyOverride if set; this is provided during CREATE OR REPLACE
+	// FUNCTION to analyze the new function body in the trigger's table context.
+	body := o.Body
+	if ct.FuncBodyOverride != "" {
+		body = ct.FuncBodyOverride
+	}
+	stmt, err := parser.Parse(body)
 	if err != nil {
 		panic(err)
 	}

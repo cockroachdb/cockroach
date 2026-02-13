@@ -226,11 +226,22 @@ func (b *builderState) ensureDescriptors(e scpb.Element) {
 // target=ToPublic so the planner emits "add" operations that update the
 // already-existing descriptor. This is used for CREATE OR REPLACE FUNCTION.
 func (b *builderState) replaceElement(e scpb.Element, meta scpb.TargetMetadata) {
+	// Ensure all referenced descriptors are loaded BEFORE obtaining a pointer
+	// into b.output, since ensureDescriptors can grow b.output and reallocate
+	// its backing array, which would invalidate any existing pointer.
+	b.ensureDescriptors(e)
 	existing := b.getExistingElementState(e)
 	if existing == nil {
-		panic(errors.AssertionFailedf(
-			"Replace called on non-existent element %s", screl.ElementString(e),
-		))
+		// The exact string key didn't match. Fall back to scanning by scalar
+		// keys to handle elements whose slice attributes changed (e.g.,
+		// TriggerDeps where UsesTypeIDs or UsesRoutineIDs changed during
+		// CREATE OR REPLACE FUNCTION on a trigger function).
+		existing = b.findExistingByElementKeys(e)
+		if existing == nil {
+			panic(errors.AssertionFailedf(
+				"Replace called on non-existent element %s", screl.ElementString(e),
+			))
+		}
 	}
 	if !screl.EqualElementKeys(existing.element, e) {
 		panic(errors.AssertionFailedf(
@@ -238,17 +249,30 @@ func (b *builderState) replaceElement(e scpb.Element, meta scpb.TargetMetadata) 
 			screl.ElementString(existing.element), screl.ElementString(e),
 		))
 	}
-	b.ensureDescriptors(e)
 	id := screl.GetDescID(e)
 	c := b.descCache[id]
 	c.cachedCollection = nil
-	b.upsertElementState(elementState{
+	// Update the elementIndexMap if the string key changed (due to slice
+	// attribute changes). Delete the old key and insert the new one.
+	oldKey := screl.ElementString(existing.element)
+	newKey := screl.ElementString(e)
+	if oldKey != newKey {
+		if idx, ok := c.elementIndexMap[oldKey]; ok {
+			delete(c.elementIndexMap, oldKey)
+			c.elementIndexMap[newKey] = idx
+		}
+	}
+	newState := elementState{
 		element:  e,
 		initial:  scpb.Status_ABSENT,
 		current:  scpb.Status_ABSENT,
 		target:   scpb.ToPublic,
 		metadata: meta,
-	})
+	}
+	if err := b.localMemAcc.Grow(b.ctx, newState.byteSize()-existing.byteSize()); err != nil {
+		panic(err)
+	}
+	*existing = newState
 }
 
 func (b *builderState) upsertElementState(es elementState) {
@@ -281,6 +305,24 @@ func (b *builderState) getExistingElementState(e scpb.Element) *elementState {
 			key, screl.ElementString(es.element)))
 	}
 	return es
+}
+
+// findExistingByElementKeys scans for an element with matching scalar keys
+// when the exact ElementString key doesn't match. This handles elements that
+// have the same identity (scalar attributes) but different slice attribute
+// values, such as TriggerDeps where the dep arrays may change during
+// CREATE OR REPLACE FUNCTION.
+func (b *builderState) findExistingByElementKeys(e scpb.Element) *elementState {
+	id := screl.GetDescID(e)
+	b.ensureDescriptor(id)
+	c := b.descCache[id]
+	for _, idx := range c.outputIndexes {
+		es := &b.output[idx]
+		if screl.EqualElementKeys(es.element, e) {
+			return es
+		}
+	}
+	return nil
 }
 
 func (b *builderState) addNewElementState(es elementState) {
