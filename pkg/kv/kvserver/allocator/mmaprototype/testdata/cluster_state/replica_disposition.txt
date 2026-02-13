@@ -88,7 +88,7 @@ ok refusing=replicas
 
 retain-ready-replica-target-stores-only in=(1,2,3)
 ----
-skipping s3 for replica transfer: replica disposition ‹×› (health ‹×›)
+skipping s3 for replica transfer: replica disposition refusing (health ok)
 [1 2]
 
 # Shedding and refusing are treated the same.
@@ -98,7 +98,7 @@ ok shedding=replicas
 
 retain-ready-replica-target-stores-only in=(1,2,3)
 ----
-skipping s3 for replica transfer: replica disposition ‹×› (health ‹×›)
+skipping s3 for replica transfer: replica disposition shedding (health ok)
 [1 2]
 
 # Restore store 3.
@@ -124,7 +124,7 @@ updated: map[1:ok accepting all 2:ok shedding=replicas 3:ok accepting all]
 
 retain-ready-replica-target-stores-only in=(1,2,3)
 ----
-skipping s2 for replica transfer: replica disposition ‹×› (health ‹×›)
+skipping s2 for replica transfer: replica disposition shedding (health ok)
 [1 3]
 
 # Test combination of filters: s2 still high disk,
@@ -135,8 +135,8 @@ ok refusing=replicas
 
 retain-ready-replica-target-stores-only in=(1,2,3)
 ----
-skipping s2 for replica transfer: replica disposition ‹×› (health ‹×›)
-skipping s3 for replica transfer: replica disposition ‹×› (health ‹×›)
+skipping s2 for replica transfer: replica disposition shedding (health ok)
+skipping s3 for replica transfer: replica disposition refusing (health ok)
 [1]
 
 # Test with `replicas` parameter: stores in this set bypass disposition checks
@@ -173,7 +173,7 @@ ok refusing=replicas
 # When not specified to already have a replica, s1 is filtered out.
 retain-ready-replica-target-stores-only in=(1,2,3)
 ----
-skipping s1 for replica transfer: replica disposition ‹×› (health ‹×›)
+skipping s1 for replica transfer: replica disposition refusing (health ok)
 [2 3]
 
 # With existing replica on s1, s1 bypasses the disposition check and is retained.

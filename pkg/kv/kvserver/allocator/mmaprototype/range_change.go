@@ -98,14 +98,14 @@ func (rc *ExternalRangeChange) SafeFormat(w redact.SafePrinter, _ rune) {
 	if !found {
 		panic("unknown change type")
 	}
-	w.Print(" cids=")
+	w.SafeString(" cids=")
 	for i, c := range rc.Changes {
 		if i > 0 {
-			w.Print(",")
+			w.SafeRune(',')
 		}
 		w.Printf("%v", c.changeID)
 	}
-	w.Print("]")
+	w.SafeRune(']')
 }
 
 // TODO(sumeer): A single ExternalRangeChange can model a bunch of replica

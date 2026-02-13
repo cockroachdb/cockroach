@@ -19,84 +19,84 @@ rebalance-stores store-id=1 max-range-move-count=999 fraction-pending-decrease-t
 [mmaid=2] start processing shedding store s3: cpu node load overloadUrgent, store load overloadUrgent, worst dim CPURate
 [mmaid=2] top-K[CPURate] ranges for s3 with lease on local s1: r3:[cpu:100ns/s, write-bandwidth:0 B/s, byte-size:0 B] r2:[cpu:100ns/s, write-bandwidth:0 B/s, byte-size:0 B] r1:[cpu:100ns/s, write-bandwidth:0 B/s, byte-size:0 B]
 [mmaid=2] attempting to shed replicas next
-[mmaid=2] load summary for dim=CPURate (‹×›): overloadUrgent, reason: ‹×› [‹×›]
-[mmaid=2] load summary for dim=WriteBandwidth (‹×›): loadNormal, reason: ‹×› [‹×›]
-[mmaid=2] load summary for dim=ByteSize (‹×›): loadNormal, reason: ‹×› [‹×›]
-[mmaid=2] load summary for dim=CPURate (‹×›): overloadUrgent, reason: ‹×› [‹×›]
-[mmaid=2] load summary for dim=CPURate (‹×›): loadLow, reason: ‹×› [‹×›]
-[mmaid=2] load summary for dim=WriteBandwidth (‹×›): loadNormal, reason: ‹×› [‹×›]
-[mmaid=2] load summary for dim=ByteSize (‹×›): loadNormal, reason: ‹×› [‹×›]
-[mmaid=2] load summary for dim=CPURate (‹×›): loadLow, reason: ‹×› [‹×›]
+[mmaid=2] load summary for dim=CPURate (s3): overloadUrgent, reason: fractionUsed > 90% [load=1000 meanLoad=525 fractionUsed=100.00% meanUtil=52.50% capacity=1000]
+[mmaid=2] load summary for dim=WriteBandwidth (s3): loadNormal, reason: load is within 5% of mean [load=0 meanLoad=0 fractionUsed=0.00% meanUtil=0.00% capacity=1000]
+[mmaid=2] load summary for dim=ByteSize (s3): loadNormal, reason: load is within 5% of mean [load=0 meanLoad=0 fractionUsed=0.00% meanUtil=0.00% capacity=1000]
+[mmaid=2] load summary for dim=CPURate (n3): overloadUrgent, reason: fractionUsed > 90% [load=1000 meanLoad=525 fractionUsed=100.00% meanUtil=52.50% capacity=1000]
+[mmaid=2] load summary for dim=CPURate (s4): loadLow, reason: load is >10% below mean [load=100 meanLoad=525 fractionUsed=10.00% meanUtil=52.50% capacity=1000]
+[mmaid=2] load summary for dim=WriteBandwidth (s4): loadNormal, reason: load is within 5% of mean [load=0 meanLoad=0 fractionUsed=0.00% meanUtil=0.00% capacity=1000]
+[mmaid=2] load summary for dim=ByteSize (s4): loadNormal, reason: load is within 5% of mean [load=0 meanLoad=0 fractionUsed=0.00% meanUtil=0.00% capacity=1000]
+[mmaid=2] load summary for dim=CPURate (n4): loadLow, reason: load is >10% below mean [load=100 meanLoad=525 fractionUsed=10.00% meanUtil=52.50% capacity=1000]
 [mmaid=2] considering replica-transfer r3 from s3: store load [cpu:1µs/s, write-bandwidth:0 B/s, byte-size:0 B]
 [mmaid=2] candidates are:
 [mmaid=2]  s4: (store=loadNormal worst=WriteBandwidth cpu=loadLow writes=loadNormal bytes=loadNormal node=loadLow frac_pending=0.00,0.00(true))
 [mmaid=2] sortTargetCandidateSetAndPick: candidates: s4(SLS:loadNormal, overloadedDimLoadSummary:loadLow), overloadedDim:CPURate, picked s4
-[mmaid=2] load summary for dim=CPURate (‹×›): loadLow, reason: ‹×› [‹×›]
-[mmaid=2] load summary for dim=WriteBandwidth (‹×›): loadNormal, reason: ‹×› [‹×›]
-[mmaid=2] load summary for dim=ByteSize (‹×›): loadNormal, reason: ‹×› [‹×›]
-[mmaid=2] load summary for dim=CPURate (‹×›): loadLow, reason: ‹×› [‹×›]
-[mmaid=2] load summary for dim=CPURate (‹×›): overloadUrgent, reason: ‹×› [‹×›]
-[mmaid=2] load summary for dim=WriteBandwidth (‹×›): loadNormal, reason: ‹×› [‹×›]
-[mmaid=2] load summary for dim=ByteSize (‹×›): loadNormal, reason: ‹×› [‹×›]
-[mmaid=2] load summary for dim=CPURate (‹×›): overloadUrgent, reason: ‹×› [‹×›]
+[mmaid=2] load summary for dim=CPURate (s4): loadLow, reason: load is >10% below mean [load=210 meanLoad=525 fractionUsed=21.00% meanUtil=52.50% capacity=1000]
+[mmaid=2] load summary for dim=WriteBandwidth (s4): loadNormal, reason: load is within 5% of mean [load=0 meanLoad=0 fractionUsed=0.00% meanUtil=0.00% capacity=1000]
+[mmaid=2] load summary for dim=ByteSize (s4): loadNormal, reason: load is within 5% of mean [load=0 meanLoad=0 fractionUsed=0.00% meanUtil=0.00% capacity=1000]
+[mmaid=2] load summary for dim=CPURate (n4): loadLow, reason: load is >10% below mean [load=210 meanLoad=525 fractionUsed=21.00% meanUtil=52.50% capacity=1000]
+[mmaid=2] load summary for dim=CPURate (s3): overloadUrgent, reason: fractionUsed > 75% and >1.5x meanUtil [load=900 meanLoad=525 fractionUsed=90.00% meanUtil=52.50% capacity=1000]
+[mmaid=2] load summary for dim=WriteBandwidth (s3): loadNormal, reason: load is within 5% of mean [load=0 meanLoad=0 fractionUsed=0.00% meanUtil=0.00% capacity=1000]
+[mmaid=2] load summary for dim=ByteSize (s3): loadNormal, reason: load is within 5% of mean [load=0 meanLoad=0 fractionUsed=0.00% meanUtil=0.00% capacity=1000]
+[mmaid=2] load summary for dim=CPURate (n3): overloadUrgent, reason: fractionUsed > 75% and >1.5x meanUtil [load=900 meanLoad=525 fractionUsed=90.00% meanUtil=52.50% capacity=1000]
 [mmaid=2] can add load to n4s4: true targetSLS[(store=loadNormal worst=WriteBandwidth cpu=loadLow writes=loadNormal bytes=loadNormal node=loadLow frac_pending=0.00,0.00(true))] srcSLS[(store=overloadUrgent worst=CPURate cpu=overloadUrgent writes=loadNormal bytes=loadNormal node=overloadUrgent frac_pending=0.00,0.00(true))]
-[mmaid=2] applying replica change r3 type: ‹×› target store n4,s4 (‹×› type=VOTER_FULL)->(‹×› type=VOTER_FULL) to range 3 on store 4
-[mmaid=2] addPendingRangeChange: change_id=‹×›, range_id=3, change=r3 type: ‹×› target store n4,s4 (‹×› type=VOTER_FULL)->(‹×› type=VOTER_FULL)
-[mmaid=2] applying replica change r3 type: ‹×› target store n3,s3 (‹×›3 type=VOTER_FULL)->(‹×› type=VOTER_FULL) to range 3 on store 3
-[mmaid=2] addPendingRangeChange: change_id=‹×›, range_id=3, change=r3 type: ‹×› target store n3,s3 (‹×›3 type=VOTER_FULL)->(‹×› type=VOTER_FULL)
-[mmaid=2] result(success): rebalancing r3 from s3 to s4 [change: r3=[change_replicas=[{ADD_VOTER n4,s4} {REMOVE_VOTER n3,s3}]‹×›] with resulting loads source: [cpu:900ns/s, write-bandwidth:0 B/s, byte-size:0 B] target: [cpu:210ns/s, write-bandwidth:0 B/s, byte-size:0 B]
-[mmaid=2] load summary for dim=CPURate (‹×›): overloadUrgent, reason: ‹×› [‹×›]
-[mmaid=2] load summary for dim=WriteBandwidth (‹×›): loadNormal, reason: ‹×› [‹×›]
-[mmaid=2] load summary for dim=ByteSize (‹×›): loadNormal, reason: ‹×› [‹×›]
-[mmaid=2] load summary for dim=CPURate (‹×›): overloadUrgent, reason: ‹×› [‹×›]
-[mmaid=2] load summary for dim=CPURate (‹×›): loadLow, reason: ‹×› [‹×›]
-[mmaid=2] load summary for dim=WriteBandwidth (‹×›): loadNormal, reason: ‹×› [‹×›]
-[mmaid=2] load summary for dim=ByteSize (‹×›): loadNormal, reason: ‹×› [‹×›]
-[mmaid=2] load summary for dim=CPURate (‹×›): loadLow, reason: ‹×› [‹×›]
+[mmaid=2] applying replica change r3 type: AddReplica target store n4,s4 (replica-id=none type=VOTER_FULL)->(replica-id=unknown type=VOTER_FULL) to range 3 on store 4
+[mmaid=2] addPendingRangeChange: change_id=1, range_id=3, change=r3 type: AddReplica target store n4,s4 (replica-id=none type=VOTER_FULL)->(replica-id=unknown type=VOTER_FULL)
+[mmaid=2] applying replica change r3 type: RemoveReplica target store n3,s3 (replica-id=3 type=VOTER_FULL)->(replica-id=none type=VOTER_FULL) to range 3 on store 3
+[mmaid=2] addPendingRangeChange: change_id=2, range_id=3, change=r3 type: RemoveReplica target store n3,s3 (replica-id=3 type=VOTER_FULL)->(replica-id=none type=VOTER_FULL)
+[mmaid=2] result(success): rebalancing r3 from s3 to s4 [change: r3=[change_replicas=[{ADD_VOTER n4,s4} {REMOVE_VOTER n3,s3}] cids=1,2]] with resulting loads source: [cpu:900ns/s, write-bandwidth:0 B/s, byte-size:0 B] target: [cpu:210ns/s, write-bandwidth:0 B/s, byte-size:0 B]
+[mmaid=2] load summary for dim=CPURate (s3): overloadUrgent, reason: fractionUsed > 75% and >1.5x meanUtil [load=900 meanLoad=525 fractionUsed=90.00% meanUtil=52.50% capacity=1000]
+[mmaid=2] load summary for dim=WriteBandwidth (s3): loadNormal, reason: load is within 5% of mean [load=0 meanLoad=0 fractionUsed=0.00% meanUtil=0.00% capacity=1000]
+[mmaid=2] load summary for dim=ByteSize (s3): loadNormal, reason: load is within 5% of mean [load=0 meanLoad=0 fractionUsed=0.00% meanUtil=0.00% capacity=1000]
+[mmaid=2] load summary for dim=CPURate (n3): overloadUrgent, reason: fractionUsed > 75% and >1.5x meanUtil [load=900 meanLoad=525 fractionUsed=90.00% meanUtil=52.50% capacity=1000]
+[mmaid=2] load summary for dim=CPURate (s4): loadLow, reason: load is >10% below mean [load=210 meanLoad=525 fractionUsed=21.00% meanUtil=52.50% capacity=1000]
+[mmaid=2] load summary for dim=WriteBandwidth (s4): loadNormal, reason: load is within 5% of mean [load=0 meanLoad=0 fractionUsed=0.00% meanUtil=0.00% capacity=1000]
+[mmaid=2] load summary for dim=ByteSize (s4): loadNormal, reason: load is within 5% of mean [load=0 meanLoad=0 fractionUsed=0.00% meanUtil=0.00% capacity=1000]
+[mmaid=2] load summary for dim=CPURate (n4): loadLow, reason: load is >10% below mean [load=210 meanLoad=525 fractionUsed=21.00% meanUtil=52.50% capacity=1000]
 [mmaid=2] considering replica-transfer r2 from s3: store load [cpu:900ns/s, write-bandwidth:0 B/s, byte-size:0 B]
 [mmaid=2] candidates are:
 [mmaid=2]  s4: (store=loadNormal worst=WriteBandwidth cpu=loadLow writes=loadNormal bytes=loadNormal node=loadLow frac_pending=1.10,0.00(false))
 [mmaid=2] sortTargetCandidateSetAndPick: candidates: s4(SLS:loadNormal, overloadedDimLoadSummary:loadLow), overloadedDim:CPURate, picked s4
-[mmaid=2] load summary for dim=CPURate (‹×›): loadLow, reason: ‹×› [‹×›]
-[mmaid=2] load summary for dim=WriteBandwidth (‹×›): loadNormal, reason: ‹×› [‹×›]
-[mmaid=2] load summary for dim=ByteSize (‹×›): loadNormal, reason: ‹×› [‹×›]
-[mmaid=2] load summary for dim=CPURate (‹×›): loadLow, reason: ‹×› [‹×›]
-[mmaid=2] load summary for dim=CPURate (‹×›): overloadUrgent, reason: ‹×› [‹×›]
-[mmaid=2] load summary for dim=WriteBandwidth (‹×›): loadNormal, reason: ‹×› [‹×›]
-[mmaid=2] load summary for dim=ByteSize (‹×›): loadNormal, reason: ‹×› [‹×›]
-[mmaid=2] load summary for dim=CPURate (‹×›): overloadUrgent, reason: ‹×› [‹×›]
+[mmaid=2] load summary for dim=CPURate (s4): loadLow, reason: load is >10% below mean [load=320 meanLoad=525 fractionUsed=32.00% meanUtil=52.50% capacity=1000]
+[mmaid=2] load summary for dim=WriteBandwidth (s4): loadNormal, reason: load is within 5% of mean [load=0 meanLoad=0 fractionUsed=0.00% meanUtil=0.00% capacity=1000]
+[mmaid=2] load summary for dim=ByteSize (s4): loadNormal, reason: load is within 5% of mean [load=0 meanLoad=0 fractionUsed=0.00% meanUtil=0.00% capacity=1000]
+[mmaid=2] load summary for dim=CPURate (n4): loadLow, reason: load is >10% below mean [load=320 meanLoad=525 fractionUsed=32.00% meanUtil=52.50% capacity=1000]
+[mmaid=2] load summary for dim=CPURate (s3): overloadUrgent, reason: fractionUsed > 75% and >1.5x meanUtil [load=800 meanLoad=525 fractionUsed=80.00% meanUtil=52.50% capacity=1000]
+[mmaid=2] load summary for dim=WriteBandwidth (s3): loadNormal, reason: load is within 5% of mean [load=0 meanLoad=0 fractionUsed=0.00% meanUtil=0.00% capacity=1000]
+[mmaid=2] load summary for dim=ByteSize (s3): loadNormal, reason: load is within 5% of mean [load=0 meanLoad=0 fractionUsed=0.00% meanUtil=0.00% capacity=1000]
+[mmaid=2] load summary for dim=CPURate (n3): overloadUrgent, reason: fractionUsed > 75% and >1.5x meanUtil [load=800 meanLoad=525 fractionUsed=80.00% meanUtil=52.50% capacity=1000]
 [mmaid=2] can add load to n4s4: true targetSLS[(store=loadNormal worst=WriteBandwidth cpu=loadLow writes=loadNormal bytes=loadNormal node=loadLow frac_pending=1.10,0.00(false))] srcSLS[(store=overloadUrgent worst=CPURate cpu=overloadUrgent writes=loadNormal bytes=loadNormal node=overloadUrgent frac_pending=0.00,0.10(false))]
-[mmaid=2] applying replica change r2 type: ‹×› target store n4,s4 (‹×› type=VOTER_FULL)->(‹×› type=VOTER_FULL) to range 2 on store 4
-[mmaid=2] addPendingRangeChange: change_id=‹×›, range_id=2, change=r2 type: ‹×› target store n4,s4 (‹×› type=VOTER_FULL)->(‹×› type=VOTER_FULL)
-[mmaid=2] applying replica change r2 type: ‹×› target store n3,s3 (‹×›3 type=VOTER_FULL)->(‹×› type=VOTER_FULL) to range 2 on store 3
-[mmaid=2] addPendingRangeChange: change_id=‹×›, range_id=2, change=r2 type: ‹×› target store n3,s3 (‹×›3 type=VOTER_FULL)->(‹×› type=VOTER_FULL)
-[mmaid=2] result(success): rebalancing r2 from s3 to s4 [change: r2=[change_replicas=[{ADD_VOTER n4,s4} {REMOVE_VOTER n3,s3}]‹×›] with resulting loads source: [cpu:800ns/s, write-bandwidth:0 B/s, byte-size:0 B] target: [cpu:320ns/s, write-bandwidth:0 B/s, byte-size:0 B]
-[mmaid=2] load summary for dim=CPURate (‹×›): overloadUrgent, reason: ‹×› [‹×›]
-[mmaid=2] load summary for dim=WriteBandwidth (‹×›): loadNormal, reason: ‹×› [‹×›]
-[mmaid=2] load summary for dim=ByteSize (‹×›): loadNormal, reason: ‹×› [‹×›]
-[mmaid=2] load summary for dim=CPURate (‹×›): overloadUrgent, reason: ‹×› [‹×›]
-[mmaid=2] load summary for dim=CPURate (‹×›): loadLow, reason: ‹×› [‹×›]
-[mmaid=2] load summary for dim=WriteBandwidth (‹×›): loadNormal, reason: ‹×› [‹×›]
-[mmaid=2] load summary for dim=ByteSize (‹×›): loadNormal, reason: ‹×› [‹×›]
-[mmaid=2] load summary for dim=CPURate (‹×›): loadLow, reason: ‹×› [‹×›]
+[mmaid=2] applying replica change r2 type: AddReplica target store n4,s4 (replica-id=none type=VOTER_FULL)->(replica-id=unknown type=VOTER_FULL) to range 2 on store 4
+[mmaid=2] addPendingRangeChange: change_id=3, range_id=2, change=r2 type: AddReplica target store n4,s4 (replica-id=none type=VOTER_FULL)->(replica-id=unknown type=VOTER_FULL)
+[mmaid=2] applying replica change r2 type: RemoveReplica target store n3,s3 (replica-id=3 type=VOTER_FULL)->(replica-id=none type=VOTER_FULL) to range 2 on store 3
+[mmaid=2] addPendingRangeChange: change_id=4, range_id=2, change=r2 type: RemoveReplica target store n3,s3 (replica-id=3 type=VOTER_FULL)->(replica-id=none type=VOTER_FULL)
+[mmaid=2] result(success): rebalancing r2 from s3 to s4 [change: r2=[change_replicas=[{ADD_VOTER n4,s4} {REMOVE_VOTER n3,s3}] cids=3,4]] with resulting loads source: [cpu:800ns/s, write-bandwidth:0 B/s, byte-size:0 B] target: [cpu:320ns/s, write-bandwidth:0 B/s, byte-size:0 B]
+[mmaid=2] load summary for dim=CPURate (s3): overloadUrgent, reason: fractionUsed > 75% and >1.5x meanUtil [load=800 meanLoad=525 fractionUsed=80.00% meanUtil=52.50% capacity=1000]
+[mmaid=2] load summary for dim=WriteBandwidth (s3): loadNormal, reason: load is within 5% of mean [load=0 meanLoad=0 fractionUsed=0.00% meanUtil=0.00% capacity=1000]
+[mmaid=2] load summary for dim=ByteSize (s3): loadNormal, reason: load is within 5% of mean [load=0 meanLoad=0 fractionUsed=0.00% meanUtil=0.00% capacity=1000]
+[mmaid=2] load summary for dim=CPURate (n3): overloadUrgent, reason: fractionUsed > 75% and >1.5x meanUtil [load=800 meanLoad=525 fractionUsed=80.00% meanUtil=52.50% capacity=1000]
+[mmaid=2] load summary for dim=CPURate (s4): loadLow, reason: load is >10% below mean [load=320 meanLoad=525 fractionUsed=32.00% meanUtil=52.50% capacity=1000]
+[mmaid=2] load summary for dim=WriteBandwidth (s4): loadNormal, reason: load is within 5% of mean [load=0 meanLoad=0 fractionUsed=0.00% meanUtil=0.00% capacity=1000]
+[mmaid=2] load summary for dim=ByteSize (s4): loadNormal, reason: load is within 5% of mean [load=0 meanLoad=0 fractionUsed=0.00% meanUtil=0.00% capacity=1000]
+[mmaid=2] load summary for dim=CPURate (n4): loadLow, reason: load is >10% below mean [load=320 meanLoad=525 fractionUsed=32.00% meanUtil=52.50% capacity=1000]
 [mmaid=2] considering replica-transfer r1 from s3: store load [cpu:800ns/s, write-bandwidth:0 B/s, byte-size:0 B]
 [mmaid=2] candidates are:
 [mmaid=2]  s4: (store=loadNormal worst=WriteBandwidth cpu=loadLow writes=loadNormal bytes=loadNormal node=loadLow frac_pending=2.20,0.00(false))
 [mmaid=2] sortTargetCandidateSetAndPick: candidates: s4(SLS:loadNormal, overloadedDimLoadSummary:loadLow), overloadedDim:CPURate, picked s4
-[mmaid=2] load summary for dim=CPURate (‹×›): loadLow, reason: ‹×› [‹×›]
-[mmaid=2] load summary for dim=WriteBandwidth (‹×›): loadNormal, reason: ‹×› [‹×›]
-[mmaid=2] load summary for dim=ByteSize (‹×›): loadNormal, reason: ‹×› [‹×›]
-[mmaid=2] load summary for dim=CPURate (‹×›): loadLow, reason: ‹×› [‹×›]
-[mmaid=2] load summary for dim=CPURate (‹×›): overloadSlow, reason: ‹×› [‹×›]
-[mmaid=2] load summary for dim=WriteBandwidth (‹×›): loadNormal, reason: ‹×› [‹×›]
-[mmaid=2] load summary for dim=ByteSize (‹×›): loadNormal, reason: ‹×› [‹×›]
-[mmaid=2] load summary for dim=CPURate (‹×›): overloadSlow, reason: ‹×› [‹×›]
+[mmaid=2] load summary for dim=CPURate (s4): loadLow, reason: load is >10% below mean [load=430 meanLoad=525 fractionUsed=43.00% meanUtil=52.50% capacity=1000]
+[mmaid=2] load summary for dim=WriteBandwidth (s4): loadNormal, reason: load is within 5% of mean [load=0 meanLoad=0 fractionUsed=0.00% meanUtil=0.00% capacity=1000]
+[mmaid=2] load summary for dim=ByteSize (s4): loadNormal, reason: load is within 5% of mean [load=0 meanLoad=0 fractionUsed=0.00% meanUtil=0.00% capacity=1000]
+[mmaid=2] load summary for dim=CPURate (n4): loadLow, reason: load is >10% below mean [load=430 meanLoad=525 fractionUsed=43.00% meanUtil=52.50% capacity=1000]
+[mmaid=2] load summary for dim=CPURate (s3): overloadSlow, reason: fractionUsed < 75% [load=700 meanLoad=525 fractionUsed=70.00% meanUtil=52.50% capacity=1000]
+[mmaid=2] load summary for dim=WriteBandwidth (s3): loadNormal, reason: load is within 5% of mean [load=0 meanLoad=0 fractionUsed=0.00% meanUtil=0.00% capacity=1000]
+[mmaid=2] load summary for dim=ByteSize (s3): loadNormal, reason: load is within 5% of mean [load=0 meanLoad=0 fractionUsed=0.00% meanUtil=0.00% capacity=1000]
+[mmaid=2] load summary for dim=CPURate (n3): overloadSlow, reason: fractionUsed < 75% [load=700 meanLoad=525 fractionUsed=70.00% meanUtil=52.50% capacity=1000]
 [mmaid=2] can add load to n4s4: true targetSLS[(store=loadNormal worst=WriteBandwidth cpu=loadLow writes=loadNormal bytes=loadNormal node=loadLow frac_pending=2.20,0.00(false))] srcSLS[(store=overloadSlow worst=CPURate cpu=overloadSlow writes=loadNormal bytes=loadNormal node=overloadSlow frac_pending=0.00,0.20(false))]
-[mmaid=2] applying replica change r1 type: ‹×› target store n4,s4 (‹×› type=VOTER_FULL)->(‹×› type=VOTER_FULL) to range 1 on store 4
-[mmaid=2] addPendingRangeChange: change_id=‹×›, range_id=1, change=r1 type: ‹×› target store n4,s4 (‹×› type=VOTER_FULL)->(‹×› type=VOTER_FULL)
-[mmaid=2] applying replica change r1 type: ‹×› target store n3,s3 (‹×›3 type=VOTER_FULL)->(‹×› type=VOTER_FULL) to range 1 on store 3
-[mmaid=2] addPendingRangeChange: change_id=‹×›, range_id=1, change=r1 type: ‹×› target store n3,s3 (‹×›3 type=VOTER_FULL)->(‹×› type=VOTER_FULL)
-[mmaid=2] result(success): rebalancing r1 from s3 to s4 [change: r1=[change_replicas=[{ADD_VOTER n4,s4} {REMOVE_VOTER n3,s3}]‹×›] with resulting loads source: [cpu:700ns/s, write-bandwidth:0 B/s, byte-size:0 B] target: [cpu:430ns/s, write-bandwidth:0 B/s, byte-size:0 B]
+[mmaid=2] applying replica change r1 type: AddReplica target store n4,s4 (replica-id=none type=VOTER_FULL)->(replica-id=unknown type=VOTER_FULL) to range 1 on store 4
+[mmaid=2] addPendingRangeChange: change_id=5, range_id=1, change=r1 type: AddReplica target store n4,s4 (replica-id=none type=VOTER_FULL)->(replica-id=unknown type=VOTER_FULL)
+[mmaid=2] applying replica change r1 type: RemoveReplica target store n3,s3 (replica-id=3 type=VOTER_FULL)->(replica-id=none type=VOTER_FULL) to range 1 on store 3
+[mmaid=2] addPendingRangeChange: change_id=6, range_id=1, change=r1 type: RemoveReplica target store n3,s3 (replica-id=3 type=VOTER_FULL)->(replica-id=none type=VOTER_FULL)
+[mmaid=2] result(success): rebalancing r1 from s3 to s4 [change: r1=[change_replicas=[{ADD_VOTER n4,s4} {REMOVE_VOTER n3,s3}] cids=5,6]] with resulting loads source: [cpu:700ns/s, write-bandwidth:0 B/s, byte-size:0 B] target: [cpu:430ns/s, write-bandwidth:0 B/s, byte-size:0 B]
 [mmaid=2] rebalancing pass summary [local=s1]:
 	overloaded:
 		short: [s3]

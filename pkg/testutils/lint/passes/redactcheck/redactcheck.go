@@ -111,7 +111,9 @@ func runAnalyzer(pass *analysis.Pass) (interface{}, error) {
 						"StoreStatus": {},
 					},
 					"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/mmaprototype": {
-						"LoadValue": {},
+						"LoadValue":         {},
+						"changeID":          {},
+						"ReplicaChangeType": {},
 					},
 					"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts/ctpb": {
 						"SeqNum": {},

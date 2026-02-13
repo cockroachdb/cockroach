@@ -52,12 +52,12 @@ dead shedding=leases,replicas
 
 retain-ready-replica-target-stores-only in=(2,3)
 ----
-skipping s3 for replica transfer: replica disposition ‹×› (health ‹×›)
+skipping s3 for replica transfer: replica disposition shedding (health dead)
 [2]
 
 retain-ready-lease-target-stores-only in=(2,3) range-id=1
 ----
-skipping s3 for lease transfer: lease disposition ‹×› (health ‹×›)
+skipping s3 for lease transfer: lease disposition shedding (health dead)
 [2]
 
 # Unknown: excluded from all targets (refusing leases, refusing replicas)
@@ -67,12 +67,12 @@ unknown refusing=leases,replicas
 
 retain-ready-replica-target-stores-only in=(2,3)
 ----
-skipping s3 for replica transfer: replica disposition ‹×› (health ‹×›)
+skipping s3 for replica transfer: replica disposition refusing (health unknown)
 [2]
 
 retain-ready-lease-target-stores-only in=(2,3) range-id=1
 ----
-skipping s3 for lease transfer: lease disposition ‹×› (health ‹×›)
+skipping s3 for lease transfer: lease disposition refusing (health unknown)
 [2]
 
 # Decommissioning: excluded from all targets (shedding leases, shedding replicas)
@@ -82,12 +82,12 @@ ok shedding=leases,replicas
 
 retain-ready-replica-target-stores-only in=(2,3)
 ----
-skipping s3 for replica transfer: replica disposition ‹×› (health ‹×›)
+skipping s3 for replica transfer: replica disposition shedding (health ok)
 [2]
 
 retain-ready-lease-target-stores-only in=(2,3) range-id=1
 ----
-skipping s3 for lease transfer: lease disposition ‹×› (health ‹×›)
+skipping s3 for lease transfer: lease disposition shedding (health ok)
 [2]
 
 # Draining: excluded from all targets (shedding leases, refusing replicas)
@@ -97,12 +97,12 @@ ok refusing=replicas shedding=leases
 
 retain-ready-replica-target-stores-only in=(2,3)
 ----
-skipping s3 for replica transfer: replica disposition ‹×› (health ‹×›)
+skipping s3 for replica transfer: replica disposition refusing (health ok)
 [2]
 
 retain-ready-lease-target-stores-only in=(2,3) range-id=1
 ----
-skipping s3 for lease transfer: lease disposition ‹×› (health ‹×›)
+skipping s3 for lease transfer: lease disposition shedding (health ok)
 [2]
 
 # Suspect: excluded from all targets (shedding leases, refusing replicas)
@@ -112,12 +112,12 @@ unhealthy refusing=replicas shedding=leases
 
 retain-ready-replica-target-stores-only in=(2,3)
 ----
-skipping s3 for replica transfer: replica disposition ‹×› (health ‹×›)
+skipping s3 for replica transfer: replica disposition refusing (health unhealthy)
 [2]
 
 retain-ready-lease-target-stores-only in=(2,3) range-id=1
 ----
-skipping s3 for lease transfer: lease disposition ‹×› (health ‹×›)
+skipping s3 for lease transfer: lease disposition shedding (health unhealthy)
 [2]
 
 # Throttled: excluded from replica targets, can receive leases
@@ -127,7 +127,7 @@ ok refusing=replicas
 
 retain-ready-replica-target-stores-only in=(2,3)
 ----
-skipping s3 for replica transfer: replica disposition ‹×› (health ‹×›)
+skipping s3 for replica transfer: replica disposition refusing (health ok)
 [2]
 
 retain-ready-lease-target-stores-only in=(2,3) range-id=1
@@ -156,51 +156,51 @@ rebalance-stores store-id=1
 ----
 [mmaid=1] rebalanceStores begins
 [mmaid=1] cluster means: (stores-load [cpu:400ns/s, write-bandwidth:0 B/s, byte-size:0 B]) (stores-capacity [cpu:1µs/s, write-bandwidth:1.0 kB/s, byte-size:1.0 kB]) (nodes-cpu-load 400) (nodes-cpu-capacity 1000)
-[mmaid=1] load summary for dim=CPURate (‹×›): overloadUrgent, reason: ‹×› [‹×›]
-[mmaid=1] load summary for dim=WriteBandwidth (‹×›): loadNormal, reason: ‹×› [‹×›]
-[mmaid=1] load summary for dim=ByteSize (‹×›): loadNormal, reason: ‹×› [‹×›]
-[mmaid=1] load summary for dim=CPURate (‹×›): overloadUrgent, reason: ‹×› [‹×›]
+[mmaid=1] load summary for dim=CPURate (s1): overloadUrgent, reason: fractionUsed > 90% [load=1000 meanLoad=400 fractionUsed=100.00% meanUtil=40.00% capacity=1000]
+[mmaid=1] load summary for dim=WriteBandwidth (s1): loadNormal, reason: load is within 5% of mean [load=0 meanLoad=0 fractionUsed=0.00% meanUtil=0.00% capacity=1000]
+[mmaid=1] load summary for dim=ByteSize (s1): loadNormal, reason: load is within 5% of mean [load=0 meanLoad=0 fractionUsed=0.00% meanUtil=0.00% capacity=1000]
+[mmaid=1] load summary for dim=CPURate (n1): overloadUrgent, reason: fractionUsed > 90% [load=1000 meanLoad=400 fractionUsed=100.00% meanUtil=40.00% capacity=1000]
 [mmaid=1] evaluating s1: node load overloadUrgent, store load overloadUrgent, worst dim CPURate
 [mmaid=1] overload-continued s1 ((store=overloadUrgent worst=CPURate cpu=overloadUrgent writes=loadNormal bytes=loadNormal node=overloadUrgent frac_pending=0.00,0.00(true))) - within grace period
 [mmaid=1] store s1 was added to shedding store list
-[mmaid=1] load summary for dim=CPURate (‹×›): loadLow, reason: ‹×› [‹×›]
-[mmaid=1] load summary for dim=WriteBandwidth (‹×›): loadNormal, reason: ‹×› [‹×›]
-[mmaid=1] load summary for dim=ByteSize (‹×›): loadNormal, reason: ‹×› [‹×›]
-[mmaid=1] load summary for dim=CPURate (‹×›): loadLow, reason: ‹×› [‹×›]
+[mmaid=1] load summary for dim=CPURate (s2): loadLow, reason: load is >10% below mean [load=100 meanLoad=400 fractionUsed=10.00% meanUtil=40.00% capacity=1000]
+[mmaid=1] load summary for dim=WriteBandwidth (s2): loadNormal, reason: load is within 5% of mean [load=0 meanLoad=0 fractionUsed=0.00% meanUtil=0.00% capacity=1000]
+[mmaid=1] load summary for dim=ByteSize (s2): loadNormal, reason: load is within 5% of mean [load=0 meanLoad=0 fractionUsed=0.00% meanUtil=0.00% capacity=1000]
+[mmaid=1] load summary for dim=CPURate (n2): loadLow, reason: load is >10% below mean [load=100 meanLoad=400 fractionUsed=10.00% meanUtil=40.00% capacity=1000]
 [mmaid=1] evaluating s2: node load loadLow, store load loadNormal, worst dim WriteBandwidth
-[mmaid=1] load summary for dim=CPURate (‹×›): loadLow, reason: ‹×› [‹×›]
-[mmaid=1] load summary for dim=WriteBandwidth (‹×›): loadNormal, reason: ‹×› [‹×›]
-[mmaid=1] load summary for dim=ByteSize (‹×›): loadNormal, reason: ‹×› [‹×›]
-[mmaid=1] load summary for dim=CPURate (‹×›): loadLow, reason: ‹×› [‹×›]
+[mmaid=1] load summary for dim=CPURate (s3): loadLow, reason: load is >10% below mean [load=100 meanLoad=400 fractionUsed=10.00% meanUtil=40.00% capacity=1000]
+[mmaid=1] load summary for dim=WriteBandwidth (s3): loadNormal, reason: load is within 5% of mean [load=0 meanLoad=0 fractionUsed=0.00% meanUtil=0.00% capacity=1000]
+[mmaid=1] load summary for dim=ByteSize (s3): loadNormal, reason: load is within 5% of mean [load=0 meanLoad=0 fractionUsed=0.00% meanUtil=0.00% capacity=1000]
+[mmaid=1] load summary for dim=CPURate (n3): loadLow, reason: load is >10% below mean [load=100 meanLoad=400 fractionUsed=10.00% meanUtil=40.00% capacity=1000]
 [mmaid=1] evaluating s3: node load loadLow, store load loadNormal, worst dim WriteBandwidth
 [mmaid=1] start processing shedding store s1: cpu node load overloadUrgent, store load overloadUrgent, worst dim CPURate
 [mmaid=1] top-K[CPURate] ranges for s1 with lease on local s1: r1:[cpu:100ns/s, write-bandwidth:0 B/s, byte-size:0 B]
 [mmaid=1] local store s1 is CPU overloaded (overloadUrgent >= overloadSlow), attempting lease transfers first
 [mmaid=1] considering lease-transfer r1 from s1: candidates are [2 3]
-[mmaid=1] skipping s3 for lease transfer: lease disposition ‹×› (health ‹×›)
-[mmaid=1] load summary for dim=CPURate (‹×›): overloadUrgent, reason: ‹×› [‹×›]
-[mmaid=1] load summary for dim=WriteBandwidth (‹×›): loadNormal, reason: ‹×› [‹×›]
-[mmaid=1] load summary for dim=ByteSize (‹×›): loadNormal, reason: ‹×› [‹×›]
-[mmaid=1] load summary for dim=CPURate (‹×›): overloadUrgent, reason: ‹×› [‹×›]
-[mmaid=1] load summary for dim=CPURate (‹×›): loadLow, reason: ‹×› [‹×›]
-[mmaid=1] load summary for dim=WriteBandwidth (‹×›): loadNormal, reason: ‹×› [‹×›]
-[mmaid=1] load summary for dim=ByteSize (‹×›): loadNormal, reason: ‹×› [‹×›]
-[mmaid=1] load summary for dim=CPURate (‹×›): loadLow, reason: ‹×› [‹×›]
+[mmaid=1] skipping s3 for lease transfer: lease disposition shedding (health dead)
+[mmaid=1] load summary for dim=CPURate (s1): overloadUrgent, reason: fractionUsed > 90% [load=1000 meanLoad=550 fractionUsed=100.00% meanUtil=55.00% capacity=1000]
+[mmaid=1] load summary for dim=WriteBandwidth (s1): loadNormal, reason: load is within 5% of mean [load=0 meanLoad=0 fractionUsed=0.00% meanUtil=0.00% capacity=1000]
+[mmaid=1] load summary for dim=ByteSize (s1): loadNormal, reason: load is within 5% of mean [load=0 meanLoad=0 fractionUsed=0.00% meanUtil=0.00% capacity=1000]
+[mmaid=1] load summary for dim=CPURate (n1): overloadUrgent, reason: fractionUsed > 90% [load=1000 meanLoad=550 fractionUsed=100.00% meanUtil=55.00% capacity=1000]
+[mmaid=1] load summary for dim=CPURate (s2): loadLow, reason: load is >10% below mean [load=100 meanLoad=550 fractionUsed=10.00% meanUtil=55.00% capacity=1000]
+[mmaid=1] load summary for dim=WriteBandwidth (s2): loadNormal, reason: load is within 5% of mean [load=0 meanLoad=0 fractionUsed=0.00% meanUtil=0.00% capacity=1000]
+[mmaid=1] load summary for dim=ByteSize (s2): loadNormal, reason: load is within 5% of mean [load=0 meanLoad=0 fractionUsed=0.00% meanUtil=0.00% capacity=1000]
+[mmaid=1] load summary for dim=CPURate (n2): loadLow, reason: load is >10% below mean [load=100 meanLoad=550 fractionUsed=10.00% meanUtil=55.00% capacity=1000]
 [mmaid=1] sortTargetCandidateSetAndPick: candidates: s2(SLS:loadNormal, overloadedDimLoadSummary:loadLow), overloadedDim:CPURate, picked s2
-[mmaid=1] load summary for dim=CPURate (‹×›): loadLow, reason: ‹×› [‹×›]
-[mmaid=1] load summary for dim=WriteBandwidth (‹×›): loadNormal, reason: ‹×› [‹×›]
-[mmaid=1] load summary for dim=ByteSize (‹×›): loadNormal, reason: ‹×› [‹×›]
-[mmaid=1] load summary for dim=CPURate (‹×›): loadLow, reason: ‹×› [‹×›]
-[mmaid=1] load summary for dim=CPURate (‹×›): overloadUrgent, reason: ‹×› [‹×›]
-[mmaid=1] load summary for dim=WriteBandwidth (‹×›): loadNormal, reason: ‹×› [‹×›]
-[mmaid=1] load summary for dim=ByteSize (‹×›): loadNormal, reason: ‹×› [‹×›]
-[mmaid=1] load summary for dim=CPURate (‹×›): overloadUrgent, reason: ‹×› [‹×›]
+[mmaid=1] load summary for dim=CPURate (s2): loadLow, reason: load is >10% below mean [load=100 meanLoad=550 fractionUsed=10.00% meanUtil=55.00% capacity=1000]
+[mmaid=1] load summary for dim=WriteBandwidth (s2): loadNormal, reason: load is within 5% of mean [load=0 meanLoad=0 fractionUsed=0.00% meanUtil=0.00% capacity=1000]
+[mmaid=1] load summary for dim=ByteSize (s2): loadNormal, reason: load is within 5% of mean [load=0 meanLoad=0 fractionUsed=0.00% meanUtil=0.00% capacity=1000]
+[mmaid=1] load summary for dim=CPURate (n2): loadLow, reason: load is >10% below mean [load=100 meanLoad=550 fractionUsed=10.00% meanUtil=55.00% capacity=1000]
+[mmaid=1] load summary for dim=CPURate (s1): overloadUrgent, reason: fractionUsed > 90% [load=1000 meanLoad=550 fractionUsed=100.00% meanUtil=55.00% capacity=1000]
+[mmaid=1] load summary for dim=WriteBandwidth (s1): loadNormal, reason: load is within 5% of mean [load=0 meanLoad=0 fractionUsed=0.00% meanUtil=0.00% capacity=1000]
+[mmaid=1] load summary for dim=ByteSize (s1): loadNormal, reason: load is within 5% of mean [load=0 meanLoad=0 fractionUsed=0.00% meanUtil=0.00% capacity=1000]
+[mmaid=1] load summary for dim=CPURate (n1): overloadUrgent, reason: fractionUsed > 90% [load=1000 meanLoad=550 fractionUsed=100.00% meanUtil=55.00% capacity=1000]
 [mmaid=1] can add load to n2s2: true targetSLS[(store=loadNormal worst=WriteBandwidth cpu=loadLow writes=loadNormal bytes=loadNormal node=loadLow frac_pending=0.00,0.00(true))] srcSLS[(store=overloadUrgent worst=CPURate cpu=overloadUrgent writes=loadNormal bytes=loadNormal node=overloadUrgent frac_pending=0.00,0.00(true))]
-[mmaid=1] applying replica change r1 type: ‹×› target store n1,s1 (‹×›1 type=VOTER_FULL‹×›)->(‹×›1 type=VOTER_FULL) to range 1 on store 1
-[mmaid=1] addPendingRangeChange: change_id=‹×›, range_id=1, change=r1 type: ‹×› target store n1,s1 (‹×›1 type=VOTER_FULL‹×›)->(‹×›1 type=VOTER_FULL)
-[mmaid=1] applying replica change r1 type: ‹×› target store n2,s2 (‹×›2 type=VOTER_FULL)->(‹×›2 type=VOTER_FULL‹×›) to range 1 on store 2
-[mmaid=1] addPendingRangeChange: change_id=‹×›, range_id=1, change=r1 type: ‹×› target store n2,s2 (‹×›2 type=VOTER_FULL)->(‹×›2 type=VOTER_FULL‹×›)
-[mmaid=1] result(success): shedding r1 lease from s1 to s2 [change:r1=[transfer_to=2‹×›] with resulting loads source:[cpu:1µs/s, write-bandwidth:0 B/s, byte-size:0 B] target:[cpu:100ns/s, write-bandwidth:0 B/s, byte-size:0 B] (means: [cpu:550ns/s, write-bandwidth:0 B/s, byte-size:0 B]) (frac_pending: (src:0.00,target:0.00) (src:0.00,target:0.00))
+[mmaid=1] applying replica change r1 type: RemoveLease target store n1,s1 (replica-id=1 type=VOTER_FULL leaseholder=true)->(replica-id=1 type=VOTER_FULL) to range 1 on store 1
+[mmaid=1] addPendingRangeChange: change_id=1, range_id=1, change=r1 type: RemoveLease target store n1,s1 (replica-id=1 type=VOTER_FULL leaseholder=true)->(replica-id=1 type=VOTER_FULL)
+[mmaid=1] applying replica change r1 type: AddLease target store n2,s2 (replica-id=2 type=VOTER_FULL)->(replica-id=2 type=VOTER_FULL leaseholder=true) to range 1 on store 2
+[mmaid=1] addPendingRangeChange: change_id=2, range_id=1, change=r1 type: AddLease target store n2,s2 (replica-id=2 type=VOTER_FULL)->(replica-id=2 type=VOTER_FULL leaseholder=true)
+[mmaid=1] result(success): shedding r1 lease from s1 to s2 [change:r1=[transfer_to=2 cids=1,2]] with resulting loads source:[cpu:1µs/s, write-bandwidth:0 B/s, byte-size:0 B] target:[cpu:100ns/s, write-bandwidth:0 B/s, byte-size:0 B] (means: [cpu:550ns/s, write-bandwidth:0 B/s, byte-size:0 B]) (frac_pending: (src:0.00,target:0.00) (src:0.00,target:0.00))
 [mmaid=1] skipping replica transfers for s1 to try more leases next time
 [mmaid=1] rebalancing pass summary [local=s1]:
 	overloaded:
