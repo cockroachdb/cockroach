@@ -66,27 +66,27 @@ rebalance-stores store-id=1
 ----
 [mmaid=1] rebalanceStores begins
 [mmaid=1] cluster means: (stores-load [cpu:525ns/s, write-bandwidth:0 B/s, byte-size:0 B]) (stores-capacity [cpu:1µs/s, write-bandwidth:1.0 kB/s, byte-size:1.0 kB]) (nodes-cpu-load 525) (nodes-cpu-capacity 1000)
-[mmaid=1] load summary for dim=CPURate (s1): loadNormal, reason: load is within 5% of mean [load=500 meanLoad=525 fractionUsed=50.00% meanUtil=52.50% capacity=1000]
-[mmaid=1] load summary for dim=WriteBandwidth (s1): loadNormal, reason: load is within 5% of mean [load=0 meanLoad=0 fractionUsed=0.00% meanUtil=0.00% capacity=1000]
-[mmaid=1] load summary for dim=ByteSize (s1): loadNormal, reason: load is within 5% of mean [load=0 meanLoad=0 fractionUsed=0.00% meanUtil=0.00% capacity=1000]
-[mmaid=1] load summary for dim=CPURate (n1): loadNormal, reason: load is within 5% of mean [load=500 meanLoad=525 fractionUsed=50.00% meanUtil=52.50% capacity=1000]
+[mmaid=1] load summary for dim=CPURate (‹×›): loadNormal, reason: ‹×› [‹×›]
+[mmaid=1] load summary for dim=WriteBandwidth (‹×›): loadNormal, reason: ‹×› [‹×›]
+[mmaid=1] load summary for dim=ByteSize (‹×›): loadNormal, reason: ‹×› [‹×›]
+[mmaid=1] load summary for dim=CPURate (‹×›): loadNormal, reason: ‹×› [‹×›]
 [mmaid=1] evaluating s1: node load loadNormal, store load loadNormal, worst dim CPURate
-[mmaid=1] load summary for dim=CPURate (s2): loadNormal, reason: load is within 5% of mean [load=500 meanLoad=525 fractionUsed=50.00% meanUtil=52.50% capacity=1000]
-[mmaid=1] load summary for dim=WriteBandwidth (s2): loadNormal, reason: load is within 5% of mean [load=0 meanLoad=0 fractionUsed=0.00% meanUtil=0.00% capacity=1000]
-[mmaid=1] load summary for dim=ByteSize (s2): loadNormal, reason: load is within 5% of mean [load=0 meanLoad=0 fractionUsed=0.00% meanUtil=0.00% capacity=1000]
-[mmaid=1] load summary for dim=CPURate (n2): loadNormal, reason: load is within 5% of mean [load=500 meanLoad=525 fractionUsed=50.00% meanUtil=52.50% capacity=1000]
+[mmaid=1] load summary for dim=CPURate (‹×›): loadNormal, reason: ‹×› [‹×›]
+[mmaid=1] load summary for dim=WriteBandwidth (‹×›): loadNormal, reason: ‹×› [‹×›]
+[mmaid=1] load summary for dim=ByteSize (‹×›): loadNormal, reason: ‹×› [‹×›]
+[mmaid=1] load summary for dim=CPURate (‹×›): loadNormal, reason: ‹×› [‹×›]
 [mmaid=1] evaluating s2: node load loadNormal, store load loadNormal, worst dim CPURate
-[mmaid=1] load summary for dim=CPURate (s3): overloadUrgent, reason: fractionUsed > 90% [load=1000 meanLoad=525 fractionUsed=100.00% meanUtil=52.50% capacity=1000]
-[mmaid=1] load summary for dim=WriteBandwidth (s3): loadNormal, reason: load is within 5% of mean [load=0 meanLoad=0 fractionUsed=0.00% meanUtil=0.00% capacity=1000]
-[mmaid=1] load summary for dim=ByteSize (s3): loadNormal, reason: load is within 5% of mean [load=0 meanLoad=0 fractionUsed=0.00% meanUtil=0.00% capacity=1000]
-[mmaid=1] load summary for dim=CPURate (n3): overloadUrgent, reason: fractionUsed > 90% [load=1000 meanLoad=525 fractionUsed=100.00% meanUtil=52.50% capacity=1000]
+[mmaid=1] load summary for dim=CPURate (‹×›): overloadUrgent, reason: ‹×› [‹×›]
+[mmaid=1] load summary for dim=WriteBandwidth (‹×›): loadNormal, reason: ‹×› [‹×›]
+[mmaid=1] load summary for dim=ByteSize (‹×›): loadNormal, reason: ‹×› [‹×›]
+[mmaid=1] load summary for dim=CPURate (‹×›): overloadUrgent, reason: ‹×› [‹×›]
 [mmaid=1] evaluating s3: node load overloadUrgent, store load overloadUrgent, worst dim CPURate
 [mmaid=1] overload-continued s3 ((store=overloadUrgent worst=CPURate cpu=overloadUrgent writes=loadNormal bytes=loadNormal node=overloadUrgent frac_pending=0.00,0.00(true))) - within grace period
 [mmaid=1] store s3 was added to shedding store list
-[mmaid=1] load summary for dim=CPURate (s4): loadLow, reason: load is >10% below mean [load=100 meanLoad=525 fractionUsed=10.00% meanUtil=52.50% capacity=1000]
-[mmaid=1] load summary for dim=WriteBandwidth (s4): loadNormal, reason: load is within 5% of mean [load=0 meanLoad=0 fractionUsed=0.00% meanUtil=0.00% capacity=1000]
-[mmaid=1] load summary for dim=ByteSize (s4): loadNormal, reason: load is within 5% of mean [load=0 meanLoad=0 fractionUsed=0.00% meanUtil=0.00% capacity=1000]
-[mmaid=1] load summary for dim=CPURate (n4): loadLow, reason: load is >10% below mean [load=100 meanLoad=525 fractionUsed=10.00% meanUtil=52.50% capacity=1000]
+[mmaid=1] load summary for dim=CPURate (‹×›): loadLow, reason: ‹×› [‹×›]
+[mmaid=1] load summary for dim=WriteBandwidth (‹×›): loadNormal, reason: ‹×› [‹×›]
+[mmaid=1] load summary for dim=ByteSize (‹×›): loadNormal, reason: ‹×› [‹×›]
+[mmaid=1] load summary for dim=CPURate (‹×›): loadLow, reason: ‹×› [‹×›]
 [mmaid=1] evaluating s4: node load loadLow, store load loadNormal, worst dim WriteBandwidth
 [mmaid=1] start processing shedding store s3: cpu node load overloadUrgent, store load overloadUrgent, worst dim CPURate
 [mmaid=1] top-K[CPURate] ranges for s3 with lease on local s1: r3:[cpu:100ns/s, write-bandwidth:0 B/s, byte-size:0 B] r2:[cpu:100ns/s, write-bandwidth:0 B/s, byte-size:0 B] r1:[cpu:100ns/s, write-bandwidth:0 B/s, byte-size:0 B]
