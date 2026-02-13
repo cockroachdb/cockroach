@@ -1,0 +1,39 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "templates",
+    srcs = [
+        "backend.go",
+        "files.go",
+        "manager.go",
+        "parser.go",
+        "snapshot.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/services/provisionings/templates",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/cmd/roachprod-centralized/models/provisionings",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_hashicorp_hcl_v2//:hcl",
+        "@com_github_hashicorp_hcl_v2//ext/typeexpr",
+        "@com_github_hashicorp_hcl_v2//hclparse",
+        "@com_github_zclconf_go_cty//cty",
+        "@com_github_zclconf_go_cty//cty/convert",
+        "@com_github_zclconf_go_cty//cty/json",
+        "@in_gopkg_yaml_v2//:yaml_v2",
+    ],
+)
+
+go_test(
+    name = "templates_test",
+    srcs = [
+        "manager_test.go",
+        "parser_test.go",
+    ],
+    embed = [":templates"],
+    deps = [
+        "//pkg/cmd/roachprod-centralized/models/provisionings",
+        "@com_github_stretchr_testify//assert",
+        "@com_github_stretchr_testify//require",
+    ],
+)
