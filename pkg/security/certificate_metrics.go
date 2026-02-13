@@ -16,16 +16,16 @@ const SQLUserLabel = "sql_user"
 // Metrics is a metric.Struct for certificates.
 type Metrics struct {
 	// CA certificate expirations.
-	CAExpiration       *metric.Gauge
-	ClientCAExpiration *metric.Gauge
-	UICAExpiration     *metric.Gauge
-	TenantCAExpiration *metric.Gauge
+	CAExpiration       *metric.FunctionalGauge
+	ClientCAExpiration *metric.FunctionalGauge
+	UICAExpiration     *metric.FunctionalGauge
+	TenantCAExpiration *metric.FunctionalGauge
 
 	// Certificate expirations.
-	NodeExpiration       *metric.Gauge
-	NodeClientExpiration *metric.Gauge
-	UIExpiration         *metric.Gauge
-	TenantExpiration     *metric.Gauge
+	NodeExpiration       *metric.FunctionalGauge
+	NodeClientExpiration *metric.FunctionalGauge
+	UIExpiration         *metric.FunctionalGauge
+	TenantExpiration     *metric.FunctionalGauge
 	// ClientExpiration is an aggregate metric, containing child metrics for all
 	// users that have done cert auth with this node.
 	// The children are labeled by SQL user.
@@ -36,15 +36,15 @@ type Metrics struct {
 	// Below are TTL metrics which mirror the above expiration metrics.
 	// Instead of returning the unix time in seconds however, they
 	// return the number of seconds till expiration.
-	CATTL         *metric.Gauge
-	TenantTTL     *metric.Gauge
-	TenantCATTL   *metric.Gauge
-	UITTL         *metric.Gauge
-	UICATTL       *metric.Gauge
-	ClientCATTL   *metric.Gauge
-	NodeTTL       *metric.Gauge
-	NodeClientTTL *metric.Gauge
-	ClientTTL     *aggmetric.AggGauge
+	CATTL         *metric.FunctionalGauge
+	TenantTTL     *metric.FunctionalGauge
+	TenantCATTL   *metric.FunctionalGauge
+	UITTL         *metric.FunctionalGauge
+	UICATTL       *metric.FunctionalGauge
+	ClientCATTL   *metric.FunctionalGauge
+	NodeTTL       *metric.FunctionalGauge
+	NodeClientTTL *metric.FunctionalGauge
+	ClientTTL     *aggmetric.AggFunctionalGauge
 }
 
 var _ metric.Struct = (*Metrics)(nil)
@@ -225,7 +225,7 @@ var (
 // certificates.
 type certClosure func() *CertInfo
 
-func expirationGauge(metadata metric.Metadata, certFunc certClosure) *metric.Gauge {
+func expirationGauge(metadata metric.Metadata, certFunc certClosure) *metric.FunctionalGauge {
 	return metric.NewFunctionalGauge(metadata, func() int64 {
 		ci := certFunc()
 		if ci != nil && ci.Error == nil {
@@ -238,7 +238,7 @@ func expirationGauge(metadata metric.Metadata, certFunc certClosure) *metric.Gau
 
 func ttlGauge(
 	metadata metric.Metadata, certFunc certClosure, ts timeutil.TimeSource,
-) *metric.Gauge {
+) *metric.FunctionalGauge {
 	return metric.NewFunctionalGauge(metadata, func() int64 {
 		ci := certFunc()
 		if ci != nil && ci.Error == nil {
@@ -282,7 +282,7 @@ func createMetricsLocked(cm *CertificateManager) *Metrics {
 		TenantCATTL:   ttlGauge(metaTenantCATTL, func() *CertInfo { return cm.tenantCACert }, ts),
 		UITTL:         ttlGauge(metaUITTL, cm.UICert, ts),
 		UICATTL:       ttlGauge(metaUICATTL, cm.UICACert, ts),
-		ClientTTL:     b.Gauge(metaClientTTL),
+		ClientTTL:     b.FunctionalGauge(metaClientTTL, func(cvs []int64) int64 { return 0 }),
 		ClientCATTL:   ttlGauge(metaClientCATTL, cm.ClientCACert, ts),
 		NodeTTL:       ttlGauge(metaNodeTTL, cm.NodeCert, ts),
 		NodeClientTTL: ttlGauge(metaNodeClientTTL, func() *CertInfo { return cm.nodeClientCert }, ts),

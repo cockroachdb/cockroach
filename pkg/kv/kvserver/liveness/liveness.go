@@ -213,7 +213,7 @@ var (
 
 // Metrics holds metrics for use with node liveness activity.
 type Metrics struct {
-	LiveNodes          *metric.Gauge
+	LiveNodes          *metric.FunctionalGauge
 	HeartbeatsInFlight *metric.Gauge
 	HeartbeatSuccesses *metric.Counter
 	HeartbeatFailures  telemetry.CounterWithMetric

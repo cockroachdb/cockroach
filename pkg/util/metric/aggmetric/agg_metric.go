@@ -63,9 +63,11 @@ func (b Builder) Gauge(metadata metric.Metadata) *AggGauge {
 	return NewGauge(metadata, b.labels...)
 }
 
-// FunctionalGauge constructs a new AggGauge with the Builder's labels who's
-// value is determined when asked for.
-func (b Builder) FunctionalGauge(metadata metric.Metadata, f func(cvs []int64) int64) *AggGauge {
+// FunctionalGauge constructs a new AggFunctionalGauge with the Builder's
+// labels whose value is determined when asked for.
+func (b Builder) FunctionalGauge(
+	metadata metric.Metadata, f func(cvs []int64) int64,
+) *AggFunctionalGauge {
 	return NewFunctionalGauge(metadata, f, b.labels...)
 }
 
