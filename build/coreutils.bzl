@@ -27,6 +27,18 @@ COREUTILS_PLATFORMS = {
             "@platforms//cpu:aarch64",
         ],
     ),
+    "linux_ppc64le": struct(
+        compatible_with = [
+            "@platforms//os:linux",
+            "@platforms//cpu:ppc64le",
+        ],
+    ),
+    "linux_s390x": struct(
+        compatible_with = [
+            "@platforms//os:linux",
+            "@platforms//cpu:s390x",
+        ],
+    ),
     "windows_amd64": struct(
         compatible_with = [
             "@platforms//os:windows",
@@ -37,25 +49,33 @@ COREUTILS_PLATFORMS = {
 
 COREUTILS_VERSIONS = {
     "0.0.27": {
+        "darwin_amd64": {
+            "filename": "coreutils-0.0.27-x86_64-apple-darwin.tar.gz",
+            "sha256": "sha256-1ivz4ue8/ROUYhPh22Bg2ASPgC6MKMulR52nLgZvTBo=",
+        },
         "darwin_arm64": {
             "filename": "coreutils-0.0.27-aarch64-apple-darwin.tar.gz",
             "sha256": "sha256-BjAeGgJ8+sLCIwmokCOkfelCCLtnNRH49QcFnrDq8a4=",
+        },
+        "linux_amd64": {
+            "filename": "coreutils-0.0.27-x86_64-unknown-linux-musl.tar.gz",
+            "sha256": "sha256-tM+hJd16cCjflJyMwsCaevPYZMiBkIKZJm7/XC+760w=",
         },
         "linux_arm64": {
             "filename": "coreutils-0.0.27-aarch64-unknown-linux-musl.tar.gz",
             "sha256": "sha256-doU+ZfTyA5I8RSwDAcsOkEI3BZXFuFwBfEbg+diS06g=",
         },
-        "darwin_amd64": {
-            "filename": "coreutils-0.0.27-x86_64-apple-darwin.tar.gz",
-            "sha256": "sha256-1ivz4ue8/ROUYhPh22Bg2ASPgC6MKMulR52nLgZvTBo=",
+        "linux_ppc64le": {
+            "filename": "coreutils-0.0.27-ppc64le-unknown-linux.tar.gz",
+            "sha256": "sha256-/Z1k5CGkVUxEozLUAWyvBa9I97r1zGaxOBRgvF9p9vE=",
+        },
+        "linux_s390x": {
+            "filename": "coreutils-0.0.27-s390x-unknown-linux.tar.gz",
+            "sha256": "sha256-+rXdooTsNunTnwtaHfxNOxDmqEilRTq4aJ8dw5mKL4c=",
         },
         "windows_amd64": {
             "filename": "coreutils-0.0.27-x86_64-pc-windows-msvc.zip",
             "sha256": "sha256-DC4H+hQX51aHoFudV39n7u217NDcNL9AiG4o4edboV0=",
-        },
-        "linux_amd64": {
-            "filename": "coreutils-0.0.27-x86_64-unknown-linux-musl.tar.gz",
-            "sha256": "sha256-tM+hJd16cCjflJyMwsCaevPYZMiBkIKZJm7/XC+760w=",
         },
     },
 }

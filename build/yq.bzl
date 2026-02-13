@@ -39,6 +39,12 @@ YQ_PLATFORMS = {
             "@platforms//cpu:aarch64",
         ],
     ),
+    "linux_ppc64le": struct(
+        compatible_with = [
+            "@platforms//os:linux",
+            "@platforms//cpu:ppc64le",
+        ],
+    ),
     "linux_s390x": struct(
         compatible_with = [
             "@platforms//os:linux",
@@ -61,6 +67,7 @@ YQ_VERSIONS = {
         "darwin_arm64": "sha384-COVD0Ko3vQUmSS/SS17VrpA4gTaxuyszgPfE9P8vNKLlB+65I7HznstHg/iElxrk",
         "linux_amd64": "sha384-uK7+qPUYBO1bnKUNYKqKuGpfTKsRktfptGATlV14AFb5hiVp6vcWvDyTRSfiZn5f",
         "linux_arm64": "sha384-2SwY2OtotYhupSEeUSHRKTMbUoIhUyIt7QgujH3UyaQ/9AoXWNZ3h05OAdWL5WbL",
+        "linux_ppc64le": "sha384-N6UXrIzrpPy6zojzI8J7AFP5z3UAe9KU8WLuUKe8WrttuD1Fl3YTwvo/OM2+5NTt",
         "linux_s390x": "sha384-AXZe1USYMi0mg5ylHnU8OGqQQZcMDETD/bLWG0BKytSBhZ0Xkkhn9r90fJYM4xVS",
         "windows_amd64": "sha384-wD0GpKHTLQIWWNJv43ts+l2rIdAiyYYtb3upncdIOLLydFcWxB39+thcQ8aSdaW+",
     },
@@ -178,7 +185,6 @@ def _yq_platform_repo_impl(rctx):
     meta = YQ_PLATFORMS[rctx.attr.platform]
     release_platform = meta.release_platform if hasattr(meta, "release_platform") else rctx.attr.platform
 
-    #https://github.com/mikefarah/yq/releases/download/v4.24.4/yq_linux_386
     url = "https://storage.googleapis.com/public-bazel-artifacts/yq/{0}/yq_{1}{2}".format(
         rctx.attr.version,
         release_platform,
