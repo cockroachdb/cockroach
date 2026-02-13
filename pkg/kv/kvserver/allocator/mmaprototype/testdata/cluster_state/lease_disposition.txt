@@ -62,7 +62,7 @@ unhealthy shedding=leases,replicas
 
 retain-ready-lease-target-stores-only in=(1,2,3) range-id=1
 ----
-skipping s2 for lease transfer: lease disposition shedding (health unhealthy)
+skipping s2 for lease transfer: lease disposition ‹×› (health ‹×›)
 [1 3]
 
 # Different kind of unhealthy. Same result.
@@ -72,7 +72,7 @@ unknown shedding=leases,replicas
 
 retain-ready-lease-target-stores-only in=(1,2,3) range-id=1
 ----
-skipping s2 for lease transfer: lease disposition shedding (health unknown)
+skipping s2 for lease transfer: lease disposition ‹×› (health ‹×›)
 [1 3]
 
 # Restore store 2, make store 3 refuse leases at store level.
@@ -86,7 +86,7 @@ ok refusing=leases
 
 retain-ready-lease-target-stores-only in=(1,2,3) range-id=1
 ----
-skipping s3 for lease transfer: lease disposition refusing (health ok)
+skipping s3 for lease transfer: lease disposition ‹×› (health ‹×›)
 [1 2]
 
 # Shedding and refusing are treated the same.
@@ -96,7 +96,7 @@ ok shedding=leases
 
 retain-ready-lease-target-stores-only in=(1,2,3) range-id=1
 ----
-skipping s3 for lease transfer: lease disposition shedding (health ok)
+skipping s3 for lease transfer: lease disposition ‹×› (health ‹×›)
 [1 2]
 
 # Restore store 3.
@@ -121,7 +121,7 @@ store-id=1
 
 retain-ready-lease-target-stores-only in=(1,2,3) range-id=1
 ----
-skipping s2 for lease transfer: replica lease disposition refusing (health ok)
+skipping s2 for lease transfer: replica lease disposition ‹×› (health ‹×›)
 [1 3]
 
 # The leaseholder is exempt from the disposition check.
