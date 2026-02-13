@@ -125,17 +125,24 @@ func (r *Retry) mustReset() {
 }
 
 // retryIn returns the duration to wait before the next retry attempt.
-func (r Retry) retryIn() time.Duration {
+func (r Retry) retryIn(randomizationFactor float64) time.Duration {
 	backoff := float64(r.opts.InitialBackoff) * math.Pow(r.opts.Multiplier, float64(r.currentAttempt))
 	if maxBackoff := float64(r.opts.MaxBackoff); backoff > maxBackoff {
 		backoff = maxBackoff
 	}
 
-	var delta = r.opts.RandomizationFactor * backoff
+	var delta = randomizationFactor * backoff
 	// Get a random value from the range [backoff - delta, backoff + delta].
 	// The formula used below has a +1 because time.Duration is an int64, and the
 	// conversion floors the float64.
 	return time.Duration(backoff - delta + rand.Float64()*(2*delta+1))
+}
+
+// NextBackoff returns the average duration to wait before the next retry attempt.
+// This is different from retryIn() because it does not take into account the
+// randomization factor. Use this for logging purposes only.
+func (r *Retry) NextBackoff() time.Duration {
+	return r.retryIn(0)
 }
 
 // calcDurationScopedBackoff calculates the duration to wait before the next
@@ -143,7 +150,7 @@ func (r Retry) retryIn() time.Duration {
 // backoff duration, the actual wait duration (if the backoff exceeds the max
 // duration), and a boolean indicating whether the retry should be attempted.
 func (r Retry) calcDurationScopedBackoff() (time.Duration, time.Duration, bool) {
-	backoff := r.retryIn()
+	backoff := r.retryIn(r.opts.RandomizationFactor)
 	actualWait := backoff
 	shouldAttempt := true
 	if r.opts.MaxDuration != 0 && !r.opts.Clock.Now().Add(backoff).Before(r.deadline) {
