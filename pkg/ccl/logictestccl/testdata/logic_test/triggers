@@ -4211,8 +4211,30 @@ DROP FUNCTION g;
 
 subtest unsupported
 
-statement error pgcode 0A000 pq: unimplemented: CREATE OR REPLACE TRIGGER is not supported
-CREATE OR REPLACE TRIGGER foo AFTER INSERT ON xy FOR EACH ROW EXECUTE FUNCTION f();
+# CREATE OR REPLACE TRIGGER when the trigger does not exist yet creates it.
+statement ok
+CREATE OR REPLACE TRIGGER replace_test BEFORE INSERT ON xy FOR EACH ROW EXECUTE FUNCTION f();
+
+query TT
+SHOW CREATE TRIGGER replace_test ON xy;
+----
+replace_test  CREATE TRIGGER replace_test BEFORE INSERT ON test.public.xy FOR EACH ROW EXECUTE FUNCTION test.public.f()
+
+# CREATE OR REPLACE TRIGGER when the trigger already exists replaces it.
+statement ok
+CREATE OR REPLACE TRIGGER replace_test AFTER UPDATE ON xy FOR EACH ROW EXECUTE FUNCTION f();
+
+query TT
+SHOW CREATE TRIGGER replace_test ON xy;
+----
+replace_test  CREATE TRIGGER replace_test AFTER UPDATE ON test.public.xy FOR EACH ROW EXECUTE FUNCTION test.public.f()
+
+# CREATE TRIGGER (without REPLACE) still errors on duplicate.
+statement error pgcode 42710 pq: trigger "replace_test" for relation "xy" already exists
+CREATE TRIGGER replace_test AFTER INSERT ON xy FOR EACH ROW EXECUTE FUNCTION f();
+
+statement ok
+DROP TRIGGER replace_test ON xy;
 
 statement error pgcode 0A000 pq: unimplemented: statement-level triggers are not yet supported
 CREATE TRIGGER foo AFTER INSERT ON xy FOR EACH STATEMENT EXECUTE FUNCTION f();

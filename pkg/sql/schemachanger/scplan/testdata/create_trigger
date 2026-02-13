@@ -197,3 +197,232 @@ CREATE TRIGGER t1_tg BEFORE INSERT OR UPDATE OR DELETE ON defaultdb.t1 FOR EACH 
   to:   [TriggerTiming:{DescID: 104, TriggerID: 1}, PUBLIC]
   kind: Precedence
   rule: trigger public before its dependents
+
+# CREATE OR REPLACE TRIGGER when the trigger already exists.
+setup
+CREATE TRIGGER t1_tg BEFORE INSERT OR UPDATE OR DELETE ON defaultdb.t1 FOR EACH ROW EXECUTE FUNCTION g();
+----
+
+ops
+CREATE OR REPLACE TRIGGER t1_tg AFTER INSERT ON defaultdb.t1 FOR EACH ROW EXECUTE FUNCTION g();
+----
+StatementPhase stage 1 of 1 with 12 MutationType ops
+  transitions:
+    [[Trigger:{DescID: 104, TriggerID: 1}, ABSENT], PUBLIC] -> ABSENT
+    [[TriggerDeps:{DescID: 104, TriggerID: 1, ReferencedFunctionIDs: [105]}, ABSENT], PUBLIC] -> ABSENT
+    [[Trigger:{DescID: 104, TriggerID: 2}, PUBLIC], ABSENT] -> PUBLIC
+    [[TriggerName:{DescID: 104, TriggerID: 2}, PUBLIC], ABSENT] -> PUBLIC
+    [[TriggerEnabled:{DescID: 104, TriggerID: 2}, PUBLIC], ABSENT] -> PUBLIC
+    [[TriggerTiming:{DescID: 104, TriggerID: 2}, PUBLIC], ABSENT] -> PUBLIC
+    [[TriggerEvents:{DescID: 104, TriggerID: 2}, PUBLIC], ABSENT] -> PUBLIC
+    [[TriggerFunctionCall:{DescID: 104, TriggerID: 2}, PUBLIC], ABSENT] -> PUBLIC
+    [[TriggerDeps:{DescID: 104, TriggerID: 2, ReferencedFunctionIDs: [105]}, PUBLIC], ABSENT] -> PUBLIC
+  ops:
+    *scop.RemoveTrigger
+      Trigger:
+        TableID: 104
+        TriggerID: 1
+    *scop.UpdateTriggerBackReferencesInRelations
+      RelationReferences:
+      - id: 104
+        columnids: []
+        indexid: 0
+      TableID: 104
+      TriggerID: 1
+    *scop.RemoveTriggerBackReferencesInRoutines
+      BackReferencedTableID: 104
+      BackReferencedTriggerID: 1
+      RoutineIDs:
+      - 105
+    *scop.AddTrigger
+      Trigger:
+        TableID: 104
+        TriggerID: 2
+    *scop.SetTriggerName
+      Name:
+        Name: t1_tg
+        TableID: 104
+        TriggerID: 2
+    *scop.SetTriggerEnabled
+      Enabled: true
+      TableID: 104
+      TriggerID: 2
+    *scop.SetTriggerTiming
+      Timing:
+        ActionTime: 2
+        ForEachRow: true
+        TableID: 104
+        TriggerID: 2
+    *scop.SetTriggerEvents
+      Events:
+        Events:
+        - type: 1
+          columnnames: []
+        TableID: 104
+        TriggerID: 2
+    *scop.SetTriggerFunctionCall
+      FunctionCall:
+        FuncArgs: []
+        FuncBody: |
+          BEGIN
+          RAISE NOTICE '%: old: %, new: %', tg_op, old, new;
+          RETURN COALESCE(new, old);
+          END;
+        FuncID: 105
+        TableID: 104
+        TriggerID: 2
+    *scop.SetTriggerForwardReferences
+      Deps:
+        TableID: 104
+        TriggerID: 2
+        UsesRelations:
+        - id: 104
+          columnids: []
+          indexid: 0
+        UsesRoutineIDs:
+        - 105
+    *scop.UpdateTriggerBackReferencesInRelations
+      RelationReferences:
+      - id: 104
+        columnids: []
+        indexid: 0
+      TableID: 104
+      TriggerID: 2
+    *scop.AddTriggerBackReferencesInRoutines
+      BackReferencedTableID: 104
+      BackReferencedTriggerID: 2
+      RoutineIDs:
+      - 105
+PreCommitPhase stage 1 of 2 with 1 MutationType op
+  transitions:
+    [[Trigger:{DescID: 104, TriggerID: 1}, ABSENT], ABSENT] -> PUBLIC
+    [[TriggerDeps:{DescID: 104, TriggerID: 1, ReferencedFunctionIDs: [105]}, ABSENT], ABSENT] -> PUBLIC
+    [[Trigger:{DescID: 104, TriggerID: 2}, PUBLIC], PUBLIC] -> ABSENT
+    [[TriggerName:{DescID: 104, TriggerID: 2}, PUBLIC], PUBLIC] -> ABSENT
+    [[TriggerEnabled:{DescID: 104, TriggerID: 2}, PUBLIC], PUBLIC] -> ABSENT
+    [[TriggerTiming:{DescID: 104, TriggerID: 2}, PUBLIC], PUBLIC] -> ABSENT
+    [[TriggerEvents:{DescID: 104, TriggerID: 2}, PUBLIC], PUBLIC] -> ABSENT
+    [[TriggerFunctionCall:{DescID: 104, TriggerID: 2}, PUBLIC], PUBLIC] -> ABSENT
+    [[TriggerDeps:{DescID: 104, TriggerID: 2, ReferencedFunctionIDs: [105]}, PUBLIC], PUBLIC] -> ABSENT
+  ops:
+    *scop.UndoAllInTxnImmediateMutationOpSideEffects
+      {}
+PreCommitPhase stage 2 of 2 with 12 MutationType ops
+  transitions:
+    [[Trigger:{DescID: 104, TriggerID: 1}, ABSENT], PUBLIC] -> ABSENT
+    [[TriggerDeps:{DescID: 104, TriggerID: 1, ReferencedFunctionIDs: [105]}, ABSENT], PUBLIC] -> ABSENT
+    [[Trigger:{DescID: 104, TriggerID: 2}, PUBLIC], ABSENT] -> PUBLIC
+    [[TriggerName:{DescID: 104, TriggerID: 2}, PUBLIC], ABSENT] -> PUBLIC
+    [[TriggerEnabled:{DescID: 104, TriggerID: 2}, PUBLIC], ABSENT] -> PUBLIC
+    [[TriggerTiming:{DescID: 104, TriggerID: 2}, PUBLIC], ABSENT] -> PUBLIC
+    [[TriggerEvents:{DescID: 104, TriggerID: 2}, PUBLIC], ABSENT] -> PUBLIC
+    [[TriggerFunctionCall:{DescID: 104, TriggerID: 2}, PUBLIC], ABSENT] -> PUBLIC
+    [[TriggerDeps:{DescID: 104, TriggerID: 2, ReferencedFunctionIDs: [105]}, PUBLIC], ABSENT] -> PUBLIC
+  ops:
+    *scop.RemoveTrigger
+      Trigger:
+        TableID: 104
+        TriggerID: 1
+    *scop.UpdateTriggerBackReferencesInRelations
+      RelationReferences:
+      - id: 104
+        columnids: []
+        indexid: 0
+      TableID: 104
+      TriggerID: 1
+    *scop.RemoveTriggerBackReferencesInRoutines
+      BackReferencedTableID: 104
+      BackReferencedTriggerID: 1
+      RoutineIDs:
+      - 105
+    *scop.AddTrigger
+      Trigger:
+        TableID: 104
+        TriggerID: 2
+    *scop.SetTriggerName
+      Name:
+        Name: t1_tg
+        TableID: 104
+        TriggerID: 2
+    *scop.SetTriggerEnabled
+      Enabled: true
+      TableID: 104
+      TriggerID: 2
+    *scop.SetTriggerTiming
+      Timing:
+        ActionTime: 2
+        ForEachRow: true
+        TableID: 104
+        TriggerID: 2
+    *scop.SetTriggerEvents
+      Events:
+        Events:
+        - type: 1
+          columnnames: []
+        TableID: 104
+        TriggerID: 2
+    *scop.SetTriggerFunctionCall
+      FunctionCall:
+        FuncArgs: []
+        FuncBody: |
+          BEGIN
+          RAISE NOTICE '%: old: %, new: %', tg_op, old, new;
+          RETURN COALESCE(new, old);
+          END;
+        FuncID: 105
+        TableID: 104
+        TriggerID: 2
+    *scop.SetTriggerForwardReferences
+      Deps:
+        TableID: 104
+        TriggerID: 2
+        UsesRelations:
+        - id: 104
+          columnids: []
+          indexid: 0
+        UsesRoutineIDs:
+        - 105
+    *scop.UpdateTriggerBackReferencesInRelations
+      RelationReferences:
+      - id: 104
+        columnids: []
+        indexid: 0
+      TableID: 104
+      TriggerID: 2
+    *scop.AddTriggerBackReferencesInRoutines
+      BackReferencedTableID: 104
+      BackReferencedTriggerID: 2
+      RoutineIDs:
+      - 105
+
+deps
+CREATE OR REPLACE TRIGGER t1_tg AFTER INSERT ON defaultdb.t1 FOR EACH ROW EXECUTE FUNCTION g();
+----
+- from: [Trigger:{DescID: 104, TriggerID: 2}, PUBLIC]
+  to:   [TriggerDeps:{DescID: 104, TriggerID: 2, ReferencedFunctionIDs: [105]}, PUBLIC]
+  kind: Precedence
+  rule: trigger public before its dependents
+- from: [Trigger:{DescID: 104, TriggerID: 2}, PUBLIC]
+  to:   [TriggerEnabled:{DescID: 104, TriggerID: 2}, PUBLIC]
+  kind: Precedence
+  rule: trigger public before its dependents
+- from: [Trigger:{DescID: 104, TriggerID: 2}, PUBLIC]
+  to:   [TriggerEvents:{DescID: 104, TriggerID: 2}, PUBLIC]
+  kind: Precedence
+  rule: trigger public before its dependents
+- from: [Trigger:{DescID: 104, TriggerID: 2}, PUBLIC]
+  to:   [TriggerFunctionCall:{DescID: 104, TriggerID: 2}, PUBLIC]
+  kind: Precedence
+  rule: trigger public before its dependents
+- from: [Trigger:{DescID: 104, TriggerID: 2}, PUBLIC]
+  to:   [TriggerName:{DescID: 104, TriggerID: 2}, PUBLIC]
+  kind: Precedence
+  rule: trigger public before its dependents
+- from: [Trigger:{DescID: 104, TriggerID: 2}, PUBLIC]
+  to:   [TriggerTiming:{DescID: 104, TriggerID: 2}, PUBLIC]
+  kind: Precedence
+  rule: trigger public before its dependents
+- from: [TriggerDeps:{DescID: 104, TriggerID: 1, ReferencedFunctionIDs: [105]}, ABSENT]
+  to:   [Trigger:{DescID: 104, TriggerID: 1}, PUBLIC]
+  kind: Precedence
+  rule: trigger removed before dependents

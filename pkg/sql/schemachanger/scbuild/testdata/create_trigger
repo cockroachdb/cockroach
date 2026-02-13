@@ -37,6 +37,60 @@ CREATE TRIGGER tr BEFORE INSERT OR UPDATE ON xy FOR EACH ROW EXECUTE FUNCTION f(
 - [[TriggerDeps:{DescID: 104, ReferencedTypeIDs: [106 107], TriggerID: 1, ReferencedFunctionIDs: [109 110]}, PUBLIC], ABSENT]
   {tableId: 104, triggerId: 1, usesRelations: [{columnIds: [1, 2], id: 105}, {id: 108}], usesRoutineIds: [109, 110], usesTypeIds: [106, 107]}
 
+# CREATE OR REPLACE when no existing trigger exists creates a new trigger.
+build
+CREATE OR REPLACE TRIGGER tr2 BEFORE INSERT ON xy FOR EACH ROW EXECUTE FUNCTION f();
+----
+- [[IndexData:{DescID: 104, IndexID: 1}, PUBLIC], PUBLIC]
+  {indexId: 1, tableId: 104}
+- [[TableData:{DescID: 104, ReferencedDescID: 100}, PUBLIC], PUBLIC]
+  {databaseId: 100, tableId: 104}
+- [[Trigger:{DescID: 104, TriggerID: 1}, PUBLIC], ABSENT]
+  {tableId: 104, triggerId: 1}
+- [[TriggerName:{DescID: 104, TriggerID: 1}, PUBLIC], ABSENT]
+  {name: tr2, tableId: 104, triggerId: 1}
+- [[TriggerEnabled:{DescID: 104, TriggerID: 1}, PUBLIC], ABSENT]
+  {tableId: 104, triggerId: 1}
+- [[TriggerTiming:{DescID: 104, TriggerID: 1}, PUBLIC], ABSENT]
+  {actionTime: BEFORE, forEachRow: true, tableId: 104, triggerId: 1}
+- [[TriggerEvents:{DescID: 104, TriggerID: 1}, PUBLIC], ABSENT]
+  {events: [{columnNames: [], type: INSERT}], tableId: 104, triggerId: 1}
+- [[TriggerFunctionCall:{DescID: 104, TriggerID: 1}, PUBLIC], ABSENT]
+  {funcArgs: [], funcBody: "DECLARE\nfoo @100106 := 'a';\nBEGIN\nINSERT INTO defaultdb.public.ab VALUES ((new).x, (new).y);\nRAISE NOTICE '% %', public.g(), nextval(108:::REGCLASS);\nRETURN new;\nEND;\n", funcId: 110, tableId: 104, triggerId: 1}
+- [[TriggerDeps:{DescID: 104, ReferencedTypeIDs: [106 107], TriggerID: 1, ReferencedFunctionIDs: [109 110]}, PUBLIC], ABSENT]
+  {tableId: 104, triggerId: 1, usesRelations: [{columnIds: [1, 2], id: 105}, {id: 108}], usesRoutineIds: [109, 110], usesTypeIds: [106, 107]}
+
+# CREATE OR REPLACE when trigger already exists drops old and creates new.
+setup
+CREATE TRIGGER tr BEFORE INSERT OR UPDATE ON xy FOR EACH ROW EXECUTE FUNCTION f();
+----
+
+build
+CREATE OR REPLACE TRIGGER tr AFTER DELETE ON xy FOR EACH ROW EXECUTE FUNCTION f();
+----
+- [[IndexData:{DescID: 104, IndexID: 1}, PUBLIC], PUBLIC]
+  {indexId: 1, tableId: 104}
+- [[Trigger:{DescID: 104, TriggerID: 1}, ABSENT], PUBLIC]
+  {tableId: 104, triggerId: 1}
+- [[TriggerDeps:{DescID: 104, ReferencedTypeIDs: [106 107], TriggerID: 1, ReferencedFunctionIDs: [109 110]}, ABSENT], PUBLIC]
+  {tableId: 104, triggerId: 1, usesRelations: [{columnIds: [1, 2], id: 105}, {id: 108}], usesRoutineIds: [109, 110], usesTypeIds: [106, 107]}
+- [[TableData:{DescID: 104, ReferencedDescID: 100}, PUBLIC], PUBLIC]
+  {databaseId: 100, tableId: 104}
+- [[Trigger:{DescID: 104, TriggerID: 2}, PUBLIC], ABSENT]
+  {tableId: 104, triggerId: 2}
+- [[TriggerName:{DescID: 104, TriggerID: 2}, PUBLIC], ABSENT]
+  {name: tr, tableId: 104, triggerId: 2}
+- [[TriggerEnabled:{DescID: 104, TriggerID: 2}, PUBLIC], ABSENT]
+  {tableId: 104, triggerId: 2}
+- [[TriggerTiming:{DescID: 104, TriggerID: 2}, PUBLIC], ABSENT]
+  {actionTime: AFTER, forEachRow: true, tableId: 104, triggerId: 2}
+- [[TriggerEvents:{DescID: 104, TriggerID: 2}, PUBLIC], ABSENT]
+  {events: [{columnNames: [], type: DELETE}], tableId: 104, triggerId: 2}
+- [[TriggerFunctionCall:{DescID: 104, TriggerID: 2}, PUBLIC], ABSENT]
+  {funcArgs: [], funcBody: "DECLARE\nfoo @100106 := 'a';\nBEGIN\nINSERT INTO defaultdb.public.ab VALUES ((new).x, (new).y);\nRAISE NOTICE '% %', public.g(), nextval(108:::REGCLASS);\nRETURN new;\nEND;\n", funcId: 110, tableId: 104, triggerId: 2}
+- [[TriggerDeps:{DescID: 104, ReferencedTypeIDs: [106 107], TriggerID: 2, ReferencedFunctionIDs: [109 110]}, PUBLIC], ABSENT]
+  {tableId: 104, triggerId: 2, usesRelations: [{columnIds: [1, 2], id: 105}, {id: 108}], usesRoutineIds: [109, 110], usesTypeIds: [106, 107]}
+
 # TODO(#126362, #135655): uncomment this test case.
 # build
 # CREATE TRIGGER tr AFTER DELETE ON xy REFERENCING OLD TABLE AS foo WHEN (1 = 1) EXECUTE FUNCTION f('a', 'bc');
