@@ -688,7 +688,10 @@ func (mgcq *mvccGCQueue) process(
 		log.VErrEventf(ctx, 2, "failed to fetch last processed time: %v", err)
 	}
 	r := makeMVCCGCQueueScore(ctx, repl, gcTimestamp, lastGC, conf.TTL(), canAdvanceGCThreshold)
-	log.VEventf(ctx, 2, "processing replica %s with score %s", repl.String(), r)
+	log.VEventf(ctx, 2, "processing replica %s with score %s", repl, r)
+	log.KvDistribution.Infof(ctx,
+		"GC processing r%d; score %s; gcTimestamp=%s, oldThreshold=%s, newThreshold=%s",
+		repl.RangeID, r, gcTimestamp, oldThreshold, newThreshold)
 	// Update the last processed timestamp.
 	if err := repl.setQueueLastProcessed(ctx, mgcq.name, repl.store.Clock().Now()); err != nil {
 		log.VErrEventf(ctx, 2, "failed to update last processed time: %v", err)
@@ -768,6 +771,7 @@ func (mgcq *mvccGCQueue) process(
 		ctx, repl, repl.store.Clock().Now(), lastGC, conf.TTL(), canAdvanceGCThreshold)
 	log.VEventf(ctx, 2, "MVCC stats after GC: %+v", repl.GetMVCCStats())
 	log.VEventf(ctx, 2, "GC score after GC: %s", scoreAfter)
+	log.KvDistribution.Infof(ctx, "GC complete for r%d; %s", repl.RangeID, info)
 	updateStoreMetricsWithGCInfo(mgcq.store.metrics, info)
 	// If the score after running through the queue indicates that this
 	// replica should be re-queued for GC it most likely means that there
