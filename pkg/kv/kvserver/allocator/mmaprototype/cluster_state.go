@@ -443,6 +443,7 @@ func MakeReplicaTypeChange(
 // removing another. If the replica being rebalanced is the current
 // leaseholder, the impact of the rebalance also includes the lease load.
 func makeRebalanceReplicaChanges(
+	ctx context.Context,
 	rangeID roachpb.RangeID,
 	existingReplicas []StoreIDAndReplicaState,
 	rLoad RangeLoad,
@@ -455,7 +456,7 @@ func makeRebalanceReplicaChanges(
 		}
 	}
 	if remove == (StoreIDAndReplicaState{}) {
-		log.KvDistribution.Fatalf(context.Background(), "remove target %s not in existing replicas", removeTarget)
+		log.KvDistribution.Fatalf(ctx, "remove target %s not in existing replicas", removeTarget)
 	}
 
 	addIDAndType := ReplicaIDAndType{
@@ -1292,6 +1293,28 @@ type clusterState struct {
 	meansMemo *meansMemo
 
 	mmaid int // a counter for rebalanceStores calls, for logging
+
+	// Disk utilization thresholds from cluster settings. These are set via
+	// SetDiskUtilThresholds.
+	//
+	// SMA uses these thresholds:
+	// - 0.925 (rebalance_to_max_disk_utilization_threshold): for rebalancing
+	// targets
+	// - 0.95 (max_disk_utilization_threshold): for allocation targets (e.g.
+	// under-replicated ranges) AND for shedding decisions
+	//
+	// TODO(mma): When MMA handles allocation of necessary replicas, we'd need
+	// to add max_disk_utilization_threshold for allocation targets.
+	//
+	// Stores >= this threshold will refuse new replicas.
+	diskUtilRefuseThreshold float64
+	// Stores >= this threshold will force ByteSize to be prioritized over other
+	// dimensions (CPURate, WriteBandwidth) when selecting ranges for the top-k,
+	// regardless of the load summary. Note that MMA will rebalance based on
+	// ByteSize even without this threshold, when ByteSize is the worst dimension
+	// relative to the cluster mean. See highDiskSpaceUtilization usage in
+	// processStoreLoadMsg.
+	diskUtilShedThreshold float64
 }
 
 func newClusterState(ts timeutil.TimeSource, interner *stringInterner) *clusterState {
@@ -1304,6 +1327,10 @@ func newClusterState(ts timeutil.TimeSource, interner *stringInterner) *clusterS
 		pendingChanges:       map[changeID]*pendingReplicaChange{},
 		constraintMatcher:    newConstraintMatcher(interner),
 		localityTierInterner: newLocalityTierInterner(interner),
+		// Disk utilization thresholds default to 0. We don't plumb cluster
+		// settings here to avoid coupling MMA to settings at construction.
+		// Callers (e.g., newMMAStoreRebalancer) call SetDiskUtilThresholds
+		// after construction to set proper values from cluster settings.
 	}
 	cs.meansMemo = newMeansMemo(cs, cs.constraintMatcher)
 	return cs
@@ -1311,7 +1338,7 @@ func newClusterState(ts timeutil.TimeSource, interner *stringInterner) *clusterS
 
 func (cs *clusterState) processStoreLoadMsg(ctx context.Context, storeMsg *StoreLoadMsg) {
 	now := cs.ts.Now()
-	cs.gcPendingChanges(now)
+	cs.gcPendingChanges(ctx, now)
 
 	ns := cs.nodes[storeMsg.NodeID]
 	ss := cs.stores[storeMsg.StoreID]
@@ -1487,7 +1514,7 @@ func (cs *clusterState) processRangeMsg(
 	// rs.pendingChanges is the union of remainingChanges and enactedChanges.
 	// These changes are also in cs.pendingChanges.
 	if len(enactedChanges) > 0 {
-		log.KvDistribution.Infof(ctx, "enactedChanges %v", enactedChanges)
+		log.KvDistribution.VEventf(ctx, 2, "enactedChanges %v", enactedChanges)
 	}
 	for _, change := range enactedChanges {
 		// Mark the change as enacted. Enacting a change does not remove the
@@ -1512,7 +1539,7 @@ func (cs *clusterState) processRangeMsg(
 	// effect is also incorporated into the storeStates, but not in the range
 	// membership (since we undid that above).
 	if len(remainingChanges) > 0 {
-		log.KvDistribution.Infof(ctx, "remainingChanges %v", remainingChanges)
+		log.KvDistribution.VEventf(ctx, 2, "remainingChanges %v", remainingChanges)
 		// Temporarily set the rs.pendingChanges to nil, since
 		// preCheckOnApplyReplicaChanges returns false if there are any pending
 		// changes, and these are the changes that are pending. This is hacky
@@ -1536,7 +1563,7 @@ func (cs *clusterState) processRangeMsg(
 			// pendingChanges data-structures, which is what we want here since
 			// these changes are already in those data-structures.
 			for _, change := range remainingChanges {
-				cs.applyReplicaChange(change.ReplicaChange, false)
+				cs.applyReplicaChange(ctx, change.ReplicaChange, false)
 			}
 		} else {
 			reason := redact.Sprint(err)
@@ -1544,7 +1571,7 @@ func (cs *clusterState) processRangeMsg(
 			// changes, so we need to drop them. This should be rare, but can happen
 			// if the leaseholder executed a change that MMA was completely unaware
 			// of.
-			log.KvDistribution.Infof(ctx, "remainingChanges %v are no longer valid due to %v",
+			log.KvDistribution.VEventf(ctx, 2, "remainingChanges %v are no longer valid due to %v",
 				remainingChanges, reason)
 			if metrics != nil {
 				metrics.DroppedDueToStateInconsistency.Inc(1)
@@ -1586,7 +1613,7 @@ func (cs *clusterState) processStoreLeaseholderMsgInternal(
 	metrics *rangeOperationMetrics,
 ) {
 	now := cs.ts.Now()
-	cs.gcPendingChanges(now)
+	cs.gcPendingChanges(ctx, now)
 
 	clear(cs.scratchRangeMap)
 	totalErrorCount := 0
@@ -1669,7 +1696,7 @@ func (cs *clusterState) processStoreLeaseholderMsgInternal(
 		} else {
 			topk.dim = WriteBandwidth
 		}
-		if sls.highDiskSpaceUtilization {
+		if highDiskSpaceUtilization(ss.adjusted.load[ByteSize], ss.capacity[ByteSize], cs.diskUtilShedThreshold) {
 			// If disk space is running out, shedding bytes becomes the top priority.
 			topk.dim = ByteSize
 		} else if sls.sls > loadNoChange {
@@ -1830,7 +1857,7 @@ const pendingLeaseTransferGCDuration = 1 * time.Minute
 const partiallyEnactedGCDuration = 30 * time.Second
 
 // Called periodically by allocator.
-func (cs *clusterState) gcPendingChanges(now time.Time) {
+func (cs *clusterState) gcPendingChanges(ctx context.Context, now time.Time) {
 	var rangesWithChanges map[roachpb.RangeID]struct{}
 	for _, pendingChange := range cs.pendingChanges {
 		if rangesWithChanges == nil {
@@ -1863,7 +1890,7 @@ func (cs *clusterState) gcPendingChanges(now time.Time) {
 			changeIDs = append(changeIDs, pendingChange.changeID)
 		}
 		for _, changeID := range changeIDs {
-			cs.undoPendingChange(changeID)
+			cs.undoPendingChange(ctx, changeID)
 		}
 	}
 }
@@ -1884,7 +1911,7 @@ func (cs *clusterState) pendingChangeEnacted(cid changeID, enactedAt time.Time) 
 }
 
 // undoPendingChange reverses the change with ID cid.
-func (cs *clusterState) undoPendingChange(cid changeID) {
+func (cs *clusterState) undoPendingChange(ctx context.Context, cid changeID) {
 	change, ok := cs.pendingChanges[cid]
 	if !ok {
 		panic(errors.AssertionFailedf("change %v not found %v", cid, printMapPendingChanges(cs.pendingChanges)))
@@ -1898,7 +1925,7 @@ func (cs *clusterState) undoPendingChange(cid changeID) {
 	rs.lastFailedChange = cs.ts.Now()
 	// Undo the change delta as well as the replica change and remove the pending
 	// change from all tracking (range, store, cluster).
-	cs.undoReplicaChange(change.ReplicaChange)
+	cs.undoReplicaChange(ctx, change.ReplicaChange)
 	rs.removePendingChangeTracking(cid)
 	delete(cs.stores[change.target.StoreID].adjusted.loadPendingChanges, change.changeID)
 	delete(cs.pendingChanges, change.changeID)
@@ -1927,7 +1954,7 @@ func printMapPendingChanges(changes map[changeID]*pendingReplicaChange) string {
 //
 // REQUIRES: all the replica changes are to the same range, and that the range
 // has no pending changes.
-func (cs *clusterState) addPendingRangeChange(change PendingRangeChange) {
+func (cs *clusterState) addPendingRangeChange(ctx context.Context, change PendingRangeChange) {
 	if len(change.pendingReplicaChanges) == 0 {
 		return
 	}
@@ -1953,7 +1980,7 @@ func (cs *clusterState) addPendingRangeChange(change PendingRangeChange) {
 	}
 	now := cs.ts.Now()
 	for _, pendingChange := range change.pendingReplicaChanges {
-		cs.applyReplicaChange(pendingChange.ReplicaChange, true)
+		cs.applyReplicaChange(ctx, pendingChange.ReplicaChange, true)
 		cs.changeSeqGen++
 		cid := cs.changeSeqGen
 		pendingChange.changeID = cid
@@ -1965,7 +1992,7 @@ func (cs *clusterState) addPendingRangeChange(change PendingRangeChange) {
 		cs.pendingChanges[cid] = pendingChange
 		storeState.adjusted.loadPendingChanges[cid] = pendingChange
 		rangeState.pendingChanges = append(rangeState.pendingChanges, pendingChange)
-		log.KvDistribution.VEventf(context.Background(), 3,
+		log.KvDistribution.VEventf(ctx, 3,
 			"addPendingRangeChange: change_id=%v, range_id=%v, change=%v",
 			cid, rangeID, pendingChange.ReplicaChange)
 	}
@@ -2080,7 +2107,9 @@ func (cs *clusterState) preCheckOnUndoReplicaChanges(rangeChange PendingRangeCha
 }
 
 // REQUIRES: the range and store are known to the allocator.
-func (cs *clusterState) applyReplicaChange(change ReplicaChange, applyLoadChange bool) {
+func (cs *clusterState) applyReplicaChange(
+	ctx context.Context, change ReplicaChange, applyLoadChange bool,
+) {
 	storeState, ok := cs.stores[change.target.StoreID]
 	if !ok {
 		panic(fmt.Sprintf("store %v not found in cluster state", change.target.StoreID))
@@ -2090,7 +2119,7 @@ func (cs *clusterState) applyReplicaChange(change ReplicaChange, applyLoadChange
 		panic(fmt.Sprintf("range %v not found in cluster state", change.rangeID))
 	}
 
-	log.KvDistribution.VEventf(context.Background(), 2, "applying replica change %v to range %d on store %d",
+	log.KvDistribution.VEventf(ctx, 2, "applying replica change %v to range %d on store %d",
 		change, change.rangeID, change.target.StoreID)
 	if change.isRemoval() {
 		delete(storeState.adjusted.replicas, change.rangeID)
@@ -2122,8 +2151,8 @@ func (cs *clusterState) applyReplicaChange(change ReplicaChange, applyLoadChange
 	}
 }
 
-func (cs *clusterState) undoReplicaChange(change ReplicaChange) {
-	log.KvDistribution.Infof(context.Background(), "undoing replica change %v to range %d on store %d",
+func (cs *clusterState) undoReplicaChange(ctx context.Context, change ReplicaChange) {
+	log.KvDistribution.VEventf(ctx, 2, "undoing replica change %v to range %d on store %d",
 		change, change.rangeID, change.target.StoreID)
 	rangeState := cs.ranges[change.rangeID]
 	storeState := cs.stores[change.target.StoreID]
@@ -2210,18 +2239,40 @@ func (cs *clusterState) setStore(sal storeAttributesAndLocalityWithNodeTier) {
 	}
 }
 
+// setDiskUtilThresholds configures the disk utilization thresholds used
+// to augment store dispositions.
+func (cs *clusterState) setDiskUtilThresholds(refuseThreshold, shedThreshold float64) {
+	cs.diskUtilRefuseThreshold = refuseThreshold
+	cs.diskUtilShedThreshold = shedThreshold
+}
+
 // updateStoreStatuses updates each known store's health and disposition from storeStatuses.
 // Stores unknown in mma yet but are known to store pool are ignored with logging.
+// The replica disposition is augmented based on disk utilization using thresholds
+// set via setDiskUtilThresholds.
 func (cs *clusterState) updateStoreStatuses(
 	ctx context.Context, storeStatuses map[roachpb.StoreID]Status,
 ) {
 	for storeID, storeStatus := range storeStatuses {
-		if _, ok := cs.stores[storeID]; !ok {
+		ss, ok := cs.stores[storeID]
+		if !ok {
 			// Store not known to mma yet but is known to store pool - ignore the update. The store will be added via
 			// setStore when gossip arrives, and then subsequent status updates will
 			// take effect.
 			log.KvDistribution.Infof(ctx, "store %d not found in cluster state, skipping update", storeID)
 			continue
+		}
+		// Augment the replica disposition based on disk utilization.
+		// We use adjusted load (which includes pending changes) to account for
+		// in-flight replica additions that haven't completed yet.
+		if highDiskSpaceUtilization(ss.adjusted.load[ByteSize], ss.capacity[ByteSize], cs.diskUtilShedThreshold) {
+			storeStatus.Disposition.Replica = max(storeStatus.Disposition.Replica, ReplicaDispositionShedding)
+			log.KvDistribution.VEventf(ctx, 2, "store %d: upgrading replica disposition to Shedding due to high disk utilization (>= %.1f%%)",
+				storeID, cs.diskUtilShedThreshold*100)
+		} else if highDiskSpaceUtilization(ss.adjusted.load[ByteSize], ss.capacity[ByteSize], cs.diskUtilRefuseThreshold) {
+			storeStatus.Disposition.Replica = max(storeStatus.Disposition.Replica, ReplicaDispositionRefusing)
+			log.KvDistribution.VEventf(ctx, 2, "store %d: upgrading replica disposition to Refusing due to high disk utilization (>= %.1f%%)",
+				storeID, cs.diskUtilRefuseThreshold*100)
 		}
 		cs.stores[storeID].status = storeStatus
 	}
@@ -2318,6 +2369,9 @@ func (cs *clusterState) canShedAndAddLoad(
 	// sloppy/confusing though.
 	targetNS.adjustedCPU += deltaToAdd[CPURate]
 	targetSLS := computeLoadSummary(ctx, targetSS, targetNS, &means.storeLoad, &means.nodeLoad)
+	postTransferHighDiskSpaceUtil := highDiskSpaceUtilization(targetSS.adjusted.load[ByteSize],
+		targetSS.capacity[ByteSize], cs.diskUtilRefuseThreshold)
+
 	// Undo the addition.
 	targetSS.adjusted.load.subtract(deltaToAdd)
 	targetNS.adjustedCPU -= deltaToAdd[CPURate]
@@ -2331,18 +2385,23 @@ func (cs *clusterState) canShedAndAddLoad(
 	srcSS.adjusted.load.add(delta)
 	srcNS.adjustedCPU += delta[CPURate]
 
-	var reason strings.Builder
+	var failureReason strings.Builder
+	populateFailureReason := log.ExpensiveLogEnabled(ctx, 2)
 	defer func() {
 		if canAddLoad {
 			log.KvDistribution.VEventf(ctx, 3, "can add load to n%vs%v: %v targetSLS[%v] srcSLS[%v]",
 				targetNS.NodeID, targetSS.StoreID, canAddLoad, targetSLS, srcSLS)
-		} else {
-			log.KvDistribution.VEventf(ctx, 2, "cannot add load to n%vs%v: due to %s", targetNS.NodeID, targetSS.StoreID, reason.String())
+		} else if populateFailureReason {
+			log.KvDistribution.VEventf(ctx, 2, "cannot add load to n%vs%v: due to %s", targetNS.NodeID, targetSS.StoreID, failureReason.String())
 			log.KvDistribution.VEventf(ctx, 2, "[target_sls:%v,src_sls:%v]", targetSLS, srcSLS)
 		}
 	}()
-	if targetSLS.highDiskSpaceUtilization {
-		reason.WriteString("targetSLS.highDiskSpaceUtilization")
+	// Check if the target would have high disk utilization after the transfer.
+	// We compute this using the post-transfer load (current + delta).
+	if postTransferHighDiskSpaceUtil {
+		if populateFailureReason {
+			failureReason.WriteString("(post-transfer) targetSLS.highDiskSpaceUtilization")
+		}
 		return false
 	}
 
@@ -2360,7 +2419,9 @@ func (cs *clusterState) canShedAndAddLoad(
 		return true
 	}
 	if targetSummary >= overloadUrgent {
-		reason.WriteString("overloadUrgent")
+		if populateFailureReason {
+			failureReason.WriteString("overloadUrgent")
+		}
 		return false
 	}
 
@@ -2417,7 +2478,7 @@ func (cs *clusterState) canShedAndAddLoad(
 			dimFractionIncrease := float64(deltaToAdd[dim]) / float64(targetSS.adjusted.load[dim])
 			// The use of 33% is arbitrary.
 			if dimFractionIncrease > overloadedDimFractionIncrease/3 {
-				log.KvDistribution.Infof(ctx, "%v: %f > %f/3", dim, dimFractionIncrease, overloadedDimFractionIncrease)
+				log.KvDistribution.VEventf(ctx, 2, "%v: %f > %f/3", dim, dimFractionIncrease, overloadedDimFractionIncrease)
 				otherDimensionsBecameWorseInTarget = true
 				break
 			}
@@ -2467,43 +2528,45 @@ func (cs *clusterState) canShedAndAddLoad(
 	if canAddLoad {
 		return true
 	}
-	if !overloadedDimPermitsChange {
-		if reason.Len() != 0 {
-			reason.WriteRune(',')
+	if populateFailureReason {
+		if !overloadedDimPermitsChange {
+			if failureReason.Len() != 0 {
+				failureReason.WriteRune(',')
+			}
+			failureReason.WriteString("!overloadedDimPermitsChange")
 		}
-		reason.WriteString("!overloadedDimPermitsChange")
-	}
-	if otherDimensionsBecameWorseInTarget {
-		if reason.Len() != 0 {
-			reason.WriteRune(',')
+		if otherDimensionsBecameWorseInTarget {
+			if failureReason.Len() != 0 {
+				failureReason.WriteRune(',')
+			}
+			failureReason.WriteString("otherDimensionsBecameWorseInTarget")
 		}
-		reason.WriteString("otherDimensionsBecameWorseInTarget")
-	}
-	if targetSummary >= loadNoChange {
-		if reason.Len() != 0 {
-			reason.WriteRune(',')
+		if targetSummary >= loadNoChange {
+			if failureReason.Len() != 0 {
+				failureReason.WriteRune(',')
+			}
+			failureReason.WriteString(fmt.Sprintf("target_summary(%s)>=loadNoChange", targetSummary))
 		}
-		reason.WriteString(fmt.Sprintf("target_summary(%s)>=loadNoChange", targetSummary))
-	}
-	if targetSLS.maxFractionPendingIncrease >= epsilon || targetSLS.maxFractionPendingDecrease >= epsilon {
-		if reason.Len() != 0 {
-			reason.WriteRune(',')
+		if targetSLS.maxFractionPendingIncrease >= epsilon || targetSLS.maxFractionPendingDecrease >= epsilon {
+			if failureReason.Len() != 0 {
+				failureReason.WriteRune(',')
+			}
+			failureReason.WriteString(fmt.Sprintf("targetSLS.frac_pending(%.2for%.2f>=epsilon)",
+				targetSLS.maxFractionPendingIncrease, targetSLS.maxFractionPendingDecrease))
 		}
-		reason.WriteString(fmt.Sprintf("targetSLS.frac_pending(%.2for%.2f>=epsilon)",
-			targetSLS.maxFractionPendingIncrease, targetSLS.maxFractionPendingDecrease))
-	}
-	if targetSLS.sls > srcSLS.sls {
-		if reason.Len() != 0 {
-			reason.WriteRune(',')
+		if targetSLS.sls > srcSLS.sls {
+			if failureReason.Len() != 0 {
+				failureReason.WriteRune(',')
+			}
+			failureReason.WriteString(fmt.Sprintf("target-store(%s)>src-store(%s)", targetSLS.sls, srcSLS.sls))
 		}
-		reason.WriteString(fmt.Sprintf("target-store(%s)>src-store(%s)", targetSLS.sls, srcSLS.sls))
-	}
-	if targetSLS.nls > targetSLS.sls {
-		if reason.Len() != 0 {
-			reason.WriteRune(',')
+		if targetSLS.nls > targetSLS.sls {
+			if failureReason.Len() != 0 {
+				failureReason.WriteRune(',')
+			}
+			failureReason.WriteString(fmt.Sprintf("target-node(%s)>target-store(%s)",
+				targetSLS.nls, targetSLS.sls))
 		}
-		reason.WriteString(fmt.Sprintf("target-node(%s)>target-store(%s)",
-			targetSLS.nls, targetSLS.sls))
 	}
 	return false
 }
@@ -2535,7 +2598,6 @@ func computeLoadSummary(
 	ctx context.Context, ss *storeState, ns *nodeState, msl *meanStoreLoad, mnl *meanNodeLoad,
 ) storeLoadSummary {
 	sls := loadLow
-	var highDiskSpaceUtil bool
 	var dimSummary [NumLoadDimensions]loadSummary
 	var worstDim LoadDimension
 	for i := range msl.load {
@@ -2546,19 +2608,13 @@ func computeLoadSummary(
 			worstDim = LoadDimension(i)
 		}
 		dimSummary[i] = ls
-		switch LoadDimension(i) {
-		case ByteSize:
-			highDiskSpaceUtil = highDiskSpaceUtilization(ss.adjusted.load[i], ss.capacity[i])
-		}
 	}
 	nls := loadSummaryForDimension(ctx, storeIDForLogging, ns.NodeID, CPURate, ns.adjustedCPU, ns.CapacityCPU, mnl.loadCPU, mnl.utilCPU)
 	return storeLoadSummary{
-		worstDim:   worstDim,
-		sls:        sls,
-		nls:        nls,
-		dimSummary: dimSummary,
-		// TODO(tbg): remove highDiskSpaceUtilization.
-		highDiskSpaceUtilization:   highDiskSpaceUtil,
+		worstDim:                   worstDim,
+		sls:                        sls,
+		nls:                        nls,
+		dimSummary:                 dimSummary,
 		maxFractionPendingIncrease: ss.maxFractionPendingIncrease,
 		maxFractionPendingDecrease: ss.maxFractionPendingDecrease,
 		loadSeqNum:                 ss.loadSeqNum,

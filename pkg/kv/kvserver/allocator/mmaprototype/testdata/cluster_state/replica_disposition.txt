@@ -1,7 +1,9 @@
 # Test retainReadyReplicaTargetStoresOnly which filters stores based on:
 # 1. Health (must be HealthOK)
 # 2. Store-level replica disposition (must be ReplicaDispositionOK)
-# 3. High disk space utilization (>90%)
+#
+# High disk space utilization (>90%) is handled via updateStoreStatuses which
+# augments the replica disposition to ReplicaDispositionRefusing.
 #
 # Note: constraint-based exclusions (e.g., to avoid multiple replicas per node)
 # are handled post-means at the caller level, not here.
@@ -46,7 +48,7 @@ retain-ready-replica-target-stores-only in=(1,3)
 
 # Mark s2 as shedding leases, which should have no effect
 # since we're looking at replicas.
-set-store-status store-id=2 leases=shedding
+update-store-status store-id=2 leases=shedding
 ----
 ok shedding=leases
 
@@ -58,7 +60,7 @@ retain-ready-replica-target-stores-only in=(1,2,3)
 # disposition, so no filtering occurs.
 # This can't happen in production since unhealthy
 # stores can't have a green disposition.
-set-store-status store-id=2 health=unhealthy leases=ok
+update-store-status store-id=2 health=unhealthy leases=ok
 ----
 unhealthy accepting all
 
@@ -67,7 +69,7 @@ retain-ready-replica-target-stores-only in=(1,2,3)
 [1 2 3]
 
 # Different kind of unhealthy. Same result.
-set-store-status store-id=2 health=unknown
+update-store-status store-id=2 health=unknown
 ----
 unknown accepting all
 
@@ -76,11 +78,11 @@ retain-ready-replica-target-stores-only in=(1,2,3)
 [1 2 3]
 
 # Restore store 2, make store 3 refuse replicas at store level.
-set-store-status store-id=2 health=ok
+update-store-status store-id=2 health=ok
 ----
 ok accepting all
 
-set-store-status store-id=3 replicas=refusing
+update-store-status store-id=3 replicas=refusing
 ----
 ok refusing=replicas
 
@@ -90,7 +92,7 @@ skipping s3 for replica transfer: replica disposition refusing (health ok)
 [1 2]
 
 # Shedding and refusing are treated the same.
-set-store-status store-id=3 health=ok replicas=shedding
+update-store-status store-id=3 health=ok replicas=shedding
 ----
 ok shedding=replicas
 
@@ -100,7 +102,7 @@ skipping s3 for replica transfer: replica disposition shedding (health ok)
 [1 2]
 
 # Restore store 3.
-set-store-status store-id=3 replicas=ok
+update-store-status store-id=3 replicas=ok
 ----
 ok accepting all
 
@@ -115,20 +117,25 @@ store-load-msg
   store-id=2 node-id=2 load=[50,0,95] capacity=[200,100,100] load-time=0s
 ----
 
+# Trigger updateStoreStatuses to augment disposition based on disk utilization.
+update-store-status
+----
+updated: map[1:ok accepting all 2:ok shedding=replicas 3:ok accepting all]
+
 retain-ready-replica-target-stores-only in=(1,2,3)
 ----
-skipping s2 for replica transfer: high disk utilization (health ok)
+skipping s2 for replica transfer: replica disposition shedding (health ok)
 [1 3]
 
 # Test combination of filters: s2 still high disk,
 # s3 refusing replicas.
-set-store-status store-id=3 replicas=refusing
+update-store-status store-id=3 replicas=refusing
 ----
 ok refusing=replicas
 
 retain-ready-replica-target-stores-only in=(1,2,3)
 ----
-skipping s2 for replica transfer: high disk utilization (health ok)
+skipping s2 for replica transfer: replica disposition shedding (health ok)
 skipping s3 for replica transfer: replica disposition refusing (health ok)
 [1]
 
@@ -136,8 +143,10 @@ skipping s3 for replica transfer: replica disposition refusing (health ok)
 # since it already has the replica (their load should be in the mean regardless
 # of whether it's accepting new replicas).
 
-# Reset stores to healthy.
-set-store-status store-id=2 health=ok
+# Reset stores to healthy. Note: we need to explicitly reset replicas=ok
+# because update-store-status doesn't automatically clear dispositions set by
+# update-store-statuses.
+update-store-status store-id=2 health=ok replicas=ok
 ----
 ok accepting all
 
@@ -146,12 +155,18 @@ store-load-msg
   store-id=2 node-id=2 load=[50,0,0] capacity=[200,100,100] load-time=0s
 ----
 
-set-store-status store-id=3 replicas=ok
+# Trigger updateStoreStatuses to ensure disposition is recalculated
+# (disk is now low, so disposition stays ok).
+update-store-status
+----
+updated: map[1:ok accepting all 2:ok accepting all 3:ok refusing=replicas]
+
+update-store-status store-id=3 replicas=ok
 ----
 ok accepting all
 
 # Make store 1 refuse replicas.
-set-store-status store-id=1 replicas=refusing
+update-store-status store-id=1 replicas=refusing
 ----
 ok refusing=replicas
 
@@ -172,7 +187,7 @@ retain-ready-replica-target-stores-only in=(1,2,3) replicas=(1)
 # TODO(tbg): this is an interesting case that I need to understand
 # better, especially if we also consider excluding ALL current replicas
 # from the check.
-set-store-status store-id=1 health=unhealthy replicas=refusing
+update-store-status store-id=1 health=unhealthy replicas=refusing
 ----
 unhealthy refusing=replicas
 

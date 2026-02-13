@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/allocatorimpl"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/mmaprototype"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/config"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/op"
@@ -70,6 +71,9 @@ func NewMMAStoreRebalancer(
 	controller op.Controller,
 	settings *config.SimulationSettings,
 ) *MMAStoreRebalancer {
+	// Initialize disk utilization thresholds from cluster settings.
+	opts := allocatorimpl.MakeDiskCapacityOptions(&settings.ST.SV)
+	allocator.SetDiskUtilThresholds(opts.RebalanceToThreshold, opts.ShedAndBlockAllThreshold)
 	msr := &MMAStoreRebalancer{
 		AmbientContext:       log.MakeTestingAmbientCtxWithNewTracer(),
 		localStoreID:         localStoreID,
@@ -156,12 +160,30 @@ func (msr *MMAStoreRebalancer) Tick(ctx context.Context, tick time.Time, s state
 			// This uses the real production RefreshStoreStatus, which queries
 			// StorePool (backed by StatusTracker via NodeLivenessFn) and
 			// translates to MMA's status model.
+			opts := allocatorimpl.MakeDiskCapacityOptions(&msr.settings.ST.SV)
+			msr.allocator.SetDiskUtilThresholds(opts.RebalanceToThreshold, opts.ShedAndBlockAllThreshold)
 			msr.allocator.UpdateStoresStatuses(ctx, msr.as.GetMMAStoreStatuses())
 			storeLeaseholderMsg := MakeStoreLeaseholderMsgFromState(s, msr.localStoreID)
 			pendingChanges := msr.allocator.ComputeChanges(ctx, &storeLeaseholderMsg, mmaprototype.ChangeOptions{
 				LocalStoreID: roachpb.StoreID(msr.localStoreID),
 				PeriodicCall: true, /* to exercise observability code paths */
 			})
+			// After ComputeChanges succeeds, mark the span config as up-to-date
+			// on replicas.
+			for _, rm := range storeLeaseholderMsg.Ranges {
+				if rm.MaybeSpanConfIsPopulated {
+					rng, ok := s.Range(state.RangeID(rm.RangeID))
+					if !ok {
+						panic(fmt.Sprintf("range %d not found", rm.RangeID))
+					}
+
+					replica, ok := rng.Replica(msr.localStoreID)
+					if !ok {
+						panic(fmt.Sprintf("replica %d not found", msr.localStoreID))
+					}
+					replica.SetMMASpanConfigIsUpToDate(true)
+				}
+			}
 			log.KvDistribution.Infof(ctx, "store %d: computed %d changes", msr.localStoreID, len(pendingChanges))
 			for i, change := range pendingChanges {
 				usageInfo := s.RangeUsageInfo(state.RangeID(change.RangeID), msr.localStoreID)

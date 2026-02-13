@@ -204,7 +204,14 @@ func (a *allocatorState) ProcessStoreLoadMsg(ctx context.Context, msg *StoreLoad
 	a.cs.processStoreLoadMsg(ctx, msg)
 }
 
-// UpdateStoresStatus implements the Allocator interface.
+// SetDiskUtilThresholds implements the Allocator interface.
+func (a *allocatorState) SetDiskUtilThresholds(refuseThreshold, shedThreshold float64) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	a.cs.setDiskUtilThresholds(refuseThreshold, shedThreshold)
+}
+
+// UpdateStoresStatuses implements the Allocator interface.
 func (a *allocatorState) UpdateStoresStatuses(
 	ctx context.Context, storeStatuses map[roachpb.StoreID]Status,
 ) {
@@ -287,7 +294,7 @@ func (a *allocatorState) AdjustPendingChangeDisposition(
 		if success {
 			a.cs.pendingChangeEnacted(c.changeID, a.cs.ts.Now())
 		} else {
-			a.cs.undoPendingChange(c.changeID)
+			a.cs.undoPendingChange(ctx, c.changeID)
 		}
 	}
 }
@@ -301,13 +308,12 @@ func (a *allocatorState) RegisterExternalChange(
 	rangeOperationMetrics := a.getCounterMetricsForLocalStoreLocked(ctx, localStoreID)
 	if err := a.cs.preCheckOnApplyReplicaChanges(change); err != nil {
 		rangeOperationMetrics.ExternalRegisterFailure.Inc(1)
-		log.KvDistribution.Infof(context.Background(),
-			"did not register external changes: due to %v", err)
+		log.KvDistribution.Infof(ctx, "did not register external changes: due to %v", err)
 		return ExternalRangeChange{}, false
 	} else {
 		rangeOperationMetrics.ExternalRegisterSuccess.Inc(1)
 	}
-	a.cs.addPendingRangeChange(change)
+	a.cs.addPendingRangeChange(ctx, change)
 	return MakeExternalRangeChange(OriginExternal, localStoreID, change), true
 }
 
@@ -543,44 +549,25 @@ func sortTargetCandidateSetAndPick(
 	})
 	bestDiversity := cands.candidates[0].diversityScore
 	j := 0
-	// Iterate over candidates with the same diversity. First such set that is
-	// not disk capacity constrained is where we stop. Even if they can't accept
-	// because they have too many pending changes or can't handle the addition
-	// of the range. That is, we are not willing to reduce diversity when
-	// rebalancing ranges. When rebalancing leases, the diversityScore of all
-	// the candidates will be 0.
+	// Iterate over candidates with the same diversity. We stop at the first set
+	// of candidates with the same diversity. Even if they can't accept because
+	// they have too many pending changes or can't handle the addition of the
+	// range. That is, we are not willing to reduce diversity when rebalancing
+	// ranges. When rebalancing leases, the diversityScore of all the candidates
+	// will be 0.
 	for i, cand := range cands.candidates {
 		if !diversityScoresAlmostEqual(bestDiversity, cand.diversityScore) {
-			if j == 0 {
-				// Don't have any candidates yet.
-				bestDiversity = cand.diversityScore
-			} else {
-				// Have a set of candidates.
-				if s := formatCandidatesLog(&b, cands.candidates[i:]); s != "" {
-					log.KvDistribution.VEventf(ctx, 2, "discarding candidates due to lower diversity score: %s", s)
-				}
-				break
+			// Have a set of candidates with the best diversity.
+			if s := formatCandidatesLog(&b, cands.candidates[i:]); s != "" {
+				log.KvDistribution.VEventf(ctx, 2, "discarding candidates due to lower diversity score: %s", s)
 			}
+			break
 		}
-		// Diversity is the same. Include if not reaching disk capacity.
-		// TODO(tbg): remove highDiskSpaceUtilization check here. These candidates
-		// should instead be filtered out by retainReadyLeaseTargetStoresOnly (which
-		// filters down the initial candidate set before computing the mean).
-		if !cand.highDiskSpaceUtilization {
-			cands.candidates[j] = cand
-			j++
-		} else {
-			log.KvDistribution.VEventf(ctx, 2, "discarding candidate due to high disk space utilization: %v", cand.StoreID)
-		}
+		cands.candidates[j] = cand
+		j++
 	}
-	if j == 0 {
-		log.KvDistribution.VEventf(ctx, 2, "sortTargetCandidateSetAndPick: no candidates due to disk space util")
-		failLogger(noCandidateDiskSpaceUtil)
-		return 0
-	}
-
-	// Every candidate in [0:j] has same diversity and is sorted by increasing
-	// load, and within the same load by increasing leasePreferenceIndex.
+	// Every candidate in [0:j] has the same (best) diversity and is sorted by
+	// increasing load, and within the same load by increasing leasePreferenceIndex.
 	cands.candidates = cands.candidates[:j]
 	j = 0
 	// Filter out the candidates that are overloaded or have too many pending
@@ -805,14 +792,14 @@ func sortTargetCandidateSetAndPick(
 //
 // NB: Caller is responsible for calling clearAnalyzedConstraints when rstate or
 // the rstate.constraints is no longer needed.
-func (cs *clusterState) ensureAnalyzedConstraints(rstate *rangeState) {
+func (cs *clusterState) ensureAnalyzedConstraints(ctx context.Context, rstate *rangeState) {
 	if rstate.constraints != nil {
 		return
 	}
 	// Skip the range if the configuration is invalid for constraint analysis.
 	if rstate.conf == nil {
-		log.KvDistribution.Warning(context.Background(),
-			"no span config due to normalization error, skipping constraint analysis")
+		log.KvDistribution.Warning(
+			ctx, "no span config due to normalization error, skipping constraint analysis")
 		return
 	}
 	// Populate the constraints.
@@ -835,13 +822,13 @@ func (cs *clusterState) ensureAnalyzedConstraints(rstate *rangeState) {
 		// that there is a new leaseholder (and thus should drop this range).
 		// However, even in this case, replica.IsLeaseholder should still be there
 		// based on to the stale state, so this should still be impossible to hit.
-		log.KvDistribution.Warningf(context.Background(),
+		log.KvDistribution.Warningf(ctx,
 			"mma: no leaseholders found in %v, skipping constraint analysis", rstate.replicas)
 		return
 	}
 	if err := rac.finishInit(rstate.conf, cs.constraintMatcher, leaseholder); err != nil {
 		releaseRangeAnalyzedConstraints(rac)
-		log.KvDistribution.Warningf(context.Background(),
+		log.KvDistribution.Warningf(ctx,
 			"mma: error finishing constraint analysis: %v, skipping range", err)
 		return
 	}
@@ -983,8 +970,8 @@ func (cs *clusterState) computeCandidatesForReplicaTransfer(
 
 // retainReadyReplicaTargetStoresOnly filters the input set to only those stores
 // that are ready to accept a replica. A store is not ready if it has a non-OK
-// replica disposition. In practice, the input set is already filtered by
-// constraints.
+// replica disposition (which also takes disk utilization into account via
+// updateStoreStatuses).
 //
 // Stores already housing a replica (on top of being in the input storeSet)
 // bypass this disposition check since they already have the replica - its load
@@ -1018,12 +1005,6 @@ func retainReadyReplicaTargetStoresOnly(
 		switch {
 		case ss.status.Disposition.Replica != ReplicaDispositionOK:
 			log.KvDistribution.VEventf(ctx, 2, "skipping s%d for replica transfer: replica disposition %v (health %v)", storeID, ss.status.Disposition.Replica, ss.status.Health)
-		case highDiskSpaceUtilization(ss.reportedLoad[ByteSize], ss.capacity[ByteSize]):
-			// TODO(tbg): remove this from mma and just let the caller set this
-			// disposition based on the following cluster settings:
-			// - kv.allocator.max_disk_utilization_threshold
-			// - kv.allocator.rebalance_to_max_disk_utilization_threshold
-			log.KvDistribution.VEventf(ctx, 2, "skipping s%d for replica transfer: high disk utilization (health %v)", storeID, ss.status.Health)
 		default:
 			out = append(out, storeID)
 		}

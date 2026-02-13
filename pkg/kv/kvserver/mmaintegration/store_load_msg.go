@@ -115,8 +115,7 @@ func MakeStoreLoadMsg(
 	// Available does not compensate for the ballast, so utilization will look
 	// higher than actual. This is fine since the ballast is small (default is
 	// 1% of capacity) and is for use in an emergency.
-	byteSizeUtil :=
-		float64(desc.Capacity.Capacity-desc.Capacity.Available) / float64(desc.Capacity.Capacity)
+	byteSizeUtil := desc.Capacity.FractionUsed()
 	almostZeroUtil := byteSizeUtil < 0.01
 	if load[mmaprototype.ByteSize] != 0 && !almostZeroUtil {
 		// Normal case. The store has some ranges, and is not almost empty.

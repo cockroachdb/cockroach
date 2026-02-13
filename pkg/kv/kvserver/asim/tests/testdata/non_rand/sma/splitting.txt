@@ -35,21 +35,23 @@ asserting: |replicas(t)/mean_{T}(replicas) - 1| = 0.00 ∀ t∈T and each store 
 # split threshold.
 eval duration=5m samples=2 seed=42 metrics=(replicas) cfgs=(sma-count,mma-only)
 ----
+sma-count:
 replicas#1: first: [s1=1] (stddev=0.00, mean=1.00, sum=1)
 replicas#1: last:  [s1=7] (stddev=0.00, mean=7.00, sum=7)
 replicas#1: thrash_pct: [s1=0%]  (sum=0%)
 replicas#2: first: [s1=1] (stddev=0.00, mean=1.00, sum=1)
 replicas#2: last:  [s1=6] (stddev=0.00, mean=6.00, sum=6)
 replicas#2: thrash_pct: [s1=0%]  (sum=0%)
-artifacts[sma-count]: 7852a87f3c8d2092
+hash: 7852a87f3c8d2092
 ==========================
+mma-only:
 replicas#1: first: [s1=1] (stddev=0.00, mean=1.00, sum=1)
 replicas#1: last:  [s1=7] (stddev=0.00, mean=7.00, sum=7)
 replicas#1: thrash_pct: [s1=0%]  (sum=0%)
 replicas#2: first: [s1=1] (stddev=0.00, mean=1.00, sum=1)
 replicas#2: last:  [s1=6] (stddev=0.00, mean=6.00, sum=6)
 replicas#2: thrash_pct: [s1=0%]  (sum=0%)
-artifacts[mma-only]: 7852a87f3c8d2092
+hash: 7852a87f3c8d2092
 ==========================
 
 # Update the load generator to use a zipfian distribution instead of a uniform.
@@ -62,19 +64,21 @@ gen_load rate=10000 rw_ratio=1.0 access_skew=true replace=true
 
 eval duration=5m samples=2 seed=42 metrics=(replicas) cfgs=(sma-count,mma-only)
 ----
+sma-count:
 replicas#1: first: [s1=1] (stddev=0.00, mean=1.00, sum=1)
 replicas#1: last:  [s1=9] (stddev=0.00, mean=9.00, sum=9)
 replicas#1: thrash_pct: [s1=0%]  (sum=0%)
 replicas#2: first: [s1=1] (stddev=0.00, mean=1.00, sum=1)
 replicas#2: last:  [s1=9] (stddev=0.00, mean=9.00, sum=9)
 replicas#2: thrash_pct: [s1=0%]  (sum=0%)
-artifacts[sma-count]: 8073dfd29bf0465c
+hash: 8073dfd29bf0465c
 ==========================
+mma-only:
 replicas#1: first: [s1=1] (stddev=0.00, mean=1.00, sum=1)
 replicas#1: last:  [s1=9] (stddev=0.00, mean=9.00, sum=9)
 replicas#1: thrash_pct: [s1=0%]  (sum=0%)
 replicas#2: first: [s1=1] (stddev=0.00, mean=1.00, sum=1)
 replicas#2: last:  [s1=9] (stddev=0.00, mean=9.00, sum=9)
 replicas#2: thrash_pct: [s1=0%]  (sum=0%)
-artifacts[mma-only]: 8073dfd29bf0465c
+hash: 8073dfd29bf0465c
 ==========================

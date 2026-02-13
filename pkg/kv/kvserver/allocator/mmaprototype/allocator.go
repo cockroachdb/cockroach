@@ -60,9 +60,17 @@ type Allocator interface {
 	// associated node in the cluster.
 	ProcessStoreLoadMsg(ctx context.Context, msg *StoreLoadMsg)
 
+	// SetDiskUtilThresholds configures the disk utilization thresholds used
+	// to augment store dispositions in UpdateStoresStatuses:
+	// - refuseThreshold: stores above this refuse new replicas
+	// - shedThreshold: stores above this actively shed replicas
+	SetDiskUtilThresholds(refuseThreshold, shedThreshold float64)
+
 	// UpdateStoresStatuses updates the health and disposition for the stores in
 	// storeStatuses. Stores unknown to the allocator are ignored with logging.
-	// to the allocator are ignored with logging.
+	//
+	// The replica disposition is augmented based on disk utilization using
+	// thresholds set via SetDiskUtilThresholds.
 	UpdateStoresStatuses(ctx context.Context, storeStatuses map[roachpb.StoreID]Status)
 
 	// Methods related to making changes.
