@@ -30,11 +30,11 @@ sequence req=req1
 
 on-lock-acquired req=req1 key=k1 str=shared
 ----
-[-] acquire lock: txn 00000001 @ ‹k1›
+[-] acquire lock: txn 00000001 acquiring Unreplicated Shared lock on ‹"k1"›
 
 on-lock-acquired req=req1 key=k2 str=shared
 ----
-[-] acquire lock: txn 00000001 @ ‹k2›
+[-] acquire lock: txn 00000001 acquiring Unreplicated Shared lock on ‹"k2"›
 
 finish req=req1
 ----
@@ -53,7 +53,7 @@ sequence req=req2
 
 on-lock-acquired req=req2 key=k2 str=shared
 ----
-[-] acquire lock: txn 00000002 @ ‹k2›
+[-] acquire lock: txn 00000002 acquiring Unreplicated Shared lock on ‹"k2"›
 
 new-request name=req3 txn=txn3 ts=12,1
   get key=k3 str=exclusive
@@ -72,7 +72,7 @@ sequence req=req3
 
 on-lock-acquired req=req3 key=k3 str=exclusive
 ----
-[-] acquire lock: txn 00000003 @ ‹k3›
+[-] acquire lock: txn 00000003 acquiring Unreplicated Exclusive lock on ‹"k3"›
 
 finish req=req3
 ----

@@ -34,7 +34,7 @@ handle-lock-conflict-error req=req1 lease-seq=1
   lock txn=txn2 key=i
   lock txn=txn2 key=j
 ----
-[2] handle lock conflict error req1: handled conflicting locks on ‹"a"›, ‹"b"›, ‹"c"›, ‹"d"›, ‹"e"›, ‹"f"›, ‹"g"›, ‹"h"›, ‹"i"›, ‹"j"›, released latches
+[2] handle lock conflict error req1: added 10 discovered lock(s) to lock table: conflicting locks on ‹"a"›, ‹"b"›, ‹"c"›, ‹"d"›, ‹"e"›, ‹"f"›, ‹"g"›, ‹"h"›, ‹"i"›, ‹"j"›
 
 debug-lock-table
 ----
@@ -120,7 +120,7 @@ finish req=req1
 handle-lock-conflict-error req=req2 lease-seq=1
   lock txn=txn2 key=c
 ----
-[5] handle lock conflict error req2: handled conflicting locks on ‹"c"›, released latches
+[5] handle lock conflict error req2: added 1 discovered lock(s) to lock table: conflicting locks on ‹"c"›
 
 # Only the contended lock remains.
 debug-lock-table
@@ -186,7 +186,7 @@ handle-lock-conflict-error req=req1 lease-seq=1
   lock txn=txn2 key=a
   lock txn=txn2 key=b
 ----
-[2] handle lock conflict error req1: handled conflicting locks on ‹"a"›, ‹"b"›, released latches
+[2] handle lock conflict error req1: added 2 discovered lock(s) to lock table: conflicting locks on ‹"a"›, ‹"b"›
 
 debug-lock-table
 ----
@@ -210,11 +210,11 @@ sequence req=req2
 
 on-lock-acquired req=req2 key=g dur=u
 ----
-[-] acquire lock: txn 00000002 @ ‹g›
+[-] acquire lock: txn 00000002 acquiring Unreplicated Exclusive lock on ‹"g"›
 
 on-lock-acquired req=req2 key=h dur=u
 ----
-[-] acquire lock: txn 00000002 @ ‹h›
+[-] acquire lock: txn 00000002 acquiring Unreplicated Exclusive lock on ‹"h"›
 
 finish req=req2
 ----
@@ -294,7 +294,7 @@ handle-lock-conflict-error req=req1 lease-seq=1
   lock txn=txn2 key=b
   lock txn=txn2 key=c
 ----
-[2] handle lock conflict error req1: handled conflicting locks on ‹"a"›, ‹"b"›, ‹"c"›, released latches
+[2] handle lock conflict error req1: added 3 discovered lock(s) to lock table: conflicting locks on ‹"a"›, ‹"b"›, ‹"c"›
 
 debug-lock-table
 ----
@@ -384,7 +384,7 @@ handle-lock-conflict-error req=req1 lease-seq=1
   lock txn=txn2 key=i
   lock txn=txn2 key=j
 ----
-[2] handle lock conflict error req1: handled conflicting locks on ‹"a"›, ‹"b"›, ‹"c"›, ‹"d"›, ‹"e"›, ‹"f"›, ‹"g"›, ‹"h"›, ‹"i"›, ‹"j"›, released latches
+[2] handle lock conflict error req1: added 10 discovered lock(s) to lock table: conflicting locks on ‹"a"›, ‹"b"›, ‹"c"›, ‹"d"›, ‹"e"›, ‹"f"›, ‹"g"›, ‹"h"›, ‹"i"›, ‹"j"›
 
 debug-lock-table
 ----
@@ -505,7 +505,7 @@ finish req=req1
 handle-lock-conflict-error req=req2 lease-seq=1
   lock txn=txn2 key=c
 ----
-[5] handle lock conflict error req2: handled conflicting locks on ‹"c"›, released latches
+[5] handle lock conflict error req2: added 1 discovered lock(s) to lock table: conflicting locks on ‹"c"›
 
 # Only the contended lock remains.
 debug-lock-table
