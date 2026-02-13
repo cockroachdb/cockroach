@@ -515,10 +515,11 @@ CREATE TABLE system.statement_diagnostics_requests(
     anti_plan_gist           BOOL        NULL,
     redacted                 BOOL        NOT NULL DEFAULT FALSE,
     username                 STRING      NOT NULL DEFAULT '',
+    collections_remaining    INT8        NULL,
     CONSTRAINT "primary" PRIMARY KEY (id),
     CONSTRAINT check_sampling_probability CHECK (sampling_probability BETWEEN 0.0 AND 1.0),
-    INDEX completed_idx_v2 (completed, id) STORING (statement_fingerprint, min_execution_latency, expires_at, sampling_probability, plan_gist, anti_plan_gist, redacted, username),
-    FAMILY "primary" (id, completed, statement_fingerprint, statement_diagnostics_id, requested_at, min_execution_latency, expires_at, sampling_probability, plan_gist, anti_plan_gist, redacted, username)
+    INDEX completed_idx_v2 (completed, id) STORING (statement_fingerprint, min_execution_latency, expires_at, sampling_probability, plan_gist, anti_plan_gist, redacted, username, collections_remaining),
+    FAMILY "primary" (id, completed, statement_fingerprint, statement_diagnostics_id, requested_at, min_execution_latency, expires_at, sampling_probability, plan_gist, anti_plan_gist, redacted, username, collections_remaining)
 );`
 
 	StatementDiagnosticsTableSchema = `
@@ -531,9 +532,11 @@ CREATE TABLE system.statement_diagnostics(
     bundle_chunks              INT ARRAY,
     error                      STRING,
     transaction_diagnostics_id INT8,
+    request_id                 INT8,
     CONSTRAINT "primary" PRIMARY KEY (id),
-    FAMILY "primary" (id, statement_fingerprint, statement, collected_at, trace, bundle_chunks, error, transaction_diagnostics_id),
-    INDEX transaction_diagnostics_id_idx (transaction_diagnostics_id)
+    FAMILY "primary" (id, statement_fingerprint, statement, collected_at, trace, bundle_chunks, error, transaction_diagnostics_id, request_id),
+    INDEX transaction_diagnostics_id_idx (transaction_diagnostics_id),
+    INDEX request_id_idx (request_id)
 );`
 
 	TransactionDiagnosticsRequestsTableSchema = `
@@ -1291,7 +1294,7 @@ const SystemDatabaseName = catconstants.SystemDatabaseName
 // release version).
 //
 // NB: Don't set this to clusterversion.Latest; use a specific version instead.
-var SystemDatabaseSchemaBootstrapVersion = clusterversion.V26_2_AddTableStatisticsDelayDeleteColumn.Version()
+var SystemDatabaseSchemaBootstrapVersion = clusterversion.V26_2_StmtDiagnosticsRequestID.Version()
 
 // MakeSystemDatabaseDesc constructs a copy of the system database
 // descriptor.
@@ -2698,12 +2701,13 @@ var (
 				{Name: "anti_plan_gist", ID: 10, Type: types.Bool, Nullable: true},
 				{Name: "redacted", ID: 11, Type: types.Bool, Nullable: false, DefaultExpr: &falseBoolString},
 				{Name: "username", ID: 12, Type: types.String, Nullable: false, DefaultExpr: &emptyString},
+			{Name: "collections_remaining", ID: 13, Type: types.Int, Nullable: true},
 			},
 			[]descpb.ColumnFamilyDescriptor{
 				{
 					Name:        "primary",
-					ColumnNames: []string{"id", "completed", "statement_fingerprint", "statement_diagnostics_id", "requested_at", "min_execution_latency", "expires_at", "sampling_probability", "plan_gist", "anti_plan_gist", "redacted", "username"},
-					ColumnIDs:   []descpb.ColumnID{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12},
+					ColumnNames: []string{"id", "completed", "statement_fingerprint", "statement_diagnostics_id", "requested_at", "min_execution_latency", "expires_at", "sampling_probability", "plan_gist", "anti_plan_gist", "redacted", "username", "collections_remaining"},
+					ColumnIDs:   []descpb.ColumnID{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13},
 				},
 			},
 			pk("id"),
@@ -2713,10 +2717,10 @@ var (
 				ID:                  2,
 				Unique:              false,
 				KeyColumnNames:      []string{"completed", "id"},
-				StoreColumnNames:    []string{"statement_fingerprint", "min_execution_latency", "expires_at", "sampling_probability", "plan_gist", "anti_plan_gist", "redacted", "username"},
+				StoreColumnNames:    []string{"statement_fingerprint", "min_execution_latency", "expires_at", "sampling_probability", "plan_gist", "anti_plan_gist", "redacted", "username", "collections_remaining"},
 				KeyColumnIDs:        []descpb.ColumnID{2, 1},
 				KeyColumnDirections: []catenumpb.IndexColumn_Direction{catenumpb.IndexColumn_ASC, catenumpb.IndexColumn_ASC},
-				StoreColumnIDs:      []descpb.ColumnID{3, 6, 7, 8, 9, 10, 11, 12},
+				StoreColumnIDs:      []descpb.ColumnID{3, 6, 7, 8, 9, 10, 11, 12, 13},
 				Version:             descpb.StrictIndexColumnIDGuaranteesVersion,
 			},
 		),
@@ -2746,13 +2750,14 @@ var (
 				{Name: "bundle_chunks", ID: 6, Type: types.IntArray, Nullable: true},
 				{Name: "error", ID: 7, Type: types.String, Nullable: true},
 				{Name: "transaction_diagnostics_id", ID: 8, Type: types.Int, Nullable: true},
+				{Name: "request_id", ID: 9, Type: types.Int, Nullable: true},
 			},
 			[]descpb.ColumnFamilyDescriptor{
 				{
 					Name: "primary",
 					ColumnNames: []string{"id", "statement_fingerprint", "statement",
-						"collected_at", "trace", "bundle_chunks", "error", "transaction_diagnostics_id"},
-					ColumnIDs: []descpb.ColumnID{1, 2, 3, 4, 5, 6, 7, 8},
+						"collected_at", "trace", "bundle_chunks", "error", "transaction_diagnostics_id", "request_id"},
+					ColumnIDs: []descpb.ColumnID{1, 2, 3, 4, 5, 6, 7, 8, 9},
 				},
 			},
 			pk("id"),
@@ -2764,6 +2769,17 @@ var (
 				KeyColumnNames:      []string{"transaction_diagnostics_id"},
 				KeyColumnDirections: []catenumpb.IndexColumn_Direction{catenumpb.IndexColumn_ASC},
 				KeyColumnIDs:        []descpb.ColumnID{8},
+				KeySuffixColumnIDs:  []descpb.ColumnID{1},
+				Version:             descpb.StrictIndexColumnIDGuaranteesVersion,
+			},
+			// Index for retrieving all bundles for a statement diagnostics request.
+			descpb.IndexDescriptor{
+				Name:                "request_id_idx",
+				ID:                  3,
+				Unique:              false,
+				KeyColumnNames:      []string{"request_id"},
+				KeyColumnDirections: []catenumpb.IndexColumn_Direction{catenumpb.IndexColumn_ASC},
+				KeyColumnIDs:        []descpb.ColumnID{9},
 				KeySuffixColumnIDs:  []descpb.ColumnID{1},
 				Version:             descpb.StrictIndexColumnIDGuaranteesVersion,
 			},

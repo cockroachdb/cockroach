@@ -78,6 +78,13 @@ var upgrades = []upgradebase.Upgrade{
 		tableStatisticsDelayDeleteColumnMigration,
 		upgrade.RestoreActionNotRequired("cluster restore does not restore the new column"),
 	),
+	upgrade.NewTenantUpgrade(
+		"add request_id column/index to system.statement_diagnostics and collections_remaining to system.statement_diagnostics_requests",
+		clusterversion.V26_2_StmtDiagnosticsRequestID.Version(),
+		upgrade.NoPrecondition,
+		stmtDiagnosticsAddRequestIDColumnAndIndex,
+		upgrade.RestoreActionNotRequired("cluster restore does not restore this table"),
+	),
 
 	// Note: when starting a new release version, the first upgrade (for
 	// Vxy_zStart) must be a newFirstUpgrade. Keep this comment at the bottom.
