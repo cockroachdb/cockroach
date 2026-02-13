@@ -40,6 +40,7 @@ go_library(
         "//pkg/cmd/roachtest/registry",
         "//pkg/cmd/roachtest/roachtestflags",
         "//pkg/cmd/roachtest/roachtestutil",
+        "//pkg/cmd/roachtest/spec",
         "//pkg/cmd/roachtest/tests",
         "//pkg/sql/catalog/catpb",
         "//pkg/sql/lexbase",
