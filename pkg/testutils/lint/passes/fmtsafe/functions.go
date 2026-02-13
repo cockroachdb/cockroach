@@ -119,6 +119,10 @@ var requireConstFmt = map[string]bool{
 	"(*main.operationImpl).Fatalf":                                                            true,
 	"(*github.com/cockroachdb/cockroach/pkg/cmd/roachtest.operationImpl).Fatalf":              true,
 
+	"(*github.com/cockroachdb/cockroach/pkg/cmd/tef/planners.defaultLogger).Infof":    true,
+	"(*github.com/cockroachdb/cockroach/pkg/cmd/tef/planners.defaultLogger).Warningf": true,
+	"(*github.com/cockroachdb/cockroach/pkg/cmd/tef/planners.defaultLogger).Errorf":   true,
+
 	"(*github.com/cockroachdb/cockroach/pkg/kv/kvserver.raftLogger).Debugf":   true,
 	"(*github.com/cockroachdb/cockroach/pkg/kv/kvserver.raftLogger).Infof":    true,
 	"(*github.com/cockroachdb/cockroach/pkg/kv/kvserver.raftLogger).Warningf": true,
