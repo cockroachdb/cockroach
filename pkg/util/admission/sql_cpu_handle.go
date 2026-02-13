@@ -100,6 +100,8 @@ func newSQLCPUAdmissionHandle(workInfo SQLWorkInfo, p *sqlCPUProviderImpl) *SQLC
 	return h
 }
 
+// reportCPU atomically adds the CPU time difference to the appropriate
+// cumulative counter.
 func (h *SQLCPUHandle) reportCPU(diff time.Duration) {
 	if h.workInfo.AtGateway {
 		h.p.cumulativeGatewayCPUNanos.Add(diff.Nanoseconds())
@@ -258,7 +260,15 @@ func (h *GoroutineCPUHandle) UnpauseMeasuring() {
 }
 
 type sqlCPUProviderImpl struct {
+	// cumulativeGatewayCPUNanos tracks the cumulative CPU time in nanoseconds
+	// accounted for SQL work executed at gateway nodes. This value is
+	// monotonically increasing and is updated atomically as CPU time is
+	// reported via SQLCPUHandle.reportCPU.
 	cumulativeGatewayCPUNanos atomic.Int64
+	// cumulativeDistSQLCPUNanos tracks the cumulative CPU time in nanoseconds
+	// accounted for distributed SQL work. This value is monotonically
+	// increasing and is updated atomically as CPU time is reported via
+	// SQLCPUHandle.reportCPU.
 	cumulativeDistSQLCPUNanos atomic.Int64
 }
 
