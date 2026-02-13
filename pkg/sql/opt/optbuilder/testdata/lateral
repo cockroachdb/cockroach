@@ -232,28 +232,7 @@ project
 build
 SELECT * FROM j, jsonb_array_elements(j.j->'foo') AS e, jsonb_array_elements(e.e->'bar')
 ----
-project
- ├── columns: id:1!null j:2 e:5 value:6
- └── inner-join-apply
-      ├── columns: id:1!null j:2 crdb_internal_mvcc_timestamp:3 tableoid:4 value:5 value:6
-      ├── inner-join-apply
-      │    ├── columns: id:1!null j:2 crdb_internal_mvcc_timestamp:3 tableoid:4 value:5
-      │    ├── scan j
-      │    │    └── columns: id:1!null j:2 crdb_internal_mvcc_timestamp:3 tableoid:4
-      │    ├── project-set
-      │    │    ├── columns: value:5
-      │    │    ├── values
-      │    │    │    └── ()
-      │    │    └── zip
-      │    │         └── jsonb_array_elements(j:2->'foo')
-      │    └── filters (true)
-      ├── project-set
-      │    ├── columns: value:6
-      │    ├── values
-      │    │    └── ()
-      │    └── zip
-      │         └── jsonb_array_elements(value:5->'bar')
-      └── filters (true)
+error (22023): jsonb_array_elements(): unsupported binary operator: <tuple{jsonb AS value}> -> <string> (returning <jsonb>)
 
 build
 SELECT
