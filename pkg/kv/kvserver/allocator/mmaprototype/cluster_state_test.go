@@ -348,6 +348,17 @@ func testingGetPendingChanges(t *testing.T, cs *clusterState) []*pendingReplicaC
 	return storeLoadPendingChangeList
 }
 
+// redactedTrace returns the trace output with all non-safe values replaced by
+// the redacted marker ‹×›. This is used to verify that log messages in the
+// allocator properly mark all their format arguments as redaction-safe.
+// Operational data (store IDs, load values, etc.) should never be redacted
+// in our logs. Any ‹×› appearing in test output indicates a log call that
+// passes a value without proper redaction safety, meaning that value would
+// be stripped from the log in production redacted output.
+func redactedTrace(sb *redact.StringBuilder) string {
+	return string(sb.RedactableString().Redact())
+}
+
 func TestClusterState(t *testing.T) {
 	tdPath := datapathutils.TestDataPath(t, "cluster_state")
 	datadriven.Walk(t,
@@ -558,7 +569,7 @@ func TestClusterState(t *testing.T) {
 						rec := finishAndGet()
 						var sb redact.StringBuilder
 						rec.SafeFormatMinimal(&sb)
-						return sb.String()
+						return redactedTrace(&sb)
 					}
 					return ""
 
@@ -654,7 +665,7 @@ func TestClusterState(t *testing.T) {
 					rec := finishAndGet()
 					var sb redact.StringBuilder
 					rec.SafeFormatMinimal(&sb)
-					return sb.String() + printPendingChangesTest(testingGetPendingChanges(t, cs))
+					return redactedTrace(&sb) + printPendingChangesTest(testingGetPendingChanges(t, cs))
 
 				case "tick":
 					seconds := dd.ScanArg[int](t, d, "seconds")
@@ -669,7 +680,7 @@ func TestClusterState(t *testing.T) {
 					rec := finishAndGet()
 					var sb redact.StringBuilder
 					rec.SafeFormatMinimal(&sb)
-					return fmt.Sprintf("%s%v\n", sb.String(), out)
+					return fmt.Sprintf("%s%v\n", redactedTrace(&sb), out)
 
 				case "retain-ready-replica-target-stores-only":
 					in := dd.ScanArg[[]roachpb.StoreID](t, d, "in")
@@ -682,7 +693,7 @@ func TestClusterState(t *testing.T) {
 					rec := finishAndGet()
 					var sb redact.StringBuilder
 					rec.SafeFormatMinimal(&sb)
-					return fmt.Sprintf("%s%v\n", sb.String(), out)
+					return fmt.Sprintf("%s%v\n", redactedTrace(&sb), out)
 
 				default:
 					panic(fmt.Sprintf("unknown command: %v", d.Cmd))
