@@ -1302,14 +1302,28 @@ func newChangeFrontierProcessor(
 		execinfra.ProcStateOpts{
 			InputsToDrain: []execinfra.RowSource{cf.input},
 			TrailingMetaCallback: func() []execinfrapb.ProducerMetadata {
+				var metas []execinfrapb.ProducerMetadata
+
+				// For core changefeeds (no job record), emit the coordinator
+				// frontier as trailing metadata so that progress can be
+				// preserved across retries.
+				if cf.spec.JobID == 0 && cf.frontier != nil {
+					var cfMeta execinfrapb.ChangefeedMeta
+					for sp, ts := range cf.frontier.Entries() {
+						cfMeta.CoordinatorFrontier = append(cfMeta.CoordinatorFrontier,
+							execinfrapb.ChangefeedMeta_FrontierSpan{Span: sp, Timestamp: ts})
+					}
+					metas = append(metas, execinfrapb.ProducerMetadata{Changefeed: &cfMeta})
+				}
+
 				cf.close()
 
 				if cf.agg != nil {
 					meta := bulkutil.ConstructTracingAggregatorProducerMeta(ctx,
 						cf.FlowCtx.NodeID.SQLInstanceID(), cf.FlowCtx.ID, cf.agg)
-					return []execinfrapb.ProducerMetadata{*meta}
+					metas = append(metas, *meta)
 				}
-				return nil
+				return metas
 			},
 		},
 	); err != nil {
@@ -1675,7 +1689,6 @@ func (cf *changeFrontier) Next() (rowenc.EncDatumRow, *execinfrapb.ProducerMetad
 			log.Changefeed.Warningf(cf.Ctx(),
 				"moving to draining after reaching resolved span boundary (%s): %v",
 				boundaryType, err)
-			cf.emitCoordinatorFrontierMeta()
 			cf.MoveToDraining(err)
 			break
 		}
@@ -1692,14 +1705,12 @@ func (cf *changeFrontier) Next() (rowenc.EncDatumRow, *execinfrapb.ProducerMetad
 				// draining so that the remaining aggregators will shut down and
 				// transmit their up-to-date frontier.
 				log.Changefeed.Warningf(cf.Ctx(), "moving to draining due to aggregator shutdown: %s", meta.Changefeed)
-				cf.emitCoordinatorFrontierMeta()
 				cf.MoveToDraining(changefeedbase.ErrNodeDraining)
 			}
 			return nil, meta
 		}
 		if row == nil {
 			log.Changefeed.Warningf(cf.Ctx(), "moving to draining after getting nil row from aggregator")
-			cf.emitCoordinatorFrontierMeta()
 			cf.MoveToDraining(nil /* err */)
 			break
 		}
@@ -1715,7 +1726,6 @@ func (cf *changeFrontier) Next() (rowenc.EncDatumRow, *execinfrapb.ProducerMetad
 
 		if err := cf.noteAggregatorProgress(cf.Ctx(), row[0]); err != nil {
 			log.Changefeed.Warningf(cf.Ctx(), "moving to draining after error while processing aggregator progress: %v", err)
-			cf.emitCoordinatorFrontierMeta()
 			cf.MoveToDraining(err)
 			break
 		}
@@ -1760,21 +1770,6 @@ func (cf *changeFrontier) noteAggregatorProgress(ctx context.Context, d rowenc.E
 	return nil
 }
 
-// emitCoordinatorFrontierMeta appends the coordinator frontier as trailing
-// metadata for core changefeeds. This must be called before MoveToDraining
-// so the frontier data is delivered before the error, since the flow runner
-// may stop consuming metadata after receiving an error.
-func (cf *changeFrontier) emitCoordinatorFrontierMeta() {
-	if cf.spec.JobID != 0 || cf.frontier == nil {
-		return
-	}
-	var meta execinfrapb.ChangefeedMeta
-	for sp, ts := range cf.frontier.Entries() {
-		meta.CoordinatorFrontier = append(meta.CoordinatorFrontier,
-			execinfrapb.ChangefeedMeta_FrontierSpan{Span: sp, Timestamp: ts})
-	}
-	cf.AppendTrailingMeta(execinfrapb.ProducerMetadata{Changefeed: &meta})
-}
 
 func (cf *changeFrontier) forwardFrontier(
 	ctx context.Context, spans []jobspb.ResolvedSpan,

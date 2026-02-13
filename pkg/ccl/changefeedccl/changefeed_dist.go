@@ -290,8 +290,18 @@ func startDistChangefeed(
 		ctx, cancel := execCtx.ExecCfg().DistSQLSrv.Stopper.WithCancelOnQuiesce(ctx)
 		defer cancel()
 
+		// For core changefeeds (no job, single node), don't pass cancel to
+		// the result writer. This allows the drain protocol to complete and
+		// trailing metadata (including the coordinator frontier) to be
+		// delivered. For job-backed changefeeds, cancel is needed to quickly
+		// shut down potentially many remote aggregators.
+		writerCancel := cancel
+		if jobID == 0 {
+			writerCancel = nil
+		}
+
 		resultRows := sql.NewMetadataCallbackWriter(
-			makeChangefeedResultWriter(resultsCh, cancel),
+			makeChangefeedResultWriter(resultsCh, writerCancel),
 			func(ctx context.Context, meta *execinfrapb.ProducerMetadata) error {
 				if meta.Changefeed != nil {
 					if meta.Changefeed.DrainInfo != nil {
@@ -633,6 +643,9 @@ func (w *changefeedResultWriter) SetRowsAffected(ctx context.Context, n int) {
 }
 func (w *changefeedResultWriter) SetError(err error) {
 	w.err = err
+	if w.cancel == nil {
+		return
+	}
 	switch {
 	case errors.Is(err, changefeedbase.ErrNodeDraining):
 		// Let drain signal proceed w/out cancellation.
