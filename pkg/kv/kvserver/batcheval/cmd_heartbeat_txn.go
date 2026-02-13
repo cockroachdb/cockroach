@@ -46,7 +46,7 @@ func HeartbeatTxn(
 	h := cArgs.Header
 	reply := resp.(*kvpb.HeartbeatTxnResponse)
 
-	if err := VerifyTransaction(h, args, roachpb.PENDING, roachpb.PREPARED, roachpb.STAGING); err != nil {
+	if err := VerifyTransaction(h, args, roachpb.PENDING, roachpb.PREPARED, roachpb.STAGING, roachpb.REFRESHING); err != nil {
 		return result.Result{}, err
 	}
 
@@ -83,6 +83,14 @@ func HeartbeatTxn(
 	// already be implicitly committed.
 	if txn.Status == roachpb.PENDING {
 		BumpToMinTxnCommitTS(ctx, cArgs.EvalCtx, &txn)
+	}
+
+	// If requested, update the transaction record's status. This is used to
+	// transition REFRESHING records back to PENDING after a failed refresh.
+	if args.UpdateStatus {
+		if txn.Status == roachpb.REFRESHING {
+			txn.Status = h.Txn.Status
+		}
 	}
 
 	if !txn.Status.IsFinalized() {
