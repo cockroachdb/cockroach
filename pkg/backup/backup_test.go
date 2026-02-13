@@ -9438,7 +9438,7 @@ func TestExportRequestBelowGCThresholdOnDataExcludedFromBackup(t *testing.T) {
 	upsertUntilBackpressure(t, rRand, conn, "defaultdb", "foo")
 	runGCAndCheckTraceOnCluster(ctx, t, tc, sqlDB, false /* skipShouldQueue */, "defaultdb", "foo",
 		func(traceStr string) error {
-			const processedPattern = `(?s)shouldQueue=true.*processing replica.*GC score after GC`
+			const processedPattern = `(?s)shouldQueue=true.*GC processing.*GC complete`
 			processedRegexp := regexp.MustCompile(processedPattern)
 			if !processedRegexp.MatchString(traceStr) {
 				return errors.Errorf("%q does not match %q", traceStr, processedRegexp)
@@ -9563,7 +9563,7 @@ func TestExcludeDataFromBackupDoesNotHoldupGC(t *testing.T) {
 	upsertUntilBackpressure(t, rRand, conn, "test", "foo")
 	runGCAndCheckTraceOnCluster(ctx, t, tc, runner, false, /* skipShouldQueue */
 		"test", "foo", func(traceStr string) error {
-			const processedPattern = `(?s)shouldQueue=true.*processing replica.*GC score after GC`
+			const processedPattern = `(?s)shouldQueue=true.*GC processing.*GC complete`
 			processedRegexp := regexp.MustCompile(processedPattern)
 			if !processedRegexp.MatchString(traceStr) {
 				return errors.Errorf("%q does not match %q", traceStr, processedRegexp)
