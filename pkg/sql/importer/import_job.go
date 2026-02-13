@@ -12,6 +12,7 @@ import (
 	"math"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/ingeststopped"
 	"github.com/cockroachdb/cockroach/pkg/jobs/joberror"
@@ -60,6 +61,9 @@ type importTestingKnobs struct {
 	onSetupFinish          func(flowinfra.Flow)
 	alwaysFlushJobProgress bool
 	beforeInitialRowCount  func() error
+	// expectedRowCountOffset is added to the expected row count passed to the
+	// inspect row count check.
+	expectedRowCountOffset int64
 }
 
 type importResumer struct {
@@ -76,6 +80,14 @@ func (r *importResumer) TestingSetAfterImportKnob(fn func(summary roachpb.RowCou
 
 func (r *importResumer) TestingSetBeforeInitialRowCountKnob(fn func() error) {
 	r.testingKnobs.beforeInitialRowCount = fn
+}
+
+func (r *importResumer) TestingSetExpectedRowCountOffset(offset int64) {
+	r.testingKnobs.expectedRowCountOffset = offset
+}
+
+func (r *importResumer) TestingSetAlwaysFlushJobProgress() {
+	r.testingKnobs.alwaysFlushJobProgress = true
 }
 
 var _ jobs.TraceableJob = &importResumer{}
@@ -233,7 +245,7 @@ func (r *importResumer) Resume(ctx context.Context, execCtx interface{}) error {
 		}
 	}
 
-	if details.Table.InitialRowCount == 0 {
+	if details.Table.InitialRowCount == 0 && details.Walltime == 0 {
 		// Check if the table being imported into is starting empty, in which case
 		// we can cheaply clear-range instead of DeleteRange to cleanup.
 		//
@@ -241,6 +253,13 @@ func (r *importResumer) Resume(ctx context.Context, execCtx interface{}) error {
 		//
 		// The count is low-cost for empty tables and otherwise the expensive
 		// full scan is only run the one time.
+		//
+		// We also check that the walltime has not been set yet. The walltime is
+		// set later in this function, after the count. If the walltime is
+		// already set, the count has already been performed in a previous
+		// attempt. Without this check, resuming an import into an empty table
+		// would re-count and include the already-ingested import data in the
+		// initial row count.
 		if err := p.ExecCfg().InternalDB.DescsTxn(ctx, func(ctx context.Context, txn descs.Txn) error {
 			rowCountDetails, err := r.detailsWithInitialRowCount(ctx, txn, details)
 			if err != nil {
@@ -300,6 +319,19 @@ func (r *importResumer) Resume(ctx context.Context, execCtx interface{}) error {
 	procsPerNode := int(processorsPerNode.Get(&p.ExecCfg().Settings.SV))
 	initialSplitsPerProc := int(initialSplitsPerProcessor.Get(&p.ExecCfg().Settings.SV))
 
+	// Capture the cumulative imported row count from previous runs before
+	// starting the current ingest. The progress summary is overwritten during
+	// ingest, so we must read it beforehand. This is needed because r.res.Rows
+	// only reflects the current run's ingested rows.
+	pkID := kvpb.BulkOpSummaryID(uint64(table.Desc.ID), uint64(table.Desc.PrimaryIndex.ID))
+	var previouslyImportedRows int64
+	{
+		prog := r.job.Progress()
+		if importProgress := prog.GetImport(); importProgress != nil {
+			previouslyImportedRows = importProgress.Summary.EntryCounts[pkID]
+		}
+	}
+
 	res, err := ingestWithRetry(
 		ctx, p, r.job, importTable, typeDescs, files, format, details.Walltime,
 		r.testingKnobs, procsPerNode, initialSplitsPerProc,
@@ -308,7 +340,6 @@ func (r *importResumer) Resume(ctx context.Context, execCtx interface{}) error {
 		return err
 	}
 
-	pkID := kvpb.BulkOpSummaryID(uint64(table.Desc.ID), uint64(table.Desc.PrimaryIndex.ID))
 	r.res.DataSize = res.DataSize
 	for id, count := range res.EntryCounts {
 		if id == pkID {
@@ -369,15 +400,14 @@ func (r *importResumer) Resume(ctx context.Context, execCtx interface{}) error {
 			}
 			tableName = tblDesc.GetName()
 
-			// TODO(bghal): Get the initial row count so it can be included in the expected.
-			if !details.Table.WasEmpty {
-				log.Eventf(ctx, "skipping row count check on table %q: non-empty tables are not supported", tableName)
+			if creationVersion := r.job.Payload().CreationClusterVersion; !details.Table.WasEmpty && creationVersion.Less(clusterversion.V26_2.Version()) {
+				log.Eventf(ctx, "skipping row count on table %q: the table was not empty and the job was started in an unsupported version", tableName)
 
 				checks, err = inspect.ChecksForTable(ctx, nil /* p */, tblDesc, nil /* expectedRowCount */)
 				return err
 			}
 
-			expectedRowCount := uint64(r.res.Rows)
+			expectedRowCount := uint64(r.res.Rows + previouslyImportedRows + int64(table.InitialRowCount) + r.testingKnobs.expectedRowCountOffset)
 			checks, err = inspect.ChecksForTable(ctx, nil /* p */, tblDesc, &expectedRowCount)
 			return err
 		}); err != nil {

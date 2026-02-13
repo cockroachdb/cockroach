@@ -502,6 +502,11 @@ func ingestKvs(
 		return nil, nil, err
 	}
 
+	// Send a final progress update so the job progress summary includes data
+	// from the final flush. Without this, the summary may be missing the last
+	// batch of ingested data when the BulkAdder only flushes at the end.
+	pushProgress(ctx)
+
 	addedSummary := importAdder.GetSummary()
 	return &addedSummary, importAdder.GetFileList(), nil
 }
