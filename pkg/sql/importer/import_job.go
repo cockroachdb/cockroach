@@ -86,6 +86,10 @@ func (r *importResumer) TestingSetExpectedRowCountOffset(offset int64) {
 	r.testingKnobs.expectedRowCountOffset = offset
 }
 
+func (r *importResumer) TestingSetAlwaysFlushJobProgress() {
+	r.testingKnobs.alwaysFlushJobProgress = true
+}
+
 var _ jobs.TraceableJob = &importResumer{}
 
 func (r *importResumer) ForceRealSpan() bool {
@@ -315,6 +319,19 @@ func (r *importResumer) Resume(ctx context.Context, execCtx interface{}) error {
 	procsPerNode := int(processorsPerNode.Get(&p.ExecCfg().Settings.SV))
 	initialSplitsPerProc := int(initialSplitsPerProcessor.Get(&p.ExecCfg().Settings.SV))
 
+	// Capture the cumulative imported row count from previous runs before
+	// starting the current ingest. The progress summary is overwritten during
+	// ingest, so we must read it beforehand. This is needed because r.res.Rows
+	// only reflects the current run's ingested rows.
+	pkID := kvpb.BulkOpSummaryID(uint64(table.Desc.ID), uint64(table.Desc.PrimaryIndex.ID))
+	var previouslyImportedRows int64
+	{
+		prog := r.job.Progress()
+		if importProgress := prog.GetImport(); importProgress != nil {
+			previouslyImportedRows = importProgress.Summary.EntryCounts[pkID]
+		}
+	}
+
 	res, err := ingestWithRetry(
 		ctx, p, r.job, importTable, typeDescs, files, format, details.Walltime,
 		r.testingKnobs, procsPerNode, initialSplitsPerProc,
@@ -323,7 +340,6 @@ func (r *importResumer) Resume(ctx context.Context, execCtx interface{}) error {
 		return err
 	}
 
-	pkID := kvpb.BulkOpSummaryID(uint64(table.Desc.ID), uint64(table.Desc.PrimaryIndex.ID))
 	r.res.DataSize = res.DataSize
 	for id, count := range res.EntryCounts {
 		if id == pkID {
@@ -391,7 +407,7 @@ func (r *importResumer) Resume(ctx context.Context, execCtx interface{}) error {
 				return err
 			}
 
-			expectedRowCount := uint64(r.res.Rows + int64(table.InitialRowCount) + r.testingKnobs.expectedRowCountOffset)
+			expectedRowCount := uint64(r.res.Rows + previouslyImportedRows + int64(table.InitialRowCount) + r.testingKnobs.expectedRowCountOffset)
 			checks, err = inspect.ChecksForTable(ctx, nil /* p */, tblDesc, &expectedRowCount)
 			return err
 		}); err != nil {

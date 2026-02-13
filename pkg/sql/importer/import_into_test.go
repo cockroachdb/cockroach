@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -387,6 +388,132 @@ func TestImportIntoNonEmptyTableRowCountCheck(t *testing.T) {
 		require.Contains(t, details, `"actual": 300`)
 		require.Contains(t, details, `"expected": 305`)
 	})
+}
+
+// TestImportIntoRowCountCheckAfterPause verifies that the INSPECT row count
+// validation passes after an import is paused and resumed. This exercises two
+// fixes:
+//   - For empty tables, the initial row count must not be re-computed on resume
+//     (since the ingested data would be included, inflating the count).
+//   - For resumed imports, the expected row count must include rows ingested in
+//     previous runs, since r.res.Rows only reflects the current run.
+func TestImportIntoRowCountCheckAfterPause(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	skip.UnderDuress(t, "uses short job adoption intervals that don't work well in slow test configurations")
+
+	ctx := context.Background()
+	dir, dirCleanupFn := testutils.TempDir(t)
+	defer dirCleanupFn()
+
+	adoptInterval := 500 * time.Millisecond
+	srv, db, _ := serverutils.StartServer(t, base.TestServerArgs{
+		ExternalIODir: dir,
+		Knobs: base.TestingKnobs{
+			JobsTestingKnobs: &jobs.TestingKnobs{
+				IntervalOverrides: jobs.TestingIntervalOverrides{
+					Adopt:  &adoptInterval,
+					Cancel: &adoptInterval,
+				},
+			},
+		},
+	})
+	defer srv.Stopper().Stop(ctx)
+
+	runner := sqlutils.MakeSQLRunner(db)
+
+	// Use sync mode so the import blocks until the inspect job completes. If
+	// the row count is wrong the import statement itself will fail.
+	setUnsafeClusterSetting(t, db, `SET CLUSTER SETTING bulkio.import.row_count_validation.unsafe.mode = 'sync'`)
+
+	s := srv.ApplicationLayer()
+	registry := s.JobRegistry().(*jobs.Registry)
+
+	for _, tc := range []struct {
+		name      string
+		setupSQL  string
+		totalRows int
+	}{
+		{
+			name:      "empty_table",
+			setupSQL:  "",
+			totalRows: 10,
+		},
+		{
+			name:      "nonempty_table",
+			setupSQL:  `INSERT INTO nonempty_table SELECT i, i*10 FROM generate_series(1, 5) AS g(i)`,
+			totalRows: 15,
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			// Flush job progress after every batch so that resume_pos is saved
+			// before the pausepoint fires. Without this, the second ingest on
+			// resume would re-process all rows (since resume_pos would be 0),
+			// masking the need for the previouslyImportedRows accounting.
+			registry.TestingWrapResumerConstructor(
+				jobspb.TypeImport,
+				func(resumer jobs.Resumer) jobs.Resumer {
+					resumer.(interface {
+						TestingSetAlwaysFlushJobProgress()
+					}).TestingSetAlwaysFlushJobProgress()
+					return resumer
+				})
+
+			// Use a unique table name per subtest to avoid conflicts from
+			// tables left offline by a previous subtest's paused import.
+			runner.Exec(t, fmt.Sprintf(`CREATE TABLE %s (k INT PRIMARY KEY, v INT)`, tc.name))
+
+			if tc.setupSQL != "" {
+				runner.Exec(t, tc.setupSQL)
+			}
+
+			runner.Exec(t, fmt.Sprintf(
+				`EXPORT INTO CSV 'nodelocal://1/export_%s/' FROM SELECT i, i*10 FROM generate_series(6, 15) AS g(i)`,
+				tc.name))
+
+			// Set pausepoint to pause after ingest.
+			runner.Exec(t, `SET CLUSTER SETTING jobs.debug.pausepoints = 'import.after_ingest'`)
+
+			// Run import. The statement returns with a pausepoint error.
+			_, err := db.Exec(fmt.Sprintf(
+				`IMPORT INTO %s (k, v) CSV DATA ('nodelocal://1/export_%s/export*-n*.0.csv')`,
+				tc.name, tc.name))
+			require.Error(t, err)
+			require.ErrorContains(t, err, "pause point")
+
+			// Find the paused import job.
+			var jobID int64
+			runner.QueryRow(t,
+				`SELECT job_id FROM [SHOW JOBS] WHERE job_type = 'IMPORT' AND status = 'paused'`,
+			).Scan(&jobID)
+
+			// Clear pausepoint and resume the job.
+			runner.Exec(t, `SET CLUSTER SETTING jobs.debug.pausepoints = ''`)
+			runner.Exec(t, fmt.Sprintf(`RESUME JOB %d`, jobID))
+
+			// Wait for job to succeed. If the INSPECT row count check fails,
+			// the job will be in 'failed' state instead.
+			testutils.SucceedsSoon(t, func() error {
+				var status, errStr string
+				if err := db.QueryRow(
+					fmt.Sprintf(`SELECT status, COALESCE(error, '') FROM [SHOW JOB %d]`, jobID),
+				).Scan(&status, &errStr); err != nil {
+					return err
+				}
+				if status == string(jobs.StateFailed) {
+					return errors.Newf("import job %d failed: %s", jobID, errStr)
+				}
+				if status != string(jobs.StateSucceeded) {
+					return errors.Newf("job %d status: %s", jobID, status)
+				}
+				return nil
+			})
+
+			runner.CheckQueryResults(t,
+				fmt.Sprintf(`SELECT count(*) FROM %s`, tc.name),
+				[][]string{{fmt.Sprintf("%d", tc.totalRows)}})
+		})
+	}
 }
 
 // setUnsafeClusterSetting sets a cluster setting that is marked as unsafe. It
