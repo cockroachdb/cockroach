@@ -348,15 +348,25 @@ func testingGetPendingChanges(t *testing.T, cs *clusterState) []*pendingReplicaC
 	return storeLoadPendingChangeList
 }
 
-// redactedTrace returns the trace output with all non-safe values replaced by
-// the redacted marker ‹×›. This is used to verify that log messages in the
-// allocator properly mark all their format arguments as redaction-safe.
-// Operational data (store IDs, load values, etc.) should never be redacted
-// in our logs. Any ‹×› appearing in test output indicates a log call that
-// passes a value without proper redaction safety, meaning that value would
-// be stripped from the log in production redacted output.
-func redactedTrace(sb *redact.StringBuilder) string {
-	return string(sb.RedactableString().Redact())
+// safeTrace returns the trace output and asserts that all values in it are
+// properly marked as redaction-safe. The allocator logs only operational data
+// (store IDs, load values, etc.) which should never be redacted. If any
+// argument in a log call is not properly marked as safe, it will be enclosed
+// in redaction markers ‹...› in the redactable string. This function detects
+// that by comparing the redactable string to its stripped form: if they
+// differ, some value was not safe, and the test fails showing which markers
+// are present.
+func safeTrace(t *testing.T, sb *redact.StringBuilder) string {
+	t.Helper()
+	rs := sb.RedactableString()
+	stripped := rs.StripMarkers()
+	if string(rs) != stripped {
+		redacted := string(rs.Redact())
+		t.Errorf("trace output contains values not marked as redaction-safe.\n"+
+			"Redacted output (‹×› shows where data would be lost):\n%s\n\n"+
+			"Full output with markers:\n%s", redacted, string(rs))
+	}
+	return stripped
 }
 
 func TestClusterState(t *testing.T) {
@@ -569,7 +579,7 @@ func TestClusterState(t *testing.T) {
 						rec := finishAndGet()
 						var sb redact.StringBuilder
 						rec.SafeFormatMinimal(&sb)
-						return redactedTrace(&sb)
+						return safeTrace(t, &sb)
 					}
 					return ""
 
@@ -665,7 +675,7 @@ func TestClusterState(t *testing.T) {
 					rec := finishAndGet()
 					var sb redact.StringBuilder
 					rec.SafeFormatMinimal(&sb)
-					return redactedTrace(&sb) + printPendingChangesTest(testingGetPendingChanges(t, cs))
+					return safeTrace(t, &sb) + printPendingChangesTest(testingGetPendingChanges(t, cs))
 
 				case "tick":
 					seconds := dd.ScanArg[int](t, d, "seconds")
@@ -680,7 +690,7 @@ func TestClusterState(t *testing.T) {
 					rec := finishAndGet()
 					var sb redact.StringBuilder
 					rec.SafeFormatMinimal(&sb)
-					return fmt.Sprintf("%s%v\n", redactedTrace(&sb), out)
+					return fmt.Sprintf("%s%v\n", safeTrace(t, &sb), out)
 
 				case "retain-ready-replica-target-stores-only":
 					in := dd.ScanArg[[]roachpb.StoreID](t, d, "in")
@@ -693,7 +703,7 @@ func TestClusterState(t *testing.T) {
 					rec := finishAndGet()
 					var sb redact.StringBuilder
 					rec.SafeFormatMinimal(&sb)
-					return fmt.Sprintf("%s%v\n", redactedTrace(&sb), out)
+					return fmt.Sprintf("%s%v\n", safeTrace(t, &sb), out)
 
 				default:
 					panic(fmt.Sprintf("unknown command: %v", d.Cmd))
