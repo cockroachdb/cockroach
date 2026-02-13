@@ -7,6 +7,7 @@ package framework
 
 import (
 	"encoding/json"
+	"strings"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/roachprod/cloud"
@@ -196,6 +197,40 @@ func (tc *TestOptions) AssertClusterNonBootVolumeCount(expected int) {
 	}
 }
 
+// AssertClusterNonBootVolumeType verifies all non-boot volumes on all VMs
+// have the expected volume type (e.g., "pd-ssd", "hyperdisk-balanced").
+func (tc *TestOptions) AssertClusterNonBootVolumeType(expectedType string) {
+	tc.t.Helper()
+
+	info := tc.GetClusterInfo()
+	require.NotEmpty(tc.t, info.VMs, "Cluster has no VMs")
+
+	for _, vm := range info.VMs {
+		for _, vol := range vm.NonBootAttachedVolumes {
+			require.Equal(tc.t, expectedType, vol.ProviderVolumeType,
+				"VM %s volume %s has type %s, expected %s",
+				vm.Name, vol.Name, vol.ProviderVolumeType, expectedType)
+		}
+	}
+}
+
+// AssertClusterNonBootVolumeSize verifies all non-boot volumes on all VMs
+// have the expected size in GB.
+func (tc *TestOptions) AssertClusterNonBootVolumeSize(expectedSizeGB int) {
+	tc.t.Helper()
+
+	info := tc.GetClusterInfo()
+	require.NotEmpty(tc.t, info.VMs, "Cluster has no VMs")
+
+	for _, vm := range info.VMs {
+		for _, vol := range vm.NonBootAttachedVolumes {
+			require.Equal(tc.t, expectedSizeGB, vol.Size,
+				"VM %s volume %s has size %dGB, expected %dGB",
+				vm.Name, vol.Name, vol.Size, expectedSizeGB)
+		}
+	}
+}
+
 // AssertClusterHasLabel verifies all VMs have the expected label key-value pair
 func (tc *TestOptions) AssertClusterHasLabel(key, value string) {
 	tc.t.Helper()
@@ -226,4 +261,19 @@ func (tc *TestOptions) AssertClusterMultiZone(minZones int) {
 	}
 	require.GreaterOrEqual(tc.t, len(zones), minZones,
 		"Cluster spans %d zones, expected at least %d", len(zones), minZones)
+}
+
+// AssertClusterFilesystem verifies the filesystem on /mnt/data1 matches the
+// expected type by running `df -T` on the first node.
+func (tc *TestOptions) AssertClusterFilesystem(expectedFS string) {
+	tc.t.Helper()
+
+	result := tc.RunOnNodes("1", "df -T /mnt/data1 | tail -1 | awk '{print $2}'")
+	require.True(tc.t, result.Success(),
+		"Failed to check filesystem:\nStdout: %s\nStderr: %s",
+		result.Stdout, result.Stderr)
+
+	actual := strings.TrimSpace(result.Stdout)
+	require.Equal(tc.t, expectedFS, actual,
+		"Filesystem on /mnt/data1 is %s, expected %s", actual, expectedFS)
 }

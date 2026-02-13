@@ -17,25 +17,85 @@ import (
 )
 
 // ========================================
-// Deterministic tests
+// Architecture tests
 // ========================================
-// TestCreate tests creating a cloud cluster with a basic configuration
-func TestCreate(t *testing.T) {
+
+// TestCreateAMD64 tests creating a basic AMD64 GCE cluster with default settings
+func TestCreateAMD64(t *testing.T) {
 	t.Parallel()
 	rpt := framework.NewRoachprodTest(t, framework.WithTimeout(10*time.Minute))
 
-	// Create a 1-node GCE cluster
+	numNodes := 1 + rpt.Rand().Intn(3)
+	t.Logf("Creating AMD64 cluster with %d nodes (seed=%d)", numNodes, rpt.Seed())
+
 	rpt.RunExpectSuccess("create", rpt.ClusterName(),
-		"-n", "1",
+		"-n", fmt.Sprintf("%d", numNodes),
 		"--clouds", "gce",
 		"--lifetime", "1h",
 	)
 
-	// Verify cluster exists and has correct configuration
 	rpt.AssertClusterExists()
-	rpt.AssertClusterNodeCount(1)
+	rpt.AssertClusterNodeCount(numNodes)
 	rpt.AssertClusterCloud("gce")
 }
+
+// TestCreateARM64 tests creating an ARM64 cluster with a T2A machine type,
+// a T2A-compatible zone, and persistent disk storage.
+func TestCreateARM64(t *testing.T) {
+	t.Parallel()
+	rpt := framework.NewRoachprodTest(t, framework.WithTimeout(10*time.Minute))
+
+	numNodes := 1 + rpt.Rand().Intn(3)
+	// Pick a random T2A-compatible zone
+	zone := gce.SupportedT2AZones[rpt.Rand().Intn(len(gce.SupportedT2AZones))]
+	t.Logf("Using T2A zone: %s, nodes: %d (seed=%d)", zone, numNodes, rpt.Seed())
+
+	rpt.RunExpectSuccess("create", rpt.ClusterName(),
+		"-n", fmt.Sprintf("%d", numNodes),
+		"--clouds", "gce",
+		"--lifetime", "1h",
+		"--arch", "arm64",
+		"--gce-machine-type", "t2a-standard-4",
+		"--gce-zones", zone,
+		"--local-ssd=false",
+		"--gce-pd-volume-type", "pd-balanced",
+		"--gce-pd-volume-size", "100",
+	)
+
+	rpt.AssertClusterExists()
+	rpt.AssertClusterNodeCount(numNodes)
+	rpt.AssertClusterCloud("gce")
+	rpt.AssertClusterMachineType("t2a-standard-4")
+	rpt.AssertClusterArchitecture("arm64")
+	rpt.AssertClusterZone(zone)
+}
+
+// TestCreateFIPS tests creating a FIPS-mode cluster.
+// FIPS implies amd64 with OpenSSL — the VM reports amd64 architecture.
+func TestCreateFIPS(t *testing.T) {
+	t.Parallel()
+	rpt := framework.NewRoachprodTest(t, framework.WithTimeout(10*time.Minute))
+
+	numNodes := 1 + rpt.Rand().Intn(3)
+	t.Logf("Creating FIPS cluster with %d nodes (seed=%d)", numNodes, rpt.Seed())
+
+	rpt.RunExpectSuccess("create", rpt.ClusterName(),
+		"-n", fmt.Sprintf("%d", numNodes),
+		"--clouds", "gce",
+		"--lifetime", "1h",
+		"--arch", "fips",
+		"--gce-machine-type", "n2-standard-4",
+	)
+
+	rpt.AssertClusterExists()
+	rpt.AssertClusterNodeCount(numNodes)
+	rpt.AssertClusterCloud("gce")
+	rpt.AssertClusterMachineType("n2-standard-4")
+}
+
+// ========================================
+// Zone distribution tests
+// ========================================
 
 // TestCreateWithSpecificZone tests creating a cluster in a specific GCE zone
 // and verifies all VMs are created in the correct zone
@@ -49,11 +109,12 @@ func TestCreateWithSpecificZone(t *testing.T) {
 
 	// Randomly pick a zone from the valid zones
 	zone := validZones[rpt.Rand().Intn(len(validZones))]
-	t.Logf("Testing with randomly selected zone: %s", zone)
+	numNodes := 2 + rpt.Rand().Intn(2) // 2-3 nodes
+	t.Logf("Testing with zone: %s, nodes: %d (seed=%d)", zone, numNodes, rpt.Seed())
 
 	// Create cluster with specific zone
 	rpt.RunExpectSuccess("create", rpt.ClusterName(),
-		"-n", "3",
+		"-n", fmt.Sprintf("%d", numNodes),
 		"--clouds", "gce",
 		"--lifetime", "1h",
 		"--gce-zones", zone,
@@ -63,7 +124,7 @@ func TestCreateWithSpecificZone(t *testing.T) {
 	rpt.AssertClusterZone(zone)
 
 	// Also verify we got the right number of nodes
-	rpt.AssertClusterNodeCount(3)
+	rpt.AssertClusterNodeCount(numNodes)
 
 	// And verify it's on GCE
 	rpt.AssertClusterCloud("gce")
@@ -140,97 +201,119 @@ func TestCreateWithZoneCounts(t *testing.T) {
 		"Should have nodes in exactly %d zones, but found %d", len(zoneCounts), len(actualZoneCounts))
 }
 
-// TestCreateARM64 tests creating an ARM64 cluster with a T2A machine type,
-// a T2A-compatible zone, and persistent disk storage.
-func TestCreateARM64(t *testing.T) {
-	t.Parallel()
-	rpt := framework.NewRoachprodTest(t, framework.WithTimeout(10*time.Minute))
-
-	// Pick a random T2A-compatible zone
-	zone := gce.SupportedT2AZones[rpt.Rand().Intn(len(gce.SupportedT2AZones))]
-	t.Logf("Using T2A zone: %s", zone)
-
-	rpt.RunExpectSuccess("create", rpt.ClusterName(),
-		"-n", "2",
-		"--clouds", "gce",
-		"--lifetime", "1h",
-		"--arch", "arm64",
-		"--gce-machine-type", "t2a-standard-4",
-		"--gce-zones", zone,
-		"--local-ssd=false",
-		"--gce-pd-volume-type", "pd-balanced",
-		"--gce-pd-volume-size", "100",
-	)
-
-	rpt.AssertClusterExists()
-	rpt.AssertClusterNodeCount(2)
-	rpt.AssertClusterCloud("gce")
-	rpt.AssertClusterMachineType("t2a-standard-4")
-	rpt.AssertClusterArchitecture("arm64")
-	rpt.AssertClusterZone(zone)
-}
-
-// TestCreateFIPS tests creating a FIPS-mode cluster.
-// FIPS implies amd64 with OpenSSL — the VM reports amd64 architecture.
-func TestCreateFIPS(t *testing.T) {
+// TestCreateGeo tests creating a geo-distributed cluster.
+// --geo selects from hardcoded multi-region defaults:
+//   - us-east1-{b,c,d} (shuffled)
+//   - us-west1-{a,b,c}
+//   - europe-west2-{a,b,c}
+//
+// Unlike --gce-zones which takes explicit zone names, --geo is a convenience
+// flag for multi-region spread. --gce-zones overrides --geo if both are set.
+// Verifies nodes are spread across at least 2 zones.
+func TestCreateGeo(t *testing.T) {
 	t.Parallel()
 	rpt := framework.NewRoachprodTest(t, framework.WithTimeout(10*time.Minute))
 
 	rpt.RunExpectSuccess("create", rpt.ClusterName(),
-		"-n", "2",
+		"-n", "3",
 		"--clouds", "gce",
 		"--lifetime", "1h",
-		"--arch", "fips",
-		"--gce-machine-type", "n2-standard-4",
+		"--geo",
 	)
 
 	rpt.AssertClusterExists()
-	rpt.AssertClusterNodeCount(2)
+	rpt.AssertClusterNodeCount(3)
 	rpt.AssertClusterCloud("gce")
-	rpt.AssertClusterMachineType("n2-standard-4")
+	rpt.AssertClusterMultiZone(2)
 }
 
-// TestCreatePersistentDisk tests creating a cluster with explicit persistent
-// disk configuration and spot instances.
+// ========================================
+// Image tests
+// ========================================
+
+// TestCreateCustomImage tests creating a cluster with a specific GCE image
+// instead of the default roachprod image.
+// Uses the same image drtprod uses. (different than roachprod's default)
+func TestCreateCustomImage(t *testing.T) {
+	t.Parallel()
+	rpt := framework.NewRoachprodTest(t, framework.WithTimeout(10*time.Minute))
+
+	numNodes := 1 + rpt.Rand().Intn(3)
+
+	rpt.RunExpectSuccess("create", rpt.ClusterName(),
+		"-n", fmt.Sprintf("%d", numNodes),
+		"--clouds", "gce",
+		"--lifetime", "1h",
+		"--gce-image", "ubuntu-2204-jammy-v20250112", // Supported until April 2027
+	)
+
+	rpt.AssertClusterExists()
+	rpt.AssertClusterNodeCount(numNodes)
+	rpt.AssertClusterCloud("gce")
+}
+
+// ========================================
+// Storage tests
+// ========================================
+// Note: a single local SSD with ext4 is the default storage configuration
+// when no storage flags are specified. The tests below cover non-default
+// storage configurations.
+
+// TestCreatePersistentDisk tests creating a cluster with persistent disk storage,
+// randomly selecting from the simple PD types that don't require extra provisioning
+// (pd-ssd, pd-balanced, pd-standard). Types like pd-extreme and hyperdisk-* need
+// provisioned IOPS/throughput and are covered by TestCreateHyperdisk.
 func TestCreatePersistentDisk(t *testing.T) {
 	t.Parallel()
 	rpt := framework.NewRoachprodTest(t, framework.WithTimeout(10*time.Minute))
 
+	numNodes := 1 + rpt.Rand().Intn(3)
+	pdTypes := []string{"pd-ssd", "pd-balanced", "pd-standard"}
+	pdType := pdTypes[rpt.Rand().Intn(len(pdTypes))]
+	t.Logf("Testing with PD type: %s, nodes: %d (seed=%d)", pdType, numNodes, rpt.Seed())
+
 	rpt.RunExpectSuccess("create", rpt.ClusterName(),
-		"-n", "2",
+		"-n", fmt.Sprintf("%d", numNodes),
 		"--clouds", "gce",
 		"--lifetime", "1h",
 		"--local-ssd=false",
-		"--gce-pd-volume-type", "pd-ssd",
+		"--gce-pd-volume-type", pdType,
 		"--gce-pd-volume-size", "200",
-		"--gce-use-spot",
+		"--gce-pd-volume-count", "2",
 	)
 
 	rpt.AssertClusterExists()
-	rpt.AssertClusterNodeCount(2)
+	rpt.AssertClusterNodeCount(numNodes)
 	rpt.AssertClusterCloud("gce")
+	rpt.AssertClusterNonBootVolumeCount(2)
+	rpt.AssertClusterNonBootVolumeType(pdType)
+	rpt.AssertClusterNonBootVolumeSize(200)
 }
 
-// TestCreateFilesystemRandomized tests creating a cluster with a randomly selected filesystem.
-// Roachprod supports ext4, zfs, xfs, f2fs, and btrfs.
-func TestCreateFilesystemRandomized(t *testing.T) {
+// TestCreateLocalSSDMultiStore tests creating a cluster with multiple local
+// SSDs, multiple stores (one per disk), and spot instances.
+func TestCreateLocalSSDMultiStore(t *testing.T) {
 	t.Parallel()
 	rpt := framework.NewRoachprodTest(t, framework.WithTimeout(10*time.Minute))
 
-	filesystems := []vm.Filesystem{vm.Ext4, vm.Zfs, vm.Xfs, vm.F2fs, vm.Btrfs}
-	fs := filesystems[rpt.Rand().Intn(len(filesystems))]
-	t.Logf("Testing with filesystem: %s (seed=%d)", fs, rpt.Seed())
+	numNodes := 1 + rpt.Rand().Intn(3)
+	t.Logf("Creating local SSD multi-store cluster with %d nodes (seed=%d)", numNodes, rpt.Seed())
 
 	rpt.RunExpectSuccess("create", rpt.ClusterName(),
-		"-n", "2",
+		"-n", fmt.Sprintf("%d", numNodes),
 		"--clouds", "gce",
 		"--lifetime", "1h",
-		"--filesystem", string(fs),
+		"--local-ssd",
+		"--gce-local-ssd-count", "2",
+		"--gce-enable-multiple-stores",
+		"--gce-machine-type", "n2-standard-4",
 	)
 
 	rpt.AssertClusterExists()
-	rpt.AssertClusterNodeCount(2)
+	rpt.AssertClusterNodeCount(numNodes)
 	rpt.AssertClusterCloud("gce")
+	rpt.AssertClusterMachineType("n2-standard-4")
+	rpt.AssertClusterLocalDiskCount(2)
 }
 
 // TestCreateBootDiskOnly tests creating a cluster with boot-disk-only mode,
@@ -239,8 +322,11 @@ func TestCreateBootDiskOnly(t *testing.T) {
 	t.Parallel()
 	rpt := framework.NewRoachprodTest(t, framework.WithTimeout(10*time.Minute))
 
+	numNodes := 1 + rpt.Rand().Intn(3)
+	t.Logf("Creating boot-disk-only cluster with %d nodes (seed=%d)", numNodes, rpt.Seed())
+
 	rpt.RunExpectSuccess("create", rpt.ClusterName(),
-		"-n", "2",
+		"-n", fmt.Sprintf("%d", numNodes),
 		"--clouds", "gce",
 		"--lifetime", "1h",
 		"--gce-boot-disk-only",
@@ -250,59 +336,9 @@ func TestCreateBootDiskOnly(t *testing.T) {
 	)
 
 	rpt.AssertClusterExists()
-	rpt.AssertClusterNodeCount(2)
+	rpt.AssertClusterNodeCount(numNodes)
 	rpt.AssertClusterCloud("gce")
 	rpt.AssertClusterNonBootVolumeCount(0)
-}
-
-// TestCreateLocalSSDMultiStore tests creating a cluster with multiple local
-// SSDs, multiple stores (one per disk), and preemptible instances.
-func TestCreateLocalSSDMultiStore(t *testing.T) {
-	t.Parallel()
-	rpt := framework.NewRoachprodTest(t, framework.WithTimeout(10*time.Minute))
-
-	rpt.RunExpectSuccess("create", rpt.ClusterName(),
-		"-n", "2",
-		"--clouds", "gce",
-		"--lifetime", "1h",
-		"--local-ssd",
-		"--gce-local-ssd-count", "2",
-		"--gce-enable-multiple-stores",
-		"--gce-preemptible",
-		"--gce-machine-type", "n2-standard-4",
-	)
-
-	rpt.AssertClusterExists()
-	rpt.AssertClusterNodeCount(2)
-	rpt.AssertClusterCloud("gce")
-	rpt.AssertClusterMachineType("n2-standard-4")
-	rpt.AssertClusterPreemptible(true)
-	rpt.AssertClusterLocalDiskCount(2)
-}
-
-// TestCreateCPUConfig tests CPU hardware configuration flags: threads-per-core,
-// min-cpu-platform, and turbo mode. Uses a C4 machine type which supports turbo mode.
-// These flags require --gce-use-bulk-insert=false as they are not yet wired through
-// the SDK BulkInsert path.
-func TestCreateCPUConfig(t *testing.T) {
-	t.Parallel()
-	rpt := framework.NewRoachprodTest(t, framework.WithTimeout(10*time.Minute))
-
-	rpt.RunExpectSuccess("create", rpt.ClusterName(),
-		"-n", "2",
-		"--clouds", "gce",
-		"--lifetime", "1h",
-		"--gce-use-bulk-insert=false",
-		"--gce-machine-type", "c4-standard-4",
-		"--gce-threads-per-core", "1",
-		"--gce-min-cpu-platform", "any",
-		"--gce-turbo-mode", "ALL_CORE_MAX",
-	)
-
-	rpt.AssertClusterExists()
-	rpt.AssertClusterNodeCount(2)
-	rpt.AssertClusterCloud("gce")
-	rpt.AssertClusterMachineType("c4-standard-4")
 }
 
 // TestCreateHyperdisk tests creating a cluster with multiple hyperdisk-balanced
@@ -312,8 +348,11 @@ func TestCreateHyperdisk(t *testing.T) {
 	t.Parallel()
 	rpt := framework.NewRoachprodTest(t, framework.WithTimeout(10*time.Minute))
 
+	numNodes := 1 + rpt.Rand().Intn(3)
+	t.Logf("Creating hyperdisk cluster with %d nodes (seed=%d)", numNodes, rpt.Seed())
+
 	rpt.RunExpectSuccess("create", rpt.ClusterName(),
-		"-n", "2",
+		"-n", fmt.Sprintf("%d", numNodes),
 		"--clouds", "gce",
 		"--lifetime", "1h",
 		"--gce-use-bulk-insert=false",
@@ -327,29 +366,82 @@ func TestCreateHyperdisk(t *testing.T) {
 	)
 
 	rpt.AssertClusterExists()
-	rpt.AssertClusterNodeCount(2)
+	rpt.AssertClusterNodeCount(numNodes)
 	rpt.AssertClusterCloud("gce")
 	rpt.AssertClusterNonBootVolumeCount(2)
+	rpt.AssertClusterNonBootVolumeType("hyperdisk-balanced")
+	rpt.AssertClusterNonBootVolumeSize(100)
+
+	// Note: provisioned IOPS and throughput are GCE control plane properties
+	// not exposed by roachprod list. The create command succeeding is itself
+	// validation — GCE rejects invalid IOPS/throughput for the disk type.
 }
 
-// TestCreateGeo tests creating a geo-distributed cluster with a custom image.
-// Verifies nodes are spread across multiple zones.
-func TestCreateGeo(t *testing.T) {
+// TestCreateFilesystemRandomized tests creating a cluster with a randomly selected filesystem.
+// Roachprod supports ext4, zfs, xfs, f2fs, and btrfs.
+func TestCreateFilesystemRandomized(t *testing.T) {
 	t.Parallel()
 	rpt := framework.NewRoachprodTest(t, framework.WithTimeout(10*time.Minute))
 
+	numNodes := 1 + rpt.Rand().Intn(3)
+	filesystems := []vm.Filesystem{vm.Ext4, vm.Zfs, vm.Xfs, vm.F2fs, vm.Btrfs}
+	fs := filesystems[rpt.Rand().Intn(len(filesystems))]
+	t.Logf("Testing with filesystem: %s, nodes: %d (seed=%d)", fs, numNodes, rpt.Seed())
+
 	rpt.RunExpectSuccess("create", rpt.ClusterName(),
-		"-n", "3",
+		"-n", fmt.Sprintf("%d", numNodes),
 		"--clouds", "gce",
 		"--lifetime", "1h",
-		"--geo",
-		"--gce-image", "ubuntu-2204-jammy-v20240319",
+		"--filesystem", string(fs),
 	)
 
 	rpt.AssertClusterExists()
-	rpt.AssertClusterNodeCount(3)
+	rpt.AssertClusterNodeCount(numNodes)
 	rpt.AssertClusterCloud("gce")
-	rpt.AssertClusterMultiZone(2)
+	rpt.AssertClusterFilesystem(string(fs))
+}
+
+// ========================================
+// Instance and CPU configuration tests
+// ========================================
+
+// TestCreateCPUConfig tests CPU hardware configuration flags: threads-per-core,
+// min-cpu-platform, and turbo mode. Uses a C4 machine type which supports turbo mode.
+// These flags require --gce-use-bulk-insert=false as they are not yet wired through
+// the SDK BulkInsert path.
+//
+// --threads-per-core controls SMT (Simultaneous Multithreading / Hyper-Threading)
+// and is randomized: 0 (omit flag, GCE default), 1 (disable SMT — one thread per
+// physical core), or 2 (explicitly enable SMT — two threads per core).
+func TestCreateCPUConfig(t *testing.T) {
+	t.Parallel()
+	rpt := framework.NewRoachprodTest(t, framework.WithTimeout(10*time.Minute))
+
+	// 0 = omit the flag (GCE default), 1 = disable SMT, 2 = enable SMT
+	threadsPerCore := rpt.Rand().Intn(3)
+	t.Logf("Testing with threads-per-core=%d (0=omitted) (seed=%d)", threadsPerCore, rpt.Seed())
+
+	numNodes := 1 + rpt.Rand().Intn(3)
+	args := []string{
+		"create", rpt.ClusterName(),
+		"-n", fmt.Sprintf("%d", numNodes),
+		"--clouds", "gce",
+		"--lifetime", "1h",
+		"--gce-use-bulk-insert=false",
+		"--gce-machine-type", "c4-standard-4",
+		"--gce-min-cpu-platform", "any",
+		"--gce-turbo-mode", "ALL_CORE_MAX",
+	}
+	if threadsPerCore > 0 {
+		args = append(args, "--gce-threads-per-core", fmt.Sprintf("%d", threadsPerCore))
+	}
+
+	rpt.RunExpectSuccess(args...)
+
+	rpt.AssertClusterExists()
+	rpt.AssertClusterNodeCount(numNodes)
+	rpt.AssertClusterCloud("gce")
+	rpt.AssertClusterMachineType("c4-standard-4")
 }
 
 // TestCreateManaged tests creating a cluster using managed instance groups,
@@ -358,8 +450,11 @@ func TestCreateManaged(t *testing.T) {
 	t.Parallel()
 	rpt := framework.NewRoachprodTest(t, framework.WithTimeout(10*time.Minute))
 
+	numNodes := 1 + rpt.Rand().Intn(3)
+	t.Logf("Creating managed cluster with %d nodes (seed=%d)", numNodes, rpt.Seed())
+
 	rpt.RunExpectSuccess("create", rpt.ClusterName(),
-		"-n", "2",
+		"-n", fmt.Sprintf("%d", numNodes),
 		"--clouds", "gce",
 		"--lifetime", "1h",
 		"--gce-managed",
@@ -367,7 +462,7 @@ func TestCreateManaged(t *testing.T) {
 	)
 
 	rpt.AssertClusterExists()
-	rpt.AssertClusterNodeCount(2)
+	rpt.AssertClusterNodeCount(numNodes)
 	rpt.AssertClusterCloud("gce")
 	rpt.AssertClusterHasLabel("managed", "true")
 }

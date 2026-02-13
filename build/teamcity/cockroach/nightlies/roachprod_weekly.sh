@@ -104,17 +104,10 @@ BAZEL_SUPPORT_EXTRA_DOCKER_ARGS="-e GOOGLE_EPHEMERAL_CREDENTIALS -e GOOGLE_PROJE
   --test_arg=-test.v \
   --test_timeout="$TEST_TIMEOUT" \
   --runs_per_test="$TEST_COUNT" \
+  --test_tmpdir=/tmp \
   || exit_status=\$?
 EOF
 tc_end_block "Run roachprod E2E tests"
-
-## Import JUnit XML results into TeamCity
-#tc_start_block "Import test results"
-#echo "##teamcity[importData type='junit' path='artifacts/**/*.xml']"
-#tc_end_block "Import test results"
-
-# Publish artifacts
-echo "##teamcity[publishArtifacts 'artifacts/ => roachprodtest-artifacts.zip']"
 
 # Ensure gcloud is authenticated for final cluster listing
 #log_into_gcloud
