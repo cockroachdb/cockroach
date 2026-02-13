@@ -1139,13 +1139,8 @@ EXPLAIN (TYPES) SELECT 2*count(k) as z, v FROM t WHERE v>123 GROUP BY v HAVING v
 distribution: local
 vectorized: true
 ·
-• render
-│ columns: (z int, v int)
-│ render z: ((count)[int] * (2)[int])[int]
-│ render v: (v)[int]
-│
-└── • norows
-      columns: (v int, count int)
+• norows
+  columns: (z int, v int)
 
 query T
 EXPLAIN (TYPES) DELETE FROM t WHERE v > 1

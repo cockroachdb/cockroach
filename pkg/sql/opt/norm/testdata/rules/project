@@ -1447,7 +1447,7 @@ CREATE TABLE t74241 (
 )
 ----
 
-norm
+norm disable=(EliminateZeroCardSelect,EliminateZeroCardProject)
 INSERT INTO t74241 (a, b, c)
 SELECT tmp.b, tmp.b, tmp.d FROM t74241 AS tmp
 WHERE false
