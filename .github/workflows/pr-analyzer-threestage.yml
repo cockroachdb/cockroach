@@ -2,13 +2,29 @@ name: Claude Code PR Review
 
 on:
   pull_request_target:
-    types: [synchronize, ready_for_review, reopened]
+    types: [synchronize, ready_for_review, reopened, labeled]
 
 jobs:
   claude-code-pr-review:
     runs-on: ubuntu-latest
     timeout-minutes: 60
-    if: "!startsWith(github.base_ref, 'release-') && !contains(github.event.pull_request.labels.*.name, 'O-No-AI-Review') && !github.event.pull_request.merged && !github.event.pull_request.draft"
+    # Allow external PRs only when a write-access user applies the 'O-AI-Review' label.
+    # Internal PRs (from the same repo) run automatically without the label.
+    # For 'labeled' events, only trigger when the specific 'O-AI-Review' label is applied
+    # to avoid re-running the full review when unrelated labels are added.
+    if: |
+      !startsWith(github.base_ref, 'release-') &&
+      !contains(github.event.pull_request.labels.*.name, 'O-No-AI-Review') &&
+      !github.event.pull_request.merged &&
+      !github.event.pull_request.draft &&
+      (
+        github.event.action != 'labeled' ||
+        github.event.label.name == 'O-AI-Review'
+      ) &&
+      (
+        github.event.pull_request.head.repo.full_name == github.repository ||
+        contains(github.event.pull_request.labels.*.name, 'O-AI-Review')
+      )
     permissions:
       contents: read
       pull-requests: write
@@ -35,6 +51,9 @@ jobs:
           CLOUD_ML_REGION: global
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
+          # External contributor PRs are gated by the O-AI-Review label at the job level,
+          # so it's safe to allow non-write users through the action's permission check.
+          allowed_non_write_users: "*"
           use_vertex: "true"
           claude_args: |
             --model claude-opus-4-5@20251101
@@ -84,6 +103,7 @@ jobs:
           CLOUD_ML_REGION: global
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
+          allowed_non_write_users: "*"
           use_vertex: "true"
           claude_args: |
             --model claude-opus-4-5@20251101
@@ -134,6 +154,7 @@ jobs:
           CLOUD_ML_REGION: global
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
+          allowed_non_write_users: "*"
           use_vertex: "true"
           claude_args: |
             --model claude-opus-4-5@20251101
@@ -198,6 +219,7 @@ jobs:
           CLOUD_ML_REGION: global
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
+          allowed_non_write_users: "*"
           use_vertex: "true"
           claude_args: |
             --model claude-opus-4-5@20251101
