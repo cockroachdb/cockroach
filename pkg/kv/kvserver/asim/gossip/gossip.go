@@ -123,10 +123,7 @@ func (g *gossip) addStoreToGossip(s state.State, storeID state.StoreID, nodeID s
 	g.storeGossip[storeID] = &storeGossiper{addingStore: true}
 	g.storeGossip[storeID] = newStoreGossiper(
 		func(cached bool) roachpb.StoreDescriptor {
-			nc := s.NodeCapacity(nodeID)
-			desc := s.StoreDescriptors(cached, storeID)[0]
-			desc.NodeCapacity = nc
-			return desc
+			return s.StoreDescriptors(cached, storeID)[0]
 		},
 		s.Clock(), g.settings.ST)
 }
