@@ -63,8 +63,73 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
         with:
-          ref: ${{ github.event.pull_request.head.sha || github.ref }}
+          ref: ${{ github.event.pull_request.head.ref }}
           fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Sync Bazel files with diagrams.go
+        id: sync-bazel
+        run: |
+          echo "::group::Syncing Bazel files with diagrams.go"
+
+          # Extract diagram names from diagrams.go
+          # Look for {name: "xxx"} patterns
+          DIAGRAM_NAMES=$(grep -oP 'name:\s*"[^"]+' pkg/cmd/docgen/diagrams.go | sed 's/name:\s*"//' | sort -u)
+
+          BAZEL_UPDATED=false
+
+          for name in $DIAGRAM_NAMES; do
+            # Skip if name ends with _stmt (HTML file won't have _stmt suffix)
+            html_name="${name%_stmt}"
+
+            # Check and update BUILD.bazel
+            if ! grep -q "\"${name}\"" docs/generated/sql/bnf/BUILD.bazel; then
+              echo "Adding ${name} to BUILD.bazel"
+              # Find the right alphabetical position and insert
+              sed -i "/\"analyze_stmt\",/a\\    \"${name}\"," docs/generated/sql/bnf/BUILD.bazel
+              BAZEL_UPDATED=true
+            fi
+
+            # Check and update bnf.bzl
+            if ! grep -q "${name}.bnf" pkg/gen/bnf.bzl; then
+              echo "Adding ${name}.bnf to bnf.bzl"
+              sed -i "/analyze_stmt.bnf/a\\    \"//docs/generated/sql/bnf:${name}.bnf\"," pkg/gen/bnf.bzl
+              BAZEL_UPDATED=true
+            fi
+
+            # Check and update diagrams.bzl (uses html_name without _stmt)
+            if ! grep -q "${html_name}.html" pkg/gen/diagrams.bzl; then
+              echo "Adding ${html_name}.html to diagrams.bzl"
+              sed -i "/analyze.html/a\\    \"//docs/generated/sql/bnf:${html_name}.html\"," pkg/gen/diagrams.bzl
+              BAZEL_UPDATED=true
+            fi
+
+            # Check and update docs.bzl
+            if ! grep -q "${name}.bnf" pkg/gen/docs.bzl; then
+              echo "Adding ${name}.bnf to docs.bzl"
+              sed -i "/analyze_stmt.bnf/a\\    \"//docs/generated/sql/bnf:${name}.bnf\"," pkg/gen/docs.bzl
+              BAZEL_UPDATED=true
+            fi
+          done
+
+          echo "bazel_updated=${BAZEL_UPDATED}" >> $GITHUB_OUTPUT
+          echo "::endgroup::"
+
+      - name: Commit Bazel file updates
+        if: steps.sync-bazel.outputs.bazel_updated == 'true'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          git add docs/generated/sql/bnf/BUILD.bazel pkg/gen/bnf.bzl pkg/gen/diagrams.bzl pkg/gen/docs.bzl
+
+          if git diff --staged --quiet; then
+            echo "No Bazel file changes to commit"
+          else
+            git commit -m "chore: auto-sync Bazel files with diagrams.go"
+            git push
+            echo "::notice::Bazel files automatically updated and pushed"
+          fi
 
       - name: Compute metadata
         run: echo GITHUB_ACTIONS_BRANCH=${{ github.event.pull_request.number || github.ref_name}} >> "$GITHUB_ENV"
