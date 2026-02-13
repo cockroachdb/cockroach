@@ -84,6 +84,9 @@ type SQLCPUHandle struct {
 		syncutil.Mutex
 		closed   bool
 		gHandles []*GoroutineCPUHandle
+		// Backing for up to 2 goroutine handles, to avoid allocations in
+		// gHandles when there are 2 or fewer goroutines.
+		handlesBacking [2]*GoroutineCPUHandle
 	}
 }
 
@@ -92,6 +95,7 @@ func newSQLCPUAdmissionHandle(workInfo SQLWorkInfo, p *sqlCPUProviderImpl) *SQLC
 		workInfo: workInfo,
 		p:        p,
 	}
+	h.mu.gHandles = h.mu.handlesBacking[:0]
 	return h
 }
 
