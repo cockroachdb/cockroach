@@ -312,6 +312,11 @@ message NodeCapacity {
   // sec, calculated by the runtime load monitor based on number of logical CPU
   // processors available for use by the processor.
   optional int64 node_cpu_rate_capacity = 4 [(gogoproto.nullable) = false, (gogoproto.customname) = "NodeCPURateCapacity"];
+
+  // ComputedNodeCPURateCapacity is the node's total CPU capacity in nanoseconds
+  // per sec, calculated by the runtime load monitor based on number of logical
+  // CPU processors available for use by the processor.
+  optional int64 computed_node_cpu_rate_capacity = 5 [(gogoproto.nullable) = false, (gogoproto.customname) = "ComputedNodeCPURateCapacity"];
 }
 
 // StoreCapacity contains capacity information for a storage device.
