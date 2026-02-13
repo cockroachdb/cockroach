@@ -4967,6 +4967,7 @@ deprules
     - ToPublicOrTransient($secondary-index-Target, $primary-index-Target)
     - $secondary-index-Node[CurrentStatus] = VALIDATED
     - $primary-index-Node[CurrentStatus] = PUBLIC
+    - $primary-index-Target[TargetStatus] = PUBLIC
     - joinTargetNode($secondary-index, $secondary-index-Target, $secondary-index-Node)
     - joinTargetNode($primary-index, $primary-index-Target, $primary-index-Node)
 - name: simple constraint public right before its dependents
@@ -10246,6 +10247,7 @@ deprules
     - ToPublicOrTransient($secondary-index-Target, $primary-index-Target)
     - $secondary-index-Node[CurrentStatus] = VALIDATED
     - $primary-index-Node[CurrentStatus] = PUBLIC
+    - $primary-index-Target[TargetStatus] = PUBLIC
     - joinTargetNode($secondary-index, $secondary-index-Target, $secondary-index-Node)
     - joinTargetNode($primary-index, $primary-index-Target, $primary-index-Node)
 - name: simple constraint public right before its dependents
