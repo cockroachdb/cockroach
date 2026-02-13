@@ -502,8 +502,6 @@ SELECT
         AS tab_130098 (col_218772)
       JOIN (VALUES ('14:54:42.42701':::TIME)) AS tab_130099 (col_218773) ON (tab_130098.col_218772) = (tab_130099.col_218773)
       FULL JOIN (VALUES (tab_130094.col_218765)) AS tab_130100 (col_218774) ON NULL
-    WHERE
-      NULL
     GROUP BY
       tab_130098.col_218772, tab_130100.col_218774
     LIMIT
