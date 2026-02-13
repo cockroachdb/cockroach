@@ -162,6 +162,14 @@ func newReplicaGCQueue(store *Store, db *kv.DB) *replicaGCQueue {
 func (rgcq *replicaGCQueue) shouldQueue(
 	ctx context.Context, now hlc.ClockTimestamp, repl *Replica, _ spanconfig.StoreReader,
 ) (shouldQueue bool, priority float64) {
+	// Merge-pending replicas should be GC'd promptly. The scanner now offers
+	// these to us; treat them with suspect priority so they bypass the 12-hour
+	// check interval. The local descriptor still shows this store as a member
+	// (since the merge was never applied locally), so the currentMember check
+	// below would otherwise gate us on the long interval.
+	if reason, err := repl.IsDestroyed(); err != nil && reason == destroyReasonMergePending {
+		return true, replicaGCPrioritySuspect
+	}
 	if _, currentMember := repl.Desc().GetReplicaDescriptor(repl.store.StoreID()); !currentMember {
 		return true, replicaGCPriorityRemoved
 	}
