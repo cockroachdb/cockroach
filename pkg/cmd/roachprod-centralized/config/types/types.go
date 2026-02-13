@@ -67,6 +67,9 @@ type Config struct {
 	Bootstrap      struct {
 		SCIMToken string `env:"SCIM_TOKEN" default:"" description:"Bootstrap SCIM service account token (used on first startup when no service accounts exist)"`
 	} `env:"BOOTSTRAP" description:"Bootstrap configuration for initial setup"`
+	Secrets struct {
+		GCPProject string `env:"GCP_PROJECT" default:"" description:"GCP project for auto-writing secrets to Secret Manager"`
+	} `env:"SECRETS" description:"Secret management configuration"`
 }
 
 // CloudProvider represents a cloud provider configuration.

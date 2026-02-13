@@ -25,6 +25,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/repositories/clusters"
 	ccrdbstore "github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/repositories/clusters/cockroachdb"
 	cmemstore "github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/repositories/clusters/memory"
+	renvironments "github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/repositories/environments"
+	ecrdbstore "github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/repositories/environments/cockroachdb"
+	ememstore "github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/repositories/environments/memory"
 	rhealth "github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/repositories/health"
 	hcrdbstore "github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/repositories/health/cockroachdb"
 	hmemstore "github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/repositories/health/memory"
@@ -36,6 +39,8 @@ import (
 	sauthtypes "github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/services/auth/types"
 	sclusters "github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/services/clusters"
 	dnsregistry "github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/services/dns/registry"
+	senvironments "github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/services/environments"
+	senvironmentstypes "github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/services/environments/types"
 	shealth "github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/services/health"
 	shealthtypes "github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/services/health/types"
 	spublicdns "github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/services/public-dns"
@@ -53,11 +58,12 @@ import (
 
 // Services holds all the application services
 type Services struct {
-	Task     *stasks.Service
-	Health   *shealth.Service
-	Clusters *sclusters.Service
-	DNS      *spublicdns.Service
-	Auth     *sauth.Service
+	Task         *stasks.Service
+	Health       *shealth.Service
+	Clusters     *sclusters.Service
+	DNS          *spublicdns.Service
+	Auth         *sauth.Service
+	Environments *senvironments.Service
 }
 
 // NewServicesFromConfig creates and initializes all services from configuration
@@ -74,6 +80,7 @@ func NewServicesFromConfig(
 	var tasksRepository rtasks.ITasksRepository
 	var healthRepository rhealth.IHealthRepository
 	var authRepository rauth.IAuthRepository
+	var environmentsRepository renvironments.IEnvironmentsRepository
 
 	switch strings.ToLower(cfg.Database.Type) {
 	case "cockroachdb":
@@ -128,9 +135,19 @@ func NewServicesFromConfig(
 			return nil, errors.Wrap(err, "error running auth migrations")
 		}
 
+		// Run database migrations for environments repository
+		if err := database.RunMigrationsForRepository(appCtx, l, db, "environments", ecrdbstore.GetEnvironmentsMigrations(), crdbmigrator.NewMigrator()); err != nil {
+			l.Error("failed to run environments migrations",
+				slog.Any("error", err),
+				slog.String("repository", "environments"),
+			)
+			return nil, errors.Wrap(err, "error running environments migrations")
+		}
+
 		healthRepository = hcrdbstore.NewHealthRepository(db)
 		clustersRepository = ccrdbstore.NewClustersRepository(db)
 		authRepository = authcrdbstore.NewAuthRepository(db)
+		environmentsRepository = ecrdbstore.NewEnvironmentsRepository(db)
 
 		tasksRepository = tcrdbstore.NewTasksRepository(db, tcrdbstore.Options{
 			HealthTimeout: time.Duration(cfg.InstanceHealthTimeoutSeconds) * time.Second,
@@ -168,6 +185,7 @@ func NewServicesFromConfig(
 		healthRepository = hmemstore.NewHealthRepository()
 		clustersRepository = cmemstore.NewClustersRepository()
 		authRepository = authmemstore.NewAuthRepository()
+		environmentsRepository = ememstore.NewEnvironmentsRepository()
 
 	default:
 		return nil, fmt.Errorf("unsupported database type: %s", cfg.Database.Type)
@@ -274,6 +292,18 @@ func NewServicesFromConfig(
 		BootstrapSCIMToken:       cfg.Bootstrap.SCIMToken,
 	})
 
+	// Create the environments service.
+	environmentsService := senvironments.NewService(environmentsRepository, senvironmentstypes.Options{
+		GCPProject: cfg.Secrets.GCPProject,
+	})
+	if cfg.Secrets.GCPProject != "" {
+		if err := environmentsService.RegisterGCPResolver(appCtx); err != nil {
+			l.Error("failed to register GCP secret resolver",
+				slog.Any("error", err))
+			return nil, errors.Wrap(err, "error registering GCP secret resolver")
+		}
+	}
+
 	// Configure Okta token validator if bearer authentication is configured
 	authType := auth.AuthenticationType(strings.ToLower(cfg.Api.Authentication.Type))
 	if authType == auth.AuthenticationTypeBearer && cfg.Api.Authentication.Bearer.OktaIssuer != "" {
@@ -294,11 +324,12 @@ func NewServicesFromConfig(
 	}
 
 	return &Services{
-		Task:     taskService,
-		Health:   healthService,
-		Clusters: clustersService,
-		DNS:      dnsService,
-		Auth:     authService,
+		Task:         taskService,
+		Health:       healthService,
+		Clusters:     clustersService,
+		DNS:          dnsService,
+		Auth:         authService,
+		Environments: environmentsService,
 	}, nil
 }
 
@@ -309,6 +340,7 @@ func (s *Services) ToSlice() []services.IService {
 		s.Clusters,
 		s.DNS,
 		s.Auth,
+		s.Environments,
 	}
 }
 
