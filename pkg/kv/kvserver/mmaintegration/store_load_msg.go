@@ -20,11 +20,13 @@ func MakeStoreLoadMsg(
 
 	load[mmaprototype.CPURate] = mmaprototype.LoadValue(desc.Capacity.CPUPerSecond)
 	cpuCap := computeCPUCapacityWithCap(
-		load[mmaprototype.CPURate],
-		float64(desc.NodeCapacity.StoresCPURate),
-		float64(desc.NodeCapacity.NodeCPURateUsage),
-		float64(desc.NodeCapacity.NodeCPURateCapacity),
-		desc.NodeCapacity.NumStores,
+		storeCPURateCapacityInput{
+			currentStoreCPUUsage: load[mmaprototype.CPURate],
+			storesCPURate:        float64(desc.NodeCapacity.StoresCPURate),
+			nodeCPURateUsage:     float64(desc.NodeCapacity.NodeCPURateUsage),
+			nodeCPURateCapacity:  float64(desc.NodeCapacity.NodeCPURateCapacity),
+			numStores:            desc.NodeCapacity.NumStores,
+		},
 		func(_ float64, _ float64, _ float64, _ float64) {},
 	)
 	// cpuCap can be 0 when the node is overloaded (nodeCPURateUsage >
