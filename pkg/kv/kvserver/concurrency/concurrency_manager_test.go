@@ -348,12 +348,11 @@ func TestConcurrencyManagerBasic(t *testing.T) {
 					lcErr := &kvpb.LockConflictError{Locks: locks}
 					guard, err := m.HandleLockConflictError(ctx, prev, leaseSeq, lcErr)
 					if err != nil {
-						log.Eventf(ctx, "handled %v, returned error: %v", lcErr, err)
+						log.Eventf(ctx, "returned error: %v", err)
 						c.mu.Lock()
 						delete(c.guardsByReqName, reqName)
 						c.mu.Unlock()
 					} else {
-						log.Eventf(ctx, "handled %v, released latches", lcErr)
 						c.mu.Lock()
 						c.guardsByReqName[reqName] = guard
 						c.mu.Unlock()
@@ -444,7 +443,6 @@ func TestConcurrencyManagerBasic(t *testing.T) {
 				txnAcquire.Sequence = seqNum
 
 				mon.runSync("acquire lock", func(ctx context.Context) {
-					log.Eventf(ctx, "txn %s @ %s", txn.Short(), key)
 					acq := roachpb.MakeLockAcquisition(txnAcquire.TxnMeta, roachpb.Key(key), dur, str, nil)
 					m.OnLockAcquired(ctx, &acq)
 				})

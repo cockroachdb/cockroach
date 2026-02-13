@@ -20,7 +20,7 @@ sequence req=reqNormalPri
 
 on-lock-acquired req=reqNormalPri key=k
 ----
-[-] acquire lock: txn 00000001 @ ‹k›
+[-] acquire lock: txn 00000001 acquiring Unreplicated Exclusive lock on ‹"k"›
 
 finish req=reqNormalPri
 ----
