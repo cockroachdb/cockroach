@@ -568,7 +568,7 @@ CREATE TABLE t140019 (
 
 # Regression test for #140019. Do not project unnecessary columns, like i=0,
 # that are held constant by the partial index predicate.
-opt disable=SimplifyZeroCardinalityGroup
+opt disable=(SimplifyZeroCardinalityGroup,EliminateZeroCardSelect,EliminateZeroCardProject)
 SELECT NULL FROM t140019 WHERE false GROUP BY j
 ----
 project

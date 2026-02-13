@@ -371,3 +371,19 @@ $input
     (Project $input $projections $passthrough)
     $leakproofPermeable
 )
+
+# EliminateZeroCardProject eliminates a Project when its input has zero
+# cardinality. The projection expressions are per-row and will never be
+# evaluated, so it is safe to remove them regardless of volatility. This
+# complements the SimplifyZeroCardinalityGroup rule which requires the entire
+# expression to be leakproof.
+[EliminateZeroCardProject, Normalize]
+(Project
+    $input:* & (HasZeroRows $input)
+    $projections:*
+    $passthrough:*
+)
+=>
+(ConstructEmptyValues
+    (UnionCols $passthrough (ProjectionCols $projections))
+)
