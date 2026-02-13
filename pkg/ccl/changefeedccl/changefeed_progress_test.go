@@ -313,3 +313,5 @@ WITH no_initial_scan, min_checkpoint_frequency='1s', resolved, metrics_label='%s
 		cdcTest(t, testFn)
 	})
 }
+
+// TODO add a test that we don't get duplicates with core changefeed resume or that we saved it correctly

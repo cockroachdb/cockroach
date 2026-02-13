@@ -57,41 +57,35 @@ const (
 )
 
 // computeDistChangefeedTimestamps computes the initialHighWater and schemaTS
-// for a changefeed run, and mutates localState.progress when appropriate
-// (e.g., to set the high-water if initial scan should be skipped). It also
-// invokes testing knobs that observe the initial high-water.
+// for a changefeed run. The provided highWater is the most recent known
+// high-water mark (from the job record or from the previous flow's trailing
+// metadata for core changefeeds).
 func computeDistChangefeedTimestamps(
 	ctx context.Context,
 	execCtx sql.JobExecContext,
 	details jobspb.ChangefeedDetails,
-	localState *cachedState,
+	highWater hlc.Timestamp,
 ) (initialHighWater hlc.Timestamp, schemaTS hlc.Timestamp, _ error) {
 	opts := changefeedbase.MakeStatementOptions(details.Opts)
-	progress := localState.progress
 
 	// NB: A non-empty high water indicates that we have checkpointed a resolved
 	// timestamp. Skipping the initial scan is equivalent to starting the
 	// changefeed from a checkpoint at its start time. Initialize the progress
 	// based on whether we should perform an initial scan.
-	{
-		h := progress.GetHighWater()
-		noHighWater := (h == nil || h.IsEmpty())
-		// We want to set the highWater and thus avoid an initial scan if either
-		// this is a cursor and there was no request for one, or we don't have a
-		// cursor but we have a request to not have an initial scan.
+	if highWater.IsEmpty() {
 		initialScanType, err := opts.GetInitialScanType()
 		if err != nil {
 			return hlc.Timestamp{}, hlc.Timestamp{}, err
 		}
-		if noHighWater && initialScanType == changefeedbase.NoInitialScan {
+		if initialScanType == changefeedbase.NoInitialScan {
 			// If there is a cursor, the statement time has already been set to it.
-			progress.Progress = &jobspb.Progress_HighWater{HighWater: &details.StatementTime}
+			highWater = details.StatementTime
 		}
 	}
 
 	schemaTS = details.StatementTime
-	if h := progress.GetHighWater(); h != nil && !h.IsEmpty() {
-		initialHighWater = *h
+	if !highWater.IsEmpty() {
+		initialHighWater = highWater
 		// If we have a high-water set, use it to compute the spans, since the
 		// ones at the statement time may have been garbage collected by now.
 		schemaTS = initialHighWater
@@ -103,7 +97,7 @@ func computeDistChangefeedTimestamps(
 	// timestamp. However, an initial scan should be performed at exactly the
 	// timestamp specified; initial scans can be created at the timestamp of a
 	// schema change and thus should see the side-effect of the schema change.
-	if progress.GetHighWater() != nil {
+	if !highWater.IsEmpty() {
 		schemaTS = schemaTS.Next()
 	}
 
@@ -226,15 +220,17 @@ func startDistChangefeed(
 	details jobspb.ChangefeedDetails,
 	description string,
 	initialHighWater hlc.Timestamp,
-	localState *cachedState,
+	spanLevelCheckpoint *jobspb.TimestampSpansMap,
+	prevResult flowResult,
 	resultsCh chan<- tree.Datums,
 	onTracingEvent func(ctx context.Context, meta *execinfrapb.TracingAggregatorEvents),
 	targets changefeedbase.Targets,
-) error {
+) (flowResult, error) {
+	var result flowResult
 	execCfg := execCtx.ExecCfg()
 	tableDescs, err := fetchTableDescriptors(ctx, execCfg, targets, schemaTS)
 	if err != nil {
-		return err
+		return result, err
 	}
 
 	if schemaTS.IsEmpty() {
@@ -242,29 +238,50 @@ func startDistChangefeed(
 	}
 	trackedSpans, err := fetchSpansForTables(ctx, execCtx, tableDescs, details, schemaTS)
 	if err != nil {
-		return err
+		return result, err
 	}
 	if log.ExpensiveLogEnabled(ctx, 2) {
 		log.Changefeed.Infof(ctx, "tracked spans: %s", trackedSpans)
 	}
-	localState.trackedSpans = trackedSpans
+	result.trackedSpans = trackedSpans
 
 	// Changefeed flows handle transactional consistency themselves.
 	var noTxn *kv.Txn
 
 	dsp := execCtx.DistSQLPlanner()
 
-	var spanLevelCheckpoint *jobspb.TimestampSpansMap
-	if progress := localState.progress.GetChangefeed(); progress != nil && progress.SpanLevelCheckpoint != nil {
-		spanLevelCheckpoint = progress.SpanLevelCheckpoint
-		if log.V(2) {
-			log.Changefeed.Infof(ctx, "span-level checkpoint: %s", spanLevelCheckpoint)
+	if spanLevelCheckpoint != nil && log.V(2) {
+		log.Changefeed.Infof(ctx, "span-level checkpoint: %s", spanLevelCheckpoint)
+	}
+
+	// Compute resolved spans to restore frontier state on startup.
+	var resolvedSpans []jobspb.ResolvedSpan
+	if jobID == 0 {
+		// Core changefeeds get resolved spans from the coordinator frontier
+		// captured via trailing metadata on the previous flow's shutdown.
+		resolvedSpans = prevResult.coordinatorResolvedSpans()
+	} else {
+		// Job-backed changefeeds load resolved spans from frontier
+		// persistence in the job_info table.
+		if err := execCfg.InternalDB.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+			spans, ok, err := jobfrontier.GetAllResolvedSpans(ctx, txn, jobID)
+			if err != nil {
+				return err
+			}
+			if ok {
+				resolvedSpans = spans
+			}
+			return nil
+		}); err != nil {
+			return result, err
 		}
 	}
+
 	p, planCtx, err := makePlan(execCtx, jobID, details, description, initialHighWater,
-		trackedSpans, spanLevelCheckpoint, localState.drainingNodes, schemaTS)(ctx, dsp)
+		trackedSpans, spanLevelCheckpoint, prevResult.drainingNodes, schemaTS,
+		resolvedSpans)(ctx, dsp)
 	if err != nil {
-		return err
+		return result, err
 	}
 
 	execPlan := func(ctx context.Context) error {
@@ -273,18 +290,27 @@ func startDistChangefeed(
 		ctx, cancel := execCtx.ExecCfg().DistSQLSrv.Stopper.WithCancelOnQuiesce(ctx)
 		defer cancel()
 
-		// clear out previous drain/shutdown information.
-		localState.drainingNodes = localState.drainingNodes[:0]
-		localState.aggregatorFrontier = localState.aggregatorFrontier[:0]
+		// For core changefeeds (no job, single node), don't pass cancel to
+		// the result writer. This allows the drain protocol to complete and
+		// trailing metadata (including the coordinator frontier) to be
+		// delivered. For job-backed changefeeds, cancel is needed to quickly
+		// shut down potentially many remote aggregators.
+		writerCancel := cancel
+		if jobID == 0 {
+			writerCancel = nil
+		}
 
 		resultRows := sql.NewMetadataCallbackWriter(
-			makeChangefeedResultWriter(resultsCh, cancel),
+			makeChangefeedResultWriter(resultsCh, writerCancel),
 			func(ctx context.Context, meta *execinfrapb.ProducerMetadata) error {
 				if meta.Changefeed != nil {
 					if meta.Changefeed.DrainInfo != nil {
-						localState.drainingNodes = append(localState.drainingNodes, meta.Changefeed.DrainInfo.NodeID)
+						result.drainingNodes = append(result.drainingNodes, meta.Changefeed.DrainInfo.NodeID)
 					}
-					localState.aggregatorFrontier = append(localState.aggregatorFrontier, meta.Changefeed.Checkpoint...)
+					result.aggregatorFrontier = append(result.aggregatorFrontier, meta.Changefeed.AggregatorFrontier...)
+					if len(meta.Changefeed.CoordinatorFrontier) > 0 {
+						result.coordinatorFrontier = meta.Changefeed.CoordinatorFrontier
+					}
 				}
 				if meta.AggregatorEvents != nil && onTracingEvent != nil {
 					onTracingEvent(ctx, meta.AggregatorEvents)
@@ -334,7 +360,7 @@ func startDistChangefeed(
 		return resultRows.Err()
 	}
 
-	return ctxgroup.GoAndWait(ctx, execPlan)
+	return result, ctxgroup.GoAndWait(ctx, execPlan)
 }
 
 // The bin packing choice gives preference to leaseholder replicas if possible.
@@ -390,6 +416,7 @@ func makePlan(
 	spanLevelCheckpoint *jobspb.TimestampSpansMap,
 	drainingNodes []roachpb.NodeID,
 	schemaTS hlc.Timestamp,
+	resolvedSpans []jobspb.ResolvedSpan,
 ) func(context.Context, *sql.DistSQLPlanner) (*sql.PhysicalPlan, *sql.PlanningCtx, error) {
 	return func(ctx context.Context, dsp *sql.DistSQLPlanner) (*sql.PhysicalPlan, *sql.PlanningCtx, error) {
 		sv := &execCtx.ExecCfg().Settings.SV
@@ -493,22 +520,6 @@ func makePlan(
 				// the per table pts records will be rewritten in the new format when the
 				// highwater mark is updated in manageProtectedTimestamps.
 				PerTableProtectedTimestamps: perTableTrackingEnabled && perTableProtectedTimestampsEnabled,
-			}
-		}
-
-		var resolvedSpans []jobspb.ResolvedSpan
-		if jobID != 0 {
-			if err := execCtx.ExecCfg().InternalDB.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
-				spans, ok, err := jobfrontier.GetAllResolvedSpans(ctx, txn, jobID)
-				if err != nil {
-					return err
-				}
-				if ok {
-					resolvedSpans = spans
-				}
-				return nil
-			}); err != nil {
-				return nil, nil, err
 			}
 		}
 
@@ -632,6 +643,9 @@ func (w *changefeedResultWriter) SetRowsAffected(ctx context.Context, n int) {
 }
 func (w *changefeedResultWriter) SetError(err error) {
 	w.err = err
+	if w.cancel == nil {
+		return
+	}
 	switch {
 	case errors.Is(err, changefeedbase.ErrNodeDraining):
 		// Let drain signal proceed w/out cancellation.

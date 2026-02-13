@@ -720,17 +720,6 @@ type SequenceOperators interface {
 	GetLastSequenceValueByID(ctx context.Context, seqID uint32) (value int64, wasCalled bool, err error)
 }
 
-// ChangefeedState is used to track progress and checkpointing for sinkless/core changefeeds.
-// Because a CREATE CHANGEFEED statement for a sinkless changefeed will hang and return data
-// over the SQL connection, this state belongs in the EvalCtx.
-type ChangefeedState interface {
-	// SetHighwater sets the frontier timestamp for the changefeed.
-	SetHighwater(frontier hlc.Timestamp)
-
-	// SetCheckpoint sets the checkpoint for the changefeed.
-	SetCheckpoint(checkpoint *jobspb.TimestampSpansMap)
-}
-
 // TenantOperator is capable of interacting with tenant state, allowing SQL
 // builtin functions to create, configure, and destroy tenants. The methods will
 // return errors when run by any tenant other than the system tenant.
