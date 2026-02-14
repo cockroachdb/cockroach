@@ -1748,6 +1748,10 @@ func (cf *changeFrontier) noteAggregatorProgress(ctx context.Context, d rowenc.E
 		return err
 	}
 
+	if err := cf.maybePersistFrontier(ctx); err != nil {
+		return err
+	}
+
 	cf.updateProgressSkewMetrics()
 
 	return nil
@@ -1803,10 +1807,6 @@ func (cf *changeFrontier) maybeCheckpoint(
 		return err
 	}
 	cf.js.checkpointCompleted(ctx, timeutil.Since(checkpointStart))
-
-	if err := cf.maybePersistFrontier(ctx); err != nil {
-		return err
-	}
 
 	newResolved := cf.frontier.Frontier()
 
