@@ -1,0 +1,25 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "vars",
+    srcs = ["assembly.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/services/provisionings/vars",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/cmd/roachprod-centralized/models/provisionings",
+        "//pkg/cmd/roachprod-centralized/services/environments/types",
+        "@com_github_cockroachdb_errors//:errors",
+    ],
+)
+
+go_test(
+    name = "vars_test",
+    srcs = ["assembly_test.go"],
+    embed = [":vars"],
+    deps = [
+        "//pkg/cmd/roachprod-centralized/models/provisionings",
+        "//pkg/cmd/roachprod-centralized/services/environments/types",
+        "@com_github_stretchr_testify//assert",
+        "@com_github_stretchr_testify//require",
+    ],
+)

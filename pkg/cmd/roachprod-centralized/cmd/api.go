@@ -33,7 +33,10 @@ var apiCmd = &cobra.Command{
 	Short: "Start the API server",
 	Long: `Start the roachprod-centralized API server which provides HTTP endpoints
 for managing roachprod clusters, tasks, and related operations.`,
-	RunE: runAPI,
+	RunE: func(cmd *cobra.Command, args []string) error {
+		cmd.SilenceUsage = true
+		return runAPI(cmd, args)
+	},
 }
 
 func init() {

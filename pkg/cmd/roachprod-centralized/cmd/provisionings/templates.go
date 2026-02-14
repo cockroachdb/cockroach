@@ -3,7 +3,7 @@
 // Use of this software is governed by the CockroachDB Software License
 // included in the /LICENSE file.
 
-package cmd
+package provisionings
 
 import (
 	"encoding/json"
@@ -30,7 +30,10 @@ var templatesListCmd = &cobra.Command{
 	Short: "List all discovered templates",
 	Long: `Scan the templates directory for subdirectories containing a template.yaml
 or template.yml marker file and list them.`,
-	RunE: runTemplatesList,
+	RunE: func(cmd *cobra.Command, args []string) error {
+		cmd.SilenceUsage = true
+		return runTemplatesList(cmd, args)
+	},
 }
 
 var templatesInspectCmd = &cobra.Command{
@@ -42,37 +45,20 @@ including type, default value, required/sensitive flags, and description.
 Use --output=json for the full structured output with complete default values
 and HCL type constraints.`,
 	Args: cobra.ExactArgs(1),
-	RunE: runTemplatesInspect,
+	RunE: func(cmd *cobra.Command, args []string) error {
+		cmd.SilenceUsage = true
+		return runTemplatesInspect(cmd, args)
+	},
 }
 
 func init() {
-	rootCmd.AddCommand(templatesCmd)
 	templatesCmd.AddCommand(templatesListCmd)
 	templatesCmd.AddCommand(templatesInspectCmd)
-
-	templatesCmd.PersistentFlags().String(
-		"templates-dir", "",
-		"Path to templates directory (overrides ROACHPROD_PROVISIONINGS_TEMPLATES_DIR)",
-	)
 
 	templatesInspectCmd.Flags().StringP(
 		"output", "o", "text",
 		"Output format: text or json",
 	)
-}
-
-func getTemplatesDir(cmd *cobra.Command) (string, error) {
-	dir, _ := cmd.Flags().GetString("templates-dir")
-	if dir == "" {
-		dir = os.Getenv("ROACHPROD_PROVISIONINGS_TEMPLATES_DIR")
-	}
-	if dir == "" {
-		return "", errors.New(
-			"templates directory not set: use --templates-dir flag or " +
-				"ROACHPROD_PROVISIONINGS_TEMPLATES_DIR environment variable",
-		)
-	}
-	return dir, nil
 }
 
 func runTemplatesList(cmd *cobra.Command, args []string) error {
@@ -114,11 +100,14 @@ func runTemplatesInspect(cmd *cobra.Command, args []string) error {
 		return errors.Wrapf(err, "get template %s", args[0])
 	}
 
+	// Validate module references before rendering output.
+	warnings := templates.ValidateModuleReferences(tmpl.Path)
+
 	switch strings.ToLower(outputFmt) {
 	case "json":
-		return renderInspectJSON(tmpl)
+		return renderInspectJSON(tmpl, warnings)
 	default:
-		return renderInspectText(tmpl)
+		return renderInspectText(tmpl, warnings)
 	}
 }
 
@@ -140,9 +129,10 @@ type inspectJSONOutput struct {
 	Name        string                         `json:"name"`
 	Description string                         `json:"description,omitempty"`
 	Variables   map[string]inspectJSONVariable `json:"variables"`
+	Warnings    []string                       `json:"warnings,omitempty"`
 }
 
-func renderInspectJSON(tmpl provisionings.Template) error {
+func renderInspectJSON(tmpl provisionings.Template, warnings []string) error {
 	vars := make(map[string]inspectJSONVariable, len(tmpl.Variables))
 	for name, opt := range tmpl.Variables {
 		vars[name] = inspectJSONVariable{
@@ -160,6 +150,7 @@ func renderInspectJSON(tmpl provisionings.Template) error {
 		Name:        tmpl.Name,
 		Description: tmpl.Description,
 		Variables:   vars,
+		Warnings:    warnings,
 	}
 
 	enc := json.NewEncoder(os.Stdout)
@@ -167,7 +158,7 @@ func renderInspectJSON(tmpl provisionings.Template) error {
 	return enc.Encode(output)
 }
 
-func renderInspectText(tmpl provisionings.Template) error {
+func renderInspectText(tmpl provisionings.Template, warnings []string) error {
 	fmt.Printf("Directory:   %s\n", tmpl.DirName)
 	fmt.Printf("Name:        %s\n", tmpl.Name)
 	fmt.Printf("Description: %s\n", tmpl.Description)
@@ -176,18 +167,29 @@ func renderInspectText(tmpl provisionings.Template) error {
 
 	if len(tmpl.Variables) == 0 {
 		fmt.Println("No variables declared.")
-		return nil
+	} else {
+		w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
+		fmt.Fprintln(w, "VARIABLE\tTYPE\tDEFAULT\tREQUIRED\tSENSITIVE\tDESCRIPTION")
+		for name, opt := range tmpl.Variables {
+			defaultStr := formatDefault(opt)
+			fmt.Fprintf(w, "%s\t%s\t%s\t%t\t%t\t%s\n",
+				name, opt.Type, defaultStr, opt.Required, opt.Sensitive, opt.Description,
+			)
+		}
+		if err := w.Flush(); err != nil {
+			return err
+		}
 	}
 
-	w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
-	fmt.Fprintln(w, "VARIABLE\tTYPE\tDEFAULT\tREQUIRED\tSENSITIVE\tDESCRIPTION")
-	for name, opt := range tmpl.Variables {
-		defaultStr := formatDefault(opt)
-		fmt.Fprintf(w, "%s\t%s\t%s\t%t\t%t\t%s\n",
-			name, opt.Type, defaultStr, opt.Required, opt.Sensitive, opt.Description,
-		)
+	if len(warnings) > 0 {
+		fmt.Println()
+		fmt.Println("Warnings:")
+		for _, w := range warnings {
+			fmt.Printf("  - %s\n", w)
+		}
 	}
-	return w.Flush()
+
+	return nil
 }
 
 // formatDefault returns a human-readable string representation of a variable's

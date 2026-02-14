@@ -8,6 +8,7 @@ go_library(
         "manager.go",
         "parser.go",
         "snapshot.go",
+        "validate.go",
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/services/provisionings/templates",
     visibility = ["//visibility:public"],
@@ -29,6 +30,7 @@ go_test(
     srcs = [
         "manager_test.go",
         "parser_test.go",
+        "validate_test.go",
     ],
     embed = [":templates"],
     deps = [
