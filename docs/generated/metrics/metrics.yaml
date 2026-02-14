@@ -16803,6 +16803,30 @@ layers:
       unit: NANOSECONDS
       aggregation: AVG
       derivative: NON_NEGATIVE_DERIVATIVE
+    - name: storage.iterator.category-consistency-checker.block-load.bytes
+      exported_name: storage_iterator_category_consistency_checker_block_load_bytes
+      description: Bytes loaded by storage sstable iterators (possibly cached).
+      y_axis_label: Bytes
+      type: COUNTER
+      unit: BYTES
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+    - name: storage.iterator.category-consistency-checker.block-load.cached-bytes
+      exported_name: storage_iterator_category_consistency_checker_block_load_cached_bytes
+      description: Bytes loaded by storage sstable iterators from the block cache
+      y_axis_label: Bytes
+      type: COUNTER
+      unit: BYTES
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+    - name: storage.iterator.category-consistency-checker.block-load.latency-sum
+      exported_name: storage_iterator_category_consistency_checker_block_load_latency_sum
+      description: Cumulative latency for loading bytes not in the block cache, by storage sstable iterators
+      y_axis_label: Latency
+      type: COUNTER
+      unit: NANOSECONDS
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
     - name: storage.iterator.category-crdb-unknown.block-load.bytes
       exported_name: storage_iterator_category_crdb_unknown_block_load_bytes
       description: Bytes loaded by storage sstable iterators (possibly cached).
