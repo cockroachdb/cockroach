@@ -1724,7 +1724,7 @@ func TestImportCSVStmt(t *testing.T) {
 				return
 			}
 			sqlDB.QueryRow(t, query).Scan(
-				&unused, &unused, &unused, &restored.rows, &restored.idx, &restored.bytes,
+				&unused, &unused, &unused, &restored.rows, &restored.idx, &restored.bytes, &unused,
 			)
 
 			jobPrefix := fmt.Sprintf(`IMPORT INTO %s.public.t`, intodb)
@@ -2529,7 +2529,7 @@ func TestImportIntoCSV(t *testing.T) {
 			}
 
 			sqlDB.QueryRow(t, query).Scan(
-				&unused, &unused, &unused, &restored.rows, &restored.idx, &restored.bytes,
+				&unused, &unused, &unused, &restored.rows, &restored.idx, &restored.bytes, &unused,
 			)
 
 			jobPrefix := `IMPORT INTO defaultdb.public.t(a, b)`
@@ -2665,7 +2665,7 @@ func TestImportIntoCSV(t *testing.T) {
 		g.GoCtx(func(ctx context.Context) error {
 			defer close(importBodyFinished)
 			return sqlDB.DB.QueryRowContext(ctx, fmt.Sprintf(`IMPORT INTO t (a, b) CSV DATA (%s)`,
-				testFiles.files[1])).Scan(&jobID, &unused, &unused, &unused, &unused, &unused)
+				testFiles.files[1])).Scan(&jobID, &unused, &unused, &unused, &unused, &unused, &unused)
 		})
 		g.GoCtx(func(ctx context.Context) error {
 			defer close(delayImportFinish)
@@ -5399,7 +5399,7 @@ func TestImportJobEventLogging(t *testing.T) {
 	var unused interface{}
 	sqlDB.Exec(t, createQuery)
 	sqlDB.QueryRow(t, importQuery, simpleOcf).Scan(&jobID, &unused, &unused, &unused, &unused,
-		&unused)
+		&unused, &unused)
 
 	expectedStatus := []string{
 		string(jobs.StateSucceeded),
