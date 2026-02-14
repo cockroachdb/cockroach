@@ -163,7 +163,8 @@ func (c *CustomFuncs) CanInline(scalar opt.ScalarExpr) bool {
 		opt.IsOp, opt.IsNotOp, opt.InOp, opt.NotInOp,
 		opt.VariableOp, opt.ConstOp, opt.NullOp,
 		opt.PlusOp, opt.MinusOp, opt.MultOp,
-		opt.CaseOp, opt.WhenOp, opt.ScalarListOp:
+		opt.CaseOp, opt.WhenOp, opt.ScalarListOp,
+		opt.FetchValOp, opt.FetchTextOp, opt.FetchValPathOp, opt.FetchTextPathOp:
 
 		// Recursively verify that children are also inlinable.
 		for i, n := 0, scalar.ChildCount(); i < n; i++ {
