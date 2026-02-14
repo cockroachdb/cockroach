@@ -19,6 +19,7 @@ import (
 	"github.com/apache/arrow/go/v11/parquet/compress"
 	"github.com/apache/arrow/go/v11/parquet/file"
 	"github.com/apache/arrow/go/v11/parquet/pqarrow"
+	"github.com/apache/arrow/go/v11/parquet/schema"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catenumpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
@@ -1457,4 +1458,164 @@ func TestParquetRowView(t *testing.T) {
 	require.Equal(t, int32(2), view1.batches[0].int32Values[view1.rowIndex])
 
 	require.True(t, view1.batches[1].isNull[view1.rowIndex])
+}
+
+// TestParquetPlainPrimitiveTypes verifies that Parquet files with plain primitive
+// types (no LogicalType or ConvertedType annotations) are handled correctly.
+func TestParquetPlainPrimitiveTypes(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	// Open alltypes_plain.parquet which should have plain primitive types
+	testFile := "testdata/parquet/alltypes_plain.parquet"
+	f, err := os.Open(testFile)
+	require.NoError(t, err)
+	defer f.Close()
+
+	stat, err := f.Stat()
+	require.NoError(t, err)
+
+	fr := &fileReader{
+		Reader:   f,
+		ReaderAt: f,
+		Seeker:   f,
+		total:    stat.Size(),
+	}
+
+	// Create producer (this will call newParquetRowProducer)
+	producer, err := newParquetRowProducer(fr, nil)
+	require.NoError(t, err)
+	require.NotNil(t, producer)
+
+	// Check the metadata to verify we're testing plain types
+	parquetReader, err := file.NewParquetReader(fr)
+	require.NoError(t, err)
+	defer func() { _ = parquetReader.Close() }()
+
+	parquetSchema := parquetReader.MetaData().Schema
+	foundPlainType := false
+
+	t.Log("Column annotations:")
+	for i := 0; i < parquetSchema.NumColumns(); i++ {
+		col := parquetSchema.Column(i)
+		logicalType := col.LogicalType()
+		convertedType := col.ConvertedType()
+
+		t.Logf("  %s: LogicalType=%v (nil=%v), ConvertedType=%v",
+			col.Name(), logicalType, logicalType == nil, convertedType)
+
+		// Check if this is a plain type (either no logical type, or UnknownLogicalType)
+		// Plain types have no semantic annotations, just physical type
+		isPlainType := false
+		if logicalType == nil {
+			isPlainType = true
+		} else {
+			// Check for UnknownLogicalType which represents plain types
+			// Also check string representation for "None"
+			switch logicalType.(type) {
+			case schema.UnknownLogicalType:
+				isPlainType = true
+			default:
+				// Check if string representation is "None"
+				if logicalType.String() == "None" {
+					isPlainType = true
+				}
+			}
+		}
+
+		if isPlainType && convertedType == schema.ConvertedTypes.None {
+			foundPlainType = true
+		}
+	}
+
+	require.True(t, foundPlainType,
+		"alltypes_plain.parquet should have at least one column with no type annotations")
+
+	// Verify we can read rows (this tests that conversion works with nil logicalType)
+	rowCount := 0
+	for producer.Scan() && rowCount < 5 {
+		row, err := producer.Row()
+		require.NoError(t, err)
+		require.NotNil(t, row)
+		rowCount++
+	}
+
+	require.NoError(t, producer.Err())
+	require.Greater(t, rowCount, 0, "should read at least some rows")
+
+	t.Logf("Successfully read %d rows with plain primitive types", rowCount)
+}
+
+// TestParquetPlainPrimitivesValidation verifies that plain primitive types
+// (no LogicalType/ConvertedType) pass schema validation when creating a consumer.
+// This tests the validateAndBuildColumnMapping → validateWithLogicalType path.
+func TestParquetPlainPrimitivesValidation(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	testFile := "testdata/parquet/alltypes_plain.parquet"
+	f, err := os.Open(testFile)
+	require.NoError(t, err)
+	defer f.Close()
+
+	stat, err := f.Stat()
+	require.NoError(t, err)
+
+	fr := &fileReader{
+		Reader:   f,
+		ReaderAt: f,
+		Seeker:   f,
+		total:    stat.Size(),
+	}
+
+	// Create producer
+	producer, err := newParquetRowProducer(fr, nil)
+	require.NoError(t, err)
+	require.NotNil(t, producer)
+
+	// Create a mock table descriptor with columns matching the Parquet file
+	// alltypes_plain.parquet has columns: id, bool_col, tinyint_col, smallint_col,
+	// int_col, bigint_col, float_col, double_col, date_string_col, string_col, timestamp_col
+	tableDesc := tabledesc.NewBuilder(&descpb.TableDescriptor{
+		Name: "test_table",
+		Columns: []descpb.ColumnDescriptor{
+			{Name: "id", ID: 1, Type: types.Int},
+			{Name: "bool_col", ID: 2, Type: types.Bool},
+			{Name: "tinyint_col", ID: 3, Type: types.Int},
+			{Name: "smallint_col", ID: 4, Type: types.Int},
+			{Name: "int_col", ID: 5, Type: types.Int},
+			{Name: "bigint_col", ID: 6, Type: types.Int},
+			{Name: "float_col", ID: 7, Type: types.Float},
+			{Name: "double_col", ID: 8, Type: types.Float},
+			{Name: "date_string_col", ID: 9, Type: types.String},
+			{Name: "string_col", ID: 10, Type: types.String},
+			{Name: "timestamp_col", ID: 11, Type: types.TimestampTZ}, // INT96 timestamp
+		},
+		Families: []descpb.ColumnFamilyDescriptor{{
+			Name:        "primary",
+			ColumnNames: []string{"id", "bool_col", "tinyint_col", "smallint_col", "int_col", "bigint_col", "float_col", "double_col", "date_string_col", "string_col", "timestamp_col"},
+			ColumnIDs:   []descpb.ColumnID{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11},
+		}},
+		PrimaryIndex: descpb.IndexDescriptor{
+			Name:                "primary",
+			ID:                  1,
+			Unique:              true,
+			KeyColumnNames:      []string{"id"},
+			KeyColumnIDs:        []descpb.ColumnID{1},
+			KeyColumnDirections: []catenumpb.IndexColumn_Direction{catenumpb.IndexColumn_ASC},
+		},
+	}).BuildImmutableTable()
+
+	importCtx := &parallelImportContext{
+		tableDesc:  tableDesc,
+		targetCols: nil, // Use all columns
+	}
+
+	// This should NOT fail even though the Parquet file has plain primitive types (nil LogicalType)
+	// The validation logic should handle nil LogicalType and validate based on physical type alone
+	consumer, err := newParquetRowConsumer(importCtx, producer, nil, false)
+	require.NoError(t, err, "validation should succeed for plain primitive types")
+	require.NotNil(t, consumer)
+
+	t.Log("Successfully validated plain primitive types through consumer creation")
 }
