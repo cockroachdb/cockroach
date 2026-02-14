@@ -84,6 +84,9 @@ type rangeFeedConfig struct {
 		captureMuxRangeFeedRequestSender func(nodeID roachpb.NodeID, sender func(req *kvpb.RangeFeedRequest) error)
 		// beforeSendRequest is a mux rangefeed callback invoked prior to sending rangefeed request.
 		beforeSendRequest func()
+		// afterRoutingReset is a mux rangefeed callback invoked after resetRouting
+		// completes. Used for testing race conditions.
+		afterRoutingReset func()
 	}
 }
 
@@ -701,6 +704,14 @@ func TestingWithMuxRangeFeedRequestSenderCapture(
 func TestingWithBeforeSendRequest(fn func()) RangeFeedOption {
 	return optionFunc(func(c *rangeFeedConfig) {
 		c.knobs.beforeSendRequest = fn
+	})
+}
+
+// TestingWithAfterRoutingReset returns a test only option that invokes
+// function after resetRouting completes.
+func TestingWithAfterRoutingReset(fn func()) RangeFeedOption {
+	return optionFunc(func(c *rangeFeedConfig) {
+		c.knobs.afterRoutingReset = fn
 	})
 }
 
