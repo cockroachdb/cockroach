@@ -300,7 +300,7 @@ const MinSupported Key = V25_4
 
 // PreviousRelease is the logical cluster version of the previous release (which must
 // have at least an RC build published).
-const PreviousRelease Key = V25_4
+const PreviousRelease Key = V26_1
 
 // V26_2 is a placeholder that will eventually be replaced by the actual 26.2
 // version Key, but in the meantime it points to the latest Key. The placeholder
