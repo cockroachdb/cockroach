@@ -12,6 +12,7 @@ import (
 	"hash"
 	"hash/fnv"
 	"math"
+	"sync"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
@@ -44,6 +45,9 @@ func TestAllRegisteredImportFixture(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	sqlMemoryPoolSize := int64(1000 << 20) // 1GiB
+
+	var wg sync.WaitGroup
+	defer wg.Wait()
 
 	for _, meta := range workload.Registered() {
 		if meta.Name == `workload_generator` {
@@ -83,7 +87,7 @@ func TestAllRegisteredImportFixture(t *testing.T) {
 			continue
 		}
 
-		t.Run(meta.Name, func(t *testing.T) {
+		runTest := func(t *testing.T, meta workload.Meta, gen workload.Generator) {
 			if bigInitialData(meta) {
 				skip.UnderShort(t, fmt.Sprintf(`%s loads a lot of data`, meta.Name))
 			}
@@ -110,7 +114,22 @@ func TestAllRegisteredImportFixture(t *testing.T) {
 					}
 				}
 			}
-		})
+		}
+
+		// Run tpcc in parallel to avoid timeout issues. tpcc takes a long time and
+		// we have a 15-minute timeout, so running it in parallel with other
+		// tests helps stay within the limit. See #161919.
+		if meta.Name == `tpcc` {
+			wg.Add(1)
+			go t.Run(meta.Name, func(t *testing.T) {
+				defer wg.Done()
+				runTest(t, meta, gen)
+			})
+		} else {
+			t.Run(meta.Name, func(t *testing.T) {
+				runTest(t, meta, gen)
+			})
+		}
 	}
 }
 
