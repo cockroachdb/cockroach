@@ -419,6 +419,19 @@ var senderConcurrencyLimit = settings.RegisterIntSetting(
 	settings.NonNegativeInt,
 )
 
+// processingConcurrencyLimit controls the maximum number of concurrent
+// goroutines actively processing requests (not waiting on RPCs). This limits
+// CPU-bound parallelism while allowing high request concurrency for network
+// I/O bound operations. The default is the number of vCPUs.
+var processingConcurrencyLimit = settings.RegisterIntSetting(
+	settings.ApplicationLevel,
+	"kv.dist_sender.processing_concurrency_limit",
+	"maximum number of concurrent goroutines actively processing requests "+
+		"(not waiting on RPCs). Default is the number of vCPUs.",
+	int64(max(MinViableProcs, runtime.GOMAXPROCS(0))),
+	settings.PositiveInt,
+)
+
 // FollowerReadsUnhealthy controls whether we will send follower reads to nodes
 // that are not considered healthy. By default, we will sort these nodes behind
 // healthy nodes.
@@ -743,7 +756,11 @@ type DistSender struct {
 	transportFactory   TransportFactory
 	rpcRetryOptions    retry.Options
 	asyncSenderSem     *quotapool.IntPool
-	circuitBreakers    *DistSenderCircuitBreakers
+	// processingSem limits the number of goroutines actively doing CPU work
+	// (not waiting on RPCs). This prevents goroutine scheduling latency spikes
+	// when many RPCs return simultaneously.
+	processingSem   *quotapool.IntPool
+	circuitBreakers *DistSenderCircuitBreakers
 
 	// batchInterceptor is set for tenants; when set, information about all
 	// BatchRequests and BatchResponses are passed through this interceptor, which
@@ -917,6 +934,13 @@ func NewDistSender(cfg DistSenderConfig) *DistSender {
 		ds.asyncSenderSem.UpdateCapacity(uint64(senderConcurrencyLimit.Get(&ds.st.SV)))
 	})
 	cfg.Stopper.AddCloser(ds.asyncSenderSem.Closer("stopper"))
+
+	ds.processingSem = quotapool.NewIntPool("DistSender processing concurrency",
+		uint64(processingConcurrencyLimit.Get(&ds.st.SV)))
+	processingConcurrencyLimit.SetOnChange(&ds.st.SV, func(ctx context.Context) {
+		ds.processingSem.UpdateCapacity(uint64(processingConcurrencyLimit.Get(&ds.st.SV)))
+	})
+	cfg.Stopper.AddCloser(ds.processingSem.Closer("stopper"))
 
 	if ds.firstRangeProvider != nil {
 		ctx := ds.AnnotateCtx(context.Background())
@@ -2213,6 +2237,21 @@ func (ds *DistSender) sendPartialBatch(
 	var pErr *kvpb.Error
 	var err error
 
+	// Acquire processing semaphore at function entry. This limits CPU-intensive
+	// processing parallelism while allowing high request concurrency for network
+	// I/O bound operations.
+	alloc, err := ds.processingSem.Acquire(ctx, 1)
+	if err != nil {
+		return response{pErr: kvpb.NewError(err)}
+	}
+	// Track whether we're currently holding the semaphore for cleanup.
+	var holdingAlloc = true
+	defer func() {
+		if holdingAlloc && alloc != nil {
+			alloc.Release()
+		}
+	}()
+
 	// Start a retry loop for sending the batch to the range. Each iteration of
 	// this loop uses a new descriptor. Attempts to send to multiple replicas in
 	// this descriptor are done at a lower level.
@@ -2266,13 +2305,37 @@ func (ds *DistSender) sendPartialBatch(
 			}
 			if !intersection.Equal(rs) {
 				log.Eventf(ctx, "range shrunk; sub-dividing the request")
+				// Release processing semaphore before recursive call to avoid deadlock.
+				alloc.Release()
+				holdingAlloc = false
 				reply, pErr = ds.divideAndSendBatchToRanges(ctx, ba, rs, withCommit, batchIdx)
 				return response{reply: reply, pErr: pErr}
 			}
 		}
 
 		prevTok = routingTok
+
+		// Release processing semaphore before blocking on RPC.
+		alloc.Release()
+		holdingAlloc = false
+
 		reply, err = ds.sendToReplicas(ctx, ba, routingTok, withCommit)
+
+		// Re-acquire processing semaphore after RPC returns.
+		var acqErr error
+		alloc, acqErr = ds.processingSem.Acquire(ctx, 1)
+		if acqErr != nil {
+			// Context was cancelled while waiting for semaphore.
+			// Return the RPC result as-is.
+			if err != nil {
+				return response{pErr: kvpb.NewError(err)}
+			}
+			if reply != nil && reply.Error != nil {
+				return response{pErr: reply.Error}
+			}
+			return response{reply: reply, pErr: kvpb.NewError(acqErr)}
+		}
+		holdingAlloc = true
 
 		if dur := tBegin.Elapsed(); dur > slowDistSenderRangeThreshold && tBegin != 0 {
 			{
@@ -2368,6 +2431,9 @@ func (ds *DistSender) sendPartialBatch(
 			// batch here would give a potentially larger response slice
 			// with unknown mapping to our truncated reply).
 			log.VEventf(ctx, 1, "likely split; will resend. Got new descriptors: %s", tErr.Ranges)
+			// Release processing semaphore before recursive call to avoid deadlock.
+			alloc.Release()
+			holdingAlloc = false
 			reply, pErr = ds.divideAndSendBatchToRanges(ctx, ba, rs, withCommit, batchIdx)
 			return response{reply: reply, pErr: pErr}
 		}
