@@ -260,14 +260,6 @@ func createTestStoreWithoutStart(
 
 	stores := NewStores(cfg.AmbientCtx, cfg.Clock)
 	nodeDesc := &roachpb.NodeDescriptor{NodeID: 1}
-	if cfg.NodeCapacityProvider == nil {
-		// Faster refresh intervals for testing.
-		cfg.NodeCapacityProvider = load.NewNodeCapacityProvider(stopper, stores, load.NodeCapacityProviderConfig{
-			CPUUsageRefreshInterval:    10 * time.Millisecond,
-			CPUCapacityRefreshInterval: 10 * time.Millisecond,
-			CPUUsageMovingAverageAge:   20,
-		})
-	}
 
 	rangeProv := &dummyFirstRangeProvider{}
 	var storeSender struct{ kv.Sender }
@@ -291,6 +283,14 @@ func createTestStoreWithoutStart(
 	}, ds)
 	require.Nil(t, cfg.DB)
 	cfg.DB = kv.NewDB(cfg.AmbientCtx, txnCoordSenderFactory, cfg.Clock, stopper)
+	if cfg.NodeCapacityProvider == nil {
+		// Faster refresh intervals for testing.
+		cfg.NodeCapacityProvider = load.NewNodeCapacityProvider(stopper, stores, cfg.DB.SQLCPUProvider, load.NodeCapacityProviderConfig{
+			CPUUsageRefreshInterval:    10 * time.Millisecond,
+			CPUCapacityRefreshInterval: 10 * time.Millisecond,
+			CPUUsageMovingAverageAge:   20,
+		})
+	}
 	store := NewStore(ctx, *cfg, eng, nodeDesc)
 	storeSender.Sender = ToSenderForTesting(store)
 

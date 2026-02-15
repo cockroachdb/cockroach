@@ -312,6 +312,15 @@ message NodeCapacity {
   // sec, calculated by the runtime load monitor based on number of logical CPU
   // processors available for use by the processor.
   optional int64 node_cpu_rate_capacity = 4 [(gogoproto.nullable) = false, (gogoproto.customname) = "NodeCPURateCapacity"];
+
+  // SQLGatewayCPUNanoPerSec is the SQL gateway CPU usage in nanoseconds per
+  // second, measured by the runtime load monitor tracking SQL work executed at
+  // gateway nodes.
+  optional int64 sql_gateway_cpu_nano_per_sec = 6 [(gogoproto.nullable) = false, (gogoproto.customname) = "SQLGatewayCPUNanoPerSec"];
+
+  // SQLDistCPUNanoPerSec is the distributed SQL CPU usage in nanoseconds per
+  // second, measured by the runtime load monitor tracking distributed SQL work.
+  optional int64 sql_dist_cpu_nano_per_sec = 7 [(gogoproto.nullable) = false, (gogoproto.customname) = "SQLDistCPUNanoPerSec"];
 }
 
 // StoreCapacity contains capacity information for a storage device.
