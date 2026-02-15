@@ -112,6 +112,7 @@ func RegisterTests(r registry.Registry) {
 	registerMultiStoreRemove(r)
 	registerMultiTenantDistSQL(r)
 	registerMultiTenantMultiregion(r)
+	registerMultiTenantSQLProxy(r)
 	registerMultiTenantTPCH(r)
 	registerMultiTenantUpgrade(r)
 	registerMultiTenantSharedProcess(r)

@@ -2365,6 +2365,12 @@ func (c *clusterImpl) RefetchCertsFromNode(ctx context.Context, node int) error 
 	return roachprod.FetchCertsDir(ctx, c.l, c.MakeNodes(c.Node(node)), fmt.Sprintf("./%s", install.CockroachNodeCertsDir), c.localCertsDir)
 }
 
+// LocalCertsDir returns the local directory where the cluster's
+// certificates are stored, i.e. the roachtest runner's certs.
+func (c *clusterImpl) LocalCertsDir() string {
+	return c.localCertsDir
+}
+
 func (c *clusterImpl) SetDefaultVirtualCluster(name string) {
 	c.defaultVirtualCluster = name
 }
