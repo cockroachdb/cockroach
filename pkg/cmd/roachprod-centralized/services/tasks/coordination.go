@@ -33,7 +33,7 @@ func (s *Service) CreateTaskIfNotAlreadyPlanned(
 		AddFilter("Type", filtertypes.OpEqual, task.GetType()).
 		AddFilter("State", filtertypes.OpEqual, string(tasks.TaskStatePending))
 
-	storedTasks, err := s.store.GetTasks(ctx, l, *filters)
+	storedTasks, _, err := s.store.GetTasks(ctx, l, *filters)
 	if err != nil {
 		return nil, err
 	}
@@ -69,7 +69,7 @@ func (s *Service) CreateTaskIfNotRecentlyScheduled(
 		AddFilter("State", filtertypes.OpNotEqual, string(tasks.TaskStateFailed)).
 		AddFilter("CreationDatetime", filtertypes.OpGreater, timeutil.Now().Add(-fetchRecencyWindow))
 
-	recentTasks, err := s.store.GetTasks(ctx, l, *taskFilters)
+	recentTasks, _, err := s.store.GetTasks(ctx, l, *taskFilters)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to check for recent tasks")
 	}

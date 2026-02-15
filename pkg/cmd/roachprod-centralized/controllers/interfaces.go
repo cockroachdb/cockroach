@@ -5,25 +5,36 @@
 
 package controllers
 
-import "github.com/gin-gonic/gin"
+import (
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/auth"
+	"github.com/gin-gonic/gin"
+)
 
 // IController defines the main interface for all HTTP controllers in the roachprod-centralized system.
 // Controllers handle HTTP requests and coordinate between the transport layer and business logic services.
 type IController interface {
-	// GetHandlers returns a slice of controller handlers that define the routes and their implementations.
-	GetHandlers() []IControllerHandler
-	// Authentication performs authentication and authorization for the given gin context.
-	// Parameters: context, requireAuth flag, user email, user role, and authentication issuer.
-	Authentication(*gin.Context, bool, string, string, string)
+	// GetControllerHandlers returns a slice of controller handlers that define the routes and their implementations.
+	GetControllerHandlers() []IControllerHandler
+
+	// AuthMiddleware creates authentication middleware.
+	// Used by the API layer to add authentication to routes.
+	AuthMiddleware(authenticator auth.IAuthenticator, headerName string) gin.HandlerFunc
+
+	// AuthzMiddleware creates authorization middleware.
+	// Used by the API layer to add authorization checks to routes.
+	AuthzMiddleware(authenticator auth.IAuthenticator, requirement *auth.AuthorizationRequirement) gin.HandlerFunc
 }
 
 // IControllerHandler defines the interface for individual HTTP route handlers.
 // Each handler represents a specific HTTP endpoint with its method, path, and processing logic.
 type IControllerHandler interface {
-	// GetHandlers returns the Gin middleware functions that process the HTTP request for this route.
-	GetHandlers() []gin.HandlerFunc
+	// GetRouteHandlers returns the Gin middleware functions that process the HTTP request for this route.
+	GetRouteHandlers() []gin.HandlerFunc
 	// GetAuthenticationType returns the type of authentication required for this endpoint.
 	GetAuthenticationType() AuthenticationType
+	// GetAuthorizationRequirement returns the authorization requirements for this endpoint.
+	// Returns nil if no authorization is required beyond authentication.
+	GetAuthorizationRequirement() *auth.AuthorizationRequirement
 	// GetMethod returns the HTTP method (GET, POST, PUT, DELETE, etc.) for this route.
 	GetMethod() string
 	// GetPath returns the URL path pattern for this route (e.g., "/api/clusters").
@@ -39,4 +50,13 @@ type IResultDTO interface {
 	GetError() error
 	// GetAssociatedStatusCode returns the HTTP status code that should be sent with this response.
 	GetAssociatedStatusCode() int
+}
+
+// IPaginatedResult extends IResultDTO for list responses that include pagination metadata.
+// When a result DTO implements this interface, the Render method will automatically
+// extract and populate the pagination field in the API response.
+type IPaginatedResult interface {
+	IResultDTO
+	// GetPaginationMetadata returns the pagination information for list responses.
+	GetPaginationMetadata() *PaginationMetadata
 }

@@ -19,6 +19,7 @@ import (
 	stasks "github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/services/tasks"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/utils"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/utils/logger"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/errors"
 )
 
@@ -190,24 +191,47 @@ func (a *App) Shutdown() error {
 		shutdownErrors = append(shutdownErrors, err)
 	}
 
-	// Shutdown all services
+	// Shutdown all services concurrently so that a slow service (e.g. one
+	// draining long-running tasks) does not delay the shutdown of others.
+	var mu syncutil.Mutex
+	var wg sync.WaitGroup
 	for _, service := range a.services {
-		err = func() error {
-			serviceShutdownCtx, cancel := context.WithTimeout(context.Background(), ShutdownTimeout)
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+
+			timeout := ShutdownTimeout
+			if s, ok := service.(services.IServiceWithShutdownTimeout); ok {
+				timeout = s.GetShutdownTimeout()
+			}
+			serviceShutdownCtx, cancel := context.WithTimeout(context.Background(), timeout)
 			defer cancel()
 
-			a.logger.Info("Shutting down service", slog.String("service", fmt.Sprintf("%T", service)))
-			err := service.Shutdown(serviceShutdownCtx)
-			if err != nil {
-				a.logger.Error("Error shutting down service", slog.Any("error", err))
-				return err
+			a.logger.Info(
+				"Shutting down service",
+				slog.String("service", fmt.Sprintf("%T", service)),
+				slog.Duration("timeout", timeout),
+			)
+			if err := service.Shutdown(serviceShutdownCtx); err != nil {
+				a.logger.Error(
+					"Error shutting down service",
+					slog.String("service", fmt.Sprintf("%T", service)),
+					slog.Any("error", err),
+				)
+
+				mu.Lock()
+				defer mu.Unlock()
+				shutdownErrors = append(shutdownErrors, err)
+				return
 			}
-			return nil
+
+			a.logger.Info(
+				"Service shut down successfully",
+				slog.String("service", fmt.Sprintf("%T", service)),
+			)
 		}()
-		if err != nil {
-			shutdownErrors = append(shutdownErrors, err)
-		}
 	}
+	wg.Wait()
 
 	return errors.Join(shutdownErrors...)
 }

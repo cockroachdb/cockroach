@@ -10,9 +10,11 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/client/auth"
 	cloudcluster "github.com/cockroachdb/cockroach/pkg/roachprod/cloud/types"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/stretchr/testify/assert"
@@ -280,11 +282,11 @@ func TestClient_NoRetryOnClientError(t *testing.T) {
 
 func TestLoadConfigFromEnv(t *testing.T) {
 	// Set environment variables
-	t.Setenv("ROACHPROD_CENTRALIZED_API_ENABLED", "true")
-	t.Setenv("ROACHPROD_CENTRALIZED_API_BASE_URL", "https://api.example.com")
-	t.Setenv("ROACHPROD_CENTRALIZED_API_FORCE_FETCH_CREDS", "true")
-	t.Setenv("ROACHPROD_CENTRALIZED_API_TIMEOUT", "30s")
-	t.Setenv("ROACHPROD_CENTRALIZED_API_RETRY_ATTEMPTS", "3")
+	t.Setenv(EnvEnabled, "true")
+	t.Setenv(EnvBaseURL, "https://api.example.com")
+	t.Setenv(EnvForceFetchCreds, "true")
+	t.Setenv(EnvTimeout, "30s")
+	t.Setenv(EnvRetryAttempts, "3")
 
 	config := LoadConfigFromEnv()
 
@@ -403,6 +405,15 @@ func TestNewClient_WithConfig(t *testing.T) {
 	assert.Equal(t, "https://legacy.api.com", client.config.BaseURL)
 	assert.Equal(t, 20*time.Second, client.config.Timeout)
 	assert.Equal(t, 3, client.config.RetryAttempts)
+}
+
+// TestEnvPrefixSync verifies that the auth subpackage env vars use the same
+// prefix as the client package. This guards against accidental divergence
+// since the auth package defines its own unexported copy of the prefix.
+func TestEnvPrefixSync(t *testing.T) {
+	assert.True(t, strings.HasPrefix(auth.EnvAPIToken, EnvPrefix))
+	assert.True(t, strings.HasPrefix(auth.EnvOktaIssuer, EnvPrefix))
+	assert.True(t, strings.HasPrefix(auth.EnvOktaClientID, EnvPrefix))
 }
 
 type mockIAPTokenSource struct {

@@ -9,12 +9,12 @@ go_library(
         "//pkg/cmd/roachprod-centralized/models/tasks",
         "//pkg/cmd/roachprod-centralized/repositories/tasks",
         "//pkg/cmd/roachprod-centralized/utils/filters",
+        "//pkg/cmd/roachprod-centralized/utils/filters/memory",
         "//pkg/cmd/roachprod-centralized/utils/filters/types",
         "//pkg/cmd/roachprod-centralized/utils/logger",
         "//pkg/util/syncutil",
         "//pkg/util/timeutil",
         "//pkg/util/uuid",
-        "@org_golang_x_exp//maps",
     ],
 )
 

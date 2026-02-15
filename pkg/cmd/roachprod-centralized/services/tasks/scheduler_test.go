@@ -12,6 +12,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/models/tasks"
 	tasksrepomock "github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/repositories/tasks/mocks"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/services/tasks/types"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/utils/logger"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/assert"
@@ -21,7 +22,7 @@ import (
 func TestSchedulePurgeTaskRoutine(t *testing.T) {
 
 	mockRepo := &tasksrepomock.ITasksRepository{}
-	taskServiceOpts := Options{
+	taskServiceOpts := types.Options{
 		PurgeDoneTaskOlderThan:   10 * time.Hour,
 		PurgeFailedTaskOlderThan: 20 * time.Hour,
 		PurgeTasksInterval:       1 * time.Millisecond,
@@ -34,7 +35,7 @@ func TestSchedulePurgeTaskRoutine(t *testing.T) {
 	// Expect GetTasks to check for recent purge tasks
 	mockRepo.On(
 		"GetTasks", mock.Anything, mock.Anything, mock.Anything,
-	).Return([]tasks.ITask{}, nil)
+	).Return([]tasks.ITask{}, 0, nil)
 
 	// Expect CreateTask to be called to schedule the purge task
 	mockRepo.On(
@@ -56,7 +57,7 @@ func TestSchedulePurgeTaskRoutine(t *testing.T) {
 func TestSchedulePurgeTaskRoutine_Error(t *testing.T) {
 
 	mockRepo := &tasksrepomock.ITasksRepository{}
-	taskServiceOpts := Options{
+	taskServiceOpts := types.Options{
 		PurgeDoneTaskOlderThan:   10 * time.Hour,
 		PurgeFailedTaskOlderThan: 20 * time.Hour,
 		PurgeTasksInterval:       1 * time.Millisecond,
@@ -70,7 +71,7 @@ func TestSchedulePurgeTaskRoutine_Error(t *testing.T) {
 
 	mockRepo.On(
 		"GetTasks", mock.Anything, mock.Anything, mock.Anything,
-	).Return(nil, expectedError)
+	).Return(nil, 0, expectedError)
 
 	errChan := make(chan error)
 	err := taskService.schedulePurgeTaskRoutine(ctx, logger.DefaultLogger, errChan)

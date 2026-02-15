@@ -58,7 +58,7 @@ export ROACHPROD_DATABASE_URL="postgresql://user:pass@host:26257/db?sslmode=requ
 
 # Override API settings
 export ROACHPROD_API_PORT=9090
-export ROACHPROD_API_AUTHENTICATION_DISABLED=true
+export ROACHPROD_API_AUTHENTICATION_METHOD=disabled
 ```
 
 ### Cloud Provider Setup
@@ -141,7 +141,7 @@ Available metric types:
 3. **Authentication errors**:
    ```bash
    # Disable for development
-   export ROACHPROD_API_AUTHENTICATION_DISABLED=true
+   export ROACHPROD_API_AUTHENTICATION_METHOD=disabled
    ```
 
 4. **Cloud provider configuration**:

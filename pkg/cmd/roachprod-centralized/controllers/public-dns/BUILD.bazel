@@ -6,6 +6,7 @@ go_library(
     importpath = "github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/controllers/public-dns",
     visibility = ["//visibility:public"],
     deps = [
+        "//pkg/cmd/roachprod-centralized/auth",
         "//pkg/cmd/roachprod-centralized/controllers",
         "//pkg/cmd/roachprod-centralized/controllers/public-dns/types",
         "//pkg/cmd/roachprod-centralized/services/public-dns/types",
@@ -19,6 +20,7 @@ go_test(
     embed = [":public-dns"],
     deps = [
         "//pkg/cmd/roachprod-centralized/app",
+        "//pkg/cmd/roachprod-centralized/auth/disabled",
         "//pkg/cmd/roachprod-centralized/services/public-dns/mocks",
         "@com_github_gin_gonic_gin//:gin",
         "@com_github_stretchr_testify//assert",

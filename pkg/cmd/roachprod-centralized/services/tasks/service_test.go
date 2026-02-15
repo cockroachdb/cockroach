@@ -38,7 +38,7 @@ func (s *Service) processTasksUpdateStatisticsRoutine(
 func (s *Service) processTaskRoutine(
 	ctx context.Context, l *logger.Logger, errChan chan<- error,
 ) error {
-	return processor.StartProcessing(ctx, l, errChan, s.options.Workers, s.instanceID, s.store, s)
+	return processor.StartProcessing(ctx, l, errChan, s.options.Workers, s.instanceID, s.store, s, func() {})
 }
 
 func (s *Service) processTask(ctx context.Context, l *logger.Logger, baseTask tasks.ITask) error {

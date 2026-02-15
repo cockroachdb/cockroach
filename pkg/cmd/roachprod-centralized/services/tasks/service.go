@@ -15,6 +15,7 @@ import (
 	configtypes "github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/config/types"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/models/tasks"
 	tasksrepo "github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/repositories/tasks"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/services"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/services/tasks/internal/metrics"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/services/tasks/internal/processor"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/services/tasks/internal/scheduler"
@@ -29,18 +30,17 @@ import (
 // service.go contains the main Service struct, lifecycle management, and orchestration
 // of all task service components (processor, scheduler, metrics, registry).
 
-var (
-	// DefaultTasksTimeout is the default timeout for tasks.
-	DefaultTasksTimeout = 30 * time.Second
-	// DefaultTasksWorkers is the default number of workers processing tasks.
-	DefaultTasksWorkers = 1
-)
+// shutdownTimeoutMargin is the extra time added on top of the maximum task
+// timeout to allow for cleanup work during shutdown.
+const shutdownTimeoutMargin = 10 * time.Second
+
+var _ services.IServiceWithShutdownTimeout = (*Service)(nil)
 
 // Service implements the tasks service interface and manages background task processing.
 // It coordinates between task producers (other services) and task consumers (workers)
 // to ensure efficient and reliable task execution across the system.
 type Service struct {
-	options Options
+	options types.Options
 
 	instanceID string
 	store      tasksrepo.ITasksRepository
@@ -54,37 +54,12 @@ type Service struct {
 	// taskServices maps task type names to their managing service
 	taskServices map[string]types.ITasksService
 
+	// maxTaskTimeout tracks the highest timeout across all registered tasks,
+	// updated at registration time. Used to derive the service shutdown timeout.
+	maxTaskTimeout time.Duration
+
 	backgroundJobsCancelFunc context.CancelFunc
 	backgroundJobsWg         *sync.WaitGroup
-}
-
-// Options contains configuration parameters for the tasks service.
-type Options struct {
-	// Workers specifies the number of concurrent workers that process tasks.
-	// Higher values increase throughput but consume more resources.
-	Workers int
-
-	// WorkersEnabled indicates whether task workers are running
-	WorkersEnabled bool
-
-	// CollectMetrics is a flag to enable metrics collection.
-	CollectMetrics bool
-
-	// DefaultTasksTimeout is the timeout for tasks.
-	DefaultTasksTimeout time.Duration
-
-	// PurgeDoneTaskOlderThan is the duration after which tasks in done state
-	// are purged from the repository.
-	PurgeDoneTaskOlderThan time.Duration
-	// PurgeFailedTaskOlderThan is the duration after which tasks in failed
-	// state are purged from the repository.
-	PurgeFailedTaskOlderThan time.Duration
-	// PurgeTasksInterval is the value for how often tasks are purged from the
-	// repository.
-	PurgeTasksInterval time.Duration
-	// StatisticsUpdateInterval is the value for how often the tasks statistics
-	// are updated.
-	StatisticsUpdateInterval time.Duration
 }
 
 // taskMetrics contains Prometheus metrics for monitoring tasks service performance and health.
@@ -100,18 +75,20 @@ type taskMetrics struct {
 }
 
 // NewService creates a new tasks service.
-func NewService(store tasksrepo.ITasksRepository, instanceID string, options Options) *Service {
+func NewService(
+	store tasksrepo.ITasksRepository, instanceID string, options types.Options,
+) *Service {
 
 	// Workers < 0 means explicitly disabled (API-only mode)
 	// Workers == 0 means not set, use default
 	// Workers > 0 means explicitly set
 	if options.Workers == 0 {
-		options.Workers = DefaultTasksWorkers
+		options.Workers = types.DefaultTasksWorkers
 	} else if options.Workers < 0 {
 		options.Workers = 0
 	}
 	if options.DefaultTasksTimeout == 0 {
-		options.DefaultTasksTimeout = DefaultTasksTimeout
+		options.DefaultTasksTimeout = types.DefaultTasksTimeout
 	}
 	if options.PurgeDoneTaskOlderThan == 0 {
 		options.PurgeDoneTaskOlderThan = scheduler.DefaultPurgeDoneTaskOlderThan
@@ -258,6 +235,7 @@ func (s *Service) StartBackgroundWork(
 	ctx, s.backgroundJobsCancelFunc = context.WithCancel(context.WithoutCancel(ctx))
 
 	// Start task processor
+	s.backgroundJobsWg.Add(1)
 	err := processor.StartProcessing(
 		ctx,
 		l,
@@ -265,9 +243,11 @@ func (s *Service) StartBackgroundWork(
 		s.options.Workers,
 		s.instanceID,
 		s.store,
-		s, // Service implements processor.TaskExecutor interface
+		s,                       // Service implements processor.TaskExecutor interface
+		s.backgroundJobsWg.Done, // Call Done() when all processor goroutines exit
 	)
 	if err != nil {
+		s.backgroundJobsWg.Done()
 		return err
 	}
 
@@ -344,6 +324,16 @@ func (s *Service) Shutdown(ctx context.Context) error {
 		// If all workers finish successfully, return nil
 		return nil
 	}
+}
+
+// GetShutdownTimeout returns a shutdown timeout derived from the maximum
+// timeout across all registered tasks, plus a margin for cleanup.
+func (s *Service) GetShutdownTimeout() time.Duration {
+	maxTimeout := s.options.DefaultTasksTimeout
+	if s.maxTaskTimeout > maxTimeout {
+		maxTimeout = s.maxTaskTimeout
+	}
+	return maxTimeout + shutdownTimeoutMargin
 }
 
 // GetTaskServiceName returns the name of the task service.

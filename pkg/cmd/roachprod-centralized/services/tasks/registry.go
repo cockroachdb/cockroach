@@ -23,6 +23,12 @@ func (s *Service) RegisterTasksService(tasksService types.ITasksService) {
 		s.taskServices[taskName] = tasksService
 		// Update pre-computed task types slice for metrics
 		s.managedTaskTypes = append(s.managedTaskTypes, taskName)
+		// Track the highest timeout across all registered tasks
+		if t, ok := task.(types.ITaskWithTimeout); ok {
+			if timeout := t.GetTimeout(); timeout > s.maxTaskTimeout {
+				s.maxTaskTimeout = timeout
+			}
+		}
 	}
 }
 

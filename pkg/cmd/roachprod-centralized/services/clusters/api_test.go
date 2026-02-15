@@ -10,6 +10,8 @@ import (
 	"testing"
 	"time"
 
+	pkgauth "github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/auth"
+	authmodels "github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/models/auth"
 	clustersrepomock "github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/repositories/clusters/mocks"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/services/clusters/tasks"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/services/clusters/types"
@@ -20,6 +22,7 @@ import (
 	filtertypes "github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/utils/filters/types"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/utils/logger"
 	cloudcluster "github.com/cockroachdb/cockroach/pkg/roachprod/cloud/types"
+	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
@@ -36,10 +39,8 @@ func TestService_GetAllClusters(t *testing.T) {
 		wantErr  bool
 	}{
 		{
-			name: "success - no filter",
-			input: types.InputGetAllClustersDTO{
-				Filters: *filters.NewFilterSet(),
-			},
+			name:  "success - no filter",
+			input: types.NewInputGetAllClustersDTO(),
 			mockFunc: func(repo *clustersrepomock.IClustersRepository) {
 				repo.On("GetClusters", mock.Anything, mock.Anything, *filters.NewFilterSet()).Return(cloudcluster.Clusters{
 					"test-1": &cloudcluster.Cluster{Name: "test-1"},
@@ -81,7 +82,7 @@ func TestService_GetAllClusters(t *testing.T) {
 			healthService := healthmock.NewIHealthService(t)
 			s, err := NewService(store, nil, healthService, Options{})
 			assert.NoError(t, err)
-			got, err := s.GetAllClusters(context.Background(), &logger.Logger{}, tt.input)
+			got, err := s.GetAllClusters(context.Background(), &logger.Logger{}, makeTestPrincipal(), tt.input)
 
 			if tt.wantErr {
 				assert.Error(t, err)
@@ -143,7 +144,7 @@ func TestService_GetCluster(t *testing.T) {
 			s, err := NewService(store, nil, healthService, Options{})
 			assert.NoError(t, err)
 
-			got, err := s.GetCluster(context.Background(), &logger.Logger{}, tt.input)
+			got, err := s.GetCluster(context.Background(), &logger.Logger{}, makeTestPrincipal(), tt.input)
 
 			if tt.wantErr != nil {
 				assert.ErrorIs(t, err, tt.wantErr)
@@ -183,7 +184,7 @@ func TestService_CreateCluster(t *testing.T) {
 				repo.On("ConditionalEnqueueOperation", mock.Anything, mock.Anything, mock.Anything, mock.Anything).
 					Return(false, nil)
 			},
-			want: &cloudcluster.Cluster{Name: "new-cluster"},
+			want: &cloudcluster.Cluster{Name: "new-cluster", User: "test@example.com"},
 		},
 		{
 			name: "already exists",
@@ -215,7 +216,7 @@ func TestService_CreateCluster(t *testing.T) {
 			s, err := NewService(store, nil, healthService, Options{})
 			assert.NoError(t, err)
 
-			got, err := s.RegisterCluster(context.Background(), logger.DefaultLogger, tt.input)
+			got, err := s.RegisterCluster(context.Background(), logger.DefaultLogger, makeTestPrincipal(), tt.input)
 
 			if tt.wantErr != nil {
 				assert.ErrorIs(t, err, tt.wantErr)
@@ -243,10 +244,33 @@ func TestService_SyncClouds(t *testing.T) {
 	service, err := NewService(store, taskService, healthService, Options{})
 	require.NoError(t, err)
 
-	task, err := service.SyncClouds(context.Background(), logger.DefaultLogger)
+	task, err := service.SyncClouds(context.Background(), logger.DefaultLogger, nil)
 	require.NoError(t, err)
 	assert.NotNil(t, task)
 
 	store.AssertExpectations(t)
 	store.ExpectedCalls = nil
+}
+
+// makeTestPrincipal creates a principal with wildcard permissions for testing.
+// This simulates a super-admin user that bypasses all authorization checks.
+func makeTestPrincipal() *pkgauth.Principal {
+	userID := uuid.MakeV4()
+	return &pkgauth.Principal{
+		Token: pkgauth.TokenInfo{
+			ID:   uuid.MakeV4(),
+			Type: authmodels.TokenTypeUser,
+		},
+		UserID: &userID,
+		User: &authmodels.User{
+			ID:    userID,
+			Email: "test@example.com",
+		},
+		Permissions: []authmodels.Permission{
+			&authmodels.UserPermission{
+				Scope:      "*",
+				Permission: "*", // Wildcard grants access to everything
+			},
+		},
+	}
 }

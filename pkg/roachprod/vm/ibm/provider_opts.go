@@ -48,6 +48,11 @@ func WithDNSProvider(dnsProvider vm.DNSProvider) OptionFunc {
 // ProviderOptions holds options for configuring the IBM provider.
 type ProviderOptions struct {
 	DNSProvider vm.DNSProvider
+	// AccountID is the IBM Cloud account ID. It is used by
+	// roachprod-centralized to derive the provider's identity string
+	// (e.g., "ibm-<accountID>") for environment-based authorization
+	// without needing to create a live provider instance.
+	AccountID string
 }
 
 // ToOptions converts ProviderOptions to a slice of Option functions to be used
