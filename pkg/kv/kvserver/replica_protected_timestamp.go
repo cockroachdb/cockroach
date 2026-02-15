@@ -146,6 +146,7 @@ func (r *Replica) checkProtectedTimestampsForGC(
 	}
 
 	gcTimestamp = read.readAt
+	log.KvExec.Infof(ctx, "thresholds pts: %v", read)
 	if !read.earliestProtectionTimestamp.IsEmpty() {
 		// NB: we want to allow GC up to the timestamp preceding the earliest valid
 		// protection timestamp.
@@ -155,6 +156,7 @@ func (r *Replica) checkProtectedTimestampsForGC(
 		}
 	}
 
+	log.KvExec.Infof(context.Background(), "thresholds TTL: %v %v", gcTimestamp, gcTTL)
 	newThreshold = gc.CalculateThreshold(gcTimestamp, gcTTL)
 
 	return true, gcTimestamp, oldThreshold, newThreshold, nil
