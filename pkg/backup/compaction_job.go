@@ -420,8 +420,8 @@ func (b *backupResumer) ResumeCompaction(
 		MaxRetries: 5,
 	}
 
-	if testingKnobs != nil && testingKnobs.BackupDistSQLRetryPolicy != nil {
-		retryOpts = *testingKnobs.BackupDistSQLRetryPolicy
+	if testingKnobs != nil && testingKnobs.BackupDistSQLInitialRetryPolicy != nil {
+		retryOpts = *testingKnobs.BackupDistSQLInitialRetryPolicy
 	}
 
 	// We want to retry a backup if there are transient failures (i.e. worker nodes

@@ -67,7 +67,11 @@ type BackupRestoreTestingKnobs struct {
 
 	RunAfterRestoreFlow func() error
 
-	BackupDistSQLRetryPolicy *retry.Options
+	EnableBackupRetriesUnderTest bool
+
+	BackupDistSQLInitialRetryPolicy *retry.Options
+
+	BackupDistSQLSecondaryRetryPolicy *retry.Options
 
 	RunBeforeBackupFlow func() error
 
