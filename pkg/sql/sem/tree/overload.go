@@ -35,6 +35,7 @@ const (
 	CrdbInternalRangeStatsWithErrors
 	FNV64
 	FNV64a
+	DatumsToBytes
 )
 
 // AggregateOverload is an opaque type which is used to box an eval.AggregateOverload.
