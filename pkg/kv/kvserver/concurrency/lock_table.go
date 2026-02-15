@@ -876,7 +876,11 @@ func (g *lockTableGuardImpl) pendingPushedTransactionCanBeResolved(
 	// uncertainty interval, or we need to be sure that the request was concurrent
 	// with our transaction so that rewritten intent can be ignored even if it is
 	// inside our uncertainty interval.
-	return !g.hasUncertaintyInterval() || g.hasObservationAtOrBefore(pushed.ClockWhilePending)
+	if !g.hasUncertaintyInterval() {
+		return true
+	}
+
+	return PushUsingCachedClockObservation.Get(&g.lt.settings.SV) && g.hasObservationAtOrBefore(pushed.ClockWhilePending)
 }
 
 func (g *lockTableGuardImpl) isSameTxn(txn *enginepb.TxnMeta) bool {
