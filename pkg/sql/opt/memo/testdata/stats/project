@@ -320,7 +320,7 @@ project
       │    └── stats: [rows=1000]
       ├── limit
       │    ├── outer: (2)
-      │    ├── cardinality: [1 - 1]
+      │    ├── cardinality: [0 - 1]
       │    ├── immutable
       │    ├── stats: [rows=1]
       │    ├── key: ()
