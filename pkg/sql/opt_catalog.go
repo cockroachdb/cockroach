@@ -1601,6 +1601,11 @@ func (ot *optTable) RegionalByRowUsingConstraint() cat.ForeignKeyConstraint {
 	return nil
 }
 
+// SkipRBRUniqueRowIDCrossRegionChecks is part of the cat.Table interface.
+func (ot *optTable) SkipRBRUniqueRowIDCrossRegionChecks() bool {
+	return ot.desc.GetSkipRBRUniqueRowIDChecks()
+}
+
 // GetDatabaseID is part of the cat.Table interface.
 func (ot *optTable) GetDatabaseID() descpb.ID {
 	return ot.desc.GetParentID()
@@ -2742,6 +2747,11 @@ func (ot *optVirtualTable) HomeRegionColName() (colName string, ok bool) {
 // RegionalByRowUsingConstraint is part of the cat.Table interface.
 func (ot *optVirtualTable) RegionalByRowUsingConstraint() cat.ForeignKeyConstraint {
 	return nil
+}
+
+// SkipRBRUniqueRowIDCrossRegionChecks is part of the cat.Table interface.
+func (ot *optVirtualTable) SkipRBRUniqueRowIDCrossRegionChecks() bool {
+	return false
 }
 
 // GetDatabaseID is part of the cat.Table interface.

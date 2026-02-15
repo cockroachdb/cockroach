@@ -158,6 +158,10 @@ var ttlAutomaticColumnNotice = pgnotice.Newf("ttl_automatic_column is no longer 
 
 var ttlRangeConcurrencyNotice = pgnotice.Newf("ttl_range_concurrency is no longer configurable.")
 
+var skipRBRUniqueRowIDChecksNotice = pgnotice.Newf("When skip_rbr_unique_rowid_checks is enabled, " +
+	"do not mix user-supplied values with DEFAULT unique_rowid() or unordered_unique_rowid() values. " +
+	"User-supplied values could conflict with future unique_rowid() values that omit uniqueness checks.")
+
 var tableParams = map[string]tableParam{
 	`fillfactor`: {
 		validateSetValue: func(ctx context.Context, semaCtx *tree.SemaContext, evalCtx *eval.Context, key string, datum tree.Datum) (string, error) {
@@ -789,6 +793,36 @@ var tableParams = map[string]tableParam{
 		},
 		onReset: func(ctx context.Context, po *Setter, key string, value string) error {
 			po.TableDesc.StatsCanaryWindow = 0
+			return nil
+		},
+	},
+	catpb.RBRSkipUniqueRowIDChecksTableSettingName: {
+		validateSetValue: func(ctx context.Context, semaCtx *tree.SemaContext, evalCtx *eval.Context, key string, datum tree.Datum) (string, error) {
+			boolVal, err := boolFromDatum(ctx, evalCtx, key, datum)
+			if err != nil {
+				return "", err
+			}
+			if boolVal && evalCtx != nil {
+				evalCtx.ClientNoticeSender.BufferClientNotice(
+					ctx,
+					skipRBRUniqueRowIDChecksNotice,
+				)
+			}
+			return fmt.Sprintf("%t", boolVal), nil
+		},
+		onSet: func(ctx context.Context, po *Setter, key string, value string) error {
+			boolVal, err := strconv.ParseBool(value)
+			if err != nil {
+				return err
+			}
+			po.TableDesc.SkipRBRUniqueRowIDChecks = boolVal
+			if boolVal {
+				telemetry.Inc(sqltelemetry.SkipRBRUniqueRowIDChecksCounter)
+			}
+			return nil
+		},
+		onReset: func(ctx context.Context, po *Setter, key string, value string) error {
+			po.TableDesc.SkipRBRUniqueRowIDChecks = false
 			return nil
 		},
 	},
