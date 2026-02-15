@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvstorage"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/rditer"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/repro"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/fs"
@@ -122,6 +123,11 @@ func (b *replicaAppBatch) Stage(
 	// Then, maybe override the result with testing knobs.
 	if b.r.store.TestingKnobs() != nil {
 		fr = replicaApplyTestingFilters(ctx, b.r, cmd, fr, false /* ephemeral */)
+	}
+
+	if repro.S.AdmitFirstCR.IsDone() && b.r.RangeID == 81 {
+		log.Dev.Warningf(ctx, "waiting for WriteToRHS")
+		<-repro.S.WriteToRHS.Done()
 	}
 
 	// Now update cmd. We'll either put the lease index in it or zero out
