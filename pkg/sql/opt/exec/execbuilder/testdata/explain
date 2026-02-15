@@ -114,7 +114,7 @@ SELECT * FROM [EXPLAIN SHOW JOBS] WHERE info NOT LIKE '%size%' AND info NOT LIKE
 distribution: local
 ·
 • sort
-│ order: -column71,-created
+│ order: -"COALESCE(finished, now())",-created
 │
 └── • render
     │
@@ -1787,7 +1787,7 @@ query T
 EXPLAIN (OPT, VERBOSE) SELECT * FROM tc WHERE a + 2 * b > 1 ORDER BY a*b
 ----
 distribute
- ├── columns: a:1 b:2  [hidden: column8:8]
+ ├── columns: a:1 b:2  [hidden: "a * b":8]
  ├── immutable
  ├── stats: [rows=333.333]
  ├── cost: 1418.32951
@@ -1799,7 +1799,7 @@ distribute
  ├── prune: (1,2,8)
  ├── interesting orderings: (+1)
  └── sort
-      ├── columns: a:1 b:2 column8:8
+      ├── columns: a:1 b:2 "a * b":8
       ├── immutable
       ├── stats: [rows=333.333]
       ├── cost: 1218.30951
@@ -1809,7 +1809,7 @@ distribute
       ├── prune: (1,2,8)
       ├── interesting orderings: (+1)
       └── project
-           ├── columns: column8:8 a:1 b:2
+           ├── columns: "a * b":8 a:1 b:2
            ├── immutable
            ├── stats: [rows=333.333]
            ├── cost: 1145.73667
@@ -1834,13 +1834,13 @@ distribute
            │    └── filters
            │         └── (a:1 + (b:2 * 2)) > 1 [outer=(1,2), immutable]
            └── projections
-                └── a:1 * b:2 [as=column8:8, outer=(1,2), immutable]
+                └── a:1 * b:2 [as="a * b":8, outer=(1,2), immutable]
 
 query T
 EXPLAIN (OPT, VERBOSE, REDACT) SELECT * FROM tc WHERE a + 2 * b > 1 ORDER BY a*b
 ----
 distribute
- ├── columns: a:1 b:2  [hidden: column8:8]
+ ├── columns: a:1 b:2  [hidden: "a * b":8]
  ├── immutable
  ├── stats: [rows=333.333]
  ├── cost: 1418.32951
@@ -1852,7 +1852,7 @@ distribute
  ├── prune: (1,2,8)
  ├── interesting orderings: (+1)
  └── sort
-      ├── columns: a:1 b:2 column8:8
+      ├── columns: a:1 b:2 "a * b":8
       ├── immutable
       ├── stats: [rows=333.333]
       ├── cost: 1218.30951
@@ -1862,7 +1862,7 @@ distribute
       ├── prune: (1,2,8)
       ├── interesting orderings: (+1)
       └── project
-           ├── columns: column8:8 a:1 b:2
+           ├── columns: "a * b":8 a:1 b:2
            ├── immutable
            ├── stats: [rows=333.333]
            ├── cost: 1145.73667
@@ -1887,13 +1887,13 @@ distribute
            │    └── filters
            │         └── (a:1 + (b:2 * ‹×›)) > ‹×› [outer=(1,2), immutable]
            └── projections
-                └── a:1 * b:2 [as=column8:8, outer=(1,2), immutable]
+                └── a:1 * b:2 [as="a * b":8, outer=(1,2), immutable]
 
 query T
 EXPLAIN (OPT, TYPES) SELECT * FROM tc WHERE a + 2 * b > 1 ORDER BY a*b
 ----
 distribute
- ├── columns: a:1(int) b:2(int)  [hidden: column8:8(int)]
+ ├── columns: a:1(int) b:2(int)  [hidden: "a * b":8(int)]
  ├── immutable
  ├── stats: [rows=333.333]
  ├── cost: 1418.32951
@@ -1905,7 +1905,7 @@ distribute
  ├── prune: (1,2,8)
  ├── interesting orderings: (+1)
  └── sort
-      ├── columns: a:1(int) b:2(int) column8:8(int)
+      ├── columns: a:1(int) b:2(int) "a * b":8(int)
       ├── immutable
       ├── stats: [rows=333.333]
       ├── cost: 1218.30951
@@ -1915,7 +1915,7 @@ distribute
       ├── prune: (1,2,8)
       ├── interesting orderings: (+1)
       └── project
-           ├── columns: column8:8(int) a:1(int) b:2(int)
+           ├── columns: "a * b":8(int) a:1(int) b:2(int)
            ├── immutable
            ├── stats: [rows=333.333]
            ├── cost: 1145.73667
@@ -1946,7 +1946,7 @@ distribute
            │              │         └── const: 2 [type=int]
            │              └── const: 1 [type=int]
            └── projections
-                └── mult [as=column8:8, type=int, outer=(1,2), immutable]
+                └── mult [as="a * b":8, type=int, outer=(1,2), immutable]
                      ├── variable: a:1 [type=int]
                      └── variable: b:2 [type=int]
 
@@ -1954,7 +1954,7 @@ query T
 EXPLAIN (OPT, TYPES, REDACT) SELECT * FROM tc WHERE a + 2 * b > 1 ORDER BY a*b
 ----
 distribute
- ├── columns: a:1(int) b:2(int)  [hidden: column8:8(int)]
+ ├── columns: a:1(int) b:2(int)  [hidden: "a * b":8(int)]
  ├── immutable
  ├── stats: [rows=333.333]
  ├── cost: 1418.32951
@@ -1966,7 +1966,7 @@ distribute
  ├── prune: (1,2,8)
  ├── interesting orderings: (+1)
  └── sort
-      ├── columns: a:1(int) b:2(int) column8:8(int)
+      ├── columns: a:1(int) b:2(int) "a * b":8(int)
       ├── immutable
       ├── stats: [rows=333.333]
       ├── cost: 1218.30951
@@ -1976,7 +1976,7 @@ distribute
       ├── prune: (1,2,8)
       ├── interesting orderings: (+1)
       └── project
-           ├── columns: column8:8(int) a:1(int) b:2(int)
+           ├── columns: "a * b":8(int) a:1(int) b:2(int)
            ├── immutable
            ├── stats: [rows=333.333]
            ├── cost: 1145.73667
@@ -2007,7 +2007,7 @@ distribute
            │              │         └── const: ‹×› [type=int]
            │              └── const: ‹×› [type=int]
            └── projections
-                └── mult [as=column8:8, type=int, outer=(1,2), immutable]
+                └── mult [as="a * b":8, type=int, outer=(1,2), immutable]
                      ├── variable: a:1 [type=int]
                      └── variable: b:2 [type=int]
 

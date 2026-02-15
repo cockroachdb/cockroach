@@ -1249,7 +1249,7 @@ opt
 		100;
 ----
 with &1 (v1)
- ├── columns: i_category:154!null i_brand:155!null cc_name:156!null d_year:157!null avg_monthly_sales:158!null sum_sales:159 psum:160 nsum:161  [hidden: column162:162]
+ ├── columns: i_category:154!null i_brand:155!null cc_name:156!null d_year:157!null avg_monthly_sales:158!null sum_sales:159 psum:160 nsum:161  [hidden: "sum_sales - avg_monthly_sales":162]
  ├── cardinality: [0 - 100]
  ├── immutable
  ├── fd: ()-->(157), (158,159)-->(162)
@@ -1314,7 +1314,7 @@ with &1 (v1)
  │    └── windows
  │         └── rank [as=rank:126]
  └── top-k
-      ├── columns: i_category:154!null i_brand:155!null cc_name:156!null d_year:157!null avg_monthly_sales:158!null sum_sales:159 psum:160 nsum:161 column162:162
+      ├── columns: i_category:154!null i_brand:155!null cc_name:156!null d_year:157!null avg_monthly_sales:158!null sum_sales:159 psum:160 nsum:161 "sum_sales - avg_monthly_sales":162
       ├── internal-ordering: +162,+158 opt(157)
       ├── k: 100
       ├── cardinality: [0 - 100]
@@ -1322,7 +1322,7 @@ with &1 (v1)
       ├── fd: ()-->(157), (158,159)-->(162)
       ├── ordering: +162,+158 opt(157) [actual: +162,+158]
       └── project
-           ├── columns: column162:162 i_category:154!null i_brand:155!null cc_name:156!null d_year:157!null avg_monthly_sales:158!null sum_sales:159 psum:160 nsum:161
+           ├── columns: "sum_sales - avg_monthly_sales":162 i_category:154!null i_brand:155!null cc_name:156!null d_year:157!null avg_monthly_sales:158!null sum_sales:159 psum:160 nsum:161
            ├── immutable
            ├── fd: ()-->(157), (158,159)-->(162)
            ├── project
@@ -1407,7 +1407,7 @@ with &1 (v1)
            │         ├── sum_sales:140 [as=psum:160, outer=(140)]
            │         └── sum_sales:148 [as=nsum:161, outer=(148)]
            └── projections
-                └── sum_sales:159 - avg_monthly_sales:158 [as=column162:162, outer=(158,159), immutable]
+                └── sum_sales:159 - avg_monthly_sales:158 [as="sum_sales - avg_monthly_sales":162, outer=(158,159), immutable]
 
 # --------------------------------------------------
 # Q58

@@ -819,9 +819,9 @@ vectorized: true
 │ columns: (b, a)
 │
 └── • render
-    │ columns: (column8, a, b)
+    │ columns: ("@1", a, b)
     │ ordering: +a
-    │ render column8: a
+    │ render @1: a
     │ render a: a
     │ render b: b
     │
@@ -846,9 +846,9 @@ vectorized: true
 │ columns: (b, a)
 │
 └── • render
-    │ columns: (column8, a, b)
+    │ columns: ("@2", a, b)
     │ ordering: +b
-    │ render column8: b
+    │ render @2: b
     │ render a: a
     │ render b: b
     │

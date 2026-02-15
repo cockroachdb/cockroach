@@ -553,7 +553,7 @@ EXPLAIN SELECT * FROM t1 ORDER BY v <-> '[3,1,2]' LIMIT 5;
 distribution: local
 ·
 • top-k
-│ order: +column9
+│ order: +"v <-> '[3,1,2]'"
 │ k: 5
 │
 └── • render
@@ -580,7 +580,7 @@ EXPLAIN SELECT * FROM t1 ORDER BY v <-> '[3,1,2]' LIMIT 5;
 distribution: local
 ·
 • top-k
-│ order: +column9
+│ order: +"v <-> '[3,1,2]'"
 │ k: 5
 │
 └── • render
@@ -601,7 +601,7 @@ EXPLAIN SELECT * FROM t1 WHERE a IN (10, 20) ORDER BY v <-> '[3,1,2]' LIMIT 5;
 distribution: local
 ·
 • top-k
-│ order: +column9
+│ order: +"v <-> '[3,1,2]'"
 │ k: 5
 │
 └── • render
@@ -624,7 +624,7 @@ EXPLAIN SELECT * FROM t1 WHERE a IN (20, 30) ORDER BY v <-> '[3,1,2]' LIMIT 5;
 distribution: local
 ·
 • top-k
-│ order: +column9
+│ order: +"v <-> '[3,1,2]'"
 │ k: 5
 │
 └── • render

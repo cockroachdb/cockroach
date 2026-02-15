@@ -71,13 +71,13 @@ quality of service: regular
 │ columns: (cid int, sum decimal)
 │
 └── • sort
-    │ columns: (column10 decimal, cid int, sum decimal)
+    │ columns: ("1 - sum(value)" decimal, cid int, sum decimal)
     │ estimated row count: 98 (missing stats)
-    │ order: +column10
+    │ order: +"1 - sum(value)"
     │
     └── • render
-        │ columns: (column10 decimal, cid int, sum decimal)
-        │ render column10: ((1)[decimal] - (sum)[decimal])[decimal]
+        │ columns: ("1 - sum(value)" decimal, cid int, sum decimal)
+        │ render 1 - sum(value): ((1)[decimal] - (sum)[decimal])[decimal]
         │ render cid: (cid)[int]
         │ render sum: (sum)[decimal]
         │

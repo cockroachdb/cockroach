@@ -3431,7 +3431,7 @@ EXPLAIN (REDACT) SELECT * FROM cd ORDER BY regexp_replace(c, '[0-9]', 'd') LIMIT
 distribution: local
 ·
 • top-k
-│ order: +column8
+│ order: +"regexp_replace(c, '[0-9]', 'd')"
 │ k: 3
 │
 └── • render
@@ -3451,14 +3451,14 @@ vectorized: true
 │ columns: (c, d)
 │
 └── • top-k
-    │ columns: (column8, c, d)
+    │ columns: ("regexp_replace(c, '[0-9]', 'd')", c, d)
     │ estimated row count: 3 (missing stats)
-    │ order: +column8
+    │ order: +"regexp_replace(c, '[0-9]', 'd')"
     │ k: 3
     │
     └── • render
-        │ columns: (column8, c, d)
-        │ render column8: regexp_replace(c, ‹×›, ‹×›)
+        │ columns: ("regexp_replace(c, '[0-9]', 'd')", c, d)
+        │ render regexp_replace(c, '[0-9]', 'd'): regexp_replace(c, ‹×›, ‹×›)
         │ render c: c
         │ render d: d
         │
@@ -3485,7 +3485,7 @@ query T
 EXPLAIN (OPT, VERBOSE, REDACT) SELECT * FROM cd ORDER BY regexp_replace(c, '[0-9]', 'd') LIMIT 3
 ----
 top-k
- ├── columns: c:1 d:2  [hidden: column8:8]
+ ├── columns: c:1 d:2  [hidden: "regexp_replace(c, '[0-9]', 'd')":8]
  ├── internal-ordering: +8 opt(2)
  ├── k: 3
  ├── cardinality: [0 - 3]
@@ -3499,7 +3499,7 @@ top-k
  ├── prune: (1,2)
  ├── interesting orderings: (+8 opt(2))
  └── project
-      ├── columns: column8:8 c:1 d:2
+      ├── columns: "regexp_replace(c, '[0-9]', 'd')":8 c:1 d:2
       ├── immutable
       ├── stats: [rows=1000]
       ├── cost: 1149.04
@@ -3519,13 +3519,13 @@ top-k
       │    ├── distribution: test
       │    └── prune: (1,2)
       └── projections
-           └── regexp_replace(c:1, ‹×›, ‹×›) [as=column8:8, outer=(1), immutable]
+           └── regexp_replace(c:1, ‹×›, ‹×›) [as="regexp_replace(c, '[0-9]', 'd')":8, outer=(1), immutable]
 
 query T
 EXPLAIN (OPT, TYPES, REDACT) SELECT * FROM cd ORDER BY regexp_replace(c, '[0-9]', 'd') LIMIT 3
 ----
 top-k
- ├── columns: c:1(char) d:2(char)  [hidden: column8:8(string)]
+ ├── columns: c:1(char) d:2(char)  [hidden: "regexp_replace(c, '[0-9]', 'd')":8(string)]
  ├── internal-ordering: +8 opt(2)
  ├── k: 3
  ├── cardinality: [0 - 3]
@@ -3539,7 +3539,7 @@ top-k
  ├── prune: (1,2)
  ├── interesting orderings: (+8 opt(2))
  └── project
-      ├── columns: column8:8(string) c:1(char) d:2(char)
+      ├── columns: "regexp_replace(c, '[0-9]', 'd')":8(string) c:1(char) d:2(char)
       ├── immutable
       ├── stats: [rows=1000]
       ├── cost: 1149.04
@@ -3559,7 +3559,7 @@ top-k
       │    ├── distribution: test
       │    └── prune: (1,2)
       └── projections
-           └── function: regexp_replace [as=column8:8, type=string, outer=(1), immutable]
+           └── function: regexp_replace [as="regexp_replace(c, '[0-9]', 'd')":8, type=string, outer=(1), immutable]
                 ├── variable: c:1 [type=char]
                 ├── const: ‹×› [type=string]
                 └── const: ‹×› [type=string]

@@ -2006,21 +2006,21 @@ delete a
  ├── cardinality: [0 - 0]
  ├── volatile, mutations
  └── limit
-      ├── columns: k:7!null column13:13!null
+      ├── columns: k:7!null "i * 2":13!null
       ├── internal-ordering: +13
       ├── cardinality: [0 - 10]
       ├── immutable
       ├── key: (7)
       ├── fd: (7)-->(13)
       ├── sort
-      │    ├── columns: k:7!null column13:13!null
+      │    ├── columns: k:7!null "i * 2":13!null
       │    ├── immutable
       │    ├── key: (7)
       │    ├── fd: (7)-->(13)
       │    ├── ordering: +13
       │    ├── limit hint: 10.00
       │    └── project
-      │         ├── columns: column13:13!null k:7!null
+      │         ├── columns: "i * 2":13!null k:7!null
       │         ├── immutable
       │         ├── key: (7)
       │         ├── fd: (7)-->(13)
@@ -2036,7 +2036,7 @@ delete a
       │         │    └── filters
       │         │         └── i:8 > 0 [outer=(8), constraints=(/8: [/1 - ]; tight)]
       │         └── projections
-      │              └── i:8 * 2 [as=column13:13, outer=(8), immutable]
+      │              └── i:8 * 2 [as="i * 2":13, outer=(8), immutable]
       └── 10
 
 # Prune when a secondary index is present on the table.
