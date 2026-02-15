@@ -3,7 +3,7 @@
 // Use of this software is governed by the CockroachDB Software License
 // included in the /LICENSE file.
 
-package main
+package cli
 
 import (
 	"bytes"
@@ -45,7 +45,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachprod/promhelperclient"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/vm"
 	"github.com/cockroachdb/cockroach/pkg/util/allstacks"
-	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/quotapool"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
@@ -1237,14 +1236,22 @@ fi'`
 			return errors.Errorf("unexpected output when checking for artifacts in %q: %s", srcDirOnNode, out)
 		}
 	}
-	g := ctxgroup.WithContext(ctx)
+	var wg sync.WaitGroup
+	errCh := make(chan error, len(c.All()))
 	for _, i := range c.All() {
 		node := i
-		g.GoCtx(func(ctx context.Context) error {
-			return fetchNode(ctx, node)
-		})
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			if err := fetchNode(ctx, node); err != nil {
+				errCh <- err
+			}
+		}()
 	}
-	if err := g.Wait(); err != nil {
+	wg.Wait()
+	close(errCh)
+
+	if err := <-errCh; err != nil {
 		t.L().PrintfCtx(ctx, "failed to get artifacts from %q: %v", srcDirOnNode, err)
 	}
 }

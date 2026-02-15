@@ -3,7 +3,7 @@
 // Use of this software is governed by the CockroachDB Software License
 // included in the /LICENSE file.
 
-package main
+package cli
 
 import (
 	"context"
@@ -14,12 +14,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil/task"
 	"github.com/cockroachdb/cockroach/pkg/roachprod"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/errors"
-	"golang.org/x/sync/errgroup"
 )
 
 // monitorProcess represents a single process that the monitor monitors.
@@ -83,7 +83,7 @@ func (m *expectedProcessHealth) set(
 // in a user task or an unexpected node death should cause all
 // goroutines managed by the monitor (user tasks or internal
 // monitoring) to finish, providing semantics similar to an
-// `errgroup`. The actual implementation uses two different errgroups
+// `errgroup`. The actual implementation uses two different error groups
 // (one for node events, and another one for user tasks). This is to
 // support the use-case where callers wish to monitor exclusively for
 // node events even if they do not have a goroutine (user task) to be
@@ -98,8 +98,9 @@ type monitorImpl struct {
 	nodes        string
 	ctx          context.Context
 	cancel       func()
-	userGroup    *errgroup.Group // user-provided functions
-	monitorGroup *errgroup.Group // monitor goroutine
+	taskManager  task.Manager    // task manager for creating groups
+	userGroup    task.ErrorGroup // user-provided functions
+	monitorGroup task.ErrorGroup // monitor goroutine
 	monitorOnce  sync.Once       // guarantees monitor goroutine is only started once
 
 	// expExactProcessDeath if true indicates that the monitor should expect that a
@@ -134,8 +135,9 @@ func newMonitor(
 		expProcessHealth:     expectedProcessHealth{},
 	}
 	m.ctx, m.cancel = context.WithCancel(ctx)
-	m.userGroup, _ = errgroup.WithContext(m.ctx)
-	m.monitorGroup, _ = errgroup.WithContext(m.ctx)
+	m.taskManager = task.NewManager(m.ctx, m.l)
+	m.userGroup = m.taskManager.NewErrorGroup()
+	m.monitorGroup = m.taskManager.NewErrorGroup()
 	return m
 }
 
@@ -208,7 +210,8 @@ func (m *monitorImpl) ResetDeaths() {
 var errTestFatal = errors.New("t.Fatal() was called")
 
 func (m *monitorImpl) Go(fn func(context.Context) error) {
-	m.userGroup.Go(func() (err error) {
+	m.userGroup.Go(func(ctx context.Context, l *logger.Logger) error {
+		var err error
 		defer func() {
 			r := recover()
 			if r == nil {
@@ -220,7 +223,7 @@ func (m *monitorImpl) Go(fn func(context.Context) error) {
 			}
 			// t.{Skip,Fatal} perform a panic(errTestFatal). If we've caught the
 			// errTestFatal sentinel we transform the panic into an error return so
-			// that the wrapped errgroup cancels itself. The "panic" will then be
+			// that the wrapped error group cancels itself. The "panic" will then be
 			// returned by `m.WaitE()`.
 			//
 			// Note that `t.Fatal` calls `panic(err)`, so this mechanism primarily
@@ -230,7 +233,8 @@ func (m *monitorImpl) Go(fn func(context.Context) error) {
 		}()
 		// Automatically clear the worker status message when the goroutine exits.
 		defer m.t.WorkerStatus()
-		return fn(m.ctx)
+		err = fn(ctx)
+		return err
 	})
 }
 
@@ -273,10 +277,10 @@ func (m *monitorImpl) Wait() {
 // callers are expected to call `Wait` or `WaitForNodeDeath`.
 func (m *monitorImpl) startNodeMonitor() {
 	m.monitorOnce.Do(func() {
-		m.monitorGroup.Go(func() error {
+		m.monitorGroup.Go(func(ctx context.Context, l *logger.Logger) error {
 			defer m.cancel() // stop user-tasks
 
-			eventsCh, err := roachprod.Monitor(m.ctx, m.l, m.nodes, install.MonitorOpts{})
+			eventsCh, err := roachprod.Monitor(ctx, l, m.nodes, install.MonitorOpts{})
 			if err != nil {
 				return errors.Wrap(err, "monitor node command failure")
 			}
@@ -322,7 +326,7 @@ func (m *monitorImpl) startNodeMonitor() {
 					}
 				}
 
-				m.l.Printf("Monitor event: %s%s", info, expectedDeathStr)
+				l.Printf("Monitor event: %s%s", info, expectedDeathStr)
 				if retErr != nil {
 					return retErr
 				}
@@ -337,12 +341,12 @@ func (m *monitorImpl) startNodeMonitor() {
 // to unexpected node deaths are returned.
 func (m *monitorImpl) WaitForNodeDeath() error {
 	m.startNodeMonitor()
-	return m.monitorGroup.Wait()
+	return m.monitorGroup.WaitE()
 }
 
 func (m *monitorImpl) wait() error {
 	m.startNodeMonitor()
-	userErr := m.userGroup.Wait()
+	userErr := m.userGroup.WaitE()
 	m.cancel() // stop monitoring goroutine
 	// By canceling the monitor context above, the goroutines created by
 	// `roachprod.Monitor` should terminate the session and close the

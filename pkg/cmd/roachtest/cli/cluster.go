@@ -3,7 +3,7 @@
 // Use of this software is governed by the CockroachDB Software License
 // included in the /LICENSE file.
 
-package main
+package cli
 
 import (
 	"bytes"
@@ -13,7 +13,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"log"
 	"math/rand"
 	"net"
 	"net/http"
@@ -981,7 +980,7 @@ func (f *clusterFactory) newCluster(
 		logPath := filepath.Join(f.artifactsDir, runnerLogsDir, clusterCreateDir, genName+retryStr+".log")
 		l, err := logger.RootLogger(logPath, teeOpt)
 		if err != nil {
-			log.Fatalf("%v", err)
+			return nil, nil, errors.Wrapf(err, "failed to create logger for cluster %s", genName)
 		}
 
 		c := &clusterImpl{

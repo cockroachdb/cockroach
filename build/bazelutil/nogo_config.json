@@ -21,6 +21,7 @@
             "pkg/cmd/roachtest/roachtestutil/mixedversion": "part of the roachtest framework",
             "pkg/cmd/roachtest/operations": "operations do not run under the managed roachtest framework",
             "pkg/cmd/roachtest/[^/]+\\.go$": "roachtest framework",
+            "pkg/cmd/roachtest/cli": "roachtest framework infrastructure",
             "_test\\.go$": "tests"
         }
     },
@@ -58,8 +59,8 @@
             "pkg/cli/clisqlexec/format_csv_tsv.go": "flagged by linter, should be evaluated",
             "pkg/cli/clisqlshell/sql.go": "flagged by linter, should be evaluated",
             "pkg/cli/syncbench/syncbench.go": "flagged by linter, should be evaluated",
-            "pkg/cmd/roachtest/cluster.go": "flagged by linter, should be evaluated",
-            "pkg/cmd/roachtest/test_runner.go": "flagged by linter, should be evaluated",
+            "pkg/cmd/roachtest/cli/cluster.go": "flagged by linter, should be evaluated",
+            "pkg/cmd/roachtest/cli/test_runner.go": "flagged by linter, should be evaluated",
             "pkg/gossip/client.go": "flagged by linter, should be evaluated",
             "pkg/gossip/gossip.go": "flagged by linter, should be evaluated",
             "pkg/config/system.go": "flagged by linter, should be evaluated",
