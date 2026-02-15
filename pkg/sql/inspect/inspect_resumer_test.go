@@ -8,6 +8,7 @@ package inspect_test
 import (
 	"context"
 	gosql "database/sql"
+	"fmt"
 	"regexp"
 	"sync/atomic"
 	"testing"
@@ -18,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobfrontier"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts"
+	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilitiespb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
@@ -353,31 +355,24 @@ func TestInspectProgressWithMultiRangeTable(t *testing.T) {
 	for i := 100; i <= 900; i += 100 {
 		runner.Exec(t, `ALTER TABLE multi_range_table SPLIT AT VALUES ($1)`, i)
 	}
-	runner.Exec(t, `ALTER TABLE multi_range_table SCATTER`)
-
-	// Wait for scatter to distribute ranges across nodes.
-	var rangeCount, nodeCount int
-	testutils.SucceedsSoon(t, func() error {
-		// Count total ranges and verify distribution.
-		runner.QueryRow(t, `
-			WITH r AS (SHOW RANGES FROM TABLE multi_range_table WITH DETAILS)
-			SELECT count(DISTINCT range_id), count(DISTINCT lease_holder)
-			FROM r
-		`).Scan(&rangeCount, &nodeCount)
-
-		if rangeCount <= 5 {
-			return errors.Newf("waiting for splits: only %d ranges", rangeCount)
-		}
-
-		if nodeCount < 2 {
-			return errors.Newf("waiting for scatter to multiple nodes: ranges only on %d node(s)", nodeCount)
-		}
-
-		return nil
-	})
+	if tc.DefaultTenantDeploymentMode().IsExternal() {
+		tc.GrantTenantCapabilities(ctx, t, serverutils.TestTenantID(),
+			map[tenantcapabilitiespb.ID]string{tenantcapabilitiespb.CanAdminRelocateRange: "true"})
+	}
+	splitVals := []int{100, 200, 300, 400, 500, 600, 700, 800, 900}
+	for i, splitVal := range splitVals {
+		nodeIdx := (i % numNodes) + 1
+		stmt := fmt.Sprintf(
+			`ALTER TABLE multi_range_table EXPERIMENTAL_RELOCATE LEASE VALUES (%d, %d)`,
+			nodeIdx, splitVal)
+		testutils.SucceedsSoon(t, func() error {
+			_, err := db.ExecContext(ctx, stmt)
+			return err
+		})
+	}
 
 	// Start the INSPECT job.
-	t.Logf("Starting INSPECT job on table with %d ranges distributed across %d nodes", rangeCount, nodeCount)
+	t.Log("Starting INSPECT job on multi-range table with leases distributed across nodes")
 	_, err := db.Exec(`
 		COMMIT;
 		INSPECT TABLE multi_range_table`)
