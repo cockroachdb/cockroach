@@ -112,21 +112,26 @@ func (t *tableDecoder) decodeEvent(
 		return DecodedRow{}, cdcevent.Row{}, err
 	}
 
-	var prev roachpb.KeyValue
-	prev.Key = event.KeyValue.Key
-	prev.Value = event.PrevValue
+	var prevRow tree.Datums
+	if len(event.PrevValue.RawBytes) != 0 {
+		var prev roachpb.KeyValue
+		prev.Key = event.KeyValue.Key
+		prev.Value = event.PrevValue
 
-	decodedPrevRow, prevStatus, err := t.decoder.DecodeKV(ctx, prev, cdcevent.PrevRow, event.PrevValue.Timestamp, false)
-	if err != nil {
-		return DecodedRow{}, cdcevent.Row{}, err
-	}
-	if prevStatus != cdcevent.DecodeOK {
-		return DecodedRow{}, cdcevent.Row{}, errors.Newf("unexpected decode status: %v", prevStatus)
-	}
+		// TODO(jeffswenson): it would be nice if decoded row has the Timestamp,
+		// but for some reason it is missing from the rangefeed.
+		decodedPrevRow, prevStatus, err := t.decoder.DecodeKV(ctx, prev, cdcevent.PrevRow, event.KeyValue.Value.Timestamp, false)
+		if err != nil {
+			return DecodedRow{}, cdcevent.Row{}, err
+		}
+		if prevStatus != cdcevent.DecodeOK {
+			return DecodedRow{}, cdcevent.Row{}, errors.Newf("unexpected decode status: %v", prevStatus)
+		}
 
-	prevRow, err := dstTable.toLocalDatums(decodedPrevRow)
-	if err != nil {
-		return DecodedRow{}, cdcevent.Row{}, err
+		prevRow, err = dstTable.toLocalDatums(decodedPrevRow)
+		if err != nil {
+			return DecodedRow{}, cdcevent.Row{}, err
+		}
 	}
 
 	return DecodedRow{

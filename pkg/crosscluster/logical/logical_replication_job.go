@@ -12,6 +12,8 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/crosscluster"
+	"github.com/cockroachdb/cockroach/pkg/crosscluster/logical/ldrdecoder"
+	"github.com/cockroachdb/cockroach/pkg/crosscluster/logical/txnmode"
 	"github.com/cockroachdb/cockroach/pkg/crosscluster/physical"
 	"github.com/cockroachdb/cockroach/pkg/crosscluster/replicationutils"
 	"github.com/cockroachdb/cockroach/pkg/crosscluster/streamclient"
@@ -112,7 +114,95 @@ func (r *logicalReplicationResumer) Resume(ctx context.Context, execCtx interfac
 		return jobs.MarkPauseRequestError(errors.Newf("UDF-based logical replication writer is disabled and will be deleted in a future CockroachDB release"))
 	}
 
+	payload := r.job.Details().(jobspb.LogicalReplicationDetails)
+	progress := r.job.Progress().Details.(*jobspb.Progress_LogicalReplication).LogicalReplication
+
+	// Handle initial backfill if needed.
+	if payload.CreateTable && progress.ReplicatedTime.IsEmpty() {
+		if err := r.resumeInitialScan(ctx, jobExecCtx); err != nil {
+			return r.handleResumeError(ctx, jobExecCtx, err)
+		}
+		// Initial scan completed successfully. Check pausepoint for testing.
+		if err := jobExecCtx.ExecCfg().JobRegistry.CheckPausepoint(
+			"logical_replication.after.initial_scan"); err != nil {
+			return err
+		}
+		// Reload progress since it was updated during the initial scan, then
+		// continue with setup and normal replication.
+		progress = r.job.Progress().Details.(*jobspb.Progress_LogicalReplication).LogicalReplication
+	}
+
+	// After initial scan completes, handle reverse stream setup and table publishing.
+	// This only needs to run when CreateTable is true and the initial scan has completed.
+	if payload.CreateTable && !progress.ReplicatedTime.IsEmpty() {
+		if err := r.setupAfterInitialScan(ctx, jobExecCtx); err != nil {
+			return r.handleResumeError(ctx, jobExecCtx, err)
+		}
+	}
+
+	// Delegate to the appropriate replication mode.
+	if payload.Mode == jobspb.LogicalReplicationDetails_Transaction {
+		return r.handleResumeError(ctx, jobExecCtx, r.resumeWithTxnCoordinator(ctx, jobExecCtx))
+	}
+
 	return r.handleResumeError(ctx, jobExecCtx, r.ingestWithRetries(ctx, jobExecCtx))
+}
+
+// resumeInitialScan performs the offline initial scan using classic LDR logic.
+// This is used when CreateTable is true and ReplicatedTime is empty.
+func (r *logicalReplicationResumer) resumeInitialScan(
+	ctx context.Context, jobExecCtx sql.JobExecContext,
+) error {
+	err := r.ingestWithRetries(ctx, jobExecCtx)
+	// errOfflineInitialScanComplete indicates the initial scan finished successfully.
+	// Return nil so the job can resume and proceed with normal replication.
+	if errors.Is(err, errOfflineInitialScanComplete) {
+		return nil
+	}
+	return err
+}
+
+// setupAfterInitialScan handles reverse stream setup and publishing created tables.
+// This runs after the initial backfill completes but before normal replication starts.
+func (r *logicalReplicationResumer) setupAfterInitialScan(
+	ctx context.Context, jobExecCtx sql.JobExecContext,
+) error {
+	payload := r.job.Details().(jobspb.LogicalReplicationDetails)
+	progress := r.job.Progress().Details.(*jobspb.Progress_LogicalReplication).LogicalReplication
+
+	uris, err := r.getClusterUris(ctx, r.job, jobExecCtx.ExecCfg().InternalDB)
+	if err != nil {
+		return err
+	}
+
+	client, err := streamclient.GetFirstActiveClient(ctx,
+		uris,
+		jobExecCtx.ExecCfg().InternalDB,
+		streamclient.WithStreamID(streampb.StreamID(payload.StreamID)),
+		streamclient.WithLogical(),
+	)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = client.Close(ctx) }()
+
+	status, err := client.Heartbeat(ctx, streampb.StreamID(payload.StreamID), progress.ReplicatedTime)
+	if err != nil {
+		log.Dev.Warningf(ctx, "could not heartbeat source cluster with stream id %d", payload.StreamID)
+	}
+	if status.StreamStatus == streampb.StreamReplicationStatus_STREAM_INACTIVE {
+		return jobs.MarkAsPermanentJobError(errors.Newf("history retention job is no longer active"))
+	}
+
+	if err := r.maybeStartReverseStream(ctx, jobExecCtx, client); err != nil {
+		return err
+	}
+
+	if err := r.maybePublishCreatedTables(ctx, jobExecCtx); err != nil {
+		return err
+	}
+
+	return nil
 }
 
 // The ingestion job should always pause, unless the error is marked as a permanent job error.
@@ -208,14 +298,6 @@ func (r *logicalReplicationResumer) ingest(
 	}
 	if status.StreamStatus == streampb.StreamReplicationStatus_STREAM_INACTIVE {
 		return jobs.MarkAsPermanentJobError(errors.Newf("history retention job is no longer active"))
-	}
-
-	if err := r.maybeStartReverseStream(ctx, jobExecCtx, client); err != nil {
-		return err
-	}
-
-	if err := r.maybePublishCreatedTables(ctx, jobExecCtx); err != nil {
-		return err
 	}
 
 	asOf := replicatedTimeAtStart
@@ -920,6 +1002,88 @@ func (rh *rowHandler) handleRow(ctx context.Context, row tree.Datums) error {
 	return nil
 }
 
+func (r *logicalReplicationResumer) resumeWithTxnCoordinator(
+	ctx context.Context, jobExecCtx sql.JobExecContext,
+) error {
+	var (
+		execCfg  = jobExecCtx.ExecCfg()
+		payload  = r.job.Details().(jobspb.LogicalReplicationDetails)
+		progress = r.job.Progress().Details.(*jobspb.Progress_LogicalReplication).LogicalReplication
+	)
+
+	uris, err := r.getClusterUris(ctx, r.job, execCfg.InternalDB)
+	if err != nil {
+		return err
+	}
+
+	client, err := streamclient.GetFirstActiveClient(ctx,
+		uris,
+		execCfg.InternalDB,
+		streamclient.WithStreamID(streampb.StreamID(payload.StreamID)),
+		streamclient.WithLogical(),
+	)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = client.Close(ctx) }()
+
+	// Build table mappings for the transaction coordinator
+	tableMappings, err := buildTableMappings(ctx, execCfg, client, payload, progress)
+	if err != nil {
+		return errors.Wrap(err, "building table mappings")
+	}
+
+	coordinator := txnmode.NewTxnLdrCoordinator(ctx, jobExecCtx, r.job, client, tableMappings)
+	return coordinator.Resume(ctx)
+}
+
+func buildTableMappings(
+	ctx context.Context,
+	execCfg *sql.ExecutorConfig,
+	client streamclient.Client,
+	payload jobspb.LogicalReplicationDetails,
+	progress *jobspb.LogicalReplicationProgress,
+) ([]ldrdecoder.TableMapping, error) {
+	// Get source table descriptors from the replication plan
+	asOf := payload.ReplicationStartTime
+	if !progress.ReplicatedTime.IsEmpty() {
+		asOf = progress.ReplicatedTime
+	}
+	req := streampb.LogicalReplicationPlanRequest{
+		StreamID: streampb.StreamID(payload.StreamID),
+		PlanAsOf: asOf,
+	}
+	for _, pair := range payload.ReplicationPairs {
+		req.TableIDs = append(req.TableIDs, pair.SrcDescriptorID)
+	}
+
+	plan, err := client.PlanLogicalReplication(ctx, req)
+	if err != nil {
+		return nil, errors.Wrap(err, "planning logical replication")
+	}
+
+	crossClusterResolver := crosscluster.MakeCrossClusterTypeResolver(plan.SourceTypes)
+	tableMappings := make([]ldrdecoder.TableMapping, 0, len(payload.ReplicationPairs))
+	if err := sql.DescsTxn(ctx, execCfg, func(ctx context.Context, txn isql.Txn, descriptors *descs.Collection) error {
+		for _, pair := range payload.ReplicationPairs {
+			srcTableDesc := plan.DescriptorMap[pair.SrcDescriptorID]
+			cpy := tabledesc.NewBuilder(&srcTableDesc).BuildCreatedMutableTable()
+			if err := typedesc.HydrateTypesInDescriptor(ctx, cpy, crossClusterResolver); err != nil {
+				return err
+			}
+			tableMappings = append(tableMappings, ldrdecoder.TableMapping{
+				SourceDescriptor: cpy,
+				DestID:           descpb.ID(pair.DstDescriptorID),
+			})
+		}
+		return nil
+	}); err != nil {
+		return nil, err
+	}
+
+	return tableMappings, nil
+}
+
 func (r *logicalReplicationResumer) ingestWithRetries(
 	ctx context.Context, execCtx sql.JobExecContext,
 ) error {
@@ -931,6 +1095,11 @@ func (r *logicalReplicationResumer) ingestWithRetries(
 	for retrier := retry.Start(ro); retrier.Next(); {
 		err = r.ingest(ctx, execCtx)
 		if err == nil {
+			break
+		}
+		// errOfflineInitialScanComplete indicates the initial scan finished
+		// successfully; exit the retry loop so the caller can handle it.
+		if errors.Is(err, errOfflineInitialScanComplete) {
 			break
 		}
 		// By default, all errors are retryable unless it's marked as
