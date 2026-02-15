@@ -402,12 +402,12 @@ type UniqueConstraint interface {
 	// needs to be enforced on new mutations.
 	Validated() bool
 
-	// UniquenessGuaranteedByAnotherIndex returns true when WithoutIndex() returns
-	// true and the uniqueness of the constraint is guaranteed by another index.
-	// When true, the optimizer will always consider the constraint to be
-	// satisfied when building functional dependencies for the table. This enables
-	// additional optimizations, such as omission of uniqueness checks.
-	UniquenessGuaranteedByAnotherIndex() bool
+	// CanElideUniqueCheck returns true when WithoutIndex() returns
+	// true and the uniqueness check for the constraint can be elided. This can happen
+	// when the uniqueness is guaranteed by another index, or when the
+	// skip_unique_checks storage parameter is set on the index.
+	// When true, the optimizer will not plan uniqueness checks for mutations.
+	CanElideUniqueCheck() bool
 }
 
 // UniqueOrdinal identifies a unique constraint (in the context of a Table).

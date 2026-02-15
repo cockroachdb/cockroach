@@ -47,9 +47,13 @@ type AlterIndexCmd interface {
 	alterIndexCmd()
 }
 
-func (*AlterIndexPartitionBy) alterIndexCmd() {}
+func (*AlterIndexPartitionBy) alterIndexCmd()          {}
+func (*AlterIndexSetStorageParams) alterIndexCmd()    {}
+func (*AlterIndexResetStorageParams) alterIndexCmd()  {}
 
 var _ AlterIndexCmd = &AlterIndexPartitionBy{}
+var _ AlterIndexCmd = &AlterIndexSetStorageParams{}
+var _ AlterIndexCmd = &AlterIndexResetStorageParams{}
 
 // AlterIndexPartitionBy represents an ALTER INDEX PARTITION BY
 // command.
@@ -60,6 +64,35 @@ type AlterIndexPartitionBy struct {
 // Format implements the NodeFormatter interface.
 func (node *AlterIndexPartitionBy) Format(ctx *FmtCtx) {
 	ctx.FormatNode(node.PartitionByIndex)
+}
+
+// AlterIndexSetStorageParams represents an ALTER INDEX SET (...) command.
+type AlterIndexSetStorageParams struct {
+	StorageParams StorageParams
+}
+
+// Format implements the NodeFormatter interface.
+func (node *AlterIndexSetStorageParams) Format(ctx *FmtCtx) {
+	ctx.WriteString(" SET (")
+	ctx.FormatNode(&node.StorageParams)
+	ctx.WriteString(")")
+}
+
+// AlterIndexResetStorageParams represents an ALTER INDEX RESET (...) command.
+type AlterIndexResetStorageParams struct {
+	Params []string
+}
+
+// Format implements the NodeFormatter interface.
+func (node *AlterIndexResetStorageParams) Format(ctx *FmtCtx) {
+	ctx.WriteString(" RESET (")
+	for i, param := range node.Params {
+		if i > 0 {
+			ctx.WriteString(", ")
+		}
+		ctx.WriteString(param)
+	}
+	ctx.WriteString(")")
 }
 
 // AlterIndexVisible represents a ALTER INDEX ... [VISIBLE | NOT VISIBLE] statement.

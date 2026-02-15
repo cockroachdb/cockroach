@@ -1,5 +1,13 @@
 alter_oneindex_stmt ::=
-	'ALTER' 'INDEX' table_name '@' index_name partition_by_index ( ( ',' ( partition_by_index ) ) )*
-	| 'ALTER' 'INDEX' index_name partition_by_index ( ( ',' ( partition_by_index ) ) )*
-	| 'ALTER' 'INDEX' 'IF' 'EXISTS' table_name '@' index_name partition_by_index ( ( ',' ( partition_by_index ) ) )*
-	| 'ALTER' 'INDEX' 'IF' 'EXISTS' index_name partition_by_index ( ( ',' ( partition_by_index ) ) )*
+	'ALTER' 'INDEX' table_name '@' index_name partition_by_index ( ( ',' ( partition_by_index | 'SET' '(' storage_parameter_list ')' | 'RESET' '(' storage_parameter_key_list ')' ) ) )*
+	| 'ALTER' 'INDEX' table_name '@' index_name 'SET' '(' storage_parameter_list ')' ( ( ',' ( partition_by_index | 'SET' '(' storage_parameter_list ')' | 'RESET' '(' storage_parameter_key_list ')' ) ) )*
+	| 'ALTER' 'INDEX' table_name '@' index_name 'RESET' '(' storage_parameter_key_list ')' ( ( ',' ( partition_by_index | 'SET' '(' storage_parameter_list ')' | 'RESET' '(' storage_parameter_key_list ')' ) ) )*
+	| 'ALTER' 'INDEX' index_name partition_by_index ( ( ',' ( partition_by_index | 'SET' '(' storage_parameter_list ')' | 'RESET' '(' storage_parameter_key_list ')' ) ) )*
+	| 'ALTER' 'INDEX' index_name 'SET' '(' storage_parameter_list ')' ( ( ',' ( partition_by_index | 'SET' '(' storage_parameter_list ')' | 'RESET' '(' storage_parameter_key_list ')' ) ) )*
+	| 'ALTER' 'INDEX' index_name 'RESET' '(' storage_parameter_key_list ')' ( ( ',' ( partition_by_index | 'SET' '(' storage_parameter_list ')' | 'RESET' '(' storage_parameter_key_list ')' ) ) )*
+	| 'ALTER' 'INDEX' 'IF' 'EXISTS' table_name '@' index_name partition_by_index ( ( ',' ( partition_by_index | 'SET' '(' storage_parameter_list ')' | 'RESET' '(' storage_parameter_key_list ')' ) ) )*
+	| 'ALTER' 'INDEX' 'IF' 'EXISTS' table_name '@' index_name 'SET' '(' storage_parameter_list ')' ( ( ',' ( partition_by_index | 'SET' '(' storage_parameter_list ')' | 'RESET' '(' storage_parameter_key_list ')' ) ) )*
+	| 'ALTER' 'INDEX' 'IF' 'EXISTS' table_name '@' index_name 'RESET' '(' storage_parameter_key_list ')' ( ( ',' ( partition_by_index | 'SET' '(' storage_parameter_list ')' | 'RESET' '(' storage_parameter_key_list ')' ) ) )*
+	| 'ALTER' 'INDEX' 'IF' 'EXISTS' index_name partition_by_index ( ( ',' ( partition_by_index | 'SET' '(' storage_parameter_list ')' | 'RESET' '(' storage_parameter_key_list ')' ) ) )*
+	| 'ALTER' 'INDEX' 'IF' 'EXISTS' index_name 'SET' '(' storage_parameter_list ')' ( ( ',' ( partition_by_index | 'SET' '(' storage_parameter_list ')' | 'RESET' '(' storage_parameter_key_list ')' ) ) )*
+	| 'ALTER' 'INDEX' 'IF' 'EXISTS' index_name 'RESET' '(' storage_parameter_key_list ')' ( ( ',' ( partition_by_index | 'SET' '(' storage_parameter_list ')' | 'RESET' '(' storage_parameter_key_list ')' ) ) )*
