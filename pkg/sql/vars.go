@@ -4564,6 +4564,46 @@ var varGen = map[string]sessionVar{
 		},
 		GlobalDefault: globalTrue,
 	},
+
+	// CockroachDB extension.
+	// stats_as_of allows controlling statistics selection based on a specific
+	// timestamp rather than the current time. This is primarily intended for
+	// debugging and testing purposes and should not be used in production.
+	// When set to an empty string, statistics selection uses the current time.
+	// When set to a timestamp, statistics selection is based on the age gap
+	// between the stats creation timestamp and the specified timestamp.
+	`stats_as_of`: {
+		Hidden: true,
+		SetWithPlanner: func(ctx context.Context, p *planner, local bool, s string) error {
+			ts := hlc.Timestamp{}
+			if s != "" {
+				asOfTimestamp, err := p.EvalAsOfTimestamp(ctx, tree.AsOfClause{Expr: tree.NewStrVal(s)})
+				if err != nil {
+					return errors.Wrap(err, "could not parse stats_as_of")
+				}
+				ts = asOfTimestamp.Timestamp
+			}
+
+			return p.applyOnSessionDataMutators(
+				ctx,
+				local,
+				func(m sessionmutator.SessionDataMutator) error {
+					m.SetStatsAsOf(ts)
+					return nil
+				},
+			)
+		},
+		Get: func(evalCtx *extendedEvalContext, _ *kv.Txn) (string, error) {
+			asOfTs := evalCtx.SessionData().StatsAsOf
+			if asOfTs.IsEmpty() {
+				return "", nil
+			}
+			return asOfTs.AsOfSystemTime(), nil
+		},
+		GlobalDefault: func(sv *settings.Values) string {
+			return ""
+		},
+	},
 }
 
 func ReplicationModeFromString(s string) (sessiondatapb.ReplicationMode, error) {

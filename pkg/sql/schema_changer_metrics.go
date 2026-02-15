@@ -12,6 +12,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 )
 
@@ -57,7 +58,7 @@ func UpdateDescriptorCount(
 		if err != nil {
 			return err
 		}
-		tableStats, err := execCfg.TableStatsCache.GetTableStats(ctx, desc, nil /* typeResolver */)
+		tableStats, err := execCfg.TableStatsCache.GetTableStats(ctx, desc, nil /* typeResolver */, false /* stable */, 0 /* canaryWindowSize */, hlc.Timestamp{} /* statsAsOf */)
 		if err != nil {
 			return err
 		}

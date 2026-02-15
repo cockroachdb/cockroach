@@ -773,6 +773,12 @@ message LocalOnlySessionData {
   // OptimizerInlineAnyUnnestSubquery, when true, enables the InlineAnyProjectSet
   // normalization rule that inlines unnest subqueries in ANY comparisons.
   bool optimizer_inline_any_unnest_subquery = 198;
+  // StatsAsOf is an optional timestamp that, when set, causes statistics
+  // selection to be based on the age gap between the stats creation timestamp
+  // and the StatsAsOf timestamp, rather than the current time. This is
+  // primarily intended for debugging, testing, and historical analysis.
+  // Should not be used in production environments.
+  util.hlc.Timestamp stats_as_of = 199 [(gogoproto.nullable) = false];
 
   ///////////////////////////////////////////////////////////////////////////
   // WARNING: consider whether a session parameter you're adding needs to  //

@@ -336,13 +336,6 @@ func TestRepeatableReadLogic_bytes(
 	runLogicTest(t, "bytes")
 }
 
-func TestRepeatableReadLogic_canary_stats(
-	t *testing.T,
-) {
-	defer leaktest.AfterTest(t)()
-	runLogicTest(t, "canary_stats")
-}
-
 func TestRepeatableReadLogic_canary_stats_deletion(
 	t *testing.T,
 ) {
