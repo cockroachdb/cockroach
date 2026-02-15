@@ -4,7 +4,7 @@
 // included in the /LICENSE file.
 //
 
-package main
+package benchdoc
 
 import (
 	"go/ast"
@@ -13,23 +13,21 @@ import (
 	"testing"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/internal/codeowners"
 	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
 	"github.com/stretchr/testify/require"
 )
 
-func TestAnalyzeBenchmark(t *testing.T) {
-	f, err := parseFile(datapathutils.TestDataPath(t, "benchdoc", "bench_test_go"))
+func TestAnalyzeGoodBenchmarkDocs(t *testing.T) {
+	f, err := parseFile(datapathutils.TestDataPath(t, "good_bench_test_go"))
 	require.NoError(t, err)
-	co, err := codeowners.DefaultLoadCodeOwners()
-	require.NoError(t, err)
-	benchmarks, err := analyzeBenchmarkAST(co, f, "/abc/pkg", "/abc/pkg/some_pkg/sub_pkg/bench_test_go")
+
+	benchmarks, err := AnalyzeBenchmarkDocs(f, stubPackageResolver, stubTeamResolver, false, nil)
 	require.NoError(t, err)
 	require.Equal(t, []BenchmarkInfo{
 		{
 			Name:    "BenchmarkDocTest",
-			Package: "pkg/some_pkg/sub_pkg",
-			Team:    "unowned",
+			Package: "pkg_test",
+			Team:    "team_test",
 			Args: RunArgs{
 				Suite:     "manual",
 				Count:     10,
@@ -40,6 +38,14 @@ func TestAnalyzeBenchmark(t *testing.T) {
 	}, benchmarks)
 }
 
+func TestAnalyzeBadBenchmarkDocs(t *testing.T) {
+	f, err := parseFile(datapathutils.TestDataPath(t, "bad_bench_test_go"))
+	require.NoError(t, err)
+
+	_, err = AnalyzeBenchmarkDocs(f, stubPackageResolver, stubTeamResolver, false, nil)
+	require.Error(t, err)
+}
+
 func parseFile(filename string) (*ast.File, error) {
 	tokenSet := token.NewFileSet()
 	f, err := parser.ParseFile(tokenSet, filename, nil, parser.ParseComments)
@@ -47,4 +53,12 @@ func parseFile(filename string) (*ast.File, error) {
 		return nil, err
 	}
 	return f, nil
+}
+
+func stubTeamResolver() (string, error) {
+	return "team_test", nil
+}
+
+func stubPackageResolver() (string, error) {
+	return "pkg_test", nil
 }
