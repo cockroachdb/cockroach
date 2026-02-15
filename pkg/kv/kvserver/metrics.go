@@ -2487,6 +2487,13 @@ var (
 		Unit:        metric.Unit_COUNT,
 		Visibility:  metric.Metadata_SUPPORT,
 	}
+	metaReplicaGCQueuePurgatory = metric.Metadata{
+		Name:        "queue.replicagc.purgatory",
+		Help:        "Number of replicas in the replica GC queue's purgatory, waiting for a prerequisite (e.g. left neighbor GC) before they can be GC'd",
+		Measurement: "Replicas",
+		Unit:        metric.Unit_COUNT,
+		Visibility:  metric.Metadata_SUPPORT,
+	}
 	metaReplicaGCQueueProcessingNanos = metric.Metadata{
 		Name:        "queue.replicagc.processingnanos",
 		Help:        "Nanoseconds spent processing replicas in the replica GC queue",
@@ -3659,6 +3666,7 @@ type StoreMetrics struct {
 	ReplicaGCQueueSuccesses                   *metric.Counter
 	ReplicaGCQueueFailures                    *metric.Counter
 	ReplicaGCQueuePending                     *metric.Gauge
+	ReplicaGCQueuePurgatory                   *metric.Gauge
 	ReplicaGCQueueProcessingNanos             *metric.Counter
 	ReplicateQueueEnqueueAdd                  *metric.Counter
 	ReplicateQueueEnqueueFailedPrecondition   *metric.Counter
@@ -4479,6 +4487,7 @@ func newStoreMetrics(histogramWindow time.Duration) *StoreMetrics {
 		ReplicaGCQueueSuccesses:                   metric.NewCounter(metaReplicaGCQueueSuccesses),
 		ReplicaGCQueueFailures:                    metric.NewCounter(metaReplicaGCQueueFailures),
 		ReplicaGCQueuePending:                     metric.NewGauge(metaReplicaGCQueuePending),
+		ReplicaGCQueuePurgatory:                   metric.NewGauge(metaReplicaGCQueuePurgatory),
 		ReplicaGCQueueProcessingNanos:             metric.NewCounter(metaReplicaGCQueueProcessingNanos),
 		ReplicateQueueEnqueueAdd:                  metric.NewCounter(metaReplicateQueueEnqueueAdd),
 		ReplicateQueueEnqueueFailedPrecondition:   metric.NewCounter(metaReplicateQueueEnqueueFailedPrecondition),
