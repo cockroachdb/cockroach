@@ -250,7 +250,7 @@ func (r *commandResult) beforeAdd() error {
 	return nil
 }
 
-// JobIdColIdx is based on jobs.BulkJobExecutionResultHeader and
+// JobIdColIdx is based on jobs.ImportJobExecutionResultHeader and
 // jobs.DetachedJobExecutionResultHeader.
 var JobIdColIdx int
 
@@ -745,25 +745,25 @@ func (r *limitedCommandResult) Close(ctx context.Context, t sql.TransactionStatu
 }
 
 // Get the column index for job id based on the result header defined in
-// jobs.BulkJobExecutionResultHeader and jobs.DetachedJobExecutionResultHeader.
+// jobs.ImportJobExecutionResultHeader and jobs.DetachedJobExecutionResultHeader.
 func init() {
-	jobIdIdxInBulkJobExecutionResultHeader := -1
+	jobIdIdxInImportJobExecutionResultHeader := -1
 	jobIdIdxInDetachedJobExecutionResultHeader := -1
-	for i, col := range jobs.BulkJobExecutionResultHeader {
+	for i, col := range jobs.ImportJobExecutionResultHeader {
 		if col.Name == "job_id" {
-			jobIdIdxInBulkJobExecutionResultHeader = i
+			jobIdIdxInImportJobExecutionResultHeader = i
 			break
 		}
 	}
-	if jobIdIdxInBulkJobExecutionResultHeader == -1 {
-		panic("cannot find the job id column in BulkJobExecutionResultHeader")
+	if jobIdIdxInImportJobExecutionResultHeader == -1 {
+		panic("cannot find the job id column in ImportJobExecutionResultHeader")
 	}
 
 	for i, col := range jobs.DetachedJobExecutionResultHeader {
 		if col.Name == "job_id" {
-			if i != jobIdIdxInBulkJobExecutionResultHeader {
+			if i != jobIdIdxInImportJobExecutionResultHeader {
 				panic("column index of job_id in DetachedJobExecutionResultHeader and" +
-					" BulkJobExecutionResultHeader should be the same")
+					" ImportJobExecutionResultHeader should be the same")
 			} else {
 				jobIdIdxInDetachedJobExecutionResultHeader = i
 				break
@@ -773,5 +773,5 @@ func init() {
 	if jobIdIdxInDetachedJobExecutionResultHeader == -1 {
 		panic("cannot find the job id column in DetachedJobExecutionResultHeader")
 	}
-	JobIdColIdx = jobIdIdxInBulkJobExecutionResultHeader
+	JobIdColIdx = jobIdIdxInImportJobExecutionResultHeader
 }
