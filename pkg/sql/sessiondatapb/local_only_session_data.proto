@@ -773,6 +773,9 @@ message LocalOnlySessionData {
   // OptimizerInlineAnyUnnestSubquery, when true, enables the InlineAnyProjectSet
   // normalization rule that inlines unnest subqueries in ANY comparisons.
   bool optimizer_inline_any_unnest_subquery = 198;
+  // OptimizerUseMinRowCountAntiJoinFix, when true, causes the
+  // optimizer_min_row_count setting to be applied correctly to anti-joins.
+  bool optimizer_use_min_row_count_anti_join_fix = 199;
 
   ///////////////////////////////////////////////////////////////////////////
   // WARNING: consider whether a session parameter you're adding needs to  //

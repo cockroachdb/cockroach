@@ -282,13 +282,13 @@ distribution: local
 │   └── • error if rows
 │       │
 │       └── • lookup join (anti)
-│           │ estimated row count: 0
+│           │ estimated row count: 1
 │           │ table: customer@primary
 │           │ equality cols are key
 │           │ lookup condition: (((crdb_region IN ('ca-central-1', 'us-east-1')) AND (column3 = c_w_id)) AND (column2 = c_d_id)) AND (column1 = c_id)
 │           │
 │           └── • lookup join (anti)
-│               │ estimated row count: 0
+│               │ estimated row count: 1
 │               │ table: customer@primary
 │               │ equality cols are key
 │               │ lookup condition: (((crdb_region = 'ap-southeast-2') AND (column3 = c_w_id)) AND (column2 = c_d_id)) AND (column1 = c_id)
@@ -302,13 +302,13 @@ distribution: local
     └── • error if rows
         │
         └── • lookup join (anti)
-            │ estimated row count: 0
+            │ estimated row count: 1
             │ table: district@primary
             │ equality cols are key
             │ lookup condition: ((crdb_region IN ('ca-central-1', 'us-east-1')) AND (column5 = d_w_id)) AND (column4 = d_id)
             │
             └── • lookup join (anti)
-                │ estimated row count: 0
+                │ estimated row count: 1
                 │ table: district@primary
                 │ equality cols are key
                 │ lookup condition: ((crdb_region = 'ap-southeast-2') AND (column5 = d_w_id)) AND (column4 = d_id)

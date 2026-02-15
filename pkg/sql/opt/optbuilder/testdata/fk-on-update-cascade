@@ -1619,7 +1619,7 @@ root
                 └── f-k-checks-item: child_diff_type(p) -> parent_diff_type(p)
                      └── anti-join (hash)
                           ├── columns: p:19(int2!null)
-                          ├── stats: [rows=1e-10]
+                          ├── stats: [rows=1]
                           ├── fd: ()-->(19)
                           ├── cte-uses
                           │    └── &2: count=1 used-columns=(18)

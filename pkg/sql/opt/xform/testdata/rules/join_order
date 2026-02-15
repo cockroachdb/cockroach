@@ -1825,9 +1825,9 @@ Joins Considered: 12
 ================================================================================
 Final Plan
 ================================================================================
-semi-join (lookup dz)
+left-join (lookup cy)
  ├── lookup columns are key
- ├── left-join (lookup cy)
+ ├── semi-join (lookup dz)
  │    ├── lookup columns are key
  │    ├── anti-join (merge)
  │    │    ├── scan bx

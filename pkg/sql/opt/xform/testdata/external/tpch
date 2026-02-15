@@ -2503,62 +2503,61 @@ GROUP BY
 ORDER BY
     cntrycode;
 ----
-sort
+group-by (streaming)
  ├── columns: cntrycode:34 numcust:35!null totacctbal:36!null
+ ├── grouping columns: cntrycode:34
  ├── immutable
  ├── key: (34)
  ├── fd: (34)-->(35,36)
  ├── ordering: +34
- └── group-by (hash)
-      ├── columns: cntrycode:34 count_rows:35!null sum:36!null
-      ├── grouping columns: cntrycode:34
-      ├── immutable
-      ├── key: (34)
-      ├── fd: (34)-->(35,36)
-      ├── project
-      │    ├── columns: cntrycode:34 c_acctbal:6!null
-      │    ├── immutable
-      │    ├── anti-join (lookup orders@o_ck)
-      │    │    ├── columns: c_custkey:1!null c_phone:5!null c_acctbal:6!null
-      │    │    ├── key columns: [1] = [23]
-      │    │    ├── immutable
-      │    │    ├── key: (1)
-      │    │    ├── fd: (1)-->(5,6)
-      │    │    ├── select
-      │    │    │    ├── columns: c_custkey:1!null c_phone:5!null c_acctbal:6!null
-      │    │    │    ├── immutable
-      │    │    │    ├── key: (1)
-      │    │    │    ├── fd: (1)-->(5,6)
-      │    │    │    ├── scan customer
-      │    │    │    │    ├── columns: c_custkey:1!null c_phone:5!null c_acctbal:6!null
-      │    │    │    │    ├── key: (1)
-      │    │    │    │    └── fd: (1)-->(5,6)
-      │    │    │    └── filters
-      │    │    │         ├── substring(c_phone:5, 1, 2) IN ('13', '17', '18', '23', '29', '30', '31') [outer=(5), immutable]
-      │    │    │         └── gt [outer=(6), immutable, subquery, constraints=(/6: (/NULL - ])]
-      │    │    │              ├── c_acctbal:6
-      │    │    │              └── subquery
-      │    │    │                   └── scalar-group-by
-      │    │    │                        ├── columns: avg:21
-      │    │    │                        ├── cardinality: [1 - 1]
-      │    │    │                        ├── immutable
-      │    │    │                        ├── key: ()
-      │    │    │                        ├── fd: ()-->(21)
-      │    │    │                        ├── select
-      │    │    │                        │    ├── columns: c_phone:15!null c_acctbal:16!null
-      │    │    │                        │    ├── immutable
-      │    │    │                        │    ├── scan customer
-      │    │    │                        │    │    └── columns: c_phone:15!null c_acctbal:16!null
-      │    │    │                        │    └── filters
-      │    │    │                        │         ├── c_acctbal:16 > 0.0 [outer=(16), constraints=(/16: [/5e-324 - ]; tight)]
-      │    │    │                        │         └── substring(c_phone:15, 1, 2) IN ('13', '17', '18', '23', '29', '30', '31') [outer=(15), immutable]
-      │    │    │                        └── aggregations
-      │    │    │                             └── avg [as=avg:21, outer=(16)]
-      │    │    │                                  └── c_acctbal:16
-      │    │    └── filters (true)
-      │    └── projections
-      │         └── substring(c_phone:5, 1, 2) [as=cntrycode:34, outer=(5), immutable]
-      └── aggregations
-           ├── count-rows [as=count_rows:35]
-           └── sum [as=sum:36, outer=(6)]
-                └── c_acctbal:6
+ ├── sort
+ │    ├── columns: c_acctbal:6!null cntrycode:34
+ │    ├── immutable
+ │    ├── ordering: +34
+ │    └── project
+ │         ├── columns: cntrycode:34 c_acctbal:6!null
+ │         ├── immutable
+ │         ├── anti-join (lookup orders@o_ck)
+ │         │    ├── columns: c_custkey:1!null c_phone:5!null c_acctbal:6!null
+ │         │    ├── key columns: [1] = [23]
+ │         │    ├── immutable
+ │         │    ├── key: (1)
+ │         │    ├── fd: (1)-->(5,6)
+ │         │    ├── select
+ │         │    │    ├── columns: c_custkey:1!null c_phone:5!null c_acctbal:6!null
+ │         │    │    ├── immutable
+ │         │    │    ├── key: (1)
+ │         │    │    ├── fd: (1)-->(5,6)
+ │         │    │    ├── scan customer
+ │         │    │    │    ├── columns: c_custkey:1!null c_phone:5!null c_acctbal:6!null
+ │         │    │    │    ├── key: (1)
+ │         │    │    │    └── fd: (1)-->(5,6)
+ │         │    │    └── filters
+ │         │    │         ├── substring(c_phone:5, 1, 2) IN ('13', '17', '18', '23', '29', '30', '31') [outer=(5), immutable]
+ │         │    │         └── gt [outer=(6), immutable, subquery, constraints=(/6: (/NULL - ])]
+ │         │    │              ├── c_acctbal:6
+ │         │    │              └── subquery
+ │         │    │                   └── scalar-group-by
+ │         │    │                        ├── columns: avg:21
+ │         │    │                        ├── cardinality: [1 - 1]
+ │         │    │                        ├── immutable
+ │         │    │                        ├── key: ()
+ │         │    │                        ├── fd: ()-->(21)
+ │         │    │                        ├── select
+ │         │    │                        │    ├── columns: c_phone:15!null c_acctbal:16!null
+ │         │    │                        │    ├── immutable
+ │         │    │                        │    ├── scan customer
+ │         │    │                        │    │    └── columns: c_phone:15!null c_acctbal:16!null
+ │         │    │                        │    └── filters
+ │         │    │                        │         ├── c_acctbal:16 > 0.0 [outer=(16), constraints=(/16: [/5e-324 - ]; tight)]
+ │         │    │                        │         └── substring(c_phone:15, 1, 2) IN ('13', '17', '18', '23', '29', '30', '31') [outer=(15), immutable]
+ │         │    │                        └── aggregations
+ │         │    │                             └── avg [as=avg:21, outer=(16)]
+ │         │    │                                  └── c_acctbal:16
+ │         │    └── filters (true)
+ │         └── projections
+ │              └── substring(c_phone:5, 1, 2) [as=cntrycode:34, outer=(5), immutable]
+ └── aggregations
+      ├── count-rows [as=count_rows:35]
+      └── sum [as=sum:36, outer=(6)]
+           └── c_acctbal:6

@@ -359,7 +359,7 @@ SELECT * FROM u WHERE NOT EXISTS (SELECT * FROM t WHERE u.x=t.x AND u.y=t.y);
 anti-join (lookup t@xy_idx)
  ├── columns: x:1(int) y:2(int)
  ├── key columns: [1 2] = [6 7]
- ├── stats: [rows=1e-10]
+ ├── stats: [rows=1]
  ├── scan u
  │    ├── columns: u.x:1(int) u.y:2(int)
  │    └── stats: [rows=10, distinct(1)=2, null(1)=0, distinct(2)=2, null(2)=0]

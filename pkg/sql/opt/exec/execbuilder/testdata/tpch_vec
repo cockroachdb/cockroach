@@ -20998,8 +20998,8 @@ EXPLAIN (VEC) SELECT cntrycode, count(*) AS numcust, sum(c_acctbal) AS totacctba
 ----
 │
 └ Node 1
-  └ *colexec.sortOp
-    └ *colexec.hashAggregator
+  └ *colexec.orderedAggregator
+    └ *colexec.sortOp
       └ *colexecbuiltins.substringInt64Int64Operator
         └ *colexecbase.constInt64Op
           └ *colexecbase.constInt64Op

@@ -358,54 +358,54 @@ vectorized: true
 │
 └── • hash join (right anti)
     │ columns: (column1, column2, column3, column4, column5)
-    │ estimated row count: 0 (missing stats)
-    │ equality: (x, y) = (column4, column5)
+    │ estimated row count: 1 (missing stats)
+    │ equality: (w) = (column3)
     │ right cols are key
     │
     ├── • scan
-    │     columns: (x, y)
+    │     columns: (w)
     │     estimated row count: 1,000 (missing stats)
     │     table: uniq@uniq_pkey
     │     spans: FULL SCAN
     │
-    └── • cross join (right anti)
+    └── • lookup join (anti)
         │ columns: (column1, column2, column3, column4, column5)
         │ estimated row count: 0 (missing stats)
+        │ table: uniq@uniq_v_key
+        │ equality: (column2) = (v)
+        │ equality cols are key
+        │ parallel
         │
-        ├── • scan
-        │     columns: (k)
-        │     estimated row count: 1 (missing stats)
-        │     table: uniq@uniq_pkey
-        │     spans: /1/0
-        │
-        └── • lookup join (anti)
+        └── • hash join (right anti)
             │ columns: (column1, column2, column3, column4, column5)
             │ estimated row count: 0 (missing stats)
-            │ table: uniq@uniq_v_key
-            │ equality: (column2) = (v)
-            │ equality cols are key
-            │ parallel
+            │ equality: (x, y) = (column4, column5)
+            │ right cols are key
             │
-            └── • hash join (right anti)
+            ├── • scan
+            │     columns: (x, y)
+            │     estimated row count: 1,000 (missing stats)
+            │     table: uniq@uniq_pkey
+            │     spans: FULL SCAN
+            │
+            └── • cross join (anti)
                 │ columns: (column1, column2, column3, column4, column5)
                 │ estimated row count: 0 (missing stats)
-                │ equality: (w) = (column3)
-                │ right cols are key
                 │
-                ├── • scan
-                │     columns: (w)
-                │     estimated row count: 1,000 (missing stats)
-                │     table: uniq@uniq_pkey
-                │     spans: FULL SCAN
+                ├── • values
+                │     columns: (column1, column2, column3, column4, column5)
+                │     size: 5 columns, 1 row
+                │     row 0, expr 0: 1
+                │     row 0, expr 1: 2
+                │     row 0, expr 2: 3
+                │     row 0, expr 3: 4
+                │     row 0, expr 4: 5
                 │
-                └── • values
-                      columns: (column1, column2, column3, column4, column5)
-                      size: 5 columns, 1 row
-                      row 0, expr 0: 1
-                      row 0, expr 1: 2
-                      row 0, expr 2: 3
-                      row 0, expr 3: 4
-                      row 0, expr 4: 5
+                └── • scan
+                      columns: (k)
+                      estimated row count: 1 (missing stats)
+                      table: uniq@uniq_pkey
+                      spans: /1/0
 
 # Insert with non-constant input.
 query T
@@ -1020,7 +1020,7 @@ vectorized: true
     │
     └── • lookup join (anti)
         │ columns: (column1, column2, column3, column4)
-        │ estimated row count: 0 (missing stats)
+        │ estimated row count: 1 (missing stats)
         │ table: uniq_enum@uniq_enum_pkey
         │ equality cols are key
         │ lookup condition: (r IN ('us-east', 'us-west', 'eu-west')) AND (column3 = i)
@@ -1028,7 +1028,7 @@ vectorized: true
         │
         └── • lookup join (anti)
             │ columns: (column1, column2, column3, column4)
-            │ estimated row count: 0 (missing stats)
+            │ estimated row count: 1 (missing stats)
             │ table: uniq_enum@uniq_enum_r_s_j_key
             │ equality cols are key
             │ lookup condition: ((r IN ('us-east', 'us-west', 'eu-west')) AND (column2 = s)) AND (column4 = j)
@@ -1170,17 +1170,18 @@ vectorized: true
 │
 └── • hash join (right anti)
     │ columns: (column1, column2, column3)
-    │ estimated row count: 0 (missing stats)
-    │ equality: (b) = (column3)
+    │ estimated row count: 1 (missing stats)
+    │ equality: (a) = (column2)
     │ right cols are key
+    │ pred: column3 > 0
     │
     ├── • filter
-    │   │ columns: (b)
+    │   │ columns: (a, b)
     │   │ estimated row count: 333 (missing stats)
     │   │ filter: b > 0
     │   │
     │   └── • scan
-    │         columns: (b)
+    │         columns: (a, b)
     │         estimated row count: 1,000 (missing stats)
     │         table: uniq_partial@uniq_partial_pkey
     │         spans: FULL SCAN
@@ -1188,17 +1189,16 @@ vectorized: true
     └── • hash join (right anti)
         │ columns: (column1, column2, column3)
         │ estimated row count: 0 (missing stats)
-        │ equality: (a) = (column2)
+        │ equality: (b) = (column3)
         │ right cols are key
-        │ pred: column3 > 0
         │
         ├── • filter
-        │   │ columns: (a, b)
+        │   │ columns: (b)
         │   │ estimated row count: 333 (missing stats)
         │   │ filter: b > 0
         │   │
         │   └── • scan
-        │         columns: (a, b)
+        │         columns: (b)
         │         estimated row count: 1,000 (missing stats)
         │         table: uniq_partial@uniq_partial_pkey
         │         spans: FULL SCAN
@@ -1435,7 +1435,7 @@ vectorized: true
     │
     └── • distinct
         │ columns: (arbiter_unique_b_distinct, column1, column2, column3, column4)
-        │ estimated row count: 0
+        │ estimated row count: 1
         │ distinct on: arbiter_unique_b_distinct, column3
         │ nulls are distinct
         │
@@ -1449,14 +1449,14 @@ vectorized: true
             │
             └── • lookup join (anti)
                 │ columns: (column1, column2, column3, column4)
-                │ estimated row count: 0
+                │ estimated row count: 1
                 │ table: uniq_partial_enum@uniq_partial_enum_r_b_idx (partial index)
                 │ lookup condition: (r IN ('us-east', 'us-west', 'eu-west')) AND (column3 = b)
                 │ pred: column4 IN ('bar', 'baz', 'foo')
                 │
                 └── • lookup join (anti)
                     │ columns: (column1, column2, column3, column4)
-                    │ estimated row count: 0
+                    │ estimated row count: 1
                     │ table: uniq_partial_enum@uniq_partial_enum_pkey
                     │ equality: (column1, column2) = (r, a)
                     │ equality cols are key
