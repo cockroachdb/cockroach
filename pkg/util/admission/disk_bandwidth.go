@@ -202,7 +202,7 @@ func (d *diskBandwidthLimiter) SafeFormat(p redact.SafePrinter, _ rune) {
 	}
 	p.Printf("diskBandwidthLimiter%s (writeUtil %.2f, tokensUsed (elastic %s, "+
 		"snapshot %s, regular %s) tokens (write %s (prev %s), read %s (prev %s)), writeBW %s/s, "+
-		"readBW %s/s, provisioned %s/s, err(cum,abs,acc) write: %s,%s,%s read: %s,%s,%s)",
+		"readBW %s/s, provisioned %s/s, err(cum,abs) write: %s,%s read: %s,%s)",
 		redact.SafeString(unlimitedPrefix),
 		d.state.prevWriteTokenUtil,
 		ib(d.state.prevUsedTokens[admissionpb.ElasticStoreWorkType].writeByteTokens),
@@ -217,10 +217,8 @@ func (d *diskBandwidthLimiter) SafeFormat(p redact.SafePrinter, _ rune) {
 		ib(d.state.prevDiskLoad.intProvisionedDiskBytes/adjustmentInterval),
 		ib(d.state.prevDiskErrorStats.cumError.writeByteTokens),
 		ib(d.state.prevDiskErrorStats.absError.writeByteTokens),
-		ib(d.state.prevDiskErrorStats.accountedForError.writeByteTokens),
 		ib(d.state.prevDiskErrorStats.cumError.readByteTokens),
 		ib(d.state.prevDiskErrorStats.absError.readByteTokens),
-		ib(d.state.prevDiskErrorStats.accountedForError.readByteTokens),
 	)
 }
 

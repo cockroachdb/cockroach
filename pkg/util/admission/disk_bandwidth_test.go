@@ -67,7 +67,6 @@ func TestDiskBandwidthLimiter(t *testing.T) {
 				var diskErrStats diskErrorStats
 				diskErrStats.cumError.writeByteTokens = cumErr
 				diskErrStats.absError.writeByteTokens = absErr
-				diskErrStats.accountedForError.writeByteTokens = accErr
 				dbl.computeElasticTokens(diskLoad, usedTokens, diskErrStats)
 				return dblToString()
 

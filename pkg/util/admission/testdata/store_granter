@@ -456,12 +456,12 @@ GrantCoordinator:
 adjust-disk-error actual-write-bytes=150 actual-read-bytes=150
 ----
 GrantCoordinator:
- io-avail: 153722867280912930(153722867280912930), disk-write-tokens-avail: 153722867280912630, disk-read-tokens-deducted: 0 disk-tokens-error: cum-error(write=150, read=150), abs-error(write=150, read=150), accounted-for-error(write=150, read=150)
+ io-avail: 153722867280912930(153722867280912930), disk-write-tokens-avail: 153722867280912630, disk-read-tokens-deducted: 0 disk-tokens-error: cum-error(write=150, read=150), abs-error(write=150, read=150)
 
 set-tokens io-tokens=750 disk-write-tokens=1050 disk-read-tokens=300 tick-interval=250
 ----
 GrantCoordinator:
- io-avail: 750(750), disk-write-tokens-avail: 1050, disk-read-tokens-deducted: 300 disk-tokens-error: cum-error(write=150, read=150), abs-error(write=150, read=150), accounted-for-error(write=150, read=150)
+ io-avail: 750(750), disk-write-tokens-avail: 1050, disk-read-tokens-deducted: 300 disk-tokens-error: cum-error(write=150, read=150), abs-error(write=150, read=150)
 
 # Tokens already deducted for writes is 0. Any writes that occur will be
 # considered error. We assumed 300B of read tokens, so reads in excess of that
@@ -473,13 +473,13 @@ GrantCoordinator:
 adjust-disk-error actual-write-bytes=300 actual-read-bytes=750
 ----
 GrantCoordinator:
- io-avail: 750(750), disk-write-tokens-avail: 600, disk-read-tokens-deducted: 0 disk-tokens-error: cum-error(write=300, read=450), abs-error(write=300, read=450), accounted-for-error(write=300, read=450)
+ io-avail: 750(750), disk-write-tokens-avail: 600, disk-read-tokens-deducted: 0 disk-tokens-error: cum-error(write=300, read=450), abs-error(write=300, read=450)
 
 try-get work=regular v=150
 ----
 kv-regular: tryGet(150) returned true
 GrantCoordinator:
- io-avail: 600(600), disk-write-tokens-avail: 450, disk-read-tokens-deducted: 0 disk-tokens-error: cum-error(write=300, read=450), abs-error(write=300, read=450), accounted-for-error(write=300, read=450)
+ io-avail: 600(600), disk-write-tokens-avail: 450, disk-read-tokens-deducted: 0 disk-tokens-error: cum-error(write=300, read=450), abs-error(write=300, read=450)
 
 # +300B writes and +75B reads since last error accounting. Since we already
 # deducted 150B of write tokens during admission, the observed write error
@@ -489,12 +489,12 @@ GrantCoordinator:
 adjust-disk-error actual-write-bytes=600 actual-read-bytes=825
 ----
 GrantCoordinator:
- io-avail: 600(600), disk-write-tokens-avail: 225, disk-read-tokens-deducted: 0 disk-tokens-error: cum-error(write=450, read=525), abs-error(write=450, read=525), accounted-for-error(write=450, read=525)
+ io-avail: 600(600), disk-write-tokens-avail: 225, disk-read-tokens-deducted: 0 disk-tokens-error: cum-error(write=450, read=525), abs-error(write=450, read=525)
 
 set-tokens io-tokens=750 disk-write-tokens=1050 disk-read-tokens=300 tick-interval=250
 ----
 GrantCoordinator:
- io-avail: 750(750), disk-write-tokens-avail: 1050, disk-read-tokens-deducted: 300 disk-tokens-error: cum-error(write=450, read=525), abs-error(write=450, read=525), accounted-for-error(write=450, read=525)
+ io-avail: 750(750), disk-write-tokens-avail: 1050, disk-read-tokens-deducted: 300 disk-tokens-error: cum-error(write=450, read=525), abs-error(write=450, read=525)
 
 # With this deduction we have seen 300B of write tokens. Additionally, the
 # preceding set-tokens call has resulted in 300B of read tokens.
@@ -502,7 +502,7 @@ try-get work=regular v=300
 ----
 kv-regular: tryGet(300) returned true
 GrantCoordinator:
- io-avail: 450(450), disk-write-tokens-avail: 750, disk-read-tokens-deducted: 300 disk-tokens-error: cum-error(write=450, read=525), abs-error(write=450, read=525), accounted-for-error(write=450, read=525)
+ io-avail: 450(450), disk-write-tokens-avail: 750, disk-read-tokens-deducted: 300 disk-tokens-error: cum-error(write=450, read=525), abs-error(write=450, read=525)
 
 # The observed delta in actual disk writes is 75 (675-600), and actual disk
 # reads is 150 (975-825). But the token deduction is 300B for writes and 300B
@@ -513,4 +513,4 @@ GrantCoordinator:
 adjust-disk-error actual-write-bytes=675 actual-read-bytes=975
 ----
 GrantCoordinator:
- io-avail: 450(450), disk-write-tokens-avail: 1125, disk-read-tokens-deducted: 0 disk-tokens-error: cum-error(write=225, read=375), abs-error(write=675, read=675), accounted-for-error(write=225, read=375)
+ io-avail: 450(450), disk-write-tokens-avail: 1125, disk-read-tokens-deducted: 0 disk-tokens-error: cum-error(write=225, read=375), abs-error(write=675, read=675)
