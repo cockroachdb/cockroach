@@ -374,6 +374,10 @@ type zipContext struct {
 	// validateZipFile indicates whether the generated zip file should be validated
 	// post debug zip file generation.
 	validateZipFile bool
+
+	// logFormat specifies the format for storing log files in the debug zip.
+	// Valid values are "text" (default) and "parquet".
+	logFormat string
 }
 
 // setZipContextDefaults set the default values in zipCtx.  This
@@ -397,6 +401,7 @@ func setZipContextDefaults() {
 	zipCtx.cpuProfDuration = 5 * time.Second
 	zipCtx.concurrency = 15
 	zipCtx.validateZipFile = true
+	zipCtx.logFormat = "text"
 
 	// File selection covers the last 48 hours by default.
 	// We add 24 hours to now for the end timestamp to ensure
