@@ -1256,8 +1256,10 @@ func (n *Node) UpdateIOThreshold(id roachpb.StoreID, threshold *admissionpb.IOTh
 // diskStatsMap encapsulates all the logic for populating DiskStats for
 // admission.StoreMetrics.
 type diskStatsMap struct {
-	provisionedRate map[roachpb.StoreID]storageconfig.ProvisionedRate
-	diskMonitors    map[roachpb.StoreID]kvserver.DiskStatsMonitor
+	mm                monitorManagerInterface
+	provisionedRate   map[roachpb.StoreID]storageconfig.ProvisionedRate
+	diskMonitors      map[roachpb.StoreID]kvserver.DiskStatsMonitor
+	deviceIDToStoreID map[disk.DeviceID]roachpb.StoreID
 }
 
 func (dsm *diskStatsMap) tryPopulateAdmissionDiskStats(
@@ -1273,18 +1275,52 @@ func (dsm *diskStatsMap) tryPopulateAdmissionDiskStats(
 			return map[roachpb.StoreID]admission.DiskStats{}, err
 		}
 
-		provisionedBandwidth := clusterProvisionedBandwidth
-		spec, ok := dsm.provisionedRate[id]
-		if ok && spec.ProvisionedBandwidth > 0 {
-			provisionedBandwidth = spec.ProvisionedBandwidth
-		}
 		stats[id] = admission.DiskStats{
-			ProvisionedBandwidth: provisionedBandwidth,
 			BytesRead:            uint64(cumulativeStats.BytesRead()),
 			BytesWritten:         uint64(cumulativeStats.BytesWritten()),
+			ProvisionedBandwidth: dsm.provisionedBandwidth(clusterProvisionedBandwidth, id),
 		}
 	}
 	return stats, nil
+}
+
+// collectInstantaneous collects the instantaneous disk stats and populates the
+// result into buf.Stats.
+func (dsm *diskStatsMap) collectInstantaneous(
+	buf *admission.DiskMetricsBuf, clusterProvisionedBandwidth int64,
+) (err error) {
+	buf.Raw, buf.Scratch, err = dsm.mm.CollectInstantaneous(buf.Raw, buf.Scratch)
+	if err != nil {
+		return err
+	}
+
+	buf.Stats = buf.Stats[:0]
+	for _, stat := range buf.Raw {
+		storeID, ok := dsm.deviceIDToStoreID[stat.DeviceID]
+		if !ok {
+			panic(errors.AssertionFailedf("unknown device ID in disk stats"))
+		}
+		buf.Stats = append(buf.Stats, admission.StoreIDAndStats{
+			StoreID: storeID,
+			Stats: admission.DiskStats{
+				BytesRead:            uint64(stat.BytesRead()),
+				BytesWritten:         uint64(stat.BytesWritten()),
+				ProvisionedBandwidth: dsm.provisionedBandwidth(clusterProvisionedBandwidth, storeID),
+			},
+		})
+	}
+	return nil
+}
+
+// provisionedBandwidthForStore returns the provisioned bandwidth for a store.
+func (dsm *diskStatsMap) provisionedBandwidth(
+	clusterProvisionedBandwidth int64, storeID roachpb.StoreID,
+) int64 {
+	spec, ok := dsm.provisionedRate[storeID]
+	if ok && spec.ProvisionedBandwidth > 0 {
+		return spec.ProvisionedBandwidth
+	}
+	return clusterProvisionedBandwidth
 }
 
 func (dsm *diskStatsMap) empty() bool {
@@ -1294,14 +1330,17 @@ func (dsm *diskStatsMap) empty() bool {
 // monitorManagerInterface abstracts disk.MonitorManager for testing purposes.
 type monitorManagerInterface interface {
 	Monitor(string) (kvserver.DiskStatsMonitor, error)
+	CollectInstantaneous(statsBuf []disk.Stats, byteBuf []byte) ([]disk.Stats, []byte, error)
 }
 
 func (dsm *diskStatsMap) initDiskStatsMap(
 	specs []base.StoreSpec, engines []kvstorage.Engines, diskManager monitorManagerInterface,
 ) error {
 	*dsm = diskStatsMap{
-		provisionedRate: make(map[roachpb.StoreID]storageconfig.ProvisionedRate),
-		diskMonitors:    make(map[roachpb.StoreID]kvserver.DiskStatsMonitor),
+		mm:                diskManager,
+		provisionedRate:   make(map[roachpb.StoreID]storageconfig.ProvisionedRate),
+		diskMonitors:      make(map[roachpb.StoreID]kvserver.DiskStatsMonitor),
+		deviceIDToStoreID: make(map[disk.DeviceID]roachpb.StoreID),
 	}
 	for i := range engines {
 		if specs[i].Path == "" || specs[i].InMemory {
@@ -1317,6 +1356,7 @@ func (dsm *diskStatsMap) initDiskStatsMap(
 		}
 		dsm.provisionedRate[id.StoreID] = specs[i].ProvisionedRate
 		dsm.diskMonitors[id.StoreID] = monitor
+		dsm.deviceIDToStoreID[monitor.DeviceID()] = id.StoreID
 	}
 	return nil
 }
@@ -1329,9 +1369,18 @@ func (dsm *diskStatsMap) closeDiskMonitors() {
 
 type diskMonitorManager disk.MonitorManager
 
+var _ monitorManagerInterface = &diskMonitorManager{}
+
 // Monitor wraps disk.MonitorManager to satisfy monitorManagerInterface.
 func (mm *diskMonitorManager) Monitor(path string) (kvserver.DiskStatsMonitor, error) {
 	return (*disk.MonitorManager)(mm).Monitor(path)
+}
+
+// CollectInstantaneous wraps disk.MonitorManager to satisfy monitorManagerInterface.
+func (mm *diskMonitorManager) CollectInstantaneous(
+	statsBuf []disk.Stats, byteBuf []byte,
+) ([]disk.Stats, []byte, error) {
+	return (*disk.MonitorManager)(mm).CollectInstantaneous(statsBuf, byteBuf)
 }
 
 func (n *Node) registerEnginesForDiskStatsMap(
@@ -1355,6 +1404,8 @@ type nodePebbleMetricsProvider struct {
 	n            *Node
 	diskStatsMap diskStatsMap
 }
+
+var _ admission.PebbleMetricsProvider = &nodePebbleMetricsProvider{}
 
 // GetPebbleMetrics implements admission.PebbleMetricsProvider.
 func (pmp *nodePebbleMetricsProvider) GetPebbleMetrics() []admission.StoreMetrics {
@@ -1387,6 +1438,14 @@ func (pmp *nodePebbleMetricsProvider) GetPebbleMetrics() []admission.StoreMetric
 		return nil
 	})
 	return metrics
+}
+
+// GetDiskStats collects the instantaneous disk stats and populates the
+// result into buf.Stats. It implements admission.PebbleMetricsProvider.
+func (pmp *nodePebbleMetricsProvider) GetDiskStats(buf *admission.DiskMetricsBuf) error {
+	clusterProvisionedBandwidth := kvadmission.ProvisionedBandwidth.Get(
+		&pmp.n.storeCfg.Settings.SV)
+	return pmp.diskStatsMap.collectInstantaneous(buf, clusterProvisionedBandwidth)
 }
 
 // Close implements admission.PebbleMetricsProvider.

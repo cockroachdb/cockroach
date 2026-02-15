@@ -434,10 +434,10 @@ func (t tickDuration) ticksInAdjustmentInterval() int64 {
 const unloadedDuration = tickDuration(250 * time.Millisecond)
 const loadedDuration = tickDuration(1 * time.Millisecond)
 
-// TODO(aaditya): Consider lowering this threshold. It was picked arbitrarily
-// and seems to work well enough. Would it be better to do error accounting at
-// an even higher frequency?
-const errorAdjustmentInterval = 1
+// errorAdjustmentInterval is the interval (in seconds) between error
+// corrections. Set to 0.001 (1ms) to enable error correction on every tick when
+// loaded.
+const errorAdjustmentInterval = 0.001
 const errorTicksInAdjustmentInterval = int64(adjustmentInterval / errorAdjustmentInterval)
 
 // tokenAllocationTicker wraps a time.Ticker, and also computes the remaining

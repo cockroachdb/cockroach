@@ -604,25 +604,23 @@ func TestTokenAllocationTickerErrorAdjustmentThreshold(t *testing.T) {
 	defer ticker.stop()
 	ticker.adjustmentStart(false /* loaded */)
 
-	// Knowing we are using unloaded duration. The first iteration will have 60 ticks.
-	require.False(t, ticker.shouldAdjustForError(60 /* remainingTicks */, false /* loaded */))
-	// Verify that we correctly reset the lastErrorAdjustmentTick value.
-	require.Equal(t, uint64(60), ticker.lastErrorAdjustmentTick)
-
-	// We should not do error adjustment unless 1s has passed. i.e. 4 ticks.
-	require.False(t, ticker.shouldAdjustForError(58 /* remainingTicks */, false /* loaded */))
+	// With errorAdjustmentInterval = 0.001 (1ms), error correction happens on
+	// every tick except the first of each period (where there's no prior
+	// measurement to compute a delta from).
+	//
+	// Unloaded: errorTickThreshold = 60 / 15000 = 0, so all ticks after first
+	// return true (diff >= 0 is always true once lastErrorAdjustmentTick is set).
+	require.True(t, ticker.shouldAdjustForError(60 /* remainingTicks */, false /* loaded */))
+	require.True(t, ticker.shouldAdjustForError(58 /* remainingTicks */, false /* loaded */))
 	require.True(t, ticker.shouldAdjustForError(56 /* remainingTicks */, false /* loaded */))
-	require.Equal(t, uint64(56), ticker.lastErrorAdjustmentTick)
-
-	// We should adjust for error on the last tick.
 	require.True(t, ticker.shouldAdjustForError(0 /* remainingTicks */, false /* loaded */))
 
-	// Re-run the above with loaded system. Now the error adjustment threshold is every 1000 ticks.
+	// Loaded: errorTickThreshold = 15000 / 15000 = 1. First tick of loaded mode
+	// returns false because lastErrorAdjustmentTick gets reset and diff is 0.
+	// After that, every tick returns true (diff >= 1).
 	require.False(t, ticker.shouldAdjustForError(15000 /* remainingTicks */, true /* loaded */))
-	require.Equal(t, uint64(15000), ticker.lastErrorAdjustmentTick)
-	require.False(t, ticker.shouldAdjustForError(14001 /* remainingTicks */, true /* loaded */))
-	require.True(t, ticker.shouldAdjustForError(14000 /* remainingTicks */, true /* loaded */))
-	require.Equal(t, uint64(14000), ticker.lastErrorAdjustmentTick)
+	require.True(t, ticker.shouldAdjustForError(14999 /* remainingTicks */, true /* loaded */))
+	require.True(t, ticker.shouldAdjustForError(14998 /* remainingTicks */, true /* loaded */))
 	require.True(t, ticker.shouldAdjustForError(0 /* remainingTicks */, true /* loaded */))
 }
 

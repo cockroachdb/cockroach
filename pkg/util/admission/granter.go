@@ -6,10 +6,13 @@
 package admission
 
 import (
+	"context"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
+	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -297,11 +300,14 @@ type kvStoreTokenGranter struct {
 		// The capacity of the token bucket for disk write bytes.
 		diskWriteByteTokensCapacity int64
 		diskTokensError             struct {
+			initialized bool
 			// prevObserved{Writes,Reads} is the observed disk metrics in the last
 			// call to adjustDiskTokenErrorLocked. These are used to compute the
 			// delta.
 			prevObservedWrites uint64
 			prevObservedReads  uint64
+			// staleStats tracks consecutive intervals where disk stats don't change.
+			staleStats staleStatTracker
 			// alreadyDeductedTokens is the number of tokens deducted that can be
 			// used to partially explain the observed writes and reads. The write
 			// tokens here correspond to deductions from
@@ -590,10 +596,74 @@ func (sg *kvStoreTokenGranter) subtractTokensForStoreWorkTypeLocked(
 	}
 }
 
-func (sg *kvStoreTokenGranter) adjustDiskTokenError(m StoreMetrics) {
+func (sg *kvStoreTokenGranter) adjustDiskTokenError(stats DiskStats) {
 	sg.mu.Lock()
 	defer sg.mu.Unlock()
-	sg.adjustDiskTokenErrorLocked(m.DiskStats.BytesRead, m.DiskStats.BytesWritten)
+	sg.adjustDiskTokenErrorLocked(stats.BytesRead, stats.BytesWritten)
+}
+
+// staleStatTracker tracks consecutive intervals where disk stats don't change,
+// and rate-limits logging at configurable thresholds. This helps assess whether
+// the 1ms error correction tick rate is effective given the kernel's disk stat
+// update frequency.
+type staleStatTracker struct {
+	// consecutiveCount is the current number of consecutive ticks where disk
+	// stats have not changed.
+	consecutiveCount int
+	// thresholds defines the consecutive count values at which we log warnings.
+	thresholds []int // e.g., [20, 50, 100]
+	// cumExceededCounts tracks how many times consecutiveCount exceeded each
+	// threshold before stats changed. Index i corresponds to thresholds[i].
+	cumExceededCounts []uint64
+	logLimiter        log.EveryN
+}
+
+func newStaleStatTracker() staleStatTracker {
+	return staleStatTracker{
+		thresholds:        []int{20, 50, 100},
+		cumExceededCounts: make([]uint64, 3),
+		logLimiter:        log.Every(time.Minute),
+	}
+}
+
+// recordNoChange increments consecutiveCount and logs if a threshold is exceeded.
+func (t *staleStatTracker) recordNoChange(ctx context.Context) {
+	t.consecutiveCount++
+	if t.shouldLog() {
+		log.Dev.Infof(ctx,
+			"disk token error adjustment: no stat change for %d consecutive intervals "+
+				"(cumulative runs exceeding 20/50/100: %d/%d/%d)",
+			t.consecutiveCount, t.cumExceededCounts[0], t.cumExceededCounts[1], t.cumExceededCounts[2])
+	}
+}
+
+// recordChange records the completed run in the appropriate threshold bucket
+// and resets consecutiveCount.
+func (t *staleStatTracker) recordChange() {
+	if t.consecutiveCount == 0 {
+		return
+	}
+
+	// Record in highest matching threshold bucket.
+	for i := len(t.thresholds) - 1; i >= 0; i-- {
+		if t.consecutiveCount >= t.thresholds[i] {
+			t.cumExceededCounts[i]++
+			break
+		}
+	}
+	t.consecutiveCount = 0
+}
+
+func (t *staleStatTracker) shouldLog() bool {
+	for _, thresh := range t.thresholds {
+		if t.consecutiveCount == thresh {
+			// Always log if we've just exceeded a threshold
+			return true
+		} else if t.consecutiveCount > thresh {
+			return t.logLimiter.ShouldLog()
+		}
+	}
+	return false
 }
 
 // adjustDiskTokenErrorLocked is used to account for extra reads and writes that
@@ -613,9 +683,26 @@ func (sg *kvStoreTokenGranter) adjustDiskTokenError(m StoreMetrics) {
 // For both reads and writes, we reset the alreadyDeductedTokens to 0 for the
 // next error tick interval, since we will use those to compare with the
 // observed disk reads and writes for the next error tick interval.
+// readBytes and writeBytes are the cumulative values retrieved from the disk stats.
 func (sg *kvStoreTokenGranter) adjustDiskTokenErrorLocked(readBytes uint64, writeBytes uint64) {
+	// On the first call, we only record the baseline cumulative values. We can't
+	// compute error yet because we need a valid previous observation to compute
+	// the delta (otherwise we'd treat total bytes since boot as "error").
+	if !sg.mu.diskTokensError.initialized {
+		sg.mu.diskTokensError.prevObservedWrites = writeBytes
+		sg.mu.diskTokensError.prevObservedReads = readBytes
+		sg.mu.diskTokensError.initialized = true
+		return
+	}
+
 	intWrites := int64(writeBytes - sg.mu.diskTokensError.prevObservedWrites)
 	intReads := int64(readBytes - sg.mu.diskTokensError.prevObservedReads)
+
+	if intWrites == 0 && intReads == 0 {
+		sg.mu.diskTokensError.staleStats.recordNoChange(context.Background())
+	} else {
+		sg.mu.diskTokensError.staleStats.recordChange()
+	}
 
 	errorAdjFunc := func(
 		intObserved int64, intTokensDeducted int64, cumError *int64, absError *int64, accountedError *int64) {
@@ -626,15 +713,14 @@ func (sg *kvStoreTokenGranter) adjustDiskTokenErrorLocked(readBytes uint64, writ
 			absIntError = -absIntError
 		}
 		*absError += absIntError
-		// Account for a fraction of the unaccounted error accumulated so far.
-		// This is a heuristic to reduce fluctuations in available tokens.
+
+		// Account for all of the unaccounted error accumulated so far.
 		cumUnaccountedError := *cumError - *accountedError
-		intErrorToAccount := cumUnaccountedError / adjustmentInterval
-		if intErrorToAccount != 0 {
-			*accountedError += intErrorToAccount
+		if cumUnaccountedError != 0 {
+			*accountedError += cumUnaccountedError
 			// NB: the following also updates alreadyDeductedTokens.writeByteTokens,
 			// which is harmless, since we reset it to 0 later in this function.
-			sg.subtractDiskWriteTokensLocked(intErrorToAccount, false)
+			sg.subtractDiskWriteTokensLocked(cumUnaccountedError, false)
 		}
 	}
 	// Compensate for error due to writes.
@@ -837,6 +923,10 @@ func (sg *kvStoreTokenGranter) addAvailableTokens(
 		// which case we want availableIOTokens[ElasticWorkClass] to not exceed it.
 		sg.mu.availableIOTokens[admissionpb.ElasticWorkClass] =
 			min(sg.mu.availableIOTokens[admissionpb.ElasticWorkClass], sg.mu.availableIOTokens[admissionpb.RegularWorkClass])
+		writeTokensPerSec := sg.mu.diskTokensAvailable.writeByteTokens / adjustmentInterval
+		if writeTokensPerSec < 0 {
+			log.Dev.Infof(context.Background(), "Potential overadmission=%s/s", humanizeutil.IBytes(-writeTokensPerSec))
+		}
 		// We also want to avoid very negative disk write tokens, so we reset them.
 		sg.mu.diskTokensAvailable.writeByteTokens = max(sg.mu.diskTokensAvailable.writeByteTokens, 0)
 	}
