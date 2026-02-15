@@ -3,7 +3,7 @@
 // Use of this software is governed by the CockroachDB Software License
 // included in the /LICENSE file.
 import { Dropdown } from "@cockroachlabs/cluster-ui";
-import React from "react";
+import React, { useEffect, useState } from "react";
 
 import { getCookieValue, setCookie } from "src/redux/cookies";
 import { isSystemTenant } from "src/redux/tenants";
@@ -15,47 +15,11 @@ import "./tenantDropdown.scss";
 
 const tenantIDKey = "tenant";
 
-interface TenantDropdownState {
-  currentTenant: string;
-  virtualClusters: string[];
-}
+function TenantDropdown(): React.ReactElement {
+  const [currentTenant] = useState(() => getCookieValue(tenantIDKey));
+  const [virtualClusters, setVirtualClusters] = useState<string[]>([]);
 
-export default class TenantDropdown extends React.Component<
-  {},
-  TenantDropdownState
-> {
-  createDropdownItems() {
-    if (this.state.virtualClusters) {
-      return (
-        this.state.virtualClusters.map(name => {
-          return { name: "Virtual cluster: " + name, value: name };
-        }) || []
-      );
-    } else {
-      return [];
-    }
-  }
-
-  onTenantChange(tenant: string) {
-    if (tenant !== this.state.currentTenant) {
-      setCookie(tenantIDKey, tenant);
-      location.reload();
-    }
-  }
-
-  constructor(props: any) {
-    super(props);
-
-    const currentTenant = getCookieValue(tenantIDKey);
-    this.state = {
-      currentTenant,
-      virtualClusters: [],
-    };
-
-    this.onTenantChange = this.onTenantChange.bind(this);
-  }
-
-  componentDidMount() {
+  useEffect(() => {
     fetch("virtual_clusters", {
       method: "GET",
       headers: {
@@ -70,46 +34,60 @@ export default class TenantDropdown extends React.Component<
         return resp.json();
       })
       .then(respJson => {
-        this.setState({
-          virtualClusters: respJson.virtual_clusters,
-        });
+        setVirtualClusters(respJson.virtual_clusters);
       });
-  }
+  }, []);
 
-  render() {
-    const dataFromServer = getDataFromServer();
-    const isInsecure = dataFromServer.Insecure;
-    // In insecure mode, show dropdown if there are >1 virtual clusters
-    if (isInsecure) {
-      if (this.state.virtualClusters?.length <= 1) {
-        return null;
-      }
-    } else {
-      // In secure mode, use the original logic
-      if (
-        !this.state.currentTenant ||
-        (this.state.virtualClusters?.length < 2 &&
-          isSystemTenant(this.state.currentTenant))
-      ) {
-        return null;
-      }
+  const createDropdownItems = () => {
+    if (virtualClusters) {
+      return (
+        virtualClusters.map(name => {
+          return { name: "Virtual cluster: " + name, value: name };
+        }) || []
+      );
     }
+    return [];
+  };
 
-    // In insecure mode, show "default" if no tenant is set
-    const displayTenant =
-      this.state.currentTenant || (isInsecure ? "default" : "");
+  const onTenantChange = (tenant: string) => {
+    if (tenant !== currentTenant) {
+      setCookie(tenantIDKey, tenant);
+      location.reload();
+    }
+  };
 
-    return (
-      <ErrorBoundary>
-        <Dropdown
-          items={this.createDropdownItems()}
-          onChange={(tenantID: string) => this.onTenantChange(tenantID)}
-        >
-          <div className="virtual-cluster-selected">
-            {"Virtual cluster: " + displayTenant}
-          </div>
-        </Dropdown>
-      </ErrorBoundary>
-    );
+  const dataFromServer = getDataFromServer();
+  const isInsecure = dataFromServer.Insecure;
+  // In insecure mode, show dropdown if there are >1 virtual clusters
+  if (isInsecure) {
+    if (virtualClusters?.length <= 1) {
+      return null;
+    }
+  } else {
+    // In secure mode, use the original logic
+    if (
+      !currentTenant ||
+      (virtualClusters?.length < 2 && isSystemTenant(currentTenant))
+    ) {
+      return null;
+    }
   }
+
+  // In insecure mode, show "default" if no tenant is set
+  const displayTenant = currentTenant || (isInsecure ? "default" : "");
+
+  return (
+    <ErrorBoundary>
+      <Dropdown
+        items={createDropdownItems()}
+        onChange={(tenantID: string) => onTenantChange(tenantID)}
+      >
+        <div className="virtual-cluster-selected">
+          {"Virtual cluster: " + displayTenant}
+        </div>
+      </Dropdown>
+    </ErrorBoundary>
+  );
 }
+
+export default TenantDropdown;

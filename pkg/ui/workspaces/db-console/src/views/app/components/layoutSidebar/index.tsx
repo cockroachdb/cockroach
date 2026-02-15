@@ -4,12 +4,12 @@
 // included in the /LICENSE file.
 
 import React from "react";
-import { connect } from "react-redux";
-import { Link, withRouter, RouteComponentProps } from "react-router-dom";
+import { useSelector } from "react-redux";
+import { Link, useLocation } from "react-router-dom";
 
 import { SideNavigation } from "src/components";
 import "./navigation-bar.scss";
-import { isSingleNodeCluster } from "src/redux/nodes";
+import { isSingleNodeCluster as isSingleNodeClusterSelector } from "src/redux/nodes";
 import { AdminUIState } from "src/redux/state";
 
 interface RouteParam {
@@ -19,18 +19,21 @@ interface RouteParam {
   // ignoreFor allows exclude specific paths from been recognized as active
   // even if path is matched with activeFor paths.
   ignoreFor?: string[];
-  isHidden?: () => boolean;
+  isHidden?: boolean;
 }
-
-type SidebarProps = RouteComponentProps & MapToStateProps;
 
 /**
  * Sidebar represents the static navigation sidebar available on all pages. It
  * displays a number of graphic icons representing available pages; the icon of
  * the page which is currently active will be highlighted.
  */
-export class Sidebar extends React.Component<SidebarProps> {
-  readonly routes: RouteParam[] = [
+function Sidebar(): React.ReactElement {
+  const singleNode = useSelector((state: AdminUIState) =>
+    isSingleNodeClusterSelector(state),
+  );
+  const location = useLocation();
+
+  const routes: RouteParam[] = [
     { path: "/overview", text: "Overview", activeFor: ["/node"] },
     { path: "/metrics", text: "Metrics", activeFor: [] },
     { path: "/databases", text: "Databases", activeFor: ["/database"] },
@@ -49,7 +52,7 @@ export class Sidebar extends React.Component<SidebarProps> {
       text: "Network",
       activeFor: ["/reports/network"],
       // Do not show Network for single node cluster.
-      isHidden: () => this.props.isSingleNodeCluster,
+      isHidden: singleNode,
     },
     {
       path: "/topranges",
@@ -66,41 +69,27 @@ export class Sidebar extends React.Component<SidebarProps> {
     },
   ];
 
-  isActiveNavigationItem = (path: string): boolean => {
-    const { pathname } = this.props.location;
-    const { activeFor, ignoreFor = [] } = this.routes.find(
+  const isActiveNavigationItem = (path: string): boolean => {
+    const { activeFor, ignoreFor = [] } = routes.find(
       route => route.path === path,
     );
     return [...activeFor, path].some(p => {
       const isMatchedToIgnoredPaths = ignoreFor.some(ignorePath =>
-        pathname.startsWith(ignorePath),
+        location.pathname.startsWith(ignorePath),
       );
-      const isMatchedToActiveFor = pathname.startsWith(p);
+      const isMatchedToActiveFor = location.pathname.startsWith(p);
       return isMatchedToActiveFor && !isMatchedToIgnoredPaths;
     });
   };
 
-  render() {
-    const navigationItems = this.routes
-      .filter(route => !route.isHidden || !route.isHidden())
-      .map(({ path, text }, idx) => (
-        <SideNavigation.Item
-          isActive={this.isActiveNavigationItem(path)}
-          key={idx}
-        >
-          <Link to={path}>{text}</Link>
-        </SideNavigation.Item>
-      ));
-    return <SideNavigation>{navigationItems}</SideNavigation>;
-  }
+  const navigationItems = routes
+    .filter(route => !route.isHidden)
+    .map(({ path, text }, idx) => (
+      <SideNavigation.Item isActive={isActiveNavigationItem(path)} key={idx}>
+        <Link to={path}>{text}</Link>
+      </SideNavigation.Item>
+    ));
+  return <SideNavigation>{navigationItems}</SideNavigation>;
 }
 
-interface MapToStateProps {
-  isSingleNodeCluster: boolean;
-}
-
-const mapStateToProps = (state: AdminUIState) => ({
-  isSingleNodeCluster: isSingleNodeCluster(state),
-});
-
-export default withRouter(connect(mapStateToProps, null)(Sidebar));
+export default Sidebar;
