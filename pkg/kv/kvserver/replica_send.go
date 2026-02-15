@@ -826,7 +826,7 @@ func (r *Replica) handleReadWithinUncertaintyIntervalError(
 	// latchSpans, because we have already released our latches and plan to
 	// re-acquire them if the retry is allowed.
 	var ok bool
-	ba, ok = canDoServersideRetry(ctx, pErr, ba, nil /* g */, hlc.Timestamp{} /* deadline */)
+	ba, ok = canDoServersideRetry(ctx, pErr, nil /* br */, ba, nil /* g */, hlc.Timestamp{} /* deadline */)
 	if !ok {
 		r.store.Metrics().ReadWithinUncertaintyIntervalErrorServerSideRetryFailure.Inc(1)
 		return nil, pErr
