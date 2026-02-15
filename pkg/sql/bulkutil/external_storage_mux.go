@@ -106,6 +106,20 @@ func (c *ExternalStorageMux) ListFiles(
 	return store.List(ctx, prefix, cloud.ListOptions{}, fn)
 }
 
+// ListDirectories lists immediate subdirectories under the provided URI prefix.
+// The callback receives directory names relative to the prefix (e.g., "subdir/"
+// for a subdirectory named "subdir"). This uses the "/" delimiter to group
+// results at the directory level rather than listing individual files.
+func (c *ExternalStorageMux) ListDirectories(
+	ctx context.Context, uriPrefix string, fn cloud.ListingFn,
+) error {
+	store, prefix, err := c.getStore(ctx, uriPrefix)
+	if err != nil {
+		return err
+	}
+	return store.List(ctx, prefix, cloud.ListOptions{Delimiter: "/"}, fn)
+}
+
 // splitURI splits a URI into its prefix (scheme + host) and path components.
 // For example, "nodelocal://1/import/123/file.sst" becomes:
 //   - prefix: url.URL{Scheme: "nodelocal", Host: "1"}
