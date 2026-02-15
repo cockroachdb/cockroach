@@ -171,22 +171,6 @@ func TestEndTxnUpdatesTransactionRecord(t *testing.T) {
 		record.LockSpans = intents
 		return &record
 	}()
-	pushedHeaderRefreshingRecord := func(inFlight []roachpb.SequencedWrite) *roachpb.TransactionRecord {
-		record := pushedHeaderTxn.AsRecord()
-		record.Status = roachpb.REFRESHING
-		// TODO(ssd): should we really be writing these out?
-		record.LockSpans = intents
-		record.InFlightWrites = inFlight
-		return &record
-	}
-	restartedAndPushedRefreshingRecord := func(inFlight []roachpb.SequencedWrite) *roachpb.TransactionRecord {
-		record := restartedAndPushedHeaderTxn.AsRecord()
-		record.Status = roachpb.REFRESHING
-		record.LockSpans = intents
-		record.InFlightWrites = inFlight
-		return &record
-	}
-
 	testCases := []struct {
 		name string
 		// Replica state.
@@ -393,7 +377,9 @@ func TestEndTxnUpdatesTransactionRecord(t *testing.T) {
 			expError: "TransactionRetryError: retry txn (RETRY_SERIALIZABLE)",
 		},
 		{
-			// Same as previous, but with refreshing state enabled.
+			// Same as previous, but with refreshing state enabled. With the
+			// timestamp cache approach, EndTxn returns RETRY_SERIALIZABLE
+			// directly instead of writing a REFRESHING record.
 			name: "record missing, can create, try stage at pushed timestamp, refreshing state enabled",
 			// Replica state.
 			existingTxn:  nil,
@@ -404,7 +390,7 @@ func TestEndTxnUpdatesTransactionRecord(t *testing.T) {
 			useRefreshingStatus: true,
 			inFlightWrites:      writes,
 			// Expected result.
-			expTxn: pushedHeaderRefreshingRecord(writes),
+			expError: "TransactionRetryError: retry txn (RETRY_SERIALIZABLE)",
 		},
 		{
 			// The transaction's commit timestamp was increased during its
@@ -432,7 +418,7 @@ func TestEndTxnUpdatesTransactionRecord(t *testing.T) {
 
 			commit: true,
 			// Expected result.
-			expTxn: pushedHeaderRefreshingRecord(nil),
+			expError: "TransactionRetryError: retry txn (RETRY_SERIALIZABLE)",
 		},
 		{
 			// The transaction's commit timestamp was increased during its
@@ -546,7 +532,7 @@ func TestEndTxnUpdatesTransactionRecord(t *testing.T) {
 
 			inFlightWrites: writes,
 			// Expected result.
-			expTxn: pushedHeaderRefreshingRecord(writes),
+			expError: "TransactionRetryError: retry txn (RETRY_SERIALIZABLE)",
 		},
 		{
 			// A PushTxn(TIMESTAMP) request bumped the minimum timestamp that the
@@ -573,7 +559,7 @@ func TestEndTxnUpdatesTransactionRecord(t *testing.T) {
 			useRefreshingStatus: true,
 			commit:              true,
 			// Expected result.
-			expTxn: pushedHeaderRefreshingRecord(nil),
+			expError: "TransactionRetryError: retry txn (RETRY_SERIALIZABLE)",
 		},
 		{
 			// A PushTxn(TIMESTAMP) request bumped the minimum timestamp that the
@@ -741,7 +727,7 @@ func TestEndTxnUpdatesTransactionRecord(t *testing.T) {
 			commit:              true,
 			inFlightWrites:      writes,
 			// Expected result.
-			expTxn: pushedHeaderRefreshingRecord(writes),
+			expError: "TransactionRetryError: retry txn (RETRY_SERIALIZABLE)",
 		},
 		{
 			// The transaction's commit timestamp was increased during its
@@ -765,7 +751,7 @@ func TestEndTxnUpdatesTransactionRecord(t *testing.T) {
 			useRefreshingStatus: true,
 			commit:              true,
 			// Expected result.
-			expTxn: pushedHeaderRefreshingRecord(nil),
+			expError: "TransactionRetryError: retry txn (RETRY_SERIALIZABLE)",
 		},
 		{
 			// The transaction's commit timestamp was increased during its
@@ -872,7 +858,7 @@ func TestEndTxnUpdatesTransactionRecord(t *testing.T) {
 			commit:              true,
 			inFlightWrites:      writes,
 			// Expected result.
-			expTxn: pushedHeaderRefreshingRecord(writes),
+			expError: "TransactionRetryError: retry txn (RETRY_SERIALIZABLE)",
 		},
 		{
 			// A PushTxn(TIMESTAMP) request bumped the minimum timestamp that the
@@ -898,7 +884,7 @@ func TestEndTxnUpdatesTransactionRecord(t *testing.T) {
 			useRefreshingStatus: true,
 			commit:              true,
 			// Expected result.
-			expTxn: pushedHeaderRefreshingRecord(nil),
+			expError: "TransactionRetryError: retry txn (RETRY_SERIALIZABLE)",
 		},
 		{
 			// A PushTxn(TIMESTAMP) request bumped the minimum timestamp that the
@@ -1085,7 +1071,7 @@ func TestEndTxnUpdatesTransactionRecord(t *testing.T) {
 			commit:              true,
 			inFlightWrites:      writes,
 			// Expected result.
-			expTxn: restartedAndPushedRefreshingRecord(writes),
+			expError: "TransactionRetryError: retry txn (RETRY_SERIALIZABLE)",
 		},
 		{
 			// The transaction's commit timestamp was increased during the
@@ -1109,7 +1095,7 @@ func TestEndTxnUpdatesTransactionRecord(t *testing.T) {
 			useRefreshingStatus: true,
 			commit:              true,
 			// Expected result.
-			expTxn: restartedAndPushedRefreshingRecord(nil),
+			expError: "TransactionRetryError: retry txn (RETRY_SERIALIZABLE)",
 		},
 		{
 			// The transaction's commit timestamp was increased during the
@@ -1237,7 +1223,7 @@ func TestEndTxnUpdatesTransactionRecord(t *testing.T) {
 			commit:              true,
 			inFlightWrites:      writes,
 			// Expected result.
-			expTxn: pushedHeaderRefreshingRecord(writes),
+			expError: "TransactionRetryError: retry txn (RETRY_SERIALIZABLE)",
 		},
 		{
 			// Non-standard case where a transaction record is committed during
@@ -1262,7 +1248,7 @@ func TestEndTxnUpdatesTransactionRecord(t *testing.T) {
 			useRefreshingStatus: true,
 			commit:              true,
 			// Expected result.
-			expTxn: pushedHeaderRefreshingRecord(nil),
+			expError: "TransactionRetryError: retry txn (RETRY_SERIALIZABLE)",
 		},
 		{
 			// Non-standard case where a transaction is rolled back. The record
@@ -1382,7 +1368,7 @@ func TestEndTxnUpdatesTransactionRecord(t *testing.T) {
 			commit:              true,
 			inFlightWrites:      writes,
 			// Expected result.
-			expTxn: restartedAndPushedRefreshingRecord(writes),
+			expError: "TransactionRetryError: retry txn (RETRY_SERIALIZABLE)",
 		},
 		{
 			// Non-standard case where a transaction record is committed during
@@ -1407,7 +1393,7 @@ func TestEndTxnUpdatesTransactionRecord(t *testing.T) {
 			commit:              true,
 			useRefreshingStatus: true,
 			// Expected result.
-			expTxn: restartedAndPushedRefreshingRecord(nil),
+			expError: "TransactionRetryError: retry txn (RETRY_SERIALIZABLE)",
 		},
 		{
 			name: "record staging, try prepare at higher epoch and pushed timestamp",
@@ -1892,6 +1878,22 @@ func TestEndTxnUpdatesTransactionRecord(t *testing.T) {
 				}
 				if c.validateError != nil {
 					c.validateError(t, err)
+				}
+				// When useRefreshingStatus is set, verify that no REFRESHING
+				// transaction record was written. The refreshing signal is
+				// conveyed via a timestamp cache marker (set by
+				// updateTimestampCache after evaluation), not a transaction
+				// record.
+				if c.useRefreshingStatus {
+					var resTxnRecord roachpb.TransactionRecord
+					if ok, readErr := storage.MVCCGetProto(
+						ctx, batch, txnKey, hlc.Timestamp{}, &resTxnRecord, storage.MVCCGetOptions{},
+					); readErr != nil {
+						t.Fatal(readErr)
+					} else if ok {
+						require.NotEqual(t, roachpb.REFRESHING, resTxnRecord.Status,
+							"transaction record should not be in REFRESHING state")
+					}
 				}
 			} else {
 				require.NoError(t, err)

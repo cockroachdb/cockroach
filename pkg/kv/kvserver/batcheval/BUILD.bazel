@@ -58,7 +58,6 @@ go_library(
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/build",
-        "//pkg/clusterversion",
         "//pkg/keys",
         "//pkg/kv/kvnemesis/kvnemesisutil",
         "//pkg/kv/kvpb",

@@ -46,8 +46,17 @@ func HeartbeatTxn(
 	h := cArgs.Header
 	reply := resp.(*kvpb.HeartbeatTxnResponse)
 
-	if err := VerifyTransaction(h, args, roachpb.PENDING, roachpb.PREPARED, roachpb.STAGING, roachpb.REFRESHING); err != nil {
+	if err := VerifyTransaction(h, args, roachpb.PENDING, roachpb.PREPARED, roachpb.STAGING); err != nil {
 		return result.Result{}, err
+	}
+
+	if args.UpdateTSCacheOnly {
+		// Cancel a refreshing marker in the timestamp cache. Skip the
+		// record read/write entirely; the tscache update happens in
+		// updateTimestampCache after evaluation via endCmds.done(). The
+		// empty write batch means no Raft proposal is needed.
+		reply.Txn = h.Txn
+		return result.Result{}, nil
 	}
 
 	if args.Now.IsEmpty() {
@@ -83,14 +92,6 @@ func HeartbeatTxn(
 	// already be implicitly committed.
 	if txn.Status == roachpb.PENDING {
 		BumpToMinTxnCommitTS(ctx, cArgs.EvalCtx, &txn)
-	}
-
-	// If requested, update the transaction record's status. This is used to
-	// transition REFRESHING records back to PENDING after a failed refresh.
-	if args.UpdateStatus {
-		if txn.Status == roachpb.REFRESHING {
-			txn.Status = h.Txn.Status
-		}
 	}
 
 	if !txn.Status.IsFinalized() {
