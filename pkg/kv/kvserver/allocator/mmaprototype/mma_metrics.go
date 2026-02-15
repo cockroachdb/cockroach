@@ -8,9 +8,7 @@ package mmaprototype
 import (
 	"cmp"
 	"context"
-	"fmt"
 	"slices"
-	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -391,12 +389,17 @@ const (
 // storePassState contains all the state gathered for a store for
 // which shedding was attempted.
 type storePassState struct {
-	overloadKind overloadKind
-	shedCounts   [numShedKinds][numShedResults]int
+	overloadKind       overloadKind
+	shedCounts         [numShedKinds][numShedResults]int
+	numRangesEvaluated int
 }
 
 func (s *storePassState) summarize() storePassSummary {
 	var sum storePassSummary
+	sum.numRangesEvaluated = s.numRangesEvaluated
+	for i := 0; i < int(numShedResults); i++ {
+		sum.reasonCounts[i].reason = shedResult(i)
+	}
 	for kindIdx := range s.shedCounts {
 		for resultIdx := range s.shedCounts[kindIdx] {
 			count := s.shedCounts[kindIdx][resultIdx]
@@ -409,12 +412,12 @@ func (s *storePassState) summarize() storePassSummary {
 			} else {
 				sum.numShedFailures += count
 			}
-			if count > sum.mostCommonCount {
-				sum.mostCommonReason = result
-				sum.mostCommonCount = count
-			}
+			sum.reasonCounts[resultIdx].count += count
 		}
 	}
+	slices.SortFunc(sum.reasonCounts[:], func(a, b reasonCount) int {
+		return cmp.Compare(-a.count, -b.count)
+	})
 	return sum
 }
 
@@ -422,13 +425,18 @@ func (s *storePassState) summarize() storePassSummary {
 // store.
 type storePassSummary struct {
 	// Overloaded store ID.
-	storeID          roachpb.StoreID
-	numShedSuccesses int
-	numShedFailures  int
-	// mostCommonReason/mostCommonCount track the most frequent shedResult for
-	// this overloaded store, used in failure logging.
-	mostCommonReason shedResult
-	mostCommonCount  int
+	storeID            roachpb.StoreID
+	numShedSuccesses   int
+	numShedFailures    int
+	numRangesEvaluated int
+	// reasonCounts tracks the counts of shedResult for this overloaded store
+	// in the descending order based on counts, used in failure logging
+	reasonCounts [numShedResults]reasonCount
+}
+
+type reasonCount struct {
+	count  int
+	reason shedResult
 }
 
 var (
@@ -620,6 +628,16 @@ func (sr shedResult) SafeFormat(w redact.SafePrinter, _ rune) {
 	}
 }
 
+// startEvaluatingRange is called when a range is beginning to be evaluated for
+// shedding, and is used to count how many total ranges were evaluated for an
+// overloaded store.
+func (g *rebalancingPassMetricsAndLogger) startEvaluatingRange() {
+	if g == nil {
+		return
+	}
+	g.curState.numRangesEvaluated++
+}
+
 // leaseShed is sandwiched between storeOverloaded and finishStore, and
 // provides the result of the shedding attempt.
 func (g *rebalancingPassMetricsAndLogger) leaseShed(result shedResult) {
@@ -649,6 +667,22 @@ func (g *rebalancingPassMetricsAndLogger) finishRebalancingPass(ctx context.Cont
 	if g == nil {
 		return
 	}
+	buf := redact.StringBuilder{}
+	g.computePassSummary(&buf)
+	if buf.Len() > 0 {
+		log.KvDistribution.Infof(ctx, "%s", buf.RedactableString())
+	}
+}
+
+// maxStoresLogged defines the upper bound on how many stores' summary is
+// logged.
+const maxStoresLogged int = 20
+
+// computePassSummary performs the aggregation of the rebalancing pass summary,
+// updates gauges and generates a log message with up to maxStoresLogged stores
+// per category of successful rebalances, failed rebalances, and skipped stores.
+// Example output: "rebalancing pass shed: {s1, s3} failures (store,reason:count...,total_ranges): (s2,no-cand:5,5), (s6,not-overloaded:1,1) skipped: {s4, s5}"
+func (g *rebalancingPassMetricsAndLogger) computePassSummary(buf *redact.StringBuilder) {
 	g.failedSummaries = g.failedSummaries[:0]
 	g.successSummaries = g.successSummaries[:0]
 
@@ -706,11 +740,9 @@ func (g *rebalancingPassMetricsAndLogger) finishRebalancingPass(ctx context.Cont
 		}
 	}
 
-	// Build log message with up to k entries per category.
-	// Example output: "rebalancing pass shed: {s1, s3} failures
-	// (store,reason:count): (s2,no-cand:5) skipped: {s4, s5}"
-	const k = 20
-	var b strings.Builder
+	if len(g.successSummaries) > 0 || len(g.failedSummaries) > 0 || len(g.skippedStores) > 0 {
+		buf.SafeString("rebalancing pass")
+	}
 
 	// Log stores where shedding succeeded, sorted by store ID.
 	n := len(g.successSummaries)
@@ -719,22 +751,22 @@ func (g *rebalancingPassMetricsAndLogger) finishRebalancingPass(ctx context.Cont
 			return cmp.Compare(a.storeID, b.storeID)
 		})
 		omitted := false
-		if n > k {
+		if n > maxStoresLogged {
 			omitted = true
-			n = k
+			n = maxStoresLogged
 		}
-		fmt.Fprintf(&b, "rebalancing pass shed: {")
+		buf.SafeString(" shed: {")
 		for i := 0; i < n; i++ {
-			prefix := ", "
 			if i == 0 {
-				prefix = ""
+				buf.Printf("s%v", g.successSummaries[i].storeID)
+			} else {
+				buf.Printf(", s%v", g.successSummaries[i].storeID)
 			}
-			fmt.Fprintf(&b, "%ss%v", prefix, g.successSummaries[i].storeID)
 		}
 		if omitted {
-			fmt.Fprintf(&b, ",...")
+			buf.SafeString(",...")
 		}
-		fmt.Fprintf(&b, "}")
+		buf.SafeRune('}')
 	}
 
 	// Log stores where shedding failed, sorted by failure count (descending).
@@ -745,24 +777,27 @@ func (g *rebalancingPassMetricsAndLogger) finishRebalancingPass(ctx context.Cont
 				cmp.Compare(a.storeID, b.storeID))
 		})
 		omitted := false
-		if n > k {
+		if n > maxStoresLogged {
 			omitted = true
-			n = k
+			n = maxStoresLogged
 		}
-		if b.Len() == 0 {
-			fmt.Fprintf(&b, "rebalancing pass")
-		}
-		fmt.Fprintf(&b, " failures (store,reason:count): ")
+		buf.SafeString(" failures (store,reason:count...,total_ranges): ")
 		for i := 0; i < n; i++ {
-			prefix := ", "
 			if i == 0 {
-				prefix = ""
+				buf.Printf("(s%v", g.failedSummaries[i].storeID)
+			} else {
+				buf.Printf(", (s%v", g.failedSummaries[i].storeID)
 			}
-			fmt.Fprintf(&b, "%s(s%v,%v:%d)", prefix, g.failedSummaries[i].storeID,
-				g.failedSummaries[i].mostCommonReason, g.failedSummaries[i].mostCommonCount)
+			for _, reasonCount := range g.failedSummaries[i].reasonCounts {
+				if reasonCount.count == 0 {
+					break
+				}
+				buf.Printf(",%v:%v", reasonCount.reason, redact.SafeInt(reasonCount.count))
+			}
+			buf.Printf(",%v)", redact.SafeInt(g.failedSummaries[i].numRangesEvaluated))
 		}
 		if omitted {
-			fmt.Fprintf(&b, ",...")
+			buf.SafeString(",...")
 		}
 	}
 
@@ -772,25 +807,21 @@ func (g *rebalancingPassMetricsAndLogger) finishRebalancingPass(ctx context.Cont
 	if n > 0 {
 		slices.Sort(g.skippedStores)
 		omitted := false
-		if n > k {
+		if n > maxStoresLogged {
 			omitted = true
-			n = k
+			n = maxStoresLogged
 		}
-		fmt.Fprintf(&b, " skipped: {")
+		buf.SafeString(" skipped: {")
 		for i := 0; i < n; i++ {
-			prefix := ", "
 			if i == 0 {
-				prefix = ""
+				buf.Printf("s%v", g.skippedStores[i])
+			} else {
+				buf.Printf(", s%v", g.skippedStores[i])
 			}
-			fmt.Fprintf(&b, "%ss%v", prefix, g.skippedStores[i])
 		}
 		if omitted {
-			fmt.Fprintf(&b, ",...")
+			buf.SafeString(",...")
 		}
-		fmt.Fprintf(&b, "}")
-	}
-
-	if b.Len() > 0 {
-		log.KvDistribution.Infof(ctx, "%s", redact.SafeString(b.String()))
+		buf.SafeRune('}')
 	}
 }
