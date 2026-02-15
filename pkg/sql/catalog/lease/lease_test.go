@@ -839,6 +839,7 @@ func TestSubqueryLeases(t *testing.T) {
 	fooReleaseCount := int32(0)
 	var tableID int64
 	var params base.TestServerArgs
+	params.Settings = cluster.MakeTestingClusterSettings()
 	params.Knobs = base.TestingKnobs{
 		SQLLeaseManager: &lease.ManagerTestingKnobs{
 			LeaseStoreTestingKnobs: lease.StorageTestingKnobs{
@@ -861,6 +862,10 @@ func TestSubqueryLeases(t *testing.T) {
 			},
 		},
 	}
+	// Ensure wait for initial version is disabled, so that newly created
+	// descriptors are not automatically leased.
+	ctx := context.Background()
+	lease.WaitForInitialVersion.Override(ctx, &params.Settings.SV, false)
 	srv, sqlDB, kvDB := serverutils.StartServer(t, params)
 	defer srv.Stopper().Stop(context.Background())
 	s := srv.ApplicationLayer()
