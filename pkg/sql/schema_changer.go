@@ -651,7 +651,7 @@ func (sc *SchemaChanger) maybeMakeAddTablePublic(
 		}
 		mut.State = descpb.DescriptorState_PUBLIC
 		return txn.Descriptors().WriteDesc(ctx, true /* kvTrace */, mut, txn.KV())
-	})
+	}, metadataOnlyTxn)
 }
 
 // ignoreRevertedDropIndex finds all add index mutations that are the
@@ -704,7 +704,7 @@ func (sc *SchemaChanger) ignoreRevertedDropIndex(
 			return txn.Descriptors().WriteDesc(ctx, true /* kvTrace */, mut, txn.KV())
 		}
 		return nil
-	})
+	}, metadataOnlyTxn)
 }
 
 func startGCJob(
@@ -810,7 +810,7 @@ func (sc *SchemaChanger) getTargetDescriptor(ctx context.Context) (catalog.Descr
 	) (err error) {
 		desc, err = txn.Descriptors().ByIDWithoutLeased(txn.KV()).Get().Desc(ctx, sc.descID)
 		return err
-	}); err != nil {
+	}, metadataOnlyTxn); err != nil {
 		return nil, err
 	}
 	return desc, nil
@@ -1174,7 +1174,7 @@ func (sc *SchemaChanger) initJobRunningStatus(ctx context.Context) error {
 			}
 		}
 		return nil
-	})
+	}, metadataOnlyTxn)
 }
 
 // dropViewDeps cleans up any dependencies that are related to a given view,
@@ -1329,7 +1329,7 @@ func (sc *SchemaChanger) rollbackSchemaChange(ctx context.Context, err error) er
 			return err
 		}
 		return txn.KV().Run(ctx, b)
-	}); err != nil {
+	}, metadataOnlyTxn); err != nil {
 		return err
 	}
 	log.Dev.Infof(ctx, "starting GC job %d", gcJobID)
@@ -1412,7 +1412,7 @@ func (sc *SchemaChanger) RunStateMachineBeforeBackfill(ctx context.Context) erro
 			}
 		}
 		return nil
-	}); err != nil {
+	}, metadataOnlyTxn); err != nil {
 		return err
 	}
 
@@ -1489,7 +1489,7 @@ func (sc *SchemaChanger) stepStateMachineAfterIndexBackfill(ctx context.Context)
 			}
 		}
 		return nil
-	}); err != nil {
+	}, metadataOnlyTxn); err != nil {
 		return err
 	}
 	return nil
@@ -2197,7 +2197,7 @@ func (sc *SchemaChanger) done(ctx context.Context) error {
 			sc.descID,
 			sc.mutationID,
 			info)
-	})
+	}, metadataOnlyTxn)
 	if err != nil {
 		return err
 	}
@@ -2516,7 +2516,7 @@ func (sc *SchemaChanger) maybeReverseMutations(ctx context.Context, causingError
 				SQLSTATE:     pgerror.GetPGCode(causingError).String(),
 				LatencyNanos: timeutil.Since(startTime).Nanoseconds(),
 			})
-	})
+	}, metadataOnlyTxn)
 	if err != nil || alreadyReversed {
 		return err
 	}
@@ -2900,18 +2900,44 @@ type SchemaChangerTestingKnobs struct {
 // ModuleTestingKnobs is part of the base.ModuleTestingKnobs interface.
 func (*SchemaChangerTestingKnobs) ModuleTestingKnobs() {}
 
+// txnType identifies the type of schema change transaction and determines
+// its admission control priority.
+type schemaChangeTxnType int
+
+const (
+	// metadataOnlyTxn indicates a transaction that only updates metadata without
+	// backfilling or validating data. These run at normal priority to avoid
+	// being deprioritized by admission control during system overload.
+	metadataOnlyTxn schemaChangeTxnType = iota
+	// backfillTxn indicates a transaction performing a backfill operation.
+	// These run at bulk normal priority to avoid overwhelming the system.
+	backfillTxn
+	// validationTxn indicates a transaction performing validation.
+	// These run at bulk normal priority to avoid overwhelming the system.
+	validationTxn
+)
+
 // txn is a convenient wrapper around descs.Txn().
-func (sc *SchemaChanger) txn(ctx context.Context, f func(context.Context, descs.Txn) error) error {
+func (sc *SchemaChanger) txn(
+	ctx context.Context, f func(context.Context, descs.Txn) error, typ schemaChangeTxnType,
+) error {
 	if fn := sc.testingKnobs.RunBeforeDescTxn; fn != nil {
 		if err := fn(sc.job.ID()); err != nil {
 			return err
 		}
 	}
+	// Metadata-only transactions (like CREATE TABLE) use normal priority to avoid
+	// being deprioritized during system overload. All other transactions use bulk
+	// bulk normal priority.
+	priority := admissionpb.BulkNormalPri
+	if typ == metadataOnlyTxn {
+		priority = admissionpb.NormalPri
+	}
 	return sc.execCfg.InternalDB.DescsTxn(ctx, func(
 		ctx context.Context, txn descs.Txn,
 	) error {
 		return f(ctx, txn)
-	}, isql.WithPriority(admissionpb.BulkNormalPri))
+	}, isql.WithPriority(priority))
 }
 
 // createSchemaChangeEvalCtx creates an extendedEvalContext() to be used for backfills.
@@ -3519,7 +3545,7 @@ func (sc *SchemaChanger) preSplitHashShardedIndexRanges(ctx context.Context) err
 		}
 
 		return nil
-	}); err != nil {
+	}, metadataOnlyTxn); err != nil {
 		return err
 	}
 
