@@ -186,6 +186,7 @@ func TestLockTableBasic(t *testing.T) {
 
 	datadriven.Walk(t, datapathutils.TestDataPath(t, "lock_table"), func(t *testing.T, path string) {
 		var lt lockTable
+		var st *cluster.Settings
 		var txnsByName map[string]*enginepb.TxnMeta
 		var uncertaintyLimitsByTxn map[string]hlc.Timestamp
 		var txnCounter uint128.Uint128
@@ -198,8 +199,9 @@ func TestLockTableBasic(t *testing.T) {
 			case "new-lock-table":
 				maxLocks := dd.ScanArg[int64](t, d, "maxlocks")
 				m := TestingMakeLockTableMetricsCfg()
+				st = cluster.MakeTestingClusterSettings()
 				ltImpl := newLockTable(
-					maxLocks, roachpb.RangeID(3), clock, cluster.MakeTestingClusterSettings(),
+					maxLocks, roachpb.RangeID(3), clock, st,
 					m.LocksShedDueToMemoryLimit, m.NumLockShedDueToMemoryLimitEvents,
 				)
 				ltImpl.enabled = true
@@ -651,6 +653,11 @@ func TestLockTableBasic(t *testing.T) {
 					d.Fatalf(t, "marshaling metrics: %v", err)
 				}
 				return string(b)
+
+			case "set-virtual-intent-resolution":
+				ok := dd.ScanArg[bool](t, d, "ok")
+				VirtualIntentResolution.Override(context.Background(), &st.SV, ok)
+				return ""
 
 			default:
 				return fmt.Sprintf("unknown command: %s", d.Cmd)

@@ -883,6 +883,55 @@ func (g *lockTableGuardImpl) isSameTxn(txn *enginepb.TxnMeta) bool {
 	return g.txn != nil && g.txn.ID == txn.ID
 }
 
+// conflictWithHeld locks return true if the given lock conflicts with the
+// request for this guard.
+//
+// The resolveMustBeVirtual indicates whether locks which can be resolved based
+// on the txn status cache should only be considered when the request is
+// configured for a virtual resolution.
+func (g *lockTableGuardImpl) conflictsWithHeldLock(
+	tl *txnLock, key roachpb.Key, resolveMustBeVirtual bool,
+) bool {
+	lockHolderTxn := tl.getLockHolderTxn()
+	if g.isSameTxn(lockHolderTxn) {
+		// We should never get here if the lock is already held by another request
+		// from the same transaction with sufficient strength (read: greater than
+		// or equal to what this guy wants); this should already be checked in
+		// alreadyHoldsLockAndIsAllowedToProceed.
+		assert(g.curStrength() > tl.getLockMode().Strength,
+			"lock already held by the request's transaction with sufficient strength")
+		return false // no conflict with a lock held by our own transaction
+	}
+
+	if canResolve, up := g.canResolveKeyForHoldingTransaction(lockHolderTxn, g.curStrength(), key); canResolve {
+		// We share this code with a couple of contexts. For now, we want to avoid waking up
+		// readers who are not going to virtually resolve their intents.
+		//
+		// TODO(ssd): Should we just wake up everyone?
+		if (resolveMustBeVirtual && g.virtuallyResolveIntents) || !resolveMustBeVirtual {
+			if !tl.isHeldReplicated() {
+				// Only held unreplicated. Accumulate it as an unreplicated lock to
+				// resolve, in case any other waiting readers can benefit from the
+				// pushed timestamp.
+				//
+				// TODO(arul): this case is only possible while non-locking reads
+				// block on Exclusive locks. Once non-locking reads start only
+				// blocking on intents, it can be removed and asserted against.
+				g.toResolveUnreplicated = append(g.toResolveUnreplicated, up)
+			} else {
+				// Resolve to push the replicated intent.
+				g.toResolve = append(g.toResolve, up)
+			}
+			return false // No conflict on a lock we are going to resolve.
+		}
+	}
+
+	// The held lock neither belongs to the request's transaction (which has
+	// special handling above) nor to a transaction whose keys we can resolve.
+	// Check for conflicts.
+	return lock.Conflicts(tl.getLockMode(), g.curLockMode(), &g.lt.settings.SV)
+}
+
 // curStrength returns the lock strength of the current lock span being scanned
 // by the request. Lock spans declared by a request are iterated from strongest
 // to weakest, and the return value of this method is mutable as the request's
@@ -1019,7 +1068,7 @@ func (g *lockTableGuardImpl) resumeScan(notify bool) error {
 		span = stepToNextSpan(g)
 	}
 
-	if len(g.toResolve) > 0 {
+	if len(g.toResolve) > 0 && !g.virtuallyResolveIntents {
 		j := 0
 		// Some of the locks in g.toResolve may already have been claimed by
 		// another concurrent request and removed, or intent resolution could have
@@ -1033,6 +1082,9 @@ func (g *lockTableGuardImpl) resumeScan(notify bool) error {
 		// timestamp to go through. This is because updating the lock ahead of
 		// resolution risks rediscovery loops where the lock is continually
 		// rediscovered at a lower timestamp than that in the lock table.
+		//
+		// We skip updating the lock table if virtual intent resolution is enabled
+		// since this request won't be committing its intent resolution.
 		for i := range g.toResolve {
 			var doResolve bool
 			if g.toResolve[i].Status.IsFinalized() {
@@ -2743,40 +2795,7 @@ func (kl *keyLocks) conflictsWithLockHolders(g *lockTableGuardImpl) bool {
 	}
 
 	for e := kl.holders.Front(); e != nil; e = e.Next() {
-		tl := e.Value
-		lockHolderTxn := tl.getLockHolderTxn()
-
-		if g.isSameTxn(lockHolderTxn) {
-			// We should never get here if the lock is already held by another request
-			// from the same transaction with sufficient strength (read: greater than
-			// or equal to what this guy wants); this should already be checked in
-			// alreadyHoldsLockAndIsAllowedToProceed.
-			assert(g.curStrength() > tl.getLockMode().Strength,
-				"lock already held by the request's transaction with sufficient strength")
-			continue // no conflict with a lock held by our own transaction
-		}
-
-		if canResolve, up := g.canResolveKeyForHoldingTransaction(lockHolderTxn, g.curStrength(), kl.key); canResolve {
-			if !tl.isHeldReplicated() {
-				// Only held unreplicated. Accumulate it as an unreplicated lock to
-				// resolve, in case any other waiting readers can benefit from the
-				// pushed timestamp.
-				//
-				// TODO(arul): this case is only possible while non-locking reads
-				// block on Exclusive locks. Once non-locking reads start only
-				// blocking on intents, it can be removed and asserted against.
-				g.toResolveUnreplicated = append(g.toResolveUnreplicated, up)
-			} else {
-				// Resolve to push the replicated intent.
-				g.toResolve = append(g.toResolve, up)
-			}
-			continue // check next lock
-		}
-
-		// The held lock neither belongs to the request's transaction (which has
-		// special handling above) nor to a transaction whose keys we can resolve.
-		// Check for conflicts.
-		if lock.Conflicts(tl.getLockMode(), g.curLockMode(), &g.lt.settings.SV) {
+		if g.conflictsWithHeldLock(e.Value, kl.key, false) {
 			return true
 		}
 	}
@@ -3534,22 +3553,27 @@ func (kl *keyLocks) tryUpdateLockLocked(
 
 // recomputeWaitQueues goes through the receiver's wait queues and recomputes
 // whether actively waiting requests should continue to do so, given the key's
-// locks holders and other waiting requests. A non-exhaustive list scenarios where
-// such computation is necessary is:
-// - A lock's strength has decreased[1]
-// - Or locking requests have dropped out of wait queue's[2] without actually
-// acquiring the lock
-// - Or the lock's timestamp has advanced
-// - Or one of the locks on a key has been released[3]
+// locks holders and other waiting requests. A non-exhaustive list scenarios
+// where such computation is necessary is:
+//
+//   - A lock's strength has decreased[1]
+//   - Or locking requests have dropped out of wait queue's[2] without actually
+//     acquiring the lock
+//   - Or the lock's timestamp has advanced
+//   - Or one of the locks on a key has been released[3]
+//   - The lock's holding transaction has been pushed, making it virtually
+//     resolvable.
 //
 // [1] This can happen as a result of savepoint rollback or when the lock table
 // stops tracking a replicated lock because of a PUSH_TIMESTAMP that
 // successfully bumps the pushee's timestamp.
+//
 // [2] A locking request that doesn't conflict with any held lock(s) may still
 // have to actively wait if it conflicts with a lower sequence numbered request
 // already in the lock's wait queue. Locking requests dropping out of a lock's
 // wait queue can therefore result in other requests no longer needing to
 // actively wait.
+//
 // [3] If there are multiple shared locks on a key and on of the transactions
 // that holds the shared lock is trying to promote its strength to something
 // stronger, then the release of a shared lock may allow it to do so. Note that
@@ -3567,6 +3591,7 @@ func (kl *keyLocks) recomputeWaitQueues(st *cluster.Settings) {
 	// (which are the only ones that exist at the time of writing).
 	var strongestMode lock.Mode
 	var lockHolderTxn *enginepb.TxnMeta // nil if {no,more than one} locks are held
+	var txnLock *txnLock
 	// Go through the list of lock holders.
 	// TODO(arul): We should annotate each of the holders to reflect if the lock
 	// belongs to a finalized transaction or not. If it does, we should exclude
@@ -3575,8 +3600,10 @@ func (kl *keyLocks) recomputeWaitQueues(st *cluster.Settings) {
 		mode := e.Value.getLockMode()
 		if strongestMode.Empty() {
 			lockHolderTxn = e.Value.txn
+			txnLock = e.Value
 		} else {
 			lockHolderTxn = nil
+			txnLock = nil
 		}
 		if strongestMode.Weaker(mode) {
 			strongestMode = mode
@@ -3590,7 +3617,7 @@ func (kl *keyLocks) recomputeWaitQueues(st *cluster.Settings) {
 		reader := e.Value
 		curr := e
 		e = e.Next()
-		if !lock.Conflicts(reader.curLockMode(), strongestMode, &st.SV) {
+		if !reader.conflictsWithHeldLock(txnLock, kl.key, true /* only allow virtual resolve */) {
 			kl.removeReader(curr)
 		}
 	}
@@ -4780,12 +4807,35 @@ func (t *lockTableImpl) batchPushedLockResolution() bool {
 func (t *lockTableImpl) PushedTransactionUpdated(
 	txn *roachpb.Transaction, clockObs roachpb.ObservedTimestamp,
 ) {
-	// TODO(sumeer): We don't take any action for requests that are already
-	// waiting on locks held by txn. They need to take some action, like
-	// pushing, and resume their scan, to notice the change to this txn. We
-	// could be more proactive if we knew which locks in lockTableImpl were held
-	// by txn.
 	t.txnStatusCache.add(txn, clockObs)
+	t.maybeWakeReadersForPushedTxn(txn, clockObs)
+}
+
+// maybeWakeReadersForPushedTxn iterates over all locks in the lock table and
+// wakes waiting readers that can virtually resolve replicated locks held by the
+// pushed transaction. For each eligible reader, a LockUpdate is added to its
+// toResolve slice and the reader is removed from the lock's wait queue.
+//
+// TODO(ssd): Currently this is scanning the entire lock table and recomputing
+// the queue for any lock held by the pushed txn. We may want to only wake the
+// queue for the specific key that led to us pushing in the first place.
+func (t *lockTableImpl) maybeWakeReadersForPushedTxn(
+	txn *roachpb.Transaction, clockObs roachpb.ObservedTimestamp,
+) {
+	t.locks.mu.RLock()
+	defer t.locks.mu.RUnlock()
+	iter := t.locks.MakeIter()
+	for iter.First(); iter.Valid(); iter.Next() {
+		kl := iter.Cur()
+		kl.mu.Lock()
+
+		if !kl.isLockedBy(txn.ID) {
+			kl.mu.Unlock()
+			continue
+		}
+		kl.recomputeWaitQueues(t.settings)
+		kl.mu.Unlock()
+	}
 }
 
 // Enable implements the lockTable interface.
