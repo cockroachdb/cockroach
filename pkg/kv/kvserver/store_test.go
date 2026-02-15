@@ -1549,7 +1549,7 @@ func TestStoreResolveWriteIntentPushOnRead(t *testing.T) {
 			// the commit succeeds or fails.
 			etArgs, etH := endTxnArgs(pushee, true)
 			assignSeqNumsForReqs(pushee, &etArgs)
-			_, pErr = kv.SendWrappedWith(ctx, store.TestSender(), etH, &etArgs)
+			repl, pErr = kv.SendWrappedWith(ctx, store.TestSender(), etH, &etArgs)
 			if tc.expPusheeRetry {
 				if _, ok := pErr.GetDetail().(*kvpb.TransactionRetryError); !ok {
 					t.Errorf("expected transaction retry error; got %s", pErr)

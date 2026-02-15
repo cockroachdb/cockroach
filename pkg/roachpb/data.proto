@@ -346,6 +346,12 @@ enum TransactionStatus {
   // ABORTED state are deleted and are never made visible to other
   // transactions.
   ABORTED = 2;
+  // REFRESHING is the state for a transaction that was pushed at commit
+  // time and is refreshing its read spans. While REFRESHING, the
+  // transaction cannot be pushed, preventing starvation by high-priority
+  // transactions. The coordinator transitions the record back to PENDING
+  // after the refresh completes (success or failure).
+  REFRESHING = 5;
 }
 
 message ObservedTimestamp {

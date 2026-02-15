@@ -100,6 +100,13 @@ func CanPushWithPriority(
 		}
 	}
 	pusherPri, pusheePri = normalize(pusherPri), normalize(pusheePri)
+	// REFRESHING transactions are protected from all pushes while refreshing
+	// their read spans. This prevents starvation of serializable transactions
+	// by high-priority pushers. The safety valve is the expiration check in
+	// PushTxn, which fires before priority-based push decisions.
+	if pusheeStatus == roachpb.REFRESHING {
+		return false
+	}
 	switch pushType {
 	case kvpb.PUSH_ABORT:
 		// If the pushee transaction is prepared, never let a PUSH_ABORT through.
