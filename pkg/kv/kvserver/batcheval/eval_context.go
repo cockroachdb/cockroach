@@ -81,6 +81,13 @@ type EvalContext interface {
 	// about its arguments, return values, and preconditions.
 	MinTxnCommitTS(ctx context.Context, txnID uuid.UUID, txnKey []byte) hlc.Timestamp
 
+	// IsTransactionRefreshing returns true if the transaction is currently
+	// refreshing its read spans at the given epoch, as indicated by a refreshing
+	// marker in the timestamp cache. See Replica.IsTransactionRefreshing.
+	IsTransactionRefreshing(
+		ctx context.Context, txnKey roachpb.Key, txnID uuid.UUID, epoch enginepb.TxnEpoch,
+	) bool
+
 	// GetMVCCStats returns a snapshot of the MVCC stats for the range.
 	// If called from a command that declares a read/write span on the
 	// entire range, the stats will be consistent with the data that is
@@ -166,31 +173,32 @@ type ImmutableEvalContext interface {
 // MockEvalCtx is a dummy implementation of EvalContext for testing purposes.
 // For technical reasons, the interface is implemented by a wrapper .EvalContext().
 type MockEvalCtx struct {
-	ClusterSettings        *cluster.Settings
-	Desc                   *roachpb.RangeDescriptor
-	StoreID                roachpb.StoreID
-	NodeID                 roachpb.NodeID
-	Clock                  *hlc.Clock
-	Stats                  enginepb.MVCCStats
-	QPS                    float64
-	CPU                    float64
-	AbortSpan              *abortspan.AbortSpan
-	GCThreshold            hlc.Timestamp
-	Term                   kvpb.RaftTerm
-	CompactedIndex         kvpb.RaftIndex
-	LogEngine              storage.Engine
-	CanCreateTxnRecordFn   func() (bool, kvpb.TransactionAbortedReason)
-	MinTxnCommitTSFn       func() hlc.Timestamp
-	LastReplicaGCTimestamp hlc.Timestamp
-	Lease                  roachpb.Lease
-	RangeLeaseDuration     time.Duration
-	CurrentReadSummary     rspb.ReadSummary
-	ConcurrencyManager     concurrency.Manager
-	ClosedTimestamp        hlc.Timestamp
-	RevokedLeaseSeq        roachpb.LeaseSequence
-	MaxBytes               int64
-	ApproxDiskBytes        uint64
-	EvalKnobs              kvserverbase.BatchEvalTestingKnobs
+	ClusterSettings           *cluster.Settings
+	Desc                      *roachpb.RangeDescriptor
+	StoreID                   roachpb.StoreID
+	NodeID                    roachpb.NodeID
+	Clock                     *hlc.Clock
+	Stats                     enginepb.MVCCStats
+	QPS                       float64
+	CPU                       float64
+	AbortSpan                 *abortspan.AbortSpan
+	GCThreshold               hlc.Timestamp
+	Term                      kvpb.RaftTerm
+	CompactedIndex            kvpb.RaftIndex
+	LogEngine                 storage.Engine
+	CanCreateTxnRecordFn      func() (bool, kvpb.TransactionAbortedReason)
+	MinTxnCommitTSFn          func() hlc.Timestamp
+	IsTransactionRefreshingFn func() bool
+	LastReplicaGCTimestamp    hlc.Timestamp
+	Lease                     roachpb.Lease
+	RangeLeaseDuration        time.Duration
+	CurrentReadSummary        rspb.ReadSummary
+	ConcurrencyManager        concurrency.Manager
+	ClosedTimestamp           hlc.Timestamp
+	RevokedLeaseSeq           roachpb.LeaseSequence
+	MaxBytes                  int64
+	ApproxDiskBytes           uint64
+	EvalKnobs                 kvserverbase.BatchEvalTestingKnobs
 }
 
 // EvalContext returns the MockEvalCtx as an EvalContext. It will reflect future
@@ -289,6 +297,14 @@ func (m *mockEvalCtxImpl) MinTxnCommitTS(
 		return hlc.Timestamp{}
 	}
 	return m.MinTxnCommitTSFn()
+}
+func (m *mockEvalCtxImpl) IsTransactionRefreshing(
+	ctx context.Context, txnKey roachpb.Key, txnID uuid.UUID, epoch enginepb.TxnEpoch,
+) bool {
+	if m.IsTransactionRefreshingFn == nil {
+		return false
+	}
+	return m.IsTransactionRefreshingFn()
 }
 func (m *mockEvalCtxImpl) GetGCThreshold() hlc.Timestamp {
 	return m.GCThreshold

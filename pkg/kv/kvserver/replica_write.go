@@ -719,22 +719,13 @@ func (r *Replica) evaluateWriteBatchWithServersideRefreshes(
 
 		// Allow one retry only; a non-txn batch containing overlapping
 		// spans will always experience WriteTooOldError.
-		refreshing := pErr == nil && br != nil && br.Txn != nil && br.Txn.Status == roachpb.REFRESHING
-		if (pErr == nil && !refreshing) || retries > 0 {
+		if pErr == nil || retries > 0 {
 			break
 		}
 		// If we can retry, set a higher batch timestamp and continue.
-		// For REFRESHING responses (pErr == nil), we pass br so
-		// canDoServersideRetry can extract the pushed timestamp.
 		var ok bool
-		ba, ok = canDoServersideRetry(ctx, pErr, br, ba, g, deadline)
+		ba, ok = canDoServersideRetry(ctx, pErr, ba, g, deadline)
 		if !ok {
-			if refreshing {
-				// Server-side retry not possible for this REFRESHING response.
-				// Return the REFRESHING success to the client for client-side
-				// refresh.
-				break
-			}
 			r.store.Metrics().WriteEvaluationServerSideRetryFailure.Inc(1)
 			break
 		} else {
