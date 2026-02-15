@@ -11,6 +11,7 @@ STRINGER_SRCS = [
     "//pkg/kv/kvpb:errordetailtype_string.go",
     "//pkg/kv/kvpb:method_string.go",
     "//pkg/kv/kvserver/closedts/sidetransport:cantclosereason_string.go",
+    "//pkg/kv/kvserver:raftleadertransferoutcome_string.go",
     "//pkg/kv/kvserver:refreshraftreason_string.go",
     "//pkg/multitenant/tenantcapabilitiespb:id_string.go",
     "//pkg/raft/quorum:voteresult_string.go",
