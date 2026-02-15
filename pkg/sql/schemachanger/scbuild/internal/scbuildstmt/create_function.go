@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -291,25 +292,6 @@ func replaceFunction(
 		))
 	}
 
-	// Validate: trigger function with active triggers cannot be replaced.
-	if newReturnType.Type.Identical(types.Trigger) {
-		// Check if there are back-references (triggers) that depend on this
-		// function. If there are, we cannot replace it.
-		backRefs := b.BackReferences(fnID)
-		if backRefs.Filter(func(_ scpb.Status, _ scpb.TargetStatus, e scpb.Element) bool {
-			_, ok := e.(*scpb.TriggerFunctionCall)
-			return ok
-		}).IsEmpty() {
-			// No active triggers, safe to replace.
-		} else {
-			panic(errors.WithHint(
-				unimplemented.NewWithIssue(134555,
-					"cannot replace a trigger function with an active trigger"),
-				"consider dropping and recreating the trigger",
-			))
-		}
-	}
-
 	// Build new params.
 	newParams := make([]scpb.Function_Parameter, len(n.Params))
 	for i, param := range n.Params {
@@ -444,7 +426,163 @@ func replaceFunction(
 	}
 	b.Replace(funcParams)
 
+	// If this is a trigger function, propagate the new body to dependent
+	// triggers so their inlined copies stay in sync.
+	if newReturnType.Type.Identical(types.Trigger) {
+		updateDependentTriggers(b, fnID, fnBodyStr)
+	}
+
 	b.LogEventForExistingTarget(existingFnElem)
+}
+
+// updateDependentTriggers finds all triggers that reference the given function
+// and updates their inlined function body and dependency tracking to reflect the
+// new function body.
+func updateDependentTriggers(b BuildCtx, fnID descpb.ID, fnBodyStr string) {
+	backRefs := b.BackReferences(fnID)
+	backRefs.FilterTriggerFunctionCall().ForEach(
+		func(_ scpb.Status, target scpb.TargetStatus, e *scpb.TriggerFunctionCall) {
+			if target != scpb.ToPublic || e.FuncID != fnID {
+				return
+			}
+			tableID := e.TableID
+			triggerID := e.TriggerID
+
+			// Build a reference provider by constructing a synthetic CREATE TRIGGER
+			// statement with the new function body. This runs the optbuilder, which
+			// analyzes the function body in the trigger's table context to capture
+			// all dependencies (types, tables, routines referenced in SQL statements).
+			syntheticCT := buildSyntheticCreateTrigger(b, tableID, triggerID, fnID, fnBodyStr, e.FuncArgs)
+			triggerRefProvider := b.BuildReferenceProvider(syntheticCT)
+
+			// Replace TriggerFunctionCall with the qualified function body produced
+			// by the optbuilder.
+			b.Replace(&scpb.TriggerFunctionCall{
+				TableID:   tableID,
+				TriggerID: triggerID,
+				FuncID:    fnID,
+				FuncBody:  syntheticCT.FuncBody,
+				FuncArgs:  e.FuncArgs,
+			})
+
+			// Update TriggerDeps with new dependencies from the new function body.
+			// TriggerDeps identity is (TableID, TriggerID), and the dep slices are
+			// non-identity attributes, so Replace works here. The
+			// SetTriggerForwardReferences operation handler cleans up stale
+			// back-references from old deps that are no longer referenced.
+			routineIDs := triggerRefProvider.ReferencedRoutines()
+			routineIDs.Add(fnID)
+			typeIDs := triggerRefProvider.ReferencedTypes().Ordered()
+			relations := buildRelationDeps(tableID, triggerRefProvider)
+			b.Replace(&scpb.TriggerDeps{
+				TableID:        tableID,
+				TriggerID:      triggerID,
+				UsesRelations:  relations,
+				UsesTypeIDs:    typeIDs,
+				UsesRoutineIDs: routineIDs.Ordered(),
+			})
+		},
+	)
+}
+
+// buildSyntheticCreateTrigger constructs a minimal CREATE TRIGGER AST for use
+// with BuildReferenceProvider. The FuncBodyOverride field is set so that the
+// optbuilder analyzes the new function body instead of the old one from the
+// catalog.
+func buildSyntheticCreateTrigger(
+	b BuildCtx,
+	tableID descpb.ID,
+	triggerID catid.TriggerID,
+	fnID descpb.ID,
+	fnBodyStr string,
+	funcArgs []string,
+) *tree.CreateTrigger {
+	tableElts := b.QueryByID(tableID)
+
+	// Look up table name parts.
+	_, _, ns := scpb.FindNamespace(tableElts)
+	_, _, scNs := scpb.FindNamespace(b.QueryByID(ns.SchemaID))
+	_, _, dbNs := scpb.FindNamespace(b.QueryByID(ns.DatabaseID))
+	tableName, err := tree.NewUnresolvedObjectName(3,
+		[3]string{ns.Name, scNs.Name, dbNs.Name}, tree.NoAnnotation)
+	if err != nil {
+		panic(err)
+	}
+
+	// Look up function name parts.
+	fnElts := b.QueryByID(fnID)
+	_, _, fnName := scpb.FindFunctionName(fnElts)
+	_, _, fnParent := scpb.FindSchemaChild(fnElts)
+	_, _, fnScNs := scpb.FindNamespace(b.QueryByID(fnParent.SchemaID))
+	_, _, fnScParent := scpb.FindSchemaParent(b.QueryByID(fnParent.SchemaID))
+	_, _, fnDbNs := scpb.FindNamespace(b.QueryByID(fnScParent.ParentDatabaseID))
+	funcName := tree.MakeUnresolvedName(fnDbNs.Name, fnScNs.Name, fnName.Name)
+
+	// Look up trigger metadata from existing elements.
+	timing := tableElts.FilterTriggerTiming().Filter(
+		func(_ scpb.Status, _ scpb.TargetStatus, e *scpb.TriggerTiming) bool {
+			return e.TriggerID == triggerID
+		},
+	).MustGetOneElement()
+	events := tableElts.FilterTriggerEvents().Filter(
+		func(_ scpb.Status, _ scpb.TargetStatus, e *scpb.TriggerEvents) bool {
+			return e.TriggerID == triggerID
+		},
+	).MustGetOneElement()
+
+	// Convert events from protobuf to tree types.
+	treeEvents := make([]*tree.TriggerEvent, len(events.Events))
+	for i, ev := range events.Events {
+		columns := make(tree.NameList, len(ev.ColumnNames))
+		for j, col := range ev.ColumnNames {
+			columns[j] = tree.Name(col)
+		}
+		treeEvents[i] = &tree.TriggerEvent{
+			EventType: tree.TriggerEventTypeToTree[ev.Type],
+			Columns:   columns,
+		}
+	}
+
+	// Convert ForEach.
+	forEach := tree.TriggerForEachStatement
+	if timing.ForEachRow {
+		forEach = tree.TriggerForEachRow
+	}
+
+	// Look up transition aliases if present.
+	var transitions []*tree.TriggerTransition
+	trans := tableElts.FilterTriggerTransition().Filter(
+		func(_ scpb.Status, _ scpb.TargetStatus, e *scpb.TriggerTransition) bool {
+			return e.TriggerID == triggerID
+		},
+	).MustGetZeroOrOneElement()
+	if trans != nil {
+		if trans.NewTransitionAlias != "" {
+			transitions = append(transitions, &tree.TriggerTransition{
+				IsNew: true,
+				Name:  tree.Name(trans.NewTransitionAlias),
+			})
+		}
+		if trans.OldTransitionAlias != "" {
+			transitions = append(transitions, &tree.TriggerTransition{
+				IsNew: false,
+				Name:  tree.Name(trans.OldTransitionAlias),
+			})
+		}
+	}
+
+	return &tree.CreateTrigger{
+		Replace:          true,
+		Name:             "synthetic_trigger",
+		ActionTime:       tree.TriggerActionTimeToTree[timing.ActionTime],
+		Events:           treeEvents,
+		TableName:        tableName,
+		Transitions:      transitions,
+		ForEach:          forEach,
+		FuncName:         &funcName,
+		FuncArgs:         funcArgs,
+		FuncBodyOverride: fnBodyStr,
+	}
 }
 
 // validateReplaceParams validates that parameter changes in CREATE OR REPLACE
