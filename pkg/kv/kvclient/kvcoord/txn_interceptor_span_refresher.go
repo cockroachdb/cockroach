@@ -57,12 +57,14 @@ var KeepRefreshSpansOnSavepointRollback = settings.RegisterBoolSetting(
 	true)
 
 // TransactionRefreshingStatusEnabled controls whether serializable transactions
-// write a REFRESHING record when pushed at commit time.
+// add a refreshing marker to the timestamp cache when pushed at commit time,
+// preventing concurrent pushers from starving the transaction during its
+// refresh window.
 var TransactionRefreshingStatusEnabled = settings.RegisterBoolSetting(
 	settings.ApplicationLevel,
 	"kv.transaction.refreshing_status.enabled",
-	"when enabled, serializable transactions write a REFRESHING record "+
-		"when pushed at commit time to help prevent starvation",
+	"when enabled, serializable transactions add a refreshing marker to the "+
+		"timestamp cache when pushed at commit time to help prevent starvation",
 	false,
 )
 
@@ -174,14 +176,13 @@ func (sr *txnSpanRefresher) SendLocked(
 	// Send through wrapped lockedSender. Unlocks while sending then re-locks.
 	br, pErr := sr.sendLockedWithRefreshAttempts(ctx, ba, sr.maxRefreshAttempts())
 	if pErr != nil {
-		// REFRESHING must never escape the txnSpanRefresher.
+		// REFRESHING must never escape the txnSpanRefresher. It is a
+		// transient server-to-client signal that the refresher handles.
+		// If REFRESHING is still on the error txn at this point, we've
+		// exhausted refresh attempts. Cancel the marker so it doesn't
+		// block pushers indefinitely.
 		if txn := pErr.GetTxn(); txn != nil && txn.Status == roachpb.REFRESHING {
-			// For retriable errors, transition the record back to PENDING so
-			// the transaction can be retried without the REFRESHING protection.
-			_, ok := pErr.GetDetail().(*kvpb.TransactionRetryError)
-			if ok {
-				sr.transitionRefreshingToPending(ctx, txn)
-			}
+			sr.cancelRefreshingMarker(ctx, txn)
 			pErr.SetTxn(cloneWithStatus(txn, roachpb.PENDING))
 		}
 		return nil, pErr
@@ -255,18 +256,6 @@ func (sr *txnSpanRefresher) sendLockedWithRefreshAttempts(
 		return nil, kvpb.NewError(err)
 	}
 
-	// If the server wrote a REFRESHING record instead of returning
-	// RETRY_SERIALIZABLE, convert to a synthetic retry error so the
-	// existing refresh logic in maybeRefreshAndRetrySend can handle it.
-	if pErr == nil && br != nil && br.Txn != nil && br.Txn.Status == roachpb.REFRESHING {
-		log.VEventf(ctx, 2, "received REFRESHING response; converting to synthetic retry error")
-		pErr = kvpb.NewErrorWithTxn(
-			kvpb.NewTransactionRetryError(kvpb.RETRY_SERIALIZABLE, ""),
-			br.Txn,
-		)
-		br = nil
-	}
-
 	if pErr != nil {
 		if maxRefreshAttempts > 0 {
 			br, pErr = sr.maybeRefreshAndRetrySend(ctx, ba, pErr, maxRefreshAttempts)
@@ -321,10 +310,9 @@ func (sr *txnSpanRefresher) maybeRefreshAndRetrySend(
 		// STAGING, we know that the transaction failed to implicitly commit.
 		refreshToTxn.Status = roachpb.PENDING
 	case roachpb.REFRESHING:
-		// The server wrote a REFRESHING record instead of returning
-		// RETRY_SERIALIZABLE. Downgrade to PENDING for the refresh attempt.
-		// The on-disk record remains REFRESHING, protecting the transaction
-		// from pushes while we refresh.
+		// The server placed a refreshing marker in the timestamp cache to
+		// protect this transaction from pushes during the refresh window.
+		// If the refresh fails, we'll cancel the marker.
 		refreshToTxn.Status = roachpb.PENDING
 	default:
 		return nil, kvpb.NewError(errors.AssertionFailedf(
@@ -445,29 +433,26 @@ func (sr *txnSpanRefresher) splitEndTxnAndRetrySend(
 	return br, nil
 }
 
-// transitionRefreshingToPending sends a HeartbeatTxn to transition a REFRESHING
-// transaction record back to PENDING. We do this to avoid the REFRESHING state
-// (which is un-push-able) from pushing into the next epoch.
-func (sr *txnSpanRefresher) transitionRefreshingToPending(
-	ctx context.Context, txn *roachpb.Transaction,
-) {
-	log.Eventf(ctx, "transition REFRESHING to PENDING via txn heartbeat")
-	hbTxn := txn.Clone()
-	hbTxn.Status = roachpb.PENDING
-	hbBa := &kvpb.BatchRequest{}
-	hbBa.Txn = hbTxn
-	hbBa.Add(&kvpb.HeartbeatTxnRequest{
+// cancelRefreshingMarker sends a HeartbeatTxn with UpdateTSCacheOnly to cancel
+// the refreshing marker in the timestamp cache after a failed refresh. This
+// prevents the marker from blocking pushers indefinitely.
+func (sr *txnSpanRefresher) cancelRefreshingMarker(ctx context.Context, txn *roachpb.Transaction) {
+	ba := &kvpb.BatchRequest{}
+	ba.Txn = txn.Clone()
+	ba.Txn.Status = roachpb.PENDING
+	ba.Add(&kvpb.HeartbeatTxnRequest{
 		RequestHeader: kvpb.RequestHeader{
 			Key: txn.Key,
 		},
-		Now:          sr.clock.Now(),
-		UpdateStatus: true,
+		Now:               sr.clock.Now(),
+		UpdateTSCacheOnly: true,
 	})
-	_, pErr := sr.wrapped.SendLocked(ctx, hbBa)
+	log.VEventf(ctx, 2, "canceling refreshing marker after failed refresh")
+	_, pErr := sr.wrapped.SendLocked(ctx, ba)
 	if pErr != nil {
-		// TODO(ssd): Should we just return this error? We also regret places where
-		// we just log errors.
-		log.VEventf(ctx, 1, "failed to transition REFRESHING to PENDING: %s", pErr)
+		// Best-effort. The marker is epoch-scoped, so it becomes irrelevant
+		// once the transaction restarts at a new epoch.
+		log.VEventf(ctx, 1, "failed to cancel refreshing marker: %s", pErr)
 	}
 }
 
@@ -485,7 +470,7 @@ func (sr *txnSpanRefresher) maybeSetUseRefreshingStatus(
 	}
 	etIdx := len(ba.Requests) - 1
 	if et := ba.Requests[etIdx].GetEndTxn(); et != nil {
-		log.Event(ctx, "requesting refreshing status transition in case of serializable error")
+		log.Event(ctx, "requesting refreshing marker in case of serializable error")
 		et.UseRefreshingStatus = true
 	}
 }

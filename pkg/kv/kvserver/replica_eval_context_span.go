@@ -168,6 +168,15 @@ func (rec SpanSetReplicaEvalContext) MinTxnCommitTS(
 	return rec.i.MinTxnCommitTS(ctx, txnID, txnKey)
 }
 
+// IsTransactionRefreshing returns true if the transaction is currently
+// refreshing its read spans, as indicated by a refreshing marker in the
+// timestamp cache.
+func (rec SpanSetReplicaEvalContext) IsTransactionRefreshing(
+	ctx context.Context, txnKey roachpb.Key, txnID uuid.UUID, epoch enginepb.TxnEpoch,
+) bool {
+	return rec.i.IsTransactionRefreshing(ctx, txnKey, txnID, epoch)
+}
+
 // GetGCThreshold returns the GC threshold of the Range, typically updated when
 // keys are garbage collected. Reads and writes at timestamps <= this time will
 // not be served.

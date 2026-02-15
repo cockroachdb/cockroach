@@ -201,19 +201,19 @@ func TestWaiterOnRejectedCommit(t *testing.T) {
 	}
 }
 
-// TestRefreshingPreventsStarvation verifies that the REFRESHING transaction
-// state prevents high-priority pushers from starving a serializable
+// TestRefreshingPreventsStarvation verifies that the refreshing marker in the
+// timestamp cache prevents high-priority pushers from starving a serializable
 // transaction during its refresh window.
 //
 // The scenario:
 //  1. T1 reads key A, writes key B.
 //  2. T2 (high priority) reads key B, pushing T1's write timestamp, then commits.
-//  3. T1 commits. EndTxn detects the pushed timestamp and writes a REFRESHING
-//     record instead of returning RETRY_SERIALIZABLE.
+//  3. T1 commits. EndTxn detects the pushed timestamp, returns
+//     RETRY_SERIALIZABLE, and adds a refreshing marker to the timestamp cache.
 //  4. The txnSpanRefresher refreshes T1's read spans and retries EndTxn.
 //     A request filter blocks this retry.
 //  5. T3 (high priority) reads key B, encounters T1's intent, and tries to
-//     push T1. Because T1 is REFRESHING, the push is blocked in the wait queue.
+//     push T1. Because of the refreshing marker, the push is blocked.
 //  6. The retry is released, T1 commits, and T3's push resolves.
 func TestRefreshingPreventsStarvation(t *testing.T) {
 	defer leaktest.AfterTest(t)()
@@ -292,9 +292,10 @@ func TestRefreshingPreventsStarvation(t *testing.T) {
 	require.NoError(t, err)
 	require.NoError(t, t2.Commit(ctx))
 
-	// T1 commits in the background. The first EndTxn writes a REFRESHING
-	// record. The refresh succeeds (key A is unchanged). The retry EndTxn
-	// is blocked by the request filter.
+	// T1 commits in the background. The first EndTxn returns
+	// RETRY_SERIALIZABLE and adds a refreshing marker. The refresh
+	// succeeds (key A is unchanged). The retry EndTxn is blocked by
+	// the request filter.
 	t1Done := make(chan error, 1)
 	go func() {
 		t1Done <- t1.Commit(ctx)
@@ -302,7 +303,7 @@ func TestRefreshingPreventsStarvation(t *testing.T) {
 	<-retryBlocked
 
 	// T3: high priority, reads key B. It encounters T1's intent and tries
-	// to push, but T1 is REFRESHING so the push blocks in the wait queue.
+	// to push, but the refreshing marker blocks the push.
 	t3Done := make(chan error, 1)
 	go func() {
 		t3 := db.NewTxn(ctx, "t3")
@@ -321,20 +322,21 @@ func TestRefreshingPreventsStarvation(t *testing.T) {
 	require.NoError(t, <-t3Done)
 }
 
-// TestRefreshingToPendingAllowsPush verifies that after a failed refresh a
-// REFRESHING transaction record is transitioned back to PENDING via
-// HeartbeatTxn, pushers can then push the transaction normally.
+// TestRefreshingToPendingAllowsPush verifies that after a failed refresh the
+// refreshing marker in the timestamp cache is canceled via HeartbeatTxn with
+// UpdateTSCacheOnly, so pushers can then push the transaction normally.
 //
 // The scenario:
 //  1. T1 reads key A, writes key B.
 //  2. Key A is overwritten, invalidating T1's read span.
 //  3. T2 (high priority) reads key B, pushing T1's write timestamp, then
 //     commits.
-//  4. T1 commits. EndTxn writes a REFRESHING record. The refresh fails
-//     (key A changed). The txnSpanRefresher sends HeartbeatTxn to transition
-//     the record back to PENDING, then returns RETRY_SERIALIZABLE.
+//  4. T1 commits. EndTxn returns RETRY_SERIALIZABLE and adds a refreshing
+//     marker to the timestamp cache. The refresh fails (key A changed).
+//     The txnSpanRefresher sends HeartbeatTxn(UpdateTSCacheOnly=true) to cancel
+//     the marker, then returns RETRY_SERIALIZABLE.
 //  5. T3 (high priority) reads key B. It pushes T1, which succeeds because
-//     T1 is now PENDING (not REFRESHING).
+//     the refreshing marker has been canceled.
 func TestRefreshingToPendingAllowsPush(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -360,7 +362,7 @@ func TestRefreshingToPendingAllowsPush(t *testing.T) {
 					if !ba.Txn.ID.Equal(v.(uuid.UUID)) {
 						return nil
 					}
-					if hbReq.(*kvpb.HeartbeatTxnRequest).UpdateStatus {
+					if hbReq.(*kvpb.HeartbeatTxnRequest).UpdateTSCacheOnly {
 						heartbeatSeen.Store(true)
 					}
 					return nil
@@ -392,12 +394,13 @@ func TestRefreshingToPendingAllowsPush(t *testing.T) {
 	require.NoError(t, err)
 	require.NoError(t, t2.Commit(ctx))
 
-	// T1 commit attempt should write REFRESHING but the refresh should fail. The
-	// txnSpanRefresher should transition us back to PENDING. Client sees
-	// RETRY_SERIALIZABLE.
+	// T1 commit attempt adds a refreshing marker to the tscache, but the
+	// refresh fails (key A was overwritten). The txnSpanRefresher cancels
+	// the marker via HeartbeatTxn(UpdateTSCacheOnly=true), then returns
+	// RETRY_SERIALIZABLE to the client.
 	require.Error(t, t1.Commit(ctx))
 	require.True(t, heartbeatSeen.Load(),
-		"expected HeartbeatTxn with UpdateStatus for REFRESHING→PENDING transition")
+		"expected HeartbeatTxn with UpdateTSCacheOnly to cancel refreshing marker")
 
 	// T1 can now be pushed.
 	t3 := db.NewTxn(ctx, "t3")
@@ -410,16 +413,16 @@ func TestRefreshingToPendingAllowsPush(t *testing.T) {
 
 // TestRefreshingServerSideRetry verifies that when a transaction has no read
 // spans (CanForwardReadTimestamp=true), a pushed timestamp that would normally
-// trigger the REFRESHING round-trip is instead handled via server-side retry.
+// trigger a client-side refresh is instead handled via server-side retry.
 // The server bumps the batch timestamp and re-evaluates, committing in a single
 // EndTxn RPC.
 //
 // The scenario:
 //  1. T1 writes key B (no reads, so CanForwardReadTimestamp is true).
 //  2. T2 (high priority) reads key B, pushing T1's write timestamp, then commits.
-//  3. T1 commits with REFRESHING enabled. The server detects the REFRESHING
-//     response, bumps the timestamp via server-side retry, and commits without
-//     a second EndTxn from the client.
+//  3. T1 commits with UseRefreshingStatus enabled. The server detects the
+//     RETRY_SERIALIZABLE error, bumps the timestamp via server-side retry, and
+//     commits without a second EndTxn from the client.
 func TestRefreshingServerSideRetry(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -470,13 +473,14 @@ func TestRefreshingServerSideRetry(t *testing.T) {
 	require.NoError(t, t2.Commit(ctx))
 
 	// T1 commits. Since T1 has no read spans, CanForwardReadTimestamp is true.
-	// The server should handle the timestamp bump via server-side retry without
-	// returning REFRESHING to the client.
+	// The server should handle the timestamp bump via server-side retry,
+	// committing in a single round-trip.
 	require.NoError(t, t1.Commit(ctx))
 
 	// Exactly 1 EndTxn batch should have been sent. If the server-side retry
-	// didn't work, the client would have seen REFRESHING and sent a second
-	// EndTxn after refreshing (which is a no-op with no read spans).
+	// didn't work, the client would have received RETRY_SERIALIZABLE and
+	// sent a second EndTxn after refreshing (which is a no-op with no read
+	// spans).
 	require.Equal(t, int32(1), endTxnCount.Load(),
 		"expected exactly 1 EndTxn; server-side retry should have avoided a second EndTxn")
 }

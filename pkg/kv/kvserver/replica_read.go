@@ -525,7 +525,7 @@ func (r *Replica) executeReadOnlyBatchWithServersideRefreshes(
 		// timestamps.
 		var ok bool
 		if latchesHeld {
-			ba, ok = canDoServersideRetry(ctx, pErr, nil /* br */, ba, g, hlc.Timestamp{})
+			ba, ok = canDoServersideRetry(ctx, pErr, ba, g, hlc.Timestamp{})
 		}
 		if !ok {
 			// TODO(aayush,arul): These metrics are incorrect at the moment since

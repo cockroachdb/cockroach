@@ -11,7 +11,6 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/abortspan"
@@ -394,24 +393,6 @@ func EndTxn(
 				panic("unreachable")
 			}
 
-		case roachpb.REFRESHING:
-			// The coordinator previously wrote a REFRESHING record and is now
-			// retrying EndTxn after a successful refresh.
-			switch {
-			case h.Txn.Epoch < reply.Txn.Epoch:
-				return result.Result{}, errors.AssertionFailedf(
-					"programming error: epoch regression: %d", h.Txn.Epoch)
-			case h.Txn.Epoch == reply.Txn.Epoch:
-				// Same epoch: the coordinator refreshed successfully and is
-				// retrying. Downgrade to PENDING and proceed.
-				reply.Txn.Status = roachpb.PENDING
-			case h.Txn.Epoch > reply.Txn.Epoch:
-				// Newer epoch: the coordinator restarted. Downgrade to PENDING.
-				reply.Txn.Status = roachpb.PENDING
-			default:
-				panic("unreachable")
-			}
-
 		default:
 			return result.Result{}, errors.AssertionFailedf("bad txn status: %s", reply.Txn)
 		}
@@ -440,9 +421,6 @@ func EndTxn(
 			// Furthermore, checking the timestamp cache and increasing the commit
 			// timestamp at this point would be incorrect, because the transaction may
 			// have entered the implicit commit state.
-		case existingTxn.Status == roachpb.REFRESHING:
-			// Don't check timestamp cache. The transaction could not have been pushed
-			// while its record was in the REFRESHING state.
 		default:
 			panic("unreachable")
 		}
@@ -453,30 +431,6 @@ func EndTxn(
 		// request is marking the commit as explicit, this check must succeed. We
 		// assert this in txnCommitter.makeTxnCommitExplicitAsync.
 		if retry, reason, extraMsg := IsEndTxnTriggeringRetryError(reply.Txn, args.Deadline); retry {
-			// If enabled, we transform RETRY_SERIALIZABLE failures into a transition
-			// into the REFRESHING state. This protects the transaction from pushes
-			// during the refresh.
-			//
-			// TODO(ssd): Think carefully about whether REFRESHING makes sense
-			// for PREPARE. For now, skip it.
-			transitionToRefreshing := reason == kvpb.RETRY_SERIALIZABLE && args.UseRefreshingStatus && !args.Prepare
-
-			if transitionToRefreshing {
-				// Even if request, don't write a transaction REFRESHING transaction
-				// status unless all nodes can understand it.
-				if !cArgs.EvalCtx.ClusterSettings().Version.IsActive(ctx, clusterversion.V26_2) {
-					log.Event(ctx, "REFRESHING status request but ignored because of cluster version")
-					transitionToRefreshing = false
-				}
-			}
-			if transitionToRefreshing {
-				log.Eventf(ctx, "transitioning to REFRESHING rather than returning RETRY_SERIALIZABLE: %s", extraMsg)
-				reply.Txn.Status = roachpb.REFRESHING
-				if err := updateRefreshingTxn(ctx, readWriter, ms, key, args, reply.Txn); err != nil {
-					return result.Result{}, err
-				}
-				return result.Result{}, nil
-			}
 			return result.Result{}, kvpb.NewTransactionRetryError(reason, extraMsg)
 		}
 
@@ -857,23 +811,6 @@ func updatePreparedTxn(
 // declared in-flight writes along with all of the transaction's (local and
 // remote) locks.
 func updateStagingTxn(
-	ctx context.Context,
-	readWriter storage.ReadWriter,
-	ms *enginepb.MVCCStats,
-	key []byte,
-	args *kvpb.EndTxnRequest,
-	txn *roachpb.Transaction,
-) error {
-	txn.LockSpans = args.LockSpans
-	txn.InFlightWrites = args.InFlightWrites
-	txnRecord := txn.AsRecord()
-	return storage.MVCCPutProto(
-		ctx, readWriter, key, hlc.Timestamp{}, &txnRecord,
-		storage.MVCCWriteOptions{Stats: ms, Category: fs.BatchEvalReadCategory})
-}
-
-// updateRefreshingTxn persists the REFRESHING transaction record.
-func updateRefreshingTxn(
 	ctx context.Context,
 	readWriter storage.ReadWriter,
 	ms *enginepb.MVCCStats,
