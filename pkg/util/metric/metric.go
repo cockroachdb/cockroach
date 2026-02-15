@@ -109,6 +109,7 @@ type PrometheusExportable interface {
 type PrometheusVector interface {
 	PrometheusCompatible
 	ToPrometheusMetrics() []*prometheusgo.Metric
+	Delete(labels map[string]string) bool
 }
 
 // PrometheusIterable is an extension of PrometheusExportable to indicate that
@@ -1365,6 +1366,29 @@ func (v *vector) recordLabels(labelValues []string) error {
 	return nil
 }
 
+// deleteLabels removes a specific label combination from the vector's
+// tracking. This must be called alongside the prometheus vec's Delete to
+// keep encounteredLabelValues in sync with the underlying metric store.
+func (v *vector) deleteLabels(labels map[string]string) {
+	labelValues := v.getOrderedValues(labels)
+	lookupKey := strings.Join(labelValues, "_")
+
+	v.Lock()
+	defer v.Unlock()
+	if _, ok := v.encounteredLabelsLookup[lookupKey]; !ok {
+		return
+	}
+	delete(v.encounteredLabelsLookup, lookupKey)
+	for i, lv := range v.encounteredLabelValues {
+		if strings.Join(lv, "_") == lookupKey {
+			v.encounteredLabelValues = append(
+				v.encounteredLabelValues[:i],
+				v.encounteredLabelValues[i+1:]...)
+			break
+		}
+	}
+}
+
 // clear flushes the labels from the vector.
 func (v *vector) clear() {
 	v.Lock()
@@ -1400,6 +1424,13 @@ func NewExportedGaugeVec(metadata Metadata, labelSchema []string) *GaugeVec {
 		vector:   vec,
 		promVec:  promVec,
 	}
+}
+
+// Delete removes the metric with the given label set from the vector.
+// Returns true if a metric was deleted.
+func (gv *GaugeVec) Delete(labels map[string]string) bool {
+	gv.deleteLabels(labels)
+	return gv.promVec.Delete(labels)
 }
 
 // Update updates the gauge value for the given combination of labels.
@@ -1488,6 +1519,13 @@ func NewExportedCounterVec(metadata Metadata, labelNames []string) *CounterVec {
 		vector:   vec,
 		promVec:  promVec,
 	}
+}
+
+// Delete removes the metric with the given label set from the vector.
+// Returns true if a metric was deleted.
+func (cv *CounterVec) Delete(labels map[string]string) bool {
+	cv.deleteLabels(labels)
+	return cv.promVec.Delete(labels)
 }
 
 // Update updates the counter value for the given combination of labels.
@@ -1621,6 +1659,13 @@ func (hv *HistogramVec) Inspect(f func(interface{})) { f(hv) }
 // GetType implements PrometheusExportable.
 func (hv *HistogramVec) GetType() *prometheusgo.MetricType {
 	return prometheusgo.MetricType_HISTOGRAM.Enum()
+}
+
+// Delete removes the metric with the given label set from the vector.
+// Returns true if a metric was deleted.
+func (hv *HistogramVec) Delete(labels map[string]string) bool {
+	hv.deleteLabels(labels)
+	return hv.promVec.Delete(labels)
 }
 
 // ToPrometheusMetrics implements PrometheusExportable.
