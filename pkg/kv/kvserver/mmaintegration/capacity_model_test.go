@@ -53,12 +53,20 @@ func TestComputeStoreCPURateCapacity(t *testing.T) {
 				var nodeUsageCores, nodeCapCores float64
 				var storesCPUCores float64
 				var numStores int
+				var sqlGatewayCores, sqlDistCores float64
 
 				d.ScanArgs(t, "store-load", &storeCPUCores)
 				d.ScanArgs(t, "node-cpu-usage", &nodeUsageCores)
 				d.ScanArgs(t, "node-cpu-capacity", &nodeCapCores)
 				d.ScanArgs(t, "total-stores-cpu-usage", &storesCPUCores)
 				d.ScanArgs(t, "num-stores", &numStores)
+				// SQL CPU values are optional - default to 0 if not provided
+				if d.HasArg("sql-gateway-cpu") {
+					d.ScanArgs(t, "sql-gateway-cpu", &sqlGatewayCores)
+				}
+				if d.HasArg("sql-dist-cpu") {
+					d.ScanArgs(t, "sql-dist-cpu", &sqlDistCores)
+				}
 
 				totalPerStore := nodeCapCores / float64(numStores)
 
@@ -74,57 +82,37 @@ func TestComputeStoreCPURateCapacity(t *testing.T) {
 				naiveCap := float64(naiveResult) / nsPerCore
 
 				// Capped model: caps the indirect overhead multiplier.
-				var cappedMult, bgLoad, mmaShare, mmaDirect float64
 				cappedCapNs := computeCPUCapacityWithCap(
 					in,
-					func(mult, backgroundLoad, mmaShareOfCapacity, mmaDirectCapacity float64) {
-						cappedMult = mult
-						bgLoad = backgroundLoad / nsPerCore
-						mmaShare = mmaShareOfCapacity / nsPerCore
-						mmaDirect = mmaDirectCapacity / nsPerCore
-					},
+					func(_ float64, _ float64, _ float64, _ float64) {},
 				)
 				cappedCap := cappedCapNs / nsPerCore
 
-				var cappedSteps string
-				if numStores <= 0 {
-					cappedSteps = fmt.Sprintf(
-						"capped_mult: (early return: num-stores=%d)\n"+
-							"  kv-capacity: %.2f cores, kv-util: %s (%.2f/%.2f cores)\n",
-						numStores,
-						cappedCap, fmtUtil(storeCPUCores, cappedCap), storeCPUCores, cappedCap,
-					)
-				} else if nodeCapCores <= 0 {
-					cappedSteps = fmt.Sprintf(
-						"capped_mult: (node-cpu-capacity unknown, assuming 50%% util)\n"+
-							"  kv-capacity: %.2f cores, kv-util: %s (%.2f/%.2f cores)\n",
-						cappedCap, fmtUtil(storeCPUCores, cappedCap), storeCPUCores, cappedCap,
-					)
-				} else {
-					cappedSteps = fmt.Sprintf(
-						"capped_mult: (steps below)\n"+
-							"  mult        = max(1, min(%.2f/%.2f, %.0f)) = %.1f\n"+
-							"  background  = max(0, %.2f - %.2f*%.1f) = %.2f cores\n"+
-							"  mma-share   = %.2f - %.2f = %.2f cores\n"+
-							"  mma-direct  = %.2f / %.1f = %.2f cores\n"+
-							"  per-store   = %.2f / %d = %.2f cores\n"+
-							"  kv-capacity: %.2f cores, kv-util: %s (%.2f/%.2f cores)\n",
-						nodeUsageCores, storesCPUCores, cpuIndirectOverheadMultiplier, cappedMult,
-						nodeUsageCores, storesCPUCores, cappedMult, bgLoad,
-						nodeCapCores, bgLoad, mmaShare,
-						mmaShare, cappedMult, mmaDirect,
-						mmaDirect, numStores, cappedCap,
-						cappedCap, fmtUtil(storeCPUCores, cappedCap), storeCPUCores, cappedCap,
-					)
+				// SQL model: accounts for SQL gateway and distributed SQL CPU separately.
+				inSQL := storeCPURateCapacityInput{
+					currentStoreCPUUsage:    mmaprototype.LoadValue(storeCPUCores * nsPerCore),
+					storesCPURate:           storesCPUCores * nsPerCore,
+					nodeCPURateUsage:        nodeUsageCores * nsPerCore,
+					nodeCPURateCapacity:     nodeCapCores * nsPerCore,
+					sqlGatewayCPUNanoPerSec: sqlGatewayCores * nsPerCore,
+					sqlDistCPUNanoPerSec:    sqlDistCores * nsPerCore,
+					numStores:               int32(numStores),
 				}
+				sqlCapNs := computeStoreCPURateCapacityWithSQL(
+					inSQL,
+					func(_ float64, _ float64, _ float64) {},
+				)
+				sqlCap := sqlCapNs / nsPerCore
 
 				return fmt.Sprintf(
 					"              node-cpu-capacity/num-stores: %.2f cores/store\n"+
 						"naive:        kv-capacity: %.2f cores, kv-util: %s (%.2f/%.2f cores)\n"+
-						"%s",
+						"capped_mult:  kv-capacity: %.2f cores, kv-util: %s (%.2f/%.2f cores)\n"+
+						"sql_model:    kv-capacity: %.2f cores, kv-util: %s (%.2f/%.2f cores)\n",
 					totalPerStore,
 					naiveCap, fmtUtil(storeCPUCores, naiveCap), storeCPUCores, naiveCap,
-					cappedSteps,
+					cappedCap, fmtUtil(storeCPUCores, cappedCap), storeCPUCores, cappedCap,
+					sqlCap, fmtUtil(storeCPUCores, sqlCap), storeCPUCores, sqlCap,
 				)
 
 			default:
