@@ -579,13 +579,15 @@ func evaluateCommand(
 	return pd, err
 }
 
-// canDoServersideRetry looks at the error produced by evaluating ba and decides
-// if it's possible to retry the batch evaluation at a higher timestamp.
+// canDoServersideRetry looks at the error (or REFRESHING response) produced by
+// evaluating ba and decides if it's possible to retry the batch evaluation at a
+// higher timestamp.
 //
 // Retrying is sometimes possible in case of some retriable errors which ask for
-// higher timestamps. For transactional requests, retrying is possible if the
-// transaction had not performed any prior reads that need refreshing. For
-// non-transactional requests, retrying is always possible.
+// higher timestamps, or when EndTxn produces a REFRESHING response (indicating
+// a pushed timestamp that needs refreshing). For transactional requests,
+// retrying is possible if the transaction had not performed any prior reads that
+// need refreshing. For non-transactional requests, retrying is always possible.
 //
 // This function is called both below and above latching, which is indicated by
 // the concurrency guard argument. The concurrency guard, if not nil, indicates
@@ -599,17 +601,22 @@ func evaluateCommand(
 // the request can be evaluated. If ba is a transactional request, then deadline
 // cannot be specified; a transaction's deadline comes from it's EndTxn request.
 //
+// br is the batch response from evaluation. It is non-nil when pErr is nil and
+// the evaluation produced a REFRESHING transaction status. Callers that cannot
+// produce REFRESHING responses pass nil.
+//
 // If true is returned, ba and ba.Txn will have been updated with the new
 // timestamp.
 func canDoServersideRetry(
 	ctx context.Context,
 	pErr *kvpb.Error,
+	br *kvpb.BatchResponse,
 	ba *kvpb.BatchRequest,
 	g *concurrency.Guard,
 	deadline hlc.Timestamp,
 ) (*kvpb.BatchRequest, bool) {
-	if pErr == nil {
-		log.KvExec.Fatalf(ctx, "canDoServersideRetry called without error")
+	if pErr == nil && (br == nil || br.Txn == nil || br.Txn.Status != roachpb.REFRESHING) {
+		log.KvExec.Fatalf(ctx, "canDoServersideRetry called without error or REFRESHING response")
 	}
 	if ba.Txn != nil {
 		if !ba.CanForwardReadTimestamp {
@@ -625,7 +632,10 @@ func canDoServersideRetry(
 	}
 
 	var newTimestamp hlc.Timestamp
-	if ba.Txn != nil {
+	if pErr == nil {
+		// REFRESHING case: the new timestamp is the pushed write timestamp.
+		newTimestamp = br.Txn.WriteTimestamp
+	} else if ba.Txn != nil {
 		var ok bool
 		ok, newTimestamp = kvpb.TransactionRefreshTimestamp(pErr)
 		if !ok {
