@@ -95,7 +95,9 @@ func (s *topLevelServer) newTenantServer(
 		serverutils.SetUnsafeOverride(&baseCfg.TestingKnobs)
 	}
 
-	tenantServer, err := newTenantServerInternal(ctx, baseCfg, sqlCfg, tenantStopper, tenantNameContainer, s.db.AdmissionPacerFactory)
+	tenantServer, err := newTenantServerInternal(
+		ctx, baseCfg, sqlCfg, tenantStopper, tenantNameContainer, s.db.AdmissionPacerFactory,
+		s.db.SQLCPUProvider)
 	if err != nil {
 		return nil, err
 	}
@@ -152,6 +154,7 @@ func newTenantServerInternal(
 	stopper *stop.Stopper,
 	tenantNameContainer *roachpb.TenantNameContainer,
 	elastic admission.PacerFactory,
+	sqlCPUProvider admission.SQLCPUProvider,
 ) (*SQLServerWrapper, error) {
 	ambientCtx := baseCfg.AmbientCtx
 	stopper.SetTracer(baseCfg.Tracer)
@@ -163,7 +166,8 @@ func newTenantServerInternal(
 	log.Dev.Infof(newCtx, "creating tenant server")
 
 	// Now instantiate the tenant server proper.
-	return newSharedProcessTenantServer(newCtx, stopper, baseCfg, sqlCfg, tenantNameContainer, elastic)
+	return newSharedProcessTenantServer(
+		newCtx, stopper, baseCfg, sqlCfg, tenantNameContainer, elastic, sqlCPUProvider)
 }
 
 func (s *topLevelServer) makeSharedProcessTenantConfig(

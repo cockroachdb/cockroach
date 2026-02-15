@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util/admission"
 	"github.com/cockroachdb/cockroach/pkg/util/cancelchecker"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
@@ -281,6 +282,10 @@ func (s *ParallelUnorderedSynchronizer) init() {
 		// goroutines just sitting around waiting for cancellation. I wonder if we
 		// could reuse those goroutines to push batches to batchCh directly.
 		go func(input colexecargs.OpWithMetaInfo, inputIdx int) {
+			if cpuHandle := admission.SQLCPUHandleFromContext(s.Ctx); cpuHandle != nil {
+				gh := cpuHandle.RegisterGoroutine()
+				defer gh.Close(s.Ctx)
+			}
 			span := s.tracingSpans[inputIdx]
 			defer func() {
 				if int(atomic.AddUint32(&s.numFinishedInputs, 1)) == len(s.inputs) {

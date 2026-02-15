@@ -590,6 +590,8 @@ func NewServer(cfg Config, stopper *stop.Stopper) (serverctl.ServerStartupInterf
 	)
 	db.SQLKVResponseAdmissionQ = gcoords.RegularCPU.GetSQLWorkQueue(admission.SQLKVResponseWork)
 	db.AdmissionPacerFactory = gcoords.ElasticCPU
+	sqlCPUProvider := admission.NewSQLCPUProvider()
+	db.SQLCPUProvider = sqlCPUProvider
 	goschedstats.RegisterSettings(st)
 	if goschedstats.Supported {
 		cbID := goschedstats.RegisterRunnableCountCallback(gcoords.RegularCPU.GetRunnableCountCallback())
@@ -1271,6 +1273,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (serverctl.ServerStartupInterf
 		monitorAndMetrics:        sqlMonitorAndMetrics,
 		settingsStorage:          settingsWriter,
 		admissionPacerFactory:    gcoords.ElasticCPU,
+		sqlCPUProvider:           sqlCPUProvider,
 		rangeDescIteratorFactory: rangedesc.NewIteratorFactory(db),
 		tenantCapabilitiesReader: sql.MakeSystemTenantOnly[tenantcapabilities.Reader](tenantCapabilitiesWatcher),
 	})
