@@ -22,6 +22,7 @@ go_library(
         "alter_table_alter_primary_key.go",
         "alter_table_drop_column.go",
         "alter_table_drop_constraint.go",
+        "alter_table_locality.go",
         "alter_table_rename_column.go",
         "alter_table_rename_constraint.go",
         "alter_table_set_rls_mode.go",

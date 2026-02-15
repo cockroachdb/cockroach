@@ -4401,6 +4401,20 @@ deprules
     - $new-index-name-Node[CurrentStatus] = PUBLIC
     - joinTargetNode($old-index-name, $old-index-name-Target, $old-index-name-Node)
     - joinTargetNode($new-index-name, $new-index-name-Target, $new-index-name-Node)
+- name: old locality must become absent before the new locality is public
+  from: old-locality-Node
+  kind: Precedence
+  to: new-locality-Node
+  query:
+    - $old-locality[Type] IN ['*scpb.TableLocalityGlobal', '*scpb.TableLocalityPrimaryRegion', '*scpb.TableLocalityRegionalByRow', '*scpb.TableLocalitySecondaryRegion']
+    - $new-locality[Type] IN ['*scpb.TableLocalityGlobal', '*scpb.TableLocalityPrimaryRegion', '*scpb.TableLocalityRegionalByRow', '*scpb.TableLocalitySecondaryRegion']
+    - joinOnDescID($old-locality, $new-locality, $table-id)
+    - $old-locality-Target[TargetStatus] = ABSENT
+    - $old-locality-Node[CurrentStatus] = PUBLIC
+    - $new-locality-Target[TargetStatus] = PUBLIC
+    - $new-locality-Node[CurrentStatus] = ABSENT
+    - joinTargetNode($old-locality, $old-locality-Target, $old-locality-Node)
+    - joinTargetNode($new-locality, $new-locality-Target, $new-locality-Node)
 - name: old secondary indexes that have been recreated should be removed when their replacement is usable.
   from: new-primary-index-Node
   kind: SameStagePrecedence
@@ -9681,6 +9695,20 @@ deprules
     - $new-index-name-Node[CurrentStatus] = PUBLIC
     - joinTargetNode($old-index-name, $old-index-name-Target, $old-index-name-Node)
     - joinTargetNode($new-index-name, $new-index-name-Target, $new-index-name-Node)
+- name: old locality must become absent before the new locality is public
+  from: old-locality-Node
+  kind: Precedence
+  to: new-locality-Node
+  query:
+    - $old-locality[Type] IN ['*scpb.TableLocalityGlobal', '*scpb.TableLocalityPrimaryRegion', '*scpb.TableLocalityRegionalByRow', '*scpb.TableLocalitySecondaryRegion']
+    - $new-locality[Type] IN ['*scpb.TableLocalityGlobal', '*scpb.TableLocalityPrimaryRegion', '*scpb.TableLocalityRegionalByRow', '*scpb.TableLocalitySecondaryRegion']
+    - joinOnDescID($old-locality, $new-locality, $table-id)
+    - $old-locality-Target[TargetStatus] = ABSENT
+    - $old-locality-Node[CurrentStatus] = PUBLIC
+    - $new-locality-Target[TargetStatus] = PUBLIC
+    - $new-locality-Node[CurrentStatus] = ABSENT
+    - joinTargetNode($old-locality, $old-locality-Target, $old-locality-Node)
+    - joinTargetNode($new-locality, $new-locality-Target, $new-locality-Node)
 - name: old secondary indexes that have been recreated should be removed when their replacement is usable.
   from: new-primary-index-Node
   kind: SameStagePrecedence
