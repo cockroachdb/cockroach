@@ -12,6 +12,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
@@ -353,6 +354,17 @@ type FetcherInitArgs struct {
 	// row is being processed. In practice, this means that span IDs must be
 	// passed in when SpansCanOverlap is true.
 	SpansCanOverlap bool
+	// WorkloadID is an identifier that links the request back to the workload
+	// entity that triggered the Batch. This can be a statement fingerprint ID,
+	// transaction fingerprint ID, job ID, etc.
+	WorkloadID uint64
+	// AppNameID is the uint64 identifier for the app_name of the SQL session
+	// that created this request. This is a hash of the app_name string.
+	AppNameID uint64
+	// Gateway is the SQL instance ID of the gateway node that planned the flow
+	// or served the query. This is always set to the gateway node ID, even when
+	// the flow is executing on a remote node.
+	Gateway base.SQLInstanceID
 }
 
 // Init sets up a Fetcher for a given table and index.
@@ -518,6 +530,9 @@ func (rf *Fetcher) Init(ctx context.Context, args FetcherInitArgs) error {
 			kvPairsRead:                &kvPairsRead,
 			batchRequestsIssued:        &batchRequestsIssued,
 			kvCPUTime:                  &kvCPUTime,
+			workloadID:                 args.WorkloadID,
+			appNameID:                  args.AppNameID,
+			gatewayNodeID:              roachpb.NodeID(args.Gateway),
 		}
 		if args.Txn != nil {
 			fetcherArgs.sendFn = makeSendFunc(args.Txn, args.Spec.External, &batchRequestsIssued, &kvCPUTime)

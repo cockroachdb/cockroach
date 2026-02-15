@@ -15,6 +15,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/col/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvstreamer"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
@@ -637,6 +638,9 @@ func NewColIndexJoin(
 			kvFetcherMemAcc,
 			spec.FetchSpec.External,
 			tableArgs.RequiresRawMVCCValues(),
+			flowCtx.EvalCtx.WorkloadID,
+			flowCtx.EvalCtx.AppNameID,
+			roachpb.NodeID(flowCtx.EvalCtx.Gateway),
 		)
 	} else {
 		kvFetcher = row.NewKVFetcher(
@@ -652,22 +656,28 @@ func NewColIndexJoin(
 			kvFetcherMemAcc,
 			flowCtx.EvalCtx.TestingKnobs.ForceProductionValues,
 			spec.FetchSpec.External,
+			flowCtx.EvalCtx.WorkloadID,
+			flowCtx.EvalCtx.AppNameID,
+			roachpb.NodeID(flowCtx.EvalCtx.Gateway),
 		)
 	}
 
 	shouldCollectStats := execstats.ShouldCollectStats(ctx, flowCtx.CollectStats)
 	fetcher := cFetcherPool.Get().(*cFetcher)
 	fetcher.cFetcherArgs = cFetcherArgs{
-		cFetcherMemoryLimit,
+		memoryLimit: cFetcherMemoryLimit,
 		// Note that the correct estimated row count will be set by the index
 		// joiner for each set of spans to read.
-		0, /* estimatedRowCount */
-		flowCtx.TraceKV,
-		false, /* singleUse */
-		shouldCollectStats,
-		false, /* alwaysReallocate */
-		txn,
-		flowCtx.Codec().TenantID,
+		estimatedRowCount: 0,
+		traceKV:           flowCtx.TraceKV,
+		singleUse:         false,
+		collectStats:      shouldCollectStats,
+		alwaysReallocate:  false,
+		txn:               txn,
+		tenantID:          flowCtx.Codec().TenantID,
+		workloadID:        flowCtx.EvalCtx.WorkloadID,
+		appNameID:         flowCtx.EvalCtx.AppNameID,
+		gatewayNodeID:     roachpb.NodeID(flowCtx.EvalCtx.Gateway),
 	}
 	if err = fetcher.Init(
 		fetcherAllocator, kvFetcher, tableArgs,

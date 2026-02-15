@@ -15,6 +15,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
+	"github.com/cockroachdb/cockroach/pkg/sql/ash"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catsessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/colflow"
@@ -280,7 +281,14 @@ func (ds *ServerImpl) setupFlow(
 		// The flow will run in a LeafTxn because we do not want each distributed
 		// Txn to heartbeat the transaction.
 		nodeID := roachpb.NodeID(req.Flow.Gateway)
-		return kv.NewLeafTxn(ctx, ds.DB.KV(), nodeID, tis, &req.LeafTxnAdmissionHeader), nil
+		sqlGatewayNodeID := roachpb.NodeID(req.Flow.Gateway)
+		if req.WorkloadID == 0 || req.AppNameID == 0 {
+			log.Ops.Error(ctx, "ASH debugging: empty workloadID or appNameID when creating a leaf txn")
+		}
+		return kv.NewLeafTxnWithWorkloadInfo(
+			ctx, ds.DB.KV(), nodeID, tis, &req.LeafTxnAdmissionHeader,
+			req.WorkloadID, req.AppNameID, sqlGatewayNodeID,
+		), nil
 	}
 
 	var evalCtx *eval.Context
@@ -291,6 +299,14 @@ func (ds *ServerImpl) setupFlow(
 		// this allows us to avoid an unnecessary deserialization of the eval
 		// context proto.
 		evalCtx = localState.EvalContext
+		// Ensure Gateway is set to the gateway node ID. It should already be set
+		// from copyFromExecCfg, but set it from req.Flow.Gateway as a fallback.
+		if evalCtx.Gateway == 0 {
+			evalCtx.Gateway = req.Flow.Gateway
+		}
+		// Set WorkloadID and AppNameID on the eval context from the request.
+		evalCtx.WorkloadID = req.WorkloadID
+		evalCtx.AppNameID = req.AppNameID
 		if localState.MustUseLeafTxn() {
 			var err error
 			leafTxn, err = makeLeaf(ctx)
@@ -352,7 +368,10 @@ func (ds *ServerImpl) setupFlow(
 			ClusterID:                 ds.ServerConfig.LogicalClusterID.Get(),
 			ClusterName:               ds.ServerConfig.ClusterName,
 			NodeID:                    ds.ServerConfig.NodeID,
+			Gateway:                   req.Flow.Gateway,
 			Codec:                     ds.ServerConfig.Codec,
+			WorkloadID:                req.WorkloadID,
+			AppNameID:                 req.AppNameID,
 			ReCache:                   ds.regexpCache,
 			ToCharFormatCache:         ds.toCharFormatCache,
 			Locality:                  ds.ServerConfig.Locality,
@@ -460,6 +479,7 @@ func (ds *ServerImpl) setupFlow(
 		}
 		txn = leafTxn
 	}
+	txn.SetWorkloadInfo(flowCtx.EvalCtx.WorkloadID, flowCtx.EvalCtx.AppNameID, roachpb.NodeID(req.Flow.Gateway))
 	// TODO(andrei): We're about to overwrite f.EvalCtx.Txn, but the existing
 	// field has already been captured by various processors and operators that
 	// have already made a copy of the EvalCtx. In case this is not the gateway,
@@ -695,6 +715,9 @@ func (ds *ServerImpl) SetupFlow(
 	ctx context.Context, req *execinfrapb.SetupFlowRequest,
 ) (*execinfrapb.SimpleResponse, error) {
 	log.VEventf(ctx, 1, "received SetupFlow request from n%v for flow %v", req.Flow.Gateway, req.Flow.FlowID)
+	// Store the app name mapping using the ID from the request. The gateway
+	// already computed the hash, so we just need to populate the local map.
+	ash.StoreAppNameMapping(req.AppNameID, req.EvalContext.SessionData.ApplicationName)
 	_, rpcSpan := ds.setupSpanForIncomingRPC(ctx, req)
 	defer rpcSpan.Finish()
 
@@ -737,6 +760,7 @@ func (ds *ServerImpl) SetupFlow(
 			}
 			return err
 		}
+		// TODO(alyshan): workloadID is available in SetupFlowRequest, add the workloadid.ProfileTag to the pprof labels.
 		var undo func()
 		ctx, undo = pprofutil.SetProfilerLabelsFromCtxTags(ctx)
 		defer undo()

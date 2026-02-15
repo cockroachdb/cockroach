@@ -65,6 +65,17 @@ message SetupFlowRequest {
   // is populated on a best effort basis.
   optional string statement_sql = 10 [(gogoproto.nullable) = false,
     (gogoproto.customname) = "StatementSQL"];
+
+  // WorkloadID is the identifier for this workload that we can use
+  // for profiling and tracing.
+  optional uint64 workload_id = 14 [(gogoproto.nullable) = false,
+    (gogoproto.customname) = "WorkloadID"];
+  // AppNameID is the uint64 identifier for the app_name of the SQL session
+  // that created this flow. This is a hash of the app_name string that can
+  // be mapped back to the app_name using the node-local app name mapping.
+  // Zero means no app_name is associated with this flow.
+  optional uint64 app_name_id = 15 [(gogoproto.nullable) = false,
+    (gogoproto.customname) = "AppNameID"];
 }
 
 // FlowSpec describes a "flow" which is a subgraph of a distributed SQL

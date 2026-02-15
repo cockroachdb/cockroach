@@ -546,13 +546,21 @@ func BenchmarkTracing(b *testing.B) {
 						// netTrace, if set, enables use of net.Traces. This is similar to
 						// the effects of the trace.debug_http_endpoint.enabled cluster setting.
 						netTrace bool
+						// ashEnabled, if set, enables Active Session History (ASH) sampling.
+						ashEnabled bool
 					}
 					for _, test := range []testSpec{
-						{alwaysTrace: false},
-						{sqlTraceRatio: 0.01},
-						{sqlTraceRatio: 1.0},
-						{alwaysTrace: true},
-						{netTrace: true},
+						{ashEnabled: false},
+						{ashEnabled: true},
+						// {alwaysTrace: false},
+						// {alwaysTrace: false, ashEnabled: true},
+						// {sqlTraceRatio: 0.01},
+						// {sqlTraceRatio: 0.01, ashEnabled: true},
+						// {sqlTraceRatio: 0.03},
+						// {sqlTraceRatio: 0.10},
+						// {sqlTraceRatio: 1.0},
+						// {alwaysTrace: true},
+						// {netTrace: true},
 					} {
 						if test.alwaysTrace && test.sqlTraceRatio != 0 {
 							panic("invalid test")
@@ -569,6 +577,12 @@ func BenchmarkTracing(b *testing.B) {
 						} else {
 							percent := int(test.sqlTraceRatio * 100)
 							name.WriteString(fmt.Sprintf("%d%%", percent))
+						}
+						name.WriteString("/ash=")
+						if test.ashEnabled {
+							name.WriteString("on")
+						} else {
+							name.WriteString("off")
 						}
 						b.Run(name.String(), func(b *testing.B) {
 							var opts []tracing.TracerOption
@@ -588,6 +602,7 @@ func BenchmarkTracing(b *testing.B) {
 
 							sqlRunner.Exec(b, `CREATE DATABASE bench`)
 							sqlRunner.Exec(b, `SET CLUSTER SETTING sql.txn_stats.sample_rate = $1`, test.sqlTraceRatio)
+							sqlRunner.Exec(b, `SET CLUSTER SETTING sql.ash.enabled = $1`, test.ashEnabled)
 
 							b.ReportAllocs()
 							bench.fn(b, sqlRunner)

@@ -403,6 +403,9 @@ func NewStreamer(
 	lockStrength lock.Strength,
 	lockDurability lock.Durability,
 	reverse bool,
+	workloadID uint64,
+	appNameID uint64,
+	gatewayNodeID roachpb.NodeID,
 ) *Streamer {
 	if txn.Type() != kv.LeafTxn {
 		panic(errors.AssertionFailedf("RootTxn is given to the Streamer"))
@@ -447,6 +450,9 @@ func NewStreamer(
 		lockWaitPolicy:         lockWaitPolicy,
 		requestAdmissionHeader: txn.AdmissionHeader(),
 		responseAdmissionQ:     txn.DB().SQLKVResponseAdmissionQ,
+		workloadID:             workloadID,
+		appNameID:              appNameID,
+		gatewayNodeID:          gatewayNodeID,
 	}
 	s.coordinator.asyncSem = quotapool.NewIntPool(
 		"single Streamer async concurrency",
@@ -918,6 +924,11 @@ type workerCoordinator struct {
 	// For request and response admission control.
 	requestAdmissionHeader kvpb.AdmissionHeader
 	responseAdmissionQ     *admission.WorkQueue
+
+	// Workload attribution fields for response admission control.
+	workloadID    uint64
+	appNameID     uint64
+	gatewayNodeID roachpb.NodeID
 }
 
 // mainLoop runs throughout the lifetime of the Streamer (from the first Enqueue
@@ -1554,9 +1565,12 @@ func (w *workerCoordinator) performRequestAsync(
 		// Do admission control after we've finalized the memory accounting.
 		if br != nil && w.responseAdmissionQ != nil {
 			responseAdmission := admission.WorkInfo{
-				TenantID:   roachpb.SystemTenantID,
-				Priority:   admissionpb.WorkPriority(w.requestAdmissionHeader.Priority),
-				CreateTime: w.requestAdmissionHeader.CreateTime,
+				TenantID:      roachpb.SystemTenantID,
+				Priority:      admissionpb.WorkPriority(w.requestAdmissionHeader.Priority),
+				CreateTime:    w.requestAdmissionHeader.CreateTime,
+				WorkloadID:    w.workloadID,
+				AppNameID:     w.appNameID,
+				GatewayNodeID: w.gatewayNodeID,
 			}
 			if _, err = w.responseAdmissionQ.Admit(ctx, responseAdmission); err != nil {
 				log.VEventf(ctx, 2, "dropping response: admission control: %v", err)

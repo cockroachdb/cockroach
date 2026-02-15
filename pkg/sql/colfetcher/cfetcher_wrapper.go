@@ -177,6 +177,9 @@ func newCFetcherWrapper(
 	nextKVer storage.NextKVer,
 	startKey roachpb.Key,
 	mustSerialize bool,
+	workloadID uint64,
+	appNameID uint64,
+	sqlGatewayNodeID roachpb.NodeID,
 ) (_ storage.CFetcherWrapper, retErr error) {
 	// At the moment, we always serialize the columnar batches if they contain
 	// enums, so it is safe to handle enum types without proper hydration - we
@@ -239,6 +242,9 @@ func newCFetcherWrapper(
 		alwaysReallocate,
 		nil, /* txn; TODO(dt): this means no AC priority info is passed. */
 		tenantID,
+		workloadID,
+		appNameID,
+		sqlGatewayNodeID,
 	}
 
 	// This memory monitor is not connected to the memory accounting system

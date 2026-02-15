@@ -82,6 +82,22 @@ type Txn struct {
 	// It will be attached to all requests sent through this transaction.
 	gatewayNodeID roachpb.NodeID
 
+	// workloadID, if != 0, is the identifier for the workload that triggered
+	// this transaction (e.g., statement fingerprint ID). It will be attached to
+	// all requests sent through this transaction.
+	workloadID uint64
+
+	// appNameID, if != 0, is the uint64 identifier for the app_name of the SQL
+	// session that created this transaction. It will be attached to all requests
+	// sent through this transaction.
+	appNameID uint64
+
+	// sqlGatewayNodeID, if != 0, is the ID of the SQL gateway node that
+	// initiated the query. This is used for ASH sampling and is distinct from
+	// gatewayNodeID (which is the KV gateway). It will be attached to all
+	// requests sent through this transaction.
+	sqlGatewayNodeID roachpb.NodeID
+
 	// The following fields are not safe for concurrent modification.
 	// They should be set before operating on the transaction.
 
@@ -221,7 +237,12 @@ func NewTxnFromProto(
 		proto.UpdateObservedTimestamp(gatewayNodeID, now)
 	}
 
-	txn := &Txn{db: db, typ: typ, gatewayNodeID: gatewayNodeID}
+	txn := &Txn{
+		db:               db,
+		typ:              typ,
+		gatewayNodeID:    gatewayNodeID,
+		sqlGatewayNodeID: gatewayNodeID, // For SQL transactions, SQL gateway is the same as KV gateway
+	}
 	txn.mu.ID = proto.ID
 	txn.mu.userPriority = roachpb.NormalUserPriority
 	txn.mu.sender = db.factory.RootTransactionalSender(proto, txn.mu.userPriority)
@@ -236,6 +257,22 @@ func NewLeafTxn(
 	tis *roachpb.LeafTxnInputState,
 	header *kvpb.AdmissionHeader,
 ) *Txn {
+	return NewLeafTxnWithWorkloadInfo(ctx, db, gatewayNodeID, tis, header, 0, 0, 0)
+}
+
+// NewLeafTxnWithWorkloadInfo instantiates a new leaf transaction with workload
+// information. This should be used when the workload ID, app name ID, and SQL
+// gateway node ID are known (e.g., from a DistSQL SetupFlowRequest).
+func NewLeafTxnWithWorkloadInfo(
+	ctx context.Context,
+	db *DB,
+	gatewayNodeID roachpb.NodeID,
+	tis *roachpb.LeafTxnInputState,
+	header *kvpb.AdmissionHeader,
+	workloadID uint64,
+	appNameID uint64,
+	sqlGatewayNodeID roachpb.NodeID,
+) *Txn {
 	if db == nil {
 		panic(errors.WithContextTags(
 			errors.AssertionFailedf("attempting to create leaf txn with nil db for Transaction: %s", tis.Txn), ctx))
@@ -245,7 +282,14 @@ func NewLeafTxn(
 			errors.AssertionFailedf("can't create leaf txn with non-PENDING proto: %s", tis.Txn), ctx))
 	}
 	tis.Txn.AssertInitialized(ctx)
-	txn := &Txn{db: db, typ: LeafTxn, gatewayNodeID: gatewayNodeID}
+	txn := &Txn{
+		db:               db,
+		typ:              LeafTxn,
+		gatewayNodeID:    gatewayNodeID,
+		workloadID:       workloadID,
+		appNameID:        appNameID,
+		sqlGatewayNodeID: sqlGatewayNodeID,
+	}
 	txn.mu.ID = tis.Txn.ID
 	txn.mu.userPriority = roachpb.NormalUserPriority
 	txn.mu.sender = db.factory.LeafTransactionalSender(tis)
@@ -428,6 +472,20 @@ func (txn *Txn) SetDebugName(name string) {
 
 	txn.mu.sender.SetDebugName(name)
 	txn.mu.debugName = name
+}
+
+// SetWorkloadInfo sets the workload ID, app name ID, and SQL gateway node ID
+// on the transaction. These fields will be attached to all BatchRequests sent
+// through this transaction. This should be called when executing a statement
+// to associate the transaction with the statement's workload.
+func (txn *Txn) SetWorkloadInfo(workloadID uint64, appNameID uint64, sqlGatewayNodeID roachpb.NodeID) {
+	txn.workloadID = workloadID
+	txn.appNameID = appNameID
+	txn.sqlGatewayNodeID = sqlGatewayNodeID
+	// Also propagate to the TxnCoordSender so it can be used for heartbeats.
+	txn.mu.Lock()
+	defer txn.mu.Unlock()
+	txn.mu.sender.SetWorkloadInfo(workloadID, appNameID, sqlGatewayNodeID)
 }
 
 // DebugName returns the debug name associated with the transaction.
@@ -1344,7 +1402,7 @@ func (txn *Txn) checkRetryErrorTxnIDLocked(
 func (txn *Txn) Send(
 	ctx context.Context, ba *kvpb.BatchRequest,
 ) (*kvpb.BatchResponse, *kvpb.Error) {
-	// Fill in the GatewayNodeID on the batch if the txn knows it.
+	// Fill in the GatewayNodeID and SQLGatewayNodeID on the batch if the txn knows them.
 	// NOTE(andrei): It seems a bit ugly that we're filling in the batches here as
 	// opposed to the point where the requests are being created, but
 	// unfortunately requests are being created in many ways and this was the best
@@ -1352,6 +1410,42 @@ func (txn *Txn) Send(
 	if txn.gatewayNodeID != 0 {
 		ba.Header.GatewayNodeID = txn.gatewayNodeID
 	}
+	if txn.sqlGatewayNodeID != 0 && ba.Header.SQLGatewayNodeID == 0 {
+		ba.Header.SQLGatewayNodeID = txn.sqlGatewayNodeID
+	}
+	if txn.workloadID != 0 && ba.Header.WorkloadId == 0 {
+		ba.Header.WorkloadId = txn.workloadID
+	}
+	if txn.appNameID != 0 && ba.Header.AppNameID == 0 {
+		ba.Header.AppNameID = txn.appNameID
+	}
+
+	// if ba.Header.WorkloadId != 0 {
+	// 	if ba.Header.AppNameID == 0 || ba.Header.SQLGatewayNodeID == 0 {
+	// 		// Get transaction info (requires lock)
+	// 		txn.mu.Lock()
+	// 		txnID := txn.mu.ID
+	// 		debugName := txn.mu.debugName
+	// 		txn.mu.Unlock()
+
+	// 		log.Ops.Infof(ctx,
+	// 			"workloadID is non-zero (%d) but appNameID or sqlGatewayNodeID are missing "+
+	// 				"(appNameID=%d, sqlGatewayNodeID=%d). "+
+	// 				"txn: %s (id: %s), typ: %v, gatewayNodeID: %d, "+
+	// 				"admissionSource: %v, admissionSourceLocation: %v, numRequests: %d. "+
+	// 				"This may affect profiling, tracing, and ASH sampling.",
+	// 			ba.Header.WorkloadId,
+	// 			ba.Header.AppNameID,
+	// 			ba.Header.SQLGatewayNodeID,
+	// 			debugName,
+	// 			txnID,
+	// 			txn.typ,
+	// 			txn.gatewayNodeID,
+	// 			ba.AdmissionHeader.Source,
+	// 			ba.AdmissionHeader.SourceLocation,
+	// 			len(ba.Requests))
+	// 	}
+	// }
 
 	// Requests with a bounded staleness header should use NegotiateAndSend.
 	if ba.BoundedStaleness != nil {

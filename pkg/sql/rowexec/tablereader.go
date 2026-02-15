@@ -151,6 +151,9 @@ func newTableReader(
 			Spec:                       &spec.FetchSpec,
 			TraceKV:                    flowCtx.TraceKV,
 			ForceProductionKVBatchSize: flowCtx.EvalCtx.TestingKnobs.ForceProductionValues,
+			WorkloadID:                 flowCtx.EvalCtx.WorkloadID,
+			AppNameID:                  flowCtx.EvalCtx.AppNameID,
+			Gateway:                    flowCtx.EvalCtx.Gateway,
 		},
 	); err != nil {
 		return nil, err

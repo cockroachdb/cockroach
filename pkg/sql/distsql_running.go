@@ -468,12 +468,22 @@ func (dsp *DistSQLPlanner) setupFlows(
 	if len(statementSQL) > setupFlowRequestStmtMaxLength {
 		statementSQL = statementSQL[:setupFlowRequestStmtMaxLength]
 	}
+
+	var workloadID uint64
+	if planCtx.planner != nil {
+		workloadID = planCtx.planner.stmt.WorkloadID
+	}
+	// Read the cached appNameID from the eval context, which was set by
+	// the conn executor when the statement was prepared.
+	appNameID := evalCtx.AppNameID
 	setupReq := execinfrapb.SetupFlowRequest{
 		LeafTxnInputState: leafInputState,
 		Version:           execversion.V25_4,
 		TraceKV:           recv.tracing.KVTracingEnabled(),
 		CollectStats:      planCtx.collectExecStats,
 		StatementSQL:      statementSQL,
+		WorkloadID:        workloadID,
+		AppNameID:         appNameID,
 	}
 	if localState.IsLocal {
 		// VectorizeMode is the only field that the setup code expects to be set

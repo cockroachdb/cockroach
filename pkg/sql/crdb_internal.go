@@ -234,6 +234,8 @@ var crdbInternal = virtualSchema{
 		catconstants.CrdbInternalStoreLivenessSupportFrom:           crdbInternalStoreLivenessSupportFromTable,
 		catconstants.CrdbInternalStoreLivenessSupportFor:            crdbInternalStoreLivenessSupportForTable,
 		catconstants.CrdbInternalClusterInspectErrorsViewID:         crdbInternalClusterInspectErrorsView,
+		catconstants.CrdbInternalNodeActiveSessionHistoryTableID:    crdbInternalNodeActiveSessionHistoryTable,
+		catconstants.CrdbInternalClusterActiveSessionHistoryTableID: crdbInternalClusterActiveSessionHistoryTable,
 	},
 	validWithNoDatabaseContext: true,
 }
@@ -9846,4 +9848,96 @@ CREATE VIEW crdb_internal.cluster_inspect_errors AS
 		{Name: "crdb_internal_expiration", Typ: types.TimestampTZ},
 	},
 	comment: `wrapper over system.inspect_errors`,
+}
+
+// crdbInternalNodeActiveSessionHistoryTable exposes Active Session History
+// samples from the local node's in-memory buffer.
+var crdbInternalNodeActiveSessionHistoryTable = virtualSchemaTable{
+	comment: `sampled active session history from this node (RAM)`,
+	schema: `
+CREATE TABLE crdb_internal.node_active_session_history (
+  sample_time      TIMESTAMPTZ NOT NULL,
+  node_id          INT NOT NULL,
+  workload_id      STRING,
+  work_event_type  STRING NOT NULL,
+  work_event       STRING NOT NULL,
+  goroutine_id     INT NOT NULL,
+  app_name         STRING,
+  gateway_node_id  INT
+)`,
+	populate: func(ctx context.Context, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
+		// Get ASH samples from the sampler's buffer.
+		sampler := p.extendedEvalCtx.ASHSampler
+		if sampler == nil {
+			// ASH not enabled or not initialized.
+			return nil
+		}
+
+		samples := sampler.GetSamples()
+		for _, sample := range samples {
+			if err := addRow(
+				tree.MustMakeDTimestampTZ(sample.SampleTime, time.Microsecond),
+				tree.NewDInt(tree.DInt(sample.NodeID)),
+				tree.NewDString(sample.WorkloadID),
+				tree.NewDString(sample.WorkEventType.String()),
+				tree.NewDString(sample.WorkEvent),
+				tree.NewDInt(tree.DInt(sample.GoroutineID)),
+				tree.NewDString(sample.AppName),
+				tree.NewDInt(tree.DInt(sample.GatewayNodeID)),
+			); err != nil {
+				return err
+			}
+		}
+		return nil
+	},
+}
+
+// crdbInternalClusterActiveSessionHistoryTable exposes Active Session History
+// samples from all nodes in the cluster via RPC fan-out.
+var crdbInternalClusterActiveSessionHistoryTable = virtualSchemaTable{
+	comment: `sampled active session history from all nodes in the cluster (cluster RPC; expensive!)`,
+	schema: `
+CREATE TABLE crdb_internal.cluster_active_session_history (
+  sample_time      TIMESTAMPTZ NOT NULL,
+  node_id          INT NOT NULL,
+  workload_id      STRING,
+  work_event_type  STRING NOT NULL,
+  work_event       STRING NOT NULL,
+  goroutine_id     INT NOT NULL,
+  app_name         STRING,
+  gateway_node_id  INT
+)`,
+	populate: func(ctx context.Context, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
+		response, err := p.extendedEvalCtx.SQLStatusServer.ListActiveSessionHistory(ctx, &serverpb.ListActiveSessionHistoryRequest{})
+		if err != nil {
+			return err
+		}
+
+		// Add all samples from all nodes.
+		for _, sample := range response.Samples {
+			sampleTime, err := tree.MakeDTimestampTZ(sample.SampleTime, time.Microsecond)
+			if err != nil {
+				return err
+			}
+			if err := addRow(
+				sampleTime,
+				tree.NewDInt(tree.DInt(sample.NodeID)),
+				tree.NewDString(sample.WorkloadId),
+				tree.NewDString(sample.WorkEventType),
+				tree.NewDString(sample.WorkEvent),
+				tree.NewDInt(tree.DInt(sample.GoroutineID)),
+				tree.NewDString(sample.AppName),
+				tree.NewDInt(tree.DInt(sample.GatewayNodeID)),
+			); err != nil {
+				return err
+			}
+		}
+
+		// Log any errors from individual nodes, but don't fail the entire query.
+		for _, rpcErr := range response.Errors {
+			log.Dev.Warningf(ctx, "error collecting ASH samples from node %d: %v", rpcErr.NodeID, rpcErr.Message)
+		}
+
+		return nil
+	},
 }

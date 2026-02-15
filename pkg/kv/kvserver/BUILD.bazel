@@ -208,6 +208,7 @@ go_library(
         "//pkg/settings/cluster",
         "//pkg/spanconfig",
         "//pkg/spanconfig/spanconfigstore",
+        "//pkg/sql/ash",
         "//pkg/storage",
         "//pkg/storage/disk",
         "//pkg/storage/enginepb",

@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
@@ -380,18 +381,24 @@ func NewColBatchScan(
 		kvFetcherMemAcc,
 		flowCtx.EvalCtx.TestingKnobs.ForceProductionValues,
 		spec.FetchSpec.External,
+		flowCtx.EvalCtx.WorkloadID,
+		flowCtx.EvalCtx.AppNameID,
+		roachpb.NodeID(flowCtx.EvalCtx.Gateway),
 	)
 	fetcher := cFetcherPool.Get().(*cFetcher)
 	shouldCollectStats := execstats.ShouldCollectStats(ctx, flowCtx.CollectStats)
 	fetcher.cFetcherArgs = cFetcherArgs{
-		execinfra.GetWorkMemLimit(flowCtx),
-		estimatedRowCount,
-		flowCtx.TraceKV,
-		true, /* singleUse */
-		shouldCollectStats,
-		false, /* alwaysReallocate */
-		flowCtx.Txn,
-		flowCtx.Codec().TenantID,
+		memoryLimit:      execinfra.GetWorkMemLimit(flowCtx),
+		estimatedRowCount: estimatedRowCount,
+		traceKV:          flowCtx.TraceKV,
+		singleUse:        true,
+		collectStats:     shouldCollectStats,
+		alwaysReallocate: false,
+		txn:              flowCtx.Txn,
+		tenantID:         flowCtx.Codec().TenantID,
+		workloadID:       flowCtx.EvalCtx.WorkloadID,
+		appNameID:        flowCtx.EvalCtx.AppNameID,
+		gatewayNodeID:    roachpb.NodeID(flowCtx.EvalCtx.Gateway),
 	}
 	if err = fetcher.Init(fetcherAllocator, kvFetcher, tableArgs); err != nil {
 		fetcher.Release()

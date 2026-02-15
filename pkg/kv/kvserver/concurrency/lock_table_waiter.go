@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/ash"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
@@ -113,6 +114,18 @@ type IntentResolver interface {
 func (w *lockTableWaiterImpl) WaitOn(
 	ctx context.Context, req Request, guard lockTableGuard,
 ) *Error {
+	// Register lock wait state for ASH sampling.
+	var workloadID uint64
+	var appNameID uint64
+	var gatewayNodeID roachpb.NodeID
+	if req.Batch != nil {
+		workloadID = req.Batch.Header.WorkloadId
+		appNameID = req.Batch.Header.AppNameID
+		gatewayNodeID = req.Batch.Header.SQLGatewayNodeID
+	}
+	clearWorkState := ash.SetWorkStateWithAppName(workloadID, ash.WORK_LOCK, "LockWait", appNameID, gatewayNodeID)
+	defer clearWorkState()
+
 	newStateC := guard.NewStateChan()
 	ctxDoneC := ctx.Done()
 	shouldQuiesceC := w.stopper.ShouldQuiesce()
@@ -714,6 +727,11 @@ func (w *lockTableWaiterImpl) pushHeader(req Request) kvpb.Header {
 		Timestamp:    req.Timestamp,
 		UserPriority: req.NonTxnPriority,
 		WaitPolicy:   req.WaitPolicy,
+	}
+	if req.Batch != nil {
+		h.WorkloadId = req.Batch.Header.WorkloadId
+		h.AppNameID = req.Batch.Header.AppNameID
+		h.SQLGatewayNodeID = req.Batch.Header.SQLGatewayNodeID
 	}
 	if req.Txn != nil {
 		// We are going to hand the header (and thus the transaction proto) to

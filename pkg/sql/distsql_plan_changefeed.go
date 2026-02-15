@@ -9,6 +9,7 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/appstatspb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
@@ -78,7 +79,7 @@ func PlanCDCExpression(
 		opt.apply(&cfg)
 	}
 
-	p.stmt = makeStatement(
+	stmtObj := makeStatement(
 		ctx,
 		statements.Statement[tree.Statement]{
 			AST: cdcExpr,
@@ -87,6 +88,9 @@ func PlanCDCExpression(
 		tree.FmtFlags(tree.QueryFormattingForFingerprintsMask.Get(&p.execCfg.Settings.SV)),
 		nil, /* statementHintsCache */
 	)
+	// Set WorkloadID so it can be plumbed through DistSQL flows for profiling and tracing.
+	stmtObj.WorkloadID = uint64(appstatspb.ConstructStatementFingerprintID(stmtObj.StmtNoConstants, false /* implicitTxn */, p.SessionData().Database))
+	p.stmt = stmtObj
 
 	p.curPlan.init(&p.stmt, &p.instrumentation)
 	opc := &p.optPlanningCtx

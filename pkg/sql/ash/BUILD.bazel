@@ -1,0 +1,35 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "ash",
+    srcs = [
+        "buffer.go",
+        "sampler.go",
+        "types.go",
+        "work_state.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/sql/ash",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/roachpb",
+        "//pkg/settings",
+        "//pkg/settings/cluster",
+        "//pkg/util",
+        "//pkg/util/encoding",
+        "//pkg/util/log",
+        "//pkg/util/stop",
+        "//pkg/util/syncutil",
+        "//pkg/util/timeutil",
+        "@com_github_petermattis_goid//:goid",
+    ],
+)
+
+go_test(
+    name = "ash_test",
+    srcs = ["work_state_test.go"],
+    embed = [":ash"],
+    deps = [
+        "@com_github_petermattis_goid//:goid",
+        "@com_github_stretchr_testify//require",
+    ],
+)
