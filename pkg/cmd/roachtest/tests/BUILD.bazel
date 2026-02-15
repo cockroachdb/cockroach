@@ -181,6 +181,8 @@ go_library(
         "ruby_pg_blocklist.go",
         "rust_postgres.go",
         "rust_postgres_blocklist.go",
+        "rust_sqlx.go",
+        "rust_sqlx_blocklist.go",
         "s3_clone_backup_restore.go",
         "s3_microceph.go",
         "s3_minio.go",
