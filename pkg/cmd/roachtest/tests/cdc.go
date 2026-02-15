@@ -3210,7 +3210,10 @@ CONFIGURE ZONE USING
 						// when frontier persistence is on.
 						"changefeed.span_checkpoint.interval": "'0'",
 						// TODO(#158779): When we add back per-table PTS, make sure that this test
-						// turns it off, to avoid it impacting the results.
+						// turns it off,  to avoid it impacting the results.
+						// TODO(#TODO): Once we have fixed single range rangefeed
+						// scalability, we should re-enable storage coalescing.
+						// "spanconfig.storage_coalesce_adjacent.enabled": "false",
 					} {
 						stmt := fmt.Sprintf(`SET CLUSTER SETTING %s = %s`, name, value)
 						if _, err := db.ExecContext(ctx, stmt); err != nil {

@@ -399,7 +399,6 @@ func (tf *schemaFeed) Pop(
 func (tf *schemaFeed) peekOrPop(
 	ctx context.Context, atOrBefore hlc.Timestamp, pop bool,
 ) (events []TableEvent, err error) {
-	// Routinely check whether to pause or resume polling.
 	if err = tf.pauseOrResumePolling(ctx, atOrBefore); err != nil {
 		return nil, err
 	}
@@ -504,6 +503,10 @@ func (tf *schemaFeed) pauseOrResumePolling(ctx context.Context, atOrBefore hlc.T
 		return nil
 	}
 
+	if now := tf.clock.Now(); atOrBefore.LessEq(now) {
+		atOrBefore = now
+	}
+
 	// Always assume we need to resume polling until we've proven otherwise.
 	tf.mu.pollingPaused = false
 
@@ -561,7 +564,7 @@ func (tf *schemaFeed) pauseOrResumePolling(ctx context.Context, atOrBefore hlc.T
 	if !frontier.Less(atOrBefore) {
 		return nil
 	}
-	return tf.mu.ts.advanceFrontier(atOrBefore)
+	return tf.mu.ts.advanceFrontier(ctx, atOrBefore)
 }
 
 // waitForTS blocks until the given timestamp is less than or equal to the
@@ -635,7 +638,7 @@ func (tf *schemaFeed) ingestDescriptors(
 			validateErr = err
 		}
 	}
-	return tf.adjustTimestamps(startTS, endTS, validateErr)
+	return tf.adjustTimestamps(ctx, startTS, endTS, validateErr)
 }
 
 // frontierAdvanceCheckEnabled controls whether the changefeed will
@@ -649,7 +652,9 @@ var frontierAdvanceCheckEnabled = settings.RegisterBoolSetting(
 )
 
 // adjustTimestamps adjusts the frontier or error timestamp appropriately.
-func (tf *schemaFeed) adjustTimestamps(startTS, endTS hlc.Timestamp, validateErr error) error {
+func (tf *schemaFeed) adjustTimestamps(
+	ctx context.Context, startTS, endTS hlc.Timestamp, validateErr error,
+) error {
 	tf.mu.Lock()
 	defer tf.mu.Unlock()
 
@@ -669,7 +674,7 @@ func (tf *schemaFeed) adjustTimestamps(startTS, endTS hlc.Timestamp, validateErr
 	if endTS.LessEq(frontier) && frontierAdvanceCheckEnabled.Get(&tf.settings.SV) {
 		return nil
 	}
-	return tf.mu.ts.advanceFrontier(endTS)
+	return tf.mu.ts.advanceFrontier(ctx, endTS)
 }
 
 func (e TableEvent) String() string {
