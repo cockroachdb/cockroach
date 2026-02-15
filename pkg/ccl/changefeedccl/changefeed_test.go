@@ -8683,9 +8683,9 @@ func TestChangefeedHandlesRollingRestart(t *testing.T) {
 						// checkpoints are behind, changefeed can handle rolling restarts by
 						// utilizing the most up-to-date checkpoint information transmitted by
 						// the aggregators to the change frontier processor.
-						ShouldCheckpointToJobRecord: func(hw hlc.Timestamp) bool {
+						ShouldCheckpointToJobRecord: func(hw hlc.Timestamp) (updateCheckpoint bool, updateHighwater bool) {
 							checkpointHW.Store(hw)
-							return false
+							return false, false
 						},
 
 						OnDrain: func() <-chan struct{} {
@@ -9622,13 +9622,13 @@ func TestCoreChangefeedBackfillScanCheckpoint(t *testing.T) {
 
 		emittedCount := 0
 		errorCount := 0
-		knobs.RaiseRetryableError = func() error {
+		knobs.ShouldFailCheckpoint = func() bool {
 			emittedCount++
 			if emittedCount%200 == 0 {
 				errorCount++
-				return errors.New("test transient error")
+				return true
 			}
-			return nil
+			return false
 		}
 
 		foo := feed(t, f, `CREATE CHANGEFEED FOR TABLE foo WITH min_checkpoint_frequency='1ns'`)
@@ -11623,11 +11623,8 @@ func TestHighwaterDoesNotRegressOnRetry(t *testing.T) {
 
 		// A flag we toggle on to put the changefeed in a retrying state.
 		var changefeedIsRetrying atomic.Bool
-		knobs.RaiseRetryableError = func() error {
-			if changefeedIsRetrying.Load() {
-				return errors.New("test retryable error")
-			}
-			return nil
+		knobs.ShouldFailCheckpoint = func() bool {
+			return changefeedIsRetrying.Load()
 		}
 
 		// NB: We use the errCh to return errors in testing knobs because they run in separate goroutines.
@@ -11706,7 +11703,7 @@ func TestHighwaterDoesNotRegressOnRetry(t *testing.T) {
 		// Check that the following happens soon.
 		//
 		// Step 2: Since `changefeedIsRetrying` is true, the changefeed will now attempt retries in
-		//         via `knobs.RaiseRetryableError`.
+		//         via `knobs.ShouldFailCheckpoint`.
 		// Step 3: `knobs.LoadJobErr` will result an in error when reading the job record a couple of times, causing
 		//          more retries.
 		// Step 4: Eventually, a dist changefeed is started at a certain highwater timestamp.
@@ -12165,11 +12162,8 @@ func TestChangefeedRetryBackoffLogging(t *testing.T) {
 
 		var errorCount atomic.Int32
 		knobs := s.TestingKnobs.DistSQL.(*execinfra.TestingKnobs).Changefeed.(*TestingKnobs)
-		knobs.RaiseRetryableError = func() error {
-			if errorCount.Add(1) == 1 {
-				return errors.New("test transient error")
-			}
-			return nil
+		knobs.ShouldFailCheckpoint = func() bool {
+			return errorCount.Add(1) == 1
 		}
 
 		feed := feed(t, f, `CREATE CHANGEFEED FOR foo WITH initial_scan='no'`)
