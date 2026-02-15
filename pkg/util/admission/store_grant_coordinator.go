@@ -167,12 +167,9 @@ func (sgc *StoreGrantCoordinators) SetPebbleMetricsProvider(
 				// NB: We always do error calculation prior to making adjustments to
 				// make sure we account for errors prior to starting a new adjustment
 				// interval.
-				diskStatsLen := 0
-				if t.shouldAdjustForError(remainingTicks, systemLoaded) {
-					diskStatsLen = sgc.adjustDiskTokenErrorForAllStores(
-						ctx, &pebbleMetricsProvider, &diskBuf,
-					)
-				}
+				diskStatsLen := sgc.adjustDiskTokenErrorForAllStores(
+					ctx, &pebbleMetricsProvider, &diskBuf,
+				)
 
 				remainingTicks = t.remainingTicks()
 

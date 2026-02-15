@@ -596,34 +596,6 @@ func TestTokenAllocationTickerAdjustmentCalculation(t *testing.T) {
 	}
 }
 
-func TestTokenAllocationTickerErrorAdjustmentThreshold(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-
-	ticker := tokenAllocationTicker{}
-	defer ticker.stop()
-	ticker.adjustmentStart(false /* loaded */)
-
-	// With errorAdjustmentInterval = 0.001 (1ms), error correction happens on
-	// every tick except the first of each period (where there's no prior
-	// measurement to compute a delta from).
-	//
-	// Unloaded: errorTickThreshold = 60 / 15000 = 0, so all ticks after first
-	// return true (diff >= 0 is always true once lastErrorAdjustmentTick is set).
-	require.True(t, ticker.shouldAdjustForError(60 /* remainingTicks */, false /* loaded */))
-	require.True(t, ticker.shouldAdjustForError(58 /* remainingTicks */, false /* loaded */))
-	require.True(t, ticker.shouldAdjustForError(56 /* remainingTicks */, false /* loaded */))
-	require.True(t, ticker.shouldAdjustForError(0 /* remainingTicks */, false /* loaded */))
-
-	// Loaded: errorTickThreshold = 15000 / 15000 = 1. First tick of loaded mode
-	// returns false because lastErrorAdjustmentTick gets reset and diff is 0.
-	// After that, every tick returns true (diff >= 1).
-	require.False(t, ticker.shouldAdjustForError(15000 /* remainingTicks */, true /* loaded */))
-	require.True(t, ticker.shouldAdjustForError(14999 /* remainingTicks */, true /* loaded */))
-	require.True(t, ticker.shouldAdjustForError(14998 /* remainingTicks */, true /* loaded */))
-	require.True(t, ticker.shouldAdjustForError(0 /* remainingTicks */, true /* loaded */))
-}
-
 func TestTokenAllocationTicker(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
