@@ -181,7 +181,7 @@ func ClientInterceptor(
 		opts ...grpc.CallOption,
 	) error {
 		skipTracing := tracingutil.ShouldSkipClientTracing(ctx)
-		if skipTracing {
+		if skipTracing || tracingutil.MethodExcludedFromTracing(method) {
 			return invoker(ctx, method, req, resp, cc, opts...)
 		}
 
@@ -195,10 +195,7 @@ func ClientInterceptor(
 		init(clientSpan)
 		defer clientSpan.Finish()
 
-		// For most RPCs we pass along tracing info as metadata
-		if !tracingutil.MethodExcludedFromTracing(method) {
-			ctx = tracingutil.InjectSpanMeta(ctx, tracer, clientSpan)
-		}
+		ctx = tracingutil.InjectSpanMeta(ctx, tracer, clientSpan)
 
 		if invoker != nil {
 			err := invoker(ctx, method, req, resp, cc, opts...)
@@ -242,7 +239,7 @@ func StreamClientInterceptor(
 		opts ...grpc.CallOption,
 	) (grpc.ClientStream, error) {
 		skipTracing := tracingutil.ShouldSkipClientTracing(ctx)
-		if skipTracing {
+		if skipTracing || tracingutil.MethodExcludedFromTracing(method) {
 			return streamer(ctx, desc, cc, method, opts...)
 		}
 
@@ -255,10 +252,7 @@ func StreamClientInterceptor(
 		)
 		init(clientSpan)
 
-		// For most RPCs we pass along tracing info as metadata
-		if !tracingutil.MethodExcludedFromTracing(method) {
-			ctx = tracingutil.InjectSpanMeta(ctx, tracer, clientSpan)
-		}
+		ctx = tracingutil.InjectSpanMeta(ctx, tracer, clientSpan)
 
 		cs, err := streamer(ctx, desc, cc, method, opts...)
 		if err != nil {

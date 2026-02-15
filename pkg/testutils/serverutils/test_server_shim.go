@@ -680,7 +680,6 @@ func ShouldEnableDRPC(
 		}
 		return base.TestDRPCEnabled
 	}
-
 	return base.TestDRPCDisabled
 }
 
