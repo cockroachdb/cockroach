@@ -145,7 +145,7 @@ type Metrics struct {
 	WriteProbeAttempts                 *metric.Counter
 	WriteProbeFailures                 *metric.Counter
 	WriteProbeLatency                  metric.IHistogram
-	WriteProbeQuarantineOldestDuration *metric.Gauge
+	WriteProbeQuarantineOldestDuration *metric.FunctionalGauge
 	ProbePlanAttempts                  *metric.Counter
 	ProbePlanFailures                  *metric.Counter
 }

@@ -9,8 +9,8 @@ import "github.com/cockroachdb/cockroach/pkg/util/metric"
 
 // RaftTransportMetrics is the set of metrics for a given RaftTransport.
 type RaftTransportMetrics struct {
-	SendQueueSize  *metric.Gauge
-	SendQueueBytes *metric.Gauge
+	SendQueueSize  *metric.FunctionalGauge
+	SendQueueBytes *metric.FunctionalGauge
 
 	MessagesDropped *metric.Counter
 	MessagesSent    *metric.Counter

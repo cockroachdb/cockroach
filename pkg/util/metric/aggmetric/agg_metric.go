@@ -56,10 +56,10 @@ func (b Builder) Gauge(metadata metric.Metadata) *AggGauge {
 	return NewGauge(metadata, b.labels...)
 }
 
-// FunctionalGauge constructs a new AggGauge with the Builder's labels who's
+// DerivedGauge constructs a new AggGauge with the Builder's labels who's
 // value is determined when asked for.
-func (b Builder) FunctionalGauge(metadata metric.Metadata, f func(cvs []int64) int64) *AggGauge {
-	return NewFunctionalGauge(metadata, f, b.labels...)
+func (b Builder) DerivedGauge(metadata metric.Metadata, f func(cvs []int64) int64) *AggGauge {
+	return NewDerivedGauge(metadata, f, b.labels...)
 }
 
 // GaugeFloat64 constructs a new AggGaugeFloat64 with the Builder's labels.
