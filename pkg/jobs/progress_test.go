@@ -23,14 +23,14 @@ func TestChunkProgressLoggerLimitsFloatingPointError(t *testing.T) {
 
 	rangeCount := 1240725
 
-	var lastReported float32
-	l := NewChunkProgressLogger(func(_ context.Context, pct float32) error {
-		require.Less(t, pct, float32(1.01))
+	var lastReported float64
+	l := NewChunkProgressLogger(func(_ context.Context, pct float64) error {
+		require.Less(t, pct, float64(1.01))
 		lastReported = pct
 		return nil
 	}, rangeCount, 0)
 	for i := 0; i < rangeCount; i++ {
 		require.NoError(t, l.chunkFinished(ctx), "failed at update %d", i)
 	}
-	require.Greater(t, lastReported, float32(0.99))
+	require.Greater(t, lastReported, float64(0.99))
 }

@@ -223,7 +223,7 @@ func backup(
 		numTotalSpans += len(spec.IntroducedSpans) + len(spec.Spans)
 	}
 
-	progressLogger := jobs.NewChunkProgressLoggerForJob(job, numTotalSpans, job.FractionCompleted(), jobs.ProgressUpdateOnly)
+	progressLogger := jobs.DeprecatedNewChunkProgressLoggerForJob(job, numTotalSpans, job.FractionCompleted(), jobs.DeprecatedProgressUpdateOnly)
 
 	requestFinishedCh := make(chan struct{}, numTotalSpans) // enough buffer to never block
 	var jobProgressLoop func(ctx context.Context) error
