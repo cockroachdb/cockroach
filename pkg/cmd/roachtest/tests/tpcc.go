@@ -729,6 +729,8 @@ func runTPCCMixedHeadroom(ctx context.Context, t test.Test, c cluster.Cluster, c
 		// See #138014 for more details.
 		mixedversion.MaxNumPlanSteps(70),
 		mixedversion.WithWorkloadNodes(c.WorkloadNode()),
+		// Smoke test same-series upgrades (e.g., 24.3.5 -> 24.3.12) with 50% probability.
+		mixedversion.WithSameSeriesUpgradeProbability(0.5),
 	}
 
 	// If the test is a chaos test, we want to opt for the more expansive panic
