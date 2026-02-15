@@ -1,0 +1,26 @@
+/* setup */
+CREATE DATABASE multiregion_db PRIMARY REGION "us-east1" REGIONS "us-east2", "us-east3";
+USE multiregion_db;
+CREATE TABLE multiregion_db.public.t (  
+  pk INT PRIMARY KEY,
+  i INT NOT NULL,
+  cr crdb_internal_region NOT NULL DEFAULT 'us-east1',
+  INDEX idx(i)
+) LOCALITY REGIONAL BY ROW;
+
+/* test */
+EXPLAIN (DDL, SHAPE) ALTER TABLE multiregion_db.public.t SET LOCALITY REGIONAL BY ROW AS cr;
+----
+Schema change plan for ALTER TABLE ‹multiregion_db›.‹public›.‹t› SET LOCALITY REGIONAL BY ROW AS ‹cr›;
+ ├── execute 2 system table mutations transactions
+ ├── backfill using primary index t_pkey- in relation t
+ │    ├── into idx+ (cr, i: pk)
+ │    └── into t_pkey+ (pk, cr; crdb_region, i)
+ ├── execute 2 system table mutations transactions
+ ├── merge temporary indexes into backfilled indexes in relation t
+ │    ├── from t@[4] into idx+
+ │    └── from t@[6] into t_pkey+
+ ├── execute 1 system table mutations transaction
+ ├── validate UNIQUE constraint backed by index t_pkey+ in relation t
+ ├── validate UNIQUE constraint backed by index idx+ in relation t
+ └── execute 3 system table mutations transactions

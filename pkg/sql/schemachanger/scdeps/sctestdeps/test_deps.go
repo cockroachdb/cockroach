@@ -168,6 +168,13 @@ func (s *TestState) IncrementSchemaChangeIndexCounter(counterType string) {
 	s.LogSideEffectf("increment telemetry for sql.schema.%s_index", counterType)
 }
 
+// IncrementAlterTableLocalityCounter implements the scbuild.Dependencies interface.
+func (s *TestState) IncrementAlterTableLocalityCounter(counterTypeFrom, counterTypeTo string) {
+	s.LogSideEffectf(
+		"increment telemetry for sql.multiregion.alter_table.locality.from.%s.to.%s",
+		counterTypeFrom, counterTypeTo)
+}
+
 var _ scbuild.AuthorizationAccessor = (*TestState)(nil)
 
 // CheckPrivilege implements the scbuild.AuthorizationAccessor interface.
