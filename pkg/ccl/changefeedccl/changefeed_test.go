@@ -541,6 +541,10 @@ func TestChangefeedIdentifyDependentTablesForProtecting(t *testing.T) {
 		trimmed := trimRx.FindStringSubmatch(msg)[1]
 		spanStmts := strings.Split(trimmed, ", ")
 		for _, spanStmt := range spanStmts {
+			// The range stats poller scans the Meta2, which don't need to be protected with PTS.
+			if strings.Contains(spanStmt, "/Meta1/") || strings.Contains(spanStmt, "/Meta2/") {
+				continue
+			}
 			spanStmt = strings.Replace(spanStmt, "Scan ", "", 1)
 			startEnd := strings.Split(strings.Trim(spanStmt, "[)"), ",")
 			require.Len(t, startEnd, 2)
@@ -1955,6 +1959,9 @@ func TestChangefeedLaggingRangesMetrics(t *testing.T) {
 			context.Background(), &s.Server.ClusterSettings().SV, 20*time.Millisecond)
 		closedts.TargetDuration.Override(
 			context.Background(), &s.Server.ClusterSettings().SV, 20*time.Millisecond)
+		// Disable quantizing as we are asserting our timestamps are within a 250ms threshold.
+		changefeedbase.Quantize.Override(
+			context.Background(), &s.Server.ClusterSettings().SV, 0)
 
 		skipMu := syncutil.Mutex{}
 		skippedRanges := map[string]struct{}{}
@@ -2109,7 +2116,7 @@ func TestChangefeedTotalRangesMetric(t *testing.T) {
 	cdcTest(t, testFn, feedTestEnterpriseSinks)
 }
 
-func TestChangefeedBackfillObservability(t *testing.T) {
+func TestChangefeedInitialBackfillObservability(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
@@ -2120,6 +2127,7 @@ func TestChangefeedBackfillObservability(t *testing.T) {
 		registry := s.Server.JobRegistry().(*jobs.Registry)
 		sli, err := registry.MetricsStruct().Changefeed.(*Metrics).getSLIMetrics(defaultSLIScope)
 		require.NoError(t, err)
+		// TODO(darryl): we should add a test for BackfillPendingRanges during schemachanges.
 		pendingRanges := sli.BackfillPendingRanges
 
 		// Create a table with multiple ranges
@@ -2147,7 +2155,8 @@ func TestChangefeedBackfillObservability(t *testing.T) {
 		}
 
 		require.Equal(t, pendingRanges.Value(), int64(0))
-		foo := feed(t, f, `CREATE CHANGEFEED FOR foo`)
+
+		foo := feed(t, f, `CREATE CHANGEFEED FOR foo WITH lagging_ranges_polling_interval="25ms"`)
 		defer closeFeed(t, foo)
 
 		// Progress the initial backfill halfway through its ranges

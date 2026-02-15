@@ -102,6 +102,7 @@ go_library(
         "//pkg/util/pprofutil",
         "//pkg/util/protoutil",
         "//pkg/util/randutil",
+        "//pkg/util/rangescanstats/rangescanstatspb",
         "//pkg/util/retry",
         "//pkg/util/span",
         "//pkg/util/syncutil",

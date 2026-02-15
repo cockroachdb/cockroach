@@ -29,7 +29,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/span"
-	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
@@ -38,16 +37,6 @@ import (
 // MonitoringConfig is a set of callbacks which the kvfeed calls to provide
 // the caller with information about the state of the kvfeed.
 type MonitoringConfig struct {
-	// LaggingRangesCallback is called periodically with the number of lagging ranges
-	// and total ranges watched by the kvfeed.
-	LaggingRangesCallback func(lagging int64, total int64)
-	// LaggingRangesPollingInterval is how often the kv feed will poll for
-	// lagging ranges and total ranges.
-	LaggingRangesPollingInterval time.Duration
-	// LaggingRangesThreshold is how far behind a range must be to be considered
-	// lagging.
-	LaggingRangesThreshold time.Duration
-
 	OnBackfillCallback      func() func()
 	OnBackfillRangeCallback func(int64) (func(), func())
 }
@@ -148,8 +137,6 @@ func Run(ctx context.Context, cfg Config) error {
 		cfg.SchemaFeed,
 		sc, pff, bf, cfg.Targets, cfg.ScopedTimers, cfg.Knobs)
 	f.onBackfillCallback = cfg.MonitoringCfg.OnBackfillCallback
-	f.rangeObserver = startLaggingRangesObserver(g, cfg.MonitoringCfg.LaggingRangesCallback,
-		cfg.MonitoringCfg.LaggingRangesPollingInterval, cfg.MonitoringCfg.LaggingRangesThreshold)
 
 	g.GoCtx(cfg.SchemaFeed.Run)
 	g.GoCtx(f.run)
@@ -193,59 +180,6 @@ func Run(ctx context.Context, cfg Config) error {
 	// an error reading from the Writer that was closed above.
 	<-ctx.Done()
 	return ctx.Err()
-}
-
-func startLaggingRangesObserver(
-	g ctxgroup.Group,
-	updateLaggingRanges func(lagging int64, total int64),
-	pollingInterval time.Duration,
-	threshold time.Duration,
-) kvcoord.RangeObserver {
-	return func(fn kvcoord.ForEachRangeFn) {
-		g.GoCtx(func(ctx context.Context) error {
-			// Reset metrics on shutdown.
-			defer func() {
-				updateLaggingRanges(0 /* lagging */, 0 /* total */)
-			}()
-
-			var timer timeutil.Timer
-			defer timer.Stop()
-			timer.Reset(pollingInterval)
-
-			for {
-				select {
-				case <-ctx.Done():
-					return ctx.Err()
-				case <-timer.C:
-					var laggingCount, totalCount int64
-					thresholdTS := timeutil.Now().Add(-1 * threshold)
-					err := fn(func(rfCtx kvcoord.RangeFeedContext, feed kvcoord.PartialRangeFeed) error {
-						totalCount += 1
-
-						// The resolved timestamp of a range determines the timestamp which is caught up to.
-						// However, during catchup scans, this is not set. For catchup scans, we consider the
-						// time the partial rangefeed was created to be its resolved ts. Note that a range can
-						// restart due to a range split, transient error etc. In these cases you also expect
-						// to see a `CreatedTime` but no resolved timestamp.
-						ts := feed.Resolved
-						if ts.IsEmpty() {
-							ts = hlc.Timestamp{WallTime: feed.CreatedTime.UnixNano()}
-						}
-
-						if ts.Less(hlc.Timestamp{WallTime: thresholdTS.UnixNano()}) {
-							laggingCount += 1
-						}
-						return nil
-					})
-					if err != nil {
-						return err
-					}
-					updateLaggingRanges(laggingCount, totalCount)
-					timer.Reset(pollingInterval)
-				}
-			}
-		})
-	}
 }
 
 // schemaChangeDetectedError is a sentinel error to indicate to Run() that the
