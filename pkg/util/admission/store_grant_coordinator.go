@@ -11,6 +11,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/storage/disk"
 	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
@@ -72,7 +73,27 @@ type StoreGrantCoordinators struct {
 // PebbleMetricsProvider provides the pebble.Metrics for all stores.
 type PebbleMetricsProvider interface {
 	GetPebbleMetrics() []StoreMetrics
+	GetDiskStats(buf *DiskMetricsBuf) error
 	Close()
+}
+
+// DiskMetricsBuf is a reusable buffer for collecting disk stats. It is passed
+// to PebbleMetricsProvider.GetDiskStats and reused across calls to minimize
+// allocations.
+type DiskMetricsBuf struct {
+	// Raw holds disk stats read directly from the OS.
+	Raw []disk.Stats
+	// Scratch is a byte buffer used when reading disk stats from the OS. It may
+	// be reallocated if too small.
+	Scratch []byte
+	// Stats holds the processed disk stats with its store ID.
+	Stats []StoreIDAndStats
+}
+
+// StoreIDAndStats pairs a store ID with its disk stats.
+type StoreIDAndStats struct {
+	StoreID roachpb.StoreID
+	Stats   DiskStats
 }
 
 // MetricsRegistryProvider provides the store metric.Registry for a given store.
