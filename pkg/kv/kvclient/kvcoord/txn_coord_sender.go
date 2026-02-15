@@ -1416,6 +1416,33 @@ func (tc *TxnCoordSender) Active() bool {
 	return tc.mu.active
 }
 
+// MaybeRefreshSpans is part of the kv.TxnSender interface.
+func (tc *TxnCoordSender) MaybeRefreshSpans(ctx context.Context) error {
+	tc.mu.Lock()
+	defer tc.mu.Unlock()
+
+	if tc.mu.txn.ReadTimestamp == tc.mu.txn.WriteTimestamp {
+		// No need to refresh if the read and write timestamps are equal.
+		return nil
+	}
+
+	// Refresh from the current refreshed timestamp (or original timestamp if we
+	// haven't refreshed yet) up to the transaction's current WriteTimestamp.
+	refreshFrom := tc.mu.txn.ReadTimestamp
+	refreshToTxn := tc.mu.txn.Clone()
+	refreshToTxn.BumpReadTimestamp(tc.mu.txn.WriteTimestamp)
+	log.VEventf(ctx, 2, "refreshing to timestamp %s in MaybeRefreshSpans()",
+		refreshToTxn.ReadTimestamp)
+
+	if pErr := tc.interceptorAlloc.txnSpanRefresher.tryRefreshTxnSpans(
+		ctx, refreshFrom, refreshToTxn,
+	); pErr != nil {
+		return pErr.GoError()
+	}
+
+	return nil
+}
+
 // GetLeafTxnInputState is part of the kv.TxnSender interface.
 func (tc *TxnCoordSender) GetLeafTxnInputState(
 	ctx context.Context, readsTree interval.Tree,

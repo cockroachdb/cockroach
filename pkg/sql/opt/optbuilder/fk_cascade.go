@@ -349,13 +349,18 @@ func (cb *onDeleteFastCascadeBuilder) Build(
 
 			locking := noRowLocking
 			if b.evalCtx.TxnIsoLevel != isolation.Serializable {
-				locking = lockingSpec{
-					&lockingItem{
-						item: &tree.LockingItem{
-							Strength:   tree.ForUpdate,
-							WaitPolicy: tree.LockWaitBlock,
+				// Under Read Committed, if ReadCommittedNonLockingChecksEnabled is set,
+				// we skip locking and instead use non-locking reads with manual refresh.
+				if b.evalCtx.TxnIsoLevel != isolation.ReadCommitted ||
+					!b.evalCtx.SessionData().ReadCommittedNonLockingChecksEnabled {
+					locking = lockingSpec{
+						&lockingItem{
+							item: &tree.LockingItem{
+								Strength:   tree.ForUpdate,
+								WaitPolicy: tree.LockWaitBlock,
+							},
 						},
-					},
+					}
 				}
 			}
 
@@ -619,13 +624,18 @@ func (b *Builder) buildDeleteCascadeMutationInput(
 
 	locking := noRowLocking
 	if b.evalCtx.TxnIsoLevel != isolation.Serializable {
-		locking = lockingSpec{
-			&lockingItem{
-				item: &tree.LockingItem{
-					Strength:   tree.ForUpdate,
-					WaitPolicy: tree.LockWaitBlock,
+		// Under Read Committed, if ReadCommittedNonLockingChecksEnabled is set,
+		// we skip locking and instead use non-locking reads with manual refresh.
+		if b.evalCtx.TxnIsoLevel != isolation.ReadCommitted ||
+			!b.evalCtx.SessionData().ReadCommittedNonLockingChecksEnabled {
+			locking = lockingSpec{
+				&lockingItem{
+					item: &tree.LockingItem{
+						Strength:   tree.ForUpdate,
+						WaitPolicy: tree.LockWaitBlock,
+					},
 				},
-			},
+			}
 		}
 	}
 
@@ -907,13 +917,18 @@ func (b *Builder) buildUpdateCascadeMutationInput(
 
 	locking := noRowLocking
 	if b.evalCtx.TxnIsoLevel != isolation.Serializable {
-		locking = lockingSpec{
-			&lockingItem{
-				item: &tree.LockingItem{
-					Strength:   tree.ForUpdate,
-					WaitPolicy: tree.LockWaitBlock,
+		// Under Read Committed, if ReadCommittedNonLockingChecksEnabled is set,
+		// we skip locking and instead use non-locking reads with manual refresh.
+		if b.evalCtx.TxnIsoLevel != isolation.ReadCommitted ||
+			!b.evalCtx.SessionData().ReadCommittedNonLockingChecksEnabled {
+			locking = lockingSpec{
+				&lockingItem{
+					item: &tree.LockingItem{
+						Strength:   tree.ForUpdate,
+						WaitPolicy: tree.LockWaitBlock,
+					},
 				},
-			},
+			}
 		}
 	}
 

@@ -463,3 +463,112 @@ SELECT * FROM t ORDER BY pk
 ----
 1  five  3  4  25  NULL
 2  four  3  6  5   NULL
+
+# ==============================================================================
+# Test partitioned tables with non-locking checks enabled.
+# ==============================================================================
+
+statement ok
+SET read_committed_non_locking_checks_enabled = true
+
+# Now we can insert into partitioned tables (previously failed with unimplemented error).
+statement ok
+INSERT INTO t_double VALUES (1, 'one', 'one', 10), (2, 'two', 'two', 20)
+
+query ITTI rowsort
+SELECT * FROM t_double
+----
+1  one  one  10
+2  two  two  20
+
+statement ok
+INSERT INTO t_int VALUES (1, 1, 10), (2, 2, 20)
+
+query III rowsort
+SELECT * FROM t_int
+----
+1  1  10
+2  2  20
+
+# ------------------------------------------------------------------------------
+# Concurrent tests with partitioned tables.
+# ------------------------------------------------------------------------------
+
+# Grant privileges for concurrent tests.
+statement ok
+GRANT ALL ON TABLE t TO testuser
+
+# Test concurrent inserts with partitioned tables.
+statement ok
+BEGIN ISOLATION LEVEL READ COMMITTED
+
+statement async conflict error pgcode 23505 pq: duplicate key value violates unique constraint "t_c_key"
+WITH sleep AS (SELECT pg_sleep(2)) INSERT INTO t VALUES (10, 'one', 100, 101, 102)
+
+user testuser
+
+statement ok
+SET SESSION CHARACTERISTICS AS TRANSACTION ISOLATION LEVEL READ COMMITTED
+
+statement ok
+SET experimental_enable_implicit_column_partitioning = true
+
+statement ok
+INSERT INTO t VALUES (11, 'one', 100, 101, 103)
+
+user root
+
+awaitstatement conflict
+
+statement ok
+ABORT
+
+query ITIIIT rowsort
+SELECT * FROM t
+----
+1   five  3    4    25  NULL
+2   four  3    6    5   NULL
+11  one   100  101  103 NULL
+
+# Test successful insert without conflicts
+statement ok
+BEGIN
+
+statement ok
+INSERT INTO t VALUES (20, 'two', 200, 201, 202)
+
+statement ok
+COMMIT
+
+query ITIIIT rowsort
+SELECT * FROM t
+----
+1   five  3    4    25  NULL
+2   four  3    6    5   NULL
+11  one   100  101  103 NULL
+20  two   200  201  202 NULL
+
+# Test update with partitioned table
+statement ok
+BEGIN ISOLATION LEVEL READ COMMITTED
+
+statement async partition_update
+WITH sleep AS (SELECT pg_sleep(2)) UPDATE t SET d = 999 WHERE pk = 20
+
+user testuser
+
+statement ok
+UPDATE t SET d = 888 WHERE pk = 20
+
+user root
+
+awaitstatement partition_update
+
+# The RC UPDATE should be pushed to a higher timestamp.
+statement ok
+COMMIT
+
+query ITIIIT
+SELECT * FROM t WHERE pk = 20
+----
+20  two  200  201  999  NULL

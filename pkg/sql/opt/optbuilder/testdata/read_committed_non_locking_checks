@@ -1,0 +1,916 @@
+# Tests for the ReadCommittedNonLockingChecksEnabled cluster setting, which
+# disables locking for FK checks and unique checks under Read Committed isolation
+# and instead relies on DisallowIntentTimestampChange and manual refresh.
+
+exec-ddl
+CREATE TABLE parent (p INT PRIMARY KEY, other INT)
+----
+
+exec-ddl
+CREATE TABLE child_check (c INT PRIMARY KEY, p INT NOT NULL REFERENCES parent(p))
+----
+
+exec-ddl
+CREATE TABLE child_cascade (c INT PRIMARY KEY, p INT NOT NULL REFERENCES parent(p) ON DELETE CASCADE ON UPDATE CASCADE)
+----
+
+exec-ddl
+CREATE TABLE uniq (
+  k INT PRIMARY KEY,
+  v INT UNIQUE WITHOUT INDEX,
+  w INT,
+  x INT,
+  UNIQUE WITHOUT INDEX (w, x)
+)
+----
+
+exec-ddl
+CREATE TABLE partitioned_parent (
+  region STRING NOT NULL,
+  p INT NOT NULL,
+  PRIMARY KEY (region, p)
+) PARTITION BY LIST (region) (
+  PARTITION us VALUES IN ('us-east', 'us-west'),
+  PARTITION eu VALUES IN ('eu-west', 'eu-east')
+)
+----
+
+exec-ddl
+CREATE TABLE partitioned_child (
+  region STRING NOT NULL,
+  c INT PRIMARY KEY,
+  p INT NOT NULL,
+  FOREIGN KEY (region, p) REFERENCES partitioned_parent(region, p)
+)
+----
+
+exec-ddl
+CREATE TABLE rbr_parent (
+  p INT PRIMARY KEY
+) LOCALITY REGIONAL BY ROW
+----
+
+exec-ddl
+CREATE TABLE rbr_child (
+  c INT PRIMARY KEY,
+  p INT NOT NULL REFERENCES rbr_parent(p)
+) LOCALITY REGIONAL BY ROW
+----
+
+# ------------------------------------------------------------------------------
+# Read committed FK checks + cascades.
+# ------------------------------------------------------------------------------
+
+# By default, the parent table check uses locking.
+build isolation=ReadCommitted
+INSERT INTO child_check VALUES (1, 1)
+----
+insert child_check
+ ├── columns: <none>
+ ├── insert-mapping:
+ │    ├── column1:5 => c:1
+ │    └── column2:6 => child_check.p:2
+ ├── input binding: &1
+ ├── values
+ │    ├── columns: column1:5!null column2:6!null
+ │    └── (1, 1)
+ └── f-k-checks
+      └── f-k-checks-item: child_check(p) -> parent(p)
+           └── anti-join (hash)
+                ├── columns: p:7!null
+                ├── with-scan &1
+                │    ├── columns: p:7!null
+                │    └── mapping:
+                │         └──  column2:6 => p:7
+                ├── scan parent
+                │    ├── columns: parent.p:8!null
+                │    ├── flags: avoid-full-scan disabled not visible index feature
+                │    └── locking: for-share,durability-guaranteed
+                └── filters
+                     └── p:7 = parent.p:8
+
+# With the setting enabled, the parent table check is non-locking.
+build isolation=ReadCommitted set=read_committed_non_locking_checks_enabled=true
+INSERT INTO child_check VALUES (1, 1)
+----
+insert child_check
+ ├── columns: <none>
+ ├── insert-mapping:
+ │    ├── column1:5 => c:1
+ │    └── column2:6 => child_check.p:2
+ ├── input binding: &1
+ ├── values
+ │    ├── columns: column1:5!null column2:6!null
+ │    └── (1, 1)
+ └── f-k-checks
+      └── f-k-checks-item: child_check(p) -> parent(p)
+           └── anti-join (hash)
+                ├── columns: p:7!null
+                ├── with-scan &1
+                │    ├── columns: p:7!null
+                │    └── mapping:
+                │         └──  column2:6 => p:7
+                ├── scan parent
+                │    ├── columns: parent.p:8!null
+                │    └── flags: avoid-full-scan disabled not visible index feature
+                └── filters
+                     └── p:7 = parent.p:8
+
+# Verify the same behavior for child UPDATE with FK checks.
+build isolation=ReadCommitted
+UPDATE child_check SET p = 2 WHERE c = 1
+----
+update child_check
+ ├── columns: <none>
+ ├── fetch columns: c:5 child_check.p:6
+ ├── update-mapping:
+ │    └── p_new:9 => child_check.p:2
+ ├── input binding: &1
+ ├── project
+ │    ├── columns: p_new:9!null c:5!null child_check.p:6!null child_check.crdb_internal_mvcc_timestamp:7 child_check.tableoid:8
+ │    ├── select
+ │    │    ├── columns: c:5!null child_check.p:6!null child_check.crdb_internal_mvcc_timestamp:7 child_check.tableoid:8
+ │    │    ├── scan child_check
+ │    │    │    ├── columns: c:5!null child_check.p:6!null child_check.crdb_internal_mvcc_timestamp:7 child_check.tableoid:8
+ │    │    │    └── flags: avoid-full-scan
+ │    │    └── filters
+ │    │         └── c:5 = 1
+ │    └── projections
+ │         └── 2 [as=p_new:9]
+ └── f-k-checks
+      └── f-k-checks-item: child_check(p) -> parent(p)
+           └── anti-join (hash)
+                ├── columns: p:10!null
+                ├── with-scan &1
+                │    ├── columns: p:10!null
+                │    └── mapping:
+                │         └──  p_new:9 => p:10
+                ├── scan parent
+                │    ├── columns: parent.p:11!null
+                │    ├── flags: avoid-full-scan disabled not visible index feature
+                │    └── locking: for-share,durability-guaranteed
+                └── filters
+                     └── p:10 = parent.p:11
+
+build isolation=ReadCommitted set=read_committed_non_locking_checks_enabled=true
+UPDATE child_check SET p = 2 WHERE c = 1
+----
+update child_check
+ ├── columns: <none>
+ ├── fetch columns: c:5 child_check.p:6
+ ├── update-mapping:
+ │    └── p_new:9 => child_check.p:2
+ ├── input binding: &1
+ ├── project
+ │    ├── columns: p_new:9!null c:5!null child_check.p:6!null child_check.crdb_internal_mvcc_timestamp:7 child_check.tableoid:8
+ │    ├── select
+ │    │    ├── columns: c:5!null child_check.p:6!null child_check.crdb_internal_mvcc_timestamp:7 child_check.tableoid:8
+ │    │    ├── scan child_check
+ │    │    │    ├── columns: c:5!null child_check.p:6!null child_check.crdb_internal_mvcc_timestamp:7 child_check.tableoid:8
+ │    │    │    └── flags: avoid-full-scan
+ │    │    └── filters
+ │    │         └── c:5 = 1
+ │    └── projections
+ │         └── 2 [as=p_new:9]
+ └── f-k-checks
+      └── f-k-checks-item: child_check(p) -> parent(p)
+           └── anti-join (hash)
+                ├── columns: p:10!null
+                ├── with-scan &1
+                │    ├── columns: p:10!null
+                │    └── mapping:
+                │         └──  p_new:9 => p:10
+                ├── scan parent
+                │    ├── columns: parent.p:11!null
+                │    └── flags: avoid-full-scan disabled not visible index feature
+                └── filters
+                     └── p:10 = parent.p:11
+
+# By default, child table checks/cascades use locking.
+build-post-queries isolation=ReadCommitted
+DELETE FROM parent WHERE p = 1
+----
+root
+ ├── delete parent
+ │    ├── columns: <none>
+ │    ├── fetch columns: parent.p:5 other:6
+ │    ├── input binding: &1
+ │    ├── cascades
+ │    │    └── child_cascade_p_fkey
+ │    ├── select
+ │    │    ├── columns: parent.p:5!null other:6 parent.crdb_internal_mvcc_timestamp:7 parent.tableoid:8
+ │    │    ├── scan parent
+ │    │    │    ├── columns: parent.p:5!null other:6 parent.crdb_internal_mvcc_timestamp:7 parent.tableoid:8
+ │    │    │    └── flags: avoid-full-scan
+ │    │    └── filters
+ │    │         └── parent.p:5 = 1
+ │    └── f-k-checks
+ │         └── f-k-checks-item: child_check(p) -> parent(p)
+ │              └── semi-join (hash)
+ │                   ├── columns: p:9!null
+ │                   ├── with-scan &1
+ │                   │    ├── columns: p:9!null
+ │                   │    └── mapping:
+ │                   │         └──  parent.p:5 => p:9
+ │                   ├── scan child_check
+ │                   │    ├── columns: child_check.p:11!null
+ │                   │    ├── flags: avoid-full-scan disabled not visible index feature
+ │                   │    └── locking: for-share,durability-guaranteed
+ │                   └── filters
+ │                        └── p:9 = child_check.p:11
+ └── cascade
+      └── delete child_cascade
+           ├── columns: <none>
+           ├── fetch columns: child_cascade.c:18 child_cascade.p:19
+           └── select
+                ├── columns: child_cascade.c:18!null child_cascade.p:19!null
+                ├── scan child_cascade
+                │    ├── columns: child_cascade.c:18!null child_cascade.p:19!null
+                │    ├── flags: avoid-full-scan disabled not visible index feature
+                │    └── locking: for-update,durability-guaranteed
+                └── filters
+                     └── child_cascade.p:19 = 1
+
+# With the setting enabled, child table checks/cascades are non-locking.
+build-post-queries isolation=ReadCommitted set=read_committed_non_locking_checks_enabled=true
+DELETE FROM parent WHERE p = 1
+----
+root
+ ├── delete parent
+ │    ├── columns: <none>
+ │    ├── fetch columns: parent.p:5 other:6
+ │    ├── input binding: &1
+ │    ├── cascades
+ │    │    └── child_cascade_p_fkey
+ │    ├── select
+ │    │    ├── columns: parent.p:5!null other:6 parent.crdb_internal_mvcc_timestamp:7 parent.tableoid:8
+ │    │    ├── scan parent
+ │    │    │    ├── columns: parent.p:5!null other:6 parent.crdb_internal_mvcc_timestamp:7 parent.tableoid:8
+ │    │    │    └── flags: avoid-full-scan
+ │    │    └── filters
+ │    │         └── parent.p:5 = 1
+ │    └── f-k-checks
+ │         └── f-k-checks-item: child_check(p) -> parent(p)
+ │              └── semi-join (hash)
+ │                   ├── columns: p:9!null
+ │                   ├── with-scan &1
+ │                   │    ├── columns: p:9!null
+ │                   │    └── mapping:
+ │                   │         └──  parent.p:5 => p:9
+ │                   ├── scan child_check
+ │                   │    ├── columns: child_check.p:11!null
+ │                   │    └── flags: avoid-full-scan disabled not visible index feature
+ │                   └── filters
+ │                        └── p:9 = child_check.p:11
+ └── cascade
+      └── delete child_cascade
+           ├── columns: <none>
+           ├── fetch columns: child_cascade.c:18 child_cascade.p:19
+           └── select
+                ├── columns: child_cascade.c:18!null child_cascade.p:19!null
+                ├── scan child_cascade
+                │    ├── columns: child_cascade.c:18!null child_cascade.p:19!null
+                │    └── flags: avoid-full-scan disabled not visible index feature
+                └── filters
+                     └── child_cascade.p:19 = 1
+
+# Same as above, but with parent table UPDATE.
+build-post-queries isolation=ReadCommitted
+UPDATE parent SET p = 2 WHERE p = 1
+----
+root
+ ├── update parent
+ │    ├── columns: <none>
+ │    ├── fetch columns: parent.p:5 other:6
+ │    ├── update-mapping:
+ │    │    └── p_new:9 => parent.p:1
+ │    ├── input binding: &1
+ │    ├── cascades
+ │    │    └── child_cascade_p_fkey
+ │    ├── project
+ │    │    ├── columns: p_new:9!null parent.p:5!null other:6 parent.crdb_internal_mvcc_timestamp:7 parent.tableoid:8
+ │    │    ├── select
+ │    │    │    ├── columns: parent.p:5!null other:6 parent.crdb_internal_mvcc_timestamp:7 parent.tableoid:8
+ │    │    │    ├── scan parent
+ │    │    │    │    ├── columns: parent.p:5!null other:6 parent.crdb_internal_mvcc_timestamp:7 parent.tableoid:8
+ │    │    │    │    └── flags: avoid-full-scan
+ │    │    │    └── filters
+ │    │    │         └── parent.p:5 = 1
+ │    │    └── projections
+ │    │         └── 2 [as=p_new:9]
+ │    └── f-k-checks
+ │         └── f-k-checks-item: child_check(p) -> parent(p)
+ │              └── semi-join (hash)
+ │                   ├── columns: p:10!null
+ │                   ├── except
+ │                   │    ├── columns: p:10!null
+ │                   │    ├── left columns: p:10!null
+ │                   │    ├── right columns: p:11
+ │                   │    ├── with-scan &1
+ │                   │    │    ├── columns: p:10!null
+ │                   │    │    └── mapping:
+ │                   │    │         └──  parent.p:5 => p:10
+ │                   │    └── with-scan &1
+ │                   │         ├── columns: p:11!null
+ │                   │         └── mapping:
+ │                   │              └──  p_new:9 => p:11
+ │                   ├── scan child_check
+ │                   │    ├── columns: child_check.p:13!null
+ │                   │    ├── flags: avoid-full-scan disabled not visible index feature
+ │                   │    └── locking: for-share,durability-guaranteed
+ │                   └── filters
+ │                        └── p:10 = child_check.p:13
+ └── cascade
+      └── update child_cascade
+           ├── columns: <none>
+           ├── fetch columns: child_cascade.c:20 child_cascade.p:21
+           ├── update-mapping:
+           │    └── p_new:25 => child_cascade.p:17
+           ├── input binding: &2
+           ├── inner-join (hash)
+           │    ├── columns: child_cascade.c:20!null child_cascade.p:21!null p_old:24!null p_new:25!null
+           │    ├── scan child_cascade
+           │    │    ├── columns: child_cascade.c:20!null child_cascade.p:21!null
+           │    │    ├── flags: avoid-full-scan disabled not visible index feature
+           │    │    └── locking: for-update,durability-guaranteed
+           │    ├── select
+           │    │    ├── columns: p_old:24!null p_new:25!null
+           │    │    ├── with-scan &1
+           │    │    │    ├── columns: p_old:24!null p_new:25!null
+           │    │    │    └── mapping:
+           │    │    │         ├──  parent.p:5 => p_old:24
+           │    │    │         └──  p_new:9 => p_new:25
+           │    │    └── filters
+           │    │         └── p_old:24 IS DISTINCT FROM p_new:25
+           │    └── filters
+           │         └── child_cascade.p:21 = p_old:24
+           └── f-k-checks
+                └── f-k-checks-item: child_cascade(p) -> parent(p)
+                     └── anti-join (hash)
+                          ├── columns: p:26!null
+                          ├── with-scan &2
+                          │    ├── columns: p:26!null
+                          │    └── mapping:
+                          │         └──  p_new:25 => p:26
+                          ├── scan parent
+                          │    ├── columns: parent.p:27!null
+                          │    ├── flags: avoid-full-scan disabled not visible index feature
+                          │    └── locking: for-share,durability-guaranteed
+                          └── filters
+                               └── p:26 = parent.p:27
+
+# With the setting enabled, child table checks/cascades are non-locking.
+build-post-queries isolation=ReadCommitted set=read_committed_non_locking_checks_enabled=true
+UPDATE parent SET p = 2 WHERE p = 1
+----
+root
+ ├── update parent
+ │    ├── columns: <none>
+ │    ├── fetch columns: parent.p:5 other:6
+ │    ├── update-mapping:
+ │    │    └── p_new:9 => parent.p:1
+ │    ├── input binding: &1
+ │    ├── cascades
+ │    │    └── child_cascade_p_fkey
+ │    ├── project
+ │    │    ├── columns: p_new:9!null parent.p:5!null other:6 parent.crdb_internal_mvcc_timestamp:7 parent.tableoid:8
+ │    │    ├── select
+ │    │    │    ├── columns: parent.p:5!null other:6 parent.crdb_internal_mvcc_timestamp:7 parent.tableoid:8
+ │    │    │    ├── scan parent
+ │    │    │    │    ├── columns: parent.p:5!null other:6 parent.crdb_internal_mvcc_timestamp:7 parent.tableoid:8
+ │    │    │    │    └── flags: avoid-full-scan
+ │    │    │    └── filters
+ │    │    │         └── parent.p:5 = 1
+ │    │    └── projections
+ │    │         └── 2 [as=p_new:9]
+ │    └── f-k-checks
+ │         └── f-k-checks-item: child_check(p) -> parent(p)
+ │              └── semi-join (hash)
+ │                   ├── columns: p:10!null
+ │                   ├── except
+ │                   │    ├── columns: p:10!null
+ │                   │    ├── left columns: p:10!null
+ │                   │    ├── right columns: p:11
+ │                   │    ├── with-scan &1
+ │                   │    │    ├── columns: p:10!null
+ │                   │    │    └── mapping:
+ │                   │    │         └──  parent.p:5 => p:10
+ │                   │    └── with-scan &1
+ │                   │         ├── columns: p:11!null
+ │                   │         └── mapping:
+ │                   │              └──  p_new:9 => p:11
+ │                   ├── scan child_check
+ │                   │    ├── columns: child_check.p:13!null
+ │                   │    └── flags: avoid-full-scan disabled not visible index feature
+ │                   └── filters
+ │                        └── p:10 = child_check.p:13
+ └── cascade
+      └── update child_cascade
+           ├── columns: <none>
+           ├── fetch columns: child_cascade.c:20 child_cascade.p:21
+           ├── update-mapping:
+           │    └── p_new:25 => child_cascade.p:17
+           ├── input binding: &2
+           ├── inner-join (hash)
+           │    ├── columns: child_cascade.c:20!null child_cascade.p:21!null p_old:24!null p_new:25!null
+           │    ├── scan child_cascade
+           │    │    ├── columns: child_cascade.c:20!null child_cascade.p:21!null
+           │    │    └── flags: avoid-full-scan disabled not visible index feature
+           │    ├── select
+           │    │    ├── columns: p_old:24!null p_new:25!null
+           │    │    ├── with-scan &1
+           │    │    │    ├── columns: p_old:24!null p_new:25!null
+           │    │    │    └── mapping:
+           │    │    │         ├──  parent.p:5 => p_old:24
+           │    │    │         └──  p_new:9 => p_new:25
+           │    │    └── filters
+           │    │         └── p_old:24 IS DISTINCT FROM p_new:25
+           │    └── filters
+           │         └── child_cascade.p:21 = p_old:24
+           └── f-k-checks
+                └── f-k-checks-item: child_cascade(p) -> parent(p)
+                     └── anti-join (hash)
+                          ├── columns: p:26!null
+                          ├── with-scan &2
+                          │    ├── columns: p:26!null
+                          │    └── mapping:
+                          │         └──  p_new:25 => p:26
+                          ├── scan parent
+                          │    ├── columns: parent.p:27!null
+                          │    └── flags: avoid-full-scan disabled not visible index feature
+                          └── filters
+                               └── p:26 = parent.p:27
+
+# ------------------------------------------------------------------------------
+# Read committed unique checks.
+# ------------------------------------------------------------------------------
+
+# UNIQUE WITHOUT INDEX is not supported by default under Read Committed.
+build isolation=ReadCommitted
+INSERT INTO uniq VALUES (1, 1, 1, 1)
+----
+error (0A000): unimplemented: unique without index constraint under non-serializable isolation levels
+
+# Checks should not contain locking with setting enabled.
+build isolation=ReadCommitted set=read_committed_non_locking_checks_enabled=true
+INSERT INTO uniq VALUES (1, 1, 1, 1)
+----
+insert uniq
+ ├── columns: <none>
+ ├── insert-mapping:
+ │    ├── column1:7 => uniq.k:1
+ │    ├── column2:8 => uniq.v:2
+ │    ├── column3:9 => uniq.w:3
+ │    └── column4:10 => uniq.x:4
+ ├── values
+ │    ├── columns: column1:7!null column2:8!null column3:9!null column4:10!null
+ │    └── (1, 1, 1, 1)
+ ├── unique-checks
+ │    ├── unique-checks-item: uniq(v)
+ │    │    └── project
+ │    │         ├── columns: v:18!null
+ │    │         └── semi-join (hash)
+ │    │              ├── columns: k:17!null v:18!null w:19!null x:20!null
+ │    │              ├── flags: prefer lookup join (into right side)
+ │    │              ├── values
+ │    │              │    ├── columns: k:17!null v:18!null w:19!null x:20!null
+ │    │              │    └── (1, 1, 1, 1)
+ │    │              ├── scan uniq
+ │    │              │    ├── columns: uniq.k:11!null uniq.v:12 uniq.w:13 uniq.x:14
+ │    │              │    └── flags: avoid-full-scan disabled not visible index feature
+ │    │              └── filters
+ │    │                   ├── v:18 = uniq.v:12
+ │    │                   └── k:17 != uniq.k:11
+ │    └── unique-checks-item: uniq(w,x)
+ │         └── project
+ │              ├── columns: w:35!null x:36!null
+ │              └── semi-join (hash)
+ │                   ├── columns: k:33!null v:34!null w:35!null x:36!null
+ │                   ├── flags: prefer lookup join (into right side)
+ │                   ├── values
+ │                   │    ├── columns: k:33!null v:34!null w:35!null x:36!null
+ │                   │    └── (1, 1, 1, 1)
+ │                   ├── scan uniq
+ │                   │    ├── columns: uniq.k:27!null uniq.v:28 uniq.w:29 uniq.x:30
+ │                   │    └── flags: avoid-full-scan disabled not visible index feature
+ │                   └── filters
+ │                        ├── w:35 = uniq.w:29
+ │                        ├── x:36 = uniq.x:30
+ │                        └── k:33 != uniq.k:27
+ └── fast-path-unique-checks
+      ├── fast-path-unique-checks-item: uniq(v)
+      │    └── select
+      │         ├── columns: uniq.k:21!null uniq.v:22!null uniq.w:23 uniq.x:24
+      │         ├── scan uniq
+      │         │    ├── columns: uniq.k:21!null uniq.v:22 uniq.w:23 uniq.x:24
+      │         │    └── flags: avoid-full-scan disabled not visible index feature
+      │         └── filters
+      │              └── uniq.v:22 = 1
+      └── fast-path-unique-checks-item: uniq(w,x)
+           └── select
+                ├── columns: uniq.k:37!null uniq.v:38 uniq.w:39!null uniq.x:40!null
+                ├── scan uniq
+                │    ├── columns: uniq.k:37!null uniq.v:38 uniq.w:39 uniq.x:40
+                │    └── flags: avoid-full-scan disabled not visible index feature
+                └── filters
+                     ├── uniq.w:39 = 1
+                     └── uniq.x:40 = 1
+
+# Verify the same behavior for UPDATE with unique checks.
+build isolation=ReadCommitted
+UPDATE uniq SET v = 2 WHERE k = 1
+----
+error (0A000): unimplemented: unique without index constraint under non-serializable isolation levels
+
+# Checks should not contain locking with setting enabled.
+build isolation=ReadCommitted set=read_committed_non_locking_checks_enabled=true
+UPDATE uniq SET v = 2 WHERE k = 1
+----
+update uniq
+ ├── columns: <none>
+ ├── fetch columns: uniq.k:7 uniq.v:8 uniq.w:9 uniq.x:10
+ ├── update-mapping:
+ │    └── v_new:13 => uniq.v:2
+ ├── input binding: &1
+ ├── project
+ │    ├── columns: v_new:13!null uniq.k:7!null uniq.v:8 uniq.w:9 uniq.x:10 crdb_internal_mvcc_timestamp:11 tableoid:12
+ │    ├── select
+ │    │    ├── columns: uniq.k:7!null uniq.v:8 uniq.w:9 uniq.x:10 crdb_internal_mvcc_timestamp:11 tableoid:12
+ │    │    ├── scan uniq
+ │    │    │    ├── columns: uniq.k:7!null uniq.v:8 uniq.w:9 uniq.x:10 crdb_internal_mvcc_timestamp:11 tableoid:12
+ │    │    │    └── flags: avoid-full-scan
+ │    │    └── filters
+ │    │         └── uniq.k:7 = 1
+ │    └── projections
+ │         └── 2 [as=v_new:13]
+ └── unique-checks
+      └── unique-checks-item: uniq(v)
+           └── project
+                ├── columns: v:21!null
+                └── semi-join (hash)
+                     ├── columns: k:20!null v:21!null w:22 x:23
+                     ├── flags: prefer lookup join (into right side)
+                     ├── with-scan &1
+                     │    ├── columns: k:20!null v:21!null w:22 x:23
+                     │    └── mapping:
+                     │         ├──  uniq.k:7 => k:20
+                     │         ├──  v_new:13 => v:21
+                     │         ├──  uniq.w:9 => w:22
+                     │         └──  uniq.x:10 => x:23
+                     ├── scan uniq
+                     │    ├── columns: uniq.k:14!null uniq.v:15 uniq.w:16 uniq.x:17
+                     │    └── flags: avoid-full-scan disabled not visible index feature
+                     └── filters
+                          ├── v:21 = uniq.v:15
+                          └── k:20 != uniq.k:14
+
+# ------------------------------------------------------------------------------
+# Test partitioned table with FK checks.
+# ------------------------------------------------------------------------------
+
+# By default under Read Committed, FK checks use locking for partitioned tables.
+build isolation=ReadCommitted
+INSERT INTO partitioned_child VALUES ('us-east', 1, 1)
+----
+insert partitioned_child
+ ├── columns: <none>
+ ├── insert-mapping:
+ │    ├── column1:6 => partitioned_child.region:1
+ │    ├── column2:7 => c:2
+ │    └── column3:8 => partitioned_child.p:3
+ ├── input binding: &1
+ ├── values
+ │    ├── columns: column1:6!null column2:7!null column3:8!null
+ │    └── ('us-east', 1, 1)
+ └── f-k-checks
+      └── f-k-checks-item: partitioned_child(region,p) -> partitioned_parent(region,p)
+           └── anti-join (hash)
+                ├── columns: region:9!null p:10!null
+                ├── with-scan &1
+                │    ├── columns: region:9!null p:10!null
+                │    └── mapping:
+                │         ├──  column1:6 => region:9
+                │         └──  column3:8 => p:10
+                ├── scan partitioned_parent
+                │    ├── columns: partitioned_parent.region:11!null partitioned_parent.p:12!null
+                │    ├── flags: avoid-full-scan disabled not visible index feature
+                │    └── locking: for-share,durability-guaranteed
+                └── filters
+                     ├── region:9 = partitioned_parent.region:11
+                     └── p:10 = partitioned_parent.p:12
+
+# With the setting enabled, FK checks on partitioned tables do NOT use locking.
+build isolation=ReadCommitted set=read_committed_non_locking_checks_enabled=true
+INSERT INTO partitioned_child VALUES ('us-east', 1, 1)
+----
+insert partitioned_child
+ ├── columns: <none>
+ ├── insert-mapping:
+ │    ├── column1:6 => partitioned_child.region:1
+ │    ├── column2:7 => c:2
+ │    └── column3:8 => partitioned_child.p:3
+ ├── input binding: &1
+ ├── values
+ │    ├── columns: column1:6!null column2:7!null column3:8!null
+ │    └── ('us-east', 1, 1)
+ └── f-k-checks
+      └── f-k-checks-item: partitioned_child(region,p) -> partitioned_parent(region,p)
+           └── anti-join (hash)
+                ├── columns: region:9!null p:10!null
+                ├── with-scan &1
+                │    ├── columns: region:9!null p:10!null
+                │    └── mapping:
+                │         ├──  column1:6 => region:9
+                │         └──  column3:8 => p:10
+                ├── scan partitioned_parent
+                │    ├── columns: partitioned_parent.region:11!null partitioned_parent.p:12!null
+                │    └── flags: avoid-full-scan disabled not visible index feature
+                └── filters
+                     ├── region:9 = partitioned_parent.region:11
+                     └── p:10 = partitioned_parent.p:12
+
+# Test parent table delete. We already don't lock the child table.
+build isolation=ReadCommitted
+DELETE FROM partitioned_parent WHERE region = 'us-east' AND p = 1
+----
+delete partitioned_parent
+ ├── columns: <none>
+ ├── fetch columns: partitioned_parent.region:5 partitioned_parent.p:6
+ ├── input binding: &1
+ ├── select
+ │    ├── columns: partitioned_parent.region:5!null partitioned_parent.p:6!null partitioned_parent.crdb_internal_mvcc_timestamp:7 partitioned_parent.tableoid:8
+ │    ├── scan partitioned_parent
+ │    │    ├── columns: partitioned_parent.region:5!null partitioned_parent.p:6!null partitioned_parent.crdb_internal_mvcc_timestamp:7 partitioned_parent.tableoid:8
+ │    │    └── flags: avoid-full-scan
+ │    └── filters
+ │         └── (partitioned_parent.region:5 = 'us-east') AND (partitioned_parent.p:6 = 1)
+ └── f-k-checks
+      └── f-k-checks-item: partitioned_child(region,p) -> partitioned_parent(region,p)
+           └── semi-join (hash)
+                ├── columns: region:9!null p:10!null
+                ├── with-scan &1
+                │    ├── columns: region:9!null p:10!null
+                │    └── mapping:
+                │         ├──  partitioned_parent.region:5 => region:9
+                │         └──  partitioned_parent.p:6 => p:10
+                ├── scan partitioned_child
+                │    ├── columns: partitioned_child.region:11!null partitioned_child.p:13!null
+                │    ├── flags: avoid-full-scan disabled not visible index feature
+                │    └── locking: for-share,durability-guaranteed
+                └── filters
+                     ├── region:9 = partitioned_child.region:11
+                     └── p:10 = partitioned_child.p:13
+
+build isolation=ReadCommitted set=read_committed_non_locking_checks_enabled=true
+DELETE FROM partitioned_parent WHERE region = 'us-east' AND p = 1
+----
+delete partitioned_parent
+ ├── columns: <none>
+ ├── fetch columns: partitioned_parent.region:5 partitioned_parent.p:6
+ ├── input binding: &1
+ ├── select
+ │    ├── columns: partitioned_parent.region:5!null partitioned_parent.p:6!null partitioned_parent.crdb_internal_mvcc_timestamp:7 partitioned_parent.tableoid:8
+ │    ├── scan partitioned_parent
+ │    │    ├── columns: partitioned_parent.region:5!null partitioned_parent.p:6!null partitioned_parent.crdb_internal_mvcc_timestamp:7 partitioned_parent.tableoid:8
+ │    │    └── flags: avoid-full-scan
+ │    └── filters
+ │         └── (partitioned_parent.region:5 = 'us-east') AND (partitioned_parent.p:6 = 1)
+ └── f-k-checks
+      └── f-k-checks-item: partitioned_child(region,p) -> partitioned_parent(region,p)
+           └── semi-join (hash)
+                ├── columns: region:9!null p:10!null
+                ├── with-scan &1
+                │    ├── columns: region:9!null p:10!null
+                │    └── mapping:
+                │         ├──  partitioned_parent.region:5 => region:9
+                │         └──  partitioned_parent.p:6 => p:10
+                ├── scan partitioned_child
+                │    ├── columns: partitioned_child.region:11!null partitioned_child.p:13!null
+                │    └── flags: avoid-full-scan disabled not visible index feature
+                └── filters
+                     ├── region:9 = partitioned_child.region:11
+                     └── p:10 = partitioned_child.p:13
+
+# ------------------------------------------------------------------------------
+# Test regional by row (RBR) table with FK checks.
+# ------------------------------------------------------------------------------
+
+# By default under Read Committed, FK checks use locking for RBR tables.
+# Note: while we support this in an actual cluster, the opt-tester uses a
+# string instead of an enum for the region column, so we hit the error here.
+build isolation=ReadCommitted
+INSERT INTO rbr_child VALUES (1, 1)
+----
+error (0A000): unimplemented: unique without index constraint under non-serializable isolation levels
+
+# With the setting enabled, FK checks on RBR tables do NOT use locking.
+build isolation=ReadCommitted set=read_committed_non_locking_checks_enabled=true
+INSERT INTO rbr_child VALUES (1, 1)
+----
+insert rbr_child
+ ├── columns: <none>
+ ├── insert-mapping:
+ │    ├── column1:6 => rbr_child.c:1
+ │    ├── column2:7 => rbr_child.p:2
+ │    └── crdb_region_default:8 => rbr_child.crdb_region:3
+ ├── check columns: check1:9
+ ├── input binding: &1
+ ├── project
+ │    ├── columns: check1:9 column1:6!null column2:7!null crdb_region_default:8
+ │    ├── project
+ │    │    ├── columns: crdb_region_default:8 column1:6!null column2:7!null
+ │    │    ├── values
+ │    │    │    ├── columns: column1:6!null column2:7!null
+ │    │    │    └── (1, 1)
+ │    │    └── projections
+ │    │         └── default_to_database_primary_region(gateway_region()) [as=crdb_region_default:8]
+ │    └── projections
+ │         └── crdb_region_default:8 IN ('east', 'central', 'west') [as=check1:9]
+ ├── unique-checks
+ │    └── unique-checks-item: rbr_child(c)
+ │         └── project
+ │              ├── columns: c:15!null
+ │              └── semi-join (hash)
+ │                   ├── columns: c:15!null p:16!null crdb_region:17
+ │                   ├── flags: prefer lookup join (into right side)
+ │                   ├── with-scan &1
+ │                   │    ├── columns: c:15!null p:16!null crdb_region:17
+ │                   │    └── mapping:
+ │                   │         ├──  column1:6 => c:15
+ │                   │         ├──  column2:7 => p:16
+ │                   │         └──  crdb_region_default:8 => crdb_region:17
+ │                   ├── scan rbr_child
+ │                   │    ├── columns: rbr_child.c:10!null rbr_child.p:11!null rbr_child.crdb_region:12!null
+ │                   │    ├── check constraint expressions
+ │                   │    │    └── rbr_child.crdb_region:12 IN ('east', 'central', 'west')
+ │                   │    └── flags: avoid-full-scan disabled not visible index feature
+ │                   └── filters
+ │                        ├── c:15 = rbr_child.c:10
+ │                        └── crdb_region:17 != rbr_child.crdb_region:12
+ ├── fast-path-unique-checks
+ │    └── fast-path-unique-checks-item: rbr_child(c)
+ │         └── select
+ │              ├── columns: rbr_child.c:18!null rbr_child.p:19!null rbr_child.crdb_region:20!null
+ │              ├── scan rbr_child
+ │              │    ├── columns: rbr_child.c:18!null rbr_child.p:19!null rbr_child.crdb_region:20!null
+ │              │    ├── check constraint expressions
+ │              │    │    └── rbr_child.crdb_region:20 IN ('east', 'central', 'west')
+ │              │    └── flags: avoid-full-scan disabled not visible index feature
+ │              └── filters
+ │                   └── rbr_child.c:18 = 1
+ └── f-k-checks
+      └── f-k-checks-item: rbr_child(p) -> rbr_parent(p)
+           └── anti-join (hash)
+                ├── columns: p:23!null
+                ├── with-scan &1
+                │    ├── columns: p:23!null
+                │    └── mapping:
+                │         └──  column2:7 => p:23
+                ├── scan rbr_parent
+                │    ├── columns: rbr_parent.p:24!null
+                │    ├── check constraint expressions
+                │    │    └── rbr_parent.crdb_region:25 IN ('east', 'central', 'west')
+                │    └── flags: avoid-full-scan disabled not visible index feature
+                └── filters
+                     └── p:23 = rbr_parent.p:24
+
+# ------------------------------------------------------------------------------
+# Verify that Serializable isolation is unaffected by the setting.
+# ------------------------------------------------------------------------------
+
+# Under Serializable, the setting should have no effect - we should not see
+# locking regardless.
+
+build isolation=Serializable
+INSERT INTO child VALUES (1, 1)
+----
+error (42P01): no data source matches prefix: "child"
+
+build isolation=Serializable set=read_committed_non_locking_checks_enabled=true
+INSERT INTO child VALUES (1, 1)
+----
+error (42P01): no data source matches prefix: "child"
+
+build isolation=Serializable
+INSERT INTO uniq VALUES (1, 1, 1, 1)
+----
+insert uniq
+ ├── columns: <none>
+ ├── insert-mapping:
+ │    ├── column1:7 => uniq.k:1
+ │    ├── column2:8 => uniq.v:2
+ │    ├── column3:9 => uniq.w:3
+ │    └── column4:10 => uniq.x:4
+ ├── values
+ │    ├── columns: column1:7!null column2:8!null column3:9!null column4:10!null
+ │    └── (1, 1, 1, 1)
+ ├── unique-checks
+ │    ├── unique-checks-item: uniq(v)
+ │    │    └── project
+ │    │         ├── columns: v:18!null
+ │    │         └── semi-join (hash)
+ │    │              ├── columns: k:17!null v:18!null w:19!null x:20!null
+ │    │              ├── values
+ │    │              │    ├── columns: k:17!null v:18!null w:19!null x:20!null
+ │    │              │    └── (1, 1, 1, 1)
+ │    │              ├── scan uniq
+ │    │              │    ├── columns: uniq.k:11!null uniq.v:12 uniq.w:13 uniq.x:14
+ │    │              │    └── flags: avoid-full-scan disabled not visible index feature
+ │    │              └── filters
+ │    │                   ├── v:18 = uniq.v:12
+ │    │                   └── k:17 != uniq.k:11
+ │    └── unique-checks-item: uniq(w,x)
+ │         └── project
+ │              ├── columns: w:35!null x:36!null
+ │              └── semi-join (hash)
+ │                   ├── columns: k:33!null v:34!null w:35!null x:36!null
+ │                   ├── values
+ │                   │    ├── columns: k:33!null v:34!null w:35!null x:36!null
+ │                   │    └── (1, 1, 1, 1)
+ │                   ├── scan uniq
+ │                   │    ├── columns: uniq.k:27!null uniq.v:28 uniq.w:29 uniq.x:30
+ │                   │    └── flags: avoid-full-scan disabled not visible index feature
+ │                   └── filters
+ │                        ├── w:35 = uniq.w:29
+ │                        ├── x:36 = uniq.x:30
+ │                        └── k:33 != uniq.k:27
+ └── fast-path-unique-checks
+      ├── fast-path-unique-checks-item: uniq(v)
+      │    └── select
+      │         ├── columns: uniq.k:21!null uniq.v:22!null uniq.w:23 uniq.x:24
+      │         ├── scan uniq
+      │         │    ├── columns: uniq.k:21!null uniq.v:22 uniq.w:23 uniq.x:24
+      │         │    └── flags: avoid-full-scan disabled not visible index feature
+      │         └── filters
+      │              └── uniq.v:22 = 1
+      └── fast-path-unique-checks-item: uniq(w,x)
+           └── select
+                ├── columns: uniq.k:37!null uniq.v:38 uniq.w:39!null uniq.x:40!null
+                ├── scan uniq
+                │    ├── columns: uniq.k:37!null uniq.v:38 uniq.w:39 uniq.x:40
+                │    └── flags: avoid-full-scan disabled not visible index feature
+                └── filters
+                     ├── uniq.w:39 = 1
+                     └── uniq.x:40 = 1
+
+build isolation=Serializable set=read_committed_non_locking_checks_enabled=true
+INSERT INTO uniq VALUES (1, 1, 1, 1)
+----
+insert uniq
+ ├── columns: <none>
+ ├── insert-mapping:
+ │    ├── column1:7 => uniq.k:1
+ │    ├── column2:8 => uniq.v:2
+ │    ├── column3:9 => uniq.w:3
+ │    └── column4:10 => uniq.x:4
+ ├── values
+ │    ├── columns: column1:7!null column2:8!null column3:9!null column4:10!null
+ │    └── (1, 1, 1, 1)
+ ├── unique-checks
+ │    ├── unique-checks-item: uniq(v)
+ │    │    └── project
+ │    │         ├── columns: v:18!null
+ │    │         └── semi-join (hash)
+ │    │              ├── columns: k:17!null v:18!null w:19!null x:20!null
+ │    │              ├── values
+ │    │              │    ├── columns: k:17!null v:18!null w:19!null x:20!null
+ │    │              │    └── (1, 1, 1, 1)
+ │    │              ├── scan uniq
+ │    │              │    ├── columns: uniq.k:11!null uniq.v:12 uniq.w:13 uniq.x:14
+ │    │              │    └── flags: avoid-full-scan disabled not visible index feature
+ │    │              └── filters
+ │    │                   ├── v:18 = uniq.v:12
+ │    │                   └── k:17 != uniq.k:11
+ │    └── unique-checks-item: uniq(w,x)
+ │         └── project
+ │              ├── columns: w:35!null x:36!null
+ │              └── semi-join (hash)
+ │                   ├── columns: k:33!null v:34!null w:35!null x:36!null
+ │                   ├── values
+ │                   │    ├── columns: k:33!null v:34!null w:35!null x:36!null
+ │                   │    └── (1, 1, 1, 1)
+ │                   ├── scan uniq
+ │                   │    ├── columns: uniq.k:27!null uniq.v:28 uniq.w:29 uniq.x:30
+ │                   │    └── flags: avoid-full-scan disabled not visible index feature
+ │                   └── filters
+ │                        ├── w:35 = uniq.w:29
+ │                        ├── x:36 = uniq.x:30
+ │                        └── k:33 != uniq.k:27
+ └── fast-path-unique-checks
+      ├── fast-path-unique-checks-item: uniq(v)
+      │    └── select
+      │         ├── columns: uniq.k:21!null uniq.v:22!null uniq.w:23 uniq.x:24
+      │         ├── scan uniq
+      │         │    ├── columns: uniq.k:21!null uniq.v:22 uniq.w:23 uniq.x:24
+      │         │    └── flags: avoid-full-scan disabled not visible index feature
+      │         └── filters
+      │              └── uniq.v:22 = 1
+      └── fast-path-unique-checks-item: uniq(w,x)
+           └── select
+                ├── columns: uniq.k:37!null uniq.v:38 uniq.w:39!null uniq.x:40!null
+                ├── scan uniq
+                │    ├── columns: uniq.k:37!null uniq.v:38 uniq.w:39 uniq.x:40
+                │    └── flags: avoid-full-scan disabled not visible index feature
+                └── filters
+                     ├── uniq.w:39 = 1
+                     └── uniq.x:40 = 1

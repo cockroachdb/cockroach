@@ -64,6 +64,7 @@ func Put(
 		OmitInRangefeeds:               cArgs.OmitInRangefeeds,
 		OriginID:                       h.WriteOptions.GetOriginID(),
 		OriginTimestamp:                h.WriteOptions.GetOriginTimestamp(),
+		DisallowIntentTimestampChange:  h.DisallowIntentTimestampChange,
 		MaxLockConflicts:               storage.MaxConflictsPerLockConflictError.Get(&cArgs.EvalCtx.ClusterSettings().SV),
 		TargetLockConflictBytes:        storage.TargetBytesPerLockConflictError.Get(&cArgs.EvalCtx.ClusterSettings().SV),
 		Category:                       fs.BatchEvalReadCategory,

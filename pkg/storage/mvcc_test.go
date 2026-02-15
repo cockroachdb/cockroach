@@ -3529,6 +3529,294 @@ func TestMVCCResolveWithPushedTimestamp(t *testing.T) {
 	}
 }
 
+// TestMVCCResolveIntentWithDisallowTimestampChange verifies that when an intent
+// is written with DisallowIntentTimestampChange set, resolving the intent does
+// not rewrite it at a higher timestamp even if the transaction's write timestamp
+// has been pushed. This is used by Read Committed transactions to ensure locking
+// reads maintain their original lock timestamps.
+func TestMVCCResolveIntentWithDisallowTimestampChange(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+
+	// Helper to verify that an intent remains at its original timestamp after
+	// the transaction is pushed (but before commit).
+	verifyIntentAtOriginalTimestamp := func(t *testing.T, engine Engine, key roachpb.Key,
+		tsOriginal, tsPushed hlc.Timestamp, expectValue *roachpb.Value, expectDeleted bool) {
+		t.Helper()
+
+		// A read at the original timestamp should see a lock conflict (intent still there).
+		_, err := MVCCGet(ctx, engine, key, tsOriginal, MVCCGetOptions{})
+		if !errors.HasType(err, (*kvpb.LockConflictError)(nil)) {
+			t.Fatalf("expected lock conflict error at original timestamp, got %v", err)
+		}
+
+		// A read at the pushed timestamp should also see a lock conflict, because
+		// the intent was NOT moved forward.
+		_, err = MVCCGet(ctx, engine, key, tsPushed, MVCCGetOptions{})
+		if !errors.HasType(err, (*kvpb.LockConflictError)(nil)) {
+			t.Fatalf("expected lock conflict error at pushed timestamp, got %v", err)
+		}
+	}
+
+	// Helper to verify the committed value is at the commit timestamp (pushed timestamp).
+	verifyCommittedAtCommitTimestamp := func(t *testing.T, engine Engine, key roachpb.Key,
+		tsOriginal, tsPushed hlc.Timestamp, expectValue *roachpb.Value, expectDeleted bool) {
+		t.Helper()
+
+		if !expectDeleted {
+			// For Put/CPut: a read at the original timestamp should NOT see the value
+			// (it was committed at the pushed timestamp).
+			valueRes, err := MVCCGet(ctx, engine, key, tsOriginal, MVCCGetOptions{})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if valueRes.Value.Exists() {
+				t.Fatalf("expected no value at original timestamp (not yet committed), got %v",
+					valueRes.Value.Value)
+			}
+		}
+
+		// A read at the pushed (commit) timestamp should see the final result.
+		valueRes, err := MVCCGet(ctx, engine, key, tsPushed, MVCCGetOptions{})
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		if expectDeleted {
+			if valueRes.Value.Exists() {
+				t.Fatalf("expected no value at commit timestamp (deleted), got %v",
+					valueRes.Value.Value)
+			}
+		} else {
+			if !valueRes.Value.Exists() {
+				t.Fatal("expected value to exist at commit timestamp")
+			}
+			if !bytes.Equal(expectValue.RawBytes, valueRes.Value.Value.RawBytes) {
+				t.Fatalf("expected value %s at commit timestamp, got %s",
+					expectValue.RawBytes, valueRes.Value.Value.RawBytes)
+			}
+			if valueRes.Value.Value.Timestamp != tsPushed {
+				t.Fatalf("expected value timestamp %s, got %s", tsPushed, valueRes.Value.Value.Timestamp)
+			}
+		}
+	}
+
+	tsOriginal := hlc.Timestamp{WallTime: 1}
+	tsPushed := hlc.Timestamp{WallTime: 5}
+
+	testCases := []struct {
+		name          string
+		writeIntent   func(engine Engine, txn *roachpb.Transaction) error
+		expectValue   *roachpb.Value
+		expectDeleted bool
+	}{
+		{
+			name: "Put",
+			writeIntent: func(engine Engine, txn *roachpb.Transaction) error {
+				opts := MVCCWriteOptions{
+					Txn:                           txn,
+					DisallowIntentTimestampChange: true,
+				}
+				_, err := MVCCPut(ctx, engine, testKey1, tsOriginal, value1, opts)
+				return err
+			},
+			expectValue:   &value1,
+			expectDeleted: false,
+		},
+		{
+			name: "CPut",
+			writeIntent: func(engine Engine, txn *roachpb.Transaction) error {
+				opts := MVCCWriteOptions{
+					Txn:                           txn,
+					DisallowIntentTimestampChange: true,
+				}
+				_, err := MVCCConditionalPut(ctx, engine, testKey2, tsOriginal, value2,
+					nil /* expVal */, ConditionalPutWriteOptions{MVCCWriteOptions: opts})
+				return err
+			},
+			expectValue:   &value2,
+			expectDeleted: false,
+		},
+		{
+			name: "Del",
+			writeIntent: func(engine Engine, txn *roachpb.Transaction) error {
+				// First put a value so we have something to delete (use a non-zero
+				// timestamp to avoid inline values).
+				if _, err := MVCCPut(ctx, engine, testKey3, hlc.Timestamp{Logical: 1},
+					value3, MVCCWriteOptions{}); err != nil {
+					return err
+				}
+				// Now delete it with DisallowIntentTimestampChange.
+				opts := MVCCWriteOptions{
+					Txn:                           txn,
+					DisallowIntentTimestampChange: true,
+				}
+				_, _, err := MVCCDelete(ctx, engine, testKey3, tsOriginal, opts)
+				return err
+			},
+			expectValue:   nil,
+			expectDeleted: true,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			engine := NewDefaultInMemForTesting()
+			defer engine.Close()
+
+			// Write an intent with DisallowIntentTimestampChange set.
+			txn := makeTxn(*txn1, tsOriginal)
+			if err := tc.writeIntent(engine, txn); err != nil {
+				t.Fatal(err)
+			}
+
+			// Push the transaction's write timestamp forward.
+			txnPushed := txn.Clone()
+			txnPushed.WriteTimestamp = tsPushed
+
+			// Resolve the intent with the pushed transaction (still PENDING).
+			key := testKey1
+			if tc.name == "CPut" {
+				key = testKey2
+			} else if tc.name == "Del" {
+				key = testKey3
+			}
+
+			intent := roachpb.MakeLockUpdate(txnPushed, roachpb.Span{Key: key})
+			intent.Status = roachpb.PENDING
+			if _, _, _, _, err := MVCCResolveWriteIntent(ctx, engine, nil, intent,
+				MVCCResolveWriteIntentOptions{}); err != nil {
+				t.Fatal(err)
+			}
+
+			// Verify the intent is still at the original timestamp.
+			verifyIntentAtOriginalTimestamp(t, engine, key, tsOriginal, tsPushed,
+				tc.expectValue, tc.expectDeleted)
+
+			// Verify that writes in the interval [tsOriginal, tsPushed] are blocked by
+			// the intent. Try to write at an intermediate timestamp.
+			tsIntermediate := hlc.Timestamp{WallTime: 3}
+			intermediateValue := roachpb.MakeValueFromString("intermediate")
+			_, writeErr := MVCCPut(ctx, engine, key, tsIntermediate, intermediateValue, MVCCWriteOptions{})
+			if !errors.HasType(writeErr, (*kvpb.LockConflictError)(nil)) {
+				t.Fatalf("expected lock conflict when writing at intermediate timestamp, got %v", writeErr)
+			}
+
+			// Now commit the transaction at the pushed timestamp.
+			txnCommitted := txnPushed.Clone()
+			txnCommitted.Status = roachpb.COMMITTED
+			commitIntent := roachpb.MakeLockUpdate(txnCommitted, roachpb.Span{Key: key})
+			_, _, _, replLocksReleased, err := MVCCResolveWriteIntent(ctx, engine, nil, commitIntent,
+				MVCCResolveWriteIntentOptions{})
+			if err != nil {
+				t.Fatal(err)
+			}
+			// Verify that replLocksReleased is true, which signals that the timestamp
+			// cache should be updated to prevent writes below the commit timestamp.
+			if !replLocksReleased {
+				t.Fatal("expected replLocksReleased to be true for commit with DisallowIntentTimestampChange")
+			}
+
+			// Verify the value/deletion is at the commit timestamp (pushed timestamp).
+			verifyCommittedAtCommitTimestamp(t, engine, key, tsOriginal, tsPushed,
+				tc.expectValue, tc.expectDeleted)
+		})
+	}
+}
+
+// TestMVCCResolveIntentWithoutDisallowTimestampChange verifies the normal
+// behavior where an intent IS moved forward when the transaction is pushed
+// and committed. This contrasts with the DisallowIntentTimestampChange behavior.
+func TestMVCCResolveIntentWithoutDisallowTimestampChange(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	engine := NewDefaultInMemForTesting()
+	defer engine.Close()
+
+	// Write an intent at ts1 WITHOUT DisallowIntentTimestampChange.
+	tsOriginal := hlc.Timestamp{WallTime: 1}
+	txn := makeTxn(*txn1, tsOriginal)
+	opts := MVCCWriteOptions{
+		Txn: txn,
+		// DisallowIntentTimestampChange is false (default)
+	}
+	if _, err := MVCCPut(ctx, engine, testKey1, tsOriginal, value1, opts); err != nil {
+		t.Fatal(err)
+	}
+
+	// Push the transaction's write timestamp forward.
+	tsPushed := hlc.Timestamp{WallTime: 5}
+	txnPushed := txn.Clone()
+	txnPushed.WriteTimestamp = tsPushed
+
+	// Resolve the intent with the pushed transaction (still PENDING).
+	intent := roachpb.MakeLockUpdate(txnPushed, roachpb.Span{Key: testKey1})
+	intent.Status = roachpb.PENDING
+	if _, _, _, _, err := MVCCResolveWriteIntent(ctx, engine, nil, intent,
+		MVCCResolveWriteIntentOptions{}); err != nil {
+		t.Fatal(err)
+	}
+
+	// Without DisallowIntentTimestampChange, the intent SHOULD be moved to the
+	// pushed timestamp. A read at the original timestamp should NOT see a lock
+	// conflict.
+	valueRes, err := MVCCGet(ctx, engine, testKey1, tsOriginal, MVCCGetOptions{})
+	if err != nil {
+		t.Fatalf("expected no error at original timestamp (intent should be moved), got %v", err)
+	}
+	if valueRes.Value.Exists() {
+		t.Fatalf("expected no value at original timestamp (intent moved forward), got %v",
+			valueRes.Value.Value)
+	}
+
+	// A read at the pushed timestamp should see a lock conflict, because
+	// the intent WAS moved forward.
+	_, err = MVCCGet(ctx, engine, testKey1, tsPushed, MVCCGetOptions{})
+	if !errors.HasType(err, (*kvpb.LockConflictError)(nil)) {
+		t.Fatalf("expected lock conflict error at pushed timestamp, got %v", err)
+	}
+
+	// Now commit the transaction at the pushed timestamp.
+	txnCommitted := txnPushed.Clone()
+	txnCommitted.Status = roachpb.COMMITTED
+	commitIntent := roachpb.MakeLockUpdate(txnCommitted, roachpb.Span{Key: testKey1})
+	if _, _, _, _, err = MVCCResolveWriteIntent(ctx, engine, nil, commitIntent,
+		MVCCResolveWriteIntentOptions{}); err != nil {
+		t.Fatal(err)
+	}
+
+	// After commit without DisallowIntentTimestampChange, the value should be at
+	// the pushed timestamp, not the original timestamp.
+	valueRes, err = MVCCGet(ctx, engine, testKey1, tsPushed, MVCCGetOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !valueRes.Value.Exists() {
+		t.Fatal("expected value to exist at pushed timestamp after commit")
+	}
+	if !bytes.Equal(value1.RawBytes, valueRes.Value.Value.RawBytes) {
+		t.Fatalf("expected value %s at pushed timestamp, got %s",
+			value1.RawBytes, valueRes.Value.Value.RawBytes)
+	}
+	if valueRes.Value.Value.Timestamp != tsPushed {
+		t.Fatalf("expected value timestamp %s, got %s", tsPushed, valueRes.Value.Value.Timestamp)
+	}
+
+	// A read at the original timestamp should NOT see the value anymore.
+	valueRes, err = MVCCGet(ctx, engine, testKey1, tsOriginal, MVCCGetOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if valueRes.Value.Exists() {
+		t.Fatalf("expected no value at original timestamp (should be at %s), got %v",
+			tsPushed, valueRes.Value.Value)
+	}
+}
+
 func TestMVCCResolveTxnNoOps(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
