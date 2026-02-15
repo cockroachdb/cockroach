@@ -34,7 +34,7 @@ sequence req=req1
 
 on-lock-acquired req=req1 key=k
 ----
-[-] acquire lock: txn 00000001 @ ‹k›
+[-] acquire lock: txn 00000001 acquiring Unreplicated Exclusive lock on ‹"k"›
 
 finish req=req1
 ----
@@ -150,7 +150,7 @@ finish req=req5r
 
 on-lock-acquired req=req2 key=k
 ----
-[-] acquire lock: txn 00000002 @ ‹k›
+[-] acquire lock: txn 00000002 acquiring Unreplicated Exclusive lock on ‹"k"›
 [3] sequence req3: lock wait-queue event: wait for txn 00000002 holding lock @ key ‹"k"› (queuedLockingRequests: 2, queuedReaders: 0)
 [3] sequence req3: pushing after 0s for: deadlock/liveness detection = true, timeout enforcement = false, priority enforcement = false, wait policy error = false
 [3] sequence req3: pushing txn 00000002 to abort

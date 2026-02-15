@@ -37,7 +37,7 @@ sequence req=req1
 
 on-lock-acquired req=req1 key=k
 ----
-[-] acquire lock: txn 00000001 @ ‹k›
+[-] acquire lock: txn 00000001 acquiring Unreplicated Exclusive lock on ‹"k"›
 
 finish req=req1
 ----
@@ -102,7 +102,7 @@ sequence req=req3
 
 on-lock-acquired req=req3 key=k seq=1
 ----
-[-] acquire lock: txn 00000001 @ ‹k›
+[-] acquire lock: txn 00000001 acquiring Unreplicated Exclusive lock on ‹"k"›
 
 finish req=req3
 ----
@@ -155,7 +155,7 @@ sequence req=req1
 
 on-lock-acquired req=req1 key=k
 ----
-[-] acquire lock: txn 00000001 @ ‹k›
+[-] acquire lock: txn 00000001 acquiring Unreplicated Exclusive lock on ‹"k"›
 
 finish req=req1
 ----
@@ -224,7 +224,7 @@ sequence req=req3
 
 on-lock-acquired req=req3 key=k
 ----
-[-] acquire lock: txn 00000001 @ ‹k›
+[-] acquire lock: txn 00000001 acquiring Unreplicated Exclusive lock on ‹"k"›
 
 finish req=req3
 ----
@@ -282,7 +282,7 @@ sequence req=req1
 
 on-lock-acquired req=req1 key=k dur=u
 ----
-[-] acquire lock: txn 00000001 @ ‹k›
+[-] acquire lock: txn 00000001 acquiring Unreplicated Exclusive lock on ‹"k"›
 
 finish req=req1
 ----
@@ -368,7 +368,7 @@ sequence req=req3
 
 on-lock-acquired req=req3 key=k seq=1 dur=r
 ----
-[-] acquire lock: txn 00000001 @ ‹k›
+[-] acquire lock: txn 00000001 acquiring Replicated Intent lock on ‹"k"›
 
 finish req=req3
 ----

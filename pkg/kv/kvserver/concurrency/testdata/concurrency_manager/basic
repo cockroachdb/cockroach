@@ -52,7 +52,7 @@ sequence req=req2
 
 on-lock-acquired req=req2 key=k
 ----
-[-] acquire lock: txn 00000002 @ ‹k›
+[-] acquire lock: txn 00000002 acquiring Unreplicated Exclusive lock on ‹"k"›
 
 debug-lock-table
 ----
@@ -96,7 +96,7 @@ sequence req=req2
 
 on-lock-acquired req=req2 key=k
 ----
-[-] acquire lock: txn 00000002 @ ‹k›
+[-] acquire lock: txn 00000002 acquiring Unreplicated Exclusive lock on ‹"k"›
 
 finish req=req2
 ----
@@ -188,7 +188,7 @@ sequence req=req2
 
 on-lock-acquired req=req2 key=k
 ----
-[-] acquire lock: txn 00000002 @ ‹k›
+[-] acquire lock: txn 00000002 acquiring Unreplicated Exclusive lock on ‹"k"›
 
 finish req=req2
 ----

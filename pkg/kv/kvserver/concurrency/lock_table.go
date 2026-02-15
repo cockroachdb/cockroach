@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/container/list"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
@@ -4268,7 +4269,9 @@ func (t *lockTableImpl) ScanOptimistic(req Request) lockTableGuard {
 }
 
 // ScanAndEnqueue implements the lockTable interface.
-func (t *lockTableImpl) ScanAndEnqueue(req Request, guard lockTableGuard) (lockTableGuard, *Error) {
+func (t *lockTableImpl) ScanAndEnqueue(
+	ctx context.Context, req Request, guard lockTableGuard,
+) (lockTableGuard, *Error) {
 	// NOTE: there is no need to synchronize with enabledMu here. ScanAndEnqueue
 	// scans the lockTable and enters any conflicting lock wait-queues, but a
 	// disabled lockTable will be empty. If the scan's btree snapshot races with
@@ -4304,7 +4307,7 @@ func (t *lockTableImpl) ScanAndEnqueue(req Request, guard lockTableGuard) (lockT
 	if err != nil {
 		// We're not returning the guard on this error path, so we need to
 		// release the guard in case it has already entered any wait-queues.
-		t.Dequeue(g)
+		t.Dequeue(ctx, g)
 		return nil, kvpb.NewError(err)
 	}
 	if g.notRemovableLock != nil {
@@ -4344,7 +4347,7 @@ func (t *lockTableImpl) doSnapshotForGuard(g *lockTableGuardImpl) {
 }
 
 // Dequeue implements the lockTable interface.
-func (t *lockTableImpl) Dequeue(guard lockTableGuard) {
+func (t *lockTableImpl) Dequeue(_ context.Context, guard lockTableGuard) {
 	// NOTE: there is no need to synchronize with enabledMu here. Dequeue only
 	// accesses state already held by the guard and does not add anything to the
 	// lockTable.
@@ -4395,6 +4398,7 @@ func (t *lockTableImpl) Dequeue(guard lockTableGuard) {
 // each of the locks. At that point a decision is made whether to consult the
 // txnStatusCache eagerly when adding discovered locks.
 func (t *lockTableImpl) AddDiscoveredLock(
+	ctx context.Context,
 	foundLock *roachpb.Lock,
 	seq roachpb.LeaseSequence,
 	consultTxnStatusCache bool,
@@ -4468,7 +4472,7 @@ func (t *lockTableImpl) AddDiscoveredLock(
 }
 
 // AcquireLock implements the lockTable interface.
-func (t *lockTableImpl) AcquireLock(acq *roachpb.LockAcquisition) error {
+func (t *lockTableImpl) AcquireLock(ctx context.Context, acq *roachpb.LockAcquisition) error {
 	t.enabledMu.RLock()
 	defer t.enabledMu.RUnlock()
 	if !t.enabled {
@@ -4487,6 +4491,8 @@ func (t *lockTableImpl) AcquireLock(acq *roachpb.LockAcquisition) error {
 	default:
 		return errors.AssertionFailedf("unsupported lock strength %s", acq.Strength)
 	}
+	log.VEventf(ctx, 2, "txn %s acquiring %s %s lock on %s",
+		acq.Txn.Short(), acq.Durability, acq.Strength, acq.Key)
 	var kl *keyLocks
 	t.locks.mu.Lock()
 	// Can't release tree.mu until call kl.acquireLock() since someone may find
@@ -4550,7 +4556,9 @@ func (t *lockTableImpl) AcquireLock(acq *roachpb.LockAcquisition) error {
 }
 
 // MarkIneligibleForExport implements the lockTable interface.
-func (t *lockTableImpl) MarkIneligibleForExport(acq *roachpb.LockAcquisition) error {
+func (t *lockTableImpl) MarkIneligibleForExport(
+	_ context.Context, acq *roachpb.LockAcquisition,
+) error {
 	if acq == nil {
 		return errors.AssertionFailedf("unexpected nil lock acquisition")
 	}
@@ -4595,6 +4603,9 @@ func (t *lockTableImpl) checkMaxKeysLockedAndTryClear() {
 		if numCleared != 0 {
 			t.locksShedDueToMemoryLimit.Inc(numCleared)
 			t.numLockShedDueToMemoryLimitEvents.Inc(1)
+			log.KvExec.Warningf(context.Background(),
+				"lock table exceeded memory limit (%d locks > %d max); shed %d locks",
+				totalLocks, t.lockTableLimitsMu.maxKeysLocked, numCleared)
 		}
 	}
 }
@@ -4738,7 +4749,7 @@ func (t *lockTableImpl) tryGCLocks(tree *treeMu, locks []*keyLocks) {
 }
 
 // UpdateLocks implements the lockTable interface.
-func (t *lockTableImpl) UpdateLocks(up *roachpb.LockUpdate) error {
+func (t *lockTableImpl) UpdateLocks(_ context.Context, up *roachpb.LockUpdate) error {
 	_ = t.updateLockInternal(up)
 	return nil
 }
@@ -4864,6 +4875,11 @@ func (t *lockTableImpl) Clear(disable bool) {
 		defer t.enabledMu.Unlock()
 		t.enabled = false
 	}
+	numLocks := t.locks.numKeysLocked.Load()
+	if numLocks > 0 {
+		log.KvExec.VInfof(context.Background(), 2,
+			"clearing lock table (locks=%d)", numLocks)
+	}
 	// The numToClear=0 is arbitrary since it is unused when force=true.
 	t.tryClearLocks(true /* force */, 0)
 	// Also clear the txn status cache, since it won't be needed any time
@@ -4873,7 +4889,15 @@ func (t *lockTableImpl) Clear(disable bool) {
 
 // ClearGE implements the lockTable interface.
 func (t *lockTableImpl) ClearGE(key roachpb.Key) []roachpb.LockAcquisition {
-	return t.tryClearLocksGE(key)
+	numBefore := t.locks.numKeysLocked.Load()
+	acqs := t.tryClearLocksGE(key)
+	numCleared := numBefore - t.locks.numKeysLocked.Load()
+	if numCleared > 0 || len(acqs) > 0 {
+		log.KvExec.VInfof(context.Background(), 2,
+			"cleared %d lock(s) >= key %s, returning %d lock acquisitions",
+			numCleared, key, len(acqs))
+	}
+	return acqs
 }
 
 // ExportUnreplicatedLocks implements the lockTable interface.
