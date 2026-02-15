@@ -124,3 +124,144 @@ query TTT
 SELECT metaphone('Night', 4), metaphone('Knight', 4), metaphone('Knives', 4);
 ----
 NFT NFT NFS
+
+# Double Metaphone
+
+query T
+SELECT dmetaphone('gumbo');
+----
+KMP
+
+query TT
+SELECT dmetaphone('Richard'), dmetaphone_alt('Richard');
+----
+RXRT  RKRT
+
+query TT
+SELECT dmetaphone('Smith'), dmetaphone_alt('Smith');
+----
+SM0  XMT
+
+query TT
+SELECT dmetaphone('Schmidt'), dmetaphone_alt('Schmidt');
+----
+XMT  SMT
+
+query T
+SELECT dmetaphone('');
+----
+·
+
+query TT
+SELECT dmetaphone(NULL), dmetaphone_alt(NULL);
+----
+NULL  NULL
+
+query TT
+SELECT dmetaphone('Jose'), dmetaphone_alt('Jose');
+----
+HS  HS
+
+query TT
+SELECT dmetaphone('danger'), dmetaphone_alt('danger');
+----
+TNJR  TNKR
+
+query TT
+SELECT dmetaphone('filipowicz'), dmetaphone_alt('filipowicz');
+----
+FLPT  FLPF
+
+query TT
+SELECT dmetaphone('knight'), dmetaphone_alt('knight');
+----
+NT  NT
+
+# Daitch-Mokotoff Soundex
+
+query T
+SELECT daitch_mokotoff('George');
+----
+{595000}
+
+query T
+SELECT daitch_mokotoff('John');
+----
+{160000,460000}
+
+query T
+SELECT daitch_mokotoff('Augsburg');
+----
+{054795}
+
+query T
+SELECT daitch_mokotoff('Breuer');
+----
+{791900}
+
+query T
+SELECT daitch_mokotoff('Halberstadt');
+----
+{587433,587943}
+
+query T
+SELECT daitch_mokotoff('Chernowitz');
+----
+{496740,596740}
+
+query T
+SELECT daitch_mokotoff('');
+----
+NULL
+
+query T
+SELECT daitch_mokotoff(NULL);
+----
+NULL
+
+# Non-ASCII / UTF-8 inputs
+
+query T
+SELECT daitch_mokotoff('Müller');
+----
+{689000}
+
+query T
+SELECT daitch_mokotoff('Schäfer');
+----
+{479000}
+
+query T
+SELECT daitch_mokotoff('Straßburg');
+----
+{294795}
+
+query T
+SELECT daitch_mokotoff('Éregon');
+----
+{095600}
+
+query T
+SELECT daitch_mokotoff('gąszczu');
+----
+{540000,564000}
+
+query T
+SELECT daitch_mokotoff('brzęczy');
+----
+{744000,746400,794400,794640}
+
+query T
+SELECT daitch_mokotoff('ţamas');
+----
+{364000,464000}
+
+query T
+SELECT daitch_mokotoff('țamas');
+----
+{364000,464000}
+
+query T
+SELECT daitch_mokotoff('ZĄBEK');
+----
+{467500,475000}
