@@ -3129,3 +3129,10 @@ func TestTenantExecBuild_distsql_tenant(
 	defer leaktest.AfterTest(t)()
 	runExecBuildLogicTest(t, "distsql_tenant")
 }
+
+func TestTenantExecBuild_prepare_cache(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runExecBuildLogicTest(t, "prepare_cache")
+}

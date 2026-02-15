@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security/securityassets"
 	"github.com/cockroachdb/cockroach/pkg/security/securitytest"
 	"github.com/cockroachdb/cockroach/pkg/server"
+	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/logictest"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
@@ -30,6 +31,7 @@ const configIdx = 4
 
 var logicTestDir string
 var cclLogicTestDir string
+var execBuildLogicTestDir string
 
 func init() {
 	if bazel.BuiltWithBazel() {
@@ -49,6 +51,15 @@ func init() {
 		}
 	} else {
 		cclLogicTestDir = "../../../../ccl/logictestccl/testdata/logic_test"
+	}
+	if bazel.BuiltWithBazel() {
+		var err error
+		execBuildLogicTestDir, err = bazel.Runfile("pkg/sql/opt/exec/execbuilder/testdata")
+		if err != nil {
+			panic(err)
+		}
+	} else {
+		execBuildLogicTestDir = "../../../../sql/opt/exec/execbuilder/testdata"
 	}
 }
 
@@ -74,6 +85,17 @@ func runCCLLogicTest(t *testing.T, file string) {
 	skip.UnderDeadlock(t, "times out and/or hangs")
 	logictest.RunLogicTest(t, logictest.TestServerArgs{}, configIdx, filepath.Join(cclLogicTestDir, file))
 }
+func runExecBuildLogicTest(t *testing.T, file string) {
+	defer sql.TestingOverrideExplainEnvVersion("CockroachDB execbuilder test version")()
+	skip.UnderDeadlock(t, "times out and/or hangs")
+	serverArgs := logictest.TestServerArgs{
+		DisableWorkmemRandomization: true,
+		// Disable the direct scans in order to keep the output of EXPLAIN (VEC)
+		// deterministic.
+		DisableDirectColumnarScans: true,
+	}
+	logictest.RunLogicTest(t, serverArgs, configIdx, filepath.Join(execBuildLogicTestDir, file))
+}
 
 // TestLogic_tmp runs any tests that are prefixed with "_", in which a dedicated
 // test is not generated for. This allows developers to create and run temporary
@@ -89,6 +111,11 @@ func TestLogic_tmp(t *testing.T) {
 	logictest.RunLogicTests(t, logictest.TestServerArgs{}, configIdx, glob)
 	glob = filepath.Join(cclLogicTestDir, "_*")
 	logictest.RunLogicTests(t, logictest.TestServerArgs{}, configIdx, glob)
+	glob = filepath.Join(execBuildLogicTestDir, "_*")
+	serverArgs := logictest.TestServerArgs{
+		DisableWorkmemRandomization: true,
+	}
+	logictest.RunLogicTests(t, serverArgs, configIdx, glob)
 }
 
 func TestRepeatableReadLogic_aggregate(
@@ -2987,4 +3014,11 @@ func TestRepeatableReadLogicCCL_vector(
 ) {
 	defer leaktest.AfterTest(t)()
 	runCCLLogicTest(t, "vector")
+}
+
+func TestRepeatableReadExecBuild_prepare_cache(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runExecBuildLogicTest(t, "prepare_cache")
 }

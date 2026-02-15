@@ -498,6 +498,13 @@ func TestExecBuild_prepare(
 	runExecBuildLogicTest(t, "prepare")
 }
 
+func TestExecBuild_prepare_cache(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runExecBuildLogicTest(t, "prepare_cache")
+}
+
 func TestExecBuild_range_stats(
 	t *testing.T,
 ) {
