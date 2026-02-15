@@ -585,6 +585,11 @@ type StoreTestingKnobs struct {
 	// DisableLeaderlessWatcherRefreshOnRaftTick, if set, disables refreshing
 	// the leaderless watcher's unavailable state during raft ticks.
 	DisableLeaderlessWatcherRefreshOnRaftTick bool
+
+	// InjectIntentsToResolveVirtually is called while executing read-only
+	// requests; it helps inject intents to be resolved virtually, usually passed
+	// in by the lock table guard.
+	InjectIntentsToResolveVirtually func() []roachpb.LockUpdate
 }
 
 // ModuleTestingKnobs is part of the base.ModuleTestingKnobs interface.
