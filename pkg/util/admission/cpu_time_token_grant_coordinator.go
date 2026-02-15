@@ -130,6 +130,7 @@ func makeCPUTimeTokenGrantCoordinator(
 		requesters[tier] = makeWorkQueue(
 			ambientCtx, KVWork, &childGranters[tier], settings, wqMetrics, opts)
 		granter.requester[tier] = requesters[tier]
+		allocator.queues[tier] = requesters[tier].(*WorkQueue)
 	}
 
 	coordinator := &cpuTimeTokenGrantCoordinator{
