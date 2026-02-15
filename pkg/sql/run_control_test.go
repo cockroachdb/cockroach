@@ -9,6 +9,7 @@ import (
 	"context"
 	gosql "database/sql"
 	"fmt"
+	"regexp"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -1147,7 +1148,9 @@ func TestStatementTimeoutForSchemaChangeCommit(t *testing.T) {
 				if implicitTxn {
 					_, err := conn.DB.ExecContext(ctx, "ALTER TABLE t1 ADD COLUMN j INT DEFAULT 32")
 					require.ErrorContains(t, err, sqlerrors.QueryTimeoutError.Error())
-					require.Equal(t, 2, len(actualNotices))
+					// There will be one notice for the job and one from the WaitForOneVersion
+					// operation. In additin to the notice from the job that was created.
+					require.Equal(t, 3, len(actualNotices))
 					require.Regexp(t, "waiting for job\\(s\\) to complete: \\d+", actualNotices[0])
 					require.Regexp(t,
 						"The statement has timed out, but the following background jobs have been created and will continue running: \\d+",
@@ -1162,5 +1165,102 @@ func TestStatementTimeoutForSchemaChangeCommit(t *testing.T) {
 					require.NoError(t, err)
 				}
 			})
+	}
+}
+
+// TestStatementTimeoutForSchemaChangeCommit confirms that waiting new versions
+// also respects the statement timeout.
+func TestStatementTimeoutForSchemaChangeWaitForOneVersion(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	ctx := context.Background()
+	skip.UnderDuress(t, "sets a long timeout")
+
+	numNodes := 1
+	tc := serverutils.StartCluster(t, numNodes,
+		base.TestClusterArgs{})
+	defer tc.Stopper().Stop(ctx)
+
+	url, cleanup := tc.ApplicationLayer(0).PGUrl(t)
+	defer cleanup()
+	baseConn, err := pq.NewConnector(url.String())
+	require.NoError(t, err)
+	actualNotices := make([]string, 0)
+	connector := pq.ConnectorWithNoticeHandler(baseConn, func(n *pq.Error) {
+		actualNotices = append(actualNotices, n.Message)
+	})
+	dbWithHandler := gosql.OpenDB(connector)
+	defer dbWithHandler.Close()
+
+	conn := sqlutils.MakeSQLRunner(dbWithHandler)
+	for _, test := range []struct {
+		description              string
+		setup                    string
+		blockingTxn              string
+		schemaChange             string
+		forceLegacySchemaChanger bool
+		expectJobMessage         bool
+	}{
+		{
+			description:  "WaitForOneVersion",
+			setup:        "CREATE TABLE t1 (n int);",
+			blockingTxn:  "SELECT * FROM t1;",
+			schemaChange: "ALTER TABLE t1 ADD COLUMN j INT DEFAULT 32",
+		},
+		{
+			description:  "WaitForNoVersion",
+			setup:        "CREATE TABLE t2 (n int);",
+			blockingTxn:  "SELECT * FROM t2",
+			schemaChange: "DROP TABLE t2",
+		},
+		{
+			description:  "WaitForInitialVersion",
+			setup:        "SELECT 1",
+			blockingTxn:  "DELETE FROM system.lease;",
+			schemaChange: "CREATE TABLE t3 (n int)",
+		},
+		{
+			description:  "waitForTxnJobs",
+			setup:        "CREATE TABLE t4(n int) WITH (schema_locked=false)",
+			blockingTxn:  "SELECT * FROM t4",
+			schemaChange: "ALTER TABLE t4 ADD COLUMN j int;",
+			// The legacy schema changer will execute the WaitForOneVersion in
+			// the job. So, this allows us to confirm the job wait code can be
+			// canceled as well.
+			forceLegacySchemaChanger: true,
+			// We expect the message to occur while waiting for the job.
+			expectJobMessage: true,
+		},
+	} {
+		t.Run(test.description, func(t *testing.T) {
+			conn.Exec(t, "RESET statement_timeout")
+			conn.Exec(t, "RESET use_declarative_schema_changer")
+			conn.Exec(t, test.setup)
+			txn := conn.Begin(t)
+			require.NoError(t, err)
+			_, err := txn.Exec(test.blockingTxn)
+			require.NoError(t, err)
+			if test.forceLegacySchemaChanger {
+				conn.Exec(t, "SET use_declarative_schema_changer='off'")
+			}
+			conn.Exec(t, "SET statement_timeout = '1s'")
+			conn.ExpectErr(t, "pq: query execution canceled due to statement timeout", test.schemaChange)
+			err = txn.Rollback()
+			require.NoError(t, err)
+			foundSchemaChangeNotice := false
+			for _, notice := range actualNotices {
+				expectedNotice := "The statement has timed out while waiting for the schema change to be visible on all nodes."
+				if test.expectJobMessage {
+					expectedNotice = `The statement has timed out, but the following background jobs have been created and will continue running: \d+.`
+				}
+				noticeRegex := regexp.MustCompile(expectedNotice)
+				if noticeRegex.MatchString(notice) {
+					foundSchemaChangeNotice = true
+					break
+				}
+			}
+			require.True(t, foundSchemaChangeNotice, "schema change notice not found: %v", actualNotices)
+			actualNotices = actualNotices[:0]
+		})
 	}
 }
