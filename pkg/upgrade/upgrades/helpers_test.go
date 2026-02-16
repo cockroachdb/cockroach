@@ -30,6 +30,7 @@ import (
 var (
 	HasColumn           = hasColumn
 	HasIndex            = hasIndex
+	HasMatchingIndex    = hasMatchingIndex
 	DoesNotHaveIndex    = doesNotHaveIndex
 	HasColumnFamily     = hasColumnFamily
 	CreateSystemTable   = createSystemTable
