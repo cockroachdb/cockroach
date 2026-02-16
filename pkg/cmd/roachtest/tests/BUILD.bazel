@@ -45,6 +45,7 @@ go_library(
         "cdc_bench.go",
         "cdc_filtering.go",
         "cdc_helper.go",
+        "cdc_show_changefeed_jobs_bench.go",
         "cdc_stats.go",
         "chaos.go",
         "clearrange.go",
