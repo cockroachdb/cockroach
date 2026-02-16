@@ -8,6 +8,7 @@ package processor
 import (
 	"context"
 	"log/slog"
+	"time"
 
 	mtasks "github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/models/tasks"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/services/tasks/types"
@@ -17,7 +18,15 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-// executor.go handles the execution of individual tasks with error handling and state transitions.
+// executor.go handles the execution of individual tasks with error handling
+// and state transitions.
+
+const (
+	// taskGracePeriodAfterTimeout is the maximum time to wait for a task to return
+	// after its context deadline has been exceeded. This prevents worker starvation
+	// while giving well-behaved tasks time to clean up.
+	taskGracePeriodAfterTimeout = 30 * time.Second
+)
 
 // TaskExecutor defines the interface for task execution operations.
 // This interface allows the parent service to provide necessary methods
@@ -208,13 +217,55 @@ func executeTaskWithTimeout(
 	select {
 	case taskErr = <-resultCh:
 	case <-taskCtx.Done():
-		deadlineExceeded = errors.Is(taskCtx.Err(), context.DeadlineExceeded)
-		taskErr = <-resultCh
+		ctxErr := taskCtx.Err()
+		deadlineExceeded = errors.Is(ctxErr, context.DeadlineExceeded)
+
+		if deadlineExceeded {
+			l.Error("Task processing timed out, waiting for task to return",
+				slog.Any("task_id", task.GetID()),
+				slog.String("task_type", tType),
+			)
+		} else {
+			l.Error("Task context cancelled, waiting for task to return",
+				slog.Any("task_id", task.GetID()),
+				slog.String("task_type", tType),
+			)
+		}
+
+		select {
+		case taskErr = <-resultCh:
+			// Task completed during grace period
+		case <-time.After(taskGracePeriodAfterTimeout):
+			if deadlineExceeded {
+
+				l.Error("Task did not return within grace period after timeout",
+					slog.Any("task_id", task.GetID()),
+					slog.String("task_type", tType),
+				)
+
+				if executor.GetMetricsEnabled() {
+					executor.IncrementTimeouts(tType)
+				}
+
+				return types.ErrTaskTimeout
+
+			} else {
+
+				l.Error("Task did not return within grace period after cancellation",
+					slog.Any("task_id", task.GetID()),
+					slog.String("task_type", tType),
+				)
+
+				return ctxErr
+
+			}
+		}
 	}
 
-	// If the context deadline fired, ensure we surface a timeout even if the task
-	// returned nil or a different error after finishing its work.
-	if deadlineExceeded || errors.Is(taskCtx.Err(), context.DeadlineExceeded) {
+	// Handle timeout case: if the task context deadline was exceeded,
+	// always return a timeout error. This ensures we surface a timeout
+	// even if the task returned nil or a different error.
+	if deadlineExceeded {
 		if executor.GetMetricsEnabled() {
 			executor.IncrementTimeouts(tType)
 		}
@@ -224,14 +275,17 @@ func executeTaskWithTimeout(
 			slog.String("task_type", tType),
 		)
 
-		// Preserve additional context if the task surfaced its own error.
+		// Preserve additional context if the task surfaced its own error
+		// that's not already a timeout.
 		if taskErr != nil && !errors.Is(taskErr, context.DeadlineExceeded) && !errors.Is(taskErr, types.ErrTaskTimeout) {
 			return errors.CombineErrors(types.ErrTaskTimeout, taskErr)
 		}
 		return types.ErrTaskTimeout
 	}
 
-	// Propagate cancellation from the parent context when it was not a timeout.
+	// Handle parent context cancellation (when it was not a timeout).
+	// If the parent context was cancelled, preserve the task error
+	// if it's more specific, otherwise return the cancellation error.
 	if ctxErr := ctx.Err(); ctxErr != nil {
 		if taskErr != nil {
 			return taskErr
@@ -239,5 +293,7 @@ func executeTaskWithTimeout(
 		return ctxErr
 	}
 
+	// No timeout, no cancellation - return whatever the task returned
+	// (could be nil or an error).
 	return taskErr
 }
