@@ -1670,6 +1670,27 @@ SELECT least(NULL, NULL, NULL, a, -1) FROM foo
 ----
 -1
 
+# Regression test for #159153: least/greatest should correctly handle mixed
+# integer types without truncation.
+statement ok
+CREATE TABLE t159153 (c1 INT2, c2 INT4)
+
+statement ok
+INSERT INTO t159153 VALUES (-9551, -1347373370)
+
+query I
+SELECT least(c1, least(0, c2)) FROM t159153
+----
+-1347373370
+
+query I
+SELECT greatest(c1, greatest(0, c2)) FROM t159153
+----
+0
+
+statement ok
+DROP TABLE t159153
+
 # Test float and int comparison.
 
 query BBBB
