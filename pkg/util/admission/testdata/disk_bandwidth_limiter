@@ -18,6 +18,12 @@ compute int-read-bytes=50 int-write-bytes=100 int-provisioned-bytes=800 regular-
 diskBandwidthLimiter (writeUtil 0.07, tokensUsed (elastic 30 B, snapshot 5 B, regular 10 B) tokens (write 655 B (prev 640 B), read 65 B (prev 80 B)), writeBW 6 B/s, readBW 3 B/s, provisioned 53 B/s, err(cum,abs) write: 0 B,0 B read: 0 B,0 B)
 
 # Now we use 200 for read bandwidth adjustment.
-compute int-read-bytes=200 int-write-bytes=100 int-provisioned-bytes=800 regular-tokens-used=10 snapshot-tokens-used=5 elastic-tokens-used=30 cum-err=20 abs-err=30 acc-err=5
+compute int-read-bytes=200 int-write-bytes=100 int-provisioned-bytes=800 regular-tokens-used=10 snapshot-tokens-used=5 elastic-tokens-used=30 cum-err=20 abs-err=30
 ----
 diskBandwidthLimiter (writeUtil 0.07, tokensUsed (elastic 30 B, snapshot 5 B, regular 10 B) tokens (write 520 B (prev 655 B), read 200 B (prev 65 B)), writeBW 6 B/s, readBW 13 B/s, provisioned 53 B/s, err(cum,abs) write: 20 B,30 B read: 0 B,0 B)
+
+# Negative remaining-disk-write-tokens indicates overadmission. -450 over a
+# 15s interval = 30 B/s overadmission rate.
+compute int-read-bytes=200 int-write-bytes=100 int-provisioned-bytes=800 regular-tokens-used=10 snapshot-tokens-used=5 elastic-tokens-used=30 remaining-disk-write-tokens=-450
+----
+diskBandwidthLimiter (writeUtil 0.09, tokensUsed (elastic 30 B, snapshot 5 B, regular 10 B) tokens (write 520 B (prev 520 B), read 200 B (prev 200 B)), writeBW 6 B/s, readBW 13 B/s, provisioned 53 B/s, err(cum,abs) write: 0 B,0 B read: 0 B,0 B) overadmission 30 B/s
