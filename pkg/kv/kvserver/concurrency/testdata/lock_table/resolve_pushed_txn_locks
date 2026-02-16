@@ -125,12 +125,8 @@ num=3
   holder: txn: 00000000-0000-0000-0000-000000000002 epoch: 0, iso: Serializable, ts: 11.000000000,1, info: unrepl [(str: Exclusive seq: 0)]
  lock: "b"
   holder: txn: 00000000-0000-0000-0000-000000000002 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: repl [Intent], unrepl [(str: Exclusive seq: 0)]
-   waiting readers:
-    req: 4, txn: 00000000-0000-0000-0000-000000000001
  lock: "c"
   holder: txn: 00000000-0000-0000-0000-000000000002 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: repl [Intent]
-   waiting readers:
-    req: 5, txn: 00000000-0000-0000-0000-000000000001
 
 guard-state r=req1
 ----
@@ -138,11 +134,15 @@ new: state=doneWaiting
 
 guard-state r=req2
 ----
-new: state=waitFor txn=txn2 key="b" held=true guard-strength=None
+new: state=doneWaiting
+Intents to resolve:
+ key="b" txn=00000000-0000-0000-0000-000000000002 epoch=0 ts=11.000000000,1 status=PENDING
 
 guard-state r=req3
 ----
-new: state=waitFor txn=txn2 key="c" held=true guard-strength=None
+new: state=doneWaiting
+Intents to resolve:
+ key="c" txn=00000000-0000-0000-0000-000000000002 epoch=0 ts=11.000000000,1 status=PENDING
 
 guard-state r=req4
 ----
@@ -160,8 +160,6 @@ num=3
   holder: txn: 00000000-0000-0000-0000-000000000002 epoch: 0, iso: Serializable, ts: 11.000000000,1, info: unrepl [(str: Exclusive seq: 0)]
  lock: "c"
   holder: txn: 00000000-0000-0000-0000-000000000002 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: repl [Intent]
-   waiting readers:
-    req: 5, txn: 00000000-0000-0000-0000-000000000001
 
 update txn=txn2 ts=11,1 epoch=0 span=c
 ----
@@ -173,11 +171,11 @@ num=2
 
 guard-state r=req2
 ----
-new: state=doneWaiting
+old: state=doneWaiting
 
 guard-state r=req3
 ----
-new: state=doneWaiting
+old: state=doneWaiting
 
 clear
 ----

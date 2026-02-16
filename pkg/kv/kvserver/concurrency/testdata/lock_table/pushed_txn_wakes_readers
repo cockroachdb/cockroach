@@ -257,7 +257,7 @@ num=1
   holder: txn: 00000000-0000-0000-0000-000000000002 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: repl [Intent]
 
 # ---------------------------------------------------------------------------
-# Test 5: Reader without virtuallyResolveIntents — NOT woken.
+# Test 5: Reader without virtuallyResolveIntents — also woken.
 # ---------------------------------------------------------------------------
 
 new-lock-table maxlocks=10000
@@ -309,15 +309,15 @@ pushed-txn-updated txn=txn2 status=pending ts=11,1
 # Reader should NOT be woken.
 guard-state r=req2
 ----
-old: state=waitFor txn=txn2 key="a" held=true guard-strength=None
+new: state=doneWaiting
+Intents to resolve:
+ key="a" txn=00000000-0000-0000-0000-000000000002 epoch=0 ts=11.000000000,1 status=PENDING
 
 print
 ----
 num=1
  lock: "a"
   holder: txn: 00000000-0000-0000-0000-000000000002 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: repl [Intent]
-   waiting readers:
-    req: 2, txn: 00000000-0000-0000-0000-000000000001
 
 dequeue r=req2
 ----
@@ -326,9 +326,8 @@ num=1
   holder: txn: 00000000-0000-0000-0000-000000000002 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: repl [Intent]
 
 # ---------------------------------------------------------------------------
-# Test 6: Multiple readers on same lock — mix of eligible/ineligible.
-# One with virtuallyResolveIntents=true, one without. Only the eligible
-# one is woken.
+# Test 6: Multiple readers on same lock, one with
+# virtuallyResolveIntents=true, one without. Both are woken.
 # ---------------------------------------------------------------------------
 
 new-lock-table maxlocks=10000
@@ -399,7 +398,9 @@ pushed-txn-updated txn=txn2 status=pending ts=11,1
 # req2 should remain waiting; req3 should be woken.
 guard-state r=req2
 ----
-new: state=waitFor txn=txn2 key="a" held=true guard-strength=None
+new: state=doneWaiting
+Intents to resolve:
+ key="a" txn=00000000-0000-0000-0000-000000000002 epoch=0 ts=11.000000000,1 status=PENDING
 
 guard-state r=req3
 ----
@@ -412,8 +413,6 @@ print
 num=1
  lock: "a"
   holder: txn: 00000000-0000-0000-0000-000000000002 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: repl [Intent]
-   waiting readers:
-    req: 2, txn: 00000000-0000-0000-0000-000000000001
 
 dequeue r=req2
 ----

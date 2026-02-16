@@ -256,12 +256,16 @@ on-txn-updated txn=txnThreeKeyWriter status=pending ts=20,2
 [10] sequence reqTwoKeyWaiter: resolving intent ‹"k1"› for txn 00000003 with PENDING status and clock observation {1 246.000000000,1}
 [10] sequence reqTwoKeyWaiter: lock wait-queue event: done waiting
 [10] sequence reqTwoKeyWaiter: conflicted with 00000003-0000-0000-0000-000000000000 on ‹"k1"› for 0.000s
+[10] sequence reqTwoKeyWaiter: resolving a batch of 1 intent(s)
+[10] sequence reqTwoKeyWaiter: resolving intent ‹"k1"› for txn 00000003 with PENDING status
 [10] sequence reqTwoKeyWaiter: acquiring latches
 [10] sequence reqTwoKeyWaiter: scanning lock table for conflicting locks
 [10] sequence reqTwoKeyWaiter: sequencing complete, returned guard
 [12] sequence reqThreeKeyWaiter: resolving intent ‹"k1"› for txn 00000003 with PENDING status and clock observation {1 246.000000000,3}
 [12] sequence reqThreeKeyWaiter: lock wait-queue event: done waiting
 [12] sequence reqThreeKeyWaiter: conflicted with 00000003-0000-0000-0000-000000000000 on ‹"k1"› for 0.000s
+[12] sequence reqThreeKeyWaiter: resolving a batch of 1 intent(s)
+[12] sequence reqThreeKeyWaiter: resolving intent ‹"k1"› for txn 00000003 with PENDING status
 [12] sequence reqThreeKeyWaiter: acquiring latches
 [12] sequence reqThreeKeyWaiter: scanning lock table for conflicting locks
 [12] sequence reqThreeKeyWaiter: sequencing complete, returned guard
