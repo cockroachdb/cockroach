@@ -1067,24 +1067,73 @@ func (md *Metadata) UpdateTableMeta(
 	ctx context.Context, evalCtx *eval.Context, tables map[cat.StableID]cat.Table,
 ) {
 	for i := range md.tables {
-		oldTable := md.tables[i].Table
+		tm := &md.tables[i]
+		oldTable := tm.Table
+
 		if newTable, ok := tables[oldTable.ID()]; ok {
 			// If there are any inverted hypothetical indexes, the hypothetical table
 			// will have extra inverted columns added. Add any new inverted columns to
 			// the metadata.
 			for j, n := oldTable.ColumnCount(), newTable.ColumnCount(); j < n; j++ {
 				colID := md.AddColumn(string(newTable.Column(j).ColName()), types.Bytes)
-				md.ColumnMeta(colID).Table = md.tables[i].MetaID
+				md.ColumnMeta(colID).Table = tm.MetaID
 			}
 			if newTable.ColumnCount() > oldTable.ColumnCount() {
 				// If we added any new columns, we need to recalculate the not null
 				// column set.
-				md.SetTableAnnotation(md.tables[i].MetaID, NotNullAnnID, nil)
+				md.SetTableAnnotation(tm.MetaID, NotNullAnnID, nil)
 			}
-			md.tables[i].Table = newTable
-			md.tables[i].CacheIndexPartitionLocalities(ctx, evalCtx)
+
+			tm.Table = newTable
+			tm.partialIndexPredicates = md.rebuildPartialIndexPredicates(oldTable, newTable, tm.partialIndexPredicates)
+			tm.CacheIndexPartitionLocalities(ctx, evalCtx)
 		}
 	}
+}
+
+// rebuildPartialIndexPredicates rebuilds the partial index predicates mapping when a table
+// is updated. It preserves existing predicate expressions by matching predicate strings
+// between the old and new table structures.
+func (md *Metadata) rebuildPartialIndexPredicates(
+	oldTable, newTable cat.Table, existingPredicates map[cat.IndexOrdinal]ScalarExpr,
+) map[cat.IndexOrdinal]ScalarExpr {
+	// Build a mapping from predicate strings to their ScalarExpr from existing predicates
+	predicateToExpr := md.BuildPredicateToExprMapping(oldTable, existingPredicates)
+
+	// Rebuild partialIndexPredicates by matching predicate strings in the new table
+	return md.MatchPredicatesInNewTable(newTable, predicateToExpr)
+}
+
+// BuildPredicateToExprMapping creates a mapping from predicate strings to their ScalarExpr
+// from the existing partial index predicates.
+func (md *Metadata) BuildPredicateToExprMapping(
+	table cat.Table, predicates map[cat.IndexOrdinal]ScalarExpr,
+) map[string]ScalarExpr {
+	predicateToExpr := make(map[string]ScalarExpr, len(predicates))
+	for ord, expr := range predicates {
+		idx := table.Index(ord)
+		if pred, hasPred := idx.Predicate(); hasPred && pred != "" {
+			predicateToExpr[pred] = expr
+		}
+	}
+	return predicateToExpr
+}
+
+// MatchPredicatesInNewTable rebuilds the partial index predicates by matching
+// predicate strings from the predicateToExpr mapping to indexes in the new table.
+func (md *Metadata) MatchPredicatesInNewTable(
+	table cat.Table, predicateToExpr map[string]ScalarExpr,
+) map[cat.IndexOrdinal]ScalarExpr {
+	newPreds := make(map[cat.IndexOrdinal]ScalarExpr)
+	for k := 0; k < table.IndexCount(); k++ {
+		idx := table.Index(k)
+		if pred, hasPred := idx.Predicate(); hasPred && pred != "" {
+			if expr, found := predicateToExpr[pred]; found {
+				newPreds[idx.Ordinal()] = expr
+			}
+		}
+	}
+	return newPreds
 }
 
 // SequenceID uniquely identifies the usage of a sequence within the scope of a
