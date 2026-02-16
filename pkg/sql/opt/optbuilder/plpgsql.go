@@ -863,9 +863,33 @@ func (b *plpgsqlBuilder) buildPLpgSQLStatements(stmts []ast.Statement, s *scope)
 				scope := b.handleIntForLoop(s, t, c)
 				b.popContinuation()
 				return scope
+			case *ast.CursorForLoopControl:
+				// A CURSOR FOR loop is syntactic sugar for a LOOP with
+				// an OPEN statement, a FETCH statement, and an EXIT
+				// statement that checks whether the cursor is exhausted.
+				//
+				//   FOR target IN cursor LOOP
+				//     [body];
+				//   END LOOP;
+				//
+				//  =>
+				//  LOOP
+				//    OPEN cursor;
+				//    FETCH cursor INTO target;
+				//    IF NOT FOUND THEN
+				//      EXIT;
+				//    END IF;
+				//    [body];
+				//  END LOOP;
+				//
+				b.pushContinuation(exitCon)
+				scope := b.handleCursorForLoop(s, t, c)
+				b.popContinuation()
+				return scope
+
 			default:
 				panic(errors.WithDetail(unsupportedPLStmtErr,
-					"query and cursor FOR loops are not yet supported",
+					"query FOR loops are not yet supported",
 				))
 			}
 
@@ -1463,6 +1487,63 @@ func (b *plpgsqlBuilder) handleIntForLoop(
 	// increment continuation, because the counter should not be incremented
 	// until after the first iteration.
 	return b.callContinuation(&loopCon, s)
+}
+
+// handleCursorForLoop constructs the plan for a cursor FOR loop, which
+// initially opens a cursor, and then for each iteration it fetches a row
+// and executes the loop body. Once all rows have been exhausted, it finally
+// closes the cursor.
+func (b *plpgsqlBuilder) handleCursorForLoop(
+	s *scope, forLoop *ast.ForLoop, control *ast.CursorForLoopControl,
+) *scope {
+	// TODO(paulniziolek): Remove debug print.
+	fmt.Println("handling cursor for loop...")
+	if len(forLoop.Target) != 1 {
+		panic(cursorForLoopTargetErr)
+	}
+
+	b.pushNewBlock(&ast.Block{Label: forLoop.Label})
+	defer b.popBlock()
+	// TODO(paulniziolek): Strictly define the tuple record type.
+	b.addVariable(forLoop.Target[0], types.AnyTuple)
+
+	// The looping will be implemented by two continuations: one to execute the
+	// loop body, and one to fetch the next row from the cursor and check if the
+	// record isn't NULL.
+
+	loopCon := b.makeContinuation("stmt_loop")
+	loopCon.def.IsRecursive = true
+	fetchCon := b.makeContinuationWithTyp("stmt_loop_fetch", forLoop.Label, continuationLoopContinue)
+	fetchCon.def.IsRecursive = true
+
+	b.pushContinuation(fetchCon)
+
+	// Now, build the loop body continuation. Build a fetch statement that
+	// retrieves the next row from the cursor and assigns it to the target
+	// and also build an IF statement that checks whether the target variable
+	// is NULL, and executes the loop body if not.
+
+	fetchStmt := &ast.Fetch{
+		Cursor: tree.CursorStmt{
+			Name:      control.Cursor,
+			FetchType: tree.FetchAll,
+			Count:     10, // temporary for testing
+		},
+		Target: forLoop.Target,
+	}
+
+	_ = fetchStmt
+
+	/*
+		fetchScope := b.buildFetch(fetchCon.s, fetchStmt)
+
+
+		cond := &tree.IsNotNullExpr{
+			Expr:
+		}
+
+	*/
+	return s
 }
 
 // resolveOpenQuery finds and validates the query that is bound to cursor for
@@ -3000,6 +3081,9 @@ var (
 	)
 	intForLoopTargetErr = pgerror.New(pgcode.Syntax,
 		"integer FOR loop must have only one target variable",
+	)
+	cursorForLoopTargetErr = pgerror.New(pgcode.Syntax,
+		"cursor FOR loop must have only one target variable",
 	)
 	doBlockVersionErr = unimplemented.Newf("do blocks",
 		"DO statement usage inside a routine definition is not supported until version 25.1",
