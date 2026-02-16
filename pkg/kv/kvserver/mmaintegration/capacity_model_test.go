@@ -41,79 +41,98 @@ func TestComputeStoreCPURateCapacity(t *testing.T) {
 	// All CPU inputs are in cores (1 core = 1e9 ns/s).
 	const nsPerCore = 1e9
 
-	fmtUtil := func(load, cap float64) string {
-		return fmt.Sprintf("%.2f%%", load/cap*100)
-	}
-
 	datadriven.RunTest(t, datapathutils.TestDataPath(t, t.Name()),
 		func(t *testing.T, d *datadriven.TestData) string {
 			switch d.Cmd {
-			case "compute":
-				var storeCPUCores float64
-				var nodeUsageCores, nodeCapCores float64
-				var storesCPUCores float64
+			case "scenario":
+				// Ground-truth inputs describing what's ACTUALLY happening.
+				var kvCPUCores float64      // Total KV CPU across all stores.
+				var propOverhead float64    // CPU that scales with KV (dist SQL, RPC, compactions, etc.).
+				var backgroundCores float64 // CPU that does NOT scale with KV (gateway SQL, GC, jobs, etc.).
+				var nodeCapCores float64    // Node's total CPU capacity.
 				var numStores int
-				var sqlGatewayCores, sqlDistCores float64
 
-				d.ScanArgs(t, "store-load", &storeCPUCores)
-				d.ScanArgs(t, "node-cpu-usage", &nodeUsageCores)
+				// SQL measurements available to sql_model (subsets of the above).
+				var sqlGatewayCores float64 // Measured subset of background.
+				var sqlDistCores float64    // Measured subset of proportional-overhead.
+
+				d.ScanArgs(t, "kv-cpu", &kvCPUCores)
+				d.ScanArgs(t, "proportional-overhead", &propOverhead)
+				d.ScanArgs(t, "background", &backgroundCores)
 				d.ScanArgs(t, "node-cpu-capacity", &nodeCapCores)
-				d.ScanArgs(t, "total-stores-cpu-usage", &storesCPUCores)
 				d.ScanArgs(t, "num-stores", &numStores)
-				// SQL CPU values are optional - default to 0 if not provided
-				if d.HasArg("sql-gateway-cpu") {
-					d.ScanArgs(t, "sql-gateway-cpu", &sqlGatewayCores)
-				}
-				if d.HasArg("sql-dist-cpu") {
-					d.ScanArgs(t, "sql-dist-cpu", &sqlDistCores)
-				}
+				d.ScanArgs(t, "sql-gateway-cpu", &sqlGatewayCores)
+				d.ScanArgs(t, "sql-dist-cpu", &sqlDistCores)
 
-				totalPerStore := nodeCapCores / float64(numStores)
+				require.Greater(t, numStores, 0)
+				require.Greater(t, nodeCapCores, 0.0)
+				require.GreaterOrEqual(t, kvCPUCores, 0.0)
+				require.GreaterOrEqual(t, propOverhead, 0.0)
+				require.GreaterOrEqual(t, backgroundCores, 0.0)
+				require.GreaterOrEqual(t, sqlGatewayCores, 0.0)
+				require.GreaterOrEqual(t, sqlDistCores, 0.0)
+				require.LessOrEqual(t, sqlGatewayCores, backgroundCores)
+				require.LessOrEqual(t, sqlDistCores, propOverhead)
 
-				// Naive model: assumes all node CPU scales directly with store work.
+				// Derive node CPU usage from ground truth.
+				nodeUsageCores := kvCPUCores + propOverhead + backgroundCores
+
+				// Compute true capacity from ground truth.
+				// true-mult = (kv + overhead) / kv: how much total CPU per unit of KV.
+				// true-capacity = (nodeCapacity - background) / true-mult / numStores.
+				var trueMult float64
+				if kvCPUCores > 0 {
+					trueMult = (kvCPUCores + propOverhead) / kvCPUCores
+				} else {
+					// No KV work → proportional overhead must also be 0.
+					require.Equal(t, 0.0, propOverhead)
+					trueMult = 1.0
+				}
+				available := max(0.0, nodeCapCores-backgroundCores)
+				trueCapPerStore := available / trueMult / float64(numStores)
+
+				// Build model inputs (what models actually see).
 				in := storeCPURateCapacityInput{
-					currentStoreCPUUsage: mmaprototype.LoadValue(storeCPUCores * nsPerCore),
-					storesCPURate:        storesCPUCores * nsPerCore,
-					nodeCPURateUsage:     nodeUsageCores * nsPerCore,
-					nodeCPURateCapacity:  nodeCapCores * nsPerCore,
-					numStores:            int32(numStores),
+					storesCPURate:       kvCPUCores * nsPerCore,
+					nodeCPURateUsage:    nodeUsageCores * nsPerCore,
+					nodeCPURateCapacity: nodeCapCores * nsPerCore,
+					numStores:           int32(numStores),
 				}
-				naiveResult := computeStoreCPURateCapacity(in)
-				naiveCap := float64(naiveResult) / nsPerCore
 
-				// Capped model: caps the indirect overhead multiplier.
-				cappedCapNs := computeCPUCapacityWithCap(
-					in,
-					func(_ float64, _ float64, _ float64, _ float64) {},
-				)
-				cappedCap := cappedCapNs / nsPerCore
+				// Run all three models.
+				naiveCap := float64(computeStoreCPURateCapacity(in)) / nsPerCore
+				cappedCap := computeCPUCapacityWithCap(in, func(_, _, _, _ float64) {}) / nsPerCore
 
-				// SQL model: accounts for SQL gateway and distributed SQL CPU separately.
-				inSQL := storeCPURateCapacityInput{
-					currentStoreCPUUsage:    mmaprototype.LoadValue(storeCPUCores * nsPerCore),
-					storesCPURate:           storesCPUCores * nsPerCore,
-					nodeCPURateUsage:        nodeUsageCores * nsPerCore,
-					nodeCPURateCapacity:     nodeCapCores * nsPerCore,
-					sqlGatewayCPUNanoPerSec: sqlGatewayCores * nsPerCore,
-					sqlDistCPUNanoPerSec:    sqlDistCores * nsPerCore,
-					numStores:               int32(numStores),
+				inSQL := in
+				inSQL.sqlGatewayCPUNanoPerSec = sqlGatewayCores * nsPerCore
+				inSQL.sqlDistCPUNanoPerSec = sqlDistCores * nsPerCore
+				sqlCap := computeStoreCPURateCapacityWithSQL(inSQL, func(_, _, _ float64) {}) / nsPerCore
+
+				// Format helpers.
+				fmtError := func(modelCap float64) string {
+					if trueCapPerStore <= 0 {
+						return "   N/A"
+					}
+					pctErr := (modelCap - trueCapPerStore) / trueCapPerStore * 100
+					// Round near-zero to avoid "-0.0%".
+					if pctErr > -0.05 && pctErr < 0.05 {
+						pctErr = 0
+					}
+					return fmt.Sprintf("%6.1f%%", pctErr)
 				}
-				sqlCapNs := computeStoreCPURateCapacityWithSQL(
-					inSQL,
-					func(_ float64, _ float64, _ float64) {},
-				)
-				sqlCap := sqlCapNs / nsPerCore
 
+				// Build output.
 				return fmt.Sprintf(
-					"              node-cpu-capacity/num-stores: %.2f cores/store\n"+
-						"naive:        kv-capacity: %.2f cores, kv-util: %s (%.2f/%.2f cores)\n"+
-						"capped_mult:  kv-capacity: %.2f cores, kv-util: %s (%.2f/%.2f cores)\n"+
-						"sql_model:    kv-capacity: %.2f cores, kv-util: %s (%.2f/%.2f cores)\n",
-					totalPerStore,
-					naiveCap, fmtUtil(storeCPUCores, naiveCap), storeCPUCores, naiveCap,
-					cappedCap, fmtUtil(storeCPUCores, cappedCap), storeCPUCores, cappedCap,
-					sqlCap, fmtUtil(storeCPUCores, sqlCap), storeCPUCores, sqlCap,
-				)
+					"              node-cpu: %.2f = kv %.2f + overhead %.2f + background %.2f\n"+
+						"correct:      capacity %6.2f\n"+
+						"naive:        capacity %6.2f, capacity_err %s\n"+
+						"capped_mult:  capacity %6.2f, capacity_err %s\n"+
+						"sql_model:    capacity %6.2f, capacity_err %s\n",
+					nodeUsageCores, kvCPUCores, propOverhead, backgroundCores,
+					trueCapPerStore,
+					naiveCap, fmtError(naiveCap),
+					cappedCap, fmtError(cappedCap),
+					sqlCap, fmtError(sqlCap))
 
 			default:
 				return fmt.Sprintf("unknown command: %s", d.Cmd)

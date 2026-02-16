@@ -21,7 +21,6 @@ func MakeStoreLoadMsg(
 	load[mmaprototype.CPURate] = mmaprototype.LoadValue(desc.Capacity.CPUPerSecond)
 	cpuCap := computeStoreCPURateCapacityWithSQL(
 		storeCPURateCapacityInput{
-			currentStoreCPUUsage:    load[mmaprototype.CPURate],
 			storesCPURate:           float64(desc.NodeCapacity.StoresCPURate),
 			nodeCPURateUsage:        float64(desc.NodeCapacity.NodeCPURateUsage),
 			nodeCPURateCapacity:     float64(desc.NodeCapacity.NodeCPURateCapacity),
