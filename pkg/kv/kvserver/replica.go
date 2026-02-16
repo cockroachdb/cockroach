@@ -420,6 +420,13 @@ type Replica struct {
 	// replica.mu lock. All updates to state.Desc should be duplicated here.
 	isInitialized atomic.Bool
 
+	// readyToServe is true when the store has fully registered this replica and
+	// it can serve external requests. This is false for uninitialized replicas
+	// waiting for a snapshot, and also false during the brief window between
+	// when isInitialized becomes true during a split and when the store
+	// finishes its bookkeeping in activateReplicaLockedReplLocked.
+	readyToServe atomic.Bool
+
 	// connectionClass controls the ConnectionClass used to send raft messages.
 	connectionClass atomicConnectionClass
 
@@ -2094,13 +2101,13 @@ func (r *Replica) checkExecutionCanProceedBeforeStorageSnapshot(
 		return kvserverpb.LeaseStatus{}, err
 	}
 
-	// Has the replica been initialized?
+	// Is the replica ready to serve requests?
 	// NB: this should have already been checked in Store.Send, so we don't need
 	// to handle this case particularly well, but if we do reach here (as some
 	// tests that call directly into Replica.Send have), it's better to return
 	// an error than to panic in checkSpanInRangeRLocked.
-	if !r.IsInitialized() {
-		return kvserverpb.LeaseStatus{}, errors.Errorf("%s not initialized", r)
+	if !r.ReadyToServe() {
+		return kvserverpb.LeaseStatus{}, errors.Errorf("%s not ready to serve", r)
 	}
 
 	r.mu.RLock()

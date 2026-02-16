@@ -141,7 +141,7 @@ func TestStoreReplicaBTree_LookupPrecedingAndNextReplica(t *testing.T) {
 func TestStoreReplicaBTree_ReplicaCanBeLockedDuringInsert(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	// Verify that the replica can be locked while being inserted (and removed).
-	// This is important for `Store.markReplicaInitializedLockedReplLocked`.
+	// This is important for `Store.activateReplicaLockedReplLocked`.
 	ctx := context.Background()
 	repl := &Replica{}
 	k := roachpb.RKey("a")

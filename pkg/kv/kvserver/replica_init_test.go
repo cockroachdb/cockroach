@@ -63,7 +63,7 @@ func TestReplicaUpdateLastReplicaAdded(t *testing.T) {
 			r.flowControlV2 = noopProcessor{}
 			r.store = tc.store
 			r.concMgr = tc.repl.concMgr
-			r.setDescRaftMuLocked(context.Background(), &c.newDesc, nil)
+			r.setDescRaftMuLocked(context.Background(), &c.newDesc)
 			if c.expectedLastReplicaAdded != r.mu.lastReplicaAdded {
 				t.Fatalf("expected %d, but found %d",
 					c.expectedLastReplicaAdded, r.mu.lastReplicaAdded)

@@ -324,11 +324,6 @@ type RangeStateListener interface {
 	// replica before it is serving requests.
 	OnRangeSplit(roachpb.Key) []roachpb.LockAcquisition
 
-	// OnRangeSplitRHS is called on the RHS replica before initialization. The
-	// given span should be the span of the new RHS range. The function acquires a
-	// latches on all possible keys that can be released with the returned func
-	OnRangeSplitRHS(context.Context) (func(), error)
-
 	// OnRangeMerge informs the concurrency manager that its range has merged
 	// into its LHS neighbor. This is not called on the LHS range being merged
 	// into.
@@ -531,10 +526,6 @@ type latchManager interface {
 	// before returning. This should be followed by CheckOptimisticNoConflicts
 	// to validate that not waiting did not violate correctness.
 	AcquireOptimistic(req Request) latchGuard
-
-	// AcquireFromEmpty inserts the latches, but errors if the latch manager has
-	// any existing latches.
-	AcquireFromEmpty(span *spanset.SpanSet) (latchGuard, error)
 
 	// CheckOptimisticNoConflicts returns true iff the spans in the provided
 	// spanset do not conflict with existing latches.

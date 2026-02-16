@@ -285,10 +285,13 @@ func (s *Store) addToReplicasByRangeIDLocked(repl *Replica) error {
 	return nil
 }
 
-// markReplicaInitializedLocked updates the Store bookkeeping to reflect that
-// the given replica has transitioned from uninitialized to initialized state.
+// activateReplicaLockedReplLocked completes the registration of an initialized
+// replica in the Store. It removes the replica from uninitReplicas, adds it to
+// replicasByKey, and marks it as ready to serve requests. After this call,
+// Store.Send will route requests to this replica.
+//
 // Requires that Store.mu and Replica.mu are locked.
-func (s *Store) markReplicaInitializedLockedReplLocked(ctx context.Context, r *Replica) error {
+func (s *Store) activateReplicaLockedReplLocked(ctx context.Context, r *Replica) error {
 	if !r.IsInitialized() {
 		return errors.AssertionFailedf("attempted to process uninitialized replica %s", r)
 	}
@@ -310,6 +313,11 @@ func (s *Store) markReplicaInitializedLockedReplLocked(ctx context.Context, r *R
 	// Add the range to metrics and maybe gossip on capacity change.
 	s.metrics.ReplicaCount.Inc(1)
 	s.storeGossip.MaybeGossipOnCapacityChange(ctx, RangeAddEvent)
+
+	// Mark the replica as ready to serve requests. At this point, the replica
+	// is fully registered in the store (in replicasByKey) and can handle
+	// incoming requests routed by Store.Send.
+	r.readyToServe.Store(true)
 
 	return nil
 }

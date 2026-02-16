@@ -87,9 +87,10 @@ func newInitializedReplica(
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
-	if err := r.initRaftMuLockedReplicaMuLocked(loaded, waitForPrevLeaseToExpire, nil); err != nil {
+	if err := r.initRaftMuLockedReplicaMuLocked(loaded, waitForPrevLeaseToExpire); err != nil {
 		return nil, err
 	}
+	r.readyToServe.Store(true)
 
 	return r, nil
 }
@@ -298,7 +299,7 @@ func (r *Replica) setStartKeyLocked(startKey roachpb.RKey) {
 // initRaftMuLockedReplicaMuLocked initializes the Replica using the state
 // loaded from storage. Must not be called more than once on a Replica.
 func (r *Replica) initRaftMuLockedReplicaMuLocked(
-	s kvstorage.LoadedReplicaState, waitForPrevLeaseToExpire bool, beforeInitFunc func(*Replica),
+	s kvstorage.LoadedReplicaState, waitForPrevLeaseToExpire bool,
 ) error {
 	desc := s.ReplState.Desc
 	// Ensure that the loaded state corresponds to the same replica.
@@ -333,7 +334,7 @@ func (r *Replica) initRaftMuLockedReplicaMuLocked(
 		return err
 	}
 
-	r.setDescLockedRaftMuLocked(r.AnnotateCtx(context.TODO()), desc, beforeInitFunc)
+	r.setDescLockedRaftMuLocked(r.AnnotateCtx(context.TODO()), desc)
 
 	// Only do this if there was a previous lease. This shouldn't be important
 	// to do but consider that the first lease which is obtained is back-dated
@@ -400,7 +401,7 @@ func (r *Replica) initFromSnapshotLockedRaftMuLocked(
 		return errors.AssertionFailedf("initializing replica with uninitialized desc: %s", desc)
 	}
 
-	r.setDescLockedRaftMuLocked(ctx, desc, nil)
+	r.setDescLockedRaftMuLocked(ctx, desc)
 	r.setStartKeyLocked(desc.StartKey)
 	return nil
 }
@@ -411,6 +412,19 @@ func (r *Replica) initFromSnapshotLockedRaftMuLocked(
 // message but we are waiting for our initial snapshot.
 func (r *Replica) IsInitialized() bool {
 	return r.isInitialized.Load()
+}
+
+// ReadyToServe is true when the store has fully registered this replica and it
+// can serve external requests. A replica that is initialized but not yet ready
+// to serve is in a transient state during split application, where the store
+// has not yet finished its bookkeeping.
+func (r *Replica) ReadyToServe() bool {
+	ready := r.readyToServe.Load()
+	if ready && !r.isInitialized.Load() {
+		log.KvExec.Fatalf(context.Background(),
+			"readyToServe is true but isInitialized is false for %s", r)
+	}
+	return ready
 }
 
 // TenantID returns the associated tenant ID and a boolean to indicate that it
@@ -427,17 +441,13 @@ func (r *Replica) getTenantIDRLocked() (roachpb.TenantID, bool) {
 
 // setDescRaftMuLocked atomically sets the replica's descriptor. It requires raftMu to be
 // locked.
-func (r *Replica) setDescRaftMuLocked(
-	ctx context.Context, desc *roachpb.RangeDescriptor, beforeInitFunc func(*Replica),
-) {
+func (r *Replica) setDescRaftMuLocked(ctx context.Context, desc *roachpb.RangeDescriptor) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	r.setDescLockedRaftMuLocked(ctx, desc, beforeInitFunc)
+	r.setDescLockedRaftMuLocked(ctx, desc)
 }
 
-func (r *Replica) setDescLockedRaftMuLocked(
-	ctx context.Context, desc *roachpb.RangeDescriptor, beforeInitFunc func(*Replica),
-) {
+func (r *Replica) setDescLockedRaftMuLocked(ctx context.Context, desc *roachpb.RangeDescriptor) {
 	if desc.RangeID != r.RangeID {
 		log.KvExec.Fatalf(ctx, "range descriptor ID (%d) does not match replica's range ID (%d)",
 			desc.RangeID, r.RangeID)
@@ -499,9 +509,6 @@ func (r *Replica) setDescLockedRaftMuLocked(
 		r.mu.lastReplicaAddedTime = time.Time{}
 	}
 
-	if beforeInitFunc != nil {
-		beforeInitFunc(r)
-	}
 	r.rangeStr.store(r.replicaID, desc)
 	r.isInitialized.Store(desc.IsInitialized())
 	r.connectionClass.set(rpcbase.ConnectionClassForKey(desc.StartKey, defRaftConnClass))

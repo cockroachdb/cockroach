@@ -174,14 +174,11 @@ func (s *Store) SendWithWriteBytes(
 		if err != nil {
 			return nil, nil, kvpb.NewError(err)
 		}
-		if !repl.IsInitialized() {
-			// If we have an uninitialized copy of the range, then we are probably a
-			// valid member of the range, we're just in the process of getting our
-			// snapshot. If we returned RangeNotFoundError, the client would
-			// invalidate its cache. Instead, we return a NLHE error to indicate to
-			// the client that it should move on and try the next replica. Very
-			// likely, the next replica the client tries will be initialized and will
-			// have useful leaseholder information for the client.
+		if !repl.ReadyToServe() {
+			// If the replica is not ready to serve, it is either uninitialized
+			// (waiting for a snapshot) or in a transient state during split
+			// application. We return a NLHE to indicate to the client that it
+			// should move on and try the next replica.
 			return nil, nil, kvpb.NewError(&kvpb.NotLeaseHolderError{
 				RangeID: ba.RangeID,
 				// The replica doesn't have a range descriptor yet, so we have to build

@@ -9,7 +9,6 @@ import (
 	"bytes"
 	"context"
 
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvstorage"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/load"
@@ -203,11 +202,11 @@ func splitPostApply(
 	// rightReplOrNil will be nil if the RHS replica at the ID of the split is
 	// already known to be removed, generally because we know that this store has
 	// been re-added at a higher replica ID.
-	rightReplOrNil, unlatch := prepareRightReplicaForSplit(ctx, split, r)
+	rightReplOrNil := prepareRightReplicaForSplit(ctx, split, r)
 	// Add the RHS replica to the store. This step atomically updates
 	// the EndKey of the LHS replica and also adds the RHS replica
 	// to the store's replica map.
-	if err := r.store.SplitRange(ctx, r, rightReplOrNil, split, unlatch); err != nil {
+	if err := r.store.SplitRange(ctx, r, rightReplOrNil, split); err != nil {
 		// Our in-memory state has diverged from the on-disk state.
 		log.KvExec.Fatalf(ctx, "%s: failed to update Store after split: %+v", r, err)
 	}
@@ -246,7 +245,7 @@ func splitPostApply(
 // Requires that r.raftMu is held.
 func prepareRightReplicaForSplit(
 	ctx context.Context, split *roachpb.SplitTrigger, r *Replica,
-) (rightReplicaOrNil *Replica, _ func()) {
+) (rightReplicaOrNil *Replica) {
 	// Copy out the minLeaseProposedTS and minValidObservedTimestamp from the LHS,
 	// so we can assign it to the RHS. minLeaseProposedTS ensures that if the LHS
 	// was not able to use its current lease because of a restart or lease
@@ -260,7 +259,6 @@ func prepareRightReplicaForSplit(
 	// If the RHS replica of the split is not removed, then it has been obtained
 	// (and its raftMu acquired) in Replica.acquireSplitLock.
 	rightRepl := r.store.GetReplicaIfExists(split.RightDesc.RangeID)
-	unlatch := func() {}
 
 	// If the RHS replica of the split has been removed then we either not find it
 	// here, or find a one with a later replica ID. In this case we also know that
@@ -268,7 +266,7 @@ func prepareRightReplicaForSplit(
 	// this replica. See also:
 	_, _ = r.acquireSplitLock, splitPostApply
 	if rightRepl == nil || rightRepl.isNewerThanSplit(split) {
-		return nil, unlatch
+		return nil
 	}
 
 	// Finish initialization of the RHS replica.
@@ -285,19 +283,8 @@ func prepareRightReplicaForSplit(
 	rightRepl.mu.Lock()
 	defer rightRepl.mu.Unlock()
 
-	var beforeInitFunc func(*Replica)
-	if concurrency.UnreplicatedLockReliabilitySplit.Get(&r.ClusterSettings().SV) {
-		beforeInitFunc = func(r *Replica) {
-			var err error
-			unlatch, err = r.concMgr.OnRangeSplitRHS(ctx)
-			if err != nil {
-				log.KvExec.Fatalf(ctx, "%v", err)
-			}
-		}
-	}
-
 	if err := rightRepl.initRaftMuLockedReplicaMuLocked(
-		state, false /* waitForPrevLeaseToExpire */, beforeInitFunc,
+		state, false, /* waitForPrevLeaseToExpire */
 	); err != nil {
 		log.KvExec.Fatalf(ctx, "%v", err)
 	}
@@ -338,7 +325,7 @@ func prepareRightReplicaForSplit(
 		fn(rightDesc, rightRepl.shMu.state)
 	}
 
-	return rightRepl, unlatch
+	return rightRepl
 }
 
 // SplitRange shortens the original range to accommodate the new range. The new
@@ -349,12 +336,8 @@ func prepareRightReplicaForSplit(
 // of a Raft command. Note that rightRepl will be nil if the replica described
 // by rightDesc is known to have been removed.
 func (s *Store) SplitRange(
-	ctx context.Context,
-	leftRepl, rightReplOrNil *Replica,
-	split *roachpb.SplitTrigger,
-	unlatch func(),
+	ctx context.Context, leftRepl, rightReplOrNil *Replica, split *roachpb.SplitTrigger,
 ) error {
-	defer unlatch()
 	rightDesc := &split.RightDesc
 	newLeftDesc := &split.LeftDesc
 	oldLeftDesc := leftRepl.Desc()
@@ -365,7 +348,7 @@ func (s *Store) SplitRange(
 
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	leftRepl.setDescRaftMuLocked(ctx, newLeftDesc, nil)
+	leftRepl.setDescRaftMuLocked(ctx, newLeftDesc)
 
 	// Clear or split the LHS lock and txn wait-queues, to redirect to the RHS if
 	// appropriate. We do this after setDescWithoutProcessUpdate to ensure
@@ -406,5 +389,5 @@ func (s *Store) SplitRange(
 
 	rightRepl.mu.Lock()
 	defer rightRepl.mu.Unlock()
-	return s.markReplicaInitializedLockedReplLocked(ctx, rightRepl)
+	return s.activateReplicaLockedReplLocked(ctx, rightRepl)
 }

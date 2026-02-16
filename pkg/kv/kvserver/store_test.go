@@ -779,7 +779,7 @@ func TestMarkReplicaInitialized(t *testing.T) {
 	func() {
 		r.mu.Lock()
 		defer r.mu.Unlock()
-		if err := store.markReplicaInitializedLockedReplLocked(ctx, r); !testutils.IsError(err, expectedResult) {
+		if err := store.activateReplicaLockedReplLocked(ctx, r); !testutils.IsError(err, expectedResult) {
 			t.Errorf("expected markReplicaInitializedLocked with uninitialized replica to fail, got %v", err)
 		}
 	}()
@@ -797,13 +797,13 @@ func TestMarkReplicaInitialized(t *testing.T) {
 	func() {
 		r.raftMu.Lock()
 		defer r.raftMu.Unlock()
-		r.setDescRaftMuLocked(ctx, desc, nil)
+		r.setDescRaftMuLocked(ctx, desc)
 	}()
 	expectedResult = "not in uninitReplicas"
 	func() {
 		r.mu.Lock()
 		defer r.mu.Unlock()
-		if err := store.markReplicaInitializedLockedReplLocked(ctx, r); !testutils.IsError(err, expectedResult) {
+		if err := store.activateReplicaLockedReplLocked(ctx, r); !testutils.IsError(err, expectedResult) {
 			t.Errorf("expected markReplicaInitializedLocked on a replica that's not in the uninit map to fail, got %v", err)
 		}
 	}()
@@ -815,7 +815,7 @@ func TestMarkReplicaInitialized(t *testing.T) {
 	func() {
 		r.mu.Lock()
 		defer r.mu.Unlock()
-		if err := store.markReplicaInitializedLockedReplLocked(ctx, r); !testutils.IsError(err, expectedResult) {
+		if err := store.activateReplicaLockedReplLocked(ctx, r); !testutils.IsError(err, expectedResult) {
 			t.Errorf("expected markReplicaInitializedLocked with overlapping keys to fail, got %v", err)
 		}
 	}()

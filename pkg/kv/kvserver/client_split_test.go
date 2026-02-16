@@ -4734,6 +4734,12 @@ func TestGCRequestStraddlingSplit(t *testing.T) {
 // which was a bug caused by the fact that, during a split, a Replica becomes
 // available for requests before the end of the application of the EndTxn that
 // creates the replica.
+//
+// The fix gates requests on ReadyToServe(), which is false until
+// activateReplicaLockedReplLocked completes. Requests arriving during the gap
+// get NLHE and retry. This test validates the end-to-end flow: NLHE during the
+// gap, success after activation, correct lock contention with the transferred
+// lock.
 func TestSplitWithConcurrentLockAcquisitionOnRHS(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -4745,7 +4751,7 @@ func TestSplitWithConcurrentLockAcquisitionOnRHS(t *testing.T) {
 	splitKey := roachpb.Key("m")
 
 	// We install a BeforeSplitAcquiresLocksOnRHS testing hook that will pause the
-	// split we issue for SplitKey during application so that we can then send a
+	// split we issue for splitKey during application so that we can then send a
 	// request targeted to the new RHS replica.
 	splitPaused := make(chan roachpb.RangeID)
 	splitResume := make(chan struct{})
@@ -4761,13 +4767,11 @@ func TestSplitWithConcurrentLockAcquisitionOnRHS(t *testing.T) {
 				BeforeSplitAcquiresLocksOnRHS: func(ctx context.Context, rhsRepl *kvserver.Replica) {
 					startKey := rhsRepl.Desc().StartKey.AsRawKey()
 					if !startKey.Equal(splitKey) {
-						t.Logf("allowing split for range with StartKey %s != %s", startKey, splitKey)
 						return
 					}
 
-					t.Logf("pausing split for RHS %d: %s: %v", rhsRepl.RangeID, startKey, rhsRepl.IsInitialized())
+					t.Logf("pausing split for RHS %d: %s", rhsRepl.RangeID, startKey)
 					splitPaused <- rhsRepl.RangeID
-					// Wait for signal to resume.
 					<-splitResume
 					t.Logf("split resumed for RHS %d", rhsRepl.RangeID)
 				},
@@ -4776,18 +4780,17 @@ func TestSplitWithConcurrentLockAcquisitionOnRHS(t *testing.T) {
 	})
 	defer s.Stopper().Stop(ctx)
 
-	// First, we create a key to the right of our split point and make a locking
-	// request to that key.
 	store, err := s.GetStores().(*kvserver.Stores).GetStore(s.GetFirstStoreID())
 	require.NoError(t, err)
 	db := s.DB()
 	require.NoError(t, db.Put(ctx, rhsKey, "initial value"))
 
+	// Acquire a lock on rhsKey via txn1.
 	txn1 := kv.NewTxn(ctx, db, s.NodeID())
 	_, err = txn1.GetForUpdate(ctx, rhsKey, kvpb.BestEffort)
 	require.NoError(t, err)
 
-	// Now split the range. This will block until we explicitly unblock it below.
+	// Split the range. This blocks until we explicitly unblock it below.
 	g := ctxgroup.WithContext(ctx)
 	g.GoCtx(func(ctx context.Context) error {
 		_, _, err := s.SplitRange(splitKey)
@@ -4795,37 +4798,34 @@ func TestSplitWithConcurrentLockAcquisitionOnRHS(t *testing.T) {
 	})
 	rID := <-splitPaused
 
-	// Send a request targeted specifically at the new range ID. If the lock
-	// acquired by this write is added to the lock table while the lock acquired
-	// by tnx1 above is still head, we will hit a lock table assertion.
-	//
-	// We send this in a goroutine because it either (1) blocks waiting to
-	// sequence the request when the bug is fixed or (2) blocks waiting on the
-	// application of the split when the bug is not fixed.
+	// Send a Put to rhsKey targeted at the new range ID. While ReadyToServe()
+	// is false, each attempt returns NLHE. We retry until the request either
+	// succeeds or returns a non-NLHE error.
 	g.GoCtx(func(ctx context.Context) error {
-		txn := db.NewTxn(ctx, "test-txn-2")
-		ba := &kvpb.BatchRequest{}
-		ba.Header = kvpb.Header{
-			Txn:     txn.TestingCloneTxn(),
+		txn2 := db.NewTxn(ctx, "test-txn-2")
+		header := kvpb.Header{
+			Txn:     txn2.TestingCloneTxn(),
 			RangeID: rID,
 		}
-		ba.Add(putArgs(rhsKey, []byte("hello")))
-		t.Logf("sending %v", ba)
-		_, pErr := store.TestSender().Send(ctx, ba)
-		return pErr.GoError()
+		for {
+			_, pErr := kv.SendWrappedWith(ctx, store.TestSender(), header, putArgs(rhsKey, []byte("hello")))
+			if pErr == nil {
+				return nil
+			}
+			if _, ok := pErr.GetDetail().(*kvpb.NotLeaseHolderError); ok {
+				continue
+			}
+			return pErr.GoError()
+		}
 	})
 
-	// Wait for the above to actually acquire the lock. If this becomes flakey we
-	// could work harder to coordinate here.
+	// Let the split proceed.
 	time.Sleep(100 * time.Millisecond)
 	t.Logf("resuming split")
 	close(splitResume)
 
-	// Rollback txn1 so that txn2 can proceed. This is required when the bug is
-	// fixed then the lock from txn1 is moved to the RHS replica and txn2 should
-	// end up waiting on it.
+	// Rollback txn1 so that txn2 can proceed. The lock from txn1 was
+	// transferred to the RHS during the split, so txn2 waits on it.
 	require.NoError(t, txn1.Rollback(ctx))
-	// When the bug is fixed, everything should succeed. When the bug is not
-	// fixed, we log.Fatal.
 	require.NoError(t, g.Wait())
 }
