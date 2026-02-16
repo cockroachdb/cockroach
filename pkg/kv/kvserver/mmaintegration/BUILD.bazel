@@ -33,6 +33,7 @@ go_test(
     name = "mmaintegration_test",
     srcs = [
         "capacity_model_test.go",
+        "legacy_model_test.go",
         "mma_conversion_test.go",
         "store_status_test.go",
     ],

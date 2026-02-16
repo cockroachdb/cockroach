@@ -19,21 +19,6 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// computeStoreByteSizeCapacityWithOverhead uses (Total-Available)/Total as the
-// disk fraction instead of Used/(Used+Available). This is the wrong model
-// because Total-Available includes filesystem reserved blocks, ballast, and
-// other non-store files on the same mount — all of which inflate the fraction
-// and produce an unrealistically small capacity for stores with little data.
-func computeStoreByteSizeCapacityWrong(
-	logicalBytes mmaprototype.LoadValue, total int64, available int64,
-) mmaprototype.LoadValue {
-	var fullDiskFraction float64
-	if total > 0 {
-		fullDiskFraction = float64(total-available) / float64(total)
-	}
-	return computeStoreByteSizeCapacity(logicalBytes, fullDiskFraction, available)
-}
-
 func TestComputeStoreCPURateCapacity(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -69,7 +54,7 @@ func TestComputeStoreCPURateCapacity(t *testing.T) {
 					nodeCPURateCapacity: nodeCapCores * nsPerCore,
 					numStores:           int32(numStores),
 				}
-				naiveResult := computeStoreCPURateCapacity(in)
+				naiveResult := computeStoreCPURateCapacityNaive(in)
 				naiveCap := float64(naiveResult) / nsPerCore
 
 				// Capped model: caps the indirect overhead multiplier.
@@ -168,7 +153,7 @@ func TestComputeStoreByteSizeCapacity(t *testing.T) {
 					mmaprototype.LoadValue(logicalBytes), fractionUsed, available,
 				)
 				// Wrong model: uses (Total-Available)/Total.
-				wrongResult := computeStoreByteSizeCapacityWrong(
+				wrongResult := computeStoreByteSizeCapacityNaive(
 					mmaprototype.LoadValue(logicalBytes), total, available,
 				)
 
