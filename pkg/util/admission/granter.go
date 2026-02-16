@@ -11,7 +11,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
-	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
@@ -340,6 +339,10 @@ type kvStoreTokenGranter struct {
 			absError diskTokens
 		}
 		diskTokensUsed [admissionpb.NumStoreWorkTypes]diskTokens
+		// prevIntervalDiskWriteTokensRemaining is the value of
+		// diskTokensAvailable.writeByteTokens at the end of the previous
+		// adjustment interval. A negative value indicates overadmission.
+		prevIntervalDiskWriteTokensRemaining int64
 		// exhaustedStart is the time when the corresponding availableIOTokens
 		// became <= 0. Ignored when the corresponding availableIOTokens is > 0.
 		exhaustedStart [admissionpb.NumWorkClasses]time.Time
@@ -856,10 +859,9 @@ func (sg *kvStoreTokenGranter) addAvailableTokens(
 		sg.mu.availableIOTokens[admissionpb.ElasticWorkClass] =
 			min(sg.mu.availableIOTokens[admissionpb.ElasticWorkClass], sg.mu.availableIOTokens[admissionpb.RegularWorkClass])
 
-		writeTokensPerSec := sg.mu.diskTokensAvailable.writeByteTokens / adjustmentInterval
-		if writeTokensPerSec < 0 {
-			log.Dev.Infof(context.Background(), "Potential overadmission=%s/s", humanizeutil.IBytes(-writeTokensPerSec))
-		}
+		// Stash the balance before resetting, so getDiskTokensUsedAndReset can
+		// return it to the ioLoadListener for logging.
+		sg.mu.prevIntervalDiskWriteTokensRemaining = sg.mu.diskTokensAvailable.writeByteTokens
 		// We also want to avoid very negative disk write tokens, so we reset them.
 		sg.mu.diskTokensAvailable.writeByteTokens = max(sg.mu.diskTokensAvailable.writeByteTokens, 0)
 	}
@@ -902,6 +904,7 @@ type diskErrorStats struct {
 func (sg *kvStoreTokenGranter) getDiskTokensUsedAndReset() (
 	usedTokens [admissionpb.NumStoreWorkTypes]diskTokens,
 	_ diskErrorStats,
+	remainingDiskWriteTokens int64,
 ) {
 	sg.mu.Lock()
 	defer sg.mu.Unlock()
@@ -915,7 +918,9 @@ func (sg *kvStoreTokenGranter) getDiskTokensUsedAndReset() (
 	}
 	sg.mu.diskTokensError.cumError = diskTokens{}
 	sg.mu.diskTokensError.absError = diskTokens{}
-	return usedTokens, diskErrStats
+	remainingDiskWriteTokens = sg.mu.prevIntervalDiskWriteTokensRemaining
+	sg.mu.prevIntervalDiskWriteTokensRemaining = 0
+	return usedTokens, diskErrStats, remainingDiskWriteTokens
 }
 
 // setAdmittedModelsLocked implements granterWithIOTokens.
