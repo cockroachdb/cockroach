@@ -113,10 +113,7 @@ const cpuIndirectOverheadMultiplier = 3.0
 // When storesCPURate is 0 (no replicas reporting CPU yet), we use the limiting
 // behavior: MMA attributes none of the node usage to itself (all is
 // background), and divides the idle capacity by the multiplier across stores.
-func computeCPUCapacityWithCap(
-	in storeCPURateCapacityInput,
-	observer func(mult float64, backgroundLoad float64, mmaShareOfCapacity float64, mmaDirectCapacity float64),
-) (capacity float64) {
+func computeCPUCapacityWithCap(in storeCPURateCapacityInput) (capacity float64) {
 	mult := 0.0
 	if in.numStores <= 0 || in.nodeCPURateCapacity <= 0 {
 		log.KvDistribution.Fatalf(context.Background(), "numStores and nodeCPURateCapacity must be > 0")
@@ -155,6 +152,5 @@ func computeCPUCapacityWithCap(
 
 	// Divide evenly across stores.
 	capacity = mmaDirectCapacity / float64(in.numStores)
-	observer(mult, backgroundLoad, mmaShareOfCapacity, mmaDirectCapacity)
 	return capacity
 }

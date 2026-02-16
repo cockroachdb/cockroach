@@ -79,10 +79,7 @@ func TestComputeStoreCPURateCapacity(t *testing.T) {
 
 				// Run models.
 				naiveCap := float64(computeStoreCPURateCapacityNaive(in)) / nsPerCore
-				cappedCap := computeCPUCapacityWithCap(
-					in,
-					func(float64, float64, float64, float64) {}, // observer unused
-				) / nsPerCore
+				cappedCap := computeCPUCapacityWithCap(in) / nsPerCore
 
 				// Compute error percentage.
 				// Negative = pessimistic (underestimates capacity, safer).
