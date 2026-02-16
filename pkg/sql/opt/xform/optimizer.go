@@ -557,7 +557,7 @@ func (o *Optimizer) optimizeGroup(grp memo.RelExpr, required *physical.Required)
 
 		// Now try to generate new expressions that are logically equivalent to
 		// other expressions in this group.
-		if o.shouldExplore(required) && !o.explorer.exploreGroup(grp, required).fullyExplored {
+		if o.shouldExplore(required) && !o.explorer.exploreGroup(grp).fullyExplored {
 			fullyOptimized = false
 		}
 
@@ -869,20 +869,18 @@ func (o *Optimizer) getScratchSort() *memo.SortExpr {
 // MaybeGetBestCostRelation returns the best-cost relation for the given memo
 // group if the group has been fully optimized for the `required` physical
 // properties.
-func (o *Optimizer) MaybeGetBestCostRelation(
-	grp memo.RelExpr, required *physical.Required,
-) (best memo.RelExpr, ok bool) {
+func (o *Optimizer) MaybeGetBestCostRelation(grp memo.RelExpr) (best memo.RelExpr, ok bool) {
 	if o == nil {
 		return nil, false
 	}
-	state := o.lookupOptState(grp, required)
-	if state == nil {
-		return nil, false
+	// TODO(mgartner): This is a temporary hack and it shows how much the LOS
+	// code is working against the design of the optimizer.
+	for key, state := range o.stateMap {
+		if key.group == grp && state.best != nil && state.fullyOptimized {
+			return state.best, true
+		}
 	}
-	if state.best == nil || !state.fullyOptimized {
-		return nil, false
-	}
-	return state.best, true
+	return nil, false
 }
 
 // lookupOptState looks up the state associated with the given group and
