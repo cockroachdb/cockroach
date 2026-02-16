@@ -683,7 +683,7 @@ CREATE TABLE pg_catalog.pg_seclabels (
 )`
 
 // PGCatalogSequence describes the schema of the pg_catalog.pg_sequence table.
-// https://www.postgresql.org/docs/9.5/catalog-pg-sequence.html,
+// https://www.postgresql.org/docs/10/catalog-pg-sequence.html,
 const PGCatalogSequence = `
 CREATE TABLE pg_catalog.pg_sequence (
 	seqrelid OID,
@@ -697,7 +697,7 @@ CREATE TABLE pg_catalog.pg_sequence (
 )`
 
 // PGCatalogSettings describes the schema of the pg_catalog.pg_settings table.
-// https://www.postgresql.org/docs/9.5/catalog-pg-settings.html,
+// https://www.postgresql.org/docs/9.5/view-pg-settings.html,
 const PGCatalogSettings = `
 CREATE TABLE pg_catalog.pg_settings (
     name STRING,

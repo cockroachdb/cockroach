@@ -451,7 +451,7 @@ the most relevant are:
 
 1. [Gibbons, Phillip B., Yossi Matias, and Viswanath Poosala. "Fast incremental
    maintenance of approximate histograms." In _VLDB_, vol. 97, pp. 466-475. 1997.](
-   http://www.mathcs.emory.edu/~cheung/Courses/584/Syllabus/papers/Histogram/Gibbons-fast-incr-histogram.pdf)
+   https://www.vldb.org/conf/1997/P466.PDF)
 
 The solution described in this paper enables keeping histograms quite fresh and
 up-to-date, but it requires maintaining a backing sample (similar to a partial
@@ -463,7 +463,7 @@ RFC.
 2. [Gibbons, Phillip B., and Yossi Matias. "New sampling-based summary statistics
    for improving approximate query answers." In _Proceedings of the 1998 ACM
    SIGMOD international conference on Management of data_, pp. 331-342. 1998.](
-   https://www.researchgate.net/profile/Yossi-Matias/publication/2634326_New_Sampling-Based_Summary_Statistics_for_Improving_Approximate_Query_Answers/links/0fcfd50baafa968854000000/New-Sampling-Based-Summary-Statistics-for-Improving-Approximate-Query-Answers.pdf)
+   https://www.cs.cmu.edu/~christos/courses/826-resources/PAPERS+BOOK/p331-gibbons.pdf)
 
 This paper is by the same authors as above, and builds on the prior work that
 uses a backing sample. This paper adds two additional types of summary
@@ -474,7 +474,7 @@ less relevant, although may be worth considering in the future.
 3. [Cormode, Graham, and Shan Muthukrishnan. "What's hot and what's not: tracking
    most frequent items dynamically." _ACM Transactions on Database Systems
    (TODS)_ 30, no. 1 (2005): 249-278.](
-   http://www.mathcs.emory.edu/~cheung/Courses/584/Syllabus/papers/Histogram/2005-Cormode-Histogram.pdf)
+   https://dimacs.rutgers.edu/~graham/pubs/papers/whatshot-tods.pdf)
 
 This is a solution for keeping track of “hot” values that appear many times in a
 table, and keeping the list of hot items up to date. Tracking hot items is not
@@ -484,7 +484,7 @@ paper may be useful at that point.
 4. [Aboulnaga, Ashraf, and Surajit Chaudhuri. "Self-tuning histograms: Building
    histograms without looking at data." _ACM SIGMOD Record_ 28, no. 2 (1999):
    181-192.](
-   https://citeseerx.ist.psu.edu/viewdoc/download?doi=10.1.1.39.4864&rep=rep1&type=pdf)
+   https://sigmodrecord.org/publications/sigmodRecord/9906/Self-tuning%20histograms_%20building%20histograms%20without%20looking%20at%20data.pdf)
 
 This approach is somewhat similar to our idea of triggering automatic stats
 collection based on queries that have scans with stale stats. But instead of
@@ -511,7 +511,7 @@ above.
 6. [Thaper, Nitin, Sudipto Guha, Piotr Indyk, and Nick Koudas. "Dynamic
    multidimensional histograms." In _Proceedings of the 2002 ACM SIGMOD
    international conference on Management of data_, pp. 428-439. 2002.](
-   https://citeseerx.ist.psu.edu/viewdoc/download?doi=10.1.1.132.2078&rep=rep1&type=pdf)
+   https://people.csail.mit.edu/indyk/thaper.pdf)
 
 This paper has many of the same authors as the previous, and also proposes using
 a sketch to maintain histograms over data streams. The difference here is that

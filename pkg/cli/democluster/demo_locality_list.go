@@ -58,7 +58,7 @@ var defaultLocalities = DemoLocalityList{
 	{Tiers: []roachpb.Tier{{Key: "region", Value: "europe-west1"}, {Key: "az", Value: "d"}}},
 }
 
-// Round-trip latencies collected from http://cloudping.co on 2019-09-11.
+// Round-trip latencies collected from https://web.archive.org/web/20250808080622/https://cloudping.co/ on 2019-09-11.
 var localityLatencies = regionlatency.RoundTripPairs{
 	{A: "us-east1", B: "us-west1"}:     66 * time.Millisecond,
 	{A: "us-east1", B: "europe-west1"}: 64 * time.Millisecond,
