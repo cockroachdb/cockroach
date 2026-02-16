@@ -2028,7 +2028,7 @@ func TestTxnWriteBufferRollbackToSavepoint(t *testing.T) {
 
 	// Create a savepoint. This is inclusive of the buffered Delete on keyC.
 	savepoint := &savepoint{seqNum: txn.Sequence}
-	twb.createSavepointLocked(ctx, savepoint)
+	require.NoError(t, twb.createSavepointLocked(ctx, savepoint))
 
 	// Add some new writes. A second write to keyA and a new one to keyB.
 	ba = &kvpb.BatchRequest{}
@@ -2060,7 +2060,7 @@ func TestTxnWriteBufferRollbackToSavepoint(t *testing.T) {
 
 	// Now, Rollback to the savepoint. This should leave just one write in the
 	// buffer, that on keyA at seqnum 10.
-	twb.rollbackToSavepointLocked(ctx, *savepoint)
+	require.NoError(t, twb.rollbackToSavepointLocked(ctx, *savepoint))
 	expBufferedWrites = []bufferedWrite{
 		makeBufferedWrite(keyA, makeBufferedValue("valA", 10)),
 	}
@@ -2108,7 +2108,7 @@ func TestTxnWriteBufferRollbackNeverHeldLock(t *testing.T) {
 	txn.Sequence = 10
 	txn.Sequence++
 	sp := &savepoint{seqNum: txn.Sequence}
-	twb.createSavepointLocked(ctx, sp)
+	require.NoError(t, twb.createSavepointLocked(ctx, sp))
 
 	txn.Sequence++
 	ba := &kvpb.BatchRequest{Header: kvpb.Header{Txn: &txn}}
@@ -2118,7 +2118,7 @@ func TestTxnWriteBufferRollbackNeverHeldLock(t *testing.T) {
 	require.Nil(t, pErr)
 	require.NotNil(t, br)
 
-	twb.rollbackToSavepointLocked(ctx, *sp)
+	require.NoError(t, twb.rollbackToSavepointLocked(ctx, *sp))
 
 	// Commit the transaction.
 	ba = &kvpb.BatchRequest{Header: kvpb.Header{Txn: &txn}}
@@ -3051,7 +3051,7 @@ func TestTxnWriteBufferCorrectlyRollsbackExclusionTimestamp(t *testing.T) {
 	valStr := "val"
 
 	savepoint := &savepoint{seqNum: txn.Sequence}
-	twb.createSavepointLocked(ctx, savepoint)
+	require.NoError(t, twb.createSavepointLocked(ctx, savepoint))
 
 	ba := &kvpb.BatchRequest{}
 	ba.Header = kvpb.Header{Txn: &txn}
@@ -3070,7 +3070,7 @@ func TestTxnWriteBufferCorrectlyRollsbackExclusionTimestamp(t *testing.T) {
 	require.Nil(t, pErr)
 	require.NotNil(t, br)
 
-	twb.rollbackToSavepointLocked(ctx, *savepoint)
+	require.NoError(t, twb.rollbackToSavepointLocked(ctx, *savepoint))
 	txn.Sequence++
 
 	// Another write on keyA
@@ -4016,12 +4016,12 @@ func TestTxnWriteBufferLockingGetFlushing(t *testing.T) {
 						t.Fatal("implemented: multiple active savepoints")
 					}
 					sp = &savepoint{seqNum: txn.Sequence}
-					twb.createSavepointLocked(ctx, sp)
+					require.NoError(t, twb.createSavepointLocked(ctx, sp))
 				case rollbackSavepoint:
 					if sp == nil {
 						t.Fatal("rollback without active savepoint")
 					}
-					twb.rollbackToSavepointLocked(ctx, *sp)
+					require.NoError(t, twb.rollbackToSavepointLocked(ctx, *sp))
 					sp = nil
 				}
 			}
