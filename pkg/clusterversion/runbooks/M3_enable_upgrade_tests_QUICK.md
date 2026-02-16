@@ -344,6 +344,19 @@ func supportsSkipUpgradeTo(v *version.Version) bool {
 
 ---
 
+### Step 6.5: Regenerate Declarative Rules Corpus
+
+Bumping `PreviousRelease` changes which schema changer rules are active, so the
+declarative rules test corpus must be regenerated:
+
+```bash
+./dev test pkg/cli -f=TestDeclarativeRules --rewrite
+```
+
+**Updates:** `pkg/cli/testdata/declarative-rules/deprules`
+
+---
+
 ### Step 7: Commit and Push Code PR
 
 ```bash
@@ -400,14 +413,15 @@ Epic: None"
 2. `pkg/sql/logictest/REPOSITORIES.bzl`
 3-6. `pkg/cmd/roachtest/fixtures/{1,2,3,4}/checkpoint-v25.4.tgz`
 
-### PR 2 (Code): ~9 files
+### PR 2 (Code): ~10 files
 1. `pkg/clusterversion/cockroach_versions.go`
 2. `pkg/sql/logictest/logictestbase/logictestbase.go`
 3. `pkg/sql/logictest/BUILD.bazel`
 4. `pkg/cmd/roachtest/roachtestutil/mixedversion/mixedversion.go` (verify only)
-5. `pkg/sql/logictest/tests/cockroach-go-testserver-25.4/BUILD.bazel` (generated)
-6. `pkg/sql/logictest/tests/cockroach-go-testserver-25.4/generated_test.go` (generated)
-7-9. Various BUILD.bazel updates from `./dev gen bazel`
+5. `pkg/cli/testdata/declarative-rules/deprules` (regenerated via `--rewrite`)
+6. `pkg/sql/logictest/tests/cockroach-go-testserver-25.4/BUILD.bazel` (generated)
+7. `pkg/sql/logictest/tests/cockroach-go-testserver-25.4/generated_test.go` (generated)
+8-10. Various BUILD.bazel updates from `./dev gen bazel`
 
 ---
 
@@ -434,6 +448,12 @@ grep "const PreviousRelease" pkg/clusterversion/cockroach_versions.go
 
 # Verify testserver config added
 grep "cockroach-go-testserver-25.4" pkg/sql/logictest/logictestbase/logictestbase.go
+
+# Run unit tests
+./dev test pkg/clusterversion -v
+./dev test pkg/roachpb -v
+./dev test pkg/sql/logictest/logictestbase -v
+./dev test pkg/cli -f=TestDeclarativeRules -v
 
 # Build succeeds
 ./dev build short
@@ -469,6 +489,13 @@ grep "cockroach-go-testserver-25.4" pkg/sql/logictest/logictestbase/logictestbas
 | "license required" | Verify: `echo $COCKROACH_DEV_LICENSE` |
 | "roachprod cluster exists" | `./bin/roachprod destroy local` |
 | Fixtures 0 bytes or >10MB | Compare with previous version sizes, regenerate if needed |
+
+### CI Failures After PR 2
+
+| Error | Fix |
+|-------|-----|
+| `TestLogic_mixed_version_bootstrap_tenant` fails with descriptor diffs | System table descriptors evolve between versions. Exclude differing keys in the test's WHERE clause (see full runbook for details) |
+| `TestDeclarativeRules` fails with version mismatch | Forgot Step 6.5: run `./dev test pkg/cli -f=TestDeclarativeRules --rewrite` |
 
 ### REPOSITORIES.bzl
 
