@@ -205,6 +205,7 @@ require (
 	github.com/maruel/panicparse/v2 v2.2.2
 	github.com/marusama/semaphore v0.0.0-20190110074507-6952cef993b2
 	github.com/mattn/go-isatty v0.0.20
+	github.com/maypok86/otter/v2 v2.3.0
 	github.com/mitchellh/reflectwalk v1.0.0
 	github.com/mkungla/bexp/v3 v3.0.1
 	github.com/montanaflynn/stats v0.7.1

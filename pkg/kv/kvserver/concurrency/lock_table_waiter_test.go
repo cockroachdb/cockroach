@@ -33,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
+	"github.com/maypok86/otter/v2"
 	"github.com/stretchr/testify/require"
 )
 
@@ -1188,6 +1189,18 @@ func (a *typedAdapter) add(txn *roachpb.Transaction) {
 	a.c.Add(txn.ID, txn)
 }
 
+type otterAdapter struct {
+	c *otter.Cache[uuid.UUID, *roachpb.Transaction]
+}
+
+func (a *otterAdapter) add(txn *roachpb.Transaction) {
+	a.c.Set(txn.ID, txn)
+}
+
+func (a *otterAdapter) get(id uuid.UUID) (*roachpb.Transaction, bool) {
+	return a.c.GetIfPresent(id)
+}
+
 func (a *typedAdapter) get(id uuid.UUID) (*roachpb.Transaction, bool) {
 	a.Lock()
 	defer a.Unlock()
@@ -1195,94 +1208,220 @@ func (a *typedAdapter) get(id uuid.UUID) (*roachpb.Transaction, bool) {
 }
 
 func BenchmarkFinalizedTxnCache(b *testing.B) {
-	rng := rand.New(rand.NewSource(timeutil.Now().UnixNano()))
-	numOps := txnCacheSize * 4 // TODO
-	txns := make([]roachpb.Transaction, numOps)
-	for i := range txns {
-		txns[i] = makeTxnProto(fmt.Sprintf("txn %d", i))
+	const numOps = 10000
+
+	type workload struct {
+		name           string
+		readPct        int // percentage of operations that are reads
+		initialEntries int // number of entries pre-populated before benchmark
+	}
+	workloads := []workload{
+		{"reads=100/init=1000", 100, 1000},
+		{"reads=100/init=80000", 100, 80000},
+		{"reads=99/init=1000", 99, 1000},
+		{"reads=99/init=80000", 99, 80000},
+		{"reads=95/init=1000", 95, 1000},
+		{"reads=95/init=80000", 95, 80000},
+		{"reads=50/init=0", 50, 0},
+		{"reads=50/init=1000", 50, 1000},
+		{"reads=50/init=80000", 50, 80000},
+		{"reads=0/init=0", 0, 0},
+		{"reads=0/init=80000", 0, 80000},
 	}
 
-	makeOps := func(b *testing.B) []*roachpb.Transaction {
-		txnOps := make([]*roachpb.Transaction, b.N)
-		for i := range txnOps {
-			txnOps[i] = &txns[rng.Intn(len(txns))]
-		}
-		return txnOps
+	// Pre-generate a pool of transactions large enough for all workloads.
+	const txnPoolSize = 200000
+	txnPool := make([]roachpb.Transaction, txnPoolSize)
+	for i := range txnPool {
+		txnPool[i] = makeTxnProto(fmt.Sprintf("txn %d", i))
 	}
-	allAdd := func(b *testing.B, c tCache) {
-		txnOps := makeOps(b)
-		b.ResetTimer()
-		for _, txnOp := range txnOps {
-			c.add(txnOp)
+
+	runWorkload := func(b *testing.B, c tCache, wl workload) {
+		rng := rand.New(rand.NewSource(timeutil.Now().UnixNano()))
+
+		// Pre-populate the cache with initialEntries distinct transactions.
+		for i := 0; i < wl.initialEntries; i++ {
+			c.add(&txnPool[i])
 		}
-	}
-	allGet := func(b *testing.B, c tCache) {
-		txnOps := makeOps(b)
-		for _, txnOp := range txnOps {
-			c.add(txnOp)
+
+		// Build the operation sequence. Reads target pre-populated entries
+		// (if any exist); writes use transactions beyond the initial set to
+		// ensure they are new insertions.
+		type op struct {
+			isRead bool
+			txn    *roachpb.Transaction
 		}
-		b.ResetTimer()
-		for _, txnOp := range txnOps {
-			_, _ = c.get(txnOp.ID)
-		}
-	}
-	halfAndHalf := func(b *testing.B, c tCache) {
-		txnOps := makeOps(b)
-		b.ResetTimer()
-		for i, txnOp := range txnOps {
-			if i%2 == 0 {
-				c.add(txnOp)
+		ops := make([]op, numOps)
+		for i := range ops {
+			if rng.Intn(100) < wl.readPct && wl.initialEntries > 0 {
+				ops[i] = op{isRead: true, txn: &txnPool[rng.Intn(wl.initialEntries)]}
 			} else {
-				_, _ = c.get(txnOp.ID)
+				ops[i] = op{isRead: false, txn: &txnPool[wl.initialEntries+rng.Intn(txnPoolSize-wl.initialEntries)]}
+			}
+		}
+
+		b.ResetTimer()
+		for n := 0; n < b.N; n++ {
+			for _, o := range ops {
+				if o.isRead {
+					_, _ = c.get(o.txn.ID)
+				} else {
+					c.add(o.txn)
+				}
 			}
 		}
 	}
 
-	workloads := []struct {
-		name string
-		fn   func(b *testing.B, c tCache)
-	}{
-		{"all-get", allGet},
-		{"all-add", allAdd},
-		{"half-and-half", halfAndHalf},
+	// runWorkloadParallel distributes operations across GOMAXPROCS goroutines
+	// using b.RunParallel. Each goroutine uses its own RNG to avoid contention.
+	runWorkloadParallel := func(b *testing.B, c tCache, wl workload) {
+		for i := 0; i < wl.initialEntries; i++ {
+			c.add(&txnPool[i])
+		}
+
+		b.ResetTimer()
+		b.RunParallel(func(pb *testing.PB) {
+			rng := rand.New(rand.NewSource(timeutil.Now().UnixNano()))
+			for pb.Next() {
+				for i := 0; i < numOps; i++ {
+					if rng.Intn(100) < wl.readPct && wl.initialEntries > 0 {
+						_, _ = c.get(txnPool[rng.Intn(wl.initialEntries)].ID)
+					} else {
+						idx := wl.initialEntries + rng.Intn(txnPoolSize-wl.initialEntries)
+						c.add(&txnPool[idx])
+					}
+				}
+			}
+		})
 	}
 
-	b.Run("txnCache", func(b *testing.B) {
-		var c finalizedTxnCache
-		for _, tc := range workloads {
-			b.Run(tc.name, func(b *testing.B) {
-				tc.fn(b, &c)
+	type runner struct {
+		name string
+		fn   func(*testing.B, tCache, workload)
+	}
+	runners := []runner{
+		{"serial", runWorkload},
+		{"parallel", runWorkloadParallel},
+	}
+
+	for _, r := range runners {
+		b.Run(r.name, func(b *testing.B) {
+			b.Run("txnCache", func(b *testing.B) {
+				for _, wl := range workloads {
+					b.Run(wl.name, func(b *testing.B) {
+						var c finalizedTxnCache
+						r.fn(b, &c, wl)
+					})
+				}
 			})
-		}
-	})
-	b.Run("cache.UnorderedCache", func(b *testing.B) {
-		bc := cache.NewUnorderedCache(cache.Config{
-			Policy: cache.CacheLRU,
-			ShouldEvict: func(size int, _, _ interface{}) bool {
-				return size > txnCacheSize
-			},
+			b.Run("cache.UnorderedCache", func(b *testing.B) {
+				for _, wl := range workloads {
+					b.Run(wl.name, func(b *testing.B) {
+						bc := cache.NewUnorderedCache(cache.Config{
+							Policy: cache.CacheLRU,
+							ShouldEvict: func(size int, _, _ interface{}) bool {
+								return size > txnCacheSize
+							},
+						})
+						c := &adapter{c: bc}
+						r.fn(b, c, wl)
+					})
+				}
+			})
+			b.Run("cache.TypedUnorderedCache", func(b *testing.B) {
+				for _, wl := range workloads {
+					b.Run(wl.name, func(b *testing.B) {
+						bc := cache.NewTypedUnorderedCache(cache.TypedConfig[uuid.UUID, *roachpb.Transaction]{
+							Policy: cache.CacheLRU,
+							ShouldEvict: func(size int, _ uuid.UUID, _ *roachpb.Transaction) bool {
+								return size > txnCacheSize
+							},
+						})
+						c := &typedAdapter{c: bc}
+						r.fn(b, c, wl)
+					})
+				}
+			})
+			b.Run("otter.Cache", func(b *testing.B) {
+				for _, wl := range workloads {
+					b.Run(wl.name, func(b *testing.B) {
+						oc, err := otter.New(&otter.Options[uuid.UUID, *roachpb.Transaction]{
+							MaximumSize:     txnCacheSize,
+							InitialCapacity: 8,
+						})
+						require.NoError(b, err)
+						c := &otterAdapter{c: oc}
+						r.fn(b, c, wl)
+					})
+				}
+			})
 		})
-		c := &adapter{c: bc}
-		for _, tc := range workloads {
-			b.Run(tc.name, func(b *testing.B) {
-				tc.fn(b, c)
-			})
+	}
+}
+
+// BenchmarkFinalizedTxnCacheContention measures per-operation throughput under
+// high goroutine contention.
+func BenchmarkFinalizedTxnCacheContention(b *testing.B) {
+	const txnPoolSize = 200000
+	txnPool := make([]roachpb.Transaction, txnPoolSize)
+	for i := range txnPool {
+		txnPool[i] = makeTxnProto(fmt.Sprintf("txn %d", i))
+	}
+
+	for _, parallelism := range []int{1, 4, 16} {
+		for _, readPct := range []int{100, 95, 50} {
+			for _, initEntries := range []int{1000, 80000} {
+				name := fmt.Sprintf("P=%d/reads=%d/init=%d", parallelism, readPct, initEntries)
+
+				makeTypedCache := func(b *testing.B) tCache {
+					bc := cache.NewTypedUnorderedCache(cache.TypedConfig[uuid.UUID, *roachpb.Transaction]{
+						Policy: cache.CacheLRU,
+						ShouldEvict: func(size int, _ uuid.UUID, _ *roachpb.Transaction) bool {
+							return size > txnCacheSize
+						},
+					})
+					return &typedAdapter{c: bc}
+				}
+				makeOtterCache := func(b *testing.B) tCache {
+					oc, err := otter.New(&otter.Options[uuid.UUID, *roachpb.Transaction]{
+						MaximumSize:     txnCacheSize,
+						InitialCapacity: 8,
+					})
+					require.NoError(b, err)
+					return &otterAdapter{c: oc}
+				}
+
+				for _, cc := range []struct {
+					name   string
+					makeFn func(*testing.B) tCache
+				}{
+					{"TypedUnorderedCache", makeTypedCache},
+					{"otter.Cache", makeOtterCache},
+				} {
+					b.Run(name+"/"+cc.name, func(b *testing.B) {
+						c := cc.makeFn(b)
+						for i := 0; i < initEntries; i++ {
+							c.add(&txnPool[i])
+						}
+
+						b.SetParallelism(parallelism)
+						b.ResetTimer()
+						b.RunParallel(func(pb *testing.PB) {
+							rng := rand.New(rand.NewSource(timeutil.Now().UnixNano()))
+							for pb.Next() {
+								if rng.Intn(100) < readPct && initEntries > 0 {
+									_, _ = c.get(txnPool[rng.Intn(initEntries)].ID)
+								} else {
+									idx := initEntries + rng.Intn(txnPoolSize-initEntries)
+									c.add(&txnPool[idx])
+								}
+							}
+						})
+					})
+				}
+			}
 		}
-	})
-	b.Run("cache.TypedUnorderedCache", func(b *testing.B) {
-		bc := cache.NewTypedUnorderedCache(cache.TypedConfig[uuid.UUID, *roachpb.Transaction]{
-			Policy: cache.CacheLRU,
-			ShouldEvict: func(size int, _ uuid.UUID, _ *roachpb.Transaction) bool {
-				return size > txnCacheSize
-			},
-		})
-		c := &typedAdapter{c: bc}
-		for _, tc := range workloads {
-			b.Run(tc.name, func(b *testing.B) {
-				tc.fn(b, c)
-			})
-		}
-	})
+	}
 }
 
 func TestContentionEventTracer(t *testing.T) {
