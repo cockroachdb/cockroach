@@ -64,11 +64,10 @@ func TestComputeStoreCPURateCapacity(t *testing.T) {
 
 				// Naive model: assumes all node CPU scales directly with store work.
 				in := storeCPURateCapacityInput{
-					currentStoreCPUUsage: mmaprototype.LoadValue(storeCPUCores * nsPerCore),
-					storesCPURate:        storesCPUCores * nsPerCore,
-					nodeCPURateUsage:     nodeUsageCores * nsPerCore,
-					nodeCPURateCapacity:  nodeCapCores * nsPerCore,
-					numStores:            int32(numStores),
+					storesCPURate:       storesCPUCores * nsPerCore,
+					nodeCPURateUsage:    nodeUsageCores * nsPerCore,
+					nodeCPURateCapacity: nodeCapCores * nsPerCore,
+					numStores:           int32(numStores),
 				}
 				naiveResult := computeStoreCPURateCapacity(in)
 				naiveCap := float64(naiveResult) / nsPerCore

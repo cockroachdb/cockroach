@@ -91,24 +91,6 @@ capped_mult: (steps below)
   per-store   = 2.67 / 1 = 2.67 cores
   kv-capacity: 2.67 cores, kv-util: 0.00% (0.00/2.67 cores)
 
-# Unknown capacity: node CPU capacity is 0 (mixed version cluster or missing
-# metrics). Both models fall back to assuming 50% utilization.
-compute store-load=4 node-cpu-usage=8 node-cpu-capacity=0 total-stores-cpu-usage=4 num-stores=1
-----
-              node-cpu-capacity/num-stores: 0.00 cores/store
-naive:        kv-capacity: 8.00 cores, kv-util: 50.00% (4.00/8.00 cores)
-capped_mult: (node-cpu-capacity unknown, assuming 50% util)
-  kv-capacity: 8.00 cores, kv-util: 50.00% (4.00/8.00 cores)
-
-# Invalid case: num-stores is 0 (should not happen in production).
-# Both models return 0 capacity.
-compute store-load=4 node-cpu-usage=8 node-cpu-capacity=16 total-stores-cpu-usage=4 num-stores=0
-----
-              node-cpu-capacity/num-stores: +Inf cores/store
-naive:        kv-capacity: 0.00 cores, kv-util: +Inf% (4.00/0.00 cores)
-capped_mult: (early return: num-stores=0)
-  kv-capacity: 8.00 cores, kv-util: 50.00% (4.00/8.00 cores)
-
 # ---------------------------------------------------------------------------
 # Problems with the naive model
 # ---------------------------------------------------------------------------
