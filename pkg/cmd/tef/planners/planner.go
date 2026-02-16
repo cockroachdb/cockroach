@@ -32,8 +32,6 @@ type BasePlanner struct {
 	TasksRegistry    map[string]Task
 	ExecutorRegistry map[string]*Executor
 	Registered       bool
-	// generationError accumulates errors during plan generation (e.g., duplicate registrations).
-	generationError error
 }
 
 // The BasePlanner type implements the Planner interface.
@@ -56,10 +54,6 @@ func NewBasePlanner(ctx context.Context, r Registry) (*BasePlanner, error) {
 		ExecutorRegistry: make(map[string]*Executor),
 	}
 	r.GeneratePlan(ctx, p)
-	// Check for errors accumulated during plan generation.
-	if p.generationError != nil {
-		return nil, p.generationError
-	}
 	return p, p.validate(ctx)
 }
 
@@ -81,12 +75,10 @@ func (bp *BasePlanner) NewEndTask(ctx context.Context, name string) *EndTask {
 }
 
 // RegisterExecutor adds an executor to the planner's executor registry.
-// If an executor with the same name is already registered, an error is accumulated.
+// If an executor with the same name is already registered, it panics.
 func (bp *BasePlanner) RegisterExecutor(_ context.Context, executor *Executor) {
 	if _, exists := bp.ExecutorRegistry[executor.Name]; exists {
-		bp.generationError = errors.CombineErrors(bp.generationError,
-			errors.Newf("executor <%s> is already registered for plan <%s>", executor.Name, bp.Name))
-		return
+		panic(errors.AssertionFailedf("executor <%s> is already registered for plan <%s>", executor.Name, bp.Name))
 	}
 	bp.ExecutorRegistry[executor.Name] = executor
 }
@@ -146,15 +138,13 @@ func (bp *BasePlanner) NewChildPlanTask(ctx context.Context, name string) *Child
 }
 
 // registerTask adds a task to the planner's task registry.
-// If a task with the same name is already registered, an error is accumulated,
+// If a task with the same name is already registered, it panics,
 // ensuring task names remain unique within a plan.
 func (bp *BasePlanner) registerTask(_ context.Context, task Task) {
-	if _, ok := bp.TasksRegistry[task.Name()]; !ok {
-		bp.TasksRegistry[task.Name()] = task
-		return
+	if _, ok := bp.TasksRegistry[task.Name()]; ok {
+		panic(errors.AssertionFailedf("task with name <%s> is already registered for the plan <%s>", task.Name(), bp.Name))
 	}
-	bp.generationError = errors.CombineErrors(bp.generationError,
-		errors.Newf("task with name <%s> is already registered for the plan <%s>", task.Name(), bp.Name))
+	bp.TasksRegistry[task.Name()] = task
 }
 
 // validate performs comprehensive validation of the planner and its task chain. The
