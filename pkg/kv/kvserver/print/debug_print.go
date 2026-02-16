@@ -479,26 +479,21 @@ func tryWAGKey(kv storage.MVCCKeyValue) (string, error) {
 		return "", err
 	}
 
-	str := fmt.Appendf(nil, "%v %s", node.Type, node.Addr)
-	if c, d := node.Create, node.Destroy; c != 0 || len(d) != 0 {
-		if c != 0 {
-			str = fmt.Appendf(str, " create:%d", c)
-		}
-		if len(d) != 0 {
-			str = fmt.Appendf(str, " destroy:%v", d)
-		}
+	str := fmt.Appendf(nil, "%v %s", node.Event.Type, node.Addr)
+	for _, e := range node.Events {
+		str = fmt.Appendf(str, " %v:%d", e.Type, e.RangeID)
 	}
 
+	if ing := node.Mutation.Ingestion; ing != nil {
+		// TODO(pav-kv): make this format nicely. Currently, this proto is too big.
+		str = fmt.Appendf(str, "\ningestion: %v", ing)
+	}
 	if b := node.Mutation.Batch; len(b) > 0 {
 		bs, err := DecodeWriteBatch(b)
 		if err != nil {
 			bs = "failed to decode write batch: " + err.Error()
 		}
 		str = fmt.Appendf(str, "\n%s", text.Indent(bs, "> "))
-	}
-	if ing := node.Mutation.Ingestion; ing != nil {
-		// TODO(pav-kv): make this format nicely. Currently, this proto is too big.
-		str = fmt.Appendf(str, "\ningestion: %v", ing)
 	}
 
 	return string(str), nil

@@ -77,15 +77,15 @@ func createReplica(s *store, w storage.Writer, id roachpb.FullReplicaID) error {
 	}
 	return Write(w, s.seq.Next(1), wagpb.Node{
 		Addr:     wagpb.Addr{RangeID: id.RangeID, ReplicaID: id.ReplicaID, Index: 0},
-		Type:     wagpb.NodeType_NodeCreate,
+		Event:    wagpb.ReplicaEvent{RangeID: id.RangeID, Type: wagpb.EventType_EventCreate},
 		Mutation: wagpb.Mutation{Batch: b.Repr()},
 	})
 }
 
 func initReplica(s *store, w storage.Writer, id roachpb.FullReplicaID, index uint64) error {
 	return Write(w, s.seq.Next(1), wagpb.Node{
-		Addr: wagpb.Addr{RangeID: id.RangeID, ReplicaID: id.ReplicaID, Index: kvpb.RaftIndex(index)},
-		Type: wagpb.NodeType_NodeSnap,
+		Addr:  wagpb.Addr{RangeID: id.RangeID, ReplicaID: id.ReplicaID, Index: kvpb.RaftIndex(index)},
+		Event: wagpb.ReplicaEvent{RangeID: id.RangeID, Type: wagpb.EventType_EventSnap},
 		Mutation: wagpb.Mutation{Ingestion: &wagpb.Ingestion{
 			SSTs: []string{"tmp/1.sst", "tmp/2.sst"},
 		}},
@@ -103,16 +103,18 @@ func splitReplica(s *store, w storage.Writer, id roachpb.FullReplicaID, index ui
 
 	seq := s.seq.Next(2)
 	if err := Write(w, seq, wagpb.Node{
-		Addr: wagpb.Addr{RangeID: id.RangeID, ReplicaID: id.ReplicaID, Index: kvpb.RaftIndex(index - 1)},
-		Type: wagpb.NodeType_NodeApply,
+		Addr:  wagpb.Addr{RangeID: id.RangeID, ReplicaID: id.ReplicaID, Index: kvpb.RaftIndex(index - 1)},
+		Event: wagpb.ReplicaEvent{RangeID: id.RangeID, Type: wagpb.EventType_EventApply},
 	}); err != nil {
 		return err
 	}
 	return Write(w, seq+1, wagpb.Node{
-		Addr:     wagpb.Addr{RangeID: id.RangeID, ReplicaID: id.ReplicaID, Index: kvpb.RaftIndex(index)},
-		Type:     wagpb.NodeType_NodeSplit,
+		Addr:  wagpb.Addr{RangeID: id.RangeID, ReplicaID: id.ReplicaID, Index: kvpb.RaftIndex(index)},
+		Event: wagpb.ReplicaEvent{RangeID: id.RangeID, Type: wagpb.EventType_EventApply},
+		Events: []wagpb.ReplicaEvent{
+			{RangeID: 567, Type: wagpb.EventType_EventSplit}, // the RHS
+		},
 		Mutation: wagpb.Mutation{Batch: b.Repr()},
-		Create:   567, // the RHS range ID
 	})
 }
 
