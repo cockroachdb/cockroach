@@ -7,6 +7,7 @@ package mmaintegration
 
 import (
 	"fmt"
+	"math"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/mmaprototype"
@@ -26,89 +27,119 @@ func TestComputeStoreCPURateCapacity(t *testing.T) {
 	// All CPU inputs are in cores (1 core = 1e9 ns/s).
 	const nsPerCore = 1e9
 
-	fmtUtil := func(load, cap float64) string {
-		return fmt.Sprintf("%.2f%%", load/cap*100)
-	}
+	// Accumulators for mean |capacity_err| across scenarios.
+	var naiveAbsErrs, cappedAbsErrs []float64
 
 	datadriven.RunTest(t, datapathutils.TestDataPath(t, t.Name()),
 		func(t *testing.T, d *datadriven.TestData) string {
 			switch d.Cmd {
-			case "compute":
-				var storeCPUCores float64
-				var nodeUsageCores, nodeCapCores float64
-				var storesCPUCores float64
-				var numStores int
+			case "scenario":
+				// Ground-truth inputs: the true breakdown of CPU on the node.
+				var kvCPUCores float64   // direct KV replica CPU (= storesCPURate)
+				var propOverhead float64 // CPU proportional to KV (DistSQL, RPC, compactions)
+				var bgCores float64      // CPU independent of KV (gateway SQL, GC, jobs)
+				var nodeCapCores float64 // total CPU capacity of the node
+				var numStores int        // number of stores on the node
 
-				d.ScanArgs(t, "store-load", &storeCPUCores)
-				d.ScanArgs(t, "node-cpu-usage", &nodeUsageCores)
+				d.ScanArgs(t, "kv-cpu", &kvCPUCores)
+				d.ScanArgs(t, "proportional-overhead", &propOverhead)
+				d.ScanArgs(t, "background", &bgCores)
 				d.ScanArgs(t, "node-cpu-capacity", &nodeCapCores)
-				d.ScanArgs(t, "total-stores-cpu-usage", &storesCPUCores)
 				d.ScanArgs(t, "num-stores", &numStores)
 
-				totalPerStore := nodeCapCores / float64(numStores)
+				// Input validations.
+				require.Greater(t, numStores, 0, "num-stores must be >= 1")
+				require.Greater(t, nodeCapCores, 0.0, "node-cpu-capacity must be > 0")
+				require.GreaterOrEqual(t, kvCPUCores, 0.0, "kv-cpu must be >= 0")
+				require.GreaterOrEqual(t, propOverhead, 0.0, "proportional-overhead must be >= 0")
+				require.GreaterOrEqual(t, bgCores, 0.0, "background must be >= 0")
 
-				// Naive model: assumes all node CPU scales directly with store work.
+				// Derive node usage from ground truth.
+				nodeUsageCores := kvCPUCores + propOverhead + bgCores
+
+				// Compute true capacity from ground truth.
+				// true-mult is the ratio of total KV-proportional CPU to direct KV CPU.
+				// true-capacity = (node-capacity - background) / true-mult / num-stores
+				var trueMult float64
+				if kvCPUCores == 0 {
+					trueMult = 1.0 // no KV work, assume multiplier of 1
+				} else {
+					trueMult = (kvCPUCores + propOverhead) / kvCPUCores
+				}
+				trueCapPerStore := max(0, (nodeCapCores-bgCores)/trueMult/float64(numStores))
+
+				// Build model input (models only see aggregate metrics, not the
+				// ground-truth breakdown).
 				in := storeCPURateCapacityInput{
-					storesCPURate:       storesCPUCores * nsPerCore,
+					storesCPURate:       kvCPUCores * nsPerCore,
 					nodeCPURateUsage:    nodeUsageCores * nsPerCore,
 					nodeCPURateCapacity: nodeCapCores * nsPerCore,
 					numStores:           int32(numStores),
 				}
-				naiveResult := computeStoreCPURateCapacityNaive(in)
-				naiveCap := float64(naiveResult) / nsPerCore
 
-				// Capped model: caps the indirect overhead multiplier.
-				var cappedMult, bgLoad, mmaShare, mmaDirect float64
-				cappedCapNs := computeCPUCapacityWithCap(
+				// Run models.
+				naiveCap := float64(computeStoreCPURateCapacityNaive(in)) / nsPerCore
+				cappedCap := computeCPUCapacityWithCap(
 					in,
-					func(mult, backgroundLoad, mmaShareOfCapacity, mmaDirectCapacity float64) {
-						cappedMult = mult
-						bgLoad = backgroundLoad / nsPerCore
-						mmaShare = mmaShareOfCapacity / nsPerCore
-						mmaDirect = mmaDirectCapacity / nsPerCore
-					},
-				)
-				cappedCap := cappedCapNs / nsPerCore
+					func(float64, float64, float64, float64) {}, // observer unused
+				) / nsPerCore
 
-				var cappedSteps string
-				if numStores <= 0 {
-					cappedSteps = fmt.Sprintf(
-						"capped_mult: (early return: num-stores=%d)\n"+
-							"  kv-capacity: %.2f cores, kv-util: %s (%.2f/%.2f cores)\n",
-						numStores,
-						cappedCap, fmtUtil(storeCPUCores, cappedCap), storeCPUCores, cappedCap,
-					)
-				} else if nodeCapCores <= 0 {
-					cappedSteps = fmt.Sprintf(
-						"capped_mult: (node-cpu-capacity unknown, assuming 50%% util)\n"+
-							"  kv-capacity: %.2f cores, kv-util: %s (%.2f/%.2f cores)\n",
-						cappedCap, fmtUtil(storeCPUCores, cappedCap), storeCPUCores, cappedCap,
-					)
-				} else {
-					cappedSteps = fmt.Sprintf(
-						"capped_mult: (steps below)\n"+
-							"  mult        = max(1, min(%.2f/%.2f, %.0f)) = %.1f\n"+
-							"  background  = max(0, %.2f - %.2f*%.1f) = %.2f cores\n"+
-							"  mma-share   = %.2f - %.2f = %.2f cores\n"+
-							"  mma-direct  = %.2f / %.1f = %.2f cores\n"+
-							"  per-store   = %.2f / %d = %.2f cores\n"+
-							"  kv-capacity: %.2f cores, kv-util: %s (%.2f/%.2f cores)\n",
-						nodeUsageCores, storesCPUCores, cpuIndirectOverheadMultiplier, cappedMult,
-						nodeUsageCores, storesCPUCores, cappedMult, bgLoad,
-						nodeCapCores, bgLoad, mmaShare,
-						mmaShare, cappedMult, mmaDirect,
-						mmaDirect, numStores, cappedCap,
-						cappedCap, fmtUtil(storeCPUCores, cappedCap), storeCPUCores, cappedCap,
-					)
+				// Compute error percentage.
+				// Negative = pessimistic (underestimates capacity, safer).
+				// Positive = optimistic (overestimates capacity, dangerous).
+				errPct := func(modelCap float64) (pct float64, inf bool) {
+					if trueCapPerStore == 0 {
+						if modelCap == 0 {
+							return 0, false
+						}
+						return 0, true // +Inf
+					}
+					return (modelCap - trueCapPerStore) / trueCapPerStore * 100, false
+				}
+				fmtErr := func(modelCap float64) string {
+					pct, inf := errPct(modelCap)
+					if inf {
+						return "+Inf%"
+					}
+					if math.Abs(pct) < 0.005 {
+						return "0.00%"
+					}
+					return fmt.Sprintf("%+.2f%%", pct)
+				}
+
+				// Accumulate |err| for mean calculation (skip +Inf).
+				if naivePct, inf := errPct(naiveCap); !inf {
+					naiveAbsErrs = append(naiveAbsErrs, math.Abs(naivePct))
+				}
+				if cappedPct, inf := errPct(cappedCap); !inf {
+					cappedAbsErrs = append(cappedAbsErrs, math.Abs(cappedPct))
 				}
 
 				return fmt.Sprintf(
-					"              node-cpu-capacity/num-stores: %.2f cores/store\n"+
-						"naive:        kv-capacity: %.2f cores, kv-util: %s (%.2f/%.2f cores)\n"+
-						"%s",
-					totalPerStore,
-					naiveCap, fmtUtil(storeCPUCores, naiveCap), storeCPUCores, naiveCap,
-					cappedSteps,
+					"node-cpu: %.2f used / %.2f capacity (%.2f kv + %.2f proportional + %.2f background)\n"+
+						"truth:    kv-capacity: %.2f cores/store (true-mult: %.2f)\n"+
+						"naive:    kv-capacity: %.2f cores/store, capacity_err: %s\n"+
+						"capped:   kv-capacity: %.2f cores/store, capacity_err: %s\n",
+					nodeUsageCores, nodeCapCores, kvCPUCores, propOverhead, bgCores,
+					trueCapPerStore, trueMult,
+					naiveCap, fmtErr(naiveCap),
+					cappedCap, fmtErr(cappedCap),
+				)
+
+			case "mean":
+				meanOf := func(vals []float64) float64 {
+					if len(vals) == 0 {
+						return 0
+					}
+					sum := 0.0
+					for _, v := range vals {
+						sum += v
+					}
+					return sum / float64(len(vals))
+				}
+				return fmt.Sprintf(
+					"Mean |capacity_err| across %d scenarios: naive: %.1f%%  capped: %.1f%%\n",
+					len(naiveAbsErrs), meanOf(naiveAbsErrs), meanOf(cappedAbsErrs),
 				)
 
 			default:
