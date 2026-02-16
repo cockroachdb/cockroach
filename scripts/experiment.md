@@ -1,16 +1,18 @@
 # Lease Preference Spike Experiment
 
-**TLDR:** We tried to reproduce the DistSender concurrency → scheduler latency
-spike described in [#162386](https://github.com/cockroachdb/cockroach/issues/162386)
-but couldn't get SQL-level workloads to produce the parallel fan-out pattern
-needed to trigger it. The SQL layer always mediates KV access in ways that
-prevent a single query from creating a large burst of concurrent DistSender
-sub-batches (scans use `TargetBytes`, deletes go through lookup joins or
-per-statement execution). As a next step, we should look at the workload that
-was originally used to tune `kv.dist_sender.concurrency_limit` — but it likely
-wasn't individual queries fanning out wildly; it was probably high-concurrency
-workloads where many queries each contributed a smaller amount of parallelism,
-and the aggregate effect oversubscribed the scheduler.
+**TLDR:** We reproduced the DistSender concurrency → scheduler latency spike
+described in [#162386](https://github.com/cockroachdb/cockroach/issues/162386).
+Spanning *scans* can't trigger it (the SQL layer sets `TargetBytes`, forcing
+sequential dispatch), but **batched multi-row upserts** with uniformly random
+keys do the trick: each 1000-row upsert fans out across ~1000 ranges in
+parallel through DistSender. At just 10 ops/sec on a 3-node cluster with 5000
+splits and all leases pinned to n1, the leaseholder's p99 scheduler latency
+jumps from ~70k ns to **~3ms** and pmax hits **21ms**. The goroutine burst
+happens on the *leaseholder* (n1), not the gateway (n3) — and it's driven by
+**intent resolution**, not the write proposals themselves. After each 1000-key
+transaction commits, the `IntentResolver`'s `RequestBatcher` spawns ~235
+goroutines to resolve write intents across ranges, cascading into ~305
+runnable goroutines within ±1ms.
 
 ---
 
@@ -288,3 +290,167 @@ To get true DistSender-level parallel fan-out, we likely need a custom Go
 program that builds a single `roachpb.BatchRequest` containing many
 `GetRequest`s or `ScanRequest`s (without byte/key limits) and sends it
 directly through a KV client.
+
+## Batched upserts: reproducing the spike
+
+The `kv` workload's `--batch` flag controls how many rows are inserted per SQL
+statement. With `--batch=1000`, each operation becomes a single multi-row
+`UPSERT` with 1000 uniformly random keys spread across the 5001 ranges. Unlike
+scans (which set `TargetBytes`), writes don't trigger `MightStopEarly()`, so
+DistSender parallelizes the fan-out across all touched ranges.
+
+```bash
+# 10 batched upserts/sec (1000 rows each) through n3 for 5 minutes.
+roachprod run $(c):4 -- ./cockroach workload run kv \
+  --read-percent=0 \
+  --batch=1000 \
+  --concurrency=10 \
+  --max-rate=10 \
+  --duration=5m \
+  '{pgurl:3}'
+```
+
+Workload latency: p50 ~19ms, p95 ~22ms per 1000-row upsert at steady 10 ops/sec.
+
+### Scheduler latency results (batch=1000, 10 ops/sec)
+
+**p99 scheduler latency (nanoseconds):**
+
+| Host              | Baseline (pre-workload) | Under workload          |
+|-------------------|-------------------------|-------------------------|
+| n1 (leaseholder)  | ~70-75k ns              | **~2.7-3.0M ns (3ms)**  |
+| n2 (idle)         | ~93-97k ns              | ~425-453k ns            |
+| n3 (gateway)      | ~91-97k ns              | ~425-453k ns            |
+
+**pmax scheduler latency (nanoseconds):**
+
+| Host              | Baseline                | Under workload            |
+|-------------------|-------------------------|---------------------------|
+| n1 (leaseholder)  | ~163-393k ns            | **~12.6-21.0M ns (21ms)**|
+| n2 (idle)         | ~163-262k ns            | ~10.5-14.7M ns            |
+| n3 (gateway)      | ~163-656k ns            | ~6.3-10.5M ns             |
+
+At just 10 multi-range upserts/sec, the leaseholder's p99 scheduler latency
+crosses **3ms** — well past the 1ms threshold — and pmax hits **21ms**.
+
+### Execution traces (batch=1000, 10 ops/sec)
+
+Traces and schedstat output are in
+[`scripts/experiment-batch1000-upsert-10qps/`](experiment-batch1000-upsert-10qps/).
+
+```bash
+# Captured 10s execution traces from n1 and n3 while the workload was running.
+curl -sSL "http://tobias-spike-0001.roachprod.crdb.io:26258/debug/pprof/trace?seconds=10" \
+  -o scripts/experiment-batch1000-upsert-10qps/n1.bin
+curl -sSL "http://tobias-spike-0003.roachprod.crdb.io:26258/debug/pprof/trace?seconds=10" \
+  -o scripts/experiment-batch1000-upsert-10qps/n3.bin
+
+schedstat scripts/experiment-batch1000-upsert-10qps/n1.bin
+schedstat scripts/experiment-batch1000-upsert-10qps/n3.bin
+```
+
+**n1 (leaseholder) — schedstat summary:**
+
+```
+Trace duration: 10000.8ms
+
+--- Scheduling Latency (runnable → running) ---
+Events: 1557821
+  min: 1ns         p50: 41.5µs      p90: 1.14ms
+  avg: 350.3µs     p99: 3.21ms      max: 21.76ms
+
+--- Latency Spikes (p99 > 1ms per 100ms) ---
+101 window(s) above threshold (showing top 5)
+  [1] t=9900ms  p99=15.94ms  max=21.76ms  14755 events
+  [2] t=7700ms  p99=4.73ms   max=6.18ms   16930 events
+  [3] t=200ms   p99=4.65ms   max=5.71ms   14891 events
+  [4] t=10000ms p99=4.64ms   max=4.79ms   207 events
+  [5] t=7000ms  p99=4.64ms   max=6.39ms   15733 events
+
+--- Runnable Spikes (>80 runnable per 100ms) ---
+101 window(s) above threshold (showing top 5)
+  [6] t=9300ms  peak 804 runnable
+  [7] t=7700ms  peak 763 runnable
+  [8] t=4700ms  peak 761 runnable
+  [9] t=8200ms  peak 749 runnable
+  [10] t=9900ms peak 720 runnable
+```
+
+Every 100ms window has elevated scheduling latency *and* elevated runnable
+goroutine counts. The worst latency spike (21.76ms) involves a burst of
+**305 goroutines** becoming runnable within ±1ms — 235 created by
+`(*RequestBatcher).sendBatch`, plus 45 raft scheduler workers woken by
+`(*Cond).Signal`. The longest single run blocking the queue:
+`registryRecorder.record` holding a CPU for **14ms**.
+
+The `RequestBatcher` here is the `IntentResolver`'s intent resolution batcher
+(`irBatcher`), not the write path itself. The `RequestBatcher` library
+(in `pkg/internal/client/requestbatcher`) is used for three purposes: (1)
+intent resolution, (2) txn heartbeating, and (3) txn record GC. After each
+1000-key upsert commits, the transaction needs to resolve its write intents
+across ~1000 ranges. The `IntentResolver` queues these into `irBatcher`, which
+groups them by range and fires off batches — each `sendBatch` spawns a
+goroutine. So the goroutine storm is from the **cleanup phase** (intent
+resolution) after commit, not the initial write proposals.
+
+The runnable spike data reveals additional contention sources:
+- **`(*tokenCounter).adjust`** (spike [9], t=8200ms): G906 unlocks
+  `tokenCounterMu` and wakes **368 goroutines** blocked on
+  `(*tokenCounterMu).RLock`, on top of raft scheduler and intent resolution
+  activity.
+- **Block cache contention** (spike [10], t=9900ms): 401 preempted goroutines
+  with `(*shard).getWithReadEntry` blocked on an `RWMutex.RLock`, unblocked
+  in a burst when G278027 calls `(*shard).set`.
+
+**n3 (gateway) — schedstat summary:**
+
+```
+Trace duration: 10001.1ms
+
+--- Scheduling Latency (runnable → running) ---
+Events: 1554412
+  min: 1ns         p50: 21.4µs      p90: 169.7µs
+  avg: 63.5µs      p99: 521.8µs     max: 9.44ms
+
+--- Latency Spikes (p99 > 1ms per 100ms) ---
+1 window(s) above threshold
+
+--- Runnable Spikes (>80 runnable per 100ms) ---
+100 window(s) above threshold (showing top 5)
+  [2] t=4200ms  peak 542 runnable
+  [3] t=9800ms  peak 237 runnable
+  [4] t=6700ms  peak 221 runnable
+  [5] t=9700ms  peak 219 runnable
+  [6] t=1800ms  peak 190 runnable
+```
+
+Only **1 latency spike** but **100 runnable spike windows** — the scheduler is
+busy but on 16 CPUs it mostly keeps up. The DistSender fan-out is visible at
+t=6700ms (spike [4]): **352 goroutines created by
+`(*DistSender).sendPartialBatchAsync`** with G1012 (`(*http2Client).handleData`)
+waking 315 gRPC stream readers when responses arrive. Despite the fan-out, n3
+absorbs it without sustained latency spikes. The raft scheduler on n3 also sees
+load (n3 holds replicas) with `HandleRaftRequest` and `enqueueRaftUpdateCheck`
+as heavy unblockers.
+
+### Key insight: the spike is on the leaseholder, not the gateway
+
+The gateway (n3) runs the DistSender that parallelizes 1000 point writes
+across ~1000 ranges. This does create runnable goroutine bursts (peak 542,
+including 352 from `sendPartialBatchAsync`), but the 16 CPUs absorb them —
+only 1 latency spike in 10s.
+
+The leaseholder (n1) receives all ~1000 requests, processes the writes through
+Raft, and then — after each transaction commits — the `IntentResolver`'s
+`RequestBatcher` spawns ~235 goroutines to resolve write intents across all
+the touched ranges. These intent resolution requests in turn wake raft
+scheduler workers via `(*Cond).Signal`, producing cascading bursts of
+**700-800 runnable goroutines** that overwhelm 16 CPUs. Additional contention
+from `tokenCounter` lock release (368 goroutines) and block cache shard locks
+(401 preempted goroutines) amplifies the effect.
+
+The key distinction: the goroutine storm is not from the initial write
+fan-out, but from the **post-commit intent resolution cleanup**. Each
+committed transaction leaves behind write intents on ~1000 ranges that must
+be resolved, and the `IntentResolver` does this with unbounded parallelism
+via `RequestBatcher.sendBatch`.

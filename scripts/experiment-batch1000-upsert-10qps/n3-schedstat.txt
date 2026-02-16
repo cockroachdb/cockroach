@@ -1,0 +1,111 @@
+schedstat: n3.bin
+============================================================
+
+Trace duration: 10001.1ms
+
+--- Scheduling Latency (runnable → running) ---
+Events: 1554412
+  min: 1ns         p50: 21.4µs      p90: 169.7µs   
+  avg: 63.5µs      p99: 521.8µs     max: 9.44ms    
+
+--- Latency Spikes (p99 > 1ms per 100ms) ---
+1 window(s) above threshold
+
+  [1] t=4200ms  p99=6.85ms  max=9.44ms  12933 events
+
+--- Runnable Spikes (>80 runnable per 100ms) ---
+100 window(s) above threshold (showing top 5)
+
+  [2] t=4200ms  peak 542 runnable
+  [3] t=9800ms  peak 237 runnable
+  [4] t=6700ms  peak 221 runnable
+  [5] t=9700ms  peak 219 runnable
+  [6] t=1800ms  peak 190 runnable
+
+--- Spike Details ---
+
+[1] t=4200ms [latency] p99=6.85ms
+   → G852 waited 9.44ms on P6
+   → Burst: 125 goroutines became runnable within ±1ms
+     Breakdown: 139 unblocked
+     Unblocked by (94): selectgo
+     Unblocked by (10): systemstack_switch
+     Unblocked by (8): (*Cond).Signal
+     Blocked at (94): (*streamPool[...]).newPooledStream.func2 → (*pooledStream[...]).runOnce [selectgo]
+     Blocked at (10): gopark [gopark]
+     Blocked at (9): ReadFull → ReadAtLeast → (*Reader).Read → (*conn).Read → (*netFD).Read [(*FD).Read]
+     Heavy unblocker G841 (4): (*writeBatch).CommitNoSyncWait → (*DB).applyInternal → (*commitPipeline).prepare
+     Heavy unblocker G917 (4): (*Store).enqueueRaftUpdateCheck → (*raftScheduler).enqueue1 → (*raftSchedulerShard).signal
+     Heavy unblocker G2228028 (4): (*LogWriter).flushPending → (*pendingSyncsWithSyncQueue).pop → (*syncQueue).pop
+   → Longest run during wait: G901 ran 886.8µs
+     (*DB).applyInternal → (*commitPipeline).prepare
+   → Queue activity: 174 goroutines ran 176 times during the wait
+
+[2] t=4200ms [runnable] peak 542 runnable
+     Breakdown: 1214 unblocked, 229 preempted, 1 new
+     Unblocked by (832): (*Cond).Signal
+     Unblocked by (195): (*WaitGroup).Add
+     Unblocked by (157): (*Mutex).Unlock
+     Blocked at (832): (*raftScheduler).Start.func2 → (*raftSchedulerShard).worker [(*Cond).Wait]
+     Blocked at (152): (*DB).applyInternal → (*commitPipeline).publish [(*WaitGroup).Wait]
+     Blocked at (40): (*DB).applyInternal → (*commitPipeline).prepare [(*Mutex).Lock]
+     Heavy unblocker G1222 (389): (*Store).HandleRaftRequest → (*raftScheduler).enqueue1 → (*raftSchedulerShard).signal
+     Heavy unblocker G916 (160): (*Store).enqueueRaftUpdateCheck → (*raftScheduler).enqueue1 → (*raftSchedulerShard).signal
+     Heavy unblocker G919 (121): (*Store).enqueueRaftUpdateCheck → (*raftScheduler).enqueue1 → (*raftSchedulerShard).signal
+     Created by (1): (*Task).applyOneBatch → (*replicaAppBatch).ApplyToStateMachine → (*baseQueue).Async
+
+[3] t=9800ms [runnable] peak 237 runnable
+     Breakdown: 1013 unblocked, 4 new, 2 preempted
+     Unblocked by (694): (*Cond).Signal
+     Unblocked by (170): (*Mutex).Unlock
+     Unblocked by (121): (*WaitGroup).Add
+     Blocked at (692): (*raftScheduler).Start.func2 → (*raftSchedulerShard).worker [(*Cond).Wait]
+     Blocked at (86): (*DB).applyInternal → (*commitPipeline).publish [(*WaitGroup).Wait]
+     Blocked at (60): (*DB).applyInternal → (*commitPipeline).prepare [(*Mutex).Lock]
+     Heavy unblocker G916 (169): (*Store).enqueueRaftUpdateCheck → (*raftScheduler).enqueue1 → (*raftSchedulerShard).signal
+     Heavy unblocker G1222 (161): (*Store).HandleRaftRequest → (*raftScheduler).enqueue1 → (*raftSchedulerShard).signal
+     Heavy unblocker G919 (160): (*Store).enqueueRaftUpdateCheck → (*raftScheduler).enqueue1 → (*raftSchedulerShard).signal
+     Created by (4): (*Task).applyOneBatch → (*replicaAppBatch).ApplyToStateMachine → (*baseQueue).Async
+
+[4] t=6700ms [runnable] peak 221 runnable
+     Breakdown: 1160 unblocked, 356 new, 96 preempted
+     Unblocked by (380): selectnbsend
+     Unblocked by (315): chansend1
+     Unblocked by (241): (*Cond).Signal
+     Blocked at (315): (*streamPool[...]).Send → (*pooledStream[...]).Send [selectgo]
+     Blocked at (315): ReadAtLeast → (*transportReader).Read → (*recvBufferReader).readClient [selectgo]
+     Blocked at (240): (*raftScheduler).Start.func2 → (*raftSchedulerShard).worker [(*Cond).Wait]
+     Heavy unblocker G1012 (315): (*http2Client).handleData → (*Stream).write → (*recvBuffer).put
+     Heavy unblocker G1222 (79): (*Store).HandleRaftRequest → (*raftScheduler).enqueue1 → (*raftSchedulerShard).signal
+     Heavy unblocker G917 (49): (*Store).enqueueRaftUpdateCheck → (*raftScheduler).enqueue1 → (*raftSchedulerShard).signal
+     Created by (352): (*txnLockGatekeeper).SendLocked → (*DistSender).sendPartialBatchAsync
+     Created by (3): (*Task).applyOneBatch → (*replicaAppBatch).ApplyToStateMachine → (*baseQueue).Async
+     Created by (1): (*Task).applyOneBatch → (*replicaAppBatch).ApplyToStateMachine → (*baseQueue).Async
+
+[5] t=9700ms [runnable] peak 219 runnable
+     Breakdown: 1410 unblocked, 6 new, 5 preempted
+     Unblocked by (829): (*Cond).Signal
+     Unblocked by (297): (*WaitGroup).Add
+     Unblocked by (260): (*Mutex).Unlock
+     Blocked at (828): (*raftScheduler).Start.func2 → (*raftSchedulerShard).worker [(*Cond).Wait]
+     Blocked at (184): (*DB).applyInternal → (*commitPipeline).publish [(*WaitGroup).Wait]
+     Blocked at (104): (*Batch).Commit → (*DB).applyInternal → (*commitPipeline).publish [(*WaitGroup).Wait]
+     Heavy unblocker G1222 (313): (*Store).HandleRaftRequest → (*raftScheduler).enqueue1 → (*raftSchedulerShard).signal
+     Heavy unblocker G918 (147): (*Store).enqueueRaftUpdateCheck → (*raftScheduler).enqueue1 → (*raftSchedulerShard).signal
+     Heavy unblocker G916 (131): (*Store).enqueueRaftUpdateCheck → (*raftScheduler).enqueue1 → (*raftSchedulerShard).signal
+     Created by (4): (*Task).applyOneBatch → (*replicaAppBatch).ApplyToStateMachine → (*baseQueue).Async
+     Created by (2): (*Task).applyOneBatch → (*replicaAppBatch).ApplyToStateMachine → (*baseQueue).Async
+
+[6] t=1800ms [runnable] peak 190 runnable
+     Breakdown: 933 unblocked, 31 new, 2 preempted
+     Unblocked by (288): (*WaitGroup).Add
+     Unblocked by (257): (*Cond).Signal
+     Unblocked by (208): selectgo
+     Blocked at (257): (*raftScheduler).Start.func2 → (*raftSchedulerShard).worker [(*Cond).Wait]
+     Blocked at (222): (*DB).applyInternal → (*commitPipeline).publish [(*WaitGroup).Wait]
+     Blocked at (208): (*streamPool[...]).newPooledStream.func2 → (*pooledStream[...]).runOnce [selectgo]
+     Heavy unblocker G1222 (116): (*Store).HandleRaftRequest → (*raftScheduler).enqueue1 → (*raftSchedulerShard).signal
+     Heavy unblocker G916 (50): (*Store).enqueueRaftUpdateCheck → (*raftScheduler).enqueue1 → (*raftSchedulerShard).signal
+     Heavy unblocker G917 (34): (*Store).enqueueRaftUpdateCheck → (*raftScheduler).enqueue1 → (*raftSchedulerShard).signal
+     Created by (28): (*Task).applyOneBatch → (*replicaAppBatch).ApplyToStateMachine → (*baseQueue).Async
+     Created by (3): (*Task).applyOneBatch → (*replicaAppBatch).ApplyToStateMachine → (*baseQueue).Async
