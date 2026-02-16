@@ -21,6 +21,7 @@ import (
 
 type alterTableOwnerNode struct {
 	zeroInputPlanNode
+	nonReusablePlanNode
 	owner  username.SQLUsername
 	desc   *tabledesc.Mutable
 	n      *tree.AlterTableOwner

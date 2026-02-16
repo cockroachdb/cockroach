@@ -778,6 +778,7 @@ func (opc *optPlanningCtx) chooseValidPreparedMemo(ctx context.Context) (*memo.M
 			// new stats could drastically change the cost of generic and custom
 			// plans, so we should re-consider which to use.
 			prep.GenericMemo = nil
+			prep.GenericExecPlan = nil
 			prep.BaseMemo = nil
 			prep.Costs.Reset()
 			return nil, nil
@@ -793,6 +794,7 @@ func (opc *optPlanningCtx) chooseValidPreparedMemo(ctx context.Context) (*memo.M
 			// new stats could drastically change the cost of generic and custom
 			// plans, so we should re-consider which to use.
 			prep.GenericMemo = nil
+			prep.GenericExecPlan = nil
 			prep.BaseMemo = nil
 			prep.Costs.Reset()
 			return nil, nil
@@ -1017,19 +1019,39 @@ func (opc *optPlanningCtx) runExecBuilder(
 		f = &opc.gf
 	}
 	var bld *execbuilder.Builder
+	var metrics exec.QueryMetrics
+	var gist explain.PlanGist
+	generic := stmt.Prepared != nil && mem == stmt.Prepared.GenericMemo
 	if !planTop.instrumentation.ShouldBuildExplainPlan() {
-		bld = execbuilder.New(
-			ctx, f, &opc.optimizer, mem, opc.catalog, mem.RootExpr(),
-			semaCtx, evalCtx, allowAutoCommit, statements.IsANSIDML(stmt.AST),
-		)
-		if disableTelemetryAndPlanGists {
-			bld.DisableTelemetry()
+		// Reuse a generic exec plan if we have one and the memo is generic.
+		if generic && stmt.Prepared.GenericExecPlan != nil {
+			result = stmt.Prepared.GenericExecPlan.(*planComponents)
+			metrics = stmt.Prepared.GenericExecPlanQueryMetrics
+			gist = stmt.Prepared.GenericPlanGist
+		} else {
+			bld = execbuilder.New(
+				ctx, f, &opc.optimizer, mem, opc.catalog, mem.RootExpr(),
+				semaCtx, evalCtx, allowAutoCommit, statements.IsANSIDML(stmt.AST),
+			)
+			if disableTelemetryAndPlanGists {
+				bld.DisableTelemetry()
+			}
+			plan, err := bld.Build()
+			if err != nil {
+				return err
+			}
+			result = plan.(*planComponents)
+			metrics = bld.Metrics
+			if opc.gf.Initialized() {
+				gist = opc.gf.PlanGist()
+			}
+			// Cache the generic exec plan if it is reusable.
+			if generic && result.reuse() {
+				stmt.Prepared.GenericExecPlan = result
+				stmt.Prepared.GenericExecPlanQueryMetrics = metrics
+				stmt.Prepared.GenericPlanGist = gist
+			}
 		}
-		plan, err := bld.Build()
-		if err != nil {
-			return err
-		}
-		result = plan.(*planComponents)
 	} else {
 		// Create an explain factory and record the explain.Plan.
 		explainFactory := explain.NewFactory(f, semaCtx, evalCtx)
@@ -1046,21 +1068,15 @@ func (opc *optPlanningCtx) runExecBuilder(
 		}
 		explainPlan := plan.(*explain.Plan)
 		result = explainPlan.WrappedPlan.(*planComponents)
+		metrics = bld.Metrics
 		planTop.instrumentation.RecordExplainPlan(explainPlan)
+		if opc.gf.Initialized() {
+			gist = opc.gf.PlanGist()
+		}
 	}
-	planTop.instrumentation.maxFullScanRows = bld.MaxFullScanRows
-	planTop.instrumentation.totalScanRows = bld.TotalScanRows
-	planTop.instrumentation.totalScanRowsWithoutForecasts = bld.TotalScanRowsWithoutForecasts
-	planTop.instrumentation.nanosSinceStatsCollected = bld.NanosSinceStatsCollected
-	planTop.instrumentation.nanosSinceStatsForecasted = bld.NanosSinceStatsForecasted
-	planTop.instrumentation.joinTypeCounts = bld.JoinTypeCounts
-	planTop.instrumentation.joinAlgorithmCounts = bld.JoinAlgorithmCounts
-	planTop.instrumentation.scanCounts = bld.ScanCounts
-	planTop.instrumentation.indexesUsed = bld.IndexesUsed
 
-	if opc.gf.Initialized() {
-		planTop.instrumentation.planGist = opc.gf.PlanGist()
-	}
+	planTop.instrumentation.RecordQueryMetrics(metrics)
+	planTop.instrumentation.planGist = gist
 	planTop.instrumentation.costEstimate = mem.RootExpr().Cost().C
 	available := mem.RootExpr().Relational().Statistics().Available
 	planTop.instrumentation.statsAvailable = available

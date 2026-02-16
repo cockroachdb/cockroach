@@ -19,6 +19,7 @@ const alterExternalConnectionOp = "ALTER EXTERNAL CONNECTION"
 
 type alterExternalConnectionNode struct {
 	zeroInputPlanNode
+	nonReusablePlanNode
 	n *tree.AlterExternalConnection
 }
 

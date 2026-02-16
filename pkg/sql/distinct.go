@@ -15,6 +15,7 @@ import (
 // distinctNode de-duplicates rows returned by a wrapped planNode.
 type distinctNode struct {
 	singleInputPlanNode
+	nonReusablePlanNode
 
 	// distinctOnColIdxs are the column indices of the child planNode and
 	// is what defines the distinct key.

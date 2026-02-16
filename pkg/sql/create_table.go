@@ -64,6 +64,7 @@ import (
 )
 
 type createTableNode struct {
+	nonReusablePlanNode
 	n      *tree.CreateTable
 	dbDesc catalog.DatabaseDescriptor
 	input  planNode

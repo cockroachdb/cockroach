@@ -25,7 +25,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/idxrecommendations"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec"
-	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec/execbuilder"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec/explain"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/indexrec"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/optbuilder"
@@ -219,7 +218,7 @@ type instrumentationHelper struct {
 
 	// joinTypeCounts records the number of times each type of logical join was
 	// used in the query, up to 255.
-	joinTypeCounts [execbuilder.NumRecordedJoinTypes]uint8
+	joinTypeCounts [exec.NumRecordedJoinTypes]uint8
 
 	// joinAlgorithmCounts records the number of times each type of join
 	// algorithm was used in the query, up to 255.
@@ -229,7 +228,7 @@ type instrumentationHelper struct {
 	scanCounts [exec.NumScanCountTypes]int
 
 	// indexesUsed list the indexes used in the query with format tableID@indexID.
-	indexesUsed execbuilder.IndexesUsed
+	indexesUsed exec.IndexesUsed
 
 	// schemachangerMode indicates which schema changer mode was used to execute
 	// the query.
@@ -273,6 +272,20 @@ func (ih *instrumentationHelper) Tracing() (sp *tracing.Span, ok bool) {
 func (ih *instrumentationHelper) SetOutputMode(outputMode outputMode, explainFlags explain.Flags) {
 	ih.outputMode = outputMode
 	ih.explainFlags = explainFlags
+}
+
+// RecordQueryMetrics copies the given query metrics into the
+// instrumentationHelper.
+func (ih *instrumentationHelper) RecordQueryMetrics(qm exec.QueryMetrics) {
+	ih.maxFullScanRows = qm.MaxFullScanRows
+	ih.totalScanRows = qm.TotalScanRows
+	ih.totalScanRowsWithoutForecasts = qm.TotalScanRowsWithoutForecasts
+	ih.nanosSinceStatsCollected = time.Since(qm.StatsCollectedAt)
+	ih.nanosSinceStatsForecasted = time.Since(qm.StatsForecastedAt)
+	ih.joinTypeCounts = qm.JoinTypeCounts
+	ih.joinAlgorithmCounts = qm.JoinAlgorithmCounts
+	ih.scanCounts = qm.ScanCounts
+	ih.indexesUsed = qm.IndexesUsed
 }
 
 type inFlightTraceCollector struct {
