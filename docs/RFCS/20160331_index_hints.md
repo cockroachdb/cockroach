@@ -84,7 +84,7 @@ More syntax and detailed information [here][1].
 PG does not provide support for hints. Instead they provide various knobs for
 tuning the optimizer to do the right thing. Details [here][2].
 
-[2]: http://blog.2ndquadrant.com/hinting_at_postgresql/
+[2]: https://web.archive.org/web/20221224144457/http://blog.2ndquadrant.com/hinting_at_postgresql 
 
 ### Oracle
 

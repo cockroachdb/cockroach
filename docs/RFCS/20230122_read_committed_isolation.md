@@ -134,7 +134,7 @@ While more complete, these definitions were still based on preventing
 conflicting operations that could lead to anomalies from executing concurrently.
 Adya's dissertation ["Weak Consistency: A Generalized Theory and Optimistic
 Implementations for Distributed
-Transactions"](https://pmg.csail.mit.edu/papers/adya-phd.pdf) (1999) argued that
+Transactions"](https://web.archive.org/web/20250820175955/http://pmg.csail.mit.edu/papers/adya-phd.pdf) (1999) argued that
 this _preventative_ approach is overly restrictive. The definitions were
 "disguised versions of locking" and therefore disallow optimistic and
 multi-versioning schemes. Adya's work generalizes existing isolation levels in
@@ -146,7 +146,7 @@ enough to allow both locking and optimistic transaction implementations (of
 which CockroachDB is a hybrid), we use its formalization where appropriate in
 this proposal. Readers are encouraged to familiarize themselves with the thesis.
 Once they notice the page count, they are encouraged to familiarize themselves
-with the [summary paper](https://pmg.csail.mit.edu/papers/icde00.pdf) instead.
+with the [summary paper](https://web.archive.org/web/20250820180305/http://pmg.csail.mit.edu/papers/icde00.pdf) instead.
 
 Conveniently, [Elle](https://github.com/jepsen-io/elle), a transactional
 consistency checker that we intend to use as part of the [testing for this

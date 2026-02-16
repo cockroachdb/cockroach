@@ -25,7 +25,7 @@ import "time"
 // general class of aggregators that may be  associative, such as geometric
 // mean, bloom filters etc. These require special treatment with user defined
 // functions for lift(e), lower(a) and combine(v1,v2)
-// (https://dl.acm.org/doi/pdf/10.1145/3093742.3093925).
+// (https://web.archive.org/web/20240426074602/https://dl.acm.org/doi/pdf/10.1145/3093742.3093925).
 //
 // query: O(k), append: O(k), space O(k), k = |windows|.
 // The average case append is O(1), when no windows

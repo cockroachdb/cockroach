@@ -854,7 +854,7 @@ https://www.postgresql.org/docs/9.5/infoschema-constraint-column-usage.html`,
 	},
 }
 
-// MySQL:    https://dev.mysql.com/doc/refman/5.7/en/key-column-usage-table.html
+// MySQL:    https://dev.mysql.com/doc/refman/8.4/en/information-schema-key-column-usage-table.html
 var informationSchemaKeyColumnUsageTable = virtualSchemaTable{
 	comment: `column usage by indexes and key constraints
 ` + docs.URL("information-schema.html#key_column_usage") + `
@@ -906,7 +906,7 @@ https://www.postgresql.org/docs/9.5/infoschema-key-column-usage.html`,
 }
 
 // Postgres: https://www.postgresql.org/docs/9.6/static/infoschema-parameters.html
-// MySQL:    https://dev.mysql.com/doc/refman/5.7/en/parameters-table.html
+// MySQL:    https://dev.mysql.com/doc/refman/8.4/en/information-schema-parameters-table.html
 var informationSchemaParametersTable = virtualSchemaView{
 	comment: `function parameters
 https://www.postgresql.org/docs/9.5/infoschema-parameters.html`,
@@ -981,7 +981,7 @@ func dStringForFKAction(action semenumpb.ForeignKeyAction) tree.Datum {
 	panic(errors.Errorf("unexpected ForeignKeyReference_Action: %v", action))
 }
 
-// MySQL:    https://dev.mysql.com/doc/refman/5.7/en/referential-constraints-table.html
+// MySQL:    https://dev.mysql.com/doc/refman/8.4/en/information-schema-referential-constraints-table.html
 var informationSchemaReferentialConstraintsTable = virtualSchemaTable{
 	comment: `foreign key constraints
 ` + docs.URL("information-schema.html#referential_constraints") + `
@@ -1052,7 +1052,7 @@ https://www.postgresql.org/docs/9.5/infoschema-role-table-grants.html`,
 	populate: populateTablePrivileges,
 }
 
-// MySQL:    https://dev.mysql.com/doc/mysql-infoschema-excerpt/5.7/en/routines-table.html
+// MySQL:   https://dev.mysql.com/doc/refman/8.4/en/information-schema-routines-table.html
 var informationSchemaRoutineTable = virtualSchemaView{
 	comment: `built-in functions and user-defined functions
 https://www.postgresql.org/docs/15/infoschema-routines.html`,
@@ -1143,7 +1143,7 @@ https://www.postgresql.org/docs/15/infoschema-routines.html`,
 	},
 }
 
-// MySQL:    https://dev.mysql.com/doc/refman/5.7/en/schemata-table.html
+// MySQL:    https://dev.mysql.com/doc/refman/8.4/en/information-schema-table-reference.html
 var informationSchemaSchemataTable = virtualSchemaTable{
 	comment: `database schemas (may contain schemata without permission)
 ` + docs.URL("information-schema.html#schemata") + `
@@ -1242,7 +1242,7 @@ var informationSchemaTypePrivilegesTable = virtualSchemaTable{
 	},
 }
 
-// MySQL:    https://dev.mysql.com/doc/refman/5.7/en/schema-privileges-table.html
+// MySQL:    https://dev.mysql.com/doc/refman/8.4/en/information-schema-table-privileges-table.html
 var informationSchemaSchemataTablePrivileges = virtualSchemaTable{
 	comment: `schema privileges (incomplete; may contain excess users or roles)
 ` + docs.URL("information-schema.html#schema_privileges"),
@@ -1345,7 +1345,7 @@ https://www.postgresql.org/docs/9.5/infoschema-sequences.html`,
 }
 
 // Postgres: missing
-// MySQL:    https://dev.mysql.com/doc/refman/5.7/en/statistics-table.html
+// MySQL:    https://dev.mysql.com/doc/refman/8.4/en/information-schema-statistics-table.html
 var informationSchemaStatisticsTable = virtualSchemaTable{
 	comment: `index metadata and statistics (incomplete)
 ` + docs.URL("information-schema.html#statistics"),
@@ -1456,7 +1456,7 @@ var informationSchemaStatisticsTable = virtualSchemaTable{
 	},
 }
 
-// MySQL:    https://dev.mysql.com/doc/refman/5.7/en/table-constraints-table.html
+// MySQL:    https://dev.mysql.com/doc/refman/8.4/en/information-schema-table-constraints-table.html
 var informationSchemaTableConstraintTable = virtualSchemaTable{
 	comment: `table constraints
 ` + docs.URL("information-schema.html#table_constraints") + `
@@ -1566,7 +1566,7 @@ var informationSchemaUserDefinedTypesTable = virtualSchemaView{
 }
 
 // Postgres: not provided
-// MySQL:    https://dev.mysql.com/doc/refman/5.7/en/user-privileges-table.html
+// MySQL:    https://dev.mysql.com/doc/refman/8.4/en/information-schema-user-privileges-table.html
 // TODO(knz): this introspection facility is of dubious utility.
 var informationSchemaUserPrivileges = virtualSchemaTable{
 	comment: `grantable privileges (incomplete)`,
@@ -1597,7 +1597,7 @@ var informationSchemaUserPrivileges = virtualSchemaTable{
 	},
 }
 
-// MySQL:    https://dev.mysql.com/doc/refman/5.7/en/table-privileges-table.html
+// MySQL:    https://dev.mysql.com/doc/refman/8.4/en/information-schema-table-privileges-table.html
 var informationSchemaTablePrivileges = virtualSchemaTable{
 	comment: `privileges granted on table or views (incomplete; may contain excess users or roles)
 ` + docs.URL("information-schema.html#table_privileges") + `
@@ -1712,7 +1712,7 @@ https://www.postgresql.org/docs/9.5/infoschema-tables.html`,
 }
 
 // Postgres: https://www.postgresql.org/docs/9.6/static/infoschema-views.html
-// MySQL:    https://dev.mysql.com/doc/refman/5.7/en/views-table.html
+// MySQL:    https://dev.mysql.com/doc/refman/8.4/en/information-schema-columns-table.html
 var informationSchemaViewsTable = virtualSchemaTable{
 	comment: `views (incomplete)
 ` + docs.URL("information-schema.html#views") + `

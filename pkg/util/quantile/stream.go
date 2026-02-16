@@ -22,7 +22,7 @@
 //
 // # Effective Computation of Biased Quantiles over Data Streams
 //
-// http://www.cs.rutgers.edu/~muthu/bquant.pdf
+// [1] https://web.archive.org/web/20250506150208/https://www.cs.rutgers.edu/~muthu/bquant.pdf
 package quantile
 
 import (
@@ -56,7 +56,7 @@ type invariant func(s *stream, r float64) float64
 // The provided epsilon is a relative error, i.e. the true quantile of a value
 // returned by a query is guaranteed to be within (1±Epsilon)*Quantile.
 //
-// See http://www.cs.rutgers.edu/~muthu/bquant.pdf for time, space, and error
+// See [1] above for time, space, and error
 // properties.
 func NewLowBiased(epsilon float64) *Stream {
 	ƒ := func(s *stream, r float64) float64 {
@@ -73,7 +73,7 @@ func NewLowBiased(epsilon float64) *Stream {
 // The provided epsilon is a relative error, i.e. the true quantile of a value
 // returned by a query is guaranteed to be within 1-(1±Epsilon)*(1-Quantile).
 //
-// See http://www.cs.rutgers.edu/~muthu/bquant.pdf for time, space, and error
+// See [1] above for time, space, and error
 // properties.
 func NewHighBiased(epsilon float64) *Stream {
 	ƒ := func(s *stream, r float64) float64 {
@@ -88,7 +88,7 @@ func NewHighBiased(epsilon float64) *Stream {
 // their absolute errors, i.e. the true quantile of a value returned by a query
 // is guaranteed to be within (Quantile±Epsilon).
 //
-// See http://www.cs.rutgers.edu/~muthu/bquant.pdf for time, space, and error properties.
+// See [1] above for time, space, and error properties.
 func NewTargeted(targetMap map[float64]float64) *Stream {
 	// Convert map to slice to avoid slow iterations on a map.
 	// ƒ is called on the hot path, so converting the map to a slice

@@ -604,4 +604,4 @@ const (
 
   [\#16240]: https://github.com/cockroachdb/cockroach/pull/16240
   [separate RFC]: https://github.com/cockroachdb/cockroach/pull/10055
-  [Clang]: https://clang.llvm.org/docs/LibASTMatchers.html
+  [Clang]: https://web.archive.org/web/20250902012257/https://clang.llvm.org/docs/LibASTMatchers.html 

@@ -31,7 +31,7 @@ import (
 //
 // [1]: https://github.com/golang/go/blob/4aa1efed4853ea067d665a952eee77c52faac774/src/crypto/tls/cipher_suites.go#L215-L270
 // [2]: https://www.iana.org/assignments/tls-parameters/tls-parameters.xhtml#tls-parameters-4
-// [3]: https://wiki.mozilla.org/Security/Server_Side_TLS#Intermediate_compatibility_.28recommended.29
+// [3]: https://web.archive.org/web/20250906032848/https://wiki.mozilla.org/Security/Server_Side_TLS
 func RecommendedCipherSuites() []uint16 {
 	return []uint16{
 		tls.TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256,

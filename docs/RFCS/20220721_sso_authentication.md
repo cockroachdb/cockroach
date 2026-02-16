@@ -283,7 +283,7 @@ Token validation will look like the following:
 CC Console will use the
 [JSON Web Key (JWK) specification](https://openid.net/specs/draft-jones-json-web-key-03.html).
 CC Console will sign tokens with a public/private key pair using
-[RS256 (RSA Digital Signature Algorithm with SHA-256)](https://ldapwiki.com/wiki/RS256).
+[RS256 (RSA Digital Signature Algorithm with SHA-256)](https://web.archive.org/web/20220817220301/https://ldapwiki.com/wiki/RS256).
 The private signing key will rotate once a year, and in the case of an emergency, could be rotated
 immediately. 
 

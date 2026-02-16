@@ -55,7 +55,7 @@ class Layout extends React.Component<LayoutProps & RouteComponentProps> {
   contentRef = React.createRef<HTMLDivElement>();
 
   componentDidUpdate(prevProps: RouteComponentProps) {
-    // `react-router` doesn't handle scroll restoration (https://reactrouter.com/react-router/web/guides/scroll-restoration)
+    // `react-router` doesn't handle scroll restoration (https://reactrouter.com/6.30.1/components/scroll-restoration)
     // and when location changed with react-router's Link it preserves scroll position whenever it is.
     // AdminUI layout keeps left and top panels have fixed position on a screen and has internal scrolling for content div
     // element which has to be scrolled back on top with navigation change.

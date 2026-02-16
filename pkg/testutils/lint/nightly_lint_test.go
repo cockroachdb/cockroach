@@ -40,7 +40,7 @@ func TestNightlyLint(t *testing.T) {
 		}
 		cmd := exec.Command("grep", "-nE", urlcheck.URLRE)
 		cmd.Stdin = &buf
-		if err := urlcheck.CheckURLsFromGrepOutput(cmd); err != nil {
+		if _, err := urlcheck.CheckURLsFromGrepOutput(cmd, nil); err != nil {
 			t.Fatal(err)
 		}
 	})

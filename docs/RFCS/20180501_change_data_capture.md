@@ -707,7 +707,7 @@ an alias if we build support for CockroachDB to CockroachDB replication.
 [kafka]: https://kafka.apache.org/intro
 [other cdc syntaxes]: #appendix-other-cdc-syntaxes
 [proposed and sent through raft]: https://github.com/cockroachdb/cockroach/blob/381e4dafa596c5f3621a48fcb5fce1f62b18c186/docs/RFCS/20160420_proposer_evaluated_kv.md
-[schema resolution]: http://avro.apache.org/docs/current/spec.html#Schema+Resolution
+[schema resolution]: https://avro.apache.org/docs/++version++/specification/#schema-resolution 
 [sql table sink]: #sql-table-sink
 [system jobs]: https://github.com/cockroachdb/cockroach/blob/381e4dafa596c5f3621a48fcb5fce1f62b18c186/docs/RFCS/20170215_system_jobs.md
 [transaction grouped changes]: #no-transaction-grouped-changes

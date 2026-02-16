@@ -297,9 +297,9 @@ CockroachCloud.
 
 Wide area network (WAN) round-trip time (RTT) latencies can be as large as 200ms
 in the global deployment scenarios that we are interested in (ref:
-[AWS](https://docs.aviatrix.com/_images/inter_region_latency.png),
-[Azure](https://docs.aviatrix.com/_images/arm_inter_region_latency.png),
-[GCP](https://docs.aviatrix.com/_images/gcp_inter_region_latency.png)). The
+[AWS](https://web.archive.org/web/20210916044213/https://docs.aviatrix.com/_images/inter_region_latency.png),
+[Azure](https://web.archive.org/web/20200629231656/https://docs.aviatrix.com/_images/arm_inter_region_latency.png),
+[GCP](https://web.archive.org/web/20201027165100/https://docs.aviatrix.com/_images/gcp_inter_region_latency.png)). The
 current default clock uncertainty offset is 500ms. This proposal explores the
 half of the design space in which clock uncertainty bounds drop below WAN RTT
 time. Within this regime, it becomes cheaper to establish causality between
@@ -380,7 +380,7 @@ servable locally in all regions, not just in the single region that the tables'
 leaseholders happens to land. A common example of this arises with foreign keys
 on static tables.
 
-Until now, our best solution to this problem has been [duplicated indexes](https://www.cockroachlabs.com/docs/v19.1/pology-duplicate-indexes.html).
+Until now, our best solution to this problem has been [duplicated indexes](https://www.cockroachlabs.com/docs/v20.1/topology-duplicate-indexes).
 This solution requires users to create a collection of secondary SQL indexes that
 each contain every single column in the table. Users then use zone configurations
 to place a leaseholder for each of these indexes in every geographical locality.
@@ -623,7 +623,7 @@ call returns, no other node's HLC clock can have a value less that
 
 #### Commit Wait: Not Just for the Cool Kid With the Fancy Hardware
 
-The original [Spanner paper](https://storage.googleapis.com/pub-tools-public-publication-data/pdf/65b514eda12d025585183a641b5a9e096a3c4be5.pdf)
+The original [Spanner paper](https://static.googleusercontent.com/media/research.google.com/en//archive/spanner-osdi2012.pdf)
 discussed how the system added a delay to all read-write transactions before
 returning to the client to ensure that all nodes in the system had clocks in
 excess of the commit timestamp of a transaction before that transaction was
@@ -1080,7 +1080,7 @@ complicates our consistency story, but may make a very useful option.
 
 ## References
 
-[1] Spanner: https://storage.googleapis.com/pub-tools-public-publication-data/pdf/65b514eda12d025585183a641b5a9e096a3c4be5.pdf
+[1] Spanner: https://static.googleusercontent.com/media/research.google.com/en//archive/spanner-osdi2012.pdf
   * Specifically, see _Section 4.2.3. Schema-Change Transactions_, which briefly mentions a scheme that sounds similar to this, although for the purpose of running large schema changes.
 
 [2] Logical Physical Clocks and Consistent Snapshots in Globally Distributed Databases: https://cse.buffalo.edu/tech-reports/2014-04.pdf
@@ -1091,6 +1091,6 @@ complicates our consistency story, but may make a very useful option.
 
 [5] SLOG: Serializable, Low-latency, Geo-replicated Transactions: https://www.cs.umd.edu/~abadi/papers/1154-Abadi.pdf
 
-[6] Large-scale Incremental Processing Using Distributed Transactions and Notifications: https://storage.googleapis.com/pub-tools-public-publication-data/pdf/36726.pdf
+[6] Large-scale Incremental Processing Using Distributed Transactions and Notifications: https://www.usenix.org/legacy/event/osdi10/tech/full_papers/Peng.pdf
 
 [7] KuaFu: Closing the Parallelism Gap in Database Replication: https://www.cs.cmu.edu/afs/cs/Web/People/dongz/papers/KuaFu.pdf
