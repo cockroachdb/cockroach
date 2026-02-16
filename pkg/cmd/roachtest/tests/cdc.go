@@ -2952,6 +2952,25 @@ CONFIGURE ZONE USING
 				// kgo. There isn't a direct equivalent, however, so check a few
 				// things.
 				logSearchStr := `(client/metadata fetching metadata for|updating kafka metadata for topics|fetching metadata to learn its partitions|waiting for metadata for new topic)`
+				// ct.cluster.FetchLogs(ct.ctx, t.L())
+				sanityResults, sanityCheckLogsErr := ct.cluster.RunWithDetails(ct.ctx, t.L(),
+					option.WithNodes(ct.cluster.Range(1, c.Spec().NodeCount-1)),
+					fmt.Sprintf(`grep -E "%s" logs/cockroach.log`, "client.*"))
+				if sanityCheckLogsErr != nil {
+					t.Fatal(sanityCheckLogsErr)
+				}
+				for _, result := range sanityResults {
+					t.L().Printf("node %d stdout: %s", result.Node, result.Stdout)
+				}
+				logLineResults, logLineCheckLogsErr := ct.cluster.RunWithDetails(ct.ctx, t.L(),
+					option.WithNodes(ct.cluster.Range(1, c.Spec().NodeCount-1)),
+					fmt.Sprintf(`wc -L logs/cockroach.log`))
+				if logLineCheckLogsErr != nil {
+					t.Fatal(logLineCheckLogsErr)
+				}
+				for _, result := range logLineResults {
+					t.L().Printf("node %d stdout: %s", result.Node, result.Stdout)
+				}
 				results, checkLogsErr := ct.cluster.RunWithDetails(ct.ctx, t.L(),
 					option.WithNodes(ct.cluster.Range(1, c.Spec().NodeCount-1)),
 					fmt.Sprintf(`grep -E "%s" logs/cockroach-changefeed.log`, logSearchStr))
