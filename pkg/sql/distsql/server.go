@@ -525,6 +525,19 @@ func (ds *ServerImpl) newFlowContext(
 		// In distributed execution, authorization was already checked on the gateway node.
 		evalCatalogBuiltins.Init(evalCtx.Codec, evalCtx.Txn, flowCtx.Descriptors, nil /* authzChecker */)
 		evalCtx.CatalogBuiltins = &evalCatalogBuiltins
+		// When the testing knob is set and we're on a parallel check worker
+		// goroutine (which gets a fresh Collection), simulate a type version
+		// mismatch by bumping versions on hydrated UDTs.
+		if ds.ServerConfig.TestingKnobs.ForceTypeVersionMismatchInParallelChecks {
+			isParallelCheck := localState.GetConcurrency()&ConcurrencyParallelChecks != 0
+			isWorker := !localState.ParallelCheckMainGoroutine
+			log.VEventf(ctx, 0, "ForceTypeVersionMismatchInParallelChecks: isParallelCheck=%v, isWorker=%v",
+				isParallelCheck, isWorker)
+			if isParallelCheck && isWorker {
+				flowCtx.TestingTypeVersionBump = 1
+				log.VEventf(ctx, 0, "ForceTypeVersionMismatchInParallelChecks: setting TestingTypeVersionBump=1")
+			}
+		}
 	}
 	return flowCtx
 }

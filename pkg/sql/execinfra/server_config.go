@@ -363,6 +363,14 @@ type TestingKnobs struct {
 	// SampleAggregatorTestingKnobRowHook, if non-nil, is called for each row
 	// processed by the sample aggregator. Used for testing, e.g., to inject panics.
 	SampleAggregatorTestingKnobRowHook func()
+
+	// ForceTypeVersionMismatchInParallelChecks, if set, causes
+	// parallel check worker goroutines (which use a fresh
+	// descs.Collection) to bump the version of user-defined types in
+	// the join reader's FetchSpec by 1. This simulates the scenario
+	// where different Collections resolve different versions of a type
+	// descriptor due to advancing lease timestamps.
+	ForceTypeVersionMismatchInParallelChecks bool
 }
 
 // ModuleTestingKnobs is part of the base.ModuleTestingKnobs interface.

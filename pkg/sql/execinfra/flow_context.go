@@ -91,6 +91,13 @@ type FlowCtx struct {
 	// running EXPLAIN ANALYZE. Currently, it is only used by remote flows.
 	// The gateway flow is handled by the connExecutor.
 	TenantCPUMonitor multitenantcpu.CPUUsageHelper
+
+	// TestingTypeVersionBump, if non-zero, causes the join reader to
+	// create copies of user-defined types in the FetchSpec with their
+	// version bumped by this amount. This is used to simulate a type
+	// version mismatch between buffer DEnum values and lookup DEnum
+	// values in parallel constraint checks.
+	TestingTypeVersionBump uint32
 }
 
 // NewEvalCtx returns a modifiable copy of the FlowCtx's eval.Context.

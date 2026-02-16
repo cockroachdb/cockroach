@@ -469,6 +469,26 @@ func newJoinReader(
 		}
 	}
 
+	// When TestingTypeVersionBump is set, bump the version of user-defined
+	// types in rightTypes IN-PLACE. This must happen AFTER joinerBase.init
+	// (which re-hydrates types via EnsureTypeIsHydrated). Because rightTypes
+	// shares the same *types.T pointers as the onCondTypes inside the
+	// joinerBase's expression helper, this in-place mutation causes the ON
+	// expression evaluator to decode right-side EncDatums with the bumped
+	// version. Left-side EncDatums (from the buffer) are already decoded
+	// with the original version, so DEnum.Compare detects the mismatch.
+	// This simulates the real bug where a fresh descs.Collection on the
+	// worker goroutine resolves a newer type descriptor version.
+	if flowCtx.TestingTypeVersionBump != 0 {
+		for i, t := range rightTypes {
+			if t.UserDefined() {
+				log.VEventf(ctx, 0, "TestingTypeVersionBump: bumping rightTypes[%d] type %s version from %d to %d",
+					i, t.DebugString(), t.TypeMeta.Version, t.TypeMeta.Version+flowCtx.TestingTypeVersionBump)
+				t.TypeMeta.Version += flowCtx.TestingTypeVersionBump
+			}
+		}
+	}
+
 	// We will create a memory monitor with a hard memory limit since the join
 	// reader doesn't know how to spill its in-memory state to disk (separate
 	// from the buffered rows). It is most likely that if the target limit is

@@ -26,6 +26,7 @@ go_test(
     srcs = [
         "cold_start_latency_test.go",
         "datadriven_test.go",
+        "enum_version_mismatch_test.go",
         "main_test.go",
         "multiregion_system_table_test.go",
         "multiregion_test.go",
