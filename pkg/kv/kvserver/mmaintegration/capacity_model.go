@@ -77,6 +77,17 @@ func computeStoreByteSizeCapacity(
 // treated as background load unrelated to MMA.
 const cpuIndirectOverheadMultiplier = 3.0
 
+// cpuCapacityFloorPerStore is the minimum per-store CPU capacity (in ns/s)
+// returned by computeCPUCapacityWithCap. Without a floor, the capacity
+// approaches 0 as background load approaches nodeCPURateCapacity, and then
+// jumps discontinuously when the model switches behavior (e.g. storesCPURate
+// drops to 0). The floor smooths this: the capacity graph bottoms out at 0.1
+// cores instead of reaching 0, avoiding a cliff in the cluster-wide mean
+// utilization (sum-of-loads / sum-of-capacities). The value 0.1 cores is
+// small enough that the store is still considered nearly saturated, but large
+// enough to keep the utilization ratio finite.
+const cpuCapacityFloorPerStore = 0.1 * 1e9 // 0.1 cores in ns/s
+
 // computeCPUCapacityWithCap computes per-store CPU capacity using a clamped
 // multiplier. Unlike the naive model (computeStoreCPURateCapacityNaive in
 // legacy_model_test.go, which assumes all node CPU usage is caused by
@@ -107,8 +118,12 @@ const cpuIndirectOverheadMultiplier = 3.0
 //     accounts for the indirect overhead: each unit of direct load consumes
 //     clampedMult units of actual CPU.
 //
-//  5. storeCapacity = mmaDirectCapacity / numStores
-//     Split evenly across stores on the node.
+//  5. storeCapacity = max(mmaDirectCapacity / numStores, cpuCapacityFloorPerStore)
+//     Split evenly across stores on the node, but never below the floor.
+//     The floor (0.1 cores) prevents the capacity from reaching 0, which
+//     would cause a discontinuity: as background load grows, the capacity
+//     smoothly decreases to 0.1 instead of hitting 0 and then jumping
+//     back up when the model switches regimes.
 //
 // When storesCPURate is 0 (no replicas reporting CPU yet), we use the limiting
 // behavior: MMA attributes none of the node usage to itself (all is
@@ -150,7 +165,9 @@ func computeCPUCapacityWithCap(in storeCPURateCapacityInput) (capacity float64) 
 	// for indirect overhead.
 	mmaDirectCapacity := mmaShareOfCapacity / mult
 
-	// Divide evenly across stores.
+	// Divide evenly across stores, but enforce a minimum capacity floor.
+	// See cpuCapacityFloorPerStore for why we avoid letting capacity reach 0.
 	capacity = mmaDirectCapacity / float64(in.numStores)
+	capacity = max(capacity, cpuCapacityFloorPerStore)
 	return capacity
 }
