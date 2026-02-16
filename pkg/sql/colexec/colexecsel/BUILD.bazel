@@ -35,6 +35,7 @@ go_library(
 go_test(
     name = "colexecsel_test",
     srcs = [
+        "inject_setup_test.go",
         "like_ops_test.go",
         "main_test.go",
         "selection_ops_test.go",
@@ -45,6 +46,7 @@ go_test(
         "//pkg/col/coldataext",
         "//pkg/col/coldatatestutils",
         "//pkg/settings/cluster",
+        "//pkg/sql/colexec",
         "//pkg/sql/colexec/colexectestutils",
         "//pkg/sql/colexecerror",
         "//pkg/sql/colexecop",
