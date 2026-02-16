@@ -5,7 +5,12 @@
 
 package mmaintegration
 
-import "github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/mmaprototype"
+import (
+	"context"
+
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/mmaprototype"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
+)
 
 // This file contains the capacity model functions used by MMA to derive
 // per-store capacity from node-level and disk-level metrics. These are
@@ -15,10 +20,8 @@ import "github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/mmaprototype"
 // capacity. Using a struct avoids accidentally swapping the order of parameters
 // when passing them to functions.
 type storeCPURateCapacityInput struct {
-	// currentStoreCPUUsage is the CPU usage reported by this specific store.
-	currentStoreCPUUsage mmaprototype.LoadValue
 	// storesCPURate is the aggregated CPU usage across all stores on the node
-	// (sum of per-store CPU load usage).
+	// (sum of per-store CPU load usage) in ns/sec.
 	storesCPURate float64
 	// nodeCPURateUsage is the total CPU usage of the node (from OS-level
 	// metrics) in ns/sec.
@@ -37,30 +40,22 @@ type storeCPURateCapacityInput struct {
 // exactly when it is detected at the node level. Individual stores may have
 // different utilizations depending on their load.
 //
-// The three cases are:
+// The two cases are:
 //
-//  1. Normal: nodeCPURateCapacity > 0, storesCPURate > 0, cpuUtil >= 0.01.
+//  1. Normal: storesCPURate > 0, cpuUtil >= 0.01.
 //     We compute cpuUtil = nodeCPURateUsage / nodeCPURateCapacity, then
 //     derive a per-store capacity = (storesCPURate / cpuUtil) / numStores.
 //     See MakeStoreLoadMsg for why this construction preserves the
 //     node-level utilization as the mean store-level utilization.
 //
-//  2. Low utilization fallback: nodeCPURateCapacity > 0, but storesCPURate
-//     is zero or cpuUtil < 0.01. We assume 50% of the node capacity is
-//     attributable to stores and split evenly.
+//  2. Low utilization fallback: storesCPURate is zero or cpuUtil < 0.01.
+//     We assume 50% of the node capacity is attributable to stores and
+//     split evenly.
 //
-//  3. Unknown capacity: nodeCPURateCapacity <= 0 (should not happen in
-//     production). Falls back to assuming 50% utilization from the store's
-//     own CPU usage.
+// Panics if numStores <= 0 or nodeCPURateCapacity <= 0.
 func computeStoreCPURateCapacity(in storeCPURateCapacityInput) mmaprototype.LoadValue {
-	if in.nodeCPURateCapacity <= 0 {
-		// TODO(sumeer): remove this hack of defaulting to 50% utilization, since
-		// NodeCPURateCapacity should never be 0.
-		// TODO(tbg): when do we expect to hit this branch? Mixed version cluster?
-		return in.currentStoreCPUUsage * 2
-	}
-	if in.numStores <= 0 {
-		return 0
+	if in.numStores <= 0 || in.nodeCPURateCapacity <= 0 {
+		log.KvDistribution.Fatalf(context.Background(), "numStores and nodeCPURateCapacity must be > 0")
 	}
 
 	// CPU is a shared resource across all stores on a node, and we choose to
@@ -228,9 +223,7 @@ func computeCPUCapacityWithCap(
 ) (capacity float64) {
 	mult := 0.0
 	if in.numStores <= 0 || in.nodeCPURateCapacity <= 0 {
-		// TODO(sumeer): remove this hack of defaulting to 50% utilization, since
-		// NodeCPURateCapacity should never be 0.
-		return float64(in.currentStoreCPUUsage) * 2
+		log.KvDistribution.Fatalf(context.Background(), "numStores and nodeCPURateCapacity must be > 0")
 	}
 
 	if in.storesCPURate <= 0 {
