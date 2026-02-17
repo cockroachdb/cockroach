@@ -870,9 +870,8 @@ func TestJobPauseStateTransitionsRecorded(t *testing.T) {
 	r := s.JobRegistry().(*jobs.Registry)
 
 	blockCh := make(chan struct{})
-	defer close(blockCh)
 
-	// Register a fake resumer so the job doesn't complete during the test.
+	// Register a fake resumer to control if and when the job completes.
 	cleanup := jobs.TestingRegisterConstructor(jobspb.TypeBackup, func(job *jobs.Job, _ *cluster.Settings) jobs.Resumer {
 		return jobstest.FakeResumer{
 			OnResume: func(ctx context.Context) error {
@@ -892,38 +891,61 @@ func TestJobPauseStateTransitionsRecorded(t *testing.T) {
 		Progress: jobspb.BackupProgress{},
 		Username: username.TestUserName(),
 	}
-	job, err := jobs.TestingCreateAndStartJob(ctx, r, idb, record)
-	require.NoError(t, err)
-	jobutils.WaitForJobToRun(t, sql, job.ID())
 
-	sql.Exec(t, "PAUSE JOB $1 WITH REASON = 'test pause reason'", job.ID())
-	jobutils.WaitForJobToPause(t, sql, job.ID())
+	startJobAndRunThroughPaused := func() *jobs.StartableJob {
+		job, err := jobs.TestingCreateAndStartJob(ctx, r, idb, record)
+		require.NoError(t, err)
+		jobutils.WaitForJobToRun(t, sql, job.ID())
 
-	// Verify the running_status shows the pause reason via SHOW JOB.
-	sql.CheckQueryResults(t,
-		fmt.Sprintf("SELECT running_status FROM [SHOW JOB %d]", job.ID()),
-		[][]string{{"pausing: test pause reason"}},
-	)
+		sql.Exec(t, "PAUSE JOB $1 WITH REASON = 'test pause reason'", job.ID())
+		jobutils.WaitForJobToPause(t, sql, job.ID())
 
-	sql.Exec(t, "RESUME JOB $1", job.ID())
-	jobutils.WaitForJobToRun(t, sql, job.ID())
+		// Verify the running_status shows the pause reason via SHOW JOB.
+		sql.CheckQueryResults(t,
+			fmt.Sprintf("SELECT running_status FROM [SHOW JOB %d]", job.ID()),
+			[][]string{{"pausing: test pause reason"}},
+		)
 
-	sql.Exec(t, "CANCEL JOB $1", job.ID())
-	jobutils.WaitForJobToCancel(t, sql, job.ID())
-
-	var messages []jobs.JobMessage
-	require.NoError(t, idb.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
-		var err error
-		messages, err = job.Job.Messages().Fetch(ctx, txn)
-		return err
-	}))
-
-	var stateMessages []string
-	for _, msg := range messages {
-		if msg.Kind == "state" {
-			stateMessages = append(stateMessages, msg.Message)
-		}
+		sql.Exec(t, "RESUME JOB $1", job.ID())
+		jobutils.WaitForJobToRun(t, sql, job.ID())
+		return job
 	}
 
-	require.Equal(t, []string{"canceled", "reverting", "cancel-requested", "running", "paused", "pause-requested"}, stateMessages)
+	collectStatusMessages := func(job *jobs.StartableJob) []string {
+		var messages []jobs.JobMessage
+		require.NoError(t, idb.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+			var err error
+			messages, err = job.Job.Messages().Fetch(ctx, txn)
+			return err
+		}))
+
+		var stateMessages []string
+		for _, msg := range messages {
+			if msg.Kind == "state" {
+				stateMessages = append(stateMessages, msg.Message)
+			}
+		}
+		return stateMessages
+	}
+
+	t.Run("end in cancelled", func(t *testing.T) {
+		job := startJobAndRunThroughPaused()
+		sql.Exec(t, "CANCEL JOB $1", job.ID())
+		jobutils.WaitForJobToCancel(t, sql, job.ID())
+		stateMessages := collectStatusMessages(job)
+		require.Equal(t, []string{"canceled", "reverting", "cancel-requested", "running", "paused", "pause-requested"}, stateMessages)
+	})
+
+	t.Run("end in succeeded", func(t *testing.T) {
+		job := startJobAndRunThroughPaused()
+		close(blockCh)
+		jobutils.WaitForJobToSucceed(t, sql, job.ID())
+		// Verify that running_status is cleared on successful job completion.
+		sql.CheckQueryResults(t,
+			fmt.Sprintf("SELECT running_status FROM [SHOW JOB %d]", job.ID()),
+			[][]string{{"NULL"}},
+		)
+		stateMessages := collectStatusMessages(job)
+		require.Equal(t, []string{"succeeded", "running", "paused", "pause-requested"}, stateMessages)
+	})
 }
