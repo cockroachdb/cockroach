@@ -30,7 +30,15 @@ type CancelChecker struct {
 	// check.
 	callsSinceLastCheck uint32
 
-	cpuHandle *admission.GoroutineCPUHandle
+	// sqlCPUHandle is the parent handle from the context. We store it here
+	// and defer calling RegisterGoroutine until the first CheckEveryCall,
+	// because Init may run on a different goroutine (e.g., the flow
+	// coordinator) than the one that later calls CheckEveryCall (a worker
+	// goroutine spawned by ParallelUnorderedSynchronizer). RegisterGoroutine
+	// binds to the caller's gid, so it must be called on the executing
+	// goroutine to get the correct per-goroutine CPU handle.
+	sqlCPUHandle *admission.SQLCPUHandle
+	cpuHandle    *admission.GoroutineCPUHandle
 }
 
 var _ colexecop.Operator = &CancelChecker{}
@@ -50,10 +58,9 @@ func (c *CancelChecker) Init(ctx context.Context) {
 		// Check*() methods, and the input remains nil then.
 		c.Input.Init(c.Ctx)
 	}
-	cpuHandle := admission.SQLCPUHandleFromContext(ctx)
-	if cpuHandle != nil {
-		c.cpuHandle = cpuHandle.RegisterGoroutine()
-	}
+	// Store the parent handle but don't register yet — Init may be running on
+	// a different goroutine than the one that will call CheckEveryCall.
+	c.sqlCPUHandle = admission.SQLCPUHandleFromContext(ctx)
 }
 
 // Next is part of colexecop.Operator interface.
@@ -88,6 +95,10 @@ func (c *CancelChecker) CheckEveryCall() {
 	case <-c.Ctx.Done():
 		colexecerror.ExpectedError(cancelchecker.QueryCanceledError)
 	default:
+	}
+	if c.cpuHandle == nil && c.sqlCPUHandle != nil {
+		// Lazily register on the goroutine that actually executes the operator.
+		c.cpuHandle = c.sqlCPUHandle.RegisterGoroutine()
 	}
 	if c.cpuHandle != nil {
 		err := c.cpuHandle.MeasureAndAdmit(c.Ctx)
