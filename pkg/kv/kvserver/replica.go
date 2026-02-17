@@ -940,6 +940,10 @@ type Replica struct {
 		// replica because it looks like it's dead).
 		quotaReleaseQueue []*quotapool.IntAlloc
 
+		// leaderTransferDiag tracks diagnostic state for the Raft leadership
+		// transfer mechanism. Updated on the tick path by tick().
+		leaderTransferDiag leaderTransferDiagState
+
 		// Counts calls to Replica.tick()
 		ticks int64
 

@@ -11759,44 +11759,44 @@ func TestReplicaShouldTransferRaftLeadershipToLeaseholder(t *testing.T) {
 	}
 
 	testcases := map[string]struct {
-		expect bool
+		expect raftLeaderTransferOutcome
 		modify func(*params)
 	}{
 		"leader": {
-			true, func(p *params) {},
+			raftLeaderTransferOK, func(p *params) {},
 		},
-		"follower": {false, func(p *params) {
+		"follower": {raftLeaderTransferNotNeeded, func(p *params) {
 			p.raftStatus.SoftState.RaftState = raftpb.StateFollower
 			p.raftStatus.Lead = remoteID
 		}},
-		"pre-candidate": {false, func(p *params) {
+		"pre-candidate": {raftLeaderTransferNotNeeded, func(p *params) {
 			p.raftStatus.SoftState.RaftState = raftpb.StatePreCandidate
 			p.raftStatus.Lead = raft.None
 		}},
-		"candidate": {false, func(p *params) {
+		"candidate": {raftLeaderTransferNotNeeded, func(p *params) {
 			p.raftStatus.SoftState.RaftState = raftpb.StateCandidate
 			p.raftStatus.Lead = raft.None
 		}},
-		"invalid lease": {false, func(p *params) {
+		"invalid lease": {raftLeaderTransferNotNeeded, func(p *params) {
 			p.leaseStatus.State = kvserverpb.LeaseState_EXPIRED
 		}},
-		"local lease": {false, func(p *params) {
+		"local lease": {raftLeaderTransferNotNeeded, func(p *params) {
 			p.leaseStatus.Lease.Replica.StoreID = localID
 		}},
-		"lease request pending": {false, func(p *params) {
+		"lease request pending": {raftLeaderTransferBlockedByPendingAcquisition, func(p *params) {
 			p.leaseAcquisitionPending = true
 		}},
-		"no progress": {false, func(p *params) {
+		"no progress": {raftLeaderTransferBlockedByLeaseholderBehind, func(p *params) {
 			p.progress = nil
 		}},
-		"insufficient progress": {false, func(p *params) {
+		"insufficient progress": {raftLeaderTransferBlockedByLeaseholderBehind, func(p *params) {
 			p.progress = &tracker.Progress{Match: 9}
 		}},
-		"no progress, draining": {true, func(p *params) {
+		"no progress, draining": {raftLeaderTransferOK, func(p *params) {
 			p.progress = nil
 			p.draining = true
 		}},
-		"insufficient progress, draining": {true, func(p *params) {
+		"insufficient progress, draining": {raftLeaderTransferOK, func(p *params) {
 			p.progress = &tracker.Progress{Match: 9}
 			p.draining = true
 		}},
@@ -11810,6 +11810,67 @@ func TestReplicaShouldTransferRaftLeadershipToLeaseholder(t *testing.T) {
 				p.raftStatus, p.progress, p.leaseStatus, p.leaseAcquisitionPending, p.storeID, p.draining))
 		})
 	}
+}
+
+func TestMaybeTransferRaftStateUpdate(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	var s leaderTransferDiagState
+
+	// Initially not needed: no logging.
+	logStuck, logResolved, _, _ := s.update(raftLeaderTransferNotNeeded, 0)
+	require.False(t, logStuck)
+	require.False(t, logResolved)
+
+	// Transition to blocked: no logging (haven't waited long enough).
+	logStuck, logResolved, _, _ = s.update(raftLeaderTransferBlockedByLeaseholderBehind, 10*time.Second)
+	require.False(t, logStuck)
+	require.False(t, logResolved)
+
+	// Still blocked, 50s elapsed: no logging yet (< 1 min).
+	logStuck, logResolved, _, _ = s.update(raftLeaderTransferBlockedByLeaseholderBehind, 60*time.Second)
+	require.False(t, logStuck)
+	require.False(t, logResolved)
+
+	// Still blocked, 60s elapsed: should log "stuck" exactly once.
+	logStuck, logResolved, elapsed, _ := s.update(raftLeaderTransferBlockedByLeaseholderBehind, 70*time.Second)
+	require.True(t, logStuck)
+	require.False(t, logResolved)
+	require.Equal(t, 60*time.Second, elapsed)
+
+	// Still blocked, 90s: no repeat log.
+	logStuck, logResolved, _, _ = s.update(raftLeaderTransferBlockedByLeaseholderBehind, 100*time.Second)
+	require.False(t, logStuck)
+	require.False(t, logResolved)
+
+	// Now resolved: should log "resolved" with elapsed >= 1 min.
+	logStuck, logResolved, elapsed, prev := s.update(raftLeaderTransferOK, 120*time.Second)
+	require.False(t, logStuck)
+	require.True(t, logResolved)
+	require.Equal(t, 110*time.Second, elapsed)
+	require.Equal(t, raftLeaderTransferBlockedByLeaseholderBehind, prev)
+
+	// Back to not needed: no logging.
+	logStuck, logResolved, _, _ = s.update(raftLeaderTransferNotNeeded, 121*time.Second)
+	require.False(t, logStuck)
+	require.False(t, logResolved)
+
+	// Short-lived blocked episode (< 1 min) that resolves: no logging.
+	s.update(raftLeaderTransferBlockedByPendingAcquisition, 200*time.Second)
+	logStuck, logResolved, _, _ = s.update(raftLeaderTransferOK, 230*time.Second)
+	require.False(t, logStuck)
+	require.False(t, logResolved)
+
+	// Blocked episode with reason change: the timer is NOT reset, so the 1-min
+	// threshold is measured from when the first blocked state was entered.
+	s.update(raftLeaderTransferBlockedByLeaseholderBehind, 300*time.Second)
+	s.update(raftLeaderTransferBlockedByPendingAcquisition, 350*time.Second)
+	// 60s since first blocked (at 300s), even though reason changed at 350s.
+	logStuck, logResolved, elapsed, _ = s.update(raftLeaderTransferBlockedByPendingAcquisition, 360*time.Second)
+	require.True(t, logStuck)
+	require.False(t, logResolved)
+	require.Equal(t, 60*time.Second, elapsed)
 }
 
 func TestRangeStatsRequest(t *testing.T) {
