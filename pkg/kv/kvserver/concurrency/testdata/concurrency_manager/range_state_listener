@@ -65,11 +65,11 @@ sequence req=req1
 
 on-lock-acquired req=req1 key=k
 ----
-[-] acquire lock: txn 00000001 @ ‹k›
+[-] acquire lock: txn 00000001 acquiring Unreplicated Exclusive lock on ‹"k"›
 
 on-lock-acquired req=req1 key=k2
 ----
-[-] acquire lock: txn 00000001 @ ‹k2›
+[-] acquire lock: txn 00000001 acquiring Unreplicated Exclusive lock on ‹"k2"›
 
 finish req=req1
 ----
@@ -129,8 +129,7 @@ num=0
 handle-lock-conflict-error req=req2 lease-seq=1
   lock txn=txn1 key=k
 ----
-[3] handle lock conflict error req2: intent on ‹"k"› discovered but not added to disabled lock table
-[3] handle lock conflict error req2: handled conflicting locks on ‹"k"›, released latches
+[3] handle lock conflict error req2: discovered lock on ‹"k"› not added to disabled lock table
 
 debug-lock-table
 ----
@@ -162,7 +161,7 @@ sequence req=req2
 handle-lock-conflict-error req=req2 lease-seq=2
   lock txn=txn1 key=k
 ----
-[6] handle lock conflict error req2: handled conflicting locks on ‹"k"›, released latches
+[6] handle lock conflict error req2: added 1 discovered lock(s) to lock table: conflicting locks on ‹"k"›
 
 debug-lock-table
 ----
@@ -225,7 +224,7 @@ num=1
 
 on-lock-acquired req=req2 key=k
 ----
-[-] acquire lock: txn 00000002 @ ‹k›
+[-] acquire lock: txn 00000002 acquiring Unreplicated Exclusive lock on ‹"k"›
 
 debug-lock-table
 ----
@@ -264,8 +263,7 @@ sequence req=req3
 handle-lock-conflict-error req=req3 lease-seq=2
   lock txn=txn1 key=k
 ----
-[10] handle lock conflict error req3: intent on ‹"k"› discovered but not added to disabled lock table
-[10] handle lock conflict error req3: handled conflicting locks on ‹"k"›, released latches
+[10] handle lock conflict error req3: discovered lock on ‹"k"› not added to disabled lock table
 
 debug-lock-table
 ----
@@ -281,7 +279,7 @@ sequence req=req3
 handle-lock-conflict-error req=req3 lease-seq=4
   lock txn=txn2 key=k
 ----
-[12] handle lock conflict error req3: handled conflicting locks on ‹"k"›, released latches
+[12] handle lock conflict error req3: added 1 discovered lock(s) to lock table: conflicting locks on ‹"k"›
 
 debug-lock-table
 ----
@@ -339,7 +337,7 @@ num=1
 
 on-lock-acquired req=req3 key=k
 ----
-[-] acquire lock: txn 00000003 @ ‹k›
+[-] acquire lock: txn 00000003 acquiring Unreplicated Exclusive lock on ‹"k"›
 
 debug-lock-table
 ----
@@ -392,7 +390,7 @@ sequence req=req1
 
 on-lock-acquired req=req1 key=k
 ----
-[-] acquire lock: txn 00000001 @ ‹k›
+[-] acquire lock: txn 00000001 acquiring Unreplicated Exclusive lock on ‹"k"›
 
 finish req=req1
 ----
@@ -444,7 +442,7 @@ num=0
 handle-lock-conflict-error req=req2 lease-seq=1
   lock txn=txn1 key=k
 ----
-[3] handle lock conflict error req2: handled conflicting locks on ‹"k"›, released latches
+[3] handle lock conflict error req2: added 1 discovered lock(s) to lock table: conflicting locks on ‹"k"›
 
 debug-lock-table
 ----
@@ -502,7 +500,7 @@ num=1
 
 on-lock-acquired req=req2 key=k
 ----
-[-] acquire lock: txn 00000002 @ ‹k›
+[-] acquire lock: txn 00000002 acquiring Unreplicated Exclusive lock on ‹"k"›
 
 debug-lock-table
 ----
@@ -575,11 +573,11 @@ sequence req=req2
 
 on-lock-acquired req=req1 key=k1
 ----
-[-] acquire lock: txn 00000001 @ ‹k1›
+[-] acquire lock: txn 00000001 acquiring Unreplicated Exclusive lock on ‹"k1"›
 
 on-lock-acquired req=req2 key=k3
 ----
-[-] acquire lock: txn 00000002 @ ‹k3›
+[-] acquire lock: txn 00000002 acquiring Unreplicated Exclusive lock on ‹"k3"›
 
 finish req=req1
 ----
@@ -757,7 +755,7 @@ sequence req=req1
 
 on-lock-acquired req=req1 key=k
 ----
-[-] acquire lock: txn 00000001 @ ‹k›
+[-] acquire lock: txn 00000001 acquiring Unreplicated Exclusive lock on ‹"k"›
 
 finish req=req1
 ----
@@ -813,7 +811,6 @@ num=0
 
 on-lock-acquired req=req3 key=k2
 ----
-[-] acquire lock: txn 00000003 @ ‹k2›
 
 debug-lock-table
 ----
@@ -826,8 +823,7 @@ finish req=req3
 handle-lock-conflict-error req=req2 lease-seq=1
   lock txn=txn1 key=k
 ----
-[4] handle lock conflict error req2: intent on ‹"k"› discovered but not added to disabled lock table
-[4] handle lock conflict error req2: handled conflicting locks on ‹"k"›, released latches
+[4] handle lock conflict error req2: discovered lock on ‹"k"› not added to disabled lock table
 
 sequence req=req2
 ----
@@ -855,7 +851,7 @@ sequence req=req2
 handle-lock-conflict-error req=req2 lease-seq=2
   lock txn=txn1 key=k
 ----
-[7] handle lock conflict error req2: handled conflicting locks on ‹"k"›, released latches
+[7] handle lock conflict error req2: added 1 discovered lock(s) to lock table: conflicting locks on ‹"k"›
 
 debug-lock-table
 ----
@@ -913,7 +909,7 @@ num=1
 
 on-lock-acquired req=req2 key=k
 ----
-[-] acquire lock: txn 00000002 @ ‹k›
+[-] acquire lock: txn 00000002 acquiring Unreplicated Exclusive lock on ‹"k"›
 
 debug-lock-table
 ----
@@ -966,7 +962,7 @@ sequence req=req1
 
 on-lock-acquired req=req1 key=k
 ----
-[-] acquire lock: txn 00000001 @ ‹k›
+[-] acquire lock: txn 00000001 acquiring Unreplicated Exclusive lock on ‹"k"›
 
 finish req=req1
 ----
@@ -1016,7 +1012,7 @@ num=0
 handle-lock-conflict-error req=req2 lease-seq=1
   lock txn=txn1 key=k
 ----
-[3] handle lock conflict error req2: handled conflicting locks on ‹"k"›, released latches
+[3] handle lock conflict error req2: added 1 discovered lock(s) to lock table: conflicting locks on ‹"k"›
 
 debug-lock-table
 ----
@@ -1074,7 +1070,7 @@ num=1
 
 on-lock-acquired req=req2 key=k
 ----
-[-] acquire lock: txn 00000002 @ ‹k›
+[-] acquire lock: txn 00000002 acquiring Unreplicated Exclusive lock on ‹"k"›
 
 debug-lock-table
 ----

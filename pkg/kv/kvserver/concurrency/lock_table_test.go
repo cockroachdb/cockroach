@@ -185,6 +185,7 @@ func TestLockTableBasic(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	datadriven.Walk(t, datapathutils.TestDataPath(t, "lock_table"), func(t *testing.T, path string) {
+		ctx := context.Background()
 		var lt lockTable
 		var st *cluster.Settings
 		var txnsByName map[string]*enginepb.TxnMeta
@@ -360,7 +361,7 @@ func TestLockTableBasic(t *testing.T) {
 				}
 				g := guardsByReqName[reqName]
 				var err *Error
-				g, err = lt.ScanAndEnqueue(req, g)
+				g, err = lt.ScanAndEnqueue(ctx, req, g)
 				if err != nil {
 					return err.String()
 				}
@@ -401,7 +402,7 @@ func TestLockTableBasic(t *testing.T) {
 					req.Txn.TxnMeta, roachpb.Key(key), durability, strength, req.Txn.IgnoredSeqNums,
 				)
 				acq.IgnoredSeqNums = ScanIgnoredSeqNumbers(t, d)
-				if err := lt.AcquireLock(&acq); err != nil {
+				if err := lt.AcquireLock(ctx, &acq); err != nil {
 					return err.Error()
 				}
 				return lt.String()
@@ -415,7 +416,7 @@ func TestLockTableBasic(t *testing.T) {
 				span := getSpan(t, d, dd.ScanArg[string](t, d, "span"))
 				// TODO(sbhola): also test ABORTED.
 				intent := &roachpb.LockUpdate{Span: span, Txn: *txnMeta, Status: roachpb.COMMITTED}
-				if err := lt.UpdateLocks(intent); err != nil {
+				if err := lt.UpdateLocks(ctx, intent); err != nil {
 					return err.Error()
 				}
 				return lt.String()
@@ -437,7 +438,7 @@ func TestLockTableBasic(t *testing.T) {
 				// TODO(sbhola): also test STAGING.
 				intent := &roachpb.LockUpdate{
 					Span: span, Txn: *txnMeta, Status: roachpb.PENDING, IgnoredSeqNums: ignored}
-				if err := lt.UpdateLocks(intent); err != nil {
+				if err := lt.UpdateLocks(ctx, intent); err != nil {
 					return err.Error()
 				}
 				return lt.String()
@@ -478,7 +479,7 @@ func TestLockTableBasic(t *testing.T) {
 				foundLock.Strength = str
 
 				if _, err := lt.AddDiscoveredLock(
-					&foundLock, leaseSeq, consultTxnStatusCache, g); err != nil {
+					ctx, &foundLock, leaseSeq, consultTxnStatusCache, g); err != nil {
 					return err.Error()
 				}
 				return lt.String()
@@ -504,7 +505,7 @@ func TestLockTableBasic(t *testing.T) {
 				}
 				key := dd.ScanArg[string](t, d, "k")
 				strength := ScanLockStrength(t, d)
-				ok, txn, err := g.IsKeyLockedByConflictingTxn(context.Background(), roachpb.Key(key), strength)
+				ok, txn, err := g.IsKeyLockedByConflictingTxn(ctx, roachpb.Key(key), strength)
 				if err != nil {
 					return err.Error()
 				}
@@ -523,7 +524,7 @@ func TestLockTableBasic(t *testing.T) {
 				if g == nil {
 					d.Fatalf(t, "unknown guard: %s", reqName)
 				}
-				lt.Dequeue(g)
+				lt.Dequeue(ctx, g)
 				delete(guardsByReqName, reqName)
 				delete(requestsByName, reqName)
 				return lt.String()
@@ -848,6 +849,7 @@ func newLock(txn *enginepb.TxnMeta, key roachpb.Key, str lock.Strength) *roachpb
 }
 
 func TestLockTableMaxLocks(t *testing.T) {
+	ctx := context.Background()
 	m := TestingMakeLockTableMetricsCfg()
 	lt := newLockTable(
 		5, roachpb.RangeID(3), hlc.NewClockForTesting(nil), cluster.MakeTestingClusterSettings(),
@@ -878,7 +880,7 @@ func TestLockTableMaxLocks(t *testing.T) {
 			Batch:      ba,
 		}
 		reqs = append(reqs, req)
-		ltg, err := lt.ScanAndEnqueue(req, nil)
+		ltg, err := lt.ScanAndEnqueue(ctx, req, nil)
 		require.Nil(t, err)
 		require.Nil(t, ltg.ResolveBeforeScanning())
 		require.False(t, ltg.ShouldWait())
@@ -895,7 +897,7 @@ func TestLockTableMaxLocks(t *testing.T) {
 		for j := 0; j < 10; j++ {
 			k := i*20 + j
 			added, err := lt.AddDiscoveredLock(
-				newLock(&txnMeta, keys[k], lock.Intent),
+				ctx, newLock(&txnMeta, keys[k], lock.Intent),
 				0, false, guards[i])
 			require.True(t, added)
 			require.NoError(t, err)
@@ -908,21 +910,21 @@ func TestLockTableMaxLocks(t *testing.T) {
 	require.Equal(t, int64(66), m.NumLockShedDueToMemoryLimitEvents.Count())
 	// Two guards are dequeued. This marks 2 notRemovable locks as removable.
 	// We're at 8 notRemovable locks now.
-	lt.Dequeue(guards[0])
-	lt.Dequeue(guards[1])
+	lt.Dequeue(ctx, guards[0])
+	lt.Dequeue(ctx, guards[1])
 	require.Equal(t, int64(10), lt.lockCountForTesting())
 	// Two guards do ScanAndEnqueue. This marks 2 notRemovable locks as
 	// removable. We're at 6 notRemovable locks now.
 	for i := 2; i < 4; i++ {
 		var err *Error
-		guards[i], err = lt.ScanAndEnqueue(reqs[i], guards[i])
+		guards[i], err = lt.ScanAndEnqueue(ctx, reqs[i], guards[i])
 		require.Nil(t, err)
 		require.True(t, guards[i].ShouldWait())
 	}
 	require.Equal(t, int64(10), lt.lockCountForTesting())
 	// Add another discovered lock, to trigger tryClearLocks.
 	added, err := lt.AddDiscoveredLock(
-		newLock(&txnMeta, keys[9*20+10], lock.Intent),
+		ctx, newLock(&txnMeta, keys[9*20+10], lock.Intent),
 		0, false, guards[9])
 	require.True(t, added)
 	require.NoError(t, err)
@@ -935,7 +937,7 @@ func TestLockTableMaxLocks(t *testing.T) {
 	require.Equal(t, int64(101), int64(lt.locks.lockIDSeqNum))
 	// Add another discovered lock, to trigger tryClearLocks.
 	added, err = lt.AddDiscoveredLock(
-		newLock(&txnMeta, keys[9*20+11], lock.Intent),
+		ctx, newLock(&txnMeta, keys[9*20+11], lock.Intent),
 		0, false, guards[9])
 	require.True(t, added)
 	require.NoError(t, err)
@@ -945,13 +947,13 @@ func TestLockTableMaxLocks(t *testing.T) {
 	require.Equal(t, int64(96), m.LocksShedDueToMemoryLimit.Count())
 	require.Equal(t, int64(68), m.NumLockShedDueToMemoryLimitEvents.Count())
 	// Two more guards are dequeued, so we are down to 4 notRemovable locks.
-	lt.Dequeue(guards[4])
-	lt.Dequeue(guards[5])
+	lt.Dequeue(ctx, guards[4])
+	lt.Dequeue(ctx, guards[5])
 	// Bump up the enforcement interval manually.
 	lt.lockTableLimitsMu.lockAddMaxLocksCheckInterval = 2
 	// Add another discovered lock.
 	added, err = lt.AddDiscoveredLock(
-		newLock(&txnMeta, keys[9*20+12], lock.Intent),
+		ctx, newLock(&txnMeta, keys[9*20+12], lock.Intent),
 		0, false, guards[9])
 	require.True(t, added)
 	require.NoError(t, err)
@@ -962,7 +964,7 @@ func TestLockTableMaxLocks(t *testing.T) {
 	require.Equal(t, int64(68), m.NumLockShedDueToMemoryLimitEvents.Count())
 	// Add another discovered lock, to trigger tryClearLocks.
 	added, err = lt.AddDiscoveredLock(
-		newLock(&txnMeta, keys[9*20+13], lock.Intent),
+		ctx, newLock(&txnMeta, keys[9*20+13], lock.Intent),
 		0, false, guards[9])
 	require.True(t, added)
 	require.NoError(t, err)
@@ -976,12 +978,12 @@ func TestLockTableMaxLocks(t *testing.T) {
 	lt.lockTableLimitsMu.lockAddMaxLocksCheckInterval = 1
 	lt.lockTableLimitsMu.minKeysLocked = 2
 	// Three more guards dequeued. Now only 1 lock is notRemovable.
-	lt.Dequeue(guards[6])
-	lt.Dequeue(guards[7])
-	lt.Dequeue(guards[8])
+	lt.Dequeue(ctx, guards[6])
+	lt.Dequeue(ctx, guards[7])
+	lt.Dequeue(ctx, guards[8])
 	// Add another discovered lock.
 	added, err = lt.AddDiscoveredLock(
-		newLock(&txnMeta, keys[9*20+14], lock.Intent),
+		ctx, newLock(&txnMeta, keys[9*20+14], lock.Intent),
 		0, false, guards[9])
 	require.True(t, added)
 	require.NoError(t, err)
@@ -993,7 +995,7 @@ func TestLockTableMaxLocks(t *testing.T) {
 	// Add another discovered lock, to trigger tryClearLocks, and push us over 5
 	// locks.
 	added, err = lt.AddDiscoveredLock(
-		newLock(&txnMeta, keys[9*20+15], lock.Intent),
+		ctx, newLock(&txnMeta, keys[9*20+15], lock.Intent),
 		0, false, guards[9])
 	require.True(t, added)
 	require.NoError(t, err)
@@ -1008,7 +1010,7 @@ func TestLockTableMaxLocks(t *testing.T) {
 	// Add locks to push us over 5 locks.
 	for i := 16; i < 20; i++ {
 		added, err = lt.AddDiscoveredLock(
-			newLock(&txnMeta, keys[9*20+i], lock.Intent),
+			ctx, newLock(&txnMeta, keys[9*20+i], lock.Intent),
 			0, false, guards[9])
 		require.True(t, added)
 		require.NoError(t, err)
@@ -1024,6 +1026,7 @@ func TestLockTableMaxLocks(t *testing.T) {
 // TestLockTableMaxLocksWithMultipleNotRemovableRefs tests the notRemovable
 // ref counting.
 func TestLockTableMaxLocksWithMultipleNotRemovableRefs(t *testing.T) {
+	ctx := context.Background()
 	m := TestingMakeLockTableMetricsCfg()
 	lt := newLockTable(
 		2, roachpb.RangeID(3), hlc.NewClockForTesting(nil), cluster.MakeTestingClusterSettings(),
@@ -1051,7 +1054,7 @@ func TestLockTableMaxLocksWithMultipleNotRemovableRefs(t *testing.T) {
 			LockSpans:  lockSpans,
 			Batch:      ba,
 		}
-		ltg, err := lt.ScanAndEnqueue(req, nil)
+		ltg, err := lt.ScanAndEnqueue(ctx, req, nil)
 		require.Nil(t, err)
 		require.Nil(t, ltg.ResolveBeforeScanning())
 		require.False(t, ltg.ShouldWait())
@@ -1064,7 +1067,7 @@ func TestLockTableMaxLocksWithMultipleNotRemovableRefs(t *testing.T) {
 	// The first 6 requests discover 3 locks total.
 	for i := 0; i < 6; i++ {
 		added, err := lt.AddDiscoveredLock(
-			newLock(&txnMeta, keys[i/2], lock.Intent),
+			ctx, newLock(&txnMeta, keys[i/2], lock.Intent),
 			0, false, guards[i])
 		require.True(t, added)
 		require.NoError(t, err)
@@ -1074,12 +1077,12 @@ func TestLockTableMaxLocksWithMultipleNotRemovableRefs(t *testing.T) {
 	// Remove one of the notRemovable refs from each lock.
 	for i := 0; i < 6; i++ {
 		if i%2 == 0 {
-			lt.Dequeue(guards[i])
+			lt.Dequeue(ctx, guards[i])
 		}
 	}
 	// Add another lock using request 6.
 	added, err := lt.AddDiscoveredLock(
-		newLock(&txnMeta, keys[6/2], lock.Intent),
+		ctx, newLock(&txnMeta, keys[6/2], lock.Intent),
 		0, false, guards[6])
 	require.True(t, added)
 	require.NoError(t, err)
@@ -1088,16 +1091,16 @@ func TestLockTableMaxLocksWithMultipleNotRemovableRefs(t *testing.T) {
 	// Remove the remaining notRemovable refs.
 	for i := 0; i < 6; i++ {
 		if i%2 == 1 {
-			lt.Dequeue(guards[i])
+			lt.Dequeue(ctx, guards[i])
 		}
 	}
-	lt.Dequeue(guards[6])
+	lt.Dequeue(ctx, guards[6])
 	// There are still 4 locks since tryClearLocks has not happened since the
 	// ref counts went to 0.
 	require.Equal(t, int64(4), lt.lockCountForTesting())
 	// Add another lock using request 8.
 	added, err = lt.AddDiscoveredLock(
-		newLock(&txnMeta, keys[8/2], lock.Intent),
+		ctx, newLock(&txnMeta, keys[8/2], lock.Intent),
 		0, false, guards[8])
 	require.True(t, added)
 	require.NoError(t, err)
@@ -1136,7 +1139,7 @@ func doWork(ctx context.Context, item *workItem, e *workloadExecutor) error {
 				lg = nil
 			}
 			if g != nil {
-				e.lt.Dequeue(g)
+				e.lt.Dequeue(ctx, g)
 				g = nil
 			}
 		}()
@@ -1148,12 +1151,12 @@ func doWork(ctx context.Context, item *workItem, e *workloadExecutor) error {
 			// cancellation, the code makes sure to release latches when returning
 			// early due to error. Otherwise other requests will get stuck and
 			// group.Wait() will not return until the test times out.
-			lg, err = e.lm.Acquire(context.Background(), item.request.LatchSpans, poison.Policy_Error, item.request.Batch)
+			lg, err = e.lm.Acquire(ctx, item.request.LatchSpans, poison.Policy_Error, item.request.Batch)
 			if err != nil {
 				return err
 			}
 			var kvErr *Error
-			g, kvErr = e.lt.ScanAndEnqueue(*item.request, g)
+			g, kvErr = e.lt.ScanAndEnqueue(ctx, *item.request, g)
 			if kvErr != nil {
 				return kvErr.GoError()
 			}
@@ -1221,7 +1224,7 @@ func doWork(ctx context.Context, item *workItem, e *workloadExecutor) error {
 		return err
 	}
 	for i := range item.intents {
-		if err := e.lt.UpdateLocks(&item.intents[i]); err != nil {
+		if err := e.lt.UpdateLocks(ctx, &item.intents[i]); err != nil {
 			return err
 		}
 	}
@@ -1329,10 +1332,11 @@ func newWorkLoadExecutor(items []workloadItem, concurrency int) *workloadExecuto
 }
 
 func (e *workloadExecutor) acquireLock(txn *roachpb.Transaction, toAcq lockToAcquire) error {
+	ctx := context.Background()
 	acq := roachpb.MakeLockAcquisition(
 		txn.TxnMeta, toAcq.key, toAcq.dur, toAcq.str, txn.IgnoredSeqNums,
 	)
-	err := e.lt.AcquireLock(&acq)
+	err := e.lt.AcquireLock(ctx, &acq)
 	if err != nil {
 		return err
 	}
@@ -1834,12 +1838,12 @@ func doBenchWork(item *benchWorkItem, env benchEnv, doneCh chan<- error) {
 	firstIter := true
 	ctx := context.Background()
 	for {
-		if lg, err = env.lm.Acquire(context.Background(), item.LatchSpans, poison.Policy_Error, item.Batch); err != nil {
+		if lg, err = env.lm.Acquire(ctx, item.LatchSpans, poison.Policy_Error, item.Batch); err != nil {
 			doneCh <- err
 			return
 		}
 		var kvErr *Error
-		g, kvErr = env.lt.ScanAndEnqueue(item.Request, g)
+		g, kvErr = env.lt.ScanAndEnqueue(ctx, item.Request, g)
 		if kvErr != nil {
 			doneCh <- kvErr.GoError()
 			return
@@ -1869,19 +1873,19 @@ func doBenchWork(item *benchWorkItem, env benchEnv, doneCh chan<- error) {
 		acq := roachpb.MakeLockAcquisition(
 			item.Txn.TxnMeta, toAcq.key, toAcq.dur, toAcq.str, item.Txn.IgnoredSeqNums,
 		)
-		if err = env.lt.AcquireLock(&acq); err != nil {
+		if err = env.lt.AcquireLock(ctx, &acq); err != nil {
 			doneCh <- err
 			return
 		}
 	}
-	env.lt.Dequeue(g)
+	env.lt.Dequeue(ctx, g)
 	env.lm.Release(ctx, lg)
 	if len(item.locksToAcquire) == 0 {
 		doneCh <- nil
 		return
 	}
 	// Release locks.
-	if lg, err = env.lm.Acquire(context.Background(), item.LatchSpans, poison.Policy_Error, item.Batch); err != nil {
+	if lg, err = env.lm.Acquire(ctx, item.LatchSpans, poison.Policy_Error, item.Batch); err != nil {
 		doneCh <- err
 		return
 	}
@@ -1891,7 +1895,7 @@ func doBenchWork(item *benchWorkItem, env benchEnv, doneCh chan<- error) {
 			Txn:    item.Request.Txn.TxnMeta,
 			Status: roachpb.COMMITTED,
 		}
-		if err = env.lt.UpdateLocks(&intent); err != nil {
+		if err = env.lt.UpdateLocks(ctx, &intent); err != nil {
 			doneCh <- err
 			return
 		}
@@ -2070,6 +2074,7 @@ func BenchmarkLockTableMetrics(b *testing.B) {
 			)
 			lt.enabled = true
 
+			ctx := context.Background()
 			txn := &roachpb.Transaction{
 				TxnMeta: enginepb.TxnMeta{ID: uuid.MakeV4()},
 			}
@@ -2078,7 +2083,7 @@ func BenchmarkLockTableMetrics(b *testing.B) {
 				acq := roachpb.MakeLockAcquisition(
 					txn.TxnMeta, k, lock.Unreplicated, lock.Exclusive, txn.IgnoredSeqNums,
 				)
-				err := lt.AcquireLock(&acq)
+				err := lt.AcquireLock(ctx, &acq)
 				if err != nil {
 					b.Fatal(err)
 				}

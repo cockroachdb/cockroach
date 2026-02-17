@@ -33,7 +33,7 @@ sequence req=req1
 
 on-lock-acquired req=req1 key=a dur=r str=shared
 ----
-[-] acquire lock: txn 00000001 @ ‹a›
+[-] acquire lock: txn 00000001 acquiring Replicated Shared lock on ‹"a"›
 
 finish req=req1
 ----
@@ -52,7 +52,7 @@ sequence req=req2
 
 on-lock-acquired req=req2 key=a dur=r str=shared
 ----
-[-] acquire lock: txn 00000002 @ ‹a›
+[-] acquire lock: txn 00000002 acquiring Replicated Shared lock on ‹"a"›
 
 finish req=req2
 ----
@@ -78,7 +78,7 @@ handle-lock-conflict-error req=req3 lease-seq=1
   lock txn=txn1 key=a str=shared
   lock txn=txn2 key=a str=shared
 ----
-[4] handle lock conflict error req3: handled conflicting locks on ‹"a"›, ‹"a"›, released latches
+[4] handle lock conflict error req3: added 2 discovered lock(s) to lock table: conflicting locks on ‹"a"›, ‹"a"›
 
 debug-lock-table
 ----
@@ -146,7 +146,7 @@ sequence req=req4
 
 on-lock-acquired req=req4 key=a dur=r str=exclusive
 ----
-[-] acquire lock: txn 00000003 @ ‹a›
+[-] acquire lock: txn 00000003 acquiring Replicated Exclusive lock on ‹"a"›
 
 finish req=req4
 ----
@@ -171,7 +171,7 @@ sequence req=req5
 handle-lock-conflict-error req=req5 lease-seq=1
   lock txn=txn3 key=a str=exclusive
 ----
-[3] handle lock conflict error req5: handled conflicting locks on ‹"a"›, released latches
+[3] handle lock conflict error req5: added 1 discovered lock(s) to lock table: conflicting locks on ‹"a"›
 
 debug-lock-table
 ----
