@@ -68,3 +68,7 @@ func (r *Retry) Next() bool {
 	}
 	return r.Retry.Next()
 }
+
+func (r *Retry) NextBackoff() time.Duration {
+	return r.Retry.NextBackoff()
+}
