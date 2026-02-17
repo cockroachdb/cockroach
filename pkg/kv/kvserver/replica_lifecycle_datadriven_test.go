@@ -292,9 +292,15 @@ func TestReplicaLifecycleDataDriven(t *testing.T) {
 				require.NoError(t, err)
 
 				batchRepr := batch.Repr()
+				lhsRepl := rs.replica
+				require.NotNil(t, lhsRepl, "LHS replica must exist on n1/s1")
+				// Bump the raft index to account for where the split command
+				// would go in the raft log.
+				lhsRepl.lastIdx++
 				tc.splits[rangeID] = pendingSplit{
 					trigger:   split,
 					batchRepr: batchRepr,
+					raftIndex: lhsRepl.lastIdx,
 				}
 				tc.updatePostSplitRangeState(ctx, t, batch, split)
 				batch.Close()
@@ -322,12 +328,18 @@ func TestReplicaLifecycleDataDriven(t *testing.T) {
 				// - if the replica has a higher ReplicaID than in the split
 				// trigger, the original was removed and a new one created (also
 				// destroyed).
+				lhsRangeState := tc.mustGetRangeState(t, rangeID)
+				require.NotNil(t, lhsRangeState.replica, "LHS replica must exist on n1/s1")
+
 				rhsRangeState := tc.mustGetRangeState(t, split.RightDesc.RangeID)
 				rhsReplDesc := rhsRangeState.mustGetReplicaDescriptor(t, roachpb.NodeID(1))
 				destroyed := rhsRangeState.replica == nil ||
 					rhsRangeState.replica.ReplicaID > rhsReplDesc.ReplicaID
 
 				in := splitPreApplyInput{
+					lhsID:              lhsRangeState.replica.FullReplicaID,
+					storeID:            1, // s1
+					raftIndex:          ps.raftIndex,
 					destroyed:           destroyed,
 					rhsDesc:             split.RightDesc,
 					initClosedTimestamp: hlc.Timestamp{WallTime: 100}, // dummy timestamp
@@ -503,6 +515,7 @@ func (r *replicaInfo) initialized() bool {
 type pendingSplit struct {
 	trigger   roachpb.SplitTrigger
 	batchRepr []byte
+	raftIndex kvpb.RaftIndex
 }
 
 // testCtx is a single test's context. It tracks the state of all ranges and any

@@ -9,6 +9,7 @@ import (
 	"bytes"
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvstorage"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/load"
@@ -19,9 +20,14 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-// splitPreApplyInput contains input for the RHS replica required for
-// splitPreApply.
+// splitPreApplyInput contains the input needed for splitPreApply.
 type splitPreApplyInput struct {
+	// lhsID identifies the LHS replica applying the split.
+	lhsID roachpb.FullReplicaID
+	// storeID is the ID of the store applying the split.
+	storeID roachpb.StoreID
+	// raftIndex is the raft log index of the split command.
+	raftIndex kvpb.RaftIndex
 	// destroyed is set to true iff the RHS replica (the one with the matching
 	// ReplicaID from the SplitTrigger used to construct a splitPreApplyInput) has
 	// already been removed from the store.
@@ -43,10 +49,17 @@ type splitPreApplyInput struct {
 // splitTrigger and, assuming they hold, returns the corresponding input that
 // should be passed to splitPreApply.
 //
+// raftIndex is the log index of the split command being applied. It is threaded
+// through to splitPreApplyInput for use by WAG node staging.
+//
 // initClosedTS is the closed timestamp carried by the split command. It will be
 // used to initialize the closed timestamp of the RHS replica.
 func validateAndPrepareSplit(
-	ctx context.Context, r *Replica, split roachpb.SplitTrigger, initClosedTS *hlc.Timestamp,
+	ctx context.Context,
+	r *Replica,
+	split roachpb.SplitTrigger,
+	raftIndex kvpb.RaftIndex,
+	initClosedTS *hlc.Timestamp,
 ) (splitPreApplyInput, error) {
 	// Sanity check that the store is in the split.
 	splitRightReplDesc, hasRightDesc := split.RightDesc.GetReplicaDescriptor(r.StoreID())
@@ -82,7 +95,13 @@ func validateAndPrepareSplit(
 			}
 		}
 
-		return splitPreApplyInput{destroyed: true, rhsDesc: split.RightDesc}, nil
+		return splitPreApplyInput{
+			lhsID:     roachpb.FullReplicaID{RangeID: r.RangeID, ReplicaID: r.replicaID},
+			storeID:   r.StoreID(),
+			raftIndex: raftIndex,
+			destroyed: true,
+			rhsDesc:   split.RightDesc,
+		}, nil
 	}
 	// Sanity check the common case -- the RHS replica that exists should match
 	// the ReplicaID in the split trigger. In particular, it shouldn't older than
@@ -108,8 +127,11 @@ func validateAndPrepareSplit(
 	initClosedTS.Forward(r.GetCurrentClosedTimestamp(ctx))
 
 	return splitPreApplyInput{
-		destroyed:           false,
-		rhsDesc:             split.RightDesc,
+		lhsID:              roachpb.FullReplicaID{RangeID: r.RangeID, ReplicaID: r.replicaID},
+		storeID:            r.StoreID(),
+		raftIndex:          raftIndex,
+		destroyed:          false,
+		rhsDesc:            split.RightDesc,
 		initClosedTimestamp: *initClosedTS,
 	}, nil
 }
