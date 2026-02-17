@@ -7,19 +7,24 @@
 package main
 
 import (
+	"encoding/json"
 	"go/parser"
 	"go/token"
 	"io/fs"
+	"os"
 	"path/filepath"
 	"runtime"
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/internal/codeowners"
 	"github.com/cockroachdb/cockroach/pkg/testutils/benchdoc"
+	"github.com/cockroachdb/errors"
 	"golang.org/x/sync/errgroup"
 )
 
-func listBenchmarks(pkgDir string) ([]benchdoc.BenchmarkInfo, error) {
+type BenchmarkInfoList []benchdoc.BenchmarkInfo
+
+func listBenchmarks(pkgDir string) (BenchmarkInfoList, error) {
 	absPkgDir, err := filepath.Abs(pkgDir)
 	if err != nil {
 		return nil, err
@@ -29,7 +34,7 @@ func listBenchmarks(pkgDir string) ([]benchdoc.BenchmarkInfo, error) {
 		return nil, err
 	}
 
-	var benchmarkInfoList []benchdoc.BenchmarkInfo
+	var benchmarkInfoList BenchmarkInfoList
 	g := errgroup.Group{}
 	g.SetLimit(runtime.GOMAXPROCS(0))
 	resultsCh := make(chan []benchdoc.BenchmarkInfo, 4096)
@@ -100,4 +105,27 @@ func listBenchmarks(pkgDir string) ([]benchdoc.BenchmarkInfo, error) {
 	}
 
 	return benchmarkInfoList, nil
+}
+
+func (p BenchmarkInfoList) export(jsonPath string) error {
+	data, err := json.Marshal(p)
+	if err != nil {
+		return errors.Wrap(err, "marshaling benchmark list")
+	}
+	if err := os.WriteFile(jsonPath, data, 0644); err != nil {
+		return errors.Wrapf(err, "writing to %s", jsonPath)
+	}
+	return nil
+}
+
+func loadBenchmarkList(jsonPath string) (BenchmarkInfoList, error) {
+	data, err := os.ReadFile(jsonPath)
+	if err != nil {
+		return nil, errors.Wrapf(err, "reading from %s", jsonPath)
+	}
+	var list BenchmarkInfoList
+	if err := json.Unmarshal(data, &list); err != nil {
+		return nil, errors.Wrap(err, "unmarshaling benchmark list")
+	}
+	return list, nil
 }
