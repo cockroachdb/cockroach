@@ -12,6 +12,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/load"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/util/admission"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
@@ -40,7 +41,7 @@ func TestNodeCapacityProvider(t *testing.T) {
 		storeCount: 3,
 	}
 
-	provider := load.NewNodeCapacityProvider(stopper, mockStores, load.NodeCapacityProviderConfig{
+	provider := load.NewNodeCapacityProvider(stopper, mockStores, admission.NewSQLCPUProvider(), load.NodeCapacityProviderConfig{
 		CPUUsageRefreshInterval:    1 * time.Millisecond,
 		CPUCapacityRefreshInterval: 1 * time.Millisecond,
 		CPUUsageMovingAverageAge:   20,

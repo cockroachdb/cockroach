@@ -721,7 +721,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (serverctl.ServerStartupInterf
 		CPUCapacityRefreshInterval: cpuCapacityRefreshInterval,
 		CPUUsageMovingAverageAge:   base.DefaultCPUUsageMovingAverageAge,
 	}
-	nodeCapacityProvider := load.NewNodeCapacityProvider(stopper, stores, nodeCapacityProviderConfig)
+	nodeCapacityProvider := load.NewNodeCapacityProvider(stopper, stores, sqlCPUProvider, nodeCapacityProviderConfig)
 
 	// The Executor will be further initialized later, as we create more
 	// of the server's components. There's a circular dependency - many things
