@@ -247,6 +247,9 @@ func (bp *backupDataProcessor) constructProgressProducerMeta(
 	return &execinfrapb.ProducerMetadata{BulkProcessorProgress: &p}
 }
 
+const backupRequestTraceSpanName = "backup.ExportRequest"
+const backupSinkWriteTraceSpanName = "backup.FileSSTSink.Write"
+
 // Next is part of the RowSource interface.
 func (bp *backupDataProcessor) Next() (rowenc.EncDatumRow, *execinfrapb.ProducerMetadata) {
 	if bp.State != execinfra.StateRunning {
@@ -544,7 +547,7 @@ func runBackupProcessor(
 								if sendExportRequestWithVerboseTracing.Get(&clusterSettings.SV) {
 									opts = append(opts, tracing.WithRecording(tracingpb.RecordingVerbose))
 								}
-								ctx, exportSpan := tracer.StartSpanCtx(ctx, "backup.ExportRequest", opts...)
+								ctx, exportSpan := tracer.StartSpanCtx(ctx, backupRequestTraceSpanName, opts...)
 								rawResp, pErr = kv.SendWrappedWithAdmission(
 									ctx, flowCtx.Cfg.DB.KV().NonTransactionalSender(), header, admissionHeader, req)
 								recording = exportSpan.FinishAndGetConfiguredRecording()
@@ -680,7 +683,11 @@ func runBackupProcessor(
 
 							// Cannot set the error to err, which is shared across workers.
 							var writeErr error
-							resumeSpan.span.Key, writeErr = sink.Write(ctx, ret)
+							func() {
+								ctx, sp := tracing.ChildSpan(ctx, backupSinkWriteTraceSpanName)
+								defer sp.Finish()
+								resumeSpan.span.Key, writeErr = sink.Write(ctx, ret)
+							}()
 							if writeErr != nil {
 								return writeErr
 							}

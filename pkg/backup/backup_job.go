@@ -52,6 +52,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
+	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
+	"github.com/cockroachdb/cockroach/pkg/util/bulk"
 	bulkutil "github.com/cockroachdb/cockroach/pkg/util/bulk"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -68,6 +70,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
+	"github.com/gogo/protobuf/proto"
 	"github.com/gogo/protobuf/types"
 )
 
@@ -84,6 +87,23 @@ var useBulkOracle = settings.RegisterBoolSetting(
 	"bulkio.backup.balanced_distribution.enabled",
 	"randomize the selection of which replica backs up each range",
 	true)
+
+// acDelayThreshold is the percentage of time spent waiting for admission across
+// all work done by backup -- waiting for export requests and writing them to
+// the sink -- above which a notice is emitted by the job that overload is
+// causing the job to be slower than expected. "Expected" is the key word here:
+// we expect a normal backup to be queuing up enough work that it is able to
+// utilize available capacity as determined by admission control, meaning that
+// most of that queued work is _expected_ to wait for admission control to tell
+// it when to run. Thus we "expect" a large fraction of time to be spent in the
+// job's various workers to be spent waiting for admission control, this it is
+// only an _unexpected_ condition if/when this fraction approaches 100%.
+var acDelayThreshold = settings.RegisterFloatSetting(
+	settings.ApplicationLevel,
+	"backup.admission_control_delay_warning.threshold",
+	"fraction of time spent waiting for admission control above which a warning is logged to the job's details",
+	0.98,
+)
 
 func countRows(raw kvpb.BulkOpSummary, pkIDs map[uint64]bool) roachpb.RowCount {
 	res := roachpb.RowCount{DataSize: raw.DataSize}
@@ -273,6 +293,13 @@ func backup(
 
 	progCh := make(chan *execinfrapb.RemoteProducerMetadata_BulkProcessorProgress)
 	checkpointLoop := func(ctx context.Context) error {
+
+		acDelayLogger := bulk.NewJobDelayLogger(
+			job.ID(), execCtx.ExecCfg(),
+			time.Minute*5, acDelayThreshold,
+			backupAdmissionDelayTraceReader{}, "cluster overload protection",
+		)
+
 		// When a processor is done exporting a span, it will send a progress update
 		// to progCh.
 		defer close(requestFinishedCh)
@@ -336,6 +363,17 @@ func backup(
 				if execCtx.ExecCfg().BackupRestoreTestingKnobs != nil &&
 					execCtx.ExecCfg().BackupRestoreTestingKnobs.AfterBackupCheckpoint != nil {
 					execCtx.ExecCfg().BackupRestoreTestingKnobs.AfterBackupCheckpoint()
+				}
+
+				// Check if we should report on the accumulated trace stats, namely any
+				// delays due to AC.
+				perNodeAggregatorStatsCopy := func() bulkutil.ComponentAggregatorStats {
+					resumer.mu.Lock()
+					defer resumer.mu.Unlock()
+					return resumer.mu.perNodeAggregatorStats.DeepCopy()
+				}()
+				if err := acDelayLogger.Process(ctx, perNodeAggregatorStatsCopy); err != nil {
+					log.Warningf(ctx, "unable to process updated admission control delays: %+v", err)
 				}
 			}
 		}
@@ -2024,6 +2062,58 @@ func (b *backupResumer) getTelemetryEventType() eventpb.RecoveryEventType {
 	}
 	return backupJobEventType
 }
+
+type backupAdmissionDelayTraceReader struct{}
+
+func (backupAdmissionDelayTraceReader) Work(
+	prior, now bulk.ComponentAggregatorStats,
+) time.Duration {
+	var prevSpent, nowSpent time.Duration
+	for _, node := range prior {
+		prevSpent += node.SpanTotals[backupRequestTraceSpanName].Duration
+		prevSpent += node.SpanTotals[backupSinkWriteTraceSpanName].Duration
+	}
+	for _, node := range now {
+		nowSpent += node.SpanTotals[backupRequestTraceSpanName].Duration
+		nowSpent += node.SpanTotals[backupSinkWriteTraceSpanName].Duration
+	}
+	return nowSpent - prevSpent
+}
+
+func (backupAdmissionDelayTraceReader) Delay(
+	prior, now bulk.ComponentAggregatorStats,
+) (time.Duration, error) {
+	var ac admissionpb.AdmissionWorkQueueStats
+	acMsgName := ac.ProtoName()
+
+	var prevDelayed, nowDelayed time.Duration
+	for _, node := range prior {
+		for ev, payload := range node.Events {
+			if ev == acMsgName {
+				ac.Reset()
+				if err := proto.Unmarshal(payload, &ac); err != nil {
+					return 0, err
+				}
+				prevDelayed += ac.WaitDurationNanos
+			}
+		}
+	}
+
+	for _, node := range now {
+		for ev, payload := range node.Events {
+			if ev == acMsgName {
+				ac.Reset()
+				if err := proto.Unmarshal(payload, &ac); err != nil {
+					return 0, err
+				}
+				nowDelayed += ac.WaitDurationNanos
+			}
+		}
+	}
+	return nowDelayed - prevDelayed, nil
+}
+
+var _ bulk.TraceDelayReader = &backupAdmissionDelayTraceReader{}
 
 var _ jobs.Resumer = &backupResumer{}
 
