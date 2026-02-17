@@ -42,6 +42,7 @@ type SQLWorkInfo struct {
 type SQLCPUProvider interface {
 	// GetHandle returns a SQLCPUHandle for the supplied work info.
 	GetHandle(work SQLWorkInfo) *SQLCPUHandle
+	GetCumulativeSQLCPUNanos() (gatewayCPUNanos, distCPUNanos int64)
 }
 
 var sqlCPUAdmissionHandleContextKey = ctxutil.RegisterFastValueKey()
@@ -97,6 +98,16 @@ func newSQLCPUAdmissionHandle(workInfo SQLWorkInfo, p *sqlCPUProviderImpl) *SQLC
 	}
 	h.mu.gHandles = h.mu.handlesBacking[:0]
 	return h
+}
+
+// reportCPU atomically adds the CPU time difference to the appropriate
+// cumulative counter.
+func (h *SQLCPUHandle) reportCPU(diff time.Duration) {
+	if h.workInfo.AtGateway {
+		h.p.cumulativeGatewayCPUNanos.Add(diff.Nanoseconds())
+	} else {
+		h.p.cumulativeDistSQLCPUNanos.Add(diff.Nanoseconds())
+	}
 }
 
 // TODO(sumeer): see the comment
@@ -225,6 +236,7 @@ func (h *GoroutineCPUHandle) measureAndAdmit(ctx context.Context, noWait bool) e
 	// we would need an atomic here is that when SQLCPUHandle is closed, it
 	// needs to reach in and grab whatever CPU has not yet been reported.
 	h.cpuAccounted += diff
+	h.h.reportCPU(diff)
 	return nil
 }
 
@@ -248,7 +260,20 @@ func (h *GoroutineCPUHandle) UnpauseMeasuring() {
 }
 
 type sqlCPUProviderImpl struct {
-	// TODO(sumeer): implement.
+	// cumulativeGatewayCPUNanos tracks the cumulative CPU time in nanoseconds
+	// accounted for SQL work executed at gateway nodes. This value is
+	// monotonically increasing and is updated atomically as CPU time is
+	// reported via SQLCPUHandle.reportCPU.
+	cumulativeGatewayCPUNanos atomic.Int64
+	// cumulativeDistSQLCPUNanos tracks the cumulative CPU time in nanoseconds
+	// accounted for distributed SQL work. This value is monotonically
+	// increasing and is updated atomically as CPU time is reported via
+	// SQLCPUHandle.reportCPU.
+	cumulativeDistSQLCPUNanos atomic.Int64
+}
+
+func (p *sqlCPUProviderImpl) GetCumulativeSQLCPUNanos() (gatewayCPUNanos, distCPUNanos int64) {
+	return p.cumulativeGatewayCPUNanos.Load(), p.cumulativeDistSQLCPUNanos.Load()
 }
 
 func (p *sqlCPUProviderImpl) GetHandle(workInfo SQLWorkInfo) *SQLCPUHandle {
