@@ -22,8 +22,8 @@ import (
 // while its children are additionally exported to prometheus via the
 // PrometheusIterable interface.
 type AggGauge struct {
-	g metric.Gauge
-	childSet
+	g *metric.Gauge
+	*baseAggMetric
 }
 
 var _ metric.Iterable = (*AggGauge)(nil)
@@ -32,7 +32,9 @@ var _ metric.PrometheusExportable = (*AggGauge)(nil)
 
 // NewGauge constructs a new AggGauge.
 func NewGauge(metadata metric.Metadata, childLabels ...string) *AggGauge {
-	g := &AggGauge{g: *metric.NewGauge(metadata)}
+	gauge := metric.NewGauge(metadata)
+	base := newBaseAggMetric(gauge)
+	g := &AggGauge{g: gauge, baseAggMetric: base}
 	g.initWithBTreeStorageType(childLabels)
 	return g
 }
@@ -54,43 +56,14 @@ func NewFunctionalGauge(
 		})
 		return f(values)
 	}
-	g.g = *metric.NewFunctionalGauge(metadata, gaugeFn)
+	g.g = metric.NewFunctionalGauge(metadata, gaugeFn)
+	g.baseAggMetric = newBaseAggMetric(g.g)
 	g.initWithBTreeStorageType(childLabels)
 	return g
 }
 
-// GetName is part of the metric.Iterable interface.
-func (g *AggGauge) GetName(useStaticLabels bool) string { return g.g.GetName(useStaticLabels) }
-
-// GetHelp is part of the metric.Iterable interface.
-func (g *AggGauge) GetHelp() string { return g.g.GetHelp() }
-
-// GetMeasurement is part of the metric.Iterable interface.
-func (g *AggGauge) GetMeasurement() string { return g.g.GetMeasurement() }
-
-// GetUnit is part of the metric.Iterable interface.
-func (g *AggGauge) GetUnit() metric.Unit { return g.g.GetUnit() }
-
-// GetMetadata is part of the metric.Iterable interface.
-func (g *AggGauge) GetMetadata() metric.Metadata { return g.g.GetMetadata() }
-
 // Inspect is part of the metric.Iterable interface.
 func (g *AggGauge) Inspect(f func(interface{})) { f(g) }
-
-// GetType is part of the metric.PrometheusExportable interface.
-func (g *AggGauge) GetType() *io_prometheus_client.MetricType {
-	return g.g.GetType()
-}
-
-// GetLabels is part of the metric.PrometheusExportable interface.
-func (g *AggGauge) GetLabels(useStaticLabels bool) []*io_prometheus_client.LabelPair {
-	return g.g.GetLabels(useStaticLabels)
-}
-
-// ToPrometheusMetric is part of the metric.PrometheusExportable interface.
-func (g *AggGauge) ToPrometheusMetric() *io_prometheus_client.Metric {
-	return g.g.ToPrometheusMetric()
-}
 
 // Value returns the aggregate sum of all of its current children.
 func (g *AggGauge) Value() int64 {
@@ -257,8 +230,8 @@ func (g *Gauge) UpdateFn(fn func() int64) {
 // children, while its children are additionally exported to prometheus via the
 // PrometheusIterable interface.
 type AggGaugeFloat64 struct {
-	g metric.GaugeFloat64
-	childSet
+	g *metric.GaugeFloat64
+	*baseAggMetric
 }
 
 var _ metric.Iterable = (*AggGaugeFloat64)(nil)
@@ -267,43 +240,15 @@ var _ metric.PrometheusExportable = (*AggGaugeFloat64)(nil)
 
 // NewGaugeFloat64 constructs a new AggGaugeFloat64.
 func NewGaugeFloat64(metadata metric.Metadata, childLabels ...string) *AggGaugeFloat64 {
-	g := &AggGaugeFloat64{g: *metric.NewGaugeFloat64(metadata)}
+	gaugeFloat64 := metric.NewGaugeFloat64(metadata)
+	base := newBaseAggMetric(gaugeFloat64)
+	g := &AggGaugeFloat64{g: gaugeFloat64, baseAggMetric: base}
 	g.initWithBTreeStorageType(childLabels)
 	return g
 }
 
-// GetName is part of the metric.Iterable interface.
-func (g *AggGaugeFloat64) GetName(useStaticLabels bool) string { return g.g.GetName(useStaticLabels) }
-
-// GetHelp is part of the metric.Iterable interface.
-func (g *AggGaugeFloat64) GetHelp() string { return g.g.GetHelp() }
-
-// GetMeasurement is part of the metric.Iterable interface.
-func (g *AggGaugeFloat64) GetMeasurement() string { return g.g.GetMeasurement() }
-
-// GetUnit is part of the metric.Iterable interface.
-func (g *AggGaugeFloat64) GetUnit() metric.Unit { return g.g.GetUnit() }
-
-// GetMetadata is part of the metric.Iterable interface.
-func (g *AggGaugeFloat64) GetMetadata() metric.Metadata { return g.g.GetMetadata() }
-
 // Inspect is part of the metric.Iterable interface.
 func (g *AggGaugeFloat64) Inspect(f func(interface{})) { f(g) }
-
-// GetType is part of the metric.PrometheusExportable interface.
-func (g *AggGaugeFloat64) GetType() *io_prometheus_client.MetricType {
-	return g.g.GetType()
-}
-
-// GetLabels is part of the metric.PrometheusExportable interface.
-func (g *AggGaugeFloat64) GetLabels(useStaticLabels bool) []*io_prometheus_client.LabelPair {
-	return g.g.GetLabels(useStaticLabels)
-}
-
-// ToPrometheusMetric is part of the metric.PrometheusExportable interface.
-func (g *AggGaugeFloat64) ToPrometheusMetric() *io_prometheus_client.Metric {
-	return g.g.ToPrometheusMetric()
-}
 
 // Value returns the aggregate sum of all of its current children.
 func (g *AggGaugeFloat64) Value() float64 {
@@ -368,7 +313,7 @@ func (g *GaugeFloat64) Update(v float64) {
 // a SQLGauge creates child metrics dynamically while AggGauge needs the
 // child creation up front.
 type SQLGauge struct {
-	g metric.Gauge
+	g *metric.Gauge
 	*SQLMetric
 }
 
@@ -377,51 +322,12 @@ var _ metric.PrometheusReinitialisable = (*SQLGauge)(nil)
 var _ metric.PrometheusExportable = (*SQLGauge)(nil)
 
 func NewSQLGauge(metadata metric.Metadata) *SQLGauge {
+	gauge := metric.NewGauge(metadata)
 	g := &SQLGauge{
-		g: *metric.NewGauge(metadata),
+		g: gauge,
 	}
-	g.SQLMetric = NewSQLMetric(metric.LabelConfigDisabled)
+	g.SQLMetric = NewSQLMetric(metric.LabelConfigDisabled, gauge)
 	return g
-}
-
-// GetType is part of the metric.PrometheusExportable interface.
-func (sg *SQLGauge) GetType() *io_prometheus_client.MetricType {
-	return sg.g.GetType()
-}
-
-// GetLabels is part of the metric.PrometheusExportable interface.
-func (sg *SQLGauge) GetLabels(useStaticLabels bool) []*io_prometheus_client.LabelPair {
-	return sg.g.GetLabels(useStaticLabels)
-}
-
-// ToPrometheusMetric is part of the metric.PrometheusExportable interface.
-func (sg *SQLGauge) ToPrometheusMetric() *io_prometheus_client.Metric {
-	return sg.g.ToPrometheusMetric()
-}
-
-// GetName is part of the metric.Iterable interface.
-func (sg *SQLGauge) GetName(useStaticLabels bool) string {
-	return sg.g.GetName(useStaticLabels)
-}
-
-// GetHelp is part of the metric.Iterable interface.
-func (sg *SQLGauge) GetHelp() string {
-	return sg.g.GetHelp()
-}
-
-// GetMeasurement is part of the metric.Iterable interface.
-func (sg *SQLGauge) GetMeasurement() string {
-	return sg.g.GetMeasurement()
-}
-
-// GetUnit is part of the metric.Iterable interface.
-func (sg *SQLGauge) GetUnit() metric.Unit {
-	return sg.g.GetUnit()
-}
-
-// GetMetadata is part of the metric.Iterable interface.
-func (sg *SQLGauge) GetMetadata() metric.Metadata {
-	return sg.g.GetMetadata()
 }
 
 // Inspect is part of the metric.Iterable interface.
@@ -528,8 +434,8 @@ func (scg *SQLChildGauge) Dec(i int64) {
 // allowing for automatic eviction of less frequently used child metrics.
 // This is useful when dealing with high cardinality metrics that might exceed resource limits.
 type HighCardinalityGauge struct {
-	g metric.Gauge
-	childSet
+	g *metric.Gauge
+	*baseAggMetric
 	labelSliceCache *metric.LabelSliceCache
 }
 
@@ -543,45 +449,15 @@ var _ metric.PrometheusEvictable = (*HighCardinalityGauge)(nil)
 func NewHighCardinalityGauge(
 	opts metric.HighCardinalityMetricOptions, childLabels ...string,
 ) *HighCardinalityGauge {
-	g := &HighCardinalityGauge{g: *metric.NewGauge(opts.Metadata)}
+	gauge := metric.NewGauge(opts.Metadata)
+	base := newBaseAggMetric(gauge)
+	g := &HighCardinalityGauge{g: gauge, baseAggMetric: base}
 	g.initWithCacheStorageType(childLabels, opts.Metadata.Name, opts)
 	return g
 }
 
-// GetName is part of the metric.Iterable interface.
-func (g *HighCardinalityGauge) GetName(useStaticLabels bool) string {
-	return g.g.GetName(useStaticLabels)
-}
-
-// GetHelp is part of the metric.Iterable interface.
-func (g *HighCardinalityGauge) GetHelp() string { return g.g.GetHelp() }
-
-// GetMeasurement is part of the metric.Iterable interface.
-func (g *HighCardinalityGauge) GetMeasurement() string { return g.g.GetMeasurement() }
-
-// GetUnit is part of the metric.Iterable interface.
-func (g *HighCardinalityGauge) GetUnit() metric.Unit { return g.g.GetUnit() }
-
-// GetMetadata is part of the metric.Iterable interface.
-func (g *HighCardinalityGauge) GetMetadata() metric.Metadata { return g.g.GetMetadata() }
-
 // Inspect is part of the metric.Iterable interface.
 func (g *HighCardinalityGauge) Inspect(f func(interface{})) { f(g) }
-
-// GetType is part of the metric.PrometheusExportable interface.
-func (g *HighCardinalityGauge) GetType() *io_prometheus_client.MetricType {
-	return g.g.GetType()
-}
-
-// GetLabels is part of the metric.PrometheusExportable interface.
-func (g *HighCardinalityGauge) GetLabels(useStaticLabels bool) []*io_prometheus_client.LabelPair {
-	return g.g.GetLabels(useStaticLabels)
-}
-
-// ToPrometheusMetric is part of the metric.PrometheusExportable interface.
-func (g *HighCardinalityGauge) ToPrometheusMetric() *io_prometheus_client.Metric {
-	return g.g.ToPrometheusMetric()
-}
 
 // Value returns the aggregate sum of all of its current children.
 func (g *HighCardinalityGauge) Value() int64 {

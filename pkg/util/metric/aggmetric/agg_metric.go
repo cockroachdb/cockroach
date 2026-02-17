@@ -46,6 +46,13 @@ type Builder struct {
 	labels []string
 }
 
+// parentMetric is an interface that agg metric parent types must satisfy. It
+// is used to allow child metrics to update the parent metric when they are updated.
+type parentMetric interface {
+	metric.Iterable
+	metric.PrometheusExportable
+}
+
 // MakeBuilder makes a new Builder.
 func MakeBuilder(labels ...string) Builder {
 	return Builder{labels: labels}
@@ -306,20 +313,66 @@ func (cs *childSet) clear() {
 }
 
 type SQLMetric struct {
-	mu struct {
+	parent parentMetric
+	mu     struct {
 		labelConfig metric.LabelConfig
 		syncutil.Mutex
 		children ChildrenStorage
 	}
 }
 
-func NewSQLMetric(labelConfig metric.LabelConfig) *SQLMetric {
-	sm := &SQLMetric{}
+var _ metric.PrometheusIterable = (*SQLMetric)(nil)
+var _ metric.PrometheusExportable = (*SQLMetric)(nil)
+
+func NewSQLMetric(labelConfig metric.LabelConfig, parent parentMetric) *SQLMetric {
+	sm := &SQLMetric{
+		parent: parent,
+	}
 	sm.mu.labelConfig = labelConfig
 	sm.mu.children = &UnorderedCacheWrapper{
 		cache: getCacheStorage(),
 	}
 	return sm
+}
+
+// GetType is part of the metric.PrometheusExportable interface.
+func (sm *SQLMetric) GetType() *io_prometheus_client.MetricType {
+	return sm.parent.GetType()
+}
+
+// GetLabels is part of the metric.PrometheusExportable interface.
+func (sm *SQLMetric) GetLabels(useStaticLabels bool) []*io_prometheus_client.LabelPair {
+	return sm.parent.GetLabels(useStaticLabels)
+}
+
+// ToPrometheusMetric is part of the metric.PrometheusExportable interface.
+func (sm *SQLMetric) ToPrometheusMetric() *io_prometheus_client.Metric {
+	return sm.parent.ToPrometheusMetric()
+}
+
+// GetName is part of the metric.Iterable interface.
+func (sm *SQLMetric) GetName(useStaticLabels bool) string {
+	return sm.parent.GetName(useStaticLabels)
+}
+
+// GetHelp is part of the metric.Iterable interface.
+func (sm *SQLMetric) GetHelp() string {
+	return sm.parent.GetHelp()
+}
+
+// GetMeasurement is part of the metric.Iterable interface.
+func (sm *SQLMetric) GetMeasurement() string {
+	return sm.parent.GetMeasurement()
+}
+
+// GetUnit is part of the metric.Iterable interface.
+func (sm *SQLMetric) GetUnit() metric.Unit {
+	return sm.parent.GetUnit()
+}
+
+// GetMetadata is part of the metric.Iterable interface.
+func (sm *SQLMetric) GetMetadata() metric.Metadata {
+	return sm.parent.GetMetadata()
 }
 
 func (sm *SQLMetric) Each(
@@ -588,3 +641,64 @@ func (b BtreeWrapper) ForEach(f func(metric ChildMetric)) {
 func (b BtreeWrapper) Clear() {
 	b.tree.Clear(false)
 }
+
+// baseAggMetric provides the shared implementation for aggregate metric types.
+// It delegates Iterable and PrometheusExportable methods to the parent metric,
+// which tracks the aggregate value, and manages per-label child metrics via
+// the embedded childSet.
+// Note: This struct does not fully implement metric.Iterable because it doesn't
+// implement the metric.Iterable Inspect method, which is expected to be
+// implemented by the concrete aggregate metric types that embed baseAggMetric.
+type baseAggMetric struct {
+	parent parentMetric
+	childSet
+}
+
+func newBaseAggMetric(parent parentMetric) *baseAggMetric {
+	return &baseAggMetric{
+		parent: parent,
+	}
+}
+
+// GetType is part of the metric.PrometheusExportable interface.
+func (b *baseAggMetric) GetType() *io_prometheus_client.MetricType {
+	return b.parent.GetType()
+}
+
+// GetLabels is part of the metric.PrometheusExportable interface.
+func (b *baseAggMetric) GetLabels(useStaticLabels bool) []*io_prometheus_client.LabelPair {
+	return b.parent.GetLabels(useStaticLabels)
+}
+
+// ToPrometheusMetric is part of the metric.PrometheusExportable interface.
+func (b *baseAggMetric) ToPrometheusMetric() *io_prometheus_client.Metric {
+	return b.parent.ToPrometheusMetric()
+}
+
+// GetName is part of the metric.Iterable interface.
+func (b *baseAggMetric) GetName(useStaticLabels bool) string {
+	return b.parent.GetName(useStaticLabels)
+}
+
+// GetHelp is part of the metric.Iterable interface.
+func (b *baseAggMetric) GetHelp() string {
+	return b.parent.GetHelp()
+}
+
+// GetMeasurement is part of the metric.Iterable interface.
+func (b *baseAggMetric) GetMeasurement() string {
+	return b.parent.GetMeasurement()
+}
+
+// GetUnit is part of the metric.Iterable interface.
+func (b *baseAggMetric) GetUnit() metric.Unit {
+	return b.parent.GetUnit()
+}
+
+// GetMetadata is part of the metric.Iterable interface.
+func (b *baseAggMetric) GetMetadata() metric.Metadata {
+	return b.parent.GetMetadata()
+}
+
+var _ metric.PrometheusIterable = (*baseAggMetric)(nil)
+var _ metric.PrometheusExportable = (*baseAggMetric)(nil)
