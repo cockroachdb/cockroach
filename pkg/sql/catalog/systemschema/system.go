@@ -1219,9 +1219,6 @@ CREATE TABLE system.statement_hints (
 	// * type: the type of metric (e.g., 'literal').
 	// * value: the integer value of the metric.
 	// * node_id: the node that reported the metric.
-	// * unit: the unit of measurement.
-	// * help_text: description of the metric.
-	// * measurement: measurement identifier.
 	// * last_updated: timestamp when the metric was last updated.
 	ClusterMetricsTableSchema = `
 CREATE TABLE system.cluster_metrics (
@@ -1229,17 +1226,14 @@ CREATE TABLE system.cluster_metrics (
     name         STRING NOT NULL,
     labels       JSONB NOT NULL DEFAULT '{}',
     type         STRING NOT NULL,
-    value        INT8,
+    value        INT8 NOT NULL,
     node_id      INT8 NOT NULL,
-    unit         INT8 NOT NULL,
-    help_text    STRING NOT NULL,
-    measurement  STRING NOT NULL,
     last_updated TIMESTAMPTZ NOT NULL DEFAULT now(),
     crdb_internal_last_updated_shard_8 INT4 NOT VISIBLE NOT NULL AS (mod(fnv32(md5(crdb_internal.datums_to_bytes(last_updated))), 8:::INT8)) VIRTUAL,
     CONSTRAINT "primary" PRIMARY KEY (id ASC),
     UNIQUE INDEX name_labels_idx (name ASC, labels ASC),
-    INDEX last_updated_idx (last_updated DESC) USING HASH STORING (name, labels, type, value, node_id, unit, help_text, measurement) WITH (bucket_count=8),
-    FAMILY "primary" (id, name, labels, type, value, node_id, unit, help_text, measurement, last_updated)
+    INDEX last_updated_idx (last_updated DESC) USING HASH STORING (name, labels, type, value, node_id) WITH (bucket_count=8),
+    FAMILY "primary" (id, name, labels, type, value, node_id, last_updated)
 );`
 
 	// TableStatisticsLocksTableSchema defines the schema for the
@@ -5372,15 +5366,12 @@ var (
 				{Name: "name", ID: 2, Type: types.String},
 				{Name: "labels", ID: 3, Type: types.Jsonb, DefaultExpr: &clusterMetricsDefaultLabels},
 				{Name: "type", ID: 4, Type: types.String},
-				{Name: "value", ID: 5, Type: types.Int, Nullable: true},
+				{Name: "value", ID: 5, Type: types.Int},
 				{Name: "node_id", ID: 6, Type: types.Int},
-				{Name: "unit", ID: 7, Type: types.Int},
-				{Name: "help_text", ID: 8, Type: types.String},
-				{Name: "measurement", ID: 9, Type: types.String},
-				{Name: "last_updated", ID: 10, Type: types.TimestampTZ, DefaultExpr: &nowTZString},
+				{Name: "last_updated", ID: 7, Type: types.TimestampTZ, DefaultExpr: &nowTZString},
 				{
 					Name:        "crdb_internal_last_updated_shard_8",
-					ID:          11,
+					ID:          8,
 					Type:        types.Int4,
 					Nullable:    false,
 					ComputeExpr: &clusterMetricsLastUpdatedShardExpr,
@@ -5392,8 +5383,8 @@ var (
 				{
 					Name:        "primary",
 					ID:          0,
-					ColumnNames: []string{"id", "name", "labels", "type", "value", "node_id", "unit", "help_text", "measurement", "last_updated"},
-					ColumnIDs:   []descpb.ColumnID{1, 2, 3, 4, 5, 6, 7, 8, 9, 10},
+					ColumnNames: []string{"id", "name", "labels", "type", "value", "node_id", "last_updated"},
+					ColumnIDs:   []descpb.ColumnID{1, 2, 3, 4, 5, 6, 7},
 				},
 			},
 			descpb.IndexDescriptor{
@@ -5432,10 +5423,10 @@ var (
 					catenumpb.IndexColumn_ASC,
 					catenumpb.IndexColumn_DESC,
 				},
-				KeyColumnIDs:       []descpb.ColumnID{11, 10},
+				KeyColumnIDs:       []descpb.ColumnID{8, 7},
 				KeySuffixColumnIDs: []descpb.ColumnID{1},
-				StoreColumnIDs:     []descpb.ColumnID{2, 3, 4, 5, 6, 7, 8, 9},
-				StoreColumnNames:   []string{"name", "labels", "type", "value", "node_id", "unit", "help_text", "measurement"},
+				StoreColumnIDs:     []descpb.ColumnID{2, 3, 4, 5, 6},
+				StoreColumnNames:   []string{"name", "labels", "type", "value", "node_id"},
 				Version:            descpb.StrictIndexColumnIDGuaranteesVersion,
 				Sharded: catpb.ShardedDescriptor{
 					IsSharded:    true,
@@ -5450,7 +5441,7 @@ var (
 				Expr:                  "crdb_internal_last_updated_shard_8 IN (0:::INT8, 1:::INT8, 2:::INT8, 3:::INT8, 4:::INT8, 5:::INT8, 6:::INT8, 7:::INT8)",
 				Name:                  "check_crdb_internal_last_updated_shard_8",
 				Validity:              descpb.ConstraintValidity_Validated,
-				ColumnIDs:             []descpb.ColumnID{11},
+				ColumnIDs:             []descpb.ColumnID{8},
 				FromHashShardedColumn: true,
 				ConstraintID:          tbl.NextConstraintID,
 			}}
