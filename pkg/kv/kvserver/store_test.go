@@ -37,6 +37,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvstorage"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvstorage/wag"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/load"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/rditer"
@@ -4119,10 +4120,10 @@ func TestSplitPreApplyInitializesTruncatedState(t *testing.T) {
 	}, &rightDesc.InternalReplicas[0])
 	require.NoError(t, err)
 
-	in, err := validateAndPrepareSplit(ctx, lhsRepl, roachpb.SplitTrigger{LeftDesc: leftDesc, RightDesc: rightDesc}, 0 /* raftIndex */, nil)
+	in, err := validateAndPrepareSplit(ctx, lhsRepl, roachpb.SplitTrigger{LeftDesc: leftDesc, RightDesc: rightDesc}, 11 /* raftIndex */, nil)
 	require.NoError(t, err)
 
-	splitPreApply(ctx, kvstorage.StateRW(batch), kvstorage.TODORaft(batch), in)
+	splitPreApply(ctx, kvstorage.StateRW(batch), kvstorage.TODORaft(batch), &wag.Writer{}, in)
 
 	// Verify that the RHS truncated state is initialized as expected.
 	rsl := kvstorage.MakeStateLoader(rightDesc.RangeID)
@@ -4163,7 +4164,7 @@ func TestSplitPreApplyWithSeparatedEngines(t *testing.T) {
 	raftBatch := e.LogEngine().NewBatch()
 	defer raftBatch.Close()
 
-	splitPreApply(ctx, kvstorage.StateRW(stateBatch), kvstorage.WrapRaft(raftBatch), in)
+	splitPreApply(ctx, kvstorage.StateRW(stateBatch), kvstorage.WrapRaft(raftBatch), &wag.Writer{}, in)
 
 	require.NoError(t, stateBatch.Commit(false /* sync */))
 	require.NoError(t, raftBatch.Commit(false /* sync */))
