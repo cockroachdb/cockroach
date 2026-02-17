@@ -175,11 +175,11 @@ func createCompactionPlan(
 	}
 	instanceLocalities := make([]roachpb.Locality, len(instanceIDs))
 	for i, id := range instanceIDs {
-		desc, err := dsp.GetSQLInstanceInfo(id)
+		sqlInstanceInfo, err := dsp.GetSQLInstanceInfo(ctx, id)
 		if err != nil {
 			return nil, nil, errors.Wrap(err, "getting instance info")
 		}
-		instanceLocalities[i] = desc.Locality
+		instanceLocalities[i] = sqlInstanceInfo.Locality
 	}
 	localitySets, err := buildLocalitySets(
 		ctx, instanceIDs, instanceLocalities, details.StrictLocalityFiltering, genSpan,

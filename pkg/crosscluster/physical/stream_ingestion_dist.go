@@ -801,12 +801,12 @@ func GetDestNodeLocalities(
 
 	instanceInfos := make([]sql.InstanceLocality, 0, len(instanceIDs))
 	for _, id := range instanceIDs {
-		nodeDesc, err := dsp.GetSQLInstanceInfo(id)
+		sqlInstanceInfo, err := dsp.GetSQLInstanceInfo(ctx, id)
 		if err != nil {
-			log.Eventf(ctx, "unable to get node descriptor for sql node %s", id)
+			log.Eventf(ctx, "unable to get sql instance info for sql node %s", id)
 			return nil, err
 		}
-		instanceInfos = append(instanceInfos, sql.MakeInstanceLocality(id, nodeDesc.Locality))
+		instanceInfos = append(instanceInfos, sql.MakeInstanceLocality(id, sqlInstanceInfo.Locality))
 	}
 	return instanceInfos, nil
 }
