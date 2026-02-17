@@ -682,9 +682,11 @@ func newCluster() *cluster {
 }
 
 func newClusterWithSettings(st *clustersettings.Settings) *cluster {
-	// Set the latch manager's long latch threshold to infinity to disable
-	// logging, which could cause a test to erroneously fail.
+	// Set the latch manager's long latch hold and slow latch request thresholds
+	// to infinity to disable logging, which could cause a test to erroneously
+	// fail when wall-clock time exceeds the threshold.
 	spanlatch.LongLatchHoldThreshold.Override(context.Background(), &st.SV, math.MaxInt64)
+	spanlatch.SlowLatchRequestThreshold.Override(context.Background(), &st.SV, math.MaxInt64)
 	concurrency.UnreplicatedLockReliabilitySplit.Override(context.Background(), &st.SV, true)
 	concurrency.UnreplicatedLockReliabilityMerge.Override(context.Background(), &st.SV, true)
 	concurrency.UnreplicatedLockReliabilityLeaseTransfer.Override(context.Background(), &st.SV, true)
