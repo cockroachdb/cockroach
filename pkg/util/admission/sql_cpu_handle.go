@@ -160,7 +160,7 @@ type GoroutineCPUHandle struct {
 	cpuStart time.Duration
 	// cpuAccounted is the total CPU time accounted for on this goroutine.
 	// Monotonically increasing.
-	cpuAccounted time.Duration
+	cpuAccounted time.Duration //nolint:unused
 
 	pauseDur   time.Duration
 	paused     int
@@ -211,20 +211,21 @@ func (h *GoroutineCPUHandle) MeasureAndAdmit(ctx context.Context) error {
 // only measurement is desired (blocking is no longer productive). When noWait
 // is true, this function never returns an error.
 func (h *GoroutineCPUHandle) measureAndAdmit(ctx context.Context, noWait bool) error {
-	if h.paused > 0 {
-		return nil
-	}
-	cpuUsed := grunning.Elapsed(h.cpuStart, grunning.Time()) - h.pauseDur
-	diff := cpuUsed - h.cpuAccounted
-	if diff <= 0 {
-		return nil
-	}
-	// TODO(sumeer): adding this diff to an atomic in SQLCPUHandle may be too
-	// much overhead. An alternative would be implement an atomic here, and
-	// only update the SQLCPUHandle when enough has accumulated. The reason
-	// we would need an atomic here is that when SQLCPUHandle is closed, it
-	// needs to reach in and grab whatever CPU has not yet been reported.
-	h.cpuAccounted += diff
+	// if h.paused > 0 {
+	// 	return nil
+	// }
+	// cpuUsed := grunning.Elapsed(h.cpuStart, grunning.Time()) - h.pauseDur
+	// diff := cpuUsed - h.cpuAccounted
+	// if diff <= 0 {
+	// 	return nil
+	// }
+	// // TODO(sumeer): adding this diff to an atomic in SQLCPUHandle may be too
+	// // much overhead. An alternative would be implement an atomic here, and
+	// // only update the SQLCPUHandle when enough has accumulated. The reason
+	// // we would need an atomic here is that when SQLCPUHandle is closed, it
+	// // needs to reach in and grab whatever CPU has not yet been reported.
+	// h.cpuAccounted += diff
+	// return nil
 	return nil
 }
 
