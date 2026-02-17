@@ -1,4 +1,4 @@
-// Copyright 2024 The Cockroach Authors.
+// Copyright 2026 The Cockroach Authors.
 //
 // Use of this software is governed by the CockroachDB Software License
 // included in the /LICENSE file.
@@ -7,6 +7,7 @@ package fuzzystrmatch
 
 import (
 	"fmt"
+	"slices"
 	"strings"
 	"testing"
 )
@@ -59,7 +60,7 @@ func TestDaitchMokotoff(t *testing.T) {
 	for _, tc := range tt {
 		t.Run(tc.Source, func(t *testing.T) {
 			got := DaitchMokotoff(tc.Source)
-			if !dmSlicesEqual(got, tc.Expected) {
+			if !slices.Equal(got, tc.Expected) {
 				t.Errorf("DaitchMokotoff(%q):\n  got:  %s\n  want: %s",
 					tc.Source,
 					fmt.Sprintf("{%s}", strings.Join(got, ",")),
@@ -69,14 +70,24 @@ func TestDaitchMokotoff(t *testing.T) {
 	}
 }
 
-func dmSlicesEqual(a, b []string) bool {
-	if len(a) != len(b) {
-		return false
+func TestDMApplyCodesDeduplicatesEquivalentBranches(t *testing.T) {
+	branches := []dmBranch{{}, {}}
+	codes := []dmCodes{
+		{"5", "5", "5"},
+		{"5", "5", "5"},
 	}
-	for i := range a {
-		if a[i] != b[i] {
-			return false
-		}
+
+	got := dmApplyCodes(branches, codes, 0)
+	if len(got) != 1 {
+		t.Fatalf("expected 1 branch after deduplication, got %d", len(got))
 	}
-	return true
+
+	want := dmBranch{
+		code:      [dmCodeLen]byte{'5'},
+		length:    1,
+		lastDigit: '5',
+	}
+	if got[0] != want {
+		t.Fatalf("unexpected deduped branch: got %+v, want %+v", got[0], want)
+	}
 }

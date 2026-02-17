@@ -1,4 +1,4 @@
-// Copyright 2024 The Cockroach Authors.
+// Copyright 2026 The Cockroach Authors.
 //
 // Use of this software is governed by the CockroachDB Software License
 // included in the /LICENSE file.
@@ -330,17 +330,29 @@ func DaitchMokotoff(source string) []string {
 }
 
 // dmApplyCodes processes one letter's codes across all branches.
+// Equivalent branches are deduplicated immediately to avoid multiplicative
+// growth from alternate paths that lead to the same state.
 func dmApplyCodes(branches []dmBranch, codes []dmCodes, codeIndex int) []dmBranch {
-	var result []dmBranch
+	result := make([]dmBranch, 0, len(branches))
+	seen := make(map[dmBranch]struct{}, len(branches))
 	for _, b := range branches {
 		if b.length >= dmCodeLen {
-			result = append(result, b)
+			if _, ok := seen[b]; !ok {
+				seen[b] = struct{}{}
+				result = append(result, b)
+			}
 			continue
 		}
 		for _, alt := range codes {
 			codeStr := alt[codeIndex]
 			newBranches := dmApplyCodeStr(b, codeStr)
-			result = append(result, newBranches...)
+			for _, newBranch := range newBranches {
+				if _, ok := seen[newBranch]; ok {
+					continue
+				}
+				seen[newBranch] = struct{}{}
+				result = append(result, newBranch)
+			}
 		}
 	}
 	return result

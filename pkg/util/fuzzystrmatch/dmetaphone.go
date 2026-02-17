@@ -1,4 +1,4 @@
-// Copyright 2024 The Cockroach Authors.
+// Copyright 2026 The Cockroach Authors.
 //
 // Use of this software is governed by the CockroachDB Software License
 // included in the /LICENSE file.
@@ -32,8 +32,9 @@ func doubleMetaphone(source string) (string, string) {
 	}
 
 	// Work with uppercase ASCII. Pad with spaces so we can look ahead safely.
-	original := strings.ToUpper(source) + "     "
-	length := len(source)
+	upper := strings.ToUpper(source)
+	original := upper + "     "
+	length := len(upper)
 	last := length - 1
 
 	var primary, secondary strings.Builder
