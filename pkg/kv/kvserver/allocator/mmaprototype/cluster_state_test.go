@@ -543,7 +543,7 @@ func TestClusterState(t *testing.T) {
 					// Consider making it relative to ts.
 					for line := range strings.Lines(d.Input) {
 						msg := parseStoreLoadMsg(t, line)
-						cs.processStoreLoadMsg(context.Background(), &msg)
+						cs.processStoreLoadMsg(context.Background(), &msg, nil)
 					}
 					return ""
 

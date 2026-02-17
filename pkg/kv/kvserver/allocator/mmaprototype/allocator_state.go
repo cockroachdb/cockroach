@@ -119,6 +119,7 @@ func NewAllocatorState(ts timeutil.TimeSource, rand *rand.Rand) *allocatorState 
 
 type metricsEtc struct {
 	counters             *rangeOperationMetrics
+	loadAndCapacity      *loadAndCapacityMetrics
 	passMetricsAndLogger *rebalancingPassMetricsAndLogger
 	metricsRegistered    bool
 }
@@ -162,6 +163,7 @@ func (a *allocatorState) ensureMetricsForLocalStoreLocked(
 	if !ok {
 		m = &metricsEtc{
 			counters:             makeRangeOperationMetrics(),
+			loadAndCapacity:      makeLoadAndCapacityMetrics(),
 			passMetricsAndLogger: makeRebalancingPassMetricsAndLogger(localStoreID),
 		}
 		a.metricsMap[localStoreID] = m
@@ -169,6 +171,7 @@ func (a *allocatorState) ensureMetricsForLocalStoreLocked(
 	if !m.metricsRegistered {
 		if registry != nil {
 			registry.AddMetricStruct(*m.counters)
+			registry.AddMetricStruct(*m.loadAndCapacity)
 			registry.AddMetricStruct(m.passMetricsAndLogger.m)
 			m.metricsRegistered = true
 		} else if a.shouldLogUnregisteredMetrics() {
@@ -201,7 +204,14 @@ func (a *allocatorState) SetStore(store StoreAttributesAndLocality) {
 func (a *allocatorState) ProcessStoreLoadMsg(ctx context.Context, msg *StoreLoadMsg) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
-	a.cs.processStoreLoadMsg(ctx, msg)
+
+	// Pass the metrics struct for this store if they exist in the map.
+	m, ok := a.metricsMap[msg.StoreID]
+	if ok {
+		a.cs.processStoreLoadMsg(ctx, msg, m.loadAndCapacity)
+	} else {
+		a.cs.processStoreLoadMsg(ctx, msg, nil)
+	}
 }
 
 // SetDiskUtilThresholds implements the Allocator interface.

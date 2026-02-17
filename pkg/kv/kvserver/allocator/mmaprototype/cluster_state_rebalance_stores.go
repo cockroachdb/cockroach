@@ -603,9 +603,7 @@ func (re *rebalanceEnv) rebalanceReplicas(
 		if !isLeaseholder {
 			addedLoad[CPURate] = rstate.load.RaftCPU
 		}
-		if !re.canShedAndAddLoad(ctx, ss, targetSS, addedLoad, cands.means, false, loadDim) {
-			log.KvDistribution.VEventf(ctx, 2, "result(failed): cannot shed from s%d to s%d for r%d: delta load %v",
-				store.StoreID, targetStoreID, rangeID, addedLoad)
+		if !re.canShedAndAddLoad(ctx, ss, targetSS, rangeID, addedLoad, cands.means, false, loadDim) {
 			re.passObs.replicaShed(noCandidateToAcceptLoad)
 			continue
 		}
@@ -827,10 +825,8 @@ func (re *rebalanceEnv) rebalanceLeasesFromLocalStoreID(
 			addedLoad[CPURate] = 0
 			panic("raft cpu higher than total cpu")
 		}
-		if !re.canShedAndAddLoad(ctx, ss, targetSS, addedLoad, &means, true, CPURate) {
+		if !re.canShedAndAddLoad(ctx, ss, targetSS, rangeID, addedLoad, &means, true, CPURate) {
 			re.passObs.leaseShed(noCandidateToAcceptLoad)
-			log.KvDistribution.VEventf(ctx, 2, "result(failed): cannot shed from s%d to s%d for r%d: delta load %v",
-				store.StoreID, targetStoreID, rangeID, addedLoad)
 			continue
 		}
 		addTarget := roachpb.ReplicationTarget{

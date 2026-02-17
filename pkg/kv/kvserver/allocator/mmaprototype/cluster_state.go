@@ -1336,7 +1336,9 @@ func newClusterState(ts timeutil.TimeSource, interner *stringInterner) *clusterS
 	return cs
 }
 
-func (cs *clusterState) processStoreLoadMsg(ctx context.Context, storeMsg *StoreLoadMsg) {
+func (cs *clusterState) processStoreLoadMsg(
+	ctx context.Context, storeMsg *StoreLoadMsg, metrics *loadAndCapacityMetrics,
+) {
 	now := cs.ts.Now()
 	cs.gcPendingChanges(ctx, now)
 
@@ -1369,6 +1371,26 @@ func (cs *clusterState) processStoreLoadMsg(ctx context.Context, storeMsg *Store
 	ss.adjusted.load = storeMsg.Load
 	ss.adjusted.secondaryLoad = storeMsg.SecondaryLoad
 	ss.maxFractionPendingIncrease, ss.maxFractionPendingDecrease = 0, 0
+
+	// Report the load and capacity that was just applied if we have a valid
+	// metrics handle.
+	if metrics != nil {
+		cpuLoad := int64(storeMsg.Load[CPURate])
+		cpuCapacity := int64(storeMsg.Capacity[CPURate])
+		cpuUtil := float64(cpuLoad) / float64(cpuCapacity)
+		writeBandwidth := int64(storeMsg.Load[WriteBandwidth])
+		diskLoad := int64(storeMsg.Load[ByteSize])
+		diskCapacity := int64(storeMsg.Capacity[ByteSize])
+		diskUtil := float64(diskLoad) / float64(diskCapacity)
+
+		metrics.CPULoad.Update(cpuLoad)
+		metrics.CPUCapacity.Update(cpuCapacity)
+		metrics.CPUUtilization.Update(cpuUtil)
+		metrics.WriteBandwidth.Update(writeBandwidth)
+		metrics.DiskLoad.Update(diskLoad)
+		metrics.DiskCapacity.Update(diskCapacity)
+		metrics.DiskUtilization.Update(diskUtil)
+	}
 
 	// Find any load pending changes for ranges which involve this store, that
 	// can now be removed from the loadPendingChanges. We don't need to undo the
@@ -2341,6 +2363,7 @@ func (cs *clusterState) canShedAndAddLoad(
 	ctx context.Context,
 	srcSS *storeState,
 	targetSS *storeState,
+	rangeID roachpb.RangeID,
 	delta LoadVector,
 	means *meansLoad,
 	onlyConsiderTargetCPUSummary bool,
@@ -2392,8 +2415,10 @@ func (cs *clusterState) canShedAndAddLoad(
 			log.KvDistribution.VEventf(ctx, 3, "can add load to n%vs%v: %v targetSLS[%v] srcSLS[%v]",
 				targetNS.NodeID, targetSS.StoreID, canAddLoad, targetSLS, srcSLS)
 		} else if populateFailureReason {
-			log.KvDistribution.VEventf(ctx, 2, "cannot add load to n%vs%v: due to %s", targetNS.NodeID, targetSS.StoreID, failureReason.String())
-			log.KvDistribution.VEventf(ctx, 2, "[target_sls:%v,src_sls:%v]", targetSLS, srcSLS)
+			log.KvDistribution.VEventf(ctx, 2,
+				"cannot add load from n%vs%v to n%vs%v for r%v due to %s: delta(%v) targetSLS[%v] srcSLS[%v]",
+				srcNS.NodeID, srcSS.StoreID, targetNS.NodeID, targetSS.StoreID, rangeID,
+				failureReason.String(), delta, targetSLS, srcSLS)
 		}
 	}()
 	// Check if the target would have high disk utilization after the transfer.
