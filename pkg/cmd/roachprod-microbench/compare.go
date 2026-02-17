@@ -422,10 +422,30 @@ func (c *compare) pushToInfluxDB(comparisonResultsMap model.ComparisonResultsMap
 		return errors.Wrap(err, "error parsing experiment commit date")
 	}
 
+	// Monitor errorChan for the first writing error. On error, cancel the
+	// context to stop writing further points. Subsequent errors are swallowed.
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	var writeErr error
+	go func() {
+		for err := range errorChan {
+			if writeErr == nil {
+				writeErr = errors.Wrap(err, "writing to InfluxDB")
+				cancel()
+			}
+		}
+	}()
+
 	for _, group := range comparisonResultsMap {
 		for _, result := range group {
 			for _, detail := range result.Comparisons {
+				if ctx.Err() != nil {
+					break
+				}
 				ci := detail.Comparison.ConfidenceInterval
+				if model.IsUndefinedConfidenceInterval(ci) {
+					continue
+				}
 				fields := map[string]interface{}{
 					"low":               ci.Low,
 					"center":            ci.Center,
@@ -452,18 +472,10 @@ func (c *compare) pushToInfluxDB(comparisonResultsMap model.ComparisonResultsMap
 			}
 		}
 	}
-	done := make(chan struct{})
-	go func() {
-		defer close(done)
-		writeAPI.Flush()
-	}()
-
-	select {
-	case err = <-errorChan:
-		return errors.Wrap(err, "failed to write to InfluxDB")
-	case <-done:
-		return nil
-	}
+	// Flush triggers sending any remaining buffered points and closes
+	// errorChan when done, which terminates the error-monitoring goroutine.
+	writeAPI.Flush()
+	return writeErr
 }
 
 func processReportFile(builder *model.Builder, id, pkg, path string) error {
