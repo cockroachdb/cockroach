@@ -1734,6 +1734,13 @@ func (cf *changeFrontier) noteAggregatorProgress(ctx context.Context, d rowenc.E
 		return err
 	}
 
+	// Persist frontier independently of job progress checkpointing;
+	// frontier persistence has its own rate limiter and is especially
+	// useful when the highwater is not advancing.
+	if err := cf.maybePersistFrontier(ctx); err != nil {
+		return err
+	}
+
 	cf.updateProgressSkewMetrics()
 
 	return nil
@@ -1789,10 +1796,6 @@ func (cf *changeFrontier) maybeCheckpoint(
 		return err
 	}
 	cf.js.checkpointCompleted(ctx, timeutil.Since(checkpointStart))
-
-	if err := cf.maybePersistFrontier(ctx); err != nil {
-		return err
-	}
 
 	newResolved := cf.frontier.Frontier()
 
