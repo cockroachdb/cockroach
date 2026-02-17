@@ -1203,6 +1203,7 @@ func (rp *replicaProposer) verifyLeaseRequestSafetyRLocked(
 	r := (*Replica)(rp)
 	st := r.leaseSettings(ctx)
 	raftStatus := raftGroup.Status()
+	leaseStatus := r.leaseStatusAtRLocked(ctx, r.Clock().NowAsClockTimestamp())
 	in := leases.VerifyInput{
 		LocalStoreID:       r.StoreID(),
 		LocalReplicaID:     r.ReplicaID(),
@@ -1210,7 +1211,7 @@ func (rp *replicaProposer) verifyLeaseRequestSafetyRLocked(
 		RaftStatus:         &raftStatus,
 		RaftCompacted:      r.raftCompactedIndexRLocked(),
 		PrevLease:          prevLease,
-		PrevLeaseExpired:   !r.ownsValidLeaseRLocked(ctx, r.Clock().NowAsClockTimestamp()),
+		PrevLeaseExpired:   leaseStatus.IsExpired() || !leaseStatus.OwnedBy(r.StoreID()),
 		NextLeaseHolder:    nextLease.Replica,
 		BypassSafetyChecks: bypassSafetyChecks,
 		DesiredLeaseType:   r.desiredLeaseType(r.descRLocked()),

@@ -1487,6 +1487,14 @@ type leaseTransferTest struct {
 }
 
 func setupLeaseTransferTest(t *testing.T) *leaseTransferTest {
+	return setupLeaseTransferTestWithKnobs(t, nil /* mutateStoreKnobs */)
+}
+
+// setupLeaseTransferTestWithKnobs is like setupLeaseTransferTest but allows
+// callers to mutate the StoreTestingKnobs used on each server.
+func setupLeaseTransferTestWithKnobs(
+	t *testing.T, mutateStoreKnobs func(*kvserver.StoreTestingKnobs),
+) *leaseTransferTest {
 	l := &leaseTransferTest{
 		leftKey:     roachpb.Key("a"),
 		manualClock: hlc.NewHybridManualClock(),
@@ -1530,17 +1538,21 @@ func setupLeaseTransferTest(t *testing.T) *leaseTransferTest {
 		// jumps. Disable the suspect timer to prevent nodes from becoming suspect
 		// and being excluded as lease transfer targets when we bump clocks.
 		liveness.TimeAfterNodeSuspect.Override(context.Background(), &st.SV, 0)
+		storeKnobs := &kvserver.StoreTestingKnobs{
+			EvalKnobs: kvserverbase.BatchEvalTestingKnobs{
+				TestingEvalFilter: testingEvalFilter,
+			},
+			TestingProposalFilter:                testingProposalFilter,
+			LeaseTransferBlockedOnExtensionEvent: leaseTransferBlockedOnExtensionEvent,
+		}
+		if mutateStoreKnobs != nil {
+			mutateStoreKnobs(storeKnobs)
+		}
 
 		serverArgs[i] = base.TestServerArgs{
 			Settings: st,
 			Knobs: base.TestingKnobs{
-				Store: &kvserver.StoreTestingKnobs{
-					EvalKnobs: kvserverbase.BatchEvalTestingKnobs{
-						TestingEvalFilter: testingEvalFilter,
-					},
-					TestingProposalFilter:                testingProposalFilter,
-					LeaseTransferBlockedOnExtensionEvent: leaseTransferBlockedOnExtensionEvent,
-				},
+				Store: storeKnobs,
 				Server: &server.TestingKnobs{
 					WallClock: l.manualClock,
 				},
@@ -2042,6 +2054,62 @@ func TestLeaseExpirationBelowFutureTimeRequest(t *testing.T) {
 			require.True(t, preLease.Expiration.Less(*postLease.Expiration), "expected extension")
 		}
 	})
+}
+
+// TestLeaseExtensionInStasisOnFollower verifies that extending an UNUSABLE
+// (stasis) lease succeeds even when the leaseholder is a Raft follower.
+func TestLeaseExtensionInStasisOnFollower(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	l := setupLeaseTransferTestWithKnobs(t, func(knobs *kvserver.StoreTestingKnobs) {
+		// Keep raft leadership fixed during lease transfers so that replica1 can
+		// hold the lease while replica0 remains the raft leader.
+		knobs.DisableLeaderFollowsLeaseholder = true
+	})
+	defer l.tc.Stopper().Stop(ctx)
+
+	// Make sure replica0 starts as raft leader, then transfer the lease to
+	// replica1 while keeping raft leadership on replica0.
+	l.ensureLeaderAndRaftState(t, l.replica0, l.replica1Desc)
+	require.NoError(t, l.replica0.AdminTransferLease(ctx, l.replica1Desc.StoreID, false /* bypassSafetyChecks */))
+	l.checkHasLease(t, 1)
+	l.ensureLeaderAndRaftState(t, l.replica0, l.replica1Desc)
+
+	// Confirm that replica1 is still not raft leader.
+	testutils.SucceedsSoon(t, func() error {
+		if status := l.replica1.RaftStatus(); status.RaftState == raftpb.StateLeader {
+			return errors.Errorf("expected replica1 to be raft follower, got %s", status.RaftState)
+		}
+		return nil
+	})
+
+	preLease, _ := l.replica1.GetLease()
+
+	// Move to expiration-10ns, which is inside the lease stasis period.
+	l.manualClock.Pause()
+	atPause := l.manualClock.UnixNano()
+	l.manualClock.Increment((preLease.Expiration.WallTime - 10) - atPause)
+	now := l.tc.Servers[1].Clock().Now()
+
+	// Pick a request timestamp that should trigger synchronous lease extension
+	// without being "too far in future".
+	leaseRenewal := l.tc.Servers[1].RaftConfig().RangeLeaseRenewalDuration()
+	leaseRenewalMinusStasis := leaseRenewal - l.tc.Servers[1].Clock().MaxOffset()
+	reqTime := now.Add(leaseRenewalMinusStasis.Nanoseconds()-10, 0)
+
+	// This request should extend the local lease even though replica1 is not the
+	// raft leader.
+	args := getArgs(l.leftKey)
+	_, pErr := kv.SendWrappedWith(ctx, l.tc.GetFirstStoreFromServer(t, 1).TestSender(), kvpb.Header{
+		RangeID: l.replica0.RangeID, Replica: l.replica1Desc, Timestamp: reqTime,
+	}, args)
+	require.Nil(t, pErr)
+
+	l.checkHasLease(t, 1)
+	postLease, _ := l.replica1.GetLease()
+	require.True(t, preLease.Expiration.Less(*postLease.Expiration), "expected extension")
 }
 
 // TestRangeLocalUncertaintyLimitAfterNewLease verifies that on lease
