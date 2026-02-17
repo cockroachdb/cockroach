@@ -439,7 +439,7 @@ func (sg *SQLGauge) Value() int64 {
 // Gauge and updates it. Update increments parent metrics
 // irrespective of labelConfig.
 func (sg *SQLGauge) Update(val int64, db, app string) {
-	childMetric, isChildMetricEnabled := sg.getChildByLabelConfig(sg.createChildGauge, db, app)
+	childMetric, isChildMetricEnabled := sg.getOrAddChildByLabelConfig(sg.createChildGauge, db, app)
 
 	// If the label configuration is either LabelConfigDisabled or unrecognised,
 	// then only update aggregated gauge value.
@@ -460,7 +460,7 @@ func (sg *SQLGauge) Update(val int64, db, app string) {
 func (sg *SQLGauge) Inc(i int64, db, app string) {
 	sg.g.Inc(i)
 
-	childMetric, isChildMetricEnabled := sg.getChildByLabelConfig(sg.createChildGauge, db, app)
+	childMetric, isChildMetricEnabled := sg.getOrAddChildByLabelConfig(sg.createChildGauge, db, app)
 	if !isChildMetricEnabled {
 		return
 	}
@@ -474,7 +474,7 @@ func (sg *SQLGauge) Inc(i int64, db, app string) {
 func (sg *SQLGauge) Dec(i int64, db, app string) {
 	sg.g.Dec(i)
 
-	childMetric, isChildMetricEnabled := sg.getChildByLabelConfig(sg.createChildGauge, db, app)
+	childMetric, isChildMetricEnabled := sg.getOrAddChildByLabelConfig(sg.createChildGauge, db, app)
 	if !isChildMetricEnabled {
 		return
 	}
@@ -659,7 +659,7 @@ func (g *HighCardinalityGauge) GetOrAddChild(labelVals ...string) *HighCardinali
 	}
 
 	// Create a LabelSliceCacheKey from the tenantID.
-	key := metric.LabelSliceCacheKey(metricKey(labelVals...))
+	key := metric.LabelSliceCacheKey(metricKey(labelVals))
 
 	child := g.getOrAddWithLabelSliceCache(g.GetMetadata().Name, g.createHighCardinalityChildGauge, g.labelSliceCache, labelVals...)
 
