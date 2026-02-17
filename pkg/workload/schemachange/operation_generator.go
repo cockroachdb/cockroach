@@ -2018,6 +2018,10 @@ func (og *operationGenerator) dropConstraint(ctx context.Context, tx pgx.Tx) (*o
 		}
 		if !og.useDeclarativeSchemaChanger || uniqueDropNotSupported {
 			stmt.expectedExecErrors.add(pgcode.FeatureNotSupported)
+		} else {
+			// The unique constraint may be referenced by a foreign key from
+			// another table, which would cause the drop to fail.
+			stmt.potentialExecErrors.add(pgcode.DependentObjectsStillExist)
 		}
 	}
 
