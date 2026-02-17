@@ -4043,7 +4043,7 @@ func TestSplitPreApplyInitializesTruncatedState(t *testing.T) {
 	}, &rightDesc.InternalReplicas[0])
 	require.NoError(t, err)
 
-	in, err := validateAndPrepareSplit(ctx, lhsRepl, roachpb.SplitTrigger{LeftDesc: leftDesc, RightDesc: rightDesc}, nil)
+	in, err := validateAndPrepareSplit(ctx, lhsRepl, roachpb.SplitTrigger{LeftDesc: leftDesc, RightDesc: rightDesc}, 0 /* raftIndex */, nil)
 	require.NoError(t, err)
 
 	splitPreApply(ctx, kvstorage.StateRW(batch), kvstorage.TODORaft(batch), in)
