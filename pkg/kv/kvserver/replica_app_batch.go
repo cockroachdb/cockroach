@@ -339,7 +339,7 @@ func (b *replicaAppBatch) runPostAddTriggersReplicaOnly(
 		// NB: another reason why we shouldn't write HardState at evaluation time is
 		// that it belongs to the log engine, whereas the evaluated batch must
 		// contain only state machine updates.
-		in, err := validateAndPrepareSplit(ctx, b.r, res.Split.SplitTrigger, cmd.Cmd.ClosedTimestamp)
+		in, err := validateAndPrepareSplit(ctx, b.r, res.Split.SplitTrigger, cmd.Index(), cmd.Cmd.ClosedTimestamp)
 		if err != nil {
 			log.KvExec.Fatalf(ctx, "unable to validate split: %s", err)
 		}
