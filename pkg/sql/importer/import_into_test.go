@@ -481,11 +481,15 @@ func TestImportIntoRowCountCheckAfterPause(t *testing.T) {
 			require.Error(t, err)
 			require.ErrorContains(t, err, "pause point")
 
-			// Find the paused import job.
+			// Find the paused import job. The job transitions from
+			// pause-requested to paused asynchronously, so retry until
+			// it reaches the paused state.
 			var jobID int64
-			runner.QueryRow(t,
-				`SELECT job_id FROM [SHOW JOBS] WHERE job_type = 'IMPORT' AND status = 'paused'`,
-			).Scan(&jobID)
+			testutils.SucceedsSoon(t, func() error {
+				return db.QueryRow(
+					`SELECT job_id FROM [SHOW JOBS] WHERE job_type = 'IMPORT' AND status = 'paused'`,
+				).Scan(&jobID)
+			})
 
 			// Clear pausepoint and resume the job.
 			runner.Exec(t, `SET CLUSTER SETTING jobs.debug.pausepoints = ''`)
