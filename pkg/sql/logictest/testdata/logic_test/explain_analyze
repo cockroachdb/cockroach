@@ -100,3 +100,18 @@ EXPLAIN ANALYZE (DISTSQL) INSERT INTO c SELECT x, x + 1 FROM (VALUES (1), (2)) A
 # LocalPlanNodes (#62261).
 query error pgcode 23503 insert on table \"c\" violates foreign key constraint \"c_p_fkey\"
 EXPLAIN ANALYZE (DEBUG) INSERT INTO c SELECT x, x + 1 FROM (VALUES (1), (2)) AS v (x)
+
+# Regression test for #142041: triggers not included in debug bundle.
+statement ok
+CREATE TABLE trigger_t1 (k INT PRIMARY KEY, v INT);
+CREATE TABLE trigger_t2 (k INT PRIMARY KEY, v INT);
+CREATE FUNCTION trigger_f() RETURNS TRIGGER LANGUAGE PLpgSQL AS $$
+  BEGIN
+    INSERT INTO trigger_t2 VALUES ((NEW).k, (NEW).v);
+    RETURN NEW;
+  END
+$$;
+CREATE TRIGGER trigger_foo AFTER INSERT ON trigger_t1 FOR EACH ROW EXECUTE FUNCTION trigger_f();
+
+statement ok
+EXPLAIN ANALYZE (DEBUG) INSERT INTO trigger_t1 VALUES (1, 10)
