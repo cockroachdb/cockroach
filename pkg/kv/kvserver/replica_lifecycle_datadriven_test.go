@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvstorage"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvstorage/wag"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/logstore"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/print"
 	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
@@ -344,12 +345,19 @@ func TestReplicaLifecycleDataDriven(t *testing.T) {
 					rhsDesc:             split.RightDesc,
 					initClosedTimestamp: hlc.Timestamp{WallTime: 100}, // dummy timestamp
 				}
+				wagWriter := wag.MakeWriter(&tc.wagSeq)
 				return tc.mutate(t, func(stateBatch, raftBatch storage.Batch) {
 					// First, apply the stashed batch from split trigger
 					// evaluation.
 					require.NoError(t, stateBatch.ApplyBatchRepr(ps.batchRepr, false /* sync */))
-					// Then run splitPreApply which does the apply-time tweaks.
-					splitPreApply(ctx, kvstorage.StateRW(stateBatch), kvstorage.WrapRaft(raftBatch), in)
+					// Then run splitPreApply which does the apply-time tweaks
+					// and stages WAG nodes on the writer.
+					splitPreApply(ctx, kvstorage.StateRW(stateBatch), kvstorage.WrapRaft(raftBatch), &wagWriter, in)
+					// Flush WAG nodes to the raft batch, mirroring what
+					// ApplyToStateMachine does in production.
+					require.NoError(t, wagWriter.Flush(
+						kvstorage.WrapRaft(raftBatch).WO, stateBatch.Repr(),
+					))
 					// If the RHS replica wasn't destroyed, it is now initialized.
 					// Update the in-memory state to reflect this.
 					if !destroyed {
@@ -533,6 +541,8 @@ type testCtx struct {
 	// for Raft.
 	stateStorage storage.Engine
 	raftStorage  storage.Engine
+
+	wagSeq wag.Seq
 }
 
 // newTestCtx constructs and returns a new testCtx.

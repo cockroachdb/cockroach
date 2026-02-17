@@ -49,6 +49,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvstorage"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvstorage/snaprecv"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvstorage/wag"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness"
 	loadmonitor "github.com/cockroachdb/cockroach/pkg/kv/kvserver/load"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/logstore"
@@ -879,6 +880,7 @@ type Store struct {
 	Ident                *roachpb.StoreIdent // pointer to catch access before Start() is called
 	cfg                  StoreConfig
 	internalEngines      kvstorage.Engines
+	wagSeq               wag.Seq
 	db                   *kv.DB
 	tsCache              tscache.Cache           // Most recent timestamps for keys / key ranges
 	allocator            allocatorimpl.Allocator // Makes allocation decisions

@@ -12,6 +12,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvstorage"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvstorage/wag"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvstorage/wag/wagpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/load"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
@@ -136,11 +138,17 @@ func validateAndPrepareSplit(
 	}, nil
 }
 
-// splitPreApply is called when the raft command is applied. Any
-// changes to the given ReadWriter will be written atomically with the
-// split commit.
+// splitPreApply is called when the raft command is applied. Any changes to the
+// given ReadWriter will be written atomically with the split commit.
+//
+// WAG nodes for the split are staged on wagWriter. The caller is responsible
+// for flushing the writer after splitPreApply returns.
 func splitPreApply(
-	ctx context.Context, stateRW kvstorage.StateRW, raftRW kvstorage.Raft, in splitPreApplyInput,
+	ctx context.Context,
+	stateRW kvstorage.StateRW,
+	raftRW kvstorage.Raft,
+	wagWriter *wag.Writer,
+	in splitPreApplyInput,
 ) {
 	rsl := kvstorage.MakeStateLoader(in.rhsDesc.RangeID)
 	// After PR #149620, the split trigger batch may only contain replicated state
@@ -166,6 +174,44 @@ func splitPreApply(
 	} else if err := rsl.ClearRaftTruncatedState(stateRW); err != nil {
 		log.KvExec.Fatalf(ctx, "cannot clear RaftTruncatedState: %v", err)
 	}
+
+	// Stage WAG nodes for the split. First, record that the LHS state machine
+	// must be caught up to the entry before the split. If the RHS isn't
+	// destroyed, also record its creation as an uninitialized replica. Finally,
+	// the mutation node is the split itself.
+	wagWriter.AddDep(wagpb.Node{
+		Addr: wagpb.Addr{
+			RangeID:   in.lhsID.RangeID,
+			ReplicaID: in.lhsID.ReplicaID,
+			Index:     in.raftIndex - 1,
+		},
+		Type: wagpb.NodeType_NodeApply,
+	})
+	var rhsRangeID roachpb.RangeID
+	if !in.destroyed {
+		rhsRangeID = in.rhsDesc.RangeID
+		rightReplDesc, _ := in.rhsDesc.GetReplicaDescriptor(in.storeID)
+		wagWriter.AddDep(wagpb.Node{
+			Addr: wagpb.Addr{
+				RangeID:   rhsRangeID,
+				ReplicaID: rightReplDesc.ReplicaID,
+				Index:     0,
+			},
+			Type:   wagpb.NodeType_NodeCreate,
+			Create: rhsRangeID,
+		})
+	}
+	// TODO(arul): It's unclear to me why we need a Create field in here.
+	// Shouldn't the WAG node for the RHS's creation above suffice?
+	wagWriter.SetMutation(wagpb.Node{
+		Addr: wagpb.Addr{
+			RangeID:   in.lhsID.RangeID,
+			ReplicaID: in.lhsID.ReplicaID,
+			Index:     in.raftIndex,
+		},
+		Type:   wagpb.NodeType_NodeSplit,
+		Create: rhsRangeID,
+	})
 
 	if in.destroyed {
 		// The RHS replica has already been removed from the store. To apply the
