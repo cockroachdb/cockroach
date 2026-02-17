@@ -1762,3 +1762,30 @@ query B
 EXECUTE p152664(true, 4, NULL)
 ----
 true
+
+# Regression tests for #159043.
+statement ok
+CREATE TABLE t159043a (a INT)
+
+statement ok
+CREATE TABLE t159043b (b INT)
+
+statement ok
+INSERT INTO t159043b VALUES (33)
+
+statement ok
+PREPARE p159043 AS
+SELECT 1 FROM t159043b CROSS JOIN (SELECT min(1) FROM t159043a OFFSET $1) GROUP BY b
+
+query empty
+EXECUTE p159043(10)
+
+statement ok
+DEALLOCATE p159043
+
+statement ok
+PREPARE p159043 AS
+SELECT 1 FROM t159043b CROSS JOIN (SELECT min(1) FROM t159043a LIMIT $1) GROUP BY b
+
+statement error negative value for LIMIT
+EXECUTE p159043(-1)
