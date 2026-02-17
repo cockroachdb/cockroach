@@ -173,3 +173,4 @@ func getLogFormat(data []byte) (string, error) {
 }
 
 var ErrMalformedLogEntry = errors.New("malformed log entry")
+var ErrMalformedJSON = errors.New("malformed JSON log entry")
