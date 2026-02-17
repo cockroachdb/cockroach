@@ -1,0 +1,275 @@
+# ==========================================================================
+# CPU Capacity Model Evaluation
+# ==========================================================================
+#
+# All CPU values are in cores (1 core = 1e9 ns/s).
+#
+# Each scenario defines the GROUND TRUTH of what's happening on the node:
+#   kv-cpu:                  Direct KV replica CPU (total across all stores)
+#   proportional-overhead:   CPU that scales with KV (dist SQL, RPC, compactions)
+#   background:              CPU that does NOT scale with KV (gateway SQL, GC, jobs)
+#
+# From ground truth we derive:
+#   node-cpu-usage = kv-cpu + proportional-overhead + background
+#   true-mult      = (kv-cpu + proportional-overhead) / kv-cpu
+#   true-capacity  = (node-cpu-capacity - background) / true-mult / num-stores
+#
+# The capacity_err % shows how far each model's capacity is from the true capacity:
+#   capacity_err < 0 → model thinks capacity is LOWER than reality (too pessimistic,
+#                       store looks overloaded → moves replicas away too early, safer)
+#   capacity_err > 0 → model thinks capacity is HIGHER than reality (too optimistic,
+#                       store looks underloaded → accepts too much work, risks overload)
+#
+# Three models:
+#   naive:       Uses only node CPU usage and stores CPU. Treats all node CPU as
+#                proportional to KV. Does not use SQL measurements.
+#   capped_mult: Like naive but caps the overhead multiplier at 3x. Does not use
+#                SQL measurements.
+#   sql_model:   Uses sql-gateway-cpu (⊆ background) and sql-dist-cpu
+#                (⊆ proportional-overhead) to separate background from proportional.
+#
+# In practice we always measure both gateway SQL and dist SQL, so every scenario
+# provides both. The sql_model's accuracy depends on how much of background and
+# proportional-overhead is captured by these SQL measurements.
+#
+# ==========================================================================
+# SUMMARY
+# ==========================================================================
+#
+# Mean |capacity_err| across normal operation scenarios:
+#   sql_model: 5.6%  |  capped_mult: 17.4%  |  naive: 23.9%
+#
+# Where each model fails:
+# naive (worst: -77.1%, always pessimistic):
+#   Treats ALL node CPU as proportional to KV. Background load inflates the
+#   per-KV cost — the more background, the worse it gets.
+#
+# capped_mult (worst: -66.7%, always pessimistic):
+#   Caps the multiplier at 3x, which helps with high background, but
+#   misclassifies real overhead as background when proportional overhead
+#   exceeds 3x.
+#
+# sql_model (worst: -50.0%, mostly pessimistic, CAN be optimistic):
+#   Most accurate; perfect when SQL measurements fully capture background
+#   and overhead. Pessimistic when background is undercounted (GC/jobs not
+#   in gateway SQL). OPTIMISTIC when proportional overhead is undercounted
+#   (compactions not in dist SQL) — the dangerous direction.
+
+# ==========================================================================
+# SECTION 1: No background — all models accurate (0% error)
+# ==========================================================================
+# When ALL node CPU is proportional to KV work, every model computes the
+# correct capacity. No background means nothing to separate.
+
+# Pure KV, no overhead: 8 of 16 cores used, all direct KV.
+scenario kv-cpu=8 proportional-overhead=0 background=0 node-cpu-capacity=16 num-stores=1 sql-gateway-cpu=0 sql-dist-cpu=0
+----
+              node-cpu: 8.00 = kv 8.00 + overhead 0.00 + background 0.00
+correct:      capacity  16.00
+naive:        capacity  16.00, capacity_err    0.0%
+capped_mult:  capacity  16.00, capacity_err    0.0%
+sql_model:    capacity  16.00, capacity_err    0.0%
+
+# KV + 2x overhead (all dist SQL): 4 KV + 8 overhead = 12 total. Multiplier = 12/4 = 3x (at the capped_mult cap).
+scenario kv-cpu=4 proportional-overhead=8 background=0 node-cpu-capacity=16 num-stores=1 sql-gateway-cpu=0 sql-dist-cpu=8
+----
+              node-cpu: 12.00 = kv 4.00 + overhead 8.00 + background 0.00
+correct:      capacity   5.33
+naive:        capacity   5.33, capacity_err    0.0%
+capped_mult:  capacity   5.33, capacity_err    0.0%
+sql_model:    capacity   5.33, capacity_err    0.0%
+
+# KV + 4x overhead (all dist SQL): 4 KV + 16 overhead = 20 total. Multiplier =
+# 20/4 = 5x (exceeds the capped_mult 3x cap). capped_mult clips to 3x, so it
+# attributes only 4*3=12 of the 20 node CPU to KV work and treats the remaining
+# 8 as background - but there is no background, so it subtracts real overhead
+# from the available capacity: (16-8)/3 = 2.67 instead of the correct 3.20.
+scenario kv-cpu=4 proportional-overhead=16 background=0 node-cpu-capacity=16 num-stores=1 sql-gateway-cpu=0 sql-dist-cpu=8
+----
+              node-cpu: 20.00 = kv 4.00 + overhead 16.00 + background 0.00
+correct:      capacity   3.20
+naive:        capacity   3.20, capacity_err    0.0%
+capped_mult:  capacity   2.67, capacity_err  -16.7%
+sql_model:    capacity   3.20, capacity_err    0.0%
+
+# ==========================================================================
+# SECTION 2: Background fully captured by SQL measurements
+# ==========================================================================
+# Background is entirely gateway SQL, proportional overhead is entirely dist
+# SQL. sql_model can perfectly separate the two and achieves 0% error.
+# naive and capped_mult cannot distinguish background from proportional.
+
+# Background is all gateway SQL, no proportional overhead.
+# kv=2, background=8 (all gateway). True capacity = (16-8)/1 = 8.0.
+# naive treats all 10 cores (including 8 of gateway SQL) as overhead caused by
+# KV, implying mult=5 and vastly overestimating per-KV cost.
+# capped_mult clips mult to 3x and finds 10-6=4 cores of background, but the
+# true background is 8 — it still blames 4 gateway cores on KV.
+scenario kv-cpu=2 proportional-overhead=0 background=8 node-cpu-capacity=16 num-stores=1 sql-gateway-cpu=8 sql-dist-cpu=0
+----
+              node-cpu: 10.00 = kv 2.00 + overhead 0.00 + background 8.00
+correct:      capacity   8.00
+naive:        capacity   3.20, capacity_err  -60.0%
+capped_mult:  capacity   4.00, capacity_err  -50.0%
+sql_model:    capacity   8.00, capacity_err    0.0%
+
+# Background is all gateway, overhead is all dist SQL.
+# kv=2, overhead=2 (all dist SQL), background=8 (all gateway).
+# True capacity = (16-8)/2 = 4.0.
+# naive computes mult=12/2=6, treating 8 cores of gateway SQL as KV overhead.
+# capped_mult clips to 3x, finding 12-6=6 background (true is 8). Both over-
+# estimate per-KV cost because they can't distinguish gateway from KV work.
+scenario kv-cpu=2 proportional-overhead=2 background=8 node-cpu-capacity=16 num-stores=1 sql-gateway-cpu=8 sql-dist-cpu=2
+----
+              node-cpu: 12.00 = kv 2.00 + overhead 2.00 + background 8.00
+correct:      capacity   4.00
+naive:        capacity   2.67, capacity_err  -33.3%
+capped_mult:  capacity   3.33, capacity_err  -16.7%
+sql_model:    capacity   4.00, capacity_err    0.0%
+
+# Heavier load: kv=4, overhead=4 (all dist), background=8 (all gateway).
+# Node at capacity (16/16). True capacity = (16-8)/2 = 4.0.
+# All models converge at 100% utilization: the store's current KV load (4)
+# equals the true capacity, so even a wrong multiplier produces the right answer
+# — the store is exactly at its limit no matter how you slice the overhead.
+scenario kv-cpu=4 proportional-overhead=4 background=8 node-cpu-capacity=16 num-stores=1 sql-gateway-cpu=8 sql-dist-cpu=4
+----
+              node-cpu: 16.00 = kv 4.00 + overhead 4.00 + background 8.00
+correct:      capacity   4.00
+naive:        capacity   4.00, capacity_err    0.0%
+capped_mult:  capacity   4.00, capacity_err    0.0%
+sql_model:    capacity   4.00, capacity_err    0.0%
+
+# ==========================================================================
+# SECTION 3: Background partially captured by SQL measurements
+# ==========================================================================
+# Realistic scenario: some background is gateway SQL but some is GC/jobs,
+# and some proportional overhead is dist SQL but some is compactions/RPC.
+# sql_model improves over naive/capped_mult but doesn't achieve 0% error.
+
+# Half of background is gateway SQL, all overhead is dist SQL.
+# kv=2, overhead=2 (all dist), background=8 (4 gateway + 4 GC/jobs).
+# True capacity = (16-8)/2 = 4.0.
+# sql_model sees all the overhead (dist=2) but only half the background
+# (gateway=4, misses 4 GC/jobs). The unseen 4 cores make the model think all
+# measured work is ~50% more expensive than it is, inflating per-KV cost and
+# producing a pessimistic estimate matching capped_mult.
+scenario kv-cpu=2 proportional-overhead=2 background=8 node-cpu-capacity=16 num-stores=1 sql-gateway-cpu=4 sql-dist-cpu=2
+----
+              node-cpu: 12.00 = kv 2.00 + overhead 2.00 + background 8.00
+correct:      capacity   4.00
+naive:        capacity   2.67, capacity_err  -33.3%
+capped_mult:  capacity   3.33, capacity_err  -16.7%
+sql_model:    capacity   3.33, capacity_err  -16.7%
+
+# All of background is gateway SQL, half of overhead is dist SQL.
+# kv=2, overhead=2 (1 dist + 1 compactions), background=8 (all gateway).
+# True capacity = (16-8)/2 = 4.0.
+# sql_model is OPTIMISTIC here (+11.1%): it only sees 1 core of dist SQL but
+# the real proportional overhead is 2 cores (1 dist SQL + 1 compactions). So it
+# underestimates how much overhead each unit of KV work causes. It thinks KV
+# work is "cheaper" than it really is, so it overestimates how much KV work the
+# node can handle — reporting 4.44 instead of the correct 4.0.
+scenario kv-cpu=2 proportional-overhead=2 background=8 node-cpu-capacity=16 num-stores=1 sql-gateway-cpu=8 sql-dist-cpu=1
+----
+              node-cpu: 12.00 = kv 2.00 + overhead 2.00 + background 8.00
+correct:      capacity   4.00
+naive:        capacity   2.67, capacity_err  -33.3%
+capped_mult:  capacity   3.33, capacity_err  -16.7%
+sql_model:    capacity   4.44, capacity_err   11.1%
+
+# Small fractions measured: 25% of background is gateway, no dist SQL.
+# kv=2, overhead=2 (all compactions/RPC), background=8 (2 gateway + 6 GC/jobs).
+# True capacity = (16-8)/2 = 4.0.
+# sql_model sees only 2 of 8 background and 0 of 2 overhead cores. The 8 unseen
+# cores (6 GC/jobs + 2 compactions) make the model think all measured work is 3x
+# more expensive, heavily inflating per-KV cost. Matches capped_mult.
+scenario kv-cpu=2 proportional-overhead=2 background=8 node-cpu-capacity=16 num-stores=1 sql-gateway-cpu=2 sql-dist-cpu=0
+----
+              node-cpu: 12.00 = kv 2.00 + overhead 2.00 + background 8.00
+correct:      capacity   4.00
+naive:        capacity   2.67, capacity_err  -33.3%
+capped_mult:  capacity   3.33, capacity_err  -16.7%
+sql_model:    capacity   3.33, capacity_err  -16.7%
+
+# Extreme background, partially measured: kv=0.5, background=13.5 (10 gateway
+# + 3.5 GC/jobs), no overhead, no dist SQL.
+# True capacity = (16-13.5)/1 = 2.5.
+# naive treats all 14 cores as proportional to 0.5 KV (mult=28!), blaming 13.5
+# cores of background entirely on KV — catastrophically pessimistic.
+# capped_mult clips to 3x, finding 14-1.5=12.5 background (close to true 13.5)
+# but still divides by 3x instead of the true 1x, underestimating capacity.
+# sql_model sees 10 of 13.5 background. The unseen 3.5 GC/jobs cores inflate
+# per-KV cost, but it still gets much closer than the other models.
+scenario kv-cpu=0.5 proportional-overhead=0 background=13.5 node-cpu-capacity=16 num-stores=1 sql-gateway-cpu=10 sql-dist-cpu=0
+----
+              node-cpu: 14.00 = kv 0.50 + overhead 0.00 + background 13.50
+correct:      capacity   2.50
+naive:        capacity   0.57, capacity_err  -77.1%
+capped_mult:  capacity   1.17, capacity_err  -53.3%
+sql_model:    capacity   2.00, capacity_err  -20.0%
+
+# ==========================================================================
+# SECTION 4: Multi-store scenarios
+# ==========================================================================
+
+# 2 stores, kv=4 total. overhead=2 (all dist), background=6 (all gateway).
+# True capacity = (16-6)/1.5/2 = 3.33 per store.
+# naive/capped_mult compute mult=12/4=3 (exactly at the cap), treating all 12
+# cores as KV-proportional — including 6 cores of gateway SQL that don't move
+# with replicas. Neither detects any background.
+scenario kv-cpu=4 proportional-overhead=2 background=6 node-cpu-capacity=16 num-stores=2 sql-gateway-cpu=6 sql-dist-cpu=2
+----
+              node-cpu: 12.00 = kv 4.00 + overhead 2.00 + background 6.00
+correct:      capacity   3.33
+naive:        capacity   2.67, capacity_err  -20.0%
+capped_mult:  capacity   2.67, capacity_err  -20.0%
+sql_model:    capacity   3.33, capacity_err    0.0%
+
+# 2 stores, partial SQL coverage: background=6 (3 gateway + 3 GC/jobs),
+# overhead=2 (1 dist + 1 compactions).
+# sql_model sees 3 of 6 background and 1 of 2 overhead. The 4 unseen cores
+# inflate per-unit cost, making it slightly pessimistic (-8%) but still better
+# than naive/capped which treat all node CPU as KV-proportional.
+scenario kv-cpu=4 proportional-overhead=2 background=6 node-cpu-capacity=16 num-stores=2 sql-gateway-cpu=3 sql-dist-cpu=1
+----
+              node-cpu: 12.00 = kv 4.00 + overhead 2.00 + background 6.00
+correct:      capacity   3.33
+naive:        capacity   2.67, capacity_err  -20.0%
+capped_mult:  capacity   2.67, capacity_err  -20.0%
+sql_model:    capacity   3.07, capacity_err   -8.0%
+
+# ==========================================================================
+# SECTION 5: Edge cases
+# ==========================================================================
+
+# Zero KV CPU (startup, no replicas reporting yet). Heavy background from
+# gateway SQL + jobs. True mult = 1 (no overhead). True capacity = (16-12)/1 = 4.
+# All three models fail:
+# naive falls back to nodeCapacity/2 = 8 when storesCPU=0, completely ignoring
+# background — dangerously optimistic (+100%), reporting double the real capacity.
+# capped_mult correctly finds all 12 background (attributes 0*3=0 to KV) but
+# divides available capacity by 3 for no reason: (16-12)/3 = 1.33.
+# sql_model subtracts its visible 10 gateway cores, but also divides by 3:
+# (16-10)/3 = 2.0. Better than capped because it subtracts less background,
+# but both apply an unnecessary 3x multiplier when there's no overhead.
+scenario kv-cpu=0 proportional-overhead=0 background=12 node-cpu-capacity=16 num-stores=1 sql-gateway-cpu=10 sql-dist-cpu=0
+----
+              node-cpu: 12.00 = kv 0.00 + overhead 0.00 + background 12.00
+correct:      capacity   4.00
+naive:        capacity   8.00, capacity_err  100.0%
+capped_mult:  capacity   1.33, capacity_err  -66.7%
+sql_model:    capacity   2.00, capacity_err  -50.0%
+
+# Overloaded: background exceeds node capacity.
+# True capacity = max(0, 16-30)/2 = 0 (node is crushed by background).
+# naive still reports 0.5 because it doesn't model background at all — it just
+# divides KV load by CPU utilization, blind to the fact that the node can't
+# support any KV work. capped_mult and sql_model correctly return 0.
+scenario kv-cpu=1 proportional-overhead=1 background=30 node-cpu-capacity=16 num-stores=1 sql-gateway-cpu=20 sql-dist-cpu=1
+----
+              node-cpu: 32.00 = kv 1.00 + overhead 1.00 + background 30.00
+correct:      capacity   0.00
+naive:        capacity   0.50, capacity_err    N/A
+capped_mult:  capacity   0.00, capacity_err    N/A
+sql_model:    capacity   0.00, capacity_err    N/A

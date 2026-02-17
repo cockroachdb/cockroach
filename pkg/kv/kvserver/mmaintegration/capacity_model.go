@@ -1,0 +1,347 @@
+// Copyright 2025 The Cockroach Authors.
+//
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
+
+package mmaintegration
+
+import "github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/mmaprototype"
+
+// This file contains the capacity model functions used by MMA to derive
+// per-store capacity from node-level and disk-level metrics. These are
+// extracted here so they can be unit tested directly.
+
+// storeCPURateCapacityInput holds the inputs needed to compute per-store CPU
+// capacity. Using a struct avoids accidentally swapping the order of parameters
+// when passing them to functions.
+type storeCPURateCapacityInput struct {
+	// storesCPURate is the aggregated CPU usage across all stores on the node
+	// (sum of per-store CPU load usage) in ns/sec.
+	storesCPURate float64
+	// nodeCPURateUsage is the total CPU usage of the node (from OS-level
+	// metrics) in ns/sec.
+	nodeCPURateUsage float64
+	// nodeCPURateCapacity is the total CPU capacity of the node (from OS-level
+	// metrics) in ns/sec.
+	nodeCPURateCapacity float64
+	// sqlGatewayCPUNanoPerSec is the SQL gateway CPU usage in ns/sec, measured
+	// by the runtime load monitor tracking SQL work executed at gateway nodes.
+	sqlGatewayCPUNanoPerSec float64
+	// sqlDistCPUNanoPerSec is the distributed SQL CPU usage in ns/sec, measured
+	// by the runtime load monitor tracking distributed SQL work.
+	sqlDistCPUNanoPerSec float64
+	// numStores is the number of stores on the node.
+	numStores int32
+}
+
+// computeStoreCPURateCapacity computes the CPU rate capacity for a single store
+// given node-level CPU metrics. The model ensures that the mean store
+// utilization (sum of store loads / sum of store capacities) equals the
+// node-level CPU utilization, so that overload is detected at the store level
+// exactly when it is detected at the node level. Individual stores may have
+// different utilizations depending on their load.
+//
+// The two cases are:
+//
+//  1. Normal: storesCPURate > 0, cpuUtil >= 0.01.
+//     We compute cpuUtil = nodeCPURateUsage / nodeCPURateCapacity, then
+//     derive a per-store capacity = (storesCPURate / cpuUtil) / numStores.
+//     See MakeStoreLoadMsg for why this construction preserves the
+//     node-level utilization as the mean store-level utilization.
+//
+//  2. Low utilization fallback: storesCPURate is zero or cpuUtil < 0.01.
+//     We assume 50% of the node capacity is attributable to stores and
+//     split evenly.
+//
+// Panics if numStores <= 0 or nodeCPURateCapacity <= 0.
+func computeStoreCPURateCapacity(in storeCPURateCapacityInput) mmaprototype.LoadValue {
+	if in.numStores <= 0 || in.nodeCPURateCapacity <= 0 {
+		panic("numStores and nodeCPURateCapacity must be > 0")
+	}
+
+	// CPU is a shared resource across all stores on a node, and we choose to
+	// divide the CPU capacity evenly across stores on the node (any other
+	// choice would be arbitrary).
+	//
+	// Furthermore, there are CPU consumers that we don't track on a
+	// per-replica (and thus per-store) level. Examples include RPC work, Go
+	// GC, SQL work etc. Some of the distributed SQL work could be happening
+	// because of a local replica, so ideally we should improve our
+	// instrumentation to track it per replica. Due to these gaps, we expect
+	// the NodeCPURateCapacity to be higher than StoresCPURate. So simply
+	// using NodeCPURateCapacity/NumStores as the per-store capacity would
+	// lead to over-utilization.
+	//
+	// Our approach is to apply the CPU utilization to StoresCPURate to
+	// compute a capacity and divide that evenly across stores. Specifically,
+	//
+	//   cpuUtil = NodeCPURateUsage/NodeCPURateCapacity
+	//
+	// we want to define StoresCPURateCapacity such that
+	//
+	//    StoresCPURate/StoresCPURateCapacity = cpuUtil,
+	//
+	// i.e. we want to give the (collective) stores a capacity that results
+	// in the same utilization as reported at the process (node) level, i.e.
+	//
+	//    StoresCPURateCapacity = StoresCPURate/cpuUtil.
+	//
+	// Finally, we split StoresCPURateCapacity evenly across the stores.
+	//
+	// This construction ensures that there is overload as measured by node
+	// CPU usage exactly when there is overload as measured by mean store
+	// CPU usage:
+	//
+	// meanCPUUtil = sum_i StoreCPURate_i / sum_i StoreCPURateCapacity_i
+	//             = 1/StoresCPURateCapacity * sum_i StoreCPURate_i
+	//             = StoresCPURate / StoresCPURateCapacity
+	//             = cpuUtil
+	//
+	// The above mathematical property is used to avoid having any explicit
+	// communication of node load to MMA. The
+	// NodeLoad.{ReportedCPU,CapacityCPU} is incrementally maintained as a sum
+	// of the load and capacity reported by each store (at different times).
+	//
+	// Additionally, when the meanCPUUtil indicates overload, at least one
+	// store will be above that mean, so it is overloaded as well and will
+	// induce load shedding.
+	//
+	// It's worth noting that this construction assumes that all load on the
+	// node is due to the stores. Take an extreme example in which there is
+	// a single store using up 1vcpu, but the node is fully utilized (at,
+	// say, 16 vcpus). In this case, the node will be at 100%, and we will
+	// assign a capacity of 1 to the store, i.e. the store will also be at
+	// 100% utilization despite contributing only 1/16th of the node CPU
+	// utilization. The effect of the construction is that the store will
+	// take on responsibility for shedding load to compensate for auxiliary
+	// consumption of CPU, which is generally sensible.
+	cpuUtil := in.nodeCPURateUsage / in.nodeCPURateCapacity
+	// cpuUtil can be zero or close to zero.
+	almostZeroUtil := cpuUtil < 0.01
+	if in.storesCPURate == 0 || almostZeroUtil {
+		// almostZeroUtil or StoresCPURate is zero. We assume that only 50% of
+		// the usage can be accounted for in StoresCPURate, so we divide 50% of
+		// the NodeCPURateCapacity among all the stores.
+		return mmaprototype.LoadValue(in.nodeCPURateCapacity / 2 / float64(in.numStores))
+	}
+	// cpuUtil is distributed across the stores, by constructing a
+	// nodeCapacity, and then splitting nodeCapacity evenly across all the
+	// stores. If the cpuUtil of a node is higher than the mean across nodes
+	// of the cluster, then cpu util of at least one store on that node will
+	// be higher than the mean across all stores in the cluster (since the
+	// cpu util of a node is simply the mean across all its stores), which
+	// will result in load shedding. Note that this can cause cpu util of a
+	// store to be > 100% e.g. if a node is at 80% cpu util and has 10
+	// stores, and all the cpu usage is due to store s1, then s1 will have
+	// 800% util.
+	nodeCapacity := in.storesCPURate / cpuUtil
+	storeCapacity := nodeCapacity / float64(in.numStores)
+	return mmaprototype.LoadValue(storeCapacity)
+}
+
+// computeStoreByteSizeCapacity computes the byte size (disk) capacity for a
+// store. The load is LogicalBytes (uncompressed) and the capacity is expressed
+// in the same LogicalBytes-space, so that load/capacity recovers the actual
+// disk utilization.
+//
+// The two cases are:
+//
+//  1. Normal: logicalBytes > 0 and diskFractionUsed >= 0.01.
+//     capacity = logicalBytes / diskFractionUsed.
+//     This ensures that logicalBytes/capacity equals the observed physical
+//     disk utilization, encoding the space amplification factor
+//     (physical/logical) into the capacity.
+//
+//  2. Empty/new store: logicalBytes is 0 or diskFractionUsed < 0.01.
+//     We fall back to availableBytes (compressed/physical), which is
+//     pessimistic since LogicalBytes are uncompressed.
+//
+// diskFractionUsed should be computed via StoreCapacity.FractionUsed(), which
+// prefers Used/(Available+Used) to scope utilization to the store's own data.
+// Available does not compensate for the ballast, so utilization will look
+// slightly higher than actual. This is acceptable since the ballast is small
+// (default 1% of capacity) and is for emergency use.
+func computeStoreByteSizeCapacity(
+	logicalBytes mmaprototype.LoadValue, diskFractionUsed float64, availableBytes int64,
+) mmaprototype.LoadValue {
+	almostZeroUtil := diskFractionUsed < 0.01
+	if logicalBytes == 0 || almostZeroUtil {
+		// Has no ranges or is almost empty. This is likely a new store. Since
+		// LogicalBytes are uncompressed, we start with the compressed available,
+		// which is desirably pessimistic.
+		return mmaprototype.LoadValue(availableBytes)
+	}
+	// Normal case. The store has some ranges, and is not almost empty.
+	return mmaprototype.LoadValue(float64(logicalBytes) / diskFractionUsed)
+}
+
+// cpuIndirectOverheadMultiplier is the maximum ratio of total CPU caused by
+// store work to the directly-tracked store CPU. For example, a value of 3
+// means we assume each unit of direct MMA load (replica CPU) can cause up to 2
+// additional units of indirect CPU (RPC handling, compactions, etc.), for a
+// total of 3 units. Any node CPU usage beyond storesCPURate * multiplier is
+// treated as background load unrelated to MMA.
+const cpuIndirectOverheadMultiplier = 3.0
+
+// computeCPUCapacityWithCap computes per-store CPU capacity using a clamped
+// multiplier. Unlike computeStoreCPURateCapacity (which assumes all node CPU
+// usage is caused by MMA-tracked store work), this model distinguishes between
+// MMA-attributed load and background load.
+//
+// The formula:
+//
+//  1. clampedMult = max(1, min(nodeCPURateUsage / storesCPURate, cpuIndirectOverheadMultiplier))
+//     When the implicit multiplier is low (<= cap), we assume all non-store
+//     CPU is indirectly caused by store work (e.g. RPC overhead, compactions)
+//     and will scale linearly with MMA's direct load.
+//     When the implicit multiplier exceeds the cap, we stop attributing
+//     unrelated CPU consumption (SQL gateway work, GC, background jobs) to
+//     the stores.
+//
+//  2. backgroundLoad = nodeCPURateUsage - storesCPURate * clampedMult
+//     The portion of node CPU usage that we assume is independent of
+//     MMA-tracked work. This is zero when the implicit multiplier is below
+//     the cap, and grows as auxiliary CPU usage increases.
+//
+//  3. mmaShareOfCapacity = nodeCPURateCapacity - backgroundLoad
+//     The number of cores available for MMA-related work (both direct store
+//     load and its indirect overhead).
+//
+//  4. mmaDirectCapacity = mmaShareOfCapacity / clampedMult
+//     The capacity in terms of direct MMA load. Dividing by the multiplier
+//     accounts for the indirect overhead: each unit of direct load consumes
+//     clampedMult units of actual CPU.
+//
+//  5. storeCapacity = mmaDirectCapacity / numStores
+//     Split evenly across stores on the node.
+//
+// When storesCPURate is 0 (no replicas reporting CPU yet), we use the limiting
+// behavior: MMA attributes none of the node usage to itself (all is
+// background), and divides the idle capacity by the multiplier across stores.
+func computeCPUCapacityWithCap(
+	in storeCPURateCapacityInput,
+	observer func(mult float64, backgroundLoad float64, mmaShareOfCapacity float64, mmaDirectCapacity float64),
+) (capacity float64) {
+	mult := 0.0
+	if in.numStores <= 0 || in.nodeCPURateCapacity <= 0 {
+		panic("numStores and nodeCPURateCapacity must be > 0")
+	}
+
+	if in.storesCPURate <= 0 {
+		// When MMA has zero load, the implicit multiplier is infinite, so we
+		// use the cap. MMA attributes 0 * cap = 0 of the node usage to itself,
+		// meaning all node usage is "background". MMA gets the remaining idle
+		// capacity, scaled down by the multiplier.
+		mult = cpuIndirectOverheadMultiplier
+	} else {
+		// Compute the implicit multiplier and clamp it to [1, cap].
+		// - Clamping from above prevents pathological behavior when MMA tracks
+		//   little load but the node has high CPU usage from other sources.
+		// - Clamping from below (at 1) handles the case where MMA load exceeds
+		//   node usage (shouldn't happen, but can due to measurement lag).
+		//   Without this, MMA would get unreasonably high capacity.
+		implicitMult := in.nodeCPURateUsage / in.storesCPURate
+		mult = max(1, min(implicitMult, cpuIndirectOverheadMultiplier))
+	}
+
+	// Background load is the portion of node usage NOT attributed to MMA.
+	// This is clamped to be non-negative.
+	mmaAttributedLoad := in.storesCPURate * mult
+	backgroundLoad := max(0.0, in.nodeCPURateUsage-mmaAttributedLoad)
+
+	// MMA's share of capacity is what remains after background load.
+	// Clamp to non-negative to handle overloaded nodes where backgroundLoad
+	// exceeds nodeCPURateCapacity.
+	mmaShareOfCapacity := max(0.0, in.nodeCPURateCapacity-backgroundLoad)
+
+	// MMA's direct capacity is scaled down by the multiplier to account
+	// for indirect overhead.
+	mmaDirectCapacity := mmaShareOfCapacity / mult
+
+	// Divide evenly across stores.
+	capacity = mmaDirectCapacity / float64(in.numStores)
+	observer(mult, backgroundLoad, mmaShareOfCapacity, mmaDirectCapacity)
+	return capacity
+}
+
+// computeStoreCPURateCapacityWithSQL computes per-store CPU capacity using the
+// alternative model that accounts for SQL gateway and distributed SQL CPU
+// separately. This model fits:
+//
+//	(SSCR + SQL_DIST + SQL_G) * K1 = NCR
+//	SSCR * K2 = SQL_DIST
+//
+// Where:
+//   - SSCR = storesCPURate (aggregate KV CPU across all stores)
+//   - SQL_DIST = sqlDistCPUNanoPerSec (distributed SQL CPU)
+//   - SQL_G = sqlGatewayCPUNanoPerSec (gateway SQL CPU)
+//   - NCR = nodeCPURateUsage (total node CPU usage)
+//   - NCRC = nodeCPURateCapacity (total node CPU capacity)
+//   - K1 = multiplier for total CPU overhead
+//   - K2 = multiplier for SQL_DIST relative to SSCR
+//
+// Solving for K1 and K2:
+//
+//	K2 = SQL_DIST / SSCR (if SSCR > 0)
+//	K1 = NCR / (SSCR + SQL_DIST + SQL_G) (if denominator > 0)
+//
+// The effective capacity for stores is:
+//
+//	NodeCapacity = (NCRC - SQL_G*K1) / ((K2+1)*K1)
+//	StoreCapacity = NodeCapacity / numStores
+//
+// This model correctly attributes gateway SQL CPU (SQL_G) as background load
+// that doesn't scale with store work, while distributed SQL CPU (SQL_DIST) is
+// assumed to scale proportionally with KV work.
+func computeStoreCPURateCapacityWithSQL(
+	in storeCPURateCapacityInput,
+	observer func(k1 float64, k2 float64, nodeCapacity float64),
+) (capacity float64) {
+	if in.numStores <= 0 || in.nodeCPURateCapacity <= 0 {
+		panic("numStores and nodeCPURateCapacity must be > 0")
+	}
+
+	// Handle edge cases where we can't compute the model.
+	if in.storesCPURate <= 0 {
+		// No store CPU usage. Use a fallback: assume SQL_G is background and
+		// distribute remaining capacity evenly, scaled by a conservative multiplier.
+		const fallbackMultiplier = 3.0
+		backgroundLoad := in.sqlGatewayCPUNanoPerSec
+		availableCapacity := max(0.0, in.nodeCPURateCapacity-backgroundLoad)
+		nodeCapacity := availableCapacity / fallbackMultiplier
+		capacity = nodeCapacity / float64(in.numStores)
+		observer(0, 0, nodeCapacity)
+		return capacity
+	}
+
+	// Compute K2: SQL_DIST scales proportionally with SSCR.
+	k2 := in.sqlDistCPUNanoPerSec / in.storesCPURate
+
+	// Compute K1: total CPU overhead multiplier.
+	// (SSCR + SQL_DIST + SQL_G) * K1 = NCR
+	totalAttributedLoad := in.storesCPURate + in.sqlDistCPUNanoPerSec + in.sqlGatewayCPUNanoPerSec
+	if totalAttributedLoad <= 0 {
+		// Fallback: assume no overhead.
+		k1 := 1.0
+		nodeCapacity := in.nodeCPURateCapacity / (k2 + 1)
+		capacity = nodeCapacity / float64(in.numStores)
+		observer(k1, k2, nodeCapacity)
+		return capacity
+	}
+	k1 := in.nodeCPURateUsage / totalAttributedLoad
+
+	// Compute NodeCapacity = (NCRC - SQL_G*K1) / ((K2+1)*K1)
+	sqlGatewayAttributedLoad := in.sqlGatewayCPUNanoPerSec * k1
+	availableCapacity := max(0.0, in.nodeCPURateCapacity-sqlGatewayAttributedLoad)
+	denominator := (k2 + 1) * k1
+	if denominator <= 0 {
+		// Fallback to avoid division by zero.
+		capacity = 0
+		observer(k1, k2, 0)
+		return capacity
+	}
+	nodeCapacity := availableCapacity / denominator
+	capacity = nodeCapacity / float64(in.numStores)
+	observer(k1, k2, nodeCapacity)
+	return capacity
+}
