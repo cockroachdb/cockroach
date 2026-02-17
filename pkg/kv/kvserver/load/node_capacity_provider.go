@@ -69,6 +69,8 @@ func NewNodeCapacityProvider(
 		capacityRefreshInterval: config.CPUCapacityRefreshInterval,
 	}
 	monitor.mu.usageEWMA = ewma.NewMovingAverage(config.CPUUsageMovingAverageAge)
+	monitor.mu.sqlGatewayEWMA = ewma.NewMovingAverage(config.CPUUsageMovingAverageAge)
+	monitor.mu.sqlDistEWMA = ewma.NewMovingAverage(config.CPUUsageMovingAverageAge)
 	monitor.recordCPUCapacity(context.Background())
 	return &NodeCapacityProvider{
 		stores:             stores,
@@ -105,12 +107,14 @@ func (n *NodeCapacityProvider) GetNodeCapacity(useCached bool) (roachpb.NodeCapa
 	// runtimeLoadMonitor to also fetch updated stats.
 	// TODO(wenyihu6): NodeCPURateCapacity <= NodeCPURateUsage fails on CI and
 	// requires more investigation.
-	cpuUsageNanoPerSec, cpuCapacityNanoPerSec := n.runtimeLoadMonitor.GetCPUStats()
+	cpuUsageNanoPerSec, cpuCapacityNanoPerSec, sqlGatewayCPUNanoPerSec, sqlDistCPUNanoPerSec := n.runtimeLoadMonitor.GetCPUStats()
 	return roachpb.NodeCapacity{
-		StoresCPURate:       storesCPURate,
-		NumStores:           numStores,
-		NodeCPURateCapacity: cpuCapacityNanoPerSec,
-		NodeCPURateUsage:    cpuUsageNanoPerSec,
+		StoresCPURate:           storesCPURate,
+		NumStores:               numStores,
+		NodeCPURateCapacity:     cpuCapacityNanoPerSec,
+		NodeCPURateUsage:        cpuUsageNanoPerSec,
+		SQLGatewayCPUNanoPerSec: int64(sqlGatewayCPUNanoPerSec),
+		SQLDistCPUNanoPerSec:    int64(sqlDistCPUNanoPerSec),
 	}, nil
 }
 
@@ -131,6 +135,23 @@ type runtimeLoadMonitor struct {
 		// subsequent polls in nanoseconds. The cpu usage is obtained by polling
 		// stats from status.GetProcCPUTime which is cumulative.
 		usageEWMA ewma.MovingAverage
+
+		// lastGatewayCPUNanos tracks the last cumulative SQL gateway CPU usage
+		// in nanoseconds, used to compute the delta between subsequent polls.
+		lastGatewayCPUNanos float64
+
+		// lastDistCPUNanos tracks the last cumulative dist SQL CPU usage in
+		// nanoseconds, used to compute the delta between subsequent polls.
+		lastDistCPUNanos float64
+
+		// sqlGatewayEWMA maintains a moving average of delta SQL gateway CPU
+		// usage between two subsequent polls in nanoseconds.
+		sqlGatewayEWMA ewma.MovingAverage
+
+		// sqlDistEWMA maintains a moving average of delta dist SQL CPU usage
+		// between two subsequent polls in nanoseconds.
+		sqlDistEWMA ewma.MovingAverage
+
 		// logicalCPUsPerSec represents the node's cpu capacity in logical
 		// CPU-seconds per second, obtained from status.GetCPUCapacity.
 		logicalCPUsPerSec int64
@@ -138,7 +159,9 @@ type runtimeLoadMonitor struct {
 }
 
 // GetCPUStats returns the current cpu usage and capacity stats for the node.
-func (m *runtimeLoadMonitor) GetCPUStats() (cpuUsageNanoPerSec int64, cpuCapacityNanoPerSec int64) {
+func (m *runtimeLoadMonitor) GetCPUStats() (
+	cpuUsageNanoPerSec int64, cpuCapacityNanoPerSec int64,
+	sqlGatewayCPUNanoPerSec float64, sqlDistCPUNanoPerSec float64) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	// usageEWMA is usage in nanoseconds. Divide by refresh interval to get the
@@ -147,11 +170,17 @@ func (m *runtimeLoadMonitor) GetCPUStats() (cpuUsageNanoPerSec int64, cpuCapacit
 	// logicalCPUsPerSec is in logical cpu-seconds per second. Convert the unit
 	// from cpu-seconds to cpu-nanoseconds.
 	cpuCapacityNanoPerSec = m.mu.logicalCPUsPerSec * time.Second.Nanoseconds()
+	sqlGatewayCPUNanoPerSec = m.mu.sqlGatewayEWMA.Value() / m.usageRefreshInterval.Seconds()
+	sqlDistCPUNanoPerSec = m.mu.sqlDistEWMA.Value() / m.usageRefreshInterval.Seconds()
 	return
 }
 
 // recordCPUUsage samples and records the current cpu usage of the node.
 func (m *runtimeLoadMonitor) recordCPUUsage(ctx context.Context) error {
+	var gatewayCPUNanos, distCPUNanos int64
+	if m.SQLCPUProvider != nil {
+		gatewayCPUNanos, distCPUNanos = m.SQLCPUProvider.GetCumulativeSQLCPUNanos()
+	}
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	userTimeMillis, sysTimeMillis, err := status.GetProcCPUTime(ctx)
@@ -163,6 +192,13 @@ func (m *runtimeLoadMonitor) recordCPUUsage(ctx context.Context) error {
 	totalUsageNanos := float64(userTimeMillis*1e6 + sysTimeMillis*1e6)
 	cpuUsageDelta, m.mu.lastTotalUsageNanos = cumulativeDelta(ctx, totalUsageNanos, m.mu.lastTotalUsageNanos)
 	m.mu.usageEWMA.Add(cpuUsageDelta)
+	if m.SQLCPUProvider != nil {
+		var gatewayDelta, distDelta float64
+		gatewayDelta, m.mu.lastGatewayCPUNanos = cumulativeDelta(ctx, float64(gatewayCPUNanos), m.mu.lastGatewayCPUNanos)
+		distDelta, m.mu.lastDistCPUNanos = cumulativeDelta(ctx, float64(distCPUNanos), m.mu.lastDistCPUNanos)
+		m.mu.sqlGatewayEWMA.Add(gatewayDelta)
+		m.mu.sqlDistEWMA.Add(distDelta)
+	}
 	return nil
 }
 
