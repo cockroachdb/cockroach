@@ -350,6 +350,7 @@ go_test(
         "//pkg/util/encoding",
         "//pkg/util/grpcutil",
         "//pkg/util/hlc",
+        "//pkg/util/interval",
         "//pkg/util/intsets",
         "//pkg/util/ioctx",
         "//pkg/util/json",
