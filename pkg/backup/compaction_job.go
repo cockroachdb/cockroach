@@ -903,12 +903,17 @@ func doCompaction(
 	defaultStore cloud.ExternalStorage,
 	kmsEnv cloud.KMSEnv,
 ) error {
+	plan, planCtx, err := createCompactionPlan(
+		ctx, execCtx, jobID, details, compactChain, manifest, defaultStore, kmsEnv,
+	)
+	if err != nil {
+		return errors.Wrap(err, "creating compaction plan")
+	}
+
 	progCh := make(chan *execinfrapb.RemoteProducerMetadata_BulkProcessorProgress)
 	runDistCompaction := func(ctx context.Context) error {
 		defer close(progCh)
-		return runCompactionPlan(
-			ctx, execCtx, jobID, details, compactChain, manifest, defaultStore, kmsEnv, progCh,
-		)
+		return runCompactionPlan(ctx, execCtx, jobID, planCtx, plan, progCh)
 	}
 	checkpointLoop := func(ctx context.Context) error {
 		return processProgress(ctx, execCtx, details, manifest, progCh, kmsEnv)
@@ -920,7 +925,9 @@ func doCompaction(
 	); err != nil {
 		return err
 	}
-	statsTable := getTableStatsForBackup(ctx, execCtx.ExecCfg().InternalDB.Executor(), execCtx.ExecCfg().Settings, manifest.Descriptors)
+	statsTable := getTableStatsForBackup(
+		ctx, execCtx.ExecCfg().InternalDB.Executor(), execCtx.ExecCfg().Settings, manifest.Descriptors,
+	)
 	return backupinfo.WriteBackupMetadata(
 		ctx, execCtx, defaultStore, details, kmsEnv, manifest, statsTable,
 	)
