@@ -2810,8 +2810,8 @@ func (ex *connExecutor) dispatchToExecutionEngine(
 	pausablePortalInfo := getPausablePortalInfo(planner)
 	if pausablePortalInfo != nil {
 		// This is ugly, but we need to override the execMon to the specific one
-		// owned by the pausable portals.
-		planner.execMon = ex.ppExecMon
+		// owned by the pausable portal.
+		planner.execMon = pausablePortalInfo.execMon
 	} else {
 		// Guarantee that we use the global execMon in case we had some pausable
 		// portal executions in between.
