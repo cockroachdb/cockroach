@@ -303,7 +303,7 @@ func importTypeCheck(
 	); err != nil {
 		return false, nil, err
 	}
-	header = jobs.BulkJobExecutionResultHeader
+	header = jobs.ImportJobExecutionResultHeader
 	if importStmt.Options.HasKey(importOptionDetached) {
 		header = jobs.DetachedJobExecutionResultHeader
 	}
@@ -859,7 +859,7 @@ func importPlanHook(
 	if isDetached {
 		return fn, jobs.DetachedJobExecutionResultHeader, false, nil
 	}
-	return fn, jobs.BulkJobExecutionResultHeader, false, nil
+	return fn, jobs.ImportJobExecutionResultHeader, false, nil
 }
 
 func parseAvroOptions(

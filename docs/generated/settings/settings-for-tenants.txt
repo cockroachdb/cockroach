@@ -8,6 +8,7 @@ admission.sql_sql_response.enabled	boolean	true	when true, work performed by the
 bulkio.backup.file_size	byte size	128 MiB	target size for individual data files produced during BACKUP	application
 bulkio.backup.read_timeout	duration	5m0s	amount of time after which a read attempt is considered timed out, which causes the backup to fail	application
 bulkio.backup.read_with_priority_after	duration	1m0s	amount of time since the read-as-of time above which a BACKUP should use priority when retrying reads	application
+bulkio.import.row_count_validation.mode (alias: bulkio.import.row_count_validation.unsafe.mode)	enumeration	async	controls validation of imported data via INSPECT jobs. Options: 'off' (no validation), 'async' (background validation), 'sync' (blocking validation). If disabled, IMPORT will not perform a post-import row count check. [off = 0, async = 1, sync = 2]	application
 bulkio.merge.file_size	byte size	1.0 GiB	target size for individual data files produced during local only merge phases	application
 changefeed.aggregator.flush_jitter	float	0.1	jitter aggregator flushes as a fraction of min_checkpoint_frequency. This setting has no effect if min_checkpoint_frequency is set to 0.	application
 changefeed.backfill.concurrent_scan_requests	integer	0	number of concurrent scan requests per node issued during a backfill	application

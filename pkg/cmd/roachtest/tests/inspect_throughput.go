@@ -9,7 +9,6 @@ import (
 	"bytes"
 	"context"
 	gosql "database/sql"
-	"errors"
 	"fmt"
 	"io"
 	"strings"
@@ -26,7 +25,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/workload/histogram"
 	"github.com/cockroachdb/cockroach/pkg/workload/histogram/exporter"
-	"github.com/lib/pq"
 	"github.com/stretchr/testify/require"
 )
 
@@ -273,26 +271,9 @@ func makeInspectThroughputTest(
 func disableRowCountValidation(t test.Test, db *gosql.DB) {
 	t.Helper()
 	t.L().Printf("Disabling automatic row count validation")
-	_, err := db.Exec("SET CLUSTER SETTING bulkio.import.row_count_validation.unsafe.mode = 'off'")
-	// If we get an error, it's because the cluster setting is considered unsafe.
-	// So, we need extract the interlock key from the error.
+	_, err := db.Exec("SET CLUSTER SETTING bulkio.import.row_count_validation.mode = 'off'")
 	if err != nil {
-		var pqErr *pq.Error
-		if !errors.As(err, &pqErr) {
-			t.Fatalf("expected pq.Error, got %T: %v", err, err)
-		}
-		if !strings.HasPrefix(pqErr.Detail, "key: ") {
-			t.Fatalf("expected error detail to start with 'key: ', got: %s", pqErr.Detail)
-		}
-		interlockKey := strings.TrimPrefix(pqErr.Detail, "key: ")
-
-		// Set the interlock key and retry.
-		if _, err := db.Exec("SET unsafe_setting_interlock_key = $1", interlockKey); err != nil {
-			t.Fatal(err)
-		}
-		if _, err := db.Exec("SET CLUSTER SETTING bulkio.import.row_count_validation.unsafe.mode = 'off'"); err != nil {
-			t.Fatal(err)
-		}
+		t.Fatal(err)
 	}
 }
 
