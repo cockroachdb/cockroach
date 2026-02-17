@@ -4697,3 +4697,87 @@ func TestStoreRangeSplitRaftSnapshotAfterRHSRebalanced(t *testing.T) {
 		return nil
 	})
 }
+
+// TestGCRequestStraddlingSplit verifies that a GCRequest that targets keys in
+// the post split RHS correctly receives a RangeKeyMismatchError, even when the
+// request header is constrainted to the LHS. This serves as a regression test
+// for https://github.com/cockroachdb/cockroach/issues/162085, to ensure erroneous
+// GC requests as a result of that issue are gracefully rejected, instead of
+// silently working and causing potential data loss.
+func TestGCRequestStraddlingSplit(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{
+		ReplicationMode: base.ReplicationManual,
+	})
+	defer tc.Stopper().Stop(ctx)
+
+	scratch := tc.ScratchRange(t)
+	store := tc.GetFirstStoreFromServer(t, 0)
+
+	// Create a split key within the scratch range.
+	splitKey := testutils.MakeKey(scratch, roachpb.Key("b"))
+	tc.SplitRangeOrFatal(t, splitKey)
+	lhsDesc := store.LookupReplica(roachpb.RKey(scratch)).Desc()
+	rhsDesc := store.LookupReplica(roachpb.RKey(splitKey)).Desc()
+
+	testCases := []struct {
+		name  string
+		gcReq *kvpb.GCRequest
+	}{
+		{
+			name: "clear range straddling split",
+			gcReq: &kvpb.GCRequest{
+				RequestHeader: kvpb.RequestHeader{
+					Key:    lhsDesc.StartKey.AsRawKey(),
+					EndKey: lhsDesc.EndKey.AsRawKey(),
+				},
+				ClearRange: &kvpb.GCRequest_GCClearRange{
+					StartKey: lhsDesc.StartKey.AsRawKey(),
+					EndKey:   rhsDesc.EndKey.AsRawKey(), // Extends beyond the LHS into RHS
+				},
+			},
+		},
+		{
+			name: "range keys straddling split",
+			gcReq: &kvpb.GCRequest{
+				RequestHeader: kvpb.RequestHeader{
+					Key:    lhsDesc.StartKey.AsRawKey(),
+					EndKey: lhsDesc.EndKey.AsRawKey(),
+				},
+				RangeKeys: []kvpb.GCRequest_GCRangeKey{
+					{
+						StartKey: lhsDesc.StartKey.AsRawKey(),
+						EndKey:   rhsDesc.EndKey.AsRawKey(), // Extends beyond the LHS into RHS
+					},
+				},
+			},
+		},
+		{
+			name: "point key in RHS",
+			gcReq: &kvpb.GCRequest{
+				RequestHeader: kvpb.RequestHeader{
+					Key:    lhsDesc.StartKey.AsRawKey(),
+					EndKey: lhsDesc.EndKey.AsRawKey(),
+				},
+				Keys: []kvpb.GCRequest_GCKey{
+					{Key: rhsDesc.StartKey.AsRawKey()}, // Point key in the RHS
+				},
+			},
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			// Send the GC request. It should fail with a RangeKeyMismatchError
+			// because the keys being targeted extend beyond the LHS range, into
+			// the RHS.
+			_, pErr := kv.SendWrapped(ctx, store.TestSender(), tc.gcReq)
+			require.NotNil(t, pErr, "expected RangeKeyMismatchError but got success")
+			_, ok := pErr.GetDetail().(*kvpb.RangeKeyMismatchError)
+			require.True(t, ok, "expected RangeKeyMismatchError, got %v", pErr)
+		})
+	}
+}
