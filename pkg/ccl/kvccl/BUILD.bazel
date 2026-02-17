@@ -5,8 +5,5 @@ go_library(
     srcs = ["kvccl.go"],
     importpath = "github.com/cockroachdb/cockroach/pkg/ccl/kvccl",
     visibility = ["//visibility:public"],
-    deps = [
-        "//pkg/ccl/kvccl/kvfollowerreadsccl",
-        "//pkg/ccl/kvccl/kvtenantccl",
-    ],
+    deps = ["//pkg/ccl/kvccl/kvfollowerreadsccl"],
 )

@@ -14,7 +14,6 @@ go_test(
         "//pkg/backup",
         "//pkg/base",
         "//pkg/ccl/changefeedccl",
-        "//pkg/ccl/kvccl/kvtenantccl",
         "//pkg/cloud/externalconn",
         "//pkg/cloud/externalconn/providers",
         "//pkg/cloud/externalconn/testutils",

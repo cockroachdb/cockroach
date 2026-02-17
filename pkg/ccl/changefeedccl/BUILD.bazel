@@ -263,7 +263,6 @@ go_test(
         "//pkg/ccl/changefeedccl/mocks",
         "//pkg/ccl/changefeedccl/resolvedspan",
         "//pkg/ccl/changefeedccl/schemafeed/schematestutils",
-        "//pkg/ccl/kvccl/kvtenantccl",
         "//pkg/ccl/multiregionccl",
         "//pkg/ccl/multiregionccl/multiregionccltestutils",
         "//pkg/ccl/partitionccl",

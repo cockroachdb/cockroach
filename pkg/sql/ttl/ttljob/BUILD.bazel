@@ -82,7 +82,6 @@ go_test(
     shard_count = 4,
     deps = [
         "//pkg/base",
-        "//pkg/ccl/kvccl/kvtenantccl",
         "//pkg/clusterversion",
         "//pkg/jobs",
         "//pkg/jobs/jobfrontier",

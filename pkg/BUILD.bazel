@@ -1027,7 +1027,6 @@ GO_TARGETS = [
     "//pkg/ccl/kvccl/kvtenantccl/upgradeinterlockccl/testgen:testgen",
     "//pkg/ccl/kvccl/kvtenantccl/upgradeinterlockccl/testgen:testgen_lib",
     "//pkg/ccl/kvccl/kvtenantccl/upgradeinterlockccl:upgradeinterlockccl_test",
-    "//pkg/ccl/kvccl/kvtenantccl:kvtenantccl",
     "//pkg/ccl/kvccl:kvccl",
     "//pkg/ccl/ldapccl:ldapccl",
     "//pkg/ccl/ldapccl:ldapccl_test",

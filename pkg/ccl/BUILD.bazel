@@ -15,7 +15,6 @@ go_library(
         "//pkg/ccl/gssapiccl",
         "//pkg/ccl/jwtauthccl",
         "//pkg/ccl/kvccl",
-        "//pkg/ccl/kvccl/kvtenantccl",
         "//pkg/ccl/ldapccl",
         "//pkg/ccl/multiregionccl",
         "//pkg/ccl/multitenantccl",

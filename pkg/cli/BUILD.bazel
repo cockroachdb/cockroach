@@ -436,7 +436,6 @@ go_test(
         "//pkg/jobs/jobstest",
         "//pkg/keys",
         "//pkg/kv",
-        "//pkg/kv/kvclient/kvtenant",
         "//pkg/kv/kvpb",
         "//pkg/kv/kvserver",
         "//pkg/kv/kvserver/kvstorage",
