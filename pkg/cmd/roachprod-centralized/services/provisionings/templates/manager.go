@@ -73,70 +73,24 @@ func (m *Manager) ListTemplates() ([]provisionings.Template, error) {
 }
 
 // GetTemplate returns a single template by directory name or metadata name.
-// It first tries an exact directory name match, then falls back to scanning
-// all templates for a matching metadata name.
+// Resolution is performed only against discovered templates from ListTemplates,
+// so user input is never used to build direct filesystem paths.
 func (m *Manager) GetTemplate(name string) (provisionings.Template, error) {
-	// Try direct directory name lookup first.
-	tmpl, err := m.getTemplateByDir(name)
-	if err == nil {
-		return tmpl, nil
-	}
-
-	// Fall back to metadata name lookup.
-	tmpl, metaErr := m.getTemplateByMetaName(name)
-	if metaErr == nil {
-		return tmpl, nil
-	}
-
-	return provisionings.Template{}, errors.Newf("template %q not found", name)
-}
-
-// getTemplateByDir loads a template from a specific subdirectory.
-func (m *Manager) getTemplateByDir(dirName string) (provisionings.Template, error) {
-	templateDir := filepath.Join(m.templatesDir, dirName)
-	info, err := os.Stat(templateDir)
-	if err != nil {
-		return provisionings.Template{}, err
-	}
-	if !info.IsDir() {
-		return provisionings.Template{}, errors.Newf("template %q is not a directory", dirName)
-	}
-
-	meta, found := readTemplateMarker(templateDir)
-	if !found {
-		return provisionings.Template{}, errors.Newf(
-			"template %q has no template.yaml or template.yml marker", dirName,
-		)
-	}
-
-	vars, parseErr := ParseTemplateVariables(templateDir)
-	if parseErr != nil {
-		return provisionings.Template{}, errors.Wrapf(
-			parseErr, "parse variables for template %s", dirName,
-		)
-	}
-
-	return provisionings.Template{
-		TemplateMetadata: meta,
-		DirName:          dirName,
-		Variables:        vars,
-		Path:             templateDir,
-	}, nil
-}
-
-// getTemplateByMetaName scans all templates and returns the first one whose
-// metadata name matches.
-func (m *Manager) getTemplateByMetaName(name string) (provisionings.Template, error) {
 	templates, err := m.ListTemplates()
 	if err != nil {
 		return provisionings.Template{}, err
 	}
+
+	// Support both aliases:
+	// - directory name (`DirName`)
+	// - template metadata name (`Name`)
 	for _, tmpl := range templates {
-		if tmpl.Name == name {
+		if tmpl.DirName == name || tmpl.Name == name {
 			return tmpl, nil
 		}
 	}
-	return provisionings.Template{}, errors.Newf("template with metadata name %q not found", name)
+
+	return provisionings.Template{}, errors.Newf("template %q not found", name)
 }
 
 // readTemplateMarker looks for template.yaml or template.yml in dir and parses

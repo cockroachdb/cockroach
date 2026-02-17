@@ -79,7 +79,6 @@ const (
 	// Permissions granted to users.
 	PermissionViewAll   = PermissionView + ":all"
 	PermissionViewOwn   = PermissionView + ":own"
-	PermissionCreateAll = PermissionCreate + ":all"
 	PermissionUpdateAll = PermissionUpdate + ":all"
 	PermissionUpdateOwn = PermissionUpdate + ":own"
 	PermissionDeleteAll = PermissionDelete + ":all"

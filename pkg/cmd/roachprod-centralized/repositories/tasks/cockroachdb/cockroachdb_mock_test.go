@@ -8,6 +8,7 @@ package cockroachdb
 import (
 	"context"
 	gosql "database/sql"
+	"errors"
 	"regexp"
 	"testing"
 	"time"
@@ -31,16 +32,18 @@ var (
 		"update_datetime",
 		"payload",
 		"error",
+		"reference",
+		"concurrency_key",
 	}
-	insertTaskQuery          = regexp.MustCompile(`INSERT INTO tasks\s+\(id, type, state, consumer_id, creation_datetime, update_datetime, payload, error\)`)
-	selectTaskByIDQuery      = regexp.MustCompile(regexp.QuoteMeta("SELECT id, type, state, consumer_id, creation_datetime, update_datetime, payload, error FROM tasks WHERE id = $1"))
+	insertTaskQuery          = regexp.MustCompile(`INSERT INTO tasks\s+\(\s*id,\s*type,\s*state,\s*consumer_id,\s*creation_datetime,\s*update_datetime,\s*payload,\s*error,\s*reference,\s*concurrency_key\s*\)`)
+	selectTaskByIDQuery      = regexp.MustCompile(regexp.QuoteMeta("SELECT id, type, state, consumer_id, creation_datetime, update_datetime, payload, error, reference, concurrency_key FROM tasks WHERE id = $1"))
 	updateStateQuery         = regexp.MustCompile(regexp.QuoteMeta("UPDATE tasks SET state = $1, update_datetime = $2 WHERE id = $3"))
 	updateErrorQuery         = regexp.MustCompile(regexp.QuoteMeta("UPDATE tasks SET error = $1, update_datetime = $2 WHERE id = $3"))
-	claimNextTaskQuery       = regexp.MustCompile(`(?s)UPDATE tasks\s+SET state = \$1, consumer_id = \$2, update_datetime = \$3.*RETURNING id, type, state, consumer_id, creation_datetime, update_datetime, payload, error`)
+	claimNextTaskQuery       = regexp.MustCompile(`(?s)UPDATE tasks\s+SET state = \$1, consumer_id = \$2, update_datetime = \$3.*RETURNING id, type, state, consumer_id, creation_datetime, update_datetime, payload, error, reference, concurrency_key`)
 	purgeTasksQuery          = regexp.MustCompile(regexp.QuoteMeta("DELETE FROM tasks WHERE state = $1 AND update_datetime < $2"))
 	statsQuery               = regexp.MustCompile(regexp.QuoteMeta("SELECT state, type, count(*) FROM tasks GROUP BY state, type ORDER BY state, type"))
 	cleanupStaleQuery        = regexp.MustCompile(`(?s)UPDATE tasks\s+SET state = \$1, consumer_id = NULL, update_datetime = \$2.*LIMIT \$5`)
-	mostRecentCompletedQuery = regexp.MustCompile(`(?s)SELECT id, type, state, consumer_id, creation_datetime, update_datetime, payload, error\s+FROM tasks\s+WHERE type = \$1 AND state = \$2\s+ORDER BY update_datetime DESC\s+LIMIT 1`)
+	mostRecentCompletedQuery = regexp.MustCompile(`(?s)SELECT id, type, state, consumer_id, creation_datetime, update_datetime, payload, error, reference, concurrency_key\s+FROM tasks\s+WHERE type = \$1 AND state = \$2\s+ORDER BY update_datetime DESC\s+LIMIT 1`)
 )
 
 func newMockedTasksRepo(t *testing.T, opts ...Options) (*CRDBTasksRepo, sqlmock.Sqlmock) {
@@ -82,6 +85,8 @@ func TestCreateTask_InsertsRowUsingNullPayload(t *testing.T) {
 			sqlmock.AnyArg(),
 			nil,
 			nil,
+			nil,
+			nil,
 		).
 		WillReturnResult(sqlmock.NewResult(0, 1))
 
@@ -102,6 +107,8 @@ func TestGetTask_ReturnsTask(t *testing.T) {
 		now,
 		now,
 		[]byte(`{"key":"value"}`),
+		nil,
+		nil,
 		nil,
 	)
 
@@ -216,6 +223,8 @@ func TestClaimNextTask_ReturnsTask(t *testing.T) {
 		now,
 		nil,
 		nil,
+		nil,
+		nil,
 	)
 
 	instanceID := "instance-a"
@@ -225,6 +234,7 @@ func TestClaimNextTask_ReturnsTask(t *testing.T) {
 			instanceID,
 			sqlmock.AnyArg(),
 			string(tasks.TaskStatePending),
+			string(tasks.TaskStateRunning),
 		).
 		WillReturnRows(rows)
 
@@ -245,8 +255,31 @@ func TestClaimNextTask_ReturnsFalseWhenNoPendingTasks(t *testing.T) {
 			instanceID,
 			sqlmock.AnyArg(),
 			string(tasks.TaskStatePending),
+			string(tasks.TaskStateRunning),
 		).
 		WillReturnError(gosql.ErrNoRows)
+
+	task, found, err := repo.claimNextTask(context.Background(), logger.DefaultLogger, instanceID)
+	require.NoError(t, err)
+	require.False(t, found)
+	require.Nil(t, task)
+}
+
+func TestClaimNextTask_ReturnsFalseOnConcurrencyKeyRunningConflict(t *testing.T) {
+	repo, mock := newMockedTasksRepo(t)
+
+	instanceID := "instance-a"
+	mock.ExpectQuery(claimNextTaskQuery.String()).
+		WithArgs(
+			string(tasks.TaskStateRunning),
+			instanceID,
+			sqlmock.AnyArg(),
+			string(tasks.TaskStatePending),
+			string(tasks.TaskStateRunning),
+		).
+		WillReturnError(
+			errors.New(`duplicate key value violates unique constraint "idx_tasks_concurrency_key_running_unique"`),
+		)
 
 	task, found, err := repo.claimNextTask(context.Background(), logger.DefaultLogger, instanceID)
 	require.NoError(t, err)
@@ -282,6 +315,8 @@ func TestGetMostRecentCompletedTaskOfType_ReturnsTask(t *testing.T) {
 		nil,
 		now,
 		now,
+		nil,
+		nil,
 		nil,
 		nil,
 	)

@@ -15,6 +15,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/services/provisionings/templates"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/utils/logger"
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	tfjson "github.com/hashicorp/terraform-json"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -24,7 +25,7 @@ import (
 func skipIfNoTofu(t *testing.T) {
 	t.Helper()
 	if _, err := exec.LookPath("tofu"); err != nil {
-		t.Skip("tofu binary not found on $PATH, skipping integration test")
+		skip.IgnoreLint(t, "tofu binary not found on $PATH, skipping integration test")
 	}
 }
 
@@ -249,8 +250,8 @@ func TestPlanFailsWithUnknownVariable(t *testing.T) {
 	require.NoError(t, e.Init(ctx, l, dir, nil))
 
 	vars := map[string]string{
-		"identifier":       "test1",
-		"nonexistent_var":  "value",
+		"identifier":      "test1",
+		"nonexistent_var": "value",
 	}
 	hasChanges, planJSON, err := e.Plan(ctx, l, dir, vars, nil)
 	assert.Error(t, err, "plan with undeclared variable should fail")

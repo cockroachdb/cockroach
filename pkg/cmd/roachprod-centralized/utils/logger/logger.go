@@ -6,6 +6,7 @@
 package logger
 
 import (
+	"bytes"
 	"context"
 	"log/slog"
 	"os"
@@ -79,4 +80,48 @@ func (l *Logger) Write(p []byte) (n int, err error) {
 		message,
 	)
 	return length, nil
+}
+
+// LineWriter is an io.WriteCloser that buffers writes by newline and logs
+// each complete line as a structured log entry. Call Close to flush any
+// remaining partial line. This is useful for streaming subprocess output
+// to the logger line-by-line in real time.
+type LineWriter struct {
+	logger *Logger
+	level  slog.Level
+	attrs  []slog.Attr
+	buf    []byte
+}
+
+// NewLineWriter returns an io.WriteCloser that buffers subprocess output
+// by newline and logs each complete line at the given level with the
+// provided attributes.
+func (l *Logger) NewLineWriter(level slog.Level, attrs ...slog.Attr) *LineWriter {
+	return &LineWriter{logger: l, level: level, attrs: attrs}
+}
+
+// Write buffers incoming data and logs each complete line.
+func (w *LineWriter) Write(p []byte) (int, error) {
+	w.buf = append(w.buf, p...)
+	for {
+		idx := bytes.IndexByte(w.buf, '\n')
+		if idx < 0 {
+			break
+		}
+		line := string(w.buf[:idx])
+		w.buf = w.buf[idx+1:]
+		if line != "" {
+			w.logger.LogAttrs(context.Background(), w.level, line, w.attrs...)
+		}
+	}
+	return len(p), nil
+}
+
+// Close flushes any remaining buffered content (incomplete last line).
+func (w *LineWriter) Close() error {
+	if len(w.buf) > 0 {
+		w.logger.LogAttrs(context.Background(), w.level, string(w.buf), w.attrs...)
+		w.buf = nil
+	}
+	return nil
 }

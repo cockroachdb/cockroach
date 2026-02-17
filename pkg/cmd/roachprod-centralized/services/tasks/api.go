@@ -72,6 +72,14 @@ func (s *Service) CreateTask(
 	// Set state
 	newTask.SetState(tasks.TaskStatePending)
 
+	// Auto-populate worker lock key from task-type concurrency policy when no
+	// explicit key has been provided by the caller.
+	if newTask.GetConcurrencyKey() == "" {
+		if key := newTask.ResolveConcurrencyKey(); key != "" {
+			newTask.SetConcurrencyKey(key)
+		}
+	}
+
 	// Save the task
 	err := s.store.CreateTask(ctx, l, newTask)
 	if err != nil {

@@ -23,6 +23,14 @@ import (
 	"github.com/stretchr/testify/mock"
 )
 
+type NoLockTask struct {
+	MockTask
+}
+
+func (t *NoLockTask) ResolveConcurrencyKey() string {
+	return ""
+}
+
 func TestGetTasks(t *testing.T) {
 	mockRepo := &tasksrepomock.ITasksRepository{}
 	taskService := NewService(mockRepo, "test-instance", types.Options{})
@@ -137,12 +145,46 @@ func TestCreateTask(t *testing.T) {
 	taskService := NewService(mockRepo, "test-instance", types.Options{})
 	ctx := context.Background()
 
-	fakeTask := &MockTask{}
+	fakeTask := &MockTask{Task: tasks.Task{Type: "fake_type"}}
 	mockRepo.On("CreateTask", mock.Anything, mock.Anything, fakeTask).Return(nil)
 
 	task, err := taskService.CreateTask(ctx, logger.DefaultLogger, fakeTask)
 	assert.Nil(t, err)
 	assert.NotNil(t, task)
+	assert.Equal(t, "fake_type", task.GetConcurrencyKey())
+	assert.Equal(t, "", task.GetReference())
+	mockRepo.AssertExpectations(t)
+}
+
+func TestCreateTask_UsesExplicitReference(t *testing.T) {
+	mockRepo := &tasksrepomock.ITasksRepository{}
+	taskService := NewService(mockRepo, "test-instance", types.Options{})
+	ctx := context.Background()
+
+	fakeTask := &MockTask{Task: tasks.Task{Type: "fake_type", Reference: "custom#123"}}
+	mockRepo.On("CreateTask", mock.Anything, mock.Anything, fakeTask).Return(nil)
+
+	task, err := taskService.CreateTask(ctx, logger.DefaultLogger, fakeTask)
+	assert.Nil(t, err)
+	assert.NotNil(t, task)
+	assert.Equal(t, "custom#123", task.GetReference())
+	assert.Equal(t, "fake_type", task.GetConcurrencyKey())
+	mockRepo.AssertExpectations(t)
+}
+
+func TestCreateTask_DisableConcurrencyKey(t *testing.T) {
+	mockRepo := &tasksrepomock.ITasksRepository{}
+	taskService := NewService(mockRepo, "test-instance", types.Options{})
+	ctx := context.Background()
+
+	fakeTask := &NoLockTask{MockTask: MockTask{Task: tasks.Task{Type: "fake_type"}}}
+	mockRepo.On("CreateTask", mock.Anything, mock.Anything, fakeTask).Return(nil)
+
+	task, err := taskService.CreateTask(ctx, logger.DefaultLogger, fakeTask)
+	assert.Nil(t, err)
+	assert.NotNil(t, task)
+	assert.Equal(t, "", task.GetConcurrencyKey())
+	assert.Equal(t, "", task.GetReference())
 	mockRepo.AssertExpectations(t)
 }
 

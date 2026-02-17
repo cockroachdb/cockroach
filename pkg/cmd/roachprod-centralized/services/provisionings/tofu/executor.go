@@ -9,6 +9,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"io"
 	"log/slog"
 	"os"
 	"os/exec"
@@ -267,8 +268,22 @@ func (e *Executor) run(
 	cmd := e.buildCommand(ctx, workingDir, args, envVars)
 
 	var stdoutBuf, stderrBuf bytes.Buffer
-	cmd.Stdout = &stdoutBuf
-	cmd.Stderr = &stderrBuf
+	stdoutLW := l.NewLineWriter(slog.LevelInfo, slog.String("source", "tofu"), slog.String("stream", "stdout"))
+	stderrLW := l.NewLineWriter(slog.LevelWarn, slog.String("source", "tofu"), slog.String("stream", "stderr"))
+	defer func() {
+		err := stdoutLW.Close()
+		if err != nil {
+			l.Error("failed to close stdout line writer", slog.Any("error", err))
+		}
+	}()
+	defer func() {
+		err := stderrLW.Close()
+		if err != nil {
+			l.Error("failed to close stderr line writer", slog.Any("error", err))
+		}
+	}()
+	cmd.Stdout = io.MultiWriter(&stdoutBuf, stdoutLW)
+	cmd.Stderr = io.MultiWriter(&stderrBuf, stderrLW)
 
 	// Log the subcommand being executed but not the full arguments or env
 	// vars, which may contain credentials.

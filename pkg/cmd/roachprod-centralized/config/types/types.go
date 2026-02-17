@@ -70,6 +70,13 @@ type Config struct {
 	Secrets struct {
 		GCPProject string `env:"GCP_PROJECT" default:"" description:"GCP project for auto-writing secrets to Secret Manager"`
 	} `env:"SECRETS" description:"Secret management configuration"`
+	Provisionings struct {
+		Enabled        bool   `env:"ENABLED" default:"false" description:"Enable terraform provisioning"`
+		TemplatesDir   string `env:"TEMPLATES_DIR" default:"" description:"Path to terraform templates directory"`
+		WorkingDirBase string `env:"WORKING_DIR_BASE" default:"/tmp/roachprod-provisionings" description:"Base dir for terraform working dirs"`
+		TofuBinary     string `env:"TOFU_BINARY" default:"tofu" description:"Path to OpenTofu binary"`
+		GCSStateBucket string `env:"GCS_STATE_BUCKET" default:"" description:"GCS bucket for terraform state backend"`
+	} `env:"PROVISIONINGS" description:"Terraform provisioning configuration"`
 }
 
 // CloudProvider represents a cloud provider configuration.

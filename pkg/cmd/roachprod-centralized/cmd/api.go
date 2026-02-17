@@ -18,6 +18,7 @@ import (
 	clusterscontroller "github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/controllers/clusters"
 	environmentscontroller "github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/controllers/environments"
 	healthcontroller "github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/controllers/health"
+	provisioningscontroller "github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/controllers/provisionings"
 	publicdns "github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/controllers/public-dns"
 	scimcontroller "github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/controllers/scim"
 	serviceaccountscontroller "github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/controllers/service-accounts"
@@ -110,6 +111,12 @@ func runAPI(cmd *cobra.Command, args []string) error {
 		app.WithApiController(tasks.NewController(services.Task)),
 		app.WithApiController(authcontroller.NewController(services.Auth)),
 		app.WithApiController(environmentscontroller.NewController(services.Environments)),
+	}
+
+	if services.Provisionings != nil {
+		options = append(options,
+			app.WithApiController(provisioningscontroller.NewController(services.Provisionings)),
+		)
 	}
 
 	if auth.AuthenticationType(strings.ToLower(cfg.Api.Authentication.Type)) == auth.AuthenticationTypeBearer {

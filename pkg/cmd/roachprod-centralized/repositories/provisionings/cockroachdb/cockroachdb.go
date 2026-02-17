@@ -44,7 +44,9 @@ const allColumns = "id, name, environment, template_type, template_checksum, " +
 
 // scanProvisioning scans a single row into a Provisioning. The row must
 // contain the columns listed in allColumns, in that order.
-func scanProvisioning(scanner interface{ Scan(dest ...interface{}) error }) (provmodels.Provisioning, error) {
+func scanProvisioning(
+	scanner interface{ Scan(dest ...interface{}) error },
+) (provmodels.Provisioning, error) {
 	var p provmodels.Provisioning
 
 	var variables []byte
@@ -139,9 +141,7 @@ func (r *CRDBProvisioningsRepo) GetProvisioning(
 
 // GetProvisionings retrieves provisionings matching the given filters.
 func (r *CRDBProvisioningsRepo) GetProvisionings(
-	ctx context.Context,
-	l *logger.Logger,
-	filterSet filtertypes.FilterSet,
+	ctx context.Context, l *logger.Logger, filterSet filtertypes.FilterSet,
 ) ([]provmodels.Provisioning, int, error) {
 	baseQuery := `SELECT ` + allColumns + ` FROM provisionings`
 

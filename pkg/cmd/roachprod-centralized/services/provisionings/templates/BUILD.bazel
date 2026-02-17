@@ -35,6 +35,7 @@ go_test(
     embed = [":templates"],
     deps = [
         "//pkg/cmd/roachprod-centralized/models/provisionings",
+        "//pkg/testutils/skip",
         "@com_github_stretchr_testify//assert",
         "@com_github_stretchr_testify//require",
     ],

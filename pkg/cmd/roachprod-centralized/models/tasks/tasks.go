@@ -58,6 +58,20 @@ type ITask interface {
 	GetState() TaskState
 	// SetState updates the task's execution state.
 	SetState(state TaskState)
+	// GetReference returns an optional foreign reference string (e.g.
+	// "provisionings#<uuid>") that links this task to an external entity.
+	GetReference() string
+	// SetReference sets the foreign reference string.
+	SetReference(string)
+	// GetConcurrencyKey returns the persisted key used by workers as a lock scope.
+	// Empty value means "no locking key" for this task.
+	GetConcurrencyKey() string
+	// SetConcurrencyKey sets the persisted key used by workers as a lock scope.
+	SetConcurrencyKey(string)
+	// ResolveConcurrencyKey returns the task-type concurrency policy key used
+	// during task creation when ConcurrencyKey is empty.
+	// Return an empty string to disable lock key auto-population for a task type.
+	ResolveConcurrencyKey() string
 	// AsLogAttributes returns task metadata as slog attributes for structured logging.
 	// This method provides a consistent way to log tasks without exposing base64-encoded payloads.
 	AsLogAttributes() []slog.Attr
@@ -69,8 +83,10 @@ type Task struct {
 	ID               uuid.UUID `json:"id" db:"id"`
 	Type             string    `json:"type" db:"type"`
 	State            TaskState `json:"state" db:"state"`
-	Payload          []byte    `json:"payload,omitempty" db:"payload"` // Serialized task options/arguments as JSON
-	Error            string    `json:"error,omitempty" db:"error"`     // Error message if task failed
+	Payload          []byte    `json:"payload,omitempty" db:"payload"`     // Serialized task options/arguments as JSON
+	Error            string    `json:"error,omitempty" db:"error"`         // Error message if task failed
+	Reference        string    `json:"reference,omitempty" db:"reference"` // Foreign reference (e.g. "provisionings#<uuid>")
+	ConcurrencyKey   string    `json:"-" db:"concurrency_key"`             // Worker lock scope key
 	CreationDatetime time.Time `json:"creation_datetime" db:"creation_datetime"`
 	UpdateDatetime   time.Time `json:"update_datetime" db:"update_datetime"`
 }
@@ -123,6 +139,36 @@ func (t *Task) SetState(state TaskState) {
 	t.State = state
 }
 
+// GetReference returns the task's foreign reference.
+func (t *Task) GetReference() string {
+	return t.Reference
+}
+
+// SetReference sets the task's foreign reference.
+func (t *Task) SetReference(ref string) {
+	t.Reference = ref
+}
+
+// GetConcurrencyKey returns the task's persisted concurrency key.
+func (t *Task) GetConcurrencyKey() string {
+	return t.ConcurrencyKey
+}
+
+// SetConcurrencyKey sets the task's persisted concurrency key.
+func (t *Task) SetConcurrencyKey(key string) {
+	t.ConcurrencyKey = key
+}
+
+// ResolveConcurrencyKey returns the default per-type concurrency key policy.
+// Task types can override this method to customize lock scope (for example,
+// per-entity locking) or return an empty string to opt out.
+func (t *Task) ResolveConcurrencyKey() string {
+	if t.ConcurrencyKey != "" {
+		return t.ConcurrencyKey
+	}
+	return t.Type
+}
+
 // GetCreationDatetime returns the task creation datetime.
 func (t *Task) GetCreationDatetime() time.Time {
 	return t.CreationDatetime
@@ -146,11 +192,18 @@ func (t *Task) SetUpdateDatetime(utime time.Time) {
 // AsLogAttributes returns task metadata as slog attributes for structured logging.
 // This method provides a consistent way to log tasks without exposing base64-encoded payloads.
 func (t *Task) AsLogAttributes() []slog.Attr {
-	return []slog.Attr{
+	attrs := []slog.Attr{
 		slog.String("task_id", t.ID.String()),
 		slog.String("task_type", t.Type),
 		slog.String("state", string(t.State)),
 		slog.Time("created_at", t.CreationDatetime),
 		slog.Time("updated_at", t.UpdateDatetime),
 	}
+	if t.Reference != "" {
+		attrs = append(attrs, slog.String("reference", t.Reference))
+	}
+	if t.ConcurrencyKey != "" {
+		attrs = append(attrs, slog.String("concurrency_key", t.ConcurrencyKey))
+	}
+	return attrs
 }

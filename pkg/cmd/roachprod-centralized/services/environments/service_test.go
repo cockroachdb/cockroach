@@ -66,7 +66,7 @@ func TestService_CreateAndGet(t *testing.T) {
 	l := logger.DefaultLogger
 	svc := NewService(memory.NewEnvironmentsRepository(), types.Options{})
 
-	admin := newPrincipal("admin@x.com", types.PermissionCreateAll, types.PermissionViewAll)
+	admin := newPrincipal("admin@x.com", types.PermissionCreate, types.PermissionViewAll)
 
 	env, err := svc.CreateEnvironment(ctx, l, admin, types.InputCreateDTO{
 		Name:        "prod",
@@ -87,7 +87,7 @@ func TestService_CreateDuplicate(t *testing.T) {
 	ctx := context.Background()
 	l := logger.DefaultLogger
 	svc := NewService(memory.NewEnvironmentsRepository(), types.Options{})
-	admin := newPrincipal("admin@x.com", types.PermissionCreateAll)
+	admin := newPrincipal("admin@x.com", types.PermissionCreate)
 
 	_, err := svc.CreateEnvironment(ctx, l, admin, types.InputCreateDTO{Name: "dup"})
 	require.NoError(t, err)
@@ -100,7 +100,7 @@ func TestService_Validation(t *testing.T) {
 	ctx := context.Background()
 	l := logger.DefaultLogger
 	svc := NewService(memory.NewEnvironmentsRepository(), types.Options{})
-	admin := newPrincipal("admin@x.com", types.PermissionCreateAll)
+	admin := newPrincipal("admin@x.com", types.PermissionCreate)
 
 	t.Run("empty name", func(t *testing.T) {
 		_, err := svc.CreateEnvironment(ctx, l, admin, types.InputCreateDTO{Name: ""})
@@ -113,7 +113,7 @@ func TestService_OwnerPermissions_ViewAll(t *testing.T) {
 	l := logger.DefaultLogger
 	svc := NewService(memory.NewEnvironmentsRepository(), types.Options{})
 
-	admin := newPrincipal("admin@x.com", types.PermissionCreateAll, types.PermissionViewAll)
+	admin := newPrincipal("admin@x.com", types.PermissionCreate, types.PermissionViewAll)
 	viewer := newPrincipal("viewer@x.com", types.PermissionViewAll)
 	ownViewer := newPrincipal("own@x.com", types.PermissionViewOwn)
 
@@ -135,7 +135,7 @@ func TestService_OwnerPermissions_ViewOwn(t *testing.T) {
 	svc := NewService(memory.NewEnvironmentsRepository(), types.Options{})
 
 	owner := newPrincipal("alice@x.com",
-		types.PermissionCreateAll, types.PermissionViewOwn)
+		types.PermissionCreate, types.PermissionViewOwn)
 
 	_, err := svc.CreateEnvironment(ctx, l, owner, types.InputCreateDTO{Name: "my-env"})
 	require.NoError(t, err)
@@ -152,11 +152,11 @@ func TestService_GetAll_FiltersByOwnership(t *testing.T) {
 	svc := NewService(memory.NewEnvironmentsRepository(), types.Options{})
 
 	alice := newPrincipal("alice@x.com",
-		types.PermissionCreateAll, types.PermissionViewOwn)
+		types.PermissionCreate, types.PermissionViewOwn)
 	bob := newPrincipal("bob@x.com",
-		types.PermissionCreateAll, types.PermissionViewOwn)
+		types.PermissionCreate, types.PermissionViewOwn)
 	admin := newPrincipal("admin@x.com",
-		types.PermissionCreateAll, types.PermissionViewAll)
+		types.PermissionCreate, types.PermissionViewAll)
 
 	_, err := svc.CreateEnvironment(ctx, l, alice, types.InputCreateDTO{Name: "alice-env"})
 	require.NoError(t, err)
@@ -187,7 +187,7 @@ func TestService_UpdateOwn(t *testing.T) {
 	svc := NewService(memory.NewEnvironmentsRepository(), types.Options{})
 
 	owner := newPrincipal("alice@x.com",
-		types.PermissionCreateAll, types.PermissionViewAll,
+		types.PermissionCreate, types.PermissionViewAll,
 		types.PermissionUpdateOwn)
 	other := newPrincipal("bob@x.com", types.PermissionUpdateOwn)
 
@@ -218,7 +218,7 @@ func TestService_DeleteOwn(t *testing.T) {
 	svc := NewService(memory.NewEnvironmentsRepository(), types.Options{})
 
 	owner := newPrincipal("alice@x.com",
-		types.PermissionCreateAll, types.PermissionDeleteOwn)
+		types.PermissionCreate, types.PermissionDeleteOwn)
 	other := newPrincipal("bob@x.com", types.PermissionDeleteOwn)
 
 	_, err := svc.CreateEnvironment(ctx, l, owner, types.InputCreateDTO{Name: "del-env"})
@@ -238,7 +238,7 @@ func TestService_DeleteAll(t *testing.T) {
 	l := logger.DefaultLogger
 	svc := NewService(memory.NewEnvironmentsRepository(), types.Options{})
 
-	creator := newPrincipal("alice@x.com", types.PermissionCreateAll)
+	creator := newPrincipal("alice@x.com", types.PermissionCreate)
 	admin := newPrincipal("admin@x.com", types.PermissionDeleteAll)
 
 	_, err := svc.CreateEnvironment(ctx, l, creator, types.InputCreateDTO{Name: "env1"})
@@ -257,7 +257,7 @@ func TestService_CreateVariable_Plaintext(t *testing.T) {
 	svc := NewService(memory.NewEnvironmentsRepository(), types.Options{})
 
 	admin := newPrincipal("admin@x.com",
-		types.PermissionCreateAll, types.PermissionUpdateAll, types.PermissionViewAll)
+		types.PermissionCreate, types.PermissionUpdateAll, types.PermissionViewAll)
 
 	_, err := svc.CreateEnvironment(ctx, l, admin, types.InputCreateDTO{Name: "env1"})
 	require.NoError(t, err)
@@ -290,7 +290,7 @@ func TestService_CreateVariable_SecretAutoWrite(t *testing.T) {
 	svc.RegisterResolver("gcp", stub)
 
 	admin := newPrincipal("admin@x.com",
-		types.PermissionCreateAll, types.PermissionUpdateAll, types.PermissionViewAll)
+		types.PermissionCreate, types.PermissionUpdateAll, types.PermissionViewAll)
 
 	_, err := svc.CreateEnvironment(ctx, l, admin, types.InputCreateDTO{Name: "env1"})
 	require.NoError(t, err)
@@ -315,7 +315,7 @@ func TestService_CreateVariable_SecretAutoWrite_NoProject(t *testing.T) {
 	svc := NewService(memory.NewEnvironmentsRepository(), types.Options{})
 
 	admin := newPrincipal("admin@x.com",
-		types.PermissionCreateAll, types.PermissionUpdateAll)
+		types.PermissionCreate, types.PermissionUpdateAll)
 
 	_, err := svc.CreateEnvironment(ctx, l, admin, types.InputCreateDTO{Name: "env1"})
 	require.NoError(t, err)
@@ -337,7 +337,7 @@ func TestService_CreateVariable_SecretVerifyReference(t *testing.T) {
 	svc.RegisterResolver("gcp", stub)
 
 	admin := newPrincipal("admin@x.com",
-		types.PermissionCreateAll, types.PermissionUpdateAll, types.PermissionViewAll)
+		types.PermissionCreate, types.PermissionUpdateAll, types.PermissionViewAll)
 
 	_, err := svc.CreateEnvironment(ctx, l, admin, types.InputCreateDTO{Name: "env1"})
 	require.NoError(t, err)
@@ -363,7 +363,7 @@ func TestService_CreateVariable_SecretVerifyFails(t *testing.T) {
 	svc.RegisterResolver("gcp", stub)
 
 	admin := newPrincipal("admin@x.com",
-		types.PermissionCreateAll, types.PermissionUpdateAll)
+		types.PermissionCreate, types.PermissionUpdateAll)
 
 	_, err := svc.CreateEnvironment(ctx, l, admin, types.InputCreateDTO{Name: "env1"})
 	require.NoError(t, err)
@@ -382,7 +382,7 @@ func TestService_UpdateVariable(t *testing.T) {
 	svc := NewService(memory.NewEnvironmentsRepository(), types.Options{})
 
 	admin := newPrincipal("admin@x.com",
-		types.PermissionCreateAll, types.PermissionUpdateAll, types.PermissionViewAll)
+		types.PermissionCreate, types.PermissionUpdateAll, types.PermissionViewAll)
 
 	_, err := svc.CreateEnvironment(ctx, l, admin, types.InputCreateDTO{Name: "env1"})
 	require.NoError(t, err)
@@ -409,7 +409,7 @@ func TestService_DeleteVariable_OwnershipCheck(t *testing.T) {
 	svc := NewService(memory.NewEnvironmentsRepository(), types.Options{})
 
 	owner := newPrincipal("alice@x.com",
-		types.PermissionCreateAll, types.PermissionUpdateOwn, types.PermissionViewOwn)
+		types.PermissionCreate, types.PermissionUpdateOwn, types.PermissionViewOwn)
 	other := newPrincipal("bob@x.com", types.PermissionUpdateOwn)
 
 	_, err := svc.CreateEnvironment(ctx, l, owner, types.InputCreateDTO{Name: "env1"})
@@ -441,9 +441,9 @@ func TestService_GetVariables(t *testing.T) {
 	svc := NewService(memory.NewEnvironmentsRepository(), types.Options{})
 
 	alice := newPrincipal("alice@x.com",
-		types.PermissionCreateAll, types.PermissionUpdateOwn, types.PermissionViewOwn)
+		types.PermissionCreate, types.PermissionUpdateOwn, types.PermissionViewOwn)
 	bob := newPrincipal("bob@x.com",
-		types.PermissionCreateAll, types.PermissionUpdateOwn, types.PermissionViewOwn)
+		types.PermissionCreate, types.PermissionUpdateOwn, types.PermissionViewOwn)
 
 	_, err := svc.CreateEnvironment(ctx, l, alice, types.InputCreateDTO{Name: "alice-env"})
 	require.NoError(t, err)
@@ -476,7 +476,7 @@ func TestService_CreateVariable_Validation(t *testing.T) {
 	svc := NewService(memory.NewEnvironmentsRepository(), types.Options{})
 
 	admin := newPrincipal("admin@x.com",
-		types.PermissionCreateAll, types.PermissionUpdateAll)
+		types.PermissionCreate, types.PermissionUpdateAll)
 
 	_, err := svc.CreateEnvironment(ctx, l, admin, types.InputCreateDTO{Name: "env1"})
 	require.NoError(t, err)
@@ -532,7 +532,7 @@ func TestService_CreateVariable_Duplicate(t *testing.T) {
 	svc := NewService(memory.NewEnvironmentsRepository(), types.Options{})
 
 	admin := newPrincipal("admin@x.com",
-		types.PermissionCreateAll, types.PermissionUpdateAll)
+		types.PermissionCreate, types.PermissionUpdateAll)
 
 	_, err := svc.CreateEnvironment(ctx, l, admin, types.InputCreateDTO{Name: "env1"})
 	require.NoError(t, err)

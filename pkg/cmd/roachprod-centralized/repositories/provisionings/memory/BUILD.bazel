@@ -24,6 +24,7 @@ go_test(
     deps = [
         "//pkg/cmd/roachprod-centralized/models/provisionings",
         "//pkg/cmd/roachprod-centralized/repositories/provisionings",
+        "//pkg/cmd/roachprod-centralized/utils/filters",
         "//pkg/cmd/roachprod-centralized/utils/filters/types",
         "//pkg/cmd/roachprod-centralized/utils/logger",
         "//pkg/util/timeutil",

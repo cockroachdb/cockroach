@@ -55,7 +55,7 @@ func NewController(service envtypes.IService) *Controller {
 			Func:   ctrl.Create,
 			Authorization: &auth.AuthorizationRequirement{
 				AnyOf: []string{
-					envtypes.PermissionCreateAll,
+					envtypes.PermissionCreate,
 				},
 			},
 		},

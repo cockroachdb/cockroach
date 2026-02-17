@@ -44,9 +44,7 @@ func ValidateModuleReferences(templateDir string) []string {
 // relative source paths and checks that each target directory exists.
 // Found modules are validated recursively; visited tracks absolute paths
 // to avoid infinite loops.
-func validateModuleDir(
-	dir, templateRoot string, visited map[string]bool, warnings *[]string,
-) {
+func validateModuleDir(dir, templateRoot string, visited map[string]bool, warnings *[]string) {
 	absDir, err := filepath.Abs(dir)
 	if err != nil {
 		return

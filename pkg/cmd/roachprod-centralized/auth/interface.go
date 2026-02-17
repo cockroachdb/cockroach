@@ -190,6 +190,14 @@ func (p *Principal) GetAuthMethod() string {
 	return "unknown"
 }
 
+func (p *Principal) GetPermissions() []string {
+	var perms []string
+	for _, perm := range p.Permissions {
+		perms = append(perms, perm.GetPermission())
+	}
+	return perms
+}
+
 // AuthConfig holds configuration for authentication/authorization.
 type AuthConfig struct {
 	// Disabled allows bypassing authentication entirely (for development/testing).

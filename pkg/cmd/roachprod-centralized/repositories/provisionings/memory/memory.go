@@ -54,9 +54,7 @@ func (r *MemProvisioningsRepo) GetProvisioning(
 // support, matching the behavior of the SQL filter builder in the CRDB repo.
 // Results are ordered by created_at DESC.
 func (r *MemProvisioningsRepo) GetProvisionings(
-	ctx context.Context,
-	l *logger.Logger,
-	filterSet filtertypes.FilterSet,
+	ctx context.Context, l *logger.Logger, filterSet filtertypes.FilterSet,
 ) ([]provmodels.Provisioning, int, error) {
 	r.lock.Lock()
 	defer r.lock.Unlock()

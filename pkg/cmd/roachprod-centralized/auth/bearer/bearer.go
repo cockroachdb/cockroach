@@ -59,6 +59,7 @@ func (a *BearerAuthenticator) Authenticate(
 	}
 
 	a.metrics.RecordAuthentication("success", principal.GetAuthMethod(), timeutil.Since(start))
+
 	return principal, nil
 }
 

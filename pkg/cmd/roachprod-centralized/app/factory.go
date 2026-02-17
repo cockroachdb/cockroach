@@ -31,6 +31,9 @@ import (
 	rhealth "github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/repositories/health"
 	hcrdbstore "github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/repositories/health/cockroachdb"
 	hmemstore "github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/repositories/health/memory"
+	provisioningsrepo "github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/repositories/provisionings"
+	provcrdbstore "github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/repositories/provisionings/cockroachdb"
+	provmemstore "github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/repositories/provisionings/memory"
 	rtasks "github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/repositories/tasks"
 	tcrdbstore "github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/repositories/tasks/cockroachdb"
 	tmemstore "github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/repositories/tasks/memory"
@@ -43,6 +46,8 @@ import (
 	senvironmentstypes "github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/services/environments/types"
 	shealth "github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/services/health"
 	shealthtypes "github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/services/health/types"
+	sprovisionings "github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/services/provisionings"
+	sprovtypes "github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/services/provisionings/types"
 	spublicdns "github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/services/public-dns"
 	spublicdnstypes "github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/services/public-dns/types"
 	stasks "github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/services/tasks"
@@ -58,12 +63,13 @@ import (
 
 // Services holds all the application services
 type Services struct {
-	Task         *stasks.Service
-	Health       *shealth.Service
-	Clusters     *sclusters.Service
-	DNS          *spublicdns.Service
-	Auth         *sauth.Service
-	Environments *senvironments.Service
+	Task          *stasks.Service
+	Health        *shealth.Service
+	Clusters      *sclusters.Service
+	DNS           *spublicdns.Service
+	Auth          *sauth.Service
+	Environments  *senvironments.Service
+	Provisionings *sprovisionings.Service
 }
 
 // NewServicesFromConfig creates and initializes all services from configuration
@@ -81,6 +87,7 @@ func NewServicesFromConfig(
 	var healthRepository rhealth.IHealthRepository
 	var authRepository rauth.IAuthRepository
 	var environmentsRepository renvironments.IEnvironmentsRepository
+	var provisioningsRepository provisioningsrepo.IProvisioningsRepository
 
 	switch strings.ToLower(cfg.Database.Type) {
 	case "cockroachdb":
@@ -144,10 +151,20 @@ func NewServicesFromConfig(
 			return nil, errors.Wrap(err, "error running environments migrations")
 		}
 
+		// Run database migrations for provisionings repository
+		if err := database.RunMigrationsForRepository(appCtx, l, db, "provisionings", provcrdbstore.GetProvisioningsMigrations(), crdbmigrator.NewMigrator()); err != nil {
+			l.Error("failed to run provisionings migrations",
+				slog.Any("error", err),
+				slog.String("repository", "provisionings"),
+			)
+			return nil, errors.Wrap(err, "error running provisionings migrations")
+		}
+
 		healthRepository = hcrdbstore.NewHealthRepository(db)
 		clustersRepository = ccrdbstore.NewClustersRepository(db)
 		authRepository = authcrdbstore.NewAuthRepository(db)
 		environmentsRepository = ecrdbstore.NewEnvironmentsRepository(db)
+		provisioningsRepository = provcrdbstore.NewProvisioningsRepository(db)
 
 		tasksRepository = tcrdbstore.NewTasksRepository(db, tcrdbstore.Options{
 			HealthTimeout: time.Duration(cfg.InstanceHealthTimeoutSeconds) * time.Second,
@@ -186,6 +203,7 @@ func NewServicesFromConfig(
 		clustersRepository = cmemstore.NewClustersRepository()
 		authRepository = authmemstore.NewAuthRepository()
 		environmentsRepository = ememstore.NewEnvironmentsRepository()
+		provisioningsRepository = provmemstore.NewProvisioningsRepository()
 
 	default:
 		return nil, fmt.Errorf("unsupported database type: %s", cfg.Database.Type)
@@ -304,6 +322,23 @@ func NewServicesFromConfig(
 		}
 	}
 
+	// Create the provisionings service (conditionally).
+	var provisioningsService *sprovisionings.Service
+	if cfg.Provisionings.Enabled {
+		provisioningsService = sprovisionings.NewService(
+			provisioningsRepository,
+			environmentsService,
+			taskService,
+			sprovtypes.Options{
+				TemplatesDir:   cfg.Provisionings.TemplatesDir,
+				WorkingDirBase: cfg.Provisionings.WorkingDirBase,
+				GCSStateBucket: cfg.Provisionings.GCSStateBucket,
+				TofuBinary:     cfg.Provisionings.TofuBinary,
+				WorkersEnabled: cfg.Tasks.Workers > 0,
+			},
+		)
+	}
+
 	// Configure Okta token validator if bearer authentication is configured
 	authType := auth.AuthenticationType(strings.ToLower(cfg.Api.Authentication.Type))
 	if authType == auth.AuthenticationTypeBearer && cfg.Api.Authentication.Bearer.OktaIssuer != "" {
@@ -324,17 +359,18 @@ func NewServicesFromConfig(
 	}
 
 	return &Services{
-		Task:         taskService,
-		Health:       healthService,
-		Clusters:     clustersService,
-		DNS:          dnsService,
-		Auth:         authService,
-		Environments: environmentsService,
+		Task:          taskService,
+		Health:        healthService,
+		Clusters:      clustersService,
+		DNS:           dnsService,
+		Auth:          authService,
+		Environments:  environmentsService,
+		Provisionings: provisioningsService,
 	}, nil
 }
 
 func (s *Services) ToSlice() []services.IService {
-	return []services.IService{
+	slice := []services.IService{
 		s.Task,
 		s.Health,
 		s.Clusters,
@@ -342,6 +378,12 @@ func (s *Services) ToSlice() []services.IService {
 		s.Auth,
 		s.Environments,
 	}
+	// Provisionings service is optional, so we only add it to the slice
+	// if it's not nil.
+	if s.Provisionings != nil {
+		slice = append(slice, s.Provisionings)
+	}
+	return slice
 }
 
 // NewAuthenticatorFromConfig creates the appropriate authenticator based on configuration.

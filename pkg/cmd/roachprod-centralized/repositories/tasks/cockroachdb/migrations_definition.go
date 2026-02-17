@@ -91,5 +91,27 @@ CREATE INDEX IF NOT EXISTS idx_tasks_type_creation
     STORING (state, consumer_id, update_datetime, payload, error);
 			`,
 		},
+		{
+			Version:     5,
+			Description: "Add reference and concurrency key fields",
+			SQL: `
+-- Add reference field for linking tasks to external entities (e.g. "provisionings#<uuid>").
+-- NULL when the task has no foreign reference.
+ALTER TABLE tasks ADD COLUMN IF NOT EXISTS reference VARCHAR(512);
+
+-- Add concurrency_key field for worker lock scoping.
+-- NULL means no lock key (task can run concurrently with others).
+ALTER TABLE tasks ADD COLUMN IF NOT EXISTS concurrency_key VARCHAR(512);
+
+-- Partial index for efficient lookups by reference (only rows with a reference).
+CREATE INDEX IF NOT EXISTS idx_tasks_reference ON tasks (reference) WHERE reference IS NOT NULL;
+
+-- Locking invariant: only one running task per concurrency key at a time.
+-- Pending tasks may queue freely for the same key.
+CREATE UNIQUE INDEX IF NOT EXISTS idx_tasks_concurrency_key_running_unique
+    ON tasks (concurrency_key)
+    WHERE concurrency_key IS NOT NULL AND state = 'running';
+				`,
+		},
 	}
 }

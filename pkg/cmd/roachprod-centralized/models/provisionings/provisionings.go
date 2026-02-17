@@ -20,15 +20,15 @@ import (
 type ProvisioningState string
 
 const (
-	ProvisioningStateNew            ProvisioningState = "new"
-	ProvisioningStateInitializing   ProvisioningState = "initializing"
-	ProvisioningStatePlanning       ProvisioningState = "planning"
-	ProvisioningStateProvisioning   ProvisioningState = "provisioning"
-	ProvisioningStateProvisioned    ProvisioningState = "provisioned"
-	ProvisioningStateFailed         ProvisioningState = "failed"
-	ProvisioningStateDestroying     ProvisioningState = "destroying"
-	ProvisioningStateDestroyed      ProvisioningState = "destroyed"
-	ProvisioningStateDestroyFailed  ProvisioningState = "destroy_failed"
+	ProvisioningStateNew           ProvisioningState = "new"
+	ProvisioningStateInitializing  ProvisioningState = "initializing"
+	ProvisioningStatePlanning      ProvisioningState = "planning"
+	ProvisioningStateProvisioning  ProvisioningState = "provisioning"
+	ProvisioningStateProvisioned   ProvisioningState = "provisioned"
+	ProvisioningStateFailed        ProvisioningState = "failed"
+	ProvisioningStateDestroying    ProvisioningState = "destroying"
+	ProvisioningStateDestroyed     ProvisioningState = "destroyed"
+	ProvisioningStateDestroyFailed ProvisioningState = "destroy_failed"
 	// Future work: cancellation support is not yet wired into the state
 	// machine (expectedTransitions). These constants are defined for forward
 	// compatibility but have no transitions or task handlers yet.
@@ -39,7 +39,7 @@ const (
 // expectedTransitions defines the valid state machine transitions.
 // Used for logging warnings; not enforced in PoC.
 var expectedTransitions = map[ProvisioningState][]ProvisioningState{
-	ProvisioningStateNew:           {ProvisioningStateInitializing, ProvisioningStateFailed},
+	ProvisioningStateNew:           {ProvisioningStateInitializing, ProvisioningStateFailed, ProvisioningStateDestroyed},
 	ProvisioningStateInitializing:  {ProvisioningStatePlanning, ProvisioningStateFailed},
 	ProvisioningStatePlanning:      {ProvisioningStateProvisioning, ProvisioningStateFailed},
 	ProvisioningStateProvisioning:  {ProvisioningStateProvisioned, ProvisioningStateFailed},
@@ -57,7 +57,7 @@ var expectedTransitions = map[ProvisioningState][]ProvisioningState{
 // stored as a tar.gz archive in TemplateSnapshot so that destroy always uses
 // the same template version as the original apply.
 //
-// The Identifier is an 8-character random lowercase alphanumeric string that is
+// The Identifier is an 8-character random string (letter + alphanumeric) that is
 // unconditionally auto-injected as a terraform variable. Every template must
 // declare variable "identifier" { type = string } and use it for resource
 // naming to ensure uniqueness.
@@ -107,25 +107,35 @@ func (p *Provisioning) SetState(newState ProvisioningState, l *logger.Logger) {
 	p.State = newState
 }
 
-// identifierCharset is the set of characters used to generate the 8-char
-// provisioning identifier.
+// identifierLetters is the set of characters used for the first character
+// of the identifier. Cloud providers (GCP, AWS, Azure) require resource
+// names/tags to start with a lowercase letter.
+const identifierLetters = "abcdefghijklmnopqrstuvwxyz"
+
+// identifierCharset is the full set of characters used for subsequent
+// characters of the identifier.
 const identifierCharset = "abcdefghijklmnopqrstuvwxyz0123456789"
 
 // IdentifierLength is the length of the generated identifier.
 const IdentifierLength = 8
 
 // GenerateIdentifier creates a random 8-character lowercase alphanumeric
-// string suitable for use as a provisioning identifier. Uses crypto/rand
-// with big.Int to avoid modulo bias.
+// string suitable for use as a provisioning identifier. The first character
+// is always a letter to satisfy cloud provider naming constraints (e.g.
+// GCP tags must match [a-z][-a-z0-9]*[a-z0-9]). Uses crypto/rand with
+// big.Int to avoid modulo bias.
 func GenerateIdentifier() (string, error) {
 	b := make([]byte, IdentifierLength)
-	max := big.NewInt(int64(len(identifierCharset)))
 	for i := range b {
-		n, err := rand.Int(rand.Reader, max)
+		charset := identifierCharset
+		if i == 0 {
+			charset = identifierLetters
+		}
+		n, err := rand.Int(rand.Reader, big.NewInt(int64(len(charset))))
 		if err != nil {
 			return "", err
 		}
-		b[i] = identifierCharset[n.Int64()]
+		b[i] = charset[n.Int64()]
 	}
 	return string(b), nil
 }

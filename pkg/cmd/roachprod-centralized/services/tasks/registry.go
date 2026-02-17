@@ -57,6 +57,8 @@ func (s *Service) hydrateTask(base tasks.ITask) (types.ITask, error) {
 	concreteTask.SetCreationDatetime(base.GetCreationDatetime())
 	concreteTask.SetUpdateDatetime(base.GetUpdateDatetime())
 	concreteTask.SetError(base.GetError())
+	concreteTask.SetReference(base.GetReference())
+	concreteTask.SetConcurrencyKey(base.GetConcurrencyKey())
 
 	// Deserialize payload into concrete type's options
 	if len(base.GetPayload()) > 0 {
