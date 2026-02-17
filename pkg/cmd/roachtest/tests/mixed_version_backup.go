@@ -2340,7 +2340,7 @@ func (d *BackupRestoreTestDriver) createBackupCollection(
 		}
 		backupEndTimes = append(backupEndTimes, latestIncBackupEndTime)
 
-		if d.testUtils.compactionEnabled && !collection.withRevisionHistory() && len(backupEndTimes) >= 3 {
+		if d.testUtils.compactionEnabled && len(backupEndTimes) >= 3 {
 			// Require that endIdx - startIdx >= 2 so at least 2 inc backups are
 			// compacted. If there are 3 backupEndTimes, the start must be the the
 			// 0th. Thn endIdx is always the last index for now, so the compacted
