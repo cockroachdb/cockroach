@@ -125,6 +125,7 @@ func (rpcCtx *Context) drpcDialOptsCommon(
 			unaryInterceptors = append(unaryInterceptors, interceptor)
 		}
 	}
+
 	drpcDialOpts = append(drpcDialOpts, drpcclient.WithChainUnaryInterceptor(unaryInterceptors...))
 
 	streamInterceptors := rpcCtx.clientStreamInterceptorsDRPC
@@ -298,8 +299,13 @@ func NewDRPCServer(_ context.Context, rpcCtx *Context, opts ...ServerOption) (DR
 
 	// If the metrics interceptor is set, it should be registered second so
 	// that all other interceptors are included in the response time durations.
-	if o.drpcRequestMetricsInterceptor != nil {
-		unaryInterceptors = append(unaryInterceptors, drpcmux.UnaryServerInterceptor(o.drpcRequestMetricsInterceptor))
+	if o.drpcUnaryRequestMetricsInterceptor != nil {
+		unaryInterceptors = append(unaryInterceptors,
+			drpcmux.UnaryServerInterceptor(o.drpcUnaryRequestMetricsInterceptor))
+	}
+	if o.drpcStreamRequestMetricsInterceptor != nil {
+		streamInterceptors = append(streamInterceptors,
+			drpcmux.StreamServerInterceptor(o.drpcStreamRequestMetricsInterceptor))
 	}
 
 	if !rpcCtx.ContextOptions.Insecure {

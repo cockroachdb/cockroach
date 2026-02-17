@@ -1341,12 +1341,14 @@ func makeTenantSQLServerArgs(
 
 	requestMetrics := rpc.NewRequestMetrics()
 	registry.AddMetricStruct(requestMetrics)
+	drpcRequestMetrics := rpc.NewDRPCServerRequestMetrics()
+	registry.AddMetricStruct(drpcRequestMetrics)
 
 	grpcServer, err := newGRPCServer(startupCtx, rpcContext, requestMetrics)
 	if err != nil {
 		return sqlServerArgs{}, err
 	}
-	drpcServer, err := newDRPCServer(startupCtx, rpcContext, requestMetrics)
+	drpcServer, err := newDRPCServer(startupCtx, rpcContext, drpcRequestMetrics)
 	if err != nil {
 		return sqlServerArgs{}, err
 	}

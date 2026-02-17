@@ -97,8 +97,8 @@ func muxRangeFeed(
 // muxStream represents MuxRangeFeed RPC established with a node.
 //
 // MuxRangeFeed is a bidirectional RPC: the muxStream.sender is the client ->
-// server portion of the stream, and muxStream.receiver is the server -> client
-// portion. Any number of RangeFeedRequests may be initiated with the server
+// server portion of the stream, and muxStream.receiver is the  server -> client
+// // portion.Any number of RangeFeedRequests may be initiated with the server
 // (sender.Send). The server will send MuxRangeFeed for all the range feeds, and
 // those events are received via receiver.Recv. If an error occurs with one of
 // the logical range feeds, a MuxRangeFeedEvent describing the error will be
