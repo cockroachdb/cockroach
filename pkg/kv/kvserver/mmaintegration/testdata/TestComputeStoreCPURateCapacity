@@ -213,17 +213,20 @@ capped:   kv-capacity: 3.33 cores/store, capacity_err: +11.11%
 # - naive: mult = 32/1 = 32. capacity = 16/32 = 0.5. Doesn't model background
 #   at all, so it still thinks KV can do some work.
 # - capped: clips mult to 3, bgLoad = 32 - 3*1 = 29. capacity = max(0,
-#   (16-29)/3) = 0. Correctly detects the node is overwhelmed. 
+#   (16-29)/3) = 0. Correctly detects the node is overwhelmed.
+# The capped formula yields 0 but hits cpuCapacityFloorPerStore (0.1 cores),
+# so it reports 0.10 instead — the floor keeps utilization finite while still
+# signaling near-total saturation.
 scenario kv-cpu=1 proportional-overhead=1 background=30 node-cpu-capacity=16 num-stores=1
 ----
 node-cpu: 32.00 used / 16.00 capacity (1.00 kv + 1.00 proportional + 30.00 background)
 truth:    kv-capacity: 0.00 cores/store (true-mult: 2.00)
 naive:    kv-capacity: 0.50 cores/store, capacity_err: +Inf%
-capped:   kv-capacity: 0.00 cores/store, capacity_err: 0.00%
+capped:   kv-capacity: 0.10 cores/store, capacity_err: +Inf%
 
 # ==========================================================================
 # Mean |capacity_err| across all scenarios (excluding +Inf).
 # ==========================================================================
 mean
 ----
-Mean |capacity_err| across 12 scenarios: naive: 25.7%  capped: 21.1%
+Mean |capacity_err| across 12 scenarios: naive: 25.7%  capped: 22.8%

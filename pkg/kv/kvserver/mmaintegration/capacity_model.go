@@ -77,6 +77,38 @@ func computeStoreByteSizeCapacity(
 // treated as background load unrelated to MMA.
 const cpuIndirectOverheadMultiplier = 3.0
 
+// cpuCapacityFloorPerStore is the minimum per-store CPU capacity (in ns/s)
+// returned by computeCPUCapacityWithCap. The capacity formula is:
+//
+//	mult = clamp(nodeCPURateUsage / storesCPURate, 1, cpuIndirectOverheadMultiplier)
+//	backgroundLoad = nodeCPURateUsage - storesCPURate * mult
+//	capacity = (nodeCPURateCapacity - backgroundLoad) / mult
+//
+// As background load grows (SQL gateway, GC, etc.), capacity shrinks
+// toward 0 while storesCPURate stays constant, causing utilization
+// (load/capacity) to spike to infinity. The floor prevents this.
+//
+// Example: 16-core node, 1 store, storesCPURate=2, mult clamped to
+// cpuIndirectOverheadMultiplier=3 (implicit mult exceeds cap in all rows):
+//
+//	bg = nodeCPURateUsage - storesCPURate*mult
+//	cap = (nodeCPURateCapacity - bg) / mult
+//
+//	usage=10     bg=4      cap=(16-4)/3    = 4.0 cores
+//	usage=14     bg=8      cap=(16-8)/3    = 2.67 cores
+//	usage=16     bg=10     cap=(16-10)/3   = 2.0 cores   (node saturated)
+//	usage=21.7   bg=15.7   cap=(16-15.7)/3 = 0.1 cores
+//	usage=21.91  bg=15.91  cap=(16-15.91)/3= 0.03 cores  (without floor)
+//	usage=22     bg=16     cap=(16-16)/3   = 0.0 cores   (without floor)
+//
+// The floor keeps capacity at 0.1 cores - small enough that the store
+// looks nearly saturated, large enough to keep utilization finite.
+//
+// Note: due to flooring, severe overloads become indistinguishable (load=2 over
+// a 0.1-core floor is 20x util regardless of how much background exists). This
+// is acceptable because MMA has no stronger action beyond 20x.
+const cpuCapacityFloorPerStore = 0.1 * 1e9 // 0.1 cores in ns/s
+
 // computeCPUCapacityWithCap computes per-store CPU capacity using a clamped
 // multiplier. Unlike the naive model (computeStoreCPURateCapacityNaive in
 // legacy_model_test.go, which assumes all node CPU usage is caused by
@@ -114,6 +146,10 @@ const cpuIndirectOverheadMultiplier = 3.0
 // behavior: MMA attributes none of the node usage to itself (all is
 // background), and divides the idle capacity by the multiplier across stores.
 func computeCPUCapacityWithCap(in storeCPURateCapacityInput) (capacity float64) {
+	defer func() {
+		capacity = max(cpuCapacityFloorPerStore, capacity)
+	}()
+
 	mult := 0.0
 	if in.numStores <= 0 || in.nodeCPURateCapacity <= 0 {
 		log.KvDistribution.Fatalf(context.Background(), "numStores and nodeCPURateCapacity must be > 0")
