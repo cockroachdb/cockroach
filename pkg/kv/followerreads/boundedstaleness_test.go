@@ -3,7 +3,7 @@
 // Use of this software is governed by the CockroachDB Software License
 // included in the /LICENSE file.
 
-package kvfollowerreadsccl_test
+package followerreads_test
 
 import (
 	"context"
@@ -15,7 +15,6 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/ccl"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvtestutils"
@@ -48,59 +47,6 @@ var (
 // fullTraceDebug is a flag that controls whether full traces are printed in the
 // case of some errors.
 const fullTraceDebug = false
-
-func TestBoundedStalenessEnterpriseLicense(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-
-	ctx := context.Background()
-	tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{})
-	defer tc.Stopper().Stop(ctx)
-
-	testCases := []struct {
-		query string
-		args  []interface{}
-	}{
-		{
-			query: `SELECT with_max_staleness('10s')`,
-		},
-		{
-			query: `SELECT with_min_timestamp(statement_timestamp())`,
-		},
-		{
-			query: `SELECT $1::TEXT FROM generate_series(1,1) AS OF SYSTEM TIME with_max_staleness('1s')`,
-			args:  []interface{}{"cat"},
-		},
-		{
-			query: `SELECT $1::TEXT FROM generate_series(1,1) AS OF SYSTEM TIME with_min_timestamp(statement_timestamp())`,
-			args:  []interface{}{"cat"},
-		},
-	}
-
-	// With the deprecation of the core license, disabling the enterprise
-	// license has no effect. All commands should now work as intended.
-	defer ccl.TestingDisableEnterprise()()
-	t.Run("disabled", func(t *testing.T) {
-		for _, testCase := range testCases {
-			t.Run(testCase.query, func(t *testing.T) {
-				r, err := tc.Conns[0].QueryContext(ctx, testCase.query, testCase.args...)
-				require.NoError(t, err)
-				require.NoError(t, r.Close())
-			})
-		}
-	})
-
-	t.Run("enabled", func(t *testing.T) {
-		defer ccl.TestingEnableEnterprise()()
-		for _, testCase := range testCases {
-			t.Run(testCase.query, func(t *testing.T) {
-				r, err := tc.Conns[0].QueryContext(ctx, testCase.query, testCase.args...)
-				require.NoError(t, err)
-				require.NoError(t, r.Close())
-			})
-		}
-	})
-}
 
 // boundedStalenessDataDrivenEvent is an event during a bounded staleness datadriven test.
 type boundedStalenessDataDrivenEvent interface {
@@ -281,7 +227,6 @@ func TestBoundedStalenessDataDriven(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	skip.UnderDuress(t, "1μs staleness reads may actually succeed due to the slow environment")
-	defer ccl.TestingEnableEnterprise()()
 
 	ctx := context.Background()
 

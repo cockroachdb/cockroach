@@ -3,7 +3,7 @@
 // Use of this software is governed by the CockroachDB Software License
 // included in the /LICENSE file.
 
-package kvfollowerreadsccl
+package followerreads
 
 import (
 	"context"
@@ -16,7 +16,6 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvbase"
@@ -58,22 +57,16 @@ const (
 
 func TestEvalFollowerReadOffset(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	disableEnterprise := utilccl.TestingEnableEnterprise()
-	defer disableEnterprise()
 	st := cluster.MakeTestingClusterSettings()
 	if offset, err := evalFollowerReadOffset(st); err != nil {
 		t.Fatal(err)
 	} else if offset != expectedFollowerReadOffset {
 		t.Fatalf("expected %v, got %v", expectedFollowerReadOffset, offset)
 	}
-	disableEnterprise()
-	_, err := evalFollowerReadOffset(st)
-	require.NoError(t, err)
 }
 
 func TestZeroDurationDisablesFollowerReadOffset(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	defer utilccl.TestingEnableEnterprise()()
 	ctx := context.Background()
 
 	st := cluster.MakeTestingClusterSettings()
@@ -796,8 +789,6 @@ func TestFollowerReadsWithStaleDescriptor(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	// The test uses follower_read_timestamp().
-	defer utilccl.TestingEnableEnterprise()()
 
 	var historicalQuery atomic.Value
 	historicalQuery.Store(`SELECT * FROM test AS OF SYSTEM TIME follower_read_timestamp() WHERE k=2`)
@@ -1022,7 +1013,6 @@ func TestFollowerReadsWithStaleDescriptor(t *testing.T) {
 func TestSecondaryTenantFollowerReadsRouting(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	defer utilccl.TestingEnableEnterprise()()
 
 	skip.UnderRace(t, "times out")
 	skip.UnderDeadlock(t)
@@ -1270,7 +1260,6 @@ func TestSecondaryTenantFollowerReadsRouting(t *testing.T) {
 func TestDrainStopsFollowerReads(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	defer utilccl.TestingEnableEnterprise()()
 	ctx := context.Background()
 	settings := cluster.MakeTestingClusterSettings()
 	sv := &settings.SV

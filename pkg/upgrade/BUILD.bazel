@@ -43,7 +43,7 @@ go_test(
     srcs = [
         "main_test.go",
         "tenant_upgrade_test.go",
-        "upgrade_interlock_generated_test.go",
+        "upgrade_interlock_generated_test.go",  # keep
         "upgrade_interlock_test.go",
     ],
     exec_properties = {"test.Pool": "large"},

@@ -13,13 +13,13 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdceval"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
-	"github.com/cockroachdb/cockroach/pkg/ccl/kvccl/kvfollowerreadsccl"
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobfrontier"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobsprofiler"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/kv/followerreads"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
@@ -414,7 +414,7 @@ func makePlan(
 		if useBulkOracle.Get(&evalCtx.Settings.SV) {
 			log.Changefeed.Infof(ctx, "using bulk oracle for DistSQL planning")
 			var err error
-			oracle, err = kvfollowerreadsccl.NewLocalityFilteringBulkOracle(dsp.ReplicaOracleConfig(evalCtx.Locality), sql.SingleLocalityFilter(locFilter))
+			oracle, err = followerreads.NewLocalityFilteringBulkOracle(dsp.ReplicaOracleConfig(evalCtx.Locality), sql.SingleLocalityFilter(locFilter))
 			if err != nil {
 				return nil, nil, err
 			}

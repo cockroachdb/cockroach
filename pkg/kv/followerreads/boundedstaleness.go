@@ -3,13 +3,12 @@
 // Use of this software is governed by the CockroachDB Software License
 // included in the /LICENSE file.
 
-package kvfollowerreadsccl
+package followerreads
 
 import (
 	"context"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/asof"
@@ -19,19 +18,9 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-func checkBoundedStalenessEnabled(evalCtx *eval.Context) error {
-	return utilccl.CheckEnterpriseEnabled(
-		evalCtx.Settings,
-		"bounded staleness",
-	)
-}
-
 func evalMaxStaleness(
 	ctx context.Context, evalCtx *eval.Context, d duration.Duration,
 ) (time.Time, error) {
-	if err := checkBoundedStalenessEnabled(evalCtx); err != nil {
-		return time.Time{}, err
-	}
 	if d.Compare(duration.FromInt64(0)) < 0 {
 		return time.Time{}, pgerror.Newf(
 			pgcode.InvalidParameterValue,
@@ -43,9 +32,6 @@ func evalMaxStaleness(
 }
 
 func evalMinTimestamp(ctx context.Context, evalCtx *eval.Context, t time.Time) (time.Time, error) {
-	if err := checkBoundedStalenessEnabled(evalCtx); err != nil {
-		return time.Time{}, err
-	}
 	t = t.Round(time.Microsecond)
 	if stmtTimestamp := evalCtx.GetStmtTimestamp().Round(time.Microsecond); t.After(stmtTimestamp) {
 		return time.Time{}, errors.WithDetailf(

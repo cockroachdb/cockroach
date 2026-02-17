@@ -370,9 +370,9 @@ var metamorphicRouteToLeaseholderFirst = metamorphic.ConstantWithTestBool(
 )
 
 // CanSendToFollower is used by the DistSender to determine if it needs to look
-// up the current lease holder for a request. It is used by the
-// followerreadsccl code to inject logic to check if follower reads are enabled.
-// By default, without CCL code, this function returns false.
+// up the current lease holder for a request. It is overridden by the
+// followerreads package (pkg/kv/followerreads) to inject logic to check if
+// follower reads are enabled. By default, this function returns false.
 var CanSendToFollower = func(
 	_ context.Context,
 	_ *cluster.Settings,
