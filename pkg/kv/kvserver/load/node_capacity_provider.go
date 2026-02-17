@@ -153,15 +153,25 @@ func (m *runtimeLoadMonitor) recordCPUUsage(ctx context.Context) error {
 		return errors.NewAssertionErrorWithWrappedErrf(err, "failed to get cpu usage")
 	}
 	// Convert milliseconds to nanoseconds.
+	var cpuUsageDelta float64
 	totalUsageNanos := float64(userTimeMillis*1e6 + sysTimeMillis*1e6)
-	if totalUsageNanos < m.mu.lastTotalUsageNanos {
-		log.KvDistribution.Warningf(ctx, "last cpu usage is larger than current: %v > %v",
-			m.mu.lastTotalUsageNanos, totalUsageNanos)
-		totalUsageNanos = m.mu.lastTotalUsageNanos
-	}
-	m.mu.usageEWMA.Add(totalUsageNanos - m.mu.lastTotalUsageNanos)
-	m.mu.lastTotalUsageNanos = totalUsageNanos
+	cpuUsageDelta, m.mu.lastTotalUsageNanos = cumulativeDelta(ctx, totalUsageNanos, m.mu.lastTotalUsageNanos)
+	m.mu.usageEWMA.Add(cpuUsageDelta)
 	return nil
+}
+
+// cumulativeDelta computes the non-negative delta between a new cumulative
+// value and the previous one. If the new value is less than the previous
+// (which shouldn't happen for monotonic counters), the delta is clamped to
+// zero and the previous value is preserved.
+func cumulativeDelta(ctx context.Context, current, last float64) (delta, newLast float64) {
+	delta = current - last
+	if delta < 0 {
+		log.KvDistribution.Warningf(ctx, "last cpu usage is larger than current: %v > %v",
+			last, current)
+		return 0, last
+	}
+	return delta, current
 }
 
 // recordCPUCapacity samples and records the current cpu capacity of the node.
