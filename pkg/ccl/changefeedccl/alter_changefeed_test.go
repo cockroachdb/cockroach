@@ -27,7 +27,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobfrontier"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
-	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -2219,10 +2218,18 @@ WITH resolved = '1s', no_initial_scan, min_checkpoint_frequency='1ns'`,
 		changefeedbase.SpanCheckpointMaxBytes.Override(
 			context.Background(), &s.Server.ClusterSettings().SV, maxCheckpointSize)
 
-		// Note the tableSpan to avoid resolved events that leave no gaps
-		fooDesc := desctestutils.TestingGetPublicTableDescriptor(
-			s.SystemServer.DB(), s.Codec, "d", "foo")
-		tableSpan := fooDesc.PrimaryIndexSpan(keys.SystemSQLCodec)
+		// isFullIndexSpan returns true if the span covers an entire index. We filter
+		// out full index spans to create gaps in the resolved frontier, which forces
+		// checkpoint creation. We detect full index spans dynamically rather than
+		// comparing against a static PrimaryIndexSpan because the primary index ID
+		// can change during ADD COLUMN ... DEFAULT with the declarative schema changer.
+		isFullIndexSpan := func(sp roachpb.Span) bool {
+			remaining, _, _, err := s.Codec.DecodeIndexPrefix(sp.Key)
+			if err != nil || len(remaining) != 0 {
+				return false
+			}
+			return sp.EndKey.Equal(sp.Key.PrefixEnd())
+		}
 
 		// FilterSpanWithMutation should ensure that once the backfill begins, the following resolved events
 		// that are for that backfill (are of the timestamp right after the backfill timestamp) resolve some
@@ -2269,13 +2276,13 @@ WITH resolved = '1s', no_initial_scan, min_checkpoint_frequency='1ns'`,
 				return skip, nil
 			}
 
-			// Only allow resolving if we definitely won't have a completely resolved table
-			if !r.Span.Equal(tableSpan) && haveGaps {
+			// Only allow resolving if we definitely won't have a completely resolved index
+			if !isFullIndexSpan(r.Span) && haveGaps {
 				skip := rnd.Intn(10) > 7
 				t.Logf("handling span %s: %t", r.Span.String(), skip)
 				return skip, nil
 			}
-			t.Logf("skipping span %s", r.Span.String())
+			t.Logf("skipping full index span %s", r.Span.String())
 			haveGaps = true
 			return true, nil
 		}
