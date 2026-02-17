@@ -221,7 +221,9 @@ func NewSeparateProcessTenantServer(
 	}
 	// TODO(irfansharif): hook up NewGrantCoordinatorSQL.
 	var noopElasticCPUGrantCoord *admission.ElasticCPUGrantCoordinator = nil
-	return newTenantServer(ctx, stopper, baseCfg, sqlCfg, tenantNameContainer, deps, mtinfopb.ServiceModeExternal, noopElasticCPUGrantCoord)
+	return newTenantServer(
+		ctx, stopper, baseCfg, sqlCfg, tenantNameContainer, deps, mtinfopb.ServiceModeExternal,
+		noopElasticCPUGrantCoord, admission.NewSQLCPUProvider())
 }
 
 // newSharedProcessTenantServer creates a tenant-specific, SQL-only
@@ -237,6 +239,7 @@ func newSharedProcessTenantServer(
 	sqlCfg SQLConfig,
 	tenantNameContainer *roachpb.TenantNameContainer,
 	elastic admission.PacerFactory,
+	sqlCPUProvider admission.SQLCPUProvider,
 ) (*SQLServerWrapper, error) {
 	if baseCfg.IDContainer.Get() == 0 {
 		return nil, errors.AssertionFailedf("programming error: NewSharedProcessTenantServer called before NodeID was assigned.")
@@ -260,7 +263,9 @@ func newSharedProcessTenantServer(
 			return spanconfiglimiter.NoopLimiter{}
 		},
 	}
-	return newTenantServer(ctx, stopper, baseCfg, sqlCfg, tenantNameContainer, deps, mtinfopb.ServiceModeShared, elastic)
+	return newTenantServer(
+		ctx, stopper, baseCfg, sqlCfg, tenantNameContainer, deps, mtinfopb.ServiceModeShared, elastic,
+		sqlCPUProvider)
 }
 
 // newTenantServer constructs a SQLServerWrapper.
@@ -275,6 +280,7 @@ func newTenantServer(
 	deps tenantServerDeps,
 	serviceMode mtinfopb.TenantServiceMode,
 	elastic admission.PacerFactory,
+	sqlCPUProvider admission.SQLCPUProvider,
 ) (*SQLServerWrapper, error) {
 	// TODO(knz): Make the license application a per-server thing
 	// instead of a global thing.
@@ -322,7 +328,8 @@ func newTenantServer(
 	// then rely on some mechanism to retrieve the ID from the name to
 	// initialize the rest of the server.
 	baseCfg.idProvider.SetTenantID(sqlCfg.TenantID)
-	args, err := makeTenantSQLServerArgs(ctx, stopper, baseCfg, sqlCfg, tenantNameContainer, deps, serviceMode, elastic)
+	args, err := makeTenantSQLServerArgs(
+		ctx, stopper, baseCfg, sqlCfg, tenantNameContainer, deps, serviceMode, elastic, sqlCPUProvider)
 	if err != nil {
 		return nil, err
 	}
@@ -1125,6 +1132,7 @@ func makeTenantSQLServerArgs(
 	deps tenantServerDeps,
 	serviceMode mtinfopb.TenantServiceMode,
 	elastic admission.PacerFactory,
+	sqlCPUProvider admission.SQLCPUProvider,
 ) (sqlServerArgs, error) {
 	st := baseCfg.Settings
 
@@ -1282,6 +1290,7 @@ func makeTenantSQLServerArgs(
 	dbCtx.NodeID = deps.instanceIDContainer
 	db := kv.NewDBWithContext(baseCfg.AmbientCtx, tcsFactory, clock, dbCtx)
 	db.AdmissionPacerFactory = elastic
+	db.SQLCPUProvider = sqlCPUProvider
 	rangeFeedKnobs, _ := baseCfg.TestingKnobs.RangeFeed.(*rangefeed.TestingKnobs)
 	rangeFeedFactory, err := rangefeed.NewFactory(stopper, db, st, rangeFeedKnobs)
 	if err != nil {
@@ -1418,6 +1427,7 @@ func makeTenantSQLServerArgs(
 		drpc:                     drpcServer,
 		externalStorageBuilder:   esb,
 		admissionPacerFactory:    elastic,
+		sqlCPUProvider:           sqlCPUProvider,
 		rangeDescIteratorFactory: tenantConnect,
 		tenantTimeSeriesServer:   sTS,
 		tenantCapabilitiesReader: sql.EmptySystemTenantOnly[tenantcapabilities.Reader](),
