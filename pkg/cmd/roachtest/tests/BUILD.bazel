@@ -36,6 +36,7 @@ go_library(
         "awsdms.go",
         "backup.go",
         "backup_fixtures.go",
+        "backup_restore_driver.go",
         "backup_restore_roundtrip.go",
         "buffered_logging.go",
         "build_info.go",

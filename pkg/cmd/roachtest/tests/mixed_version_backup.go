@@ -60,10 +60,6 @@ import (
 )
 
 const (
-	// nonceLen is the length of the randomly generated string appended
-	// to the backup name when creating a backup in GCS for this test.
-	nonceLen = 4
-
 	// systemTableSentinel is a placeholder value for system table
 	// columns that cannot be validated after restore, for various
 	// reasons. See `handleSpecialCases` for more details.
@@ -259,23 +255,6 @@ func quoteColumnsForSelect(columns []string) string {
 }
 
 type (
-	// backupOption is an option passed to the `BACKUP` command (i.e.,
-	// `WITH ...` portion).
-	backupOption interface {
-		fmt.Stringer
-	}
-
-	// revisionHistory wraps the `revision_history` backup option.
-	revisionHistory struct{}
-
-	// encryptionPassphrase is the `encryption_passphrase` backup
-	// option. If passed when a backup is created, the same passphrase
-	// needs to be passed for incremental backups and for restoring the
-	// backup as well.
-	encryptionPassphrase struct {
-		passphrase string
-	}
-
 	// metamorphicSetting encodes the space of possible values a cluster
 	// setting may assume during this test, along with the scope where
 	// it applies (system or tenant).
@@ -431,13 +410,6 @@ type (
 		fullSubdir string
 	}
 
-	// labeledNodes allows us to label a set of nodes with the version
-	// they are running, to allow for human-readable backup names
-	labeledNodes struct {
-		Nodes   option.NodeListOption
-		Version string
-	}
-
 	// backupSpec indicates where backups are supposed to be planned
 	// (`BACKUP` statement sent to); and where they are supposed to be
 	// executed (where the backup job will be picked up).
@@ -479,10 +451,6 @@ func (fb fullBackup) String() string        { return "full" }
 func (ib incrementalBackup) String() string { return "incremental" }
 func (cb compactedBackup) String() string   { return "compacted" }
 
-func (rh revisionHistory) String() string {
-	return "revision_history"
-}
-
 func randIntBetween(rng *rand.Rand, min, max int) int {
 	return rng.Intn(max-min) + min
 }
@@ -496,12 +464,8 @@ func randWaitDuration(rng *rand.Rand) time.Duration {
 	return time.Duration(durations[rng.Intn(len(durations))]) * time.Second
 }
 
-func newEncryptionPassphrase(rng *rand.Rand) encryptionPassphrase {
+func randEncryptionPassphrase(rng *rand.Rand) encryptionPassphrase {
 	return encryptionPassphrase{randString(rng, randIntBetween(rng, 32, 64))}
-}
-
-func (ep encryptionPassphrase) String() string {
-	return fmt.Sprintf("encryption_passphrase = '%s'", ep.passphrase)
 }
 
 // newBackupOptions returns a list of backup options to be used when
@@ -511,7 +475,7 @@ func newBackupOptions(rng *rand.Rand, onlineRestoreExpected bool) []backupOption
 	possibleOpts := []backupOption{}
 	if !onlineRestoreExpected {
 		possibleOpts = append(possibleOpts, revisionHistory{})
-		possibleOpts = append(possibleOpts, newEncryptionPassphrase(rng))
+		possibleOpts = append(possibleOpts, randEncryptionPassphrase(rng))
 	}
 
 	var options []backupOption
@@ -1419,7 +1383,7 @@ func (d *BackupRestoreTestDriver) buildRestoreStatement(
 	// If the backup was created with an encryption passphrase, we
 	// need to include it when restoring as well.
 	if opt := bc.encryptionOption(); opt != nil {
-		restoreOptions = append(restoreOptions, opt.String())
+		restoreOptions = append(restoreOptions, opt.OptionString())
 	}
 	if d.testUtils.onlineRestore {
 		restoreOptions = append(restoreOptions, "experimental deferred copy")
@@ -2132,7 +2096,7 @@ func (d *BackupRestoreTestDriver) runBackup(
 	}
 
 	for _, opt := range collection.options {
-		options = append(options, opt.String())
+		options = append(options, opt.OptionString())
 	}
 
 	backupTime := d.testUtils.now()
@@ -2692,7 +2656,7 @@ func (u *CommonTestUtils) checkFiles(
 ) error {
 	options := []string{"check_files"}
 	if opt := collection.encryptionOption(); opt != nil {
-		options = append(options, opt.String())
+		options = append(options, opt.OptionString())
 	}
 
 	checkFilesStmt := fmt.Sprintf(
