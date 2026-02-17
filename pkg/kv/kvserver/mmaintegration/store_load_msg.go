@@ -18,16 +18,22 @@ func MakeStoreLoadMsg(
 	var load, capacity mmaprototype.LoadVector
 
 	load[mmaprototype.CPURate] = mmaprototype.LoadValue(desc.Capacity.CPUPerSecond)
-	cpuCap := computeCPUCapacityWithCap(storeCPURateCapacityInput{
-		storesCPURate:       float64(desc.NodeCapacity.StoresCPURate),
-		nodeCPURateUsage:    float64(desc.NodeCapacity.NodeCPURateUsage),
-		nodeCPURateCapacity: float64(desc.NodeCapacity.NodeCPURateCapacity),
-		numStores:           desc.NodeCapacity.NumStores,
-	})
-	// cpuCap can be 0 when the node is overloaded (nodeCPURateUsage >
-	// nodeCPURateCapacity). This is correct behavior - it signals that the
-	// store has no CPU capacity available and should trigger load shedding.
-	capacity[mmaprototype.CPURate] = mmaprototype.LoadValue(cpuCap)
+	if desc.NodeCapacity.NodeCPURateCapacity > 0 && desc.NodeCapacity.NumStores > 0 {
+		cpuCap := computeCPUCapacityWithCap(storeCPURateCapacityInput{
+			storesCPURate:       float64(desc.NodeCapacity.StoresCPURate),
+			nodeCPURateUsage:    float64(desc.NodeCapacity.NodeCPURateUsage),
+			nodeCPURateCapacity: float64(desc.NodeCapacity.NodeCPURateCapacity),
+			numStores:           desc.NodeCapacity.NumStores,
+		})
+		// cpuCap can be 0 when the node is overloaded (nodeCPURateUsage >
+		// nodeCPURateCapacity). This is correct behavior - it signals that the
+		// store has no CPU capacity available and should trigger load shedding.
+		capacity[mmaprototype.CPURate] = mmaprototype.LoadValue(cpuCap)
+	} else {
+		// NodeCapacity not yet populated (e.g. early in node startup before the
+		// first capacity sample). Fall back to assuming 50% CPU utilization.
+		capacity[mmaprototype.CPURate] = load[mmaprototype.CPURate] * 2
+	}
 
 	load[mmaprototype.WriteBandwidth] = mmaprototype.LoadValue(desc.Capacity.WriteBytesPerSecond)
 	capacity[mmaprototype.WriteBandwidth] = mmaprototype.UnknownCapacity
