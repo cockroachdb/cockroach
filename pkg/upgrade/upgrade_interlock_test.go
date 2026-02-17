@@ -3,7 +3,7 @@
 // Use of this software is governed by the CockroachDB Software License
 // included in the /LICENSE file.
 
-package upgradeinterlockccl
+package upgrade_test
 
 import (
 	"context"
@@ -13,7 +13,6 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/ccl/kvccl/kvtenantccl/upgradeinterlockccl/sharedtestutil"
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -30,14 +29,16 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
+	"github.com/cockroachdb/cockroach/pkg/upgrade/interlocktestutil"
 	"github.com/cockroachdb/cockroach/pkg/upgrade/upgradebase"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/stretchr/testify/require"
 )
 
-//lint:ignore U1000 unused
-func runTest(t *testing.T, variant sharedtestutil.TestVariant, test sharedtestutil.TestConfig) {
+func runTest(
+	t *testing.T, variant interlocktestutil.TestVariant, test interlocktestutil.TestConfig,
+) {
 	ctx := context.Background()
 	logf := func(format string, args ...interface{}) {
 		t.Helper()
@@ -46,7 +47,7 @@ func runTest(t *testing.T, variant sharedtestutil.TestVariant, test sharedtestut
 		copy(newArgs[1:], args)
 		t.Logf("(%s) "+format, newArgs...)
 	}
-	logf(`upgrade interlock test: running variant "%s", configuration: "%s"`, sharedtestutil.Variants[variant], test.Name)
+	logf(`upgrade interlock test: running variant "%s", configuration: "%s"`, interlocktestutil.Variants[variant], test.Name)
 
 	reachedChannel := make(chan struct{})
 	resumeChannel := make(chan struct{})
@@ -217,7 +218,7 @@ func runTest(t *testing.T, variant sharedtestutil.TestVariant, test sharedtestut
 		// under the covers. See https://go.dev/doc/go1.16#vet-testing-T for
 		// more details.
 		if expectingUpgradeToFail {
-			getPossibleUpgradeErrorsString := func(variant sharedtestutil.TestVariant) string {
+			getPossibleUpgradeErrorsString := func(variant interlocktestutil.TestVariant) string {
 				possibleErrorsString := ""
 				for i := range test.ExpUpgradeErr[variant] {
 					expErrString := test.ExpUpgradeErr[variant][i]
@@ -263,7 +264,7 @@ func runTest(t *testing.T, variant sharedtestutil.TestVariant, test sharedtestut
 	// two SQL servers interact.
 	otherMsv := msv
 	otherBv := bv
-	if variant == sharedtestutil.LaggingBinaryVersion {
+	if variant == interlocktestutil.LaggingBinaryVersion {
 		// If we're in "lagging binary" mode, we want the server to
 		// startup with a binary that is too old for the upgrade to
 		// succeed. To make this happen we set the binary version to
