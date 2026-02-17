@@ -40,6 +40,7 @@ go_test(
     ],
     embed = [":upgradecluster"],
     deps = [
+        "//pkg/base",
         "//pkg/kv/kvserver/liveness/livenesspb",
         "//pkg/roachpb",
         "//pkg/rpc/rpcbase",
