@@ -409,6 +409,10 @@ func TestReplicaLifecycleDataDriven(t *testing.T) {
 				var ms enginepb.MVCCStats
 				_, err := batcheval.TestingMergeTrigger(
 					ctx, rec, batch, &ms, &merge, hlc.Timestamp{},
+					batcheval.MergeTriggerHelperInput{
+						LHSGCHint: &lhsRS.gcHint,
+						RHSGCHint: &rhsRS.gcHint,
+					},
 				)
 				require.NoError(t, err)
 
