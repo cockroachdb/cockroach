@@ -618,6 +618,8 @@ const (
 	noCandidateDueToUnmatchedLeasePreference
 	noCandidateToAcceptLoad
 	rangeConstraintsViolated
+	rangeConstraintsError
+	rangeTransient
 	numShedResults
 )
 
@@ -643,6 +645,10 @@ func (sr shedResult) SafeFormat(w redact.SafePrinter, _ rune) {
 		w.SafeString("no-cand-to-accept-load")
 	case rangeConstraintsViolated:
 		w.SafeString("constraint-violation")
+	case rangeConstraintsError:
+		w.SafeString("constraint-error")
+	case rangeTransient:
+		w.SafeString("range-transient")
 	default:
 		w.SafeString("unknown")
 	}

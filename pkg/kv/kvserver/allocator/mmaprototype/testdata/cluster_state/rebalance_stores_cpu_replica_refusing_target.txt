@@ -106,6 +106,6 @@ rebalance-stores store-id=1
 	overloaded:
 		lease-grace: [s2, s3]
 		short: [s1]
-	failure: [{s1, total: 3, not-overloaded:2, no-cand:1}]
+	failure: [{s1, total: 2, not-overloaded:2}]
 	no-ranges-evaluated: [s2, s3]
 pending(0)
