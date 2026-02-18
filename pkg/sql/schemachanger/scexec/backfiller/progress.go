@@ -157,8 +157,9 @@ func newBackfillProgress(codec keys.SQLCodec, bp scexec.BackfillProgress) *backf
 		EndKey: indexPrefix.PrefixEnd(),
 	}
 	return &backfillProgress{
-		BackfillProgress: bp,
-		totalSpan:        indexSpan,
+		BackfillProgress:                   bp,
+		totalSpan:                          indexSpan,
+		lastPersistedDistributedMergePhase: bp.DistributedMergePhase,
 	}
 }
 
@@ -181,6 +182,12 @@ type backfillProgress struct {
 	// totalSpan represents the complete span of the source index being
 	// backfilled.
 	totalSpan roachpb.Span
+
+	// lastPersistedDistributedMergePhase tracks the last successfully persisted
+	// DistributedMergePhase value. Used to detect when phase transitions have
+	// been committed to the database. This enables lazy cleanup of SST files from
+	// previous phases.
+	lastPersistedDistributedMergePhase int32
 }
 
 func (p backfillProgress) matches(bf scexec.Backfill) error {

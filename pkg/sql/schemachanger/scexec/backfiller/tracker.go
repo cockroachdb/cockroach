@@ -13,6 +13,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/bulkutil"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scexec"
@@ -43,7 +44,8 @@ type RangeCounter interface {
 // records the remaining spans of the source index to scan.
 type Tracker struct {
 	trackerConfig
-	codec keys.SQLCodec
+	codec   keys.SQLCodec
+	cleaner *phaseTransitionCleaner // Optional: nil if no cleanup needed
 
 	mu struct {
 		syncutil.Mutex
@@ -56,6 +58,10 @@ type Tracker struct {
 var _ scexec.BackfillerTracker = (*Tracker)(nil)
 
 // NewTracker constructs a new Tracker.
+//
+// If cleaner is non-nil, the tracker will perform SST cleanup when phase
+// transitions are detected. The caller is responsible for closing the cleaner.
+// If nil, cleanup is disabled.
 func NewTracker(
 	codec keys.SQLCodec,
 	counter RangeCounter,
@@ -63,13 +69,24 @@ func NewTracker(
 	db isql.DB,
 	jobBackfillProgress []jobspb.BackfillProgress,
 	jobMergeProgress []jobspb.MergeProgress,
+	cleaner *bulkutil.BulkJobCleaner,
 ) *Tracker {
-	return newTracker(
+	tr := newTracker(
 		codec,
 		newTrackerConfig(codec, counter, job, db),
 		convertFromJobBackfillProgress(codec, jobBackfillProgress),
 		convertFromJobMergeProgress(codec, jobMergeProgress),
 	)
+
+	// Configure cleanup if cleaner provided.
+	if cleaner != nil {
+		tr.cleaner = &phaseTransitionCleaner{
+			jobID:   job.ID(),
+			cleaner: cleaner,
+		}
+	}
+
+	return tr
 }
 
 func newTracker(
@@ -259,7 +276,58 @@ func (b *Tracker) FlushCheckpoint(ctx context.Context) error {
 		return false
 	})
 	log.Dev.Infof(ctx, "writing %d backfill checkpoints and %d merge checkpoints", len(bps), len(mps))
-	return b.writeCheckpoint(ctx, bps, mps)
+	if err := b.writeCheckpoint(ctx, bps, mps); err != nil {
+		return err
+	}
+
+	// After successful write, detect phase transitions and handle cleanup.
+	if b.cleaner != nil {
+		transitions := b.detectPhaseTransitions(ctx, bps)
+		for _, transition := range transitions {
+			if err := b.cleaner.cleanupTransition(ctx, transition); err != nil {
+				log.Ops.Warningf(ctx, "phase transition cleanup failed: %v", err)
+			}
+		}
+	}
+
+	return nil
+}
+
+// detectPhaseTransitions detects and records phase transitions that occurred
+// after checkpoint persistence. It returns the list of detected transitions.
+func (b *Tracker) detectPhaseTransitions(
+	ctx context.Context, bps []scexec.BackfillProgress,
+) []phaseTransition {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+
+	var transitions []phaseTransition
+	for _, bp := range bps {
+		key := toBackfillKey(bp.Backfill)
+		p, exists := b.mu.backfillProgress[key]
+		if !exists {
+			continue
+		}
+
+		oldPhase := p.lastPersistedDistributedMergePhase
+		newPhase := bp.DistributedMergePhase
+
+		if oldPhase != newPhase {
+			log.Dev.Infof(ctx, "detected persisted distributed merge phase transition for table %d: phase %d → %d",
+				bp.Backfill.TableID, oldPhase, newPhase)
+
+			transitions = append(transitions, phaseTransition{
+				TableID:            bp.Backfill.TableID,
+				OldPhase:           oldPhase,
+				NewPhase:           newPhase,
+				SSTStoragePrefixes: bp.SSTStoragePrefixes,
+			})
+			// Update last persisted phase.
+			p.lastPersistedDistributedMergePhase = newPhase
+		}
+	}
+
+	return transitions
 }
 
 func (b *Tracker) getTableIndexBackfillProgress(bf scexec.Backfill) (backfillProgress, bool) {
