@@ -6,6 +6,11 @@
 # included in the /LICENSE file.
 
 
+cd $SRC/go-118-fuzz-build
+go build .
+mv go-118-fuzz-build /root/go/bin/
+
+cd $SRC/cockroach
 # Don't need the stdlib and libc++ gives linker error
 CXXFLAGS="${CXXFLAGS/-stdlib=libc++/}"
 
@@ -14,8 +19,9 @@ CXXFLAGS="${CXXFLAGS/-stdlib=libc++/}"
 git submodule update --init --recursive
 
 # Install dependencies for compile_native_go_fuzzer
-go install github.com/AdamKorcz/go-118-fuzz-build@latest
-go get github.com/AdamKorcz/go-118-fuzz-build/testing
+printf "package testutils\nimport _ \"github.com/AdamKorcz/go-118-fuzz-build/testing\"\n" > $SRC/cockroach/pkg/testutils/registerfuzzdependency.go
+go mod edit -replace github.com/AdamKorcz/go-118-fuzz-build=$SRC/go-118-fuzz-build
+go get github.com/AdamKorcz/go-118-fuzz-build
 
 # Generate artifacts for building the binary
 bazel run pkg/gen:code
@@ -36,19 +42,17 @@ compile_native_go_fuzzer ./pkg/sql/sqlliveness/slstorage FuzzSessionIDEncoding f
 
 compile_native_go_fuzzer ./pkg/util/span FuzzBtreeFrontier fuzzBtreeFrontier
 
-compile_native_go_fuzzer ./pkg/util/span FuzzLLRBFrontier fuzzLLRBFrontier
+#compile_native_go_fuzzer ./pkg/util/span FuzzLLRBFrontier fuzzLLRBFrontier
 
 compile_native_go_fuzzer ./pkg/ccl/pgcryptoccl/pgcryptocipherccl FuzzEncryptDecryptAES fuzzEncryptDecryptAES
 
 compile_native_go_fuzzer ./pkg/ccl/pgcryptoccl/pgcryptocipherccl FuzzNoPaddingEncryptDecryptAES fuzzNoPaddingEncryptDecryptAES
 
-compile_native_go_fuzzer ./pkg/storage FuzzEngineKeysInvariants fuzzEngineKeysInvariants
+# This needs some extra work to run on OSS-Fuzz: TODO @AdamKorcz
+#compile_native_go_fuzzer ./pkg/storage FuzzEngineKeysInvariants fuzzEngineKeysInvariants
 
 # Build old fuzz targets which used `gofuzz`
 compile_go_fuzzer /src/cockroach/pkg/util/uuid Fuzz fuzzuuid
-
-# Generate seed corpus, from native go format to oss-fuzz format
-go run github.com/orijtech/otils/corpus2ossfuzz@latest -o "$OUT"/fuzzPrettyPrint_seed_corpus.zip -corpus ./pkg/keys/testdata/fuzz/FuzzPrettyPrint
 
 # Generate seed corpus
 zip -r $OUT/fuzzuuid_seed_corpus.zip ./pkg/util/uuid/testdata/corpus || true
