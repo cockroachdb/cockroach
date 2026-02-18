@@ -8,8 +8,10 @@ package metricspoller
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
+	"github.com/cockroachdb/cockroach/pkg/obs/clustermetrics/cmreader"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -55,6 +57,13 @@ func (mp *metricsPoller) Resume(ctx context.Context, execCtx interface{}) error 
 
 	exec := execCtx.(sql.JobExecContext)
 	metrics := exec.ExecCfg().JobRegistry.MetricsStruct().JobSpecificMetrics[jobspb.TypePollJobsStats].(pollerMetrics)
+
+	// Start cluster metrics registry syncer loop
+	if exec.ExecCfg().Settings.Version.IsActive(ctx, clusterversion.V26_2_AddSystemClusterMetricsTable) {
+		if err := cmreader.Start(ctx, exec.ExecCfg()); err != nil {
+			log.Dev.Errorf(ctx, "failed to start cluster metrics registry syncer: %v", err)
+		}
+	}
 
 	var t timeutil.Timer
 	defer t.Stop()

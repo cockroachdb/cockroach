@@ -45,6 +45,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/multitenant/mtinfopb"
 	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities"
 	"github.com/cockroachdb/cockroach/pkg/obs/clustermetrics/cmwriter"
+	clustermetricutils "github.com/cockroachdb/cockroach/pkg/obs/clustermetrics/utils"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
@@ -1163,6 +1164,9 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 	}
 	if tableMetadataKnobs := cfg.TestingKnobs.TableMetadata; tableMetadataKnobs != nil {
 		execCfg.TableMetadataKnobs = tableMetadataKnobs.(*tablemetadatacacheutil.TestingKnobs)
+	}
+	if clusterMetricsKnobs := cfg.TestingKnobs.ClusterMetricsKnobs; clusterMetricsKnobs != nil {
+		execCfg.ClusterMetricsKnobs = clusterMetricsKnobs.(*clustermetricutils.TestingKnobs)
 	}
 
 	// Set up internal memory metrics for use by internal SQL executors.

@@ -9,10 +9,12 @@ go_library(
     importpath = "github.com/cockroachdb/cockroach/pkg/jobs/metricspoller",
     visibility = ["//visibility:public"],
     deps = [
+        "//pkg/clusterversion",
         "//pkg/jobs",
         "//pkg/jobs/jobspb",
         "//pkg/jobs/jobsprotectedts",
         "//pkg/kv/kvserver/protectedts/ptpb",
+        "//pkg/obs/clustermetrics/cmreader",
         "//pkg/roachpb",
         "//pkg/scheduledjobs",
         "//pkg/settings/cluster",

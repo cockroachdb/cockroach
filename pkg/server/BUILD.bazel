@@ -169,6 +169,7 @@ go_library(
         "//pkg/multitenant/tenantcostmodel",
         "//pkg/obs/clustermetrics/cmreader",
         "//pkg/obs/clustermetrics/cmwriter",
+        "//pkg/obs/clustermetrics/utils",
         "//pkg/raft",
         "//pkg/raft/raftpb",
         "//pkg/roachpb",
