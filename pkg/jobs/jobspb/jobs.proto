@@ -260,6 +260,7 @@ message LogicalReplicationDetails {
   enum ApplyMode {
     Immediate = 0;
     Validated = 1;
+    Transaction = 2;
   }
 
   ApplyMode mode = 9;

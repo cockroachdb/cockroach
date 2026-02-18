@@ -185,9 +185,7 @@ func (t *tableHandler) attemptBatch(
 				// Skip: handled in its own transaction.
 			case event.PrevRow == nil:
 				stats.inserts++
-				err := t.session.Savepoint(ctx, func(ctx context.Context) error {
-					return t.sqlWriter.InsertRow(ctx, event.RowTimestamp, event.Row)
-				})
+				err := t.sqlWriter.InsertRow(ctx, event.RowTimestamp, event.Row)
 				if isLwwLoser(err) {
 					// Insert may observe a LWW failure if it attempts to write over a tombstone.
 					stats.kvLwwLosers++

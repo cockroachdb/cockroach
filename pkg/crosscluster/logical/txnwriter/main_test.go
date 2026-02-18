@@ -1,9 +1,9 @@
-// Copyright 2025 The Cockroach Authors.
+// Copyright 2026 The Cockroach Authors.
 //
 // Use of this software is governed by the CockroachDB Software License
 // included in the /LICENSE file.
 
-package sqlwriter_test
+package txnwriter_test
 
 import (
 	"os"
