@@ -357,11 +357,11 @@ type mockDRPCStream struct {
 
 var _ drpc.Stream = (*mockDRPCStream)(nil)
 
-func (s *mockDRPCStream) Context() context.Context        { return s.ctx }
+func (s *mockDRPCStream) Context() context.Context                  { return s.ctx }
 func (s *mockDRPCStream) MsgSend(drpc.Message, drpc.Encoding) error { return nil }
 func (s *mockDRPCStream) MsgRecv(drpc.Message, drpc.Encoding) error { return nil }
-func (s *mockDRPCStream) CloseSend() error                 { return nil }
-func (s *mockDRPCStream) Close() error                     { return nil }
+func (s *mockDRPCStream) CloseSend() error                          { return nil }
+func (s *mockDRPCStream) Close() error                              { return nil }
 
 func TestDRPCStreamServerRequestInterceptor(t *testing.T) {
 	defer leaktest.AfterTest(t)()

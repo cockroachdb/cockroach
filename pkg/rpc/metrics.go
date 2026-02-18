@@ -8,10 +8,8 @@ package rpc
 import (
 	"context"
 	"fmt"
-	"io"
 	"net/http"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/VividCortex/ewma"
@@ -685,8 +683,7 @@ type Reportable struct {
 
 // reporter builds a DRPC metrics reporter with pre-computed label maps.
 func (r *Reportable) reporter(
-	ctx context.Context, meta drpcCallMeta,
-	kind drpcMetricsKind,
+	ctx context.Context, meta drpcCallMeta, kind drpcMetricsKind,
 ) (drpcMetricsReporter, context.Context) {
 	baseLabels := map[string]string{
 		RPCTypeLabel:    meta.drpcType,
@@ -716,70 +713,6 @@ func (r *Reportable) serverReporter(
 	reporter, ctx := r.reporter(ctx, meta, drpcMetricsServer)
 	r.ServerMetrics.ServerStarted.Inc(reporter.(*drpcReporter).baseLabels, 1)
 	return reporter, ctx
-}
-
-// clientReporter builds a DRPC reporter and records the start counter.
-func (r *Reportable) clientReporter(
-	ctx context.Context, meta drpcCallMeta,
-) (drpcMetricsReporter, context.Context) {
-	reporter, ctx := r.reporter(ctx, meta, drpcMetricsClient)
-	r.ClientMetrics.ClientStarted.Inc(reporter.(*drpcReporter).baseLabels, 1)
-	return reporter, ctx
-}
-
-type monitoredDRPCClientStream struct {
-	drpc.Stream
-	startTime time.Time
-	reporter  drpcMetricsReporter
-	once      sync.Once
-}
-
-func (s *monitoredDRPCClientStream) finish(err error) {
-	s.once.Do(func() {
-		s.reporter.PostCall(err, timeutil.Since(s.startTime))
-	})
-}
-
-func (s *monitoredDRPCClientStream) MsgSend(msg drpc.Message, enc drpc.Encoding) error {
-	start := timeutil.Now()
-	err := s.Stream.MsgSend(msg, enc)
-	s.reporter.PostMsgSend(timeutil.Since(start))
-	if err != nil {
-		if err == io.EOF {
-			s.finish(nil)
-			return err
-		}
-		s.finish(err)
-	}
-	return err
-}
-
-func (s *monitoredDRPCClientStream) MsgRecv(msg drpc.Message, enc drpc.Encoding) error {
-	start := timeutil.Now()
-	err := s.Stream.MsgRecv(msg, enc)
-	s.reporter.PostMsgReceive(timeutil.Since(start))
-	if err != nil {
-		if err == io.EOF {
-			s.finish(nil)
-			return err
-		}
-		s.finish(err)
-	}
-	return err
-}
-
-func (s *monitoredDRPCClientStream) CloseSend() error {
-	err := s.Stream.CloseSend()
-	if err != nil {
-		s.finish(err)
-	}
-	return err
-}
-
-func (s *monitoredDRPCClientStream) Close() error {
-	err := s.Stream.Close()
-	s.finish(err)
-	return err
 }
 
 type monitoredDRPCServerStream struct {
@@ -959,8 +892,8 @@ func NewDRPCUnaryServerRequestMetricsInterceptor(
 // The interceptor will only record durations if shouldRecord returns true.
 // Otherwise, this interceptor will be a no-op.
 func NewDRPCStreamServerRequestMetricsInterceptor(
-	reportable *Reportable,
-	shouldRecord func(rpc string) bool) DRPCStreamServerRequestMetricsInterceptor {
+	reportable *Reportable, shouldRecord func(rpc string) bool,
+) DRPCStreamServerRequestMetricsInterceptor {
 	return func(
 		stream drpc.Stream,
 		rpc string,
