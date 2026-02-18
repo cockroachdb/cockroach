@@ -14,6 +14,7 @@ import (
 	tasksrepomock "github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/repositories/tasks/mocks"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/services/tasks/types"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/utils/logger"
+	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
@@ -21,18 +22,18 @@ import (
 
 func TestPurgeTasks(t *testing.T) {
 	mockRepo := &tasksrepomock.ITasksRepository{}
-	taskService := NewService(mockRepo, "test-instance", types.Options{
+	taskService := NewService(mockRepo, "test-instance", nil, types.Options{
 		PurgeDoneTaskOlderThan:   time.Second,
 		PurgeFailedTaskOlderThan: time.Minute,
 	})
 
 	mockRepo.
 		On("PurgeTasks", mock.Anything, mock.Anything, time.Second, tasks.TaskStateDone).
-		Return(2, nil).
+		Return([]uuid.UUID{uuid.MakeV4(), uuid.MakeV4()}, nil).
 		Once()
 	mockRepo.
 		On("PurgeTasks", mock.Anything, mock.Anything, time.Minute, tasks.TaskStateFailed).
-		Return(1, nil).
+		Return([]uuid.UUID{uuid.MakeV4()}, nil).
 		Once()
 
 	done, failed, err := taskService.PurgeTasks(context.Background(), logger.DefaultLogger)
@@ -44,13 +45,13 @@ func TestPurgeTasks(t *testing.T) {
 
 func TestPurgeTasks_ErrorOnDonePurge(t *testing.T) {
 	mockRepo := &tasksrepomock.ITasksRepository{}
-	taskService := NewService(mockRepo, "test-instance", types.Options{
+	taskService := NewService(mockRepo, "test-instance", nil, types.Options{
 		PurgeDoneTaskOlderThan: time.Second,
 	})
 
 	mockRepo.
 		On("PurgeTasks", mock.Anything, mock.Anything, time.Second, tasks.TaskStateDone).
-		Return(0, errors.New("some error")).
+		Return([]uuid.UUID(nil), errors.New("some error")).
 		Once()
 
 	done, failed, err := taskService.PurgeTasks(context.Background(), logger.DefaultLogger)
@@ -63,18 +64,18 @@ func TestPurgeTasks_ErrorOnDonePurge(t *testing.T) {
 
 func TestPurgeTasks_ErrorOnFailedPurge(t *testing.T) {
 	mockRepo := &tasksrepomock.ITasksRepository{}
-	taskService := NewService(mockRepo, "test-instance", types.Options{
+	taskService := NewService(mockRepo, "test-instance", nil, types.Options{
 		PurgeDoneTaskOlderThan:   time.Second,
 		PurgeFailedTaskOlderThan: time.Minute,
 	})
 	mockRepo.
 		On("PurgeTasks", mock.Anything, mock.Anything, time.Second, tasks.TaskStateDone).
-		Return(2, nil).
+		Return([]uuid.UUID{uuid.MakeV4(), uuid.MakeV4()}, nil).
 		Once()
 
 	mockRepo.
 		On("PurgeTasks", mock.Anything, mock.Anything, time.Minute, tasks.TaskStateFailed).
-		Return(0, errors.New("some error")).
+		Return([]uuid.UUID(nil), errors.New("some error")).
 		Once()
 
 	done, failed, err := taskService.PurgeTasks(context.Background(), logger.DefaultLogger)
@@ -87,11 +88,11 @@ func TestPurgeTasks_ErrorOnFailedPurge(t *testing.T) {
 
 func TestPurgeTasksInState_Error(t *testing.T) {
 	mockRepo := &tasksrepomock.ITasksRepository{}
-	taskService := NewService(mockRepo, "test-instance", types.Options{})
+	taskService := NewService(mockRepo, "test-instance", nil, types.Options{})
 
 	mockRepo.
 		On("PurgeTasks", mock.Anything, mock.Anything, time.Minute, tasks.TaskStatePending).
-		Return(0, errors.New("some error")).
+		Return([]uuid.UUID(nil), errors.New("some error")).
 		Once()
 
 	count, err := taskService.purgeTasksInState(context.Background(), logger.DefaultLogger, time.Minute, tasks.TaskStatePending)
@@ -102,11 +103,11 @@ func TestPurgeTasksInState_Error(t *testing.T) {
 
 func TestPurgeTasksInState(t *testing.T) {
 	mockRepo := &tasksrepomock.ITasksRepository{}
-	taskService := NewService(mockRepo, "test-instance", types.Options{})
+	taskService := NewService(mockRepo, "test-instance", nil, types.Options{})
 
 	mockRepo.
 		On("PurgeTasks", mock.Anything, mock.Anything, time.Minute, tasks.TaskStatePending).
-		Return(3, nil).
+		Return([]uuid.UUID{uuid.MakeV4(), uuid.MakeV4(), uuid.MakeV4()}, nil).
 		Once()
 
 	count, err := taskService.purgeTasksInState(context.Background(), logger.DefaultLogger, time.Minute, tasks.TaskStatePending)

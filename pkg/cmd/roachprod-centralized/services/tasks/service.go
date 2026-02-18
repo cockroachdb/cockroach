@@ -22,6 +22,7 @@ import (
 	ttasks "github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/services/tasks/tasks"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/services/tasks/types"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/utils/logger"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/utils/logstore"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
@@ -44,6 +45,7 @@ type Service struct {
 
 	instanceID string
 	store      tasksrepo.ITasksRepository
+	logStore   logstore.ILogStore // nil when not configured
 	metrics    *taskMetrics
 
 	// Task registry fields
@@ -76,7 +78,7 @@ type taskMetrics struct {
 
 // NewService creates a new tasks service.
 func NewService(
-	store tasksrepo.ITasksRepository, instanceID string, options types.Options,
+	store tasksrepo.ITasksRepository, instanceID string, ls logstore.ILogStore, options types.Options,
 ) *Service {
 
 	// Workers < 0 means explicitly disabled (API-only mode)
@@ -107,6 +109,7 @@ func NewService(
 		options:          options,
 		instanceID:       instanceID,
 		store:            store,
+		logStore:         ls,
 		managedPkgs:      make(map[string]bool),
 		managedTasks:     make(map[string]types.ITask),
 		taskServices:     make(map[string]types.ITasksService),
@@ -429,6 +432,21 @@ func (s *Service) IncrementTimeouts(taskType string) {
 
 func (s *Service) GetDefaultTimeout() types.TimeoutGetter {
 	return &timeoutGetter{timeout: s.options.DefaultTasksTimeout}
+}
+
+// NewLogSink creates a log sink for the given task.
+// Returns nil if log streaming is not configured.
+func (s *Service) NewLogSink(taskID uuid.UUID) logger.LogSink {
+	if s.logStore == nil {
+		return nil
+	}
+	return s.logStore.NewSink(taskID)
+}
+
+// GetLogStore returns the log store used by this service.
+// Returns nil if log streaming is not configured.
+func (s *Service) GetLogStore() logstore.ILogStore {
+	return s.logStore
 }
 
 // timeoutGetter implements types.TimeoutGetter

@@ -40,7 +40,7 @@ var (
 	updateStateQuery         = regexp.MustCompile(regexp.QuoteMeta("UPDATE tasks SET state = $1, update_datetime = $2 WHERE id = $3"))
 	updateErrorQuery         = regexp.MustCompile(regexp.QuoteMeta("UPDATE tasks SET error = $1, update_datetime = $2 WHERE id = $3"))
 	claimNextTaskQuery       = regexp.MustCompile(`(?s)UPDATE tasks\s+SET state = \$1, consumer_id = \$2, update_datetime = \$3.*RETURNING id, type, state, consumer_id, creation_datetime, update_datetime, payload, error, reference, concurrency_key`)
-	purgeTasksQuery          = regexp.MustCompile(regexp.QuoteMeta("DELETE FROM tasks WHERE state = $1 AND update_datetime < $2"))
+	purgeTasksQuery          = regexp.MustCompile(regexp.QuoteMeta("DELETE FROM tasks WHERE state = $1 AND update_datetime < $2 RETURNING id"))
 	statsQuery               = regexp.MustCompile(regexp.QuoteMeta("SELECT state, type, count(*) FROM tasks GROUP BY state, type ORDER BY state, type"))
 	cleanupStaleQuery        = regexp.MustCompile(`(?s)UPDATE tasks\s+SET state = \$1, consumer_id = NULL, update_datetime = \$2.*LIMIT \$5`)
 	mostRecentCompletedQuery = regexp.MustCompile(`(?s)SELECT id, type, state, consumer_id, creation_datetime, update_datetime, payload, error, reference, concurrency_key\s+FROM tasks\s+WHERE type = \$1 AND state = \$2\s+ORDER BY update_datetime DESC\s+LIMIT 1`)
@@ -200,13 +200,21 @@ func TestGetStatistics_ReturnsCounts(t *testing.T) {
 func TestPurgeTasks_ReturnsDeletedCount(t *testing.T) {
 	repo, mock := newMockedTasksRepo(t)
 
-	mock.ExpectExec(purgeTasksQuery.String()).
+	id1 := uuid.MakeV4()
+	id2 := uuid.MakeV4()
+	id3 := uuid.MakeV4()
+	rows := sqlmock.NewRows([]string{"id"}).
+		AddRow(id1.String()).
+		AddRow(id2.String()).
+		AddRow(id3.String())
+
+	mock.ExpectQuery(purgeTasksQuery.String()).
 		WithArgs(string(tasks.TaskStateDone), sqlmock.AnyArg()).
-		WillReturnResult(sqlmock.NewResult(0, 3))
+		WillReturnRows(rows)
 
 	deleted, err := repo.PurgeTasks(context.Background(), logger.DefaultLogger, time.Hour, tasks.TaskStateDone)
 	require.NoError(t, err)
-	require.Equal(t, 3, deleted)
+	require.Len(t, deleted, 3)
 }
 
 func TestClaimNextTask_ReturnsTask(t *testing.T) {

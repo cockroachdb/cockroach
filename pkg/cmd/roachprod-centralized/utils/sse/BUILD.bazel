@@ -1,0 +1,20 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "sse",
+    srcs = ["stream.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/utils/sse",
+    visibility = ["//visibility:public"],
+    deps = ["@com_github_gin_gonic_gin//:gin"],
+)
+
+go_test(
+    name = "sse_test",
+    srcs = ["stream_test.go"],
+    embed = [":sse"],
+    deps = [
+        "@com_github_gin_gonic_gin//:gin",
+        "@com_github_stretchr_testify//assert",
+        "@com_github_stretchr_testify//require",
+    ],
+)

@@ -28,7 +28,7 @@ func TestProcessTasksUpdateStatisticsRoutine(t *testing.T) {
 		CollectMetrics:           false, // Disable auto-creation
 		StatisticsUpdateInterval: 1 * time.Millisecond,
 	}
-	taskService := NewService(mockRepo, "test-instance-stats", taskServiceOpts)
+	taskService := NewService(mockRepo, "test-instance-stats", nil, taskServiceOpts)
 	// Manually create metrics with isolated registry for testing
 	taskService.metrics = taskService.newMetrics(prometheus.NewRegistry())
 	// Enable metrics flag after manual creation
@@ -60,7 +60,7 @@ func TestProcessTasksUpdateStatisticsRoutine_Error(t *testing.T) {
 		CollectMetrics:           false, // Disable auto-creation
 		StatisticsUpdateInterval: 1 * time.Millisecond,
 	}
-	taskService := NewService(mockRepo, "test-instance-stats-error", taskServiceOpts)
+	taskService := NewService(mockRepo, "test-instance-stats-error", nil, taskServiceOpts)
 	// Manually create metrics with isolated registry for testing
 	taskService.metrics = taskService.newMetrics(prometheus.NewRegistry())
 	// Enable metrics flag after manual creation
@@ -93,7 +93,7 @@ func TestProcessTasksUpdateStatisticsRoutine_NoMetrics(t *testing.T) {
 	taskServiceOpts := types.Options{
 		StatisticsUpdateInterval: 1 * time.Millisecond,
 	}
-	taskService := NewService(mockRepo, "test-instance", taskServiceOpts)
+	taskService := NewService(mockRepo, "test-instance", nil, taskServiceOpts)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -107,7 +107,7 @@ func TestProcessTasksUpdateStatisticsRoutine_NoMetrics(t *testing.T) {
 
 func TestUpdateMetrics(t *testing.T) {
 	mockRepo := &tasksrepomock.ITasksRepository{}
-	taskService := NewService(mockRepo, "test-instance-metrics", types.Options{
+	taskService := NewService(mockRepo, "test-instance-metrics", nil, types.Options{
 		CollectMetrics: false, // Disable auto-creation
 	})
 	// Manually create metrics with isolated registry for testing
@@ -140,7 +140,7 @@ func TestUpdateMetrics(t *testing.T) {
 
 func TestUpdateMetrics_NoMetrics(t *testing.T) {
 	mockRepo := &tasksrepomock.ITasksRepository{}
-	taskService := NewService(mockRepo, "test-instance", types.Options{})
+	taskService := NewService(mockRepo, "test-instance", nil, types.Options{})
 
 	err := taskService.updateMetrics(context.Background(), logger.DefaultLogger)
 	assert.ErrorIs(t, err, types.ErrMetricsCollectionDisabled)
@@ -149,7 +149,7 @@ func TestUpdateMetrics_NoMetrics(t *testing.T) {
 
 func TestUpdateMetrics_Error(t *testing.T) {
 	mockRepo := &tasksrepomock.ITasksRepository{}
-	taskService := NewService(mockRepo, "test-instance-metrics-error", types.Options{
+	taskService := NewService(mockRepo, "test-instance-metrics-error", nil, types.Options{
 		CollectMetrics: false, // Disable auto-creation
 	})
 	// Manually create metrics with isolated registry for testing

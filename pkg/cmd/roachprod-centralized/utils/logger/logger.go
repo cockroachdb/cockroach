@@ -11,6 +11,7 @@ import (
 	"log/slog"
 	"os"
 	"strings"
+	"time"
 )
 
 var (
@@ -26,6 +27,7 @@ var (
 type Logger struct {
 	*slog.Logger
 	LogLevel slog.Level
+	sink     LogSink // nil unless explicitly set via WithSink
 }
 
 // NewLogger creates a new Logger instance with the default logger
@@ -56,6 +58,17 @@ func (l *Logger) With(attrs ...slog.Attr) *Logger {
 	return &Logger{
 		LogLevel: l.LogLevel,
 		Logger:   slog.New(l.Logger.Handler().WithAttrs(attrs)),
+		sink:     l.sink,
+	}
+}
+
+// WithSink returns a shallow copy of the logger with the given LogSink attached.
+// LineWriters created from this logger will forward entries to the sink.
+func (l *Logger) WithSink(s LogSink) *Logger {
+	return &Logger{
+		LogLevel: l.LogLevel,
+		Logger:   l.Logger,
+		sink:     s,
 	}
 }
 
@@ -91,13 +104,14 @@ type LineWriter struct {
 	level  slog.Level
 	attrs  []slog.Attr
 	buf    []byte
+	sink   LogSink // inherited from logger, may be nil
 }
 
 // NewLineWriter returns an io.WriteCloser that buffers subprocess output
 // by newline and logs each complete line at the given level with the
 // provided attributes.
 func (l *Logger) NewLineWriter(level slog.Level, attrs ...slog.Attr) *LineWriter {
-	return &LineWriter{logger: l, level: level, attrs: attrs}
+	return &LineWriter{logger: l, level: level, attrs: attrs, sink: l.sink}
 }
 
 // Write buffers incoming data and logs each complete line.
@@ -112,16 +126,44 @@ func (w *LineWriter) Write(p []byte) (int, error) {
 		w.buf = w.buf[idx+1:]
 		if line != "" {
 			w.logger.LogAttrs(context.Background(), w.level, line, w.attrs...)
+			w.writeToSink(line)
 		}
 	}
 	return len(p), nil
 }
 
 // Close flushes any remaining buffered content (incomplete last line).
+// The sink is NOT closed here — the task executor is responsible for
+// closing the sink, since it is shared across multiple LineWriters
+// (stdout + stderr).
 func (w *LineWriter) Close() error {
 	if len(w.buf) > 0 {
-		w.logger.LogAttrs(context.Background(), w.level, string(w.buf), w.attrs...)
+		line := string(w.buf)
+		w.logger.LogAttrs(context.Background(), w.level, line, w.attrs...)
+		w.writeToSink(line)
 		w.buf = nil
 	}
 	return nil
+}
+
+// writeToSink forwards a log line to the sink if one is configured.
+// Best-effort: logs a warning but does not fail the write.
+func (w *LineWriter) writeToSink(line string) {
+	if w.sink == nil {
+		return
+	}
+	entry := LogEntry{
+		Timestamp: time.Now().UTC(),
+		Level:     w.level.String(),
+		Message:   line,
+	}
+	if len(w.attrs) > 0 {
+		entry.Attrs = make(map[string]string, len(w.attrs))
+		for _, a := range w.attrs {
+			entry.Attrs[a.Key] = a.Value.String()
+		}
+	}
+	if sinkErr := w.sink.WriteEntry(entry); sinkErr != nil {
+		w.logger.Warn("log sink write failed", slog.Any("error", sinkErr))
+	}
 }

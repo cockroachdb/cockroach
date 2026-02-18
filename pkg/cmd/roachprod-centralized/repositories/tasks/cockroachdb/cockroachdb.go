@@ -274,23 +274,36 @@ func (r *CRDBTasksRepo) GetStatistics(
 }
 
 // PurgeTasks deletes tasks that are in the specified state and older than the given duration.
+// Returns the IDs of tasks that were purged.
 func (r *CRDBTasksRepo) PurgeTasks(
 	ctx context.Context, l *logger.Logger, olderThan time.Duration, state tasks.TaskState,
-) (int, error) {
-	query := "DELETE FROM tasks WHERE state = $1 AND update_datetime < $2"
+) ([]uuid.UUID, error) {
+	query := "DELETE FROM tasks WHERE state = $1 AND update_datetime < $2 RETURNING id"
 	cutoff := timeutil.Now().Add(-olderThan)
 
-	result, err := r.db.ExecContext(ctx, query, string(state), cutoff)
+	rows, err := r.db.QueryContext(ctx, query, string(state), cutoff)
 	if err != nil {
-		return 0, errors.Wrap(err, "failed to purge tasks")
+		return nil, errors.Wrap(err, "purge tasks")
+	}
+	defer rows.Close()
+
+	var purgedIDs []uuid.UUID
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			return nil, errors.Wrap(err, "scan purged task ID")
+		}
+		taskID, err := uuid.FromString(id)
+		if err != nil {
+			return nil, errors.Wrap(err, "parse purged task ID")
+		}
+		purgedIDs = append(purgedIDs, taskID)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, errors.Wrap(err, "iterate purged task IDs")
 	}
 
-	rowsAffected, err := result.RowsAffected()
-	if err != nil {
-		return 0, errors.Wrap(err, "failed to get purged count")
-	}
-
-	return int(rowsAffected), nil
+	return purgedIDs, nil
 }
 
 // GetTasksForProcessing implements distributed task processing with fixed interval polling.

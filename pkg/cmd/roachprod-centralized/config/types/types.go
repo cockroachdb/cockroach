@@ -55,6 +55,11 @@ type Config struct {
 	InstanceHealthTimeoutSeconds int `env:"INSTANCE_HEALTH_TIMEOUT_SECONDS" default:"3" description:"Timeout in seconds to consider an instance healthy"`
 	Tasks                        struct {
 		Workers int `env:"WORKERS" default:"1" description:"Number of workers processing tasks"`
+		Logs    struct {
+			Backend   string `env:"BACKEND" default:"memory" description:"Log store backend (memory, gcs, noop)"`
+			GCSBucket string `env:"GCS_BUCKET" default:"" description:"GCS bucket for task logs"`
+			GCSPrefix string `env:"GCS_PREFIX" default:"tasks" description:"GCS object prefix for task logs"`
+		} `env:"LOGS" description:"Task log storage configuration"`
 	} `env:"TASKS" description:"Tasks configuration"`
 	Database struct {
 		URL         string `env:"URL" default:"" description:"Database connection URL"`

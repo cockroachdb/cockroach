@@ -39,8 +39,8 @@ type ITasksRepository interface {
 	// GetStatistics returns aggregated counts of tasks grouped by their current state.
 	GetStatistics(context.Context, *logger.Logger) (Statistics, error)
 	// PurgeTasks removes tasks in the specified state that are older than the given duration.
-	// Returns the number of tasks that were purged.
-	PurgeTasks(context.Context, *logger.Logger, time.Duration, tasks.TaskState) (int, error)
+	// Returns the IDs of tasks that were purged.
+	PurgeTasks(context.Context, *logger.Logger, time.Duration, tasks.TaskState) ([]uuid.UUID, error)
 	// GetTasksForProcessing retrieves pending tasks and sends them to the provided channel
 	// for worker processing. Uses the instance ID for distributed coordination.
 	GetTasksForProcessing(context.Context, *logger.Logger, chan<- tasks.ITask, string) error

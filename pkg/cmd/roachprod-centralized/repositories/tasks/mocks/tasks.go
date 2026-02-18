@@ -202,22 +202,24 @@ func (_m *ITasksRepository) GetTasksForProcessing(
 // PurgeTasks provides a mock function with given fields: _a0, _a1, _a2, _a3
 func (_m *ITasksRepository) PurgeTasks(
 	_a0 context.Context, _a1 *logger.Logger, _a2 time.Duration, _a3 tasks.TaskState,
-) (int, error) {
+) ([]uuid.UUID, error) {
 	ret := _m.Called(_a0, _a1, _a2, _a3)
 
 	if len(ret) == 0 {
 		panic("no return value specified for PurgeTasks")
 	}
 
-	var r0 int
+	var r0 []uuid.UUID
 	var r1 error
-	if rf, ok := ret.Get(0).(func(context.Context, *logger.Logger, time.Duration, tasks.TaskState) (int, error)); ok {
+	if rf, ok := ret.Get(0).(func(context.Context, *logger.Logger, time.Duration, tasks.TaskState) ([]uuid.UUID, error)); ok {
 		return rf(_a0, _a1, _a2, _a3)
 	}
-	if rf, ok := ret.Get(0).(func(context.Context, *logger.Logger, time.Duration, tasks.TaskState) int); ok {
+	if rf, ok := ret.Get(0).(func(context.Context, *logger.Logger, time.Duration, tasks.TaskState) []uuid.UUID); ok {
 		r0 = rf(_a0, _a1, _a2, _a3)
 	} else {
-		r0 = ret.Get(0).(int)
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).([]uuid.UUID)
+		}
 	}
 
 	if rf, ok := ret.Get(1).(func(context.Context, *logger.Logger, time.Duration, tasks.TaskState) error); ok {

@@ -1,0 +1,32 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "logstore",
+    srcs = [
+        "gcs.go",
+        "memory.go",
+        "noop.go",
+        "types.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/utils/logstore",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/cmd/roachprod-centralized/utils/logger",
+        "//pkg/util/uuid",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_google_cloud_go_storage//:storage",
+        "@org_golang_google_api//iterator",
+    ],
+)
+
+go_test(
+    name = "logstore_test",
+    srcs = ["memory_test.go"],
+    embed = [":logstore"],
+    deps = [
+        "//pkg/cmd/roachprod-centralized/utils/logger",
+        "//pkg/util/uuid",
+        "@com_github_stretchr_testify//assert",
+        "@com_github_stretchr_testify//require",
+    ],
+)

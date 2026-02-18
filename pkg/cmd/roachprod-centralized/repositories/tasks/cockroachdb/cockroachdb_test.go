@@ -241,7 +241,7 @@ func TestCRDBTasksRepo_PurgeTasks(t *testing.T) {
 	// Purge tasks older than 1 hour
 	purged, err := repo.PurgeTasks(ctx, logger.DefaultLogger, time.Hour, tasks.TaskStateDone)
 	require.NoError(t, err)
-	require.Equal(t, 1, purged)
+	require.Len(t, purged, 1)
 
 	// Verify only the old task was purged
 	_, err = repo.GetTask(ctx, logger.DefaultLogger, oldTask.GetID())

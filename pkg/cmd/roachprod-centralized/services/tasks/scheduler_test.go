@@ -27,7 +27,7 @@ func TestSchedulePurgeTaskRoutine(t *testing.T) {
 		PurgeFailedTaskOlderThan: 20 * time.Hour,
 		PurgeTasksInterval:       1 * time.Millisecond,
 	}
-	taskService := NewService(mockRepo, "test-instance", taskServiceOpts)
+	taskService := NewService(mockRepo, "test-instance", nil, taskServiceOpts)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -62,7 +62,7 @@ func TestSchedulePurgeTaskRoutine_Error(t *testing.T) {
 		PurgeFailedTaskOlderThan: 20 * time.Hour,
 		PurgeTasksInterval:       1 * time.Millisecond,
 	}
-	taskService := NewService(mockRepo, "test-instance", taskServiceOpts)
+	taskService := NewService(mockRepo, "test-instance", nil, taskServiceOpts)
 
 	expectedError := errors.New("some error")
 

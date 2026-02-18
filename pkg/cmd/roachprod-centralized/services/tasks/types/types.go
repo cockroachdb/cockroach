@@ -8,6 +8,7 @@ package types
 import (
 	"context"
 	"fmt"
+	"io"
 	"time"
 
 	pkgauth "github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/auth"
@@ -16,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/utils/filters"
 	filtertypes "github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/utils/filters/types"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/utils/logger"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/utils/logstore"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 )
 
@@ -76,6 +78,11 @@ type IService interface {
 	GetMostRecentCompletedTaskOfType(context.Context, *logger.Logger, string) (tasks.ITask, error)
 	// WaitForTaskCompletion blocks until the task reaches a final state (done/failed) or timeout.
 	WaitForTaskCompletion(context.Context, *logger.Logger, uuid.UUID, time.Duration) error
+	// StreamTaskLogs returns a reader that streams JSONL log entries for a task.
+	// The caller must close the returned reader.
+	StreamTaskLogs(ctx context.Context, l *logger.Logger, taskID uuid.UUID, offset int) (io.ReadCloser, error)
+	// GetLogStore returns the log store for reading task logs.
+	GetLogStore() logstore.ILogStore
 }
 
 // Options contains configuration parameters for the tasks service.

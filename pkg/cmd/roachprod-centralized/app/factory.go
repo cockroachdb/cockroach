@@ -13,6 +13,7 @@ import (
 	"strings"
 	"time"
 
+	"cloud.google.com/go/storage"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/auth"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/auth/bearer"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/auth/disabled"
@@ -55,6 +56,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/utils/database"
 	crdbmigrator "github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/utils/database/cockroachdb"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/utils/logger"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/utils/logstore"
 	"github.com/cockroachdb/errors"
 	_ "github.com/lib/pq"
 	"github.com/prometheus/client_golang/prometheus"
@@ -222,6 +224,12 @@ func NewServicesFromConfig(
 		return nil, errors.Wrap(err, "error creating DNS provider registry")
 	}
 
+	// Create the task log store based on configuration.
+	taskLogStore, err := newLogStore(appCtx, l, cfg)
+	if err != nil {
+		return nil, errors.Wrap(err, "error creating task log store")
+	}
+
 	// Create the task service.
 	// This service is responsible for managing tasks, which are used to perform
 	// operations like syncing clusters or DNS.
@@ -229,6 +237,7 @@ func NewServicesFromConfig(
 	taskService := stasks.NewService(
 		tasksRepository,
 		instanceID,
+		taskLogStore,
 		staskstypes.Options{
 			Workers:        cfg.Tasks.Workers,
 			WorkersEnabled: cfg.Tasks.Workers > 0,
@@ -428,5 +437,42 @@ func NewAuthenticatorFromConfig(
 
 	default:
 		return nil, fmt.Errorf("invalid authentication type: %s (must be 'disabled', 'jwt', or 'bearer')", cfg.Api.Authentication.Type)
+	}
+}
+
+// newLogStore creates a log store based on the task log configuration.
+func newLogStore(
+	ctx context.Context, l *logger.Logger, cfg *configtypes.Config,
+) (logstore.ILogStore, error) {
+	backend := strings.ToLower(cfg.Tasks.Logs.Backend)
+	switch backend {
+	case "memory", "":
+		l.Info("using in-memory task log store")
+		return logstore.NewMemoryLogStore(), nil
+
+	case "gcs":
+		if cfg.Tasks.Logs.GCSBucket == "" {
+			return nil, fmt.Errorf("tasks.logs.gcs_bucket is required when backend=gcs")
+		}
+		client, err := storage.NewClient(ctx)
+		if err != nil {
+			return nil, errors.Wrap(err, "create GCS client for task logs")
+		}
+		prefix := cfg.Tasks.Logs.GCSPrefix
+		if prefix == "" {
+			prefix = "tasks"
+		}
+		l.Info("using GCS task log store",
+			slog.String("bucket", cfg.Tasks.Logs.GCSBucket),
+			slog.String("prefix", prefix),
+		)
+		return logstore.NewGCSLogStore(client, cfg.Tasks.Logs.GCSBucket, prefix), nil
+
+	case "noop":
+		l.Info("using no-op task log store (logs discarded)")
+		return logstore.NewNoopLogStore(), nil
+
+	default:
+		return nil, fmt.Errorf("unsupported task log backend: %s (must be 'memory', 'gcs', or 'noop')", backend)
 	}
 }

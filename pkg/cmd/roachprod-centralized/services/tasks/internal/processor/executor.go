@@ -45,6 +45,9 @@ type TaskExecutor interface {
 	IncrementTimeouts(taskType string)
 	// GetDefaultTimeout returns the default task timeout
 	GetDefaultTimeout() types.TimeoutGetter
+	// NewLogSink creates a log sink for the given task.
+	// Returns nil if log streaming is not configured.
+	NewLogSink(taskID uuid.UUID) logger.LogSink
 }
 
 // ExecuteTask processes a task and updates its status in the repository.
@@ -84,6 +87,20 @@ func ExecuteTask(
 			)
 		}
 		return err
+	}
+
+	// Create log sink for this task execution.
+	sink := executor.NewLogSink(hydratedTask.GetID())
+	if sink != nil {
+		taskLogger = taskLogger.WithSink(sink)
+		defer func() {
+			if closeErr := sink.Close(); closeErr != nil {
+				l.Warn("failed to close log sink",
+					slog.String("task_id", hydratedTask.GetID().String()),
+					slog.Any("error", closeErr),
+				)
+			}
+		}()
 	}
 
 	// Log the hydrated task with deserialized options (not base64 payload)

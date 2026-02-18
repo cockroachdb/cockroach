@@ -108,7 +108,7 @@ func TestPurgeTasks(t *testing.T) {
 	// No sleep needed - we're testing in-memory state
 	deleted, err := repo.PurgeTasks(context.Background(), logger.DefaultLogger, 0, tasks.TaskStatePending)
 	assert.NoError(t, err)
-	assert.Equal(t, 1, deleted, "expected 1 deleted task, got %d", deleted)
+	assert.Len(t, deleted, 1, "expected 1 deleted task, got %v", deleted)
 }
 
 func TestGetTasksForProcessing(t *testing.T) {
@@ -199,7 +199,7 @@ func TestPurgeTasksNoMatch(t *testing.T) {
 	assert.NoError(t, err)
 	deleted, err := repo.PurgeTasks(context.Background(), logger.DefaultLogger, time.Microsecond, tasks.TaskStateRunning)
 	assert.NoError(t, err)
-	assert.Equal(t, 0, deleted, "expected 0 deleted tasks, got %d", deleted)
+	assert.Empty(t, deleted, "expected 0 deleted tasks, got %v", deleted)
 }
 
 func TestGetTasksForProcessingNonPendingTask(t *testing.T) {

@@ -168,27 +168,25 @@ func (s *MemTasksRepo) GetStatistics(
 
 // PurgeTasks deletes tasks from the in-memory tasks map that are
 // from the specified state and older than the specified duration.
+// Returns the IDs of tasks that were purged.
 func (s *MemTasksRepo) PurgeTasks(
 	ctx context.Context, l *logger.Logger, olderThan time.Duration, state tasks.TaskState,
-) (int, error) {
+) ([]uuid.UUID, error) {
 	s.lock.Lock()
 	defer s.lock.Unlock()
 
-	deleted := 0
+	var purgedIDs []uuid.UUID
 	for _, task := range s.tasks {
-
-		// We only delete tasks that have been processed
 		if task.GetState() != state {
 			continue
 		}
-
 		if timeutil.Since(task.GetUpdateDatetime()) > olderThan {
+			purgedIDs = append(purgedIDs, task.GetID())
 			delete(s.tasks, task.GetID())
-			deleted++
 		}
 	}
 
-	return deleted, nil
+	return purgedIDs, nil
 }
 
 // GetTasksForProcessing returns tasks that are pending. The tasks are sent
