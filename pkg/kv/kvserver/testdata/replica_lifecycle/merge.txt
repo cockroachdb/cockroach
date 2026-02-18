@@ -54,11 +54,19 @@ state engine:
 Put: 0,0 /Local/RangeID/2/r/AbortSpan/"00000000-0000-0000-0000-000000000001" (0x01698a726162632d1200ff00ff00ff00ff00ff00ff00ff00ff00ff00ff00ff00ff00ff00ff00ff01000100): key:"m" timestamp:<wall_time:10 > priority:100 
 Put: 0,0 /Local/RangeID/2/r/AbortSpan/"00000000-0000-0000-0000-000000000002" (0x01698a726162632d1200ff00ff00ff00ff00ff00ff00ff00ff00ff00ff00ff00ff00ff00ff00ff02000100): key:"m" timestamp:<wall_time:10 > priority:100 
 
+# Give the RHS a different GC hint so the merge produces a visible GCHint write.
+# The LHS has gc-timestamp=4 (default); with the RHS at gc-timestamp=8, the
+# merged hint should be gc-timestamp=4, gc-timestamp-next=8.
+set-gc-hint range-id=2 gc-timestamp=8
+----
+ok
+
 # Evaluate the merge of RHS into LHS.
 eval-merge lhs-range-id=1 rhs-range-id=2 verbose
 ----
 Put: 0,0 /Local/RangeID/1/r/AbortSpan/"00000000-0000-0000-0000-000000000001" (0x016989726162632d1200ff00ff00ff00ff00ff00ff00ff00ff00ff00ff00ff00ff00ff00ff00ff01000100): key:"m" timestamp:<wall_time:10 > priority:100 
 Put: 0,0 /Local/RangeID/1/r/AbortSpan/"00000000-0000-0000-0000-000000000002" (0x016989726162632d1200ff00ff00ff00ff00ff00ff00ff00ff00ff00ff00ff00ff00ff00ff00ff02000100): key:"m" timestamp:<wall_time:10 > priority:100 
+Put: 0,0 /Local/RangeID/1/r/RangeGCHint (0x016989727267636800): latest_range_delete_timestamp:<> gc_timestamp:<wall_time:4 > gc_timestamp_next:<wall_time:8 > 
 
 # Apply the merge.
 apply-merge range-id=1
@@ -66,6 +74,7 @@ apply-merge range-id=1
 state engine:
 Put: 0,0 /Local/RangeID/1/r/AbortSpan/"00000000-0000-0000-0000-000000000001" (0x016989726162632d1200ff00ff00ff00ff00ff00ff00ff00ff00ff00ff00ff00ff00ff00ff00ff01000100): key:"m" timestamp:<wall_time:10 > priority:100 
 Put: 0,0 /Local/RangeID/1/r/AbortSpan/"00000000-0000-0000-0000-000000000002" (0x016989726162632d1200ff00ff00ff00ff00ff00ff00ff00ff00ff00ff00ff00ff00ff00ff00ff02000100): key:"m" timestamp:<wall_time:10 > priority:100 
+Put: 0,0 /Local/RangeID/1/r/RangeGCHint (0x016989727267636800): latest_range_delete_timestamp:<> gc_timestamp:<wall_time:4 > gc_timestamp_next:<wall_time:8 > 
 Delete (Sized at 71): 0,0 /Local/RangeID/2/r/AbortSpan/"00000000-0000-0000-0000-000000000001" (0x01698a726162632d1200ff00ff00ff00ff00ff00ff00ff00ff00ff00ff00ff00ff00ff00ff00ff01000100): 
 Delete (Sized at 71): 0,0 /Local/RangeID/2/r/AbortSpan/"00000000-0000-0000-0000-000000000002" (0x01698a726162632d1200ff00ff00ff00ff00ff00ff00ff00ff00ff00ff00ff00ff00ff00ff00ff02000100): 
 Delete (Sized at 28): 0,0 /Local/RangeID/2/r/RangeGCThreshold (0x01698a726c67632d00): 
