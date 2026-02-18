@@ -179,6 +179,9 @@ func getDescriptorsByID(
 				if descs[i] != nil {
 					continue
 				}
+				if tc.forceStorageLookupIDs.Contains(id) {
+					continue
+				}
 				desc, vl, err := fn(id)
 				if err != nil {
 					return err
