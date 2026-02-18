@@ -10,7 +10,7 @@ import (
 	"testing"
 )
 
-// benchmark-ci: count=10, benchtime=50x, timeout=20m, suite=manual, post=blocker, threshold=0.3
+// benchmark-ci: count=10, benchtime=50x, timeout=20m, suite=manual, post=release-blocker, threshold=0.3
 func BenchmarkAllArgs(b *testing.B) {
 	// noop
 }
@@ -20,7 +20,7 @@ func BenchmarkCompareArgsOnly(b *testing.B) {
 	// noop
 }
 
-// benchmark-ci: post=blocker
+// benchmark-ci: post=release-blocker
 func BenchmarkPostBlockerOnly(b *testing.B) {
 	// noop
 }
