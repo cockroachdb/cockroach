@@ -1340,6 +1340,69 @@ func TestCompactionCheckpointing(t *testing.T) {
 	validateCompactedBackupForTables(t, db, collectionURI, []string{"bank"}, start, end, noOpts, noOpts, 2)
 }
 
+func TestBackupCompactionProgressTracking(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	defer jobs.TestingSetProgressThresholds()()
+
+	_, db, _, cleanup := backupRestoreTestSetup(
+		t, singleNode, 1000 /* numAccounts */, InitManualReplication,
+	)
+	defer cleanup()
+
+	mutate := func() {
+		db.Exec(t, "UPDATE data.bank SET balance = balance + 1")
+	}
+	collectionURI := []string{"nodelocal://1/backup"}
+	start := getTime()
+	backupStmt := fullBackupQuery(fullCluster, collectionURI, start, noOpts)
+	db.Exec(t, backupStmt)
+	mutate()
+	db.Exec(t, incBackupQuery(fullCluster, collectionURI, noAOST, noOpts))
+	mutate()
+	end := getTime()
+	db.Exec(t, incBackupQuery(fullCluster, collectionURI, end, noOpts))
+
+	var backupPath string
+	db.QueryRow(
+		t,
+		fmt.Sprintf("SHOW BACKUPS IN (%s)", stringifyCollectionURI(collectionURI)),
+	).Scan(&backupPath)
+
+	db.Exec(t, "SET CLUSTER SETTING backup.restore_span.target_size = '1KB'")
+	db.Exec(t, "SET CLUSTER SETTING backup.restore_span.max_file_count = 2")
+	jobID := triggerCompaction(t, db, backupStmt, backupPath, start, end)
+
+	getFrac := func() float64 {
+		var frac float64
+		db.QueryRow(t,
+			"SELECT fraction_completed FROM [SHOW JOBS] WHERE job_id = $1",
+			jobID,
+		).Scan(&frac)
+		return frac
+	}
+	var initialFrac float64
+	testutils.SucceedsSoon(t, func() error {
+		initialFrac = getFrac()
+		if initialFrac == 0 {
+			return fmt.Errorf("waiting for progress update")
+		}
+		return nil
+	})
+	db.Exec(t, "PAUSE JOB $1", jobID)
+	jobutils.WaitForJobToPause(t, db, jobID)
+	db.Exec(t, "RESUME JOB $1", jobID)
+	testutils.SucceedsSoon(t, func() error {
+		frac := getFrac()
+		if frac <= initialFrac && frac != 1 {
+			return fmt.Errorf("waiting for progress update")
+		}
+		return nil
+	})
+	jobutils.WaitForJobToSucceed(t, db, jobID)
+	require.Equal(t, getFrac(), float64(1))
+}
+
 func TestToggleCompactionForRestore(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)

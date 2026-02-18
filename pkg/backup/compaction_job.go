@@ -45,6 +45,10 @@ import (
 	"github.com/gogo/protobuf/types"
 )
 
+const (
+	compactionTotalEntriesInfoKey = "compaction-total-entries"
+)
+
 var (
 	backupCompactionThreshold = settings.RegisterIntSetting(
 		settings.ApplicationLevel,
@@ -834,37 +838,97 @@ func getBackupChain(
 func processProgress(
 	ctx context.Context,
 	execCtx sql.JobExecContext,
+	jobID jobspb.JobID,
 	details jobspb.BackupDetails,
 	manifest *backuppb.BackupManifest,
+	localitySets map[string]*localitySet,
 	progCh <-chan *execinfrapb.RemoteProducerMetadata_BulkProcessorProgress,
 	kmsEnv cloud.KMSEnv,
 ) error {
-	var lastCheckpointTime time.Time
-	// When a processor is done exporting a span, it will send a progress update
-	// to progCh.
-	for progress := range progCh {
-		var progDetails backuppb.BackupManifest_Progress
-		if err := types.UnmarshalAny(&progress.ProgressDetails, &progDetails); err != nil {
-			log.Dev.Errorf(ctx, "unable to unmarshal backup progress details: %+v", err)
+	// Get total entries and current fraction completed.
+	var fractionCompleted float64
+	var totalEntries int
+	err := execCtx.ExecCfg().InternalDB.Txn(ctx, func(ctx context.Context, t isql.Txn) error {
+		// Note that localitySets contains the entries left to compact in this job.
+		// On the first resume, it will contain the total entries for the job as a whole,
+		// so we save this value to an info key to refer back to it if the job pauses and resumes later.
+		infostorage := jobs.InfoStorageForJob(t, jobID)
+		val, exists, err := infostorage.GetUint64(ctx, compactionTotalEntriesInfoKey)
+		if err != nil {
 			return err
 		}
-		for _, file := range progDetails.Files {
-			manifest.Files = append(manifest.Files, file)
-			manifest.EntryCounts.Add(file.EntryCounts)
-		}
-
-		// TODO (kev-cao): Add per node progress updates.
-
-		if wroteCheckpoint, err := maybeWriteBackupCheckpoint(
-			ctx, execCtx, details, manifest, lastCheckpointTime, kmsEnv,
-		); err != nil {
-			log.Dev.Errorf(ctx, "unable to checkpoint compaction: %+v", err)
-		} else if wroteCheckpoint {
-			lastCheckpointTime = timeutil.Now()
-			if err := execCtx.ExecCfg().JobRegistry.CheckPausepoint("backup_compaction.after.write_checkpoint"); err != nil {
+		if !exists {
+			// Total entries has not been written, and localitySets will contain the total entries.
+			for _, set := range localitySets {
+				totalEntries += set.totalEntries
+			}
+			err := infostorage.WriteUint64(ctx, compactionTotalEntriesInfoKey, uint64(totalEntries))
+			if err != nil {
 				return err
 			}
+		} else {
+			// Total entries has already been written, use this value instead of calculating.
+			totalEntries = int(val)
 		}
+
+		// Get the current fraction completed.
+		fractionCompleted, _, _, err = jobs.ProgressStorage(jobID).Get(ctx, t)
+		if err != nil {
+			return err
+		}
+
+		return nil
+	})
+	if err != nil {
+		return errors.Wrap(err, "loading progress metadata")
+	}
+
+	logger := jobs.NewChunkProgressLoggerForJob(
+		jobID, execCtx.ExecCfg().InternalDB, totalEntries, fractionCompleted,
+	)
+	requestFinishedCh := make(chan struct{}, totalEntries)
+	updateProgressLoop := func(ctx context.Context) error {
+		return logger.Loop(ctx, requestFinishedCh)
+	}
+
+	checkpointLoop := func(ctx context.Context) error {
+		defer close(requestFinishedCh)
+
+		var lastCheckpointTime time.Time
+		// When a processor is done exporting a span, it will send a progress update
+		// to progCh.
+		for progress := range progCh {
+			var progDetails backuppb.BackupManifest_Progress
+			if err := types.UnmarshalAny(&progress.ProgressDetails, &progDetails); err != nil {
+				log.Dev.Errorf(ctx, "unable to unmarshal backup progress details: %+v", err)
+				return err
+			}
+			for _, file := range progDetails.Files {
+				manifest.Files = append(manifest.Files, file)
+				manifest.EntryCounts.Add(file.EntryCounts)
+			}
+			for range progDetails.CompletedSpans {
+				requestFinishedCh <- struct{}{}
+			}
+
+			// TODO (kev-cao): Add per node progress updates.
+
+			if wroteCheckpoint, err := maybeWriteBackupCheckpoint(
+				ctx, execCtx, details, manifest, lastCheckpointTime, kmsEnv,
+			); err != nil {
+				log.Dev.Errorf(ctx, "unable to checkpoint compaction: %+v", err)
+			} else if wroteCheckpoint {
+				lastCheckpointTime = timeutil.Now()
+				if err := execCtx.ExecCfg().JobRegistry.CheckPausepoint("backup_compaction.after.write_checkpoint"); err != nil {
+					return err
+				}
+			}
+		}
+		return nil
+	}
+
+	if err := ctxgroup.GoAndWait(ctx, updateProgressLoop, checkpointLoop); err != nil {
+		return err
 	}
 	return nil
 }
@@ -903,7 +967,7 @@ func doCompaction(
 	defaultStore cloud.ExternalStorage,
 	kmsEnv cloud.KMSEnv,
 ) error {
-	plan, planCtx, err := createCompactionPlan(
+	compactionPlan, err := createCompactionPlan(
 		ctx, execCtx, jobID, details, compactChain, manifest, defaultStore, kmsEnv,
 	)
 	if err != nil {
@@ -913,10 +977,14 @@ func doCompaction(
 	progCh := make(chan *execinfrapb.RemoteProducerMetadata_BulkProcessorProgress)
 	runDistCompaction := func(ctx context.Context) error {
 		defer close(progCh)
-		return runCompactionPlan(ctx, execCtx, jobID, planCtx, plan, progCh)
+		return runCompactionPlan(
+			ctx, execCtx, jobID, compactionPlan, progCh,
+		)
 	}
 	checkpointLoop := func(ctx context.Context) error {
-		return processProgress(ctx, execCtx, details, manifest, progCh, kmsEnv)
+		return processProgress(
+			ctx, execCtx, jobID, details, manifest, compactionPlan.localitySets, progCh, kmsEnv,
+		)
 	}
 	// TODO (kev-cao): Add trace aggregator loop.
 
