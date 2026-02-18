@@ -44,6 +44,7 @@ func (p *planner) alterExternalConnection(params runParams, n *tree.AlterExterna
 	if err != nil {
 		return err
 	}
+	endpoint = v26_2_maybeStripEmptyTopicNameFromSinkURI(params.ctx, params.ExecCfg().Settings, endpoint)
 
 	ecPrivilege := &syntheticprivilege.ExternalConnectionPrivilege{
 		ConnectionName: name,

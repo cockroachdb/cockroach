@@ -228,6 +228,26 @@ const (
 	// making them indistinguishable from view dependencies. This upgrade ensures
 	// each trigger backref has the correct TriggerID set.
 	V26_2_TriggerBackrefRepair
+
+	// V26_2_ChangefeedsDiscardEmptyTopicName causes CREATE/ALTER CHANGEFEED
+	// to silently strip empty topic_name params from the sink URI before
+	// persisting. This is safe because an empty topic_name is functionally
+	// the same as not having one at all. No migration is needed; this
+	// prevents new empty params from being written. This is a separate
+	// version gate from V26_2_ChangefeedsRejectEmptyTopicName so that it
+	// is guaranteed to be active on all nodes before the migration runs,
+	// closing the race window where a CREATE/ALTER CHANGEFEED could
+	// introduce an empty param during the migration.
+	V26_2_ChangefeedsDiscardEmptyTopicName
+
+	// V26_2_ChangefeedsRejectEmptyTopicName adds validation that rejects
+	// empty topic_name params in changefeed sink URIs. The associated
+	// migration strips existing empty topic_name params so they don't
+	// break on resume. V26_2_ChangefeedsDiscardEmptyTopicName is
+	// guaranteed to be active before this migration runs, so no new
+	// empty params can be introduced while the migration is running.
+	V26_2_ChangefeedsRejectEmptyTopicName
+
 	// *************************************************
 	// Step (1) Add new versions above this comment.
 	// Do not add new versions to a patch release.
@@ -285,6 +305,11 @@ var versionTable = [numKeys]roachpb.Version{
 	V26_2_AddSystemClusterMetricsTable: {Major: 26, Minor: 1, Internal: 6},
 
 	V26_2_TriggerBackrefRepair: {Major: 26, Minor: 1, Internal: 8},
+
+	V26_2_ChangefeedsDiscardEmptyTopicName: {Major: 26, Minor: 1, Internal: 10},
+
+	V26_2_ChangefeedsRejectEmptyTopicName: {Major: 26, Minor: 1, Internal: 12},
+
 	// *************************************************
 	// Step (2): Add new versions above this comment.
 	// Do not add new versions to a patch release.

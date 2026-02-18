@@ -12,6 +12,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/redact"
 )
 
 // SinkURL is a helper struct which for "consuming" URL query
@@ -34,6 +35,20 @@ func (u *SinkURL) ConsumeParam(p string) string {
 	v := u.PeekParam(p)
 	u.q.Del(p)
 	return v
+}
+
+// ConsumeParamRejectEmpty consumes a query parameter. If the parameter is present
+// in the URL but has an empty value, it returns an error.
+func (u *SinkURL) ConsumeParamRejectEmpty(p string) (string, error) {
+	if u.q == nil {
+		u.q = u.Query()
+	}
+	has := u.q.Has(p)
+	v := u.ConsumeParam(p)
+	if has && v == "" {
+		return "", errors.Newf(`param %s must not be empty`, redact.Safe(p))
+	}
+	return v, nil
 }
 
 func (u *SinkURL) ConsumeParams(p string) []string {
@@ -63,7 +78,7 @@ func (u *SinkURL) ConsumeBool(param string, dest *bool) (wasSet bool, err error)
 	if paramVal := u.ConsumeParam(param); paramVal != "" {
 		wasSet, err := strToBool(paramVal, dest)
 		if err != nil {
-			return false, errors.Wrapf(err, "param %s must be a bool", param)
+			return false, errors.Wrapf(err, "param %s must be a bool", redact.Safe(param))
 		}
 		return wasSet, err
 	}
@@ -85,7 +100,7 @@ func (u *SinkURL) DecodeBase64(param string, dest *[]byte) error {
 	val := u.ConsumeParam(param)
 	err := DecodeBase64FromString(val, dest)
 	if err != nil {
-		return errors.Wrapf(err, `param %s must be base 64 encoded`, param)
+		return errors.Wrapf(err, `param %s must be base 64 encoded`, redact.Safe(param))
 	}
 	return nil
 }
@@ -113,6 +128,23 @@ func strToBool(src string, dest *bool) (wasSet bool, err error) {
 	}
 	*dest = b
 	return true, nil
+}
+
+// StripEmptyParam removes a query parameter from a URI string if it is present
+// and has an empty value. If the parameter is absent or non-empty, the URI is
+// returned unchanged.
+func StripEmptyParam(uri string, param string) string {
+	u, err := url.Parse(uri)
+	if err != nil {
+		return uri
+	}
+	q := u.Query()
+	if !q.Has(param) || q.Get(param) != "" {
+		return uri
+	}
+	q.Del(param)
+	u.RawQuery = q.Encode()
+	return u.String()
 }
 
 func DecodeBase64FromString(src string, dest *[]byte) error {

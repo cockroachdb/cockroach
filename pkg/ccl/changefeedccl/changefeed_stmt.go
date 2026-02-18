@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl"
 	"github.com/cockroachdb/cockroach/pkg/cloud"
 	"github.com/cockroachdb/cockroach/pkg/cloud/externalconn"
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/docs"
 	"github.com/cockroachdb/cockroach/pkg/featureflag"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
@@ -218,6 +219,10 @@ func changefeedPlanHook(
 		if sinkURI == `` {
 			// Error if someone specifies an INTO with the empty string.
 			return nil, nil, false, errors.New(`omit the SINK clause for inline results`)
+		}
+		if p.ExecCfg().Settings.Version.IsActive(ctx, clusterversion.V26_2_ChangefeedsDiscardEmptyTopicName) &&
+			!p.ExecCfg().Settings.Version.IsActive(ctx, clusterversion.V26_2_ChangefeedsRejectEmptyTopicName) {
+			sinkURI = changefeedbase.StripEmptyParam(sinkURI, changefeedbase.SinkParamTopicName)
 		}
 		header = withSinkHeader
 	}
