@@ -108,5 +108,5 @@ rebalance-stores store-id=1
 [mmaid=1] rebalancing pass summary [local=s1]:
 	overloaded:
 		short: [s1]
-	failure: [{s1, total: 2, not-overloaded:1, no-cand:1}]
+	failure: [{s1, total: 1, not-overloaded:1}]
 pending(0)

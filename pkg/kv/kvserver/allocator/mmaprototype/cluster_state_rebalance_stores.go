@@ -481,10 +481,12 @@ func (re *rebalanceEnv) rebalanceReplicas(
 		if len(rstate.pendingChanges) > 0 {
 			// If the range has pending changes, don't make more changes.
 			log.KvDistribution.VEventf(ctx, 2, "skipping r%d: has pending changes", rangeID)
+			re.passObs.replicaShed(rangeTransient)
 			continue
 		}
 		if re.now.Sub(rstate.lastFailedChange) < re.lastFailedChangeDelayDuration {
 			log.KvDistribution.VEventf(ctx, 2, "skipping r%d: too soon after failed change", rangeID)
+			re.passObs.replicaShed(rangeTransient)
 			continue
 		}
 		re.ensureAnalyzedConstraints(ctx, rstate)
@@ -494,6 +496,7 @@ func (re *rebalanceEnv) rebalanceReplicas(
 					"skipping r%d: no constraints analyzed (conf=%v replicas=%v)",
 					rangeID, rstate.conf, rstate.replicas)
 			}
+			re.passObs.replicaShed(rangeConstraintsError)
 			continue
 		}
 		isVoter, isNonVoter := rstate.constraints.replicaRole(store.StoreID)
@@ -561,7 +564,6 @@ func (re *rebalanceEnv) rebalanceReplicas(
 		}
 
 		if len(cands.candidates) == 0 {
-			re.passObs.replicaShed(noCandidate)
 			log.KvDistribution.VEventf(ctx, 2, "result(failed): no candidates found for r%d after exclusions", rangeID)
 			continue
 		}
@@ -672,6 +674,7 @@ func (re *rebalanceEnv) rebalanceLeasesFromLocalStoreID(
 		if len(rstate.pendingChanges) > 0 {
 			// If the range has pending changes, don't make more changes.
 			log.KvDistribution.VEventf(ctx, 2, "skipping r%d: has pending changes", rangeID)
+			re.passObs.leaseShed(rangeTransient)
 			continue
 		}
 		foundLocalReplica := false
@@ -701,6 +704,7 @@ func (re *rebalanceEnv) rebalanceLeasesFromLocalStoreID(
 		}
 		if re.now.Sub(rstate.lastFailedChange) < re.lastFailedChangeDelayDuration {
 			log.KvDistribution.VEventf(ctx, 2, "skipping r%d: too soon after failed change", rangeID)
+			re.passObs.leaseShed(rangeTransient)
 			continue
 		}
 		re.ensureAnalyzedConstraints(ctx, rstate)
@@ -710,6 +714,7 @@ func (re *rebalanceEnv) rebalanceLeasesFromLocalStoreID(
 					"skipping r%d: no constraints analyzed (conf=%v replicas=%v)",
 					rangeID, rstate.conf, rstate.replicas)
 			}
+			re.passObs.leaseShed(rangeConstraintsError)
 			continue
 		}
 		if rstate.constraints.leaseholderID != store.StoreID {
