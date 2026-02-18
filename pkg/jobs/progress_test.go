@@ -43,12 +43,12 @@ func TestChunkProgressLogger(t *testing.T) {
 	require.NoError(t, err)
 
 	requestFinishedCh := make(chan struct{}, 100)
-	defer close(requestFinishedCh)
-	logger := NewChunkProgressLoggerForJob(
-		jobID, s.InternalDB().(isql.DB), 100 /* expectedChunks */, 0, /* startFraction */
-	)
 	go func() {
-		require.NoError(t, logger.Loop(ctx, requestFinishedCh))
+		require.NoError(t,
+			NewChunkProgressLoggerForJob(
+				jobID, s.InternalDB().(isql.DB), 100 /* expectedChunks */, 0, /* startFraction */
+			).Loop(ctx, requestFinishedCh),
+		)
 	}()
 
 	db := sqlutils.MakeSQLRunner(s.SQLConn(t))
@@ -66,22 +66,34 @@ func TestChunkProgressLogger(t *testing.T) {
 		})
 	}
 
+	// Do some progress updates.
 	for range 10 {
 		requestFinishedCh <- struct{}{}
 	}
 	validateFrac(0.1)
-
 	for range 50 {
 		requestFinishedCh <- struct{}{}
 	}
 	validateFrac(0.6)
 
+	// Reset to a new logger, mimicing a job pause then resume.
+	close(requestFinishedCh) // Closing this chanel will cancel the previous loop.
+	requestFinishedCh2 := make(chan struct{}, 100)
+	defer close(requestFinishedCh2)
+	go func() {
+		require.NoError(t,
+			NewChunkProgressLoggerForJob(
+				jobID, s.InternalDB().(isql.DB), 40 /* expectedChunks */, 0.6, /* startFraction */
+			).Loop(ctx, requestFinishedCh2),
+		)
+	}()
+
+	// Verify that we pick up where we left off.
 	for range 39 {
-		requestFinishedCh <- struct{}{}
+		requestFinishedCh2 <- struct{}{}
 	}
 	validateFrac(0.99)
-
-	requestFinishedCh <- struct{}{}
+	requestFinishedCh2 <- struct{}{}
 	validateFrac(1)
 }
 

@@ -42,7 +42,7 @@ func createCompactionPlan(
 	manifest *backuppb.BackupManifest,
 	defaultStore cloud.ExternalStorage,
 	kmsEnv cloud.KMSEnv,
-) (*sql.PhysicalPlan, *sql.PlanningCtx, error) {
+) (compactionPlan, error) {
 	log.Dev.Infof(
 		ctx, "planning compaction of %d backups: %s",
 		len(compactChain.chainToCompact),
@@ -54,13 +54,13 @@ func createCompactionPlan(
 		compactChain.compactedLocalityInfo, execCtx.User(),
 	)
 	if err != nil {
-		return nil, nil, err
+		return compactionPlan{}, err
 	}
 	introducedSpanFrontier, err := createIntroducedSpanFrontier(
 		compactChain.backupChain, manifest.EndTime,
 	)
 	if err != nil {
-		return nil, nil, err
+		return compactionPlan{}, err
 	}
 	defer introducedSpanFrontier.Release()
 	targetSize := targetRestoreSpanSize.Get(&execCtx.ExecCfg().Settings.SV)
@@ -74,14 +74,14 @@ func createCompactionPlan(
 		maxFiles,
 	)
 	if err != nil {
-		return nil, nil, err
+		return compactionPlan{}, err
 	}
 
 	spansToCompact, err := getSpansToCompact(
 		ctx, execCtx, manifest, compactChain.chainToCompact, details, defaultStore, kmsEnv,
 	)
 	if err != nil {
-		return nil, nil, err
+		return compactionPlan{}, err
 	}
 	genSpan := func(ctx context.Context, spanCh chan execinfrapb.RestoreSpanEntry) error {
 		return errors.Wrap(generateAndSendImportSpans(
@@ -108,7 +108,7 @@ func createCompactionPlan(
 			locFilter,
 		)
 		if err != nil {
-			return nil, nil, errors.Wrap(err, "failed to create locality filtering bulk oracle")
+			return compactionPlan{}, errors.Wrap(err, "failed to create locality filtering bulk oracle")
 		}
 	}
 
@@ -117,13 +117,13 @@ func createCompactionPlan(
 		oracle, locFilter, sql.NoStrictLocalityFiltering,
 	)
 	if err != nil {
-		return nil, nil, errors.Wrap(err, "setting up node planning")
+		return compactionPlan{}, errors.Wrap(err, "setting up node planning")
 	}
 	instanceLocalities := make([]roachpb.Locality, len(instanceIDs))
 	for i, id := range instanceIDs {
 		sqlInstanceInfo, err := dsp.GetSQLInstanceInfo(ctx, id)
 		if err != nil {
-			return nil, nil, errors.Wrap(err, "getting instance info")
+			return compactionPlan{}, errors.Wrap(err, "getting instance info")
 		}
 		instanceLocalities[i] = sqlInstanceInfo.Locality
 	}
@@ -131,14 +131,14 @@ func createCompactionPlan(
 		ctx, instanceIDs, instanceLocalities, details.StrictLocalityFiltering, genSpan,
 	)
 	if err != nil {
-		return nil, nil, errors.Wrap(err, "building locality sets")
+		return compactionPlan{}, errors.Wrap(err, "building locality sets")
 	}
 	corePlacements, err := createCompactionCorePlacements(
 		ctx, jobID, execCtx.User(), details, manifest.ElidedPrefix, genSpan,
 		spansToCompact, instanceIDs, localitySets, targetSize, maxFiles,
 	)
 	if err != nil {
-		return nil, nil, errors.Wrap(err, "creating core placements")
+		return compactionPlan{}, errors.Wrap(err, "creating core placements")
 	}
 
 	plan := planCtx.NewPhysicalPlan()
@@ -149,18 +149,23 @@ func createCompactionPlan(
 		execinfrapb.Ordering{},
 		nil, /* finalizeLastStageCb */
 	)
-	return plan, planCtx, nil
+	return compactionPlan{plan: plan, planCtx: planCtx, localitySets: localitySets}, nil
+}
+
+type compactionPlan struct {
+	plan         *sql.PhysicalPlan
+	planCtx      *sql.PlanningCtx
+	localitySets map[string]*localitySet
 }
 
 func runCompactionPlan(
 	ctx context.Context,
 	execCtx sql.JobExecContext,
 	jobID jobspb.JobID,
-	planCtx *sql.PlanningCtx,
-	plan *sql.PhysicalPlan,
+	compactionPlan compactionPlan,
 	progCh chan *execinfrapb.RemoteProducerMetadata_BulkProcessorProgress,
 ) error {
-	sql.FinalizePlan(ctx, planCtx, plan)
+	sql.FinalizePlan(ctx, compactionPlan.planCtx, compactionPlan.plan)
 
 	metaFn := func(_ context.Context, meta *execinfrapb.ProducerMetadata) error {
 		if meta.BulkProcessorProgress != nil {
@@ -183,12 +188,14 @@ func runCompactionPlan(
 	defer recv.Release()
 
 	jobsprofiler.StorePlanDiagram(
-		ctx, execCtx.ExecCfg().DistSQLSrv.Stopper, plan, execCtx.ExecCfg().InternalDB, jobID,
+		ctx, execCtx.ExecCfg().DistSQLSrv.Stopper,
+		compactionPlan.plan, execCtx.ExecCfg().InternalDB, jobID,
 	)
 
 	evalCtxCopy := execCtx.ExtendedEvalContext().Copy()
 	execCtx.DistSQLPlanner().Run(
-		ctx, planCtx, nil /* txn */, plan, recv, evalCtxCopy, nil, /* finishedSetupFn */
+		ctx, compactionPlan.planCtx,
+		nil /* txn */, compactionPlan.plan, recv, evalCtxCopy, nil, /* finishedSetupFn */
 	)
 	return rowResultWriter.Err()
 }
