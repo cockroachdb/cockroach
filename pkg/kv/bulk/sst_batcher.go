@@ -76,7 +76,7 @@ var (
 		settings.ApplicationLevel,
 		"bulkio.ingest.sst_batcher_elastic_control.enabled",
 		"determines whether the sst batcher integrates with elastic CPU control",
-		false, // TODO(dt): enable this by default.
+		true,
 	)
 )
 
