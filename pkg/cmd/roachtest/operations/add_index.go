@@ -121,9 +121,10 @@ WHERE
 			}
 		}
 	}
-	// Fallback to hash index randomly if not inverted
+	// Fallback to hash-sharded index randomly if not inverted
+	hashClause := ""
 	if indexUsingClause == "" && rng.Intn(2) == 0 {
-		indexUsingClause = "USING HASH "
+		hashClause = " USING HASH"
 	}
 
 	o.Status(fmt.Sprintf("adding index %s on %s.%s (column %s) %s", indexName, dbName, tableName, colName, predicateClause))
@@ -138,12 +139,12 @@ WHERE
 			predicateClause,
 		)
 	} else {
-		createIndexStmt = fmt.Sprintf("CREATE INDEX %s ON %s.%s %s(%s) %s",
+		createIndexStmt = fmt.Sprintf("CREATE INDEX %s ON %s.%s (%s)%s %s",
 			indexName,
 			dbName,
 			tableName,
-			indexUsingClause,
 			colName,
+			hashClause,
 			predicateClause,
 		)
 	}

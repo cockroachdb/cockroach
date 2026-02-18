@@ -19,7 +19,6 @@ go_library(
         "license_throttle.go",
         "manual_compaction.go",
         "network_partition.go",
-        "node_kill.go",
         "pause_job.go",
         "probe_ranges.go",
         "register.go",

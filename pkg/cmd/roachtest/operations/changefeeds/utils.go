@@ -340,6 +340,12 @@ func createChangefeed(
 	o.Status(fmt.Sprintf("creating changefeed job to sink %s with options %v on table %s.%s",
 		sink, options, dbName, tableName))
 
+	// Ensure rangefeeds are enabled, as they are required for changefeeds.
+	_, err = conn.ExecContext(ctx, "SET CLUSTER SETTING kv.rangefeed.enabled = true")
+	if err != nil {
+		return err
+	}
+
 	// Construct and execute the SQL statement to create the changefeed.
 	_, err = conn.ExecContext(ctx, fmt.Sprintf("CREATE CHANGEFEED FOR TABLE %s.%s INTO '%s' WITH %s;",
 		dbName, tableName, sink, strings.Join(options, ",")))
@@ -442,6 +448,9 @@ func calculateScanOption(allCFJobs []*jobDetails) (string, error) {
 		scanOnCount := 0
 		// Count the number of jobs that have initial scan set to 'yes' or "only".
 		for _, j := range allCFJobs {
+			if j.payload == nil {
+				continue
+			}
 			if v, ok := j.payload.Opts[changefeedbase.OptInitialScan]; ok {
 				if v == "yes" || v == "only" {
 					scanOnCount++
