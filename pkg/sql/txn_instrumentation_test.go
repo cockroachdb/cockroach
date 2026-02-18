@@ -27,6 +27,16 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// makeMatches is a test helper to create a []TxnRequestMatch from a
+// request and ID, matching the new multi-candidate interface.
+func makeMatches(
+	request stmtdiagnostics.TxnRequest, requestID stmtdiagnostics.RequestID,
+) []stmtdiagnostics.TxnRequestMatch {
+	return []stmtdiagnostics.TxnRequestMatch{
+		{ID: requestID, Request: request},
+	}
+}
+
 func TestTxnDiagnosticsCollector_AddStatementBundle_NoMoreFps(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -35,7 +45,7 @@ func TestTxnDiagnosticsCollector_AddStatementBundle_NoMoreFps(t *testing.T) {
 		func(t *testing.T, stmt tree.Statement) {
 			request := stmtdiagnostics.TxnRequest{}
 			requestID := stmtdiagnostics.RequestID(42)
-			collector := newTxnDiagnosticsCollector(request, requestID, nil)
+			collector := newTxnDiagnosticsCollector(makeMatches(request, requestID), nil)
 
 			// Since stmtsFpsToCapture is empty, only commit/rollback should be accepted
 			bundle := stmtdiagnostics.StmtDiagnostic{}
@@ -53,16 +63,17 @@ func TestTxnDiagnosticsCollector_AddStatementBundle_ExpectedTerminalStatement(t 
 
 	request := stmtdiagnostics.TxnRequest{}
 	requestID := stmtdiagnostics.RequestID(42)
-	collector := newTxnDiagnosticsCollector(request, requestID, nil)
+	collector := newTxnDiagnosticsCollector(makeMatches(request, requestID), nil)
 
 	stmt := &tree.Select{
 		Select: &tree.SelectClause{},
 	}
 	bundle := stmtdiagnostics.StmtDiagnostic{}
 	success, err := collector.AddStatementBundle(123, stmt, bundle)
-	require.Error(t, err)
+	// With multi-candidate, a non-terminal statement with no fingerprints
+	// to capture eliminates all candidates, returning (false, nil).
+	require.NoError(t, err)
 	require.False(t, success)
-	require.Contains(t, err.Error(), "Expected a terminal statement")
 }
 
 func TestTxnDiagnosticsCollector_AddStatementBundle_AlreadyFinalized(t *testing.T) {
@@ -71,7 +82,7 @@ func TestTxnDiagnosticsCollector_AddStatementBundle_AlreadyFinalized(t *testing.
 
 	request := stmtdiagnostics.TxnRequest{}
 	requestID := stmtdiagnostics.RequestID(42)
-	collector := newTxnDiagnosticsCollector(request, requestID, nil)
+	collector := newTxnDiagnosticsCollector(makeMatches(request, requestID), nil)
 	collector.UpdateState(txnDiagnosticsReadyToFinalize)
 
 	stmt := &tree.Select{
@@ -88,10 +99,9 @@ func TestTxnDiagnosticsCollector_AddStatementBundle_WithStmtsToCapture(t *testin
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	request := stmtdiagnostics.TxnRequest{}
+	request := stmtdiagnostics.NewTxnRequest(0, []uint64{123, 456}, false, "", time.Time{}, 0, 0)
 	requestID := stmtdiagnostics.RequestID(42)
-	collector := newTxnDiagnosticsCollector(request, requestID, nil)
-	collector.stmtsFpsToCapture = []uint64{123, 456}
+	collector := newTxnDiagnosticsCollector(makeMatches(request, requestID), nil)
 
 	stmt1 := &tree.Select{
 		Select: &tree.SelectClause{},
@@ -102,7 +112,8 @@ func TestTxnDiagnosticsCollector_AddStatementBundle_WithStmtsToCapture(t *testin
 	require.NoError(t, err)
 	require.True(t, success)
 	require.Len(t, collector.stmtBundles, 1)
-	require.Equal(t, []uint64{456}, collector.stmtsFpsToCapture)
+	require.Len(t, collector.candidates, 1)
+	require.Equal(t, []uint64{456}, collector.candidates[0].stmtsFpsToCapture)
 	require.False(t, collector.ReadyToFinalize())
 
 	stmt2 := &tree.Insert{}
@@ -112,7 +123,8 @@ func TestTxnDiagnosticsCollector_AddStatementBundle_WithStmtsToCapture(t *testin
 	require.NoError(t, err)
 	require.True(t, success)
 	require.Len(t, collector.stmtBundles, 2)
-	require.Empty(t, collector.stmtsFpsToCapture)
+	require.Len(t, collector.candidates, 1)
+	require.Empty(t, collector.candidates[0].stmtsFpsToCapture)
 	require.False(t, collector.ReadyToFinalize())
 }
 
@@ -120,11 +132,9 @@ func TestTxnDiagnosticsCollector_AddStatementBundle_WrongFingerprint(t *testing.
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	request := stmtdiagnostics.TxnRequest{}
+	request := stmtdiagnostics.NewTxnRequest(0, []uint64{123, 456}, false, "", time.Time{}, 0, 0)
 	requestID := stmtdiagnostics.RequestID(42)
-	collector := newTxnDiagnosticsCollector(request, requestID, nil)
-
-	collector.stmtsFpsToCapture = []uint64{123, 456}
+	collector := newTxnDiagnosticsCollector(makeMatches(request, requestID), nil)
 
 	stmt := &tree.Select{
 		Select: &tree.SelectClause{},
@@ -145,12 +155,14 @@ func TestTxnInstrumentationHelper_StartDiagnostics(t *testing.T) {
 
 	request := stmtdiagnostics.TxnRequest{}
 	requestID := stmtdiagnostics.RequestID(42)
+	matches := makeMatches(request, requestID)
 
 	span := &tracing.Span{}
-	helper.StartDiagnostics(request, requestID, span)
+	helper.StartDiagnostics(matches, span)
 
-	require.Equal(t, request, helper.diagnosticsCollector.request)
-	require.Equal(t, requestID, helper.diagnosticsCollector.requestId)
+	require.Len(t, helper.diagnosticsCollector.candidates, 1)
+	require.Equal(t, request, helper.diagnosticsCollector.candidates[0].request)
+	require.Equal(t, requestID, helper.diagnosticsCollector.candidates[0].id)
 	require.Equal(t, span, helper.diagnosticsCollector.span)
 	require.True(t, helper.diagnosticsCollector.InProgress())
 }
@@ -163,7 +175,7 @@ func TestTxnInstrumentationHelper_AddStatementBundle_Success(t *testing.T) {
 
 	request := stmtdiagnostics.TxnRequest{}
 	requestID := stmtdiagnostics.RequestID(42)
-	helper.StartDiagnostics(request, requestID, nil)
+	helper.StartDiagnostics(makeMatches(request, requestID), nil)
 
 	ctx := context.Background()
 	stmt := &tree.CommitTransaction{} // Use commit since we have no expected statements
@@ -186,7 +198,7 @@ func TestTxnInstrumentationHelper_AddStatementBundle_Error(t *testing.T) {
 
 	request := stmtdiagnostics.TxnRequest{}
 	requestID := stmtdiagnostics.RequestID(42)
-	helper.StartDiagnostics(request, requestID, nil)
+	helper.StartDiagnostics(makeMatches(request, requestID), nil)
 
 	// Set collector to already finalized to trigger error
 	helper.diagnosticsCollector.UpdateState(txnDiagnosticsReadyToFinalize)
@@ -210,12 +222,9 @@ func TestTxnInstrumentationHelper_AddStatementBundle_NoSuccess(t *testing.T) {
 	helper := &txnInstrumentationHelper{}
 	helper.TxnDiagnosticsRecorder = stmtdiagnostics.NewTxnRegistry(nil, nil, nil, timeutil.DefaultTimeSource{})
 
-	request := stmtdiagnostics.TxnRequest{}
+	request := stmtdiagnostics.NewTxnRequest(0, []uint64{123}, false, "", time.Time{}, 0, 0)
 	requestID := stmtdiagnostics.RequestID(42)
-	helper.StartDiagnostics(request, requestID, nil)
-
-	// Set up expected fingerprints so we can trigger no-success case
-	helper.diagnosticsCollector.stmtsFpsToCapture = []uint64{123}
+	helper.StartDiagnostics(makeMatches(request, requestID), nil)
 
 	ctx := context.Background()
 	stmt := &tree.Select{Select: &tree.SelectClause{}}
@@ -297,7 +306,7 @@ func TestTxnInstrumentationHelper_MaybeContinueDiagnostics(t *testing.T) {
 		requestID := stmtdiagnostics.RequestID(42)
 		tracer := tracing.NewTracer()
 		sp := tracer.StartSpan("parent-span", tracing.WithRecording(tracingpb.RecordingVerbose))
-		helper.StartDiagnostics(request, requestID, sp)
+		helper.StartDiagnostics(makeMatches(request, requestID), sp)
 		newCtx, actual := helper.MaybeContinueDiagnostics(ctx, tc.stmt.stmt, tc.stmt.fpId)
 		require.Equal(t, tc.shouldContinue, actual)
 
@@ -323,7 +332,7 @@ func TestTxnInstrumentationHelper_ShouldRedact(t *testing.T) {
 
 		request := stmtdiagnostics.NewTxnRequest(0, nil, shouldRedact, "", time.Time{}, 0, 0)
 		requestID := stmtdiagnostics.RequestID(42)
-		helper.StartDiagnostics(request, requestID, nil)
+		helper.StartDiagnostics(makeMatches(request, requestID), nil)
 
 		require.Equal(t, shouldRedact, helper.ShouldRedact())
 	})
@@ -336,13 +345,11 @@ func TestTxnInstrumentationHelper_collectionFlow(t *testing.T) {
 	// Test the complete flow with multiple statement fingerprints using only SELECT statements to avoid formatting issues
 	helper := &txnInstrumentationHelper{}
 
-	request := stmtdiagnostics.TxnRequest{}
-	requestID := stmtdiagnostics.RequestID(42)
-	helper.StartDiagnostics(request, requestID, nil)
-
 	// Simulate a TxnRequest with multiple statement fingerprints
 	expectedFingerprints := []uint64{100, 200, 300}
-	helper.diagnosticsCollector.stmtsFpsToCapture = expectedFingerprints
+	request := stmtdiagnostics.NewTxnRequest(0, expectedFingerprints, false, "", time.Time{}, 0, 0)
+	requestID := stmtdiagnostics.RequestID(42)
+	helper.StartDiagnostics(makeMatches(request, requestID), nil)
 
 	ctx := context.Background()
 
@@ -355,7 +362,8 @@ func TestTxnInstrumentationHelper_collectionFlow(t *testing.T) {
 	helper.AddStatementBundle(ctx, stmt1, uint64(100), "SELECT * FROM table1", bundle1)
 
 	require.Len(t, helper.diagnosticsCollector.stmtBundles, 1)
-	require.Equal(t, []uint64{200, 300}, helper.diagnosticsCollector.stmtsFpsToCapture)
+	require.Len(t, helper.diagnosticsCollector.candidates, 1)
+	require.Equal(t, []uint64{200, 300}, helper.diagnosticsCollector.candidates[0].stmtsFpsToCapture)
 	require.False(t, helper.diagnosticsCollector.ReadyToFinalize())
 
 	// Process second statement
@@ -367,7 +375,8 @@ func TestTxnInstrumentationHelper_collectionFlow(t *testing.T) {
 	helper.AddStatementBundle(ctx, stmt2, uint64(200), "SELECT * FROM table2", bundle2)
 
 	require.Len(t, helper.diagnosticsCollector.stmtBundles, 2)
-	require.Equal(t, []uint64{300}, helper.diagnosticsCollector.stmtsFpsToCapture)
+	require.Len(t, helper.diagnosticsCollector.candidates, 1)
+	require.Equal(t, []uint64{300}, helper.diagnosticsCollector.candidates[0].stmtsFpsToCapture)
 	require.False(t, helper.diagnosticsCollector.ReadyToFinalize())
 
 	// Process third statement
@@ -379,7 +388,8 @@ func TestTxnInstrumentationHelper_collectionFlow(t *testing.T) {
 	helper.AddStatementBundle(ctx, stmt3, uint64(300), "SELECT * FROM table3", bundle3)
 
 	require.Len(t, helper.diagnosticsCollector.stmtBundles, 3)
-	require.Empty(t, helper.diagnosticsCollector.stmtsFpsToCapture)
+	require.Len(t, helper.diagnosticsCollector.candidates, 1)
+	require.Empty(t, helper.diagnosticsCollector.candidates[0].stmtsFpsToCapture)
 	require.False(t, helper.diagnosticsCollector.ReadyToFinalize())
 
 	// Process commit statement
@@ -398,7 +408,7 @@ func TestTxnDiagnosticsCollector_collectTrace_RedactedRequest(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	// Test that AddTrace does nothing when request is redacted
+	// Test that collectTrace does nothing when request is redacted
 	request := stmtdiagnostics.NewTxnRequest(
 		1111,
 		[]uint64{1111, 2222},
@@ -408,8 +418,8 @@ func TestTxnDiagnosticsCollector_collectTrace_RedactedRequest(t *testing.T) {
 		0,
 		0,
 	)
-	collector := newTxnDiagnosticsCollector(request, stmtdiagnostics.RequestID(42), nil)
-	collector.collectTrace()
+	collector := newTxnDiagnosticsCollector(makeMatches(request, stmtdiagnostics.RequestID(42)), nil)
+	collector.collectTrace(true /* redacted */, 1111)
 
 	buf, err := collector.z.Finalize()
 	require.NoError(t, err)
@@ -447,10 +457,10 @@ func TestTxnDiagnosticsCollector_collectTrace(t *testing.T) {
 	tracer := tracing.NewTracer()
 	span := tracer.StartSpan("test-tracer", tracing.WithRecording(tracingpb.RecordingVerbose))
 	span.Record("test msg")
-	collector := newTxnDiagnosticsCollector(request, stmtdiagnostics.RequestID(42), span)
+	collector := newTxnDiagnosticsCollector(makeMatches(request, stmtdiagnostics.RequestID(42)), span)
 
 	// Add trace
-	collector.collectTrace()
+	collector.collectTrace(false /* redacted */, 1111)
 
 	// Verify files were added
 	buf, err := collector.z.Finalize()
@@ -484,8 +494,8 @@ func TestTxnDiagnosticsCollector_collectTrace_emptyRecordings(t *testing.T) {
 		0,
 	)
 
-	collector := newTxnDiagnosticsCollector(request, stmtdiagnostics.RequestID(42), &tracing.Span{})
-	collector.collectTrace()
+	collector := newTxnDiagnosticsCollector(makeMatches(request, stmtdiagnostics.RequestID(42)), &tracing.Span{})
+	collector.collectTrace(false /* redacted */, 1111)
 
 	buf, err := collector.z.Finalize()
 	require.NoError(t, err)
@@ -578,6 +588,7 @@ func TestTxnDiagnosticsCollector_MaybeStartDiagnostics(t *testing.T) {
 			newCtx, started := helper.MaybeStartDiagnostics(ctx, &tree.Select{Select: &tree.SelectClause{}}, 123, ts.Tracer())
 			require.True(t, started)
 			require.True(t, helper.diagnosticsCollector.InProgress())
+			require.Len(t, helper.diagnosticsCollector.candidates, 1)
 			if redacted {
 				require.Equal(t, ctx, newCtx)
 				require.Nil(t, helper.diagnosticsCollector.span)
@@ -588,4 +599,57 @@ func TestTxnDiagnosticsCollector_MaybeStartDiagnostics(t *testing.T) {
 			}
 		})
 	})
+}
+
+func TestTxnDiagnosticsCollector_ProgressiveFiltering(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	// Two candidates share first fingerprint but diverge at second.
+	req1 := stmtdiagnostics.NewTxnRequest(111, []uint64{100, 200, 300}, false, "", time.Time{}, 0, 0)
+	req2 := stmtdiagnostics.NewTxnRequest(222, []uint64{100, 444, 555}, false, "", time.Time{}, 0, 0)
+	matches := []stmtdiagnostics.TxnRequestMatch{
+		{ID: stmtdiagnostics.RequestID(1), Request: req1},
+		{ID: stmtdiagnostics.RequestID(2), Request: req2},
+	}
+	collector := newTxnDiagnosticsCollector(matches, nil)
+	require.Len(t, collector.candidates, 2)
+
+	// First statement matches both (fp=100).
+	stmt := &tree.Select{Select: &tree.SelectClause{}}
+	ok, err := collector.AddStatementBundle(100, stmt, stmtdiagnostics.StmtDiagnostic{})
+	require.NoError(t, err)
+	require.True(t, ok)
+	require.Len(t, collector.candidates, 2)
+
+	// Second statement matches only candidate 1 (fp=200, not 444).
+	ok, err = collector.AddStatementBundle(200, stmt, stmtdiagnostics.StmtDiagnostic{})
+	require.NoError(t, err)
+	require.True(t, ok)
+	require.Len(t, collector.candidates, 1)
+	require.Equal(t, stmtdiagnostics.RequestID(1), collector.candidates[0].id)
+	require.Equal(t, []uint64{300}, collector.candidates[0].stmtsFpsToCapture)
+}
+
+func TestTxnDiagnosticsCollector_AllCandidatesEliminated(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	req := stmtdiagnostics.NewTxnRequest(111, []uint64{100, 200}, false, "", time.Time{}, 0, 0)
+	matches := []stmtdiagnostics.TxnRequestMatch{
+		{ID: stmtdiagnostics.RequestID(1), Request: req},
+	}
+	collector := newTxnDiagnosticsCollector(matches, nil)
+
+	// First statement matches (fp=100).
+	stmt := &tree.Select{Select: &tree.SelectClause{}}
+	ok, err := collector.AddStatementBundle(100, stmt, stmtdiagnostics.StmtDiagnostic{})
+	require.NoError(t, err)
+	require.True(t, ok)
+
+	// Second statement doesn't match (fp=999 instead of 200).
+	ok, err = collector.AddStatementBundle(999, stmt, stmtdiagnostics.StmtDiagnostic{})
+	require.NoError(t, err)
+	require.False(t, ok)
+	require.Empty(t, collector.candidates)
 }
