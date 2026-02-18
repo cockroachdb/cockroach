@@ -24,7 +24,7 @@ import orderBy from "lodash/orderBy";
 import sum from "lodash/sum";
 import take from "lodash/take";
 import moment, { Moment } from "moment-timezone";
-import React from "react";
+import React, { useEffect } from "react";
 import { connect } from "react-redux";
 import { Link } from "react-router-dom";
 import { createSelector } from "reselect";
@@ -455,8 +455,11 @@ export class NodeList extends React.Component<LiveNodeListProps> {
  * DecommissionedNodeList renders a view with a table for recently "decommissioned"
  * nodes on a link on a full list of decommissioned nodes.
  */
-class DecommissionedNodeList extends React.Component<DecommissionedNodeListProps> {
-  columns: ColumnsConfig<DecommissionedNodeStatusRow> = [
+function DecommissionedNodeList({
+  dataSource,
+  isCollapsible,
+}: DecommissionedNodeListProps): React.ReactElement {
+  const columns: ColumnsConfig<DecommissionedNodeStatusRow> = [
     {
       key: "nodes",
       title: "decommissioned nodes",
@@ -490,34 +493,31 @@ class DecommissionedNodeList extends React.Component<DecommissionedNodeListProps
     },
   ];
 
-  render() {
-    const { dataSource, isCollapsible } = this.props;
-    if (isEmpty(dataSource)) {
-      return null;
-    }
-
-    return (
-      <div className="nodes-overview__panel">
-        <TableSection
-          id={`nodes-overview__decommissioned-nodes`}
-          title="Recently Decommissioned Nodes"
-          footer={
-            <Link to={`/reports/nodes/history`}>
-              View all decommissioned nodes{" "}
-            </Link>
-          }
-          isCollapsible={isCollapsible}
-          className="embedded-table embedded-table--dense"
-        >
-          <Table
-            dataSource={dataSource}
-            columns={this.columns}
-            className="nodes-overview__decommissioned-nodes-table"
-          />
-        </TableSection>
-      </div>
-    );
+  if (isEmpty(dataSource)) {
+    return null;
   }
+
+  return (
+    <div className="nodes-overview__panel">
+      <TableSection
+        id={`nodes-overview__decommissioned-nodes`}
+        title="Recently Decommissioned Nodes"
+        footer={
+          <Link to={`/reports/nodes/history`}>
+            View all decommissioned nodes{" "}
+          </Link>
+        }
+        isCollapsible={isCollapsible}
+        className="embedded-table embedded-table--dense"
+      >
+        <Table
+          dataSource={dataSource}
+          columns={columns}
+          className="nodes-overview__decommissioned-nodes-table"
+        />
+      </TableSection>
+    </div>
+  );
 }
 
 export const liveNodesTableDataSelector = createSelector(
@@ -723,28 +723,24 @@ interface NodesMainProps {
  * Renders the main content of the nodes page, which is primarily a data table
  * of all nodes.
  */
-class NodesMain extends React.Component<NodesMainProps, {}> {
-  componentDidMount() {
-    // Refresh nodes status query when mounting.
-    this.props.refreshNodes();
-    this.props.refreshLiveness();
-  }
+function NodesMain({
+  refreshNodes: refreshNodesAction,
+  refreshLiveness: refreshLivenessAction,
+}: NodesMainProps): React.ReactElement {
+  useEffect(() => {
+    // Refresh nodes status query when mounting and when props change;
+    // this will immediately trigger a new request if previous results
+    // are invalidated.
+    refreshNodesAction();
+    refreshLivenessAction();
+  });
 
-  componentDidUpdate() {
-    // Refresh nodes status query when props are received; this will immediately
-    // trigger a new request if previous results are invalidated.
-    this.props.refreshNodes();
-    this.props.refreshLiveness();
-  }
-
-  render() {
-    return (
-      <div className="nodes-overview">
-        <NodesConnected />
-        <DecommissionedNodesConnected />
-      </div>
-    );
-  }
+  return (
+    <div className="nodes-overview">
+      <NodesConnected />
+      <DecommissionedNodesConnected />
+    </div>
+  );
 }
 
 /**

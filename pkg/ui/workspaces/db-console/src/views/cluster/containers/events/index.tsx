@@ -16,7 +16,7 @@ import { InlineAlert } from "@cockroachlabs/ui-components";
 import map from "lodash/map";
 import take from "lodash/take";
 import moment from "moment-timezone";
-import React, { useContext } from "react";
+import React, { useContext, useEffect } from "react";
 import { Helmet } from "react-helmet";
 import { connect } from "react-redux";
 import { Link, RouteComponentProps, withRouter } from "react-router-dom";
@@ -97,39 +97,34 @@ export interface EventBoxProps {
   refreshEvents: typeof refreshEvents;
 }
 
-export class EventBoxUnconnected extends React.Component<EventBoxProps, {}> {
-  componentDidMount() {
-    // Refresh events when mounting.
-    this.props.refreshEvents();
-  }
+export function EventBoxUnconnected({
+  events,
+  refreshEvents: refreshEventsAction,
+}: EventBoxProps): React.ReactElement {
+  useEffect(() => {
+    // Refresh events when mounting and when props change.
+    refreshEventsAction();
+  });
 
-  componentDidUpdate() {
-    // Refresh events when props change.
-    this.props.refreshEvents();
-  }
-
-  render() {
-    const events = this.props.events;
-    return (
-      <div className="events">
-        <table>
-          <tbody>
-            {map(
-              take(events, EVENT_BOX_NUM_EVENTS),
-              (e: clusterUiApi.EventColumns, i: number) => {
-                return <EventRow event={e} key={i} />;
-              },
-            )}
-            <tr>
-              <td className="events__more-link" colSpan={2}>
-                <Link to="/events">View all events</Link>
-              </td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
-    );
-  }
+  return (
+    <div className="events">
+      <table>
+        <tbody>
+          {map(
+            take(events, EVENT_BOX_NUM_EVENTS),
+            (e: clusterUiApi.EventColumns, i: number) => {
+              return <EventRow event={e} key={i} />;
+            },
+          )}
+          <tr>
+            <td className="events__more-link" colSpan={2}>
+              <Link to="/events">View all events</Link>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  );
 }
 
 export interface EventPageProps {
