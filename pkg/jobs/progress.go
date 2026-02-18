@@ -54,6 +54,9 @@ type ChunkProgressLogger struct {
 	batcher ProgressUpdateBatcher
 }
 
+// NewChunkProgressLoggerForJob returns a ChunkProgressLogger which updates a job's
+// fraction_completed via ProgressStorage. expectedChunks is the expected number of chunks left
+// for this job, and fraction_completed is calculated based on this number and startFraction.
 func NewChunkProgressLoggerForJob(
 	jobID jobspb.JobID, db isql.DB, expectedChunks int, startFraction float64,
 ) *ChunkProgressLogger {
@@ -67,8 +70,8 @@ func NewChunkProgressLoggerForJob(
 	)
 }
 
-// DeprecatedProgressUpdateOnly is for use with NewChunkProgressLogger to just update job
-// progress fraction (ie. when a custom func with side-effects is not needed).
+// DeprecatedProgressUpdateOnly is for use with DeprecatedNewChunkProgressLoggerForJob to just
+// update job progress fraction (ie. when a custom func with side-effects is not needed).
 var DeprecatedProgressUpdateOnly func(context.Context, jobspb.ProgressDetails)
 
 func DeprecatedNewChunkProgressLoggerForJob(

@@ -829,14 +829,15 @@ func getBackupChain(
 	return manifests, localityInfo, baseEncryptionInfo, allIters, nil
 }
 
-// processProgress processes progress updates from the bulk processor for a backup and updates
+// checkpointLoop processes progress updates from the bulk processor for a backup and updates
 // the associated manifest.
-func processProgress(
+func checkpointLoop(
 	ctx context.Context,
 	execCtx sql.JobExecContext,
 	details jobspb.BackupDetails,
 	manifest *backuppb.BackupManifest,
 	progCh <-chan *execinfrapb.RemoteProducerMetadata_BulkProcessorProgress,
+	chunkFinishedCh chan<- struct{},
 	kmsEnv cloud.KMSEnv,
 ) error {
 	var lastCheckpointTime time.Time
@@ -851,6 +852,9 @@ func processProgress(
 		for _, file := range progDetails.Files {
 			manifest.Files = append(manifest.Files, file)
 			manifest.EntryCounts.Add(file.EntryCounts)
+		}
+		for range progDetails.CompletedSpans {
+			chunkFinishedCh <- struct{}{}
 		}
 
 		// TODO (kev-cao): Add per node progress updates.
@@ -903,7 +907,7 @@ func doCompaction(
 	defaultStore cloud.ExternalStorage,
 	kmsEnv cloud.KMSEnv,
 ) error {
-	plan, planCtx, err := createCompactionPlan(
+	compactionPlan, err := createCompactionPlan(
 		ctx, execCtx, jobID, details, compactChain, manifest, defaultStore, kmsEnv,
 	)
 	if err != nil {
@@ -913,15 +917,45 @@ func doCompaction(
 	progCh := make(chan *execinfrapb.RemoteProducerMetadata_BulkProcessorProgress)
 	runDistCompaction := func(ctx context.Context) error {
 		defer close(progCh)
-		return runCompactionPlan(ctx, execCtx, jobID, planCtx, plan, progCh)
+		return runCompactionPlan(
+			ctx, execCtx, jobID, compactionPlan, progCh,
+		)
 	}
+
+	var totalEntriesLeft int
+	for _, set := range compactionPlan.localitySets {
+		totalEntriesLeft += set.totalEntries
+	}
+	chunkFinishedCh := make(chan struct{}, totalEntriesLeft)
 	checkpointLoop := func(ctx context.Context) error {
-		return processProgress(ctx, execCtx, details, manifest, progCh, kmsEnv)
+		defer close(chunkFinishedCh)
+		return checkpointLoop(
+			ctx, execCtx, details, manifest, progCh, chunkFinishedCh, kmsEnv,
+		)
 	}
+
+	var frac float64
+	if err := execCtx.ExecCfg().InternalDB.Txn(ctx, func(ctx context.Context, t isql.Txn) error {
+		var err error
+		frac, _, _, err = jobs.ProgressStorage(jobID).Get(ctx, t)
+		return err
+	}); err != nil {
+		return err
+	}
+	if math.IsNaN(frac) {
+		frac = 0
+	}
+	logger := jobs.NewChunkProgressLoggerForJob(
+		jobID, execCtx.ExecCfg().InternalDB, totalEntriesLeft, frac,
+	)
+	progressLoop := func(ctx context.Context) error {
+		return logger.Loop(ctx, chunkFinishedCh)
+	}
+
 	// TODO (kev-cao): Add trace aggregator loop.
 
 	if err := ctxgroup.GoAndWait(
-		ctx, runDistCompaction, checkpointLoop,
+		ctx, runDistCompaction, checkpointLoop, progressLoop,
 	); err != nil {
 		return err
 	}
