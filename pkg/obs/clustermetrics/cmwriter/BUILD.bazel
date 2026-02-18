@@ -4,6 +4,7 @@ go_library(
     name = "cmwriter",
     srcs = [
         "doc.go",
+        "metrics.go",
         "settings.go",
         "sql_store.go",
         "writer.go",
@@ -14,7 +15,6 @@ go_library(
     deps = [
         "//pkg/base",
         "//pkg/clusterversion",
-        "//pkg/obs/clustermetrics",
         "//pkg/settings",
         "//pkg/settings/cluster",
         "//pkg/sql/isql",
@@ -23,7 +23,9 @@ go_library(
         "//pkg/util/log",
         "//pkg/util/metric",
         "//pkg/util/stop",
+        "//pkg/util/syncutil",
         "//pkg/util/timeutil",
+        "@com_github_prometheus_client_model//go",
     ],
 )
 
@@ -37,7 +39,6 @@ go_test(
     embed = [":cmwriter"],
     deps = [
         "//pkg/base",
-        "//pkg/obs/clustermetrics",
         "//pkg/security/securityassets",
         "//pkg/security/securitytest",
         "//pkg/server",
@@ -54,6 +55,7 @@ go_test(
         "//pkg/util/syncutil",
         "//pkg/util/timeutil",
         "@com_github_cockroachdb_errors//:errors",
+        "@com_github_prometheus_client_model//go",
         "@com_github_stretchr_testify//require",
     ],
 )

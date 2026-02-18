@@ -547,7 +547,7 @@ go_test(
         "//pkg/kv/kvserver/kvstorage",
         "//pkg/kv/kvserver/liveness/livenesspb",
         "//pkg/multitenant",
-        "//pkg/obs/clustermetrics",
+        "//pkg/obs/clustermetrics/cmwriter",
         "//pkg/roachpb",
         "//pkg/rpc",
         "//pkg/rpc/rpcbase",
