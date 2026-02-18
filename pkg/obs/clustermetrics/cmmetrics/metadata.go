@@ -3,7 +3,11 @@
 // Use of this software is governed by the CockroachDB Software License
 // included in the /LICENSE file.
 
-package clustermetrics
+// Package cmmetrics holds the cluster metric metadata registry. Both
+// cmwriter (registration at construction time) and cmwatcher (lookup
+// when materializing rangefeed rows) import this package, avoiding a
+// circular dependency through the parent clustermetrics package.
+package cmmetrics
 
 import (
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
@@ -28,8 +32,9 @@ func newCmMetadata() *cmMetadata {
 var metadata = newCmMetadata()
 
 // RegisterClusterMetric registers metadata for a scalar cluster metric.
-// This should be called in an init() function so that metadata is available
-// before the cmreader.updater starts reading from the rangefeed.
+// This is called automatically by the cmwriter constructors (NewCounter,
+// NewGauge, NewStopwatch) so that metadata is available before the
+// cmreader starts reading from the rangefeed.
 func RegisterClusterMetric(name string, md metric.Metadata) {
 	metadata.mu.Lock()
 	defer metadata.mu.Unlock()
@@ -37,9 +42,9 @@ func RegisterClusterMetric(name string, md metric.Metadata) {
 }
 
 // RegisterLabeledClusterMetric registers metadata for a labeled (vector)
-// cluster metric. This should be called in an init() function so that
-// metadata is available before the cmreader.updater starts reading from
-// the rangefeed.
+// cluster metric. This is called automatically by the cmwriter
+// constructors (NewGaugeVec, NewCounterVec) so that metadata is
+// available before the cmreader starts reading from the rangefeed.
 func RegisterLabeledClusterMetric(name string, md metric.Metadata, labels []string) {
 	metadata.mu.Lock()
 	defer metadata.mu.Unlock()

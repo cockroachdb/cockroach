@@ -84,6 +84,21 @@ type Struct interface {
 	MetricStruct()
 }
 
+// NonExportableMetric is a marker interface for metrics that must not be
+// registered with metric registries. Metrics implementing this interface
+// (e.g. cluster-level metrics flushed to system.cluster_metrics) will be
+// rejected by Registry.AddMetric.
+type NonExportableMetric interface {
+	NonExportableMetric()
+}
+
+// IsNonExportableMetric is a mixin that implements NonExportableMetric.
+// Embed it in metric types that must not be added to prometheus registries.
+type IsNonExportableMetric struct{}
+
+// NonExportableMetric implements the NonExportableMetric interface.
+func (IsNonExportableMetric) NonExportableMetric() {}
+
 // NewRegistry creates a new Registry.
 func NewRegistry() *Registry {
 	return &Registry{
@@ -112,8 +127,21 @@ func (r *Registry) GetLabels() []*prometheusgo.LabelPair {
 	return r.computedLabels
 }
 
-// AddMetric adds the passed-in metric to the registry.
+// AddMetric adds the passed-in metric to the registry. Metrics that
+// implement NonExportableMetric are rejected: in test builds this is
+// fatal, in production a warning is logged and the metric is skipped.
 func (r *Registry) AddMetric(metric Iterable) {
+	if _, ok := metric.(NonExportableMetric); ok {
+		name := metric.GetName(false /* useStaticLabels */)
+		if buildutil.CrdbTestBuild {
+			panicHandler(context.TODO(),
+				"non-exportable metric %s (%T) cannot be added to a prometheus registry",
+				name, metric)
+		}
+		log.Dev.Warningf(context.TODO(),
+			"skipping non-exportable metric %s (%T)", name, metric)
+		return
+	}
 	r.Lock()
 	defer r.Unlock()
 	r.tracked[metric.GetName(false /* useStaticLabels */)] = metric
