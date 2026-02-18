@@ -569,7 +569,7 @@ func TestLockTableBasic(t *testing.T) {
 				case doneWaiting:
 					var toResolveStr string
 					if stateTransition {
-						toResolveStr = intentsToResolveToStr(g.ResolveBeforeScanning(), true)
+						toResolveStr = intentsToResolveToStr(g, true)
 					}
 					return str + "state=doneWaiting" + toResolveStr
 				default:
@@ -595,7 +595,7 @@ func TestLockTableBasic(t *testing.T) {
 				if g == nil {
 					d.Fatalf(t, "unknown guard: %s", reqName)
 				}
-				return intentsToResolveToStr(g.ResolveBeforeScanning(), false)
+				return intentsToResolveToStr(g, false)
 
 			case "enable":
 				lt.Enable(dd.ScanArgOr[roachpb.LeaseSequence](t, d, "lease-seq", 1))
@@ -826,7 +826,10 @@ func ScanIgnoredSeqNumbers(t *testing.T, d *datadriven.TestData) []enginepb.Igno
 	return ignored
 }
 
-func intentsToResolveToStr(toResolve []roachpb.LockUpdate, startOnNewLine bool) string {
+func intentsToResolveToStr(g lockTableGuard, startOnNewLine bool) string {
+	// Depending on whether intent resolution is virtual or not, the intents to
+	// resolve are returned from either of the following functions.
+	toResolve := append(g.IntentsToResolveVirtually(), g.ResolveBeforeScanning()...)
 	if len(toResolve) == 0 {
 		return ""
 	}

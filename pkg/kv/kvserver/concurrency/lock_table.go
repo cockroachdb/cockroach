@@ -583,8 +583,22 @@ func (g *lockTableGuardImpl) ShouldWait() bool {
 	return g.mu.startWait || len(g.toResolve) > 0
 }
 
+// ResolveBeforeScanning implements the lockTableGuard interface. The locks to
+// resolve are returned only if virtualized resolution is disabled.
 func (g *lockTableGuardImpl) ResolveBeforeScanning() []roachpb.LockUpdate {
-	return g.toResolve
+	if !g.virtuallyResolveIntents {
+		return g.toResolve
+	}
+	return nil
+}
+
+// IntentsToResolveVirtually implements the lockTableGuard interface. The locks
+// to resolve are returned only if virtualized resolution is enabled.
+func (g *lockTableGuardImpl) IntentsToResolveVirtually() []roachpb.LockUpdate {
+	if g.virtuallyResolveIntents {
+		return g.toResolve
+	}
+	return nil
 }
 
 func (g *lockTableGuardImpl) NewStateChan() chan struct{} {

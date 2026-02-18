@@ -976,6 +976,15 @@ func (g *Guard) IsKeyLockedByConflictingTxn(
 	return g.ltg.IsKeyLockedByConflictingTxn(ctx, key, strength)
 }
 
+// IntentsToResolveVirtually delegates listing the locks to be resolved to the
+// lock table guard.
+func (g *Guard) IntentsToResolveVirtually() []roachpb.LockUpdate {
+	if g.ltg != nil {
+		return g.ltg.IntentsToResolveVirtually()
+	}
+	return nil
+}
+
 func (g *Guard) moveLatchGuard() latchGuard {
 	lg := g.lg
 	g.lg = nil

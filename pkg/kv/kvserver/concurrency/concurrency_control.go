@@ -829,6 +829,11 @@ type lockTableGuard interface {
 	//   the discovered locks have been added.
 	ResolveBeforeScanning() []roachpb.LockUpdate
 
+	// IntentsToResolveVirtually lists the locks to resolve before scanning
+	// similarly to ResolveBeforeScanning. However, these locks are intended to be
+	// resolved virtually.
+	IntentsToResolveVirtually() []roachpb.LockUpdate
+
 	// CheckOptimisticNoConflicts uses the LockSpanSet representing the spans that
 	// were actually read, to check for conflicting locks, after an optimistic
 	// evaluation. It returns true if there were no conflicts. See
