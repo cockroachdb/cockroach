@@ -1296,3 +1296,126 @@ func getDatabaseNames(allDBs []catalog.DatabaseDescriptor) []string {
 	}
 	return names
 }
+
+// TestForceStorageLookupIDs verifies that when a Collection is created with
+// WithForceStorageLookupIDs, descriptor lookups for IDs in the forced set
+// bypass the leased/cached layers and resolve directly from KV storage.
+// This is a regression test for #161528, where a child Collection created for
+// parallel check workers could resolve a stale leased descriptor instead of
+// the updated version written to KV by the parent Collection.
+func TestForceStorageLookupIDs(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	srv, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	defer srv.Stopper().Stop(ctx)
+	s := srv.ApplicationLayer()
+
+	tdb := sqlutils.MakeSQLRunner(sqlDB)
+	tdb.Exec(t, "CREATE DATABASE db")
+	tdb.Exec(t, "USE db")
+	tdb.Exec(t, "CREATE TYPE db.public.typ AS ENUM ('a')")
+	tdb.Exec(t, "CREATE TABLE db.public.tab (i INT PRIMARY KEY)")
+
+	execCfg := s.ExecutorConfig().(sql.ExecutorConfig)
+
+	require.NoError(t, sql.DescsTxn(ctx, &execCfg, func(
+		ctx context.Context, txn isql.Txn, parentCol *descs.Collection,
+	) error {
+		// Set up the parent collection: get the type descriptor mutably and
+		// write it to KV. This simulates the parent planner modifying a
+		// descriptor (e.g. adding an enum member) before spawning parallel
+		// check workers. WriteDesc increments the version and writes to KV
+		// within this transaction (uncommitted).
+		tn := tree.MakeQualifiedTypeName("db", "public", "typ")
+		_, typ, err := descs.PrefixAndMutableType(ctx, parentCol.MutableByName(txn.KV()), &tn)
+		require.NoError(t, err)
+		committedVersion := typ.Version
+
+		require.NoError(t, parentCol.WriteDesc(ctx, false /* kvTrace */, typ, txn.KV()))
+		kvVersion := typ.Version
+		require.Greater(t, kvVersion, committedVersion,
+			"WriteDesc should have incremented the version")
+		typID := typ.GetID()
+
+		// Resolve the table descriptor (unmodified) for the non-forced case.
+		tabTn := tree.MakeTableNameWithSchema("db", "public", "tab")
+		_, tab, err := descs.PrefixAndTable(ctx, parentCol.ByNameWithLeased(txn.KV()).MaybeGet(), &tabTn)
+		require.NoError(t, err)
+		tabID := tab.GetID()
+		tabLeasedVersion := tab.GetVersion()
+
+		// Create the child collection with forceStorageLookupIDs set to the
+		// parent's uncommitted descriptor IDs, mirroring what
+		// distsql.ServerImpl.newFlowContext does for parallel check workers.
+		uncommittedIDs := parentCol.GetUncommittedDescriptorIDs()
+		require.True(t, uncommittedIDs.Contains(typID),
+			"type descriptor should be in uncommitted IDs")
+
+		childCol := execCfg.CollectionFactory.NewCollection(
+			ctx, descs.WithForceStorageLookupIDs(uncommittedIDs),
+		)
+		defer childCol.ReleaseAll(ctx)
+
+		// Also create a child without forceStorageLookupIDs to contrast.
+		childColNoForce := execCfg.CollectionFactory.NewCollection(ctx)
+		defer childColNoForce.ReleaseAll(ctx)
+
+		nonExistentID := descpb.ID(999999)
+
+		testCases := []struct {
+			name            string
+			col             *descs.Collection
+			id              descpb.ID
+			expectedVersion descpb.DescriptorVersion // 0 means don't check (error case)
+			expectErr       bool
+		}{
+			{
+				// ID is in forceStorageLookupIDs: bypasses the lease, reads
+				// the updated version directly from KV.
+				name:            "forced ID resolves from KV storage",
+				col:             childCol,
+				id:              typID,
+				expectedVersion: kvVersion,
+			},
+			{
+				// Same ID without forceStorageLookupIDs: resolves from the
+				// lease manager, returning the stale committed version.
+				name:            "non-forced child gets stale leased version",
+				col:             childColNoForce,
+				id:              typID,
+				expectedVersion: committedVersion,
+			},
+			{
+				// ID not in forceStorageLookupIDs: resolves through the
+				// normal leased path even on the forced collection.
+				name:            "non-forced ID resolves from lease",
+				col:             childCol,
+				id:              tabID,
+				expectedVersion: tabLeasedVersion,
+			},
+			{
+				// ID that doesn't exist anywhere.
+				name:      "non-existent ID returns error",
+				col:       childCol,
+				id:        nonExistentID,
+				expectErr: true,
+			},
+		}
+
+		for _, tc := range testCases {
+			t.Run(tc.name, func(t *testing.T) {
+				desc, err := tc.col.ByIDWithLeased(txn.KV()).WithoutNonPublic().Get().Desc(ctx, tc.id)
+				if tc.expectErr {
+					require.Error(t, err)
+					return
+				}
+				require.NoError(t, err)
+				require.Equal(t, tc.expectedVersion, desc.GetVersion())
+			})
+		}
+
+		return nil
+	}))
+}
