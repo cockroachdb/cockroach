@@ -1354,7 +1354,7 @@ func (f *blackholeFailer) Setup(context.Context)       {}
 func (f *blackholeFailer) Ready(context.Context, int)  {}
 
 func (f *blackholeFailer) Cleanup(ctx context.Context) {
-	f.c.Run(ctx, option.WithNodes(f.c.All()), `sudo iptables -F`)
+	f.c.Run(ctx, option.WithNodes(f.c.All()), `sudo iptables -w -F`)
 }
 
 func (f *blackholeFailer) Fail(ctx context.Context, nodeID int) {
@@ -1371,15 +1371,15 @@ func (f *blackholeFailer) Fail(ctx context.Context, nodeID int) {
 	// outages in the wild.
 	if f.input && f.output {
 		// Inbound TCP connections, both received and sent packets.
-		f.c.Run(ctx, option.WithNodes(f.c.Node(nodeID)), fmt.Sprintf(`sudo iptables -A INPUT -p tcp --dport %s -j DROP`, pgport))
-		f.c.Run(ctx, option.WithNodes(f.c.Node(nodeID)), fmt.Sprintf(`sudo iptables -A OUTPUT -p tcp --sport %s -j DROP`, pgport))
+		f.c.Run(ctx, option.WithNodes(f.c.Node(nodeID)), fmt.Sprintf(`sudo iptables -w -A INPUT -p tcp --dport %s -j DROP`, pgport))
+		f.c.Run(ctx, option.WithNodes(f.c.Node(nodeID)), fmt.Sprintf(`sudo iptables -w -A OUTPUT -p tcp --sport %s -j DROP`, pgport))
 		// Outbound TCP connections, both sent and received packets.
-		f.c.Run(ctx, option.WithNodes(f.c.Node(nodeID)), fmt.Sprintf(`sudo iptables -A OUTPUT -p tcp --dport %s -j DROP`, pgport))
-		f.c.Run(ctx, option.WithNodes(f.c.Node(nodeID)), fmt.Sprintf(`sudo iptables -A INPUT -p tcp --sport %s -j DROP`, pgport))
+		f.c.Run(ctx, option.WithNodes(f.c.Node(nodeID)), fmt.Sprintf(`sudo iptables -w -A OUTPUT -p tcp --dport %s -j DROP`, pgport))
+		f.c.Run(ctx, option.WithNodes(f.c.Node(nodeID)), fmt.Sprintf(`sudo iptables -w -A INPUT -p tcp --sport %s -j DROP`, pgport))
 	} else if f.input {
-		f.c.Run(ctx, option.WithNodes(f.c.Node(nodeID)), fmt.Sprintf(`sudo iptables -A INPUT -p tcp --dport %s -j DROP`, pgport))
+		f.c.Run(ctx, option.WithNodes(f.c.Node(nodeID)), fmt.Sprintf(`sudo iptables -w -A INPUT -p tcp --dport %s -j DROP`, pgport))
 	} else if f.output {
-		f.c.Run(ctx, option.WithNodes(f.c.Node(nodeID)), fmt.Sprintf(`sudo iptables -A OUTPUT -p tcp --dport %s -j DROP`, pgport))
+		f.c.Run(ctx, option.WithNodes(f.c.Node(nodeID)), fmt.Sprintf(`sudo iptables -w -A OUTPUT -p tcp --dport %s -j DROP`, pgport))
 	}
 }
 
@@ -1402,26 +1402,26 @@ func (f *blackholeFailer) FailPartial(ctx context.Context, nodeID int, peerIDs [
 		if f.input && f.output {
 			// Inbound TCP connections, both received and sent packets.
 			f.c.Run(ctx, option.WithNodes(f.c.Node(nodeID)), fmt.Sprintf(
-				`sudo iptables -A INPUT -p tcp -s %s --dport %s -j DROP`, peerIP, pgport))
+				`sudo iptables -w -A INPUT -p tcp -s %s --dport %s -j DROP`, peerIP, pgport))
 			f.c.Run(ctx, option.WithNodes(f.c.Node(nodeID)), fmt.Sprintf(
-				`sudo iptables -A OUTPUT -p tcp -d %s --sport %s -j DROP`, peerIP, pgport))
+				`sudo iptables -w -A OUTPUT -p tcp -d %s --sport %s -j DROP`, peerIP, pgport))
 			// Outbound TCP connections, both sent and received packets.
 			f.c.Run(ctx, option.WithNodes(f.c.Node(nodeID)), fmt.Sprintf(
-				`sudo iptables -A OUTPUT -p tcp -d %s --dport %s -j DROP`, peerIP, pgport))
+				`sudo iptables -w -A OUTPUT -p tcp -d %s --dport %s -j DROP`, peerIP, pgport))
 			f.c.Run(ctx, option.WithNodes(f.c.Node(nodeID)), fmt.Sprintf(
-				`sudo iptables -A INPUT -p tcp -s %s --sport %s -j DROP`, peerIP, pgport))
+				`sudo iptables -w -A INPUT -p tcp -s %s --sport %s -j DROP`, peerIP, pgport))
 		} else if f.input {
 			f.c.Run(ctx, option.WithNodes(f.c.Node(nodeID)), fmt.Sprintf(
-				`sudo iptables -A INPUT -p tcp -s %s --dport %s -j DROP`, peerIP, pgport))
+				`sudo iptables -w -A INPUT -p tcp -s %s --dport %s -j DROP`, peerIP, pgport))
 		} else if f.output {
 			f.c.Run(ctx, option.WithNodes(f.c.Node(nodeID)), fmt.Sprintf(
-				`sudo iptables -A OUTPUT -p tcp -d %s --dport %s -j DROP`, peerIP, pgport))
+				`sudo iptables -w -A OUTPUT -p tcp -d %s --dport %s -j DROP`, peerIP, pgport))
 		}
 	}
 }
 
 func (f *blackholeFailer) Recover(ctx context.Context, nodeID int) {
-	f.c.Run(ctx, option.WithNodes(f.c.Node(nodeID)), `sudo iptables -F`)
+	f.c.Run(ctx, option.WithNodes(f.c.Node(nodeID)), `sudo iptables -w -F`)
 }
 
 // crashFailer is a process crash where the TCP/IP stack remains responsive
