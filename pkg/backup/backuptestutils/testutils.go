@@ -92,6 +92,7 @@ type backupTestOptions struct {
 	testClusterArgs            base.TestClusterArgs
 	initFunc                   func(*testcluster.TestCluster)
 	skipInvalidDescriptorCheck bool
+	useNonSlimServer           bool
 }
 
 func WithParams(p base.TestClusterArgs) BackupTestArg {
@@ -125,6 +126,11 @@ func WithSkipInvalidDescriptorCheck() BackupTestArg {
 		o.skipInvalidDescriptorCheck = true
 	}
 }
+func WithNonSlimServers() BackupTestArg {
+	return func(o *backupTestOptions) {
+		o.useNonSlimServer = true
+	}
+}
 
 func StartBackupRestoreTestCluster(
 	t testing.TB, clusterSize int, args ...BackupTestArg,
@@ -144,6 +150,9 @@ func StartBackupRestoreTestCluster(
 		// TODO(ssd): Is anything actually using a custom init
 		// func?
 		opts.initFunc = InitManualReplication
+	}
+	if !opts.useNonSlimServer {
+		opts.testClusterArgs.ServerArgs.SlimTestSeverConfig = &base.SlimTestServerConfig{}
 	}
 
 	useDatabase := ""
