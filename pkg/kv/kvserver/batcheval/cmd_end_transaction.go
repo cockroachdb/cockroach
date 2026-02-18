@@ -1254,6 +1254,19 @@ func splitTrigger(
 	return splitTriggerHelper(ctx, rec, batch, in, h, split, ts)
 }
 
+// TestingMergeTrigger is a wrapper around mergeTrigger that is exported for
+// testing purposes.
+func TestingMergeTrigger(
+	ctx context.Context,
+	rec EvalContext,
+	batch storage.Batch,
+	ms *enginepb.MVCCStats,
+	merge *roachpb.MergeTrigger,
+	ts hlc.Timestamp,
+) (result.Result, error) {
+	return mergeTrigger(ctx, rec, batch, ms, merge, ts)
+}
+
 // TestingSplitTrigger is a wrapper around splitTrigger that is exported for
 // testing purposes.
 func TestingSplitTrigger(
