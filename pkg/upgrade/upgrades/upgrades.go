@@ -94,6 +94,15 @@ var upgrades = []upgradebase.Upgrade{
 		repairTriggerBackrefs,
 		upgrade.RestoreActionImplemented("handled in RunRestoreChanges"),
 	),
+
+	upgrade.NewTenantUpgrade(
+		"strip empty topic_name from changefeed sink URIs",
+		clusterversion.V26_2_ChangefeedsRejectEmptyTopicName.Version(),
+		upgrade.NoPrecondition,
+		stripEmptyTopicNameFromChangefeeds,
+		upgrade.RestoreActionNotRequired("changefeed job payloads are not restored"),
+	),
+
 	// Note: when starting a new release version, the first upgrade (for
 	// Vxy_zStart) must be a newFirstUpgrade. Keep this comment at the bottom.
 }
