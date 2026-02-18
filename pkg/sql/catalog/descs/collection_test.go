@@ -611,7 +611,7 @@ func TestCollectionProperlyUsesMemoryMonitoring(t *testing.T) {
 	)
 	require.Equal(t, int64(0), monitor.AllocBytes())
 
-	// Read all the descriptors into `col` and assert this read will finish without error.
+	// Read all the descriptors into `collection` and assert this read will finish without error.
 	_, err1 := col.GetAllDescriptors(ctx, txn)
 	require.NoError(t, err1)
 
@@ -1295,4 +1295,107 @@ func getDatabaseNames(allDBs []catalog.DatabaseDescriptor) []string {
 		names = append(names, db.GetName())
 	}
 	return names
+}
+
+// TestForceStorageLookupIDs verifies that when a Collection is created with
+// WithForceStorageLookupIDs, descriptor lookups for IDs in the forced set
+// bypass the leased/cached layers and resolve directly from KV storage.
+func TestForceStorageLookupIDs(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	srv, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	defer srv.Stopper().Stop(ctx)
+	s := srv.ApplicationLayer()
+
+	tdb := sqlutils.MakeSQLRunner(sqlDB)
+	tdb.Exec(t, "CREATE DATABASE db")
+	tdb.Exec(t, "USE db")
+	// Here the descriptor of db.public.typ is commited with initial version = 1.
+	tdb.Exec(t, "CREATE TYPE db.public.typ AS ENUM ('a')")
+
+	execCfg := s.ExecutorConfig().(sql.ExecutorConfig)
+
+	require.NoError(t, sql.DescsTxn(ctx, &execCfg, func(
+		ctx context.Context, txn isql.Txn, parentCollection *descs.Collection,
+	) error {
+		tn := tree.MakeQualifiedTypeName("db", "public", "typ")
+		_, typ, err := descs.PrefixAndMutableType(ctx, parentCollection.MutableByName(txn.KV()), &tn)
+		require.NoError(t, err)
+		committedVersion := typ.Version
+
+		// Here `WriteDesc()` calls `MaybeIncrementVersion()` that increase the UDT
+		// version by 1.
+		// It also writes to KV within this transaction but without committing.
+		require.NoError(t, parentCollection.WriteDesc(ctx, false /* kvTrace */, typ, txn.KV()))
+		kvVersion := typ.Version
+		require.Greater(t, kvVersion, committedVersion,
+			"WriteDesc should have incremented the version")
+		typID := typ.GetID()
+
+		// Create the child collection with forceStorageLookupIDs set to the
+		// parent's uncommitted descriptor IDs.
+		uncommittedIDs := parentCollection.GetUncommittedDescriptorIDs()
+		require.True(t, uncommittedIDs.Contains(typID),
+			"type descriptor should be in uncommitted IDs")
+
+		childCollection := execCfg.CollectionFactory.NewCollection(
+			ctx, descs.WithForceStorageLookupIDs(uncommittedIDs),
+		)
+		defer childCollection.ReleaseAll(ctx)
+
+		// Also create a child without forceStorageLookupIDs to contrast.
+		childCollectionNoForce := execCfg.CollectionFactory.NewCollection(ctx)
+		defer childCollectionNoForce.ReleaseAll(ctx)
+
+		nonExistentID := descpb.ID(999999)
+
+		testCases := []struct {
+			name            string
+			collection      *descs.Collection
+			id              descpb.ID
+			expectedVersion descpb.DescriptorVersion // 0 means don't check (error case)
+			expectErr       bool
+		}{
+			{
+				name:            "forced ID resolves from KV storage",
+				collection:      childCollection,
+				id:              typID,
+				expectedVersion: kvVersion,
+			},
+			{
+				name:            "non-forced child gets stale leased version",
+				collection:      childCollectionNoForce,
+				id:              typID,
+				expectedVersion: committedVersion,
+			},
+			{
+				name:       "forced child returns error for non-existent ID",
+				collection: childCollection,
+				id:         nonExistentID,
+				expectErr:  true,
+			},
+			{
+				name:       "non-forced child returns error for non-existent ID",
+				collection: childCollectionNoForce,
+				id:         nonExistentID,
+				expectErr:  true,
+			},
+		}
+
+		for _, tc := range testCases {
+			t.Run(tc.name, func(t *testing.T) {
+				desc, err := tc.collection.ByIDWithLeased(txn.KV()).WithoutNonPublic().Get().Desc(ctx, tc.id)
+				if tc.expectErr {
+					require.Error(t, err)
+					return
+				}
+				require.NoError(t, err)
+				require.Equal(t, tc.expectedVersion, desc.GetVersion())
+			})
+		}
+
+		return nil
+	}))
 }
