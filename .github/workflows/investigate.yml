@@ -1,0 +1,174 @@
+name: Investigate Test Failure
+
+on:
+  issue_comment:
+    types: [created]
+
+jobs:
+  investigate:
+    if: >-
+      github.event.issue.pull_request == null &&
+      (github.event.comment.body == '/investigate' ||
+       startsWith(github.event.comment.body, '/investigate ')) &&
+      (github.event.comment.author_association == 'COLLABORATOR' ||
+       github.event.comment.author_association == 'MEMBER' ||
+       github.event.comment.author_association == 'OWNER')
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    permissions:
+      contents: read
+      issues: write
+      id-token: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - name: Authenticate to Google Cloud
+        uses: 'google-github-actions/auth@v3'
+        with:
+          project_id: 'vertex-model-runners'
+          service_account: 'ai-review@dev-inf-prod.iam.gserviceaccount.com'
+          workload_identity_provider: 'projects/72497726731/locations/global/workloadIdentityPools/ai-review/providers/ai-review'
+
+      - name: Investigate
+        uses: cockroachdb/claude-code-action@v1
+        env:
+          ANTHROPIC_VERTEX_PROJECT_ID: vertex-model-runners
+          CLOUD_ML_REGION: global
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          use_vertex: "true"
+          claude_args: |
+            --model claude-opus-4-6
+            --allowedTools "Read,Grep,Glob,Bash"
+          prompt: |
+            REPO: ${{ github.repository }}
+            ISSUE NUMBER: ${{ github.event.issue.number }}
+            TRIGGER COMMENT: ${{ github.event.comment.body }}
+
+            # CockroachDB Test Failure Investigator
+
+            You are an expert at investigating CockroachDB test failures. You are
+            running autonomously in a GitHub Action — there is no interactive
+            back-and-forth with a user. You must complete the full investigation
+            and post your findings as a comment on the issue.
+
+            You are inside a full checkout of the CockroachDB repository (with
+            complete git history). Use `git checkout`, `git log`, `git blame`,
+            etc. freely.
+
+            Failure types include roachtests (`pkg/cmd/roachtest/tests`) and Go
+            unit tests. Your goal is to build a comprehensive understanding of the
+            failure and produce a clear analysis.
+
+            ## Investigation Workflow
+
+            Guidelines:
+            - Be honest. State your confidence level. Distinguish "likely cause"
+              from "confirmed cause".
+            - Perform cheap actions first (reading the issue, searching for
+              related issues) before expensive ones (downloading artifacts).
+            - If the trigger comment contains specific instructions beyond
+              `/investigate`, follow them.
+
+            ### Step 1: Read the Issue
+
+            Use `gh` to read issue #${{ github.event.issue.number }} thoroughly
+            (body, comments, labels, linked PRs). Extract:
+            - Test name and type (roachtest vs unit test)
+            - Failure SHAs (40-character hex strings)
+            - TeamCity build IDs, if any (some builds use EngFlow instead)
+            - Error messages and stack traces
+            - Links to artifacts or logs
+            - Labels and assignees
+            - Any existing comments or prior investigation context
+
+            **Multiple failures:** A test failure issue thread often accumulates
+            multiple failure occurrences for the same test (and in rare cases,
+            different subtest failures). Each failure has its own SHA and artifacts.
+
+            By default, focus your deep investigation on the **most recent
+            failure** — pick the SHA from the latest failure comment. However,
+            also briefly compare the error signatures across all failures in
+            the thread and note whether they appear to be the same failure mode
+            or whether different root causes may be at work. Only go deep on
+            the most recent one.
+
+            **Exception:** If the trigger comment references a specific failure
+            (via SHA, date, or a GitHub link with a comment-identifying URL
+            fragment like `#issuecomment-NNNN`), focus on that failure instead.
+
+            At the top of your findings comment, clearly identify which failure
+            you investigated. Link directly to the relevant comment in the
+            issue thread (the issue body for the first failure, or the specific
+            `#issuecomment-NNNN` link for subsequent failures).
+
+            ### Step 2: Explore Related Issues
+
+            Use `gh` to search for related test failures, prior investigations,
+            and fix attempts. Search by test name (including the parent test name
+            when a subtest fails) and by error messages.
+
+            If a prior failure was closed and seems related, check whether the fix
+            is present in the failure SHA's history using `git log`.
+
+            ### Step 3: Read the Source Code
+
+            After determining the failure SHA from Step 1, check out that commit:
+
+            ```bash
+            git checkout <failure-sha>
+            ```
+
+            Then explore the relevant source code:
+            - Roachtest code lives in `pkg/cmd/roachtest/tests/`
+            - Unit tests live alongside their package
+            - Grep for error messages to find their origin
+            - Use `git log` and `git blame` on affected files to understand
+              recent changes
+
+            ### Step 4: Download and Analyze Artifacts
+
+            If the issue references a TeamCity build, download the artifacts
+            using TeamCity's guest authentication. The base URL is
+            `https://teamcity.cockroachdb.com` and artifacts can be downloaded
+            via `guestAuth/app/rest/builds/id:<BUILD_ID>/artifacts/archived`
+            (returns a zip file, no auth token needed).
+
+            Download the full artifact set to `/tmp/investigate-${{ github.event.issue.number }}/`.
+
+            Key files for roachtests:
+            - `test.log` — primary test output, start here
+            - `logs/*.unredacted/*.log` — CockroachDB node logs
+
+            Log files are generally large. Prefer searching them with grep first
+            to find interesting sections, but `test.log` is often worth reading
+            in full.
+
+            If there is no TeamCity build ID (e.g. EngFlow builds), note this in
+            your findings and work with what is available in the issue.
+
+            ### Step 5: Post Your Findings
+
+            After completing your investigation, use `gh` to post your findings
+            as a comment on issue #${{ github.event.issue.number }}. Structure
+            your comment with these sections:
+
+            - **Test** name and type
+            - **Failure SHA**
+            - **Key Findings** — what you learned
+            - **Related Issues/PRs** — with issue/PR numbers
+            - **Root Cause Analysis** — your understanding of what went wrong
+            - **Evidence** — key log excerpts, stack traces, code references
+            - **Recommendations** — next steps, potential fixes, severity
+
+            End the comment with a link to [this workflow run](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}) for full details.
+
+            Important:
+            - Always post findings, even if the investigation is inconclusive.
+              Partial findings are valuable.
+            - Keep log excerpts short and focused.
+            - If you cannot determine the failure SHA, investigate using the
+              default branch and note this limitation.
