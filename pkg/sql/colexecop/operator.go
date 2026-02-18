@@ -32,6 +32,8 @@ type Operator interface {
 	//
 	// It might panic with an expected error, so there must be a "root"
 	// component that will catch that panic.
+	//
+	// Init and Next must be called from the same goroutine.
 	Init(ctx context.Context)
 
 	// Next returns the next Batch from this operator. Once the operator is
@@ -48,6 +50,8 @@ type Operator interface {
 	//
 	// It might panic with an expected error, so there must be a "root"
 	// component that will catch that panic.
+	//
+	// Init and Next must be called from the same goroutine.
 	Next() (coldata.Batch, *execinfrapb.ProducerMetadata)
 
 	execopnode.OpNode
