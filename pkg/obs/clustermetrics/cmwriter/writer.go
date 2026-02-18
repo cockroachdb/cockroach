@@ -11,7 +11,6 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/obs/clustermetrics"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
@@ -24,7 +23,7 @@ import (
 // MetricStore abstracts the storage backend for cluster metrics.
 type MetricStore interface {
 	// Write writes the given metrics to storage.
-	Write(ctx context.Context, metrics []clustermetrics.Metric) error
+	Write(ctx context.Context, metrics []WritableMetric) error
 }
 
 // Writer manages registered cluster metrics and periodically flushes their
@@ -77,30 +76,49 @@ func (w *Writer) Metrics() *WriterMetrics {
 	return w.metrics
 }
 
+// resettable is satisfied by both scalar Metric and MetricVec types.
+type resettable interface {
+	Reset()
+}
+
 // Flush triggers an immediate flush of all registered metrics to the store.
 // Only metrics that have changed since the last flush are written.
-// Iterates via registry.Each() to collect dirty metrics.
+//
+// Scalar metrics (Metric) are collected directly. Vector metrics
+// (MetricVec) yield read-only snapshots of their dirty children; the
+// parent vec is reset after a successful write.
 func (w *Writer) Flush(ctx context.Context) {
 	startTime := timeutil.Now()
-	var dirty []clustermetrics.Metric
+	var toWrite []WritableMetric
+	var toReset []resettable
 
-	// Collect dirty metrics to be written.
 	w.registry.Each(func(_ string, val interface{}) {
-		if m, ok := val.(clustermetrics.Metric); ok {
+		switch m := val.(type) {
+		case Metric:
 			if m.IsDirty() {
-				dirty = append(dirty, m)
+				toWrite = append(toWrite, m)
+				toReset = append(toReset, m)
 			}
-		} else {
+		case MetricVec:
+			hasDirty := false
+			m.Each(func(snap WritableMetric) {
+				toWrite = append(toWrite, snap)
+				hasDirty = true
+			})
+			if hasDirty {
+				toReset = append(toReset, m)
+			}
+		default:
 			log.Ops.Warningf(ctx, "cannot flush non-cluster-metric of type %T", val)
 		}
 	})
 
-	if len(dirty) == 0 {
+	if len(toWrite) == 0 {
 		return
 	}
 
 	// Write the metrics to the downstream store.
-	err := w.store.Write(ctx, dirty)
+	err := w.store.Write(ctx, toWrite)
 
 	// Record meta metrics.
 	elapsed := timeutil.Since(startTime)
@@ -111,11 +129,11 @@ func (w *Writer) Flush(ctx context.Context) {
 		log.Ops.Warningf(ctx, "failed to flush cluster metrics: %v", err)
 		return
 	}
-	w.metrics.MetricsWritten.Inc(int64(len(dirty)))
+	w.metrics.MetricsWritten.Inc(int64(len(toWrite)))
 
 	// Reset metrics after successful write.
-	for _, m := range dirty {
-		m.Reset()
+	for _, r := range toReset {
+		r.Reset()
 	}
 }
 

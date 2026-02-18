@@ -12,6 +12,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
+	"github.com/cockroachdb/cockroach/pkg/obs/clustermetrics/cmwriter"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
@@ -47,6 +48,15 @@ func (j *tableMetadataUpdateJobResumer) Resume(ctx context.Context, execCtxI int
 	metrics := execCtx.ExecCfg().JobRegistry.MetricsStruct().
 		JobSpecificMetrics[jobspb.TypeUpdateTableMetadataCache].(TableMetadataUpdateJobMetrics)
 	j.metrics = &metrics
+
+	// Register cluster metrics with the writer so they are periodically
+	// flushed to system.cluster_metrics. AddMetric overwrites by name,
+	// so repeated calls on job restart are safe.
+	if w := execCtx.ExecCfg().ClusterMetricsWriter; w != nil {
+		w.AddMetric(metrics.ClusterStatus)
+		w.AddMetric(metrics.ClusterLastStart)
+	}
+
 	testKnobs := execCtx.ExecCfg().TableMetadataKnobs
 	var updater tablemetadatacacheutil.ITableMetadataUpdater
 	var onJobStartKnob, onJobCompleteKnob, onJobReady func()
@@ -140,6 +150,9 @@ func (j *tableMetadataUpdateJobResumer) updateProgress(
 // markAsRunning updates the last_start_time and status fields in the job's progress
 // details and writes the job progress as a JSON string to the running status.
 func (j *tableMetadataUpdateJobResumer) markAsRunning(ctx context.Context) {
+	j.metrics.ClusterStatus.Update(1)
+	j.metrics.ClusterLastStart.Start()
+
 	if err := j.job.NoTxn().Update(ctx, func(txn isql.Txn, md jobs.JobMetadata, ju *jobs.JobUpdater) error {
 		progress := md.Progress
 		details := progress.Details.(*jobspb.Progress_TableMetadataCache).TableMetadataCache
@@ -160,6 +173,8 @@ func (j *tableMetadataUpdateJobResumer) markAsRunning(ctx context.Context) {
 // markAsCompleted updates the last_completed_time and status fields in the job's progress
 // details and writes the job progress as a JSON string to the running status.
 func (j *tableMetadataUpdateJobResumer) markAsCompleted(ctx context.Context) {
+	j.metrics.ClusterStatus.Update(0)
+
 	if err := j.job.NoTxn().Update(ctx, func(txn isql.Txn, md jobs.JobMetadata, ju *jobs.JobUpdater) error {
 		progress := md.Progress
 		details := progress.Details.(*jobspb.Progress_TableMetadataCache).TableMetadataCache
@@ -202,6 +217,12 @@ type TableMetadataUpdateJobMetrics struct {
 	UpdatedTables *metric.Counter
 	Errors        *metric.Counter
 	Duration      metric.IHistogram
+
+	// ClusterStatus is a cluster metric tracking whether the job is
+	// currently running (1) or not (0).
+	ClusterStatus *cmwriter.Gauge
+	// ClusterLastStart is a cluster metric tracking when the job last started.
+	ClusterLastStart *cmwriter.Stopwatch
 }
 
 func (m TableMetadataUpdateJobMetrics) MetricStruct() {}
@@ -238,6 +259,19 @@ func newTableMetadataUpdateJobMetrics() metric.Struct {
 			Duration:     base.DefaultHistogramWindowInterval(),
 			BucketConfig: metric.LongRunning60mLatencyBuckets,
 			Mode:         metric.HistogramModePrometheus,
+		}),
+		ClusterStatus: cmwriter.NewGauge(metric.Metadata{
+			Name:        "obs.tablemetadata.update_job.cluster.status",
+			Help:        "Whether the table metadata update job is currently running (1) or not (0).",
+			Measurement: "Status",
+			Unit:        metric.Unit_COUNT,
+			MetricType:  io_prometheus_client.MetricType_GAUGE,
+		}),
+		ClusterLastStart: cmwriter.NewStopwatch(metric.Metadata{
+			Name:        "obs.tablemetadata.update_job.cluster.last_start",
+			Help:        "The time at which the table metadata update job last started.",
+			Measurement: "Timestamp",
+			Unit:        metric.Unit_COUNT,
 		}),
 	}
 }
