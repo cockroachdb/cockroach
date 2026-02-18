@@ -3,19 +3,29 @@
 // Use of this software is governed by the CockroachDB Software License
 // included in the /LICENSE file.
 
-package clustermetrics
+package cmwriter
 
 import (
 	"context"
 	"math/rand"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/obs/clustermetrics"
 	"github.com/cockroachdb/cockroach/pkg/settings"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
+
+// MetricStore abstracts the storage backend for cluster metrics.
+type MetricStore interface {
+	// Write writes the given metrics to storage.
+	Write(ctx context.Context, metrics []clustermetrics.Metric) error
+}
 
 // Writer manages registered cluster metrics and periodically flushes their
 // values to a MetricStore. Uses an internal metric.Registry for uniform
@@ -26,8 +36,20 @@ type Writer struct {
 	metrics  *WriterMetrics
 }
 
-// NewWriter creates a new Writer with an internally managed registry.
-func NewWriter(store MetricStore, metrics *WriterMetrics) *Writer {
+// NewWriter creates a new Writer backed by an SQLStore. The writer creates
+// its own internal registry and operational metrics.
+func NewWriter(db isql.DB, sqlIDContainer *base.SQLIDContainer, st *cluster.Settings) *Writer {
+	store := newSQLStore(db, sqlIDContainer, st)
+	return &Writer{
+		store:    store,
+		registry: metric.NewRegistry(),
+		metrics:  NewWriterMetrics(),
+	}
+}
+
+// NewWriterWithStore creates a new Writer with the given MetricStore.
+// This is useful in tests where a custom store implementation is needed.
+func NewWriterWithStore(store MetricStore, metrics *WriterMetrics) *Writer {
 	if metrics == nil {
 		metrics = NewWriterMetrics()
 	}
@@ -60,11 +82,11 @@ func (w *Writer) Metrics() *WriterMetrics {
 // Iterates via registry.Each() to collect dirty metrics.
 func (w *Writer) Flush(ctx context.Context) {
 	startTime := timeutil.Now()
-	var dirty []Metric
+	var dirty []clustermetrics.Metric
 
 	// Collect dirty metrics to be written.
 	w.registry.Each(func(_ string, val interface{}) {
-		if m, ok := val.(Metric); ok {
+		if m, ok := val.(clustermetrics.Metric); ok {
 			if m.IsDirty() {
 				dirty = append(dirty, m)
 			}
