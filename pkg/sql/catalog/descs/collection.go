@@ -150,6 +150,17 @@ type Collection struct {
 	// txn. This guarantees the generation for long-running transactions
 	// this value stays the same for the life of the transaction.
 	leaseGeneration int64
+
+	// forceStorageLookupIDs contains descriptor IDs that must bypass all
+	// non-storage layers (leased, cached, uncommitted, synthetic) and be
+	// resolved directly from KV. This is used when a fresh Collection is
+	// created for parallel check worker goroutines: the parent (planner's)
+	// Collection has uncommitted descriptors that are only visible via KV
+	// within the same transaction. Without this, a leased or cached descriptor
+	// with a stale version could be returned.
+	// When set, the collection is implicitly read-only to avoid multiple sources
+	// of uncommitted descriptor state.
+	forceStorageLookupIDs catalog.DescriptorIDSet
 }
 
 // FromTxn is a convenience function to extract a descs.Collection which is
@@ -331,6 +342,16 @@ func (tc *Collection) CountUncommittedNewOrDroppedDescriptors() int {
 		return nil
 	})
 	return count
+}
+
+// GetUncommittedDescriptorIDs returns the IDs of all uncommitted descriptors.
+func (tc *Collection) GetUncommittedDescriptorIDs() catalog.DescriptorIDSet {
+	var ids catalog.DescriptorIDSet
+	_ = tc.uncommitted.iterateUncommittedByID(func(desc catalog.Descriptor) error {
+		ids.Add(desc.GetID())
+		return nil
+	})
+	return ids
 }
 
 // HasUncommittedTypes returns true if the Collection contains uncommitted
@@ -552,6 +573,11 @@ func (tc *Collection) WriteDescToBatch(
 	b *kv.Batch,
 	opts ...WriteDescOption,
 ) error {
+	if !tc.forceStorageLookupIDs.Empty() {
+		return errors.AssertionFailedf("descriptor collection with " +
+			"forceStorageLookupIDs set is read-only, should not be used to write " +
+			"descriptors")
+	}
 	if desc.GetID() == descpb.InvalidID {
 		return errors.AssertionFailedf("cannot write descriptor with an empty ID: %v", desc)
 	}
