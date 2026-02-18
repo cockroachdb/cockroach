@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod-microbench/model"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod-microbench/util"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
+	"github.com/cockroachdb/cockroach/pkg/testutils/benchdoc"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/errors/oserror"
@@ -32,15 +33,21 @@ import (
 )
 
 type compareConfig struct {
-	slackConfig    slackConfig
-	influxConfig   influxConfig
-	experimentDir  string
-	baselineDir    string
-	versionContext string
-	generateSheet  bool
-	threshold      float64
-	postIssues     bool
+	slackConfig     slackConfig
+	influxConfig    influxConfig
+	experimentDir   string
+	baselineDir     string
+	versionContext  string
+	benchmarkConfig string
+	generateSheet   bool
+	threshold       float64
+	postIssues      string
 }
+
+const (
+	postIssuesGroup  = "group"
+	postIssuesSingle = "single"
+)
 
 type slackConfig struct {
 	user    string
@@ -56,9 +63,10 @@ type influxConfig struct {
 
 type compare struct {
 	compareConfig
-	service  *google.Service
-	packages []string
-	ctx      context.Context
+	service          *google.Service
+	packages         []string
+	benchmarkInfoMap benchmarkInfoMap
+	ctx              context.Context
 }
 
 var defaultInfluxMetadata = map[string]string{
@@ -72,9 +80,9 @@ var defaultInfluxMetadata = map[string]string{
 }
 
 const (
-	slackPercentageThreshold = 20.0
-	slackReportMax           = 3
-	skipComparison           = math.MaxFloat64
+	defaultPercentageThreshold = 20.0
+	slackReportMax             = 3
+	skipComparison             = math.MaxFloat64
 )
 
 const slackCompareTemplateScript = `
@@ -97,6 +105,15 @@ func newCompare(config compareConfig) (*compare, error) {
 		}
 	}
 
+	var infoMap benchmarkInfoMap
+	if config.benchmarkConfig != "" {
+		benchmarkInfoList, listErr := loadBenchmarkList(config.benchmarkConfig)
+		if listErr != nil {
+			return nil, listErr
+		}
+		infoMap = newBenchmarkInfoMap(benchmarkInfoList)
+	}
+
 	ctx := context.Background()
 	var service *google.Service
 	if config.generateSheet {
@@ -105,7 +122,13 @@ func newCompare(config compareConfig) (*compare, error) {
 			return nil, err
 		}
 	}
-	return &compare{compareConfig: config, service: service, packages: packages, ctx: ctx}, nil
+	return &compare{
+		compareConfig:    config,
+		service:          service,
+		packages:         packages,
+		benchmarkInfoMap: infoMap,
+		ctx:              ctx,
+	}, nil
 }
 
 func defaultCompareConfig() compareConfig {
@@ -261,7 +284,8 @@ func (c *compare) postToSlack(
 				comparison := detail.Comparison
 				metric := result.Metric
 
-				if !isRegression(comparison.Delta, metric.Better) {
+				threshold := c.benchmarkThreshold(detail.BenchmarkName)
+				if !isRegression(comparison.Delta, threshold, metric.Better) {
 					continue
 				}
 				nameSplit := strings.Split(detail.BenchmarkName, util.PackageSeparator)
@@ -273,7 +297,7 @@ func (c *compare) postToSlack(
 					highestPercentChange = math.Abs(comparison.Delta)
 				}
 				ci.ChangeSymbol = ":small_orange_diamond:"
-				if math.Abs(comparison.Delta) > slackPercentageThreshold {
+				if math.Abs(comparison.Delta) > defaultPercentageThreshold {
 					ci.ChangeSymbol = ":small_red_triangle:"
 				}
 				mi.Changes = append(mi.Changes, ci)
@@ -295,7 +319,7 @@ func (c *compare) postToSlack(
 				return err
 			}
 			status = "warning"
-			if highestPercentChange > slackPercentageThreshold {
+			if highestPercentChange > defaultPercentageThreshold {
 				status = "danger"
 			}
 			output = sb.String()
@@ -350,12 +374,14 @@ func (c *compare) compareUsingThreshold(comparisonResultsMap model.ComparisonRes
 	return nil
 }
 
-func (c *compare) maybePostRegressionIssues(comparisonResultsMap model.ComparisonResultsMap) error {
+func (c *compare) maybePostRegressionIssuesGroup(
+	comparisonResultsMap model.ComparisonResultsMap,
+) error {
 	loggerCfg := logger.Config{Stdout: os.Stdout, Stderr: os.Stderr}
 	l, _ := loggerCfg.NewLogger("")
 
 	// Collect errors encountered while creating benchmark issues.
-	createBenchmarkIssueErrors := []error{}
+	var createBenchmarkIssueErrors []error
 
 	for pkgName, comparisonResults := range comparisonResultsMap {
 		var regressions []regressionInfo
@@ -365,12 +391,14 @@ func (c *compare) maybePostRegressionIssues(comparisonResultsMap model.Compariso
 				comparison := detail.Comparison
 				metric := result.Metric
 
-				if isRegression(comparison.Delta, metric.Better) && math.Abs(comparison.Delta) >= slackPercentageThreshold {
+				threshold := c.benchmarkThreshold(detail.BenchmarkName)
+				if isRegression(comparison.Delta, threshold, metric.Better) {
 					regressions = append(regressions, regressionInfo{
 						benchmarkName:  detail.BenchmarkName,
 						metricUnit:     result.Metric.Unit,
 						percentChange:  math.Abs(comparison.Delta),
 						formattedDelta: comparison.FormattedDelta,
+						threshold:      threshold,
 					})
 				}
 			}
@@ -399,6 +427,73 @@ func (c *compare) maybePostRegressionIssues(comparisonResultsMap model.Compariso
 		return errors.Join(createBenchmarkIssueErrors...)
 	}
 
+	return nil
+}
+
+func (c *compare) maybePostRegressionIssuesSingle(
+	comparisonResultsMap model.ComparisonResultsMap,
+) error {
+	loggerCfg := logger.Config{Stdout: os.Stdout, Stderr: os.Stderr}
+	l, _ := loggerCfg.NewLogger("")
+	var errs []error
+
+	for _, comparisonResults := range comparisonResultsMap {
+		for _, result := range comparisonResults {
+			for _, detail := range result.Comparisons {
+				comparison := detail.Comparison
+				metric := result.Metric
+
+				packagePath, functionName, err := parseBenchmarkName(detail.BenchmarkName)
+				if err != nil {
+					log.Printf("failed to parse benchmark name %s: %v", detail.BenchmarkName, err)
+					errs = append(errs, err)
+					continue
+				}
+
+				compareArgs := benchdoc.NewCompareArgs()
+				if info, ok := c.benchmarkInfoMap.lookup(packagePath, functionName); ok {
+					compareArgs = info.CompareArgs
+				}
+				if compareArgs.PostIssue == benchdoc.PostIssueNone {
+					continue
+				}
+
+				if !isRegression(comparison.Delta, c.benchmarkThreshold(detail.BenchmarkName), metric.Better) {
+					continue
+				}
+
+				reg := regressionInfo{
+					benchmarkName:  detail.BenchmarkName,
+					metricUnit:     result.Metric.Unit,
+					percentChange:  math.Abs(comparison.Delta),
+					formattedDelta: comparison.FormattedDelta,
+					threshold:      c.benchmarkThreshold(detail.BenchmarkName),
+				}
+
+				releaseBlocker := compareArgs.PostIssue == benchdoc.PostIssueBlocker
+				formatter, req, err := createSingleRegressionPostRequest(
+					reg, c.versionContext, releaseBlocker,
+				)
+				if err != nil {
+					log.Printf("failed to create single regression request for %s: %v",
+						detail.BenchmarkName, err)
+					errs = append(errs, err)
+					continue
+				}
+				if err = postBenchmarkIssue(c.ctx, l, formatter, req); err != nil {
+					log.Printf("failed to post single regression issue for %s: %v",
+						detail.BenchmarkName, err)
+					errs = append(errs, err)
+					continue
+				}
+				log.Printf("Posted single regression issue for: %s", detail.BenchmarkName)
+			}
+		}
+	}
+
+	if len(errs) > 0 {
+		return errors.Join(errs...)
+	}
 	return nil
 }
 
@@ -496,6 +591,24 @@ func truncateBenchmarkName(text string, maxLen int) string {
 	return text
 }
 
-func isRegression(delta float64, better int) bool {
-	return delta*float64(better) < 0
+func isRegression(delta float64, threshold float64, better int) bool {
+	return delta*float64(better) < 0 && math.Abs(delta) >= threshold
+}
+
+// benchmarkThreshold returns the regression threshold (in percentage) for the
+// given benchmark. If a per-benchmark threshold is configured via benchdoc, it
+// is converted from a fraction (e.g., 0.3) to a percentage (30.0). Otherwise,
+// the defaultPercentageThreshold is returned.
+func (c *compare) benchmarkThreshold(benchmarkName string) float64 {
+	if c.benchmarkInfoMap != nil {
+		packagePath, functionName, err := parseBenchmarkName(benchmarkName)
+		if err == nil {
+			if info, ok := c.benchmarkInfoMap.lookup(packagePath, functionName); ok {
+				if info.CompareArgs.Threshold > 0 {
+					return info.CompareArgs.Threshold * 100
+				}
+			}
+		}
+	}
+	return defaultPercentageThreshold
 }
