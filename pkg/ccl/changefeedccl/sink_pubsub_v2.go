@@ -18,6 +18,7 @@ import (
 	pb "cloud.google.com/go/pubsub/apiv1/pubsubpb"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
 	"github.com/cockroachdb/cockroach/pkg/cloud"
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/admission"
 	"github.com/cockroachdb/cockroach/pkg/util/cidr"
@@ -472,7 +473,15 @@ func makePubsubSink(
 		return nil, err
 	}
 
-	pubsubTopicName := pubsubURL.ConsumeParam(changefeedbase.SinkParamTopicName)
+	var pubsubTopicName string
+	if settings.Version.IsActive(ctx, clusterversion.V26_2_ChangefeedsRejectEmptyTopicName) {
+		pubsubTopicName, err = pubsubURL.ConsumeParamRejectEmpty(changefeedbase.SinkParamTopicName)
+		if err != nil {
+			return nil, err
+		}
+	} else {
+		pubsubTopicName = pubsubURL.ConsumeParam(changefeedbase.SinkParamTopicName)
+	}
 	topicNamer, err := MakeTopicNamer(targets, WithSingleName(pubsubTopicName))
 	if err != nil {
 		return nil, err

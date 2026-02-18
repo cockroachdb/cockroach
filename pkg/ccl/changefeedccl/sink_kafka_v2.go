@@ -18,6 +18,7 @@ import (
 
 	"github.com/IBM/sarama"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/admission"
 	"github.com/cockroachdb/cockroach/pkg/util/cidr"
@@ -389,7 +390,15 @@ func makeKafkaSinkV2(
 	}
 
 	kafkaTopicPrefix := u.ConsumeParam(changefeedbase.SinkParamTopicPrefix)
-	kafkaTopicName := u.ConsumeParam(changefeedbase.SinkParamTopicName)
+	var kafkaTopicName string
+	if settings.Version.IsActive(ctx, clusterversion.V26_2_ChangefeedsRejectEmptyTopicName) {
+		kafkaTopicName, err = u.ConsumeParamRejectEmpty(changefeedbase.SinkParamTopicName)
+		if err != nil {
+			return nil, err
+		}
+	} else {
+		kafkaTopicName = u.ConsumeParam(changefeedbase.SinkParamTopicName)
+	}
 	if schemaTopic := u.ConsumeParam(changefeedbase.SinkParamSchemaTopic); schemaTopic != `` {
 		return nil, errors.Errorf(`%s is not yet supported`, changefeedbase.SinkParamSchemaTopic)
 	}

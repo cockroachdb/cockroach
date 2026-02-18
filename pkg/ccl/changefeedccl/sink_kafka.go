@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/kafkaauth"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/kvevent"
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -1228,7 +1229,16 @@ func makeKafkaSink(
 	mb metricsRecorderBuilder,
 ) (Sink, error) {
 	kafkaTopicPrefix := u.ConsumeParam(changefeedbase.SinkParamTopicPrefix)
-	kafkaTopicName := u.ConsumeParam(changefeedbase.SinkParamTopicName)
+	var kafkaTopicName string
+	if settings.Version.IsActive(ctx, clusterversion.V26_2_ChangefeedsRejectEmptyTopicName) {
+		var err error
+		kafkaTopicName, err = u.ConsumeParamRejectEmpty(changefeedbase.SinkParamTopicName)
+		if err != nil {
+			return nil, err
+		}
+	} else {
+		kafkaTopicName = u.ConsumeParam(changefeedbase.SinkParamTopicName)
+	}
 	if schemaTopic := u.ConsumeParam(changefeedbase.SinkParamSchemaTopic); schemaTopic != `` {
 		return nil, errors.Errorf(`%s is not yet supported`, changefeedbase.SinkParamSchemaTopic)
 	}
