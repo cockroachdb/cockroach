@@ -254,6 +254,7 @@ func (m *Metadata) AddLabel(name, value string) {
 }
 
 var _ Iterable = &Gauge{}
+var _ Iterable = &Stopwatch{}
 var _ Iterable = &GaugeFloat64{}
 var _ Iterable = &Counter{}
 var _ Iterable = &UniqueCounter{}
@@ -263,6 +264,7 @@ var _ Iterable = &CounterVec{}
 var _ Iterable = &HistogramVec{}
 
 var _ json.Marshaler = &Gauge{}
+var _ json.Marshaler = &Stopwatch{}
 var _ json.Marshaler = &GaugeFloat64{}
 var _ json.Marshaler = &Counter{}
 var _ json.Marshaler = &UniqueCounter{}
@@ -270,6 +272,7 @@ var _ json.Marshaler = &CounterFloat64{}
 var _ json.Marshaler = &Registry{}
 
 var _ PrometheusExportable = &Gauge{}
+var _ PrometheusExportable = &Stopwatch{}
 var _ PrometheusExportable = &GaugeFloat64{}
 var _ PrometheusExportable = &Counter{}
 var _ PrometheusExportable = &UniqueCounter{}
@@ -1140,6 +1143,75 @@ func (g *Gauge) GetMetadata() Metadata {
 	return baseMetadata
 }
 
+// MetricType_STOPWATCH is a custom metric type sentinel for stopwatch
+// metrics. Prometheus has no stopwatch concept, so we define a value
+// outside the standard enum range. Callers converting to a string
+// should check for this value explicitly.
+var MetricType_STOPWATCH = prometheusgo.MetricType(100)
+
+// A Stopwatch records the unix-second timestamp at which it was started.
+// Value() returns the stored timestamp; Elapsed() returns seconds since
+// Start(). It is exported as a prometheus gauge.
+type Stopwatch struct {
+	Metadata
+	startTime atomic.Int64 // unix seconds
+}
+
+// NewStopwatch creates a Stopwatch.
+func NewStopwatch(metadata Metadata) *Stopwatch {
+	return &Stopwatch{Metadata: metadata}
+}
+
+// Start records the current time as the start time.
+func (s *Stopwatch) Start() {
+	s.startTime.Store(timeutil.Now().Unix())
+}
+
+// Value returns the stored unix timestamp (seconds), or 0 if not started.
+func (s *Stopwatch) Value() int64 {
+	return s.startTime.Load()
+}
+
+// Elapsed returns the number of seconds since Start() was called, or 0
+// if Start() has not been called.
+func (s *Stopwatch) Elapsed() int64 {
+	start := s.startTime.Load()
+	if start == 0 {
+		return 0
+	}
+	return int64(timeutil.Since(timeutil.Unix(start, 0)).Seconds())
+}
+
+// GetType returns the MetricType_STOPWATCH sentinel. This is a custom
+// value outside the standard prometheus enum range; callers that need
+// a string should handle this sentinel explicitly.
+func (s *Stopwatch) GetType() *prometheusgo.MetricType {
+	return MetricType_STOPWATCH.Enum()
+}
+
+// Inspect calls the given closure with itself.
+func (s *Stopwatch) Inspect(f func(interface{})) { f(s) }
+
+// MarshalJSON marshals to JSON.
+func (s *Stopwatch) MarshalJSON() ([]byte, error) {
+	return json.Marshal(s.Value())
+}
+
+// ToPrometheusMetric returns a filled-in prometheus metric of the right type.
+func (s *Stopwatch) ToPrometheusMetric() *prometheusgo.Metric {
+	return &prometheusgo.Metric{
+		Gauge: &prometheusgo.Gauge{Value: proto.Float64(float64(s.Value()))},
+	}
+}
+
+// GetMetadata returns the metric's metadata including the Prometheus
+// MetricType.
+func (s *Stopwatch) GetMetadata() Metadata {
+	baseMetadata := s.Metadata
+	baseMetadata.MetricType = prometheusgo.MetricType_GAUGE
+	return baseMetadata
+}
+
 // A GaugeFloat64 atomically stores a single float64 value.
 type GaugeFloat64 struct {
 	Metadata
@@ -1464,6 +1536,13 @@ func (gv *GaugeVec) ToPrometheusMetrics() []*prometheusgo.Metric {
 	return metrics
 }
 
+// Clear removes all child gauges and resets the label tracking,
+// preserving the metadata and configuration.
+func (gv *GaugeVec) Clear() {
+	gv.vector.clear()
+	gv.promVec.Reset()
+}
+
 // CounterVec wraps a prometheus.CounterVec; it is not aggregated or persisted.
 type CounterVec struct {
 	Metadata
@@ -1562,6 +1641,13 @@ func (cv *CounterVec) ToPrometheusMetrics() []*prometheusgo.Metric {
 	}
 
 	return metrics
+}
+
+// Clear removes all child counters and resets the label tracking,
+// preserving the metadata and configuration.
+func (cv *CounterVec) Clear() {
+	cv.vector.clear()
+	cv.promVec.Reset()
 }
 
 // HistogramVec wraps a prometheus.HistogramVec; it is not aggregated or persisted.

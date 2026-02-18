@@ -14,6 +14,7 @@ go_library(
         "//pkg/base",
         "//pkg/jobs",
         "//pkg/jobs/jobspb",
+        "//pkg/obs/clustermetrics",
         "//pkg/roachpb",
         "//pkg/settings",
         "//pkg/settings/cluster",
