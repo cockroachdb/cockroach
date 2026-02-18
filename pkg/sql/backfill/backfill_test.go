@@ -48,6 +48,7 @@ func TestVectorColumnAndIndexBackfill(t *testing.T) {
 				},
 			},
 		},
+		DisableElasticCPUAdmission: true,
 	})
 	defer srv.Stopper().Stop(ctx)
 	sqlDB := sqlutils.MakeSQLRunner(db)
@@ -112,6 +113,7 @@ func TestConcurrentOperationsDuringVectorIndexCreation(t *testing.T) {
 				},
 			},
 		},
+		DisableElasticCPUAdmission: true,
 	})
 	defer srv.Stopper().Stop(ctx)
 	sqlDB := sqlutils.MakeSQLRunner(db)
@@ -194,7 +196,9 @@ func TestVectorIndexWithPrefixBackfill(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	srv, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	srv, db, _ := serverutils.StartServer(t, base.TestServerArgs{
+		DisableElasticCPUAdmission: true,
+	})
 	defer srv.Stopper().Stop(ctx)
 	sqlDB := sqlutils.MakeSQLRunner(db)
 
@@ -263,6 +267,7 @@ func TestVectorIndexMergingDuringBackfill(t *testing.T) {
 				},
 			},
 		},
+		DisableElasticCPUAdmission: true,
 	})
 	defer srv.Stopper().Stop(ctx)
 	sqlDB := sqlutils.MakeSQLRunner(db)
@@ -364,7 +369,8 @@ func TestVectorIndexMergingDuringBackfillWithPrefix(t *testing.T) {
 				},
 			},
 		},
-		DefaultTestTenant: testTenant,
+		DefaultTestTenant:          testTenant,
+		DisableElasticCPUAdmission: true,
 	})
 	defer srv.Stopper().Stop(ctx)
 	sqlDB := sqlutils.MakeSQLRunner(db)
