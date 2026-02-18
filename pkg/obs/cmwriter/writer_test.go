@@ -3,13 +3,14 @@
 // Use of this software is governed by the CockroachDB Software License
 // included in the /LICENSE file.
 
-package clustermetrics
+package cmwriter
 
 import (
 	"context"
 	"testing"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/obs/clustermetrics"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -24,7 +25,7 @@ import (
 
 // storedMetric represents a stored metric value with metadata.
 type storedMetric struct {
-	Metric    Metric
+	Metric    clustermetrics.Metric
 	Value     int64
 	Timestamp time.Time
 }
@@ -43,12 +44,12 @@ func newMapStore() *mapStore {
 	return s
 }
 
-func (s *mapStore) Write(_ context.Context, metrics []Metric) error {
+func (s *mapStore) Write(_ context.Context, metrics []clustermetrics.Metric) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	now := timeutil.Now()
 	for _, m := range metrics {
-		s.mu.metrics[m.GetName(false)] = storedMetric{
+		s.mu.metrics[m.GetName(false /* useStaticLabels */)] = storedMetric{
 			Metric:    m,
 			Value:     m.Get(),
 			Timestamp: now,
@@ -57,10 +58,10 @@ func (s *mapStore) Write(_ context.Context, metrics []Metric) error {
 	return nil
 }
 
-func (s *mapStore) Get(_ context.Context) ([]Metric, error) {
+func (s *mapStore) Get(_ context.Context) ([]clustermetrics.Metric, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	result := make([]Metric, 0, len(s.mu.metrics))
+	result := make([]clustermetrics.Metric, 0, len(s.mu.metrics))
 	for _, stored := range s.mu.metrics {
 		result = append(result, stored.Metric)
 	}
@@ -86,7 +87,7 @@ func newTestEnv() *testEnv {
 	ctx := context.Background()
 	store := newMapStore()
 	writerMetrics := NewWriterMetrics()
-	writer := NewWriter(store, writerMetrics)
+	writer := NewWriterWithStore(store, writerMetrics)
 	return &testEnv{
 		ctx:           ctx,
 		store:         store,
@@ -109,7 +110,7 @@ func TestWriter_Flush(t *testing.T) {
 		}{{
 			name: "counter incremented is stored",
 			setup: func(env *testEnv) {
-				c := NewCounter(metric.Metadata{Name: "c"})
+				c := clustermetrics.NewCounter(metric.Metadata{Name: "c"})
 				env.writer.AddMetric(c)
 				c.Inc(5)
 			},
@@ -117,7 +118,7 @@ func TestWriter_Flush(t *testing.T) {
 		}, {
 			name: "counter accumulates multiple increments",
 			setup: func(env *testEnv) {
-				c := NewCounter(metric.Metadata{Name: "c"})
+				c := clustermetrics.NewCounter(metric.Metadata{Name: "c"})
 				env.writer.AddMetric(c)
 				c.Inc(5)
 				c.Inc(3)
@@ -126,14 +127,14 @@ func TestWriter_Flush(t *testing.T) {
 		}, {
 			name: "counter not incremented is not stored",
 			setup: func(env *testEnv) {
-				c := NewCounter(metric.Metadata{Name: "c"})
+				c := clustermetrics.NewCounter(metric.Metadata{Name: "c"})
 				env.writer.AddMetric(c)
 			},
 			wantNotStored: []string{"c"},
 		}, {
 			name: "gauge updated is stored",
 			setup: func(env *testEnv) {
-				g := NewGauge(metric.Metadata{Name: "g"})
+				g := clustermetrics.NewGauge(metric.Metadata{Name: "g"})
 				env.writer.AddMetric(g)
 				g.Update(100)
 			},
@@ -141,14 +142,14 @@ func TestWriter_Flush(t *testing.T) {
 		}, {
 			name: "gauge not updated is not stored",
 			setup: func(env *testEnv) {
-				g := NewGauge(metric.Metadata{Name: "g"})
+				g := clustermetrics.NewGauge(metric.Metadata{Name: "g"})
 				env.writer.AddMetric(g)
 			},
 			wantNotStored: []string{"g"},
 		}, {
 			name: "gauge Inc marks dirty",
 			setup: func(env *testEnv) {
-				g := NewGauge(metric.Metadata{Name: "g"})
+				g := clustermetrics.NewGauge(metric.Metadata{Name: "g"})
 				env.writer.AddMetric(g)
 				g.Inc(10)
 			},
@@ -156,7 +157,7 @@ func TestWriter_Flush(t *testing.T) {
 		}, {
 			name: "gauge Dec marks dirty",
 			setup: func(env *testEnv) {
-				g := NewGauge(metric.Metadata{Name: "g"})
+				g := clustermetrics.NewGauge(metric.Metadata{Name: "g"})
 				env.writer.AddMetric(g)
 				g.Dec(-5) // Dec of negative = increase
 			},
@@ -164,8 +165,8 @@ func TestWriter_Flush(t *testing.T) {
 		}, {
 			name: "multiple counters all stored",
 			setup: func(env *testEnv) {
-				c1 := NewCounter(metric.Metadata{Name: "c1"})
-				c2 := NewCounter(metric.Metadata{Name: "c2"})
+				c1 := clustermetrics.NewCounter(metric.Metadata{Name: "c1"})
+				c2 := clustermetrics.NewCounter(metric.Metadata{Name: "c2"})
 				env.writer.AddMetric(c1)
 				env.writer.AddMetric(c2)
 				c1.Inc(10)
@@ -175,8 +176,8 @@ func TestWriter_Flush(t *testing.T) {
 		}, {
 			name: "multiple gauges all stored",
 			setup: func(env *testEnv) {
-				g1 := NewGauge(metric.Metadata{Name: "g1"})
-				g2 := NewGauge(metric.Metadata{Name: "g2"})
+				g1 := clustermetrics.NewGauge(metric.Metadata{Name: "g1"})
+				g2 := clustermetrics.NewGauge(metric.Metadata{Name: "g2"})
 				env.writer.AddMetric(g1)
 				env.writer.AddMetric(g2)
 				g1.Update(100)
@@ -186,8 +187,8 @@ func TestWriter_Flush(t *testing.T) {
 		}, {
 			name: "mixed counters and gauges all stored",
 			setup: func(env *testEnv) {
-				c := NewCounter(metric.Metadata{Name: "c"})
-				g := NewGauge(metric.Metadata{Name: "g"})
+				c := clustermetrics.NewCounter(metric.Metadata{Name: "c"})
+				g := clustermetrics.NewGauge(metric.Metadata{Name: "g"})
 				env.writer.AddMetric(c)
 				env.writer.AddMetric(g)
 				c.Inc(10)
@@ -197,10 +198,10 @@ func TestWriter_Flush(t *testing.T) {
 		}, {
 			name: "only dirty metrics stored",
 			setup: func(env *testEnv) {
-				c1 := NewCounter(metric.Metadata{Name: "c1"})
-				c2 := NewCounter(metric.Metadata{Name: "c2"})
-				g1 := NewGauge(metric.Metadata{Name: "g1"})
-				g2 := NewGauge(metric.Metadata{Name: "g2"})
+				c1 := clustermetrics.NewCounter(metric.Metadata{Name: "c1"})
+				c2 := clustermetrics.NewCounter(metric.Metadata{Name: "c2"})
+				g1 := clustermetrics.NewGauge(metric.Metadata{Name: "g1"})
+				g2 := clustermetrics.NewGauge(metric.Metadata{Name: "g2"})
 				env.writer.AddMetric(c1)
 				env.writer.AddMetric(c2)
 				env.writer.AddMetric(g1)
@@ -216,12 +217,12 @@ func TestWriter_Flush(t *testing.T) {
 			name: "struct registration",
 			setup: func(env *testEnv) {
 				type TestMetrics struct {
-					Count  *Counter
-					Status *Gauge
+					Count  *clustermetrics.Counter
+					Status *clustermetrics.Gauge
 				}
 				m := TestMetrics{
-					Count:  NewCounter(metric.Metadata{Name: "count"}),
-					Status: NewGauge(metric.Metadata{Name: "status"}),
+					Count:  clustermetrics.NewCounter(metric.Metadata{Name: "count"}),
+					Status: clustermetrics.NewGauge(metric.Metadata{Name: "status"}),
 				}
 				env.writer.AddMetricStruct(&m)
 				m.Count.Inc(15)
@@ -256,7 +257,7 @@ func TestWriter_Flush(t *testing.T) {
 
 	t.Run("gauge unchanged on second flush not written", func(t *testing.T) {
 		env := newTestEnv()
-		g := NewGauge(metric.Metadata{Name: "g"})
+		g := clustermetrics.NewGauge(metric.Metadata{Name: "g"})
 		env.writer.AddMetric(g)
 
 		g.Update(50)
@@ -275,7 +276,7 @@ func TestWriter_Flush(t *testing.T) {
 
 	t.Run("gauge retains value after flush", func(t *testing.T) {
 		env := newTestEnv()
-		g := NewGauge(metric.Metadata{Name: "g"})
+		g := clustermetrics.NewGauge(metric.Metadata{Name: "g"})
 		env.writer.AddMetric(g)
 
 		g.Update(42)
@@ -286,7 +287,7 @@ func TestWriter_Flush(t *testing.T) {
 
 	t.Run("counter accumulates across increments then resets", func(t *testing.T) {
 		env := newTestEnv()
-		c := NewCounter(metric.Metadata{Name: "c"})
+		c := clustermetrics.NewCounter(metric.Metadata{Name: "c"})
 		env.writer.AddMetric(c)
 
 		c.Inc(5)
@@ -307,8 +308,8 @@ func TestWriter_Flush(t *testing.T) {
 
 	t.Run("mixed dirty and clean on second flush", func(t *testing.T) {
 		env := newTestEnv()
-		c := NewCounter(metric.Metadata{Name: "c"})
-		g := NewGauge(metric.Metadata{Name: "g"})
+		c := clustermetrics.NewCounter(metric.Metadata{Name: "c"})
+		g := clustermetrics.NewGauge(metric.Metadata{Name: "g"})
 		env.writer.AddMetric(c)
 		env.writer.AddMetric(g)
 
@@ -337,7 +338,7 @@ func TestWriter_OperationalMetrics(t *testing.T) {
 
 	t.Run("records flush metrics", func(t *testing.T) {
 		env := newTestEnv()
-		c := NewCounter(metric.Metadata{Name: "c"})
+		c := clustermetrics.NewCounter(metric.Metadata{Name: "c"})
 		env.writer.AddMetric(c)
 		c.Inc(1)
 
@@ -372,9 +373,9 @@ func TestWriter_PeriodicFlush(t *testing.T) {
 		FlushInterval.Override(ctx, &st.SV, 50*time.Millisecond)
 
 		writerMetrics := NewWriterMetrics()
-		w := NewWriter(store, writerMetrics)
+		w := NewWriterWithStore(store, writerMetrics)
 
-		c := NewCounter(metric.Metadata{Name: "c"})
+		c := clustermetrics.NewCounter(metric.Metadata{Name: "c"})
 		w.AddMetric(c)
 		c.Inc(5)
 
@@ -399,9 +400,9 @@ func TestWriter_PeriodicFlush(t *testing.T) {
 		FlushEnabled.Override(ctx, &st.SV, false)
 
 		writerMetrics := NewWriterMetrics()
-		w := NewWriter(store, writerMetrics)
+		w := NewWriterWithStore(store, writerMetrics)
 
-		c := NewCounter(metric.Metadata{Name: "c"})
+		c := clustermetrics.NewCounter(metric.Metadata{Name: "c"})
 		w.AddMetric(c)
 		c.Inc(5)
 

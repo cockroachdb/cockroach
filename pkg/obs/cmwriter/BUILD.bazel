@@ -1,0 +1,43 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "cmwriter",
+    srcs = [
+        "doc.go",
+        "settings.go",
+        "writer.go",
+        "writer_metrics.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/obs/cmwriter",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/base",
+        "//pkg/obs/clustermetrics",
+        "//pkg/settings",
+        "//pkg/settings/cluster",
+        "//pkg/sql/isql",
+        "//pkg/util/log",
+        "//pkg/util/metric",
+        "//pkg/util/stop",
+        "//pkg/util/timeutil",
+    ],
+)
+
+go_test(
+    name = "cmwriter_test",
+    srcs = ["writer_test.go"],
+    embed = [":cmwriter"],
+    deps = [
+        "//pkg/obs/clustermetrics",
+        "//pkg/settings/cluster",
+        "//pkg/testutils",
+        "//pkg/util/leaktest",
+        "//pkg/util/log",
+        "//pkg/util/metric",
+        "//pkg/util/stop",
+        "//pkg/util/syncutil",
+        "//pkg/util/timeutil",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_stretchr_testify//require",
+    ],
+)
