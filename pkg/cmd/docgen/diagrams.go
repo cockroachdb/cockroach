@@ -1602,6 +1602,17 @@ var specs = []stmtSpec{
 		inline: []string{"opt_with_show_hints_options", "show_hints_options_list", "show_hints_options"},
 	},
 	{
+		name:   "show_statement_diagnostics_stmt",
+		stmt:   "show_statements_stmt",
+		inline: []string{"opt_with_options"},
+		replace: map[string]string{
+			"'STATEMENTS'": "'STATEMENT' 'DIAGNOSTICS'",
+		},
+		// This is a demo entry to showcase how the automation handles _stmt suffix
+		// The BNF file will be named show_statement_diagnostics_stmt.bnf
+		// But the HTML file will be show_statement_diagnostics.html (without _stmt)
+	},
+	{
 		name:   "show_statements",
 		stmt:   "show_statements_stmt",
 		inline: []string{"opt_cluster", "statements_or_queries"},
