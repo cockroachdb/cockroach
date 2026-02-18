@@ -18,11 +18,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil/clusterupgrade"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil/task"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
@@ -34,6 +36,21 @@ const SystemDatabaseName = "system"
 // to the backup collection path to ensure uniqueness of the backup collection
 // name.
 const nonceLen = 4
+
+// systemTablesInFullClusterBackup includes all system tables that
+// are included as part of a full cluster backup. It should include
+// every table that opts-in to cluster backup (see `system_schema.go`).
+// It should be updated as system tables are added or removed from
+// cluster backups.
+//
+// Note that we don't verify the `system.zones` table as there's no
+// general mechanism to verify its correctness due to #100852. We
+// may change that if the issue is fixed.
+var systemTablesInFullClusterBackup = []string{
+	"users", "settings", "locations", "role_members", "role_options", "ui",
+	"comments", "scheduled_jobs", "database_role_settings", "tenant_settings",
+	"privileges", "external_connections",
+}
 
 type (
 	// BackupRestoreEnv provides an environment for running backup/restores.
@@ -77,6 +94,16 @@ type (
 		// restorable. This allows us to maximize test coverage for features that are
 		// not yet supported with online restore, but can be used in classic restore.
 		onlineRestorable bool
+
+		backups []Backup
+	}
+
+	Backup struct {
+		aost string
+		// Stores database-qualified table names that are included in the backup.
+		storedTables []string
+		// Maps fully-qualified table names to their corresponding fingerprints.
+		fingerprints map[string]map[string]string
 	}
 
 	// labeledNodes allows us to label a set of nodes with the version
@@ -202,7 +229,9 @@ func (c *BackupCollectionHandle) URI() string {
 	)
 }
 
-func (c *BackupCollectionHandle) TakeFull(ctx context.Context) (jobspb.JobID, error) {
+func (c *BackupCollectionHandle) TakeFull(
+	ctx context.Context, fingerprint bool,
+) (jobspb.JobID, error) {
 	backupTime := c.env.testUtils.now()
 	stmt := fmt.Sprintf(
 		"BACKUP %s INTO '%s' AS OF SYSTEM TIME '%s'",
@@ -232,11 +261,16 @@ func (c *BackupCollectionHandle) TakeFull(ctx context.Context) (jobspb.JobID, er
 	); err != nil {
 		return 0, err
 	}
+	if err := c.appendBackup(ctx, db, backupTime, fingerprint); err != nil {
+		return 0, err
+	}
 	return jobID, nil
 }
 
-func (c *BackupCollectionHandle) TakeFullSync(ctx context.Context) (jobspb.JobID, error) {
-	jobID, err := c.TakeFull(ctx)
+func (c *BackupCollectionHandle) TakeFullSync(
+	ctx context.Context, fingerprint bool,
+) (jobspb.JobID, error) {
+	jobID, err := c.TakeFull(ctx, fingerprint)
 	if err != nil {
 		return 0, err
 	}
@@ -246,7 +280,9 @@ func (c *BackupCollectionHandle) TakeFullSync(ctx context.Context) (jobspb.JobID
 	return jobID, execErr
 }
 
-func (c *BackupCollectionHandle) TakeIncremental(ctx context.Context) (jobspb.JobID, error) {
+func (c *BackupCollectionHandle) TakeIncremental(
+	ctx context.Context, fingerprint bool,
+) (jobspb.JobID, error) {
 	backupTime := c.env.testUtils.now()
 	stmt := fmt.Sprintf(
 		"BACKUP %s INTO LATEST IN '%s' AS OF SYSTEM TIME '%s'",
@@ -277,11 +313,16 @@ func (c *BackupCollectionHandle) TakeIncremental(ctx context.Context) (jobspb.Jo
 		return 0, err
 	}
 
+	if err := c.appendBackup(ctx, db, backupTime, fingerprint); err != nil {
+		return 0, err
+	}
 	return jobID, nil
 }
 
-func (c *BackupCollectionHandle) TakeIncrementalSync(ctx context.Context) (jobspb.JobID, error) {
-	jobID, err := c.TakeIncremental(ctx)
+func (c *BackupCollectionHandle) TakeIncrementalSync(
+	ctx context.Context, fingerprint bool,
+) (jobspb.JobID, error) {
+	jobID, err := c.TakeIncremental(ctx, fingerprint)
 	if err != nil {
 		return 0, err
 	}
@@ -413,6 +454,38 @@ func (c *BackupCollectionHandle) TakeCompactedSync(ctx context.Context) (jobspb.
 	return jobID, execErr
 }
 
+func (c *BackupCollectionHandle) appendBackup(
+	ctx context.Context, db *gosql.DB, aost string, fingerprint bool,
+) error {
+	storedTables := c.scope.ScopedTables(ctx, c.env.t, db, aost)
+	var fingerprints map[string]map[string]string
+	if fingerprint {
+		var err error
+		c.env.log.Printf(
+			"fingerprinting %d tables for backup at %s in collection %s", len(storedTables), aost, c.Name(),
+		)
+		fingerprints, err = fingerprintTables(
+			ctx, c.env.t, db, storedTables, aost,
+		)
+		if err != nil {
+			return errors.Wrapf(
+				err,
+				"error fingerprinting tables for backup at %s in collection %s", aost, c.Name(),
+			)
+		}
+	}
+	backup := Backup{
+		aost:         aost,
+		storedTables: storedTables,
+		fingerprints: fingerprints,
+	}
+	idx, _ := slices.BinarySearchFunc(c.backups, backup, func(a, b Backup) int {
+		return strings.Compare(a.aost, b.aost)
+	})
+	c.backups = slices.Insert(c.backups, idx, backup)
+	return nil
+}
+
 type InitBackupCollectionOption func(*BackupRestoreEnv, *BackupCollectionHandle)
 
 func WithRevisionHistory() InitBackupCollectionOption {
@@ -513,24 +586,9 @@ func RandomTableScope(dbs []string) initBackupScope {
 		dbs = filterDBsForTableScope(dbs)
 		require.NotEmpty(env.t, dbs, "no eligible databases to select from for random table backup")
 		targetDB := dbs[env.rng.Intn(len(dbs))]
-
-		var tables []string
 		_, conn := env.testUtils.RandomDB(env.rng, env.planNodes.Nodes)
-		rows, err := conn.QueryContext(
-			ctx,
-			fmt.Sprintf(
-				`SELECT schema_name, table_name FROM [SHOW TABLES FROM "%s"] WHERE type = 'table'`,
-				targetDB,
-			),
-		)
-		require.NoError(env.t, err, "error querying for tables in database %s", targetDB)
-		defer rows.Close()
-		for rows.Next() {
-			var schemaName, tableName string
-			require.NoError(env.t, rows.Scan(&schemaName, &tableName), "error scanning table names for database %s", targetDB)
-			tables = append(tables, fmt.Sprintf("%s.%s.%s", targetDB, schemaName, tableName))
-		}
-		require.NoError(env.t, rows.Err(), "error iterating over tables in database %s", targetDB)
+		tables, err := loadQualifiedTablesForDBs(env.t, ctx, conn, "now", targetDB)
+		require.NoError(env.t, err, "error loading tables for database %s", targetDB)
 		return tableScope{tables: tables}
 	}
 }
@@ -597,6 +655,10 @@ type (
 		// `RESTORE {target}`. For example, for a table backup, this would return
 		// `TABLE {databaseName}.{tableName}`.
 		AsTargetCmd() string
+		// ScopedTables returns a list of fully-qualified table names that
+		// were in scope at a given AOST. This is used to determine which tables
+		// were stored in a backup and are eligible for verification.
+		ScopedTables(ctx context.Context, t test.Test, conn *gosql.DB, aost string) []string
 	}
 
 	// NB: Due to the fact that restore operations are limited to single-database
@@ -626,6 +688,10 @@ func (ts tableScope) AsTargetCmd() string {
 	return "TABLE " + strings.Join(ts.tables, ", ")
 }
 
+func (ts tableScope) ScopedTables(_ context.Context, _ test.Test, _ *gosql.DB, _ string) []string {
+	return ts.tables
+}
+
 func (ds databaseScope) Desc() string {
 	return "database-" + ds.db
 }
@@ -634,12 +700,54 @@ func (ds databaseScope) AsTargetCmd() string {
 	return "DATABASE " + ds.db
 }
 
+func (ds databaseScope) ScopedTables(
+	ctx context.Context, t test.Test, conn *gosql.DB, aost string,
+) []string {
+	tables, err := loadQualifiedTablesForDBs(t, ctx, conn, aost, ds.db)
+	require.NoError(t, err, "error loading tables for databases %v", ds.db)
+	return tables
+}
+
 func (clusterScope) Desc() string {
 	return "cluster"
 }
 
 func (clusterScope) AsTargetCmd() string {
 	return ""
+}
+
+func (clusterScope) ScopedTables(
+	ctx context.Context, t test.Test, conn *gosql.DB, aost string,
+) []string {
+	var dbs []string
+	rows, err := conn.QueryContext(
+		ctx,
+		fmt.Sprintf("SELECT database_name FROM [SHOW DATABASES] AS OF SYSTEM TIME %s", aost),
+	)
+	require.NoError(t, err, "error querying for databases at AOST %s", aost)
+	defer rows.Close()
+	for rows.Next() {
+		var dbName string
+		require.NoError(t, rows.Scan(&dbName), "error scanning database name")
+		dbs = append(dbs, dbName)
+	}
+
+	var targets []string
+	if idx := slices.Index(dbs, SystemDatabaseName); idx != -1 {
+		// A full cluster backup doesn't include every table, so we manually handle
+		// the system database.
+		dbs = slices.Delete(dbs, idx, idx+1)
+		targets = append(
+			targets,
+			util.Map(systemTablesInFullClusterBackup, func(table string) string {
+				return fmt.Sprintf("%s.%s", SystemDatabaseName, table)
+			})...,
+		)
+	}
+
+	dbTables, err := loadQualifiedTablesForDBs(t, ctx, conn, aost, dbs...)
+	require.NoError(t, err, "error loading tables for databases %v", dbs)
+	return append(targets, dbTables...)
 }
 
 type (
@@ -673,4 +781,97 @@ func (revisionHistory) OptionString() string {
 
 func (ep encryptionPassphrase) OptionString() string {
 	return fmt.Sprintf("encryption_passphrase = '%s'", ep.passphrase)
+}
+
+// fingerprintTables returns a mapping from database-qualified table names to a
+// mapping of their indexes to their corresponding fingerprints.
+func fingerprintTables(
+	ctx context.Context, t test.Test, conn *gosql.DB, tables []string, aost string,
+) (map[string]map[string]string, error) {
+	var mu syncutil.Mutex
+	fingerprints := make(map[string]map[string]string)
+	grp := t.NewErrorGroup()
+	for _, table := range tables {
+		grp.Go(func(ctx context.Context, l *logger.Logger) error {
+			tableFps := make(map[string]string)
+			fpRows, err := conn.QueryContext(
+				ctx,
+				fmt.Sprintf(
+					`SELECT * FROM
+					[SHOW FINGERPRINTS FROM TABLE %s]
+					AS OF SYSTEM TIME '%s'
+					`,
+					table, aost,
+				),
+			)
+			if err != nil {
+				return err
+			}
+			defer fpRows.Close()
+			for fpRows.Next() {
+				var idxName string
+				var idxFp gosql.NullString
+				if err := fpRows.Scan(&idxName, &idxFp); err != nil {
+					return err
+				}
+				tableFps[idxName] = idxFp.String
+			}
+			if err := fpRows.Err(); err != nil {
+				return err
+			}
+			mu.Lock()
+			defer mu.Unlock()
+			fingerprints[table] = tableFps
+			return nil
+		})
+	}
+	if err := grp.WaitE(); err != nil {
+		return nil, err
+	}
+	return fingerprints, nil
+}
+
+func loadQualifiedTablesForDBs(
+	t test.Test, ctx context.Context, conn *gosql.DB, aost string, dbs ...string,
+) ([]string, error) {
+	var mu syncutil.Mutex
+	var tables []string
+
+	grp := t.NewErrorGroup(task.WithContext(ctx))
+	for _, db := range dbs {
+		grp.Go(func(ctx context.Context, l *logger.Logger) error {
+			l.Printf("loading table information for DB %q", db)
+			rows, err := conn.QueryContext(
+				ctx,
+				fmt.Sprintf(
+					`SELECT schema_name, table_name FROM [SHOW TABLES FROM %s] WHERE type = 'table'`, db,
+				),
+			)
+			if err != nil {
+				return fmt.Errorf("failed to read tables for database %s: %w", db, err)
+			}
+			defer rows.Close()
+
+			var dbTables []string
+			for rows.Next() {
+				var schemaName, tableName string
+				if err := rows.Scan(&schemaName, &tableName); err != nil {
+					return fmt.Errorf("error scanning table_name for db %s: %w", db, err)
+				}
+				dbTables = append(dbTables, fmt.Sprintf("%s.%s.%s", db, schemaName, tableName))
+			}
+			if err := rows.Err(); err != nil {
+				return fmt.Errorf("error iterating over table_name rows for database %s: %w", db, err)
+			}
+			mu.Lock()
+			defer mu.Unlock()
+			tables = append(tables, dbTables...)
+			l.Printf("database %q has %d tables", db, len(dbTables))
+			return nil
+		})
+	}
+	if err := grp.WaitE(); err != nil {
+		return nil, err
+	}
+	return tables, nil
 }

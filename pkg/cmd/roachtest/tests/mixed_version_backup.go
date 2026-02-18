@@ -103,21 +103,6 @@ var (
 
 	v231CV = "23.1"
 
-	// systemTablesInFullClusterBackup includes all system tables that
-	// are included as part of a full cluster backup. It should include
-	// every table that opts-in to cluster backup (see `system_schema.go`).
-	// It should be updated as system tables are added or removed from
-	// cluster backups.
-	//
-	// Note that we don't verify the `system.zones` table as there's no
-	// general mechanism to verify its correctness due to #100852. We
-	// may change that if the issue is fixed.
-	systemTablesInFullClusterBackup = []string{
-		"users", "settings", "locations", "role_members", "role_options", "ui",
-		"comments", "scheduled_jobs", "database_role_settings", "tenant_settings",
-		"privileges", "external_connections",
-	}
-
 	// showSystemQueries maps system table names to `SHOW` statements
 	// that reflect their contents in a more human readable format. When
 	// the contents of a system table after restore does not match the
