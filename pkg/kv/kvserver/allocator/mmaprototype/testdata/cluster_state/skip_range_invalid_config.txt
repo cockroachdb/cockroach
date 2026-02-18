@@ -75,4 +75,8 @@ rebalance-stores store-id=1
 [mmaid=1] attempting to shed replicas next
 [mmaid=1] no span config due to normalization error, skipping constraint analysis
 [mmaid=1] skipping r1: no constraints analyzed (conf=<nil> replicas=[s1:replica-id=1 type=VOTER_FULL leaseholder=true lease disposition:ok])
+[mmaid=1] rebalancing pass summary [local=s1]:
+	overloaded:
+		short: [s1]
+	no-ranges-evaluated: [s1]
 pending(0)

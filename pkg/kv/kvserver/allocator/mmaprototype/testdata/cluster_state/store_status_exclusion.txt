@@ -202,7 +202,10 @@ rebalance-stores store-id=1
 [mmaid=1] addPendingRangeChange: change_id=2, range_id=1, change=r1 type: AddLease target store n2,s2 (replica-id=2 type=VOTER_FULL)->(replica-id=2 type=VOTER_FULL leaseholder=true)
 [mmaid=1] result(success): shedding r1 lease from s1 to s2 [change:r1=[transfer_to=2 cids=1,2]] with resulting loads source:[cpu:1µs/s, write-bandwidth:0 B/s, byte-size:0 B] target:[cpu:100ns/s, write-bandwidth:0 B/s, byte-size:0 B] (means: [cpu:550ns/s, write-bandwidth:0 B/s, byte-size:0 B]) (frac_pending: (src:0.00,target:0.00) (src:0.00,target:0.00))
 [mmaid=1] skipping replica transfers for s1 to try more leases next time
-[mmaid=1] rebalancing pass shed: {s1}
+[mmaid=1] rebalancing pass summary [local=s1]:
+	overloaded:
+		short: [s1]
+	success: [s1]
 pending(2)
 change-id=1 store-id=1 node-id=1 range-id=1 load-delta=[cpu:0s/s, write-bandwidth:0 B/s, byte-size:0 B] start=0s gc=1m0s
   prev=(replica-id=1 type=VOTER_FULL leaseholder=true)
