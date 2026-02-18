@@ -4,9 +4,9 @@ go_library(
     name = "framework",
     srcs = [
         "assertions.go",
-        "operations.go",
         "createconfig.go",
         "framework.go",
+        "operations.go",
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/cmd/roachprod/test/framework",
     visibility = ["//visibility:public"],
@@ -24,8 +24,8 @@ go_library(
 go_test(
     name = "framework_test",
     srcs = [
-        "framework_test.go",
         "createconfig_test.go",
+        "framework_test.go",
     ],
     embed = [":framework"],
     deps = [

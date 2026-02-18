@@ -4,8 +4,8 @@ go_test(
     name = "create",
     size = "enormous",
     srcs = [
-        "main_test.go",
         "create_test.go",
+        "main_test.go",
     ],
     data = [
         "//pkg/cmd/roachprod",
@@ -29,8 +29,8 @@ go_test(
     name = "destroy",
     size = "enormous",
     srcs = [
-        "main_test.go",
         "destroy_test.go",
+        "main_test.go",
     ],
     data = [
         "//pkg/cmd/roachprod",
@@ -52,8 +52,8 @@ go_test(
     name = "extend",
     size = "enormous",
     srcs = [
-        "main_test.go",
         "extend_test.go",
+        "main_test.go",
     ],
     data = [
         "//pkg/cmd/roachprod",
@@ -182,6 +182,27 @@ go_test(
     ],
     deps = [
         "//pkg/cmd/roachprod/test/framework",
+        "@com_github_stretchr_testify//require",
+    ],
+)
+
+go_test(
+    name = "tests_test",
+    srcs = [
+        "create_test.go",
+        "destroy_test.go",
+        "extend_test.go",
+        "main_test.go",
+        "managed_test.go",
+        "populate_etc_hosts_test.go",
+        "reset_test.go",
+        "start_stop_test.go",
+        "version_test.go",
+    ],
+    deps = [
+        "//pkg/cmd/roachprod/test/framework",
+        "//pkg/roachprod/vm",
+        "//pkg/roachprod/vm/gce",
         "@com_github_stretchr_testify//require",
     ],
 )
