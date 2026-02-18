@@ -119,3 +119,4 @@ a much shorter window than the previous 48 seconds.
 ## Pull Request Guidelines
 - **Create PRs from your personal fork**, not directly on cockroachdb/cockroach
 - **Single-commit PRs**: PR title should match commit title, PR body should match commit body
+- **Multi-commit PRs**: The body should summarize the end goal that the set of commits achieves and give the reader the context necessary to review the PR commit by commit (for example, the first commits might get refactors out of the way so that the last commit can hook everything up). When there isn't an overarching connection between the commits (maybe the PR groups a few mechanical changes that are not related) it is fine to say that the individual commits speak for themselves.
