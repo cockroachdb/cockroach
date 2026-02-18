@@ -77,7 +77,7 @@ func (t schemaTelemetryResumer) Resume(ctx context.Context, execCtx interface{})
 		// Note: This won't be perfectly up-to-date, but it will make sure the
 		// metric gets updated periodically. It also gets updated after every
 		// schema change.
-		tableStats, err := p.ExecCfg().TableStatsCache.GetTableStats(ctx, desc, nil /* typeResolver */)
+		tableStats, err := p.ExecCfg().TableStatsCache.GetFreshTableStats(ctx, desc, nil /* typeResolver */)
 		if err != nil {
 			return err
 		}
