@@ -167,7 +167,7 @@ go_library(
         "//pkg/multitenant/tenantcapabilities/tenantcapabilitieswatcher",
         "//pkg/multitenant/tenantcapabilitiespb",
         "//pkg/multitenant/tenantcostmodel",
-        "//pkg/obs/clustermetrics/cmreader",
+        "//pkg/obs/clustermetrics",
         "//pkg/obs/clustermetrics/cmwriter",
         "//pkg/raft",
         "//pkg/raft/raftpb",

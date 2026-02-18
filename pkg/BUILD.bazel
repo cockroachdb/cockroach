@@ -1819,6 +1819,7 @@ GO_TARGETS = [
     "//pkg/multitenant/tenantcostmodel:tenantcostmodel",
     "//pkg/multitenant/tenantcostmodel:tenantcostmodel_test",
     "//pkg/multitenant:multitenant",
+    "//pkg/obs/clustermetrics/cmmetrics:cmmetrics",
     "//pkg/obs/clustermetrics/cmreader:cmreader",
     "//pkg/obs/clustermetrics/cmreader:cmreader_test",
     "//pkg/obs/clustermetrics/cmwatcher:cmwatcher",

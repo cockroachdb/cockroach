@@ -14,15 +14,17 @@ go_library(
     deps = [
         "//pkg/base",
         "//pkg/clusterversion",
-        "//pkg/obs/clustermetrics",
+        "//pkg/obs/clustermetrics/cmmetrics",
         "//pkg/settings",
         "//pkg/settings/cluster",
         "//pkg/sql/isql",
         "//pkg/sql/sem/tree",
         "//pkg/sql/sessiondata",
+        "//pkg/util/buildutil",
         "//pkg/util/log",
         "//pkg/util/metric",
         "//pkg/util/stop",
+        "//pkg/util/syncutil",
         "//pkg/util/timeutil",
     ],
 )
@@ -37,7 +39,7 @@ go_test(
     embed = [":cmwriter"],
     deps = [
         "//pkg/base",
-        "//pkg/obs/clustermetrics",
+        "//pkg/obs/clustermetrics/cmmetrics",
         "//pkg/security/securityassets",
         "//pkg/security/securitytest",
         "//pkg/server",
@@ -54,6 +56,7 @@ go_test(
         "//pkg/util/syncutil",
         "//pkg/util/timeutil",
         "@com_github_cockroachdb_errors//:errors",
+        "@com_github_prometheus_client_model//go",
         "@com_github_stretchr_testify//require",
     ],
 )
