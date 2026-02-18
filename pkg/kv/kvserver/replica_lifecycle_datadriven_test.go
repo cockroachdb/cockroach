@@ -149,6 +149,11 @@ import (
 //	Each entry uses a unique deterministic txn ID. The number of entries
 //	defaults to 1.
 //
+// set-gc-hint range-id=<int> [gc-timestamp=<int>] [gc-timestamp-next=<int>]
+// ----
+//
+//	Sets the in-memory GC hint for the specified range.
+//
 // print-range-state [sort-keys=<bool>]
 // ----
 //
@@ -571,6 +576,17 @@ func TestReplicaLifecycleDataDriven(t *testing.T) {
 						))
 					}
 				})
+
+			case "set-gc-hint":
+				rangeID := dd.ScanArg[roachpb.RangeID](t, d, "range-id")
+				rs := tc.mustGetRangeState(t, rangeID)
+				if ts, ok := dd.ScanArgOpt[int64](t, d, "gc-timestamp"); ok {
+					rs.gcHint.GCTimestamp = hlc.Timestamp{WallTime: ts}
+				}
+				if ts, ok := dd.ScanArgOpt[int64](t, d, "gc-timestamp-next"); ok {
+					rs.gcHint.GCTimestampNext = hlc.Timestamp{WallTime: ts}
+				}
+				return "ok"
 
 			case "print-range-state":
 				var sb strings.Builder
