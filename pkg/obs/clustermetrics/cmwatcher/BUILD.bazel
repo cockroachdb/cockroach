@@ -14,7 +14,7 @@ go_library(
         "//pkg/kv/kvclient/rangefeed/rangefeedbuffer",
         "//pkg/kv/kvclient/rangefeed/rangefeedcache",
         "//pkg/kv/kvpb",
-        "//pkg/obs/clustermetrics",
+        "//pkg/obs/clustermetrics/cmmetrics",
         "//pkg/roachpb",
         "//pkg/sql/catalog",
         "//pkg/sql/catalog/descpb",

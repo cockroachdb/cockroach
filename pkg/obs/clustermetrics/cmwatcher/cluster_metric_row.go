@@ -10,7 +10,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
-	"github.com/cockroachdb/cockroach/pkg/obs/clustermetrics"
+	"github.com/cockroachdb/cockroach/pkg/obs/clustermetrics/cmmetrics"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
@@ -38,7 +38,7 @@ type ClusterMetricRow struct {
 // ExportedGaugeVec or ExportedCounterVec. An error is returned if no metadata
 // is registered for the metric name or if the metric type is unsupported.
 func (cmr ClusterMetricRow) ToMetric() (metric.Iterable, error) {
-	md, labels, ok := clustermetrics.GetClusterMetricMetadata(cmr.Name)
+	md, labels, ok := cmmetrics.GetClusterMetricMetadata(cmr.Name)
 	if !ok {
 		return nil, errors.Newf("no metadata found for metric %s", cmr.Name)
 	}

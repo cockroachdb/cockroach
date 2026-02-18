@@ -4,7 +4,6 @@ go_library(
     name = "cmreader",
     srcs = [
         "doc.go",
-        "metrics.go",
         "registry_syncer.go",
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/obs/clustermetrics/cmreader",
@@ -12,6 +11,7 @@ go_library(
     deps = [
         "//pkg/keys",
         "//pkg/kv/kvclient/rangefeed",
+        "//pkg/obs/clustermetrics/cmmetrics",
         "//pkg/obs/clustermetrics/cmwatcher",
         "//pkg/sql",
         "//pkg/sql/catalog",
@@ -36,6 +36,7 @@ go_test(
     deps = [
         "//pkg/base",
         "//pkg/obs/clustermetrics",
+        "//pkg/obs/clustermetrics/cmmetrics",
         "//pkg/obs/clustermetrics/cmwatcher",
         "//pkg/security/securityassets",
         "//pkg/security/securitytest",

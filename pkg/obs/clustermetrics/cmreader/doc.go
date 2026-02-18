@@ -40,12 +40,10 @@
 // # Metadata Registration
 //
 // Before a metric row from the rangefeed can be materialized into the
-// registry, its metadata must be pre-registered in the parent
-// clustermetrics package. Unlabeled metrics must be registered via
-// clustermetrics.RegisterClusterMetric and Labeled metrics must be
-// registered via clustermetrics.RegisterLabeledClusterMetric. Both
-// registration functions should be called in init() so that metadata is
-// available before the registrySyncer starts consuming rangefeed events. If a
-// row arrives whose name is not found in the appropriate registry, the
-// registrySyncer logs an error and skips the row.
+// registry, its metadata must be registered in the cmmetrics package.
+// This happens automatically when a cluster metric is constructed via
+// the cmwriter constructors (NewCounter, NewGauge, NewStopwatch,
+// NewGaugeVec, NewCounterVec). If a row arrives whose name is not
+// found in the metadata registry, the registrySyncer logs an error
+// and skips the row.
 package cmreader
