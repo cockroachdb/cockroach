@@ -1,0 +1,11 @@
+echo
+----
+rebalancing pass summary [local=s1]:
+	overloaded:
+		short: [s1, s10]
+		medium: [s8]
+		long: [s6]
+	success: [s1]
+	failure: [{s6, total: 4, no-healthy-cand:4}, {s8, total: 2, no-cand:1, no-cand-to-accept-load:1}]
+	skipped: [s5, s12]
+	no-ranges-evaluated: [s10]
