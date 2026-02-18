@@ -240,215 +240,218 @@ const formatWithPossibleStaleIndicator = (
  * both healthy and suspect nodes. Included is a side-bar with summary
  * statistics for these nodes.
  */
-export class NodeList extends React.Component<LiveNodeListProps> {
-  readonly columns: ColumnsConfig<NodeStatusRow> = [
-    {
-      key: "region",
-      title: "nodes",
-      render: (_text: string, record: NodeStatusRow) => {
-        if (record.nodeId) {
-          return <NodeNameColumn record={record} />;
-        } else {
-          return <NodeLocalityColumn record={record} />;
-        }
-      },
-      sorter: (a: NodeStatusRow, b: NodeStatusRow) => {
-        if (!isUndefined(a.nodeId) && !isUndefined(b.nodeId)) {
-          // If nodeId is defined but regionId is not, this means that there is only
-          // a single region. In this case, sort the by nodeId.
-          if (isUndefined(a.region) && isUndefined(b.region)) {
-            return a.nodeId - b.nodeId;
-          }
-          return 0;
-        }
-        if (a.region < b.region) {
-          return -1;
-        }
-        if (a.region > b.region) {
-          return 1;
+
+const nodeListColumns: ColumnsConfig<NodeStatusRow> = [
+  {
+    key: "region",
+    title: "nodes",
+    render: (_text: string, record: NodeStatusRow) => {
+      if (record.nodeId) {
+        return <NodeNameColumn record={record} />;
+      } else {
+        return <NodeLocalityColumn record={record} />;
+      }
+    },
+    sorter: (a: NodeStatusRow, b: NodeStatusRow) => {
+      if (!isUndefined(a.nodeId) && !isUndefined(b.nodeId)) {
+        // If nodeId is defined but regionId is not, this means that there is only
+        // a single region. In this case, sort the by nodeId.
+        if (isUndefined(a.region) && isUndefined(b.region)) {
+          return a.nodeId - b.nodeId;
         }
         return 0;
-      },
-      className: "column--border-right",
-      width: "20%",
+      }
+      if (a.region < b.region) {
+        return -1;
+      }
+      if (a.region > b.region) {
+        return 1;
+      }
+      return 0;
     },
-    {
-      key: "nodesCount",
-      title: <NodeCountTooltip>Node Count</NodeCountTooltip>,
-      sorter: (a: NodeStatusRow, b: NodeStatusRow) => {
-        if (isUndefined(a.nodesCount) || isUndefined(b.nodesCount)) {
-          return 0;
-        }
-        return a.nodesCount - b.nodesCount;
-      },
-      render: (_text: string, record: NodeStatusRow) => record.nodesCount,
-      sortDirections: ["ascend", "descend"],
-      className: "column--align-right",
-      width: "10%",
+    className: "column--border-right",
+    width: "20%",
+  },
+  {
+    key: "nodesCount",
+    title: <NodeCountTooltip>Node Count</NodeCountTooltip>,
+    sorter: (a: NodeStatusRow, b: NodeStatusRow) => {
+      if (isUndefined(a.nodesCount) || isUndefined(b.nodesCount)) {
+        return 0;
+      }
+      return a.nodesCount - b.nodesCount;
     },
-    {
-      key: "uptime",
-      dataIndex: "uptime",
-      render: formatWithPossibleStaleIndicator,
-      title: <UptimeTooltip>Uptime</UptimeTooltip>,
-      sorter: false,
-      className: "column--align-right",
-      width: "10%",
-      ellipsis: true,
-    },
-    {
-      key: "replicas",
-      dataIndex: "replicas",
-      render: formatWithPossibleStaleIndicator,
-      title: <ReplicasTooltip>Replicas</ReplicasTooltip>,
-      sorter: (a: NodeStatusRow, b: NodeStatusRow) => a.replicas - b.replicas,
-      className: "column--align-right",
-      width: "10%",
-    },
-    {
-      key: "capacityUsage",
-      title: (
-        <NodelistCapacityUsageTooltip>
-          Capacity Usage
-        </NodelistCapacityUsageTooltip>
+    render: (_text: string, record: NodeStatusRow) => record.nodesCount,
+    sortDirections: ["ascend", "descend"],
+    className: "column--align-right",
+    width: "10%",
+  },
+  {
+    key: "uptime",
+    dataIndex: "uptime",
+    render: formatWithPossibleStaleIndicator,
+    title: <UptimeTooltip>Uptime</UptimeTooltip>,
+    sorter: false,
+    className: "column--align-right",
+    width: "10%",
+    ellipsis: true,
+  },
+  {
+    key: "replicas",
+    dataIndex: "replicas",
+    render: formatWithPossibleStaleIndicator,
+    title: <ReplicasTooltip>Replicas</ReplicasTooltip>,
+    sorter: (a: NodeStatusRow, b: NodeStatusRow) => a.replicas - b.replicas,
+    className: "column--align-right",
+    width: "10%",
+  },
+  {
+    key: "capacityUsage",
+    title: (
+      <NodelistCapacityUsageTooltip>
+        Capacity Usage
+      </NodelistCapacityUsageTooltip>
+    ),
+    render: (_text: string, record: NodeStatusRow) =>
+      formatWithPossibleStaleIndicator(
+        util.Percentage(record.usedCapacity, record.availableCapacity),
+        record,
       ),
-      render: (_text: string, record: NodeStatusRow) =>
-        formatWithPossibleStaleIndicator(
-          util.Percentage(record.usedCapacity, record.availableCapacity),
-          record,
-        ),
-      sorter: (a: NodeStatusRow, b: NodeStatusRow) =>
-        a.usedCapacity / a.availableCapacity -
-        b.usedCapacity / b.availableCapacity,
-      className: "column--align-right",
-      width: "10%",
-    },
-    {
-      key: "memoryUse",
-      title: <MemoryUseTooltip>Memory Use</MemoryUseTooltip>,
-      render: (_text: string, record: NodeStatusRow) =>
-        formatWithPossibleStaleIndicator(
-          util.Percentage(record.usedMemory, record.availableMemory),
-          record,
-        ),
-      sorter: (a: NodeStatusRow, b: NodeStatusRow) =>
-        a.usedMemory / a.availableMemory - b.usedMemory / b.availableMemory,
-      className: "column--align-right",
-      width: "10%",
-    },
-    {
-      key: "vCpus",
-      title: <CPUsTooltip>vCPUs</CPUsTooltip>,
-      dataIndex: "numVcpus",
-      sorter: (a: NodeStatusRow, b: NodeStatusRow) => a.numVcpus - b.numVcpus,
-      className: "column--align-right",
-      width: "8%",
-    },
-    {
-      key: "version",
-      dataIndex: "version",
-      title: <VersionTooltip>Version</VersionTooltip>,
-      sorter: false,
-      width: "8%",
-      ellipsis: true,
-    },
-    {
-      key: "status",
-      title: <StatusTooltip>Status</StatusTooltip>,
-      render: (_text: string, record: NodeStatusRow) => {
-        let badgeText: string;
-        let tooltipText: string | JSX.Element;
-        let nodeTooltip: string | JSX.Element;
+    sorter: (a: NodeStatusRow, b: NodeStatusRow) =>
+      a.usedCapacity / a.availableCapacity -
+      b.usedCapacity / b.availableCapacity,
+    className: "column--align-right",
+    width: "10%",
+  },
+  {
+    key: "memoryUse",
+    title: <MemoryUseTooltip>Memory Use</MemoryUseTooltip>,
+    render: (_text: string, record: NodeStatusRow) =>
+      formatWithPossibleStaleIndicator(
+        util.Percentage(record.usedMemory, record.availableMemory),
+        record,
+      ),
+    sorter: (a: NodeStatusRow, b: NodeStatusRow) =>
+      a.usedMemory / a.availableMemory - b.usedMemory / b.availableMemory,
+    className: "column--align-right",
+    width: "10%",
+  },
+  {
+    key: "vCpus",
+    title: <CPUsTooltip>vCPUs</CPUsTooltip>,
+    dataIndex: "numVcpus",
+    sorter: (a: NodeStatusRow, b: NodeStatusRow) => a.numVcpus - b.numVcpus,
+    className: "column--align-right",
+    width: "8%",
+  },
+  {
+    key: "version",
+    dataIndex: "version",
+    title: <VersionTooltip>Version</VersionTooltip>,
+    sorter: false,
+    width: "8%",
+    ellipsis: true,
+  },
+  {
+    key: "status",
+    title: <StatusTooltip>Status</StatusTooltip>,
+    render: (_text: string, record: NodeStatusRow) => {
+      let badgeText: string;
+      let tooltipText: string | JSX.Element;
+      let nodeTooltip: string | JSX.Element;
 
-        // single node row
-        const badgeType = getBadgeTypeByNodeStatus(record.status);
-        switch (record.status) {
-          case AggregatedNodeStatus.DEAD:
-            badgeText = "warning";
-            tooltipText = getStatusDescription(LivenessStatus.NODE_STATUS_DEAD);
-            nodeTooltip = getNodeStatusDescription(record.status);
-            break;
-          case AggregatedNodeStatus.LIVE:
-          case AggregatedNodeStatus.WARNING:
-            badgeText = AggregatedNodeStatus[record.status];
-            nodeTooltip = getNodeStatusDescription(record.status);
-            break;
-          case LivenessStatus.NODE_STATUS_UNKNOWN:
-          case LivenessStatus.NODE_STATUS_UNAVAILABLE:
-            badgeText = "suspect";
-            tooltipText = getStatusDescription(record.status);
-            break;
-          default:
-            badgeText = getLivenessStatusName(record.status);
-            tooltipText = getStatusDescription(record.status);
-            break;
-        }
+      // single node row
+      const badgeType = getBadgeTypeByNodeStatus(record.status);
+      switch (record.status) {
+        case AggregatedNodeStatus.DEAD:
+          badgeText = "warning";
+          tooltipText = getStatusDescription(LivenessStatus.NODE_STATUS_DEAD);
+          nodeTooltip = getNodeStatusDescription(record.status);
+          break;
+        case AggregatedNodeStatus.LIVE:
+        case AggregatedNodeStatus.WARNING:
+          badgeText = AggregatedNodeStatus[record.status];
+          nodeTooltip = getNodeStatusDescription(record.status);
+          break;
+        case LivenessStatus.NODE_STATUS_UNKNOWN:
+        case LivenessStatus.NODE_STATUS_UNAVAILABLE:
+          badgeText = "suspect";
+          tooltipText = getStatusDescription(record.status);
+          break;
+        default:
+          badgeText = getLivenessStatusName(record.status);
+          tooltipText = getStatusDescription(record.status);
+          break;
+      }
 
-        // if aggregated row
-        if (!record.nodeId) {
-          return (
-            <Tooltip title={nodeTooltip}>
-              {""}
-              <Badge status={badgeType} text={badgeText} />
-            </Tooltip>
-          );
-        }
-
+      // if aggregated row
+      if (!record.nodeId) {
         return (
-          <Badge
-            status={badgeType}
-            text={<Tooltip title={tooltipText}>{badgeText}</Tooltip>}
-          />
+          <Tooltip title={nodeTooltip}>
+            {""}
+            <Badge status={badgeType} text={badgeText} />
+          </Tooltip>
         );
-      },
-      sorter: (a: NodeStatusRow, b: NodeStatusRow) => a.status - b.status,
-      width: "13%",
-    },
-    {
-      key: "logs",
-      title: <span />,
-      render: (_text: string, record: NodeStatusRow) =>
-        record.nodeId && (
-          <div className="cell--show-on-hover ">
-            <Link
-              className="nodes-table__link"
-              to={`/node/${record.nodeId}/logs`}
-            >
-              Logs
-            </Link>
-          </div>
-        ),
-      width: "5%",
-    },
-  ];
+      }
 
-  render() {
-    const { nodesCount, regionsCount } = this.props;
-    let columns = this.columns;
-    let dataSource = this.props.dataSource;
+      return (
+        <Badge
+          status={badgeType}
+          text={<Tooltip title={tooltipText}>{badgeText}</Tooltip>}
+        />
+      );
+    },
+    sorter: (a: NodeStatusRow, b: NodeStatusRow) => a.status - b.status,
+    width: "13%",
+  },
+  {
+    key: "logs",
+    title: <span />,
+    render: (_text: string, record: NodeStatusRow) =>
+      record.nodeId && (
+        <div className="cell--show-on-hover ">
+          <Link
+            className="nodes-table__link"
+            to={`/node/${record.nodeId}/logs`}
+          >
+            Logs
+          </Link>
+        </div>
+      ),
+    width: "5%",
+  },
+];
 
-    // Remove "Nodes Count" column If nodes are not partitioned by regions,
-    if (regionsCount === 1) {
-      columns = columns.filter(column => column.key !== "nodesCount");
-      dataSource = head(dataSource).children;
-    }
-    return (
-      <div className="nodes-overview__panel">
-        <TableSection
-          id={`nodes-overview__live-nodes`}
-          title={`Nodes (${nodesCount})`}
-          className="embedded-table"
-        >
-          <Table
-            dataSource={dataSource}
-            columns={columns}
-            tableLayout="fixed"
-            className="nodes-overview__live-nodes-table"
-          />
-        </TableSection>
-      </div>
-    );
+export function NodeList({
+  dataSource,
+  nodesCount,
+  regionsCount,
+}: LiveNodeListProps): React.ReactElement {
+  let columns = nodeListColumns;
+  let adjustedDataSource = dataSource;
+
+  // Remove "Nodes Count" column if nodes are not partitioned by regions.
+  if (regionsCount === 1) {
+    columns = nodeListColumns.filter(column => column.key !== "nodesCount");
+    adjustedDataSource = head(dataSource).children;
   }
+
+  return (
+    <div className="nodes-overview__panel">
+      <TableSection
+        id={`nodes-overview__live-nodes`}
+        title={`Nodes (${nodesCount})`}
+        className="embedded-table"
+      >
+        <Table
+          dataSource={adjustedDataSource}
+          columns={columns}
+          tableLayout="fixed"
+          className="nodes-overview__live-nodes-table"
+        />
+      </TableSection>
+    </div>
+  );
 }
 
 /**

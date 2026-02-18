@@ -140,21 +140,23 @@ export interface EventPageProps {
   timezone: string;
 }
 
-export class EventPageUnconnected extends React.Component<EventPageProps, {}> {
-  componentDidMount() {
-    // Refresh events when mounting.
-    this.props.refreshEvents();
-  }
+export function EventPageUnconnected({
+  events,
+  refreshEvents: refreshEventsAction,
+  sortSetting,
+  setSort,
+  lastError,
+  maxSizeApiReached,
+  timezone,
+}: EventPageProps): React.ReactElement {
+  useEffect(() => {
+    // Refresh events when mounting and when props change.
+    refreshEventsAction();
+  });
 
-  componentDidUpdate() {
-    // Refresh events when props change.
-    this.props.refreshEvents();
-  }
-
-  renderContent() {
-    const { events, sortSetting, maxSizeApiReached } = this.props;
+  const renderContent = () => {
     const simplifiedEvents = map(events, event => {
-      return getEventInfo(event, this.props.timezone);
+      return getEventInfo(event, timezone);
     });
 
     return (
@@ -163,9 +165,7 @@ export class EventPageUnconnected extends React.Component<EventPageProps, {}> {
           <EventSortedTable
             data={simplifiedEvents}
             sortSetting={sortSetting}
-            onChangeSortSetting={(setting: SortSetting) =>
-              this.props.setSort(setting)
-            }
+            onChangeSortSetting={(setting: SortSetting) => setSort(setting)}
             columns={[
               {
                 title: "Event",
@@ -194,27 +194,24 @@ export class EventPageUnconnected extends React.Component<EventPageProps, {}> {
         )}
       </>
     );
-  }
+  };
 
-  render() {
-    const { events, lastError } = this.props;
-    return (
-      <div>
-        <Helmet title="Events" />
-        <section className="section section--heading">
-          <h1 className="base-heading">Events</h1>
-        </section>
-        <section className="section">
-          <Loading
-            loading={!events}
-            page={"events"}
-            error={lastError}
-            render={this.renderContent.bind(this)}
-          />
-        </section>
-      </div>
-    );
-  }
+  return (
+    <div>
+      <Helmet title="Events" />
+      <section className="section section--heading">
+        <h1 className="base-heading">Events</h1>
+      </section>
+      <section className="section">
+        <Loading
+          loading={!events}
+          page={"events"}
+          error={lastError}
+          render={renderContent}
+        />
+      </section>
+    </div>
+  );
 }
 
 // Connect the EventsList class with our redux store.
