@@ -157,7 +157,11 @@ resumed by any node in the cluster. The mechanism by which this is done is the
 
 ## The Job Registry
 A node interacts with the jobs table through the [`JobRegistry`](https://github.com/cockroachdb/cockroach/blob/7097a9015f1a09c7dee4fbdbcc6bde82121f657b/pkg/jobs/registry.go#L92)
-struct.
+struct. The job registry changes a job's status via the following state machine. See a 
+description of all job states in [jobs/jobs.go](https://github.com/cockroachdb/cockroach/blob/8a501a247f177bf287bcf34beb4f05155818998c/pkg/jobs/jobs.go#L177)
+and keep reading to learn how the registry changes a job's state!
+
+![job state machine](images/job-state-machine.png)
 
 
 ### Job Creation
