@@ -1498,11 +1498,18 @@ func (ts *testServer) StartSharedProcessTenant(
 	// system tenant; for shared-process tenants, the system tenant's setting
 	// already applies at the KV layer.
 	if args.DisableElasticCPUAdmission {
-		if s, ok := settings.LookupForLocalAccessByKey(
-			settings.InternalKey("sqladmission.low_pri_read_response_elastic_control.enabled"),
-			false, /* forSystemTenant */
-		); ok {
-			s.(*settings.BoolSetting).Override(ctx, &sqlServer.cfg.Settings.SV, false)
+		for _, key := range []string{
+			"sqladmission.low_pri_read_response_elastic_control.enabled",
+			"bulkio.index_backfill.elastic_control.enabled",
+			"bulkio.ingest.sst_batcher_elastic_control.enabled",
+			"bulkio.import.elastic_control.enabled",
+			"bulkio.backup.file_sst_sink_elastic_control.enabled",
+		} {
+			if s, ok := settings.LookupForLocalAccessByKey(
+				settings.InternalKey(key), false, /* forSystemTenant */
+			); ok {
+				s.(*settings.BoolSetting).Override(ctx, &sqlServer.cfg.Settings.SV, false)
+			}
 		}
 	}
 	admission.YieldForElasticCPU.Override(ctx, &sqlServer.cfg.Settings.SV, false)
@@ -1900,11 +1907,18 @@ func (ts *testServer) StartTenant(
 	// NB: ElasticAdmission is a SystemOnly setting so it can only be set on the
 	// system tenant; the setting on the host cluster already applies at the KV layer.
 	if params.DisableElasticCPUAdmission {
-		if s, ok := settings.LookupForLocalAccessByKey(
-			settings.InternalKey("sqladmission.low_pri_read_response_elastic_control.enabled"),
-			false, /* forSystemTenant */
-		); ok {
-			s.(*settings.BoolSetting).Override(ctx, &st.SV, false)
+		for _, key := range []string{
+			"sqladmission.low_pri_read_response_elastic_control.enabled",
+			"bulkio.index_backfill.elastic_control.enabled",
+			"bulkio.ingest.sst_batcher_elastic_control.enabled",
+			"bulkio.import.elastic_control.enabled",
+			"bulkio.backup.file_sst_sink_elastic_control.enabled",
+		} {
+			if s, ok := settings.LookupForLocalAccessByKey(
+				settings.InternalKey(key), false, /* forSystemTenant */
+			); ok {
+				s.(*settings.BoolSetting).Override(ctx, &st.SV, false)
+			}
 		}
 	}
 	admission.YieldForElasticCPU.Override(ctx, &st.SV, false)
