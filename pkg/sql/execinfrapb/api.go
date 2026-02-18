@@ -67,6 +67,8 @@ func (m *ChangeAggregatorSpec) User() username.SQLUsername {
 func (m *ChangeAggregatorSpec) GetSchemaTS() hlc.Timestamp {
 	if m.SchemaTS != nil && !m.SchemaTS.IsEmpty() {
 		return *m.SchemaTS
+	} else if m.InitialHighWater != nil && !m.InitialHighWater.IsEmpty() {
+		return *m.InitialHighWater
 	}
 	return m.Feed.StatementTime
 }
