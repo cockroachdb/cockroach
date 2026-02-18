@@ -404,9 +404,13 @@ type lockTableGuardImpl struct {
 	ts         hlc.Timestamp
 	spans      *lockspanset.LockSpanSet
 	waitPolicy lock.WaitPolicy
+
 	// virtuallyResolveIntents represents the state of VirtuallyDeferrerIntents at
 	// the outset of this request.
 	virtuallyResolveIntents bool
+	// pushUsingCachedClockObservations represents the state of the
+	// PushUsingCachedClockObservation cluster setting at the this request.
+	pushUsingCachedClockObs bool
 	maxWaitQueueLength      int
 
 	// Snapshot of the tree for which this request has some spans. Note that
@@ -877,7 +881,11 @@ func (g *lockTableGuardImpl) pendingPushedTransactionCanBeResolved(
 	// uncertainty interval, or we need to be sure that the request was concurrent
 	// with our transaction so that rewritten intent can be ignored even if it is
 	// inside our uncertainty interval.
-	return !g.hasUncertaintyInterval() || g.hasObservationAtOrBefore(pushed.ClockWhilePending)
+	if !g.hasUncertaintyInterval() {
+		return true
+	}
+
+	return g.pushUsingCachedClockObs && g.hasObservationAtOrBefore(pushed.ClockWhilePending)
 }
 
 func (g *lockTableGuardImpl) isSameTxn(txn *enginepb.TxnMeta) bool {
@@ -4330,6 +4338,7 @@ func (t *lockTableImpl) newGuardForReq(req Request) *lockTableGuardImpl {
 	g.maxWaitQueueLength = req.MaxLockWaitQueueLength
 	g.str = lock.MaxStrength
 	g.index = -1
+	g.pushUsingCachedClockObs = PushUsingCachedClockObservation.Get(&g.lt.settings.SV)
 	g.virtuallyResolveIntents = VirtualIntentResolution.Get(&g.lt.settings.SV) && req.canVirtuallyResolve()
 	return g
 }
