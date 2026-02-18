@@ -19,8 +19,8 @@ import (
 
 // makeTestRegistrySyncer creates an registrySyncer with a fresh registry for unit testing.
 // It does not create a watcher or connect to any rangefeed.
-func makeTestRegistrySyncer() (*registrySyncer, *registry) {
-	reg := &registry{metric.NewRegistry()}
+func makeTestRegistrySyncer() (*registrySyncer, *clustermetrics.Registry) {
+	reg := clustermetrics.NewRegistry()
 	u := &registrySyncer{registry: reg}
 	u.mu.trackedMetrics = make(map[string]metric.Iterable)
 	u.mu.trackedRows = make(map[int64]cmwatcher.ClusterMetricRow)
@@ -35,7 +35,7 @@ func TestUpdateMetricLocked(t *testing.T) {
 		name   string
 		setup  func() func()
 		rows   []cmwatcher.ClusterMetricRow
-		verify func(t *testing.T, u *registrySyncer, reg *registry)
+		verify func(t *testing.T, u *registrySyncer, reg *clustermetrics.Registry)
 	}{{
 		name: "new gauge",
 		setup: func() func() {
@@ -48,7 +48,7 @@ func TestUpdateMetricLocked(t *testing.T) {
 		rows: []cmwatcher.ClusterMetricRow{{
 			ID: 1, Name: "test.gauge", Type: "gauge", Value: 42,
 		}},
-		verify: func(t *testing.T, u *registrySyncer, reg *registry) {
+		verify: func(t *testing.T, u *registrySyncer, reg *clustermetrics.Registry) {
 			require.Contains(t, u.mu.trackedMetrics, "test.gauge")
 			require.Contains(t, u.mu.trackedRows, int64(1))
 
@@ -77,7 +77,7 @@ func TestUpdateMetricLocked(t *testing.T) {
 		}, {
 			ID: 1, Name: "test.gauge", Type: "gauge", Value: 99,
 		}},
-		verify: func(t *testing.T, u *registrySyncer, _ *registry) {
+		verify: func(t *testing.T, u *registrySyncer, _ *clustermetrics.Registry) {
 			g := u.mu.trackedMetrics["test.gauge"].(*metric.Gauge)
 			require.Equal(t, int64(99), g.Value())
 		},
@@ -95,7 +95,7 @@ func TestUpdateMetricLocked(t *testing.T) {
 		}, {
 			ID: 1, Name: "test.counter", Type: "counter", Value: 42,
 		}},
-		verify: func(t *testing.T, u *registrySyncer, _ *registry) {
+		verify: func(t *testing.T, u *registrySyncer, _ *clustermetrics.Registry) {
 			c := u.mu.trackedMetrics["test.counter"].(*metric.Counter)
 			require.Equal(t, int64(42), c.Count())
 		},
@@ -105,7 +105,7 @@ func TestUpdateMetricLocked(t *testing.T) {
 		rows: []cmwatcher.ClusterMetricRow{{
 			ID: 999, Name: "nonexistent.metric", Type: "gauge", Value: 42,
 		}},
-		verify: func(t *testing.T, u *registrySyncer, _ *registry) {
+		verify: func(t *testing.T, u *registrySyncer, _ *clustermetrics.Registry) {
 			require.Empty(t, u.mu.trackedMetrics)
 			require.Empty(t, u.mu.trackedRows)
 		},
@@ -123,7 +123,7 @@ func TestUpdateMetricLocked(t *testing.T) {
 			Labels: map[string]string{"store": "1"},
 			Type:   "gauge", Value: 42,
 		}},
-		verify: func(t *testing.T, u *registrySyncer, reg *registry) {
+		verify: func(t *testing.T, u *registrySyncer, reg *clustermetrics.Registry) {
 			require.Contains(t, u.mu.trackedMetrics, "test.gaugevec")
 			_, ok := u.mu.trackedMetrics["test.gaugevec"].(*metric.GaugeVec)
 			require.True(t, ok, "expected *metric.GaugeVec")
@@ -155,7 +155,7 @@ func TestUpdateMetricLocked(t *testing.T) {
 			Labels: map[string]string{"store": "2"},
 			Type:   "gauge", Value: 20,
 		}},
-		verify: func(t *testing.T, u *registrySyncer, _ *registry) {
+		verify: func(t *testing.T, u *registrySyncer, _ *clustermetrics.Registry) {
 			require.Contains(t, u.mu.trackedRows, int64(1))
 			require.Contains(t, u.mu.trackedRows, int64(2))
 			require.Len(t, u.mu.trackedMetrics, 1)
@@ -179,7 +179,7 @@ func TestUpdateMetricLocked(t *testing.T) {
 			Labels: map[string]string{"store": "1"},
 			Type:   "gauge", Value: 99,
 		}},
-		verify: func(t *testing.T, u *registrySyncer, _ *registry) {
+		verify: func(t *testing.T, u *registrySyncer, _ *clustermetrics.Registry) {
 			require.Contains(t, u.mu.trackedRows, int64(1))
 			require.Equal(t, int64(99),
 				u.mu.trackedRows[int64(1)].Value)
@@ -206,7 +206,7 @@ func TestUpdateMetricLocked(t *testing.T) {
 			Labels: map[string]string{"store": "1"},
 			Type:   "counter", Value: 50,
 		}},
-		verify: func(t *testing.T, u *registrySyncer, _ *registry) {
+		verify: func(t *testing.T, u *registrySyncer, _ *clustermetrics.Registry) {
 			require.Contains(t, u.mu.trackedMetrics, "test.countervec")
 			cv, ok := u.mu.trackedMetrics["test.countervec"].(*metric.CounterVec)
 			require.True(t, ok, "expected *metric.CounterVec")
@@ -245,7 +245,7 @@ func TestDeleteMetricLocked(t *testing.T) {
 		setup      func() func()
 		insertRows []cmwatcher.ClusterMetricRow
 		deleteRow  cmwatcher.ClusterMetricRow
-		verify     func(t *testing.T, u *registrySyncer, reg *registry)
+		verify     func(t *testing.T, u *registrySyncer, reg *clustermetrics.Registry)
 	}{{
 		name: "scalar gauge",
 		setup: func() func() {
@@ -259,7 +259,7 @@ func TestDeleteMetricLocked(t *testing.T) {
 			ID: 1, Name: "test.gauge", Type: "gauge", Value: 42,
 		}},
 		deleteRow: cmwatcher.ClusterMetricRow{ID: 1},
-		verify: func(t *testing.T, u *registrySyncer, reg *registry) {
+		verify: func(t *testing.T, u *registrySyncer, reg *clustermetrics.Registry) {
 			require.NotContains(t, u.mu.trackedMetrics, "test.gauge")
 			require.NotContains(t, u.mu.trackedRows, int64(1))
 
@@ -282,7 +282,7 @@ func TestDeleteMetricLocked(t *testing.T) {
 			Type:   "gauge", Value: 42,
 		}},
 		deleteRow: cmwatcher.ClusterMetricRow{ID: 1},
-		verify: func(t *testing.T, u *registrySyncer, reg *registry) {
+		verify: func(t *testing.T, u *registrySyncer, reg *clustermetrics.Registry) {
 			// Vec metric stays in trackedMetrics and registry even
 			// after all label sets are deleted.
 			require.Contains(t, u.mu.trackedMetrics, "test.vec")
@@ -301,7 +301,7 @@ func TestDeleteMetricLocked(t *testing.T) {
 		name:      "unknown ID",
 		setup:     func() func() { return func() {} },
 		deleteRow: cmwatcher.ClusterMetricRow{ID: 999},
-		verify: func(t *testing.T, u *registrySyncer, _ *registry) {
+		verify: func(t *testing.T, u *registrySyncer, _ *clustermetrics.Registry) {
 			require.Empty(t, u.mu.trackedMetrics)
 			require.Empty(t, u.mu.trackedRows)
 		},

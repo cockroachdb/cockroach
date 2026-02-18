@@ -204,7 +204,7 @@ type TableMetadataUpdateJobMetrics struct {
 	Duration      metric.IHistogram
 }
 
-func (m TableMetadataUpdateJobMetrics) MetricStruct() {}
+func (TableMetadataUpdateJobMetrics) MetricStruct() {}
 
 func newTableMetadataUpdateJobMetrics() metric.Struct {
 	return TableMetadataUpdateJobMetrics{
