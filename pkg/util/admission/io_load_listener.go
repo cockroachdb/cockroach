@@ -434,12 +434,6 @@ func (t tickDuration) ticksInAdjustmentInterval() int64 {
 const unloadedDuration = tickDuration(250 * time.Millisecond)
 const loadedDuration = tickDuration(1 * time.Millisecond)
 
-// TODO(aaditya): Consider lowering this threshold. It was picked arbitrarily
-// and seems to work well enough. Would it be better to do error accounting at
-// an even higher frequency?
-const errorAdjustmentInterval = 1
-const errorTicksInAdjustmentInterval = int64(adjustmentInterval / errorAdjustmentInterval)
-
 // tokenAllocationTicker wraps a time.Ticker, and also computes the remaining
 // ticks in the adjustment interval, given an expected tick rate. If every tick
 // from the ticker was always equal to the expected tick rate, then we could
@@ -448,7 +442,6 @@ const errorTicksInAdjustmentInterval = int64(adjustmentInterval / errorAdjustmen
 type tokenAllocationTicker struct {
 	expectedTickDuration        time.Duration
 	adjustmentIntervalStartTime time.Time
-	lastErrorAdjustmentTick     uint64
 	ticker                      *time.Ticker
 }
 
@@ -485,35 +478,6 @@ func (t *tokenAllocationTicker) remainingTicks() uint64 {
 	}
 	remainingTime := adjustmentInterval*time.Second - timePassed
 	return uint64((remainingTime + t.expectedTickDuration - 1) / t.expectedTickDuration)
-}
-
-// shouldAdjustForError returns true if we should additionally adjust for read
-// and write error based on the number of remainingTicks and
-// errorAdjustmentInterval.
-func (t *tokenAllocationTicker) shouldAdjustForError(remainingTicks uint64, loaded bool) bool {
-	tickDur := unloadedDuration
-	if loaded {
-		tickDur = loadedDuration
-	}
-	if t.lastErrorAdjustmentTick == 0 {
-		// If this is the first tick of a new adjustment period, reset the 0 value
-		// to the total number of ticks (equivalent values for the purpose of error
-		// accounting).
-		t.lastErrorAdjustmentTick = uint64(tickDur.ticksInAdjustmentInterval())
-	}
-	// We calculate the number of ticks in the errorAdjustmentDuration.
-	errorTickThreshold := uint64(tickDur.ticksInAdjustmentInterval() / errorTicksInAdjustmentInterval)
-	// We adjust for error when either we have passed the errorAdjustmentInterval
-	// threshold or it is the last tick before the new adjustment interval.
-	shouldAdjust := t.lastErrorAdjustmentTick-remainingTicks >= errorTickThreshold || remainingTicks == 0
-	if !shouldAdjust {
-		return false
-	}
-	// Since lastErrorAdjustmentTick uses the remainingTicks in the previous
-	// iteration, it is expected to be a decreasing value over time. The expected
-	// range is [ticksInAdjustmentInterval, 0].
-	t.lastErrorAdjustmentTick = remainingTicks
-	return true
 }
 
 func (t *tokenAllocationTicker) stop() {
@@ -747,10 +711,10 @@ func (io *ioLoadListener) adjustTokens(ctx context.Context, metrics StoreMetrics
 	elasticBWMaxUtil := ElasticBandwidthMaxUtil.Get(&io.settings.SV)
 	intDiskLoadInfo := computeIntervalDiskLoadInfo(
 		cumDiskBW.bytesRead, cumDiskBW.bytesWritten, metrics.DiskStats, elasticBWMaxUtil)
-	diskTokensUsed, diskErrStats := io.kvGranter.getDiskTokensUsedAndReset()
+	diskTokensUsed, diskErrStats, remainingDiskWriteTokens := io.kvGranter.getDiskTokensUsedAndReset()
 	if metrics.DiskStats.ProvisionedBandwidth > 0 {
 		tokens := io.diskBandwidthLimiter.computeElasticTokens(
-			intDiskLoadInfo, diskTokensUsed, diskErrStats)
+			intDiskLoadInfo, diskTokensUsed, diskErrStats, remainingDiskWriteTokens)
 		io.diskWriteTokens = tokens.writeByteTokens
 		io.diskWriteTokensAllocated = 0
 		io.diskReadTokens = tokens.readByteTokens

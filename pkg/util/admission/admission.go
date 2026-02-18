@@ -322,8 +322,14 @@ type granterWithIOTokens interface {
 		lastTick bool,
 	) (ioTokensUsed int64, ioTokensUsedByElasticWork int64)
 	// getDiskTokensUsedAndReset returns the disk bandwidth tokens used since the
-	// last such call.
-	getDiskTokensUsedAndReset() ([admissionpb.NumStoreWorkTypes]diskTokens, diskErrorStats)
+	// last such call, along with the remaining disk write tokens at the end of
+	// the previous interval. A negative value for remainingDiskWriteTokens
+	// indicates overadmission.
+	getDiskTokensUsedAndReset() (
+		usedTokens [admissionpb.NumStoreWorkTypes]diskTokens,
+		errStats diskErrorStats,
+		remainingDiskWriteTokens int64,
+	)
 	// setLinearModels supplies the models to use when storeWriteDone or
 	// storeReplicatedWorkAdmittedLocked is called, to adjust token consumption.
 	// Note that these models are not used for token adjustment at admission
