@@ -11,10 +11,11 @@
 //
 // The package has two main components:
 //
-//   - registry: a package-private wrapper around metric.Registry that
-//     is exposed externally only as a metric.RegistryReader. This
-//     prevents callers outside the package from mutating the registry
-//     directly; only the registrySyncer may add or remove metrics.
+//   - registry: a package-private wrapper around metric.Registry
+//     that is exposed externally only as a metric.RegistryReader
+//     via NewRegistryReader. This prevents callers outside the
+//     cmreader package from mutating the registry directly; only
+//     the registrySyncer may add or remove metrics.
 //
 //   - registrySyncer: subscribes to the system.cluster_metrics table via a
 //     cmwatcher.Watcher rangefeed and keeps the registry in sync with
@@ -40,12 +41,8 @@
 // # Metadata Registration
 //
 // Before a metric row from the rangefeed can be materialized into the
-// registry, its metadata must be pre-registered in the parent
-// clustermetrics package. Unlabeled metrics must be registered via
-// clustermetrics.RegisterClusterMetric and Labeled metrics must be
-// registered via clustermetrics.RegisterLabeledClusterMetric. Both
-// registration functions should be called in init() so that metadata is
-// available before the registrySyncer starts consuming rangefeed events. If a
-// row arrives whose name is not found in the appropriate registry, the
+// registry, its metadata must be registered in the cmmetrics package
+// via RegisterClusterMetric or RegisterLabeledClusterMetric. If a row
+// arrives whose name is not found in the metadata registry, the
 // registrySyncer logs an error and skips the row.
 package cmreader

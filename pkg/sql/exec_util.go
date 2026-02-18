@@ -1689,6 +1689,13 @@ func EmptySystemTenantOnly[T any]() SystemTenantOnly[T] {
 	return (*emptySystemTenantOnly[T])(empty)
 }
 
+// ClusterMetricAdder registers metrics for periodic flushing to
+// system.cluster_metrics. Implemented by cmwriter.Writer.
+type ClusterMetricAdder interface {
+	AddMetric(m metric.Iterable)
+	AddMetricStruct(s interface{})
+}
+
 // An ExecutorConfig encompasses the auxiliary objects and configuration
 // required to create an executor.
 // All fields holding a pointer or an interface are required to create
@@ -1734,6 +1741,10 @@ type ExecutorConfig struct {
 	FeatureFlagMetrics   *featureflag.DenialMetrics
 	RowMetrics           *rowinfra.Metrics
 	InternalRowMetrics   *rowinfra.Metrics
+
+	// ClusterMetricsWriter registers metrics for periodic flushing to
+	// system.cluster_metrics. Implemented by cmwriter.Writer.
+	ClusterMetricsWriter ClusterMetricAdder
 
 	TestingKnobs                         ExecutorTestingKnobs
 	UpgradeTestingKnobs                  *upgradebase.TestingKnobs

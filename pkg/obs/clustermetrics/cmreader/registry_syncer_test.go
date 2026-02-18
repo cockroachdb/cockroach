@@ -9,7 +9,7 @@ import (
 	"context"
 	"testing"
 
-	"github.com/cockroachdb/cockroach/pkg/obs/clustermetrics"
+	"github.com/cockroachdb/cockroach/pkg/obs/clustermetrics/cmmetrics"
 	"github.com/cockroachdb/cockroach/pkg/obs/clustermetrics/cmwatcher"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -20,7 +20,7 @@ import (
 // makeTestRegistrySyncer creates an registrySyncer with a fresh registry for unit testing.
 // It does not create a watcher or connect to any rangefeed.
 func makeTestRegistrySyncer() (*registrySyncer, *registry) {
-	reg := &registry{metric.NewRegistry()}
+	reg := newRegistry()
 	u := &registrySyncer{registry: reg}
 	u.mu.trackedMetrics = make(map[string]metric.Iterable)
 	u.mu.trackedRows = make(map[int64]cmwatcher.ClusterMetricRow)
@@ -39,7 +39,7 @@ func TestUpdateMetricLocked(t *testing.T) {
 	}{{
 		name: "new gauge",
 		setup: func() func() {
-			return clustermetrics.TestingRegisterClusterMetric(
+			return cmmetrics.TestingRegisterClusterMetric(
 				"test.gauge", metric.Metadata{
 					Name: "test.gauge",
 					Help: "A test gauge",
@@ -66,7 +66,7 @@ func TestUpdateMetricLocked(t *testing.T) {
 	}, {
 		name: "existing gauge update",
 		setup: func() func() {
-			return clustermetrics.TestingRegisterClusterMetric(
+			return cmmetrics.TestingRegisterClusterMetric(
 				"test.gauge", metric.Metadata{
 					Name: "test.gauge",
 					Help: "A test gauge",
@@ -84,7 +84,7 @@ func TestUpdateMetricLocked(t *testing.T) {
 	}, {
 		name: "counter",
 		setup: func() func() {
-			return clustermetrics.TestingRegisterClusterMetric(
+			return cmmetrics.TestingRegisterClusterMetric(
 				"test.counter", metric.Metadata{
 					Name: "test.counter",
 					Help: "A test counter",
@@ -112,7 +112,7 @@ func TestUpdateMetricLocked(t *testing.T) {
 	}, {
 		name: "new gauge vec",
 		setup: func() func() {
-			return clustermetrics.TestingRegisterLabeledClusterMetric(
+			return cmmetrics.TestingRegisterLabeledClusterMetric(
 				"test.gaugevec", metric.Metadata{
 					Name: "test.gaugevec",
 					Help: "A test gauge vec",
@@ -140,7 +140,7 @@ func TestUpdateMetricLocked(t *testing.T) {
 	}, {
 		name: "vec second label set",
 		setup: func() func() {
-			return clustermetrics.TestingRegisterLabeledClusterMetric(
+			return cmmetrics.TestingRegisterLabeledClusterMetric(
 				"test.gaugevec", metric.Metadata{
 					Name: "test.gaugevec",
 					Help: "A test gauge vec",
@@ -164,7 +164,7 @@ func TestUpdateMetricLocked(t *testing.T) {
 	}, {
 		name: "existing gauge vec update",
 		setup: func() func() {
-			return clustermetrics.TestingRegisterLabeledClusterMetric(
+			return cmmetrics.TestingRegisterLabeledClusterMetric(
 				"test.gaugevec", metric.Metadata{
 					Name: "test.gaugevec",
 					Help: "A test gauge vec",
@@ -187,7 +187,7 @@ func TestUpdateMetricLocked(t *testing.T) {
 	}, {
 		name: "counter vec",
 		setup: func() func() {
-			return clustermetrics.TestingRegisterLabeledClusterMetric(
+			return cmmetrics.TestingRegisterLabeledClusterMetric(
 				"test.countervec", metric.Metadata{
 					Name: "test.countervec",
 					Help: "A test counter vec",
@@ -249,7 +249,7 @@ func TestDeleteMetricLocked(t *testing.T) {
 	}{{
 		name: "scalar gauge",
 		setup: func() func() {
-			return clustermetrics.TestingRegisterClusterMetric(
+			return cmmetrics.TestingRegisterClusterMetric(
 				"test.gauge", metric.Metadata{
 					Name: "test.gauge",
 					Help: "A test gauge",
@@ -270,7 +270,7 @@ func TestDeleteMetricLocked(t *testing.T) {
 	}, {
 		name: "vec metric label set",
 		setup: func() func() {
-			return clustermetrics.TestingRegisterLabeledClusterMetric(
+			return cmmetrics.TestingRegisterLabeledClusterMetric(
 				"test.vec", metric.Metadata{
 					Name: "test.vec",
 					Help: "A test vector gauge",
@@ -330,11 +330,11 @@ func TestStop(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	defer clustermetrics.TestingRegisterClusterMetric("gauge_one", metric.Metadata{
+	defer cmmetrics.TestingRegisterClusterMetric("gauge_one", metric.Metadata{
 		Name: "gauge_one",
 		Help: "First gauge",
 	})()
-	defer clustermetrics.TestingRegisterClusterMetric("gauge_two", metric.Metadata{
+	defer cmmetrics.TestingRegisterClusterMetric("gauge_two", metric.Metadata{
 		Name: "gauge_two",
 		Help: "Second gauge",
 	})()
@@ -366,15 +366,15 @@ func TestOnRefresh(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	defer clustermetrics.TestingRegisterClusterMetric("gauge.old", metric.Metadata{
+	defer cmmetrics.TestingRegisterClusterMetric("gauge.old", metric.Metadata{
 		Name: "gauge.old",
 		Help: "Old gauge",
 	})()
-	defer clustermetrics.TestingRegisterClusterMetric("gauge.new", metric.Metadata{
+	defer cmmetrics.TestingRegisterClusterMetric("gauge.new", metric.Metadata{
 		Name: "gauge.new",
 		Help: "New gauge",
 	})()
-	defer clustermetrics.TestingRegisterClusterMetric("counter.new", metric.Metadata{
+	defer cmmetrics.TestingRegisterClusterMetric("counter.new", metric.Metadata{
 		Name: "counter.new",
 		Help: "New counter",
 	})()

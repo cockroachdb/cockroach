@@ -1495,6 +1495,13 @@ func (gv *GaugeVec) ToPrometheusMetrics() []*prometheusgo.Metric {
 	return metrics
 }
 
+// Clear removes all child gauges and resets the label tracking,
+// preserving the metadata and configuration.
+func (gv *GaugeVec) Clear() {
+	gv.vector.clear()
+	gv.promVec.Reset()
+}
+
 // CounterVec wraps a prometheus.CounterVec; it is not aggregated or persisted.
 type CounterVec struct {
 	Metadata
@@ -1600,6 +1607,13 @@ func (cv *CounterVec) ToPrometheusMetrics() []*prometheusgo.Metric {
 	}
 
 	return metrics
+}
+
+// Clear removes all child counters and resets the label tracking,
+// preserving the metadata and configuration.
+func (cv *CounterVec) Clear() {
+	cv.vector.clear()
+	cv.promVec.Reset()
 }
 
 // HistogramVec wraps a prometheus.HistogramVec; it is not aggregated or persisted.
