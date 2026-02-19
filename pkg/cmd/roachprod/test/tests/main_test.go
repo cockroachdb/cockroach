@@ -12,16 +12,17 @@ import (
 	"os/exec"
 	"path/filepath"
 	"testing"
+
+	"github.com/cockroachdb/errors/oserror"
 )
 
-// t.Parallel() usage:
-// Tests in this package use t.Parallel() to run concurrently. The CockroachDB
-// linter forbids t.Parallel() due to golang/go#31651, where deferred cleanup
-// in a parent test can run before parallel subtests finish. That issue does not
-// apply here: t.Parallel() is called on top-level test functions (not subtests),
-// and cleanup uses t.Cleanup() which waits for parallel tests to complete.
-// Each t.Parallel() call is annotated with "// SAFE FOR TESTING" to satisfy
-// the linter.
+// Parallel test execution:
+// Tests in this package run concurrently. The CockroachDB linter flags
+// the parallel testing API due to golang/go#31651 (deferred cleanup
+// timing with parallel subtests). That issue does not apply here:
+// parallelism is on top-level test functions (not subtests), and cleanup
+// uses t.Cleanup which waits for parallel tests to complete. Each call
+// is annotated with "SAFE FOR TESTING" to satisfy the linter.
 
 // TestMain handles one-time authentication setup before any tests run.
 //
@@ -126,7 +127,7 @@ func setupLocalAuth() {
 	if realHome == "" {
 		if user := os.Getenv("USER"); user != "" {
 			realHome = "/Users/" + user
-			if _, err := os.Stat(realHome); os.IsNotExist(err) {
+			if _, err := os.Stat(realHome); oserror.IsNotExist(err) {
 				realHome = "/home/" + user
 			}
 		}
@@ -174,7 +175,7 @@ func ensureSSHKey() {
 	}
 
 	sshKeyPath := filepath.Join(testHome, ".ssh", "id_rsa")
-	if _, err := os.Stat(sshKeyPath); !os.IsNotExist(err) {
+	if _, err := os.Stat(sshKeyPath); !oserror.IsNotExist(err) {
 		return
 	}
 

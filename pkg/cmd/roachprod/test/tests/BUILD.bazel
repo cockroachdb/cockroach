@@ -207,6 +207,7 @@ go_test(
         "//pkg/cmd/roachprod/test/framework",
         "//pkg/roachprod/vm",
         "//pkg/roachprod/vm/gce",
+        "@com_github_cockroachdb_errors//oserror",
         "@com_github_stretchr_testify//require",
     ],
 )

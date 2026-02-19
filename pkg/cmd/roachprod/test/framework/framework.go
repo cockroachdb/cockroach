@@ -68,6 +68,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachprod/cloud"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/cloud/types"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/stretchr/testify/require"
 )
 
@@ -347,7 +348,7 @@ func generateClusterName(t *testing.T) string {
 		testName = testName[:20]
 	}
 
-	timestamp := time.Now().UnixNano()
+	timestamp := timeutil.Now().UnixNano()
 	return fmt.Sprintf("%s-%s-%d", username, testName, timestamp)
 }
 

@@ -13,6 +13,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/stretchr/testify/require"
 )
 
@@ -126,7 +127,7 @@ func (tc *RoachprodTest) RunOnNodes(nodeSpec string, command string) *RunResult 
 func (tc *RoachprodTest) WaitForSSH(timeout time.Duration) {
 	tc.t.Helper()
 
-	deadline := time.Now().Add(timeout)
+	deadline := timeutil.Now().Add(timeout)
 	target := tc.clusterName
 	interval := 10 * time.Second
 

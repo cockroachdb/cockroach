@@ -17,6 +17,7 @@ go_library(
         "//pkg/roachprod/vm/gce",
         "//pkg/roachprod/vm/gce/gcedb",
         "//pkg/util/randutil",
+        "//pkg/util/timeutil",
         "@com_github_stretchr_testify//require",
     ],
 )

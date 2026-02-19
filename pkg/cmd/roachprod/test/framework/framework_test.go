@@ -6,7 +6,6 @@
 package framework
 
 import (
-	"fmt"
 	"strings"
 	"testing"
 
@@ -96,7 +95,7 @@ func TestGenerateClusterNameFormat(t *testing.T) {
 		"name %q should start with 'testuser-'", name)
 
 	// Verify the full format: username-testname-timestamp
-	expectedPrefix := fmt.Sprintf("testuser-testgenerateclustern")
+	expectedPrefix := "testuser-testgenerateclustern"
 	lastDash := strings.LastIndex(name, "-")
 	prefix := name[:lastDash]
 	require.Equal(t, expectedPrefix, prefix)
