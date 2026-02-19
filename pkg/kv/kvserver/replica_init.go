@@ -473,7 +473,7 @@ func (r *Replica) setDescLockedRaftMuLocked(ctx context.Context, desc *roachpb.R
 	// Initialize the tenant. The must be the first time that the descriptor has
 	// been initialized. Note that the desc.StartKey never changes throughout the
 	// life of a range.
-	if desc.IsInitialized() && r.mu.tenantID == (roachpb.TenantID{}) {
+	if r.mu.tenantID == (roachpb.TenantID{}) {
 		_, tenantID, err := keys.DecodeTenantPrefix(desc.StartKey.AsRawKey())
 		if err != nil {
 			log.KvExec.Fatalf(ctx, "failed to decode tenant prefix from key for "+
@@ -500,7 +500,7 @@ func (r *Replica) setDescLockedRaftMuLocked(ctx context.Context, desc *roachpb.R
 	}
 
 	r.rangeStr.store(r.replicaID, desc)
-	r.isInitialized.Store(desc.IsInitialized())
+	r.isInitialized.Store(true)
 	r.connectionClass.set(rpcbase.ConnectionClassForKey(desc.StartKey, defRaftConnClass))
 	r.concMgr.OnRangeDescUpdated(desc)
 	r.shMu.state.Desc = desc
