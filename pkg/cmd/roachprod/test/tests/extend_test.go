@@ -18,7 +18,7 @@ import (
 // uses Go's time.ParseDuration, so the largest unit is hours (e.g. "24h"),
 // not days ("1d" is invalid).
 func TestExtend(t *testing.T) {
-	t.Parallel()
+	t.Parallel() // SAFE FOR TESTING (see main_test.go)
 	rpt := framework.NewRoachprodTest(t, framework.WithTimeout(10*time.Minute))
 
 	initialLifetime := 1 * time.Hour

@@ -21,7 +21,7 @@ import (
 // WARNING: NEVER use --all-mine or -m flags with destroy. In CI, that would
 // destroy all TeamCity clusters.
 func TestDestroy(t *testing.T) {
-	t.Parallel()
+	t.Parallel() // SAFE FOR TESTING (see main_test.go)
 	rpt := framework.NewRoachprodTest(t,
 		framework.WithTimeout(10*time.Minute),
 		framework.DisableCleanup(),

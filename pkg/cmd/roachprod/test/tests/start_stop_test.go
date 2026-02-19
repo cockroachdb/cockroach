@@ -30,7 +30,7 @@ import (
 //   - --skip-init (skips cockroach init and admin user creation)
 //   - --num-files-limit (systemd LimitNOFILE, hard to verify remotely)
 func TestStartStop(t *testing.T) {
-	t.Parallel()
+	t.Parallel() // SAFE FOR TESTING (see main_test.go)
 	rpt := framework.NewRoachprodTest(t, framework.WithTimeout(20*time.Minute))
 
 	rpt.RunExpectSuccess("create", rpt.ClusterName(),

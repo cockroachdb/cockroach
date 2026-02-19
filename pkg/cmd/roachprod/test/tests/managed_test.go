@@ -25,7 +25,7 @@ import (
 // respectively. Testing non-default values would require a separate Cloud DNS
 // zone provisioned in GCP.
 func TestManaged(t *testing.T) {
-	t.Parallel()
+	t.Parallel() // SAFE FOR TESTING (see main_test.go)
 	rpt := framework.NewRoachprodTest(t, framework.WithTimeout(15*time.Minute))
 
 	numNodes := 1 + rpt.Rand().Intn(3)
@@ -70,7 +70,7 @@ func TestManaged(t *testing.T) {
 // Cockroach does not need to be running; these commands create and query cloud
 // infrastructure independently.
 func TestLoadBalancer(t *testing.T) {
-	t.Parallel()
+	t.Parallel() // SAFE FOR TESTING (see main_test.go)
 	rpt := framework.NewRoachprodTest(t, framework.WithTimeout(15*time.Minute))
 
 	rpt.RunExpectSuccess("create", rpt.ClusterName(),

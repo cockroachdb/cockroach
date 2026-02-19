@@ -20,8 +20,6 @@ via `Run`, `RunExpectSuccess`, or `RunExpectFailure`. Assert verifies cluster st
 
 ```go
 func TestExample(t *testing.T) {
-    t.Parallel()
-
     // Setup: initialize test harness. Generates a unique cluster name,
     // locates the roachprod binary, and registers cleanup (cluster destroy)
     // to run automatically when the test finishes.
@@ -157,7 +155,7 @@ Note: These tests are still picked up by `bazel test //pkg/...`.
 
 ### Implicitly Tested Commands
 
-Some commands are not explicitly tested because the framework uses them internally, so any breakage would surface immediately e.g. `run`, `list`, `destroy`. An argument could be made for adding these for the sake of completeness. 
+Some commands are not explicitly tested because the framework uses them internally, so any breakage would surface immediately e.g. `run`, `list`. An argument could be made for adding these for the sake of completeness.
 
 ## Randomized Create Coverage
 

@@ -20,7 +20,7 @@ import (
 // populate-etc-hosts, /etc/hosts on node 1 contains the private IPs
 // of all nodes in the cluster.
 func TestPopulateEtcHosts(t *testing.T) {
-	t.Parallel()
+	t.Parallel() // SAFE FOR TESTING (see main_test.go)
 	rpt := framework.NewRoachprodTest(t, framework.WithTimeout(10*time.Minute))
 
 	numNodes := 1 + rpt.Rand().Intn(3)

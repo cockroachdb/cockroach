@@ -382,4 +382,3 @@ func (cfg *RandomizedClusterConfig) String() string {
 		cfg.NumNodes, gceOpts.MachineType, cfg.CreateOpts.Arch, storage,
 		cfg.CreateOpts.SSDOpts.FileSystem, spotStr, cronStr, gceOpts.Zones)
 }
-

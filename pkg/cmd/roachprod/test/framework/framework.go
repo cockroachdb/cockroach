@@ -3,7 +3,7 @@
 // Use of this software is governed by the CockroachDB Software License
 // included in the /LICENSE file.
 
-// pkg framework provides a test framework for running roachprod
+// Package framework provides a test framework for running roachprod
 // commands against real cloud infrastructure. It manages cluster
 // lifecycle (creation, cleanup), command execution, and provides
 // assertions for verifying cluster state.
@@ -19,7 +19,6 @@
 // Typical usage:
 //
 //	func TestExample(t *testing.T) {
-//	    t.Parallel()
 //	    rpt := framework.NewRoachprodTest(t, framework.WithTimeout(10*time.Minute))
 //
 //	    rpt.RunExpectSuccess("create", rpt.ClusterName(),
@@ -36,7 +35,6 @@
 // For randomized testing:
 //
 //	func TestRandomized(t *testing.T) {
-//	    t.Parallel()
 //	    rpt := framework.NewRoachprodTest(t, framework.WithTimeout(15*time.Minute))
 //
 //	    opts := framework.RandomGCECreateOptions(rpt.Rand())

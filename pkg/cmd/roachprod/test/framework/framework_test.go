@@ -27,15 +27,15 @@ func TestGenerateClusterName(t *testing.T) {
 		// Dots stripped from username, test name lowercased.
 		// t.Name() = "TestGenerateClusterName/Simple"
 		// sanitized: "testgenerateclustername-simple" → truncated to 20 chars
-		wantPrefix: "firstlast-testgeneratecluster",
+		wantPrefix: "firstlast-testgenerateclustern",
 	}, {
 		subtestName: "With_Underscores",
 		// underscores → dashes
-		wantPrefix: "firstlast-testgeneratecluster",
+		wantPrefix: "firstlast-testgenerateclustern",
 	}, {
 		subtestName: "With Spaces",
 		// spaces → dashes (Go subtests encode spaces as underscores in t.Name())
-		wantPrefix: "firstlast-testgeneratecluster",
+		wantPrefix: "firstlast-testgenerateclustern",
 	}}
 
 	for _, tt := range tests {

@@ -199,6 +199,10 @@ go_test(
         "start_stop_test.go",
         "version_test.go",
     ],
+    tags = [
+        "integration",
+        "manual",
+    ],  # keep
     deps = [
         "//pkg/cmd/roachprod/test/framework",
         "//pkg/roachprod/vm",

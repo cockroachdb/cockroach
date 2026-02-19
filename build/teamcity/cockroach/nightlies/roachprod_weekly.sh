@@ -48,7 +48,7 @@ mkdir -p "$ARTIFACTS_DIR"
 
 # Build bazci and run the roachprod functional tests
 # bazci wraps bazel test and:
-# --config=ci is added explicitly to the front because bazci will use .bazelrc to expand --config=ci into other bazel args that we want to override
+# --config=ci is added early because bazci will use .bazelrc to expand --config=ci into other bazel args that we want to override
 # i.e. --test_tmpdir so unnecessary roachprod artifacts are not collected by bazci / teamcity
 # - Collects test.xml and test.log files, munges XML for TeamCity compatibility, and stages them in the artifacts directory
 # - Teamcity's XML Report Processing Build Feature finds the xml and log files to create the Teamcity test report view

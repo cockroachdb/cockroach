@@ -20,7 +20,7 @@ import (
 // NOTE: reset supports targeting a subset of nodes (e.g., cluster:1-3,8-9)
 // but we only test resetting the entire cluster here.
 func TestReset(t *testing.T) {
-	t.Parallel()
+	t.Parallel() // SAFE FOR TESTING (see main_test.go)
 	rpt := framework.NewRoachprodTest(t, framework.WithTimeout(15*time.Minute))
 
 	rpt.RunExpectSuccess("create", rpt.ClusterName(),

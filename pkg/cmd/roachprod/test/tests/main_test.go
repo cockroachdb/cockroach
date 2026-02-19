@@ -14,6 +14,15 @@ import (
 	"testing"
 )
 
+// t.Parallel() usage:
+// Tests in this package use t.Parallel() to run concurrently. The CockroachDB
+// linter forbids t.Parallel() due to golang/go#31651, where deferred cleanup
+// in a parent test can run before parallel subtests finish. That issue does not
+// apply here: t.Parallel() is called on top-level test functions (not subtests),
+// and cleanup uses t.Cleanup() which waits for parallel tests to complete.
+// Each t.Parallel() call is annotated with "// SAFE FOR TESTING" to satisfy
+// the linter.
+
 // TestMain handles one-time authentication setup before any tests run.
 //
 // Roachprod uses both the Google Cloud Go SDK (for GCE API calls) and the

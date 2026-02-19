@@ -7,6 +7,7 @@ package tests
 
 import (
 	"fmt"
+	"strings"
 	"testing"
 	"time"
 
@@ -22,7 +23,7 @@ import (
 
 // TestCreateAMD64 tests creating a basic AMD64 GCE cluster with default settings
 func TestCreateAMD64(t *testing.T) {
-	t.Parallel()
+	t.Parallel() // SAFE FOR TESTING (see main_test.go)
 	rpt := framework.NewRoachprodTest(t, framework.WithTimeout(10*time.Minute))
 
 	numNodes := 1 + rpt.Rand().Intn(3)
@@ -42,7 +43,7 @@ func TestCreateAMD64(t *testing.T) {
 // TestCreateARM64 tests creating an ARM64 cluster with a T2A machine type,
 // a T2A-compatible zone, and persistent disk storage.
 func TestCreateARM64(t *testing.T) {
-	t.Parallel()
+	t.Parallel() // SAFE FOR TESTING (see main_test.go)
 	rpt := framework.NewRoachprodTest(t, framework.WithTimeout(10*time.Minute))
 
 	numNodes := 1 + rpt.Rand().Intn(3)
@@ -73,7 +74,7 @@ func TestCreateARM64(t *testing.T) {
 // TestCreateFIPS tests creating a FIPS-mode cluster.
 // FIPS implies amd64 with OpenSSL — the VM reports amd64 architecture.
 func TestCreateFIPS(t *testing.T) {
-	t.Parallel()
+	t.Parallel() // SAFE FOR TESTING (see main_test.go)
 	rpt := framework.NewRoachprodTest(t, framework.WithTimeout(10*time.Minute))
 
 	numNodes := 1 + rpt.Rand().Intn(3)
@@ -91,6 +92,7 @@ func TestCreateFIPS(t *testing.T) {
 	rpt.AssertClusterNodeCount(numNodes)
 	rpt.AssertClusterCloud("gce")
 	rpt.AssertClusterMachineType("n2-standard-4")
+	rpt.AssertClusterArchitecture("amd64")
 }
 
 // ========================================
@@ -100,7 +102,7 @@ func TestCreateFIPS(t *testing.T) {
 // TestCreateWithSpecificZone tests creating a cluster in a specific GCE zone
 // and verifies all VMs are created in the correct zone
 func TestCreateWithSpecificZone(t *testing.T) {
-	t.Parallel()
+	t.Parallel() // SAFE FOR TESTING (see main_test.go)
 	rpt := framework.NewRoachprodTest(t, framework.WithTimeout(10*time.Minute))
 
 	// Get the list of potential zones from roachprod GCE provider implementation
@@ -133,7 +135,7 @@ func TestCreateWithSpecificZone(t *testing.T) {
 // TestCreateWithZoneCounts tests creating a cluster using the AZ:N zone format
 // where N specifies how many nodes should be in each zone
 func TestCreateWithZoneCounts(t *testing.T) {
-	t.Parallel()
+	t.Parallel() // SAFE FOR TESTING (see main_test.go)
 	rpt := framework.NewRoachprodTest(t, framework.WithTimeout(10*time.Minute))
 
 	// Get valid zones and randomly select 2-3 zones
@@ -159,10 +161,7 @@ func TestCreateWithZoneCounts(t *testing.T) {
 		zoneArgs[i] = fmt.Sprintf("%s:%d", zone, count)
 	}
 
-	zonesArg := fmt.Sprintf("%s", zoneArgs[0])
-	for i := 1; i < len(zoneArgs); i++ {
-		zonesArg += "," + zoneArgs[i]
-	}
+	zonesArg := strings.Join(zoneArgs, ",")
 
 	t.Logf("Creating cluster with zone counts: %s (total nodes: %d)", zonesArg, totalNodes)
 
@@ -211,7 +210,7 @@ func TestCreateWithZoneCounts(t *testing.T) {
 // flag for multi-region spread. --gce-zones overrides --geo if both are set.
 // Verifies nodes are spread across at least 2 zones.
 func TestCreateGeo(t *testing.T) {
-	t.Parallel()
+	t.Parallel() // SAFE FOR TESTING (see main_test.go)
 	rpt := framework.NewRoachprodTest(t, framework.WithTimeout(10*time.Minute))
 
 	rpt.RunExpectSuccess("create", rpt.ClusterName(),
@@ -235,7 +234,7 @@ func TestCreateGeo(t *testing.T) {
 // instead of the default roachprod image.
 // Uses the same image drtprod uses. (different than roachprod's default)
 func TestCreateCustomImage(t *testing.T) {
-	t.Parallel()
+	t.Parallel() // SAFE FOR TESTING (see main_test.go)
 	rpt := framework.NewRoachprodTest(t, framework.WithTimeout(10*time.Minute))
 
 	numNodes := 1 + rpt.Rand().Intn(3)
@@ -264,7 +263,7 @@ func TestCreateCustomImage(t *testing.T) {
 // (pd-ssd, pd-balanced, pd-standard). Types like pd-extreme and hyperdisk-* need
 // provisioned IOPS/throughput and are covered by TestCreateHyperdisk.
 func TestCreatePersistentDisk(t *testing.T) {
-	t.Parallel()
+	t.Parallel() // SAFE FOR TESTING (see main_test.go)
 	rpt := framework.NewRoachprodTest(t, framework.WithTimeout(10*time.Minute))
 
 	numNodes := 1 + rpt.Rand().Intn(3)
@@ -293,7 +292,7 @@ func TestCreatePersistentDisk(t *testing.T) {
 // TestCreateLocalSSDMultiStore tests creating a cluster with multiple local
 // SSDs, multiple stores (one per disk), and spot instances.
 func TestCreateLocalSSDMultiStore(t *testing.T) {
-	t.Parallel()
+	t.Parallel() // SAFE FOR TESTING (see main_test.go)
 	rpt := framework.NewRoachprodTest(t, framework.WithTimeout(10*time.Minute))
 
 	numNodes := 1 + rpt.Rand().Intn(3)
@@ -319,7 +318,7 @@ func TestCreateLocalSSDMultiStore(t *testing.T) {
 // TestCreateBootDiskOnly tests creating a cluster with boot-disk-only mode,
 // a specific boot disk type, cron enabled, and TERMINATE maintenance policy.
 func TestCreateBootDiskOnly(t *testing.T) {
-	t.Parallel()
+	t.Parallel() // SAFE FOR TESTING (see main_test.go)
 	rpt := framework.NewRoachprodTest(t, framework.WithTimeout(10*time.Minute))
 
 	numNodes := 1 + rpt.Rand().Intn(3)
@@ -345,7 +344,7 @@ func TestCreateBootDiskOnly(t *testing.T) {
 // volumes with provisioned IOPS and throughput. These flags are only wired through
 // the CLI path, so --gce-use-bulk-insert=false is required.
 func TestCreateHyperdisk(t *testing.T) {
-	t.Parallel()
+	t.Parallel() // SAFE FOR TESTING (see main_test.go)
 	rpt := framework.NewRoachprodTest(t, framework.WithTimeout(10*time.Minute))
 
 	numNodes := 1 + rpt.Rand().Intn(3)
@@ -380,7 +379,7 @@ func TestCreateHyperdisk(t *testing.T) {
 // TestCreateFilesystemRandomized tests creating a cluster with a randomly selected filesystem.
 // Roachprod supports ext4, zfs, xfs, f2fs, and btrfs.
 func TestCreateFilesystemRandomized(t *testing.T) {
-	t.Parallel()
+	t.Parallel() // SAFE FOR TESTING (see main_test.go)
 	rpt := framework.NewRoachprodTest(t, framework.WithTimeout(10*time.Minute))
 
 	numNodes := 1 + rpt.Rand().Intn(3)
@@ -414,7 +413,7 @@ func TestCreateFilesystemRandomized(t *testing.T) {
 // and is randomized: 0 (omit flag, GCE default), 1 (disable SMT — one thread per
 // physical core), or 2 (explicitly enable SMT — two threads per core).
 func TestCreateCPUConfig(t *testing.T) {
-	t.Parallel()
+	t.Parallel() // SAFE FOR TESTING (see main_test.go)
 	rpt := framework.NewRoachprodTest(t, framework.WithTimeout(10*time.Minute))
 
 	// 0 = omit the flag (GCE default), 1 = disable SMT, 2 = enable SMT
@@ -450,7 +449,7 @@ func TestCreateCPUConfig(t *testing.T) {
 
 // TestCreateRandomized tests creating clusters with randomized GCE options
 func TestCreateRandomized(t *testing.T) {
-	t.Parallel()
+	t.Parallel() // SAFE FOR TESTING (see main_test.go)
 	rpt := framework.NewRoachprodTest(t, framework.WithTimeout(15*time.Minute))
 
 	// Generate random GCE create options using the test's seeded RNG
