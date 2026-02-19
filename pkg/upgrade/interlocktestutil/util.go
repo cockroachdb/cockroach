@@ -3,9 +3,9 @@
 // Use of this software is governed by the CockroachDB Software License
 // included in the /LICENSE file.
 
-// package sharedtestutil contains util shared between upgradeinterlockccl and testgen.
-// The goal of this util split is minimizing the dependencies of testgen.
-package sharedtestutil
+// Package interlocktestutil contains test utilities shared between upgrade
+// interlock tests and the test generator.
+package interlocktestutil
 
 import (
 	"fmt"

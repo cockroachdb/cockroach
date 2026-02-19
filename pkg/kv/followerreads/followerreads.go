@@ -3,16 +3,15 @@
 // Use of this software is governed by the CockroachDB Software License
 // included in the /LICENSE file.
 
-// Package kvfollowerreadsccl implements and injects the functionality needed to
+// Package followerreads implements and injects the functionality needed to
 // expose follower reads to clients.
-package kvfollowerreadsccl
+package followerreads
 
 import (
 	"context"
 	"math"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
@@ -68,30 +67,11 @@ func getGlobalReadsLead(clock *hlc.Clock) time.Duration {
 	return clock.MaxOffset()
 }
 
-// checkEnterpriseEnabled checks whether the enterprise feature for follower
-// reads is enabled, returning a detailed error if not. It is not suitable for
-// use in hot paths since a new error may be instantiated on each call.
-func checkEnterpriseEnabled(st *cluster.Settings) error {
-	return utilccl.CheckEnterpriseEnabled(st, "follower reads")
-}
-
-// isEnterpriseEnabled is faster than checkEnterpriseEnabled, and suitable
-// for hot paths.
-func isEnterpriseEnabled(st *cluster.Settings) bool {
-	return utilccl.IsEnterpriseEnabled(st, "follower reads")
-}
-
 func checkFollowerReadsEnabled(ctx context.Context, st *cluster.Settings) bool {
-	if !kvserver.FollowerReadsEnabled.Get(&st.SV) {
-		return false
-	}
-	return isEnterpriseEnabled(st)
+	return kvserver.FollowerReadsEnabled.Get(&st.SV)
 }
 
 func evalFollowerReadOffset(st *cluster.Settings) (time.Duration, error) {
-	if err := checkEnterpriseEnabled(st); err != nil {
-		return 0, err
-	}
 	// NOTE: we assume that at least some of the ranges being queried use a
 	// LAG_BY_CLUSTER_SETTING closed timestamp policy. Otherwise, there would
 	// be no reason to use AS OF SYSTEM TIME follower_read_timestamp().

@@ -818,7 +818,6 @@ go_test(
         "//pkg/kv",
         "//pkg/kv/kvclient",
         "//pkg/kv/kvclient/kvcoord",
-        "//pkg/kv/kvclient/kvtenant",
         "//pkg/kv/kvclient/rangecache",
         "//pkg/kv/kvclient/rangefeed",
         "//pkg/kv/kvpb",

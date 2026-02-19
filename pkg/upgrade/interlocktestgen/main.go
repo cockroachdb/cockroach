@@ -12,7 +12,7 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/cockroachdb/cockroach/pkg/ccl/kvccl/kvtenantccl/upgradeinterlockccl/sharedtestutil"
+	"github.com/cockroachdb/cockroach/pkg/upgrade/interlocktestutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
@@ -25,9 +25,9 @@ func main() {
 	}
 
 	data := struct {
-		Tests    map[string]sharedtestutil.TestConfig
-		Variants map[sharedtestutil.TestVariant]string
-	}{Tests: sharedtestutil.Tests, Variants: sharedtestutil.Variants}
+		Tests    map[string]interlocktestutil.TestConfig
+		Variants map[interlocktestutil.TestVariant]string
+	}{Tests: interlocktestutil.Tests, Variants: interlocktestutil.Variants}
 
 	tmpl := template.Must(template.New("source").Parse(test_template))
 	file, err := os.Create(filepath.Join(*outputPath))

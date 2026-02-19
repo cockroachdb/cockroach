@@ -34,7 +34,6 @@ go_test(
         "//pkg/build",
         "//pkg/gossip",
         "//pkg/keys",
-        "//pkg/kv/kvclient/kvtenant",
         "//pkg/kv/kvserver",
         "//pkg/kv/kvserver/allocator",
         "//pkg/kv/kvserver/allocator/allocatorimpl",

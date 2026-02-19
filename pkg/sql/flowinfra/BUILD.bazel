@@ -80,7 +80,6 @@ go_test(
     embed = [":flowinfra"],
     deps = [
         "//pkg/base",
-        "//pkg/ccl/kvccl/kvtenantccl",
         "//pkg/kv",
         "//pkg/kv/kvpb",
         "//pkg/kv/kvserver",

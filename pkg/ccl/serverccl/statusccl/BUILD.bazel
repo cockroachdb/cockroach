@@ -14,9 +14,9 @@ go_test(
     deps = [
         "//pkg/base",
         "//pkg/ccl",
-        "//pkg/ccl/kvccl",
         "//pkg/ccl/serverccl",
         "//pkg/keys",
+        "//pkg/kv/followerreads",
         "//pkg/kv/kvserver",
         "//pkg/roachpb",
         "//pkg/rpc/rpcbase",

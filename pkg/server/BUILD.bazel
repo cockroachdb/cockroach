@@ -537,7 +537,6 @@ go_test(
         "//pkg/jobs/jobspb",
         "//pkg/keys",
         "//pkg/kv",
-        "//pkg/kv/kvclient/kvtenant",
         "//pkg/kv/kvpb",
         "//pkg/kv/kvserver",
         "//pkg/kv/kvserver/allocator/plan",
