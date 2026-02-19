@@ -95,9 +95,9 @@ func shouldEnableDistributedMergeIndexBackfill(
 		return jobspb.IndexBackfillDistributedMergeMode_Disabled,
 			errors.AssertionFailedf("unrecognized distributed merge index backfill mode %d", mode)
 	}
-	if !st.Version.IsActive(ctx, clusterversion.V26_2) {
+	if !st.Version.IsActive(ctx, clusterversion.V26_1) {
 		return jobspb.IndexBackfillDistributedMergeMode_Disabled,
-			pgerror.New(pgcode.FeatureNotSupported, "distributed merge requires cluster version 26.2")
+			pgerror.New(pgcode.FeatureNotSupported, "distributed merge requires cluster version 26.1")
 	}
 	return result, nil
 }
