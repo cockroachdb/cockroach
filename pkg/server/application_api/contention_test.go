@@ -120,7 +120,7 @@ SET TRACING=off;
 	require.True(t, found,
 		"expect to find contention event for table %d, but found %+v", testTableID, resp)
 
-	server1Conn.CheckQueryResults(t, `
+	server1Conn.CheckQueryResultsRetry(t, `
   SELECT count(*)
   FROM crdb_internal.statement_statistics
   WHERE
@@ -128,7 +128,7 @@ SET TRACING=off;
     AND app_name = 'contentionTest'
 `, [][]string{{"1"}})
 
-	server1Conn.CheckQueryResults(t, `
+	server1Conn.CheckQueryResultsRetry(t, `
   SELECT count(*)
   FROM crdb_internal.transaction_statistics
   WHERE
