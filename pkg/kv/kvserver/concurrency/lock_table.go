@@ -604,6 +604,11 @@ func (g *lockTableGuardImpl) IntentsToResolveVirtually() []roachpb.LockUpdate {
 	return nil
 }
 
+// VirtuallyResolvesIntents implements the lockTableGuard interface.
+func (g *lockTableGuardImpl) VirtuallyResolvesIntents() bool {
+	return g.virtuallyResolveIntents
+}
+
 func (g *lockTableGuardImpl) NewStateChan() chan struct{} {
 	g.mu.Lock()
 	defer g.mu.Unlock()
