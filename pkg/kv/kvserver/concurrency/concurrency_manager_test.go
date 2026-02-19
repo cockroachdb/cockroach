@@ -92,6 +92,7 @@ import (
 // debug-set-batch-pushed-lock-resolution-enabled ok=<enabled>
 // debug-set-push-using-cached-clock-observation-enabled ok=<enabled>
 // debug-set-max-locks n=<count>
+// debug-set-virtual-intent-resolution-enabled ok=<enabled>
 // reset [namespace|force]
 func TestConcurrencyManagerBasic(t *testing.T) {
 	defer leaktest.AfterTest(t)()
@@ -610,6 +611,11 @@ func TestConcurrencyManagerBasic(t *testing.T) {
 				c.setPushUsingCachedClockObservationEnabled(ok)
 				return ""
 
+			case "debug-set-virtual-intent-resolution-enabled":
+				ok := dd.ScanArg[bool](t, d, "ok")
+				c.setVirtualIntentResolutionEnabled(ok)
+				return ""
+
 			case "debug-set-max-locks":
 				n := dd.ScanArg[int64](t, d, "n")
 				m.SetMaxLockTableSize(n)
@@ -1016,6 +1022,10 @@ func (c *cluster) setBatchPushedLockResolutionEnabled(ok bool) {
 
 func (c *cluster) setPushUsingCachedClockObservationEnabled(ok bool) {
 	concurrency.PushUsingCachedClockObservation.Override(context.Background(), &c.st.SV, ok)
+}
+
+func (c *cluster) setVirtualIntentResolutionEnabled(ok bool) {
+	concurrency.VirtualIntentResolution.Override(context.Background(), &c.st.SV, ok)
 }
 
 // reset clears all request state in the cluster. This avoids portions of tests
