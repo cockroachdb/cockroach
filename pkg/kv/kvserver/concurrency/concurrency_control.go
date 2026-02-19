@@ -834,6 +834,10 @@ type lockTableGuard interface {
 	// resolved virtually.
 	IntentsToResolveVirtually() []roachpb.LockUpdate
 
+	// VirtuallyResolvesIntents returns true if the guard will resolve intents
+	// virtually during evaluation rather than physically before re-scanning.
+	VirtuallyResolvesIntents() bool
+
 	// CheckOptimisticNoConflicts uses the LockSpanSet representing the spans that
 	// were actually read, to check for conflicting locks, after an optimistic
 	// evaluation. It returns true if there were no conflicts. See
