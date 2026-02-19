@@ -1689,8 +1689,8 @@ func (og *operationGenerator) dropColumn(ctx context.Context, tx pgx.Tx) (*opStm
 		return nil, err
 	}
 
-	// Check if the table has any policies, triggers, or foreign keys.
-	tableHasPolicies, tableHasTriggers, tableHasFK := false, false, false
+	// Check if the table has any policies, triggers, foreign keys, or row-level TTL.
+	tableHasPolicies, tableHasTriggers, tableHasFK, tableHasTTL := false, false, false, false
 	if tableExists {
 		if tableHasPolicies, err = og.tableHasPolicies(ctx, tx, tableName); err != nil {
 			return nil, err
@@ -1699,6 +1699,9 @@ func (og *operationGenerator) dropColumn(ctx context.Context, tx pgx.Tx) (*opStm
 			return nil, err
 		}
 		if tableHasFK, err = og.tableHasFK(ctx, tx, tableName); err != nil {
+			return nil, err
+		}
+		if tableHasTTL, err = og.tableHasRowLevelTTL(ctx, tx, tableName); err != nil {
 			return nil, err
 		}
 	}
@@ -1747,9 +1750,9 @@ func (og *operationGenerator) dropColumn(ctx context.Context, tx pgx.Tx) (*opStm
 		// It is possible the column we are dropping is in the new primary key,
 		// so a potential error is an invalid reference in this case.
 		{code: pgcode.InvalidColumnReference, condition: og.useDeclarativeSchemaChanger && hasAlterPKSchemaChange},
-		// It is possible that we cannot drop column because
-		// it is referenced in a policy expression.
-		{code: pgcode.InvalidTableDefinition, condition: tableHasPolicies},
+		// It is possible that we cannot drop column because it is referenced
+		// in a policy expression or a row-level TTL expiration expression.
+		{code: pgcode.InvalidTableDefinition, condition: tableHasPolicies || tableHasTTL},
 		// It is possible that we cannot drop column because
 		// it is depended on by a trigger or foreign key.
 		{code: pgcode.DependentObjectsStillExist, condition: tableHasTriggers || tableHasFK},
@@ -1819,6 +1822,19 @@ SELECT EXISTS (
 	 WHERE contype = 'f'
 	   AND (conrelid = $1::REGCLASS OR confrelid = $1::REGCLASS)
 )`, tableName.String())
+}
+
+// tableHasRowLevelTTL checks if a table has a row-level TTL configured.
+func (og *operationGenerator) tableHasRowLevelTTL(
+	ctx context.Context, tx pgx.Tx, tableName *tree.TableName,
+) (bool, error) {
+	return og.scanBool(ctx, tx, `
+SELECT crdb_internal.pb_to_json(
+         'cockroach.sql.sqlbase.Descriptor',
+         descriptor
+       )->'table'->'rowLevelTtl' IS NOT NULL
+  FROM system.descriptor
+ WHERE id = $1::REGCLASS`, tableName.String())
 }
 
 func (og *operationGenerator) dropColumnDefault(ctx context.Context, tx pgx.Tx) (*opStmt, error) {
@@ -2995,7 +3011,7 @@ func (og *operationGenerator) commentOn(ctx context.Context, tx pgx.Tx) (*opStmt
 	}, fmt.Sprintf(`
 	SELECT 'SCHEMA ' || quote_ident(schema_name) FROM [SHOW SCHEMAS] WHERE owner != 'node'
 		UNION ALL
-	SELECT 'TABLE ' || quote_ident(schema_name) || '.' || quote_ident(table_name) FROM [SHOW TABLES] WHERE type = 'table'
+	SELECT 'TABLE ' || quote_ident(table_schema) || '.' || quote_ident(table_name) FROM information_schema.tables WHERE table_type = 'BASE TABLE' AND table_schema NOT IN ('information_schema', 'pg_catalog', 'pg_extension', 'crdb_internal')
 		UNION ALL
 	SELECT 'COLUMN ' || quote_ident(schema_name) || '.' || quote_ident(table_name) || '.' || quote_ident("column"->>'name') FROM columns
 		UNION ALL
@@ -4090,9 +4106,10 @@ func (og *operationGenerator) randView(
 
 		q := fmt.Sprintf(`
 		  SELECT table_name
-		    FROM [SHOW TABLES]
+		    FROM information_schema.tables
 		   WHERE table_name LIKE 'view%%'
-				 AND schema_name = '%s'
+				 AND table_schema = '%s'
+				 AND table_schema NOT IN ('information_schema', 'pg_catalog', 'pg_extension', 'crdb_internal')
 		ORDER BY random()
 		   LIMIT 1;
 		`, desiredSchema)
@@ -4127,9 +4144,10 @@ func (og *operationGenerator) randView(
 		return nil, err
 	}
 	const q = `
-  SELECT schema_name, table_name
-    FROM [SHOW TABLES]
+  SELECT table_schema, table_name
+    FROM information_schema.tables
    WHERE table_name LIKE 'view%'
+     AND table_schema NOT IN ('information_schema', 'pg_catalog', 'pg_extension', 'crdb_internal')
 ORDER BY random()
    LIMIT 1;
 `
@@ -4326,7 +4344,7 @@ func (og *operationGenerator) createFunction(ctx context.Context, tx pgx.Tx) (*o
 	// TODO(chrisseto): Allow referencing sequences as well. Currently, `DROP
 	// SEQUENCE CASCADE` will break if we allow sequences. It may also be good to
 	// reference sequences with next_val or something.
-	tables, err := Collect(ctx, og, tx, pgx.RowTo[string], `SELECT quote_ident(schema_name) || '.' || quote_ident(table_name) FROM [SHOW TABLES] WHERE type != 'sequence'`)
+	tables, err := Collect(ctx, og, tx, pgx.RowTo[string], `SELECT quote_ident(table_schema) || '.' || quote_ident(table_name) FROM information_schema.tables WHERE table_type IN ('BASE TABLE', 'VIEW') AND table_schema NOT IN ('information_schema', 'pg_catalog', 'pg_extension', 'crdb_internal')`)
 	if err != nil {
 		return nil, err
 	}
@@ -5666,7 +5684,7 @@ func (og *operationGenerator) findExistingTrigger(
 // truncateTable generates a TRUNCATE TABLE statement.
 func (og *operationGenerator) truncateTable(ctx context.Context, tx pgx.Tx) (*opStmt, error) {
 	tbls, err := Collect(ctx, og, tx, pgx.RowTo[string],
-		`SELECT quote_ident(schema_name) || '.' || quote_ident(table_name) FROM [SHOW TABLES] WHERE type = 'table'`)
+		`SELECT quote_ident(table_schema) || '.' || quote_ident(table_name) FROM information_schema.tables WHERE table_type = 'BASE TABLE' AND table_schema NOT IN ('information_schema', 'pg_catalog', 'pg_extension', 'crdb_internal')`)
 	if err != nil {
 		return nil, err
 	}
