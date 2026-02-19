@@ -17,6 +17,7 @@ go_library(
     importpath = "github.com/cockroachdb/cockroach/pkg/workload/workload_generator",
     visibility = ["//visibility:public"],
     deps = [
+        "//pkg/cli/exit",
         "//pkg/col/coldata",
         "//pkg/sql/parser",
         "//pkg/sql/parser/statements",
