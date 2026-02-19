@@ -399,7 +399,6 @@ func (tf *schemaFeed) Pop(
 func (tf *schemaFeed) peekOrPop(
 	ctx context.Context, atOrBefore hlc.Timestamp, pop bool,
 ) (events []TableEvent, err error) {
-	// Routinely check whether to pause or resume polling.
 	if err = tf.pauseOrResumePolling(ctx, atOrBefore); err != nil {
 		return nil, err
 	}
@@ -504,6 +503,11 @@ func (tf *schemaFeed) pauseOrResumePolling(ctx context.Context, atOrBefore hlc.T
 		return nil
 	}
 
+	advanceTo := atOrBefore
+	if now := tf.clock.Now(); atOrBefore.LessEq(now) {
+		advanceTo = now
+	}
+
 	// Always assume we need to resume polling until we've proven otherwise.
 	tf.mu.pollingPaused = false
 
@@ -522,12 +526,12 @@ func (tf *schemaFeed) pauseOrResumePolling(ctx context.Context, atOrBefore hlc.T
 			return false, nil
 		}
 
-		if atOrBefore.LessEq(frontier) {
+		if advanceTo.LessEq(frontier) {
 			return true, nil
 		}
 
 		// Check if target table remains at the same version at atOrBefore.
-		ld2, err := tf.leaseMgr.Acquire(ctx, lease.TimestampToReadTimestamp(atOrBefore), id)
+		ld2, err := tf.leaseMgr.Acquire(ctx, lease.TimestampToReadTimestamp(advanceTo), id)
 		if err != nil {
 			return false, err
 		}
@@ -537,7 +541,7 @@ func (tf *schemaFeed) pauseOrResumePolling(ctx context.Context, atOrBefore hlc.T
 			if log.V(1) {
 				log.Changefeed.Infof(ctx,
 					"desc %d version changed from version %d to %d between frontier %s and atOrBefore %s",
-					desc1.GetID(), desc1.GetVersion(), desc2.GetVersion(), frontier, atOrBefore)
+					desc1.GetID(), desc1.GetVersion(), desc2.GetVersion(), frontier, advanceTo)
 			}
 			return false, nil
 		}
@@ -558,10 +562,10 @@ func (tf *schemaFeed) pauseOrResumePolling(ctx context.Context, atOrBefore hlc.T
 	}
 
 	tf.mu.pollingPaused = true
-	if !frontier.Less(atOrBefore) {
+	if !frontier.Less(advanceTo) {
 		return nil
 	}
-	return tf.mu.ts.advanceFrontier(atOrBefore)
+	return tf.mu.ts.advanceFrontier(advanceTo)
 }
 
 // waitForTS blocks until the given timestamp is less than or equal to the
