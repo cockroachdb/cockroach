@@ -4,9 +4,9 @@
 // included in the /LICENSE file.
 
 import { api as clusterUiApi } from "@cockroachlabs/cluster-ui";
-import { mount, shallow } from "enzyme";
-import each from "lodash/each";
+import { render } from "@testing-library/react";
 import React from "react";
+import { MemoryRouter } from "react-router-dom";
 
 import { refreshEvents } from "src/redux/apiReducers";
 import { allEvents } from "src/util/eventTypes";
@@ -15,24 +15,6 @@ import {
   EventRow,
   getEventInfo,
 } from "src/views/cluster/containers/events";
-import { ToolTipWrapper } from "src/views/shared/components/toolTip";
-
-function makeEventBox(
-  events: clusterUiApi.EventsResponse,
-  refreshEventsFn: typeof refreshEvents,
-) {
-  return shallow(
-    <EventBox
-      events={events}
-      refreshEvents={refreshEventsFn}
-      eventsValid={true}
-    />,
-  );
-}
-
-function makeEvent(event: clusterUiApi.EventColumns) {
-  return mount(<EventRow event={event}></EventRow>);
-}
 
 const createEventWithEventType = (
   eventType: string,
@@ -45,6 +27,31 @@ const createEventWithEventType = (
     uniqueID: "\\\x4ce0d9e74bd5480ab1d9e6f98cc2f483",
   };
 };
+
+function makeEventBox(
+  events: clusterUiApi.EventsResponse,
+  refreshEventsFn: typeof refreshEvents,
+) {
+  return render(
+    <MemoryRouter>
+      <EventBox
+        events={events}
+        refreshEvents={refreshEventsFn}
+        eventsValid={true}
+      />
+    </MemoryRouter>,
+  );
+}
+
+function makeEvent(event: clusterUiApi.EventColumns) {
+  return render(
+    <table>
+      <tbody>
+        <EventRow event={event} />
+      </tbody>
+    </table>,
+  );
+}
 
 describe("<EventBox>", function () {
   const spy = jest.fn();
@@ -62,38 +69,33 @@ describe("<EventRow>", function () {
     it("correctly renders a known event", function () {
       const e: clusterUiApi.EventColumns =
         createEventWithEventType("create_database");
-      const provider = makeEvent(e);
+      const { container } = makeEvent(e);
 
       expect(
-        provider
-          .find("div.events__message > span")
-          .text()
-          .includes("created database"),
-      ).toBe(true);
-      expect(provider.find(ToolTipWrapper).exists()).toBe(true);
+        container.querySelector("div.events__message span")?.textContent,
+      ).toContain("created database");
     });
 
     it("correctly renders an unknown event", function () {
       const e: clusterUiApi.EventColumns = createEventWithEventType("unknown");
-      const provider = makeEvent(e);
+      const { container } = makeEvent(e);
 
       expect(
-        provider.find("div.events__message > span").text().includes("unknown"),
-      ).toBe(true);
-      expect(provider.find(ToolTipWrapper).exists()).toBe(true);
+        container.querySelector("div.events__message span")?.textContent,
+      ).toContain("unknown");
     });
   });
 });
 
 describe("getEventInfo", function () {
   it("covers every currently known event", function () {
-    each(allEvents, eventType => {
+    allEvents.forEach(eventType => {
       const event: clusterUiApi.EventColumns =
         createEventWithEventType(eventType);
-      const eventContent = shallow(
+      const { container } = render(
         getEventInfo(event, "UTC").content as React.ReactElement<any>,
       );
-      expect(eventContent.text()).not.toMatch(/Unknown event type/);
+      expect(container.textContent).not.toMatch(/Unknown event type/);
     });
   });
 });

@@ -10,7 +10,7 @@ import {
   Timestamp,
 } from "@cockroachlabs/cluster-ui";
 import sortBy from "lodash/sortBy";
-import React from "react";
+import React, { useEffect } from "react";
 import { Helmet } from "react-helmet";
 import { connect } from "react-redux";
 import { RouteComponentProps, withRouter } from "react-router-dom";
@@ -39,17 +39,24 @@ interface LogProps {
 /**
  * Renders the main content of the logs page.
  */
-export class Logs extends React.Component<LogProps & RouteComponentProps, {}> {
-  componentDidMount() {
-    const nodeId = getMatchParamByName(this.props.match, nodeIDAttr);
-    this.props.refreshNodes();
-    this.props.refreshLogs(
+export function Logs({
+  logs,
+  currentNode,
+  refreshLogs: refreshLogsAction,
+  refreshNodes: refreshNodesAction,
+  match,
+}: LogProps & RouteComponentProps): React.ReactElement {
+  const nodeId = getMatchParamByName(match, nodeIDAttr);
+
+  useEffect(() => {
+    refreshNodesAction();
+    refreshLogsAction(
       new protos.cockroach.server.serverpb.LogsRequest({ node_id: nodeId }),
     );
-  }
+  }, [nodeId, refreshLogsAction, refreshNodesAction]);
 
-  renderContent = () => {
-    const logEntries = sortBy(this.props.logs.data.entries, e => e.time);
+  const renderContent = () => {
+    const logEntries = sortBy(logs.data.entries, e => e.time);
     const columns = [
       {
         title: "Time",
@@ -88,34 +95,31 @@ export class Logs extends React.Component<LogProps & RouteComponentProps, {}> {
     );
   };
 
-  render() {
-    const nodeAddress = this.props.currentNode
-      ? this.props.currentNode.desc.address.address_field
-      : null;
-    const nodeId = getMatchParamByName(this.props.match, nodeIDAttr);
-    const title = this.props.currentNode
-      ? `Logs | ${getDisplayName(this.props.currentNode)} | Nodes`
-      : `Logs | Node ${nodeId} | Nodes`;
+  const nodeAddress = currentNode
+    ? currentNode.desc.address.address_field
+    : null;
+  const title = currentNode
+    ? `Logs | ${getDisplayName(currentNode)} | Nodes`
+    : `Logs | Node ${nodeId} | Nodes`;
 
-    return (
-      <div>
-        <Helmet title={title} />
-        <div className="section section--heading">
-          <h2 className="base-heading">
-            Logs Node {nodeId} / {nodeAddress}
-          </h2>
-        </div>
-        <section className="section">
-          <Loading
-            loading={!this.props.logs.data}
-            page={"node logs"}
-            error={this.props.logs.lastError}
-            render={this.renderContent}
-          />
-        </section>
+  return (
+    <div>
+      <Helmet title={title} />
+      <div className="section section--heading">
+        <h2 className="base-heading">
+          Logs Node {nodeId} / {nodeAddress}
+        </h2>
       </div>
-    );
-  }
+      <section className="section">
+        <Loading
+          loading={!logs.data}
+          page={"node logs"}
+          error={logs.lastError}
+          render={renderContent}
+        />
+      </section>
+    </div>
+  );
 }
 
 // Connect the EventsList class with our redux store.

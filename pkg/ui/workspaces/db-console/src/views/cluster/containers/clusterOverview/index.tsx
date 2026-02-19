@@ -7,7 +7,7 @@ import { util } from "@cockroachlabs/cluster-ui";
 import { Skeleton } from "antd";
 import classNames from "classnames";
 import { format } from "d3-format";
-import React from "react";
+import React, { useEffect } from "react";
 import { Helmet } from "react-helmet";
 import { connect } from "react-redux";
 import { createSelector } from "reselect";
@@ -262,40 +262,37 @@ interface ClusterSummaryActionsProps {
 type ClusterSummaryProps = ClusterSummaryStateProps &
   ClusterSummaryActionsProps;
 
-class ClusterSummary extends React.Component<ClusterSummaryProps, {}> {
-  componentDidMount() {
-    this.refresh();
-  }
+function ClusterSummary({
+  capacityUsage,
+  nodeLiveness,
+  replicationStatus,
+  loading,
+  refreshLiveness: refreshLivenessAction,
+  refreshNodes: refreshNodesAction,
+}: ClusterSummaryProps): React.ReactElement {
+  useEffect(() => {
+    refreshLivenessAction();
+    refreshNodesAction();
+  });
 
-  componentDidUpdate() {
-    this.refresh();
-  }
+  const children = [
+    ...renderCapacityUsage(capacityUsage),
+    ...renderNodeLiveness(nodeLiveness),
+    ...renderReplicationStatus(replicationStatus),
+  ];
 
-  refresh() {
-    this.props.refreshLiveness();
-    this.props.refreshNodes();
-  }
-
-  render() {
-    const children = [
-      ...renderCapacityUsage(this.props.capacityUsage),
-      ...renderNodeLiveness(this.props.nodeLiveness),
-      ...renderReplicationStatus(this.props.replicationStatus),
-    ];
-
-    return (
-      <section className="cluster-summary">
-        <Skeleton
-          loading={this.props.loading}
-          active
-          // This styling is necessary because this section is a grid.
-          style={{ gridColumn: "1 / span all" }}
-        >
-          {React.Children.toArray(children)}
-        </Skeleton>
-      </section>
-    );
-  }
+  return (
+    <section className="cluster-summary">
+      <Skeleton
+        loading={loading}
+        active
+        // This styling is necessary because this section is a grid.
+        style={{ gridColumn: "1 / span all" }}
+      >
+        {React.Children.toArray(children)}
+      </Skeleton>
+    </section>
+  );
 }
 
 function mapStateToClusterSummaryProps(state: AdminUIState) {
@@ -320,20 +317,18 @@ const ClusterSummaryConnected = connect(
 /**
  * Renders the main content of the cluster visualization page.
  */
-export default class ClusterOverview extends React.Component<any, any> {
-  render() {
-    return (
-      <div className="cluster-page">
-        <Helmet title="Cluster Overview" />
-        <EmailSubscription />
-        <OverviewListAlerts />
-        <section className="section cluster-overview">
-          <ClusterSummaryConnected />
-        </section>
-        <section className="cluster-overview--fixed">
-          {this.props.children}
-        </section>
-      </div>
-    );
-  }
+export default function ClusterOverview({
+  children,
+}: React.PropsWithChildren<{}>): React.ReactElement {
+  return (
+    <div className="cluster-page">
+      <Helmet title="Cluster Overview" />
+      <EmailSubscription />
+      <OverviewListAlerts />
+      <section className="section cluster-overview">
+        <ClusterSummaryConnected />
+      </section>
+      <section className="cluster-overview--fixed">{children}</section>
+    </div>
+  );
 }

@@ -7,7 +7,7 @@ import { Button, util, Timestamp } from "@cockroachlabs/cluster-ui";
 import { ArrowLeft } from "@cockroachlabs/icons";
 import find from "lodash/find";
 import map from "lodash/map";
-import React from "react";
+import React, { useEffect } from "react";
 import { Helmet } from "react-helmet";
 import { connect } from "react-redux";
 import { Link, RouteComponentProps, withRouter } from "react-router-dom";
@@ -96,236 +96,229 @@ interface NodeOverviewProps extends RouteComponentProps {
 /**
  * Renders the Node Overview page.
  */
-export class NodeOverview extends React.Component<NodeOverviewProps, {}> {
-  componentDidMount() {
-    // Refresh nodes status query when mounting.
-    this.props.refreshNodes();
-    this.props.refreshLiveness();
-  }
+export function NodeOverview({
+  node,
+  nodesSummary,
+  refreshNodes: refreshNodesAction,
+  refreshLiveness: refreshLivenessAction,
+  history,
+}: NodeOverviewProps): React.ReactElement {
+  useEffect(() => {
+    // Refresh nodes status query when mounting and when props change;
+    // this will immediately trigger a new request if previous results
+    // are invalidated.
+    refreshNodesAction();
+    refreshLivenessAction();
+  });
 
-  componentDidUpdate() {
-    // Refresh nodes status query when props are received; this will immediately
-    // trigger a new request if previous results are invalidated.
-    this.props.refreshNodes();
-    this.props.refreshLiveness();
-  }
+  const { Bytes, Percentage, DATE_FORMAT_24_TZ } = util;
 
-  prevPage = () => this.props.history.goBack();
-
-  render() {
-    const { node, nodesSummary } = this.props;
-    const { Bytes, Percentage, DATE_FORMAT_24_TZ } = util;
-    if (!node) {
-      return (
-        <div className="section">
-          <h1 className="base-heading">Loading cluster status...</h1>
-        </div>
-      );
-    }
-
-    const liveness =
-      nodesSummary.livenessStatusByNodeID[node.desc.node_id] ||
-      LivenessStatus.NODE_STATUS_LIVE;
-    const livenessString = livenessNomenclature(liveness);
-
+  if (!node) {
     return (
-      <div>
-        <Helmet
-          title={`${
-            nodesSummary.nodeDisplayNameByID[node.desc.node_id]
-          } | Nodes`}
-        />
-        <div className="section section--heading">
-          <Button
-            onClick={this.prevPage}
-            type="unstyled-link"
-            size="small"
-            icon={<ArrowLeft fontSize={"10px"} />}
-            iconPosition="left"
-          >
-            Overview
-          </Button>
-          <h3 className="base-heading">{`Node ${node.desc.node_id} / ${node.desc.address.address_field}`}</h3>
-        </div>
-        <section className="section l-columns">
-          <div className="l-columns__left">
-            <table className="table" data-testid="node-overview-table">
-              <thead>
-                <tr className="table__row table__row--header">
-                  <th className="table__cell" />
-                  <th className="table__cell">{`Node ${node.desc.node_id}`}</th>
-                  {map(node.store_statuses, ss => {
-                    const storeId = ss.desc.store_id;
-                    return (
-                      <th
-                        key={storeId}
-                        className="table__cell"
-                      >{`Store ${storeId}`}</th>
-                    );
-                  })}
-                  <th className="table__cell table__cell--filler" />
-                </tr>
-              </thead>
-              <tbody>
-                <TableRow
-                  data={node}
-                  title="Live Bytes"
-                  valueFn={metrics => Bytes(metrics[MetricConstants.liveBytes])}
-                  nodeName={nodesSummary.nodeDisplayNameByID[node.desc.node_id]}
-                  CellTooltip={LiveBytesTooltip}
-                />
-                <TableRow
-                  data={node}
-                  title="Key Bytes"
-                  valueFn={metrics => Bytes(metrics[MetricConstants.keyBytes])}
-                  nodeName={nodesSummary.nodeDisplayNameByID[node.desc.node_id]}
-                  CellTooltip={KeyBytesTooltip}
-                />
-                <TableRow
-                  data={node}
-                  title="Value Bytes"
-                  valueFn={metrics => Bytes(metrics[MetricConstants.valBytes])}
-                  nodeName={nodesSummary.nodeDisplayNameByID[node.desc.node_id]}
-                  CellTooltip={ValueBytesTooltip}
-                />
-                <TableRow
-                  data={node}
-                  title="MVCC Range Key Bytes"
-                  valueFn={metrics =>
-                    Bytes(metrics[MetricConstants.rangeKeyBytes] || 0)
-                  }
-                  nodeName={nodesSummary.nodeDisplayNameByID[node.desc.node_id]}
-                  CellTooltip={MVCCRangeKeyBytesTooltip}
-                />
-                <TableRow
-                  data={node}
-                  title="MVCC Range Value Bytes"
-                  valueFn={metrics =>
-                    Bytes(metrics[MetricConstants.rangeValBytes] || 0)
-                  }
-                  nodeName={nodesSummary.nodeDisplayNameByID[node.desc.node_id]}
-                  CellTooltip={MVCCRangeValueBytesTooltip}
-                />
-                <TableRow
-                  data={node}
-                  title="Intent Bytes"
-                  valueFn={metrics =>
-                    Bytes(metrics[MetricConstants.intentBytes])
-                  }
-                  CellTooltip={IntentBytesTooltip}
-                />
-                <TableRow
-                  data={node}
-                  title="System Bytes"
-                  valueFn={metrics => Bytes(metrics[MetricConstants.sysBytes])}
-                  nodeName={nodesSummary.nodeDisplayNameByID[node.desc.node_id]}
-                  CellTooltip={SystemBytesTooltip}
-                />
-                <TableRow
-                  data={node}
-                  title="GC Bytes Age"
-                  valueFn={metrics =>
-                    metrics[MetricConstants.gcBytesAge].toString()
-                  }
-                />
-                <TableRow
-                  data={node}
-                  title="Total Replicas"
-                  valueFn={metrics =>
-                    metrics[MetricConstants.replicas].toString()
-                  }
-                />
-                <TableRow
-                  data={node}
-                  title="Raft Leaders"
-                  valueFn={metrics =>
-                    metrics[MetricConstants.raftLeaders].toString()
-                  }
-                />
-                <TableRow
-                  data={node}
-                  title="Total Ranges"
-                  valueFn={metrics => metrics[MetricConstants.ranges]}
-                />
-                <TableRow
-                  data={node}
-                  title="Unavailable %"
-                  valueFn={metrics =>
-                    Percentage(
-                      metrics[MetricConstants.unavailableRanges],
-                      metrics[MetricConstants.ranges],
-                    )
-                  }
-                />
-                <TableRow
-                  data={node}
-                  title="Under Replicated %"
-                  valueFn={metrics =>
-                    Percentage(
-                      metrics[MetricConstants.underReplicatedRanges],
-                      metrics[MetricConstants.ranges],
-                    )
-                  }
-                />
-                <TableRow
-                  data={node}
-                  title="Used Capacity"
-                  valueFn={metrics =>
-                    Bytes(metrics[MetricConstants.usedCapacity])
-                  }
-                  nodeName={nodesSummary.nodeDisplayNameByID[node.desc.node_id]}
-                  CellTooltip={NodeUsedCapacityTooltip}
-                />
-                <TableRow
-                  data={node}
-                  title="Available Capacity"
-                  valueFn={metrics =>
-                    Bytes(metrics[MetricConstants.availableCapacity])
-                  }
-                  nodeName={nodesSummary.nodeDisplayNameByID[node.desc.node_id]}
-                  CellTooltip={NodeAvailableCapacityTooltip}
-                />
-                <TableRow
-                  data={node}
-                  title="Maximum Capacity"
-                  valueFn={metrics => Bytes(metrics[MetricConstants.capacity])}
-                  nodeName={nodesSummary.nodeDisplayNameByID[node.desc.node_id]}
-                  CellTooltip={NodeMaximumCapacityTooltip}
-                />
-              </tbody>
-            </table>
-          </div>
-          <div className="l-columns__right">
-            <SummaryBar>
-              <SummaryLabel>Node Summary</SummaryLabel>
-              <SummaryValue
-                title="Health"
-                value={livenessString}
-                classModifier={livenessString}
-              />
-              <SummaryValue
-                title="Last Update"
-                value={
-                  <Timestamp
-                    time={util.LongToMoment(node.updated_at)}
-                    format={DATE_FORMAT_24_TZ}
-                  />
-                }
-              />
-              <SummaryValue title="Build" value={node.build_info.tag} />
-              <SummaryValue
-                title="Logs"
-                value={
-                  <Link to={`/node/${node.desc.node_id}/logs`}>View Logs</Link>
-                }
-                classModifier="link"
-              />
-            </SummaryBar>
-          </div>
-        </section>
+      <div className="section">
+        <h1 className="base-heading">Loading cluster status...</h1>
       </div>
     );
   }
+
+  const liveness =
+    nodesSummary.livenessStatusByNodeID[node.desc.node_id] ||
+    LivenessStatus.NODE_STATUS_LIVE;
+  const livenessString = livenessNomenclature(liveness);
+
+  return (
+    <div>
+      <Helmet
+        title={`${nodesSummary.nodeDisplayNameByID[node.desc.node_id]} | Nodes`}
+      />
+      <div className="section section--heading">
+        <Button
+          onClick={() => history.goBack()}
+          type="unstyled-link"
+          size="small"
+          icon={<ArrowLeft fontSize={"10px"} />}
+          iconPosition="left"
+        >
+          Overview
+        </Button>
+        <h3 className="base-heading">{`Node ${node.desc.node_id} / ${node.desc.address.address_field}`}</h3>
+      </div>
+      <section className="section l-columns">
+        <div className="l-columns__left">
+          <table className="table" data-testid="node-overview-table">
+            <thead>
+              <tr className="table__row table__row--header">
+                <th className="table__cell" />
+                <th className="table__cell">{`Node ${node.desc.node_id}`}</th>
+                {map(node.store_statuses, ss => {
+                  const storeId = ss.desc.store_id;
+                  return (
+                    <th
+                      key={storeId}
+                      className="table__cell"
+                    >{`Store ${storeId}`}</th>
+                  );
+                })}
+                <th className="table__cell table__cell--filler" />
+              </tr>
+            </thead>
+            <tbody>
+              <TableRow
+                data={node}
+                title="Live Bytes"
+                valueFn={metrics => Bytes(metrics[MetricConstants.liveBytes])}
+                nodeName={nodesSummary.nodeDisplayNameByID[node.desc.node_id]}
+                CellTooltip={LiveBytesTooltip}
+              />
+              <TableRow
+                data={node}
+                title="Key Bytes"
+                valueFn={metrics => Bytes(metrics[MetricConstants.keyBytes])}
+                nodeName={nodesSummary.nodeDisplayNameByID[node.desc.node_id]}
+                CellTooltip={KeyBytesTooltip}
+              />
+              <TableRow
+                data={node}
+                title="Value Bytes"
+                valueFn={metrics => Bytes(metrics[MetricConstants.valBytes])}
+                nodeName={nodesSummary.nodeDisplayNameByID[node.desc.node_id]}
+                CellTooltip={ValueBytesTooltip}
+              />
+              <TableRow
+                data={node}
+                title="MVCC Range Key Bytes"
+                valueFn={metrics =>
+                  Bytes(metrics[MetricConstants.rangeKeyBytes] || 0)
+                }
+                nodeName={nodesSummary.nodeDisplayNameByID[node.desc.node_id]}
+                CellTooltip={MVCCRangeKeyBytesTooltip}
+              />
+              <TableRow
+                data={node}
+                title="MVCC Range Value Bytes"
+                valueFn={metrics =>
+                  Bytes(metrics[MetricConstants.rangeValBytes] || 0)
+                }
+                nodeName={nodesSummary.nodeDisplayNameByID[node.desc.node_id]}
+                CellTooltip={MVCCRangeValueBytesTooltip}
+              />
+              <TableRow
+                data={node}
+                title="Intent Bytes"
+                valueFn={metrics => Bytes(metrics[MetricConstants.intentBytes])}
+                CellTooltip={IntentBytesTooltip}
+              />
+              <TableRow
+                data={node}
+                title="System Bytes"
+                valueFn={metrics => Bytes(metrics[MetricConstants.sysBytes])}
+                nodeName={nodesSummary.nodeDisplayNameByID[node.desc.node_id]}
+                CellTooltip={SystemBytesTooltip}
+              />
+              <TableRow
+                data={node}
+                title="GC Bytes Age"
+                valueFn={metrics =>
+                  metrics[MetricConstants.gcBytesAge].toString()
+                }
+              />
+              <TableRow
+                data={node}
+                title="Total Replicas"
+                valueFn={metrics =>
+                  metrics[MetricConstants.replicas].toString()
+                }
+              />
+              <TableRow
+                data={node}
+                title="Raft Leaders"
+                valueFn={metrics =>
+                  metrics[MetricConstants.raftLeaders].toString()
+                }
+              />
+              <TableRow
+                data={node}
+                title="Total Ranges"
+                valueFn={metrics => metrics[MetricConstants.ranges]}
+              />
+              <TableRow
+                data={node}
+                title="Unavailable %"
+                valueFn={metrics =>
+                  Percentage(
+                    metrics[MetricConstants.unavailableRanges],
+                    metrics[MetricConstants.ranges],
+                  )
+                }
+              />
+              <TableRow
+                data={node}
+                title="Under Replicated %"
+                valueFn={metrics =>
+                  Percentage(
+                    metrics[MetricConstants.underReplicatedRanges],
+                    metrics[MetricConstants.ranges],
+                  )
+                }
+              />
+              <TableRow
+                data={node}
+                title="Used Capacity"
+                valueFn={metrics =>
+                  Bytes(metrics[MetricConstants.usedCapacity])
+                }
+                nodeName={nodesSummary.nodeDisplayNameByID[node.desc.node_id]}
+                CellTooltip={NodeUsedCapacityTooltip}
+              />
+              <TableRow
+                data={node}
+                title="Available Capacity"
+                valueFn={metrics =>
+                  Bytes(metrics[MetricConstants.availableCapacity])
+                }
+                nodeName={nodesSummary.nodeDisplayNameByID[node.desc.node_id]}
+                CellTooltip={NodeAvailableCapacityTooltip}
+              />
+              <TableRow
+                data={node}
+                title="Maximum Capacity"
+                valueFn={metrics => Bytes(metrics[MetricConstants.capacity])}
+                nodeName={nodesSummary.nodeDisplayNameByID[node.desc.node_id]}
+                CellTooltip={NodeMaximumCapacityTooltip}
+              />
+            </tbody>
+          </table>
+        </div>
+        <div className="l-columns__right">
+          <SummaryBar>
+            <SummaryLabel>Node Summary</SummaryLabel>
+            <SummaryValue
+              title="Health"
+              value={livenessString}
+              classModifier={livenessString}
+            />
+            <SummaryValue
+              title="Last Update"
+              value={
+                <Timestamp
+                  time={util.LongToMoment(node.updated_at)}
+                  format={DATE_FORMAT_24_TZ}
+                />
+              }
+            />
+            <SummaryValue title="Build" value={node.build_info.tag} />
+            <SummaryValue
+              title="Logs"
+              value={
+                <Link to={`/node/${node.desc.node_id}/logs`}>View Logs</Link>
+              }
+              classModifier="link"
+            />
+          </SummaryBar>
+        </div>
+      </section>
+    </div>
+  );
 }
 
 export const currentNode = createSelector(
