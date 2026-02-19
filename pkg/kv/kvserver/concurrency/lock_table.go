@@ -579,8 +579,11 @@ func (g *lockTableGuardImpl) ShouldWait() bool {
 	// 1. The lock table indicated as such (e.g. the request ran into a
 	// conflicting lock).
 	// 2. OR the request successfully performed its scan but discovered replicated
-	// locks that need to be resolved before it can evaluate.
-	return g.mu.startWait || len(g.toResolve) > 0
+	// locks that need to be resolved before it can evaluate. When virtual intent
+	// resolution is enabled, these locks will be resolved during evaluation (on
+	// a temporary batch) rather than before re-scanning, so the request does not
+	// need to wait.
+	return g.mu.startWait || (!g.virtuallyResolveIntents && len(g.toResolve) > 0)
 }
 
 // ResolveBeforeScanning implements the lockTableGuard interface. The locks to
@@ -599,6 +602,11 @@ func (g *lockTableGuardImpl) IntentsToResolveVirtually() []roachpb.LockUpdate {
 		return g.toResolve
 	}
 	return nil
+}
+
+// VirtuallyResolvesIntents implements the lockTableGuard interface.
+func (g *lockTableGuardImpl) VirtuallyResolvesIntents() bool {
+	return g.virtuallyResolveIntents
 }
 
 func (g *lockTableGuardImpl) NewStateChan() chan struct{} {
