@@ -438,10 +438,14 @@ func (r *Replica) setDescLockedRaftMuLocked(ctx context.Context, desc *roachpb.R
 		log.KvExec.Fatalf(ctx, "range descriptor ID (%d) does not match replica's range ID (%d)",
 			desc.RangeID, r.RangeID)
 	}
-	if r.shMu.state.Desc.IsInitialized() &&
-		(desc == nil || !desc.IsInitialized()) {
-		log.KvExec.Fatalf(ctx, "cannot replace initialized descriptor with uninitialized one: %+v -> %+v",
-			r.shMu.state.Desc, desc)
+	// We should always be setting the replica's descriptor to an initialized
+	// one. setDescLockedRaftMuLocked is called when we're initializing a
+	// replica for the very first time, or when we're updating an initialized
+	// replica's descriptor. The former necessitates an initialized descriptor.
+	// For the latter, this assertion guards against initialized->uninitialized
+	// transitions, which we don't allow.
+	if !desc.IsInitialized() {
+		log.KvExec.Fatalf(ctx, "cannot set uninitialized descriptor: %+v", desc)
 	}
 	if r.shMu.state.Desc.IsInitialized() &&
 		!r.shMu.state.Desc.StartKey.Equal(desc.StartKey) {
