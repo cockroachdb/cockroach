@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/lexbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
@@ -602,8 +603,16 @@ func (b *stmtBundleBuilder) addEnv(ctx context.Context) {
 	// TODO(#27611): when we support stats on virtual tables, we'll need to
 	// update this logic to not include virtual tables into schema.sql but still
 	// create stats files for them.
+	type triggerInfo struct {
+		tableName tree.TableName
+		name      string
+	}
 	var tables, sequences, views []tree.TableName
 	var addFKs, skipFKs []*tree.AlterTable
+	var triggerInfos []triggerInfo
+	var triggerFuncIDs intsets.Fast
+	var triggerDepTypeOIDs intsets.Fast
+	isProcedure := make(map[oid.Oid]bool)
 	err := b.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 		// Catalog objects can show up multiple times in our lists, so
 		// deduplicate them.
@@ -782,6 +791,62 @@ func (b *stmtBundleBuilder) addEnv(ctx context.Context) {
 				include = hasDelete || hasUpdate || hasUpsert
 			},
 		)
+		// Collect trigger information from all referenced tables. For each
+		// trigger, we record its name (for CREATE TRIGGER output later),
+		// the trigger function, and any tables/types/routines it depends on.
+		// We iterate using an index because refTables may grow during
+		// iteration as we discover trigger-dependent tables.
+		// TODO(sql-queries): consider skipping trigger collection for SELECT
+		// statements, since triggers only fire on INSERT/UPDATE/DELETE.
+		for i := 0; i < len(refTables); i++ {
+			table := refTables[i]
+			desc, err := getDescForDataSource(table)
+			if err != nil {
+				return err
+			}
+			triggers := desc.GetTriggers()
+			for j := range triggers {
+				trig := &triggers[j]
+				triggerFuncIDs.Add(int(trig.FuncID))
+				for _, depID := range trig.DependsOnRoutines {
+					triggerFuncIDs.Add(int(depID))
+					funcOid := catid.FuncIDToOID(depID)
+					_, ol, err := b.plan.catalog.ResolveFunctionByOID(ctx, funcOid)
+					if err != nil {
+						return err
+					}
+					isProcedure[funcOid] = ol.Type == tree.ProcedureRoutine
+				}
+				for _, depID := range trig.DependsOn {
+					if !refTableIncluded.Contains(int(depID)) {
+						ds, _, err := b.plan.catalog.ResolveDataSourceByID(ctx, cat.Flags{}, cat.StableID(depID))
+						if err != nil {
+							return err
+						}
+						t, ok := ds.(cat.Table)
+						if !ok || t.IsVirtualTable() {
+							continue
+						}
+						refTables = append(refTables, t)
+						refTableIncluded.Add(int(depID))
+					}
+				}
+				for _, depID := range trig.DependsOnTypes {
+					triggerDepTypeOIDs.Add(int(catid.TypeIDToOID(depID)))
+				}
+				tn, err := b.plan.catalog.fullyQualifiedNameWithTxn(ctx, table, txn)
+				if err != nil {
+					return err
+				}
+				triggerInfos = append(triggerInfos, triggerInfo{
+					tableName: tn,
+					name:      trig.Name,
+				})
+			}
+		}
+
+		// Collect FK constraints after the trigger loop so that tables
+		// discovered via trigger dependencies are included.
 		addFKs, skipFKs = opt.GetAllFKs(
 			ctx,
 			b.plan.catalog,
@@ -789,6 +854,7 @@ func (b *stmtBundleBuilder) addEnv(ctx context.Context) {
 			func(t cat.Table) (tree.TableName, error) {
 				return b.plan.catalog.fullyQualifiedNameWithTxn(ctx, t, txn)
 			})
+
 		var err error
 		tables, err = getNames(len(refTables), func(i int) cat.DataSource {
 			return refTables[i]
@@ -857,13 +923,24 @@ func (b *stmtBundleBuilder) addEnv(ctx context.Context) {
 		}
 	}
 	// Get all relevant user-defined types.
+	var printedTypeOIDs intsets.Fast
 	for _, t := range mem.Metadata().AllUserDefinedTypes() {
 		blankLine()
+		printedTypeOIDs.Add(int(t.Oid()))
 		if err = c.PrintCreateUDT(&buf, t.Oid(), b.flags.RedactValues); err != nil {
 			b.printError(fmt.Sprintf("-- error getting schema for type %s: %v", t.SQLStringForError(), err), &buf)
 		}
 	}
-	if mem.Metadata().HasUserDefinedRoutines() {
+	// Also print UDTs referenced by triggers.
+	triggerDepTypeOIDs.ForEach(func(id int) {
+		if !printedTypeOIDs.Contains(id) {
+			blankLine()
+			if err = c.PrintCreateUDT(&buf, oid.Oid(id), b.flags.RedactValues); err != nil {
+				b.printError(fmt.Sprintf("-- error getting schema for type with OID %d: %v", id, err), &buf)
+			}
+		}
+	})
+	{
 		// Get all relevant user-defined routines.
 		//
 		// Note that we first populate fast int set so that we add routines in
@@ -872,10 +949,21 @@ func (b *stmtBundleBuilder) addEnv(ctx context.Context) {
 		// smaller Oid would indicate an older routine which makes it less
 		// likely to depend on another routine.
 		var ids intsets.Fast
-		isProcedure := make(map[oid.Oid]bool)
-		mem.Metadata().ForEachUserDefinedRoutine(func(ol *tree.Overload) {
-			ids.Add(int(ol.Oid))
-			isProcedure[ol.Oid] = ol.Type == tree.ProcedureRoutine
+		if mem.Metadata().HasUserDefinedRoutines() {
+			mem.Metadata().ForEachUserDefinedRoutine(func(ol *tree.Overload) {
+				ids.Add(int(ol.Oid))
+				isProcedure[ol.Oid] = ol.Type == tree.ProcedureRoutine
+			})
+		}
+		// Also include trigger functions and routines they depend on.
+		// Trigger functions (trig.FuncID) are always functions, but
+		// DependsOnRoutines entries may be procedures, so we use
+		// isProcedure which was populated during collection.
+		triggerFuncIDs.ForEach(func(descID int) {
+			funcOid := catid.FuncIDToOID(descpb.ID(descID))
+			if !ids.Contains(int(funcOid)) {
+				ids.Add(int(funcOid))
+			}
 		})
 		ids.ForEach(func(id int) {
 			blankLine()
@@ -904,6 +992,13 @@ func (b *stmtBundleBuilder) addEnv(ctx context.Context) {
 			for _, skipFK := range skipFKs {
 				fmt.Fprintf(&buf, "-- %s;\n", skipFK)
 			}
+		}
+	}
+	for i := range triggerInfos {
+		blankLine()
+		if err = c.PrintCreateTrigger(&buf, &triggerInfos[i].tableName, triggerInfos[i].name, b.flags.RedactValues); err != nil {
+			b.printError(fmt.Sprintf("-- error getting trigger %s on table %s: %v",
+				triggerInfos[i].name, triggerInfos[i].tableName.FQString(), err), &buf)
 		}
 	}
 	for i := range views {
@@ -1332,6 +1427,34 @@ func (c *stmtEnvCollector) PrintCreateRoutine(
 		)
 	}
 	res, err := c.queryEx(createRoutineQuery, 2 /* numCols */, false /* emptyOk */)
+	if err != nil {
+		return err
+	}
+	printCreateStatement(w, tree.Name(res[0]) /* dbName */, res[1] /* createStatement */)
+	return nil
+}
+
+// PrintCreateTrigger outputs the CREATE TRIGGER statement for the named
+// trigger on the given table.
+func (c *stmtEnvCollector) PrintCreateTrigger(
+	w io.Writer, tn *tree.TableName, triggerName string, redactValues bool,
+) error {
+	// Use "".crdb_internal to allow for cross-DB lookups.
+	query := fmt.Sprintf(
+		`SELECT database_name, create_statement FROM "".crdb_internal.create_trigger_statements `+
+			`WHERE database_name = %s AND schema_name = %s AND table_name = %s AND trigger_name = %s`,
+		lexbase.EscapeSQLString(string(tn.CatalogName)),
+		lexbase.EscapeSQLString(string(tn.SchemaName)),
+		lexbase.EscapeSQLString(string(tn.ObjectName)),
+		lexbase.EscapeSQLString(triggerName),
+	)
+	if redactValues {
+		query = fmt.Sprintf(
+			"SELECT database_name, crdb_internal.redact(crdb_internal.redactable_sql_constants(create_statement)) FROM (%s)",
+			query,
+		)
+	}
+	res, err := c.queryEx(query, 2 /* numCols */, false /* emptyOk */)
 	if err != nil {
 		return err
 	}
