@@ -32,7 +32,7 @@ platform(
         "@platforms//cpu:x86_64",
     ],
     exec_properties = {
-        "container-image": "docker://us-east1-docker.pkg.dev/crl-ci-images/cockroach/bazel@sha256:8e28252850bdd6f996d3d4087839be7a2e37d441f6f1e0d5c0a08fae82feacc3",
+        "container-image": "docker://us-east1-docker.pkg.dev/crl-ci-images/cockroach/bazel@sha256:777de92cc32790cd8dfd6bedbf6c9ca9fad594552f18265db5bca9d1e357c7dc",
         "dockerReuse": "True",
     },
 )
@@ -136,7 +136,7 @@ platform(
         "@platforms//cpu:arm64",
     ],
     exec_properties = {
-        "container-image": "docker://us-east1-docker.pkg.dev/crl-ci-images/cockroach/bazel@sha256:a60cd34ece7f75930169653ce55eb6825775a5204152fb563276e6eb25c73ed1",
+        "container-image": "docker://us-east1-docker.pkg.dev/crl-ci-images/cockroach/bazel@sha256:342d5589ba69ca9f57efc964fb1142c7e8667402403c8ed91fd887739a3e3d4e",
         "dockerReuse": "True",
     },
 )
