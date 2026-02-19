@@ -496,8 +496,8 @@ https://www.postgresql.org/docs/12/catalog-pg-attribute.html`,
 		}
 		// Add a dropped entry for any attribute numbers in the middle that are
 		// missing, assuming there are any numeric gaps in the number of columns
-		// observed.
-		missingColumnType := types.AnyElement
+		// observed. Use atttypid=0 to match PostgreSQL behavior, where dropped
+		// columns have no valid type.
 		if populatedColumns.Len() != maxPGAttributeNum {
 			for colOrdinal := 1; colOrdinal <= maxPGAttributeNum; colOrdinal++ {
 				if populatedColumns.Contains(colOrdinal) {
@@ -507,27 +507,27 @@ https://www.postgresql.org/docs/12/catalog-pg-attribute.html`,
 				if err := addRow(
 					tableID,                             // attrelid
 					tree.NewDName(colName),              // attname
-					typOid(missingColumnType),           // atttypid
+					oidZero,                             // atttypid
 					zeroVal,                             // attstattarget
-					typLen(missingColumnType),           // attlen
+					negOneVal,                           // attlen
 					tree.NewDInt(tree.DInt(colOrdinal)), // attnum
 					zeroVal,                             // attndims
 					negOneVal,                           // attcacheoff
-					tree.NewDInt(tree.DInt(missingColumnType.TypeModifier())), // atttypmod
-					tree.DNull,                    // attbyval (see pg_type.typbyval)
-					tree.DNull,                    // attstorage
-					tree.DNull,                    // attalign
-					tree.DBoolFalse,               // attnotnull
-					tree.DBoolFalse,               // atthasdef
-					tree.NewDString(""),           // attidentity
-					tree.NewDString(""),           // attgenerated
-					tree.DBoolTrue,                // attisdropped
-					tree.DBoolTrue,                // attislocal
-					zeroVal,                       // attinhcount
-					typColl(missingColumnType, h), // attcollation
-					tree.DNull,                    // attacl
-					tree.DNull,                    // attoptions
-					tree.DNull,                    // attfdwoptions
+					negOneVal,                           // atttypmod
+					tree.DNull,                          // attbyval (see pg_type.typbyval)
+					tree.DNull,                          // attstorage
+					tree.DNull,                          // attalign
+					tree.DBoolFalse,                     // attnotnull
+					tree.DBoolFalse,                     // atthasdef
+					tree.NewDString(""),                 // attidentity
+					tree.NewDString(""),                 // attgenerated
+					tree.DBoolTrue,                      // attisdropped
+					tree.DBoolTrue,                      // attislocal
+					zeroVal,                             // attinhcount
+					oidZero,                             // attcollation
+					tree.DNull,                          // attacl
+					tree.DNull,                          // attoptions
+					tree.DNull,                          // attfdwoptions
 					// These columns were automatically created by pg_catalog_test's missing column generator.
 					tree.DNull, // atthasmissing
 					// These columns were automatically created by pg_catalog_test's missing column generator.
