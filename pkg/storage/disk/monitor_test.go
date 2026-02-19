@@ -134,12 +134,11 @@ func TestMonitorManager_CollectInstantaneous(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	t.Run("no collector returns error", func(t *testing.T) {
+	t.Run("no collector does not return error", func(t *testing.T) {
 		manager := NewMonitorManager(vfs.NewMem())
-		// No statsCollector set, should return error.
+		// No statsCollector set, should not return error.
 		stats, buf, err := manager.CollectInstantaneous(nil, nil)
-		require.Error(t, err)
-		require.Contains(t, err.Error(), "no disks are being monitored")
+		require.NoError(t, err)
 		require.Empty(t, stats)
 		require.Nil(t, buf)
 	})

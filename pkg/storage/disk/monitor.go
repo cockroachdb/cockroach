@@ -217,7 +217,8 @@ func (m *MonitorManager) CollectInstantaneous(
 	m.mu.Unlock()
 	statsBuf = statsBuf[:0]
 	if collector == nil {
-		return statsBuf, byteBuf, errors.Errorf("no disks are being monitored")
+		// No collector set, so no disks are being monitored. Return empty stats and byte buffer.
+		return statsBuf, byteBuf, nil
 	}
 	now := timeutil.Now()
 	var err error
