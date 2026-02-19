@@ -1957,6 +1957,12 @@ func NewLeaseManager(
 	lm.descDelCh = make(chan descpb.ID)
 	lm.descMetaDataUpdateCh = make(chan *descriptorTxnUpdate)
 	lm.rangefeedErrCh = make(chan error)
+	// Allow the bytes monitor to allocate extra memory
+	// with smaller allocations (default).
+	bytesMonitorIncrement := int64(0)
+	if lm.testingKnobs.DisallowBytesMonitorCaching {
+		bytesMonitorIncrement = 1
+	}
 	lm.bytesMonitor = mon.NewMonitor(mon.Options{
 		Name:       mon.MakeName("leased-descriptors"),
 		CurCount:   lm.storage.leasingMetrics.leaseCurBytesCount,
@@ -1964,12 +1970,21 @@ func NewLeaseManager(
 		Res:        mon.MemoryResource,
 		Settings:   settings,
 		LongLiving: true,
+		Increment:  bytesMonitorIncrement,
 	})
 	lm.bytesMonitor.StartNoReserved(context.Background(), rootBytesMonitor)
 	lm.boundAccount = lm.bytesMonitor.MakeConcurrentBoundAccount()
 	// Add a stopper for the bound account that we are using to
 	// track memory usage.
 	lm.stopper.AddCloser(stop.CloserFn(func() {
+		// If there are outstanding leases, we cannot close the account and
+		// properly stop it. This can happen if draining failed for some reason.
+		// The safest option is to emergency-stop the monitor, which prevents
+		// panics in other code paths.
+		if lm.boundAccount.Used() > 0 {
+			lm.bytesMonitor.EmergencyStop(ctx)
+			return
+		}
 		lm.boundAccount.Close(ctx)
 		lm.bytesMonitor.Stop(ctx)
 	}))
