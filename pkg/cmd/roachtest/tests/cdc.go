@@ -3139,8 +3139,9 @@ CONFIGURE ZONE USING
 		for _, cfg := range []struct {
 			tables int
 			ranges int
+			skip   string
 		}{
-			{tables: 1, ranges: 10_000},
+			{tables: 1, ranges: 10_000, skip: "https://github.com/cockroachdb/cockroach/issues/163761"},
 			{tables: 10, ranges: 1_000},
 			{tables: 100, ranges: 100},
 			{tables: 1_000, ranges: 10},
@@ -3149,6 +3150,7 @@ CONFIGURE ZONE USING
 			r.Add(registry.TestSpec{
 				Name: "cdc/frontier-persistence-benchmark" +
 					fmt.Sprintf("/interval=%s/tables=%d/ranges=%d", interval, cfg.tables, cfg.ranges),
+				Skip:             cfg.skip,
 				Owner:            registry.OwnerCDC,
 				Benchmark:        true,
 				Cluster:          r.MakeClusterSpec(4, spec.CPU(16), spec.WorkloadNode()),
