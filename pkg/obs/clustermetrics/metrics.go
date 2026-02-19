@@ -18,6 +18,8 @@ type Metric interface {
 	metric.Iterable
 	// Get returns the current value of the metric.
 	Get() int64
+	// Type returns the metric type string (e.g. "counter", "gauge").
+	Type() string
 	// IsDirty returns true if the metric has changed since the last flush.
 	IsDirty() bool
 	// Reset resets the metric's state after a successful flush.
@@ -63,6 +65,11 @@ func (c *Counter) Inc(i int64) {
 // Get returns the current count.
 func (c *Counter) Get() int64 {
 	return c.Counter.Count()
+}
+
+// Type returns "counter".
+func (c *Counter) Type() string {
+	return "counter"
 }
 
 // IsDirty returns true if the counter has been incremented since the last flush.
@@ -112,6 +119,11 @@ func (g *Gauge) Dec(i int64) {
 // Get returns the current value of the gauge.
 func (g *Gauge) Get() int64 {
 	return g.Gauge.Value()
+}
+
+// Type returns "gauge".
+func (g *Gauge) Type() string {
+	return "gauge"
 }
 
 // IsDirty returns true if the gauge has been updated since the last flush.

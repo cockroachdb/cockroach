@@ -44,6 +44,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/multitenant"
 	"github.com/cockroachdb/cockroach/pkg/multitenant/mtinfopb"
 	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities"
+	"github.com/cockroachdb/cockroach/pkg/obs/clustermetrics/cmwriter"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
@@ -172,6 +173,7 @@ type SQLServer struct {
 	closedSessionCache             *sql.ClosedSessionCache
 	jobRegistry                    *jobs.Registry
 	statsRefresher                 *stats.Refresher
+	clusterMetricsWriter           *cmwriter.Writer
 	temporaryObjectCleaner         *sql.TemporaryObjectCleaner
 	stmtDiagnosticsRegistry        *stmtdiagnostics.Registry
 	txnDiagnosticsRegistry         *stmtdiagnostics.TxnRegistry
@@ -1222,6 +1224,10 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 	execCfg.StatsRefresher = statsRefresher
 	distSQLServer.ServerConfig.StatsRefresher = statsRefresher
 
+	// Create cluster metrics writer.
+	clusterMetricsWriter := cmwriter.NewWriter(internalDB, cfg.nodeIDContainer, cfg.Settings)
+	cfg.registry.AddMetricStruct(clusterMetricsWriter.Metrics())
+
 	execCfg.IndexBackfiller = sql.NewIndexBackfiller(execCfg)
 	execCfg.IndexSpanSplitter = sql.NewIndexSplitAndScatter(execCfg)
 	execCfg.IndexMerger = sql.NewIndexBackfillerMergePlanner(execCfg)
@@ -1448,6 +1454,7 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 		jobRegistry:                    jobRegistry,
 		sqlInstanceDialer:              cfg.sqlInstanceDialer,
 		statsRefresher:                 statsRefresher,
+		clusterMetricsWriter:           clusterMetricsWriter,
 		temporaryObjectCleaner:         temporaryObjectCleaner,
 		stmtDiagnosticsRegistry:        stmtDiagnosticsRegistry,
 		txnDiagnosticsRegistry:         txnDiagnosticsRegistry,
@@ -1785,6 +1792,9 @@ func (s *SQLServer) preStart(
 		return err
 	}
 	if err := s.statsRefresher.Start(ctx, stopper, stats.DefaultRefreshInterval); err != nil {
+		return err
+	}
+	if err := s.clusterMetricsWriter.Start(ctx, stopper, &s.execCfg.Settings.SV); err != nil {
 		return err
 	}
 	if err = s.execCfg.StatementHintsCache.Start(ctx, s.execCfg.SystemTableIDResolver); err != nil {
@@ -2206,4 +2216,9 @@ func (s *SQLServer) PGServer() *pgwire.Server {
 // MetricsRegistry returns the application-level metrics registry.
 func (s *SQLServer) MetricsRegistry() *metric.Registry {
 	return s.metricsRegistry
+}
+
+// ClusterMetricsWriter returns the cluster metrics writer.
+func (s *SQLServer) ClusterMetricsWriter() *cmwriter.Writer {
+	return s.clusterMetricsWriter
 }
