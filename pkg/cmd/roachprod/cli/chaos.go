@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/errors"
 	"github.com/spf13/cobra"
+	"github.com/spf13/pflag"
 )
 
 // FailureStage represents a single stage in the failure injection lifecycle
@@ -56,7 +57,7 @@ func ValidStages() []string {
 
 // Global chaos options that apply to all chaos commands
 var (
-	chaosWaitBeforeCleanup time.Duration
+	chaosWaitBeforeRecover time.Duration
 	chaosRunForever        bool
 	chaosCertsDir          string
 	chaosReplicationFactor int
@@ -70,11 +71,48 @@ var (
 
 // GlobalChaosOpts captures global chaos flags
 type GlobalChaosOpts struct {
-	WaitBeforeCleanup time.Duration
+	WaitBeforeRecover time.Duration
 	RunForever        bool
 	Stage             FailureStage
 	Verbose           bool
 }
+
+// chaosSubcmdUsageTemplate is a custom usage template for chaos subcommands
+// that separates chaos-level persistent flags from root-level global flags.
+// This is a modified version of cobra's default usage template.
+var chaosSubcmdUsageTemplate = `Usage:{{if .Runnable}}
+  {{.UseLine}}{{end}}{{if .HasAvailableSubCommands}}
+  {{.CommandPath}} [command]{{end}}{{if gt (len .Aliases) 0}}
+
+Aliases:
+  {{.NameAndAliases}}{{end}}{{if .HasExample}}
+
+Examples:
+{{.Example}}{{end}}{{if .HasAvailableSubCommands}}{{$cmds := .Commands}}{{if eq (len .Groups) 0}}
+
+Available Commands:{{range $cmds}}{{if (or .IsAvailableCommand (eq .Name "help"))}}
+  {{rpad .Name .NamePadding }} {{.Short}}{{end}}{{end}}{{else}}{{range $group := .Groups}}
+
+{{.Title}}{{range $cmds}}{{if (and (eq .GroupID $group.ID) (or .IsAvailableCommand (eq .Name "help")))}}
+  {{rpad .Name .NamePadding }} {{.Short}}{{end}}{{end}}{{end}}{{if not .AllChildCommandsHaveGroup}}
+
+Additional Commands:{{range $cmds}}{{if (and (eq .GroupID "") (or .IsAvailableCommand (eq .Name "help")))}}
+  {{rpad .Name .NamePadding }} {{.Short}}{{end}}{{end}}{{end}}{{end}}{{end}}{{if .HasAvailableLocalFlags}}
+
+Flags:
+{{.LocalFlags.FlagUsages | trimTrailingWhitespaces}}{{end}}{{if chaosFlags .}}
+
+Chaos Flags:
+{{chaosFlags . | trimTrailingWhitespaces}}{{end}}{{if nonChaosGlobalFlags .}}
+
+Global Flags:
+{{nonChaosGlobalFlags . | trimTrailingWhitespaces}}{{end}}{{if .HasHelpSubCommands}}
+
+Additional help topics:{{range .Commands}}{{if .IsAdditionalHelpTopicCommand}}
+  {{rpad .CommandPath .CommandPathPadding}} {{.Short}}{{end}}{{end}}{{end}}{{if .HasAvailableSubCommands}}
+
+Use "{{.CommandPath}} [command] --help" for more information about a command.{{end}}
+`
 
 // buildChaosCmd creates the root chaos command
 func (cr *commandRegistry) buildChaosCmd() *cobra.Command {
@@ -96,12 +134,12 @@ Global flags control the duration and cleanup behavior of all chaos commands.
 	}
 
 	// Add global flags
-	chaosCmd.PersistentFlags().DurationVar(&chaosWaitBeforeCleanup,
-		"wait-before-cleanup", 5*time.Minute,
-		"time to wait before cleaning up the failure")
+	chaosCmd.PersistentFlags().DurationVar(&chaosWaitBeforeRecover,
+		"wait-before-recover", 5*time.Minute,
+		"time to wait before recovering from the failure")
 	chaosCmd.PersistentFlags().BoolVar(&chaosRunForever,
 		"run-forever", false,
-		"if set, takes precedence over --wait-before-cleanup. On graceful shutdown, cleans up the injected failure")
+		"if set, takes precedence over --wait-before-recover. On graceful shutdown, cleans up the injected failure")
 	chaosCmd.PersistentFlags().StringVar(&chaosCertsDir,
 		"certs-dir", install.CockroachNodeCertsDir,
 		"local path to certs directory for secure clusters")
@@ -116,7 +154,7 @@ Global flags control the duration and cleanup behavior of all chaos commands.
   - inject: runs only the inject phase (activates the failure)
   - recover: runs only the recover phase (removes the failure)
   - cleanup: runs only the cleanup phase (removes failure dependencies)
-  - inject-recover: runs inject, waits for --wait-before-cleanup or --run-forever, then recovers
+  - inject-recover: runs inject, waits for --wait-before-recover or --run-forever, then recovers
 Default: all`)
 	chaosCmd.PersistentFlags().BoolVar(&verbose,
 		"verbose", false,
@@ -128,6 +166,36 @@ Default: all`)
 	chaosCmd.AddCommand(cr.buildChaosDiskStallCmd())
 	chaosCmd.AddCommand(cr.buildChaosProcessKillCmd())
 	chaosCmd.AddCommand(cr.buildChaosResetVMCmd())
+
+	// Collect chaos persistent flag names so we can separate them from
+	// root-level global flags in the help output.
+	chaosFlagNames := make(map[string]bool)
+	chaosCmd.PersistentFlags().VisitAll(func(f *pflag.Flag) {
+		chaosFlagNames[f.Name] = true
+	})
+
+	cobra.AddTemplateFunc("chaosFlags", func(cmd *cobra.Command) string {
+		fs := pflag.NewFlagSet("chaos", pflag.ContinueOnError)
+		cmd.InheritedFlags().VisitAll(func(f *pflag.Flag) {
+			if chaosFlagNames[f.Name] {
+				fs.AddFlag(f)
+			}
+		})
+		return fs.FlagUsages()
+	})
+	cobra.AddTemplateFunc("nonChaosGlobalFlags", func(cmd *cobra.Command) string {
+		fs := pflag.NewFlagSet("global", pflag.ContinueOnError)
+		cmd.InheritedFlags().VisitAll(func(f *pflag.Flag) {
+			if !chaosFlagNames[f.Name] {
+				fs.AddFlag(f)
+			}
+		})
+		return fs.FlagUsages()
+	})
+
+	for _, sub := range chaosCmd.Commands() {
+		sub.SetUsageTemplate(chaosSubcmdUsageTemplate)
+	}
 
 	return chaosCmd
 }
@@ -152,7 +220,7 @@ func getGlobalChaosOpts() (GlobalChaosOpts, error) {
 	}
 
 	return GlobalChaosOpts{
-		WaitBeforeCleanup: chaosWaitBeforeCleanup,
+		WaitBeforeRecover: chaosWaitBeforeRecover,
 		RunForever:        chaosRunForever,
 		Stage:             stage,
 	}, nil
@@ -385,9 +453,9 @@ func waitForDurationOrInterrupt(opts GlobalChaosOpts) {
 		<-waitForInterrupt()
 		config.Logger.Printf("Interrupt received. Beginning recovery...")
 	} else {
-		config.Logger.Printf("Failure injected. Waiting %s before recovery...", opts.WaitBeforeCleanup)
+		config.Logger.Printf("Failure injected. Waiting %s before recovery...", opts.WaitBeforeRecover)
 		select {
-		case <-time.After(opts.WaitBeforeCleanup):
+		case <-time.After(opts.WaitBeforeRecover):
 			config.Logger.Printf("Wait period complete. Beginning recovery...")
 		case <-waitForInterrupt():
 			config.Logger.Printf("Interrupt received. Beginning recovery...")

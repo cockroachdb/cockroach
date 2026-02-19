@@ -50,7 +50,7 @@ Examples:
   roachprod chaos network-partition mycluster --src 1 --dest 2,3 --type asymmetric --direction incoming
 
   # Run partition for 10 minutes before cleanup
-  roachprod chaos network-partition mycluster --src 1 --dest 2 --type bidirectional --wait-before-cleanup 10m
+  roachprod chaos network-partition mycluster --src 1 --dest 2 --type bidirectional --wait-before-recover 10m
 `,
 		Args: cobra.ExactArgs(1),
 		Run: Wrap(func(cmd *cobra.Command, args []string) error {
@@ -227,7 +227,7 @@ Examples:
 
   # Run with custom cleanup time
   roachprod chaos network-latency mycluster \
-    --src 1 --dest 2 --delay 500ms --wait-before-cleanup 15m
+    --src 1 --dest 2 --delay 500ms --wait-before-recover 15m
 `,
 		Args: cobra.ExactArgs(1),
 		Run: Wrap(func(cmd *cobra.Command, args []string) error {

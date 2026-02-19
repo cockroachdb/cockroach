@@ -48,7 +48,7 @@ Examples:
   roachprod chaos reset-vm mycluster --nodes 1 --run-forever
 
   # Reset VM with custom wait time before cleanup
-  roachprod chaos reset-vm mycluster --nodes 1 --wait-before-cleanup 15m
+  roachprod chaos reset-vm mycluster --nodes 1 --wait-before-recover 15m
 
   # For a secure cluster, specify the local path to certificates
   roachprod chaos reset-vm mycluster --nodes 1 --certs-dir /path/to/certs --secure
