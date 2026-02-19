@@ -327,13 +327,14 @@ func (r *Replica) initRaftMuLockedReplicaMuLocked(
 	// Initialize the Raft group. This may replace a Raft group that was installed
 	// for the uninitialized replica to process Raft requests or snapshots.
 	//
-	// We do this before the call to setDescLockedRaftMuLocked(), since it flips
-	// isInitialized and we'd like the Raft group to be in place before then.
+	// We do this before flipping isInitialized and we'd like the Raft group to
+	// be in place before then.
 	if err := r.initRaftGroupRaftMuLockedReplicaMuLocked(); err != nil {
 		return err
 	}
 
 	r.setDescLockedRaftMuLocked(r.AnnotateCtx(context.TODO()), desc)
+	r.isInitialized.Store(true)
 
 	// Only do this if there was a previous lease. This shouldn't be important
 	// to do but consider that the first lease which is obtained is back-dated
@@ -401,6 +402,7 @@ func (r *Replica) initFromSnapshotLockedRaftMuLocked(
 	}
 
 	r.setDescLockedRaftMuLocked(ctx, desc)
+	r.isInitialized.Store(true)
 	r.setStartKeyLocked(desc.StartKey)
 	return nil
 }
@@ -500,7 +502,6 @@ func (r *Replica) setDescLockedRaftMuLocked(ctx context.Context, desc *roachpb.R
 	}
 
 	r.rangeStr.store(r.replicaID, desc)
-	r.isInitialized.Store(true)
 	r.connectionClass.set(rpcbase.ConnectionClassForKey(desc.StartKey, defRaftConnClass))
 	r.concMgr.OnRangeDescUpdated(desc)
 	r.shMu.state.Desc = desc
