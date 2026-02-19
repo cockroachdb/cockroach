@@ -9,6 +9,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/auth"
 	provmodels "github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/models/provisionings"
@@ -26,11 +27,13 @@ const MaxIdentifierRetries = 3
 
 // Options contains configuration parameters for the provisionings service.
 type Options struct {
-	TemplatesDir   string
-	WorkingDirBase string
-	GCSStateBucket string
-	TofuBinary     string
-	WorkersEnabled bool
+	TemplatesDir      string
+	WorkingDirBase    string
+	TofuBinary        string
+	WorkersEnabled    bool
+	DefaultLifetime   time.Duration
+	LifetimeExtension time.Duration
+	GCWatcherInterval time.Duration
 }
 
 var (
@@ -50,6 +53,8 @@ const (
 	PermissionCreate     = TaskServiceName + ":create"
 	PermissionDestroyAll = TaskServiceName + ":destroy:all"
 	PermissionDestroyOwn = TaskServiceName + ":destroy:own"
+	PermissionUpdateAll  = TaskServiceName + ":update:all"
+	PermissionUpdateOwn  = TaskServiceName + ":update:own"
 )
 
 // IService is the interface for the provisionings service.
@@ -63,6 +68,7 @@ type IService interface {
 	DeleteProvisioning(ctx context.Context, l *logger.Logger, principal *auth.Principal, id uuid.UUID) error
 	GetProvisioningPlan(ctx context.Context, l *logger.Logger, principal *auth.Principal, id uuid.UUID) (json.RawMessage, error)
 	GetProvisioningOutputs(ctx context.Context, l *logger.Logger, principal *auth.Principal, id uuid.UUID) (map[string]interface{}, error)
+	ExtendLifetime(ctx context.Context, l *logger.Logger, principal *auth.Principal, id uuid.UUID) (provmodels.Provisioning, error)
 }
 
 // IProvisioningTaskHandler is the interface used by task handlers to call
@@ -71,6 +77,7 @@ type IService interface {
 type IProvisioningTaskHandler interface {
 	HandleProvision(ctx context.Context, l *logger.Logger, provisioningID uuid.UUID) error
 	HandleDestroy(ctx context.Context, l *logger.Logger, provisioningID uuid.UUID) error
+	HandleGC(ctx context.Context, l *logger.Logger) error
 }
 
 // InputCreateDTO is the service-layer DTO for creating a provisioning.

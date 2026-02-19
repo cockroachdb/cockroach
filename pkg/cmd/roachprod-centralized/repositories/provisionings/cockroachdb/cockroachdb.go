@@ -368,18 +368,20 @@ func (r *CRDBProvisioningsRepo) DeleteProvisioning(
 }
 
 // GetExpiredProvisionings returns provisionings where expires_at <= now()
-// and state is 'provisioned'. Used by the TTL watcher to schedule destroy
-// tasks.
+// and state is not destroyed or destroying.
 func (r *CRDBProvisioningsRepo) GetExpiredProvisionings(
 	ctx context.Context, l *logger.Logger,
 ) ([]provmodels.Provisioning, error) {
 	query := `SELECT ` + allColumns + ` FROM provisionings
 		WHERE expires_at IS NOT NULL
 		AND expires_at <= now()
-		AND state = $1
+		AND state NOT IN ($1, $2)
 		ORDER BY expires_at ASC`
 
-	rows, err := r.db.QueryContext(ctx, query, provmodels.ProvisioningStateProvisioned)
+	rows, err := r.db.QueryContext(ctx, query,
+		provmodels.ProvisioningStateDestroyed,
+		provmodels.ProvisioningStateDestroying,
+	)
 	if err != nil {
 		return nil, errors.Wrap(err, "query expired provisionings")
 	}

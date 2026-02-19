@@ -47,6 +47,7 @@ go_library(
         "//pkg/cmd/roachprod-centralized/services/health",
         "//pkg/cmd/roachprod-centralized/services/health/types",
         "//pkg/cmd/roachprod-centralized/services/provisionings",
+        "//pkg/cmd/roachprod-centralized/services/provisionings/templates",
         "//pkg/cmd/roachprod-centralized/services/provisionings/types",
         "//pkg/cmd/roachprod-centralized/services/public-dns",
         "//pkg/cmd/roachprod-centralized/services/public-dns/types",

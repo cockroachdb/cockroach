@@ -41,6 +41,7 @@ type IProvisioningsRepository interface {
 	// DeleteProvisioning removes a provisioning by ID.
 	DeleteProvisioning(ctx context.Context, l *logger.Logger, id uuid.UUID) error
 	// GetExpiredProvisionings returns provisionings where expires_at <= now()
-	// and state is 'provisioned'.
+	// and state is not destroyed or destroying. Used by the GC watcher to
+	// schedule destroy tasks.
 	GetExpiredProvisionings(ctx context.Context, l *logger.Logger) ([]provmodels.Provisioning, error)
 }

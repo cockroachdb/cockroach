@@ -12,6 +12,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	provmodels "github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/models/provisionings"
 	provisioningsrepmock "github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/repositories/provisionings/mocks"
@@ -55,12 +56,14 @@ func TestHandleProvision_CanceledContextStillPersistsFailure(t *testing.T) {
 
 	archive, checksum, templatesDir := makeSnapshotFixture(t)
 	svc := NewService(repo, envSvc, nil, provtypes.Options{
-		TemplatesDir:   templatesDir,
-		WorkingDirBase: t.TempDir(),
-		GCSStateBucket: "unit-test-bucket",
-		TofuBinary:     "tofu",
-		WorkersEnabled: true,
-	})
+		TemplatesDir:      templatesDir,
+		WorkingDirBase:    t.TempDir(),
+		TofuBinary:        "tofu",
+		WorkersEnabled:    true,
+		DefaultLifetime:   12 * time.Hour,
+		LifetimeExtension: 12 * time.Hour,
+		GCWatcherInterval: 5 * time.Minute,
+	}, templates.NewLocalBackend())
 	svc.executor = exec
 
 	provID := uuid.MakeV4()

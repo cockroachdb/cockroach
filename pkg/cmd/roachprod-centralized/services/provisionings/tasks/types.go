@@ -19,4 +19,7 @@ const (
 	ProvisioningsTaskProvision ProvisioningsTaskType = TaskServiceName + "_provision"
 	// ProvisioningsTaskDestroy is the task type for destroying infrastructure.
 	ProvisioningsTaskDestroy ProvisioningsTaskType = TaskServiceName + "_destroy"
+	// ProvisioningsTaskGC is the task type for garbage-collecting expired
+	// provisionings. Only one GC task runs at a time across all instances.
+	ProvisioningsTaskGC ProvisioningsTaskType = TaskServiceName + "_gc"
 )

@@ -355,14 +355,20 @@ func TestMemProvisioningsRepoExpired(t *testing.T) {
 		require.Equal(t, p.ID, result[0].ID)
 	})
 
-	t.Run("ExpiredButWrongState", func(t *testing.T) {
+	t.Run("ExpiredButExcludedState", func(t *testing.T) {
 		repo := NewProvisioningsRepository()
 
 		past := timeutil.Now().Add(-1 * time.Hour)
-		p := newTestProvisioning(t)
-		p.State = provmodels.ProvisioningStateFailed
-		p.ExpiresAt = &past
-		require.NoError(t, repo.StoreProvisioning(ctx, l, p))
+		// Destroyed and destroying are excluded from GC.
+		p1 := newTestProvisioning(t)
+		p1.State = provmodels.ProvisioningStateDestroyed
+		p1.ExpiresAt = &past
+		require.NoError(t, repo.StoreProvisioning(ctx, l, p1))
+
+		p2 := newTestProvisioning(t)
+		p2.State = provmodels.ProvisioningStateDestroying
+		p2.ExpiresAt = &past
+		require.NoError(t, repo.StoreProvisioning(ctx, l, p2))
 
 		result, err := repo.GetExpiredProvisionings(ctx, l)
 		require.NoError(t, err)

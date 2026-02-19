@@ -186,15 +186,14 @@ func runLocalProvision(cmd *cobra.Command, _ []string) error {
 	}
 
 	// Step 6: WriteBackendTF with local backend.
-	backendContent := templates.GenerateLocalBackendTF()
+	localBackend := templates.NewLocalBackend()
+	backendContent := localBackend.GenerateTF("")
 	if err := templates.WriteBackendTF(workingDir, backendContent); err != nil {
 		return errors.Wrap(err, "write backend.tf")
 	}
 
 	// Step 7: BuildVarMaps -> assemble vars and envVars.
 	// No environment resolution in the local command — use --var flags only.
-	// The local backend doesn't need backend credentials, but we pass
-	// GCS backend env vars in case the user is testing with a GCS backend.
 	tfVars, envVars, err := vars.BuildVarMaps(vars.BuildVarMapsInput{
 		UserVars:       userVars,
 		TemplateVars:   tmpl.Variables,
@@ -202,7 +201,7 @@ func runLocalProvision(cmd *cobra.Command, _ []string) error {
 		TemplateType:   tmpl.Name,
 		Environment:    environment,
 		Owner:          owner,
-		BackendEnvVars: templates.GCSBackendEnvVars(os.Getenv("GOOGLE_APPLICATION_CREDENTIALS")),
+		BackendEnvVars: localBackend.EnvVars(),
 	})
 	if err != nil {
 		return errors.Wrap(err, "build variable maps")
@@ -294,7 +293,7 @@ func runLocalDestroy(p localDestroyParams) error {
 		TemplateType:   p.tmpl.Name,
 		Environment:    p.environment,
 		Owner:          p.owner,
-		BackendEnvVars: templates.GCSBackendEnvVars(os.Getenv("GOOGLE_APPLICATION_CREDENTIALS")),
+		BackendEnvVars: templates.NewLocalBackend().EnvVars(),
 	})
 	if err != nil {
 		return errors.Wrap(err, "build variable maps")

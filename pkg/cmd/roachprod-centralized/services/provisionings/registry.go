@@ -22,6 +22,7 @@ func (s *Service) GetHandledTasks() map[string]stasks.ITask {
 	return map[string]stasks.ITask{
 		string(ptasks.ProvisioningsTaskProvision): &ptasks.TaskProvision{Service: s},
 		string(ptasks.ProvisioningsTaskDestroy):   &ptasks.TaskDestroy{Service: s},
+		string(ptasks.ProvisioningsTaskGC):        &ptasks.TaskGC{Service: s},
 	}
 }
 
@@ -35,6 +36,11 @@ func (s *Service) CreateTaskInstance(taskType string) (tasks.ITask, error) {
 		}, nil
 	case string(ptasks.ProvisioningsTaskDestroy):
 		return &ptasks.TaskDestroy{
+			Task:    tasks.Task{Type: taskType},
+			Service: s,
+		}, nil
+	case string(ptasks.ProvisioningsTaskGC):
+		return &ptasks.TaskGC{
 			Task:    tasks.Task{Type: taskType},
 			Service: s,
 		}, nil

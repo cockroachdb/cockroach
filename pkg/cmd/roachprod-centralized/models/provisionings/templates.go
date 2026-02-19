@@ -14,8 +14,9 @@ import (
 // TemplateMetadata holds the name and description parsed from a template's
 // template.yaml or template.yml marker file.
 type TemplateMetadata struct {
-	Name        string `yaml:"name" json:"name"`
-	Description string `yaml:"description,omitempty" json:"description,omitempty"`
+	Name            string `yaml:"name" json:"name"`
+	Description     string `yaml:"description,omitempty" json:"description,omitempty"`
+	DefaultLifetime string `yaml:"default_lifetime,omitempty" json:"default_lifetime,omitempty"`
 }
 
 // Template represents a discovered terraform template with its parsed variable

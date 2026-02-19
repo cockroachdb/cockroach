@@ -48,6 +48,7 @@ import (
 	shealth "github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/services/health"
 	shealthtypes "github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/services/health/types"
 	sprovisionings "github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/services/provisionings"
+	sprovtemplates "github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/services/provisionings/templates"
 	sprovtypes "github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/services/provisionings/types"
 	spublicdns "github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/services/public-dns"
 	spublicdnstypes "github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/services/public-dns/types"
@@ -334,17 +335,45 @@ func NewServicesFromConfig(
 	// Create the provisionings service (conditionally).
 	var provisioningsService *sprovisionings.Service
 	if cfg.Provisionings.Enabled {
+		defaultLifetime, err := time.ParseDuration(cfg.Provisionings.DefaultLifetime)
+		if err != nil {
+			return nil, errors.Wrapf(err, "parse provisionings default lifetime %q", cfg.Provisionings.DefaultLifetime)
+		}
+		lifetimeExtension, err := time.ParseDuration(cfg.Provisionings.LifetimeExtension)
+		if err != nil {
+			return nil, errors.Wrapf(err, "parse provisionings lifetime extension %q", cfg.Provisionings.LifetimeExtension)
+		}
+		gcWatcherInterval, err := time.ParseDuration(cfg.Provisionings.GCWatcherInterval)
+		if err != nil {
+			return nil, errors.Wrapf(err, "parse provisionings GC watcher interval %q", cfg.Provisionings.GCWatcherInterval)
+		}
+
+		// Create the backend for terraform state storage.
+		var provBackend sprovtemplates.Backend
+		if cfg.Provisionings.GCSStateBucket != "" {
+			gcsClient, err := storage.NewClient(appCtx)
+			if err != nil {
+				return nil, errors.Wrap(err, "create GCS client for provisioning state backend")
+			}
+			provBackend = sprovtemplates.NewGCSBackend(gcsClient, cfg.Provisionings.GCSStateBucket)
+		} else {
+			provBackend = sprovtemplates.NewLocalBackend()
+		}
+
 		provisioningsService = sprovisionings.NewService(
 			provisioningsRepository,
 			environmentsService,
 			taskService,
 			sprovtypes.Options{
-				TemplatesDir:   cfg.Provisionings.TemplatesDir,
-				WorkingDirBase: cfg.Provisionings.WorkingDirBase,
-				GCSStateBucket: cfg.Provisionings.GCSStateBucket,
-				TofuBinary:     cfg.Provisionings.TofuBinary,
-				WorkersEnabled: cfg.Tasks.Workers > 0,
+				TemplatesDir:      cfg.Provisionings.TemplatesDir,
+				WorkingDirBase:    cfg.Provisionings.WorkingDirBase,
+				TofuBinary:        cfg.Provisionings.TofuBinary,
+				WorkersEnabled:    cfg.Tasks.Workers > 0,
+				DefaultLifetime:   defaultLifetime,
+				LifetimeExtension: lifetimeExtension,
+				GCWatcherInterval: gcWatcherInterval,
 			},
+			provBackend,
 		)
 	}
 

@@ -264,25 +264,9 @@ func TestSnapshotExcludesMarkerFile(t *testing.T) {
 	assert.True(t, os.IsNotExist(err), "template.yaml should not be in the snapshot")
 }
 
-func TestGenerateBackendTF(t *testing.T) {
-	content := GenerateBackendTF(BackendConfig{
-		Bucket: "my-bucket",
-		Prefix: "provisioning-abc12345",
-	})
-	assert.Contains(t, content, `bucket = "my-bucket"`)
-	assert.Contains(t, content, `prefix = "provisioning-abc12345"`)
-	assert.Contains(t, content, `backend "gcs"`)
-}
-
-func TestGenerateLocalBackendTF(t *testing.T) {
-	content := GenerateLocalBackendTF()
-	assert.Contains(t, content, `backend "local"`)
-	assert.Contains(t, content, `path = "terraform.tfstate"`)
-}
-
 func TestWriteBackendTF(t *testing.T) {
 	dir := t.TempDir()
-	content := GenerateBackendTF(BackendConfig{Bucket: "test", Prefix: "test"})
+	content := NewLocalBackend().GenerateTF("")
 	err := WriteBackendTF(dir, content)
 	require.NoError(t, err)
 

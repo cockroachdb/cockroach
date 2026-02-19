@@ -4,6 +4,9 @@ go_library(
     name = "templates",
     srcs = [
         "backend.go",
+        "backend_gcs.go",
+        "backend_interface.go",
+        "backend_local.go",
         "files.go",
         "manager.go",
         "parser.go",
@@ -14,6 +17,7 @@ go_library(
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/cmd/roachprod-centralized/models/provisionings",
+        "//pkg/cmd/roachprod-centralized/utils/logger",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_hashicorp_hcl_v2//:hcl",
         "@com_github_hashicorp_hcl_v2//ext/typeexpr",
@@ -21,13 +25,16 @@ go_library(
         "@com_github_zclconf_go_cty//cty",
         "@com_github_zclconf_go_cty//cty/convert",
         "@com_github_zclconf_go_cty//cty/json",
+        "@com_google_cloud_go_storage//:storage",
         "@in_gopkg_yaml_v2//:yaml_v2",
+        "@org_golang_google_api//iterator",
     ],
 )
 
 go_test(
     name = "templates_test",
     srcs = [
+        "backend_test.go",
         "manager_test.go",
         "parser_test.go",
         "validate_test.go",
@@ -35,6 +42,7 @@ go_test(
     embed = [":templates"],
     deps = [
         "//pkg/cmd/roachprod-centralized/models/provisionings",
+        "//pkg/cmd/roachprod-centralized/utils/logger",
         "//pkg/testutils/skip",
         "@com_github_stretchr_testify//assert",
         "@com_github_stretchr_testify//require",

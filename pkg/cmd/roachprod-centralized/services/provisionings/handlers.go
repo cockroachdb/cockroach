@@ -53,11 +53,9 @@ func (s *Service) HandleProvision(
 		return s.failProvision(ctx, l, &prov, errors.Wrap(err, "extract snapshot"))
 	}
 
-	// Write backend.tf for GCS state storage.
-	backendContent := templates.GenerateBackendTF(templates.BackendConfig{
-		Bucket: s.options.GCSStateBucket,
-		Prefix: "provisioning-" + prov.ID.String(),
-	})
+	// Write backend.tf for state storage.
+	statePrefix := "provisioning-" + prov.ID.String()
+	backendContent := s.backend.GenerateTF(statePrefix)
 	if err := templates.WriteBackendTF(workingDir, backendContent); err != nil {
 		return s.failProvision(ctx, l, &prov, errors.Wrap(err, "write backend.tf"))
 	}
@@ -77,7 +75,7 @@ func (s *Service) HandleProvision(
 		TemplateType:   prov.TemplateType,
 		Environment:    prov.Environment,
 		Owner:          prov.Owner,
-		BackendEnvVars: templates.GCSBackendEnvVars(os.Getenv("GOOGLE_APPLICATION_CREDENTIALS")),
+		BackendEnvVars: s.backend.EnvVars(),
 	})
 	if err != nil {
 		return s.failProvision(ctx, l, &prov, errors.Wrap(err, "build var maps"))
@@ -190,10 +188,8 @@ func (s *Service) HandleDestroy(
 	}
 
 	// Write backend.tf.
-	backendContent := templates.GenerateBackendTF(templates.BackendConfig{
-		Bucket: s.options.GCSStateBucket,
-		Prefix: "provisioning-" + prov.ID.String(),
-	})
+	statePrefix := "provisioning-" + prov.ID.String()
+	backendContent := s.backend.GenerateTF(statePrefix)
 	if err := templates.WriteBackendTF(workingDir, backendContent); err != nil {
 		return s.failDestroy(ctx, l, &prov, errors.Wrap(err, "write backend.tf"))
 	}
@@ -213,7 +209,7 @@ func (s *Service) HandleDestroy(
 		TemplateType:   prov.TemplateType,
 		Environment:    prov.Environment,
 		Owner:          prov.Owner,
-		BackendEnvVars: templates.GCSBackendEnvVars(os.Getenv("GOOGLE_APPLICATION_CREDENTIALS")),
+		BackendEnvVars: s.backend.EnvVars(),
 	})
 	if err != nil {
 		return s.failDestroy(ctx, l, &prov, errors.Wrap(err, "build var maps"))
@@ -239,14 +235,17 @@ func (s *Service) HandleDestroy(
 		return s.failDestroy(ctx, l, &prov, errors.Wrap(err, "tofu destroy"))
 	}
 
-	// TODO: In the future, clean up orphaned GCS state prefixes via
-	// storage.Client.Bucket().Objects() for the "provisioning-<id>" prefix.
-	// Working directory cleanup is handled by the defer at the top of this
-	// function.
+	// Best-effort backend state cleanup.
+	if err := s.backend.CleanupState(ctx, l, statePrefix); err != nil {
+		l.Warn("failed to clean up backend state",
+			slog.String("prefix", statePrefix), slog.Any("error", err))
+	}
 
 	// Done
 	prov.SetState(provmodels.ProvisioningStateDestroyed, l)
 	prov.LastStep = "done"
+	prov.PlanOutput = nil
+	prov.Outputs = make(map[string]interface{}) // stores as {} in JSONB
 	prov.UpdatedAt = time.Now().UTC()
 	if err := s.repo.UpdateProvisioning(ctx, l, prov); err != nil {
 		return errors.Wrap(err, "update state to destroyed")

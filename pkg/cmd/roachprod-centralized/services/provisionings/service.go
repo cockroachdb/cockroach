@@ -10,7 +10,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
-	"os"
 	"sync"
 	"time"
 
@@ -42,6 +41,7 @@ type Service struct {
 	executor    tofu.IExecutor
 	templateMgr *templates.Manager
 	options     types.Options
+	backend     templates.Backend // GCS or local state backend
 
 	backgroundJobsCancelFunc context.CancelFunc
 	backgroundJobsWg         *sync.WaitGroup
@@ -53,6 +53,7 @@ func NewService(
 	envService envtypes.IService,
 	taskService stasks.IService,
 	opts types.Options,
+	backend templates.Backend,
 ) *Service {
 	return &Service{
 		repo:        repo,
@@ -61,6 +62,7 @@ func NewService(
 		executor:    tofu.NewExecutor(opts.TofuBinary),
 		templateMgr: templates.NewManager(opts.TemplatesDir),
 		options:     opts,
+		backend:     backend,
 	}
 }
 
@@ -87,7 +89,32 @@ func (s *Service) StartBackgroundWork(
 		return nil
 	}
 	ctx, s.backgroundJobsCancelFunc = context.WithCancel(context.WithoutCancel(ctx))
-	// Future: start TTL watcher here.
+
+	// GC scheduler: periodically creates a GC task that scans for expired
+	// provisionings. Using the task system ensures only one instance runs
+	// the scan at a time, preventing duplicate destroy task creation.
+	s.backgroundJobsWg.Add(1)
+	go func() {
+		defer s.backgroundJobsWg.Done()
+		l.Info("GC scheduler started",
+			slog.Duration("interval", s.options.GCWatcherInterval))
+
+		ticker := time.NewTicker(s.options.GCWatcherInterval)
+		defer ticker.Stop()
+
+		for {
+			select {
+			case <-ctx.Done():
+				l.Debug("GC scheduler stopped")
+				return
+			case <-ticker.C:
+				if err := s.scheduleGCTaskIfNeeded(ctx, l); err != nil {
+					l.Warn("GC scheduler error", slog.Any("error", err))
+				}
+			}
+		}
+	}()
+
 	return nil
 }
 
@@ -106,6 +133,100 @@ func (s *Service) Shutdown(ctx context.Context) error {
 		return ctx.Err()
 	case <-done:
 		return nil
+	}
+}
+
+// scheduleGCTaskIfNeeded creates a GC task if no recent one exists.
+// This prevents duplicate GC scans when multiple instances are running.
+func (s *Service) scheduleGCTaskIfNeeded(ctx context.Context, l *logger.Logger) error {
+	if s.taskService == nil {
+		return nil
+	}
+	task, err := s.taskService.CreateTaskIfNotRecentlyScheduled(
+		ctx, l,
+		ptasks.NewTaskGC(),
+		s.options.GCWatcherInterval,
+	)
+	if err != nil {
+		return err
+	}
+	if task != nil {
+		l.Info("GC task scheduled", slog.String("task_id", task.GetID().String()))
+	}
+	return nil
+}
+
+// HandleGC queries expired provisionings and either marks them destroyed
+// directly (if no infra was created) or schedules destroy tasks.
+// Runs as a task without auth context (system operation).
+//
+// The repository query already excludes destroyed and destroying states.
+// For state=new, no infra exists so we mark destroyed immediately. For
+// all other states, we delegate to gcScheduleDestroy which checks for
+// active tasks before scheduling (handles both in-flight and idle states).
+func (s *Service) HandleGC(ctx context.Context, l *logger.Logger) error {
+	expired, err := s.repo.GetExpiredProvisionings(ctx, l)
+	if err != nil {
+		return errors.Wrap(err, "query expired provisionings")
+	}
+
+	for _, prov := range expired {
+		switch prov.State {
+		case provmodels.ProvisioningStateNew:
+			// No infra created — mark destroyed immediately.
+			prov.SetState(provmodels.ProvisioningStateDestroyed, l)
+			prov.UpdatedAt = timeutil.Now().UTC()
+			if err := s.repo.UpdateProvisioning(ctx, l, prov); err != nil {
+				l.Warn("GC: failed to mark new provisioning as destroyed",
+					slog.String("id", prov.ID.String()), slog.Any("error", err))
+			}
+
+		default:
+			// All other states (initializing, planning, provisioning,
+			// provisioned, failed, destroy_failed): schedule destroy.
+			// gcScheduleDestroy checks hasActiveTask internally and skips
+			// if a task is already pending/running.
+			s.gcScheduleDestroy(ctx, l, &prov)
+		}
+	}
+	return nil
+}
+
+// gcScheduleDestroy transitions a provisioning to destroying and creates a
+// destroy task. Checks for an already-scheduled task to avoid duplicates.
+// Logs warnings on errors instead of returning them (best-effort GC).
+func (s *Service) gcScheduleDestroy(
+	ctx context.Context, l *logger.Logger, prov *provmodels.Provisioning,
+) {
+	// Check if a destroy task is already pending or running for this
+	// provisioning to avoid creating duplicates when GC runs faster than
+	// task processing.
+	active, err := s.hasActiveTask(ctx, l, prov.ID)
+	if err != nil {
+		l.Warn("GC: failed to check active tasks",
+			slog.String("id", prov.ID.String()), slog.Any("error", err))
+		return
+	}
+	if active {
+		return
+	}
+
+	prov.SetState(provmodels.ProvisioningStateDestroying, l)
+	prov.UpdatedAt = timeutil.Now().UTC()
+	if err := s.repo.UpdateProvisioning(ctx, l, *prov); err != nil {
+		l.Warn("GC: failed to update state to destroying",
+			slog.String("id", prov.ID.String()), slog.Any("error", err))
+		return
+	}
+	task, err := ptasks.NewTaskDestroy(prov.ID)
+	if err != nil {
+		l.Warn("GC: failed to create destroy task",
+			slog.String("id", prov.ID.String()), slog.Any("error", err))
+		return
+	}
+	if _, err := s.taskService.CreateTask(ctx, l, task); err != nil {
+		l.Warn("GC: failed to schedule destroy task",
+			slog.String("id", prov.ID.String()), slog.Any("error", err))
 	}
 }
 
@@ -186,6 +307,40 @@ func (s *Service) GetProvisioningOutputs(
 	return prov.Outputs, nil
 }
 
+// ExtendLifetime extends the provisioning's expiration by the configured
+// extension duration. Cannot extend destroyed provisionings.
+func (s *Service) ExtendLifetime(
+	ctx context.Context, l *logger.Logger, principal *auth.Principal, id uuid.UUID,
+) (provmodels.Provisioning, error) {
+	prov, err := s.getProvisioningWithAccess(ctx, l, principal, id,
+		types.PermissionUpdateAll, types.PermissionUpdateOwn)
+	if err != nil {
+		return provmodels.Provisioning{}, err
+	}
+
+	if prov.State == provmodels.ProvisioningStateDestroyed {
+		return provmodels.Provisioning{}, types.ErrInvalidState
+	}
+
+	now := timeutil.Now().UTC()
+	if prov.ExpiresAt != nil {
+		extended := prov.ExpiresAt.Add(s.options.LifetimeExtension)
+		prov.ExpiresAt = &extended
+	} else {
+		extended := now.Add(s.options.LifetimeExtension)
+		prov.ExpiresAt = &extended
+	}
+	prov.UpdatedAt = now
+
+	if err := s.repo.UpdateProvisioning(ctx, l, prov); err != nil {
+		return provmodels.Provisioning{}, err
+	}
+
+	prov.PlanOutput = nil
+	prov.Outputs = nil
+	return prov, nil
+}
+
 // getProvisioningWithAccess loads a provisioning from the repo and checks
 // access. Returns ErrProvisioningNotFound if the provisioning doesn't exist
 // or if the principal lacks the required permissions.
@@ -247,7 +402,7 @@ func (s *Service) CreateProvisioning(
 		TemplateType:   input.TemplateType,
 		Environment:    input.Environment,
 		Owner:          getOwnerEmail(principal),
-		BackendEnvVars: templates.GCSBackendEnvVars(os.Getenv("GOOGLE_APPLICATION_CREDENTIALS")),
+		BackendEnvVars: s.backend.EnvVars(),
 	}); err != nil {
 		return provmodels.Provisioning{}, nil, utils.NewPublicError(err)
 	}
@@ -258,16 +413,28 @@ func (s *Service) CreateProvisioning(
 		return provmodels.Provisioning{}, nil, errors.Wrap(err, "snapshot template")
 	}
 
-	// Parse lifetime if provided.
-	var lifetime time.Duration
+	// Determine lifetime: user input > template default > global default.
+	lifetime := s.options.DefaultLifetime
 	if input.Lifetime != "" {
 		lifetime, err = time.ParseDuration(input.Lifetime)
 		if err != nil {
 			return provmodels.Provisioning{}, nil, types.ErrInvalidLifetime
 		}
+	} else if tmpl.DefaultLifetime != "" {
+		parsed, parseErr := time.ParseDuration(tmpl.DefaultLifetime)
+		if parseErr != nil {
+			l.Warn("invalid default_lifetime in template metadata, using global default",
+				slog.String("template", input.TemplateType),
+				slog.String("default_lifetime", tmpl.DefaultLifetime),
+				slog.Any("error", parseErr),
+			)
+		} else {
+			lifetime = parsed
+		}
 	}
 
 	now := timeutil.Now().UTC()
+	expiresAt := now.Add(lifetime)
 	prov := provmodels.Provisioning{
 		ID:               uuid.MakeV4(),
 		Environment:      input.Environment,
@@ -278,13 +445,9 @@ func (s *Service) CreateProvisioning(
 		Variables:        input.Variables,
 		Owner:            getOwnerEmail(principal),
 		Lifetime:         lifetime,
+		ExpiresAt:        &expiresAt,
 		CreatedAt:        now,
 		UpdatedAt:        now,
-	}
-
-	if lifetime > 0 {
-		expiresAt := now.Add(lifetime)
-		prov.ExpiresAt = &expiresAt
 	}
 
 	// Generate identifier and store provisioning (retry on collision).
@@ -419,7 +582,12 @@ func (s *Service) DeleteProvisioning(
 		return types.ErrInvalidState
 	}
 
-	// TODO: clean up GCS state prefix for "provisioning-<id>".
+	// Best-effort backend state cleanup.
+	statePrefix := "provisioning-" + prov.ID.String()
+	if err := s.backend.CleanupState(ctx, l, statePrefix); err != nil {
+		l.Warn("failed to clean up backend state during delete",
+			slog.String("prefix", statePrefix), slog.Any("error", err))
+	}
 	return s.repo.DeleteProvisioning(ctx, l, prov.ID)
 }
 
@@ -505,4 +673,9 @@ func (s *Service) GetTemplateMgr() *templates.Manager {
 // GetOptions returns the service options (used by task handlers).
 func (s *Service) GetOptions() types.Options {
 	return s.options
+}
+
+// GetBackend returns the backend (used by task handlers).
+func (s *Service) GetBackend() templates.Backend {
+	return s.backend
 }

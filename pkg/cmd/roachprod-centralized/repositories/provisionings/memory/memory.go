@@ -165,7 +165,7 @@ func (r *MemProvisioningsRepo) DeleteProvisioning(
 }
 
 // GetExpiredProvisionings returns provisionings where expires_at <= now()
-// and state is 'provisioned'.
+// and state is not destroyed or destroying.
 func (r *MemProvisioningsRepo) GetExpiredProvisionings(
 	ctx context.Context, l *logger.Logger,
 ) ([]provmodels.Provisioning, error) {
@@ -175,7 +175,9 @@ func (r *MemProvisioningsRepo) GetExpiredProvisionings(
 	now := timeutil.Now()
 	var result []provmodels.Provisioning
 	for _, p := range r.data {
-		if p.ExpiresAt != nil && !p.ExpiresAt.After(now) && p.State == provmodels.ProvisioningStateProvisioned {
+		if p.ExpiresAt != nil && !p.ExpiresAt.After(now) &&
+			p.State != provmodels.ProvisioningStateDestroyed &&
+			p.State != provmodels.ProvisioningStateDestroying {
 			result = append(result, copyProvisioning(p))
 		}
 	}

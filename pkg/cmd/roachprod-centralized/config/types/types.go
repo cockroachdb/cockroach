@@ -76,11 +76,14 @@ type Config struct {
 		GCPProject string `env:"GCP_PROJECT" default:"" description:"GCP project for auto-writing secrets to Secret Manager"`
 	} `env:"SECRETS" description:"Secret management configuration"`
 	Provisionings struct {
-		Enabled        bool   `env:"ENABLED" default:"false" description:"Enable terraform provisioning"`
-		TemplatesDir   string `env:"TEMPLATES_DIR" default:"" description:"Path to terraform templates directory"`
-		WorkingDirBase string `env:"WORKING_DIR_BASE" default:"/tmp/roachprod-provisionings" description:"Base dir for terraform working dirs"`
-		TofuBinary     string `env:"TOFU_BINARY" default:"tofu" description:"Path to OpenTofu binary"`
-		GCSStateBucket string `env:"GCS_STATE_BUCKET" default:"" description:"GCS bucket for terraform state backend"`
+		Enabled           bool   `env:"ENABLED" default:"false" description:"Enable terraform provisioning"`
+		TemplatesDir      string `env:"TEMPLATES_DIR" default:"" description:"Path to terraform templates directory"`
+		WorkingDirBase    string `env:"WORKING_DIR_BASE" default:"/tmp/roachprod-provisionings" description:"Base dir for terraform working dirs"`
+		TofuBinary        string `env:"TOFU_BINARY" default:"tofu" description:"Path to OpenTofu binary"`
+		GCSStateBucket    string `env:"GCS_STATE_BUCKET" default:"" description:"GCS bucket for terraform state backend"`
+		DefaultLifetime   string `env:"DEFAULT_LIFETIME" default:"12h" description:"Default provisioning lifetime when template doesn't specify one"`
+		LifetimeExtension string `env:"LIFETIME_EXTENSION" default:"12h" description:"Amount to extend lifetime by"`
+		GCWatcherInterval string `env:"GC_WATCHER_INTERVAL" default:"5m" description:"Interval for GC watcher polling"`
 	} `env:"PROVISIONINGS" description:"Terraform provisioning configuration"`
 }
 

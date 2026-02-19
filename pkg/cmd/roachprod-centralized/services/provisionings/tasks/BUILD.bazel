@@ -4,6 +4,7 @@ go_library(
     name = "tasks",
     srcs = [
         "destroy.go",
+        "gc.go",
         "provision.go",
         "types.go",
     ],

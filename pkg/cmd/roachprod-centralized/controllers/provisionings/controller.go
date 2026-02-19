@@ -131,6 +131,17 @@ func NewController(service provtypes.IService) *Controller {
 				},
 			},
 		},
+		&controllers.ControllerHandler{
+			Method: "PATCH",
+			Path:   types.ControllerPath + "/:id/lifetime",
+			Func:   ctrl.ExtendLifetime,
+			Authorization: &auth.AuthorizationRequirement{
+				AnyOf: []string{
+					provtypes.PermissionUpdateAll,
+					provtypes.PermissionUpdateOwn,
+				},
+			},
+		},
 	}
 	return ctrl
 }
@@ -308,6 +319,29 @@ func (ctrl *Controller) GetOutputs(c *gin.Context) {
 		id,
 	)
 	ctrl.Render(c, types.NewOutputsResult(outputs, err))
+}
+
+// ExtendLifetime extends the expiration of a provisioning.
+func (ctrl *Controller) ExtendLifetime(c *gin.Context) {
+	principal, _ := controllers.GetPrincipal(c)
+
+	id, err := parseUUID(c.Param("id"))
+	if err != nil {
+		ctrl.Render(c, &controllers.BadRequestResult{Error: err})
+		return
+	}
+
+	prov, err := ctrl.service.ExtendLifetime(
+		c.Request.Context(),
+		ctrl.GetRequestLogger(c),
+		principal,
+		id,
+	)
+	if err != nil {
+		ctrl.Render(c, types.NewProvisioningResult(nil, nil, err))
+		return
+	}
+	ctrl.Render(c, types.NewProvisioningResult(&prov, nil, nil))
 }
 
 // parseUUID parses a UUID string and returns a user-friendly error.
