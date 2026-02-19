@@ -1,0 +1,185 @@
+# Investigate Test Failure
+#
+# Triggers when a collaborator comments `/investigate` on a test failure
+# issue. Invokes Claude to autonomously analyze the failure and post
+# findings as a comment.
+#
+# Manual testing via workflow_dispatch:
+#
+#   Changes to this workflow (especially to permissions, allowed tools,
+#   or the agent prompt) should be reviewed by SecEng before testing or
+#   merging, as public-facing AI workflows require sign-off.
+#
+#   Use --ref to point at a branch containing the workflow file:
+#
+#     gh workflow run investigate.yml \
+#       --repo cockroachdb/cockroach \
+#       --ref your-branch-name \
+#       -f issue_number=163542
+#
+#   When triggered via dispatch, findings are uploaded as a workflow
+#   artifact (visible in the run's "Artifacts" section) but not posted
+#   as a comment. The artifact is uploaded regardless of trigger type.
+#
+#   To test on a personal fork (where Vertex AI OIDC is unavailable):
+#
+#   1. Add an ANTHROPIC_API_KEY repository secret to the fork. The
+#      workflow detects this and uses the API key directly instead of
+#      Vertex.
+#
+#   2. Copy the test failure issue to your fork (the agent reads the
+#      issue by number from the workflow's own repo):
+#
+#        BODY=$(gh issue view 163542 --repo cockroachdb/cockroach --json body -q .body)
+#        gh issue create --repo <you>/cockroach --title "..." --body "$BODY"
+#
+#   3. The checkout is a blobless clone with full history, so git log
+#      and git blame work without deepening. The failure SHA must still
+#      be reachable from the fork's remote. Push it to a throwaway
+#      branch if needed:
+#
+#        git push <your-fork-remote> <failure-sha>:refs/heads/investigate-sha
+#
+#   4. Trigger the workflow. Dispatch defaults to a cheaper model
+#      (Sonnet 4.5); add -f cheap=false for Opus 4.6:
+#
+#        gh workflow run investigate.yml \
+#          --repo <you>/cockroach \
+#          --ref agent-workflow-investigate \
+#          -f issue_number=<fork-issue-number>
+
+name: Investigate Test Failure
+
+on:
+  issue_comment:
+    types: [created]
+  workflow_dispatch:
+    inputs:
+      issue_number:
+        description: 'Issue number to investigate'
+        required: true
+      comment_body:
+        description: 'Simulated trigger comment'
+        default: '/investigate'
+      cheap:
+        description: 'Use a cheaper model (claude-sonnet-4-5)'
+        type: boolean
+        default: true
+      smoke_test:
+        description: 'Run a tool smoke test instead of a real investigation'
+        type: boolean
+        default: false
+
+jobs:
+  investigate:
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event.issue.pull_request == null &&
+       (github.event.comment.body == '/investigate' ||
+        startsWith(github.event.comment.body, '/investigate ')) &&
+       (github.event.comment.author_association == 'COLLABORATOR' ||
+        github.event.comment.author_association == 'MEMBER' ||
+        github.event.comment.author_association == 'OWNER'))
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    permissions:
+      contents: read
+      issues: write
+      id-token: write
+    env:
+      ISSUE_NUMBER: ${{ inputs.issue_number || github.event.issue.number }}
+      COMMENT_BODY: ${{ inputs.comment_body || github.event.comment.body }}
+      HAS_API_KEY: ${{ secrets.ANTHROPIC_API_KEY != '' }}
+    steps:
+      - name: Acknowledge trigger
+        if: github.event_name == 'issue_comment'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh api repos/${{ github.repository }}/issues/comments/${{ github.event.comment.id }}/reactions \
+            -f content=eyes
+
+      # Blobless clone: fetches the full commit graph (so git log,
+      # git blame, etc. work immediately) but defers downloading file
+      # contents until they're actually accessed. Much faster than a
+      # full clone of the cockroach repo while still giving the agent
+      # full history without manual deepening.
+      - name: Checkout repository
+        uses: actions/checkout@v5
+        with:
+          filter: blob:none
+          fetch-depth: 0
+
+      - name: Create fetch-url wrapper
+        run: |
+          cat > /usr/local/bin/fetch-url <<'WRAPPER'
+          #!/bin/bash
+          set -euo pipefail
+          url="${1:?Usage: fetch-url URL [OUTPUT_FILE]}"
+          if [ -n "${2:-}" ]; then
+            exec curl -fsSL -o "$2" "$url"
+          else
+            exec curl -fsSL "$url"
+          fi
+          WRAPPER
+          chmod +x /usr/local/bin/fetch-url
+
+      # Vertex AI auth for cockroachdb/cockroach. Skipped when an
+      # ANTHROPIC_API_KEY secret is set (e.g. on a personal fork).
+      - name: Authenticate to Google Cloud
+        if: env.HAS_API_KEY != 'true'
+        uses: 'google-github-actions/auth@v3'
+        with:
+          project_id: 'vertex-model-runners'
+          service_account: 'ai-review@dev-inf-prod.iam.gserviceaccount.com'
+          workload_identity_provider: 'projects/72497726731/locations/global/workloadIdentityPools/ai-review/providers/ai-review'
+
+      - name: Investigate
+        uses: cockroachdb/claude-code-action@v1
+        env:
+          ANTHROPIC_VERTEX_PROJECT_ID: ${{ env.HAS_API_KEY != 'true' && 'vertex-model-runners' || '' }}
+          CLOUD_ML_REGION: ${{ env.HAS_API_KEY != 'true' && 'global' || '' }}
+        with:
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          use_vertex: ${{ env.HAS_API_KEY != 'true' && 'true' || 'false' }}
+          # Permissions are passed via --allowedTools using the colon
+          # format (Bash(cmd:args)) because cockroachdb/claude-code-action@v1
+          # (Claude Code 2.0.1) ignores permissions set via the `settings`
+          # input — tools end up denied even though settings.json is written
+          # correctly. The newer space format (Bash(cmd args)) and settings-
+          # based permissions may work after upgrading the action.
+          claude_args: |
+            --model ${{ inputs.cheap == true && 'claude-sonnet-4-5' || 'claude-opus-4-6' }}
+            --allowedTools "Write,Read,Grep,Glob,WebFetch,Bash(cat:*),Bash(head:*),Bash(tail:*),Bash(grep:*),Bash(rg:*),Bash(awk:*),Bash(cut:*),Bash(tr:*),Bash(sort:*),Bash(uniq:*),Bash(wc:*),Bash(tee:*),Bash(diff:*),Bash(file:*),Bash(strings:*),Bash(jq:*),Bash(ls:*),Bash(find:*),Bash(tree:*),Bash(stat:*),Bash(du:*),Bash(mkdir:*),Bash(git:*),Bash(gh issue view:*),Bash(gh issue list:*),Bash(gh pr view:*),Bash(gh pr list:*),Bash(gh pr diff:*),Bash(gh search:*),Bash(fetch-url:*),Bash(unzip:*),Bash(tar x*),Bash(tar -x*),Bash(tar --extract:*),Bash(go mod download:*),Bash(go env:*)"
+          prompt: |
+            Read and follow the instructions in the prompt file
+            `.github/prompts/${{ inputs.smoke_test == true && 'investigate-smoke' || 'investigate' }}.md`.
+
+            REPO: ${{ github.repository }}
+            ISSUE NUMBER: ${{ env.ISSUE_NUMBER }}
+            TRIGGER COMMENT: ${{ env.COMMENT_BODY }}
+            WORKFLOW RUN: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+
+      - name: Upload findings
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: investigation-findings
+          path: artifacts/findings.md
+          if-no-files-found: ignore
+
+      - name: Post findings
+        if: always() && github.event_name == 'issue_comment'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          if [ -s artifacts/findings.md ]; then
+            gh issue comment "$ISSUE_NUMBER" \
+              --repo ${{ github.repository }} \
+              --body-file artifacts/findings.md
+          else
+            gh issue comment "$ISSUE_NUMBER" \
+              --repo ${{ github.repository }} \
+              --body "Investigation did not produce findings. Check the [workflow run](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}) for details."
+          fi
