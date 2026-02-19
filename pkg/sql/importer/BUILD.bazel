@@ -3,7 +3,7 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 filegroup(
     name = "testdata",
     srcs = glob(["testdata/**"]),
-    visibility = ["//pkg/ccl/importerccl:__subpackages__"],
+    visibility = ["//visibility:public"],
 )
 
 go_library(
@@ -139,6 +139,7 @@ go_test(
         "import_processor_test.go",
         "import_stmt_test.go",
         "main_test.go",
+        "multi_region_test.go",
         "mysql_testdata_helpers_test.go",
         "pg_testdata_helpers_test.go",
         "read_import_avro_logical_test.go",
@@ -162,6 +163,9 @@ go_test(
     deps = [
         "//pkg/base",
         "//pkg/blobs",
+        "//pkg/ccl/multiregionccl",
+        "//pkg/ccl/multiregionccl/multiregionccltestutils",
+        "//pkg/ccl/partitionccl",
         "//pkg/cloud",
         "//pkg/cloud/cloudpb",
         "//pkg/cloud/impl:cloudimpl",
@@ -174,6 +178,7 @@ go_test(
         "//pkg/jobs/jobstest",
         "//pkg/keys",
         "//pkg/kv",
+        "//pkg/kv/followerreads",
         "//pkg/kv/kvclient/kvcoord",
         "//pkg/kv/kvpb",
         "//pkg/kv/kvserver",

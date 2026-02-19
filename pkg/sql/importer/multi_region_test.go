@@ -3,9 +3,7 @@
 // Use of this software is governed by the CockroachDB Software License
 // included in the /LICENSE file.
 
-// importerccl is a package where we can write tests of IMPORT that require that
-// ccl-only functionality be enabled as well.
-package importerccl
+package importer_test
 
 import (
 	"context"
@@ -19,7 +17,6 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/build/bazel"
 	_ "github.com/cockroachdb/cockroach/pkg/ccl/multiregionccl"
 	"github.com/cockroachdb/cockroach/pkg/ccl/multiregionccl/multiregionccltestutils"
 	_ "github.com/cockroachdb/cockroach/pkg/ccl/partitionccl"
@@ -42,25 +39,13 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func sharedTestdata(t *testing.T) string {
-	testdataDir := "../../sql/importer/testdata/"
-	if bazel.BuiltWithBazel() {
-		runfile, err := bazel.Runfile("pkg/sql/importer/testdata/")
-		if err != nil {
-			t.Fatal(err)
-		}
-		testdataDir = runfile
-	}
-	return testdataDir
-}
-
 func TestImportMultiRegion(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
 	skip.UnderRace(t, "takes >1min under race")
 
-	baseDir := sharedTestdata(t)
+	baseDir := datapathutils.TestDataPath(t)
 	tc, sqlDB, cleanup := multiregionccltestutils.TestingCreateMultiRegionCluster(
 		t, 3 /* numServers */, base.TestingKnobs{}, multiregionccltestutils.WithBaseDirectory(baseDir),
 	)
@@ -411,7 +396,7 @@ func TestImportInTenant(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	baseDir := sharedTestdata(t)
+	baseDir := datapathutils.TestDataPath(t)
 	args := base.TestServerArgs{
 		ExternalIODir: baseDir,
 		// Test is designed to run inside a tenant so no need to
