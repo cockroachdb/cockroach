@@ -1934,6 +1934,13 @@ func NewLeaseManager(
 	lm.descDelCh = make(chan descpb.ID)
 	lm.descMetaDataUpdateCh = make(chan *descriptorTxnUpdate)
 	lm.rangefeedErrCh = make(chan error)
+	// Allow the bytes monitor to have allocation buffering
+	// by default. When we specify the minimum memory acquired
+	// per-allocation is: DefaultPoolAllocationSize
+	bytesMonitorIncrement := int64(0)
+	if lm.testingKnobs.DisallowBytesMonitorCaching {
+		bytesMonitorIncrement = 1
+	}
 	lm.bytesMonitor = mon.NewMonitor(mon.Options{
 		Name:       mon.MakeName("leased-descriptors"),
 		CurCount:   lm.storage.leasingMetrics.leaseCurBytesCount,
@@ -1941,12 +1948,23 @@ func NewLeaseManager(
 		Res:        mon.MemoryResource,
 		Settings:   settings,
 		LongLiving: true,
+		Increment:  bytesMonitorIncrement,
 	})
 	lm.bytesMonitor.StartNoReserved(context.Background(), rootBytesMonitor)
 	lm.boundAccount = lm.bytesMonitor.MakeConcurrentBoundAccount()
 	// Add a stopper for the bound account that we are using to
 	// track memory usage.
 	lm.stopper.AddCloser(stop.CloserFn(func() {
+		// If there are outstanding leases, we cannot close the account and
+		// properly stop it. This can happen if draining fails, but we have no
+		// way of knowing if draining itself was successful, because an earlier
+		// go routine will attempt it.
+		// The safest option is to emergency-stop the monitor, which prevents
+		// panics inside the release code path.
+		if lm.boundAccount.Used() > 0 {
+			lm.bytesMonitor.EmergencyStop(context.Background())
+			return
+		}
 		lm.boundAccount.Close(ctx)
 		lm.bytesMonitor.Stop(ctx)
 	}))
