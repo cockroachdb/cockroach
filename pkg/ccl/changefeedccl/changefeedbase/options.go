@@ -1085,10 +1085,14 @@ func (s StatementOptions) GetFilters() Filters {
 	}
 }
 
+// DefaultWebhookClientTimeout is the default timeout used for webhook HTTP
+// client connections when no explicit webhook_client_timeout is specified.
+// This matches the documented default of 3 seconds.
+var DefaultWebhookClientTimeout = 3 * time.Second
+
 // WebhookSinkOptions are passed in WITH args but
 // are specific to the webhook sink.
-// ClientTimeout is nil if not set as the default
-// is different from 0.
+// ClientTimeout defaults to DefaultWebhookClientTimeout when not explicitly set.
 type WebhookSinkOptions struct {
 	JSONConfig    SinkSpecificJSONConfig
 	AuthHeader    string
@@ -1108,6 +1112,10 @@ func (s StatementOptions) GetWebhookSinkOptions() (WebhookSinkOptions, error) {
 	timeout, err := s.getDurationValue(OptWebhookClientTimeout)
 	if err != nil {
 		return o, err
+	}
+	if timeout == nil {
+		defaultTimeout := DefaultWebhookClientTimeout
+		timeout = &defaultTimeout
 	}
 	o.ClientTimeout = timeout
 
