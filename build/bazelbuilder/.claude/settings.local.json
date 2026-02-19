@@ -1,0 +1,15 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(gh issue view:*)",
+      "WebSearch",
+      "WebFetch(domain:gitlab.com)",
+      "Bash(python3:*)",
+      "WebFetch(domain:github.com)",
+      "WebFetch(domain:bugs.debian.org)"
+    ]
+  },
+  "disabledMcpjsonServers": [
+    "gopls-mcp"
+  ]
+}

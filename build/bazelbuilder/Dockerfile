@@ -1,6 +1,23 @@
 # We use a docker image mirror to avoid pulling from 3rd party repos, which sometimes have reliability issues.
 # See https://cockroachlabs.atlassian.net/wiki/spaces/devinf/pages/3462594561/Docker+image+sync for the details.
-FROM us-east1-docker.pkg.dev/crl-docker-sync/docker-io/library/ubuntu:focal
+
+# Download external keys on the build host's native platform to avoid QEMU
+# user-mode emulation bugs that cause SSL_ERROR_SYSCALL during TLS handshakes
+# on cross-architecture builds. See https://github.com/tonistiigi/binfmt/issues/215.
+FROM --platform=$BUILDPLATFORM us-east1-docker.pkg.dev/crl-docker-sync/docker-io/library/ubuntu:noble AS fetch
+ARG TARGETPLATFORM
+SHELL ["/usr/bin/bash", "-c"]
+RUN if [[ ${TARGETPLATFORM} != "linux/s390x" ]]; then \
+ apt-get update \
+ && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+    ca-certificates \
+    curl \
+    gnupg2 \
+ && apt-get clean \
+ && curl -fsLS https://packages.microsoft.com/keys/microsoft.asc | gpg --dearmor > /microsoft.gpg ; \
+ fi
+
+FROM us-east1-docker.pkg.dev/crl-docker-sync/docker-io/library/ubuntu:noble
 ARG TARGETPLATFORM
 
 SHELL ["/usr/bin/bash", "-c"]
@@ -11,7 +28,7 @@ RUN apt-get update \
     autoconf \
     bison \
     ca-certificates \
-    clang-10 \
+    clang-20 \
     cmake \
     curl \
     flex \
@@ -28,11 +45,11 @@ RUN apt-get update \
     openssh-client \
     python-is-python3 \
     python3 \
-    python3.8-venv \
+    python3.12-venv \
     unzip \
     zip \
- && update-alternatives --install /usr/bin/clang clang /usr/bin/clang-10 100 \
-    --slave /usr/bin/clang++ clang++ /usr/bin/clang++-10 \
+ && update-alternatives --install /usr/bin/clang clang /usr/bin/clang-20 100 \
+    --slave /usr/bin/clang++ clang++ /usr/bin/clang++-20 \
  && apt-get clean
 
 # We need a newer version of cmake.
@@ -78,9 +95,12 @@ RUN apt-get update && \
     rm -rf git-2.29.2.zip git-2.29.2
 
 # NB: Don't install the azure CLI on s390x which doesn't support it.
+# The GPG key is fetched in the "fetch" stage on the native build platform to
+# work around QEMU SSL failures during cross-arch builds.
+COPY --from=fetch /microsoft.gpg* /tmp/
 RUN if [[ ${TARGETPLATFORM} != "linux/s390x" ]]; then \
- curl -fsLS https://packages.microsoft.com/keys/microsoft.asc | gpg --dearmor | apt-key add - \
- && echo "deb https://packages.microsoft.com/repos/azure-cli/ focal main" > /etc/apt/sources.list.d/azure-cli.list \
+ mv /tmp/microsoft.gpg /etc/apt/trusted.gpg.d/microsoft.gpg \
+ && echo "deb https://packages.microsoft.com/repos/azure-cli/ noble main" > /etc/apt/sources.list.d/azure-cli.list \
  && apt-get update \
  && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends azure-cli \
  && apt-get clean ; \
@@ -89,8 +109,8 @@ RUN if [[ ${TARGETPLATFORM} != "linux/s390x" ]]; then \
 # NB: As above, this is not available on `s390x`.
 RUN if [[ ${TARGETPLATFORM} != "linux/s390x" ]]; then \
  case ${TARGETPLATFORM} in \
-     "linux/amd64") ARCH=x86_64; SHASUM=8ba7e746ca05f225e5a73952bbc03f4086a5f65fd94f3717df6f75f212587159 ;; \
-     "linux/arm64") ARCH=arm; SHASUM=e6153461e3154ebce61d35b73005bdd14a0ecacd42e5008f66e25b4ad231e5c9 ;; \
+     "linux/amd64") ARCH=x86_64; SHASUM=c23b87ad08cd2dfb9b0538bc74cf945dc32af7ff3089ae1e67e485daeab10943 ;; \
+     "linux/arm64") ARCH=arm; SHASUM=6832a5ce66edb445863b807ce1cffda8b489e6adf61c8dbcf0610d9133415964 ;; \
  esac  \
  && curl -fsSL "https://dl.google.com/dl/cloudsdk/channels/rapid/downloads/google-cloud-cli-linux-$ARCH.tar.gz" -o gcloud.tar.gz \
  && echo "$SHASUM gcloud.tar.gz" | sha256sum -c - \
