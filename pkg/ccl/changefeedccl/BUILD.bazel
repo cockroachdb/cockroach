@@ -58,6 +58,7 @@ go_library(
         "//pkg/ccl/changefeedccl/changefeedpb",
         "//pkg/ccl/changefeedccl/changefeedvalidators",
         "//pkg/ccl/changefeedccl/checkpoint",
+        "//pkg/ccl/changefeedccl/checkpointpb",
         "//pkg/ccl/changefeedccl/kafkaauth",
         "//pkg/ccl/changefeedccl/kcjsonschema",
         "//pkg/ccl/changefeedccl/kvevent",

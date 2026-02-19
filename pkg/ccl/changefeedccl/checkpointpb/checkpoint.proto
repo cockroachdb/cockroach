@@ -1,0 +1,22 @@
+// Copyright 2026 The Cockroach Authors.
+//
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
+
+syntax = "proto3";
+package cockroach.ccl.changefeedccl.checkpointpb;
+option go_package = "github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/checkpointpb";
+
+import "jobs/jobspb/jobs.proto";
+import "gogoproto/gogo.proto";
+
+// ChangefeedCheckpoint represents a changefeed checkpoint sent to the frontier.
+message ChangefeedCheckpoint {
+  repeated cockroach.sql.jobs.jobspb.ResolvedSpan ResolvedSpans = 1 [(gogoproto.nullable) = false];
+
+  message Stats {
+    uint64 recent_kv_count = 1;
+  }
+
+  Stats stats = 2 [(gogoproto.nullable) = false];
+}
