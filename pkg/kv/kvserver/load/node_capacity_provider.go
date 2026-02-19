@@ -12,6 +12,7 @@ import (
 	"github.com/VividCortex/ewma"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/status"
+	"github.com/cockroachdb/cockroach/pkg/util/admission"
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
@@ -52,7 +53,10 @@ type NodeCapacityProviderConfig struct {
 // NewNodeCapacityProvider creates a new NodeCapacityProvider that monitors CPU
 // metrics using the provided stores aggregator and configuration.
 func NewNodeCapacityProvider(
-	stopper *stop.Stopper, stores StoresStatsAggregator, config NodeCapacityProviderConfig,
+	stopper *stop.Stopper,
+	stores StoresStatsAggregator,
+	sqlCPUProvider admission.SQLCPUProvider,
+	config NodeCapacityProviderConfig,
 ) *NodeCapacityProvider {
 	if stopper == nil || stores == nil {
 		panic("programming error: stopper or stores aggregator cannot be nil")
@@ -60,10 +64,13 @@ func NewNodeCapacityProvider(
 
 	monitor := &runtimeLoadMonitor{
 		stopper:                 stopper,
+		SQLCPUProvider:          sqlCPUProvider,
 		usageRefreshInterval:    config.CPUUsageRefreshInterval,
 		capacityRefreshInterval: config.CPUCapacityRefreshInterval,
 	}
 	monitor.mu.usageEWMA = ewma.NewMovingAverage(config.CPUUsageMovingAverageAge)
+	monitor.mu.sqlGatewayEWMA = ewma.NewMovingAverage(config.CPUUsageMovingAverageAge)
+	monitor.mu.sqlDistEWMA = ewma.NewMovingAverage(config.CPUUsageMovingAverageAge)
 	monitor.recordCPUCapacity(context.Background())
 	return &NodeCapacityProvider{
 		stores:             stores,
@@ -100,18 +107,21 @@ func (n *NodeCapacityProvider) GetNodeCapacity(useCached bool) (roachpb.NodeCapa
 	// runtimeLoadMonitor to also fetch updated stats.
 	// TODO(wenyihu6): NodeCPURateCapacity <= NodeCPURateUsage fails on CI and
 	// requires more investigation.
-	cpuUsageNanoPerSec, cpuCapacityNanoPerSec := n.runtimeLoadMonitor.GetCPUStats()
+	cpuUsageNanoPerSec, cpuCapacityNanoPerSec, sqlGatewayCPUNanoPerSec, sqlDistCPUNanoPerSec := n.runtimeLoadMonitor.GetCPUStats()
 	return roachpb.NodeCapacity{
-		StoresCPURate:       storesCPURate,
-		NumStores:           numStores,
-		NodeCPURateCapacity: cpuCapacityNanoPerSec,
-		NodeCPURateUsage:    cpuUsageNanoPerSec,
+		StoresCPURate:           storesCPURate,
+		NumStores:               numStores,
+		NodeCPURateCapacity:     cpuCapacityNanoPerSec,
+		NodeCPURateUsage:        cpuUsageNanoPerSec,
+		SQLGatewayCPUNanoPerSec: int64(sqlGatewayCPUNanoPerSec),
+		SQLDistCPUNanoPerSec:    int64(sqlDistCPUNanoPerSec),
 	}, nil
 }
 
 // runtimeLoadMonitor polls cpu usage and capacity stats of the node
 // periodically and maintaining a moving average.
 type runtimeLoadMonitor struct {
+	admission.SQLCPUProvider
 	usageRefreshInterval    time.Duration
 	capacityRefreshInterval time.Duration
 	stopper                 *stop.Stopper
@@ -125,6 +135,23 @@ type runtimeLoadMonitor struct {
 		// subsequent polls in nanoseconds. The cpu usage is obtained by polling
 		// stats from status.GetProcCPUTime which is cumulative.
 		usageEWMA ewma.MovingAverage
+
+		// lastGatewayCPUNanos tracks the last cumulative SQL gateway CPU usage
+		// in nanoseconds, used to compute the delta between subsequent polls.
+		lastGatewayCPUNanos float64
+
+		// lastDistCPUNanos tracks the last cumulative dist SQL CPU usage in
+		// nanoseconds, used to compute the delta between subsequent polls.
+		lastDistCPUNanos float64
+
+		// sqlGatewayEWMA maintains a moving average of delta SQL gateway CPU
+		// usage between two subsequent polls in nanoseconds.
+		sqlGatewayEWMA ewma.MovingAverage
+
+		// sqlDistEWMA maintains a moving average of delta dist SQL CPU usage
+		// between two subsequent polls in nanoseconds.
+		sqlDistEWMA ewma.MovingAverage
+
 		// logicalCPUsPerSec represents the node's cpu capacity in logical
 		// CPU-seconds per second, obtained from status.GetCPUCapacity.
 		logicalCPUsPerSec int64
@@ -132,7 +159,12 @@ type runtimeLoadMonitor struct {
 }
 
 // GetCPUStats returns the current cpu usage and capacity stats for the node.
-func (m *runtimeLoadMonitor) GetCPUStats() (cpuUsageNanoPerSec int64, cpuCapacityNanoPerSec int64) {
+func (m *runtimeLoadMonitor) GetCPUStats() (
+	cpuUsageNanoPerSec int64,
+	cpuCapacityNanoPerSec int64,
+	sqlGatewayCPUNanoPerSec float64,
+	sqlDistCPUNanoPerSec float64,
+) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	// usageEWMA is usage in nanoseconds. Divide by refresh interval to get the
@@ -141,11 +173,17 @@ func (m *runtimeLoadMonitor) GetCPUStats() (cpuUsageNanoPerSec int64, cpuCapacit
 	// logicalCPUsPerSec is in logical cpu-seconds per second. Convert the unit
 	// from cpu-seconds to cpu-nanoseconds.
 	cpuCapacityNanoPerSec = m.mu.logicalCPUsPerSec * time.Second.Nanoseconds()
+	sqlGatewayCPUNanoPerSec = m.mu.sqlGatewayEWMA.Value() / m.usageRefreshInterval.Seconds()
+	sqlDistCPUNanoPerSec = m.mu.sqlDistEWMA.Value() / m.usageRefreshInterval.Seconds()
 	return
 }
 
 // recordCPUUsage samples and records the current cpu usage of the node.
 func (m *runtimeLoadMonitor) recordCPUUsage(ctx context.Context) error {
+	var gatewayCPUNanos, distCPUNanos int64
+	if m.SQLCPUProvider != nil {
+		gatewayCPUNanos, distCPUNanos = m.SQLCPUProvider.GetCumulativeSQLCPUNanos()
+	}
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	userTimeMillis, sysTimeMillis, err := status.GetProcCPUTime(ctx)
@@ -153,15 +191,32 @@ func (m *runtimeLoadMonitor) recordCPUUsage(ctx context.Context) error {
 		return errors.NewAssertionErrorWithWrappedErrf(err, "failed to get cpu usage")
 	}
 	// Convert milliseconds to nanoseconds.
+	var cpuUsageDelta float64
 	totalUsageNanos := float64(userTimeMillis*1e6 + sysTimeMillis*1e6)
-	if totalUsageNanos < m.mu.lastTotalUsageNanos {
-		log.KvDistribution.Warningf(ctx, "last cpu usage is larger than current: %v > %v",
-			m.mu.lastTotalUsageNanos, totalUsageNanos)
-		totalUsageNanos = m.mu.lastTotalUsageNanos
+	cpuUsageDelta, m.mu.lastTotalUsageNanos = cumulativeDelta(ctx, totalUsageNanos, m.mu.lastTotalUsageNanos)
+	m.mu.usageEWMA.Add(cpuUsageDelta)
+	if m.SQLCPUProvider != nil {
+		var gatewayDelta, distDelta float64
+		gatewayDelta, m.mu.lastGatewayCPUNanos = cumulativeDelta(ctx, float64(gatewayCPUNanos), m.mu.lastGatewayCPUNanos)
+		distDelta, m.mu.lastDistCPUNanos = cumulativeDelta(ctx, float64(distCPUNanos), m.mu.lastDistCPUNanos)
+		m.mu.sqlGatewayEWMA.Add(gatewayDelta)
+		m.mu.sqlDistEWMA.Add(distDelta)
 	}
-	m.mu.usageEWMA.Add(totalUsageNanos - m.mu.lastTotalUsageNanos)
-	m.mu.lastTotalUsageNanos = totalUsageNanos
 	return nil
+}
+
+// cumulativeDelta computes the non-negative delta between a new cumulative
+// value and the previous one. If the new value is less than the previous
+// (which shouldn't happen for monotonic counters), the delta is clamped to
+// zero and the previous value is preserved.
+func cumulativeDelta(ctx context.Context, current, last float64) (delta, newLast float64) {
+	delta = current - last
+	if delta < 0 {
+		log.KvDistribution.Warningf(ctx, "last cpu usage is larger than current: %v > %v",
+			last, current)
+		return 0, last
+	}
+	return delta, current
 }
 
 // recordCPUCapacity samples and records the current cpu capacity of the node.

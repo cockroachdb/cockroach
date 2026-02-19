@@ -14,6 +14,7 @@ go_library(
         "//pkg/kv/kvserver/replicastats",
         "//pkg/roachpb",
         "//pkg/server/status",
+        "//pkg/util/admission",
         "//pkg/util/buildutil",
         "//pkg/util/hlc",
         "//pkg/util/log",
@@ -31,6 +32,7 @@ go_test(
     deps = [
         ":load",
         "//pkg/testutils",
+        "//pkg/util/admission",
         "//pkg/util/stop",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_stretchr_testify//require",
