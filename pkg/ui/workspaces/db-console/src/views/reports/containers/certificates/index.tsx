@@ -5,12 +5,11 @@
 
 import { Loading, util } from "@cockroachlabs/cluster-ui";
 import isEmpty from "lodash/isEmpty";
-import isEqual from "lodash/isEqual";
 import isNaN from "lodash/isNaN";
 import join from "lodash/join";
 import map from "lodash/map";
 import sortBy from "lodash/sortBy";
-import React, { Fragment } from "react";
+import React, { Fragment, useEffect } from "react";
 import { Helmet } from "react-helmet";
 import { connect } from "react-redux";
 import { RouteComponentProps, withRouter } from "react-router-dom";
@@ -48,134 +47,127 @@ function certificatesRequestFromProps(props: CertificatesProps) {
   });
 }
 
+function renderSimpleRow(header: string, value: string, title = "") {
+  let realTitle = title;
+  if (isEmpty(realTitle)) {
+    realTitle = value;
+  }
+  return (
+    <tr className="certs-table__row">
+      <th className="certs-table__cell certs-table__cell--header">{header}</th>
+      <td className="certs-table__cell" title={realTitle}>
+        {value}
+      </td>
+    </tr>
+  );
+}
+
+function renderMultilineRow(header: string, values: string[]) {
+  return (
+    <tr className="certs-table__row">
+      <th className="certs-table__cell certs-table__cell--header">{header}</th>
+      <td className="certs-table__cell" title={join(values, "\n")}>
+        <ul className="certs-entries-list">
+          {sortBy(values).map((value, key) => (
+            <li key={key}>{value}</li>
+          ))}
+        </ul>
+      </td>
+    </tr>
+  );
+}
+
+function renderTimestampRow(header: string, value: Long) {
+  const timestamp = util.LongToMoment(value).format(dateFormat);
+  const title = value + "\n" + timestamp;
+  return renderSimpleRow(header, timestamp, title);
+}
+
+function renderFields(
+  fields: protos.cockroach.server.serverpb.CertificateDetails.IFields,
+  id: number,
+) {
+  return [
+    renderSimpleRow("Cert ID", id.toString()),
+    renderSimpleRow("Issuer", fields.issuer),
+    renderSimpleRow("Subject", fields.subject),
+    renderTimestampRow("Valid From", fields.valid_from),
+    renderTimestampRow("Valid Until", fields.valid_until),
+    renderMultilineRow("Addresses", fields.addresses),
+    renderSimpleRow("Signature Algorithm", fields.signature_algorithm),
+    renderSimpleRow("Public Key", fields.public_key),
+    renderMultilineRow("Key Usage", fields.key_usage),
+    renderMultilineRow("Extended Key Usage", fields.extended_key_usage),
+  ];
+}
+
+function renderCert(
+  cert: protos.cockroach.server.serverpb.ICertificateDetails,
+  key: number,
+) {
+  let certType: string;
+  switch (cert.type) {
+    case protos.cockroach.server.serverpb.CertificateDetails.CertificateType.CA:
+      certType = "Certificate Authority";
+      break;
+    case protos.cockroach.server.serverpb.CertificateDetails.CertificateType
+      .NODE:
+      certType = "Node Certificate";
+      break;
+    case protos.cockroach.server.serverpb.CertificateDetails.CertificateType
+      .CLIENT_CA:
+      certType = "Client Certificate Authority";
+      break;
+    case protos.cockroach.server.serverpb.CertificateDetails.CertificateType
+      .CLIENT:
+      certType = "Client Certificate";
+      break;
+    case protos.cockroach.server.serverpb.CertificateDetails.CertificateType
+      .UI_CA:
+      certType = "UI Certificate Authority";
+      break;
+    case protos.cockroach.server.serverpb.CertificateDetails.CertificateType.UI:
+      certType = "UI Certificate";
+      break;
+    default:
+      certType = "Unknown";
+  }
+  return (
+    <table key={key} className="certs-table">
+      <tbody>
+        {renderSimpleRow("Type", certType)}
+        {map(cert.fields, (fields, id) => {
+          const result = renderFields(fields, id);
+          if (id > 0) {
+            result.unshift(emptyRow);
+          }
+          return result;
+        })}
+      </tbody>
+    </table>
+  );
+}
+
 /**
  * Renders the Certificate Report page.
  */
-export class Certificates extends React.Component<CertificatesProps, {}> {
-  refresh(props = this.props) {
-    props.refreshCertificates(certificatesRequestFromProps(props));
-  }
-
-  componentDidMount() {
-    // Refresh nodes status query when mounting.
-    this.refresh();
-  }
-
-  componentDidUpdate(prevProps: CertificatesProps) {
-    if (!isEqual(this.props.location, prevProps.location)) {
-      this.refresh(this.props);
-    }
-  }
-
-  renderSimpleRow(header: string, value: string, title = "") {
-    let realTitle = title;
-    if (isEmpty(realTitle)) {
-      realTitle = value;
-    }
-    return (
-      <tr className="certs-table__row">
-        <th className="certs-table__cell certs-table__cell--header">
-          {header}
-        </th>
-        <td className="certs-table__cell" title={realTitle}>
-          {value}
-        </td>
-      </tr>
+export function Certificates({
+  certificates,
+  lastError,
+  refreshCertificates: refreshCertificatesAction,
+  match,
+  history,
+  location,
+}: CertificatesProps): React.ReactElement {
+  useEffect(() => {
+    refreshCertificatesAction(
+      new protos.cockroach.server.serverpb.CertificatesRequest({
+        node_id: getMatchParamByName(match, nodeIDAttr),
+      }),
     );
-  }
+  }, [refreshCertificatesAction, match, location.pathname, location.search]);
 
-  renderMultilineRow(header: string, values: string[]) {
-    return (
-      <tr className="certs-table__row">
-        <th className="certs-table__cell certs-table__cell--header">
-          {header}
-        </th>
-        <td className="certs-table__cell" title={join(values, "\n")}>
-          <ul className="certs-entries-list">
-            {sortBy(values).map((value, key) => (
-              <li key={key}>{value}</li>
-            ))}
-          </ul>
-        </td>
-      </tr>
-    );
-  }
-
-  renderTimestampRow(header: string, value: Long) {
-    const timestamp = util.LongToMoment(value).format(dateFormat);
-    const title = value + "\n" + timestamp;
-    return this.renderSimpleRow(header, timestamp, title);
-  }
-
-  renderFields(
-    fields: protos.cockroach.server.serverpb.CertificateDetails.IFields,
-    id: number,
-  ) {
-    return [
-      this.renderSimpleRow("Cert ID", id.toString()),
-      this.renderSimpleRow("Issuer", fields.issuer),
-      this.renderSimpleRow("Subject", fields.subject),
-      this.renderTimestampRow("Valid From", fields.valid_from),
-      this.renderTimestampRow("Valid Until", fields.valid_until),
-      this.renderMultilineRow("Addresses", fields.addresses),
-      this.renderSimpleRow("Signature Algorithm", fields.signature_algorithm),
-      this.renderSimpleRow("Public Key", fields.public_key),
-      this.renderMultilineRow("Key Usage", fields.key_usage),
-      this.renderMultilineRow("Extended Key Usage", fields.extended_key_usage),
-    ];
-  }
-
-  renderCert(
-    cert: protos.cockroach.server.serverpb.ICertificateDetails,
-    key: number,
-  ) {
-    let certType: string;
-    switch (cert.type) {
-      case protos.cockroach.server.serverpb.CertificateDetails.CertificateType
-        .CA:
-        certType = "Certificate Authority";
-        break;
-      case protos.cockroach.server.serverpb.CertificateDetails.CertificateType
-        .NODE:
-        certType = "Node Certificate";
-        break;
-      case protos.cockroach.server.serverpb.CertificateDetails.CertificateType
-        .CLIENT_CA:
-        certType = "Client Certificate Authority";
-        break;
-      case protos.cockroach.server.serverpb.CertificateDetails.CertificateType
-        .CLIENT:
-        certType = "Client Certificate";
-        break;
-      case protos.cockroach.server.serverpb.CertificateDetails.CertificateType
-        .UI_CA:
-        certType = "UI Certificate Authority";
-        break;
-      case protos.cockroach.server.serverpb.CertificateDetails.CertificateType
-        .UI:
-        certType = "UI Certificate";
-        break;
-      default:
-        certType = "Unknown";
-    }
-    return (
-      <table key={key} className="certs-table">
-        <tbody>
-          {this.renderSimpleRow("Type", certType)}
-          {map(cert.fields, (fields, id) => {
-            const result = this.renderFields(fields, id);
-            if (id > 0) {
-              result.unshift(emptyRow);
-            }
-            return result;
-          })}
-        </tbody>
-      </table>
-    );
-  }
-
-  renderContent = () => {
-    const { certificates, match } = this.props;
+  const renderContent = () => {
     const nodeId = getMatchParamByName(match, nodeIDAttr);
 
     if (isEmpty(certificates.certificates)) {
@@ -196,31 +188,27 @@ export class Certificates extends React.Component<CertificatesProps, {}> {
     return (
       <Fragment>
         <h2 className="base-heading">{header} certificates</h2>
-        {map(certificates.certificates, (cert, key) =>
-          this.renderCert(cert, key),
-        )}
+        {map(certificates.certificates, (cert, key) => renderCert(cert, key))}
       </Fragment>
     );
   };
 
-  render() {
-    return (
-      <div className="section">
-        <Helmet title="Certificates | Debug" />
-        <BackToAdvanceDebug history={this.props.history} />
-        <h1 className="base-heading">Certificates</h1>
+  return (
+    <div className="section">
+      <Helmet title="Certificates | Debug" />
+      <BackToAdvanceDebug history={history} />
+      <h1 className="base-heading">Certificates</h1>
 
-        <section className="section">
-          <Loading
-            loading={!this.props.certificates}
-            page={"certificates"}
-            error={this.props.lastError}
-            render={this.renderContent}
-          />
-        </section>
-      </div>
-    );
-  }
+      <section className="section">
+        <Loading
+          loading={!certificates}
+          page={"certificates"}
+          error={lastError}
+          render={renderContent}
+        />
+      </section>
+    </div>
+  );
 }
 
 const mapStateToProps = (state: AdminUIState, props: CertificatesProps) => {

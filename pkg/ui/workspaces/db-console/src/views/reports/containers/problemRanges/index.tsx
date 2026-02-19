@@ -8,7 +8,6 @@ import filter from "lodash/filter";
 import flatMap from "lodash/flatMap";
 import flow from "lodash/flow";
 import isEmpty from "lodash/isEmpty";
-import isEqual from "lodash/isEqual";
 import isNil from "lodash/isNil";
 import keys from "lodash/keys";
 import map from "lodash/map";
@@ -17,7 +16,7 @@ import sortBy from "lodash/sortBy";
 import sortedUniq from "lodash/sortedUniq";
 import values from "lodash/values";
 import Long from "long";
-import React from "react";
+import React, { useEffect } from "react";
 import { Helmet } from "react-helmet";
 import { connect } from "react-redux";
 import { Link, RouteComponentProps, withRouter } from "react-router-dom";
@@ -104,27 +103,23 @@ function problemRangeRequestFromProps(props: ProblemRangesProps) {
  * per node basis. This page aggregates those lists together and displays all
  * unique range IDs that have problems.
  */
-export class ProblemRanges extends React.Component<ProblemRangesProps, {}> {
-  refresh(props = this.props) {
-    props.refreshProblemRanges(problemRangeRequestFromProps(props));
-  }
+export function ProblemRanges({
+  problemRanges,
+  refreshProblemRanges: refreshProblemRangesAction,
+  match,
+  history,
+  location,
+}: ProblemRangesProps): React.ReactElement {
+  useEffect(() => {
+    refreshProblemRangesAction(
+      problemRangeRequestFromProps({ match } as ProblemRangesProps),
+    );
+  }, [refreshProblemRangesAction, match, location.pathname, location.search]);
 
-  componentDidMount() {
-    // Refresh nodes status query when mounting.
-    this.refresh();
-  }
-
-  componentDidUpdate(prevProps: ProblemRangesProps) {
-    if (!isEqual(this.props.location, prevProps.location)) {
-      this.refresh(this.props);
-    }
-  }
-
-  renderReportBody() {
-    const { problemRanges, match } = this.props;
+  const renderReportBody = () => {
     const nodeId = getMatchParamByName(match, nodeIDAttr);
 
-    if (isLoading(this.props.problemRanges)) {
+    if (isLoading(problemRanges)) {
       return null;
     }
 
@@ -234,28 +229,26 @@ export class ProblemRanges extends React.Component<ProblemRangesProps, {}> {
         />
       </div>
     );
-  }
+  };
 
-  render() {
-    return (
-      <div className="section">
-        <Helmet title="Problem Ranges | Debug" />
-        <BackToAdvanceDebug history={this.props.history} />
-        <h1 className="base-heading">Problem Ranges Report</h1>
-        <Loading
-          loading={isLoading(this.props.problemRanges)}
-          page={"problems range"}
-          error={this.props.problemRanges && this.props.problemRanges.lastError}
-          render={() => (
-            <div>
-              {this.renderReportBody()}
-              <ConnectionsTable problemRanges={this.props.problemRanges} />
-            </div>
-          )}
-        />
-      </div>
-    );
-  }
+  return (
+    <div className="section">
+      <Helmet title="Problem Ranges | Debug" />
+      <BackToAdvanceDebug history={history} />
+      <h1 className="base-heading">Problem Ranges Report</h1>
+      <Loading
+        loading={isLoading(problemRanges)}
+        page={"problems range"}
+        error={problemRanges && problemRanges.lastError}
+        render={() => (
+          <div>
+            {renderReportBody()}
+            <ConnectionsTable problemRanges={problemRanges} />
+          </div>
+        )}
+      />
+    </div>
+  );
 }
 
 const mapStateToProps = (state: AdminUIState, props: ProblemRangesProps) => {
