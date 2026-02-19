@@ -509,7 +509,7 @@ func (ca *changeAggregator) startKVFeed(
 	}
 	buf := kvevent.NewThrottlingBuffer(
 		kvevent.NewMemBuffer(kvFeedMemMon.MakeBoundAccount(), &cfg.Settings.SV,
-			&ca.metrics.KVFeedMetrics.AggregatorBufferMetrics, options...),
+			&ca.metrics.KVEventMetrics.AggregatorBufferMetrics, options...),
 		cdcutils.NodeLevelThrottler(&cfg.Settings.SV, &ca.metrics.ThrottleMetrics))
 
 	// KVFeed takes ownership of the kvevent.Writer portion of the buffer, while
@@ -596,7 +596,8 @@ func (ca *changeAggregator) makeKVFeedCfg(
 		Clock:                cfg.DB.KV().Clock(),
 		Spans:                spans,
 		Targets:              ca.targets,
-		Metrics:              &ca.metrics.KVFeedMetrics,
+		BufferMetrics:        &ca.metrics.KVEventMetrics,
+		KVFeedMetrics:        &ca.metrics.KVFeedMetrics,
 		MM:                   memMon,
 		InitialHighWater:     initialHighWater,
 		InitialSpanTimePairs: initialSpanTimePairs,
@@ -910,11 +911,10 @@ func (ca *changeAggregator) flushBufferedEvents(ctx context.Context) error {
 // changeAggregator node to the changeFrontier node to allow the changeFrontier
 // to persist the overall changefeed's progress
 func (ca *changeAggregator) noteResolvedSpan(resolved jobspb.ResolvedSpan) error {
-	ctx, sp := tracing.ChildSpan(ca.Ctx(), "changefeed.aggregator.note_resolved_span")
-	defer sp.Finish()
+	ctx := ca.Ctx()
 
 	if log.V(2) {
-		log.Changefeed.Infof(ca.Ctx(), "resolved span from kv feed: %#v", resolved)
+		log.Changefeed.Infof(ctx, "resolved span from kv feed: %#v", resolved)
 	}
 
 	if resolved.Timestamp.IsEmpty() {
@@ -930,9 +930,9 @@ func (ca *changeAggregator) noteResolvedSpan(resolved jobspb.ResolvedSpan) error
 	}
 	sv := &ca.FlowCtx.Cfg.Settings.SV
 
-	defer func(ctx context.Context) {
+	defer func() {
 		maybeLogBehindSpan(ctx, "aggregator", ca.frontier, advanced, sv)
-	}(ctx)
+	}()
 
 	// The resolved sliMetric data backs the aggregator_progress metric
 	if advanced {

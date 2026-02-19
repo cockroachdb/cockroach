@@ -39,6 +39,7 @@ type rangeFeedConfig struct {
 	RangeObserver        kvcoord.RangeObserver
 	Knobs                TestingKnobs
 	Timers               *timers.ScopedTimers
+	Metrics              *Metrics
 }
 
 // rangefeedFactory is a function that creates and runs a rangefeed.
@@ -60,6 +61,7 @@ type rangefeed struct {
 	eventCh <-chan kvcoord.RangeFeedMessage
 	knobs   TestingKnobs
 	st      *timers.ScopedTimers
+	metrics *Metrics
 }
 
 // Run implements the physicalFeedFactory interface.
@@ -91,6 +93,7 @@ func (p rangefeedFactory) Run(ctx context.Context, sink kvevent.Writer, cfg rang
 		eventCh: eventCh,
 		knobs:   cfg.Knobs,
 		st:      cfg.Timers,
+		metrics: cfg.Metrics,
 	}
 	g := ctxgroup.WithContext(ctx)
 	g.GoCtx(feed.addEventsToBuffer)
@@ -143,6 +146,7 @@ func quantizeTS(ts hlc.Timestamp, granularity time.Duration) hlc.Timestamp {
 func (p *rangefeed) handleRangefeedEvent(ctx context.Context, e *kvpb.RangeFeedEvent) error {
 	switch t := e.GetValue().(type) {
 	case *kvpb.RangeFeedValue:
+		p.metrics.RangefeedValues.Inc(1)
 		if p.cfg.Knobs.OnRangeFeedValue != nil {
 			if err := p.cfg.Knobs.OnRangeFeedValue(); err != nil {
 				return err
@@ -162,11 +166,14 @@ func (p *rangefeed) handleRangefeedEvent(ctx context.Context, e *kvpb.RangeFeedE
 			// RangeFeed happily forwards any closed timestamps it receives as
 			// soon as there are no outstanding intents under them.
 			// Changefeeds don't care about these at all, so throw them out.
+			p.metrics.RangefeedSkippedCheckpoints.Inc(1)
 			return nil
 		}
 		if p.knobs.ShouldSkipCheckpoint != nil && p.knobs.ShouldSkipCheckpoint(t) {
+			p.metrics.RangefeedSkippedCheckpoints.Inc(1)
 			return nil
 		}
+		p.metrics.RangefeedCheckpoints.Inc(1)
 		timer := p.st.RangefeedBufferCheckpoint.Start()
 		if err := p.memBuf.Add(
 			ctx, kvevent.MakeResolvedEvent(ev, jobspb.ResolvedSpan_NONE),
@@ -188,6 +195,7 @@ func (p *rangefeed) handleRangefeedEvent(ctx context.Context, e *kvpb.RangeFeedE
 			}
 		}
 	case *kvpb.RangeFeedDeleteRange:
+		p.metrics.RangefeedDeleteRanges.Inc(1)
 		// For now, we just ignore on MVCC range tombstones. These are currently
 		// only expected to be used by schema GC and IMPORT INTO, and such spans
 		// should not have active changefeeds across them, at least at the times

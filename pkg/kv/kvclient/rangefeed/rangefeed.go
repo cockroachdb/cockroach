@@ -82,6 +82,7 @@ type Factory struct {
 	stopper *stop.Stopper
 	client  DB
 	knobs   *TestingKnobs
+	metrics *Metrics
 }
 
 // TestingKnobs is used to inject behavior into a rangefeed for testing.
@@ -118,7 +119,14 @@ func newFactory(stopper *stop.Stopper, client DB, knobs *TestingKnobs) *Factory 
 		stopper: stopper,
 		client:  client,
 		knobs:   knobs,
+		metrics: NewMetrics(),
 	}
+}
+
+// Metrics returns the metrics for this Factory. These should be registered with
+// the metric registry to be reported.
+func (f *Factory) Metrics() *Metrics {
+	return f.metrics
 }
 
 // RangeFeed constructs a new rangefeed and runs it in an async task.
@@ -158,6 +166,7 @@ func (f *Factory) New(
 		client:  f.client,
 		stopper: f.stopper,
 		knobs:   f.knobs,
+		metrics: f.metrics,
 
 		initialTimestamp: initialTimestamp,
 		name:             name,
@@ -180,6 +189,7 @@ type RangeFeed struct {
 	client  DB
 	stopper *stop.Stopper
 	knobs   *TestingKnobs
+	metrics *Metrics
 
 	initialTimestamp hlc.Timestamp
 	spans            []roachpb.Span
@@ -452,6 +462,7 @@ func (f *RangeFeed) processEvent(
 	case ev.Val != nil:
 		f.onValue(ctx, ev.Val)
 	case ev.Checkpoint != nil:
+		f.metrics.Checkpoints.Inc(1)
 		ts := ev.Checkpoint.ResolvedTS
 		if f.frontierQuantize != 0 {
 			ts.Logical = 0

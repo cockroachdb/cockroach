@@ -530,6 +530,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (serverctl.ServerStartupInterf
 	if err != nil {
 		return nil, err
 	}
+	nodeRegistry.AddMetricStruct(rangeFeedFactory.Metrics())
 
 	stores := kvserver.NewStores(cfg.AmbientCtx, clock)
 

@@ -146,6 +146,7 @@ func TestKVFeed(t *testing.T) {
 		ref := rawEventFeed(tc.events)
 		tf := newRawTableFeed(tc.descs, tc.initialHighWater)
 		st := timers.New(time.Minute).GetOrCreateScopedTimers("")
+		kvfeedMetrics := MakeMetrics()
 		f := newKVFeed(buf, tc.spans,
 			tc.schemaChangeEvents, tc.schemaChangePolicy,
 			tc.needsInitialScan, tc.withDiff, true /* withFiltering */, changefeedbase.BulkDelivery.Get(&settings.SV), tc.withFrontierQuantize,
@@ -154,7 +155,7 @@ func TestKVFeed(t *testing.T) {
 			codec,
 			tf, sf, rangefeedFactory(ref.run), bufferFactory,
 			changefeedbase.Targets{},
-			st, TestingKnobs{})
+			st, &kvfeedMetrics, TestingKnobs{})
 		ctx, cancel := context.WithCancel(context.Background())
 		g := ctxgroup.WithContext(ctx)
 		g.GoCtx(func(ctx context.Context) error {

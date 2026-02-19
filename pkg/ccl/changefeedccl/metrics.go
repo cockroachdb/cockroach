@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdcutils"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/checkpoint"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/kvevent"
+	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/kvfeed"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/schemafeed"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/timers"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
@@ -1474,7 +1475,8 @@ func (m *sliMetrics) getLaggingRangesCallback() func(lagging int64, total int64)
 type Metrics struct {
 	AggMetrics                     *AggMetrics
 	UsageMetrics                   *JobScopedUsageMetrics
-	KVFeedMetrics                  kvevent.Metrics
+	KVFeedMetrics                  kvfeed.Metrics
+	KVEventMetrics                 kvevent.Metrics
 	SchemaFeedMetrics              schemafeed.Metrics
 	Failures                       *metric.Counter
 	ResolvedMessages               *metric.Counter
@@ -1505,7 +1507,8 @@ func MakeMetrics(histogramWindow time.Duration, lookup *cidr.Lookup) metric.Stru
 	m := &Metrics{
 		AggMetrics:        newAggregateMetrics(histogramWindow, lookup),
 		UsageMetrics:      newJobScopedUsageMetrics(histogramWindow),
-		KVFeedMetrics:     kvevent.MakeMetrics(histogramWindow),
+		KVFeedMetrics:     kvfeed.MakeMetrics(),
+		KVEventMetrics:    kvevent.MakeMetrics(histogramWindow),
 		SchemaFeedMetrics: schemafeed.MakeMetrics(histogramWindow),
 		ResolvedMessages:  metric.NewCounter(metaChangefeedForwardedResolvedMessages),
 		Failures:          metric.NewCounter(metaChangefeedFailures),
