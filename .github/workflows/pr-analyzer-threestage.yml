@@ -8,8 +8,8 @@ jobs:
   claude-code-pr-review:
     runs-on: ubuntu-latest
     timeout-minutes: 60
-    # Allow external PRs only when a write-access user applies the 'O-AI-Review' label.
-    # Internal PRs (from the same repo) run automatically without the label.
+    # Run automatically for org members/collaborators (who typically work from forks).
+    # External contributors require a write-access user to apply the 'O-AI-Review' label.
     # For 'labeled' events, only trigger when the specific 'O-AI-Review' label is applied
     # to avoid re-running the full review when unrelated labels are added.
     if: |
@@ -22,7 +22,7 @@ jobs:
         github.event.label.name == 'O-AI-Review'
       ) &&
       (
-        github.event.pull_request.head.repo.full_name == github.repository ||
+        contains(fromJSON('["COLLABORATOR","MEMBER","OWNER"]'), github.event.pull_request.author_association) ||
         contains(github.event.pull_request.labels.*.name, 'O-AI-Review')
       )
     permissions:
