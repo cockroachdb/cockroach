@@ -211,6 +211,21 @@ func splitPostApply(
 		log.KvExec.Fatalf(ctx, "%s: failed to update Store after split: %+v", r, err)
 	}
 
+	// Explicitly unquiesce the Raft group on the right-hand range or else the
+	// range could be underreplicated for an indefinite period of time.
+	//
+	// Specifically, suppose one of the replicas of the left-hand range never
+	// applies this split trigger, e.g., because it catches up via a snapshot that
+	// advances it past this split. That store won't create the right-hand replica
+	// until it receives a Raft message addressed to the right-hand range. But
+	// since new replicas start out quiesced, unless we explicitly awaken the
+	// Raft group, there might not be any Raft traffic for quite a while.
+	if rightReplOrNil != nil {
+		rightReplOrNil.mu.Lock()
+		rightReplOrNil.maybeUnquiesceLocked(true /* wakeLeader */, true /* mayCampaign */)
+		rightReplOrNil.mu.Unlock()
+	}
+
 	// Update store stats with difference in stats before and after split.
 	if rightReplOrNil != nil {
 		rightReplOrNil.store.metrics.addMVCCStats(ctx, rightReplOrNil.tenantMetricsRef, deltaMS)
@@ -285,7 +300,6 @@ func prepareRightReplicaForSplit(
 	); err != nil {
 		log.KvExec.Fatalf(ctx, "%v", err)
 	}
-	rightRepl.isInitialized.Store(true)
 
 	// Copy the minLeaseProposedTS from the LHS. loadRaftMuLockedReplicaMuLocked
 	// has already assigned a value for this field; this will overwrite it.
@@ -303,17 +317,6 @@ func prepareRightReplicaForSplit(
 		nil,                        /* priorReadSum */
 		assertNoLeaseJump)
 
-	// We need to explicitly unquiesce the Raft group on the right-hand range or
-	// else the range could be underreplicated for an indefinite period of time.
-	//
-	// Specifically, suppose one of the replicas of the left-hand range never
-	// applies this split trigger, e.g., because it catches up via a snapshot that
-	// advances it past this split. That store won't create the right-hand replica
-	// until it receives a Raft message addressed to the right-hand range. But
-	// since new replicas start out quiesced, unless we explicitly awaken the
-	// Raft group, there might not be any Raft traffic for quite a while.
-	rightRepl.maybeUnquiesceLocked(true /* wakeLeader */, true /* mayCampaign */)
-
 	if fn := r.store.TestingKnobs().AfterSplitApplication; fn != nil {
 		// TODO(pav-kv): we have already checked up the stack that rightDesc exists,
 		// but maybe it would be better to carry a "bus" struct with these kinds of
@@ -330,9 +333,9 @@ func prepareRightReplicaForSplit(
 // range is added to the ranges map and the replicasByKey btree. origRng.raftMu
 // and newRng.raftMu must be held.
 //
-// This is only called from the split trigger in the context of the execution
-// of a Raft command. Note that rightRepl will be nil if the replica described
-// by rightDesc is known to have been removed.
+// This is only called from the split trigger in the context of the execution of
+// a Raft command. rightReplOrNil will be nil if it is known to have been
+// removed. Otherwise, it is marked as initialized before SplitRange returns.
 func (s *Store) SplitRange(
 	ctx context.Context, leftRepl, rightReplOrNil *Replica, split *roachpb.SplitTrigger,
 ) error {
@@ -384,5 +387,6 @@ func (s *Store) SplitRange(
 
 	rightRepl.mu.Lock()
 	defer rightRepl.mu.Unlock()
+	rightRepl.isInitialized.Store(true)
 	return s.markReplicaInitializedLockedReplLocked(ctx, rightRepl)
 }
