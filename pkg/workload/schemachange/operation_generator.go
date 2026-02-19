@@ -3009,7 +3009,7 @@ func (og *operationGenerator) commentOn(ctx context.Context, tx pgx.Tx) (*opStmt
 	}, fmt.Sprintf(`
 	SELECT 'SCHEMA ' || quote_ident(schema_name) FROM [SHOW SCHEMAS] WHERE owner != 'node'
 		UNION ALL
-	SELECT 'TABLE ' || quote_ident(schema_name) || '.' || quote_ident(table_name) FROM [SHOW TABLES] WHERE type = 'table'
+	SELECT 'TABLE ' || quote_ident(table_schema) || '.' || quote_ident(table_name) FROM information_schema.tables WHERE table_type = 'BASE TABLE' AND table_schema NOT IN ('information_schema', 'pg_catalog', 'pg_extension', 'crdb_internal')
 		UNION ALL
 	SELECT 'COLUMN ' || quote_ident(schema_name) || '.' || quote_ident(table_name) || '.' || quote_ident("column"->>'name') FROM columns
 		UNION ALL
@@ -4122,9 +4122,10 @@ func (og *operationGenerator) randView(
 
 		q := fmt.Sprintf(`
 		  SELECT table_name
-		    FROM [SHOW TABLES]
+		    FROM information_schema.tables
 		   WHERE table_name LIKE 'view%%'
-				 AND schema_name = '%s'
+				 AND table_schema = '%s'
+				 AND table_schema NOT IN ('information_schema', 'pg_catalog', 'pg_extension', 'crdb_internal')
 		ORDER BY random()
 		   LIMIT 1;
 		`, desiredSchema)
@@ -4159,9 +4160,10 @@ func (og *operationGenerator) randView(
 		return nil, err
 	}
 	const q = `
-  SELECT schema_name, table_name
-    FROM [SHOW TABLES]
+  SELECT table_schema, table_name
+    FROM information_schema.tables
    WHERE table_name LIKE 'view%'
+     AND table_schema NOT IN ('information_schema', 'pg_catalog', 'pg_extension', 'crdb_internal')
 ORDER BY random()
    LIMIT 1;
 `
@@ -4358,7 +4360,7 @@ func (og *operationGenerator) createFunction(ctx context.Context, tx pgx.Tx) (*o
 	// TODO(chrisseto): Allow referencing sequences as well. Currently, `DROP
 	// SEQUENCE CASCADE` will break if we allow sequences. It may also be good to
 	// reference sequences with next_val or something.
-	tables, err := Collect(ctx, og, tx, pgx.RowTo[string], `SELECT quote_ident(schema_name) || '.' || quote_ident(table_name) FROM [SHOW TABLES] WHERE type != 'sequence'`)
+	tables, err := Collect(ctx, og, tx, pgx.RowTo[string], `SELECT quote_ident(table_schema) || '.' || quote_ident(table_name) FROM information_schema.tables WHERE table_type IN ('BASE TABLE', 'VIEW') AND table_schema NOT IN ('information_schema', 'pg_catalog', 'pg_extension', 'crdb_internal')`)
 	if err != nil {
 		return nil, err
 	}
@@ -5698,7 +5700,7 @@ func (og *operationGenerator) findExistingTrigger(
 // truncateTable generates a TRUNCATE TABLE statement.
 func (og *operationGenerator) truncateTable(ctx context.Context, tx pgx.Tx) (*opStmt, error) {
 	tbls, err := Collect(ctx, og, tx, pgx.RowTo[string],
-		`SELECT quote_ident(schema_name) || '.' || quote_ident(table_name) FROM [SHOW TABLES] WHERE type = 'table'`)
+		`SELECT quote_ident(table_schema) || '.' || quote_ident(table_name) FROM information_schema.tables WHERE table_type = 'BASE TABLE' AND table_schema NOT IN ('information_schema', 'pg_catalog', 'pg_extension', 'crdb_internal')`)
 	if err != nil {
 		return nil, err
 	}
