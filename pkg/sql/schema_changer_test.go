@@ -3706,6 +3706,10 @@ CREATE TABLE d.t (
 		newIndexDesc.StoreColumnIDs = nil
 		tableDesc.SetPublicNonPrimaryIndex(index.Ordinal(), newIndexDesc)
 	}
+	// Bump the version so the lease manager detects the descriptor change and
+	// refreshes its cache. Without this, the INSERT below may use the stale
+	// cached descriptor (new encoding) and write data incorrectly.
+	tableDesc.Version++
 	if err := kvDB.Put(
 		context.Background(),
 		catalogkeys.MakeDescMetadataKey(server.Codec(), tableDesc.GetID()),
