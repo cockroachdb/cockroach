@@ -272,6 +272,10 @@ func restoreWithRetry(
 			return roachpb.RowCount{}, jobs.MarkAsPermanentJobError(err)
 		}
 
+		if jobs.IsPauseSelfError(err) {
+			return roachpb.RowCount{}, err
+		}
+
 		// If we are draining, it is unlikely we can start a
 		// new DistSQL flow. Exit with a retryable error so
 		// that another node can pick up the job.
