@@ -1004,6 +1004,13 @@ func TestLogic_procedure_params(
 	runLogicTest(t, "procedure_params")
 }
 
+func TestLogic_procedure_schema_change(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "procedure_schema_change")
+}
+
 func TestLogic_propagate_input_ordering(
 	t *testing.T,
 ) {

@@ -1,4 +1,3 @@
-# LogicTest: !local-prepared
 subtest alter_procedure_name
 
 statement ok
@@ -131,26 +130,29 @@ SELECT get_function_id('public', 'p', 1)
 let $sc_p
 SELECT get_function_id('sc', 'p', 0)
 
-query TTT
-SELECT oid, proname, prosrc
-FROM pg_catalog.pg_proc WHERE proname IN ('p')
-ORDER BY oid
-----
-100110  p  SELECT 1;
-100111  p  SELECT 2;
-100113  p  SELECT 3;
-
 query TT
+SELECT proname, prosrc
+FROM pg_catalog.pg_proc WHERE proname IN ('p')
+ORDER BY prosrc
+----
+p  SELECT 1;
+p  SELECT 2;
+p  SELECT 3;
+
+query TTT
 WITH procs AS (
   SELECT crdb_internal.pb_to_json('cockroach.sql.sqlbase.Descriptor', descriptor, false)->'function' AS proc
   FROM system.descriptor
   WHERE id IN ($public_p, $public_p_int, $sc_p)
 )
-SELECT proc->>'id' AS id, proc->'parentSchemaId' FROM procs ORDER BY id
+SELECT proc->>'name', n.name, pg.prosrc FROM procs
+JOIN system.namespace n ON n.id = (proc->>'parentSchemaId')::INT
+JOIN pg_catalog.pg_proc pg ON pg.oid = (proc->>'id')::INT + 100000
+ORDER BY pg.prosrc
 ----
-110  105
-111  105
-113  112
+p  public  SELECT 1;
+p  public  SELECT 2;
+p  sc  SELECT 3;
 
 statement error pgcode 0A000 pq: cannot move objects into or out of virtual schemas
 ALTER PROCEDURE p() SET SCHEMA pg_catalog
@@ -165,17 +167,20 @@ ALTER FUNCTION p(INT) SET SCHEMA sc;
 statement ok
 ALTER PROCEDURE p(INT) SET SCHEMA public
 
-query TT
+query TTT
 WITH procs AS (
   SELECT crdb_internal.pb_to_json('cockroach.sql.sqlbase.Descriptor', descriptor, false)->'function' AS proc
   FROM system.descriptor
   WHERE id IN ($public_p, $public_p_int, $sc_p)
 )
-SELECT proc->>'id' AS id, proc->'parentSchemaId' FROM procs ORDER BY id
+SELECT proc->>'name', n.name, pg.prosrc FROM procs
+JOIN system.namespace n ON n.id = (proc->>'parentSchemaId')::INT
+JOIN pg_catalog.pg_proc pg ON pg.oid = (proc->>'id')::INT + 100000
+ORDER BY pg.prosrc
 ----
-110  105
-111  105
-113  112
+p  public  SELECT 1;
+p  public  SELECT 2;
+p  sc  SELECT 3;
 
 query T
 SELECT create_statement FROM [SHOW CREATE PROCEDURE public.p] ORDER BY 1
@@ -198,17 +203,20 @@ $$
 statement ok
 ALTER PROCEDURE p(INT) SET SCHEMA sc;
 
-query TT
+query TTT
 WITH procs AS (
   SELECT crdb_internal.pb_to_json('cockroach.sql.sqlbase.Descriptor', descriptor, false)->'function' AS proc
   FROM system.descriptor
   WHERE id IN ($public_p, $public_p_int, $sc_p)
 )
-SELECT proc->>'id' AS id, proc->'parentSchemaId' FROM procs ORDER BY id
+SELECT proc->>'name', n.name, pg.prosrc FROM procs
+JOIN system.namespace n ON n.id = (proc->>'parentSchemaId')::INT
+JOIN pg_catalog.pg_proc pg ON pg.oid = (proc->>'id')::INT + 100000
+ORDER BY pg.prosrc
 ----
-110  105
-111  112
-113  112
+p  public  SELECT 1;
+p  sc  SELECT 2;
+p  sc  SELECT 3;
 
 query T
 SELECT create_statement FROM [SHOW CREATE PROCEDURE public.p];
