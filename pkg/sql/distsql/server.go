@@ -545,9 +545,13 @@ func (ds *ServerImpl) newFlowContext(
 		// responsible for cleaning it up and releasing any accessed descriptors
 		// on flow cleanup.
 		dsdp := catsessiondata.NewDescriptorSessionDataStackProvider(evalCtx.SessionDataStack)
-		flowCtx.Descriptors = ds.CollectionFactory.NewCollection(
-			ctx, descs.WithDescriptorSessionDataProvider(dsdp),
-		)
+		opts := []descs.Option{descs.WithDescriptorSessionDataProvider(dsdp)}
+		if localState.Collection != nil {
+			opts = append(opts, descs.WithForceStorageLookupIDs(
+				localState.Collection.GetUncommittedDescriptorIDs(),
+			))
+		}
+		flowCtx.Descriptors = ds.CollectionFactory.NewCollection(ctx, opts...)
 		flowCtx.IsDescriptorsCleanupRequired = true
 		var evalCatalogBuiltins evalcatalog.Builtins
 		// In distributed execution, authorization was already checked on the gateway node.
