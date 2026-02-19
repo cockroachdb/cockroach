@@ -12,6 +12,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/hydrateddesccache"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/internal/catkv"
@@ -103,8 +104,9 @@ func NewBareBonesCollectionFactory(
 }
 
 type constructorConfig struct {
-	dsdp    DescriptorSessionDataProvider
-	monitor *mon.BytesMonitor
+	dsdp                  DescriptorSessionDataProvider
+	monitor               *mon.BytesMonitor
+	forceStorageLookupIDs catalog.DescriptorIDSet
 }
 
 // Option is how optional construction parameters are provided to the
@@ -126,6 +128,17 @@ func WithDescriptorSessionDataProvider(
 func WithMonitor(monitor *mon.BytesMonitor) func(b *constructorConfig) {
 	return func(cfg *constructorConfig) {
 		cfg.monitor = monitor
+	}
+}
+
+// WithForceStorageLookupIDs configures the Collection to bypass all
+// non-storage layers (leased, cached, etc.) for the given descriptor IDs,
+// resolving them directly from KV. This is used when a fresh Collection is
+// created for parallel check workers whose parent Collection has uncommitted
+// descriptors visible only via KV within the same transaction.
+func WithForceStorageLookupIDs(ids catalog.DescriptorIDSet) func(cfg *constructorConfig) {
+	return func(cfg *constructorConfig) {
+		cfg.forceStorageLookupIDs = ids
 	}
 }
 
@@ -162,6 +175,7 @@ func (cf *CollectionFactory) NewCollection(ctx context.Context, options ...Optio
 		cr:                      catkv.NewCatalogReader(cf.codec, v, cf.systemDatabase, cfg.monitor),
 		temporarySchemaProvider: cfg.dsdp,
 		validationModeProvider:  cfg.dsdp,
+		forceStorageLookupIDs:   cfg.forceStorageLookupIDs,
 	}
 }
 

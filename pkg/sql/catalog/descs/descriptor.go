@@ -483,6 +483,9 @@ func (q *byIDLookupContext) lookupLeased(
 	if q.flags.layerFilters.withoutLeased || lease.TestingTableLeasesAreDisabled() {
 		return nil, catalog.NoValidation, nil
 	}
+	if q.tc.forceStorageLookupIDs.Contains(id) {
+		return nil, catalog.NoValidation, nil
+	}
 	// If we have already read all of the descriptors, use it as a negative
 	// cache to short-circuit a lookup we know will be doomed to fail.
 	if q.tc.cr.IsDescIDKnownToNotExist(id, q.flags.descFilters.maybeParentID) {
