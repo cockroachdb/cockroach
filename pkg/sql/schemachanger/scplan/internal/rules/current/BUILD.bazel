@@ -10,6 +10,7 @@ go_library(
         "dep_add_index_and_constraint.go",
         "dep_add_trigger.go",
         "dep_alter_column_type.go",
+        "dep_alter_locality.go",
         "dep_configure_zone.go",
         "dep_create.go",
         "dep_create_function.go",
