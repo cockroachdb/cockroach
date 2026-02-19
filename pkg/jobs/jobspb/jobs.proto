@@ -1266,11 +1266,7 @@ message ResolvedSpan {
 message ResolvedSpans {
   repeated ResolvedSpan resolved_spans = 1 [(gogoproto.nullable) = false];
 
-  message Stats {
-    uint64 recent_kv_count = 1;
-  }
-
-  Stats stats = 2 [(gogoproto.nullable) = false];
+  reserved 2;
 }
 
 // TimestampSpansMap is a map from timestamps to lists of spans.
