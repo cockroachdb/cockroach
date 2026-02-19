@@ -285,6 +285,7 @@ func prepareRightReplicaForSplit(
 	); err != nil {
 		log.KvExec.Fatalf(ctx, "%v", err)
 	}
+	rightRepl.isInitialized.Store(true)
 
 	// Copy the minLeaseProposedTS from the LHS. loadRaftMuLockedReplicaMuLocked
 	// has already assigned a value for this field; this will overwrite it.

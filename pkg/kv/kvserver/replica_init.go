@@ -90,6 +90,7 @@ func newInitializedReplica(
 	if err := r.initRaftMuLockedReplicaMuLocked(loaded, waitForPrevLeaseToExpire); err != nil {
 		return nil, err
 	}
+	r.isInitialized.Store(true)
 
 	return r, nil
 }
@@ -326,15 +327,11 @@ func (r *Replica) initRaftMuLockedReplicaMuLocked(
 
 	// Initialize the Raft group. This may replace a Raft group that was installed
 	// for the uninitialized replica to process Raft requests or snapshots.
-	//
-	// We do this before flipping isInitialized and we'd like the Raft group to
-	// be in place before then.
 	if err := r.initRaftGroupRaftMuLockedReplicaMuLocked(); err != nil {
 		return err
 	}
 
 	r.setDescLockedRaftMuLocked(r.AnnotateCtx(context.TODO()), desc)
-	r.isInitialized.Store(true)
 
 	// Only do this if there was a previous lease. This shouldn't be important
 	// to do but consider that the first lease which is obtained is back-dated
