@@ -524,7 +524,7 @@ func (u Updater) succeeded(ctx context.Context, fn func(context.Context, isql.Tx
 			FractionCompleted: 1.0,
 		}
 		ju.UpdateProgress(md.Progress)
-		return nil
+		return u.j.StatusStorage().Clear(ctx, txn)
 	})
 }
 
