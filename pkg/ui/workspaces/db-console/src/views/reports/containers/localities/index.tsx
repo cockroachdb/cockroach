@@ -5,7 +5,7 @@
 
 import { Loading } from "@cockroachlabs/cluster-ui";
 import isNil from "lodash/isNil";
-import React from "react";
+import React, { useEffect } from "react";
 import { Helmet } from "react-helmet";
 import { connect } from "react-redux";
 import { RouteComponentProps, withRouter } from "react-router-dom";
@@ -106,60 +106,48 @@ interface LocalitiesProps {
   refreshNodes: typeof refreshNodes;
 }
 
-export class Localities extends React.Component<
-  LocalitiesProps & RouteComponentProps,
-  {}
-> {
-  componentDidMount() {
-    this.props.refreshLocations();
-    this.props.refreshNodes();
-  }
+export function Localities({
+  localityTree,
+  localityStatus,
+  locationTree,
+  locationStatus,
+  refreshLocations: refreshLocationsAction,
+  refreshNodes: refreshNodesAction,
+  history,
+}: LocalitiesProps & RouteComponentProps): React.ReactElement {
+  useEffect(() => {
+    refreshLocationsAction();
+    refreshNodesAction();
+  }, [refreshLocationsAction, refreshNodesAction]);
 
-  componentDidUpdate() {
-    this.props.refreshLocations();
-    this.props.refreshNodes();
-  }
-
-  render() {
-    return (
-      <div>
-        <Helmet title="Localities | Debug" />
-        <BackToAdvanceDebug history={this.props.history} />
-        <section className="section">
-          <h1 className="base-heading">Localities</h1>
-        </section>
-        <Loading
-          loading={
-            !this.props.localityStatus.data || !this.props.locationStatus.data
-          }
-          page={"localities"}
-          error={[
-            this.props.localityStatus.lastError,
-            this.props.locationStatus.lastError,
-          ]}
-          render={() => (
-            <section className="section">
-              <table className="locality-table">
-                <thead>
-                  <tr>
-                    <th>Localities</th>
-                    <th>Nodes</th>
-                    <th>Location</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {renderLocalityTree(
-                    this.props.locationTree,
-                    this.props.localityTree,
-                  )}
-                </tbody>
-              </table>
-            </section>
-          )}
-        />
-      </div>
-    );
-  }
+  return (
+    <div>
+      <Helmet title="Localities | Debug" />
+      <BackToAdvanceDebug history={history} />
+      <section className="section">
+        <h1 className="base-heading">Localities</h1>
+      </section>
+      <Loading
+        loading={!localityStatus.data || !locationStatus.data}
+        page={"localities"}
+        error={[localityStatus.lastError, locationStatus.lastError]}
+        render={() => (
+          <section className="section">
+            <table className="locality-table">
+              <thead>
+                <tr>
+                  <th>Localities</th>
+                  <th>Nodes</th>
+                  <th>Location</th>
+                </tr>
+              </thead>
+              <tbody>{renderLocalityTree(locationTree, localityTree)}</tbody>
+            </table>
+          </section>
+        )}
+      />
+    </div>
+  );
 }
 
 const mapStateToProps = (state: AdminUIState, _: RouteComponentProps) => ({
