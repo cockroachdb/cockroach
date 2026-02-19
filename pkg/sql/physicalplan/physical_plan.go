@@ -1045,8 +1045,17 @@ func (p *PhysicalPlan) GenerateFlowSpecs() (
 }
 
 func releaseAll(flows map[base.SQLInstanceID]*execinfrapb.FlowSpec) {
-	for _, flowSpec := range flows {
-		ReleaseFlowSpec(flowSpec)
+	for _, spec := range flows {
+		for i := range spec.Processors {
+			if tr := spec.Processors[i].Core.TableReader; tr != nil {
+				releaseTableReaderSpec(tr)
+			}
+			spec.Processors[i] = execinfrapb.ProcessorSpec{}
+		}
+		*spec = execinfrapb.FlowSpec{
+			Processors: spec.Processors[:0],
+		}
+		flowSpecPool.Put(spec)
 	}
 }
 
