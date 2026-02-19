@@ -5,11 +5,10 @@
 
 import { Loading } from "@cockroachlabs/cluster-ui";
 import isEmpty from "lodash/isEmpty";
-import isEqual from "lodash/isEqual";
 import isNil from "lodash/isNil";
 import map from "lodash/map";
 import sortBy from "lodash/sortBy";
-import React from "react";
+import React, { useEffect } from "react";
 import { Helmet } from "react-helmet";
 import { connect } from "react-redux";
 import { RouteComponentProps, withRouter } from "react-router-dom";
@@ -40,56 +39,54 @@ function storesRequestFromProps(props: StoresProps) {
   });
 }
 
+function renderSimpleRow(header: string, value: string, title = "") {
+  let realTitle = title;
+  if (isEmpty(realTitle)) {
+    realTitle = value;
+  }
+  return (
+    <tr className="stores-table__row">
+      <th className="stores-table__cell stores-table__cell--header">
+        {header}
+      </th>
+      <td className="stores-table__cell" title={realTitle}>
+        {value}
+      </td>
+    </tr>
+  );
+}
+
+function renderStore(store: protos.cockroach.server.serverpb.IStoreDetails) {
+  return (
+    <table key={store.store_id} className="stores-table">
+      <tbody>
+        {renderSimpleRow("Store ID", store.store_id.toString())}
+        {new EncryptionStatus({ store: store }).getEncryptionRows()}
+      </tbody>
+    </table>
+  );
+}
+
 /**
  * Renders the Stores Report page.
  */
-export class Stores extends React.Component<StoresProps, {}> {
-  refresh(props = this.props) {
-    props.refreshStores(storesRequestFromProps(props));
-  }
-
-  componentDidMount() {
-    // Refresh nodes status query when mounting.
-    this.refresh();
-  }
-
-  componentDidUpdate(prevProps: StoresProps) {
-    if (!isEqual(this.props.location, prevProps.location)) {
-      this.refresh(this.props);
-    }
-  }
-
-  renderSimpleRow(header: string, value: string, title = "") {
-    let realTitle = title;
-    if (isEmpty(realTitle)) {
-      realTitle = value;
-    }
-    return (
-      <tr className="stores-table__row">
-        <th className="stores-table__cell stores-table__cell--header">
-          {header}
-        </th>
-        <td className="stores-table__cell" title={realTitle}>
-          {value}
-        </td>
-      </tr>
+export function Stores({
+  stores,
+  loading,
+  lastError,
+  refreshStores: refreshStoresAction,
+  match,
+  history,
+  location,
+}: StoresProps): React.ReactElement {
+  useEffect(() => {
+    const nodeId = getMatchParamByName(match, nodeIDAttr);
+    refreshStoresAction(
+      new protos.cockroach.server.serverpb.StoresRequest({ node_id: nodeId }),
     );
-  }
+  }, [refreshStoresAction, match, location.pathname, location.search]);
 
-  renderStore = (store: protos.cockroach.server.serverpb.IStoreDetails) => {
-    return (
-      <table key={store.store_id} className="stores-table">
-        <tbody>
-          {this.renderSimpleRow("Store ID", store.store_id.toString())}
-          {new EncryptionStatus({ store: store }).getEncryptionRows()}
-        </tbody>
-      </table>
-    );
-  };
-
-  renderContent = () => {
-    const { stores, match } = this.props;
-
+  const renderContent = () => {
     const nodeID = getMatchParamByName(match, nodeIDAttr);
     if (isEmpty(stores)) {
       return (
@@ -97,35 +94,31 @@ export class Stores extends React.Component<StoresProps, {}> {
       );
     }
 
-    return (
-      <>${React.Children.toArray(map(this.props.stores, this.renderStore))}</>
-    );
+    return <>{React.Children.toArray(map(stores, renderStore))}</>;
   };
 
-  render() {
-    const nodeID = getMatchParamByName(this.props.match, nodeIDAttr);
-    let header: string = null;
-    if (isNaN(parseInt(nodeID, 10))) {
-      header = "Local Node";
-    } else {
-      header = `Node ${nodeID}`;
-    }
-
-    return (
-      <div className="section">
-        <Helmet title="Stores | Debug" />
-        <BackToAdvanceDebug history={this.props.history} />
-        <h1 className="base-heading">Stores</h1>
-        <h2 className="base-heading">{header} stores</h2>
-        <Loading
-          loading={this.props.loading}
-          page={"containers stores"}
-          error={this.props.lastError}
-          render={this.renderContent}
-        />
-      </div>
-    );
+  const nodeID = getMatchParamByName(match, nodeIDAttr);
+  let header: string = null;
+  if (isNaN(parseInt(nodeID, 10))) {
+    header = "Local Node";
+  } else {
+    header = `Node ${nodeID}`;
   }
+
+  return (
+    <div className="section">
+      <Helmet title="Stores | Debug" />
+      <BackToAdvanceDebug history={history} />
+      <h1 className="base-heading">Stores</h1>
+      <h2 className="base-heading">{header} stores</h2>
+      <Loading
+        loading={loading}
+        page={"containers stores"}
+        error={lastError}
+        render={renderContent}
+      />
+    </div>
+  );
 }
 
 function selectStoresState(state: AdminUIState, props: StoresProps) {

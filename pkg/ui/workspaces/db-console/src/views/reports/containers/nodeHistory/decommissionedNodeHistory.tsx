@@ -14,7 +14,7 @@ import flow from "lodash/flow";
 import map from "lodash/map";
 import orderBy from "lodash/orderBy";
 import { Moment } from "moment-timezone";
-import * as React from "react";
+import React, { useEffect } from "react";
 import { Helmet } from "react-helmet";
 import { connect } from "react-redux";
 import { RouteComponentProps, withRouter } from "react-router-dom";
@@ -76,61 +76,55 @@ const sortByDecommissioningDate = (
   return 0;
 };
 
-export class DecommissionedNodeHistory extends React.Component<
-  DecommissionedNodeHistoryProps & RouteComponentProps
-> {
-  columns: ColumnsConfig<DecommissionedNodeStatusRow> = [
-    {
-      key: "id",
-      title: "ID",
-      sorter: sortByNodeId,
-      render: (_text: string, record: DecommissionedNodeStatusRow) => (
-        <Text>{`n${record.nodeId}`}</Text>
-      ),
+const decommissionedColumns: ColumnsConfig<DecommissionedNodeStatusRow> = [
+  {
+    key: "id",
+    title: "ID",
+    sorter: sortByNodeId,
+    render: (_text: string, record: DecommissionedNodeStatusRow) => (
+      <Text>{`n${record.nodeId}`}</Text>
+    ),
+  },
+  {
+    key: "decommissionedOn",
+    title: "Decommissioned On",
+    sorter: sortByDecommissioningDate,
+    render: (_text: string, record: DecommissionedNodeStatusRow) => {
+      return (
+        <Timestamp
+          time={record.decommissionedDate}
+          format={util.DATE_FORMAT_24_TZ}
+        />
+      );
     },
-    {
-      key: "decommissionedOn",
-      title: "Decommissioned On",
-      sorter: sortByDecommissioningDate,
-      render: (_text: string, record: DecommissionedNodeStatusRow) => {
-        return (
-          <Timestamp
-            time={record.decommissionedDate}
-            format={util.DATE_FORMAT_24_TZ}
-          />
-        );
-      },
-    },
-  ];
+  },
+];
 
-  componentDidMount() {
-    this.props.refreshNodes();
-    this.props.refreshLiveness();
-  }
+export function DecommissionedNodeHistory({
+  refreshNodes: refreshNodesAction,
+  refreshLiveness: refreshLivenessAction,
+  dataSource,
+  history,
+}: DecommissionedNodeHistoryProps & RouteComponentProps): React.ReactElement {
+  useEffect(() => {
+    refreshNodesAction();
+    refreshLivenessAction();
+  }, [refreshNodesAction, refreshLivenessAction]);
 
-  componentDidUpdate() {
-    this.props.refreshNodes();
-    this.props.refreshLiveness();
-  }
-
-  render() {
-    const { dataSource } = this.props;
-
-    return (
-      <section className="section">
-        <Helmet title="Decommissioned Node History | Debug" />
-        <BackToAdvanceDebug history={this.props.history} />
-        <h1 className="base-heading title">Decommissioned Node History</h1>
-        <div>
-          <Table
-            dataSource={dataSource}
-            columns={this.columns}
-            noDataMessage="There are no decommissioned nodes in this cluster."
-          />
-        </div>
-      </section>
-    );
-  }
+  return (
+    <section className="section">
+      <Helmet title="Decommissioned Node History | Debug" />
+      <BackToAdvanceDebug history={history} />
+      <h1 className="base-heading title">Decommissioned Node History</h1>
+      <div>
+        <Table
+          dataSource={dataSource}
+          columns={decommissionedColumns}
+          noDataMessage="There are no decommissioned nodes in this cluster."
+        />
+      </div>
+    </section>
+  );
 }
 
 const decommissionedNodesTableData = createSelector(
