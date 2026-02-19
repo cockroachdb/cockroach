@@ -719,17 +719,11 @@ func TestServeIndexHTML(t *testing.T) {
 			require.NoError(t, err)
 
 			respString := string(respBytes)
-			// Since server test package links ccl, build.GetInfo() says that we
-			// think we're using CCL distribution (even though this test file is
-			// in `server` and not in `server_test`). However, serverutils
-			// doesn't link ccl, so it says it uses OSS distribution. Reconcile
-			// this mismatch.
-			buildInfo := strings.Replace(build.GetInfo().Short().StripMarkers(), "CockroachDB CCL", "CockroachDB OSS", 1)
 			expected := fmt.Sprintf(`<!DOCTYPE html>
 <title>CockroachDB</title>
 Binary built without web UI.
 <hr>
-<em>%s</em>`, buildInfo)
+<em>%s</em>`, build.GetInfo().Short().StripMarkers())
 			require.Equal(t, expected, respString)
 		})
 
