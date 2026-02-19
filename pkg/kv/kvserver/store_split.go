@@ -280,7 +280,7 @@ func prepareRightReplicaForSplit(
 	// Already holding raftMu, see above.
 	rightRepl.mu.Lock()
 	defer rightRepl.mu.Unlock()
-	if err := rightRepl.initRaftMuLockedReplicaMuLocked(
+	if err := rightRepl.initRaftMuLockedReplicaMuLockedForSplit(
 		state, false, /* waitForPrevLeaseToExpire */
 	); err != nil {
 		log.KvExec.Fatalf(ctx, "%v", err)
@@ -301,17 +301,6 @@ func prepareRightReplicaForSplit(
 		rightRepl.shMu.state.Lease, /* newLease - same as prevLease */
 		nil,                        /* priorReadSum */
 		assertNoLeaseJump)
-
-	// We need to explicitly unquiesce the Raft group on the right-hand range or
-	// else the range could be underreplicated for an indefinite period of time.
-	//
-	// Specifically, suppose one of the replicas of the left-hand range never
-	// applies this split trigger, e.g., because it catches up via a snapshot that
-	// advances it past this split. That store won't create the right-hand replica
-	// until it receives a Raft message addressed to the right-hand range. But
-	// since new replicas start out quiesced, unless we explicitly awaken the
-	// Raft group, there might not be any Raft traffic for quite a while.
-	rightRepl.maybeUnquiesceLocked(true /* wakeLeader */, true /* mayCampaign */)
 
 	if fn := r.store.TestingKnobs().AfterSplitApplication; fn != nil {
 		// TODO(pav-kv): we have already checked up the stack that rightDesc exists,
@@ -383,5 +372,27 @@ func (s *Store) SplitRange(
 
 	rightRepl.mu.Lock()
 	defer rightRepl.mu.Unlock()
+
+	// Mark the RHS replica as initialized. We intentionally deferred this from
+	// initRaftMuLockedReplicaMuLockedForSplit to this point so that the replica
+	// is not considered initialized until the very end of the split.
+	rightRepl.isInitialized.Store(true)
+
+	// Explicitly unquiesce the Raft group on the right-hand range or else the
+	// range could be underreplicated for an indefinite period of time.
+	//
+	// Specifically, suppose one of the replicas of the left-hand range never
+	// applies this split trigger, e.g., because it catches up via a snapshot
+	// that advances it past this split. That store won't create the right-hand
+	// replica until it receives a Raft message addressed to the right-hand
+	// range. But since new replicas start out quiesced, unless we explicitly
+	// awaken the Raft group, there might not be any Raft traffic for quite a
+	// while.
+	//
+	// TODO(arul): check the implications of moving this call further down in
+	// the split apply stack. It now runs later (and under Store.mu) compared to
+	// its previous position in prepareRightReplicaForSplit.
+	rightRepl.maybeUnquiesceLocked(true /* wakeLeader */, true /* mayCampaign */)
+
 	return s.markReplicaInitializedLockedReplLocked(ctx, rightRepl)
 }

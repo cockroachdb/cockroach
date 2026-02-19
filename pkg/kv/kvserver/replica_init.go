@@ -515,6 +515,154 @@ func (r *Replica) setDescLockedRaftMuLocked(ctx context.Context, desc *roachpb.R
 	}
 }
 
+// setDescLockedRaftMuLockedForSplit is like setDescLockedRaftMuLocked but does
+// not flip isInitialized. This is used during splits where we want to defer
+// marking the RHS as initialized until the very end of SplitRange.
+func (r *Replica) setDescLockedRaftMuLockedForSplit(
+	ctx context.Context, desc *roachpb.RangeDescriptor,
+) {
+	if desc.RangeID != r.RangeID {
+		log.KvExec.Fatalf(ctx, "range descriptor ID (%d) does not match replica's range ID (%d)",
+			desc.RangeID, r.RangeID)
+	}
+	if r.shMu.state.Desc.IsInitialized() &&
+		(desc == nil || !desc.IsInitialized()) {
+		log.KvExec.Fatalf(ctx, "cannot replace initialized descriptor with uninitialized one: %+v -> %+v",
+			r.shMu.state.Desc, desc)
+	}
+	if r.shMu.state.Desc.IsInitialized() &&
+		!r.shMu.state.Desc.StartKey.Equal(desc.StartKey) {
+		log.KvExec.Fatalf(ctx, "attempted to change replica's start key from %s to %s",
+			r.shMu.state.Desc.StartKey, desc.StartKey)
+	}
+
+	// NB: It might be nice to assert that the current replica exists in desc
+	// however we allow it to not be present for three reasons:
+	//
+	//   1) When removing the current replica we update the descriptor to the point
+	//      of removal even though we will delete the Replica's data in the same
+	//      batch. We could avoid setting the local descriptor in this case.
+	//   2) When the DisableEagerReplicaRemoval testing knob is enabled. We
+	//      could remove all tests which utilize this behavior now that there's
+	//      no other mechanism for range state which does not contain the current
+	//      store to exist on disk.
+	//   3) Various unit tests do not provide a valid descriptor.
+	replDesc, found := desc.GetReplicaDescriptor(r.StoreID())
+	if found && replDesc.ReplicaID != r.replicaID {
+		log.KvExec.Fatalf(ctx, "attempted to change replica's ID from %d to %d",
+			r.replicaID, replDesc.ReplicaID)
+	}
+
+	// Initialize the tenant. The must be the first time that the descriptor has
+	// been initialized. Note that the desc.StartKey never changes throughout the
+	// life of a range.
+	if desc.IsInitialized() && r.mu.tenantID == (roachpb.TenantID{}) {
+		_, tenantID, err := keys.DecodeTenantPrefix(desc.StartKey.AsRawKey())
+		if err != nil {
+			log.KvExec.Fatalf(ctx, "failed to decode tenant prefix from key for "+
+				"replica %v: %v", r, err)
+		}
+		r.mu.tenantID = tenantID
+		r.tenantMetricsRef = r.store.metrics.acquireTenant(tenantID)
+		if tenantID != roachpb.SystemTenantID {
+			r.tenantLimiter = r.store.tenantRateLimiters.GetTenant(ctx, tenantID, r.store.stopper.ShouldQuiesce())
+		}
+	}
+
+	// Determine if a new replica was added. This is true if the new max replica
+	// ID is greater than the old max replica ID.
+	oldMaxID := maxReplicaIDOfAny(r.shMu.state.Desc)
+	newMaxID := maxReplicaIDOfAny(desc)
+	if newMaxID > oldMaxID {
+		r.mu.lastReplicaAdded = newMaxID
+		r.mu.lastReplicaAddedTime = timeutil.Now()
+	} else if r.mu.lastReplicaAdded > newMaxID {
+		// The last replica added was removed.
+		r.mu.lastReplicaAdded = 0
+		r.mu.lastReplicaAddedTime = time.Time{}
+	}
+
+	r.rangeStr.store(r.replicaID, desc)
+	// NB: unlike setDescLockedRaftMuLocked, we intentionally do not flip
+	// isInitialized here. The caller is responsible for flipping it at the
+	// right time.
+	r.connectionClass.set(rpcbase.ConnectionClassForKey(desc.StartKey, defRaftConnClass))
+	r.concMgr.OnRangeDescUpdated(desc)
+	r.shMu.state.Desc = desc
+	r.flowControlV2.OnDescChangedLocked(ctx, desc, r.mu.tenantID)
+
+	// Give the liveness and meta ranges high priority in the Raft scheduler, to
+	// avoid head-of-line blocking and high scheduling latency.
+	for _, span := range []roachpb.Span{keys.NodeLivenessSpan, keys.MetaSpan} {
+		rspan, err := keys.SpanAddr(span)
+		if err != nil {
+			log.KvExec.Fatalf(ctx, "can't resolve system span %s: %s", span, err)
+		}
+		if _, err := desc.RSpan().Intersect(rspan); err == nil {
+			r.store.scheduler.AddPriorityID(desc.RangeID)
+		}
+	}
+}
+
+// initRaftMuLockedReplicaMuLockedForSplit is like
+// initRaftMuLockedReplicaMuLocked but does not flip isInitialized. This is used
+// during splits where we want to defer marking the RHS as initialized until the
+// very end of SplitRange.
+func (r *Replica) initRaftMuLockedReplicaMuLockedForSplit(
+	s kvstorage.LoadedReplicaState, waitForPrevLeaseToExpire bool,
+) error {
+	desc := s.ReplState.Desc
+	// Ensure that the loaded state corresponds to the same replica.
+	if desc.RangeID != r.RangeID || s.ReplicaID != r.replicaID {
+		return errors.AssertionFailedf(
+			"%s: trying to init with other replica's state r%d/%d", r, desc.RangeID, s.ReplicaID)
+	}
+	// Ensure that we transition to initialized replica, and do it only once.
+	if !desc.IsInitialized() {
+		return errors.AssertionFailedf("%s: cannot init replica with uninitialized descriptor", r)
+	} else if r.IsInitialized() {
+		return errors.AssertionFailedf("%s: cannot reinitialize an initialized replica", r)
+	}
+
+	r.setStartKeyLocked(desc.StartKey)
+
+	r.shMu.state = s.ReplState
+	if r.shMu.state.ForceFlushIndex != (roachpb.ForceFlushIndex{}) {
+		r.flowControlV2.ForceFlushIndexChangedLocked(context.TODO(), r.shMu.state.ForceFlushIndex.Index)
+	}
+	// TODO(pav-kv): make a method to initialize the log storage.
+	ls := r.asLogStorage()
+	ls.shMu.trunc = s.TruncState
+	ls.shMu.last = s.LastEntryID
+
+	// Initialize the Raft group. This may replace a Raft group that was installed
+	// for the uninitialized replica to process Raft requests or snapshots.
+	if err := r.initRaftGroupRaftMuLockedReplicaMuLocked(); err != nil {
+		return err
+	}
+
+	r.setDescLockedRaftMuLockedForSplit(r.AnnotateCtx(context.TODO()), desc)
+
+	// Only do this if there was a previous lease. This shouldn't be important
+	// to do but consider that the first lease which is obtained is back-dated
+	// to a zero start timestamp (and this de-flakes some tests). If we set the
+	// min proposed TS here, this lease could not be renewed (by the semantics
+	// of minLeaseProposedTS); and since minLeaseProposedTS is copied on splits,
+	// this problem would multiply to a number of replicas at cluster bootstrap.
+	// Instead, we make the first lease special (which is OK) and the problem
+	// disappears.
+	if r.shMu.state.Lease.Sequence > 0 {
+		if waitForPrevLeaseToExpire {
+			if err := r.waitForPreviousLeaseToExpire(r.store); err != nil {
+				return err
+			}
+		}
+		r.mu.minLeaseProposedTS = r.Clock().NowAsClockTimestamp()
+	}
+
+	return nil
+}
+
 // waitForPreviousLeaseToExpire waits for the previous lease to expire. It does
 // so by sleeping until Clock().Now() is in the future of the previous lease
 // expiration. This works for expiration-based leases, and leader-leases but
