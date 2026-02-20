@@ -370,6 +370,36 @@ func TestManualWindowHistogram(t *testing.T) {
 	}
 }
 
+// TestValueAtQuantileWithEmptyBuckets verifies that ValueAtQuantile does not
+// return +Inf when adjacent buckets have the same cumulative count (causing a
+// division by zero in the interpolation). This was the root cause of #163958.
+func TestValueAtQuantileWithEmptyBuckets(t *testing.T) {
+	u := func(v uint64) *uint64 { return &v }
+	f := func(v float64) *float64 { return &v }
+
+	// Construct a histogram where the first two buckets have the same
+	// cumulative count, meaning the second bucket is empty. This causes
+	// count to be 0 in the interpolation, producing +Inf via division by zero.
+	h := &prometheusgo.Histogram{
+		SampleCount: u(5),
+		SampleSum:   f(250),
+		Bucket: []*prometheusgo.Bucket{
+			{CumulativeCount: u(0), UpperBound: f(1)},
+			{CumulativeCount: u(0), UpperBound: f(5)},
+			{CumulativeCount: u(2), UpperBound: f(10)},
+			{CumulativeCount: u(3), UpperBound: f(25)},
+			{CumulativeCount: u(5), UpperBound: f(100)},
+		},
+	}
+
+	snap := MakeHistogramSnapshot(h)
+	for q := 0.0; q <= 100.0; q += 10 {
+		val := snap.ValueAtQuantile(q)
+		require.False(t, math.IsInf(val, 0), "ValueAtQuantile(%v) returned infinity", q)
+		require.False(t, math.IsNaN(val), "ValueAtQuantile(%v) returned NaN", q)
+	}
+}
+
 func TestManualWindowHistogramTicker(t *testing.T) {
 	now := time.UnixMicro(1699565116)
 	defer TestingSetNow(func() time.Time {

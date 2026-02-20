@@ -62,8 +62,19 @@ func (hs HistogramSnapshot) ValueAtQuantile(q float64) float64 {
 		count -= *buckets[b-1].CumulativeCount
 		rank -= *buckets[b-1].CumulativeCount
 	}
-	val := bucketStart + (bucketEnd-bucketStart)*(float64(rank)/float64(count))
-	if math.IsNaN(val) || math.IsInf(val, -1) {
+	var val float64
+	if count == 0 {
+		// The bucket has no observations. Use the bucket start as the estimate
+		// when rank is also 0 (quantile 0), otherwise use the bucket end.
+		if rank == 0 {
+			val = bucketStart
+		} else {
+			val = bucketEnd
+		}
+	} else {
+		val = bucketStart + (bucketEnd-bucketStart)*(float64(rank)/float64(count))
+	}
+	if math.IsNaN(val) || math.IsInf(val, 0) {
 		return 0
 	}
 
