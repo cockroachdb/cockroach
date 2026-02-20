@@ -17,7 +17,7 @@ env:
   # Autosolver fork configuration - update these if the bot account changes
   # NOTE: The job-level 'if' condition below must also be updated manually since
   # GitHub Actions doesn't support env var substitution in job-level conditions.
-  AUTOSOLVER_FORK_OWNER: crdb-autosolver
+  AUTOSOLVER_FORK_OWNER: cockroach-teamcity
   AUTOSOLVER_FORK_REPO: cockroach
 
 jobs:
@@ -32,10 +32,10 @@ jobs:
     # - For review events: only COMMENTED or CHANGES_REQUESTED (not APPROVED/DISMISSED)
     # NOTE: The fork name below must match AUTOSOLVER_FORK_OWNER/AUTOSOLVER_FORK_REPO above
     if: |
-      github.event.pull_request.head.repo.full_name == 'crdb-autosolver/cockroach' &&
+      github.event.pull_request.head.repo.full_name == 'cockroach-teamcity/cockroach' &&
       contains(github.event.pull_request.labels.*.name, 'o-autosolver') &&
       github.actor != 'github-actions[bot]' &&
-      github.actor != 'crdb-autosolver' &&
+      github.actor != 'cockroach-teamcity' &&
       (
         (github.event_name == 'pull_request_review_comment' && !contains(github.event.comment.body, '[autosolve-response]')) ||
         (github.event_name == 'pull_request_review' && (github.event.review.state == 'commented' || github.event.review.state == 'changes_requested'))
@@ -51,7 +51,7 @@ jobs:
           # Validate that env vars match expected fork (defense against misconfiguration)
           # This ensures the hard-coded value in the job-level 'if' stays in sync
           EXPECTED_FORK="${AUTOSOLVER_FORK_OWNER}/${AUTOSOLVER_FORK_REPO}"
-          if [ "$EXPECTED_FORK" != "crdb-autosolver/cockroach" ]; then
+          if [ "$EXPECTED_FORK" != "cockroach-teamcity/cockroach" ]; then
             echo "::error::AUTOSOLVER_FORK_OWNER/AUTOSOLVER_FORK_REPO mismatch. Update the env vars AND the job-level 'if' condition."
             exit 1
           fi
@@ -214,7 +214,7 @@ jobs:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           use_vertex: "true"
           claude_args: |
-            --model claude-opus-4-5@20251101
+            --model claude-opus-4-6
             --allowedTools "Read,Write,Edit,Grep,Glob,Bash(./dev test:*),Bash(./dev testlogic:*),Bash(./dev build:*),Bash(./dev generate:*),Bash(git add:*),Bash(git status:*),Bash(git diff:*),Bash(git log:*),Bash(git show:*)"
           prompt: |
             <system_instruction priority="absolute">
@@ -310,8 +310,8 @@ jobs:
         env:
           AUTOSOLVER_PAT: ${{ secrets.AUTOSOLVER_PAT }}
         run: |
-          git config user.name "crdb-autosolver"
-          git config user.email "crdb-autosolver@users.noreply.github.com"
+          git config user.name "cockroach-teamcity"
+          git config user.email "cockroach-teamcity@users.noreply.github.com"
 
           # Security check: Block workflow file modifications BEFORE staging
           # Check modified, untracked files, and symlinks to prevent bypass
@@ -359,7 +359,7 @@ jobs:
 
           # Check authorship before amending - only amend if we authored the commit
           AUTHOR_EMAIL=$(git log -1 --format='%ae')
-          if [ "$AUTHOR_EMAIL" = "crdb-autosolver@users.noreply.github.com" ]; then
+          if [ "$AUTHOR_EMAIL" = "cockroach-teamcity@users.noreply.github.com" ]; then
             # Check if staged changes differ from HEAD before amending
             if git diff --cached --quiet HEAD; then
               echo "Staged changes are identical to HEAD, nothing to amend"

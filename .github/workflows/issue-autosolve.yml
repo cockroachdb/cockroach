@@ -11,7 +11,7 @@ concurrency:
 
 env:
   # Autosolver fork configuration - update these if the bot account changes
-  AUTOSOLVER_FORK_OWNER: crdb-autosolver
+  AUTOSOLVER_FORK_OWNER: cockroach-teamcity
   AUTOSOLVER_FORK_REPO: cockroach
 
 jobs:
@@ -37,7 +37,7 @@ jobs:
 
           # Validate that env vars match expected fork (defense against misconfiguration)
           EXPECTED_FORK="${AUTOSOLVER_FORK_OWNER}/${AUTOSOLVER_FORK_REPO}"
-          if [ "$EXPECTED_FORK" != "crdb-autosolver/cockroach" ]; then
+          if [ "$EXPECTED_FORK" != "cockroach-teamcity/cockroach" ]; then
             echo "::error::AUTOSOLVER_FORK_OWNER/AUTOSOLVER_FORK_REPO mismatch. Update the env vars or the validation check."
             exit 1
           fi
@@ -86,7 +86,7 @@ jobs:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           use_vertex: "true"
           claude_args: |
-            --model claude-opus-4-5@20251101
+            --model claude-opus-4-6
             --allowedTools "Read,Grep,Glob,Bash(gh issue view:*)"
           prompt: |
             <system_instruction priority="absolute">
@@ -232,7 +232,7 @@ jobs:
               # First attempt - start new session
               echo "Starting new Claude session..."
               claude --print \
-                --model claude-opus-4-5@20251101 \
+                --model claude-opus-4-6 \
                 --output-format json \
                 --allowedTools "Read,Write,Edit,Grep,Glob,Bash(gh issue view:*),Bash(./dev test:*),Bash(./dev testlogic:*),Bash(./dev build:*),Bash(./dev generate:*),Bash(git add:*),Bash(git status:*),Bash(git diff:*),Bash(git log:*),Bash(git show:*)" \
                 --prompt "$PROMPT" \
@@ -242,7 +242,7 @@ jobs:
               echo "Resuming session $SESSION_ID..."
               claude --print \
                 --resume "$SESSION_ID" \
-                --model claude-opus-4-5@20251101 \
+                --model claude-opus-4-6 \
                 --output-format json \
                 --allowedTools "Read,Write,Edit,Grep,Glob,Bash(gh issue view:*),Bash(./dev test:*),Bash(./dev testlogic:*),Bash(./dev build:*),Bash(./dev generate:*),Bash(git add:*),Bash(git status:*),Bash(git diff:*),Bash(git log:*),Bash(git show:*)" \
                 > "$EXECUTION_FILE" 2> "$STDERR_FILE" || CLAUDE_EXIT_CODE=$?
@@ -337,8 +337,8 @@ jobs:
           AUTOSOLVER_PAT: ${{ secrets.AUTOSOLVER_PAT }}
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          git config user.name "crdb-autosolver"
-          git config user.email "crdb-autosolver@users.noreply.github.com"
+          git config user.name "cockroach-teamcity"
+          git config user.email "cockroach-teamcity@users.noreply.github.com"
 
           # Configure git credential helper to use PAT for the fork
           # Using a script-based helper avoids writing credentials to disk
