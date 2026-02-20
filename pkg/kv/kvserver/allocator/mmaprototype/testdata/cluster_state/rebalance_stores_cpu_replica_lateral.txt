@@ -126,7 +126,12 @@ rebalance-stores store-id=1
 [mmaid=1] load summary for dim=ByteSize (s3): loadNormal, reason: load is within 5% of mean [load=0 meanLoad=0 fractionUsed=0.00% meanUtil=0.00% capacity=1000]
 [mmaid=1] load summary for dim=CPURate (n3): loadNormal, reason: load is within 5% of mean [load=90 meanLoad=100 fractionUsed=4.50% meanUtil=7.50% capacity=2000]
 [mmaid=1] cannot add load from n3s3 to n3s4 for r1 due to target_summary(overloadSlow)>=loadNoChange,target-node(overloadSlow)>target-store(loadNormal): delta([cpu:10ns/s, write-bandwidth:10 MB/s, byte-size:0 B]) targetSLS[(store=loadNormal worst=ByteSize cpu=loadLow writes=loadLow bytes=loadNormal node=overloadSlow frac_pending=0.00,0.00(true))] srcSLS[(store=overloadSlow worst=WriteBandwidth cpu=loadLow writes=overloadSlow bytes=loadNormal node=loadNormal frac_pending=0.00,0.00(true))]
-[mmaid=1] rebalancing pass failures (store,reason:count): (s1,no-cand-load:1), (s3,no-cand-to-accept-load:1)
+[mmaid=1] rebalancing pass summary [local=s1]:
+	overloaded:
+		lease-grace: [s2]
+		short: [s1, s3]
+	failure: [{s1, total: 2, no-cand:1, no-cand-load:1}, {s3, total: 1, no-cand-to-accept-load:1}]
+	no-ranges-evaluated: [s2]
 pending(0)
 
 # Advance time beyond the lease shedding grace period.
@@ -214,5 +219,8 @@ rebalance-stores store-id=1
 [mmaid=2] load summary for dim=ByteSize (s3): loadNormal, reason: load is within 5% of mean [load=0 meanLoad=0 fractionUsed=0.00% meanUtil=0.00% capacity=1000]
 [mmaid=2] load summary for dim=CPURate (n3): loadNormal, reason: load is within 5% of mean [load=90 meanLoad=100 fractionUsed=4.50% meanUtil=7.50% capacity=2000]
 [mmaid=2] cannot add load from n3s3 to n3s4 for r1 due to target_summary(overloadSlow)>=loadNoChange,target-node(overloadSlow)>target-store(loadNormal): delta([cpu:10ns/s, write-bandwidth:10 MB/s, byte-size:0 B]) targetSLS[(store=loadNormal worst=ByteSize cpu=loadLow writes=loadLow bytes=loadNormal node=overloadSlow frac_pending=0.00,0.00(true))] srcSLS[(store=overloadSlow worst=WriteBandwidth cpu=loadLow writes=overloadSlow bytes=loadNormal node=loadNormal frac_pending=0.00,0.00(true))]
-[mmaid=2] rebalancing pass failures (store,reason:count): (s1,no-cand-load:1), (s2,no-cand:1), (s3,no-cand-to-accept-load:1)
+[mmaid=2] rebalancing pass summary [local=s1]:
+	overloaded:
+		short: [s1, s2, s3]
+	failure: [{s1, total: 2, no-cand:1, no-cand-load:1}, {s2, total: 1, no-cand:1}, {s3, total: 1, no-cand-to-accept-load:1}]
 pending(0)
