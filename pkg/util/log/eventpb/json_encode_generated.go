@@ -2853,6 +2853,45 @@ func (m *DebugSendKvBatch) AppendJSONFields(printComma bool, b redact.Redactable
 }
 
 // AppendJSONFields implements the EventPayload interface.
+func (m *DeleteRewriteInlineHints) AppendJSONFields(printComma bool, b redact.RedactableBytes) (bool, redact.RedactableBytes) {
+
+	printComma, b = m.CommonEventDetails.AppendJSONFields(printComma, b)
+
+	printComma, b = m.CommonSQLEventDetails.AppendJSONFields(printComma, b)
+
+	if m.StatementFingerprint != "" {
+		if printComma {
+			b = append(b, ',')
+		}
+		printComma = true
+		b = append(b, "\"StatementFingerprint\":\""...)
+		b = redact.RedactableBytes(jsonbytes.EncodeString([]byte(b), string(m.StatementFingerprint)))
+		b = append(b, '"')
+	}
+
+	if m.HintID != 0 {
+		if printComma {
+			b = append(b, ',')
+		}
+		printComma = true
+		b = append(b, "\"HintID\":"...)
+		b = strconv.AppendInt(b, int64(m.HintID), 10)
+	}
+
+	if m.DonorSql != "" {
+		if printComma {
+			b = append(b, ',')
+		}
+		printComma = true
+		b = append(b, "\"DonorSql\":\""...)
+		b = redact.RedactableBytes(jsonbytes.EncodeString([]byte(b), string(m.DonorSql)))
+		b = append(b, '"')
+	}
+
+	return printComma, b
+}
+
+// AppendJSONFields implements the EventPayload interface.
 func (m *DiskSlownessCleared) AppendJSONFields(printComma bool, b redact.RedactableBytes) (bool, redact.RedactableBytes) {
 
 	printComma, b = m.CommonEventDetails.AppendJSONFields(printComma, b)
