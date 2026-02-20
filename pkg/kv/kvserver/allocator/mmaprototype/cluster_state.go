@@ -124,8 +124,8 @@ type ReplicaState struct {
 }
 
 // SafeFormat implements the redact.SafeFormatter interface.
-func (rs ReplicaState) SafeFormat(w redact.SafePrinter, _ rune) {
-	rs.ReplicaIDAndType.SafeFormat(w, 'v')
+func (rs ReplicaState) SafeFormat(w redact.SafePrinter, c rune) {
+	rs.ReplicaIDAndType.SafeFormat(w, c)
 	if rs.LeaseDisposition != LeaseDispositionOK {
 		w.Printf(" lease-disposition=%v", rs.LeaseDisposition)
 	}
@@ -140,8 +140,6 @@ func (changeID) SafeValue() {}
 
 type ReplicaChangeType int
 
-func (ReplicaChangeType) SafeValue() {}
-
 const (
 	Unknown ReplicaChangeType = iota
 	AddLease
@@ -155,20 +153,25 @@ const (
 	ChangeReplica
 )
 
-func (s ReplicaChangeType) String() string {
-	switch s {
+func (rct ReplicaChangeType) String() string {
+	return redact.StringWithoutMarkers(rct)
+}
+
+// SafeFormat implements the redact.SafeFromatter interface.
+func (rct ReplicaChangeType) SafeFormat(w redact.SafePrinter, _ rune) {
+	switch rct {
 	case Unknown:
-		return "Unknown"
+		w.SafeString("Unknown")
 	case AddLease:
-		return "AddLease"
+		w.SafeString("AddLease")
 	case RemoveLease:
-		return "RemoveLease"
+		w.SafeString("RemoveLease")
 	case AddReplica:
-		return "AddReplica"
+		w.SafeString("AddReplica")
 	case RemoveReplica:
-		return "RemoveReplica"
+		w.SafeString("RemoveReplica")
 	case ChangeReplica:
-		return "ChangeReplica"
+		w.SafeString("ChangeReplica")
 	default:
 		panic("unknown ReplicaChangeType")
 	}
@@ -2612,17 +2615,17 @@ func (cs *clusterState) computeLoadSummary(
 
 // TODO(wenyihu6): check to make sure obs here is correct
 func (cs *clusterState) loadSummaryForAllStores(ctx context.Context) string {
-	var b strings.Builder
+	var buf redact.StringBuilder
 	clusterMeans := cs.meansMemo.getMeans(nil)
-	b.WriteString(fmt.Sprintf("cluster means: (stores-load %s) (stores-capacity %s)\n",
-		clusterMeans.storeLoad.load, clusterMeans.storeLoad.capacity))
-	b.WriteString(fmt.Sprintf("(nodes-cpu-load %d) (nodes-cpu-capacity %d)\n",
-		clusterMeans.nodeLoad.loadCPU, clusterMeans.nodeLoad.capacityCPU))
+	buf.Printf("cluster means: (stores-load %v) (stores-capacity %v)\n",
+		clusterMeans.storeLoad.load, clusterMeans.storeLoad.capacity)
+	buf.Printf("(nodes-cpu-load %v) (nodes-cpu-capacity %v)\n",
+		clusterMeans.nodeLoad.loadCPU, clusterMeans.nodeLoad.capacityCPU)
 	for storeID, ss := range cs.stores {
 		sls := cs.meansMemo.getStoreLoadSummary(ctx, clusterMeans, storeID, ss.loadSeqNum)
-		b.WriteString(fmt.Sprintf("evaluating store s%d for shedding: load summary %v", storeID, sls))
+		buf.Printf("evaluating store s%v for shedding: load summary %v", storeID, sls)
 	}
-	return b.String()
+	return string(buf.RedactableString())
 }
 
 func computeLoadSummary(

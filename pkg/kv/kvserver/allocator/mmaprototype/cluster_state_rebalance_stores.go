@@ -11,7 +11,6 @@ import (
 	"fmt"
 	"math/rand"
 	"slices"
-	"strings"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -344,25 +343,24 @@ func (re *rebalanceEnv) rebalanceStore(
 
 	topKRanges := ss.adjusted.topKRanges[localStoreID]
 	n := topKRanges.len()
-	if true {
-		// Debug logging.
-		if n > 0 {
-			var b strings.Builder
-			for i := 0; i < n; i++ {
-				rangeID := topKRanges.index(i)
-				rstate := re.ranges[rangeID]
-				load := rstate.load.Load
-				if !ss.adjusted.replicas[rangeID].IsLeaseholder {
-					load[CPURate] = rstate.load.RaftCPU
-				}
-				_, _ = fmt.Fprintf(&b, " r%d:%v", rangeID, load)
+	// Debug logging.
+	if n > 0 {
+		var buf redact.StringBuilder
+		buf.Printf("top-K[%d] ranges for s%d with lease on local s%d:", topKRanges.dim,
+			store.StoreID, localStoreID)
+		for i := 0; i < n; i++ {
+			rangeID := topKRanges.index(i)
+			rstate := re.ranges[rangeID]
+			load := rstate.load.Load
+			if !ss.adjusted.replicas[rangeID].IsLeaseholder {
+				load[CPURate] = rstate.load.RaftCPU
 			}
-			log.KvDistribution.VEventf(ctx, 2, "top-K[%s] ranges for s%d with lease on local s%d:%s",
-				topKRanges.dim, store.StoreID, localStoreID, redact.SafeString(b.String()))
-		} else {
-			log.KvDistribution.VEventf(ctx, 2, "no top-K[%s] ranges found for s%d with lease on local s%d",
-				topKRanges.dim, store.StoreID, localStoreID)
+			buf.Printf(" r%d:%v", rangeID, load)
 		}
+		log.KvDistribution.VEventf(ctx, 2, "%s", buf.RedactableString())
+	} else {
+		log.KvDistribution.VEventf(ctx, 2, "no top-K[%s] ranges found for s%d with lease on local s%d",
+			topKRanges.dim, store.StoreID, localStoreID)
 	}
 	if n == 0 {
 		return

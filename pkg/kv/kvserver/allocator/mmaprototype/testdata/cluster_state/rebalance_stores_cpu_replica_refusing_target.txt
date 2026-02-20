@@ -88,7 +88,7 @@ rebalance-stores store-id=1
 [mmaid=1] result(failed): skipping r1 since store not overloaded relative to candidates
 [mmaid=1] attempting to shed replicas next
 [mmaid=1] skipping s4 for replica transfer: replica disposition refusing (health ok)
-[mmaid=1] pre-means filtered 1 stores → remaining [1 2 3], means: store={[cpu:1µs/s, write-bandwidth:0 B/s, byte-size:0 B] [cpu:1µs/s, write-bandwidth:1.0 kB/s, byte-size:1.0 kB] [1 0 0] [lease:0, replica:0]} node={1000 1000 1}
+[mmaid=1] pre-means filtered 1 stores → remaining [1 2 3], means: store={[cpu:1µs/s, write-bandwidth:0 B/s, byte-size:0 B] [cpu:1µs/s, write-bandwidth:1.0 kB/s, byte-size:1.0 kB] [cpu-util:1.00 byte-util:0.00] [lease:0, replica:0] node={1000 1000 1}
 [mmaid=1] load summary for dim=CPURate (s1): loadNormal, reason: load is within 5% of mean [load=1000 meanLoad=1000 fractionUsed=100.00% meanUtil=100.00% capacity=1000]
 [mmaid=1] load summary for dim=WriteBandwidth (s1): loadNormal, reason: load is within 5% of mean [load=0 meanLoad=0 fractionUsed=0.00% meanUtil=0.00% capacity=1000]
 [mmaid=1] load summary for dim=ByteSize (s1): loadNormal, reason: load is within 5% of mean [load=0 meanLoad=0 fractionUsed=0.00% meanUtil=0.00% capacity=1000]
