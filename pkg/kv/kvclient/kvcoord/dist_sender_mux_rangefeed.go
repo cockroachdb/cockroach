@@ -250,8 +250,6 @@ func (m *rangefeedMuxer) startSingleRangeFeed(
 // Upon successfully establishing RPC stream, the ownership of the activeMuxRangeFeed
 // gets transferred to the node event loop goroutine (receiveEventsFromNode).
 func (s *activeMuxRangeFeed) start(ctx context.Context, m *rangefeedMuxer) error {
-	streamID := atomic.AddInt64(&m.seqID, 1)
-
 	// Before starting single rangefeed, acquire catchup scan quota.
 	if err := s.acquireCatchupScanQuota(ctx, m.catchupSem, m.metrics); err != nil {
 		return err
@@ -283,6 +281,12 @@ func (s *activeMuxRangeFeed) start(ctx context.Context, m *rangefeedMuxer) error
 		}
 
 		for !s.transport.IsExhausted() {
+			// Generate a new streamID for each attempt. This allows us to use
+			// LoadAndDelete as a coordination mechanism: whoever successfully deletes
+			// the streamID from the streams map is responsible for handling its
+			// restart.
+			streamID := atomic.AddInt64(&m.seqID, 1)
+
 			args := makeRangeFeedRequest(
 				s.Span, s.token.Desc().RangeID, m.cfg.overSystemTable, s.startAfter, m.cfg.withDiff, m.cfg.withFiltering, m.cfg.withMatchingOriginIDs, m.cfg.consumerID, m.cfg.bulkDelivery)
 			args.Replica = s.transport.NextReplica()
@@ -306,11 +310,17 @@ func (s *activeMuxRangeFeed) start(ctx context.Context, m *rangefeedMuxer) error
 			conn, err := m.establishMuxConnection(ctx, rpcClient, args.Replica.NodeID)
 			s.onConnect(rpcClient, m.metrics)
 
+			var takenOver bool
 			if err == nil {
-				err = conn.startRangeFeed(streamID, s, &args, m.cfg.knobs.beforeSendRequest)
+				err, takenOver = conn.startRangeFeed(streamID, s, &args, m.cfg.knobs.beforeSendRequest)
 			}
 
 			if err != nil {
+				if takenOver {
+					// Another goroutine (restartActiveRangeFeed) took over responsibility
+					// for this activeMuxRangeFeed. Abort without error to let them handle it.
+					return nil
+				}
 				log.VErrEventf(ctx, 1,
 					"RPC error establishing mux rangefeed to r%d, replica %s: %s", args.RangeID, args.Replica, err)
 				if grpcutil.IsAuthError(err) {
@@ -506,13 +516,18 @@ func (m *rangefeedMuxer) receiveEventsFromNode(
 			if active.catchupRes != nil {
 				m.metrics.Errors.RangefeedErrorCatchup.Inc(1)
 			}
-			ms.streams.Delete(event.StreamID)
-			// Restart rangefeed on another goroutine. Restart might be a bit
-			// expensive, particularly if we have to resolve span.  We do not want
-			// to block receiveEventsFromNode for too long.
-			m.g.GoCtx(func(ctx context.Context) error {
-				return m.restartActiveRangeFeed(ctx, active, t.Error.GoError())
-			})
+			// Use LoadAndDelete to coordinate with startRangeFeed. Only spawn
+			// restartActiveRangeFeed if we successfully deleted the streamID.
+			// If startRangeFeed's defer already deleted it, that goroutine is
+			// handling the retry.
+			if _, deleted := ms.streams.LoadAndDelete(event.StreamID); deleted {
+				// Restart rangefeed on another goroutine. Restart might be a bit
+				// expensive, particularly if we have to resolve span. We do not want
+				// to block receiveEventsFromNode for too long.
+				m.g.GoCtx(func(ctx context.Context) error {
+					return m.restartActiveRangeFeed(ctx, active, t.Error.GoError())
+				})
+			}
 			continue
 		}
 
@@ -574,6 +589,9 @@ func (m *rangefeedMuxer) restartActiveRangeFeed(
 
 	if errInfo.evict {
 		active.resetRouting(ctx, rangecache.EvictionToken{})
+		if m.cfg.knobs.afterRoutingReset != nil {
+			m.cfg.knobs.afterRoutingReset()
+		}
 	}
 
 	if errInfo.resolveSpan {
@@ -592,11 +610,16 @@ func (m *rangefeedMuxer) restartActiveRangeFeed(
 }
 
 // startRangeFeed initiates rangefeed for the specified request running
-// on this node connection.  If no error returned, registers stream
-// with this connection.  Otherwise, stream is not registered.
+// on this node connection. If no error returned, registers stream
+// with this connection. Otherwise, stream is not registered.
+//
+// The second return value (takenOver) indicates whether another goroutine
+// (receiveEventsFromNode via restartActiveRangeFeed) has taken over
+// responsibility for this activeMuxRangeFeed. When takenOver is true, the
+// caller should abort without retrying, as the other goroutine is handling it.
 func (c *muxStream) startRangeFeed(
 	streamID int64, stream *activeMuxRangeFeed, req *kvpb.RangeFeedRequest, beforeSend func(),
-) (retErr error) {
+) (retErr error, takenOver bool) {
 	// NB: lock must be held for the duration of this method.
 	// The reasons for this are twofold:
 	//  1. Send calls must be protected against concurrent calls.
@@ -619,20 +642,24 @@ func (c *muxStream) startRangeFeed(
 
 	defer func() {
 		if retErr != nil {
-			// undo stream registration.
-			c.streams.Delete(streamID)
+			// Use LoadAndDelete to detect if someone else already took over. If
+			// receiveEventsFromNode already deleted this streamID and spawned
+			// restartActiveRangeFeed, we should not retry here.
+			if _, found := c.streams.LoadAndDelete(streamID); !found {
+				takenOver = true
+			}
 		}
 	}()
 
 	if c.mu.closed {
-		return net.ErrClosed
+		return net.ErrClosed, false
 	}
 
 	if beforeSend != nil {
 		beforeSend()
 	}
 
-	return c.mu.sender.Send(req)
+	return c.mu.sender.Send(req), false
 }
 
 func (c *muxStream) lookupStream(streamID int64) *activeMuxRangeFeed {
@@ -640,7 +667,7 @@ func (c *muxStream) lookupStream(streamID int64) *activeMuxRangeFeed {
 	return v
 }
 
-// close closes mux stream returning the list of active range feeds.
+// close closes mux stream returning the list of active range feeds to restart.
 func (c *muxStream) close() (toRestart []*activeMuxRangeFeed) {
 	// NB: lock must be held for the duration of this method to synchronize with startRangeFeed.
 	c.mu.Lock()
@@ -648,8 +675,13 @@ func (c *muxStream) close() (toRestart []*activeMuxRangeFeed) {
 
 	c.mu.closed = true
 
-	c.streams.Range(func(_ int64, v *activeMuxRangeFeed) bool {
+	// Collect streams and delete them from the map. Deleting ensures that any
+	// concurrent restartActiveRangeFeed goroutines (spawned by
+	// receiveEventsFromNode before it returned) will see the stream was already
+	// handled via their LoadAndDelete check.
+	c.streams.Range(func(streamID int64, v *activeMuxRangeFeed) bool {
 		toRestart = append(toRestart, v)
+		c.streams.Delete(streamID)
 		return true
 	})
 
