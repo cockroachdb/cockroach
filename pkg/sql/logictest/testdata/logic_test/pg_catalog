@@ -752,9 +752,9 @@ attrelid    relname            attname                       atttypid  attstatta
 120         t6                 c                             25        0              -1      3       0         -1
 120         t6                 m                             100118    0              -1      4       0         -1
 120         t6                 rowid                         20        0              8       6       0         -1
-120         t6                 ........pg.dropped.5........  2283      0              -1      5       0         -1
-120         t6                 ........pg.dropped.7........  2283      0              -1      7       0         -1
-120         t6                 ........pg.dropped.8........  2283      0              -1      8       0         -1
+120         t6                 ........pg.dropped.5........  0         0              -1      5       0         -1
+120         t6                 ........pg.dropped.7........  0         0              -1      7       0         -1
+120         t6                 ........pg.dropped.8........  0         0              -1      8       0         -1
 2129466852  t6_pkey            rowid                         20        0              8       1       0         -1
 2129466855  t6_expr_idx        crdb_internal_idx_expr        20        0              8       1       0         -1
 2129466854  t6_expr_expr1_idx  crdb_internal_idx_expr_1      25        0              -1      1       0         -1
@@ -910,6 +910,27 @@ t6_expr_idx1       crdb_internal_idx_expr_2      false         true        0    
 mv1                ?column?                      false         true        0            NULL    NULL        NULL
 mv1                rowid                         false         true        0            NULL    NULL        NULL
 mv1_pkey           rowid                         false         true        0            NULL    NULL        NULL
+
+# Regression test for #163948: dropped columns should have atttypid=0, so they
+# are filtered out by joins with pg_type (matching PostgreSQL behavior).
+query TTBII
+SELECT
+  a.attname,
+  t.typname,
+  a.attnotnull,
+  a.attlen,
+  a.atttypmod
+FROM pg_attribute AS a
+JOIN pg_type AS t ON a.atttypid = t.oid
+WHERE a.attrelid = 'constraint_db.t6'::regclass
+  AND a.attnum > 0
+ORDER BY a.attnum
+----
+a      int8     false  8   -1
+b      int8     false  8   -1
+c      text     false  -1  -1
+m      mytype   false  -1  -1
+rowid  int8     true   8   -1
 
 # Check relkind codes.
 statement ok
