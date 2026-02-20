@@ -42,6 +42,11 @@ func schemaExists(
 }
 
 func (p *planner) writeSchemaDesc(ctx context.Context, desc *schemadesc.Mutable) error {
+	// Exit early with an error if the schema is undergoing a declarative schema
+	// change.
+	if catalog.HasConcurrentDeclarativeSchemaChange(desc) {
+		return scerrors.ConcurrentSchemaChangeError(desc)
+	}
 	b := p.txn.NewBatch()
 	if err := p.Descriptors().WriteDescToBatch(
 		ctx, p.extendedEvalCtx.Tracing.KVTracingEnabled(), desc, b,
@@ -54,11 +59,6 @@ func (p *planner) writeSchemaDesc(ctx context.Context, desc *schemadesc.Mutable)
 func (p *planner) writeSchemaDescChange(
 	ctx context.Context, desc *schemadesc.Mutable, jobDesc string,
 ) error {
-	// Exit early with an error if the schema is undergoing a declarative schema
-	// change.
-	if catalog.HasConcurrentDeclarativeSchemaChange(desc) {
-		return scerrors.ConcurrentSchemaChangeError(desc)
-	}
 	record, recordExists := p.extendedEvalCtx.jobs.uniqueToCreate[desc.ID]
 	if recordExists {
 		// Update it.
