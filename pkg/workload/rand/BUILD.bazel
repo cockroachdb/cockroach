@@ -3,6 +3,7 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 go_library(
     name = "rand",
     srcs = [
+        "diff.go",
         "rand.go",
         "schema.go",
         "writer.go",
@@ -15,6 +16,7 @@ go_library(
         "//pkg/sql/randgen",
         "//pkg/sql/sem/tree",
         "//pkg/sql/types",
+        "//pkg/util/hlc",
         "//pkg/util/timeutil",
         "//pkg/workload",
         "//pkg/workload/histogram",
@@ -29,6 +31,7 @@ go_test(
     name = "rand_test",
     size = "small",
     srcs = [
+        "diff_test.go",
         "rand_test.go",
         "writer_test.go",
     ],
@@ -48,6 +51,7 @@ go_test(
         "//pkg/testutils/serverutils",
         "//pkg/testutils/skip",
         "//pkg/testutils/sqlutils",
+        "//pkg/util/hlc",
         "//pkg/util/leaktest",
         "//pkg/util/log",
         "//pkg/util/randutil",
