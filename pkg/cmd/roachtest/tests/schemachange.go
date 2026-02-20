@@ -708,21 +708,25 @@ func makeSchemaChangeBulkIngestTestName(
 // distributed merge behavior at varying dataset sizes.
 func registerSchemaChangeBulkIngestScaleTest(r registry.Registry) {
 	// Local-mode tests for quick validation (1M rows)
-	r.Add(makeSchemaChangeBulkIngestScaleTest(r, 4, 1_000_000, false, true, randomIndexOrder, pdSsdDiskType))
-	r.Add(makeSchemaChangeBulkIngestScaleTest(r, 4, 1_000_000, true, true, randomIndexOrder, pdSsdDiskType))
-	r.Add(makeSchemaChangeBulkIngestScaleTest(r, 4, 1_000_000, false, true, sortedIndexOrder, pdSsdDiskType))
-	r.Add(makeSchemaChangeBulkIngestScaleTest(r, 4, 1_000_000, true, true, sortedIndexOrder, pdSsdDiskType))
+	r.Add(makeSchemaChangeBulkIngestScaleTest(r, 4, 1_000_000, false, true, randomIndexOrder, pdSsdDiskType, 0, spec.Auto))
+	r.Add(makeSchemaChangeBulkIngestScaleTest(r, 4, 1_000_000, true, true, randomIndexOrder, pdSsdDiskType, 0, spec.Auto))
+	r.Add(makeSchemaChangeBulkIngestScaleTest(r, 4, 1_000_000, false, true, sortedIndexOrder, pdSsdDiskType, 0, spec.Auto))
+	r.Add(makeSchemaChangeBulkIngestScaleTest(r, 4, 1_000_000, true, true, sortedIndexOrder, pdSsdDiskType, 0, spec.Auto))
 
 	// Cloud-mode tests for scale investigation
 	for rows := int64(5_000_000_000); rows <= 11_000_000_000; rows += 3_000_000_000 {
-		r.Add(makeSchemaChangeBulkIngestScaleTest(r, 12, rows, false, false, randomIndexOrder, pdSsdDiskType))
-		r.Add(makeSchemaChangeBulkIngestScaleTest(r, 12, rows, true, false, randomIndexOrder, pdSsdDiskType))
-		r.Add(makeSchemaChangeBulkIngestScaleTest(r, 12, rows, false, false, sortedIndexOrder, pdSsdDiskType))
-		r.Add(makeSchemaChangeBulkIngestScaleTest(r, 12, rows, true, false, sortedIndexOrder, pdSsdDiskType))
+		r.Add(makeSchemaChangeBulkIngestScaleTest(r, 12, rows, false, false, randomIndexOrder, pdSsdDiskType, 0, spec.Auto))
+		r.Add(makeSchemaChangeBulkIngestScaleTest(r, 12, rows, true, false, randomIndexOrder, pdSsdDiskType, 0, spec.Auto))
+		r.Add(makeSchemaChangeBulkIngestScaleTest(r, 12, rows, false, false, sortedIndexOrder, pdSsdDiskType, 0, spec.Auto))
+		r.Add(makeSchemaChangeBulkIngestScaleTest(r, 12, rows, true, false, sortedIndexOrder, pdSsdDiskType, 0, spec.Auto))
 
-		r.Add(makeSchemaChangeBulkIngestScaleTest(r, 12, rows, false, false, randomIndexOrder, pdBalancedDiskType))
-		r.Add(makeSchemaChangeBulkIngestScaleTest(r, 12, rows, true, false, randomIndexOrder, pdBalancedDiskType))
+		r.Add(makeSchemaChangeBulkIngestScaleTest(r, 12, rows, false, false, randomIndexOrder, pdBalancedDiskType, 0, spec.Auto))
+		r.Add(makeSchemaChangeBulkIngestScaleTest(r, 12, rows, true, false, randomIndexOrder, pdBalancedDiskType, 0, spec.Auto))
 	}
+
+	// 1B-row test with small file size to generate ~1756 SST files for
+	// testing distributed merge under high file counts and low memory.
+	r.Add(makeSchemaChangeBulkIngestScaleTest(r, 12, 1_000_000_000, true, false, randomIndexOrder, pdSsdDiskType, 32<<20, spec.Low))
 }
 
 func makeSchemaChangeBulkIngestScaleTest(
@@ -733,6 +737,8 @@ func makeSchemaChangeBulkIngestScaleTest(
 	localMode bool,
 	order indexOrder,
 	disk diskType,
+	fileSize int64,
+	mem spec.MemPerCPU,
 ) registry.TestSpec {
 	modeStr := "nodist"
 	if distributedMerge {
@@ -741,6 +747,12 @@ func makeSchemaChangeBulkIngestScaleTest(
 	const disks = 4
 
 	name := fmt.Sprintf("schemachange/bulkingest/scale/rows=%d/%s/%s/%s", numRows, order, disk, modeStr)
+	if fileSize > 0 {
+		name += fmt.Sprintf("/filesize=%dMB", fileSize/(1<<20))
+	}
+	if mem == spec.Low {
+		name += "/lowmem"
+	}
 
 	// Configure cloud compatibility and timeout based on mode
 	compatibleClouds := registry.OnlyGCE
@@ -758,6 +770,7 @@ func makeSchemaChangeBulkIngestScaleTest(
 		spec.VolumeSize(500),
 		spec.VolumeType(string(disk)),
 	}
+	clusterOpts = append(clusterOpts, spec.Mem(mem))
 
 	return registry.TestSpec{
 		Name:                name,
@@ -770,7 +783,7 @@ func makeSchemaChangeBulkIngestScaleTest(
 		Timeout:             timeout,
 		SkipPostValidations: registry.PostValidationAll,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
-			runBulkIngestScaleTest(ctx, t, c, numRows, distributedMerge, disks, order, disk)
+			runBulkIngestScaleTest(ctx, t, c, numRows, distributedMerge, disks, order, disk, fileSize)
 		},
 	}
 }
@@ -784,6 +797,7 @@ func runBulkIngestScaleTest(
 	disks int,
 	order indexOrder,
 	disk diskType,
+	fileSize int64,
 ) {
 	// Step 1: Start cluster
 	settings := install.MakeClusterSettings()
@@ -881,6 +895,16 @@ func runBulkIngestScaleTest(
 		t.L().Printf("Disabling distributed merge mode")
 		if _, err := db.Exec(
 			"SET CLUSTER SETTING bulkio.index_backfill.distributed_merge.mode = 'disabled'",
+		); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	// Step 8b: Configure merge file size if specified
+	if fileSize > 0 {
+		t.L().Printf("Setting bulkio.merge.file_size to %d bytes", fileSize)
+		if _, err := db.Exec(
+			fmt.Sprintf("SET CLUSTER SETTING bulkio.merge.file_size = '%d'", fileSize),
 		); err != nil {
 			t.Fatal(err)
 		}
