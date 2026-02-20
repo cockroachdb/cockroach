@@ -12,8 +12,11 @@ import (
 	"math/rand"
 	"net/url"
 	"reflect"
+	"regexp"
 	"slices"
+	"strconv"
 	"strings"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
@@ -21,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil/task"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util"
@@ -99,6 +103,7 @@ type (
 	}
 
 	Backup struct {
+		id   string
 		aost string
 		// Stores database-qualified table names that are included in the backup.
 		storedTables []string
@@ -484,6 +489,224 @@ func (c *BackupCollectionHandle) appendBackup(
 	})
 	c.backups = slices.Insert(c.backups, idx, backup)
 	return nil
+}
+
+// SyncBackups links the backups taken by the collection with their associated IDs.
+// SyncBackups should be called before any restore operations are performed to ensure
+// all backups have been ID'd.
+func (c *BackupCollectionHandle) SyncBackups(ctx context.Context) error {
+	c.env.log.Printf("syncing backup collection %s to link tracked backups to IDs", c.Name())
+	_, db := c.env.testUtils.RandomDB(c.env.rng, c.env.planNodes.Nodes)
+	_, err := db.ExecContext(ctx, "SET use_backups_with_ids = true")
+	if err != nil {
+		return errors.Wrapf(err, "error setting use_backups_with_ids")
+	}
+	type showOutput struct {
+		id      string
+		endTime time.Time
+	}
+	var showOutputs []showOutput
+	rows, err := db.QueryContext(
+		ctx,
+		fmt.Sprintf(
+			`SELECT id, backup_time FROM [SHOW BACKUPS IN '%s']`,
+			c.URI(),
+		),
+	)
+	if err != nil {
+		return errors.Wrapf(err, "error querying SHOW BACKUPS for collection %s", c.Name())
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var show showOutput
+		if err := rows.Scan(&show.id, &show.endTime); err != nil {
+			return errors.Wrapf(err, "error scanning SHOW BACKUPS output for collection %s", c.Name())
+		}
+		showOutputs = append(showOutputs, show)
+	}
+	if err := rows.Err(); err != nil {
+		return errors.Wrapf(err, "error iterating over SHOW BACKUPS output for collection %s", c.Name())
+	}
+	for idx, backup := range c.backups {
+		if backup.id != "" {
+			continue
+		}
+		unixNano, err := strconv.ParseInt(strings.Split(backup.aost, ".")[0], 10, 64)
+		if err != nil {
+			return errors.Wrapf(err, "error parsing AOST %s", backup.aost)
+		}
+		// SHOW BACKUPS outputs end times in seconds, so we round the AOST to
+		// seconds.
+		recordedEndTime := timeutil.Unix(0, unixNano).Round(time.Second)
+		showIdx := slices.IndexFunc(showOutputs, func(output showOutput) bool {
+			return output.endTime.Equal(recordedEndTime)
+		})
+		if showIdx == -1 {
+			return errors.Newf(
+				"could not find SHOW BACKUPS record for backup with AOST %s in collection %s",
+				backup.aost, c.Name(),
+			)
+		}
+		c.backups[idx].id = showOutputs[showIdx].id
+		showOutputs = slices.Delete(showOutputs, showIdx, showIdx+1)
+	}
+	return nil
+}
+
+// Restore restores a backup with the given backupID from the backup collection.
+// If the collection is scoped to the entire cluster, the cluster will be reset
+// in order to allow for a full cluster restore.
+// NB: Prior to calling Restore, SyncBackups should be called to ensure that all
+// backups in the collection have been linked to their corresponding IDs.
+func (c *BackupCollectionHandle) Restore(
+	ctx context.Context, backupID string,
+) (jobspb.JobID, error) {
+	node, db := c.env.testUtils.RandomDB(c.env.rng, c.env.planNodes.Nodes)
+	if _, err := db.ExecContext(
+		ctx,
+		fmt.Sprintf(`DROP DATABASE IF EXISTS "restored_%s" CASCADE`, backupID),
+	); err != nil {
+		return 0, err
+	}
+
+	var optionStrs []string
+	switch c.scope.(type) {
+	case tableScope:
+		if _, err := db.ExecContext(
+			ctx,
+			fmt.Sprintf(`CREATE DATABASE IF NOT EXISTS "restored_%s"`, backupID),
+		); err != nil {
+			return 0, err
+		}
+		optionStrs = append(optionStrs, fmt.Sprintf("into_db='restored_%s'", backupID))
+	case databaseScope:
+		optionStrs = append(optionStrs, fmt.Sprintf("new_db_name='restored_%s'", backupID))
+	case clusterScope:
+		if err := resetCluster(c.env.t, ctx, c.env.testUtils); err != nil {
+			return 0, errors.Wrapf(
+				err, "error resetting cluster before restoring backup %s", backupID,
+			)
+		}
+	}
+	for _, opt := range c.options {
+		if _, ok := opt.(encryptionPassphrase); ok {
+			optionStrs = append(optionStrs, opt.OptionString())
+		}
+	}
+
+	stmt := fmt.Sprintf(
+		"RESTORE %s FROM '%s' IN '%s'",
+		c.scope.AsTargetCmd(),
+		backupID,
+		c.URI(),
+	)
+	if len(optionStrs) > 0 {
+		stmt += " WITH " + strings.Join(optionStrs, ", ")
+	}
+
+	var jobID jobspb.JobID
+	c.env.log.Printf("restoring backup %s via node %d: %s", backupID, node, stmt)
+	if err := c.env.testUtils.runJobOnOneOf(
+		ctx, c.env.log, c.env.executionNodes.Nodes, func() error {
+			return errors.Wrapf(
+				db.QueryRowContext(ctx, stmt).Scan(&jobID),
+				"error while planning restore of backup %s in collection %s",
+				backupID, c.Name(),
+			)
+		},
+	); err != nil {
+		return 0, err
+	}
+
+	return jobID, nil
+}
+
+// RestoreSync restores a backup and waits for the restore job to complete
+// before returning. If the collection is scoped to the entire cluster, the
+// cluster will be reset in order to allow for a full cluster restore.
+func (c *BackupCollectionHandle) RestoreSync(
+	ctx context.Context, backupID string,
+) (jobspb.JobID, error) {
+	jobID, err := c.Restore(ctx, backupID)
+	if err != nil {
+		return 0, err
+	}
+	execErr := c.env.testUtils.waitForJobSuccess(
+		ctx, c.env.log, c.env.rng, int(jobID), true, /* internalSystemJobs */
+	)
+	return jobID, execErr
+}
+
+// VerifyBackup validates that contents of a backup after a restore match the
+// contents at the time of the backup. This assumes that a restore of the backup
+// has been completed, either via RestoreSync or Restore followed by a wait for
+// job completion.
+func (c *BackupCollectionHandle) VerifyBackup(ctx context.Context, backupID string) error {
+	backupIdx := slices.IndexFunc(c.backups, func(b Backup) bool {
+		return b.id == backupID
+	})
+	require.NotEqual(
+		c.env.t, -1, backupIdx, "backup %s not found in collection %s", backupID, c.Name(),
+	)
+	backup := c.backups[backupIdx]
+	require.NotEmpty(
+		c.env.t, backup.fingerprints,
+		"backup %s in collection %s was not fingerprinted, cannot be verified", backupID, c.Name(),
+	)
+	node, db := c.env.testUtils.RandomDB(c.env.rng, c.env.planNodes.Nodes)
+	c.env.log.Printf("verifying backup %s via node %d", backupID, node)
+	grp := c.env.t.NewErrorGroup()
+	dbPattern := regexp.MustCompile(`^.+?\.`)
+	for table, backupFp := range backup.fingerprints {
+		grp.Go(func(ctx context.Context, l *logger.Logger) error {
+			restoreFp := make(map[string]string)
+			restoredTable := dbPattern.ReplaceAllString(table, fmt.Sprintf(`"restored_%s".`, backupID))
+			fpRows, err := db.QueryContext(
+				ctx, fmt.Sprintf(`SELECT * FROM [SHOW FINGERPRINTS FROM TABLE %s]`, restoredTable),
+			)
+			if err != nil {
+				return err
+			}
+			defer fpRows.Close()
+			for fpRows.Next() {
+				var idxName string
+				var idxFp gosql.NullString
+				if err := fpRows.Scan(&idxName, &idxFp); err != nil {
+					return err
+				}
+				restoreFp[idxName] = idxFp.String
+			}
+			if err := fpRows.Err(); err != nil {
+				return err
+			}
+			if !reflect.DeepEqual(backupFp, restoreFp) {
+				return errors.Newf(
+					"fingerprint mismatch for table %s: expected %v, got %v",
+					table, backupFp, restoreFp,
+				)
+			}
+			return nil
+		})
+	}
+	if err := grp.WaitE(); err != nil {
+		return errors.Wrapf(
+			err, "error during fingerprint of backup %s in collection %s", backupID, c.Name(),
+		)
+	}
+	c.env.log.Printf("backup %s in collection %s successfully verified", backupID, c.Name())
+	return nil
+}
+
+func (c *BackupCollectionHandle) Backups() []Backup {
+	return c.backups
+}
+
+func (c *BackupCollectionHandle) LatestBackup() Backup {
+	return c.backups[len(c.backups)-1]
+}
+
+func (B Backup) ID() string {
+	return B.id
 }
 
 type InitBackupCollectionOption func(*BackupRestoreEnv, *BackupCollectionHandle)
@@ -874,4 +1097,22 @@ func loadQualifiedTablesForDBs(
 		return nil, err
 	}
 	return tables, nil
+}
+
+// resetCluster takes a debug zip and resets the cluster, expecting all nodes to restart.
+func resetCluster(t test.Test, ctx context.Context, testUtils *CommonTestUtils) error {
+	expectDeathsFn := func(n int) {
+		t.Monitor().ExpectProcessDead(testUtils.cluster.All())
+	}
+	// Before we reset the cluster, grab a debug zip.
+	zipPath := fmt.Sprintf("debug-%d.zip", timeutil.Now().Unix())
+	if err := testUtils.cluster.FetchDebugZip(ctx, t.L(), zipPath); err != nil {
+		t.L().Printf("failed to fetch a debug zip: %v", err)
+	}
+	if err := testUtils.resetCluster(
+		ctx, t.L(), clusterupgrade.CurrentVersion(), expectDeathsFn, []install.ClusterSettingOption{},
+	); err != nil {
+		return err
+	}
+	return nil
 }
