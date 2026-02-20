@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil/clusterupgrade"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil/task"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
@@ -134,7 +135,7 @@ func backupRestoreRoundTrip(
 
 	m.Go(func(ctx context.Context) error {
 		testUtils, err := setupBackupRestoreTestUtils(
-			ctx, t, c, m, testRNG,
+			ctx, t, c, testRNG,
 			withMock(sp.mock), withOnlineRestore(sp.onlineRestore), withCompaction(!sp.onlineRestore),
 		)
 		if err != nil {
@@ -144,7 +145,7 @@ func backupRestoreRoundTrip(
 
 		dbs := []string{"bank", "tpcc", schemaChangeDB}
 		d, runBackgroundWorkload, _, err := createDriversForBackupRestore(
-			ctx, t, c, m, testRNG, workloadSeed, testUtils, dbs,
+			ctx, t, c, testRNG, workloadSeed, testUtils, dbs,
 		)
 		if err != nil {
 			return err
@@ -231,13 +232,13 @@ func backupRestoreRoundTrip(
 	m.Wait()
 }
 
-// startBackgroundWorkloads returns a function that starts a TPCC, bank, and a
+// initBackgroundWorkloads returns a function that starts a TPCC, bank, and a
 // system table workload in the background.
-func startBackgroundWorkloads(
+func initBackgroundWorkloads(
 	ctx context.Context,
+	t test.Test,
 	l *logger.Logger,
 	c cluster.Cluster,
-	m cluster.Monitor,
 	testRNG *rand.Rand,
 	seed int64,
 	roachNodes, workloadNode option.NodeListOption,
@@ -254,64 +255,61 @@ func startBackgroundWorkloads(
 	tpccInit, tpccRun := tpccWorkloadCmd(l, testRNG, seed, numWarehouses, roachNodes)
 	bankInit, bankRun := bankWorkloadCmd(l, testRNG, seed, roachNodes, testUtils.mock)
 	scInit, scRun := schemaChangeWorkloadCmd(l, testRNG, seed, roachNodes, testUtils.mock)
-	if err := prepSchemaChangeWorkload(ctx, workloadNode, testUtils, testRNG); err != nil {
+
+	initGroup := t.NewErrorGroup(task.WithContext(ctx))
+	initGroup.Go(func(ctx context.Context, l *logger.Logger) error {
+		return c.RunE(ctx, option.WithNodes(workloadNode), bankInit.String())
+	}, task.Name("init-bank"))
+	initGroup.Go(func(ctx context.Context, l *logger.Logger) error {
+		return c.RunE(ctx, option.WithNodes(workloadNode), tpccInit.String())
+	}, task.Name("init-tpcc"))
+	initGroup.Go(func(ctx context.Context, l *logger.Logger) (err error) {
+		defer func() {
+			if err != nil {
+				err = handleSchemaChangeWorkloadError(err)
+			}
+		}()
+		if err := prepSchemaChangeWorkload(ctx, workloadNode, testUtils, testRNG); err != nil {
+			return err
+		}
+		return c.RunE(ctx, option.WithNodes(workloadNode), scInit.String())
+	}, task.Name("init-schemachange"))
+	if err := initGroup.WaitE(); err != nil {
 		return nil, err
 	}
 
-	err := c.RunE(ctx, option.WithNodes(workloadNode), bankInit.String())
-	if err != nil {
-		return nil, err
-	}
-
-	err = c.RunE(ctx, option.WithNodes(workloadNode), tpccInit.String())
-	if err != nil {
-		return nil, err
-	}
-
-	err = c.RunE(ctx, option.WithNodes(workloadNode), scInit.String())
-	if err != nil {
-		return nil, handleSchemaChangeWorkloadError(err)
-	}
-
-	run := func() (func(), error) {
+	runWorkloadTasks := func() (func(), error) {
 		tables, err := testUtils.loadTablesForDBs(ctx, l, testRNG, dbs...)
 		if err != nil {
 			return nil, err
 		}
-		stopBank := workloadWithCancel(m, func(ctx context.Context) error {
+
+		groupCtx, cancel := context.WithCancel(ctx)
+		runGroup := t.NewGroup(task.WithContext(groupCtx))
+		runGroup.Go(func(ctx context.Context, l *logger.Logger) error {
 			return c.RunE(ctx, option.WithNodes(workloadNode), bankRun.String())
-		})
-
-		stopTPCC := workloadWithCancel(m, func(ctx context.Context) error {
+		}, task.Name("run-bank"))
+		runGroup.Go(func(ctx context.Context, l *logger.Logger) error {
 			return c.RunE(ctx, option.WithNodes(workloadNode), tpccRun.String())
-		})
-		stopSC := workloadWithCancel(m, func(ctx context.Context) error {
-			if err := c.RunE(ctx, option.WithNodes(workloadNode), scRun.String()); err != nil {
-				return handleSchemaChangeWorkloadError(err)
-			}
-			return nil
-		})
-
-		stopSystemWriter := workloadWithCancel(m, func(ctx context.Context) error {
+		}, task.Name("run-tpcc"))
+		runGroup.Go(func(ctx context.Context, l *logger.Logger) error {
+			return handleSchemaChangeWorkloadError(
+				c.RunE(ctx, option.WithNodes(workloadNode), scRun.String()),
+			)
+		}, task.Name("run-schemachange"))
+		runGroup.Go(func(ctx context.Context, l *logger.Logger) error {
 			// We use a separate RNG for the system table writer to avoid
 			// non-determinism of the RNG usage due to the time-based nature of
 			// the system writer workload. See
 			// https://github.com/cockroachdb/cockroach/blob/master/pkg/cmd/roachtest/roachtestutil/mixedversion/README.md#note-non-deterministic-use-of-the-randrand-instance
 			systemTableRNG := rand.New(rand.NewSource(testRNG.Int63()))
 			return testUtils.systemTableWriter(ctx, l, systemTableRNG, dbs, tables)
-		})
+		}, task.Name("run-system-table-writer"))
 
-		stopBackgroundCommands := func() {
-			stopBank()
-			stopTPCC()
-			stopSC()
-			stopSystemWriter()
-		}
-
-		return stopBackgroundCommands, nil
+		return cancel, nil
 	}
 
-	return run, nil
+	return runWorkloadTasks, nil
 }
 
 // Connect makes a database handle to the node.
@@ -363,27 +361,10 @@ func (u *CommonTestUtils) CloseConnections() {
 	}
 }
 
-func workloadWithCancel(m cluster.Monitor, fn func(ctx context.Context) error) func() {
-	cancelWorkload := m.GoWithCancel(func(ctx context.Context) error {
-		err := fn(ctx)
-		if ctx.Err() != nil {
-			// Workload context was cancelled as a normal part of test shutdown.
-			return nil
-		}
-		return err
-	})
-	return cancelWorkload
-}
-
 // setupBackupRestoreTestUtils sets up a CommonTestUtils instance for backup and
 // restore tests and initializes some useful settings.
 func setupBackupRestoreTestUtils(
-	ctx context.Context,
-	t test.Test,
-	c cluster.Cluster,
-	m cluster.Monitor,
-	rng *rand.Rand,
-	testOpts ...commonTestOption,
+	ctx context.Context, t test.Test, c cluster.Cluster, rng *rand.Rand, testOpts ...commonTestOption,
 ) (*CommonTestUtils, error) {
 	connectFunc := func(node int) (*gosql.DB, error) {
 		conn, err := c.ConnE(ctx, t.L(), node)
@@ -415,14 +396,13 @@ func createDriversForBackupRestore(
 	ctx context.Context,
 	t test.Test,
 	c cluster.Cluster,
-	m cluster.Monitor,
 	rng *rand.Rand,
 	workloadSeed int64,
 	testUtils *CommonTestUtils,
 	dbs []string,
 ) (*BackupRestoreTestDriver, func() (func(), error), [][]string, error) {
-	runBackgroundWorkload, err := startBackgroundWorkloads(
-		ctx, t.L(), c, m, rng, workloadSeed, c.CRDBNodes(), c.WorkloadNode(), testUtils, dbs,
+	runBackgroundWorkload, err := initBackgroundWorkloads(
+		ctx, t, t.L(), c, rng, workloadSeed, c.CRDBNodes(), c.WorkloadNode(), testUtils, dbs,
 	)
 	if err != nil {
 		return nil, nil, nil, err
