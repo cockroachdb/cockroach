@@ -317,6 +317,31 @@ func doesNotHaveIndex(
 	return idx == nil, nil
 }
 
+// hasMatchingIndex returns true if storedTable has an index with the given name
+// that matches the expected table's index definition. Unlike hasIndex, this
+// function returns false without an error if the index exists but doesn't match
+// the expected definition, allowing the caller to proceed with a
+// drop-and-recreate.
+func hasMatchingIndex(
+	storedTable, expectedTable catalog.TableDescriptor, indexName string,
+) (bool, error) {
+	storedIdx := catalog.FindIndexByName(storedTable, indexName)
+	if storedIdx == nil {
+		return false, nil
+	}
+	expectedIdx, err := catalog.MustFindIndexByName(expectedTable, indexName)
+	if err != nil {
+		return false, errors.Wrapf(err, "index name %s is invalid", indexName)
+	}
+	storedCopy := indexDescForComparison(storedIdx)
+	expectedCopy := indexDescForComparison(expectedIdx)
+	if err = ensureProtoMessagesAreEqual(expectedCopy, storedCopy); err != nil {
+		// Index exists but doesn't match expected definition.
+		return false, nil //nolint:returnerrcheck
+	}
+	return true, nil
+}
+
 // hasColumnFamily returns true if storedTable already has the given column
 // family, comparing with expectedTable. storedTable descriptor must be read
 // from system storage as compared to reading from the systemschema package. On
