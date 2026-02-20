@@ -54,7 +54,7 @@ message SetTenantClusterSetting {
 }
 
 // RewriteInlineHints is recorded when a new inline-hints rewrite rule is added
-// via information_schema.crdb_rewrite_inline_hints.
+// via information_schema.crdb_rewrite_inline_hints or crdb_internal.inject_hint.
 message RewriteInlineHints {
   CommonEventDetails common = 1 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
   CommonSQLEventDetails sql = 2 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
@@ -64,4 +64,17 @@ message RewriteInlineHints {
   string donor_sql = 4 [(gogoproto.customname) = "DonorSQL", (gogoproto.jsontag) = ",omitempty", (gogoproto.moretags) = "redact:\"nonsensitive\""];
   // The hint ID of the newly created statement hint.
   int64 hint_id = 5 [(gogoproto.customname) = "HintID", (gogoproto.jsontag) = ",omitempty"];
+}
+
+// DeleteRewriteInlineHints is recorded when a rewrite inline hint is
+// deleted via information_schema.crdb_delete_statement_hints.
+message DeleteRewriteInlineHints {
+  CommonEventDetails common = 1 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
+  CommonSQLEventDetails sql = 2 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
+  // The target statement fingerprint for which inline hints are being deleted.
+  string statement_fingerprint = 3 [(gogoproto.jsontag) = ",omitempty", (gogoproto.moretags) = "redact:\"nonsensitive\""];
+  // The hint ID of the to-delete statement hint.
+  int64 hint_id = 4 [(gogoproto.customname) = "HintID", (gogoproto.jsontag) = ",omitempty"];
+  // The donor sql of the deleted inline hint.
+  string donor_sql = 5 [(gogoproto.jsontag) = ",omitempty", (gogoproto.moretags) = "redact:\"nonsensitive\""];
 }
