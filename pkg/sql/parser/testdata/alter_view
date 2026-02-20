@@ -62,23 +62,26 @@ ALTER MATERIALIZED VIEW IF EXISTS v RENAME TO v -- fully parenthesized
 ALTER MATERIALIZED VIEW IF EXISTS v RENAME TO v -- literals removed
 ALTER MATERIALIZED VIEW IF EXISTS _ RENAME TO _ -- identifiers removed
 
-error
+parse
 ALTER VIEW v SET (security_invoker = true)
 ----
-----
-at or near ")": syntax error: unimplemented: this syntax
-DETAIL: source SQL:
 ALTER VIEW v SET (security_invoker = true)
-                                         ^
-HINT: You have attempted to use a feature that is not yet implemented.
+ALTER VIEW v SET (security_invoker = true) -- fully parenthesized
+ALTER VIEW v SET (security_invoker = true) -- literals removed
+ALTER VIEW _ SET (security_invoker = true) -- identifiers removed
 
-Please check the public issue tracker to check whether this problem is
-already tracked. If you cannot find it there, please report the error
-with details by creating a new issue.
-
-If you would rather not post publicly, please contact us directly
-using the support form.
-
-We appreciate your feedback.
+parse
+ALTER VIEW v RESET (security_invoker)
 ----
+ALTER VIEW v RESET (security_invoker)
+ALTER VIEW v RESET (security_invoker) -- fully parenthesized
+ALTER VIEW v RESET (security_invoker) -- literals removed
+ALTER VIEW _ RESET (security_invoker) -- identifiers removed
+
+parse
+ALTER VIEW IF EXISTS v RESET (security_invoker)
 ----
+ALTER VIEW IF EXISTS v RESET (security_invoker)
+ALTER VIEW IF EXISTS v RESET (security_invoker) -- fully parenthesized
+ALTER VIEW IF EXISTS v RESET (security_invoker) -- literals removed
+ALTER VIEW IF EXISTS _ RESET (security_invoker) -- identifiers removed

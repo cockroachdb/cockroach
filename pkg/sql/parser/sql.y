@@ -1237,6 +1237,7 @@ func (u *sqlSymUnion) filterType() tree.FilterType {
 %type <tree.Statement> alter_view_set_schema_stmt
 %type <tree.Statement> alter_view_owner_stmt
 %type <tree.Statement> alter_view_set_options_stmt
+%type <tree.Statement> alter_view_reset_options_stmt
 
 // ALTER SEQUENCE
 %type <tree.Statement> alter_rename_sequence_stmt
@@ -2110,6 +2111,7 @@ alter_view_stmt:
 | alter_view_set_schema_stmt
 | alter_view_owner_stmt
 | alter_view_set_options_stmt
+| alter_view_reset_options_stmt
 // ALTER VIEW has its error help token here because the ALTER VIEW
 // prefix is spread over multiple non-terminals.
 | ALTER VIEW error // SHOW HELP: ALTER VIEW
@@ -12656,23 +12658,19 @@ opt_view_with:
   }
 | WITH '(' SECURITY_INVOKER ')'
   {
-    /* SKIP DOC */
     // security_invoker without value defaults to true
     $$.val = &tree.ViewOptions{SecurityInvoker: true}
   }
 | WITH '(' SECURITY_INVOKER '=' TRUE ')'
   {
-    /* SKIP DOC */
     $$.val = &tree.ViewOptions{SecurityInvoker: true}
   }
 | WITH '(' SECURITY_INVOKER '=' FALSE ')'
   {
-    /* SKIP DOC */
     $$.val = &tree.ViewOptions{SecurityInvoker: false}
   }
 | WITH '(' SECURITY_INVOKER '=' ICONST ')'
   {
-    /* SKIP DOC */
     // Handle integer values: 1 = true, 0 = false
     val, err := $5.numVal().AsInt64()
     if err != nil {
@@ -13301,13 +13299,103 @@ alter_view_owner_stmt:
   }
 
 alter_view_set_options_stmt:
-  ALTER VIEW relation_expr SET '(' SECURITY_INVOKER '=' var_value ')'
+  ALTER VIEW relation_expr SET '(' SECURITY_INVOKER '=' TRUE ')'
   {
-    return unimplemented(sqllex, "ALTER VIEW ... SET (security_invoker = ...) is not yet implemented.")
+    $$.val = &tree.AlterViewSetOptions{
+      Name: $3.unresolvedObjectName(),
+      IfExists: false,
+      Options: &tree.ViewOptions{SecurityInvoker: true},
+    }
   }
-| ALTER VIEW IF EXISTS relation_expr SET '(' SECURITY_INVOKER '=' var_value ')'
+| ALTER VIEW relation_expr SET '(' SECURITY_INVOKER '=' FALSE ')'
   {
-    return unimplemented(sqllex, "ALTER VIEW ... IF EXISTS SET (security_invoker = ...) is not yet implemented.")
+    $$.val = &tree.AlterViewSetOptions{
+      Name: $3.unresolvedObjectName(),
+      IfExists: false,
+      Options: &tree.ViewOptions{SecurityInvoker: false},
+    }
+  }
+| ALTER VIEW relation_expr SET '(' SECURITY_INVOKER '=' ICONST ')'
+  {
+    val, err := $8.numVal().AsInt64()
+    if err != nil { return setErr(sqllex, err) }
+    var si bool
+    if val == 1 {
+      si = true
+    } else if val == 0 {
+      si = false
+    } else {
+      return setErr(sqllex, errors.New("security_invoker accepts only true/false or 1/0"))
+    }
+    $$.val = &tree.AlterViewSetOptions{
+      Name: $3.unresolvedObjectName(),
+      IfExists: false,
+      Options: &tree.ViewOptions{SecurityInvoker: si},
+    }
+  }
+| ALTER VIEW relation_expr SET '(' SECURITY_INVOKER ')'
+  {
+    $$.val = &tree.AlterViewSetOptions{
+      Name: $3.unresolvedObjectName(),
+      IfExists: false,
+      Options: &tree.ViewOptions{SecurityInvoker: true},
+    }
+  }
+| ALTER VIEW IF EXISTS relation_expr SET '(' SECURITY_INVOKER '=' TRUE ')'
+  {
+    $$.val = &tree.AlterViewSetOptions{
+      Name: $5.unresolvedObjectName(),
+      IfExists: true,
+      Options: &tree.ViewOptions{SecurityInvoker: true},
+    }
+  }
+| ALTER VIEW IF EXISTS relation_expr SET '(' SECURITY_INVOKER '=' FALSE ')'
+  {
+    $$.val = &tree.AlterViewSetOptions{
+      Name: $5.unresolvedObjectName(),
+      IfExists: true,
+      Options: &tree.ViewOptions{SecurityInvoker: false},
+    }
+  }
+| ALTER VIEW IF EXISTS relation_expr SET '(' SECURITY_INVOKER '=' ICONST ')'
+  {
+    val, err := $10.numVal().AsInt64()
+    if err != nil { return setErr(sqllex, err) }
+    var si bool
+    if val == 1 {
+      si = true
+    } else if val == 0 {
+      si = false
+    } else {
+      return setErr(sqllex, errors.New("security_invoker accepts only true/false or 1/0"))
+    }
+    $$.val = &tree.AlterViewSetOptions{
+      Name: $5.unresolvedObjectName(),
+      IfExists: true,
+      Options: &tree.ViewOptions{SecurityInvoker: si},
+    }
+  }
+| ALTER VIEW IF EXISTS relation_expr SET '(' SECURITY_INVOKER ')'
+  {
+    $$.val = &tree.AlterViewSetOptions{
+      Name: $5.unresolvedObjectName(),
+      IfExists: true,
+      Options: &tree.ViewOptions{SecurityInvoker: true},
+    }
+  }
+alter_view_reset_options_stmt:
+  ALTER VIEW relation_expr RESET '(' SECURITY_INVOKER ')'
+  {
+    $$.val = &tree.AlterViewResetOptions{
+      Name: $3.unresolvedObjectName(),
+    }
+  }
+| ALTER VIEW IF EXISTS relation_expr RESET '(' SECURITY_INVOKER ')'
+  {
+    $$.val = &tree.AlterViewResetOptions{
+      Name: $5.unresolvedObjectName(),
+      IfExists: true,
+    }
   }
 
 alter_sequence_set_schema_stmt:

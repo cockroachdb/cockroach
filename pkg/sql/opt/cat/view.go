@@ -41,8 +41,11 @@ type View interface {
 	// Trigger returns the ith trigger, where i < TriggerCount.
 	Trigger(i int) Trigger
 
+	// IsSecurityInvoker returns true if the view uses SECURITY INVOKER semantics.
+	IsSecurityInvoker() bool
+
 	// Owner returns the username of the view owner.
-	// Used to check view select privileges.
+	// Used for SECURITY DEFINER semantics when security_invoker is false.
 	Owner() username.SQLUsername
 }
 

@@ -67,6 +67,8 @@ DIAGRAMS_SRCS = [
     "//docs/generated/sql/bnf:alter_type.html",
     "//docs/generated/sql/bnf:alter_view.html",
     "//docs/generated/sql/bnf:alter_view_owner.html",
+    "//docs/generated/sql/bnf:alter_view_reset_options.html",
+    "//docs/generated/sql/bnf:alter_view_set_options.html",
     "//docs/generated/sql/bnf:alter_view_set_schema.html",
     "//docs/generated/sql/bnf:alter_virtual_cluster.html",
     "//docs/generated/sql/bnf:alter_virtual_cluster_capability.html",

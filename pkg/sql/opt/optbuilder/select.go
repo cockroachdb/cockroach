@@ -374,10 +374,12 @@ func (b *Builder) buildView(
 			defer func() { b.skipSelectPrivilegeChecks = false }()
 		}
 	} else {
-		defer func(dataSourcePrivilegeUserOverride username.SQLUsername) {
-			b.dataSourcePrivilegeUserOverride = dataSourcePrivilegeUserOverride
-		}(b.dataSourcePrivilegeUserOverride)
-		b.dataSourcePrivilegeUserOverride = view.Owner()
+		if !view.IsSecurityInvoker() {
+			defer func(dataSourcePrivilegeUserOverride username.SQLUsername) {
+				b.dataSourcePrivilegeUserOverride = dataSourcePrivilegeUserOverride
+			}(b.dataSourcePrivilegeUserOverride)
+			b.dataSourcePrivilegeUserOverride = view.Owner()
+		}
 		defer b.DisableUnsafeInternalCheck()()
 		if b.skipSelectPrivilegeChecks {
 			b.skipSelectPrivilegeChecks = false
