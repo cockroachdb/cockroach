@@ -831,6 +831,7 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 		ParentDiskMonitor: cfg.TempStorageConfig.Mon,
 		BackfillerMonitor: backfillMemoryMonitor,
 		BackupMonitor:     backupMemoryMonitor,
+		BulkMonitor:       bulkMemoryMonitor,
 		ChangefeedMonitor: changefeedMemoryMonitor,
 		BulkSenderLimiter: bulkSenderLimiter,
 

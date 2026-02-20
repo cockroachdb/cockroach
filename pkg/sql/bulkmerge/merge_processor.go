@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/taskset"
 	"github.com/cockroachdb/errors"
@@ -169,7 +170,7 @@ func (m *bulkMergeProcessor) handleRow(row rowenc.EncDatumRow) (rowenc.EncDatumR
 
 	if knobs, ok := m.flowCtx.Cfg.TestingKnobs.BulkMergeTestingKnobs.(*TestingKnobs); ok {
 		if knobs.RunBeforeMergeTask != nil {
-			if err := knobs.RunBeforeMergeTask(m.Ctx(), m.flowCtx.ID, input.taskID); err != nil {
+			if err := knobs.RunBeforeMergeTask(m.Ctx(), m.flowCtx, input.taskID, m.spec); err != nil {
 				return nil, err
 			}
 		}
@@ -427,7 +428,7 @@ func (m *bulkMergeProcessor) ingestFinalIteration(
 		disallowShadowingBelow,
 		false, // writeAtBatchTs
 		true,  // scatterSplitRanges
-		m.flowCtx.Cfg.BackupMonitor.MakeConcurrentBoundAccount(),
+		resolveMemoryMonitor(m.flowCtx, m.spec.MemoryMonitor).MakeConcurrentBoundAccount(),
 		m.flowCtx.Cfg.BulkSenderLimiter,
 		nil, // range cache
 	)
@@ -438,6 +439,19 @@ func (m *bulkMergeProcessor) ingestFinalIteration(
 	writer := newKVStorageWriter(batcher, writeTS)
 	defer writer.Close(ctx)
 	return m.processMergedData(ctx, iter, mergeSpan, writer)
+}
+
+// resolveMemoryMonitor returns the BytesMonitor indicated by the given
+// MemoryMonitor enum.
+func resolveMemoryMonitor(
+	flowCtx *execinfra.FlowCtx, m execinfrapb.BulkMergeSpec_MemoryMonitor,
+) *mon.BytesMonitor {
+	switch m {
+	case execinfrapb.BulkMergeSpec_BACKFILL_MONITOR:
+		return flowCtx.Cfg.BackfillerMonitor
+	default: // execinfrapb.BulkMergeSpec_BULK_MONITOR
+		return flowCtx.Cfg.BulkMonitor
+	}
 }
 
 // createIter builds an iterator over all input SSTs. When EnforceUniqueness
