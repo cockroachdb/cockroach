@@ -22,6 +22,14 @@ func isSupportedType(t *types.T) bool {
 		// We don't support RefCursor columns in LDR tables because they do not
 		// support equality.
 		return false
+	case types.TSVectorFamily,
+		types.TSQueryFamily,
+		types.JsonpathFamily,
+		types.PGVectorFamily:
+		// These type families do not support keyside encoding, which means they
+		// cannot be used with crdb_internal.datums_to_bytes. This prevents
+		// fingerprinting and diff hashing from working.
+		return false
 	case types.ArrayFamily:
 		// We don't allow Arrays of bits because rand.LoadTable doesn't correctly identify their bit width.
 		if t.ArrayContents().Family() == types.BitFamily {
@@ -63,6 +71,9 @@ func GenerateLDRTable(
 		}),
 		randgen.WithPrimaryIndexFilter(func(indexDef *tree.IndexTableDef, columnDefs []*tree.ColumnTableDef) bool {
 			for _, col := range indexDef.Columns {
+				if col.Expr != nil {
+					continue
+				}
 				columnDef := columnByName(col.Column, columnDefs)
 				// TODO(127315): types with composite encoding are not supported in the
 				// primary key by LDR.
@@ -93,10 +104,15 @@ func GenerateLDRTable(
 				return false
 			case *tree.IndexTableDef:
 				for _, col := range indexDef.Columns {
-					if writerType == sqlclustersettings.LDRWriterTypeLegacyKV && col.Expr != nil {
-						// Do not allow expression indexes. These cause SQL to generate a
-						// hidden computed column, which is not supported by the kv writer.
-						return false
+					if col.Expr != nil {
+						if writerType == sqlclustersettings.LDRWriterTypeLegacyKV {
+							// Expression indexes generate hidden computed
+							// columns not supported by the KV writer.
+							return false
+						}
+						// Expression columns don't map to a column def;
+						// skip column-level checks.
+						continue
 					}
 					columnDef := columnByName(col.Column, columnDefs)
 					if columnDef != nil && columnDef.IsVirtual() &&

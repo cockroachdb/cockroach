@@ -59,6 +59,25 @@ func (t *Table) RandomRow(rng *rand.Rand, nullPct int) ([]any, error) {
 	return row, nil
 }
 
+// IndexableColumns returns the indices of columns with a type that can be
+// stored in an index. This is useful for things like fingerprinting, where we
+// can only tolerate types with a canonical encoding.
+func (t *Table) IndexableColumns() []int {
+	var columns []int
+	for i := range t.Cols {
+		switch t.Cols[i].DataType.Family() {
+		case types.TSVectorFamily,
+			types.TSQueryFamily,
+			types.JsonpathFamily,
+			types.PGVectorFamily,
+			types.RefCursorFamily:
+			continue
+		}
+		columns = append(columns, i)
+	}
+	return columns
+}
+
 func (t *Table) randomColumn(rng *rand.Rand, columnIndex int, nullPct int) (any, error) {
 	col := t.Cols[columnIndex]
 	nullChance := 0
@@ -99,15 +118,16 @@ func (t *Table) MutateRow(rng *rand.Rand, nullPct int, prevRow []any) ([]any, er
 // `character_maximum_length` column is NULL, it means the column has
 // variable width and we set the width of the type to 0, which will
 // cause the random data generator to generate data with random width.
-func typeForOid(db *gosql.DB, typeOid oid.Oid, tableName, columnName string) (*types.T, error) {
+func typeForOid(db *gosql.DB, typeOid oid.Oid, relid int, columnName string) (*types.T, error) {
 	datumType := *types.OidToType[typeOid]
 	if typeOid == oid.T_bit || typeOid == oid.T_char {
 		var width int32
 		if err := db.QueryRow(
 			`SELECT IFNULL(character_maximum_length, 0)
 			FROM information_schema.columns
-			WHERE table_name = $1 AND column_name = $2`,
-			tableName, columnName).Scan(&width); err != nil {
+			JOIN pg_catalog.pg_class ON pg_class.relname = table_name
+			WHERE pg_class.oid = $1 AND column_name = $2`,
+			relid, columnName).Scan(&width); err != nil {
 			return nil, err
 		}
 
@@ -120,8 +140,7 @@ func typeForOid(db *gosql.DB, typeOid oid.Oid, tableName, columnName string) (*t
 // LoadTable loads a table's schema from the database.
 func LoadTable(conn *gosql.DB, tableName string) (_ Table, retErr error) {
 	var relid int
-	sqlName := tree.Name(tableName)
-	if err := conn.QueryRow("SELECT $1::REGCLASS::OID", sqlName.String()).Scan(&relid); err != nil {
+	if err := conn.QueryRow("SELECT $1::REGCLASS::OID", tableName).Scan(&relid); err != nil {
 		return Table{}, err
 	}
 
@@ -147,7 +166,7 @@ WHERE attrelid=$1 AND NOT attisdropped`, relid)
 		if err := rows.Scan(&c.Name, &typOid, &c.CDefault, &c.IsNullable, &c.IsComputed, &c.Expression); err != nil {
 			return Table{}, err
 		}
-		c.DataType, err = typeForOid(conn, oid.Oid(typOid), tableName, c.Name)
+		c.DataType, err = typeForOid(conn, oid.Oid(typOid), relid, c.Name)
 		if err != nil {
 			return Table{}, err
 		}
