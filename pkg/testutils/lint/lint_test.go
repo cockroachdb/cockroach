@@ -1092,6 +1092,7 @@ func TestLint(t *testing.T) {
 			":!util/syncutil/mutex_tracing.go",
 			":!util/timeutil/time.go",
 			":!util/timeutil/zoneinfo.go",
+			":!cmd/dev/**",
 			":!cmd/roachtest/tests/gorm_helpers.go",
 		)
 		if err != nil {
