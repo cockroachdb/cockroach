@@ -135,8 +135,20 @@ func ShowCreateView(
 			f.WriteRune(',')
 		}
 	}
-	f.WriteString(") AS ")
+	f.WriteString(")")
 
+	// Add view options if any exist
+	viewOptions, err := desc.GetViewOptions(true /* spaceBetweenEqual */)
+	if err != nil {
+		return "", err
+	}
+	if len(viewOptions) > 0 {
+		f.WriteString(" WITH (")
+		f.WriteString(strings.Join(viewOptions, ", "))
+		f.WriteString(")")
+	}
+
+	f.WriteString(" AS ")
 	cfg := tree.DefaultPrettyCfg()
 	cfg.UseTabs = true
 	cfg.LineWidth = 100 - cfg.TabWidth
