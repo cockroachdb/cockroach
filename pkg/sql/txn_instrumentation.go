@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/memzipper"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
+	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 )
 
@@ -228,7 +229,11 @@ func (h *txnInstrumentationHelper) AddStatementBundle(
 // started. If a new diagnostics collection is started, it returns a new
 // context that should be used to capture transaction traces.
 func (h *txnInstrumentationHelper) MaybeStartDiagnostics(
-	ctx context.Context, stmt tree.Statement, stmtFpId uint64, tracer *tracing.Tracer,
+	ctx context.Context,
+	stmt tree.Statement,
+	stmtFpId uint64,
+	tracer *tracing.Tracer,
+	txnID uuid.UUID,
 ) (newCtx context.Context, diagnosticsStarted bool) {
 	if h.diagnosticsCollector.NotStarted() {
 		if h.diagnosticsCollector.shouldAllowStatement(stmt) {
@@ -242,6 +247,12 @@ func (h *txnInstrumentationHelper) MaybeStartDiagnostics(
 			// collection for the rest of the transaction.
 			collectDiagnostics, requestId, req := h.TxnDiagnosticsRecorder.ShouldStartTxnDiagnostic(ctx, stmtFpId)
 			if collectDiagnostics {
+				log.Dev.VInfof(ctx, 2, "txn diag: starting collection for request %d, "+
+					"txn %s, triggered by stmt fingerprint %s",
+					requestId,
+					txnID,
+					sqlstatsutil.EncodeStmtFingerprintIDToString(
+						appstatspb.StmtFingerprintID(stmtFpId)))
 				var sp *tracing.Span
 				if !req.IsRedacted() {
 					ctx, sp = tracing.EnsureChildSpan(ctx, tracer, "txn-diag-bundle",
@@ -263,7 +274,7 @@ func (h *txnInstrumentationHelper) MaybeStartDiagnostics(
 // context with the diagnostics recording span. Otherwise, collection is
 // aborted and future statements will not be considered for diagnostics.
 func (h *txnInstrumentationHelper) MaybeContinueDiagnostics(
-	ctx context.Context, stmt tree.Statement, stmtFpId uint64,
+	ctx context.Context, stmt tree.Statement, stmtFpId uint64, txnID uuid.UUID,
 ) (newCtx context.Context, shouldContinue bool) {
 	if !h.diagnosticsCollector.InProgress() {
 		return ctx, false
@@ -278,6 +289,21 @@ func (h *txnInstrumentationHelper) MaybeContinueDiagnostics(
 	}
 
 	if !shouldContinue {
+		var expected string
+		if len(h.diagnosticsCollector.stmtsFpsToCapture) != 0 {
+			expected = sqlstatsutil.EncodeStmtFingerprintIDToString(
+				appstatspb.StmtFingerprintID(h.diagnosticsCollector.stmtsFpsToCapture[0]))
+		} else {
+			expected = "terminal statement"
+		}
+		log.Dev.VInfof(ctx, 2, "txn diag: aborting collection for request %d, "+
+			"txn %s, stmt fingerprint %s did not match (expected %s), collected %d bundles so far",
+			h.diagnosticsCollector.requestId,
+			txnID,
+			sqlstatsutil.EncodeStmtFingerprintIDToString(
+				appstatspb.StmtFingerprintID(stmtFpId)),
+			expected,
+			len(h.diagnosticsCollector.stmtBundles))
 		h.Abort(ctx)
 	} else {
 		// TODO (kyle.wong): due to the existing hierarchy of spans, we have to
@@ -297,17 +323,35 @@ func (h *txnInstrumentationHelper) ShouldRedact() bool {
 
 // Finalize finalizes the transaction diagnostics collection by writing all
 // the collected data to the underlying system tables.
-func (h *txnInstrumentationHelper) Finalize(ctx context.Context, executionDuration time.Duration) {
+func (h *txnInstrumentationHelper) Finalize(
+	ctx context.Context, executionDuration time.Duration, txnID uuid.UUID,
+) {
 	defer h.Reset(ctx)
 	collector := h.diagnosticsCollector
 
+	txnFpStr := sqlstatsutil.EncodeTxnFingerprintIDToString(
+		appstatspb.TransactionFingerprintID(collector.request.TxnFingerprintId()))
+
 	if collector.Aborted() {
+		log.Dev.VInfof(ctx, 2, "txn diag: finalize aborted collection for "+
+			"request %d, txn %s, txn fingerprint %s",
+			collector.requestId, txnID, txnFpStr)
 		return
 	}
 
 	if collector.InProgress() {
+		log.Dev.VInfof(ctx, 2, "txn diag: finalize abandoned collection for "+
+			"request %d, txn %s, txn fingerprint %s",
+			collector.requestId, txnID, txnFpStr)
 		collector.UpdateState(txnDiagnosticsReadyToFinalize)
 	}
+
+	if collector.ReadyToFinalize() {
+		log.Dev.VInfof(ctx, 2, "txn diag: finalize completed collection for "+
+			"request %d, txn %s, txn fingerprint %s",
+			collector.requestId, txnID, txnFpStr)
+	}
+
 	if collector.ShouldCollect(executionDuration) {
 		collector.collectTrace()
 		buf, err := collector.z.Finalize()
