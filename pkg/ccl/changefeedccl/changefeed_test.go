@@ -9585,7 +9585,6 @@ WITH resolved='100ms', min_checkpoint_frequency='1ns'`)
 
 // TestCoreChangefeedBackfillScanCheckpoint tests that a core changefeed
 // successfully completes the initial scan of a table when transient errors occur.
-// This test only succeeds if checkpoints are taken.
 func TestCoreChangefeedBackfillScanCheckpoint(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -9595,7 +9594,22 @@ func TestCoreChangefeedBackfillScanCheckpoint(t *testing.T) {
 
 	rnd, _ := randutil.NewPseudoRand()
 
-	rowCount := 10000
+	const (
+		rowCount = 10000
+		// maxBatchSize is the maximum number of rows a scan request will return,
+		// which maps to the number of rows in a single resolved span that the
+		// changeAggregator sees.
+		maxBatchSize = 25
+		// minErrorCount is the minimum number of errors we'd like to inject.
+		// We want to see that the changefeed restarted at least twice since
+		// if it only restarted once, it could've been after the backfill
+		// already completed and we wouldn't be testing that a transient error
+		// during the backfill isn't an issue.
+		minErrorCount = 2
+		// errorPeriod is the maximum number of resolved spans after which we
+		// must inject an error to be able to have at least minErrorCount errors.
+		errorPeriod = rowCount / maxBatchSize / minErrorCount
+	)
 
 	testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
 		sqlDB := sqlutils.MakeSQLRunner(s.DB)
@@ -9607,30 +9621,53 @@ func TestCoreChangefeedBackfillScanCheckpoint(t *testing.T) {
 			Changefeed.(*TestingKnobs)
 
 		// Ensure Scan Requests are always small enough that we receive multiple
-		// resolved events during a backfill. Also ensure that checkpoint frequency
-		// and size are large enough to induce several checkpoints when
-		// writing `rowCount` rows.
+		// resolved events during a backfill.
 		knobs.FeedKnobs.BeforeScanRequest = func(b *kv.Batch) error {
-			b.Header.MaxSpanRequestKeys = 1 + rnd.Int63n(25)
+			b.Header.MaxSpanRequestKeys = 1 + rnd.Int63n(maxBatchSize)
 			return nil
 		}
-		changefeedbase.SpanCheckpointInterval.Override(
+		// Persist the frontier frequently so that AfterPersistFrontier
+		// fires often enough to inject errors mid-backfill.
+		changefeedbase.FrontierPersistenceInterval.Override(
 			context.Background(), &s.Server.ClusterSettings().SV, 1)
-		changefeedbase.SpanCheckpointMaxBytes.Override(
-			context.Background(), &s.Server.ClusterSettings().SV, 100<<20)
 
-		emittedCount := 0
+		// Flush the aggregator's frontier on every resolved span so
+		// that the changeFrontier processor receives updates frequently
+		// enough for AfterPersistFrontier to fire mid-backfill.
+		knobs.ShouldFlushFrontier = func(_ jobspb.ResolvedSpan) bool {
+			return true
+		}
+
+		// Periodically inject a retryable error, but only when
+		// backfill coverage has advanced, so that retries don't
+		// fire faster than the backfill can make progress.
+		var coveredSpans roachpb.SpanGroup
+		progressCount := 0
 		errorCount := 0
-		knobs.RaiseRetryableError = func() error {
-			emittedCount++
-			if emittedCount%200 == 0 {
+		knobs.AfterPersistFrontier = func(state eval.CoreChangefeedState) error {
+			if state == nil {
+				return nil
+			}
+			cp := state.(*coreProgress)
+			var backfilledSpans []roachpb.Span
+			for _, rs := range cp.frontierSpans {
+				if !rs.Timestamp.IsEmpty() {
+					backfilledSpans = append(backfilledSpans, rs.Span)
+				}
+			}
+			if !coveredSpans.Add(backfilledSpans...) {
+				return nil
+			}
+			progressCount++
+			if progressCount%errorPeriod == 0 {
 				errorCount++
-				return errors.New("test transient error")
+				return changefeedbase.MarkRetryableError(
+					errors.New("test transient error"))
 			}
 			return nil
 		}
 
-		foo := feed(t, f, `CREATE CHANGEFEED FOR TABLE foo WITH min_checkpoint_frequency='1ns'`)
+		foo := feed(t, f, `CREATE CHANGEFEED FOR TABLE foo`)
 		defer closeFeed(t, foo)
 
 		payloads := make([]string, rowCount+1)
@@ -9638,10 +9675,13 @@ func TestCoreChangefeedBackfillScanCheckpoint(t *testing.T) {
 			payloads[i] = fmt.Sprintf(`foo: [%d]->{"after": {"a": %d}}`, i, i)
 		}
 		assertPayloads(t, foo, payloads)
-		require.GreaterOrEqual(t, errorCount, 1)
+
+		require.GreaterOrEqualf(t, errorCount, minErrorCount,
+			"changefeed should have seen at least %d transient errors", minErrorCount)
 	}
 
-	cdcTest(t, testFn, feedTestForceSink("sinkless"))
+	cdcTest(t, testFn, feedTestForceSink("sinkless"),
+		withAllowChangefeedErr("test injects transient errors"))
 }
 
 func TestCheckpointFrequency(t *testing.T) {
