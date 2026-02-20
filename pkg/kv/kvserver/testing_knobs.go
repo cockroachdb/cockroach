@@ -592,6 +592,10 @@ type StoreTestingKnobs struct {
 	// the leaderless watcher's unavailable state during raft ticks.
 	DisableLeaderlessWatcherRefreshOnRaftTick bool
 
+	// BeforeSplitAcquiresLocksOnRHS is invoked during a split application before
+	// we start acquiring locks on the right hand side.
+	BeforeSplitAcquiresLocksOnRHS func(context.Context, *Replica)
+
 	// InjectIntentsToResolveVirtually is called while executing read-only
 	// requests; it helps inject intents to be resolved virtually, usually passed
 	// in by the lock table guard.

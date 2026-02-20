@@ -368,6 +368,9 @@ func (s *Store) SplitRange(
 
 	// Acquire unreplicated locks on the RHS. We expect locksToAcquireOnRHS to be
 	// empty if UnreplicatedLockReliabilityUpgrade is false.
+	if beforeFn := s.TestingKnobs().BeforeSplitAcquiresLocksOnRHS; beforeFn != nil {
+		beforeFn(ctx, rightRepl)
+	}
 	log.KvExec.VInfof(ctx, 2, "acquiring %d locks on the RHS", len(locksToAcquireOnRHS))
 	for _, l := range locksToAcquireOnRHS {
 		rightRepl.concMgr.OnLockAcquired(ctx, &l)
