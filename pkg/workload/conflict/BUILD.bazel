@@ -24,10 +24,7 @@ go_library(
 
 go_test(
     name = "conflict_test",
-    srcs = [
-        "main_test.go",
-    ],
-    embed = [":conflict"],
+    srcs = ["main_test.go"],
     deps = [
         "//pkg/base",
         "//pkg/ccl",
