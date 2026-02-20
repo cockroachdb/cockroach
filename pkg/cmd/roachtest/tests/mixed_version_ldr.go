@@ -41,7 +41,7 @@ func registerLDRMixedVersions(r registry.Registry) {
 
 	r.Add(registry.TestSpec{
 		Name:             "ldr/mixed-version",
-		Owner:            registry.OwnerDisasterRecovery,
+		Owner:            registry.OwnerCDC,
 		Cluster:          r.MakeClusterSpec(sp.leftNodes+sp.rightNodes+1, spec.WorkloadNode()),
 		CompatibleClouds: registry.OnlyGCE,
 		Suites:           registry.Suites(registry.MixedVersion, registry.Nightly),
