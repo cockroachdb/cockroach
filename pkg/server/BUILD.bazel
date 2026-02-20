@@ -318,6 +318,7 @@ go_library(
         "//pkg/util/admission",
         "//pkg/util/admission/admissionpb",
         "//pkg/util/allstacks",
+        "//pkg/util/besteffort",
         "//pkg/util/buildutil",
         "//pkg/util/cidr",
         "//pkg/util/ctxgroup",
