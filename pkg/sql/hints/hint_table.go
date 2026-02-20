@@ -7,6 +7,8 @@ package hints
 
 import (
 	"context"
+	"fmt"
+	"strings"
 	"unsafe"
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
@@ -196,6 +198,53 @@ func InsertHintIntoDB(
 	// StatementHintsCache.handleIncrementalUpdate here to eagerly update the
 	// local node's cache.
 	return int64(tree.MustBeDInt(row[0])), nil
+}
+
+// DeleteHintFromDB deletes statement hints from system.statement_hints,
+// filtered by row ID or fingerprint and returns the number of rows
+// affected.
+func DeleteHintFromDB(
+	ctx context.Context, txn isql.Txn, rowID int64, fingerprint string,
+) (rowIDs []int64, fingerprints []string, err error) {
+	const opName = "delete-statement-hint"
+	filterCols := make([]string, 0, 3)
+	vals := make([]interface{}, 0, 3)
+	if rowID != 0 {
+		filterCols = append(filterCols, `"row_id"`)
+		vals = append(vals, rowID)
+	}
+	if fingerprint != "" {
+		filterCols = append(filterCols, "fingerprint")
+		vals = append(vals, fingerprint)
+	}
+
+	if len(filterCols) == 0 {
+		return nil, nil, errors.New("delete statement hint must specify at least one of row_id or fingerprint")
+	}
+
+	var b strings.Builder
+	for i, filterCol := range filterCols {
+		b.WriteString(fmt.Sprintf("%s = $%d", filterCol, i+1))
+		if i != len(filterCols)-1 {
+			b.WriteString(" AND ")
+		}
+	}
+	rows, err := txn.QueryBufferedEx(
+		ctx, opName, txn.KV(), sessiondata.NodeUserSessionDataOverride,
+		fmt.Sprintf("DELETE FROM system.statement_hints WHERE %s RETURNING row_id, fingerprint", b.String()), vals...,
+	)
+	if err != nil {
+		return nil, nil, err
+	}
+	for _, row := range rows {
+		if len(row) < 2 {
+			return nil, nil, errors.AssertionFailedf("expecting 2 columns from query, got %d", len(row))
+		}
+		rowIDs = append(rowIDs, int64(tree.MustBeDInt(row[0])))
+		fingerprints = append(fingerprints, string(tree.MustBeDString(row[1])))
+	}
+
+	return rowIDs, fingerprints, nil
 }
 
 // Size returns an estimate of the memory usage of the Hint in bytes.
