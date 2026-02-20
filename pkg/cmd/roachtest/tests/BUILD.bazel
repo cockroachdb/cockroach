@@ -219,7 +219,6 @@ go_library(
         "ruby_pg_helpers.rb",
         "knexfile.js",
         "create-msk-topic/main.go.txt",
-        "db-console/Dockerfile",
         "db-console/admin_endpoints.json",
         "db-console/api_v2_endpoints.json",
         "db-console/status_endpoints.json",

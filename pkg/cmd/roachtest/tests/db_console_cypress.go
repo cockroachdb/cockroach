@@ -13,7 +13,6 @@ import (
 	"io/fs"
 	"math/rand"
 	"os"
-	"path"
 	"path/filepath"
 	"time"
 
@@ -31,23 +30,19 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-//go:embed db-console/Dockerfile
-var dockerFile string
-
 const cypressFilePath = "/tmp/dbconsole-cypress"
 const testArtifactPath = "/tmp/dbconsole-cypress/artifacts"
-const imageName = "cypress-roach-test"
 
 var seedQueries = []string{
 	`CREATE USER IF NOT EXISTS cypress PASSWORD 'tests'`,
 	`GRANT admin TO cypress`,
 }
 
-// dbConsoleCypressTest provides functionality for building and running a
-// docker container containing db-console cypress tests. It provides functions
-// for building a docker image, seeding a test cluster with data, and running
-// the built docker image. Running the docker image will run the configured
-// cypress tests against every  node in the provided test cluster.
+// dbConsoleCypressTest provides functionality for installing dependencies and
+// running db-console cypress tests directly on the workload node. It provides
+// functions for installing Node.js and Cypress dependencies, seeding a test
+// cluster with data, and running cypress tests against every node in the
+// provided test cluster.
 type dbConsoleCypressTest struct {
 	t test.Test
 	// testCluster is the roachtest cluster that the configured cypress tests
@@ -55,25 +50,19 @@ type dbConsoleCypressTest struct {
 	testCluster cluster.Cluster
 	// cypressFiles contains all the files that are necessary to run db-console's
 	// cypress tests. These files contain both the files necessary to configure
-	// cypress and the  tests that will be run by cypress
+	// cypress and the tests that will be run by cypress.
 	cypressFiles []embed.FS
 	// cypressWorkingDir contains the location that cypressFiles will be written
-	// to on the workloadNode
+	// to on the workloadNode.
 	cypressWorkingDir string
-	// imageName is the name that will be given to the docker image built and run
-	// as part of these tests
-	imageName string
-	// dockerFile is the Dockerfile contents that will be written to the
-	// cluster's workloadNode to be used for docker  build and docker run
-	dockerFile string
 	// artifactPath contains the location that test artifacts, including cypress
-	// screenshots upon failures, will be written to
+	// screenshots upon failures, will be written to.
 	artifactPath string
 	// spec is the specified tests to run via cypress. If no value is set, all
-	// tests are run
+	// tests are run.
 	spec string
 	// seedQueries contains all the queries to seed the cluster with before the
-	// tests runs
+	// tests run.
 	seedQueries []string
 }
 
@@ -84,8 +73,6 @@ func newDbConsoleCypressTest(
 		t:                 t,
 		testCluster:       c,
 		cypressFiles:      e2e_tests.CypressEmbeds,
-		imageName:         imageName,
-		dockerFile:        dockerFile,
 		artifactPath:      testArtifactPath,
 		cypressWorkingDir: cypressFilePath,
 		spec:              spec,
@@ -93,16 +80,16 @@ func newDbConsoleCypressTest(
 	}
 }
 
-// SetupTest builds the test's Docker image and seeds the cluster with the data
+// SetupTest installs Cypress dependencies and seeds the cluster with the data
 // necessary for the tests to succeed.
 func (d *dbConsoleCypressTest) SetupTest(ctx context.Context, conn *gosql.DB) {
-	d.buildDockerImage(ctx)
+	d.installDeps(ctx)
 	d.seedCluster(ctx, conn)
 }
 
 // RunTest runs the cypress tests against the provided targetNode's db-console.
 // Test failures will produce artifacts in the roachtest's artifacts directory
-// to help with failure investigations
+// to help with failure investigations.
 func (d *dbConsoleCypressTest) RunTest(ctx context.Context, targetNode int, l *logger.Logger) {
 	var specStr string
 	if d.spec != "" {
@@ -114,12 +101,12 @@ func (d *dbConsoleCypressTest) RunTest(ctx context.Context, targetNode int, l *l
 	require.NoError(d.t, err)
 	url := fmt.Sprintf("https://%s", adminUIAddrs[0])
 	require.NoError(d.t, rtCluster.RunE(ctx, option.WithNodes(workloadNode), "mkdir", "-p", d.artifactPath))
-	dockerRun := fmt.Sprintf(
-		`docker run -e NO_COLOR=1 -v %s:/e2e/artifacts %s --config baseUrl=%s,screenshotsFolder=/e2e/artifacts,videosFolder=/e2e/artifacts %s`,
-		d.artifactPath, d.imageName, url, specStr)
-	// If the Docker run fails, get the test failure artifacts and write them to
-	// roachtest's artifact directory.
-	if err = rtCluster.RunE(ctx, option.WithNodes(workloadNode), dockerRun); !assert.NoError(d.t, err) {
+	cypressRun := fmt.Sprintf(
+		`cd %s && NO_COLOR=1 npx cypress run --e2e --config baseUrl=%s,screenshotsFolder=%s,videosFolder=%s %s`,
+		d.cypressWorkingDir, url, d.artifactPath, d.artifactPath, specStr)
+	// If the cypress run fails, get the test failure artifacts and write them
+	// to roachtest's artifact directory.
+	if err = rtCluster.RunE(ctx, option.WithNodes(workloadNode), cypressRun); !assert.NoError(d.t, err) {
 		testArtifactsDir := d.t.ArtifactsDir()
 		if mkDirErr := os.MkdirAll(testArtifactsDir, 0777); mkDirErr != nil {
 			d.t.Fatal(mkDirErr)
@@ -130,7 +117,7 @@ func (d *dbConsoleCypressTest) RunTest(ctx context.Context, targetNode int, l *l
 }
 
 // seedCluster seeds the cluster with dbConsoleCypressTest.seedQueries. This
-// will set up the test  cluster with all the data necessary to successfully
+// will set up the test cluster with all the data necessary to successfully
 // run db-console cypress tests.
 func (d *dbConsoleCypressTest) seedCluster(ctx context.Context, db *gosql.DB) {
 	for _, cmd := range seedQueries {
@@ -140,34 +127,34 @@ func (d *dbConsoleCypressTest) seedCluster(ctx context.Context, db *gosql.DB) {
 	}
 }
 
-// buildDockerImage builds a Docker image which will run db-console cypress
-// tests. This involves writing the configured dockerfile and cypress files to
-// the WorkloadNode, installing docker, and building the docker image.
-func (d *dbConsoleCypressTest) buildDockerImage(ctx context.Context) {
+// installDeps installs all dependencies needed to run Cypress tests directly
+// on the workload node: Node.js 22, pnpm, Cypress system libraries, and
+// project npm dependencies.
+func (d *dbConsoleCypressTest) installDeps(ctx context.Context) {
 	workloadNode := d.testCluster.WorkloadNode()
 	rtCluster := d.testCluster
 	t := d.t
 	require.NoError(t, rtCluster.RunE(ctx, option.WithNodes(workloadNode), "mkdir", "-p", d.cypressWorkingDir))
 
-	// Write Dockerfile to workload node.
-	require.NoError(t,
-		rtCluster.PutString(ctx, d.dockerFile, path.Join(d.cypressWorkingDir, "Dockerfile"), os.ModePerm, workloadNode))
-
 	d.writeCypressFilesToWorkloadNode(ctx)
 
-	t.Status("installing docker")
-	require.NoError(t, rtCluster.Install(ctx, t.L(), workloadNode, "docker"), "failed to install docker")
+	t.Status("installing node 22")
+	require.NoError(t, installNode22(ctx, t, rtCluster, workloadNode, nodeOpts{withPnpm: true}))
 
-	// Build docker image on the workload node.
+	t.Status("installing cypress system dependencies")
+	require.NoError(t, rtCluster.RunE(ctx, option.WithNodes(workloadNode),
+		`sudo apt-get update && sudo DEBIAN_FRONTEND=noninteractive apt-get install -y `+
+			`libgtk2.0-0 libgtk-3-0 libgbm-dev libnotify-dev libnss3 libxss1 libasound2 libxtst6 xauth xvfb`))
+
+	t.Status("installing npm dependencies")
 	testutils.SucceedsSoon(t, func() error {
 		return rtCluster.RunE(ctx, option.WithNodes(workloadNode),
-			fmt.Sprintf("docker build -t %s %s", d.imageName, d.cypressWorkingDir))
+			fmt.Sprintf("cd %s && pnpm install", d.cypressWorkingDir))
 	})
 }
 
-// writeCypressFilesToWorkloadNode writes the embedded dbConsoleCypressTest.cypressFiles to the
-// cluster's workloadNode. This is necessary for the buildDockerImage to build a Docker image
-// with said files.
+// writeCypressFilesToWorkloadNode writes the embedded
+// dbConsoleCypressTest.cypressFiles to the cluster's workloadNode.
 func (d *dbConsoleCypressTest) writeCypressFilesToWorkloadNode(ctx context.Context) {
 	joinPath := d.cypressWorkingDir
 	workloadNode := d.testCluster.WorkloadNode()
