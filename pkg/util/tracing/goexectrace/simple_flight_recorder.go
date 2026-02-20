@@ -8,6 +8,7 @@ package goexectrace
 import (
 	"context"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -20,10 +21,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/redact"
 )
 
 // errDumpBusy is a sentinel error returned by doDump when the flight recorder
@@ -59,6 +62,14 @@ var ExecutionTracerDuration = settings.RegisterDurationSetting(
 	settings.DurationWithMinimumOrZeroDisable(0),
 )
 
+var executionTracerOnDemandMinInterval = settings.RegisterDurationSetting(
+	settings.ApplicationLevel,
+	"obs.execution_tracer.on_demand.min_interval",
+	"minimum interval between on-demand execution trace dumps",
+	10*time.Second,
+	settings.DurationWithMinimum(0),
+)
+
 // SimpleFlightRecorder is a wrapper around trace.FlightRecorder that enables
 // continuous trace capture. The flight recorder lifecycle is controlled by the
 // obs.execution_tracer.duration setting: a positive value enables it, zero
@@ -75,11 +86,16 @@ type SimpleFlightRecorder struct {
 	enabledCheckInterval time.Duration
 	enabled              atomic.Bool
 
+	// lastOnDemandDumpNanos stores the UnixNano timestamp of the last
+	// successful on-demand dump, used for rate limiting.
+	lastOnDemandDumpNanos atomic.Int64
+
 	// frMu protects the fr pointer, which is reassigned in
 	// ensureFRStarted when the configured duration changes. Without this
-	// mutex, concurrent readers (doDump) would race with the Start loop
-	// replacing fr. The Start loop holds a write lock during lifecycle
-	// changes; doDump holds a read lock when calling WriteTo.
+	// mutex, concurrent readers (doDump, WriteTraceTo) would race with
+	// the Start loop replacing fr. The Start loop holds a write lock
+	// during lifecycle changes; doDump and WriteTraceTo hold a read lock
+	// when calling WriteTo.
 	frMu struct {
 		syncutil.RWMutex
 
@@ -208,6 +224,89 @@ func (sfr *SimpleFlightRecorder) doDump(tag string) (string, error) {
 		_ = os.Remove(tmpName)
 		return "", errors.Wrapf(err, "renaming flight record to %s", filename)
 	}
+	return filename, nil
+}
+
+// WriteTraceTo writes the current flight recorder buffer to the given writer.
+// This is used by the pprof trace handler to stream the trace data without
+// saving to disk. If a concurrent WriteTo is in progress, it retries briefly.
+func (sfr *SimpleFlightRecorder) WriteTraceTo(ctx context.Context, w io.Writer) (int64, error) {
+	retryOpts := retry.Options{
+		InitialBackoff: 100 * time.Millisecond,
+		MaxBackoff:     time.Second,
+		Multiplier:     2,
+		MaxRetries:     5,
+	}
+	for r := retry.StartWithCtx(ctx, retryOpts); r.Next(); {
+		var n int64
+		var err error
+		func() {
+			sfr.frMu.RLock()
+			defer sfr.frMu.RUnlock()
+			n, err = sfr.frMu.fr.WriteTo(w)
+		}()
+		if err == nil || !isSnapshotInProgress(err) {
+			return n, err
+		}
+	}
+	return 0, errors.New("goexectrace: concurrent trace write could not complete after retries")
+}
+
+// validTag returns true if s contains only ASCII letters, digits, and
+// underscores (or is empty). This prevents path-traversal via the tag.
+func validTag(s string) bool {
+	for _, r := range s {
+		if r != '_' && !(r >= 'a' && r <= 'z') && !(r >= 'A' && r <= 'Z') && !(r >= '0' && r <= '9') {
+			return false
+		}
+	}
+	return true
+}
+
+// DumpNow triggers an on-demand execution trace dump. The flight recorder must
+// already be enabled via the obs.execution_tracer.duration cluster setting. The
+// tag parameter is appended to the filename (e.g., "scheduling_latency") and
+// must contain only alphanumeric characters and underscores.
+//
+// If a dump is already in progress, the call is skipped (returns "", nil).
+// On-demand dumps are rate limited by obs.execution_tracer.on_demand.min_interval.
+func (sfr *SimpleFlightRecorder) DumpNow(
+	ctx context.Context, reason redact.RedactableString, tag string,
+) (string, error) {
+	if !sfr.enabled.Load() {
+		return "", errors.New(
+			"flight recorder is not enabled; set obs.execution_tracer.duration to enable")
+	}
+	if !validTag(tag) {
+		return "", errors.Newf(
+			"invalid tag %q: must contain only alphanumeric characters and underscores", tag)
+	}
+
+	// Rate limiting: check whether we're within the minimum interval since
+	// the last successful dump. This is best-effort: two concurrent callers
+	// can both pass the check before either updates the timestamp.
+	minInterval := executionTracerOnDemandMinInterval.Get(sfr.sv)
+	nowNanos := timeutil.Now().UnixNano()
+	lastNanos := sfr.lastOnDemandDumpNanos.Load()
+	if minInterval > 0 && nowNanos-lastNanos < minInterval.Nanoseconds() {
+		log.Ops.VEventfDepth(
+			ctx, 1, 1, "goexectrace: on-demand dump suppressed by rate limit: %s", reason)
+		return "", nil
+	}
+
+	log.Ops.Infof(ctx, "goexectrace: taking on-demand dump: %s [tag=%s]", reason, tag)
+	filename, err := sfr.doDump(tag)
+	if errors.Is(err, errDumpBusy) {
+		log.Dev.VEventf(ctx, 2, "goexectrace: on-demand dump skipped, snapshot already in progress")
+		return "", nil
+	}
+	if err != nil {
+		return "", err
+	}
+
+	sfr.lastOnDemandDumpNanos.Store(timeutil.Now().UnixNano())
+
+	sfr.dumpStore.GC(ctx, timeutil.Now(), sfr)
 	return filename, nil
 }
 
