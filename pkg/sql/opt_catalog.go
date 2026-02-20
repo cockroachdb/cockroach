@@ -836,6 +836,11 @@ func (ov *optView) Trigger(i int) cat.Trigger {
 	return &ov.triggers[i]
 }
 
+// IsSecurityInvoker is part of the cat.View interface.
+func (ov *optView) IsSecurityInvoker() bool {
+	return ov.desc.IsSecurityInvoker()
+}
+
 // Owner is part of the cat.View interface.
 func (ov *optView) Owner() username.SQLUsername {
 	return ov.desc.GetPrivileges().Owner()

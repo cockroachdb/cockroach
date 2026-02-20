@@ -815,14 +815,22 @@ https://www.postgresql.org/docs/9.5/catalog-pg-class.html`,
 			relPersistence = relPersistenceTemporary
 		}
 		var relOptions tree.Datum = tree.DNull
-		storageParams, err := table.GetStorageParams(false /* spaceBetweenEqual */)
+		var withOptions []string
+		var err error
+		if table.IsView() {
+			// Show view options in reloptions.
+			withOptions, err = table.GetViewOptions(false /* spaceBetweenEqual */)
+		} else {
+			// Show table storage parameters in reloptions.
+			withOptions, err = table.GetStorageParams(false /* spaceBetweenEqual */)
+		}
 		if err != nil {
 			return err
 		}
-		if len(storageParams) > 0 {
+		if len(withOptions) > 0 {
 			relOptionsArr := tree.NewDArray(types.String)
-			for _, storageParam := range storageParams {
-				if err := relOptionsArr.Append(tree.NewDString(storageParam)); err != nil {
+			for _, opt := range withOptions {
+				if err := relOptionsArr.Append(tree.NewDString(opt)); err != nil {
 					return err
 				}
 			}

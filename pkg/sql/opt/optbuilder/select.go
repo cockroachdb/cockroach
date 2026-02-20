@@ -373,9 +373,11 @@ func (b *Builder) buildView(
 			defer func() { b.skipSelectPrivilegeChecks = false }()
 		}
 	} else {
-		prevPrivilegeUser := b.checkPrivilegeUser
-		b.checkPrivilegeUser = view.Owner()
-		defer func() { b.checkPrivilegeUser = prevPrivilegeUser }()
+		if !view.IsSecurityInvoker() {
+			prevPrivilegeUser := b.checkPrivilegeUser
+			b.checkPrivilegeUser = view.Owner()
+			defer func() { b.checkPrivilegeUser = prevPrivilegeUser }()
+		}
 		defer b.DisableUnsafeInternalCheck()()
 		if b.skipSelectPrivilegeChecks {
 			b.skipSelectPrivilegeChecks = false

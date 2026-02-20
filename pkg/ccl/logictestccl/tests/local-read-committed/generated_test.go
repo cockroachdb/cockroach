@@ -1854,6 +1854,13 @@ func TestReadCommittedLogic_secondary_index_column_families(
 	runLogicTest(t, "secondary_index_column_families")
 }
 
+func TestReadCommittedLogic_security_invoker_view(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "security_invoker_view")
+}
+
 func TestReadCommittedLogic_select(
 	t *testing.T,
 ) {

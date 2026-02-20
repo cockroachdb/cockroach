@@ -1,0 +1,1359 @@
+# LogicTest: !local-legacy-schema-changer !local-mixed-25.4 !local-mixed-26.1
+
+# Comprehensive tests for security_invoker view option.
+# Tests privilege checks and RLS policy application with security_invoker
+# on and off (security definer).
+
+subtest setup
+
+statement ok
+CREATE DATABASE sidb;
+
+statement ok
+USE sidb;
+
+# Create roles:
+# - table_owner: owns the base table
+# - view_owner: owns the views (different from table_owner for some tests)
+# - invoker_user: the user querying the views
+statement ok
+CREATE ROLE table_owner;
+
+statement ok
+CREATE ROLE view_owner;
+
+statement ok
+CREATE ROLE invoker_user;
+
+statement ok
+GRANT ALL ON DATABASE sidb TO table_owner;
+
+statement ok
+GRANT ALL ON DATABASE sidb TO view_owner;
+
+statement ok
+GRANT ALL ON DATABASE sidb TO invoker_user;
+
+subtest end
+
+# ---------------------------------------------------------------------------
+# Part 1: DDL tests — CREATE VIEW, SHOW CREATE, pg_catalog, CREATE OR REPLACE
+# ---------------------------------------------------------------------------
+subtest ddl_create_and_metadata
+
+statement ok
+CREATE TABLE base_t (
+  id INT PRIMARY KEY,
+  username TEXT,
+  data TEXT
+);
+
+statement ok
+INSERT INTO base_t VALUES
+  (1, 'table_owner', 'owner-data'),
+  (2, 'view_owner', 'vowner-data'),
+  (3, 'invoker_user', 'invoker-data'),
+  (4, 'other', 'other-data');
+
+# Create view with security_invoker = true
+statement ok
+CREATE VIEW si_view WITH (security_invoker = true) AS
+  SELECT id, username, data FROM base_t;
+
+statement ok
+CREATE VIEW si_view_default WITH (security_invoker) AS
+  SELECT id, username, data FROM base_t;
+
+# Create view with security_invoker = false (explicit definer)
+statement ok
+CREATE VIEW sd_view WITH (security_invoker = false) AS
+  SELECT id, username, data FROM base_t;
+
+# Create view without any option (defaults to definer)
+statement ok
+CREATE VIEW default_view AS
+  SELECT id, username, data FROM base_t;
+
+# SHOW CREATE should show security_invoker when explicitly included in the CREATE VIEW
+query TT
+SHOW CREATE VIEW si_view;
+----
+si_view  CREATE VIEW public.si_view (
+           id,
+           username,
+           data
+         ) WITH (security_invoker = true) AS SELECT id, username, data FROM sidb.public.base_t;
+
+query TT
+SHOW CREATE VIEW si_view_default;
+----
+si_view_default  CREATE VIEW public.si_view_default (
+                  id,
+                  username,
+                  data
+                ) WITH (security_invoker = true) AS SELECT id, username, data FROM sidb.public.base_t;
+
+query TT
+SHOW CREATE VIEW sd_view;
+----
+sd_view  CREATE VIEW public.sd_view (
+           id,
+           username,
+           data
+         ) WITH (security_invoker = false) AS SELECT id, username, data FROM sidb.public.base_t;
+
+query TT
+SHOW CREATE VIEW default_view;
+----
+default_view  CREATE VIEW public.default_view (
+                id,
+                username,
+                data
+              ) AS SELECT id, username, data FROM sidb.public.base_t;
+
+# Verify reloptions in pg_catalog.pg_class
+query TT
+SELECT relname, reloptions FROM pg_catalog.pg_class
+WHERE relname IN ('si_view', 'si_view_default', 'sd_view', 'default_view')
+ORDER BY relname;
+----
+default_view     NULL
+sd_view          {security_invoker=false}
+si_view          {security_invoker=true}
+si_view_default  {security_invoker=true}
+
+subtest end
+
+# ---------------------------------------------------------------------------
+subtest ddl_create_or_replace
+
+# CREATE OR REPLACE resets security_invoker
+statement ok
+CREATE OR REPLACE VIEW si_view AS
+  SELECT id, username, data FROM base_t;
+
+query TT
+SELECT relname, reloptions FROM pg_catalog.pg_class
+WHERE relname = 'si_view';
+----
+si_view  NULL
+
+statement ok
+CREATE OR REPLACE VIEW si_view WITH (security_invoker) AS
+  SELECT id, username, data FROM base_t;
+
+query TT
+SELECT relname, reloptions FROM pg_catalog.pg_class
+WHERE relname = 'si_view';
+----
+si_view  {security_invoker=true}
+
+# CREATE OR REPLACE can add security_invoker to an existing definer view
+statement ok
+CREATE OR REPLACE VIEW sd_view WITH (security_invoker = true) AS
+  SELECT id, username, data FROM base_t;
+
+query TT
+SELECT relname, reloptions FROM pg_catalog.pg_class
+WHERE relname = 'sd_view';
+----
+sd_view  {security_invoker=true}
+
+# Change it back to definer
+statement ok
+CREATE OR REPLACE VIEW sd_view WITH (security_invoker = false) AS
+  SELECT id, username, data FROM base_t;
+
+query TT
+SELECT relname, reloptions FROM pg_catalog.pg_class
+WHERE relname = 'sd_view';
+----
+sd_view  {security_invoker=false}
+
+subtest end
+
+# ---------------------------------------------------------------------------
+# Part 2: Privilege checks without RLS
+# ---------------------------------------------------------------------------
+subtest privileges_no_rls
+
+# Revoke direct table access from invoker_user.
+statement ok
+REVOKE ALL ON base_t FROM invoker_user;
+
+# Grant SELECT on the views to invoker_user.
+statement ok
+GRANT SELECT ON si_view TO invoker_user;
+
+statement ok
+GRANT SELECT ON sd_view TO invoker_user;
+
+statement ok
+GRANT SELECT ON default_view TO invoker_user;
+
+statement ok
+SET ROLE invoker_user;
+
+statement ok
+USE sidb;
+
+# SECURITY INVOKER view: should fail because invoker_user does not have
+# SELECT on base_t. The view checks invoker privileges.
+statement error pgcode 42501 user invoker_user does not have SELECT privilege on relation base_t
+SELECT * FROM si_view;
+
+# SECURITY DEFINER view: should succeed because the view owner (root)
+# has access to base_t.
+query ITT rowsort
+SELECT * FROM sd_view;
+----
+1  table_owner   owner-data
+2  view_owner    vowner-data
+3  invoker_user  invoker-data
+4  other         other-data
+
+# Default view (no option): behaves as definer, should succeed.
+query ITT rowsort
+SELECT * FROM default_view;
+----
+1  table_owner   owner-data
+2  view_owner    vowner-data
+3  invoker_user  invoker-data
+4  other         other-data
+
+statement ok
+SET ROLE root;
+
+subtest end
+
+# ---------------------------------------------------------------------------
+subtest privileges_after_grant
+
+# Grant SELECT on base_t to invoker_user.
+statement ok
+GRANT SELECT ON base_t TO invoker_user;
+
+statement ok
+SET ROLE invoker_user;
+
+# Now SECURITY INVOKER should succeed since invoker has table access.
+query ITT rowsort
+SELECT * FROM si_view;
+----
+1  table_owner   owner-data
+2  view_owner    vowner-data
+3  invoker_user  invoker-data
+4  other         other-data
+
+# Definer view still works.
+query ITT rowsort
+SELECT * FROM sd_view;
+----
+1  table_owner   owner-data
+2  view_owner    vowner-data
+3  invoker_user  invoker-data
+4  other         other-data
+
+statement ok
+SET ROLE root;
+
+# Revoke again for later tests.
+statement ok
+REVOKE ALL ON base_t FROM invoker_user;
+
+subtest end
+
+# ---------------------------------------------------------------------------
+# Part 3: View owner != table owner (privilege checks without RLS)
+# ---------------------------------------------------------------------------
+subtest different_owners_privileges
+
+# Give table_owner access to base_t.
+statement ok
+ALTER TABLE base_t OWNER TO table_owner;
+
+# Let view_owner create views. Grant view_owner access to base_t so they
+# can create views referencing it.
+statement ok
+GRANT SELECT ON base_t TO view_owner;
+
+statement ok
+SET ROLE view_owner;
+
+statement ok
+CREATE VIEW vo_si_view WITH (security_invoker = true) AS
+  SELECT id, username, data FROM base_t;
+
+statement ok
+CREATE VIEW vo_sd_view WITH (security_invoker = false) AS
+  SELECT id, username, data FROM base_t;
+
+statement ok
+SET ROLE root;
+
+statement ok
+GRANT SELECT ON vo_si_view TO invoker_user;
+
+statement ok
+GRANT SELECT ON vo_sd_view TO invoker_user;
+
+statement ok
+SET ROLE invoker_user;
+
+# SECURITY INVOKER: fails because invoker_user has no SELECT on base_t.
+statement error pgcode 42501 user invoker_user does not have SELECT privilege on relation base_t
+SELECT * FROM vo_si_view;
+
+# SECURITY DEFINER: succeeds because view_owner has SELECT on base_t.
+query ITT rowsort
+SELECT * FROM vo_sd_view;
+----
+1  table_owner   owner-data
+2  view_owner    vowner-data
+3  invoker_user  invoker-data
+4  other         other-data
+
+statement ok
+SET ROLE root;
+
+# Grant base_t SELECT to invoker_user, now invoker view works.
+statement ok
+GRANT SELECT ON base_t TO invoker_user;
+
+statement ok
+SET ROLE invoker_user;
+
+query ITT rowsort
+SELECT * FROM vo_si_view;
+----
+1  table_owner   owner-data
+2  view_owner    vowner-data
+3  invoker_user  invoker-data
+4  other         other-data
+
+statement ok
+SET ROLE root;
+
+# Revoke view_owner's SELECT on base_t. The definer view should now fail
+# when queried even by root because the view owner (view_owner) lost access.
+statement ok
+REVOKE SELECT ON base_t FROM view_owner;
+
+# Query as invoker_user: invoker view still works (invoker has access).
+statement ok
+SET ROLE invoker_user;
+
+query ITT rowsort
+SELECT * FROM vo_si_view;
+----
+1  table_owner   owner-data
+2  view_owner    vowner-data
+3  invoker_user  invoker-data
+4  other         other-data
+
+# Definer view fails because view_owner lost access to base_t.
+statement error pgcode 42501 user view_owner does not have SELECT privilege on relation base_t
+SELECT * FROM vo_sd_view;
+
+statement ok
+SET ROLE root;
+
+# Restore view_owner's access for later tests.
+statement ok
+GRANT SELECT ON base_t TO view_owner;
+
+subtest end
+
+# ---------------------------------------------------------------------------
+# Part 4: RLS with security_invoker — different policies for different users
+# ---------------------------------------------------------------------------
+subtest rls_basic
+
+# Enable RLS on base_t.
+statement ok
+ALTER TABLE base_t ENABLE ROW LEVEL SECURITY;
+
+# Create per-user policies:
+# - table_owner sees all rows (owns the table, so RLS is bypassed for owner)
+# - view_owner sees the 'view_owner' row
+# - invoker_user sees the 'invoker_user' row
+statement ok
+CREATE POLICY p_view_owner ON base_t
+  FOR SELECT
+  TO view_owner
+  USING (username = 'view_owner');
+
+statement ok
+CREATE POLICY p_invoker ON base_t
+  FOR SELECT
+  TO invoker_user
+  USING (username = 'invoker_user');
+
+# Ensure both users have SELECT on the table itself.
+statement ok
+GRANT SELECT ON base_t TO view_owner;
+
+statement ok
+GRANT SELECT ON base_t TO invoker_user;
+
+# Create views owned by view_owner with RLS-enabled table.
+statement ok
+SET ROLE view_owner;
+
+statement ok
+CREATE VIEW rls_si_view WITH (security_invoker = true) AS
+  SELECT id, username, data FROM base_t;
+
+statement ok
+CREATE VIEW rls_sd_view WITH (security_invoker = false) AS
+  SELECT id, username, data FROM base_t;
+
+statement ok
+CREATE VIEW rls_default_view AS
+  SELECT id, username, data FROM base_t;
+
+statement ok
+SET ROLE root;
+
+statement ok
+GRANT SELECT ON rls_si_view TO invoker_user;
+
+statement ok
+GRANT SELECT ON rls_sd_view TO invoker_user;
+
+statement ok
+GRANT SELECT ON rls_default_view TO invoker_user;
+
+# ---- Query as view_owner (the view owner) ----
+statement ok
+SET ROLE view_owner;
+
+query ITT
+SELECT * FROM rls_si_view ORDER BY id;
+----
+2  view_owner  vowner-data
+
+query ITT
+SELECT * FROM rls_sd_view ORDER BY id;
+----
+2  view_owner  vowner-data
+
+query ITT
+SELECT * FROM rls_default_view ORDER BY id;
+----
+2  view_owner  vowner-data
+
+# ---- Query as invoker_user ----
+statement ok
+SET ROLE invoker_user;
+
+query ITT
+SELECT * FROM rls_si_view ORDER BY id;
+----
+3  invoker_user  invoker-data
+
+query ITT
+SELECT * FROM rls_sd_view ORDER BY id;
+----
+2  view_owner  vowner-data
+
+query ITT
+SELECT * FROM rls_default_view ORDER BY id;
+----
+2  view_owner  vowner-data
+
+statement ok
+SET ROLE root;
+
+subtest end
+
+# ---------------------------------------------------------------------------
+# Part 5: RLS with current_user based policies
+# ---------------------------------------------------------------------------
+subtest rls_current_user
+
+# Create a table where each user sees only their own rows.
+statement ok
+CREATE TABLE user_data (
+  id INT PRIMARY KEY,
+  owner_name TEXT,
+  secret TEXT
+);
+
+statement ok
+INSERT INTO user_data VALUES
+  (1, 'view_owner', 'vo-secret'),
+  (2, 'invoker_user', 'inv-secret'),
+  (3, 'table_owner', 'to-secret'),
+  (4, 'invoker_user', 'inv-secret-2');
+
+statement ok
+ALTER TABLE user_data ENABLE ROW LEVEL SECURITY;
+
+statement ok
+CREATE POLICY see_own ON user_data
+  FOR SELECT
+  TO view_owner, invoker_user
+  USING (owner_name = current_user());
+
+statement ok
+GRANT SELECT ON user_data TO view_owner;
+
+statement ok
+GRANT SELECT ON user_data TO invoker_user;
+
+statement ok
+SET ROLE view_owner;
+
+statement ok
+CREATE VIEW ud_si_view WITH (security_invoker = true) AS
+  SELECT * FROM user_data;
+
+statement ok
+CREATE VIEW ud_sd_view WITH (security_invoker = false) AS
+  SELECT * FROM user_data;
+
+statement ok
+SET ROLE root;
+
+statement ok
+GRANT SELECT ON ud_si_view TO invoker_user;
+
+statement ok
+GRANT SELECT ON ud_sd_view TO invoker_user;
+
+# As view_owner: both views show view_owner's rows.
+statement ok
+SET ROLE view_owner;
+
+query ITT
+SELECT * FROM ud_si_view ORDER BY id;
+----
+1  view_owner  vo-secret
+
+query ITT
+SELECT * FROM ud_sd_view ORDER BY id;
+----
+1  view_owner  vo-secret
+
+# As invoker_user: both views show invoker_user's rows.
+statement ok
+SET ROLE invoker_user;
+
+# SECURITY INVOKER: current_user = invoker_user → sees invoker_user's rows.
+query ITT
+SELECT * FROM ud_si_view ORDER BY id;
+----
+2  invoker_user  inv-secret
+4  invoker_user  inv-secret-2
+
+# SECURITY DEFINER: current_user is still invoker_user → sees invoker_user's rows.
+query ITT
+SELECT * FROM ud_sd_view ORDER BY id;
+----
+2  invoker_user  inv-secret
+4  invoker_user  inv-secret-2
+
+statement ok
+SET ROLE root;
+
+subtest end
+
+# ---------------------------------------------------------------------------
+# Part 6: RLS with FORCE ROW LEVEL SECURITY (table owner affected)
+# ---------------------------------------------------------------------------
+subtest rls_force
+
+# With FORCE ROW LEVEL SECURITY, even the table owner is subject to policies.
+statement ok
+CREATE TABLE force_t (
+  id INT PRIMARY KEY,
+  val TEXT
+);
+
+statement ok
+INSERT INTO force_t VALUES (1, 'a'), (2, 'b'), (3, 'c'), (4, 'd');
+
+statement ok
+ALTER TABLE force_t ENABLE ROW LEVEL SECURITY;
+
+statement ok
+ALTER TABLE force_t FORCE ROW LEVEL SECURITY;
+
+statement ok
+CREATE POLICY p_even ON force_t FOR SELECT USING (id % 2 = 0);
+
+statement ok
+GRANT SELECT ON force_t TO view_owner;
+
+statement ok
+GRANT SELECT ON force_t TO invoker_user;
+
+# Table owner (root) is also subject to policy because of FORCE.
+# But root has admin so it bypasses RLS regardless.
+query IT
+SELECT * FROM force_t ORDER BY id;
+----
+1  a
+2  b
+3  c
+4  d
+
+# Transfer ownership to table_owner.
+statement ok
+ALTER TABLE force_t OWNER TO table_owner;
+
+statement ok
+SET ROLE table_owner;
+
+# Table owner with FORCE RLS: sees only even rows.
+query IT
+SELECT * FROM force_t ORDER BY id;
+----
+2  b
+4  d
+
+statement ok
+SET ROLE root;
+
+# Create views owned by view_owner.
+statement ok
+SET ROLE view_owner;
+
+statement ok
+CREATE VIEW force_si_view WITH (security_invoker = true) AS
+  SELECT * FROM force_t;
+
+statement ok
+CREATE VIEW force_sd_view WITH (security_invoker = false) AS
+  SELECT * FROM force_t;
+
+statement ok
+SET ROLE root;
+
+statement ok
+GRANT SELECT ON force_si_view TO table_owner;
+
+statement ok
+GRANT SELECT ON force_sd_view TO table_owner;
+
+statement ok
+GRANT SELECT ON force_si_view TO invoker_user;
+
+statement ok
+GRANT SELECT ON force_sd_view TO invoker_user;
+
+statement ok
+SET ROLE invoker_user;
+
+query IT
+SELECT * FROM force_si_view ORDER BY id;
+----
+2  b
+4  d
+
+query IT
+SELECT * FROM force_sd_view ORDER BY id;
+----
+2  b
+4  d
+
+statement ok
+SET ROLE table_owner;
+
+query IT
+SELECT * FROM force_si_view ORDER BY id;
+----
+2  b
+4  d
+
+query IT
+SELECT * FROM force_sd_view ORDER BY id;
+----
+2  b
+4  d
+
+statement ok
+SET ROLE root;
+
+subtest end
+
+# ---------------------------------------------------------------------------
+# Part 7: Nested views with security_invoker
+# ---------------------------------------------------------------------------
+subtest nested_views
+
+# A security_invoker view on top of another security_invoker view.
+# The privilege/RLS check should follow the invoker at each level.
+
+statement ok
+GRANT SELECT ON base_t TO view_owner;
+
+statement ok
+GRANT SELECT ON base_t TO invoker_user;
+
+statement ok
+SET ROLE view_owner;
+
+# Inner view: security_invoker
+statement ok
+CREATE VIEW inner_si WITH (security_invoker = true) AS
+  SELECT id, username, data FROM base_t;
+
+# Outer view: security_invoker, on top of inner_si
+statement ok
+CREATE VIEW outer_si WITH (security_invoker = true) AS
+  SELECT * FROM inner_si;
+
+# Outer view: security definer, on top of inner_si
+statement ok
+CREATE VIEW outer_sd WITH (security_invoker = false) AS
+  SELECT * FROM inner_si;
+
+statement ok
+SET ROLE root;
+
+statement ok
+GRANT SELECT ON inner_si TO invoker_user;
+
+statement ok
+GRANT SELECT ON outer_si TO invoker_user;
+
+statement ok
+GRANT SELECT ON outer_sd TO invoker_user;
+
+statement ok
+SET ROLE invoker_user;
+
+# As invoker_user: outer_si (invoker) → inner_si (invoker) → base_t
+query ITT
+SELECT * FROM outer_si ORDER BY id;
+----
+3  invoker_user  invoker-data
+
+# outer_sd (definer=view_owner) → inner_si (invoker, but invoker is now
+# view_owner because outer is definer) → base_t
+query ITT
+SELECT * FROM outer_sd ORDER BY id;
+----
+2  view_owner   vowner-data
+
+statement ok
+SET ROLE root;
+
+statement ok
+DROP VIEW outer_si;
+DROP VIEW outer_sd;
+DROP VIEW inner_si;
+
+subtest end
+
+# ---------------------------------------------------------------------------
+# Part 8: Switching security_invoker on an existing view with RLS
+# ---------------------------------------------------------------------------
+subtest toggle_security_invoker
+
+# Start with a definer view.
+statement ok
+SET ROLE view_owner;
+
+statement ok
+CREATE VIEW toggle_view AS
+  SELECT id, username, data FROM base_t;
+
+statement ok
+SET ROLE root;
+
+statement ok
+GRANT SELECT ON toggle_view TO invoker_user;
+
+statement ok
+SET ROLE invoker_user;
+
+# Default (definer): view_owner policy → view_owner row
+query ITT
+SELECT * FROM toggle_view ORDER BY id;
+----
+2  view_owner   vowner-data
+
+statement ok
+SET ROLE view_owner;
+
+# Switch to security_invoker.
+statement ok
+CREATE OR REPLACE VIEW toggle_view WITH (security_invoker = true) AS
+  SELECT id, username, data FROM base_t;
+
+statement ok
+SET ROLE invoker_user;
+
+# Now invoker_user policy applies → invoker_user row
+query ITT
+SELECT * FROM toggle_view ORDER BY id;
+----
+3  invoker_user  invoker-data
+
+statement ok
+SET ROLE view_owner;
+
+# Switch back to definer.
+statement ok
+CREATE OR REPLACE VIEW toggle_view WITH (security_invoker = false) AS
+  SELECT id, username, data FROM base_t;
+
+statement ok
+SET ROLE invoker_user;
+
+# Back to view_owner policy → odd IDs.
+query ITT
+SELECT * FROM toggle_view ORDER BY id;
+----
+2  view_owner   vowner-data
+
+statement ok
+SET ROLE root;
+
+subtest end
+
+# ---------------------------------------------------------------------------
+# Part 9: RLS with restrictive policies and security_invoker
+# ---------------------------------------------------------------------------
+subtest rls_restrictive
+
+statement ok
+CREATE TABLE restrict_t (
+  id INT PRIMARY KEY,
+  category TEXT,
+  val TEXT
+);
+
+statement ok
+INSERT INTO restrict_t VALUES
+  (1, 'public', 'pub-1'),
+  (2, 'public', 'pub-2'),
+  (3, 'secret', 'sec-3'),
+  (4, 'secret', 'sec-4'),
+  (5, 'public', 'pub-5');
+
+statement ok
+ALTER TABLE restrict_t ENABLE ROW LEVEL SECURITY;
+
+# Permissive policy: both users can see all rows.
+statement ok
+CREATE POLICY perm ON restrict_t
+  FOR SELECT
+  TO view_owner, invoker_user
+  USING (true);
+
+# Restrictive policy only for invoker_user: cannot see 'secret' rows.
+statement ok
+CREATE POLICY restrict ON restrict_t
+  AS RESTRICTIVE
+  FOR SELECT
+  TO invoker_user
+  USING (category = 'public');
+
+statement ok
+GRANT SELECT ON restrict_t TO view_owner;
+
+statement ok
+GRANT SELECT ON restrict_t TO invoker_user;
+
+statement ok
+SET ROLE view_owner;
+
+statement ok
+CREATE VIEW restrict_si WITH (security_invoker = true) AS
+  SELECT * FROM restrict_t;
+
+statement ok
+CREATE VIEW restrict_sd WITH (security_invoker = false) AS
+  SELECT * FROM restrict_t;
+
+statement ok
+SET ROLE root;
+
+statement ok
+GRANT SELECT ON restrict_si TO invoker_user;
+
+statement ok
+GRANT SELECT ON restrict_sd TO invoker_user;
+
+# As invoker_user through invoker view: restrictive policy applies.
+statement ok
+SET ROLE invoker_user;
+
+query ITT
+SELECT * FROM restrict_si ORDER BY id;
+----
+1  public  pub-1
+2  public  pub-2
+5  public  pub-5
+
+# Through definer view: view_owner policies apply (no restrictive policy
+# for view_owner), sees all rows.
+query ITT
+SELECT * FROM restrict_sd ORDER BY id;
+----
+1  public  pub-1
+2  public  pub-2
+3  secret  sec-3
+4  secret  sec-4
+5  public  pub-5
+
+statement ok
+SET ROLE root;
+
+# Disable RLS: should see all rows in the invoker view.
+statement ok
+ALTER TABLE restrict_t DISABLE ROW LEVEL SECURITY;
+
+statement ok
+SET ROLE invoker_user;
+
+query ITT
+SELECT * FROM restrict_si ORDER BY id;
+----
+1  public  pub-1
+2  public  pub-2
+3  secret  sec-3
+4  secret  sec-4
+5  public  pub-5
+
+statement ok
+SET ROLE root;
+
+subtest end
+
+# ---------------------------------------------------------------------------
+# Part 10: Multiple policies with security_invoker
+# ---------------------------------------------------------------------------
+subtest rls_multiple_policies
+
+statement ok
+CREATE TABLE multi_pol_t (
+  id INT PRIMARY KEY,
+  department TEXT,
+  data TEXT
+);
+
+statement ok
+INSERT INTO multi_pol_t VALUES
+  (1, 'eng', 'eng-1'),
+  (2, 'sales', 'sales-2'),
+  (3, 'eng', 'eng-3'),
+  (4, 'hr', 'hr-4'),
+  (5, 'sales', 'sales-5');
+
+statement ok
+ALTER TABLE multi_pol_t ENABLE ROW LEVEL SECURITY;
+
+# invoker_user has two permissive policies (union): eng OR sales
+statement ok
+CREATE POLICY inv_eng ON multi_pol_t
+  FOR SELECT TO invoker_user
+  USING (department = 'eng');
+
+statement ok
+CREATE POLICY inv_sales ON multi_pol_t
+  FOR SELECT TO invoker_user
+  USING (department = 'sales');
+
+# view_owner only sees hr
+statement ok
+CREATE POLICY vo_hr ON multi_pol_t
+  FOR SELECT TO view_owner
+  USING (department = 'hr');
+
+statement ok
+GRANT SELECT ON multi_pol_t TO view_owner;
+
+statement ok
+GRANT SELECT ON multi_pol_t TO invoker_user;
+
+statement ok
+SET ROLE view_owner;
+
+statement ok
+CREATE VIEW multi_si WITH (security_invoker = true) AS
+  SELECT * FROM multi_pol_t;
+
+statement ok
+CREATE VIEW multi_sd WITH (security_invoker = false) AS
+  SELECT * FROM multi_pol_t;
+
+statement ok
+SET ROLE root;
+
+statement ok
+GRANT SELECT ON multi_si TO invoker_user;
+
+statement ok
+GRANT SELECT ON multi_sd TO invoker_user;
+
+statement ok
+SET ROLE invoker_user;
+
+# Invoker view: invoker_user's policies → eng + sales rows.
+query ITT
+SELECT * FROM multi_si ORDER BY id;
+----
+1  eng    eng-1
+2  sales  sales-2
+3  eng    eng-3
+5  sales  sales-5
+
+# Definer view: view_owner's policy → hr only.
+query ITT
+SELECT * FROM multi_sd ORDER BY id;
+----
+4  hr  hr-4
+
+statement ok
+SET ROLE root;
+
+subtest end
+
+# ---------------------------------------------------------------------------
+# Part 11: ALTER VIEW SET (security_invoker)
+# ---------------------------------------------------------------------------
+subtest alter_view_set_security_invoker
+
+statement ok
+SET ROLE root;
+
+# Create a basic view without security_invoker.
+statement ok
+CREATE VIEW alter_test_view AS SELECT id, username FROM base_t;
+
+# Verify it does not have security_invoker set.
+query TT
+SHOW CREATE VIEW alter_test_view;
+----
+alter_test_view  CREATE VIEW public.alter_test_view (
+                   id,
+                   username
+                 ) AS SELECT id, username FROM sidb.public.base_t;
+
+# ALTER VIEW to enable security_invoker.
+statement ok
+ALTER VIEW alter_test_view SET (security_invoker = true)
+
+query TT
+SHOW CREATE VIEW alter_test_view;
+----
+alter_test_view  CREATE VIEW public.alter_test_view (
+                   id,
+                   username
+                 ) WITH (security_invoker = true) AS SELECT id, username FROM sidb.public.base_t;
+
+# ALTER VIEW to disable security_invoker.
+statement ok
+ALTER VIEW alter_test_view SET (security_invoker = false)
+
+query TT
+SHOW CREATE VIEW alter_test_view;
+----
+alter_test_view  CREATE VIEW public.alter_test_view (
+                   id,
+                   username
+                 ) WITH (security_invoker = false) AS SELECT id, username FROM sidb.public.base_t;
+
+# IF EXISTS on a nonexistent view should be a no-op.
+statement ok
+ALTER VIEW IF EXISTS nonexistent_view SET (security_invoker = true)
+
+# Without IF EXISTS on a nonexistent view should error.
+statement error pgcode 42P01 relation "nonexistent_view" does not exist
+ALTER VIEW nonexistent_view SET (security_invoker = true)
+
+# ALTER VIEW on a table should error.
+statement error pgcode 42809 "base_t" is not a view
+ALTER VIEW base_t SET (security_invoker = true)
+
+# Test integer values: 1 = true, 0 = false.
+statement ok
+ALTER VIEW alter_test_view SET (security_invoker = 1)
+
+query TT
+SHOW CREATE VIEW alter_test_view;
+----
+alter_test_view  CREATE VIEW public.alter_test_view (
+                   id,
+                   username
+                 ) WITH (security_invoker = true) AS SELECT id, username FROM sidb.public.base_t;
+
+statement ok
+ALTER VIEW alter_test_view SET (security_invoker = 0)
+
+query TT
+SHOW CREATE VIEW alter_test_view;
+----
+alter_test_view  CREATE VIEW public.alter_test_view (
+                   id,
+                   username
+                 ) WITH (security_invoker = false) AS SELECT id, username FROM sidb.public.base_t;
+
+# Test security_invoker without values
+statement ok
+ALTER VIEW alter_test_view SET (security_invoker)
+
+query TT
+SHOW CREATE VIEW alter_test_view;
+----
+alter_test_view  CREATE VIEW public.alter_test_view (
+                   id,
+                   username
+                 ) WITH (security_invoker = true) AS SELECT id, username FROM sidb.public.base_t;
+
+# Test privilege check: non-owner without CREATE should fail.
+statement ok
+GRANT SELECT ON alter_test_view TO invoker_user
+
+statement ok
+SET ROLE invoker_user
+
+statement error pgcode 42501 must be owner of view alter_test_view
+ALTER VIEW alter_test_view SET (security_invoker = true)
+
+statement ok
+SET ROLE root
+
+# Verify that toggling security_invoker changes privilege behavior.
+# Enable security_invoker and check that invoker_user needs SELECT on base table.
+statement ok
+ALTER VIEW alter_test_view SET (security_invoker = true)
+
+statement ok
+REVOKE ALL on base_t FROM invoker_user
+
+statement ok
+GRANT SELECT ON alter_test_view TO invoker_user
+
+statement ok
+SET ROLE invoker_user
+
+statement error pgcode 42501 user invoker_user does not have SELECT privilege on relation base_t
+SELECT * FROM alter_test_view
+
+statement ok
+SET ROLE root
+
+# Disable security_invoker and verify invoker_user can query via the view.
+statement ok
+ALTER VIEW alter_test_view SET (security_invoker = false)
+
+statement ok
+SET ROLE invoker_user
+
+query IT
+SELECT id, username FROM alter_test_view ORDER BY id
+----
+1  table_owner
+2  view_owner
+3  invoker_user
+4  other
+
+statement ok
+SET ROLE root
+
+# Clean up alter test view.
+statement ok
+DROP VIEW alter_test_view
+
+subtest end
+
+# ---------------------------------------------------------------------------
+# Part 12: Nested views — all combinations of invoker/definer
+# ---------------------------------------------------------------------------
+subtest nested_views
+
+# Create a base table for nested view tests.
+statement ok
+CREATE TABLE nested_t (
+  id INT PRIMARY KEY,
+  username TEXT,
+  data TEXT
+);
+
+statement ok
+INSERT INTO nested_t VALUES
+  (1, 'view_owner', 'vo-data'),
+  (2, 'invoker_user', 'inv-data'),
+  (3, 'other', 'other-data');
+
+# Grant view_owner access so they can create views referencing nested_t.
+statement ok
+GRANT SELECT ON nested_t TO view_owner;
+
+# Create inner views owned by view_owner.
+statement ok
+SET ROLE view_owner;
+
+statement ok
+CREATE VIEW inner_si WITH (security_invoker = true) AS
+  SELECT id, username, data FROM nested_t;
+
+statement ok
+CREATE VIEW inner_sd WITH (security_invoker = false) AS
+  SELECT id, username, data FROM nested_t;
+
+# Create outer views for all four combinations.
+statement ok
+CREATE VIEW outer_si_si WITH (security_invoker = true) AS
+  SELECT id, username, data FROM inner_si;
+
+statement ok
+CREATE VIEW outer_si_sd WITH (security_invoker = true) AS
+  SELECT id, username, data FROM inner_sd;
+
+statement ok
+CREATE VIEW outer_sd_si WITH (security_invoker = false) AS
+  SELECT id, username, data FROM inner_si;
+
+statement ok
+CREATE VIEW outer_sd_sd WITH (security_invoker = false) AS
+  SELECT id, username, data FROM inner_sd;
+
+statement ok
+SET ROLE root;
+
+# Grant invoker_user SELECT on all views but NOT on nested_t.
+statement ok
+GRANT SELECT ON inner_si TO invoker_user;
+
+statement ok
+GRANT SELECT ON inner_sd TO invoker_user;
+
+statement ok
+GRANT SELECT ON outer_si_si TO invoker_user;
+
+statement ok
+GRANT SELECT ON outer_si_sd TO invoker_user;
+
+statement ok
+GRANT SELECT ON outer_sd_si TO invoker_user;
+
+statement ok
+GRANT SELECT ON outer_sd_sd TO invoker_user;
+
+# Privilege checks 
+statement ok
+SET ROLE invoker_user;
+
+# invoker(invoker): FAIL — privilege check reaches nested_t as invoker_user.
+statement error pgcode 42501 user invoker_user does not have SELECT privilege on relation nested_t
+SELECT * FROM outer_si_si;
+
+# invoker(definer): PASS — inner definer checks nested_t as view_owner.
+query ITT rowsort
+SELECT * FROM outer_si_sd;
+----
+1  view_owner    vo-data
+2  invoker_user  inv-data
+3  other         other-data
+
+# definer(invoker): PASS — outer definer sets privilege user to view_owner,
+# inner invoker inherits that.
+query ITT rowsort
+SELECT * FROM outer_sd_si;
+----
+1  view_owner    vo-data
+2  invoker_user  inv-data
+3  other         other-data
+
+# definer(definer): PASS — inner definer checks nested_t as view_owner.
+query ITT rowsort
+SELECT * FROM outer_sd_sd;
+----
+1  view_owner    vo-data
+2  invoker_user  inv-data
+3  other         other-data
+
+statement ok
+SET ROLE root;
+
+# RLS checks
+statement ok
+ALTER TABLE nested_t ENABLE ROW LEVEL SECURITY;
+
+# view_owner can see all rows.
+statement ok
+CREATE POLICY view_owner_all ON nested_t
+  FOR SELECT TO view_owner USING (true);
+
+# invoker_user can only see their own rows.
+statement ok
+CREATE POLICY invoker_own_rows ON nested_t
+  FOR SELECT TO invoker_user USING (username = current_user);
+
+statement ok
+GRANT SELECT ON nested_t TO invoker_user;
+
+statement ok
+SET ROLE invoker_user;
+
+# invoker(invoker): RLS evaluated as invoker_user — sees only own rows.
+query ITT
+SELECT * FROM outer_si_si;
+----
+2  invoker_user  inv-data
+
+# invoker(definer): RLS evaluated as view_owner — sees all rows.
+query ITT rowsort
+SELECT * FROM outer_si_sd;
+----
+1  view_owner    vo-data
+2  invoker_user  inv-data
+3  other         other-data
+
+# definer(invoker): outer definer sets current_user to view_owner, inner
+# invoker inherits it — RLS evaluated as view_owner, sees all rows.
+query ITT rowsort
+SELECT * FROM outer_sd_si;
+----
+1  view_owner    vo-data
+2  invoker_user  inv-data
+3  other         other-data
+
+# definer(definer): RLS evaluated as view_owner — sees all rows.
+query ITT rowsort
+SELECT * FROM outer_sd_sd;
+----
+1  view_owner    vo-data
+2  invoker_user  inv-data
+3  other         other-data
+
+statement ok
+SET ROLE root;
+
+# Clean up nested view test objects.
+statement ok
+DROP VIEW outer_si_si, outer_si_sd, outer_sd_si, outer_sd_sd;
+
+statement ok
+DROP VIEW inner_si, inner_sd;
+
+statement ok
+DROP TABLE nested_t;
+
+subtest end
+
+# ---------------------------------------------------------------------------
+# Cleanup
+# ---------------------------------------------------------------------------
+subtest cleanup
+
+statement ok
+DROP DATABASE IF EXISTS sidb CASCADE;
+
+statement ok
+DROP ROLE IF EXISTS table_owner;
+
+statement ok
+DROP ROLE IF EXISTS view_owner;
+
+statement ok
+DROP ROLE IF EXISTS invoker_user;
+
+subtest end
