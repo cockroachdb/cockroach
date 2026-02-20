@@ -27,7 +27,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
-	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -517,16 +516,6 @@ type perturbation interface {
 	endPerturbation(ctx context.Context, t test.Test, v variations) time.Duration
 }
 
-func prettyPrint(title string, stats map[string]trackedStat) string {
-	var outputStr strings.Builder
-	outputStr.WriteString(title + "\n")
-	keys := sortedStringKeys(stats)
-	for _, name := range keys {
-		outputStr.WriteString(fmt.Sprintf("%-15s: %s\n", name, stats[name]))
-	}
-	return outputStr.String()
-}
-
 // interval is a time interval.
 type interval struct {
 	start time.Time
@@ -588,10 +577,16 @@ func (w workloadData) addTicks(ticks []cli.Tick) {
 // as the single core operation latency.
 func (v variations) calculateScore(t cli.Tick) time.Duration {
 	if t.Throughput == 0 {
-		// Use a non-infinite score that is still very high if there was a period of no throughput.
+		// Use a non-infinite score that is still very high if there was a
+		// period of no throughput.
 		return time.Hour
 	}
-	return time.Duration(math.Sqrt((float64(v.numNodes*v.vcpu) * float64((t.P50+t.P99)/2)) / t.Throughput * float64(time.Second)))
+	// The throughput score measures the per-vcpu operation latency based on the
+	// total throughput.
+	throughputScore := float64(time.Second) * float64(v.numNodes*v.vcpu) / t.Throughput
+	// The latency score measures the arithmetic mean of the P50 and P99.
+	latencyScore := float64((t.P50 + t.P99) / 2)
+	return time.Duration(geoMean([]float64{throughputScore, latencyScore}))
 }
 
 func (w workloadData) convert(t cli.Tick) trackedStat {
@@ -602,8 +597,8 @@ func (w workloadData) convert(t cli.Tick) trackedStat {
 
 // worstStats returns the worst stats for a given interval for each of the
 // tracked data types.
-func (w workloadData) worstStats(i interval) map[string]trackedStat {
-	m := make(map[string]trackedStat)
+func (w workloadData) worstStats(i interval) opStats {
+	m := make(opStats)
 	for name, stats := range w.data {
 		for time, stat := range stats {
 			if time.After(i.start) && time.Before(i.end) {
@@ -691,10 +686,6 @@ func (v variations) runTest(ctx context.Context, t test.Test, c cluster.Cluster)
 	afterDuration := v.perturbation.endPerturbation(ctx, t, v)
 	afterInterval := intervalSince(afterDuration)
 
-	t.L().Printf("Baseline interval     : %s", baselineInterval)
-	t.L().Printf("Perturbation interval : %s", perturbationInterval)
-	t.L().Printf("Recovery interval     : %s", afterInterval)
-
 	cancelWorkload()
 	require.NoError(t, m.WaitE())
 
@@ -702,19 +693,20 @@ func (v variations) runTest(ctx context.Context, t test.Test, c cluster.Cluster)
 	perturbationStats := data.worstStats(perturbationInterval)
 	afterStats := data.worstStats(afterInterval)
 
-	t.L().Printf("%s\n", prettyPrint("Baseline stats", baselineStats))
-	t.L().Printf("%s\n", prettyPrint("Perturbation stats", perturbationStats))
-	t.L().Printf("%s\n", prettyPrint("Recovery stats", afterStats))
-
 	t.Status("T5: validating results")
 	require.NoError(t, roachtestutil.DownloadProfiles(ctx, c, t.L(), t.ArtifactsDir()))
 	require.NoError(t, v.writePerfArtifacts(ctx, t, baselineStats, perturbationStats, afterStats))
 
-	t.L().Printf("validating stats during the perturbation")
-	failures := isAcceptableChange(t.L(), baselineStats, perturbationStats, v.acceptableChange)
-	t.L().Printf("validating stats after the perturbation")
-	failures = append(failures, isAcceptableChange(t.L(), baselineStats, afterStats, v.acceptableChange)...)
-	require.True(t, len(failures) == 0, strings.Join(failures, "\n"))
+	t.L().Printf("Baseline     : %s\n%s\n", baselineInterval, baselineStats)
+	t.L().Printf("Perturbation : %s\n%s\n", perturbationInterval, perturbationStats)
+	t.L().Printf("Recovery     : %s\n%s\n", afterInterval, afterStats)
+
+	perturbationInc := baselineStats.increase(perturbationStats)
+	recoveryInc := baselineStats.increase(afterStats)
+	t.L().Printf("perturbation increase %.4f, recovery increase %.4f, acceptable %.4f", perturbationInc, recoveryInc, v.acceptableChange)
+	require.True(t, perturbationInc <= v.acceptableChange, "failed during perturbation: %.4f > %.4f", recoveryInc, v.acceptableChange)
+	require.True(t, recoveryInc <= v.acceptableChange, "failed during recovery: %.4f > %.4f", recoveryInc, v.acceptableChange)
+
 	// TODO(baptist): Look at the time for token return in actual tests to
 	// determine if this can be lowered further.
 	tokenReturnTime := 10 * time.Minute
@@ -768,34 +760,32 @@ func (t trackedStat) merge(o trackedStat, c scoreCalculator) trackedStat {
 	}
 }
 
-// isAcceptableChange determines if a change from the baseline is acceptable.
-// It compares all the metrics rather than failing fast. Normally multiple
-// metrics will fail at once if a test is going to fail and it is helpful to see
-// all the differences.
-// This returns an array of strings with the reason(s) the change was too large.
-func isAcceptableChange(
-	logger *logger.Logger, baseline, other map[string]trackedStat, acceptableChange float64,
-) []string {
-	// This can happen if we aren't measuring one of the phases.
-	var failures []string
-	if len(other) == 0 {
-		return failures
+func (r opStats) String() string {
+	var outputStr strings.Builder
+	for key, stat := range r {
+		outputStr.WriteString(fmt.Sprintf("%-15s: %s\n", key, stat))
 	}
-	keys := sortedStringKeys(baseline)
+	return outputStr.String()
+}
 
-	for _, name := range keys {
-		baseStat := baseline[name]
-		otherStat := other[name]
-		increase := float64(otherStat.score) / float64(baseStat.score)
-		if increase > acceptableChange {
-			failure := fmt.Sprintf("FAILURE: %-15s: Increase %.4f > %.4f BASE: %v SCORE: %v\n", name, increase, acceptableChange, baseStat.score, otherStat.score)
-			logger.Printf(failure)
-			failures = append(failures, failure)
-		} else {
-			logger.Printf("PASSED : %-15s: Increase %.4f <= %.4f BASE: %v SCORE: %v\n", name, increase, acceptableChange, baseStat.score, otherStat.score)
-		}
+// opStats represent the overall statistics from a single operation over a time
+// interval
+type opStats map[string]trackedStat
+
+func (r opStats) geoMean() float64 {
+	var individual []float64
+	for _, t := range r {
+		individual = append(individual, float64(t.score))
 	}
-	return failures
+	return geoMean(individual)
+}
+
+func (baseline opStats) increase(other opStats) float64 {
+	if len(other) == 0 {
+		return 1.0
+	}
+	totalIncrease := other.geoMean() / baseline.geoMean()
+	return totalIncrease
 }
 
 // startNoBackup starts the nodes without enabling backup.
@@ -906,20 +896,20 @@ func waitDuration(ctx context.Context, duration time.Duration) {
 	}
 }
 
-func sortedStringKeys(m map[string]trackedStat) []string {
-	keys := make([]string, 0, len(m))
-	for k := range m {
-		keys = append(keys, k)
+// geoMean returns the geometric mean from a slice of Values as float64.
+func geoMean(vals []float64) float64 {
+	m := 1.0
+	for _, v := range vals {
+		m = m * v
 	}
-	sort.Strings(keys)
-	return keys
+	return math.Pow(m, 1.0/float64(len(vals)))
 }
 
 // writePerfArtifacts writes the stats file in the right format to node 1 so it
 // can be picked up by roachperf. Currently it only writes the write stats since
 // there would be too many lines on the graph otherwise.
 func (v variations) writePerfArtifacts(
-	ctx context.Context, t test.Test, baseline, perturbation, recovery map[string]trackedStat,
+	ctx context.Context, t test.Test, baseline, perturbation, recovery opStats,
 ) error {
 
 	exporter := roachtestutil.CreateWorkloadHistogramExporter(t, v)
