@@ -3209,6 +3209,11 @@ CONFIGURE ZONE USING
 						// Disable span-level checkpointing since it's not necessary
 						// when frontier persistence is on.
 						"changefeed.span_checkpoint.interval": "'0'",
+						// TODO(#163764,#163766): Disable range coalescing to ensure
+						// each table is placed in its own range. There are scalability
+						// issues with multiple disjoint rangefeeds on the same range.
+						"spanconfig.range_coalescing.system.enabled":      "'false'",
+						"spanconfig.range_coalescing.application.enabled": "'false'",
 						// TODO(#158779): When we add back per-table PTS, make sure that this test
 						// turns it off, to avoid it impacting the results.
 					} {
