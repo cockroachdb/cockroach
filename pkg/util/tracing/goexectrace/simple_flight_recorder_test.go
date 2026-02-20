@@ -48,6 +48,8 @@ func TestSimpleFlightRecorder(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, len(files), 0)
 
+	// Enable the FR via duration and enable periodic dumps via interval.
+	ExecutionTracerDuration.Override(context.Background(), &st.SV, 10*time.Second)
 	ExecutionTracerInterval.Override(context.Background(), &st.SV, 1*time.Millisecond)
 
 	t.Run("writes a file when enabled", func(t *testing.T) {
@@ -77,7 +79,7 @@ func TestSimpleFlightRecorder(t *testing.T) {
 	})
 
 	t.Run("stops the flight recorder when disabled", func(t *testing.T) {
-		ExecutionTracerInterval.Override(context.Background(), &st.SV, 0)
+		ExecutionTracerDuration.Override(context.Background(), &st.SV, 0)
 		testutils.SucceedsSoon(t, func() error {
 			if fr.Enabled() {
 				return errors.New("flight recorder is still enabled")
@@ -87,7 +89,7 @@ func TestSimpleFlightRecorder(t *testing.T) {
 	})
 
 	// Restart so we can test that it's stopped with the stopper.
-	ExecutionTracerInterval.Override(context.Background(), &st.SV, 10*time.Second)
+	ExecutionTracerDuration.Override(context.Background(), &st.SV, 10*time.Second)
 	testutils.SucceedsSoon(t, func() error {
 		if !fr.Enabled() {
 			return errors.New("flight recorder is not enabled")
