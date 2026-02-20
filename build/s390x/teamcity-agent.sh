@@ -17,14 +17,22 @@ systemDir=../system
 EOF
 }
 
+sudo apt-key adv --keyserver hkp://keyserver.ubuntu.com:80 --recv-keys 0EBFCD88
+sudo tee /etc/apt/sources.list.d/docker.list <<EOF
+deb https://download.docker.com/linux/ubuntu $(lsb_release -cs) stable
+EOF
+
 sudo apt-get update
 
 sudo apt-get install --yes \
   autoconf \
+  binfmt-support \
   bison \
   build-essential \
   cmake \
   curl \
+  docker-ce \
+  docker-compose \
   flex \
   git \
   gnome-keyring \
@@ -33,12 +41,14 @@ sudo apt-get install --yes \
   openjdk-11-jre-headless \
   pass \
   python3 \
+  qemu-user-static \
   sudo \
   unzip \
   zip
 
-# Add a user for the TeamCity agent if it doesn't exist already.
-
+# Give the user for the TeamCity agent Docker rights.
+# NB: We expect the agent user to already exist. See the documentation.
+sudo usermod -a -G docker agent
 
 # Download the TeamCity agent code and install its configuration.
 # N.B.: This must be done as the agent user.
