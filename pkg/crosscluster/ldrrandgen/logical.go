@@ -44,6 +44,9 @@ func GenerateLDRTable(
 		}),
 		randgen.WithPrimaryIndexFilter(func(indexDef *tree.IndexTableDef, columnDefs []*tree.ColumnTableDef) bool {
 			for _, col := range indexDef.Columns {
+				if col.Expr != nil {
+					continue
+				}
 				columnDef := columnByName(col.Column, columnDefs)
 				// TODO(127315): types with composite encoding are not supported in the
 				// primary key by LDR.
@@ -74,12 +77,15 @@ func GenerateLDRTable(
 				return false
 			case *tree.IndexTableDef:
 				for _, col := range indexDef.Columns {
-					if supportKVWriter && col.Expr != nil {
-						// Do not allow expression indexes. These cause SQL to generate a hidden computed column, which is not
-						// supported by the kv writer.
-						if col.Expr != nil {
+					if col.Expr != nil {
+						if supportKVWriter {
+							// Expression indexes generate hidden computed
+							// columns not supported by the KV writer.
 							return false
 						}
+						// Expression columns don't map to a column def;
+						// skip column-level checks.
+						continue
 					}
 					columnDef := columnByName(col.Column, columnDefs)
 					if columnDef.IsVirtual() {
