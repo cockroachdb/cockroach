@@ -1236,7 +1236,7 @@ func makeScanStatsFn(
 		computeStatsFn = rditer.ComputeStatsForRangeExcludingUser
 	}
 	return func() (enginepb.MVCCStats, error) {
-		sideMS, err := computeStatsFn(ctx, sideDesc, reader, ts.WallTime)
+		sideMS, err := computeStatsFn(ctx, sideDesc, reader, fs.BatchEvalReadCategory, ts.WallTime)
 		if err != nil {
 			return enginepb.MVCCStats{}, errors.Wrapf(err,
 				"unable to compute stats for %s range after split", sideName)

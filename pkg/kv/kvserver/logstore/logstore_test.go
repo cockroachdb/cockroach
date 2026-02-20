@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/storage/fs"
 	"github.com/cockroachdb/cockroach/pkg/testutils/echotest"
 	"github.com/stretchr/testify/require"
 )
@@ -54,7 +55,8 @@ func TestRaftStorageWrites(t *testing.T) {
 		t.Helper()
 		prefix := keys.RaftLogPrefix(rangeID)
 		prefixEnd := prefix.PrefixEnd()
-		ms, err := storage.ComputeStats(ctx, eng, prefix, prefixEnd, 0 /* nowNanos */)
+		ms, err := storage.ComputeStats(ctx, eng, fs.ReplicationReadCategory,
+			prefix, prefixEnd, 0 /* nowNanos */)
 		require.NoError(t, err)
 		return ms.SysBytes
 	}

@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/storage/fs"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/stretchr/testify/require"
@@ -192,7 +193,7 @@ func assertRecomputedStatsExceptSys(
 ) {
 	t.Helper()
 
-	ms, err := rditer.ComputeStatsForRange(context.Background(), desc, r, nowNanos)
+	ms, err := rditer.ComputeStatsForRange(context.Background(), desc, r, fs.UnknownReadCategory, nowNanos)
 	require.NoError(t, err)
 
 	// When used with a real wall clock these will not be the same, since it

@@ -13,6 +13,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/storage/fs"
 	"github.com/cockroachdb/cockroach/pkg/util/iterutil"
 )
 
@@ -78,7 +79,8 @@ func NewIterator(
 		upperBound = prefixBuf.RaftLogKey(opts.Hi)
 	}
 	iter, err := eng.NewMVCCIterator(ctx, storage.MVCCKeyIterKind, storage.IterOptions{
-		UpperBound: upperBound,
+		UpperBound:   upperBound,
+		ReadCategory: fs.ReplicationReadCategory,
 	})
 	if err != nil {
 		return nil, err
