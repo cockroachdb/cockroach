@@ -55,12 +55,14 @@ type RoundTripBenchTestCase struct {
 // It avoids creating a tracing span so that there's less overhead, which means
 // roundtrips are not measured.
 func runCPUMemBenchmark(b testingB, tests []RoundTripBenchTestCase, cc ClusterConstructor) {
+	cluster := cc(b, false /* measureRoundtrips */)
+	defer cluster.close()
 	for _, tc := range tests {
 		b.Run(tc.Name, func(b testingB) {
 			if tc.SkipIssue != 0 {
 				skip.WithIssue(b, tc.SkipIssue)
 			}
-			executeRoundTripTest(b, tc, cc, false /* measureRoundtrips */)
+			executeRoundTripTest(b, tc, cluster, false /* measureRoundtrips */)
 		})
 	}
 }
@@ -112,9 +114,12 @@ func runRoundTripBenchmarkTestCase(
 		go func() {
 			defer wg.Done()
 			defer alloc.Release()
-			executeRoundTripTest(tShim{
+			ts := tShim{
 				T: t, results: results, scope: scope,
-			}, tc, cc, true /* measureRoundTrips */)
+			}
+			cluster := cc(ts, true /* measureRoundTrips */)
+			defer cluster.close()
+			executeRoundTripTest(ts, tc, cluster, true /* measureRoundTrips */)
 		}()
 	}
 	wg.Wait()
@@ -122,13 +127,10 @@ func runRoundTripBenchmarkTestCase(
 
 // executeRoundTripTest executes a RoundTripBenchCase on with the provided SQL runner
 func executeRoundTripTest(
-	b testingB, tc RoundTripBenchTestCase, cc ClusterConstructor, measureRoundtrips bool,
+	b testingB, tc RoundTripBenchTestCase, cluster *Cluster, measureRoundtrips bool,
 ) {
 	getDir, cleanup := b.logScope()
 	defer cleanup()
-
-	cluster := cc(b, measureRoundtrips)
-	defer cluster.close()
 
 	adminSQL := sqlutils.MakeSQLRunner(cluster.adminConn())
 	sql := adminSQL
