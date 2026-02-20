@@ -12,7 +12,6 @@ import (
 	"math"
 	"math/rand"
 	"slices"
-	"strings"
 	"sync"
 	"time"
 
@@ -24,7 +23,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
-	"github.com/cockroachdb/redact/interfaces"
 )
 
 type allocatorState struct {
@@ -420,22 +418,22 @@ const (
 const ignoreLoadThresholdAndHigherGraceDuration = 5 * time.Minute
 const ignoreHigherThanLoadThresholdGraceDuration = 8 * time.Minute
 
-func (i ignoreLevel) String() string {
+// SafeFormat implements the redact.SafeFormatter interface.
+func (i ignoreLevel) SafeFormat(w redact.SafePrinter, _ rune) {
 	switch i {
 	case ignoreLoadNoChangeAndHigher:
-		return "only consider targets < LoadNoChange"
+		w.SafeString("only consider targets < LoadNoChange")
 	case ignoreLoadThresholdAndHigher:
-		return "only consider targets < load threshold"
+		w.SafeString("only consider targets < load threshold")
 	case ignoreHigherThanLoadThreshold:
-		return "only consider targets <= load threshold"
+		w.SafeString("only consider targets <= load threshold")
 	default:
-		panic(fmt.Sprintf("unknown: %d", i))
+		panic("unknown ignoreLevel")
 	}
 }
 
-// SafeFormat implements the redact.SafeFormatter interface.
-func (i ignoreLevel) SafeFormat(s interfaces.SafePrinter, verb rune) {
-	s.SafeInt(redact.SafeInt(i))
+func (i ignoreLevel) String() string {
+	return redact.StringWithoutMarkers(i)
 }
 
 // The logic in sortTargetCandidateSetAndPick related to load is a heuristic
@@ -513,20 +511,20 @@ func sortTargetCandidateSetAndPick(
 	maxFractionPendingThreshold float64,
 	failLogger func(shedResult),
 ) roachpb.StoreID {
-	var b strings.Builder
-	var formatCandidatesLog = func(b *strings.Builder, candidates []candidateInfo) redact.SafeString {
-		b.Reset()
+	var buf redact.StringBuilder
+	var formatCandidatesLog = func(candidates []candidateInfo) redact.RedactableString {
+		buf.Reset()
 		for _, c := range candidates {
 			if overloadedDim != NumLoadDimensions {
-				fmt.Fprintf(b, " s%v(SLS:%v, overloadedDimLoadSummary:%v)", c.StoreID, c.sls, c.dimSummary[overloadedDim])
+				buf.Printf(" s%v(SLS:%v, overloadedDimLoadSummary:%v)", c.StoreID, c.sls, c.dimSummary[overloadedDim])
 			} else {
-				fmt.Fprintf(b, " s%v(SLS:%v)", c.StoreID, c.storeLoadSummary)
+				buf.Printf(" s%v(SLS:%v)", c.StoreID, c.storeLoadSummary)
 			}
 		}
 		if len(candidates) > 0 {
-			fmt.Fprintf(b, ", overloadedDim:%s", overloadedDim)
+			buf.Printf(", overloadedDim:%v", overloadedDim)
 		}
-		return redact.SafeString(b.String())
+		return buf.RedactableString()
 	}
 
 	if loadThreshold <= loadNoChange {
@@ -568,7 +566,7 @@ func sortTargetCandidateSetAndPick(
 	for i, cand := range cands.candidates {
 		if !diversityScoresAlmostEqual(bestDiversity, cand.diversityScore) {
 			// Have a set of candidates with the best diversity.
-			if s := formatCandidatesLog(&b, cands.candidates[i:]); s != "" {
+			if s := formatCandidatesLog(cands.candidates[i:]); s != "" {
 				log.KvDistribution.VEventf(ctx, 2, "discarding candidates due to lower diversity score: %s", s)
 			}
 			break
@@ -600,7 +598,7 @@ func sortTargetCandidateSetAndPick(
 				// Never go to the next set if we have discarded candidates that have
 				// pending changes. We will wait for those to have no pending changes
 				// before we consider later sets.
-				if s := formatCandidatesLog(&b, cands.candidates[i:]); s != "" {
+				if s := formatCandidatesLog(cands.candidates[i:]); s != "" {
 					log.KvDistribution.VEventf(ctx, 2,
 						"candidate with pending changes was discarded, discarding remaining candidates with higher load: %s", s)
 				}
@@ -614,7 +612,7 @@ func sortTargetCandidateSetAndPick(
 				lowestLoadSet = cand.sls
 			} else if ignoreLevel < ignoreHigherThanLoadThreshold || overloadedDim == NumLoadDimensions {
 				// Past the lowestLoad set. We don't care about these.
-				if s := formatCandidatesLog(&b, cands.candidates[i:]); s != "" {
+				if s := formatCandidatesLog(cands.candidates[i:]); s != "" {
 					log.KvDistribution.VEventf(ctx, 2,
 						"discarding candidates with higher load than lowestLoadSet(%v): %s", lowestLoadSet, s)
 				}
@@ -625,7 +623,7 @@ func sortTargetCandidateSetAndPick(
 			// cand.sls <= loadThreshold.
 		}
 		if cand.sls > loadThreshold {
-			if s := formatCandidatesLog(&b, cands.candidates[i:]); s != "" {
+			if s := formatCandidatesLog(cands.candidates[i:]); s != "" {
 				log.KvDistribution.VEventf(ctx, 2,
 					"discarding candidates with higher load than loadThreshold(%v): %s", loadThreshold, s)
 			}
@@ -774,12 +772,12 @@ func sortTargetCandidateSetAndPick(
 			}
 			j++
 		}
-		if s := formatCandidatesLog(&b, cands.candidates[j:]); s != "" {
+		if s := formatCandidatesLog(cands.candidates[j:]); s != "" {
 			log.KvDistribution.VEventf(ctx, 2, "discarding candidates due to overloadedDim: %s", s)
 		}
 		cands.candidates = cands.candidates[:j]
 	}
-	s := formatCandidatesLog(&b, cands.candidates)
+	s := formatCandidatesLog(cands.candidates)
 	j = rng.Intn(j)
 	log.KvDistribution.VEventf(ctx, 2, "sortTargetCandidateSetAndPick: candidates:%s, picked s%v", s, cands.candidates[j].StoreID)
 	if ignoreLevel == ignoreLoadNoChangeAndHigher && cands.candidates[j].sls >= loadNoChange ||

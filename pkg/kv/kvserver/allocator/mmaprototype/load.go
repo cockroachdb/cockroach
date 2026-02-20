@@ -249,8 +249,10 @@ type meanStoreLoad struct {
 
 // SafeFormat implements the redact.SafeFormatter interface.
 func (m meanStoreLoad) SafeFormat(w redact.SafePrinter, _ rune) {
-	w.Printf("{%v %v %v %v}", m.load, m.capacity,
-		redact.SafeString(fmt.Sprintf("%v", m.util)), m.secondaryLoad)
+	// Only printing CPU and byte size utilization explicitly since
+	// write bandwidth util is necessarily 0, might need to update in the future.
+	w.Printf("{%v %v [cpu-util:%.2f byte-util:%.2f] %v", m.load, m.capacity,
+		redact.SafeFloat(m.util[CPURate]), redact.SafeFloat(m.util[ByteSize]), m.secondaryLoad)
 }
 
 // The mean node load for a set of NodeLoad.
@@ -627,26 +629,21 @@ func loadSummaryForDimension(
 			return
 		}
 
-		var metrics redact.StringBuilder
-		metrics.Printf("load=%v meanLoad=%v", load, meanLoad)
+		var buf redact.StringBuilder
+		buf.Printf("load summary for dim=%v (", dim)
+		if nodeID > nodeIDForLogging {
+			buf.Printf("n%v", nodeID)
+		}
+		if storeID > storeIDForLogging {
+			buf.Printf("s%v", storeID)
+		}
+		buf.Printf("): %v, reason: %v [load=%v meanLoad=%v", summary, redact.SafeString(reason), load, meanLoad)
 		if capacity != UnknownCapacity {
-			metrics.Printf(" fractionUsed=%.2f%% meanUtil=%.2f%% capacity=%v",
+			buf.Printf(" fractionUsed=%.2f%% meanUtil=%.2f%% capacity=%v",
 				redact.SafeFloat(fractionUsed*100), redact.SafeFloat(meanUtil*100), capacity)
 		}
-
-		var nodeIdStr redact.StringBuilder
-		if nodeID > nodeIDForLogging {
-			nodeIdStr.Printf("n%v", nodeID)
-		}
-
-		var storeIdStr redact.StringBuilder
-		if storeID > storeIDForLogging {
-			storeIdStr.Printf("s%v", storeID)
-		}
-
-		log.KvDistribution.VEventf(ctx, 3,
-			"load summary for dim=%v (%v%v): %v, reason: %v [%v]",
-			dim, &nodeIdStr, &storeIdStr, summary, redact.SafeString(reason), &metrics)
+		buf.SafeRune(']')
+		log.KvDistribution.VEventf(ctx, 3, "%s", buf.RedactableString())
 	}()
 
 	if capacity != UnknownCapacity && meanUtil*1.1 < fractionUsed {
