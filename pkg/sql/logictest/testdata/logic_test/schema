@@ -1560,3 +1560,53 @@ statement ok
 DROP SCHEMA drop_schema_with_triggers CASCADE;
 
 subtest end
+
+subtest concurrent_schema_drop
+
+statement ok
+CREATE SCHEMA concurrent_drop_sc;
+
+statement ok
+CREATE TABLE concurrent_drop_sc.t1 (id INT PRIMARY KEY);
+
+statement ok
+CREATE TABLE public.fk_ref_to_concurrent_t1 (
+    id INT PRIMARY KEY,
+    fk INT REFERENCES concurrent_drop_sc.t1(id)
+);
+
+statement ok
+CREATE OR REPLACE FUNCTION concurrent_rename_fn (a INT) RETURNS INT AS 'SELECT a*a' LANGUAGE SQL;
+
+statement ok
+SET CLUSTER SETTING jobs.debug.pausepoints = 'newschemachanger.before.exec';
+
+skipif config local-legacy-schema-changer
+statement error pq: job \d+ was paused before it completed with reason: pause point
+DROP SCHEMA concurrent_drop_sc CASCADE;
+
+statement ok
+BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE;
+
+statement ok
+set autocommit_before_ddl=false;
+
+# Confirm we hit a retry error if attempt to us the schema.
+skipif config local-legacy-schema-changer
+statement error restart transaction: descriptor \d+ is undergoing another schema change
+ALTER FUNCTION concurrent_rename_fn SET SCHEMA concurrent_drop_sc;
+
+statement ok
+ROLLBACK;
+
+statement ok
+RESET autocommit_before_ddl;
+
+statement ok
+RESET CLUSTER SETTING jobs.debug.pausepoints;
+
+statement ok
+RESUME JOBS (SELECT job_id FROM crdb_internal.jobs WHERE status = 'paused');
+
+
+subtest end
