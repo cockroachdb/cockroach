@@ -11,6 +11,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"runtime/trace"
 	"sync/atomic"
 	"time"
 
@@ -21,7 +22,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
-	"golang.org/x/exp/trace"
 )
 
 var executionTracerTotalDumpSizeLimit = settings.RegisterByteSizeSetting(
@@ -74,7 +74,7 @@ var _ dumpstore.Dumper = &SimpleFlightRecorder{}
 func NewFlightRecorder(
 	st *cluster.Settings, enabledCheckInterval time.Duration, directory string,
 ) (*SimpleFlightRecorder, error) {
-	fr := trace.NewFlightRecorder()
+	fr := trace.NewFlightRecorder(trace.FlightRecorderConfig{})
 	if directory == "" {
 		return nil, errors.New("flight recorder directory argument is empty, will not record execution traces")
 	}
@@ -115,10 +115,8 @@ func (sfr *SimpleFlightRecorder) PreFilter(
 	return nil, nil
 }
 
-// enabledForTests is a helper function for tests to check if the flight recorder
-// is enabled. It is necessary because we cannot call `sfr.fr.Enabled()`
-// concurrently with `sfr.fr.Start()`.
-func (sfr *SimpleFlightRecorder) enabledForTests() bool {
+// Enabled returns whether the flight recorder is currently running.
+func (sfr *SimpleFlightRecorder) Enabled() bool {
 	return sfr.enabled.Load()
 }
 
@@ -132,10 +130,7 @@ func (sfr *SimpleFlightRecorder) Start(ctx context.Context, stopper *stop.Stoppe
 
 		defer func() {
 			if sfr.fr.Enabled() {
-				err := sfr.fr.Stop()
-				if err != nil {
-					log.Dev.Warningf(ctx, "error while stopping flight recorder: %v", err)
-				}
+				sfr.fr.Stop()
 				sfr.enabled.Store(false)
 			}
 		}()
@@ -147,22 +142,19 @@ func (sfr *SimpleFlightRecorder) Start(ctx context.Context, stopper *stop.Stoppe
 				interval := ExecutionTracerInterval.Get(sfr.sv)
 				if interval == 0 {
 					if sfr.fr.Enabled() {
-						err := sfr.fr.Stop()
-						if err != nil {
-							log.Dev.Warningf(ctx, "error while stopping flight recorder: %v", err)
-						}
+						sfr.fr.Stop()
 						sfr.enabled.Store(false)
 						log.Dev.Infof(ctx, "flight recorder stopped")
 					}
-					// Disabled. Check again soon.
 					t.Reset(sfr.enabledCheckInterval)
 					continue
 				}
 				if !sfr.fr.Enabled() {
 					duration := ExecutionTracerDuration.Get(sfr.sv)
-					sfr.fr.SetPeriod(duration)
-					err := sfr.fr.Start()
-					if err != nil {
+					sfr.fr = trace.NewFlightRecorder(trace.FlightRecorderConfig{
+						MinAge: duration,
+					})
+					if err := sfr.fr.Start(); err != nil {
 						log.Dev.Warningf(ctx, "error while starting flight recorder, will try again: %v", err)
 						t.Reset(max(interval-timeutil.Since(startTime), 0))
 						continue
@@ -184,7 +176,6 @@ func (sfr *SimpleFlightRecorder) Start(ctx context.Context, stopper *stop.Stoppe
 					continue
 				}
 
-				// Can run GC since we successfully wrote a new file.
 				sfr.dumpStore.GC(ctx, timeutil.Now(), sfr)
 				t.Reset(max(interval-timeutil.Since(startTime), 0))
 			case <-stopper.ShouldQuiesce():

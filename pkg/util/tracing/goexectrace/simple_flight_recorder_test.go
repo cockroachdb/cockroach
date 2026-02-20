@@ -34,7 +34,7 @@ func TestSimpleFlightRecorder(t *testing.T) {
 	stopper := stop.NewStopper()
 	defer func() {
 		<-stopper.IsStopped()
-		if fr.enabledForTests() {
+		if fr.Enabled() {
 			t.Fatal("flight recorder is still enabled after stopper is stopped")
 		}
 	}()
@@ -52,7 +52,7 @@ func TestSimpleFlightRecorder(t *testing.T) {
 
 	t.Run("writes a file when enabled", func(t *testing.T) {
 		testutils.SucceedsSoon(t, func() error {
-			if !fr.enabledForTests() {
+			if !fr.Enabled() {
 				return errors.New("flight recorder is not enabled")
 			}
 			files, err := os.ReadDir(dir)
@@ -79,7 +79,7 @@ func TestSimpleFlightRecorder(t *testing.T) {
 	t.Run("stops the flight recorder when disabled", func(t *testing.T) {
 		ExecutionTracerInterval.Override(context.Background(), &st.SV, 0)
 		testutils.SucceedsSoon(t, func() error {
-			if fr.enabledForTests() {
+			if fr.Enabled() {
 				return errors.New("flight recorder is still enabled")
 			}
 			return nil
@@ -89,7 +89,7 @@ func TestSimpleFlightRecorder(t *testing.T) {
 	// Restart so we can test that it's stopped with the stopper.
 	ExecutionTracerInterval.Override(context.Background(), &st.SV, 10*time.Second)
 	testutils.SucceedsSoon(t, func() error {
-		if !fr.enabledForTests() {
+		if !fr.Enabled() {
 			return errors.New("flight recorder is not enabled")
 		}
 		return nil

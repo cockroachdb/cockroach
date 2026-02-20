@@ -13,7 +13,6 @@ go_library(
         "//pkg/util/stop",
         "//pkg/util/timeutil",
         "@com_github_cockroachdb_errors//:errors",
-        "@org_golang_x_exp//trace",
     ],
 )
 
