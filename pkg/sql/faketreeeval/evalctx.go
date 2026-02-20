@@ -615,6 +615,13 @@ func (ep *DummyEvalPlanner) InsertStatementHint(
 	return 0, nil
 }
 
+// DeleteStatementHint is part of the eval.Planner interface.
+func (ep *DummyEvalPlanner) DeleteStatementHint(
+	ctx context.Context, rowID int64, statementFingerprint string, donorSQL string,
+) (int64, error) {
+	return 0, nil
+}
+
 // UsingHintInjection is part of the eval.Planner interface.
 func (ep *DummyEvalPlanner) UsingHintInjection() bool {
 	return false

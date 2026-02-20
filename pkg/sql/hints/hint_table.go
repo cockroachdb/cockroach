@@ -7,6 +7,8 @@ package hints
 
 import (
 	"context"
+	"fmt"
+	"strings"
 	"unsafe"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/hintpb"
@@ -178,6 +180,58 @@ func InsertHintIntoDB(
 	// StatementHintsCache.handleIncrementalUpdate here to eagerly update the
 	// local node's cache.
 	return int64(tree.MustBeDInt(row[0])), nil
+}
+
+// DeleteHintFromDB deletes statement hints from system.statement_hints,
+// filtered by at least one of the row ID, fingerprint, or donor SQL, and
+// returns the number of rows affected.
+// When donorSQL is set, it is serialized into the same protobuf format
+// stored in the hint column, so it can be used directly for filtering.
+func DeleteHintFromDB(
+	ctx context.Context, txn isql.Txn, rowID int64, fingerprint string, donorSQL string,
+) (int64, error) {
+	const opName = "delete-statement-hint"
+	filterCols := make([]string, 0, 3)
+	vals := make([]interface{}, 0, 3)
+	if rowID != 0 {
+		filterCols = append(filterCols, `"row_id"`)
+		vals = append(vals, rowID)
+	}
+	if fingerprint != "" {
+		filterCols = append(filterCols, "fingerprint")
+		vals = append(vals, fingerprint)
+	}
+	if donorSQL != "" {
+		var hint hintpb.StatementHintUnion
+		hint.SetValue(&hintpb.InjectHints{DonorSQL: donorSQL})
+		hintBytes, err := hintpb.ToBytes(hint)
+		if err != nil {
+			return 0, err
+		}
+		filterCols = append(filterCols, "hint")
+		vals = append(vals, hintBytes)
+	}
+
+	if len(filterCols) == 0 {
+		return 0, errors.New("delete statement hint must specify at least one of row_id, fingerprint, or doner_sql")
+	}
+
+	var b strings.Builder
+	for i, filterCol := range filterCols {
+		b.WriteString(fmt.Sprintf("%s = $%d", filterCol, i+1))
+		if i != len(filterCols)-1 {
+			b.WriteString(" AND ")
+		}
+	}
+	rowAffected, err := txn.ExecEx(
+		ctx, opName, txn.KV(), sessiondata.NodeUserSessionDataOverride,
+		fmt.Sprintf("DELETE FROM system.statement_hints WHERE %s", b.String()), vals...,
+	)
+	if err != nil {
+		return 0, err
+	}
+
+	return int64(rowAffected), nil
 }
 
 // Size returns an estimate of the memory usage of the Hint in bytes.
