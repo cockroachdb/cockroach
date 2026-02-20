@@ -150,11 +150,6 @@ func (d *dev) build(cmd *cobra.Command, commandLine []string) error {
 	lint := mustGetFlagBool(cmd, lintFlag)
 	dockerArgs := mustGetFlagStringArray(cmd, dockerArgsFlag)
 
-	if cross != "" && localPebble != "" {
-		return fmt.Errorf("--cross and --local-pebble cannot be used together; " +
-			"for cross builds with custom pebble, push your changes and update DEPS.bzl instead")
-	}
-
 	args, buildTargets, err := d.getBasicBuildArgs(ctx, targets)
 	if err != nil {
 		return err
@@ -198,6 +193,20 @@ func (d *dev) crossBuild(
 ) error {
 	bazelArgs = append(bazelArgs, fmt.Sprintf("--config=%s", crossConfig), "--config=nolintonbuild", "-c", "opt", "--config=pgo")
 	configArgs := getConfigArgs(bazelArgs)
+
+	// When using a local pebble checkout, mount it into the container
+	// and rewrite the override_repository arg to use the container path.
+	if localPebble != "" {
+		const containerPebblePath = "/pebble"
+		dockerArgs = append(dockerArgs, "-v", localPebble+":"+containerPebblePath)
+		overridePrefix := "--override_repository=" + pebbleOverrideRepo + "="
+		for i, arg := range bazelArgs {
+			if strings.HasPrefix(arg, overridePrefix) {
+				bazelArgs[i] = overridePrefix + containerPebblePath
+			}
+		}
+	}
+
 	dockerArgs, err := d.getDockerRunArgs(ctx, volume, false, dockerArgs)
 	if err != nil {
 		return err
