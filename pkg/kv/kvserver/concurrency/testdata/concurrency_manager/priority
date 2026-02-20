@@ -292,7 +292,7 @@ sequence req=req8
 
 sequence req=req9
 ----
-[8] sequence req8: resolving intent ‹"kNormal1"› for txn 00000002 with PENDING status and clock observation {1 123.000000000,6}
+[8] sequence req8: resolving intent ‹"kNormal1"› for txn 00000002 with PENDING status and clock observation {1 123.000000000,8}
 [8] sequence req8: lock wait-queue event: done waiting
 [8] sequence req8: conflicted with 00000002-0000-0000-0000-000000000000 on ‹"kNormal1"› for 0.000s
 [8] sequence req8: acquiring latches
@@ -306,7 +306,7 @@ sequence req=req9
 [9] sequence req9: pushing after 0s for: deadlock/liveness detection = true, timeout enforcement = false, priority enforcement = true, wait policy error = false
 [9] sequence req9: pushing timestamp of txn 00000002 above 10.000000000,1
 [9] sequence req9: pusher pushed pushee to 10.000000000,2
-[9] sequence req9: resolving intent ‹"kNormal1"› for txn 00000002 with PENDING status and clock observation {1 123.000000000,8}
+[9] sequence req9: resolving intent ‹"kNormal1"› for txn 00000002 with PENDING status and clock observation {1 123.000000000,10}
 [9] sequence req9: lock wait-queue event: done waiting
 [9] sequence req9: conflicted with 00000002-0000-0000-0000-000000000000 on ‹"kNormal1"› for 0.000s
 [9] sequence req9: acquiring latches
@@ -448,13 +448,13 @@ sequence req=req13
 on-txn-updated txn=txnHighPushee status=pending ts=10,2
 ----
 [-] update txn: increasing timestamp of txnHighPushee
-[12] sequence req12: resolving intent ‹"kHigh1"› for txn 00000003 with PENDING status and clock observation {1 123.000000000,11}
+[12] sequence req12: resolving intent ‹"kHigh1"› for txn 00000003 with PENDING status and clock observation {1 123.000000000,15}
 [12] sequence req12: lock wait-queue event: done waiting
 [12] sequence req12: conflicted with 00000003-0000-0000-0000-000000000000 on ‹"kHigh1"› for 0.000s
 [12] sequence req12: acquiring latches
 [12] sequence req12: scanning lock table for conflicting locks
 [12] sequence req12: sequencing complete, returned guard
-[13] sequence req13: resolving intent ‹"kHigh1"› for txn 00000003 with PENDING status and clock observation {1 123.000000000,13}
+[13] sequence req13: resolving intent ‹"kHigh1"› for txn 00000003 with PENDING status and clock observation {1 123.000000000,17}
 [13] sequence req13: lock wait-queue event: done waiting
 [13] sequence req13: conflicted with 00000003-0000-0000-0000-000000000000 on ‹"kHigh1"› for 0.000s
 [13] sequence req13: acquiring latches

@@ -275,7 +275,7 @@ sequence req=req8
 [10] sequence req8: pushing after 0s for: deadlock/liveness detection = true, timeout enforcement = false, priority enforcement = true, wait policy error = false
 [10] sequence req8: pushing timestamp of txn 00000006 above 11.000000000,1
 [10] sequence req8: pusher pushed pushee to 11.000000000,2
-[10] sequence req8: resolving intent ‹"a"› for txn 00000006 with PENDING status and clock observation {1 123.000000000,5}
+[10] sequence req8: resolving intent ‹"a"› for txn 00000006 with PENDING status and clock observation {1 123.000000000,9}
 [10] sequence req8: lock wait-queue event: done waiting
 [10] sequence req8: conflicted with 00000006-0000-0000-0000-000000000000 on ‹"a"› for 0.000s
 [10] sequence req8: acquiring latches
@@ -357,7 +357,7 @@ sequence req=req10
 [14] sequence req10: lock wait-queue event: wait for txn 00000006 holding lock @ key ‹"a"› (queuedLockingRequests: 1, queuedReaders: 1)
 [14] sequence req10: pushing after 0s for: deadlock/liveness detection = true, timeout enforcement = false, priority enforcement = true, wait policy error = false
 [14] sequence req10: pushing timestamp of txn 00000006 above 11.000000000,1
-[14] sequence req10: resolving intent ‹"a"› for txn 00000006 with PENDING status and clock observation {1 123.000000000,8}
+[14] sequence req10: resolving intent ‹"a"› for txn 00000006 with PENDING status and clock observation {1 123.000000000,13}
 [14] sequence req10: lock wait-queue event: done waiting
 [14] sequence req10: conflicted with 00000006-0000-0000-0000-000000000000 on ‹"a"› for 0.000s
 [14] sequence req10: acquiring latches

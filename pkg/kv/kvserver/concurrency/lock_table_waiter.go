@@ -442,14 +442,14 @@ func (w *lockTableWaiterImpl) pushLockTxn(
 
 	// Construct the request header and determine which form of push to use.
 	h := w.pushHeader(req)
+	beforePushObs := roachpb.ObservedTimestamp{
+		NodeID:    w.nodeDesc.NodeID,
+		Timestamp: w.clock.NowAsClockTimestamp(),
+	}
+
 	var pushType kvpb.PushTxnType
-	var beforePushObs roachpb.ObservedTimestamp
 	if ws.guardStrength == lock.None {
 		pushType = kvpb.PUSH_TIMESTAMP
-		beforePushObs = roachpb.ObservedTimestamp{
-			NodeID:    w.nodeDesc.NodeID,
-			Timestamp: w.clock.NowAsClockTimestamp(),
-		}
 		// TODO(nvanbenschoten): because information about the local_timestamp
 		// leading the MVCC timestamp of an intent is lost, we also need to push
 		// the intent up to the top of the transaction's local uncertainty limit
@@ -947,8 +947,9 @@ func (c *finalizedTxnCache) insertFrontLocked(txn *roachpb.Transaction) {
 //
 // The zero value of this struct is ready for use.
 type pendingTxnCache struct {
-	mu   syncutil.Mutex
-	txns [8]*pendingTxnCacheEntry // [MRU, ..., LRU]
+	mu     syncutil.Mutex
+	nodeID roachpb.NodeID           // set on first add, asserted thereafter
+	txns   [8]*pendingTxnCacheEntry // [MRU, ..., LRU]
 }
 
 // pendingTxnCacheEntry holds a pending transaction and the clock observation
@@ -974,11 +975,22 @@ func (c *pendingTxnCache) get(id uuid.UUID) (*pendingTxnCacheEntry, bool) {
 func (c *pendingTxnCache) add(
 	txn *roachpb.Transaction, clockObservation roachpb.ObservedTimestamp,
 ) {
+	assert(!clockObservation.Timestamp.IsEmpty(), "pendingTxnCache: clock observation must be non-empty")
+
 	c.mu.Lock()
 	defer c.mu.Unlock()
+
+	// All observations must come from the same node.
+	if c.nodeID == 0 {
+		c.nodeID = clockObservation.NodeID
+	}
+	assert(clockObservation.NodeID == c.nodeID, "pendingTxnCache: unexpected NodeID")
+
 	if idx := c.getIdxLocked(txn.ID); idx >= 0 {
 		currentEntry := c.txns[idx]
 		newEntry := *currentEntry
+		assert(!currentEntry.ClockWhilePending.Timestamp.IsEmpty(), "pendingTxnCache: cache entry without clock observation")
+		assert(clockObservation.NodeID == currentEntry.ClockWhilePending.NodeID, "pendingTxnCache: NodeID mismatch on update")
 
 		// Only update the cached transaction if the inbound copy has a newer
 		// WriteTimestamp.
@@ -987,11 +999,9 @@ func (c *pendingTxnCache) add(
 		}
 
 		// Always keep the latest ClockWhilePending available.
-		if !clockObservation.Timestamp.IsEmpty() &&
-			currentEntry.ClockWhilePending.Timestamp.Less(clockObservation.Timestamp) {
+		if currentEntry.ClockWhilePending.Timestamp.Less(clockObservation.Timestamp) {
 			newEntry.ClockWhilePending = clockObservation
 		}
-
 		c.moveFrontLocked(&newEntry, idx)
 	} else {
 		c.insertFrontLocked(&pendingTxnCacheEntry{Txn: txn, ClockWhilePending: clockObservation})
@@ -1001,6 +1011,7 @@ func (c *pendingTxnCache) add(
 func (c *pendingTxnCache) clear() {
 	c.mu.Lock()
 	defer c.mu.Unlock()
+	c.nodeID = 0
 	for i := range c.txns {
 		c.txns[i] = nil
 	}
