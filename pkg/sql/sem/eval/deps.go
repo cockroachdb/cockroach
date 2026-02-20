@@ -500,6 +500,13 @@ type Planner interface {
 	// created hint.
 	InsertStatementHint(ctx context.Context, statementFingerprint string, hint hintpb.StatementHintUnion) (int64, error)
 
+	// DeleteStatementHint deletes statement hints from
+	// system.statement_hints, filtered by the row ID or fingerprint. If the
+	// provided rowID is zero, we don't filter on row ID. If the fingerprint
+	// is empty string, we don't filter on fingerprint. Returns the row_id,
+	// fingerprint, and raw hint protobuf bytes of all deleted rows.
+	DeleteStatementHint(ctx context.Context, rowID int64, statementFingerprint string) (rowIDs []int64, fingerprints []string, hintBytes [][]byte, err error)
+
 	// UsingHintInjection returns whether we are planning with externally-injected
 	// hints.
 	UsingHintInjection() bool

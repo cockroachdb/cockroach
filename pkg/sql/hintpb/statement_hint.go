@@ -10,6 +10,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/lexbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/protoreflect"
+	"github.com/cockroachdb/cockroach/pkg/util/errorutil"
 	"github.com/cockroachdb/cockroach/pkg/util/json"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/errors"
@@ -46,6 +47,15 @@ func FromBytes(bytes []byte) (StatementHintUnion, error) {
 		return StatementHintUnion{}, errors.New("invalid hint bytes: no value set")
 	}
 	return res, nil
+}
+
+// ParseHintProto unmarshals raw hint protobuf bytes, guarding against panics.
+// Returns the deserialized StatementHintUnion, or an error if unmarshaling
+// fails.
+func ParseHintProto(hintBytes []byte) (hint StatementHintUnion, retErr error) {
+	defer errorutil.MaybeCatchPanic(&retErr, nil /* errCallback */)
+	hint, retErr = FromBytes(hintBytes)
+	return hint, retErr
 }
 
 // ToBytes converts the StatementHintUnion to a raw bytes representation that
