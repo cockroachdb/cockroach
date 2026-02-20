@@ -67,6 +67,7 @@ go_library(
         "//pkg/sql/catalog/randgen/randgencfg",
         "//pkg/sql/colexecerror",
         "//pkg/sql/hintpb",
+        "//pkg/sql/hints",
         "//pkg/sql/lex",
         "//pkg/sql/lexbase",
         "//pkg/sql/memsize",

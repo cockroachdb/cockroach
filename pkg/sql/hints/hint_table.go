@@ -7,6 +7,8 @@ package hints
 
 import (
 	"context"
+	"fmt"
+	"strings"
 	"unsafe"
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
@@ -196,6 +198,71 @@ func InsertHintIntoDB(
 	// StatementHintsCache.handleIncrementalUpdate here to eagerly update the
 	// local node's cache.
 	return int64(tree.MustBeDInt(row[0])), nil
+}
+
+// DeleteHintFromDB deletes statement hints from system.statement_hints,
+// filtered by row ID or fingerprint. If the provided rowID is zero, we don't
+// filter on row ID. If the fingerprint is empty string, we don't filter on
+// fingerprint. Returns the row_id, fingerprint, and raw hint protobuf bytes of
+// all deleted rows.
+func DeleteHintFromDB(
+	ctx context.Context, txn isql.Txn, rowID int64, fingerprint string,
+) (rowIDs []int64, fingerprints []string, hintBytes [][]byte, err error) {
+	const opName = "delete-statement-hint"
+	filterCols := make([]string, 0, 2)
+	vals := make([]interface{}, 0, 2)
+	if rowID != 0 {
+		filterCols = append(filterCols, `"row_id"`)
+		vals = append(vals, rowID)
+	}
+	if fingerprint != "" {
+		filterCols = append(filterCols, "fingerprint")
+		vals = append(vals, fingerprint)
+	}
+
+	if len(filterCols) == 0 {
+		return nil, nil, nil, errors.New("delete statement hint must specify at least one of row_id or fingerprint")
+	}
+
+	var b strings.Builder
+	for i, filterCol := range filterCols {
+		_, err := fmt.Fprintf(&b, "%s = $%d", filterCol, i+1)
+		if err != nil {
+			return nil, nil, nil, err
+		}
+		if i != len(filterCols)-1 {
+			b.WriteString(" AND ")
+		}
+	}
+	rows, err := txn.QueryBufferedEx(
+		ctx, opName, txn.KV(), sessiondata.NodeUserSessionDataOverride,
+		fmt.Sprintf("DELETE FROM system.statement_hints WHERE %s RETURNING row_id, fingerprint, hint", b.String()), vals...,
+	)
+	if err != nil {
+		return nil, nil, nil, err
+	}
+	for _, row := range rows {
+		if len(row) < 3 {
+			return nil, nil, nil, errors.AssertionFailedf("expecting 3 columns from query, got %d", len(row))
+		}
+		rowIDs = append(rowIDs, int64(tree.MustBeDInt(row[0])))
+		fingerprints = append(fingerprints, string(tree.MustBeDString(row[1])))
+		rawBytes, ok := row[2].(*tree.DBytes)
+		if !ok {
+			return nil, nil, nil, errors.AssertionFailedf("expected hint to be bytes, got %T", row[2])
+		}
+		hintBytes = append(hintBytes, []byte(*rawBytes))
+	}
+	return rowIDs, fingerprints, hintBytes, nil
+}
+
+// ParseHintProto unmarshals raw hint protobuf bytes, guarding against panics.
+// Returns the deserialized StatementHintUnion, or an error if unmarshaling
+// fails.
+func ParseHintProto(hintBytes []byte) (hint hintpb.StatementHintUnion, retErr error) {
+	defer errorutil.MaybeCatchPanic(&retErr, nil /* errCallback */)
+	hint, retErr = hintpb.FromBytes(hintBytes)
+	return hint, retErr
 }
 
 // Size returns an estimate of the memory usage of the Hint in bytes.
