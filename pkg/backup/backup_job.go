@@ -51,6 +51,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlclustersettings"
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
 	bulkutil "github.com/cockroachdb/cockroach/pkg/util/bulk"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
@@ -1246,14 +1247,27 @@ func maybeRelocateJobExecution(
 	jobDesc redact.SafeString,
 ) error {
 	if locality.NonEmpty() {
-		current, err := p.DistSQLPlanner().GetSQLInstanceInfo(p.ExecCfg().JobRegistry.ID())
-		if err != nil {
-			return err
+		var currentLocality roachpb.Locality
+		var currentInstanceID int32
+		if sqlclustersettings.UseInstanceInfoForSQLInstances.Get(&p.ExecCfg().Settings.SV) {
+			current, err := p.DistSQLPlanner().GetSQLInstanceInfo(ctx, p.ExecCfg().JobRegistry.ID())
+			if err != nil {
+				return err
+			}
+			currentLocality = current.Locality
+			currentInstanceID = int32(current.GetInstanceID())
+		} else {
+			current, err := p.DistSQLPlanner().GetNodeDescriptor(p.ExecCfg().JobRegistry.ID())
+			if err != nil {
+				return err
+			}
+			currentLocality = current.Locality
+			currentInstanceID = int32(current.NodeID)
 		}
-		if ok, missedTier := current.Locality.Matches(locality); !ok {
+		if ok, missedTier := currentLocality.Matches(locality); !ok {
 			log.Dev.Infof(ctx,
 				"%s job %d initially adopted on instance %d but it does not match locality filter %s, finding a new coordinator",
-				jobDesc, jobID, current.NodeID, missedTier.String(),
+				jobDesc, jobID, currentInstanceID, missedTier.String(),
 			)
 
 			instancesInRegion, err := p.DistSQLPlanner().GetAllInstancesByLocality(ctx, locality)

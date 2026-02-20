@@ -13364,3 +13364,62 @@ func TestDatabaseLevelChangefeedSkipOfflineTables(t *testing.T) {
 	// changefeed when they are restored, and dropping an included table to
 	// restore it will fail the feed.
 }
+
+// TestChangefeedServerlessLocalityFilter tests that changefeeds with locality
+// filters can run on serverless (tenant) clusters. This reproduces an issue we
+// were seeing where a changefeed would repeatedly relocate itself to the same
+// node. On production it would eventually move to another node where it would
+// fail with "job failed (node descriptor with node ID 31 was not found)" even
+// though the node appeared to exist.
+func TestChangefeedServerlessLocalityFilter(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	options := makeOptions(t)
+	kvServer, _, cleanup := startTestFullServer(t, options)
+	defer cleanup()
+
+	testLocality := roachpb.Locality{
+		Tiers: []roachpb.Tier{{
+			Key:   "region",
+			Value: "us-east",
+		}},
+	}
+
+	tenantKnobs := base.TestingKnobs{
+		DistSQL:          &execinfra.TestingKnobs{Changefeed: &TestingKnobs{}},
+		JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
+	}
+	if options.knobsFn != nil {
+		options.knobsFn(&tenantKnobs)
+	}
+
+	tenantArgs := base.TestTenantArgs{
+		TenantID:     serverutils.TestTenantID(),
+		UseDatabase:  `d`,
+		Locality:     testLocality,
+		TestingKnobs: tenantKnobs,
+	}
+
+	tenantServer, tenantDB := serverutils.StartTenant(t, kvServer, tenantArgs)
+	tenantSQL := sqlutils.MakeSQLRunner(tenantDB)
+	tenantSQL.ExecMultiple(t, strings.Split(tenantSetupStatements, ";")...)
+
+	// The cluster setting sql.instance_info.use_instance_resolver.enabled is
+	// metamorphic and will be randomly enabled during tests. We explicitly enable
+	// it here to ensure this test exercises the new code path.
+	tenantSQL.Exec(t, `SET CLUSTER SETTING sql.instance_info.use_instance_resolver.enabled = true`)
+
+	tenantSQL.Exec(t, `CREATE TABLE foo (pk INT PRIMARY KEY)`)
+	tenantSQL.Exec(t, `INSERT INTO foo VALUES (1)`)
+
+	f, feedCleanup := makeFeedFactory(t, "enterprise", tenantServer, tenantDB)
+	defer feedCleanup()
+
+	feed := feed(t, f, `CREATE CHANGEFEED FOR foo WITH execution_locality='region=us-east'`)
+	defer closeFeed(t, feed)
+
+	assertPayloads(t, feed, []string{
+		`foo: [1]->{"after": {"pk": 1}}`,
+	})
+}

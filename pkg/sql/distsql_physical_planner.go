@@ -254,11 +254,26 @@ func (dsp *DistSQLPlanner) GetAllInstancesByLocality(
 	return all[:pos], nil
 }
 
-// GetSQLInstanceInfo gets a node descriptor by node ID.
-func (dsp *DistSQLPlanner) GetSQLInstanceInfo(
+// GetNodeDescriptor gets a node descriptor by treating the SQL instance ID as a node ID.
+// This only works when SQL instances map 1:1 to KV nodes (i.e., system tenant).
+// Deprecated: Use GetSQLInstanceInfo when sql.instance_info.use_instance_resolver.enabled is true.
+func (dsp *DistSQLPlanner) GetNodeDescriptor(
 	sqlInstanceID base.SQLInstanceID,
 ) (*roachpb.NodeDescriptor, error) {
 	return dsp.nodeDescs.GetNodeDescriptor(roachpb.NodeID(sqlInstanceID))
+}
+
+// GetSQLInstanceInfo gets SQL instance info by instance ID. This properly handles
+// SQL instances in multi-tenant environments where instances may not map to KV nodes.
+func (dsp *DistSQLPlanner) GetSQLInstanceInfo(
+	ctx context.Context, sqlInstanceID base.SQLInstanceID,
+) (sqlinstance.InstanceInfo, error) {
+	return dsp.sqlAddressResolver.GetInstance(ctx, sqlInstanceID)
+}
+
+// Settings returns the cluster settings for this planner.
+func (dsp *DistSQLPlanner) Settings() *cluster.Settings {
+	return dsp.st
 }
 
 // ReplicaOracleConfig returns the DSP's replicaoracle.Config.
