@@ -15,6 +15,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/sysutil"
+	"github.com/cockroachdb/errors"
 )
 
 var KeepAliveProbeCount = settings.RegisterIntSetting(
@@ -33,6 +35,18 @@ var KeepAliveProbeFrequency = settings.RegisterDurationSetting(
 	time.Second*10,
 	settings.WithPublic,
 )
+
+var TcpUserTimeout = settings.RegisterDurationSetting(
+	settings.ApplicationLevel,
+	"server.sql_tcp_user.timeout",
+	"specifies the maximum amount of time, in milliseconds, that transmitted data "+
+		"can remain unacknowledged before the underlying TCP connection is forcefully closed. "+
+		"(Linux and Darwin only)",
+	time.Second*30,
+	settings.WithPublic,
+)
+
+// FIXME: Just add a new setting instead.
 
 type tcpKeepAliveManager struct {
 	// loggedKeepAliveStatus ensures that errors about setting the TCP
@@ -75,6 +89,26 @@ func (k *tcpKeepAliveManager) configure(ctx context.Context, conn net.Conn) {
 	if err != nil {
 		if doLog {
 			log.Ops.Warningf(ctx, "failed to configure TCP keep-alive for pgwire: %v", err)
+		}
+		return
+	}
+
+	rawConn, err := tcpConn.SyscallConn()
+	if err != nil {
+		if doLog {
+			log.Ops.Warningf(ctx, "failed to get raw TCP connection for user-timeout: %v", err)
+		}
+		return
+	}
+	var userTimeoutErr error
+	userTimeout := TcpUserTimeout.Get(&k.settings.SV)
+	err = rawConn.Control(func(fd uintptr) {
+		userTimeoutErr = sysutil.SetTcpUserTimeout(sysutil.SocketFd(fd), userTimeout)
+	})
+	err = errors.CombineErrors(err, userTimeoutErr)
+	if err != nil {
+		if doLog {
+			log.Ops.Warningf(ctx, "failed to set user-timeout for TCP connection: %v", err)
 		}
 		return
 	}

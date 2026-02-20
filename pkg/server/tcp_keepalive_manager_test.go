@@ -75,7 +75,7 @@ func TestKeepAliveManager(t *testing.T) {
 	if !ok {
 		return
 	}
-	idleTime, probeInterval, probeCount, err := sysutil.GetKeepAliveSettings(tcpConn)
+	idleTime, probeInterval, probeCount, userTimeout, err := sysutil.GetKeepAliveSettings(tcpConn)
 	require.NoError(t, err)
 
 	require.Equal(t,
@@ -86,13 +86,12 @@ func TestKeepAliveManager(t *testing.T) {
 		probeInterval,
 		KeepAliveProbeFrequency.Get(&clusterSettings.SV),
 		"keep alive probe frequency not set")
-
 	require.Equal(t,
 		probeCount,
 		int(KeepAliveProbeCount.Get(&clusterSettings.SV)),
 		"Computed wait time doesn't match our target timeout")
-
-	// Validate we didn't hit any errors using the sockets.
+	require.Equal(t, userTimeout, TcpUserTimeout.Get(&clusterSettings.SV))
+	// Validate we didn't hit any errors using the sockets.q
 	require.NoError(t, err)
 	require.NoError(t, listener.Close())
 	require.NoError(t, grp.Wait())
