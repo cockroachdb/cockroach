@@ -1387,7 +1387,7 @@ FROM defaults_parsed
 			ReturnType: tree.FixedReturnType(types.Bool),
 			Body: `SELECT n.nspname = any current_schemas(true)
              FROM pg_catalog.pg_type t
-             INNER LOOKUP JOIN pg_catalog.pg_namespace n
+             JOIN pg_catalog.pg_namespace n
              ON t.typnamespace = n.oid
              WHERE t.oid=$1 LIMIT 1`,
 			CalledOnNullInput: true,
