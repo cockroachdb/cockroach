@@ -2659,27 +2659,82 @@ func TestSupportedSchemaChecks(t *testing.T) {
 
 	ctx := context.Background()
 
-	server, s, dbA, dbB := setupLogicalTestServer(t, ctx, testClusterBaseClusterArgs, 1)
+	server, s, dbA, _ := setupLogicalTestServer(t, ctx, testClusterBaseClusterArgs, 1)
 	defer server.Stopper().Stop(ctx)
 
-	dbAURL := replicationtestutils.GetExternalConnectionURI(t, s, s, serverutils.DBName("a"))
+	dbA.Exec(t, "SET CLUSTER SETTING logical_replication.consumer.immediate_mode_writer = 'sql'")
 
 	// source is allowed to have a seq expression but not dest.
 	t.Run("sequences", func(t *testing.T) {
+		dbA.Exec(t, "CREATE DATABASE seqa")
+		dbA.Exec(t, "CREATE DATABASE seqb")
+		dbSeqA := sqlutils.MakeSQLRunner(s.SQLConn(t, serverutils.DBName("seqa")))
+		dbSeqB := sqlutils.MakeSQLRunner(s.SQLConn(t, serverutils.DBName("seqb")))
 
-		dbA.Exec(t, "CREATE SEQUENCE my_seqA")
-		dbB.Exec(t, "CREATE SEQUENCE my_seqB")
-		dbA.Exec(t, "CREATE TABLE tab_with_seq (pk INT PRIMARY KEY, v INT DEFAULT nextval('my_seqA'))")
-		dbA.Exec(t, "INSERT INTO tab_with_seq (pk) VALUES (1), (2), (3)")
+		dbSeqAURL := replicationtestutils.GetExternalConnectionURI(t, s, s, serverutils.DBName("seqa"))
+		dbSeqBURL := replicationtestutils.GetExternalConnectionURI(t, s, s, serverutils.DBName("seqb"))
 
-		dbB.Exec(t, "CREATE TABLE tab_with_seq (pk INT PRIMARY KEY, v INT DEFAULT nextval('my_seqB'))")
-		dbB.Exec(t, "CREATE TABLE tab_no_seq (pk INT PRIMARY KEY, v INT)")
+		dbSeqA.Exec(t, "CREATE SEQUENCE my_seq")
+		dbSeqA.Exec(t, "CREATE TABLE a_seq (pk INT PRIMARY KEY, v INT DEFAULT nextval('my_seq'))")
+		dbSeqA.Exec(t, "INSERT INTO a_seq (pk) VALUES (1), (2), (3)")
+
+		dbSeqB.Exec(t, "CREATE TABLE b_no_seq (pk INT PRIMARY KEY, v INT)")
 
 		var jobBID jobspb.JobID
-		dbB.QueryRow(t, "CREATE LOGICAL REPLICATION STREAM FROM TABLE tab_with_seq ON $1 INTO TABLE tab_no_seq", dbAURL.String()).Scan(&jobBID)
-		WaitUntilReplicatedTime(t, s.Clock().Now(), dbB, jobBID)
+		dbSeqB.QueryRow(t, "CREATE LOGICAL REPLICATION STREAM FROM TABLE a_seq ON $1 INTO TABLE b_no_seq", dbSeqAURL.String()).Scan(&jobBID)
+		WaitUntilReplicatedTime(t, s.Clock().Now(), dbSeqB, jobBID)
 
-		dbB.ExpectErr(t, "references sequences with IDs", "CREATE LOGICAL REPLICATION STREAM FROM TABLE tab_with_seq ON $1 INTO TABLE tab_with_seq", dbAURL.String())
+		dbSeqA.ExpectErr(t, "references sequences with IDs", "CREATE LOGICAL REPLICATION STREAM FROM TABLE b_no_seq ON $1 INTO TABLE a_seq", dbSeqBURL.String())
+	})
+
+	t.Run("hash_sharded_indexes", func(t *testing.T) {
+		dbA.Exec(t, "CREATE DATABASE hasha")
+		dbA.Exec(t, "CREATE DATABASE hashb")
+		dbHashA := sqlutils.MakeSQLRunner(s.SQLConn(t, serverutils.DBName("hasha")))
+		dbHashB := sqlutils.MakeSQLRunner(s.SQLConn(t, serverutils.DBName("hashb")))
+
+		dbHashAURL := replicationtestutils.GetExternalConnectionURI(t, s, s, serverutils.DBName("hasha"))
+
+		// Create tables with matching hash sharded indexes on both sides.
+		dbHashA.Exec(t, "CREATE TABLE a (pk INT PRIMARY KEY, v INT)")
+		dbHashA.Exec(t, "CREATE INDEX hash_idx ON a(v) USING HASH WITH (bucket_count = 4)")
+		dbHashA.Exec(t, "INSERT INTO a (pk, v) VALUES (1, 100), (2, 200), (3, 300)")
+
+		dbHashB.Exec(t, "CREATE TABLE b (pk INT PRIMARY KEY, v INT)")
+		dbHashB.Exec(t, "CREATE INDEX hash_idx ON b(v) USING HASH WITH (bucket_count = 4)")
+
+		// Verify that replication is supported when both sides have matching hash sharded indexes.
+		var jobBID jobspb.JobID
+		dbHashB.QueryRow(t, "CREATE LOGICAL REPLICATION STREAM FROM TABLE a ON $1 INTO TABLE b", dbHashAURL.String()).Scan(&jobBID)
+		WaitUntilReplicatedTime(t, s.Clock().Now(), dbHashB, jobBID)
+
+		// Verify data was replicated.
+		dbHashB.CheckQueryResults(t, "SELECT pk, v FROM b ORDER BY pk", [][]string{{"1", "100"}, {"2", "200"}, {"3", "300"}})
+	})
+
+	t.Run("secondary index virtual computed columns", func(t *testing.T) {
+		dbA.Exec(t, "CREATE DATABASE vcola")
+		dbA.Exec(t, "CREATE DATABASE vcolb")
+		dbVColA := sqlutils.MakeSQLRunner(s.SQLConn(t, serverutils.DBName("vcola")))
+		dbVColB := sqlutils.MakeSQLRunner(s.SQLConn(t, serverutils.DBName("vcolb")))
+
+		dbVColAURL := replicationtestutils.GetExternalConnectionURI(t, s, s, serverutils.DBName("vcola"))
+
+		// Create tables with virtual computed columns that are part of a secondary index.
+		dbVColA.Exec(t, "CREATE TABLE a (pk INT PRIMARY KEY, v INT, virtual_col INT AS (v + 10) VIRTUAL)")
+		dbVColA.Exec(t, "CREATE INDEX virtual_idx ON a(virtual_col)")
+		dbVColA.Exec(t, "INSERT INTO a (pk, v) VALUES (1, 100), (2, 200), (3, 300)")
+
+		dbVColB.Exec(t, "CREATE TABLE b (pk INT PRIMARY KEY, v INT, virtual_col INT AS (v + 10) VIRTUAL)")
+		dbVColB.Exec(t, "CREATE INDEX virtual_idx ON b(virtual_col)")
+
+		// Verify that replication is supported when both sides have matching virtual computed columns in secondary indexes.
+		var jobBID jobspb.JobID
+		dbVColB.QueryRow(t, "CREATE LOGICAL REPLICATION STREAM FROM TABLE a ON $1 INTO TABLE b", dbVColAURL.String()).Scan(&jobBID)
+		WaitUntilReplicatedTime(t, s.Clock().Now(), dbVColB, jobBID)
+
+		// Verify data was replicated correctly, and virtual columns are computed correctly on destination.
+		dbVColB.CheckQueryResults(t, "SELECT pk, v, virtual_col FROM b ORDER BY pk", [][]string{{"1", "100", "110"}, {"2", "200", "210"}, {"3", "300", "310"}})
 	})
 }
 
@@ -2735,24 +2790,11 @@ func TestLogicalReplicationCreationChecks(t *testing.T) {
 	expectErr(t, "tab", `cannot create logical replication stream: table tab has a primary key column \(composite_col\) with composite encoding`)
 	replicationtestutils.WaitForAllProducerJobsToFail(t, dbB)
 	dbA.Exec(t, "ALTER TABLE tab ALTER PRIMARY KEY USING COLUMNS (pk)")
-
-	// Check for hash sharded indexes.
-	dbA.Exec(t, "CREATE INDEX hash_idx ON tab(pk) USING HASH WITH (bucket_count = 4)")
-	dbB.Exec(t, "CREATE INDEX hash_idx ON b.tab(pk) USING HASH WITH (bucket_count = 4)")
-	expectErr(t, "tab", "tab has a virtual computed column crdb_internal_pk_shard_4 that is a key of index hash_idx")
-	replicationtestutils.WaitForAllProducerJobsToFail(t, dbB)
-	dbA.Exec(t, "DROP INDEX hash_idx")
-	dbB.Exec(t, "DROP INDEX hash_idx")
-
-	// Check for virtual computed columns that are a key of a secondary index.
-	dbA.Exec(t, "ALTER TABLE tab ADD COLUMN virtual_col INT NOT NULL AS (pk + 1) VIRTUAL")
-	dbB.Exec(t, "ALTER TABLE b.tab ADD COLUMN virtual_col INT NOT NULL AS (pk + 1) VIRTUAL")
-	dbA.Exec(t, "CREATE INDEX virtual_col_idx ON tab(virtual_col)")
-	expectErr(t, "tab", "cannot create logical replication stream: table tab has a virtual computed column virtual_col that is a key of index virtual_col_idx")
-	replicationtestutils.WaitForAllProducerJobsToFail(t, dbB)
+	dbA.Exec(t, "DROP INDEX tab_pk_composite_col_key")
 
 	// Check for virtual columns that are in the primary index.
-	dbA.Exec(t, "DROP INDEX virtual_col_idx")
+	dbA.Exec(t, "ALTER TABLE tab ADD COLUMN virtual_col INT NOT NULL AS (pk + 1) VIRTUAL")
+	dbB.Exec(t, "ALTER TABLE b.tab ADD COLUMN virtual_col INT NOT NULL AS (pk + 1) VIRTUAL")
 	dbA.Exec(t, "ALTER TABLE tab ALTER PRIMARY KEY USING COLUMNS (pk, virtual_col)")
 	expectErr(t, "tab", "cannot create logical replication stream: table tab has a virtual computed column virtual_col that appears in the primary key")
 	replicationtestutils.WaitForAllProducerJobsToFail(t, dbB)
@@ -2760,9 +2802,8 @@ func TestLogicalReplicationCreationChecks(t *testing.T) {
 	// Change the primary key back, and remove the indexes that are left over from
 	// changing the PK.
 	dbA.Exec(t, "ALTER TABLE tab ALTER PRIMARY KEY USING COLUMNS (pk)")
-	dbA.Exec(t, "DROP INDEX tab_pk_virtual_col_key")
 	dbA.Exec(t, "DROP INDEX tab_pk_key")
-	dbA.Exec(t, "DROP INDEX tab_pk_composite_col_key")
+	dbA.Exec(t, "DROP INDEX tab_pk_virtual_col_key")
 
 	// Check that CHECK constraints match.
 	dbA.Exec(t, "ALTER TABLE tab ADD CONSTRAINT check_constraint_1 CHECK (pk > 0)")
