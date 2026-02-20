@@ -672,3 +672,127 @@ finish req=req1
 
 reset namespace
 ----
+
+# Re-enable the push-using-cached-clock-observation setting for the
+# remaining tests.
+debug-set-push-using-cached-clock-observation-enabled ok=true
+----
+
+# -------------------------------------------------------------
+# Cross-transaction cache reuse of ClockWhilePending.
+#
+# Reader B (txn2) pushes writer A (txn1) at key "a" and finds
+# it PENDING. The push result and clock observation are cached.
+# Reader C (txn3), a separate transaction arriving later with
+# an uncertainty interval and an observed timestamp on this node
+# that is <= the cached clock observation, discovers a different
+# intent from txn1 at key "b". Because the cache already has
+# txn1's push result, txn3 resolves the intent without pushing.
+#
+# This exercises the core correctness argument: the clock
+# observation was taken before the push found txn1 PENDING, so
+# any reader whose observed timestamp on this node is <= the
+# observation was concurrent with txn1. The local timestamp
+# forwarding during intent resolution ensures the pushed intent
+# won't fall inside such a reader's uncertainty interval.
+# -------------------------------------------------------------
+
+new-txn name=txn1 ts=10,1 epoch=0
+----
+
+# txn2 is a reader that will push txn1 at key "a".
+new-txn name=txn2 ts=12,1 epoch=0 uncertainty-limit=15,1 observed-ts=1@123,1
+----
+
+new-request name=req1 txn=txn2 ts=12,1
+  get key=a
+----
+
+sequence req=req1
+----
+[1] sequence req1: sequencing request
+[1] sequence req1: acquiring latches
+[1] sequence req1: scanning lock table for conflicting locks
+[1] sequence req1: sequencing complete, returned guard
+
+# txn2 discovers txn1's intent at "a".
+handle-lock-conflict-error req=req1 lease-seq=1
+  lock txn=txn1 key=a
+----
+[2] handle lock conflict error req1: added 1 discovered lock(s) to lock table: conflicting locks on ‹"a"›
+
+# txn2 re-sequences and pushes txn1.
+sequence req=req1
+----
+[3] sequence req1: re-sequencing request
+[3] sequence req1: acquiring latches
+[3] sequence req1: scanning lock table for conflicting locks
+[3] sequence req1: waiting in lock wait-queues
+[3] sequence req1: lock wait-queue event: wait for txn 00000001 holding lock @ key ‹"a"› (queuedLockingRequests: 0, queuedReaders: 1)
+[3] sequence req1: pushing after 0s for: deadlock/liveness detection = true, timeout enforcement = false, priority enforcement = false, wait policy error = false
+[3] sequence req1: pushing timestamp of txn 00000001 above 15.000000000,1
+[3] sequence req1: blocked on select in concurrency_test.(*cluster).PushTransaction
+
+# Push succeeds — txn1 is pushed above the reader's uncertainty limit.
+# The clock observation is cached alongside the pending push result.
+on-txn-updated txn=txn1 status=pending ts=15,2
+----
+[-] update txn: increasing timestamp of txn1
+[3] sequence req1: resolving intent ‹"a"› for txn 00000001 with PENDING status and clock observation {1 135.000000000,23}
+[3] sequence req1: lock wait-queue event: done waiting
+[3] sequence req1: conflicted with 00000001-0000-0000-0000-000000000000 on ‹"a"› for 0.000s
+[3] sequence req1: acquiring latches
+[3] sequence req1: scanning lock table for conflicting locks
+[3] sequence req1: sequencing complete, returned guard
+
+finish req=req1
+----
+[-] finish req1: finishing request
+
+# Now txn3 (reader C) arrives. It has an uncertainty interval and an
+# observed timestamp on node 1 that is <= the clock observation cached
+# by txn2's push. This means txn3 was concurrent with txn1 — the
+# optimization should apply.
+new-txn name=txn3 ts=12,1 epoch=0 uncertainty-limit=15,1 observed-ts=1@123,1
+----
+
+new-request name=req2 txn=txn3 ts=12,1
+  get key=b
+----
+
+sequence req=req2
+----
+[4] sequence req2: sequencing request
+[4] sequence req2: acquiring latches
+[4] sequence req2: scanning lock table for conflicting locks
+[4] sequence req2: sequencing complete, returned guard
+
+# txn3 discovers txn1's intent at "b".
+handle-lock-conflict-error req=req2 lease-seq=1
+  lock txn=txn1 key=b
+----
+[5] handle lock conflict error req2: added 1 discovered lock(s) to lock table: conflicting locks on ‹"b"›
+
+# txn3 re-sequences. Because the pending cache has txn1's push result
+# with a ClockWhilePending observation, and txn3's observed timestamp
+# on node 1 is <= that observation, txn3 can resolve txn1's intent at
+# "b" without re-pushing. The resolution includes the clock observation.
+sequence req=req2
+----
+[6] sequence req2: re-sequencing request
+[6] sequence req2: acquiring latches
+[6] sequence req2: scanning lock table for conflicting locks
+[6] sequence req2: waiting in lock wait-queues
+[6] sequence req2: lock wait-queue event: done waiting
+[6] sequence req2: resolving a batch of 1 intent(s)
+[6] sequence req2: resolving intent ‹"b"› for txn 00000001 with PENDING status and clock observation {1 135.000000000,23}
+[6] sequence req2: acquiring latches
+[6] sequence req2: scanning lock table for conflicting locks
+[6] sequence req2: sequencing complete, returned guard
+
+finish req=req2
+----
+[-] finish req2: finishing request
+
+reset namespace
+----
