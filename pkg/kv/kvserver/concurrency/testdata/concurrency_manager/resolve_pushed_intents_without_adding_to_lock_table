@@ -86,15 +86,15 @@ handle-lock-conflict-error req=req2 lease-seq=1
 ----
 [5] handle lock conflict error req2: added 9 discovered lock(s) to lock table: conflicting locks on ‹"b"›, ‹"c"›, ‹"d"›, ‹"e"›, ‹"f"›, ‹"g"›, ‹"h"›, ‹"i"›, ‹"j"›
 [5] handle lock conflict error req2: resolving a batch of 9 intent(s)
-[5] handle lock conflict error req2: resolving intent ‹"b"› for txn 00000002 with PENDING status
-[5] handle lock conflict error req2: resolving intent ‹"c"› for txn 00000002 with PENDING status
-[5] handle lock conflict error req2: resolving intent ‹"d"› for txn 00000002 with PENDING status
-[5] handle lock conflict error req2: resolving intent ‹"e"› for txn 00000002 with PENDING status
-[5] handle lock conflict error req2: resolving intent ‹"f"› for txn 00000002 with PENDING status
-[5] handle lock conflict error req2: resolving intent ‹"g"› for txn 00000002 with PENDING status
-[5] handle lock conflict error req2: resolving intent ‹"h"› for txn 00000002 with PENDING status
-[5] handle lock conflict error req2: resolving intent ‹"i"› for txn 00000002 with PENDING status
-[5] handle lock conflict error req2: resolving intent ‹"j"› for txn 00000002 with PENDING status
+[5] handle lock conflict error req2: resolving intent ‹"b"› for txn 00000002 with PENDING status and clock observation {1 123.000000000,1}
+[5] handle lock conflict error req2: resolving intent ‹"c"› for txn 00000002 with PENDING status and clock observation {1 123.000000000,1}
+[5] handle lock conflict error req2: resolving intent ‹"d"› for txn 00000002 with PENDING status and clock observation {1 123.000000000,1}
+[5] handle lock conflict error req2: resolving intent ‹"e"› for txn 00000002 with PENDING status and clock observation {1 123.000000000,1}
+[5] handle lock conflict error req2: resolving intent ‹"f"› for txn 00000002 with PENDING status and clock observation {1 123.000000000,1}
+[5] handle lock conflict error req2: resolving intent ‹"g"› for txn 00000002 with PENDING status and clock observation {1 123.000000000,1}
+[5] handle lock conflict error req2: resolving intent ‹"h"› for txn 00000002 with PENDING status and clock observation {1 123.000000000,1}
+[5] handle lock conflict error req2: resolving intent ‹"i"› for txn 00000002 with PENDING status and clock observation {1 123.000000000,1}
+[5] handle lock conflict error req2: resolving intent ‹"j"› for txn 00000002 with PENDING status and clock observation {1 123.000000000,1}
 
 debug-lock-table
 ----

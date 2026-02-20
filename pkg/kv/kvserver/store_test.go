@@ -1653,6 +1653,67 @@ func TestStoreResolveWriteIntentNoTxn(t *testing.T) {
 	}
 }
 
+// TestNonTxnReadUncertaintyIntentResolution verifies that when a
+// non-transactional read pushes a PENDING transaction's timestamp and resolves
+// its intents, the ClockWhilePending field is correctly propagated on the
+// LockUpdate. Without this, the resolved intent's local timestamp would not be
+// forwarded, causing an infinite ReadWithinUncertaintyIntervalError server-side
+// retry loop (and a timeout).
+func TestNonTxnReadUncertaintyIntentResolution(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	ctx := context.Background()
+	stopper := stop.NewStopper()
+	defer stopper.Stop(ctx)
+
+	// Use a non-zero max offset so that non-transactional requests with a
+	// server-assigned timestamp get an uncertainty interval. Without this, pushed
+	// values fall outside the global uncertainty limit and can never trigger
+	// ReadWithinUncertaintyIntervalError.
+	manual := timeutil.NewManualTime(timeutil.Unix(0, 123))
+	clock := hlc.NewClock(manual, 500*time.Millisecond, 500*time.Millisecond, hlc.PanicLogger)
+	cfg := TestStoreConfig(clock)
+	store := createTestStoreWithConfig(ctx, t, stopper, testStoreOpts{createSystemRanges: true}, &cfg)
+
+	keyA := roachpb.Key("a")
+	keyB := roachpb.Key("b")
+	pushee := newTransaction("test", keyA, 1, store.cfg.Clock)
+
+	// Write intents on both keys.
+	putA := putArgs(keyA, []byte("valueA"))
+	putB := putArgs(keyB, []byte("valueB"))
+	assignSeqNumsForReqs(pushee, &putA, &putB)
+	ba := &kvpb.BatchRequest{}
+	ba.Header = kvpb.Header{Txn: pushee}
+	ba.Add(&putA, &putB)
+	if _, pErr := store.TestSender().Send(ctx, ba); pErr != nil {
+		t.Fatal(pErr)
+	}
+
+	rwuieBefore := store.Metrics().ReadWithinUncertaintyIntervalErrorServerSideRetrySuccess.Count()
+
+	// Scan both keys outside a transaction with high priority. We omit the
+	// Timestamp field so the server allocates one and sets
+	// TimestampFromServerClock, which enables the uncertainty interval for this
+	// non-transactional request.
+	//
+	// The scan pushes the pushee and resolves both intents: the first via
+	// pushLockTxn (with ClockWhilePending), the second via the lock table's
+	// deferred resolution path during the re-scan. If ClockWhilePending is
+	// missing on the intent resolutions, the scan enters an infinite RWUIE
+	// retry loop and times out.
+	sArgs := scanArgs(keyA, keyB.Next())
+	_, pErr := kv.SendWrappedWith(
+		ctx, store.TestSender(), kvpb.Header{UserPriority: roachpb.MaxUserPriority}, sArgs,
+	)
+	require.NoError(t, pErr.GoError())
+
+	// With ClockWhilePending correctly set on deferred resolutions, no RWUIE
+	// retries should occur.
+	rwuieAfter := store.Metrics().ReadWithinUncertaintyIntervalErrorServerSideRetrySuccess.Count()
+	require.Equal(t, int64(0), rwuieAfter-rwuieBefore)
+}
+
 // TestStoreReadInconsistent verifies that gets and scans with read
 // consistency set to INCONSISTENT or READ_UNCOMMITTED either push or
 // simply ignore extant intents (if they cannot be pushed), depending

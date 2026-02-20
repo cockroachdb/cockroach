@@ -413,8 +413,8 @@ on-txn-updated txn=txn1 status=pending ts=12,2
 [3] sequence req1: lock wait-queue event: done waiting
 [3] sequence req1: conflicted with 00000001-0000-0000-0000-000000000000 on ‹"a"› for 0.000s
 [3] sequence req1: resolving a batch of 2 intent(s)
-[3] sequence req1: resolving intent ‹"b"› for txn 00000001 with PENDING status
-[3] sequence req1: resolving intent ‹"c"› for txn 00000001 with PENDING status
+[3] sequence req1: resolving intent ‹"b"› for txn 00000001 with PENDING status and clock observation {1 135.000000000,9}
+[3] sequence req1: resolving intent ‹"c"› for txn 00000001 with PENDING status and clock observation {1 135.000000000,9}
 [3] sequence req1: acquiring latches
 [3] sequence req1: scanning lock table for conflicting locks
 [3] sequence req1: sequencing complete, returned guard

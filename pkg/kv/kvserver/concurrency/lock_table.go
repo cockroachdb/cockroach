@@ -882,9 +882,7 @@ func (g *lockTableGuardImpl) canResolveKeyForHoldingTransaction(
 		pushedTxnEntry, ok := g.lt.txnStatusCache.pendingTxns.get(lockHolderTxn.ID)
 		if ok && g.pendingPushedTransactionCanBeResolved(pushedTxnEntry) {
 			up := roachpb.MakeLockUpdate(pushedTxnEntry.Txn, roachpb.Span{Key: key})
-			if g.hasUncertaintyInterval() {
-				up.ClockWhilePending = pushedTxnEntry.ClockWhilePending
-			}
+			up.ClockWhilePending = pushedTxnEntry.ClockWhilePending
 			return true, up
 		}
 	}

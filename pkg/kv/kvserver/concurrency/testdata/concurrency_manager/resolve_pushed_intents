@@ -100,15 +100,15 @@ sequence req=req1
 [4] sequence req1: lock wait-queue event: done waiting
 [4] sequence req1: conflicted with 00000002-0000-0000-0000-000000000000 on ‹"a"› for 0.000s
 [4] sequence req1: resolving a batch of 9 intent(s)
-[4] sequence req1: resolving intent ‹"b"› for txn 00000002 with PENDING status
-[4] sequence req1: resolving intent ‹"c"› for txn 00000002 with PENDING status
-[4] sequence req1: resolving intent ‹"d"› for txn 00000002 with PENDING status
-[4] sequence req1: resolving intent ‹"e"› for txn 00000002 with PENDING status
-[4] sequence req1: resolving intent ‹"f"› for txn 00000002 with PENDING status
-[4] sequence req1: resolving intent ‹"g"› for txn 00000002 with PENDING status
-[4] sequence req1: resolving intent ‹"h"› for txn 00000002 with PENDING status
-[4] sequence req1: resolving intent ‹"i"› for txn 00000002 with PENDING status
-[4] sequence req1: resolving intent ‹"j"› for txn 00000002 with PENDING status
+[4] sequence req1: resolving intent ‹"b"› for txn 00000002 with PENDING status and clock observation {1 123.000000000,2}
+[4] sequence req1: resolving intent ‹"c"› for txn 00000002 with PENDING status and clock observation {1 123.000000000,2}
+[4] sequence req1: resolving intent ‹"d"› for txn 00000002 with PENDING status and clock observation {1 123.000000000,2}
+[4] sequence req1: resolving intent ‹"e"› for txn 00000002 with PENDING status and clock observation {1 123.000000000,2}
+[4] sequence req1: resolving intent ‹"f"› for txn 00000002 with PENDING status and clock observation {1 123.000000000,2}
+[4] sequence req1: resolving intent ‹"g"› for txn 00000002 with PENDING status and clock observation {1 123.000000000,2}
+[4] sequence req1: resolving intent ‹"h"› for txn 00000002 with PENDING status and clock observation {1 123.000000000,2}
+[4] sequence req1: resolving intent ‹"i"› for txn 00000002 with PENDING status and clock observation {1 123.000000000,2}
+[4] sequence req1: resolving intent ‹"j"› for txn 00000002 with PENDING status and clock observation {1 123.000000000,2}
 [4] sequence req1: acquiring latches
 [4] sequence req1: scanning lock table for conflicting locks
 [4] sequence req1: sequencing complete, returned guard
@@ -246,7 +246,7 @@ sequence req=req1
 [4] sequence req1: lock wait-queue event: done waiting
 [4] sequence req1: conflicted with 00000002-0000-0000-0000-000000000000 on ‹"a"› for 0.000s
 [4] sequence req1: resolving a batch of 1 intent(s)
-[4] sequence req1: resolving intent ‹"b"› for txn 00000002 with PENDING status
+[4] sequence req1: resolving intent ‹"b"› for txn 00000002 with PENDING status and clock observation {1 123.000000000,5}
 [4] sequence req1: acquiring latches
 [4] sequence req1: scanning lock table for conflicting locks
 [4] sequence req1: sequencing complete, returned guard
