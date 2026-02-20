@@ -32,6 +32,7 @@ go_library(
         "//pkg/util/log/severity",
         "//pkg/util/stop",
         "//pkg/util/timeutil",
+        "//pkg/util/tracing/goexectrace",
         "//pkg/util/uint128",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_cockroachdb_pebble//:pebble",
