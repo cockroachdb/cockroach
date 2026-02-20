@@ -1775,6 +1775,7 @@ alter_view_stmt ::=
 	alter_rename_view_stmt
 	| alter_view_set_schema_stmt
 	| alter_view_owner_stmt
+	| alter_view_set_options_stmt
 
 alter_sequence_stmt ::=
 	alter_rename_sequence_stmt
@@ -2486,6 +2487,14 @@ alter_view_owner_stmt ::=
 	| 'ALTER' 'MATERIALIZED' 'VIEW' relation_expr 'OWNER' 'TO' role_spec
 	| 'ALTER' 'VIEW' 'IF' 'EXISTS' relation_expr 'OWNER' 'TO' role_spec
 	| 'ALTER' 'MATERIALIZED' 'VIEW' 'IF' 'EXISTS' relation_expr 'OWNER' 'TO' role_spec
+
+alter_view_set_options_stmt ::=
+	'ALTER' 'VIEW' relation_expr 'SET' '(' 'SECURITY_INVOKER' '=' 'TRUE' ')'
+	| 'ALTER' 'VIEW' relation_expr 'SET' '(' 'SECURITY_INVOKER' '=' 'FALSE' ')'
+	| 'ALTER' 'VIEW' relation_expr 'SET' '(' 'SECURITY_INVOKER' '=' 'ICONST' ')'
+	| 'ALTER' 'VIEW' 'IF' 'EXISTS' relation_expr 'SET' '(' 'SECURITY_INVOKER' '=' 'TRUE' ')'
+	| 'ALTER' 'VIEW' 'IF' 'EXISTS' relation_expr 'SET' '(' 'SECURITY_INVOKER' '=' 'FALSE' ')'
+	| 'ALTER' 'VIEW' 'IF' 'EXISTS' relation_expr 'SET' '(' 'SECURITY_INVOKER' '=' 'ICONST' ')'
 
 alter_rename_sequence_stmt ::=
 	'ALTER' 'SEQUENCE' relation_expr 'RENAME' 'TO' sequence_name

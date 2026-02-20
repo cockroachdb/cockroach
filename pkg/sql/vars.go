@@ -2154,22 +2154,8 @@ var varGen = map[string]sessionVar{
 	},
 
 	// CockroachDB extension.
-	`allow_view_with_security_invoker_clause`: {
-		Hidden:       true,
-		GetStringVal: makePostgresBoolGetStringValFn(`allow_view_with_security_invoker_clause`),
-		Set: func(_ context.Context, m sessionmutator.SessionDataMutator, s string) error {
-			b, err := paramparse.ParseBoolVar("allow_view_with_security_invoker_clause", s)
-			if err != nil {
-				return err
-			}
-			m.SetAllowViewWithSecurityInvokerClause(b)
-			return nil
-		},
-		Get: func(evalCtx *extendedEvalContext, _ *kv.Txn) (string, error) {
-			return formatBoolAsPostgresSetting(evalCtx.SessionData().AllowViewWithSecurityInvokerClause), nil
-		},
-		GlobalDefault: globalFalse,
-	},
+	// This is only kept for backwards compatibility and no longer has any effect.
+	`allow_view_with_security_invoker_clause`: makeBackwardsCompatBoolVar("allow_view_with_security_invoker_clause", true),
 
 	// TODO(rytaft): remove this once unique without index constraints are fully
 	// supported.

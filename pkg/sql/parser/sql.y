@@ -13285,13 +13285,73 @@ alter_view_owner_stmt:
   }
 
 alter_view_set_options_stmt:
-  ALTER VIEW relation_expr SET '(' SECURITY_INVOKER '=' var_value ')'
+  ALTER VIEW relation_expr SET '(' SECURITY_INVOKER '=' TRUE ')'
   {
-    return unimplemented(sqllex, "ALTER VIEW ... SET (security_invoker = ...) is not yet implemented.")
+    $$.val = &tree.AlterViewSetOptions{
+      Name: $3.unresolvedObjectName(),
+      IfExists: false,
+      Options: &tree.ViewOptions{SecurityInvoker: true},
+    }
   }
-| ALTER VIEW IF EXISTS relation_expr SET '(' SECURITY_INVOKER '=' var_value ')'
+| ALTER VIEW relation_expr SET '(' SECURITY_INVOKER '=' FALSE ')'
   {
-    return unimplemented(sqllex, "ALTER VIEW ... IF EXISTS SET (security_invoker = ...) is not yet implemented.")
+    $$.val = &tree.AlterViewSetOptions{
+      Name: $3.unresolvedObjectName(),
+      IfExists: false,
+      Options: &tree.ViewOptions{SecurityInvoker: false},
+    }
+  }
+| ALTER VIEW relation_expr SET '(' SECURITY_INVOKER '=' ICONST ')'
+  {
+    val, err := $8.numVal().AsInt64()
+    if err != nil { return setErr(sqllex, err) }
+    var si bool
+    if val == 1 {
+      si = true
+    } else if val == 0 {
+      si = false
+    } else {
+      return setErr(sqllex, errors.New("security_invoker accepts only true/false or 1/0"))
+    }
+    $$.val = &tree.AlterViewSetOptions{
+      Name: $3.unresolvedObjectName(),
+      IfExists: false,
+      Options: &tree.ViewOptions{SecurityInvoker: si},
+    }
+  }
+| ALTER VIEW IF EXISTS relation_expr SET '(' SECURITY_INVOKER '=' TRUE ')'
+  {
+    $$.val = &tree.AlterViewSetOptions{
+      Name: $5.unresolvedObjectName(),
+      IfExists: true,
+      Options: &tree.ViewOptions{SecurityInvoker: true},
+    }
+  }
+| ALTER VIEW IF EXISTS relation_expr SET '(' SECURITY_INVOKER '=' FALSE ')'
+  {
+    $$.val = &tree.AlterViewSetOptions{
+      Name: $5.unresolvedObjectName(),
+      IfExists: true,
+      Options: &tree.ViewOptions{SecurityInvoker: false},
+    }
+  }
+| ALTER VIEW IF EXISTS relation_expr SET '(' SECURITY_INVOKER '=' ICONST ')'
+  {
+    val, err := $10.numVal().AsInt64()
+    if err != nil { return setErr(sqllex, err) }
+    var si bool
+    if val == 1 {
+      si = true
+    } else if val == 0 {
+      si = false
+    } else {
+      return setErr(sqllex, errors.New("security_invoker accepts only true/false or 1/0"))
+    }
+    $$.val = &tree.AlterViewSetOptions{
+      Name: $5.unresolvedObjectName(),
+      IfExists: true,
+      Options: &tree.ViewOptions{SecurityInvoker: si},
+    }
   }
 
 alter_sequence_set_schema_stmt:

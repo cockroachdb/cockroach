@@ -9,6 +9,7 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/docs"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
@@ -37,6 +38,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 	"github.com/cockroachdb/errors"
+	"github.com/gogo/protobuf/proto"
 )
 
 // createViewNode represents a CREATE VIEW statement.
@@ -78,7 +80,8 @@ func (n *createViewNode) startExec(params runParams) error {
 	}
 	createView := n.createView
 
-	if !params.SessionData().AllowViewWithSecurityInvokerClause && createView.Options != nil && createView.Options.SecurityInvoker {
+	if !params.p.execCfg.Settings.Version.IsActive(params.ctx, clusterversion.V26_2) &&
+		createView.Options != nil && createView.Options.SecurityInvoker {
 		return pgerror.Newf(pgcode.FeatureNotSupported,
 			"security invoker views are not supported")
 	}
@@ -289,6 +292,11 @@ func (n *createViewNode) startExec(params runParams) error {
 						desc.SetTableLocalityGlobal()
 						applyGlobalMultiRegionZoneConfig = true
 					}
+				}
+
+				// Set view options if specified.
+				if createView.Options != nil {
+					desc.SecurityInvoker = proto.Bool(createView.Options.SecurityInvoker)
 				}
 
 				// Collect all the tables/views this view depends on.
@@ -745,6 +753,11 @@ func (p *planner) replaceViewDesc(
 		return nil, err
 	}
 	toReplace.ViewQuery = typeReplacedQuery
+
+	// Update view options if specified in the replacement.
+	if n.createView.Options != nil {
+		toReplace.SecurityInvoker = proto.Bool(n.createView.Options.SecurityInvoker)
+	}
 
 	// Check that the new view has at least as many columns as the old view before
 	// adding result columns.

@@ -2658,6 +2658,27 @@ func (desc *wrapper) GetStorageParams(spaceBetweenEqual bool) ([]string, error) 
 	return storageParams, nil
 }
 
+// GetViewOptions implements the TableDescriptor interface.
+func (desc *wrapper) GetViewOptions(spaceBetweenEqual bool) ([]string, error) {
+	var viewOptions []string
+	var spacing string
+	if spaceBetweenEqual {
+		spacing = ` `
+	}
+	appendViewOptions := func(key, value string) {
+		viewOptions = append(viewOptions, key+spacing+`=`+spacing+value)
+	}
+
+	if desc.SecurityInvoker != nil {
+		if *desc.SecurityInvoker {
+			appendViewOptions(`security_invoker`, `true`)
+		} else {
+			appendViewOptions(`security_invoker`, `false`)
+		}
+	}
+	return viewOptions, nil
+}
+
 // GetMultiRegionEnumDependency returns true if the given table has an "implicit"
 // dependency on the multi-region enum. An implicit dependency exists for
 // REGIONAL BY TABLE table's which are homed in an explicit region
