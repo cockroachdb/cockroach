@@ -28,6 +28,7 @@ const (
 	txnDiagnosticsNotStarted
 	txnDiagnosticsInProgress
 	txnDiagnosticsReadyToFinalize
+	txnDiagnosticsAborted
 )
 
 type txnDiagnosticsCollector struct {
@@ -69,6 +70,10 @@ func (tds *txnDiagnosticsCollector) InProgress() bool {
 
 func (tds *txnDiagnosticsCollector) ReadyToFinalize() bool {
 	return tds.state == txnDiagnosticsReadyToFinalize
+}
+
+func (tds *txnDiagnosticsCollector) Aborted() bool {
+	return tds.state == txnDiagnosticsAborted
 }
 
 func (tds *txnDiagnosticsCollector) UpdateState(state txnDiagnosticsState) {
@@ -164,23 +169,38 @@ func (h *txnInstrumentationHelper) StartDiagnostics(
 	h.diagnosticsCollector = newTxnDiagnosticsCollector(txnRequest, reqID, span)
 }
 
-//
-//func (h *txnInstrumentationHelper) ReadyToStartDiagnostics() bool {
-//	return h.diagnosticsCollector.state == txnDiagnosticsNotStarted
-//}
-
-func (h *txnInstrumentationHelper) Reset() {
+// Abort performs a partial cleanup of the diagnostics collection. It releases
+// the request and finishes the span, but preserves the collector's request
+// info (requestId, request) so that Finalize can still log details about
+// the aborted collection.
+func (h *txnInstrumentationHelper) Abort(ctx context.Context) {
 	if h.diagnosticsCollector.requestId != 0 {
 		h.TxnDiagnosticsRecorder.ResetTxnRequest(h.diagnosticsCollector.requestId)
 	}
+	if h.diagnosticsCollector.span != nil {
+		h.diagnosticsCollector.span.Finish()
+		h.diagnosticsCollector.span = nil
+	}
+	h.diagnosticsCollector.stmtBundles = nil
+	h.diagnosticsCollector.stmtsFpsToCapture = nil
+	h.diagnosticsCollector.UpdateState(txnDiagnosticsAborted)
+}
 
-	h.diagnosticsCollector.span.Finish()
+func (h *txnInstrumentationHelper) Reset(ctx context.Context) {
+	if !h.diagnosticsCollector.Aborted() {
+		if h.diagnosticsCollector.requestId != 0 {
+			h.TxnDiagnosticsRecorder.ResetTxnRequest(h.diagnosticsCollector.requestId)
+		}
+		if h.diagnosticsCollector.span != nil {
+			h.diagnosticsCollector.span.Finish()
+		}
+	}
 	h.diagnosticsCollector = txnDiagnosticsCollector{}
 }
 
 // AddStatementBundle adds a statement diagnostic bundle to the transaction
 // diagnostics collector. If the bundle cannot be added, the transaction
-// diagnostics collection is reset.
+// diagnostics collection is aborted.
 func (h *txnInstrumentationHelper) AddStatementBundle(
 	ctx context.Context,
 	stmt tree.Statement,
@@ -200,7 +220,7 @@ func (h *txnInstrumentationHelper) AddStatementBundle(
 		if err != nil {
 			log.Ops.VWarningf(ctx, 2, "Failed to add statement bundle: %s", err)
 		}
-		h.Reset()
+		h.Abort(ctx)
 	}
 }
 
@@ -230,7 +250,7 @@ func (h *txnInstrumentationHelper) MaybeStartDiagnostics(
 				h.StartDiagnostics(req, requestId, sp)
 				return ctx, true
 			} else {
-				h.Reset()
+				h.Reset(ctx)
 			}
 		}
 	}
@@ -258,7 +278,7 @@ func (h *txnInstrumentationHelper) MaybeContinueDiagnostics(
 	}
 
 	if !shouldContinue {
-		h.Reset()
+		h.Abort(ctx)
 	} else {
 		// TODO (kyle.wong): due to the existing hierarchy of spans, we have to
 		//  manually manage the span by putting it in the context. Ideally, we
@@ -278,8 +298,13 @@ func (h *txnInstrumentationHelper) ShouldRedact() bool {
 // Finalize finalizes the transaction diagnostics collection by writing all
 // the collected data to the underlying system tables.
 func (h *txnInstrumentationHelper) Finalize(ctx context.Context, executionDuration time.Duration) {
-	defer h.Reset()
+	defer h.Reset(ctx)
 	collector := h.diagnosticsCollector
+
+	if collector.Aborted() {
+		return
+	}
+
 	if collector.InProgress() {
 		collector.UpdateState(txnDiagnosticsReadyToFinalize)
 	}

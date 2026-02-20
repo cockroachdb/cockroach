@@ -199,8 +199,8 @@ func TestTxnInstrumentationHelper_AddStatementBundle_Error(t *testing.T) {
 
 	helper.AddStatementBundle(ctx, stmt, stmtFingerprintId, stmtFingerprint, bundle)
 
-	// After error, helper should be reset
-	require.False(t, helper.diagnosticsCollector.InProgress())
+	// After error, helper should be aborted
+	require.True(t, helper.diagnosticsCollector.Aborted())
 }
 
 func TestTxnInstrumentationHelper_AddStatementBundle_NoSuccess(t *testing.T) {
@@ -225,8 +225,8 @@ func TestTxnInstrumentationHelper_AddStatementBundle_NoSuccess(t *testing.T) {
 
 	helper.AddStatementBundle(ctx, stmt, stmtFingerprintId, stmtFingerprint, bundle)
 
-	// After no success, helper should be reset
-	require.False(t, helper.diagnosticsCollector.InProgress())
+	// After no success, helper should be aborted
+	require.True(t, helper.diagnosticsCollector.Aborted())
 }
 
 func TestTxnInstrumentationHelper_MaybeContinueDiagnostics(t *testing.T) {
@@ -302,7 +302,7 @@ func TestTxnInstrumentationHelper_MaybeContinueDiagnostics(t *testing.T) {
 		require.Equal(t, tc.shouldContinue, actual)
 
 		if !tc.shouldContinue {
-			require.True(t, helper.diagnosticsCollector.IsReset())
+			require.True(t, helper.diagnosticsCollector.Aborted())
 			require.False(t, helper.diagnosticsCollector.InProgress())
 			require.Equal(t, ctx, newCtx)
 		} else {
