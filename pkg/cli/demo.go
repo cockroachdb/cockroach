@@ -243,12 +243,6 @@ func runDemoInternal(
 	}
 	sqlCtx.ShellCtx.DemoCluster = c
 
-	if demoCtx.DefaultEnableRangefeeds {
-		if err = c.SetClusterSetting(ctx, "kv.rangefeed.enabled", true); err != nil {
-			return clierrorplus.CheckAndMaybeShout(err)
-		}
-	}
-
 	if cliCtx.IsInteractive {
 		cliCtx.PrintfUnlessEmbedded(`#
 # Welcome to the CockroachDB demo database!

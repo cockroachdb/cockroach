@@ -98,10 +98,6 @@ type Context struct {
 	// multi-tenant mode.
 	Multitenant bool
 
-	// DefaultEnableRangefeeds is true if rangefeeds should start
-	// out enabled.
-	DefaultEnableRangefeeds bool
-
 	// DisableServerController is true if we want to avoid the server
 	// controller to instantiate tenant secondary servers.
 	DisableServerController bool
