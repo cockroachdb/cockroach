@@ -67,6 +67,7 @@ FILES = [
     "alter_type",
     "alter_view",
     "alter_view_owner_stmt",
+    "alter_view_set_options_stmt",
     "alter_view_set_schema_stmt",
     "alter_virtual_cluster_capability",
     "alter_virtual_cluster",

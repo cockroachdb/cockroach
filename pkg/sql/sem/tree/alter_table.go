@@ -800,6 +800,31 @@ func (node *AlterTableOwner) Format(ctx *FmtCtx) {
 	ctx.FormatNode(&node.Owner)
 }
 
+// AlterViewSetOptions represents an ALTER VIEW SET (...) command.
+type AlterViewSetOptions struct {
+	Name     *UnresolvedObjectName
+	IfExists bool
+	Options  *ViewOptions
+}
+
+// TelemetryName returns the telemetry counter to increment
+// when this command is used.
+func (node *AlterViewSetOptions) TelemetryName() string {
+	return "set_options"
+}
+
+// Format implements the NodeFormatter interface.
+func (node *AlterViewSetOptions) Format(ctx *FmtCtx) {
+	ctx.WriteString("ALTER VIEW ")
+	if node.IfExists {
+		ctx.WriteString("IF EXISTS ")
+	}
+	ctx.FormatNode(node.Name)
+	ctx.WriteString(" SET (")
+	node.Options.Format(ctx)
+	ctx.WriteString(")")
+}
+
 // AlterTableAddIdentity represents commands to alter a column to an identity.
 type AlterTableAddIdentity struct {
 	Column        Name

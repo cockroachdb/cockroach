@@ -102,6 +102,7 @@ var validationMap = []struct {
 				status: todoIAmKnowinglyAddingTechDebt,
 				reason: "initial import: TODO(features): add validation"},
 			"IsMaterializedView":  {status: thisFieldReferencesNoObjects},
+			"SecurityInvoker":     {status: thisFieldReferencesNoObjects},
 			"RefreshViewRequired": {status: thisFieldReferencesNoObjects},
 			"DependsOn":           {status: iSolemnlySwearThisFieldIsValidated},
 			"DependsOnTypes":      {status: iSolemnlySwearThisFieldIsValidated},

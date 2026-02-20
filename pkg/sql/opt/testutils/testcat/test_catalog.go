@@ -878,6 +878,11 @@ func (tv *View) Trigger(i int) cat.Trigger {
 	return &tv.Triggers[i]
 }
 
+// IsSecurityInvoker is part of the cat.View interface.
+func (tv *View) IsSecurityInvoker() bool {
+	return false
+}
+
 // Owner is part of the cat.View interface.
 func (tv *View) Owner() username.SQLUsername {
 	return username.MakeSQLUsernameFromPreNormalizedString("root")

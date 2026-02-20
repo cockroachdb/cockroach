@@ -231,6 +231,11 @@ func (desc *TableDescriptor) MaterializedView() bool {
 	return desc.IsMaterializedView
 }
 
+// IsSecurityInvoker implements the TableDescriptor interface.
+func (desc *TableDescriptor) IsSecurityInvoker() bool {
+	return desc.SecurityInvoker != nil && *desc.SecurityInvoker
+}
+
 // IsReadOnly implements the TableDescriptor interface.
 func (desc *TableDescriptor) IsReadOnly() bool {
 	return desc.IsMaterializedView || desc.GetExternal() != nil
