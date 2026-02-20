@@ -195,12 +195,16 @@ func TestLockTableBasic(t *testing.T) {
 		var guardsByReqName map[string]lockTableGuard
 		manualClock := timeutil.NewManualTime(timeutil.Unix(0, 123))
 		clock := hlc.NewClockForTesting(manualClock)
+		// Keep virtualized intent resolution off, unless tests enable it
+		// explicitly. When it becomes on by default, there will be some test churn
+		// in these data-driven tests.
+		st = cluster.MakeTestingClusterSettings()
+		VirtualIntentResolution.Override(context.Background(), &st.SV, false)
 		datadriven.RunTest(t, path, func(t *testing.T, d *datadriven.TestData) string {
 			switch d.Cmd {
 			case "new-lock-table":
 				maxLocks := dd.ScanArg[int64](t, d, "maxlocks")
 				m := TestingMakeLockTableMetricsCfg()
-				st = cluster.MakeTestingClusterSettings()
 				ltImpl := newLockTable(
 					maxLocks, roachpb.RangeID(3), clock, st,
 					m.LocksShedDueToMemoryLimit, m.NumLockShedDueToMemoryLimitEvents,
