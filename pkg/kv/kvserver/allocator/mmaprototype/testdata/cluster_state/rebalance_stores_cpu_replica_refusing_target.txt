@@ -102,5 +102,10 @@ rebalance-stores store-id=1
 [mmaid=1] start processing shedding store s3: cpu node load overloadUrgent, store load overloadUrgent, worst dim CPURate
 [mmaid=1] top-K[CPURate] ranges for s3 with lease on local s1: r1:[cpu:100ns/s, write-bandwidth:0 B/s, byte-size:0 B]
 [mmaid=1] skipping remote store s3: in lease shedding grace period
-[mmaid=1] rebalancing pass failures (store,reason:count): (s1,not-overloaded:1)
+[mmaid=1] rebalancing pass summary [local=s1]:
+	overloaded:
+		lease-grace: [s2, s3]
+		short: [s1]
+	failure: [{s1, total: 3, not-overloaded:2, no-cand:1}]
+	no-ranges-evaluated: [s2, s3]
 pending(0)
