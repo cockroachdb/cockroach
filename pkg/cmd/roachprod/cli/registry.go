@@ -77,5 +77,9 @@ func (cr *commandRegistry) register() {
 		cr.buildChaosCmd(),
 		// Authentication commands
 		cr.buildAuthCmd(),
+		// Centralized infrastructure commands
+		cr.buildEnvironmentCmd(),
+		cr.buildProvisioningCmd(),
+		cr.buildTaskCmd(),
 	})
 }
