@@ -83,6 +83,9 @@ func (m *Restore) LoggingChannel() logpb.Channel { return logpb.Channel_OPS }
 func (m *StatusChange) LoggingChannel() logpb.Channel { return logpb.Channel_OPS }
 
 // LoggingChannel implements the EventPayload interface.
+func (m *DeleteInlineHints) LoggingChannel() logpb.Channel { return logpb.Channel_OPS }
+
+// LoggingChannel implements the EventPayload interface.
 func (m *RewriteInlineHints) LoggingChannel() logpb.Channel { return logpb.Channel_OPS }
 
 // LoggingChannel implements the EventPayload interface.
