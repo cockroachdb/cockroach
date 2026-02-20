@@ -222,6 +222,7 @@ go_test(
         "helpers_test.go",
         "main_test.go",
         "nemeses_test.go",
+        "perturbation_test.go",
         "parquet_test.go",
         "protected_timestamps_test.go",
         "scheduled_changefeed_test.go",
