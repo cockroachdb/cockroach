@@ -19,13 +19,16 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/gc"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/rafttrace"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/repro"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
 	"github.com/cockroachdb/cockroach/pkg/rpc/rpcbase"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/spanconfig"
 	"github.com/cockroachdb/cockroach/pkg/storage/fs"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/listenerutil"
@@ -38,6 +41,7 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/pebble/vfs"
 	"github.com/gogo/protobuf/proto"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
@@ -462,6 +466,151 @@ func TestCrashWhileTruncatingSideloadedEntries(t *testing.T) {
 			return nil
 		})
 	})
+}
+
+func TestReproGCRace(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	repro.Struct(&repro.S)
+	repro.S.Init.Once()
+
+	require.NoError(t, log.SetVModule("dist_sender=2,mvcc_gc_queue=2"))
+	defer func() { _ = log.SetVModule("") }()
+
+	// Configure a low ClearRangeMinKeys, so that MVCC GC uses ClearRange to clear
+	// contiguous spans of non-live data.
+	ctx := context.Background()
+	settings := cluster.MakeTestingClusterSettings()
+	gc.ClearRangeMinKeys.Override(ctx, &settings.SV, 3)
+
+	// Configure a low GC TTL, to make the deleted data non-live soon enough.
+	const ttlSeconds = 1
+	zoneConfig := zonepb.DefaultZoneConfig()
+	zoneConfig.GC = &zonepb.GCPolicy{TTLSeconds: ttlSeconds}
+
+	tc := testcluster.StartTestCluster(t, 4, base.TestClusterArgs{
+		ReplicationMode: base.ReplicationManual,
+		ServerArgs: base.TestServerArgs{
+			Settings: settings,
+			Knobs: base.TestingKnobs{
+				Server: &server.TestingKnobs{
+					DefaultZoneConfigOverride: &zoneConfig,
+				},
+				SpanConfig: &spanconfig.TestingKnobs{
+					ProtectedTSReaderOverrideFn: spanconfig.EmptyProtectedTSReader,
+				},
+				Store: &kvserver.StoreTestingKnobs{
+					DisableGCQueue:            true,
+					DisableConsistencyQueue:   true,
+					DisableLastProcessedCheck: true,
+
+					TestingRequestFilter: func(ctx context.Context, ba *kvpb.BatchRequest) *kvpb.Error {
+						if len(ba.Requests) == 0 {
+							return nil
+						}
+						if gcReq := ba.Requests[0].GetGc(); gcReq != nil {
+							log.KvExec.Infof(ctx, "GC req: %+v", gcReq)
+						}
+						return nil
+					},
+				},
+			},
+		},
+	})
+	defer tc.Stopper().Stop(ctx)
+
+	key := tc.ScratchRange(t)
+	tc.AddVotersOrFatal(t, key, tc.Targets(1, 2)...)
+	tc.WaitForVotersOrFatal(t, key, tc.Targets(1, 2)...)
+
+	store := tc.GetFirstStoreFromServer(t, 0)
+
+	// Put 100 different keys in the scratch range.
+	var keys []roachpb.Key
+	for i := 0; i < 100; i++ {
+		k := testutils.MakeKey(key, []byte(fmt.Sprintf("foo-%d", i)))
+		keys = append(keys, k)
+		_, pErr := kv.SendWrapped(ctx, store.TestSender(), putArgs(k, []byte("value")))
+		require.NoError(t, pErr.GoError())
+	}
+
+	// Delete keys 10-89, so that we still have live and non-live data in the
+	// post-split the LHS and RHS.
+	for _, k := range keys[10:90] {
+		_, pErr := kv.SendWrapped(ctx, store.TestSender(), &kvpb.DeleteRequest{
+			RequestHeader: kvpb.RequestHeader{Key: k},
+		})
+		require.NoError(t, pErr.GoError())
+	}
+
+	// Trigger MVCC GC on the scratch range before the split, but make sure the GC
+	// request are sent after the split.
+	repl := store.LookupReplica(roachpb.RKey(key))
+	require.NotNil(t, repl)
+	go func() {
+		// Wait for TTL so GC threshold will include all deleted data.
+		time.Sleep(ttlSeconds*time.Second + 100*time.Millisecond)
+		repro.S.GCStart.Once()
+		require.NoError(t, store.ManualMVCCGC(repl))
+		repro.S.GCSent.Once()
+	}()
+
+	// Split the scratch range in the middle.
+	middle := keys[50]
+	repro.S.SplitStart.Once()
+	tc.SplitRangeOrFatal(t, middle)
+	require.NoError(t, tc.WaitForSplitAndInitialization(middle))
+	repro.S.SplitApplied.Once()
+
+	// Relocate the RHS range's replica from 1st to 4th node.
+	tc.RebalanceVoterOrFatal(ctx, t, middle, tc.Target(0), tc.Target(3))
+	repro.S.RebalancedRHS.Once()
+
+	// Put the RHS keys back to life.
+	s4 := tc.GetFirstStoreFromServer(t, 3)
+	repro.S.PreWriteToRHS.Once()
+	for _, k := range keys[50:90] {
+		_, pErr := kv.SendWrapped(ctx, s4.TestSender(), putArgs(k, []byte("value")))
+		require.NoError(t, pErr.GoError())
+	}
+	repro.S.WriteToRHS.Once()
+
+	repro.S.ReadRHS.Once()
+	// Transfer the RHS lease to s3 and read the back-to-life keys.
+	tc.TransferRangeLeaseOrFatal(t, tc.LookupRangeOrFatal(t, keys[50]), tc.Target(2))
+	s3 := tc.GetFirstStoreFromServer(t, 2)
+	for _, k := range keys[50:90] {
+		getResp, pErr := kv.SendWrapped(ctx, s3.TestSender(), getArgs(k))
+		require.NoError(t, pErr.GoError())
+		gr := getResp.(*kvpb.GetResponse)
+		if assert.NotNil(t, gr.Value, "could not read key %v back", k) {
+			b, err := gr.Value.GetBytes()
+			require.NoError(t, err)
+			require.Equal(t, []byte("value"), b)
+		}
+	}
+
+	// Run a consistency check on the RHS range.
+	repro.S.ConsistencyRHS.Once()
+	rhsDesc := tc.LookupRangeOrFatal(t, middle)
+	checkResp, pErr := kv.SendWrappedWith(ctx, store.DB().NonTransactionalSender(), kvpb.Header{
+		Timestamp: store.Clock().Now(),
+	}, &kvpb.CheckConsistencyRequest{
+		RequestHeader: kvpb.RequestHeader{
+			Key:    rhsDesc.StartKey.AsRawKey(),
+			EndKey: rhsDesc.EndKey.AsRawKey(),
+		},
+		Mode: kvpb.ChecksumMode_CHECK_FULL,
+	})
+	require.NoError(t, pErr.GoError())
+
+	for _, res := range checkResp.(*kvpb.CheckConsistencyResponse).Result {
+		require.Contains(t, []kvpb.CheckConsistencyResponse_Status{
+			kvpb.CheckConsistencyResponse_RANGE_CONSISTENT,
+			kvpb.CheckConsistencyResponse_RANGE_CONSISTENT_STATS_ESTIMATED,
+		}, res.Status, "RHS range consistency check: %s", res.Detail)
+	}
 }
 
 func makeAddSST(

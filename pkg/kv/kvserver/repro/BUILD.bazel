@@ -1,0 +1,28 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "repro",
+    srcs = [
+        "global.go",
+        "repro.go",
+        "repro2.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/kv/kvserver/repro",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/util/buildutil",
+        "//pkg/util/log",
+        "//pkg/util/syncutil",
+        "@com_github_cockroachdb_redact//:redact",
+    ],
+)
+
+go_test(
+    name = "repro_test",
+    srcs = [
+        "repro2_test.go",
+        "repro_test.go",
+    ],
+    embed = [":repro"],
+    deps = ["@com_github_stretchr_testify//require"],
+)
