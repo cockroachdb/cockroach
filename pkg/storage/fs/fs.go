@@ -342,6 +342,20 @@ func InMemory() *Env {
 	return e
 }
 
+// WrapFS wraps the Env's internal default VFS with the provided wrapper function.
+// This is intended for testing purposes, allowing tests to intercept VFS operations.
+// The wrapper function receives the current defaultFS and should return the wrapped FS.
+// Note: This does NOT wrap the UnencryptedFS; only the defaultFS used for most operations.
+func (e *Env) WrapFS(wrapper func(vfs.FS) vfs.FS) {
+	e.defaultFS = wrapper(e.defaultFS)
+}
+
+// DefaultFS returns the Env's internal default VFS.
+// This is intended for testing purposes.
+func (e *Env) DefaultFS() vfs.FS {
+	return e.defaultFS
+}
+
 // MustInitPhysicalTestingEnv initializes an Env that reads/writees from the
 // real physical filesystem in the provided directory, without
 // encryption-at-rest. Since this function ignores the possibility of

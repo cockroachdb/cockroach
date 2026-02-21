@@ -1,0 +1,29 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "faults",
+    srcs = ["fault_controller.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/testutils/faults",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/kv/kvpb",
+        "//pkg/rpc/rpcbase",
+        "//pkg/storage/fs",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_cockroachdb_pebble//vfs/errorfs",
+        "@org_golang_google_grpc//:grpc",
+    ],
+)
+
+go_test(
+    name = "faults_test",
+    srcs = ["fault_controller_test.go"],
+    embed = [":faults"],
+    deps = [
+        "//pkg/kv/kvpb",
+        "//pkg/roachpb",
+        "@com_github_cockroachdb_pebble//vfs",
+        "@com_github_cockroachdb_pebble//vfs/errorfs",
+        "@com_github_stretchr_testify//require",
+    ],
+)
