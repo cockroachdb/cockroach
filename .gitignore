@@ -75,3 +75,4 @@ pkg/testutils/serverutils/*_generated.go
 .idea/
 .vscode/
 CLAUDE.local.md
+.claude/*.local.*
