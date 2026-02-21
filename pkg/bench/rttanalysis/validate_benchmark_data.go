@@ -22,9 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metamorphic"
-	"github.com/cockroachdb/cockroach/pkg/util/quotapool"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
-	"github.com/cockroachdb/cockroach/pkg/util/system"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 )
@@ -77,8 +75,6 @@ func runBenchmarkExpectationTests(t *testing.T, r *Registry) {
 
 	var results resultSet
 	var wg sync.WaitGroup
-	concurrency := ((system.NumCPU() - 1) / r.numNodes) + 1 // arbitrary
-	limiter := quotapool.NewIntPool("rttanalysis", uint64(concurrency))
 	isRewrite := *rewriteFlag
 	for b, cases := range r.r {
 		wg.Add(1)
@@ -89,7 +85,7 @@ func runBenchmarkExpectationTests(t *testing.T, r *Registry) {
 				if isRewrite {
 					runs = *rewriteIterations
 				}
-				runRoundTripBenchmarkTest(t, scope, &results, cases, r.cc, runs, limiter)
+				runRoundTripBenchmarkTest(t, scope, &results, cases, r.cc, runs)
 			})
 		}(b, cases)
 	}
