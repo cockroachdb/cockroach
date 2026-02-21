@@ -247,11 +247,22 @@ type meanStoreLoad struct {
 	secondaryLoad SecondaryLoadVector
 }
 
+// SafeFormat implements the redact.SafeFormatter interface.
+func (m meanStoreLoad) SafeFormat(w redact.SafePrinter, _ rune) {
+	w.Printf("{%v %v %v %v}", m.load, m.capacity,
+		redact.SafeString(fmt.Sprintf("%v", m.util)), m.secondaryLoad)
+}
+
 // The mean node load for a set of NodeLoad.
 type meanNodeLoad struct {
 	loadCPU     LoadValue
 	capacityCPU LoadValue
 	utilCPU     float64
+}
+
+// SafeFormat implements the redact.SafeFormatter interface.
+func (m meanNodeLoad) SafeFormat(w redact.SafePrinter, _ rune) {
+	w.Printf("{%v %v %v}", m.loadCPU, m.capacityCPU, redact.SafeFloat(m.utilCPU))
 }
 
 // The allocator often needs mean load information for a set of stores. This
@@ -616,24 +627,26 @@ func loadSummaryForDimension(
 			return
 		}
 
-		metrics := fmt.Sprintf("load=%d meanLoad=%d", load, meanLoad)
+		var metrics redact.StringBuilder
+		metrics.Printf("load=%v meanLoad=%v", load, meanLoad)
 		if capacity != UnknownCapacity {
-			metrics += fmt.Sprintf(" fractionUsed=%.2f%% meanUtil=%.2f%% capacity=%d", fractionUsed*100, meanUtil*100, capacity)
+			metrics.Printf(" fractionUsed=%.2f%% meanUtil=%.2f%% capacity=%v",
+				redact.SafeFloat(fractionUsed*100), redact.SafeFloat(meanUtil*100), capacity)
 		}
 
-		nodeIdStr := ""
+		var nodeIdStr redact.StringBuilder
 		if nodeID > nodeIDForLogging {
-			nodeIdStr = fmt.Sprintf("n%v", nodeID)
+			nodeIdStr.Printf("n%v", nodeID)
 		}
 
-		storeIdStr := ""
+		var storeIdStr redact.StringBuilder
 		if storeID > storeIDForLogging {
-			storeIdStr = fmt.Sprintf("s%v", storeID)
+			storeIdStr.Printf("s%v", storeID)
 		}
 
 		log.KvDistribution.VEventf(ctx, 3,
-			"load summary for dim=%s (%s%s): %s, reason: %s [%s]",
-			dim, nodeIdStr, storeIdStr, summary, reason, metrics)
+			"load summary for dim=%v (%v%v): %v, reason: %v [%v]",
+			dim, &nodeIdStr, &storeIdStr, summary, redact.SafeString(reason), &metrics)
 	}()
 
 	if capacity != UnknownCapacity && meanUtil*1.1 < fractionUsed {
