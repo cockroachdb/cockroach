@@ -4244,25 +4244,34 @@ func (ex *connExecutor) txnStateTransitionsApplyWrapper(
 		// wait for one version (if no job exists) or the initial version to be
 		// acquired.
 		if ex.extraTxnState.descCollection.HasUncommittedDescriptors() {
-			cachedRegions, err := regions.NewCachedDatabaseRegions(ex.Ctx(), ex.server.cfg.DB, ex.server.cfg.LeaseManager)
+			// Apply statement timeout on any waiting logic.
+			err = ex.runWithStatementTimeout(func(ctx context.Context) error {
+				cachedRegions, err := regions.NewCachedDatabaseRegions(ctx, ex.server.cfg.DB, ex.server.cfg.LeaseManager)
+				if err != nil {
+					return err
+				}
+				if err := ex.waitOneVersionForNewVersionDescriptorsWithoutJobs(ctx, descIDsInJobs, cachedRegions); err != nil {
+					return err
+				}
+				if err := ex.waitForNewVersionPropagation(ctx, descIDsInJobs, cachedRegions); err != nil {
+					return err
+				}
+				if err := ex.waitForInitialVersionForNewDescriptors(ctx, cachedRegions); err != nil {
+					return err
+				}
+				// If a repair query was executed, then we need to confirm that the lease manager
+				// is handing out the new descriptor version. This is covered by the previous waits
+				// if the prior version was valid, but if it was invalid, then we need the lease manager
+				// to have a new timestamp available.
+				ex.extraTxnState.descCollection.MaybeWaitForLeaseTimestampBump(ctx, advInfo.txnEvent.commitTimestamp)
+				return nil
+			}, func() error {
+				return ex.planner.noticeSender.SendNotice(ex.Ctx(), pgnotice.Newf("The statement has timed out while waiting for the "+
+					"schema change to be visible on all nodes."), true)
+			})
 			if err != nil {
-				return advanceInfo{}, err
+				handleErr(err)
 			}
-			if err := ex.waitOneVersionForNewVersionDescriptorsWithoutJobs(descIDsInJobs, cachedRegions); err != nil {
-				return advanceInfo{}, err
-			}
-			if err := ex.waitForNewVersionPropagation(descIDsInJobs, cachedRegions); err != nil {
-				return advanceInfo{}, err
-			}
-			if err := ex.waitForInitialVersionForNewDescriptors(cachedRegions); err != nil {
-				return advanceInfo{}, err
-			}
-			// If a repair query was executed, then we need to confirm that the lease manager
-			// is handing out the new descirptor version. This is covered by the previous waits
-			// if the prior version was valid, but if it was invalid then we need the lease manager
-			// to have a new timestamp available.
-			ex.extraTxnState.descCollection.MaybeWaitForLeaseTimestampBump(ex.Ctx(), advInfo.txnEvent.commitTimestamp)
-
 			execCfg := ex.planner.ExecCfg()
 			if err := UpdateDescriptorCount(ex.Ctx(), execCfg, execCfg.SchemaChangerMetrics); err != nil {
 				log.Dev.Warningf(ex.Ctx(), "failed to update descriptor count metric: %v", err)
@@ -4291,21 +4300,12 @@ func (ex *connExecutor) txnStateTransitionsApplyWrapper(
 	return advInfo, nil
 }
 
-// waitForTxnJobs waits for any jobs created inside this txn
-// and respects the statement timeout for implicit transactions.
-func (ex *connExecutor) waitForTxnJobs() error {
-	var retErr error
-	if len(ex.extraTxnState.jobs.created) == 0 {
-		return nil
-	}
-	ex.mu.IdleInSessionTimeout.Stop()
-	defer ex.startIdleInSessionTimeout()
-	ex.server.cfg.JobRegistry.NotifyToResume(
-		ex.ctxHolder.connCtx, ex.extraTxnState.jobs.created...,
-	)
+func (ex *connExecutor) runWithStatementTimeout(
+	execFn func(ctx context.Context) error, onTimeoutError func() error,
+) error {
 	// Set up a context for waiting for the jobs, which can be cancelled if
 	// a statement timeout exists.
-	jobWaitCtx := ex.ctxHolder.ctx()
+	waitCtx := ex.ctxHolder.ctx()
 	var queryTimedout atomic.Bool
 	if ex.sessionData().StmtTimeout > 0 {
 		timePassed := ex.phaseTimes.GetSessionPhaseTime(sessionphase.SessionQueryReceived).Elapsed()
@@ -4313,7 +4313,7 @@ func (ex *connExecutor) waitForTxnJobs() error {
 			queryTimedout.Store(true)
 		} else {
 			var cancelFn context.CancelFunc
-			jobWaitCtx, cancelFn = context.WithCancel(jobWaitCtx)
+			waitCtx, cancelFn = context.WithCancel(waitCtx)
 			queryTimeTicker := time.AfterFunc(ex.sessionData().StmtTimeout-timePassed, func() {
 				cancelFn()
 				queryTimedout.Store(true)
@@ -4322,7 +4322,38 @@ func (ex *connExecutor) waitForTxnJobs() error {
 			defer queryTimeTicker.Stop()
 		}
 	}
-	if !queryTimedout.Load() && len(ex.extraTxnState.jobs.created) > 0 {
+	if queryTimedout.Load() {
+		if err := onTimeoutError(); err != nil {
+			return err
+		}
+		return sqlerrors.QueryTimeoutError
+	}
+	err := execFn(waitCtx)
+	// Detect a context cancelled or a query cancelled error.
+	if (errors.Is(err, context.Canceled) ||
+		errors.Is(err, cancelchecker.QueryCanceledError)) && queryTimedout.Load() {
+		if err := onTimeoutError(); err != nil {
+			return err
+		}
+		return sqlerrors.QueryTimeoutError
+	}
+	return err
+}
+
+// waitForTxnJobs waits for any jobs created inside this txn
+// and respects the statement timeout for implicit transactions.
+func (ex *connExecutor) waitForTxnJobs() error {
+	if len(ex.extraTxnState.jobs.created) == 0 {
+		return nil
+	}
+
+	ex.mu.IdleInSessionTimeout.Stop()
+	defer ex.startIdleInSessionTimeout()
+	ex.server.cfg.JobRegistry.NotifyToResume(
+		ex.ctxHolder.connCtx, ex.extraTxnState.jobs.created...,
+	)
+
+	return ex.runWithStatementTimeout(func(ctx context.Context) error {
 		if !ex.sessionData().DisableWaitForJobsNotice {
 			jobIDs := strings.Builder{}
 			for i, jobID := range ex.extraTxnState.jobs.created {
@@ -4338,37 +4369,29 @@ func (ex *connExecutor) waitForTxnJobs() error {
 				return err
 			}
 		}
-		if err := ex.server.cfg.JobRegistry.WaitForJobs(jobWaitCtx,
-			ex.extraTxnState.jobs.created); err != nil {
-			if errors.Is(err, context.Canceled) && queryTimedout.Load() {
-				retErr = sqlerrors.QueryTimeoutError
-				err = nil
-			} else {
+		return ex.server.cfg.JobRegistry.WaitForJobs(ctx,
+			ex.extraTxnState.jobs.created)
+	},
+		func() error {
+			jobList := strings.Builder{}
+			for i, j := range ex.extraTxnState.jobs.created {
+				if i > 0 {
+					jobList.WriteString(",")
+				}
+				jobList.WriteString(j.String())
+			}
+			if err := ex.planner.noticeSender.SendNotice(
+				ex.ctxHolder.connCtx,
+				pgnotice.Newf(
+					"The statement has timed out, but the following "+
+						"background jobs have been created and will continue running: %s.",
+					jobList.String()),
+				false, /* immediateFlush */
+			); err != nil {
 				return err
 			}
-		}
-	}
-	// If the query timed out indicate that there are jobs left behind.
-	if queryTimedout.Load() {
-		jobList := strings.Builder{}
-		for i, j := range ex.extraTxnState.jobs.created {
-			if i > 0 {
-				jobList.WriteString(",")
-			}
-			jobList.WriteString(j.String())
-		}
-		if err := ex.planner.noticeSender.SendNotice(
-			ex.ctxHolder.connCtx,
-			pgnotice.Newf(
-				"The statement has timed out, but the following "+
-					"background jobs have been created and will continue running: %s.",
-				jobList.String()),
-			false, /* immediateFlush */
-		); err != nil {
-			return err
-		}
-	}
-	return retErr
+			return nil
+		})
 }
 
 func (ex *connExecutor) maybeSetSQLLivenessSessionAndGeneration() error {
