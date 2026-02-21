@@ -37,6 +37,7 @@ go_test(
         "//pkg/cmd/roachprod-centralized/utils/filters",
         "//pkg/cmd/roachprod-centralized/utils/filters/types",
         "//pkg/cmd/roachprod-centralized/utils/logger",
+        "//pkg/roachprod/config",
         "//pkg/testutils/skip",
         "//pkg/util/timeutil",
         "//pkg/util/uuid",

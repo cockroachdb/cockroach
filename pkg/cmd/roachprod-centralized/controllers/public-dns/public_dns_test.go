@@ -12,6 +12,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/app"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/auth/disabled"
 	publicdnsmock "github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/services/public-dns/mocks"
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/assert"
@@ -62,7 +63,7 @@ func TestSync(t *testing.T) {
 			c, e := gin.CreateTestContext(w)
 
 			app, err := app.NewApp(
-				app.WithApiAuthenticationDisabled(true),
+				app.WithApiAuthenticator(disabled.NewDisabledAuthenticator()),
 				app.WithApiGinEngine(e),
 				app.WithApiController(NewController(mockPublicDNSService)),
 			)

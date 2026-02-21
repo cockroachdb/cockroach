@@ -6,6 +6,8 @@
 package filters
 
 import (
+	"reflect"
+
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/utils/filters/memory"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/utils/filters/sql"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/utils/filters/types"
@@ -20,10 +22,10 @@ func NewFilterSet() *types.FilterSet {
 }
 
 // Convenience constructors for subpackages
-func NewSQLQueryBuilder() *sql.QueryBuilder {
-	return sql.NewQueryBuilder()
+func NewSQLQueryBuilderWithTypeHint(filteredType reflect.Type) *sql.QueryBuilder {
+	return sql.NewQueryBuilderWithTypeHint(filteredType)
 }
 
-func NewMemoryFilterEvaluator() *memory.FilterEvaluator {
-	return memory.NewFilterEvaluator()
+func NewMemoryFilterEvaluatorWithTypeHint(filteredType reflect.Type) *memory.FilterEvaluator {
+	return memory.NewFilterEvaluatorWithTypeHint(filteredType)
 }

@@ -6,6 +6,7 @@ go_library(
     importpath = "github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/services/tasks/mocks",
     visibility = ["//visibility:public"],
     deps = [
+        "//pkg/cmd/roachprod-centralized/auth",
         "//pkg/cmd/roachprod-centralized/models/tasks",
         "//pkg/cmd/roachprod-centralized/services/tasks/types",
         "//pkg/cmd/roachprod-centralized/utils/logger",

@@ -8,6 +8,7 @@ package cockroachdb
 import (
 	"context"
 	gosql "database/sql"
+	"fmt"
 	"sync"
 	"testing"
 	"time"
@@ -19,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/utils/filters"
 	filtertypes "github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/utils/filters/types"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/utils/logger"
+	rpconfig "github.com/cockroachdb/cockroach/pkg/roachprod/config"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
@@ -33,7 +35,11 @@ var (
 
 func setupTestDB(_ *testing.T) (*gosql.DB, error) {
 	return database.NewConnection(context.Background(), database.ConnectionConfig{
-		URL:         "postgresql://root@localhost:29002/defaultdb?sslmode=disable",
+		URL: fmt.Sprintf(
+			"postgresql://%s@localhost:%d/defaultdb?sslmode=require",
+			"roachprod:cockroachdb",
+			rpconfig.DefaultOpenPortStart,
+		),
 		MaxConns:    10,
 		MaxIdleTime: 300, // 5 minutes
 	})
@@ -45,6 +51,13 @@ func createTasksTable(t *testing.T, db *gosql.DB) {
 	const repoName = "tasks_integration_tests"
 	ctx := context.Background()
 	tasksMigrationsOnce.Do(func() {
+		// Reset schema for test isolation - drop all tasks tables and migration history.
+		// This ensures tests run against the current consolidated schema.
+		_, _ = db.Exec(`
+			DROP TABLE IF EXISTS tasks CASCADE;
+			DELETE FROM schema_migrations WHERE repository = $1;
+		`, repoName)
+
 		tasksMigrationsErr = database.RunMigrationsForRepository(
 			ctx,
 			logger.DefaultLogger,
@@ -56,7 +69,7 @@ func createTasksTable(t *testing.T, db *gosql.DB) {
 	})
 	require.NoError(t, tasksMigrationsErr)
 
-	_, err := db.Exec("TRUNCATE TABLE tasks")
+	_, err := db.Exec("DELETE FROM tasks")
 	require.NoError(t, err)
 }
 
@@ -117,16 +130,18 @@ func TestCRDBTasksRepo_GetTasks_WithFilters(t *testing.T) {
 
 	// Test filtering by state
 	stateFilter := *filters.NewFilterSet().AddFilter("State", filtertypes.OpEqual, "pending")
-	pendingTasks, err := repo.GetTasks(ctx, logger.DefaultLogger, stateFilter)
+	pendingTasks, totalCount, err := repo.GetTasks(ctx, logger.DefaultLogger, stateFilter)
 	require.NoError(t, err)
 	require.Len(t, pendingTasks, 1)
+	require.Equal(t, 1, totalCount)
 	require.Equal(t, pendingTask.GetID(), pendingTasks[0].GetID())
 
 	// Test filtering by type
 	typeFilter := *filters.NewFilterSet().AddFilter("Type", filtertypes.OpEqual, "test-task")
-	testTasks, err := repo.GetTasks(ctx, logger.DefaultLogger, typeFilter)
+	testTasks, totalCount, err := repo.GetTasks(ctx, logger.DefaultLogger, typeFilter)
 	require.NoError(t, err)
 	require.Len(t, testTasks, 1)
+	require.Equal(t, 1, totalCount)
 	require.Equal(t, pendingTask.GetID(), testTasks[0].GetID())
 }
 

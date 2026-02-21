@@ -11,6 +11,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"reflect"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/repositories/clusters"
@@ -50,7 +51,9 @@ func (r *CRDBClustersRepo) GetClusters(
 	baseQuery := `SELECT name, data FROM clusters`
 
 	// Build WHERE clause using the filtering framework
-	qb := filters.NewSQLQueryBuilder()
+	qb := filters.NewSQLQueryBuilderWithTypeHint(
+		reflect.TypeOf(cloudcluster.Cluster{}),
+	)
 	whereClause, args, err := qb.BuildWhere(&filterSet)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to build query filters")
@@ -66,6 +69,7 @@ func (r *CRDBClustersRepo) GetClusters(
 	l.Debug("querying clusters from database",
 		slog.String("query", query),
 		slog.Int("args_count", len(args)),
+		slog.Any("args", args),
 	)
 
 	rows, err := r.db.QueryContext(ctx, query, args...)

@@ -6,8 +6,10 @@ go_library(
     importpath = "github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/services/clusters/types",
     visibility = ["//visibility:public"],
     deps = [
+        "//pkg/cmd/roachprod-centralized/auth",
         "//pkg/cmd/roachprod-centralized/models/tasks",
         "//pkg/cmd/roachprod-centralized/utils",
+        "//pkg/cmd/roachprod-centralized/utils/filters",
         "//pkg/cmd/roachprod-centralized/utils/filters/types",
         "//pkg/cmd/roachprod-centralized/utils/logger",
         "//pkg/roachprod/cloud/types",

@@ -3,7 +3,7 @@
 // Use of this software is governed by the CockroachDB Software License
 // included in the /LICENSE file.
 
-package bindings
+package stripe
 
 import (
 	"reflect"
@@ -48,11 +48,32 @@ func (p *QueryParser) ParseStripeQuery(obj interface{}, values map[string][]stri
 		}
 	}
 
+	// Reserved query parameters that should not be validated as filter fields
+	// These are handled separately for pagination and sorting
+	reservedParams := map[string]bool{
+		"count":      true,
+		"startIndex": true,
+		"sortBy":     true,
+		"sortOrder":  true,
+	}
+
 	// Check for unknown fields in query parameters
 	for queryParam := range values {
 		fieldName := p.extractFieldName(queryParam)
+		// Skip validation for reserved pagination/sorting parameters
+		if reservedParams[fieldName] {
+			continue
+		}
 		if !validFields[fieldName] {
 			return errors.Newf("Field validation for '%s' failed on unknown field", fieldName)
+		}
+	}
+
+	// Validate sortBy value if present
+	if sortByValues, exists := values["sortBy"]; exists && len(sortByValues) > 0 {
+		sortByField := sortByValues[0]
+		if !validFields[sortByField] {
+			return errors.Newf("Field validation for 'sortBy' failed: '%s' is not a valid field", sortByField)
 		}
 	}
 

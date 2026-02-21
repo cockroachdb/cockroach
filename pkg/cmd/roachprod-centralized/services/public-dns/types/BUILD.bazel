@@ -1,17 +1,6 @@
 load("@io_bazel_rules_go//go:def.bzl", "go_library")
 
 go_library(
-    name = "models",
-    srcs = ["models.go"],
-    importpath = "github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/services/public-dns/models",
-    visibility = ["//visibility:public"],
-    deps = [
-        "//pkg/cmd/roachprod-centralized/models/tasks",
-        "//pkg/cmd/roachprod-centralized/utils/logger",
-    ],
-)
-
-go_library(
     name = "types",
     srcs = ["types.go"],
     importpath = "github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/services/public-dns/types",

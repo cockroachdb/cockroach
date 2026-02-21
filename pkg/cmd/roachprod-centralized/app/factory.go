@@ -13,8 +13,15 @@ import (
 	"strings"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/auth"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/auth/bearer"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/auth/disabled"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/auth/jwt"
 	configtypes "github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/config/types"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/models/health"
+	rauth "github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/repositories/auth"
+	authcrdbstore "github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/repositories/auth/cockroachdb"
+	authmemstore "github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/repositories/auth/memory"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/repositories/clusters"
 	ccrdbstore "github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/repositories/clusters/cockroachdb"
 	cmemstore "github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/repositories/clusters/memory"
@@ -25,11 +32,16 @@ import (
 	tcrdbstore "github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/repositories/tasks/cockroachdb"
 	tmemstore "github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/repositories/tasks/memory"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/services"
+	sauth "github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/services/auth"
+	sauthtypes "github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/services/auth/types"
 	sclusters "github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/services/clusters"
 	dnsregistry "github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/services/dns/registry"
 	shealth "github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/services/health"
+	shealthtypes "github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/services/health/types"
 	spublicdns "github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/services/public-dns"
+	spublicdnstypes "github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/services/public-dns/types"
 	stasks "github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/services/tasks"
+	staskstypes "github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/services/tasks/types"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/utils/database"
 	crdbmigrator "github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/utils/database/cockroachdb"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/utils/logger"
@@ -45,6 +57,7 @@ type Services struct {
 	Health   *shealth.Service
 	Clusters *sclusters.Service
 	DNS      *spublicdns.Service
+	Auth     *sauth.Service
 }
 
 // NewServicesFromConfig creates and initializes all services from configuration
@@ -60,6 +73,7 @@ func NewServicesFromConfig(
 	var clustersRepository clusters.IClustersRepository
 	var tasksRepository rtasks.ITasksRepository
 	var healthRepository rhealth.IHealthRepository
+	var authRepository rauth.IAuthRepository
 
 	switch strings.ToLower(cfg.Database.Type) {
 	case "cockroachdb":
@@ -105,8 +119,18 @@ func NewServicesFromConfig(
 			return nil, errors.Wrap(err, "error running clusters migrations")
 		}
 
+		// Run database migrations for auth repository
+		if err := database.RunMigrationsForRepository(appCtx, l, db, "auth", authcrdbstore.GetAuthMigrations(), crdbmigrator.NewMigrator()); err != nil {
+			l.Error("failed to run auth migrations",
+				slog.Any("error", err),
+				slog.String("repository", "auth"),
+			)
+			return nil, errors.Wrap(err, "error running auth migrations")
+		}
+
 		healthRepository = hcrdbstore.NewHealthRepository(db)
 		clustersRepository = ccrdbstore.NewClustersRepository(db)
+		authRepository = authcrdbstore.NewAuthRepository(db)
 
 		tasksRepository = tcrdbstore.NewTasksRepository(db, tcrdbstore.Options{
 			HealthTimeout: time.Duration(cfg.InstanceHealthTimeoutSeconds) * time.Second,
@@ -143,6 +167,7 @@ func NewServicesFromConfig(
 		tasksRepository = tmemstore.NewTasksRepository()
 		healthRepository = hmemstore.NewHealthRepository()
 		clustersRepository = cmemstore.NewClustersRepository()
+		authRepository = authmemstore.NewAuthRepository()
 
 	default:
 		return nil, fmt.Errorf("unsupported database type: %s", cfg.Database.Type)
@@ -168,7 +193,7 @@ func NewServicesFromConfig(
 	taskService := stasks.NewService(
 		tasksRepository,
 		instanceID,
-		stasks.Options{
+		staskstypes.Options{
 			Workers:        cfg.Tasks.Workers,
 			WorkersEnabled: cfg.Tasks.Workers > 0,
 			CollectMetrics: cfg.Api.Metrics.Enabled,
@@ -181,7 +206,7 @@ func NewServicesFromConfig(
 		healthRepository,
 		taskService,
 		instanceID,
-		shealth.Options{
+		shealthtypes.Options{
 			HeartbeatInterval: time.Second,
 			InstanceTimeout:   time.Duration(cfg.InstanceHealthTimeoutSeconds) * time.Second,
 			CleanupInterval:   time.Hour,
@@ -227,7 +252,7 @@ func NewServicesFromConfig(
 		clustersService,
 		taskService,
 		dnsRegistry,
-		spublicdns.Options{
+		spublicdnstypes.Options{
 			WorkersEnabled: cfg.Tasks.Workers > 0,
 		},
 	)
@@ -240,11 +265,40 @@ func NewServicesFromConfig(
 		return nil, errors.Wrap(err, "error creating DNS service")
 	}
 
+	// Create the auth service.
+	authService := sauth.NewService(authRepository, taskService, instanceID, sauthtypes.Options{
+		CleanupInterval:          time.Hour * 24,
+		ExpiredTokensRetention:   time.Hour * 24,
+		CollectMetrics:           cfg.Api.Metrics.Enabled,
+		StatisticsUpdateInterval: 30 * time.Second,
+		BootstrapSCIMToken:       cfg.Bootstrap.SCIMToken,
+	})
+
+	// Configure Okta token validator if bearer authentication is configured
+	authType := auth.AuthenticationType(strings.ToLower(cfg.Api.Authentication.Type))
+	if authType == auth.AuthenticationTypeBearer && cfg.Api.Authentication.Bearer.OktaIssuer != "" {
+		oktaValidator, err := sauth.NewOktaValidator(sauth.OktaValidatorConfig{
+			Issuer:   cfg.Api.Authentication.Bearer.OktaIssuer,
+			Audience: cfg.Api.Authentication.Bearer.OktaAudience,
+		})
+		if err != nil {
+			l.Error("failed to create Okta validator",
+				slog.Any("error", err),
+				slog.String("issuer", cfg.Api.Authentication.Bearer.OktaIssuer),
+			)
+			return nil, errors.Wrap(err, "error creating Okta validator")
+		}
+		authService.WithTokenValidator(oktaValidator)
+	} else if authType == auth.AuthenticationTypeBearer {
+		l.Warn("Bearer authentication configured but Okta settings missing - token exchange will not be available")
+	}
+
 	return &Services{
 		Task:     taskService,
 		Health:   healthService,
 		Clusters: clustersService,
 		DNS:      dnsService,
+		Auth:     authService,
 	}, nil
 }
 
@@ -254,5 +308,51 @@ func (s *Services) ToSlice() []services.IService {
 		s.Health,
 		s.Clusters,
 		s.DNS,
+		s.Auth,
+	}
+}
+
+// NewAuthenticatorFromConfig creates the appropriate authenticator based on configuration.
+// Supports three types: disabled (for dev/testing), jwt (Google IAP), and bearer (opaque tokens with Okta).
+func NewAuthenticatorFromConfig(
+	cfg *configtypes.Config, l *logger.Logger, authService *sauth.Service,
+) (auth.IAuthenticator, error) {
+	authType := auth.AuthenticationType(strings.ToLower(cfg.Api.Authentication.Type))
+
+	switch authType {
+	case auth.AuthenticationTypeDisabled:
+		l.Warn("Authentication is DISABLED - all requests will succeed with admin permissions",
+			slog.String("type", string(authType)),
+		)
+		return disabled.NewDisabledAuthenticator(), nil
+
+	case auth.AuthenticationTypeJWT:
+		authConfig := auth.AuthConfig{
+			Header:   cfg.Api.Authentication.Header,
+			Audience: cfg.Api.Authentication.JWT.Audience,
+			Issuer:   cfg.Api.Authentication.JWT.Issuer,
+		}
+		l.Info("Using JWT authentication",
+			slog.String("type", string(authType)),
+			slog.String("header", authConfig.Header),
+			slog.String("audience", authConfig.Audience),
+			slog.String("issuer", authConfig.Issuer),
+		)
+		return jwt.NewJWTAuthenticator(authConfig, authService, authService), nil
+
+	case auth.AuthenticationTypeBearer:
+		authConfig := auth.AuthConfig{
+			Header:   cfg.Api.Authentication.Header,
+			Audience: cfg.Api.Authentication.Bearer.OktaAudience,
+			Issuer:   cfg.Api.Authentication.Bearer.OktaIssuer,
+		}
+		l.Info("Using Bearer token authentication",
+			slog.String("type", string(authType)),
+			slog.String("header", authConfig.Header),
+		)
+		return bearer.NewBearerAuthenticator(authConfig, authService, authService, l), nil
+
+	default:
+		return nil, fmt.Errorf("invalid authentication type: %s (must be 'disabled', 'jwt', or 'bearer')", cfg.Api.Authentication.Type)
 	}
 }

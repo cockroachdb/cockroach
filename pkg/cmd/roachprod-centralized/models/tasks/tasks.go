@@ -66,13 +66,13 @@ type ITask interface {
 // Task provides a basic implementation of the ITask interface.
 // Specific task types should embed this struct and implement their own processing logic.
 type Task struct {
-	ID               uuid.UUID
-	Type             string
-	State            TaskState
-	Payload          []byte // Serialized task options/arguments as JSON
-	Error            string // Error message if task failed
-	CreationDatetime time.Time
-	UpdateDatetime   time.Time
+	ID               uuid.UUID `json:"id" db:"id"`
+	Type             string    `json:"type" db:"type"`
+	State            TaskState `json:"state" db:"state"`
+	Payload          []byte    `json:"payload,omitempty" db:"payload"` // Serialized task options/arguments as JSON
+	Error            string    `json:"error,omitempty" db:"error"`     // Error message if task failed
+	CreationDatetime time.Time `json:"creation_datetime" db:"creation_datetime"`
+	UpdateDatetime   time.Time `json:"update_datetime" db:"update_datetime"`
 }
 
 // GetID returns the task ID.

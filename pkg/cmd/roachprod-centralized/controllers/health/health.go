@@ -40,8 +40,8 @@ func NewController(service healthtypes.IHealthService) (ctrl *Controller) {
 	return
 }
 
-// GetHandlers returns the controller's handlers, as required
-func (ctrl *Controller) GetHandlers() []controllers.IControllerHandler {
+// GetControllerHandlers returns the controller's handlers, as required
+func (ctrl *Controller) GetControllerHandlers() []controllers.IControllerHandler {
 	return ctrl.handlers
 }
 

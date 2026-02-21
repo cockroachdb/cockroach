@@ -90,6 +90,7 @@ require (
 require (
 	cloud.google.com/go/compute v1.19.3
 	cloud.google.com/go/profiler v0.3.1
+	github.com/99designs/keyring v1.2.2
 	github.com/Azure/azure-sdk-for-go/sdk/azcore v1.11.1
 	github.com/Azure/azure-sdk-for-go/sdk/azidentity v1.7.0
 	github.com/Azure/azure-sdk-for-go/sdk/keyvault/azkeys v0.9.0
@@ -229,6 +230,7 @@ require (
 	github.com/robfig/cron/v3 v3.0.1
 	github.com/rs/dnscache v0.0.0-20230804202142-fc85eb664529
 	github.com/sasha-s/go-deadlock v0.3.1
+	github.com/scim2/filter-parser/v2 v2.2.0
 	github.com/shirou/gopsutil/v3 v3.21.12
 	github.com/slack-go/slack v0.9.5
 	github.com/snowflakedb/gosnowflake v1.6.25
@@ -268,7 +270,6 @@ require (
 	cloud.google.com/go/longrunning v0.4.1 // indirect
 	git.sr.ht/~sbinet/gg v0.6.0 // indirect
 	github.com/99designs/go-keychain v0.0.0-20191008050251-8e49817e8af4 // indirect
-	github.com/99designs/keyring v1.2.2 // indirect
 	github.com/AthenZ/athenz v1.10.39 // indirect
 	github.com/Azure/azure-sdk-for-go/sdk/internal v1.8.0 // indirect
 	github.com/Azure/azure-sdk-for-go/sdk/keyvault/internal v0.7.0 // indirect
@@ -328,6 +329,7 @@ require (
 	github.com/danieljoos/wincred v1.1.2 // indirect
 	github.com/decred/dcrd/dcrec/secp256k1/v4 v4.3.0 // indirect
 	github.com/deepmap/oapi-codegen v1.6.0 // indirect
+	github.com/di-wu/parser v0.2.2 // indirect
 	github.com/dimchansky/utfbom v1.1.1 // indirect
 	github.com/distribution/reference v0.6.0 // indirect
 	github.com/djherbis/atime v1.1.0 // indirect

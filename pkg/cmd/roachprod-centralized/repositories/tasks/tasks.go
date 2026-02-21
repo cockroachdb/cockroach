@@ -26,7 +26,8 @@ var (
 // and provides querying capabilities with filtering support for task management systems.
 type ITasksRepository interface {
 	// GetTasks retrieves multiple tasks based on the provided filter criteria.
-	GetTasks(context.Context, *logger.Logger, filtertypes.FilterSet) ([]tasks.ITask, error)
+	// Returns tasks, total count (for pagination), and error.
+	GetTasks(context.Context, *logger.Logger, filtertypes.FilterSet) ([]tasks.ITask, int, error)
 	// GetTask retrieves a single task by its unique identifier.
 	GetTask(context.Context, *logger.Logger, uuid.UUID) (tasks.ITask, error)
 	// CreateTask persists a new task to the repository.

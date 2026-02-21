@@ -14,6 +14,32 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
+// EnvPrefix is the common prefix for all roachprod API environment variables.
+const EnvPrefix = "ROACHPROD_API_"
+
+// Environment variable names for client configuration.
+const (
+	EnvEnabled                = EnvPrefix + "ENABLED"
+	EnvBaseURL                = EnvPrefix + "BASE_URL"
+	EnvForceFetchCreds        = EnvPrefix + "FORCE_FETCH_CREDS"
+	EnvIAPServiceAccountEmail = EnvPrefix + "IAP_SERVICE_ACCOUNT_EMAIL"
+	EnvTimeout                = EnvPrefix + "TIMEOUT"
+	EnvRetryAttempts          = EnvPrefix + "RETRY_ATTEMPTS"
+	EnvRetryDelay             = EnvPrefix + "RETRY_DELAY"
+	EnvSilentFailures         = EnvPrefix + "SILENT_FAILURES"
+	EnvAuthMode               = EnvPrefix + "AUTH_MODE"
+)
+
+// Authentication modes (valid values for Config.AuthMode).
+const (
+	AuthModeBearer   = "bearer"
+	AuthModeIAP      = "iap"
+	AuthModeDisabled = "disabled"
+)
+
+// DefaultAuthMode is the default authentication mode.
+const DefaultAuthMode = AuthModeBearer
+
 // Config contains configuration for the centralized API client.
 type Config struct {
 	// Enabled controls whether the client should make API calls
@@ -21,6 +47,8 @@ type Config struct {
 	// BaseURL is the base URL of the centralized API (e.g., "https://api.example.com")
 	// Also used as the OAuth2 audience for authentication
 	BaseURL string
+	// AuthMode is the authentication mode: "bearer", "iap", or "disabled"
+	AuthMode string
 	// ForceFetchCreds forces fetching fresh credentials from the service account
 	ForceFetchCreds bool
 	// Timeout is the request timeout (default: 10s)
@@ -40,6 +68,7 @@ func DefaultConfig() Config {
 	return Config{
 		Enabled:                DefaultEnabled,
 		BaseURL:                DefaultBaseURL,
+		AuthMode:               DefaultAuthMode,
 		Timeout:                DefaultTimeout,
 		RetryAttempts:          DefaultRetryAttempts,
 		RetryDelay:             DefaultRetryDelay,
@@ -53,50 +82,38 @@ func DefaultConfig() Config {
 func LoadConfigFromEnv() Config {
 	config := DefaultConfig()
 
-	// Check if centralized API is enabled
-	if enabled := os.Getenv("ROACHPROD_CENTRALIZED_API_ENABLED"); enabled != "" {
+	if enabled := os.Getenv(EnvEnabled); enabled != "" {
 		config.Enabled = enabled == "true" || enabled == "1"
 	}
-
-	// Base URL (required if enabled)
-	if baseURL := os.Getenv("ROACHPROD_CENTRALIZED_API_BASE_URL"); baseURL != "" {
+	if baseURL := os.Getenv(EnvBaseURL); baseURL != "" {
 		config.BaseURL = baseURL
 	}
-
-	// Force fetch credentials
-	if forceFetch := os.Getenv("ROACHPROD_CENTRALIZED_API_FORCE_FETCH_CREDS"); forceFetch != "" {
+	if forceFetch := os.Getenv(EnvForceFetchCreds); forceFetch != "" {
 		config.ForceFetchCreds = forceFetch == "true" || forceFetch == "1"
 	}
-
-	// Service Account Email
-	if saEmail := os.Getenv("ROACHPROD_CENTRALIZED_API_IAP_SERVICE_ACCOUNT_EMAIL"); saEmail != "" {
+	if saEmail := os.Getenv(EnvIAPServiceAccountEmail); saEmail != "" {
 		config.IAPServiceAccountEmail = saEmail
 	}
-
-	// Timeout
-	if timeoutStr := os.Getenv("ROACHPROD_CENTRALIZED_API_TIMEOUT"); timeoutStr != "" {
+	if timeoutStr := os.Getenv(EnvTimeout); timeoutStr != "" {
 		if timeout, err := time.ParseDuration(timeoutStr); err == nil {
 			config.Timeout = timeout
 		}
 	}
-
-	// Retry attempts
-	if retryStr := os.Getenv("ROACHPROD_CENTRALIZED_API_RETRY_ATTEMPTS"); retryStr != "" {
+	if retryStr := os.Getenv(EnvRetryAttempts); retryStr != "" {
 		if retry, err := strconv.Atoi(retryStr); err == nil && retry >= 0 {
 			config.RetryAttempts = retry
 		}
 	}
-
-	// Retry delay
-	if delayStr := os.Getenv("ROACHPROD_CENTRALIZED_API_RETRY_DELAY"); delayStr != "" {
+	if delayStr := os.Getenv(EnvRetryDelay); delayStr != "" {
 		if delay, err := time.ParseDuration(delayStr); err == nil {
 			config.RetryDelay = delay
 		}
 	}
-
-	// Silent failures
-	if silentStr := os.Getenv("ROACHPROD_CENTRALIZED_API_SILENT_FAILURES"); silentStr != "" {
+	if silentStr := os.Getenv(EnvSilentFailures); silentStr != "" {
 		config.SilentFailures = silentStr == "true" || silentStr == "1"
+	}
+	if authMode := os.Getenv(EnvAuthMode); authMode != "" {
+		config.AuthMode = authMode
 	}
 
 	return config
@@ -189,5 +206,12 @@ func WithSilentFailures(silent bool) OptionFunc {
 func WithIAPTokenSource(tokenSource roachprodutil.IAPTokenSource) OptionFunc {
 	return func(c *Client) {
 		c.httpClient = tokenSource.GetHTTPClient()
+	}
+}
+
+// WithAuthMode sets the authentication mode.
+func WithAuthMode(mode string) OptionFunc {
+	return func(c *Client) {
+		c.config.AuthMode = mode
 	}
 }

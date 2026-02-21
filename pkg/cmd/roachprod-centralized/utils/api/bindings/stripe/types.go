@@ -3,7 +3,7 @@
 // Use of this software is governed by the CockroachDB Software License
 // included in the /LICENSE file.
 
-package bindings
+package stripe
 
 // BindingResult represents the result of a binding operation
 type BindingResult struct {

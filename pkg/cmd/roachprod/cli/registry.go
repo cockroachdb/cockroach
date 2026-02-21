@@ -75,5 +75,7 @@ func (cr *commandRegistry) register() {
 		cr.buildGetLatestPProfCmd(),
 		cr.buildFetchCertsDir(),
 		cr.buildChaosCmd(),
+		// Authentication commands
+		cr.buildAuthCmd(),
 	})
 }

@@ -8,6 +8,7 @@ package processor
 import (
 	"context"
 	"log/slog"
+	"sync"
 	"time"
 
 	mtasks "github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/models/tasks"
@@ -20,9 +21,10 @@ import (
 
 // processor.go manages the task processing queue and worker coordination.
 
-// StartProcessing begins the task processing routine with the specified number of workers.
-// It starts worker goroutines that consume tasks from the repository and process them.
-// Returns error if workers are disabled (count == 0).
+// StartProcessing begins the task processing routine with the specified number
+// of workers. It starts worker goroutines that consume tasks from the repository
+// and process them. The onComplete callback is called once all goroutines
+// (workers + task retrieval) have exited.
 func StartProcessing(
 	ctx context.Context,
 	l *logger.Logger,
@@ -31,10 +33,12 @@ func StartProcessing(
 	instanceID string,
 	repository tasksrepo.ITasksRepository,
 	executor TaskExecutor,
+	onComplete func(),
 ) error {
 	// Skip task processing if no workers are configured (API-only mode)
 	if workers == 0 {
 		l.Info("Task workers disabled (Workers=0), skipping task processing routine")
+		onComplete()
 		return nil
 	}
 
@@ -47,9 +51,15 @@ func StartProcessing(
 
 	taskChan := make(chan mtasks.ITask)
 
+	// Track all spawned goroutines (N workers + 1 retrieval) so that
+	// onComplete is called only after every goroutine has exited.
+	var wg sync.WaitGroup
+
 	// Start the workers that handle the tasks
 	for range workers {
+		wg.Add(1)
 		go func() {
+			defer wg.Done()
 			for {
 				select {
 				case <-ctx.Done():
@@ -57,8 +67,9 @@ func StartProcessing(
 					return
 
 				case task := <-taskChan:
-					// Log the received task with its ID, type, state, creation and update timestamps
-					// but not the full payload because it is not human-readable yet (base64-encoded JSON).
+					// Log the received task with its ID, type, state, creation and
+					// update timestamps but not the full payload because it is not
+					// human-readable yet (base64-encoded JSON).
 					taskRoutineLogger.Debug(
 						"Received task to process",
 						slog.Any("task", struct {
@@ -97,8 +108,10 @@ func StartProcessing(
 	}
 
 	// Get tasks for processing from repository
+	wg.Add(1)
 	go func() {
 		defer func() {
+			wg.Done()
 			taskRoutineLogger.Debug("Tasks retrieval routine stopped")
 		}()
 		err := repository.GetTasksForProcessing(
@@ -116,6 +129,13 @@ func StartProcessing(
 				)
 			}
 		}
+	}()
+
+	// Coordination goroutine: waits for all internal goroutines to exit,
+	// then signals the parent via onComplete.
+	go func() {
+		wg.Wait()
+		onComplete()
 	}()
 
 	return nil

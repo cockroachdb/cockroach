@@ -3,7 +3,7 @@
 // Use of this software is governed by the CockroachDB Software License
 // included in the /LICENSE file.
 
-package bindings
+package stripe
 
 import (
 	"net/http"
@@ -86,7 +86,7 @@ func (b StripeQueryBinding) BindQuery(obj interface{}, values map[string][]strin
 
 // ToFilterSet converts any struct with FilterValue fields to a filters.FilterSet.
 // It uses reflection to automatically process all FilterValue[T] fields in the struct,
-// using their actual struct field names (not stripe tags). This eliminates the need to manually implement
+// using their stripe tag values as field names. This eliminates the need to manually implement
 // ToFilterSet for every DTO with FilterValue fields.
 //
 // Example usage:
@@ -97,7 +97,7 @@ func (b StripeQueryBinding) BindQuery(obj interface{}, values map[string][]strin
 //	}
 //
 //	dto := MyDTO{...}
-//	filterSet := ToFilterSet(dto)  // Uses "Name" and "Count" as field names
+//	filterSet := ToFilterSet(dto)  // Uses "name" and "count" as field names
 func ToFilterSet(obj interface{}) filtertypes.FilterSet {
 	filterSet := filters.NewFilterSet()
 
@@ -186,7 +186,9 @@ func ToFilterSet(obj interface{}) filtertypes.FilterSet {
 			}
 		}
 
-		// Add the filter using the actual struct field name instead of stripe tag
+		// Add the filter using the Go field name (not the stripe tag).
+		// This keeps FilterSet API-agnostic. The repository layer translates
+		// field names to storage format (db tags for SQL, field names for memory).
 		filterSet.AddFilter(field.Name, operator, value)
 	}
 

@@ -23,7 +23,7 @@ This document provides practical examples and common workflows for using the roa
 
 ```bash
 # 1. Start the service in development mode
-export ROACHPROD_API_AUTHENTICATION_DISABLED=true
+export ROACHPROD_API_AUTHENTICATION_METHOD=disabled
 export ROACHPROD_DATABASE_TYPE=memory
 export ROACHPROD_LOG_LEVEL=info
 
@@ -227,7 +227,7 @@ lsof -i :8080
 pgrep -f roachprod-centralized
 
 # Start with minimal configuration
-export ROACHPROD_API_AUTHENTICATION_DISABLED=true
+export ROACHPROD_API_AUTHENTICATION_METHOD=disabled
 export ROACHPROD_DATABASE_TYPE=memory
 export ROACHPROD_LOG_LEVEL=debug
 ./dev run roachprod-centralized api
@@ -257,7 +257,7 @@ export ROACHPROD_DATABASE_URL="$DB_URL"
 
 ```bash
 # Disable authentication for development
-export ROACHPROD_API_AUTHENTICATION_DISABLED=true
+export ROACHPROD_API_AUTHENTICATION_METHOD=disabled
 ./dev run roachprod-centralized api
 ```
 

@@ -13,6 +13,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/app"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/auth/disabled"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/controllers"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/controllers/clusters/types"
 	clustersmock "github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/services/clusters/mocks"
@@ -61,10 +62,8 @@ func TestGetAll(t *testing.T) {
 			},
 			serviceResult: serviceResult{},
 			expected: expected{
-				code: http.StatusOK,
-				arguments: clustermodels.InputGetAllClustersDTO{
-					Filters: *filters.NewFilterSet(),
-				},
+				code:      http.StatusOK,
+				arguments: clustermodels.NewInputGetAllClustersDTO(),
 			},
 		},
 		{
@@ -104,7 +103,7 @@ func TestGetAll(t *testing.T) {
 			c, e := gin.CreateTestContext(w)
 
 			app, err := app.NewApp(
-				app.WithApiAuthenticationDisabled(true),
+				app.WithApiAuthenticator(disabled.NewDisabledAuthenticator()),
 				app.WithApiGinEngine(e),
 				app.WithApiController(NewController(mockClustersService)),
 			)
@@ -118,6 +117,7 @@ func TestGetAll(t *testing.T) {
 					"GetAllClusters",
 					c,
 					mock.Anything,
+					mock.AnythingOfType("*auth.Principal"),
 					tc.expected.arguments,
 				).Return(tc.serviceResult.val, tc.serviceResult.err).Once()
 			}
@@ -193,7 +193,7 @@ func TestGetOne(t *testing.T) {
 			c, e := gin.CreateTestContext(w)
 
 			app, err := app.NewApp(
-				app.WithApiAuthenticationDisabled(true),
+				app.WithApiAuthenticator(disabled.NewDisabledAuthenticator()),
 				app.WithApiGinEngine(e),
 				app.WithApiController(NewController(mockClustersService)),
 			)
@@ -207,6 +207,7 @@ func TestGetOne(t *testing.T) {
 					"GetCluster",
 					c,
 					mock.Anything,
+					mock.AnythingOfType("*auth.Principal"),
 					tc.expected.arguments,
 				).Return(tc.serviceResult.val, tc.serviceResult.err).Once()
 			}
@@ -304,7 +305,7 @@ func TestRegister(t *testing.T) {
 			c, e := gin.CreateTestContext(w)
 
 			app, err := app.NewApp(
-				app.WithApiAuthenticationDisabled(true),
+				app.WithApiAuthenticator(disabled.NewDisabledAuthenticator()),
 				app.WithApiGinEngine(e),
 				app.WithApiController(NewController(mockClustersService)),
 			)
@@ -318,6 +319,7 @@ func TestRegister(t *testing.T) {
 					"RegisterCluster",
 					mock.Anything,
 					mock.Anything,
+					mock.AnythingOfType("*auth.Principal"),
 					tc.expected.arguments,
 				).Return(tc.serviceResult.val, tc.serviceResult.err).Once()
 			}
@@ -429,7 +431,7 @@ func TestRegisterUpdate(t *testing.T) {
 			c, e := gin.CreateTestContext(w)
 
 			app, err := app.NewApp(
-				app.WithApiAuthenticationDisabled(true),
+				app.WithApiAuthenticator(disabled.NewDisabledAuthenticator()),
 				app.WithApiGinEngine(e),
 				app.WithApiController(NewController(mockClustersService)),
 			)
@@ -443,6 +445,7 @@ func TestRegisterUpdate(t *testing.T) {
 					"RegisterClusterUpdate",
 					mock.Anything,
 					mock.Anything,
+					mock.AnythingOfType("*auth.Principal"),
 					tc.expected.arguments,
 				).Return(tc.serviceResult.val, tc.serviceResult.err).Once()
 			}
@@ -495,7 +498,7 @@ func TestRegisterDelete(t *testing.T) {
 			c, e := gin.CreateTestContext(w)
 
 			app, err := app.NewApp(
-				app.WithApiAuthenticationDisabled(true),
+				app.WithApiAuthenticator(disabled.NewDisabledAuthenticator()),
 				app.WithApiGinEngine(e),
 				app.WithApiController(NewController(mockClustersService)),
 			)
@@ -509,6 +512,7 @@ func TestRegisterDelete(t *testing.T) {
 					"RegisterClusterDelete",
 					c,
 					mock.Anything,
+					mock.AnythingOfType("*auth.Principal"),
 					tc.expected.arguments,
 				).Return(tc.serviceResult.err).Once()
 			}
@@ -546,7 +550,7 @@ func TestSync(t *testing.T) {
 			c, e := gin.CreateTestContext(w)
 
 			app, err := app.NewApp(
-				app.WithApiAuthenticationDisabled(true),
+				app.WithApiAuthenticator(disabled.NewDisabledAuthenticator()),
 				app.WithApiGinEngine(e),
 				app.WithApiController(NewController(mockClustersService)),
 			)
@@ -560,6 +564,7 @@ func TestSync(t *testing.T) {
 					"SyncClouds",
 					c,
 					mock.Anything,
+					mock.AnythingOfType("*auth.Principal"),
 				).Return(tc.serviceResult.val, tc.serviceResult.err).Once()
 			}
 

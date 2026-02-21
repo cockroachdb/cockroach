@@ -2,11 +2,15 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library")
 
 go_library(
     name = "memory",
-    srcs = ["evaluator.go"],
+    srcs = [
+        "evaluator.go",
+        "sorter.go",
+    ],
     importpath = "github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/utils/filters/memory",
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/cmd/roachprod-centralized/utils/filters/types",
         "@com_github_cockroachdb_errors//:errors",
+        "@com_github_iancoleman_strcase//:strcase",
     ],
 )

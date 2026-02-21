@@ -21,6 +21,8 @@ This document provides comprehensive documentation for the roachprod-centralized
   - [Cluster Management](#cluster-management)
   - [Task Management](#task-management)
   - [DNS Management](#dns-management)
+  - [Auth Endpoints](#auth-endpoints)
+  - [Service Account Management](#service-account-management)
 - [Query Parameters](#query-parameters)
 - [Examples](#examples)
 
@@ -43,26 +45,64 @@ All requests and responses use `application/json` content type unless otherwise 
 
 ## Authentication
 
-### Development Mode
+The API supports three authentication modes, configured via `AUTH_TYPE` environment variable. The authentication mode determines which endpoints are available.
 
-For development environments, authentication can be disabled:
+### Authentication Modes
 
-```bash
-export ROACHPROD_API_AUTHENTICATION_DISABLED=true
+| Mode | Config | Header | Use Case |
+|------|--------|--------|----------|
+| **Bearer** | `AUTH_TYPE=bearer` | `Authorization: Bearer rp$...` | Production with Okta |
+| **JWT** | `AUTH_TYPE=jwt` | `X-Goog-IAP-JWT-Assertion` | Google IAP |
+| **Disabled** | `AUTH_DISABLED=true` | None required | Development |
+
+### Bearer Authentication (Production)
+
+Bearer authentication uses opaque tokens validated against the database. This is the recommended mode for production deployments with Okta integration.
+
+```http
+Authorization: Bearer rp$user$1$abc123...
 ```
 
-### Production Mode
+**Token acquisition:**
+1. Authenticate with Okta using Device Authorization Grant
+2. Exchange the Okta ID token for an opaque bearer token via `POST /v1/auth/okta/exchange`
+3. Use the returned token for subsequent API requests
 
-In production, the API uses JWT authentication with Google IAP:
+### JWT Authentication (Google IAP)
 
-- **Header**: `X-Goog-IAP-JWT-Assertion` (configurable)
-- **Type**: JWT Bearer token
-- **Validation**: JWT signature and audience verification
+When running behind Google Cloud Identity-Aware Proxy:
 
-**Authentication Header Example**:
 ```http
 X-Goog-IAP-JWT-Assertion: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
 ```
+
+JWT authentication grants wildcard permissions to all authenticated users. No fine-grained authorization is available.
+
+### Disabled Authentication (Development)
+
+For local development, authentication can be bypassed:
+
+```bash
+export ROACHPROD_API_AUTHENTICATION_METHOD=disabled
+```
+
+All requests are authenticated as a dev user with full permissions.
+
+### Endpoint Availability by Auth Mode
+
+Some endpoints are only available with bearer authentication:
+
+| Endpoint Category | Bearer | JWT / Disabled |
+|-------------------|--------|----------------|
+| Health, Clusters, Tasks, DNS | ✓ | ✓ |
+| `GET /v1/auth/whoami` | ✓ | ✓ |
+| `POST /v1/auth/okta/exchange` | ✓ | ✗ |
+| `GET/DELETE /v1/auth/tokens` | ✓ | ✗ |
+| `/v1/service-accounts/*` | ✓ | ✗ |
+| `/v1/admin/*` | ✓ | ✗ |
+| `/scim/v2/*` | ✓ | ✗ |
+
+See [AUTH.md](services/AUTH.md#authentication-implementations) for detailed documentation.
 
 ## Base URL
 
@@ -470,6 +510,278 @@ Trigger synchronization of public DNS records.
 ```bash
 curl -X POST http://localhost:8080/v1/public-dns/sync
 ```
+
+### Auth Endpoints
+
+The auth controller is split into two parts:
+- **Core endpoints** (always available): `GET /v1/auth/whoami`
+- **Bearer-only endpoints** (requires `AUTH_TYPE=bearer`): Token exchange and self-service token management
+
+#### GET /v1/auth/whoami
+
+Returns information about the current authenticated principal.
+
+**Response**: `200 OK`
+```json
+{
+  "data": {
+    "user": {
+      "id": "11111111-1111-1111-1111-111111111111",
+      "email": "alice@example.com",
+      "name": "Alice Smith",
+      "active": true
+    },
+    "permissions": [
+      {"scope": "gcp-my-project", "permission": "clusters:create"}
+    ],
+    "token": {
+      "id": "22222222-2222-2222-2222-222222222222",
+      "type": "user",
+      "created_at": "2025-01-15T10:00:00Z",
+      "expires_at": "2025-01-22T10:00:00Z"
+    }
+  }
+}
+```
+
+#### POST /v1/auth/okta/exchange *(Bearer auth only)*
+
+Exchange an Okta ID token for an opaque bearer token.
+
+**Request Body**:
+```json
+{
+  "okta_access_token": "eyJraWQiOiI..."
+}
+```
+
+**Response**: `200 OK`
+```json
+{
+  "data": {
+    "token": "rp$user$1$abc123...",
+    "expires_at": "2025-01-22T10:00:00Z"
+  }
+}
+```
+
+**Important**: Store the token securely. It is only returned once.
+
+#### GET /v1/auth/tokens *(Bearer auth only)*
+
+List tokens owned by the current principal.
+
+**Query Parameters**: Supports Stripe-style filtering on `type`, `status`, `created_at`, `expires_at`.
+
+**Response**: `200 OK`
+```json
+{
+  "data": [
+    {
+      "id": "22222222-2222-2222-2222-222222222222",
+      "type": "user",
+      "token": "****901234",
+      "status": "valid",
+      "created_at": "2025-01-15T10:00:00Z",
+      "expires_at": "2025-01-22T10:00:00Z"
+    }
+  ],
+  "count": 1,
+  "total_count": 1
+}
+```
+
+#### DELETE /v1/auth/tokens/:id *(Bearer auth only)*
+
+Revoke a token owned by the current principal.
+
+**Response**: `200 OK`
+```json
+{
+  "data": {
+    "message": "token revoked successfully"
+  }
+}
+```
+
+### Service Account Management
+
+Service accounts are machine identities for CI/CD, automation, and system integrations. See [AUTH.md](services/AUTH.md#service-account-types) for details on orphan vs delegated service accounts.
+
+#### POST /v1/service-accounts
+
+Create a new service account.
+
+**Request Body**:
+```json
+{
+  "name": "my-automation",
+  "description": "Automation service account",
+  "enabled": true,
+  "orphan": false
+}
+```
+
+| Field | Type | Required | Default | Description |
+|-------|------|----------|---------|-------------|
+| `name` | string | Yes | - | Unique name for the service account |
+| `description` | string | No | `""` | Human-readable description |
+| `enabled` | boolean | No | `true` | Whether the SA can authenticate |
+| `orphan` | boolean | No | `false` | If `true`, SA has its own permissions; if `false`, inherits from creator |
+
+**Response**: `201 Created`
+```json
+{
+  "request_id": "req_...",
+  "data": {
+    "id": "550e8400-e29b-41d4-a716-446655440000",
+    "name": "my-automation",
+    "description": "Automation service account",
+    "enabled": true,
+    "delegated_from": "11111111-1111-1111-1111-111111111111",
+    "created_at": "2025-01-15T10:30:00Z",
+    "updated_at": "2025-01-15T10:30:00Z"
+  }
+}
+```
+
+**Notes**:
+- `delegated_from` is only present for delegated SAs (when `orphan=false`)
+- Orphan SAs require explicit permission grants via `/service-accounts/:id/permissions`
+
+#### GET /v1/service-accounts
+
+List service accounts with optional filtering.
+
+**Query Parameters**:
+- `name[eq]`, `name[contains]`, etc. - Filter by name
+
+**Response**: `200 OK`
+```json
+{
+  "data": [
+    {
+      "id": "...",
+      "name": "my-automation",
+      "enabled": true,
+      "delegated_from": "11111111-...",
+      "created_at": "2025-01-15T10:30:00Z",
+      "updated_at": "2025-01-15T10:30:00Z"
+    }
+  ],
+  "count": 1,
+  "total_count": 1
+}
+```
+
+#### GET /v1/service-accounts/:id
+
+Get a specific service account by ID.
+
+#### PATCH /v1/service-accounts/:id
+
+Update a service account.
+
+**Request Body**:
+```json
+{
+  "name": "new-name",
+  "description": "Updated description",
+  "enabled": false
+}
+```
+
+#### DELETE /v1/service-accounts/:id
+
+Delete a service account. Also revokes all associated tokens.
+
+**Response**: `200 OK`
+```json
+{
+  "data": {
+    "message": "service account deleted successfully"
+  }
+}
+```
+
+#### POST /v1/service-accounts/:id/tokens
+
+Mint a new token for a service account.
+
+**Request Body**:
+```json
+{
+  "ttl_days": 30
+}
+```
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `ttl_days` | integer | Yes | Token validity period (1-365 days) |
+
+**Response**: `201 Created`
+```json
+{
+  "data": {
+    "token": "rp$sa$1$...",
+    "token_id": "660e8400-...",
+    "expires_at": "2025-02-15T10:30:00Z"
+  }
+}
+```
+
+**Important**: The `token` value is only returned once. Store it securely.
+
+#### POST /v1/service-accounts/:id/permissions
+
+Add a permission to an orphan service account.
+
+**Request Body**:
+```json
+{
+  "scope": "gcp-my-project",
+  "permission": "clusters:create"
+}
+```
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `scope` | string | Yes | Scope/environment for the permission (e.g., `gcp-my-project`, `aws-engineering`, or `*` for all) |
+| `permission` | string | Yes | Permission string (e.g., `clusters:create`) |
+
+**Response**: `201 Created`
+
+**Error**: `403 Forbidden` if the SA is delegated (has `delegated_from` set)
+
+#### GET /v1/service-accounts/:id/permissions
+
+List permissions for a service account.
+
+#### DELETE /v1/service-accounts/:id/permissions/:permission_id
+
+Remove a permission from an orphan service account.
+
+**Error**: `403 Forbidden` if the SA is delegated
+
+#### POST /v1/service-accounts/:id/origins
+
+Add an IP origin restriction to a service account.
+
+**Request Body**:
+```json
+{
+  "cidr": "10.0.0.0/8",
+  "description": "Internal network"
+}
+```
+
+#### GET /v1/service-accounts/:id/origins
+
+List IP origin restrictions for a service account.
+
+#### DELETE /v1/service-accounts/:id/origins/:origin_id
+
+Remove an IP origin restriction.
 
 ## Query Parameters
 

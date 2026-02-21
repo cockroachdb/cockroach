@@ -1,0 +1,36 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "jwt",
+    srcs = ["jwt.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/auth/jwt",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/cmd/roachprod-centralized/auth",
+        "//pkg/cmd/roachprod-centralized/models/auth",
+        "//pkg/cmd/roachprod-centralized/services/auth/types",
+        "//pkg/util/timeutil",
+        "//pkg/util/uuid",
+        "@com_github_cockroachdb_errors//:errors",
+        "@org_golang_google_api//idtoken",
+    ],
+)
+
+go_test(
+    name = "jwt_test",
+    srcs = ["jwt_test.go"],
+    embed = [":jwt"],
+    deps = [
+        "//pkg/cmd/roachprod-centralized/auth",
+        "//pkg/cmd/roachprod-centralized/models/auth",
+        "//pkg/cmd/roachprod-centralized/services/auth/mocks",
+        "//pkg/cmd/roachprod-centralized/services/auth/types",
+        "//pkg/util/timeutil",
+        "//pkg/util/uuid",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_stretchr_testify//assert",
+        "@com_github_stretchr_testify//mock",
+        "@com_github_stretchr_testify//require",
+        "@org_golang_google_api//idtoken",
+    ],
+)

@@ -1,0 +1,16 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "mocks",
+    srcs = ["repository.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/repositories/auth/mocks",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/cmd/roachprod-centralized/models/auth",
+        "//pkg/cmd/roachprod-centralized/repositories/auth",
+        "//pkg/cmd/roachprod-centralized/utils/filters/types",
+        "//pkg/cmd/roachprod-centralized/utils/logger",
+        "//pkg/util/uuid",
+        "@com_github_stretchr_testify//mock",
+    ],
+)

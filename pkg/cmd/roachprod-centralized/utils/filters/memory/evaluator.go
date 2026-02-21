@@ -12,14 +12,17 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/utils/filters/types"
 	"github.com/cockroachdb/errors"
+	"github.com/iancoleman/strcase"
 )
 
 // FilterEvaluator helps evaluate filters against in-memory objects.
-type FilterEvaluator struct{}
+type FilterEvaluator struct {
+	filteredType reflect.Type
+}
 
 // NewFilterEvaluator creates a new memory filter evaluator.
-func NewFilterEvaluator() *FilterEvaluator {
-	return &FilterEvaluator{}
+func NewFilterEvaluatorWithTypeHint(filteredType reflect.Type) *FilterEvaluator {
+	return &FilterEvaluator{filteredType: filteredType}
 }
 
 // Evaluate checks if an object matches the given FilterSet.
@@ -37,31 +40,47 @@ func (mfe *FilterEvaluator) Evaluate(obj interface{}, fs *types.FilterSet) (bool
 		objValue = objValue.Elem()
 	}
 
-	results := make([]bool, len(fs.Filters))
+	return mfe.evaluateGroup(objValue, fs)
+}
+
+// evaluateGroup evaluates all Filters and SubGroups in a FilterSet,
+// combining results with short-circuit evaluation.
+func (mfe *FilterEvaluator) evaluateGroup(
+	objValue reflect.Value, fs *types.FilterSet,
+) (bool, error) {
+	isOr := fs.Logic == types.LogicOr
+
 	for i, filter := range fs.Filters {
 		match, err := mfe.evaluateFilter(objValue, filter)
 		if err != nil {
-			return false, errors.Wrapf(err, "failed to evaluate filter %d", i)
+			return false, errors.Wrapf(err, "filter %d", i)
 		}
-		results[i] = match
+		if isOr && match {
+			return true, nil
+		}
+		if !isOr && !match {
+			return false, nil
+		}
 	}
 
-	// Combine results based on logic operator
-	if fs.Logic == types.LogicOr {
-		for _, result := range results {
-			if result {
-				return true, nil
-			}
+	for i, sg := range fs.SubGroups {
+		match, err := mfe.evaluateGroup(objValue, &sg)
+		if err != nil {
+			return false, errors.Wrapf(err, "sub_group %d", i)
 		}
-		return false, nil
-	} else { // LogicAnd
-		for _, result := range results {
-			if !result {
-				return false, nil
-			}
+		if isOr && match {
+			return true, nil
 		}
-		return true, nil
+		if !isOr && !match {
+			return false, nil
+		}
 	}
+
+	// OR with parts but none matched -> false. Everything else -> true.
+	if isOr && (len(fs.Filters) > 0 || len(fs.SubGroups) > 0) {
+		return false, nil
+	}
+	return true, nil
 }
 
 // evaluateFilter evaluates a single filter against an object.
@@ -97,21 +116,33 @@ func (mfe *FilterEvaluator) evaluateFilter(
 	case types.OpNotLike:
 		like, err := mfe.compareLike(fieldValue, filter.Value)
 		return !like, err
+	case types.OpContains:
+		return mfe.compareContains(fieldValue, filter.Value)
+	case types.OpStartsWith:
+		return mfe.compareStartsWith(fieldValue, filter.Value)
+	case types.OpEndsWith:
+		return mfe.compareEndsWith(fieldValue, filter.Value)
+	case types.OpPresent:
+		return mfe.comparePresent(fieldValue)
 	default:
 		return false, errors.Newf("unsupported operator: %s", filter.Operator)
 	}
 }
 
 // getFieldValue extracts a field value from an object, supporting nested field access.
+// Converts snake_case field names to PascalCase for Go struct field lookup.
 func (mfe *FilterEvaluator) getFieldValue(
 	objValue reflect.Value, fieldPath string,
 ) (interface{}, error) {
-	// Handle nested field access (e.g., "Task.State")
+	// Handle nested field access (e.g., "Task.State" or "task.state")
 	fieldParts := strings.Split(fieldPath, ".")
 	currentValue := objValue
 
 	for _, fieldName := range fieldParts {
-		methodName := "Get" + fieldName
+		// Convert snake_case to PascalCase for Go struct field names
+		// e.g., "creation_datetime" -> "CreationDatetime"
+		pascalFieldName := strcase.ToCamel(fieldName)
+		methodName := "Get" + pascalFieldName
 		fieldFound := false
 
 		// Try getter method on current value (works for structs, pointers, interfaces)
@@ -145,7 +176,7 @@ func (mfe *FilterEvaluator) getFieldValue(
 			if !fieldFound {
 				// Try struct field on dereferenced value
 				if elemValue.Kind() == reflect.Struct {
-					field := elemValue.FieldByName(fieldName)
+					field := elemValue.FieldByName(pascalFieldName)
 					if field.IsValid() {
 						currentValue = field
 						fieldFound = true
@@ -160,7 +191,7 @@ func (mfe *FilterEvaluator) getFieldValue(
 
 		// Handle struct fields directly
 		if currentValue.Kind() == reflect.Struct {
-			field := currentValue.FieldByName(fieldName)
+			field := currentValue.FieldByName(pascalFieldName)
 			if field.IsValid() {
 				currentValue = field
 				fieldFound = true
@@ -312,4 +343,52 @@ func (mfe *FilterEvaluator) toFloat64(val reflect.Value) float64 {
 	default:
 		return 0
 	}
+}
+
+// compareContains checks if the field value contains the filter value (case-insensitive).
+func (mfe *FilterEvaluator) compareContains(fieldValue, filterValue interface{}) (bool, error) {
+	fieldStr, ok := fieldValue.(string)
+	if !ok {
+		return false, errors.Newf("contains operator requires string field, got %T", fieldValue)
+	}
+	filterStr, ok := filterValue.(string)
+	if !ok {
+		return false, errors.Newf("contains operator requires string value, got %T", filterValue)
+	}
+	return strings.Contains(strings.ToLower(fieldStr), strings.ToLower(filterStr)), nil
+}
+
+// compareStartsWith checks if the field value starts with the filter value (case-insensitive).
+func (mfe *FilterEvaluator) compareStartsWith(fieldValue, filterValue interface{}) (bool, error) {
+	fieldStr, ok := fieldValue.(string)
+	if !ok {
+		return false, errors.Newf("startsWith operator requires string field, got %T", fieldValue)
+	}
+	filterStr, ok := filterValue.(string)
+	if !ok {
+		return false, errors.Newf("startsWith operator requires string value, got %T", filterValue)
+	}
+	return strings.HasPrefix(strings.ToLower(fieldStr), strings.ToLower(filterStr)), nil
+}
+
+// compareEndsWith checks if the field value ends with the filter value (case-insensitive).
+func (mfe *FilterEvaluator) compareEndsWith(fieldValue, filterValue interface{}) (bool, error) {
+	fieldStr, ok := fieldValue.(string)
+	if !ok {
+		return false, errors.Newf("endsWith operator requires string field, got %T", fieldValue)
+	}
+	filterStr, ok := filterValue.(string)
+	if !ok {
+		return false, errors.Newf("endsWith operator requires string value, got %T", filterValue)
+	}
+	return strings.HasSuffix(strings.ToLower(fieldStr), strings.ToLower(filterStr)), nil
+}
+
+// comparePresent checks if the field is present and not nil/zero.
+func (mfe *FilterEvaluator) comparePresent(fieldValue interface{}) (bool, error) {
+	if fieldValue == nil {
+		return false, nil
+	}
+	val := reflect.ValueOf(fieldValue)
+	return !val.IsZero(), nil
 }

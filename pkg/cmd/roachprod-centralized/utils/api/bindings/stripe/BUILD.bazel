@@ -1,0 +1,31 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "stripe",
+    srcs = [
+        "binding.go",
+        "converter.go",
+        "parser.go",
+        "types.go",
+        "validator.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/utils/api/bindings/stripe",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/cmd/roachprod-centralized/utils/filters",
+        "//pkg/cmd/roachprod-centralized/utils/filters/types",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_gin_gonic_gin//binding",
+        "@com_github_go_playground_validator_v10//:validator",
+    ],
+)
+
+go_test(
+    name = "stripe_test",
+    srcs = ["binding_test.go"],
+    embed = [":stripe"],
+    deps = [
+        "//pkg/cmd/roachprod-centralized/utils/filters/types",
+        "@com_github_stretchr_testify//assert",
+    ],
+)

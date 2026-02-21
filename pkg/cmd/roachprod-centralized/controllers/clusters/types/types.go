@@ -13,7 +13,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/controllers"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/models/tasks"
 	clustermodels "github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/services/clusters/types"
-	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/utils/api/bindings"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/utils/api/bindings/stripe"
 	filtertypes "github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/utils/filters/types"
 	cloudcluster "github.com/cockroachdb/cockroach/pkg/roachprod/cloud/types"
 )
@@ -30,12 +30,12 @@ var (
 // InputGetAllDTO is input data transfer object that handles requests parameters
 // for the clusters.GetAll() controller.
 type InputGetAllDTO struct {
-	Name bindings.FilterValue[string] `stripe:"name" validate:"omitempty,max=50,min=3"`
+	Name stripe.FilterValue[string] `stripe:"name" validate:"omitempty,max=50,min=3"`
 }
 
 // ToFilterSet converts the InputGetAllDTO to a filters.FilterSet for use by the service layer
 func (dto *InputGetAllDTO) ToFilterSet() filtertypes.FilterSet {
-	return bindings.ToFilterSet(*dto)
+	return stripe.ToFilterSet(*dto)
 }
 
 // ToServiceInputGetAllDTO converts the InputGetAllDTO data transfer object
@@ -136,11 +136,12 @@ func (dto *ClustersResult) GetData() any {
 	return dto.Data
 }
 
-// FromService converts the result of the clusters service to a ClustersResult.
-func (dto *ClustersResult) FromService(data cloudcluster.Clusters, err error) *ClustersResult {
-	dto.Data = &data
-	dto.Error = err
-	return dto
+// NewClustersResult creates a new ClustersResult.
+func NewClustersResult(data *cloudcluster.Clusters, err error) *ClustersResult {
+	return &ClustersResult{
+		ClustersResultError: ClustersResultError{Error: err},
+		Data:                data,
+	}
 }
 
 // ClusterResult is the output data transfer object for the clusters controller
@@ -155,11 +156,12 @@ func (dto *ClusterResult) GetData() any {
 	return dto.Data
 }
 
-// FromService converts the result of the clusters service to a ClusterResult.
-func (dto *ClusterResult) FromService(data *cloudcluster.Cluster, err error) *ClusterResult {
-	dto.Data = data
-	dto.Error = err
-	return dto
+// NewClusterResult creates a new ClusterResult.
+func NewClusterResult(data *cloudcluster.Cluster, err error) *ClusterResult {
+	return &ClusterResult{
+		ClustersResultError: ClustersResultError{Error: err},
+		Data:                data,
+	}
 }
 
 // TaskResult is the output data transfer object for the clusters controller
@@ -174,9 +176,10 @@ func (dto *TaskResult) GetData() any {
 	return dto.Data
 }
 
-// FromService converts the result of the clusters service to a TaskResult.
-func (dto *TaskResult) FromService(task tasks.ITask, err error) *TaskResult {
-	dto.Data = task
-	dto.Error = err
-	return dto
+// NewTaskResult creates a new TaskResult.
+func NewTaskResult(task tasks.ITask, err error) *TaskResult {
+	return &TaskResult{
+		ClustersResultError: ClustersResultError{Error: err},
+		Data:                task,
+	}
 }

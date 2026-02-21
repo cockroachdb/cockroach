@@ -178,7 +178,7 @@ pkg/cmd/roachprod-centralized/
 
 # Run with in-memory storage
 export ROACHPROD_DATABASE_TYPE=memory
-export ROACHPROD_API_AUTHENTICATION_DISABLED=true
+export ROACHPROD_API_AUTHENTICATION_METHOD=disabled
 ./bin/roachprod-centralized api
 
 # Run with debug logging
@@ -206,7 +206,7 @@ cockroach sql --insecure -e "CREATE DATABASE IF NOT EXISTS roachprod;"
 # Terminal 1: API instance 1
 export ROACHPROD_DATABASE_TYPE=cockroachdb
 export ROACHPROD_DATABASE_URL="postgresql://root@localhost:26257/roachprod?sslmode=disable"
-export ROACHPROD_API_AUTHENTICATION_DISABLED=true
+export ROACHPROD_API_AUTHENTICATION_METHOD=disabled
 export ROACHPROD_API_PORT=8090
 export ROACHPROD_LOG_LEVEL=debug
 ./bin/roachprod-centralized api --no-workers
@@ -214,7 +214,7 @@ export ROACHPROD_LOG_LEVEL=debug
 # Terminal 2: API instance 2
 export ROACHPROD_DATABASE_TYPE=cockroachdb
 export ROACHPROD_DATABASE_URL="postgresql://root@localhost:26257/roachprod?sslmode=disable"
-export ROACHPROD_API_AUTHENTICATION_DISABLED=true
+export ROACHPROD_API_AUTHENTICATION_METHOD=disabled
 export ROACHPROD_API_PORT=8091
 export ROACHPROD_LOG_LEVEL=debug
 ./bin/roachprod-centralized api --no-workers

@@ -9,7 +9,7 @@ go_library(
         "//pkg/cmd/roachprod-centralized/controllers",
         "//pkg/cmd/roachprod-centralized/models/tasks",
         "//pkg/cmd/roachprod-centralized/services/clusters/types",
-        "//pkg/cmd/roachprod-centralized/utils/api/bindings",
+        "//pkg/cmd/roachprod-centralized/utils/api/bindings/stripe",
         "//pkg/cmd/roachprod-centralized/utils/filters/types",
         "//pkg/roachprod/cloud/types",
     ],
