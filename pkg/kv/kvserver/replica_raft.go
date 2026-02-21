@@ -114,7 +114,7 @@ var ReplicaLeaderlessUnavailableThreshold = settings.RegisterDurationSettingWith
 func (r *Replica) evalAndPropose(
 	ctx context.Context,
 	ba *kvpb.BatchRequest,
-	g *concurrency.Guard,
+	g concurrency.Guard,
 	st *kvserverpb.LeaseStatus,
 	ui uncertainty.Interval,
 	tok TrackedRequestToken,
@@ -1748,7 +1748,7 @@ func (r *Replica) poisonInflightLatches(err error) {
 		p.ec.poison()
 		// TODO(tbg): find out how `p.ec.done()` can have been called at this point,
 		// See: https://github.com/cockroachdb/cockroach/issues/86547
-		if p.ec.g != nil && p.ec.g.Req.PoisonPolicy == poison.Policy_Error {
+		if p.ec.g != nil && p.ec.g.Req().PoisonPolicy == poison.Policy_Error {
 			aErr := kvpb.NewAmbiguousResultError(err)
 			// NB: this does not release the request's latches. It's important that
 			// the latches stay in place, since the command could still apply.

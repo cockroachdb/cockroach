@@ -369,7 +369,7 @@ func TestConcurrencyManagerBasic(t *testing.T) {
 					d.Fatalf(t, "unknown request: %s", reqName)
 				}
 				reqs, _ := scanRequests(t, d, c)
-				latchSpans, lockSpans := c.collectSpans(t, g.Req.Txn, g.Req.Timestamp, g.Req.WaitPolicy, reqs)
+				latchSpans, lockSpans := c.collectSpans(t, g.Req().Txn, g.Req().Timestamp, g.Req().WaitPolicy, reqs)
 				return fmt.Sprintf("no-conflicts: %t", g.CheckOptimisticNoConflicts(latchSpans, lockSpans))
 
 			case "is-key-locked-by-conflicting-txn":
@@ -400,7 +400,7 @@ func TestConcurrencyManagerBasic(t *testing.T) {
 				if !ok {
 					d.Fatalf(t, "unknown request: %s", reqName)
 				}
-				txn := guard.Req.Txn
+				txn := guard.Req().Txn
 
 				key := dd.ScanArg[string](t, d, "key")
 				seqNum := dd.ScanArgOr[enginepb.TxnSeq](t, d, "seq", 0)
@@ -427,7 +427,7 @@ func TestConcurrencyManagerBasic(t *testing.T) {
 				}
 				// Confirm that the request has a corresponding write request.
 				found := false
-				for _, ru := range guard.Req.Requests {
+				for _, ru := range guard.Req().Requests {
 					req := ru.GetInner()
 					keySpan := roachpb.Span{Key: roachpb.Key(key)}
 					if kvpb.IsLocking(req) &&
@@ -473,7 +473,7 @@ func TestConcurrencyManagerBasic(t *testing.T) {
 
 				// Confirm that the request has a corresponding ResolveIntent.
 				found := false
-				for _, ru := range guard.Req.Requests {
+				for _, ru := range guard.Req().Requests {
 					if riReq := ru.GetResolveIntent(); riReq != nil &&
 						riReq.IntentTxn.ID == txn.ID &&
 						riReq.Key.Equal(roachpb.Key(key)) &&
@@ -685,7 +685,7 @@ type cluster struct {
 
 	// Request state. Cleared on reset.
 	mu              syncutil.Mutex
-	guardsByReqName map[string]*concurrency.Guard
+	guardsByReqName map[string]concurrency.Guard
 	txnRecords      map[uuid.UUID]*txnRecord
 	txnPushes       map[uuid.UUID]*txnPush
 }
@@ -727,7 +727,7 @@ func newClusterWithSettings(st *clustersettings.Settings) *cluster {
 
 		txnsByName:      make(map[string]*roachpb.Transaction),
 		requestsByName:  make(map[string]concurrency.Request),
-		guardsByReqName: make(map[string]*concurrency.Guard),
+		guardsByReqName: make(map[string]concurrency.Guard),
 		txnRecords:      make(map[uuid.UUID]*txnRecord),
 		txnPushes:       make(map[uuid.UUID]*txnPush),
 	}
