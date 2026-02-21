@@ -228,6 +228,15 @@ const (
 	// making them indistinguishable from view dependencies. This upgrade ensures
 	// each trigger backref has the correct TriggerID set.
 	V26_2_TriggerBackrefRepair
+
+	// V26_1_StatementHintsTypeNameEnabledColumnsAdded adds hint_type, hint_name,
+	// and enabled columns to the system.statement_hints table.
+	V26_2_StatementHintsTypeNameEnabledColumnsAdded
+
+	// V26_1_StatementHintsTypeColumnBackfilled adds hint_type, hint_name, and enabled
+	// columns to the system.statement_hints table.
+	V26_2_StatementHintsTypeColumnBackfilled
+
 	// *************************************************
 	// Step (1) Add new versions above this comment.
 	// Do not add new versions to a patch release.
@@ -285,6 +294,11 @@ var versionTable = [numKeys]roachpb.Version{
 	V26_2_AddSystemClusterMetricsTable: {Major: 26, Minor: 1, Internal: 6},
 
 	V26_2_TriggerBackrefRepair: {Major: 26, Minor: 1, Internal: 8},
+
+	V26_2_StatementHintsTypeNameEnabledColumnsAdded: {Major: 26, Minor: 1, Internal: 10},
+
+	V26_2_StatementHintsTypeColumnBackfilled: {Major: 26, Minor: 1, Internal: 12},
+
 	// *************************************************
 	// Step (2): Add new versions above this comment.
 	// Do not add new versions to a patch release.

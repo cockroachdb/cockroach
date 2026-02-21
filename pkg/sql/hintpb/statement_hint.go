@@ -12,6 +12,26 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
+const (
+	// HintTypeEmpty is the default value, used if the hint type cannot be
+	// determined.
+	HintTypeEmpty = "EMPTY"
+	// HintTypeRewriteInlineHints is used for "hint injection" hints that rewrite
+	// the inline hints within the AST of a statement.
+	HintTypeRewriteInlineHints = "REWRITE INLINE HINTS"
+)
+
+// HintTypeStr returns the string representation of the type of the given hint,
+// suitable for use in the statement_hints table.
+func (hint *StatementHintUnion) HintTypeStr() string {
+	switch hint.GetValue().(type) {
+	case *InjectHints:
+		return HintTypeRewriteInlineHints
+	default:
+		return HintTypeEmpty
+	}
+}
+
 // FromBytes converts the raw bytes from system.statement_hints into a
 // StatementHintUnion object.
 func FromBytes(bytes []byte) (StatementHintUnion, error) {
