@@ -19,7 +19,6 @@ CREATE FUNCTION f() RETURNS INT IMMUTABLE AS $$ SELECT 1 $$;
 statement error pgcode 42P13 pq: no function body specified
 CREATE FUNCTION f() RETURNS INT IMMUTABLE LANGUAGE SQL;
 
-
 statement ok
 CREATE FUNCTION a(i INT) RETURNS INT LANGUAGE SQL AS 'SELECT i'
 
@@ -86,7 +85,6 @@ C INT,
 INDEX t_idx_b(b),
 INDEX t_idx_c(c)
 );
-
 
 statement ok
 CREATE FUNCTION f(a notmyworkday) RETURNS INT VOLATILE LANGUAGE SQL AS $$
@@ -160,7 +158,6 @@ statement ok
 USE test;
 subtest end
 
-
 subtest udf_regproc
 
 query T
@@ -201,7 +198,6 @@ SELECT 999999::regproc;
 
 subtest end
 
-
 subtest execute_dropped_function
 
 statement ok
@@ -219,7 +215,6 @@ statement error pgcode 42883 pq: unknown function: f_test_exec_dropped\(\)
 SELECT f_test_exec_dropped(321);
 
 subtest end
-
 
 subtest create_or_replace_function
 
@@ -296,7 +291,6 @@ $$
 
 subtest end
 
-
 subtest seq_qualified_name
 
 statement ok
@@ -323,7 +317,6 @@ SELECT f_seq_qualified_name_quoted()
 2
 
 subtest end
-
 
 subtest execution
 
@@ -503,7 +496,6 @@ SELECT int_identity((1/0)::INT)
 
 subtest end
 
-
 subtest args
 
 statement error pgcode 42P13 pq: SQL functions cannot have arguments of type record
@@ -630,7 +622,6 @@ FROM generate_series(1, 100) AS g(i)
 
 subtest end
 
-
 subtest return_type_assignment_casts
 
 # Do not allow functions with return type mismatches that cannot be cast in an
@@ -658,7 +649,6 @@ statement error pgcode 22001 value too long for type CHAR
 SELECT stoc('abc')
 
 subtest end
-
 
 subtest tagged_dollar_quotes
 
@@ -693,7 +683,6 @@ $inner$
 
 subtest end
 
-
 subtest array_flatten
 
 statement ok
@@ -714,7 +703,6 @@ SELECT arr(i) FROM generate_series(1, 3) g(i)
 {1,2,3}
 
 subtest end
-
 
 subtest lowercase_hint_error_implicit_schema
 
@@ -1231,7 +1219,7 @@ CREATE FUNCTION public.cast_to_enum()
   DECLARE
   i INT8;
   BEGIN
-  SELECT count(*) FROM public.cast_udf_enum_t WHERE c::public.cast_udf_enum = 'a'::test.public.cast_udf_enum INTO i;
+  SELECT count(*) FROM public.cast_udf_enum_t WHERE c::public.cast_udf_enum = 'a'::public.cast_udf_enum INTO i;
   RETURN i;
   END;
 $$
@@ -1332,7 +1320,7 @@ CREATE FUNCTION public.process_array()
   DECLARE
   count INT8;
   BEGIN
-  SELECT count(*) FROM public.array_test_t WHERE statuses[1]::public.array_status = 'active'::test.public.array_status INTO count;
+  SELECT count(*) FROM public.array_test_t WHERE statuses[1]::public.array_status = 'active'::public.array_status INTO count;
   RETURN count;
   END;
 $$
@@ -1389,7 +1377,7 @@ CREATE FUNCTION public.mixed_udt_func()
   profile_val public.user_profile;
   result STRING;
   BEGIN
-  SELECT status::public.user_status, profile::user_profile FROM public.mixed_udt_t WHERE status::user_status = 'admin'::test.public.user_status INTO status_val, profile_val;
+  SELECT status::public.user_status, profile::public.user_profile FROM public.mixed_udt_t WHERE status::public.user_status = 'admin'::public.user_status INTO status_val, profile_val;
   result := status_val::STRING;
   RETURN result;
   END;
