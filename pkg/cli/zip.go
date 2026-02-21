@@ -217,6 +217,11 @@ func runDebugZip(cmd *cobra.Command, args []string) (retErr error) {
 		return err
 	}
 
+	// Validate log format
+	if zipCtx.logFormat != "text" && zipCtx.logFormat != "parquet" {
+		return errors.Newf("invalid --log-format value %q: must be 'text' or 'parquet'", zipCtx.logFormat)
+	}
+
 	timeout := 60 * time.Second
 	if cliCtx.cmdTimeout != 0 {
 		timeout = cliCtx.cmdTimeout

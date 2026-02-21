@@ -801,6 +801,7 @@ func init() {
 		cliflagcfg.BoolFlag(f, &zipCtx.includeStacks, cliflags.ZipIncludeGoroutineStacks)
 		cliflagcfg.BoolFlag(f, &zipCtx.includeRunningJobTraces, cliflags.ZipIncludeRunningJobTraces)
 		cliflagcfg.BoolFlag(f, &zipCtx.validateZipFile, cliflags.ZipValidateFile)
+		cliflagcfg.StringFlag(f, &zipCtx.logFormat, cliflags.ZipLogFormat)
 		cliflagcfg.BoolFlag(f, &baseCfg.UseDRPC, cliflags.UseNewRPC)
 		_ = f.MarkHidden(cliflags.UseNewRPC.Name)
 	}
