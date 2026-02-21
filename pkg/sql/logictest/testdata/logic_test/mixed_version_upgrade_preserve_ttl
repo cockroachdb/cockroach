@@ -1,7 +1,11 @@
-# LogicTest: cockroach-go-testserver-configs
+# LogicTest: cockroach-go-testserver-25.4
 
 # This test verifies that when a cluster is upgraded, it preserves the TTL
 # job configuration on a table.
+#
+# Pinned to cockroach-go-testserver-25.4 because upgrading from 26.1 adds
+# schema_locked=true to the SHOW CREATE output, which is unrelated to TTL
+# preservation.
 
 let $initial_version
 SELECT version FROM [SHOW CLUSTER SETTING version]
