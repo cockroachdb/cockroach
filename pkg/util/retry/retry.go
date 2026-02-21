@@ -285,7 +285,7 @@ func (r *Retry) NextCh() <-chan bool {
 }
 
 // CurrentAttempt returns the current attempt (0-based index)
-func (r *Retry) CurrentAttempt() int {
+func (r Retry) CurrentAttempt() int {
 	return r.currentAttempt
 }
 

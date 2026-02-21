@@ -4,12 +4,15 @@ go_library(
     name = "retry",
     srcs = [
         "batch.go",
+        "dynamic_retry.go",
         "retry.go",
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/util/retry",
     visibility = ["//visibility:public"],
     deps = [
+        "//pkg/settings",
         "//pkg/util/log",
+        "//pkg/util/log/logcrash",
         "//pkg/util/timeutil",
         "@com_github_cockroachdb_errors//:errors",
     ],
@@ -20,11 +23,14 @@ go_test(
     size = "small",
     srcs = [
         "batch_test.go",
+        "dynamic_retry_test.go",
         "main_test.go",
         "retry_test.go",
     ],
     embed = [":retry"],
     deps = [
+        "//pkg/settings/cluster",
+        "//pkg/util/leaktest",
         "//pkg/util/log",
         "//pkg/util/timeutil",
         "@com_github_cockroachdb_errors//:errors",
