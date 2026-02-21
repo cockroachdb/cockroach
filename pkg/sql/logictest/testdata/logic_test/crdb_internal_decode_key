@@ -234,45 +234,11 @@ REVOKE SELECT ON TABLE decode_key_priv_test FROM testuser
 
 user testuser
 
-# Test that user without privileges gets permission denied error in result
-query T
+# Test that user without privileges gets permission denied error
+query error permission denied
 SELECT crdb_internal.decode_key(
   crdb_internal.encode_key($priv_test_id, 1, (42,))
-)->>'error'
-----
-permission denied
-
-# The table_id should still be present even without access
-query B
-SELECT (crdb_internal.decode_key(
-  crdb_internal.encode_key($priv_test_id, 1, (42,))
-)->>'table_id')::INT = $priv_test_id
-----
-true
-
-# The index_id should still be present even without access
-query T
-SELECT crdb_internal.decode_key(
-  crdb_internal.encode_key($priv_test_id, 1, (42,))
-)->>'index_id'
-----
-1
-
-# Table name should NOT be present without access
-query T
-SELECT crdb_internal.decode_key(
-  crdb_internal.encode_key($priv_test_id, 1, (42,))
-)->>'table_name'
-----
-NULL
-
-# Key columns should NOT be present without access
-query T
-SELECT crdb_internal.decode_key(
-  crdb_internal.encode_key($priv_test_id, 1, (42,))
-)->'key_columns'
-----
-NULL
+)
 
 user root
 
