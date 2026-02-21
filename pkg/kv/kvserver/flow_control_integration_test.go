@@ -3226,6 +3226,7 @@ func TestFlowControlSendQueueRangeSplitMerge(t *testing.T) {
 func TestFlowControlSendQueueRangeFeed(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+	testutils.SetVModule(t, "dist_sender_mux_rangefeed=2,dist_sender_rangefeed=2")
 
 	// rangeFeed will create a rangefeed suitable for testing. It will start a
 	// rangefeed and return a function that can be used to stop it.
