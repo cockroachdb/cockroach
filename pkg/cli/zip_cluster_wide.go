@@ -85,7 +85,7 @@ func (zc *debugZipContext) collectClusterData(
 
 	queryAndDumpTables := func(reg DebugZipTableRegistry) error {
 		for _, table := range reg.GetTables() {
-			query, err := reg.QueryForTable(table, zipCtx.redact)
+			query, err := reg.QueryForTable(table, zipCtx.redact || zipCtx.redactLocally)
 			if err != nil {
 				return err
 			}

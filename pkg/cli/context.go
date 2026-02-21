@@ -354,6 +354,11 @@ type zipContext struct {
 	// range key data, which is necessary to support CockroachDB.
 	redact bool
 
+	// redactLocally indicates whether log redaction should happen client-side
+	// instead of server-side. This can help avoid memory issues on the server
+	// when processing large log files.
+	redactLocally bool
+
 	// Duration (in seconds) to run CPU profile for.
 	cpuProfDuration time.Duration
 
@@ -389,6 +394,7 @@ func setZipContextDefaults() {
 	zipCtx.files = fileSelection{}
 	zipCtx.redactLogs = false
 	zipCtx.redact = false
+	zipCtx.redactLocally = false
 	// Even though it makes debug.zip heavyweight, range infos are often the best source
 	// of information for range-level issues and so they are opt-out, not opt-in.
 	zipCtx.includeRangeInfo = true

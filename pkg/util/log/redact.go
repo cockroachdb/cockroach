@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/util/encoding/encodingtype"
+	"github.com/cockroachdb/cockroach/pkg/util/log/logpb"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
 )
@@ -131,6 +132,32 @@ func maybeRedactEntry(payload entryPayload, editor redactEditor) (res entryPaylo
 	res.message = string(r.msg)
 	res.tags = r.tags
 	return res
+}
+
+// RedactEntry applies redaction to a logpb.Entry in-place based on the given edit mode.
+// This is useful for client-side redaction of log entries received from a server.
+func RedactEntry(e *logpb.Entry, editMode EditSensitiveData) {
+	editor := getEditor(editMode)
+
+	// Redact the message.
+	msgPkg := redactablePackage{
+		msg:        []byte(e.Message),
+		redactable: e.Redactable,
+	}
+	msgPkg = editor(msgPkg)
+	e.Message = string(msgPkg.msg)
+
+	// Redact the tags.
+	if len(e.Tags) > 0 {
+		tagsPkg := redactablePackage{
+			msg:        []byte(e.Tags),
+			redactable: e.Redactable,
+		}
+		tagsPkg = editor(tagsPkg)
+		e.Tags = string(tagsPkg.msg)
+	}
+
+	e.Redactable = msgPkg.redactable
 }
 
 func init() {
