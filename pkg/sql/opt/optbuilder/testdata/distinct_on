@@ -577,17 +577,17 @@ build
 SELECT DISTINCT ON (id) * FROM t1 ORDER BY id IS NULL, id
 ----
 sort
- ├── columns: id:1 str:2  [hidden: column6:6!null]
+ ├── columns: id:1 str:2  [hidden: "id IS NULL":6!null]
  ├── ordering: +6,+1
  └── distinct-on
-      ├── columns: id:1 str:2 column6:6!null
-      ├── grouping columns: id:1 column6:6!null
+      ├── columns: id:1 str:2 "id IS NULL":6!null
+      ├── grouping columns: id:1 "id IS NULL":6!null
       ├── project
-      │    ├── columns: column6:6!null id:1 str:2
+      │    ├── columns: "id IS NULL":6!null id:1 str:2
       │    ├── scan t1
       │    │    └── columns: id:1 str:2 rowid:3!null crdb_internal_mvcc_timestamp:4 tableoid:5
       │    └── projections
-      │         └── id:1 IS NULL [as=column6:6]
+      │         └── id:1 IS NULL [as="id IS NULL":6]
       └── aggregations
            └── first-agg [as=str:2]
                 └── str:2

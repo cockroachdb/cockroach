@@ -1776,19 +1776,19 @@ with &1 (cte)
  ├── project
  │    ├── columns: "?column?":6
  │    └── limit
- │         ├── columns: "?column?":6 column7:7
+ │         ├── columns: "?column?":6 "a + b":7
  │         ├── internal-ordering: +7
  │         ├── sort
- │         │    ├── columns: "?column?":6 column7:7
+ │         │    ├── columns: "?column?":6 "a + b":7
  │         │    ├── ordering: +7
  │         │    ├── limit hint: 10.00
  │         │    └── project
- │         │         ├── columns: "?column?":6 column7:7
+ │         │         ├── columns: "?column?":6 "a + b":7
  │         │         ├── scan x
  │         │         │    └── columns: a:1 b:2 rowid:3!null crdb_internal_mvcc_timestamp:4 tableoid:5
  │         │         └── projections
  │         │              ├── a:1 + 1 [as="?column?":6]
- │         │              └── a:1 + b:2 [as=column7:7]
+ │         │              └── a:1 + b:2 [as="a + b":7]
  │         └── 10
  └── with-scan &1 (cte)
       ├── columns: "?column?":8

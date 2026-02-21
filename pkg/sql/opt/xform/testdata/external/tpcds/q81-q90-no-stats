@@ -1857,7 +1857,7 @@ opt
 		100;
 ----
 top-k
- ├── columns: i_category:13!null i_class:11!null i_brand:9 s_store_name:85 s_company_name:97 d_moy:58 sum_sales:111 avg_monthly_sales:112  [hidden: column113:113]
+ ├── columns: i_category:13!null i_class:11!null i_brand:9 s_store_name:85 s_company_name:97 d_moy:58 sum_sales:111 avg_monthly_sales:112  [hidden: "sum_sales - avg_monthly_sales":113]
  ├── internal-ordering: +113,+85
  ├── k: 100
  ├── cardinality: [0 - 100]
@@ -1866,7 +1866,7 @@ top-k
  ├── fd: (9,11,13,58,85,97)-->(111,112), (111,112)-->(113)
  ├── ordering: +113,+85
  └── project
-      ├── columns: column113:113 i_brand:9 i_class:11!null i_category:13!null d_moy:58 s_store_name:85 s_company_name:97 sum:111 avg:112
+      ├── columns: "sum_sales - avg_monthly_sales":113 i_brand:9 i_class:11!null i_category:13!null d_moy:58 s_store_name:85 s_company_name:97 sum:111 avg:112
       ├── immutable
       ├── key: (9,11,13,58,85,97)
       ├── fd: (9,11,13,58,85,97)-->(111,112), (111,112)-->(113)
@@ -1921,7 +1921,7 @@ top-k
       │    └── filters
       │         └── CASE WHEN avg:112 != 0 THEN abs(sum:111 - avg:112) / avg:112 ELSE CAST(NULL AS DECIMAL) END > 0.1 [outer=(111,112), immutable]
       └── projections
-           └── sum:111 - avg:112 [as=column113:113, outer=(111,112), immutable]
+           └── sum:111 - avg:112 [as="sum_sales - avg_monthly_sales":113, outer=(111,112), immutable]
 
 # --------------------------------------------------
 # Q90

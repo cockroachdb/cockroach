@@ -3517,7 +3517,7 @@ opt expect=GenerateVectorSearch
 SELECT * FROM index_tab ORDER BY vec1 <-> '[3,1,2]' LIMIT 1;
 ----
 top-k
- ├── columns: id:1!null val:2 region:3 latitude:4 longitude:5 data1:6!null data2:7!null geom:8 vec1:9 vec2:10 vec3:11  [hidden: column15:15]
+ ├── columns: id:1!null val:2 region:3 latitude:4 longitude:5 data1:6!null data2:7!null geom:8 vec1:9 vec2:10 vec3:11  [hidden: "vec1 <-> '[3,1,2]'":15]
  ├── internal-ordering: +15
  ├── k: 1
  ├── cardinality: [0 - 1]
@@ -3525,7 +3525,7 @@ top-k
  ├── key: ()
  ├── fd: ()-->(1-11,15)
  └── project
-      ├── columns: column15:15 id:1!null val:2 region:3 latitude:4 longitude:5 data1:6!null data2:7!null geom:8 vec1:9 vec2:10 vec3:11
+      ├── columns: "vec1 <-> '[3,1,2]'":15 id:1!null val:2 region:3 latitude:4 longitude:5 data1:6!null data2:7!null geom:8 vec1:9 vec2:10 vec3:11
       ├── immutable
       ├── key: (1)
       ├── fd: (1)-->(2-11), (9)-->(15)
@@ -3542,14 +3542,14 @@ top-k
       │    │    └── '[3,1,2]'
       │    └── filters (true)
       └── projections
-           └── vec1:9 <-> '[3,1,2]' [as=column15:15, outer=(9), immutable]
+           └── vec1:9 <-> '[3,1,2]' [as="vec1 <-> '[3,1,2]'":15, outer=(9), immutable]
 
 # Case with a limit greater than 1.
 opt expect=GenerateVectorSearch
 SELECT * FROM index_tab ORDER BY vec1 <-> '[3,1,2]' LIMIT 5;
 ----
 top-k
- ├── columns: id:1!null val:2 region:3 latitude:4 longitude:5 data1:6!null data2:7!null geom:8 vec1:9 vec2:10 vec3:11  [hidden: column15:15]
+ ├── columns: id:1!null val:2 region:3 latitude:4 longitude:5 data1:6!null data2:7!null geom:8 vec1:9 vec2:10 vec3:11  [hidden: "vec1 <-> '[3,1,2]'":15]
  ├── internal-ordering: +15
  ├── k: 5
  ├── cardinality: [0 - 5]
@@ -3558,7 +3558,7 @@ top-k
  ├── fd: (1)-->(2-11), (9)-->(15)
  ├── ordering: +15
  └── project
-      ├── columns: column15:15 id:1!null val:2 region:3 latitude:4 longitude:5 data1:6!null data2:7!null geom:8 vec1:9 vec2:10 vec3:11
+      ├── columns: "vec1 <-> '[3,1,2]'":15 id:1!null val:2 region:3 latitude:4 longitude:5 data1:6!null data2:7!null geom:8 vec1:9 vec2:10 vec3:11
       ├── immutable
       ├── key: (1)
       ├── fd: (1)-->(2-11), (9)-->(15)
@@ -3575,14 +3575,14 @@ top-k
       │    │    └── '[3,1,2]'
       │    └── filters (true)
       └── projections
-           └── vec1:9 <-> '[3,1,2]' [as=column15:15, outer=(9), immutable]
+           └── vec1:9 <-> '[3,1,2]' [as="vec1 <-> '[3,1,2]'":15, outer=(9), immutable]
 
 # Case with a different vector index.
 opt expect=GenerateVectorSearch
 SELECT * FROM index_tab ORDER BY vec2 <-> '[3,1,2]' LIMIT 5;
 ----
 top-k
- ├── columns: id:1!null val:2 region:3 latitude:4 longitude:5 data1:6!null data2:7!null geom:8 vec1:9 vec2:10 vec3:11  [hidden: column15:15]
+ ├── columns: id:1!null val:2 region:3 latitude:4 longitude:5 data1:6!null data2:7!null geom:8 vec1:9 vec2:10 vec3:11  [hidden: "vec2 <-> '[3,1,2]'":15]
  ├── internal-ordering: +15
  ├── k: 5
  ├── cardinality: [0 - 5]
@@ -3591,7 +3591,7 @@ top-k
  ├── fd: (1)-->(2-11), (10)-->(15)
  ├── ordering: +15
  └── project
-      ├── columns: column15:15 id:1!null val:2 region:3 latitude:4 longitude:5 data1:6!null data2:7!null geom:8 vec1:9 vec2:10 vec3:11
+      ├── columns: "vec2 <-> '[3,1,2]'":15 id:1!null val:2 region:3 latitude:4 longitude:5 data1:6!null data2:7!null geom:8 vec1:9 vec2:10 vec3:11
       ├── immutable
       ├── key: (1)
       ├── fd: (1)-->(2-11), (10)-->(15)
@@ -3608,14 +3608,14 @@ top-k
       │    │    └── '[3,1,2]'
       │    └── filters (true)
       └── projections
-           └── vec2:10 <-> '[3,1,2]' [as=column15:15, outer=(10), immutable]
+           └── vec2:10 <-> '[3,1,2]' [as="vec2 <-> '[3,1,2]'":15, outer=(10), immutable]
 
 # Case with a subset of table columns requested.
 opt expect=GenerateVectorSearch
 SELECT id, vec1 FROM index_tab ORDER BY vec1 <-> '[3,1,2]' LIMIT 5;
 ----
 top-k
- ├── columns: id:1!null vec1:9  [hidden: column15:15]
+ ├── columns: id:1!null vec1:9  [hidden: "vec1 <-> '[3,1,2]'":15]
  ├── internal-ordering: +15
  ├── k: 5
  ├── cardinality: [0 - 5]
@@ -3624,7 +3624,7 @@ top-k
  ├── fd: (1)-->(9), (9)-->(15)
  ├── ordering: +15
  └── project
-      ├── columns: column15:15 id:1!null vec1:9
+      ├── columns: "vec1 <-> '[3,1,2]'":15 id:1!null vec1:9
       ├── immutable
       ├── key: (1)
       ├── fd: (1)-->(9), (9)-->(15)
@@ -3641,7 +3641,7 @@ top-k
       │    │    └── '[3,1,2]'
       │    └── filters (true)
       └── projections
-           └── vec1:9 <-> '[3,1,2]' [as=column15:15, outer=(9), immutable]
+           └── vec1:9 <-> '[3,1,2]' [as="vec1 <-> '[3,1,2]'":15, outer=(9), immutable]
 
 # Case with additional projected expressions.
 opt expect=GenerateVectorSearch
@@ -3649,7 +3649,7 @@ SELECT id, vec1, latitude*longitude, data1*data2 FROM index_tab
 ORDER BY vec1 <-> '[3,1,2]' LIMIT 5;
 ----
 top-k
- ├── columns: id:1!null vec1:9 "?column?":15 "?column?":16!null  [hidden: column17:17]
+ ├── columns: id:1!null vec1:9 "?column?":15 "?column?":16!null  [hidden: "vec1 <-> '[3,1,2]'":17]
  ├── internal-ordering: +17
  ├── k: 5
  ├── cardinality: [0 - 5]
@@ -3658,7 +3658,7 @@ top-k
  ├── fd: (1)-->(9,15-17), (9)-->(17)
  ├── ordering: +17
  └── project
-      ├── columns: "?column?":15 "?column?":16!null column17:17 id:1!null vec1:9
+      ├── columns: "?column?":15 "?column?":16!null "vec1 <-> '[3,1,2]'":17 id:1!null vec1:9
       ├── immutable
       ├── key: (1)
       ├── fd: (1)-->(9,15-17), (9)-->(17)
@@ -3677,14 +3677,14 @@ top-k
       └── projections
            ├── latitude:4 * longitude:5 [as="?column?":15, outer=(4,5), immutable]
            ├── data1:6 * data2:7 [as="?column?":16, outer=(6,7), immutable]
-           └── vec1:9 <-> '[3,1,2]' [as=column17:17, outer=(9), immutable]
+           └── vec1:9 <-> '[3,1,2]' [as="vec1 <-> '[3,1,2]'":17, outer=(9), immutable]
 
 # Case with prefix columns.
 opt expect=GenerateVectorSearch
 SELECT id, val, vec1 FROM index_tab WHERE data1 = 1 AND data2 = 2 ORDER BY vec1 <-> '[3,1,2]' LIMIT 5;
 ----
 top-k
- ├── columns: id:1!null val:2 vec1:9  [hidden: column15:15]
+ ├── columns: id:1!null val:2 vec1:9  [hidden: "vec1 <-> '[3,1,2]'":15]
  ├── internal-ordering: +15
  ├── k: 5
  ├── cardinality: [0 - 5]
@@ -3693,7 +3693,7 @@ top-k
  ├── fd: (1)-->(2,9), (9)-->(15)
  ├── ordering: +15
  └── project
-      ├── columns: column15:15 id:1!null val:2 vec1:9
+      ├── columns: "vec1 <-> '[3,1,2]'":15 id:1!null val:2 vec1:9
       ├── immutable
       ├── key: (1)
       ├── fd: (1)-->(2,9,15), (9)-->(15)
@@ -3712,7 +3712,7 @@ top-k
       │    │    └── '[3,1,2]'
       │    └── filters (true)
       └── projections
-           └── vec1:9 <-> '[3,1,2]' [as=column15:15, outer=(9), immutable]
+           └── vec1:9 <-> '[3,1,2]' [as="vec1 <-> '[3,1,2]'":15, outer=(9), immutable]
 
 # Case with the index prefix constrained to multiple sets of values.
 opt expect=GenerateVectorSearch
@@ -3721,7 +3721,7 @@ WHERE (data1, data2) IN ((1, 2), (3, 4), (5, 6))
 ORDER BY vec1 <-> '[3,1,2]' LIMIT 5;
 ----
 top-k
- ├── columns: id:1!null val:2 region:3 vec1:9  [hidden: column15:15]
+ ├── columns: id:1!null val:2 region:3 vec1:9  [hidden: "vec1 <-> '[3,1,2]'":15]
  ├── internal-ordering: +15
  ├── k: 5
  ├── cardinality: [0 - 5]
@@ -3730,7 +3730,7 @@ top-k
  ├── fd: (1)-->(2,3,9,15), (9)-->(15)
  ├── ordering: +15
  └── project
-      ├── columns: column15:15 id:1!null val:2 region:3 vec1:9
+      ├── columns: "vec1 <-> '[3,1,2]'":15 id:1!null val:2 region:3 vec1:9
       ├── immutable
       ├── key: (1)
       ├── fd: (1)-->(2,3,9,15), (9)-->(15)
@@ -3751,14 +3751,14 @@ top-k
       │    │    └── '[3,1,2]'
       │    └── filters (true)
       └── projections
-           └── vec1:9 <-> '[3,1,2]' [as=column15:15, outer=(9), immutable]
+           └── vec1:9 <-> '[3,1,2]' [as="vec1 <-> '[3,1,2]'":15, outer=(9), immutable]
 
 # Case with Cosine distance operator.
 opt expect=GenerateVectorSearch
 SELECT * FROM index_tab ORDER BY vec1 <=> '[3,1,2]' LIMIT 1;
 ----
 top-k
- ├── columns: id:1!null val:2 region:3 latitude:4 longitude:5 data1:6!null data2:7!null geom:8 vec1:9 vec2:10 vec3:11  [hidden: column15:15]
+ ├── columns: id:1!null val:2 region:3 latitude:4 longitude:5 data1:6!null data2:7!null geom:8 vec1:9 vec2:10 vec3:11  [hidden: "vec1 <=> '[3,1,2]'":15]
  ├── internal-ordering: +15
  ├── k: 1
  ├── cardinality: [0 - 1]
@@ -3766,7 +3766,7 @@ top-k
  ├── key: ()
  ├── fd: ()-->(1-11,15)
  └── project
-      ├── columns: column15:15 id:1!null val:2 region:3 latitude:4 longitude:5 data1:6!null data2:7!null geom:8 vec1:9 vec2:10 vec3:11
+      ├── columns: "vec1 <=> '[3,1,2]'":15 id:1!null val:2 region:3 latitude:4 longitude:5 data1:6!null data2:7!null geom:8 vec1:9 vec2:10 vec3:11
       ├── immutable
       ├── key: (1)
       ├── fd: (1)-->(2-11), (9)-->(15)
@@ -3783,14 +3783,14 @@ top-k
       │    │    └── '[3,1,2]'
       │    └── filters (true)
       └── projections
-           └── vec1:9 <=> '[3,1,2]' [as=column15:15, outer=(9), immutable]
+           └── vec1:9 <=> '[3,1,2]' [as="vec1 <=> '[3,1,2]'":15, outer=(9), immutable]
 
 # Case with InnerProduct distance operator.
 opt expect=GenerateVectorSearch
 SELECT * FROM index_tab ORDER BY vec2 <#> '[3,1,2]' LIMIT 1;
 ----
 top-k
- ├── columns: id:1!null val:2 region:3 latitude:4 longitude:5 data1:6!null data2:7!null geom:8 vec1:9 vec2:10 vec3:11  [hidden: column15:15]
+ ├── columns: id:1!null val:2 region:3 latitude:4 longitude:5 data1:6!null data2:7!null geom:8 vec1:9 vec2:10 vec3:11  [hidden: "vec2 <#> '[3,1,2]'":15]
  ├── internal-ordering: +15
  ├── k: 1
  ├── cardinality: [0 - 1]
@@ -3798,7 +3798,7 @@ top-k
  ├── key: ()
  ├── fd: ()-->(1-11,15)
  └── project
-      ├── columns: column15:15 id:1!null val:2 region:3 latitude:4 longitude:5 data1:6!null data2:7!null geom:8 vec1:9 vec2:10 vec3:11
+      ├── columns: "vec2 <#> '[3,1,2]'":15 id:1!null val:2 region:3 latitude:4 longitude:5 data1:6!null data2:7!null geom:8 vec1:9 vec2:10 vec3:11
       ├── immutable
       ├── key: (1)
       ├── fd: (1)-->(2-11), (10)-->(15)
@@ -3815,7 +3815,7 @@ top-k
       │    │    └── '[3,1,2]'
       │    └── filters (true)
       └── projections
-           └── vec2:10 <#> '[3,1,2]' [as=column15:15, outer=(10), immutable]
+           └── vec2:10 <#> '[3,1,2]' [as="vec2 <#> '[3,1,2]'":15, outer=(10), immutable]
 
 # Case with prefix columns constrained by a check constraint. Inapplicable check
 # constraints should not prevent the search.
@@ -3834,7 +3834,7 @@ opt expect=GenerateVectorSearch
 SELECT * FROM index_with_check_tab ORDER BY vec <-> '[3,1,2]' LIMIT 5;
 ----
 top-k
- ├── columns: col1:1!null col2:2!null vec:3  [hidden: column7:7]
+ ├── columns: col1:1!null col2:2!null vec:3  [hidden: "vec <-> '[3,1,2]'":7]
  ├── internal-ordering: +7
  ├── k: 5
  ├── cardinality: [0 - 5]
@@ -3842,7 +3842,7 @@ top-k
  ├── fd: (3)-->(7)
  ├── ordering: +7
  └── project
-      ├── columns: column7:7 col1:1!null col2:2!null vec:3
+      ├── columns: "vec <-> '[3,1,2]'":7 col1:1!null col2:2!null vec:3
       ├── immutable
       ├── fd: (3)-->(7)
       ├── inner-join (lookup index_with_check_tab)
@@ -3861,7 +3861,7 @@ top-k
       │    │    └── '[3,1,2]'
       │    └── filters (true)
       └── projections
-           └── vec:3 <-> '[3,1,2]' [as=column7:7, outer=(3), immutable]
+           └── vec:3 <-> '[3,1,2]' [as="vec <-> '[3,1,2]'":7, outer=(3), immutable]
 
 # Test computed prefix columns.
 exec-ddl
@@ -3880,7 +3880,7 @@ opt expect=GenerateVectorSearch
 SELECT vec FROM index_with_computed_tab WHERE col3 = 5 ORDER BY vec <-> '[3,1,2]' LIMIT 5;
 ----
 top-k
- ├── columns: vec:5  [hidden: column9:9]
+ ├── columns: vec:5  [hidden: "vec <-> '[3,1,2]'":9]
  ├── internal-ordering: +9
  ├── k: 5
  ├── cardinality: [0 - 5]
@@ -3888,7 +3888,7 @@ top-k
  ├── fd: (5)-->(9)
  ├── ordering: +9
  └── project
-      ├── columns: column9:9 vec:5
+      ├── columns: "vec <-> '[3,1,2]'":9 vec:5
       ├── immutable
       ├── fd: (5)-->(9)
       ├── inner-join (lookup index_with_computed_tab)
@@ -3904,13 +3904,13 @@ top-k
       │    │    └── '[3,1,2]'
       │    └── filters (true)
       └── projections
-           └── vec:5 <-> '[3,1,2]' [as=column9:9, outer=(5), immutable]
+           └── vec:5 <-> '[3,1,2]' [as="vec <-> '[3,1,2]'":9, outer=(5), immutable]
 
 opt expect=GenerateVectorSearch
 SELECT * FROM index_with_computed_tab WHERE col3 = 5 ORDER BY vec <-> '[3,1,2]' LIMIT 5;
 ----
 top-k
- ├── columns: col1:1!null col2:2!null col3:3!null col4:4!null vec:5  [hidden: column9:9]
+ ├── columns: col1:1!null col2:2!null col3:3!null col4:4!null vec:5  [hidden: "vec <-> '[3,1,2]'":9]
  ├── internal-ordering: +9 opt(3)
  ├── k: 5
  ├── cardinality: [0 - 5]
@@ -3918,7 +3918,7 @@ top-k
  ├── fd: ()-->(3), (5)-->(9), (1,2)-->(4)
  ├── ordering: +9 opt(3) [actual: +9]
  └── project
-      ├── columns: column9:9 col4:4!null col1:1!null col2:2!null col3:3!null vec:5
+      ├── columns: "vec <-> '[3,1,2]'":9 col4:4!null col1:1!null col2:2!null col3:3!null vec:5
       ├── immutable
       ├── fd: (1,2)-->(3,4), (5)-->(9)
       ├── inner-join (lookup index_with_computed_tab)
@@ -3935,14 +3935,14 @@ top-k
       │    │    └── '[3,1,2]'
       │    └── filters (true)
       └── projections
-           ├── vec:5 <-> '[3,1,2]' [as=column9:9, outer=(5), immutable]
+           ├── vec:5 <-> '[3,1,2]' [as="vec <-> '[3,1,2]'":9, outer=(5), immutable]
            └── col1:1 * col2:2 [as=col4:4, outer=(1,2), immutable]
 
 opt expect=GenerateVectorSearch
 SELECT vec FROM index_with_computed_tab WHERE col4 = 12 ORDER BY vec <-> '[3,1,2]' LIMIT 5;
 ----
 top-k
- ├── columns: vec:5  [hidden: column9:9]
+ ├── columns: vec:5  [hidden: "vec <-> '[3,1,2]'":9]
  ├── internal-ordering: +9
  ├── k: 5
  ├── cardinality: [0 - 5]
@@ -3950,7 +3950,7 @@ top-k
  ├── fd: (5)-->(9)
  ├── ordering: +9
  └── project
-      ├── columns: column9:9 vec:5
+      ├── columns: "vec <-> '[3,1,2]'":9 vec:5
       ├── immutable
       ├── fd: (5)-->(9)
       ├── inner-join (lookup index_with_computed_tab)
@@ -3966,7 +3966,7 @@ top-k
       │    │    └── '[3,1,2]'
       │    └── filters (true)
       └── projections
-           └── vec:5 <-> '[3,1,2]' [as=column9:9, outer=(5), immutable]
+           └── vec:5 <-> '[3,1,2]' [as="vec <-> '[3,1,2]'":9, outer=(5), immutable]
 
 # The col1 and col2 filters imply filters on col3 and col4, but may filter
 # additional rows, so this case is not yet supported.
@@ -3974,7 +3974,7 @@ opt expect-not=GenerateVectorSearch
 SELECT vec FROM index_with_computed_tab WHERE col1 = 2 AND col2 = 10 ORDER BY vec <-> '[3,1,2]' LIMIT 5;
 ----
 top-k
- ├── columns: vec:5  [hidden: column9:9]
+ ├── columns: vec:5  [hidden: "vec <-> '[3,1,2]'":9]
  ├── internal-ordering: +9
  ├── k: 5
  ├── cardinality: [0 - 5]
@@ -3982,7 +3982,7 @@ top-k
  ├── fd: (5)-->(9)
  ├── ordering: +9
  └── project
-      ├── columns: column9:9 vec:5
+      ├── columns: "vec <-> '[3,1,2]'":9 vec:5
       ├── immutable
       ├── fd: (5)-->(9)
       ├── select
@@ -3999,14 +3999,14 @@ top-k
       │         ├── col1:1 = 2 [outer=(1), constraints=(/1: [/2 - /2]; tight), fd=()-->(1)]
       │         └── col2:2 = 10 [outer=(2), constraints=(/2: [/10 - /10]; tight), fd=()-->(2)]
       └── projections
-           └── vec:5 <-> '[3,1,2]' [as=column9:9, outer=(5), immutable]
+           └── vec:5 <-> '[3,1,2]' [as="vec <-> '[3,1,2]'":9, outer=(5), immutable]
 
 # Case with a placeholder vector.
 opt expect=GenerateVectorSearch
 SELECT * FROM index_tab ORDER BY vec1 <-> $1 LIMIT 5;
 ----
 top-k
- ├── columns: id:1!null val:2 region:3 latitude:4 longitude:5 data1:6!null data2:7!null geom:8 vec1:9 vec2:10 vec3:11  [hidden: column15:15]
+ ├── columns: id:1!null val:2 region:3 latitude:4 longitude:5 data1:6!null data2:7!null geom:8 vec1:9 vec2:10 vec3:11  [hidden: "vec1 <-> $1":15]
  ├── internal-ordering: +15
  ├── k: 5
  ├── cardinality: [0 - 5]
@@ -4015,7 +4015,7 @@ top-k
  ├── fd: (1)-->(2-11), (9)-->(15)
  ├── ordering: +15
  └── project
-      ├── columns: column15:15 id:1!null val:2 region:3 latitude:4 longitude:5 data1:6!null data2:7!null geom:8 vec1:9 vec2:10 vec3:11
+      ├── columns: "vec1 <-> $1":15 id:1!null val:2 region:3 latitude:4 longitude:5 data1:6!null data2:7!null geom:8 vec1:9 vec2:10 vec3:11
       ├── immutable, has-placeholder
       ├── key: (1)
       ├── fd: (1)-->(2-11), (9)-->(15)
@@ -4034,14 +4034,14 @@ top-k
       │    │    └── $1
       │    └── filters (true)
       └── projections
-           └── vec1:9 <-> $1 [as=column15:15, outer=(9), immutable]
+           └── vec1:9 <-> $1 [as="vec1 <-> $1":15, outer=(9), immutable]
 
 # Locking should transfer from the scan to the lookup-join.
 opt expect=GenerateVectorSearch
 SELECT * FROM index_tab ORDER BY vec1 <-> '[3,1,2]' LIMIT 5 FOR UPDATE;
 ----
 top-k
- ├── columns: id:1!null val:2 region:3 latitude:4 longitude:5 data1:6!null data2:7!null geom:8 vec1:9 vec2:10 vec3:11  [hidden: column15:15]
+ ├── columns: id:1!null val:2 region:3 latitude:4 longitude:5 data1:6!null data2:7!null geom:8 vec1:9 vec2:10 vec3:11  [hidden: "vec1 <-> '[3,1,2]'":15]
  ├── internal-ordering: +15
  ├── k: 5
  ├── cardinality: [0 - 5]
@@ -4050,7 +4050,7 @@ top-k
  ├── fd: (1)-->(2-11), (9)-->(15)
  ├── ordering: +15
  └── project
-      ├── columns: column15:15 id:1!null val:2 region:3 latitude:4 longitude:5 data1:6!null data2:7!null geom:8 vec1:9 vec2:10 vec3:11
+      ├── columns: "vec1 <-> '[3,1,2]'":15 id:1!null val:2 region:3 latitude:4 longitude:5 data1:6!null data2:7!null geom:8 vec1:9 vec2:10 vec3:11
       ├── volatile
       ├── key: (1)
       ├── fd: (1)-->(2-11), (9)-->(15)
@@ -4069,13 +4069,13 @@ top-k
       │    │    └── '[3,1,2]'
       │    └── filters (true)
       └── projections
-           └── vec1:9 <-> '[3,1,2]' [as=column15:15, outer=(9), immutable]
+           └── vec1:9 <-> '[3,1,2]' [as="vec1 <-> '[3,1,2]'":15, outer=(9), immutable]
 
 opt expect=GenerateVectorSearch
 SELECT * FROM index_tab ORDER BY vec1 <-> '[3,1,2]' LIMIT 5 FOR SHARE SKIP LOCKED;
 ----
 top-k
- ├── columns: id:1!null val:2 region:3 latitude:4 longitude:5 data1:6!null data2:7!null geom:8 vec1:9 vec2:10 vec3:11  [hidden: column15:15]
+ ├── columns: id:1!null val:2 region:3 latitude:4 longitude:5 data1:6!null data2:7!null geom:8 vec1:9 vec2:10 vec3:11  [hidden: "vec1 <-> '[3,1,2]'":15]
  ├── internal-ordering: +15
  ├── k: 5
  ├── cardinality: [0 - 5]
@@ -4084,7 +4084,7 @@ top-k
  ├── fd: (1)-->(2-11), (9)-->(15)
  ├── ordering: +15
  └── project
-      ├── columns: column15:15 id:1!null val:2 region:3 latitude:4 longitude:5 data1:6!null data2:7!null geom:8 vec1:9 vec2:10 vec3:11
+      ├── columns: "vec1 <-> '[3,1,2]'":15 id:1!null val:2 region:3 latitude:4 longitude:5 data1:6!null data2:7!null geom:8 vec1:9 vec2:10 vec3:11
       ├── volatile
       ├── key: (1)
       ├── fd: (1)-->(2-11), (9)-->(15)
@@ -4103,14 +4103,14 @@ top-k
       │    │    └── '[3,1,2]'
       │    └── filters (true)
       └── projections
-           └── vec1:9 <-> '[3,1,2]' [as=column15:15, outer=(9), immutable]
+           └── vec1:9 <-> '[3,1,2]' [as="vec1 <-> '[3,1,2]'":15, outer=(9), immutable]
 
 # The lock operator handles locking, so the lookup-join is non-locking.
 opt expect=GenerateVectorSearch set=optimizer_use_lock_op_for_serializable=true
 SELECT * FROM index_tab ORDER BY vec1 <-> '[3,1,2]' LIMIT 5 FOR SHARE;
 ----
 lock index_tab
- ├── columns: id:1!null val:2 region:3 latitude:4 longitude:5 data1:6!null data2:7!null geom:8 vec1:9 vec2:10 vec3:11  [hidden: column15:15]
+ ├── columns: id:1!null val:2 region:3 latitude:4 longitude:5 data1:6!null data2:7!null geom:8 vec1:9 vec2:10 vec3:11  [hidden: "vec1 <-> '[3,1,2]'":15]
  ├── key columns: id:1
  ├── lock columns: (16-26)
  ├── locking: for-share
@@ -4120,7 +4120,7 @@ lock index_tab
  ├── fd: (1)-->(2-11), (9)-->(15)
  ├── ordering: +15
  └── top-k
-      ├── columns: id:1!null val:2 region:3 latitude:4 longitude:5 data1:6!null data2:7!null geom:8 vec1:9 vec2:10 vec3:11 column15:15
+      ├── columns: id:1!null val:2 region:3 latitude:4 longitude:5 data1:6!null data2:7!null geom:8 vec1:9 vec2:10 vec3:11 "vec1 <-> '[3,1,2]'":15
       ├── internal-ordering: +15
       ├── k: 5
       ├── cardinality: [0 - 5]
@@ -4129,7 +4129,7 @@ lock index_tab
       ├── fd: (1)-->(2-11), (9)-->(15)
       ├── ordering: +15
       └── project
-           ├── columns: column15:15 id:1!null val:2 region:3 latitude:4 longitude:5 data1:6!null data2:7!null geom:8 vec1:9 vec2:10 vec3:11
+           ├── columns: "vec1 <-> '[3,1,2]'":15 id:1!null val:2 region:3 latitude:4 longitude:5 data1:6!null data2:7!null geom:8 vec1:9 vec2:10 vec3:11
            ├── immutable
            ├── key: (1)
            ├── fd: (1)-->(2-11), (9)-->(15)
@@ -4146,14 +4146,14 @@ lock index_tab
            │    │    └── '[3,1,2]'
            │    └── filters (true)
            └── projections
-                └── vec1:9 <-> '[3,1,2]' [as=column15:15, outer=(9), immutable]
+                └── vec1:9 <-> '[3,1,2]' [as="vec1 <-> '[3,1,2]'":15, outer=(9), immutable]
 
 # The index can be forced.
 opt expect=GenerateVectorSearch
 SELECT * FROM index_tab@index_tab_vec2_idx ORDER BY vec2 <-> '[3,1,2]' LIMIT 500;
 ----
 top-k
- ├── columns: id:1!null val:2 region:3 latitude:4 longitude:5 data1:6!null data2:7!null geom:8 vec1:9 vec2:10 vec3:11  [hidden: column15:15]
+ ├── columns: id:1!null val:2 region:3 latitude:4 longitude:5 data1:6!null data2:7!null geom:8 vec1:9 vec2:10 vec3:11  [hidden: "vec2 <-> '[3,1,2]'":15]
  ├── internal-ordering: +15
  ├── k: 500
  ├── cardinality: [0 - 500]
@@ -4162,7 +4162,7 @@ top-k
  ├── fd: (1)-->(2-11), (10)-->(15)
  ├── ordering: +15
  └── project
-      ├── columns: column15:15 id:1!null val:2 region:3 latitude:4 longitude:5 data1:6!null data2:7!null geom:8 vec1:9 vec2:10 vec3:11
+      ├── columns: "vec2 <-> '[3,1,2]'":15 id:1!null val:2 region:3 latitude:4 longitude:5 data1:6!null data2:7!null geom:8 vec1:9 vec2:10 vec3:11
       ├── immutable
       ├── key: (1)
       ├── fd: (1)-->(2-11), (10)-->(15)
@@ -4179,14 +4179,14 @@ top-k
       │    │    └── '[3,1,2]'
       │    └── filters (true)
       └── projections
-           └── vec2:10 <-> '[3,1,2]' [as=column15:15, outer=(10), immutable]
+           └── vec2:10 <-> '[3,1,2]' [as="vec2 <-> '[3,1,2]'":15, outer=(10), immutable]
 
 # Forcing a different index prevents using the vector index.
 opt expect-not=GenerateVectorSearch
 SELECT * FROM index_tab@primary ORDER BY vec1 <-> '[3,1,2]' LIMIT 5;
 ----
 top-k
- ├── columns: id:1!null val:2 region:3 latitude:4 longitude:5 data1:6!null data2:7!null geom:8 vec1:9 vec2:10 vec3:11  [hidden: column15:15]
+ ├── columns: id:1!null val:2 region:3 latitude:4 longitude:5 data1:6!null data2:7!null geom:8 vec1:9 vec2:10 vec3:11  [hidden: "vec1 <-> '[3,1,2]'":15]
  ├── internal-ordering: +15
  ├── k: 5
  ├── cardinality: [0 - 5]
@@ -4195,7 +4195,7 @@ top-k
  ├── fd: (1)-->(2-11), (9)-->(15)
  ├── ordering: +15
  └── project
-      ├── columns: column15:15 id:1!null val:2 region:3 latitude:4 longitude:5 data1:6!null data2:7!null geom:8 vec1:9 vec2:10 vec3:11
+      ├── columns: "vec1 <-> '[3,1,2]'":15 id:1!null val:2 region:3 latitude:4 longitude:5 data1:6!null data2:7!null geom:8 vec1:9 vec2:10 vec3:11
       ├── immutable
       ├── key: (1)
       ├── fd: (1)-->(2-11), (9)-->(15)
@@ -4212,14 +4212,14 @@ top-k
       │    ├── key: (1)
       │    └── fd: (1)-->(2-11)
       └── projections
-           └── vec1:9 <-> '[3,1,2]' [as=column15:15, outer=(9), immutable]
+           └── vec1:9 <-> '[3,1,2]' [as="vec1 <-> '[3,1,2]'":15, outer=(9), immutable]
 
 # No-op case with an un-indexed vector column.
 opt expect-not=GenerateVectorSearch
 SELECT * FROM index_tab ORDER BY vec3 <-> '[3,1,2]' LIMIT 5;
 ----
 top-k
- ├── columns: id:1!null val:2 region:3 latitude:4 longitude:5 data1:6!null data2:7!null geom:8 vec1:9 vec2:10 vec3:11  [hidden: column15:15]
+ ├── columns: id:1!null val:2 region:3 latitude:4 longitude:5 data1:6!null data2:7!null geom:8 vec1:9 vec2:10 vec3:11  [hidden: "vec3 <-> '[3,1,2]'":15]
  ├── internal-ordering: +15
  ├── k: 5
  ├── cardinality: [0 - 5]
@@ -4228,7 +4228,7 @@ top-k
  ├── fd: (1)-->(2-11), (11)-->(15)
  ├── ordering: +15
  └── project
-      ├── columns: column15:15 id:1!null val:2 region:3 latitude:4 longitude:5 data1:6!null data2:7!null geom:8 vec1:9 vec2:10 vec3:11
+      ├── columns: "vec3 <-> '[3,1,2]'":15 id:1!null val:2 region:3 latitude:4 longitude:5 data1:6!null data2:7!null geom:8 vec1:9 vec2:10 vec3:11
       ├── immutable
       ├── key: (1)
       ├── fd: (1)-->(2-11), (11)-->(15)
@@ -4244,20 +4244,20 @@ top-k
       │    ├── key: (1)
       │    └── fd: (1)-->(2-11)
       └── projections
-           └── vec3:11 <-> '[3,1,2]' [as=column15:15, outer=(11), immutable]
+           └── vec3:11 <-> '[3,1,2]' [as="vec3 <-> '[3,1,2]'":15, outer=(11), immutable]
 
 # No-op case without a limit.
 opt expect-not=GenerateVectorSearch
 SELECT * FROM index_tab ORDER BY vec1 <-> '[3,1,2]';
 ----
 sort
- ├── columns: id:1!null val:2 region:3 latitude:4 longitude:5 data1:6!null data2:7!null geom:8 vec1:9 vec2:10 vec3:11  [hidden: column15:15]
+ ├── columns: id:1!null val:2 region:3 latitude:4 longitude:5 data1:6!null data2:7!null geom:8 vec1:9 vec2:10 vec3:11  [hidden: "vec1 <-> '[3,1,2]'":15]
  ├── immutable
  ├── key: (1)
  ├── fd: (1)-->(2-11), (9)-->(15)
  ├── ordering: +15
  └── project
-      ├── columns: column15:15 id:1!null val:2 region:3 latitude:4 longitude:5 data1:6!null data2:7!null geom:8 vec1:9 vec2:10 vec3:11
+      ├── columns: "vec1 <-> '[3,1,2]'":15 id:1!null val:2 region:3 latitude:4 longitude:5 data1:6!null data2:7!null geom:8 vec1:9 vec2:10 vec3:11
       ├── immutable
       ├── key: (1)
       ├── fd: (1)-->(2-11), (9)-->(15)
@@ -4273,7 +4273,7 @@ sort
       │    ├── key: (1)
       │    └── fd: (1)-->(2-11)
       └── projections
-           └── vec1:9 <-> '[3,1,2]' [as=column15:15, outer=(9), immutable]
+           └── vec1:9 <-> '[3,1,2]' [as="vec1 <-> '[3,1,2]'":15, outer=(9), immutable]
 
 # No-op case without an ordering.
 opt expect-not=GenerateVectorSearch
@@ -4302,7 +4302,7 @@ opt expect-not=GenerateVectorSearch
 SELECT * FROM index_tab ORDER BY vec1 <-> '[3,1,2]', id LIMIT 5;
 ----
 top-k
- ├── columns: id:1!null val:2 region:3 latitude:4 longitude:5 data1:6!null data2:7!null geom:8 vec1:9 vec2:10 vec3:11  [hidden: column15:15]
+ ├── columns: id:1!null val:2 region:3 latitude:4 longitude:5 data1:6!null data2:7!null geom:8 vec1:9 vec2:10 vec3:11  [hidden: "vec1 <-> '[3,1,2]'":15]
  ├── internal-ordering: +15,+1
  ├── k: 5
  ├── cardinality: [0 - 5]
@@ -4311,7 +4311,7 @@ top-k
  ├── fd: (1)-->(2-11), (9)-->(15)
  ├── ordering: +15,+1
  └── project
-      ├── columns: column15:15 id:1!null val:2 region:3 latitude:4 longitude:5 data1:6!null data2:7!null geom:8 vec1:9 vec2:10 vec3:11
+      ├── columns: "vec1 <-> '[3,1,2]'":15 id:1!null val:2 region:3 latitude:4 longitude:5 data1:6!null data2:7!null geom:8 vec1:9 vec2:10 vec3:11
       ├── immutable
       ├── key: (1)
       ├── fd: (1)-->(2-11), (9)-->(15)
@@ -4327,14 +4327,14 @@ top-k
       │    ├── key: (1)
       │    └── fd: (1)-->(2-11)
       └── projections
-           └── vec1:9 <-> '[3,1,2]' [as=column15:15, outer=(9), immutable]
+           └── vec1:9 <-> '[3,1,2]' [as="vec1 <-> '[3,1,2]'":15, outer=(9), immutable]
 
 # The query vector must be a constant or placeholder.
 opt expect-not=GenerateVectorSearch
 SELECT * FROM index_tab ORDER BY vec1 <-> (SELECT '[3,1,2]'::VECTOR(3) FROM a LIMIT 1) LIMIT 5;
 ----
 top-k
- ├── columns: id:1!null val:2 region:3 latitude:4 longitude:5 data1:6!null data2:7!null geom:8 vec1:9 vec2:10 vec3:11  [hidden: column23:23]
+ ├── columns: id:1!null val:2 region:3 latitude:4 longitude:5 data1:6!null data2:7!null geom:8 vec1:9 vec2:10 vec3:11  [hidden: "vec1 <-> (SELECT '[3,1,2]'::VECTOR(3) FROM a LIMIT 1)":23]
  ├── internal-ordering: +23
  ├── k: 5
  ├── cardinality: [0 - 5]
@@ -4343,7 +4343,7 @@ top-k
  ├── fd: (1)-->(2-11,23)
  ├── ordering: +23
  └── project
-      ├── columns: column23:23 id:1!null val:2 region:3 latitude:4 longitude:5 data1:6!null data2:7!null geom:8 vec1:9 vec2:10 vec3:11
+      ├── columns: "vec1 <-> (SELECT '[3,1,2]'::VECTOR(3) FROM a LIMIT 1)":23 id:1!null val:2 region:3 latitude:4 longitude:5 data1:6!null data2:7!null geom:8 vec1:9 vec2:10 vec3:11
       ├── immutable
       ├── key: (1)
       ├── fd: (1)-->(2-11,23)
@@ -4359,7 +4359,7 @@ top-k
       │    ├── key: (1)
       │    └── fd: (1)-->(2-11)
       └── projections
-           └── vector-distance [as=column23:23, outer=(9), immutable, subquery]
+           └── vector-distance [as="vec1 <-> (SELECT '[3,1,2]'::VECTOR(3) FROM a LIMIT 1)":23, outer=(9), immutable, subquery]
                 ├── vec1:9
                 └── subquery
                      └── project
@@ -4377,7 +4377,7 @@ opt expect-not=GenerateVectorSearch
 SELECT * FROM index_tab ORDER BY vec1 <-> vec2 LIMIT 5;
 ----
 top-k
- ├── columns: id:1!null val:2 region:3 latitude:4 longitude:5 data1:6!null data2:7!null geom:8 vec1:9 vec2:10 vec3:11  [hidden: column15:15]
+ ├── columns: id:1!null val:2 region:3 latitude:4 longitude:5 data1:6!null data2:7!null geom:8 vec1:9 vec2:10 vec3:11  [hidden: "vec1 <-> vec2":15]
  ├── internal-ordering: +15
  ├── k: 5
  ├── cardinality: [0 - 5]
@@ -4386,7 +4386,7 @@ top-k
  ├── fd: (1)-->(2-11), (9,10)-->(15)
  ├── ordering: +15
  └── project
-      ├── columns: column15:15 id:1!null val:2 region:3 latitude:4 longitude:5 data1:6!null data2:7!null geom:8 vec1:9 vec2:10 vec3:11
+      ├── columns: "vec1 <-> vec2":15 id:1!null val:2 region:3 latitude:4 longitude:5 data1:6!null data2:7!null geom:8 vec1:9 vec2:10 vec3:11
       ├── immutable
       ├── key: (1)
       ├── fd: (1)-->(2-11), (9,10)-->(15)
@@ -4402,7 +4402,7 @@ top-k
       │    ├── key: (1)
       │    └── fd: (1)-->(2-11)
       └── projections
-           └── vec1:9 <-> vec2:10 [as=column15:15, outer=(9,10), immutable]
+           └── vec1:9 <-> vec2:10 [as="vec1 <-> vec2":15, outer=(9,10), immutable]
 
 # Currently, the vector column must be the left argument.
 # TODO(drewk, mw5h): add a normalization rule to flip the args.
@@ -4410,7 +4410,7 @@ opt expect-not=GenerateVectorSearch
 SELECT * FROM index_tab ORDER BY '[3,1,2]' <-> vec1 LIMIT 5;
 ----
 top-k
- ├── columns: id:1!null val:2 region:3 latitude:4 longitude:5 data1:6!null data2:7!null geom:8 vec1:9 vec2:10 vec3:11  [hidden: column15:15]
+ ├── columns: id:1!null val:2 region:3 latitude:4 longitude:5 data1:6!null data2:7!null geom:8 vec1:9 vec2:10 vec3:11  [hidden: "'[3,1,2]' <-> vec1":15]
  ├── internal-ordering: +15
  ├── k: 5
  ├── cardinality: [0 - 5]
@@ -4419,7 +4419,7 @@ top-k
  ├── fd: (1)-->(2-11), (9)-->(15)
  ├── ordering: +15
  └── project
-      ├── columns: column15:15 id:1!null val:2 region:3 latitude:4 longitude:5 data1:6!null data2:7!null geom:8 vec1:9 vec2:10 vec3:11
+      ├── columns: "'[3,1,2]' <-> vec1":15 id:1!null val:2 region:3 latitude:4 longitude:5 data1:6!null data2:7!null geom:8 vec1:9 vec2:10 vec3:11
       ├── immutable
       ├── key: (1)
       ├── fd: (1)-->(2-11), (9)-->(15)
@@ -4435,7 +4435,7 @@ top-k
       │    ├── key: (1)
       │    └── fd: (1)-->(2-11)
       └── projections
-           └── '[3,1,2]' <-> vec1:9 [as=column15:15, outer=(9), immutable]
+           └── '[3,1,2]' <-> vec1:9 [as="'[3,1,2]' <-> vec1":15, outer=(9), immutable]
 
 # Currently, there can be no extra filters beyond those used to constrain index
 # prefix columns, if any.
@@ -4443,7 +4443,7 @@ opt expect-not=GenerateVectorSearch
 SELECT * FROM index_tab WHERE region = 'us-west' AND latitude > 0 ORDER BY vec1 <-> '[3,1,2]' LIMIT 5;
 ----
 top-k
- ├── columns: id:1!null val:2 region:3!null latitude:4!null longitude:5 data1:6!null data2:7!null geom:8 vec1:9 vec2:10 vec3:11  [hidden: column15:15]
+ ├── columns: id:1!null val:2 region:3!null latitude:4!null longitude:5 data1:6!null data2:7!null geom:8 vec1:9 vec2:10 vec3:11  [hidden: "vec1 <-> '[3,1,2]'":15]
  ├── internal-ordering: +15 opt(3)
  ├── k: 5
  ├── cardinality: [0 - 5]
@@ -4452,7 +4452,7 @@ top-k
  ├── fd: ()-->(3), (1)-->(2,4-11), (9)-->(15)
  ├── ordering: +15 opt(3) [actual: +15]
  └── project
-      ├── columns: column15:15 id:1!null val:2 region:3!null latitude:4!null longitude:5 data1:6!null data2:7!null geom:8 vec1:9 vec2:10 vec3:11
+      ├── columns: "vec1 <-> '[3,1,2]'":15 id:1!null val:2 region:3!null latitude:4!null longitude:5 data1:6!null data2:7!null geom:8 vec1:9 vec2:10 vec3:11
       ├── immutable
       ├── key: (1)
       ├── fd: ()-->(3), (1)-->(2,4-11), (9)-->(15)
@@ -4472,14 +4472,14 @@ top-k
       │    └── filters
       │         └── latitude:4 > 0 [outer=(4), constraints=(/4: [/1 - ]; tight)]
       └── projections
-           └── vec1:9 <-> '[3,1,2]' [as=column15:15, outer=(9), immutable]
+           └── vec1:9 <-> '[3,1,2]' [as="vec1 <-> '[3,1,2]'":15, outer=(9), immutable]
 
 # The full index prefix must be constrained in order to use the index.
 opt expect-not=GenerateVectorSearch
 SELECT id, val, vec1 FROM index_tab WHERE data1 = 1 ORDER BY vec1 <-> '[3,1,2]' LIMIT 5;
 ----
 top-k
- ├── columns: id:1!null val:2 vec1:9  [hidden: column15:15]
+ ├── columns: id:1!null val:2 vec1:9  [hidden: "vec1 <-> '[3,1,2]'":15]
  ├── internal-ordering: +15
  ├── k: 5
  ├── cardinality: [0 - 5]
@@ -4488,7 +4488,7 @@ top-k
  ├── fd: (1)-->(2,9), (9)-->(15)
  ├── ordering: +15
  └── project
-      ├── columns: column15:15 id:1!null val:2 vec1:9
+      ├── columns: "vec1 <-> '[3,1,2]'":15 id:1!null val:2 vec1:9
       ├── immutable
       ├── key: (1)
       ├── fd: (1)-->(2,9), (9)-->(15)
@@ -4510,7 +4510,7 @@ top-k
       │    └── filters
       │         └── data1:6 = 1 [outer=(6), constraints=(/6: [/1 - /1]; tight), fd=()-->(6)]
       └── projections
-           └── vec1:9 <-> '[3,1,2]' [as=column15:15, outer=(9), immutable]
+           └── vec1:9 <-> '[3,1,2]' [as="vec1 <-> '[3,1,2]'":15, outer=(9), immutable]
 
 # The filters cannot be used to constrain the index prefix because they are a
 # contradiction.
@@ -4530,7 +4530,7 @@ SELECT id, val, vec1 FROM index_tab WHERE data1 = 1 AND data2 >= 2 AND data2 <= 
 ORDER BY vec1 <-> '[3,1,2]' LIMIT 5;
 ----
 top-k
- ├── columns: id:1!null val:2 vec1:9  [hidden: column15:15]
+ ├── columns: id:1!null val:2 vec1:9  [hidden: "vec1 <-> '[3,1,2]'":15]
  ├── internal-ordering: +15
  ├── k: 5
  ├── cardinality: [0 - 5]
@@ -4539,7 +4539,7 @@ top-k
  ├── fd: (1)-->(2,9,15), (9)-->(15)
  ├── ordering: +15
  └── project
-      ├── columns: column15:15 id:1!null val:2 vec1:9
+      ├── columns: "vec1 <-> '[3,1,2]'":15 id:1!null val:2 vec1:9
       ├── immutable
       ├── key: (1)
       ├── fd: (1)-->(2,9,15), (9)-->(15)
@@ -4562,14 +4562,14 @@ top-k
       │         ├── (data2:7 >= 2) AND (data2:7 <= 5) [outer=(7), constraints=(/7: [/2 - /5]; tight)]
       │         └── data1:6 = 1 [outer=(6), constraints=(/6: [/1 - /1]; tight), fd=()-->(6)]
       └── projections
-           └── vec1:9 <-> '[3,1,2]' [as=column15:15, outer=(9), immutable]
+           └── vec1:9 <-> '[3,1,2]' [as="vec1 <-> '[3,1,2]'":15, outer=(9), immutable]
 
 # Partial index case with exact predicate match.
 opt expect=GenerateVectorSearch
 SELECT * FROM index_tab WHERE latitude > 0 ORDER BY vec1 <-> '[3,1,2]' LIMIT 5;
 ----
 top-k
- ├── columns: id:1!null val:2 region:3 latitude:4!null longitude:5 data1:6!null data2:7!null geom:8 vec1:9 vec2:10 vec3:11  [hidden: column15:15]
+ ├── columns: id:1!null val:2 region:3 latitude:4!null longitude:5 data1:6!null data2:7!null geom:8 vec1:9 vec2:10 vec3:11  [hidden: "vec1 <-> '[3,1,2]'":15]
  ├── internal-ordering: +15
  ├── k: 5
  ├── cardinality: [0 - 5]
@@ -4578,7 +4578,7 @@ top-k
  ├── fd: (1)-->(2-11), (9)-->(15)
  ├── ordering: +15
  └── project
-      ├── columns: column15:15 id:1!null val:2 region:3 latitude:4 longitude:5 data1:6!null data2:7!null geom:8 vec1:9 vec2:10 vec3:11
+      ├── columns: "vec1 <-> '[3,1,2]'":15 id:1!null val:2 region:3 latitude:4 longitude:5 data1:6!null data2:7!null geom:8 vec1:9 vec2:10 vec3:11
       ├── immutable
       ├── key: (1)
       ├── fd: (1)-->(2-11), (9)-->(15)
@@ -4595,7 +4595,7 @@ top-k
       │    │    └── '[3,1,2]'
       │    └── filters (true)
       └── projections
-           └── vec1:9 <-> '[3,1,2]' [as=column15:15, outer=(9), immutable]
+           └── vec1:9 <-> '[3,1,2]' [as="vec1 <-> '[3,1,2]'":15, outer=(9), immutable]
 
 # Partial index case where the filter matches the index predicate, but is also
 # needed to constrain the prefix column.
@@ -4603,7 +4603,7 @@ opt expect=GenerateVectorSearch
 SELECT * FROM index_tab WHERE longitude IN (1, 2) ORDER BY vec3 <-> '[3,1,2]' LIMIT 5;
 ----
 top-k
- ├── columns: id:1!null val:2 region:3 latitude:4 longitude:5!null data1:6!null data2:7!null geom:8 vec1:9 vec2:10 vec3:11  [hidden: column15:15]
+ ├── columns: id:1!null val:2 region:3 latitude:4 longitude:5!null data1:6!null data2:7!null geom:8 vec1:9 vec2:10 vec3:11  [hidden: "vec3 <-> '[3,1,2]'":15]
  ├── internal-ordering: +15
  ├── k: 5
  ├── cardinality: [0 - 5]
@@ -4612,7 +4612,7 @@ top-k
  ├── fd: (1)-->(2-11), (11)-->(15)
  ├── ordering: +15
  └── project
-      ├── columns: column15:15 id:1!null val:2 region:3 latitude:4 longitude:5 data1:6!null data2:7!null geom:8 vec1:9 vec2:10 vec3:11
+      ├── columns: "vec3 <-> '[3,1,2]'":15 id:1!null val:2 region:3 latitude:4 longitude:5 data1:6!null data2:7!null geom:8 vec1:9 vec2:10 vec3:11
       ├── immutable
       ├── key: (1)
       ├── fd: (1)-->(2-11), (11)-->(15)
@@ -4632,7 +4632,7 @@ top-k
       │    │    └── '[3,1,2]'
       │    └── filters (true)
       └── projections
-           └── vec3:11 <-> '[3,1,2]' [as=column15:15, outer=(11), immutable]
+           └── vec3:11 <-> '[3,1,2]' [as="vec3 <-> '[3,1,2]'":15, outer=(11), immutable]
 
 # No-op because the filter is more restrictive than the index predicate, and
 # additional filters are not yet supported.
@@ -4640,7 +4640,7 @@ opt expect-not=GenerateVectorSearch
 SELECT * FROM index_tab WHERE latitude > 3 ORDER BY vec1 <-> '[3,1,2]' LIMIT 5;
 ----
 top-k
- ├── columns: id:1!null val:2 region:3 latitude:4!null longitude:5 data1:6!null data2:7!null geom:8 vec1:9 vec2:10 vec3:11  [hidden: column15:15]
+ ├── columns: id:1!null val:2 region:3 latitude:4!null longitude:5 data1:6!null data2:7!null geom:8 vec1:9 vec2:10 vec3:11  [hidden: "vec1 <-> '[3,1,2]'":15]
  ├── internal-ordering: +15
  ├── k: 5
  ├── cardinality: [0 - 5]
@@ -4649,7 +4649,7 @@ top-k
  ├── fd: (1)-->(2-11), (9)-->(15)
  ├── ordering: +15
  └── project
-      ├── columns: column15:15 id:1!null val:2 region:3 latitude:4!null longitude:5 data1:6!null data2:7!null geom:8 vec1:9 vec2:10 vec3:11
+      ├── columns: "vec1 <-> '[3,1,2]'":15 id:1!null val:2 region:3 latitude:4!null longitude:5 data1:6!null data2:7!null geom:8 vec1:9 vec2:10 vec3:11
       ├── immutable
       ├── key: (1)
       ├── fd: (1)-->(2-11), (9)-->(15)
@@ -4671,7 +4671,7 @@ top-k
       │    └── filters
       │         └── latitude:4 > 3 [outer=(4), constraints=(/4: [/4 - ]; tight)]
       └── projections
-           └── vec1:9 <-> '[3,1,2]' [as=column15:15, outer=(9), immutable]
+           └── vec1:9 <-> '[3,1,2]' [as="vec1 <-> '[3,1,2]'":15, outer=(9), immutable]
 
 # Case with a prefix column and a partial-index predicate on the prefix column.
 # This works even though the filter is more restrictive than the index
@@ -4680,7 +4680,7 @@ opt expect=GenerateVectorSearch
 SELECT * FROM index_tab WHERE data2 = 1 ORDER BY vec2 <-> '[3,1,2]' LIMIT 5;
 ----
 top-k
- ├── columns: id:1!null val:2 region:3 latitude:4 longitude:5 data1:6!null data2:7!null geom:8 vec1:9 vec2:10 vec3:11  [hidden: column15:15]
+ ├── columns: id:1!null val:2 region:3 latitude:4 longitude:5 data1:6!null data2:7!null geom:8 vec1:9 vec2:10 vec3:11  [hidden: "vec2 <-> '[3,1,2]'":15]
  ├── internal-ordering: +15 opt(7)
  ├── k: 5
  ├── cardinality: [0 - 5]
@@ -4689,7 +4689,7 @@ top-k
  ├── fd: ()-->(7), (1)-->(2-6,8-11), (10)-->(15)
  ├── ordering: +15 opt(7) [actual: +15]
  └── project
-      ├── columns: column15:15 id:1!null val:2 region:3 latitude:4 longitude:5 data1:6!null data2:7!null geom:8 vec1:9 vec2:10 vec3:11
+      ├── columns: "vec2 <-> '[3,1,2]'":15 id:1!null val:2 region:3 latitude:4 longitude:5 data1:6!null data2:7!null geom:8 vec1:9 vec2:10 vec3:11
       ├── immutable
       ├── key: (1)
       ├── fd: (1)-->(2-11), (10)-->(15)
@@ -4708,14 +4708,14 @@ top-k
       │    │    └── '[3,1,2]'
       │    └── filters (true)
       └── projections
-           └── vec2:10 <-> '[3,1,2]' [as=column15:15, outer=(10), immutable]
+           └── vec2:10 <-> '[3,1,2]' [as="vec2 <-> '[3,1,2]'":15, outer=(10), immutable]
 
 # No-op case where the filter is not implied by the partial-index predicate.
 opt expect-not=GenerateVectorSearch
 SELECT * FROM index_tab WHERE data2 = 0 ORDER BY vec2 <-> '[3,1,2]' LIMIT 5;
 ----
 top-k
- ├── columns: id:1!null val:2 region:3 latitude:4 longitude:5 data1:6!null data2:7!null geom:8 vec1:9 vec2:10 vec3:11  [hidden: column15:15]
+ ├── columns: id:1!null val:2 region:3 latitude:4 longitude:5 data1:6!null data2:7!null geom:8 vec1:9 vec2:10 vec3:11  [hidden: "vec2 <-> '[3,1,2]'":15]
  ├── internal-ordering: +15 opt(7)
  ├── k: 5
  ├── cardinality: [0 - 5]
@@ -4724,7 +4724,7 @@ top-k
  ├── fd: ()-->(7), (1)-->(2-6,8-11), (10)-->(15)
  ├── ordering: +15 opt(7) [actual: +15]
  └── project
-      ├── columns: column15:15 id:1!null val:2 region:3 latitude:4 longitude:5 data1:6!null data2:7!null geom:8 vec1:9 vec2:10 vec3:11
+      ├── columns: "vec2 <-> '[3,1,2]'":15 id:1!null val:2 region:3 latitude:4 longitude:5 data1:6!null data2:7!null geom:8 vec1:9 vec2:10 vec3:11
       ├── immutable
       ├── key: (1)
       ├── fd: ()-->(7), (1)-->(2-6,8-11), (10)-->(15)
@@ -4746,7 +4746,7 @@ top-k
       │    └── filters
       │         └── data2:7 = 0 [outer=(7), constraints=(/7: [/0 - /0]; tight), fd=()-->(7)]
       └── projections
-           └── vec2:10 <-> '[3,1,2]' [as=column15:15, outer=(10), immutable]
+           └── vec2:10 <-> '[3,1,2]' [as="vec2 <-> '[3,1,2]'":15, outer=(10), immutable]
 
 # Regression test for failure to project the vector column from the index join.
 exec-ddl
@@ -4766,14 +4766,14 @@ ORDER BY embedding <-> '[0.016068,-0.033417,-0.020309,-0.031494,-0.014076,0.0365
 LIMIT 5;
 ----
 top-k
- ├── columns: photo_id:2!null photo_url:3!null description:4  [hidden: column8:8]
+ ├── columns: photo_id:2!null photo_url:3!null description:4  [hidden: "embedding <-> '[0.016068,-0.033417,-0.020309,-0.031494,-0.014076,0.03653]'":8]
  ├── internal-ordering: +8
  ├── k: 5
  ├── cardinality: [0 - 5]
  ├── immutable
  ├── ordering: +8
  └── project
-      ├── columns: column8:8 photo_id:2!null photo_url:3!null description:4
+      ├── columns: "embedding <-> '[0.016068,-0.033417,-0.020309,-0.031494,-0.014076,0.03653]'":8 photo_id:2!null photo_url:3!null description:4
       ├── immutable
       ├── inner-join (lookup image_embeddings)
       │    ├── columns: photo_id:2!null photo_url:3!null description:4 embedding:5!null
@@ -4786,7 +4786,7 @@ top-k
       │    │    └── '[0.016068,-0.033417,-0.020309,-0.031494,-0.014076,0.03653]'
       │    └── filters (true)
       └── projections
-           └── embedding:5 <-> '[0.016068,-0.033417,-0.020309,-0.031494,-0.014076,0.03653]' [as=column8:8, outer=(5), immutable]
+           └── embedding:5 <-> '[0.016068,-0.033417,-0.020309,-0.031494,-0.014076,0.03653]' [as="embedding <-> '[0.016068,-0.033417,-0.020309,-0.031494,-0.014076,0.03653]'":8, outer=(5), immutable]
 
 # Regression test for #146257 - do not overwrite the supplied filters while
 # iterating through vector indexes.
@@ -4805,7 +4805,7 @@ opt expect-not=GenerateVectorSearch
 SELECT vec FROM t146257 WHERE col2 = 12 ORDER BY vec <-> '[3,1,2]' LIMIT 5;
 ----
 top-k
- ├── columns: vec:3  [hidden: column7:7]
+ ├── columns: vec:3  [hidden: "vec <-> '[3,1,2]'":7]
  ├── internal-ordering: +7
  ├── k: 5
  ├── cardinality: [0 - 5]
@@ -4813,7 +4813,7 @@ top-k
  ├── fd: (3)-->(7)
  ├── ordering: +7
  └── project
-      ├── columns: column7:7 vec:3
+      ├── columns: "vec <-> '[3,1,2]'":7 vec:3
       ├── immutable
       ├── fd: (3)-->(7)
       ├── select
@@ -4824,4 +4824,4 @@ top-k
       │    └── filters
       │         └── col2:2 = 12 [outer=(2), constraints=(/2: [/12 - /12]; tight), fd=()-->(2)]
       └── projections
-           └── vec:3 <-> '[3,1,2]' [as=column7:7, outer=(3), immutable]
+           └── vec:3 <-> '[3,1,2]' [as="vec <-> '[3,1,2]'":7, outer=(3), immutable]

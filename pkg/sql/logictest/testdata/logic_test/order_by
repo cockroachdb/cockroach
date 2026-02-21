@@ -622,3 +622,118 @@ query II
 SELECT a, b FROM (SELECT a, b FROM t106678 ORDER BY a LIMIT 3) ORDER BY a, b LIMIT 1
 ----
 1  -1
+
+# ------------------------------------------------------------------------------
+# ORDER BY with subqueries and non-default NULLS ordering test cases.
+# These test the pre-projection logic for avoiding subquery duplication.
+# ------------------------------------------------------------------------------
+subtest subquery_nulls_ordering
+
+statement ok
+CREATE TABLE t_sub (id INT, val INT);
+INSERT INTO t_sub VALUES (1, 10), (2, NULL), (3, 30), (NULL, 40)
+
+statement ok  
+CREATE TABLE t_lookup (k INT, v INT);
+INSERT INTO t_lookup VALUES (1, 100), (2, 200), (3, 300)
+
+# Test ORDER BY subquery with NULLS LAST (non-default for ASC).
+query II
+SELECT id, val FROM t_sub ORDER BY (SELECT v FROM t_lookup WHERE k = id) NULLS LAST
+----
+1     10
+2     NULL
+3     30
+NULL  40
+
+# Test ORDER BY subquery with NULLS FIRST (default for ASC).
+query II  
+SELECT id, val FROM t_sub ORDER BY (SELECT v FROM t_lookup WHERE k = id) NULLS FIRST
+----
+NULL  40
+1     10
+2     NULL
+3     30
+
+# Test ORDER BY subquery with DESC NULLS FIRST (non-default for DESC).
+query II
+SELECT id, val FROM t_sub ORDER BY (SELECT v FROM t_lookup WHERE k = id) DESC NULLS FIRST  
+----
+NULL  40
+3     30
+2     NULL
+1     10
+
+# Test ORDER BY subquery with DESC NULLS LAST (default for DESC).
+query II
+SELECT id, val FROM t_sub ORDER BY (SELECT v FROM t_lookup WHERE k = id) DESC NULLS LAST
+----
+3     30
+2     NULL
+1     10
+NULL  40
+
+# Test multiple ORDER BY columns, some with subqueries and non-default NULLS.
+query II
+SELECT id, val FROM t_sub ORDER BY id NULLS LAST, (SELECT v FROM t_lookup WHERE k = id) NULLS LAST
+----
+1     10
+2     NULL
+3     30
+NULL  40
+
+# Test complex subquery expression with NULLS LAST.
+query II
+SELECT id, val FROM t_sub ORDER BY (SELECT CASE WHEN v > 150 THEN v ELSE NULL END FROM t_lookup WHERE k = id) NULLS LAST, id NULLS FIRST
+----
+2     NULL
+3     30
+NULL  40
+1     10
+
+# Test subquery in SELECT list that matches ORDER BY expression.
+query III
+SELECT id, val, (SELECT v FROM t_lookup WHERE k = id) AS lookup_val 
+FROM t_sub 
+ORDER BY (SELECT v FROM t_lookup WHERE k = id) NULLS LAST
+----
+1     10    100
+2     NULL  200
+3     30    300
+NULL  40    NULL
+
+# Test correlated subquery with aggregation and NULLS LAST.
+statement ok
+CREATE TABLE t_orders (customer_id INT, amount DECIMAL);
+INSERT INTO t_orders VALUES (1, 25.50), (1, 75.00), (2, 150.75), (3, 10.25)
+
+# Test aggregation with subquery ORDER BY and NULLS LAST.
+query IT
+SELECT id, sum(val) FROM t_sub
+GROUP BY id
+ORDER BY (SELECT sum(amount) FROM t_orders WHERE customer_id = id) NULLS LAST
+----
+3     30
+1     10
+2     NULL
+NULL  40
+
+# Test VALUES clause with subquery ORDER BY and NULLS LAST.
+query II
+VALUES (1, 10), (2, NULL), (3, 30), (NULL, 40)
+ORDER BY (SELECT count(*) FROM t_lookup WHERE k = column1) NULLS LAST, column1 NULLS FIRST
+----
+NULL  40
+1     10
+2     NULL
+3     30
+
+# Clean up
+statement ok
+DROP TABLE t_sub CASCADE
+
+statement ok
+DROP TABLE t_lookup CASCADE
+
+statement ok 
+DROP TABLE t_orders CASCADE

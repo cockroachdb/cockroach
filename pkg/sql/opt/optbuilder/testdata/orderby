@@ -303,14 +303,14 @@ build
 SELECT a FROM t ORDER BY a+b DESC, a
 ----
 sort
- ├── columns: a:1!null  [hidden: column6:6]
+ ├── columns: a:1!null  [hidden: "a + b":6]
  ├── ordering: -6,+1
  └── project
-      ├── columns: column6:6 a:1!null
+      ├── columns: "a + b":6 a:1!null
       ├── scan t
       │    └── columns: a:1!null b:2 c:3 crdb_internal_mvcc_timestamp:4 tableoid:5
       └── projections
-           └── a:1 + b:2 [as=column6:6]
+           └── a:1 + b:2 [as="a + b":6]
 
 build
 SELECT a FROM t ORDER BY (((a)))
@@ -400,10 +400,10 @@ build
 SELECT generate_series FROM generate_series(1, 100) ORDER BY ARRAY[generate_series]
 ----
 sort
- ├── columns: generate_series:1  [hidden: column2:2]
+ ├── columns: generate_series:1  [hidden: "ARRAY[generate_series]":2]
  ├── ordering: +2
  └── project
-      ├── columns: column2:2 generate_series:1
+      ├── columns: "ARRAY[generate_series]":2 generate_series:1
       ├── project-set
       │    ├── columns: generate_series:1
       │    ├── values
@@ -411,7 +411,7 @@ sort
       │    └── zip
       │         └── generate_series(1, 100)
       └── projections
-           └── ARRAY[generate_series:1] [as=column2:2]
+           └── ARRAY[generate_series:1] [as="ARRAY[generate_series]":2]
 
 build
 SELECT ARRAY[generate_series] FROM generate_series(1, 100) ORDER BY ARRAY[generate_series]
@@ -504,10 +504,10 @@ build
 SELECT generate_series, ARRAY[generate_series] FROM generate_series(1, 1) ORDER BY -generate_series
 ----
 sort
- ├── columns: generate_series:1 array:2  [hidden: column3:3]
+ ├── columns: generate_series:1 array:2  [hidden: "-generate_series":3]
  ├── ordering: +3
  └── project
-      ├── columns: array:2 column3:3 generate_series:1
+      ├── columns: array:2 "-generate_series":3 generate_series:1
       ├── project-set
       │    ├── columns: generate_series:1
       │    ├── values
@@ -516,7 +516,7 @@ sort
       │         └── generate_series(1, 1)
       └── projections
            ├── ARRAY[generate_series:1] [as=array:2]
-           └── -generate_series:1 [as=column3:3]
+           └── -generate_series:1 [as="-generate_series":3]
 
 
 # Sort should be skipped if the ORDER BY clause is constant.
@@ -524,12 +524,12 @@ build
 SELECT * FROM t ORDER BY 1+2
 ----
 project
- ├── columns: a:1!null b:2 c:3  [hidden: column6:6!null]
+ ├── columns: a:1!null b:2 c:3  [hidden: "1 + 2":6!null]
  ├── ordering: +6
  ├── scan t
  │    └── columns: a:1!null b:2 c:3 crdb_internal_mvcc_timestamp:4 tableoid:5
  └── projections
-      └── 1 + 2 [as=column6:6]
+      └── 1 + 2 [as="1 + 2":6]
 
 build
 SELECT 1 AS r, * FROM t ORDER BY 1
@@ -546,12 +546,12 @@ build
 SELECT * FROM t ORDER BY length('abc')
 ----
 project
- ├── columns: a:1!null b:2 c:3  [hidden: column6:6]
+ ├── columns: a:1!null b:2 c:3  [hidden: "length('abc')":6]
  ├── ordering: +6
  ├── scan t
  │    └── columns: a:1!null b:2 c:3 crdb_internal_mvcc_timestamp:4 tableoid:5
  └── projections
-      └── length('abc') [as=column6:6]
+      └── length('abc') [as="length('abc')":6]
 
 build
 SELECT b+2 AS r FROM t ORDER BY b+2
@@ -607,27 +607,27 @@ build set=allow_ordinal_column_references=true
 SELECT b, c FROM t ORDER BY @2
 ----
 sort
- ├── columns: b:2 c:3  [hidden: column6:6]
+ ├── columns: b:2 c:3  [hidden: "@2":6]
  ├── ordering: +6
  └── project
-      ├── columns: column6:6 b:2 c:3
+      ├── columns: "@2":6 b:2 c:3
       ├── scan t
       │    └── columns: a:1!null b:2 c:3 crdb_internal_mvcc_timestamp:4 tableoid:5
       └── projections
-           └── b:2 [as=column6:6]
+           └── b:2 [as="@2":6]
 
 build set=allow_ordinal_column_references=true
 SELECT b, c FROM t ORDER BY @4
 ----
 sort
- ├── columns: b:2 c:3  [hidden: column6:6]
+ ├── columns: b:2 c:3  [hidden: "@4":6]
  ├── ordering: +6
  └── project
-      ├── columns: column6:6 b:2 c:3
+      ├── columns: "@4":6 b:2 c:3
       ├── scan t
       │    └── columns: a:1!null b:2 c:3 crdb_internal_mvcc_timestamp:4 tableoid:5
       └── projections
-           └── crdb_internal_mvcc_timestamp:4 [as=column6:6]
+           └── crdb_internal_mvcc_timestamp:4 [as="@4":6]
 
 exec-ddl
 CREATE TABLE abc (
@@ -651,14 +651,14 @@ build
 SELECT d FROM abc ORDER BY lower(d)
 ----
 sort
- ├── columns: d:4  [hidden: column7:7]
+ ├── columns: d:4  [hidden: "lower(d)":7]
  ├── ordering: +7
  └── project
-      ├── columns: column7:7 d:4
+      ├── columns: "lower(d)":7 d:4
       ├── scan abc
       │    └── columns: a:1!null b:2!null c:3!null d:4 crdb_internal_mvcc_timestamp:5 tableoid:6
       └── projections
-           └── lower(d:4) [as=column7:7]
+           └── lower(d:4) [as="lower(d)":7]
 
 build
 SELECT * FROM abc ORDER BY a
@@ -1266,8 +1266,8 @@ sort
       └── scan abcd
            └── columns: a:1!null b:2 c:3 d:4 crdb_internal_mvcc_timestamp:5 tableoid:6
 
-# TODO(#129956): Handle non-default NULL ordering that references a projected
-# expression that contains a subquery.
+# Regression #129956: Handle non-default NULL ordering that references a
+# projected expression that contains a subquery.
 exec-ddl
 CREATE TABLE t129956 (i INT)
 ----
@@ -1279,7 +1279,229 @@ WHERE EXISTS(
   ORDER BY tmp NULLS LAST
 )
 ----
-error (0A000): subqueries in ORDER BY with non-default NULLS ordering is not supported
+project
+ ├── columns: i:1
+ └── select
+      ├── columns: t0.i:1 t0.rowid:2!null t0.crdb_internal_mvcc_timestamp:3 t0.tableoid:4
+      ├── scan t129956 [as=t0]
+      │    └── columns: t0.i:1 t0.rowid:2!null t0.crdb_internal_mvcc_timestamp:3 t0.tableoid:4
+      └── filters
+           └── exists
+                └── project
+                     ├── columns: tmp:10
+                     └── project
+                          ├── columns: nulls_ordering_tmp:11!null tmp:12 tmp:10
+                          ├── project
+                          │    ├── columns: tmp:10
+                          │    ├── values
+                          │    │    └── ()
+                          │    └── projections
+                          │         └── subquery [as=tmp:10]
+                          │              └── max1-row
+                          │                   ├── columns: i:9
+                          │                   └── project
+                          │                        ├── columns: i:9
+                          │                        ├── scan t129956
+                          │                        │    └── columns: t129956.i:5 t129956.rowid:6!null t129956.crdb_internal_mvcc_timestamp:7 t129956.tableoid:8
+                          │                        └── projections
+                          │                             └── t0.i:1 [as=i:9]
+                          └── projections
+                               ├── tmp:10 IS NULL [as=nulls_ordering_tmp:11]
+                               └── tmp:10 [as=tmp:12]
+
+# Test subqueries in ORDER BY with NULLS FIRST/LAST (issue #129956).
+exec-ddl
+CREATE TABLE t_sub1 (id INT, val INT)
+----
+
+exec-ddl
+CREATE TABLE t_sub2 (id INT, val INT)
+----
+
+# Simple subquery with NULLS FIRST.
+build
+SELECT id FROM t_sub1 ORDER BY (SELECT val FROM t_sub2 WHERE t_sub2.id = t_sub1.id) NULLS FIRST
+----
+sort
+ ├── columns: id:1  [hidden: "(SELECT val FROM t_sub2 WHERE t_sub2.id = t_sub1.id)":11]
+ ├── ordering: +11
+ └── project
+      ├── columns: "(SELECT val FROM t_sub2 WHERE t_sub2.id = t_sub1.id)":11 t_sub1.id:1
+      ├── scan t_sub1
+      │    └── columns: t_sub1.id:1 t_sub1.val:2 t_sub1.rowid:3!null t_sub1.crdb_internal_mvcc_timestamp:4 t_sub1.tableoid:5
+      └── projections
+           └── subquery [as="(SELECT val FROM t_sub2 WHERE t_sub2.id = t_sub1.id)":11]
+                └── max1-row
+                     ├── columns: t_sub2.val:7
+                     └── project
+                          ├── columns: t_sub2.val:7
+                          └── select
+                               ├── columns: t_sub2.id:6!null t_sub2.val:7 t_sub2.rowid:8!null t_sub2.crdb_internal_mvcc_timestamp:9 t_sub2.tableoid:10
+                               ├── scan t_sub2
+                               │    └── columns: t_sub2.id:6 t_sub2.val:7 t_sub2.rowid:8!null t_sub2.crdb_internal_mvcc_timestamp:9 t_sub2.tableoid:10
+                               └── filters
+                                    └── t_sub2.id:6 = t_sub1.id:1
+
+# Simple subquery with NULLS LAST.
+build
+SELECT id FROM t_sub1 ORDER BY (SELECT val FROM t_sub2 WHERE t_sub2.id = t_sub1.id) NULLS LAST
+----
+sort
+ ├── columns: id:1  [hidden: "nulls_ordering_(SELECT val FROM t_sub2 WHERE t_sub2.id = t_sub1.id)":12!null "(SELECT val FROM t_sub2 WHERE t_sub2.id = t_sub1.id)":13]
+ ├── ordering: +12,+13
+ └── project
+      ├── columns: "nulls_ordering_(SELECT val FROM t_sub2 WHERE t_sub2.id = t_sub1.id)":12!null "(SELECT val FROM t_sub2 WHERE t_sub2.id = t_sub1.id)":13 t_sub1.id:1
+      ├── project
+      │    ├── columns: "(SELECT val FROM t_sub2 WHERE t_sub2.id = t_sub1.id)":11 t_sub1.id:1
+      │    ├── scan t_sub1
+      │    │    └── columns: t_sub1.id:1 t_sub1.val:2 t_sub1.rowid:3!null t_sub1.crdb_internal_mvcc_timestamp:4 t_sub1.tableoid:5
+      │    └── projections
+      │         └── subquery [as="(SELECT val FROM t_sub2 WHERE t_sub2.id = t_sub1.id)":11]
+      │              └── max1-row
+      │                   ├── columns: t_sub2.val:7
+      │                   └── project
+      │                        ├── columns: t_sub2.val:7
+      │                        └── select
+      │                             ├── columns: t_sub2.id:6!null t_sub2.val:7 t_sub2.rowid:8!null t_sub2.crdb_internal_mvcc_timestamp:9 t_sub2.tableoid:10
+      │                             ├── scan t_sub2
+      │                             │    └── columns: t_sub2.id:6 t_sub2.val:7 t_sub2.rowid:8!null t_sub2.crdb_internal_mvcc_timestamp:9 t_sub2.tableoid:10
+      │                             └── filters
+      │                                  └── t_sub2.id:6 = t_sub1.id:1
+      └── projections
+           ├── "(SELECT val FROM t_sub2 WHERE t_sub2.id = t_sub1.id)":11 IS NULL [as="nulls_ordering_(SELECT val FROM t_sub2 WHERE t_sub2.id = t_sub1.id)":12]
+           └── "(SELECT val FROM t_sub2 WHERE t_sub2.id = t_sub1.id)":11 [as="(SELECT val FROM t_sub2 WHERE t_sub2.id = t_sub1.id)":13]
+
+# Subquery with DESC and NULLS FIRST.
+build
+SELECT id FROM t_sub1 ORDER BY (SELECT val FROM t_sub2 WHERE t_sub2.id = t_sub1.id) DESC NULLS FIRST
+----
+sort
+ ├── columns: id:1  [hidden: "nulls_ordering_(SELECT val FROM t_sub2 WHERE t_sub2.id = t_sub1.id)":12!null "(SELECT val FROM t_sub2 WHERE t_sub2.id = t_sub1.id)":13]
+ ├── ordering: -12,-13
+ └── project
+      ├── columns: "nulls_ordering_(SELECT val FROM t_sub2 WHERE t_sub2.id = t_sub1.id)":12!null "(SELECT val FROM t_sub2 WHERE t_sub2.id = t_sub1.id)":13 t_sub1.id:1
+      ├── project
+      │    ├── columns: "(SELECT val FROM t_sub2 WHERE t_sub2.id = t_sub1.id)":11 t_sub1.id:1
+      │    ├── scan t_sub1
+      │    │    └── columns: t_sub1.id:1 t_sub1.val:2 t_sub1.rowid:3!null t_sub1.crdb_internal_mvcc_timestamp:4 t_sub1.tableoid:5
+      │    └── projections
+      │         └── subquery [as="(SELECT val FROM t_sub2 WHERE t_sub2.id = t_sub1.id)":11]
+      │              └── max1-row
+      │                   ├── columns: t_sub2.val:7
+      │                   └── project
+      │                        ├── columns: t_sub2.val:7
+      │                        └── select
+      │                             ├── columns: t_sub2.id:6!null t_sub2.val:7 t_sub2.rowid:8!null t_sub2.crdb_internal_mvcc_timestamp:9 t_sub2.tableoid:10
+      │                             ├── scan t_sub2
+      │                             │    └── columns: t_sub2.id:6 t_sub2.val:7 t_sub2.rowid:8!null t_sub2.crdb_internal_mvcc_timestamp:9 t_sub2.tableoid:10
+      │                             └── filters
+      │                                  └── t_sub2.id:6 = t_sub1.id:1
+      └── projections
+           ├── "(SELECT val FROM t_sub2 WHERE t_sub2.id = t_sub1.id)":11 IS NULL [as="nulls_ordering_(SELECT val FROM t_sub2 WHERE t_sub2.id = t_sub1.id)":12]
+           └── "(SELECT val FROM t_sub2 WHERE t_sub2.id = t_sub1.id)":11 [as="(SELECT val FROM t_sub2 WHERE t_sub2.id = t_sub1.id)":13]
+
+# Subquery with DESC and NULLS LAST.
+build
+SELECT id FROM t_sub1 ORDER BY (SELECT val FROM t_sub2 WHERE t_sub2.id = t_sub1.id) DESC NULLS LAST
+----
+sort
+ ├── columns: id:1  [hidden: "(SELECT val FROM t_sub2 WHERE t_sub2.id = t_sub1.id)":11]
+ ├── ordering: -11
+ └── project
+      ├── columns: "(SELECT val FROM t_sub2 WHERE t_sub2.id = t_sub1.id)":11 t_sub1.id:1
+      ├── scan t_sub1
+      │    └── columns: t_sub1.id:1 t_sub1.val:2 t_sub1.rowid:3!null t_sub1.crdb_internal_mvcc_timestamp:4 t_sub1.tableoid:5
+      └── projections
+           └── subquery [as="(SELECT val FROM t_sub2 WHERE t_sub2.id = t_sub1.id)":11]
+                └── max1-row
+                     ├── columns: t_sub2.val:7
+                     └── project
+                          ├── columns: t_sub2.val:7
+                          └── select
+                               ├── columns: t_sub2.id:6!null t_sub2.val:7 t_sub2.rowid:8!null t_sub2.crdb_internal_mvcc_timestamp:9 t_sub2.tableoid:10
+                               ├── scan t_sub2
+                               │    └── columns: t_sub2.id:6 t_sub2.val:7 t_sub2.rowid:8!null t_sub2.crdb_internal_mvcc_timestamp:9 t_sub2.tableoid:10
+                               └── filters
+                                    └── t_sub2.id:6 = t_sub1.id:1
+
+# VALUES clause ordered by subquery with NULLS LAST.
+build
+VALUES (1, 2), (3, 4), (NULL, 5) ORDER BY (SELECT column1 = ANY(SELECT id FROM t_sub1)) NULLS LAST
+----
+sort
+ ├── columns: column1:1 column2:2!null  [hidden: "nulls_ordering_(SELECT column1 = ANY (SELECT id FROM t_sub1))":10!null "(SELECT column1 = ANY (SELECT id FROM t_sub1))":11]
+ ├── ordering: +10,+11
+ └── project
+      ├── columns: "nulls_ordering_(SELECT column1 = ANY (SELECT id FROM t_sub1))":10!null "(SELECT column1 = ANY (SELECT id FROM t_sub1))":11 column1:1 column2:2!null
+      ├── project
+      │    ├── columns: "(SELECT column1 = ANY (SELECT id FROM t_sub1))":9 column1:1 column2:2!null
+      │    ├── values
+      │    │    ├── columns: column1:1 column2:2!null
+      │    │    ├── (1, 2)
+      │    │    ├── (3, 4)
+      │    │    └── (NULL::INT8, 5)
+      │    └── projections
+      │         └── subquery [as="(SELECT column1 = ANY (SELECT id FROM t_sub1))":9]
+      │              └── max1-row
+      │                   ├── columns: "?column?":8
+      │                   └── project
+      │                        ├── columns: "?column?":8
+      │                        ├── values
+      │                        │    └── ()
+      │                        └── projections
+      │                             └── any: eq [as="?column?":8]
+      │                                  ├── project
+      │                                  │    ├── columns: id:3
+      │                                  │    └── scan t_sub1
+      │                                  │         └── columns: id:3 val:4 rowid:5!null crdb_internal_mvcc_timestamp:6 tableoid:7
+      │                                  └── column1:1
+      └── projections
+           ├── "(SELECT column1 = ANY (SELECT id FROM t_sub1))":9 IS NULL [as="nulls_ordering_(SELECT column1 = ANY (SELECT id FROM t_sub1))":10]
+           └── "(SELECT column1 = ANY (SELECT id FROM t_sub1))":9 [as="(SELECT column1 = ANY (SELECT id FROM t_sub1))":11]
+
+# Aggregation ordered by subquery with NULLS LAST.
+build
+SELECT id, sum(val) FROM t_sub1
+GROUP BY id
+ORDER BY (SELECT sum(val) FROM t_sub2 WHERE t_sub2.id = t_sub1.id) NULLS LAST
+----
+sort
+ ├── columns: id:1 sum:6  [hidden: "nulls_ordering_(SELECT sum(val) FROM t_sub2 WHERE t_sub2.id = t_sub1.id)":14!null "(SELECT sum(val) FROM t_sub2 WHERE t_sub2.id = t_sub1.id)":15]
+ ├── ordering: +14,+15
+ └── project
+      ├── columns: "nulls_ordering_(SELECT sum(val) FROM t_sub2 WHERE t_sub2.id = t_sub1.id)":14!null "(SELECT sum(val) FROM t_sub2 WHERE t_sub2.id = t_sub1.id)":15 t_sub1.id:1 sum:6
+      ├── project
+      │    ├── columns: "(SELECT sum(val) FROM t_sub2 WHERE t_sub2.id = t_sub1.id)":13 t_sub1.id:1 sum:6
+      │    ├── group-by (hash)
+      │    │    ├── columns: t_sub1.id:1 sum:6
+      │    │    ├── grouping columns: t_sub1.id:1
+      │    │    ├── project
+      │    │    │    ├── columns: t_sub1.id:1 t_sub1.val:2
+      │    │    │    └── scan t_sub1
+      │    │    │         └── columns: t_sub1.id:1 t_sub1.val:2 t_sub1.rowid:3!null t_sub1.crdb_internal_mvcc_timestamp:4 t_sub1.tableoid:5
+      │    │    └── aggregations
+      │    │         └── sum [as=sum:6]
+      │    │              └── t_sub1.val:2
+      │    └── projections
+      │         └── subquery [as="(SELECT sum(val) FROM t_sub2 WHERE t_sub2.id = t_sub1.id)":13]
+      │              └── max1-row
+      │                   ├── columns: sum:12
+      │                   └── scalar-group-by
+      │                        ├── columns: sum:12
+      │                        ├── project
+      │                        │    ├── columns: t_sub2.val:8
+      │                        │    └── select
+      │                        │         ├── columns: t_sub2.id:7!null t_sub2.val:8 t_sub2.rowid:9!null t_sub2.crdb_internal_mvcc_timestamp:10 t_sub2.tableoid:11
+      │                        │         ├── scan t_sub2
+      │                        │         │    └── columns: t_sub2.id:7 t_sub2.val:8 t_sub2.rowid:9!null t_sub2.crdb_internal_mvcc_timestamp:10 t_sub2.tableoid:11
+      │                        │         └── filters
+      │                        │              └── t_sub2.id:7 = t_sub1.id:1
+      │                        └── aggregations
+      │                             └── sum [as=sum:12]
+      │                                  └── t_sub2.val:8
+      └── projections
+           ├── "(SELECT sum(val) FROM t_sub2 WHERE t_sub2.id = t_sub1.id)":13 IS NULL [as="nulls_ordering_(SELECT sum(val) FROM t_sub2 WHERE t_sub2.id = t_sub1.id)":14]
+           └── "(SELECT sum(val) FROM t_sub2 WHERE t_sub2.id = t_sub1.id)":13 [as="(SELECT sum(val) FROM t_sub2 WHERE t_sub2.id = t_sub1.id)":15]
 
 # TODO(#92165): Allow ordering by VECTOR columns.
 exec-ddl

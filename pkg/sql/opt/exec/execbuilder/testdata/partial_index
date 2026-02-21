@@ -1092,7 +1092,7 @@ EXPLAIN SELECT a FROM vec@i WHERE c IN ('foo', 'bar') ORDER BY b <-> '[1,2]' LIM
 distribution: local
 ·
 • top-k
-│ order: +column8
+│ order: +"b <-> '[1,2]'"
 │ k: 10
 │
 └── • render

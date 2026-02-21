@@ -190,10 +190,10 @@ delete xyz
  ├── columns: <none>
  ├── fetch columns: x:6 y:7 z:8
  └── limit
-      ├── columns: x:6!null y:7 z:8 crdb_internal_mvcc_timestamp:9 tableoid:10 column11:11
+      ├── columns: x:6!null y:7 z:8 crdb_internal_mvcc_timestamp:9 tableoid:10 "y + $2":11
       ├── internal-ordering: -11
       ├── project
-      │    ├── columns: column11:11 x:6!null y:7 z:8 crdb_internal_mvcc_timestamp:9 tableoid:10
+      │    ├── columns: "y + $2":11 x:6!null y:7 z:8 crdb_internal_mvcc_timestamp:9 tableoid:10
       │    ├── ordering: -11
       │    ├── limit hint: 2.00
       │    ├── select
@@ -205,7 +205,7 @@ delete xyz
       │    │    └── filters
       │    │         └── x:6 = $1
       │    └── projections
-      │         └── y:7 + $2 [as=column11:11]
+      │         └── y:7 + $2 [as="y + $2":11]
       └── 2
 
 

@@ -229,7 +229,7 @@ opt
 SELECT * FROM a ORDER BY CASE WHEN false THEN x END ASC, CASE WHEN NOT false THEN x END DESC
 ----
 project
- ├── columns: x:1!null y:2!null z:3 s:4!null  [hidden: column8:8!null]
+ ├── columns: x:1!null y:2!null z:3 s:4!null  [hidden: "CASE WHEN NOT false THEN x END":8!null]
  ├── key: (1,2)
  ├── fd: (1,2)-->(3,4), (1)==(8), (8)==(1)
  ├── ordering: -(1|8) [actual: -1]
@@ -239,13 +239,13 @@ project
  │    ├── fd: (1,2)-->(3,4)
  │    └── ordering: -1
  └── projections
-      └── x:1 [as=column8:8, outer=(1)]
+      └── x:1 [as="CASE WHEN NOT false THEN x END":8, outer=(1)]
 
 opt
 SELECT * FROM a ORDER BY CASE WHEN true THEN x END ASC, CASE WHEN NOT true THEN x END DESC
 ----
 project
- ├── columns: x:1!null y:2!null z:3 s:4!null  [hidden: column7:7!null]
+ ├── columns: x:1!null y:2!null z:3 s:4!null  [hidden: "CASE WHEN true THEN x END":7!null]
  ├── key: (1,2)
  ├── fd: (1,2)-->(3,4), (1)==(7), (7)==(1)
  ├── ordering: +(1|7) [actual: +1]
@@ -255,14 +255,14 @@ project
  │    ├── fd: (1,2)-->(3,4)
  │    └── ordering: +1
  └── projections
-      └── x:1 [as=column7:7, outer=(1)]
+      └── x:1 [as="CASE WHEN true THEN x END":7, outer=(1)]
 
 # Similar case, except the equivalent input column is not being projected.
 opt
 SELECT 1 FROM a ORDER BY CASE WHEN false THEN x END ASC, CASE WHEN NOT false THEN x END DESC
 ----
 project
- ├── columns: "?column?":7!null  [hidden: column9:9!null]
+ ├── columns: "?column?":7!null  [hidden: "CASE WHEN NOT false THEN x END":9!null]
  ├── fd: ()-->(7)
  ├── ordering: -9 opt(7) [actual: -9]
  ├── scan a,rev
@@ -270,7 +270,7 @@ project
  │    └── ordering: -1
  └── projections
       ├── 1 [as="?column?":7]
-      └── x:1 [as=column9:9, outer=(1)]
+      └── x:1 [as="CASE WHEN NOT false THEN x END":9, outer=(1)]
 
 # --------------------------------------------------
 # Select + Project operators (pass through both).

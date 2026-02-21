@@ -13,10 +13,10 @@ SELECT * FROM
   (SELECT * FROM generate_series(1, 10) i ORDER BY i % 5 ASC, i ASC)
 ----
 sort
- ├── columns: i:1  [hidden: column2:2]
+ ├── columns: i:1  [hidden: "i % 5":2]
  ├── ordering: +2,+1
  └── project
-      ├── columns: column2:2 generate_series:1
+      ├── columns: "i % 5":2 generate_series:1
       ├── project-set
       │    ├── columns: generate_series:1
       │    ├── values
@@ -24,7 +24,7 @@ sort
       │    └── zip
       │         └── generate_series(1, 10)
       └── projections
-           └── generate_series:1 % 5 [as=column2:2]
+           └── generate_series:1 % 5 [as="i % 5":2]
 
 build set=propagate_input_ordering=true
 WITH tmp AS (SELECT * FROM generate_series(1, 10) i ORDER BY i % 5 ASC, i ASC) SELECT * FROM tmp;
@@ -33,10 +33,10 @@ with &1 (tmp)
  ├── columns: i:3
  ├── materialized
  ├── sort
- │    ├── columns: generate_series:1 column2:2
+ │    ├── columns: generate_series:1 "i % 5":2
  │    ├── ordering: +2,+1
  │    └── project
- │         ├── columns: column2:2 generate_series:1
+ │         ├── columns: "i % 5":2 generate_series:1
  │         ├── project-set
  │         │    ├── columns: generate_series:1
  │         │    ├── values
@@ -44,7 +44,7 @@ with &1 (tmp)
  │         │    └── zip
  │         │         └── generate_series(1, 10)
  │         └── projections
- │              └── generate_series:1 % 5 [as=column2:2]
+ │              └── generate_series:1 % 5 [as="i % 5":2]
  └── with-scan &1 (tmp)
       ├── columns: i:3
       └── mapping:
@@ -55,12 +55,12 @@ build set=propagate_input_ordering=true
 SELECT foo FROM (SELECT i, i%2 FROM generate_series(1, 10) i ORDER BY i % 5 ASC, i ASC) AS foo
 ----
 sort
- ├── columns: foo:4  [hidden: generate_series:1 column3:3]
+ ├── columns: foo:4  [hidden: generate_series:1 "i % 5":3]
  ├── ordering: +3,+1
  └── project
-      ├── columns: foo:4 generate_series:1 column3:3
+      ├── columns: foo:4 generate_series:1 "i % 5":3
       ├── project
-      │    ├── columns: "?column?":2 column3:3 generate_series:1
+      │    ├── columns: "?column?":2 "i % 5":3 generate_series:1
       │    ├── project-set
       │    │    ├── columns: generate_series:1
       │    │    ├── values
@@ -69,7 +69,7 @@ sort
       │    │         └── generate_series(1, 10)
       │    └── projections
       │         ├── generate_series:1 % 2 [as="?column?":2]
-      │         └── generate_series:1 % 5 [as=column3:3]
+      │         └── generate_series:1 % 5 [as="i % 5":3]
       └── projections
            └── ((generate_series:1, "?column?":2) AS i, "?column?") [as=foo:4]
 
@@ -78,10 +78,10 @@ build set=propagate_input_ordering=true
 SELECT foo.* FROM (SELECT i, i%2 FROM generate_series(1, 10) i ORDER BY i % 5 ASC, i ASC) AS foo
 ----
 sort
- ├── columns: i:1 "?column?":2  [hidden: column3:3]
+ ├── columns: i:1 "?column?":2  [hidden: "i % 5":3]
  ├── ordering: +3,+1
  └── project
-      ├── columns: "?column?":2 column3:3 generate_series:1
+      ├── columns: "?column?":2 "i % 5":3 generate_series:1
       ├── project-set
       │    ├── columns: generate_series:1
       │    ├── values
@@ -90,7 +90,7 @@ sort
       │         └── generate_series(1, 10)
       └── projections
            ├── generate_series:1 % 2 [as="?column?":2]
-           └── generate_series:1 % 5 [as=column3:3]
+           └── generate_series:1 % 5 [as="i % 5":3]
 
 # The subquery ordering is propagated to the aggregation.
 build set=propagate_input_ordering=true
@@ -100,10 +100,10 @@ scalar-group-by
  ├── columns: array_agg:3
  ├── internal-ordering: -2,+1
  ├── sort
- │    ├── columns: generate_series:1 column2:2
+ │    ├── columns: generate_series:1 "i % 2":2
  │    ├── ordering: -2,+1
  │    └── project
- │         ├── columns: column2:2 generate_series:1
+ │         ├── columns: "i % 2":2 generate_series:1
  │         ├── project-set
  │         │    ├── columns: generate_series:1
  │         │    ├── values
@@ -111,7 +111,7 @@ scalar-group-by
  │         │    └── zip
  │         │         └── generate_series(1, 5)
  │         └── projections
- │              └── generate_series:1 % 2 [as=column2:2]
+ │              └── generate_series:1 % 2 [as="i % 2":2]
  └── aggregations
       └── array-agg [as=array_agg:3]
            └── generate_series:1
@@ -123,7 +123,7 @@ FROM (SELECT * FROM generate_series(1, 2) x) tmp,
      (SELECT * FROM generate_series(8, 12) i ORDER BY i % 5 ASC, i ASC) tmp2;
 ----
 inner-join (cross)
- ├── columns: x:1 i:2  [hidden: column3:3]
+ ├── columns: x:1 i:2  [hidden: "i % 5":3]
  ├── project-set
  │    ├── columns: generate_series:1
  │    ├── values
@@ -131,7 +131,7 @@ inner-join (cross)
  │    └── zip
  │         └── generate_series(1, 2)
  ├── project
- │    ├── columns: column3:3 generate_series:2
+ │    ├── columns: "i % 5":3 generate_series:2
  │    ├── project-set
  │    │    ├── columns: generate_series:2
  │    │    ├── values
@@ -139,7 +139,7 @@ inner-join (cross)
  │    │    └── zip
  │    │         └── generate_series(8, 12)
  │    └── projections
- │         └── generate_series:2 % 5 [as=column3:3]
+ │         └── generate_series:2 % 5 [as="i % 5":3]
  └── filters (true)
 
 # Do not preserve the subquery ordering because the parent scope has its own
@@ -155,7 +155,7 @@ sort
  └── project
       ├── columns: generate_series:1
       └── project
-           ├── columns: column2:2 generate_series:1
+           ├── columns: "i % 5":2 generate_series:1
            ├── project-set
            │    ├── columns: generate_series:1
            │    ├── values
@@ -163,7 +163,7 @@ sort
            │    └── zip
            │         └── generate_series(1, 10)
            └── projections
-                └── generate_series:1 % 5 [as=column2:2]
+                └── generate_series:1 % 5 [as="i % 5":2]
 
 # CTEs get materialized in the desired order. 
 build set=propagate_input_ordering=true

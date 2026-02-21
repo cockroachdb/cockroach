@@ -458,16 +458,16 @@ vectorized: true
         │ render ?column?: "?column?"
         │
         └── • top-k
-            │ columns: (length, "?column?", column16)
+            │ columns: (length, "?column?", "k || v")
             │ estimated row count: 10 (missing stats)
-            │ order: +column16
+            │ order: +"k || v"
             │ k: 10
             │
             └── • render
-                │ columns: (length, "?column?", column16)
+                │ columns: (length, "?column?", "k || v")
                 │ render length: length(k)
                 │ render ?column?: 2
-                │ render column16: k || v
+                │ render k || v: k || v
                 │
                 └── • scan
                       columns: (k, v)

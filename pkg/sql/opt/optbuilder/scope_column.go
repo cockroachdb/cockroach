@@ -52,6 +52,13 @@ type scopeColumn struct {
 	// This field is only used for ordering columns.
 	descending bool
 
+	// nonDefaultNullsOrder is true when this ORDER BY column requires
+	// non-default NULLS ordering (e.g., NULLS LAST for ASC, or NULLS FIRST
+	// for DESC). When true, an additional IS NULL column will be generated
+	// to implement the correct NULL ordering semantics.
+	// This field is only used for ordering columns.
+	nonDefaultNullsOrder bool
+
 	// paramOrd is the 1-based ordinal of the parameter of the function that
 	// the column corresponds to. It is used to resolve placeholders (e.g., $1)
 	// in function bodies that are references to function arguments. If the
