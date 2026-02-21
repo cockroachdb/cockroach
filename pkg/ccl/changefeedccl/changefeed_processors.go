@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdcutils"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/checkpoint"
+	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/checkpointpb"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/kvevent"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/kvfeed"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/resolvedspan"
@@ -50,6 +51,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log/logcrash"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
+	"github.com/cockroachdb/cockroach/pkg/util/rangescanstats"
+	"github.com/cockroachdb/cockroach/pkg/util/rangescanstats/rangescanstatspb"
 	"github.com/cockroachdb/cockroach/pkg/util/span"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
@@ -121,6 +124,9 @@ type changeAggregator struct {
 	// changeAggregator's trace recording.
 	agg      *tracing.TracingAggregator
 	aggTimer timeutil.Timer
+
+	statsPoller              *rangescanstats.RangeStatsPoller
+	updateRangeStatsCallback func(stats *rangescanstatspb.RangeStats)
 
 	metrics                *Metrics
 	sliMetrics             *sliMetrics
@@ -469,6 +475,14 @@ func (ca *changeAggregator) Start(ctx context.Context) {
 		ca.cancel()
 		return
 	}
+
+	if err = ca.startRangeStatsPoller(ctx, spans, execCfg, opts); err != nil {
+		log.Changefeed.Warningf(ca.Ctx(), "moving to draining due to error starting range stats poller: %v", err)
+		ca.MoveToDraining(err)
+		ca.cancel()
+		return
+	}
+
 	ca.sink = &errorWrapperSink{wrapped: ca.sink}
 	ca.eventConsumer, ca.sink, err = newEventConsumer(
 		ctx, ca.FlowCtx.Cfg, ca.spec, feed, ca.frontier, kvFeedHighWater,
@@ -621,15 +635,7 @@ func makeKVFeedMonitoringCfg(
 	opts changefeedbase.StatementOptions,
 	settings *cluster.Settings,
 ) (kvfeed.MonitoringConfig, error) {
-	laggingRangesThreshold, laggingRangesInterval, err := opts.GetLaggingRangesConfig(ctx, settings)
-	if err != nil {
-		return kvfeed.MonitoringConfig{}, err
-	}
 	return kvfeed.MonitoringConfig{
-		LaggingRangesCallback:        sliMetrics.getLaggingRangesCallback(),
-		LaggingRangesThreshold:       laggingRangesThreshold,
-		LaggingRangesPollingInterval: laggingRangesInterval,
-
 		OnBackfillCallback:      sliMetrics.getBackfillCallback(),
 		OnBackfillRangeCallback: sliMetrics.getBackfillRangeCallback(),
 	}, nil
@@ -730,6 +736,7 @@ func (ca *changeAggregator) close() {
 		ca.sliMetrics.closeId(ca.sliMetricsID)
 	}
 
+	ca.closeRangeStatsPoller()
 	ca.memAcc.Close(ca.Ctx())
 	ca.MemMonitor.Stop(ca.Ctx())
 	ca.InternalClose()
@@ -984,17 +991,18 @@ func (ca *changeAggregator) flushFrontier(ctx context.Context) error {
 	}
 
 	// Iterate frontier spans and build a list of spans to emit.
-	batch := jobspb.ResolvedSpans{
-		ResolvedSpans: slices.Collect(ca.frontier.All()),
-	}
+	batch := slices.Collect(ca.frontier.All())
 	return ca.emitResolved(batch)
 }
 
-func (ca *changeAggregator) emitResolved(batch jobspb.ResolvedSpans) error {
-	progressUpdate := jobspb.ResolvedSpans{
-		ResolvedSpans: batch.ResolvedSpans,
-		Stats: jobspb.ResolvedSpans_Stats{
-			RecentKvCount: ca.recentKVCount,
+func (ca *changeAggregator) emitResolved(batch []jobspb.ResolvedSpan) error {
+	progressUpdate := checkpointpb.ChangefeedCheckpoint{
+		ResolvedSpans: batch,
+		Stats: checkpointpb.ChangefeedCheckpoint_Stats{
+			RecentKvCount:         ca.recentKVCount,
+			BackfillPendingRanges: ca.sliMetrics.BackfillPendingRanges.Value(),
+			TotalRanges:           ca.sliMetrics.TotalRanges.Value(),
+			AggregatorID:          ca.spec.AggregatorID,
 		},
 	}
 	if log.V(2) {
@@ -1030,6 +1038,46 @@ const (
 	emitAllResolved = 0
 	emitNoResolved  = -1
 )
+
+func (ca *changeAggregator) startRangeStatsPoller(
+	ctx context.Context,
+	spans []roachpb.Span,
+	execCfg *sql.ExecutorConfig,
+	opts changefeedbase.StatementOptions,
+) error {
+	laggingRangesThreshold, laggingRangesInterval, err := opts.GetLaggingRangesConfig(ctx, ca.FlowCtx.Cfg.Settings)
+	if err != nil {
+		return err
+	}
+	// We want to consume our polled metrics in two ways:
+	//
+	// 1. Report per aggregator stats as metrics. This per node granularity allows us to
+	// 		diagnose things such as unbalanced plans. This is handled by the callback function.
+	//
+	// 2. Sent to the changefeed frontier to be aggregated and reported as a job status
+	// 		message. This allows users to see the progress of backfill scans. This is done
+	// 		by piggybacking our range stats when we emit resolved spans to the frontier.
+	ca.updateRangeStatsCallback = ca.sliMetrics.getRangeStatsCallback()
+	ca.statsPoller = rangescanstats.StartStatsPoller(
+		ctx,
+		laggingRangesInterval,
+		spans,
+		ca.frontier,
+		execCfg.RangeDescIteratorFactory,
+		laggingRangesThreshold,
+		ca.updateRangeStatsCallback,
+	)
+	return nil
+}
+
+func (ca *changeAggregator) closeRangeStatsPoller() {
+	if ca.statsPoller == nil {
+		return
+	}
+	ca.statsPoller.Close()
+	// Reset metrics on shutdown.
+	ca.updateRangeStatsCallback(&rangescanstatspb.RangeStats{})
+}
 
 type changeFrontier struct {
 	execinfra.ProcessorBase
@@ -1107,6 +1155,9 @@ type changeFrontier struct {
 	usageWgCancel context.CancelFunc
 
 	targets changefeedbase.Targets
+
+	// rangeStatsCollector aggregates range stats from all aggregators.
+	backfillStatsCollector *backfillStatsCollector
 }
 
 const (
@@ -1274,11 +1325,12 @@ func newChangeFrontierProcessor(
 	memMonitor := execinfra.NewMonitor(ctx, flowCtx.Mon, mon.MakeName("changefntr-mem"))
 
 	cf := &changeFrontier{
-		evalCtx:       flowCtx.NewEvalCtx(),
-		spec:          spec,
-		memAcc:        memMonitor.MakeBoundAccount(),
-		input:         input,
-		usageWgCancel: func() {},
+		evalCtx:                flowCtx.NewEvalCtx(),
+		spec:                   spec,
+		memAcc:                 memMonitor.MakeBoundAccount(),
+		input:                  input,
+		usageWgCancel:          func() {},
+		backfillStatsCollector: newBackfillStatsCollector(spec.NumAggregators),
 	}
 
 	defer func() {
@@ -1740,23 +1792,24 @@ func (cf *changeFrontier) noteAggregatorProgress(ctx context.Context, d rowenc.E
 		return errors.AssertionFailedf(`unexpected datum type %T: %s`, d.Datum, d.Datum)
 	}
 
-	var resolvedSpans jobspb.ResolvedSpans
-	if err := protoutil.Unmarshal([]byte(*raw), &resolvedSpans); err != nil {
+	var changefeedCheckpoint checkpointpb.ChangefeedCheckpoint
+	if err := protoutil.Unmarshal([]byte(*raw), &changefeedCheckpoint); err != nil {
 		return errors.NewAssertionErrorWithWrappedErrf(err,
 			`unmarshalling aggregator progress update: %x`, raw)
 	}
 	if log.V(2) {
-		log.Changefeed.Infof(ctx, "progress update from aggregator: %#v", resolvedSpans)
+		log.Changefeed.Infof(ctx, "progress update from aggregator: %#v", changefeedCheckpoint)
 	}
 
-	cf.maybeMarkJobIdle(resolvedSpans.Stats.RecentKvCount)
+	cf.maybeMarkJobIdle(changefeedCheckpoint.Stats.RecentKvCount)
+	cf.backfillStatsCollector.add(changefeedCheckpoint.Stats.AggregatorID, changefeedCheckpoint.Stats.TotalRanges, changefeedCheckpoint.Stats.BackfillPendingRanges)
 
-	frontierChanged, err := cf.forwardFrontier(ctx, resolvedSpans.ResolvedSpans)
+	frontierChanged, err := cf.forwardFrontier(ctx, changefeedCheckpoint.ResolvedSpans)
 	if err != nil {
 		return err
 	}
 
-	if err := cf.maybeCheckpoint(ctx, frontierChanged, resolvedSpans.ResolvedSpans); err != nil {
+	if err := cf.maybeCheckpoint(ctx, frontierChanged, changefeedCheckpoint.ResolvedSpans); err != nil {
 		return err
 	}
 
@@ -1897,7 +1950,11 @@ func (cf *changeFrontier) checkpointJobProgress(
 		}
 	}
 
-	updateRunStatus := timeutil.Since(cf.js.lastRunStatusUpdate) > runStatusUpdateFrequency
+	initialScanPercentage, backfillStatus := cf.backfillStatsCollector.rollupStats(cf.frontier.Frontier().IsEmpty())
+
+	// We emit the backfill status over the resolved timestamp.
+	updateBackfillStatus := backfillStatus != ""
+	updateRunStatus := !updateBackfillStatus && timeutil.Since(cf.js.lastRunStatusUpdate) > runStatusUpdateFrequency
 	if updateRunStatus {
 		defer func() { cf.js.lastRunStatusUpdate = timeutil.Now() }()
 	}
@@ -1912,10 +1969,17 @@ func (cf *changeFrontier) checkpointJobProgress(
 				return err
 			}
 
-			// Advance resolved timestamp.
+			// Report the highwater if it exists, otherwise we are in initial scan
+			// phase and report the backfill progress.
 			progress := md.Progress
-			progress.Progress = &jobspb.Progress_HighWater{
-				HighWater: &frontier,
+			if !frontier.IsEmpty() {
+				progress.Progress = &jobspb.Progress_HighWater{
+					HighWater: &frontier,
+				}
+			} else if initialScanPercentage > 0 && initialScanPercentage < 1 {
+				progress.Progress = &jobspb.Progress_FractionCompleted{
+					FractionCompleted: initialScanPercentage,
+				}
 			}
 
 			changefeedProgress := progress.Details.(*jobspb.Progress_Changefeed).Changefeed
@@ -1929,7 +1993,9 @@ func (cf *changeFrontier) checkpointJobProgress(
 				return err
 			}
 
-			if updateRunStatus {
+			if updateBackfillStatus {
+				progress.StatusMessage = backfillStatus
+			} else if updateRunStatus {
 				progress.StatusMessage = fmt.Sprintf("running: resolved=%s", frontier)
 			}
 

@@ -15,6 +15,7 @@ proto_library(
         "//pkg/sql/catalog/externalcatalog/externalpb:externalpb_proto",
         "//pkg/util:util_proto",
         "//pkg/util/hlc:hlc_proto",
+        "//pkg/util/rangescanstats/rangescanstatspb:rangescanstatspb_proto",
         "@com_github_gogo_protobuf//gogoproto:gogo_proto",
         "@com_google_protobuf//:duration_proto",
     ],
@@ -34,6 +35,7 @@ go_proto_library(
         "//pkg/sql/catalog/externalcatalog/externalpb",
         "//pkg/util",
         "//pkg/util/hlc",
+        "//pkg/util/rangescanstats/rangescanstatspb",
         "//pkg/util/uuid",  # keep
         "@com_github_gogo_protobuf//gogoproto",
     ],

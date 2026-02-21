@@ -8,9 +8,9 @@ package replicationutils
 import (
 	"fmt"
 
-	"github.com/cockroachdb/cockroach/pkg/repstream/streampb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/util/rangescanstats/rangescanstatspb"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/errors"
 	pbtypes "github.com/gogo/protobuf/types"
@@ -20,7 +20,7 @@ import (
 // StreamEvent and converts it to a ProducerMetadata that can be passed through
 // the DistSQL pipeline.
 func StreamRangeStatsToProgressMeta(
-	flowCtx *execinfra.FlowCtx, procID int32, stats *streampb.StreamEvent_RangeStats,
+	flowCtx *execinfra.FlowCtx, procID int32, stats *rangescanstatspb.RangeStats,
 ) (*execinfrapb.ProducerMetadata, error) {
 	asAny, err := pbtypes.MarshalAny(stats)
 	if err != nil {
@@ -40,21 +40,19 @@ func StreamRangeStatsToProgressMeta(
 // multiple processors and aggregates them into single metrics.
 type AggregateRangeStatsCollector struct {
 	mu             syncutil.Mutex
-	stats          map[int32]*streampb.StreamEvent_RangeStats
+	stats          map[int32]*rangescanstatspb.RangeStats
 	processorCount int
 }
 
 func NewAggregateRangeStatsCollector(processorCount int) AggregateRangeStatsCollector {
 	return AggregateRangeStatsCollector{
-		stats:          make(map[int32]*streampb.StreamEvent_RangeStats),
+		stats:          make(map[int32]*rangescanstatspb.RangeStats),
 		processorCount: processorCount,
 	}
 }
 
 // Add adds range states from a processor to the collector.
-func (r *AggregateRangeStatsCollector) Add(
-	processorID int32, stats *streampb.StreamEvent_RangeStats,
-) {
+func (r *AggregateRangeStatsCollector) Add(processorID int32, stats *rangescanstatspb.RangeStats) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	r.stats[processorID] = stats
@@ -64,13 +62,13 @@ func (r *AggregateRangeStatsCollector) Add(
 // the fraction of ranges that have reached the steady state, and a human
 // readable status message.
 func (r *AggregateRangeStatsCollector) RollupStats() (
-	streampb.StreamEvent_RangeStats,
+	rangescanstatspb.RangeStats,
 	float32,
 	string,
 ) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	var total streampb.StreamEvent_RangeStats
+	var total rangescanstatspb.RangeStats
 	for _, producerStats := range r.stats {
 		total.RangeCount += producerStats.RangeCount
 		total.ScanningRangeCount += producerStats.ScanningRangeCount
@@ -89,7 +87,7 @@ func (r *AggregateRangeStatsCollector) RollupStats() (
 		(float32(total.RangeCount-incompleteCount) / float32(total.RangeCount)))
 
 	if len(r.stats) != r.processorCount || total.RangeCount == 0 {
-		return streampb.StreamEvent_RangeStats{}, 0, fmt.Sprintf("starting streams (%d out of %d)", len(r.stats), r.processorCount)
+		return rangescanstatspb.RangeStats{}, 0, fmt.Sprintf("starting streams (%d out of %d)", len(r.stats), r.processorCount)
 	}
 	if !initialScanComplete {
 		return total, fractionCompleted, fmt.Sprintf("initial scan on %d out of %d ranges", total.ScanningRangeCount, total.RangeCount)
