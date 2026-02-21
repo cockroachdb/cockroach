@@ -134,6 +134,11 @@ type OptTester struct {
 
 	builder strings.Builder
 	f       *norm.Factory
+
+	// preparedMemo stores the memo built with placeholders, used by
+	// assign-placeholders-optstepsweb to show step-by-step optimization
+	// after placeholder assignment.
+	preparedMemo *memo.Memo
 }
 
 // Flags are control knobs for tests. Note that specific testcases can
@@ -346,6 +351,13 @@ func New(catalog cat.Catalog, sqlStr string) *OptTester {
 //
 //     Builds a query that has placeholders (with normalization enabled), then
 //     assigns placeholders to the given query arguments and fully optimizes it.
+//
+//   - assign-placeholders-optstepsweb query-args=(...)
+//
+//     Similar to optstepsweb, but first assigns placeholder values from
+//     query-args before running step-by-step optimization. This allows
+//     visualizing the optimization process for prepared statements. The result
+//     is a URL which displays the optimization steps.
 //
 //   - placeholder-fast-path [flags]
 //
@@ -690,6 +702,13 @@ func (ot *OptTester) runCommandInternal(tb testing.TB, d *datadriven.TestData) s
 		ot.postProcess(tb, d, e)
 		return ot.FormatExpr(e)
 
+	case "assign-placeholders-optstepsweb":
+		result, err := ot.AssignPlaceholdersOptStepsWeb(ot.Flags.QueryArgs)
+		if err != nil {
+			d.Fatalf(tb, "%+v", err)
+		}
+		return result
+
 	case "placeholder-fast-path":
 		e, ok, err := ot.PlaceholderFastPath()
 		if err != nil {
@@ -737,6 +756,20 @@ func (ot *OptTester) runCommandInternal(tb testing.TB, d *datadriven.TestData) s
 
 	case "normstepsweb":
 		result, err := ot.OptStepsWeb(false /* explore */)
+		if err != nil {
+			d.Fatalf(tb, "%+v", err)
+		}
+		return result
+
+	case "assign-placeholders-optsteps":
+		result, err := ot.AssignPlaceholdersOptSteps(true /* explore */)
+		if err != nil {
+			d.Fatalf(tb, "%+v", err)
+		}
+		return result
+
+	case "assign-placeholders-normsteps":
+		result, err := ot.AssignPlaceholdersOptSteps(false /* explore */)
 		if err != nil {
 			d.Fatalf(tb, "%+v", err)
 		}
@@ -1154,7 +1187,12 @@ func (f *Flags) Set(arg datadriven.CmdArg) error {
 		f.MemoGroupLimit = limit
 
 	case "query-args":
-		f.QueryArgs = arg.Vals
+		// Process escape sequences in query args. The datadriven parser splits
+		// on commas, so we use \x2c as an escape for commas inside array literals.
+		f.QueryArgs = make([]string, len(arg.Vals))
+		for i, val := range arg.Vals {
+			f.QueryArgs[i] = strings.ReplaceAll(val, `\x2c`, ",")
+		}
 
 	case "memo-cycles":
 		f.MemoFormat = xform.FmtCycle
@@ -1293,7 +1331,15 @@ func (ot *OptTester) AssignPlaceholders(
 			return nil, err
 		}
 
-		ot.semaCtx.Placeholders.Values[i] = texpr
+		// Evaluate the typed expression to get a datum. This ensures that
+		// string representations of arrays like '{1,4}' are converted to
+		// actual DArray values, matching the behavior of array literals
+		// in the query itself.
+		datum, err := eval.Expr(context.Background(), &ot.evalCtx, texpr)
+		if err != nil {
+			return nil, err
+		}
+		ot.semaCtx.Placeholders.Values[i] = datum
 	}
 	ot.evalCtx.Placeholders = &ot.semaCtx.Placeholders
 
@@ -1583,6 +1629,187 @@ func (ot *OptTester) OptSteps(explore bool) (string, error) {
 	return ot.builder.String(), nil
 }
 
+// AssignPlaceholdersOptSteps is similar to OptSteps but first builds a prepared
+// memo with placeholders, then assigns placeholder values before running
+// step-by-step optimization. This allows visualizing the optimization process
+// for prepared statements.
+func (ot *OptTester) AssignPlaceholdersOptSteps(explore bool) (string, error) {
+	ot.Flags.DisableCheckExpr = true
+
+	// Build the prepared memo with placeholders. Allow normalization during
+	// the initial build to match the real prepared statement workflow in
+	// plan_opt.go, where Build() normalizes during PREPARE. Exploration
+	// rules don't run during buildExpr anyway (only during Optimize).
+	o := ot.makeOptimizer()
+	if err := ot.buildExpr(o.Factory()); err != nil {
+		return "", err
+	}
+	prepMemo := o.DetachMemo(ot.ctx)
+
+	// Construct placeholder values.
+	if err := ot.setupPlaceholderValues(); err != nil {
+		return "", err
+	}
+
+	// Set the evalCtx's Placeholders so that eval.Expr can resolve placeholder values.
+	ot.evalCtx.Placeholders = &ot.semaCtx.Placeholders
+
+	var prevBest, prev, next string
+	ot.builder.Reset()
+
+	os := newOptStepsWithPlaceholders(ot, prepMemo)
+	for {
+		err := os.Next()
+		if err != nil {
+			return "", err
+		}
+
+		next = os.fo.o.FormatExpr(os.Root(), ot.Flags.ExprFormat, false /* redactableValues */)
+
+		if os.Done() {
+			break
+		}
+
+		if !explore {
+			rule := os.LastRuleName()
+			if rule.IsExplore() {
+				break
+			}
+		}
+
+		if prev == "" {
+			ot.optStepsDisplayWithPlaceholders("", next, os)
+			prevBest = next
+		} else if next == prev || next == prevBest {
+			ot.optStepsDisplayWithPlaceholders(next, next, os)
+		} else if os.IsBetter() {
+			ot.optStepsDisplayWithPlaceholders(prevBest, next, os)
+			prevBest = next
+		} else {
+			ot.optStepsDisplayWithPlaceholders(prev, next, os)
+		}
+
+		prev = next
+	}
+
+	ot.optStepsDisplayWithPlaceholders(next, "", os)
+
+	return ot.builder.String(), nil
+}
+
+// setupPlaceholderValues sets up placeholder values from QueryArgs.
+func (ot *OptTester) setupPlaceholderValues() error {
+	queryArgs := ot.Flags.QueryArgs
+	if exp := len(ot.semaCtx.Placeholders.Types); len(queryArgs) != exp {
+		return errors.Errorf("expected %d arguments, got %d", exp, len(queryArgs))
+	}
+	ot.semaCtx.Placeholders.Values = make(tree.QueryArguments, len(queryArgs))
+	for i, arg := range queryArgs {
+		parg, err := parser.ParseExpr(fmt.Sprintf("%v", arg))
+		if err != nil {
+			return err
+		}
+
+		id := tree.PlaceholderIdx(i)
+		typ, _ := ot.semaCtx.Placeholders.ValueType(id)
+		texpr, err := schemaexpr.SanitizeVarFreeExpr(
+			context.Background(),
+			parg,
+			typ,
+			"", /* context */
+			&ot.semaCtx,
+			volatility.Volatile,
+			false, /*allowAssignmentCast*/
+		)
+		if err != nil {
+			return err
+		}
+		// Evaluate the typed expression to get a datum.
+		datum, err := eval.Expr(context.Background(), &ot.evalCtx, texpr)
+		if err != nil {
+			return err
+		}
+		ot.semaCtx.Placeholders.Values[i] = datum
+	}
+	return nil
+}
+
+// optStepsDisplayWithPlaceholders formats the output for AssignPlaceholdersOptSteps.
+func (ot *OptTester) optStepsDisplayWithPlaceholders(before, after string, os *optStepsWithPlaceholders) {
+	// bestHeader is used when the expression is an improvement over the previous
+	// expression.
+	bestHeader := func(e opt.Expr, format string, args ...interface{}) {
+		ot.separator("=")
+		ot.output(format, args...)
+		if rel, ok := e.(memo.RelExpr); ok {
+			ot.output("  Cost: %.2f\n", rel.Cost().C)
+		} else {
+			ot.output("\n")
+		}
+		ot.separator("=")
+	}
+
+	// altHeader is used when the expression doesn't improve over the previous
+	// expression, but it's still desirable to see what changed.
+	altHeader := func(format string, args ...interface{}) {
+		ot.separator("-")
+		ot.output(format, args...)
+		ot.separator("-")
+	}
+
+	if before == "" {
+		if ot.Flags.Verbose {
+			fmt.Print("------ assign-placeholders-optsteps verbose output starts ------\n")
+		}
+		bestHeader(os.Root(), "Initial expression after placeholder assignment\n")
+		ot.indent(after)
+		return
+	}
+
+	if before == after {
+		msg := "no changes"
+		if os.LastRuleName().IsNormalize() {
+			msg = "normalization of expression outside of memo"
+		}
+		altHeader("%s (%s)\n", os.LastRuleName(), msg)
+		return
+	}
+
+	if after == "" {
+		bestHeader(os.Root(), "Final best expression\n")
+		ot.indent(before)
+
+		if ot.Flags.Verbose {
+			fmt.Print("------ assign-placeholders-optsteps verbose output ends ------\n")
+		}
+		return
+	}
+
+	if os.IsBetter() {
+		bestHeader(os.Root(), "%s\n", os.LastRuleName())
+	} else {
+		altHeader("%s (higher cost)\n", os.LastRuleName())
+	}
+
+	if ot.Flags.OptStepsSplitDiff {
+		ot.output("<<<<<<< before\n")
+		ot.indent(before)
+		ot.output("=======\n")
+		ot.indent(after)
+		ot.output(">>>>>>> after\n")
+	} else {
+		diff := difflib.UnifiedDiff{
+			A:       difflib.SplitLines(before),
+			B:       difflib.SplitLines(after),
+			Context: 100,
+		}
+		text, _ := difflib.GetUnifiedDiffString(diff)
+		// Skip the "@@ ... @@" header (first line).
+		text = strings.SplitN(text, "\n", 2)[1]
+		ot.indent(text)
+	}
+}
+
 // OptStepsWeb is similar to Optsteps but it uses a special web page for
 // formatting the output. The result will be an URL which contains the encoded
 // data.
@@ -1610,6 +1837,232 @@ func (ot *OptTester) OptStepsWeb(explore bool) (string, error) {
 		return "", err
 	}
 	return url.String(), nil
+}
+
+// AssignPlaceholdersOptStepsWeb is similar to OptStepsWeb but first assigns
+// placeholder values from QueryArgs before running step-by-step optimization.
+// This allows visualizing the optimization process for prepared statements.
+func (ot *OptTester) AssignPlaceholdersOptStepsWeb(queryArgs []string) (string, error) {
+	// Disable CheckExpr assertions since we create partially normalized expressions.
+	ot.Flags.DisableCheckExpr = true
+
+	// Build the prepared memo with placeholders. Allow normalization during
+	// the initial build to match the real prepared statement workflow in
+	// plan_opt.go, where Build() normalizes during PREPARE. Exploration
+	// rules don't run during buildExpr anyway (only during Optimize).
+	o := ot.makeOptimizer()
+	if err := ot.buildExpr(o.Factory()); err != nil {
+		return "", err
+	}
+	prepMemo := o.DetachMemo(ot.ctx)
+
+	// Construct placeholder values.
+	if exp := len(ot.semaCtx.Placeholders.Types); len(queryArgs) != exp {
+		return "", errors.Errorf("expected %d arguments, got %d", exp, len(queryArgs))
+	}
+	ot.semaCtx.Placeholders.Values = make(tree.QueryArguments, len(queryArgs))
+	for i, arg := range queryArgs {
+		parg, err := parser.ParseExpr(fmt.Sprintf("%v", arg))
+		if err != nil {
+			return "", err
+		}
+
+		id := tree.PlaceholderIdx(i)
+		typ, _ := ot.semaCtx.Placeholders.ValueType(id)
+		texpr, err := schemaexpr.SanitizeVarFreeExpr(
+			context.Background(),
+			parg,
+			typ,
+			"", /* context */
+			&ot.semaCtx,
+			volatility.Volatile,
+			false, /*allowAssignmentCast*/
+		)
+		if err != nil {
+			return "", err
+		}
+
+		// Evaluate the typed expression to get a datum. This ensures that
+		// string representations of arrays like '{1,4}' are converted to
+		// actual DArray values, matching the behavior of array literals
+		// in the query itself.
+		datum, err := eval.Expr(context.Background(), &ot.evalCtx, texpr)
+		if err != nil {
+			return "", err
+		}
+		ot.semaCtx.Placeholders.Values[i] = datum
+	}
+	ot.evalCtx.Placeholders = &ot.semaCtx.Placeholders
+
+	// Store the prepared memo for use by the forcing optimizer.
+	ot.preparedMemo = prepMemo
+
+	// Generate normalization diff.
+	normDiffStr, err := ot.optStepsNormDiffWithPlaceholders()
+	if err != nil {
+		return "", err
+	}
+
+	// Generate exploration diff.
+	exploreDiffStr, err := ot.optStepsExploreDiffWithPlaceholders()
+	if err != nil {
+		return "", err
+	}
+
+	url, err := ot.encodeOptstepsURL(normDiffStr, exploreDiffStr)
+	if err != nil {
+		return "", err
+	}
+	return url.String(), nil
+}
+
+// optStepsNormDiffWithPlaceholders produces the normalization steps as a diff
+// for a query with placeholders assigned.
+func (ot *OptTester) optStepsNormDiffWithPlaceholders() (string, error) {
+	type step struct {
+		Name string
+		Expr string
+	}
+	var normSteps []step
+	steps := 0
+	for {
+		fo, err := newForcingOptimizerWithPlaceholders(ot, ot.preparedMemo, steps, false /* ignoreNormRules */)
+		if err != nil {
+			return "", err
+		}
+		expr := fo.Optimize()
+		exprStr := fo.o.FormatExpr(expr, ot.Flags.ExprFormat, false /* redactableValues */)
+
+		name := "Initial"
+		if len(normSteps) > 0 {
+			rule := fo.lastMatched
+			if rule.IsExplore() {
+				// Stop at the first exploration rule.
+				break
+			}
+			name = rule.String()
+		}
+		normSteps = append(normSteps, step{Name: name, Expr: exprStr})
+
+		// Check if we're done (no more rules to apply).
+		if fo.remaining != 0 {
+			break
+		}
+		steps++
+	}
+
+	var buf bytes.Buffer
+	for i, s := range normSteps {
+		before := ""
+		if i > 0 {
+			before = normSteps[i-1].Expr
+		}
+		after := s.Expr
+		diff := difflib.UnifiedDiff{
+			A:        difflib.SplitLines(before),
+			FromFile: fmt.Sprintf("a/%s", s.Name),
+			B:        difflib.SplitLines(after),
+			ToFile:   fmt.Sprintf("b/%s", s.Name),
+			Context:  10000,
+		}
+		diffStr, err := difflib.GetUnifiedDiffString(diff)
+		if err != nil {
+			return "", err
+		}
+		diffStr = strings.TrimRight(diffStr, " \r\t\n")
+		buf.WriteString(diffStr)
+		buf.WriteString("\n")
+	}
+	return buf.String(), nil
+}
+
+// optStepsExploreDiffWithPlaceholders produces the exploration steps as a diff
+// for a query with placeholders assigned.
+func (ot *OptTester) optStepsExploreDiffWithPlaceholders() (string, error) {
+	var buf bytes.Buffer
+	steps := 1
+
+	for step := 0; step < 2000; step++ {
+		fo, err := newForcingOptimizerWithPlaceholders(ot, ot.preparedMemo, steps, true /* ignoreNormRules */)
+		if err != nil {
+			return "", err
+		}
+		fo.Optimize()
+
+		// Check if we're done.
+		if fo.remaining != 0 {
+			break
+		}
+
+		if ot.Flags.ExploreTraceRule != opt.InvalidRuleName &&
+			fo.lastApplied != ot.Flags.ExploreTraceRule {
+			steps++
+			continue
+		}
+
+		if fo.lastAppliedSource == nil {
+			steps++
+			continue
+		}
+
+		// Get the source expression.
+		srcPath := fo.LookupPath(fo.lastAppliedSource)
+		if srcPath == nil {
+			steps++
+			continue
+		}
+		fo2, err := newForcingOptimizerWithPlaceholders(ot, ot.preparedMemo, steps, true /* ignoreNormRules */)
+		if err != nil {
+			return "", err
+		}
+		fo2.RestrictToExpr(srcPath)
+		srcExpr := fo2.Optimize()
+		before := fo2.o.FormatExpr(srcExpr, ot.Flags.ExprFormat, false /* redactableValues */)
+
+		// Get the target expressions.
+		if fo.lastAppliedTarget != nil {
+			target := fo.lastAppliedTarget
+			for target != nil {
+				targetPath := fo.LookupPath(target)
+				if targetPath != nil {
+					fo3, err := newForcingOptimizerWithPlaceholders(ot, ot.preparedMemo, steps, true /* ignoreNormRules */)
+					if err != nil {
+						return "", err
+					}
+					fo3.RestrictToExpr(targetPath)
+					targetExpr := fo3.Optimize()
+					after := fo3.o.FormatExpr(targetExpr, ot.Flags.ExprFormat, false /* redactableValues */)
+
+					name := fo.lastApplied.String()
+					diff := difflib.UnifiedDiff{
+						A:        difflib.SplitLines(before),
+						FromFile: fmt.Sprintf("a/%s", name),
+						B:        difflib.SplitLines(after),
+						ToFile:   fmt.Sprintf("b/%s", name),
+						Context:  10000,
+					}
+					diffStr, err := difflib.GetUnifiedDiffString(diff)
+					if err != nil {
+						return "", err
+					}
+					diffStr = strings.TrimRight(diffStr, " \r\t\n")
+					if diffStr != "" {
+						buf.WriteString(diffStr)
+						buf.WriteString("\n")
+					}
+				}
+
+				if rel, ok := target.(memo.RelExpr); ok {
+					target = rel.NextExpr()
+				} else {
+					break
+				}
+			}
+		}
+
+		steps++
+	}
+	return buf.String(), nil
 }
 
 // optStepsNormDiff produces the normalization steps as a diff where each step

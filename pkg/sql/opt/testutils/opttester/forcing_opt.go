@@ -201,3 +201,63 @@ func (fc *forcingCoster) MaybeGetBestCostRelation(
 ) (best memo.RelExpr, ok bool) {
 	return fc.o.MaybeGetBestCostRelation(grp, required)
 }
+
+// newForcingOptimizerWithPlaceholders creates a forcing optimizer that uses
+// AssignPlaceholders to build the expression from a prepared memo with
+// placeholder values. This is used by assign-placeholders-optstepsweb to show
+// step-by-step optimization after placeholder assignment.
+func newForcingOptimizerWithPlaceholders(
+	tester *OptTester, preparedMemo *memo.Memo, steps int, ignoreNormRules bool,
+) (*forcingOptimizer, error) {
+	fo := &forcingOptimizer{
+		remaining:   steps,
+		lastMatched: opt.InvalidRuleName,
+	}
+	fo.o.Init(context.Background(), &tester.evalCtx, tester.catalog)
+	fo.o.Factory().FoldingControl().AllowStableFolds()
+	fo.coster.Init(&fo.o, &fo.groups)
+	fo.o.SetCoster(&fo.coster)
+	fo.o.Factory().SetDisabledRules(tester.Flags.DisableRules)
+
+	fo.o.NotifyOnMatchedRule(func(ruleName opt.RuleName) bool {
+		if tester.Flags.DisableRules.Contains(int(ruleName)) {
+			return false
+		}
+		if ignoreNormRules && ruleName.IsNormalize() {
+			return true
+		}
+		if fo.remaining == 0 {
+			return false
+		}
+		fo.remaining--
+		fo.lastMatched = ruleName
+		return true
+	})
+
+	// Hook the AppliedRule notification in order to track the portion of the
+	// expression tree affected by each transformation rule.
+	fo.o.NotifyOnAppliedRule(
+		func(ruleName opt.RuleName, source, target opt.Expr) {
+			if ignoreNormRules && ruleName.IsNormalize() {
+				return
+			}
+			fo.lastApplied = ruleName
+			fo.lastAppliedSource = source
+			fo.lastAppliedTarget = target
+		},
+	)
+
+	fo.o.Memo().NotifyOnNewGroup(func(expr opt.Expr) {
+		fo.groups.AddGroup(expr)
+	})
+
+	if tester.Flags.DisableCheckExpr {
+		fo.o.Memo().DisableCheckExpr()
+	}
+
+	// Use AssignPlaceholders instead of buildExpr.
+	if err := fo.o.Factory().AssignPlaceholders(preparedMemo); err != nil {
+		return nil, err
+	}
+	return fo, nil
+}
