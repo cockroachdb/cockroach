@@ -18,6 +18,7 @@ go_library(
         "//pkg/roachpb",
         "//pkg/security",
         "//pkg/security/password",
+        "//pkg/security/provisioning",
         "//pkg/security/username",
         "//pkg/server/apiutil",
         "//pkg/server/serverpb",
@@ -54,6 +55,7 @@ go_library(
 
 go_test(
     name = "authserver_test",
+    size = "large",
     srcs = [
         "authentication_test.go",
         "main_test.go",
@@ -61,6 +63,7 @@ go_test(
     deps = [
         ":authserver",
         "//pkg/base",
+        "//pkg/ccl/ldapccl",
         "//pkg/gossip",
         "//pkg/kv/kvpb",
         "//pkg/kv/kvserver",
@@ -79,9 +82,13 @@ go_test(
         "//pkg/server/serverpb",
         "//pkg/settings/cluster",
         "//pkg/sql/execinfrapb",
+        "//pkg/sql/pgwire",
+        "//pkg/sql/pgwire/hba",
+        "//pkg/sql/pgwire/identmap",
         "//pkg/testutils",
         "//pkg/testutils/serverutils",
         "//pkg/testutils/skip",
+        "//pkg/testutils/sqlutils",
         "//pkg/testutils/testcluster",
         "//pkg/ts",
         "//pkg/ts/tspb",
@@ -90,7 +97,10 @@ go_test(
         "//pkg/util/leaktest",
         "//pkg/util/log",
         "//pkg/util/timeutil",
+        "//pkg/util/uuid",
         "@com_github_cockroachdb_errors//:errors",
+        "@com_github_cockroachdb_redact//:redact",
+        "@com_github_go_ldap_ldap_v3//:ldap",
         "@com_github_gogo_protobuf//jsonpb",
         "@com_github_lib_pq//:pq",
         "@com_github_stretchr_testify//require",

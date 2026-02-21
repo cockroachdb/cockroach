@@ -21,6 +21,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	_ "github.com/cockroachdb/cockroach/pkg/ccl/ldapccl"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
@@ -37,9 +38,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/hba"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/identmap"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
+	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/ts"
 	"github.com/cockroachdb/cockroach/pkg/ts/tspb"
 	"github.com/cockroachdb/cockroach/pkg/util"
@@ -47,7 +52,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/redact"
+	ldap "github.com/go-ldap/ldap/v3"
 	"github.com/gogo/protobuf/jsonpb"
 	"github.com/lib/pq"
 	"github.com/stretchr/testify/require"
@@ -1050,4 +1058,198 @@ func TestFindSessionCookieValue(t *testing.T) {
 			require.Equal(t, test.errorExpected, err != nil)
 		})
 	}
+}
+
+// testLDAPManager implements pgwire.LDAPManager for unit testing the LDAP
+// login code path in userLogin.
+type testLDAPManager struct {
+	groups map[string][]string // userDN string -> group DN strings
+}
+
+var _ pgwire.LDAPManager = (*testLDAPManager)(nil)
+
+func (m *testLDAPManager) FetchLDAPUserDN(
+	_ context.Context, _ *cluster.Settings, user username.SQLUsername, _ *hba.Entry, _ *identmap.Conf,
+) (userDN *ldap.DN, detailedErrorMsg redact.RedactableString, authError error) {
+	dn, err := ldap.ParseDN("cn=" + user.Normalized())
+	if err != nil {
+		return nil, "", err
+	}
+	return dn, "", nil
+}
+
+func (m *testLDAPManager) ValidateLDAPLogin(
+	_ context.Context,
+	_ *cluster.Settings,
+	_ *ldap.DN,
+	_ username.SQLUsername,
+	pwd string,
+	_ *hba.Entry,
+	_ *identmap.Conf,
+) (detailedErrorMsg redact.RedactableString, authError error) {
+	if pwd == "invalid" {
+		return "", errors.New("invalid password")
+	}
+	return "", nil
+}
+
+func (m *testLDAPManager) FetchLDAPGroups(
+	_ context.Context,
+	_ *cluster.Settings,
+	userDN *ldap.DN,
+	_ username.SQLUsername,
+	_ *hba.Entry,
+	_ *identmap.Conf,
+) (ldapGroups []*ldap.DN, detailedErrorMsg redact.RedactableString, authError error) {
+	groupStrs, ok := m.groups[userDN.String()]
+	if !ok {
+		return nil, "", errors.New("no groups found")
+	}
+	groups := make([]*ldap.DN, 0, len(groupStrs))
+	for _, g := range groupStrs {
+		dn, err := ldap.ParseDN(g)
+		if err != nil {
+			return nil, "", err
+		}
+		groups = append(groups, dn)
+	}
+	return groups, "", nil
+}
+
+// TestLDAPUserLoginDBConsole exercises the userLogin code path for
+// LDAP-authenticated DB Console logins. It verifies that when a new user logs
+// in via LDAP with provisioning enabled, the user is provisioned, their LDAP
+// group memberships are synced as role grants, and estimated_last_login_time is
+// populated.
+func TestLDAPUserLoginDBConsole(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	// Set up a mock LDAPManager and hook pgwire.ConfigureLDAPAuth so that
+	// the authserver's ldapManager singleton is initialized with our mock.
+	mock := &testLDAPManager{groups: make(map[string][]string)}
+	defer testutils.TestingHook(&pgwire.ConfigureLDAPAuth,
+		func(
+			_ context.Context, _ log.AmbientContext, _ *cluster.Settings, _ uuid.UUID,
+		) pgwire.LDAPManager {
+			return mock
+		},
+	)()
+
+	ctx := context.Background()
+	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	defer s.Stopper().Stop(ctx)
+	ts := s.ApplicationLayer()
+	tdb := sqlutils.MakeSQLRunner(db)
+
+	const hbaConf = `host all all all ldap ldapserver=localhost ldapport=636 ` +
+		`ldapbasedn="dc=crdb,dc=io" ldapbinddn="cn=admin,dc=crdb,dc=io" ` +
+		`ldapbindpasswd=admin ldapsearchattribute=cn ` +
+		`"ldapsearchfilter=(objectClass=*)" ` +
+		`"ldapgrouplistfilter=(objectClass=groupOfNames)"`
+	tdb.Exec(t, "SET CLUSTER SETTING server.host_based_authentication.configuration = $1", hbaConf)
+	tdb.Exec(t, "SET CLUSTER SETTING security.provisioning.ldap.enabled = true")
+	tdb.Exec(t, "CREATE ROLE engineers")
+	tdb.Exec(t, "CREATE ROLE oncall")
+
+	httpLogin := func(user, password string) error {
+		req := &serverpb.UserLoginRequest{
+			Username: user,
+			Password: password,
+		}
+		var resp serverpb.UserLoginResponse
+		httpClient, err := ts.GetUnauthenticatedHTTPClient()
+		if err != nil {
+			return err
+		}
+		return httputil.PostJSON(
+			httpClient,
+			ts.AdminURL().WithPath(authserver.LoginPath).String(),
+			req,
+			&resp,
+		)
+	}
+
+	getRoles := func(user string) []string {
+		rows := tdb.QueryStr(t,
+			`SELECT role FROM system.role_members WHERE member = $1 ORDER BY role`, user)
+		roles := make([]string, len(rows))
+		for i, r := range rows {
+			roles[i] = r[0]
+		}
+		return roles
+	}
+
+	t.Run("new user gets provisioned with roles and login time", func(t *testing.T) {
+		mock.groups["cn=newdev"] = []string{"cn=engineers", "cn=oncall"}
+
+		err := httpLogin("newdev", "password")
+		require.NoError(t, err)
+
+		// Verify the user was provisioned.
+		rows := tdb.QueryStr(t,
+			`SELECT username FROM system.users WHERE username = 'newdev'`)
+		require.Len(t, rows, 1, "user should have been provisioned")
+
+		// Verify role memberships were synced from LDAP groups.
+		require.Equal(t, []string{"engineers", "oncall"}, getRoles("newdev"))
+
+		// Verify estimated_last_login_time is populated.
+		testutils.SucceedsSoon(t, func() error {
+			rows := tdb.QueryStr(t,
+				`SELECT count(*) FROM system.users WHERE username = 'newdev' AND estimated_last_login_time IS NOT NULL`)
+			if len(rows) == 0 || rows[0][0] != "1" {
+				return errors.New("estimated_last_login_time not yet updated for newdev")
+			}
+			return nil
+		})
+	})
+
+	t.Run("subsequent login updates roles and login time", func(t *testing.T) {
+		// Record the login time from the first login.
+		var firstLoginTime string
+		tdb.QueryRow(t,
+			`SELECT estimated_last_login_time::string FROM system.users WHERE username = 'newdev'`,
+		).Scan(&firstLoginTime)
+
+		// Change group membership: remove oncall, keep engineers.
+		mock.groups["cn=newdev"] = []string{"cn=engineers"}
+
+		err := httpLogin("newdev", "password")
+		require.NoError(t, err)
+
+		// Verify the revoked role is removed and the kept role remains.
+		require.Equal(t, []string{"engineers"}, getRoles("newdev"))
+
+		// Verify estimated_last_login_time is updated to a newer value.
+		testutils.SucceedsSoon(t, func() error {
+			var updatedLoginTime string
+			tdb.QueryRow(t,
+				`SELECT estimated_last_login_time::string FROM system.users WHERE username = 'newdev'`,
+			).Scan(&updatedLoginTime)
+			if updatedLoginTime <= firstLoginTime {
+				return errors.Newf(
+					"estimated_last_login_time not yet advanced: first=%s current=%s",
+					firstLoginTime, updatedLoginTime)
+			}
+			return nil
+		})
+	})
+
+	t.Run("provisioning disabled skips login time", func(t *testing.T) {
+		tdb.Exec(t, "SET CLUSTER SETTING security.provisioning.ldap.enabled = false")
+		// Pre-create the user so LDAP login succeeds without provisioning.
+		tdb.Exec(t, "CREATE USER manualuser")
+		mock.groups["cn=manualuser"] = []string{"cn=engineers"}
+
+		err := httpLogin("manualuser", "password")
+		require.NoError(t, err)
+
+		// estimated_last_login_time should NOT be populated since provisioning
+		// is disabled.
+		rows := tdb.QueryStr(t,
+			`SELECT count(*) FROM system.users WHERE username = 'manualuser' AND estimated_last_login_time IS NOT NULL`)
+		require.Equal(t, "0", rows[0][0],
+			"estimated_last_login_time should not be populated when provisioning is disabled")
+	})
 }
