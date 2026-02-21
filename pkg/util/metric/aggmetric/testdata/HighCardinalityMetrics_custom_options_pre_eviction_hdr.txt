@@ -1,6 +1,5 @@
 echo
 ----
-custom_options_counter 8
 custom_options_counter{database="db1",application_name="0"} 1
 custom_options_counter{database="db1",application_name="1"} 1
 custom_options_counter{database="db1",application_name="2"} 1
@@ -9,7 +8,6 @@ custom_options_counter{database="db1",application_name="4"} 1
 custom_options_counter{database="db1",application_name="5"} 1
 custom_options_counter{database="db1",application_name="6"} 1
 custom_options_counter{database="db1",application_name="7"} 1
-custom_options_gauge 36
 custom_options_gauge{database="db1",application_name="0"} 1
 custom_options_gauge{database="db1",application_name="1"} 2
 custom_options_gauge{database="db1",application_name="2"} 3
@@ -34,16 +32,6 @@ custom_options_histogram_bucket{database="db1",application_name="6",le="+Inf"} 1
 custom_options_histogram_bucket{database="db1",application_name="6",le="7"} 1
 custom_options_histogram_bucket{database="db1",application_name="7",le="+Inf"} 1
 custom_options_histogram_bucket{database="db1",application_name="7",le="8"} 1
-custom_options_histogram_bucket{le="+Inf"} 8
-custom_options_histogram_bucket{le="1"} 1
-custom_options_histogram_bucket{le="2"} 2
-custom_options_histogram_bucket{le="3"} 3
-custom_options_histogram_bucket{le="4"} 4
-custom_options_histogram_bucket{le="5"} 5
-custom_options_histogram_bucket{le="6"} 6
-custom_options_histogram_bucket{le="7"} 7
-custom_options_histogram_bucket{le="8"} 8
-custom_options_histogram_count 8
 custom_options_histogram_count{database="db1",application_name="0"} 1
 custom_options_histogram_count{database="db1",application_name="1"} 1
 custom_options_histogram_count{database="db1",application_name="2"} 1
@@ -52,7 +40,6 @@ custom_options_histogram_count{database="db1",application_name="4"} 1
 custom_options_histogram_count{database="db1",application_name="5"} 1
 custom_options_histogram_count{database="db1",application_name="6"} 1
 custom_options_histogram_count{database="db1",application_name="7"} 1
-custom_options_histogram_sum 36
 custom_options_histogram_sum{database="db1",application_name="0"} 1
 custom_options_histogram_sum{database="db1",application_name="1"} 2
 custom_options_histogram_sum{database="db1",application_name="2"} 3
