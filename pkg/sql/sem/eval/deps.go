@@ -12,6 +12,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
@@ -84,6 +85,9 @@ type CastFunc = func(context.Context, tree.Datum, *types.T) (tree.Datum, error)
 // of the Planner interface as we subsume its privilege checking into an
 // intermediate layer.
 type CatalogBuiltins interface {
+	// SetTxn updates the kv.Txn used by the builtins.
+	SetTxn(txn *kv.Txn)
+
 	// EncodeTableIndexKey constructs a deterministic and immutable encoding of
 	// a table index key from a tuple of datums. It is leveraged as the
 	// input to a hash function for hash-sharded indexes.

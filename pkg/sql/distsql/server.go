@@ -319,6 +319,9 @@ func (ds *ServerImpl) setupFlow(
 			// Update the Txn field early (before f.SetTxn() below) since some
 			// processors capture the field in their constructor (see #41992).
 			localEvalCtx.Txn = leafTxn
+			if localEvalCtx.CatalogBuiltins != nil {
+				localEvalCtx.CatalogBuiltins.SetTxn(leafTxn)
+			}
 		} else {
 			onFlowCleanupEnd = func(ctx context.Context) {
 				reserved.Close(ctx)
