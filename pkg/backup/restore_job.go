@@ -2279,7 +2279,7 @@ func (r *restoreResumer) doResume(ctx context.Context, execCtx interface{}) erro
 		// the first place, as a special case.
 		publishDescriptors := func(ctx context.Context, txn descs.Txn) error {
 			return r.publishDescriptors(
-				ctx, p.ExecCfg().JobRegistry, p.ExecCfg().JobsKnobs(), txn, p.User(), details, p.ExecCfg().NodeInfo.LogicalClusterID(),
+				ctx, p.ExecCfg().JobRegistry, p.ExecCfg().JobsKnobs(), txn, p.User(), details, sqlDescs, p.ExecCfg().NodeInfo.LogicalClusterID(),
 			)
 		}
 		if err := r.execCfg.InternalDB.DescsTxn(ctx, publishDescriptors); err != nil {
@@ -2443,7 +2443,7 @@ func (r *restoreResumer) doResume(ctx context.Context, execCtx interface{}) erro
 	publishDescriptors := func(ctx context.Context, txn descs.Txn) (err error) {
 		return r.publishDescriptors(
 			ctx, p.ExecCfg().JobRegistry, p.ExecCfg().JobsKnobs(), txn, p.User(),
-			details, p.ExecCfg().NodeInfo.LogicalClusterID(),
+			details, sqlDescs, p.ExecCfg().NodeInfo.LogicalClusterID(),
 		)
 	}
 	if err := r.execCfg.InternalDB.DescsTxn(ctx, publishDescriptors); err != nil {
@@ -2952,6 +2952,7 @@ func (r *restoreResumer) publishDescriptors(
 	txn descs.Txn,
 	user username.SQLUsername,
 	details jobspb.RestoreDetails,
+	sqlDesc []catalog.Descriptor,
 	clusterID uuid.UUID,
 ) (err error) {
 	if details.DescriptorsPublished {
@@ -2976,6 +2977,12 @@ func (r *restoreResumer) publishDescriptors(
 	// Pre-fetch all the descriptors into the collection to avoid doing
 	// round-trips per descriptor.
 	all, err := prefetchDescriptors(ctx, txn.KV(), txn.Descriptors(), details)
+	if err != nil {
+		return err
+	}
+
+	// Add type descriptors referenced by schema change targets.
+	all, err = addReferencedTypeDescriptors(ctx, txn, all, sqlDesc, details.DescriptorRewrites)
 	if err != nil {
 		return err
 	}
@@ -3197,6 +3204,60 @@ func prefetchDescriptors(
 		all.UpsertDescriptor(got[i])
 	}
 	return all.Catalog, nil
+}
+
+// addReferencedTypeDescriptors finds type descriptors from the backup that are
+// referenced by ColumnType targets in descriptors with declarative schema
+// changer state. For each type, it determines the new type ID from the
+// descriptor rewrites and adds the type descriptor (with its new ID) to the
+// catalog. This ensures that type descriptors referenced by restored tables are
+// included in the schema change job, whether they are new types being created
+// or existing types in the cluster.
+func addReferencedTypeDescriptors(
+	ctx context.Context,
+	txn descs.Txn,
+	all nstree.Catalog,
+	sqlDesc []catalog.Descriptor,
+	descRewrites map[descpb.ID]*jobspb.DescriptorRewrite,
+) (nstree.Catalog, error) {
+	typeIDsToFetch := make(map[descpb.ID]catalog.Descriptor)
+
+	// Find type descriptors from the backup and map them to their new IDs.
+	for _, desc := range sqlDesc {
+		if desc.DescriptorType() != catalog.Type || desc.GetDeclarativeSchemaChangerState() == nil {
+			continue
+		}
+		// Get the rewrite for this type descriptor
+		rewriteTyp, ok := descRewrites[desc.GetID()]
+		if !ok {
+			// Type is not being restored.
+			continue
+		}
+		// Skip if the type with the new ID is already in the catalog
+		newTypeID := rewriteTyp.ID
+		if all.LookupDescriptor(newTypeID) != nil {
+			continue
+		}
+		typeIDsToFetch[newTypeID] = desc
+	}
+
+	// Nothing to fetch.
+	if len(typeIDsToFetch) == 0 {
+		return all, nil
+	}
+
+	// Fetch the type descriptors and add them to the catalog.
+	mutAll := nstree.MutableCatalog{Catalog: all}
+	for typeID := range typeIDsToFetch {
+		newTypeDesc, err := txn.Descriptors().MutableByID(txn.KV()).Type(ctx, typeID)
+		if err != nil {
+			return nstree.Catalog{}, err
+		}
+		oldTypeDesc := typeIDsToFetch[typeID]
+		newTypeDesc.SetDeclarativeSchemaChangerState(oldTypeDesc.GetDeclarativeSchemaChangerState())
+		mutAll.UpsertDescriptor(newTypeDesc)
+	}
+	return mutAll.Catalog, nil
 }
 
 func emitRestoreJobEvent(

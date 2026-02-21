@@ -15,17 +15,22 @@ func init() {
 		toPublic(
 			scpb.Status_ABSENT,
 			to(scpb.Status_PUBLIC,
-				emit(func(this *scpb.TableLocalityRegionalByRow) *scop.NotImplemented {
-					return notImplemented(this)
+				emit(func(this *scpb.TableLocalityRegionalByRow) *scop.SetTableLocalityRegionalByRow {
+					return &scop.SetTableLocalityRegionalByRow{
+						TableID: this.TableID,
+						As:      this.As,
+					}
 				}),
 			),
 		),
 		toAbsent(
 			scpb.Status_PUBLIC,
 			to(scpb.Status_ABSENT,
-				// TODO(postamar): remove revertibility constraint when possible
-				revertible(false),
-				// TODO(postamar): implement table locality update
+				emit(func(this *scpb.TableLocalityRegionalByRow) *scop.UnsetTableLocality {
+					return &scop.UnsetTableLocality{
+						TableID: this.TableID,
+					}
+				}),
 			),
 		),
 	)

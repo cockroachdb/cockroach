@@ -5925,12 +5925,13 @@ func TestChangefeedRestartMultiNode(t *testing.T) {
 	})
 
 	waitForSchemaChange(t, sqlDB, `ALTER TABLE test_tab SET LOCALITY REGIONAL BY ROW`)
-	// schema-changer backfill for the ADD COLUMN
-	assertPayloadsStripTs(t, feed, []string{
-		`test_tab: [0]->{"after": {"a": 0, "b": 0}}`,
-		`test_tab: [11]->{"after": {"a": 1, "b": 11}}`,
-	})
-	// changefeed backfill for the ADD COLUMN
+	// changefeed backfill for ALTER LOCALITY (includes ADD COLUMN and ALTER PRIMARY KEY)
+	// The output of the legacy and declarative schema changer is slightly different.
+	// The declarative schema changer only has one backfill for both operations.
+	// The legacy schema changer has one extra for ADD COLUMN, so it would an extra payload:
+	//   {`test_tab: [0]->{"after": {"a": 0, "b": 0}}`,
+	//		`test_tab: [11]->{"after": {"a": 1, "b": 11}}`,}
+	// The test output was updated to match the declarative schema changer.
 	assertPayloadsStripTs(t, feed, []string{
 		`test_tab: ["us-east1", 0]->{"after": {"a": 0, "b": 0, "crdb_region": "us-east1"}}`,
 		`test_tab: ["us-east1", 11]->{"after": {"a": 1, "b": 11, "crdb_region": "us-east1"}}`,

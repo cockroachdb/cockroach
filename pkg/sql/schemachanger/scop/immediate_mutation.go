@@ -1252,6 +1252,13 @@ type SetTableLocalitySecondaryRegion struct {
 	RegionName       catpb.RegionName
 }
 
+// SetTableLocalityRegionalByRow sets the table's locality to REGIONAL BY ROW.
+type SetTableLocalityRegionalByRow struct {
+	immediateMutationOp
+	TableID descpb.ID
+	As      string
+}
+
 // UnsetTableLocality removes the table's locality configuration.
 type UnsetTableLocality struct {
 	immediateMutationOp

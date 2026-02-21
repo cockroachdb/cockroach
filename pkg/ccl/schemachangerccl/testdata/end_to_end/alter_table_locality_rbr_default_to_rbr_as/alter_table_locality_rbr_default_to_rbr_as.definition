@@ -1,0 +1,66 @@
+setup
+CREATE DATABASE multiregion_db PRIMARY REGION "us-east1" REGIONS "us-east2", "us-east3";
+USE multiregion_db;
+CREATE TABLE multiregion_db.public.t (  
+  pk INT PRIMARY KEY,
+  i INT NOT NULL,
+  cr crdb_internal_region NOT NULL DEFAULT 'us-east1',
+  INDEX idx(i)
+) LOCALITY REGIONAL BY ROW;
+----
+
+stage-exec phase=PostCommitPhase stage=:
+USE multiregion_db;
+INSERT INTO multiregion_db.public.t  VALUES ($stageKey, $stageKey);
+UPDATE multiregion_db.public.t SET i=pk + 1;
+INSERT INTO multiregion_db.public.t VALUES ($stageKey * -1, $stageKey * -1);
+DELETE FROM multiregion_db.public.t WHERE pk = $stageKey * -1;
+----
+
+stage-query phase=PostCommitPhase stage=:
+SELECT count(*) = $successfulStageCount FROM multiregion_db.public.t@idx;
+----
+true
+
+stage-query phase=PostCommitPhase stage=:
+SELECT count(*) = $successfulStageCount FROM multiregion_db.public.t@primary;
+----
+true
+
+stage-exec phase=PostCommitPhase stage=:
+SELECT crdb_internal.validate_multi_region_zone_configs();
+----
+
+stage-exec phase=PostCommitPhase stage=:
+SELECT * from multiregion_db.public.t;
+----
+
+stage-exec phase=PostCommitNonRevertiblePhase stage=:
+USE multiregion_db;
+INSERT INTO multiregion_db.public.t VALUES ($stageKey, $stageKey);
+UPDATE multiregion_db.public.t SET i=pk + 1;
+INSERT INTO multiregion_db.public.t VALUES ($stageKey * -1, $stageKey * -1);
+DELETE FROM multiregion_db.public.t WHERE pk = $stageKey * -1;
+----
+
+stage-query phase=PostCommitNonRevertiblePhase stage=:
+SELECT count(*) = $successfulStageCount FROM multiregion_db.public.t@idx;
+----
+true
+
+stage-query phase=PostCommitNonRevertiblePhase stage=:
+SELECT count(*) = $successfulStageCount FROM multiregion_db.public.t@primary;
+----
+true
+
+stage-exec phase=PostCommitNonRevertiblePhase stage=:
+SELECT crdb_internal.validate_multi_region_zone_configs();
+----
+
+stage-exec phase=PostCommitNonRevertiblePhase stage=:
+SELECT * from multiregion_db.public.t;
+----
+
+test
+ALTER TABLE multiregion_db.public.t SET LOCALITY REGIONAL BY ROW AS cr;
+----

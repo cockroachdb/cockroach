@@ -9,17 +9,21 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catenumpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/multiregion"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotice"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
-	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scerrors"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scdecomp"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlclustersettings"
 	"github.com/cockroachdb/errors"
+	"github.com/lib/pq/oid"
 )
 
 // AlterTableLocality implements ALTER TABLE ... LOCALITY ... for the declarative schema changer.
@@ -52,10 +56,6 @@ func AlterTableLocality(b BuildCtx, t *tree.AlterTableLocality) {
 	targetLocality := t.Locality
 	currentLocalityElem, currentLocality := getCurrentTableLocality(b, tableID, tableName)
 
-	if isLocalityRegionalByRow(currentLocality) || isLocalityRegionalByRow(targetLocality) {
-		panic(scerrors.NotImplementedErrorf(t, "alter locality to or from RBR not implemented yet"))
-	}
-
 	// Validate region name for REGIONAL BY TABLE IN <region>
 	if targetLocality.LocalityLevel == tree.LocalityLevelTable &&
 		targetLocality.TableRegion != tree.PrimaryRegionNotSpecifiedName {
@@ -74,11 +74,30 @@ func AlterTableLocality(b BuildCtx, t *tree.AlterTableLocality) {
 	b.Drop(currentLocalityElem)
 	addTargetLocalityElements(b, tableID, regionEnumTypeID, targetLocality)
 
+	// Ensure that the table is not in the middle of a region change.
+	if isLocalityRegionalByRow(targetLocality) || isLocalityRegionalByRow(currentLocality) {
+		panicIfRegionChangeUnderway(b, "perform this locality change", "", tbl.TableID)
+	}
+
+	// add or create region column when switching to regional by row
+	if isLocalityRegionalByRow(targetLocality) {
+		createOrVerifyRegionColumn(b, tableID, tableName, regionEnumTypeID, currentLocality, targetLocality, tbl, t)
+	}
+
+	// alter the primary key if needed
+	if isLocalityRegionalByRow(targetLocality) || isLocalityRegionalByRow(currentLocality) {
+		alterPrimaryKeyForRegionalByRowTable(b, tableID, tbl, t, currentLocality, targetLocality)
+	}
+
 	// Update the table zone config
 	err = configureZoneConfigForNewTableLocality(b, tableID, buildLocalityConfig(targetLocality))
 	if err != nil {
 		panic(err)
 	}
+
+	// Post-processing: deflate redundant indexes and rewrite tentative IDs to real IDs
+	maybeDropRedundantPrimaryIndexes(b, tableID)
+	maybeRewriteTempIDsInPrimaryIndexes(b, tableID)
 
 	// Record this table alteration in the event log
 	b.LogEventForExistingTarget(tbl)
@@ -105,6 +124,15 @@ func getDatabaseMultiRegionEnumTypeID(b BuildCtx, tableID catid.DescID) catid.De
 		))
 	}
 	return dbRegionConfig.RegionEnumTypeID
+}
+
+func getDatabasePrimaryRegionName(b BuildCtx, tableID catid.DescID) catpb.RegionName {
+	namespace := mustRetrieveNamespaceElem(b, tableID)
+	regionConfig, err := b.SynthesizeRegionConfig(b, namespace.DatabaseID)
+	if err != nil {
+		panic(err)
+	}
+	return regionConfig.PrimaryRegion()
 }
 
 // getCurrentTableLocality determines the current locality configuration of a table
@@ -173,6 +201,313 @@ func checkPrivilegesForMultiRegionOp(b BuildCtx, tbl *scpb.Table, tableName stri
 				tableName,
 			))
 		}
+	}
+}
+
+// alterPrimaryKeyForRegionalByRowTable handles the index changes when transitioning
+// to or from REGIONAL BY ROW.
+func alterPrimaryKeyForRegionalByRowTable(
+	b BuildCtx,
+	tableID catid.DescID,
+	tbl *scpb.Table,
+	t *tree.AlterTableLocality,
+	currentLocality *tree.Locality,
+	targetLocality *tree.Locality,
+) {
+	if currentLocality.LocalityLevel == targetLocality.LocalityLevel &&
+		explicitRegionColName(currentLocality.RegionalByRowColumn) == explicitRegionColName(targetLocality.RegionalByRowColumn) {
+		// AlterTableLocality might be called to explicitly specify "crdb_region"
+		// as the RBR region column or to reset subzone configs. Must avoid calling
+		// alterPrimaryKey in that case.
+		return
+	}
+
+	// Step 1: Get current primary key columns
+	primaryIndexElem := mustRetrieveCurrentPrimaryIndexElement(b, tableID)
+
+	// Step 2: Build columns list with an empty slot for a new region column prepended
+	cols := retrieveNonImplicitIndexColumns(b, tableID, primaryIndexElem.IndexID)
+
+	// Step 3: Get current PK name and sharding
+	currentPKName := mustRetrieveIndexNameElem(b, tableID, primaryIndexElem.IndexID)
+	var sharded *tree.ShardedIndexDef
+	if primaryIndexElem.Sharding != nil {
+		// remove shard column for the keys
+		cols = cols[1:]
+		// pass non nil sharding definition to alter primary key to recreate the sharding
+		sharded = &tree.ShardedIndexDef{
+			ShardBuckets: tree.NewDInt(tree.DInt(primaryIndexElem.Sharding.ShardBuckets)),
+		}
+	}
+
+	// Step 4: Build the alterPrimaryKeySpec
+	partSpec := getTablePartitioningSpec(b, tableID, targetLocality)
+	spec := alterPrimaryKeySpec{
+		n:            t,
+		Columns:      cols,
+		Sharded:      sharded,
+		Name:         tree.Name(currentPKName.Name),
+		Partitioning: &partSpec,
+	}
+
+	// Step 5: Call alterPrimaryKey
+	// This will trigger recreation of all secondary indexes with new partitioning
+	alterPrimaryKey(b, nil, tbl, nil, spec)
+	b.EvalCtx().ClientNoticeSender.BufferClientNotice(
+		b,
+		pgnotice.Newf(
+			"LOCALITY changes will be finalized asynchronously; "+
+				"further schema changes on this table may be restricted until the job completes"),
+	)
+}
+
+func getTablePartitioningSpec(
+	b BuildCtx, tableID catid.DescID, targetLocality *tree.Locality,
+) partitioningSpec {
+	if !isLocalityRegionalByRow(targetLocality) {
+		// return an empty partitioning spec to remove RBR partitioning
+		return partitioningSpec{}
+	}
+	// Create a multiregion partitioning spec for the RBR table
+	namespace := mustRetrieveNamespaceElem(b, tableID)
+	regionConfig, err := b.SynthesizeRegionConfig(b, namespace.DatabaseID)
+	if err != nil {
+		panic(err)
+	}
+	newColName := explicitRegionColName(targetLocality.RegionalByRowColumn)
+	allowedNewColNames := []tree.Name{newColName}
+	partitionBy := multiregion.PartitionByForRegionalByRow(regionConfig, newColName)
+	colName, err := findColumnByNameOnTable(b, tableID, newColName, allowedNewColNames)
+	implicitCols := []*scpb.ColumnName{colName}
+	if err != nil {
+		panic(err)
+	}
+	return partitioningSpec{
+		PartitionBy:           partitionBy,
+		NewImplicitColumns:    implicitCols,
+		AllowedNewColumnNames: allowedNewColNames,
+	}
+}
+
+func retrieveNonImplicitIndexColumns(
+	b BuildCtx, tableID catid.DescID, indexID catid.IndexID,
+) tree.IndexElemList {
+	keyColumns := mustRetrieveKeyIndexColumns(b, tableID, indexID)
+	cols := make(tree.IndexElemList, len(keyColumns))
+	i := 0
+	for _, keyCol := range keyColumns {
+		colName := mustRetrieveColumnName(b, tableID, keyCol.ColumnID)
+		if keyCol.Implicit {
+			continue
+		}
+		cols[i] = tree.IndexElem{
+			Column:    tree.Name(colName.Name),
+			Direction: getIndexColDir(keyCol),
+		}
+		i += 1
+	}
+	cols = cols[:i]
+	return cols
+}
+
+func getIndexColDir(col *scpb.IndexColumn) tree.Direction {
+	switch col.Direction {
+	case catenumpb.IndexColumn_ASC:
+		return tree.Ascending
+	case catenumpb.IndexColumn_DESC:
+		return tree.Descending
+	}
+	panic(pgerror.Newf(pgcode.AssertFailure, "invalid index direction %s", col.Direction))
+}
+
+func createOrVerifyRegionColumn(
+	b BuildCtx,
+	tableID catid.DescID,
+	tableName string,
+	regionEnumTypeID catid.DescID,
+	currentLocality *tree.Locality,
+	targetLocality *tree.Locality,
+	tbl *scpb.Table,
+	t *tree.AlterTableLocality,
+) {
+	// Check if the region column exists already - if so, use it.
+	// Otherwise, if we have no name was specified, implicitly create the
+	// crdb_region column.
+	createDefaultRegionCol := false
+	mayNeedImplicitRegionCol := regionColNameNotSpecified(targetLocality.RegionalByRowColumn)
+	newRegionColName := explicitRegionColName(targetLocality.RegionalByRowColumn)
+
+	colElems := b.ResolveColumn(tableID, newRegionColName, ResolveParams{IsExistenceOptional: true})
+	regionCol := colElems.FilterColumn().MustGetZeroOrOneElement()
+	if regionCol == nil {
+		if mayNeedImplicitRegionCol {
+			createDefaultRegionCol = true
+		} else {
+			panic(pgerror.Newf(pgcode.UndefinedColumn, "column %q does not exist", newRegionColName))
+		}
+	}
+
+	panicIfTableLocalityRegionalByRowUsingConstraint(b, tableID, currentLocality, newRegionColName)
+
+	if !createDefaultRegionCol {
+		// If the column is not public, we cannot use it yet.
+		checkExistingColIsValidForRegionCol(b, tableID, regionEnumTypeID, regionCol, newRegionColName, tableName)
+	} else {
+		createDefaultRegionColumn(b, tbl, regionEnumTypeID, t)
+	}
+}
+
+func panicIfTableLocalityRegionalByRowUsingConstraint(
+	b BuildCtx, tableID catid.DescID, currentLocality *tree.Locality, targetColName tree.Name,
+) {
+	if !isLocalityRegionalByRow(currentLocality) {
+		return
+	}
+	currColName := explicitRegionColName(currentLocality.RegionalByRowColumn)
+	rbrUsingConstaint := b.QueryByID(tableID).FilterTableLocalityRegionalByRowUsingConstraint().MustGetZeroOrOneElement()
+	if rbrUsingConstaint != nil && currColName != targetColName {
+		panic(pgerror.Newf(
+			pgcode.InvalidTableDefinition,
+			`cannot change the REGIONAL BY ROW column from %s to %s when "%s" is set`,
+			currColName, targetColName, catpb.RBRUsingConstraintTableSettingName,
+		))
+	}
+}
+
+func regionColNameNotSpecified(colName tree.Name) bool {
+	return colName == tree.PrimaryRegionNotSpecifiedName
+}
+
+func explicitRegionColName(regionColName tree.Name) tree.Name {
+	if regionColName == tree.RegionalByRowRegionNotSpecifiedName {
+		return tree.RegionalByRowRegionDefaultColName
+	}
+	return regionColName
+}
+
+func createDefaultRegionColumn(
+	b BuildCtx, tbl *scpb.Table, regionEnumTypeID catid.DescID, t *tree.AlterTableLocality,
+) {
+	enumOID := catid.TypeIDToOID(regionEnumTypeID)
+	primaryRegion := getDatabasePrimaryRegionName(b, tbl.TableID)
+
+	// Generate the ID of the new region column
+	newColID := b.NextTableColumnID(tbl)
+	colType := &scpb.ColumnType{
+		TableID:                 tbl.TableID,
+		ColumnID:                newColID,
+		TypeT:                   b.ResolveTypeRef(&tree.OIDTypeReference{OID: enumOID}),
+		ElementCreationMetadata: scdecomp.NewElementCreationMetadata(b.EvalCtx().Settings.Version.ActiveVersion(b)),
+	}
+
+	transientComputeExpr := regionalByRowRegionDefaultExpr(enumOID, tree.Name(primaryRegion))
+	defaultExpr := multiregion.RegionalByRowGatewayRegionDefaultExpr(enumOID)
+	onUpdateExpr := multiregion.MaybeRegionalByRowOnUpdateExpr(b.EvalCtx(), enumOID)
+
+	// Add the spec for the new column. Use a transient computed expression
+	// to initialize the column value to the primary region.
+	spec := addColumnSpec{
+		tbl: tbl,
+		col: &scpb.Column{
+			TableID:  tbl.TableID,
+			ColumnID: newColID,
+			IsHidden: true,
+		},
+		name: &scpb.ColumnName{
+			TableID:  tbl.TableID,
+			ColumnID: newColID,
+			Name:     string(tree.RegionalByRowRegionDefaultColName),
+		},
+		def: &scpb.ColumnDefaultExpression{
+			TableID:    tbl.TableID,
+			ColumnID:   newColID,
+			Expression: *wrapRegionalByRowExpression(b, tbl, colType, defaultExpr),
+		},
+		colType: colType,
+		transientCompute: &scpb.ColumnComputeExpression{
+			TableID:    tbl.TableID,
+			ColumnID:   newColID,
+			Expression: *wrapRegionalByRowExpression(b, tbl, colType, transientComputeExpr),
+			Usage:      scpb.ColumnComputeExpression_ALTER_TYPE_USING,
+		},
+		hidden:  true,
+		notNull: true,
+	}
+	if onUpdateExpr != nil {
+		spec.onUpdate = &scpb.ColumnOnUpdateExpression{
+			TableID:    tbl.TableID,
+			ColumnID:   newColID,
+			Expression: *wrapRegionalByRowExpression(b, tbl, colType, onUpdateExpr),
+		}
+	}
+	addColumn(b, spec, t)
+}
+
+func regionalByRowRegionDefaultExpr(oid oid.Oid, region tree.Name) tree.Expr {
+	return &tree.CastExpr{
+		Expr:       tree.NewDString(string(region)),
+		Type:       &tree.OIDTypeReference{OID: oid},
+		SyntaxMode: tree.CastShort,
+	}
+}
+
+func wrapRegionalByRowExpression(
+	b BuildCtx, tbl *scpb.Table, colType *scpb.ColumnType, expr tree.Expr,
+) *scpb.Expression {
+	typedExpr, _, err := sanitizeColumnExpression(
+		b,
+		b.SemaCtx(),
+		expr,
+		colType,
+		tree.RegionalByRowRegionDefaultExpr,
+	)
+	if err != nil {
+		panic(err)
+	}
+	return b.WrapExpression(tbl.TableID, typedExpr)
+}
+
+func checkExistingColIsValidForRegionCol(
+	b BuildCtx,
+	tableID catid.DescID,
+	regionEnumTypeID catid.DescID,
+	partCol *scpb.Column,
+	partColName tree.Name,
+	tableName string,
+) {
+	if partCol == nil {
+		panic(colinfo.NewUndefinedColumnError(string(partColName)))
+	}
+
+	// If we already have a column with the given name, check it is compatible to be made
+	// a PRIMARY KEY.
+	colID := getColumnIDFromColumnName(b, tableID, partColName, true /* required */)
+	colType := retrieveColumnTypeElem(b, tableID, colID)
+	if colType.Type.Oid() != catid.TypeIDToOID(regionEnumTypeID) {
+		panic(pgerror.Newf(
+			pgcode.InvalidTableDefinition,
+			"cannot use column %s for REGIONAL BY ROW table as it does not have the %s type",
+			partColName,
+			tree.RegionEnum,
+		))
+	}
+
+	// Check whether the given row is NOT NULL.
+	columNotNull := b.QueryByID(tableID).FilterColumnNotNull().Filter(func(
+		current scpb.Status, target scpb.TargetStatus, e *scpb.ColumnNotNull) bool {
+		return e.ColumnID == partCol.ColumnID
+	}).MustGetZeroOrOneElement()
+	if columNotNull == nil {
+		panic(errors.WithHintf(
+			pgerror.Newf(
+				pgcode.InvalidTableDefinition,
+				"cannot use column %s for REGIONAL BY ROW table as it may contain NULL values",
+				partColName,
+			),
+			"Add the NOT NULL constraint first using ALTER TABLE %s ALTER COLUMN %s SET NOT NULL.",
+			tableName,
+			partColName,
+		))
 	}
 }
 
@@ -245,9 +580,6 @@ func addTargetLocalityElements(
 		// Note that changes to/from RBR is not supported in the declarative schema changer yet
 		// Determine the column name to use
 		colName := locality.RegionalByRowColumn
-		if colName == tree.RegionalByRowRegionNotSpecifiedName {
-			colName = tree.RegionalByRowRegionDefaultColName
-		}
 		b.Add(&scpb.TableLocalityRegionalByRow{
 			TableID: tableID,
 			As:      string(colName),

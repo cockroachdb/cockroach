@@ -1604,6 +1604,28 @@ func (v *multiRegionTableValidatorData) GetTransitioningRBRIndexes() map[uint32]
 			break
 		}
 	}
+
+	// Now that ALTER TABLE LOCALITY is run by the declarative schema changer,
+	// we must find and exclude index ids that are recreated because of it
+	// and exclude them too.
+	if declarativeRegionalByRowChangeUnderway(v.desc) {
+		for _, target := range v.desc.GetDeclarativeSchemaChangerState().Targets {
+			if target.TargetStatus != scpb.Status_PUBLIC && target.TargetStatus != scpb.Status_TRANSIENT_ABSENT {
+				// New RBR indexes either go public or transient_absent.
+				continue
+			}
+			var idxID descpb.IndexID
+			if idx := target.GetPrimaryIndex(); idx != nil {
+				idxID = idx.IndexID
+			} else if idx := target.GetSecondaryIndex(); idx != nil {
+				idxID = idx.IndexID
+			} else if idx := target.GetTemporaryIndex(); idx != nil {
+				idxID = idx.IndexID
+			}
+			regionalByRowNewIndexes[uint32(idxID)] = struct{}{}
+		}
+	}
+
 	return regionalByRowNewIndexes
 }
 
@@ -1735,6 +1757,18 @@ func (p *planner) checkNoRegionalByRowChangeUnderway(
 			// For declarative schema changer check if we are trying to add
 			// a primary index to detect primary key changes.
 			if table.GetDeclarativeSchemaChangerState() != nil {
+				for idx, target := range table.GetDeclarativeSchemaChangerState().Targets {
+					if target.GetTableLocalityRegionalByRow() != nil &&
+						table.GetDeclarativeSchemaChangerState().CurrentStatuses[idx] != target.TargetStatus {
+						return wrapErr(
+							pgerror.Newf(
+								pgcode.ObjectNotInPrerequisiteState,
+								"cannot perform database region changes while a REGIONAL BY ROW transition is underway",
+							),
+							"is currently transitioning to or from REGIONAL BY ROW",
+						)
+					}
+				}
 				for idx, target := range table.GetDeclarativeSchemaChangerState().Targets {
 					if target.GetPrimaryIndex() != nil &&
 						table.GetDeclarativeSchemaChangerState().CurrentStatuses[idx] != scpb.Status_PUBLIC {
@@ -2166,4 +2200,16 @@ func (zv *zoneConfigValidator) ValidateDbZoneConfig(
 		return err
 	}
 	return nil
+}
+
+func declarativeRegionalByRowChangeUnderway(tbl catalog.TableDescriptor) bool {
+	if tbl.GetDeclarativeSchemaChangerState() != nil {
+		for idx, target := range tbl.GetDeclarativeSchemaChangerState().Targets {
+			if target.GetTableLocalityRegionalByRow() != nil &&
+				tbl.GetDeclarativeSchemaChangerState().CurrentStatuses[idx] != target.TargetStatus {
+				return true
+			}
+		}
+	}
+	return false
 }

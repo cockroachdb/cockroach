@@ -10,6 +10,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scop"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/storageparam/tablestorageparam"
@@ -124,13 +125,28 @@ func (i *immediateVisitor) SetTableLocalitySecondaryRegion(
 	return nil
 }
 
+func (i *immediateVisitor) SetTableLocalityRegionalByRow(
+	ctx context.Context, op scop.SetTableLocalityRegionalByRow,
+) error {
+	tbl, err := i.checkOutTable(ctx, op.TableID)
+	if err != nil {
+		return err
+	}
+	tbl.SetTableLocalityRegionalByRow(tree.Name(op.As))
+	tbl.PartitionAllBy = true
+	return nil
+}
+
 func (i *immediateVisitor) UnsetTableLocality(
 	ctx context.Context, op scop.UnsetTableLocality,
 ) error {
-	// todo (shadi): add logic for RBR table.
-	// This function should reset partitionAllBy and RBR constraint.
-	// There's nothing to do when transfering from Global ro RBT.
-	// Support for RBR will be added in a separate commit.
-	// no-op
+	tbl, err := i.checkOutTable(ctx, op.TableID)
+	if err != nil {
+		return err
+	}
+	// We should not reset TableLocality itself, specially for RBR tables. Otherwise,
+	// GC won't cleanup partitions correctly during drop table.
+	tbl.PartitionAllBy = false
+	tbl.RBRUsingConstraint = descpb.ConstraintID(0)
 	return nil
 }

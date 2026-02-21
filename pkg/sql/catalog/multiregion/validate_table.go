@@ -13,6 +13,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/errors"
 )
@@ -280,4 +281,17 @@ func FormatTableLocalityConfig(c *catpb.LocalityConfig, f *tree.FmtCtx) error {
 		return errors.Newf("unknown locality: %T", v)
 	}
 	return nil
+}
+
+func IsLocalityChangingFromOrToRBR(desc catalog.TableDescriptor) bool {
+	if desc.GetDeclarativeSchemaChangerState() == nil {
+		return false
+	}
+	for idx, target := range desc.GetDeclarativeSchemaChangerState().Targets {
+		if target.GetTableLocalityRegionalByRow() != nil &&
+			desc.GetDeclarativeSchemaChangerState().CurrentStatuses[idx] != scpb.Status_PUBLIC {
+			return true
+		}
+	}
+	return false
 }

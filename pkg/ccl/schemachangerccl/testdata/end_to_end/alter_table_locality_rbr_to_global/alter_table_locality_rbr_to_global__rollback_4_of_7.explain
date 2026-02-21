@@ -1,0 +1,64 @@
+/* setup */
+CREATE DATABASE multiregion_db PRIMARY REGION "us-east1" REGIONS "us-east2", "us-east3";
+CREATE TABLE multiregion_db.public.t (  
+  pk INT PRIMARY KEY,
+  i INT NOT NULL,
+  INDEX idx(i)
+) LOCALITY REGIONAL BY ROW;
+
+/* test */
+ALTER TABLE multiregion_db.public.t SET LOCALITY GLOBAL;
+EXPLAIN (DDL) rollback at post-commit stage 4 of 7;
+----
+Schema change plan for rolling back ALTER TABLE multiregion_db.public.t SET LOCALITY GLOBAL;
+ └── PostCommitNonRevertiblePhase
+      ├── Stage 1 of 2 in PostCommitNonRevertiblePhase
+      │    ├── 14 elements transitioning toward ABSENT
+      │    │    ├── DELETE_ONLY → ABSENT      PrimaryIndex:{DescID: 108 (t), IndexID: 5 (t_pkey-), ConstraintID: 4, TemporaryIndexID: 6, SourceIndexID: 1 (t_pkey+)}
+      │    │    ├── PUBLIC      → ABSENT      IndexColumn:{DescID: 108 (t), ColumnID: 3 (crdb_region), IndexID: 5 (t_pkey-)}
+      │    │    ├── PUBLIC      → ABSENT      IndexColumn:{DescID: 108 (t), ColumnID: 1 (pk), IndexID: 5 (t_pkey-)}
+      │    │    ├── PUBLIC      → ABSENT      IndexColumn:{DescID: 108 (t), ColumnID: 2 (i), IndexID: 5 (t_pkey-)}
+      │    │    ├── WRITE_ONLY  → DELETE_ONLY TemporaryIndex:{DescID: 108 (t), IndexID: 6, ConstraintID: 5, SourceIndexID: 1 (t_pkey+)}
+      │    │    ├── PUBLIC      → ABSENT      IndexColumn:{DescID: 108 (t), ColumnID: 3 (crdb_region), IndexID: 6}
+      │    │    ├── PUBLIC      → ABSENT      IndexColumn:{DescID: 108 (t), ColumnID: 1 (pk), IndexID: 6}
+      │    │    ├── PUBLIC      → ABSENT      IndexColumn:{DescID: 108 (t), ColumnID: 2 (i), IndexID: 6}
+      │    │    ├── DELETE_ONLY → ABSENT      SecondaryIndex:{DescID: 108 (t), IndexID: 3 (idx-), ConstraintID: 2, TemporaryIndexID: 4, SourceIndexID: 1 (t_pkey+), RecreateSourceIndexID: 2, RecreateTargetIndexID: 5}
+      │    │    ├── PUBLIC      → ABSENT      IndexColumn:{DescID: 108 (t), ColumnID: 2 (i), IndexID: 3 (idx-)}
+      │    │    ├── PUBLIC      → ABSENT      IndexColumn:{DescID: 108 (t), ColumnID: 1 (pk), IndexID: 3 (idx-)}
+      │    │    ├── WRITE_ONLY  → DELETE_ONLY TemporaryIndex:{DescID: 108 (t), IndexID: 4, ConstraintID: 3, SourceIndexID: 1 (t_pkey+)}
+      │    │    ├── PUBLIC      → ABSENT      IndexColumn:{DescID: 108 (t), ColumnID: 2 (i), IndexID: 4}
+      │    │    └── PUBLIC      → ABSENT      IndexColumn:{DescID: 108 (t), ColumnID: 1 (pk), IndexID: 4}
+      │    └── 16 Mutation operations
+      │         ├── RemoveColumnFromIndex {"ColumnID":3,"IndexID":5,"Kind":2,"TableID":108}
+      │         ├── RemoveColumnFromIndex {"ColumnID":1,"IndexID":5,"TableID":108}
+      │         ├── RemoveColumnFromIndex {"ColumnID":2,"IndexID":5,"Kind":2,"Ordinal":1,"TableID":108}
+      │         ├── MakeWriteOnlyIndexDeleteOnly {"IndexID":6,"TableID":108}
+      │         ├── RemoveColumnFromIndex {"ColumnID":3,"IndexID":6,"Kind":2,"TableID":108}
+      │         ├── RemoveColumnFromIndex {"ColumnID":1,"IndexID":6,"TableID":108}
+      │         ├── RemoveColumnFromIndex {"ColumnID":2,"IndexID":6,"Kind":2,"Ordinal":1,"TableID":108}
+      │         ├── RemoveColumnFromIndex {"ColumnID":2,"IndexID":3,"TableID":108}
+      │         ├── RemoveColumnFromIndex {"ColumnID":1,"IndexID":3,"Kind":1,"TableID":108}
+      │         ├── MakeWriteOnlyIndexDeleteOnly {"IndexID":4,"TableID":108}
+      │         ├── RemoveColumnFromIndex {"ColumnID":2,"IndexID":4,"TableID":108}
+      │         ├── RemoveColumnFromIndex {"ColumnID":1,"IndexID":4,"Kind":1,"TableID":108}
+      │         ├── MakeIndexAbsent {"IndexID":5,"TableID":108}
+      │         ├── MakeIndexAbsent {"IndexID":3,"TableID":108}
+      │         ├── SetJobStateOnDescriptor {"DescriptorID":108}
+      │         └── UpdateSchemaChangerJob {"IsNonCancelable":true,"RunningStatus":"Pending: Updatin..."}
+      └── Stage 2 of 2 in PostCommitNonRevertiblePhase
+           ├── 6 elements transitioning toward ABSENT
+           │    ├── PUBLIC      → ABSENT IndexData:{DescID: 108 (t), IndexID: 5 (t_pkey-)}
+           │    ├── DELETE_ONLY → ABSENT TemporaryIndex:{DescID: 108 (t), IndexID: 6, ConstraintID: 5, SourceIndexID: 1 (t_pkey+)}
+           │    ├── PUBLIC      → ABSENT IndexData:{DescID: 108 (t), IndexID: 6}
+           │    ├── PUBLIC      → ABSENT IndexData:{DescID: 108 (t), IndexID: 3 (idx-)}
+           │    ├── DELETE_ONLY → ABSENT TemporaryIndex:{DescID: 108 (t), IndexID: 4, ConstraintID: 3, SourceIndexID: 1 (t_pkey+)}
+           │    └── PUBLIC      → ABSENT IndexData:{DescID: 108 (t), IndexID: 4}
+           └── 8 Mutation operations
+                ├── MakeIndexAbsent {"IndexID":6,"TableID":108}
+                ├── CreateGCJobForIndex {"IndexID":3,"TableID":108}
+                ├── MakeIndexAbsent {"IndexID":4,"TableID":108}
+                ├── CreateGCJobForIndex {"IndexID":4,"TableID":108}
+                ├── CreateGCJobForIndex {"IndexID":5,"TableID":108}
+                ├── CreateGCJobForIndex {"IndexID":6,"TableID":108}
+                ├── RemoveJobStateFromDescriptor {"DescriptorID":108}
+                └── UpdateSchemaChangerJob {"IsNonCancelable":true,"RunningStatus":"all stages compl..."}
