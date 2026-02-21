@@ -214,7 +214,7 @@ insert c137547
                 ├── key columns: [14 15] = [16 17]
                 ├── lookup columns are key
                 ├── cardinality: [0 - 1]
-                ├── stats: [rows=1e-10]
+                ├── stats: [rows=1]
                 ├── key: ()
                 ├── fd: ()-->(14,15)
                 ├── distribution: us

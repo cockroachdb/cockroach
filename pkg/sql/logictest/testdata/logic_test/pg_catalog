@@ -3201,6 +3201,7 @@ optimizer_use_lock_elision_multiple_families                     off            
 optimizer_use_lock_op_for_serializable                           off                 NULL      NULL        NULL        string
 optimizer_use_max_frequency_selectivity                          on                  NULL      NULL        NULL        string
 optimizer_use_merged_partial_statistics                          on                  NULL      NULL        NULL        string
+optimizer_use_min_row_count_anti_join_fix                        on                  NULL      NULL        NULL        string
 optimizer_use_multicol_stats                                     on                  NULL      NULL        NULL        string
 optimizer_use_not_visible_indexes                                off                 NULL      NULL        NULL        string
 optimizer_use_polymorphic_parameter_fix                          on                  NULL      NULL        NULL        string
@@ -3453,6 +3454,7 @@ optimizer_use_lock_elision_multiple_families                     off            
 optimizer_use_lock_op_for_serializable                           off                 NULL  user     NULL      off                 off
 optimizer_use_max_frequency_selectivity                          on                  NULL  user     NULL      on                  on
 optimizer_use_merged_partial_statistics                          on                  NULL  user     NULL      on                  on
+optimizer_use_min_row_count_anti_join_fix                        on                  NULL  user     NULL      on                  on
 optimizer_use_multicol_stats                                     on                  NULL  user     NULL      on                  on
 optimizer_use_not_visible_indexes                                off                 NULL  user     NULL      off                 off
 optimizer_use_polymorphic_parameter_fix                          on                  NULL  user     NULL      on                  on
@@ -3696,6 +3698,7 @@ optimizer_use_lock_elision_multiple_families                     NULL    NULL   
 optimizer_use_lock_op_for_serializable                           NULL    NULL     NULL     NULL        NULL
 optimizer_use_max_frequency_selectivity                          NULL    NULL     NULL     NULL        NULL
 optimizer_use_merged_partial_statistics                          NULL    NULL     NULL     NULL        NULL
+optimizer_use_min_row_count_anti_join_fix                        NULL    NULL     NULL     NULL        NULL
 optimizer_use_multicol_stats                                     NULL    NULL     NULL     NULL        NULL
 optimizer_use_not_visible_indexes                                NULL    NULL     NULL     NULL        NULL
 optimizer_use_polymorphic_parameter_fix                          NULL    NULL     NULL     NULL        NULL

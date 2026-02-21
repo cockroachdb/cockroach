@@ -1548,8 +1548,17 @@ func (sb *statisticsBuilder) buildJoin(
 	// Fix the stats for anti join.
 	switch h.joinType {
 	case opt.AntiJoinOp, opt.AntiJoinApplyOp:
-		s.RowCount = max(leftStats.RowCount-s.RowCount, epsilon)
-		s.Selectivity = props.MakeSelectivity(1 - s.Selectivity.AsFloat())
+		if sb.evalCtx.SessionData().OptimizerUseMinRowCountAntiJoinFix {
+			// Make sure to use ApplySelectivity instead of setting the selectivity and
+			// row count directly so that min_row_count is respected.
+			originalSel := s.Selectivity
+			s.RowCount = leftStats.RowCount
+			s.Selectivity = props.OneSelectivity
+			s.ApplySelectivity(props.MakeSelectivity(1 - originalSel.AsFloat()))
+		} else {
+			s.RowCount = max(leftStats.RowCount-s.RowCount, epsilon)
+			s.Selectivity = props.MakeSelectivity(1 - s.Selectivity.AsFloat())
+		}
 
 		// Converting column stats is error-prone. If any column stats are needed,
 		// colStatJoin will use the selectivity calculated above to estimate the
@@ -2478,16 +2487,8 @@ func (sb *statisticsBuilder) buildOffset(offset *OffsetExpr, relProps *props.Rel
 	// Update row count if offset is a constant and row count is non-zero.
 	if cnst, ok := offset.Offset.(*ConstExpr); ok && inputStats.RowCount > 0 {
 		hardOffset := *cnst.Value.(*tree.DInt)
-		if float64(hardOffset) >= inputStats.RowCount {
-			// The correct estimate for row count here is 0, but we don't ever want
-			// row count to be zero unless the cardinality is zero. This is because
-			// the stats may be stale, and we can end up with weird and inefficient
-			// plans if we estimate 0 rows. Use a small number instead.
-			s.RowCount = min(1, inputStats.RowCount)
-		} else if hardOffset > 0 {
-			s.RowCount = inputStats.RowCount - float64(hardOffset)
-		}
-		s.Selectivity = props.MakeSelectivity(s.RowCount / inputStats.RowCount)
+		expectedRowCount := max(inputStats.RowCount-float64(hardOffset), 0)
+		s.ApplySelectivity(props.MakeSelectivity(expectedRowCount / inputStats.RowCount))
 	}
 
 	sb.finalizeFromCardinality(relProps)

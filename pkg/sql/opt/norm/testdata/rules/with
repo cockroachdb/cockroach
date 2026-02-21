@@ -673,7 +673,7 @@ with &2 (cte)
  │              └── anti-join (hash)
  │                   ├── columns: p:7(int!null)
  │                   ├── cardinality: [0 - 1]
- │                   ├── stats: [rows=1e-10]
+ │                   ├── stats: [rows=1]
  │                   ├── cost: 1060.7675
  │                   ├── cost-flags: full-scan-penalty unbounded-cardinality
  │                   ├── key: ()

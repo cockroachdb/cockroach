@@ -68,7 +68,7 @@ vectorized: true
             │
             └── • lookup join (anti)
                 │ columns: (crdb_internal_id_shard_16_eq, pid)
-                │ estimated row count: 0 (missing stats)
+                │ estimated row count: 1 (missing stats)
                 │ table: t_parent@t_parent_pkey
                 │ equality cols are key
                 │ lookup condition: ((part IN ('new york', 'seattle')) AND (crdb_internal_id_shard_16_eq = crdb_internal_id_shard_16)) AND (pid = id)
@@ -147,7 +147,7 @@ vectorized: true
             │
             └── • lookup join (anti)
                 │ columns: (crdb_internal_id_shard_16_eq, pid)
-                │ estimated row count: 0 (missing stats)
+                │ estimated row count: 1 (missing stats)
                 │ table: t_parent@t_parent_pkey
                 │ equality cols are key
                 │ lookup condition: ((part IN ('new york', 'seattle')) AND (crdb_internal_id_shard_16_eq = crdb_internal_id_shard_16)) AND (pid = id)
@@ -242,7 +242,7 @@ vectorized: true
         │
         └── • lookup join (anti)
             │ columns: (crdb_internal_user_id_shard_16_eq, crdb_internal_user_id_shard_16_comp, column2, val_cast, user_id_default)
-            │ estimated row count: 0 (missing stats)
+            │ estimated row count: 1 (missing stats)
             │ table: t_gen_random_uuid@t_gen_random_uuid_pkey
             │ equality cols are key
             │ lookup condition: ((part IN ('new york', 'seattle')) AND (crdb_internal_user_id_shard_16_eq = crdb_internal_user_id_shard_16)) AND (user_id_default = user_id)
@@ -287,7 +287,7 @@ vectorized: true
     │
     └── • distinct
         │ columns: (column2, val_cast, user_id_default, crdb_internal_user_id_shard_16_comp)
-        │ estimated row count: 0 (missing stats)
+        │ estimated row count: 1 (missing stats)
         │ distinct on: user_id_default
         │ nulls are distinct
         │
@@ -296,7 +296,7 @@ vectorized: true
             │
             └── • lookup join (anti)
                 │ columns: (crdb_internal_user_id_shard_16_eq, crdb_internal_user_id_shard_16_comp, column2, val_cast, user_id_default)
-                │ estimated row count: 0 (missing stats)
+                │ estimated row count: 1 (missing stats)
                 │ table: t_gen_random_uuid@t_gen_random_uuid_pkey
                 │ equality cols are key
                 │ lookup condition: ((part IN ('new york', 'seattle')) AND (crdb_internal_user_id_shard_16_eq = crdb_internal_user_id_shard_16)) AND (user_id_default = user_id)
@@ -420,7 +420,7 @@ vectorized: true
         │
         └── • lookup join (anti)
             │ columns: (crdb_internal_id_shard_16_eq, crdb_internal_id_shard_16_comp, column1, column2)
-            │ estimated row count: 0 (missing stats)
+            │ estimated row count: 1 (missing stats)
             │ table: t_unique_hash_pk@t_unique_hash_pk_pkey
             │ equality cols are key
             │ lookup condition: ((part IN ('new york', 'seattle')) AND (crdb_internal_id_shard_16_eq = crdb_internal_id_shard_16)) AND (column1 = id)
@@ -506,7 +506,7 @@ vectorized: true
         │
         └── • lookup join (anti)
             │ columns: (crdb_internal_id_shard_16_eq, crdb_internal_id_shard_16_comp, column1, column2)
-            │ estimated row count: 0 (missing stats)
+            │ estimated row count: 1 (missing stats)
             │ table: t_unique_hash_pk@t_unique_hash_pk_pkey
             │ equality cols are key
             │ lookup condition: ((part IN ('new york', 'seattle')) AND (crdb_internal_id_shard_16_eq = crdb_internal_id_shard_16)) AND (column1 = id)
@@ -960,7 +960,7 @@ vectorized: true
         │
         └── • lookup join (anti)
             │ columns: (crdb_internal_email_shard_16_eq, column1, column2, column3, crdb_internal_email_shard_16_comp)
-            │ estimated row count: 0 (missing stats)
+            │ estimated row count: 1 (missing stats)
             │ table: t_unique_hash_sec_key@idx_uniq_hash_email
             │ equality cols are key
             │ lookup condition: ((part IN ('new york', 'seattle')) AND (crdb_internal_email_shard_16_eq = crdb_internal_email_shard_16)) AND (column2 = email)
@@ -1023,7 +1023,7 @@ vectorized: true
         │
         └── • lookup join (anti)
             │ columns: (crdb_internal_email_shard_16_eq, column1, column2, column3, crdb_internal_email_shard_16_comp)
-            │ estimated row count: 0 (missing stats)
+            │ estimated row count: 1 (missing stats)
             │ table: t_unique_hash_sec_key@idx_uniq_hash_email
             │ equality cols are key
             │ lookup condition: ((part IN ('new york', 'seattle')) AND (crdb_internal_email_shard_16_eq = crdb_internal_email_shard_16)) AND (column2 = email)
@@ -1039,7 +1039,7 @@ vectorized: true
                 │
                 └── • lookup join (anti)
                     │ columns: (crdb_internal_email_shard_16_comp, column1, column2, column3)
-                    │ estimated row count: 0 (missing stats)
+                    │ estimated row count: 1 (missing stats)
                     │ table: t_unique_hash_sec_key@t_unique_hash_sec_key_pkey
                     │ equality cols are key
                     │ lookup condition: (part IN ('new york', 'seattle')) AND (column1 = id)
@@ -1165,7 +1165,7 @@ vectorized: true
 │               │
 │               └── • lookup join (anti)
 │                   │ columns: (crdb_internal_email_shard_16_eq, crdb_internal_email_shard_16_comp, column1, column2, column3)
-│                   │ estimated row count: 0 (missing stats)
+│                   │ estimated row count: 1 (missing stats)
 │                   │ table: t_unique_hash_sec_key@idx_uniq_hash_email
 │                   │ equality cols are key
 │                   │ lookup condition: ((part IN ('new york', 'seattle')) AND (crdb_internal_email_shard_16_eq = crdb_internal_email_shard_16)) AND (column2 = email)

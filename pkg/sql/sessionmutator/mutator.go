@@ -1126,3 +1126,7 @@ func (m *SessionDataMutator) SetOptimizerInlineAnyUnnestSubquery(val bool) {
 func (m *SessionDataMutator) SetUseBackupsWithIDs(val bool) {
 	m.Data.UseBackupsWithIDs = val
 }
+
+func (m *SessionDataMutator) SetOptimizerUseMinRowCountAntiJoinFix(val bool) {
+	m.Data.OptimizerUseMinRowCountAntiJoinFix = val
+}
