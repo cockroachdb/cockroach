@@ -153,7 +153,8 @@ func (fw *fixupWorker) startMerge(
 		// is not yet normalized.
 		fw.tempIndexCtx.Init(txn)
 		fw.index.setupContext(&fw.tempIndexCtx, fw.treeKey, metadata.Level+1, SearchOptions{
-			SkipRerank: true,
+			SkipRerank:              true,
+			DisableSplitMergeFixups: !fw.index.options.IsDeterministic,
 		})
 		fw.tempIndexCtx.query.InitCentroid(fw.index.quantizer.GetDistanceMetric(), metadata.Centroid)
 
