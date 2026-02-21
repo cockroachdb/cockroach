@@ -315,6 +315,18 @@ func (h *uniqueCheckHelper) init(mb *mutationBuilder, uniqueOrdinal int) bool {
 					return false
 				}
 			}
+		case types.IntFamily:
+			// If one of the columns is an INT set to unique_rowid() or
+			// unordered_unique_rowid() and the table has skip_rbr_unique_rowid_checks
+			// set, we skip uniqueness checks (similar to gen_random_uuid()). This is
+			// safe because unique_rowid() and unordered_unique_rowid() have near-zero
+			// collision probability, making cross-region uniqueness checks unnecessary
+			// in REGIONAL BY ROW tables where such checks would be expensive.
+			if columnIsUniqueRowID(mb.outScope.expr, colID) {
+				if mb.tab.SkipRBRUniqueRowIDCrossRegionChecks() && mb.tab.IsRegionalByRow() {
+					return false
+				}
+			}
 		}
 	}
 
@@ -671,23 +683,19 @@ func (h *uniqueCheckHelper) buildTableScan() (outScope *scope, ordinals []int) {
 	), ordinals
 }
 
-// columnIsGenRandomUUID returns true if the expression returns the function
-// gen_random_uuid() for the given column.
-func columnIsGenRandomUUID(e memo.RelExpr, col opt.ColumnID) bool {
-	isGenRandomUUIDFunction := func(scalar opt.ScalarExpr) bool {
-		if cast, ok := scalar.(*memo.CastExpr); ok &&
-			(cast.Typ.Family() == types.StringFamily || cast.Typ.Family() == types.BytesFamily) &&
-			cast.Typ.Width() == 0 {
-			scalar = cast.Input
-		} else if cast, ok := scalar.(*memo.AssignmentCastExpr); ok &&
-			(cast.Typ.Family() == types.StringFamily || cast.Typ.Family() == types.BytesFamily) &&
-			cast.Typ.Width() == 0 {
-			scalar = cast.Input
-		}
+// columnMatchesFunction returns true if the expression returns the specified
+// function for the given column. The unwrapCast function is used to unwrap
+// casts before checking the function name.
+func columnMatchesFunction(
+	e memo.RelExpr,
+	col opt.ColumnID,
+	unwrapCast func(opt.ScalarExpr) opt.ScalarExpr,
+	functionName string,
+) bool {
+	matchesFunction := func(scalar opt.ScalarExpr) bool {
+		scalar = unwrapCast(scalar)
 		if function, ok := scalar.(*memo.FunctionExpr); ok {
-			if function.Name == "gen_random_uuid" {
-				return true
-			}
+			return function.Name == functionName
 		}
 		return false
 	}
@@ -696,11 +704,11 @@ func columnIsGenRandomUUID(e memo.RelExpr, col opt.ColumnID) bool {
 	case opt.ProjectOp:
 		p := e.(*memo.ProjectExpr)
 		if p.Passthrough.Contains(col) {
-			return columnIsGenRandomUUID(p.Input, col)
+			return columnMatchesFunction(p.Input, col, unwrapCast, functionName)
 		}
 		for i := range p.Projections {
 			if p.Projections[i].Col == col {
-				return isGenRandomUUIDFunction(p.Projections[i].Element)
+				return matchesFunction(p.Projections[i].Element)
 			}
 		}
 
@@ -711,7 +719,7 @@ func columnIsGenRandomUUID(e memo.RelExpr, col opt.ColumnID) bool {
 			return false
 		}
 		for i := range v.Rows {
-			if !isGenRandomUUIDFunction(v.Rows[i].(*memo.TupleExpr).Elems[colOrdinal]) {
+			if !matchesFunction(v.Rows[i].(*memo.TupleExpr).Elems[colOrdinal]) {
 				return false
 			}
 		}
@@ -719,4 +727,41 @@ func columnIsGenRandomUUID(e memo.RelExpr, col opt.ColumnID) bool {
 	}
 
 	return false
+}
+
+// columnIsGenRandomUUID returns true if the expression returns the function
+// gen_random_uuid() for the given column, possibly wrapped in a cast to
+// String or Bytes.
+func columnIsGenRandomUUID(e memo.RelExpr, col opt.ColumnID) bool {
+	unwrapCast := func(scalar opt.ScalarExpr) opt.ScalarExpr {
+		if cast, ok := scalar.(*memo.CastExpr); ok &&
+			(cast.Typ.Family() == types.StringFamily || cast.Typ.Family() == types.BytesFamily) &&
+			cast.Typ.Width() == 0 {
+			return cast.Input
+		}
+		if cast, ok := scalar.(*memo.AssignmentCastExpr); ok &&
+			(cast.Typ.Family() == types.StringFamily || cast.Typ.Family() == types.BytesFamily) &&
+			cast.Typ.Width() == 0 {
+			return cast.Input
+		}
+		return scalar
+	}
+	return columnMatchesFunction(e, col, unwrapCast, "gen_random_uuid")
+}
+
+// columnIsUniqueRowID returns true if the expression returns the function
+// unique_rowid() or unordered_unique_rowid() for the given column, possibly
+// wrapped in a cast to an INT type.
+func columnIsUniqueRowID(e memo.RelExpr, col opt.ColumnID) bool {
+	unwrapCast := func(scalar opt.ScalarExpr) opt.ScalarExpr {
+		if cast, ok := scalar.(*memo.CastExpr); ok && cast.Typ.Family() == types.IntFamily {
+			return cast.Input
+		}
+		if cast, ok := scalar.(*memo.AssignmentCastExpr); ok && cast.Typ.Family() == types.IntFamily {
+			return cast.Input
+		}
+		return scalar
+	}
+	return columnMatchesFunction(e, col, unwrapCast, "unique_rowid") ||
+		columnMatchesFunction(e, col, unwrapCast, "unordered_unique_rowid")
 }

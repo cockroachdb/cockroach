@@ -1,0 +1,492 @@
+# ------------------------------------------------------------------------------
+# Test skip_rbr_unique_rowid_checks feature for REGIONAL BY ROW tables
+# with unique_rowid() or unordered_unique_rowid() columns.
+# ------------------------------------------------------------------------------
+
+# Basic table with unique_rowid() and skip_rbr_unique_rowid_checks
+# enabled.
+exec-ddl
+CREATE TABLE rbr_table (
+  id INT DEFAULT unique_rowid() PRIMARY KEY,
+  data TEXT
+) WITH (skip_rbr_unique_rowid_checks = true) LOCALITY REGIONAL BY ROW
+----
+
+# Unique check should be skipped.
+build
+INSERT INTO rbr_table (data) VALUES ('test1'), ('test2')
+----
+insert rbr_table
+ ├── columns: <none>
+ ├── insert-mapping:
+ │    ├── id_default:7 => id:1
+ │    ├── column1:6 => data:2
+ │    └── crdb_region_default:8 => crdb_region:3
+ ├── check columns: check1:9
+ └── project
+      ├── columns: check1:9 column1:6!null id_default:7 crdb_region_default:8
+      ├── project
+      │    ├── columns: id_default:7 crdb_region_default:8 column1:6!null
+      │    ├── values
+      │    │    ├── columns: column1:6!null
+      │    │    ├── ('test1',)
+      │    │    └── ('test2',)
+      │    └── projections
+      │         ├── unique_rowid() [as=id_default:7]
+      │         └── default_to_database_primary_region(gateway_region()) [as=crdb_region_default:8]
+      └── projections
+           └── crdb_region_default:8 IN ('east', 'central', 'west') [as=check1:9]
+
+# Update case.
+build
+UPDATE rbr_table SET id = unique_rowid() WHERE data = 'test'
+----
+update rbr_table
+ ├── columns: <none>
+ ├── fetch columns: id:6 data:7 crdb_region:8
+ ├── update-mapping:
+ │    └── id_new:11 => id:1
+ └── project
+      ├── columns: check1:12!null id:6!null data:7!null crdb_region:8!null crdb_internal_mvcc_timestamp:9 tableoid:10 id_new:11
+      ├── project
+      │    ├── columns: id_new:11 id:6!null data:7!null crdb_region:8!null crdb_internal_mvcc_timestamp:9 tableoid:10
+      │    ├── select
+      │    │    ├── columns: id:6!null data:7!null crdb_region:8!null crdb_internal_mvcc_timestamp:9 tableoid:10
+      │    │    ├── scan rbr_table
+      │    │    │    ├── columns: id:6!null data:7 crdb_region:8!null crdb_internal_mvcc_timestamp:9 tableoid:10
+      │    │    │    ├── check constraint expressions
+      │    │    │    │    └── crdb_region:8 IN ('east', 'central', 'west')
+      │    │    │    └── flags: avoid-full-scan
+      │    │    └── filters
+      │    │         └── data:7 = 'test'
+      │    └── projections
+      │         └── unique_rowid() [as=id_new:11]
+      └── projections
+           └── crdb_region:8 IN ('east', 'central', 'west') [as=check1:12]
+
+# Table with unordered_unique_rowid().
+exec-ddl
+CREATE TABLE rbr_unordered (
+  id INT DEFAULT unordered_unique_rowid() PRIMARY KEY,
+  value INT
+) WITH (skip_rbr_unique_rowid_checks = true) LOCALITY REGIONAL BY ROW
+----
+
+# Unique check should be skipped.
+build
+INSERT INTO rbr_unordered (value) VALUES (100), (200)
+----
+insert rbr_unordered
+ ├── columns: <none>
+ ├── insert-mapping:
+ │    ├── id_default:7 => id:1
+ │    ├── column1:6 => value:2
+ │    └── crdb_region_default:8 => crdb_region:3
+ ├── check columns: check1:9
+ └── project
+      ├── columns: check1:9 column1:6!null id_default:7 crdb_region_default:8
+      ├── project
+      │    ├── columns: id_default:7 crdb_region_default:8 column1:6!null
+      │    ├── values
+      │    │    ├── columns: column1:6!null
+      │    │    ├── (100,)
+      │    │    └── (200,)
+      │    └── projections
+      │         ├── unordered_unique_rowid() [as=id_default:7]
+      │         └── default_to_database_primary_region(gateway_region()) [as=crdb_region_default:8]
+      └── projections
+           └── crdb_region_default:8 IN ('east', 'central', 'west') [as=check1:9]
+
+# Update case.
+build
+UPDATE rbr_unordered SET id = unordered_unique_rowid() WHERE value = 100
+----
+update rbr_unordered
+ ├── columns: <none>
+ ├── fetch columns: id:6 value:7 crdb_region:8
+ ├── update-mapping:
+ │    └── id_new:11 => id:1
+ └── project
+      ├── columns: check1:12!null id:6!null value:7!null crdb_region:8!null crdb_internal_mvcc_timestamp:9 tableoid:10 id_new:11
+      ├── project
+      │    ├── columns: id_new:11 id:6!null value:7!null crdb_region:8!null crdb_internal_mvcc_timestamp:9 tableoid:10
+      │    ├── select
+      │    │    ├── columns: id:6!null value:7!null crdb_region:8!null crdb_internal_mvcc_timestamp:9 tableoid:10
+      │    │    ├── scan rbr_unordered
+      │    │    │    ├── columns: id:6!null value:7 crdb_region:8!null crdb_internal_mvcc_timestamp:9 tableoid:10
+      │    │    │    ├── check constraint expressions
+      │    │    │    │    └── crdb_region:8 IN ('east', 'central', 'west')
+      │    │    │    └── flags: avoid-full-scan
+      │    │    └── filters
+      │    │         └── value:7 = 100
+      │    └── projections
+      │         └── unordered_unique_rowid() [as=id_new:11]
+      └── projections
+           └── crdb_region:8 IN ('east', 'central', 'west') [as=check1:12]
+
+# Table with casted unique_rowid() - the cast is unwrapped so the optimization
+# applies.
+exec-ddl
+CREATE TABLE rbr_casted (
+  id INT DEFAULT unique_rowid()::INT PRIMARY KEY,
+  data TEXT
+) WITH (skip_rbr_unique_rowid_checks = true) LOCALITY REGIONAL BY ROW
+----
+
+# Unique check should be skipped even with the cast.
+build
+INSERT INTO rbr_casted (data) VALUES ('test1'), ('test2')
+----
+insert rbr_casted
+ ├── columns: <none>
+ ├── insert-mapping:
+ │    ├── id_default:7 => id:1
+ │    ├── column1:6 => data:2
+ │    └── crdb_region_default:8 => crdb_region:3
+ ├── check columns: check1:9
+ └── project
+      ├── columns: check1:9 column1:6!null id_default:7 crdb_region_default:8
+      ├── project
+      │    ├── columns: id_default:7 crdb_region_default:8 column1:6!null
+      │    ├── values
+      │    │    ├── columns: column1:6!null
+      │    │    ├── ('test1',)
+      │    │    └── ('test2',)
+      │    └── projections
+      │         ├── unique_rowid() [as=id_default:7]
+      │         └── default_to_database_primary_region(gateway_region()) [as=crdb_region_default:8]
+      └── projections
+           └── crdb_region_default:8 IN ('east', 'central', 'west') [as=check1:9]
+
+# Table without skip_rbr_unique_rowid_checks enabled.
+exec-ddl
+CREATE TABLE rbr_no_skip (
+  id INT DEFAULT unique_rowid() PRIMARY KEY,
+  data TEXT
+) LOCALITY REGIONAL BY ROW
+----
+
+# A unique check is planned to look for duplicate values across regions.
+build
+INSERT INTO rbr_no_skip (data) VALUES ('test1'), ('test2')
+----
+insert rbr_no_skip
+ ├── columns: <none>
+ ├── insert-mapping:
+ │    ├── id_default:7 => rbr_no_skip.id:1
+ │    ├── column1:6 => rbr_no_skip.data:2
+ │    └── crdb_region_default:8 => rbr_no_skip.crdb_region:3
+ ├── check columns: check1:9
+ ├── input binding: &1
+ ├── project
+ │    ├── columns: check1:9 column1:6!null id_default:7 crdb_region_default:8
+ │    ├── project
+ │    │    ├── columns: id_default:7 crdb_region_default:8 column1:6!null
+ │    │    ├── values
+ │    │    │    ├── columns: column1:6!null
+ │    │    │    ├── ('test1',)
+ │    │    │    └── ('test2',)
+ │    │    └── projections
+ │    │         ├── unique_rowid() [as=id_default:7]
+ │    │         └── default_to_database_primary_region(gateway_region()) [as=crdb_region_default:8]
+ │    └── projections
+ │         └── crdb_region_default:8 IN ('east', 'central', 'west') [as=check1:9]
+ └── unique-checks
+      └── unique-checks-item: rbr_no_skip(id)
+           └── project
+                ├── columns: id:15
+                └── semi-join (hash)
+                     ├── columns: id:15 data:16!null crdb_region:17
+                     ├── with-scan &1
+                     │    ├── columns: id:15 data:16!null crdb_region:17
+                     │    └── mapping:
+                     │         ├──  id_default:7 => id:15
+                     │         ├──  column1:6 => data:16
+                     │         └──  crdb_region_default:8 => crdb_region:17
+                     ├── scan rbr_no_skip
+                     │    ├── columns: rbr_no_skip.id:10!null rbr_no_skip.data:11 rbr_no_skip.crdb_region:12!null
+                     │    ├── check constraint expressions
+                     │    │    └── rbr_no_skip.crdb_region:12 IN ('east', 'central', 'west')
+                     │    └── flags: avoid-full-scan disabled not visible index feature
+                     └── filters
+                          ├── id:15 = rbr_no_skip.id:10
+                          └── crdb_region:17 != rbr_no_skip.crdb_region:12
+
+# Update case.
+build
+UPDATE rbr_no_skip SET id = unique_rowid() WHERE data = 'test'
+----
+update rbr_no_skip
+ ├── columns: <none>
+ ├── fetch columns: rbr_no_skip.id:6 rbr_no_skip.data:7 rbr_no_skip.crdb_region:8
+ ├── update-mapping:
+ │    └── id_new:11 => rbr_no_skip.id:1
+ ├── input binding: &1
+ ├── project
+ │    ├── columns: check1:12!null rbr_no_skip.id:6!null rbr_no_skip.data:7!null rbr_no_skip.crdb_region:8!null crdb_internal_mvcc_timestamp:9 tableoid:10 id_new:11
+ │    ├── project
+ │    │    ├── columns: id_new:11 rbr_no_skip.id:6!null rbr_no_skip.data:7!null rbr_no_skip.crdb_region:8!null crdb_internal_mvcc_timestamp:9 tableoid:10
+ │    │    ├── select
+ │    │    │    ├── columns: rbr_no_skip.id:6!null rbr_no_skip.data:7!null rbr_no_skip.crdb_region:8!null crdb_internal_mvcc_timestamp:9 tableoid:10
+ │    │    │    ├── scan rbr_no_skip
+ │    │    │    │    ├── columns: rbr_no_skip.id:6!null rbr_no_skip.data:7 rbr_no_skip.crdb_region:8!null crdb_internal_mvcc_timestamp:9 tableoid:10
+ │    │    │    │    ├── check constraint expressions
+ │    │    │    │    │    └── rbr_no_skip.crdb_region:8 IN ('east', 'central', 'west')
+ │    │    │    │    └── flags: avoid-full-scan
+ │    │    │    └── filters
+ │    │    │         └── rbr_no_skip.data:7 = 'test'
+ │    │    └── projections
+ │    │         └── unique_rowid() [as=id_new:11]
+ │    └── projections
+ │         └── rbr_no_skip.crdb_region:8 IN ('east', 'central', 'west') [as=check1:12]
+ └── unique-checks
+      └── unique-checks-item: rbr_no_skip(id)
+           └── project
+                ├── columns: id:18
+                └── semi-join (hash)
+                     ├── columns: id:18 data:19!null crdb_region:20!null
+                     ├── with-scan &1
+                     │    ├── columns: id:18 data:19!null crdb_region:20!null
+                     │    └── mapping:
+                     │         ├──  id_new:11 => id:18
+                     │         ├──  rbr_no_skip.data:7 => data:19
+                     │         └──  rbr_no_skip.crdb_region:8 => crdb_region:20
+                     ├── scan rbr_no_skip
+                     │    ├── columns: rbr_no_skip.id:13!null rbr_no_skip.data:14 rbr_no_skip.crdb_region:15!null
+                     │    ├── check constraint expressions
+                     │    │    └── rbr_no_skip.crdb_region:15 IN ('east', 'central', 'west')
+                     │    └── flags: avoid-full-scan disabled not visible index feature
+                     └── filters
+                          ├── id:18 = rbr_no_skip.id:13
+                          └── crdb_region:20 != rbr_no_skip.crdb_region:15
+
+# Test with a UNIQUE secondary index on unique_rowid() column.
+exec-ddl
+CREATE TABLE unique_index_test (
+  pk INT PRIMARY KEY,
+  unique_col INT DEFAULT unique_rowid(),
+  data TEXT,
+  UNIQUE INDEX (unique_col)
+) WITH (skip_rbr_unique_rowid_checks = true) LOCALITY REGIONAL BY ROW
+----
+
+# The unique check for the secondary index is skipped, but not for the primary.
+build
+INSERT INTO unique_index_test (pk, data) VALUES (1, 'test1'), (2, 'test2')
+----
+insert unique_index_test
+ ├── columns: <none>
+ ├── insert-mapping:
+ │    ├── column1:7 => unique_index_test.pk:1
+ │    ├── unique_col_default:9 => unique_index_test.unique_col:2
+ │    ├── column2:8 => unique_index_test.data:3
+ │    └── crdb_region_default:10 => unique_index_test.crdb_region:4
+ ├── check columns: check1:11
+ ├── input binding: &1
+ ├── project
+ │    ├── columns: check1:11 column1:7!null column2:8!null unique_col_default:9 crdb_region_default:10
+ │    ├── project
+ │    │    ├── columns: unique_col_default:9 crdb_region_default:10 column1:7!null column2:8!null
+ │    │    ├── values
+ │    │    │    ├── columns: column1:7!null column2:8!null
+ │    │    │    ├── (1, 'test1')
+ │    │    │    └── (2, 'test2')
+ │    │    └── projections
+ │    │         ├── unique_rowid() [as=unique_col_default:9]
+ │    │         └── default_to_database_primary_region(gateway_region()) [as=crdb_region_default:10]
+ │    └── projections
+ │         └── crdb_region_default:10 IN ('east', 'central', 'west') [as=check1:11]
+ └── unique-checks
+      └── unique-checks-item: unique_index_test(pk)
+           └── project
+                ├── columns: pk:18!null
+                └── semi-join (hash)
+                     ├── columns: pk:18!null unique_col:19 data:20!null crdb_region:21
+                     ├── with-scan &1
+                     │    ├── columns: pk:18!null unique_col:19 data:20!null crdb_region:21
+                     │    └── mapping:
+                     │         ├──  column1:7 => pk:18
+                     │         ├──  unique_col_default:9 => unique_col:19
+                     │         ├──  column2:8 => data:20
+                     │         └──  crdb_region_default:10 => crdb_region:21
+                     ├── scan unique_index_test
+                     │    ├── columns: unique_index_test.pk:12!null unique_index_test.unique_col:13 unique_index_test.data:14 unique_index_test.crdb_region:15!null
+                     │    ├── check constraint expressions
+                     │    │    └── unique_index_test.crdb_region:15 IN ('east', 'central', 'west')
+                     │    └── flags: avoid-full-scan disabled not visible index feature
+                     └── filters
+                          ├── pk:18 = unique_index_test.pk:12
+                          └── crdb_region:21 != unique_index_test.crdb_region:15
+
+# Update case.
+build
+UPDATE unique_index_test SET unique_col = unique_rowid() WHERE data = 'test'
+----
+update unique_index_test
+ ├── columns: <none>
+ ├── fetch columns: pk:7 unique_col:8 data:9 crdb_region:10
+ ├── update-mapping:
+ │    └── unique_col_new:13 => unique_col:2
+ └── project
+      ├── columns: check1:14!null pk:7!null unique_col:8 data:9!null crdb_region:10!null crdb_internal_mvcc_timestamp:11 tableoid:12 unique_col_new:13
+      ├── project
+      │    ├── columns: unique_col_new:13 pk:7!null unique_col:8 data:9!null crdb_region:10!null crdb_internal_mvcc_timestamp:11 tableoid:12
+      │    ├── select
+      │    │    ├── columns: pk:7!null unique_col:8 data:9!null crdb_region:10!null crdb_internal_mvcc_timestamp:11 tableoid:12
+      │    │    ├── scan unique_index_test
+      │    │    │    ├── columns: pk:7!null unique_col:8 data:9 crdb_region:10!null crdb_internal_mvcc_timestamp:11 tableoid:12
+      │    │    │    ├── check constraint expressions
+      │    │    │    │    └── crdb_region:10 IN ('east', 'central', 'west')
+      │    │    │    └── flags: avoid-full-scan
+      │    │    └── filters
+      │    │         └── data:9 = 'test'
+      │    └── projections
+      │         └── unique_rowid() [as=unique_col_new:13]
+      └── projections
+           └── crdb_region:10 IN ('east', 'central', 'west') [as=check1:14]
+
+# Case with UNIQUE WITHOUT INDEX constraint on a non-PK column with unique_rowid().
+# The unique check for the UWI constraint should be skipped.
+exec-ddl
+CREATE TABLE uwi_non_pk (
+  pk INT PRIMARY KEY,
+  unique_col INT DEFAULT unique_rowid(),
+  data TEXT,
+  UNIQUE WITHOUT INDEX (unique_col)
+) WITH (skip_rbr_unique_rowid_checks = true) LOCALITY REGIONAL BY ROW
+----
+
+build
+INSERT INTO uwi_non_pk (pk, data) VALUES (1, 'test1'), (2, 'test2')
+----
+insert uwi_non_pk
+ ├── columns: <none>
+ ├── insert-mapping:
+ │    ├── column1:7 => uwi_non_pk.pk:1
+ │    ├── unique_col_default:9 => uwi_non_pk.unique_col:2
+ │    ├── column2:8 => uwi_non_pk.data:3
+ │    └── crdb_region_default:10 => uwi_non_pk.crdb_region:4
+ ├── check columns: check1:11
+ ├── input binding: &1
+ ├── project
+ │    ├── columns: check1:11 column1:7!null column2:8!null unique_col_default:9 crdb_region_default:10
+ │    ├── project
+ │    │    ├── columns: unique_col_default:9 crdb_region_default:10 column1:7!null column2:8!null
+ │    │    ├── values
+ │    │    │    ├── columns: column1:7!null column2:8!null
+ │    │    │    ├── (1, 'test1')
+ │    │    │    └── (2, 'test2')
+ │    │    └── projections
+ │    │         ├── unique_rowid() [as=unique_col_default:9]
+ │    │         └── default_to_database_primary_region(gateway_region()) [as=crdb_region_default:10]
+ │    └── projections
+ │         └── crdb_region_default:10 IN ('east', 'central', 'west') [as=check1:11]
+ └── unique-checks
+      └── unique-checks-item: uwi_non_pk(pk)
+           └── project
+                ├── columns: pk:18!null
+                └── semi-join (hash)
+                     ├── columns: pk:18!null unique_col:19 data:20!null crdb_region:21
+                     ├── with-scan &1
+                     │    ├── columns: pk:18!null unique_col:19 data:20!null crdb_region:21
+                     │    └── mapping:
+                     │         ├──  column1:7 => pk:18
+                     │         ├──  unique_col_default:9 => unique_col:19
+                     │         ├──  column2:8 => data:20
+                     │         └──  crdb_region_default:10 => crdb_region:21
+                     ├── scan uwi_non_pk
+                     │    ├── columns: uwi_non_pk.pk:12!null uwi_non_pk.unique_col:13 uwi_non_pk.data:14 uwi_non_pk.crdb_region:15!null
+                     │    ├── check constraint expressions
+                     │    │    └── uwi_non_pk.crdb_region:15 IN ('east', 'central', 'west')
+                     │    └── flags: avoid-full-scan disabled not visible index feature
+                     └── filters
+                          ├── pk:18 = uwi_non_pk.pk:12
+                          └── crdb_region:21 != uwi_non_pk.crdb_region:15
+
+# Update case.
+build
+UPDATE uwi_non_pk SET unique_col = unique_rowid() WHERE data = 'test'
+----
+update uwi_non_pk
+ ├── columns: <none>
+ ├── fetch columns: pk:7 unique_col:8 data:9 crdb_region:10
+ ├── update-mapping:
+ │    └── unique_col_new:13 => unique_col:2
+ └── project
+      ├── columns: check1:14!null pk:7!null unique_col:8 data:9!null crdb_region:10!null crdb_internal_mvcc_timestamp:11 tableoid:12 unique_col_new:13
+      ├── project
+      │    ├── columns: unique_col_new:13 pk:7!null unique_col:8 data:9!null crdb_region:10!null crdb_internal_mvcc_timestamp:11 tableoid:12
+      │    ├── select
+      │    │    ├── columns: pk:7!null unique_col:8 data:9!null crdb_region:10!null crdb_internal_mvcc_timestamp:11 tableoid:12
+      │    │    ├── scan uwi_non_pk
+      │    │    │    ├── columns: pk:7!null unique_col:8 data:9 crdb_region:10!null crdb_internal_mvcc_timestamp:11 tableoid:12
+      │    │    │    ├── check constraint expressions
+      │    │    │    │    └── crdb_region:10 IN ('east', 'central', 'west')
+      │    │    │    └── flags: avoid-full-scan
+      │    │    └── filters
+      │    │         └── data:9 = 'test'
+      │    └── projections
+      │         └── unique_rowid() [as=unique_col_new:13]
+      └── projections
+           └── crdb_region:10 IN ('east', 'central', 'west') [as=check1:14]
+
+# Case with additional UNIQUE WITHOUT INDEX constraint on the ID column.
+# Unique checks should still be skipped.
+exec-ddl
+CREATE TABLE uwi_skip_enabled (
+  id INT DEFAULT unique_rowid() PRIMARY KEY,
+  data TEXT,
+  UNIQUE WITHOUT INDEX (id)
+) WITH (skip_rbr_unique_rowid_checks = true) LOCALITY REGIONAL BY ROW
+----
+
+build
+INSERT INTO uwi_skip_enabled (data) VALUES ('test1'), ('test2')
+----
+insert uwi_skip_enabled
+ ├── columns: <none>
+ ├── insert-mapping:
+ │    ├── id_default:7 => id:1
+ │    ├── column1:6 => data:2
+ │    └── crdb_region_default:8 => crdb_region:3
+ ├── check columns: check1:9
+ └── project
+      ├── columns: check1:9 column1:6!null id_default:7 crdb_region_default:8
+      ├── project
+      │    ├── columns: id_default:7 crdb_region_default:8 column1:6!null
+      │    ├── values
+      │    │    ├── columns: column1:6!null
+      │    │    ├── ('test1',)
+      │    │    └── ('test2',)
+      │    └── projections
+      │         ├── unique_rowid() [as=id_default:7]
+      │         └── default_to_database_primary_region(gateway_region()) [as=crdb_region_default:8]
+      └── projections
+           └── crdb_region_default:8 IN ('east', 'central', 'west') [as=check1:9]
+
+# Update case.
+build
+UPDATE uwi_skip_enabled SET id = unique_rowid() WHERE data = 'test'
+----
+update uwi_skip_enabled
+ ├── columns: <none>
+ ├── fetch columns: id:6 data:7 crdb_region:8
+ ├── update-mapping:
+ │    └── id_new:11 => id:1
+ └── project
+      ├── columns: check1:12!null id:6!null data:7!null crdb_region:8!null crdb_internal_mvcc_timestamp:9 tableoid:10 id_new:11
+      ├── project
+      │    ├── columns: id_new:11 id:6!null data:7!null crdb_region:8!null crdb_internal_mvcc_timestamp:9 tableoid:10
+      │    ├── select
+      │    │    ├── columns: id:6!null data:7!null crdb_region:8!null crdb_internal_mvcc_timestamp:9 tableoid:10
+      │    │    ├── scan uwi_skip_enabled
+      │    │    │    ├── columns: id:6!null data:7 crdb_region:8!null crdb_internal_mvcc_timestamp:9 tableoid:10
+      │    │    │    ├── check constraint expressions
+      │    │    │    │    └── crdb_region:8 IN ('east', 'central', 'west')
+      │    │    │    └── flags: avoid-full-scan
+      │    │    └── filters
+      │    │         └── data:7 = 'test'
+      │    └── projections
+      │         └── unique_rowid() [as=id_new:11]
+      └── projections
+           └── crdb_region:8 IN ('east', 'central', 'west') [as=check1:12]

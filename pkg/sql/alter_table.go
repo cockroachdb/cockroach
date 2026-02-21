@@ -779,6 +779,17 @@ func (n *alterTableNode) startExec(params runParams) error {
 				return err
 			}
 
+			// Validate that skip_rbr_unique_rowid_checks is only set on RBR tables.
+			if t.StorageParams.GetVal(catpb.RBRSkipUniqueRowIDChecksTableSettingName) != nil {
+				if !n.tableDesc.IsLocalityRegionalByRow() {
+					return pgerror.Newf(
+						pgcode.InvalidParameterValue,
+						`storage parameter "%s" can only be set on REGIONAL BY ROW tables`,
+						catpb.RBRSkipUniqueRowIDChecksTableSettingName,
+					)
+				}
+			}
+
 			descriptorChangedByTTL, err := handleTTLStorageParamChange(
 				params,
 				tn,

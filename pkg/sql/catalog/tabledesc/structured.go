@@ -2542,6 +2542,11 @@ func (desc *wrapper) GetExcludeDataFromBackup() bool {
 	return desc.ExcludeDataFromBackup
 }
 
+// GetSkipRBRUniqueRowIDChecks implements the TableDescriptor interface.
+func (desc *wrapper) GetSkipRBRUniqueRowIDChecks() bool {
+	return desc.SkipRBRUniqueRowIDChecks
+}
+
 // GetStorageParams implements the TableDescriptor interface.
 func (desc *wrapper) GetStorageParams(spaceBetweenEqual bool) ([]string, error) {
 	var storageParams []string
@@ -2654,6 +2659,9 @@ func (desc *wrapper) GetStorageParams(spaceBetweenEqual bool) ([]string, error) 
 		}
 		appendStorageParam(catpb.RBRUsingConstraintTableSettingName,
 			fmt.Sprintf("%q", tree.Name(constraint.GetName())))
+	}
+	if desc.GetSkipRBRUniqueRowIDChecks() {
+		appendStorageParam(catpb.RBRSkipUniqueRowIDChecksTableSettingName, `true`)
 	}
 	return storageParams, nil
 }

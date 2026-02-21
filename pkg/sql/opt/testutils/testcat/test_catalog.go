@@ -918,6 +918,8 @@ type Table struct {
 
 	homeRegion string
 
+	skipRBRUniqueRowIDCrossRegionChecks bool
+
 	rlsEnabled   bool
 	rlsForced    bool
 	policies     cat.Policies
@@ -1126,6 +1128,11 @@ func (tt *Table) RegionalByRowUsingConstraint() cat.ForeignKeyConstraint {
 		return nil
 	}
 	return tt.regionalByRowUsingConstraint
+}
+
+// SkipRBRUniqueRowIDCrossRegionChecks is part of the cat.Table interface.
+func (tt *Table) SkipRBRUniqueRowIDCrossRegionChecks() bool {
+	return tt.skipRBRUniqueRowIDCrossRegionChecks
 }
 
 // GetDatabaseID is part of the cat.Table interface.

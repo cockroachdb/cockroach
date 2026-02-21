@@ -38,6 +38,9 @@ func validateStorageParamKey(t tree.NodeFormatter, key string) {
 	if loweredKey == catpb.RBRUsingConstraintTableSettingName {
 		panic(scerrors.NotImplementedErrorf(t, "infer_rbr_region_col_using_constraint not implemented yet"))
 	}
+	if loweredKey == catpb.RBRSkipUniqueRowIDChecksTableSettingName {
+		panic(scerrors.NotImplementedErrorf(t, "skip_rbr_unique_rowid_checks not implemented yet"))
+	}
 }
 
 // buildTTLColumnExpr builds the expression: current_timestamp() + interval_expr.
