@@ -407,8 +407,19 @@ func (ds *ServerImpl) setupFlow(
 	}
 
 	// Create the FlowCtx for the flow.
+	//
+	// We only set MakeLeafTxn on the flow context if we have LeafTxnInputState.
+	// This is important for inner plans (e.g., apply-join iterations, routines)
+	// that might be passed a LeafTxn from an outer plan but don't have
+	// LeafTxnInputState themselves. Without this check, UseStreamer() might try
+	// to call MakeLeafTxn and hit an assertion failure because we can't create
+	// new leaf txns without LeafTxnInputState.
+	var makeLeafTxn func(context.Context) (*kv.Txn, error)
+	if req.LeafTxnInputState != nil {
+		makeLeafTxn = makeLeaf
+	}
 	flowCtx := ds.newFlowContext(
-		ctx, req.Flow.FlowID, evalCtx, monitor, diskMonitor, makeLeaf, req.TraceKV,
+		ctx, req.Flow.FlowID, evalCtx, monitor, diskMonitor, makeLeafTxn, req.TraceKV,
 		req.CollectStats, localState, req.Flow.Gateway == ds.NodeID.SQLInstanceID(),
 	)
 
