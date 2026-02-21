@@ -37,6 +37,7 @@ func IsAggOptimized(aggFn execinfrapb.AggregatorSpec_Func) bool {
 		execinfrapb.Min,
 		execinfrapb.Sum,
 		execinfrapb.SumInt,
+		execinfrapb.XorAgg,
 		execinfrapb.CountRows:
 		return true
 	default:
@@ -63,7 +64,8 @@ const (
 	minFirstOverload        = maxFirstOverload + minMaxNumOverloads
 	sumFirstOverload        = minFirstOverload + minMaxNumOverloads
 	sumIntFirstOverload     = sumFirstOverload + sumNumOverloads
-	countRowsFirstOverload  = sumIntFirstOverload + sumIntNumOverloads
+	xorFirstOverload        = sumIntFirstOverload + sumIntNumOverloads
+	countRowsFirstOverload  = xorFirstOverload + xorNumOverloads
 	numOverloadsTotal       = countRowsFirstOverload + 1
 )
 
@@ -458,6 +460,23 @@ func NewAggregateFuncsAlloc(
 					allocs[firstOverloadIndex+offset], err = newSumIntOrderedAggAlloc(args.Allocator, inputType, allocSize)
 				case WindowAggKind:
 					allocs[firstOverloadIndex+offset], err = newSumIntWindowAggAlloc(args.Allocator, inputType, allocSize)
+				default:
+					colexecerror.InternalError(errors.AssertionFailedf("unexpected agg kind"))
+				}
+			}
+		case execinfrapb.XorAgg:
+			firstOverloadIndex = xorFirstOverload
+			inputType := args.InputTypes[aggFn.ColIdx[0]]
+			offset = xorOverloadOffset(inputType)
+			if allocs[firstOverloadIndex+offset] == nil {
+				freshAllocator = true
+				switch aggKind {
+				case HashAggKind:
+					allocs[firstOverloadIndex+offset], err = newXorHashAggAlloc(args.Allocator, inputType, allocSize)
+				case OrderedAggKind:
+					allocs[firstOverloadIndex+offset], err = newXorOrderedAggAlloc(args.Allocator, inputType, allocSize)
+				case WindowAggKind:
+					allocs[firstOverloadIndex+offset], err = newXorWindowAggAlloc(args.Allocator, inputType, allocSize)
 				default:
 					colexecerror.InternalError(errors.AssertionFailedf("unexpected agg kind"))
 				}

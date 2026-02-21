@@ -12932,8 +12932,9 @@ var datumsToBytesOverload = tree.Overload{
 	// Note that datums_to_bytes(a) == datums_to_bytes(b) iff (a IS NOT DISTINCT FROM b)
 	Info: "Converts datums into key-encoded bytes. " +
 		"Supports NULLs and all data types which may be used in index keys",
-	Types:      tree.VariadicType{VarType: types.Any},
-	ReturnType: tree.FixedReturnType(types.Bytes),
+	Types:             tree.VariadicType{VarType: types.Any},
+	ReturnType:        tree.FixedReturnType(types.Bytes),
+	SpecializedVecBuiltin: tree.DatumsToBytes,
 	Fn: func(_ context.Context, _ *eval.Context, args tree.Datums) (tree.Datum, error) {
 		var out []byte
 		for i, arg := range args {

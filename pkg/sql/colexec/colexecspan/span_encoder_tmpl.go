@@ -50,12 +50,12 @@ func _ASSIGN_SPAN_ENCODING(_, _ string) {
 
 // */}}
 
-// newSpanEncoder creates a new utility operator that, given input batches,
+// NewSpanEncoder creates a new utility operator that, given input batches,
 // generates the encoding for the given key column. It is used by SpanAssembler
 // operators to generate spans for index joins and lookup joins.
-func newSpanEncoder(
+func NewSpanEncoder(
 	allocator *colmem.Allocator, typ *types.T, asc bool, encodeColIdx int,
-) spanEncoder {
+) SpanEncoder {
 	base := spanEncoderBase{
 		allocator:    allocator,
 		encodeColIdx: encodeColIdx,
@@ -80,16 +80,19 @@ func newSpanEncoder(
 	return nil
 }
 
-type spanEncoder interface {
-	// next generates the encoding for the current key column for each row from
+// SpanEncoder generates the encoding for a key column for each row from a
+// batch.
+type SpanEncoder interface {
+	// Next generates the encoding for the current key column for each row from
 	// the given batch in the range [startIdx, endIdx), then returns each row's
 	// encoding as a value in a Bytes column. The returned Bytes column is owned
-	// by the spanEncoder operator and should not be modified. Calling next
-	// invalidates previous calls to next. next assumes that startIdx and endIdx
+	// by the SpanEncoder operator and should not be modified. Calling Next
+	// invalidates previous calls to Next. Next assumes that startIdx and endIdx
 	// constitute a valid range of the given batch.
-	next(batch coldata.Batch, startIdx, endIdx int) *coldata.Bytes
+	Next(batch coldata.Batch, startIdx, endIdx int) *coldata.Bytes
 
-	close()
+	// Close releases any resources held by the encoder.
+	Close()
 }
 
 type spanEncoderBase struct {
@@ -114,10 +117,10 @@ type _OP_STRING struct {
 	spanEncoderBase
 }
 
-var _ spanEncoder = &_OP_STRING{}
+var _ SpanEncoder = &_OP_STRING{}
 
-// next implements the spanEncoder interface.
-func (op *_OP_STRING) next(batch coldata.Batch, startIdx, endIdx int) *coldata.Bytes {
+// Next implements the SpanEncoder interface.
+func (op *_OP_STRING) Next(batch coldata.Batch, startIdx, endIdx int) *coldata.Bytes {
 	oldBytesSize := op.outputBytes.Size()
 	if op.outputBytes == nil || op.outputBytes.Len() < endIdx-startIdx {
 		op.outputBytes = coldata.NewBytes(endIdx - startIdx)
@@ -170,8 +173,8 @@ func (op *_OP_STRING) next(batch coldata.Batch, startIdx, endIdx int) *coldata.B
 // {{end}}
 // {{end}}
 
-// close implements the spanEncoder interface.
-func (b *spanEncoderBase) close() {
+// Close implements the SpanEncoder interface.
+func (b *spanEncoderBase) Close() {
 	*b = spanEncoderBase{}
 }
 
