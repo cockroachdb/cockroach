@@ -1,0 +1,406 @@
+# Test plan caching behavior for various prepared statement types.
+
+# Create all DDL objects up front.
+statement ok
+CREATE TABLE t (a INT PRIMARY KEY, b INT, INDEX(b))
+
+statement ok
+CREATE TABLE t2 (x INT PRIMARY KEY, y INT, INDEX(y))
+
+statement ok
+CREATE SEQUENCE seq
+
+statement ok
+CREATE VIEW v AS SELECT a, b FROM t WHERE a > 10
+
+statement ok
+CREATE FUNCTION f() RETURNS INT IMMUTABLE AS $$ SELECT 1 $$ LANGUAGE SQL;
+
+statement ok
+CREATE FUNCTION g(x INT) RETURNS INT STABLE AS $$ SELECT b FROM t WHERE a = x $$ LANGUAGE SQL;
+
+statement ok
+CREATE PROCEDURE proc(x INT) AS $$ SELECT x $$ LANGUAGE SQL;
+
+# ------------------------------------------------------------------------------
+# Simple queries without placeholders should cache.
+# ------------------------------------------------------------------------------
+
+statement ok
+PREPARE simple1 AS SELECT a FROM t WHERE a = 1;
+PREPARE simple2 AS SELECT a FROM t WHERE b = 2;
+PREPARE simple3 AS SELECT a, b FROM t WHERE a > 10 ORDER BY b;
+
+statement ok
+SET TRACING = "on", cluster;
+
+statement ok
+EXECUTE simple1;
+EXECUTE simple1;
+EXECUTE simple2;
+EXECUTE simple2;
+EXECUTE simple3;
+EXECUTE simple3;
+
+statement ok
+SET TRACING = "off";
+
+query T
+SELECT message FROM [SHOW TRACE FOR SESSION] WHERE message LIKE '%query cache%' OR message LIKE '%cached memo%';
+----
+reusing cached memo
+reusing cached memo
+reusing cached memo
+reusing cached memo
+reusing cached memo
+reusing cached memo
+
+# ------------------------------------------------------------------------------
+# Queries with placeholders should cache and reuse plans.
+# ------------------------------------------------------------------------------
+statement ok
+PREPARE ph1 AS SELECT a FROM t WHERE a = $1;
+PREPARE ph2 AS SELECT a FROM t WHERE b = $1;
+PREPARE ph3 AS SELECT a FROM t WHERE a = $1 AND b = $2;
+
+statement ok
+SET TRACING = "on", cluster;
+
+statement ok
+EXECUTE ph1(1);
+EXECUTE ph1(2);
+EXECUTE ph1(3);
+EXECUTE ph2(10);
+EXECUTE ph2(20);
+EXECUTE ph3(1, 10);
+EXECUTE ph3(2, 20);
+
+statement ok
+SET TRACING = "off";
+
+query T
+SELECT message FROM [SHOW TRACE FOR SESSION] WHERE message LIKE '%query cache%' OR message LIKE '%cached memo%';
+----
+reusing cached memo
+reusing cached memo
+reusing cached memo
+reusing cached memo
+reusing cached memo
+reusing cached memo
+reusing cached memo
+
+# ------------------------------------------------------------------------------
+# INSERT, UPDATE, DELETE statements should cache.
+# ------------------------------------------------------------------------------
+statement ok
+PREPARE ins AS INSERT INTO t VALUES ($1, $2);
+PREPARE upd AS UPDATE t SET b = $1 WHERE a = $2;
+PREPARE del AS DELETE FROM t WHERE a = $1;
+
+statement ok
+SET TRACING = "on", cluster;
+
+statement ok
+EXECUTE ins(100, 1);
+EXECUTE ins(101, 2);
+EXECUTE upd(10, 100);
+EXECUTE upd(20, 101);
+EXECUTE del(100);
+EXECUTE del(101);
+
+statement ok
+SET TRACING = "off";
+
+query T
+SELECT message FROM [SHOW TRACE FOR SESSION] WHERE message LIKE '%query cache%' OR message LIKE '%cached memo%';
+----
+reusing cached memo
+reusing cached memo
+reusing cached memo
+reusing cached memo
+reusing cached memo
+reusing cached memo
+
+# ------------------------------------------------------------------------------
+# Queries with subqueries should cache.
+# ------------------------------------------------------------------------------
+statement ok
+PREPARE subq1 AS SELECT a FROM t WHERE b IN (SELECT b FROM t WHERE a < $1);
+PREPARE subq2 AS SELECT a FROM t WHERE EXISTS (SELECT 1 FROM t t2 WHERE t2.a = t.a AND t2.b = $1);
+
+statement ok
+SET TRACING = "on", cluster;
+
+statement ok
+EXECUTE subq1(10);
+EXECUTE subq1(20);
+EXECUTE subq2(5);
+EXECUTE subq2(15);
+
+statement ok
+SET TRACING = "off";
+
+query T
+SELECT message FROM [SHOW TRACE FOR SESSION] WHERE message LIKE '%query cache%' OR message LIKE '%cached memo%';
+----
+reusing cached memo
+reusing cached memo
+reusing cached memo
+reusing cached memo
+
+# ------------------------------------------------------------------------------
+# Queries with joins should cache.
+# ------------------------------------------------------------------------------
+statement ok
+PREPARE join1 AS SELECT t.a, t2.x FROM t JOIN t2 ON t.b = t2.y WHERE t.a = $1;
+PREPARE join2 AS SELECT t.a, t2.x FROM t LEFT JOIN t2 ON t.a = t2.x WHERE t2.y = $1;
+
+statement ok
+SET TRACING = "on", cluster;
+
+statement ok
+EXECUTE join1(1);
+EXECUTE join1(2);
+EXECUTE join2(10);
+EXECUTE join2(20);
+
+statement ok
+SET TRACING = "off";
+
+query T
+SELECT message FROM [SHOW TRACE FOR SESSION] WHERE message LIKE '%query cache%' OR message LIKE '%cached memo%';
+----
+reusing cached memo
+reusing cached memo
+reusing cached memo
+reusing cached memo
+
+# ------------------------------------------------------------------------------
+# Aggregates and window functions should cache.
+# ------------------------------------------------------------------------------
+statement ok
+PREPARE agg1 AS SELECT b, COUNT(*) FROM t WHERE a > $1 GROUP BY b;
+PREPARE agg2 AS SELECT SUM(b) FROM t WHERE a BETWEEN $1 AND $2;
+PREPARE win1 AS SELECT a, b, ROW_NUMBER() OVER (PARTITION BY b ORDER BY a) FROM t WHERE b > $1;
+
+statement ok
+SET TRACING = "on", cluster;
+
+statement ok
+EXECUTE agg1(5);
+EXECUTE agg1(10);
+EXECUTE agg2(1, 50);
+EXECUTE agg2(10, 100);
+EXECUTE win1(5);
+EXECUTE win1(10);
+
+statement ok
+SET TRACING = "off";
+
+query T
+SELECT message FROM [SHOW TRACE FOR SESSION] WHERE message LIKE '%query cache%' OR message LIKE '%cached memo%';
+----
+reusing cached memo
+reusing cached memo
+reusing cached memo
+reusing cached memo
+reusing cached memo
+reusing cached memo
+
+# ------------------------------------------------------------------------------
+# CTEs should cache.
+# ------------------------------------------------------------------------------
+statement ok
+PREPARE cte1 AS WITH cte AS (SELECT a, b FROM t WHERE a > $1) SELECT * FROM cte WHERE b < $2;
+PREPARE cte2 AS WITH RECURSIVE cte(n) AS (SELECT $1::INT UNION ALL SELECT n+1 FROM cte WHERE n < $2) SELECT * FROM cte;
+
+statement ok
+SET TRACING = "on", cluster;
+
+statement ok
+EXECUTE cte1(10, 50);
+EXECUTE cte1(20, 100);
+EXECUTE cte2(1, 5);
+EXECUTE cte2(10, 20);
+
+statement ok
+SET TRACING = "off";
+
+query T
+SELECT message FROM [SHOW TRACE FOR SESSION] WHERE message LIKE '%query cache%' OR message LIKE '%cached memo%';
+----
+reusing cached memo
+reusing cached memo
+reusing cached memo
+reusing cached memo
+
+# ------------------------------------------------------------------------------
+# Queries with different types of placeholders.
+# ------------------------------------------------------------------------------
+statement ok
+PREPARE types1 AS SELECT a FROM t WHERE b = $1::INT;
+PREPARE types2 AS SELECT a FROM t WHERE b::TEXT = $1::TEXT;
+PREPARE types3 AS SELECT a FROM t WHERE a = ANY($1::INT[]);
+
+statement ok
+SET TRACING = "on", cluster;
+
+statement ok
+EXECUTE types1(5);
+EXECUTE types1(10);
+EXECUTE types2('5');
+EXECUTE types2('10');
+EXECUTE types3(ARRAY[1,2,3]);
+EXECUTE types3(ARRAY[4,5,6]);
+
+statement ok
+SET TRACING = "off";
+
+query T
+SELECT message FROM [SHOW TRACE FOR SESSION] WHERE message LIKE '%query cache%' OR message LIKE '%cached memo%';
+----
+reusing cached memo
+reusing cached memo
+reusing cached memo
+reusing cached memo
+reusing cached memo
+reusing cached memo
+
+# ------------------------------------------------------------------------------
+# Multiple executions with same placeholder values should still cache.
+# ------------------------------------------------------------------------------
+statement ok
+PREPARE same_val AS SELECT a FROM t WHERE a = $1;
+
+statement ok
+SET TRACING = "on", cluster;
+
+statement ok
+EXECUTE same_val(1);
+EXECUTE same_val(1);
+EXECUTE same_val(1);
+EXECUTE same_val(2);
+EXECUTE same_val(2);
+EXECUTE same_val(2);
+
+statement ok
+SET TRACING = "off";
+
+query T
+SELECT message FROM [SHOW TRACE FOR SESSION] WHERE message LIKE '%query cache%' OR message LIKE '%cached memo%';
+----
+reusing cached memo
+reusing cached memo
+reusing cached memo
+reusing cached memo
+reusing cached memo
+reusing cached memo
+
+# ------------------------------------------------------------------------------
+# Queries with sequence references should cache.
+# ------------------------------------------------------------------------------
+statement ok
+PREPARE seq1 AS SELECT nextval('seq');
+PREPARE seq2 AS SELECT currval('seq');
+PREPARE seq3 AS SELECT setval('seq', $1::INT);
+
+statement ok
+SET TRACING = "on", cluster;
+
+statement ok
+EXECUTE seq1;
+EXECUTE seq1;
+EXECUTE seq2;
+EXECUTE seq2;
+EXECUTE seq3(100);
+EXECUTE seq3(200);
+
+statement ok
+SET TRACING = "off";
+
+query T
+SELECT message FROM [SHOW TRACE FOR SESSION] WHERE message LIKE '%query cache%' OR message LIKE '%cached memo%';
+----
+reusing cached memo
+reusing cached memo
+reusing cached memo
+reusing cached memo
+reusing cached memo
+reusing cached memo
+
+# ------------------------------------------------------------------------------
+# Queries with view references should cache.
+# ------------------------------------------------------------------------------
+statement ok
+PREPARE view1 AS SELECT a FROM v WHERE b = $1;
+PREPARE view2 AS SELECT * FROM v WHERE a BETWEEN $1 AND $2;
+
+statement ok
+SET TRACING = "on", cluster;
+
+statement ok
+EXECUTE view1(5);
+EXECUTE view1(10);
+EXECUTE view2(1, 50);
+EXECUTE view2(10, 100);
+
+statement ok
+SET TRACING = "off";
+
+query T
+SELECT message FROM [SHOW TRACE FOR SESSION] WHERE message LIKE '%query cache%' OR message LIKE '%cached memo%';
+----
+reusing cached memo
+reusing cached memo
+reusing cached memo
+reusing cached memo
+
+# ------------------------------------------------------------------------------
+# Plan caching should work for queries with UDFs.
+# ------------------------------------------------------------------------------
+statement ok
+PREPARE p1 AS SELECT f();
+PREPARE p2 AS SELECT g($1::INT);
+PREPARE p3 AS SELECT g($1::INT + $2::INT);
+
+statement ok
+SET TRACING = "on", cluster;
+
+statement ok
+EXECUTE p1;
+EXECUTE p2(1);
+EXECUTE p2(2);
+EXECUTE p3(1, 2);
+EXECUTE p3(3, 4);
+
+statement ok
+SET TRACING = "off";
+
+query T
+SELECT message FROM [SHOW TRACE FOR SESSION] WHERE message LIKE '%query cache%' OR message LIKE '%cached memo%';
+----
+reusing cached memo
+reusing cached memo
+reusing cached memo
+reusing cached memo
+reusing cached memo
+
+# Modifying the function should force a rebuild.
+statement ok
+ALTER FUNCTION f() LEAKPROOF;
+
+statement ok
+SET TRACING = "on", cluster;
+
+statement ok
+EXECUTE p1;
+EXECUTE p1;
+
+statement ok
+SET TRACING = "off";
+
+query T
+SELECT message FROM [SHOW TRACE FOR SESSION] WHERE message LIKE '%query cache%' OR message LIKE '%cached memo%';
+----
+rebuilding cached memo
+reusing cached memo

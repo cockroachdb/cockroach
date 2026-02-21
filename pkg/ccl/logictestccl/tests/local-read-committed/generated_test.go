@@ -3044,6 +3044,13 @@ func TestReadCommittedExecBuild_fk_read_committed(
 	runExecBuildLogicTest(t, "fk_read_committed")
 }
 
+func TestReadCommittedExecBuild_prepare_cache(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runExecBuildLogicTest(t, "prepare_cache")
+}
+
 func TestReadCommittedExecBuild_select_for_update_read_committed(
 	t *testing.T,
 ) {
