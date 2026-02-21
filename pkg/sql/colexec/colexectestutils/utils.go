@@ -52,6 +52,11 @@ import (
 var OrderedDistinctColsToOperators func(input colexecop.Operator, distinctCols []uint32, typs []*types.T, nullsAreDistinct bool,
 ) (colexecop.ResettableOperator, []bool)
 
+// NewInvariantsChecker is a test helper that's aliased to
+// colexec.NewInvariantsChecker. We inject this at test time so that tests can
+// use NewInvariantsChecker without invoking an import dependency cycle.
+var NewInvariantsChecker func(input colexecop.Operator) colexecop.DrainableClosableOperator
+
 // Tuple represents a row with any-type columns.
 type Tuple []interface{}
 
@@ -682,6 +687,7 @@ func RunTestsWithFn(
 					}
 					inputSources[i] = newOpTestSelInput(allocator, batchSize, tup, inputTypes)
 					inputSources[i].(*opTestInput).batchLengthRandomizationEnabled = true
+					inputSources[i] = NewInvariantsChecker(inputSources[i])
 				}
 			} else {
 				for i, tup := range tups {
@@ -690,6 +696,7 @@ func RunTestsWithFn(
 					}
 					inputSources[i] = NewOpTestInput(allocator, batchSize, tup, inputTypes)
 					inputSources[i].(*opTestInput).batchLengthRandomizationEnabled = true
+					inputSources[i] = NewInvariantsChecker(inputSources[i])
 				}
 			}
 			test(t, inputSources)

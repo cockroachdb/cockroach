@@ -262,7 +262,12 @@ func TestAllSpooler(t *testing.T) {
 		colexectestutils.RunTestsWithFn(t, testAllocator, []colexectestutils.Tuples{tc.tuples}, nil, func(t *testing.T, input []colexecop.Operator) {
 			allSpooler := newAllSpooler(testAllocator, input[0], tc.typ)
 			allSpooler.init(context.Background())
-			allSpooler.spool()
+			for {
+				meta := allSpooler.spool()
+				if meta == nil {
+					break
+				}
+			}
 			if len(tc.tuples) != allSpooler.getNumTuples() {
 				t.Fatalf("allSpooler spooled wrong number of tuples: expected %d, but received %d", len(tc.tuples), allSpooler.getNumTuples())
 			}

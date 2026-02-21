@@ -45,6 +45,7 @@ go_library(
 go_test(
     name = "colexectestutils_test",
     srcs = [
+        "inject_setup_test.go",
         "main_test.go",
         "utils_test.go",
     ],
@@ -54,6 +55,7 @@ go_test(
         "//pkg/col/coldataext",
         "//pkg/col/coldatatestutils",
         "//pkg/settings/cluster",
+        "//pkg/sql/colexec",
         "//pkg/sql/colexecop",
         "//pkg/sql/colmem",
         "//pkg/sql/execinfra",
