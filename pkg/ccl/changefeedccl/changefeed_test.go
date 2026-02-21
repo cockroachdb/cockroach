@@ -9725,6 +9725,90 @@ func TestParallelIOMetrics(t *testing.T) {
 	cdcTest(t, testFn, feedTestForceSink("pubsub"))
 }
 
+type changefeedLogSpy struct {
+	syncutil.Mutex
+	logs []string
+}
+
+// Intercept implements log.Interceptor.
+func (s *changefeedLogSpy) Intercept(entry []byte) {
+	s.Lock()
+	defer s.Unlock()
+	var j map[string]any
+	if err := gojson.Unmarshal(entry, &j); err != nil {
+		panic(err)
+	}
+	if !strings.Contains(j["file"].(string), "ccl/changefeedccl/") {
+		return
+	}
+
+	s.logs = append(s.logs, j["message"].(string))
+}
+
+var _ log.Interceptor = (*changefeedLogSpy)(nil)
+
+// TestChangefeedRetryBackoffLogging tests that retry backoff duration is
+// included in log messages when changefeeds encounter transient errors.
+func TestChangefeedRetryBackoffLogging(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
+		sqlDB := sqlutils.MakeSQLRunner(s.DB)
+		sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY)`)
+
+		spy := &changefeedLogSpy{}
+		cleanup := log.InterceptWith(context.Background(), spy)
+		defer cleanup()
+
+		var errorCount atomic.Int32
+		knobs := s.TestingKnobs.DistSQL.(*execinfra.TestingKnobs).Changefeed.(*TestingKnobs)
+		knobs.RaiseRetryableError = func() error {
+			if errorCount.Add(1) == 1 {
+				return errors.New("test transient error")
+			}
+			return nil
+		}
+
+		feed := feed(t, f, `CREATE CHANGEFEED FOR foo WITH initial_scan='no'`)
+		defer closeFeed(t, feed)
+
+		// Insert data to trigger the changefeed and error
+		sqlDB.Exec(t, `INSERT INTO foo VALUES (1)`)
+		assertPayloads(t, feed, []string{
+			`foo: [1]->{"after": {"a": 1}}`,
+		})
+
+		testutils.SucceedsSoon(t, func() error {
+			spy.Lock()
+			defer spy.Unlock()
+
+			transientErrorLogs := []string{}
+			for _, log := range spy.logs {
+				if strings.Contains(log, "encountered transient error") {
+					transientErrorLogs = append(transientErrorLogs, log)
+				}
+			}
+			if len(transientErrorLogs) == 0 {
+				return errors.New("expected transient error log not found")
+			}
+			logMsg := transientErrorLogs[0]
+
+			// These logs should look like this:
+			// "Changefeed job %d encountered transient error: %v (attempt %d) (approx backoff: %s)"
+			if !strings.Contains(logMsg, "approx backoff:") {
+				return errors.Newf("log missing 'approx backoff:' - got: %s", logMsg)
+			}
+			if !strings.Contains(logMsg, "attempt") {
+				return errors.Newf("log missing 'attempt' - got: %s", logMsg)
+			}
+			return nil
+		})
+	}
+
+	cdcTest(t, testFn, feedTestEnterpriseSinks)
+}
+
 // TestPubsubAttributes tests that the "attributes" field in the
 // `pubsub_sink_config` behaves as expected.
 func TestPubsubAttributes(t *testing.T) {
