@@ -89,6 +89,7 @@ func computeDistChangefeedTimestamps(
 
 	schemaTS = details.StatementTime
 	if h := progress.GetHighWater(); h != nil && !h.IsEmpty() {
+		log.Changefeed.Infof(ctx, "setting initial high water to %s", h)
 		initialHighWater = *h
 		// If we have a high-water set, use it to compute the spans, since the
 		// ones at the statement time may have been garbage collected by now.
