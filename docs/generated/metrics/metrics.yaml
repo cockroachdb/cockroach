@@ -15403,7 +15403,7 @@ layers:
     - name: mma.change.external.lease.failure
       exported_name: mma_change_external_lease_failure
       labeled_name: 'mma.change{origin: external, type: lease, result: failure}'
-      description: Number of failed external lease change operations
+      description: Number of external lease transfers (moving the leaseholder to a different replica, not initiated by MMA) that failed. External changes come from other components like admin commands or the legacy allocator (SMA). Failures may indicate the target replica is unavailable or doesn't meet lease preferences.
       y_axis_label: Lease Change
       type: COUNTER
       unit: COUNT
@@ -15412,7 +15412,7 @@ layers:
     - name: mma.change.external.lease.success
       exported_name: mma_change_external_lease_success
       labeled_name: 'mma.change{origin: external, type: lease, result: success}'
-      description: Number of successful external lease change operations
+      description: Number of external lease transfers (moving the leaseholder to a different replica, not initiated by MMA) that completed successfully. External changes come from other components like admin commands or the legacy allocator (SMA).
       y_axis_label: Lease Change
       type: COUNTER
       unit: COUNT
@@ -15421,7 +15421,7 @@ layers:
     - name: mma.change.external.replica.failure
       exported_name: mma_change_external_replica_failure
       labeled_name: 'mma.change{origin: external, type: replica, result: failure}'
-      description: Number of failed external replica change operations
+      description: Number of external replica changes (adding, removing, or moving replicas not initiated by MMA) that failed. External changes come from other components like admin commands or the legacy allocator (SMA). Failures may indicate constraint violations, unavailable nodes, or other issues.
       y_axis_label: Range Change
       type: COUNTER
       unit: COUNT
@@ -15430,7 +15430,7 @@ layers:
     - name: mma.change.external.replica.success
       exported_name: mma_change_external_replica_success
       labeled_name: 'mma.change{origin: external, type: replica, result: success}'
-      description: Number of successful external replica change operations
+      description: Number of external replica changes (adding, removing, or moving replicas not initiated by MMA) that completed successfully. External changes come from other components like admin commands or the legacy allocator (SMA).
       y_axis_label: Range Change
       type: COUNTER
       unit: COUNT
@@ -15439,7 +15439,7 @@ layers:
     - name: mma.change.rebalance.lease.failure
       exported_name: mma_change_rebalance_lease_failure
       labeled_name: 'mma.change{origin: rebalance, type: lease, result: failure}'
-      description: Number of failed MMA-initiated rebalance operations that transfer the lease
+      description: Number of MMA-initiated lease transfers (moving the leaseholder to balance load) that failed. Failures may indicate the target replica is unavailable, doesn't meet lease preferences, or a concurrent change invalidated the operation.
       y_axis_label: Lease Change
       type: COUNTER
       unit: COUNT
@@ -15448,7 +15448,7 @@ layers:
     - name: mma.change.rebalance.lease.success
       exported_name: mma_change_rebalance_lease_success
       labeled_name: 'mma.change{origin: rebalance, type: lease, result: success}'
-      description: Number of successful MMA-initiated rebalance operations that transfer the lease
+      description: Number of MMA-initiated lease transfers (moving the leaseholder to balance load) that completed successfully. MMA transfers leases away from overloaded stores to reduce their CPU load, since leaseholders handle all reads and coordinate writes.
       y_axis_label: Lease Change
       type: COUNTER
       unit: COUNT
@@ -15457,7 +15457,7 @@ layers:
     - name: mma.change.rebalance.replica.failure
       exported_name: mma_change_rebalance_replica_failure
       labeled_name: 'mma.change{origin: rebalance, type: replica, result: failure}'
-      description: Number of failed MMA-initiated rebalance operations that change replicas
+      description: Number of MMA-initiated replica changes (adding, removing, or moving replicas to balance load) that failed. Failures may indicate constraint violations, unavailable target stores, or concurrent changes that invalidated the operation.
       y_axis_label: Range Change
       type: COUNTER
       unit: COUNT
@@ -15466,7 +15466,7 @@ layers:
     - name: mma.change.rebalance.replica.success
       exported_name: mma_change_rebalance_replica_success
       labeled_name: 'mma.change{origin: rebalance, type: replica, result: success}'
-      description: Number of successful MMA-initiated rebalance operations that change replicas
+      description: Number of MMA-initiated replica changes (adding, removing, or moving replicas to balance load) that completed successfully. MMA moves replicas away from overloaded stores to reduce their load.
       y_axis_label: Range Change
       type: COUNTER
       unit: COUNT
@@ -15474,7 +15474,7 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
     - name: mma.dropped
       exported_name: mma_dropped
-      description: Number of operations dropped due to MMA state inconsistency
+      description: Number of pending replica or lease changes that MMA dropped because its internal state became inconsistent with the actual cluster state. This can happen when an external change (e.g., from another component or admin command) modifies the cluster in a way that invalidates MMA's pending changes. A non-zero value is expected during normal operation when external changes occur.
       y_axis_label: Replica/Lease Change
       type: COUNTER
       unit: COUNT
@@ -15482,7 +15482,7 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
     - name: mma.external.registration.failure
       exported_name: mma_external_registration_failure
-      description: Number of external operations that failed to register with MMA
+      description: Number of external operations (replica/lease changes not initiated by MMA) that failed to register with MMA due to pre-check failures (e.g., the change conflicts with MMA's current state). The external operation may still proceed, but MMA will not track it until the next state synchronization.
       y_axis_label: Replica/Lease Change
       type: COUNTER
       unit: COUNT
@@ -15490,7 +15490,7 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
     - name: mma.external.registration.success
       exported_name: mma_external_registration_success
-      description: Number of external operations successfully registered with MMA
+      description: Number of external operations (replica/lease changes not initiated by MMA, e.g., from admin commands or other allocators) that were successfully registered with MMA. Registration allows MMA to track the change and keep its internal state synchronized with the cluster.
       y_axis_label: Replica/Lease Change
       type: COUNTER
       unit: COUNT
@@ -15499,7 +15499,7 @@ layers:
     - name: mma.overloaded_store.lease_grace.failure
       exported_name: mma_overloaded_store_lease_grace_failure
       labeled_name: 'mma.overloaded_store{type: lease_grace, result: failure}'
-      description: Number of overloaded stores within lease shedding grace period for which shedding failed
+      description: Number of overloaded stores in the lease shedding grace period (first 2 min of overload) where all shedding attempts failed during this store's MMA rebalancing pass. During this grace period, MMA waits for the overloaded store to shed its own leases before intervening. A non-zero value indicates stores were observed but intentionally skipped.
       y_axis_label: Stores
       type: GAUGE
       unit: COUNT
@@ -15508,7 +15508,7 @@ layers:
     - name: mma.overloaded_store.lease_grace.success
       exported_name: mma_overloaded_store_lease_grace_success
       labeled_name: 'mma.overloaded_store{type: lease_grace, result: success}'
-      description: Number of overloaded stores within lease shedding grace period for which shedding succeeded
+      description: Number of overloaded stores in the lease shedding grace period (first 2 min of overload) where at least one lease or replica was successfully moved away during this store's MMA rebalancing pass. During this grace period, MMA waits for the overloaded store to shed its own leases before intervening. This metric should normally be 0 since MMA skips shedding during the grace period.
       y_axis_label: Stores
       type: GAUGE
       unit: COUNT
@@ -15517,7 +15517,7 @@ layers:
     - name: mma.overloaded_store.long_dur.failure
       exported_name: mma_overloaded_store_long_dur_failure
       labeled_name: 'mma.overloaded_store{type: long_dur, result: failure}'
-      description: Number of stores overloaded for a long duration for which shedding failed
+      description: Number of stores overloaded for a long duration (8+ min) where all shedding attempts failed during this store's MMA rebalancing pass. Even with the most aggressive target selection, no suitable store was found. This may indicate cluster-wide capacity issues or overly restrictive constraints.
       y_axis_label: Stores
       type: GAUGE
       unit: COUNT
@@ -15526,7 +15526,7 @@ layers:
     - name: mma.overloaded_store.long_dur.success
       exported_name: mma_overloaded_store_long_dur_success
       labeled_name: 'mma.overloaded_store{type: long_dur, result: success}'
-      description: Number of stores overloaded for a long duration for which shedding succeeded
+      description: Number of stores overloaded for a long duration (8+ min) where at least one lease or replica was successfully moved away during this store's MMA rebalancing pass. At this stage, MMA is most aggressive and considers any target store at or below the load threshold.
       y_axis_label: Stores
       type: GAUGE
       unit: COUNT
@@ -15535,7 +15535,7 @@ layers:
     - name: mma.overloaded_store.medium_dur.failure
       exported_name: mma_overloaded_store_medium_dur_failure
       labeled_name: 'mma.overloaded_store{type: medium_dur, result: failure}'
-      description: Number of stores overloaded for a medium duration for which shedding failed
+      description: Number of stores overloaded for a medium duration (5-8 min) where all shedding attempts failed during this store's MMA rebalancing pass. Despite considering moderately-loaded targets, no suitable store was found (e.g., constraints cannot be satisfied, all candidates still too loaded).
       y_axis_label: Stores
       type: GAUGE
       unit: COUNT
@@ -15544,7 +15544,7 @@ layers:
     - name: mma.overloaded_store.medium_dur.success
       exported_name: mma_overloaded_store_medium_dur_success
       labeled_name: 'mma.overloaded_store{type: medium_dur, result: success}'
-      description: Number of stores overloaded for a medium duration for which shedding succeeded
+      description: Number of stores overloaded for a medium duration (5-8 min) where at least one lease or replica was successfully moved away during this store's MMA rebalancing pass. At this stage, MMA becomes more aggressive and considers moderately-loaded target stores that were previously excluded.
       y_axis_label: Stores
       type: GAUGE
       unit: COUNT
@@ -15553,7 +15553,7 @@ layers:
     - name: mma.overloaded_store.short_dur.failure
       exported_name: mma_overloaded_store_short_dur_failure
       labeled_name: 'mma.overloaded_store{type: short_dur, result: failure}'
-      description: Number of stores overloaded for a short duration for which shedding failed
+      description: Number of stores overloaded for a short duration (2-5 min) where all shedding attempts failed during this store's MMA rebalancing pass. Failures occur when no suitable target store is found (e.g., all targets are too loaded, constraints cannot be satisfied). At this stage, MMA only considers lightly-loaded targets.
       y_axis_label: Stores
       type: GAUGE
       unit: COUNT
@@ -15562,7 +15562,7 @@ layers:
     - name: mma.overloaded_store.short_dur.success
       exported_name: mma_overloaded_store_short_dur_success
       labeled_name: 'mma.overloaded_store{type: short_dur, result: success}'
-      description: Number of stores overloaded for a short duration for which shedding succeeded
+      description: Number of stores overloaded for a short duration (2-5 min) where at least one lease or replica was successfully moved away during this store's MMA rebalancing pass. At this stage, MMA only considers lightly-loaded target stores to avoid overloading them.
       y_axis_label: Stores
       type: GAUGE
       unit: COUNT
@@ -15571,7 +15571,7 @@ layers:
     - name: mma.span_config.normalization.error
       exported_name: mma_span_config_normalization_error
       labeled_name: 'mma.span_config.normalization{result: error}'
-      description: Number of ranges where the local store is leaseholder and span config normalization encountered errors. Includes both hard errors (nil conf, excluded from rebalancing) and soft errors (usable config, still rebalanced). Operators should review zone config if this metric is non-zero.
+      description: Number of ranges where the local store is leaseholder and MMA encountered errors while normalizing the span config (zone configuration). This includes both hard errors (config is unusable, range excluded from rebalancing) and soft errors (best-effort config produced, range still rebalanced). Non-zero values indicate zone config issues that operators should review.
       y_axis_label: Range
       type: GAUGE
       unit: COUNT
@@ -15580,7 +15580,7 @@ layers:
     - name: mma.span_config.normalization.soft_error
       exported_name: mma_span_config_normalization_soft_error
       labeled_name: 'mma.span_config.normalization{result: soft_error}'
-      description: Number of ranges where the local store is leaseholder and structural span config normalization failed, but produced a best-effort usable config. Operators should fix the zone config if this metric is non-zero.
+      description: 'Number of ranges where the local store is leaseholder and MMA''s structural normalization of the span config failed, but MMA produced a best-effort usable config. These ranges remain valid rebalancing candidates. Example: voter constraints cannot be fully satisfied by the replica constraints. Non-zero values indicate zone config issues that operators should fix.'
       y_axis_label: Range
       type: GAUGE
       unit: COUNT
