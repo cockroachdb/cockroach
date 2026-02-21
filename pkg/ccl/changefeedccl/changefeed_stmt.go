@@ -1395,17 +1395,11 @@ func (b *changefeedResumer) resumeWithRetries(
 		}
 	}
 
-	// Grab a "reference" to this nodes job registry in order to make sure
+	// Grab a "reference" to this node's job registry in order to make sure
 	// this resumer has enough time to persist up to date checkpoint in case
 	// of node drain.
 	drainCh, cleanup := execCfg.JobRegistry.OnDrain()
 	defer cleanup()
-
-	// We'd like to avoid failing a changefeed unnecessarily, so when an error
-	// bubbles up to this level, we'd like to "retry" the flow if possible. This
-	// could be because the sink is down or because a cockroach node has crashed
-	// or for many other reasons.
-	var lastRunStatusUpdate time.Time
 
 	// Setup local state information.
 	// This information is used by dist flow process to communicate back
@@ -1420,8 +1414,17 @@ func (b *changefeedResumer) resumeWithRetries(
 		log.Warningf(ctx, "failed to resolve destination details for change monitoring: %v", err)
 	}
 
+	// We'd like to avoid failing a changefeed unnecessarily, so when an error
+	// bubbles up to this level, we'd like to "retry" the flow if possible. This
+	// could be because the sink is down or because a cockroach node has crashed
+	// or for many other reasons.
 	maxBackoff := changefeedbase.MaxRetryBackoff.Get(&execCfg.Settings.SV)
 	backoffReset := changefeedbase.RetryBackoffReset.Get(&execCfg.Settings.SV)
+
+	// lastRunStatusUpdate is used to track the last time the job status was updated
+	// to avoid updating the job status too frequently.
+	var lastRunStatusUpdate time.Time
+
 	for r := getRetry(ctx, maxBackoff, backoffReset); r.Next(); {
 		flowErr := maybeUpgradePreProductionReadyExpression(ctx, jobID, details, jobExec)
 
@@ -1469,7 +1472,7 @@ func (b *changefeedResumer) resumeWithRetries(
 			}
 
 			if errors.Is(flowErr, replanErr) {
-				log.Infof(ctx, "restarting changefeed due to updated configuration")
+				log.Infof(ctx, "restarting changefeed due to updated configuration (approx backoff: %s)", r.NextBackoff())
 				continue
 			}
 
@@ -1490,8 +1493,8 @@ func (b *changefeedResumer) resumeWithRetries(
 		}
 
 		// All other errors retry.
-		log.Warningf(ctx, `Changefeed job %d encountered transient error: %v (attempt %d)`,
-			jobID, flowErr, 1+r.CurrentAttempt())
+		log.Warningf(ctx, `Changefeed job %d encountered transient error: %v (attempt %d) (approx backoff: %s)`,
+			jobID, flowErr, 1+r.CurrentAttempt(), r.NextBackoff())
 		lastRunStatusUpdate = b.setJobStatusMessage(ctx, lastRunStatusUpdate, "transient error: %s", flowErr)
 
 		if metrics, ok := execCfg.JobRegistry.MetricsStruct().Changefeed.(*Metrics); ok {
@@ -1523,8 +1526,8 @@ func (b *changefeedResumer) resumeWithRetries(
 				// and this node restarting changefeed before this happens.
 				// We could come up with a mechanism to provide additional
 				// information to dist sql planner.  Or... we could just wait a bit.
-				log.Warningf(ctx, "Changefeed %d delaying restart due to %d node(s) (%v) draining",
-					jobID, len(localState.drainingNodes), localState.drainingNodes)
+				log.Warningf(ctx, "Changefeed %d delaying restart due to %d node(s) (%v) draining (approx backoff: %s)",
+					jobID, len(localState.drainingNodes), localState.drainingNodes, r.NextBackoff())
 				r.Next() // default config: ~5 sec delay, plus 10 sec on the retry loop.
 			}
 		}
