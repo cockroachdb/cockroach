@@ -1,0 +1,167 @@
+# LogicTest: local
+
+statement ok
+CREATE TYPE part_type AS ENUM ('one', 'two', 'three', 'four', 'five');
+
+statement ok
+SET SESSION CHARACTERISTICS AS TRANSACTION ISOLATION LEVEL READ COMMITTED
+
+# ==============================================================================
+# Test PARTITION BY with partitioning on a specific index.
+# ==============================================================================
+statement ok
+CREATE TABLE t_partition_by (
+  pk INT PRIMARY KEY,
+  a part_type NOT NULL,
+  b INT,
+  c INT,
+  UNIQUE INDEX idx_c (a, c) PARTITION BY LIST (a) (
+    PARTITION one VALUES IN ('one'),
+    PARTITION two VALUES IN ('two'),
+    PARTITION three VALUES IN ('three')
+  ),
+  FAMILY (pk, a, b, c)
+)
+
+# Enable non-locking checks.
+statement ok
+SET read_committed_non_locking_checks_enabled = true
+
+# Now inserts should work.
+statement ok
+INSERT INTO t_partition_by VALUES (1, 'one', 10, 100), (2, 'two', 20, 200)
+
+query ITII rowsort
+SELECT * FROM t_partition_by
+----
+1  one  10  100
+2  two  20  200
+
+# Test unique constraint on the partitioned index.
+statement error pgcode 23505 pq: duplicate key value violates unique constraint "idx_c"
+INSERT INTO t_partition_by VALUES (3, 'one', 30, 100)
+
+# Different partition should be OK with same c value.
+statement ok
+INSERT INTO t_partition_by VALUES (3, 'three', 30, 100)
+
+query ITII rowsort
+SELECT * FROM t_partition_by
+----
+1  one    10  100
+2  two    20  200
+3  three  30  100
+
+# ------------------------------------------------------------------------------
+# Concurrent tests with partitioned index.
+# ------------------------------------------------------------------------------
+
+# Grant privileges for concurrent tests.
+statement ok
+GRANT ALL ON TABLE t_partition_by TO testuser
+
+# Test concurrent inserts with partitioned index.
+statement ok
+BEGIN ISOLATION LEVEL READ COMMITTED
+
+statement async conflict error pgcode 23505 pq: duplicate key value violates unique constraint "idx_c"
+WITH sleep AS (SELECT pg_sleep(2)) INSERT INTO t_partition_by VALUES (4, 'one', 40, 400)
+
+user testuser
+
+statement ok
+SET SESSION CHARACTERISTICS AS TRANSACTION ISOLATION LEVEL READ COMMITTED
+
+statement ok
+INSERT INTO t_partition_by VALUES (5, 'one', 50, 400)
+
+user root
+
+awaitstatement conflict
+
+statement ok
+COMMIT
+
+query ITII rowsort
+SELECT * FROM t_partition_by
+----
+1  one    10  100
+2  two    20  200
+3  three  30  100
+5  one    50  400
+
+# Test UPDATE with partitioned index.
+statement ok
+BEGIN ISOLATION LEVEL READ COMMITTED
+
+statement async partition_by_update
+WITH sleep AS (SELECT pg_sleep(2)) UPDATE t_partition_by SET c = 500 WHERE pk = 5
+
+user testuser
+
+statement ok
+UPDATE t_partition_by SET c = 600 WHERE pk = 5
+
+user root
+
+awaitstatement partition_by_update
+
+statement ok
+COMMIT
+
+# RC UPDATE should be pushed to a higher timestamp.
+query ITII
+SELECT * FROM t_partition_by WHERE pk = 5
+----
+5  one  50  500
+
+# ------------------------------------------------------------------------------
+# Multiple partitioned indexes on same table.
+# ------------------------------------------------------------------------------
+
+# Test with multiple partitioned indexes on the same table.
+statement ok
+CREATE TABLE t_multi_partition (
+  pk INT PRIMARY KEY,
+  a part_type NOT NULL,
+  b part_type NOT NULL,
+  c INT,
+  d INT,
+  UNIQUE INDEX idx_c (a, c) PARTITION BY LIST (a) (
+    PARTITION one VALUES IN ('one'),
+    PARTITION two VALUES IN ('two')
+  ),
+  UNIQUE INDEX idx_d (b, d) PARTITION BY LIST (b) (
+    PARTITION one VALUES IN ('one'),
+    PARTITION two VALUES IN ('two')
+  ),
+  FAMILY (pk, a, b, c, d)
+)
+
+statement ok
+INSERT INTO t_multi_partition VALUES (1, 'one', 'one', 100, 1000), (2, 'two', 'two', 200, 2000)
+
+query ITTII rowsort
+SELECT * FROM t_multi_partition
+----
+1  one  one  100  1000
+2  two  two  200  2000
+
+# Test unique constraint on first partitioned index.
+statement error pgcode 23505 pq: duplicate key value violates unique constraint "idx_c"
+INSERT INTO t_multi_partition VALUES (3, 'one', 'two', 100, 3000)
+
+# Test unique constraint on second partitioned index.
+statement error pgcode 23505 pq: duplicate key value violates unique constraint "idx_d"
+INSERT INTO t_multi_partition VALUES (3, 'two', 'one', 300, 1000)
+
+# Different partitions on both indexes should be OK.
+statement ok
+INSERT INTO t_multi_partition VALUES (3, 'two', 'one', 100, 2000)
+
+query ITTII rowsort
+SELECT * FROM t_multi_partition
+----
+1  one  one  100  1000
+2  two  two  200  2000
+3  two  one  100  2000

@@ -481,6 +481,16 @@ var insertFastPathClusterMode = settings.RegisterBoolSetting(
 	true,
 	settings.WithPublic)
 
+var readCommittedNonLockingChecksClusterMode = settings.RegisterBoolSetting(
+	settings.ApplicationLevel,
+	"sql.defaults.read_committed_non_locking_checks.enabled",
+	"default value for read_committed_non_locking_checks_enabled session setting; "+
+		"enables non-locking optimization for Read Committed transactions where "+
+		"constraint checks and cascades use non-locking reads with manual refresh "+
+		"validation before commit instead of acquiring locks",
+	false,
+	settings.WithPublic)
+
 var experimentalAlterColumnTypeGeneralMode = settings.RegisterBoolSetting(
 	settings.ApplicationLevel,
 	"sql.defaults.experimental_alter_column_type.enabled",

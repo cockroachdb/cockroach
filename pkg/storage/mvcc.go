@@ -2733,6 +2733,9 @@ func mvccPutInternal(
 	newMeta.ValBytes = int64(versionValue.encodedSize())
 	newMeta.Deleted = versionValue.IsTombstone()
 	newMeta.IntentHistory = newIntentHistory
+	if opts.DisallowIntentTimestampChange {
+		newMeta.PreserveTimestamp = &trueValue
+	}
 
 	var metaKeySize, metaValSize int64
 	var lockAcquisition roachpb.LockAcquisition
@@ -4834,6 +4837,16 @@ type MVCCWriteOptions struct {
 	// OriginTimestamp, when set during Logical Data Replication, will bind to the
 	// putting key's MVCCValueHeader.
 	OriginTimestamp hlc.Timestamp
+	// DisallowIntentTimestampChange, when set, prevents the intent from being
+	// rewritten at a higher timestamp during intent resolution, even if the
+	// transaction's write timestamp has been pushed. This provides lock-like
+	// semantics where reads are blocked from the time the intent was originally
+	// written.
+	//
+	// This is primarily used for constraint checking in read-committed
+	// transactions, where locks need to provide serialization guarantees from
+	// the time they are acquired.
+	DisallowIntentTimestampChange bool
 	// MaxLockConflicts is a maximum number of conflicting locks collected before
 	// returning LockConflictError. Even single-key writes can encounter multiple
 	// conflicting shared locks, so the limit is important to bound the number of
@@ -5358,6 +5371,12 @@ func MVCCResolveWriteIntent(
 			}
 			outcome, err = mvccResolveWriteIntent(ctx, rw, iter, ms, update, &buf.meta, buf)
 			iter.Close()
+			// Intents with preserve_timestamp require timestamp cache updates to
+			// prevent writes in the interval between the intent timestamp and commit
+			// timestamp, similar to replicated Shared/Exclusive locks.
+			if outcome == intentCommittedWithPreservedTimestamp {
+				replLocksReleased = true
+			}
 		} else {
 			outcome, err = mvccReleaseLockInternal(ctx, rw, ms, update, str, &buf.meta, buf)
 			replLocksReleased = replLocksReleased || outcome != lockNoop
@@ -5472,6 +5491,10 @@ const (
 	lockOverwritten
 	lockClearedBySingleDelete
 	lockClearedByDelete
+	// intentCommittedWithPreservedTimestamp indicates that an intent with
+	// preserve_timestamp was committed, requiring timestamp cache updates
+	// similar to replicated Shared/Exclusive locks.
+	intentCommittedWithPreservedTimestamp
 )
 
 // mvccResolveWriteIntent is the core logic for resolving an intent. The
@@ -5560,6 +5583,19 @@ func mvccResolveWriteIntent(
 	inProgress := !update.Status.IsFinalized() && meta.Txn.Epoch >= update.Txn.Epoch
 	pushed := inProgress && timestampChanged
 	latestKey := MVCCKey{Key: update.Key, Timestamp: metaTimestamp}
+
+	// Check if this intent has disallowed timestamp changes. When set, the intent
+	// should not be rewritten at a higher timestamp during resolution while the
+	// transaction is still pending, even if the transaction's write timestamp has
+	// been pushed. However, when the transaction commits, the value is written at
+	// the commit timestamp as usual.
+	disallowTimestampChange := meta.PreserveTimestamp != nil && *meta.PreserveTimestamp
+	if disallowTimestampChange && pushed {
+		// When disallow_intent_timestamp_change is set, we don't update the
+		// intent's timestamp even if the transaction has been pushed. The intent
+		// will continue to block at its original timestamp until commit.
+		return lockNoop, nil
+	}
 
 	// Handle partial txn rollbacks. If the current txn sequence
 	// is part of a rolled back (ignored) seqnum range, we're going
@@ -5756,13 +5792,21 @@ func mvccResolveWriteIntent(
 				writer, metaKey.Key, lock.Intent, newMeta, true /* alreadyExists */)
 			logicalOp = MVCCUpdateIntentOpType
 		} else {
-			outcome = lockClearedByDelete
-			useSingleDelete := canSingleDelHelper.onCommitLock()
-			if useSingleDelete {
-				outcome = lockClearedBySingleDelete
+			// When disallow_intent_timestamp_change is set, the intent was committed at
+			// its original timestamp rather than being rewritten to the transaction's
+			// commit timestamp. This requires updating the timestamp cache similar
+			// to how replicated Shared/Exclusive locks are handled.
+			if disallowTimestampChange {
+				outcome = intentCommittedWithPreservedTimestamp
+			} else {
+				outcome = lockClearedByDelete
+				useSingleDelete := canSingleDelHelper.onCommitLock()
+				if useSingleDelete {
+					outcome = lockClearedBySingleDelete
+				}
 			}
 			metaKeySize, metaValSize, err = buf.clearLockMeta(
-				writer, metaKey.Key, lock.Intent, useSingleDelete, meta.Txn.ID, ClearOptions{
+				writer, metaKey.Key, lock.Intent, !disallowTimestampChange && canSingleDelHelper.onCommitLock(), meta.Txn.ID, ClearOptions{
 					ValueSizeKnown: true,
 					ValueSize:      uint32(origMetaValSize),
 				})

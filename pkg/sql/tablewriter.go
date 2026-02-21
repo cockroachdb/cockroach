@@ -11,6 +11,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/isolation"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
@@ -92,6 +93,11 @@ type tableWriterBase struct {
 	// originally written with before being replicated via Logical Data
 	// Replication.
 	originTimestamp hlc.Timestamp
+	// sv is the cluster settings values, used to check cluster settings.
+	sv *settings.Values
+	// readCommittedNonLockingChecksEnabled is true when non-locking optimization
+	// is enabled for Read Committed transactions.
+	readCommittedNonLockingChecksEnabled bool
 }
 
 var maxBatchBytes = settings.RegisterByteSizeSetting(
@@ -114,11 +120,15 @@ func (tb *tableWriterBase) init(
 	tb.deadlockTimeout = 0
 	tb.originID = 0
 	tb.originTimestamp = hlc.Timestamp{}
+	tb.sv = nil
+	tb.readCommittedNonLockingChecksEnabled = false
 	if evalCtx != nil {
 		tb.lockTimeout = evalCtx.SessionData().LockTimeout
 		tb.deadlockTimeout = evalCtx.SessionData().DeadlockTimeout
 		tb.originID = evalCtx.SessionData().OriginIDForLogicalDataReplication
 		tb.originTimestamp = evalCtx.SessionData().OriginTimestampForLogicalDataReplication
+		tb.sv = &evalCtx.Settings.SV
+		tb.readCommittedNonLockingChecksEnabled = evalCtx.SessionData().ReadCommittedNonLockingChecksEnabled
 	}
 	tb.forceProductionBatchSizes = evalCtx != nil && evalCtx.TestingKnobs.ForceProductionValues
 	tb.maxBatchSize = mutations.MaxBatchSize(tb.forceProductionBatchSizes)
@@ -233,6 +243,16 @@ func (tb *tableWriterBase) initNewBatch() {
 			OriginID:        tb.originID,
 			OriginTimestamp: tb.originTimestamp,
 		}
+	}
+	// For Read Committed transactions with non-locking checks enabled, set
+	// DisallowIntentTimestampChange on write intents to prevent them from being
+	// moved to a higher timestamp when the transaction is pushed. This ensures
+	// that intents block concurrent writes at their original timestamp until
+	// commit, even if the transaction's commit timestamp increases.
+	// TODO(drewk): Only set this for RC statements with checks or cascades.
+	if tb.txn.IsoLevel() == isolation.ReadCommitted &&
+		tb.readCommittedNonLockingChecksEnabled {
+		tb.b.Header.DisallowIntentTimestampChange = true
 	}
 }
 

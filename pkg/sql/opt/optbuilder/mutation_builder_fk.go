@@ -646,8 +646,18 @@ func (h *fkCheckHelper) buildOtherTableScan(parent bool) (outScope *scope, tabMe
 	// concurrent inserts or updates of the child. Deletion-side checks do need to
 	// lock the child row(s) under Read Committed isolation to ensure there are no
 	// newer writers.
-	if h.mb.b.evalCtx.TxnIsoLevel != isolation.Serializable ||
-		(parent && h.mb.b.evalCtx.SessionData().ImplicitFKLockingForSerializable) {
+	//
+	// However, if ReadCommittedNonLockingChecksEnabled is set, we skip locking
+	// for Read Committed transactions and instead use non-locking reads with
+	// manual refresh validation before commit.
+	var needLocking bool
+	if h.mb.b.evalCtx.TxnIsoLevel == isolation.Serializable {
+		needLocking = parent && h.mb.b.evalCtx.SessionData().ImplicitFKLockingForSerializable
+	} else {
+		needLocking = h.mb.b.evalCtx.TxnIsoLevel != isolation.ReadCommitted ||
+			!h.mb.b.evalCtx.SessionData().ReadCommittedNonLockingChecksEnabled
+	}
+	if needLocking {
 		locking = lockingSpec{
 			&lockingItem{
 				item: &tree.LockingItem{

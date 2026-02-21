@@ -274,6 +274,9 @@ This session variable default should now be configured using ALTER ROLE... SET: 
 sql.defaults.primary_region	string		"if not empty, all databases created without a PRIMARY REGION will implicitly have the given PRIMARY REGION
 This cluster setting is being kept to preserve backwards-compatibility.
 This session variable default should now be configured using ALTER ROLE... SET: https://www.cockroachlabs.com/docs/stable/alter-role.html"	application
+sql.defaults.read_committed_non_locking_checks.enabled	boolean	false	"default value for read_committed_non_locking_checks_enabled session setting; enables non-locking optimization for Read Committed transactions where constraint checks and cascades use non-locking reads with manual refresh validation before commit instead of acquiring locks
+This cluster setting is being kept to preserve backwards-compatibility.
+This session variable default should now be configured using ALTER ROLE... SET: https://www.cockroachlabs.com/docs/stable/alter-role.html"	application
 sql.defaults.reorder_joins_limit	integer	8	"default number of joins to reorder
 This cluster setting is being kept to preserve backwards-compatibility.
 This session variable default should now be configured using ALTER ROLE... SET: https://www.cockroachlabs.com/docs/stable/alter-role.html"	application

@@ -773,6 +773,12 @@ message LocalOnlySessionData {
   // OptimizerInlineAnyUnnestSubquery, when true, enables the InlineAnyProjectSet
   // normalization rule that inlines unnest subqueries in ANY comparisons.
   bool optimizer_inline_any_unnest_subquery = 198;
+  // ReadCommittedNonLockingChecksEnabled, when true, enables non-locking
+  // optimization for Read Committed transactions. Constraint checks and cascades
+  // use non-locking reads with manual refresh validation before commit instead
+  // of acquiring locks, and writes set DisallowIntentTimestampChange to prevent
+  // timestamp advancement while pending.
+  bool read_committed_non_locking_checks_enabled = 199;
 
   ///////////////////////////////////////////////////////////////////////////
   // WARNING: consider whether a session parameter you're adding needs to  //

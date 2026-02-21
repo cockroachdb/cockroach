@@ -50,14 +50,24 @@ func (mb *mutationBuilder) buildUniqueChecksForInsert() {
 		}
 
 		// For non-serializable transactions, we guarantee uniqueness by writing tombstones in all
-		// partitions of a unique index with implicit partitioning columns.
+		// partitions of a unique index with implicit partitioning columns. However, when
+		// read_committed_non_locking_checks_enabled is set, we use refresh-based validation instead
+		// of tombstones, so we build unique checks.
 		if mb.b.evalCtx.TxnIsoLevel != isolation.Serializable {
-			if indexOrdinal, ok := u.TombstoneIndexOrdinal(); ok {
-				mb.uniqueWithTombstoneIndexes.Add(indexOrdinal)
-				continue
+			useNonLockingChecks := mb.b.evalCtx.TxnIsoLevel == isolation.ReadCommitted &&
+				mb.b.evalCtx.SessionData().ReadCommittedNonLockingChecksEnabled
+			if !useNonLockingChecks {
+				if indexOrdinal, ok := u.TombstoneIndexOrdinal(); ok {
+					mb.uniqueWithTombstoneIndexes.Add(indexOrdinal)
+					continue
+				}
 			}
-			panic(unimplemented.NewWithIssue(126592,
-				"unique without index constraint under non-serializable isolation levels"))
+			// Allow unique without index under Read Committed when non-locking checks are enabled.
+			if mb.b.evalCtx.TxnIsoLevel != isolation.ReadCommitted ||
+				!mb.b.evalCtx.SessionData().ReadCommittedNonLockingChecksEnabled {
+				panic(unimplemented.NewWithIssue(126592,
+					"unique without index constraint under non-serializable isolation levels"))
+			}
 		}
 
 		// If this constraint is an arbiter of an INSERT ... ON CONFLICT ... DO
@@ -109,14 +119,24 @@ func (mb *mutationBuilder) buildUniqueChecksForUpdate() {
 			continue
 		}
 		// For non-serializable transactions, we guarantee uniqueness by writing tombstones in all
-		// partitions of a unique index with implicit partitioning columns.
+		// partitions of a unique index with implicit partitioning columns. However, when
+		// read_committed_non_locking_checks_enabled is set, we use refresh-based validation instead
+		// of tombstones, so we build unique checks.
 		if mb.b.evalCtx.TxnIsoLevel != isolation.Serializable {
-			if indexOrdinal, ok := u.TombstoneIndexOrdinal(); ok {
-				mb.uniqueWithTombstoneIndexes.Add(indexOrdinal)
-				continue
+			useNonLockingChecks := mb.b.evalCtx.TxnIsoLevel == isolation.ReadCommitted &&
+				mb.b.evalCtx.SessionData().ReadCommittedNonLockingChecksEnabled
+			if !useNonLockingChecks {
+				if indexOrdinal, ok := u.TombstoneIndexOrdinal(); ok {
+					mb.uniqueWithTombstoneIndexes.Add(indexOrdinal)
+					continue
+				}
 			}
-			panic(unimplemented.NewWithIssue(126592,
-				"unique without index constraint under non-serializable isolation levels"))
+			// Allow unique without index under Read Committed when non-locking checks are enabled.
+			if mb.b.evalCtx.TxnIsoLevel != isolation.ReadCommitted ||
+				!mb.b.evalCtx.SessionData().ReadCommittedNonLockingChecksEnabled {
+				panic(unimplemented.NewWithIssue(126592,
+					"unique without index constraint under non-serializable isolation levels"))
+			}
 		}
 
 		if h.init(mb, i) {
@@ -151,14 +171,24 @@ func (mb *mutationBuilder) buildUniqueChecksForUpsert() {
 			continue
 		}
 		// For non-serializable transactions, we guarantee uniqueness by writing tombstones in all
-		// partitions of a unique index with implicit partitioning columns.
+		// partitions of a unique index with implicit partitioning columns. However, when
+		// read_committed_non_locking_checks_enabled is set, we use refresh-based validation instead
+		// of tombstones, so we build unique checks.
 		if mb.b.evalCtx.TxnIsoLevel != isolation.Serializable {
-			if indexOrdinal, ok := u.TombstoneIndexOrdinal(); ok {
-				mb.uniqueWithTombstoneIndexes.Add(indexOrdinal)
-				continue
+			useNonLockingChecks := mb.b.evalCtx.TxnIsoLevel == isolation.ReadCommitted &&
+				mb.b.evalCtx.SessionData().ReadCommittedNonLockingChecksEnabled
+			if !useNonLockingChecks {
+				if indexOrdinal, ok := u.TombstoneIndexOrdinal(); ok {
+					mb.uniqueWithTombstoneIndexes.Add(indexOrdinal)
+					continue
+				}
 			}
-			panic(unimplemented.NewWithIssue(126592,
-				"unique without index constraint under non-serializable isolation levels"))
+			// Allow unique without index under Read Committed when non-locking checks are enabled.
+			if mb.b.evalCtx.TxnIsoLevel != isolation.ReadCommitted ||
+				!mb.b.evalCtx.SessionData().ReadCommittedNonLockingChecksEnabled {
+				panic(unimplemented.NewWithIssue(126592,
+					"unique without index constraint under non-serializable isolation levels"))
+			}
 		}
 
 		// If this constraint is an arbiter of an INSERT ... ON CONFLICT ... DO
@@ -637,7 +667,16 @@ func (h *uniqueCheckHelper) buildTableScan() (outScope *scope, ordinals []int) {
 	// If we're using a weaker isolation level, we lock the checked predicate(s)
 	// to prevent concurrent inserts from other transactions from violating the
 	// unique constraint.
+	//
+	// However, if ReadCommittedNonLockingChecksEnabled is set, we skip locking
+	// for Read Committed transactions and instead use non-locking reads with
+	// manual refresh validation before commit.
+	var needLocking bool
 	if h.mb.b.evalCtx.TxnIsoLevel != isolation.Serializable {
+		needLocking = h.mb.b.evalCtx.TxnIsoLevel != isolation.ReadCommitted ||
+			!h.mb.b.evalCtx.SessionData().ReadCommittedNonLockingChecksEnabled
+	}
+	if needLocking {
 		locking = lockingSpec{
 			&lockingItem{
 				item: &tree.LockingItem{

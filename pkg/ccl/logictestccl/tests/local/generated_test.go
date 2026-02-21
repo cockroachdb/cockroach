@@ -215,6 +215,13 @@ func TestCCLLogic_partitioning_index(
 	runCCLLogicTest(t, "partitioning_index")
 }
 
+func TestCCLLogic_partitioning_read_committed(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runCCLLogicTest(t, "partitioning_read_committed")
+}
+
 func TestCCLLogic_pgcrypto_builtins(
 	t *testing.T,
 ) {
