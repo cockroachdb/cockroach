@@ -15,6 +15,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/pebble"
+	"github.com/cockroachdb/pebble/objstorage"
 	"github.com/cockroachdb/pebble/rangedel"
 	"github.com/cockroachdb/pebble/rangekey"
 )
@@ -230,8 +231,18 @@ func (msstw *MultiSSTWriter) initSST(ctx context.Context) error {
 	if err != nil {
 		return errors.Wrap(err, "failed to create new sst file")
 	}
-	newSST := storage.MakeIngestionSSTWriter(ctx, msstw.st, newSSTFile)
-	msstw.currSST = newSST
+	// Use blob writer for snapshot SSTs. It will write blob files when enabled
+	// via cluster settings AND the engine's format version supports blob files.
+	// Without the format version check, we could write SSTs with blob references
+	// that the engine cannot ingest.
+	if storage.ValueSeparationSnapshotSSTEnabled.Get(&msstw.st.SV) && msstw.scratch.SupportsBlobFiles() {
+		newBlobFile := func() (objstorage.Writable, error) {
+			return msstw.scratch.NewBlobFile(ctx)
+		}
+		msstw.currSST = storage.MakeIngestionSSTWriterWithBlobs(ctx, msstw.st, newSSTFile, newBlobFile)
+	} else {
+		msstw.currSST = storage.MakeIngestionSSTWriter(ctx, msstw.st, newSSTFile)
+	}
 
 	// Add a RangeKeyDel as well as a range del for the entire bounds of the SST,
 	// meaning upon ingestion any range and point keys existing in the span will

@@ -7,16 +7,21 @@ package kvserver
 
 import (
 	"context"
+	"fmt"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvadmission"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/replica_rac2"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvstorage"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvstorage/snaprecv"
 	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/storage/fs"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/admission"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -272,4 +277,157 @@ func TestKVBatchSnapshotStrategyReceiveExternalReplicate(t *testing.T) {
 		require.Error(t, err, "Receive should fail with DEL operation when neither SharedReplicate nor ExternalReplicate is set")
 		require.Contains(t, err.Error(), "unexpected batch entry key kind")
 	})
+}
+
+// TestSnapshotWithBlobFiles tests the snapshot receive and apply flow with
+// blob files (value separation) enabled. This exercises:
+// 1. MultiSSTWriter with blob files enabled (via kvBatchSnapshotStrategy.Receive).
+// 2. snapWriter.commit() which calls IngestAndExciseWithBlobs.
+// 3. Read-back verification to ensure values can be read after ingestion.
+func TestSnapshotWithBlobFiles(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+
+	// Create a temp directory for the on-disk engine.
+	dir, cleanup := testutils.TempDir(t)
+	defer cleanup()
+
+	// Create settings with blob files enabled.
+	settings := cluster.MakeTestingClusterSettings()
+	storage.ValueSeparationEnabled.Override(ctx, &settings.SV, true)
+	storage.ValueSeparationSnapshotSSTEnabled.Override(ctx, &settings.SV, true)
+	storage.ValueSeparationMinimumSize.Override(ctx, &settings.SV, 256)
+
+	// Create on-disk engine.
+	eng, err := storage.Open(
+		ctx,
+		fs.MustInitPhysicalTestingEnv(dir),
+		settings)
+	require.NoError(t, err)
+	defer eng.Close()
+
+	// Test store configuration.
+	manual := timeutil.NewManualTime(timeutil.Unix(0, 123))
+	cfg := TestStoreConfig(hlc.NewClockForTesting(manual))
+	cfg.Settings = settings
+	cfg.KVAdmissionController = &mockKVAdmissionController{}
+
+	testIdent := roachpb.StoreIdent{ClusterID: uuid.MakeV4(), NodeID: 1, StoreID: 1}
+	store := &Store{cfg: cfg, Ident: &testIdent}
+
+	desc := &roachpb.RangeDescriptor{
+		RangeID:  1,
+		StartKey: roachpb.RKey("a"),
+		EndKey:   roachpb.RKey("z"),
+	}
+
+	snapUUID := uuid.MakeV4()
+	sstSnapshotStorage := snaprecv.NewSSTSnapshotStorage(eng, rate.NewLimiter(rate.Inf, 0))
+	scratch := sstSnapshotStorage.NewScratchSpace(desc.RangeID, snapUUID, settings)
+
+	// Use a large value (>256 bytes to trigger blob separation).
+	largeValueBytes := make([]byte, 512)
+	for i := range largeValueBytes {
+		largeValueBytes[i] = byte(i % 256)
+	}
+	largeValue := roachpb.MakeValueFromBytes(largeValueBytes)
+	mvccValue := storage.MVCCValue{Value: largeValue}
+
+	// Generate batches with large MVCC values.
+	now := hlc.Timestamp{WallTime: timeutil.Now().UnixNano()}
+	makeBatchRepr := func(fn func(storage.WriteBatch)) []byte {
+		batch := eng.NewWriteBatch()
+		defer batch.Close()
+		fn(batch)
+		repr := batch.Repr()
+		reprCopy := make([]byte, len(repr))
+		copy(reprCopy, repr)
+		return reprCopy
+	}
+
+	// Generate 10 batches, each with one large value.
+	var kvBatches [][]byte
+	for i := 0; i < 10; i++ {
+		key := roachpb.Key(fmt.Sprintf("key%03d", i))
+		mvccKey := storage.MVCCKey{Key: key, Timestamp: now}
+		kvBatch := makeBatchRepr(func(b storage.WriteBatch) {
+			require.NoError(t, b.PutMVCC(mvccKey, mvccValue))
+		})
+		kvBatches = append(kvBatches, kvBatch)
+	}
+
+	// Generate mock stream requests.
+	requests := make([]*kvserverpb.SnapshotRequest, 0, len(kvBatches)+1)
+	for _, batch := range kvBatches {
+		requests = append(requests, &kvserverpb.SnapshotRequest{KVBatch: batch})
+	}
+	requests = append(requests, &kvserverpb.SnapshotRequest{Final: true})
+	stream := &mockIncomingSnapshotStream{requests: requests}
+
+	header := kvserverpb.SnapshotRequest_Header{
+		State: kvserverpb.ReplicaState{Desc: desc},
+		RaftMessageRequest: kvserverpb.RaftMessageRequest{
+			Message: raftpb.Message{
+				Snapshot: &raftpb.Snapshot{Data: snapUUID.GetBytes()},
+			},
+		},
+	}
+
+	// Create and call kvBatchSnapshotStrategy.Receive.
+	kvSS := &kvBatchSnapshotStrategy{st: settings, scratch: scratch}
+	inSnap, err := kvSS.Receive(ctx, store, stream, header, func(int64) {})
+	require.NoError(t, err)
+	require.Equal(t, snapUUID, inSnap.SnapUUID)
+
+	// Verify blob files were created.
+	require.True(t, scratch.HasBlobFiles(), "expected blob files to be created")
+
+	// Apply snapshot.
+	engs := kvstorage.MakeEngines(eng)
+	sw := snapWriter{
+		eng:      engs,
+		writeSST: scratch.WriteSST,
+	}
+	defer sw.close()
+
+	// Commit the snapshot.
+	_, err = sw.commit(ctx, snapIngestion{
+		localSSTs:  scratch.SSTs(),
+		exciseSpan: desc.KeySpan().AsRawSpanWithNoLocals(),
+	})
+	require.NoError(t, err)
+
+	// Read back and verify values are readable after blob file ingestion.
+	iter, err := eng.NewMVCCIterator(ctx, storage.MVCCKeyAndIntentsIterKind, storage.IterOptions{
+		LowerBound: roachpb.Key("a"),
+		UpperBound: roachpb.Key("z"),
+	})
+	require.NoError(t, err)
+	defer iter.Close()
+
+	count := 0
+	iter.SeekGE(storage.MVCCKey{Key: roachpb.Key("a")})
+	for {
+		valid, err := iter.Valid()
+		require.NoError(t, err)
+		if !valid {
+			break
+		}
+		k := iter.UnsafeKey()
+		expectedKey := roachpb.Key(fmt.Sprintf("key%03d", count))
+		require.Equal(t, expectedKey, k.Key)
+		require.Equal(t, now, k.Timestamp)
+		rawVal, err := iter.UnsafeValue()
+		require.NoError(t, err)
+		val, err := storage.DecodeMVCCValue(rawVal)
+		require.NoError(t, err)
+		readBytes, err := val.Value.GetBytes()
+		require.NoError(t, err)
+		require.Equal(t, largeValueBytes, readBytes)
+		iter.Next()
+		count++
+	}
+	require.Equal(t, 10, count, "expected 10 keys")
 }
