@@ -24,7 +24,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cloud"
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
-	"github.com/cockroachdb/cockroach/pkg/jobs/joberror"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobsprofiler"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobsprotectedts"
@@ -52,6 +51,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
+	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	bulkutil "github.com/cockroachdb/cockroach/pkg/util/bulk"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -106,6 +106,139 @@ func filterSpans(includes []roachpb.Span, excludes []roachpb.Span) []roachpb.Spa
 	return cov.Slice()
 }
 
+func backupWithRetry(
+	ctx context.Context,
+	execCtx sql.JobExecContext,
+	mem *mon.BoundAccount,
+	kmsEnv cloud.KMSEnv,
+	details jobspb.BackupDetails,
+	settings *cluster.Settings,
+	defaultStore cloud.ExternalStorage,
+	resumer *backupResumer,
+	backupManifest *backuppb.BackupManifest,
+) (
+	latestManifest *backuppb.BackupManifest,
+	memSize int64,
+	rowCount roachpb.RowCount,
+	numBackupInstances int,
+	err error,
+) {
+	type retryState string
+	const (
+		initialState   retryState = "initial"
+		secondaryState retryState = "secondary"
+	)
+
+	currState := initialState
+	initialPolicy, secondaryPolicy := getBackupRetryPolicies(execCtx.ExecCfg())
+	prevTotalProg := float32(0)
+	latestManifest = backupManifest
+
+	var attempts int
+	testKnobs := execCtx.ExecCfg().BackupRestoreTestingKnobs
+	for r := retry.StartWithCtx(ctx, initialPolicy); r.Next(); {
+		attempts++
+		var rowCount roachpb.RowCount
+		var progress map[execinfrapb.ComponentID]float32
+		var numInstances int
+		rowCount, progress, numInstances, err = backup(
+			ctx, execCtx, details, settings, defaultStore, resumer, latestManifest,
+		)
+		if err == nil {
+			return latestManifest, memSize, rowCount, numInstances, nil
+		}
+
+		if buildutil.CrdbTestBuild && (testKnobs == nil || !testKnobs.EnableBackupRetriesUnderTest) {
+			break
+		}
+
+		// If we are draining, it is unlikely we can start a new DistSQL flow.
+		// Exit with a retryable error so that another node can pick up the job.
+		if execCtx.ExecCfg().JobRegistry.IsDraining() {
+			return nil, 0, roachpb.RowCount{}, 0, jobs.MarkAsRetryJobError(
+				errors.Wrapf(err, "backup job encountered retryable error on draining node"),
+			)
+		}
+
+		log.Dev.Warningf(ctx, "backup attempt %d failed with error: %+v", attempts, err)
+
+		mem.Shrink(ctx, memSize)
+		var readErr error
+		latestManifest, memSize, readErr = resumer.readManifestOnResume(
+			ctx, mem, execCtx.ExecCfg(), defaultStore, details, execCtx.User(), kmsEnv,
+		)
+		if readErr != nil {
+			return nil, 0, roachpb.RowCount{}, 0, errors.Wrapf(readErr, "reading backup manifest on retry")
+		}
+
+		switch currState {
+		case initialState:
+			// In the initial state, we are still waiting for all nodes to return
+			// progress.
+			var numProgressedNodes int
+			for _, v := range progress {
+				if v > 0 {
+					numProgressedNodes++
+				}
+			}
+			if numProgressedNodes == numInstances && numProgressedNodes > 0 {
+				log.Dev.Infof(
+					ctx, "backup made progress on all nodes, switching to secondary retry policy",
+				)
+				currState = secondaryState
+				r = retry.StartWithCtx(ctx, secondaryPolicy)
+			}
+		case secondaryState:
+			// In the secondary state, we reset our retry mechanism as long as there
+			// has been some progress since the last attempt.
+			jobID := resumer.job.ID()
+			job, reloadErr := execCtx.ExecCfg().JobRegistry.LoadClaimedJob(ctx, jobID)
+			if reloadErr != nil {
+				log.Dev.Warningf(
+					ctx, "backup job %d could not reload job progress when retrying: %+v",
+					jobID, reloadErr,
+				)
+				continue
+			}
+			currProg := job.FractionCompleted()
+			if madeProgress := currProg - prevTotalProg; madeProgress >= 0.01 {
+				log.Dev.Infof(
+					ctx,
+					"backup made %d%% additional progress, resetting retry",
+					int(math.Round(float64(100*madeProgress))),
+				)
+				prevTotalProg = currProg
+				r.Reset()
+			}
+		}
+	}
+
+	return nil, 0, roachpb.RowCount{}, 0, errors.Wrapf(
+		err, "backup exhausted retries in %s state", currState,
+	)
+}
+
+func getBackupRetryPolicies(execCfg *sql.ExecutorConfig) (initial, secondary retry.Options) {
+	initial = retry.Options{
+		MaxBackoff: time.Second,
+		MaxRetries: 5,
+	}
+	secondary = retry.Options{
+		MaxBackoff:  time.Second,
+		MaxDuration: 5 * time.Minute,
+	}
+
+	if execCfg.BackupRestoreTestingKnobs != nil {
+		if execCfg.BackupRestoreTestingKnobs.BackupDistSQLInitialRetryPolicy != nil {
+			initial = *execCfg.BackupRestoreTestingKnobs.BackupDistSQLInitialRetryPolicy
+		}
+		if execCfg.BackupRestoreTestingKnobs.BackupDistSQLSecondaryRetryPolicy != nil {
+			secondary = *execCfg.BackupRestoreTestingKnobs.BackupDistSQLSecondaryRetryPolicy
+		}
+	}
+	return initial, secondary
+}
+
 // backup exports a snapshot of every kv entry into ranged sstables.
 //
 // The output is an sstable per range with files in the following locations:
@@ -113,6 +246,9 @@ func filterSpans(includes []roachpb.Span, excludes []roachpb.Span) []roachpb.Spa
 //   - <dir> is given by the user and may be cloud storage
 //   - Each file contains data for a key range that doesn't overlap with any other
 //     file.
+//
+// - trackedProgress maps nodes to the fraction of backup spans that they have
+// completed.
 //
 // - numBackupInstances indicates the number of SQL instances that were used to
 // execute the backup.
@@ -124,7 +260,12 @@ func backup(
 	defaultStore cloud.ExternalStorage,
 	resumer *backupResumer,
 	backupManifest *backuppb.BackupManifest,
-) (_ roachpb.RowCount, numBackupInstances int, _ error) {
+) (
+	_ roachpb.RowCount,
+	trackedProgress map[execinfrapb.ComponentID]float32,
+	numBackupInstances int,
+	_ error,
+) {
 	resumerSpan := tracing.SpanFromContext(ctx)
 	var lastCheckpoint time.Time
 	encryption := details.EncryptionOptions
@@ -139,7 +280,7 @@ func backup(
 		ctx, execCtx, backupManifest, defaultStore, encryption, &kmsEnv,
 	)
 	if err != nil {
-		return roachpb.RowCount{}, 0, err
+		return roachpb.RowCount{}, nil, 0, err
 	}
 
 	// Subtract out any completed spans.
@@ -157,7 +298,7 @@ func backup(
 	dsp := execCtx.DistSQLPlanner()
 
 	if details.ExecutionLocality.NonEmpty() && details.StrictLocalityFiltering {
-		return roachpb.RowCount{}, 0, errors.AssertionFailedf("cannot set both ExecutionLocality and StrictLocalityFiltering")
+		return roachpb.RowCount{}, nil, 0, errors.AssertionFailedf("cannot set both ExecutionLocality and StrictLocalityFiltering")
 	}
 
 	locFilter := sql.SingleLocalityFilter(details.ExecutionLocality)
@@ -166,7 +307,7 @@ func backup(
 		for kv := range details.URIsByLocalityKV {
 			kvLoc := roachpb.Locality{}
 			if err := kvLoc.Set(kv); err != nil {
-				return roachpb.RowCount{}, 0, errors.Wrapf(err, "parsing locality from key value %s", kv)
+				return roachpb.RowCount{}, nil, 0, errors.Wrapf(err, "parsing locality from key value %s", kv)
 			}
 			locFilter = append(locFilter, kvLoc)
 		}
@@ -179,7 +320,7 @@ func backup(
 			locFilter,
 		)
 		if err != nil {
-			return roachpb.RowCount{}, 0, errors.Wrap(err, "failed to create locality filtering bulk oracle")
+			return roachpb.RowCount{}, nil, 0, errors.Wrap(err, "failed to create locality filtering bulk oracle")
 		}
 	}
 
@@ -189,7 +330,7 @@ func backup(
 		ctx, evalCtx, execCtx.ExecCfg(), oracle, locFilter, details.StrictLocalityFiltering,
 	)
 	if err != nil {
-		return roachpb.RowCount{}, 0, errors.Wrap(err, "failed to determine nodes on which to run")
+		return roachpb.RowCount{}, nil, 0, errors.Wrap(err, "failed to determine nodes on which to run")
 	}
 
 	job := resumer.job
@@ -214,7 +355,7 @@ func backup(
 		backupManifest.ClusterVersion.AtLeast(clusterversion.V24_1.Version()),
 	)
 	if err != nil {
-		return roachpb.RowCount{}, 0, err
+		return roachpb.RowCount{}, nil, 0, err
 	}
 
 	numBackupInstances = len(backupSpecs)
@@ -238,10 +379,11 @@ func backup(
 
 	// Create a channel with a little buffering, but plan on dropping if blocked.
 	perNodeProgressCh := make(chan map[execinfrapb.ComponentID]float32, len(backupSpecs))
+	trackedProgress = make(map[execinfrapb.ComponentID]float32)
 	storePerNodeProgressLoop := func(ctx context.Context) error {
 		// track the last progress per component, periodically flushing those that
 		// have changed to info rows.
-		current, persisted := make(map[execinfrapb.ComponentID]float32), make(map[execinfrapb.ComponentID]float32)
+		persisted := make(map[execinfrapb.ComponentID]float32)
 		lastSaved := timeutil.Now()
 
 		for {
@@ -251,15 +393,15 @@ func backup(
 					return nil
 				}
 				for k, v := range prog {
-					current[k] = v
+					trackedProgress[k] = v
 				}
 				if timeutil.Since(lastSaved) > time.Second*15 {
 					lastSaved = timeutil.Now()
 					updates := make(map[execinfrapb.ComponentID]float32)
-					for k := range current {
-						if current[k] != persisted[k] {
-							persisted[k] = current[k]
-							updates[k] = current[k]
+					for k := range trackedProgress {
+						if trackedProgress[k] != persisted[k] {
+							persisted[k] = trackedProgress[k]
+							updates[k] = trackedProgress[k]
 						}
 					}
 					jobsprofiler.StorePerNodeProcessorProgressFraction(
@@ -378,7 +520,7 @@ func backup(
 	testingKnobs := execCtx.ExecCfg().BackupRestoreTestingKnobs
 	if testingKnobs != nil && testingKnobs.RunBeforeBackupFlow != nil {
 		if err := testingKnobs.RunBeforeBackupFlow(); err != nil {
-			return roachpb.RowCount{}, 0, err
+			return roachpb.RowCount{}, nil, 0, err
 		}
 	}
 
@@ -390,21 +532,21 @@ func backup(
 		tracingAggLoop,
 		runBackup,
 	); err != nil {
-		return roachpb.RowCount{}, 0, err
+		return roachpb.RowCount{}, trackedProgress, numBackupInstances, err
 	}
 
 	if testingKnobs != nil && testingKnobs.RunAfterBackupFlow != nil {
 		if err := testingKnobs.RunAfterBackupFlow(); err != nil {
-			return roachpb.RowCount{}, 0, err
+			return roachpb.RowCount{}, trackedProgress, numBackupInstances, err
 		}
 	}
 
 	statsTable := getTableStatsForBackup(ctx, execCtx.ExecCfg().InternalDB.Executor(), execCtx.ExecCfg().Settings, backupManifest.Descriptors)
 	if err := backupinfo.WriteBackupMetadata(ctx, execCtx, defaultStore, details, &kmsEnv, backupManifest, statsTable); err != nil {
-		return roachpb.RowCount{}, 0, err
+		return roachpb.RowCount{}, trackedProgress, numBackupInstances, err
 	}
 
-	return backupManifest.EntryCounts, numBackupInstances, nil
+	return backupManifest.EntryCounts, trackedProgress, numBackupInstances, nil
 }
 
 func releaseProtectedTimestamp(
@@ -644,6 +786,9 @@ func (b *backupResumer) Resume(ctx context.Context, execCtx interface{}) error {
 	mem := p.ExecCfg().RootMemoryMonitor.MakeBoundAccount()
 	defer mem.Close(ctx)
 	var memSize int64
+	defer func() {
+		mem.Shrink(ctx, memSize)
+	}()
 
 	if backupManifest == nil {
 		backupManifest, memSize, err = b.readManifestOnResume(ctx, &mem, p.ExecCfg(), defaultStore,
@@ -653,91 +798,15 @@ func (b *backupResumer) Resume(ctx context.Context, execCtx interface{}) error {
 		}
 	}
 
-	// We retry on pretty generic failures -- any rpc error. If a worker node were
-	// to restart, it would produce this kind of error, but there may be other
-	// errors that are also rpc errors. Don't retry too aggressively.
-	retryOpts := retry.Options{
-		MaxBackoff: 1 * time.Second,
-		MaxRetries: 5,
-	}
-
-	if p.ExecCfg().BackupRestoreTestingKnobs != nil &&
-		p.ExecCfg().BackupRestoreTestingKnobs.BackupDistSQLRetryPolicy != nil {
-		retryOpts = *p.ExecCfg().BackupRestoreTestingKnobs.BackupDistSQLRetryPolicy
-	}
-
 	if err := p.ExecCfg().JobRegistry.CheckPausepoint("backup.before.flow"); err != nil {
 		return err
 	}
 
-	// We want to retry a backup if there are transient failures (i.e. worker nodes
-	// dying), so if we receive a retryable error, re-plan and retry the backup.
-	var res roachpb.RowCount
-	var lastProgress float32
-	var numBackupInstances int
-	for r := retry.StartWithCtx(ctx, retryOpts); r.Next(); {
-		res, numBackupInstances, err = backup(
-			ctx,
-			p,
-			details,
-			p.ExecCfg().Settings,
-			defaultStore,
-			b,
-			backupManifest,
-		)
-		if err == nil {
-			break
-		}
-
-		if joberror.IsPermanentBulkJobError(err) {
-			return errors.Wrap(err, "failed to run backup")
-		}
-
-		// If we are draining, it is unlikely we can start a
-		// new DistSQL flow. Exit with a retryable error so
-		// that another node can pick up the job.
-		if p.ExecCfg().JobRegistry.IsDraining() {
-			return jobs.MarkAsRetryJobError(errors.Wrapf(err, "job encountered retryable error on draining node"))
-		}
-
-		log.Dev.Warningf(ctx, "encountered retryable error: %+v", err)
-
-		// Reload the backup manifest to pick up any spans we may have completed on
-		// previous attempts.
-		var reloadBackupErr error
-		mem.Shrink(ctx, memSize)
-		backupManifest, memSize, reloadBackupErr = b.readManifestOnResume(ctx, &mem, p.ExecCfg(),
-			defaultStore, details, p.User(), &kmsEnv)
-		if reloadBackupErr != nil {
-			return errors.Wrap(reloadBackupErr, "could not reload backup manifest when retrying")
-		}
-		// Re-load the job in order to update our progress object, which
-		// may have been updated since the flow started.
-		reloadedJob, reloadErr := p.ExecCfg().JobRegistry.LoadClaimedJob(ctx, b.job.ID())
-		if reloadErr != nil {
-			if ctx.Err() != nil {
-				return ctx.Err()
-			}
-			log.Dev.Warningf(ctx, "BACKUP job %d could not reload job progress when retrying: %+v",
-				b.job.ID(), reloadErr)
-		} else {
-			curProgress := reloadedJob.FractionCompleted()
-			// If we made decent progress with the BACKUP, reset the last
-			// progress state.
-			if madeProgress := curProgress - lastProgress; madeProgress >= 0.01 {
-				log.Dev.Infof(ctx, "backport made %d%% progress, resetting retry duration", int(math.Round(float64(100*madeProgress))))
-				lastProgress = curProgress
-				r.Reset()
-			}
-		}
-	}
-
-	// We have exhausted retries without getting a "PermanentBulkJobError", but
-	// something must be wrong if we keep seeing errors so give up and fail to
-	// ensure that any alerting on failures is triggered and that any subsequent
-	// schedule runs are not blocked.
+	backupManifest, memSize, res, numBackupInstances, err := backupWithRetry(
+		ctx, p, &mem, &kmsEnv, details, p.ExecCfg().Settings, defaultStore, b, backupManifest,
+	)
 	if err != nil {
-		return errors.Wrap(err, "exhausted retries")
+		return err
 	}
 
 	var jobDetails jobspb.BackupDetails

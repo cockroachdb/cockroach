@@ -1613,36 +1613,38 @@ func TestBackupJobRetryReset(t *testing.T) {
 		syncutil.Mutex
 		retryCount int
 	}{}
-	waitForProgress := make(chan struct{})
-	maxRetries := 4
+	initialMaxRetries := 3
+	secondaryMaxRetries := 6
 
+	var runBeforeBackupFlow func() error
+	var runAfterBackupFlow func() error
 	params := base.TestClusterArgs{}
 	knobs := base.TestingKnobs{
 		BackupRestore: &sql.BackupRestoreTestingKnobs{
-			BackupDistSQLRetryPolicy: &retry.Options{
+			EnableBackupRetriesUnderTest: true,
+			BackupDistSQLInitialRetryPolicy: &retry.Options{
 				InitialBackoff: time.Microsecond,
 				Multiplier:     2,
 				MaxBackoff:     2 * time.Microsecond,
-				MaxRetries:     maxRetries,
+				MaxRetries:     initialMaxRetries,
+			},
+			BackupDistSQLSecondaryRetryPolicy: &retry.Options{
+				InitialBackoff: time.Microsecond,
+				Multiplier:     2,
+				MaxBackoff:     2 * time.Microsecond,
+				MaxRetries:     secondaryMaxRetries,
 			},
 			RunBeforeBackupFlow: func() error {
-				mu.Lock()
-				defer mu.Unlock()
-				if mu.retryCount >= maxRetries-1 {
-					return nil
+				if runBeforeBackupFlow != nil {
+					return runBeforeBackupFlow()
 				}
-				mu.retryCount++
-				// Send a retryable error
-				return syscall.ECONNRESET
+				return nil
 			},
 			RunAfterBackupFlow: func() error {
-				mu.Lock()
-				defer mu.Unlock()
-				// Wait for at least 1% backup job progress, then continue sending retryable errors
-				<-waitForProgress
-				mu.retryCount++
-				// Send a retryable error
-				return syscall.ECONNRESET
+				if runAfterBackupFlow != nil {
+					return runAfterBackupFlow()
+				}
+				return nil
 			},
 		},
 		JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
@@ -1654,19 +1656,66 @@ func TestBackupJobRetryReset(t *testing.T) {
 		sqlDB.Exec(t, fmt.Sprintf(`CREATE TABLE %s AS (SELECT * FROM bank)`, "bank"+strconv.Itoa(i)))
 	}
 	defer cleanupFn()
-	var backupJobId jobspb.JobID
-	sqlDB.QueryRow(t, `BACKUP DATABASE data INTO $1 WITH DETACHED`, localFoo).Scan(&backupJobId)
-	testutils.SucceedsSoon(t, func() error {
-		jobProgress := jobutils.GetJobProgress(t, sqlDB, backupJobId)
-		if jobProgress.GetFractionCompleted() < 0.01 {
-			return errors.Newf("backup has not made progress yet")
-		}
-		return nil
-	})
-	close(waitForProgress)
-	// Job will fail with exhausted retries: connection reset by peer
-	jobutils.WaitForJobToFail(t, sqlDB, backupJobId)
-	require.Greater(t, mu.retryCount, maxRetries+2)
+
+	testcases := []struct {
+		name             string
+		beforeFlow       func() error
+		afterFlow        func() error
+		expectedAttempts int
+	}{
+		{
+			name: "fail before any progress is made on nodes",
+			beforeFlow: func() error {
+				mu.Lock()
+				defer mu.Unlock()
+				mu.retryCount++
+				return syscall.ECONNRESET
+			},
+			expectedAttempts: initialMaxRetries + 1,
+		},
+		{
+			name: "fail after all nodes have reported progress",
+			beforeFlow: func() error {
+				mu.Lock()
+				defer mu.Unlock()
+				if mu.retryCount >= initialMaxRetries {
+					return nil
+				}
+				mu.retryCount++
+				return syscall.ECONNRESET
+			},
+			afterFlow: func() error {
+				mu.Lock()
+				defer mu.Unlock()
+				mu.retryCount++
+				return syscall.ECONNRESET
+			},
+			// We include 1 additional attempt because the job will make progress,
+			// which adds one additional reset.
+			expectedAttempts: initialMaxRetries + secondaryMaxRetries + 2 + 1,
+		},
+	}
+
+	for _, tc := range testcases {
+		t.Run(tc.name, func(t *testing.T) {
+			// Reset test environment before each test case
+			defer func() {
+				mu.Lock()
+				defer mu.Unlock()
+				mu.retryCount = 0
+				runBeforeBackupFlow = nil
+				runAfterBackupFlow = nil
+			}()
+
+			runBeforeBackupFlow = tc.beforeFlow
+			runAfterBackupFlow = tc.afterFlow
+			var jobID jobspb.JobID
+			sqlDB.QueryRow(t, `BACKUP DATABASE data INTO $1 WITH DETACHED`, localFoo).Scan(&jobID)
+			jobutils.WaitForJobToFail(t, sqlDB, jobID)
+
+			require.Equal(t, tc.expectedAttempts, mu.retryCount, "unexpected number of attempts")
+		})
+	}
 }
 
 func createAndWaitForJob(
@@ -7510,9 +7559,9 @@ func TestBackupExportRequestTimeout(t *testing.T) {
 	allowRequest := make(chan struct{})
 	defer close(allowRequest)
 
-	params := base.TestClusterArgs{}
 	dir, dirCleanupFn := testutils.TempDir(t)
 	defer dirCleanupFn()
+	params := base.TestClusterArgs{}
 	params.ServerArgs.ExternalIODir = dir
 	const numAccounts = 10
 	ctx := context.Background()
@@ -7540,6 +7589,7 @@ func TestBackupExportRequestTimeout(t *testing.T) {
 	// export request but since the intent was laid by a high priority txn it
 	// should hang. The timeout should save us in this case.
 	_, err := sqlSessions[1].DB.ExecContext(ctx, "BACKUP TABLE data.bank INTO 'nodelocal://1/timeout'")
+	require.Error(t, err)
 	require.Regexp(t,
 		`running distributed backup to export.*/Table/\d+/.*\: context deadline exceeded`,
 		err.Error())
