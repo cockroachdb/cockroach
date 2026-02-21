@@ -398,7 +398,6 @@ func TestOverflowRestart(t *testing.T) {
 	ctx := context.Background()
 	s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{
 		DefaultTestTenant: base.TestIsSpecificToStorageLayerAndNeedsASystemTenant,
-		DefaultDRPCOption: base.TestDRPCDisabled,
 	})
 	defer s.Stopper().Stop(ctx)
 
