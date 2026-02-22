@@ -9,7 +9,6 @@ import (
 	gosql "database/sql"
 	"fmt"
 	"strings"
-	"time"
 
 	"github.com/cockroachdb/errors"
 )
@@ -22,7 +21,7 @@ type InspectResult struct {
 	Table      string
 	PrimaryKey string
 	JobID      int64
-	Aost       time.Time
+	Aost       string
 	Details    string
 }
 
