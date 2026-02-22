@@ -958,7 +958,20 @@ func RunCommitTrigger(
 		return res, nil
 	}
 	if mt := ct.GetMergeTrigger(); mt != nil {
-		res, err := mergeTrigger(ctx, rec, batch, ms, mt, txn.WriteTimestamp)
+		lhsHint, err := MakeStateLoader(rec).LoadGCHint(ctx, batch)
+		if err != nil {
+			return result.Result{}, maybeWrapReplicaCorruptionError(
+				ctx, errors.Wrap(err, "unable to load LHS GCHint"),
+			)
+		}
+		rhsHint, err := kvstorage.MakeStateLoader(mt.RightDesc.RangeID).LoadGCHint(ctx, batch)
+		if err != nil {
+			return result.Result{}, maybeWrapReplicaCorruptionError(
+				ctx, errors.Wrap(err, "unable to load RHS GCHint"),
+			)
+		}
+		in := MergeTriggerHelperInput{LHSGCHint: lhsHint, RHSGCHint: rhsHint}
+		res, err := mergeTrigger(ctx, rec, batch, ms, mt, txn.WriteTimestamp, in)
 		if err != nil {
 			return result.Result{}, maybeWrapReplicaCorruptionError(ctx, err)
 		}
@@ -1254,6 +1267,20 @@ func splitTrigger(
 	return splitTriggerHelper(ctx, rec, batch, in, h, split, ts)
 }
 
+// TestingMergeTrigger is a wrapper around mergeTrigger that is exported for
+// testing purposes.
+func TestingMergeTrigger(
+	ctx context.Context,
+	rec EvalContext,
+	batch storage.Batch,
+	ms *enginepb.MVCCStats,
+	merge *roachpb.MergeTrigger,
+	ts hlc.Timestamp,
+	in MergeTriggerHelperInput,
+) (result.Result, error) {
+	return mergeTrigger(ctx, rec, batch, ms, merge, ts, in)
+}
+
 // TestingSplitTrigger is a wrapper around splitTrigger that is exported for
 // testing purposes.
 func TestingSplitTrigger(
@@ -1324,6 +1351,12 @@ type SplitTriggerHelperInput struct {
 	GCThreshold    *hlc.Timestamp
 	GCHint         *roachpb.GCHint
 	ReplicaVersion roachpb.Version
+}
+
+// MergeTriggerHelperInput contains metadata required by the mergeTrigger.
+type MergeTriggerHelperInput struct {
+	LHSGCHint *roachpb.GCHint
+	RHSGCHint *roachpb.GCHint
 }
 
 // splitTriggerHelper continues the work begun by splitTrigger, but has a
@@ -1586,6 +1619,7 @@ func mergeTrigger(
 	ms *enginepb.MVCCStats,
 	merge *roachpb.MergeTrigger,
 	ts hlc.Timestamp,
+	in MergeTriggerHelperInput,
 ) (result.Result, error) {
 	desc := rec.Desc()
 	if !bytes.Equal(desc.StartKey, merge.LeftDesc.StartKey) {
@@ -1672,21 +1706,12 @@ func mergeTrigger(
 	pd.Replicated.DoTimelyApplicationToAllReplicas = true
 
 	{
-		// If we have GC hints populated that means we are trying to perform
-		// optimized garbage removal in future.
-		// We will try to merge both hints if possible and set new hint on LHS.
-		lhsLoader := MakeStateLoader(rec)
-		lhsHint, err := lhsLoader.LoadGCHint(ctx, batch)
-		if err != nil {
-			return result.Result{}, err
-		}
-		rhsLoader := kvstorage.MakeStateLoader(merge.RightDesc.RangeID)
-		rhsHint, err := rhsLoader.LoadGCHint(ctx, batch)
-		if err != nil {
-			return result.Result{}, err
-		}
+		// Merge the GC hints from both sides. If the merged hint differs from the
+		// LHS hint, persist the updated hint.
+		lhsHint := in.LHSGCHint
+		rhsHint := in.RHSGCHint
 		if lhsHint.Merge(rhsHint, rec.GetMVCCStats().HasNoUserData(), merge.RightMVCCStats.HasNoUserData()) {
-			if err := lhsLoader.SetGCHint(ctx, batch, ms, lhsHint); err != nil {
+			if err := MakeStateLoader(rec).SetGCHint(ctx, batch, ms, lhsHint); err != nil {
 				return result.Result{}, err
 			}
 			pd.Replicated.State = &kvserverpb.ReplicaState{
