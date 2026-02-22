@@ -258,6 +258,12 @@ message TransactionRetryError {
   // the RefreshFailedError does not contain conflicting transaction
   // information, this field is unset.
   optional storage.enginepb.TxnMeta conflicting_txn = 4;
+
+  // The key that the transaction conflicted on. This is distinct from the
+  // conflicting_txn.key field, which is the anchor key of the conflicting
+  // transaction (used for transaction record placement), not the key where the
+  // actual conflict occurred. This field is bubbled up from a RefreshFailedError.
+  optional bytes conflict_key = 5 [(gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.Key"];
 }
 
 // A TransactionStatusError indicates that the transaction status is
@@ -565,6 +571,12 @@ message TransactionRetryWithProtoRefreshError {
   // transaction that caused the refresh to fail. In all other cases this field
   // is unset
   optional storage.enginepb.TxnMeta conflicting_txn = 6;
+
+  // The key that the transaction conflicted on. This is distinct from the
+  // conflicting_txn.key field, which is the anchor key of the conflicting
+  // transaction (used for transaction record placement), not the key where the
+  // actual conflict occurred. This field is bubbled up from a RefreshFailedError.
+  optional bytes conflict_key = 7 [(gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.Key"];
 }
 
 // TxnAlreadyEncounteredErrorError indicates that an operation tried to use a
