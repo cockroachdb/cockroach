@@ -531,9 +531,11 @@ CREATE TABLE system.statement_diagnostics(
     bundle_chunks              INT ARRAY,
     error                      STRING,
     transaction_diagnostics_id INT8,
+    request_id                 INT8,
     CONSTRAINT "primary" PRIMARY KEY (id),
-    FAMILY "primary" (id, statement_fingerprint, statement, collected_at, trace, bundle_chunks, error, transaction_diagnostics_id),
-    INDEX transaction_diagnostics_id_idx (transaction_diagnostics_id)
+    FAMILY "primary" (id, statement_fingerprint, statement, collected_at, trace, bundle_chunks, error, transaction_diagnostics_id, request_id),
+    INDEX transaction_diagnostics_id_idx (transaction_diagnostics_id),
+    INDEX request_id_idx (request_id)
 );`
 
 	TransactionDiagnosticsRequestsTableSchema = `
@@ -1316,7 +1318,7 @@ const SystemDatabaseName = catconstants.SystemDatabaseName
 // release version).
 //
 // NB: Don't set this to clusterversion.Latest; use a specific version instead.
-var SystemDatabaseSchemaBootstrapVersion = clusterversion.V26_2_TriggerBackrefRepair.Version()
+var SystemDatabaseSchemaBootstrapVersion = clusterversion.V26_2_StmtDiagnosticsRequestID.Version()
 
 // MakeSystemDatabaseDesc constructs a copy of the system database
 // descriptor.
@@ -2772,13 +2774,14 @@ var (
 				{Name: "bundle_chunks", ID: 6, Type: types.IntArray, Nullable: true},
 				{Name: "error", ID: 7, Type: types.String, Nullable: true},
 				{Name: "transaction_diagnostics_id", ID: 8, Type: types.Int, Nullable: true},
+				{Name: "request_id", ID: 9, Type: types.Int, Nullable: true},
 			},
 			[]descpb.ColumnFamilyDescriptor{
 				{
 					Name: "primary",
 					ColumnNames: []string{"id", "statement_fingerprint", "statement",
-						"collected_at", "trace", "bundle_chunks", "error", "transaction_diagnostics_id"},
-					ColumnIDs: []descpb.ColumnID{1, 2, 3, 4, 5, 6, 7, 8},
+						"collected_at", "trace", "bundle_chunks", "error", "transaction_diagnostics_id", "request_id"},
+					ColumnIDs: []descpb.ColumnID{1, 2, 3, 4, 5, 6, 7, 8, 9},
 				},
 			},
 			pk("id"),
@@ -2790,6 +2793,17 @@ var (
 				KeyColumnNames:      []string{"transaction_diagnostics_id"},
 				KeyColumnDirections: []catenumpb.IndexColumn_Direction{catenumpb.IndexColumn_ASC},
 				KeyColumnIDs:        []descpb.ColumnID{8},
+				KeySuffixColumnIDs:  []descpb.ColumnID{1},
+				Version:             descpb.StrictIndexColumnIDGuaranteesVersion,
+			},
+			// Index for retrieving all bundles for a statement diagnostics request.
+			descpb.IndexDescriptor{
+				Name:                "request_id_idx",
+				ID:                  3,
+				Unique:              false,
+				KeyColumnNames:      []string{"request_id"},
+				KeyColumnDirections: []catenumpb.IndexColumn_Direction{catenumpb.IndexColumn_ASC},
+				KeyColumnIDs:        []descpb.ColumnID{9},
 				KeySuffixColumnIDs:  []descpb.ColumnID{1},
 				Version:             descpb.StrictIndexColumnIDGuaranteesVersion,
 			},
