@@ -317,7 +317,7 @@ func makeIndexDescriptor(
 		params.p.SemaCtx(),
 		params.EvalContext(),
 		n.StorageParams,
-		&indexstorageparam.Setter{IndexDesc: &indexDesc},
+		&indexstorageparam.Setter{IndexDesc: &indexDesc, NewObject: true},
 	); err != nil {
 		return nil, err
 	}

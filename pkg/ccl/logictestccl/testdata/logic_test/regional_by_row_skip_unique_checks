@@ -1,0 +1,75 @@
+# LogicTest: multiregion-9node-3region-3azs
+
+# Test the skip_unique_checks storage parameter on UNIQUE indexes in a
+# Regional By Row table. This creates a UNIQUE WITHOUT INDEX constraint
+# since the region column is implicitly added to the beginning of the index.
+
+statement ok
+CREATE DATABASE multi_region_test_db PRIMARY REGION "us-east-1" REGIONS "ca-central-1", "ap-southeast-2"
+
+statement ok
+USE multi_region_test_db
+
+statement ok
+CREATE TABLE t (
+  a INT PRIMARY KEY,
+  b INT,
+  UNIQUE INDEX idx_b (b)
+) LOCALITY REGIONAL BY ROW
+
+# Without the storage parameter, unique checks are planned for both indexes.
+query T
+SELECT DISTINCT regexp_extract(info, 'table:\s+\w+@([\w_]+)') AS index_name
+FROM [EXPLAIN INSERT INTO t VALUES (1, 10), (2, 20)]
+WHERE info ~ 'table:';
+----
+t_pkey
+idx_b
+
+# Set the storage parameter to skip unique checks on the secondary index.
+statement ok
+ALTER INDEX t@idx_b SET (skip_unique_checks = true)
+
+# Now unique checks should not be planned for the secondary.
+query T
+SELECT DISTINCT regexp_extract(info, 'table:\s+\w+@([\w_]+)') AS index_name
+FROM [EXPLAIN INSERT INTO t VALUES (3, 30), (4, 40)]
+WHERE info ~ 'table:';
+----
+t_pkey
+
+# Set the storage parameter to skip unique checks on the primary index.
+statement ok
+ALTER INDEX t@t_pkey SET (skip_unique_checks = true)
+
+# Now unique checks should not be planned for the primary either.
+query T
+SELECT DISTINCT regexp_extract(info, 'table:\s+\w+@([\w_]+)') AS index_name
+FROM [EXPLAIN INSERT INTO t VALUES (3, 30), (4, 40)]
+WHERE info ~ 'table:';
+----
+
+# Reset the parameter for the secondary.
+statement ok
+ALTER INDEX t@idx_b RESET (skip_unique_checks)
+
+# Checks should be planned again for the secondary only.
+query T
+SELECT DISTINCT regexp_extract(info, 'table:\s+\w+@([\w_]+)') AS index_name
+FROM [EXPLAIN INSERT INTO t VALUES (5, 50), (6, 60)]
+WHERE info ~ 'table:';
+----
+idx_b
+
+# Reset the parameter for the primary.
+statement ok
+ALTER INDEX t@t_pkey RESET (skip_unique_checks)
+
+# Checks should be planned again for both indexes.
+query T
+SELECT DISTINCT regexp_extract(info, 'table:\s+\w+@([\w_]+)') AS index_name
+FROM [EXPLAIN INSERT INTO t VALUES (5, 50), (6, 60)]
+WHERE info ~ 'table:';
+----
+t_pkey
+idx_b

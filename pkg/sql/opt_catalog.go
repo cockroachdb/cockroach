@@ -1158,6 +1158,11 @@ func newOptTable(
 				partitionColumn := catalog.FindColumnByID(desc, idx.GetKeyColumnID(0 /* columnOrdinal */))
 				canUseTombstones := idx.ImplicitPartitioningColumnCount() == 1 &&
 					partitionColumn.GetType().Family() == types.EnumFamily
+
+				// If the skip_unique_checks storage parameter is set on this index, we
+				// can elide uniqueness checks for this constraint.
+				canElideCheck := idx.IndexDesc().SkipUniqueChecks
+
 				ot.uniqueConstraints = append(ot.uniqueConstraints, optUniqueConstraint{
 					name:             idx.GetName(),
 					table:            ot.ID(),
@@ -1169,18 +1174,19 @@ func newOptTable(
 					predicate:             idx.GetPredicate(),
 					// TODO(rytaft): will we ever support an unvalidated unique constraint
 					// here?
-					validity: descpb.ConstraintValidity_Validated,
+					validity:            descpb.ConstraintValidity_Validated,
+					canElideUniqueCheck: canElideCheck,
 				})
 			} else if idx.IsSharded() {
 				// Add unique constraint for hash sharded indexes.
 				ot.uniqueConstraints = append(ot.uniqueConstraints, optUniqueConstraint{
-					name:                               idx.GetName(),
-					table:                              ot.ID(),
-					columns:                            idx.IndexDesc().KeyColumnIDs[idx.IndexDesc().ExplicitColumnStartIdx():],
-					withoutIndex:                       true,
-					predicate:                          idx.GetPredicate(),
-					validity:                           descpb.ConstraintValidity_Validated,
-					uniquenessGuaranteedByAnotherIndex: true,
+					name:                idx.GetName(),
+					table:               ot.ID(),
+					columns:             idx.IndexDesc().KeyColumnIDs[idx.IndexDesc().ExplicitColumnStartIdx():],
+					withoutIndex:        true,
+					predicate:           idx.GetPredicate(),
+					validity:            descpb.ConstraintValidity_Validated,
+					canElideUniqueCheck: true,
 				})
 			}
 		}
@@ -2242,7 +2248,7 @@ type optUniqueConstraint struct {
 	tombstoneIndexOrdinal cat.IndexOrdinal
 	validity              descpb.ConstraintValidity
 
-	uniquenessGuaranteedByAnotherIndex bool
+	canElideUniqueCheck bool
 }
 
 var _ cat.UniqueConstraint = &optUniqueConstraint{}
@@ -2300,12 +2306,9 @@ func (u *optUniqueConstraint) Validated() bool {
 	return u.validity == descpb.ConstraintValidity_Validated
 }
 
-// UniquenessGuaranteedByAnotherIndex is part of the cat.UniqueConstraint
-// interface. It is a hack to make unique hash sharded index work before issue
-// #75070 is resolved. Be sure to remove `ignoreUniquenessCheck` field from
-// `optUniqueConstraint` struct when dropping this hack.
-func (u *optUniqueConstraint) UniquenessGuaranteedByAnotherIndex() bool {
-	return u.uniquenessGuaranteedByAnotherIndex
+// CanElideUniqueCheck is part of the cat.UniqueConstraint interface.
+func (u *optUniqueConstraint) CanElideUniqueCheck() bool {
+	return u.canElideUniqueCheck
 }
 
 // optForeignKeyConstraint implements cat.ForeignKeyConstraint and represents a

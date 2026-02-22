@@ -8001,7 +8001,7 @@ func applyGeoindexConfigStorageParams(
 		&semaCtx,
 		evalCtx,
 		stmt.AST.(*tree.CreateIndex).StorageParams,
-		&indexstorageparam.Setter{IndexDesc: indexDesc},
+		&indexstorageparam.Setter{IndexDesc: indexDesc, NewObject: true},
 	); err != nil {
 		return geopb.Config{}, err
 	}

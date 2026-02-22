@@ -1055,6 +1055,7 @@ func maybeApplyStorageParameters(b BuildCtx, storageParams tree.StorageParams, i
 	}
 	storageParamSetter := &indexstorageparam.Setter{
 		IndexDesc: dummyIndexDesc,
+		NewObject: true,
 	}
 	err := storageparam.Set(b, b.SemaCtx(), b.EvalCtx(), storageParams, storageParamSetter)
 	if err != nil {
