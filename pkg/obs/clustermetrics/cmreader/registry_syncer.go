@@ -10,6 +10,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangefeed"
+	"github.com/cockroachdb/cockroach/pkg/obs/clustermetrics/cmmetrics"
 	"github.com/cockroachdb/cockroach/pkg/obs/clustermetrics/cmwatcher"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
@@ -24,7 +25,7 @@ import (
 
 type registrySyncer struct {
 	tableWatcher *cmwatcher.Watcher
-	registry     *registry
+	registry     *cmmetrics.Registry
 	stopper      *stop.Stopper
 	mu           struct {
 		syncutil.Mutex
@@ -34,7 +35,11 @@ type registrySyncer struct {
 }
 
 func newRegistrySyncer(
-	reg *registry, codec keys.SQLCodec, clock *hlc.Clock, f *rangefeed.Factory, stopper *stop.Stopper,
+	reg *cmmetrics.Registry,
+	codec keys.SQLCodec,
+	clock *hlc.Clock,
+	f *rangefeed.Factory,
+	stopper *stop.Stopper,
 ) *registrySyncer {
 	s := &registrySyncer{
 		registry: reg,
@@ -180,7 +185,7 @@ func (s *registrySyncer) reloadAllMetrics(
 // the server's cluster metric registry.
 func Start(ctx context.Context, config *sql.ExecutorConfig) error {
 	rr := config.MetricsRecorder.ClusterMetricRegistry(config.Codec.TenantID)
-	if reg, ok := rr.(*registry); ok {
+	if reg, ok := rr.(*cmmetrics.Registry); ok {
 		return newRegistrySyncer(
 			reg,
 			config.Codec,
@@ -190,8 +195,8 @@ func Start(ctx context.Context, config *sql.ExecutorConfig) error {
 	}
 
 	if buildutil.CrdbTestBuild {
-		panic("expected cmreader.registry type")
+		panic("expected cmmetrics.Registry type")
 	} else {
-		return errors.New("expected cmreader.registry type")
+		return errors.New("expected cmmetrics.Registry type")
 	}
 }

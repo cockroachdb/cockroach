@@ -8,43 +8,43 @@ package cmwriter
 import (
 	"context"
 	"math/rand"
+	"reflect"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/obs/clustermetrics"
+	"github.com/cockroachdb/cockroach/pkg/obs/clustermetrics/cmmetrics"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
+	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
 
 // MetricStore abstracts the storage backend for cluster metrics.
 type MetricStore interface {
 	// Write writes the given metrics to storage.
-	Write(ctx context.Context, metrics []clustermetrics.Metric) error
+	Write(ctx context.Context, metrics []cmmetrics.WritableMetric) error
 }
 
 // Writer manages registered cluster metrics and periodically flushes their
-// values to a MetricStore. Uses an internal metric.Registry for uniform
-// registration and iteration (same pattern as tsdb/prometheus).
+// values to a MetricStore.
 type Writer struct {
-	store    MetricStore
-	registry *metric.Registry
-	metrics  *WriterMetrics
+	store   MetricStore
+	metrics *WriterMetrics
+	mu      struct {
+		syncutil.Mutex
+		tracked map[string]metric.Iterable
+	}
 }
 
-// NewWriter creates a new Writer backed by an SQLStore. The writer creates
-// its own internal registry and operational metrics.
+// NewWriter creates a new Writer backed by an SQLStore.
 func NewWriter(db isql.DB, sqlIDContainer *base.SQLIDContainer, st *cluster.Settings) *Writer {
 	store := newSQLStore(db, sqlIDContainer, st)
-	return &Writer{
-		store:    store,
-		registry: metric.NewRegistry(),
-		metrics:  NewWriterMetrics(),
-	}
+	return NewWriterWithStore(store, NewWriterMetrics())
 }
 
 // NewWriterWithStore creates a new Writer with the given MetricStore.
@@ -53,22 +53,54 @@ func NewWriterWithStore(store MetricStore, metrics *WriterMetrics) *Writer {
 	if metrics == nil {
 		metrics = NewWriterMetrics()
 	}
-	return &Writer{
-		store:    store,
-		registry: metric.NewRegistry(),
-		metrics:  metrics,
+	w := &Writer{
+		store:   store,
+		metrics: metrics,
 	}
+	w.mu.tracked = make(map[string]metric.Iterable)
+	return w
 }
 
-// AddMetric registers a metric with the Writer's internal registry.
+// AddMetric registers a metric with the Writer. Overwrites any
+// previously registered metric with the same name. Only metrics
+// that implement ClusterMetric are accepted; non-cluster metrics
+// are rejected with a fatal error in test builds and a warning
+// in production.
 func (w *Writer) AddMetric(m metric.Iterable) {
-	w.registry.AddMetric(m)
+	if _, ok := m.(cmmetrics.ClusterMetric); !ok {
+		name := m.GetName(false /* useStaticLabels */)
+		if buildutil.CrdbTestBuild {
+			log.Dev.Fatalf(context.TODO(),
+				"non-cluster metric %s (%T) cannot be added to the cluster metrics writer",
+				name, m)
+		}
+		log.Dev.Warningf(context.TODO(),
+			"skipping non-cluster metric %s (%T)", name, m)
+		return
+	}
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	w.mu.tracked[m.GetName(false /* useStaticLabels */)] = m
 }
 
-// AddMetricStruct registers all metrics in the struct with the Writer's
-// internal registry.
+// AddMetricStruct registers all metric.Iterable fields in the given
+// struct with the Writer.
 func (w *Writer) AddMetricStruct(s interface{}) {
-	w.registry.AddMetricStruct(s)
+	v := reflect.ValueOf(s)
+	if v.Kind() == reflect.Ptr {
+		v = v.Elem()
+	}
+	for i := 0; i < v.NumField(); i++ {
+		field := v.Field(i)
+		if !field.CanInterface() {
+			continue
+		}
+		if m, ok := field.Interface().(metric.Iterable); ok {
+			w.AddMetric(m)
+		} else if ms, ok := field.Interface().(metric.Struct); ok {
+			w.AddMetricStruct(ms)
+		}
+	}
 }
 
 // Metrics returns the operational metrics for the Writer. These should be
@@ -77,30 +109,60 @@ func (w *Writer) Metrics() *WriterMetrics {
 	return w.metrics
 }
 
+// resettable is satisfied by both scalar Metric and MetricVec types.
+type resettable interface {
+	Reset()
+}
+
+// collectDirty returns the dirty metrics and their resetters under the lock.
+func (w *Writer) collectDirty(
+	ctx context.Context,
+) (toWrite []cmmetrics.WritableMetric, toReset []resettable) {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	for _, tracked := range w.mu.tracked {
+		tracked.Inspect(func(val interface{}) {
+			switch m := val.(type) {
+			case cmmetrics.Metric:
+				if m.IsDirty() {
+					toWrite = append(toWrite, m)
+					toReset = append(toReset, m)
+				}
+			case cmmetrics.MetricVec:
+				shouldReset := false
+				m.Each(func(snap cmmetrics.WritableMetric) {
+					toWrite = append(toWrite, snap)
+					shouldReset = true
+				})
+				if shouldReset {
+					toReset = append(toReset, m)
+				}
+			default:
+				log.Ops.Warningf(ctx,
+					"cannot flush non-cluster-metric of type %T", val)
+			}
+		})
+	}
+	return toWrite, toReset
+}
+
 // Flush triggers an immediate flush of all registered metrics to the store.
 // Only metrics that have changed since the last flush are written.
-// Iterates via registry.Each() to collect dirty metrics.
+//
+// Scalar metrics (Metric) are collected when their dirty flag is set.
+// Vector metrics (MetricVec) yield read-only snapshots of all children;
+// the parent vec is cleared after a successful write so only values set
+// since the last flush appear next time.
 func (w *Writer) Flush(ctx context.Context) {
 	startTime := timeutil.Now()
-	var dirty []clustermetrics.Metric
+	toWrite, toReset := w.collectDirty(ctx)
 
-	// Collect dirty metrics to be written.
-	w.registry.Each(func(_ string, val interface{}) {
-		if m, ok := val.(clustermetrics.Metric); ok {
-			if m.IsDirty() {
-				dirty = append(dirty, m)
-			}
-		} else {
-			log.Ops.Warningf(ctx, "cannot flush non-cluster-metric of type %T", val)
-		}
-	})
-
-	if len(dirty) == 0 {
+	if len(toWrite) == 0 {
 		return
 	}
 
 	// Write the metrics to the downstream store.
-	err := w.store.Write(ctx, dirty)
+	err := w.store.Write(ctx, toWrite)
 
 	// Record meta metrics.
 	elapsed := timeutil.Since(startTime)
@@ -111,11 +173,11 @@ func (w *Writer) Flush(ctx context.Context) {
 		log.Ops.Warningf(ctx, "failed to flush cluster metrics: %v", err)
 		return
 	}
-	w.metrics.MetricsWritten.Inc(int64(len(dirty)))
+	w.metrics.MetricsWritten.Inc(int64(len(toWrite)))
 
 	// Reset metrics after successful write.
-	for _, m := range dirty {
-		m.Reset()
+	for _, r := range toReset {
+		r.Reset()
 	}
 }
 

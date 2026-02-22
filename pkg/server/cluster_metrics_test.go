@@ -10,7 +10,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/obs/clustermetrics"
+	"github.com/cockroachdb/cockroach/pkg/obs/clustermetrics/cmwriter"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -37,10 +37,10 @@ func TestClusterMetricsWriterIntegration(t *testing.T) {
 
 	// Create and register test metrics up front so each table-driven
 	// case can reference its metric via closure.
-	counter := clustermetrics.NewCounter(metric.Metadata{Name: "test.int.counter"})
-	gauge := clustermetrics.NewGauge(metric.Metadata{Name: "test.int.gauge"})
-	counterAccum := clustermetrics.NewCounter(metric.Metadata{Name: "test.int.counter.accum"})
-	gaugeUpdate := clustermetrics.NewGauge(metric.Metadata{Name: "test.int.gauge.update"})
+	counter := cmwriter.NewCounter(metric.Metadata{Name: "test.int.counter"})
+	gauge := cmwriter.NewGauge(metric.Metadata{Name: "test.int.gauge"})
+	counterAccum := cmwriter.NewCounter(metric.Metadata{Name: "test.int.counter.accum"})
+	gaugeUpdate := cmwriter.NewGauge(metric.Metadata{Name: "test.int.gauge.update"})
 
 	writer.AddMetric(counter)
 	writer.AddMetric(gauge)
@@ -60,7 +60,7 @@ func TestClusterMetricsWriterIntegration(t *testing.T) {
 	}{{
 		name:       "counter persisted to system table",
 		metricName: "test.int.counter",
-		wantType:   "counter",
+		wantType:   "COUNTER",
 		flushes: []flushOp{{
 			before: func() { counter.Inc(42) },
 			want:   42,
@@ -68,7 +68,7 @@ func TestClusterMetricsWriterIntegration(t *testing.T) {
 	}, {
 		name:       "gauge persisted to system table",
 		metricName: "test.int.gauge",
-		wantType:   "gauge",
+		wantType:   "GAUGE",
 		flushes: []flushOp{{
 			before: func() { gauge.Update(99) },
 			want:   99,
@@ -76,7 +76,7 @@ func TestClusterMetricsWriterIntegration(t *testing.T) {
 	}, {
 		name:       "counter accumulates across flushes",
 		metricName: "test.int.counter.accum",
-		wantType:   "counter",
+		wantType:   "COUNTER",
 		flushes: []flushOp{{
 			before: func() { counterAccum.Inc(10) },
 			want:   10,
@@ -87,7 +87,7 @@ func TestClusterMetricsWriterIntegration(t *testing.T) {
 	}, {
 		name:       "gauge updates in place",
 		metricName: "test.int.gauge.update",
-		wantType:   "gauge",
+		wantType:   "GAUGE",
 		flushes: []flushOp{{
 			before: func() { gaugeUpdate.Update(100) },
 			want:   100,
@@ -131,12 +131,12 @@ func TestClusterMetricsWriterIntegration(t *testing.T) {
 
 	t.Run("struct registration and flush", func(t *testing.T) {
 		type appMetrics struct {
-			Requests *clustermetrics.Counter
-			Latency  *clustermetrics.Gauge
+			Requests *cmwriter.Counter
+			Latency  *cmwriter.Gauge
 		}
 		m := &appMetrics{
-			Requests: clustermetrics.NewCounter(metric.Metadata{Name: "test.int.requests"}),
-			Latency:  clustermetrics.NewGauge(metric.Metadata{Name: "test.int.latency"}),
+			Requests: cmwriter.NewCounter(metric.Metadata{Name: "test.int.requests"}),
+			Latency:  cmwriter.NewGauge(metric.Metadata{Name: "test.int.latency"}),
 		}
 		writer.AddMetricStruct(m)
 
