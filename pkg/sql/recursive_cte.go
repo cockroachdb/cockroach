@@ -29,6 +29,7 @@ import (
 type recursiveCTENode struct {
 	// The input plan node is for the initial query.
 	singleInputPlanNode
+	nonReusablePlanNode
 
 	// forwarder allows propagating the ProducerMetadata towards the
 	// DistSQLReceiver.

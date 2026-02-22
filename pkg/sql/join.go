@@ -15,6 +15,8 @@ import (
 
 // joinNode is a planNode whose rows are the result of a join operation.
 type joinNode struct {
+	nonReusablePlanNode
+
 	// The data sources.
 	left  planNode
 	right planNode

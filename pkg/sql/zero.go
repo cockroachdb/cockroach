@@ -17,6 +17,7 @@ import (
 // contradiction).
 type zeroNode struct {
 	zeroInputPlanNode
+	nonReusablePlanNode
 	columns colinfo.ResultColumns
 }
 

@@ -39,6 +39,7 @@ import (
 
 type showFingerprintsNode struct {
 	zeroInputPlanNode
+	nonReusablePlanNode
 	columns colinfo.ResultColumns
 
 	tableDesc catalog.TableDescriptor

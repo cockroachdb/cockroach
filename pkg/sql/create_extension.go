@@ -18,6 +18,7 @@ import (
 
 type createExtensionNode struct {
 	zeroInputPlanNode
+	nonReusablePlanNode
 	CreateExtension tree.CreateExtension
 }
 

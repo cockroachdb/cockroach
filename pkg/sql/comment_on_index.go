@@ -18,6 +18,7 @@ import (
 
 type commentOnIndexNode struct {
 	zeroInputPlanNode
+	nonReusablePlanNode
 	n         *tree.CommentOnIndex
 	tableDesc *tabledesc.Mutable
 	index     catalog.Index

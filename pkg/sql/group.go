@@ -17,6 +17,7 @@ import (
 // It "wraps" a planNode which is used to retrieve the ungrouped results.
 type groupNode struct {
 	singleInputPlanNode
+	nonReusablePlanNode
 
 	// The schema for this groupNode.
 	columns colinfo.ResultColumns

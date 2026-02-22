@@ -16,6 +16,7 @@ import (
 // ordering, in the order specified.
 type topKNode struct {
 	singleInputPlanNode
+	nonReusablePlanNode
 	k        int64
 	ordering colinfo.ColumnOrdering
 	// When alreadyOrderedPrefix is non-zero, the input is already ordered on

@@ -164,6 +164,7 @@ func setupGenerator(
 // invoking a virtualTableGenerator function.
 type virtualTableNode struct {
 	zeroInputPlanNode
+	nonReusablePlanNode
 	columns    colinfo.ResultColumns
 	next       virtualTableGenerator
 	cleanup    func(ctx context.Context)
@@ -208,6 +209,7 @@ func (n *virtualTableNode) Close(ctx context.Context) {
 // table index lookup is performed, and the rows are joined together.
 type vTableLookupJoinNode struct {
 	singleInputPlanNode
+	nonReusablePlanNode
 
 	dbName string
 	db     catalog.DatabaseDescriptor

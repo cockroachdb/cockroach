@@ -21,6 +21,7 @@ import (
 // explainVecNode is a planNode that wraps a plan and returns
 // information related to running that plan with the vectorized engine.
 type explainVecNode struct {
+	nonReusablePlanNode
 	optColumnsSlot
 
 	options *tree.ExplainOptions

@@ -34,6 +34,7 @@ import (
 // pass through column | OVER clauses columns | arguments to window functions.
 type windowNode struct {
 	singleInputPlanNode
+	nonReusablePlanNode
 	windowPlanningInfo
 
 	// columns is the set of result columns.

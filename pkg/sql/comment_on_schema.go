@@ -19,6 +19,7 @@ import (
 
 type commentOnSchemaNode struct {
 	zeroInputPlanNode
+	nonReusablePlanNode
 	n          *tree.CommentOnSchema
 	schemaDesc catalog.SchemaDescriptor
 }

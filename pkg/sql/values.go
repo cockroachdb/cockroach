@@ -18,6 +18,7 @@ import (
 
 type valuesNode struct {
 	zeroInputPlanNode
+	nonReusablePlanNode
 
 	// Note: the columns can be renamed in place (see planMutableColumns).
 	columns colinfo.ResultColumns
