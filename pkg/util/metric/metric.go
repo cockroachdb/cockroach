@@ -255,15 +255,20 @@ func (m *Metadata) AddLabel(name, value string) {
 }
 
 var _ Iterable = &Gauge{}
+var _ Iterable = &DerivedGauge{}
+var _ Iterable = &FunctionalGauge{}
 var _ Iterable = &GaugeFloat64{}
 var _ Iterable = &Counter{}
 var _ Iterable = &UniqueCounter{}
 var _ Iterable = &CounterFloat64{}
 var _ Iterable = &GaugeVec{}
+var _ Iterable = &DerivedGaugeVec{}
 var _ Iterable = &CounterVec{}
 var _ Iterable = &HistogramVec{}
 
 var _ json.Marshaler = &Gauge{}
+var _ json.Marshaler = &DerivedGauge{}
+var _ json.Marshaler = &FunctionalGauge{}
 var _ json.Marshaler = &GaugeFloat64{}
 var _ json.Marshaler = &Counter{}
 var _ json.Marshaler = &UniqueCounter{}
@@ -271,12 +276,15 @@ var _ json.Marshaler = &CounterFloat64{}
 var _ json.Marshaler = &Registry{}
 
 var _ PrometheusExportable = &Gauge{}
+var _ PrometheusExportable = &DerivedGauge{}
+var _ PrometheusExportable = &FunctionalGauge{}
 var _ PrometheusExportable = &GaugeFloat64{}
 var _ PrometheusExportable = &Counter{}
 var _ PrometheusExportable = &UniqueCounter{}
 var _ PrometheusExportable = &CounterFloat64{}
 
 var _ PrometheusVector = &GaugeVec{}
+var _ PrometheusVector = &DerivedGaugeVec{}
 var _ PrometheusVector = &CounterVec{}
 var _ PrometheusVector = &HistogramVec{}
 
@@ -1074,7 +1082,7 @@ func NewCounterFloat64(metadata Metadata) *CounterFloat64 {
 type Gauge struct {
 	Metadata
 	value atomic.Int64
-	fn    func() int64
+	fn    func(val int64) int64
 }
 
 // NewGauge creates a Gauge.
@@ -1082,12 +1090,13 @@ func NewGauge(metadata Metadata) *Gauge {
 	return &Gauge{Metadata: metadata}
 }
 
-// NewFunctionalGauge creates a Gauge metric whose value is determined when
-// asked for by calling the provided function.
-// Note that Update, Inc, and Dec should NOT be called on a Gauge returned
-// from NewFunctionalGauge.
-func NewFunctionalGauge(metadata Metadata, f func() int64) *Gauge {
-	return &Gauge{Metadata: metadata, fn: f}
+// DerivedGauge is a Gauge whose value is derived from the callback function it
+// was constructed with. The callback is called every time the value of the
+// gauge is requested and is passed the current value of the gauge as an argument.
+type DerivedGauge = Gauge
+
+func NewDerivedGauge(metadata Metadata, f func(val int64) int64) *DerivedGauge {
+	return &DerivedGauge{Metadata: metadata, fn: f}
 }
 
 // Update updates the gauge's value.
@@ -1098,7 +1107,7 @@ func (g *Gauge) Update(v int64) {
 // Value returns the gauge's current value.
 func (g *Gauge) Value() int64 {
 	if g.fn != nil {
-		return g.fn()
+		return g.fn(g.value.Load())
 	}
 	return g.value.Load()
 }
@@ -1198,6 +1207,53 @@ func (g *GaugeFloat64) GetMetadata() Metadata {
 	baseMetadata := g.Metadata
 	baseMetadata.MetricType = prometheusgo.MetricType_GAUGE
 	return baseMetadata
+}
+
+// FunctionalGauge is a Gauge whose value is the result of the callback
+// function it was constructed with. The callback is called every time the
+// value of the gauge is requested.
+type FunctionalGauge struct {
+	Metadata
+	fn func() int64
+}
+
+func NewFunctionalGauge(metadata Metadata, f func() int64) *FunctionalGauge {
+	return &FunctionalGauge{Metadata: metadata, fn: f}
+}
+
+// GetType implements PrometheusExportable.
+func (fg *FunctionalGauge) GetType() *prometheusgo.MetricType {
+	return prometheusgo.MetricType_GAUGE.Enum()
+}
+
+// ToPrometheusMetric implements PrometheusExportable.
+func (fg *FunctionalGauge) ToPrometheusMetric() *prometheusgo.Metric {
+	return &prometheusgo.Metric{
+		Gauge: &prometheusgo.Gauge{Value: proto.Float64(float64(fg.Value()))},
+	}
+}
+
+// GetMetadata implements Iterable.
+func (fg *FunctionalGauge) GetMetadata() Metadata {
+	baseMetadata := fg.Metadata
+	baseMetadata.MetricType = prometheusgo.MetricType_GAUGE
+	return baseMetadata
+}
+
+// Inspect implements Iterable.
+func (fg *FunctionalGauge) Inspect(f func(interface{})) {
+	f(fg)
+}
+
+// MarshalJSON implements json.Marshaler.
+func (fg *FunctionalGauge) MarshalJSON() ([]byte, error) {
+	return json.Marshal(fg.Value())
+}
+
+// Value returns the functional value of the gauge, which is computed by
+// by calling its callback function.
+func (fg *FunctionalGauge) Value() int64 {
+	return fg.fn()
 }
 
 // MergeWindowedHistogram adds the bucket counts, sample count, and sample sum
@@ -1406,12 +1462,32 @@ type GaugeVec struct {
 	Metadata
 	vector
 	promVec *prometheus.GaugeVec
+	fn      func(int64) int64
 }
+
+// DerivedGaugeVec is a GaugeVec whose value is derived from the callback
+// function it was constructed with. The callback is called every time the
+// value of the gauge is requested and is passed the current value of the gauge
+// as an argument.
+type DerivedGaugeVec = GaugeVec
 
 // NewExportedGaugeVec creates a new GaugeVec containing labeled gauges to be
 // exported to an external collector, but is not persisted by the internal TSDB,
 // nor are the metrics in the vector aggregated in any way.
 func NewExportedGaugeVec(metadata Metadata, labelSchema []string) *GaugeVec {
+	return newExportedGaugeVec(metadata, labelSchema, nil)
+}
+
+// NewDerivedExportedGaugeVec creates a new DerivedGaugeVec containing labeled
+// gauges to be exported to an external collector, but is not persisted by the
+// internal TSDB, nor are the metrics in the vector aggregated in any way.
+func NewDerivedExportedGaugeVec(
+	metadata Metadata, labelSchema []string, fn func(int64) int64,
+) *DerivedGaugeVec {
+	return newExportedGaugeVec(metadata, labelSchema, fn)
+}
+
+func newExportedGaugeVec(metadata Metadata, labelSchema []string, fn func(int64) int64) *GaugeVec {
 	vec := newVector(labelSchema)
 
 	promVec := prometheus.NewGaugeVec(prometheus.GaugeOpts{
@@ -1423,6 +1499,7 @@ func NewExportedGaugeVec(metadata Metadata, labelSchema []string) *GaugeVec {
 		Metadata: metadata,
 		vector:   vec,
 		promVec:  promVec,
+		fn:       fn,
 	}
 }
 
@@ -1487,6 +1564,10 @@ func (gv *GaugeVec) ToPrometheusMetrics() []*prometheusgo.Metric {
 
 		if err := g.Write(m); err != nil {
 			panic(err)
+		}
+
+		if gv.fn != nil {
+			*m.Gauge.Value = float64(gv.fn(int64(*m.Gauge.Value)))
 		}
 
 		metrics = append(metrics, m)

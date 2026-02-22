@@ -56,9 +56,11 @@ func (b Builder) Gauge(metadata metric.Metadata) *AggGauge {
 	return NewGauge(metadata, b.labels...)
 }
 
-// FunctionalGauge constructs a new AggGauge with the Builder's labels who's
-// value is determined when asked for.
-func (b Builder) FunctionalGauge(metadata metric.Metadata, f func(cvs []int64) int64) *AggGauge {
+// FunctionalGauge constructs a new AggFunctionalGauge with the Builder's
+// labels whose value is determined when asked for.
+func (b Builder) FunctionalGauge(
+	metadata metric.Metadata, f func(cvs []int64) int64,
+) *AggFunctionalGauge {
 	return NewFunctionalGauge(metadata, f, b.labels...)
 }
 
@@ -306,20 +308,72 @@ func (cs *childSet) clear() {
 }
 
 type SQLMetric struct {
-	mu struct {
+	mIterable   metric.Iterable
+	pExportable metric.PrometheusExportable
+	mu          struct {
 		labelConfig metric.LabelConfig
 		syncutil.Mutex
 		children ChildrenStorage
 	}
 }
 
-func NewSQLMetric(labelConfig metric.LabelConfig) *SQLMetric {
-	sm := &SQLMetric{}
+var _ metric.PrometheusIterable = (*SQLMetric)(nil)
+var _ metric.PrometheusExportable = (*SQLMetric)(nil)
+
+func NewSQLMetric(
+	labelConfig metric.LabelConfig,
+	mIterable metric.Iterable,
+	pExportable metric.PrometheusExportable,
+) *SQLMetric {
+	sm := &SQLMetric{
+		mIterable:   mIterable,
+		pExportable: pExportable,
+	}
 	sm.mu.labelConfig = labelConfig
 	sm.mu.children = &UnorderedCacheWrapper{
 		cache: getCacheStorage(),
 	}
 	return sm
+}
+
+// GetType is part of the metric.PrometheusExportable interface.
+func (sm *SQLMetric) GetType() *io_prometheus_client.MetricType {
+	return sm.pExportable.GetType()
+}
+
+// GetLabels is part of the metric.PrometheusExportable interface.
+func (sm *SQLMetric) GetLabels(useStaticLabels bool) []*io_prometheus_client.LabelPair {
+	return sm.pExportable.GetLabels(useStaticLabels)
+}
+
+// ToPrometheusMetric is part of the metric.PrometheusExportable interface.
+func (sm *SQLMetric) ToPrometheusMetric() *io_prometheus_client.Metric {
+	return sm.pExportable.ToPrometheusMetric()
+}
+
+// GetName is part of the metric.Iterable interface.
+func (sm *SQLMetric) GetName(useStaticLabels bool) string {
+	return sm.mIterable.GetName(useStaticLabels)
+}
+
+// GetHelp is part of the metric.Iterable interface.
+func (sm *SQLMetric) GetHelp() string {
+	return sm.mIterable.GetHelp()
+}
+
+// GetMeasurement is part of the metric.Iterable interface.
+func (sm *SQLMetric) GetMeasurement() string {
+	return sm.mIterable.GetMeasurement()
+}
+
+// GetUnit is part of the metric.Iterable interface.
+func (sm *SQLMetric) GetUnit() metric.Unit {
+	return sm.mIterable.GetUnit()
+}
+
+// GetMetadata is part of the metric.Iterable interface.
+func (sm *SQLMetric) GetMetadata() metric.Metadata {
+	return sm.mIterable.GetMetadata()
 }
 
 func (sm *SQLMetric) Each(
@@ -588,3 +642,62 @@ func (b BtreeWrapper) ForEach(f func(metric ChildMetric)) {
 func (b BtreeWrapper) Clear() {
 	b.tree.Clear(false)
 }
+
+type baseAggMetric struct {
+	mIterable   metric.Iterable
+	pExportable metric.PrometheusExportable
+	childSet
+}
+
+func newBaseAggMetric(
+	mIterable metric.Iterable, pExportable metric.PrometheusExportable,
+) *baseAggMetric {
+	b := &baseAggMetric{
+		mIterable:   mIterable,
+		pExportable: pExportable,
+	}
+	return b
+}
+
+// GetType is part of the metric.PrometheusExportable interface.
+func (b *baseAggMetric) GetType() *io_prometheus_client.MetricType {
+	return b.pExportable.GetType()
+}
+
+// GetLabels is part of the metric.PrometheusExportable interface.
+func (b *baseAggMetric) GetLabels(useStaticLabels bool) []*io_prometheus_client.LabelPair {
+	return b.pExportable.GetLabels(useStaticLabels)
+}
+
+// ToPrometheusMetric is part of the metric.PrometheusExportable interface.
+func (b *baseAggMetric) ToPrometheusMetric() *io_prometheus_client.Metric {
+	return b.pExportable.ToPrometheusMetric()
+}
+
+// GetName is part of the metric.Iterable interface.
+func (b *baseAggMetric) GetName(useStaticLabels bool) string {
+	return b.mIterable.GetName(useStaticLabels)
+}
+
+// GetHelp is part of the metric.Iterable interface.
+func (b *baseAggMetric) GetHelp() string {
+	return b.mIterable.GetHelp()
+}
+
+// GetMeasurement is part of the metric.Iterable interface.
+func (b *baseAggMetric) GetMeasurement() string {
+	return b.mIterable.GetMeasurement()
+}
+
+// GetUnit is part of the metric.Iterable interface.
+func (b *baseAggMetric) GetUnit() metric.Unit {
+	return b.mIterable.GetUnit()
+}
+
+// GetMetadata is part of the metric.Iterable interface.
+func (b *baseAggMetric) GetMetadata() metric.Metadata {
+	return b.mIterable.GetMetadata()
+}
+
+var _ metric.PrometheusIterable = (*baseAggMetric)(nil)
+var _ metric.PrometheusExportable = (*baseAggMetric)(nil)

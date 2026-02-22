@@ -48,7 +48,7 @@ type Cache struct {
 	cache             map[string]map[string]certInfo
 	account           MemAccount
 	expirationMetrics *aggmetric.AggGauge
-	ttlMetrics        *aggmetric.AggGauge
+	ttlMetrics        *aggmetric.AggFunctionalGauge
 	timeSrc           timeutil.TimeSource
 }
 
@@ -61,7 +61,7 @@ func NewCache(
 	timeSrc timeutil.TimeSource,
 	account MemAccount,
 	expirationMetrics *aggmetric.AggGauge,
-	ttlMetrics *aggmetric.AggGauge,
+	ttlMetrics *aggmetric.AggFunctionalGauge,
 ) *Cache {
 	return &Cache{
 		cache:             make(map[string]map[string]certInfo),
@@ -214,7 +214,7 @@ func (c *Cache) upsertMetricsLocked(user string) {
 	expiration := c.getExpirationLocked(user)
 	// the update functions on the metrics objects act as upserts.
 	c.expirationMetrics.Update(expiration, user)
-	c.ttlMetrics.UpdateFn(ttlFunc(c.timeSrc.Now, expiration), user)
+	c.ttlMetrics.GetOrCreateChild(ttlFunc(c.timeSrc.Now, expiration), user)
 }
 
 // removeMetricsLocked removes the expiration and ttl for a given user from the cache.
