@@ -636,6 +636,26 @@ func (c *IntForLoopControl) Format(ctx *tree.FmtCtx) {
 	}
 }
 
+type CursorForLoopControl struct {
+	Cursor Variable
+}
+
+func (c *CursorForLoopControl) isForLoopControl() {}
+
+func (c *CursorForLoopControl) Format(ctx *tree.FmtCtx) {
+	ctx.FormatNode(&c.Cursor)
+}
+
+type QueryForLoopControl struct {
+	Query tree.Statement
+}
+
+func (c *QueryForLoopControl) isForLoopControl() {}
+
+func (c *QueryForLoopControl) Format(ctx *tree.FmtCtx) {
+	ctx.FormatNode(c.Query)
+}
+
 // stmt_for
 type ForLoop struct {
 	StatementImpl
@@ -682,6 +702,10 @@ func (s *ForLoop) PlpgSQLStatementTag() string {
 	switch s.Control.(type) {
 	case *IntForLoopControl:
 		return "stmt_for_int_loop"
+	case *CursorForLoopControl:
+		return "stmt_for_cursor_loop"
+	case *QueryForLoopControl:
+		return "stmt_for_query_loop"
 	}
 	return "stmt_for_unknown"
 }
