@@ -430,13 +430,20 @@ func NewServer(params base.TestServerArgs) (TestServerInterface, error) {
 	// such, we have to disable yield AC if we want background work to run at all.
 	if params.DisableElasticCPUAdmission {
 		kvadmission.ElasticAdmission.Override(context.Background(), &srv.(TestServerInterfaceRaw).ClusterSettings().SV, false)
-		// Also disable the SQL-layer elastic CPU control for internally submitted
-		// low-priority reads. We use Lookup to avoid import cycles with pkg/sql/row.
-		if s, ok := settings.LookupForLocalAccessByKey(
-			settings.InternalKey("sqladmission.low_pri_read_response_elastic_control.enabled"),
-			true, /* forSystemTenant */
-		); ok {
-			s.(*settings.BoolSetting).Override(context.Background(), &srv.(TestServerInterfaceRaw).ClusterSettings().SV, false)
+		// Disable elastic CPU control settings that can cause bulk operations and
+		// reads to be throttled. We use Lookup to avoid import cycles.
+		for _, key := range []string{
+			"sqladmission.low_pri_read_response_elastic_control.enabled",
+			"bulkio.index_backfill.elastic_control.enabled",
+			"bulkio.ingest.sst_batcher_elastic_control.enabled",
+			"bulkio.import.elastic_control.enabled",
+			"bulkio.backup.file_sst_sink_elastic_control.enabled",
+		} {
+			if s, ok := settings.LookupForLocalAccessByKey(
+				settings.InternalKey(key), true, /* forSystemTenant */
+			); ok {
+				s.(*settings.BoolSetting).Override(context.Background(), &srv.(TestServerInterfaceRaw).ClusterSettings().SV, false)
+			}
 		}
 	}
 	admission.YieldForElasticCPU.Override(context.Background(), &srv.(TestServerInterfaceRaw).ClusterSettings().SV, false)
