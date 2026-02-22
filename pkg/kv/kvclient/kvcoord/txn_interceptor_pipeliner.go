@@ -1012,13 +1012,13 @@ func (tp *txnPipeliner) epochBumpedLocked() {
 }
 
 // createSavepointLocked is part of the txnInterceptor interface.
-func (tp *txnPipeliner) createSavepointLocked(context.Context, *savepoint) {}
+func (tp *txnPipeliner) createSavepointLocked(context.Context, *savepoint) error { return nil }
 
 // releaseSavepointLocked is part of the txnInterceptor interface.
 func (tp *txnPipeliner) releaseSavepointLocked(context.Context, *savepoint) {}
 
 // rollbackToSavepointLocked is part of the txnInterceptor interface.
-func (tp *txnPipeliner) rollbackToSavepointLocked(ctx context.Context, s savepoint) {
+func (tp *txnPipeliner) rollbackToSavepointLocked(ctx context.Context, s savepoint) error {
 	// Move all the writes in txnPipeliner that are not in the savepoint to the
 	// lock footprint. We no longer care if these write succeed or fail, so we're
 	// going to stop tracking these as in-flight writes. The respective intents
@@ -1044,6 +1044,7 @@ func (tp *txnPipeliner) rollbackToSavepointLocked(ctx context.Context, s savepoi
 	} else {
 		tp.ifWrites.clear(true /* reuse */)
 	}
+	return nil
 }
 
 // closeLocked implements the txnInterceptor interface.
