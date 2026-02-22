@@ -77,7 +77,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
+	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
@@ -4389,4 +4391,93 @@ func TestLeasedDescriptorTypeHydration(t *testing.T) {
 	tdb.Exec(t, `DROP SCHEMA schema_types CASCADE`)
 	close(stopExec)
 	require.NoError(t, grp.Wait())
+}
+
+// TestLeaseManagerMemoryCloser validates that if memory is still allocated on the
+// bytes monitor, it is freed after the memory monitor closer has run.
+// This is needed in cases where graceful shutdown fails. This test also
+// validates that new memory cannot be allocated.
+func TestLeaseManagerMemoryCloser(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	defer s.Stopper().Stop(ctx)
+
+	// Create a dedicated stopper for a dummy LeaseManager.
+	stopper := stop.NewStopper()
+	defer stopper.Stop(context.Background())
+
+	// Create a dedicated monitor.
+	monitor := mon.NewMonitor(mon.Options{
+		Name:      mon.MakeName("test-monitor"),
+		Res:       mon.MemoryResource,
+		Increment: 1,
+	})
+	monitor.Start(ctx, nil, mon.NewStandaloneBudget(1024*1024))
+	defer monitor.Stop(ctx)
+
+	// Use dependencies from the started server to create and
+	// start a lease manager instance.
+	app := s.ApplicationLayer()
+	var c base.NodeIDContainer
+	c.Set(context.Background(), roachpb.NodeID(1))
+	nc := base.NewSQLIDContainerForNode(&c)
+	execCfg := app.ExecutorConfig().(sql.ExecutorConfig)
+	provider := slprovider.New(
+		execCfg.AmbientCtx,
+		app.AppStopper(), app.Clock(), app.DB(), app.Codec(), app.ClusterSettings(), app.SettingsWatcher().(*settingswatcher.SettingsWatcher), nil, nil,
+	)
+	provider.Start(ctx, enum.One)
+	lm := lease.NewLeaseManager(
+		context.Background(),
+		app.AmbientCtx(),
+		nc,
+		app.InternalDB().(isql.DB),
+		app.Clock(),
+		app.ClusterSettings(),
+		app.SettingsWatcher().(*settingswatcher.SettingsWatcher),
+		provider,
+		app.Codec(),
+		lease.ManagerTestingKnobs{
+			LeaseStoreTestingKnobs: lease.StorageTestingKnobs{
+				RemoveOnceDereferenced: true,
+			},
+			DisallowBytesMonitorCaching: true,
+		},
+		stopper,
+		app.ExecutorConfig().(sql.ExecutorConfig).RangeFeedFactory,
+		monitor,
+	)
+	lm.RunBackgroundLeasingTask(ctx)
+	lm.TestingMarkInit()
+
+	// Create a table to lease.
+	sqlDB := sqlutils.MakeSQLRunner(db)
+	sqlDB.Exec(t, "CREATE DATABASE t")
+	sqlDB.Exec(t, "CREATE TABLE t.test (k INT PRIMARY KEY)")
+
+	var tableID descpb.ID
+	sqlDB.QueryRow(t, "SELECT 't.test'::regclass::oid").Scan(&tableID)
+
+	// Acquire a lease and confirm the memory usage has gone up.
+	l, err := lm.Acquire(ctx, lease.TimestampToReadTimestamp(app.Clock().Now()), tableID)
+	require.NoError(t, err)
+	lastMemoryUsage := monitor.AllocBytes()
+	require.Greater(t, lastMemoryUsage, int64(0))
+	// After stopping allocations should be blocked.
+	stopper.Stop(ctx)
+	err = lm.TestingGetBoundAccount().Grow(ctx, 1204)
+	require.ErrorContains(t, err, "memory budget exceeded:", "allocations should blocked")
+	// Check that the bound account still has usage.
+	require.Equal(t, lm.TestingGetBoundAccount().Used(), lastMemoryUsage)
+	// The monitor should be zero due to the emergency stop.
+	require.Equal(t, int64(0), monitor.AllocBytes())
+	// We should still be able to release leases without panicking.
+	l.Release(ctx)
+	// Check that both the bound account and monitor have
+	// hit zero.
+	require.Equal(t, int64(0), monitor.AllocBytes())
+	require.Equal(t, lm.TestingGetBoundAccount().Used(), int64(0))
 }
