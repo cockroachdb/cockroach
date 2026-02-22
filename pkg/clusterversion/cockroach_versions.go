@@ -228,6 +228,10 @@ const (
 	// making them indistinguishable from view dependencies. This upgrade ensures
 	// each trigger backref has the correct TriggerID set.
 	V26_2_TriggerBackrefRepair
+
+	// V26_2_BlobServiceFlowControl enables the flow-controlled GetStream RPC
+	// for the blob service used by nodelocal storage.
+	V26_2_BlobServiceFlowControl
 	// *************************************************
 	// Step (1) Add new versions above this comment.
 	// Do not add new versions to a patch release.
@@ -285,6 +289,8 @@ var versionTable = [numKeys]roachpb.Version{
 	V26_2_AddSystemClusterMetricsTable: {Major: 26, Minor: 1, Internal: 6},
 
 	V26_2_TriggerBackrefRepair: {Major: 26, Minor: 1, Internal: 8},
+
+	V26_2_BlobServiceFlowControl: {Major: 26, Minor: 1, Internal: 10},
 	// *************************************************
 	// Step (2): Add new versions above this comment.
 	// Do not add new versions to a patch release.

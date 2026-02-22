@@ -163,3 +163,47 @@ func (s *Service) Stat(ctx context.Context, req *blobspb.StatRequest) (*blobspb.
 	}
 	return resp, err
 }
+
+// GetStreamFlowControlled implements the DRPC service
+func (s *drpcService) GetStreamFlowControlled(
+	stream blobspb.DRPCBlob_GetStreamFlowControlledStream,
+) error {
+	return (*Service)(s).getStreamFlowControlled(stream)
+}
+
+// GetStreamFlowControlled implements the gRPC service
+func (s *Service) GetStreamFlowControlled(stream blobspb.Blob_GetStreamFlowControlledServer) error {
+	return s.getStreamFlowControlled(stream)
+}
+
+// getStreamFlowControlled is the shared implementation for GetStreamFlowControlled
+// for both gRPC and DRPC.
+func (s *Service) getStreamFlowControlled(
+	stream blobspb.RPCBlob_GetStreamFlowControlledStream,
+) error {
+	// Receive the initial request message from the client.
+	firstMsg, err := stream.Recv()
+	if err != nil {
+		return errors.Wrap(err, "receiving initial request")
+	}
+
+	req := firstMsg.GetRequest()
+	if req == nil {
+		return errors.New("first message must be a request")
+	}
+
+	// Validate and set defaults for flow control parameters.
+	window := int(req.FlowControlWindow)
+	if window <= 0 {
+		window = int(FlowControlWindow.Default())
+	}
+
+	// Open the file for reading.
+	content, _, err := s.localStorage.ReadFile(req.Filename, req.Offset)
+	if err != nil {
+		return err
+	}
+	defer content.Close(stream.Context())
+
+	return streamContentWithFlowControl(stream.Context(), stream, content, chunkSize, window)
+}
