@@ -14,7 +14,10 @@ import (
 	"github.com/cockroachdb/cmux"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/util/besteffort"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/sysutil"
+	"github.com/cockroachdb/errors"
 )
 
 var KeepAliveProbeCount = settings.RegisterIntSetting(
@@ -33,6 +36,18 @@ var KeepAliveProbeFrequency = settings.RegisterDurationSetting(
 	time.Second*10,
 	settings.WithPublic,
 )
+
+var TcpUserTimeout = settings.RegisterDurationSetting(
+	settings.ApplicationLevel,
+	"server.sql_tcp_user.timeout",
+	"specifies the maximum amount of time, in milliseconds, that transmitted data "+
+		"can remain unacknowledged before the underlying TCP connection is forcefully closed. "+
+		"(Linux and Darwin only)",
+	time.Second*30,
+	settings.WithPublic,
+)
+
+// FIXME: Just add a new setting instead.
 
 type tcpKeepAliveManager struct {
 	// loggedKeepAliveStatus ensures that errors about setting the TCP
@@ -65,21 +80,40 @@ func (k *tcpKeepAliveManager) configure(ctx context.Context, conn net.Conn) {
 	// probe count.
 	probeCount := KeepAliveProbeCount.Get(&k.settings.SV)
 	probeFrequency := KeepAliveProbeFrequency.Get(&k.settings.SV)
-
-	err := tcpConn.SetKeepAliveConfig(net.KeepAliveConfig{
-		Enable:   true,
-		Idle:     probeFrequency,
-		Interval: probeFrequency,
-		Count:    int(probeCount),
-	})
-	if err != nil {
-		if doLog {
-			log.Ops.Warningf(ctx, "failed to configure TCP keep-alive for pgwire: %v", err)
+	besteffort.Warning(ctx, "tcp-socket-keepalive", func(ctx context.Context) error {
+		err := tcpConn.SetKeepAliveConfig(net.KeepAliveConfig{
+			Enable:   true,
+			Idle:     probeFrequency,
+			Interval: probeFrequency,
+			Count:    int(probeCount),
+		})
+		// Only errors for the first connection.
+		if doLog && err != nil {
+			return err
 		}
-		return
-	}
+		return nil
+	})
+
+	userTimeout := TcpUserTimeout.Get(&k.settings.SV)
+	besteffort.Error(ctx, "tcp-socket-user-timeout", func(ctx context.Context) error {
+		rawConn, err := tcpConn.SyscallConn()
+		if err != nil {
+			return err
+		}
+		var userTimeoutErr error
+		err = rawConn.Control(func(fd uintptr) {
+			userTimeoutErr = sysutil.SetTcpUserTimeout(sysutil.SocketFd(fd), userTimeout)
+		})
+		err = errors.CombineErrors(err, userTimeoutErr)
+		// Only errors for the first connection.
+		if doLog && err != nil {
+			return err
+		}
+		return nil
+	})
 
 	if doLog {
 		log.VEventf(ctx, 2, "setting TCP keep-alive interval %d and probe count to %d for pgwire", probeFrequency, probeCount)
+		log.VEventf(ctx, 2, "setting TCP user timeout %s for pgwire", userTimeout)
 	}
 }
