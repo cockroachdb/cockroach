@@ -1270,6 +1270,11 @@ type StoreConfig struct {
 	// The returned bool indicates whether a dump was taken.
 	GoroutineDumpNow func(context.Context, redact.RedactableString) (bool, error)
 
+	// ExecutionTraceDumpNow, if set, triggers an on-demand execution trace
+	// dump from the flight recorder. The tag parameter is appended to the
+	// filename. Returns the filename of the dump.
+	ExecutionTraceDumpNow func(ctx context.Context, reason redact.RedactableString, tag string) (string, error)
+
 	// EagerLeaseAcquisitionLimiter is used to limit the number of concurrent
 	// eager lease extensions. Normally shared between all stores on a node.
 	// Can be nil, which disables the limit.
