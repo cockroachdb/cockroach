@@ -44,7 +44,7 @@ func TestingSetNow(f func() time.Time) func() {
 type AggHistogram struct {
 	h      metric.IHistogram
 	create func() metric.IHistogram
-	childSet
+	*baseAggMetric
 	ticker struct {
 		// We use a RWMutex, because we don't want child histograms to contend when
 		// recording values, unless we're rotating histograms for the parent & children.
@@ -66,9 +66,12 @@ func NewHistogram(opts metric.HistogramOptions, childLabels ...string) *AggHisto
 	create := func() metric.IHistogram {
 		return metric.NewHistogram(opts)
 	}
+	h := create()
+	base := newBaseAggMetric(h)
 	a := &AggHistogram{
-		h:      create(),
-		create: create,
+		h:             h,
+		create:        create,
+		baseAggMetric: base,
 	}
 	a.ticker.Ticker = tick.NewTicker(
 		now(),
@@ -91,21 +94,6 @@ func NewHistogram(opts metric.HistogramOptions, childLabels ...string) *AggHisto
 	return a
 }
 
-// GetName is part of the metric.Iterable interface.
-func (a *AggHistogram) GetName(useStaticLabels bool) string { return a.h.GetName(useStaticLabels) }
-
-// GetHelp is part of the metric.Iterable interface.
-func (a *AggHistogram) GetHelp() string { return a.h.GetHelp() }
-
-// GetMeasurement is part of the metric.Iterable interface.
-func (a *AggHistogram) GetMeasurement() string { return a.h.GetMeasurement() }
-
-// GetUnit is part of the metric.Iterable interface.
-func (a *AggHistogram) GetUnit() metric.Unit { return a.h.GetUnit() }
-
-// GetMetadata is part of the metric.Iterable interface.
-func (a *AggHistogram) GetMetadata() metric.Metadata { return a.h.GetMetadata() }
-
 // Inspect is part of the metric.Iterable interface.
 func (a *AggHistogram) Inspect(f func(interface{})) {
 	func() {
@@ -124,21 +112,6 @@ func (a *AggHistogram) CumulativeSnapshot() metric.HistogramSnapshot {
 // WindowedSnapshot is part of the metric.WindowedHistogram interface.
 func (a *AggHistogram) WindowedSnapshot() metric.HistogramSnapshot {
 	return a.h.WindowedSnapshot()
-}
-
-// GetType is part of the metric.PrometheusExportable interface.
-func (a *AggHistogram) GetType() *prometheusgo.MetricType {
-	return a.h.GetType()
-}
-
-// GetLabels is part of the metric.PrometheusExportable interface.
-func (a *AggHistogram) GetLabels(useStaticLabels bool) []*prometheusgo.LabelPair {
-	return a.h.GetLabels(useStaticLabels)
-}
-
-// ToPrometheusMetric is part of the metric.PrometheusExportable interface.
-func (a *AggHistogram) ToPrometheusMetric() *prometheusgo.Metric {
-	return a.h.ToPrometheusMetric()
 }
 
 // AddChild adds a Histogram to this AggHistogram. This method panics if a Histogram
@@ -248,11 +221,12 @@ func NewSQLHistogram(opts metric.HistogramOptions) *SQLHistogram {
 	create := func() metric.IHistogram {
 		return metric.NewHistogram(opts)
 	}
+	histogram := create()
 	s := &SQLHistogram{
-		h:      create(),
+		h:      histogram,
 		create: create,
 	}
-	s.SQLMetric = NewSQLMetric(metric.LabelConfigDisabled)
+	s.SQLMetric = NewSQLMetric(metric.LabelConfigDisabled, histogram)
 	s.ticker.Ticker = tick.NewTicker(
 		now(),
 		opts.Duration/metric.WindowedHistogramWrapNum,
@@ -273,55 +247,6 @@ func NewSQLHistogram(opts metric.HistogramOptions) *SQLHistogram {
 	return s
 }
 
-// apply applies the given applyFn to every item in children
-func (sh *SQLHistogram) apply(applyFn func(childMetric ChildMetric)) {
-	sh.mu.Lock()
-	defer sh.mu.Unlock()
-	sh.mu.children.ForEach(func(metric ChildMetric) {
-		applyFn(metric.(*SQLChildHistogram))
-	})
-}
-
-// GetType is part of the metric.PrometheusExportable interface.
-func (sh *SQLHistogram) GetType() *prometheusgo.MetricType {
-	return sh.h.GetType()
-}
-
-// GetLabels is part of the metric.PrometheusExportable interface.
-func (sh *SQLHistogram) GetLabels(useStaticLabels bool) []*prometheusgo.LabelPair {
-	return sh.h.GetLabels(useStaticLabels)
-}
-
-// ToPrometheusMetric is part of the metric.PrometheusExportable interface.
-func (sh *SQLHistogram) ToPrometheusMetric() *prometheusgo.Metric {
-	return sh.h.ToPrometheusMetric()
-}
-
-// GetName is part of the metric.Iterable interface.
-func (sh *SQLHistogram) GetName(useStaticLabels bool) string {
-	return sh.h.GetName(useStaticLabels)
-}
-
-// GetHelp is part of the metric.Iterable interface.
-func (sh *SQLHistogram) GetHelp() string {
-	return sh.h.GetHelp()
-}
-
-// GetMeasurement is part of the metric.Iterable interface.
-func (sh *SQLHistogram) GetMeasurement() string {
-	return sh.h.GetMeasurement()
-}
-
-// GetUnit is part of the metric.Iterable interface.
-func (sh *SQLHistogram) GetUnit() metric.Unit {
-	return sh.h.GetUnit()
-}
-
-// GetMetadata is part of the metric.Iterable interface.
-func (sh *SQLHistogram) GetMetadata() metric.Metadata {
-	return sh.h.GetMetadata()
-}
-
 // Inspect is part of the metric.Iterable interface.
 func (sh *SQLHistogram) Inspect(f func(interface{})) {
 	func() {
@@ -330,6 +255,15 @@ func (sh *SQLHistogram) Inspect(f func(interface{})) {
 		tick.MaybeTick(&sh.ticker)
 	}()
 	f(sh)
+}
+
+// apply applies the given applyFn to every item in children
+func (sh *SQLHistogram) apply(applyFn func(childMetric ChildMetric)) {
+	sh.mu.Lock()
+	defer sh.mu.Unlock()
+	sh.mu.children.ForEach(func(metric ChildMetric) {
+		applyFn(metric.(*SQLChildHistogram))
+	})
 }
 
 // RecordValue records the Histogram value for the given label values. If a
@@ -394,7 +328,7 @@ func (sch *SQLChildHistogram) Value() metric.HistogramSnapshot {
 type HighCardinalityHistogram struct {
 	h      metric.IHistogram
 	create func() metric.IHistogram
-	childSet
+	*baseAggMetric
 	labelSliceCache *metric.LabelSliceCache
 	ticker          struct {
 		// We use a RWMutex, because we don't want child histograms to contend when
@@ -421,9 +355,12 @@ func NewHighCardinalityHistogram(
 	create := func() metric.IHistogram {
 		return metric.NewHistogram(opts)
 	}
+	hch := create()
+	base := newBaseAggMetric(hch)
 	h := &HighCardinalityHistogram{
-		h:      create(),
-		create: create,
+		h:             hch,
+		create:        create,
+		baseAggMetric: base,
 	}
 	h.ticker.Ticker = tick.NewTicker(
 		now(),
@@ -446,23 +383,6 @@ func NewHighCardinalityHistogram(
 	return h
 }
 
-// GetName is part of the metric.Iterable interface.
-func (h *HighCardinalityHistogram) GetName(useStaticLabels bool) string {
-	return h.h.GetName(useStaticLabels)
-}
-
-// GetHelp is part of the metric.Iterable interface.
-func (h *HighCardinalityHistogram) GetHelp() string { return h.h.GetHelp() }
-
-// GetMeasurement is part of the metric.Iterable interface.
-func (h *HighCardinalityHistogram) GetMeasurement() string { return h.h.GetMeasurement() }
-
-// GetUnit is part of the metric.Iterable interface.
-func (h *HighCardinalityHistogram) GetUnit() metric.Unit { return h.h.GetUnit() }
-
-// GetMetadata is part of the metric.Iterable interface.
-func (h *HighCardinalityHistogram) GetMetadata() metric.Metadata { return h.h.GetMetadata() }
-
 // Inspect is part of the metric.Iterable interface.
 func (h *HighCardinalityHistogram) Inspect(f func(interface{})) {
 	func() {
@@ -481,21 +401,6 @@ func (h *HighCardinalityHistogram) CumulativeSnapshot() metric.HistogramSnapshot
 // WindowedSnapshot is part of the metric.WindowedHistogram interface.
 func (h *HighCardinalityHistogram) WindowedSnapshot() metric.HistogramSnapshot {
 	return h.h.WindowedSnapshot()
-}
-
-// GetType is part of the metric.PrometheusExportable interface.
-func (h *HighCardinalityHistogram) GetType() *prometheusgo.MetricType {
-	return h.h.GetType()
-}
-
-// GetLabels is part of the metric.PrometheusExportable interface.
-func (h *HighCardinalityHistogram) GetLabels(useStaticLabels bool) []*prometheusgo.LabelPair {
-	return h.h.GetLabels(useStaticLabels)
-}
-
-// ToPrometheusMetric is part of the metric.PrometheusExportable interface.
-func (h *HighCardinalityHistogram) ToPrometheusMetric() *prometheusgo.Metric {
-	return h.h.ToPrometheusMetric()
 }
 
 // RecordValue records the histogram value for the given label values. If a
