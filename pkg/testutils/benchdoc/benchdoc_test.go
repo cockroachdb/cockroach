@@ -30,11 +30,12 @@ func TestAnalyzeGoodBenchmarkDocs(t *testing.T) {
 			Package: "pkg_test",
 			Team:    "team_test",
 			RunArgs: RunArgs{
-				Suite:     "manual",
+				Suite:     SuiteManual,
 				Count:     10,
 				BenchTime: "50x",
 				Timeout:   20 * time.Minute,
 			},
+			CompareArgs: NewCompareArgs(),
 		},
 	}, benchmarks)
 }
@@ -68,7 +69,7 @@ func TestAnalyzeCompareArgsBenchmarkDocs(t *testing.T) {
 			Package: "pkg_test",
 			Team:    "team_test",
 			RunArgs: RunArgs{
-				Suite:     "manual",
+				Suite:     SuiteManual,
 				Count:     10,
 				BenchTime: "50x",
 				Timeout:   20 * time.Minute,
@@ -82,6 +83,7 @@ func TestAnalyzeCompareArgsBenchmarkDocs(t *testing.T) {
 			Name:    "BenchmarkCompareArgsOnly",
 			Package: "pkg_test",
 			Team:    "team_test",
+			RunArgs: NewRunArgs(),
 			CompareArgs: CompareArgs{
 				PostIssue: PostIssueNone,
 			},
@@ -90,6 +92,7 @@ func TestAnalyzeCompareArgsBenchmarkDocs(t *testing.T) {
 			Name:    "BenchmarkPostBlockerOnly",
 			Package: "pkg_test",
 			Team:    "team_test",
+			RunArgs: NewRunArgs(),
 			CompareArgs: CompareArgs{
 				PostIssue: PostIssueBlocker,
 			},
@@ -98,14 +101,18 @@ func TestAnalyzeCompareArgsBenchmarkDocs(t *testing.T) {
 			Name:    "BenchmarkThresholdOnly",
 			Package: "pkg_test",
 			Team:    "team_test",
+			RunArgs: NewRunArgs(),
 			CompareArgs: CompareArgs{
+				PostIssue: PostIssueNone,
 				Threshold: 1.0,
 			},
 		},
 		{
-			Name:    "BenchmarkNoDoc",
-			Package: "pkg_test",
-			Team:    "team_test",
+			Name:        "BenchmarkNoDoc",
+			Package:     "pkg_test",
+			Team:        "team_test",
+			RunArgs:     NewRunArgs(),
+			CompareArgs: NewCompareArgs(),
 		},
 	}, benchmarks)
 }

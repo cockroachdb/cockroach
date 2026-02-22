@@ -63,12 +63,14 @@ func TestCreateRegressionPostRequestBasic(t *testing.T) {
 			metricUnit:     "ns/op",
 			percentChange:  25.5,
 			formattedDelta: "+1.2ms",
+			threshold:      20.0,
 		},
 		{
 			benchmarkName:  "pkg/sql→BenchmarkInsert",
 			metricUnit:     "ns/op",
 			percentChange:  30.0,
 			formattedDelta: "+500µs",
+			threshold:      20.0,
 		},
 	}
 
@@ -98,11 +100,12 @@ func TestCreateRegressionPostRequestBasic(t *testing.T) {
 	require.Contains(t, req.Message, "pkg/sql")
 	require.Contains(t, req.Message, "BenchmarkScan")
 	require.Contains(t, req.Message, "25.5%")
+	require.Contains(t, req.Message, "threshold: 20.0%")
 	require.Contains(t, req.Message, "v24.1.0 -> master")
 
 	// Verify dashboard links are included (entire line is a link with checkbox)
 	require.Contains(t, req.Message, "https://microbench.testeng.crdb.io/dashboard/?benchmark=BenchmarkScan&package=pkg/sql")
-	require.Contains(t, req.Message, "- [ ] [pkg/sql→BenchmarkScan (ns/op): +1.2ms (25.5%)](https://microbench.testeng.crdb.io/dashboard/")
+	require.Contains(t, req.Message, "- [ ] [pkg/sql→BenchmarkScan (ns/op): +1.2ms (25.5%, threshold: 20.0%)](https://microbench.testeng.crdb.io/dashboard/")
 }
 
 func TestCreateRegressionPostRequestMultiple(t *testing.T) {
@@ -114,6 +117,7 @@ func TestCreateRegressionPostRequestMultiple(t *testing.T) {
 			metricUnit:     "ns/op",
 			percentChange:  20.0 + float64(i),
 			formattedDelta: fmt.Sprintf("+%dµs", i*100),
+			threshold:      20.0,
 		}
 	}
 
@@ -142,12 +146,14 @@ func TestCreateRegressionPostRequestFormat(t *testing.T) {
 			metricUnit:     "ns/op",
 			percentChange:  25.5,
 			formattedDelta: "+1.2ms",
+			threshold:      20.0,
 		},
 		{
 			benchmarkName:  "pkg/sql/exec→BenchmarkInsert/batch=100",
 			metricUnit:     "B/op",
 			percentChange:  30.0,
 			formattedDelta: "+5.0KB",
+			threshold:      15.0,
 		},
 	}
 
@@ -181,14 +187,13 @@ func TestCreateRegressionPostRequestFormat(t *testing.T) {
 	expectedElements := []string{
 		"Performance regressions detected in package pkg/sql/exec",
 		"Comparison: v24.1.0 -&gt; v24.2.0",
-		"Found 2 benchmark(s) with regressions ≥20%",
 		"BenchmarkScan/rows=1000",
-		"(ns/op): +1.2ms (25.5%)",
+		"(ns/op): +1.2ms (25.5%, threshold: 20.0%)",
 		"BenchmarkInsert/batch=100",
-		"(B/op): +5.0KB (30.0%)",
+		"(B/op): +5.0KB (30.0%, threshold: 15.0%)",
 		// Verify entire line is a markdown checklist item with link
-		"- [ ] [pkg/sql/exec→BenchmarkScan/rows=1000 (ns/op): +1.2ms (25.5%)](https://microbench.testeng.crdb.io/dashboard/?benchmark=BenchmarkScan/rows=1000&amp;package=pkg/sql/exec)",
-		"- [ ] [pkg/sql/exec→BenchmarkInsert/batch=100 (B/op): +5.0KB (30.0%)](https://microbench.testeng.crdb.io/dashboard/?benchmark=BenchmarkInsert/batch=100&amp;package=pkg/sql/exec)",
+		"- [ ] [pkg/sql/exec→BenchmarkScan/rows=1000 (ns/op): +1.2ms (25.5%, threshold: 20.0%)](https://microbench.testeng.crdb.io/dashboard/?benchmark=BenchmarkScan/rows=1000&amp;package=pkg/sql/exec)",
+		"- [ ] [pkg/sql/exec→BenchmarkInsert/batch=100 (B/op): +5.0KB (30.0%, threshold: 15.0%)](https://microbench.testeng.crdb.io/dashboard/?benchmark=BenchmarkInsert/batch=100&amp;package=pkg/sql/exec)",
 	}
 
 	for _, expected := range expectedElements {
@@ -387,4 +392,91 @@ func TestParseBenchmarkName(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestCreateSingleRegressionPostRequestNotify(t *testing.T) {
+	reg := regressionInfo{
+		benchmarkName:  "pkg/sql→BenchmarkScan/rows=1000-32",
+		metricUnit:     "ns/op",
+		percentChange:  25.5,
+		formattedDelta: "+1.2ms",
+		threshold:      20.0,
+	}
+
+	formatter, req, err := createSingleRegressionPostRequest(
+		reg, "v24.1.0 -> master", false, /* releaseBlocker */
+	)
+	require.NoError(t, err)
+
+	// Verify labels: should have O-microbench, C-performance, branch label,
+	// but NOT release-blocker.
+	require.Contains(t, req.Labels, "O-microbench")
+	require.Contains(t, req.Labels, "C-performance")
+	require.Contains(t, req.Labels, "branch-release-24.1")
+	require.NotContains(t, req.Labels, issues.ReleaseBlockerLabel)
+
+	// Verify title
+	data := issues.TemplateData{
+		PostRequest:      req,
+		Parameters:       req.ExtraParams,
+		CondensedMessage: issues.CondensedMessage(req.Message),
+		PackageNameShort: req.PackageName,
+	}
+	title := formatter.Title(data)
+	require.Equal(t, "pkg/sql: potential performance regression", title)
+
+	// Verify message contains the single benchmark info and threshold
+	require.Contains(t, req.Message, "BenchmarkScan/rows=1000-32")
+	require.Contains(t, req.Message, "25.5%, threshold: 20.0%")
+}
+
+func TestCreateSingleRegressionPostRequestBlocker(t *testing.T) {
+	reg := regressionInfo{
+		benchmarkName:  "pkg/kv→BenchmarkGet-32",
+		metricUnit:     "ns/op",
+		percentChange:  40.0,
+		formattedDelta: "+2.5ms",
+		threshold:      30.0,
+	}
+
+	_, req, err := createSingleRegressionPostRequest(
+		reg, "v25.1.0 -> master", true, /* releaseBlocker */
+	)
+	require.NoError(t, err)
+
+	require.Contains(t, req.Labels, issues.ReleaseBlockerLabel)
+	require.Contains(t, req.Labels, "O-microbench")
+	require.Contains(t, req.Labels, "C-performance")
+	require.Contains(t, req.Labels, "branch-release-25.1")
+
+	// Verify threshold is in the message
+	require.Contains(t, req.Message, "threshold: 30.0%")
+}
+
+func TestCreateSingleRegressionPostRequestFormat(t *testing.T) {
+	reg := regressionInfo{
+		benchmarkName:  "pkg/sql/exec→BenchmarkHashJoin/rows=10000-32",
+		metricUnit:     "ns/op",
+		percentChange:  35.2,
+		formattedDelta: "+3.1ms",
+		threshold:      10.0,
+	}
+
+	formatter, req, err := createSingleRegressionPostRequest(
+		reg, "v24.2.0 -> v24.3.0", false,
+	)
+	require.NoError(t, err)
+
+	// Verify message structure
+	require.Contains(t, req.Message, "Performance regression detected for benchmark pkg/sql/exec→BenchmarkHashJoin/rows=10000-32")
+	require.Contains(t, req.Message, "Comparison: v24.2.0 -> v24.3.0")
+
+	// Verify dashboard link is included
+	require.Contains(t, req.Message, "https://microbench.testeng.crdb.io/dashboard/?benchmark=BenchmarkHashJoin/rows=10000-32&package=pkg/sql/exec")
+
+	// Verify the full formatted output includes threshold
+	output, err := formatPostRequest(formatter, req)
+	require.NoError(t, err)
+	require.Contains(t, output, "BenchmarkHashJoin/rows=10000-32")
+	require.Contains(t, output, "(ns/op): +3.1ms (35.2%, threshold: 10.0%)")
 }

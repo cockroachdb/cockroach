@@ -50,6 +50,7 @@ type regressionInfo struct {
 	metricUnit     string
 	percentChange  float64
 	formattedDelta string
+	threshold      float64
 }
 
 const dashboardURL = "https://microbench.testeng.crdb.io/dashboard/"
@@ -140,7 +141,7 @@ func parseBenchmarkName(benchmarkName string) (packagePath, functionName string,
 		funcPart = funcPart[:idx]
 	}
 
-	// Add "Benchmark" prefix if not present
+	// Add a "Benchmark" prefix if not present
 	if !strings.HasPrefix(funcPart, "Benchmark") {
 		functionName = "Benchmark" + funcPart
 	} else {
@@ -243,18 +244,17 @@ func createRegressionPostRequest(
 	var sb strings.Builder
 	sb.WriteString(fmt.Sprintf("Performance regressions detected in package %s\n\n", pkgName))
 	sb.WriteString(fmt.Sprintf("Comparison: %s\n\n", description))
-	sb.WriteString(fmt.Sprintf("Found %d benchmark(s) with regressions ≥%.0f%%:\n\n", len(regressions), slackPercentageThreshold))
+	sb.WriteString(fmt.Sprintf("Found %d benchmark(s) with regressions exceeding thresholds:\n\n", len(regressions)))
 
 	for _, reg := range regressions {
 		// Make the entire line a clickable link to the dashboard
 		dashboardLink := generateDashboardLink(reg.benchmarkName)
 		if dashboardLink == "" {
-			// If we can't generate a link, skip the link but still show the regression
-			sb.WriteString(fmt.Sprintf("- [ ] %s (%s): %s (%.1f%%)\n",
-				reg.benchmarkName, reg.metricUnit, reg.formattedDelta, reg.percentChange))
+			sb.WriteString(fmt.Sprintf("- [ ] %s (%s): %s (%.1f%%, threshold: %.1f%%)\n",
+				reg.benchmarkName, reg.metricUnit, reg.formattedDelta, reg.percentChange, reg.threshold))
 		} else {
-			sb.WriteString(fmt.Sprintf("- [ ] [%s (%s): %s (%.1f%%)](%s)\n",
-				reg.benchmarkName, reg.metricUnit, reg.formattedDelta, reg.percentChange, dashboardLink))
+			sb.WriteString(fmt.Sprintf("- [ ] [%s (%s): %s (%.1f%%, threshold: %.1f%%)](%s)\n",
+				reg.benchmarkName, reg.metricUnit, reg.formattedDelta, reg.percentChange, reg.threshold, dashboardLink))
 		}
 	}
 
@@ -283,6 +283,58 @@ func createRegressionPostRequest(
 	}
 
 	return formatter, req, nil
+}
+
+// createSingleRegressionPostRequest creates a post request for a single
+// benchmark regression, using the benchmark's benchdoc configuration to
+// determine labels (e.g., release-blocker).
+func createSingleRegressionPostRequest(
+	reg regressionInfo, description string, releaseBlocker bool,
+) (issues.IssueFormatter, issues.PostRequest, error) {
+	var sb strings.Builder
+	sb.WriteString(fmt.Sprintf("Performance regression detected for benchmark %s\n\n", reg.benchmarkName))
+	sb.WriteString(fmt.Sprintf("Comparison: %s\n\n", description))
+
+	dashboardLink := generateDashboardLink(reg.benchmarkName)
+	if dashboardLink == "" {
+		sb.WriteString(fmt.Sprintf("- %s (%s): %s (%.1f%%, threshold: %.1f%%)\n",
+			reg.benchmarkName, reg.metricUnit, reg.formattedDelta, reg.percentChange, reg.threshold))
+	} else {
+		sb.WriteString(fmt.Sprintf("- [%s (%s): %s (%.1f%%, threshold: %.1f%%)](%s)\n",
+			reg.benchmarkName, reg.metricUnit, reg.formattedDelta, reg.percentChange, reg.threshold, dashboardLink))
+	}
+
+	packagePath, functionName, err := parseBenchmarkName(reg.benchmarkName)
+	if err != nil {
+		return nil, issues.PostRequest{}, err
+	}
+
+	f := githubpost.MicrobenchmarkFailure(packagePath, functionName, sb.String())
+	formatter := regressionFormatter{versionContext: description}
+	_, req := githubpost.DefaultFormatter(context.Background(), f)
+
+	// Remove the release-blocker label if not required
+	if !releaseBlocker {
+		req.Labels = filterLabels(req.Labels, issues.ReleaseBlockerLabel)
+	}
+	req.Labels = append(req.Labels, "O-microbench", "C-performance")
+
+	if branchLabel := extractBranchLabel(description); branchLabel != "" {
+		req.Labels = append(req.Labels, branchLabel)
+	}
+
+	return formatter, req, nil
+}
+
+// filterLabels returns a new slice with the specified label removed.
+func filterLabels(labels []string, remove string) []string {
+	var filtered []string
+	for _, l := range labels {
+		if l != remove {
+			filtered = append(filtered, l)
+		}
+	}
+	return filtered
 }
 
 // postBenchmarkIssue posts a benchmark issue to github.

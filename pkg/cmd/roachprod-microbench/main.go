@@ -187,10 +187,20 @@ func makeCompareCommand() *cobra.Command {
 			}
 		}
 
-		if c.postIssues {
-			err = c.maybePostRegressionIssues(comparisonResult)
+		switch c.postIssues {
+		case postIssuesGroup:
+			err = c.maybePostRegressionIssuesGroup(comparisonResult)
 			if err != nil {
-				log.Printf("Failed to post GitHub issues: %v", err)
+				log.Printf("Failed to post GitHub issues (group): %v", err)
+				errs = append(errs, err)
+			}
+		case postIssuesSingle:
+			if c.benchmarkInfoMap == nil {
+				return errors.New("--benchmark-config is required when using --post-issues=single")
+			}
+			err = c.maybePostRegressionIssuesSingle(comparisonResult)
+			if err != nil {
+				log.Printf("Failed to post GitHub issues (single): %v", err)
 				errs = append(errs, err)
 			}
 		}
@@ -235,7 +245,8 @@ func makeCompareCommand() *cobra.Command {
 	cmd.Flags().StringVar(&config.influxConfig.token, "influx-token", config.influxConfig.token, "pass an InfluxDB auth token to push the results to InfluxDB")
 	cmd.Flags().StringToStringVar(&config.influxConfig.metadata, "influx-metadata", config.influxConfig.metadata, "pass metadata to add to the InfluxDB measurement")
 	cmd.Flags().Float64Var(&config.threshold, "threshold", config.threshold, "threshold in percentage value for detecting perf regression ")
-	cmd.Flags().BoolVar(&config.postIssues, "post-issues", config.postIssues, "post GitHub issues for performance regressions (requires GITHUB_API_TOKEN to be set)")
+	cmd.Flags().StringVar(&config.postIssues, "post-issues", config.postIssues, "post GitHub issues for regressions: 'group' (one per package) or 'single' (one per benchmark, requires --benchmark-config)")
+	cmd.Flags().StringVar(&config.benchmarkConfig, "benchmark-config", config.benchmarkConfig, "benchmark config JSON (generated from list command)")
 	return cmd
 }
 

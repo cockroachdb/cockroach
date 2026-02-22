@@ -101,6 +101,13 @@ cp $BAZEL_BIN/pkg/cmd/roachprod-microbench/roachprod-microbench_/roachprod-micro
 chmod a+w bin/roachprod bin/roachprod-microbench
 EOF
 
+# Export the benchmark configuration from the experiment branch. This generates
+# a JSON file with per-benchmark settings (benchtime, count, timeout, threshold,
+# post-issue policy) parsed from benchmark-ci: comments in the source code.
+benchmark_config="$output_dir/benchmark_config.json"
+mkdir -p "$output_dir"
+./bin/roachprod-microbench list --export="$benchmark_config"
+
 # Check if the baseline cache exists and copy it to the output directory.
 baseline_cache_path="gs://$BENCH_BUCKET/cache/$GCE_MACHINE_TYPE/$SANITIZED_BENCH_PACKAGE/${sha_arr[1]}"
 declare -a build_sha_arr
@@ -151,6 +158,7 @@ fi
   --binaries experiment="$remote_dir/${build_sha_arr[0]}" \
   ${build_sha_arr[1]:+--binaries baseline="$remote_dir/${build_sha_arr[1]}"} \
   --output-dir="$output_dir" \
+  --benchmark-config="$benchmark_config" \
   --iterations "$BENCH_ITERATIONS" \
   --shell="$BENCH_SHELL" \
   ${BENCH_TIMEOUT:+--timeout="$BENCH_TIMEOUT"} \
@@ -208,7 +216,8 @@ if [ -d "$output_dir/experiment" ] && [ "$(ls -A "$output_dir/experiment")" ] \
     --generate-sheet \
     ${influx_token:+--influx-token="$influx_token"} \
     ${influx_host:+--influx-host="$influx_host"} \
-    ${TRIGGERED_BUILD:+--post-issues} \
+    ${TRIGGERED_BUILD:+--post-issues=single} \
+    --benchmark-config="$benchmark_config" \
     2>&1 | tee "$output_dir/sheets.txt"
 else
   echo "No microbenchmarks were run. Skipping comparison."
