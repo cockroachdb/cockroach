@@ -59,7 +59,6 @@ go_test(
         "//pkg/ccl/changefeedccl/schemafeed",
         "//pkg/ccl/changefeedccl/schemafeed/schematestutils",
         "//pkg/ccl/changefeedccl/timers",
-        "//pkg/ccl/storageccl",
         "//pkg/jobs/jobspb",
         "//pkg/keys",
         "//pkg/kv",

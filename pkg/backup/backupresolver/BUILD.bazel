@@ -33,7 +33,6 @@ go_test(
     embed = [":backupresolver"],
     deps = [
         "//pkg/base",
-        "//pkg/ccl/storageccl",
         "//pkg/security/securityassets",
         "//pkg/security/securitytest",
         "//pkg/security/username",

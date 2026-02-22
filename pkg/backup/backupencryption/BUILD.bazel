@@ -8,7 +8,6 @@ go_library(
     deps = [
         "//pkg/backup/backupbase",
         "//pkg/base",
-        "//pkg/ccl/storageccl",
         "//pkg/cloud",
         "//pkg/jobs/jobspb",
         "//pkg/security/username",
@@ -17,6 +16,7 @@ go_library(
         "//pkg/sql/exprutil",
         "//pkg/sql/isql",
         "//pkg/sql/sem/tree",
+        "//pkg/storage",
         "//pkg/util/ioctx",
         "//pkg/util/protoutil",
         "@com_github_cockroachdb_errors//:errors",

@@ -12,7 +12,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/backup/backupencryption"
 	"github.com/cockroachdb/cockroach/pkg/backup/backuppb"
 	"github.com/cockroachdb/cockroach/pkg/backup/backupsink"
-	"github.com/cockroachdb/cockroach/pkg/ccl/storageccl"
 	"github.com/cockroachdb/cockroach/pkg/cloud"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -389,7 +388,7 @@ func openSSTs(
 		}
 	}()
 
-	storeFiles := make([]storageccl.StoreFile, 0, len(entry.Files))
+	storeFiles := make([]storage.StoreFile, 0, len(entry.Files))
 	for idx := range entry.Files {
 		file := entry.Files[idx]
 		if file.HasRangeKeys {
@@ -402,14 +401,14 @@ func openSSTs(
 			return mergedSST{}, err
 		}
 		dirs = append(dirs, dir)
-		storeFiles = append(storeFiles, storageccl.StoreFile{Store: dir, FilePath: file.Path})
+		storeFiles = append(storeFiles, storage.StoreFile{Store: dir, FilePath: file.Path})
 	}
 	iterOpts := storage.IterOptions{
 		KeyTypes:   storage.IterKeyTypePointsOnly,
 		LowerBound: keys.LocalMax,
 		UpperBound: keys.MaxKey,
 	}
-	iter, err := storageccl.ExternalSSTReader(ctx, storeFiles, encryptionOptions, iterOpts)
+	iter, err := storage.ExternalSSTReader(ctx, storeFiles, encryptionOptions, iterOpts)
 	if err != nil {
 		return mergedSST{}, err
 	}

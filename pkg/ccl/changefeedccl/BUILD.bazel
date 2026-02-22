@@ -266,7 +266,6 @@ go_test(
         "//pkg/ccl/multiregionccl",
         "//pkg/ccl/multiregionccl/multiregionccltestutils",
         "//pkg/ccl/partitionccl",
-        "//pkg/ccl/storageccl",
         "//pkg/ccl/utilccl",
         "//pkg/cloud",
         "//pkg/cloud/cloudpb",

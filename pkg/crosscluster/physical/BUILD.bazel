@@ -134,7 +134,6 @@ go_test(
         "//pkg/ccl",
         "//pkg/ccl/changefeedccl",
         "//pkg/ccl/changefeedccl/cdctest",
-        "//pkg/ccl/storageccl",
         "//pkg/cloud/impl:cloudimpl",
         "//pkg/clusterversion",
         "//pkg/crosscluster",

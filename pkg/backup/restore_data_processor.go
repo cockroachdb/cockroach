@@ -15,7 +15,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/backup/backuppb"
 	"github.com/cockroachdb/cockroach/pkg/backup/backupsink"
 	"github.com/cockroachdb/cockroach/pkg/backup/backuputils"
-	"github.com/cockroachdb/cockroach/pkg/ccl/storageccl"
 	"github.com/cockroachdb/cockroach/pkg/cloud"
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -353,7 +352,7 @@ func (rd *restoreDataProcessor) openSSTs(
 
 	log.VEventf(ctx, 1, "ingesting %d files in span %d [%s-%s)", len(entry.Files), entry.ProgressIdx, entry.Span.Key, entry.Span.EndKey)
 
-	storeFiles := make([]storageccl.StoreFile, 0, len(entry.Files))
+	storeFiles := make([]storage.StoreFile, 0, len(entry.Files))
 
 	idx := 0
 	if resume != nil {
@@ -369,7 +368,7 @@ func (rd *restoreDataProcessor) openSSTs(
 			return mergedSST{}, nil, err
 		}
 		dirs = append(dirs, dir)
-		storeFiles = append(storeFiles, storageccl.StoreFile{Store: dir, FilePath: file.Path})
+		storeFiles = append(storeFiles, storage.StoreFile{Store: dir, FilePath: file.Path})
 	}
 
 	iterOpts := storage.IterOptions{
@@ -378,7 +377,7 @@ func (rd *restoreDataProcessor) openSSTs(
 		LowerBound:           keys.LocalMax,
 		UpperBound:           keys.MaxKey,
 	}
-	iter, err := storageccl.ExternalSSTReader(ctx, storeFiles, rd.spec.Encryption, iterOpts)
+	iter, err := storage.ExternalSSTReader(ctx, storeFiles, rd.spec.Encryption, iterOpts)
 	if err != nil {
 		return mergedSST{}, nil, err
 	}
@@ -412,14 +411,14 @@ func (rd *restoreDataProcessor) openSSTsForFiles(
 		}
 	}()
 
-	storeFiles := make([]storageccl.StoreFile, 0, len(files))
+	storeFiles := make([]storage.StoreFile, 0, len(files))
 	for _, file := range files {
 		dir, err := rd.FlowCtx.Cfg.ExternalStorage(ctx, file.Dir)
 		if err != nil {
 			return mergedSST{}, err
 		}
 		dirs = append(dirs, dir)
-		storeFiles = append(storeFiles, storageccl.StoreFile{Store: dir, FilePath: file.Path})
+		storeFiles = append(storeFiles, storage.StoreFile{Store: dir, FilePath: file.Path})
 	}
 
 	iterOpts := storage.IterOptions{
@@ -428,7 +427,7 @@ func (rd *restoreDataProcessor) openSSTsForFiles(
 		LowerBound:           keys.LocalMax,
 		UpperBound:           keys.MaxKey,
 	}
-	iter, err := storageccl.ExternalSSTReader(ctx, storeFiles, rd.spec.Encryption, iterOpts)
+	iter, err := storage.ExternalSSTReader(ctx, storeFiles, rd.spec.Encryption, iterOpts)
 	if err != nil {
 		return mergedSST{}, err
 	}
