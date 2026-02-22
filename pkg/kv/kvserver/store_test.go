@@ -799,6 +799,9 @@ func TestMarkReplicaInitialized(t *testing.T) {
 		defer r.raftMu.Unlock()
 		r.setDescRaftMuLocked(ctx, desc)
 	}()
+	// markReplicaInitializedLockedReplLocked expects the replica to be
+	// initialized.
+	r.isInitialized.Store(true)
 	expectedResult = "not in uninitReplicas"
 	func() {
 		r.mu.Lock()
