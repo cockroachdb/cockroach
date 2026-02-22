@@ -16,6 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdceval"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedvalidators"
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobfrontier"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobsauth"
@@ -144,6 +145,10 @@ func alterChangefeedPlanHook(
 		)
 		if err != nil {
 			return err
+		}
+		if p.ExecCfg().Settings.Version.IsActive(ctx, clusterversion.V26_2_ChangefeedsDiscardEmptyTopicName) &&
+			!p.ExecCfg().Settings.Version.IsActive(ctx, clusterversion.V26_2_ChangefeedsRejectEmptyTopicName) {
+			newSinkURI = changefeedbase.StripEmptyParam(newSinkURI, changefeedbase.SinkParamTopicName)
 		}
 
 		st, err := newOptions.GetInitialScanType()

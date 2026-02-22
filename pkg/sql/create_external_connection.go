@@ -8,9 +8,12 @@ package sql
 import (
 	"context"
 	"fmt"
+	"net/url"
 
 	"github.com/cockroachdb/cockroach/pkg/cloud"
 	"github.com/cockroachdb/cockroach/pkg/cloud/externalconn"
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
@@ -79,6 +82,7 @@ func (p *planner) createExternalConnection(
 	if err != nil {
 		return err
 	}
+	ec.endpoint = v26_2_maybeStripEmptyTopicNameFromSinkURI(params.ctx, params.ExecCfg().Settings, ec.endpoint)
 
 	ex := externalconn.NewMutableExternalConnection()
 	// TODO(adityamaru): Revisit if we need to reject certain kinds of names.
@@ -166,6 +170,39 @@ func logAndSanitizeExternalConnectionURI(ctx context.Context, externalConnection
 	}
 	log.Ops.Infof(ctx, "external connection planning on connecting to destination %v", redact.Safe(clean))
 	return nil
+}
+
+// v26_2_maybeStripEmptyTopicNameFromSinkURI strips an empty topic_name
+// query param from a sink URI for kafka or pubsub schemes, which is fine
+// because changefeeds (the only user of these schemes) effectively ignore
+// an empty topic_name.
+//
+// This is gated between V26_2_ChangefeedsDiscardEmptyTopicName and
+// V26_2_ChangefeedsRejectEmptyTopicName; after the latter, the validation
+// rejects the URI with an error instead.
+func v26_2_maybeStripEmptyTopicNameFromSinkURI(
+	ctx context.Context, settings *cluster.Settings, uri string,
+) string {
+	if !settings.Version.IsActive(ctx, clusterversion.V26_2_ChangefeedsDiscardEmptyTopicName) ||
+		settings.Version.IsActive(ctx, clusterversion.V26_2_ChangefeedsRejectEmptyTopicName) {
+		return uri
+	}
+	u, err := url.Parse(uri)
+	if err != nil {
+		return uri
+	}
+	switch u.Scheme {
+	case "kafka", "confluent-cloud", "azure-event-hub", "gcpubsub":
+	default:
+		return uri
+	}
+	q := u.Query()
+	if !q.Has("topic_name") || q.Get("topic_name") != "" {
+		return uri
+	}
+	q.Del("topic_name")
+	u.RawQuery = q.Encode()
+	return u.String()
 }
 
 func (c *createExternalConnectionNode) Next(_ runParams) (bool, error) { return false, nil }

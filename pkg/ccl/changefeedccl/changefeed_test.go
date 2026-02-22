@@ -7405,6 +7405,12 @@ func TestChangefeedErrors(t *testing.T) {
 		`CREATE CHANGEFEED FOR foo INTO $1`, `experimental-sql://d/?topic_name=foo`,
 	)
 
+	// Empty topic_name should be rejected.
+	sqlDB.ExpectErrWithTimeout(
+		t, `param topic_name must not be empty`,
+		`CREATE CHANGEFEED FOR foo INTO $1`, `kafka://nope/?topic_name=`,
+	)
+
 	// schema_topic will be implemented but isn't yet.
 	sqlDB.ExpectErrWithTimeout(
 		t, `schema_topic is not yet supported`,
