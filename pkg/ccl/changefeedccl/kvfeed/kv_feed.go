@@ -551,12 +551,15 @@ func (f *kvFeed) scanIfShould(
 		return spansToScan, scanTime, nil
 	}
 
-	// Filter out any spans that have already been backfilled.
+	// Filter out checkpointed spans for initial scans. Schema change
+	// backfills must scan all spans to emit rows with the new schema.
 	var spansToBackfill roachpb.SpanGroup
 	spansToBackfill.Add(spansToScan...)
-	for sp, ts := range resumeFrontier.Entries() {
-		if scanTime.LessEq(ts) {
-			spansToBackfill.Sub(sp)
+	if isInitialScan {
+		for sp, ts := range resumeFrontier.Entries() {
+			if scanTime.LessEq(ts) {
+				spansToBackfill.Sub(sp)
+			}
 		}
 	}
 
