@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 )
@@ -79,6 +80,7 @@ func WaitForJobToHaveStatus(
 	t testing.TB, db *sqlutils.SQLRunner, jobID jobspb.JobID, expectedStatus jobs.State,
 ) {
 	t.Helper()
+	start := timeutil.Now()
 	const duration = 2 * time.Minute
 	err := retry.ForDuration(duration, func() error {
 		var status string
@@ -91,6 +93,13 @@ func WaitForJobToHaveStatus(
 			t.Fatalf("job failed: %s", payload.Error)
 		}
 		if e, a := expectedStatus, jobs.State(status); e != a {
+			// Add a small delay here since retry.ForDuration starts with a 1ns
+			// delay which can cause tight looping and excessive contention on
+			// the jobs table.
+			time.Sleep(time.Millisecond * 5)
+			if dur := timeutil.Since(start); dur > 10*time.Second {
+				t.Logf("waiting %s for job %d to have status %s; currently %s", dur, jobID, e, a)
+			}
 			return errors.Errorf("expected job status %s, but got %s", e, a)
 		}
 		return nil
@@ -219,4 +228,12 @@ func GetJobPayload(t testing.TB, db *sqlutils.SQLRunner, jobID jobspb.JobID) *jo
 		t.Fatal(err)
 	}
 	return ret
+}
+
+// GetJobRunningStatus returns the running status message from the job_status table.
+// Returns empty string if no status has been set.
+func GetJobRunningStatus(t testing.TB, db *sqlutils.SQLRunner, jobID jobspb.JobID) string {
+	var status gosql.NullString
+	db.QueryRow(t, "SELECT status FROM system.job_status WHERE job_id = $1", jobID).Scan(&status)
+	return status.String
 }

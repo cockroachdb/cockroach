@@ -919,6 +919,28 @@ func GetJobTraceID(ctx context.Context, db isql.DB, jobID jobspb.JobID) (tracing
 	return traceID, nil
 }
 
+func CheckRunningOrReverting(ctx context.Context, txn isql.Txn, jobID jobspb.JobID) error {
+	row, err := txn.QueryRowEx(
+		ctx,
+		"check-job-state",
+		txn.KV(),
+		sessiondata.NodeUserSessionDataOverride,
+		"SELECT status, error_msg FROM system.jobs WHERE id = $1",
+		jobID,
+	)
+	if err != nil {
+		return err
+	}
+	if row == nil {
+		return &JobNotFoundError{jobID: jobID}
+	}
+	state, errorMsg := State(tree.MustBeDString(row[0])), string(tree.MustBeDStringOrDNull(row[1]))
+	if state != StateRunning && state != StateReverting {
+		return &InvalidStateError{jobID, state, "update progress on", errorMsg}
+	}
+	return nil
+}
+
 // LoadJobProgress returns the job progress from the info table. Note that the
 // progress can be nil if none is recorded.
 func LoadJobProgress(

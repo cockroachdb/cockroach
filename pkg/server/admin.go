@@ -3996,12 +3996,19 @@ func (s *systemAdminServer) ReadFromTenantInfo(
 		return nil, errors.Errorf("missing job ID")
 	}
 
-	progress, err := jobs.LoadJobProgress(ctx, s.sqlServer.internalDB, dstTenant.PhysicalReplicationConsumerJobID)
-	if err != nil {
+	var replicatedTime hlc.Timestamp
+	if err := s.sqlServer.internalDB.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+		details, err := jobs.LoadLegacyProgress(ctx, txn, dstTenant.PhysicalReplicationConsumerJobID)
+		if err != nil {
+			return err
+		}
+		replicatedTime = details.(jobspb.StreamIngestionProgress).ReplicatedTime
+		return nil
+	}); err != nil {
 		return nil, err
 	}
 
-	return &serverpb.ReadFromTenantInfoResponse{ReadFrom: dstID, ReadAt: progress.GetStreamIngest().ReplicatedTime}, nil
+	return &serverpb.ReadFromTenantInfoResponse{ReadFrom: dstID, ReadAt: replicatedTime}, nil
 }
 
 // RecoveryCollectReplicaInfo is unimplemented here because adminServer also

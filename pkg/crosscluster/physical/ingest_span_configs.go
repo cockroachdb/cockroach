@@ -79,8 +79,10 @@ func makeSpanConfigIngestor(
 	ingestionJob *jobs.Job,
 	sourceTenantID roachpb.TenantID,
 	stopperCh chan struct{},
+	progress jobspb.StreamIngestionProgress,
 ) (*spanConfigIngestor, error) {
-	clusterUris, err := getClusterUris(ctx, ingestionJob, execCfg.InternalDB)
+	details := ingestionJob.Details().(jobspb.StreamIngestionDetails)
+	clusterUris, err := getClusterUris(ctx, execCfg.InternalDB, details, progress)
 	if err != nil {
 		return nil, err
 
@@ -90,8 +92,6 @@ func makeSpanConfigIngestor(
 	if err != nil {
 		return nil, err
 	}
-
-	details := ingestionJob.Details().(jobspb.StreamIngestionDetails)
 
 	rekeyCfg := execinfrapb.TenantRekey{
 		OldID: sourceTenantID,

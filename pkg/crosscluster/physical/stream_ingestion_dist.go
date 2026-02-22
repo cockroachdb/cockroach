@@ -50,11 +50,16 @@ func startDistIngestion(
 ) error {
 	ingestionJob := resumer.job
 	details := ingestionJob.Details().(jobspb.StreamIngestionDetails)
-	streamProgress := ingestionJob.Progress().Details.(*jobspb.Progress_StreamIngest).StreamIngest
+
+	// Load fresh progress at the start of the function.
+	progress, err := loadStreamIngestionProgress(ctx, execCtx.ExecCfg().InternalDB, ingestionJob.ID())
+	if err != nil {
+		return err
+	}
 
 	streamID := streampb.StreamID(details.StreamID)
 	initialScanTimestamp := details.ReplicationStartTime
-	replicatedTime := streamProgress.ReplicatedTime
+	replicatedTime := progress.ReplicatedTime
 
 	if replicatedTime.IsEmpty() && initialScanTimestamp.IsEmpty() {
 		return jobs.MarkAsPermanentJobError(errors.AssertionFailedf("initial timestamp and replicated timestamp are both empty"))
@@ -62,14 +67,14 @@ func startDistIngestion(
 
 	// Start from the last checkpoint if it exists.
 	heartbeatTimestamp := replicationutils.ResolveHeartbeatTime(
-		replicatedTime, details.ReplicationStartTime, streamProgress.CutoverTime, details.ReplicationTTLSeconds)
+		replicatedTime, details.ReplicationStartTime, progress.CutoverTime, details.ReplicationTTLSeconds)
 	msg := redact.Sprintf("resuming stream (producer job %d) from %s", streamID, heartbeatTimestamp)
 
-	if streamProgress.InitialRevertRequired {
-		updateStatus(ctx, ingestionJob, jobspb.InitializingReplication, "reverting existing data to prepare for replication")
+	if progress.InitialRevertRequired {
+		updateStatus(ctx, execCtx.ExecCfg(), ingestionJob, jobspb.InitializingReplication, "reverting existing data to prepare for replication")
 
 		revertTo := replicatedTime
-		revertTo.Forward(streamProgress.InitialRevertTo)
+		revertTo.Forward(progress.InitialRevertTo)
 
 		log.Dev.Infof(ctx, "reverting tenant %s to time %s (via %s) before starting replication", details.DestinationTenantID, replicatedTime, revertTo)
 
@@ -84,19 +89,29 @@ func startDistIngestion(
 			return err
 		}
 
-		if err := ingestionJob.NoTxn().Update(ctx, func(txn isql.Txn, md jobs.JobMetadata, ju *jobs.JobUpdater) error {
-			md.Progress.GetStreamIngest().InitialRevertRequired = false
-			ju.UpdateProgress(md.Progress)
-			updateStatusInternal(md, ju, jobspb.InitializingReplication, string(msg))
-			return nil
+		// Update local pointer and persist.
+		statusMessage := string(msg.Redact())
+		if err := execCtx.ExecCfg().InternalDB.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+			p, err := jobs.LoadLegacyProgress(ctx, txn, ingestionJob.ID())
+			if err != nil {
+				return err
+			}
+			progress = p.(jobspb.StreamIngestionProgress)
+			progress.InitialRevertRequired = false
+			progress.ReplicationStatus = jobspb.InitializingReplication
+			if err := jobs.StoreLegacyProgress(ctx, txn, ingestionJob.ID(), progress); err != nil {
+				return err
+			}
+			return jobs.StatusStorage(ingestionJob.ID()).Set(ctx, txn, statusMessage)
 		}); err != nil {
 			return errors.Wrap(err, "failed to update job progress")
 		}
+		log.Dev.Infof(ctx, "%s", msg)
 	} else {
-		updateStatus(ctx, ingestionJob, jobspb.InitializingReplication, msg)
+		updateStatus(ctx, execCtx.ExecCfg(), ingestionJob, jobspb.InitializingReplication, msg)
 	}
 
-	clusterUris, err := getClusterUris(ctx, ingestionJob, execCtx.ExecCfg().InternalDB)
+	clusterUris, err := getClusterUris(ctx, execCtx.ExecCfg().InternalDB, details, progress)
 	if err != nil {
 		return err
 	}
@@ -121,7 +136,7 @@ func startDistIngestion(
 		details,
 		client,
 		replicatedTime,
-		streamProgress.Checkpoint,
+		progress.Checkpoint,
 		initialScanTimestamp,
 		dsp.GatewayID())
 	if err != nil {
@@ -129,20 +144,26 @@ func startDistIngestion(
 	}
 
 	if planner.initialPartitionPgUrls[0].RoutingMode() != streamclient.RoutingModeGateway {
-		err = ingestionJob.NoTxn().Update(ctx, func(txn isql.Txn, md jobs.JobMetadata, ju *jobs.JobUpdater) error {
-			// Persist the initial Stream Addresses to the jobs table before execution begins.
-			if len(planner.initialPartitionPgUrls) == 0 {
-				return jobs.MarkAsPermanentJobError(errors.AssertionFailedf(
-					"attempted to persist an empty list of partition connection uris"))
+		// Persist the initial Stream Addresses to the jobs table before execution begins.
+		if len(planner.initialPartitionPgUrls) == 0 {
+			return jobs.MarkAsPermanentJobError(errors.AssertionFailedf(
+				"attempted to persist an empty list of partition connection uris"))
+		}
+		// Update local pointer and persist.
+		if err := execCtx.ExecCfg().InternalDB.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+			p, err := jobs.LoadLegacyProgress(ctx, txn, ingestionJob.ID())
+			if err != nil {
+				return err
 			}
-			md.Progress.GetStreamIngest().PartitionConnUris = make([]string, len(planner.initialPartitionPgUrls))
+			prog := p.(jobspb.StreamIngestionProgress)
+			prog.PartitionConnUris = make([]string, len(planner.initialPartitionPgUrls))
 			for i := range planner.initialPartitionPgUrls {
-				md.Progress.GetStreamIngest().PartitionConnUris[i] = planner.initialPartitionPgUrls[i].Serialize()
+				prog.PartitionConnUris[i] = planner.initialPartitionPgUrls[i].Serialize()
 			}
-			ju.UpdateProgress(md.Progress)
-			return nil
-		})
-		if err != nil {
+
+			progress = prog
+			return jobs.StoreLegacyProgress(ctx, txn, ingestionJob.ID(), prog)
+		}); err != nil {
 			return errors.Wrap(err, "failed to update job progress")
 		}
 	}
@@ -195,7 +216,7 @@ func startDistIngestion(
 		if err != nil {
 			return err
 		}
-		ingestor, err := makeSpanConfigIngestor(ctx, execCtx.ExecCfg(), ingestionJob, sourceTenantID, spanConfigIngestStopper)
+		ingestor, err := makeSpanConfigIngestor(ctx, execCtx.ExecCfg(), ingestionJob, sourceTenantID, spanConfigIngestStopper, progress)
 		if err != nil {
 			return err
 		}
@@ -252,7 +273,7 @@ func startDistIngestion(
 	// this once during initial planning to avoid re-splitting on
 	// resume since it isn't clear to us at the moment whether
 	// re-splitting is always going to be useful.
-	if !streamProgress.InitialSplitComplete {
+	if !progress.InitialSplitComplete {
 		codec := execCtx.ExtendedEvalContext().Codec
 		splitter := &dbSplitAndScatter{db: execCtx.ExecCfg().DB}
 		countNumOfSplitsAndScatters := func() int {
@@ -266,7 +287,7 @@ func startDistIngestion(
 		}
 		msg := redact.Sprintf("creating %d initial splits based on the source cluster's topology",
 			countNumOfSplitsAndScatters())
-		updateStatus(ctx, ingestionJob, jobspb.CreatingInitialSplits, msg)
+		updateStatus(ctx, execCtx.ExecCfg(), ingestionJob, jobspb.CreatingInitialSplits, msg)
 		if err := createInitialSplits(ctx, codec, splitter, planner.initialTopology, len(planner.initialDestinationNodes), details.DestinationTenantID); err != nil {
 			return err
 		}
@@ -275,16 +296,26 @@ func startDistIngestion(
 	}
 
 	replicationStatusForFlow := jobspb.Replicating
-	if streamProgress.ReplicatedTime.IsEmpty() {
+	if progress.ReplicatedTime.IsEmpty() {
 		replicationStatusForFlow = jobspb.InitialScan
 	}
 
-	if err := ingestionJob.NoTxn().Update(ctx, func(txn isql.Txn, md jobs.JobMetadata, ju *jobs.JobUpdater) error {
-		md.Progress.GetStreamIngest().ReplicationStatus = replicationStatusForFlow
-		md.Progress.GetStreamIngest().InitialSplitComplete = true
-		md.Progress.StatusMessage = replicationStatusForFlow.String()
-		ju.UpdateProgress(md.Progress)
-		return nil
+	statusMessage := replicationStatusForFlow.String()
+	var loadedProgress jobspb.StreamIngestionProgress
+	// Update local pointer and persist.
+	if err := execCtx.ExecCfg().InternalDB.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+		prog, err := jobs.LoadLegacyProgress(ctx, txn, ingestionJob.ID())
+		if err != nil {
+			return err
+		}
+		loadedProgress = prog.(jobspb.StreamIngestionProgress)
+		loadedProgress.ReplicationStatus = replicationStatusForFlow
+		loadedProgress.InitialSplitComplete = true
+
+		if err := jobs.StoreLegacyProgress(ctx, txn, ingestionJob.ID(), loadedProgress); err != nil {
+			return err
+		}
+		return jobs.StatusStorage(ingestionJob.ID()).Set(ctx, txn, statusMessage)
 	}); err != nil {
 		return err
 	}

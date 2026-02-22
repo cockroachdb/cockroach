@@ -131,7 +131,7 @@ func TestTenantStreamingProducerJobTimedOut(t *testing.T) {
 	jobutils.WaitForJobToFail(c.T, c.SrcSysSQL, jobspb.JobID(producerJobID))
 	// The ingestion job will stop retrying as this is a permanent job error.
 	jobutils.WaitForJobToPause(c.T, c.DestSysSQL, jobspb.JobID(ingestionJobID))
-	require.Regexp(t, "ingestion job failed .* but is being paused",
+	require.Regexp(t, "pausing: .* is not active and in status STREAM_INACTIVE",
 		replicationtestutils.GetStatusMesssage(t, c.DestSysSQL, ingestionJobID))
 
 	ts := c.DestCluster.Server(0).Clock().Now()
@@ -365,14 +365,18 @@ func TestTenantStreamingCheckpoint(t *testing.T) {
 	producerJobID, ingestionJobID := c.StartStreamReplication(ctx)
 
 	// Helper to read job progress
-	jobRegistry := c.DestSysServer.JobRegistry().(*jobs.Registry)
 	loadIngestProgress := func() *jobspb.StreamIngestionProgress {
-		job, err := jobRegistry.LoadJob(context.Background(), jobspb.JobID(ingestionJobID))
-		require.NoError(t, err)
-
-		progress := job.Progress()
-		ingestProgress := progress.Details.(*jobspb.Progress_StreamIngest).StreamIngest
-		return ingestProgress
+		execCfg := c.DestSysServer.ExecutorConfig().(sql.ExecutorConfig)
+		var ingestProgress jobspb.StreamIngestionProgress
+		require.NoError(t, execCfg.InternalDB.Txn(context.Background(), func(ctx context.Context, txn isql.Txn) error {
+			details, err := jobs.LoadLegacyProgress(ctx, txn, jobspb.JobID(ingestionJobID))
+			if err != nil {
+				return err
+			}
+			ingestProgress = details.(jobspb.StreamIngestionProgress)
+			return nil
+		}))
+		return &ingestProgress
 	}
 
 	c.SrcExec(func(t *testing.T, sysSQL *sqlutils.SQLRunner, tenantSQL *sqlutils.SQLRunner) {
@@ -1038,9 +1042,14 @@ func TestProtectedTimestampManagement(t *testing.T) {
 		checkDestinationPTSExists(t, replicationJobID)
 
 		if completeReplication {
+			// Wait for some replication progress before cutover.
+			srcTime := c.SrcCluster.Server(0).Clock().Now()
+			c.WaitUntilReplicatedTime(srcTime, jobspb.JobID(replicationJobID))
 			// Complete replication via cutover.
-			var emptyCutoverTime time.Time
-			c.Cutover(ctx, producerJobID, replicationJobID, emptyCutoverTime, false)
+			c.Cutover(ctx, producerJobID, replicationJobID, srcTime.GoTime(), false)
+			// Speed up producer job completion.
+			c.SrcSysSQL.Exec(t, fmt.Sprintf(`ALTER TENANT '%s' SET REPLICATION SOURCE EXPIRATION WINDOW ='100ms'`, c.Args.SrcTenantName))
+			jobutils.WaitForJobToSucceed(t, c.DestSysSQL, jobspb.JobID(replicationJobID))
 		} else {
 			// Cancel replication.
 			c.DestSysSQL.Exec(t, fmt.Sprintf("CANCEL JOB %d", replicationJobID))
@@ -1049,6 +1058,9 @@ func TestProtectedTimestampManagement(t *testing.T) {
 
 		// Verify PTS is released after job completion/cancellation.
 		checkNoDestinationProtection(t, replicationJobID)
+
+		// Clean up tenant to avoid interference with next subtest.
+		c.DestSysSQL.Exec(t, fmt.Sprintf("DROP TENANT %s", destTenantName))
 	})
 }
 

@@ -445,7 +445,10 @@ func refreshTenant(
 		if isProtected {
 			log.Dev.Infof(ctx, "GC TTL for dropped tenant %d has expired, but protected timestamp "+
 				"record(s) on the tenant keyspace are preventing GC", tenID)
-			return false, deadlineUnix, nil
+			// Return a time in the future to avoid tight-looping while waiting
+			// for the protected timestamp to be released.
+			nextCheck := timeutil.Now().Add(time.Second)
+			return false, nextCheck, nil
 		}
 
 		// At this point, the tenant's keyspace is ready for GC.

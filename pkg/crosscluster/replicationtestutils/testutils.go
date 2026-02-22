@@ -616,6 +616,11 @@ func WaitUntilReplicatedTime(
 		if err == nil {
 			return nil
 		}
+		// SucceedsSoon starts at only 1ns initial retry delay, leading to excessive
+		// contention until the exponential doublings gets that to a more reasonable
+		// delay. Add a few ms of extra sleep here to avoid starving the writes we
+		// are waiting on.
+		time.Sleep(time.Millisecond * 5)
 		// Check the job status to see if there is still anything to be waiting for.
 		jobStatus := db.QueryStr(t, "SELECT status, error FROM [SHOW JOB $1]", ingestionJobID)
 		if len(jobStatus) > 0 {
@@ -711,8 +716,7 @@ func ConfigureClusterSettings(setting map[string]string) []string {
 }
 
 func GetStatusMesssage(t *testing.T, sqlRunner *sqlutils.SQLRunner, ingestionJobID int) string {
-	p := jobutils.GetJobProgress(t, sqlRunner, jobspb.JobID(ingestionJobID))
-	return p.StatusMessage
+	return jobutils.GetJobRunningStatus(t, sqlRunner, jobspb.JobID(ingestionJobID))
 }
 
 func DecimalTimeToHLC(t *testing.T, s string) hlc.Timestamp {
