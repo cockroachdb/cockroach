@@ -10,7 +10,6 @@ package aggmetric
 
 import (
 	"context"
-	"hash/fnv"
 	"strings"
 	"time"
 
@@ -24,8 +23,6 @@ import (
 	"github.com/google/btree"
 	io_prometheus_client "github.com/prometheus/client_model/go"
 )
-
-var delimiter = []byte{'_'}
 
 const (
 	dbLabel  = "database"
@@ -247,7 +244,7 @@ func (cs *childSet) getOrAddWithLabelSliceCache(
 	defer cs.mu.Unlock()
 
 	// Create a LabelSliceCacheKey from the label.
-	key := metricKey(labelVals...)
+	key := metricKey(labelVals)
 
 	// Check if the child already exists
 	if child, ok := cs.mu.children.GetValue(key); ok {
@@ -281,7 +278,7 @@ func (cs *childSet) EachWithLabels(
 		childLabels := make([]*io_prometheus_client.LabelPair, 0, len(labels)+len(cs.labels))
 		childLabels = append(childLabels, labels...)
 		lvs := cm.labelValues()
-		key := metricKey(lvs...)
+		key := metricKey(lvs)
 		labelValueCacheValues, _ := labelCache.Get(metric.LabelSliceCacheKey(key))
 		for i := range cs.labels {
 			childLabels = append(childLabels, &io_prometheus_client.LabelPair{
@@ -363,38 +360,13 @@ func (sm *SQLMetric) Each(
 	})
 }
 
-func (sm *SQLMetric) get(labelVals ...string) (ChildMetric, bool) {
-	return sm.mu.children.Get(labelVals...)
-}
-
-func (sm *SQLMetric) add(metric ChildMetric) {
-	sm.mu.children.Add(metric)
-}
-
 type createChildMetricFunc func(labelValues labelValuesSlice) ChildMetric
 
-// getOrAddChildLocked returns the child metric for the given label values. If the child
-// doesn't exist, it creates a new one and adds it to the collection.
-// REQUIRES: sm.mu is locked.
-func (sm *SQLMetric) getOrAddChildLocked(
-	f createChildMetricFunc, labelValues ...string,
-) ChildMetric {
-	// If the child already exists, return it.
-	if child, ok := sm.get(labelValues...); ok {
-		return child
-	}
-
-	child := f(labelValues)
-
-	sm.add(child)
-	return child
-}
-
-// getChildByLabelConfig returns the child metric based on the label configuration.
+// getOrAddChildByLabelConfig returns the child metric based on the label configuration.
 // It returns the child metric and a boolean indicating if the child was found.
 // If the label configuration is either LabelConfigDisabled or unrecognised, it returns
 // ChildMetric as nil and false.
-func (sm *SQLMetric) getChildByLabelConfig(
+func (sm *SQLMetric) getOrAddChildByLabelConfig(
 	f createChildMetricFunc, db string, app string,
 ) (ChildMetric, bool) {
 	// We should acquire the lock before evaluating the label configuration
@@ -403,22 +375,41 @@ func (sm *SQLMetric) getChildByLabelConfig(
 	sm.mu.Lock()
 	defer sm.mu.Unlock()
 
-	var childMetric ChildMetric
+	// Compute the hash key from the known label values.
+	var key uint64
 	switch sm.mu.labelConfig {
 	case metric.LabelConfigDisabled:
 		return nil, false
 	case metric.LabelConfigDB:
-		childMetric = sm.getOrAddChildLocked(f, db)
-		return childMetric, true
+		key = hashLabel(fnvBase, db)
 	case metric.LabelConfigApp:
-		childMetric = sm.getOrAddChildLocked(f, app)
-		return childMetric, true
+		key = hashLabel(fnvBase, app)
 	case metric.LabelConfigAppAndDB:
-		childMetric = sm.getOrAddChildLocked(f, db, app)
-		return childMetric, true
+		key = hashLabel(hashLabel(fnvBase, db), app)
 	default:
 		return nil, false
 	}
+
+	// Return existing child.
+	if child, ok := sm.mu.children.GetValue(key); ok {
+		return child, true
+	}
+
+	// Create a new child.
+	var child ChildMetric
+	switch sm.mu.labelConfig {
+	case metric.LabelConfigDB:
+		child = f(labelValuesSlice{db})
+	case metric.LabelConfigApp:
+		child = f(labelValuesSlice{app})
+	case metric.LabelConfigAppAndDB:
+		child = f(labelValuesSlice{db, app})
+	}
+
+	if err := sm.mu.children.AddKey(key, child); err != nil {
+		return nil, false
+	}
+	return child, true
 }
 
 // ReinitialiseChildMetrics clears the child metrics and
@@ -462,13 +453,32 @@ type labelValuesSlice []string
 
 func (lv *labelValuesSlice) labelValues() []string { return []string(*lv) }
 
-func metricKey(labels ...string) uint64 {
-	hash := fnv.New64a()
-	for _, label := range labels {
-		_, _ = hash.Write([]byte(label))
-		_, _ = hash.Write(delimiter)
+// FNV-64a constants.
+const (
+	fnvBase  = uint64(14695981039346656037)
+	fnvPrime = uint64(1099511628211)
+)
+
+// hashLabel hashes a single label string followed by the delimiter into the
+// running FNV-64a hash state.
+func hashLabel(h uint64, s string) uint64 {
+	for i := 0; i < len(s); i++ {
+		h ^= uint64(s[i])
+		h *= fnvPrime
 	}
-	return hash.Sum64()
+	// Delimiter '_' between labels.
+	h ^= uint64('_')
+	h *= fnvPrime
+	return h
+}
+
+// metricKey computes an FNV-64a hash over the given label values.
+func metricKey(labels []string) uint64 {
+	h := fnvBase
+	for _, label := range labels {
+		h = hashLabel(h, label)
+	}
+	return h
 }
 
 type ChildrenStorage interface {
@@ -506,7 +516,7 @@ func (ucw *UnorderedCacheWrapper) AddKey(key uint64, metric ChildMetric) error {
 }
 
 func (ucw *UnorderedCacheWrapper) Get(labelVals ...string) (ChildMetric, bool) {
-	hashKey := metricKey(labelVals...)
+	hashKey := metricKey(labelVals)
 	value, ok := ucw.cache.Get(hashKey)
 	if !ok {
 		return nil, false
@@ -516,7 +526,7 @@ func (ucw *UnorderedCacheWrapper) Get(labelVals ...string) (ChildMetric, bool) {
 
 func (ucw *UnorderedCacheWrapper) Add(metric ChildMetric) {
 	labelValues := metric.labelValues()
-	hashKey := metricKey(labelValues...)
+	hashKey := metricKey(labelValues)
 	if _, ok := ucw.cache.Get(hashKey); ok {
 		panic(errors.AssertionFailedf("child %v already exists", metric.labelValues()))
 	}
@@ -524,7 +534,7 @@ func (ucw *UnorderedCacheWrapper) Add(metric ChildMetric) {
 }
 
 func (ucw *UnorderedCacheWrapper) Del(metric ChildMetric) {
-	hashKey := metricKey(metric.labelValues()...)
+	hashKey := metricKey(metric.labelValues())
 	if _, ok := ucw.cache.Get(hashKey); ok {
 		ucw.cache.Del(hashKey)
 	}
