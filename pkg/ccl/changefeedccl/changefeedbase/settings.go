@@ -308,7 +308,7 @@ var SinkIOWorkers = settings.RegisterIntSetting(
 	"changefeed.sink_io_workers",
 	"the number of workers used by changefeeds when sending requests to the sink "+
 		"(currently the batching versions of webhook, pubsub, and kafka sinks that are "+
-		"enabled by changefeed.new_<sink type>_sink_enabled only): <0 disables, 0 assigns "+
+		"enabled by changefeed.new_<sink type>_sink_enabled only): 0 assigns "+
 		"a reasonable default, >0 assigns the setting value",
 	0,
 	settings.WithPublic)
