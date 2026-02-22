@@ -13,6 +13,7 @@ import (
 	"math/rand"
 	"os"
 	"os/user"
+	"path/filepath"
 	"regexp"
 	"strings"
 	"time"
@@ -25,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/testselector"
 	"github.com/cockroachdb/cockroach/pkg/roachprod"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/config"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/errors"
 	_ "github.com/lib/pq" // register postgres driver
@@ -310,9 +312,12 @@ func testsToRun(
 		// the test categorization must be complete in 30 seconds
 		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 		defer cancel()
-		updateSpecForSelectiveTests(ctx, specs, func(format string, args ...interface{}) {
+		err := updateSpecForSelectiveTests(ctx, specs, func(format string, args ...interface{}) {
 			fmt.Fprintf(os.Stdout, format, args...)
 		})
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	var notSkipped []registry.TestSpec
@@ -377,13 +382,20 @@ func testsToRun(
 //  5. All tests that are marked "selected=true" are considered for the test run.
 func updateSpecForSelectiveTests(
 	ctx context.Context, specs []registry.TestSpec, logFunc func(format string, args ...interface{}),
-) {
+) error {
+	logPath := filepath.Join(roachtestflags.ArtifactsDir, "selector.log")
+	selectorLogger, err := logger.RootLogger(logPath, logger.NoTee)
+	if err != nil {
+		return err
+	}
+	defer selectorLogger.Close()
+	selectorLogger.Printf("This is the test selector logger")
+
 	selectedTestsCount := 0
-	allTests, err := testselector.CategoriseTests(ctx,
+	allTests, err := testselector.CategoriseTests(ctx, selectorLogger,
 		testselector.NewDefaultSelectTestsReq(roachtestflags.Cloud, roachtestflags.Suite))
 	if err != nil {
-		logFunc("running all tests! error selecting tests: %v\n", err)
-		return
+		return errors.Wrap(err, "running all tests! error selecting tests")
 	}
 
 	// successfulTests are the tests considered by snowflake to not run, but, part of the testSpecs.
@@ -436,6 +448,7 @@ func updateSpecForSelectiveTests(
 		}
 	}
 	logFunc("%d out of %d tests selected for the run!\n", selectedTestsCount, len(specs))
+	return nil
 }
 
 // testShouldBeSkipped decides whether a test should be skipped based on test details and suite
