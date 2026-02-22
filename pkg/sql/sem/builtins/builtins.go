@@ -3943,65 +3943,122 @@ value if you rely on the HLC for accuracy.`,
 		}
 	}, false /* supportsArrayInput */)),
 
-	"array_position": setProps(arrayProps(), arrayVariadicBuiltin(func(typ *types.T) []tree.Overload {
-		return []tree.Overload{
-			{
-				Types:      tree.ParamTypes{{Name: "array", Typ: types.MakeArray(typ)}, {Name: "elem", Typ: typ}},
-				ReturnType: tree.FixedReturnType(types.Int),
-				Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
-					if args[0] == tree.DNull {
-						return tree.DNull, nil
-					}
-					for i, e := range tree.MustBeDArray(args[0]).Array {
-						cmp, err := e.Compare(ctx, evalCtx, args[1])
-						if err != nil {
-							return nil, err
-						}
-						if cmp == 0 {
-							return tree.NewDInt(tree.DInt(i + 1)), nil
-						}
-					}
+	"array_position": makeBuiltin(arrayProps(),
+		tree.Overload{
+			Types:      tree.ParamTypes{{Name: "array", Typ: types.AnyArray}, {Name: "elem", Typ: types.AnyElement}},
+			ReturnType: tree.FixedReturnType(types.Int),
+			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
+				if args[0] == tree.DNull {
 					return tree.DNull, nil
-				},
-				Info:              "Return the index of the first occurrence of `elem` in `array`.",
-				Volatility:        volatility.Immutable,
-				CalledOnNullInput: true,
+				}
+				for i, e := range tree.MustBeDArray(args[0]).Array {
+					cmp, err := e.Compare(ctx, evalCtx, args[1])
+					if err != nil {
+						return nil, err
+					}
+					if cmp == 0 {
+						return tree.NewDInt(tree.DInt(i + 1)), nil
+					}
+				}
+				return tree.DNull, nil
 			},
-			{
-				Types:      tree.ParamTypes{{Name: "array", Typ: types.MakeArray(typ)}, {Name: "elem", Typ: typ}, {Name: "start", Typ: types.Int}},
-				ReturnType: tree.FixedReturnType(types.Int),
-				Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
-					if args[0] == tree.DNull {
-						return tree.DNull, nil
-					} else if args[2] == tree.DNull {
-						return nil, pgerror.Newf(pgcode.NullValueNotAllowed, "initial position must not be null")
-					}
-					darray := tree.MustBeDArray(args[0]).Array
-					start := int(tree.MustBeDInt(args[2]))
-					start = max(start, 1) // PostgreSQL behaviour - start < 1 is implicitly treated as 1
-					if start > len(darray) {
-						return tree.DNull, nil
-					}
-
-					darray = darray[start-1:]
-					for i, e := range darray {
-						cmp, err := e.Compare(ctx, evalCtx, args[1])
-						if err != nil {
-							return nil, err
-						}
-						if cmp == 0 {
-							return tree.NewDInt(tree.DInt(i + start)), nil
-						}
-					}
+			Info:              "Return the index of the first occurrence of `elem` in `array`.",
+			Volatility:        volatility.Immutable,
+			CalledOnNullInput: true,
+		},
+		tree.Overload{
+			Types:      tree.ParamTypes{{Name: "array", Typ: types.AnyArray}, {Name: "elem", Typ: types.AnyElement}, {Name: "start", Typ: types.Int}},
+			ReturnType: tree.FixedReturnType(types.Int),
+			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
+				if args[0] == tree.DNull {
 					return tree.DNull, nil
-				},
-				Info:              "Return the index of the first occurrence of `elem` in `array`, with the search begins at `start` index.",
-				Volatility:        volatility.Immutable,
-				CalledOnNullInput: true,
-			},
-		}
-	})),
+				} else if args[2] == tree.DNull {
+					return nil, pgerror.Newf(pgcode.NullValueNotAllowed, "initial position must not be null")
+				}
+				darray := tree.MustBeDArray(args[0]).Array
+				start := int(tree.MustBeDInt(args[2]))
+				start = max(start, 1) // PostgreSQL behaviour - start < 1 is implicitly treated as 1
+				if start > len(darray) {
+					return tree.DNull, nil
+				}
 
+				darray = darray[start-1:]
+				for i, e := range darray {
+					cmp, err := e.Compare(ctx, evalCtx, args[1])
+					if err != nil {
+						return nil, err
+					}
+					if cmp == 0 {
+						return tree.NewDInt(tree.DInt(i + start)), nil
+					}
+				}
+				return tree.DNull, nil
+			},
+			Info:              "Return the index of the first occurrence of `elem` in `array`, with the search begins at `start` index.",
+			Volatility:        volatility.Immutable,
+			CalledOnNullInput: true,
+		},
+	),
+
+	//setProps(arrayProps(), arrayVariadicBuiltin(func(typ *types.T) []tree.Overload {
+	//		return []tree.Overload{
+	//			{
+	//				Types:      tree.ParamTypes{{Name: "array", Typ: types.MakeArray(typ)}, {Name: "elem", Typ: typ}},
+	//				ReturnType: tree.FixedReturnType(types.Int),
+	//				Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
+	//					if args[0] == tree.DNull {
+	//						return tree.DNull, nil
+	//					}
+	//					for i, e := range tree.MustBeDArray(args[0]).Array {
+	//						cmp, err := e.Compare(ctx, evalCtx, args[1])
+	//						if err != nil {
+	//							return nil, err
+	//						}
+	//						if cmp == 0 {
+	//							return tree.NewDInt(tree.DInt(i + 1)), nil
+	//						}
+	//					}
+	//					return tree.DNull, nil
+	//				},
+	//				Info:              "Return the index of the first occurrence of `elem` in `array`.",
+	//				Volatility:        volatility.Immutable,
+	//				CalledOnNullInput: true,
+	//			},
+	//			{
+	//				Types:      tree.ParamTypes{{Name: "array", Typ: types.MakeArray(typ)}, {Name: "elem", Typ: typ}, {Name: "start", Typ: types.Int}},
+	//				ReturnType: tree.FixedReturnType(types.Int),
+	//				Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
+	//					if args[0] == tree.DNull {
+	//						return tree.DNull, nil
+	//					} else if args[2] == tree.DNull {
+	//						return nil, pgerror.Newf(pgcode.NullValueNotAllowed, "initial position must not be null")
+	//					}
+	//					darray := tree.MustBeDArray(args[0]).Array
+	//					start := int(tree.MustBeDInt(args[2]))
+	//					start = max(start, 1) // PostgreSQL behaviour - start < 1 is implicitly treated as 1
+	//					if start > len(darray) {
+	//						return tree.DNull, nil
+	//					}
+	//
+	//					darray = darray[start-1:]
+	//					for i, e := range darray {
+	//						cmp, err := e.Compare(ctx, evalCtx, args[1])
+	//						if err != nil {
+	//							return nil, err
+	//						}
+	//						if cmp == 0 {
+	//							return tree.NewDInt(tree.DInt(i + start)), nil
+	//						}
+	//					}
+	//					return tree.DNull, nil
+	//				},
+	//				Info:              "Return the index of the first occurrence of `elem` in `array`, with the search begins at `start` index.",
+	//				Volatility:        volatility.Immutable,
+	//				CalledOnNullInput: true,
+	//			},
+	//		}
+	//	})),
+	//
 	"array_positions": setProps(arrayProps(), arrayBuiltin(func(typ *types.T) tree.Overload {
 		return tree.Overload{
 			Types:      tree.ParamTypes{{Name: "array", Typ: types.MakeArray(typ)}, {Name: "elem", Typ: typ}},
