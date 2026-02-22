@@ -724,10 +724,10 @@ func drainWithIpTables(
 	// packets in both directions.
 	// TODO(baptist): Convert this to use a network partitioning utility.
 	if !c.IsLocal() {
-		c.Run(ctx, option.WithNodes(restartNode), `sudo iptables -A INPUT -p tcp --dport 26257 -j DROP`)
-		c.Run(ctx, option.WithNodes(restartNode), `sudo iptables -A OUTPUT -p tcp --dport 26257 -j DROP`)
+		c.Run(ctx, option.WithNodes(restartNode), `sudo iptables -w -A INPUT -p tcp --dport 26257 -j DROP`)
+		c.Run(ctx, option.WithNodes(restartNode), `sudo iptables -w -A OUTPUT -p tcp --dport 26257 -j DROP`)
 		// NB: We don't use the original context as it might be cancelled.
-		defer c.Run(context.Background(), option.WithNodes(restartNode), `sudo iptables -F`)
+		defer c.Run(context.Background(), option.WithNodes(restartNode), `sudo iptables -w -F`)
 	}
 	c.Stop(ctx, t.L(), option.DefaultStopOpts(), restartNode)
 

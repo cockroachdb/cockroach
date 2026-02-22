@@ -65,7 +65,7 @@ func (p partition) startPerturbation(ctx context.Context, t test.Test, v variati
 			ctx,
 			v.withPartitionedNodes(v, p.partitionSite),
 			fmt.Sprintf(
-				`sudo iptables -A INPUT -p tcp -s %s -j DROP`, targetIPs[0]))
+				`sudo iptables -w -A INPUT -p tcp -s %s -j DROP`, targetIPs[0]))
 	}
 	waitDuration(ctx, v.perturbationDuration)
 	// During the first 10 seconds after the partition, we expect latency to drop,
@@ -76,7 +76,7 @@ func (p partition) startPerturbation(ctx context.Context, t test.Test, v variati
 func (p partition) endPerturbation(ctx context.Context, t test.Test, v variations) time.Duration {
 	startTime := timeutil.Now()
 	if !v.IsLocal() {
-		v.Run(ctx, v.withPartitionedNodes(v, p.partitionSite), `sudo iptables -F`)
+		v.Run(ctx, v.withPartitionedNodes(v, p.partitionSite), `sudo iptables -w -F`)
 	}
 	waitDuration(ctx, v.validationDuration)
 	return timeutil.Since(startTime)
