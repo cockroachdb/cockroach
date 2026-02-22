@@ -155,9 +155,9 @@ func TestOTLPSink(t *testing.T) {
 			check: func(t *testing.T, reqs []*collpb.ExportLogsServiceRequest) {
 				require.Len(t, reqs, 1)
 				require.Len(t, reqs[0].ResourceLogs, 1)
-				require.Len(t, reqs[0].ResourceLogs[0].InstrumentationLibraryLogs, 1)
-				require.Len(t, reqs[0].ResourceLogs[0].InstrumentationLibraryLogs[0].Logs, 1)
-				logRecord := reqs[0].ResourceLogs[0].InstrumentationLibraryLogs[0].Logs[0]
+				require.Len(t, reqs[0].ResourceLogs[0].ScopeLogs, 1)
+				require.Len(t, reqs[0].ResourceLogs[0].ScopeLogs[0].LogRecords, 1)
+				logRecord := reqs[0].ResourceLogs[0].ScopeLogs[0].LogRecords[0]
 
 				data, err := parseJSON(logRecord.Body.GetStringValue())
 				require.NoError(t, err)
@@ -189,7 +189,7 @@ func TestOTLPSink(t *testing.T) {
 			check: func(t *testing.T, reqs []*collpb.ExportLogsServiceRequest) {
 				severities := []string{"INFO", "WARNING", "ERROR"}
 				for i, sev := range severities {
-					logRecord := reqs[i].ResourceLogs[0].InstrumentationLibraryLogs[0].Logs[0]
+					logRecord := reqs[i].ResourceLogs[0].ScopeLogs[0].LogRecords[0]
 
 					data, err := parseJSON(logRecord.Body.GetStringValue())
 					require.NoError(t, err)

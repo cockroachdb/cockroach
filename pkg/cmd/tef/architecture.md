@@ -15,6 +15,7 @@ TEF follows a layered, interface-based architecture that separates workflow defi
 │  - Registry interface                                      │
 │  - PlanExecutor & SharedPlanService interfaces             │
 │  - Task type definitions                                   │
+│  - Manager registry (for child task execution)             │
 └────────────────────┬───────────────────────────────────────┘
                      │
 ┌────────────────────┴───────────────────────────────────────┐
@@ -38,8 +39,10 @@ TEF follows a layered, interface-based architecture that separates workflow defi
 **Status**:
 - ✅ Core Abstractions: Fully implemented
 - ✅ BasePlanner: Fully implemented with validation
+- ✅ Manager Registry: Fully implemented with comprehensive tests
+- 🚧 Temporal Planner: Skeleton implemented (interface layer, client integration, status queries)
 - ❌ Plans: Registry exists, no implementations
-- ❌ Execution Engine: Not implemented
+- ❌ Workflow Execution: Not implemented (deferred to follow-up PR)
 
 ## Directory Structure
 
@@ -64,9 +67,14 @@ pkg/cmd/tef/
 │   ├── utils.go                 # Helper functions
 │   ├── logger.go                # Logger interface and implementation
 │   ├── plan_registry.go         # Plan registry management
+│   ├── manager_registry.go      # Manager registry for child task execution
 │   ├── *_test.go                # Comprehensive tests
 │   │
-│   └── mock/                    # Generated mocks for testing
+│   ├── temporal_planner/        # 🚧 Temporal integration (skeleton)
+│   │   ├── manager.go           # PlannerManager implementation (client, status, metrics)
+│   │   └── status.go            # Execution status queries
+│   │
+│   └── mocks/                   # Generated mocks for testing
 │       └── *.go
 │
 └── plans/                       # Plan definitions (❌ TODO)
@@ -156,7 +164,55 @@ type BasePlanner struct {
 }
 ```
 
-### 3. Task Types
+### 3. Manager Registry
+
+The manager registry (`pkg/cmd/tef/planners/manager_registry.go`) provides a global registry for `PlannerManager` instances, enabling child task execution across different plans:
+
+**Key Features:**
+- **Thread-safe registration and retrieval**: Supports concurrent access from multiple goroutines
+- **Plan discovery**: Enumerate all registered managers
+- **Cross-plan execution**: Child workflows can invoke tasks from different plan managers
+
+**Key Functions:**
+```go
+func RegisterManager(planName string, manager PlannerManager)
+func GetManager(planName string) (PlannerManager, error)
+func GetAllManagers() map[string]PlannerManager
+```
+
+**Usage Pattern:**
+```go
+// During initialization, managers register themselves
+RegisterManager("myplan", myPlanManager)
+
+// During execution, child tasks can retrieve managers
+manager, err := GetManager("myplan")
+if err == nil {
+    workflowID, err := manager.ExecutePlan(ctx, input, planID)
+}
+```
+
+The manager registry is fully implemented with comprehensive test coverage (15 test cases including concurrent access validation with 1000+ operations).
+
+### 4. Temporal Planner (Partial Implementation)
+
+The Temporal planner skeleton (`pkg/cmd/tef/planners/temporal_planner/`) provides the interface layer for Temporal workflow orchestration:
+
+**Implemented Components:**
+- **Connection Management**: Temporal client with custom DNS resolver for Kubernetes environments
+- **Metrics Integration**: Prometheus metrics collection with per-worker HTTP endpoints
+- **Status Queries**: `GetExecutionStatus()`, `ListExecutions()`, `ListAllPlanIDs()`
+- **Task Resumption**: `ResumeTask()` for callback-based operations
+- **Configuration**: CLI flags for Temporal server address, namespace, and metrics settings
+
+**Pending Implementation (deferred to follow-up PR):**
+- `StartWorker()`: Temporal worker initialization and workflow registration
+- `ExecutePlan()`: Workflow execution initiation
+- Workflow definitions that translate TEF task graphs to Temporal workflows
+
+The skeleton provides all the infrastructure for Temporal integration; only the workflow execution logic remains to be implemented.
+
+### 5. Task Types
 
 Seven task types defined in `pkg/cmd/tef/planners/tasks.go`:
 

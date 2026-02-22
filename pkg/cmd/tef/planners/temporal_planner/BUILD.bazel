@@ -1,0 +1,26 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "temporal_planner",
+    srcs = [
+        "manager.go",
+        "status.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/cmd/tef/planners/temporal_planner",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/cmd/tef/planners",
+        "@com_github_cockroachdb_logtags//:logtags",
+        "@com_github_prometheus_client_golang//prometheus",
+        "@com_github_spf13_cobra//:cobra",
+        "@com_github_uber_go_tally_v4//:tally",
+        "@com_github_uber_go_tally_v4//prometheus",
+        "@io_temporal_go_api//common/v1:common",
+        "@io_temporal_go_api//enums/v1:enums",
+        "@io_temporal_go_api//workflowservice/v1:workflowservice",
+        "@io_temporal_go_sdk//client",
+        "@io_temporal_go_sdk//converter",
+        "@io_temporal_go_sdk_contrib_tally//:tally",
+        "@org_golang_google_grpc//:grpc",
+    ],
+)

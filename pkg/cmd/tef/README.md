@@ -14,7 +14,11 @@ Every TEF workflow follows this structure:
 
 TEF is framework-agnostic: the core Plan definitions have no dependency on any specific orchestration engine. Swapping execution engines only requires implementing the `PlannerManager` interface.
 
-**Current Status**: Core framework is complete (interfaces, validation, task types). Orchestration engine integration, CLI commands, and plan implementations are pending.
+**Current Status**:
+- ✅ Core framework complete (interfaces, validation, task types)
+- ✅ Manager registry for cross-plan task execution
+- 🚧 Temporal planner skeleton (interface layer, client integration, status queries)
+- ❌ Workflow execution, CLI commands, and plan implementations pending
 
 ## Terminology
 
@@ -303,9 +307,11 @@ TEF requires an orchestration engine (e.g., Temporal) to execute workflows. The 
 - BasePlanner with full validation (cycle detection, convergence checks)
 - All seven task types
 - Plan registry infrastructure
+- Manager registry for child task execution
+- Temporal planner skeleton (interface layer, client integration, status queries)
 
 **What's TODO:**
-- PlannerManager implementation for an orchestration engine
+- Temporal workflow execution implementation
 - CLI command generation
 - Plan implementations
 - Worker runtime

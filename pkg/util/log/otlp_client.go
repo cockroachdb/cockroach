@@ -81,9 +81,9 @@ func newOTLPSink(config logconfig.OTLPSinkConfig) (*otlpSink, error) {
 							},
 						},
 					},
-					InstrumentationLibraryLogs: []*lpb.InstrumentationLibraryLogs{
+					ScopeLogs: []*lpb.ScopeLogs{
 						{
-							Logs: nil,
+							LogRecords: nil,
 						},
 					},
 				},
@@ -147,7 +147,7 @@ func (sink *otlpSink) output(b []byte, opts sinkOutputOptions) error {
 	ctx := context.Background()
 
 	records := otlpExtractRecords(b)
-	sink.requestObject.ResourceLogs[0].InstrumentationLibraryLogs[0].Logs = records
+	sink.requestObject.ResourceLogs[0].ScopeLogs[0].LogRecords = records
 
 	// transmit the log over the network
 	_, err := sink.client.Export(ctx, sink.requestObject)
