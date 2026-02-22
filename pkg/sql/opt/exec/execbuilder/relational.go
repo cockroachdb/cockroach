@@ -628,29 +628,6 @@ func (b *Builder) getColumns(
 	return needed, output
 }
 
-// indexConstraintMaxResults returns the maximum number of results for a scan;
-// if successful (ok=true), the scan is guaranteed never to return more results
-// than maxRows.
-func (b *Builder) indexConstraintMaxResults(
-	scan *memo.ScanPrivate, relProps *props.Relational,
-) (maxRows uint64, ok bool) {
-	c := scan.Constraint
-	if c == nil || c.IsContradiction() || c.IsUnconstrained() {
-		return 0, false
-	}
-
-	numCols := c.Columns.Count()
-	var indexCols opt.ColSet
-	for i := 0; i < numCols; i++ {
-		indexCols.Add(c.Columns.Get(i).ID())
-	}
-	if !relProps.FuncDeps.ColsAreLaxKey(indexCols) {
-		return 0, false
-	}
-
-	return c.CalculateMaxResults(b.ctx, b.evalCtx, indexCols, relProps.NotNullCols)
-}
-
 // scanParams populates ScanParams and the output column mapping.
 func (b *Builder) scanParams(
 	tab cat.Table,
@@ -734,7 +711,11 @@ func (b *Builder) scanParams(
 
 	softLimit := uint64(reqProps.LimitHintInt64())
 	hardLimit := scan.HardLimit.RowCount()
-	maxResults, maxResultsOk := b.indexConstraintMaxResults(scan, relProps)
+	var maxResults uint64
+	maxResultsOk := !relProps.Cardinality.IsUnbounded()
+	if maxResultsOk {
+		maxResults = uint64(relProps.Cardinality.Max)
+	}
 
 	// If the txn_rows_read_err guardrail is set, make sure that we never read
 	// more than txn_rows_read_err+1 rows on any single scan. Adding a hard limit
@@ -777,7 +758,7 @@ func (b *Builder) scanParams(
 			// row: it does nothing in this case except litter EXPLAINs.
 			// There are still cases where the flag doesn't do anything when the spans
 			// cover a single range, but there is nothing we can do about that.
-			if !(maxResults == 1 && scan.Constraint.Spans.Count() == 1) {
+			if !(maxResults == 1 && scan.Constraint != nil && scan.Constraint.Spans.Count() == 1) {
 				parallelize = true
 			}
 		} else if b.evalCtx != nil {
