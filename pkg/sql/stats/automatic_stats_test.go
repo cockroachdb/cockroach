@@ -421,7 +421,7 @@ func TestAverageRefreshTime(t *testing.T) {
 
 	checkAverageRefreshTime := func(expected time.Duration) error {
 		return testutils.SucceedsSoonError(func() error {
-			stats, err := cache.GetTableStats(ctx, table, nil /* typeResolver */)
+			stats, err := cache.GetFreshTableStats(ctx, table, nil /* typeResolver */)
 			if err != nil {
 				return err
 			}
@@ -437,7 +437,7 @@ func TestAverageRefreshTime(t *testing.T) {
 	// expectedAge time ago if lessThan is true (false).
 	checkMostRecentStat := func(expectedAge time.Duration, lessThan bool) error {
 		return testutils.SucceedsSoonError(func() error {
-			stats, err := cache.GetTableStats(ctx, table, nil /* typeResolver */)
+			stats, err := cache.GetFreshTableStats(ctx, table, nil /* typeResolver */)
 			if err != nil {
 				return err
 			}
@@ -927,7 +927,7 @@ func checkStatsCount(
 	return testutils.SucceedsSoonError(func() error {
 		cache.InvalidateTableStats(ctx, table.GetID())
 
-		stats, err := cache.GetTableStats(ctx, table, nil /* typeResolver */)
+		stats, err := cache.GetFreshTableStats(ctx, table, nil /* typeResolver */)
 		if err != nil {
 			return err
 		}
@@ -960,7 +960,7 @@ func compareStatsCountWithZero(
 	desc :=
 		desctestutils.TestingGetPublicTableDescriptor(s.DB(), s.Codec(), "system", tableName)
 	return testutils.SucceedsSoonError(func() error {
-		stats, err := cache.GetTableStats(ctx, desc, nil /* typeResolver */)
+		stats, err := cache.GetFreshTableStats(ctx, desc, nil /* typeResolver */)
 		if err != nil {
 			return err
 		}

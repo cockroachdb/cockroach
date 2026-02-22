@@ -89,6 +89,7 @@ go_test(
         "stats_cache_test.go",
         "stats_test.go",
     ],
+    data = glob(["testdata/**"]),
     embed = [":stats"],
     exec_properties = select({
         "//build/toolchains:is_heavy": {"test.Pool": "large"},
@@ -136,6 +137,7 @@ go_test(
         "//pkg/testutils/sqlutils",
         "//pkg/testutils/testcluster",
         "//pkg/util/encoding",
+        "//pkg/util/hlc",
         "//pkg/util/intsets",
         "//pkg/util/leaktest",
         "//pkg/util/log",
@@ -144,6 +146,7 @@ go_test(
         "//pkg/util/randutil",
         "//pkg/util/timeutil",
         "//pkg/util/timeutil/pgdate",
+        "@com_github_cockroachdb_datadriven//:datadriven",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_lib_pq//oid",
         "@com_github_stretchr_testify//require",

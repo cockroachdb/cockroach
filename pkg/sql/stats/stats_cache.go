@@ -12,6 +12,7 @@ import (
 	"sort"
 	"sync"
 	"sync/atomic"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
@@ -40,6 +41,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/startup"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 )
 
@@ -116,7 +118,32 @@ type cacheEntry struct {
 	// so that we can re-hydrate them.
 	userDefinedTypes map[descpb.ColumnID]*types.T
 
+	tableID descpb.ID
+
+	// stats contains the freshest statistics and any statistics not
+	// marked with delayDelete. This includes merged statistics and
+	// potentially forecasted statistics if enabled.
 	stats []*TableStatistic
+
+	// stableStats contains "second-generation" statistics that are older
+	// than the latest full stats, plus any statistics marked with
+	// delayDelete. If no second-generation stats exist, this contains the
+	// same statistics as the stats field. stableStats is only used if the
+	// stable path is picked for planning via sql.canaryRollDice() and if the
+	// latestFullStatsTimestamp has not passed the canary window range.
+	stableStats []*TableStatistic
+
+	// latestFullStatsTimestamp is the creation timestamp of the latest full stats.
+	// It is compared with the canary window to decide if the freshest stats has
+	// been promoted to stable stats.
+	latestFullStatsTimestamp hlc.Timestamp
+
+	// latestStableFullStatsTimestamp is the creation timestamp of the latest stats in
+	// stableStats. We only care about the latest stats since it is the actual
+	// one that is used for planning (see cat.FindLatestFullStat).
+	// It is only used to compare with asOf -- when asOf predates this timestamp,
+	// log a trace message that it is out of the bound of stableStats.
+	latestStableFullStatsTimestamp hlc.Timestamp
 
 	// err is populated if the internal query to retrieve stats hit an error.
 	err error
@@ -241,7 +268,7 @@ func decodeTableStatisticsKV(
 	return descpb.ID(uint32(*tableID)), nil
 }
 
-// GetTableStats looks up statistics for the requested table in the cache,
+// GetFreshTableStats looks up statistics for the requested table in the cache,
 // and if the stats are not present in the cache, it looks them up in
 // system.table_statistics.
 //
@@ -254,16 +281,33 @@ func decodeTableStatisticsKV(
 // user-defined types don't exist).
 //
 // The statistics are ordered by their CreatedAt time (newest-to-oldest).
-func (sc *TableStatisticsCache) GetTableStats(
+func (sc *TableStatisticsCache) GetFreshTableStats(
 	ctx context.Context, table catalog.TableDescriptor, typeResolver *descs.DistSQLTypeResolver,
 ) (stats []*TableStatistic, err error) {
 	if !sc.statsUsageAllowed(table) {
 		return nil, nil
 	}
 	forecast := forecastAllowed(table, sc.settings)
-	return sc.getTableStatsFromCache(
-		ctx, table.GetID(), &forecast, table.UserDefinedTypeColumns(), typeResolver,
-	)
+	return sc.getTableStatsFromCache(ctx, table.GetID(), &forecast, table.UserDefinedTypeColumns(), typeResolver, false /* stable */, 0 /* canaryWindowSize */, hlc.Timestamp{} /* statsAsOf */)
+}
+
+// GetTableStatsMaybeStable is similar to GetFreshTableStats, but maybe return
+// the stable stats cache opposed to the freshest "canary" table statistics.
+// It only differs with GetFreshTableStats if the table has the canary window size
+// set.
+func (sc *TableStatisticsCache) GetTableStatsMaybeStable(
+	ctx context.Context,
+	table catalog.TableDescriptor,
+	typeResolver *descs.DistSQLTypeResolver,
+	stable bool,
+	canaryWindowSize time.Duration,
+	statsAsOf hlc.Timestamp,
+) (stats []*TableStatistic, err error) {
+	if !sc.statsUsageAllowed(table) {
+		return nil, nil
+	}
+	forecast := forecastAllowed(table, sc.settings)
+	return sc.getTableStatsFromCache(ctx, table.GetID(), &forecast, table.UserDefinedTypeColumns(), typeResolver, stable, canaryWindowSize, statsAsOf)
 }
 
 // GetTableStatsProtosFromDB looks up statistics for the requested table in
@@ -368,7 +412,7 @@ func forecastAllowed(table catalog.TableDescriptor, clusterSettings *cluster.Set
 	return UseStatisticsForecasts.Get(&clusterSettings.SV)
 }
 
-// getTableStatsFromCache is like GetTableStats but assumes that the table ID
+// getTableStatsFromCache is like GetFreshTableStats but assumes that the table ID
 // is safe to fetch statistics for: non-system, non-virtual, non-view, etc.
 func (sc *TableStatisticsCache) getTableStatsFromCache(
 	ctx context.Context,
@@ -376,20 +420,31 @@ func (sc *TableStatisticsCache) getTableStatsFromCache(
 	forecast *bool,
 	udtCols []catalog.Column,
 	typeResolver *descs.DistSQLTypeResolver,
+	stable bool,
+	canaryWindowSize time.Duration,
+	statsAsOf hlc.Timestamp,
 ) ([]*TableStatistic, error) {
 	sc.mu.Lock()
 	defer sc.mu.Unlock()
+
+	asOfTs := hlc.Timestamp{WallTime: timeutil.Now().UnixNano()}
+	if !statsAsOf.IsEmpty() {
+		asOfTs = statsAsOf
+	}
 
 	if found, e := sc.lookupStatsLocked(ctx, tableID, false /* stealthy */); found {
 		if e.isStale(forecast, udtCols) {
 			// Evict the cache entry and build it again.
 			sc.mu.cache.Del(tableID)
 		} else {
+			if stable {
+				return e.getStableStatsLocked(ctx, canaryWindowSize, asOfTs), e.err
+			}
 			return e.stats, e.err
 		}
 	}
 
-	return sc.addCacheEntryLocked(ctx, tableID, forecast != nil && *forecast, typeResolver)
+	return sc.addCacheEntryLocked(ctx, tableID, forecast != nil && *forecast, typeResolver, stable, canaryWindowSize, asOfTs)
 }
 
 // isStale checks whether we need to evict and re-load the cache entry.
@@ -414,6 +469,41 @@ func (e *cacheEntry) isStale(forecast *bool, udtCols []catalog.Column) bool {
 		}
 	}
 	return false
+}
+
+// getStableStatsLocked returns the appropriate statistics for non-canary users
+// based on the canary window. This function is only called when the dice roll
+// determined this query should use stable stats (not canary stats).
+//
+// The logic is:
+//   - If we're within the canary window (asOf < creation time + window),
+//     return the stable stats (older stats from before the latest full stats).
+//   - If we're past the canary window, the latest stats are considered "ripened"
+//     and safe for all users, so return the fresh stats.
+//
+// This gradual rollout ensures new stats are tested on canary users before being
+// applied to all queries.
+//
+// Requires: caller must hold sc.mu.
+func (e *cacheEntry) getStableStatsLocked(
+	ctx context.Context, canaryWindowSize time.Duration, asOf hlc.Timestamp,
+) []*TableStatistic {
+	if canaryWindowSize != 0 && !e.latestFullStatsTimestamp.IsEmpty() {
+		if e.latestFullStatsTimestamp.AddDuration(canaryWindowSize).After(asOf) {
+			if e.latestStableFullStatsTimestamp.After(asOf) {
+				log.VEventf(ctx, 1, "time-travel stats limitation: stats_as_of %s predates available stable stats from %s", asOf, e.latestStableFullStatsTimestamp)
+			}
+			log.VEventf(ctx, 1, "stable stats is chosen for table %d: [asOf: %s, canaryWindowSize: %s, latestFullStatsTimestamp: %s]", e.tableID, asOf, canaryWindowSize, e.latestStableFullStatsTimestamp)
+			return e.stableStats
+		}
+		// If latestFullStatsTimestamp has passed the canary window, it means
+		// the freshest stats has been promoted to be applied to all
+		// executions.
+		// From this point on, we know that we will pick canary stats. But to avoid
+		// being too noisy, we only log it when the canary stats feature is enabled.
+		log.VEventf(ctx, 1, "canary stats is chosen for table %d", e.tableID)
+	}
+	return e.stats
 }
 
 // lookupStatsLocked retrieves any existing stats for the given table.
@@ -464,8 +554,19 @@ func (sc *TableStatisticsCache) lookupStatsLocked(
 //   - mutex is unlocked;
 //   - stats are retrieved from database:
 //   - mutex is locked again and the entry is updated.
+//
+// The function populates both fresh stats (for canary users) and stable stats
+// (for non-canary users during rollout). When stable=true, it returns the
+// appropriate stats based on the canary window; otherwise it always returns
+// the fresh stats.
 func (sc *TableStatisticsCache) addCacheEntryLocked(
-	ctx context.Context, tableID descpb.ID, forecast bool, typeResolver *descs.DistSQLTypeResolver,
+	ctx context.Context,
+	tableID descpb.ID,
+	forecast bool,
+	typeResolver *descs.DistSQLTypeResolver,
+	stable bool,
+	canaryWindowSize time.Duration,
+	asOf hlc.Timestamp,
 ) (stats []*TableStatistic, err error) {
 	defer sc.generation.Add(1)
 	// Add a cache entry that other queries can find and wait on until we have the
@@ -478,16 +579,26 @@ func (sc *TableStatisticsCache) addCacheEntryLocked(
 	sc.mu.numInternalQueries++
 
 	var udts map[descpb.ColumnID]*types.T
+	var stableStats []*TableStatistic
+	var latestFullStatsTimestamp hlc.Timestamp
+	var latestStableStatsTimestamp hlc.Timestamp
 	func() {
 		sc.mu.Unlock()
 		defer sc.mu.Lock()
 		log.VEventf(ctx, 1, "reading statistics for table %d", tableID)
-		stats, udts, err = sc.getTableStatsFromDB(ctx, tableID, forecast, sc.settings, typeResolver)
+		stats, stableStats, latestFullStatsTimestamp, latestStableStatsTimestamp, udts, err = sc.getTableStatsFromDB(
+			ctx,
+			tableID,
+			forecast,
+			sc.settings,
+			typeResolver,
+		)
 		log.VEventf(ctx, 1, "finished reading statistics for table %d", tableID)
 	}()
 
 	e.mustWait = false
-	e.forecast, e.userDefinedTypes, e.stats, e.err = forecast, udts, stats, err
+	e.latestFullStatsTimestamp, e.latestStableFullStatsTimestamp = latestFullStatsTimestamp, latestStableStatsTimestamp
+	e.forecast, e.userDefinedTypes, e.stats, e.stableStats, e.err = forecast, udts, stats, stableStats, err
 
 	// Wake up any other callers that are waiting on these stats.
 	e.waitCond.Broadcast()
@@ -495,6 +606,10 @@ func (sc *TableStatisticsCache) addCacheEntryLocked(
 	if err != nil {
 		// Don't keep the cache entry around, so that we retry the query.
 		sc.mu.cache.Del(tableID)
+	}
+
+	if err == nil && stable {
+		return e.getStableStatsLocked(ctx, canaryWindowSize, asOf), nil
 	}
 
 	return stats, err
@@ -539,6 +654,9 @@ func (sc *TableStatisticsCache) refreshCacheEntry(
 
 	forecast := e.forecast
 	var stats []*TableStatistic
+	var stableStats []*TableStatistic
+	var latestStatsTimestamp hlc.Timestamp
+	var latestStableFullStatsTimestamp hlc.Timestamp
 	var udts map[descpb.ColumnID]*types.T
 	var err error
 	for {
@@ -549,7 +667,13 @@ func (sc *TableStatisticsCache) refreshCacheEntry(
 
 			log.VEventf(ctx, 1, "refreshing statistics for table %d", tableID)
 			// TODO(radu): pass the timestamp and use AS OF SYSTEM TIME.
-			stats, udts, err = sc.getTableStatsFromDB(ctx, tableID, forecast, sc.settings, nil /* typeResolver */)
+			stats, stableStats, latestStatsTimestamp, latestStableFullStatsTimestamp, udts, err = sc.getTableStatsFromDB(
+				ctx,
+				tableID,
+				forecast,
+				sc.settings,
+				nil, /* typeResolver */
+			)
 			log.VEventf(ctx, 1, "done refreshing statistics for table %d", tableID)
 		}()
 		if e.lastRefreshTimestamp.Equal(ts) {
@@ -559,7 +683,8 @@ func (sc *TableStatisticsCache) refreshCacheEntry(
 		ts = e.lastRefreshTimestamp
 	}
 
-	e.userDefinedTypes, e.stats, e.err = udts, stats, err
+	e.latestFullStatsTimestamp, e.latestStableFullStatsTimestamp = latestStatsTimestamp, latestStableFullStatsTimestamp
+	e.userDefinedTypes, e.stats, e.stableStats, e.err = udts, stats, stableStats, err
 	e.refreshing = false
 
 	if err != nil {
@@ -975,11 +1100,10 @@ func (tsp *TableStatisticProto) IsAuto() bool {
 	return tsp.Name == jobspb.AutoStatsName || tsp.Name == jobspb.AutoPartialStatsName
 }
 
-// TODO(michae2): Add an index on system.table_statistics (tableID, createdAt,
-// columnIDs, statisticID).
-
 // GetTableStatisticsStmt returns the appropriate SQL query for fetching table statistics
 // based on the cluster version. The delayDelete column was added in V26_2_AddTableStatisticsDelayDeleteColumn.
+// TODO(michae2): Add an index on system.table_statistics (tableID, createdAt,
+// columnIDs, statisticID).
 func GetTableStatisticsStmt(
 	ctx context.Context, st *cluster.Settings, ordering tree.Direction,
 ) string {
@@ -1009,38 +1133,134 @@ func GetTableStatisticsStmt(
 `, delayDeleteColumn, ordering)
 }
 
+// allocateDeferredPartialStats allocates USING EXTREMES partial
+// statistics to either the canary or stable cache based on their parent
+// full statistics ID.
+//
+// USING EXTREMES partial stats reference a parent full stats via
+// FullStatisticID. When we have dual caches, these partial stats should
+// be allocated to the same cache as their parent full stats. However,
+// since the iterator returns stats in descending CreatedAt order, we
+// encounter partial stats before knowing which full stat is the latest.
+// Therefore, we defer their allocation until after identifying the
+// latest full stat ID, with the descending time order maintained in
+// both caches.
+func allocateDeferredPartialStats(
+	deferredPartials []*TableStatistic,
+	latestFullStatsID uint64,
+	canaryStats []*TableStatistic,
+	stableStats []*TableStatistic,
+) ([]*TableStatistic, []*TableStatistic) {
+	if len(deferredPartials) == 0 {
+		return canaryStats, stableStats
+	}
+
+	var canaryPartials, stablePartials []*TableStatistic
+	for _, ps := range deferredPartials {
+		// Partial stats with parent matching the latest full stat go to
+		// canary cache. All others go to stable cache, even if their parent
+		// doesn't exist there. Having such "orphaned partial stats" is
+		// fine, since they will be ignored during merging anyway.
+		if ps.FullStatisticID == latestFullStatsID {
+			canaryPartials = append(canaryPartials, ps)
+		} else {
+			stablePartials = append(stablePartials, ps)
+		}
+	}
+
+	// Prepend the USING EXTREMES partials to maintain descending time ordering.
+	if len(canaryPartials) > 0 {
+		canaryStats = append(canaryPartials, canaryStats...)
+	}
+
+	if len(stablePartials) > 0 {
+		stableStats = append(stablePartials, stableStats...)
+	}
+
+	return canaryStats, stableStats
+}
+
 // getTableStatsFromDB retrieves the statistics in system.table_statistics
 // for the given table ID.
 //
 // It ignores any statistics that cannot be decoded (e.g. because of a
 // user-defined type that doesn't exist) and returns the rest (with no error).
+// We return 2 sets of stats for the canary and stable paths. We also return
+// the timestamp of the most recent stats collected, which is used to determine
+// if the stats (canary stats) has exceeded the canary window defined by the
+// stats_canary_window.
 func (sc *TableStatisticsCache) getTableStatsFromDB(
 	ctx context.Context,
 	tableID descpb.ID,
 	forecast bool,
 	st *cluster.Settings,
 	typeResolver *descs.DistSQLTypeResolver,
-) (_ []*TableStatistic, _ map[descpb.ColumnID]*types.T, retErr error) {
+) (
+	statsList []*TableStatistic,
+	stableStatsList []*TableStatistic,
+	latestFullStatsCreatedAtTimestamp hlc.Timestamp,
+	latestStableFullStatsCreatedAtTimestamp hlc.Timestamp,
+	udts map[descpb.ColumnID]*types.T,
+	retErr error,
+) {
 	it, queryErr := sc.db.Executor().QueryIteratorEx(
 		ctx, "get-table-statistics", nil /* txn */, sessiondata.NodeUserSessionDataOverride, GetTableStatisticsStmt(ctx, st, tree.Descending), tableID,
 	)
 	if queryErr != nil {
-		return nil, nil, queryErr
+		return nil, nil, hlc.Timestamp{}, hlc.Timestamp{}, nil, queryErr
 	}
 
 	// Guard against crashes in the code below.
 	defer errorutil.MaybeCatchPanic(&retErr, nil /* errCallback */)
 
-	var statsList []*TableStatistic
-	var udts map[descpb.ColumnID]*types.T
+	// statsList stores the freshest stats and stats that are not marked with delayDelete.
+	// stableStatsList stores the stats from the second-freshest stats, which is
+	// distinguished by the createdAt.
 	var ok bool
+
+	// latestFullStatsCreatedAt to track the timestamp of the latest full stats.
+	// It is used to find the cut-off between the latest stats and the
+	// second latest stats. Since stats are ordered newest-to-oldest, we only
+	// set this once when we encounter the first full stat.
+	var latestFullStatsCreatedAt time.Time
+	var latestStableFullStatsCreatedAt time.Time
+	var latestFullStatsID uint64
+	var usingExtremePartialStats []*TableStatistic
 	for ok, queryErr = it.Next(ctx); ok; ok, queryErr = it.Next(ctx) {
 		stats, udt, decodingErr := sc.parseStats(ctx, it.Cur(), typeResolver)
 		if decodingErr != nil {
 			log.Dev.Warningf(ctx, "could not decode statistic for table %d: %v", tableID, decodingErr)
 			continue
 		}
-		statsList = append(statsList, stats)
+
+		if latestFullStatsCreatedAt.IsZero() && !stats.IsPartial() {
+			latestFullStatsCreatedAt = stats.CreatedAt
+			latestFullStatsID = stats.StatisticID
+		}
+
+		if !stats.DelayDelete {
+			// Deal with the case where the USING EXTREMES partial stats might be bound
+			// to a full stats that is older than the latest stats. We defer the allocation
+			// after we know the ID of the full stats in the canary stats cache.
+			if stats.FullStatisticID != 0 {
+				usingExtremePartialStats = append(usingExtremePartialStats, stats)
+			} else {
+				// statsList contains the freshest valid stats, so it should never contain
+				// stats that is marked delayDelete.
+				statsList = append(statsList, stats)
+			}
+		}
+
+		// Stats that is delayed for deletion always go in to stable stats list;
+		// non-DelayDelete stats go in only if they're older than the latest full
+		// stat.
+		if stats.DelayDelete || stats.CreatedAt.Before(latestFullStatsCreatedAt) {
+			if latestStableFullStatsCreatedAt.IsZero() && !stats.IsPartial() {
+				latestStableFullStatsCreatedAt = stats.CreatedAt
+			}
+			stableStatsList = append(stableStatsList, stats)
+		}
+
 		// Keep track of user-defined types used in histograms.
 		if udt != nil {
 			// TODO(49698): If we ever support multi-column histograms we'll need to
@@ -1058,23 +1278,42 @@ func (sc *TableStatisticsCache) getTableStatsFromDB(
 		}
 	}
 	if queryErr != nil {
-		return nil, nil, queryErr
+		return nil, nil, hlc.Timestamp{}, hlc.Timestamp{}, nil, queryErr
 	}
+
+	// Allocate the deferred USING EXTREMES partial stats to the appropriate cache.
+	statsList, stableStatsList = allocateDeferredPartialStats(
+		usingExtremePartialStats, latestFullStatsID, statsList, stableStatsList,
+	)
 
 	merged := MergedStatistics(ctx, statsList, st)
 	statsList = append(merged, statsList...)
 
+	mergedStable := MergedStatistics(ctx, stableStatsList, st)
+	stableStatsList = append(mergedStable, stableStatsList...)
+
 	if forecast {
 		forecasts := ForecastTableStatistics(ctx, sc.settings, statsList)
 		statsList = append(statsList, forecasts...)
+
+		forecastsStable := ForecastTableStatistics(ctx, sc.settings, stableStatsList)
+		stableStatsList = append(stableStatsList, forecastsStable...)
 		// Some forecasts could have a CreatedAt time before or after some collected
 		// stats, so make sure the list is sorted in descending CreatedAt order.
 		sort.SliceStable(statsList, func(i, j int) bool {
 			return statsList[i].CreatedAt.After(statsList[j].CreatedAt)
 		})
+		sort.SliceStable(stableStatsList, func(i, j int) bool {
+			return stableStatsList[i].CreatedAt.After(stableStatsList[j].CreatedAt)
+		})
 	}
 
-	return statsList, udts, nil
+	return statsList,
+		stableStatsList,
+		hlc.Timestamp{WallTime: latestFullStatsCreatedAt.UnixNano()},
+		hlc.Timestamp{WallTime: latestStableFullStatsCreatedAt.UnixNano()},
+		udts,
+		nil
 }
 
 // getTableStatsProtosFromDB retrieves the statistics in system.table_statistics

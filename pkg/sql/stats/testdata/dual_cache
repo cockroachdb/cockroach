@@ -1,0 +1,614 @@
+# Setup a test table with positive canary window, so that the delete of
+# stale stats are delayed.
+exec
+CREATE TABLE test (
+  id INT PRIMARY KEY
+) with (sql_stats_canary_window = '10s')
+----
+
+# Test initial state - no statistics yet
+stats-cache table=test
+----
+fresh stats (count=0):
+stable stats (count=0):
+
+# Initialize with baseline statistics using INJECT STATISTICS.
+# This replaces all existing stats and sets up our baseline.
+exec
+ALTER TABLE test INJECT STATISTICS '[
+  {
+    "columns": ["id"],
+    "created_at": "2023-01-01 10:00:00.000000",
+    "row_count": 1000,
+    "distinct_count": 1000,
+    "null_count": 0,
+    "avg_size": 8,
+    "name": "__auto__"
+  }
+]'
+----
+
+# Case where there's only 1 full stats, we keep the stable stats cache empty.
+stats-cache table=test
+----
+fresh stats (count=1):
+created_at=2023-01-01 10:00:00, name="__auto__", row_count=1000, distinct_count=1000, null_count=0, delayed_delete=false
+stable stats (count=0):
+
+# We now inject more stats as the new baseline and test the retention logic.
+exec
+ALTER TABLE test INJECT STATISTICS '[
+  {
+    "columns": ["id"],
+    "created_at": "2023-01-01 10:00:00.000000",
+    "row_count": 1000,
+    "distinct_count": 1000,
+    "null_count": 0,
+    "avg_size": 8,
+    "name": "__auto__"
+  },
+  {
+    "columns": ["id"],
+    "created_at": "2023-01-02 10:00:00.000000",
+    "row_count": 2000,
+    "distinct_count": 2000,
+    "null_count": 0,
+    "avg_size": 8,
+    "name": "__auto__"
+  },
+  {
+    "columns": ["id"],
+    "created_at": "2023-01-03 10:00:00.000000",
+    "row_count": 3000,
+    "distinct_count": 3000,
+    "null_count": 0,
+    "avg_size": 8,
+    "name": "__auto__"
+  },
+  {
+    "columns": ["id"],
+    "created_at": "2023-01-04 10:00:00.000000",
+    "row_count": 4000,
+    "distinct_count": 4000,
+    "null_count": 0,
+    "avg_size": 8,
+    "name": "__auto__"
+  },
+  {
+    "columns": ["id"],
+    "created_at": "2023-01-05 10:00:00.000000",
+    "row_count": 5000,
+    "distinct_count": 5000,
+    "null_count": 0,
+    "avg_size": 8,
+    "name": "__auto__"
+  }
+]'
+----
+
+# Observe dual cache after first push - new stats added, old ones preserved
+stats-cache table=test
+----
+fresh stats (count=5):
+created_at=2023-01-05 10:00:00, name="__auto__", row_count=5000, distinct_count=5000, null_count=0, delayed_delete=false
+created_at=2023-01-04 10:00:00, name="__auto__", row_count=4000, distinct_count=4000, null_count=0, delayed_delete=false
+created_at=2023-01-03 10:00:00, name="__auto__", row_count=3000, distinct_count=3000, null_count=0, delayed_delete=false
+created_at=2023-01-02 10:00:00, name="__auto__", row_count=2000, distinct_count=2000, null_count=0, delayed_delete=false
+created_at=2023-01-01 10:00:00, name="__auto__", row_count=1000, distinct_count=1000, null_count=0, delayed_delete=false
+stable stats (count=4):
+created_at=2023-01-04 10:00:00, name="__auto__", row_count=4000, distinct_count=4000, null_count=0, delayed_delete=false
+created_at=2023-01-03 10:00:00, name="__auto__", row_count=3000, distinct_count=3000, null_count=0, delayed_delete=false
+created_at=2023-01-02 10:00:00, name="__auto__", row_count=2000, distinct_count=2000, null_count=0, delayed_delete=false
+created_at=2023-01-01 10:00:00, name="__auto__", row_count=1000, distinct_count=1000, null_count=0, delayed_delete=false
+
+# Push manual stats (simulating user-triggered CREATE STATISTICS)
+exec
+ALTER TABLE test PUSH STATISTICS '[
+  {
+    "columns": ["id"],
+    "created_at": "2023-01-06 10:00:00.000000",
+    "row_count": 6000,
+    "distinct_count": 6000,
+    "null_count": 0,
+    "avg_size": 8,
+    "name": "manual_stats"
+  }
+]'
+----
+
+# Observe cache evolution with mixed auto and manual stats
+stats-cache table=test
+----
+fresh stats (count=5):
+created_at=2023-01-06 10:00:00, name="manual_stats", row_count=6000, distinct_count=6000, null_count=0, delayed_delete=false
+created_at=2023-01-05 10:00:00, name="__auto__", row_count=5000, distinct_count=5000, null_count=0, delayed_delete=false
+created_at=2023-01-04 10:00:00, name="__auto__", row_count=4000, distinct_count=4000, null_count=0, delayed_delete=false
+created_at=2023-01-03 10:00:00, name="__auto__", row_count=3000, distinct_count=3000, null_count=0, delayed_delete=false
+created_at=2023-01-02 10:00:00, name="__auto__", row_count=2000, distinct_count=2000, null_count=0, delayed_delete=false
+stable stats (count=5):
+created_at=2023-01-05 10:00:00, name="__auto__", row_count=5000, distinct_count=5000, null_count=0, delayed_delete=false
+created_at=2023-01-04 10:00:00, name="__auto__", row_count=4000, distinct_count=4000, null_count=0, delayed_delete=false
+created_at=2023-01-03 10:00:00, name="__auto__", row_count=3000, distinct_count=3000, null_count=0, delayed_delete=false
+created_at=2023-01-02 10:00:00, name="__auto__", row_count=2000, distinct_count=2000, null_count=0, delayed_delete=false
+created_at=2023-01-01 10:00:00, name="__auto__", row_count=1000, distinct_count=1000, null_count=0, delayed_delete=true
+
+stats-cache table=test forecast
+----
+fresh stats (count=6):
+created_at=2023-01-07 10:00:00, name="__forecast__", row_count=7000, distinct_count=7000, null_count=0, delayed_delete=false
+created_at=2023-01-06 10:00:00, name="manual_stats", row_count=6000, distinct_count=6000, null_count=0, delayed_delete=false
+created_at=2023-01-05 10:00:00, name="__auto__", row_count=5000, distinct_count=5000, null_count=0, delayed_delete=false
+created_at=2023-01-04 10:00:00, name="__auto__", row_count=4000, distinct_count=4000, null_count=0, delayed_delete=false
+created_at=2023-01-03 10:00:00, name="__auto__", row_count=3000, distinct_count=3000, null_count=0, delayed_delete=false
+created_at=2023-01-02 10:00:00, name="__auto__", row_count=2000, distinct_count=2000, null_count=0, delayed_delete=false
+stable stats (count=6):
+created_at=2023-01-06 10:00:00, name="__forecast__", row_count=6000, distinct_count=6000, null_count=0, delayed_delete=false
+created_at=2023-01-05 10:00:00, name="__auto__", row_count=5000, distinct_count=5000, null_count=0, delayed_delete=false
+created_at=2023-01-04 10:00:00, name="__auto__", row_count=4000, distinct_count=4000, null_count=0, delayed_delete=false
+created_at=2023-01-03 10:00:00, name="__auto__", row_count=3000, distinct_count=3000, null_count=0, delayed_delete=false
+created_at=2023-01-02 10:00:00, name="__auto__", row_count=2000, distinct_count=2000, null_count=0, delayed_delete=false
+created_at=2023-01-01 10:00:00, name="__auto__", row_count=1000, distinct_count=1000, null_count=0, delayed_delete=true
+
+# Push another auto stats, then the last manual stats should only be retained in the stable stats cache.
+exec
+ALTER TABLE test PUSH STATISTICS '[
+  {
+    "columns": ["id"],
+    "created_at": "2023-01-07 10:00:00.000000",
+    "row_count": 7000,
+    "distinct_count": 7000,
+    "null_count": 0,
+    "avg_size": 8,
+    "name": "__auto__"
+  }
+]'
+----
+
+stats-cache table=test forecast
+----
+fresh stats (count=6):
+created_at=2023-01-08 16:00:00, name="__forecast__", row_count=8250, distinct_count=8250, null_count=0, delayed_delete=false
+created_at=2023-01-07 10:00:00, name="__auto__", row_count=7000, distinct_count=7000, null_count=0, delayed_delete=false
+created_at=2023-01-05 10:00:00, name="__auto__", row_count=5000, distinct_count=5000, null_count=0, delayed_delete=false
+created_at=2023-01-04 10:00:00, name="__auto__", row_count=4000, distinct_count=4000, null_count=0, delayed_delete=false
+created_at=2023-01-03 10:00:00, name="__auto__", row_count=3000, distinct_count=3000, null_count=0, delayed_delete=false
+created_at=2023-01-02 10:00:00, name="__auto__", row_count=2000, distinct_count=2000, null_count=0, delayed_delete=false
+stable stats (count=6):
+created_at=2023-01-07 10:00:00, name="__forecast__", row_count=7000, distinct_count=7000, null_count=0, delayed_delete=false
+created_at=2023-01-06 10:00:00, name="manual_stats", row_count=6000, distinct_count=6000, null_count=0, delayed_delete=true
+created_at=2023-01-05 10:00:00, name="__auto__", row_count=5000, distinct_count=5000, null_count=0, delayed_delete=false
+created_at=2023-01-04 10:00:00, name="__auto__", row_count=4000, distinct_count=4000, null_count=0, delayed_delete=false
+created_at=2023-01-03 10:00:00, name="__auto__", row_count=3000, distinct_count=3000, null_count=0, delayed_delete=false
+created_at=2023-01-02 10:00:00, name="__auto__", row_count=2000, distinct_count=2000, null_count=0, delayed_delete=false
+
+subtest merge_stats
+
+# Inject initial full stats with histograms (required for merging)
+exec
+ALTER TABLE test INJECT STATISTICS '[
+  {
+    "avg_size": 4,
+    "columns": ["id"],
+    "created_at": "2023-02-01 10:00:00.000000",
+    "distinct_count": 3,
+    "histo_buckets": [
+      {
+        "distinct_range": 0,
+        "num_eq": 1,
+        "num_range": 0,
+        "upper_bound": "0"
+      },
+      {
+        "distinct_range": 0,
+        "num_eq": 1,
+        "num_range": 0,
+        "upper_bound": "1"
+      },
+      {
+        "distinct_range": 0,
+        "num_eq": 1,
+        "num_range": 0,
+        "upper_bound": "2"
+      }
+    ],
+    "histo_col_type": "INT8",
+    "histo_version": 2,
+    "name": "__auto__",
+    "null_count": 0,
+    "row_count": 3
+  }
+]'
+----
+
+
+# Push a partial stats.
+exec
+ALTER TABLE test PUSH STATISTICS '[
+  {
+    "avg_size": 4,
+    "columns": ["id"],
+    "created_at": "2023-02-01 10:10:00.000000",
+    "distinct_count": 3,
+    "histo_buckets": [
+      {
+        "distinct_range": 0,
+        "num_eq": 2,
+        "num_range": 0,
+        "upper_bound": "1"
+      },
+      {
+        "distinct_range": 0,
+        "num_eq": 2,
+        "num_range": 0,
+        "upper_bound": "2"
+      }
+    ],
+    "histo_col_type": "INT8",
+    "histo_version": 2,
+    "name": "partial",
+    "null_count": 0,
+    "row_count": 4,
+    "partial_predicate": "id >= 1::INT8"
+  }
+]'
+----
+
+# Verify initial dual cache state
+stats-cache table=test
+----
+fresh stats (count=3):
+created_at=2023-02-01 10:10:00, name="__merged__", row_count=5, distinct_count=3, null_count=0, delayed_delete=false
+created_at=2023-02-01 10:10:00, name="partial", row_count=4, distinct_count=3, null_count=0, delayed_delete=false
+created_at=2023-02-01 10:00:00, name="__auto__", row_count=3, distinct_count=3, null_count=0, delayed_delete=false
+stable stats (count=0):
+
+
+# Push another full stats
+exec
+ALTER TABLE test PUSH STATISTICS '[
+  {
+    "avg_size": 4,
+    "columns": ["id"],
+    "created_at": "2023-02-01 11:00:00.000000",
+    "distinct_count": 3,
+    "histo_buckets": [
+      {
+        "distinct_range": 0,
+        "num_eq": 3,
+        "num_range": 0,
+        "upper_bound": "0"
+      },
+      {
+        "distinct_range": 0,
+        "num_eq": 3,
+        "num_range": 0,
+        "upper_bound": "1"
+      },
+      {
+        "distinct_range": 0,
+        "num_eq": 3,
+        "num_range": 0,
+        "upper_bound": "2"
+      }
+    ],
+    "histo_col_type": "INT8",
+    "histo_version": 2,
+    "name": "__auto__",
+    "null_count": 0,
+    "row_count": 9
+  }
+]'
+----
+
+# Now push partial stats with histograms to test merge stats.
+exec
+ALTER TABLE test PUSH STATISTICS '[
+  {
+    "avg_size": 4,
+    "columns": ["id"],
+    "created_at": "2023-02-01 11:10:00.000000",
+    "distinct_count": 3,
+    "histo_buckets": [
+      {
+        "distinct_range": 0,
+        "num_eq": 4,
+        "num_range": 0,
+        "upper_bound": "1"
+      },
+      {
+        "distinct_range": 0,
+        "num_eq": 4,
+        "num_range": 0,
+        "upper_bound": "2"
+      }
+    ],
+    "histo_col_type": "INT8",
+    "histo_version": 2,
+    "name": "partial",
+    "null_count": 0,
+    "row_count": 8,
+    "partial_predicate": "id >= 1::INT8"
+  }
+]'
+----
+
+stats-cache table=test
+----
+fresh stats (count=4):
+created_at=2023-02-01 11:10:00, name="__merged__", row_count=11, distinct_count=3, null_count=0, delayed_delete=false
+created_at=2023-02-01 11:10:00, name="partial", row_count=8, distinct_count=3, null_count=0, delayed_delete=false
+created_at=2023-02-01 11:00:00, name="__auto__", row_count=9, distinct_count=3, null_count=0, delayed_delete=false
+created_at=2023-02-01 10:00:00, name="__auto__", row_count=3, distinct_count=3, null_count=0, delayed_delete=false
+stable stats (count=3):
+created_at=2023-02-01 10:10:00, name="__merged__", row_count=5, distinct_count=3, null_count=0, delayed_delete=false
+created_at=2023-02-01 10:10:00, name="partial", row_count=4, distinct_count=3, null_count=0, delayed_delete=true
+created_at=2023-02-01 10:00:00, name="__auto__", row_count=3, distinct_count=3, null_count=0, delayed_delete=false
+
+subtest end
+
+subtest using_extreme_partial_stats
+
+exec
+ALTER TABLE test INJECT STATISTICS '[
+  {
+    "id": 1,
+    "avg_size": 4,
+    "columns": ["id"],
+    "created_at": "2023-02-01 00:00:00.000000",
+    "distinct_count": 3,
+    "histo_buckets": [
+      {
+        "distinct_range": 0,
+        "num_eq": 1,
+        "num_range": 0,
+        "upper_bound": "0"
+      },
+      {
+        "distinct_range": 0,
+        "num_eq": 1,
+        "num_range": 0,
+        "upper_bound": "1"
+      },
+      {
+        "distinct_range": 0,
+        "num_eq": 1,
+        "num_range": 0,
+        "upper_bound": "2"
+      }
+    ],
+    "histo_col_type": "INT8",
+    "histo_version": 2,
+    "name": "__auto__",
+    "null_count": 0,
+    "row_count": 3
+  },
+  {
+    "id": 2,
+    "avg_size": 4,
+    "columns": ["id"],
+    "created_at": "2023-02-01 00:30:00.000000",
+    "distinct_count": 3,
+    "histo_buckets": [
+      {
+        "distinct_range": 0,
+        "num_eq": 2,
+        "num_range": 0,
+        "upper_bound": "0"
+      },
+      {
+        "distinct_range": 0,
+        "num_eq": 2,
+        "num_range": 0,
+        "upper_bound": "1"
+      },
+      {
+        "distinct_range": 0,
+        "num_eq": 2,
+        "num_range": 0,
+        "upper_bound": "2"
+      }
+    ],
+    "histo_col_type": "INT8",
+    "histo_version": 2,
+    "name": "__auto__",
+    "null_count": 0,
+    "row_count": 6
+  },
+  {
+    "id": 3,
+    "avg_size": 4,
+    "columns": ["id"],
+    "created_at": "2023-02-01 01:00:00.000000",
+    "distinct_count": 3,
+    "histo_buckets": [
+      {
+        "distinct_range": 0,
+        "num_eq": 3,
+        "num_range": 0,
+        "upper_bound": "0"
+      },
+      {
+        "distinct_range": 0,
+        "num_eq": 3,
+        "num_range": 0,
+        "upper_bound": "1"
+      },
+      {
+        "distinct_range": 0,
+        "num_eq": 3,
+        "num_range": 0,
+        "upper_bound": "2"
+      }
+    ],
+    "histo_col_type": "INT8",
+    "histo_version": 2,
+    "name": "__auto__",
+    "null_count": 0,
+    "row_count": 9
+  }
+]'
+----
+
+stats-cache table=test
+----
+fresh stats (count=3):
+created_at=2023-02-01 01:00:00, name="__auto__", row_count=9, distinct_count=3, null_count=0, delayed_delete=false
+created_at=2023-02-01 00:30:00, name="__auto__", row_count=6, distinct_count=3, null_count=0, delayed_delete=false
+created_at=2023-02-01 00:00:00, name="__auto__", row_count=3, distinct_count=3, null_count=0, delayed_delete=false
+stable stats (count=2):
+created_at=2023-02-01 00:30:00, name="__auto__", row_count=6, distinct_count=3, null_count=0, delayed_delete=false
+created_at=2023-02-01 00:00:00, name="__auto__", row_count=3, distinct_count=3, null_count=0, delayed_delete=false
+
+# Push an USING EXTREME partial stats that is bound to auto full stats 2,
+# which is the latest stats in the stable cache, but not the global
+# latest stats.
+exec
+ALTER TABLE test PUSH STATISTICS '[
+  {
+    "id": 4,
+    "avg_size": 4,
+    "columns": ["id"],
+    "created_at": "2023-02-01 01:10:00.000000",
+    "distinct_count": 2,
+    "histo_buckets": [
+      {
+        "distinct_range": 0,
+        "num_eq": 4,
+        "num_range": 0,
+        "upper_bound": "3"
+      },
+      {
+        "distinct_range": 0,
+        "num_eq": 4,
+        "num_range": 0,
+        "upper_bound": "4"
+      }
+    ],
+    "histo_col_type": "INT8",
+    "histo_version": 2,
+    "name": "using_extreme_1",
+    "null_count": 0,
+    "row_count": 8,
+    "partial_predicate": "(id < 0:::INT8) OR ((id > 2:::INT8) OR (id IS NULL))",
+    "full_statistic_id": 2
+  }
+]'
+----
+
+# The partial stats should be allocated to the stable cache, which is
+# where its parent stats is on.
+stats-cache table=test
+----
+fresh stats (count=3):
+created_at=2023-02-01 01:00:00, name="__auto__", row_count=9, distinct_count=3, null_count=0, delayed_delete=false
+created_at=2023-02-01 00:30:00, name="__auto__", row_count=6, distinct_count=3, null_count=0, delayed_delete=false
+created_at=2023-02-01 00:00:00, name="__auto__", row_count=3, distinct_count=3, null_count=0, delayed_delete=false
+stable stats (count=4):
+created_at=2023-02-01 01:10:00, name="__merged__", row_count=14, distinct_count=5, null_count=0, delayed_delete=false
+created_at=2023-02-01 01:10:00, name="using_extreme_1", row_count=8, distinct_count=2, null_count=0, delayed_delete=false
+created_at=2023-02-01 00:30:00, name="__auto__", row_count=6, distinct_count=3, null_count=0, delayed_delete=false
+created_at=2023-02-01 00:00:00, name="__auto__", row_count=3, distinct_count=3, null_count=0, delayed_delete=false
+
+# Push a USING EXTREME partial stats that is bound to the global freshest
+# full stats. In this case, it should be allocated to the canary cache,
+# and merge with auto full stats 3.
+exec
+ALTER TABLE test PUSH STATISTICS '[
+  {
+    "id": 5,
+    "avg_size": 4,
+    "columns": ["id"],
+    "created_at": "2023-02-01 01:20:00.000000",
+    "distinct_count": 2,
+    "histo_buckets": [
+      {
+        "distinct_range": 0,
+        "num_eq": 5,
+        "num_range": 0,
+        "upper_bound": "3"
+      },
+      {
+        "distinct_range": 0,
+        "num_eq": 5,
+        "num_range": 0,
+        "upper_bound": "4"
+      }
+    ],
+    "histo_col_type": "INT8",
+    "histo_version": 2,
+    "name": "using_extreme_2",
+    "null_count": 0,
+    "row_count": 10,
+    "partial_predicate": "(id < 0:::INT8) OR ((id > 2:::INT8) OR (id IS NULL))",
+    "full_statistic_id": 3
+  }
+]'
+----
+
+stats-cache table=test
+----
+fresh stats (count=5):
+created_at=2023-02-01 01:20:00, name="__merged__", row_count=19, distinct_count=5, null_count=0, delayed_delete=false
+created_at=2023-02-01 01:20:00, name="using_extreme_2", row_count=10, distinct_count=2, null_count=0, delayed_delete=false
+created_at=2023-02-01 01:00:00, name="__auto__", row_count=9, distinct_count=3, null_count=0, delayed_delete=false
+created_at=2023-02-01 00:30:00, name="__auto__", row_count=6, distinct_count=3, null_count=0, delayed_delete=false
+created_at=2023-02-01 00:00:00, name="__auto__", row_count=3, distinct_count=3, null_count=0, delayed_delete=false
+stable stats (count=4):
+created_at=2023-02-01 01:10:00, name="__merged__", row_count=14, distinct_count=5, null_count=0, delayed_delete=false
+created_at=2023-02-01 01:10:00, name="using_extreme_1", row_count=8, distinct_count=2, null_count=0, delayed_delete=false
+created_at=2023-02-01 00:30:00, name="__auto__", row_count=6, distinct_count=3, null_count=0, delayed_delete=false
+created_at=2023-02-01 00:00:00, name="__auto__", row_count=3, distinct_count=3, null_count=0, delayed_delete=false
+
+# Push an USING EXTREME stats that is not the latest stats of either
+# the freshest cache or the stable cache. In this case, this
+# using_extreme_3 will be simply ignored and won't be merged with any
+# full stats.
+exec
+ALTER TABLE test PUSH STATISTICS '[
+  {
+    "id": 6,
+    "avg_size": 4,
+    "columns": ["id"],
+    "created_at": "2023-02-01 01:30:00.000000",
+    "distinct_count": 2,
+    "histo_buckets": [
+      {
+        "distinct_range": 0,
+        "num_eq": 100,
+        "num_range": 0,
+        "upper_bound": "3"
+      },
+      {
+        "distinct_range": 0,
+        "num_eq": 100,
+        "num_range": 0,
+        "upper_bound": "4"
+      }
+    ],
+    "histo_col_type": "INT8",
+    "histo_version": 2,
+    "name": "using_extreme_3",
+    "null_count": 0,
+    "row_count": 200,
+    "partial_predicate": "(id < 0:::INT8) OR ((id > 2:::INT8) OR (id IS NULL))",
+    "full_statistic_id": 1
+  }
+]'
+----
+
+stats-cache table=test
+----
+fresh stats (count=5):
+created_at=2023-02-01 01:20:00, name="__merged__", row_count=19, distinct_count=5, null_count=0, delayed_delete=false
+created_at=2023-02-01 01:20:00, name="using_extreme_2", row_count=10, distinct_count=2, null_count=0, delayed_delete=false
+created_at=2023-02-01 01:00:00, name="__auto__", row_count=9, distinct_count=3, null_count=0, delayed_delete=false
+created_at=2023-02-01 00:30:00, name="__auto__", row_count=6, distinct_count=3, null_count=0, delayed_delete=false
+created_at=2023-02-01 00:00:00, name="__auto__", row_count=3, distinct_count=3, null_count=0, delayed_delete=false
+stable stats (count=5):
+created_at=2023-02-01 01:10:00, name="__merged__", row_count=14, distinct_count=5, null_count=0, delayed_delete=false
+created_at=2023-02-01 01:30:00, name="using_extreme_3", row_count=200, distinct_count=2, null_count=0, delayed_delete=false
+created_at=2023-02-01 01:10:00, name="using_extreme_1", row_count=8, distinct_count=2, null_count=0, delayed_delete=false
+created_at=2023-02-01 00:30:00, name="__auto__", row_count=6, distinct_count=3, null_count=0, delayed_delete=false
+created_at=2023-02-01 00:00:00, name="__auto__", row_count=3, distinct_count=3, null_count=0, delayed_delete=false
+
+subtest end
