@@ -632,7 +632,7 @@
 /pkg/util/tracing            @cockroachdb/obs-prs @cockroachdb/obs-india-prs
 /pkg/workload/               @cockroachdb/test-eng
 /pkg/obs/                    @cockroachdb/obs-prs
-/pkg/ccl/auditloggingccl     @cockroachdb/obs-prs
+/pkg/sql/auditlogging         @cockroachdb/obs-prs
 
 # Own all bazel files to dev-inf, but don't request reviews for them
 # as they are mostly - but not only - generated code that changes with
