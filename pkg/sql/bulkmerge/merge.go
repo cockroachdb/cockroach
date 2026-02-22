@@ -108,6 +108,22 @@ func Merge(
 		return nil, err
 	}
 
+	// Check pausepoints after the merge flow completes.
+	if opts.Iteration == 1 {
+		if err := execCtx.ExecCfg().JobRegistry.CheckPausepoint(
+			"distribute_merge.after_first_iteration",
+		); err != nil {
+			return nil, err
+		}
+	}
+	if opts.Iteration == opts.MaxIterations {
+		if err := execCtx.ExecCfg().JobRegistry.CheckPausepoint(
+			"distribute_merge.after_final_iteration",
+		); err != nil {
+			return nil, err
+		}
+	}
+
 	if opts.Iteration == opts.MaxIterations {
 		// Final iteration writes directly to KV; no SST outputs expected.
 		return nil, nil
