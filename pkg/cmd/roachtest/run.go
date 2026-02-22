@@ -495,10 +495,7 @@ func newDatadogContext(ctx context.Context) context.Context {
 		datadogSite = os.Getenv("DD_SITE")
 	}
 
-	datadogAPIKey := roachtestflags.DatadogAPIKey
-	if datadogAPIKey == "" {
-		datadogAPIKey = os.Getenv("DD_API_KEY")
-	}
+	datadogAPIKey := os.Getenv("DD_API_KEY")
 
 	datadogApplicationKey := roachtestflags.DatadogApplicationKey
 	if datadogApplicationKey == "" {
