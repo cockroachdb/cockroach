@@ -10,14 +10,13 @@ import flatMap from "lodash/flatMap";
 import flow from "lodash/flow";
 import head from "lodash/head";
 import isEmpty from "lodash/isEmpty";
-import isEqual from "lodash/isEqual";
 import isNil from "lodash/isNil";
 import orderBy from "lodash/orderBy";
 import some from "lodash/some";
 import sortBy from "lodash/sortBy";
 import sortedUniqBy from "lodash/sortedUniqBy";
 import Long from "long";
-import React from "react";
+import React, { useEffect } from "react";
 import { Helmet } from "react-helmet";
 import { connect } from "react-redux";
 import { RouteComponentProps, withRouter } from "react-router-dom";
@@ -101,130 +100,131 @@ function rangeLogRequestFromProps(props: RouteComponentProps) {
 /**
  * Renders the Range Report page.
  */
-export class Range extends React.Component<RangeProps, {}> {
-  refresh(props = this.props) {
-    props.refreshRange(rangeRequestFromProps(props));
-    props.refreshAllocatorRange(allocatorRequestFromProps(props));
-    props.refreshRangeLog(rangeLogRequestFromProps(props));
-  }
-
-  componentDidMount() {
-    // Refresh nodes status query when mounting.
-    this.refresh();
-  }
-
-  componentDidUpdate(prevProps: RangeProps) {
-    if (!isEqual(this.props.location, prevProps.location)) {
-      this.refresh(this.props);
-    }
-  }
-
-  backToHotRanges = (): void => {
-    this.props.history.push("/hotranges");
-  };
-
-  render() {
-    const { range, match } = this.props;
-    const rangeID = getMatchParamByName(match, rangeIDAttr);
-
-    // A bunch of quick error cases.
-    if (!isNil(range) && !isNil(range.lastError)) {
-      return (
-        <ErrorPage
-          rangeID={rangeID}
-          errorText={`Error loading range ${range.lastError}`}
-        />
-      );
-    }
-    if (isNil(range) || isEmpty(range.data)) {
-      return (
-        <ErrorPage rangeID={rangeID} errorText={`Loading cluster status...`} />
-      );
-    }
-    const responseRangeID = FixLong(range.data.range_id);
-    if (!responseRangeID.eq(rangeID)) {
-      return (
-        <ErrorPage rangeID={rangeID} errorText={`Updating cluster status...`} />
-      );
-    }
-    if (responseRangeID.isNegative() || responseRangeID.isZero()) {
-      return (
-        <ErrorPage
-          rangeID={rangeID}
-          errorText={`Range ID must be a positive non-zero integer. "${rangeID}"`}
-        />
-      );
-    }
-
-    // Did we get any responses?
-    if (!some(range.data.responses_by_node_id, resp => resp.infos.length > 0)) {
-      return (
-        <ErrorPage
-          rangeID={rangeID}
-          errorText={`No results found, perhaps r${rangeID} doesn't exist.`}
-          range={range}
-        />
-      );
-    }
-
-    // Collect all the infos and sort them, putting the leader (or the replica
-    // with the highest term, first.
-    const infos = orderBy(
-      flatMap(range.data.responses_by_node_id, resp => {
-        if (resp.response && isEmpty(resp.error_message)) {
-          return resp.infos;
-        }
-        return [];
-      }),
-      [
-        info => RangeInfo.IsLeader(info),
-        info => FixLong(info.raft_state.applied).toNumber(),
-        info => FixLong(info.raft_state.hard_state.term).toNumber(),
-        info => {
-          const localReplica = RangeInfo.GetLocalReplica(info);
-          return isNil(localReplica) ? 0 : localReplica.replica_id;
-        },
-      ],
-      ["desc", "desc", "desc", "asc"],
+export function Range({
+  range,
+  allocator,
+  rangeLog,
+  refreshRange: refreshRangeAction,
+  refreshAllocatorRange: refreshAllocatorRangeAction,
+  refreshRangeLog: refreshRangeLogAction,
+  match,
+  history,
+  location,
+}: RangeProps): React.ReactElement {
+  useEffect(() => {
+    refreshRangeAction(rangeRequestFromProps({ match } as RouteComponentProps));
+    refreshAllocatorRangeAction(
+      allocatorRequestFromProps({ match } as RouteComponentProps),
     );
+    refreshRangeLogAction(
+      rangeLogRequestFromProps({ match } as RouteComponentProps),
+    );
+  }, [
+    refreshRangeAction,
+    refreshAllocatorRangeAction,
+    refreshRangeLogAction,
+    match,
+    location.pathname,
+    location.search,
+  ]);
 
-    // Gather all replica IDs.
-    const replicas = flow(
-      (infos: IRangeInfo[]) =>
-        flatMap(infos, info => info.state.state.desc.internal_replicas),
-      descriptors => sortBy(descriptors, d => d.replica_id),
-      descriptors => sortedUniqBy(descriptors, d => d.replica_id),
-    )(infos);
+  const rangeID = getMatchParamByName(match, rangeIDAttr);
 
+  // A bunch of quick error cases.
+  if (!isNil(range) && !isNil(range.lastError)) {
     return (
-      <div className="section">
-        <Helmet title={`r${responseRangeID.toString()} Range | Debug`} />
-        <Button
-          onClick={this.backToHotRanges}
-          type="unstyled-link"
-          size="small"
-          icon={<ArrowLeft fontSize={"10px"} />}
-          iconPosition="left"
-          className={commonStyles("small-margin")}
-        >
-          Hot Ranges
-        </Button>
-        <h1 className="base-heading">
-          Range Report for r{responseRangeID.toString()}
-        </h1>
-        <a
-          href={`/#/debug/enqueue_range?rangeID=${responseRangeID.toString()}`}
-        >
-          Enqueue Range
-        </a>
-        <RangeTable infos={infos} replicas={replicas} />
-        <LeaseTable info={head(infos)} />
-        <ConnectionsTable range={range} />
-        <AllocatorOutput allocator={this.props.allocator} />
-        <LogTable rangeID={responseRangeID} log={this.props.rangeLog} />
-      </div>
+      <ErrorPage
+        rangeID={rangeID}
+        errorText={`Error loading range ${range.lastError}`}
+      />
     );
   }
+  if (isNil(range) || isEmpty(range.data)) {
+    return (
+      <ErrorPage rangeID={rangeID} errorText={`Loading cluster status...`} />
+    );
+  }
+  const responseRangeID = FixLong(range.data.range_id);
+  if (!responseRangeID.eq(rangeID)) {
+    return (
+      <ErrorPage rangeID={rangeID} errorText={`Updating cluster status...`} />
+    );
+  }
+  if (responseRangeID.isNegative() || responseRangeID.isZero()) {
+    return (
+      <ErrorPage
+        rangeID={rangeID}
+        errorText={`Range ID must be a positive non-zero integer. "${rangeID}"`}
+      />
+    );
+  }
+
+  // Did we get any responses?
+  if (!some(range.data.responses_by_node_id, resp => resp.infos.length > 0)) {
+    return (
+      <ErrorPage
+        rangeID={rangeID}
+        errorText={`No results found, perhaps r${rangeID} doesn't exist.`}
+        range={range}
+      />
+    );
+  }
+
+  // Collect all the infos and sort them, putting the leader (or the replica
+  // with the highest term, first.
+  const infos = orderBy(
+    flatMap(range.data.responses_by_node_id, resp => {
+      if (resp.response && isEmpty(resp.error_message)) {
+        return resp.infos;
+      }
+      return [];
+    }),
+    [
+      info => RangeInfo.IsLeader(info),
+      info => FixLong(info.raft_state.applied).toNumber(),
+      info => FixLong(info.raft_state.hard_state.term).toNumber(),
+      info => {
+        const localReplica = RangeInfo.GetLocalReplica(info);
+        return isNil(localReplica) ? 0 : localReplica.replica_id;
+      },
+    ],
+    ["desc", "desc", "desc", "asc"],
+  );
+
+  // Gather all replica IDs.
+  const replicas = flow(
+    (infos: IRangeInfo[]) =>
+      flatMap(infos, info => info.state.state.desc.internal_replicas),
+    descriptors => sortBy(descriptors, d => d.replica_id),
+    descriptors => sortedUniqBy(descriptors, d => d.replica_id),
+  )(infos);
+
+  return (
+    <div className="section">
+      <Helmet title={`r${responseRangeID.toString()} Range | Debug`} />
+      <Button
+        onClick={() => history.push("/hotranges")}
+        type="unstyled-link"
+        size="small"
+        icon={<ArrowLeft fontSize={"10px"} />}
+        iconPosition="left"
+        className={commonStyles("small-margin")}
+      >
+        Hot Ranges
+      </Button>
+      <h1 className="base-heading">
+        Range Report for r{responseRangeID.toString()}
+      </h1>
+      <a href={`/#/debug/enqueue_range?rangeID=${responseRangeID.toString()}`}>
+        Enqueue Range
+      </a>
+      <RangeTable infos={infos} replicas={replicas} />
+      <LeaseTable info={head(infos)} />
+      <ConnectionsTable range={range} />
+      <AllocatorOutput allocator={allocator} />
+      <LogTable rangeID={responseRangeID} log={rangeLog} />
+    </div>
+  );
 }
 
 const mapStateToProps = (state: AdminUIState, props: RouteComponentProps) => ({

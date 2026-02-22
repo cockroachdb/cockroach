@@ -44,11 +44,40 @@ function printLogEventType(
   }
 }
 
-export default class LogTable extends React.Component<LogTableProps, {}> {
+function renderLogInfoDescriptor(title: string, desc: string) {
+  if (isEmpty(desc)) {
+    return null;
+  }
+  return (
+    <li>
+      {title}: {desc}
+    </li>
+  );
+}
+
+function renderLogInfo(
+  info: protos.cockroach.server.serverpb.RangeLogResponse.IPrettyInfo,
+) {
+  return (
+    <ul className="log-entries-list">
+      {renderLogInfoDescriptor("Updated Range Descriptor", info.updated_desc)}
+      {renderLogInfoDescriptor("New Range Descriptor", info.new_desc)}
+      {renderLogInfoDescriptor("Added Replica", info.added_replica)}
+      {renderLogInfoDescriptor("Removed Replica", info.removed_replica)}
+      {renderLogInfoDescriptor("Reason", info.reason)}
+      {renderLogInfoDescriptor("Details", info.details)}
+    </ul>
+  );
+}
+
+export default function LogTable({
+  rangeID,
+  log,
+}: LogTableProps): React.ReactElement {
   // If there is no otherRangeID, it comes back as the number 0.
-  renderRangeID(otherRangeID: Long | number) {
+  const renderRangeID = (otherRangeID: Long | number) => {
     const fixedOtherRangeID = FixLong(otherRangeID);
-    const fixedCurrentRangeID = FixLong(this.props.rangeID);
+    const fixedCurrentRangeID = FixLong(rangeID);
     if (fixedOtherRangeID.eq(0)) {
       return null;
     }
@@ -62,40 +91,9 @@ export default class LogTable extends React.Component<LogTableProps, {}> {
         r{fixedOtherRangeID.toString()}
       </a>
     );
-  }
+  };
 
-  renderLogInfoDescriptor(title: string, desc: string) {
-    if (isEmpty(desc)) {
-      return null;
-    }
-    return (
-      <li>
-        {title}: {desc}
-      </li>
-    );
-  }
-
-  renderLogInfo(
-    info: protos.cockroach.server.serverpb.RangeLogResponse.IPrettyInfo,
-  ) {
-    return (
-      <ul className="log-entries-list">
-        {this.renderLogInfoDescriptor(
-          "Updated Range Descriptor",
-          info.updated_desc,
-        )}
-        {this.renderLogInfoDescriptor("New Range Descriptor", info.new_desc)}
-        {this.renderLogInfoDescriptor("Added Replica", info.added_replica)}
-        {this.renderLogInfoDescriptor("Removed Replica", info.removed_replica)}
-        {this.renderLogInfoDescriptor("Reason", info.reason)}
-        {this.renderLogInfoDescriptor("Details", info.details)}
-      </ul>
-    );
-  }
-
-  renderContent = () => {
-    const { log } = this.props;
-
+  const renderContent = () => {
     // Sort by descending timestamp.
     const events = orderBy(
       log && log.data && log.data.events,
@@ -130,13 +128,13 @@ export default class LogTable extends React.Component<LogTableProps, {}> {
                 {printLogEventType(event.event.event_type)}
               </td>
               <td className="log-table__cell">
-                {this.renderRangeID(event.event.range_id)}
+                {renderRangeID(event.event.range_id)}
               </td>
               <td className="log-table__cell">
-                {this.renderRangeID(event.event.other_range_id)}
+                {renderRangeID(event.event.other_range_id)}
               </td>
               <td className="log-table__cell">
-                {this.renderLogInfo(event.pretty_info)}
+                {renderLogInfo(event.pretty_info)}
               </td>
             </tr>
           ))}
@@ -145,19 +143,15 @@ export default class LogTable extends React.Component<LogTableProps, {}> {
     );
   };
 
-  render() {
-    const { log } = this.props;
-
-    return (
-      <div>
-        <h2 className="base-heading">Range Log</h2>
-        <Loading
-          loading={!log || log.inFlight}
-          page={"log table"}
-          error={log && log.lastError}
-          render={this.renderContent}
-        />
-      </div>
-    );
-  }
+  return (
+    <div>
+      <h2 className="base-heading">Range Log</h2>
+      <Loading
+        loading={!log || log.inFlight}
+        page={"log table"}
+        error={log && log.lastError}
+        render={renderContent}
+      />
+    </div>
+  );
 }

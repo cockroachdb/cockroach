@@ -5,7 +5,7 @@
 
 import { Checkbox, Select } from "antd";
 import classNames from "classnames";
-import React from "react";
+import React, { useEffect, useRef, useState } from "react";
 
 import { OutsideEventHandler } from "src/components/outsideEventHandler";
 import Dropdown, { arrowRenderer } from "src/views/shared/components/dropdown";
@@ -21,44 +21,31 @@ interface IFilterProps {
   dropDownClassName?: string;
 }
 
-interface IFilterState {
-  opened: boolean;
-  width: number;
+function firstLetterToUpperCase(value: string) {
+  return value.replace(/^[a-z]/, m => m.toUpperCase());
 }
 
-export class Filter extends React.Component<IFilterProps, IFilterState> {
-  state = {
-    opened: false,
-    width: window.innerWidth,
-  };
+export function Filter({
+  onChangeFilter,
+  deselectFilterByKey,
+  sort,
+  filter,
+  dropDownClassName,
+}: IFilterProps): React.ReactElement {
+  const [opened, setOpened] = useState(false);
+  const [width, setWidth] = useState(window.innerWidth);
+  const rangeContainer = useRef<HTMLDivElement>(null);
 
-  private rangeContainer = React.createRef<HTMLDivElement>();
+  useEffect(() => {
+    const updateDimensions = () => setWidth(window.innerWidth);
+    window.addEventListener("resize", updateDimensions);
+    return () => window.removeEventListener("resize", updateDimensions);
+  }, []);
 
-  componentDidMount() {
-    window.addEventListener("resize", this.updateDimensions);
-  }
-
-  componentWillUnmount() {
-    window.removeEventListener("resize", this.updateDimensions);
-  }
-
-  updateDimensions = () => {
-    this.setState({
-      width: window.innerWidth,
-    });
-  };
-
-  onChange = (key: string, value: string) => () =>
-    this.props.onChangeFilter(key, value);
-
-  onDeselect = (key: string) => () => this.props.deselectFilterByKey(key);
-
-  renderSelectValue = (id: string) => {
-    const { filter } = this.props;
-
+  const renderSelectValue = (id: string) => {
     if (filter && filter[id]) {
       const value = (key: string) =>
-        `${filter[id].length} ${this.firstLetterToUpperCase(key)} Selected`;
+        `${filter[id].length} ${firstLetterToUpperCase(key)} Selected`;
       switch (true) {
         case filter[id].length === 1 && id === "cluster":
           return value("Node");
@@ -75,28 +62,24 @@ export class Filter extends React.Component<IFilterProps, IFilterState> {
     return;
   };
 
-  firstLetterToUpperCase = (value: string) =>
-    value.replace(/^[a-z]/, m => m.toUpperCase());
-
-  renderSelect = () => {
-    const { sort, filter } = this.props;
+  const renderSelect = () => {
     return sort.map(value => (
       <div style={{ width: "100%" }} className="select__container">
         <p className="filter--label">{`${
-          value.id === "cluster"
-            ? "Nodes"
-            : this.firstLetterToUpperCase(value.id)
+          value.id === "cluster" ? "Nodes" : firstLetterToUpperCase(value.id)
         }`}</p>
         <Select
           style={{ width: "100%" }}
           placeholder={`Filter ${
             value.id === "cluster" ? "node" : value.id
           }(s)`}
-          value={this.renderSelectValue(value.id)}
+          value={renderSelectValue(value.id)}
           dropdownRender={() => (
             <div onMouseDown={e => e.preventDefault()}>
               <div className="select-selection__deselect">
-                <a onClick={this.onDeselect(value.id)}>Deselect all</a>
+                <a onClick={() => deselectFilterByKey(value.id)}>
+                  Deselect all
+                </a>
               </div>
               {value.filters.map(val => {
                 const checked =
@@ -107,13 +90,13 @@ export class Filter extends React.Component<IFilterProps, IFilterState> {
                   <div className="filter__checkbox">
                     <Checkbox
                       checked={checked}
-                      onChange={this.onChange(value.id, val.name)}
+                      onChange={() => onChangeFilter(value.id, val.name)}
                     />
                     <a
                       className={`filter__checkbox--label ${
                         checked ? "filter__checkbox--label__active" : ""
                       }`}
-                      onClick={this.onChange(value.id, val.name)}
+                      onClick={() => onChangeFilter(value.id, val.name)}
                     >{`${value.id === "cluster" ? "N" : ""}${val.name}: ${
                       val.address
                     }`}</a>
@@ -127,69 +110,60 @@ export class Filter extends React.Component<IFilterProps, IFilterState> {
     ));
   };
 
-  render() {
-    const { opened, width } = this.state;
-    const { dropDownClassName } = this.props;
-    const containerLeft = this.rangeContainer.current
-      ? this.rangeContainer.current.getBoundingClientRect().left
-      : 0;
-    const left =
-      width >= containerLeft + 240 ? 0 : width - (containerLeft + 240);
-    return (
-      <div className="Filter-latency">
-        <OutsideEventHandler
-          onOutsideClick={() => this.setState({ opened: false })}
-        >
-          <Dropdown
-            title="Filter"
-            options={[]}
-            selected=""
-            className={classNames(
-              {
-                dropdown__focused: opened,
-              },
-              dropDownClassName,
-            )}
-            onDropdownClick={() => this.setState({ opened: !opened })}
-            content={
-              <div ref={this.rangeContainer} className="Range">
+  const containerLeft = rangeContainer.current
+    ? rangeContainer.current.getBoundingClientRect().left
+    : 0;
+  const left = width >= containerLeft + 240 ? 0 : width - (containerLeft + 240);
+  return (
+    <div className="Filter-latency">
+      <OutsideEventHandler onOutsideClick={() => setOpened(false)}>
+        <Dropdown
+          title="Filter"
+          options={[]}
+          selected=""
+          className={classNames(
+            {
+              dropdown__focused: opened,
+            },
+            dropDownClassName,
+          )}
+          onDropdownClick={() => setOpened(prev => !prev)}
+          content={
+            <div ref={rangeContainer} className="Range">
+              <div
+                className="click-zone"
+                onClick={() => setOpened(prev => !prev)}
+              />
+              {opened && (
                 <div
-                  className="click-zone"
-                  onClick={() => {
-                    this.setState({ opened: !opened });
-                  }}
+                  className="trigger-container"
+                  onClick={() => setOpened(false)}
                 />
-                {opened && (
-                  <div
-                    className="trigger-container"
-                    onClick={() => this.setState({ opened: false })}
-                  />
-                )}
-                <div className="trigger-wrapper">
-                  <div
-                    className={`trigger Select ${(opened && "is-open") || ""}`}
-                  >
-                    <div className="Select-control">
-                      <div className="Select-arrow-zone">
-                        {arrowRenderer({ isOpen: opened })}
-                      </div>
+              )}
+              <div className="trigger-wrapper">
+                <div
+                  className={`trigger Select ${(opened && "is-open") || ""}`}
+                >
+                  <div className="Select-control">
+                    <div className="Select-arrow-zone">
+                      {arrowRenderer({ isOpen: opened })}
                     </div>
                   </div>
-                  {opened && (
-                    <div
-                      className="multiple-filter__selection"
-                      style={{ left }}
-                      onClick={e => e.stopPropagation()}
-                    >
-                      {this.renderSelect()}
-                    </div>
-                  )}
                 </div>
+                {opened && (
+                  <div
+                    className="multiple-filter__selection"
+                    style={{ left }}
+                    onClick={e => e.stopPropagation()}
+                  >
+                    {renderSelect()}
+                  </div>
+                )}
               </div>
-            }
-          />
-        </OutsideEventHandler>
-      </div>
-    );
-  }
+            </div>
+          }
+        />
+      </OutsideEventHandler>
+    </div>
+  );
 }
