@@ -2302,13 +2302,11 @@ func runTPCCBench(ctx context.Context, t test.Test, c cluster.Cluster, b tpccBen
 	precision := int(math.Max(1.0, float64(b.LoadWarehouses(c.Cloud())/200)))
 	initStepSize := precision
 
-	// Create a temp directory to store the local copy of results from the
-	// workloads.
-	resultsDir, err := os.MkdirTemp("", "roachtest-tpcc")
+	// Store intermediate histograms in artifacts for post-mortem
+	resultsDir, err := makeArtifactsSubDir(t, "tpcc-line-search-histograms")
 	if err != nil {
-		t.Fatal(errors.Wrap(err, "failed to create temp dir"))
+		t.Fatal(errors.Wrap(err, "failed to create dir for line search artifacts"))
 	}
-	defer func() { _ = os.RemoveAll(resultsDir) }()
 
 	restart := func(ctx context.Context) {
 		c.Stop(ctx, t.L(), option.DefaultStopOpts(), roachNodes)
@@ -2403,7 +2401,8 @@ func runTPCCBench(ctx context.Context, t test.Test, c cluster.Cluster, b tpccBen
 					return errors.Wrapf(err, "error running tpcc load generator")
 				}
 
-				roachtestHistogramsPath := filepath.Join(resultsDir, fmt.Sprintf("%d.%d-stats.json", warehouses, groupIdx))
+				roachtestHistogramsPath := filepath.Join(resultsDir,
+					fmt.Sprintf("iter%d_warehouse%d.%d-stats.json", iteration, warehouses, groupIdx))
 				if err := c.Get(
 					ctx, t.L(), histogramsPath, roachtestHistogramsPath, group.LoadNodes,
 				); err != nil {
@@ -2416,6 +2415,7 @@ func runTPCCBench(ctx context.Context, t test.Test, c cluster.Cluster, b tpccBen
 				if err != nil {
 					// If we got this far, and can't decode data, it's not a case of
 					// overload but something that deserves failing the whole test.
+					t.L().Printf("Failed to decode histograms from %s", roachtestHistogramsPath)
 					t.Fatal(err)
 				}
 				// This roachtest uses the stats.json emitted from hdr histogram to compute Tpmc and show it in the run log
@@ -2508,6 +2508,15 @@ func runTPCCBench(ctx context.Context, t test.Test, c cluster.Cluster, b tpccBen
 		t.L().Printf("------\nMAX WAREHOUSES = %d\n------\n\n", res)
 		ttycolor.Stdout(ttycolor.Reset)
 	}
+}
+
+// makeArtifactsSubDir creates a subdirectory within the artifacts directory of a test
+func makeArtifactsSubDir(t test.Test, dirname string) (string, error) {
+	dir := filepath.Join(t.ArtifactsDir(), dirname)
+	if err := os.MkdirAll(dir, 0755); err != nil {
+		return dir, err
+	}
+	return dir, nil
 }
 
 // makeWorkloadScrapeNodes creates a ScrapeNode for every workloadInstance.
@@ -2796,13 +2805,11 @@ func runTPCCPublished(
 		})
 	}
 
-	// Create a temp directory to store the local copy of results from the
-	// workloads.
-	resultsDir, err := os.MkdirTemp("", "roachtest-published-tpcc")
+	// Store intermediate histograms in artifacts for post-mortem
+	resultsDir, err := makeArtifactsSubDir(t, "tpcc-published-line-search-histograms")
 	if err != nil {
-		t.Fatal(errors.Wrap(err, "failed to create temp dir"))
+		t.Fatal(errors.Wrap(err, "failed to create dir for line search artifacts"))
 	}
-	defer func() { _ = os.RemoveAll(resultsDir) }()
 
 	restart := func(ctx context.Context) {
 		c.Stop(ctx, t.L(), option.DefaultStopOpts(), crdbNodes)
@@ -2865,7 +2872,8 @@ func runTPCCPublished(
 					// count.
 					return errors.Wrapf(err, "error running tpcc load generator")
 				}
-				roachtestHistogramsPath := filepath.Join(resultsDir, fmt.Sprintf("%d.%d-stats.json", warehouses, wIdx))
+				roachtestHistogramsPath := filepath.Join(resultsDir,
+					fmt.Sprintf("iter%d_warehouse%d.%d-stats.json", iteration, warehouses, wIdx))
 				if err := c.Get(
 					ctx, t.L(), histogramsPath, roachtestHistogramsPath, c.Node(w.node),
 				); err != nil {
@@ -2878,6 +2886,7 @@ func runTPCCPublished(
 				if err != nil {
 					// If we got this far, and can't decode data, it's not a case of
 					// overload but something that deserves failing the whole test.
+					t.L().Printf("Failed to decode histograms from %s", roachtestHistogramsPath)
 					t.Fatal(err)
 				}
 				result := tpcc.NewResultWithSnapshots(warehouses, 0, snapshots)
