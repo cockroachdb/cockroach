@@ -8,7 +8,6 @@ go_library(
     deps = [
         "//pkg/backup",
         "//pkg/base",
-        "//pkg/ccl/auditloggingccl",
         "//pkg/ccl/changefeedccl",
         "//pkg/ccl/cliccl",
         "//pkg/ccl/gssapiccl",
