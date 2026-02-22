@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
+	"go.uber.org/atomic"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )
@@ -1048,4 +1049,65 @@ func checkRangeCheckResult(
 			checkResult.RangeID, checkResult.Error)
 	}
 	passed = true
+}
+
+// TestDecommissionPreCheckRetryThrottledStores tests that the decommission
+// pre-check retries when it encounters transient throttled store errors.
+func TestDecommissionPreCheckRetryThrottledStores(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+
+	var shouldReturnError atomic.Bool
+	synthesizeErr := func() error {
+		if shouldReturnError.CompareAndSwap(false, true) {
+			return errors.Wrapf(allocatorimpl.ErrThrottledStores,
+				"test: stores are throttled")
+		}
+		return nil
+	}
+	// Set up test cluster with testing knob to inject transient errors.
+	tc := serverutils.StartCluster(t, 4, base.TestClusterArgs{
+		ServerArgs: base.TestServerArgs{
+			DefaultTestTenant: base.TestIsSpecificToStorageLayerAndNeedsASystemTenant,
+			Knobs: base.TestingKnobs{
+				Store: &kvserver.StoreTestingKnobs{
+					// Return throttled error on first call only
+					AllocatorCheckRangeInterceptor: synthesizeErr(),
+				},
+			},
+		},
+		ReplicationMode: base.ReplicationManual,
+	})
+	defer tc.Stopper().Stop(ctx)
+
+	firstSvr := tc.Server(0)
+
+	// Create a scratch range to have something to check.
+	scratchKey := tc.ScratchRange(t)
+	scratchDesc := tc.LookupRangeOrFatal(t, scratchKey)
+
+	// Add replicas to the node we're checking, simulating a range that needs rebalancing.
+	scratchDesc = tc.AddVotersOrFatal(t, scratchKey, tc.Target(3))
+	require.Len(t, scratchDesc.InternalReplicas, 2)
+
+	// Perform decommission pre-check on node 4.
+	// With the interceptor always returning an error, this should exhaust retries.
+	decommissioningNodeIDs := []roachpb.NodeID{tc.Server(3).NodeID()}
+	result, err := firstSvr.DecommissionPreCheck(ctx, decommissioningNodeIDs,
+		true /* strictReadiness */, false /* collectTraces */, 0 /* maxErrors */)
+
+	// The pre-check should fail after exhausting retries.
+	require.NoError(t, err)
+	require.Greater(t, result.RangesChecked, 0)
+
+	// All ranges should be reported as not ready due to throttled stores error.
+	require.Greater(t, len(result.RangesNotReady), 0, "should have unready ranges due to throttling")
+
+	// Verify the error is the throttled stores error.
+	for _, rangeErr := range result.RangesNotReady {
+		require.True(t, errors.Is(rangeErr.Err, allocatorimpl.ErrThrottledStores),
+			"range error should be throttled stores error, got: %v", rangeErr.Err)
+	}
 }

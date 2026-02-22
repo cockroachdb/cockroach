@@ -3949,6 +3949,11 @@ func (s *Store) AllocatorCheckRange(
 	collectTraces bool,
 	overrideStorePool storepool.AllocatorStorePool,
 ) (allocatorimpl.AllocatorAction, roachpb.ReplicationTarget, tracingpb.Recording, error) {
+	// Testing knob to inject errors.
+	if err := s.cfg.TestingKnobs.AllocatorCheckRangeInterceptor; err != nil {
+		return allocatorimpl.AllocatorNoop, roachpb.ReplicationTarget{}, tracingpb.Recording{}, err
+	}
+
 	var spanOptions []tracing.SpanOption
 	if collectTraces {
 		spanOptions = append(spanOptions, tracing.WithRecording(tracingpb.RecordingVerbose))
