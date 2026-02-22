@@ -8,9 +8,7 @@ package mmaprototype
 import (
 	"cmp"
 	"context"
-	"fmt"
 	"slices"
-	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -288,8 +286,9 @@ var (
 			Logical disk capacity estimated by MMA by extrapolating from the
 			logical bytes consumed by the replicas and the current used and free
 			physical disk bytes.
-		`), Measurement: "Bytes",
-		Unit: metric.Unit_BYTES,
+		`),
+		Measurement: "Bytes",
+		Unit:        metric.Unit_BYTES,
 	}
 	metaStoreDiskUtilization = metric.Metadata{
 		Name:        "mma.store.disk.utilization",
@@ -326,6 +325,26 @@ const (
 	overloadedLongDuration
 	numOverloadKinds
 )
+
+func (kind overloadKind) String() string {
+	return redact.StringWithoutMarkers(kind)
+}
+
+// SafeFormat implements the redact.SafeFormatter interface.
+func (kind overloadKind) SafeFormat(w redact.SafePrinter, _ rune) {
+	switch kind {
+	case overloadedWaitingForLeaseShedding:
+		w.SafeString("lease-grace")
+	case overloadedShortDuration:
+		w.SafeString("short")
+	case overloadedMediumDuration:
+		w.SafeString("medium")
+	case overloadedLongDuration:
+		w.SafeString("long")
+	default:
+		w.SafeString("unknown overloadKind")
+	}
+}
 
 func toOverloadKind(withinLeaseSheddingGracePeriod bool, ignoreLevel ignoreLevel) overloadKind {
 	if withinLeaseSheddingGracePeriod {
@@ -397,6 +416,9 @@ type storePassState struct {
 
 func (s *storePassState) summarize() storePassSummary {
 	var sum storePassSummary
+	for i := 0; i < int(numShedResults); i++ {
+		sum.reasonCounts[i].reason = shedResult(i)
+	}
 	for kindIdx := range s.shedCounts {
 		for resultIdx := range s.shedCounts[kindIdx] {
 			count := s.shedCounts[kindIdx][resultIdx]
@@ -408,13 +430,13 @@ func (s *storePassState) summarize() storePassSummary {
 				sum.numShedSuccesses += count
 			} else {
 				sum.numShedFailures += count
-			}
-			if count > sum.mostCommonCount {
-				sum.mostCommonReason = result
-				sum.mostCommonCount = count
+				sum.reasonCounts[resultIdx].count += count
 			}
 		}
 	}
+	slices.SortFunc(sum.reasonCounts[:], func(a, b reasonCount) int {
+		return cmp.Compare(-a.count, -b.count)
+	})
 	return sum
 }
 
@@ -425,10 +447,16 @@ type storePassSummary struct {
 	storeID          roachpb.StoreID
 	numShedSuccesses int
 	numShedFailures  int
-	// mostCommonReason/mostCommonCount track the most frequent shedResult for
-	// this overloaded store, used in failure logging.
-	mostCommonReason shedResult
-	mostCommonCount  int
+	// reasonCounts tracks the counts of shedResult for this overloaded store
+	// in the descending order based on counts, used in diagnostic logging.
+	reasonCounts [numShedResults]reasonCount
+}
+
+// reasonCount tracks the count of how many ranges were rejected for a given
+// reason.
+type reasonCount struct {
+	count  int
+	reason shedResult
 }
 
 var (
@@ -590,6 +618,8 @@ const (
 	noCandidateDueToUnmatchedLeasePreference
 	noCandidateToAcceptLoad
 	rangeConstraintsViolated
+	rangeConstraintsError
+	rangeTransient
 	numShedResults
 )
 
@@ -615,6 +645,10 @@ func (sr shedResult) SafeFormat(w redact.SafePrinter, _ rune) {
 		w.SafeString("no-cand-to-accept-load")
 	case rangeConstraintsViolated:
 		w.SafeString("constraint-violation")
+	case rangeConstraintsError:
+		w.SafeString("constraint-error")
+	case rangeTransient:
+		w.SafeString("range-transient")
 	default:
 		w.SafeString("unknown")
 	}
@@ -649,148 +683,183 @@ func (g *rebalancingPassMetricsAndLogger) finishRebalancingPass(ctx context.Cont
 	if g == nil {
 		return
 	}
+	buf := redact.StringBuilder{}
+	g.computePassSummary(&buf)
+	log.KvDistribution.Infof(ctx, "%s", buf.RedactableString())
+}
+
+// computePassSummary performs the aggregation of the rebalancing pass summary,
+// updates gauges and generates a log message with stores per category of
+// successful rebalances, failed rebalances, skipped stores, and stores for
+// which no ranges were evaluates. The list of stores is truncated upto a fixed
+// number of stores (see `logStores`).
+// Example output:
+/*
+rebalancing pass summary [local=s1]:
+	overloaded:
+		short: [s1, s10]
+		medium: [s8]
+		long: [s6]
+	success: [s1]
+	failure: [{s6, total: 2, no-cand-load:2}, {s8, total: 1, no-cand:1}]
+	skipped: [s5]
+	no-ranges-evaluated: [s10]
+*/
+func (g *rebalancingPassMetricsAndLogger) computePassSummary(buf *redact.StringBuilder) {
 	g.failedSummaries = g.failedSummaries[:0]
 	g.successSummaries = g.successSummaries[:0]
 
-	// Aggregate store counts by (overloadKind, outcome) for gauge metrics.
-	// storeNumSummaries[kindIdx][0] = success count, [kindIdx][1] = failure
-	// count. Each store is counted at most once based on whether it had any
-	// shedding success.
-	var storeNumSummaries [numOverloadKinds][2]int64
-	for overloadedStoreID, passState := range g.states {
-		s := passState.summarize()
-		s.storeID = overloadedStoreID
-		if s.numShedSuccesses > 0 {
-			storeNumSummaries[passState.overloadKind][0]++
-			g.successSummaries = append(g.successSummaries, s)
-		} else if s.numShedFailures > 0 {
-			storeNumSummaries[passState.overloadKind][1]++
-			g.failedSummaries = append(g.failedSummaries, s)
-		}
-		// Else ignore. Some transient situation caused no ranges to be
-		// considered.
+	// For each overloadKind, collect the stores that belong to it and count
+	// the stores that had shedding success or failure.
+	// NB: Each store is counted at most once based on whether it had any
+	// shedding success, even if it had shedding failures.
+	var overloadSummaries [numOverloadKinds]struct {
+		success, failure int64
+		stores           []roachpb.StoreID
 	}
 
-	// Update gauge metrics using storeNumSummaries aggregated from all overloaded
-	// stores.
-	for kindIdx := range storeNumSummaries {
-		for outcomeIdx := range storeNumSummaries[kindIdx] {
-			count := storeNumSummaries[kindIdx][outcomeIdx]
-			isSuccess := outcomeIdx == 0
-			switch overloadKind(kindIdx) {
-			case overloadedWaitingForLeaseShedding:
-				if isSuccess {
-					g.m.OverloadedStoreLeaseGraceSuccess.Update(count)
-				} else {
-					g.m.OverloadedStoreLeaseGraceFailure.Update(count)
-				}
-			case overloadedShortDuration:
-				if isSuccess {
-					g.m.OverloadedStoreShortDurSuccess.Update(count)
-				} else {
-					g.m.OverloadedStoreShortDurFailure.Update(count)
-				}
-			case overloadedMediumDuration:
-				if isSuccess {
-					g.m.OverloadedStoreMediumDurSuccess.Update(count)
-				} else {
-					g.m.OverloadedStoreMediumDurFailure.Update(count)
-				}
-			case overloadedLongDuration:
-				if isSuccess {
-					g.m.OverloadedStoreLongDurSuccess.Update(count)
-				} else {
-					g.m.OverloadedStoreLongDurFailure.Update(count)
-				}
+	// Collect the stores for which no ranges were evaluated.
+	var noRangesEvaluated []roachpb.StoreID
+
+	for storeID, passState := range g.states {
+		storeSummary := passState.summarize()
+		storeSummary.storeID = storeID
+
+		overloadSummary := &overloadSummaries[passState.overloadKind]
+		overloadSummary.stores = append(overloadSummary.stores, storeID)
+
+		if storeSummary.numShedSuccesses > 0 {
+			overloadSummary.success++
+			g.successSummaries = append(g.successSummaries, storeSummary)
+		} else if storeSummary.numShedFailures > 0 {
+			overloadSummary.failure++
+			g.failedSummaries = append(g.failedSummaries, storeSummary)
+		} else {
+			noRangesEvaluated = append(noRangesEvaluated, storeSummary.storeID)
+		}
+	}
+
+	// Update gauge metrics using overloadSummaries aggregated from all
+	// overloaded stores.
+	for kind, counts := range overloadSummaries {
+		switch overloadKind(kind) {
+		case overloadedWaitingForLeaseShedding:
+			g.m.OverloadedStoreLeaseGraceSuccess.Update(counts.success)
+			g.m.OverloadedStoreLeaseGraceFailure.Update(counts.failure)
+		case overloadedShortDuration:
+			g.m.OverloadedStoreShortDurSuccess.Update(counts.success)
+			g.m.OverloadedStoreShortDurFailure.Update(counts.failure)
+		case overloadedMediumDuration:
+			g.m.OverloadedStoreMediumDurSuccess.Update(counts.success)
+			g.m.OverloadedStoreMediumDurFailure.Update(counts.failure)
+		case overloadedLongDuration:
+			g.m.OverloadedStoreLongDurSuccess.Update(counts.success)
+			g.m.OverloadedStoreLongDurFailure.Update(counts.failure)
+		}
+	}
+
+	buf.Printf("rebalancing pass summary [local=s%v]:", g.localStoreID)
+
+	// Log the state of all the overloaded store by kind.
+	empty := true
+	for kind, summary := range overloadSummaries {
+		if len(summary.stores) > 0 {
+			if empty {
+				buf.Printf("\n\toverloaded:")
+				empty = false
 			}
+			slices.Sort(summary.stores)
+			buf.Printf("\n\t\t%v: ", overloadKind(kind))
+			logStores(buf, summary.stores, func(store roachpb.StoreID) redact.RedactableString {
+				return redact.Sprintf("s%v", store)
+			})
 		}
 	}
-
-	// Build log message with up to k entries per category.
-	// Example output: "rebalancing pass shed: {s1, s3} failures
-	// (store,reason:count): (s2,no-cand:5) skipped: {s4, s5}"
-	const k = 20
-	var b strings.Builder
 
 	// Log stores where shedding succeeded, sorted by store ID.
-	n := len(g.successSummaries)
-	if n > 0 {
+	if len(g.successSummaries) > 0 {
+		empty = false
 		slices.SortFunc(g.successSummaries, func(a, b storePassSummary) int {
 			return cmp.Compare(a.storeID, b.storeID)
 		})
-		omitted := false
-		if n > k {
-			omitted = true
-			n = k
-		}
-		fmt.Fprintf(&b, "rebalancing pass shed: {")
-		for i := 0; i < n; i++ {
-			prefix := ", "
-			if i == 0 {
-				prefix = ""
-			}
-			fmt.Fprintf(&b, "%ss%v", prefix, g.successSummaries[i].storeID)
-		}
-		if omitted {
-			fmt.Fprintf(&b, ",...")
-		}
-		fmt.Fprintf(&b, "}")
+		buf.SafeString("\n\tsuccess: ")
+		logStores(buf, g.successSummaries, func(store storePassSummary) redact.RedactableString {
+			return redact.Sprintf("s%v", store.storeID)
+		})
 	}
 
 	// Log stores where shedding failed, sorted by failure count (descending).
-	n = len(g.failedSummaries)
-	if n > 0 {
+	if len(g.failedSummaries) > 0 {
+		empty = false
 		slices.SortFunc(g.failedSummaries, func(a, b storePassSummary) int {
 			return cmp.Or(cmp.Compare(-a.numShedFailures, -b.numShedFailures),
 				cmp.Compare(a.storeID, b.storeID))
 		})
-		omitted := false
-		if n > k {
-			omitted = true
-			n = k
-		}
-		if b.Len() == 0 {
-			fmt.Fprintf(&b, "rebalancing pass")
-		}
-		fmt.Fprintf(&b, " failures (store,reason:count): ")
-		for i := 0; i < n; i++ {
-			prefix := ", "
-			if i == 0 {
-				prefix = ""
+		buf.SafeString("\n\tfailure: ")
+		logStores(buf, g.failedSummaries, func(store storePassSummary) redact.RedactableString {
+			inner := redact.StringBuilder{}
+			inner.Printf("{s%v, total: %d", store.storeID,
+				redact.SafeInt(store.numShedFailures))
+			for _, reasonCount := range store.reasonCounts {
+				if reasonCount.count == 0 {
+					break
+				}
+				inner.Printf(", %v:%v", reasonCount.reason, redact.SafeInt(reasonCount.count))
 			}
-			fmt.Fprintf(&b, "%s(s%v,%v:%d)", prefix, g.failedSummaries[i].storeID,
-				g.failedSummaries[i].mostCommonReason, g.failedSummaries[i].mostCommonCount)
-		}
-		if omitted {
-			fmt.Fprintf(&b, ",...")
-		}
+			inner.SafeRune('}')
+			return inner.RedactableString()
+		})
 	}
 
 	// Log stores that were skipped (e.g., max range move limit reached), sorted
 	// by store ID.
-	n = len(g.skippedStores)
-	if n > 0 {
+	if len(g.skippedStores) > 0 {
+		empty = false
 		slices.Sort(g.skippedStores)
-		omitted := false
-		if n > k {
-			omitted = true
-			n = k
-		}
-		fmt.Fprintf(&b, " skipped: {")
-		for i := 0; i < n; i++ {
-			prefix := ", "
-			if i == 0 {
-				prefix = ""
-			}
-			fmt.Fprintf(&b, "%ss%v", prefix, g.skippedStores[i])
-		}
-		if omitted {
-			fmt.Fprintf(&b, ",...")
-		}
-		fmt.Fprintf(&b, "}")
+		buf.SafeString("\n\tskipped: ")
+		logStores(buf, g.skippedStores, func(store roachpb.StoreID) redact.RedactableString {
+			return redact.Sprintf("s%v", store)
+		})
 	}
 
-	if b.Len() > 0 {
-		log.KvDistribution.Infof(ctx, "%s", redact.SafeString(b.String()))
+	// Log stores for which no ranges were evaluated.
+	if len(noRangesEvaluated) > 0 {
+		empty = false
+		slices.Sort(noRangesEvaluated)
+		buf.SafeString("\n\tno-ranges-evaluated: ")
+		logStores(buf, noRangesEvaluated, func(store roachpb.StoreID) redact.RedactableString {
+			return redact.Sprintf("s%v", store)
+		})
+	}
+
+	// Log if none of the conditions were met.
+	if empty {
+		buf.SafeString(" none")
+	}
+}
+
+// logStores is a convenience function that prints the given slice of elements
+// by first applying the printer function and then joining the strings together.
+func logStores[T any](
+	buf *redact.StringBuilder, stores []T, printer func(T) redact.RedactableString,
+) {
+	// maxStoresLogged defines the upper bound on how many stores' summary is
+	// logged.
+	const maxStoresLogged int = 20
+
+	omitted := false
+	n := len(stores)
+	if n > maxStoresLogged {
+		omitted = true
+		n = maxStoresLogged
+	}
+	buf.Printf("[%s", printer(stores[0]))
+	for i := 1; i < n; i++ {
+		buf.Printf(", %s", printer(stores[i]))
+	}
+	if omitted {
+		buf.Printf(",..., %d total]", len(stores))
+	} else {
+		buf.SafeRune(']')
 	}
 }

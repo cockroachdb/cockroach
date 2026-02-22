@@ -88,7 +88,10 @@ rebalance-stores store-id=1 fraction-pending-decrease-threshold=1.0 max-lease-tr
 [mmaid=1] result(success): shedding r3 lease from s1 to s3 [change:r3=[transfer_to=3 cids=3,4]] with resulting loads source:[cpu:540ns/s, write-bandwidth:0 B/s, byte-size:0 B] target:[cpu:353ns/s, write-bandwidth:0 B/s, byte-size:0 B] (means: [cpu:400ns/s, write-bandwidth:0 B/s, byte-size:0 B]) (frac_pending: (src:0.00,target:0.46) (src:2.53,target:0.00))
 [mmaid=1] reached max lease transfer count 2, returning
 [mmaid=1] skipping replica transfers for s1 to try more leases next time
-[mmaid=1] rebalancing pass shed: {s1}
+[mmaid=1] rebalancing pass summary [local=s1]:
+	overloaded:
+		short: [s1]
+	success: [s1]
 pending(4)
 change-id=1 store-id=1 node-id=1 range-id=4 load-delta=[cpu:-230ns/s, write-bandwidth:0 B/s, byte-size:0 B] start=0s gc=1m0s
   prev=(replica-id=1 type=VOTER_FULL leaseholder=true)

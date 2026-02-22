@@ -1,0 +1,7 @@
+echo
+----
+rebalancing pass summary [local=s1]:
+	overloaded:
+		short: [s10]
+		medium: [s3]
+	success: [s3, s10]
