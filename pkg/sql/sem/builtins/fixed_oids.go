@@ -2870,6 +2870,12 @@ var builtinOidsArray = []string{
 	2915: `dmetaphone(source: string) -> string`,
 	2916: `dmetaphone_alt(source: string) -> string`,
 	2917: `daitch_mokotoff(source: string) -> string[]`,
+	2918: `crdb_internal.delete_hints(statement_fingerprint: string, donor_sql: string) -> int`,
+	2919: `information_schema.crdb_delete_inline_hints(statement_fingerprint: string, donor_sql: string) -> int`,
+	2920: `crdb_internal.delete_hints(rowid: int) -> int`,
+	2921: `information_schema.crdb_delete_inline_hints(rowid: int) -> int`,
+	2922: `crdb_internal.delete_hints(statement_fingerprint: string) -> int`,
+	2923: `information_schema.crdb_delete_inline_hints(statement_fingerprint: string) -> int`,
 }
 
 var builtinOidsBySignature map[string]oid.Oid

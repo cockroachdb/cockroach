@@ -303,3 +303,149 @@ SELECT information_schema.crdb_rewrite_inline_hints(
   'SELECT b FROM ab WHERE a = $1',
   'SELECT b FROM ab WHERE a = _'
 )
+
+subtest delete_hints
+
+query TTT
+SELECT fingerprint, '|', crdb_internal.pb_to_json('hintpb.StatementHintUnion', hint)->'injectHints'->>'donorSql' AS donor_sql FROM system.statement_hints ORDER BY "created_at";
+----
+SELECT a FROM ab WHERE b = _  |  SELECT a FROM ab WHERE b = _
+SELECT a FROM ab WHERE b = _  |  SELECT a FROM ab WHERE b = _
+SELECT b FROM ab WHERE a = _  |  SELECT b FROM ab WHERE a = _
+
+statement ok
+CREATE INDEX ab_b ON ab (b)
+
+let $id
+SELECT information_schema.crdb_rewrite_inline_hints(
+  'SELECT b FROM ab WHERE b = $1',
+  'SELECT b FROM ab@b WHERE b = _'
+)
+
+# Delete by row id.
+statement ok
+SELECT information_schema.crdb_delete_inline_hints($id)
+
+query TTT
+SELECT fingerprint, '|', crdb_internal.pb_to_json('hintpb.StatementHintUnion', hint)->'injectHints'->>'donorSql' AS donor_sql FROM system.statement_hints ORDER BY "created_at";
+----
+SELECT a FROM ab WHERE b = _  |  SELECT a FROM ab WHERE b = _
+SELECT a FROM ab WHERE b = _  |  SELECT a FROM ab WHERE b = _
+SELECT b FROM ab WHERE a = _  |  SELECT b FROM ab WHERE a = _
+
+statement ok
+CREATE INDEX xy_yx ON xy (y, x);
+
+statement ok
+CREATE INDEX xy_y ON xy (y);
+
+# Make some hints bound to the same fingerprint.
+statement ok
+SELECT information_schema.crdb_rewrite_inline_hints(
+  'SELECT * FROM xy WHERE y = 10',
+  'SELECT * FROM xy@primary WHERE y = 10'
+);
+
+statement ok
+SELECT information_schema.crdb_rewrite_inline_hints(
+  'SELECT * FROM xy WHERE y = 10',
+  'SELECT * FROM xy@xy_yx WHERE y = 10'
+);
+
+statement ok
+SELECT information_schema.crdb_rewrite_inline_hints(
+  'SELECT * FROM xy WHERE y = 10',
+  'SELECT * FROM xy@xy_y WHERE y = 10'
+);
+
+query TTT
+SELECT fingerprint, '|', crdb_internal.pb_to_json('hintpb.StatementHintUnion', hint)->'injectHints'->>'donorSql' AS donor_sql FROM system.statement_hints ORDER BY "created_at";
+----
+SELECT a FROM ab WHERE b = _  |  SELECT a FROM ab WHERE b = _
+SELECT a FROM ab WHERE b = _  |  SELECT a FROM ab WHERE b = _
+SELECT b FROM ab WHERE a = _  |  SELECT b FROM ab WHERE a = _
+SELECT * FROM xy WHERE y = _  |  SELECT * FROM xy@primary WHERE y = _
+SELECT * FROM xy WHERE y = _  |  SELECT * FROM xy@xy_yx WHERE y = _
+SELECT * FROM xy WHERE y = _  |  SELECT * FROM xy@xy_y WHERE y = _
+
+# Delete by fingerprinted fingerprint and donorSQL.
+statement ok
+SELECT crdb_internal.delete_hints('SELECT * FROM xy WHERE y = _', 'SELECT * FROM xy@xy_yx WHERE y = _');
+
+query TTT
+SELECT fingerprint, '|', crdb_internal.pb_to_json('hintpb.StatementHintUnion', hint)->'injectHints'->>'donorSql' AS donor_sql FROM system.statement_hints ORDER BY "created_at";
+----
+SELECT a FROM ab WHERE b = _  |  SELECT a FROM ab WHERE b = _
+SELECT a FROM ab WHERE b = _  |  SELECT a FROM ab WHERE b = _
+SELECT b FROM ab WHERE a = _  |  SELECT b FROM ab WHERE a = _
+SELECT * FROM xy WHERE y = _  |  SELECT * FROM xy@primary WHERE y = _
+SELECT * FROM xy WHERE y = _  |  SELECT * FROM xy@xy_y WHERE y = _
+
+# Delete by fingerprinted fingerprint.
+statement ok
+SELECT crdb_internal.delete_hints('SELECT * FROM xy WHERE y = _');
+
+query TTT
+SELECT fingerprint, '|', crdb_internal.pb_to_json('hintpb.StatementHintUnion', hint)->'injectHints'->>'donorSql' AS donor_sql FROM system.statement_hints ORDER BY "created_at";
+----
+SELECT a FROM ab WHERE b = _  |  SELECT a FROM ab WHERE b = _
+SELECT a FROM ab WHERE b = _  |  SELECT a FROM ab WHERE b = _
+SELECT b FROM ab WHERE a = _  |  SELECT b FROM ab WHERE a = _
+
+# Now test with non-fingerprinted inputs (constants instead of _).
+# The delete builtins should normalize them to fingerprints before matching.
+
+# Add hints back for xy.
+statement ok
+SELECT information_schema.crdb_rewrite_inline_hints(
+  'SELECT * FROM xy WHERE y = 10',
+  'SELECT * FROM xy@primary WHERE y = 10'
+);
+
+statement ok
+SELECT information_schema.crdb_rewrite_inline_hints(
+  'SELECT * FROM xy WHERE y = 10',
+  'SELECT * FROM xy@xy_yx WHERE y = 10'
+);
+
+statement ok
+SELECT information_schema.crdb_rewrite_inline_hints(
+  'SELECT * FROM xy WHERE y = 10',
+  'SELECT * FROM xy@xy_y WHERE y = 10'
+);
+
+query TTT
+SELECT fingerprint, '|', crdb_internal.pb_to_json('hintpb.StatementHintUnion', hint)->'injectHints'->>'donorSql' AS donor_sql FROM system.statement_hints ORDER BY "created_at";
+----
+SELECT a FROM ab WHERE b = _  |  SELECT a FROM ab WHERE b = _
+SELECT a FROM ab WHERE b = _  |  SELECT a FROM ab WHERE b = _
+SELECT b FROM ab WHERE a = _  |  SELECT b FROM ab WHERE a = _
+SELECT * FROM xy WHERE y = _  |  SELECT * FROM xy@primary WHERE y = _
+SELECT * FROM xy WHERE y = _  |  SELECT * FROM xy@xy_yx WHERE y = _
+SELECT * FROM xy WHERE y = _  |  SELECT * FROM xy@xy_y WHERE y = _
+
+# Delete by non-fingerprinted fingerprint and non-fingerprinted donorSQL.
+statement ok
+SELECT crdb_internal.delete_hints('SELECT * FROM xy WHERE y = 100', 'SELECT * FROM xy@xy_yx WHERE y = 20');
+
+query TTT
+SELECT fingerprint, '|', crdb_internal.pb_to_json('hintpb.StatementHintUnion', hint)->'injectHints'->>'donorSql' AS donor_sql FROM system.statement_hints ORDER BY "created_at";
+----
+SELECT a FROM ab WHERE b = _  |  SELECT a FROM ab WHERE b = _
+SELECT a FROM ab WHERE b = _  |  SELECT a FROM ab WHERE b = _
+SELECT b FROM ab WHERE a = _  |  SELECT b FROM ab WHERE a = _
+SELECT * FROM xy WHERE y = _  |  SELECT * FROM xy@primary WHERE y = _
+SELECT * FROM xy WHERE y = _  |  SELECT * FROM xy@xy_y WHERE y = _
+
+# Delete by non-fingerprinted fingerprint.
+statement ok
+SELECT crdb_internal.delete_hints('SELECT * FROM xy WHERE y = 81');
+
+query TTT
+SELECT fingerprint, '|', crdb_internal.pb_to_json('hintpb.StatementHintUnion', hint)->'injectHints'->>'donorSql' AS donor_sql FROM system.statement_hints ORDER BY "created_at";
+----
+SELECT a FROM ab WHERE b = _  |  SELECT a FROM ab WHERE b = _
+SELECT a FROM ab WHERE b = _  |  SELECT a FROM ab WHERE b = _
+SELECT b FROM ab WHERE a = _  |  SELECT b FROM ab WHERE a = _
+
+subtest end

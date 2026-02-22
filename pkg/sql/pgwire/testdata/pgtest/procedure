@@ -66,9 +66,9 @@ Query {"String": "CALL p()"}
 until
 ReadyForQuery
 ----
-{"Severity":"NOTICE","SeverityUnlocalized":"NOTICE","Code":"00000","Message":"foo","Detail":"","Hint":"","Position":0,"InternalPosition":0,"InternalQuery":"","Where":"","SchemaName":"","TableName":"","ColumnName":"","DataTypeName":"","ConstraintName":"","File":"builtins.go","Line":0,"Routine":"func386","UnknownFields":null}
-{"Severity":"NOTICE","SeverityUnlocalized":"NOTICE","Code":"00000","Message":"bar","Detail":"","Hint":"","Position":0,"InternalPosition":0,"InternalQuery":"","Where":"","SchemaName":"","TableName":"","ColumnName":"","DataTypeName":"","ConstraintName":"","File":"builtins.go","Line":0,"Routine":"func386","UnknownFields":null}
-{"Severity":"NOTICE","SeverityUnlocalized":"NOTICE","Code":"00000","Message":"baz","Detail":"","Hint":"","Position":0,"InternalPosition":0,"InternalQuery":"","Where":"","SchemaName":"","TableName":"","ColumnName":"","DataTypeName":"","ConstraintName":"","File":"builtins.go","Line":0,"Routine":"func386","UnknownFields":null}
+{"Severity":"NOTICE","SeverityUnlocalized":"NOTICE","Code":"00000","Message":"foo","Detail":"","Hint":"","Position":0,"InternalPosition":0,"InternalQuery":"","Where":"","SchemaName":"","TableName":"","ColumnName":"","DataTypeName":"","ConstraintName":"","File":"builtins.go","Line":0,"Routine":"func389","UnknownFields":null}
+{"Severity":"NOTICE","SeverityUnlocalized":"NOTICE","Code":"00000","Message":"bar","Detail":"","Hint":"","Position":0,"InternalPosition":0,"InternalQuery":"","Where":"","SchemaName":"","TableName":"","ColumnName":"","DataTypeName":"","ConstraintName":"","File":"builtins.go","Line":0,"Routine":"func389","UnknownFields":null}
+{"Severity":"NOTICE","SeverityUnlocalized":"NOTICE","Code":"00000","Message":"baz","Detail":"","Hint":"","Position":0,"InternalPosition":0,"InternalQuery":"","Where":"","SchemaName":"","TableName":"","ColumnName":"","DataTypeName":"","ConstraintName":"","File":"builtins.go","Line":0,"Routine":"func389","UnknownFields":null}
 {"Type":"CommandComplete","CommandTag":"CALL"}
 {"Type":"ReadyForQuery","TxStatus":"I"}
 
@@ -84,8 +84,8 @@ ReadyForQuery
 ----
 {"Type":"ParseComplete"}
 {"Type":"BindComplete"}
-{"Severity":"NOTICE","SeverityUnlocalized":"NOTICE","Code":"00000","Message":"foo","Detail":"","Hint":"","Position":0,"InternalPosition":0,"InternalQuery":"","Where":"","SchemaName":"","TableName":"","ColumnName":"","DataTypeName":"","ConstraintName":"","File":"builtins.go","Line":0,"Routine":"func386","UnknownFields":null}
-{"Severity":"NOTICE","SeverityUnlocalized":"NOTICE","Code":"00000","Message":"bar","Detail":"","Hint":"","Position":0,"InternalPosition":0,"InternalQuery":"","Where":"","SchemaName":"","TableName":"","ColumnName":"","DataTypeName":"","ConstraintName":"","File":"builtins.go","Line":0,"Routine":"func386","UnknownFields":null}
-{"Severity":"NOTICE","SeverityUnlocalized":"NOTICE","Code":"00000","Message":"baz","Detail":"","Hint":"","Position":0,"InternalPosition":0,"InternalQuery":"","Where":"","SchemaName":"","TableName":"","ColumnName":"","DataTypeName":"","ConstraintName":"","File":"builtins.go","Line":0,"Routine":"func386","UnknownFields":null}
+{"Severity":"NOTICE","SeverityUnlocalized":"NOTICE","Code":"00000","Message":"foo","Detail":"","Hint":"","Position":0,"InternalPosition":0,"InternalQuery":"","Where":"","SchemaName":"","TableName":"","ColumnName":"","DataTypeName":"","ConstraintName":"","File":"builtins.go","Line":0,"Routine":"func389","UnknownFields":null}
+{"Severity":"NOTICE","SeverityUnlocalized":"NOTICE","Code":"00000","Message":"bar","Detail":"","Hint":"","Position":0,"InternalPosition":0,"InternalQuery":"","Where":"","SchemaName":"","TableName":"","ColumnName":"","DataTypeName":"","ConstraintName":"","File":"builtins.go","Line":0,"Routine":"func389","UnknownFields":null}
+{"Severity":"NOTICE","SeverityUnlocalized":"NOTICE","Code":"00000","Message":"baz","Detail":"","Hint":"","Position":0,"InternalPosition":0,"InternalQuery":"","Where":"","SchemaName":"","TableName":"","ColumnName":"","DataTypeName":"","ConstraintName":"","File":"builtins.go","Line":0,"Routine":"func389","UnknownFields":null}
 {"Type":"CommandComplete","CommandTag":"CALL"}
 {"Type":"ReadyForQuery","TxStatus":"I"}

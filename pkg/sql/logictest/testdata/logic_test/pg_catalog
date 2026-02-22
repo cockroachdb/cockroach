@@ -341,7 +341,6 @@ SHOW GRANTS ON pg_catalog.pg_namespace
 database_name  schema_name  table_name    grantee  privilege_type  is_grantable
 test           pg_catalog   pg_namespace  public   SELECT          false
 
-
 # Verify selecting from pg_catalog.
 
 statement ok
@@ -998,7 +997,6 @@ t1                 j                         char      3403232968    default
 t1                 i                         _varchar  3403232968    default
 t1                 h                         _bpchar   3403232968    default
 t1                 k                         varchar   999873346     sv
-
 
 ## pg_catalog.pg_am
 
@@ -1868,7 +1866,6 @@ t1             r
 t1             r
 t1_a_key       i
 t_with_pk_seq  r
-
 
 # Some entries in pg_depend are linked to a foreign key constraint whose
 # supporting index is the referenced object id. Other entries are table-view dependencies
@@ -3024,7 +3021,6 @@ query             STRING       true         NULL            ·                  
 backend_type      STRING       true         NULL            ·                      {}       false
 leader_pid        INT4         true         NULL            ·                      {}       false
 
-
 ## pg_catalog.pg_settings
 
 statement ok
@@ -3938,6 +3934,12 @@ FROM pg_catalog.pg_proc l
 JOIN r on l.oid = r.oid
 ORDER BY id
 ----
+crdb_delete_inline_hints  2918
+delete_hints              2918
+delete_hints              2920
+crdb_delete_inline_hints  2920
+crdb_delete_inline_hints  2922
+delete_hints              2922
 
 ## Ensure no builtin has zero oid.
 query T
@@ -4634,8 +4636,6 @@ h      timestamp without time zone     NULL            false  1114  -1
 i      timestamp with time zone        NULL            false  1184  -1
 j      interval                        NULL            false  1186  -1
 rowid  bigint                          unique_rowid()  true   20    -1
-
-
 
 # Regression test for limits on virtual index scans. (#53522)
 

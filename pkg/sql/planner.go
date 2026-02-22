@@ -1169,6 +1169,13 @@ func (p *planner) InsertStatementHint(
 	return hints.InsertHintIntoDB(ctx, p.InternalSQLTxn(), statementFingerprint, hint)
 }
 
+// DeleteStatementHint is part of the eval.Planner interface.
+func (p *planner) DeleteStatementHint(
+	ctx context.Context, rowID int64, statementFingerprint string, donorSQL string,
+) (int64, error) {
+	return hints.DeleteHintFromDB(ctx, p.InternalSQLTxn(), rowID, statementFingerprint, donorSQL)
+}
+
 // UsingHintInjection is part of the eval.Planner interface.
 func (p *planner) UsingHintInjection() bool {
 	return p.usingHintInjection
