@@ -13,7 +13,8 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/obs/clustermetrics"
-	"github.com/cockroachdb/cockroach/pkg/obs/clustermetrics/cmreader"
+	clustermetricutils "github.com/cockroachdb/cockroach/pkg/obs/clustermetrics/utils"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/apiconstants"
 	"github.com/cockroachdb/cockroach/pkg/server/srvtestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql"
@@ -58,9 +59,19 @@ func TestRegistrySyncerIntegration(t *testing.T) {
 	})()
 
 	ctx := context.Background()
+	startedChan := make(chan struct{})
+	defer close(startedChan)
 	srv, db, _ := serverutils.StartServer(t, base.TestServerArgs{
 		DefaultTestTenant: base.TestIsSpecificToStorageLayerAndNeedsASystemTenant,
+		Knobs: base.TestingKnobs{
+			ClusterMetricsKnobs: &clustermetricutils.TestingKnobs{
+				OnRegistrySyncerStart: func() {
+					startedChan <- struct{}{}
+				},
+			},
+		},
 	})
+
 	defer srv.Stopper().Stop(ctx)
 	ts := srv.ApplicationLayer()
 	r := sqlutils.MakeSQLRunner(db)
@@ -77,12 +88,8 @@ func TestRegistrySyncerIntegration(t *testing.T) {
 		(id, name, labels, type, value, node_id)
 		VALUES (300, 'test.scalar', '{}', 'gauge', 50, 1)`)
 
-	// Start the registry syncer via the production path, which wires metrics into
-	// the server's real cluster metric registry. This means the metrics
-	// will appear on the /_status/vars endpoint and in TSDB data.
+	<-startedChan
 	execCfg := ts.ExecutorConfig().(sql.ExecutorConfig)
-	err := cmreader.Start(ctx, &execCfg)
-	require.NoError(t, err)
 
 	// Get a handle to the cluster metric registry for direct inspection.
 	reg := srv.MetricsRecorder().ClusterMetricRegistry(execCfg.Codec.TenantID)
@@ -439,4 +446,118 @@ func checkGaugeVecLabelAbsent(
 		}
 	}
 	return nil
+}
+
+// TestRegistrySyncerMultiTenant starts a system tenant and a shared-process
+// secondary tenant, inserts metrics with the same name into each tenant's
+// system.cluster_metrics table with different values, and verifies that each
+// tenant's cluster metric registry is fully isolated. Updates and deletes
+// in one tenant do not affect the other.
+func TestRegistrySyncerMultiTenant(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	skip.UnderStress(t, "test is too slow to run under stress")
+
+	defer clustermetrics.TestingRegisterClusterMetric("test.mt_gauge", metric.Metadata{
+		Name: "test.mt_gauge",
+		Help: "A gauge for multi-tenant isolation testing",
+	})()
+
+	ctx := context.Background()
+
+	// Use buffered channels so the registrySyncer goroutines do not block if the
+	// test hasn't started receiving yet.
+	sysStartedChan := make(chan struct{}, 1)
+	srv, sysDB, _ := serverutils.StartServer(t, base.TestServerArgs{
+		DefaultTestTenant: base.TestControlsTenantsExplicitly,
+		Knobs: base.TestingKnobs{
+			ClusterMetricsKnobs: &clustermetricutils.TestingKnobs{
+				OnRegistrySyncerStart: func() {
+					sysStartedChan <- struct{}{}
+				},
+			},
+		},
+	})
+	defer srv.Stopper().Stop(ctx)
+
+	tenantStartedChan := make(chan struct{}, 1)
+	tenant, tenantDB := serverutils.StartSharedProcessTenant(t, srv,
+		base.TestSharedProcessTenantArgs{
+			TenantName: "app",
+			Knobs: base.TestingKnobs{
+				ClusterMetricsKnobs: &clustermetricutils.TestingKnobs{
+					OnRegistrySyncerStart: func() {
+						tenantStartedChan <- struct{}{}
+					},
+				},
+			},
+		})
+
+	sysRunner := sqlutils.MakeSQLRunner(sysDB)
+	tenantRunner := sqlutils.MakeSQLRunner(tenantDB)
+
+	// Insert a metric with the same name into each tenant's
+	// system.cluster_metrics table, but with different values.
+	sysRunner.Exec(t, `INSERT INTO system.cluster_metrics
+		(id, name, labels, type, value, node_id)
+		VALUES (100, 'test.mt_gauge', '{}', 'gauge', 42, 1)`)
+	tenantRunner.Exec(t, `INSERT INTO system.cluster_metrics
+		(id, name, labels, type, value, node_id)
+		VALUES (100, 'test.mt_gauge', '{}', 'gauge', 99, 1)`)
+
+	// Wait for both registry syncers to complete their initial scan.
+	<-sysStartedChan
+	<-tenantStartedChan
+
+	tenantExecCfg := tenant.ExecutorConfig().(sql.ExecutorConfig)
+	tenantID := tenantExecCfg.Codec.TenantID
+
+	sysReg := srv.MetricsRecorder().ClusterMetricRegistry(roachpb.SystemTenantID)
+	tenantReg := srv.MetricsRecorder().ClusterMetricRegistry(tenantID)
+	require.NotNil(t, sysReg, "system tenant registry should exist")
+	require.NotNil(t, tenantReg, "app tenant registry should exist")
+
+	// ---------------------------------------------------------------
+	// Verify initial isolation: same metric name, different values.
+	// ---------------------------------------------------------------
+	requireScalarGaugeValue(t, sysReg, "test.mt_gauge", 42)
+	requireScalarGaugeValue(t, tenantReg, "test.mt_gauge", 99)
+
+	// ---------------------------------------------------------------
+	// Update the system tenant's metric and verify isolation.
+	// ---------------------------------------------------------------
+	sysRunner.Exec(t, `UPSERT INTO system.cluster_metrics
+		(id, name, labels, type, value, node_id)
+		VALUES (100, 'test.mt_gauge', '{}', 'gauge', 100, 1)`)
+
+	testutils.SucceedsSoon(t, func() error {
+		return checkScalarGaugeValue(sysReg, "test.mt_gauge", 100)
+	})
+	// App tenant's value should remain unchanged.
+	requireScalarGaugeValue(t, tenantReg, "test.mt_gauge", 99)
+
+	// ---------------------------------------------------------------
+	// Update the app tenant's metric and verify isolation.
+	// ---------------------------------------------------------------
+	tenantRunner.Exec(t, `UPSERT INTO system.cluster_metrics
+		(id, name, labels, type, value, node_id)
+		VALUES (100, 'test.mt_gauge', '{}', 'gauge', 200, 1)`)
+
+	testutils.SucceedsSoon(t, func() error {
+		return checkScalarGaugeValue(tenantReg, "test.mt_gauge", 200)
+	})
+	// System tenant's value should remain unchanged.
+	requireScalarGaugeValue(t, sysReg, "test.mt_gauge", 100)
+
+	// ---------------------------------------------------------------
+	// Delete from the system tenant and verify the app tenant is
+	// unaffected.
+	// ---------------------------------------------------------------
+	sysRunner.Exec(t, `DELETE FROM system.cluster_metrics WHERE id = 100`)
+
+	testutils.SucceedsSoon(t, func() error {
+		return checkMetricAbsent(sysReg, "test.mt_gauge")
+	})
+	// App tenant's metric should still be present.
+	requireScalarGaugeValue(t, tenantReg, "test.mt_gauge", 200)
 }

@@ -1826,6 +1826,7 @@ GO_TARGETS = [
     "//pkg/obs/clustermetrics/cmwatcher:cmwatcher_test",
     "//pkg/obs/clustermetrics/cmwriter:cmwriter",
     "//pkg/obs/clustermetrics/cmwriter:cmwriter_test",
+    "//pkg/obs/clustermetrics/utils:utils",
     "//pkg/obs/clustermetrics:clustermetrics",
     "//pkg/obs/eventagg:eventagg",
     "//pkg/obs/eventagg:eventagg_test",

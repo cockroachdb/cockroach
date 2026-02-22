@@ -11,6 +11,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangefeed"
 	"github.com/cockroachdb/cockroach/pkg/obs/clustermetrics/cmwatcher"
+	clustermetricutils "github.com/cockroachdb/cockroach/pkg/obs/clustermetrics/utils"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
@@ -26,6 +27,7 @@ type registrySyncer struct {
 	tableWatcher *cmwatcher.Watcher
 	registry     *registry
 	stopper      *stop.Stopper
+	knobs        *clustermetricutils.TestingKnobs
 	mu           struct {
 		syncutil.Mutex
 		trackedMetrics map[string]metric.Iterable           // name → metric
@@ -34,11 +36,17 @@ type registrySyncer struct {
 }
 
 func newRegistrySyncer(
-	reg *registry, codec keys.SQLCodec, clock *hlc.Clock, f *rangefeed.Factory, stopper *stop.Stopper,
+	reg *registry,
+	codec keys.SQLCodec,
+	clock *hlc.Clock,
+	f *rangefeed.Factory,
+	stopper *stop.Stopper,
+	knobs *clustermetricutils.TestingKnobs,
 ) *registrySyncer {
 	s := &registrySyncer{
 		registry: reg,
 		stopper:  stopper,
+		knobs:    knobs,
 	}
 	s.mu.trackedMetrics = make(map[string]metric.Iterable)
 	s.mu.trackedRows = make(map[int64]cmwatcher.ClusterMetricRow)
@@ -132,6 +140,9 @@ func (s *registrySyncer) start(
 	s.stopper.AddCloser(stop.CloserFn(func() {
 		s.stop()
 	}))
+	if s.knobs != nil {
+		s.knobs.OnRegistrySyncerStart()
+	}
 	return nil
 }
 
@@ -186,7 +197,8 @@ func Start(ctx context.Context, config *sql.ExecutorConfig) error {
 			config.Codec,
 			config.Clock,
 			config.RangeFeedFactory,
-			config.Stopper).start(ctx, config.SystemTableIDResolver)
+			config.Stopper,
+			config.ClusterMetricsKnobs).start(ctx, config.SystemTableIDResolver)
 	}
 
 	if buildutil.CrdbTestBuild {
