@@ -1064,3 +1064,33 @@ func TestWebhookSinkErrorCompressedResponse(t *testing.T) {
 		})
 	}
 }
+
+// TestWebhookSinkClientTimeoutDefault verifies that the webhook_client_timeout
+// option defaults to DefaultWebhookClientTimeout (3s) when not explicitly set,
+// matching the documented behavior.
+func TestWebhookSinkClientTimeoutDefault(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	// When no webhook_client_timeout is set, the default should be 3s.
+	opts := getGenericWebhookSinkOptions()
+	webhookOpts, err := opts.GetWebhookSinkOptions()
+	require.NoError(t, err)
+	require.NotNil(t, webhookOpts.ClientTimeout, "ClientTimeout should not be nil when using default")
+	require.Equal(t, changefeedbase.DefaultWebhookClientTimeout, *webhookOpts.ClientTimeout,
+		"default ClientTimeout should be DefaultWebhookClientTimeout (%s)", changefeedbase.DefaultWebhookClientTimeout)
+
+	// When webhook_client_timeout is explicitly set, it should override the default.
+	customTimeout := 10 * time.Second
+	optsWithTimeout := getGenericWebhookSinkOptions(struct {
+		key   string
+		value string
+	}{
+		key:   changefeedbase.OptWebhookClientTimeout,
+		value: customTimeout.String(),
+	})
+	webhookOptsWithTimeout, err := optsWithTimeout.GetWebhookSinkOptions()
+	require.NoError(t, err)
+	require.NotNil(t, webhookOptsWithTimeout.ClientTimeout)
+	require.Equal(t, customTimeout, *webhookOptsWithTimeout.ClientTimeout,
+		"ClientTimeout should match the explicitly set value")
+}
