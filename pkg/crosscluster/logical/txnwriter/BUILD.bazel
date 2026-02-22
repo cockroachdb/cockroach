@@ -1,0 +1,55 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "txnwriter",
+    srcs = [
+        "apply_batch.go",
+        "refresh.go",
+        "writer.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/crosscluster/logical/txnwriter",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/crosscluster/logical/ldrdecoder",
+        "//pkg/crosscluster/logical/sqlwriter",
+        "//pkg/settings/cluster",
+        "//pkg/sql",
+        "//pkg/sql/catalog",
+        "//pkg/sql/catalog/descpb",
+        "//pkg/sql/catalog/lease",
+        "//pkg/sql/isql",
+        "//pkg/sql/sem/tree",
+        "@com_github_cockroachdb_errors//:errors",
+    ],
+)
+
+go_test(
+    name = "txnwriter_test",
+    srcs = [
+        "main_test.go",
+        "refresh_test.go",
+        "writer_test.go",
+    ],
+    embed = [":txnwriter"],
+    deps = [
+        "//pkg/base",
+        "//pkg/ccl",
+        "//pkg/ccl/storageccl",
+        "//pkg/crosscluster/logical/ldrdecoder",
+        "//pkg/security/securityassets",
+        "//pkg/security/securitytest",
+        "//pkg/server",
+        "//pkg/sql/catalog/descpb",
+        "//pkg/sql/catalog/lease",
+        "//pkg/sql/isql",
+        "//pkg/sql/sem/tree",
+        "//pkg/testutils/serverutils",
+        "//pkg/testutils/sqlutils",
+        "//pkg/testutils/testcluster",
+        "//pkg/util/hlc",
+        "//pkg/util/leaktest",
+        "//pkg/util/randutil",
+        "//pkg/util/uuid",
+        "@com_github_stretchr_testify//require",
+    ],
+)
