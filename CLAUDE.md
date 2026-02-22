@@ -845,6 +845,30 @@ if !ok {
 - **Contributing**: See `/CONTRIBUTING.md` and https://wiki.crdb.io/
 - **Design Documents**: `/docs/design.md` and `/docs/tech-notes/`
 
+## Domain Context Files
+Domain Context Files (DCF) are the canonical, high‑signal references for each domain.
+You **MUST** load and consult **only** the DCF(s) for packages directly involved in your task before code exploration or edits, tests, reviews, or triage. Specifically:
+- The package you’ll read/edit
+- Directly impacted subpackages
+- Imported packages whose behavior you intend to change (even indirectly)
+
+Do not load unrelated DCFs. If additional impact becomes apparent during work, load those DCFs then.
+
+For PRs making major changes to a domain with a DCF, update the DCF in the same PR (reference `docs/agents/CONTEXT_TEMPLATE.md`).
+
+### Index
+- `pkg/kv/kvclient/kvcoord/AGENTS_INTERCEPTORS.md` — Client-side txn interceptor stack: layering, buffering/pipelining/refresh, commits, settings, and triage.
+- `pkg/kv/kvclient/kvcoord/AGENTS.md` — Transaction coordinator and DistSender: lifecycle, routing, retries/refreshes, uncertainty, closed timestamps.
+- `pkg/kv/kvserver/concurrency/AGENTS.md` — KV concurrency control: latches, lock table, waits, reliability, triage.
+- `pkg/kv/kvserver/AGENTS.md` — Range replication, leases, Raft, snapshots, split/merge, GC, rebalancing, flow control, closed/ protected timestamps, and liveness.
+- `pkg/sql/AGENTS.md` — End-to-end SQL engine: parsing, optimizer/planning, DistSQL flows, row/vectorized execution, session state, privilege enforcement, jobs, SQL→KV boundary.
+- `pkg/sql/schemachanger/AGENTS.md` — Declarative schema changer architecture (phases, jobs, backfills, protected timestamps, rollback guarantees).
+- `pkg/multitenant/AGENTS.md` — Multi-tenancy: tenant isolation, KV routing, capabilities, RU cost control/admission, SQL↔KV boundaries, and tenant upgrade/migration flows.
+- `pkg/storage/AGENTS.md` — Storage engine API over Pebble: MVCC encoding/iteration, EAR registries, snapshots/ingestion, I/O categories, and triage.
+- `pkg/settings/AGENTS.md` — Cluster settings system: defaults, overrides/propagation, watcher callbacks, tenant scoping, version gates.
+- `pkg/upgrade/AGENTS.md` — Cluster upgrades: version gates, migrations, mixed-version compatibility, rollback window, and tenant interactions.
+
+
 ### When generating PRs and commit records
 
 Use the `commit-helper` skill (invoked via `/commit-helper`) when creating commits and PRs.
