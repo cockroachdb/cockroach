@@ -6,9 +6,12 @@
 package kvserver
 
 import (
+	"cmp"
 	"context"
+	"maps"
 	"math"
 	"slices"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -19,6 +22,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc/rpcbase"
+	"github.com/cockroachdb/cockroach/pkg/settings"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
 	"github.com/cockroachdb/cockroach/pkg/util/grunning"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -30,7 +35,14 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/crlib/crtime"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/redact"
+	"github.com/dustin/go-humanize"
 )
+
+var RaftMsgAppDequeuePacingEnabled = settings.RegisterBoolSetting(
+	settings.SystemOnly, "kv.raft.msg_app_dequeue_pacing.enabled",
+	"enables pacing of dequeueing of MsgApps from the raftReceiveQueue, to reduce the "+
+		"probability of store write stalls", true)
 
 var (
 	logRaftRecvQueueFullEvery = log.Every(1 * time.Second)
@@ -43,47 +55,185 @@ type raftRequestInfo struct {
 	respStream RaftMessageResponseStream
 }
 
+// raftReceiveQueue contains the received RaftMessageRequests for a range,
+// that are waiting to be processed on the raft scheduler. In normal mode, all
+// messages are queued and dequeued in order, from a normal messages stream.
+// However, when MsgApp processing needs to be paced to avoid storage engine
+// write stalls, MsgApp messages are separated into a paused MsgApp stream and
+// dequeued when the pacing permits. This separation of the MsgApp stream is
+// acceptable since Raft does not suffer from performance hiccups (e.g.
+// retransmits) in the absence of total ordering of MsgApps with respect to
+// other messages, as long as MsgApps are delivered in order. Of course,
+// delaying delivery of MsgApps can delay quorum.
+//
+// The decision on whether to separate a MsgApp message into the paused MsgApp
+// stream happens at queueing time (Append). If at the time of dequeueing
+// (Drain), dequeueing of MsgApps is not permitted, the paused MsgApp stream
+// stays queued. However, if the decision at dequeueing time has changed to
+// normal/all mode, any MsgApps queued in the paused stream will also get
+// dequeued. To ensure MsgApps are delivered in order, the paused MsgApp
+// stream contains MsgApps that were received after the MsgApps in the normal
+// stream.
+//
+// Dequeueing from the paused MsgApp stream can be arbitrarily delayed, but
+// since there is a bounded volume of queued MsgApps (because of quorum
+// replication flow control (QRFC) pacing at the sender), we do not run the
+// risk of OOMs. Additionally, due to the existence of the QRFC, we constrain
+// MsgApp pacing only to when some queued MsgApps have LowPriorityOverride set
+// to true. This covers the case of the sender doing force-flush of a QRFC
+// send-queue, which is the primary case where we run the risk of write
+// stalls. We could expand the scope of the pacing in the future, if
+// necessary, but we want to be very careful about adding more cases where
+// queueing can delay quorum.
+//
+// NB: In the default case of QRFC applying to all work (regular and elastic),
+// the enforceMaxLen bool is false, so one doesn't need to worry about
+// queueing increasing the probability of overflow.
 type raftReceiveQueue struct {
+	rangeID      roachpb.RangeID
+	dequeuePacer *storeRaftDequeuePacer
+
 	mu struct { // not to be locked directly
-		destroyed bool
 		syncutil.Mutex
-		infos         []raftRequestInfo
+		destroyed bool
+		// The queued requests. The pausedMsgStream only contains MsgApps. To
+		// ensure the MsgApps are delivered in order, once the pausedMsgStream is
+		// non-empty, all subsequent MsgApps are added to it.
+		normalMsgStream []raftRequestInfo
+		pausedMsgStream []raftRequestInfo
+		// Memory accounting for the normalMsgStream.
+		normalMsgStreamAcc mon.BoundAccount
+		// Memory accounting for the pausedMsgStream. The used bytes represents
+		// the total size in bytes of the pausedMsgStream. This is read by the
+		// storeRaftDequeuePacer.
+		pausedMsgStreamAcc mon.BoundAccount
+
+		// Whether to enforce maxLen on append. Typically, it will be false, and
+		// only exists because it was needed pre-QRFC.
 		enforceMaxLen bool
+
+		// When the queue is non-empty, someone must be responsible for draining
+		// it. This happens either by the (a) range being queued for processing at
+		// the raft scheduler, or (b) pacerDequeueDecision==raftDequeueSkipPaused,
+		// in which case the storeRaftDequeuePacer is responsible for eventually
+		// transitioning to raftDequeueAll, and queuing the range for processing
+		// at the raft scheduler. Both (a) and (b) can be true at the same time,
+		// since when pacerDequeueDecision==raftDequeueSkipPaused, the drain will
+		// only drain the normalMsgStream.
+		//
+		// queuedAtRaftScheduler is true if raftReceiveQueue believes it is queued
+		// at the raft scheduler. It is ok for this to be false when it is
+		// actually queued, but the reverse would be a serious bug leading to
+		// indefinitely queued messages.
+		queuedAtRaftScheduler bool
+
+		// State managed by the storeRaftDequeuePacer.
+		//
+		// The raftReceiveQueue and storeRaftDequeuePacer interact via the
+		// following fields in the raftReceiveQueue.
+		//
+		// - pausedMsgStreamAcc: It is read by storeRaftDequeuePacer and modified
+		//   by raftReceiveQueue (also mentioned above).
+		//
+		// - pacerDequeue* fields: These are read and modified by the pacer. The
+		//   pacerDequeueDecision is read by raftReceiveQueue to decide on its
+		//   actions. The pacerDequeueAccountingBytes is used for bookkeeping by
+		//   the pacer, to track the bytes it granted to the raftReceiveQueue, and
+		//   is set back to 0 when the MsgApps are drained from the
+		//   pausedMsgStream. It is distinct from pausedMsgStreamAcc.Used() as
+		//   more MsgApps can be queued to that stream after the pacer switches
+		//   the decision to raftDequeueAll, and these additional MsgApps will also
+		//   be drained.
+		//
+		// INVARIANTS:
+		//
+		// pacerDequeueDecision == raftDequeueSkipPaused <=>
+		//   pacerDequeueAccountingBytes == 0
+		//
+		// pacerDequeueDecision == raftDequeueSkipPaused <=>
+		//   the raftReceiveQueue is enqueued in the pacer &&
+		//   len(pausedMsgStream) > 0
+		//
+		// The first invariant is trivially maintained by ensuring that any
+		// transition from raftDequeueAll => raftDequeueSkipPaused only happens
+		// when the pausedMsgStream is empty and a MsgApp is received.
+		//
+		// The transition from raftDequeueSkipPaused => raftDequeueAll happens
+		// when the store is healthy enough (decided by the storeRaftDequeuePacer)
+		// for the pausedMsgStream to be drained.
+		//
+		// See the declaration of storeRaftDequeuePacer for the methods called on
+		// the pacer by the raftReceiveQueue.
+		pacerDequeueDecision        raftDequeueDecision
+		pacerDequeueAccountingBytes int64
 	}
 	maxLen int
-	acc    mon.BoundAccount
+}
+
+func newRaftReceiveQueue(
+	rangeID roachpb.RangeID, pacer *storeRaftDequeuePacer, monitor *mon.BytesMonitor, maxLen int,
+) *raftReceiveQueue {
+	q := &raftReceiveQueue{rangeID: rangeID, dequeuePacer: pacer, maxLen: maxLen}
+	q.mu.normalMsgStreamAcc.Init(context.Background(), monitor)
+	q.mu.pausedMsgStreamAcc.Init(context.Background(), monitor)
+	return q
 }
 
 // Len returns the number of requests in the queue.
 func (q *raftReceiveQueue) Len() int {
 	q.mu.Lock()
 	defer q.mu.Unlock()
-	return len(q.mu.infos)
+	return q.lenLocked()
 }
 
-// Drain moves the stored requests out of the queue, returning them to
-// the caller. Returns true if the returned slice was not empty.
+func (q *raftReceiveQueue) lenLocked() int {
+	return len(q.mu.normalMsgStream) + len(q.mu.pausedMsgStream)
+}
+
+// Drain moves the stored requests out of the queue, returning them to the
+// caller. Returns true if the returned slice was not empty. It will always
+// drain the normalMsgStream, and will also drain the pausedMsgStream if the
+// (internal) raftDequeueDecision permits.
+//
+// TODO(sumeer): remove the bool return value since it is redundant.
 func (q *raftReceiveQueue) Drain() ([]raftRequestInfo, bool) {
 	q.mu.Lock()
 	defer q.mu.Unlock()
 	return q.drainLocked()
 }
 
+const maxRequestInfoSliceReuseCap = 8
+
 func (q *raftReceiveQueue) drainLocked() ([]raftRequestInfo, bool) {
-	if len(q.mu.infos) == 0 {
-		return nil, false
+	infos := q.mu.normalMsgStream
+	q.mu.normalMsgStream = nil
+	q.mu.normalMsgStreamAcc.Clear(context.Background())
+	if len(q.mu.pausedMsgStream) != 0 && q.mu.pacerDequeueDecision == raftDequeueAll {
+		infos = append(infos, q.mu.pausedMsgStream...)
+		if cap(q.mu.pausedMsgStream) > maxRequestInfoSliceReuseCap {
+			q.mu.pausedMsgStream = nil
+		} else {
+			clear(q.mu.pausedMsgStream)
+			q.mu.pausedMsgStream = q.mu.pausedMsgStream[:0]
+		}
+		q.mu.pausedMsgStreamAcc.Clear(context.Background())
+		q.dequeuePacer.DrainingPausedMsgStreamQLocked(q)
 	}
-	infos := q.mu.infos
-	q.mu.infos = nil
-	q.acc.Clear(context.Background())
-	return infos, true
+	q.mu.queuedAtRaftScheduler = false
+	return infos, len(infos) > 0
 }
 
 func (q *raftReceiveQueue) Delete() {
 	q.mu.Lock()
 	defer q.mu.Unlock()
+	q.dequeuePacer.DeregisterQLocked(q)
 	q.drainLocked()
-	if err := q.acc.ResizeTo(context.Background(), 0); err != nil {
+	q.mu.normalMsgStream = nil
+	q.mu.pausedMsgStream = nil
+	if err := q.mu.normalMsgStreamAcc.ResizeTo(context.Background(), 0); err != nil {
+		panic(err) // ResizeTo(., 0) always returns nil
+	}
+	if err := q.mu.pausedMsgStreamAcc.ResizeTo(context.Background(), 0); err != nil {
 		panic(err) // ResizeTo(., 0) always returns nil
 	}
 	q.mu.destroyed = true
@@ -92,39 +242,92 @@ func (q *raftReceiveQueue) Delete() {
 // Recycle makes a slice that the caller knows will no longer be accessed
 // available for reuse.
 func (q *raftReceiveQueue) Recycle(processed []raftRequestInfo) {
-	if cap(processed) > 4 {
+	if cap(processed) > maxRequestInfoSliceReuseCap {
 		return // cap recycled slice lengths
 	}
+	// Optimistically set it up for reuse.
+	clear(processed)
+	processed = processed[:0]
 	q.mu.Lock()
 	defer q.mu.Unlock()
-	if q.mu.infos == nil {
-		for i := range processed {
-			processed[i] = raftRequestInfo{}
-		}
-		q.mu.infos = processed[:0]
+	if q.mu.normalMsgStream == nil {
+		q.mu.normalMsgStream = processed
 	}
 }
 
+// Append adds the request to the queue. The return value
+// shouldQueueAtRaftScheduler is true if the range should be enqueued in the
+// raftScheduler.
 func (q *raftReceiveQueue) Append(
 	req *kvserverpb.RaftMessageRequest, s RaftMessageResponseStream,
-) (shouldQueue bool, size int64, appended bool) {
+) (shouldQueueAtRaftScheduler bool, size int64, appended bool) {
 	size = int64(req.Size())
 	q.mu.Lock()
 	defer q.mu.Unlock()
-	if q.mu.destroyed || (q.mu.enforceMaxLen && len(q.mu.infos) >= q.maxLen) {
+	if q.mu.destroyed || (q.mu.enforceMaxLen && q.lenLocked() >= q.maxLen) {
 		return false, size, false
 	}
-	if q.acc.Grow(context.Background(), size) != nil {
+	// Do the append.
+	addToPaused := false
+	if req.Message.Type == raftpb.MsgApp {
+		// MsgApps can be paused.
+		if len(q.mu.pausedMsgStream) > 0 {
+			// NB: current pacerDequeueDecision can be either raftDequeueSkipPaused
+			// or raftDequeueAll (the Drain call that will empty the pausedMsgStream
+			// hasn't yet happened).
+			addToPaused = true
+		} else if req.LowPriorityOverride {
+			// Empty pausedMsgStream and MsgApp is LowPriorityOverride. Consider
+			// starting the pausedMsgStream.
+			//
+			// NB: if we transition to raftDequeueSkipPaused, we will stay in that
+			// state even if later messages are !LowPriOverride. We deem this
+			// acceptable since the send-queue has been recently emptied, and even
+			// if this replica is needed for quorum (because it was emptied due to a
+			// force-flush), the burst may be large enough that we need to pace it
+			// to prevent engine write stalls.
+			//
+			// Note that when the pausedMsgStream is empty, the current decision
+			// must be raftDequeueAll because we only transition to
+			// raftDequeueSkipPaused when transitioning to a non-empty
+			// pausedMsgStream, and we will transition to raftDequeueAll before
+			// draining the pausedMsgStream.
+			if q.mu.pacerDequeueDecision == raftDequeueSkipPaused {
+				panic(errors.AssertionFailedf("pacerDequeueDecision inconsistent with empty MsgApp queue"))
+			}
+			// Compute whether to add to pausedMsgStream.
+			addToPaused = q.dequeuePacer.ShouldPauseMsgAppDequeue()
+		}
+		// Else, empty pausedMsgStream and non-LowPriorityOverride. Add to
+		// normalMsgStream.
+	}
+	var acc *mon.BoundAccount
+	var stream *[]raftRequestInfo
+	if addToPaused {
+		acc = &q.mu.pausedMsgStreamAcc
+		stream = &q.mu.pausedMsgStream
+	} else {
+		acc = &q.mu.normalMsgStreamAcc
+		stream = &q.mu.normalMsgStream
+	}
+	if acc.Grow(context.Background(), size) != nil {
 		return false, size, false
 	}
-	q.mu.infos = append(q.mu.infos, raftRequestInfo{
+	*stream = append(*stream, raftRequestInfo{
 		req:        req,
 		respStream: s,
 		size:       size,
 	})
-	// The operation that enqueues the first message will
-	// be put in charge of triggering a drain of the queue.
-	return len(q.mu.infos) == 1, size, true
+	if addToPaused && len(q.mu.pausedMsgStream) == 1 {
+		// Transition the state of q.mu.pacerDequeueDecision. We can't do this
+		// earlier since the call to pausedMsgStreamAcc.Grow can fail.
+		q.dequeuePacer.PauseMsgAppDequeueQLocked(q)
+	}
+	if !addToPaused && !q.mu.queuedAtRaftScheduler {
+		q.mu.queuedAtRaftScheduler = true
+		shouldQueueAtRaftScheduler = true
+	}
+	return shouldQueueAtRaftScheduler, size, true
 }
 
 func (q *raftReceiveQueue) SetEnforceMaxLen(enforceMaxLen bool) {
@@ -139,10 +342,17 @@ func (q *raftReceiveQueue) getEnforceMaxLenForTesting() bool {
 	return q.mu.enforceMaxLen
 }
 
+func (q *raftReceiveQueue) memoryUsedForTesting() int64 {
+	q.mu.Lock()
+	defer q.mu.Unlock()
+	return q.mu.pausedMsgStreamAcc.Used() + q.mu.normalMsgStreamAcc.Used()
+}
+
 type raftReceiveQueues struct {
 	mon           *mon.BytesMonitor
 	m             syncutil.Map[roachpb.RangeID, raftReceiveQueue]
 	enforceMaxLen atomic.Bool
+	dequeuePacer  *storeRaftDequeuePacer
 }
 
 func (qs *raftReceiveQueues) Load(rangeID roachpb.RangeID) (*raftReceiveQueue, bool) {
@@ -155,8 +365,7 @@ func (qs *raftReceiveQueues) LoadOrCreate(
 	if q, ok := qs.Load(rangeID); ok {
 		return q, ok // fast path
 	}
-	q := &raftReceiveQueue{maxLen: maxLen}
-	q.acc.Init(context.Background(), qs.mon)
+	q := newRaftReceiveQueue(rangeID, qs.dequeuePacer, qs.mon, maxLen)
 	q, loaded = qs.m.LoadOrStore(rangeID, q)
 	if loaded {
 		return q, true
@@ -1185,3 +1394,377 @@ func (s *Store) updateCapacityGauges(ctx context.Context) error {
 
 	return nil
 }
+
+// raftSchedulerForDequeuePacer abstracts raftScheduler for the
+// storeRaftDequeuePacer.
+type raftSchedulerForDequeuePacer interface {
+	EnqueueRaftRequest(id roachpb.RangeID)
+}
+
+// engineForDequeuePacer abstracts storage.Engine for the
+// storeRaftDequeuePacer.
+type engineForDequeuePacer interface {
+	// TryWaitForMemTableStallHeadroom returns true if the number of engine
+	// memtables is small enough to have some headroom to avoid write stalls, in
+	// which case it also returns the allowedBurst in bytes (which must be
+	// greater than zero). Otherwise, it returns false and allowedBurst is zero.
+	//
+	// If doWait is true, it waits until there is headroom before returning, in
+	// which case the return value is guaranteed to be true.
+	//
+	// This is not optimized to be very efficient, so it is preferable that it
+	// is only called by a few callers, who cache the result for a short
+	// duration (say 10ms).
+	TryWaitForMemTableStallHeadroom(doWait bool) (ok bool, allowedBurst int64)
+}
+
+// TODO(sumeer): remove when the implementation is complete.
+type noopEngineForDequeuePacer struct{}
+
+func (n noopEngineForDequeuePacer) TryWaitForMemTableStallHeadroom(doWait bool) (bool, int64) {
+	return true, math.MaxInt64
+}
+
+// storeRaftDequeuePacer paces dequeueing of MsgApps for a set of
+// raftReceiveQueues. Roughly, it needs to perform a number of tasks:
+//   - queue raftReceiveQueues that need to be paced
+//   - block in the storage.Engine waiting for an allowedBurst
+//   - track the burst granted by the engine and how it is distributed to some
+//     of the waiting raftReceiveQueues, and when those raftReceiveQueues have
+//     used those grants
+//   - enqueue granted raftReceiveQueues in the raftScheduler.
+//
+// Additionally, we don't always want to run in the mode of blocking in the
+// storage.Engine and distributing bursts among raftReceiveQueues, since
+// waiting for those bursts to be consumed can slow down raftReceiveQueue
+// processing needlessly when the Engine is fully healthy.
+//
+// To satisfy the above functionality, the pacer tightly integrates with the
+// raftReceiveQueue internals as documented in the field declarations in the
+// raftReceiveQueue (i.e., we choose not to unnecessarily abstract). The
+// invariants are documented and enforced via numerous assertions.
+//
+// The methods called by the raftReceiveQueue are:
+//   - ShouldPauseMsgAppDequeueQLocked and PauseMsgAppDequeueQLocked: to ask
+//     the pacer whether it should pause, then to tell it to update the
+//     pacerDequeueDecision.
+//   - DrainingPausedMsgStreamQLocked: whenever the raftReceiveQueue drains
+//     the paused MsgApp stream. This is needed for bookkeeping inside the
+//     pacer.
+//   - DeregisterQLocked: when the queue is being deleted.
+//
+// Concurrency: The pacer's mutex is ordered after raftReceiveQueue.mu. The
+// raftReceiveQueue calls methods on storeRaftDequeuePacer which pass the
+// raftReceiveQueue as a parameter while holding its own mutex (indicated by
+// the "QLocked" suffix on the methods).
+type storeRaftDequeuePacer struct {
+	eng       engineForDequeuePacer
+	scheduler raftSchedulerForDequeuePacer
+	st        *cluster.Settings
+	nowMono   func() crtime.Mono
+	every     log.EveryN
+	mu        struct {
+		syncutil.Mutex
+		// waiting is the set of raftReceiveQueues that have
+		// raftReceiveQueue.mu.pacerDequeueDecision set to raftDequeueSkipPaused.
+		//
+		// NB: for simplicity, we don't bother with FIFO ordering this queue.
+		waiting map[*raftReceiveQueue]struct{}
+		// Used to sample headroom availability no frequently than every
+		// engineHeadroomPollingInterval when waiting is empty.
+		lastHeadroomAvailableSampleTime crtime.Mono
+
+		// When dequeueBurst has granted bytes to various raftReceiveQueues, this
+		// captures how much was granted in total but has not yet been drained by
+		// the raftReceiveQueues (since draining happens on the raftScheduler).
+		// Another burst will not be requested from the engine until this is zero.
+		burstBytesToDrain int64
+		queueCond         *sync.Cond
+		closed            bool
+	}
+	testingKnobs struct {
+		pauseCh        chan *raftReceiveQueue
+		drainingCh     chan *raftReceiveQueue
+		deregisterCh   chan *raftReceiveQueue
+		dequeueBurstCh chan struct{}
+	}
+}
+
+func newStoreRaftDequeuePacer(
+	eng engineForDequeuePacer, scheduler raftSchedulerForDequeuePacer, st *cluster.Settings,
+) *storeRaftDequeuePacer {
+	w := &storeRaftDequeuePacer{
+		eng:       eng,
+		scheduler: scheduler,
+		st:        st,
+		nowMono:   crtime.NowMono,
+		every:     log.Every(time.Minute),
+	}
+	w.mu.waiting = map[*raftReceiveQueue]struct{}{}
+	w.mu.queueCond = sync.NewCond(&w.mu.Mutex)
+	return w
+}
+
+// Start must be called once to start the pacer.
+func (p *storeRaftDequeuePacer) Start() {
+	go p.waiter()
+}
+
+func (p *storeRaftDequeuePacer) Close() {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.mu.closed = true
+	p.mu.queueCond.Signal()
+}
+
+// engineHeadroomPollingInterval is the minimum duration between sampling
+// engine headroom availability when there are no waiting raftReceiveQueues.
+const engineHeadroomPollingInterval = 10 * time.Millisecond
+
+// ShouldPauseMsgAppDequeue is called by a raftReceiveQueue asking the pacer
+// whether it should pause MsgApp delivery.
+//
+// NB: this method does not take raftReceiveQueue as parameter, and does not
+// change raftReceiveQueue.mu.pacerDequeueDecision. That happens in
+// PauseMsgAppDequeueQLocked, which is called if this method returns true.
+func (p *storeRaftDequeuePacer) ShouldPauseMsgAppDequeue() bool {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	if len(p.mu.waiting) != 0 {
+		return true
+	}
+	now := p.nowMono()
+	haveHeadroom := true
+	if now.Sub(p.mu.lastHeadroomAvailableSampleTime) >= engineHeadroomPollingInterval &&
+		RaftMsgAppDequeuePacingEnabled.Get(&p.st.SV) {
+		p.mu.lastHeadroomAvailableSampleTime = now
+		haveHeadroom, _ = p.eng.TryWaitForMemTableStallHeadroom(false)
+	}
+	return !haveHeadroom
+}
+
+// PauseMsgAppDequeueQLocked is called by a raftReceiveQueue to update its
+// pacerDequeueDecision to raftDequeueSkipPaused.
+func (p *storeRaftDequeuePacer) PauseMsgAppDequeueQLocked(q *raftReceiveQueue) {
+	if p.testingKnobs.pauseCh != nil {
+		p.testingKnobs.pauseCh <- q
+	}
+	if q.mu.pacerDequeueAccountingBytes != 0 {
+		panic(errors.AssertionFailedf(
+			"pacerDequeueAccountingBytes %d are non zero", q.mu.pacerDequeueAccountingBytes))
+	}
+	if q.mu.pacerDequeueDecision == raftDequeueSkipPaused {
+		panic(errors.AssertionFailedf("pacerDequeueDecision is raftDequeueSkipPaused"))
+	}
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	// Enqueue.
+	q.mu.pacerDequeueDecision = raftDequeueSkipPaused
+	p.mu.waiting[q] = struct{}{}
+	if len(p.mu.waiting) == 1 {
+		// The waiting queue is transitioning to non-empty, so tell the waiter
+		// goroutine, so it can request an allowedBurst from the engine.
+		p.mu.queueCond.Signal()
+	}
+}
+
+// DrainingPausedMsgStreamQLocked is called by a raftReceiveQueue whenever it drains
+// all its MsgApps.
+func (p *storeRaftDequeuePacer) DrainingPausedMsgStreamQLocked(q *raftReceiveQueue) {
+	if p.testingKnobs.drainingCh != nil {
+		p.testingKnobs.drainingCh <- q
+	}
+	if q.mu.pacerDequeueAccountingBytes == 0 {
+		// Common case.
+		return
+	}
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.deductBurstBytesQLockedPacerLocked(q)
+}
+
+// DeregisterQLocked is called by a raftReceiveQueue when it is being deleted.
+func (p *storeRaftDequeuePacer) DeregisterQLocked(q *raftReceiveQueue) {
+	if p.testingKnobs.deregisterCh != nil {
+		p.testingKnobs.deregisterCh <- q
+	}
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	switch q.mu.pacerDequeueDecision {
+	case raftDequeueAll:
+		if _, ok := p.mu.waiting[q]; ok {
+			panic(errors.AssertionFailedf("raftReceiveQueue should not be in waiting"))
+		}
+		if q.mu.pacerDequeueAccountingBytes != 0 {
+			p.deductBurstBytesQLockedPacerLocked(q)
+		}
+	case raftDequeueSkipPaused:
+		// Ensure everything is drained.
+		q.mu.pacerDequeueDecision = raftDequeueAll
+		if _, ok := p.mu.waiting[q]; !ok {
+			panic(errors.AssertionFailedf("raftReceiveQueue should be in waiting"))
+		}
+		delete(p.mu.waiting, q)
+		if q.mu.pacerDequeueAccountingBytes != 0 {
+			panic(errors.AssertionFailedf(
+				"pacerDequeueAccountingBytes %d are non zero", q.mu.pacerDequeueAccountingBytes))
+		}
+	default:
+		panic(errors.AssertionFailedf("unknown pacerDequeueDecision %v", q.mu.pacerDequeueDecision))
+	}
+}
+
+func (p *storeRaftDequeuePacer) deductBurstBytesQLockedPacerLocked(q *raftReceiveQueue) {
+	// NB: the raftReceiveQueue may have drained more than this, because there
+	// is a lag between the transition to raftDequeueAll and the actual draining
+	// of MsgApps during which more MsgApps could have been queued. We are ok
+	// with that error. We just need our accounting to be accurate in the sense
+	// that what we added is what we deduct.
+	p.mu.burstBytesToDrain -= q.mu.pacerDequeueAccountingBytes
+	if p.mu.burstBytesToDrain < 0 {
+		panic(errors.AssertionFailedf("negative burstBytesToDrain: %d", p.mu.burstBytesToDrain))
+	}
+	q.mu.pacerDequeueAccountingBytes = 0
+	if p.mu.burstBytesToDrain == 0 {
+		// There may be more waiters, that the waiter goroutine can now try to
+		// process.
+		p.mu.queueCond.Signal()
+	}
+}
+
+// waiter runs in a goroutine waiting for the waiting raftReceiveQueues to
+// become non-empty, or the existing burstBytesToDrain to be consumed. At that
+// point it has some work to do, which involves asking the engine for an
+// allowedBurst and dequeueing some raftReceiveQueues accordingly.
+func (p *storeRaftDequeuePacer) waiter() {
+	// queueBuf is used to avoid allocations in dequeueBurst.
+	var queueBuf []*raftReceiveQueue
+	for {
+		if closed := p.waitUntilTryWaitAtEng(); closed {
+			break
+		}
+		// Allow another burst. TryWaitForMemTableStallHeadroom will return if
+		// the engine is closed.
+		ok, allowedBurst := p.eng.TryWaitForMemTableStallHeadroom(true)
+		if !ok {
+			panic(errors.AssertionFailedf("unexpected !ok"))
+		}
+		if allowedBurst <= 0 {
+			panic(errors.AssertionFailedf("allowedBurst must be > 0"))
+		}
+		queueBuf = p.dequeueBurst(allowedBurst, queueBuf)
+		// Queue may be empty. Or there may be more waiting, but we need to wait
+		// until all the burst is consumed. Or there may be waiters that got
+		// added immediately after dequeueBurst finished. Loop around to wait
+		// for the next event.
+	}
+	p.dequeueBurst(math.MaxInt64, queueBuf)
+}
+
+func (p *storeRaftDequeuePacer) waitUntilTryWaitAtEng() (closed bool) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	for (len(p.mu.waiting) == 0 || p.mu.burstBytesToDrain > 0) && !p.mu.closed {
+		// Nothing to do, so wait.
+		p.mu.queueCond.Wait()
+	}
+	return p.mu.closed
+}
+
+// dequeueBurst dequeues raftReceiveQueues up to allowedBurst. It stops after
+// the first raftReceiveQueue that causes the allowedBurst to be exceeded. The
+// queueBuf is scratch space to avoid allocations, and the returned queueBuf2
+// is also scratch space.
+func (p *storeRaftDequeuePacer) dequeueBurst(
+	allowedBurst int64, queueBuf []*raftReceiveQueue,
+) (queueBuf2 []*raftReceiveQueue) {
+	consumedSize := int64(0)
+	for consumedSize < allowedBurst {
+		// Collect all the current waiters. A subset of those will get dequeued
+		// later. We can't decide that subset in this loop as it requires
+		// examining raftReceiveQueue.mu.pausedMsgStreamAcc, which requires
+		// acquiring raftReceiveQueue.mu, which precedes w.mu in the lock
+		// ordering.
+		p.mu.Lock()
+		queueBuf = slices.AppendSeq(queueBuf[:0], maps.Keys(p.mu.waiting))
+		p.mu.Unlock()
+		if len(queueBuf) == 0 {
+			break
+		}
+		if p.testingKnobs.dequeueBurstCh != nil {
+			// Determinism for testing.
+			slices.SortFunc(queueBuf, func(a, b *raftReceiveQueue) int {
+				return cmp.Compare(a.rangeID, b.rangeID)
+			})
+		}
+		// Iterate over queueBuf, granting a prefix of the queues, and updating
+		// their state to raftDequeueAll, and telling the raftScheduler to
+		// schedule them.
+		for _, q := range queueBuf {
+			q.mu.Lock()
+			if q.mu.pacerDequeueDecision == raftDequeueAll {
+				// Changed to raftQDequeueAll before we reacquired the lock. This
+				// can happen when the raftReceiveQueue got closed.
+				q.mu.Unlock()
+				continue
+			}
+			size := q.mu.pausedMsgStreamAcc.Used()
+			consumedSize += size
+			// NB: it may dequeue more, but we record what we have granted, so we
+			// can correctly deduct from w.burstBytesToDrain.
+			if q.mu.pacerDequeueAccountingBytes != 0 {
+				panic(errors.AssertionFailedf("pacerDequeueAccountingBytes was not zero"))
+			}
+			q.mu.pacerDequeueAccountingBytes = size
+			q.mu.pacerDequeueDecision = raftDequeueAll
+			p.mu.Lock()
+			delete(p.mu.waiting, q)
+			p.mu.burstBytesToDrain += q.mu.pacerDequeueAccountingBytes
+			p.mu.Unlock()
+			q.mu.Unlock()
+			p.scheduler.EnqueueRaftRequest(q.rangeID)
+			if consumedSize >= allowedBurst {
+				break
+			}
+		}
+		// More queues could have been added to waiting, so loop.
+	}
+	if consumedSize > 0 && log.V(1) {
+		log.KvExec.Infof(context.TODO(), "storeRaftDequeuePacer: allowed burst=%s consumed=%s",
+			redact.SafeString(humanize.Bytes(uint64(allowedBurst))),
+			redact.SafeString(humanize.Bytes(uint64(consumedSize))))
+	}
+	if consumedSize > 0 && p.testingKnobs.dequeueBurstCh != nil {
+		p.testingKnobs.dequeueBurstCh <- struct{}{}
+	}
+	return queueBuf
+}
+
+// TryLog is called periodically by the store during metrics collection, and
+// allows the pacer to log its internal state if interesting.
+func (p *storeRaftDequeuePacer) TryLog(ctx context.Context) {
+	var lenWaiting int
+	var burstBytesToDrain int64
+	func() {
+		p.mu.Lock()
+		defer p.mu.Unlock()
+		lenWaiting = len(p.mu.waiting)
+		burstBytesToDrain = p.mu.burstBytesToDrain
+	}()
+	if lenWaiting == 0 && burstBytesToDrain == 0 {
+		return
+	}
+	if !p.every.ShouldLog() {
+		return
+	}
+	log.KvExec.Infof(ctx, "storeRaftDequeuePacer: waiting: %d, burstBytesToDrain: %s",
+		lenWaiting, redact.SafeString(humanize.Bytes(uint64(burstBytesToDrain))))
+}
+
+type raftDequeueDecision uint8
+
+// raftDequeueNormal, raftDequeueSkipPaused
+const (
+	raftDequeueAll raftDequeueDecision = iota
+	raftDequeueSkipPaused
+)

@@ -1554,11 +1554,20 @@ func NewStore(
 	s.replRankings = NewReplicaRankings()
 	s.replRankingsByTenant = NewReplicaRankingsMap()
 
+	// NB: buffer up to RaftElectionTimeoutTicks in Raft scheduler to avoid
+	// unnecessary elections when ticks are temporarily delayed and piled up.
+	s.scheduler = newRaftScheduler(cfg.AmbientCtx, s.metrics, s,
+		cfg.RaftSchedulerConcurrency, cfg.RaftSchedulerShardSize, cfg.RaftSchedulerConcurrencyPriority,
+		cfg.RaftElectionTimeoutTicks)
+
 	s.raftRecvQueues.mon = mon.NewUnlimitedMonitor(ctx, mon.Options{
 		Name:     mon.MakeName("raft-receive-queue"),
 		CurCount: s.metrics.RaftRcvdQueuedBytes,
 		Settings: cfg.Settings,
 	})
+	s.raftRecvQueues.dequeuePacer = newStoreRaftDequeuePacer(
+		noopEngineForDequeuePacer{}, s.scheduler, cfg.Settings)
+
 	s.cfg.KVFlowWaitForEvalConfig.RegisterWatcher(func(wc rac2.WaitForEvalCategory) {
 		// When the system is configured with rac2.AllWorkWaitsForEval, RACv2 is
 		// running in a mode where all senders are using send token pools for all
@@ -1579,12 +1588,6 @@ func NewStore(
 		},
 		cfg.RangeLogWriter,
 	)
-
-	// NB: buffer up to RaftElectionTimeoutTicks in Raft scheduler to avoid
-	// unnecessary elections when ticks are temporarily delayed and piled up.
-	s.scheduler = newRaftScheduler(cfg.AmbientCtx, s.metrics, s,
-		cfg.RaftSchedulerConcurrency, cfg.RaftSchedulerShardSize, cfg.RaftSchedulerConcurrencyPriority,
-		cfg.RaftElectionTimeoutTicks)
 
 	// Run a log SyncWaiter loop for every 32 raft scheduler goroutines.
 	// Experiments on c5d.12xlarge instances (48 vCPUs, the largest single-socket
@@ -2149,6 +2152,9 @@ func (s *Store) Start(ctx context.Context, stopper *stop.Stopper) error {
 	if err := s.internalEngines.SetStoreID(ctx, s.StoreID()); err != nil {
 		return err
 	}
+
+	s.raftRecvQueues.dequeuePacer.Start()
+	stopper.AddCloser(s.raftRecvQueues.dequeuePacer)
 
 	{
 		m := rangefeed.NewSchedulerMetrics(s.cfg.HistogramWindowInterval)
@@ -3595,6 +3601,7 @@ func (s *Store) updateReplicationGauges(ctx context.Context) error {
 		return err
 	}
 
+	s.raftRecvQueues.dequeuePacer.TryLog(ctx)
 	return nil
 }
 

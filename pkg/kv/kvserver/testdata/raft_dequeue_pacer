@@ -1,0 +1,273 @@
+# Basic behavior of draining after engine becomes overloaded and then recovers.
+init
+----
+pacer state:
+ lastHeadroomSampleTime: 0s
+
+# Engine not overloaded.
+enqueue range=1 msg=ma1
+----
+engine.TryWaitForMemTableStallHeadroom(doWait=false) => ok=true, allowedBurst=100
+raftReceiveQueue.Append() => shouldQ=true size=70 appended=true
+queue state: r1 all 0
+pacer state:
+ lastHeadroomSampleTime: 10ms
+
+drain range=1
+----
+raftReceiveQueue.Drain() => msgs=1
+queue state: r1 all 0
+pacer state:
+ lastHeadroomSampleTime: 10ms
+
+set-engine-overload overload=true
+----
+
+# Engine is overloaded, but we recently sampled headroom, so we don't sample
+# overload.
+enqueue range=1 msg=ma1
+----
+raftReceiveQueue.Append() => shouldQ=true size=70 appended=true
+queue state: r1 all 0
+pacer state:
+ lastHeadroomSampleTime: 10ms
+
+drain range=1
+----
+raftReceiveQueue.Drain() => msgs=1
+queue state: r1 all 0
+pacer state:
+ lastHeadroomSampleTime: 10ms
+
+# Advance time so that we will sample headroom again.
+advance-time
+----
+
+# Range gets queued in the pacer.
+enqueue range=1 msg=ma1 wait-for-start-wait
+----
+engine.TryWaitForMemTableStallHeadroom(doWait=false) => ok=false, allowedBurst=0
+start engine.TryWaitForMemTableStallHeadroom(doWait=true)
+raftReceiveQueue.Append() => shouldQ=false size=70 appended=true
+queue state: r1 skip-paused 0
+pacer state:
+ lastHeadroomSampleTime: 20ms
+ waiting queues (rangeID, decision, accounting-bytes): (r1 skip-paused 0)
+
+# Drain does not drain anything.
+drain range=1
+----
+raftReceiveQueue.Drain() => msgs=0
+queue state: r1 skip-paused 0
+pacer state:
+ lastHeadroomSampleTime: 20ms
+ waiting queues (rangeID, decision, accounting-bytes): (r1 skip-paused 0)
+
+# Engine recovers, allowing the range to be dequeued. The pacer's
+# burstBytesToDrain is positive.
+end-wait
+----
+end engine.TryWaitForMemTableStallHeadroom(doWait=true) => ok=true, allowedBurst=100
+raftScheduler.EnqueueRaftRequest(r1)
+pacer state:
+ lastHeadroomSampleTime: 20ms
+ burstBytesToDrain: 70
+
+# Deletion causes the range to be removed from the pacer and its burst bytes
+# returned.
+delete range=1
+----
+raftReceiveQueues.Delete()
+queue state: r1 all 0
+pacer state:
+ lastHeadroomSampleTime: 20ms
+
+close
+----
+pacer state:
+ lastHeadroomSampleTime: 20ms
+
+# Queue in state raftDequeueSkipPaused is deregistered.
+init
+----
+pacer state:
+ lastHeadroomSampleTime: 0s
+
+set-engine-overload overload=true
+----
+
+# Range gets queued in the pacer.
+enqueue range=1 msg=ma1 wait-for-start-wait
+----
+engine.TryWaitForMemTableStallHeadroom(doWait=false) => ok=false, allowedBurst=0
+start engine.TryWaitForMemTableStallHeadroom(doWait=true)
+raftReceiveQueue.Append() => shouldQ=false size=70 appended=true
+queue state: r1 skip-paused 0
+pacer state:
+ lastHeadroomSampleTime: 10ms
+ waiting queues (rangeID, decision, accounting-bytes): (r1 skip-paused 0)
+
+# Drain does not drain anything.
+drain range=1
+----
+raftReceiveQueue.Drain() => msgs=0
+queue state: r1 skip-paused 0
+pacer state:
+ lastHeadroomSampleTime: 10ms
+ waiting queues (rangeID, decision, accounting-bytes): (r1 skip-paused 0)
+
+# Deletion causes the range to be removed from waiting in the pacer.
+delete range=1
+----
+raftReceiveQueues.Delete()
+queue state: r1 all 0
+pacer state:
+ lastHeadroomSampleTime: 10ms
+
+end-wait do-not-wait-for-dequeue-burst
+----
+end engine.TryWaitForMemTableStallHeadroom(doWait=true) => ok=true, allowedBurst=100
+pacer state:
+ lastHeadroomSampleTime: 10ms
+
+close
+----
+pacer state:
+ lastHeadroomSampleTime: 10ms
+
+# Multiple ranges being paced. The first one has < 100 bytes, and the engine
+# allows a burst of 100 bytes, so both ranges get dequeued when the engine
+# recovers.
+init
+----
+pacer state:
+ lastHeadroomSampleTime: 0s
+
+set-engine-overload overload=true
+----
+
+# Range r1 gets queued in the pacer.
+enqueue range=1 msg=ma1 wait-for-start-wait
+----
+engine.TryWaitForMemTableStallHeadroom(doWait=false) => ok=false, allowedBurst=0
+start engine.TryWaitForMemTableStallHeadroom(doWait=true)
+raftReceiveQueue.Append() => shouldQ=false size=70 appended=true
+queue state: r1 skip-paused 0
+pacer state:
+ lastHeadroomSampleTime: 10ms
+ waiting queues (rangeID, decision, accounting-bytes): (r1 skip-paused 0)
+
+# Range r2 gets queued in the pacer.
+enqueue range=2 msg=ma2
+----
+raftReceiveQueue.Append() => shouldQ=false size=109 appended=true
+queue state: r2 skip-paused 0
+pacer state:
+ lastHeadroomSampleTime: 10ms
+ waiting queues (rangeID, decision, accounting-bytes): (r1 skip-paused 0) (r2 skip-paused 0)
+
+# Both ranges dequeued. Both are accounted for in the burstBytesToDrain.
+end-wait
+----
+end engine.TryWaitForMemTableStallHeadroom(doWait=true) => ok=true, allowedBurst=100
+raftScheduler.EnqueueRaftRequest(r1)
+raftScheduler.EnqueueRaftRequest(r2)
+pacer state:
+ lastHeadroomSampleTime: 10ms
+ burstBytesToDrain: 179
+
+# The drain of range r1 reduces burstBytesToDrain.
+drain range=1
+----
+raftReceiveQueue.Drain() => msgs=1
+queue state: r1 all 0
+pacer state:
+ lastHeadroomSampleTime: 10ms
+ burstBytesToDrain: 109
+
+# Deletion of range r2 causes its burst bytes to be returned.
+delete range=2
+----
+raftReceiveQueues.Delete()
+queue state: r2 all 0
+pacer state:
+ lastHeadroomSampleTime: 10ms
+
+close
+----
+pacer state:
+ lastHeadroomSampleTime: 10ms
+
+# Multiple ranges being paced. Each has > 100 bytes, and the engine allows a
+# burst of 100 bytes, so one range gets dequeued at a time when the engine
+# recovers.
+init
+----
+pacer state:
+ lastHeadroomSampleTime: 0s
+
+set-engine-overload overload=true
+----
+
+# Range r1 gets queued in the pacer.
+enqueue range=1 msg=ma2 wait-for-start-wait
+----
+engine.TryWaitForMemTableStallHeadroom(doWait=false) => ok=false, allowedBurst=0
+start engine.TryWaitForMemTableStallHeadroom(doWait=true)
+raftReceiveQueue.Append() => shouldQ=false size=109 appended=true
+queue state: r1 skip-paused 0
+pacer state:
+ lastHeadroomSampleTime: 10ms
+ waiting queues (rangeID, decision, accounting-bytes): (r1 skip-paused 0)
+
+# Range r2 gets queued in the pacer.
+enqueue range=2 msg=ma2
+----
+raftReceiveQueue.Append() => shouldQ=false size=109 appended=true
+queue state: r2 skip-paused 0
+pacer state:
+ lastHeadroomSampleTime: 10ms
+ waiting queues (rangeID, decision, accounting-bytes): (r1 skip-paused 0) (r2 skip-paused 0)
+
+# Range r1 is dequeued. Its bytes are accounted for in burstBytesToDrain
+end-wait
+----
+end engine.TryWaitForMemTableStallHeadroom(doWait=true) => ok=true, allowedBurst=100
+raftScheduler.EnqueueRaftRequest(r1)
+pacer state:
+ lastHeadroomSampleTime: 10ms
+ burstBytesToDrain: 109
+ waiting queues (rangeID, decision, accounting-bytes): (r2 skip-paused 0)
+
+# Deletion of range r1 causes its bytes to be removed from accounting, and
+# another TryWait to start.
+delete range=1 wait-for-start-wait
+----
+start engine.TryWaitForMemTableStallHeadroom(doWait=true)
+raftReceiveQueues.Delete()
+queue state: r1 all 0
+pacer state:
+ lastHeadroomSampleTime: 10ms
+ waiting queues (rangeID, decision, accounting-bytes): (r2 skip-paused 0)
+
+# Range r2 is dequeued. Its bytes are accounted for in burstBytesToDrain.
+end-wait
+----
+end engine.TryWaitForMemTableStallHeadroom(doWait=true) => ok=true, allowedBurst=100
+raftScheduler.EnqueueRaftRequest(r2)
+pacer state:
+ lastHeadroomSampleTime: 10ms
+ burstBytesToDrain: 109
+
+# Range r2 is drained. Its bytes are removed from accounting.
+drain range=2
+----
+raftReceiveQueue.Drain() => msgs=1
+queue state: r2 all 0
+pacer state:
+ lastHeadroomSampleTime: 10ms
+
+close
+----
+pacer state:
+ lastHeadroomSampleTime: 10ms
