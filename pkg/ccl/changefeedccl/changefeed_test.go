@@ -11183,6 +11183,16 @@ func TestChangefeedTestTimesOut(t *testing.T) {
 
 		expectResolvedTimestamp(t, nada) // Make sure feed is running.
 
+		cfKnobs := s.TestingKnobs.
+			DistSQL.(*execinfra.TestingKnobs).
+			Changefeed.(*TestingKnobs)
+		//nolint:returnerrcheck
+		cfKnobs.HandleDistChangefeedError = func(err error) error {
+			if err != nil && strings.Contains(err.Error(), "client connection is closing") {
+				return nil
+			}
+			return err
+		}
 		const expectTimeout = 500 * time.Millisecond
 		var observedError error
 		require.NoError(t,
