@@ -5,6 +5,7 @@ go_library(
     srcs = [
         "definitions.go",
         "logger.go",
+        "manager_registry.go",
         "plan_registry.go",
         "planner.go",
         "status.go",
@@ -14,6 +15,7 @@ go_library(
     importpath = "github.com/cockroachdb/cockroach/pkg/cmd/tef/planners",
     visibility = ["//visibility:public"],
     deps = [
+        "//pkg/util/syncutil",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_spf13_cobra//:cobra",
     ],
@@ -22,6 +24,7 @@ go_library(
 go_test(
     name = "planners_test",
     srcs = [
+        "manager_registry_test.go",
         "plan_registry_test.go",
         "planner_test.go",
         "status_test.go",

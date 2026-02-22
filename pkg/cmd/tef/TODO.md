@@ -13,6 +13,12 @@ This document tracks pending implementation work for the Task Execution Framewor
 - Utility functions for plan ID management
 - Status and execution tracking types
 - Logger interface and implementation
+- **Manager registry for cross-plan task execution**
+- **Temporal planner skeleton (interface layer and client integration)**
+
+### 🚧 Partially Implemented
+
+- Temporal integration (skeleton exists, workflow execution pending)
 
 ### ❌ Not Yet Implemented
 
@@ -20,39 +26,28 @@ The following components need implementation to make TEF fully functional:
 
 ## 1. Orchestration Engine Integration
 
-TEF requires a PlannerManager implementation that integrates with an orchestration engine.
-
 **Priority: HIGH** - Required for any workflow execution
 
-### Temporal Integration (Recommended)
+### Temporal Integration (In Progress)
 
-Create `pkg/cmd/tef/planners/temporal/` with:
+The Temporal planner skeleton is implemented in `pkg/cmd/tef/planners/temporal_planner/`:
 
-- `manager.go`: Implements `PlannerManager` using Temporal client
-  ```go
-  type TemporalManager struct {
-      basePlanner *BasePlanner
-      client      temporal.Client
-  }
+**✅ Completed:**
+- `manager.go`: PlannerManager interface implementation with:
+  - Temporal client connection with DNS resolver configuration
+  - Prometheus metrics integration and HTTP server
+  - Status querying via `GetExecutionStatus()`
+  - Execution listing via `ListExecutions()`
+  - Plan discovery via `ListAllPlanIDs()`
+  - Task resumption via `ResumeTask()`
+  - Configuration flags for Temporal server and metrics
+- `status.go`: Execution status queries and workflow info parsing
 
-  func (m *TemporalManager) StartWorker(ctx context.Context, planID string) error {
-      // Create temporal worker
-      // Register workflow and activities
-      // Start listening for executions
-  }
-
-  func (m *TemporalManager) ExecutePlan(ctx context.Context, input interface{}, planID string) (string, error) {
-      // Start temporal workflow execution
-  }
-  ```
-
-- `workflow.go`: Translates task graph into Temporal workflow
-- `status.go`: Queries Temporal for execution status
-- Implement remaining PlannerManager methods:
-  - `GetExecutionStatus()`
-  - `ListExecutions()`
-  - `ListAllPlanIDs()`
-  - `ResumeTask()`
+**❌ TODO (deferred to follow-up PR):**
+- `StartWorker()`: Temporal worker initialization and workflow registration
+- `ExecutePlan()`: Workflow execution initiation
+- Workflow definition that translates task graph to Temporal workflows
+- Activity implementations for task execution
 
 **Alternative Options**: Airflow, Cadence, custom scheduler, or any orchestration engine
 
