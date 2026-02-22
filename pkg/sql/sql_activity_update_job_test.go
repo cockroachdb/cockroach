@@ -10,6 +10,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"math/rand"
 	"strconv"
 	"strings"
 	"testing"
@@ -1129,4 +1130,202 @@ func getStatusJSONProto(
 ) error {
 	url := fmt.Sprintf("/_status/%s?start=%d&end=%d", path, startTime.Unix(), endTime.Unix())
 	return serverutils.GetJSONProto(ts, url, response)
+}
+
+// stmtGen generates unique INSERT statements by shuffling column order,
+// similar to the sqlstats workload. This creates high cardinality of
+// statement fingerprints.
+type stmtGen struct {
+	syncutil.Mutex
+	in  []string
+	rng *rand.Rand
+}
+
+func (g *stmtGen) Next() string {
+	g.Lock()
+	defer g.Unlock()
+
+	g.shuffleLocked()
+
+	s := strings.Join(g.in, ", ")
+	return fmt.Sprintf(`
+		INSERT INTO sql_stats_workload
+		(%s) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+	`, s)
+}
+
+func (g *stmtGen) shuffleLocked() {
+	g.rng.Shuffle(len(g.in), func(i, j int) {
+		g.in[i], g.in[j] = g.in[j], g.in[i]
+	})
+}
+
+func newStmtGen() *stmtGen {
+	rng, _ := randutil.NewPseudoRand()
+	return &stmtGen{
+		rng: rng,
+		in:  []string{"col1", "col2", "col3", "col4", "col5", "col6", "col7", "col8", "col9", "col10"},
+	}
+}
+
+// TestSqlActivityTopMax demonstrates that sql.stats.activity.top.max cluster setting
+// does not work as intended.
+//
+// The test:
+// 1. Generates at least 1000 unique statement fingerprints in statement_statistics
+// 2. Sets cluster setting sql.stats.activity.top.max and runs TransferStatsToActivity
+// 3. Checks how many rows were inserted into statement_activity
+func TestSqlActivityTopMax(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	skip.UnderRace(t, "test is too slow to run under race")
+
+	ctx := context.Background()
+	stubTime := timeutil.Now().Truncate(time.Hour)
+	sqlStatsKnobs := sqlstats.CreateTestingKnobs()
+	sqlStatsKnobs.StubTimeNow = func() time.Time { return stubTime }
+
+	// Start the cluster.
+	srv, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{
+		Insecure: true,
+		Knobs: base.TestingKnobs{
+			SQLStatsKnobs: sqlStatsKnobs,
+			UpgradeManager: &upgradebase.TestingKnobs{
+				DontUseJobs:                       true,
+				SkipUpdateSQLActivityJobBootstrap: true,
+			},
+		},
+	})
+	defer srv.Stopper().Stop(context.Background())
+	defer sqlDB.Close()
+	ts := srv.ApplicationLayer()
+
+	db := sqlutils.MakeSQLRunner(sqlDB)
+	db.Exec(t, `SET CLUSTER SETTING sql.stats.activity.flush.enabled = true;`)
+	// Give permission to write to sys tables.
+	db.Exec(t, "INSERT INTO system.users VALUES ('node', NULL, true, 3, NULL)")
+	db.Exec(t, "GRANT node TO root")
+	// Make sure all the tables are empty initially.
+	db.Exec(t, "DELETE FROM system.public.transaction_activity")
+	db.Exec(t, "DELETE FROM system.public.statement_activity")
+	db.Exec(t, "DELETE FROM system.public.transaction_statistics")
+	db.Exec(t, "DELETE FROM system.public.statement_statistics")
+
+	// Create the workload table
+	db.Exec(t, `CREATE TABLE IF NOT EXISTS sql_stats_workload (
+		id UUID NOT NULL PRIMARY KEY DEFAULT gen_random_uuid(),
+		col1 INT,
+		col2 INT,
+		col3 INT,
+		col4 INT,
+		col5 INT,
+		col6 INT,
+		col7 INT,
+		col8 INT,
+		col9 INT,
+		col10 INT
+	)`)
+
+	// Generate unique statements using permutation-based approach
+	gen := newStmtGen()
+	rng, _ := randutil.NewPseudoRand()
+
+	const targetStmtCount = 1000
+	const flushInterval = 200 // Flush every 200 statements
+
+	// Generate statements in batches, periodically flushing to ensure
+	// they're persisted to statement_statistics
+	for i := 0; i < targetStmtCount*2; i++ {
+		query := gen.Next()
+		db.Exec(t, query, rng.Int(), rng.Int(), rng.Int(), rng.Int(), rng.Int(), rng.Int(), rng.Int(), rng.Int(), rng.Int(), rng.Int())
+
+		// Periodically flush and check count
+		if (i+1)%flushInterval == 0 {
+			flushed := ts.SQLServer().(*Server).GetSQLStatsProvider().MaybeFlush(ctx, srv.AppStopper())
+			require.True(t, flushed, "Expected MaybeFlush to return true")
+
+			// Check how many distinct fingerprints we have so far
+			var count int
+			row := db.QueryRow(t, "SELECT count(DISTINCT fingerprint_id) FROM system.public.statement_statistics")
+			row.Scan(&count)
+			t.Logf("After %d statements: %d distinct fingerprints in statement_statistics", i+1, count)
+		}
+	}
+
+	// Final flush to ensure all statements are persisted
+	flushed := ts.SQLServer().(*Server).GetSQLStatsProvider().MaybeFlush(ctx, srv.AppStopper())
+	require.True(t, flushed, "Expected MaybeFlush to return true")
+
+	// Verify we have at least targetStmtCount distinct fingerprints
+	var stmtStatsCount int
+	row := db.QueryRow(t, "SELECT count(DISTINCT fingerprint_id) FROM system.public.statement_statistics")
+	row.Scan(&stmtStatsCount)
+	require.GreaterOrEqual(t, stmtStatsCount, targetStmtCount,
+		"Expected at least %d distinct fingerprints in statement_statistics, got %d", targetStmtCount, stmtStatsCount)
+	t.Logf("Final count: %d distinct fingerprints in statement_statistics", stmtStatsCount)
+
+	t.Run("top limit 1000", func(t *testing.T) {
+		// Make sure the statement_activity table is empty
+		var activityCount int
+		db.Exec(t, "DELETE FROM system.public.statement_activity")
+		row = db.QueryRow(t, "SELECT count_rows() FROM system.public.statement_activity")
+		row.Scan(&activityCount)
+		t.Logf("Rows in statement_activity: %d", activityCount)
+
+		execCfg := ts.ExecutorConfig().(ExecutorConfig)
+		st := cluster.MakeTestingClusterSettings()
+		su := st.MakeUpdater()
+		const topLimit = 1000
+		err := su.Set(ctx, "sql.stats.activity.top.max", settings.EncodedValue{
+			Value: settings.EncodeInt(int64(topLimit)),
+			Type:  "i",
+		})
+		require.NoError(t, err)
+		t.Logf("Cluster setting sql.stats.activity.top.max is set to: %d", topLimit)
+
+		updater := newSqlActivityUpdater(st, execCfg.InternalDB, sqlStatsKnobs)
+
+		// Run TransferStatsToActivity
+		require.NoError(t, updater.TransferStatsToActivity(ctx))
+
+		// Check how many rows were inserted into statement_activity
+		row = db.QueryRow(t, "SELECT count_rows() FROM system.public.statement_activity")
+		row.Scan(&activityCount)
+		t.Logf("Rows in statement_activity after TransferStatsToActivity: %d", activityCount)
+		require.Equal(t, topLimit, activityCount,
+			"Expected %d rows in statement_activity (matching sql.stats.activity.top.max), but got %d", topLimit, activityCount)
+	})
+
+	t.Run("top limit 100", func(t *testing.T) {
+		// Make sure the statement_activity table is empty
+		var activityCount int
+		db.Exec(t, "DELETE FROM system.public.statement_activity")
+		row = db.QueryRow(t, "SELECT count_rows() FROM system.public.statement_activity")
+		row.Scan(&activityCount)
+		t.Logf("Rows in statement_activity: %d", activityCount)
+
+		execCfg := ts.ExecutorConfig().(ExecutorConfig)
+		st := cluster.MakeTestingClusterSettings()
+		su := st.MakeUpdater()
+		const topLimit = 100
+		err := su.Set(ctx, "sql.stats.activity.top.max", settings.EncodedValue{
+			Value: settings.EncodeInt(int64(topLimit)),
+			Type:  "i",
+		})
+		require.NoError(t, err)
+		t.Logf("Cluster setting sql.stats.activity.top.max is set to: %d", topLimit)
+
+		updater := newSqlActivityUpdater(st, execCfg.InternalDB, sqlStatsKnobs)
+
+		// Run TransferStatsToActivity
+		require.NoError(t, updater.TransferStatsToActivity(ctx))
+
+		// Check how many rows were inserted into statement_activity
+		row = db.QueryRow(t, "SELECT count_rows() FROM system.public.statement_activity")
+		row.Scan(&activityCount)
+		t.Logf("Rows in statement_activity after TransferStatsToActivity: %d", activityCount)
+		require.Equal(t, topLimit, activityCount,
+			"Expected %d rows in statement_activity (matching sql.stats.activity.top.max), but got %d", topLimit, activityCount)
+	})
 }
