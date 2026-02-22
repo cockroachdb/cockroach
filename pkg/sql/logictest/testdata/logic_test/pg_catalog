@@ -319,7 +319,7 @@ pg_catalog.pg_namespace  CREATE TABLE pg_catalog.pg_namespace (
 query TTBTTTB colnames,rowsort
 SHOW COLUMNS FROM pg_catalog.pg_namespace
 ----
-column_name  data_type  is_nullable  column_default  generation_expression  indices  is_hidden
+column_name  data_type  is_nullable  column_default  generation_expression  indexes  is_hidden
 oid          OID        true         NULL            ·                      {}       false
 nspname      NAME       false        NULL            ·                      {}       false
 nspowner     OID        true         NULL            ·                      {}       false
@@ -3001,7 +3001,7 @@ datid  datname  pid  usesysid  usename  application_name  client_addr  client_ho
 query TTBTTTB colnames,rowsort
 SHOW COLUMNS FROM pg_catalog.pg_stat_activity
 ----
-column_name       data_type    is_nullable  column_default  generation_expression  indices  is_hidden
+column_name       data_type    is_nullable  column_default  generation_expression  indexes  is_hidden
 datid             OID          true         NULL            ·                      {}       false
 datname           NAME         true         NULL            ·                      {}       false
 pid               INT8         true         NULL            ·                      {}       false

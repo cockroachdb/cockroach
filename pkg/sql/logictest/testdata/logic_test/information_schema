@@ -337,7 +337,7 @@ information_schema.tables  CREATE TABLE information_schema.tables (
 query TTBTTTB colnames,rowsort
 SHOW COLUMNS FROM information_schema.tables
 ----
-column_name         data_type  is_nullable  column_default  generation_expression  indices  is_hidden
+column_name         data_type  is_nullable  column_default  generation_expression  indexes  is_hidden
 table_catalog       STRING     false        NULL            ·                      {}       false
 table_schema        STRING     false        NULL            ·                      {}       false
 table_name          STRING     false        NULL            ·                      {}       false
@@ -3076,7 +3076,7 @@ DROP DATABASE other_db CASCADE
 query TTBTTTB colnames,rowsort
 SHOW COLUMNS FROM information_schema.column_privileges
 ----
-column_name     data_type  is_nullable  column_default  generation_expression  indices  is_hidden
+column_name     data_type  is_nullable  column_default  generation_expression  indexes  is_hidden
 grantor         STRING     true         NULL            ·                      {}       false
 grantee         STRING     false        NULL            ·                      {}       false
 table_catalog   STRING     false        NULL            ·                      {}       false
@@ -3090,7 +3090,7 @@ is_grantable    STRING     true         NULL            ·                      
 query TTBTTTB colnames,rowsort
 SHOW COLUMNS FROM information_schema.routines
 ----
-column_name                          data_type    is_nullable  column_default  generation_expression  indices  is_hidden
+column_name                          data_type    is_nullable  column_default  generation_expression  indexes  is_hidden
 specific_catalog                     STRING       true         NULL            ·                      {}       false
 specific_schema                      STRING       true         NULL            ·                      {}       false
 specific_name                        STRING       true         NULL            ·                      {}       false
@@ -3184,7 +3184,7 @@ test              pg_catalog       pg_get_functiondef_2035  test             pg_
 query TTBTTTB colnames,rowsort
 SHOW COLUMNS FROM information_schema.parameters
 ----
-column_name               data_type  is_nullable  column_default  generation_expression  indices  is_hidden
+column_name               data_type  is_nullable  column_default  generation_expression  indexes  is_hidden
 specific_catalog          STRING     true         NULL            ·                      {}       false
 specific_schema           STRING     true         NULL            ·                      {}       false
 specific_name             STRING     true         NULL            ·                      {}       false
@@ -4499,7 +4499,7 @@ CREATE TYPE u AS (ufoo int, ubar int);
 query TTBTTTB colnames,rowsort
 SHOW COLUMNS FROM information_schema.user_defined_types
 ----
-column_name                 data_type  is_nullable  column_default  generation_expression  indices  is_hidden
+column_name                 data_type  is_nullable  column_default  generation_expression  indexes  is_hidden
 user_defined_type_catalog   STRING     true         NULL            ·                      {}       false
 user_defined_type_schema    STRING     true         NULL            ·                      {}       false
 user_defined_type_name      STRING     true         NULL            ·                      {}       false
@@ -4548,7 +4548,7 @@ subtest attributes
 query TTBTTTB colnames,rowsort
 SHOW COLUMNS FROM information_schema.attributes
 ----
-column_name                     data_type  is_nullable  column_default  generation_expression  indices  is_hidden
+column_name                     data_type  is_nullable  column_default  generation_expression  indexes  is_hidden
 udt_catalog                     STRING     true         NULL            ·                      {}       false
 udt_schema                      STRING     true         NULL            ·                      {}       false
 udt_name                        STRING     true         NULL            ·                      {}       false

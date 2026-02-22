@@ -23,7 +23,7 @@ ALTER TABLE t ADD b INT
 query TTBTTTB colnames,rowsort
 SHOW COLUMNS FROM t
 ----
-column_name  data_type  is_nullable  column_default  generation_expression  indices           is_hidden
+column_name  data_type  is_nullable  column_default  generation_expression  indexes           is_hidden
 a            INT8       false        NULL            ·                      {t_f_idx,t_pkey}  false
 f            INT8       true         NULL            ·                      {t_f_idx,t_pkey}  false
 b            INT8       true         NULL            ·                      {t_pkey}          false
@@ -538,7 +538,7 @@ ALTER TABLE tt ADD t DECIMAL UNIQUE DEFAULT 4.0
 query TTBTTTB colnames,rowsort
 SHOW COLUMNS FROM tt
 ----
-column_name  data_type  is_nullable  column_default  generation_expression  indices                      is_hidden
+column_name  data_type  is_nullable  column_default  generation_expression  indexes                      is_hidden
 a            INT8       false        NULL            ·                      {tt_pkey,tt_s_key,tt_t_key}  false
 q            DECIMAL    false        NULL            ·                      {tt_pkey}                    false
 r            DECIMAL    true         NULL            ·                      {tt_pkey}                    false
@@ -558,7 +558,7 @@ ALTER TABLE add_default ALTER COLUMN b SET DEFAULT 42
 query TTBTTTB colnames,rowsort
 SHOW COLUMNS FROM add_default
 ----
-column_name  data_type  is_nullable  column_default  generation_expression  indices             is_hidden
+column_name  data_type  is_nullable  column_default  generation_expression  indexes             is_hidden
 a            INT8       false        NULL            ·                      {add_default_pkey}  false
 b            INT8       false        42              ·                      {add_default_pkey}  false
 
@@ -716,7 +716,7 @@ ALTER TABLE add_default SET (schema_locked=true)
 query TTBTTTB colnames,rowsort
 SHOW COLUMNS FROM add_default
 ----
-column_name  data_type  is_nullable  column_default           generation_expression  indices             is_hidden
+column_name  data_type  is_nullable  column_default           generation_expression  indexes             is_hidden
 a            INT8       false        NULL                     ·                      {add_default_pkey}  false
 b            INT8       true         NULL                     ·                      {add_default_pkey}  false
 c            TIMESTAMP  true         current_timestamp()      ·                      {add_default_pkey}  false
@@ -778,7 +778,7 @@ user root
 query TTBTTTB colnames,rowsort
 SHOW COLUMNS FROM privs
 ----
-column_name  data_type  is_nullable  column_default  generation_expression  indices       is_hidden
+column_name  data_type  is_nullable  column_default  generation_expression  indexes       is_hidden
 a            INT8       false        NULL            ·                      {privs_pkey}  false
 b            INT8       true         NULL            ·                      {privs_pkey}  false
 
@@ -796,7 +796,7 @@ ALTER TABLE privs ADD CONSTRAINT foo UNIQUE (b)
 query TTBTTTB colnames,rowsort
 SHOW COLUMNS FROM privs
 ----
-column_name  data_type  is_nullable  column_default  generation_expression  indices           is_hidden
+column_name  data_type  is_nullable  column_default  generation_expression  indexes           is_hidden
 a            INT8       false        NULL            ·                      {foo,privs_pkey}  false
 b            INT8       true         NULL            ·                      {foo,privs_pkey}  false
 c            INT8       true         NULL            ·                      {privs_pkey}      false
@@ -4938,7 +4938,7 @@ alter table roach add column serial_id SERIAL;
 query TTBTTTB colnames,rowsort
 show columns from roach;
 ----
-column_name  data_type  is_nullable  column_default  generation_expression  indices       is_hidden
+column_name  data_type  is_nullable  column_default  generation_expression  indexes       is_hidden
 id           INT8       true         NULL            ·                      {roach_pkey}  false
 rowid        INT8       false        unique_rowid()  ·                      {roach_pkey}  true
 serial_id    INT8       false        unique_rowid()  ·                      {roach_pkey}  false
