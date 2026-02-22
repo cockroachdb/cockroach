@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/memzipper"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
+	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 )
 
@@ -28,6 +29,7 @@ const (
 	txnDiagnosticsNotStarted
 	txnDiagnosticsInProgress
 	txnDiagnosticsReadyToFinalize
+	txnDiagnosticsAborted
 )
 
 type txnDiagnosticsCollector struct {
@@ -69,6 +71,10 @@ func (tds *txnDiagnosticsCollector) InProgress() bool {
 
 func (tds *txnDiagnosticsCollector) ReadyToFinalize() bool {
 	return tds.state == txnDiagnosticsReadyToFinalize
+}
+
+func (tds *txnDiagnosticsCollector) Aborted() bool {
+	return tds.state == txnDiagnosticsAborted
 }
 
 func (tds *txnDiagnosticsCollector) UpdateState(state txnDiagnosticsState) {
@@ -164,23 +170,38 @@ func (h *txnInstrumentationHelper) StartDiagnostics(
 	h.diagnosticsCollector = newTxnDiagnosticsCollector(txnRequest, reqID, span)
 }
 
-//
-//func (h *txnInstrumentationHelper) ReadyToStartDiagnostics() bool {
-//	return h.diagnosticsCollector.state == txnDiagnosticsNotStarted
-//}
-
-func (h *txnInstrumentationHelper) Reset() {
+// Abort performs a partial cleanup of the diagnostics collection. It releases
+// the request and finishes the span, but preserves the collector's request
+// info (requestId, request) so that Finalize can still log details about
+// the aborted collection.
+func (h *txnInstrumentationHelper) Abort(ctx context.Context) {
 	if h.diagnosticsCollector.requestId != 0 {
 		h.TxnDiagnosticsRecorder.ResetTxnRequest(h.diagnosticsCollector.requestId)
 	}
+	if h.diagnosticsCollector.span != nil {
+		h.diagnosticsCollector.span.Finish()
+		h.diagnosticsCollector.span = nil
+	}
+	h.diagnosticsCollector.stmtBundles = nil
+	h.diagnosticsCollector.stmtsFpsToCapture = nil
+	h.diagnosticsCollector.UpdateState(txnDiagnosticsAborted)
+}
 
-	h.diagnosticsCollector.span.Finish()
+func (h *txnInstrumentationHelper) Reset(ctx context.Context) {
+	if !h.diagnosticsCollector.Aborted() {
+		if h.diagnosticsCollector.requestId != 0 {
+			h.TxnDiagnosticsRecorder.ResetTxnRequest(h.diagnosticsCollector.requestId)
+		}
+		if h.diagnosticsCollector.span != nil {
+			h.diagnosticsCollector.span.Finish()
+		}
+	}
 	h.diagnosticsCollector = txnDiagnosticsCollector{}
 }
 
 // AddStatementBundle adds a statement diagnostic bundle to the transaction
 // diagnostics collector. If the bundle cannot be added, the transaction
-// diagnostics collection is reset.
+// diagnostics collection is aborted.
 func (h *txnInstrumentationHelper) AddStatementBundle(
 	ctx context.Context,
 	stmt tree.Statement,
@@ -200,7 +221,7 @@ func (h *txnInstrumentationHelper) AddStatementBundle(
 		if err != nil {
 			log.Ops.VWarningf(ctx, 2, "Failed to add statement bundle: %s", err)
 		}
-		h.Reset()
+		h.Abort(ctx)
 	}
 }
 
@@ -208,7 +229,11 @@ func (h *txnInstrumentationHelper) AddStatementBundle(
 // started. If a new diagnostics collection is started, it returns a new
 // context that should be used to capture transaction traces.
 func (h *txnInstrumentationHelper) MaybeStartDiagnostics(
-	ctx context.Context, stmt tree.Statement, stmtFpId uint64, tracer *tracing.Tracer,
+	ctx context.Context,
+	stmt tree.Statement,
+	stmtFpId uint64,
+	tracer *tracing.Tracer,
+	txnID uuid.UUID,
 ) (newCtx context.Context, diagnosticsStarted bool) {
 	if h.diagnosticsCollector.NotStarted() {
 		if h.diagnosticsCollector.shouldAllowStatement(stmt) {
@@ -222,6 +247,12 @@ func (h *txnInstrumentationHelper) MaybeStartDiagnostics(
 			// collection for the rest of the transaction.
 			collectDiagnostics, requestId, req := h.TxnDiagnosticsRecorder.ShouldStartTxnDiagnostic(ctx, stmtFpId)
 			if collectDiagnostics {
+				log.Dev.VInfof(ctx, 2, "txn diag: starting collection for request %d, "+
+					"txn %s, triggered by stmt fingerprint %s",
+					requestId,
+					txnID,
+					sqlstatsutil.EncodeStmtFingerprintIDToString(
+						appstatspb.StmtFingerprintID(stmtFpId)))
 				var sp *tracing.Span
 				if !req.IsRedacted() {
 					ctx, sp = tracing.EnsureChildSpan(ctx, tracer, "txn-diag-bundle",
@@ -230,7 +261,7 @@ func (h *txnInstrumentationHelper) MaybeStartDiagnostics(
 				h.StartDiagnostics(req, requestId, sp)
 				return ctx, true
 			} else {
-				h.Reset()
+				h.Reset(ctx)
 			}
 		}
 	}
@@ -243,7 +274,7 @@ func (h *txnInstrumentationHelper) MaybeStartDiagnostics(
 // context with the diagnostics recording span. Otherwise, collection is
 // aborted and future statements will not be considered for diagnostics.
 func (h *txnInstrumentationHelper) MaybeContinueDiagnostics(
-	ctx context.Context, stmt tree.Statement, stmtFpId uint64,
+	ctx context.Context, stmt tree.Statement, stmtFpId uint64, txnID uuid.UUID,
 ) (newCtx context.Context, shouldContinue bool) {
 	if !h.diagnosticsCollector.InProgress() {
 		return ctx, false
@@ -258,7 +289,22 @@ func (h *txnInstrumentationHelper) MaybeContinueDiagnostics(
 	}
 
 	if !shouldContinue {
-		h.Reset()
+		var expected string
+		if len(h.diagnosticsCollector.stmtsFpsToCapture) != 0 {
+			expected = sqlstatsutil.EncodeStmtFingerprintIDToString(
+				appstatspb.StmtFingerprintID(h.diagnosticsCollector.stmtsFpsToCapture[0]))
+		} else {
+			expected = "terminal statement"
+		}
+		log.Dev.VInfof(ctx, 2, "txn diag: aborting collection for request %d, "+
+			"txn %s, stmt fingerprint %s did not match (expected %s), collected %d bundles so far",
+			h.diagnosticsCollector.requestId,
+			txnID,
+			sqlstatsutil.EncodeStmtFingerprintIDToString(
+				appstatspb.StmtFingerprintID(stmtFpId)),
+			expected,
+			len(h.diagnosticsCollector.stmtBundles))
+		h.Abort(ctx)
 	} else {
 		// TODO (kyle.wong): due to the existing hierarchy of spans, we have to
 		//  manually manage the span by putting it in the context. Ideally, we
@@ -277,12 +323,35 @@ func (h *txnInstrumentationHelper) ShouldRedact() bool {
 
 // Finalize finalizes the transaction diagnostics collection by writing all
 // the collected data to the underlying system tables.
-func (h *txnInstrumentationHelper) Finalize(ctx context.Context, executionDuration time.Duration) {
-	defer h.Reset()
+func (h *txnInstrumentationHelper) Finalize(
+	ctx context.Context, executionDuration time.Duration, txnID uuid.UUID,
+) {
+	defer h.Reset(ctx)
 	collector := h.diagnosticsCollector
+
+	txnFpStr := sqlstatsutil.EncodeTxnFingerprintIDToString(
+		appstatspb.TransactionFingerprintID(collector.request.TxnFingerprintId()))
+
+	if collector.Aborted() {
+		log.Dev.VInfof(ctx, 2, "txn diag: finalize aborted collection for "+
+			"request %d, txn %s, txn fingerprint %s",
+			collector.requestId, txnID, txnFpStr)
+		return
+	}
+
 	if collector.InProgress() {
+		log.Dev.VInfof(ctx, 2, "txn diag: finalize abandoned collection for "+
+			"request %d, txn %s, txn fingerprint %s",
+			collector.requestId, txnID, txnFpStr)
 		collector.UpdateState(txnDiagnosticsReadyToFinalize)
 	}
+
+	if collector.ReadyToFinalize() {
+		log.Dev.VInfof(ctx, 2, "txn diag: finalize completed collection for "+
+			"request %d, txn %s, txn fingerprint %s",
+			collector.requestId, txnID, txnFpStr)
+	}
+
 	if collector.ShouldCollect(executionDuration) {
 		collector.collectTrace()
 		buf, err := collector.z.Finalize()
