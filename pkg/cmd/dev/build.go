@@ -150,6 +150,11 @@ func (d *dev) build(cmd *cobra.Command, commandLine []string) error {
 	lint := mustGetFlagBool(cmd, lintFlag)
 	dockerArgs := mustGetFlagStringArray(cmd, dockerArgsFlag)
 
+	if cross != "" && localPebble != "" {
+		return fmt.Errorf("--cross and --local-pebble cannot be used together; " +
+			"for cross builds with custom pebble, push your changes and update DEPS.bzl instead")
+	}
+
 	args, buildTargets, err := d.getBasicBuildArgs(ctx, targets)
 	if err != nil {
 		return err
