@@ -940,6 +940,7 @@ func (cs *clusterState) computeCandidatesForReplicaTransfer(
 		effectiveMeans = &means.meansLoad
 	} else if len(filteredStores) == 0 {
 		// No viable candidates at all.
+		passObs.replicaShed(noCandidate)
 		return candidateSet{}, sheddingSLS
 	} else {
 		// Some stores were filtered; recompute means over filtered set.
@@ -975,6 +976,9 @@ func (cs *clusterState) computeCandidatesForReplicaTransfer(
 		})
 	}
 	cset.means = effectiveMeans
+	if len(cset.candidates) == 0 {
+		passObs.replicaShed(noCandidate)
+	}
 	return cset, sheddingSLS
 }
 

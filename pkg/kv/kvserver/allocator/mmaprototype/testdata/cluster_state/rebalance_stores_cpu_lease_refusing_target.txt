@@ -86,5 +86,8 @@ rebalance-stores store-id=1
 [mmaid=1] result(failed): no candidates found for r1 after exclusions
 [mmaid=1] start processing shedding store s3: cpu node load overloadUrgent, store load overloadUrgent, worst dim CPURate
 [mmaid=1] no top-K[CPURate] ranges found for s3 with lease on local s1
-[mmaid=1] rebalancing pass failures (store,reason:count): (s1,not-overloaded:1)
+[mmaid=1] rebalancing pass summary [local=s1]:
+	overloaded:
+		short: [s1]
+	failure: [{s1, total: 2, not-overloaded:1, no-cand:1}]
 pending(0)
