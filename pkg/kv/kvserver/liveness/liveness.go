@@ -1179,3 +1179,11 @@ func (nl *NodeLiveness) numLiveNodes() int64 {
 	}
 	return liveNodes
 }
+
+func MakeLivenessUpdate(old Record, new livenesspb.Liveness) LivenessUpdate {
+	return LivenessUpdate{
+		newLiveness: new,
+		oldLiveness: old.Liveness,
+		oldRaw:      old.raw,
+	}
+}
