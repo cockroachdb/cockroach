@@ -1237,7 +1237,7 @@ func TestParquetStrictValidation(t *testing.T) {
 		require.NotContains(t, consumer.fieldNameToIdx, "extra_column")
 	})
 
-	// Test 2: Strict mode - should have strict flag set
+	// Test 2: Strict mode - should error on extra columns
 	t.Run("StrictFlagSet", func(t *testing.T) {
 		importCtx := &parallelImportContext{
 			targetCols: tree.NameList{},
@@ -1254,17 +1254,10 @@ func TestParquetStrictValidation(t *testing.T) {
 		producer, err := newParquetRowProducer(fileReader, nil)
 		require.NoError(t, err)
 
-		consumer, err := newParquetRowConsumer(importCtx, producer, &importFileContext{}, true)
-		require.NoError(t, err)
-
-		// Verify strict mode is enabled
-		require.True(t, consumer.strict)
-
-		// Verify field mapping still doesn't include extra_column (same as non-strict)
-		require.Equal(t, 2, len(consumer.fieldNameToIdx))
-		require.Contains(t, consumer.fieldNameToIdx, "id")
-		require.Contains(t, consumer.fieldNameToIdx, "name")
-		require.NotContains(t, consumer.fieldNameToIdx, "extra_column")
+		_, err = newParquetRowConsumer(importCtx, producer, &importFileContext{}, true)
+		require.Error(t, err)
+		require.Contains(t, err.Error(), "extra_column")
+		require.Contains(t, err.Error(), "not in the target table")
 	})
 }
 

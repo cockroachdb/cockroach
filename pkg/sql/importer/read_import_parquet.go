@@ -13,10 +13,96 @@ import (
 	"github.com/apache/arrow/go/v11/parquet/file"
 	"github.com/apache/arrow/go/v11/parquet/schema"
 	"github.com/cockroachdb/cockroach/pkg/build"
+	"github.com/cockroachdb/cockroach/pkg/cloud"
+	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/errors"
 )
+
+type parquetInputReader struct {
+	importCtx *parallelImportContext
+	opts      roachpb.ParquetOptions
+}
+
+// newParquetInputReader creates a new Parquet input converter.
+func newParquetInputReader(
+	semaCtx *tree.SemaContext,
+	kvCh chan row.KVBatch,
+	walltime int64,
+	parallelism int,
+	tableDesc catalog.TableDescriptor,
+	targetCols tree.NameList,
+	evalCtx *eval.Context,
+	seqChunkProvider *row.SeqChunkProvider,
+	db *kv.DB,
+	parquetOpts roachpb.ParquetOptions,
+) (*parquetInputReader, error) {
+	// Setup parallel import context (same as other importers)
+	importCtx := &parallelImportContext{
+		walltime:         walltime,
+		numWorkers:       parallelism,
+		batchSize:        parallelImporterReaderBatchSize,
+		evalCtx:          evalCtx,
+		semaCtx:          semaCtx,
+		tableDesc:        tableDesc,
+		targetCols:       targetCols,
+		kvCh:             kvCh,
+		seqChunkProvider: seqChunkProvider,
+		db:               db,
+	}
+
+	return &parquetInputReader{
+		importCtx: importCtx,
+		opts:      parquetOpts,
+	}, nil
+}
+
+var _ inputConverter = &parquetInputReader{}
+
+// readFiles implements the inputConverter interface.
+func (p *parquetInputReader) readFiles(
+	ctx context.Context,
+	dataFiles map[int32]string,
+	resumePos map[int32]int64,
+	format roachpb.IOFileFormat,
+	makeExternalStorage cloud.ExternalStorageFactory,
+	user username.SQLUsername,
+) error {
+	return readInputFiles(ctx, dataFiles, resumePos, format, p.readFile,
+		makeExternalStorage, user)
+}
+
+// readFile processes a single Parquet file.
+func (p *parquetInputReader) readFile(
+	ctx context.Context, input *fileReader, inputIdx int32, resumePos int64, rejected chan string,
+) error {
+	// Create file context
+	fileCtx := &importFileContext{
+		source:   inputIdx,
+		skip:     resumePos,
+		rejected: rejected,
+	}
+
+	// Create row producer - it will open the file and determine which columns to read
+	producer, err := newParquetRowProducer(input, p.importCtx)
+	if err != nil {
+		return err
+	}
+
+	// Create row consumer with schema mapping
+	consumer, err := newParquetRowConsumer(p.importCtx, producer, fileCtx, p.opts.StrictMode)
+	if err != nil {
+		return err
+	}
+
+	// Process rows using the standard parallel import pipeline
+	return runParallelImport(ctx, p.importCtx, fileCtx, producer, consumer)
+}
 
 // Default batch size for reading Parquet rows.
 // TODO (silvano): tune this based on experiment, possibly exposing as an option if needed.
@@ -593,7 +679,11 @@ func newParquetRowConsumer(
 		if tableColIdx, found := fieldNameToIdx[strings.ToLower(parquetColName)]; found {
 			colMapping[parquetColIdx] = tableColIdx
 		} else {
-			colMapping[parquetColIdx] = -1 // Column not in target table
+			colMapping[parquetColIdx] = -1
+			if strict {
+				return nil, errors.Newf(
+					"column %q in Parquet file is not in the target table", parquetColName)
+			}
 		}
 	}
 

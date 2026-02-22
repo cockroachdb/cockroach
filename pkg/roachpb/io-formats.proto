@@ -131,4 +131,7 @@ message AvroOptions {
 message ParquetOptions {
   // col_nullability specifies which columns allow null values in the exported parquet file.
   repeated bool col_nullability = 1 ;
+  // strict_mode, if true, errors if the Parquet file contains columns not
+  // present in the target table.
+  optional bool strict_mode = 2 [(gogoproto.nullable) = false];
 }

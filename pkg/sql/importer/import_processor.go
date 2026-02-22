@@ -337,6 +337,10 @@ func makeInputConverter(
 		return newAvroInputReader(
 			semaCtx, kvCh, desc, spec.Format.Avro, spec.WalltimeNanos,
 			readerParallelism, evalCtx, db)
+	case roachpb.IOFileFormat_Parquet:
+		return newParquetInputReader(
+			semaCtx, kvCh, spec.WalltimeNanos, readerParallelism,
+			desc, targetCols, evalCtx, seqChunkProvider, db, spec.Format.Parquet)
 	default:
 		return nil, errors.Errorf(
 			"Requested IMPORT format (%d) not supported by this node", spec.Format.Format)
