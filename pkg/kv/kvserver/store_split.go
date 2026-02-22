@@ -9,8 +9,11 @@ import (
 	"bytes"
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvstorage"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvstorage/wag"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvstorage/wag/wagpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/load"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
@@ -19,9 +22,14 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-// splitPreApplyInput contains input for the RHS replica required for
-// splitPreApply.
+// splitPreApplyInput contains the input needed for splitPreApply.
 type splitPreApplyInput struct {
+	// lhsID identifies the LHS replica applying the split.
+	lhsID roachpb.FullReplicaID
+	// storeID is the ID of the store applying the split.
+	storeID roachpb.StoreID
+	// raftIndex is the raft log index of the split command.
+	raftIndex kvpb.RaftIndex
 	// destroyed is set to true iff the RHS replica (the one with the matching
 	// ReplicaID from the SplitTrigger used to construct a splitPreApplyInput) has
 	// already been removed from the store.
@@ -43,10 +51,17 @@ type splitPreApplyInput struct {
 // splitTrigger and, assuming they hold, returns the corresponding input that
 // should be passed to splitPreApply.
 //
+// raftIndex is the log index of the split command being applied. It is threaded
+// through to splitPreApplyInput for use by WAG node staging.
+//
 // initClosedTS is the closed timestamp carried by the split command. It will be
 // used to initialize the closed timestamp of the RHS replica.
 func validateAndPrepareSplit(
-	ctx context.Context, r *Replica, split roachpb.SplitTrigger, initClosedTS *hlc.Timestamp,
+	ctx context.Context,
+	r *Replica,
+	split roachpb.SplitTrigger,
+	raftIndex kvpb.RaftIndex,
+	initClosedTS *hlc.Timestamp,
 ) (splitPreApplyInput, error) {
 	// Sanity check that the store is in the split.
 	splitRightReplDesc, hasRightDesc := split.RightDesc.GetReplicaDescriptor(r.StoreID())
@@ -82,7 +97,13 @@ func validateAndPrepareSplit(
 			}
 		}
 
-		return splitPreApplyInput{destroyed: true, rhsDesc: split.RightDesc}, nil
+		return splitPreApplyInput{
+			lhsID:     roachpb.FullReplicaID{RangeID: r.RangeID, ReplicaID: r.replicaID},
+			storeID:   r.StoreID(),
+			raftIndex: raftIndex,
+			destroyed: true,
+			rhsDesc:   split.RightDesc,
+		}, nil
 	}
 	// Sanity check the common case -- the RHS replica that exists should match
 	// the ReplicaID in the split trigger. In particular, it shouldn't older than
@@ -108,17 +129,26 @@ func validateAndPrepareSplit(
 	initClosedTS.Forward(r.GetCurrentClosedTimestamp(ctx))
 
 	return splitPreApplyInput{
-		destroyed:           false,
-		rhsDesc:             split.RightDesc,
+		lhsID:              roachpb.FullReplicaID{RangeID: r.RangeID, ReplicaID: r.replicaID},
+		storeID:            r.StoreID(),
+		raftIndex:          raftIndex,
+		destroyed:          false,
+		rhsDesc:            split.RightDesc,
 		initClosedTimestamp: *initClosedTS,
 	}, nil
 }
 
-// splitPreApply is called when the raft command is applied. Any
-// changes to the given ReadWriter will be written atomically with the
-// split commit.
+// splitPreApply is called when the raft command is applied. Any changes to the
+// given ReadWriter will be written atomically with the split commit.
+//
+// WAG nodes for the split are staged on wagWriter. The caller is responsible
+// for flushing the writer after splitPreApply returns.
 func splitPreApply(
-	ctx context.Context, stateRW kvstorage.StateRW, raftRW kvstorage.Raft, in splitPreApplyInput,
+	ctx context.Context,
+	stateRW kvstorage.StateRW,
+	raftRW kvstorage.Raft,
+	wagWriter *wag.Writer,
+	in splitPreApplyInput,
 ) {
 	rsl := kvstorage.MakeStateLoader(in.rhsDesc.RangeID)
 	// After PR #149620, the split trigger batch may only contain replicated state
@@ -144,6 +174,44 @@ func splitPreApply(
 	} else if err := rsl.ClearRaftTruncatedState(stateRW); err != nil {
 		log.KvExec.Fatalf(ctx, "cannot clear RaftTruncatedState: %v", err)
 	}
+
+	// Stage WAG nodes for the split. First, record that the LHS state machine
+	// must be caught up to the entry before the split. If the RHS isn't
+	// destroyed, also record its creation as an uninitialized replica. Finally,
+	// the mutation node is the split itself.
+	wagWriter.AddDep(wagpb.Node{
+		Addr: wagpb.Addr{
+			RangeID:   in.lhsID.RangeID,
+			ReplicaID: in.lhsID.ReplicaID,
+			Index:     in.raftIndex - 1,
+		},
+		Type: wagpb.NodeType_NodeApply,
+	})
+	var rhsRangeID roachpb.RangeID
+	if !in.destroyed {
+		rhsRangeID = in.rhsDesc.RangeID
+		rightReplDesc, _ := in.rhsDesc.GetReplicaDescriptor(in.storeID)
+		wagWriter.AddDep(wagpb.Node{
+			Addr: wagpb.Addr{
+				RangeID:   rhsRangeID,
+				ReplicaID: rightReplDesc.ReplicaID,
+				Index:     0,
+			},
+			Type:   wagpb.NodeType_NodeCreate,
+			Create: rhsRangeID,
+		})
+	}
+	// TODO(arul): It's unclear to me why we need a Create field in here.
+	// Shouldn't the WAG node for the RHS's creation above suffice?
+	wagWriter.SetMutation(wagpb.Node{
+		Addr: wagpb.Addr{
+			RangeID:   in.lhsID.RangeID,
+			ReplicaID: in.lhsID.ReplicaID,
+			Index:     in.raftIndex,
+		},
+		Type:   wagpb.NodeType_NodeSplit,
+		Create: rhsRangeID,
+	})
 
 	if in.destroyed {
 		// The RHS replica has already been removed from the store. To apply the

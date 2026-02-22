@@ -70,11 +70,28 @@ Delete (Sized at 48): 0,0 /Local/RangeID/2/r/RangeLease (0x01698a72726c6c2d00):
 Delete (Sized at 36): 0,0 /Local/RangeID/2/r/RangeVersion (0x01698a727276657200): 
 Delete (Sized at 48): 0,0 /Local/Range"m"/QueueLastProcessed/"consistencyChecker" (0x016b126d0001716c7074636f6e73697374656e6379436865636b657200): 
 Delete (Sized at 12): 0.000000001,0 "m0" (0x6d3000000000000000000109): 
+log engine:
+Put: 0,0 /Local/Store/wag/1 (0x01737761676e000000000000000100): NodeApply r1/1:10
+Put: 0,0 /Local/Store/wag/2 (0x01737761676e000000000000000200): NodeSplit r1/1:11
+> Put: 0,0 /Local/RangeID/2/u/RangeLastReplicaGCTimestamp (0x01698a75726c727400): 0,0
+> Put: 0,0 /Local/Range"m"/QueueLastProcessed/"consistencyChecker" (0x016b126d0001716c7074636f6e73697374656e6379436865636b657200): meta={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=0,0 min=0,0 seq=0} lock=false stat=PENDING rts=0,0 gul=0,0
+> Put: 0,0 /Local/RangeID/2/r/RangeLease (0x01698a72726c6c2d00): repl=(n1,s1):1 seq=0 start=0,0 type=LeaseExpiration exp=0.000000109,0 pro=0,0 acq=Unspecified
+> Put: 0,0 /Local/RangeID/2/r/RangeGCThreshold (0x01698a726c67632d00): 0.000000004,0
+> Put: 0,0 /Local/RangeID/2/r/RangeGCHint (0x01698a727267636800): latest_range_delete_timestamp:<> gc_timestamp:<wall_time:4 > gc_timestamp_next:<> 
+> Put: 0,0 /Local/RangeID/2/r/RangeVersion (0x01698a727276657200): 10.8-upgrading-step-007
+> Put: 0,0 /Local/RangeID/2/r/RangeAppliedState (0x01698a727261736b00): raft_applied_index:10 lease_applied_index:10 range_stats:<sys_bytes:198 sys_count:5 > raft_closed_timestamp:<> raft_applied_index_term:5 
+> Delete (Sized at 30): 0,0 /Local/RangeID/2/r/RangeGCThreshold (0x01698a726c67632d00): 
+> Delete (Sized at 43): 0,0 /Local/RangeID/2/r/RangeAppliedState (0x01698a727261736b00): 
+> Delete (Sized at 36): 0,0 /Local/RangeID/2/r/RangeGCHint (0x01698a727267636800): 
+> Delete (Sized at 48): 0,0 /Local/RangeID/2/r/RangeLease (0x01698a72726c6c2d00): 
+> Delete (Sized at 36): 0,0 /Local/RangeID/2/r/RangeVersion (0x01698a727276657200): 
+> Delete (Sized at 48): 0,0 /Local/Range"m"/QueueLastProcessed/"consistencyChecker" (0x016b126d0001716c7074636f6e73697374656e6379436865636b657200): 
+> Delete (Sized at 12): 0.000000001,0 "m0" (0x6d3000000000000000000109): 
 
 print-range-state
 ----
 range desc: r1:{a-m} [(n1,s1):1, (n2,s2):2, (n3,s3):3, next=4, gen=0]
-		replica (n1/s1): id=1 HardState={Term:5,Vote:0,Commit:10} TruncatedState={Index:10,Term:5} LastIdx=10
+		replica (n1/s1): id=1 HardState={Term:5,Vote:0,Commit:10} TruncatedState={Index:10,Term:5} LastIdx=11
 		lease: repl=(n1,s1):1 seq=0 start=0,0 type=LeaseLeader term=10 min-exp=0.000000100,0 pro=0,0 acq=Unspecified
 range desc: r2:{m-z} [(n1,s1):1, (n2,s2):2, (n3,s3):3, next=4, gen=0]
 		lease: repl=(n1,s1):1 seq=0 start=0,0 type=LeaseExpiration exp=0.000000109,0 pro=0,0 acq=Unspecified
@@ -120,6 +137,23 @@ Delete (Sized at 50): 0,0 /Local/RangeID/3/r/RangeLease (0x01698b72726c6c2d00):
 Delete (Sized at 36): 0,0 /Local/RangeID/3/r/RangeVersion (0x01698b727276657200): 
 Delete (Sized at 48): 0,0 /Local/Range"f"/QueueLastProcessed/"consistencyChecker" (0x016b12660001716c7074636f6e73697374656e6379436865636b657200): 
 Delete (Sized at 12): 0.000000001,0 "g0" (0x673000000000000000000109): 
+log engine:
+Put: 0,0 /Local/Store/wag/3 (0x01737761676e000000000000000300): NodeApply r1/1:11
+Put: 0,0 /Local/Store/wag/4 (0x01737761676e000000000000000400): NodeSplit r1/1:12
+> Put: 0,0 /Local/RangeID/3/u/RangeLastReplicaGCTimestamp (0x01698b75726c727400): 0,0
+> Put: 0,0 /Local/Range"f"/QueueLastProcessed/"consistencyChecker" (0x016b12660001716c7074636f6e73697374656e6379436865636b657200): meta={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=0,0 min=0,0 seq=0} lock=false stat=PENDING rts=0,0 gul=0,0
+> Put: 0,0 /Local/RangeID/3/r/RangeLease (0x01698b72726c6c2d00): repl=(n1,s1):1 seq=0 start=0,0 type=LeaseExpiration exp=0.000000109,1 pro=0,0 acq=Unspecified
+> Put: 0,0 /Local/RangeID/3/r/RangeGCThreshold (0x01698b726c67632d00): 0.000000004,0
+> Put: 0,0 /Local/RangeID/3/r/RangeGCHint (0x01698b727267636800): latest_range_delete_timestamp:<> gc_timestamp:<wall_time:4 > gc_timestamp_next:<> 
+> Put: 0,0 /Local/RangeID/3/r/RangeVersion (0x01698b727276657200): 10.8-upgrading-step-007
+> Put: 0,0 /Local/RangeID/3/r/RangeAppliedState (0x01698b727261736b00): raft_applied_index:10 lease_applied_index:10 range_stats:<sys_bytes:200 sys_count:5 > raft_closed_timestamp:<> raft_applied_index_term:5 
+> Delete (Sized at 30): 0,0 /Local/RangeID/3/r/RangeGCThreshold (0x01698b726c67632d00): 
+> Delete (Sized at 43): 0,0 /Local/RangeID/3/r/RangeAppliedState (0x01698b727261736b00): 
+> Delete (Sized at 36): 0,0 /Local/RangeID/3/r/RangeGCHint (0x01698b727267636800): 
+> Delete (Sized at 50): 0,0 /Local/RangeID/3/r/RangeLease (0x01698b72726c6c2d00): 
+> Delete (Sized at 36): 0,0 /Local/RangeID/3/r/RangeVersion (0x01698b727276657200): 
+> Delete (Sized at 48): 0,0 /Local/Range"f"/QueueLastProcessed/"consistencyChecker" (0x016b12660001716c7074636f6e73697374656e6379436865636b657200): 
+> Delete (Sized at 12): 0.000000001,0 "g0" (0x673000000000000000000109): 
 
 # Test case 3: RHS replica exists with the same ReplicaID as in the split
 # trigger. This is the usual case.
@@ -156,11 +190,22 @@ Put: 0,0 /Local/RangeID/4/r/RangeAppliedState (0x01698c727261736b00): raft_appli
 log engine:
 Put: 0,0 /Local/RangeID/4/u/RaftHardState (0x01698c757266746800): term:5 vote:0 commit:10 lead:0 lead_epoch:0 
 Put: 0,0 /Local/RangeID/4/u/RaftTruncatedState (0x01698c757266747400): index:10 term:5 
+Put: 0,0 /Local/Store/wag/5 (0x01737761676e000000000000000500): NodeApply r1/1:12
+Put: 0,0 /Local/Store/wag/6 (0x01737761676e000000000000000600): NodeCreate r4/1:0 create:4
+Put: 0,0 /Local/Store/wag/7 (0x01737761676e000000000000000700): NodeSplit r1/1:13 create:4
+> Put: 0,0 /Local/RangeID/4/u/RangeLastReplicaGCTimestamp (0x01698c75726c727400): 0,0
+> Put: 0,0 /Local/Range"c"/QueueLastProcessed/"consistencyChecker" (0x016b12630001716c7074636f6e73697374656e6379436865636b657200): meta={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=0,0 min=0,0 seq=0} lock=false stat=PENDING rts=0,0 gul=0,0
+> Put: 0,0 /Local/RangeID/4/r/RangeLease (0x01698c72726c6c2d00): repl=(n1,s1):1 seq=0 start=0,0 type=LeaseExpiration exp=0.000000109,2 pro=0,0 acq=Unspecified
+> Put: 0,0 /Local/RangeID/4/r/RangeGCThreshold (0x01698c726c67632d00): 0.000000004,0
+> Put: 0,0 /Local/RangeID/4/r/RangeGCHint (0x01698c727267636800): latest_range_delete_timestamp:<> gc_timestamp:<wall_time:4 > gc_timestamp_next:<> 
+> Put: 0,0 /Local/RangeID/4/r/RangeVersion (0x01698c727276657200): 10.8-upgrading-step-007
+> Put: 0,0 /Local/RangeID/4/r/RangeAppliedState (0x01698c727261736b00): raft_applied_index:10 lease_applied_index:10 range_stats:<sys_bytes:200 sys_count:5 > raft_closed_timestamp:<> raft_applied_index_term:5 
+> Put: 0,0 /Local/RangeID/4/r/RangeAppliedState (0x01698c727261736b00): raft_applied_index:10 lease_applied_index:10 range_stats:<sys_bytes:200 sys_count:5 > raft_closed_timestamp:<wall_time:100 > raft_applied_index_term:5 
 
 print-range-state
 ----
 range desc: r1:{a-c} [(n1,s1):1, (n2,s2):2, (n3,s3):3, next=4, gen=0]
-		replica (n1/s1): id=1 HardState={Term:5,Vote:0,Commit:10} TruncatedState={Index:10,Term:5} LastIdx=10
+		replica (n1/s1): id=1 HardState={Term:5,Vote:0,Commit:10} TruncatedState={Index:10,Term:5} LastIdx=13
 		lease: repl=(n1,s1):1 seq=0 start=0,0 type=LeaseLeader term=10 min-exp=0.000000100,0 pro=0,0 acq=Unspecified
 range desc: r2:{m-z} [(n1,s1):1, (n2,s2):2, (n3,s3):3, next=4, gen=0]
 		lease: repl=(n1,s1):1 seq=0 start=0,0 type=LeaseExpiration exp=0.000000109,0 pro=0,0 acq=Unspecified
