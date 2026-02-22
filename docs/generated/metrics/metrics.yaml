@@ -7214,6 +7214,46 @@ layers:
       unit: COUNT
       aggregation: AVG
       derivative: NONE
+    - name: rpc.server.errors.total
+      exported_name: rpc_server_errors_total
+      description: Total number of RPC errors on the server.
+      y_axis_label: Errors
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+    - name: rpc.server.handled.nanos
+      exported_name: rpc_server_handled_nanos
+      description: Histogram of response latency (nanoseconds) of RPC that had been application-level handled by the server.
+      y_axis_label: Duration
+      type: HISTOGRAM
+      unit: NANOSECONDS
+      aggregation: AVG
+      derivative: NONE
+    - name: rpc.server.handled.total
+      exported_name: rpc_server_handled_total
+      description: Total number of RPCs completed on the server, regardless of success or failure.
+      y_axis_label: Requests
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+    - name: rpc.server.msg.received.total
+      exported_name: rpc_server_msg_received_total
+      description: Total number of RPC messages received by the server.
+      y_axis_label: Messages
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+    - name: rpc.server.msg.sent.total
+      exported_name: rpc_server_msg_sent_total
+      description: Total number of RPC messages sent by the server.
+      y_axis_label: Messages
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
     - name: rpc.server.request.duration.nanos
       exported_name: rpc_server_request_duration_nanos
       description: Duration of an RPC request in nanoseconds.
@@ -7222,6 +7262,14 @@ layers:
       unit: NANOSECONDS
       aggregation: AVG
       derivative: NONE
+    - name: rpc.server.started.total
+      exported_name: rpc_server_started_total
+      description: Total number of RPCs started on the server.
+      y_axis_label: Requests
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
     - name: schedules.BACKUP.last-completed-time-by-virtual_cluster
       exported_name: schedules_BACKUP_last_completed_time_by_virtual_cluster
       description: The unix timestamp of the most recently completed host scheduled backup by virtual cluster specified as maintaining this metric

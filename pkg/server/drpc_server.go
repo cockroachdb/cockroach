@@ -31,10 +31,11 @@ type drpcServer struct {
 // newDRPCServer creates and configures a new drpcServer instance. It enables
 // DRPC if the experimental setting is on, otherwise returns a dummy server.
 func newDRPCServer(
-	ctx context.Context, rpcCtx *rpc.Context, requestMetrics *rpc.RequestMetrics,
+	ctx context.Context, rpcCtx *rpc.Context, requestMetrics *rpc.DRPCServerRequestMetrics,
 ) (*drpcServer, error) {
 	drpcServer := &drpcServer{}
 	drpcServer.setMode(modeInitializing)
+	reportable := rpc.Reportable{ServerMetrics: requestMetrics}
 
 	d, err := rpc.NewDRPCServer(
 		ctx,
@@ -43,11 +44,17 @@ func newDRPCServer(
 			func(path string) error {
 				return drpcServer.intercept(path)
 			}),
-		rpc.WithDRPCMetricsServerInterceptor(
-			rpc.NewDRPCRequestMetricsInterceptor(requestMetrics, func(method string) bool {
-				return shouldRecordRequestDuration(rpcCtx.Settings, method)
-			}),
-		))
+		rpc.WithDRPCMetricsUnaryServerInterceptor(
+			rpc.NewDRPCUnaryServerRequestMetricsInterceptor(&reportable,
+				func(method string) bool {
+					return shouldRecordRequestDuration(rpcCtx.Settings, method)
+				})),
+		rpc.WithDRPCMetricsStreamServerInterceptor(
+			rpc.NewDRPCStreamServerRequestMetricsInterceptor(&reportable,
+				func(method string) bool {
+					return shouldRecordRequestDuration(rpcCtx.Settings, method)
+				})),
+	)
 	if err != nil {
 		return nil, err
 	}
