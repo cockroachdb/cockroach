@@ -53,7 +53,7 @@ func TestCollectInfoFromMultipleStores(t *testing.T) {
 
 	ctx := context.Background()
 	dir, cleanupFn := testutils.TempDir(t)
-	defer cleanupFn()
+	defer onTestSucceed(t, cleanupFn)
 
 	c := NewCLITest(TestCLIParams{
 		NoServer: true,
@@ -105,7 +105,7 @@ func TestCollectInfoFromOnlineCluster(t *testing.T) {
 
 	ctx := context.Background()
 	dir, cleanupFn := testutils.TempDir(t)
-	defer cleanupFn()
+	defer onTestSucceed(t, cleanupFn)
 
 	c := NewCLITest(TestCLIParams{
 		NoServer: true,
@@ -178,7 +178,7 @@ func TestLossOfQuorumRecovery(t *testing.T) {
 
 	ctx := context.Background()
 	dir, cleanupFn := testutils.TempDir(t)
-	defer cleanupFn()
+	defer onTestSucceed(t, cleanupFn)
 
 	c := NewCLITest(TestCLIParams{
 		NoServer: true,
@@ -302,13 +302,16 @@ func TestLossOfQuorumRecovery(t *testing.T) {
 		}), "Failed to force replicas to consistency queue")
 	}
 
-	// As a validation step we will just pick one range and get its replicas to see
-	// if they were up-replicated to the new nodes.
+	// Validate that all ranges were up-replicated to the new nodes.
 	s = sqlutils.MakeSQLRunner(tcAfter.Conns[0])
-	r := s.QueryRow(t, "select replicas from crdb_internal.ranges limit 1")
-	var replicas string
-	r.Scan(&replicas)
-	require.Equal(t, "{1,4,5}", replicas, "Replicas after loss of quorum recovery")
+	r := s.Query(t, "select range_id, replicas from crdb_internal.ranges")
+	for r.Next() {
+		var rangeID roachpb.RangeID
+		var replicas string
+		require.NoError(t, r.Scan(&rangeID, &replicas))
+		require.Equal(t, "{1,4,5}", replicas, "r%d: replicas after LoQ recovery", rangeID)
+	}
+	require.NoError(t, r.Err())
 
 	// Validate that rangelog is updated by recovery records after cluster restarts.
 	testutils.SucceedsSoon(t, func() error {
@@ -454,7 +457,7 @@ func TestHalfOnlineLossOfQuorumRecovery(t *testing.T) {
 
 	ctx := context.Background()
 	dir, cleanupFn := testutils.TempDir(t)
-	defer cleanupFn()
+	defer onTestSucceed(t, cleanupFn)
 
 	c := NewCLITest(TestCLIParams{
 		NoServer: true,
@@ -919,5 +922,13 @@ func TestTruncateSpanOutput(t *testing.T) {
 				EndKey: keys.SystemSpanConfigPrefix,
 			}))
 		})
+	}
+}
+
+// onTestSucceed calls the given func if the test did not fail so far.
+// Convenient for skipping cleanups at the end of a failed test.
+func onTestSucceed(t *testing.T, do func()) {
+	if !t.Failed() {
+		do()
 	}
 }
