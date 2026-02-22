@@ -56,6 +56,18 @@ var KeepRefreshSpansOnSavepointRollback = settings.RegisterBoolSetting(
 	"if enabled, all refresh spans accumulated since a savepoint was created are kept after the savepoint is rolled back",
 	true)
 
+// TransactionRefreshingStatusEnabled controls whether serializable transactions
+// add a refreshing marker to the timestamp cache when pushed at commit time,
+// preventing concurrent pushers from starving the transaction during its
+// refresh window.
+var TransactionRefreshingStatusEnabled = settings.RegisterBoolSetting(
+	settings.ApplicationLevel,
+	"kv.transaction.refreshing_status.enabled",
+	"when enabled, serializable transactions add a refreshing marker to the "+
+		"timestamp cache when pushed at commit time to help prevent starvation",
+	false,
+)
+
 // txnSpanRefresher is a txnInterceptor that collects the read spans of a
 // serializable transaction in the event it gets a serializable retry error. It
 // can then use the set of read spans to avoid retrying the transaction if all
@@ -123,6 +135,7 @@ type txnSpanRefresher struct {
 	riGen   rangeIteratorFactory
 	wrapped lockedSender
 	metrics *TxnMetrics
+	clock   *hlc.Clock
 
 	// refreshFootprint contains key spans which were read during the
 	// transaction. In case the transaction's timestamp needs to be pushed, we can
@@ -158,9 +171,20 @@ func (sr *txnSpanRefresher) SendLocked(
 		return nil, pErr
 	}
 
+	sr.maybeSetUseRefreshingStatus(ctx, ba)
+
 	// Send through wrapped lockedSender. Unlocks while sending then re-locks.
 	br, pErr := sr.sendLockedWithRefreshAttempts(ctx, ba, sr.maxRefreshAttempts())
 	if pErr != nil {
+		// REFRESHING must never escape the txnSpanRefresher. It is a
+		// transient server-to-client signal that the refresher handles.
+		// If REFRESHING is still on the error txn at this point, we've
+		// exhausted refresh attempts. Cancel the marker so it doesn't
+		// block pushers indefinitely.
+		if txn := pErr.GetTxn(); txn != nil && txn.Status == roachpb.REFRESHING {
+			sr.cancelRefreshingMarker(ctx, txn)
+			pErr.SetTxn(cloneWithStatus(txn, roachpb.PENDING))
+		}
 		return nil, pErr
 	}
 
@@ -285,6 +309,11 @@ func (sr *txnSpanRefresher) maybeRefreshAndRetrySend(
 		// to PENDING. Even though the transaction record may have a status of
 		// STAGING, we know that the transaction failed to implicitly commit.
 		refreshToTxn.Status = roachpb.PENDING
+	case roachpb.REFRESHING:
+		// The server placed a refreshing marker in the timestamp cache to
+		// protect this transaction from pushes during the refresh window.
+		// If the refresh fails, we'll cancel the marker.
+		refreshToTxn.Status = roachpb.PENDING
 	default:
 		return nil, kvpb.NewError(errors.AssertionFailedf(
 			"unexpected txn status during refresh: %v", refreshToTxn))
@@ -402,6 +431,48 @@ func (sr *txnSpanRefresher) splitEndTxnAndRetrySend(
 			"txn status not finalized after successful retried EndTxn: %v", br.Txn))
 	}
 	return br, nil
+}
+
+// cancelRefreshingMarker sends a HeartbeatTxn with UpdateTSCacheOnly to cancel
+// the refreshing marker in the timestamp cache after a failed refresh. This
+// prevents the marker from blocking pushers indefinitely.
+func (sr *txnSpanRefresher) cancelRefreshingMarker(ctx context.Context, txn *roachpb.Transaction) {
+	ba := &kvpb.BatchRequest{}
+	ba.Txn = txn.Clone()
+	ba.Txn.Status = roachpb.PENDING
+	ba.Add(&kvpb.HeartbeatTxnRequest{
+		RequestHeader: kvpb.RequestHeader{
+			Key: txn.Key,
+		},
+		Now:               sr.clock.Now(),
+		UpdateTSCacheOnly: true,
+	})
+	log.VEventf(ctx, 2, "canceling refreshing marker after failed refresh")
+	_, pErr := sr.wrapped.SendLocked(ctx, ba)
+	if pErr != nil {
+		// Best-effort. The marker is epoch-scoped, so it becomes irrelevant
+		// once the transaction restarts at a new epoch.
+		log.VEventf(ctx, 1, "failed to cancel refreshing marker: %s", pErr)
+	}
+}
+
+func (sr *txnSpanRefresher) maybeSetUseRefreshingStatus(
+	ctx context.Context, ba *kvpb.BatchRequest,
+) {
+	// TODO(ssd): We should be able to do a version check here, but in tenant
+	// tests across a number of packages, I see us reaching this code before the
+	// version is initialized. We should look into that separately.
+	//
+	// There is a version check server-side that is protecting us at the moment.
+	useRefreshing := TransactionRefreshingStatusEnabled.Get(&sr.st.SV) // && sr.st.Version.IsActive(ctx, clusterversion.V26_2)
+	if !useRefreshing {
+		return
+	}
+	etIdx := len(ba.Requests) - 1
+	if et := ba.Requests[etIdx].GetEndTxn(); et != nil {
+		log.Event(ctx, "requesting refreshing marker in case of serializable error")
+		et.UseRefreshingStatus = true
+	}
 }
 
 // maybeRefreshPreemptively attempts to refresh a transaction's read timestamp

@@ -79,7 +79,9 @@ var optimisticEvalLimitedScans = settings.RegisterBoolSetting(
 //	  Replica.maybeCommitWaitBeforeCommitTrigger (if committing with commit-trigger)
 //	                       │
 //
-// read-write ◄─────────────────────────┴────────────────────────► read-only
+// read-write
+// ◄─────────────────────────┴────────────────────────►
+// read-only
 //
 //	│                                                               │
 //	│                                                               │
@@ -785,6 +787,16 @@ func (r *Replica) handleTransactionPushError(
 	if !dontRetry && ba.IsSinglePushTxnRequest() {
 		pushReq := ba.Requests[0].GetInner().(*kvpb.PushTxnRequest)
 		dontRetry = txnwait.ShouldPushImmediately(pushReq, t.PusheeTxn.Status, ba.WaitPolicy)
+		// Even if ShouldPushImmediately says the push should proceed
+		// immediately, force a retry if the pushee is currently refreshing.
+		// The retry enqueues the pushee in the txnwait queue where
+		// MaybeWaitForPush will block the pusher based on the refreshing
+		// marker in the timestamp cache.
+		if dontRetry && r.IsTransactionRefreshing(
+			ctx, t.PusheeTxn.Key, t.PusheeTxn.ID, t.PusheeTxn.Epoch,
+		) {
+			dontRetry = false
+		}
 	}
 	if dontRetry {
 		return g, pErr

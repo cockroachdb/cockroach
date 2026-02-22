@@ -232,6 +232,10 @@ type Config struct {
 	MaxLockTableSize  int64
 	DisableTxnPushing bool
 	TxnWaitKnobs      txnwait.TestingKnobs
+	// IsTransactionRefreshing checks whether the given transaction is
+	// currently refreshing its read spans. Used by the txnwait queue to
+	// block pushers while the pushee is refreshing.
+	IsTransactionRefreshing func(ctx context.Context, txnKey roachpb.Key, txnID uuid.UUID, epoch enginepb.TxnEpoch) bool
 }
 
 func (c *Config) initDefaults() {
@@ -277,12 +281,13 @@ func NewManager(cfg Config) Manager {
 		// TODO(nvanbenschoten): move pkg/storage/txnwait to a new
 		// pkg/storage/concurrency/txnwait package.
 		twq: txnwait.NewQueue(txnwait.Config{
-			RangeDesc: cfg.RangeDesc,
-			DB:        cfg.DB,
-			Clock:     cfg.Clock,
-			Stopper:   cfg.Stopper,
-			Metrics:   cfg.TxnWaitMetrics,
-			Knobs:     cfg.TxnWaitKnobs,
+			RangeDesc:               cfg.RangeDesc,
+			DB:                      cfg.DB,
+			Clock:                   cfg.Clock,
+			Stopper:                 cfg.Stopper,
+			Metrics:                 cfg.TxnWaitMetrics,
+			Knobs:                   cfg.TxnWaitKnobs,
+			IsTransactionRefreshing: cfg.IsTransactionRefreshing,
 		}),
 	}
 	return m

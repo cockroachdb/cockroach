@@ -1982,7 +1982,16 @@ func (rsr *ReverseScanRequest) flags() flag {
 
 // EndTxn updates the timestamp cache to prevent replays.
 // Replays for the same transaction key and timestamp must retry on EndTxn.
-func (*EndTxnRequest) flags() flag              { return isWrite | isTxn | isAlone | updatesTSCache }
+// updatesTSCacheOnErr is included when UseRefreshingStatus is set so that
+// the refreshing marker is written to the timestamp cache when EndTxn
+// returns RETRY_SERIALIZABLE.
+func (r *EndTxnRequest) flags() flag {
+	f := isWrite | isTxn | isAlone | updatesTSCache
+	if r.UseRefreshingStatus {
+		f |= updatesTSCacheOnErr
+	}
+	return f
+}
 func (*AdminSplitRequest) flags() flag          { return isAdmin | isAlone }
 func (*AdminUnsplitRequest) flags() flag        { return isAdmin | isAlone }
 func (*AdminMergeRequest) flags() flag          { return isAdmin | isAlone }

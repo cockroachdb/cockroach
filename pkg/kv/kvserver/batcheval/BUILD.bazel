@@ -117,6 +117,7 @@ go_test(
         "cmd_excise_test.go",
         "cmd_export_test.go",
         "cmd_get_test.go",
+        "cmd_heartbeat_txn_test.go",
         "cmd_is_span_empty_test.go",
         "cmd_lease_test.go",
         "cmd_push_txn_test.go",

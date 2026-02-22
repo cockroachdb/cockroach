@@ -127,25 +127,26 @@ func newUninitializedReplicaWithoutRaftGroup(store *Store, id roachpb.FullReplic
 		creationTime:   timeutil.Now(),
 		store:          store,
 		abortSpan:      abortspan.New(id.RangeID),
-		concMgr: concurrency.NewManager(concurrency.Config{
-			NodeDesc:                          store.nodeDesc,
-			RangeDesc:                         uninitState.Desc,
-			Settings:                          store.ClusterSettings(),
-			DB:                                store.DB(),
-			Clock:                             store.Clock(),
-			Stopper:                           store.Stopper(),
-			IntentResolver:                    store.intentResolver,
-			TxnWaitMetrics:                    store.txnWaitMetrics,
-			SlowLatchGauge:                    store.metrics.SlowLatchRequests,
-			LatchWaitDurations:                store.metrics.LatchWaitDurations,
-			LocksShedDueToMemoryLimit:         store.metrics.LocksShedDueToMemoryLimit,
-			NumLockShedDueToMemoryLimitEvents: store.metrics.NumLockShedDueToMemoryLimitEvents,
-
-			DisableTxnPushing: store.TestingKnobs().DontPushOnLockConflictError,
-			TxnWaitKnobs:      store.TestingKnobs().TxnWaitKnobs,
-		}),
 		allocatorToken: &plan.AllocatorToken{},
 	}
+	r.concMgr = concurrency.NewManager(concurrency.Config{
+		NodeDesc:                          store.nodeDesc,
+		RangeDesc:                         uninitState.Desc,
+		Settings:                          store.ClusterSettings(),
+		DB:                                store.DB(),
+		Clock:                             store.Clock(),
+		Stopper:                           store.Stopper(),
+		IntentResolver:                    store.intentResolver,
+		TxnWaitMetrics:                    store.txnWaitMetrics,
+		SlowLatchGauge:                    store.metrics.SlowLatchRequests,
+		LatchWaitDurations:                store.metrics.LatchWaitDurations,
+		LocksShedDueToMemoryLimit:         store.metrics.LocksShedDueToMemoryLimit,
+		NumLockShedDueToMemoryLimitEvents: store.metrics.NumLockShedDueToMemoryLimitEvents,
+
+		DisableTxnPushing:       store.TestingKnobs().DontPushOnLockConflictError,
+		TxnWaitKnobs:            store.TestingKnobs().TxnWaitKnobs,
+		IsTransactionRefreshing: r.IsTransactionRefreshing,
+	})
 	r.sideTransportClosedTimestamp.init(store.cfg.ClosedTimestampReceiver, id.RangeID)
 	r.cachedClosedTimestampPolicy.Store(new(ctpb.RangeClosedTimestampPolicy))
 

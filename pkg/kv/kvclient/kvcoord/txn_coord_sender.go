@@ -348,6 +348,7 @@ func (tc *TxnCoordSender) initCommonInterceptors(
 		knobs:   &tcf.testingKnobs,
 		riGen:   riGen,
 		metrics: &tc.metrics,
+		clock:   tcf.clock,
 		// We can only allow refresh span retries on root transactions
 		// because those are the only places where we have all of the
 		// refresh spans. If this is a leaf, as in a distributed sql flow,

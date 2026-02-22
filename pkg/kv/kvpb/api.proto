@@ -1020,6 +1020,11 @@ message EndTxnRequest {
   // The field is used to support the XA two-phase commit protocol.
   bool prepare = 12;
 
+  // True to indicate that if the commit encounters a RETRY_SERIALIZABLE error,
+  // the EndTxn request can instead transition the transaction to the REFRESHING
+  // status rather than returning an error.
+  bool use_refreshing_status = 13;
+
   reserved 7, 8, 10;
 }
 
@@ -1243,6 +1248,10 @@ message HeartbeatTxnRequest {
   // large diff that doesn't seem worth it, given that we never feed this
   // timestamp back into a clock.
   util.hlc.Timestamp now = 2 [(gogoproto.nullable) = false];
+  // When set, the heartbeat skips reading/writing the transaction record
+  // and only updates the timestamp cache. Used to cancel a refreshing
+  // marker after a failed refresh attempt.
+  bool update_ts_cache_only = 3 [(gogoproto.customname) = "UpdateTSCacheOnly"];
 }
 
 // A HeartbeatTxnResponse is the return value from the HeartbeatTxn()

@@ -50,6 +50,15 @@ func HeartbeatTxn(
 		return result.Result{}, err
 	}
 
+	if args.UpdateTSCacheOnly {
+		// Cancel a refreshing marker in the timestamp cache. Skip the
+		// record read/write entirely; the tscache update happens in
+		// updateTimestampCache after evaluation via endCmds.done(). The
+		// empty write batch means no Raft proposal is needed.
+		reply.Txn = h.Txn
+		return result.Result{}, nil
+	}
+
 	if args.Now.IsEmpty() {
 		return result.Result{}, fmt.Errorf("now not specified for heartbeat")
 	}

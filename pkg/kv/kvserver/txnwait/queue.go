@@ -262,6 +262,12 @@ type Config struct {
 	Stopper   *stop.Stopper
 	Metrics   *Metrics
 	Knobs     TestingKnobs
+
+	// IsTransactionRefreshing, if set, checks whether the given transaction
+	// is currently refreshing its read spans at the given epoch (as indicated
+	// by a marker in the timestamp cache). When true, pushers should block
+	// rather than proceed to push evaluation.
+	IsTransactionRefreshing func(ctx context.Context, txnKey roachpb.Key, txnID uuid.UUID, epoch enginepb.TxnEpoch) bool
 }
 
 // TestingKnobs represents testing knobs for a Queue.
@@ -596,8 +602,15 @@ func (q *Queue) MaybeWaitForPush(
 		q.mu.Unlock()
 		return createPushTxnResponse(txn), nil
 	} else if ShouldPushImmediately(req, txn.Status, wp) {
-		q.mu.Unlock()
-		return nil, nil
+		// Even if the push would normally proceed immediately, block if the
+		// pushee is currently refreshing. The refreshing marker in the timestamp
+		// cache protects the transaction from starvation during its refresh window.
+		refreshing := q.cfg.IsTransactionRefreshing != nil &&
+			q.cfg.IsTransactionRefreshing(ctx, txn.Key, txn.ID, txn.Epoch)
+		if !refreshing {
+			q.mu.Unlock()
+			return nil, nil
+		}
 	}
 
 	push := &waitingPush{

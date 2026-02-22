@@ -772,6 +772,34 @@ func TestTransactionUpdateStaging(t *testing.T) {
 	}
 }
 
+func TestTransactionUpdateRefreshing(t *testing.T) {
+	txn := nonZeroTxn
+	txn.Status = PENDING
+
+	txn2 := nonZeroTxn
+	txn2.Status = REFRESHING
+
+	// In same epoch, PENDING < REFRESHING.
+	txn.Update(&txn2)
+	require.Equal(t, REFRESHING, txn.Status)
+
+	// REFRESHING should not regress to PENDING.
+	txn3 := nonZeroTxn
+	txn3.Status = PENDING
+	txn.Update(&txn3)
+	require.Equal(t, REFRESHING, txn.Status)
+
+	// REFRESHING can advance to COMMITTED.
+	txn4 := nonZeroTxn
+	txn4.Status = COMMITTED
+	txn.Update(&txn4)
+	require.Equal(t, COMMITTED, txn.Status)
+}
+
+func TestTransactionStatusRefreshingNotFinalized(t *testing.T) {
+	require.False(t, REFRESHING.IsFinalized())
+}
+
 // TestTransactionUpdateAbortedOldEpoch tests that Transaction.Update propagates
 // an ABORTED status even when that status comes from a proto with an old epoch.
 // It also tests that Transaction.Update retains an ABORTED status even when it
