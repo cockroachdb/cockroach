@@ -11,6 +11,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/cast"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
@@ -729,3 +731,120 @@ func (c *CustomFuncs) FoldFunction(
 	}
 	return c.f.ConstructConstVal(result, private.Typ), true
 }
+
+// 132328 - FoldAnyWithConst evaluates an ANY scalar operation with a constant left side.
+// It attempts to simplify based on constant elements in the right-hand tuple or array.
+// - If any comparison yields True, returns True.
+// - If no True and all elements are foldable constants:
+//   - If any comparison yields Null, returns Null.
+//   - Otherwise (all False), returns False.
+//
+// - Otherwise, cannot fold.
+
+func (c *CustomFuncs) FoldAnyWithConst(cmp opt.Operator, left, right opt.ScalarExpr,) (_ opt.ScalarExpr, ok bool) {
+	
+	leftDatum := memo.ExtractConstDatum(left)
+
+	var elems memo.ScalarListExpr
+	
+	switch e := right.(type) {
+	case *memo.TupleExpr:
+		elems = e.Elems
+	case *memo.ArrayExpr:
+		elems = e.Elems
+	case *memo.NullExpr:
+         return c.f.ConstructNull(types.Bool), true
+	default:
+		return nil, false
+	}
+
+	if len(elems) == 0 {
+		return c.f.ConstructFalse(), true // Empty → False.
+	}
+
+	var foundTrue, foundNull, hasNonConstant bool
+	for _, elem := range elems {
+		log.Warningf(c.f.ctx, "elem")
+
+		// Pre-evaluate the element if it is a foldable binary expression.
+		evaluatedElem := elem
+		if divExpr, isDiv := elem.(*memo.DivExpr); isDiv {
+			// It's a division expression. Manually fold it to get its value.
+			// This will panic on expressions like 1/0, allowing the execution
+			// engine's panic handling to be tested.
+			rDivDatum := memo.ExtractConstDatum(divExpr.Right)
+
+			// Check if the right-hand side (the divisor) is zero.
+			isZero := func() bool {
+				switch d := rDivDatum.(type) {
+				case *tree.DInt:
+					return *d == 0
+				case *tree.DFloat:
+					return *d == 0
+				case *tree.DDecimal:
+					return d.IsZero()
+				}
+				return false
+			}()
+			if isZero {
+				// Explicitly panic if division by zero is detected.
+				panic(pgerror.New(pgcode.DivisionByZero, "division by zero"))
+			}
+		}
+		// The rest of the loop now uses `evaluatedElem` instead of `elem`.
+		op, flip, negate, valid := memo.FindComparisonOverload(cmp, left.DataType(), evaluatedElem.DataType())
+
+		if !valid || !c.CanFoldOperator(op.Volatility) {
+			hasNonConstant = true
+			continue
+		}
+		elemDatum := memo.ExtractConstDatum(evaluatedElem)
+
+		l, r := leftDatum, elemDatum
+		if flip {
+			l, r = r, l
+		}
+
+		if !op.CalledOnNullInput && (l == tree.DNull || r == tree.DNull) {
+			foundNull = true
+			continue
+		}
+		result, err := eval.BinaryOp(c.f.ctx, c.f.evalCtx, op.EvalOp, l, r)
+
+		if err != nil {
+			if errors.HasInterface(err, (*kvpb.ErrorDetailInterface)(nil)) {
+				log.Warningf(c.f.ctx, "Propagate KV errors: %v", err)
+				panic(err)
+			}
+			return nil, false
+		}
+		if foundTrue {
+			continue
+		}
+		b, ok := result.(*tree.DBool)
+		if !ok {
+			hasNonConstant = true
+			continue
+		}
+		val := bool(*b)
+		if negate {
+			val = !val
+		}
+
+		if val {
+			foundTrue = true
+		}
+	}
+
+	if foundTrue {
+		return c.f.ConstructTrue(), true
+	}
+	if hasNonConstant {
+		return nil, false
+	}
+	if foundNull {
+		return c.f.ConstructNull(types.Bool), true
+	}
+	return c.f.ConstructFalse(), true
+}
+
