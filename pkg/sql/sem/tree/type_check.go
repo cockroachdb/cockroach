@@ -2973,15 +2973,26 @@ func typeCheckSameTypedExprs(
 		// https://www.postgresql.org/docs/15/typeconv-union-case.html
 		for i, e := range typedExprs {
 			typ := e.ResolvedType()
-			// TODO(mgartner): There should probably be a cast if the types are
-			// not identical, not just if the types are not equivalent.
-			if typ.Equivalent(candidateType) || typ.Family() == types.UnknownFamily {
+			if typ.Identical(candidateType) || typ.Family() == types.UnknownFamily {
 				continue
 			}
-			if !cast.ValidCast(typ, candidateType, cast.ContextImplicit) {
-				return nil, nil, unexpectedTypeError(exprs[i], candidateType, typ)
+			if cast.ValidCast(typ, candidateType, cast.ContextImplicit) {
+				typedExprs[i] = NewTypedCastExpr(e, candidateType)
+				continue
 			}
-			typedExprs[i] = NewTypedCastExpr(e, candidateType)
+			// For equivalent types (same family, potentially different widths),
+			// allow assignment-level casts. This is needed because integer
+			// constants always have ResolvedType() = types.Int, even when
+			// type-checked against a narrower type like INT4.
+			if typ.Equivalent(candidateType) {
+				if cast.ValidCast(typ, candidateType, cast.ContextAssignment) {
+					typedExprs[i] = NewTypedCastExpr(e, candidateType)
+				}
+				// If no valid cast exists between equivalent types (e.g., REG*
+				// types), skip adding a cast for backward compatibility.
+				continue
+			}
+			return nil, nil, unexpectedTypeError(exprs[i], candidateType, typ)
 		}
 		return typedExprs, candidateType, nil
 	}
