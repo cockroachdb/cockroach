@@ -54,7 +54,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
-	"github.com/cockroachdb/crlib/crtime"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
 	"github.com/cockroachdb/redact"
@@ -106,12 +105,9 @@ type changeAggregator struct {
 	// eventConsumer consumes the event.
 	eventConsumer eventConsumer
 
-	flushFrequency time.Duration // how often high watermark can be checkpointed.
-	lastSpanFlush  time.Time     // last time expensive, span based checkpoint was written.
-
-	// frontierFlushLimiter is a rate limiter for flushing the span frontier
-	// to the coordinator because of frontier advancement.
-	frontierFlushLimiter *saveRateLimiter
+	nextHighWaterFlush time.Time     // next time high watermark may be flushed.
+	flushFrequency     time.Duration // how often high watermark can be checkpointed.
+	lastSpanFlush      time.Time     // last time expensive, span based checkpoint was written.
 
 	// frontier keeps track of resolved timestamps for spans along with schema change
 	// boundary information.
@@ -282,22 +278,6 @@ func newChangeAggregatorProcessor(
 		ca.flushFrequency = *checkpointFreq
 	} else {
 		ca.flushFrequency = changefeedbase.DefaultMinCheckpointFrequency
-	}
-
-	ca.frontierFlushLimiter, err = newSaveRateLimiter(saveRateConfig{
-		name: "frontier",
-		intervalName: func() redact.SafeValue {
-			return redact.SafeString(changefeedbase.OptMinCheckpointFrequency)
-		},
-		interval: func() time.Duration {
-			return ca.flushFrequency
-		},
-		jitter: func() float64 {
-			return aggregatorFlushJitter.Get(&ca.FlowCtx.Cfg.Settings.SV)
-		},
-	}, timeutil.DefaultTimeSource{})
-	if err != nil {
-		return nil, err
 	}
 
 	return ca, nil
@@ -753,6 +733,18 @@ var aggregatorFlushJitter = settings.RegisterFloatSetting(
 	settings.WithPublic,
 )
 
+func nextFlushWithJitter(s timeutil.TimeSource, d time.Duration, j float64) (time.Time, error) {
+	if j < 0 || d < 0 {
+		return s.Now(), errors.AssertionFailedf("invalid jitter value: %f, duration: %s", j, d)
+	}
+	maxJitter := int64(j * float64(d))
+	if maxJitter == 0 {
+		return s.Now().Add(d), nil
+	}
+	nextFlush := d + time.Duration(rand.Int63n(maxJitter))
+	return s.Now().Add(nextFlush), nil
+}
+
 // Next is part of the RowSource interface.
 func (ca *changeAggregator) Next() (rowenc.EncDatumRow, *execinfrapb.ProducerMetadata) {
 	shouldEmitHeartBeat := func() bool {
@@ -908,7 +900,7 @@ func (ca *changeAggregator) flushBufferedEvents(ctx context.Context) error {
 // noteResolvedSpan periodically flushes Frontier progress from the current
 // changeAggregator node to the changeFrontier node to allow the changeFrontier
 // to persist the overall changefeed's progress
-func (ca *changeAggregator) noteResolvedSpan(resolved jobspb.ResolvedSpan) error {
+func (ca *changeAggregator) noteResolvedSpan(resolved jobspb.ResolvedSpan) (returnErr error) {
 	ctx, sp := tracing.ChildSpan(ca.Ctx(), "changefeed.aggregator.note_resolved_span")
 	defer sp.Finish()
 
@@ -944,16 +936,24 @@ func (ca *changeAggregator) noteResolvedSpan(resolved jobspb.ResolvedSpan) error
 
 	forceFlush := resolved.BoundaryType != jobspb.ResolvedSpan_NONE
 
-	// TODO(#155015): Re-enable periodic frontier flushing.
-	checkpointFrontier := advanced && (forceFlush || ca.frontierFlushLimiter.canSave(ctx))
+	// NB: if we miss flush window, and the flush frequency is fairly high (minutes),
+	// it might be a while before frontier advances again (particularly if
+	// the number of ranges and closed timestamp settings are high).
+	// TODO(yevgeniy): Consider doing something similar to how job checkpointing
+	//  works in the frontier where if we missed the window to checkpoint, we will attempt
+	//  the checkpoint at the next opportune moment.
+	checkpointFrontier := advanced &&
+		(forceFlush || timeutil.Now().After(ca.nextHighWaterFlush))
 
 	if checkpointFrontier {
-		now := crtime.NowMono()
-		if err := ca.flushFrontier(ctx); err != nil {
-			return err
-		}
-		ca.frontierFlushLimiter.doneSave(now.Elapsed())
-		return nil
+		defer func() {
+			ca.nextHighWaterFlush, err = nextFlushWithJitter(
+				timeutil.DefaultTimeSource{}, ca.flushFrequency, aggregatorFlushJitter.Get(sv))
+			if err != nil {
+				returnErr = errors.CombineErrors(returnErr, err)
+			}
+		}()
+		return ca.flushFrontier(ctx)
 	}
 
 	// At a lower frequency, we checkpoint specific spans in the job progress
@@ -968,7 +968,7 @@ func (ca *changeAggregator) noteResolvedSpan(resolved jobspb.ResolvedSpan) error
 		return ca.flushFrontier(ctx)
 	}
 
-	return nil
+	return returnErr
 }
 
 // flushFrontier flushes sink and emits resolved spans to the change frontier.
@@ -2511,15 +2511,10 @@ func (l *saveRateLimiter) canSave(ctx context.Context) bool {
 	if elapsed < interval {
 		return false
 	}
-	if elapsed < l.avgSaveDuration {
-		if l.warnEveryN.ShouldProcess(now) {
-			log.Changefeed.Warningf(ctx, "cannot save %s even though %s has elapsed "+
-				"since last save and %s is set to %s because average duration to save was %s "+
-				"and further saving is disabled until that much time elapses",
-				l.config.name, elapsed, l.config.intervalName(), interval, l.avgSaveDuration)
-		}
-		return false
-	}
+	// Note: We intentionally do NOT check avgSaveDuration here to match the
+	// original behavior before the rate limiter refactor. The avgSaveDuration
+	// back-off was blocking checkpoints during backfills, causing spans to not
+	// be properly checkpointed and leading to issues on resume.
 	return true
 }
 
