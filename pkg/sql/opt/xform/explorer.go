@@ -152,7 +152,7 @@ func (e *explorer) init(o *Optimizer) {
 //	    for e3 in memo-exprs($right):
 //	      if ordinal(e3) >= state.start:
 //	        ... explore (e1, e2, e3) combo ...
-func (e *explorer) exploreGroup(grp memo.RelExpr, required *physical.Required) *exploreState {
+func (e *explorer) exploreGroup(grp memo.RelExpr) *exploreState {
 	// Do nothing if this group has already been fully explored.
 	state := e.ensureExploreState(grp)
 	if state.fullyExplored {
@@ -177,7 +177,7 @@ func (e *explorer) exploreGroup(grp memo.RelExpr, required *physical.Required) *
 			continue
 		}
 
-		if memberExplored := e.exploreGroupMember(state, member, i, required); memberExplored {
+		if memberExplored := e.exploreGroupMember(state, member, i); memberExplored {
 			// No more rules can ever match this expression, so skip it in
 			// future passes.
 			state.markMemberAsFullyExplored(i)
