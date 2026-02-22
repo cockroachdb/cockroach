@@ -14,6 +14,7 @@ import (
 func init() {
 	setProxyContextDefaults()
 	setTestDirectorySvrContextDefaults()
+	setHTTPTestDirectorySvrContextDefaults()
 }
 
 // proxyContext captures the command-line parameters of the `mt start-proxy` command.
@@ -46,4 +47,14 @@ var testDirectorySvrContext struct {
 
 func setTestDirectorySvrContextDefaults() {
 	testDirectorySvrContext.port = 36257
+}
+
+var httpTestDirectorySvrContext struct {
+	grpcPort int
+	httpPort int
+}
+
+func setHTTPTestDirectorySvrContextDefaults() {
+	httpTestDirectorySvrContext.grpcPort = 46258
+	httpTestDirectorySvrContext.httpPort = 46259
 }
