@@ -139,6 +139,9 @@ import (
 type burstQualification uint8
 
 const (
+	// Order matters here. A higher priority burstQualification must use a
+	// lower ordinal than a lower priority burstQualification (see
+	// tenantHeap.Less for a place where this invariant is relied on).
 	canBurst burstQualification = iota
 	noBurst
 	numBurstQualifications

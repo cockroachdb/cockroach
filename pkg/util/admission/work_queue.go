@@ -295,6 +295,11 @@ type WorkQueue struct {
 		maxQueueDelayToSwitchToLifo time.Duration
 		// Only used if mode == usesCPUTimeTokens.
 		defaultCPUTimeTokenEstimator cpuTimeTokenEstimator
+		// burstBucketCapacity is the capacity for newly created tenant burst
+		// buckets. Note that buckets init full, so burstBucketCapacity is also
+		// the starting token count. Updated by refillBurstBuckets. Only used
+		// if mode == usesCPUTimeTokens.
+		burstBucketCapacity int64
 		// overrideAllToBypassAdmission, when true, causes all work to bypass
 		// admission control. Used by CPU time token AC.
 		overrideAllToBypassAdmission bool
@@ -658,7 +663,7 @@ func (q *WorkQueue) Admit(ctx context.Context, info WorkInfo) (AdmitResponse, er
 		// here, we also create the estimator. We init the estimator using a
 		// global estimator that sees workload across all tenants.
 		tenant = newTenantInfo(tenantID, q.getTenantWeightLocked(tenantID),
-			q.mu.defaultCPUTimeTokenEstimator.estimateTokensToBeUsed())
+			q.mode, q.mu.defaultCPUTimeTokenEstimator.estimateTokensToBeUsed(), q.mu.burstBucketCapacity)
 		q.mu.tenants[tenantID] = tenant
 	}
 	// If mode == usesCPUTimeTokens, WorkQueue does CPU time token estimation.
@@ -695,10 +700,7 @@ func (q *WorkQueue) Admit(ctx context.Context, info WorkInfo) (AdmitResponse, er
 		info.BypassAdmission = true
 	}
 	if info.BypassAdmission {
-		tenant.used += uint64(info.RequestedCount)
-		if isInTenantHeap(tenant) {
-			q.mu.tenantHeap.fix(tenant)
-		}
+		q.adjustTenantUsedLocked(tenant, info.RequestedCount)
 		q.mu.Unlock()
 		q.granter.tookWithoutPermission(info.RequestedCount)
 		q.metrics.incAdmitted(info.Priority)
@@ -713,17 +715,22 @@ func (q *WorkQueue) Admit(ctx context.Context, info WorkInfo) (AdmitResponse, er
 	// threshold for LIFO queueing based on observed admission latency.
 	tenant.priorityStates.requestAtPriority(info.Priority)
 
-	if len(q.mu.tenantHeap) == 0 && !q.knobs.DisableWorkQueueFastPath {
+	burstQual := tenant.cpuTimeBurstBucket.burstQualification()
+	if (len(q.mu.tenantHeap) == 0 ||
+		// tenant not in heap, so doesn't have waiting requests, and is canBurst, while
+		// the top of the heap was noBurst.
+		(tenant.heapIndex < 0 &&
+			burstQual == canBurst &&
+			q.mu.tenantHeap[0].cpuTimeBurstBucket.burstQualification() == noBurst)) &&
+		!q.knobs.DisableWorkQueueFastPath {
 		// Fast-path. Try to grab token/slot.
 		// Optimistically update used to avoid locking again.
-		tenant.used += uint64(info.RequestedCount)
+		q.adjustTenantUsedLocked(tenant, info.RequestedCount)
 		q.mu.Unlock()
 		// We have unlocked q.mu, so another concurrent request can also do tryGet
 		// and get ahead of this request. We don't need to be fair for such
 		// concurrent requests.
-		//
-		// TODO(sumeer): set a proper burstQualification.
-		if q.granter.tryGet(canBurst /*arbitrary*/, info.RequestedCount) {
+		if q.granter.tryGet(burstQual, info.RequestedCount) {
 			q.metrics.incAdmitted(info.Priority)
 			if info.ReplicatedWorkInfo.Enabled {
 				// TODO(irfansharif): There's a race here, and could lead to
@@ -778,16 +785,10 @@ func (q *WorkQueue) Admit(ctx context.Context, info WorkInfo) (AdmitResponse, er
 		tenant, ok = q.mu.tenants[tenantID]
 		if !ok {
 			tenant = newTenantInfo(tenantID, q.getTenantWeightLocked(tenantID),
-				q.mu.defaultCPUTimeTokenEstimator.estimateTokensToBeUsed())
+				q.mode, q.mu.defaultCPUTimeTokenEstimator.estimateTokensToBeUsed(), q.mu.burstBucketCapacity)
 			q.mu.tenants[tenantID] = tenant
 		}
-		// Don't want to overflow tenant.used if it has decreased because of being
-		// reset to 0 by the GC goroutine.
-		if tenant.used >= uint64(info.RequestedCount) {
-			tenant.used -= uint64(info.RequestedCount)
-		} else {
-			tenant.used = 0
-		}
+		q.adjustTenantUsedLocked(tenant, -info.RequestedCount)
 	}
 
 	// Check for cancellation.
@@ -977,7 +978,10 @@ func (q *WorkQueue) AdmittedWorkDone(resp AdmitResponse, cpuTime time.Duration) 
 		// NB: additionalUsed can be negative here (in case the initial estimate was
 		// too pessimistic).
 		if additionalUsed != 0 {
-			q.adjustTenantUsedLocked(resp.tenantID, additionalUsed)
+			tenant, ok := q.mu.tenants[resp.tenantID.ToUint64()]
+			if ok {
+				q.adjustTenantUsedLocked(tenant, additionalUsed)
+			}
 		}
 
 		// If mode == usesCPUTimeTokens, WorkQueue does CPU time token estimation.
@@ -1028,8 +1032,10 @@ func (q *WorkQueue) AdmittedWorkDone(resp AdmitResponse, cpuTime time.Duration) 
 func (q *WorkQueue) hasWaitingRequests() (bool, burstQualification) {
 	q.mu.Lock()
 	defer q.mu.Unlock()
-	// TODO(sumeer): return a proper burstQualification.
-	return len(q.mu.tenantHeap) > 0, canBurst /*arbitrary*/
+	if len(q.mu.tenantHeap) == 0 {
+		return false, noBurst /*arbitrary*/
+	}
+	return true, q.mu.tenantHeap[0].cpuTimeBurstBucket.burstQualification()
 }
 
 func (q *WorkQueue) granted(grantChainID grantChainID) int64 {
@@ -1053,10 +1059,8 @@ func (q *WorkQueue) granted(grantChainID grantChainID) int64 {
 	}
 	waitDur := now.Sub(item.enqueueingTime)
 	tenant.priorityStates.updateDelayLocked(item.priority, waitDur, false /* canceled */)
-	tenant.used += uint64(item.requestedCount)
-	if isInTenantHeap(tenant) {
-		q.mu.tenantHeap.fix(tenant)
-	} else {
+	q.adjustTenantUsedLocked(tenant, item.requestedCount)
+	if !isInTenantHeap(tenant) {
 		q.mu.tenantHeap.remove(tenant)
 	}
 	// Get the value of requestedCount before releasing the mutex, since after
@@ -1139,30 +1143,54 @@ func (q *WorkQueue) gcTenantsResetUsedAndUpdateEstimators() {
 // in AdmittedWorkDone. The additionalUsed count can be negative, in which
 // case it is returning unused resources. This is only for WorkQueue's own
 // accounting -- it should not call into granter.
-func (q *WorkQueue) adjustTenantUsed(tenantID roachpb.TenantID, additionalUsed int64) {
+func (q *WorkQueue) adjustTenantUsed(tenantID roachpb.TenantID, delta int64) {
 	q.mu.Lock()
 	defer q.mu.Unlock()
-	q.adjustTenantUsedLocked(tenantID, additionalUsed)
-}
-
-func (q *WorkQueue) adjustTenantUsedLocked(tenantID roachpb.TenantID, additionalUsed int64) {
 	tid := tenantID.ToUint64()
 	tenant, ok := q.mu.tenants[tid]
 	if !ok {
 		return
 	}
-	if additionalUsed < 0 {
-		toReturn := uint64(-additionalUsed)
+	q.adjustTenantUsedLocked(tenant, delta)
+}
+
+func (q *WorkQueue) adjustTenantUsedLocked(tenant *tenantInfo, delta int64) {
+	if delta < 0 {
+		toReturn := uint64(-delta)
 		if tenant.used < toReturn {
 			tenant.used = 0
 		} else {
 			tenant.used -= toReturn
 		}
 	} else {
-		tenant.used += uint64(additionalUsed)
+		tenant.used += uint64(delta)
+	}
+	if q.mode == usesCPUTimeTokens {
+		// Burst bucket tracks available budget, so we negate delta: consuming
+		// resources (positive delta to used) depletes the burst bucket.
+		tenant.cpuTimeBurstBucket.adjust(-delta)
 	}
 	if isInTenantHeap(tenant) {
 		q.mu.tenantHeap.fix(tenant)
+	}
+}
+
+// refillBurstBuckets adds tokens to all tenant burst buckets and updates
+// their capacity. This is called by cpuTimeTokenAllocator periodically (every
+// 1ms). If a tenant's burst qualification changes as a result of the refill,
+// the tenant's position in the tenantHeap is updated to maintain correct
+// priority ordering.
+func (q *WorkQueue) refillBurstBuckets(toAdd int64, capacity int64) {
+	q.mu.Lock()
+	defer q.mu.Unlock()
+	q.mu.burstBucketCapacity = capacity
+	for _, tenant := range q.mu.tenants {
+		prevBurstQual := tenant.cpuTimeBurstBucket.burstQualification()
+		tenant.cpuTimeBurstBucket.refill(toAdd, capacity)
+		curBurstQual := tenant.cpuTimeBurstBucket.burstQualification()
+		if prevBurstQual != curBurstQual && isInTenantHeap(tenant) {
+			q.mu.tenantHeap.fix(tenant)
+		}
 	}
 }
 
@@ -1217,6 +1245,16 @@ func (q *WorkQueue) SafeFormat(s redact.SafePrinter, _ rune) {
 					sortedOpenEpochsHeap[i].epoch,
 					sortedOpenEpochsHeap[i].enqueueingTime.UnixNano()/int64(time.Millisecond))
 			}
+		}
+	}
+	if q.mode == usesCPUTimeTokens && len(ids) > 0 {
+		s.Printf("\nburst-buckets: ")
+		for i, id := range ids {
+			if i > 0 {
+				s.Printf(" ")
+			}
+			tenant := q.mu.tenants[id]
+			s.Printf("t%d=%s", id, &tenant.cpuTimeBurstBucket)
 		}
 	}
 }
@@ -1535,6 +1573,11 @@ type tenantInfo struct {
 	// If mode == usesCPUTimeTokens, WorkQueue does CPU time token estimation.
 	// See the code in Admit that calls estimateTokensToBeUsed for more on this.
 	cpuTimeTokenEstimator cpuTimeTokenEstimator
+
+	// cpuTimeBurstBucket tracks whether this tenant qualifies for burst
+	// priority. Only used if mode == usesCPUTimeTokens. See
+	// cpu_time_token_burst.go for more.
+	cpuTimeBurstBucket cpuTimeBurstBucket
 }
 
 // tenantHeap is a heap of tenants with waiting work, ordered in increasing
@@ -1550,10 +1593,14 @@ var tenantInfoPool = sync.Pool{
 	},
 }
 
-func newTenantInfo(id uint64, weight uint32, cpuTimeTokenEstimate int64) *tenantInfo {
+func newTenantInfo(
+	id uint64,
+	weight uint32,
+	mode workQueueMode,
+	cpuTimeTokenEstimate int64,
+	burstBucketCapacity int64,
+) *tenantInfo {
 	ti := tenantInfoPool.Get().(*tenantInfo)
-	tokenEstimator := cpuTimeTokenEstimator{}
-	tokenEstimator.init(cpuTimeTokenEstimate)
 	*ti = tenantInfo{
 		id:                    id,
 		weight:                weight,
@@ -1562,9 +1609,14 @@ func newTenantInfo(id uint64, weight uint32, cpuTimeTokenEstimate int64) *tenant
 		priorityStates:        makePriorityStates(ti.priorityStates.ps),
 		fifoPriorityThreshold: int(admissionpb.LowPri),
 		heapIndex:             -1,
-		// This is only used if mode == usesCPUTimeTokens.
-		cpuTimeTokenEstimator: tokenEstimator,
 	}
+	// This is only used if mode == usesCPUTimeTokens.
+	ti.cpuTimeTokenEstimator.init(cpuTimeTokenEstimate)
+	// If mode != usesCPUTimeTokens, cpuTimeBurstBucket.burstQualification
+	// always returns noBurst. This effectively disables the
+	// burstQualification functionality.
+	ti.cpuTimeBurstBucket.init(
+		burstBucketCapacity, mode != usesCPUTimeTokens /* disable */)
 	return ti
 }
 
@@ -1602,9 +1654,29 @@ func (th *tenantHeap) Len() int {
 }
 
 func (th *tenantHeap) Less(i, j int) bool {
-	// For tenant fairness, use used_i/weight_i < used_j/weight_j to determine
-	// order. In case of a tie, prioritize items with higher weight, and then
-	// items with lower tenant id.
+	// First, order by burstQualification: canBurst tenants come before
+	// noBurst tenants. canBurst tenants have access to more CPU time
+	// than noBurst -- see cpu_time_token_granter.go for details -- so
+	// it is important that work from a canBurst tenant always sorts
+	// before work from a noBurst tenant -- else available capacity is
+	// left on the table.
+	iBurstQual := (*th)[i].cpuTimeBurstBucket.burstQualification()
+	jBurstQual := (*th)[j].cpuTimeBurstBucket.burstQualification()
+	if iBurstQual != jBurstQual {
+		return iBurstQual < jBurstQual
+	}
+	// Beyond burstQualification (which is only enabled on CPU time token
+	// AC today), for tenant fairness, we use used_i/weight_i <
+	// used_j/weight_j to determine order. In case of a tie, prioritize
+	// items with higher weight, and then items with lower tenant id.
+	//
+	// A reader may wonder if sorting on just used has the same effect
+	// as sorting on burstQualification first and used second. It is indeed
+	// similar, but it is not the same -- for example, used is reset every
+	// 1s, thus right after a reset it can fall out of sync with
+	// cpuTimeBurstBucket's burstQualification method. The source of truth
+	// for whether a tenant can burst is cpuTimeBurstBucket's
+	// burstQualification method, so we must call it here.
 	if (*th)[i].used*uint64((*th)[j].weight) == (*th)[j].used*uint64((*th)[i].weight) {
 		if (*th)[i].weight == (*th)[j].weight {
 			return (*th)[i].id < (*th)[j].id
