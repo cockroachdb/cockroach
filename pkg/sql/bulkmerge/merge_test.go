@@ -15,7 +15,6 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/ccl/storageccl"
 	"github.com/cockroachdb/cockroach/pkg/cloud"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
@@ -430,7 +429,7 @@ func verifySSTs(
 			UpperBound: sst.EndKey,
 		}
 
-		iter, err := storageccl.ExternalSSTReader(ctx, []storageccl.StoreFile{file}, nil, iterOpts)
+		iter, err := storage.ExternalSSTReader(ctx, []storage.StoreFile{file}, nil, iterOpts)
 		require.NoError(t, err)
 		defer iter.Close()
 
@@ -611,7 +610,7 @@ func TestMergeSSTsSplitsAtRowBoundaries(t *testing.T) {
 			UpperBound: sst.EndKey,
 		}
 
-		iter, err := storageccl.ExternalSSTReader(ctx, []storageccl.StoreFile{file}, nil, iterOpts)
+		iter, err := storage.ExternalSSTReader(ctx, []storage.StoreFile{file}, nil, iterOpts)
 		require.NoError(t, err)
 		defer iter.Close()
 

@@ -3,7 +3,7 @@
 // Use of this software is governed by the CockroachDB Software License
 // included in the /LICENSE file.
 
-package storageccl
+package storage
 
 import (
 	"bytes"
@@ -50,9 +50,9 @@ const encryptionVersion = 2
 // minimize overhead while still while still limiting the size of buffers and
 // allowing seeks to mid-file.
 var encryptionChunkSizeV2 = 64 << 10 // 64kb
-const nonceSize = 12                 // GCM standard nonce
-const headerSize = 7 + 1 + nonceSize // preamble + version + iv
-const tagSize = 16                   // GCM standard tag
+const nonceSize = 12                    // GCM standard nonce
+const headerSize = 7 + 1 + nonceSize   // preamble + version + iv
+const encryptionTagSize = 16           // GCM standard tag
 
 // GenerateSalt generates a 16 byte random salt.
 func GenerateSalt() ([]byte, error) {
@@ -143,7 +143,7 @@ func EncryptingWriter(ciphertext objstorage.Writable, key []byte) (objstorage.Wr
 		return nil, err
 	}
 
-	return &encWriter{gcm: gcm, iv: iv, ciphertext: ciphertext, buf: make([]byte, encryptionChunkSizeV2+tagSize)}, nil
+	return &encWriter{gcm: gcm, iv: iv, ciphertext: ciphertext, buf: make([]byte, encryptionChunkSizeV2+encryptionTagSize)}, nil
 }
 
 func (e *encWriter) StartMetadataPortion() error {
@@ -248,7 +248,7 @@ func decryptingReader(ciphertext readerAndReaderAt, key []byte) (objstorage.Read
 	}
 	iv := header[len(encryptionPreamble)+1:]
 
-	buf := make([]byte, nonceSize, encryptionChunkSizeV2+tagSize+nonceSize)
+	buf := make([]byte, nonceSize, encryptionChunkSizeV2+encryptionTagSize+nonceSize)
 	ivScratch := buf[:nonceSize]
 	buf = buf[nonceSize:]
 	r := &decryptReader{g: gcm, fileIV: iv, ivScratch: ivScratch, ciphertext: ciphertext, buf: buf, chunk: -1}
@@ -262,7 +262,7 @@ func (r *decryptReader) fill(chunk int64) error {
 	}
 
 	r.chunk = -1 // invalidate the current buffered chunk while we fill it.
-	ciphertextChunkSize := int64(encryptionChunkSizeV2) + tagSize
+	ciphertextChunkSize := int64(encryptionChunkSizeV2) + encryptionTagSize
 	// Load the region of ciphertext that corresponds to chunk.
 	n, err := r.ciphertext.ReadAt(r.buf[:cap(r.buf)], headerSize+chunk*ciphertextChunkSize)
 	if err != nil && err != io.EOF {
@@ -362,7 +362,7 @@ func (r *decryptReader) Stat() (vfs.FileInfo, error) {
 	}
 
 	size -= headerSize
-	size -= tagSize * ((size / (int64(encryptionChunkSizeV2) + tagSize)) + 1)
+	size -= encryptionTagSize * ((size / (int64(encryptionChunkSizeV2) + encryptionTagSize)) + 1)
 	return sizeStat(size), nil
 }
 

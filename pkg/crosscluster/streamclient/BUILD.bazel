@@ -60,7 +60,6 @@ go_test(
     deps = [
         "//pkg/base",
         "//pkg/ccl",
-        "//pkg/ccl/storageccl",
         "//pkg/crosscluster",
         "//pkg/crosscluster/replicationtestutils",
         "//pkg/jobs",

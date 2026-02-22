@@ -10,7 +10,6 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/ccl/storageccl"
 	"github.com/cockroachdb/cockroach/pkg/cloud/nodelocal"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/bulk"
@@ -471,7 +470,7 @@ func (m *bulkMergeProcessor) createIter(ctx context.Context) (storage.SimpleMVCC
 func (m *bulkMergeProcessor) createStandardIter(
 	ctx context.Context, iterOpts storage.IterOptions,
 ) (storage.SimpleMVCCIterator, error) {
-	var storeFiles []storageccl.StoreFile
+	var storeFiles []storage.StoreFile
 	for _, sst := range m.spec.SSTs {
 		file, err := m.storageMux.StoreFile(ctx, sst.URI)
 		if err != nil {
@@ -479,7 +478,7 @@ func (m *bulkMergeProcessor) createStandardIter(
 		}
 		storeFiles = append(storeFiles, file)
 	}
-	return storageccl.ExternalSSTReader(ctx, storeFiles, nil, iterOpts)
+	return storage.ExternalSSTReader(ctx, storeFiles, nil, iterOpts)
 }
 
 // createSuffixedIter creates individual iterators for each SST, wraps them
@@ -505,8 +504,8 @@ func (m *bulkMergeProcessor) createSuffixedIter(
 		}
 
 		// Create iterator for single SST.
-		baseIter, err := storageccl.ExternalSSTReader(
-			ctx, []storageccl.StoreFile{file}, nil, iterOpts,
+		baseIter, err := storage.ExternalSSTReader(
+			ctx, []storage.StoreFile{file}, nil, iterOpts,
 		)
 		if err != nil {
 			cleanup()
@@ -568,7 +567,7 @@ func (m *bulkMergeProcessor) createIterLocalOnly(
 		return m.createSuffixedIter(ctx, localSSTs, iterOpts)
 	}
 
-	var storeFiles []storageccl.StoreFile
+	var storeFiles []storage.StoreFile
 	for _, sst := range localSSTs {
 		file, err := m.storageMux.StoreFile(ctx, sst.URI)
 		if err != nil {
@@ -576,7 +575,7 @@ func (m *bulkMergeProcessor) createIterLocalOnly(
 		}
 		storeFiles = append(storeFiles, file)
 	}
-	return storageccl.ExternalSSTReader(ctx, storeFiles, nil, iterOpts)
+	return storage.ExternalSSTReader(ctx, storeFiles, nil, iterOpts)
 }
 
 // containsKey returns true if the given key is within the mergeSpan.

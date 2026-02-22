@@ -22,7 +22,6 @@ go_library(
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/base",
-        "//pkg/ccl/storageccl",
         "//pkg/cloud/cloudpb",
         "//pkg/cloud/nodelocal",
         "//pkg/jobs",
@@ -67,7 +66,6 @@ go_test(
     embed = [":bulkmerge"],
     deps = [
         "//pkg/base",
-        "//pkg/ccl/storageccl",
         "//pkg/cloud",
         "//pkg/cloud/externalconn/providers",
         "//pkg/jobs",

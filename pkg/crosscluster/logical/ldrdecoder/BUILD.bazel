@@ -43,7 +43,6 @@ go_test(
     deps = [
         "//pkg/base",
         "//pkg/ccl/changefeedccl/cdctest",
-        "//pkg/ccl/storageccl",
         "//pkg/jobs/jobspb",
         "//pkg/repstream/streampb",
         "//pkg/security/securityassets",

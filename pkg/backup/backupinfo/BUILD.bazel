@@ -17,7 +17,6 @@ go_library(
         "//pkg/backup/backupencryption",
         "//pkg/backup/backuppb",
         "//pkg/backup/backuputils",
-        "//pkg/ccl/storageccl",
         "//pkg/cloud",
         "//pkg/cloud/cloudpb",
         "//pkg/clusterversion",

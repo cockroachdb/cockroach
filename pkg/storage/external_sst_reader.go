@@ -3,7 +3,7 @@
 // Use of this software is governed by the CockroachDB Software License
 // included in the /LICENSE file.
 
-package storageccl
+package storage
 
 import (
 	"context"
@@ -15,7 +15,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cloud"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
-	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util/ioctx"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
@@ -73,8 +72,8 @@ func newMemPebbleSSTReader(
 	ctx context.Context,
 	storeFiles []StoreFile,
 	encryption *kvpb.FileEncryptionOptions,
-	iterOps storage.IterOptions,
-) (storage.SimpleMVCCIterator, error) {
+	iterOps IterOptions,
+) (SimpleMVCCIterator, error) {
 
 	inMemorySSTs := make([][]byte, 0, len(storeFiles))
 	memAcc := mon.NewStandaloneUnlimitedAccount()
@@ -97,7 +96,7 @@ func newMemPebbleSSTReader(
 		}
 		inMemorySSTs = append(inMemorySSTs, content)
 	}
-	return storage.NewMultiMemSSTIterator(inMemorySSTs, false, iterOps)
+	return NewMultiMemSSTIterator(inMemorySSTs, false, iterOps)
 }
 
 // ExternalSSTReader returns a PebbleSSTIterator for the SSTs in external storage,
@@ -113,8 +112,8 @@ func ExternalSSTReader(
 	ctx context.Context,
 	storeFiles []StoreFile,
 	encryption *kvpb.FileEncryptionOptions,
-	iterOpts storage.IterOptions,
-) (storage.SimpleMVCCIterator, error) {
+	iterOpts IterOptions,
+) (SimpleMVCCIterator, error) {
 	// TODO(jackson): Change the interface to accept a two-dimensional
 	// [][]StoreFiles slice, and propagate that structure to
 	// NewSSTIterator.
@@ -176,7 +175,7 @@ func ExternalSSTReader(
 
 	readerLevels := openedReadersByLevel
 	openedReadersByLevel = nil
-	return storage.NewSSTIterator(readerLevels, iterOpts)
+	return NewSSTIterator(readerLevels, iterOpts)
 }
 
 type sstReader struct {

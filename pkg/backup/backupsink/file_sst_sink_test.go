@@ -15,7 +15,6 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/backup/backuppb"
-	"github.com/cockroachdb/cockroach/pkg/ccl/storageccl"
 	"github.com/cockroachdb/cockroach/pkg/cloud"
 	"github.com/cockroachdb/cockroach/pkg/cloud/cloudpb"
 	"github.com/cockroachdb/cockroach/pkg/cloud/nodelocal"
@@ -1136,7 +1135,7 @@ func checkFiles(
 	// Also check that all keys within the flushed files fall within the
 	// manifest file metadata spans that point to the file.
 	for f, spans := range filePathToSpans {
-		iter, err := storageccl.ExternalSSTReader(ctx, []storageccl.StoreFile{{Store: store, FilePath: f}}, nil, iterOpts)
+		iter, err := storage.ExternalSSTReader(ctx, []storage.StoreFile{{Store: store, FilePath: f}}, nil, iterOpts)
 		if err != nil {
 			return err
 		}

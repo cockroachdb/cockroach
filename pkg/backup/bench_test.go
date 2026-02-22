@@ -14,7 +14,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/backup/backupencryption"
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/blobs"
-	"github.com/cockroachdb/cockroach/pkg/ccl/storageccl"
 	"github.com/cockroachdb/cockroach/pkg/cloud"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -74,7 +73,7 @@ func BenchmarkIteratorMemory(b *testing.B) {
 			return nil, err
 		}
 
-		return storageccl.EncryptingWriter(w, key)
+		return storage.EncryptingWriter(w, key)
 	}
 
 	getRandomPayload := func(buf []byte) {
@@ -160,7 +159,7 @@ func BenchmarkIteratorMemory(b *testing.B) {
 							require.NoError(b, err)
 
 							log.Dev.Infof(ctx, "Benchmarking using file of size %s", humanizeutil.IBytes(sz))
-							fileStores := make([]storageccl.StoreFile, fileCount)
+							fileStores := make([]storage.StoreFile, fileCount)
 							for i := 0; i < fileCount; i++ {
 								fileStores[i].Store = store
 								fileStores[i].FilePath = filename
@@ -194,7 +193,7 @@ func BenchmarkIteratorMemory(b *testing.B) {
 							b.ResetTimer()
 
 							for j := 0; j < iterCount; j++ {
-								iter, err := storageccl.ExternalSSTReader(ctx, fileStores, encOpts, iterOpts)
+								iter, err := storage.ExternalSSTReader(ctx, fileStores, encOpts, iterOpts)
 								require.NoError(b, err)
 
 								iters[j] = iter

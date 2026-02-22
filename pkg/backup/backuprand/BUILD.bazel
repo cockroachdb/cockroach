@@ -11,7 +11,6 @@ go_test(
         "//pkg/backup/backuptestutils",
         "//pkg/base",
         "//pkg/ccl",
-        "//pkg/ccl/storageccl",
         "//pkg/cloud/nodelocal",
         "//pkg/internal/sqlsmith",
         "//pkg/jobs/jobspb",

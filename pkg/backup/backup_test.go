@@ -42,7 +42,6 @@ import (
 	_ "github.com/cockroachdb/cockroach/pkg/ccl/multiregionccl"
 	_ "github.com/cockroachdb/cockroach/pkg/ccl/multitenantccl"
 	_ "github.com/cockroachdb/cockroach/pkg/ccl/partitionccl"
-	"github.com/cockroachdb/cockroach/pkg/ccl/storageccl"
 	"github.com/cockroachdb/cockroach/pkg/cloud"
 	"github.com/cockroachdb/cockroach/pkg/cloud/amazon"
 	"github.com/cockroachdb/cockroach/pkg/cloud/azure"
@@ -95,6 +94,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/admission"
 	"github.com/cockroachdb/cockroach/pkg/util/besteffort"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
+	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/ioctx"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -4197,9 +4197,9 @@ func checkBackupStatsEncrypted(t *testing.T, rawDir string) {
 				return err
 			}
 			if strings.Contains(fName, "foo/cleartext") {
-				assert.False(t, storageccl.AppearsEncrypted(statsBytes))
+				assert.False(t, storage.AppearsEncrypted(statsBytes))
 			} else {
-				assert.True(t, storageccl.AppearsEncrypted(statsBytes))
+				assert.True(t, storage.AppearsEncrypted(statsBytes))
 			}
 		}
 		return nil
@@ -8337,7 +8337,7 @@ func TestReadBackupManifestMemoryMonitoring(t *testing.T) {
 	defer dirCleanupFn()
 
 	st := cluster.MakeTestingClusterSettings()
-	storage, err := cloud.ExternalStorageFromURI(ctx,
+	extStore, err := cloud.ExternalStorageFromURI(ctx,
 		"nodelocal://1/test",
 		base.ExternalIODirConfig{},
 		st,
@@ -8357,7 +8357,7 @@ func TestReadBackupManifestMemoryMonitoring(t *testing.T) {
 	mem := m.MakeBoundAccount()
 	encOpts := &jobspb.BackupEncryptionOptions{
 		Mode: jobspb.EncryptionMode_Passphrase,
-		Key:  storageccl.GenerateKey([]byte("passphrase"), []byte("sodium")),
+		Key:  storage.GenerateKey([]byte("passphrase"), []byte("sodium")),
 	}
 	desc := &backuppb.BackupManifest{}
 	magic := 5500
@@ -8370,9 +8370,9 @@ func TestReadBackupManifestMemoryMonitoring(t *testing.T) {
 		db:               nil,
 		user:             username.RootUserName(),
 	}
-	require.NoError(t, backupinfo.WriteBackupManifest(ctx, storage, "testmanifest", encOpts,
+	require.NoError(t, backupinfo.WriteBackupManifest(ctx, extStore, "testmanifest", encOpts,
 		&kmsEnv, desc))
-	_, sz, err := backupinfo.ReadBackupManifest(ctx, &mem, storage, "testmanifest",
+	_, sz, err := backupinfo.ReadBackupManifest(ctx, &mem, extStore, "testmanifest",
 		encOpts, &kmsEnv)
 	require.NoError(t, err)
 	mem.Shrink(ctx, sz)
