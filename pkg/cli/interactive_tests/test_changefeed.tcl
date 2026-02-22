@@ -16,12 +16,6 @@ eexpect "CREATE"
 eexpect "INSERT"
 eexpect root@
 send "create changefeed for target with diff;\r"
-eexpect "ERROR: rangefeeds require the kv.rangefeed.enabled setting"
-eexpect root@
-send "SET CLUSTER SETTING kv.rangefeed.enabled=true;\r"
-eexpect "SET"
-eexpect root@
-send "create changefeed for target with diff;\r"
 eexpect "target"
 eexpect "before"
 interrupt

@@ -687,7 +687,6 @@ func setDemoContextDefaults() {
 	demoCtx.WorkloadMaxQPS = 25
 	demoCtx.Multitenant = clusterversion.DevelopmentBranch
 	demoCtx.DisableServerController = false
-	demoCtx.DefaultEnableRangefeeds = true
 
 	demoCtx.pidFile = ""
 	demoCtx.disableEnterpriseFeatures = false

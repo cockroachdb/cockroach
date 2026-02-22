@@ -941,7 +941,6 @@ func init() {
 		cliflagcfg.BoolFlag(f, &demoCtx.Insecure, cliflags.ClientInsecure)
 
 		cliflagcfg.BoolFlag(f, &demoCtx.disableEnterpriseFeatures, cliflags.DemoNoLicense)
-		cliflagcfg.BoolFlag(f, &demoCtx.DefaultEnableRangefeeds, cliflags.DemoEnableRangefeeds)
 
 		cliflagcfg.BoolFlag(f, &demoCtx.Multitenant, cliflags.DemoMultitenant)
 		cliflagcfg.BoolFlag(f, &demoCtx.DisableServerController, cliflags.DemoDisableServerController)
