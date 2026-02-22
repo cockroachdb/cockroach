@@ -61,6 +61,91 @@ func TestShowChangefeedJobsDatabaseLevel(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
+	testFnFilter := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
+		t.Run("with include and exclude filters", func(t *testing.T) {
+			sqlDB := sqlutils.MakeSQLRunner(s.DB)
+			sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY, b STRING)`)
+			sqlDB.Exec(t, `INSERT INTO foo VALUES (0, 'initial')`)
+			sqlDB.Exec(t, `CREATE TABLE bar (a INT PRIMARY KEY, b STRING)`)
+			sqlDB.Exec(t, `INSERT INTO bar VALUES (1, 'initial')`)
+			icf := feed(t, f, `CREATE CHANGEFEED FOR DATABASE d INCLUDE TABLES foo`)
+			ecf := feed(t, f, `CREATE CHANGEFEED FOR DATABASE d EXCLUDE TABLES bar`)
+			defer closeFeed(t, icf)
+			defer closeFeed(t, ecf)
+			assertPayloads(t, icf, []string{
+				`foo: [0]->{"after": {"a": 0, "b": "initial"}}`,
+			})
+			waitForJobState(sqlDB, t, icf.(cdctest.EnterpriseTestFeed).JobID(), jobs.StateRunning)
+			rowResults := sqlDB.Query(t, `select job_id, full_table_names from [SHOW CHANGEFEED JOBS WITH WATCHED_TABLES]`)
+			for rowResults.Next() {
+				err := rowResults.Err()
+				if err != nil {
+					t.Fatal(err)
+				}
+				var jobID jobspb.JobID
+				var fullTableNames []uint8
+				err = rowResults.Scan(&jobID, &fullTableNames)
+				if err != nil {
+					t.Fatal(err)
+				}
+				if jobID == icf.(cdctest.EnterpriseTestFeed).JobID() || jobID == ecf.(cdctest.EnterpriseTestFeed).JobID() {
+					require.Equal(t, "{d.public.foo}", string(fullTableNames))
+				} else {
+					t.Fatalf("Unexpected job ID: %d", jobID)
+				}
+			}
+		})
+	}
+	cdcTest(t, testFnFilter, feedTestEnterpriseSinks)
+
+	testFnFilterMany := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
+		t.Run("with many tables and filters", func(t *testing.T) {
+			sqlDB := sqlutils.MakeSQLRunner(s.DB)
+			for i := 1; i <= 500; i++ {
+				sqlDB.Exec(t, fmt.Sprintf(`CREATE TABLE foo%d (a INT PRIMARY KEY, b STRING)`, i))
+				sqlDB.Exec(t, fmt.Sprintf(`INSERT INTO foo%d VALUES (0, 'initial')`, i))
+			}
+			includeTableNames := make([]string, 250)
+			for i := 1; i <= 250; i++ {
+				includeTableNames[i-1] = fmt.Sprintf("foo%d", i)
+			}
+			includeTableNamesStr := strings.Join(includeTableNames, ", ")
+			excludeTableNames := make([]string, 250)
+			for i := 251; i <= 500; i++ {
+				excludeTableNames[i-251] = fmt.Sprintf("foo%d", i)
+			}
+			excludeTableNamesStr := strings.Join(excludeTableNames, ", ")
+			expectedTableNames := make([]string, 250)
+			for i := 1; i <= 250; i++ {
+				expectedTableNames[i-1] = fmt.Sprintf("d.public.foo%d", i)
+			}
+			expectedTableNamesStr := "{" + strings.Join(expectedTableNames, ",") + "}"
+			icf := feed(t, f, fmt.Sprintf(`CREATE CHANGEFEED FOR DATABASE d INCLUDE TABLES %s`, includeTableNamesStr))
+			ecf := feed(t, f, fmt.Sprintf(`CREATE CHANGEFEED FOR DATABASE d EXCLUDE TABLES %s`, excludeTableNamesStr))
+			defer closeFeed(t, icf)
+			defer closeFeed(t, ecf)
+			rowResults := sqlDB.Query(t, `select job_id, full_table_names from [SHOW CHANGEFEED JOBS WITH WATCHED_TABLES]`)
+			for rowResults.Next() {
+				err := rowResults.Err()
+				if err != nil {
+					t.Fatal(err)
+				}
+				var jobID jobspb.JobID
+				var fullTableNames []uint8
+				err = rowResults.Scan(&jobID, &fullTableNames)
+				if err != nil {
+					t.Fatal(err)
+				}
+				if jobID == icf.(cdctest.EnterpriseTestFeed).JobID() || jobID == ecf.(cdctest.EnterpriseTestFeed).JobID() {
+					require.Equal(t, expectedTableNamesStr, string(fullTableNames))
+				} else {
+					t.Fatalf("Unexpected job ID: %d", jobID)
+				}
+			}
+		})
+	}
+	cdcTest(t, testFnFilterMany, feedTestEnterpriseSinks)
+
 	testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
 		sqlDB := sqlutils.MakeSQLRunner(s.DB)
 		sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY, b STRING)`)
