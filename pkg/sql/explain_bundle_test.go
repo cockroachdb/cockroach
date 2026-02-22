@@ -1178,6 +1178,43 @@ CREATE TABLE users(id UUID DEFAULT gen_random_uuid() PRIMARY KEY, promo_id INT R
 		)
 	})
 
+	t.Run("schema for udt", func(t *testing.T) {
+		r.Exec(t, "CREATE SCHEMA schema_1")
+		r.Exec(t, "CREATE TYPE schema_1.test_type1 AS ENUM ('hello','world')")
+		r.Exec(t, "CREATE TABLE udt_schema_t (x INT PRIMARY KEY, y schema_1.test_type1)")
+		rows := r.QueryStr(t, "EXPLAIN ANALYZE (DEBUG) SELECT * FROM udt_schema_t")
+		checkBundle(
+			t, fmt.Sprint(rows), "udt_schema_t", func(name, contents string) error {
+				if name == "schema.sql" {
+					reg := regexp.MustCompile("CREATE SCHEMA IF NOT EXISTS schema_1")
+					if reg.FindString(contents) == "" {
+						return errors.Errorf("could not find CREATE SCHEMA for 'schema_1' type in schema.sql")
+					}
+				}
+				return nil
+			}, false, /* expectErrors */
+			base, plans, "distsql.html vec.txt vec-v.txt stats-defaultdb.public.udt_schema_t.sql",
+		)
+	})
+
+	t.Run("schema for udf", func(t *testing.T) {
+		r.Exec(t, "CREATE SCHEMA schema_2")
+		r.Exec(t, "CREATE FUNCTION schema_2.r1() RETURNS INT LANGUAGE SQL AS 'SELECT 1'")
+		rows := r.QueryStr(t, "EXPLAIN ANALYZE (DEBUG) SELECT schema_2.r1()")
+		checkBundle(
+			t, fmt.Sprint(rows), "t", func(name, contents string) error {
+				if name == "schema.sql" {
+					reg := regexp.MustCompile("CREATE SCHEMA IF NOT EXISTS schema_2")
+					if reg.FindString(contents) == "" {
+						return errors.Errorf("could not find CREATE SCHEMA for 'schema_2' type in schema.sql")
+					}
+				}
+				return nil
+			}, false, /* expectErrors */
+			base, plans, "distsql.html vec.txt vec-v.txt",
+		)
+	})
+
 	// TODO(yuzefovich): figure out why this test occasionally fails under
 	// stress (i.e. it seems that no bundle is collected altogether).
 	//t.Run("under different users", func(t *testing.T) {
