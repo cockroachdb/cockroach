@@ -918,13 +918,13 @@ EXPLAIN (VERBOSE) SELECT * FROM t WITH ORDINALITY LIMIT 1 OFFSET 1
 distribution: local
 vectorized: true
 ·
-• limit
+• ordinality
 │ columns: (k, v, "ordinality")
-│ offset: 1
+│ estimated row count: 1 (missing stats)
 │
-└── • ordinality
-    │ columns: (k, v, "ordinality")
-    │ estimated row count: 2 (missing stats)
+└── • limit
+    │ columns: (k, v)
+    │ offset: 1
     │
     └── • scan
           columns: (k, v)

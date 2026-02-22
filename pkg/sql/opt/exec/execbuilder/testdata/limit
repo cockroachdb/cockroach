@@ -143,30 +143,34 @@ vectorized: true
 • project
 │ columns: (sum)
 │
-└── • project
+└── • sort
     │ columns: (any_not_null, sum)
-    │ ordering: -any_not_null
+    │ estimated row count: 10 (missing stats)
+    │ order: -any_not_null
     │
-    └── • top-k
-        │ columns: (k, sum, any_not_null)
-        │ estimated row count: 10 (missing stats)
-        │ order: -any_not_null
-        │ k: 10
+    └── • project
+        │ columns: (any_not_null, sum)
         │
-        └── • group (streaming)
+        └── • group (hash)
             │ columns: (k, sum, any_not_null)
-            │ estimated row count: 1,000 (missing stats)
+            │ estimated row count: 10 (missing stats)
             │ aggregate 0: sum(w)
             │ aggregate 1: any_not_null(v)
             │ group by: k
-            │ ordered: +k
             │
-            └── • scan
-                  columns: (k, v, w)
-                  ordering: +k
-                  estimated row count: 1,000 (missing stats)
-                  table: t@t_pkey
-                  spans: FULL SCAN
+            └── • index join
+                │ columns: (k, v, w)
+                │ estimated row count: 10 (missing stats)
+                │ table: t@t_pkey
+                │ key columns: k
+                │ parallel
+                │
+                └── • revscan
+                      columns: (k, v)
+                      estimated row count: 10 (missing stats)
+                      table: t@t_v_idx
+                      spans: LIMITED SCAN
+                      limit: 10
 
 query T
 EXPLAIN (VERBOSE) SELECT k FROM (SELECT k, v FROM t ORDER BY v LIMIT 4)
