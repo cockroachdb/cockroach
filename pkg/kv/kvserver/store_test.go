@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/allocatorimpl"
 	aload "github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/load"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/storepool"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/node_rac2"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
@@ -1627,12 +1628,18 @@ func TestStoreResolveWriteIntentNoTxn(t *testing.T) {
 		t.Errorf("expected pushee to be aborted; got %s", txn.Status)
 	}
 
-	// Verify that the pushee's timestamp was moved forward on
-	// former read, since we have it available in lock conflict error.
-	minExpTS := getTS
-	minExpTS.Logical++
-	if txn.WriteTimestamp.Less(minExpTS) {
-		t.Errorf("expected pushee timestamp pushed to %s; got %s", minExpTS, txn.WriteTimestamp)
+	// Verify that the pushee's timestamp was moved forward on the former read.
+	// With physical intent resolution, the pushed timestamp propagates through
+	// the resolved intent's TxnMeta to the subsequent PUSH_ABORT. With virtual
+	// intent resolution, the engine intent stays at the original timestamp, so
+	// the PUSH_ABORT never observes the higher timestamp (the timestamp cache
+	// still prevents the pushee from committing below getTS+1).
+	if !concurrency.VirtualIntentResolution.Get(&store.cfg.Settings.SV) {
+		minExpTS := getTS
+		minExpTS.Logical++
+		if txn.WriteTimestamp.Less(minExpTS) {
+			t.Errorf("expected pushee timestamp pushed to %s; got %s", minExpTS, txn.WriteTimestamp)
+		}
 	}
 	// Similarly, verify that pushee's priority was moved from 0
 	// to MaxTxnPriority-1 during push.
@@ -1651,6 +1658,67 @@ func TestStoreResolveWriteIntentNoTxn(t *testing.T) {
 	if _, ok := pErr.GetDetail().(*kvpb.TransactionAbortedError); !ok {
 		t.Errorf("expected transaction aborted error; got %s", pErr)
 	}
+}
+
+// TestNonTxnReadUncertaintyIntentResolution verifies that when a
+// non-transactional read pushes a PENDING transaction's timestamp and resolves
+// its intents, the ClockWhilePending field is correctly propagated on the
+// LockUpdate. Without this, the resolved intent's local timestamp would not be
+// forwarded, causing an infinite ReadWithinUncertaintyIntervalError server-side
+// retry loop (and a timeout).
+func TestNonTxnReadUncertaintyIntentResolution(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	ctx := context.Background()
+	stopper := stop.NewStopper()
+	defer stopper.Stop(ctx)
+
+	// Use a non-zero max offset so that non-transactional requests with a
+	// server-assigned timestamp get an uncertainty interval. Without this, pushed
+	// values fall outside the global uncertainty limit and can never trigger
+	// ReadWithinUncertaintyIntervalError.
+	manual := timeutil.NewManualTime(timeutil.Unix(0, 123))
+	clock := hlc.NewClock(manual, 500*time.Millisecond, 500*time.Millisecond, hlc.PanicLogger)
+	cfg := TestStoreConfig(clock)
+	store := createTestStoreWithConfig(ctx, t, stopper, testStoreOpts{createSystemRanges: true}, &cfg)
+
+	keyA := roachpb.Key("a")
+	keyB := roachpb.Key("b")
+	pushee := newTransaction("test", keyA, 1, store.cfg.Clock)
+
+	// Write intents on both keys.
+	putA := putArgs(keyA, []byte("valueA"))
+	putB := putArgs(keyB, []byte("valueB"))
+	assignSeqNumsForReqs(pushee, &putA, &putB)
+	ba := &kvpb.BatchRequest{}
+	ba.Header = kvpb.Header{Txn: pushee}
+	ba.Add(&putA, &putB)
+	if _, pErr := store.TestSender().Send(ctx, ba); pErr != nil {
+		t.Fatal(pErr)
+	}
+
+	rwuieBefore := store.Metrics().ReadWithinUncertaintyIntervalErrorServerSideRetrySuccess.Count()
+
+	// Scan both keys outside a transaction with high priority. We omit the
+	// Timestamp field so the server allocates one and sets
+	// TimestampFromServerClock, which enables the uncertainty interval for this
+	// non-transactional request.
+	//
+	// The scan pushes the pushee and resolves both intents: the first via
+	// pushLockTxn (with ClockWhilePending), the second via the lock table's
+	// deferred resolution path during the re-scan. If ClockWhilePending is
+	// missing on the intent resolutions, the scan enters an infinite RWUIE
+	// retry loop and times out.
+	sArgs := scanArgs(keyA, keyB.Next())
+	_, pErr := kv.SendWrappedWith(
+		ctx, store.TestSender(), kvpb.Header{UserPriority: roachpb.MaxUserPriority}, sArgs,
+	)
+	require.NoError(t, pErr.GoError())
+
+	// With ClockWhilePending correctly set on deferred resolutions, no RWUIE
+	// retries should occur.
+	rwuieAfter := store.Metrics().ReadWithinUncertaintyIntervalErrorServerSideRetrySuccess.Count()
+	require.Equal(t, int64(0), rwuieAfter-rwuieBefore)
 }
 
 // TestStoreReadInconsistent verifies that gets and scans with read
@@ -2437,13 +2505,18 @@ func TestStoreScanMultipleIntents(t *testing.T) {
 		t.Fatal(pErr)
 	}
 
-	// Verify all ten intents are resolved from the single inconsistent scan.
-	testutils.SucceedsSoon(t, func() error {
-		if a, e := atomic.LoadInt32(&resolveCount), int32(10); a != e {
-			return fmt.Errorf("expected %d; got %d resolves", e, a)
-		}
-		return nil
-	})
+	// Verify all ten intents are resolved from the single scan. With virtual
+	// intent resolution, the intents are resolved on a temporary batch during
+	// evaluation and no physical ResolveIntentRequests are sent, so the eval
+	// filter won't observe them.
+	if !concurrency.VirtualIntentResolution.Get(&store.cfg.Settings.SV) {
+		testutils.SucceedsSoon(t, func() error {
+			if a, e := atomic.LoadInt32(&resolveCount), int32(10); a != e {
+				return fmt.Errorf("expected %d; got %d resolves", e, a)
+			}
+			return nil
+		})
+	}
 }
 
 // TestStoreBadRequests verifies that Send returns errors for
