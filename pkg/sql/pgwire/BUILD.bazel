@@ -111,6 +111,7 @@ go_test(
     name = "pgwire_test",
     size = "medium",
     srcs = [
+        "auth_internal_test.go",
         "auth_test.go",
         "authpipe_test.go",
         "command_result_test.go",
@@ -176,6 +177,7 @@ go_test(
         "//pkg/util/leaktest",
         "//pkg/util/log",
         "//pkg/util/log/channel",
+        "//pkg/util/log/eventpb",
         "//pkg/util/log/logconfig",
         "//pkg/util/metric",
         "//pkg/util/metric/aggmetric",

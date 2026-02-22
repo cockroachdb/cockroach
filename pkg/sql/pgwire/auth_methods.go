@@ -464,6 +464,7 @@ func authCert(
 			cm,
 			roleSubject,
 			security.ClientCertSubjectRequired.Get(&execCfg.Settings.SV),
+			clientCertSANRequired,
 		)
 		if err != nil {
 			return err
@@ -472,22 +473,7 @@ func authCert(
 	})
 	if len(tlsState.PeerCertificates) > 0 && hbaEntry.GetOption("map") != "" {
 		if clientCertSANRequired {
-			identityList := make([]string, 0)
-			for _, uri := range tlsState.PeerCertificates[0].URIs {
-				identityList = append(identityList, fmt.Sprintf("SAN:URI:%s", lexbase.NormalizeName(uri.String())))
-			}
-
-			for _, ip := range tlsState.PeerCertificates[0].IPAddresses {
-				identityList = append(identityList, fmt.Sprintf("SAN:IP:%s", lexbase.NormalizeName(ip.String())))
-			}
-
-			for _, dns := range tlsState.PeerCertificates[0].DNSNames {
-				identityList = append(identityList, fmt.Sprintf("SAN:DNS:%s", lexbase.NormalizeName(dns)))
-			}
-
-			if len(identityList) == 0 {
-				return nil, errors.New("client certificate SAN is required, but no SAN found in the certificate.")
-			}
+			identityList := security.ExtractSANsFromCertificate(tlsState.PeerCertificates[0])
 			b.SetSANIdentities(identityList)
 		} else {
 			// The common name in the certificate is set as the system identity in case we have an HBAEntry for db user.
