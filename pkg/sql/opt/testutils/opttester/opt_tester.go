@@ -2245,10 +2245,10 @@ func (ot *OptTester) IndexCandidates() (string, error) {
 		tableSb.WriteString(tableName.String())
 		tableSb.WriteString(":\n")
 		indexesOutput := make([]string, len(indexes))
-		for i, index := range indexes {
+		for i, indexCandidate := range indexes {
 			var indexSb strings.Builder
 			indexSb.WriteString(" (")
-			for j, indexCol := range index {
+			for j, indexCol := range indexCandidate.Columns() {
 				if j > 0 {
 					indexSb.WriteString(", ")
 				}
@@ -2258,7 +2258,13 @@ func (ot *OptTester) IndexCandidates() (string, error) {
 					indexSb.WriteString(" DESC")
 				}
 			}
-			indexSb.WriteString(")\n")
+			indexSb.WriteString(")")
+			// Add predicate information if present
+			if indexCandidate.Predicate() != "" {
+				indexSb.WriteString(" WHERE ")
+				indexSb.WriteString(indexCandidate.Predicate())
+			}
+			indexSb.WriteString("\n")
 			indexesOutput[i] = indexSb.String()
 		}
 		sort.Strings(indexesOutput)

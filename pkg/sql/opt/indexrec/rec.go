@@ -13,6 +13,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
+	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/idxtype"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/intsets"
@@ -159,8 +160,9 @@ func findBestExistingIndexToReplace(
 	for i, n := 0, table.IndexCount(); i < n; i++ {
 		// Iterate through every existing index in the table.
 		existingIndex := table.Index(i)
-		if _, isPartialIndex := existingIndex.Predicate(); isPartialIndex {
-			// Skip any partial indexes.
+		existingPredicate, isPartialIndex := existingIndex.Predicate()
+		if isPartialIndex && hypIndex.predicate != existingPredicate {
+			// Skip partial indexes with different predicates.
 			continue
 		}
 		if existingIndex.GetInvisibility() != 0.0 {
@@ -267,6 +269,12 @@ func (ir *indexRecommendation) constructIndexRec(ctx context.Context) (Rec, erro
 			Unique:  false,
 			Type:    ir.index.Type(),
 		}
+
+		// Add predicate if this is a partial index.
+		if err := addPredicateToCreateIndex(&createCmd, ir.index); err != nil {
+			return Rec{}, err
+		}
+
 		sb.WriteString(createCmd.String())
 		sb.WriteByte(';')
 		return Rec{sb.String(), TypeCreateIndex}, nil
@@ -285,6 +293,12 @@ func (ir *indexRecommendation) constructIndexRec(ctx context.Context) (Rec, erro
 			Unique: existingIndex.IsUnique(),
 			Type:   ir.index.Type(),
 		}
+
+		// Add predicate if this is a partial index.
+		if err := addPredicateToCreateIndex(&createCmd, ir.index); err != nil {
+			return Rec{}, err
+		}
+
 		alterCmd := tree.AlterIndexVisible{
 			Index: tree.TableIndexName{
 				Table: tableName,
@@ -408,6 +422,23 @@ func flattenRecMap(rcMap map[cat.Table][]Rec) []Rec {
 		output = append(output, rcMap[t]...)
 	}
 	return output
+}
+
+// addPredicateToCreateIndex adds a WHERE clause predicate to a CreateIndex command
+// if the hypothetical index has a predicate. Returns an error if the predicate
+// cannot be parsed.
+func addPredicateToCreateIndex(createCmd *tree.CreateIndex, hypIndex *hypotheticalIndex) error {
+	pred, isPredicate := hypIndex.Predicate()
+	if !isPredicate || pred == "" {
+		return nil
+	}
+
+	parsedPred, err := parser.ParseExpr(pred)
+	if err != nil {
+		return err
+	}
+	createCmd.Predicate = parsedPred
+	return nil
 }
 
 // indexRecommendation stores the information pertaining to a single index

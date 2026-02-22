@@ -24,7 +24,7 @@ import (
 // cat.StableID to its constructed HypotheticalTable. These tables will be used
 // to update the table query metadata when making index recommendations.
 func BuildOptAndHypTableMaps(
-	c cat.Catalog, indexCandidates map[cat.Table][][]cat.IndexColumn,
+	c cat.Catalog, indexCandidates map[cat.Table][]IndexCandidate,
 ) (optTables, hypTables map[cat.StableID]cat.Table) {
 	numTables := len(indexCandidates)
 	hypTables = make(map[cat.StableID]cat.Table, numTables)
@@ -35,7 +35,10 @@ func BuildOptAndHypTableMaps(
 		var hypTable HypotheticalTable
 		hypTable.init(c, t)
 
-		for _, indexCols := range indexes {
+		for _, indexCandidate := range indexes {
+			indexCols := indexCandidate.Columns()
+			predicate := indexCandidate.Predicate()
+
 			indexOrd := hypTable.Table.IndexCount() + len(hypIndexes)
 			lastKeyCol := indexCols[len(indexCols)-1]
 			// TODO (Shivam): Index recommendations should not only allow JSON columns
@@ -56,6 +59,7 @@ func BuildOptAndHypTableMaps(
 				indexOrd,
 				indexType,
 				t.Zone(),
+				predicate,
 			)
 
 			// Do not add hypothetical inverted indexes for which there is an existing
@@ -65,6 +69,7 @@ func BuildOptAndHypTableMaps(
 			if indexType != idxtype.INVERTED || hypTable.existingRedundantIndex(&hypIndex) == nil {
 				hypIndexes = append(hypIndexes, hypIndex)
 			}
+
 		}
 
 		hypTable.hypotheticalIndexes = hypIndexes
