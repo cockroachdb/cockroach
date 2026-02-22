@@ -48,10 +48,10 @@ hash: 491e5ffd11727f20
 ==========================
 mma-count:
 disk_fraction_used#1: first: [s1=0.20, s2=0.20, s3=0.20, s4=0.20, s5=1.05] (stddev=0.34, mean=0.37, sum=2)
-disk_fraction_used#1: last:  [s1=0.28, s2=0.28, s3=0.27, s4=0.27, s5=0.83] (stddev=0.22, mean=0.39, sum=2)
-disk_fraction_used#1: thrash_pct: [s1=23%, s2=21%, s3=23%, s4=27%, s5=46%]  (sum=141%)
+disk_fraction_used#1: last:  [s1=0.28, s2=0.28, s3=0.27, s4=0.27, s5=0.84] (stddev=0.23, mean=0.39, sum=2)
+disk_fraction_used#1: thrash_pct: [s1=22%, s2=21%, s3=24%, s4=27%, s5=46%]  (sum=141%)
 replicas#1: first: [s1=300, s2=300, s3=300, s4=300, s5=300] (stddev=0.00, mean=300.00, sum=1500)
-replicas#1: last:  [s1=329, s2=329, s3=325, s4=324, s5=193] (stddev=53.54, mean=300.00, sum=1500)
-replicas#1: thrash_pct: [s1=179%, s2=166%, s3=183%, s4=215%, s5=0%]  (sum=743%)
-hash: 1f619c1de43e855f
+replicas#1: last:  [s1=330, s2=327, s3=325, s4=323, s5=195] (stddev=52.55, mean=300.00, sum=1500)
+replicas#1: thrash_pct: [s1=179%, s2=168%, s3=190%, s4=216%, s5=0%]  (sum=754%)
+hash: 8f8384c757c2ced3
 ==========================

@@ -779,8 +779,32 @@ func sortTargetCandidateSetAndPick(
 		}
 		cands.candidates = cands.candidates[:j]
 	}
+	// When candidates span multiple SLS tiers (e.g., loadLow and overloadSlow
+	// were both allowed due to ignoreHigherThanLoadThreshold), prefer
+	// candidates in the lowest SLS tier. We sort by SLS and keep only the
+	// lowest tier.
+	if len(cands.candidates) > 1 {
+		slices.SortFunc(cands.candidates, func(a, b candidateInfo) int {
+			return cmp.Compare(a.sls, b.sls)
+		})
+		lowestSLS := cands.candidates[0].sls
+		if cands.candidates[len(cands.candidates)-1].sls != lowestSLS {
+			j = 1
+			for j < len(cands.candidates) {
+				if cands.candidates[j].sls > lowestSLS {
+					break
+				}
+				j++
+			}
+			if s := formatCandidatesLog(&b, cands.candidates[j:]); s != "" {
+				log.KvDistribution.VEventf(ctx, 2, "discarding candidates with higher SLS than lowestSLS(%s): %s",
+					lowestSLS.String(), s)
+			}
+			cands.candidates = cands.candidates[:j]
+		}
+	}
 	s := formatCandidatesLog(&b, cands.candidates)
-	j = rng.Intn(j)
+	j = rng.Intn(len(cands.candidates))
 	log.KvDistribution.VEventf(ctx, 2, "sortTargetCandidateSetAndPick: candidates:%s, picked s%v", s, cands.candidates[j].StoreID)
 	if ignoreLevel == ignoreLoadNoChangeAndHigher && cands.candidates[j].sls >= loadNoChange ||
 		ignoreLevel == ignoreLoadThresholdAndHigher && cands.candidates[j].sls >= loadThreshold ||
