@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security/securitytest"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/fingerprintutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/jobutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -1198,6 +1199,86 @@ func TestOnlineRestoreRevisionHistoryLayers(t *testing.T) {
 			}
 		})
 	}
+}
+
+// TestOnlineRestoreLinkingNonexistentFiles verifies that the link phase of
+// online restore is a metadata-only operation that does not interact with the
+// data file contents. It proves this by deleting the data SST files after
+// creating the backup, then running the link phase — which should succeed
+// because linking only records file references in the LSM without reading the
+// actual data files.
+//
+// The test creates incremental backups with data-tight SST bounds (by
+// disabling backup presplitting), so that incremental SSTs have bounds
+// strictly enclosed by the base SST. This geometry is required to exercise
+// Pebble's overlap checker.
+func TestOnlineRestoreLinkingNonexistentFiles(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	// Pebble's overlap checker currently opens backing files to probe for data
+	// overlap during ingestion, causing a crash when the files are missing.
+	// Once the SkipProbe fix lands in Pebble, remove this skip.
+	// See: https://github.com/cockroachdb/pebble/issues/5771
+	skip.WithIssue(t, 163977, "pebble overlap checker does IO during ingest; see cockroachdb/pebble#5771")
+
+	tmpDir := t.TempDir()
+	defer nodelocal.ReplaceNodeLocalForTesting(tmpDir)()
+
+	const numAccounts = 1000
+
+	_, sqlDB, _, cleanupFn := backupRestoreTestSetupWithParams(t, singleNode, numAccounts, InitManualReplication, orParams)
+	defer cleanupFn()
+
+	// Force each backup layer into a single wide SST by setting a large file
+	// size target. This ensures the base SST's bounds span the entire table,
+	// so incremental SSTs have bounds strictly enclosed by the base.
+	sqlDB.Exec(t, "SET CLUSTER SETTING bulkio.backup.file_size = '128MB'")
+	// Disable presplit exports so that backup SSTs have data-tight bounds
+	// rather than range-aligned bounds. With range-aligned bounds, the base
+	// and incremental SSTs end up with the same boundaries and the enclosing
+	// case never triggers. With data-tight bounds, the base SST covers the
+	// full table while incremental SSTs cover narrow subsets, creating the
+	// enclosing geometry.
+	sqlDB.Exec(t, "SET CLUSTER SETTING bulkio.backup.presplit_request_spans.enabled = false")
+
+	backupURI := "nodelocal://1/backup"
+
+	// Full backup producing one SST covering the entire table key range.
+	sqlDB.Exec(t, fmt.Sprintf("BACKUP DATABASE data INTO '%s'", backupURI))
+
+	// Each incremental updates a narrow band in the middle of the table,
+	// producing SSTs whose bounds are strictly enclosed by the base SST's
+	// wide bounds. When linked, Pebble's overlap checker sees the base file
+	// enclosing the incremental and opens it to probe for data overlap.
+	sqlDB.Exec(t, "SET CLUSTER SETTING backup.restore.online_layer_limit = 25")
+	for i := 0; i < 20; i++ {
+		lo := 300 + i*20
+		hi := lo + 10
+		sqlDB.Exec(t, fmt.Sprintf("UPDATE data.bank SET balance = balance + 1 WHERE id >= %d AND id < %d", lo, hi))
+		sqlDB.Exec(t, fmt.Sprintf("BACKUP DATABASE data INTO LATEST IN '%s'", backupURI))
+	}
+
+	// Delete the data SST files from the backup. The metadata SSTs
+	// (filelist.sst, descriptorslist.sst) are preserved so restore can read
+	// the manifest. When Pebble's overlap checker tries to open a previously-
+	// linked backing file during the link phase, the I/O will fail.
+	backupDir := filepath.Join(tmpDir, "backup")
+	var deleted int
+	require.NoError(t, filepath.WalkDir(backupDir, func(path string, d os.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if !d.IsDir() && filepath.Ext(path) == ".sst" && filepath.Base(filepath.Dir(path)) == "data" {
+			deleted++
+			return os.Remove(path)
+		}
+		return nil
+	}))
+	require.Greater(t, deleted, 0, "expected data SST files in backup")
+	sqlDB.Exec(t, "DROP DATABASE data CASCADE")
+	sqlDB.Exec(t, fmt.Sprintf(
+		"RESTORE DATABASE data FROM LATEST IN '%s' WITH EXPERIMENTAL DEFERRED COPY", backupURI))
 }
 
 // TestOnlineRestoreWithDistFlow tests that online restore works correctly when
