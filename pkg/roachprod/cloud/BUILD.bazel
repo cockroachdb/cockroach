@@ -11,6 +11,8 @@ go_library(
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/cloud/amazon",
+        "//pkg/cmd/roachprod-centralized/client",
+        "//pkg/roachprod/centralizedapi",
         "//pkg/roachprod/cloud/types",
         "//pkg/roachprod/config",
         "//pkg/roachprod/logger",

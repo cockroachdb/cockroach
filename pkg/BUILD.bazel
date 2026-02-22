@@ -1862,6 +1862,7 @@ GO_TARGETS = [
     "//pkg/roachprod/agents/parca:parca",
     "//pkg/roachprod/blobfixture:blobfixture",
     "//pkg/roachprod/blobfixture:blobfixture_test",
+    "//pkg/roachprod/centralizedapi:centralizedapi",
     "//pkg/roachprod/cloud/types:types",
     "//pkg/roachprod/cloud:cloud",
     "//pkg/roachprod/cloud:cloud_test",

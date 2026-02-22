@@ -19,6 +19,10 @@ if [[ ! -f ~/.ssh/id_rsa.pub ]]; then
   ssh-keygen -q -C "roachtest-nightly-bazel $(date)" -N "" -f ~/.ssh/id_rsa
 fi
 
+# Enable centralized API for roachprod to improve performance
+# when reading clusters info.
+export ROACHPROD_CENTRALIZED_API_ENABLED=true
+
 arm_probability="${ARM_PROBABILITY:-0.5}"
 fips_probability="${FIPS_PROBABILITY:-0.02}"
 

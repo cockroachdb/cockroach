@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"golang.org/x/crypto/ssh"
@@ -253,12 +254,28 @@ func (p *Provider) createInstance(
 		InstanceStatus  string
 		NetworkAttached bool
 	}{}
+
+	// Create a context with timeout to enforce maxWaitForReadyState.
+	// Use exponential backoff to reduce API call frequency during instance startup.
+	// Instances typically take 30-60 seconds to become ready, so aggressive 1-second
+	// polling is wasteful and can hit rate limits during bulk provisioning.
+	waitCtx, waitCancel := context.WithTimeout(context.Background(), maxWaitForReadyState)
+	defer waitCancel()
+
 	waitForRunningState := retry.Start(retry.Options{
-		InitialBackoff: 1 * time.Second,
-		MaxBackoff:     1 * time.Second,
-		MaxRetries:     int(maxWaitForReadyState.Seconds()),
+		InitialBackoff: 2 * time.Second,  // Start with 2 seconds
+		MaxBackoff:     10 * time.Second, // Cap at 10 seconds between polls
+		Multiplier:     1.5,              // Gradually increase delay
 	})
 	for waitForRunningState.Next() {
+		// Check if we've exceeded the maximum wait time
+		if waitCtx.Err() != nil {
+			return nil, errors.Wrapf(waitCtx.Err(),
+				"timeout waiting for instance %s to reach running state after %s",
+				opts.vmName,
+				maxWaitForReadyState,
+			)
+		}
 		instanceResp, _, err = vpcService.GetInstance(&vpcv1.GetInstanceOptions{
 			ID: instanceResp.ID,
 		})
@@ -772,9 +789,10 @@ func (p *Provider) listRegion(
 	}
 
 	g := ctxgroup.WithContext(ctx)
+	g.SetLimit(maxConcurrentRequests)
 
 	// Fetch instances
-	g.Go(func() error {
+	g.GoCtx(func(ctx context.Context) error {
 		var err error
 		instances, err = p.listRegionInstances(ctx, l, r, vpcService)
 		if err != nil {
@@ -801,6 +819,9 @@ func (p *Provider) listRegion(
 	}
 
 	var vms vm.List
+	var vmListMutex syncutil.Mutex
+	g = ctxgroup.WithContext(ctx)
+	g.SetLimit(maxConcurrentRequests)
 	for _, i := range instances {
 
 		if opts.IncludeVolumes {
@@ -852,7 +873,24 @@ func (p *Provider) listRegion(
 			continue
 		}
 
-		vms = append(vms, i.toVM())
+		// toVM will query additional information like floating IPs, so we parallelize it.
+		g.GoCtx(func(ctx context.Context) error {
+
+			// Load the instance information and convert it to a VM.
+			vm := i.toVM()
+
+			// Add it to the list of VMs.
+			vmListMutex.Lock()
+			defer vmListMutex.Unlock()
+			vms = append(vms, vm)
+
+			return nil
+		})
+	}
+
+	err = g.Wait()
+	if err != nil {
+		return nil, err
 	}
 
 	return vms, nil
