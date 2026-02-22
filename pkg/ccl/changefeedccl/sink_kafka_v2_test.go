@@ -332,6 +332,24 @@ func TestKafkaSinkClientV2_Opts(t *testing.T) {
 			},
 		},
 		{
+			name: "producer linger",
+			jsonConfig: map[string]any{
+				"ProducerLinger": "100ms",
+			},
+			expectedOpts: map[string]any{
+				"ProducerLinger": time.Millisecond * 100,
+			},
+		},
+		{
+			name: "producer linger invalid",
+			jsonConfig: map[string]any{
+				"ProducerLinger": "-100ms",
+			},
+			expectedOpts: map[string]any{
+				"ProducerLinger": time.Duration(0),
+			},
+		},
+		{
 			name: "required acks",
 			jsonConfig: map[string]any{
 				"RequiredAcks": "0",

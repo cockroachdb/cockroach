@@ -206,6 +206,7 @@ go_test(
     size = "enormous",
     srcs = [
         "alter_changefeed_test.go",
+        "benchfeed_test.go",
         "changefeed_dist_test.go",
         "changefeed_job_info_test.go",
         "changefeed_memory_test.go",
@@ -220,6 +221,7 @@ go_test(
         "event_processing_test.go",
         "fetch_table_bytes_test.go",
         "helpers_test.go",
+        "kafka_client_changefeed_bench_test.go",
         "main_test.go",
         "nemeses_test.go",
         "parquet_test.go",
