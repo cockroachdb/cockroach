@@ -139,6 +139,15 @@ var automaticExtremesStatsConcurrencyLimit = settings.RegisterIntSetting(
 	settings.IntWithMinimum(1),
 )
 
+var automaticFixMisestimatesStatsConcurrencyLimit = settings.RegisterIntSetting(
+	settings.ApplicationLevel,
+	"sql.stats.fix_misestimates_concurrency_limit",
+	"determines the maximum number of concurrent automatic partial 'fix misestimates' table statistics collection jobs",
+	128,
+	settings.WithPublic,
+	settings.NonNegativeInt,
+)
+
 const nonIndexColHistogramBuckets = 2
 
 // createStatsNode is a planNode implemented in terms of a function. The
@@ -222,7 +231,7 @@ func (n *createStatsNode) runJob(ctx context.Context) error {
 	if err := n.p.ExecCfg().InternalDB.Txn(ctx, func(ctx context.Context, txn isql.Txn) (err error) {
 		if n.isAuto() {
 			if details.UseLocksTable {
-				if err := n.checkConcurrencyLimit(ctx, txn, details.Table.ID, jobID); err != nil {
+				if err := n.checkConcurrencyLimit(ctx, txn, details, jobID); err != nil {
 					return err
 				}
 			} else if !jobCheckBefore {
@@ -271,15 +280,20 @@ func (n *createStatsNode) runJob(ctx context.Context) error {
 	return err
 }
 
-func getAutoStatsKind(name string) int {
-	switch name {
+func getAutoStatsKind(details jobspb.CreateStatsDetails) int {
+	switch details.Name {
 	case jobspb.AutoStatsName:
 		return 1
 	case jobspb.AutoPartialStatsName:
-		return 2
+		if details.UsingExtremes {
+			return 2
+		} else if details.UsingSpan {
+			return 3
+		}
+		fallthrough
 	default:
 		if buildutil.CrdbTestBuild {
-			panic(errors.AssertionFailedf("getAutoStatsKind shouldn't have been called for %s stats job", name))
+			panic(errors.AssertionFailedf("getAutoStatsKind shouldn't have been called for %s stats job", details.Name))
 		}
 		return 0
 	}
@@ -310,6 +324,10 @@ var checkFullStatsJobsQuery = fmt.Sprintf(checkStatsJobsQuery, " = 1")
 // conflict with the USING EXTREMES job.
 var checkExtremesStatsJobsQuery = fmt.Sprintf(checkStatsJobsQuery, " IN (1, 2)")
 
+// Both full and "fix misestimates" auto stats collections on the same table
+// conflict with the USING EXTREMES job.
+var checkFixMisestimatesStatsJobsQuery = fmt.Sprintf(checkStatsJobsQuery, " IN (1, 3)")
+
 var checkGlobalStatsJobsQuery = fmt.Sprintf(checkStatsJobsQuery, " = $2")
 
 // checkConcurrencyLimit verifies that starting a new stats job will not exceed
@@ -318,12 +336,13 @@ var checkGlobalStatsJobsQuery = fmt.Sprintf(checkStatsJobsQuery, " = $2")
 // system.table_statistics_locks have been acquired and the caller / the new
 // stats job is responsible for releasing them when job reaches terminal state).
 func (n *createStatsNode) checkConcurrencyLimit(
-	ctx context.Context, txn isql.Txn, tableID descpb.ID, jobID jobspb.JobID,
+	ctx context.Context, txn isql.Txn, details jobspb.CreateStatsDetails, jobID jobspb.JobID,
 ) error {
 	if !n.isAuto() {
 		// We don't apply any concurrency limits to manual stats jobs.
 		return nil
 	}
+	tableID := details.Table.ID
 	var tableLimitQuery string
 	var globalLimit int
 	switch n.Name {
@@ -331,10 +350,15 @@ func (n *createStatsNode) checkConcurrencyLimit(
 		tableLimitQuery = checkFullStatsJobsQuery
 		globalLimit = int(automaticFullStatsConcurrencyLimit.Get(n.p.ExecCfg().SV()))
 	case jobspb.AutoPartialStatsName:
-		tableLimitQuery = checkExtremesStatsJobsQuery
-		globalLimit = int(automaticExtremesStatsConcurrencyLimit.Get(n.p.ExecCfg().SV()))
+		if details.UsingExtremes {
+			tableLimitQuery = checkExtremesStatsJobsQuery
+			globalLimit = int(automaticExtremesStatsConcurrencyLimit.Get(n.p.ExecCfg().SV()))
+		} else if details.UsingSpan {
+			tableLimitQuery = checkFixMisestimatesStatsJobsQuery
+			globalLimit = int(automaticFixMisestimatesStatsConcurrencyLimit.Get(n.p.ExecCfg().SV()))
+		}
 	}
-	kind := getAutoStatsKind(string(n.Name))
+	kind := getAutoStatsKind(details)
 
 	// First, limit the concurrency on the target table to at most one.
 	row, err := txn.QueryRowEx(
@@ -388,16 +412,16 @@ func (n *createStatsNode) checkConcurrencyLimit(
 // release the locks that were acquired for the given JobID. The method assumes
 // that it's called on behalf of an auto stats job.
 func releaseAutoStatsConcurrencyLocks(
-	ctx context.Context, txn isql.Txn, tableID descpb.ID, jobID jobspb.JobID, statsJobName string,
+	ctx context.Context, txn isql.Txn, details jobspb.CreateStatsDetails, jobID jobspb.JobID,
 ) error {
-	kind := getAutoStatsKind(statsJobName)
+	kind := getAutoStatsKind(details)
 
 	// Simply overwrite the table-specific row to have empty job_ids since we
 	// allow at most one auto stats job on any table.
 	_, err := txn.ExecEx(
 		ctx, "create-stats-release-table-lock", txn.KV(), sessiondata.InternalExecutorOverride{},
 		"UPSERT INTO system.table_statistics_locks (table_id, kind, job_ids) VALUES ($1, $2, '{}')",
-		tableID, kind,
+		details.Table.ID, kind,
 	)
 	if err != nil {
 		return err
@@ -465,8 +489,11 @@ func (n *createStatsNode) makeJobRecord(ctx context.Context) (*jobs.Record, erro
 	if n.Options.UsingExtremes && !n.p.SessionData().EnableCreateStatsUsingExtremes {
 		return nil, errors.Errorf(`creating partial statistics at extremes is disabled`)
 	}
+	// TODO: maybe session variable to disable fix-up stats.
 
 	var whereClause string
+	var whereSpans roachpb.Spans
+	var whereIndexID descpb.IndexID
 	if n.Options.Where != nil {
 		if n.whereSpans == nil {
 			return nil, errors.AssertionFailedf(
@@ -475,6 +502,17 @@ func (n *createStatsNode) makeJobRecord(ctx context.Context) (*jobs.Record, erro
 		// Safe to use AsString since whereClause is only used to populate the
 		// predicate in system.table_statistics.
 		whereClause = tree.AsString(n.Options.Where.Expr)
+		whereSpans = n.whereSpans
+		whereIndexID = n.whereIndexID
+	} else if n.Options.UsingSpanOnIndexID != 0 {
+		span, err := n.p.ExecCfg().StatsRefresher.GetSpanForTableID(tableDesc.GetID(), n.Options.UsingSpanOnIndexID)
+		if err != nil {
+			return nil, err
+		}
+		// TODO: maybe some sanity checks.
+		whereSpans = roachpb.Spans{span}
+		whereIndexID = descpb.IndexID(n.Options.UsingSpanOnIndexID)
+		whereClause = fmt.Sprintf("<fix-up stats via index %d>", whereIndexID)
 	}
 
 	if err := n.p.CheckPrivilege(ctx, tableDesc, privilege.SELECT); err != nil {
@@ -489,10 +527,11 @@ func (n *createStatsNode) makeJobRecord(ctx context.Context) (*jobs.Record, erro
 		// the extremes are requested.
 		// TODO(#94076): add support for creating multi-column stats.
 		var multiColEnabled bool
-		if !n.Options.UsingExtremes {
+		if !n.Options.UsingExtremes && n.Options.UsingSpanOnIndexID == 0 {
 			multiColEnabled = stats.MultiColumnStatisticsClusterMode.Get(n.p.ExecCfg().SV())
 			deleteOtherStats = true
 		}
+		partialStats := n.Options.UsingExtremes || n.Options.UsingSpanOnIndexID != 0
 		defaultHistogramBuckets := stats.GetDefaultHistogramBuckets(n.p.ExecCfg().SV(), tableDesc)
 		if colStats, err = createStatsDefaultColumns(
 			ctx,
@@ -500,7 +539,7 @@ func (n *createStatsNode) makeJobRecord(ctx context.Context) (*jobs.Record, erro
 			virtColEnabled,
 			multiColEnabled,
 			nonIndexJSONHistograms.Get(n.p.ExecCfg().SV()),
-			n.Options.UsingExtremes,
+			partialStats,
 			defaultHistogramBuckets,
 			n.p.EvalContext(),
 		); err != nil {
@@ -601,9 +640,10 @@ func (n *createStatsNode) makeJobRecord(ctx context.Context) (*jobs.Record, erro
 			MaxFractionIdle:  n.Options.Throttling,
 			DeleteOtherStats: deleteOtherStats,
 			UsingExtremes:    n.Options.UsingExtremes,
+			UsingSpan:        n.Options.UsingSpanOnIndexID != 0,
 			WhereClause:      whereClause,
-			WhereSpans:       n.whereSpans,
-			WhereIndexID:     n.whereIndexID,
+			WhereSpans:       whereSpans,
+			WhereIndexID:     whereIndexID,
 			UseLocksTable:    useLocksTable,
 		},
 		Progress: jobspb.CreateStatsProgress{},
@@ -963,7 +1003,7 @@ func (r *createStatsResumer) Resume(ctx context.Context, execCtx interface{}) (r
 		defer func() {
 			if retErr == nil {
 				retErr = jobsPlanner.ExecCfg().InternalDB.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
-					return releaseAutoStatsConcurrencyLocks(ctx, txn, r.tableID, r.job.ID(), details.Name)
+					return releaseAutoStatsConcurrencyLocks(ctx, txn, details, r.job.ID())
 				})
 				if retErr != nil {
 					log.Dev.Warningf(ctx, "failed to release auto stats concurrency locks: %v", retErr)
@@ -1229,7 +1269,7 @@ func (r *createStatsResumer) OnFailOrCancel(
 		return nil
 	}
 	return execCtx.(JobExecContext).ExecCfg().InternalDB.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
-		return releaseAutoStatsConcurrencyLocks(ctx, txn, r.tableID, r.job.ID(), details.Name)
+		return releaseAutoStatsConcurrencyLocks(ctx, txn, details, r.job.ID())
 	})
 }
 

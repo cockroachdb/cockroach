@@ -3593,7 +3593,7 @@ func (ex *connExecutor) execWithDistSQLEngine(
 	}
 
 	if err == nil && res.Err() == nil {
-		recv.maybeLogMisestimates(ctx, planner)
+		recv.handleMisestimates(ctx, planner)
 	}
 	return recv.stats, err
 }

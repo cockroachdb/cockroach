@@ -2117,11 +2117,14 @@ type CreateStatsOptions struct {
 	// Where will specify statistics collection in a set of rows of the table
 	// or index specified.
 	Where *Where
+
+	// TODO: comment.
+	UsingSpanOnIndexID uint32
 }
 
 // Empty returns true if no options were provided.
 func (o *CreateStatsOptions) Empty() bool {
-	return o.Throttling == 0 && o.AsOf.Expr == nil && o.Where == nil && !o.UsingExtremes
+	return o.Throttling == 0 && o.AsOf.Expr == nil && o.Where == nil && !o.UsingExtremes && o.UsingSpanOnIndexID == 0
 }
 
 // Format implements the NodeFormatter interface.
@@ -2132,6 +2135,10 @@ func (o *CreateStatsOptions) Format(ctx *FmtCtx) {
 	if o.Where != nil {
 		ctx.WriteByte(' ')
 		ctx.FormatNode(o.Where)
+	}
+	if o.UsingSpanOnIndexID != 0 {
+		ctx.WriteString(" USING SPAN ON ")
+		ctx.WriteString(strconv.Itoa(int(o.UsingSpanOnIndexID)))
 	}
 	if o.Throttling != 0 {
 		ctx.WriteString(" THROTTLING ")
@@ -2179,8 +2186,18 @@ func (o *CreateStatsOptions) CombineWith(other *CreateStatsOptions) error {
 		}
 		o.Where = other.Where
 	}
+	if other.UsingSpanOnIndexID != 0 {
+		if o.UsingSpanOnIndexID != 0 {
+			return errors.New("USING SPAN ON <indexID> specified multiple times")
+		}
+		o.UsingSpanOnIndexID = other.UsingSpanOnIndexID
+	}
 	if other.Where != nil && o.UsingExtremes || o.Where != nil && other.UsingExtremes {
 		return errors.New("USING EXTREMES and WHERE may not be specified together")
+	}
+	if ((other.Where != nil || other.UsingExtremes) && o.UsingSpanOnIndexID != 0) ||
+		((o.Where != nil || o.UsingExtremes) && other.UsingSpanOnIndexID != 0) {
+		return errors.New("USING EXTREMES or WHERE may not be specified together with USING SPAN ON <indexID>")
 	}
 	return nil
 }

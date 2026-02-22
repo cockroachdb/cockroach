@@ -1360,6 +1360,9 @@ message CreateStatsDetails {
   // If true, will collect partial table statistics at extreme values.
   bool using_extremes = 9;
 
+  // If true, will collect partial table statistics on the key span.
+  bool using_span = 14;
+
   // WHERE clause for partial statistics collection. This field is only used
   // to populate the predicate in the system.table_statistics table and to
   // determine if this is a constrained stats collection. The actual constrained

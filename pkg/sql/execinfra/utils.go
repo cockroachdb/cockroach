@@ -60,15 +60,3 @@ var IncludeRUEstimateInExplainAnalyze = settings.RegisterBoolSetting(
 	true,
 	settings.WithName("sql.explain_analyze.include_ru_estimation.enabled"),
 )
-
-// LogScanRowCountMisestimate controls whether we log a warning when the
-// actual row count observed by a scan differs significantly from the optimizer
-// estimate.
-var LogScanRowCountMisestimate = settings.RegisterBoolSetting(
-	settings.ApplicationLevel,
-	"sql.log.scan_row_count_misestimate.enabled",
-	"when set to true, log a warning when a scan's actual row count differs "+
-		"significantly from the optimizer's estimate",
-	false,
-	settings.WithPublic,
-)
