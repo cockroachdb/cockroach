@@ -13662,6 +13662,12 @@ func TestChangefeedServerlessLocalityFilter(t *testing.T) {
 	tenantServer, tenantDB := serverutils.StartTenant(t, kvServer, tenantArgs)
 	tenantSQL := sqlutils.MakeSQLRunner(tenantDB)
 	tenantSQL.ExecMultiple(t, strings.Split(tenantSetupStatements, ";")...)
+
+	// The cluster setting sql.instance_info.use_instance_resolver.enabled is
+	// metamorphic and will be randomly enabled during tests. We explicitly enable
+	// it here to ensure this test exercises the new code path.
+	tenantSQL.Exec(t, `SET CLUSTER SETTING sql.instance_info.use_instance_resolver.enabled = true`)
+
 	tenantSQL.Exec(t, `CREATE TABLE foo (pk INT PRIMARY KEY)`)
 	tenantSQL.Exec(t, `INSERT INTO foo VALUES (1)`)
 
