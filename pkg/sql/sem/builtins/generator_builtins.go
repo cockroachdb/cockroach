@@ -4292,6 +4292,10 @@ FROM (
 		)
 	}
 
+	if !found {
+		return &txnDiagnosticsRequestGenerator{created: false}, nil
+	}
+
 	var username string
 	if sd := evalCtx.SessionData(); sd != nil {
 		username = sd.User().Normalized()
@@ -4307,10 +4311,6 @@ FROM (
 		redacted)
 	if err != nil {
 		return nil, err
-	}
-
-	if !found {
-		return &txnDiagnosticsRequestGenerator{created: false}, nil
 	}
 	return &txnDiagnosticsRequestGenerator{requestId: reqId, created: true}, nil
 }
