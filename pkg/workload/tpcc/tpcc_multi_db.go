@@ -20,9 +20,10 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/cockroachdb/cockroach-go/v2/crdb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
-	"github.com/cockroachdb/cockroach/pkg/util/quotapool"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -63,6 +64,8 @@ type tpccMultiDB struct {
 
 	// initLogic executes the init logic one time.
 	initLogic sync.Once
+	// precreateLogic ensures database/schema creation only runs once.
+	precreateLogic sync.Once
 }
 
 var tpccMultiDBMeta = workload.Meta{
@@ -409,64 +412,81 @@ func (t *tpccMultiDB) Hooks() workload.Hooks {
 			return err
 		}
 		ctx := context.Background()
-		// First create all require databases in a single txn, on multi-region
-		// this will reduce round trips and speed things up.
-		tx, err := db.BeginTx(ctx, &gosql.TxOptions{})
-		if err != nil {
-			return err
-		}
-		// Run the operations in a single txn so they complete more quickly.
-		_, err = tx.Exec("SET LOCAL autocommit_before_ddl = false")
-		if err != nil {
-			return err
-		}
-		// Create all of the databases that was specified in the list.
-		for _, dbName := range t.dbList {
-			if _, err := tx.Exec(fmt.Sprintf("CREATE DATABASE IF NOT EXISTS %s", dbName.Catalog())); err != nil {
-				return err
+		// Use sync.Once to ensure database/schema creation only runs once,
+		// even if PreCreate is called multiple times.
+		var precreateErr error
+		t.precreateLogic.Do(func() {
+			// Create databases and schemas in batches to avoid waiting for too many
+			// schema change jobs at once. Each batch commits and waits for its jobs
+			// before starting the next batch.
+			const batchSize = 5000
+			batchNum := 0
+			currentEntry := 0
+			for i := 0; i < len(t.dbList); i += batchSize {
+				batchStart := timeutil.Now()
+				batchNum++
+				end := min(i+batchSize, len(t.dbList))
+				batch := t.dbList[i:end]
+
+				if err := crdb.ExecuteTx(ctx, db, &gosql.TxOptions{}, func(tx *gosql.Tx) error {
+					// Disable autocommit before DDL to batch statements in a single
+					// transaction, reducing round trips on multi-region.
+					if _, err := tx.Exec("SET LOCAL autocommit_before_ddl = false"); err != nil {
+						return err
+					}
+					for _, dbName := range batch {
+						if _, err := tx.Exec(fmt.Sprintf("CREATE DATABASE IF NOT EXISTS %s", dbName.Catalog())); err != nil {
+							return err
+						}
+						if _, err := tx.Exec(fmt.Sprintf("CREATE SCHEMA IF NOT EXISTS %s.%s", dbName.Catalog(), dbName.Schema())); err != nil {
+							return err
+						}
+					}
+					return nil
+				}); err != nil {
+					precreateErr = err
+					return
+				}
+				currentEntry = end
+				log.Dev.Infof(ctx, "created %d/%d databases/schemas (batch %d, %d entries in %s)",
+					currentEntry, len(t.dbList), batchNum, len(batch), timeutil.Since(batchStart).Round(time.Millisecond))
 			}
-			if _, err := tx.Exec(fmt.Sprintf("CREATE SCHEMA IF NOT EXISTS %s.%s", dbName.Catalog(), dbName.Schema())); err != nil {
-				return err
+
+			// Next configure all the databases as multi-region.
+			// Note: Precreates are run once per database since TPCC usess them to setup
+			// multiregion.
+			for dbName := range t.dbNames {
+				if _, err := db.Exec("USE $1", dbName); err != nil {
+					precreateErr = err
+					return
+				}
+				if _, err := db.Exec("SET search_path = public"); err != nil {
+					precreateErr = err
+					return
+				}
+				// Run the usual TPCC pre-create logic after.
+				if oldPrecreate == nil {
+					continue
+				}
+				if err := oldPrecreate(db); err != nil {
+					precreateErr = err
+					return
+				}
 			}
-		}
-		if err := tx.Commit(); err != nil {
-			return err
-		}
-		// Next configure all the databases as multi-region.
-		// Note: Precreates are run once per database since TPCC usess them to setup
-		// multiregion.
-		for dbName := range t.dbNames {
-			if _, err := db.Exec("USE $1", dbName); err != nil {
-				return err
+			if _, err := db.Exec("RESET search_path"); err != nil {
+				precreateErr = err
+				return
 			}
-			if _, err := db.Exec("SET search_path = public"); err != nil {
-				return err
-			}
-			// Run the usual TPCC pre-create logic after.
-			if oldPrecreate == nil {
-				continue
-			}
-			if err := oldPrecreate(db); err != nil {
-				return err
-			}
-		}
-		if _, err := db.Exec("RESET search_path"); err != nil {
-			return err
-		}
-		return nil
+		})
+		return precreateErr
 	}
 
 	// Execute the original post-load logic across all the databases.
 	hooks.PostLoad = func(ctx context.Context, db *gosql.DB) error {
 		grp := ctxgroup.WithContext(ctx)
-		postLoadConcurrency := quotapool.NewIntPool("post-load-pool", 8)
+		grp.SetLimit(8)
 		for _, dbName := range t.dbList {
-			alloc, err := postLoadConcurrency.Acquire(ctx, 1)
-			if err != nil {
-				return err
-			}
 			grp.GoCtx(func(ctx context.Context) (err error) {
-				defer alloc.Release()
 				conn, err := db.Conn(ctx)
 				if err != nil {
 					return err
