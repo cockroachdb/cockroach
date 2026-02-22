@@ -134,6 +134,7 @@ func newBulkMergePlan(
 						MaxIterations:     int32(opts.MaxIterations),
 						WriteTimestamp:    writeTimestamp,
 						EnforceUniqueness: opts.EnforceUniqueness,
+						MemoryMonitor:     opts.MemoryMonitor,
 					},
 				},
 				Post: execinfrapb.PostProcessSpec{},

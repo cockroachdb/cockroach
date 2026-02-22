@@ -57,6 +57,9 @@ type MergeOptions struct {
 	// wrapping errors into user-friendly messages.
 	EnforceUniqueness bool
 
+	// MemoryMonitor selects which parent memory monitor the merge processor uses.
+	MemoryMonitor execinfrapb.BulkMergeSpec_MemoryMonitor
+
 	// OnProgress is called when progress metadata is received from the
 	// distributed merge flow. This allows the caller to track task completion
 	// during merge iterations.
@@ -251,12 +254,14 @@ func init() {
 		writeTimestamp *hlc.Timestamp,
 		enforceUniqueness bool,
 		onProgress func(context.Context, *execinfrapb.ProducerMetadata) error,
+		memoryMonitor execinfrapb.BulkMergeSpec_MemoryMonitor,
 	) ([]execinfrapb.BulkMergeSpec_SST, error) {
 		return Merge(ctx, execCtx, ssts, spans, genOutputURIAndRecordPrefix, MergeOptions{
 			Iteration:         iteration,
 			MaxIterations:     maxIterations,
 			WriteTimestamp:    writeTimestamp,
 			EnforceUniqueness: enforceUniqueness,
+			MemoryMonitor:     memoryMonitor,
 			OnProgress:        onProgress,
 		})
 	})

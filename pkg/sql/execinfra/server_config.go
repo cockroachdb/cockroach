@@ -114,6 +114,10 @@ type ServerConfig struct {
 	// used during restore.
 	RestoreMonitor *mon.BytesMonitor
 
+	// BulkMonitor is the parent bulk memory monitor. It is used to monitor memory
+	// for bulk operations that don't have a dedicated child monitor.
+	BulkMonitor *mon.BytesMonitor
+
 	// ChangefeedMonitor is the parent monitor for all CDC DistSQL flows.
 	ChangefeedMonitor *mon.BytesMonitor
 

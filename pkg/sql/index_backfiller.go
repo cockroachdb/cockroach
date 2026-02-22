@@ -550,6 +550,7 @@ func (ib *IndexBackfillPlanner) runDistributedMerge(
 			writeTS,
 			enforceUniqueness,
 			onProgress,
+			execinfrapb.BulkMergeSpec_BACKFILL_MONITOR,
 		)
 		if err != nil {
 			return err

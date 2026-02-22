@@ -660,11 +660,22 @@ message BulkMergeSpec {
   // key errors will propagate as DuplicateKeyError or KeyCollisionError.
   optional bool enforce_uniqueness = 7 [(gogoproto.nullable) = false];
 
+  enum MemoryMonitor {
+    // BULK_MONITOR uses the bulk (parent) memory monitor (default).
+    BULK_MONITOR = 0;
+    // BACKFILL_MONITOR uses the backfiller memory monitor.
+    BACKFILL_MONITOR = 1;
+  }
+
+  // memory_monitor selects which parent memory monitor the merge processor
+  // uses for SSTBatcher memory accounting during the final iteration.
+  optional MemoryMonitor memory_monitor = 8 [(gogoproto.nullable) = false];
+
   message Output {
     // output_ssts is the list of output SSTs.
     repeated SST ssts = 1 [(gogoproto.nullable) = false, (gogoproto.customname) = "SSTs"];
   }
-  // NEXT ID: 8.
+  // NEXT ID: 9.
 }
 
 // IndexBackfillMapProgress is emitted by map-stage processors to describe newly
