@@ -277,6 +277,13 @@ func TestLockTableBasic(t *testing.T) {
 					txn.WriteTimestamp.Forward(ts)
 				}
 				var clockObs roachpb.ObservedTimestamp
+				if txn.Status == roachpb.PENDING {
+					// Pending transactions require a non-empty clock observation.
+					clockObs = roachpb.ObservedTimestamp{
+						NodeID:    1,
+						Timestamp: clock.NowAsClockTimestamp(),
+					}
+				}
 				lt.PushedTransactionUpdated(txn, clockObs)
 				return ""
 
