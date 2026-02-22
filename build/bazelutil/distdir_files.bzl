@@ -771,6 +771,7 @@ DISTDIR_FILES = {
     "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/mattn/go-tty/com_github_mattn_go_tty-v0.0.0-20180907095812-13ff1204f104.zip": "e7384ae06bb54cc8f615d86e6397b11849be12c270d66460856f3fc6ad72aacb",
     "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/mattn/go-zglob/com_github_mattn_go_zglob-v0.0.3.zip": "8ef2dfc44aa352edd72e50287b7ac836c4c48fa439ca2648d8c1a4067f49e504",
     "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/matttproud/golang_protobuf_extensions/com_github_matttproud_golang_protobuf_extensions-v1.0.4.zip": "0b44aabaa9aea5d28e667849ad4d9821351466c3591dd7beddb2d025db6d55f2",
+    "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/maypok86/otter/v2/com_github_maypok86_otter_v2-v2.3.0.zip": "19088c673edb6d384346aa5ee5bd587501e4d35bd7dd2df6edc11f63b84f512e",
     "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/mgutz/ansi/com_github_mgutz_ansi-v0.0.0-20200706080929-d51e80ef957d.zip": "2e0c063f9597cb225904292981732f10298e95aa22a1b815297e318ba103dc1d",
     "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/microcosm-cc/bluemonday/com_github_microcosm_cc_bluemonday-v1.0.23.zip": "d720813b959b6713e000407778188cdc3b88cf3235a3dfda6543d7c5e748da6d",
     "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/miekg/dns/com_github_miekg_dns-v1.1.43.zip": "98eaddff5c30e475850f8f9c170bfb1adf33f0aaeeb280f71e77808a1dd902aa",

@@ -6225,6 +6225,16 @@ def go_deps():
         ],
     )
     go_repository(
+        name = "com_github_maypok86_otter_v2",
+        build_file_proto_mode = "disable_global",
+        importpath = "github.com/maypok86/otter/v2",
+        sha256 = "19088c673edb6d384346aa5ee5bd587501e4d35bd7dd2df6edc11f63b84f512e",
+        strip_prefix = "github.com/maypok86/otter/v2@v2.3.0",
+        urls = [
+            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/maypok86/otter/v2/com_github_maypok86_otter_v2-v2.3.0.zip",
+        ],
+    )
+    go_repository(
         name = "com_github_mgutz_ansi",
         build_file_proto_mode = "disable_global",
         importpath = "github.com/mgutz/ansi",

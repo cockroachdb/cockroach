@@ -878,6 +878,8 @@ func (c *txnStatusCache) clear() {
 	c.pendingTxns.clear()
 }
 
+const txnCacheSize = 8
+
 // finalizedTxnCache is a small LRU cache that holds finalized Transaction
 // objects (COMMITTED or ABORTED). Since finalized transactions don't need
 // clock observations for uncertainty checks, we only store the Transaction.
@@ -885,7 +887,7 @@ func (c *txnStatusCache) clear() {
 // The zero value of this struct is ready for use.
 type finalizedTxnCache struct {
 	mu   syncutil.Mutex
-	txns [8]*roachpb.Transaction // [MRU, ..., LRU]
+	txns [txnCacheSize]*roachpb.Transaction // [MRU, ..., LRU]
 }
 
 func (c *finalizedTxnCache) get(id uuid.UUID) (*roachpb.Transaction, bool) {
@@ -948,7 +950,7 @@ func (c *finalizedTxnCache) insertFrontLocked(txn *roachpb.Transaction) {
 // The zero value of this struct is ready for use.
 type pendingTxnCache struct {
 	mu   syncutil.Mutex
-	txns [8]*pendingTxnCacheEntry // [MRU, ..., LRU]
+	txns [txnCacheSize]*pendingTxnCacheEntry // [MRU, ..., LRU]
 }
 
 // pendingTxnCacheEntry holds a pending transaction and the clock observation
