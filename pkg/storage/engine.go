@@ -592,6 +592,7 @@ type Reader interface {
 		visitSharedFile func(sst *pebble.SharedSSTMeta) error,
 		visitExternalFile func(sst *pebble.ExternalFile) error,
 	) error
+
 	// ConsistentIterators returns true if the Reader implementation guarantees
 	// that the different iterators constructed by this Reader will see the same
 	// underlying Engine state. This is not true about Batch writes: new iterators
@@ -961,6 +962,11 @@ type Engine interface {
 	// All iterators created from a read-only engine are guaranteed to provide a
 	// consistent snapshot of the underlying engine. See the comment on the
 	// Reader interface and the Reader.ConsistentIterators method.
+	//
+	// NB: consistent iterators are not as of when NewReader is called. They are
+	// as of the time when the first iterator is created (often, this is when the
+	// first read happens if iterators are not used directly), or earlier if
+	// Reader.PinEngineStateForIterators is called.
 	NewReader(durability DurabilityRequirement) Reader
 	// NewReadOnly returns a new instance of a ReadWriter that wraps this
 	// engine, and with the given durability requirement. This wrapper panics
