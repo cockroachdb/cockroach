@@ -474,6 +474,7 @@ go_test(
         "distsql_flows_test.go",
         "drain_test.go",
         "drpc_test.go",
+        "external_tenant_drpc_test.go",
         "get_local_files_test.go",
         "graphite_test.go",
         "grpc_gateway_test.go",

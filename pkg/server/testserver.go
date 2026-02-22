@@ -1763,6 +1763,12 @@ func (ts *testServer) StartTenant(
 	st := params.Settings
 	if st == nil {
 		st = cluster.MakeTestingClusterSettings()
+		// Copy test setting overrides from the parent server to this external
+		// tenant, similar to how shared-process tenants inherit settings.
+		// This ensures ApplicationLevel settings like DRPC are propagated.
+		if parentSettings := ts.ClusterSettings(); parentSettings != nil {
+			st.SV.TestingCopyForVirtualCluster(&parentSettings.SV)
+		}
 	}
 
 	sqlCfg := makeTestSQLConfig(st, params.TenantID, params.TenantName)
