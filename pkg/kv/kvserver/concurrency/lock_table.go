@@ -916,13 +916,7 @@ func (g *lockTableGuardImpl) isSameTxn(txn *enginepb.TxnMeta) bool {
 
 // conflictWithHeld locks return true if the given lock conflicts with the
 // request for this guard.
-//
-// The resolveMustBeVirtual indicates whether locks which can be resolved based
-// on the txn status cache should only be considered when the request is
-// configured for a virtual resolution.
-func (g *lockTableGuardImpl) conflictsWithHeldLock(
-	tl *txnLock, key roachpb.Key, resolveMustBeVirtual bool,
-) bool {
+func (g *lockTableGuardImpl) conflictsWithHeldLock(tl *txnLock, key roachpb.Key) bool {
 	lockHolderTxn := tl.getLockHolderTxn()
 	if g.isSameTxn(lockHolderTxn) {
 		// We should never get here if the lock is already held by another request
@@ -937,24 +931,20 @@ func (g *lockTableGuardImpl) conflictsWithHeldLock(
 	if canResolve, up := g.canResolveKeyForHoldingTransaction(lockHolderTxn, g.curStrength(), key); canResolve {
 		// We share this code with a couple of contexts. For now, we want to avoid waking up
 		// readers who are not going to virtually resolve their intents.
-		//
-		// TODO(ssd): Should we just wake up everyone?
-		if (resolveMustBeVirtual && g.virtuallyResolveIntents) || !resolveMustBeVirtual {
-			if !tl.isHeldReplicated() {
-				// Only held unreplicated. Accumulate it as an unreplicated lock to
-				// resolve, in case any other waiting readers can benefit from the
-				// pushed timestamp.
-				//
-				// TODO(arul): this case is only possible while non-locking reads
-				// block on Exclusive locks. Once non-locking reads start only
-				// blocking on intents, it can be removed and asserted against.
-				g.toResolveUnreplicated = append(g.toResolveUnreplicated, up)
-			} else {
-				// Resolve to push the replicated intent.
-				g.toResolve = append(g.toResolve, up)
-			}
-			return false // No conflict on a lock we are going to resolve.
+		if !tl.isHeldReplicated() {
+			// Only held unreplicated. Accumulate it as an unreplicated lock to
+			// resolve, in case any other waiting readers can benefit from the
+			// pushed timestamp.
+			//
+			// TODO(arul): this case is only possible while non-locking reads
+			// block on Exclusive locks. Once non-locking reads start only
+			// blocking on intents, it can be removed and asserted against.
+			g.toResolveUnreplicated = append(g.toResolveUnreplicated, up)
+		} else {
+			// Resolve to push the replicated intent.
+			g.toResolve = append(g.toResolve, up)
 		}
+		return false // No conflict on a lock we are going to resolve.
 	}
 
 	// The held lock neither belongs to the request's transaction (which has
@@ -2826,7 +2816,7 @@ func (kl *keyLocks) conflictsWithLockHolders(g *lockTableGuardImpl) bool {
 	}
 
 	for e := kl.holders.Front(); e != nil; e = e.Next() {
-		if g.conflictsWithHeldLock(e.Value, kl.key, false) {
+		if g.conflictsWithHeldLock(e.Value, kl.key) {
 			return true
 		}
 	}
@@ -3648,7 +3638,7 @@ func (kl *keyLocks) recomputeWaitQueues(st *cluster.Settings) {
 		reader := e.Value
 		curr := e
 		e = e.Next()
-		if !reader.conflictsWithHeldLock(txnLock, kl.key, true /* only allow virtual resolve */) {
+		if !reader.conflictsWithHeldLock(txnLock, kl.key) {
 			kl.removeReader(curr)
 		}
 	}
