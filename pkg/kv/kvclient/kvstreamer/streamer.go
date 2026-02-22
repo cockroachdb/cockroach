@@ -668,7 +668,6 @@ func (s *Streamer) Enqueue(ctx context.Context, reqs []kvpb.RequestUnion) (retEr
 			}
 		}
 		var subRequestIdx []int32
-		var subRequestIdxOverhead int64
 		var numScansInReqs int64
 		for i, pos := range positions {
 			switch reqs[pos].GetInner().(type) {
@@ -700,7 +699,6 @@ func (s *Streamer) Enqueue(ctx context.Context, reqs []kvpb.RequestUnion) (retEr
 				if s.mode == InOrder {
 					if subRequestIdx == nil {
 						subRequestIdx = make([]int32, len(singleRangeReqs))
-						subRequestIdxOverhead = int32SliceOverhead + int32Size*int64(cap(subRequestIdx))
 					}
 					subRequestIdx[i] = s.mu.numRangesPerScanRequest[pos]
 				}
@@ -714,10 +712,7 @@ func (s *Streamer) Enqueue(ctx context.Context, reqs []kvpb.RequestUnion) (retEr
 			isScanStarted = bitmap.NewBitmap(len(reqs))
 		}
 		numGetsInReqs := int64(len(singleRangeReqs)) - numScansInReqs
-		overheadAccountedFor := requestUnionSliceOverhead + requestUnionOverhead*int64(cap(singleRangeReqs)) + // reqs
-			intSliceOverhead + intSize*int64(cap(positions)) + // positions
-			subRequestIdxOverhead + // subRequestIdx
-			isScanStarted.MemUsage() // isScanStarted
+		overhead := calcRequestOverhead(singleRangeReqs, positions, subRequestIdx, isScanStarted)
 		r := singleRangeBatch{
 			reqs:                 singleRangeReqs,
 			positions:            positions,
@@ -725,7 +720,7 @@ func (s *Streamer) Enqueue(ctx context.Context, reqs []kvpb.RequestUnion) (retEr
 			isScanStarted:        isScanStarted,
 			numGetsInReqs:        numGetsInReqs,
 			reqsReservedBytes:    requestsMemUsage(singleRangeReqs),
-			overheadAccountedFor: overheadAccountedFor,
+			overheadAccountedFor: overhead,
 		}
 		totalReqsMemUsage += r.reqsReservedBytes + r.overheadAccountedFor
 
@@ -955,15 +950,18 @@ func (w *workerCoordinator) mainLoop(ctx context.Context) {
 		// to serve, so we use its priority to spill everything with less
 		// urgency when necessary to free up the budget.
 		spillingPriority := nextReq.priority()
-
+		// Wait for at least enough budget to issue one request.
 		avgResponseSize, shouldExit := w.getAvgResponseSize()
 		if shouldExit {
 			return
 		}
-
 		if atLeastBytes == 0 {
 			atLeastBytes = avgResponseSize
 		}
+		// Account for the response overheads.
+		atLeastBytes += getResponseOverhead*nextReq.numGetsInReqs +
+			scanResponseOverhead*(int64(len(nextReq.reqs))-nextReq.numGetsInReqs) +
+			int64(len(nextReq.reqs))*responseUnionOverhead
 
 		shouldExit = w.waitUntilEnoughBudget(ctx, atLeastBytes, spillingPriority)
 		if shouldExit {
@@ -1157,30 +1155,6 @@ func (w *workerCoordinator) issueRequestsForAsyncProcessing(
 	)
 	var budgetIsExhausted bool
 	for !w.s.requestsToServe.emptyLocked() && maxNumRequestsToIssue > 0 && !budgetIsExhausted {
-		if !headOfLine && w.s.budget.mu.acc.Used() > w.s.eagerMemUsageLimitBytes {
-			// The next batch is not head-of-the-line, and the budget has used
-			// up more than eagerMemUsageLimitBytes bytes. At this point, we
-			// stop issuing "eager" requests, so we just exit.
-			//
-			// This exit will not lead to the streamer deadlocking because we
-			// already have at least one batch to serve, and at some point we'll
-			// get into this loop with headOfLine=true, so we'll always be
-			// issuing at least one batch, eventually.
-			//
-			// This behavior is helpful to prevent pathological behavior
-			// observed in #113729. Namely, if we issue too many batches eagerly
-			// in the InOrder mode, the buffered responses might consume most of
-			// our memory budget, and at some point we might regress to
-			// processing requests one batch with a single Get / Scan request at
-			// a time. We don't want to just drop already received responses
-			// (we've already discarded the original singleRangeBatches anyway),
-			// so this mechanism allows us to preserve a fraction of the budget
-			// to processing head-of-the-line batches.
-			//
-			// Similar pattern can occur in the OutOfOrder mode too although the
-			// degradation is not as severe as in the InOrder mode.
-			return nil
-		}
 		singleRangeReqs := w.s.requestsToServe.nextLocked()
 		availableBudget := w.s.budget.limitBytes - w.s.budget.mu.acc.Used()
 		// minTargetBytes is the minimum TargetBytes limit with which it makes
@@ -1242,23 +1216,24 @@ func (w *workerCoordinator) issueRequestsForAsyncProcessing(
 		// that will get a very large single row in response which will exceed
 		// this limit).
 		targetBytes := int64(len(singleRangeReqs.reqs)) * avgResponseSize
+		if w.s.mode == InOrder {
+			pos := singleRangeReqs.positions
+			overlapCount := w.s.requestsToServe.lowerPriorityRequestCountLocked(pos[len(pos)-1])
+			if divisor := min(overlapCount, maxNumRequestsToIssue); divisor > 0 {
+				// Some results from this batch cannot be emitted until results from
+				// other singleRangeBatches are received. To account for that, we cap
+				// targetBytes to a fraction of the available budget proportional to the
+				// number of overlapping requests. This prevents the head-of-line batch
+				// from using up all the budget when most of its results depend on other
+				// batches.
+				targetBytes = min(targetBytes, int64(float64(availableBudget)/float64(divisor)))
+			}
+		}
 		// Make sure that targetBytes is sufficient to receive non-empty
 		// response. Our estimate might be an under-estimate when responses vary
 		// significantly in size.
 		if targetBytes < singleRangeReqs.minTargetBytes {
 			targetBytes = singleRangeReqs.minTargetBytes
-		}
-		if headOfLine && w.s.budget.mu.acc.Used() > w.s.eagerMemUsageLimitBytes {
-			// Given that the eager memory usage limit has already been
-			// exceeded, we won't issue any more requests for now, so rather
-			// than use the estimate on the response size, this head-of-the-line
-			// batch will use most of the available budget, as controlled by the
-			// session variable.
-			if headOfLineOnly := int64(float64(availableBudget) * w.s.headOfLineOnlyFraction); headOfLineOnly > targetBytes {
-				targetBytes = headOfLineOnly
-				// Ensure that we won't issue any more requests for now.
-				budgetIsExhausted = true
-			}
 		}
 		if targetBytes+responsesOverhead > availableBudget {
 			// We don't have enough budget to account for both the TargetBytes
@@ -1323,6 +1298,18 @@ func (w *workerCoordinator) issueRequestsForAsyncProcessing(
 			// overloaded already, so it seems better to not ask it to receive
 			// any more responses at the moment.
 			return err
+		}
+		if w.s.mode == InOrder {
+			// For InOrder mode, sort the requests that we expect to receive non-empty
+			// results for to take advantage of storage-level optimizations. Note that
+			// re-ordering requests can backfire in InOrder mode if we hit a limit
+			// earlier than expected. To mitigate that, leave the first request in its
+			// original position to ensure forward progress.
+			expectedResponseCount := int(float64(targetBytes) / float64(avgResponseSize))
+			expectedResponseCount = min(expectedResponseCount, len(singleRangeReqs.reqs))
+			if expectedResponseCount > 100 {
+				singleRangeReqs.sortSlice(1, expectedResponseCount, false /* sortByPos */)
+			}
 		}
 		w.performRequestAsync(ctx, singleRangeReqs, targetBytes, responsesOverhead, headOfLine)
 		w.s.requestsToServe.removeNextLocked()
@@ -1888,20 +1875,31 @@ func buildResumeSingleRangeBatch(
 ) (resumeReq singleRangeBatch) {
 	numIncompleteRequests := fp.numIncompleteGets + fp.numIncompleteScans
 	// We have to allocate the new Get and Scan requests, but we can reuse reqs,
-	// positions, and subRequestIdx slices.
+	// positions, and subRequestIdx slices. Reallocate them only if the capacity
+	// significantly exceeds numIncompleteRequests.
 	resumeReq.reqs = req.reqs[:numIncompleteRequests]
+	if cap(resumeReq.reqs) > 2*numIncompleteRequests {
+		resumeReq.reqs = make([]kvpb.RequestUnion, numIncompleteRequests)
+		copy(resumeReq.reqs, resumeReq.reqs[:numIncompleteRequests])
+	}
 	resumeReq.positions = req.positions[:0]
+	if cap(resumeReq.positions) > 2*numIncompleteRequests {
+		resumeReq.positions = make([]int, 0, numIncompleteRequests)
+	}
 	resumeReq.subRequestIdx = req.subRequestIdx[:0]
+	if req.subRequestIdx != nil && cap(resumeReq.subRequestIdx) > 2*numIncompleteRequests {
+		resumeReq.subRequestIdx = make([]int32, 0, numIncompleteRequests)
+	}
 	// isScanStarted actually needs to be preserved between singleRangeBatches.
 	resumeReq.isScanStarted = req.isScanStarted
 	resumeReq.numGetsInReqs = int64(fp.numIncompleteGets)
 	// We've already reconciled the budget with the actual reservation for the
 	// requests with the ResumeSpans.
 	resumeReq.reqsReservedBytes = fp.resumeReqsMemUsage
-	// TODO(yuzefovich): add heuristic for making fresh allocation of slices
-	// whenever only a fraction of them will be used by the resume batch. This
-	// will allow us to return most of overheadAccountedFor to the budget.
-	resumeReq.overheadAccountedFor = req.overheadAccountedFor
+	// Make sure to re-calculate the overhead in case we reallocated.
+	resumeReq.overheadAccountedFor = calcRequestOverhead(
+		resumeReq.reqs, resumeReq.positions, resumeReq.subRequestIdx, resumeReq.isScanStarted,
+	)
 	// Note that due to limitations of the KV layer (#75452) we cannot reuse
 	// original requests because the KV doesn't allow mutability (and all
 	// requests are modified by txnSeqNumAllocator, even if they are not
@@ -2031,5 +2029,33 @@ func buildResumeSingleRangeBatch(
 	atomic.AddInt64(&s.atomics.resumeBatchRequests, 1)
 	atomic.AddInt64(&s.atomics.resumeSingleRangeRequests, int64(numIncompleteRequests))
 
+	if s.mode == InOrder {
+		// We may have sorted (part of) the original singleRangeBatch by key before
+		// issuing it. Make sure to restore position order so that requests are
+		// prioritized correctly.
+		sortedByPos := true
+		for i := 1; i < len(resumeReq.positions); i++ {
+			if resumeReq.positions[i-1] > resumeReq.positions[i] {
+				sortedByPos = false
+				break
+			}
+		}
+		if !sortedByPos {
+			resumeReq.sortSlice(0, len(resumeReq.reqs), true /* sortByPos */)
+		}
+	}
+
 	return resumeReq
+}
+
+func calcRequestOverhead(
+	reqs []kvpb.RequestUnion, positions []int, subRequestIdx []int32, isScanStarted *bitmap.Bitmap,
+) int64 {
+	overhead := requestUnionSliceOverhead + requestUnionOverhead*int64(cap(reqs)) + // reqs
+		intSliceOverhead + intSize*int64(cap(positions)) + // positions
+		int32SliceOverhead + int32Size*int64(cap(subRequestIdx)) // subRequestIdx
+	if isScanStarted != nil {
+		overhead += isScanStarted.MemUsage()
+	}
+	return overhead
 }

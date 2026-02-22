@@ -363,16 +363,19 @@ func (r *Replica) canDropLatchesBeforeEval(
 		return false /* ok */, true /* stillNeedsIntentInterleaving */, nil
 	}
 
-	log.VEventf(
-		ctx, 3, "can drop latches early for batch (%v); scanning lock table first to detect conflicts", ba,
-	)
+	expensiveLogEnabled := log.ExpensiveLogEnabled(ctx, 3)
+	if expensiveLogEnabled {
+		log.VEventf(
+			ctx, 3, "can drop latches early for batch (%v); scanning lock table first to detect conflicts", ba,
+		)
+	}
 
 	maxLockConflicts := storage.MaxConflictsPerLockConflictError.Get(&r.store.cfg.Settings.SV)
 	targetLockConflictBytes := storage.TargetBytesPerLockConflictError.Get(&r.store.cfg.Settings.SV)
 	var intents []roachpb.Intent
 	// Check if any of the requests within the batch need to resolve any intents
 	// or if any of them need to use an intent interleaving iterator.
-	for _, req := range ba.Requests {
+	for idx, req := range ba.Requests {
 		reqHeader := req.GetInner().Header()
 		start, end := reqHeader.Key, reqHeader.EndKey
 		var txnID uuid.UUID
@@ -380,7 +383,8 @@ func (r *Replica) canDropLatchesBeforeEval(
 			txnID = ba.Txn.ID
 		}
 		needsIntentInterleavingForThisRequest, err := storage.ScanConflictingIntentsForDroppingLatchesEarly(
-			ctx, rw, txnID, ba.Header.Timestamp, start, end, &intents, maxLockConflicts, targetLockConflictBytes,
+			ctx, rw, txnID, ba.Header.Timestamp, start, end, &intents,
+			maxLockConflicts, targetLockConflictBytes, expensiveLogEnabled, idx,
 		)
 		if err != nil {
 			return false /* ok */, true /* stillNeedsIntentInterleaving */, kvpb.NewError(
@@ -391,6 +395,9 @@ func (r *Replica) canDropLatchesBeforeEval(
 		if maxLockConflicts != 0 && int64(len(intents)) >= maxLockConflicts {
 			break
 		}
+	}
+	if expensiveLogEnabled {
+		log.VEventf(ctx, 3, "finished scanning lock table for %d requests", len(ba.Requests))
 	}
 	if len(intents) > 0 {
 		return false /* ok */, false /* stillNeedsIntentInterleaving */, maybeAttachLease(

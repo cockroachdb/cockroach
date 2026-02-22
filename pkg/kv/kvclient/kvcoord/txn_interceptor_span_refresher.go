@@ -611,13 +611,20 @@ func (sr *txnSpanRefresher) tryRefreshTxnSpans(
 func (sr *txnSpanRefresher) appendRefreshSpans(
 	ctx context.Context, ba *kvpb.BatchRequest, br *kvpb.BatchResponse,
 ) error {
+	var refreshedSpansCount int
+	const logMessagesLimit = 32
 	expLogEnabled := log.ExpensiveLogEnabled(ctx, 3)
-	return ba.RefreshSpanIterate(br, func(span roachpb.Span) {
-		if expLogEnabled {
-			log.VEventf(ctx, 3, "recording span to refresh: %s", span.String())
+	err := ba.RefreshSpanIterate(br, func(span roachpb.Span) {
+		if expLogEnabled && refreshedSpansCount < logMessagesLimit {
+			log.VEventf(ctx, 3,"recording span to refresh: %s", span.String())
 		}
+		refreshedSpansCount++
 		sr.refreshFootprint.insert(span)
 	})
+	if expLogEnabled {
+		log.VEventf(ctx, 3, "finished recording %d spans to refresh", refreshedSpansCount)
+	}
+	return err
 }
 
 // resetRefreshSpansLocked clears the txnSpanRefresher's refresh span set and
