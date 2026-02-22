@@ -371,8 +371,9 @@ func (sm *SupportManager) sendHeartbeats(ctx context.Context) {
 		}
 	}
 	sm.metrics.HeartbeatSuccesses.Inc(int64(successes))
-	sm.metrics.HeartbeatFailures.Inc(int64(len(heartbeats) - successes))
-	log.KvExec.VInfof(ctx, 2, "sent heartbeats to %d stores", successes)
+	failures := int64(len(heartbeats) - successes)
+	sm.metrics.HeartbeatFailures.Inc(failures)
+	log.KvExec.VInfof(ctx, 2, "sent heartbeats to %d stores (%d failed)", successes, failures)
 }
 
 // withdrawSupport delegates support withdrawal to supporterStateHandler.

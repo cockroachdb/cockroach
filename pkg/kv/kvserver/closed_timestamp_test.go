@@ -628,7 +628,7 @@ func TestClosedTimestampFrozenAfterSubsumption(t *testing.T) {
 
 	// Increase the verbosity of the logs to help debug the test if it fails, especially
 	// raft related logs when the test tries to transfer the lease non-cooperatively.
-	testutils.SetVModule(t, "raft=4,*=1")
+	testutils.SetVModule(t, "raft=4,*=1,support_manager=4")
 
 	for _, test := range []struct {
 		name string
