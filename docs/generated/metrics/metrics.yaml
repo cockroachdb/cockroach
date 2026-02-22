@@ -7413,6 +7413,30 @@ layers:
       unit: NANOSECONDS
       aggregation: AVG
       derivative: NONE
+    - name: server.startup-test.last-updated
+      exported_name: server_startup_test_last_updated
+      description: Unix timestamp of when the startup test metric was set during server startup
+      y_axis_label: Timestamp
+      type: GAUGE
+      unit: TIMESTAMP_SEC
+      aggregation: AVG
+      derivative: NONE
+    - name: server.test.last-updated-counter
+      exported_name: server_test_last_updated_counter
+      description: test counter
+      y_axis_label: Counter
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+    - name: server.test.last-updated-histogram
+      exported_name: server_test_last_updated_histogram
+      description: test histogram
+      y_axis_label: Histogram
+      type: HISTOGRAM
+      unit: NANOSECONDS
+      aggregation: AVG
+      derivative: NONE
     - name: sql.bytesin
       exported_name: sql_bytesin
       description: Number of SQL bytes received
