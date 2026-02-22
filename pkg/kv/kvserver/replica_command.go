@@ -2952,6 +2952,19 @@ func (r *Replica) sendSnapshotUsingDelegate(
 	senderQueuePriority float64,
 ) (retErr error) {
 
+	// Enable verbose tracing for delegated snapshots if configured by the testing
+	// knob.
+	if traceChan := r.store.cfg.TestingKnobs.DelegatedSnapshotTraceChan; traceChan != nil {
+		var sp *tracing.Span
+		ctx, sp = r.store.cfg.Tracer().StartSpanCtx(
+			ctx, "send-snapshot-using-delegate", tracing.WithRecording(tracingpb.RecordingVerbose),
+		)
+		defer func() {
+			recording := sp.FinishAndGetConfiguredRecording()
+			traceChan <- recording
+		}()
+	}
+
 	defer func() {
 		// Report the snapshot status to Raft, which expects us to do this once we
 		// finish sending the snapshot.

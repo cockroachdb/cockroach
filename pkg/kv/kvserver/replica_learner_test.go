@@ -379,6 +379,9 @@ func TestDelegateSnapshot(t *testing.T) {
 
 	// Record snapshots as they are sent on this channel for later analysis.
 	requestChannel := make(chan *kvserverpb.DelegateSendSnapshotRequest, 2)
+	// Capture snapshot traces for debugging via this channel.
+	traceChannel := make(chan tracingpb.Recording, 2)
+
 	knobs, ltk := makeReplicationTestKnobs()
 	ltk.storeKnobs.SendSnapshot = func(request *kvserverpb.DelegateSendSnapshotRequest) {
 		// TODO(abaptist): Remove this condition once 96841 is fixed. This
@@ -388,6 +391,8 @@ func TestDelegateSnapshot(t *testing.T) {
 			requestChannel <- request
 		}
 	}
+	// Enable tracing for delegated snapshots by providing a trace channel.
+	ltk.storeKnobs.DelegatedSnapshotTraceChan = traceChannel
 
 	localityA := roachpb.Locality{Tiers: []roachpb.Tier{{Key: "region", Value: "a"}}}
 	localityB := roachpb.Locality{Tiers: []roachpb.Tier{{Key: "region", Value: "b"}}}
@@ -417,7 +422,9 @@ func TestDelegateSnapshot(t *testing.T) {
 	{
 		_ = tc.AddVotersOrFatal(t, scratchKey, tc.Targets(2)...)
 		request := <-requestChannel
-		require.Equalf(t, request.DelegatedSender.StoreID, roachpb.StoreID(1), "Wrong sender for request %+v", request)
+		trace := <-traceChannel
+		require.Equalf(t, roachpb.StoreID(1), request.DelegatedSender.StoreID,
+			"Wrong sender for request %+v.\nSnapshot trace:\n%s", request, trace)
 	}
 
 	verifySnapshotMetrics(t, tc, map[int]expectedMetric{
@@ -444,7 +451,9 @@ func TestDelegateSnapshot(t *testing.T) {
 		})
 
 		request := <-requestChannel
-		require.Equalf(t, request.DelegatedSender.StoreID, roachpb.StoreID(3), "Wrong type of request %+v", request)
+		trace := <-traceChannel
+		require.Equalf(t, roachpb.StoreID(3), request.DelegatedSender.StoreID,
+			"Wrong sender for request %+v.\nSnapshot trace:\n%s", request, trace)
 		// TODO(abaptist): Remove this loop. Sometimes the delegated request fails
 		// due to Raft updating the generation before we can delegate. Even with the
 		// loop above to get the delegate on the correct generation, this is racy if
@@ -453,6 +462,7 @@ func TestDelegateSnapshot(t *testing.T) {
 		// leaseholder.
 		for len(requestChannel) > 0 {
 			<-requestChannel
+			<-traceChannel
 		}
 
 		verifySnapshotMetrics(t, tc, map[int]expectedMetric{
@@ -467,7 +477,9 @@ func TestDelegateSnapshot(t *testing.T) {
 	{
 		_ = tc.AddVotersOrFatal(t, scratchKey, tc.Targets(1)...)
 		request := <-requestChannel
-		require.Equalf(t, request.DelegatedSender.StoreID, roachpb.StoreID(1), "Wrong type of request %+v", request)
+		trace := <-traceChannel
+		require.Equalf(t, roachpb.StoreID(1), request.DelegatedSender.StoreID,
+			"Wrong sender for request %+v.\nSnapshot trace:\n%s", request, trace)
 	}
 	verifySnapshotMetrics(t, tc, map[int]expectedMetric{
 		0: {1, 0, 0, 0},

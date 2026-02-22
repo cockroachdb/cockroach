@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
 )
 
 // StoreTestingKnobs is a part of the context used to control parts of
@@ -339,6 +340,9 @@ type StoreTestingKnobs struct {
 	// SendSnapshot is run after receiving a DelegateRaftSnapshot request but
 	// before any throttling or sending logic.
 	SendSnapshot func(*kvserverpb.DelegateSendSnapshotRequest)
+	// DelegatedSnapshotTraceChan, if set, enables verbose tracing when sending
+	// snapshots and sends the trace recording on the channel.
+	DelegatedSnapshotTraceChan chan tracingpb.Recording
 	// ReceiveSnapshot is run after receiving a snapshot header but before
 	// acquiring snapshot quota or doing shouldAcceptSnapshotData checks. If an
 	// error is returned from the hook, it's sent as an ERROR SnapshotResponse.
