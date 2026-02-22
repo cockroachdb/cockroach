@@ -2844,15 +2844,6 @@ func TestLogicalReplicationCreationChecks(t *testing.T) {
 	expectErr(t, "tab", "cannot create logical replication stream: table tab references functions with IDs [[0-9]+]")
 	replicationtestutils.WaitForAllProducerJobsToFail(t, dbB)
 
-	// Check if the table references a sequence.
-	dbA.Exec(t, "ALTER TABLE tab DROP COLUMN udf_col")
-	dbB.Exec(t, "ALTER TABLE tab DROP COLUMN udf_col")
-	dbA.Exec(t, "CREATE SEQUENCE my_seq")
-	dbA.Exec(t, "ALTER TABLE tab ADD COLUMN seq_col INT NOT NULL DEFAULT nextval('my_seq')")
-	dbB.Exec(t, "ALTER TABLE tab ADD COLUMN seq_col INT NOT NULL DEFAULT 1")
-	expectErr(t, "tab", "cannot create logical replication stream: table tab references sequences with IDs [[0-9]+]")
-	replicationtestutils.WaitForAllProducerJobsToFail(t, dbB)
-
 	// Check if table has a trigger.
 	dbA.Exec(t, "ALTER TABLE tab DROP COLUMN seq_col")
 	dbB.Exec(t, "ALTER TABLE tab DROP COLUMN seq_col")
@@ -3085,4 +3076,49 @@ func TestLogicalReplicationCapitalTableName(t *testing.T) {
 
 	reverseJobID := GetReverseJobID(ctx, t, dbA, jobID)
 	WaitUntilReplicatedTime(t, s.Clock().Now(), dbA, reverseJobID)
+}
+
+func TestCreateLogicallyReplicatedWithSourceSequences(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+
+	server, s, dbA, dbB := setupLogicalTestServer(t, ctx, testClusterBaseClusterArgs, 1)
+	defer server.Stopper().Stop(ctx)
+
+	dbAURL := replicationtestutils.GetExternalConnectionURI(t, s, s, serverutils.DBName("a"))
+	dbBURL := replicationtestutils.GetExternalConnectionURI(t, s, s, serverutils.DBName("b"))
+
+	dbA.Exec(t, "CREATE SEQUENCE test_seq")
+	dbA.Exec(t, "CREATE TABLE foo (x INT DEFAULT nextval('test_seq'))")
+	dbA.Exec(t, "INSERT INTO foo VALUES (DEFAULT), (DEFAULT), (DEFAULT)")
+
+	t.Run("unidirectional replication succeeds", func(t *testing.T) {
+		var jobID jobspb.JobID
+		dbB.QueryRow(
+			t,
+			"CREATE LOGICALLY REPLICATED TABLE foo FROM TABLE foo ON $1 WITH UNIDIRECTIONAL",
+			dbAURL.String(),
+		).Scan(&jobID)
+		WaitUntilReplicatedTime(t, s.Clock().Now(), dbB, jobID)
+		dbB.CheckQueryResults(t, "SELECT * FROM foo", [][]string{
+			{"1"}, {"2"}, {"3"},
+		})
+		dbA.Exec(t, "INSERT INTO foo VALUES (DEFAULT), (DEFAULT), (DEFAULT)")
+		WaitUntilReplicatedTime(t, s.Clock().Now(), dbB, jobID)
+		dbB.CheckQueryResults(t, "SELECT * FROM foo", [][]string{
+			{"1"}, {"2"}, {"3"}, {"4"}, {"5"}, {"6"},
+		})
+	})
+
+	t.Run("bidirectional replication fails", func(t *testing.T) {
+		dbB.ExpectErr(
+			t,
+			"sequence references are not supported",
+			"CREATE LOGICALLY REPLICATED TABLE bar FROM TABLE foo ON $1 WITH BIDIRECTIONAL ON $2",
+			dbAURL.String(),
+			dbBURL.String(),
+		)
+	})
 }

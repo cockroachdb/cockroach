@@ -110,7 +110,7 @@ func TestExtractIngestExternalCatalog(t *testing.T) {
 
 		var written externalpb.ExternalCatalog
 		require.NoError(t, sqltestutils.TestingDescsTxn(ctx, srv, func(ctx context.Context, txn isql.Txn, col *descs.Collection) error {
-			written, err = IngestExternalCatalog(ctx, &execCfg, sqlUser, ingestableCatalog, txn, col, defaultdbID, defaultdbpublicID, false, ingestedTableNames)
+			written, err = IngestExternalCatalog(ctx, &execCfg, sqlUser, ingestableCatalog, txn, col, defaultdbID, defaultdbpublicID, false, ingestedTableNames, nil)
 			return err
 		}))
 		require.Equal(t, 2, len(written.Tables))
@@ -148,7 +148,7 @@ func TestExtractIngestExternalCatalog(t *testing.T) {
 		// an error.
 		require.ErrorContains(t,
 			sqltestutils.TestingDescsTxn(ctx, srv, func(ctx context.Context, txn isql.Txn, col *descs.Collection) error {
-				_, err = IngestExternalCatalog(ctx, &execCfg, sqlUser, udtCatalog, txn, col, defaultdbID, defaultdbpublicID, false, []string{"data"})
+				_, err = IngestExternalCatalog(ctx, &execCfg, sqlUser, udtCatalog, txn, col, defaultdbID, defaultdbpublicID, false, []string{"data"}, nil)
 				return err
 			}),
 			"cross database type references are not supported",
@@ -163,14 +163,14 @@ func TestExtractIngestExternalCatalog(t *testing.T) {
 		sadCatalog, err := extractCatalog("db1.sc1.tab3")
 		require.NoError(t, err)
 		require.ErrorContains(t, sqltestutils.TestingDescsTxn(ctx, srv, func(ctx context.Context, txn isql.Txn, col *descs.Collection) error {
-			_, err := IngestExternalCatalog(ctx, &execCfg, sqlUser, sadCatalog, txn, col, defaultdbID, defaultdbpublicID, false, []string{"tab3"})
+			_, err := IngestExternalCatalog(ctx, &execCfg, sqlUser, sadCatalog, txn, col, defaultdbID, defaultdbpublicID, false, []string{"tab3"}, nil)
 			return err
 		}), "invalid outbound foreign key")
 
 		anotherSadCatalog, err := extractCatalog("db1.sc1.tab2")
 		require.NoError(t, err)
 		require.ErrorContains(t, sqltestutils.TestingDescsTxn(ctx, srv, func(ctx context.Context, txn isql.Txn, col *descs.Collection) error {
-			_, err := IngestExternalCatalog(ctx, &execCfg, sqlUser, anotherSadCatalog, txn, col, defaultdbID, defaultdbpublicID, false, []string{"tab2"})
+			_, err := IngestExternalCatalog(ctx, &execCfg, sqlUser, anotherSadCatalog, txn, col, defaultdbID, defaultdbpublicID, false, []string{"tab2"}, nil)
 			return err
 		}), "invalid inbound foreign key")
 	})
