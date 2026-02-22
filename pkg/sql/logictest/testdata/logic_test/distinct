@@ -232,3 +232,39 @@ query IT
 SELECT x, jsonb_agg(DISTINCT jsonb_build_object('y', y, 'z', z)) FROM (SELECT * FROM t ORDER BY i) GROUP BY x
 ----
 1 [{"y": 2, "z": "hello"}, {"y": 2, "z": "hello there"}]
+
+# Regression test for issue #158879: null_ordered_last with DISTINCT
+statement ok
+DROP TABLE IF EXISTS t_nulls;
+
+statement ok
+CREATE TABLE t_nulls (
+  k INT PRIMARY KEY,
+  i INT
+);
+
+statement ok
+INSERT INTO t_nulls VALUES (1, 1), (2, NULL), (3, 2), (4, NULL), (5, 1);
+
+# Test DISTINCT with null_ordered_last=true
+statement ok
+SET null_ordered_last = true;
+
+query I
+SELECT DISTINCT i FROM t_nulls ORDER BY i
+----
+1
+2
+NULL
+
+# Reset the setting
+statement ok
+SET null_ordered_last = false;
+
+# Test DISTINCT with explicit NULLS LAST
+query I
+SELECT DISTINCT i FROM t_nulls ORDER BY i NULLS LAST
+----
+1
+2
+NULL
