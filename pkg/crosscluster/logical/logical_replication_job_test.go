@@ -2288,6 +2288,7 @@ func TestLogicalReplicationSchemaChanges(t *testing.T) {
 	dbBURL := replicationtestutils.GetExternalConnectionURI(t, s, s, serverutils.DBName("b"))
 
 	var jobAID jobspb.JobID
+	dbA.Exec(t, "SET CLUSTER SETTING logical_replication.consumer.immediate_mode_writer = 'sql'")
 	dbA.QueryRow(t, "CREATE LOGICAL REPLICATION STREAM FROM TABLE tab ON $1 INTO TABLE tab", dbBURL.String()).Scan(&jobAID)
 
 	// Changing safe table storage parameters is allowed.
@@ -2303,7 +2304,7 @@ func TestLogicalReplicationSchemaChanges(t *testing.T) {
 		{"drop index", "DROP INDEX idx", true},
 
 		// adding unsuppored indexes disallowed
-		{"add virtual column index", "CREATE INDEX virtual_col_idx ON tab(virtual_col)", false},
+		{"add virtual column index", "CREATE INDEX virtual_col_idx ON tab(virtual_col)", true},
 		{"add hash index", "CREATE INDEX hash_idx ON tab(pk) USING HASH WITH (bucket_count = 4)", false},
 		{"add unique index", "CREATE UNIQUE INDEX unique_idx ON tab(composite_col)", false},
 
