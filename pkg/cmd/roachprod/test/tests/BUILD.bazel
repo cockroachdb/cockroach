@@ -1,0 +1,213 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_test")
+
+go_test(
+    name = "create",
+    size = "enormous",
+    srcs = [
+        "create_test.go",
+        "main_test.go",
+    ],
+    data = [
+        "//pkg/cmd/roachprod",
+    ],
+    env = {
+        "ROACHPROD_BINARY": "$(location //pkg/cmd/roachprod)",
+        "HOME": "$$TEST_TMPDIR",
+    },
+    tags = [
+        "integration",
+    ],
+    deps = [
+        "//pkg/cmd/roachprod/test/framework",
+        "//pkg/roachprod/vm",
+        "//pkg/roachprod/vm/gce",
+        "@com_github_stretchr_testify//require",
+    ],
+)
+
+go_test(
+    name = "destroy",
+    size = "enormous",
+    srcs = [
+        "destroy_test.go",
+        "main_test.go",
+    ],
+    data = [
+        "//pkg/cmd/roachprod",
+    ],
+    env = {
+        "ROACHPROD_BINARY": "$(location //pkg/cmd/roachprod)",
+        "HOME": "$$TEST_TMPDIR",
+    },
+    tags = [
+        "integration",
+    ],
+    deps = [
+        "//pkg/cmd/roachprod/test/framework",
+        "@com_github_stretchr_testify//require",
+    ],
+)
+
+go_test(
+    name = "extend",
+    size = "enormous",
+    srcs = [
+        "extend_test.go",
+        "main_test.go",
+    ],
+    data = [
+        "//pkg/cmd/roachprod",
+    ],
+    env = {
+        "ROACHPROD_BINARY": "$(location //pkg/cmd/roachprod)",
+        "HOME": "$$TEST_TMPDIR",
+    },
+    tags = [
+        "integration",
+    ],
+    deps = [
+        "//pkg/cmd/roachprod/test/framework",
+        "@com_github_stretchr_testify//require",
+    ],
+)
+
+go_test(
+    name = "managed",
+    size = "enormous",
+    srcs = [
+        "main_test.go",
+        "managed_test.go",
+    ],
+    data = [
+        "//pkg/cmd/roachprod",
+    ],
+    env = {
+        "ROACHPROD_BINARY": "$(location //pkg/cmd/roachprod)",
+        "HOME": "$$TEST_TMPDIR",
+    },
+    tags = [
+        "integration",
+    ],
+    deps = [
+        "//pkg/cmd/roachprod/test/framework",
+        "@com_github_stretchr_testify//require",
+    ],
+)
+
+go_test(
+    name = "populate_etc_hosts",
+    size = "enormous",
+    srcs = [
+        "main_test.go",
+        "populate_etc_hosts_test.go",
+    ],
+    data = [
+        "//pkg/cmd/roachprod",
+    ],
+    env = {
+        "ROACHPROD_BINARY": "$(location //pkg/cmd/roachprod)",
+        "HOME": "$$TEST_TMPDIR",
+    },
+    tags = [
+        "integration",
+    ],
+    deps = [
+        "//pkg/cmd/roachprod/test/framework",
+        "@com_github_stretchr_testify//require",
+    ],
+)
+
+go_test(
+    name = "reset",
+    size = "enormous",
+    srcs = [
+        "main_test.go",
+        "reset_test.go",
+    ],
+    data = [
+        "//pkg/cmd/roachprod",
+    ],
+    env = {
+        "ROACHPROD_BINARY": "$(location //pkg/cmd/roachprod)",
+        "HOME": "$$TEST_TMPDIR",
+    },
+    tags = [
+        "integration",
+    ],
+    deps = [
+        "//pkg/cmd/roachprod/test/framework",
+        "@com_github_stretchr_testify//require",
+    ],
+)
+
+go_test(
+    name = "start_stop",
+    size = "enormous",
+    srcs = [
+        "main_test.go",
+        "start_stop_test.go",
+    ],
+    data = [
+        "//pkg/cmd/roachprod",
+    ],
+    env = {
+        "ROACHPROD_BINARY": "$(location //pkg/cmd/roachprod)",
+        "HOME": "$$TEST_TMPDIR",
+    },
+    tags = [
+        "integration",
+    ],
+    deps = [
+        "//pkg/cmd/roachprod/test/framework",
+        "@com_github_stretchr_testify//require",
+    ],
+)
+
+go_test(
+    name = "version",
+    size = "small",
+    srcs = [
+        "main_test.go",
+        "version_test.go",
+    ],
+    data = [
+        "//pkg/cmd/roachprod",
+    ],
+    env = {
+        "ROACHPROD_BINARY": "$(location //pkg/cmd/roachprod)",
+        "HOME": "$$TEST_TMPDIR",
+    },
+    tags = [
+        "integration",
+    ],
+    deps = [
+        "//pkg/cmd/roachprod/test/framework",
+        "@com_github_stretchr_testify//require",
+    ],
+)
+
+go_test(
+    name = "tests_test",
+    srcs = [
+        "create_test.go",
+        "destroy_test.go",
+        "extend_test.go",
+        "main_test.go",
+        "managed_test.go",
+        "populate_etc_hosts_test.go",
+        "reset_test.go",
+        "start_stop_test.go",
+        "version_test.go",
+    ],
+    tags = [
+        "integration",
+        "manual",
+    ],  # keep
+    deps = [
+        "//pkg/cmd/roachprod/test/framework",
+        "//pkg/roachprod/vm",
+        "//pkg/roachprod/vm/gce",
+        "@com_github_cockroachdb_errors//oserror",
+        "@com_github_stretchr_testify//require",
+    ],
+)
