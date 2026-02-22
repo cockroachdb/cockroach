@@ -108,6 +108,10 @@ const (
 	// due to the fact that they are not actually executed.
 	ExprFmtHideFastPathChecks
 
+	// ExprFmtHideTableIDs hides the :tableID qualification from table@index
+	// labels.
+	ExprFmtHideTableIDs
+
 	// ExprFmtHideAll shows only the basic structure of the expression.
 	// Note: this flag should be used judiciously, as its meaning changes whenever
 	// we add more flags.
@@ -1517,6 +1521,10 @@ func (f *ExprFmtCtx) formatIndex(tabID opt.TableID, idxOrd cat.IndexOrdinal, rev
 		fmt.Fprintf(f.Buffer, " %s", tableName(f, tabID))
 	} else {
 		fmt.Fprintf(f.Buffer, " %s@%s", tableName(f, tabID), index.Name())
+	}
+	if !f.HasFlags(ExprFmtHideTableIDs) {
+		f.Buffer.WriteRune(':')
+		f.Buffer.WriteString(tabID.Pretty())
 	}
 	if reverse {
 		f.Buffer.WriteString(",rev")
