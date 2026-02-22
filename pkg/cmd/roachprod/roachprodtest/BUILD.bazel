@@ -1,0 +1,48 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "roachprodtest",
+    srcs = [
+        "assertions.go",
+        "operations.go",
+        "testconfig.go",
+        "testutils.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/cmd/roachprod/roachprodtest",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/roachprod/cloud",
+        "//pkg/roachprod/cloud/types",
+        "//pkg/roachprod/vm",
+        "//pkg/roachprod/vm/gce",
+        "//pkg/util/randutil",
+        "@com_github_stretchr_testify//require",
+    ],
+)
+
+go_test(
+    name = "roachprodtest_test",
+    size = "enormous",
+    srcs = [
+        "create_test.go",
+        "help_test.go",
+        "list_test.go",
+        "version_test.go",
+    ],
+    data = [
+        "//pkg/cmd/roachprod",
+    ],
+    embed = [":roachprodtest"],
+    env = {
+        "ROACHPROD_BINARY": "$(location //pkg/cmd/roachprod)",
+        "HOME": "$$TEST_TMPDIR",
+    },
+    tags = [
+        "integration",
+    ],
+    deps = [
+        "//pkg/roachprod/vm",
+        "//pkg/roachprod/vm/gce",
+        "@com_github_stretchr_testify//require",
+    ],
+)
