@@ -1340,6 +1340,58 @@ func TestCompactionCheckpointing(t *testing.T) {
 	validateCompactedBackupForTables(t, db, collectionURI, []string{"bank"}, start, end, noOpts, noOpts, 2)
 }
 
+func TestBackupCompactionProgressTracking(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	defer jobs.TestingSetProgressThresholds()()
+
+	_, db, _, cleanup := backupRestoreTestSetup(
+		t, singleNode, 1000 /* numAccounts */, InitManualReplication,
+	)
+	defer cleanup()
+
+	mutate := func() {
+		db.Exec(t, "UPDATE data.bank SET balance = balance + 1")
+	}
+	collectionURI := []string{"nodelocal://1/backup"}
+	start := getTime()
+	backupStmt := fullBackupQuery(fullCluster, collectionURI, start, noOpts)
+	db.Exec(t, backupStmt)
+	mutate()
+	db.Exec(t, incBackupQuery(fullCluster, collectionURI, noAOST, noOpts))
+	mutate()
+	end := getTime()
+	db.Exec(t, incBackupQuery(fullCluster, collectionURI, end, noOpts))
+
+	var backupPath string
+	db.QueryRow(
+		t,
+		fmt.Sprintf("SHOW BACKUPS IN (%s)", stringifyCollectionURI(collectionURI)),
+	).Scan(&backupPath)
+
+	db.Exec(t, "SET CLUSTER SETTING backup.restore_span.target_size = '1KB'")
+	db.Exec(t, "SET CLUSTER SETTING backup.restore_span.max_file_count = 2")
+	jobID := triggerCompaction(t, db, backupStmt, backupPath, start, end)
+	jobutils.WaitForJobToSucceed(t, db, jobID)
+
+	// Validate that fraction_completed was updated correctly.
+	rows := db.Query(t,
+		"SELECT fraction FROM system.job_progress_history WHERE job_id = $1 ORDER BY written",
+		jobID,
+	)
+	var frac float64
+	var updates int
+	for rows.Next() {
+		updates++
+		oldFrac := frac
+		require.NoError(t, rows.Scan(&frac))
+		require.GreaterOrEqual(t, frac, oldFrac)
+	}
+	require.NoError(t, rows.Err())
+	require.Greater(t, updates, 2)
+	require.Equal(t, 1.0, frac)
+}
+
 func TestToggleCompactionForRestore(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)

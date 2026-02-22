@@ -58,10 +58,11 @@ func (m *mockIntentResolver) ResolveIntents(
 }
 
 type mockLockTableGuard struct {
-	state         waitingState
-	signal        chan struct{}
-	stateObserved chan struct{}
-	toResolve     []roachpb.LockUpdate
+	state                   waitingState
+	signal                  chan struct{}
+	stateObserved           chan struct{}
+	toResolve               []roachpb.LockUpdate
+	virtuallyResolveIntents bool
 }
 
 var _ lockTableGuard = &mockLockTableGuard{}
@@ -78,6 +79,12 @@ func (g *mockLockTableGuard) CurState() (waitingState, error) {
 }
 func (g *mockLockTableGuard) ResolveBeforeScanning() []roachpb.LockUpdate {
 	return g.toResolve
+}
+func (g *mockLockTableGuard) IntentsToResolveVirtually() []roachpb.LockUpdate {
+	return g.toResolve
+}
+func (g *mockLockTableGuard) VirtuallyResolvesIntents() bool {
+	return g.virtuallyResolveIntents
 }
 func (g *mockLockTableGuard) CheckOptimisticNoConflicts(*lockspanset.LockSpanSet) (ok bool) {
 	return true
@@ -376,6 +383,56 @@ func testWaitPush(t *testing.T, k waitKind, makeReq func() Request, expPushTS hl
 			require.Nil(t, err)
 		})
 	})
+}
+
+// TestLockTableWaiterSkipsResolveWithVIR verifies that pushLockTxn does not
+// physically resolve the intent when the guard has virtual intent resolution
+// enabled.
+func TestLockTableWaiterSkipsResolveWithVIR(t *testing.T) {
+	ctx := context.Background()
+	w, ir, g, _ := setupLockTableWaiterTest()
+	defer w.stopper.Stop(ctx)
+
+	g.virtuallyResolveIntents = true
+
+	pusheeTxn := makeTxnProto("pushee")
+	pusherTxn := makeTxnProto("pusher")
+	req := Request{
+		Txn:       &pusherTxn,
+		Timestamp: pusherTxn.ReadTimestamp,
+	}
+	keyA := roachpb.Key("keyA")
+
+	g.state = waitingState{
+		kind:          waitFor,
+		txn:           &pusheeTxn.TxnMeta,
+		key:           keyA,
+		held:          true,
+		guardStrength: lock.None,
+	}
+	g.notify()
+
+	ir.pushTxn = func(
+		_ context.Context,
+		pusheeArg *enginepb.TxnMeta,
+		h kvpb.Header,
+		pushType kvpb.PushTxnType,
+	) (*roachpb.Transaction, bool, *Error) {
+		resp := &roachpb.Transaction{TxnMeta: *pusheeArg, Status: roachpb.ABORTED}
+		w.lt.(*mockLockTable).txnFinalizedFn = func(txn *roachpb.Transaction) {}
+		// With VIR, the physical resolve should be skipped. Transition
+		// directly to doneWaiting.
+		g.state = waitingState{kind: doneWaiting}
+		g.notify()
+		return resp, false, nil
+	}
+	ir.resolveIntent = func(context.Context, roachpb.LockUpdate, intentresolver.ResolveOptions) *Error {
+		t.Fatal("ResolveIntent should not be called when VIR is enabled")
+		return nil
+	}
+
+	err := w.WaitOn(ctx, req, g)
+	require.Nil(t, err)
 }
 
 func testWaitNoopUntilDone(t *testing.T, k waitKind, makeReq func() Request) {

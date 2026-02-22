@@ -175,6 +175,10 @@ type ImmediateMutationVisitor interface {
 	AddPartitionZoneConfig(context.Context, AddPartitionZoneConfig) error
 	EnableRowLevelSecurityMode(context.Context, EnableRowLevelSecurityMode) error
 	ForcedRowLevelSecurityMode(context.Context, ForcedRowLevelSecurityMode) error
+	SetTableLocalityGlobal(context.Context, SetTableLocalityGlobal) error
+	SetTableLocalityPrimaryRegion(context.Context, SetTableLocalityPrimaryRegion) error
+	SetTableLocalitySecondaryRegion(context.Context, SetTableLocalitySecondaryRegion) error
+	UnsetTableLocality(context.Context, UnsetTableLocality) error
 	MarkRecreatedIndexAsInvisible(context.Context, MarkRecreatedIndexAsInvisible) error
 	MarkRecreatedIndexesAsVisible(context.Context, MarkRecreatedIndexesAsVisible) error
 	MarkRecreatedIndexAsVisible(context.Context, MarkRecreatedIndexAsVisible) error
@@ -972,6 +976,26 @@ func (op EnableRowLevelSecurityMode) Visit(ctx context.Context, v ImmediateMutat
 // Visit is part of the ImmediateMutationOp interface.
 func (op ForcedRowLevelSecurityMode) Visit(ctx context.Context, v ImmediateMutationVisitor) error {
 	return v.ForcedRowLevelSecurityMode(ctx, op)
+}
+
+// Visit is part of the ImmediateMutationOp interface.
+func (op SetTableLocalityGlobal) Visit(ctx context.Context, v ImmediateMutationVisitor) error {
+	return v.SetTableLocalityGlobal(ctx, op)
+}
+
+// Visit is part of the ImmediateMutationOp interface.
+func (op SetTableLocalityPrimaryRegion) Visit(ctx context.Context, v ImmediateMutationVisitor) error {
+	return v.SetTableLocalityPrimaryRegion(ctx, op)
+}
+
+// Visit is part of the ImmediateMutationOp interface.
+func (op SetTableLocalitySecondaryRegion) Visit(ctx context.Context, v ImmediateMutationVisitor) error {
+	return v.SetTableLocalitySecondaryRegion(ctx, op)
+}
+
+// Visit is part of the ImmediateMutationOp interface.
+func (op UnsetTableLocality) Visit(ctx context.Context, v ImmediateMutationVisitor) error {
+	return v.UnsetTableLocality(ctx, op)
 }
 
 // Visit is part of the ImmediateMutationOp interface.

@@ -45,6 +45,7 @@ go_test(
         "//pkg/ccl",
         "//pkg/ccl/changefeedccl/cdctest",
         "//pkg/ccl/storageccl",
+        "//pkg/kv/kvpb",
         "//pkg/roachpb",
         "//pkg/security/securityassets",
         "//pkg/security/securitytest",

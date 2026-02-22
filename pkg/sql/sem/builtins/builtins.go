@@ -4154,8 +4154,55 @@ value if you rely on the HLC for accuracy.`,
 			Volatility: volatility.Immutable,
 		},
 	),
-	"dmetaphone":     makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 56820, Category: builtinconstants.CategoryFuzzyStringMatching}),
-	"dmetaphone_alt": makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 56820, Category: builtinconstants.CategoryFuzzyStringMatching}),
+	"dmetaphone": makeBuiltin(
+		tree.FunctionProperties{Category: builtinconstants.CategoryFuzzyStringMatching},
+		tree.Overload{
+			Types:      tree.ParamTypes{{Name: "source", Typ: types.String}},
+			ReturnType: tree.FixedReturnType(types.String),
+			Fn: func(_ context.Context, _ *eval.Context, args tree.Datums) (tree.Datum, error) {
+				s := string(tree.MustBeDString(args[0]))
+				return tree.NewDString(fuzzystrmatch.DMetaphone(s)), nil
+			},
+			Info:       "Returns the primary Double Metaphone code for the input string.",
+			Volatility: volatility.Immutable,
+		},
+	),
+	"dmetaphone_alt": makeBuiltin(
+		tree.FunctionProperties{Category: builtinconstants.CategoryFuzzyStringMatching},
+		tree.Overload{
+			Types:      tree.ParamTypes{{Name: "source", Typ: types.String}},
+			ReturnType: tree.FixedReturnType(types.String),
+			Fn: func(_ context.Context, _ *eval.Context, args tree.Datums) (tree.Datum, error) {
+				s := string(tree.MustBeDString(args[0]))
+				return tree.NewDString(fuzzystrmatch.DMetaphoneAlt(s)), nil
+			},
+			Info:       "Returns the alternate Double Metaphone code for the input string.",
+			Volatility: volatility.Immutable,
+		},
+	),
+	"daitch_mokotoff": makeBuiltin(
+		tree.FunctionProperties{Category: builtinconstants.CategoryFuzzyStringMatching},
+		tree.Overload{
+			Types:      tree.ParamTypes{{Name: "source", Typ: types.String}},
+			ReturnType: tree.FixedReturnType(types.MakeArray(types.String)),
+			Fn: func(_ context.Context, _ *eval.Context, args tree.Datums) (tree.Datum, error) {
+				s := string(tree.MustBeDString(args[0]))
+				codes := fuzzystrmatch.DaitchMokotoff(s)
+				if codes == nil {
+					return tree.DNull, nil
+				}
+				arr := tree.NewDArray(types.String)
+				for _, code := range codes {
+					if err := arr.Append(tree.NewDString(code)); err != nil {
+						return nil, err
+					}
+				}
+				return arr, nil
+			},
+			Info:       "Returns an array of Daitch-Mokotoff soundex codes for the input string.",
+			Volatility: volatility.Immutable,
+		},
+	),
 	"levenshtein_less_equal": makeBuiltin(
 		tree.FunctionProperties{Category: builtinconstants.CategoryFuzzyStringMatching},
 		tree.Overload{

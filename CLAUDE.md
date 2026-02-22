@@ -25,6 +25,7 @@ This is useful as a compilation check.
 ```bash
 ./dev test pkg/sql                   # run unit tests for SQL package (slow!)
 ./dev test pkg/sql -f=TestParse -v   # run specific test pattern
+./dev test pkg/sql --count=5         # run test multiple times
 ```
 
 Note that when filtering tests via `-f` to include the `-v` flag which

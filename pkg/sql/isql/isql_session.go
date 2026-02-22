@@ -70,6 +70,13 @@ type Session interface {
 	// rolled back. If the function succeeds, the savepoint is released.
 	// Savepoints must be used within a transaction.
 	//
+	// TODO(jeffswenson): we should have Savepoint return an error if it is called
+	// outside of a transaction or transparently open a transaction. Right now,
+	// using a savepoint outside of a transaction returns an error, but after the
+	// `do` function is executed. For some reason Postgres does not produce an
+	// error if you create a savepoint outside of a transaction, but it does not
+	// remember the savepoint and returns an error when you attempt to release it.
+	//
 	// Example:
 	// err := session.Txn(ctx, func(ctx context.Context) error {
 	// 	return session.Savepoint(ctx, func(ctx context.Context) error {

@@ -11,6 +11,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scop"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/storageparam/tablestorageparam"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 )
@@ -88,4 +89,48 @@ func (d *deferredVisitor) CreateRowLevelTTLSchedule(
 	ctx context.Context, op scop.CreateRowLevelTTLSchedule,
 ) error {
 	return d.DeferredMutationStateUpdater.CreateRowLevelTTLSchedule(ctx, op.TableID)
+}
+
+func (i *immediateVisitor) SetTableLocalityGlobal(
+	ctx context.Context, op scop.SetTableLocalityGlobal,
+) error {
+	tbl, err := i.checkOutTable(ctx, op.TableID)
+	if err != nil {
+		return err
+	}
+	tbl.SetTableLocalityGlobal()
+	return nil
+}
+
+func (i *immediateVisitor) SetTableLocalityPrimaryRegion(
+	ctx context.Context, op scop.SetTableLocalityPrimaryRegion,
+) error {
+	tbl, err := i.checkOutTable(ctx, op.TableID)
+	if err != nil {
+		return err
+	}
+	tbl.SetTableLocalityRegionalByTable("")
+	return nil
+}
+
+func (i *immediateVisitor) SetTableLocalitySecondaryRegion(
+	ctx context.Context, op scop.SetTableLocalitySecondaryRegion,
+) error {
+	tbl, err := i.checkOutTable(ctx, op.TableID)
+	if err != nil {
+		return err
+	}
+	tbl.SetTableLocalityRegionalByTable(tree.Name(op.RegionName))
+	return nil
+}
+
+func (i *immediateVisitor) UnsetTableLocality(
+	ctx context.Context, op scop.UnsetTableLocality,
+) error {
+	// todo (shadi): add logic for RBR table.
+	// This function should reset partitionAllBy and RBR constraint.
+	// There's nothing to do when transfering from Global ro RBT.
+	// Support for RBR will be added in a separate commit.
+	// no-op
+	return nil
 }

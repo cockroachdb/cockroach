@@ -7,10 +7,12 @@ Command Group 1:
 	Package: pkg1
 	Benchmark: BenchmarkTest1
 	Binary Key: experiment
+	Args: sh -c "cd experiment/pkg1/bin && COCKROACH_RANDOM_SEED=1 && timeout -k 30s 10m ./run.sh  -test.benchmem -test.bench=^BenchmarkTest1$ -test.run=^$ -test.v"
 Command Group 2:
 	Package: pkg2
 	Benchmark: BenchmarkTest2
 	Binary Key: experiment
+	Args: sh -c "cd experiment/pkg2/bin && COCKROACH_RANDOM_SEED=1 && timeout -k 30s 10m ./run.sh  -test.benchmem -test.bench=^BenchmarkTest2$ -test.run=^$ -test.v"
 
 # Test with multiple iterations (affinity=true, iterations=2)
 generate iterations=2
@@ -20,10 +22,12 @@ Command Group 1:
 	Package: pkg1
 	Benchmark: BenchmarkTest1
 	Binary Key: experiment
+	Args: sh -c "cd experiment/pkg1/bin && COCKROACH_RANDOM_SEED=1 && timeout -k 30s 10m ./run.sh  -test.benchmem -test.bench=^BenchmarkTest1$ -test.run=^$ -test.v"
 Command Group 2:
 	Package: pkg1
 	Benchmark: BenchmarkTest1
 	Binary Key: experiment
+	Args: sh -c "cd experiment/pkg1/bin && COCKROACH_RANDOM_SEED=1 && timeout -k 30s 10m ./run.sh  -test.benchmem -test.bench=^BenchmarkTest1$ -test.run=^$ -test.v"
 
 # Test with affinity disabled (affinity=false, iterations=1)
 generate affinity=false
@@ -34,10 +38,12 @@ Command Group 1:
 	Package: pkg1
 	Benchmark: BenchmarkTest1
 	Binary Key: experiment
+	Args: sh -c "cd experiment/pkg1/bin && COCKROACH_RANDOM_SEED=1 && timeout -k 30s 10m ./run.sh  -test.benchmem -test.bench=^BenchmarkTest1$ -test.run=^$ -test.v"
 Command Group 2:
 	Package: pkg2
 	Benchmark: BenchmarkTest2
 	Binary Key: experiment
+	Args: sh -c "cd experiment/pkg2/bin && COCKROACH_RANDOM_SEED=1 && timeout -k 30s 10m ./run.sh  -test.benchmem -test.bench=^BenchmarkTest2$ -test.run=^$ -test.v"
 
 # Test with multiple binaries (affinity=true, iterations=1)
 generate binaries=(baseline, experiment)
@@ -47,9 +53,11 @@ Command Group 1:
 	Package: pkg1
 	Benchmark: BenchmarkTest1
 	Binary Key: baseline
+	Args: sh -c "cd baseline/pkg1/bin && COCKROACH_RANDOM_SEED=1 && timeout -k 30s 10m ./run.sh  -test.benchmem -test.bench=^BenchmarkTest1$ -test.run=^$ -test.v"
 	Package: pkg1
 	Benchmark: BenchmarkTest1
 	Binary Key: experiment
+	Args: sh -c "cd experiment/pkg1/bin && COCKROACH_RANDOM_SEED=1 && timeout -k 30s 10m ./run.sh  -test.benchmem -test.bench=^BenchmarkTest1$ -test.run=^$ -test.v"
 
 # Test with multiple binaries and affinity disabled (affinity=false, iterations=1)
 generate binaries=(baseline, experiment) affinity=false
@@ -59,10 +67,12 @@ Command Group 1:
 	Package: pkg1
 	Benchmark: BenchmarkTest1
 	Binary Key: baseline
+	Args: sh -c "cd baseline/pkg1/bin && COCKROACH_RANDOM_SEED=1 && timeout -k 30s 10m ./run.sh  -test.benchmem -test.bench=^BenchmarkTest1$ -test.run=^$ -test.v"
 Command Group 2:
 	Package: pkg1
 	Benchmark: BenchmarkTest1
 	Binary Key: experiment
+	Args: sh -c "cd experiment/pkg1/bin && COCKROACH_RANDOM_SEED=1 && timeout -k 30s 10m ./run.sh  -test.benchmem -test.bench=^BenchmarkTest1$ -test.run=^$ -test.v"
 
 # Test with multiple iterations, multiple binaries, and multiple benchmarks (affinity=true)
 generate iterations=2 binaries=(baseline, experiment)
@@ -73,27 +83,95 @@ Command Group 1:
 	Package: pkg1
 	Benchmark: BenchmarkTest1
 	Binary Key: baseline
+	Args: sh -c "cd baseline/pkg1/bin && COCKROACH_RANDOM_SEED=1 && timeout -k 30s 10m ./run.sh  -test.benchmem -test.bench=^BenchmarkTest1$ -test.run=^$ -test.v"
 	Package: pkg1
 	Benchmark: BenchmarkTest1
 	Binary Key: experiment
+	Args: sh -c "cd experiment/pkg1/bin && COCKROACH_RANDOM_SEED=1 && timeout -k 30s 10m ./run.sh  -test.benchmem -test.bench=^BenchmarkTest1$ -test.run=^$ -test.v"
 Command Group 2:
 	Package: pkg2
 	Benchmark: BenchmarkTest2
 	Binary Key: baseline
+	Args: sh -c "cd baseline/pkg2/bin && COCKROACH_RANDOM_SEED=1 && timeout -k 30s 10m ./run.sh  -test.benchmem -test.bench=^BenchmarkTest2$ -test.run=^$ -test.v"
 	Package: pkg2
 	Benchmark: BenchmarkTest2
 	Binary Key: experiment
+	Args: sh -c "cd experiment/pkg2/bin && COCKROACH_RANDOM_SEED=1 && timeout -k 30s 10m ./run.sh  -test.benchmem -test.bench=^BenchmarkTest2$ -test.run=^$ -test.v"
 Command Group 3:
 	Package: pkg1
 	Benchmark: BenchmarkTest1
 	Binary Key: baseline
+	Args: sh -c "cd baseline/pkg1/bin && COCKROACH_RANDOM_SEED=1 && timeout -k 30s 10m ./run.sh  -test.benchmem -test.bench=^BenchmarkTest1$ -test.run=^$ -test.v"
 	Package: pkg1
 	Benchmark: BenchmarkTest1
 	Binary Key: experiment
+	Args: sh -c "cd experiment/pkg1/bin && COCKROACH_RANDOM_SEED=1 && timeout -k 30s 10m ./run.sh  -test.benchmem -test.bench=^BenchmarkTest1$ -test.run=^$ -test.v"
 Command Group 4:
 	Package: pkg2
 	Benchmark: BenchmarkTest2
 	Binary Key: baseline
+	Args: sh -c "cd baseline/pkg2/bin && COCKROACH_RANDOM_SEED=1 && timeout -k 30s 10m ./run.sh  -test.benchmem -test.bench=^BenchmarkTest2$ -test.run=^$ -test.v"
 	Package: pkg2
 	Benchmark: BenchmarkTest2
 	Binary Key: experiment
+	Args: sh -c "cd experiment/pkg2/bin && COCKROACH_RANDOM_SEED=1 && timeout -k 30s 10m ./run.sh  -test.benchmem -test.bench=^BenchmarkTest2$ -test.run=^$ -test.v"
+
+# Test with benchmark config - matching benchmark gets benchtime
+generate config=benchmark_config
+pkg1 BenchmarkTest1
+----
+Command Group 1:
+	Package: pkg1
+	Benchmark: BenchmarkTest1
+	Binary Key: experiment
+	Args: sh -c "cd experiment/pkg1/bin && COCKROACH_RANDOM_SEED=1 && timeout -k 30s 10m ./run.sh  -test.benchmem -test.bench=^BenchmarkTest1$ -test.run=^$ -test.v -test.benchtime=100x"
+
+# Test with benchmark config - no matching benchmark, no benchtime
+generate config=benchmark_config
+pkg2 BenchmarkTest2
+----
+Command Group 1:
+	Package: pkg2
+	Benchmark: BenchmarkTest2
+	Binary Key: experiment
+	Args: sh -c "cd experiment/pkg2/bin && COCKROACH_RANDOM_SEED=1 && timeout -k 30s 10m ./run.sh  -test.benchmem -test.bench=^BenchmarkTest2$ -test.run=^$ -test.v"
+
+# Test with benchmark config - multiple benchmarks, mixed match
+generate config=benchmark_config
+pkg1 BenchmarkTest1
+pkg2 BenchmarkTest2
+----
+Command Group 1:
+	Package: pkg1
+	Benchmark: BenchmarkTest1
+	Binary Key: experiment
+	Args: sh -c "cd experiment/pkg1/bin && COCKROACH_RANDOM_SEED=1 && timeout -k 30s 10m ./run.sh  -test.benchmem -test.bench=^BenchmarkTest1$ -test.run=^$ -test.v -test.benchtime=100x"
+Command Group 2:
+	Package: pkg2
+	Benchmark: BenchmarkTest2
+	Binary Key: experiment
+	Args: sh -c "cd experiment/pkg2/bin && COCKROACH_RANDOM_SEED=1 && timeout -k 30s 10m ./run.sh  -test.benchmem -test.bench=^BenchmarkTest2$ -test.run=^$ -test.v"
+
+# Test with benchmark config and multiple binaries
+generate config=benchmark_config binaries=(baseline, experiment)
+pkg1 BenchmarkTest1
+----
+Command Group 1:
+	Package: pkg1
+	Benchmark: BenchmarkTest1
+	Binary Key: baseline
+	Args: sh -c "cd baseline/pkg1/bin && COCKROACH_RANDOM_SEED=1 && timeout -k 30s 10m ./run.sh  -test.benchmem -test.bench=^BenchmarkTest1$ -test.run=^$ -test.v -test.benchtime=100x"
+	Package: pkg1
+	Benchmark: BenchmarkTest1
+	Binary Key: experiment
+	Args: sh -c "cd experiment/pkg1/bin && COCKROACH_RANDOM_SEED=1 && timeout -k 30s 10m ./run.sh  -test.benchmem -test.bench=^BenchmarkTest1$ -test.run=^$ -test.v -test.benchtime=100x"
+
+# Test with benchmark config - different matching benchmark
+generate config=benchmark_config
+pkg3 BenchmarkTest3
+----
+Command Group 1:
+	Package: pkg3
+	Benchmark: BenchmarkTest3
+	Binary Key: experiment
+	Args: sh -c "cd experiment/pkg3/bin && COCKROACH_RANDOM_SEED=1 && timeout -k 30s 10m ./run.sh  -test.benchmem -test.bench=^BenchmarkTest3$ -test.run=^$ -test.v -test.benchtime=500x"

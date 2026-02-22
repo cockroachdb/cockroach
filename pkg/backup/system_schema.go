@@ -85,6 +85,16 @@ type systemBackupConfiguration struct {
 	// is provided then `defaultRestoreFunc` is used.
 	customRestoreFunc func(ctx context.Context, deps customRestoreFuncDeps, txn isql.Txn, systemTableName, tempTableName string) error
 
+	// nonClusterMigrationFunc is used instead of migrationFunc during non-cluster
+	// restores (table/database restores). It should filter rows to only include
+	// descriptors being restored, then rekey IDs appropriately.
+	nonClusterMigrationFunc func(ctx context.Context, txn isql.Txn, tempTableName string, rekeys jobspb.DescRewriteMap) error
+
+	// nonClusterRestoreFunc is used instead of customRestoreFunc during non-cluster
+	// restores (table/database restores). It should perform INSERT-based restoration
+	// (not DELETE+INSERT) and error if rows already exist to detect conflicts.
+	nonClusterRestoreFunc func(ctx context.Context, deps customRestoreFuncDeps, txn isql.Txn, systemTableName, tempTableName string) error
+
 	// The following fields are for testing.
 
 	// expectMissingInSystemTenant is true for tables that only exist in secondary tenants.
@@ -117,15 +127,23 @@ func defaultSystemTableRestoreFunc(
 	if err != nil {
 		return errors.Wrapf(err, "deleting data from system.%s", systemTableName)
 	}
+	return insertSystemDataFunc(ctx, customRestoreFuncDeps{}, txn, systemTableName, tempTableName)
+}
 
-	restoreQuery := fmt.Sprintf("INSERT INTO system.%s (SELECT * FROM %s);",
-		systemTableName, tempTableName)
-	opName = redact.Sprintf("%s-data-insert", systemTableName)
-	if _, err := txn.Exec(ctx, opName, txn.KV(), restoreQuery); err != nil {
-		return errors.Wrapf(err, "inserting data to system.%s", systemTableName)
-	}
+func insertSystemDataFunc(
+	ctx context.Context,
+	deps customRestoreFuncDeps,
+	txn isql.Txn,
+	systemTableName, tempTableName string,
+) error {
 
-	return nil
+	insertQuery := fmt.Sprintf(
+		"INSERT INTO system.%s (SELECT * FROM %s)",
+		systemTableName, tempTableName,
+	)
+	opName := redact.Sprintf("%s-data-insert", systemTableName)
+	_, err := txn.Exec(ctx, opName, txn.KV(), insertQuery)
+	return err
 }
 
 // Custom restore functions for different system tables.
@@ -627,8 +645,10 @@ var systemTableBackupConfiguration = map[string]systemBackupConfiguration{
 		shouldIncludeInClusterBackup: optInToClusterBackup, // ID in "id".
 		// The zones table should be restored before the user data so that the range
 		// allocator properly distributes ranges during the restore.
-		migrationFunc:     rekeySystemTable("id"),
-		restoreBeforeData: true,
+		migrationFunc:           rekeySystemTable("id"),
+		restoreBeforeData:       true,
+		nonClusterMigrationFunc: nonClusterRekeySystemTable("id"),
+		nonClusterRestoreFunc:   insertSystemDataFunc,
 	},
 	systemschema.SettingsTable.GetName(): {
 		// The settings table should be restored after all other system tables have
@@ -954,6 +974,38 @@ func rekeySystemTable(
 		}
 
 		return nil
+	}
+}
+
+func nonClusterRekeySystemTable(
+	colName string,
+) func(context.Context, isql.Txn, string, jobspb.DescRewriteMap) error {
+	return func(ctx context.Context, txn isql.Txn, tempTableName string, rekeys jobspb.DescRewriteMap) error {
+		restoringIDs := make([]string, 0, len(rekeys))
+		for oldID := range rekeys {
+			restoringIDs = append(restoringIDs, fmt.Sprintf("%d", oldID))
+		}
+
+		// Delete all rows for descriptors NOT being restored
+		var deleteQuery string
+		if len(restoringIDs) == 0 {
+			deleteQuery = fmt.Sprintf("DELETE FROM %s", tempTableName)
+		} else {
+			// Keep only rows for descriptors being restored
+			deleteQuery = fmt.Sprintf(
+				"DELETE FROM %s WHERE %s NOT IN (%s)",
+				tempTableName, colName, strings.Join(restoringIDs, ", "),
+			)
+		}
+
+		log.Eventf(ctx, "filtering %s to only restored descriptors", tempTableName)
+		if _, err := txn.Exec(
+			ctx, redact.Sprintf("filter-%s", tempTableName), txn.KV(), deleteQuery,
+		); err != nil {
+			return errors.Wrapf(err, "filtering %s", tempTableName)
+		}
+
+		return rekeySystemTable(colName)(ctx, txn, tempTableName, rekeys)
 	}
 }
 

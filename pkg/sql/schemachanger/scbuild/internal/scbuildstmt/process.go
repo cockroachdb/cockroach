@@ -44,6 +44,8 @@ var supportedStatements = map[reflect.Type]supportedStatement{
 	// supportedAlterTableStatements list, so we will consider it fully supported
 	// here.
 	reflect.TypeOf((*tree.AlterTable)(nil)):          {fn: AlterTable, statementTags: []string{tree.AlterTableTag}, on: true, checks: alterTableChecks},
+	reflect.TypeOf((*tree.AlterTableLocality)(nil)):  {fn: AlterTableLocality, statementTags: []string{tree.AlterTableTag}, on: true, checks: isV262Active},
+	reflect.TypeOf((*tree.AlterTableSetSchema)(nil)): {fn: AlterTableSetSchema, statementTags: []string{tree.AlterTableTag}, on: true, checks: isV261Active},
 	reflect.TypeOf((*tree.AlterPolicy)(nil)):         {fn: AlterPolicy, statementTags: []string{tree.AlterPolicyTag}, on: true, checks: isV251Active},
 	reflect.TypeOf((*tree.AlterSequence)(nil)):       {fn: AlterSequence, statementTags: []string{tree.AlterSequenceTag}, on: true, checks: isV262Active},
 	reflect.TypeOf((*tree.CommentOnColumn)(nil)):     {fn: CommentOnColumn, statementTags: []string{tree.CommentOnColumnTag}, on: true, checks: nil},
@@ -71,10 +73,9 @@ var supportedStatements = map[reflect.Type]supportedStatement{
 	reflect.TypeOf((*tree.DropTrigger)(nil)):         {fn: DropTrigger, statementTags: []string{tree.DropTriggerTag}, on: true, checks: nil},
 	reflect.TypeOf((*tree.DropType)(nil)):            {fn: DropType, statementTags: []string{tree.DropTypeTag}, on: true, checks: nil},
 	reflect.TypeOf((*tree.DropView)(nil)):            {fn: DropView, statementTags: []string{tree.DropViewTag}, on: true, checks: nil},
+	reflect.TypeOf((*tree.RenameTable)(nil)):         {fn: RenameTable, statementTags: []string{tree.AlterTableTag}, on: true, checks: isV254Active},
 	reflect.TypeOf((*tree.SetZoneConfig)(nil)):       {fn: SetZoneConfig, statementTags: []string{tree.ConfigureZoneTag}, on: true, checks: isV251Active},
 	reflect.TypeOf((*tree.Truncate)(nil)):            {fn: Truncate, statementTags: []string{tree.TruncateTag}, on: true, checks: isV254Active},
-	reflect.TypeOf((*tree.RenameTable)(nil)):         {fn: RenameTable, statementTags: []string{tree.AlterTableTag}, on: true, checks: isV254Active},
-	reflect.TypeOf((*tree.AlterTableSetSchema)(nil)): {fn: AlterTableSetSchema, statementTags: []string{tree.AlterTableTag}, on: true, checks: isV261Active},
 }
 
 // supportedStatementTags tracks statement tags which are implemented

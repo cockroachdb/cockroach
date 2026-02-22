@@ -28,6 +28,12 @@ send "CREATE VIEW \"sc ' view\".v AS SELECT * FROM t;\r"
 
 send "RESET database;\r"
 send "CREATE FUNCTION f() RETURNS INT LANGUAGE SQL AS 'SELECT 1';\r"
+
+# Create a trigger on one of the tables to ensure triggers are included in
+# the bundle and can be recreated (#142041).
+send "CREATE TABLE trigger_dest (k INT PRIMARY KEY, v INT);\r"
+send "CREATE FUNCTION trigger_f() RETURNS TRIGGER LANGUAGE PLpgSQL AS \$\$ BEGIN INSERT INTO trigger_dest VALUES ((NEW).k, 0); RETURN NEW; END \$\$;\r"
+send "CREATE TRIGGER trig AFTER INSERT ON \"db.table\".\"sc.t\".t FOR EACH ROW EXECUTE FUNCTION trigger_f();\r"
 eexpect "defaultdb>"
 
 send "EXPLAIN ANALYZE (DEBUG) SELECT *, f() FROM \"db.table\".\"sc.t\".t, \" db ' view \".\"sc ' view\".v;\r"

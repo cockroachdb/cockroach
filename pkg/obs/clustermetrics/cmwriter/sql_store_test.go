@@ -1,0 +1,146 @@
+// Copyright 2026 The Cockroach Authors.
+//
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
+
+package cmwriter
+
+import (
+	"context"
+	"testing"
+
+	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/obs/clustermetrics"
+	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/isql"
+	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/metric"
+	"github.com/stretchr/testify/require"
+)
+
+// sqlStoreTestEnv provides common test infrastructure for SQLStore tests.
+type sqlStoreTestEnv struct {
+	ctx   context.Context
+	store *SQLStore
+}
+
+func newSQLStoreTestEnv(t *testing.T) *sqlStoreTestEnv {
+	ctx := context.Background()
+	srv := serverutils.StartServerOnly(t, base.TestServerArgs{})
+	t.Cleanup(func() { srv.Stopper().Stop(ctx) })
+
+	s := srv.ApplicationLayer()
+	execCfg := s.ExecutorConfig().(sql.ExecutorConfig)
+	db := s.InternalDB().(isql.DB)
+	store := newSQLStore(db, execCfg.NodeInfo.NodeID, s.ClusterSettings())
+
+	return &sqlStoreTestEnv{
+		ctx:   ctx,
+		store: store,
+	}
+}
+
+// findMetric returns the first metric with the given name from a slice.
+func findMetric(metrics []clustermetrics.Metric, name string) clustermetrics.Metric {
+	for _, m := range metrics {
+		if m.GetName(false /* useStaticLabels */) == name {
+			return m
+		}
+	}
+	return nil
+}
+
+func TestSQLStore_Write(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	t.Run("counter", func(t *testing.T) {
+		env := newSQLStoreTestEnv(t)
+		c := clustermetrics.NewCounter(metric.Metadata{Name: "test.counter"})
+		c.Inc(42)
+
+		require.NoError(t, env.store.Write(env.ctx, []clustermetrics.Metric{c}))
+
+		metrics, err := env.store.Get(env.ctx)
+		require.NoError(t, err)
+		require.Len(t, metrics, 1)
+		require.Equal(t, "test.counter", metrics[0].GetName(false))
+		require.Equal(t, "counter", metrics[0].Type())
+		require.Equal(t, int64(42), metrics[0].Get())
+	})
+
+	t.Run("gauge", func(t *testing.T) {
+		env := newSQLStoreTestEnv(t)
+		g := clustermetrics.NewGauge(metric.Metadata{Name: "test.gauge"})
+		g.Update(100)
+
+		require.NoError(t, env.store.Write(env.ctx, []clustermetrics.Metric{g}))
+
+		metrics, err := env.store.Get(env.ctx)
+		require.NoError(t, err)
+		require.Len(t, metrics, 1)
+		require.Equal(t, "test.gauge", metrics[0].GetName(false))
+		require.Equal(t, "gauge", metrics[0].Type())
+		require.Equal(t, int64(100), metrics[0].Get())
+	})
+
+	t.Run("counter accumulates on upsert", func(t *testing.T) {
+		env := newSQLStoreTestEnv(t)
+		c := clustermetrics.NewCounter(metric.Metadata{Name: "test.counter.accum"})
+		c.Inc(10)
+
+		require.NoError(t, env.store.Write(env.ctx, []clustermetrics.Metric{c}))
+
+		// Simulate what the writer does: reset, then increment again.
+		c.Reset()
+		c.Inc(5)
+		require.NoError(t, env.store.Write(env.ctx, []clustermetrics.Metric{c}))
+
+		// Counter should accumulate: 10 + 5 = 15.
+		metrics, err := env.store.Get(env.ctx)
+		require.NoError(t, err)
+		require.Len(t, metrics, 1)
+		require.Equal(t, int64(15), metrics[0].Get())
+	})
+
+	t.Run("gauge replaces on upsert", func(t *testing.T) {
+		env := newSQLStoreTestEnv(t)
+		g := clustermetrics.NewGauge(metric.Metadata{Name: "test.gauge.replace"})
+		g.Update(100)
+
+		require.NoError(t, env.store.Write(env.ctx, []clustermetrics.Metric{g}))
+
+		g.Update(200)
+		require.NoError(t, env.store.Write(env.ctx, []clustermetrics.Metric{g}))
+
+		// Gauge should replace: value is 200, not 300.
+		metrics, err := env.store.Get(env.ctx)
+		require.NoError(t, err)
+		require.Len(t, metrics, 1)
+		require.Equal(t, int64(200), metrics[0].Get())
+	})
+
+	t.Run("multiple metrics", func(t *testing.T) {
+		env := newSQLStoreTestEnv(t)
+		c := clustermetrics.NewCounter(metric.Metadata{Name: "test.multi.counter"})
+		g := clustermetrics.NewGauge(metric.Metadata{Name: "test.multi.gauge"})
+		c.Inc(7)
+		g.Update(200)
+
+		require.NoError(t, env.store.Write(env.ctx, []clustermetrics.Metric{c, g}))
+
+		metrics, err := env.store.Get(env.ctx)
+		require.NoError(t, err)
+		require.Len(t, metrics, 2)
+
+		cm := findMetric(metrics, "test.multi.counter")
+		require.NotNil(t, cm)
+		require.Equal(t, int64(7), cm.Get())
+
+		gm := findMetric(metrics, "test.multi.gauge")
+		require.NotNil(t, gm)
+		require.Equal(t, int64(200), gm.Get())
+	})
+}

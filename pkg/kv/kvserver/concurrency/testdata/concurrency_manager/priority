@@ -43,11 +43,11 @@ sequence req=req1
 
 on-lock-acquired req=req1 key=kLow1
 ----
-[-] acquire lock: txn 00000001 @ ‹kLow1›
+[-] acquire lock: txn 00000001 acquiring Unreplicated Exclusive lock on ‹"kLow1"›
 
 on-lock-acquired req=req1 key=kLow2
 ----
-[-] acquire lock: txn 00000001 @ ‹kLow2›
+[-] acquire lock: txn 00000001 acquiring Unreplicated Exclusive lock on ‹"kLow2"›
 
 finish req=req1
 ----
@@ -67,11 +67,11 @@ sequence req=req2
 
 on-lock-acquired req=req2 key=kNormal1
 ----
-[-] acquire lock: txn 00000002 @ ‹kNormal1›
+[-] acquire lock: txn 00000002 acquiring Unreplicated Exclusive lock on ‹"kNormal1"›
 
 on-lock-acquired req=req2 key=kNormal2
 ----
-[-] acquire lock: txn 00000002 @ ‹kNormal2›
+[-] acquire lock: txn 00000002 acquiring Unreplicated Exclusive lock on ‹"kNormal2"›
 
 finish req=req2
 ----
@@ -91,11 +91,11 @@ sequence req=req3
 
 on-lock-acquired req=req3 key=kHigh1
 ----
-[-] acquire lock: txn 00000003 @ ‹kHigh1›
+[-] acquire lock: txn 00000003 acquiring Unreplicated Exclusive lock on ‹"kHigh1"›
 
 on-lock-acquired req=req3 key=kHigh2
 ----
-[-] acquire lock: txn 00000003 @ ‹kHigh2›
+[-] acquire lock: txn 00000003 acquiring Unreplicated Exclusive lock on ‹"kHigh2"›
 
 finish req=req3
 ----

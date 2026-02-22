@@ -7,6 +7,7 @@ package eval
 
 import (
 	"context"
+	"iter"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
@@ -720,15 +721,16 @@ type SequenceOperators interface {
 	GetLastSequenceValueByID(ctx context.Context, seqID uint32) (value int64, wasCalled bool, err error)
 }
 
-// ChangefeedState is used to track progress and checkpointing for sinkless/core changefeeds.
-// Because a CREATE CHANGEFEED statement for a sinkless changefeed will hang and return data
-// over the SQL connection, this state belongs in the EvalCtx.
-type ChangefeedState interface {
+// CoreChangefeedState is used to track progress for core (sinkless) changefeeds.
+// Because a CREATE CHANGEFEED statement for a sinkless changefeed will hang
+// and return data over the SQL connection, this state is stored in the EvalCtx
+// so the changeFrontier processor can write to it.
+type CoreChangefeedState interface {
 	// SetHighwater sets the frontier timestamp for the changefeed.
 	SetHighwater(frontier hlc.Timestamp)
 
-	// SetCheckpoint sets the checkpoint for the changefeed.
-	SetCheckpoint(checkpoint *jobspb.TimestampSpansMap)
+	// SetFrontier saves a snapshot of the frontier spans.
+	SetFrontier(frontier iter.Seq[jobspb.ResolvedSpan])
 }
 
 // TenantOperator is capable of interacting with tenant state, allowing SQL

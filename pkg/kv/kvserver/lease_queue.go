@@ -109,6 +109,15 @@ func (lq *leaseQueue) shouldQueue(
 		return false, 0
 	}
 	desc := repl.Desc()
+	// Only replicas that can hold a lease (IsVoterNewConfig) should be
+	// processed. Without this check, non-voters can reach
+	// canTransferLeaseFrom (and ShouldPlanChange) when their lease status
+	// evaluates as ERROR — which happens routinely for leader leases
+	// evaluated by a follower once MinExpiration has passed. See #107691.
+	replDesc, ok := desc.GetReplicaDescriptorByID(repl.ReplicaID())
+	if !ok || !replDesc.IsVoterNewConfig() {
+		return false, 0
+	}
 	return lq.planner.ShouldPlanChange(ctx, now, repl, desc, &conf, plan.PlannerOptions{
 		CanTransferLease: lq.canTransferLeaseFrom(ctx, repl, &conf),
 	})

@@ -17,11 +17,20 @@ import (
 // set. Further, the iterator does not surface point or range tombstones, nor
 // any MVCC keys shadowed by tombstones below the asOf timestamp, if set. The
 // iterator assumes that it will not encounter any write intents.
+//
+// When emitDeletes is true, point tombstones are emitted instead of being
+// skipped. This is required when ingesting data over linked backup layers,
+// where the linked layers may contain keys that need to be deleted. Without
+// emitting the tombstones, those keys would incorrectly remain visible.
 type ReadAsOfIterator struct {
 	iter SimpleMVCCIterator
 
 	// asOf is the latest timestamp of a key surfaced by the iterator.
 	asOf hlc.Timestamp
+
+	// emitDeletes, when true, causes point tombstones to be emitted rather than
+	// skipped. This is needed when ingesting over linked backup layers.
+	emitDeletes bool
 
 	// valid tracks if the current key is valid
 	valid bool
@@ -182,6 +191,10 @@ func (f *ReadAsOfIterator) advance(seeked bool) {
 				f.valid, f.err = false, err
 				return
 			} else if isTombstone {
+				if f.emitDeletes {
+					// Emit the tombstone when ingesting over linked layers.
+					return
+				}
 				// Skip to the next MVCC key if we find a point tombstone.
 				f.iter.NextKey()
 			} else if key.Timestamp.LessEq(f.newestRangeTombstone) {
@@ -203,6 +216,19 @@ func NewReadAsOfIterator(iter SimpleMVCCIterator, asOf hlc.Timestamp) *ReadAsOfI
 		asOf = hlc.MaxTimestamp
 	}
 	return &ReadAsOfIterator{iter: iter, asOf: asOf}
+}
+
+// NewReadAsOfIteratorWithEmitDeletes constructs a ReadAsOfIterator that emits
+// point tombstones instead of skipping them. This is needed when ingesting data
+// over linked backup layers, where deletes must be written to shadow keys in
+// the linked layers.
+func NewReadAsOfIteratorWithEmitDeletes(
+	iter SimpleMVCCIterator, asOf hlc.Timestamp,
+) *ReadAsOfIterator {
+	if asOf.IsEmpty() {
+		asOf = hlc.MaxTimestamp
+	}
+	return &ReadAsOfIterator{iter: iter, asOf: asOf, emitDeletes: true}
 }
 
 // assertInvariants asserts iterator invariants. The iterator must be valid.
@@ -233,10 +259,10 @@ func (f *ReadAsOfIterator) assertInvariants() error {
 		return errors.AssertionFailedf("emitted key %s above asOf timestamp %s", key, f.asOf)
 	}
 
-	// Tombstones should not be emitted.
+	// Tombstones should not be emitted unless emitDeletes is set.
 	if _, isTombstone, err := f.MVCCValueLenAndIsTombstone(); err != nil {
 		return errors.NewAssertionErrorWithWrappedErrf(err, "invalid value")
-	} else if isTombstone {
+	} else if isTombstone && !f.emitDeletes {
 		return errors.AssertionFailedf("emitted tombstone for key %s", key)
 	}
 

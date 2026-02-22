@@ -222,6 +222,39 @@ scan xyzs@xyzs_s_z_key
  ├── prune: (1)
  └── interesting orderings: (+1 opt(4))
 
+# Placeholder offset.
+build
+SELECT min(x) FROM xyzs LIMIT $1
+----
+limit
+ ├── columns: min:7(int)
+ ├── cardinality: [0 - 1]
+ ├── immutable, has-placeholder
+ ├── key: ()
+ ├── fd: ()-->(7)
+ ├── prune: (7)
+ ├── scalar-group-by
+ │    ├── columns: min:7(int)
+ │    ├── cardinality: [1 - 1]
+ │    ├── key: ()
+ │    ├── fd: ()-->(7)
+ │    ├── prune: (7)
+ │    ├── project
+ │    │    ├── columns: x:1(int!null)
+ │    │    ├── key: (1)
+ │    │    ├── prune: (1)
+ │    │    ├── interesting orderings: (+1)
+ │    │    └── scan xyzs
+ │    │         ├── columns: x:1(int!null) y:2(int) z:3(float!null) s:4(string) crdb_internal_mvcc_timestamp:5(decimal) tableoid:6(oid)
+ │    │         ├── key: (1)
+ │    │         ├── fd: (1)-->(2-6), (3,4)~~>(1,2,5,6)
+ │    │         ├── prune: (1-6)
+ │    │         └── interesting orderings: (+1) (-4,+3,+1)
+ │    └── aggregations
+ │         └── min [as=min:7, type=int, outer=(1)]
+ │              └── variable: x:1 [type=int]
+ └── placeholder: $1 [type=int]
+
 # Regression test for #65038. Copy FDs from input regardless of the limit value
 # to avoid error during test builds: "ordering column group X contains
 # non-equivalent columns".
@@ -365,3 +398,24 @@ top-k
       ├── fd: (1)-->(2-4), (3,4)~~>(1,2)
       ├── prune: (1-4)
       └── interesting orderings: (+1) (-4,+3,+1)
+
+# Placeholder offset.
+opt
+SELECT * FROM (SELECT * FROM (VALUES (1), (2), (3)) v(v) ORDER BY v LIMIT 10) LIMIT $1
+----
+limit
+ ├── columns: v:1(int!null)
+ ├── cardinality: [0 - 3]
+ ├── immutable, has-placeholder
+ ├── prune: (1)
+ ├── values
+ │    ├── columns: column1:1(int!null)
+ │    ├── cardinality: [3 - 3]
+ │    ├── prune: (1)
+ │    ├── tuple [type=tuple{int}]
+ │    │    └── const: 1 [type=int]
+ │    ├── tuple [type=tuple{int}]
+ │    │    └── const: 2 [type=int]
+ │    └── tuple [type=tuple{int}]
+ │         └── const: 3 [type=int]
+ └── placeholder: $1 [type=int]

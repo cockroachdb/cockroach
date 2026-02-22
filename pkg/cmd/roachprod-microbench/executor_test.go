@@ -39,6 +39,7 @@ func TestGenerateBenchmarkCommandsDataDriven(t *testing.T) {
 
 		// Parse test configuration
 		config := defaultExecutorConfig()
+		config.outputDir = t.TempDir()
 		for _, arg := range d.CmdArgs {
 			switch arg.Key {
 			case "iterations":
@@ -53,6 +54,8 @@ func TestGenerateBenchmarkCommandsDataDriven(t *testing.T) {
 					binaries[name] = name
 				}
 				config.binaries = binaries
+			case "config":
+				config.benchmarkConfig = datapathutils.TestDataPath(t, arg.Vals[0]+".json")
 			default:
 				t.Fatalf("unknown flag %s", arg.Key)
 			}
@@ -90,6 +93,7 @@ func TestGenerateBenchmarkCommandsDataDriven(t *testing.T) {
 				fmt.Fprintf(&output, "\tPackage: %s\n", metadata.pkg)
 				fmt.Fprintf(&output, "\tBenchmark: %s\n", metadata.name)
 				fmt.Fprintf(&output, "\tBinary Key: %s\n", metadata.key)
+				fmt.Fprintf(&output, "\tArgs: %s\n", strings.Join(cmd.Args, " "))
 			}
 		}
 		return output.String()

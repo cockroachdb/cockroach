@@ -813,6 +813,139 @@ CREATE TABLE users(id UUID DEFAULT gen_random_uuid() PRIMARY KEY, promo_id INT R
 			"distsql.html vec-v.txt vec.txt")
 	})
 
+	// Regression test for #142041: triggers, their functions, and tables they
+	// modify should be included in the statement bundle.
+	t.Run("triggers", func(t *testing.T) {
+		r.Exec(t, "CREATE TABLE trigger_t1 (k INT PRIMARY KEY, v INT);")
+		r.Exec(t, "CREATE TABLE trigger_t2 (k INT PRIMARY KEY, v INT);")
+		r.Exec(t, `CREATE FUNCTION trigger_f() RETURNS TRIGGER LANGUAGE PLpgSQL AS $$
+			BEGIN
+				INSERT INTO trigger_t2 VALUES ((NEW).k, (NEW).v);
+				RETURN NEW;
+			END
+		$$;`)
+		r.Exec(t, "CREATE TRIGGER trigger_foo AFTER INSERT ON trigger_t1 FOR EACH ROW EXECUTE FUNCTION trigger_f();")
+		rows := r.QueryStr(t, "EXPLAIN ANALYZE (DEBUG) INSERT INTO trigger_t1 VALUES (1, 10);")
+		checkBundle(
+			t, fmt.Sprint(rows), "trigger_t1", func(name, contents string) error {
+				if name == "schema.sql" {
+					for _, expected := range []string{
+						"CREATE FUNCTION public.trigger_f()",
+						"CREATE TABLE public.trigger_t1",
+						"CREATE TABLE public.trigger_t2",
+						"CREATE TRIGGER trigger_foo AFTER INSERT ON defaultdb.public.trigger_t1"} {
+						if !strings.Contains(contents, expected) {
+							return errors.Errorf("could not find %q in schema.sql:\n%s", expected, contents)
+						}
+					}
+				}
+				return nil
+			}, false /* expectErrors */, base, plans,
+			"distsql-1-main-query.html distsql-2-postquery.html vec-1-main-query-v.txt vec-1-main-query.txt vec-2-postquery-v.txt vec-2-postquery.txt stats-defaultdb.public.trigger_t1.sql stats-defaultdb.public.trigger_t2.sql",
+		)
+	})
+
+	// Test that trigger function bodies are redacted in bundles.
+	t.Run("triggers_redact", func(t *testing.T) {
+		r.Exec(t, "CREATE TABLE trigger_redact_t1 (k INT PRIMARY KEY, v INT);")
+		r.Exec(t, "CREATE TABLE trigger_redact_t2 (k INT PRIMARY KEY, v INT);")
+		r.Exec(t, `CREATE FUNCTION trigger_redact_f() RETURNS TRIGGER LANGUAGE PLpgSQL AS $$
+			BEGIN
+				INSERT INTO trigger_redact_t2 VALUES ((NEW).k, 5555555555554444);
+				RETURN NEW;
+			END
+		$$;`)
+		r.Exec(t, "CREATE TRIGGER trigger_redact_foo AFTER INSERT ON trigger_redact_t1 FOR EACH ROW EXECUTE FUNCTION trigger_redact_f();")
+		rows := r.QueryStr(t,
+			"EXPLAIN ANALYZE (DEBUG, REDACT) INSERT INTO trigger_redact_t1 VALUES (1, 10)",
+		)
+		url := getBundleDownloadURL(t, fmt.Sprint(rows))
+		verboten := []string{"5555555555554444", fmt.Sprintf("%x", 5555555555554444)}
+		checkBundleContents(
+			t, url, "", func(name, contents string) error {
+				lowerContents := strings.ToLower(contents)
+				for _, pii := range verboten {
+					if strings.Contains(lowerContents, pii) {
+						return errors.Newf("file %s contained %q:\n%s\n", name, pii, contents)
+					}
+				}
+				return nil
+			}, false, /* expectErrors */
+			plans, "statement.sql stats-defaultdb.public.trigger_redact_t1.sql stats-defaultdb.public.trigger_redact_t2.sql env.sql vec-1-main-query-v.txt vec-1-main-query.txt vec-2-postquery-v.txt vec-2-postquery.txt",
+		)
+	})
+
+	// Test that UDTs referenced by trigger functions are included in bundles.
+	t.Run("triggers_udt_deps", func(t *testing.T) {
+		r.Exec(t, "CREATE TYPE trigger_color AS ENUM ('red', 'blue');")
+		r.Exec(t, "CREATE TABLE trigger_udt_t1 (k INT PRIMARY KEY, v trigger_color);")
+		r.Exec(t, "CREATE TABLE trigger_udt_t2 (k INT PRIMARY KEY, v trigger_color);")
+		r.Exec(t, `CREATE FUNCTION trigger_udt_f() RETURNS TRIGGER LANGUAGE PLpgSQL AS $$
+			BEGIN
+				INSERT INTO trigger_udt_t2 VALUES ((NEW).k, (NEW).v);
+				RETURN NEW;
+			END
+		$$;`)
+		r.Exec(t, "CREATE TRIGGER trigger_udt_foo AFTER INSERT ON trigger_udt_t1 FOR EACH ROW EXECUTE FUNCTION trigger_udt_f();")
+		rows := r.QueryStr(t, "EXPLAIN ANALYZE (DEBUG) INSERT INTO trigger_udt_t1 VALUES (1, 'red');")
+		checkBundle(
+			t, fmt.Sprint(rows), "trigger_udt_t1", func(name, contents string) error {
+				if name == "schema.sql" {
+					for _, expected := range []string{
+						"CREATE TYPE public.trigger_color",
+						"CREATE FUNCTION public.trigger_udt_f()",
+						"CREATE TABLE public.trigger_udt_t1",
+						"CREATE TABLE public.trigger_udt_t2",
+					} {
+						if !strings.Contains(contents, expected) {
+							return errors.Errorf("could not find %q in schema.sql:\n%s", expected, contents)
+						}
+					}
+				}
+				return nil
+			}, false /* expectErrors */, base, plans,
+			"distsql-1-main-query.html distsql-2-postquery.html vec-1-main-query-v.txt vec-1-main-query.txt vec-2-postquery-v.txt vec-2-postquery.txt stats-defaultdb.public.trigger_udt_t1.sql stats-defaultdb.public.trigger_udt_t2.sql",
+		)
+	})
+
+	// Test that routines called by trigger functions (via DependsOnRoutines)
+	// are included in bundles.
+	t.Run("triggers_routine_deps", func(t *testing.T) {
+		r.Exec(t, "CREATE TABLE trigger_rdep_t1 (k INT PRIMARY KEY, v INT);")
+		r.Exec(t, "CREATE TABLE trigger_rdep_t2 (k INT PRIMARY KEY, v INT);")
+		r.Exec(t, `CREATE FUNCTION trigger_helper(a INT, b INT) RETURNS INT LANGUAGE SQL AS $$
+			INSERT INTO trigger_rdep_t2 VALUES (a, b);
+			SELECT a;
+		$$;`)
+		r.Exec(t, `CREATE FUNCTION trigger_rdep_f() RETURNS TRIGGER LANGUAGE PLpgSQL AS $$
+			DECLARE
+				unused INT;
+			BEGIN
+				SELECT trigger_helper((NEW).k, (NEW).v) INTO unused;
+				RETURN NEW;
+			END
+		$$;`)
+		r.Exec(t, "CREATE TRIGGER trigger_rdep_foo AFTER INSERT ON trigger_rdep_t1 FOR EACH ROW EXECUTE FUNCTION trigger_rdep_f();")
+		rows := r.QueryStr(t, "EXPLAIN ANALYZE (DEBUG) INSERT INTO trigger_rdep_t1 VALUES (1, 10);")
+		checkBundle(
+			t, fmt.Sprint(rows), "trigger_rdep_t1", func(name, contents string) error {
+				if name == "schema.sql" {
+					for _, expected := range []string{
+						"CREATE FUNCTION public.trigger_helper",
+						"CREATE FUNCTION public.trigger_rdep_f()",
+						"CREATE TABLE public.trigger_rdep_t1",
+					} {
+						if !strings.Contains(contents, expected) {
+							return errors.Errorf("could not find %q in schema.sql:\n%s", expected, contents)
+						}
+					}
+				}
+				return nil
+			}, false /* expectErrors */, base, plans,
+			"distsql-1-main-query.html distsql-2-postquery.html vec-1-main-query-v.txt vec-1-main-query.txt vec-2-postquery-v.txt vec-2-postquery.txt stats-defaultdb.public.trigger_rdep_t1.sql",
+		)
+	})
+
 	t.Run("different schema UDF", func(t *testing.T) {
 		r.Exec(t, "CREATE FUNCTION foo() RETURNS INT LANGUAGE SQL AS 'SELECT count(*) FROM abc, s.a';")
 		r.Exec(t, "CREATE FUNCTION s.foo() RETURNS INT LANGUAGE SQL AS 'SELECT count(*) FROM abc, s.a';")

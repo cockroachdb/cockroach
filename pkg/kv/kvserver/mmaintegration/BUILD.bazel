@@ -5,6 +5,7 @@ go_library(
     srcs = [
         "allocator_op.go",
         "allocator_sync.go",
+        "capacity_model.go",
         "mma_conversion.go",
         "store_load_msg.go",
         "store_status.go",
@@ -31,6 +32,8 @@ go_library(
 go_test(
     name = "mmaintegration_test",
     srcs = [
+        "capacity_model_test.go",
+        "legacy_model_test.go",
         "mma_conversion_test.go",
         "store_status_test.go",
     ],
@@ -44,6 +47,7 @@ go_test(
         "//pkg/roachpb",
         "//pkg/testutils/datapathutils",
         "//pkg/testutils/echotest",
+        "//pkg/util/humanizeutil",
         "//pkg/util/leaktest",
         "//pkg/util/log",
         "@com_github_cockroachdb_datadriven//:datadriven",

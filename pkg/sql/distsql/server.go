@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
+	"github.com/cockroachdb/cockroach/pkg/util/admission"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/pprofutil"
@@ -325,6 +326,7 @@ func (ds *ServerImpl) setupFlow(
 			}
 		}
 	} else {
+		// Not running on the gateway.
 		onFlowCleanupEnd = func(ctx context.Context) {
 			reserved.Close(ctx)
 			onFlowCleanup.Do()
@@ -376,6 +378,32 @@ func (ds *ServerImpl) setupFlow(
 		evalCtx.SetStmtTimestamp(timeutil.Unix(0 /* sec */, req.EvalContext.StmtTimestampNanos))
 		evalCtx.SetTxnTimestamp(timeutil.Unix(0 /* sec */, req.EvalContext.TxnTimestampNanos))
 		evalCtx.TestingKnobs.ForceProductionValues = req.EvalContext.TestingKnobsForceProductionValues
+
+		if ds.SQLCPUProvider != nil {
+			var cpuHandle *admission.SQLCPUHandle
+			var mainGoroutineCPUHandle *admission.GoroutineCPUHandle
+			var err error
+			// Remote flow (for flows at the gateway, the initialization happens in connExecutor).
+			ctx, cpuHandle, mainGoroutineCPUHandle, err = flowinfra.MakeCPUHandle(
+				ctx, ds.SQLCPUProvider, evalCtx.Codec.TenantID, evalCtx.Txn, false /* atGateway */)
+			if err != nil {
+				return nil, nil, nil, err
+			}
+			// Wrap onFlowCleanupEnd to close the CPU handles at the flow boundary.
+			// This is called at the end of Flow.Cleanup(), after all goroutines have
+			// exited (Wait() has returned).
+			origOnFlowCleanupEnd := onFlowCleanupEnd
+			onFlowCleanupEnd = func(ctx context.Context) {
+				// Close the main goroutine's CPU handle first. At this point, all other
+				// goroutines have already closed their handles (via their defers).
+				mainGoroutineCPUHandle.Close(ctx)
+				// Close the SQLCPUHandle, which will pool all closed GoroutineCPUHandles.
+				cpuHandle.Close()
+				if origOnFlowCleanupEnd != nil {
+					origOnFlowCleanupEnd(ctx)
+				}
+			}
+		}
 	}
 
 	// Create the FlowCtx for the flow.
@@ -517,9 +545,13 @@ func (ds *ServerImpl) newFlowContext(
 		// responsible for cleaning it up and releasing any accessed descriptors
 		// on flow cleanup.
 		dsdp := catsessiondata.NewDescriptorSessionDataStackProvider(evalCtx.SessionDataStack)
-		flowCtx.Descriptors = ds.CollectionFactory.NewCollection(
-			ctx, descs.WithDescriptorSessionDataProvider(dsdp),
-		)
+		opts := []descs.Option{descs.WithDescriptorSessionDataProvider(dsdp)}
+		if localState.Collection != nil {
+			opts = append(opts, descs.WithForceStorageLookupIDs(
+				localState.Collection.GetUncommittedDescriptorIDs(),
+			))
+		}
+		flowCtx.Descriptors = ds.CollectionFactory.NewCollection(ctx, opts...)
 		flowCtx.IsDescriptorsCleanupRequired = true
 		var evalCatalogBuiltins evalcatalog.Builtins
 		// In distributed execution, authorization was already checked on the gateway node.

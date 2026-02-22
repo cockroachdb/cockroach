@@ -90,7 +90,9 @@ import (
 // debug-advance-clock       ts=<secs>
 // debug-set-discovered-locks-threshold-to-consult-txn-status-cache n=<count>
 // debug-set-batch-pushed-lock-resolution-enabled ok=<enabled>
+// debug-set-push-using-cached-clock-observation-enabled ok=<enabled>
 // debug-set-max-locks n=<count>
+// debug-set-virtual-intent-resolution-enabled ok=<enabled>
 // reset [namespace|force]
 func TestConcurrencyManagerBasic(t *testing.T) {
 	defer leaktest.AfterTest(t)()
@@ -348,12 +350,11 @@ func TestConcurrencyManagerBasic(t *testing.T) {
 					lcErr := &kvpb.LockConflictError{Locks: locks}
 					guard, err := m.HandleLockConflictError(ctx, prev, leaseSeq, lcErr)
 					if err != nil {
-						log.Eventf(ctx, "handled %v, returned error: %v", lcErr, err)
+						log.Eventf(ctx, "returned error: %v", err)
 						c.mu.Lock()
 						delete(c.guardsByReqName, reqName)
 						c.mu.Unlock()
 					} else {
-						log.Eventf(ctx, "handled %v, released latches", lcErr)
 						c.mu.Lock()
 						c.guardsByReqName[reqName] = guard
 						c.mu.Unlock()
@@ -444,7 +445,6 @@ func TestConcurrencyManagerBasic(t *testing.T) {
 				txnAcquire.Sequence = seqNum
 
 				mon.runSync("acquire lock", func(ctx context.Context) {
-					log.Eventf(ctx, "txn %s @ %s", txn.Short(), key)
 					acq := roachpb.MakeLockAcquisition(txnAcquire.TxnMeta, roachpb.Key(key), dur, str, nil)
 					m.OnLockAcquired(ctx, &acq)
 				})
@@ -606,6 +606,16 @@ func TestConcurrencyManagerBasic(t *testing.T) {
 				c.setBatchPushedLockResolutionEnabled(ok)
 				return ""
 
+			case "debug-set-push-using-cached-clock-observation-enabled":
+				ok := dd.ScanArg[bool](t, d, "ok")
+				c.setPushUsingCachedClockObservationEnabled(ok)
+				return ""
+
+			case "debug-set-virtual-intent-resolution-enabled":
+				ok := dd.ScanArg[bool](t, d, "ok")
+				c.setVirtualIntentResolutionEnabled(ok)
+				return ""
+
 			case "debug-set-max-locks":
 				n := dd.ScanArg[int64](t, d, "n")
 				m.SetMaxLockTableSize(n)
@@ -699,9 +709,11 @@ func newCluster() *cluster {
 }
 
 func newClusterWithSettings(st *clustersettings.Settings) *cluster {
-	// Set the latch manager's long latch threshold to infinity to disable
-	// logging, which could cause a test to erroneously fail.
+	// Set the latch manager's long latch hold and slow latch request thresholds
+	// to infinity to disable logging, which could cause a test to erroneously
+	// fail when wall-clock time exceeds the threshold.
 	spanlatch.LongLatchHoldThreshold.Override(context.Background(), &st.SV, math.MaxInt64)
+	spanlatch.SlowLatchRequestThreshold.Override(context.Background(), &st.SV, math.MaxInt64)
 	concurrency.UnreplicatedLockReliabilitySplit.Override(context.Background(), &st.SV, true)
 	concurrency.UnreplicatedLockReliabilityMerge.Override(context.Background(), &st.SV, true)
 	concurrency.UnreplicatedLockReliabilityLeaseTransfer.Override(context.Background(), &st.SV, true)
@@ -1006,6 +1018,14 @@ func (c *cluster) setDiscoveredLocksThresholdToConsultTxnStatusCache(n int) {
 
 func (c *cluster) setBatchPushedLockResolutionEnabled(ok bool) {
 	concurrency.BatchPushedLockResolution.Override(context.Background(), &c.st.SV, ok)
+}
+
+func (c *cluster) setPushUsingCachedClockObservationEnabled(ok bool) {
+	concurrency.PushUsingCachedClockObservation.Override(context.Background(), &c.st.SV, ok)
+}
+
+func (c *cluster) setVirtualIntentResolutionEnabled(ok bool) {
+	concurrency.VirtualIntentResolution.Override(context.Background(), &c.st.SV, ok)
 }
 
 // reset clears all request state in the cluster. This avoids portions of tests

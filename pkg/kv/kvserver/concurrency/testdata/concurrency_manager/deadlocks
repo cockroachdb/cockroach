@@ -57,15 +57,15 @@ sequence req=req3w
 
 on-lock-acquired req=req1w key=a
 ----
-[-] acquire lock: txn 00000001 @ ‹a›
+[-] acquire lock: txn 00000001 acquiring Unreplicated Exclusive lock on ‹"a"›
 
 on-lock-acquired req=req2w key=b
 ----
-[-] acquire lock: txn 00000002 @ ‹b›
+[-] acquire lock: txn 00000002 acquiring Unreplicated Exclusive lock on ‹"b"›
 
 on-lock-acquired req=req3w key=c
 ----
-[-] acquire lock: txn 00000003 @ ‹c›
+[-] acquire lock: txn 00000003 acquiring Unreplicated Exclusive lock on ‹"c"›
 
 finish req=req1w
 ----
@@ -264,15 +264,15 @@ sequence req=req3w
 
 on-lock-acquired req=req1w key=a
 ----
-[-] acquire lock: txn 00000001 @ ‹a›
+[-] acquire lock: txn 00000001 acquiring Unreplicated Exclusive lock on ‹"a"›
 
 on-lock-acquired req=req2w key=b
 ----
-[-] acquire lock: txn 00000002 @ ‹b›
+[-] acquire lock: txn 00000002 acquiring Unreplicated Exclusive lock on ‹"b"›
 
 on-lock-acquired req=req3w key=c
 ----
-[-] acquire lock: txn 00000003 @ ‹c›
+[-] acquire lock: txn 00000003 acquiring Unreplicated Exclusive lock on ‹"c"›
 
 finish req=req1w
 ----
@@ -505,15 +505,15 @@ sequence req=req3w
 
 on-lock-acquired req=req1w key=a
 ----
-[-] acquire lock: txn 00000001 @ ‹a›
+[-] acquire lock: txn 00000001 acquiring Unreplicated Exclusive lock on ‹"a"›
 
 on-lock-acquired req=req2w key=b
 ----
-[-] acquire lock: txn 00000002 @ ‹b›
+[-] acquire lock: txn 00000002 acquiring Unreplicated Exclusive lock on ‹"b"›
 
 on-lock-acquired req=req3w key=c
 ----
-[-] acquire lock: txn 00000003 @ ‹c›
+[-] acquire lock: txn 00000003 acquiring Unreplicated Exclusive lock on ‹"c"›
 
 finish req=req1w
 ----
@@ -737,15 +737,15 @@ sequence req=req3w
 
 on-lock-acquired req=req1w key=a
 ----
-[-] acquire lock: txn 00000001 @ ‹a›
+[-] acquire lock: txn 00000001 acquiring Unreplicated Exclusive lock on ‹"a"›
 
 on-lock-acquired req=req2w key=b
 ----
-[-] acquire lock: txn 00000002 @ ‹b›
+[-] acquire lock: txn 00000002 acquiring Unreplicated Exclusive lock on ‹"b"›
 
 on-lock-acquired req=req3w key=c
 ----
-[-] acquire lock: txn 00000003 @ ‹c›
+[-] acquire lock: txn 00000003 acquiring Unreplicated Exclusive lock on ‹"c"›
 
 finish req=req1w
 ----
@@ -976,15 +976,15 @@ sequence req=req3w
 
 on-lock-acquired req=req1w key=a
 ----
-[-] acquire lock: txn 00000001 @ ‹a›
+[-] acquire lock: txn 00000001 acquiring Unreplicated Exclusive lock on ‹"a"›
 
 on-lock-acquired req=req2w key=b
 ----
-[-] acquire lock: txn 00000002 @ ‹b›
+[-] acquire lock: txn 00000002 acquiring Unreplicated Exclusive lock on ‹"b"›
 
 on-lock-acquired req=req3w key=c
 ----
-[-] acquire lock: txn 00000003 @ ‹c›
+[-] acquire lock: txn 00000003 acquiring Unreplicated Exclusive lock on ‹"c"›
 
 finish req=req1w
 ----
@@ -1210,11 +1210,11 @@ sequence req=req2w
 
 on-lock-acquired req=req1w key=a
 ----
-[-] acquire lock: txn 00000001 @ ‹a›
+[-] acquire lock: txn 00000001 acquiring Unreplicated Exclusive lock on ‹"a"›
 
 on-lock-acquired req=req2w key=b
 ----
-[-] acquire lock: txn 00000002 @ ‹b›
+[-] acquire lock: txn 00000002 acquiring Unreplicated Exclusive lock on ‹"b"›
 
 finish req=req1w
 ----

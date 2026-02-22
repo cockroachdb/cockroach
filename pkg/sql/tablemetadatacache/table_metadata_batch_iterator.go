@@ -218,6 +218,9 @@ func (batchIter *tableMetadataBatchIterator) fetchNextBatch(
 	res, err := batchIter.spanStatsFetcher.SpanStats(ctx, &roachpb.SpanStatsRequest{
 		Spans:  spans,
 		NodeID: "0", // Fan out.
+		// Tablemetadata does not use the ApproximateTotalStats field, so we can skip the
+		// nodes making additional RangeStats RPCs to collect the MVCC stats across all replicas.
+		SkipApproxTotalStats: true,
 	})
 
 	if err != nil {

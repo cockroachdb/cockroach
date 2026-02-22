@@ -2,7 +2,8 @@
 //
 // Use of this software is governed by the CockroachDB Software License
 // included in the /LICENSE file.
-import { shallow } from "enzyme";
+
+import { render, waitFor } from "@testing-library/react";
 import fetchMock from "fetch-mock";
 import React from "react";
 
@@ -11,95 +12,73 @@ import { getCookieValue } from "src/redux/cookies";
 import TenantDropdown from "./tenantDropdown";
 
 jest.mock("src/redux/cookies", () => ({
+  ...jest.requireActual("src/redux/cookies"),
   getCookieValue: jest.fn(),
+  setCookie: jest.fn(),
 }));
 
 describe("TenantDropdown", () => {
-  beforeEach(() => {});
-
   afterEach(() => {
     fetchMock.restore();
   });
 
-  it("returns null if there's no current virtual cluster", () => {
+  const mockFetchClusters = (virtualClusters: string[]) => {
     fetchMock.mock({
-      matcher: `virtual_clusters`,
+      matcher: "virtual_clusters",
       method: "GET",
-      response: () => {
-        return {
-          body: JSON.stringify({
-            virtual_clusters: [],
-          }),
-        };
-      },
+      response: () => ({
+        body: JSON.stringify({ virtual_clusters: virtualClusters }),
+      }),
     });
+  };
 
+  it("returns null if there's no current virtual cluster", async () => {
+    mockFetchClusters([]);
     (
       getCookieValue as jest.MockedFn<typeof getCookieValue>
     ).mockReturnValueOnce(null);
-    const wrapper = shallow(<TenantDropdown />);
-    expect(wrapper.isEmptyRender());
-  });
-  // Multi-tenant scenarios
-  it("returns null if there are no virtual clusters or less than 2 in the session cookie", () => {
-    fetchMock.mock({
-      matcher: `virtual_clusters`,
-      method: "GET",
-      response: () => {
-        return {
-          body: JSON.stringify({
-            virtual_clusters: ["system"],
-          }),
-        };
-      },
-    });
 
+    const { container } = render(<TenantDropdown />);
+    await waitFor(() => expect(fetchMock.called()).toBe(true));
+    expect(container.innerHTML).toBe("");
+  });
+
+  it("returns null if there are no virtual clusters or less than 2 in the session cookie", async () => {
+    mockFetchClusters(["system"]);
     (
       getCookieValue as jest.MockedFn<typeof getCookieValue>
     ).mockReturnValueOnce("system");
-    const wrapper = shallow(<TenantDropdown />);
-    expect(wrapper.isEmptyRender());
-  });
-  it("returns a dropdown list of tenant options if there are multiple virtual clusters in the session cookie", () => {
-    fetchMock.mock({
-      matcher: `virtual_clusters`,
-      method: "GET",
-      response: () => {
-        return {
-          body: JSON.stringify({
-            virtual_clusters: ["system", "app"],
-          }),
-        };
-      },
-    });
 
+    const { container } = render(<TenantDropdown />);
+    await waitFor(() => expect(fetchMock.called()).toBe(true));
+    expect(container.innerHTML).toBe("");
+  });
+
+  it("renders a dropdown with the current virtual cluster when there are multiple options", async () => {
+    mockFetchClusters(["system", "app"]);
     (
       getCookieValue as jest.MockedFn<typeof getCookieValue>
     ).mockReturnValueOnce("system");
-    const wrapper = shallow(<TenantDropdown />);
-    expect(
-      wrapper.find({ children: "Virtual cluster: system" }).length,
-    ).toEqual(1);
-  });
-  it("returns a dropdown if the there is a single virtual cluster option but isn't system", () => {
-    fetchMock.mock({
-      matcher: `virtual_clusters`,
-      method: "GET",
-      response: () => {
-        return {
-          body: JSON.stringify({
-            virtual_clusters: ["app"],
-          }),
-        };
-      },
-    });
 
+    const { container } = render(<TenantDropdown />);
+    await waitFor(() => {
+      const selected = container.querySelector(".virtual-cluster-selected");
+      expect(selected).not.toBeNull();
+      expect(selected.textContent).toBe("Virtual cluster: system");
+    });
+  });
+
+  it("renders a dropdown if there is a single virtual cluster option but isn't system", async () => {
+    mockFetchClusters(["app"]);
     (
       getCookieValue as jest.MockedFn<typeof getCookieValue>
     ).mockReturnValueOnce("app");
-    const wrapper = shallow(<TenantDropdown />);
-    expect(wrapper.find({ children: "Virtual cluster: app" }).length).toEqual(
-      1,
-    );
+
+    const { container } = render(<TenantDropdown />);
+    await waitFor(() => {
+      const selected = container.querySelector(".virtual-cluster-selected");
+      expect(selected).not.toBeNull();
+      expect(selected.textContent).toBe("Virtual cluster: app");
+    });
   });
 });

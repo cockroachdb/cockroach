@@ -348,6 +348,9 @@ func runBackfiller(
 		deps.Telemetry().IncrementSchemaChangeErrorType("uncategorized")
 		return err
 	}
+	// Stop the periodic flusher before the final flush to ensure no in-flight
+	// periodic writes can overwrite the final checkpoint state.
+	stop()
 	if err := tracker.FlushFractionCompleted(ctx); err != nil {
 		return err
 	}

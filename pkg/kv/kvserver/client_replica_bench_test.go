@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -350,136 +351,141 @@ func BenchmarkIntentResolution(b *testing.B) {
 		},
 	}
 
-	for _, tc := range testCases {
-		b.Run(tc.name, func(b *testing.B) {
+	for _, virtualIntentResolution := range []bool{false, true} {
+		b.Run(fmt.Sprintf("virtual-resolution=%t", virtualIntentResolution), func(b *testing.B) {
+			for _, tc := range testCases {
+				b.Run(tc.name, func(b *testing.B) {
+					// doDebug is rather expensive because it also installs tracing spans
+					// which is very expensive
+					const doDebug = false
+					var (
+						txnID                     atomic.Value
+						pushCounter               atomic.Int32
+						resolveIntentCounter      atomic.Int32
+						resolveIntentRangeCounter atomic.Int32
 
-			// doDebug is rather expensive because it also installs tracing spans
-			// which is very expensive
-			const doDebug = false
-			var (
-				txnID                     atomic.Value
-				pushCounter               atomic.Int32
-				resolveIntentCounter      atomic.Int32
-				resolveIntentRangeCounter atomic.Int32
-
-				requestFilter         kvserverbase.ReplicaRequestFilter
-				printAndResetCounters = func() {}
-			)
-			if doDebug {
-				testutils.SetVModule(b, "lock_table_waiter=4,intent_resolver=4")
-				printAndResetCounters = func() {
-					// These counters are useful for making sure the test is actually doing
-					// what we expect.
-					b.Logf("Counters for %s", txnID.Load().(string))
-					b.Logf("\t%d pushes", pushCounter.Load())
-					b.Logf("\t%d resolve intents", resolveIntentCounter.Load())
-					b.Logf("\t%d resolve intent ranges", resolveIntentRangeCounter.Load())
-					txnID.Store("")
-					pushCounter.Store(0)
-					resolveIntentCounter.Store(0)
-					resolveIntentRangeCounter.Store(0)
-				}
-				requestFilter = func(ctx context.Context, ba *kvpb.BatchRequest) *kvpb.Error {
-					tID := txnID.Load()
-					if tID == nil {
-						return nil
-					}
-					tIDstr := tID.(string)
-					if tIDstr == "" {
-						return nil
-					}
-					for _, ru := range ba.Requests {
-						switch r := ru.GetInner().(type) {
-						case *kvpb.PushTxnRequest:
-							if r.PusheeTxn.ID.String() == tIDstr {
-								pushCounter.Add(1)
+						requestFilter         kvserverbase.ReplicaRequestFilter
+						printAndResetCounters = func() {}
+					)
+					if doDebug {
+						testutils.SetVModule(b, "lock_table_waiter=4,intent_resolver=4")
+						printAndResetCounters = func() {
+							// These counters are useful for making sure the test is actually doing
+							// what we expect.
+							b.Logf("Counters for %s", txnID.Load().(string))
+							b.Logf("\t%d pushes", pushCounter.Load())
+							b.Logf("\t%d resolve intents", resolveIntentCounter.Load())
+							b.Logf("\t%d resolve intent ranges", resolveIntentRangeCounter.Load())
+							txnID.Store("")
+							pushCounter.Store(0)
+							resolveIntentCounter.Store(0)
+							resolveIntentRangeCounter.Store(0)
+						}
+						requestFilter = func(ctx context.Context, ba *kvpb.BatchRequest) *kvpb.Error {
+							tID := txnID.Load()
+							if tID == nil {
+								return nil
 							}
-						case *kvpb.ResolveIntentRequest:
-							if r.IntentTxn.ID.String() == tIDstr {
-								resolveIntentCounter.Add(1)
+							tIDstr := tID.(string)
+							if tIDstr == "" {
+								return nil
 							}
-						case *kvpb.ResolveIntentRangeRequest:
-							if r.IntentTxn.ID.String() == tIDstr {
-								resolveIntentRangeCounter.Add(1)
+							for _, ru := range ba.Requests {
+								switch r := ru.GetInner().(type) {
+								case *kvpb.PushTxnRequest:
+									if r.PusheeTxn.ID.String() == tIDstr {
+										pushCounter.Add(1)
+									}
+								case *kvpb.ResolveIntentRequest:
+									if r.IntentTxn.ID.String() == tIDstr {
+										resolveIntentCounter.Add(1)
+									}
+								case *kvpb.ResolveIntentRangeRequest:
+									if r.IntentTxn.ID.String() == tIDstr {
+										resolveIntentRangeCounter.Add(1)
+									}
+								}
 							}
+							return nil
 						}
 					}
-					return nil
-				}
-			}
 
-			s, _, kvDB := serverutils.StartServer(b, base.TestServerArgs{
-				Knobs: base.TestingKnobs{
-					Store: &kvserver.StoreTestingKnobs{
-						TestingRequestFilter: requestFilter,
-						IntentResolverKnobs: kvserverbase.IntentResolverTestingKnobs{
-							// Disable async intent resolution, so that the reader must do all
-							// required intent resolution.
-							DisableAsyncIntentResolution: true,
-						},
-					},
-				},
-			})
-			defer s.Stopper().Stop(ctx)
-			scratchRangeKey, err := s.ScratchRange()
-			require.NoError(b, err)
-
-			testRange := roachpb.Span{
-				Key:    scratchRangeKey,
-				EndKey: scratchRangeKey.PrefixEnd(),
-			}
-			makeKey := func(i int) roachpb.Key {
-				return append(testRange.Key.Clone(), []byte(fmt.Sprintf("-%05d", i))...)
-			}
-			_, _, err = s.SplitRange(makeKey(batchCount * batchSize / 2))
-			require.NoError(b, err)
-
-			for b.Loop() {
-				func() {
-					b.StopTimer()
-
-					collectAndFinishReader := func() tracingpb.Recording { return tracingpb.Recording{} }
-					collectAndFinishWriter := func() tracingpb.Recording { return tracingpb.Recording{} }
-					readerCtx := ctx
-					writerCtx := ctx
-					if doDebug {
-						tracer := s.TracerI().(*tracing.Tracer)
-						readerCtx, collectAndFinishReader = tracing.ContextWithRecordingSpan(ctx, tracer, "reader")
-						writerCtx, collectAndFinishWriter = tracing.ContextWithRecordingSpan(ctx, tracer, "writer")
-
-						defer collectAndFinishReader()
-						defer collectAndFinishWriter()
-					}
-
-					txn1 := kvDB.NewTxn(ctx, "writer")
-					txnID.Store(txn1.ID().String())
-
-					tc.writer(b, writerCtx, txn1, makeKey)
-					if doDebug {
-						b.Logf("WRITER TRACE: %s", collectAndFinishWriter())
-					}
-
-					b.StartTimer()
-					tc.reader(b, readerCtx, kvDB, testRange)
-					b.StopTimer()
-					if doDebug {
-						b.Logf("READER TRACE: %s", collectAndFinishReader())
-					}
-					printAndResetCounters()
-					// If txn1 is still alive, roll it back.
-					_ = txn1.Rollback(ctx)
-
-					// Clear out the keys so that the next iteration doesn't have to iterate
-					// over them.
-					_, pErr := kv.SendWrappedWith(ctx, kvDB.NonTransactionalSender(), kvpb.Header{}, &kvpb.ClearRangeRequest{
-						RequestHeader: kvpb.RequestHeader{
-							Key:    testRange.Key,
-							EndKey: testRange.EndKey,
+					s, _, kvDB := serverutils.StartServer(b, base.TestServerArgs{
+						Knobs: base.TestingKnobs{
+							Store: &kvserver.StoreTestingKnobs{
+								TestingRequestFilter: requestFilter,
+								IntentResolverKnobs: kvserverbase.IntentResolverTestingKnobs{
+									// Disable async intent resolution, so that the reader must do all
+									// required intent resolution.
+									DisableAsyncIntentResolution: true,
+								},
+							},
 						},
 					})
-					require.Nil(b, pErr, "error: %s", pErr)
-					b.StartTimer()
-				}()
+					defer s.Stopper().Stop(ctx)
+					concurrency.VirtualIntentResolution.Override(ctx, &s.ClusterSettings().SV, virtualIntentResolution)
+					scratchRangeKey, err := s.ScratchRange()
+					require.NoError(b, err)
+
+					testRange := roachpb.Span{
+						Key:    scratchRangeKey,
+						EndKey: scratchRangeKey.PrefixEnd(),
+					}
+					makeKey := func(i int) roachpb.Key {
+						return append(testRange.Key.Clone(), []byte(fmt.Sprintf("-%05d", i))...)
+					}
+					_, _, err = s.SplitRange(makeKey(batchCount * batchSize / 2))
+					require.NoError(b, err)
+
+					for b.Loop() {
+						func() {
+							b.StopTimer()
+
+							collectAndFinishReader := func() tracingpb.Recording { return tracingpb.Recording{} }
+							collectAndFinishWriter := func() tracingpb.Recording { return tracingpb.Recording{} }
+
+							readerCtx := ctx
+							writerCtx := ctx
+							if doDebug {
+								tracer := s.TracerI().(*tracing.Tracer)
+								readerCtx, collectAndFinishReader = tracing.ContextWithRecordingSpan(ctx, tracer, "reader")
+								writerCtx, collectAndFinishWriter = tracing.ContextWithRecordingSpan(ctx, tracer, "writer")
+
+								defer collectAndFinishReader()
+								defer collectAndFinishWriter()
+							}
+
+							txn1 := kvDB.NewTxn(ctx, "writer")
+							txnID.Store(txn1.ID().String())
+
+							tc.writer(b, writerCtx, txn1, makeKey)
+							if doDebug {
+								b.Logf("WRITER TRACE: %s", collectAndFinishWriter())
+							}
+
+							b.StartTimer()
+							tc.reader(b, readerCtx, kvDB, testRange)
+							b.StopTimer()
+							if doDebug {
+								b.Logf("READER TRACE: %s", collectAndFinishReader())
+							}
+							printAndResetCounters()
+							// If txn1 is still alive, roll it back.
+							_ = txn1.Rollback(ctx)
+
+							// Clear out the keys so that the next iteration doesn't have to iterate
+							// over them.
+							_, pErr := kv.SendWrappedWith(ctx, kvDB.NonTransactionalSender(), kvpb.Header{}, &kvpb.ClearRangeRequest{
+								RequestHeader: kvpb.RequestHeader{
+									Key:    testRange.Key,
+									EndKey: testRange.EndKey,
+								},
+							})
+							require.Nil(b, pErr, "error: %s", pErr)
+							b.StartTimer()
+						}()
+					}
+				})
 			}
 		})
 	}

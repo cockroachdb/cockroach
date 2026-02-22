@@ -7,7 +7,6 @@ package importer_test
 
 import (
 	"context"
-	gosql "database/sql"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -327,9 +326,8 @@ func TestImportIntoNonEmptyTableRowCountCheck(t *testing.T) {
 	runner := sqlutils.MakeSQLRunner(db)
 
 	// Use sync mode so the import blocks until the inspect job completes. If
-	// the row count is wrong the import statement itself will fail. The
-	// interlock key is needed since the cluster setting is marked as unsafe.
-	setUnsafeClusterSetting(t, db, `SET CLUSTER SETTING bulkio.import.row_count_validation.unsafe.mode = 'sync'`)
+	// the row count is wrong the import statement itself will fail.
+	runner.Exec(t, `SET CLUSTER SETTING bulkio.import.row_count_validation.mode = 'sync'`)
 
 	runner.Exec(t, `CREATE TABLE foo (k INT PRIMARY KEY, v INT)`)
 	runner.Exec(t, `INSERT INTO foo SELECT i, i*10 FROM generate_series(1, 100) AS g(i)`)
@@ -424,7 +422,7 @@ func TestImportIntoRowCountCheckAfterPause(t *testing.T) {
 
 	// Use sync mode so the import blocks until the inspect job completes. If
 	// the row count is wrong the import statement itself will fail.
-	setUnsafeClusterSetting(t, db, `SET CLUSTER SETTING bulkio.import.row_count_validation.unsafe.mode = 'sync'`)
+	runner.Exec(t, `SET CLUSTER SETTING bulkio.import.row_count_validation.mode = 'sync'`)
 
 	s := srv.ApplicationLayer()
 	registry := s.JobRegistry().(*jobs.Registry)
@@ -481,11 +479,15 @@ func TestImportIntoRowCountCheckAfterPause(t *testing.T) {
 			require.Error(t, err)
 			require.ErrorContains(t, err, "pause point")
 
-			// Find the paused import job.
+			// Find the paused import job. The job transitions from
+			// pause-requested to paused asynchronously, so retry until
+			// it reaches the paused state.
 			var jobID int64
-			runner.QueryRow(t,
-				`SELECT job_id FROM [SHOW JOBS] WHERE job_type = 'IMPORT' AND status = 'paused'`,
-			).Scan(&jobID)
+			testutils.SucceedsSoon(t, func() error {
+				return db.QueryRow(
+					`SELECT job_id FROM [SHOW JOBS] WHERE job_type = 'IMPORT' AND status = 'paused'`,
+				).Scan(&jobID)
+			})
 
 			// Clear pausepoint and resume the job.
 			runner.Exec(t, `SET CLUSTER SETTING jobs.debug.pausepoints = ''`)
@@ -514,20 +516,4 @@ func TestImportIntoRowCountCheckAfterPause(t *testing.T) {
 				[][]string{{fmt.Sprintf("%d", tc.totalRows)}})
 		})
 	}
-}
-
-// setUnsafeClusterSetting sets a cluster setting that is marked as unsafe. It
-// extracts the interlock key from the initial error and retries with the key.
-func setUnsafeClusterSetting(t *testing.T, db *gosql.DB, stmt string) {
-	t.Helper()
-	_, err := db.Exec(stmt)
-	require.Error(t, err)
-	var pqErr *pq.Error
-	require.True(t, errors.As(err, &pqErr))
-	require.True(t, strings.HasPrefix(pqErr.Detail, "key: "), pqErr.Detail)
-	interlockKey := strings.TrimPrefix(pqErr.Detail, "key: ")
-	_, err = db.Exec("SET unsafe_setting_interlock_key = $1", interlockKey)
-	require.NoError(t, err)
-	_, err = db.Exec(stmt)
-	require.NoError(t, err)
 }

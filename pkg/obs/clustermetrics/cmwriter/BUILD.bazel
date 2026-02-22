@@ -1,0 +1,59 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "cmwriter",
+    srcs = [
+        "doc.go",
+        "settings.go",
+        "sql_store.go",
+        "writer.go",
+        "writer_metrics.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/obs/clustermetrics/cmwriter",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/base",
+        "//pkg/clusterversion",
+        "//pkg/obs/clustermetrics",
+        "//pkg/settings",
+        "//pkg/settings/cluster",
+        "//pkg/sql/isql",
+        "//pkg/sql/sem/tree",
+        "//pkg/sql/sessiondata",
+        "//pkg/util/log",
+        "//pkg/util/metric",
+        "//pkg/util/stop",
+        "//pkg/util/timeutil",
+    ],
+)
+
+go_test(
+    name = "cmwriter_test",
+    srcs = [
+        "main_test.go",
+        "sql_store_test.go",
+        "writer_test.go",
+    ],
+    embed = [":cmwriter"],
+    deps = [
+        "//pkg/base",
+        "//pkg/obs/clustermetrics",
+        "//pkg/security/securityassets",
+        "//pkg/security/securitytest",
+        "//pkg/server",
+        "//pkg/settings/cluster",
+        "//pkg/sql",
+        "//pkg/sql/isql",
+        "//pkg/testutils",
+        "//pkg/testutils/serverutils",
+        "//pkg/testutils/testcluster",
+        "//pkg/util/leaktest",
+        "//pkg/util/log",
+        "//pkg/util/metric",
+        "//pkg/util/stop",
+        "//pkg/util/syncutil",
+        "//pkg/util/timeutil",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_stretchr_testify//require",
+    ],
+)

@@ -34,7 +34,7 @@ sequence req=reqFirstLock
 
 on-lock-acquired req=reqFirstLock key=k dur=r
 ----
-[-] acquire lock: txn 00000001 @ ‹k›
+[-] acquire lock: txn 00000001 acquiring Replicated Intent lock on ‹"k"›
 
 finish req=reqFirstLock
 ----
@@ -52,7 +52,7 @@ sequence req=reqWaiter
 handle-lock-conflict-error req=reqWaiter lease-seq=1
   lock txn=txnWriter key=k
 ----
-[3] handle lock conflict error reqWaiter: handled conflicting locks on ‹"k"›, released latches
+[3] handle lock conflict error reqWaiter: added 1 discovered lock(s) to lock table: conflicting locks on ‹"k"›
 
 sequence req=reqWaiter
 ----
@@ -82,7 +82,7 @@ sequence req=reqSecondLock
 
 on-lock-acquired req=reqSecondLock key=k2 dur=u
 ----
-[-] acquire lock: txn 00000001 @ ‹k2›
+[-] acquire lock: txn 00000001 acquiring Unreplicated Exclusive lock on ‹"k2"›
 [4] sequence reqWaiter: lock wait-queue event: wait elsewhere for txn 00000001 @ key ‹"k"›
 [4] sequence reqWaiter: pushing txn 00000001 to abort
 [4] sequence reqWaiter: blocked on select in concurrency_test.(*cluster).PushTransaction
@@ -155,15 +155,15 @@ sequence req=reqThreeKeyWriter
 
 on-lock-acquired req=reqThreeKeyWriter key=k1 dur=r
 ----
-[-] acquire lock: txn 00000003 @ ‹k1›
+[-] acquire lock: txn 00000003 acquiring Replicated Intent lock on ‹"k1"›
 
 on-lock-acquired req=reqThreeKeyWriter key=k2 dur=r
 ----
-[-] acquire lock: txn 00000003 @ ‹k2›
+[-] acquire lock: txn 00000003 acquiring Replicated Intent lock on ‹"k2"›
 
 on-lock-acquired req=reqThreeKeyWriter key=k3 dur=r
 ----
-[-] acquire lock: txn 00000003 @ ‹k3›
+[-] acquire lock: txn 00000003 acquiring Replicated Intent lock on ‹"k3"›
 
 finish req=reqThreeKeyWriter
 ----
@@ -193,7 +193,7 @@ handle-lock-conflict-error req=reqTwoKeyWaiter lease-seq=1
   lock txn=txnThreeKeyWriter key=k1
   lock txn=txnThreeKeyWriter key=k2
 ----
-[9] handle lock conflict error reqTwoKeyWaiter: handled conflicting locks on ‹"k1"›, ‹"k2"›, released latches
+[9] handle lock conflict error reqTwoKeyWaiter: added 2 discovered lock(s) to lock table: conflicting locks on ‹"k1"›, ‹"k2"›
 
 sequence req=reqTwoKeyWaiter
 ----
@@ -223,7 +223,7 @@ handle-lock-conflict-error req=reqThreeKeyWaiter lease-seq=1
   lock txn=txnThreeKeyWriter key=k2
   lock txn=txnThreeKeyWriter key=k3
 ----
-[11] handle lock conflict error reqThreeKeyWaiter: handled conflicting locks on ‹"k1"›, ‹"k2"›, ‹"k3"›, released latches
+[11] handle lock conflict error reqThreeKeyWaiter: added 3 discovered lock(s) to lock table: conflicting locks on ‹"k1"›, ‹"k2"›, ‹"k3"›
 
 sequence req=reqThreeKeyWaiter
 ----

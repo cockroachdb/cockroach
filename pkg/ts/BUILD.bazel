@@ -72,7 +72,6 @@ go_test(
         "//pkg/keys",
         "//pkg/kv",
         "//pkg/kv/kvclient/kvcoord",
-        "//pkg/kv/kvclient/kvtenant",
         "//pkg/kv/kvpb",
         "//pkg/kv/kvserver",
         "//pkg/multitenant/tenantcapabilitiespb",

@@ -111,6 +111,7 @@ func makeRunCommand() *cobra.Command {
 	}
 	cmd.Flags().StringToStringVar(&config.binaries, "binaries", config.binaries, "local output name and remote path of the test binaries to run (ex., experiment=<sha1>,baseline=<sha2>")
 	cmd.Flags().StringVar(&config.outputDir, "output-dir", config.outputDir, "output directory for run log and microbenchmark results")
+	cmd.Flags().StringVar(&config.benchmarkConfig, "benchmark-config", config.benchmarkConfig, "list of benchmarks to execute (generated from list command)")
 	cmd.Flags().StringVar(&config.timeout, "timeout", config.timeout, "timeout for each benchmark e.g. 10m")
 	cmd.Flags().StringVar(&config.shellCommand, "shell", config.shellCommand, "additional shell command to run on node before benchmark execution")
 	cmd.Flags().StringSliceVar(&config.excludeList, "exclude", []string{}, "benchmarks to exclude, in the form <pkg regex:benchmark regex> e.g. 'pkg/util/.*:BenchmarkIntPool,pkg/sql:.*'")
@@ -274,6 +275,7 @@ func makeCompressCommand() *cobra.Command {
 
 func makeListCommand() *cobra.Command {
 	repoDir := ""
+	exportPath := ""
 	runCmdFunc := func(cmd *cobra.Command, args []string) error {
 		pkgPath := filepath.Join(repoDir, "pkg")
 		info, statErr := os.Stat(pkgPath)
@@ -287,8 +289,15 @@ func makeListCommand() *cobra.Command {
 		if err != nil {
 			return err
 		}
-		for _, benchmarkInfo := range benchmarkInfoList {
-			fmt.Printf("%s/%s [%s]\n", benchmarkInfo.Package, benchmarkInfo.Name, benchmarkInfo.Team)
+		if exportPath != "" {
+			if err := benchmarkInfoList.export(exportPath); err != nil {
+				return err
+			}
+			fmt.Printf("Exported %d benchmarks to %s\n", len(benchmarkInfoList), exportPath)
+		} else {
+			for _, benchmarkInfo := range benchmarkInfoList {
+				fmt.Printf("%s/%s [%s]\n", benchmarkInfo.Package, benchmarkInfo.Name, benchmarkInfo.Team)
+			}
 		}
 		return nil
 	}
@@ -299,6 +308,7 @@ func makeListCommand() *cobra.Command {
 		RunE:  runCmdFunc,
 	}
 	cmd.Flags().StringVar(&repoDir, "repo-dir", repoDir, "path to the CockroachDB repository root directory")
+	cmd.Flags().StringVar(&exportPath, "export", exportPath, "export benchmark list to JSON file at the specified path")
 	return cmd
 }
 

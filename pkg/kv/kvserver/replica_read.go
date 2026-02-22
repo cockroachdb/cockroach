@@ -68,16 +68,68 @@ func (r *Replica) executeReadOnlyBatch(
 		ctx, r, g.LatchSpans(), ba.RequiresClosedTSOlderThanStorageSnapshot(), ba.AdmissionHeader)
 	defer rec.Release()
 
-	// TODO(irfansharif): It's unfortunate that in this read-only code path,
-	// we're stuck with a ReadWriter because of the way evaluateBatch is
-	// designed.
-	rw := r.store.StateEngine().NewReadOnly(storage.StandardDurability)
+	var rw storage.ReadWriter
+	intentsToResolveVirtually := g.IntentsToResolveVirtually()
+	if itrv := r.store.TestingKnobs().InjectIntentsToResolveVirtually; itrv != nil {
+		intentsToResolveVirtually = itrv()
+	}
+	// If there are intents to be resolved virtually, use a storage batch in which
+	// the intent resolution will be evaluated before the read-only batch request.
+	if len(intentsToResolveVirtually) > 0 {
+		rw, _ = r.newBatchedEngine(g)
+		// Latch assertions will fail here because latches are not acquired for the
+		// intent resolution in this batch. This is safe because this batch is used
+		// only for evaluating the read-only batch request, and the underlying
+		// intent resolutions will not be committed.
+		rw = spanset.DisableUndeclaredSpanAssertions(rw)
+	} else {
+		// TODO(irfansharif): It's unfortunate that in this read-only code path,
+		// we're stuck with a ReadWriter because of the way evaluateBatch is
+		// designed.
+		rw = r.store.StateEngine().NewReadOnly(storage.StandardDurability)
+		if spanset.EnableAssertions {
+			rw = spanset.NewReadWriterAt(rw, g.LatchSpans(), ba.Timestamp)
+		}
+	}
 	if !rw.ConsistentIterators() {
 		// This is needed for correctness, as we will call
 		// PinEngineStateForIterators, and potentially drop latches before
 		// evaluation.
 		panic("expected consistent iterators")
 	}
+	defer rw.Close()
+
+	// For each intent to be resolved virtually, evaluate the intent resolution
+	// directly on the storage batch before evaluating the read-only batch request
+	// below. Depending on the result of the intent resolution, the read-only
+	// batch request may not conflict with the intents anymore.
+	log.Eventf(
+		ctx, "resolving %d intents virtually before executing read",
+		len(intentsToResolveVirtually),
+	)
+	for _, intent := range intentsToResolveVirtually {
+		ir := kvpb.ResolveIntentRequest{
+			RequestHeader:     kvpb.RequestHeaderFromSpan(intent.Span),
+			IntentTxn:         intent.Txn,
+			Status:            intent.Status,
+			IgnoredSeqNums:    intent.IgnoredSeqNums,
+			ClockWhilePending: intent.ClockWhilePending,
+		}
+		// The reply coming from evaluation is discarded below.
+		reply := &kvpb.ResolveIntentResponse{}
+		// It's ok to pass an empty header since during intent resolution it's only
+		// used to ensure that this is not a transactional request, and to apply
+		// MaxTargetBytes (which we don't need because the batch is not committed).
+		h := kvpb.Header{}
+		_, err = evaluateCommand(
+			ctx, rw, rec, nil /* ms */, nil /* ss */, h, &ir,
+			reply, g, &st, ui, readWrite, false, /* omitInRangefeeds */
+		)
+		if err != nil {
+			return nil, g, nil, kvpb.NewError(err)
+		}
+	}
+
 	// Pin engine state eagerly so that all iterators created over this Reader are
 	// based off the state of the engine as of this point and are mutually
 	// consistent.
@@ -93,10 +145,6 @@ func (r *Replica) executeReadOnlyBatch(
 	if err := rw.PinEngineStateForIterators(readCategory); err != nil {
 		return nil, g, nil, kvpb.NewError(err)
 	}
-	if spanset.EnableAssertions {
-		rw = spanset.NewReadWriterAt(rw, g.LatchSpans(), ba.Timestamp)
-	}
-	defer rw.Close()
 
 	if err := r.checkExecutionCanProceedAfterStorageSnapshot(ctx, ba, st); err != nil {
 		return nil, g, nil, kvpb.NewError(err)

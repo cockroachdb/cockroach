@@ -8,11 +8,17 @@ package bulkutil
 import (
 	"context"
 	"fmt"
+	"strconv"
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/cloud"
+	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
+	"github.com/cockroachdb/cockroach/pkg/sql/isql"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 )
 
@@ -162,4 +168,99 @@ func (c *BulkJobCleaner) CleanupJobSubdirectory(
 
 	uniqueDirs := dedupeDirectories(subDirs)
 	return c.deleteFilesInDirectories(ctx, uniqueDirs)
+}
+
+// CleanupOrphanedFiles lists job subdirectories under nodelocal://self/job/,
+// checks each job's status, and deletes files for jobs that are terminal or no
+// longer exist.
+func CleanupOrphanedFiles(
+	ctx context.Context, factory cloud.ExternalStorageFromURIFactory, db isql.DB,
+) error {
+	// List subdirectories under nodelocal://self/job/.
+	const jobDirURI = "nodelocal://self/job/"
+	mux := NewExternalStorageMux(factory, username.RootUserName())
+	defer func() {
+		if err := mux.Close(); err != nil {
+			log.Dev.Warningf(ctx, "error closing storage mux during bulk file cleanup: %v", err)
+		}
+	}()
+
+	// Collect job ID directories.
+	var jobIDs []jobspb.JobID
+	listErr := mux.ListDirectories(ctx, jobDirURI, func(name string) error {
+		// Directory entries have trailing slash, e.g. "123/".
+		name = strings.TrimSuffix(name, "/")
+		id, err := strconv.ParseInt(name, 10, 64)
+		if err != nil {
+			log.Dev.Warningf(ctx, "skipping non-numeric directory in job path: %q", name)
+			return nil //nolint:returnerrcheck
+		}
+		jobIDs = append(jobIDs, jobspb.JobID(id))
+		return nil
+	})
+	if listErr != nil {
+		log.Dev.Warningf(ctx, "error listing job directories: %v", listErr)
+		return listErr
+	}
+
+	if len(jobIDs) == 0 {
+		return nil
+	}
+
+	var cleaned, skipped int
+	cleaner := NewBulkJobCleaner(factory, username.RootUserName())
+	defer func() {
+		if err := cleaner.Close(); err != nil {
+			log.Dev.Warningf(ctx, "error closing bulk job cleaner: %v", err)
+		}
+	}()
+
+	for _, jobID := range jobIDs {
+		shouldClean, err := shouldCleanJob(ctx, db, jobID)
+		if err != nil {
+			log.Dev.Warningf(ctx, "error checking status of job %d, skipping: %v", jobID, err)
+			skipped++
+			continue
+		}
+		if !shouldClean {
+			skipped++
+			continue
+		}
+
+		if err := cleaner.CleanupJobDirectories(
+			ctx, jobID, []string{"nodelocal://self/"},
+		); err != nil {
+			log.Dev.Warningf(ctx, "error cleaning files for job %d: %v", jobID, err)
+			skipped++
+			continue
+		}
+		cleaned++
+	}
+
+	log.Dev.Infof(ctx, "bulk file cleanup complete: cleaned %d job directories, skipped %d", cleaned, skipped)
+	return nil
+}
+
+// shouldCleanJob checks whether the given job's files should be cleaned up.
+// Returns true if the job is in a terminal state or does not exist.
+func shouldCleanJob(ctx context.Context, db isql.DB, jobID jobspb.JobID) (bool, error) {
+	row, err := db.Executor().QueryRowEx(
+		ctx,
+		"bulk-file-cleaner-check-job",
+		nil, /* txn */
+		sessiondata.NodeUserSessionDataOverride,
+		"SELECT status FROM system.jobs WHERE id = $1",
+		jobID,
+	)
+	if err != nil {
+		return false, err
+	}
+
+	// Job does not exist; safe to clean up.
+	if row == nil {
+		return true, nil
+	}
+
+	status := jobs.State(tree.MustBeDString(row[0]))
+	return status.Terminal(), nil
 }

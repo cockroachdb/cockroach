@@ -308,6 +308,7 @@ sql admin
 {
   "database": "mydb",
   "execute": true,
+  "timeout": "30s",
   "statements": [
     {"sql": "ALTER TABLE foo RENAME TO bar"},
     {"sql": "INSERT INTO bar (i) VALUES (1), (2)"},

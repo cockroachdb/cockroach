@@ -62,7 +62,6 @@ go_test(
         ":authserver",
         "//pkg/base",
         "//pkg/gossip",
-        "//pkg/kv/kvclient/kvtenant",
         "//pkg/kv/kvpb",
         "//pkg/kv/kvserver",
         "//pkg/kv/kvserver/closedts/ctpb",

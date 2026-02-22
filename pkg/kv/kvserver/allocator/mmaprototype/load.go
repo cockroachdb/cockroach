@@ -452,6 +452,10 @@ func computeMeansForStoreSet(
 	}
 	for i := range means.storeLoad.load {
 		if means.storeLoad.capacity[i] != UnknownCapacity {
+			// NB: capacity can be 0 for CPURate when nodeCPURateUsage >>
+			// nodeCPURateCapacity. Stores with capacity 0 will be classified as
+			// overloadUrgent via fractionUsed = +Inf in
+			// loadSummaryForDimension.
 			means.storeLoad.util[i] =
 				float64(means.storeLoad.load[i]) / float64(means.storeLoad.capacity[i])
 			means.storeLoad.capacity[i] /= LoadValue(n)
@@ -469,6 +473,7 @@ func computeMeansForStoreSet(
 		means.nodeLoad.loadCPU += nl.ReportedCPU
 		means.nodeLoad.capacityCPU += nl.CapacityCPU
 	}
+	// NB: capacityCPU can be 0 if all nodes report 0 store CPU capacity.
 	means.nodeLoad.utilCPU =
 		float64(means.nodeLoad.loadCPU) / float64(means.nodeLoad.capacityCPU)
 	means.nodeLoad.loadCPU /= LoadValue(n)
@@ -569,6 +574,7 @@ func loadSummaryForDimension(
 	fractionAbove := float64(load)/float64(meanLoad) - 1.0
 	var fractionUsed float64
 	if capacity != UnknownCapacity {
+		// NB: capacity can be 0 if nodeCPURateUsage >> nodeCPURateCapacity.
 		fractionUsed = float64(load) / float64(capacity)
 	}
 
@@ -686,7 +692,7 @@ func loadSummaryForDimension(
 // canShedAndAddLoad and topK) call this function directly.
 func highDiskSpaceUtilization(load LoadValue, capacity LoadValue, threshold float64) bool {
 	if capacity == UnknownCapacity || capacity == 0 {
-		log.KvDistribution.Errorf(context.Background(), "disk capacity is unknown")
+		log.KvDistribution.Errorf(context.Background(), "disk capacity is unknown or zero")
 		return false
 	}
 	// load and capacity are both in terms of logical bytes.

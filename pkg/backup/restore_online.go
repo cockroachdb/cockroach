@@ -330,6 +330,7 @@ func sendAddRemoteSSTWorker(
 					return errors.AssertionFailedf("files not sorted by layer")
 				}
 				currentLayer = file.Layer
+
 				if file.HasRangeKeys {
 					return errors.Wrapf(permanentRestoreError, "online restore of range keys not supported")
 				}
@@ -500,7 +501,14 @@ func checkManifestsForOnlineCompat(
 
 	for _, manifest := range manifests {
 		if !manifest.RevisionStartTime.IsEmpty() || manifest.MVCCFilter == backuppb.MVCCFilter_All {
-			return pgerror.Newf(pgcode.FeatureNotSupported, "experimental online restore: restoring from a revision history backup not supported")
+			// Revision history backups are supported when using the distributed
+			// flow, which can handle mixed link/ingest entries. The coordinator
+			// loop (sendAddRemoteSSTs) cannot handle them.
+			if !onlineRestoreUseDistFlow.Get(&settings.SV) {
+				return pgerror.Newf(pgcode.FeatureNotSupported,
+					"experimental online restore: restoring from a revision history backup not supported")
+			}
+			break
 		}
 	}
 	return nil

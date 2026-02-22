@@ -278,21 +278,16 @@ func TestMrSystemDatabase(t *testing.T) {
 		})
 
 		t.Run("RegionTables", func(t *testing.T) {
-			query := `
-		    SELECT target
-			FROM [SHOW ALL ZONE CONFIGURATIONS]
-			WHERE target LIKE 'TABLE system.public.%'
-			    AND raw_config_sql NOT LIKE '%global_reads = true%'
-					AND target = 'TABLE system.public.locations'
-			ORDER BY target;
-		`
-			tDB.CheckQueryResults(t, query, [][]string{
-				{"TABLE system.public.locations"},
-			})
-
-			sDB.CheckQueryResults(t, query, [][]string{
-				{"TABLE system.public.locations"},
-			})
+			// Verify that the locations table is REGIONAL BY TABLE IN PRIMARY
+			// REGION. With PrimaryRegionNotSpecifiedName, these tables inherit
+			// the database-level zone config rather than getting their own
+			// explicit zone config.
+			query := `SELECT create_statement FROM [SHOW CREATE TABLE system.locations]`
+			for _, db := range []*sqlutils.SQLRunner{tDB, sDB} {
+				var createStmt string
+				db.QueryRow(t, query).Scan(&createStmt)
+				require.Contains(t, createStmt, "REGIONAL BY TABLE IN PRIMARY REGION")
+			}
 		})
 
 		t.Run(fmt.Sprintf("QueryByEnum %s", testCase.name), func(t *testing.T) {
@@ -639,4 +634,120 @@ func TestDropRegionFromUserDatabaseCleansUpSystemTables(t *testing.T) {
 	// The count should remain the same since we only dropped from userdb, not system.
 	require.Equal(t, initialCount[0][0], finalCount[0][0],
 		"sql_instances count should not change when dropping region from user database")
+}
+
+func TestDropRegionSystemDatabaseMultiTenant(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	skip.UnderDuress(t, "slow test")
+
+	ctx := context.Background()
+
+	makeSettings := func() *cluster.Settings {
+		cs := cluster.MakeTestingClusterSettings()
+		instancestorage.ReclaimLoopInterval.Override(ctx, &cs.SV, 150*time.Millisecond)
+		return cs
+	}
+
+	// Create a multi-region cluster with 3 nodes (one per region).
+	regionNames := []string{"aws-us-east-1", "aws-eu-central-1", "aws-us-east-2"}
+	tc, systemSQL, cleanup := multiregionccltestutils.TestingCreateMultiRegionClusterWithRegionList(
+		t, regionNames, 1, /* serversPerRegion */
+		base.TestingKnobs{},
+		multiregionccltestutils.WithSettings(makeSettings()))
+	defer cleanup()
+
+	sDB := sqlutils.MakeSQLRunner(systemSQL)
+	sDB.Exec(t, `ANALYZE system.sqlliveness`)
+	sDB.Exec(t, `SET CLUSTER SETTING sql.multiregion.system_database_multiregion.enabled = true`)
+
+	// Create a tenant and make its system database multi-region.
+	id, err := roachpb.MakeTenantID(11)
+	require.NoError(t, err)
+
+	connectToTenant := func() (serverutils.ApplicationLayerInterface, *sqlutils.SQLRunner) {
+		var euServer serverutils.TestServerInterface
+		for _, s := range tc.Servers {
+			loc := s.Locality()
+			if region, _ := loc.Find("region"); region == "aws-eu-central-1" {
+				euServer = s
+				break
+			}
+		}
+		require.NotNil(t, euServer)
+
+		// Start the tenant *on that server* with matching locality.
+		tenantArgs := base.TestTenantArgs{
+			Settings: makeSettings(),
+			TenantID: id,                  // your tenant 11
+			Locality: euServer.Locality(), // region=aws-eu-central-1
+		}
+		tenantServer, tenantSQL := serverutils.StartTenant(t, euServer, tenantArgs)
+		return tenantServer, sqlutils.MakeSQLRunner(tenantSQL)
+	}
+	tenantServer, tDB := connectToTenant()
+
+	tDB.Exec(t, `ANALYZE system.sqlliveness`)
+	tDB.Exec(t, `ALTER DATABASE system SET PRIMARY REGION "aws-us-east-1"`)
+	tDB.Exec(t, `ALTER DATABASE system ADD REGION "aws-eu-central-1"`)
+	tDB.Exec(t, `ALTER DATABASE system ADD REGION "aws-us-east-2"`)
+	tDB.CheckQueryResults(t,
+		`USE system; SELECT unnest(values) FROM [SHOW ENUMS] WHERE name = 'crdb_internal_region'`,
+		[][]string{{"aws-eu-central-1"}, {"aws-us-east-1"}, {"aws-us-east-2"}})
+
+	// Change the primary away. This leaves all system tables with REGIONAL BY
+	// TABLE in the old primary. This is key for this scenario as we want to see
+	// that dropping the old primary will repair those tables.
+	tDB.Exec(t, `ALTER DATABASE system SET PRIMARY REGION "aws-eu-central-1"`)
+
+	// Test 1: Dropping a region when there are 3 regions.
+	tDB.Exec(t, `ALTER DATABASE system DROP REGION "aws-us-east-2"`)
+	tDB.CheckQueryResults(t,
+		`SELECT region FROM [SHOW REGIONS FROM DATABASE system] ORDER BY region`,
+		[][]string{{"aws-eu-central-1"}, {"aws-us-east-1"}})
+
+	// Verify that the DROP is blocked while the session is still alive.
+	tDB.ExpectErr(t,
+		`cannot drop region "aws-us-east-1" from the system database while there are live nodes in that region`,
+		`ALTER DATABASE system DROP REGION "aws-us-east-1"`)
+
+	// Release the tenant's sqlliveness session so we can drop its region.
+	// The session was created with crdb_region=aws-us-east-1 (the original
+	// primary) and cannot be moved, so we must delete it. Release() stops
+	// the heartbeat and deletes the session from storage.
+	provider := tenantServer.ExecutorConfig().(sql.ExecutorConfig).SQLLiveness
+	_, err = provider.Release(ctx)
+	require.NoError(t, err)
+
+	// The old SQL connection is no longer usable after releasing the session.
+	// Start a fresh tenant whose session will be in aws-eu-central-1 (the
+	// current primary region).
+	_, tDB = connectToTenant()
+
+	// Wait for any remaining live sessions in the old region to be confirmed
+	// dead across all three tables checked by checkCanDropSystemDatabaseRegion.
+	tDB.CheckQueryResultsRetry(t,
+		`SELECT count(*) FROM system.sqlliveness WHERE crdb_region = 'aws-us-east-1' AND crdb_internal.sql_liveness_is_alive(session_id, true)`,
+		[][]string{{"0"}})
+	tDB.CheckQueryResultsRetry(t,
+		`SELECT count(*) FROM system.sql_instances WHERE crdb_region = 'aws-us-east-1' AND crdb_internal.sql_liveness_is_alive(session_id, true)`,
+		[][]string{{"0"}})
+
+	// Test 2: Prove that you can keep dropping until you are down to one region.
+	tDB.Exec(t, `ALTER DATABASE system DROP REGION "aws-us-east-1"`)
+	tDB.CheckQueryResults(t,
+		`USE system; SELECT unnest(values) FROM [SHOW ENUMS] WHERE name = 'crdb_internal_region'`,
+		[][]string{{"aws-eu-central-1"}})
+	tDB.CheckQueryResults(t,
+		`SELECT count(*) FROM crdb_internal.zones
+		WHERE raw_config_sql LIKE '%aws-us-east%'`,
+		[][]string{{"0"}})
+
+	// Verify no system table locality configs reference dropped regions.
+	tDB.CheckQueryResults(t,
+		`SELECT count(*) FROM crdb_internal.tables
+		WHERE database_name = 'system'
+		  AND locality LIKE '%aws-us-east%'`,
+		[][]string{{"0"}})
 }

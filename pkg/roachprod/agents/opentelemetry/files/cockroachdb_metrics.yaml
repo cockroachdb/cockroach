@@ -1786,6 +1786,10 @@ mma_store_disk_logical: mma.store.disk.logical
 mma_store_disk_utilization: mma.store.disk.utilization
 mma_store_write_bandwidth: mma.store.write.bandwidth
 node_id: node_id
+obs_clustermetrics_flush_count: obs.clustermetrics.flush.count
+obs_clustermetrics_flush_errors: obs.clustermetrics.flush.errors
+obs_clustermetrics_flush_latency: obs.clustermetrics.flush.latency
+obs_clustermetrics_flush_metrics_written: obs.clustermetrics.flush.metrics_written
 obs_tablemetadata_update_job_duration: obs.tablemetadata.update_job.duration
 obs_tablemetadata_update_job_duration_bucket: obs.tablemetadata.update_job.duration.bucket
 obs_tablemetadata_update_job_duration_count: obs.tablemetadata.update_job.duration.count
@@ -1868,6 +1872,7 @@ queue_replicagc_pending: queue.replicagc.pending
 queue_replicagc_process_failure: queue.replicagc.process.failure
 queue_replicagc_process_success: queue.replicagc.process.success
 queue_replicagc_processingnanos: queue.replicagc.processingnanos
+queue_replicagc_purgatory: queue.replicagc.purgatory
 queue_replicagc_removereplica: queue.replicagc.removereplica
 queue_replicate_addnonvoterreplica: queue.replicate.addnonvoterreplica
 queue_replicate_addreplica: queue.replicate.addreplica

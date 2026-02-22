@@ -57,7 +57,6 @@ go_test(
     embed = [":debug"],
     deps = [
         "//pkg/base",
-        "//pkg/kv/kvclient/kvtenant",
         "//pkg/roachpb",
         "//pkg/security/securityassets",
         "//pkg/security/securitytest",

@@ -304,6 +304,17 @@ func generateAndSendImportSpans(
 		fileIterByLayer = append(fileIterByLayer, iter)
 	}
 
+	// Find the first layer with revision history. Once we hit a layer with
+	// revision history, that layer and all subsequent layers must be ingested
+	// (not linked) to maintain correct MVCC/LSM ordering.
+	firstRevHistoryLayer := len(backups) // default: no revision history layers
+	for i, b := range backups {
+		if !b.RevisionStartTime.IsEmpty() || b.MVCCFilter == backuppb.MVCCFilter_All {
+			firstRevHistoryLayer = i
+			break
+		}
+	}
+
 	// lastCovSpanSize is the size of files added to the right-most span of
 	// the cover so far.
 	var lastCovSpanSize int64
@@ -319,6 +330,14 @@ func generateAndSendImportSpans(
 		}
 		for layer := range covFilesByLayer {
 			for _, f := range covFilesByLayer[layer] {
+				// A file can be linked if:
+				// 1. useLink is true (caller wants linking)
+				// 2. It's in a layer before the first revision history layer
+				// 3. It doesn't have range keys (online restore doesn't support them)
+				// Once we hit a layer with revision history, all subsequent layers
+				// must also be ingested to maintain correct MVCC/LSM ordering.
+				canLink := useLink && layer < firstRevHistoryLayer && !f.HasRangeKeys
+
 				fileSpec := execinfrapb.RestoreFileSpec{
 					Path:                    f.Path,
 					Dir:                     backups[layer].Dir,
@@ -328,7 +347,7 @@ func generateAndSendImportSpans(
 					ApproximatePhysicalSize: f.ApproximatePhysicalSize,
 					Layer:                   int32(layer),
 					HasRangeKeys:            f.HasRangeKeys,
-					UseLink:                 useLink,
+					UseLink:                 canLink,
 				}
 				if dir, ok := backupLocalityMap[layer][f.LocalityKV]; ok {
 					fileSpec.Dir = dir

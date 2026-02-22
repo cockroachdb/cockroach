@@ -6,6 +6,8 @@
 package concurrency
 
 import (
+	"context"
+
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
@@ -65,10 +67,10 @@ func (v verifyingLockTable) ClearGE(key roachpb.Key) []roachpb.LockAcquisition {
 
 // ScanAndEnqueue implements the lockTable interface.
 func (v verifyingLockTable) ScanAndEnqueue(
-	req Request, guard lockTableGuard,
+	ctx context.Context, req Request, guard lockTableGuard,
 ) (lockTableGuard, *Error) {
 	defer v.lt.verify()
-	return v.lt.ScanAndEnqueue(req, guard)
+	return v.lt.ScanAndEnqueue(ctx, req, guard)
 }
 
 // ScanOptimistic implements the lockTable interface.
@@ -78,37 +80,40 @@ func (v verifyingLockTable) ScanOptimistic(req Request) lockTableGuard {
 }
 
 // Dequeue implements the lockTable interface.
-func (v verifyingLockTable) Dequeue(guard lockTableGuard) {
+func (v verifyingLockTable) Dequeue(ctx context.Context, guard lockTableGuard) {
 	defer v.lt.verify()
-	v.lt.Dequeue(guard)
+	v.lt.Dequeue(ctx, guard)
 }
 
 // AddDiscoveredLock implements the lockTable interface.
 func (v verifyingLockTable) AddDiscoveredLock(
+	ctx context.Context,
 	foundLock *roachpb.Lock,
 	seq roachpb.LeaseSequence,
 	consultTxnStatusCache bool,
 	guard lockTableGuard,
 ) (bool, error) {
 	defer v.lt.verifyKey(foundLock.Key)
-	return v.lt.AddDiscoveredLock(foundLock, seq, consultTxnStatusCache, guard)
+	return v.lt.AddDiscoveredLock(ctx, foundLock, seq, consultTxnStatusCache, guard)
 }
 
 // AcquireLock implements the lockTable interface.
-func (v verifyingLockTable) AcquireLock(acq *roachpb.LockAcquisition) error {
+func (v verifyingLockTable) AcquireLock(ctx context.Context, acq *roachpb.LockAcquisition) error {
 	defer v.lt.verifyKey(acq.Key)
-	return v.lt.AcquireLock(acq)
+	return v.lt.AcquireLock(ctx, acq)
 }
 
 // MarkIneligibleForExport implements the lockTable interface.
-func (v verifyingLockTable) MarkIneligibleForExport(acq *roachpb.LockAcquisition) error {
-	return v.lt.MarkIneligibleForExport(acq)
+func (v verifyingLockTable) MarkIneligibleForExport(
+	ctx context.Context, acq *roachpb.LockAcquisition,
+) error {
+	return v.lt.MarkIneligibleForExport(ctx, acq)
 }
 
 // UpdateLocks implements the lockTable interface.
-func (v verifyingLockTable) UpdateLocks(up *roachpb.LockUpdate) error {
+func (v verifyingLockTable) UpdateLocks(ctx context.Context, up *roachpb.LockUpdate) error {
 	defer v.lt.verify()
-	return v.lt.UpdateLocks(up)
+	return v.lt.UpdateLocks(ctx, up)
 }
 
 // PushedTransactionUpdated implements the lockTable interface.

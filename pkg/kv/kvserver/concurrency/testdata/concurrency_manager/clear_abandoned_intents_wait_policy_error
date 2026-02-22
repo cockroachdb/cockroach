@@ -35,7 +35,7 @@ handle-lock-conflict-error req=req1 lease-seq=1
   lock txn=txn2 key=i
   lock txn=txn2 key=j
 ----
-[2] handle lock conflict error req1: handled conflicting locks on ‹"a"›, ‹"b"›, ‹"c"›, ‹"d"›, ‹"e"›, ‹"f"›, ‹"g"›, ‹"h"›, ‹"i"›, ‹"j"›, released latches
+[2] handle lock conflict error req1: added 10 discovered lock(s) to lock table: conflicting locks on ‹"a"›, ‹"b"›, ‹"c"›, ‹"d"›, ‹"e"›, ‹"f"›, ‹"g"›, ‹"h"›, ‹"i"›, ‹"j"›
 
 debug-lock-table
 ----

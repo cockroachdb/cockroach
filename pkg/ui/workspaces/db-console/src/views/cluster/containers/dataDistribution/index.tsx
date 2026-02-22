@@ -7,7 +7,7 @@ import { Loading } from "@cockroachlabs/cluster-ui";
 import forEach from "lodash/forEach";
 import map from "lodash/map";
 import sortBy from "lodash/sortBy";
-import React from "react";
+import React, { useEffect } from "react";
 import Helmet from "react-helmet";
 import { connect } from "react-redux";
 import { RouteComponentProps, withRouter } from "react-router-dom";
@@ -73,27 +73,15 @@ interface DataDistributionProps {
   sortedZoneConfigs: ZoneConfig$Properties[];
 }
 
-class DataDistribution extends React.Component<DataDistributionProps> {
-  renderZoneConfigs() {
-    return (
-      <div className="zone-config-list">
-        <ul>
-          {this.props.sortedZoneConfigs.map(zoneConfig => (
-            <li key={zoneConfig.target} className="zone-config">
-              <pre className="zone-config__raw-sql">
-                {zoneConfig.config_sql}
-              </pre>
-            </li>
-          ))}
-        </ul>
-      </div>
-    );
-  }
-
-  getCellValue = (dbPath: TreePath, nodePath: TreePath): number => {
+function DataDistribution({
+  dataDistribution,
+  localityTree,
+  sortedZoneConfigs,
+}: DataDistributionProps): React.ReactElement {
+  const getCellValue = (dbPath: TreePath, nodePath: TreePath): number => {
     const [dbName, tableName] = dbPath;
     const nodeID = nodePath[nodePath.length - 1];
-    const databaseInfo = this.props.dataDistribution.data.database_info;
+    const databaseInfo = dataDistribution.data.database_info;
 
     const res =
       databaseInfo[dbName].table_info[tableName].replica_count_by_node_id[
@@ -105,59 +93,60 @@ class DataDistribution extends React.Component<DataDistributionProps> {
     return FixLong(res).toInt();
   };
 
-  render() {
-    const nodeTree = nodeTreeFromLocalityTree(
-      "Cluster",
-      this.props.localityTree,
-    );
+  const nodeTree = nodeTreeFromLocalityTree("Cluster", localityTree);
 
-    const databaseInfo = this.props.dataDistribution.data.database_info;
-    const dbTree: TreeNode<SchemaObject> = {
-      name: "Cluster",
+  const databaseInfo = dataDistribution.data.database_info;
+  const dbTree: TreeNode<SchemaObject> = {
+    name: "Cluster",
+    data: {
+      dbName: null,
+      tableName: null,
+    },
+    children: map(databaseInfo, (dbInfo, dbName) => ({
+      name: dbName,
       data: {
-        dbName: null,
-        tableName: null,
+        dbName,
       },
-      children: map(databaseInfo, (dbInfo, dbName) => ({
-        name: dbName,
+      children: map(dbInfo.table_info, (tableInfo, tableName) => ({
+        name: tableName,
         data: {
           dbName,
+          tableName,
+          droppedAt: tableInfo.dropped_at,
         },
-        children: map(dbInfo.table_info, (tableInfo, tableName) => ({
-          name: tableName,
-          data: {
-            dbName,
-            tableName,
-            droppedAt: tableInfo.dropped_at,
-          },
-        })),
       })),
-    };
+    })),
+  };
 
-    return (
-      <div className="data-distribution">
-        <div className="data-distribution__zone-config-sidebar">
-          <h2 className="base-heading">
-            Zone Configs <InfoTooltip text={ZONE_CONFIG_TEXT} />
-          </h2>
-          {this.renderZoneConfigs()}
-          <p style={{ maxWidth: 300, paddingTop: 10 }}>
-            Dropped tables appear{" "}
-            <span className="table-label--dropped">greyed out</span>. Their
-            replicas will be garbage collected according to the{" "}
-            <code>gc.ttlseconds</code> setting in their zone configs.
-          </p>
+  return (
+    <div className="data-distribution">
+      <div className="data-distribution__zone-config-sidebar">
+        <h2 className="base-heading">
+          Zone Configs <InfoTooltip text={ZONE_CONFIG_TEXT} />
+        </h2>
+        <div className="zone-config-list">
+          <ul>
+            {sortedZoneConfigs.map(zoneConfig => (
+              <li key={zoneConfig.target} className="zone-config">
+                <pre className="zone-config__raw-sql">
+                  {zoneConfig.config_sql}
+                </pre>
+              </li>
+            ))}
+          </ul>
         </div>
-        <div>
-          <ReplicaMatrix
-            cols={nodeTree}
-            rows={dbTree}
-            getValue={this.getCellValue}
-          />
-        </div>
+        <p style={{ maxWidth: 300, paddingTop: 10 }}>
+          Dropped tables appear{" "}
+          <span className="table-label--dropped">greyed out</span>. Their
+          replicas will be garbage collected according to the{" "}
+          <code>gc.ttlseconds</code> setting in their zone configs.
+        </p>
       </div>
-    );
-  }
+      <div>
+        <ReplicaMatrix cols={nodeTree} rows={dbTree} getValue={getCellValue} />
+      </div>
+    </div>
+  );
 }
 
 interface DataDistributionPageProps {
@@ -170,57 +159,51 @@ interface DataDistributionPageProps {
   refreshLiveness: typeof refreshLiveness;
 }
 
-export class DataDistributionPage extends React.Component<
-  DataDistributionPageProps & RouteComponentProps
-> {
-  componentDidMount() {
-    this.props.refreshDataDistribution();
-    this.props.refreshNodes();
-    this.props.refreshLiveness();
-  }
+export function DataDistributionPage({
+  dataDistribution,
+  localityTree,
+  localityTreeErrors,
+  sortedZoneConfigs: sortedZoneConfigsProp,
+  refreshDataDistribution: refreshDataDistributionAction,
+  refreshNodes: refreshNodesAction,
+  refreshLiveness: refreshLivenessAction,
+  history,
+}: DataDistributionPageProps & RouteComponentProps): React.ReactElement {
+  useEffect(() => {
+    refreshDataDistributionAction();
+    refreshNodesAction();
+    refreshLivenessAction();
+  });
 
-  componentDidUpdate() {
-    this.props.refreshDataDistribution();
-    this.props.refreshNodes();
-    this.props.refreshLiveness();
-  }
-
-  render() {
-    return (
-      <div>
-        <Helmet title="Data Distribution" />
-        <BackToAdvanceDebug history={this.props.history} />
-        <section className="section">
-          <h1 className="base-heading">Data Distribution</h1>
-          <p style={{ maxWidth: 300, paddingTop: 10 }}>
-            Note: the data distribution render does not work with coalesced
-            ranges. To disable coalesced ranges (would increase range count),
-            run the following SQL statement:
-          </p>
-          {RANGE_COALESCING_ADVICE}
-        </section>
-        <section className="section">
-          <Loading
-            loading={
-              !this.props.dataDistribution.data || !this.props.localityTree
-            }
-            page={"data distribution"}
-            error={[
-              this.props.dataDistribution.lastError,
-              ...this.props.localityTreeErrors,
-            ]}
-            render={() => (
-              <DataDistribution
-                localityTree={this.props.localityTree}
-                dataDistribution={this.props.dataDistribution}
-                sortedZoneConfigs={this.props.sortedZoneConfigs}
-              />
-            )}
-          />
-        </section>
-      </div>
-    );
-  }
+  return (
+    <div>
+      <Helmet title="Data Distribution" />
+      <BackToAdvanceDebug history={history} />
+      <section className="section">
+        <h1 className="base-heading">Data Distribution</h1>
+        <p style={{ maxWidth: 300, paddingTop: 10 }}>
+          Note: the data distribution render does not work with coalesced
+          ranges. To disable coalesced ranges (would increase range count), run
+          the following SQL statement:
+        </p>
+        {RANGE_COALESCING_ADVICE}
+      </section>
+      <section className="section">
+        <Loading
+          loading={!dataDistribution.data || !localityTree}
+          page={"data distribution"}
+          error={[dataDistribution.lastError, ...localityTreeErrors]}
+          render={() => (
+            <DataDistribution
+              localityTree={localityTree}
+              dataDistribution={dataDistribution}
+              sortedZoneConfigs={sortedZoneConfigsProp}
+            />
+          )}
+        />
+      </section>
+    </div>
+  );
 }
 
 const sortedZoneConfigs = createSelector(

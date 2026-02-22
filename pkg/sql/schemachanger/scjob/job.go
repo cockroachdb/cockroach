@@ -150,6 +150,7 @@ func (n *newSchemaChangeResumer) run(ctx context.Context, execCtxI interface{}) 
 		payload.Statement,
 		execCtx.SessionData(),
 		execCtx.ExtendedEvalContext().Tracing.KVTracingEnabled(),
+		execCfg.DistSQLSrv.ExternalStorageFromURI,
 	)
 
 	// If there are no descriptors left, then we can short circuit here.

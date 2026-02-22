@@ -5,7 +5,7 @@
 
 import { CaretLeftOutlined, CaretDownOutlined } from "@ant-design/icons";
 import cn from "classnames";
-import * as React from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { connect } from "react-redux";
 import { Action, Dispatch } from "redux";
 
@@ -37,78 +37,61 @@ interface TableSectionProps {
   children?: React.ReactNode;
 }
 
-interface TableSectionState {
-  isCollapsed: boolean;
-}
+function TableSection({
+  title,
+  footer,
+  isCollapsible = false,
+  className = "",
+  children,
+  saveExpandedState,
+}: TableSectionProps &
+  MapStateToProps &
+  MapDispatchToProps): React.ReactElement {
+  const [isCollapsed, setIsCollapsed] = useState(false);
 
-class TableSection extends React.Component<
-  TableSectionProps & MapStateToProps & MapDispatchToProps,
-  TableSectionState
-> {
-  static defaultProps = {
-    isCollapsible: false,
-    className: "",
+  // Keep a ref to the latest isCollapsed value so the unmount cleanup
+  // doesn't capture a stale value from the initial render.
+  const isCollapsedRef = useRef(isCollapsed);
+  isCollapsedRef.current = isCollapsed;
+
+  useEffect(() => {
+    return () => {
+      saveExpandedState(isCollapsedRef.current);
+    };
+  }, [saveExpandedState]);
+
+  const onExpandSectionToggle = () => {
+    const newValue = !isCollapsed;
+    setIsCollapsed(newValue);
+    saveExpandedState(newValue);
   };
 
-  state = {
-    isCollapsed: false,
-  };
+  const rootClass = cn("table-section", className);
+  const contentClass = cn("table-section__content", {
+    "table-section__content--collapsed": isCollapsed,
+  });
 
-  componentWillUnmount() {
-    this.props.saveExpandedState(this.state.isCollapsed);
-  }
-
-  onExpandSectionToggle = () => {
-    this.setState({
-      isCollapsed: !this.state.isCollapsed,
-    });
-    this.props.saveExpandedState(!this.state.isCollapsed);
-  };
-
-  getCollapseSectionToggle = () => {
-    const { isCollapsible } = this.props;
-    if (!isCollapsible) {
-      return null;
-    }
-
-    const { isCollapsed } = this.state;
-
-    return (
-      <div className="collapse-toggle" onClick={this.onExpandSectionToggle}>
-        <span>{isCollapsed ? "Show" : "Hide"}</span>
-        {isCollapsed ? (
-          <CaretLeftOutlined className="collapse-toggle__icon" />
-        ) : (
-          <CaretDownOutlined className="collapse-toggle__icon" />
+  return (
+    <div className={rootClass}>
+      <section className="table-section__heading table-section__heading--justify-end">
+        <Text textType={TextTypes.Heading3}>{title}</Text>
+        {isCollapsible && (
+          <div className="collapse-toggle" onClick={onExpandSectionToggle}>
+            <span>{isCollapsed ? "Show" : "Hide"}</span>
+            {isCollapsed ? (
+              <CaretLeftOutlined className="collapse-toggle__icon" />
+            ) : (
+              <CaretDownOutlined className="collapse-toggle__icon" />
+            )}
+          </div>
         )}
+      </section>
+      <div className={contentClass}>
+        {children}
+        {footer && <div className="table-section__footer">{footer}</div>}
       </div>
-    );
-  };
-
-  render() {
-    const { children, title, className } = this.props;
-    const { isCollapsed } = this.state;
-    const rootClass = cn("table-section", className);
-    const contentClass = cn("table-section__content", {
-      "table-section__content--collapsed": isCollapsed,
-    });
-    const collapseToggleButton = this.getCollapseSectionToggle();
-
-    return (
-      <div className={rootClass}>
-        <section className="table-section__heading table-section__heading--justify-end">
-          <Text textType={TextTypes.Heading3}>{title}</Text>
-          {collapseToggleButton}
-        </section>
-        <div className={contentClass}>
-          {children}
-          {this.props.footer && (
-            <div className="table-section__footer">{this.props.footer}</div>
-          )}
-        </div>
-      </div>
-    );
-  }
+    </div>
+  );
 }
 
 const getTableSectionKey = (id: string) =>

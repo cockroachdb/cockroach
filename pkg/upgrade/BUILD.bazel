@@ -1,4 +1,4 @@
-load("@io_bazel_rules_go//go:def.bzl", "go_library")
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
     name = "upgrade",
@@ -34,5 +34,64 @@ go_library(
         "//pkg/util/uuid",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_cockroachdb_logtags//:logtags",
+    ],
+)
+
+go_test(
+    name = "upgrade_test",
+    size = "enormous",
+    srcs = [
+        "main_test.go",
+        "tenant_upgrade_test.go",
+        "upgrade_interlock_generated_test.go",  # keep
+        "upgrade_interlock_test.go",
+    ],
+    exec_properties = {"test.Pool": "large"},
+    shard_count = 18,
+    deps = [
+        ":upgrade",
+        "//pkg/base",
+        "//pkg/ccl",
+        "//pkg/clusterversion",
+        "//pkg/jobs",
+        "//pkg/roachpb",
+        "//pkg/security/securityassets",
+        "//pkg/security/securitytest",
+        "//pkg/server",
+        "//pkg/settings/cluster",
+        "//pkg/spanconfig",
+        "//pkg/sql",
+        "//pkg/sql/catalog/lease",
+        "//pkg/sql/sem/eval",
+        "//pkg/sql/sessiondatapb",
+        "//pkg/sql/sqlinstance/instancestorage",
+        "//pkg/sql/sqlliveness/slbase",
+        "//pkg/sql/stats",
+        "//pkg/testutils/serverutils",
+        "//pkg/testutils/skip",
+        "//pkg/testutils/sqlutils",
+        "//pkg/testutils/testcluster",
+        "//pkg/upgrade/interlocktestutil",
+        "//pkg/upgrade/upgradebase",
+        "//pkg/util/leaktest",
+        "//pkg/util/log",
+        "//pkg/util/randutil",
+        "//pkg/util/stop",
+        "@com_github_stretchr_testify//require",
+    ],
+)
+
+genrule(
+    name = "gen-interlock-tests",
+    outs = ["upgrade_interlock_generated_test.go"],
+    cmd = """
+        $(location //pkg/upgrade/interlocktestgen) -output-file-path=$(location upgrade_interlock_generated_test.go)
+       """,
+    tools = [
+        "//pkg/upgrade/interlocktestgen",
+    ],
+    visibility = [
+        ":__pkg__",
+        "//pkg/gen:__pkg__",
     ],
 )

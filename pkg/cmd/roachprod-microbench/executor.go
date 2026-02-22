@@ -24,6 +24,7 @@ import (
 	roachprodConfig "github.com/cockroachdb/cockroach/pkg/roachprod/config"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
+	"github.com/cockroachdb/cockroach/pkg/testutils/benchdoc"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
@@ -35,6 +36,7 @@ type executorConfig struct {
 	binaries          map[string]string
 	excludeList       []string
 	ignorePackageList []string
+	benchmarkConfig   string
 	outputDir         string
 	timeout           string
 	shellCommand      string
@@ -50,6 +52,7 @@ type executorConfig struct {
 type executor struct {
 	executorConfig
 	excludeBenchmarksRegex [][]*regexp.Regexp
+	benchmarkInfoMap       map[string]benchdoc.BenchmarkInfo
 	ignorePackages         map[string]struct{}
 	runOptions             install.RunOptions
 	log                    *logger.Logger
@@ -89,6 +92,23 @@ func newExecutor(config executorConfig) (*executor, error) {
 	err = util.VerifyPathFlag("output-dir", config.outputDir, true)
 	if err != nil {
 		return nil, err
+	}
+
+	var benchmarkInfoMap map[string]benchdoc.BenchmarkInfo
+	if config.benchmarkConfig != "" {
+		err = util.VerifyPathFlag("benchmark-config", config.benchmarkConfig, false)
+		if err != nil {
+			return nil, err
+		}
+		benchmarkInfoList, listErr := loadBenchmarkList(config.benchmarkConfig)
+		if listErr != nil {
+			return nil, listErr
+		}
+		benchmarkInfoMap = make(map[string]benchdoc.BenchmarkInfo, len(benchmarkInfoList))
+		for _, info := range benchmarkInfoList {
+			key := fmt.Sprintf("%s/%s", info.Package, info.Name)
+			benchmarkInfoMap[key] = info
+		}
 	}
 
 	runOptions := install.DefaultRunOptions().WithRetryDisabled()
@@ -131,6 +151,7 @@ func newExecutor(config executorConfig) (*executor, error) {
 	return &executor{
 		executorConfig:         config,
 		excludeBenchmarksRegex: excludeBenchmarks,
+		benchmarkInfoMap:       benchmarkInfoMap,
 		ignorePackages:         ignorePackages,
 		runOptions:             runOptions,
 		log:                    l,
@@ -293,7 +314,7 @@ func (e *executor) generateBenchmarkCommands(
 	if e.postIssues {
 		for i, key := range binaryKeys {
 			if key == e.postConfig.binary {
-				// Move the key to front by removing it and inserting at index 0
+				// Move the key to the front by removing it and inserting at index 0
 				copy(binaryKeys[1:i+1], binaryKeys[0:i])
 				binaryKeys[0] = e.postConfig.binary
 				break
@@ -303,8 +324,15 @@ func (e *executor) generateBenchmarkCommands(
 
 	// Generate the commands for each benchmark binary.
 	for _, bench := range benchmarks {
+		benchmarkInfoKey := fmt.Sprintf("%s/%s", bench.pkg, bench.name)
+		benchmarkInfo := e.benchmarkInfoMap[benchmarkInfoKey]
+
 		runCommand := fmt.Sprintf("./run.sh %s -test.benchmem -test.bench=^%s$ -test.run=^$ -test.v",
 			strings.Join(e.testArgs, " "), bench.name)
+
+		if benchmarkInfo.RunArgs.BenchTime != "" {
+			runCommand = fmt.Sprintf("%s -test.benchtime=%s", runCommand, benchmarkInfo.RunArgs.BenchTime)
+		}
 		if e.timeout != "" {
 			runCommand = fmt.Sprintf("timeout -k 30s %s %s", e.timeout, runCommand)
 		}

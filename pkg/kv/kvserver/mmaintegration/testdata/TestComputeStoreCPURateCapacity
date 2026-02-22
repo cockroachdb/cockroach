@@ -1,0 +1,229 @@
+# ==========================================================================
+# CPU Capacity Model Evaluation
+# ==========================================================================
+#
+# Each scenario defines the of what's happening on the node:
+#   kv-cpu:                  Direct KV replica CPU (total across all stores)
+#   proportional-overhead:   CPU that scales with KV (dist SQL, RPC, compactions)
+#   background:              CPU that does NOT scale with KV (gateway SQL, GC, jobs)
+#
+# From ground truth we derive:
+#   node-cpu-usage = kv-cpu + proportional-overhead + background
+#   true-mult      = (kv-cpu + proportional-overhead) / kv-cpu
+#   true-capacity  = (node-cpu-capacity - background) / true-mult / num-stores
+#
+# capacity_err = (model - true-capacity) / true-capacity * 100
+#   < 0: pessimistic (safe — sheds load too early)
+#   > 0: optimistic (dangerous — accepts too much work)
+#
+# Where each model fails:
+# naive:
+#   Computes mult = nodeUsage / kvCores, capacity = nodeCapacity / mult. Assumes
+#   all node CPU is caused by KV work. Background inflates mult, making per-KV
+#   cost too high — the more background, the worse it gets.
+#
+# capped_mult:
+#   Like naive, but caps the multiplier at 3x. Misclassifies in both directions:
+#   when mult ≤ 3x, all CPU is attributed to KV (background treated as kv
+#   overhead). When mult > 3x, excess is called background (real kv overhead
+#   treated as background if kv overhead exceeds 3x).
+# 
+# ==========================================================================
+# SECTION 1: No background — all models accurate (0% error)
+# ==========================================================================
+# When all node CPU is proportional to KV work, every model computes the
+# correct capacity. No background means nothing to separate.
+
+# Pure KV, no overhead: 8 of 16 cores used, all direct KV.
+scenario kv-cpu=8 proportional-overhead=0 background=0 node-cpu-capacity=16 num-stores=1
+----
+node-cpu: 8.00 used / 16.00 capacity (8.00 kv + 0.00 proportional + 0.00 background)
+truth:    kv-capacity: 16.00 cores/store (true-mult: 1.00)
+naive:    kv-capacity: 16.00 cores/store, capacity_err: 0.00%
+capped:   kv-capacity: 16.00 cores/store, capacity_err: 0.00%
+
+# KV + 2x overhead: 4 KV + 8 overhead = 12 total. Multiplier = 12/4 = 3x (at the
+# capped_mult cap).
+scenario kv-cpu=4 proportional-overhead=8 background=0 node-cpu-capacity=16 num-stores=1
+----
+node-cpu: 12.00 used / 16.00 capacity (4.00 kv + 8.00 proportional + 0.00 background)
+truth:    kv-capacity: 5.33 cores/store (true-mult: 3.00)
+naive:    kv-capacity: 5.33 cores/store, capacity_err: 0.00%
+capped:   kv-capacity: 5.33 cores/store, capacity_err: 0.00%
+
+# KV + 4x overhead: 4 KV + 16 overhead = 20 total. True mult = 5x.
+# - naive: mult = 20/4 = 5. capacity = 16/5 = 3.2. Correct: 0%.
+# - capped: clips mult to 3, so bgLoad = 20 - 3*4 = 8. But there is no
+#   background — those 8 cores are real overhead that got misclassified.
+#   capacity = (16-8)/3 = 2.67. Pessimistic: -16.67%.
+scenario kv-cpu=4 proportional-overhead=16 background=0 node-cpu-capacity=16 num-stores=1
+----
+node-cpu: 20.00 used / 16.00 capacity (4.00 kv + 16.00 proportional + 0.00 background)
+truth:    kv-capacity: 3.20 cores/store (true-mult: 5.00)
+naive:    kv-capacity: 3.20 cores/store, capacity_err: 0.00%
+capped:   kv-capacity: 2.67 cores/store, capacity_err: -16.67%
+
+# Same 4x overhead but on a larger machine (40 cores, only 20 used). Same capped
+# misclassification as above (bgLoad=8 of fake background), but on a bigger
+# machine the error flips direction. Subtracting 8 fake background from 40
+# leaves (40-8)/3 = 10.67 > true 8.0 (optimistic). On the 16-core machine,
+# subtracting the same 8 from 16 left (16-8)/3 = 2.67 < true 3.2 (pessimistic).
+# More headroom + underestimated mult → optimistic.
+# True capacity = 40/5 = 8.0.
+# - naive: mult = 20/4 = 5. capacity = 40/5 = 8.0. Correct: 0%.
+# - capped: clips mult to 3, bgLoad = 20 - 12 = 8 (misclassified overhead).
+#   capacity = (40-8)/3 = 10.67. Optimistic: +33%.
+scenario kv-cpu=4 proportional-overhead=16 background=0 node-cpu-capacity=40 num-stores=1
+----
+node-cpu: 20.00 used / 40.00 capacity (4.00 kv + 16.00 proportional + 0.00 background)
+truth:    kv-capacity: 8.00 cores/store (true-mult: 5.00)
+naive:    kv-capacity: 8.00 cores/store, capacity_err: 0.00%
+capped:   kv-capacity: 10.67 cores/store, capacity_err: +33.33%
+
+# ==========================================================================
+# SECTION 2: Background load present
+# ==========================================================================
+# Background CPU doesn't move with KV replicas. naive treats it all as
+# proportional to KV, inflating per-KV cost. capped_mult helps when the
+# implied multiplier exceeds 3x, but can't separate overhead from background.
+
+# Background only, no proportional overhead.
+# - kv=2, background=8. True capacity = (16-8)/1 = 8.0.
+# - naive: mult = nodeUsage/kv = 10/2 = 5. capacity = 16/5 = 3.2. It treats
+#   all 10 cores as KV-caused, so each KV core costs 5 total (1 direct + 4
+#   overhead) but there's no overhead. Pessimistic: -60%.
+# - capped: clips mult to 3, so bgLoad = 10 - 3*2 = 4. But true background is
+#   8 — 4 background cores are still misattributed as KV overhead.
+#   capacity = (16-4)/3 = 4.0. Pessimistic: -50%.
+scenario kv-cpu=2 proportional-overhead=0 background=8 node-cpu-capacity=16 num-stores=1
+----
+node-cpu: 10.00 used / 16.00 capacity (2.00 kv + 0.00 proportional + 8.00 background)
+truth:    kv-capacity: 8.00 cores/store (true-mult: 1.00)
+naive:    kv-capacity: 3.20 cores/store, capacity_err: -60.00%
+capped:   kv-capacity: 4.00 cores/store, capacity_err: -50.00%
+
+# Background + proportional overhead.
+# kv=2, overhead=2, background=8. True capacity = (16-8)/2 = 4.0.
+# - naive computes mult=12/2=6, treating 8 cores of background as KV overhead.
+# - capped_mult clips to 3x, finding 12-6=6 background (true is 8). Both over-
+# estimate per-KV cost because they can't distinguish background from KV work.
+scenario kv-cpu=2 proportional-overhead=2 background=8 node-cpu-capacity=16 num-stores=1
+----
+node-cpu: 12.00 used / 16.00 capacity (2.00 kv + 2.00 proportional + 8.00 background)
+truth:    kv-capacity: 4.00 cores/store (true-mult: 2.00)
+naive:    kv-capacity: 2.67 cores/store, capacity_err: -33.33%
+capped:   kv-capacity: 3.33 cores/store, capacity_err: -16.67%
+
+# At capacity: kv=4, overhead=4, background=8. Node at 16/16.
+# True capacity = (16-8)/2 = 4.0.
+# All models converge at 100% utilization: the store's current KV load (4)
+# equals the true capacity, so even a wrong multiplier produces the right answer
+# — the store is exactly at its limit no matter how you slice the overhead.
+scenario kv-cpu=4 proportional-overhead=4 background=8 node-cpu-capacity=16 num-stores=1
+----
+node-cpu: 16.00 used / 16.00 capacity (4.00 kv + 4.00 proportional + 8.00 background)
+truth:    kv-capacity: 4.00 cores/store (true-mult: 2.00)
+naive:    kv-capacity: 4.00 cores/store, capacity_err: 0.00%
+capped:   kv-capacity: 4.00 cores/store, capacity_err: 0.00%
+
+# Extreme background: kv=0.5, background=13.5, no overhead.
+# True capacity = (16-13.5)/1 = 2.5.
+# - naive: mult = 14/0.5 = 28. capacity = 16/28 = 0.57. Treats all 14 cores as
+#   KV-caused, so each KV core costs 28 total — but true overhead is 0.
+#   Catastrophically pessimistic: -77%.
+# - capped: clips mult to 3, bgLoad = 14 - 3*0.5 = 12.5. Close to true 13.5,
+#   but divides by 3 instead of true 1. capacity = (16-12.5)/3 = 1.17.
+#   Pessimistic: -53%.
+scenario kv-cpu=0.5 proportional-overhead=0 background=13.5 node-cpu-capacity=16 num-stores=1
+----
+node-cpu: 14.00 used / 16.00 capacity (0.50 kv + 0.00 proportional + 13.50 background)
+truth:    kv-capacity: 2.50 cores/store (true-mult: 1.00)
+naive:    kv-capacity: 0.57 cores/store, capacity_err: -77.14%
+capped:   kv-capacity: 1.17 cores/store, capacity_err: -53.33%
+
+# ==========================================================================
+# SECTION 3: Multi-store scenarios
+# ==========================================================================
+
+# 2 stores, kv=4 total. overhead=2, background=6.
+# True capacity = (16-6)/1.5/2 = 3.33 per store.
+# - naive/capped_mult compute mult=12/4=3 (exactly at the cap), treating all 12
+# cores as KV-proportional — including 6 cores of background that don't move
+# with replicas. Neither detects any background.
+scenario kv-cpu=4 proportional-overhead=2 background=6 node-cpu-capacity=16 num-stores=2
+----
+node-cpu: 12.00 used / 16.00 capacity (4.00 kv + 2.00 proportional + 6.00 background)
+truth:    kv-capacity: 3.33 cores/store (true-mult: 1.50)
+naive:    kv-capacity: 2.67 cores/store, capacity_err: -20.00%
+capped:   kv-capacity: 2.67 cores/store, capacity_err: -20.00%
+
+# ==========================================================================
+# SECTION 4: Edge cases
+# ==========================================================================
+
+# Zero KV CPU (startup, no replicas reporting yet). Heavy background.
+# True mult = 1 (no overhead). True capacity = (16-12)/1 = 4.
+# - naive falls back to nodeCapacity/2 = 8 when storesCPU=0, completely ignoring
+#   background, reporting double the real capacity.
+# - capped: correctly identifies all background, but divides by 3 instead of
+#   true 1.
+scenario kv-cpu=0 proportional-overhead=0 background=12 node-cpu-capacity=16 num-stores=1
+----
+node-cpu: 12.00 used / 16.00 capacity (0.00 kv + 0.00 proportional + 12.00 background)
+truth:    kv-capacity: 4.00 cores/store (true-mult: 1.00)
+naive:    kv-capacity: 8.00 cores/store, capacity_err: +100.00%
+capped:   kv-capacity: 1.33 cores/store, capacity_err: -66.67%
+
+# Overloaded node (nodeUsage=18 > nodeCapacity=16) without background.
+# All 14 non-KV cores are proportional overhead (overhead=14, bg=0).
+# True capacity = 16/4.5 = 3.56: no background to subtract, but each KV core
+# costs 4.5 total (mult = 18/4 = 4.5).
+# - naive: mult = 18/4 = 4.5. capacity = 16/4.5 = 3.56. With bg=0, naive is
+#   always correct — there's nothing to misclassify. Correct: 0%.
+# - capped: clips mult to 3, bgLoad = 18 - 12 = 6. These 6 cores are real
+#   overhead, not background, but the model subtracts them from capacity anyway.
+#   capacity = (16-6)/3 = 3.33 < true 3.56. Pessimistic: -6%.
+scenario kv-cpu=4 proportional-overhead=14 background=0 node-cpu-capacity=16 num-stores=1
+----
+node-cpu: 18.00 used / 16.00 capacity (4.00 kv + 14.00 proportional + 0.00 background)
+truth:    kv-capacity: 3.56 cores/store (true-mult: 4.50)
+naive:    kv-capacity: 3.56 cores/store, capacity_err: 0.00%
+capped:   kv-capacity: 3.33 cores/store, capacity_err: -6.25%
+
+# Same node as above but now with background.
+# True capacity = (16-10)/2 = 3.0: after reserving 10 for background, only 6
+# cores remain for KV+overhead, and each KV core costs 2 total (mult=2).
+# - naive: mult = 18/4 = 4.5. capacity = 16/4.5 = 3.56. It uses the ratio of
+#   usage (18) to compute the multiplier, but divides capacity (16) by it.
+#   Since 18 > 16, the model makes KV look cheaper than what the node can
+#   actually sustain. Optimistic: +19%.
+# - capped: clips mult to 3, bgLoad = 18 - 3*4 = 6. But the real background
+#   is 10 - 4 cores of background get hidden inside the multiplier. So the
+#   model only subtracts 6 from capacity instead of 10.
+#   capacity = (16-6)/3 = 3.33 > true 3.0. Optimistic: +11%.
+scenario kv-cpu=4 proportional-overhead=4 background=10 node-cpu-capacity=16 num-stores=1
+----
+node-cpu: 18.00 used / 16.00 capacity (4.00 kv + 4.00 proportional + 10.00 background)
+truth:    kv-capacity: 3.00 cores/store (true-mult: 2.00)
+naive:    kv-capacity: 3.56 cores/store, capacity_err: +18.52%
+capped:   kv-capacity: 3.33 cores/store, capacity_err: +11.11%
+
+# Overloaded: background exceeds node capacity.
+# True capacity = max(0, 16-30)/2 = 0 (node is crushed by background).
+# - naive: mult = 32/1 = 32. capacity = 16/32 = 0.5. Doesn't model background
+#   at all, so it still thinks KV can do some work.
+# - capped: clips mult to 3, bgLoad = 32 - 3*1 = 29. capacity = max(0,
+#   (16-29)/3) = 0. Correctly detects the node is overwhelmed. 
+scenario kv-cpu=1 proportional-overhead=1 background=30 node-cpu-capacity=16 num-stores=1
+----
+node-cpu: 32.00 used / 16.00 capacity (1.00 kv + 1.00 proportional + 30.00 background)
+truth:    kv-capacity: 0.00 cores/store (true-mult: 2.00)
+naive:    kv-capacity: 0.50 cores/store, capacity_err: +Inf%
+capped:   kv-capacity: 0.00 cores/store, capacity_err: 0.00%
+
+# ==========================================================================
+# Mean |capacity_err| across all scenarios (excluding +Inf).
+# ==========================================================================
+mean
+----
+Mean |capacity_err| across 12 scenarios: naive: 25.7%  capped: 21.1%

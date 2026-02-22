@@ -6936,6 +6936,38 @@ layers:
       unit: COUNT
       aggregation: AVG
       derivative: NONE
+    - name: obs.clustermetrics.flush.count
+      exported_name: obs_clustermetrics_flush_count
+      description: Number of cluster metrics flush operations
+      y_axis_label: Flushes
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+    - name: obs.clustermetrics.flush.errors
+      exported_name: obs_clustermetrics_flush_errors
+      description: Number of cluster metrics flush errors
+      y_axis_label: Errors
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+    - name: obs.clustermetrics.flush.latency
+      exported_name: obs_clustermetrics_flush_latency
+      description: Latency of cluster metrics flushes to storage
+      y_axis_label: Latency
+      type: GAUGE
+      unit: NANOSECONDS
+      aggregation: AVG
+      derivative: NONE
+    - name: obs.clustermetrics.flush.metrics_written
+      exported_name: obs_clustermetrics_flush_metrics_written
+      description: Number of individual metrics written per flush
+      y_axis_label: Metrics
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
     - name: obs.tablemetadata.update_job.duration
       exported_name: obs_tablemetadata_update_job_duration
       description: Time spent running the update table metadata job.
@@ -16040,6 +16072,15 @@ layers:
       unit: NANOSECONDS
       aggregation: AVG
       derivative: NON_NEGATIVE_DERIVATIVE
+    - name: queue.replicagc.purgatory
+      exported_name: queue_replicagc_purgatory
+      description: Number of replicas in the replica GC queue's purgatory, waiting for a prerequisite (e.g. left neighbor GC) before they can be GC'd
+      y_axis_label: Replicas
+      type: GAUGE
+      unit: COUNT
+      aggregation: AVG
+      derivative: NONE
+      visibility: SUPPORT
     - name: queue.replicagc.removereplica
       exported_name: queue_replicagc_removereplica
       description: Number of replica removals attempted by the replica GC queue

@@ -286,6 +286,12 @@ type StoreTestingKnobs struct {
 	// spin attempting to acquire a split or merge lock on a RHS which will
 	// always fail and is generally not safe but is useful for testing.
 	DisableEagerReplicaRemoval bool
+	// DisableReplicaGCQueueAddOnRaftGroupDeleted, when set, prevents
+	// HandleRaftResponse from adding replicas to the GC queue when a
+	// RaftGroupDeletedError is received. This is useful for testing the
+	// merge watcher's ability to queue replicas for GC independently of
+	// Raft traffic.
+	DisableReplicaGCQueueAddOnRaftGroupDeleted bool
 	// RefreshReasonTicksPeriod overrides the default period over which
 	// pending commands are refreshed. The period is specified as a multiple
 	// of Raft group ticks.
@@ -585,6 +591,11 @@ type StoreTestingKnobs struct {
 	// DisableLeaderlessWatcherRefreshOnRaftTick, if set, disables refreshing
 	// the leaderless watcher's unavailable state during raft ticks.
 	DisableLeaderlessWatcherRefreshOnRaftTick bool
+
+	// InjectIntentsToResolveVirtually is called while executing read-only
+	// requests; it helps inject intents to be resolved virtually, usually passed
+	// in by the lock table guard.
+	InjectIntentsToResolveVirtually func() []roachpb.LockUpdate
 }
 
 // ModuleTestingKnobs is part of the base.ModuleTestingKnobs interface.

@@ -33,6 +33,7 @@ go_library(
         "//pkg/roachprod/install",
         "//pkg/roachprod/logger",
         "//pkg/roachprod/ssh",
+        "//pkg/testutils/benchdoc",
         "//pkg/util/retry",
         "//pkg/util/timeutil",
         "@com_github_cockroachdb_errors//:errors",
@@ -61,7 +62,6 @@ go_test(
         "executor_test.go",
         "export_test.go",
         "github_test.go",
-        "list_test.go",
     ],
     data = glob(["testdata/**"]) + [
         "//:TEAMS.yaml",
@@ -73,7 +73,6 @@ go_test(
         "//pkg/cmd/roachprod-microbench/cluster",
         "//pkg/cmd/roachprod-microbench/model",
         "//pkg/cmd/roachprod-microbench/parser",
-        "//pkg/internal/codeowners",
         "//pkg/testutils/datapathutils",
         "//pkg/util/timeutil",
         "@com_github_cockroachdb_datadriven//:datadriven",

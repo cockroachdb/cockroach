@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/container/list"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
@@ -403,9 +404,13 @@ type lockTableGuardImpl struct {
 	ts         hlc.Timestamp
 	spans      *lockspanset.LockSpanSet
 	waitPolicy lock.WaitPolicy
+
 	// virtuallyResolveIntents represents the state of VirtuallyDeferrerIntents at
 	// the outset of this request.
 	virtuallyResolveIntents bool
+	// pushUsingCachedClockObservations represents the state of the
+	// PushUsingCachedClockObservation cluster setting at the this request.
+	pushUsingCachedClockObs bool
 	maxWaitQueueLength      int
 
 	// Snapshot of the tree for which this request has some spans. Note that
@@ -574,12 +579,34 @@ func (g *lockTableGuardImpl) ShouldWait() bool {
 	// 1. The lock table indicated as such (e.g. the request ran into a
 	// conflicting lock).
 	// 2. OR the request successfully performed its scan but discovered replicated
-	// locks that need to be resolved before it can evaluate.
-	return g.mu.startWait || len(g.toResolve) > 0
+	// locks that need to be resolved before it can evaluate. When virtual intent
+	// resolution is enabled, these locks will be resolved during evaluation (on
+	// a temporary batch) rather than before re-scanning, so the request does not
+	// need to wait.
+	return g.mu.startWait || (!g.virtuallyResolveIntents && len(g.toResolve) > 0)
 }
 
+// ResolveBeforeScanning implements the lockTableGuard interface. The locks to
+// resolve are returned only if virtualized resolution is disabled.
 func (g *lockTableGuardImpl) ResolveBeforeScanning() []roachpb.LockUpdate {
-	return g.toResolve
+	if !g.virtuallyResolveIntents {
+		return g.toResolve
+	}
+	return nil
+}
+
+// IntentsToResolveVirtually implements the lockTableGuard interface. The locks
+// to resolve are returned only if virtualized resolution is enabled.
+func (g *lockTableGuardImpl) IntentsToResolveVirtually() []roachpb.LockUpdate {
+	if g.virtuallyResolveIntents {
+		return g.toResolve
+	}
+	return nil
+}
+
+// VirtuallyResolvesIntents implements the lockTableGuard interface.
+func (g *lockTableGuardImpl) VirtuallyResolvesIntents() bool {
+	return g.virtuallyResolveIntents
 }
 
 func (g *lockTableGuardImpl) NewStateChan() chan struct{} {
@@ -876,11 +903,64 @@ func (g *lockTableGuardImpl) pendingPushedTransactionCanBeResolved(
 	// uncertainty interval, or we need to be sure that the request was concurrent
 	// with our transaction so that rewritten intent can be ignored even if it is
 	// inside our uncertainty interval.
-	return !g.hasUncertaintyInterval() || g.hasObservationAtOrBefore(pushed.ClockWhilePending)
+	if !g.hasUncertaintyInterval() {
+		return true
+	}
+
+	return g.pushUsingCachedClockObs && g.hasObservationAtOrBefore(pushed.ClockWhilePending)
 }
 
 func (g *lockTableGuardImpl) isSameTxn(txn *enginepb.TxnMeta) bool {
 	return g.txn != nil && g.txn.ID == txn.ID
+}
+
+// conflictWithHeld locks return true if the given lock conflicts with the
+// request for this guard.
+//
+// The resolveMustBeVirtual indicates whether locks which can be resolved based
+// on the txn status cache should only be considered when the request is
+// configured for a virtual resolution.
+func (g *lockTableGuardImpl) conflictsWithHeldLock(
+	tl *txnLock, key roachpb.Key, resolveMustBeVirtual bool,
+) bool {
+	lockHolderTxn := tl.getLockHolderTxn()
+	if g.isSameTxn(lockHolderTxn) {
+		// We should never get here if the lock is already held by another request
+		// from the same transaction with sufficient strength (read: greater than
+		// or equal to what this guy wants); this should already be checked in
+		// alreadyHoldsLockAndIsAllowedToProceed.
+		assert(g.curStrength() > tl.getLockMode().Strength,
+			"lock already held by the request's transaction with sufficient strength")
+		return false // no conflict with a lock held by our own transaction
+	}
+
+	if canResolve, up := g.canResolveKeyForHoldingTransaction(lockHolderTxn, g.curStrength(), key); canResolve {
+		// We share this code with a couple of contexts. For now, we want to avoid waking up
+		// readers who are not going to virtually resolve their intents.
+		//
+		// TODO(ssd): Should we just wake up everyone?
+		if (resolveMustBeVirtual && g.virtuallyResolveIntents) || !resolveMustBeVirtual {
+			if !tl.isHeldReplicated() {
+				// Only held unreplicated. Accumulate it as an unreplicated lock to
+				// resolve, in case any other waiting readers can benefit from the
+				// pushed timestamp.
+				//
+				// TODO(arul): this case is only possible while non-locking reads
+				// block on Exclusive locks. Once non-locking reads start only
+				// blocking on intents, it can be removed and asserted against.
+				g.toResolveUnreplicated = append(g.toResolveUnreplicated, up)
+			} else {
+				// Resolve to push the replicated intent.
+				g.toResolve = append(g.toResolve, up)
+			}
+			return false // No conflict on a lock we are going to resolve.
+		}
+	}
+
+	// The held lock neither belongs to the request's transaction (which has
+	// special handling above) nor to a transaction whose keys we can resolve.
+	// Check for conflicts.
+	return lock.Conflicts(tl.getLockMode(), g.curLockMode(), &g.lt.settings.SV)
 }
 
 // curStrength returns the lock strength of the current lock span being scanned
@@ -1019,7 +1099,7 @@ func (g *lockTableGuardImpl) resumeScan(notify bool) error {
 		span = stepToNextSpan(g)
 	}
 
-	if len(g.toResolve) > 0 {
+	if len(g.toResolve) > 0 && !g.virtuallyResolveIntents {
 		j := 0
 		// Some of the locks in g.toResolve may already have been claimed by
 		// another concurrent request and removed, or intent resolution could have
@@ -1033,6 +1113,9 @@ func (g *lockTableGuardImpl) resumeScan(notify bool) error {
 		// timestamp to go through. This is because updating the lock ahead of
 		// resolution risks rediscovery loops where the lock is continually
 		// rediscovered at a lower timestamp than that in the lock table.
+		//
+		// We skip updating the lock table if virtual intent resolution is enabled
+		// since this request won't be committing its intent resolution.
 		for i := range g.toResolve {
 			var doResolve bool
 			if g.toResolve[i].Status.IsFinalized() {
@@ -2743,40 +2826,7 @@ func (kl *keyLocks) conflictsWithLockHolders(g *lockTableGuardImpl) bool {
 	}
 
 	for e := kl.holders.Front(); e != nil; e = e.Next() {
-		tl := e.Value
-		lockHolderTxn := tl.getLockHolderTxn()
-
-		if g.isSameTxn(lockHolderTxn) {
-			// We should never get here if the lock is already held by another request
-			// from the same transaction with sufficient strength (read: greater than
-			// or equal to what this guy wants); this should already be checked in
-			// alreadyHoldsLockAndIsAllowedToProceed.
-			assert(g.curStrength() > tl.getLockMode().Strength,
-				"lock already held by the request's transaction with sufficient strength")
-			continue // no conflict with a lock held by our own transaction
-		}
-
-		if canResolve, up := g.canResolveKeyForHoldingTransaction(lockHolderTxn, g.curStrength(), kl.key); canResolve {
-			if !tl.isHeldReplicated() {
-				// Only held unreplicated. Accumulate it as an unreplicated lock to
-				// resolve, in case any other waiting readers can benefit from the
-				// pushed timestamp.
-				//
-				// TODO(arul): this case is only possible while non-locking reads
-				// block on Exclusive locks. Once non-locking reads start only
-				// blocking on intents, it can be removed and asserted against.
-				g.toResolveUnreplicated = append(g.toResolveUnreplicated, up)
-			} else {
-				// Resolve to push the replicated intent.
-				g.toResolve = append(g.toResolve, up)
-			}
-			continue // check next lock
-		}
-
-		// The held lock neither belongs to the request's transaction (which has
-		// special handling above) nor to a transaction whose keys we can resolve.
-		// Check for conflicts.
-		if lock.Conflicts(tl.getLockMode(), g.curLockMode(), &g.lt.settings.SV) {
+		if g.conflictsWithHeldLock(e.Value, kl.key, false) {
 			return true
 		}
 	}
@@ -3534,22 +3584,27 @@ func (kl *keyLocks) tryUpdateLockLocked(
 
 // recomputeWaitQueues goes through the receiver's wait queues and recomputes
 // whether actively waiting requests should continue to do so, given the key's
-// locks holders and other waiting requests. A non-exhaustive list scenarios where
-// such computation is necessary is:
-// - A lock's strength has decreased[1]
-// - Or locking requests have dropped out of wait queue's[2] without actually
-// acquiring the lock
-// - Or the lock's timestamp has advanced
-// - Or one of the locks on a key has been released[3]
+// locks holders and other waiting requests. A non-exhaustive list scenarios
+// where such computation is necessary is:
+//
+//   - A lock's strength has decreased[1]
+//   - Or locking requests have dropped out of wait queue's[2] without actually
+//     acquiring the lock
+//   - Or the lock's timestamp has advanced
+//   - Or one of the locks on a key has been released[3]
+//   - The lock's holding transaction has been pushed, making it virtually
+//     resolvable.
 //
 // [1] This can happen as a result of savepoint rollback or when the lock table
 // stops tracking a replicated lock because of a PUSH_TIMESTAMP that
 // successfully bumps the pushee's timestamp.
+//
 // [2] A locking request that doesn't conflict with any held lock(s) may still
 // have to actively wait if it conflicts with a lower sequence numbered request
 // already in the lock's wait queue. Locking requests dropping out of a lock's
 // wait queue can therefore result in other requests no longer needing to
 // actively wait.
+//
 // [3] If there are multiple shared locks on a key and on of the transactions
 // that holds the shared lock is trying to promote its strength to something
 // stronger, then the release of a shared lock may allow it to do so. Note that
@@ -3567,6 +3622,7 @@ func (kl *keyLocks) recomputeWaitQueues(st *cluster.Settings) {
 	// (which are the only ones that exist at the time of writing).
 	var strongestMode lock.Mode
 	var lockHolderTxn *enginepb.TxnMeta // nil if {no,more than one} locks are held
+	var txnLock *txnLock
 	// Go through the list of lock holders.
 	// TODO(arul): We should annotate each of the holders to reflect if the lock
 	// belongs to a finalized transaction or not. If it does, we should exclude
@@ -3575,8 +3631,10 @@ func (kl *keyLocks) recomputeWaitQueues(st *cluster.Settings) {
 		mode := e.Value.getLockMode()
 		if strongestMode.Empty() {
 			lockHolderTxn = e.Value.txn
+			txnLock = e.Value
 		} else {
 			lockHolderTxn = nil
+			txnLock = nil
 		}
 		if strongestMode.Weaker(mode) {
 			strongestMode = mode
@@ -3590,7 +3648,7 @@ func (kl *keyLocks) recomputeWaitQueues(st *cluster.Settings) {
 		reader := e.Value
 		curr := e
 		e = e.Next()
-		if !lock.Conflicts(reader.curLockMode(), strongestMode, &st.SV) {
+		if !reader.conflictsWithHeldLock(txnLock, kl.key, true /* only allow virtual resolve */) {
 			kl.removeReader(curr)
 		}
 	}
@@ -4241,7 +4299,9 @@ func (t *lockTableImpl) ScanOptimistic(req Request) lockTableGuard {
 }
 
 // ScanAndEnqueue implements the lockTable interface.
-func (t *lockTableImpl) ScanAndEnqueue(req Request, guard lockTableGuard) (lockTableGuard, *Error) {
+func (t *lockTableImpl) ScanAndEnqueue(
+	ctx context.Context, req Request, guard lockTableGuard,
+) (lockTableGuard, *Error) {
 	// NOTE: there is no need to synchronize with enabledMu here. ScanAndEnqueue
 	// scans the lockTable and enters any conflicting lock wait-queues, but a
 	// disabled lockTable will be empty. If the scan's btree snapshot races with
@@ -4277,7 +4337,7 @@ func (t *lockTableImpl) ScanAndEnqueue(req Request, guard lockTableGuard) (lockT
 	if err != nil {
 		// We're not returning the guard on this error path, so we need to
 		// release the guard in case it has already entered any wait-queues.
-		t.Dequeue(g)
+		t.Dequeue(ctx, g)
 		return nil, kvpb.NewError(err)
 	}
 	if g.notRemovableLock != nil {
@@ -4300,6 +4360,7 @@ func (t *lockTableImpl) newGuardForReq(req Request) *lockTableGuardImpl {
 	g.maxWaitQueueLength = req.MaxLockWaitQueueLength
 	g.str = lock.MaxStrength
 	g.index = -1
+	g.pushUsingCachedClockObs = PushUsingCachedClockObservation.Get(&g.lt.settings.SV)
 	g.virtuallyResolveIntents = VirtualIntentResolution.Get(&g.lt.settings.SV) && req.canVirtuallyResolve()
 	return g
 }
@@ -4317,7 +4378,7 @@ func (t *lockTableImpl) doSnapshotForGuard(g *lockTableGuardImpl) {
 }
 
 // Dequeue implements the lockTable interface.
-func (t *lockTableImpl) Dequeue(guard lockTableGuard) {
+func (t *lockTableImpl) Dequeue(_ context.Context, guard lockTableGuard) {
 	// NOTE: there is no need to synchronize with enabledMu here. Dequeue only
 	// accesses state already held by the guard and does not add anything to the
 	// lockTable.
@@ -4368,6 +4429,7 @@ func (t *lockTableImpl) Dequeue(guard lockTableGuard) {
 // each of the locks. At that point a decision is made whether to consult the
 // txnStatusCache eagerly when adding discovered locks.
 func (t *lockTableImpl) AddDiscoveredLock(
+	ctx context.Context,
 	foundLock *roachpb.Lock,
 	seq roachpb.LeaseSequence,
 	consultTxnStatusCache bool,
@@ -4441,7 +4503,7 @@ func (t *lockTableImpl) AddDiscoveredLock(
 }
 
 // AcquireLock implements the lockTable interface.
-func (t *lockTableImpl) AcquireLock(acq *roachpb.LockAcquisition) error {
+func (t *lockTableImpl) AcquireLock(ctx context.Context, acq *roachpb.LockAcquisition) error {
 	t.enabledMu.RLock()
 	defer t.enabledMu.RUnlock()
 	if !t.enabled {
@@ -4460,6 +4522,8 @@ func (t *lockTableImpl) AcquireLock(acq *roachpb.LockAcquisition) error {
 	default:
 		return errors.AssertionFailedf("unsupported lock strength %s", acq.Strength)
 	}
+	log.VEventf(ctx, 2, "txn %s acquiring %s %s lock on %s",
+		acq.Txn.Short(), acq.Durability, acq.Strength, acq.Key)
 	var kl *keyLocks
 	t.locks.mu.Lock()
 	// Can't release tree.mu until call kl.acquireLock() since someone may find
@@ -4523,7 +4587,9 @@ func (t *lockTableImpl) AcquireLock(acq *roachpb.LockAcquisition) error {
 }
 
 // MarkIneligibleForExport implements the lockTable interface.
-func (t *lockTableImpl) MarkIneligibleForExport(acq *roachpb.LockAcquisition) error {
+func (t *lockTableImpl) MarkIneligibleForExport(
+	_ context.Context, acq *roachpb.LockAcquisition,
+) error {
 	if acq == nil {
 		return errors.AssertionFailedf("unexpected nil lock acquisition")
 	}
@@ -4568,6 +4634,9 @@ func (t *lockTableImpl) checkMaxKeysLockedAndTryClear() {
 		if numCleared != 0 {
 			t.locksShedDueToMemoryLimit.Inc(numCleared)
 			t.numLockShedDueToMemoryLimitEvents.Inc(1)
+			log.KvExec.Warningf(context.Background(),
+				"lock table exceeded memory limit (%d locks > %d max); shed %d locks",
+				totalLocks, t.lockTableLimitsMu.maxKeysLocked, numCleared)
 		}
 	}
 }
@@ -4711,7 +4780,7 @@ func (t *lockTableImpl) tryGCLocks(tree *treeMu, locks []*keyLocks) {
 }
 
 // UpdateLocks implements the lockTable interface.
-func (t *lockTableImpl) UpdateLocks(up *roachpb.LockUpdate) error {
+func (t *lockTableImpl) UpdateLocks(_ context.Context, up *roachpb.LockUpdate) error {
 	_ = t.updateLockInternal(up)
 	return nil
 }
@@ -4780,12 +4849,35 @@ func (t *lockTableImpl) batchPushedLockResolution() bool {
 func (t *lockTableImpl) PushedTransactionUpdated(
 	txn *roachpb.Transaction, clockObs roachpb.ObservedTimestamp,
 ) {
-	// TODO(sumeer): We don't take any action for requests that are already
-	// waiting on locks held by txn. They need to take some action, like
-	// pushing, and resume their scan, to notice the change to this txn. We
-	// could be more proactive if we knew which locks in lockTableImpl were held
-	// by txn.
 	t.txnStatusCache.add(txn, clockObs)
+	t.maybeWakeReadersForPushedTxn(txn, clockObs)
+}
+
+// maybeWakeReadersForPushedTxn iterates over all locks in the lock table and
+// wakes waiting readers that can virtually resolve replicated locks held by the
+// pushed transaction. For each eligible reader, a LockUpdate is added to its
+// toResolve slice and the reader is removed from the lock's wait queue.
+//
+// TODO(ssd): Currently this is scanning the entire lock table and recomputing
+// the queue for any lock held by the pushed txn. We may want to only wake the
+// queue for the specific key that led to us pushing in the first place.
+func (t *lockTableImpl) maybeWakeReadersForPushedTxn(
+	txn *roachpb.Transaction, clockObs roachpb.ObservedTimestamp,
+) {
+	t.locks.mu.RLock()
+	defer t.locks.mu.RUnlock()
+	iter := t.locks.MakeIter()
+	for iter.First(); iter.Valid(); iter.Next() {
+		kl := iter.Cur()
+		kl.mu.Lock()
+
+		if !kl.isLockedBy(txn.ID) {
+			kl.mu.Unlock()
+			continue
+		}
+		kl.recomputeWaitQueues(t.settings)
+		kl.mu.Unlock()
+	}
 }
 
 // Enable implements the lockTable interface.
@@ -4814,6 +4906,11 @@ func (t *lockTableImpl) Clear(disable bool) {
 		defer t.enabledMu.Unlock()
 		t.enabled = false
 	}
+	numLocks := t.locks.numKeysLocked.Load()
+	if numLocks > 0 {
+		log.KvExec.VInfof(context.Background(), 2,
+			"clearing lock table (locks=%d)", numLocks)
+	}
 	// The numToClear=0 is arbitrary since it is unused when force=true.
 	t.tryClearLocks(true /* force */, 0)
 	// Also clear the txn status cache, since it won't be needed any time
@@ -4823,7 +4920,15 @@ func (t *lockTableImpl) Clear(disable bool) {
 
 // ClearGE implements the lockTable interface.
 func (t *lockTableImpl) ClearGE(key roachpb.Key) []roachpb.LockAcquisition {
-	return t.tryClearLocksGE(key)
+	numBefore := t.locks.numKeysLocked.Load()
+	acqs := t.tryClearLocksGE(key)
+	numCleared := numBefore - t.locks.numKeysLocked.Load()
+	if numCleared > 0 || len(acqs) > 0 {
+		log.KvExec.VInfof(context.Background(), 2,
+			"cleared %d lock(s) >= key %s, returning %d lock acquisitions",
+			numCleared, key, len(acqs))
+	}
+	return acqs
 }
 
 // ExportUnreplicatedLocks implements the lockTable interface.

@@ -1,0 +1,79 @@
+# -------------------------------------------------------------------------
+# A non-locking read discovers intents from a pending transaction with
+# virtual intent resolution enabled. The reader should push the intent
+# holder, then proceed directly to evaluation (where intents are resolved
+# virtually on a temporary batch) rather than looping forever trying to
+# resolve intents before re-scanning.
+#
+# This is a regression test for a bug where ShouldWait() returned true
+# due to non-empty toResolve, but the doneWaiting handler in WaitOn
+# discarded those entries (ResolveBeforeScanning returns nil with VIR),
+# and the lock table was never updated (updateLockInternal is skipped
+# with VIR), causing the reader to rediscover the same locks on every
+# re-scan.
+# -------------------------------------------------------------------------
+
+debug-set-virtual-intent-resolution-enabled ok=true
+----
+
+new-txn name=txnReader ts=12,1 epoch=0 priority=high
+----
+
+new-txn name=txnWriter ts=10,1 epoch=0
+----
+
+# Reader issues a non-locking scan.
+new-request name=reqRead txn=txnReader ts=12,1
+  scan key=a endkey=z
+----
+
+# First sequence succeeds — no locks in the lock table yet.
+sequence req=reqRead
+----
+[1] sequence reqRead: sequencing request
+[1] sequence reqRead: acquiring latches
+[1] sequence reqRead: scanning lock table for conflicting locks
+[1] sequence reqRead: sequencing complete, returned guard
+
+# During evaluation, the reader discovers intents written by txnWriter.
+handle-lock-conflict-error req=reqRead lease-seq=1
+  lock txn=txnWriter key=a
+  lock txn=txnWriter key=b
+  lock txn=txnWriter key=c
+----
+[2] handle lock conflict error reqRead: added 3 discovered lock(s) to lock table: conflicting locks on ‹"a"›, ‹"b"›, ‹"c"›
+
+debug-lock-table
+----
+num=3
+ lock: "a"
+  holder: txn: 00000002-0000-0000-0000-000000000000 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: repl [Intent]
+ lock: "b"
+  holder: txn: 00000002-0000-0000-0000-000000000000 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: repl [Intent]
+ lock: "c"
+  holder: txn: 00000002-0000-0000-0000-000000000000 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: repl [Intent]
+
+# Re-sequence the reader. With VIR enabled, after pushing txnWriter, the
+# reader should proceed to evaluation without trying to resolve intents
+# before scanning. Previously this would loop forever.
+sequence req=reqRead
+----
+[3] sequence reqRead: re-sequencing request
+[3] sequence reqRead: acquiring latches
+[3] sequence reqRead: scanning lock table for conflicting locks
+[3] sequence reqRead: waiting in lock wait-queues
+[3] sequence reqRead: lock wait-queue event: wait for txn 00000002 holding lock @ key ‹"a"› (queuedLockingRequests: 0, queuedReaders: 1)
+[3] sequence reqRead: pushing after 0s for: deadlock/liveness detection = true, timeout enforcement = false, priority enforcement = true, wait policy error = false
+[3] sequence reqRead: pushing timestamp of txn 00000002 above 12.000000000,1
+[3] sequence reqRead: pusher pushed pushee to 12.000000000,2
+[3] sequence reqRead: lock wait-queue event: done waiting
+[3] sequence reqRead: conflicted with 00000002-0000-0000-0000-000000000000 on ‹"a"› for 0.000s
+[3] sequence reqRead: acquiring latches
+[3] sequence reqRead: scanning lock table for conflicting locks
+[3] sequence reqRead: sequencing complete, returned guard
+
+finish req=reqRead
+----
+[-] finish reqRead: finishing request
+
+reset namespace

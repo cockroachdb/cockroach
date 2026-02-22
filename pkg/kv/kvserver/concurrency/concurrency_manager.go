@@ -177,6 +177,16 @@ var VirtualIntentResolution = settings.RegisterBoolSetting(
 	}),
 )
 
+// PushUsingCachedClockObservation controls whether we allow intents from
+// PENDING transactions to be resolved by requests with uncertainty intervals by
+// using a cached clock observation from the original pusher.
+var PushUsingCachedClockObservation = settings.RegisterBoolSetting(
+	settings.SystemOnly,
+	"kv.concurrency.push_pending_from_cache.enabled",
+	"whether intents from pending transactions can be resolved using cached clock observations",
+	true,
+)
+
 // MaxLockFlushSize is the maximum number of lock bytes that we will attempt to
 // flush during merge and transfer operations.
 func GetMaxLockFlushSize(sv *settings.Values) int64 {
@@ -414,7 +424,7 @@ func (m *managerImpl) sequenceReqWithGuard(
 		} else {
 			// Scan for conflicting locks.
 			log.Event(ctx, "scanning lock table for conflicting locks")
-			g.ltg, err = m.lt.ScanAndEnqueue(g.Req, g.ltg)
+			g.ltg, err = m.lt.ScanAndEnqueue(ctx, g.Req, g.ltg)
 			if err != nil {
 				return nil, err
 			}
@@ -530,7 +540,7 @@ func (m *managerImpl) FinishReq(ctx context.Context, g *Guard) {
 		m.lm.Release(ctx, lg)
 	}
 	if ltg := g.moveLockTableGuard(); ltg != nil {
-		m.lt.Dequeue(ltg)
+		m.lt.Dequeue(ctx, ltg)
 	}
 	releaseGuard(g)
 }
@@ -566,17 +576,22 @@ func (m *managerImpl) HandleLockConflictError(
 	// loop without making progress.
 	consultTxnStatusCache :=
 		int64(len(t.Locks)) > DiscoveredLocksThresholdToConsultTxnStatusCache.Get(&m.st.SV)
+	var numAdded int
 	for i := range t.Locks {
 		foundLock := &t.Locks[i]
-		added, err := m.lt.AddDiscoveredLock(foundLock, seq, consultTxnStatusCache, g.ltg)
+		added, err := m.lt.AddDiscoveredLock(ctx, foundLock, seq, consultTxnStatusCache, g.ltg)
 		if err != nil {
 			log.KvExec.Fatalf(ctx, "%v", err)
 		}
-		if !added {
+		if added {
+			numAdded++
+		} else {
 			log.VEventf(ctx, 2,
-				"intent on %s discovered but not added to disabled lock table",
-				foundLock.Key.String())
+				"discovered lock on %s not added to disabled lock table", foundLock.Key)
 		}
+	}
+	if numAdded > 0 {
+		log.VEventf(ctx, 2, "added %d discovered lock(s) to lock table: %v", numAdded, t)
 	}
 
 	// Release the Guard's latches but continue to remain in lock wait-queues by
@@ -614,7 +629,7 @@ func (m *managerImpl) HandleTransactionPushError(
 
 // OnLockAcquired implements the LockManager interface.
 func (m *managerImpl) OnLockAcquired(ctx context.Context, acq *roachpb.LockAcquisition) {
-	if err := m.lt.AcquireLock(acq); err != nil {
+	if err := m.lt.AcquireLock(ctx, acq); err != nil {
 		if errors.IsAssertionFailure(err) {
 			log.KvExec.Fatalf(ctx, "%v", err)
 		}
@@ -629,7 +644,7 @@ func (m *managerImpl) OnLockAcquired(ctx context.Context, acq *roachpb.LockAcqui
 
 // OnLockMissing implements the LockManager interface.
 func (m *managerImpl) OnLockMissing(ctx context.Context, acq *roachpb.LockAcquisition) {
-	if err := m.lt.MarkIneligibleForExport(acq); err != nil {
+	if err := m.lt.MarkIneligibleForExport(ctx, acq); err != nil {
 		// We don't currently expect any errors other than assertion failures that represent
 		// programming errors from this method.
 		log.KvExec.Fatalf(ctx, "%v", err)
@@ -638,7 +653,7 @@ func (m *managerImpl) OnLockMissing(ctx context.Context, acq *roachpb.LockAcquis
 
 // OnLockUpdated implements the LockManager interface.
 func (m *managerImpl) OnLockUpdated(ctx context.Context, up *roachpb.LockUpdate) {
-	if err := m.lt.UpdateLocks(up); err != nil {
+	if err := m.lt.UpdateLocks(ctx, up); err != nil {
 		log.KvExec.Fatalf(ctx, "%v", err)
 	}
 }
@@ -959,6 +974,15 @@ func (g *Guard) IsKeyLockedByConflictingTxn(
 	ctx context.Context, key roachpb.Key, strength lock.Strength,
 ) (bool, *enginepb.TxnMeta, error) {
 	return g.ltg.IsKeyLockedByConflictingTxn(ctx, key, strength)
+}
+
+// IntentsToResolveVirtually delegates listing the locks to be resolved to the
+// lock table guard.
+func (g *Guard) IntentsToResolveVirtually() []roachpb.LockUpdate {
+	if g.ltg != nil {
+		return g.ltg.IntentsToResolveVirtually()
+	}
+	return nil
 }
 
 func (g *Guard) moveLatchGuard() latchGuard {

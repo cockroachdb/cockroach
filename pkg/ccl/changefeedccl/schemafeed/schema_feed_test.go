@@ -419,7 +419,11 @@ func TestPauseOrResumePolling(t *testing.T) {
 		newTestLeasedDescriptor(tableID, v3, notSchemaLocked, hlc.Timestamp{WallTime: 60}),
 	}
 
+	// Use a clock set to time 0, before any test timestamps.
+	clock := hlc.NewClockForTesting(timeutil.NewManualTime(timeutil.Unix(0, 0)))
+
 	sf := schemaFeed{
+		clock: clock,
 		leaseMgr: &testLeaseAcquirer{
 			id:    tableID,
 			descs: tableDescs,
@@ -496,6 +500,60 @@ func TestPauseOrResumePolling(t *testing.T) {
 	require.Equal(t, hlc.Timestamp{WallTime: 50}, getFrontier())
 }
 
+// TestPauseOrResumePollingAdvancesToNow verifies that when pauseOrResumePolling
+// is called with a timestamp in the past, it advances atOrBefore to the current
+// clock time.
+func TestPauseOrResumePollingAdvancesToNow(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+
+	const tableID = 123
+	tableDescs := []*testLeasedDescriptor{
+		newTestLeasedDescriptor(tableID, 1, true, hlc.Timestamp{WallTime: 10}),
+	}
+
+	// Set clock to time 100.
+	manualClock := timeutil.NewManualTime(timeutil.Unix(0, 100))
+	clock := hlc.NewClockForTesting(manualClock)
+
+	sf := schemaFeed{
+		clock: clock,
+		leaseMgr: &testLeaseAcquirer{
+			id:    tableID,
+			descs: tableDescs,
+		},
+		targets: CreateChangefeedTargets(tableID),
+	}
+
+	getFrontier := func() hlc.Timestamp {
+		sf.mu.Lock()
+		defer sf.mu.Unlock()
+		return sf.mu.ts.frontier
+	}
+	setFrontier := func(ts hlc.Timestamp) error {
+		sf.mu.Lock()
+		defer sf.mu.Unlock()
+		return sf.mu.ts.advanceFrontier(ts)
+	}
+
+	// Set the initial frontier to 10.
+	require.NoError(t, setFrontier(hlc.Timestamp{WallTime: 10}))
+
+	// Call with a timestamp in the past (20). Since the clock is at 100,
+	// the frontier should advance to 100.
+	require.NoError(t, sf.pauseOrResumePolling(ctx, hlc.Timestamp{WallTime: 20}))
+	require.True(t, sf.pollingPaused())
+	require.Equal(t, int64(100), getFrontier().WallTime)
+
+	// Call with a timestamp in the future (120). Since the clock is at 100,
+	// the frontier should advance to the event timestamp of 120.
+	require.NoError(t, sf.pauseOrResumePolling(ctx, hlc.Timestamp{WallTime: 120}))
+	require.True(t, sf.pollingPaused())
+	require.Equal(t, int64(120), getFrontier().WallTime)
+}
+
 // BenchmarkPauseOrResumePolling benchmarks pauseOrResumePolling in cases where
 // there is a non-terminal error early, polling should be paused, and polling
 // should not be paused.
@@ -506,7 +564,10 @@ func BenchmarkPauseOrResumePolling(b *testing.B) {
 	ctx := context.Background()
 
 	const tableID = 123
+	// Use a clock set to time 0, matching test timestamps.
+	manualClock := timeutil.NewManualTime(timeutil.Unix(0, 0))
 	sf := schemaFeed{
+		clock: hlc.NewClockForTesting(manualClock),
 		leaseMgr: &testLeaseAcquirer{
 			id: tableID,
 			descs: []*testLeasedDescriptor{

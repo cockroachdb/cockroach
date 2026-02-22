@@ -55,6 +55,7 @@ go_test(
     ],
     embed = [":workload"],
     deps = [
+        "//pkg/base",
         "//pkg/col/coldata",
         "//pkg/security/securityassets",
         "//pkg/security/securitytest",

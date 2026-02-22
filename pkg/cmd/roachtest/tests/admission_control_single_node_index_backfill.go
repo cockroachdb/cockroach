@@ -69,9 +69,7 @@ func registerSingleNodeIndexBackfill(r registry.Registry) {
 			Timeout:          12 * time.Hour,
 			Benchmark:        true,
 			CompatibleClouds: registry.OnlyGCE,
-			// TODO(sumeer): publish the duration that the backfill took to
-			// roachperf.
-			Suites: registry.Suites(registry.Weekly),
+			Suites:           registry.Suites(registry.Weekly),
 			Cluster: r.MakeClusterSpec(
 				2, // 1 CRDB node + 1 workload node
 				// 16vCPUs so that CPU is not the bottleneck.
@@ -234,6 +232,8 @@ func runSingleNodeIndexBackfill(
 	// Run TPC-E workload, KV0 workload, and index backfill concurrently.
 	workloadDuration := 120 * time.Minute
 	m := c.NewDeprecatedMonitor(ctx, c.CRDBNodes())
+	var backfillDuration time.Duration
+	var totalBWSamples []float64
 
 	// Goroutine 1: Run TPC-E workload.
 	m.Go(func(ctx context.Context) error {
@@ -303,9 +303,6 @@ func runSingleNodeIndexBackfill(
 		metricsDone := make(chan struct{})
 		t.Go(func(context.Context, *logger.Logger) error {
 			defer close(metricsDone)
-			// Metrics queries: rate over 1 minute window, converted to MiB/s.
-			//
-			// TODO(sumeer): use these metrics for pass/fail criteria.
 			writeBWQuery := divQuery("rate(sys_host_disk_write_bytes[1m])", 1<<20)
 			readBWQuery := divQuery("rate(sys_host_disk_read_bytes[1m])", 1<<20)
 
@@ -314,7 +311,6 @@ func runSingleNodeIndexBackfill(
 				if err != nil {
 					return 0, err
 				}
-				// Extract value from the point map (keyed by node/store).
 				for _, v := range point["node"] {
 					return v.Value, nil
 				}
@@ -338,6 +334,7 @@ func runSingleNodeIndexBackfill(
 						continue
 					}
 					totalBW := writeBW + readBW
+					totalBWSamples = append(totalBWSamples, totalBW)
 					t.L().Printf("[metrics %d] disk bandwidth: read=%.2f MiB/s, write=%.2f MiB/s, total=%.2f MiB/s",
 						iteration, readBW, writeBW, totalBW)
 				case <-stopMetrics:
@@ -350,9 +347,11 @@ func runSingleNodeIndexBackfill(
 		}, task.Name("metrics-collector"))
 
 		// Run the actual index creation.
+		backfillStart := timeutil.Now()
 		_, err := db.ExecContext(ctx,
 			fmt.Sprintf("CREATE INDEX %s ON tpce.cash_transaction (ct_dts)", indexName),
 		)
+		backfillDuration = timeutil.Since(backfillStart)
 
 		// Stop metrics collection.
 		close(stopMetrics)
@@ -362,11 +361,45 @@ func runSingleNodeIndexBackfill(
 			t.L().Printf("index creation error: %v", err)
 			return err
 		}
+		t.L().Printf("index backfill completed in %s", backfillDuration)
 		t.Status("finished index creation")
 		return nil
 	})
 
 	m.Wait()
+
+	// Export index backfill duration to roachperf.
+	c.Run(ctx, option.WithNodes(c.CRDBNodes()), "mkdir", "-p", t.PerfArtifactsDir())
+	perfResult := fmt.Sprintf(`{"index_backfill_duration_secs": %.1f}`, backfillDuration.Seconds())
+	c.Run(ctx, option.WithNodes(c.CRDBNodes()),
+		fmt.Sprintf(`echo '%s' > %s/stats.json`, perfResult, t.PerfArtifactsDir()))
+	t.L().Printf("roachperf stats: %s", perfResult)
+
+	// Validate pass/fail criteria. Thresholds are intentionally loose to
+	// tolerate run-to-run variance while catching severe regressions (e.g.,
+	// AC over-throttling the backfill or starving the disk).
+	const (
+		maxBackfillDuration = 90 * time.Minute
+		minAvgTotalBW       = 50.0 // MiB/s
+	)
+	if backfillDuration > maxBackfillDuration {
+		t.Fatalf("index backfill took %s, exceeding maximum of %s",
+			backfillDuration, maxBackfillDuration)
+	}
+	if len(totalBWSamples) > 0 {
+		var sum float64
+		for _, s := range totalBWSamples {
+			sum += s
+		}
+		avgTotalBW := sum / float64(len(totalBWSamples))
+		t.L().Printf("average total disk bandwidth during backfill: %.2f MiB/s (%d samples)",
+			avgTotalBW, len(totalBWSamples))
+		if avgTotalBW < minAvgTotalBW {
+			t.Fatalf("average total disk bandwidth %.2f MiB/s is below minimum of %.0f MiB/s",
+				avgTotalBW, minAvgTotalBW)
+		}
+	}
+
 	t.Status("test completed successfully")
 }
 

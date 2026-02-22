@@ -470,8 +470,9 @@ func (g *testGranterWithIOTokens) addAvailableTokens(
 func (g *testGranterWithIOTokens) getDiskTokensUsedAndReset() (
 	usedTokens [admissionpb.NumStoreWorkTypes]diskTokens,
 	_ diskErrorStats,
+	remainingDiskWriteTokens int64,
 ) {
-	return g.diskBandwidthTokensUsed, diskErrorStats{}
+	return g.diskBandwidthTokensUsed, diskErrorStats{}, 0
 }
 
 func (g *testGranterWithIOTokens) setLinearModels(
@@ -530,8 +531,9 @@ func (g *testGranterNonNegativeTokens) addAvailableTokens(
 func (g *testGranterNonNegativeTokens) getDiskTokensUsedAndReset() (
 	usedTokens [admissionpb.NumStoreWorkTypes]diskTokens,
 	_ diskErrorStats,
+	remainingDiskWriteTokens int64,
 ) {
-	return [admissionpb.NumStoreWorkTypes]diskTokens{}, diskErrorStats{}
+	return [admissionpb.NumStoreWorkTypes]diskTokens{}, diskErrorStats{}, 0
 }
 
 func (g *testGranterNonNegativeTokens) setLinearModels(
@@ -594,36 +596,6 @@ func TestTokenAllocationTickerAdjustmentCalculation(t *testing.T) {
 		}
 		time.Sleep(1 * time.Millisecond)
 	}
-}
-
-func TestTokenAllocationTickerErrorAdjustmentThreshold(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-
-	ticker := tokenAllocationTicker{}
-	defer ticker.stop()
-	ticker.adjustmentStart(false /* loaded */)
-
-	// Knowing we are using unloaded duration. The first iteration will have 60 ticks.
-	require.False(t, ticker.shouldAdjustForError(60 /* remainingTicks */, false /* loaded */))
-	// Verify that we correctly reset the lastErrorAdjustmentTick value.
-	require.Equal(t, uint64(60), ticker.lastErrorAdjustmentTick)
-
-	// We should not do error adjustment unless 1s has passed. i.e. 4 ticks.
-	require.False(t, ticker.shouldAdjustForError(58 /* remainingTicks */, false /* loaded */))
-	require.True(t, ticker.shouldAdjustForError(56 /* remainingTicks */, false /* loaded */))
-	require.Equal(t, uint64(56), ticker.lastErrorAdjustmentTick)
-
-	// We should adjust for error on the last tick.
-	require.True(t, ticker.shouldAdjustForError(0 /* remainingTicks */, false /* loaded */))
-
-	// Re-run the above with loaded system. Now the error adjustment threshold is every 1000 ticks.
-	require.False(t, ticker.shouldAdjustForError(15000 /* remainingTicks */, true /* loaded */))
-	require.Equal(t, uint64(15000), ticker.lastErrorAdjustmentTick)
-	require.False(t, ticker.shouldAdjustForError(14001 /* remainingTicks */, true /* loaded */))
-	require.True(t, ticker.shouldAdjustForError(14000 /* remainingTicks */, true /* loaded */))
-	require.Equal(t, uint64(14000), ticker.lastErrorAdjustmentTick)
-	require.True(t, ticker.shouldAdjustForError(0 /* remainingTicks */, true /* loaded */))
 }
 
 func TestTokenAllocationTicker(t *testing.T) {

@@ -1545,6 +1545,7 @@ func waitForCheckpointPersisted(
 	expectedSpans []roachpb.Span,
 	expectedPhase int32,
 ) {
+	t.Helper()
 	testutils.SucceedsWithin(t, func() error {
 		stmt := `SELECT payload FROM crdb_internal.system_jobs WHERE id = $1`
 		var payloadBytes []byte
@@ -1586,7 +1587,7 @@ func waitForCheckpointPersisted(
 			return errors.Errorf("waiting for phase %d, current: %d",
 				expectedPhase, bp.DistributedMergePhase)
 		}
-		t.Logf("checkpoint contains %d SST manifests", len(bp.SSTManifests))
+		t.Logf("checkpoint contains %d SST manifests, phase=%d", len(bp.SSTManifests), bp.DistributedMergePhase)
 		return nil
 	}, 5*time.Second)
 }

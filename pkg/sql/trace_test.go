@@ -52,7 +52,7 @@ func TestTrace(t *testing.T) {
 		"local proposal",
 		"admissionWorkQueueWait",
 		"index recommendation",
-		"/cockroach.roachpb.KVBatch/Batch", // present with dRPC, absent with gRPC
+		"/cockroach.roachpb.Internal/Batch",
 	}
 	// Depending on whether the data is local or not, we may not see these
 	// spans. Only applicable with distsql=on.
@@ -67,6 +67,12 @@ func TestTrace(t *testing.T) {
 		"/cockroach.roachpb.Internal/RangeLookup",
 		"executeWriteBatch",
 	}
+	// KVBatch spans are optional since they may or may not appear depending
+	// on whether DRPC is enabled and which nodes handle the request.
+	drpcOptionalSpans := []string{
+		"/cockroach.roachpb.KVBatch/Batch",
+		"/cockroach.roachpb.KVBatch/BatchStream",
+	}
 	commonExpSpans := []string{
 		"session recording",
 		"sql txn",
@@ -76,7 +82,6 @@ func TestTrace(t *testing.T) {
 		"consuming rows",
 		"txn coordinator send",
 		"dist sender send",
-		"/cockroach.roachpb.Internal/Batch",
 		"commit sql txn",
 	}
 	nonVectorizedExpSpans := append(append([]string(nil), commonExpSpans...), []string{
@@ -206,6 +211,11 @@ func TestTrace(t *testing.T) {
 
 	for _, test := range testData {
 		optionalSpans := append([]string{}, alwaysOptionalSpans...)
+		// Check if DRPC is enabled. When DRPC is enabled, remote KV requests
+		// produce DRPC-style span names (/cockroach.roachpb.KVBatch/Batch).
+		if cluster.IsDRPCEnabled() {
+			optionalSpans = append(optionalSpans, drpcOptionalSpans...)
+		}
 		if test.distSQL == "on" {
 			optionalSpans = append(optionalSpans, distsqlOptionalSpans...)
 		}

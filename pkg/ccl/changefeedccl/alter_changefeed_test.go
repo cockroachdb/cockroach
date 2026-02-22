@@ -27,7 +27,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobfrontier"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
-	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -41,11 +40,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/interval"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
-	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 )
@@ -2155,14 +2154,9 @@ func TestAlterChangefeedAddTargetsDuringSchemaChangeError(t *testing.T) {
 
 	testFn := func(t *testing.T, s TestServerWithSystem, f cdctest.TestFeedFactory) {
 		sqlDB := sqlutils.MakeSQLRunner(s.DB)
-		usingLegacySchemaChanger := maybeDisableDeclarativeSchemaChangesForTest(t, sqlDB)
-		// NB: For the `ALTER TABLE foo ADD COLUMN ... DEFAULT` schema change,
-		// the expected boundary is different depending on if we are using the
-		// legacy schema changer or not.
-		expectedBoundaryType := jobspb.ResolvedSpan_RESTART
-		if usingLegacySchemaChanger {
-			expectedBoundaryType = jobspb.ResolvedSpan_BACKFILL
-		}
+		// Metemorphically disable declarative schema changer to ensure we cover
+		// BACKFILL and RESTART boundary events.
+		_ = maybeDisableDeclarativeSchemaChangesForTest(t, sqlDB)
 
 		knobs := s.TestingKnobs.
 			DistSQL.(*execinfra.TestingKnobs).
@@ -2219,65 +2213,48 @@ WITH resolved = '1s', no_initial_scan, min_checkpoint_frequency='1ns'`,
 		changefeedbase.SpanCheckpointMaxBytes.Override(
 			context.Background(), &s.Server.ClusterSettings().SV, maxCheckpointSize)
 
-		// Note the tableSpan to avoid resolved events that leave no gaps
-		fooDesc := desctestutils.TestingGetPublicTableDescriptor(
-			s.SystemServer.DB(), s.Codec, "d", "foo")
-		tableSpan := fooDesc.PrimaryIndexSpan(keys.SystemSQLCodec)
-
-		// FilterSpanWithMutation should ensure that once the backfill begins, the following resolved events
-		// that are for that backfill (are of the timestamp right after the backfill timestamp) resolve some
-		// but not all of the time, which results in a checkpoint eventually being created
-		haveGaps := false
+		// backfillTimestamp is used to track the timestamp of the backfill scan.
+		// We only emit checkpoints that are part of the boundary event or part of
+		// the backfill scan. This way we ensure we construct a partial checkpoint
+		// for the backfill scan.
 		var backfillTimestamp hlc.Timestamp
-		var initialCheckpoint roachpb.SpanGroup
-		var foundCheckpoint int32
-		progressBackoff := jobRecordPollFrequency
-		var nextProgressCheck time.Time
+
+		// We track skipped spans to ensure we never emit a checkpoint that
+		// overlaps with a span we already skipped.
+		skippedSpans := interval.NewRangeTree()
+
 		knobs.FilterSpanWithMutation = func(r *jobspb.ResolvedSpan) (bool, error) {
-			// Stop resolving anything after checkpoint set to avoid eventually resolving the full span
-			if initialCheckpoint.Len() > 0 {
-				return true, nil
-			}
 			t.Logf("span %s %s %s", r.Span.String(), r.BoundaryType.String(), r.Timestamp.String())
 
-			// A backfill begins when the associated resolved event arrives, which has a
-			// timestamp such that all backfill spans have a timestamp of timestamp.Next().
-			if r.BoundaryType == expectedBoundaryType {
-				t.Logf("setting boundary timestamp %s", r.Timestamp.String())
-				backfillTimestamp = r.Timestamp
+			if r.BoundaryType != jobspb.ResolvedSpan_NONE {
+				t.Logf("found the boundary event")
+				backfillTimestamp = r.Timestamp.Next()
 				return false, nil
 			}
-
-			// Avoid reading for the job progress too frequently. Attempting
-			// to read the job record continuously in a loop may continuously
-			// abort the transaction which is trying to write the job record.
-			if nextProgressCheck.IsZero() || nextProgressCheck.Before(timeutil.Now()) {
-				// Check if we've set a checkpoint yet
-				progress := loadProgress(t, jobFeed, jobRegistry)
-				if checkpoint := loadCheckpoint(t, progress); checkpoint != nil {
-					initialCheckpoint = makeSpanGroupFromCheckpoint(t, checkpoint)
-					atomic.StoreInt32(&foundCheckpoint, 1)
-				}
-				nextProgressCheck = timeutil.Now().Add(progressBackoff)
+			if backfillTimestamp.IsEmpty() {
+				t.Logf("dropping span %s because we haven't found the boundary event yet", r.Span.String())
+				return true, nil
 			}
 
-			// Filter non-backfill-related spans
-			if !r.Timestamp.Equal(backfillTimestamp.Next()) {
-				skip := !(backfillTimestamp.IsEmpty() || r.Timestamp.LessEq(backfillTimestamp.Next()))
-				t.Logf("handling span %s: %t", r.Span.String(), skip)
-				// Only allow spans prior to a valid backfillTimestamp to avoid moving past the backfill
-				return skip, nil
+			spanInterval := interval.Range{
+				Start: interval.Comparable(r.Span.Key),
+				End:   interval.Comparable(r.Span.EndKey),
 			}
-
-			// Only allow resolving if we definitely won't have a completely resolved table
-			if !r.Span.Equal(tableSpan) && haveGaps {
-				skip := rnd.Intn(10) > 7
-				t.Logf("handling span %s: %t", r.Span.String(), skip)
-				return skip, nil
+			switch {
+			case !r.Timestamp.Equal(backfillTimestamp):
+				t.Logf("dropping span %s because it is not at the boundary timestamp", r.Span.String())
+				return true, nil
+			case skippedSpans.Overlaps(spanInterval):
+				t.Logf("skipping span %s because it overlaps with an already skipped span", r.Span.String())
+				return true, nil
+			case rnd.Intn(2) != 1:
+				t.Logf("randomly skipping span %s to create gaps in the frontier", r.Span.String())
+				skippedSpans.Add(spanInterval)
+				return true, nil
+			default:
+				t.Logf("passing span %s through", r.Span.String())
+				return false, nil
 			}
-			t.Logf("skipping span %s", r.Span.String())
-			haveGaps = true
-			return true, nil
 		}
 
 		require.NoError(t, jobFeed.Resume())
@@ -2285,13 +2262,12 @@ WITH resolved = '1s', no_initial_scan, min_checkpoint_frequency='1ns'`,
 
 		// Wait for a checkpoint to have been set
 		testutils.SucceedsSoon(t, func() error {
-			if atomic.LoadInt32(&foundCheckpoint) != 0 {
-				return nil
+			progress := loadProgress(t, jobFeed, jobRegistry)
+			if checkpoint := loadCheckpoint(t, progress); checkpoint == nil {
+				return errors.Newf("waiting for checkpoint")
 			}
-			if err := jobFeed.FetchTerminalJobErr(); err != nil {
-				return err
-			}
-			return errors.Newf("waiting for checkpoint")
+			require.NoError(t, jobFeed.FetchTerminalJobErr())
+			return nil
 		})
 
 		require.NoError(t, jobFeed.Pause())
@@ -2299,9 +2275,8 @@ WITH resolved = '1s', no_initial_scan, min_checkpoint_frequency='1ns'`,
 
 		errMsg := fmt.Sprintf(
 			`pq: cannot perform initial scan on newly added targets while the checkpoint is non-empty, please unpause the changefeed and wait until the high watermark progresses past the current value %s to add these targets.`,
-			backfillTimestamp.AsOfSystemTime(),
+			backfillTimestamp.Prev().AsOfSystemTime(),
 		)
-
 		sqlDB.ExpectErr(t, errMsg, fmt.Sprintf(`ALTER CHANGEFEED %d ADD bar WITH initial_scan`, jobFeed.JobID()))
 	}
 

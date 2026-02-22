@@ -479,6 +479,7 @@ func compactSpanEntry(
 		}
 	}
 	sink.AssumeNotMidRow()
+	sink.CompletedSpan()
 	return nil
 }
 

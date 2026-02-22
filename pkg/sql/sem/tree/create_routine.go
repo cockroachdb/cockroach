@@ -638,6 +638,7 @@ const (
 	TTLUpdateExpr                   SchemaExprContext = "TTL UPDATE"
 	PolicyUsingExpr                 SchemaExprContext = "POLICY USING"
 	PolicyWithCheckExpr             SchemaExprContext = "POLICY WITH CHECK"
+	RegionalByRowRegionDefaultExpr  SchemaExprContext = "REGIONAL BY ROW DEFAULT"
 )
 
 func ComputedColumnExprContext(isVirtual bool) SchemaExprContext {

@@ -84,6 +84,9 @@ func TestAllRegisteredImportFixture(t *testing.T) {
 		}
 
 		t.Run(meta.Name, func(t *testing.T) {
+			if meta.Name == "tpcc" || meta.Name == "tpccmultidb" {
+				t.Parallel() // SAFE FOR TESTING
+			}
 			if bigInitialData(meta) {
 				skip.UnderShort(t, fmt.Sprintf(`%s loads a lot of data`, meta.Name))
 			}

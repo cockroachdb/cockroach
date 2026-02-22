@@ -2692,9 +2692,10 @@ func TestStoreRangeMergeSlowUnabandonedFollower_NoSplit(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := store2.ManualReplicaGC(rhsRepl2); err != nil {
-		t.Fatal(err)
-	}
+	// The left neighbor hasn't caught up with meta yet, so the replica GC
+	// correctly refuses to remove the RHS.
+	err = store2.ManualReplicaGC(rhsRepl2)
+	require.True(t, kvserver.IsReplicaGCDelayedDueToLeftNeighborError(err), "expected replicaGCDelayedDueToLeftNeighborError, got: %+v", err)
 	if _, err := store2.GetReplica(rhsDesc.RangeID); err != nil {
 		t.Fatalf("non-abandoned rhs replica unexpectedly GC'd before merge")
 	}
@@ -2841,8 +2842,12 @@ func TestStoreRangeMergeSlowAbandonedFollower(t *testing.T) {
 	// the merge. This is a particularly tricky case for the replica GC queue, as
 	// meta2 will indicate that the range has been merged away AND that store2 is
 	// not a member of the new range.
-	if err := store2.ManualReplicaGC(rhsRepl2); err != nil {
-		t.Fatal(err)
+	//
+	// The left neighbor hasn't caught up with meta yet, so the replica GC
+	// correctly refuses to remove the RHS.
+	{
+		err := store2.ManualReplicaGC(rhsRepl2)
+		require.True(t, kvserver.IsReplicaGCDelayedDueToLeftNeighborError(err), "expected replicaGCDelayedDueToLeftNeighborError, got: %+v", err)
 	}
 	if _, err := store2.GetReplica(rhsDesc.RangeID); err != nil {
 		t.Fatal("rhs replica on store2 destroyed before lhs applied merge")
@@ -2859,12 +2864,18 @@ func TestStoreRangeMergeSlowAbandonedFollower(t *testing.T) {
 		// Make the LHS gets destroyed.
 		if lhsRepl, err := store2.GetReplica(lhsDesc.RangeID); err == nil {
 			if err := store2.ManualReplicaGC(lhsRepl); err != nil {
-				t.Fatal(err)
+				if !kvserver.IsReplicaGCDelayedDueToLeftNeighborError(err) {
+					t.Fatal(err)
+				}
+				return err // retry
 			}
 		}
 		if rhsRepl, err := store2.GetReplica(rhsDesc.RangeID); err == nil {
 			if err := store2.ManualReplicaGC(rhsRepl); err != nil {
-				t.Fatal(err)
+				if !kvserver.IsReplicaGCDelayedDueToLeftNeighborError(err) {
+					t.Fatal(err)
+				}
+				return err // retry
 			}
 			return errors.New("rhs not yet destroyed")
 		}
@@ -2932,42 +2943,38 @@ func TestStoreRangeMergeAbandonedFollowers(t *testing.T) {
 	}
 
 	// Verify that the abandoned ranges on store2 can only be GC'd from left to
-	// right.
-	if err := store2.ManualReplicaGC(repls[2]); err != nil {
-		t.Fatal(err)
-	}
+	// right. replicaGCDelayedDueToLeftNeighborError is expected for replicas whose left
+	// neighbor hasn't been GC'd yet.
+	require.True(t, kvserver.IsReplicaGCDelayedDueToLeftNeighborError(store2.ManualReplicaGC(repls[2])),
+		"expected c to return replicaGCDelayedDueToLeftNeighborError (b is left neighbor)")
 	if _, err := store2.GetReplica(repls[2].RangeID); err != nil {
 		t.Fatal("c replica on store2 destroyed before b")
 	}
-	if err := store2.ManualReplicaGC(repls[1]); err != nil {
-		t.Fatal(err)
-	}
+	require.True(t, kvserver.IsReplicaGCDelayedDueToLeftNeighborError(store2.ManualReplicaGC(repls[1])),
+		"expected b to return replicaGCDelayedDueToLeftNeighborError (a is left neighbor)")
 	if _, err := store2.GetReplica(repls[1].RangeID); err != nil {
 		t.Fatal("b replica on store2 destroyed before a")
 	}
-	if err := store2.ManualReplicaGC(repls[0]); err != nil {
-		t.Fatal(err)
-	}
+	// a is the leftmost — no stale left neighbor, so GC succeeds.
+	require.NoError(t, store2.ManualReplicaGC(repls[0]))
 	if _, err := store2.GetReplica(repls[0].RangeID); err == nil {
 		t.Fatal("a replica not destroyed")
 	}
 
-	if err := store2.ManualReplicaGC(repls[2]); err != nil {
-		t.Fatal(err)
-	}
+	// b still blocks c.
+	require.True(t, kvserver.IsReplicaGCDelayedDueToLeftNeighborError(store2.ManualReplicaGC(repls[2])),
+		"expected c to return replicaGCDelayedDueToLeftNeighborError (b is left neighbor)")
 	if _, err := store2.GetReplica(repls[2].RangeID); err != nil {
 		t.Fatal("c replica on store2 destroyed before b")
 	}
-	if err := store2.ManualReplicaGC(repls[1]); err != nil {
-		t.Fatal(err)
-	}
+	// b's left neighbor (a) is now gone, so GC succeeds.
+	require.NoError(t, store2.ManualReplicaGC(repls[1]))
 	if _, err := store2.GetReplica(repls[1].RangeID); err == nil {
 		t.Fatal("b replica not destroyed")
 	}
 
-	if err := store2.ManualReplicaGC(repls[2]); err != nil {
-		t.Fatal(err)
-	}
+	// c's left neighbor (b) is now gone, so GC succeeds.
+	require.NoError(t, store2.ManualReplicaGC(repls[2]))
 	if _, err := store2.GetReplica(repls[2].RangeID); err == nil {
 		t.Fatal("c replica not destroyed")
 	}
@@ -2986,81 +2993,94 @@ func TestStoreRangeMergeAbandonedFollowersAutomaticallyGarbageCollected(t *testi
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	ctx := context.Background()
-	tc := testcluster.StartTestCluster(t, 3,
-		base.TestClusterArgs{
-			ReplicationMode: base.ReplicationManual,
-		})
-	defer tc.Stopper().Stop(ctx)
-	scratch := tc.ScratchRange(t)
-	store0, store2 := tc.GetFirstStoreFromServer(t, 0), tc.GetFirstStoreFromServer(t, 2)
+	// When disableRaftGCTrigger is true, the RaftGroupDeletedError GC path is
+	// disabled. This exercises the merge watcher's direct AddAsync path combined
+	// with the replica GC queue's purgatory mechanism to handle the case where
+	// the RHS Raft group quiesces before heartbeat responses trigger GC.
+	testutils.RunTrueAndFalse(t, "disableRaftGCTrigger", func(t *testing.T, disableRaftGCTrigger bool) {
+		ctx := context.Background()
+		tc := testcluster.StartTestCluster(t, 3,
+			base.TestClusterArgs{
+				ReplicationMode: base.ReplicationManual,
+				ServerArgs: base.TestServerArgs{
+					Knobs: base.TestingKnobs{
+						Store: &kvserver.StoreTestingKnobs{
+							DisableReplicaGCQueueAddOnRaftGroupDeleted: disableRaftGCTrigger,
+						},
+					},
+				},
+			})
+		defer tc.Stopper().Stop(ctx)
+		scratch := tc.ScratchRange(t)
+		store0, store2 := tc.GetFirstStoreFromServer(t, 0), tc.GetFirstStoreFromServer(t, 2)
 
-	repl0 := store0.LookupReplica(scratchRKey("a"))
-	tc.AddVotersOrFatal(t, repl0.Desc().StartKey.AsRawKey(), tc.Targets(1, 2)...)
-	lhsDesc, rhsDesc, err := createSplitRanges(ctx, scratch, store0)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	// Make store2 the leaseholder for the RHS and wait for the lease transfer to
-	// apply.
-	tc.TransferRangeLeaseOrFatal(t, *rhsDesc, tc.Target(2))
-	testutils.SucceedsSoon(t, func() error {
-		rhsRepl, err := store2.GetReplica(rhsDesc.RangeID)
+		repl0 := store0.LookupReplica(scratchRKey("a"))
+		tc.AddVotersOrFatal(t, repl0.Desc().StartKey.AsRawKey(), tc.Targets(1, 2)...)
+		lhsDesc, rhsDesc, err := createSplitRanges(ctx, scratch, store0)
 		if err != nil {
-			return err
-		}
-		if !rhsRepl.OwnsValidLease(ctx, tc.Servers[2].Clock().NowAsClockTimestamp()) {
-			return errors.New("store2 does not own valid lease for rhs range")
+			t.Fatal(err)
 		}
 
-		// This is important for leader leases to avoid a race between us stopping
-		// Raft traffic below, and Raft attempting to transfer the lease leadership
-		// to the leaseholder.
-		if rhsRepl.RaftStatus().ID != rhsRepl.RaftStatus().Lead {
-			return errors.New("store2 isn't the leader for rhs range")
-		}
-		return nil
-	})
+		// Make store2 the leaseholder for the RHS and wait for the lease transfer to
+		// apply.
+		tc.TransferRangeLeaseOrFatal(t, *rhsDesc, tc.Target(2))
+		testutils.SucceedsSoon(t, func() error {
+			rhsRepl, err := store2.GetReplica(rhsDesc.RangeID)
+			if err != nil {
+				return err
+			}
+			if !rhsRepl.OwnsValidLease(ctx, tc.Servers[2].Clock().NowAsClockTimestamp()) {
+				return errors.New("store2 does not own valid lease for rhs range")
+			}
 
-	// Start dropping all Raft traffic to the LHS replica on store2 so that it
-	// won't be aware that there is a merge in progress.
-	tc.Servers[2].RaftTransport().(*kvserver.RaftTransport).ListenIncomingRaftMessages(store2.Ident.StoreID, &kvtestutils.UnreliableRaftHandler{
-		RangeID:                    lhsDesc.RangeID,
-		IncomingRaftMessageHandler: store2,
-		UnreliableRaftHandlerFuncs: kvtestutils.UnreliableRaftHandlerFuncs{
-			DropReq: func(*kvserverpb.RaftMessageRequest) bool {
-				return true
+			// This is important for leader leases to avoid a race between us stopping
+			// Raft traffic below, and Raft attempting to transfer the lease leadership
+			// to the leaseholder.
+			if rhsRepl.RaftStatus().ID != rhsRepl.RaftStatus().Lead {
+				return errors.New("store2 isn't the leader for rhs range")
+			}
+			return nil
+		})
+
+		// Start dropping all Raft traffic to the LHS replica on store2 so that it
+		// won't be aware that there is a merge in progress.
+		tc.Servers[2].RaftTransport().(*kvserver.RaftTransport).ListenIncomingRaftMessages(store2.Ident.StoreID, &kvtestutils.UnreliableRaftHandler{
+			RangeID:                    lhsDesc.RangeID,
+			IncomingRaftMessageHandler: store2,
+			UnreliableRaftHandlerFuncs: kvtestutils.UnreliableRaftHandlerFuncs{
+				DropReq: func(*kvserverpb.RaftMessageRequest) bool {
+					return true
+				},
 			},
-		},
-	})
+		})
 
-	// Perform the merge. The LHS replica on store2 whon't hear about this merge
-	// and thus won't subsume its RHS replica. The RHS replica's merge watcher
-	// goroutine will, however, notice the merge and mark the RHS replica as
-	// destroyed with reason destroyReasonMergePending.
-	args := adminMergeArgs(lhsDesc.StartKey.AsRawKey())
-	_, pErr := kv.SendWrapped(ctx, store0.TestSender(), args)
-	if pErr != nil {
-		t.Fatal(pErr)
-	}
-
-	// Remove the merged range from store2. Its replicas of both the LHS and RHS
-	// are now eligible for GC.
-	tc.RemoveVotersOrFatal(t, lhsDesc.StartKey.AsRawKey(), tc.Target(2))
-
-	// Note that we purposely do not call store.ManualReplicaGC here, as that
-	// calls replicaGCQueue.process directly, bypassing the logic in
-	// baseQueue.MaybeAdd and baseQueue.Add. We specifically want to test that
-	// queuing logic, which has been broken in the past.
-	testutils.SucceedsSoon(t, func() error {
-		if _, err := store2.GetReplica(lhsDesc.RangeID); err == nil {
-			return errors.New("lhs not destroyed")
+		// Perform the merge. The LHS replica on store2 won't hear about this merge
+		// and thus won't subsume its RHS replica. The RHS replica's merge watcher
+		// goroutine will, however, notice the merge and mark the RHS replica as
+		// destroyed with reason destroyReasonMergePending.
+		args := adminMergeArgs(lhsDesc.StartKey.AsRawKey())
+		_, pErr := kv.SendWrapped(ctx, store0.TestSender(), args)
+		if pErr != nil {
+			t.Fatal(pErr)
 		}
-		if _, err := store2.GetReplica(rhsDesc.RangeID); err == nil {
-			return errors.New("rhs not destroyed")
-		}
-		return nil
+
+		// Remove the merged range from store2. Its replicas of both the LHS and RHS
+		// are now eligible for GC.
+		tc.RemoveVotersOrFatal(t, lhsDesc.StartKey.AsRawKey(), tc.Target(2))
+
+		// Note that we purposely do not call store.ManualReplicaGC here, as that
+		// calls replicaGCQueue.process directly, bypassing the logic in
+		// baseQueue.MaybeAdd and baseQueue.Add. We specifically want to test that
+		// queuing logic, which has been broken in the past.
+		testutils.SucceedsSoon(t, func() error {
+			if _, err := store2.GetReplica(lhsDesc.RangeID); err == nil {
+				return errors.New("lhs not destroyed")
+			}
+			if _, err := store2.GetReplica(rhsDesc.RangeID); err == nil {
+				return errors.New("rhs not destroyed")
+			}
+			return nil
+		})
 	})
 }
 

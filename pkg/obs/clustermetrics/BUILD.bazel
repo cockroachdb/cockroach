@@ -1,40 +1,16 @@
-load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
 
 go_library(
     name = "clustermetrics",
     srcs = [
+        "cluster_metrics.go",
         "doc.go",
-        "settings.go",
-        "store.go",
-        "writable.go",
-        "writer.go",
-        "writer_metrics.go",
+        "metrics.go",
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/obs/clustermetrics",
     visibility = ["//visibility:public"],
     deps = [
-        "//pkg/settings",
-        "//pkg/util/log",
         "//pkg/util/metric",
-        "//pkg/util/stop",
-        "//pkg/util/timeutil",
-    ],
-)
-
-go_test(
-    name = "clustermetrics_test",
-    srcs = ["writer_test.go"],
-    embed = [":clustermetrics"],
-    deps = [
-        "//pkg/settings/cluster",
-        "//pkg/testutils",
-        "//pkg/util/leaktest",
-        "//pkg/util/log",
-        "//pkg/util/metric",
-        "//pkg/util/stop",
         "//pkg/util/syncutil",
-        "//pkg/util/timeutil",
-        "@com_github_cockroachdb_errors//:errors",
-        "@com_github_stretchr_testify//require",
     ],
 )

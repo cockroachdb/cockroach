@@ -13,9 +13,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/bulkutil"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/idxtype"
 	"github.com/cockroachdb/errors"
 )
 
@@ -65,30 +67,39 @@ var DistributedMergeIndexBackfillMode = settings.RegisterEnumSetting(
 	settings.WithRetiredName("bulkio.index_backfill.distributed_merge.enabled"),
 )
 
-// shouldEnableDistributedMergeIndexBackfill determines whether the specified
-// backfill consumer should opt into the distributed merge pipeline based on the
-// current cluster setting and version state.
+// shouldEnableDistributedMergeIndexBackfill determines the distributed merge
+// mode for the specified backfill consumer based on the current cluster setting
+// and version state.
 func shouldEnableDistributedMergeIndexBackfill(
 	ctx context.Context, st *cluster.Settings, consumer DistributedMergeConsumer,
-) (bool, error) {
+) (jobspb.IndexBackfillDistributedMergeMode, error) {
 	mode := DistributedMergeIndexBackfillMode.Get(&st.SV)
-	var enable bool
+	var result jobspb.IndexBackfillDistributedMergeMode
 	switch mode {
 	case distributedMergeModeDisabled, distributedMergeModeAliasFalse, distributedMergeModeAliasOff:
-		enable = false
+		return jobspb.IndexBackfillDistributedMergeMode_Disabled, nil
 	case distributedMergeModeLegacy:
-		enable = consumer == DistributedMergeConsumerLegacy
+		if consumer != DistributedMergeConsumerLegacy {
+			return jobspb.IndexBackfillDistributedMergeMode_Disabled, nil
+		}
+		result = jobspb.IndexBackfillDistributedMergeMode_Enabled
 	case distributedMergeModeDeclarative:
-		enable = consumer == DistributedMergeConsumerDeclarative
+		if consumer != DistributedMergeConsumerDeclarative {
+			return jobspb.IndexBackfillDistributedMergeMode_Disabled, nil
+		}
+		// Explicit opt-in skips the sorted-data optimization.
+		result = jobspb.IndexBackfillDistributedMergeMode_Force
 	case distributedMergeModeEnabled, distributedMergeModeAliasTrue, distributedMergeModeAliasOn:
-		enable = true
+		result = jobspb.IndexBackfillDistributedMergeMode_Enabled
 	default:
-		return false, errors.AssertionFailedf("unrecognized distributed merge index backfill mode %d", mode)
+		return jobspb.IndexBackfillDistributedMergeMode_Disabled,
+			errors.AssertionFailedf("unrecognized distributed merge index backfill mode %d", mode)
 	}
-	if enable && !st.Version.IsActive(ctx, clusterversion.V26_1) {
-		return false, pgerror.New(pgcode.FeatureNotSupported, "distributed merge requires cluster version 26.1")
+	if !st.Version.IsActive(ctx, clusterversion.V26_1) {
+		return jobspb.IndexBackfillDistributedMergeMode_Disabled,
+			pgerror.New(pgcode.FeatureNotSupported, "distributed merge requires cluster version 26.1")
 	}
-	return enable, nil
+	return result, nil
 }
 
 // EnableDistributedMergeIndexBackfillSink updates the backfiller spec to use the
@@ -108,12 +119,39 @@ func DetermineDistributedMergeMode(
 	if st == nil {
 		return jobspb.IndexBackfillDistributedMergeMode_Disabled, nil
 	}
-	useDistributedMerge, err := shouldEnableDistributedMergeIndexBackfill(ctx, st, consumer)
-	if err != nil {
-		return jobspb.IndexBackfillDistributedMergeMode_Disabled, err
+	return shouldEnableDistributedMergeIndexBackfill(ctx, st, consumer)
+}
+
+// IsBackfillDataSorted reports whether the data produced by scanning
+// sourceIndex will be sorted in the key order of destIndex. When data
+// is sorted, SSTs from different PK ranges are non-overlapping in the
+// destination index key space, making distributed merge unnecessary.
+//
+// The check compares leading key columns of both indexes. If every
+// overlapping column (up to the shorter index's key column count)
+// shares the same column ID, the data is considered sorted. Direction
+// is intentionally ignored: matching column IDs means the data is
+// ordered in the destination key space regardless of sort direction.
+//
+// Non-forward indexes always return false because their key encoding
+// expands each row into multiple entries.
+func IsBackfillDataSorted(sourceIndex, destIndex catalog.Index) bool {
+	if destIndex.GetType() != idxtype.FORWARD {
+		return false
 	}
-	if useDistributedMerge {
-		return jobspb.IndexBackfillDistributedMergeMode_Enabled, nil
+	srcCols := sourceIndex.NumKeyColumns()
+	dstCols := destIndex.NumKeyColumns()
+	if srcCols == 0 || dstCols == 0 {
+		return false
 	}
-	return jobspb.IndexBackfillDistributedMergeMode_Disabled, nil
+	n := srcCols
+	if dstCols < n {
+		n = dstCols
+	}
+	for i := 0; i < n; i++ {
+		if sourceIndex.GetKeyColumnID(i) != destIndex.GetKeyColumnID(i) {
+			return false
+		}
+	}
+	return true
 }

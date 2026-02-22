@@ -209,6 +209,10 @@ type Telemetry interface {
 	// IncrementSchemaChangeIndexCounter schema change counters related to index
 	// features during creation.
 	IncrementSchemaChangeIndexCounter(counterType string)
+
+	// IncrementAlterTableLocalityCounter increments the selected ALTER TABLE LOCALITY
+	// counter
+	IncrementAlterTableLocalityCounter(counterTypeFrom, counterTypeTo string)
 }
 
 // SchemaFeatureChecker checks if a schema change feature is allowed by the

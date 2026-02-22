@@ -54,21 +54,20 @@ func TestDiskBandwidthLimiter(t *testing.T) {
 					{writeByteTokens: elasticTokensUsed},  // elastic
 				}
 
-				var cumErr, absErr, accErr int64
+				var cumErr, absErr, remainingDiskWriteTokens int64
 				if d.HasArg("cum-err") {
 					d.ScanArgs(t, "cum-err", &cumErr)
 				}
 				if d.HasArg("abs-err") {
 					d.ScanArgs(t, "abs-err", &absErr)
 				}
-				if d.HasArg("acc-err") {
-					d.ScanArgs(t, "acc-err", &accErr)
+				if d.HasArg("remaining-disk-write-tokens") {
+					d.ScanArgs(t, "remaining-disk-write-tokens", &remainingDiskWriteTokens)
 				}
 				var diskErrStats diskErrorStats
 				diskErrStats.cumError.writeByteTokens = cumErr
 				diskErrStats.absError.writeByteTokens = absErr
-				diskErrStats.accountedForError.writeByteTokens = accErr
-				dbl.computeElasticTokens(diskLoad, usedTokens, diskErrStats)
+				dbl.computeElasticTokens(diskLoad, usedTokens, diskErrStats, remainingDiskWriteTokens)
 				return dblToString()
 
 			default:

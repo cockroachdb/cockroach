@@ -1,0 +1,20 @@
+[
+  {
+    "name": "BenchmarkTest1",
+    "package": "pkg1",
+    "team": "test-team",
+    "run_args": {
+      "bench_time": "100x"
+    },
+    "compare_args": {}
+  },
+  {
+    "name": "BenchmarkTest3",
+    "package": "pkg3",
+    "team": "test-team",
+    "run_args": {
+      "bench_time": "500x"
+    },
+    "compare_args": {}
+  }
+]

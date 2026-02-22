@@ -901,7 +901,10 @@ func NewRuntimeStatSampler(ctx context.Context, clock hlc.WallClock) *RuntimeSta
 		log.Dev.Warningf(ctx, "could not parse build timestamp: %v", err)
 	}
 
-	// Build information.
+	// Build information. The labels on this metric enable Prometheus/Datadog
+	// queries to filter or group by CockroachDB version — for example, to
+	// identify which nodes are running a particular release series.
+	year, release := build.BranchReleaseSeries()
 	metaBuildTimestamp := metric.Metadata{
 		Name:        "build.timestamp",
 		Help:        "Build information",
@@ -910,6 +913,8 @@ func NewRuntimeStatSampler(ctx context.Context, clock hlc.WallClock) *RuntimeSta
 	}
 	metaBuildTimestamp.AddLabel("tag", info.Tag)
 	metaBuildTimestamp.AddLabel("go_version", info.GoVersion)
+	metaBuildTimestamp.AddLabel("major", strconv.Itoa(year))
+	metaBuildTimestamp.AddLabel("minor", strconv.Itoa(release))
 
 	buildTimestamp := metric.NewGauge(metaBuildTimestamp)
 	buildTimestamp.Update(timestamp)

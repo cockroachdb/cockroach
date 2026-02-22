@@ -7,6 +7,7 @@ package kvserver
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/kv"
@@ -36,6 +37,13 @@ const (
 	// collection. See replicaIsSuspect() for details on what makes a replica
 	// suspect.
 	ReplicaGCQueueSuspectCheckInterval = 3 * time.Second
+
+	// replicaGCPurgatoryCheckInterval is the interval at which replicas in
+	// purgatory are retried. The primary use case is merged-away replicas
+	// waiting for their left neighbor to be GC'd first. Each retry involves a
+	// meta2 lookup, so keep the interval moderate to limit load when many
+	// replicas are pending (e.g. a chain of merges).
+	replicaGCPurgatoryCheckInterval = 5 * time.Second
 )
 
 // Priorities for the replica GC queue.
@@ -79,17 +87,51 @@ func makeReplicaGCQueueMetrics() ReplicaGCQueueMetrics {
 // ranges that have been rebalanced away from this store.
 type replicaGCQueue struct {
 	*baseQueue
-	metrics ReplicaGCQueueMetrics
-	db      *kv.DB
+	metrics  ReplicaGCQueueMetrics
+	db       *kv.DB
+	purgChan <-chan time.Time
 }
+
+// replicaGCDelayedDueToLeftNeighborError indicates that a replica GC attempt
+// could not proceed because the left neighbor's descriptor doesn't match meta2
+// (e.g. it hasn't learned about a merge or its own removal). The replica is
+// placed in purgatory for automatic retry.
+type replicaGCDelayedDueToLeftNeighborError struct {
+	cause error
+}
+
+var _ PurgatoryError = (*replicaGCDelayedDueToLeftNeighborError)(nil)
+var _ errors.SafeFormatter = (*replicaGCDelayedDueToLeftNeighborError)(nil)
+var _ fmt.Formatter = (*replicaGCDelayedDueToLeftNeighborError)(nil)
+var _ errors.Wrapper = (*replicaGCDelayedDueToLeftNeighborError)(nil)
+
+// SafeFormatError implements errors.SafeFormatter.
+func (e *replicaGCDelayedDueToLeftNeighborError) SafeFormatError(p errors.Printer) error {
+	p.Printf("replica GC delayed due to left neighbor: %s", e.cause)
+	return nil
+}
+
+// Format implements fmt.Formatter.
+func (e *replicaGCDelayedDueToLeftNeighborError) Format(s fmt.State, verb rune) {
+	errors.FormatError(e, s, verb)
+}
+
+// Error implements error.
+func (e *replicaGCDelayedDueToLeftNeighborError) Error() string { return fmt.Sprint(e) }
+
+// Unwrap implements errors.Wrapper.
+func (e *replicaGCDelayedDueToLeftNeighborError) Unwrap() error { return e.cause }
+
+func (*replicaGCDelayedDueToLeftNeighborError) PurgatoryErrorMarker() {}
 
 var _ queueImpl = &replicaGCQueue{}
 
 // newReplicaGCQueue returns a new instance of replicaGCQueue.
 func newReplicaGCQueue(store *Store, db *kv.DB) *replicaGCQueue {
 	rgcq := &replicaGCQueue{
-		metrics: makeReplicaGCQueueMetrics(),
-		db:      db,
+		metrics:  makeReplicaGCQueueMetrics(),
+		db:       db,
+		purgChan: time.NewTicker(replicaGCPurgatoryCheckInterval).C,
 	}
 	store.metrics.registry.AddMetricStruct(&rgcq.metrics)
 	rgcq.baseQueue = newBaseQueue(
@@ -104,6 +146,7 @@ func newReplicaGCQueue(store *Store, db *kv.DB) *replicaGCQueue {
 			failures:                 store.metrics.ReplicaGCQueueFailures,
 			pending:                  store.metrics.ReplicaGCQueuePending,
 			processingNanos:          store.metrics.ReplicaGCQueueProcessingNanos,
+			purgatory:                store.metrics.ReplicaGCQueuePurgatory,
 			disabledConfig:           kvserverbase.ReplicaGCQueueEnabled,
 		},
 	)
@@ -119,6 +162,14 @@ func newReplicaGCQueue(store *Store, db *kv.DB) *replicaGCQueue {
 func (rgcq *replicaGCQueue) shouldQueue(
 	ctx context.Context, now hlc.ClockTimestamp, repl *Replica, _ spanconfig.StoreReader,
 ) (shouldQueue bool, priority float64) {
+	// Merge-pending replicas should be GC'd promptly. The scanner now offers
+	// these to us; treat them with suspect priority so they bypass the 12-hour
+	// check interval. The local descriptor still shows this store as a member
+	// (since the merge was never applied locally), so the currentMember check
+	// below would otherwise gate us on the long interval.
+	if reason, err := repl.IsDestroyed(); err != nil && reason == destroyReasonMergePending {
+		return true, replicaGCPrioritySuspect
+	}
 	if _, currentMember := repl.Desc().GetReplicaDescriptor(repl.store.StoreID()); !currentMember {
 		return true, replicaGCPriorityRemoved
 	}
@@ -342,10 +393,15 @@ func (rgcq *replicaGCQueue) process(
 			if leftReplyDesc := &rs[0]; !leftDesc.Equal(leftReplyDesc) {
 				log.VEventf(ctx, 1, "left neighbor %s not up-to-date with meta descriptor %s; cannot safely GC range yet",
 					leftDesc, leftReplyDesc)
-				// Chances are that the left replica needs to be GC'd. Since we don't
-				// have definitive proof, queue it with a low priority.
+				// The left neighbor hasn't caught up with meta yet (e.g. it hasn't
+				// learned about the merge or its own removal from the range). Queue
+				// it so it gets GC'd, and place ourselves in purgatory so we retry
+				// automatically once it's gone.
 				rgcq.AddAsync(ctx, leftRepl, replicaGCPriorityDefault)
-				return false, nil
+				return false, &replicaGCDelayedDueToLeftNeighborError{
+					cause: errors.Errorf("left neighbor %s not up-to-date with meta descriptor %s",
+						leftDesc, leftReplyDesc),
+				}
 			}
 		}
 
@@ -370,9 +426,8 @@ func (*replicaGCQueue) timer(_ time.Duration) time.Duration {
 	return replicaGCQueueTimerDuration
 }
 
-// purgatoryChan returns nil.
-func (*replicaGCQueue) purgatoryChan() <-chan time.Time {
-	return nil
+func (rgcq *replicaGCQueue) purgatoryChan() <-chan time.Time {
+	return rgcq.purgChan
 }
 
 func (*replicaGCQueue) updateChan() <-chan time.Time {

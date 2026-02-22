@@ -255,19 +255,37 @@ func (fs *fileSelection) validate() error {
 // this filtering server-side so that the inclusion pattern can be
 // used to reduce the amount of data retrieved in the "get file list"
 // response.
+//
+// Only base-name patterns (those without '/') are sent to the server,
+// since the server does not know about the zip directory layout.
+// Path-based patterns are applied client-side only.
 func (fs *fileSelection) retrievalPatterns() []string {
 	if len(fs.includePatterns) == 0 {
 		// No include pattern defined: retrieve all files.
 		return []string{"*"}
 	}
-	return fs.includePatterns
+	var basePatterns []string
+	for _, p := range fs.includePatterns {
+		if !strings.Contains(p, "/") {
+			basePatterns = append(basePatterns, p)
+		}
+	}
+	if len(basePatterns) == 0 {
+		// All include patterns are path-based; we must retrieve all
+		// files and filter client-side.
+		return []string{"*"}
+	}
+	return basePatterns
 }
 
-// isIncluded determine whether the given file name is included in the selection.
-func (fs *fileSelection) isIncluded(filename string, ctime, mtime time.Time) bool {
-	// To be included, a file must be included in at least one of the retrieval patterns.
-	included := fs.shouldIncludeFile(filename)
-	if !included {
+// isIncluded determines whether the given file is included in the
+// selection. The zipPath is the full path of the file within the zip
+// archive (e.g. "debug/nodes/1/details.json"), or just the base file
+// name when the full path is not available (e.g. "cpu.pprof").
+// Patterns containing '/' are matched against zipPath; patterns
+// without '/' are matched against filepath.Base(zipPath).
+func (fs *fileSelection) isIncluded(zipPath string, ctime, mtime time.Time) bool {
+	if !fs.shouldIncludeFile(zipPath) {
 		return false
 	}
 	// Then its mtime must not be before the selected "from" time.
@@ -283,13 +301,37 @@ func (fs *fileSelection) isIncluded(filename string, ctime, mtime time.Time) boo
 	return true
 }
 
-// shouldIncludeFile determine whether the given file name is included in the selection based on
-// include & exclude patterns.
-func (fs *fileSelection) shouldIncludeFile(filename string) bool {
-	// To be included, a file must be included in at least one of the retrieval patterns.
+// matchPattern matches a single pattern against a zip path. If the
+// pattern contains '/', it is matched against the full zipPath.
+// Otherwise it is matched against filepath.Base(zipPath).
+func matchPattern(pattern, zipPath string) bool {
+	if strings.Contains(pattern, "/") {
+		matched, _ := filepath.Match(pattern, zipPath)
+		return matched
+	}
+	matched, _ := filepath.Match(pattern, filepath.Base(zipPath))
+	return matched
+}
+
+// shouldIncludeFile determines whether the given file is included in
+// the selection based on include & exclude patterns. The zipPath is
+// the full path of the file within the zip archive (e.g.
+// "debug/nodes/1/details.json"), or just the base file name when the
+// full path is not available (e.g. "cpu.pprof"). Patterns containing
+// '/' are matched against zipPath; patterns without '/' are matched
+// against filepath.Base(zipPath).
+func (fs *fileSelection) shouldIncludeFile(zipPath string) bool {
+	// To be included, a file must match at least one include pattern.
+	// Use includePatterns directly rather than retrievalPatterns(),
+	// which is intended only for server-side pre-filtering.
 	included := false
-	for _, p := range fs.retrievalPatterns() {
-		if matched, _ := filepath.Match(p, filename); matched {
+	patterns := fs.includePatterns
+	if len(patterns) == 0 {
+		// No include patterns: include everything by default.
+		patterns = []string{"*"}
+	}
+	for _, p := range patterns {
+		if matchPattern(p, zipPath) {
 			included = true
 			break
 		}
@@ -299,7 +341,7 @@ func (fs *fileSelection) shouldIncludeFile(filename string) bool {
 	}
 	// Then it must not match any of the exclusion patterns.
 	for _, p := range fs.excludePatterns {
-		if matched, _ := filepath.Match(p, filename); matched {
+		if matchPattern(p, zipPath) {
 			included = false
 			break
 		}

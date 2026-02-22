@@ -2,7 +2,6 @@
 
 MISC_SRCS = [
     "//pkg/backup:data_driven_generated_test.go",
-    "//pkg/ccl/kvccl/kvtenantccl/upgradeinterlockccl:generated_test.go",
     "//pkg/cli:files/cockroachdb_datadog_metrics.yaml",
     "//pkg/internal/team:TEAMS.yaml",
     "//pkg/kv/kvclient/kvcoord:bufferedwrite_interval_btree.go",
@@ -28,6 +27,7 @@ MISC_SRCS = [
     "//pkg/testutils/serverutils:storage_forwarder_generated.go",
     "//pkg/testutils/serverutils:tenant_control_forwarder_generated.go",
     "//pkg/testutils/serverutils:ts_control_forwarder_generated.go",
+    "//pkg/upgrade:upgrade_interlock_generated_test.go",
     "//pkg/util/interval/generic:example_interval_btree.go",
     "//pkg/util/interval/generic:example_interval_btree_test.go",
     "//pkg/util/jsonpath/parser/lexbase:keywords.go",

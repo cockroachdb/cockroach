@@ -940,6 +940,10 @@ type Replica struct {
 		// replica because it looks like it's dead).
 		quotaReleaseQueue []*quotapool.IntAlloc
 
+		// leaderTransferDiag tracks diagnostic state for the Raft leadership
+		// transfer mechanism. Updated on the tick path by tick().
+		leaderTransferDiag leaderTransferDiagState
+
 		// Counts calls to Replica.tick()
 		ticks int64
 
@@ -2670,11 +2674,13 @@ func (r *Replica) maybeWatchForMergeLocked(ctx context.Context) (bool, error) {
 		r.raftMu.Lock()
 		r.readOnlyCmdMu.Lock()
 		r.mu.Lock()
+		shouldQueueForGC := false
 		if mergeCommitted && r.shMu.destroyStatus.IsAlive() {
 			// The merge committed but the left-hand replica on this store hasn't
 			// subsumed this replica yet. Mark this replica as destroyed so it
 			// doesn't serve requests when we close the mergeCompleteCh below.
 			r.shMu.destroyStatus.Set(kvpb.NewRangeNotFoundError(r.RangeID, r.store.StoreID()), destroyReasonMergePending)
+			shouldQueueForGC = true
 		}
 		// Unblock pending requests. If the merge committed, the requests will
 		// notice that the replica has been destroyed and return an appropriate
@@ -2685,6 +2691,16 @@ func (r *Replica) maybeWatchForMergeLocked(ctx context.Context) (bool, error) {
 		r.mu.Unlock()
 		r.readOnlyCmdMu.Unlock()
 		r.raftMu.Unlock()
+		if shouldQueueForGC {
+			// Queue the replica for GC now that we've marked it as merge-pending.
+			// The scanner won't visit destroyed replicas, and the only other path
+			// into the replica GC queue is via RaftGroupDeletedError responses from
+			// Raft traffic. If the Raft group has quiesced, those responses may
+			// never arrive. Queue directly so the replica GC queue can process this
+			// replica (or place it in purgatory if the left neighbor isn't ready
+			// yet).
+			r.store.replicaGCQueue.AddAsync(ctx, r, replicaGCPriorityDefault)
+		}
 	})
 	if errors.Is(err, stop.ErrUnavailable) {
 		// We weren't able to launch a goroutine to watch for the merge's completion

@@ -630,7 +630,7 @@ type lockTable interface {
 	// lockTableGuard and the subsequent calls reuse the previously returned
 	// one. The latches needed by the request must be held when calling this
 	// function.
-	ScanAndEnqueue(Request, lockTableGuard) (lockTableGuard, *Error)
+	ScanAndEnqueue(context.Context, Request, lockTableGuard) (lockTableGuard, *Error)
 
 	// ScanOptimistic takes a snapshot of the lock table for later checking for
 	// conflicts, and returns a guard. It is for optimistic evaluation of
@@ -648,7 +648,7 @@ type lockTable interface {
 	// the (a) lockTable calls that use a lockTableGuard parameter, or (b) a
 	// lockTableGuard call, returned an error. The method allows but does not
 	// require latches to be held.
-	Dequeue(lockTableGuard)
+	Dequeue(context.Context, lockTableGuard)
 
 	// AddDiscoveredLock informs the lockTable of a lock which is wasn't
 	// previously tracking that was discovered during evaluation under the
@@ -679,7 +679,7 @@ type lockTable interface {
 	// true) or whether it was ignored because the lockTable is currently
 	// disabled (false).
 	AddDiscoveredLock(
-		foundLock *roachpb.Lock, seq roachpb.LeaseSequence,
+		ctx context.Context, foundLock *roachpb.Lock, seq roachpb.LeaseSequence,
 		consultTxnStatusCache bool, guard lockTableGuard,
 	) (bool, error)
 
@@ -709,12 +709,12 @@ type lockTable interface {
 	//
 	// For replicated locks, this must be called after the corresponding write
 	// intent has been applied to the replicated state machine.
-	AcquireLock(*roachpb.LockAcquisition) error
+	AcquireLock(context.Context, *roachpb.LockAcquisition) error
 
 	// MarkIneligibleForExport marks any locks held by this transaction on the
 	// same key as ineligible for export from the lock table for replication since
 	// doing so could result in a transaction being erroneously committed.
-	MarkIneligibleForExport(*roachpb.LockAcquisition) error
+	MarkIneligibleForExport(context.Context, *roachpb.LockAcquisition) error
 
 	// UpdateLocks informs the lockTable that an existing lock or range of locks
 	// was either updated or released.
@@ -768,7 +768,7 @@ type lockTable interface {
 	//     contained in IgnoredSeqNums are dropped.
 	//   - the remaining locks are changed to timestamp equal to
 	//     txn.WriteTimestamp.
-	UpdateLocks(*roachpb.LockUpdate) error
+	UpdateLocks(context.Context, *roachpb.LockUpdate) error
 
 	// PushedTransactionUpdated informs the lock table that a transaction has been
 	// pushed and is either finalized or has been moved to a higher timestamp.
@@ -828,6 +828,15 @@ type lockTableGuard interface {
 	// - if locks were discovered during evaluation, it must be called after all
 	//   the discovered locks have been added.
 	ResolveBeforeScanning() []roachpb.LockUpdate
+
+	// IntentsToResolveVirtually lists the locks to resolve before scanning
+	// similarly to ResolveBeforeScanning. However, these locks are intended to be
+	// resolved virtually.
+	IntentsToResolveVirtually() []roachpb.LockUpdate
+
+	// VirtuallyResolvesIntents returns true if the guard will resolve intents
+	// virtually during evaluation rather than physically before re-scanning.
+	VirtuallyResolvesIntents() bool
 
 	// CheckOptimisticNoConflicts uses the LockSpanSet representing the spans that
 	// were actually read, to check for conflicting locks, after an optimistic

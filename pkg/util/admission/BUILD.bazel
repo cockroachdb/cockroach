@@ -21,6 +21,7 @@ go_library(
         "scheduler_latency_listener.go",
         "sequencer.go",
         "snapshot_queue.go",
+        "sql_cpu_handle.go",
         "store_grant_coordinator.go",
         "store_token_estimation.go",
         "testing_knobs.go",
@@ -36,9 +37,11 @@ go_library(
         "//pkg/roachpb",
         "//pkg/settings",
         "//pkg/settings/cluster",
+        "//pkg/storage/disk",
         "//pkg/util",
         "//pkg/util/admission/admissionpb",
         "//pkg/util/buildutil",
+        "//pkg/util/ctxutil",
         "//pkg/util/goschedstats",
         "//pkg/util/grunning",
         "//pkg/util/humanizeutil",
@@ -57,6 +60,7 @@ go_library(
         "@com_github_cockroachdb_redact//:redact",
         "@com_github_cockroachdb_tokenbucket//:tokenbucket",
         "@com_github_olekukonko_tablewriter//:tablewriter",
+        "@com_github_petermattis_goid//:goid",
     ],
 )
 

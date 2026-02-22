@@ -7,6 +7,7 @@ package sqlwriter
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
@@ -85,7 +86,7 @@ func newBulkRowReader(
 	if err != nil {
 		return nil, err
 	}
-	selectStatement, err := session.Prepare(ctx, "replication-read-refresh", selectStatementRaw, types)
+	selectStatement, err := session.Prepare(ctx, fmt.Sprintf("replication-read-refresh-%d", table.GetID()), selectStatementRaw, types)
 	if err != nil {
 		return nil, err
 	}
@@ -198,7 +199,7 @@ func newPointRowReader(
 	if err != nil {
 		return nil, err
 	}
-	selectStatement, err := session.Prepare(ctx, "replication-read-point", selectStatementRaw, types)
+	selectStatement, err := session.Prepare(ctx, fmt.Sprintf("replication-read-point-%d", table.GetID()), selectStatementRaw, types)
 	if err != nil {
 		return nil, err
 	}

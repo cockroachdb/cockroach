@@ -1232,6 +1232,32 @@ type ForcedRowLevelSecurityMode struct {
 	Forced  bool
 }
 
+// SetTableLocalityGlobal sets the table's locality to GLOBAL.
+type SetTableLocalityGlobal struct {
+	immediateMutationOp
+	TableID descpb.ID
+}
+
+// SetTableLocalityPrimaryRegion sets the table's locality to REGIONAL BY TABLE in the primary region.
+type SetTableLocalityPrimaryRegion struct {
+	immediateMutationOp
+	TableID descpb.ID
+}
+
+// SetTableLocalitySecondaryRegion sets the table's locality to REGIONAL BY TABLE in a specific region.
+type SetTableLocalitySecondaryRegion struct {
+	immediateMutationOp
+	TableID          descpb.ID
+	RegionEnumTypeID descpb.ID
+	RegionName       catpb.RegionName
+}
+
+// UnsetTableLocality removes the table's locality configuration.
+type UnsetTableLocality struct {
+	immediateMutationOp
+	TableID descpb.ID
+}
+
 // MarkRecreatedIndexAsInvisible is used to mark secondary indexes recreated
 // after a primary key swap as invisible. This is to prevent their use before
 // primary key swap is complete.

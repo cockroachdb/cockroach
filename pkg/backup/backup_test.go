@@ -39,7 +39,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/backup/backuptestutils"
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/blobs"
-	_ "github.com/cockroachdb/cockroach/pkg/ccl/kvccl"
 	_ "github.com/cockroachdb/cockroach/pkg/ccl/multiregionccl"
 	_ "github.com/cockroachdb/cockroach/pkg/ccl/multitenantccl"
 	_ "github.com/cockroachdb/cockroach/pkg/ccl/partitionccl"
@@ -56,6 +55,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobstest"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	_ "github.com/cockroachdb/cockroach/pkg/kv/followerreads"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
@@ -79,6 +79,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/randgen"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltestutils"
@@ -11132,6 +11133,20 @@ func speedUpSpanConfigReconciliation(t *testing.T, sqlDB *sqlutils.SQLRunner) {
 	sqlDB.Exec(t, "SET CLUSTER SETTING kv.allocator.min_lease_transfer_interval = '100ms'")
 }
 
+// forceReplicationScanAndProcess forces the replication queue to process on all
+// stores across all servers in the cluster.
+func forceReplicationScanAndProcess(servers []serverutils.TestServerInterface) error {
+	for _, s := range servers {
+		err := s.GetStores().(*kvserver.Stores).VisitStores(func(store *kvserver.Store) error {
+			return store.ForceReplicationScanAndProcess()
+		})
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 // TestStrictLocalityAwareBackupRegionalByRow tests that a strict locality-aware
 // backup.
 func TestStrictLocalityAwareBackup(t *testing.T) {
@@ -11198,11 +11213,8 @@ func TestStrictLocalityAwareBackup(t *testing.T) {
 	}
 
 	nudgeAndValidateReplication := func() error {
-		for _, s := range tc.Servers {
-			err := s.GetStores().(*kvserver.Stores).VisitStores(func(store *kvserver.Store) error {
-				return store.ForceReplicationScanAndProcess()
-			})
-			require.NoError(t, err)
+		if err := forceReplicationScanAndProcess(tc.Servers); err != nil {
+			return err
 		}
 
 		rd := tc.LookupRangeOrFatal(t, startKey)
@@ -11263,6 +11275,226 @@ func TestStrictLocalityAwareBackup(t *testing.T) {
 	))
 }
 
+// TestStrictPartitionedBackup validates that strict locality aware backups and
+// span conformant database restore work correctly on a partitioned table.
+func TestStrictPartitionedBackup(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	skip.UnderDuress(t, "takes too long under duress")
+
+	knobs := base.TestingKnobs{
+		JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
+		BackupRestore: &sql.BackupRestoreTestingKnobs{
+			RestoreSpanConfigConformanceRetryPolicy: &retry.Options{
+				InitialBackoff: time.Millisecond,
+				Multiplier:     2,
+				MaxBackoff:     2 * time.Second,
+				MaxDuration:    60 * time.Second,
+			},
+		}}
+
+	args := base.TestClusterArgs{
+		ServerArgs: base.TestServerArgs{
+			DefaultTestTenant: base.TestIsSpecificToStorageLayerAndNeedsASystemTenant,
+			ScanMaxIdleTime:   10 * time.Millisecond,
+			Knobs:             knobs,
+		},
+		ServerArgsPerNode: map[int]base.TestServerArgs{
+			0: {Locality: localityFromStr(t, "region=east1"), Knobs: knobs},
+			1: {Locality: localityFromStr(t, "region=east2"), Knobs: knobs},
+			2: {Locality: localityFromStr(t, "region=east3"), Knobs: knobs},
+		},
+	}
+
+	tc, sqlDB, _, cleanupFn := backupRestoreTestSetupWithParams(t, 3, 0 /* numAccounts */, func(tc *testcluster.TestCluster) {}, args)
+	defer cleanupFn()
+
+	speedUpSpanConfigReconciliation(t, sqlDB)
+
+	sqlDB.Exec(t, `CREATE DATABASE test`)
+	sqlDB.Exec(t, `USE test`)
+
+	sqlDB.Exec(t, `ALTER DATABASE test CONFIGURE ZONE USING num_replicas = 1`)
+
+	sqlDB.Exec(t, `CREATE TABLE domiciled_table (
+		id INT,
+		region STRING NOT NULL,
+		data STRING,
+		PRIMARY KEY (region, id)
+	) PARTITION BY LIST (region) (
+		PARTITION east1 VALUES IN ('east1'),
+		PARTITION east2 VALUES IN ('east2'),
+		PARTITION east3 VALUES IN ('east3')
+	)`)
+
+	sqlDB.Exec(t, `ALTER PARTITION east1 OF TABLE domiciled_table CONFIGURE ZONE USING num_replicas = 1, constraints = '[+region=east1]'`)
+	sqlDB.Exec(t, `ALTER PARTITION east2 OF TABLE domiciled_table CONFIGURE ZONE USING num_replicas = 1, constraints = '[+region=east2]'`)
+	sqlDB.Exec(t, `ALTER PARTITION east3 OF TABLE domiciled_table CONFIGURE ZONE USING num_replicas = 1, constraints = '[+region=east3]'`)
+
+	sqlDB.Exec(t, `INSERT INTO domiciled_table (id, region, data) VALUES
+		(1, 'east1', 'data-east1'),
+		(3, 'east2', 'data-east2'),
+		(6, 'east3', 'data-east3')`)
+
+	// Derive partition start keys to then check for data placement conformance.
+	ctx := context.Background()
+	srv := tc.Servers[0]
+	codec := keys.MakeSQLCodec(srv.RPCContext().TenantID)
+	tableDesc := desctestutils.TestingGetPublicTableDescriptor(srv.DB(), codec, "test", "domiciled_table")
+
+	primaryIdx := tableDesc.GetPrimaryIndex()
+	partitioning := primaryIdx.GetPartitioning()
+
+	type partitionInfo struct {
+		name     string
+		startKey roachpb.Key
+		region   string
+	}
+
+	var partitions []partitionInfo
+	err := partitioning.ForEachList(
+		func(name string, values [][]byte, subPartitioning catalog.Partitioning) error {
+			if len(values) == 0 {
+				return nil
+			}
+			_, keyPrefix, err := rowenc.DecodePartitionTuple(
+				&tree.DatumAlloc{},
+				codec,
+				tableDesc,
+				primaryIdx,
+				partitioning,
+				values[0],
+				tree.Datums{},
+			)
+			if err != nil {
+				return err
+			}
+			partitions = append(partitions, partitionInfo{
+				name:     name,
+				startKey: keyPrefix,
+				region:   name, // partition name matches region name
+			})
+			return nil
+		})
+	require.NoError(t, err)
+
+	nodeRegions := map[string]roachpb.NodeID{
+		"east1": tc.Servers[0].NodeID(),
+		"east2": tc.Servers[1].NodeID(),
+		"east3": tc.Servers[2].NodeID(),
+	}
+
+	checkSpanConfigs := func() error {
+		kvSubscriber := srv.SpanConfigKVSubscriber().(spanconfig.KVSubscriber)
+
+		for _, part := range partitions {
+			conf, _, err := kvSubscriber.GetSpanConfigForKey(ctx, roachpb.RKey(part.startKey))
+			if err != nil {
+				return errors.Wrapf(err, "partition %s", part.name)
+			}
+
+			if conf.NumReplicas != 1 {
+				return errors.Newf("partition %s: expected num_replicas=1, got %d",
+					part.name, conf.NumReplicas)
+			}
+
+			// Validate constraint matches partition region.
+			expectedConstraint := fmt.Sprintf("+region=%s", part.region)
+			if len(conf.Constraints) == 0 || len(conf.Constraints[0].Constraints) == 0 {
+				return errors.Newf("partition %s: expected constraint %s, got none", part.name, expectedConstraint)
+			}
+			if conf.Constraints[0].Constraints[0].String() != expectedConstraint {
+				return errors.Newf("partition %s: expected constraint %s",
+					part.name, expectedConstraint)
+			}
+		}
+		return nil
+	}
+	testutils.SucceedsSoon(t, checkSpanConfigs)
+
+	for _, s := range tc.Servers {
+		s.DistSenderI().(*kvcoord.DistSender).RangeDescriptorCache().Clear()
+	}
+
+	nudgeAndValidateReplication := func() error {
+		// Force replication queue processing on all stores.
+		if err := forceReplicationScanAndProcess(tc.Servers); err != nil {
+			return err
+		}
+
+		// Clear range cache again for fresh lookups.
+		for _, s := range tc.Servers {
+			s.DistSenderI().(*kvcoord.DistSender).RangeDescriptorCache().Clear()
+		}
+
+		// For each partition, validate replica placement.
+		for _, part := range partitions {
+			rd := tc.LookupRangeOrFatal(t, part.startKey)
+
+			// Validate exactly 1 replica (RF=1).
+			if len(rd.InternalReplicas) != 1 {
+				return errors.Newf("partition %s: expected 1 replica, got %d",
+					part.name, len(rd.InternalReplicas))
+			}
+
+			replica := rd.InternalReplicas[0]
+
+			expectedNodeID := nodeRegions[part.region]
+			if replica.NodeID != expectedNodeID {
+				return errors.Newf("partition %s: replica on node %d, expected node %d (region %s)",
+					part.name, replica.NodeID, expectedNodeID, part.region)
+			}
+		}
+		return nil
+	}
+	testutils.SucceedsSoon(t, nudgeAndValidateReplication)
+
+	backupURIs := []string{
+		"nodelocal://1/rbr-backup-1?COCKROACH_LOCALITY=default",
+		fmt.Sprintf("nodelocal://1/rbr-backup-1?COCKROACH_LOCALITY=%s", url.QueryEscape("region=east1")),
+		fmt.Sprintf("nodelocal://1/rbr-backup-2?COCKROACH_LOCALITY=%s", url.QueryEscape("region=east2")),
+		fmt.Sprintf("nodelocal://1/rbr-backup-3?COCKROACH_LOCALITY=%s", url.QueryEscape("region=east3")),
+	}
+
+	sqlDB.Exec(t, `SET CLUSTER SETTING restore.wait_for_span_config_conformance.enabled = true`)
+
+	backupQuery := fmt.Sprintf(
+		"BACKUP DATABASE test INTO (%q, %q, %q, %q) WITH STRICT STORAGE LOCALITY",
+		backupURIs[0], backupURIs[1], backupURIs[2], backupURIs[3],
+	)
+	sqlDB.Exec(t, backupQuery)
+
+	// Run the restore with detached so we can nudge replication while the job
+	// waits for span config conformance.
+	//
+	// TODO(msbutler): this restore takes 20s because the Reconcile call in the
+	// spanconfig job takes 20 seconds. Understand why this takes so dang long.
+	var jobID int
+	sqlDB.QueryRow(t, fmt.Sprintf(
+		"RESTORE DATABASE test FROM LATEST IN (%q, %q, %q, %q) WITH detached, new_db_name = 'test_restored'",
+		backupURIs[0], backupURIs[1], backupURIs[2], backupURIs[3],
+	)).Scan(&jobID)
+
+	// Nudge the replication and split queues until the restore job has written
+	// the spans-conformed info key, indicating conformance has been achieved.
+	testutils.SucceedsSoon(t, func() error {
+		var count int
+		sqlDB.QueryRow(t,
+			`SELECT count(*) FROM system.job_info WHERE job_id = $1 AND info_key = 'spans-conformed'`,
+			jobID,
+		).Scan(&count)
+		if count > 0 {
+			return nil
+		}
+		if err := forceReplicationScanAndProcess(tc.Servers); err != nil {
+			return err
+		}
+		return errors.New("spans-conformed info key not yet written")
+	})
+
+	jobutils.WaitForJobToSucceed(t, sqlDB, jobspb.JobID(jobID))
+}
+
 func TestRestoreConformanceFailure(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -11283,9 +11515,7 @@ func TestRestoreConformanceFailure(t *testing.T) {
 	args := base.TestClusterArgs{
 		ServerArgs: base.TestServerArgs{
 			DefaultTestTenant: base.TestIsSpecificToStorageLayerAndNeedsASystemTenant,
-			// Increases allocator queue frequency.
-			ScanMaxIdleTime: 10 * time.Millisecond,
-			Knobs:           knobs,
+			Knobs:             knobs,
 		},
 		ServerArgsPerNode: map[int]base.TestServerArgs{
 			0: {Locality: localityFromStr(t, "region=east1"), Knobs: knobs},
@@ -11414,13 +11644,13 @@ func TestBackupEmptyRevisionHistoryIncs(t *testing.T) {
 	})
 }
 
-// TestDatabaseRestoreDownloadsZoneConfig verifies that when restoring a
-// database from a backup that contains the zones table, the restore creates
-// the temporary system database and downloads the zones table into it.
-// testZoneConfigDownload verifies that a restore operation downloads zone configs
-// into a temporary system database.
-func testZoneConfigDownload(t *testing.T, sqlDB *sqlutils.SQLRunner, restoreQuery string) {
+func testZoneConfigDownload(
+	t *testing.T, sqlDB *sqlutils.SQLRunner, restoreQuery string, restoredTableName string,
+) {
 	sqlDB.Exec(t, `SET CLUSTER SETTING jobs.debug.pausepoints = 'restore.after_pre_data'`)
+
+	var initialZoneCount int
+	sqlDB.QueryRow(t, `SELECT count(*) FROM system.zones`).Scan(&initialZoneCount)
 
 	var jobID jobspb.JobID
 	sqlDB.QueryRow(t, restoreQuery).Scan(&jobID)
@@ -11436,9 +11666,10 @@ func testZoneConfigDownload(t *testing.T, sqlDB *sqlutils.SQLRunner, restoreQuer
 		fmt.Sprintf(`SELECT table_name FROM [SHOW TABLES FROM %s]`, tmpDBName),
 		[][]string{{"zones"}})
 
-	var zoneCount int
-	sqlDB.QueryRow(t, fmt.Sprintf(`SELECT count(*) FROM %s.zones`, tmpDBName)).Scan(&zoneCount)
-	require.Greater(t, zoneCount, 0, "zones table should contain data")
+	var pausedZoneCount int
+	sqlDB.QueryRow(t, `SELECT count(*) FROM system.zones`).Scan(&pausedZoneCount)
+	require.Greater(t, pausedZoneCount, initialZoneCount,
+		"system.zones count should increase after zone config download during restore")
 
 	sqlDB.Exec(t, `SET CLUSTER SETTING jobs.debug.pausepoints = ''`)
 
@@ -11446,8 +11677,22 @@ func testZoneConfigDownload(t *testing.T, sqlDB *sqlutils.SQLRunner, restoreQuer
 	jobutils.WaitForJobToSucceed(t, sqlDB, jobID)
 
 	sqlDB.CheckQueryResults(t, checkTempDBExists, [][]string{{"0"}})
+
+	var target, rawConfigSQL string
+	sqlDB.QueryRow(t,
+		fmt.Sprintf(`SHOW ZONE CONFIGURATION FROM TABLE %s`, restoredTableName)).
+		Scan(&target, &rawConfigSQL)
+
+	// Verify the zone config contains the expected TTL.
+	require.Contains(t, rawConfigSQL, "gc.ttlseconds = 7200",
+		"zone config should contain the expected gc.ttlseconds value")
 }
 
+// TestRestoreDownloadsZoneConfig verifies that when restoring a
+// database/table from a backup that contains the zones table, the restore creates
+// the temporary system database and downloads the zones table into it.
+// testZoneConfigDownload verifies that a restore operation downloads zone configs
+// into a temporary system database.
 func TestRestoreDownloadsZoneConfig(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -11456,16 +11701,20 @@ func TestRestoreDownloadsZoneConfig(t *testing.T) {
 	_, sqlDB, _, cleanupFn := backupRestoreTestSetup(t, singleNode, numAccounts, InitManualReplication)
 	defer cleanupFn()
 
+	sqlDB.Exec(t, `ALTER TABLE data.bank CONFIGURE ZONE USING gc.ttlseconds = 7200`)
+
 	sqlDB.Exec(t, `BACKUP INTO 'nodelocal://1/test'`)
 
 	t.Run("database-restore", func(t *testing.T) {
 		testZoneConfigDownload(t, sqlDB,
-			`RESTORE DATABASE data FROM LATEST IN 'nodelocal://1/test' WITH new_db_name = 'data2', detached`)
+			`RESTORE DATABASE data FROM LATEST IN 'nodelocal://1/test' WITH new_db_name = 'data2', detached`,
+			"data2.bank")
 	})
 
 	t.Run("table-restore", func(t *testing.T) {
 		sqlDB.Exec(t, `CREATE DATABASE data3`)
 		testZoneConfigDownload(t, sqlDB,
-			`RESTORE TABLE data.bank FROM LATEST IN 'nodelocal://1/test' WITH into_db = 'data3', detached`)
+			`RESTORE TABLE data.bank FROM LATEST IN 'nodelocal://1/test' WITH into_db = 'data3', detached`,
+			"data3.bank")
 	})
 }
