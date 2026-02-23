@@ -31,16 +31,8 @@ func (b *LocalBackend) GenerateTF(_ string) string {
 `
 }
 
-// EnvVars returns nil — the local backend needs no extra environment
-// variables.
-func (b *LocalBackend) EnvVars() map[string]string {
-	return nil
-}
-
 // CleanupState is a no-op for local backends. The working directory
 // (containing the state file) is managed by the caller.
-func (b *LocalBackend) CleanupState(
-	_ context.Context, _ *logger.Logger, _ string,
-) error {
+func (b *LocalBackend) CleanupState(_ context.Context, _ *logger.Logger, _ string) error {
 	return nil
 }

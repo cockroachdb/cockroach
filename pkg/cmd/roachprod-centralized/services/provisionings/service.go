@@ -395,14 +395,13 @@ func (s *Service) CreateProvisioning(
 	// been generated yet (identifier is always auto-injected so it won't
 	// trigger a missing-required error).
 	if _, _, err := vars.BuildVarMaps(vars.BuildVarMapsInput{
-		ResolvedEnv:    resolvedEnv,
-		UserVars:       input.Variables,
-		TemplateVars:   tmpl.Variables,
-		Identifier:     "validation",
-		TemplateType:   input.TemplateType,
-		Environment:    input.Environment,
-		Owner:          getOwnerEmail(principal),
-		BackendEnvVars: s.backend.EnvVars(),
+		ResolvedEnv:  resolvedEnv,
+		UserVars:     input.Variables,
+		TemplateVars: tmpl.Variables,
+		Identifier:   "validation",
+		TemplateType: input.TemplateType,
+		Environment:  input.Environment,
+		Owner:        getOwnerEmail(principal),
 	}); err != nil {
 		return provmodels.Provisioning{}, nil, utils.NewPublicError(err)
 	}

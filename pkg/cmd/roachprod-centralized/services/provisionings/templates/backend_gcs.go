@@ -9,7 +9,6 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
-	"os"
 
 	"cloud.google.com/go/storage"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/utils/logger"
@@ -44,28 +43,10 @@ func (b *GCSBackend) GenerateTF(prefix string) string {
 `, b.bucket, prefix)
 }
 
-// EnvVars returns the GOOGLE_BACKEND_CREDENTIALS env var if
-// GOOGLE_APPLICATION_CREDENTIALS is set. The GCS backend uses this dedicated
-// env var for backend authentication, taking precedence over the provider-level
-// GOOGLE_APPLICATION_CREDENTIALS. This ensures the state backend authenticates
-// with the app's service account even when an environment overrides
-// GOOGLE_APPLICATION_CREDENTIALS for the GCP provider.
-func (b *GCSBackend) EnvVars() map[string]string {
-	appCreds := os.Getenv("GOOGLE_APPLICATION_CREDENTIALS")
-	if appCreds == "" {
-		return nil
-	}
-	return map[string]string{
-		"GOOGLE_BACKEND_CREDENTIALS": appCreds,
-	}
-}
-
 // CleanupState removes all objects under the given prefix from the GCS bucket.
 // Best-effort: logs warnings for individual object deletion failures but
 // returns the first listing error.
-func (b *GCSBackend) CleanupState(
-	ctx context.Context, l *logger.Logger, prefix string,
-) error {
+func (b *GCSBackend) CleanupState(ctx context.Context, l *logger.Logger, prefix string) error {
 	bkt := b.client.Bucket(b.bucket)
 	it := bkt.Objects(ctx, &storage.Query{Prefix: prefix})
 	for {

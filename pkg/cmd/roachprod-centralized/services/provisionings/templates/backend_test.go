@@ -34,8 +34,3 @@ func TestLocalBackend_CleanupState(t *testing.T) {
 	err := b.CleanupState(context.Background(), logger.DefaultLogger, "provisioning-test")
 	require.NoError(t, err)
 }
-
-func TestLocalBackend_EnvVars(t *testing.T) {
-	b := NewLocalBackend()
-	assert.Nil(t, b.EnvVars())
-}

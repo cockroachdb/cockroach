@@ -68,14 +68,13 @@ func (s *Service) HandleProvision(
 
 	// Build var maps for tofu execution.
 	varMap, envVars, err := vars.BuildVarMaps(vars.BuildVarMapsInput{
-		ResolvedEnv:    resolvedEnv,
-		UserVars:       prov.Variables,
-		TemplateVars:   parsedVars,
-		Identifier:     prov.Identifier,
-		TemplateType:   prov.TemplateType,
-		Environment:    prov.Environment,
-		Owner:          prov.Owner,
-		BackendEnvVars: s.backend.EnvVars(),
+		ResolvedEnv:  resolvedEnv,
+		UserVars:     prov.Variables,
+		TemplateVars: parsedVars,
+		Identifier:   prov.Identifier,
+		TemplateType: prov.TemplateType,
+		Environment:  prov.Environment,
+		Owner:        prov.Owner,
 	})
 	if err != nil {
 		return s.failProvision(ctx, l, &prov, errors.Wrap(err, "build var maps"))
@@ -202,14 +201,13 @@ func (s *Service) HandleDestroy(
 
 	// Build var maps.
 	varMap, envVars, err := vars.BuildVarMaps(vars.BuildVarMapsInput{
-		ResolvedEnv:    resolvedEnv,
-		UserVars:       prov.Variables,
-		TemplateVars:   parsedVars,
-		Identifier:     prov.Identifier,
-		TemplateType:   prov.TemplateType,
-		Environment:    prov.Environment,
-		Owner:          prov.Owner,
-		BackendEnvVars: s.backend.EnvVars(),
+		ResolvedEnv:  resolvedEnv,
+		UserVars:     prov.Variables,
+		TemplateVars: parsedVars,
+		Identifier:   prov.Identifier,
+		TemplateType: prov.TemplateType,
+		Environment:  prov.Environment,
+		Owner:        prov.Owner,
 	})
 	if err != nil {
 		return s.failDestroy(ctx, l, &prov, errors.Wrap(err, "build var maps"))

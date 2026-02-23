@@ -56,7 +56,7 @@ var (
 	// ErrInvalidVariableKey is returned when a variable key is invalid.
 	ErrInvalidVariableKey = utils.NewPublicError(fmt.Errorf("invalid variable key: must match [a-zA-Z0-9_-]"))
 	// ErrInvalidVariableType is returned for unsupported variable types.
-	ErrInvalidVariableType = utils.NewPublicError(fmt.Errorf("variable type must be 'plaintext' or 'secret'"))
+	ErrInvalidVariableType = utils.NewPublicError(fmt.Errorf("variable type must be 'plaintext', 'secret', or 'template_secret'"))
 	// ErrVariableNotFound is the service-level sentinel error.
 	ErrVariableNotFound = utils.NewPublicError(fmt.Errorf("environment variable not found"))
 	// ErrVariableAlreadyExists is the service-level sentinel error.
@@ -164,7 +164,7 @@ type ResolvedEnvironment struct {
 // ResolvedVariable is a variable with its value fully resolved (secrets fetched
 // from the appropriate secret manager).
 type ResolvedVariable struct {
-	Key      string
-	Value    string
-	IsSecret bool
+	Key   string
+	Value string
+	Type  envmodels.EnvironmentVarType
 }

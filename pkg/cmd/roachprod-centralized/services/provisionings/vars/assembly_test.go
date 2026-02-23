@@ -9,6 +9,7 @@ import (
 	"strings"
 	"testing"
 
+	envmodels "github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/models/environments"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/models/provisionings"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/services/environments/types"
 	"github.com/stretchr/testify/assert"
@@ -36,7 +37,7 @@ func TestBuildVarMaps_NoEnv_VarFlagsOnly(t *testing.T) {
 	assert.Equal(t, "us-east-1", vars["region"])
 	assert.Equal(t, "3", vars["count"])
 	assert.Equal(t, "ab12cd34", vars["identifier"])
-	// No environment vars should be set (no resolved env, no backend env vars).
+	// No environment vars should be set (no resolved env).
 	assert.Empty(t, envVars)
 }
 
@@ -45,9 +46,9 @@ func TestBuildVarMaps_EnvVarsAndUserVars(t *testing.T) {
 		ResolvedEnv: types.ResolvedEnvironment{
 			Name: "aws-engineering",
 			Variables: []types.ResolvedVariable{
-				{Key: "vpc_id", Value: "vpc-0abc123", IsSecret: false},
-				{Key: "aws_region", Value: "us-east-1", IsSecret: false},
-				{Key: "AWS_ACCESS_KEY_ID", Value: "AKIA...", IsSecret: true},
+				{Key: "vpc_id", Value: "vpc-0abc123", Type: envmodels.VarTypePlaintext},
+				{Key: "aws_region", Value: "us-east-1", Type: envmodels.VarTypePlaintext},
+				{Key: "AWS_ACCESS_KEY_ID", Value: "AKIA...", Type: envmodels.VarTypeSecret},
 			},
 		},
 		UserVars: map[string]interface{}{
@@ -65,15 +66,18 @@ func TestBuildVarMaps_EnvVarsAndUserVars(t *testing.T) {
 	vars, envVars, err := BuildVarMaps(input)
 	require.NoError(t, err)
 
-	// Step 1: All env vars should be in envVars as both KEY and TF_VAR_KEY.
+	// Step 1: Plaintext env vars get both raw and TF_VAR_.
 	assert.Equal(t, "vpc-0abc123", envVars["vpc_id"])
 	assert.Equal(t, "vpc-0abc123", envVars["TF_VAR_vpc_id"])
 	assert.Equal(t, "us-east-1", envVars["aws_region"])
 	assert.Equal(t, "us-east-1", envVars["TF_VAR_aws_region"])
-	assert.Equal(t, "AKIA...", envVars["AWS_ACCESS_KEY_ID"])
-	assert.Equal(t, "AKIA...", envVars["TF_VAR_AWS_ACCESS_KEY_ID"])
 
-	// Step 2: Non-secret env vars matching template vars -> in vars.
+	// Secret env vars get raw only — NO TF_VAR_ prefix.
+	assert.Equal(t, "AKIA...", envVars["AWS_ACCESS_KEY_ID"])
+	_, hasTFVar := envVars["TF_VAR_AWS_ACCESS_KEY_ID"]
+	assert.False(t, hasTFVar, "secret should not have TF_VAR_ prefix")
+
+	// Step 2: Plaintext env vars matching template vars -> in vars.
 	// But user override takes precedence.
 	assert.Equal(t, "vpc-0abc123", vars["vpc_id"])
 
@@ -88,12 +92,12 @@ func TestBuildVarMaps_EnvVarsAndUserVars(t *testing.T) {
 	assert.False(t, hasSecret, "secret should not be in vars")
 }
 
-func TestBuildVarMaps_SecretNeverInVars(t *testing.T) {
+func TestBuildVarMaps_TemplateSecretNeverInVars(t *testing.T) {
 	input := BuildVarMapsInput{
 		ResolvedEnv: types.ResolvedEnvironment{
 			Name: "test-env",
 			Variables: []types.ResolvedVariable{
-				{Key: "SECRET_KEY", Value: "s3cr3t", IsSecret: true},
+				{Key: "SECRET_KEY", Value: "s3cr3t", Type: envmodels.VarTypeTemplateSecret},
 			},
 		},
 		TemplateVars: map[string]provisionings.TemplateOption{
@@ -107,25 +111,55 @@ func TestBuildVarMaps_SecretNeverInVars(t *testing.T) {
 	vars, envVars, err := BuildVarMaps(input)
 	require.NoError(t, err)
 
-	// Secret should be in envVars (both raw and TF_VAR_).
+	// template_secret should be in envVars (both raw and TF_VAR_).
 	assert.Equal(t, "s3cr3t", envVars["SECRET_KEY"])
 	assert.Equal(t, "s3cr3t", envVars["TF_VAR_SECRET_KEY"])
 
-	// Secret must NOT be in vars (would appear on command line).
+	// template_secret must NOT be in vars (would appear on command line).
 	_, hasInVars := vars["SECRET_KEY"]
-	assert.False(t, hasInVars, "secret must not appear in -var flags")
+	assert.False(t, hasInVars, "template_secret must not appear in -var flags")
 }
 
-func TestBuildVarMaps_SecretMatchingTemplate_UserOverride(t *testing.T) {
-	// A secret env var matches a declared template variable, AND the
-	// user explicitly provides an override via --var. The user's value
-	// should appear in vars (it's their explicit choice to put it on the
-	// command line), but the environment's secret value must not.
+func TestBuildVarMaps_SecretRawEnvOnly(t *testing.T) {
+	// secret-type variables get raw env only — no TF_VAR_ and no -var.
 	input := BuildVarMapsInput{
 		ResolvedEnv: types.ResolvedEnvironment{
 			Name: "test-env",
 			Variables: []types.ResolvedVariable{
-				{Key: "db_password", Value: "env-secret-pw", IsSecret: true},
+				{Key: "AWS_SECRET_ACCESS_KEY", Value: "s3cr3t", Type: envmodels.VarTypeSecret},
+			},
+		},
+		TemplateVars: map[string]provisionings.TemplateOption{
+			"identifier": {Type: "string"},
+		},
+		Identifier:   "abcd1234",
+		TemplateType: "test",
+	}
+
+	vars, envVars, err := BuildVarMaps(input)
+	require.NoError(t, err)
+
+	// Secret should be in envVars as raw only.
+	assert.Equal(t, "s3cr3t", envVars["AWS_SECRET_ACCESS_KEY"])
+	_, hasTFVar := envVars["TF_VAR_AWS_SECRET_ACCESS_KEY"]
+	assert.False(t, hasTFVar, "secret must not have TF_VAR_ prefix")
+
+	// Secret must NOT be in vars.
+	_, hasInVars := vars["AWS_SECRET_ACCESS_KEY"]
+	assert.False(t, hasInVars, "secret must not appear in -var flags")
+}
+
+func TestBuildVarMaps_TemplateSecretMatchingTemplate_UserOverride(t *testing.T) {
+	// A template_secret env var matches a declared template variable,
+	// AND the user explicitly provides an override via --var. The
+	// user's value should appear in vars (it's their explicit choice
+	// to put it on the command line), but the environment's secret
+	// value must not.
+	input := BuildVarMapsInput{
+		ResolvedEnv: types.ResolvedEnvironment{
+			Name: "test-env",
+			Variables: []types.ResolvedVariable{
+				{Key: "db_password", Value: "env-secret-pw", Type: envmodels.VarTypeTemplateSecret},
 			},
 		},
 		UserVars: map[string]interface{}{
@@ -144,7 +178,7 @@ func TestBuildVarMaps_SecretMatchingTemplate_UserOverride(t *testing.T) {
 
 	// User override appears in vars (user's explicit choice).
 	assert.Equal(t, "user-provided-pw", vars["db_password"])
-	// Secret env value is in envVars only.
+	// template_secret env value is in envVars only.
 	assert.Equal(t, "env-secret-pw", envVars["db_password"])
 	assert.Equal(t, "env-secret-pw", envVars["TF_VAR_db_password"])
 }
@@ -229,7 +263,7 @@ func TestBuildVarMaps_EnvVarNotMatchingTemplate_NotInVars(t *testing.T) {
 		ResolvedEnv: types.ResolvedEnvironment{
 			Name: "test-env",
 			Variables: []types.ResolvedVariable{
-				{Key: "EXTRA_VAR", Value: "extra", IsSecret: false},
+				{Key: "EXTRA_VAR", Value: "extra", Type: envmodels.VarTypePlaintext},
 			},
 		},
 		TemplateVars: map[string]provisionings.TemplateOption{
@@ -281,70 +315,14 @@ func TestBuildVarMaps_ComplexUserVar(t *testing.T) {
 	assert.Contains(t, vars["tags"], `"cockroach"`)
 }
 
-func TestBuildVarMaps_BackendEnvVars(t *testing.T) {
-	t.Run("credentials provided", func(t *testing.T) {
-		input := BuildVarMapsInput{
-			TemplateVars: map[string]provisionings.TemplateOption{
-				"identifier": {Type: "string"},
-			},
-			Identifier:   "test1234",
-			TemplateType: "test",
-			BackendEnvVars: map[string]string{
-				"GOOGLE_BACKEND_CREDENTIALS": "/path/to/app-sa.json",
-			},
-		}
-
-		_, envVars, err := BuildVarMaps(input)
-		require.NoError(t, err)
-
-		assert.Equal(t, "/path/to/app-sa.json", envVars["GOOGLE_BACKEND_CREDENTIALS"])
-	})
-
-	t.Run("no backend env vars", func(t *testing.T) {
-		input := BuildVarMapsInput{
-			TemplateVars: map[string]provisionings.TemplateOption{
-				"identifier": {Type: "string"},
-			},
-			Identifier:   "test1234",
-			TemplateType: "test",
-		}
-
-		_, envVars, err := BuildVarMaps(input)
-		require.NoError(t, err)
-
-		_, hasCreds := envVars["GOOGLE_BACKEND_CREDENTIALS"]
-		assert.False(t, hasCreds, "should not set backend credentials when none provided")
-	})
-
-	t.Run("s3 backend env vars", func(t *testing.T) {
-		input := BuildVarMapsInput{
-			TemplateVars: map[string]provisionings.TemplateOption{
-				"identifier": {Type: "string"},
-			},
-			Identifier:   "test1234",
-			TemplateType: "test",
-			BackendEnvVars: map[string]string{
-				"AWS_ACCESS_KEY_ID":     "AKIA...",
-				"AWS_SECRET_ACCESS_KEY": "secret",
-			},
-		}
-
-		_, envVars, err := BuildVarMaps(input)
-		require.NoError(t, err)
-
-		assert.Equal(t, "AKIA...", envVars["AWS_ACCESS_KEY_ID"])
-		assert.Equal(t, "secret", envVars["AWS_SECRET_ACCESS_KEY"])
-	})
-}
-
 func TestBuildVarMaps_Precedence(t *testing.T) {
 	// Full precedence test: auto-injected > user > env.
 	input := BuildVarMapsInput{
 		ResolvedEnv: types.ResolvedEnvironment{
 			Name: "test-env",
 			Variables: []types.ResolvedVariable{
-				{Key: "region", Value: "env-region", IsSecret: false},
-				{Key: "identifier", Value: "env-id", IsSecret: false},
+				{Key: "region", Value: "env-region", Type: envmodels.VarTypePlaintext},
+				{Key: "identifier", Value: "env-id", Type: envmodels.VarTypePlaintext},
 			},
 		},
 		UserVars: map[string]interface{}{
@@ -382,7 +360,7 @@ func TestBuildVarMaps_EmptyInput(t *testing.T) {
 
 	assert.Equal(t, "test1234", vars["identifier"])
 	assert.Len(t, vars, 1)
-	// Should have no TF_VAR_ entries (no resolved env, no backend env vars).
+	// Should have no TF_VAR_ entries (no resolved env).
 	tfVarCount := 0
 	for k := range envVars {
 		if strings.HasPrefix(k, "TF_VAR_") {
@@ -520,13 +498,15 @@ func TestBuildVarMaps_MissingRequired(t *testing.T) {
 }
 
 func TestBuildVarMaps_MissingRequired_SatisfiedByEnv(t *testing.T) {
-	// A required variable satisfied by a secret env var (only present
+	// A required variable satisfied by a template_secret env var (present
 	// as TF_VAR_*) should not trigger the missing-required check.
+	// Must be template_secret (not secret) because only template_secret
+	// produces TF_VAR_* which satisfies required vars.
 	input := BuildVarMapsInput{
 		ResolvedEnv: types.ResolvedEnvironment{
 			Name: "test-env",
 			Variables: []types.ResolvedVariable{
-				{Key: "gcp_project", Value: "my-project", IsSecret: true},
+				{Key: "gcp_project", Value: "my-project", Type: envmodels.VarTypeTemplateSecret},
 			},
 		},
 		TemplateVars: map[string]provisionings.TemplateOption{

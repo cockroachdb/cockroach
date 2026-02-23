@@ -195,13 +195,12 @@ func runLocalProvision(cmd *cobra.Command, _ []string) error {
 	// Step 7: BuildVarMaps -> assemble vars and envVars.
 	// No environment resolution in the local command — use --var flags only.
 	tfVars, envVars, err := vars.BuildVarMaps(vars.BuildVarMapsInput{
-		UserVars:       userVars,
-		TemplateVars:   tmpl.Variables,
-		Identifier:     identifier,
-		TemplateType:   tmpl.Name,
-		Environment:    environment,
-		Owner:          owner,
-		BackendEnvVars: localBackend.EnvVars(),
+		UserVars:     userVars,
+		TemplateVars: tmpl.Variables,
+		Identifier:   identifier,
+		TemplateType: tmpl.Name,
+		Environment:  environment,
+		Owner:        owner,
 	})
 	if err != nil {
 		return errors.Wrap(err, "build variable maps")
@@ -287,13 +286,12 @@ func runLocalDestroy(p localDestroyParams) error {
 	// Build the same var maps that were used during provisioning so
 	// that tofu destroy can match the resource definitions.
 	tfVars, envVars, err := vars.BuildVarMaps(vars.BuildVarMapsInput{
-		UserVars:       p.userVars,
-		TemplateVars:   p.tmpl.Variables,
-		Identifier:     p.identifier,
-		TemplateType:   p.tmpl.Name,
-		Environment:    p.environment,
-		Owner:          p.owner,
-		BackendEnvVars: templates.NewLocalBackend().EnvVars(),
+		UserVars:     p.userVars,
+		TemplateVars: p.tmpl.Variables,
+		Identifier:   p.identifier,
+		TemplateType: p.tmpl.Name,
+		Environment:  p.environment,
+		Owner:        p.owner,
 	})
 	if err != nil {
 		return errors.Wrap(err, "build variable maps")

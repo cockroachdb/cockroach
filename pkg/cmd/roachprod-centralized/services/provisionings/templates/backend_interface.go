@@ -12,16 +12,14 @@ import (
 )
 
 // Backend abstracts terraform state backend operations. The provisioning
-// service uses a Backend to generate backend.tf configuration, provide
-// backend-specific environment variables, and clean up state after destroy.
+// service uses a Backend to generate backend.tf configuration and clean up
+// state after destroy. Backend authentication credentials (e.g.
+// GOOGLE_BACKEND_CREDENTIALS) are expected to be set at the app/deployment
+// level and inherited via os.Environ() by the tofu executor.
 type Backend interface {
 	// GenerateTF returns the content of a backend.tf file for the given
 	// state prefix (typically "provisioning-<uuid>").
 	GenerateTF(prefix string) string
-
-	// EnvVars returns environment variables required by the backend for
-	// authentication. Returns nil if no extra env vars are needed.
-	EnvVars() map[string]string
 
 	// CleanupState removes all state objects for the given prefix.
 	// Best-effort: callers should log warnings on error and continue.

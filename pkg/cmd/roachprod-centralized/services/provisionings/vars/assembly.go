@@ -11,6 +11,7 @@ import (
 	"sort"
 	"strings"
 
+	envmodels "github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/models/environments"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/models/provisionings"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/services/environments/types"
 	"github.com/cockroachdb/errors"
@@ -55,12 +56,6 @@ type BuildVarMapsInput struct {
 	// Owner is the principal email. Conditionally injected if the
 	// template declares an "owner" variable.
 	Owner string
-
-	// BackendEnvVars are additional environment variables to inject for
-	// the backend (e.g., GOOGLE_BACKEND_CREDENTIALS for GCS). The
-	// caller is responsible for constructing these based on the backend
-	// type, keeping BuildVarMaps backend-agnostic.
-	BackendEnvVars map[string]string
 }
 
 // BuildVarMaps assembles the two variable maps consumed by the OpenTofu
@@ -70,15 +65,21 @@ type BuildVarMapsInput struct {
 //     These are visible in process listings, so secrets must NOT be
 //     included here.
 //   - envVars: key=value pairs set as process environment variables.
-//     Includes both KEY=VALUE and TF_VAR_KEY=VALUE for all resolved
-//     environment variables.
+//     Includes KEY=VALUE for all types, plus TF_VAR_KEY=VALUE for
+//     plaintext and template_secret variables.
+//
+// Variable type behavior:
+//   - plaintext:        raw env + TF_VAR_* env + -var flag (if declared)
+//   - template_secret:  raw env + TF_VAR_* env only (never -var flag)
+//   - secret:           raw env only (no TF_VAR_*, no -var flag)
 //
 // Precedence (highest to lowest):
 //  1. Auto-injected variables (identifier, prov_name, environment, owner)
 //  2. User-provided variables (--var flags / Provisioning.Variables)
-//  3. Non-secret environment variables matching a declared template
+//  3. Plaintext environment variables matching a declared template
 //     variable (via -var flags)
-//  4. All environment variables (via TF_VAR_* env vars)
+//  4. Environment variables (via TF_VAR_* env vars, for plaintext and
+//     template_secret only)
 //  5. Template defaults (handled by OpenTofu itself)
 //
 // See the reference doc §5 for the full algorithm design.
@@ -88,21 +89,26 @@ func BuildVarMaps(
 	envVars = make(map[string]string)
 	vars = make(map[string]string)
 
-	// Step 1: All environment variables become process env vars AND
-	// TF_VAR_ env vars. OpenTofu ignores TF_VAR_ vars that don't match
-	// a declared variable, so passing everything is safe.
+	// Step 1: Inject environment variables into envVars based on type.
+	//   - All types get raw KEY=VALUE.
+	//   - plaintext and template_secret also get TF_VAR_KEY=VALUE
+	//     (OpenTofu ignores unknown TF_VAR_ vars).
+	//   - secret variables are raw env only (provider credentials).
 	for _, v := range input.ResolvedEnv.Variables {
 		envVars[v.Key] = v.Value
-		envVars["TF_VAR_"+v.Key] = v.Value
+		if v.Type != envmodels.VarTypeSecret {
+			envVars["TF_VAR_"+v.Key] = v.Value
+		}
 	}
 
-	// Step 2: Non-secret environment variables that match a declared
+	// Step 2: Plaintext environment variables that match a declared
 	// template variable are ALSO passed as -var flags. We check against
 	// the parsed template schema because tofu errors on unknown -var
+	// flags. template_secret and secret variables never appear as -var
 	// flags.
 	for _, v := range input.ResolvedEnv.Variables {
-		if v.IsSecret {
-			continue // secrets never go on the command line
+		if v.Type != envmodels.VarTypePlaintext {
+			continue
 		}
 		if _, declared := input.TemplateVars[v.Key]; declared {
 			vars[v.Key] = v.Value
@@ -182,12 +188,6 @@ func BuildVarMaps(
 				strings.Join(missing, ", "),
 			)
 		}
-	}
-
-	// Step 5: Inject backend-specific environment variables provided by
-	// the caller (e.g., GOOGLE_BACKEND_CREDENTIALS for GCS).
-	for k, v := range input.BackendEnvVars {
-		envVars[k] = v
 	}
 
 	return vars, envVars, nil

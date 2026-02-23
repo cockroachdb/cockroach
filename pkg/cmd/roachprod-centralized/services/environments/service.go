@@ -260,7 +260,7 @@ func (s *Service) CreateVariable(
 	}
 
 	value := input.Value
-	if input.Type == envmodels.VarTypeSecret {
+	if isSecretType(input.Type) {
 		value, err = s.processSecretValue(ctx, envName, input.Key, value)
 		if err != nil {
 			return envmodels.EnvironmentVariable{}, err
@@ -284,9 +284,10 @@ func (s *Service) CreateVariable(
 	return stored, nil
 }
 
-// UpdateVariable updates an existing variable. For secret-type variables, if
-// the value matches a registered resolver prefix it is verified; otherwise
-// the raw value is auto-written to Secret Manager.
+// UpdateVariable updates an existing variable. For secret-type variables
+// (secret or template_secret), if the value matches a registered resolver
+// prefix it is verified; otherwise the raw value is auto-written to Secret
+// Manager.
 func (s *Service) UpdateVariable(
 	ctx context.Context,
 	l *logger.Logger,
@@ -307,7 +308,7 @@ func (s *Service) UpdateVariable(
 	}
 
 	value := input.Value
-	if input.Type == envmodels.VarTypeSecret {
+	if isSecretType(input.Type) {
 		value, err = s.processSecretValue(ctx, envName, key, value)
 		if err != nil {
 			return envmodels.EnvironmentVariable{}, err
@@ -374,11 +375,11 @@ func (s *Service) GetEnvironmentResolved(
 
 	for _, v := range vars {
 		rv := types.ResolvedVariable{
-			Key:      v.Key,
-			IsSecret: v.Type == envmodels.VarTypeSecret,
+			Key:  v.Key,
+			Type: v.Type,
 		}
 
-		if v.Type == envmodels.VarTypeSecret {
+		if isSecretType(v.Type) {
 			val, err := s.secretsRegistry.Resolve(ctx, v.Value)
 			if err != nil {
 				l.Error("failed to resolve secret",
@@ -478,10 +479,18 @@ func validateVariable(key string, varType envmodels.EnvironmentVarType) error {
 	if !types.ValidVariableKeyRe.MatchString(key) {
 		return types.ErrInvalidVariableKey
 	}
-	if varType != envmodels.VarTypePlaintext && varType != envmodels.VarTypeSecret {
+	switch varType {
+	case envmodels.VarTypePlaintext, envmodels.VarTypeSecret, envmodels.VarTypeTemplateSecret:
+		return nil
+	default:
 		return types.ErrInvalidVariableType
 	}
-	return nil
+}
+
+// isSecretType reports whether the variable type requires secret manager
+// resolution (either secret or template_secret).
+func isSecretType(t envmodels.EnvironmentVarType) bool {
+	return t == envmodels.VarTypeSecret || t == envmodels.VarTypeTemplateSecret
 }
 
 // -- Error mapping --
