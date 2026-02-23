@@ -19,10 +19,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 )
 
+//lint:ignore U1000 temporarily disabled
 type cleanupNodeKill struct {
 	nodes option.NodeListOption
 }
 
+//lint:ignore U1000 temporarily disabled
 func (cl *cleanupNodeKill) Cleanup(ctx context.Context, o operation.Operation, c cluster.Cluster) {
 	db, err := c.ConnE(ctx, o.L(), cl.nodes[0])
 	if err != nil {
@@ -46,6 +48,7 @@ func (cl *cleanupNodeKill) Cleanup(ctx context.Context, o operation.Operation, c
 	}
 }
 
+//lint:ignore U1000 temporarily disabled
 func nodeKillRunner(
 	signal int, drain bool,
 ) func(ctx context.Context, o operation.Operation, c cluster.Cluster) registry.OperationCleanup {
@@ -54,6 +57,7 @@ func nodeKillRunner(
 	}
 }
 
+//lint:ignore U1000 temporarily disabled
 func runNodeKill(
 	ctx context.Context, o operation.Operation, c cluster.Cluster, signal int, drain bool,
 ) registry.OperationCleanup {
@@ -90,6 +94,7 @@ func runNodeKill(
 	return &cleanupNodeKill{nodes: node}
 }
 
+//lint:ignore U1000 temporarily disabled
 func registerNodeKill(r registry.Registry) {
 	for _, spec := range []struct {
 		name     string
