@@ -24,7 +24,7 @@ gen_load rate=40000 rw_ratio=1 request_cpu_per_access=500000 min_key=1 max_key=1
 # We want the CPU load to balance based on %cpu. But both the MMA and SMA balance
 # on absolute cpu-nanos, i.e. not taking into account that n3 has double the capacity.
 # See tracking issue: https://github.com/cockroachdb/cockroach/issues/153777
-assertion stat=cpu_util type=balance ticks=6 upper_bound=1.1
+assertion stat=cpu_util type=balance ticks=6 upper_bound=1.1 issue=https://github.com/cockroachdb/cockroach/issues/153777
 ----
 asserting: max_{stores}(cpu_util)/mean_{stores}(cpu_util) ≤ 1.10 at each of last 6 ticks
 
