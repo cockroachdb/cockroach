@@ -245,6 +245,60 @@ func (e *Engines) SetStoreID(ctx context.Context, id roachpb.StoreID) error {
 	return nil
 }
 
+// NewBatch creates a new write batch to storage. If engines are separated, it
+// consists of two batches, one per engine.
+//
+// TODO(sep-raft-log): generalize this so that the LogEngine batch is lazy.
+func (e *Engines) NewBatch() Batch {
+	if !e.Separated() {
+		// TODO(sep-raft-log): wrap for key assertions.
+		b := e.Engine().NewBatch()
+		return Batch{state: b, raft: b}
+	}
+	return Batch{
+		state:     e.StateEngine().NewBatch(),
+		raft:      e.LogEngine().NewBatch(),
+		separated: true,
+	}
+}
+
+// Batch is a read-write batch to storage which is aware whether the log and
+// state machine engines are separated.
+type Batch struct {
+	state     storage.Batch
+	raft      storage.Batch
+	separated bool
+}
+
+// ReadWriter returns a logically separated ReadWriter into the engines.
+func (b *Batch) ReadWriter() ReadWriter {
+	return ReadWriter{
+		State: WrapState(b.state),
+		Raft:  WrapRaft(b.raft),
+	}
+}
+
+// CommitAndSync commits and syncs the batch to storage. When engines are
+// separated, only the LogEngine batch is synced, and the StateEngine part is
+// expected to be replayable from the LogEngine batch.
+func (b *Batch) CommitAndSync() error {
+	if !b.separated {
+		return b.state.Commit(true /* sync */)
+	}
+	if err := b.raft.Commit(true /* sync */); err != nil {
+		return err
+	}
+	return b.state.Commit(false /* false */)
+}
+
+// Close closes the batch.
+func (b *Batch) Close() {
+	b.state.Close()
+	if b.separated {
+		b.raft.Close()
+	}
+}
+
 // validateIsStateEngineSpan asserts that the provided span only overlaps with
 // keys in the State engine and returns an error if not.
 // Note that we could receive the span with a nil startKey, which has a special
