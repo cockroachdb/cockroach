@@ -2594,6 +2594,473 @@ func TestChangefeedColumnDropsOnTheSameTableWithMultipleFamiliesWithManualSchema
 	})
 }
 
+// TestChangefeedSchemaLockedBackfill validates that schema change backfills
+// are not skipped on tables with schema_locked=true. This is a regression test
+// for #149861, where the declarative schema changer atomically toggled
+// schema_locked and added the column mutation in the same descriptor version
+// update, causing the SchemaFeed to miss the drop event and silently skip the
+// backfill. The test exercises both column drops and column additions with
+// defaults on schema_locked tables, with and without column families.
+//
+// Unlike TestChangefeedColumnDropsOnTheSameTableWithMultipleFamiliesWithManualSchemaLocked,
+// which manually toggles schema_locked around DDL operations (producing
+// separate descriptor versions), this test lets the declarative schema changer
+// handle the toggle automatically, which is the code path that caused #149861.
+func TestChangefeedSchemaLockedBackfill(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	testutils.SetVModule(t, "kv_feed=2,changefeed_processors=2")
+
+	// Subtest 1: Column families with schema_locked.
+	// Exercises the droppedColumnIsWatched code path with specific family
+	// targets, which was the exact code path that caused #149861.
+	t.Run("families", func(t *testing.T) {
+		testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
+			sqlDB := sqlutils.MakeSQLRunner(s.DB)
+
+			sqlDB.Exec(t, `CREATE TABLE locked_fams (
+				id INT PRIMARY KEY, a STRING, b STRING, c STRING,
+				FAMILY fam_a (id, a), FAMILY fam_b (b, c)
+			) WITH (schema_locked=true)`)
+			sqlDB.Exec(t, `INSERT INTO locked_fams VALUES (1, 'a1', 'b1', 'c1')`)
+			sqlDB.Exec(t, `INSERT INTO locked_fams VALUES (2, 'a2', 'b2', 'c2')`)
+
+			var args []any
+			if _, ok := f.(*webhookFeedFactory); ok {
+				args = append(args, optOutOfMetamorphicEnrichedEnvelope{
+					reason: "metamorphic enriched envelope does not support column families for webhook sinks",
+				})
+			}
+
+			cf := feed(t, f,
+				`CREATE CHANGEFEED FOR TABLE locked_fams FAMILY fam_a, TABLE locked_fams FAMILY fam_b`+
+					` WITH schema_change_policy='backfill'`,
+				args...)
+			defer closeFeed(t, cf)
+
+			// Consume initial scan.
+			assertPayloads(t, cf, []string{
+				`locked_fams.fam_a: [1]->{"after": {"a": "a1", "id": 1}}`,
+				`locked_fams.fam_a: [2]->{"after": {"a": "a2", "id": 2}}`,
+				`locked_fams.fam_b: [1]->{"after": {"b": "b1", "c": "c1"}}`,
+				`locked_fams.fam_b: [2]->{"after": {"b": "b2", "c": "c2"}}`,
+			})
+
+			// Drop a watched column. The declarative schema changer automatically
+			// unsets schema_locked and adds the column mutation atomically. Before
+			// the fix for #149861, this caused the SchemaFeed to miss the drop
+			// event, skipping the backfill entirely.
+			sqlDB.Exec(t, `ALTER TABLE locked_fams DROP COLUMN a`)
+			assertPayloads(t, cf, []string{
+				`locked_fams.fam_a: [1]->{"after": {"id": 1}}`,
+				`locked_fams.fam_a: [2]->{"after": {"id": 2}}`,
+			})
+
+			// Add a column with a default to trigger another backfill.
+			sqlDB.Exec(t, `ALTER TABLE locked_fams ADD COLUMN d STRING DEFAULT 'new'`)
+			assertPayloads(t, cf, []string{
+				`locked_fams.fam_a: [1]->{"after": {"d": "new", "id": 1}}`,
+				`locked_fams.fam_a: [2]->{"after": {"d": "new", "id": 2}}`,
+			})
+
+			// Verify the changefeed still works after schema changes.
+			sqlDB.Exec(t, `INSERT INTO locked_fams VALUES (3, 'b3', 'c3', 'd3')`)
+			assertPayloads(t, cf, []string{
+				`locked_fams.fam_a: [3]->{"after": {"d": "d3", "id": 3}}`,
+				`locked_fams.fam_b: [3]->{"after": {"b": "b3", "c": "c3"}}`,
+			})
+
+			// Drop from the second family.
+			sqlDB.Exec(t, `ALTER TABLE locked_fams DROP COLUMN b`)
+			assertPayloads(t, cf, []string{
+				`locked_fams.fam_b: [1]->{"after": {"c": "c1"}}`,
+				`locked_fams.fam_b: [2]->{"after": {"c": "c2"}}`,
+				`locked_fams.fam_b: [3]->{"after": {"c": "c3"}}`,
+			})
+		}
+
+		runWithAndWithoutRegression141453(t, testFn, func(t *testing.T, testFn cdcTestFn) {
+			cdcTest(t, testFn)
+		})
+	})
+
+	// Subtest 2: No column families with schema_locked.
+	// Exercises the dropVisibleColumnMutationExists code path without
+	// family-specific targets. The bug in #149861 affected this path too
+	// because notDeclarativeOrHasMergedIndex is checked in
+	// dropVisibleColumnMutationExists, which runs before
+	// droppedColumnIsWatched.
+	t.Run("no-families", func(t *testing.T) {
+		testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
+			sqlDB := sqlutils.MakeSQLRunner(s.DB)
+
+			sqlDB.Exec(t, `CREATE TABLE locked_nofam (
+				id INT PRIMARY KEY, a STRING, b STRING
+			) WITH (schema_locked=true)`)
+			sqlDB.Exec(t, `INSERT INTO locked_nofam VALUES (1, 'a1', 'b1')`)
+			sqlDB.Exec(t, `INSERT INTO locked_nofam VALUES (2, 'a2', 'b2')`)
+			sqlDB.Exec(t, `INSERT INTO locked_nofam VALUES (3, 'a3', 'b3')`)
+
+			cf := feed(t, f,
+				`CREATE CHANGEFEED FOR locked_nofam WITH schema_change_policy='backfill'`)
+			defer closeFeed(t, cf)
+
+			// Consume initial scan.
+			assertPayloads(t, cf, []string{
+				`locked_nofam: [1]->{"after": {"a": "a1", "b": "b1", "id": 1}}`,
+				`locked_nofam: [2]->{"after": {"a": "a2", "b": "b2", "id": 2}}`,
+				`locked_nofam: [3]->{"after": {"a": "a3", "b": "b3", "id": 3}}`,
+			})
+
+			// Drop a column on a schema_locked table.
+			sqlDB.Exec(t, `ALTER TABLE locked_nofam DROP COLUMN a`)
+			assertPayloads(t, cf, []string{
+				`locked_nofam: [1]->{"after": {"b": "b1", "id": 1}}`,
+				`locked_nofam: [2]->{"after": {"b": "b2", "id": 2}}`,
+				`locked_nofam: [3]->{"after": {"b": "b3", "id": 3}}`,
+			})
+
+			// Add a column with a default.
+			sqlDB.Exec(t, `ALTER TABLE locked_nofam ADD COLUMN c INT DEFAULT 42`)
+			assertPayloads(t, cf, []string{
+				`locked_nofam: [1]->{"after": {"b": "b1", "c": 42, "id": 1}}`,
+				`locked_nofam: [2]->{"after": {"b": "b2", "c": 42, "id": 2}}`,
+				`locked_nofam: [3]->{"after": {"b": "b3", "c": 42, "id": 3}}`,
+			})
+
+			// Verify new inserts work with updated schema.
+			sqlDB.Exec(t, `INSERT INTO locked_nofam VALUES (4, 'b4', 99)`)
+			assertPayloads(t, cf, []string{
+				`locked_nofam: [4]->{"after": {"b": "b4", "c": 99, "id": 4}}`,
+			})
+		}
+
+		runWithAndWithoutRegression141453(t, testFn, func(t *testing.T, testFn cdcTestFn) {
+			cdcTest(t, testFn)
+		})
+	})
+
+	// Subtest 3: Multiple sequential schema changes on a schema_locked table.
+	// Exercises the SchemaFeed's ability to handle multiple descriptor version
+	// transitions where schema_locked is toggled and re-set by the declarative
+	// schema changer. This can also catch races between the polling goroutine
+	// and pauseOrResumePolling (#148963).
+	t.Run("sequential-changes", func(t *testing.T) {
+		testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
+			sqlDB := sqlutils.MakeSQLRunner(s.DB)
+
+			sqlDB.Exec(t, `CREATE TABLE locked_seq (
+				id INT PRIMARY KEY, a STRING, b INT, c STRING
+			) WITH (schema_locked=true)`)
+			sqlDB.Exec(t, `INSERT INTO locked_seq VALUES (1, 'a1', 10, 'c1')`)
+			sqlDB.Exec(t, `INSERT INTO locked_seq VALUES (2, 'a2', 20, 'c2')`)
+
+			cf := feed(t, f,
+				`CREATE CHANGEFEED FOR locked_seq WITH schema_change_policy='backfill'`)
+			defer closeFeed(t, cf)
+
+			// Consume initial scan.
+			assertPayloads(t, cf, []string{
+				`locked_seq: [1]->{"after": {"a": "a1", "b": 10, "c": "c1", "id": 1}}`,
+				`locked_seq: [2]->{"after": {"a": "a2", "b": 20, "c": "c2", "id": 2}}`,
+			})
+
+			// First schema change: drop column 'a'.
+			sqlDB.Exec(t, `ALTER TABLE locked_seq DROP COLUMN a`)
+			assertPayloads(t, cf, []string{
+				`locked_seq: [1]->{"after": {"b": 10, "c": "c1", "id": 1}}`,
+				`locked_seq: [2]->{"after": {"b": 20, "c": "c2", "id": 2}}`,
+			})
+
+			// DML between schema changes.
+			sqlDB.Exec(t, `INSERT INTO locked_seq VALUES (3, 30, 'c3')`)
+			assertPayloads(t, cf, []string{
+				`locked_seq: [3]->{"after": {"b": 30, "c": "c3", "id": 3}}`,
+			})
+
+			// Second schema change: add column with default.
+			sqlDB.Exec(t, `ALTER TABLE locked_seq ADD COLUMN d BOOL DEFAULT true`)
+			assertPayloads(t, cf, []string{
+				`locked_seq: [1]->{"after": {"b": 10, "c": "c1", "d": true, "id": 1}}`,
+				`locked_seq: [2]->{"after": {"b": 20, "c": "c2", "d": true, "id": 2}}`,
+				`locked_seq: [3]->{"after": {"b": 30, "c": "c3", "d": true, "id": 3}}`,
+			})
+
+			// Third schema change: drop another column.
+			sqlDB.Exec(t, `ALTER TABLE locked_seq DROP COLUMN c`)
+			assertPayloads(t, cf, []string{
+				`locked_seq: [1]->{"after": {"b": 10, "d": true, "id": 1}}`,
+				`locked_seq: [2]->{"after": {"b": 20, "d": true, "id": 2}}`,
+				`locked_seq: [3]->{"after": {"b": 30, "d": true, "id": 3}}`,
+			})
+
+			// Fourth schema change: add NOT NULL column with default.
+			sqlDB.Exec(t, `ALTER TABLE locked_seq ADD COLUMN e INT NOT NULL DEFAULT 0`)
+			assertPayloads(t, cf, []string{
+				`locked_seq: [1]->{"after": {"b": 10, "d": true, "e": 0, "id": 1}}`,
+				`locked_seq: [2]->{"after": {"b": 20, "d": true, "e": 0, "id": 2}}`,
+				`locked_seq: [3]->{"after": {"b": 30, "d": true, "e": 0, "id": 3}}`,
+			})
+
+			// Final insert to verify feed is still operational.
+			sqlDB.Exec(t, `INSERT INTO locked_seq VALUES (4, 40, false, 7)`)
+			assertPayloads(t, cf, []string{
+				`locked_seq: [4]->{"after": {"b": 40, "d": false, "e": 7, "id": 4}}`,
+			})
+		}
+
+		runWithAndWithoutRegression141453(t, testFn, func(t *testing.T, testFn cdcTestFn) {
+			cdcTest(t, testFn)
+		})
+	})
+
+	// Subtest 4: ADD COLUMN with computed STORED expression on a
+	// schema_locked table. Computed stored columns take a different code
+	// path through the declarative schema changer (creating stored
+	// computation targets) and trigger a KV-level backfill.
+	t.Run("computed-stored", func(t *testing.T) {
+		testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
+			sqlDB := sqlutils.MakeSQLRunner(s.DB)
+
+			sqlDB.Exec(t, `CREATE TABLE locked_comp (
+				id INT PRIMARY KEY, a INT, b STRING
+			) WITH (schema_locked=true)`)
+			sqlDB.Exec(t, `INSERT INTO locked_comp VALUES (1, 10, 'x')`)
+			sqlDB.Exec(t, `INSERT INTO locked_comp VALUES (2, 20, 'y')`)
+			sqlDB.Exec(t, `INSERT INTO locked_comp VALUES (3, 30, 'z')`)
+
+			cf := feed(t, f,
+				`CREATE CHANGEFEED FOR locked_comp WITH schema_change_policy='backfill'`)
+			defer closeFeed(t, cf)
+
+			assertPayloads(t, cf, []string{
+				`locked_comp: [1]->{"after": {"a": 10, "b": "x", "id": 1}}`,
+				`locked_comp: [2]->{"after": {"a": 20, "b": "y", "id": 2}}`,
+				`locked_comp: [3]->{"after": {"a": 30, "b": "z", "id": 3}}`,
+			})
+
+			// Add a computed stored column. This triggers a KV-level backfill
+			// because the stored value must be computed for all existing rows.
+			sqlDB.Exec(t, `ALTER TABLE locked_comp ADD COLUMN c INT AS (a * 2) STORED`)
+			assertPayloads(t, cf, []string{
+				`locked_comp: [1]->{"after": {"a": 10, "b": "x", "c": 20, "id": 1}}`,
+				`locked_comp: [2]->{"after": {"a": 20, "b": "y", "c": 40, "id": 2}}`,
+				`locked_comp: [3]->{"after": {"a": 30, "b": "z", "c": 60, "id": 3}}`,
+			})
+
+			// Drop the original column 'b' to verify drop still works after
+			// a computed column addition.
+			sqlDB.Exec(t, `ALTER TABLE locked_comp DROP COLUMN b`)
+			assertPayloads(t, cf, []string{
+				`locked_comp: [1]->{"after": {"a": 10, "c": 20, "id": 1}}`,
+				`locked_comp: [2]->{"after": {"a": 20, "c": 40, "id": 2}}`,
+				`locked_comp: [3]->{"after": {"a": 30, "c": 60, "id": 3}}`,
+			})
+
+			// Verify insert with new schema.
+			sqlDB.Exec(t, `INSERT INTO locked_comp (id, a) VALUES (4, 40)`)
+			assertPayloads(t, cf, []string{
+				`locked_comp: [4]->{"after": {"a": 40, "c": 80, "id": 4}}`,
+			})
+		}
+
+		runWithAndWithoutRegression141453(t, testFn, func(t *testing.T, testFn cdcTestFn) {
+			cdcTest(t, testFn)
+		})
+	})
+
+	// Subtest 5: ALTER PRIMARY KEY on a schema_locked table.
+	// ALTER PRIMARY KEY is classified as tableEventPrimaryKeyChange by the
+	// SchemaFeed. With schema_locked, the declarative schema changer
+	// atomically toggles schema_locked alongside the PK mutation. If the
+	// SchemaFeed misses the event, the changefeed could get stuck or
+	// silently use stale key encoding. This subtest verifies the
+	// changefeed continues operating with the new primary key.
+	t.Run("alter-primary-key", func(t *testing.T) {
+		testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
+			sqlDB := sqlutils.MakeSQLRunner(s.DB)
+
+			sqlDB.Exec(t, `CREATE TABLE locked_pk (
+				a INT PRIMARY KEY, b INT NOT NULL UNIQUE, c STRING
+			) WITH (schema_locked=true)`)
+			sqlDB.Exec(t, `INSERT INTO locked_pk VALUES (1, 100, 'one')`)
+			sqlDB.Exec(t, `INSERT INTO locked_pk VALUES (2, 200, 'two')`)
+
+			cf := feed(t, f,
+				`CREATE CHANGEFEED FOR locked_pk WITH schema_change_policy='backfill'`)
+			defer closeFeed(t, cf)
+
+			// Consume initial scan (keyed by 'a').
+			assertPayloads(t, cf, []string{
+				`locked_pk: [1]->{"after": {"a": 1, "b": 100, "c": "one"}}`,
+				`locked_pk: [2]->{"after": {"a": 2, "b": 200, "c": "two"}}`,
+			})
+
+			// ALTER PRIMARY KEY changes the key column from 'a' to 'b'.
+			waitForSchemaChange(t, sqlDB, `ALTER TABLE locked_pk ALTER PRIMARY KEY USING COLUMNS (b)`)
+
+			// Verify the changefeed still works. New rows should be keyed
+			// by the new primary key column 'b'.
+			sqlDB.Exec(t, `INSERT INTO locked_pk VALUES (3, 300, 'three')`)
+			assertPayloadsStripTs(t, cf, []string{
+				`locked_pk: [300]->{"after": {"a": 3, "b": 300, "c": "three"}}`,
+			})
+
+			// Drop a column after PK change to test combined interaction.
+			sqlDB.Exec(t, `ALTER TABLE locked_pk DROP COLUMN c`)
+			assertPayloads(t, cf, []string{
+				`locked_pk: [100]->{"after": {"a": 1, "b": 100}}`,
+				`locked_pk: [200]->{"after": {"a": 2, "b": 200}}`,
+				`locked_pk: [300]->{"after": {"a": 3, "b": 300}}`,
+			})
+
+			// Final insert to verify feed is still operational.
+			sqlDB.Exec(t, `INSERT INTO locked_pk VALUES (4, 400)`)
+			assertPayloads(t, cf, []string{
+				`locked_pk: [400]->{"after": {"a": 4, "b": 400}}`,
+			})
+		}
+
+		runWithAndWithoutRegression141453(t, testFn, func(t *testing.T, testFn cdcTestFn) {
+			cdcTest(t, testFn)
+		})
+	})
+
+	// Subtest 6: TRUNCATE on a schema_locked table.
+	// TRUNCATE is classified as tableEventTruncate and must cause the
+	// changefeed to error with "was truncated". If the SchemaFeed misses
+	// the truncate event due to the schema_locked frontier advancement
+	// race, the changefeed would silently continue with stale data, which
+	// is worse than crashing.
+	t.Run("truncate", func(t *testing.T) {
+		testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
+			sqlDB := sqlutils.MakeSQLRunner(s.DB)
+
+			sqlDB.Exec(t, `CREATE TABLE locked_trunc (
+				id INT PRIMARY KEY, v STRING
+			) WITH (schema_locked=true)`)
+			sqlDB.Exec(t, `INSERT INTO locked_trunc VALUES (1, 'a')`)
+			sqlDB.Exec(t, `INSERT INTO locked_trunc VALUES (2, 'b')`)
+
+			cf := feed(t, f, `CREATE CHANGEFEED FOR locked_trunc`)
+			defer closeFeed(t, cf)
+
+			assertPayloads(t, cf, []string{
+				`locked_trunc: [1]->{"after": {"id": 1, "v": "a"}}`,
+				`locked_trunc: [2]->{"after": {"id": 2, "v": "b"}}`,
+			})
+
+			sqlDB.Exec(t, `TRUNCATE TABLE locked_trunc`)
+
+			// The changefeed must detect the truncate and return an error.
+			// If schema_locked causes the SchemaFeed to skip the event,
+			// Next() would block indefinitely or return stale data.
+			for {
+				msg, err := cf.Next()
+				if err != nil {
+					require.Regexp(t, `"locked_trunc" was truncated`, err)
+					break
+				}
+				if msg == nil {
+					t.Fatal("expected truncation error but feed ended")
+				}
+				// Keep consuming messages until we hit the error.
+			}
+		}
+
+		cdcTest(t, testFn)
+	})
+
+	// Subtest 7: Interleaved schema changes across multiple watched tables.
+	// pauseOrResumePolling pauses polling only when ALL target tables are
+	// schema_locked. When two schema_locked tables are watched and schema
+	// changes happen on each, the frontier advancement for one table must
+	// not cause events on the other to be missed. This exercises the
+	// multi-table interaction that single-table tests cannot cover.
+	t.Run("multi-table", func(t *testing.T) {
+		testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
+			sqlDB := sqlutils.MakeSQLRunner(s.DB)
+
+			sqlDB.Exec(t, `CREATE TABLE locked_t1 (
+				id INT PRIMARY KEY, a STRING, b INT
+			) WITH (schema_locked=true)`)
+			sqlDB.Exec(t, `CREATE TABLE locked_t2 (
+				id INT PRIMARY KEY, x STRING, y STRING
+			) WITH (schema_locked=true)`)
+
+			sqlDB.Exec(t, `INSERT INTO locked_t1 VALUES (1, 'a1', 10)`)
+			sqlDB.Exec(t, `INSERT INTO locked_t1 VALUES (2, 'a2', 20)`)
+			sqlDB.Exec(t, `INSERT INTO locked_t2 VALUES (1, 'x1', 'y1')`)
+			sqlDB.Exec(t, `INSERT INTO locked_t2 VALUES (2, 'x2', 'y2')`)
+
+			cf := feed(t, f,
+				`CREATE CHANGEFEED FOR locked_t1, locked_t2`+
+					` WITH schema_change_policy='backfill'`)
+			defer closeFeed(t, cf)
+
+			// Consume initial scan for both tables.
+			assertPayloads(t, cf, []string{
+				`locked_t1: [1]->{"after": {"a": "a1", "b": 10, "id": 1}}`,
+				`locked_t1: [2]->{"after": {"a": "a2", "b": 20, "id": 2}}`,
+				`locked_t2: [1]->{"after": {"id": 1, "x": "x1", "y": "y1"}}`,
+				`locked_t2: [2]->{"after": {"id": 2, "x": "x2", "y": "y2"}}`,
+			})
+
+			// Schema change on t1 while t2 remains unchanged.
+			// The declarative schema changer unsets schema_locked on t1,
+			// but t2 remains locked. pauseOrResumePolling must resume
+			// polling because not ALL tables are locked anymore.
+			sqlDB.Exec(t, `ALTER TABLE locked_t1 DROP COLUMN a`)
+			assertPayloads(t, cf, []string{
+				`locked_t1: [1]->{"after": {"b": 10, "id": 1}}`,
+				`locked_t1: [2]->{"after": {"b": 20, "id": 2}}`,
+			})
+
+			// DML on t2 to verify it still works.
+			sqlDB.Exec(t, `INSERT INTO locked_t2 VALUES (3, 'x3', 'y3')`)
+			assertPayloads(t, cf, []string{
+				`locked_t2: [3]->{"after": {"id": 3, "x": "x3", "y": "y3"}}`,
+			})
+
+			// Now schema change on t2 while t1 has already completed its
+			// schema change (schema_locked is re-set by the declarative
+			// schema changer after completion).
+			sqlDB.Exec(t, `ALTER TABLE locked_t2 DROP COLUMN x`)
+			assertPayloads(t, cf, []string{
+				`locked_t2: [1]->{"after": {"id": 1, "y": "y1"}}`,
+				`locked_t2: [2]->{"after": {"id": 2, "y": "y2"}}`,
+				`locked_t2: [3]->{"after": {"id": 3, "y": "y3"}}`,
+			})
+
+			// Schema changes on both tables in quick succession.
+			sqlDB.Exec(t, `ALTER TABLE locked_t1 ADD COLUMN c STRING DEFAULT 'new'`)
+			sqlDB.Exec(t, `ALTER TABLE locked_t2 ADD COLUMN z INT DEFAULT 0`)
+
+			// Backfill rows for both tables.
+			assertPayloads(t, cf, []string{
+				`locked_t1: [1]->{"after": {"b": 10, "c": "new", "id": 1}}`,
+				`locked_t1: [2]->{"after": {"b": 20, "c": "new", "id": 2}}`,
+				`locked_t2: [1]->{"after": {"id": 1, "y": "y1", "z": 0}}`,
+				`locked_t2: [2]->{"after": {"id": 2, "y": "y2", "z": 0}}`,
+				`locked_t2: [3]->{"after": {"id": 3, "y": "y3", "z": 0}}`,
+			})
+
+			// Final inserts to verify both tables still work.
+			sqlDB.Exec(t, `INSERT INTO locked_t1 VALUES (3, 30, 'c3')`)
+			sqlDB.Exec(t, `INSERT INTO locked_t2 VALUES (4, 'y4', 1)`)
+			assertPayloads(t, cf, []string{
+				`locked_t1: [3]->{"after": {"b": 30, "c": "c3", "id": 3}}`,
+				`locked_t2: [4]->{"after": {"id": 4, "y": "y4", "z": 1}}`,
+			})
+		}
+
+		runWithAndWithoutRegression141453(t, testFn, func(t *testing.T, testFn cdcTestFn) {
+			cdcTest(t, testFn)
+		})
+	})
+}
+
 func TestNoStopAfterNonTargetAddColumnWithBackfill(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
