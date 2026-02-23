@@ -1145,6 +1145,7 @@ CREATE TABLE users(id UUID DEFAULT gen_random_uuid() PRIMARY KEY, promo_id INT R
 		r.Exec(t, "CREATE POLICY policy1 ON rls1 USING (u = 'hal')")
 		r.Exec(t, "CREATE USER rls_user")
 		r.Exec(t, "GRANT SYSTEM VIEWCLUSTERSETTING TO rls_user")
+		r.Exec(t, "GRANT SYSTEM VIEWSYSTEMTABLE TO rls_user")
 		r.Exec(t, "ALTER TABLE rls1 OWNER TO rls_user")
 		r.Exec(t, "SET ROLE rls_user")
 		defer r.Exec(t, "SET ROLE root")
@@ -1230,6 +1231,61 @@ CREATE TABLE users(id UUID DEFAULT gen_random_uuid() PRIMARY KEY, promo_id INT R
 				return nil
 			}, false, /* expectErrors */
 			base, plans, "distsql.html vec.txt vec-v.txt stats-defaultdb._schema.3_._op.81_.sql",
+		)
+	})
+
+	t.Run("statement hints", func(t *testing.T) {
+		r.Exec(t, "CREATE TABLE table161829(x INT PRIMARY KEY, y INT, z STRING)")
+		r.Exec(t, "CREATE INDEX xy161829 ON table161829 (x, y)")
+		r.Exec(t, "CREATE INDEX y161829 ON table161829 (y)")
+		r.Exec(t, "CREATE INDEX xz161829 ON table161829 (x, z)")
+		r.Exec(t, `SELECT information_schema.crdb_rewrite_inline_hints('SELECT * FROM table161829 WHERE y = 10', 'SELECT * FROM table161829@primary WHERE y = 10')`)
+		r.Exec(t, `SELECT information_schema.crdb_rewrite_inline_hints('SELECT * FROM table161829 WHERE y = 10', 'SELECT * FROM table161829@xy161829 WHERE y = 10')`)
+		r.Exec(t, `SELECT information_schema.crdb_rewrite_inline_hints('SELECT * FROM table161829 WHERE y = 10', 'SELECT * FROM table161829@y161829 WHERE y = 10')`)
+
+		rows := r.QueryStr(t, "EXPLAIN ANALYZE (DEBUG) SELECT * FROM table161829 WHERE y = 10")
+		checkBundle(
+			t, fmt.Sprint(rows), "table161829", func(name, contents string) error {
+				if name == "schema.sql" {
+					reg := regexp.MustCompile(`crdb_rewrite_inline_hints\(.*\@primary.*\n.*crdb_rewrite_inline_hints.*\@xy161829.*\n.*crdb_rewrite_inline_hints.*\@y161829`)
+					if reg.FindString(contents) == "" {
+						return errors.Errorf("could not find full crdb_rewrite_inline_hints in schema.sql")
+					}
+				}
+				return nil
+			}, false, /* expectErrors */
+			base, plans, "distsql.html vec.txt vec-v.txt stats-defaultdb.public.table161829.sql",
+		)
+
+		// Bundle for statements that share the same fingerprint should all see the same hints.
+		rows = r.QueryStr(t, "EXPLAIN ANALYZE (DEBUG) SELECT * FROM table161829 WHERE y = 100")
+		checkBundle(
+			t, fmt.Sprint(rows), "table161829", func(name, contents string) error {
+				if name == "schema.sql" {
+					reg := regexp.MustCompile(`crdb_rewrite_inline_hints\(.*\@primary.*\n.*crdb_rewrite_inline_hints.*\@xy161829.*\n.*crdb_rewrite_inline_hints.*\@y161829`)
+					if reg.FindString(contents) == "" {
+						return errors.Errorf("could not find full crdb_rewrite_inline_hints in schema.sql")
+					}
+				}
+				return nil
+			}, false, /* expectErrors */
+			base, plans, "distsql.html vec.txt vec-v.txt stats-defaultdb.public.table161829.sql",
+		)
+
+		// Test that the stmt argument must have its single quotes escaped.
+		r.Exec(t, `SELECT information_schema.crdb_rewrite_inline_hints('SELECT * FROM table161829 WHERE z = ''hello''', 'SELECT * FROM table161829@xz161829 WHERE z = ''hello''')`)
+		rows = r.QueryStr(t, "EXPLAIN ANALYZE (DEBUG) SELECT * FROM table161829 WHERE z = 'hello'")
+		checkBundle(
+			t, fmt.Sprint(rows), "table161829", func(name, contents string) error {
+				if name == "schema.sql" {
+					reg := regexp.MustCompile(`crdb_rewrite_inline_hints\(e\'SELECT \* FROM table161829 WHERE z = \\'hello\\'\'`)
+					if reg.FindString(contents) == "" {
+						return errors.Errorf("could not find full crdb_rewrite_inline_hints in schema.sql")
+					}
+				}
+				return nil
+			}, false, /* expectErrors */
+			base, plans, "distsql.html vec.txt vec-v.txt stats-defaultdb.public.table161829.sql",
 		)
 	})
 

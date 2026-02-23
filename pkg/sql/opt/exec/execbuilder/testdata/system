@@ -173,3 +173,52 @@ distribution: local
       table: table_statistics_locks@primary
       spans: [/0/1 - /0/1]
       locking strength: for update
+
+# Query used by the stmt bundle to fetch hints for recreation.
+query T
+EXPLAIN (OPT, VERBOSE) SELECT hint FROM system.statement_hints WHERE fingerprint = 'SELECT * FROM t WHERE x = _' ORDER BY created_at
+----
+distribute
+ ├── columns: hint:4  [hidden: created_at:5]
+ ├── stats: [rows=10]
+ ├── cost: 292.494386
+ ├── cost-flags: unbounded-cardinality
+ ├── ordering: +5
+ ├── distribution: test
+ ├── input distribution:
+ ├── prune: (4,5)
+ └── sort
+      ├── columns: hint:4 created_at:5
+      ├── stats: [rows=10]
+      ├── cost: 92.4743864
+      ├── cost-flags: unbounded-cardinality
+      ├── ordering: +5
+      ├── prune: (4,5)
+      └── project
+           ├── columns: hint:4 created_at:5
+           ├── stats: [rows=10]
+           ├── cost: 91.3900007
+           ├── cost-flags: unbounded-cardinality
+           ├── prune: (4,5)
+           └── select
+                ├── columns: fingerprint:3 hint:4 created_at:5
+                ├── stats: [rows=10, distinct(3)=1, null(3)=0]
+                ├── cost: 91.2700007
+                ├── cost-flags: unbounded-cardinality
+                ├── fd: ()-->(3)
+                ├── index-join statement_hints
+                │    ├── columns: fingerprint:3 hint:4 created_at:5
+                │    ├── stats: [rows=10]
+                │    ├── cost: 91.1400007
+                │    ├── cost-flags: unbounded-cardinality
+                │    ├── interesting orderings: (+1)
+                │    └── scan statement_hints@hash_idx
+                │         ├── columns: row_id:1
+                │         ├── constraint: /2/1: [/6457443302007961978 - /6457443302007961978]
+                │         ├── stats: [rows=10, distinct(2)=1, null(2)=0]
+                │         ├── cost: 28.6200001
+                │         ├── cost-flags: unbounded-cardinality
+                │         ├── key: (1)
+                │         └── interesting orderings: (+1)
+                └── filters
+                     └── fingerprint:3 = 'SELECT * FROM t WHERE x = _' [outer=(3), constraints=(/3: [/'SELECT * FROM t WHERE x = _' - /'SELECT * FROM t WHERE x = _']; tight), fd=()-->(3)]
