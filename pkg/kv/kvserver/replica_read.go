@@ -108,21 +108,37 @@ func (r *Replica) executeReadOnlyBatch(
 		len(intentsToResolveVirtually),
 	)
 	for _, intent := range intentsToResolveVirtually {
-		ir := kvpb.ResolveIntentRequest{
-			RequestHeader:     kvpb.RequestHeaderFromSpan(intent.Span),
-			IntentTxn:         intent.Txn,
-			Status:            intent.Status,
-			IgnoredSeqNums:    intent.IgnoredSeqNums,
-			ClockWhilePending: intent.ClockWhilePending,
+		var (
+			// It's ok to pass an empty header since during intent resolution it's only
+			// used to ensure that this is not a transactional request, and to apply
+			// MaxTargetBytes (which we don't need because the batch is not committed).
+			h kvpb.Header
+			// The reply coming from evaluation is discarded below.
+			reply kvpb.Response
+			req   kvpb.Request
+		)
+		if len(intent.EndKey) > 0 {
+			// Range LockUpdate: resolve all intents for this txn in the span.
+			req = &kvpb.ResolveIntentRangeRequest{
+				RequestHeader:     kvpb.RequestHeaderFromSpan(intent.Span),
+				IntentTxn:         intent.Txn,
+				Status:            intent.Status,
+				IgnoredSeqNums:    intent.IgnoredSeqNums,
+				ClockWhilePending: intent.ClockWhilePending,
+			}
+			reply = &kvpb.ResolveIntentRangeResponse{}
+		} else {
+			req = &kvpb.ResolveIntentRequest{
+				RequestHeader:     kvpb.RequestHeaderFromSpan(intent.Span),
+				IntentTxn:         intent.Txn,
+				Status:            intent.Status,
+				IgnoredSeqNums:    intent.IgnoredSeqNums,
+				ClockWhilePending: intent.ClockWhilePending,
+			}
+			reply = &kvpb.ResolveIntentResponse{}
 		}
-		// The reply coming from evaluation is discarded below.
-		reply := &kvpb.ResolveIntentResponse{}
-		// It's ok to pass an empty header since during intent resolution it's only
-		// used to ensure that this is not a transactional request, and to apply
-		// MaxTargetBytes (which we don't need because the batch is not committed).
-		h := kvpb.Header{}
 		_, err = evaluateCommand(
-			ctx, rw, rec, nil /* ms */, nil /* ss */, h, &ir,
+			ctx, rw, rec, nil /* ms */, nil /* ss */, h, req,
 			reply, g, &st, ui, readWrite, false, /* omitInRangefeeds */
 		)
 		if err != nil {

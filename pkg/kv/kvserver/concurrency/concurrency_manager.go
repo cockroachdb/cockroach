@@ -574,6 +574,12 @@ func (m *managerImpl) HandleLockConflictError(
 	//
 	// Either way, there is no possibility of the request entering an infinite
 	// loop without making progress.
+
+	// If VIR was used, collapse point resolve entries into persistent range
+	// entries before they are cleared by the next ScanAndEnqueue. This prevents
+	// livelock when the lock table evicts entries under memory pressure.
+	g.ltg.PrepareForLockConflictRetry(ctx)
+
 	consultTxnStatusCache :=
 		int64(len(t.Locks)) > DiscoveredLocksThresholdToConsultTxnStatusCache.Get(&m.st.SV)
 	var numAdded int

@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/allocatorimpl"
 	aload "github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/load"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/storepool"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/node_rac2"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
@@ -57,6 +58,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/gossiputil"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
+	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -2278,6 +2280,100 @@ func TestStoreScanIntentsRespectsLimit(t *testing.T) {
 	}()
 
 	wg.Wait()
+}
+
+// TestVirtualIntentResolutionLivelock demonstrates that virtual intent
+// resolution (VIR) can livelock under lock table memory pressure when a reader
+// must discover intents across multiple evaluation rounds (#163924).
+//
+// # Test Setup
+//
+// - VIR is enabled, Low lock table size limit (4), and a low MaxConflictsPerLockConflictError (3) is set.
+// - A writer creates 6 intents.
+// - High-priority reader scans the range.
+//
+// Hazard before the fix:
+//
+//  1. Reader discovers intents 0-2 (truncated at MaxConflicts=3), adds to lock
+//     table, pushes writer, proceeds with VIR.
+//  2. VIR resolves 0-2 on ephemeral batch (discarded). Scan discovers intents
+//     3-5. Added to lock table (now 6 > max 4), evicting intents 0-2.
+//  3. Re-sequence clears toResolve, repopulates from lock table (only 3-5).
+//     VIR resolves 3-5, rediscovers evicted 0-2. Cycle repeats.
+func TestVirtualIntentResolutionLivelock(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	ctx := context.Background()
+
+	var lockConflictCount atomic.Int32
+	var readerTxnID atomic.Value // uuid.UUID
+	readerTxnID.Store(uuid.Nil)
+
+	tc := serverutils.StartCluster(t, 1, base.TestClusterArgs{
+		ServerArgs: base.TestServerArgs{
+			Knobs: base.TestingKnobs{
+				Store: &StoreTestingKnobs{
+					TestingConcurrencyRetryFilter: func(
+						_ context.Context, ba *kvpb.BatchRequest, pErr *kvpb.Error,
+					) {
+						if ba.Txn == nil || ba.Txn.ID != readerTxnID.Load().(uuid.UUID) {
+							return // not our reader
+						}
+						if errors.HasType(pErr.GoError(), (*kvpb.LockConflictError)(nil)) {
+							lockConflictCount.Add(1)
+						}
+					},
+				},
+			},
+		},
+	})
+	defer tc.Stopper().Stop(ctx)
+
+	// Enable VIR, set low lock table size, and low max conflicts per error to
+	// force multi-round intent discovery with frequent lock table eviction.
+	st := tc.Server(0).ClusterSettings()
+	concurrency.VirtualIntentResolution.Override(ctx, &st.SV, true)
+	concurrency.DefaultLockTableSize.Override(ctx, &st.SV, 4)
+	storage.MaxConflictsPerLockConflictError.Override(ctx, &st.SV, 3)
+
+	store, err := tc.Server(0).GetStores().(*Stores).GetStore(tc.Server(0).GetFirstStoreID())
+	require.NoError(t, err)
+
+	// Writer creates 6 intents (more than MaxConflictsPerLockConflictError but
+	// more than the lock table can hold simultaneously).
+	const numIntents = 6
+	writerTxn := newTransaction(
+		"writer", keys.ScratchRangeMin, roachpb.NormalUserPriority, tc.Server(0).Clock(),
+	)
+	for i := 0; i < numIntents; i++ {
+		key := append(keys.ScratchRangeMin.Clone(), []byte(fmt.Sprintf("%04d", i))...)
+		args := putArgs(key, []byte(fmt.Sprintf("value%d", i)))
+		assignSeqNumsForReqs(writerTxn, &args)
+		_, pErr := kv.SendWrappedWith(ctx, store.TestSender(), kvpb.Header{Txn: writerTxn}, &args)
+		require.Nil(t, pErr)
+	}
+
+	// High-priority scan to push the writer.
+	startKey := keys.ScratchRangeMin
+	endKey := keys.ScratchRangeMax
+
+	readerTxn := newTransaction(
+		"reader", startKey, roachpb.MaxUserPriority, tc.Server(0).Clock(),
+	)
+	readerTxnID.Store(readerTxn.ID)
+
+	readCtx, cancel := context.WithTimeout(ctx, 15*time.Second)
+	defer cancel()
+	g := ctxgroup.WithContext(readCtx)
+	g.GoCtx(func(ctx context.Context) error {
+		_, pErr := kv.SendWrappedWith(ctx, store.TestSender(), kvpb.Header{
+			Txn: readerTxn,
+		}, scanArgs(startKey, endKey))
+		return pErr.GoError()
+	})
+	require.NoError(t, g.Wait(), "reader failed (%d lock conflicts observed)", lockConflictCount.Load())
+	count := lockConflictCount.Load()
+	t.Logf("reader completed with %d lock conflict retries", count)
 }
 
 // TestStoreScanInconsistentResolvesIntents lays down 10 intents,

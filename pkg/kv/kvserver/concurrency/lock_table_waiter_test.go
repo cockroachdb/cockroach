@@ -89,6 +89,7 @@ func (g *mockLockTableGuard) VirtuallyResolvesIntents() bool {
 func (g *mockLockTableGuard) CheckOptimisticNoConflicts(*lockspanset.LockSpanSet) (ok bool) {
 	return true
 }
+func (g *mockLockTableGuard) PrepareForLockConflictRetry(context.Context) {}
 func (g *mockLockTableGuard) IsKeyLockedByConflictingTxn(
 	context.Context, roachpb.Key, lock.Strength,
 ) (bool, *enginepb.TxnMeta, error) {

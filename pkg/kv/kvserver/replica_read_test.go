@@ -68,10 +68,11 @@ func TestVirtualizedIntentResolution(t *testing.T) {
 		error string
 	}
 	type toResolve struct {
-		txnStatus  roachpb.TransactionStatus
-		txnWriteTs hlc.Timestamp
-		obsTs      hlc.Timestamp
-		obsNode    int
+		txnStatus    roachpb.TransactionStatus
+		txnWriteTs   hlc.Timestamp
+		obsTs        hlc.Timestamp
+		obsNode      int
+		rangeResolve bool // use ResolveIntentRangeRequest instead of ResolveIntentRequest
 	}
 	testCases := []struct {
 		readTs    hlc.Timestamp
@@ -114,6 +115,11 @@ func TestVirtualizedIntentResolution(t *testing.T) {
 		{readTs: ts300, readGUL: ts600, toResolve: &toResolve{txnStatus: roachpb.PENDING, txnWriteTs: ts500, obsTs: ts400, obsNode: 1}, exp: res{value: "original"}},
 		// A clock observation from a different node doesn't help.
 		{readTs: ts300, readGUL: ts600, toResolve: &toResolve{txnStatus: roachpb.PENDING, txnWriteTs: ts500, obsTs: ts400, obsNode: 2}, exp: res{error: "uncertainty interval"}},
+		// Range resolution: same semantics as point resolution but uses
+		// ResolveIntentRangeRequest under the hood.
+		{readTs: ts300, toResolve: &toResolve{txnStatus: roachpb.PENDING, txnWriteTs: ts400, rangeResolve: true}, exp: res{value: "original"}},
+		{readTs: ts400, toResolve: &toResolve{txnStatus: roachpb.COMMITTED, txnWriteTs: ts400, rangeResolve: true}, exp: res{value: "intent"}},
+		{readTs: ts400, toResolve: &toResolve{txnStatus: roachpb.ABORTED, txnWriteTs: ts400, rangeResolve: true}, exp: res{value: "original"}},
 	}
 
 	for _, c := range testCases {
@@ -122,7 +128,13 @@ func TestVirtualizedIntentResolution(t *testing.T) {
 			writeTxn.TxnMeta.WriteTimestamp = c.toResolve.txnWriteTs
 			status := c.toResolve.txnStatus
 			obs := roachpb.ObservedTimestamp{Timestamp: hlc.ClockTimestamp(c.toResolve.obsTs), NodeID: roachpb.NodeID(c.toResolve.obsNode)}
-			intents := []roachpb.LockUpdate{{Span: roachpb.Span{Key: k}, Status: status, Txn: writeTxn.TxnMeta, ClockWhilePending: obs}}
+			var span roachpb.Span
+			if c.toResolve.rangeResolve {
+				span = roachpb.Span{Key: k, EndKey: k.Next()}
+			} else {
+				span = roachpb.Span{Key: k}
+			}
+			intents := []roachpb.LockUpdate{{Span: span, Status: status, Txn: writeTxn.TxnMeta, ClockWhilePending: obs}}
 			intentsToResolve.Store(intents)
 		}
 		// Construct the read-only request.

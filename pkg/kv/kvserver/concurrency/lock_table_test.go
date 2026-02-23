@@ -2204,6 +2204,184 @@ func TestKeyLocksSafeFormatWaitQueue(t *testing.T) {
 		redact.Sprint(kl).Redact())
 }
 
+// TestPrepareForLockConflictRetry exercises the guard's collapse and VIR
+// disable behavior. Point entries in toResolve are collapsed into range entries
+// in toResolveRange on each lock conflict retry. When the number of distinct
+// txns in toResolveRange exceeds the configured threshold, VIR is disabled
+// stickily for the guard's lifetime.
+func TestPrepareForLockConflictRetry(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	ctx := context.Background()
+
+	makeTxnMeta := func(name string) enginepb.TxnMeta {
+		return enginepb.TxnMeta{
+			ID:             uuid.MakeV4(),
+			WriteTimestamp: hlc.Timestamp{WallTime: 10},
+			Key:            roachpb.Key(name),
+		}
+	}
+	makeLockUpdate := func(txn enginepb.TxnMeta, key roachpb.Key) roachpb.LockUpdate {
+		return roachpb.LockUpdate{
+			Span:   roachpb.Span{Key: key},
+			Txn:    txn,
+			Status: roachpb.PENDING,
+		}
+	}
+	txn := makeTxnMeta("txn1")
+
+	t.Run("noop when VIR disabled", func(t *testing.T) {
+		g := &lockTableGuardImpl{
+			virtuallyResolveIntents: false,
+			maxToResolveRangeTxns:   2,
+			toResolve: []roachpb.LockUpdate{
+				makeLockUpdate(txn, roachpb.Key("a")),
+			},
+		}
+		g.PrepareForLockConflictRetry(ctx)
+		// toResolve should be untouched since VIR is disabled.
+		require.Len(t, g.toResolve, 1)
+		require.Nil(t, g.toResolveRange)
+	})
+
+	t.Run("noop when toResolve is empty", func(t *testing.T) {
+		g := &lockTableGuardImpl{
+			virtuallyResolveIntents: true,
+			maxToResolveRangeTxns:   2,
+		}
+		g.PrepareForLockConflictRetry(ctx)
+		require.Nil(t, g.toResolveRange)
+	})
+
+	t.Run("collapse single txn", func(t *testing.T) {
+		g := &lockTableGuardImpl{
+			virtuallyResolveIntents: true,
+			maxToResolveRangeTxns:   10,
+			toResolve: []roachpb.LockUpdate{
+				makeLockUpdate(txn, roachpb.Key("b")),
+				makeLockUpdate(txn, roachpb.Key("d")),
+				makeLockUpdate(txn, roachpb.Key("a")),
+			},
+		}
+		g.PrepareForLockConflictRetry(ctx)
+		require.Empty(t, g.toResolve)
+		require.Len(t, g.toResolveRange, 1)
+		// Range should span [a, d.Next()).
+		rangeUp := g.toResolveRange[txn.ID]
+		require.Equal(t, roachpb.Key("a"), rangeUp.Key)
+		require.Equal(t, roachpb.Key("d").Next(), rangeUp.EndKey)
+		require.True(t, g.virtuallyResolveIntents)
+	})
+
+	t.Run("extend existing range", func(t *testing.T) {
+		g := &lockTableGuardImpl{
+			virtuallyResolveIntents: true,
+			maxToResolveRangeTxns:   10,
+			toResolve: []roachpb.LockUpdate{
+				makeLockUpdate(txn, roachpb.Key("b")),
+				makeLockUpdate(txn, roachpb.Key("c")),
+			},
+		}
+		// First round: collapse "b" and "c".
+		g.PrepareForLockConflictRetry(ctx)
+		require.Empty(t, g.toResolve)
+		require.Equal(t, roachpb.Key("b"), g.toResolveRange[txn.ID].Key)
+		require.Equal(t, roachpb.Key("c").Next(), g.toResolveRange[txn.ID].EndKey)
+
+		// Second round: extend left with "a" and right with "e".
+		g.toResolve = append(g.toResolve,
+			makeLockUpdate(txn, roachpb.Key("a")),
+			makeLockUpdate(txn, roachpb.Key("e")),
+		)
+		g.PrepareForLockConflictRetry(ctx)
+		require.Len(t, g.toResolveRange, 1)
+		rangeUp := g.toResolveRange[txn.ID]
+		require.Equal(t, roachpb.Key("a"), rangeUp.Key)
+		require.Equal(t, roachpb.Key("e").Next(), rangeUp.EndKey)
+	})
+
+	t.Run("covered keys skipped", func(t *testing.T) {
+		g := &lockTableGuardImpl{
+			virtuallyResolveIntents: true,
+			maxToResolveRangeTxns:   10,
+			toResolve: []roachpb.LockUpdate{
+				makeLockUpdate(txn, roachpb.Key("a")),
+				makeLockUpdate(txn, roachpb.Key("c")),
+			},
+		}
+		g.PrepareForLockConflictRetry(ctx)
+		// "b" is inside the range [a, c.Next()) and should be covered.
+		require.True(t, g.keyAlreadyCoveredByRangeResolve(txn.ID, roachpb.Key("b")))
+		// "d" is outside.
+		require.False(t, g.keyAlreadyCoveredByRangeResolve(txn.ID, roachpb.Key("d")))
+		// Unknown txn is not covered.
+		require.False(t, g.keyAlreadyCoveredByRangeResolve(uuid.MakeV4(), roachpb.Key("b")))
+	})
+
+	t.Run("VIR disabled when threshold exceeded", func(t *testing.T) {
+		g := &lockTableGuardImpl{
+			virtuallyResolveIntents: true,
+			maxToResolveRangeTxns:   2,
+			toResolve: []roachpb.LockUpdate{
+				makeLockUpdate(txn, roachpb.Key("a")),
+				makeLockUpdate(makeTxnMeta("txn2"), roachpb.Key("b")),
+				makeLockUpdate(makeTxnMeta("txn3"), roachpb.Key("c")),
+			},
+		}
+		g.PrepareForLockConflictRetry(ctx)
+		require.False(t, g.virtuallyResolveIntents)
+		require.Nil(t, g.toResolveRange)
+		require.Empty(t, g.toResolve)
+	})
+
+	t.Run("below threshold no disable", func(t *testing.T) {
+		g := &lockTableGuardImpl{
+			virtuallyResolveIntents: true,
+			maxToResolveRangeTxns:   3,
+			toResolve: []roachpb.LockUpdate{
+				makeLockUpdate(txn, roachpb.Key("a")),
+				makeLockUpdate(makeTxnMeta("txn2"), roachpb.Key("b")),
+				makeLockUpdate(makeTxnMeta("txn3"), roachpb.Key("c")),
+			},
+		}
+		// 3 txns at threshold of 3 — should not disable.
+		g.PrepareForLockConflictRetry(ctx)
+		require.True(t, g.virtuallyResolveIntents)
+		require.Len(t, g.toResolveRange, 3)
+	})
+
+	t.Run("IntentsToResolveVirtually combines point and range", func(t *testing.T) {
+		txn2 := makeTxnMeta("txn2")
+		g := &lockTableGuardImpl{
+			virtuallyResolveIntents: true,
+			maxToResolveRangeTxns:   10,
+			toResolve: []roachpb.LockUpdate{
+				makeLockUpdate(txn, roachpb.Key("a")),
+			},
+		}
+		// Collapse txn into toResolveRange.
+		g.PrepareForLockConflictRetry(ctx)
+		// Add a point entry for txn2 (not yet collapsed).
+		g.toResolve = append(g.toResolve, makeLockUpdate(txn2, roachpb.Key("x")))
+
+		combined := g.IntentsToResolveVirtually()
+		require.Len(t, combined, 2)
+		// One point (txn2) and one range (txn).
+		var hasPoint, hasRange bool
+		for _, up := range combined {
+			if len(up.EndKey) > 0 {
+				hasRange = true
+				require.Equal(t, txn.ID, up.Txn.ID)
+			} else {
+				hasPoint = true
+				require.Equal(t, txn2.ID, up.Txn.ID)
+			}
+		}
+		require.True(t, hasPoint)
+		require.True(t, hasRange)
+	})
+}
+
 // TestElideWaitingStateUpdatesConsidersAllFields ensures all fields in the
 // waitingState struct have been considered for inclusion/non-inclusion in the
 // logic of canElideWaitingStateUpdate. The test doesn't check if the

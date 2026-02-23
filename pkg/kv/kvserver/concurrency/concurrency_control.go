@@ -838,6 +838,11 @@ type lockTableGuard interface {
 	// virtually during evaluation rather than physically before re-scanning.
 	VirtuallyResolvesIntents() bool
 
+	// PrepareForLockConflictRetry is called when handling a LockConflictError
+	// after an evaluation. If VIR is in use, it collapses the guard's point
+	// resolve entries into range entries that persist across re-sequencing.
+	PrepareForLockConflictRetry(context.Context)
+
 	// CheckOptimisticNoConflicts uses the LockSpanSet representing the spans that
 	// were actually read, to check for conflicting locks, after an optimistic
 	// evaluation. It returns true if there were no conflicts. See
