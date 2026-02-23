@@ -329,6 +329,7 @@ func (p *pendingLeaseRequest) InitOrJoinRequest(
 	status kvserverpb.LeaseStatus,
 	startKey roachpb.Key,
 	bypassSafetyChecks bool,
+	targetHasSendQueue bool,
 	limiter *quotapool.IntPool,
 ) *leaseRequestHandle {
 	if nextLease, ok := p.RequestPending(); ok {
@@ -388,17 +389,12 @@ func (p *pendingLeaseRequest) InitOrJoinRequest(
 		BypassSafetyChecks:    bypassSafetyChecks,
 		DesiredLeaseType:      p.repl.desiredLeaseType(p.repl.descRLocked()),
 	}
-	// For lease transfers, check whether the target has a send queue. This is
-	// a best-effort early check that avoids the more disruptive rejection after
-	// lease revocation in the proposal buffer. When stats are unavailable, we
-	// leave TargetHasSendQueue=false to conservatively allow the transfer.
-	if in.Transfer() && !bypassSafetyChecks {
-		var stats rac2.RangeSendStreamStats
-		p.repl.SendStreamStats(&stats)
-		if replStats, ok := stats.ReplicaSendStreamStats(nextLeaseHolder.ReplicaID); ok {
-			in.TargetHasSendQueue = !replStats.IsStateReplicate || replStats.HasSendQueue
-		}
-	}
+	// For lease transfers, use the pre-fetched send queue status. The caller
+	// must query SendStreamStats before acquiring repl.mu, because
+	// SendStreamStats acquires rcReferenceUpdateMu which is ordered before
+	// repl.mu. When stats are unavailable, the caller passes false to
+	// conservatively allow the transfer.
+	in.TargetHasSendQueue = targetHasSendQueue
 	out, err := leases.VerifyAndBuild(ctx, st, nl, in)
 	if err != nil {
 		if in.Transfer() {
@@ -916,7 +912,7 @@ func (r *Replica) requestLeaseLocked(
 	}
 	return r.mu.pendingLeaseRequest.InitOrJoinRequest(
 		ctx, repDesc, status, r.shMu.state.Desc.StartKey.AsRawKey(),
-		false /* bypassSafetyChecks */, limiter)
+		false /* bypassSafetyChecks */, false /* targetHasSendQueue */, limiter)
 }
 
 // AdminTransferLease transfers the LeaderLease to another replica. Only the
@@ -954,6 +950,16 @@ func (r *Replica) AdminTransferLease(
 	// transfer (if it was successfully initiated).
 	var nextLeaseHolder roachpb.ReplicaDescriptor
 	initTransferHelper := func() (extension, transfer *leaseRequestHandle, err error) {
+		// Query send stream stats before acquiring repl.mu. SendStreamStats
+		// acquires rcReferenceUpdateMu which is ordered before repl.mu, so we
+		// must not call it while holding repl.mu. We pre-fetch the full range
+		// stats here, then look up the target's per-replica stats inside the
+		// lock after resolving the target's ReplicaID.
+		var sendStreamStats rac2.RangeSendStreamStats
+		if !bypassSafetyChecks {
+			r.SendStreamStats(&sendStreamStats)
+		}
+
 		r.mu.Lock()
 		defer r.mu.Unlock()
 
@@ -991,8 +997,21 @@ func (r *Replica) AdminTransferLease(
 				"another transfer to a different store is in progress")
 		}
 
+		// Check whether the target has a send queue using the pre-fetched stats.
+		// Reading from the RangeSendStreamStats struct is a plain data access
+		// with no lock dependencies.
+		var targetHasSendQueue bool
+		if !bypassSafetyChecks {
+			if replStats, ok := sendStreamStats.ReplicaSendStreamStats(
+				nextLeaseHolder.ReplicaID,
+			); ok {
+				targetHasSendQueue = !replStats.IsStateReplicate || replStats.HasSendQueue
+			}
+		}
+
 		transfer = r.mu.pendingLeaseRequest.InitOrJoinRequest(ctx, nextLeaseHolder, status,
-			desc.StartKey.AsRawKey(), bypassSafetyChecks, nil /* limiter */)
+			desc.StartKey.AsRawKey(), bypassSafetyChecks, targetHasSendQueue,
+			nil /* limiter */)
 		return nil, transfer, nil
 	}
 
