@@ -9,6 +9,7 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/mmaprototype"
+	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
@@ -37,6 +38,29 @@ type storeCPURateCapacityInput struct {
 	sqlDistCPUNanoPerSec float64
 	// numStores is the number of stores on the node.
 	numStores int32
+}
+
+// assertValid asserts that the input is valid.
+func (in *storeCPURateCapacityInput) assertValid() {
+	// TODO(wenyihu6): should we always assert instead?
+	if !buildutil.CrdbTestBuild {
+		return
+	}
+	if in.numStores <= 0 || in.nodeCPURateCapacity <= 0 {
+		log.KvDistribution.Fatalf(context.Background(), "numStores and nodeCPURateCapacity must be > 0")
+	}
+	if in.storesCPURate < 0 {
+		log.KvDistribution.Fatalf(context.Background(), "storesCPURate must be > 0")
+	}
+	if in.nodeCPURateUsage < 0 {
+		log.KvDistribution.Fatalf(context.Background(), "nodeCPURateUsage must be > 0")
+	}
+	if in.sqlGatewayCPUNanoPerSec < 0 {
+		log.KvDistribution.Fatalf(context.Background(), "sqlGatewayCPUNanoPerSec must be >= 0")
+	}
+	if in.sqlDistCPUNanoPerSec < 0 {
+		log.KvDistribution.Fatalf(context.Background(), "sqlDistCPUNanoPerSec must be >= 0")
+	}
 }
 
 // computeStoreByteSizeCapacity computes the byte size (disk) capacity for a
@@ -203,9 +227,7 @@ func computeCPUCapacityWithCap(in storeCPURateCapacityInput) (capacity float64) 
 func computeStoreCPURateCapacityWithSQL(
 	in storeCPURateCapacityInput,
 ) (capacity float64) {
-	if in.numStores <= 0 || in.nodeCPURateCapacity <= 0 {
-		log.KvDistribution.Fatalf(context.Background(), "numStores and nodeCPURateCapacity must be > 0")
-	}
+	in.assertValid()
 
 	// Handle edge cases where we can't compute the model.
 	if in.storesCPURate <= 0 {

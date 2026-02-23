@@ -6,10 +6,7 @@
 package mmaintegration
 
 import (
-	"context"
-
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/mmaprototype"
-	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
 // computeStoreCPURateCapacityNaive is the original (naive) CPU capacity model,
@@ -92,9 +89,7 @@ import (
 //
 // Panics if numStores <= 0 or nodeCPURateCapacity <= 0.
 func computeStoreCPURateCapacityNaive(in storeCPURateCapacityInput) mmaprototype.LoadValue {
-	if in.numStores <= 0 || in.nodeCPURateCapacity <= 0 {
-		log.KvDistribution.Fatalf(context.Background(), "numStores and nodeCPURateCapacity must be > 0")
-	}
+	in.assertValid()
 	cpuUtil := in.nodeCPURateUsage / in.nodeCPURateCapacity
 	// cpuUtil can be zero or close to zero.
 	almostZeroUtil := cpuUtil < 0.01
