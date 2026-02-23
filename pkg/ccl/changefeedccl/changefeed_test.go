@@ -12175,6 +12175,15 @@ func TestCDCQuerySelectSingleRow(t *testing.T) {
 		case <-time.After(30 * time.Second):
 			t.Fatal("timed out")
 		case <-done:
+			// Wait for the job to complete before returning, avoiding a race
+			// where closeFeed tries to cancel the job before it can mark itself
+			// as succeeded. Only applicable to enterprise feeds that use the job
+			// system.
+			if enterpriseFeed, ok := foo.(cdctest.EnterpriseTestFeed); ok {
+				require.NoError(t, enterpriseFeed.WaitForState(func(s jobs.State) bool {
+					return s == jobs.StateSucceeded
+				}))
+			}
 			return
 		}
 	}
