@@ -105,3 +105,22 @@ var ParseQualifiedTableName = func(sql string) (*tree.TableName, error) {
 var PLpgSQLParse = func(sql string) (statements.PLpgStatement, error) {
 	return statements.PLpgStatement{}, errors.AssertionFailedf("sql.DoParserInjection hasn't been called")
 }
+
+// FingerprintStatement parses a SQL string and converts it to a statement
+// fingerprint. If the input is already a fingerprint, it is returned as-is.
+// The optional extraFlags are OR'd into the default FmtHideConstants flags used
+// for fingerprinting.
+func FingerprintStatement(sql string, extraFlags ...tree.FmtFlags) (string, error) {
+	stmts, err := Parse(sql)
+	if err != nil {
+		return "", pgerror.Wrapf(
+			err, pgcode.InvalidParameterValue, "could not parse statement",
+		)
+	}
+	if len(stmts) != 1 {
+		return "", pgerror.Newf(
+			pgcode.InvalidParameterValue, "could not parse as a single SQL statement",
+		)
+	}
+	return tree.FormatStatementHideConstants(stmts[0].AST, extraFlags...), nil
+}
