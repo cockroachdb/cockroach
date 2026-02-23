@@ -296,8 +296,21 @@ func (r *RebalanceContext) logRemainingHotRanges(ctx context.Context) {
 func (sr *StoreRebalancer) Start(ctx context.Context, stopper *stop.Stopper) {
 	ctx = sr.AnnotateCtx(ctx)
 
-	// Start a goroutine that watches and proactively renews certain
-	// expiration-based leases.
+	_ = stopper.RunAsyncTask(ctx, "store-rebalancer-ctx-depth", func(ctx context.Context) {
+		for i := 0; i < 250_000; i++ {
+			sr.AddLogTag("obj", i)
+			ctx = sr.AnnotateCtx(ctx)
+		}
+		for {
+			sr.AddLogTag("obj", "test")
+			ctx = sr.AnnotateCtx(ctx)
+
+			_, cancel := context.WithTimeout(ctx, time.Second) // nolint:context
+			cancel()
+			time.Sleep(10 * time.Millisecond)
+		}
+	})
+
 	_ = stopper.RunAsyncTask(ctx, "store-rebalancer", func(ctx context.Context) {
 		var timer timeutil.Timer
 		defer timer.Stop()
