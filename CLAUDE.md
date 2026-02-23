@@ -861,3 +861,244 @@ Use the `commit-helper` skill (invoked via `/commit-helper`) when creating commi
 * Focus on accuracy and efficiency.
 * Challenge my assumptions when needed.
 * Prioritize quality information and directness.
+
+## drtprod Package (`pkg/cmd/drtprod`)
+
+**drtprod** (DRT Prod) is a CLI tool for managing **DRT (Disaster Recovery Testing)** clusters using roachprod. It provides a declarative, YAML-based approach to creating, destroying, controlling, and configuring CockroachDB clusters for reliability and disaster recovery testing.
+
+### Package Structure
+
+```
+pkg/cmd/drtprod/
+├── main.go                          # Entry point
+├── README.md                        # Brief documentation
+├── cli/                             # CLI implementation
+│   ├── handlers.go                  # Environment setup and initialization
+│   ├── registry.go                  # Command registration
+│   └── commands/                    # Command implementations
+│       ├── rootcmd.go               # Root command with DataDog integration
+│       ├── yamlprocessor.go         # YAML-based deployment orchestration (core)
+│       ├── yamlprocessor_test.go    # Comprehensive unit tests
+│       └── slack.go                 # Slack notifications
+├── helpers/                         # Utility functions
+│   └── utils.go                     # Command execution with prefixed output
+├── configs/                         # YAML configuration files
+│   ├── drt_test.yaml                # Test deployment example
+│   ├── drt_scale.yaml               # 150-node scale test cluster
+│   ├── drt_scale_300.yaml           # 300-node cluster
+│   ├── drt_chaos.yaml               # Chaos testing configuration
+│   ├── drt_multi_cloud.yaml         # Multi-cloud deployment
+│   ├── drt_pua_*.yaml               # Production Under Attack configs
+│   ├── drt_remote.yaml              # Remote monitor VM config
+│   ├── *_destroy.yaml               # Cleanup/teardown configs
+│   └── archived/                    # Historical configurations
+└── scripts/                         # Shell scripts for cluster operations
+    ├── tpcc_init.sh                 # TPC-C workload initialization
+    ├── generate_tpcc_run.sh         # TPC-C run script generator
+    ├── generate_kv_run.sh           # KV workload generator
+    ├── generate_ycsb_run.sh         # YCSB workload generator
+    ├── setup_datadog_cluster        # DataDog monitoring setup
+    ├── mixed_version.sh             # Mixed version upgrade testing
+    └── k8s/                         # Kubernetes templates
+```
+
+### Environment Setup (`cli/handlers.go`)
+
+Sets DRT-specific defaults if not already configured:
+
+| Environment Variable | Default Value |
+|---------------------|---------------|
+| `ROACHPROD_DNS` | `drt.crdb.io` |
+| `ROACHPROD_GCE_DNS_DOMAIN` | `drt.crdb.io` |
+| `ROACHPROD_GCE_DNS_ZONE` | `drt` |
+| `ROACHPROD_GCE_DEFAULT_PROJECT` | `cockroach-drt` |
+| `ROACHPROD_GCE_DEFAULT_SERVICE_ACCOUNT` | `622274581499-compute@developer.gserviceaccount.com` |
+| `DD_API_KEY` | Fetched from GCP secrets (cockroach-drt/datadog-api-key) |
+
+### YAML Configuration Schema
+
+```yaml
+environment:                          # Environment variables to set
+  KEY: value
+
+dependent_file_locations:             # Files/scripts needed for deployment
+  - path/to/script.sh
+
+targets:                              # Deployment targets
+  - target_name: cluster_name
+    dependent_targets:                # Dependencies (must complete first)
+      - other_target
+    ignore_dependent_failure: bool    # Continue even if dependencies fail
+    notify_progress: bool             # Send Slack notifications
+    steps:                            # Operations to execute
+      - command: roachprod_command    # OR script: path/to/script.sh
+        args: [args]
+        flags:
+          key: value
+        continue_on_failure: bool     # Don't stop on failure
+        wait_before: seconds          # Pre-execution delay
+        wait_after: seconds           # Post-execution delay
+        skip_notification: bool       # Skip Slack for this step
+        on_rollback:                  # Cleanup on failure
+          - command: cleanup
+```
+
+### Key Data Structures (`cli/commands/yamlprocessor.go`)
+
+| Type | Purpose |
+|------|---------|
+| `yamlConfig` | Root configuration with environment, targets, and dependencies |
+| `target` | Deployment target with steps and dependency info |
+| `step` | Individual operation (command or script) |
+| `command` | Simplified representation for execution |
+| `targetStatusRegistry` | Thread-safe registry tracking target success/failure |
+| `executeCmdOptions` | CLI flags: displayOnly, yamlFileLocation, remoteConfigYaml, targets |
+
+### Command-Line Interface
+
+**Execute Command:**
+```bash
+drtprod execute <yaml_file> [flags]
+
+Flags:
+  -d, --display-only          Preview commands without executing
+  -t, --targets strings       Execute only specific targets
+  -r, --remote-config-yaml    Deploy on remote monitor VM
+```
+
+**Pass-Through Commands** (any command not explicitly defined passes to roachprod):
+```bash
+drtprod create my-cluster --nodes=10    # -> roachprod create ...
+drtprod destroy my-cluster              # -> roachprod destroy ...
+drtprod ssh my-cluster                  # -> roachprod ssh ...
+```
+
+### Execution Flow
+
+1. **Parse YAML**: `yaml.UnmarshalStrict` with strict validation
+2. **Check Dependencies**: Verify all referenced files exist
+3. **Set Environment**: Export variables from YAML
+4. **Build Commands**: Convert steps to executable commands with env expansion (`os.ExpandEnv`)
+5. **Register Wait Groups**: Create synchronization primitives for dependencies
+6. **Execute Targets**: Run targets concurrently with dependency ordering using `errgroup`
+7. **Handle Rollbacks**: On failure, execute rollback commands in reverse order
+
+### Dependency Management
+
+Targets can depend on other targets:
+- Uses `sync.WaitGroup` per target for synchronization
+- Dependent targets wait until dependencies complete
+- `ignore_dependent_failure` allows continuation despite dependency failures
+- Parallel execution of independent targets via `errgroup.Group`
+
+### Remote Execution
+
+For long-running deployments, execution can be delegated to a remote monitor VM:
+
+1. Create a monitor VM using `drt_remote.yaml` configuration
+2. Upload all dependencies (YAML, scripts, drtprod binary) via `roachprod.Put()`
+3. Start execution via `systemd-run` on the remote VM
+4. Local process completes immediately after setup
+
+```bash
+drtprod execute drt_scale.yaml -r pkg/cmd/drtprod/configs/drt_remote.yaml
+```
+
+### Integration with roachprod
+
+drtprod is a wrapper around roachprod that adds:
+- **DRT-specific defaults**: GCE project, DNS, service accounts
+- **Declarative configuration**: YAML-based cluster definitions
+- **Dependency management**: Target ordering and parallelism
+- **Audit logging**: DataDog event tracking (via `rootcmd.go`)
+- **Notifications**: Slack integration (via `slack.go`)
+- **Rollback support**: Automatic cleanup on failures
+- **Remote execution**: Long-running deployments on monitor VMs
+
+Key roachprod functions used:
+- `roachprod.Run()` - Execute commands on cluster nodes
+- `roachprod.Put()` - Upload files to cluster nodes
+
+### Slack Integration (`cli/commands/slack.go`)
+
+```go
+type Notifier interface {
+    SendNotification(targetName string, message string) error
+}
+```
+
+Features:
+- Thread-based messaging (all messages for a target in one thread)
+- Status notifications: Starting, Completed, Failed
+- Environment variables: `SLACK_BOT_TOKEN`, `SLACK_CHANNEL`
+
+### DataDog Integration (`cli/commands/rootcmd.go`)
+
+Every command execution is logged to DataDog for audit trail:
+- Events include: command start, command finish, timing, and dashboard links
+- Tags: `env:development`, `cluster:<name>`, `team:drt`, `service:drt-cockroachdb`
+
+### Available Configurations
+
+| Config File | Purpose | Nodes |
+|-------------|---------|-------|
+| `drt_test.yaml` | Test cluster example | 3 + 1 workload |
+| `drt_scale.yaml` | Scale testing | 150 + 9 workload |
+| `drt_scale_300.yaml` | Large scale testing | 300 nodes |
+| `drt_chaos.yaml` | Chaos/failure testing | Variable |
+| `drt_multi_cloud.yaml` | Multi-cloud deployment | Variable |
+| `drt_pua_*.yaml` | Production Under Attack | Variable |
+| `drt_remote.yaml` | Monitor VM for remote execution | 1 |
+| `*_destroy.yaml` | Cleanup configurations | N/A |
+
+### Typical Workflow
+
+1. **Build binaries** (cross-compiled):
+   ```bash
+   ./dev build drtprod --cross
+   ./dev build roachprod --cross
+   ```
+
+2. **Preview deployment**:
+   ```bash
+   drtprod execute configs/drt_scale.yaml --display-only
+   ```
+
+3. **Execute deployment**:
+   ```bash
+   drtprod execute configs/drt_scale.yaml
+   ```
+
+4. **Execute specific targets**:
+   ```bash
+   drtprod execute configs/drt_scale.yaml -t "post_tasks"
+   ```
+
+5. **Remote (long-running) deployment**:
+   ```bash
+   drtprod execute configs/drt_scale.yaml -r configs/drt_remote.yaml
+   ```
+
+### Testing
+
+Run tests with:
+```bash
+./dev test pkg/cmd/drtprod/... -v
+```
+
+Tests in `yamlprocessor_test.go` cover:
+- YAML parsing validation
+- Display-only mode
+- Dependent file checking
+- Rollback execution
+- Parallel target execution with dependency ordering
+- Remote execution (with mocked roachprod)
+- Slack notification verification
+
+### Key Design Patterns
+
+1. **Testability**: Function variables (`commandExecutor`, `roachprodRun`, `roachprodPut`) allow mocking in tests
+2. **Concurrency**: `errgroup` for parallel execution, `sync.WaitGroup` for dependencies
+3. **Thread safety**: `syncutil.Mutex` for shared state (`targetStatusRegistry`, `SlackNotifier.threadTimestamps`)
+4. **Environment expansion**: `os.ExpandEnv` for variable substitution in YAML values
+5. **Rollback stacking**: Rollback commands stored in LIFO order for proper cleanup sequence
