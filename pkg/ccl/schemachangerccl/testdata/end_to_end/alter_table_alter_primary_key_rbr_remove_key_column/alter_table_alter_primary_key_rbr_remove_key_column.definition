@@ -1,0 +1,47 @@
+setup
+CREATE DATABASE multiregion_db PRIMARY REGION "us-east1" REGIONS "us-east2", "us-east3" SURVIVE REGION FAILURE;
+CREATE TABLE multiregion_db.public.table_regional_by_row (
+  k1 INT NOT NULL,
+  k2 INT NOT NULL,
+  primary key (k1, k2),
+  V STRING,
+  index idx_v(v)
+) LOCALITY REGIONAL BY ROW;
+----
+
+stage-exec phase=PostCommitPhase stage=:
+USE multiregion_db;
+INSERT INTO multiregion_db.table_regional_by_row(k1, k2) VALUES($stageKey, $stageKey);
+INSERT INTO  multiregion_db.table_regional_by_row(k1, k2) VALUES($stageKey + 1, $stageKey + 1);
+----
+
+stage-exec phase=PostCommitNonRevertiblePhase stage=:
+USE multiregion_db;
+INSERT INTO multiregion_db.table_regional_by_row(k1, k2) VALUES($stageKey, $stageKey);
+INSERT INTO multiregion_db.table_regional_by_row(k1, k2) VALUES($stageKey + 1, $stageKey + 1);
+----
+
+stage-exec phase=PostCommitPhase stage=:
+USE multiregion_db;
+SELECT crdb_internal.validate_multi_region_zone_configs()
+----
+
+stage-exec phase=PostCommitNonRevertiblePhase stage=:
+USE multiregion_db;
+SELECT crdb_internal.validate_multi_region_zone_configs()
+----
+
+stage-query phase=PostCommitPhase stage=:
+SELECT count(*)=$successfulStageCount*2 FROM  multiregion_db.public.table_regional_by_row@idx_v
+----
+true
+
+
+stage-query phase=PostCommitNonRevertiblePhase stage=:
+SELECT count(*)=$successfulStageCount*2 FROM  multiregion_db.public.table_regional_by_row@idx_v
+----
+true
+
+test
+alter table multiregion_db.table_regional_by_row alter primary key using columns(k1);
+----

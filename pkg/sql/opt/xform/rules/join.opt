@@ -431,11 +431,17 @@
 # 2. The ON condition of the InnerJoin only references columns from its right
 #    input and the input of the IndexJoin.
 # 3. The InnerJoin does not have any join hints.
+# 4. The IndexJoin must be fetching new columns (its output is not a subset of
+#    its input), otherwise the resulting LookupJoin would have no lookup columns.
 #
 # TODO(drewk): match LeftJoins as well if a good use case is found.
 [PushJoinIntoIndexJoin, Explore]
 (InnerJoin
-    $left:(IndexJoin $indexInput:* $indexPrivate:*)
+    $left:(IndexJoin $indexInput:* $indexPrivate:*) &
+        ^(ColsAreSubset
+            (OutputCols $left)
+            (OutputCols $indexInput)
+        )
     $right:* & ^(HasOuterCols $right)
     $on:* & (FiltersBoundBy $on (OutputCols2 $indexInput $right))
     $joinPrivate:* & (NoJoinHints $joinPrivate)

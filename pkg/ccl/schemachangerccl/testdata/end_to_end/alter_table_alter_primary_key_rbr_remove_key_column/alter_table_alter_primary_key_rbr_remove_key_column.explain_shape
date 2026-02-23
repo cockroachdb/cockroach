@@ -1,0 +1,34 @@
+/* setup */
+CREATE DATABASE multiregion_db PRIMARY REGION "us-east1" REGIONS "us-east2", "us-east3" SURVIVE REGION FAILURE;
+CREATE TABLE multiregion_db.public.table_regional_by_row (
+  k1 INT NOT NULL,
+  k2 INT NOT NULL,
+  primary key (k1, k2),
+  V STRING,
+  index idx_v(v)
+) LOCALITY REGIONAL BY ROW;
+
+/* test */
+EXPLAIN (DDL, SHAPE) alter table multiregion_db.table_regional_by_row alter primary key using columns(k1);
+----
+Schema change plan for ALTER TABLE ‹multiregion_db›.‹public›.‹table_regional_by_row› ALTER PRIMARY KEY USING COLUMNS (‹k1›);
+ ├── execute 2 system table mutations transactions
+ ├── backfill using primary index table_regional_by_row_pkey- in relation table_regional_by_row
+ │    ├── into idx_v+ (crdb_region, v: k1)
+ │    └── into table_regional_by_row_pkey+ (k1, crdb_region; k2, v)
+ ├── execute 2 system table mutations transactions
+ ├── merge temporary indexes into backfilled indexes in relation table_regional_by_row
+ │    ├── from table_regional_by_row@[4] into idx_v+
+ │    └── from table_regional_by_row@[8] into table_regional_by_row_pkey+
+ ├── execute 1 system table mutations transaction
+ ├── validate UNIQUE constraint backed by index table_regional_by_row_pkey+ in relation table_regional_by_row
+ ├── validate UNIQUE constraint backed by index idx_v+ in relation table_regional_by_row
+ ├── execute 2 system table mutations transactions
+ ├── backfill using primary index table_regional_by_row_pkey+ in relation table_regional_by_row
+ │    └── into table_regional_by_row_k1_k2_key+ (crdb_region, k1, k2)
+ ├── execute 2 system table mutations transactions
+ ├── merge temporary indexes into backfilled indexes in relation table_regional_by_row
+ │    └── from table_regional_by_row@[6] into table_regional_by_row_k1_k2_key+
+ ├── execute 1 system table mutations transaction
+ ├── validate UNIQUE constraint backed by index table_regional_by_row_k1_k2_key+ in relation table_regional_by_row
+ └── execute 4 system table mutations transactions

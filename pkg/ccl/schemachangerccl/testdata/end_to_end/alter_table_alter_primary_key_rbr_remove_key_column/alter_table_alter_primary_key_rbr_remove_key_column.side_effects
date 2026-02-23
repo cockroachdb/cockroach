@@ -1,0 +1,1388 @@
+/* setup */
+CREATE DATABASE multiregion_db PRIMARY REGION "us-east1" REGIONS "us-east2", "us-east3" SURVIVE REGION FAILURE;
+CREATE TABLE multiregion_db.public.table_regional_by_row (
+  k1 INT NOT NULL,
+  k2 INT NOT NULL,
+  primary key (k1, k2),
+  V STRING,
+  index idx_v(v)
+) LOCALITY REGIONAL BY ROW;
+----
+...
++database {0 0 multiregion_db} -> 104
++schema {104 0 public} -> 105
++object {104 105 crdb_internal_region} -> 106
++object {104 105 _crdb_internal_region} -> 107
++object {104 105 table_regional_by_row} -> 108
+
+/* test */
+alter table multiregion_db.table_regional_by_row alter primary key using columns(k1);
+----
+begin transaction #1
+# begin StatementPhase
+checking for feature: ALTER TABLE
+increment telemetry for sql.schema.alter_table
+increment telemetry for sql.schema.alter_table.alter_primary_key
+write *eventpb.AlterTable to event log:
+  mutationId: 1
+  sql:
+    descriptorId: 108
+    statement: ALTER TABLE ‹multiregion_db›.‹public›.‹table_regional_by_row› ALTER PRIMARY KEY USING COLUMNS (‹k1›)
+    tag: ALTER TABLE
+    user: root
+  tableName: multiregion_db.public.table_regional_by_row
+## StatementPhase stage 1 of 1 with 28 MutationType ops
+upsert descriptor #108
+  ...
+       regionalByRow: {}
+     modificationTime: {}
+  +  mutations:
+  +  - direction: ADD
+  +    index:
+  +      constraintId: 6
+  +      createdExplicitly: true
+  +      encodingType: 1
+  +      foreignKey: {}
+  +      geoConfig: {}
+  +      id: 7
+  +      interleave: {}
+  +      keyColumnDirections:
+  +      - ASC
+  +      - ASC
+  +      keyColumnIds:
+  +      - 4
+  +      - 1
+  +      keyColumnNames:
+  +      - crdb_region
+  +      - k1
+  +      name: crdb_internal_index_7_name_placeholder
+  +      partitioning:
+  +        list:
+  +        - name: us-east1
+  +          subpartitioning: {}
+  +          values:
+  +          - BgFA
+  +        - name: us-east2
+  +          subpartitioning: {}
+  +          values:
+  +          - BgGA
+  +        - name: us-east3
+  +          subpartitioning: {}
+  +          values:
+  +          - BgHA
+  +        numColumns: 1
+  +        numImplicitColumns: 1
+  +      sharded: {}
+  +      storeColumnIds:
+  +      - 2
+  +      - 3
+  +      storeColumnNames:
+  +      - k2
+  +      - v
+  +      unique: true
+  +      vecConfig: {}
+  +      version: 4
+  +    mutationId: 1
+  +    state: BACKFILLING
+  +  - direction: ADD
+  +    index:
+  +      constraintId: 7
+  +      createdExplicitly: true
+  +      encodingType: 1
+  +      foreignKey: {}
+  +      geoConfig: {}
+  +      id: 8
+  +      interleave: {}
+  +      keyColumnDirections:
+  +      - ASC
+  +      - ASC
+  +      keyColumnIds:
+  +      - 4
+  +      - 1
+  +      keyColumnNames:
+  +      - crdb_region
+  +      - k1
+  +      name: crdb_internal_index_8_name_placeholder
+  +      partitioning:
+  +        list:
+  +        - name: us-east1
+  +          subpartitioning: {}
+  +          values:
+  +          - BgFA
+  +        - name: us-east2
+  +          subpartitioning: {}
+  +          values:
+  +          - BgGA
+  +        - name: us-east3
+  +          subpartitioning: {}
+  +          values:
+  +          - BgHA
+  +        numColumns: 1
+  +        numImplicitColumns: 1
+  +      sharded: {}
+  +      storeColumnIds:
+  +      - 2
+  +      - 3
+  +      storeColumnNames:
+  +      - k2
+  +      - v
+  +      unique: true
+  +      useDeletePreservingEncoding: true
+  +      vecConfig: {}
+  +      version: 4
+  +    mutationId: 1
+  +    state: DELETE_ONLY
+  +  - direction: ADD
+  +    index:
+  +      constraintId: 2
+  +      createdAtNanos: "1640998800000000000"
+  +      createdExplicitly: true
+  +      foreignKey: {}
+  +      geoConfig: {}
+  +      id: 3
+  +      interleave: {}
+  +      keyColumnDirections:
+  +      - ASC
+  +      - ASC
+  +      keyColumnIds:
+  +      - 4
+  +      - 3
+  +      keyColumnNames:
+  +      - crdb_region
+  +      - v
+  +      keySuffixColumnIds:
+  +      - 1
+  +      name: crdb_internal_index_3_name_placeholder
+  +      partitioning:
+  +        list:
+  +        - name: us-east1
+  +          subpartitioning: {}
+  +          values:
+  +          - BgFA
+  +        - name: us-east2
+  +          subpartitioning: {}
+  +          values:
+  +          - BgGA
+  +        - name: us-east3
+  +          subpartitioning: {}
+  +          values:
+  +          - BgHA
+  +        numColumns: 1
+  +        numImplicitColumns: 1
+  +      sharded: {}
+  +      storeColumnNames: []
+  +      vecConfig: {}
+  +      version: 4
+  +    mutationId: 1
+  +    state: BACKFILLING
+  +  - direction: ADD
+  +    index:
+  +      constraintId: 3
+  +      createdExplicitly: true
+  +      foreignKey: {}
+  +      geoConfig: {}
+  +      id: 4
+  +      interleave: {}
+  +      keyColumnDirections:
+  +      - ASC
+  +      - ASC
+  +      keyColumnIds:
+  +      - 4
+  +      - 3
+  +      keyColumnNames:
+  +      - crdb_region
+  +      - v
+  +      keySuffixColumnIds:
+  +      - 1
+  +      name: crdb_internal_index_4_name_placeholder
+  +      partitioning:
+  +        list:
+  +        - name: us-east1
+  +          subpartitioning: {}
+  +          values:
+  +          - BgFA
+  +        - name: us-east2
+  +          subpartitioning: {}
+  +          values:
+  +          - BgGA
+  +        - name: us-east3
+  +          subpartitioning: {}
+  +          values:
+  +          - BgHA
+  +        numColumns: 1
+  +        numImplicitColumns: 1
+  +      sharded: {}
+  +      storeColumnNames: []
+  +      useDeletePreservingEncoding: true
+  +      vecConfig: {}
+  +      version: 4
+  +    mutationId: 1
+  +    state: DELETE_ONLY
+     name: table_regional_by_row
+     nextColumnId: 5
+  -  nextConstraintId: 2
+  +  nextConstraintId: 8
+     nextFamilyId: 1
+  -  nextIndexId: 3
+  +  nextIndexId: 9
+     nextMutationId: 1
+     parentId: 104
+  ...
+     replacementOf:
+       time: {}
+  -  schemaLocked: true
+     unexposedParentSchemaId: 105
+  -  version: "1"
+  +  version: "2"
+upsert zone config for #108
+# end StatementPhase
+# begin PreCommitPhase
+## PreCommitPhase stage 1 of 2 with 1 MutationType op
+undo all catalog changes within txn #1
+persist all catalog changes to storage
+## PreCommitPhase stage 2 of 2 with 34 MutationType ops
+upsert descriptor #108
+  ...
+     createAsOfTime:
+       wallTime: "1640995200000000000"
+  +  declarativeSchemaChangerState:
+  +    authorization:
+  +      userName: root
+  +    currentStatuses: <redacted>
+  +    jobId: "1"
+  +    nameMapping:
+  +      columns:
+  +        "1": k1
+  +        "2": k2
+  +        "3": v
+  +        "4": crdb_region
+  +        "4294967292": crdb_internal_origin_timestamp
+  +        "4294967293": crdb_internal_origin_id
+  +        "4294967294": tableoid
+  +        "4294967295": crdb_internal_mvcc_timestamp
+  +      families:
+  +        "0": primary
+  +      id: 108
+  +      indexes:
+  +        "3": idx_v
+  +        "5": table_regional_by_row_k1_k2_key
+  +        "7": table_regional_by_row_pkey
+  +      name: table_regional_by_row
+  +    relevantStatements:
+  +    - statement:
+  +        redactedStatement: ALTER TABLE ‹multiregion_db›.‹public›.‹table_regional_by_row› ALTER PRIMARY KEY USING COLUMNS (‹k1›)
+  +        statement: ALTER TABLE multiregion_db.table_regional_by_row ALTER PRIMARY KEY USING COLUMNS (k1)
+  +        statementTag: ALTER TABLE
+  +    revertible: true
+  +    targetRanks: <redacted>
+  +    targets: <redacted>
+     families:
+     - columnIds:
+  ...
+       regionalByRow: {}
+     modificationTime: {}
+  +  mutations:
+  +  - direction: ADD
+  +    index:
+  +      constraintId: 6
+  +      createdExplicitly: true
+  +      encodingType: 1
+  +      foreignKey: {}
+  +      geoConfig: {}
+  +      id: 7
+  +      interleave: {}
+  +      keyColumnDirections:
+  +      - ASC
+  +      - ASC
+  +      keyColumnIds:
+  +      - 4
+  +      - 1
+  +      keyColumnNames:
+  +      - crdb_region
+  +      - k1
+  +      name: crdb_internal_index_7_name_placeholder
+  +      partitioning:
+  +        list:
+  +        - name: us-east1
+  +          subpartitioning: {}
+  +          values:
+  +          - BgFA
+  +        - name: us-east2
+  +          subpartitioning: {}
+  +          values:
+  +          - BgGA
+  +        - name: us-east3
+  +          subpartitioning: {}
+  +          values:
+  +          - BgHA
+  +        numColumns: 1
+  +        numImplicitColumns: 1
+  +      sharded: {}
+  +      storeColumnIds:
+  +      - 2
+  +      - 3
+  +      storeColumnNames:
+  +      - k2
+  +      - v
+  +      unique: true
+  +      vecConfig: {}
+  +      version: 4
+  +    mutationId: 1
+  +    state: BACKFILLING
+  +  - direction: ADD
+  +    index:
+  +      constraintId: 7
+  +      createdExplicitly: true
+  +      encodingType: 1
+  +      foreignKey: {}
+  +      geoConfig: {}
+  +      id: 8
+  +      interleave: {}
+  +      keyColumnDirections:
+  +      - ASC
+  +      - ASC
+  +      keyColumnIds:
+  +      - 4
+  +      - 1
+  +      keyColumnNames:
+  +      - crdb_region
+  +      - k1
+  +      name: crdb_internal_index_8_name_placeholder
+  +      partitioning:
+  +        list:
+  +        - name: us-east1
+  +          subpartitioning: {}
+  +          values:
+  +          - BgFA
+  +        - name: us-east2
+  +          subpartitioning: {}
+  +          values:
+  +          - BgGA
+  +        - name: us-east3
+  +          subpartitioning: {}
+  +          values:
+  +          - BgHA
+  +        numColumns: 1
+  +        numImplicitColumns: 1
+  +      sharded: {}
+  +      storeColumnIds:
+  +      - 2
+  +      - 3
+  +      storeColumnNames:
+  +      - k2
+  +      - v
+  +      unique: true
+  +      useDeletePreservingEncoding: true
+  +      vecConfig: {}
+  +      version: 4
+  +    mutationId: 1
+  +    state: DELETE_ONLY
+  +  - direction: ADD
+  +    index:
+  +      constraintId: 2
+  +      createdAtNanos: "1640998800000000000"
+  +      createdExplicitly: true
+  +      foreignKey: {}
+  +      geoConfig: {}
+  +      id: 3
+  +      interleave: {}
+  +      keyColumnDirections:
+  +      - ASC
+  +      - ASC
+  +      keyColumnIds:
+  +      - 4
+  +      - 3
+  +      keyColumnNames:
+  +      - crdb_region
+  +      - v
+  +      keySuffixColumnIds:
+  +      - 1
+  +      name: crdb_internal_index_3_name_placeholder
+  +      partitioning:
+  +        list:
+  +        - name: us-east1
+  +          subpartitioning: {}
+  +          values:
+  +          - BgFA
+  +        - name: us-east2
+  +          subpartitioning: {}
+  +          values:
+  +          - BgGA
+  +        - name: us-east3
+  +          subpartitioning: {}
+  +          values:
+  +          - BgHA
+  +        numColumns: 1
+  +        numImplicitColumns: 1
+  +      sharded: {}
+  +      storeColumnNames: []
+  +      vecConfig: {}
+  +      version: 4
+  +    mutationId: 1
+  +    state: BACKFILLING
+  +  - direction: ADD
+  +    index:
+  +      constraintId: 3
+  +      createdExplicitly: true
+  +      foreignKey: {}
+  +      geoConfig: {}
+  +      id: 4
+  +      interleave: {}
+  +      keyColumnDirections:
+  +      - ASC
+  +      - ASC
+  +      keyColumnIds:
+  +      - 4
+  +      - 3
+  +      keyColumnNames:
+  +      - crdb_region
+  +      - v
+  +      keySuffixColumnIds:
+  +      - 1
+  +      name: crdb_internal_index_4_name_placeholder
+  +      partitioning:
+  +        list:
+  +        - name: us-east1
+  +          subpartitioning: {}
+  +          values:
+  +          - BgFA
+  +        - name: us-east2
+  +          subpartitioning: {}
+  +          values:
+  +          - BgGA
+  +        - name: us-east3
+  +          subpartitioning: {}
+  +          values:
+  +          - BgHA
+  +        numColumns: 1
+  +        numImplicitColumns: 1
+  +      sharded: {}
+  +      storeColumnNames: []
+  +      useDeletePreservingEncoding: true
+  +      vecConfig: {}
+  +      version: 4
+  +    mutationId: 1
+  +    state: DELETE_ONLY
+     name: table_regional_by_row
+     nextColumnId: 5
+  -  nextConstraintId: 2
+  +  nextConstraintId: 8
+     nextFamilyId: 1
+  -  nextIndexId: 3
+  +  nextIndexId: 9
+     nextMutationId: 1
+     parentId: 104
+  ...
+     replacementOf:
+       time: {}
+  -  schemaLocked: true
+     unexposedParentSchemaId: 105
+  -  version: "1"
+  +  version: "2"
+upsert zone config for #108
+persist all catalog changes to storage
+create job #1 (non-cancelable: false): "ALTER TABLE multiregion_db.public.table_regional_by_row ALTER PRIMARY KEY USING COLUMNS (k1)"
+  descriptor IDs: [108]
+# end PreCommitPhase
+commit transaction #1
+notified job registry to adopt jobs: [1]
+# begin PostCommitPhase
+begin transaction #2
+commit transaction #2
+begin transaction #3
+## PostCommitPhase stage 1 of 15 with 4 MutationType ops
+upsert descriptor #108
+  ...
+         version: 4
+       mutationId: 1
+  -    state: DELETE_ONLY
+  +    state: WRITE_ONLY
+     - direction: ADD
+       index:
+  ...
+         version: 4
+       mutationId: 1
+  -    state: DELETE_ONLY
+  +    state: WRITE_ONLY
+     name: table_regional_by_row
+     nextColumnId: 5
+  ...
+       time: {}
+     unexposedParentSchemaId: 105
+  -  version: "2"
+  +  version: "3"
+persist all catalog changes to storage
+update progress of schema change job #1: "Pending: Backfilling index (2 operations) — PostCommit phase (stage 2 of 15)."
+commit transaction #3
+begin transaction #4
+## PostCommitPhase stage 2 of 15 with 2 BackfillType ops
+backfill indexes [3 7] from index #1 in table #108
+commit transaction #4
+begin transaction #5
+## PostCommitPhase stage 3 of 15 with 4 MutationType ops
+upsert descriptor #108
+  ...
+         version: 4
+       mutationId: 1
+  -    state: BACKFILLING
+  +    state: DELETE_ONLY
+     - direction: ADD
+       index:
+  ...
+         version: 4
+       mutationId: 1
+  -    state: BACKFILLING
+  +    state: DELETE_ONLY
+     - direction: ADD
+       index:
+  ...
+       time: {}
+     unexposedParentSchemaId: 105
+  -  version: "3"
+  +  version: "4"
+persist all catalog changes to storage
+update progress of schema change job #1: "Pending: Updating schema metadata (2 operations) — PostCommit phase (stage 4 of 15)."
+commit transaction #5
+begin transaction #6
+## PostCommitPhase stage 4 of 15 with 4 MutationType ops
+upsert descriptor #108
+  ...
+         version: 4
+       mutationId: 1
+  -    state: DELETE_ONLY
+  +    state: MERGING
+     - direction: ADD
+       index:
+  ...
+         version: 4
+       mutationId: 1
+  -    state: DELETE_ONLY
+  +    state: MERGING
+     - direction: ADD
+       index:
+  ...
+       time: {}
+     unexposedParentSchemaId: 105
+  -  version: "4"
+  +  version: "5"
+persist all catalog changes to storage
+update progress of schema change job #1: "Pending: Merging index (2 operations) — PostCommit phase (stage 5 of 15)."
+commit transaction #6
+begin transaction #7
+## PostCommitPhase stage 5 of 15 with 2 BackfillType ops
+merge temporary indexes [4 8] into backfilled indexes [3 7] in table #108
+commit transaction #7
+begin transaction #8
+## PostCommitPhase stage 6 of 15 with 6 MutationType ops
+upsert descriptor #108
+  ...
+         version: 4
+       mutationId: 1
+  -    state: MERGING
+  -  - direction: ADD
+  +    state: WRITE_ONLY
+  +  - direction: DROP
+       index:
+         constraintId: 7
+  ...
+         version: 4
+       mutationId: 1
+  -    state: WRITE_ONLY
+  +    state: DELETE_ONLY
+     - direction: ADD
+       index:
+  ...
+         version: 4
+       mutationId: 1
+  -    state: MERGING
+  -  - direction: ADD
+  +    state: WRITE_ONLY
+  +  - direction: DROP
+       index:
+         constraintId: 3
+  ...
+         version: 4
+       mutationId: 1
+  -    state: WRITE_ONLY
+  +    state: DELETE_ONLY
+     name: table_regional_by_row
+     nextColumnId: 5
+  ...
+       time: {}
+     unexposedParentSchemaId: 105
+  -  version: "5"
+  +  version: "6"
+persist all catalog changes to storage
+update progress of schema change job #1: "Pending: Validating index (2 operations) — PostCommit phase (stage 7 of 15)."
+commit transaction #8
+begin transaction #9
+## PostCommitPhase stage 7 of 15 with 2 ValidationType ops
+validate forward indexes [7 3] in table #108
+commit transaction #9
+begin transaction #10
+## PostCommitPhase stage 8 of 15 with 18 MutationType ops
+upsert descriptor #108
+  ...
+       vecConfig: {}
+       version: 3
+  +  - constraintId: 2
+  +    createdAtNanos: "1640998800000000000"
+  +    createdExplicitly: true
+  +    foreignKey: {}
+  +    geoConfig: {}
+  +    hideForPrimaryKeyRecreate: true
+  +    id: 3
+  +    interleave: {}
+  +    invisibility: 1
+  +    keyColumnDirections:
+  +    - ASC
+  +    - ASC
+  +    keyColumnIds:
+  +    - 4
+  +    - 3
+  +    keyColumnNames:
+  +    - crdb_region
+  +    - v
+  +    keySuffixColumnIds:
+  +    - 1
+  +    name: crdb_internal_idx_v_recreated
+  +    notVisible: true
+  +    partitioning:
+  +      list:
+  +      - name: us-east1
+  +        subpartitioning: {}
+  +        values:
+  +        - BgFA
+  +      - name: us-east2
+  +        subpartitioning: {}
+  +        values:
+  +        - BgGA
+  +      - name: us-east3
+  +        subpartitioning: {}
+  +        values:
+  +        - BgHA
+  +      numColumns: 1
+  +      numImplicitColumns: 1
+  +    sharded: {}
+  +    storeColumnNames: []
+  +    vecConfig: {}
+  +    version: 4
+     localityConfig:
+       regionalByRow: {}
+  ...
+       mutationId: 1
+       state: DELETE_ONLY
+  -  - direction: ADD
+  +  - direction: DROP
+       index:
+  -      constraintId: 2
+  -      createdAtNanos: "1640998800000000000"
+  +      constraintId: 3
+         createdExplicitly: true
+         foreignKey: {}
+         geoConfig: {}
+  -      id: 3
+  +      id: 4
+         interleave: {}
+         keyColumnDirections:
+  ...
+         keySuffixColumnIds:
+         - 1
+  -      name: crdb_internal_index_3_name_placeholder
+  +      name: crdb_internal_index_4_name_placeholder
+         partitioning:
+           list:
+  ...
+         sharded: {}
+         storeColumnNames: []
+  +      useDeletePreservingEncoding: true
+         vecConfig: {}
+         version: 4
+       mutationId: 1
+  -    state: WRITE_ONLY
+  -  - direction: DROP
+  +    state: DELETE_ONLY
+  +  - direction: ADD
+       index:
+  -      constraintId: 3
+  +      constraintId: 4
+  +      createdAtNanos: "1640998800000000000"
+         createdExplicitly: true
+         foreignKey: {}
+         geoConfig: {}
+  -      id: 4
+  +      id: 5
+         interleave: {}
+         keyColumnDirections:
+         - ASC
+         - ASC
+  +      - ASC
+         keyColumnIds:
+         - 4
+  -      - 3
+  +      - 1
+  +      - 2
+         keyColumnNames:
+         - crdb_region
+  -      - v
+  -      keySuffixColumnIds:
+  -      - 1
+  -      name: crdb_internal_index_4_name_placeholder
+  +      - k1
+  +      - k2
+  +      name: table_regional_by_row_k1_k2_key
+         partitioning:
+           list:
+  ...
+         sharded: {}
+         storeColumnNames: []
+  +      unique: true
+  +      vecConfig: {}
+  +      version: 4
+  +    mutationId: 1
+  +    state: BACKFILLING
+  +  - direction: ADD
+  +    index:
+  +      constraintId: 5
+  +      createdExplicitly: true
+  +      foreignKey: {}
+  +      geoConfig: {}
+  +      id: 6
+  +      interleave: {}
+  +      keyColumnDirections:
+  +      - ASC
+  +      - ASC
+  +      - ASC
+  +      keyColumnIds:
+  +      - 4
+  +      - 1
+  +      - 2
+  +      keyColumnNames:
+  +      - crdb_region
+  +      - k1
+  +      - k2
+  +      name: crdb_internal_index_6_name_placeholder
+  +      partitioning: {}
+  +      sharded: {}
+  +      storeColumnNames: []
+  +      unique: true
+         useDeletePreservingEncoding: true
+         vecConfig: {}
+  ...
+       time: {}
+     unexposedParentSchemaId: 105
+  -  version: "6"
+  +  version: "7"
+persist all catalog changes to storage
+adding table for stats refresh: 108
+update progress of schema change job #1: "Pending: Updating schema metadata (1 operation) — PostCommit phase (stage 9 of 15)."
+commit transaction #10
+begin transaction #11
+## PostCommitPhase stage 9 of 15 with 3 MutationType ops
+upsert descriptor #108
+  ...
+         version: 4
+       mutationId: 1
+  -    state: DELETE_ONLY
+  +    state: WRITE_ONLY
+     name: table_regional_by_row
+     nextColumnId: 5
+  ...
+       time: {}
+     unexposedParentSchemaId: 105
+  -  version: "7"
+  +  version: "8"
+persist all catalog changes to storage
+update progress of schema change job #1: "Pending: Backfilling index (1 operation) — PostCommit phase (stage 10 of 15)."
+commit transaction #11
+begin transaction #12
+## PostCommitPhase stage 10 of 15 with 1 BackfillType op
+backfill indexes [5] from index #7 in table #108
+commit transaction #12
+begin transaction #13
+## PostCommitPhase stage 11 of 15 with 3 MutationType ops
+upsert descriptor #108
+  ...
+         version: 4
+       mutationId: 1
+  -    state: BACKFILLING
+  +    state: DELETE_ONLY
+     - direction: ADD
+       index:
+  ...
+       time: {}
+     unexposedParentSchemaId: 105
+  -  version: "8"
+  +  version: "9"
+persist all catalog changes to storage
+update progress of schema change job #1: "Pending: Updating schema metadata (1 operation) — PostCommit phase (stage 12 of 15)."
+commit transaction #13
+begin transaction #14
+## PostCommitPhase stage 12 of 15 with 3 MutationType ops
+upsert descriptor #108
+  ...
+         version: 4
+       mutationId: 1
+  -    state: DELETE_ONLY
+  +    state: MERGING
+     - direction: ADD
+       index:
+  ...
+       time: {}
+     unexposedParentSchemaId: 105
+  -  version: "9"
+  +  version: "10"
+persist all catalog changes to storage
+update progress of schema change job #1: "Pending: Merging index (1 operation) — PostCommit phase (stage 13 of 15)."
+commit transaction #14
+begin transaction #15
+## PostCommitPhase stage 13 of 15 with 1 BackfillType op
+merge temporary indexes [6] into backfilled indexes [5] in table #108
+commit transaction #15
+begin transaction #16
+## PostCommitPhase stage 14 of 15 with 4 MutationType ops
+upsert descriptor #108
+  ...
+         version: 4
+       mutationId: 1
+  -    state: MERGING
+  -  - direction: ADD
+  +    state: WRITE_ONLY
+  +  - direction: DROP
+       index:
+         constraintId: 5
+  ...
+         version: 4
+       mutationId: 1
+  -    state: WRITE_ONLY
+  +    state: DELETE_ONLY
+     name: table_regional_by_row
+     nextColumnId: 5
+  ...
+       time: {}
+     unexposedParentSchemaId: 105
+  -  version: "10"
+  +  version: "11"
+persist all catalog changes to storage
+update progress of schema change job #1: "Pending: Validating index (1 operation) — PostCommit phase (stage 15 of 15)."
+commit transaction #16
+begin transaction #17
+## PostCommitPhase stage 15 of 15 with 1 ValidationType op
+validate forward indexes [5] in table #108
+commit transaction #17
+begin transaction #18
+## PostCommitNonRevertiblePhase stage 1 of 4 with 23 MutationType ops
+upsert descriptor #108
+  ...
+           statement: ALTER TABLE multiregion_db.table_regional_by_row ALTER PRIMARY KEY USING COLUMNS (k1)
+           statementTag: ALTER TABLE
+  -    revertible: true
+       targetRanks: <redacted>
+       targets: <redacted>
+  ...
+     id: 108
+     indexes:
+  -  - createdAtNanos: "1640995200000000000"
+  +  - constraintId: 2
+  +    createdAtNanos: "1640998800000000000"
+  +    createdExplicitly: true
+       foreignKey: {}
+       geoConfig: {}
+  -    id: 2
+  +    id: 3
+       interleave: {}
+       keyColumnDirections:
+  ...
+       keySuffixColumnIds:
+       - 1
+  -    - 2
+       name: idx_v
+       partitioning:
+  ...
+         numImplicitColumns: 1
+       sharded: {}
+  +    storeColumnNames: []
+       vecConfig: {}
+  -    version: 3
+  -  - constraintId: 2
+  +    version: 4
+  +  - constraintId: 4
+       createdAtNanos: "1640998800000000000"
+       createdExplicitly: true
+       foreignKey: {}
+       geoConfig: {}
+  -    hideForPrimaryKeyRecreate: true
+  -    id: 3
+  +    id: 5
+       interleave: {}
+  -    invisibility: 1
+       keyColumnDirections:
+       - ASC
+       - ASC
+  +    - ASC
+       keyColumnIds:
+       - 4
+  -    - 3
+  +    - 1
+  +    - 2
+       keyColumnNames:
+       - crdb_region
+  -    - v
+  -    keySuffixColumnIds:
+  -    - 1
+  -    name: crdb_internal_idx_v_recreated
+  -    notVisible: true
+  +    - k1
+  +    - k2
+  +    name: table_regional_by_row_k1_k2_key
+       partitioning:
+         list:
+  ...
+       sharded: {}
+       storeColumnNames: []
+  +    unique: true
+       vecConfig: {}
+       version: 4
+  ...
+     modificationTime: {}
+     mutations:
+  -  - direction: ADD
+  +  - direction: DROP
+       index:
+  -      constraintId: 6
+  -      createdExplicitly: true
+  +      constraintId: 1
+  +      createdAtNanos: "1640995200000000000"
+         encodingType: 1
+         foreignKey: {}
+         geoConfig: {}
+  -      id: 7
+  +      id: 1
+         interleave: {}
+         keyColumnDirections:
+         - ASC
+         - ASC
+  +      - ASC
+         keyColumnIds:
+         - 4
+         - 1
+  +      - 2
+         keyColumnNames:
+         - crdb_region
+         - k1
+  -      name: crdb_internal_index_7_name_placeholder
+  +      - k2
+  +      name: crdb_internal_index_1_name_placeholder
+         partitioning:
+           list:
+  ...
+         sharded: {}
+         storeColumnIds:
+  -      - 2
+         - 3
+         storeColumnNames:
+  -      - k2
+         - v
+         unique: true
+  ...
+     - direction: DROP
+       index:
+  -      constraintId: 7
+  -      createdExplicitly: true
+  -      encodingType: 1
+  +      createdAtNanos: "1640995200000000000"
+         foreignKey: {}
+         geoConfig: {}
+  -      id: 8
+  +      id: 2
+         interleave: {}
+         keyColumnDirections:
+  ...
+         keyColumnIds:
+         - 4
+  -      - 1
+  -      keyColumnNames:
+  -      - crdb_region
+  -      - k1
+  -      name: crdb_internal_index_8_name_placeholder
+  -      partitioning:
+  -        list:
+  -        - name: us-east1
+  -          subpartitioning: {}
+  -          values:
+  -          - BgFA
+  -        - name: us-east2
+  -          subpartitioning: {}
+  -          values:
+  -          - BgGA
+  -        - name: us-east3
+  -          subpartitioning: {}
+  -          values:
+  -          - BgHA
+  -        numColumns: 1
+  -        numImplicitColumns: 1
+  -      sharded: {}
+  -      storeColumnIds:
+  -      - 2
+         - 3
+  -      storeColumnNames:
+  -      - k2
+  -      - v
+  -      unique: true
+  -      useDeletePreservingEncoding: true
+  -      vecConfig: {}
+  -      version: 4
+  -    mutationId: 1
+  -    state: DELETE_ONLY
+  -  - direction: DROP
+  -    index:
+  -      constraintId: 3
+  -      createdExplicitly: true
+  -      foreignKey: {}
+  -      geoConfig: {}
+  -      id: 4
+  -      interleave: {}
+  -      keyColumnDirections:
+  -      - ASC
+  -      - ASC
+  -      keyColumnIds:
+  -      - 4
+  -      - 3
+         keyColumnNames:
+         - crdb_region
+  ...
+         keySuffixColumnIds:
+         - 1
+  -      name: crdb_internal_index_4_name_placeholder
+  -      partitioning:
+  -        list:
+  -        - name: us-east1
+  -          subpartitioning: {}
+  -          values:
+  -          - BgFA
+  -        - name: us-east2
+  -          subpartitioning: {}
+  -          values:
+  -          - BgGA
+  -        - name: us-east3
+  -          subpartitioning: {}
+  -          values:
+  -          - BgHA
+  -        numColumns: 1
+  -        numImplicitColumns: 1
+  -      sharded: {}
+  -      storeColumnNames: []
+  -      useDeletePreservingEncoding: true
+  -      vecConfig: {}
+  -      version: 4
+  -    mutationId: 1
+  -    state: DELETE_ONLY
+  -  - direction: ADD
+  -    index:
+  -      constraintId: 4
+  -      createdAtNanos: "1640998800000000000"
+  -      createdExplicitly: true
+  -      foreignKey: {}
+  -      geoConfig: {}
+  -      id: 5
+  -      interleave: {}
+  -      keyColumnDirections:
+  -      - ASC
+  -      - ASC
+  -      - ASC
+  -      keyColumnIds:
+  -      - 4
+  -      - 1
+         - 2
+  -      keyColumnNames:
+  -      - crdb_region
+  -      - k1
+  -      - k2
+  -      name: table_regional_by_row_k1_k2_key
+  +      name: idx_v
+         partitioning:
+           list:
+  ...
+           numImplicitColumns: 1
+         sharded: {}
+  -      storeColumnNames: []
+  -      unique: true
+         vecConfig: {}
+  -      version: 4
+  +      version: 3
+       mutationId: 1
+       state: WRITE_ONLY
+  -  - direction: DROP
+  -    index:
+  -      constraintId: 5
+  -      createdExplicitly: true
+  -      foreignKey: {}
+  -      geoConfig: {}
+  -      id: 6
+  -      interleave: {}
+  -      keyColumnDirections:
+  -      - ASC
+  -      - ASC
+  -      - ASC
+  -      keyColumnIds:
+  -      - 4
+  -      - 1
+  -      - 2
+  -      keyColumnNames:
+  -      - crdb_region
+  -      - k1
+  -      - k2
+  -      name: crdb_internal_index_6_name_placeholder
+  -      partitioning: {}
+  -      sharded: {}
+  -      storeColumnNames: []
+  -      unique: true
+  -      useDeletePreservingEncoding: true
+  -      vecConfig: {}
+  -      version: 4
+  -    mutationId: 1
+  -    state: DELETE_ONLY
+     name: table_regional_by_row
+     nextColumnId: 5
+  ...
+     partitionAllBy: true
+     primaryIndex:
+  -    constraintId: 1
+  -    createdAtNanos: "1640995200000000000"
+  +    constraintId: 6
+  +    createdExplicitly: true
+       encodingType: 1
+       foreignKey: {}
+       geoConfig: {}
+  -    id: 1
+  +    id: 7
+       interleave: {}
+       keyColumnDirections:
+       - ASC
+       - ASC
+  -    - ASC
+       keyColumnIds:
+       - 4
+       - 1
+  -    - 2
+       keyColumnNames:
+       - crdb_region
+       - k1
+  -    - k2
+       name: table_regional_by_row_pkey
+       partitioning:
+  ...
+       sharded: {}
+       storeColumnIds:
+  +    - 2
+       - 3
+       storeColumnNames:
+  +    - k2
+       - v
+       unique: true
+  ...
+       time: {}
+     unexposedParentSchemaId: 105
+  -  version: "11"
+  +  version: "12"
+persist all catalog changes to storage
+adding table for stats refresh: 108
+update progress of schema change job #1: "Pending: Updating schema metadata (11 operations) — PostCommitNonRevertible phase (stage 2 of 4)."
+set schema change job #1 to non-cancellable
+commit transaction #18
+begin transaction #19
+## PostCommitNonRevertiblePhase stage 2 of 4 with 13 MutationType ops
+upsert descriptor #108
+  ...
+         version: 4
+       mutationId: 1
+  -    state: WRITE_ONLY
+  +    state: DELETE_ONLY
+     - direction: DROP
+       index:
+  ...
+         - 1
+         - 2
+  -      name: idx_v
+  +      name: crdb_internal_index_2_name_placeholder
+         partitioning:
+           list:
+  ...
+         version: 3
+       mutationId: 1
+  -    state: WRITE_ONLY
+  +    state: DELETE_ONLY
+     name: table_regional_by_row
+     nextColumnId: 5
+  ...
+       time: {}
+     unexposedParentSchemaId: 105
+  -  version: "12"
+  +  version: "13"
+persist all catalog changes to storage
+update progress of schema change job #1: "Pending: Updating schema metadata (7 operations) — PostCommitNonRevertible phase (stage 3 of 4)."
+commit transaction #19
+begin transaction #20
+## PostCommitNonRevertiblePhase stage 3 of 4 with 9 MutationType ops
+upsert descriptor #108
+  ...
+       regionalByRow: {}
+     modificationTime: {}
+  -  mutations:
+  -  - direction: DROP
+  -    index:
+  -      constraintId: 1
+  -      createdAtNanos: "1640995200000000000"
+  -      encodingType: 1
+  -      foreignKey: {}
+  -      geoConfig: {}
+  -      id: 1
+  -      interleave: {}
+  -      keyColumnDirections:
+  -      - ASC
+  -      - ASC
+  -      - ASC
+  -      keyColumnIds:
+  -      - 4
+  -      - 1
+  -      - 2
+  -      keyColumnNames:
+  -      - crdb_region
+  -      - k1
+  -      - k2
+  -      name: crdb_internal_index_1_name_placeholder
+  -      partitioning:
+  -        list:
+  -        - name: us-east1
+  -          subpartitioning: {}
+  -          values:
+  -          - BgFA
+  -        - name: us-east2
+  -          subpartitioning: {}
+  -          values:
+  -          - BgGA
+  -        - name: us-east3
+  -          subpartitioning: {}
+  -          values:
+  -          - BgHA
+  -        numColumns: 1
+  -        numImplicitColumns: 1
+  -      sharded: {}
+  -      storeColumnIds:
+  -      - 3
+  -      storeColumnNames:
+  -      - v
+  -      unique: true
+  -      vecConfig: {}
+  -      version: 4
+  -    mutationId: 1
+  -    state: DELETE_ONLY
+  -  - direction: DROP
+  -    index:
+  -      createdAtNanos: "1640995200000000000"
+  -      foreignKey: {}
+  -      geoConfig: {}
+  -      id: 2
+  -      interleave: {}
+  -      keyColumnDirections:
+  -      - ASC
+  -      - ASC
+  -      keyColumnIds:
+  -      - 4
+  -      - 3
+  -      keyColumnNames:
+  -      - crdb_region
+  -      - v
+  -      keySuffixColumnIds:
+  -      - 1
+  -      - 2
+  -      name: crdb_internal_index_2_name_placeholder
+  -      partitioning:
+  -        list:
+  -        - name: us-east1
+  -          subpartitioning: {}
+  -          values:
+  -          - BgFA
+  -        - name: us-east2
+  -          subpartitioning: {}
+  -          values:
+  -          - BgGA
+  -        - name: us-east3
+  -          subpartitioning: {}
+  -          values:
+  -          - BgHA
+  -        numColumns: 1
+  -        numImplicitColumns: 1
+  -      sharded: {}
+  -      vecConfig: {}
+  -      version: 3
+  -    mutationId: 1
+  -    state: DELETE_ONLY
+  +  mutations: []
+     name: table_regional_by_row
+     nextColumnId: 5
+  ...
+       time: {}
+     unexposedParentSchemaId: 105
+  -  version: "13"
+  +  version: "14"
+persist all catalog changes to storage
+create job #2 (non-cancelable: true): "GC for ALTER TABLE multiregion_db.public.table_regional_by_row ALTER PRIMARY KEY USING COLUMNS (k1)"
+  descriptor IDs: [108]
+update progress of schema change job #1: "Pending: Updating schema metadata (1 operation) — PostCommitNonRevertible phase (stage 4 of 4)."
+commit transaction #20
+notified job registry to adopt jobs: [2]
+begin transaction #21
+## PostCommitNonRevertiblePhase stage 4 of 4 with 3 MutationType ops
+upsert descriptor #108
+  ...
+     createAsOfTime:
+       wallTime: "1640995200000000000"
+  -  declarativeSchemaChangerState:
+  -    authorization:
+  -      userName: root
+  -    currentStatuses: <redacted>
+  -    jobId: "1"
+  -    nameMapping:
+  -      columns:
+  -        "1": k1
+  -        "2": k2
+  -        "3": v
+  -        "4": crdb_region
+  -        "4294967292": crdb_internal_origin_timestamp
+  -        "4294967293": crdb_internal_origin_id
+  -        "4294967294": tableoid
+  -        "4294967295": crdb_internal_mvcc_timestamp
+  -      families:
+  -        "0": primary
+  -      id: 108
+  -      indexes:
+  -        "3": idx_v
+  -        "5": table_regional_by_row_k1_k2_key
+  -        "7": table_regional_by_row_pkey
+  -      name: table_regional_by_row
+  -    relevantStatements:
+  -    - statement:
+  -        redactedStatement: ALTER TABLE ‹multiregion_db›.‹public›.‹table_regional_by_row› ALTER PRIMARY KEY USING COLUMNS (‹k1›)
+  -        statement: ALTER TABLE multiregion_db.table_regional_by_row ALTER PRIMARY KEY USING COLUMNS (k1)
+  -        statementTag: ALTER TABLE
+  -    targetRanks: <redacted>
+  -    targets: <redacted>
+     families:
+     - columnIds:
+  ...
+     replacementOf:
+       time: {}
+  +  schemaLocked: true
+     unexposedParentSchemaId: 105
+  -  version: "14"
+  +  version: "15"
+persist all catalog changes to storage
+update progress of schema change job #1: "all stages completed"
+set schema change job #1 to non-cancellable
+updated schema change job #1 descriptor IDs to []
+write *eventpb.FinishSchemaChange to event log:
+  sc:
+    descriptorId: 108
+commit transaction #21
+# end PostCommitPhase
