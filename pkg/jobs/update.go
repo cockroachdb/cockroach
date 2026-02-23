@@ -239,7 +239,7 @@ WHERE id = $1
 	}
 
 	if ju.md.State != "" && ju.md.State != state {
-		if err := j.Messages().Record(ctx, u.txn, "state", string(ju.md.State)); err != nil {
+		if err := j.Messages().Record(ctx, u.txn, MessageKindState, string(ju.md.State)); err != nil {
 			return err
 		}
 		// If we are changing state, we should clear out the status, unless
@@ -275,7 +275,7 @@ WHERE id = $1
 		}
 
 		if progress.TraceID != beforeProgress.TraceID {
-			if err := j.Messages().Record(ctx, u.txn, "trace-id", fmt.Sprintf("%d", progress.TraceID)); err != nil {
+			if err := j.Messages().Record(ctx, u.txn, MessageKindTraceID, fmt.Sprintf("%d", progress.TraceID)); err != nil {
 				return err
 			}
 		}

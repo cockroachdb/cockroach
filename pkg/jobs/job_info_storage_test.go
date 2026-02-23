@@ -875,6 +875,10 @@ func TestJobPauseStateTransitionsRecorded(t *testing.T) {
 	cleanup := jobs.TestingRegisterConstructor(jobspb.TypeBackup, func(job *jobs.Job, _ *cluster.Settings) jobs.Resumer {
 		return jobstest.FakeResumer{
 			OnResume: func(ctx context.Context) error {
+				// Simulate job making progress.
+				_ = idb.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+					return job.ProgressStorage().Set(ctx, txn, 0.3, hlc.Timestamp{})
+				})
 				select {
 				case <-ctx.Done():
 					return ctx.Err()
@@ -947,5 +951,20 @@ func TestJobPauseStateTransitionsRecorded(t *testing.T) {
 		)
 		stateMessages := collectStatusMessages(job)
 		require.Equal(t, []string{"succeeded", "running", "paused", "pause-requested"}, stateMessages)
+
+		// Verify job progress was not clobbered during pause/resume.
+		rows := sql.Query(t, fmt.Sprintf(
+			"SELECT fraction FROM system.job_progress_history WHERE job_id = %d ORDER BY written",
+			job.ID()))
+		updates := 0
+		var frac float64
+		for rows.Next() {
+			updates++
+			prevFrac := frac
+			require.NoError(t, rows.Scan(&frac))
+			require.GreaterOrEqual(t, frac, prevFrac)
+		}
+		require.NoError(t, rows.Err())
+		require.Greater(t, updates, 0)
 	})
 }

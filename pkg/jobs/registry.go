@@ -1923,7 +1923,7 @@ func (r *Registry) maybeRecordExecutionFailure(ctx context.Context, err error, j
 		if err != nil || v.Less(clusterversion.V25_1.Version()) {
 			return err
 		}
-		return j.Messages().Record(ctx, txn, "retry", efe.cause.Error())
+		return j.Messages().Record(ctx, txn, MessageKindRetry, efe.cause.Error())
 	})
 	if ctx.Err() != nil {
 		return

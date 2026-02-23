@@ -15,6 +15,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/cli/clierrorplus"
 	"github.com/cockroachdb/cockroach/pkg/cli/clisqlclient"
+	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
 	tracezipper "github.com/cockroachdb/cockroach/pkg/util/tracing/zipper"
 	"github.com/cockroachdb/errors"
@@ -49,10 +50,9 @@ func runDebugJobTrace(_ *cobra.Command, args []string) (resErr error) {
 
 func getJobTraceID(sqlConn clisqlclient.Conn, jobID int64) (int64, error) {
 	var traceID int64
-	// We normally avoid programatic access to the job's message log, but this is
-	// a debug command so we can allow it here.
+	// Try reading from message storage first, then fall back to legacy Progress proto.
 	for attempt, query := range []string{
-		`SELECT message::int FROM system.job_message WHERE job_id=$1 AND kind = 'trace-id' ORDER BY written DESC LIMIT 1`,
+		fmt.Sprintf(`SELECT message::int FROM system.job_message WHERE job_id=$1 AND kind = '%s' ORDER BY written DESC LIMIT 1`, jobs.MessageKindTraceID),
 		`SELECT trace_id FROM crdb_internal.jobs WHERE job_id=$1`,
 	} {
 		rows, err := sqlConn.Query(context.Background(), query, jobID)

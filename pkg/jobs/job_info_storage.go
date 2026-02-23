@@ -259,6 +259,16 @@ func (i StatusStorage) Get(ctx context.Context, txn isql.Txn) (string, time.Time
 	return string(*status), written.Time, nil
 }
 
+// Message kinds used in the job message log.
+const (
+	// MessageKindState records job state transitions.
+	MessageKindState = "state"
+	// MessageKindTraceID records the trace ID associated with a job execution.
+	MessageKindTraceID = "trace-id"
+	// MessageKindRetry records retry errors encountered during job execution.
+	MessageKindRetry = "retry"
+)
+
 // MessageStorage stores human-readable messages emitted by the execution of a
 // job, including when it changes states in the job system, when it wishes to
 // communicate its own custom status, or additional messages it wishes to

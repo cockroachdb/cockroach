@@ -9,6 +9,7 @@ import (
 	"context"
 	"fmt"
 	"reflect"
+	"strconv"
 	"sync/atomic"
 	"time"
 
@@ -246,7 +247,7 @@ func (u Updater) started(ctx context.Context) error {
 	if sp != nil {
 		traceID = sp.TraceID()
 	}
-	return u.Update(ctx, func(_ isql.Txn, md JobMetadata, ju *JobUpdater) error {
+	return u.Update(ctx, func(txn isql.Txn, md JobMetadata, ju *JobUpdater) error {
 		if md.State != StatePending && md.State != StateRunning {
 			return errors.Errorf("job with state %s cannot be marked started", md.State)
 		}
@@ -255,9 +256,12 @@ func (u Updater) started(ctx context.Context) error {
 			md.Payload.StartedMicros = timeutil.ToUnixMicros(u.now())
 			ju.UpdatePayload(md.Payload)
 		}
-		if traceID != 0 && md.Progress != nil && md.Progress.TraceID != traceID {
-			md.Progress.TraceID = traceID
-			ju.UpdateProgress(md.Progress)
+		// Write trace ID to message storage instead of Progress proto.
+		// This avoids clobbering progress updates made via ProgressStorage.
+		if traceID != 0 {
+			if err := u.j.Messages().Record(ctx, txn, MessageKindTraceID, fmt.Sprintf("%d", traceID)); err != nil {
+				return err
+			}
 		}
 		return nil
 	})
@@ -409,9 +413,11 @@ func (u Updater) reverted(
 			}
 			ju.UpdateState(StateReverting)
 		}
-		if traceID != 0 && md.Progress != nil && md.Progress.TraceID != traceID {
-			md.Progress.TraceID = traceID
-			ju.UpdateProgress(md.Progress)
+		// Write trace ID to message storage instead of Progress proto.
+		if traceID != 0 {
+			if err := u.j.Messages().Record(ctx, txn, MessageKindTraceID, fmt.Sprintf("%d", traceID)); err != nil {
+				return err
+			}
 		}
 		return nil
 	})
@@ -894,10 +900,37 @@ func (sj *StartableJob) recordStart() (alreadyStarted bool) {
 	return atomic.AddInt64(&sj.starts, 1) != 1
 }
 
-// GetJobTraceID returns the current trace ID of the job from the job progress.
+// GetJobTraceID returns the current trace ID of the job, reading from message
+// storage with fallback to legacy Progress proto for old jobs.
 func GetJobTraceID(ctx context.Context, db isql.DB, jobID jobspb.JobID) (tracingpb.TraceID, error) {
 	var traceID tracingpb.TraceID
 	if err := db.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+		// Try reading from message storage first (new location).
+		row, err := txn.QueryRowEx(
+			ctx, "get-job-trace-id", txn.KV(),
+			sessiondata.NodeUserSessionDataOverride,
+			`SELECT message FROM system.job_message
+			 WHERE job_id = $1 AND kind = $2
+			 ORDER BY written DESC LIMIT 1`,
+			jobID, MessageKindTraceID,
+		)
+		if err != nil {
+			return err
+		}
+		if row != nil {
+			message, ok := row[0].(*tree.DString)
+			if !ok {
+				return errors.Errorf("unexpected type %T for trace ID message", row[0])
+			}
+			id, err := strconv.ParseUint(string(*message), 10, 64)
+			if err != nil {
+				return errors.Wrap(err, "failed to parse trace ID from message storage")
+			}
+			traceID = tracingpb.TraceID(id)
+			return nil
+		}
+
+		// Fallback to legacy Progress proto for backwards compatibility.
 		jobInfo := InfoStorageForJob(txn, jobID)
 		progressBytes, exists, err := jobInfo.GetLegacyProgress(ctx, "GetJobTraceID")
 		if err != nil {

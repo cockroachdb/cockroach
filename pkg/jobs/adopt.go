@@ -599,7 +599,7 @@ func (r *Registry) servePauseAndCancelRequests(ctx context.Context, s sqllivenes
 			stateString := *row[1].(*tree.DString)
 			jobTypeString := *row[2].(*tree.DString)
 
-			if err := job.Messages().Record(ctx, txn, "state", string(stateString)); err != nil {
+			if err := job.Messages().Record(ctx, txn, MessageKindState, string(stateString)); err != nil {
 				return err
 			}
 
