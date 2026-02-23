@@ -74,6 +74,9 @@ type testProposer struct {
 	leaderReplicaType roachpb.ReplicaType
 	// rangePolicy is used in closedTimestampTarget.
 	rangePolicy ctpb.RangeClosedTimestampPolicy
+	// targetHasSendQueue is used in verifyLeaseRequestSafetyRLocked to simulate
+	// the target having a send queue.
+	targetHasSendQueue bool
 }
 
 var _ proposer = &testProposer{}
@@ -253,6 +256,7 @@ func (t *testProposer) verifyLeaseRequestSafetyRLocked(
 		PrevLeaseExpired:   !t.validLease,
 		NextLeaseHolder:    nextLease.Replica,
 		BypassSafetyChecks: bypassSafetyChecks,
+		TargetHasSendQueue: t.targetHasSendQueue,
 	}
 	return leases.Verify(ctx, st, in)
 }
@@ -687,52 +691,53 @@ func TestProposalBufferRejectUnsafeLeaseTransfer(t *testing.T) {
 		name          string
 		proposerState raftpb.StateType
 		// math.MaxUint64 if the target is not in the raft group.
-		targetState rafttracker.StateType
-		targetMatch kvpb.RaftIndex
+		targetState        rafttracker.StateType
+		targetMatch        kvpb.RaftIndex
+		targetHasSendQueue bool
 
-		expRejection       bool
-		expRejectionReason raftutil.ReplicaNeedsSnapshotStatus
+		expRejection    bool
+		expRejectionMsg string // substring expected in the rejection error
 	}{
 		{
-			name:               "follower",
-			proposerState:      raftpb.StateFollower,
-			expRejection:       true,
-			expRejectionReason: raftutil.LocalReplicaNotLeader,
+			name:            "follower",
+			proposerState:   raftpb.StateFollower,
+			expRejection:    true,
+			expRejectionMsg: raftutil.LocalReplicaNotLeader.String(),
 		},
 		{
-			name:               "candidate",
-			proposerState:      raftpb.StateCandidate,
-			expRejection:       true,
-			expRejectionReason: raftutil.LocalReplicaNotLeader,
+			name:            "candidate",
+			proposerState:   raftpb.StateCandidate,
+			expRejection:    true,
+			expRejectionMsg: raftutil.LocalReplicaNotLeader.String(),
 		},
 		{
-			name:               "leader, no progress for target",
-			proposerState:      raftpb.StateLeader,
-			targetState:        math.MaxUint64,
-			expRejection:       true,
-			expRejectionReason: raftutil.ReplicaUnknown,
+			name:            "leader, no progress for target",
+			proposerState:   raftpb.StateLeader,
+			targetState:     math.MaxUint64,
+			expRejection:    true,
+			expRejectionMsg: raftutil.ReplicaUnknown.String(),
 		},
 		{
-			name:               "leader, target state probe",
-			proposerState:      raftpb.StateLeader,
-			targetState:        rafttracker.StateProbe,
-			expRejection:       true,
-			expRejectionReason: raftutil.ReplicaStateProbe,
+			name:            "leader, target state probe",
+			proposerState:   raftpb.StateLeader,
+			targetState:     rafttracker.StateProbe,
+			expRejection:    true,
+			expRejectionMsg: raftutil.ReplicaStateProbe.String(),
 		},
 		{
-			name:               "leader, target state snapshot",
-			proposerState:      raftpb.StateLeader,
-			targetState:        rafttracker.StateSnapshot,
-			expRejection:       true,
-			expRejectionReason: raftutil.ReplicaStateSnapshot,
+			name:            "leader, target state snapshot",
+			proposerState:   raftpb.StateLeader,
+			targetState:     rafttracker.StateSnapshot,
+			expRejection:    true,
+			expRejectionMsg: raftutil.ReplicaStateSnapshot.String(),
 		},
 		{
-			name:               "leader, target state replicate, match+1 < firstIndex",
-			proposerState:      raftpb.StateLeader,
-			targetState:        rafttracker.StateReplicate,
-			targetMatch:        proposerCompactedIndex - 1,
-			expRejection:       true,
-			expRejectionReason: raftutil.ReplicaMatchBelowLeadersFirstIndex,
+			name:            "leader, target state replicate, match+1 < firstIndex",
+			proposerState:   raftpb.StateLeader,
+			targetState:     rafttracker.StateReplicate,
+			targetMatch:     proposerCompactedIndex - 1,
+			expRejection:    true,
+			expRejectionMsg: raftutil.ReplicaMatchBelowLeadersFirstIndex.String(),
 		},
 		{
 			name:          "leader, target state replicate, match+1 == firstIndex",
@@ -747,6 +752,23 @@ func TestProposalBufferRejectUnsafeLeaseTransfer(t *testing.T) {
 			targetState:   rafttracker.StateReplicate,
 			targetMatch:   proposerCompactedIndex + 1,
 			expRejection:  false,
+		},
+		{
+			name:               "leader, target has send queue",
+			proposerState:      raftpb.StateLeader,
+			targetState:        rafttracker.StateReplicate,
+			targetMatch:        proposerCompactedIndex,
+			targetHasSendQueue: true,
+			expRejection:       true,
+			expRejectionMsg:    "target has a send queue",
+		},
+		{
+			name:               "leader, target has no send queue",
+			proposerState:      raftpb.StateLeader,
+			targetState:        rafttracker.StateReplicate,
+			targetMatch:        proposerCompactedIndex,
+			targetHasSendQueue: false,
+			expRejection:       false,
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -788,6 +810,7 @@ func TestProposalBufferRejectUnsafeLeaseTransfer(t *testing.T) {
 			}
 			p.raftGroup = r
 			p.ci = proposerCompactedIndex
+			p.targetHasSendQueue = tc.targetHasSendQueue
 
 			var b propBuf
 			clock := hlc.NewClockForTesting(nil)
@@ -811,7 +834,7 @@ func TestProposalBufferRejectUnsafeLeaseTransfer(t *testing.T) {
 			require.NoError(t, b.flushLocked(ctx))
 			if tc.expRejection {
 				require.NotNil(t, rejectedErr)
-				require.Contains(t, rejectedErr.Error(), tc.expRejectionReason.String())
+				require.Contains(t, rejectedErr.Error(), tc.expRejectionMsg)
 			} else {
 				require.Nil(t, rejectedErr)
 			}
