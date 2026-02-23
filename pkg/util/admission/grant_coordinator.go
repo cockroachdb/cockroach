@@ -195,7 +195,7 @@ func NewGrantCoordinators(
 		sqlKVWorkQueue := slotsCoord.GetWorkQueue(SQLKVResponseWork)
 		sqlSQLWorkQueue := slotsCoord.GetWorkQueue(SQLSQLResponseWork)
 		setLatestOverride := func() {
-			override := cpuTimeTokenACEnabled.Get(&st.SV)
+			override := cpuTimeTokenACIsEnabled(&st.SV)
 			sqlKVWorkQueue.SetOverrideAllToBypassAdmission(override)
 			sqlSQLWorkQueue.SetOverrideAllToBypassAdmission(override)
 		}

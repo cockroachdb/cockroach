@@ -42,6 +42,7 @@ go_library(
         "//pkg/util/admission/admissionpb",
         "//pkg/util/buildutil",
         "//pkg/util/ctxutil",
+        "//pkg/util/envutil",
         "//pkg/util/goschedstats",
         "//pkg/util/grunning",
         "//pkg/util/humanizeutil",
