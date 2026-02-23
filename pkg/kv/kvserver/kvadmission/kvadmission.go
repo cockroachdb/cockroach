@@ -550,11 +550,17 @@ func (n *controllerImpl) FollowerStoreWriteBytes(
 
 var _ replica_rac2.ACWorkQueue = &controllerImpl{}
 
+var logUnableToFindQueueForStore = log.Every(time.Second)
+
 // Admit implements replica_rac2.ACWorkQueue. It is only used for the RACv2 protocol.
 func (n *controllerImpl) Admit(ctx context.Context, entry replica_rac2.EntryForAdmission) bool {
 	storeAdmissionQ := n.storeGrantCoords.TryGetQueueForStore(entry.StoreID)
 	if storeAdmissionQ == nil {
-		log.KvDistribution.Errorf(ctx, "unable to find queue for store: %s", entry.StoreID)
+		// This can happen during node startup before
+		// StoreGrantCoordinators.SetPebbleMetricsProvider has run.
+		if logUnableToFindQueueForStore.ShouldLog() {
+			log.KvDistribution.VInfof(ctx, 1, "unable to find queue for store: %s", entry.StoreID)
+		}
 		return false // nothing to do
 	}
 
