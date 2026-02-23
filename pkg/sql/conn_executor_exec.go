@@ -63,6 +63,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/fsm"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+
 	// This import is needed here to properly inject tree.ValidateJSONPath from
 	// pkg/util/jsonpath/parser/parse.go.
 	_ "github.com/cockroachdb/cockroach/pkg/util/jsonpath/parser"
@@ -655,6 +656,15 @@ func (ex *connExecutor) execStmtInOpenState(
 	// txnState.mu.autoRetryCounter, so we don't need to get a mutex here.
 	ctx = ih.Setup(ctx, ex, p, &stmt, os.ImplicitTxn.Get(),
 		ex.state.mu.priority, ex.state.mu.autoRetryCounter)
+
+	// Set workload ID for ASH sampling.
+	fingerprintID := appstatspb.ConstructStatementFingerprintID(
+		stmt.StmtNoConstants, os.ImplicitTxn.Get(), ex.sessionData().Database,
+	)
+	p.extendedEvalCtx.WorkloadID = uint64(fingerprintID)
+	if p.txn != nil {
+		p.txn.SetWorkloadID(uint64(fingerprintID))
+	}
 
 	// Note that here we always unconditionally defer a function that takes care
 	// of finishing the instrumentation helper. This is needed since in order to
@@ -1726,6 +1736,15 @@ func (ex *connExecutor) execStmtInOpenStateWithPausablePortal(
 	p.extendedEvalCtx.Annotations = &p.semaCtx.Annotations
 	p.semaCtx.Placeholders.Assign(pinfo, vars.stmt.NumPlaceholders)
 	p.extendedEvalCtx.Placeholders = &p.semaCtx.Placeholders
+
+	// Set workload ID for ASH sampling.
+	fingerprintID := appstatspb.ConstructStatementFingerprintID(
+		vars.stmt.StmtNoConstants, os.ImplicitTxn.Get(), ex.sessionData().Database,
+	)
+	p.extendedEvalCtx.WorkloadID = uint64(fingerprintID)
+	if p.txn != nil {
+		p.txn.SetWorkloadID(uint64(fingerprintID))
+	}
 
 	if buildutil.CrdbTestBuild {
 		// Ensure that each statement is formatted regardless of logging
@@ -3691,6 +3710,11 @@ func (ex *connExecutor) execStmtInNoTxnState(
 		p.semaCtx.Annotations = tree.MakeAnnotations(stmt.NumAnnotations)
 		p.extendedEvalCtx.Annotations = &p.semaCtx.Annotations
 		p.extendedEvalCtx.Placeholders = &tree.PlaceholderInfo{}
+		// Set workload ID for ASH sampling.
+		fingerprintID := appstatspb.ConstructStatementFingerprintID(
+			stmt.StmtNoConstants, ex.implicitTxn(), ex.sessionData().Database,
+		)
+		p.extendedEvalCtx.WorkloadID = uint64(fingerprintID)
 		p.curPlan.init(&p.stmt, &p.instrumentation)
 		var execErr error
 		if p, ok := payload.(payloadWithError); ok {

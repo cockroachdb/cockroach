@@ -281,7 +281,7 @@ func (ds *ServerImpl) setupFlow(
 		// The flow will run in a LeafTxn because we do not want each distributed
 		// Txn to heartbeat the transaction.
 		nodeID := roachpb.NodeID(req.Flow.Gateway)
-		return kv.NewLeafTxn(ctx, ds.DB.KV(), nodeID, tis, &req.LeafTxnAdmissionHeader), nil
+		return kv.NewLeafTxnWithWorkloadInfo(ctx, ds.DB.KV(), nodeID, tis, &req.LeafTxnAdmissionHeader, req.EvalContext.WorkloadID), nil
 	}
 
 	var evalCtx *eval.Context
@@ -378,6 +378,7 @@ func (ds *ServerImpl) setupFlow(
 		evalCtx.SetStmtTimestamp(timeutil.Unix(0 /* sec */, req.EvalContext.StmtTimestampNanos))
 		evalCtx.SetTxnTimestamp(timeutil.Unix(0 /* sec */, req.EvalContext.TxnTimestampNanos))
 		evalCtx.TestingKnobs.ForceProductionValues = req.EvalContext.TestingKnobsForceProductionValues
+		evalCtx.WorkloadID = req.EvalContext.WorkloadID
 
 		if ds.SQLCPUProvider != nil {
 			var cpuHandle *admission.SQLCPUHandle

@@ -239,6 +239,7 @@ func newCFetcherWrapper(
 		alwaysReallocate,
 		nil, /* txn; TODO(dt): this means no AC priority info is passed. */
 		tenantID,
+		0, /* workloadID */
 	}
 
 	// This memory monitor is not connected to the memory accounting system
