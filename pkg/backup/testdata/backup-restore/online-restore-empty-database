@@ -22,4 +22,4 @@ RESTORE DATABASE d FROM LATEST IN 'nodelocal://1/cluster/' with EXPERIMENTAL DEF
 query-sql retry
 SELECT count(*) FROM [SHOW JOBS] WHERE job_type='RESTORE' and status='succeeded';
 ----
-1
+2
