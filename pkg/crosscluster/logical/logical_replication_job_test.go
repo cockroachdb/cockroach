@@ -416,6 +416,42 @@ func TestLogicalStreamIngestionJobWithCursor(t *testing.T) {
 	dbB.CheckQueryResults(t, "SELECT * from b.tab", expectedRowsB)
 }
 
+func TestLogicalStreamIngestionJobWithCursorAfterSchemaChange(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	skip.UnderDeadlock(t)
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	server, s, dbA, dbB := setupLogicalTestServer(t, ctx, testClusterBaseClusterArgs, 1)
+	defer server.Stopper().Stop(ctx)
+
+	dbAURL := replicationtestutils.GetExternalConnectionURI(t, s, s, serverutils.DBName("a"))
+
+	dbA.Exec(t, "INSERT INTO tab VALUES (1, 'before schema change')")
+
+	dbA.Exec(t, "ALTER TABLE tab ADD COLUMN extra INT DEFAULT 0")
+	dbB.Exec(t, "ALTER TABLE tab ADD COLUMN extra INT DEFAULT 0")
+
+	cursorTS := s.Clock().Now()
+
+	dbA.Exec(t, "INSERT INTO tab VALUES (2, 'after cursor', 10)")
+	dbA.Exec(t, "INSERT INTO tab VALUES (3, 'after cursor', 20)")
+
+	var jobBID jobspb.JobID
+	dbB.QueryRow(t, "CREATE LOGICAL REPLICATION STREAM FROM TABLE tab ON $1 INTO TABLE tab WITH CURSOR=$2",
+		dbAURL.String(), cursorTS.AsOfSystemTime()).Scan(&jobBID)
+
+	WaitUntilReplicatedTime(t, s.Clock().Now(), dbB, jobBID)
+
+	// Only the rows inserted after the cursor should appear on the
+	// destination.
+	expectedRows := [][]string{
+		{"2", "after cursor", "10"},
+		{"3", "after cursor", "20"},
+	}
+	dbB.CheckQueryResults(t, "SELECT * FROM b.tab ORDER BY pk", expectedRows)
+}
+
 func TestCreateTables(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	skip.UnderDeadlock(t)
