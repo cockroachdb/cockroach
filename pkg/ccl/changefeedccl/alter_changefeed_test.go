@@ -151,18 +151,20 @@ func TestAlterChangefeedAddTargetPrivileges(t *testing.T) {
 			)
 		})
 
-		// With require_external_connection_sink enabled, the user requires USAGE on the external connection.
+		// With require_external_connection_sink enabled, the user requires
+		// USAGE on the external connection. Drop and re-add tables since
+		// they were already added above.
 		rootDB.Exec(t, "SET CLUSTER SETTING changefeed.permissions.require_external_connection_sink.enabled = true")
 		withUser(t, "user1", func(userDB *sqlutils.SQLRunner) {
 			userDB.ExpectErr(t,
 				"user user1 does not have USAGE privilege on external_connection second",
-				fmt.Sprintf("ALTER CHANGEFEED %d ADD table_b, table_c set sink='external://second'", jobID),
+				fmt.Sprintf("ALTER CHANGEFEED %d DROP table_b, table_c ADD table_b, table_c set sink='external://second'", jobID),
 			)
 		})
 		rootDB.Exec(t, `GRANT USAGE ON EXTERNAL CONNECTION second TO user1`)
 		withUser(t, "user1", func(userDB *sqlutils.SQLRunner) {
 			userDB.Exec(t,
-				fmt.Sprintf("ALTER CHANGEFEED %d ADD table_b, table_c set sink='external://second'", jobID),
+				fmt.Sprintf("ALTER CHANGEFEED %d DROP table_b, table_c ADD table_b, table_c set sink='external://second'", jobID),
 			)
 		})
 		rootDB.Exec(t, "SET CLUSTER SETTING changefeed.permissions.require_external_connection_sink.enabled = false")
@@ -401,57 +403,63 @@ func TestAlterChangefeedSwitchFamily(t *testing.T) {
 
 	testutils.SetVModule(t, "helpers_test=1")
 
-	testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
-		sqlDB := sqlutils.MakeSQLRunner(s.DB)
-		sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY, b STRING, FAMILY onlya (a), FAMILY onlyb (b))`)
+	testutils.RunTrueAndFalse(t, "drop first", func(t *testing.T, dropFirst bool) {
+		testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
+			sqlDB := sqlutils.MakeSQLRunner(s.DB)
+			sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY, b STRING, FAMILY onlya (a), FAMILY onlyb (b))`)
 
-		testFeed := feed(t, f, `CREATE CHANGEFEED FOR foo FAMILY onlya`)
-		defer closeFeed(t, testFeed)
+			testFeed := feed(t, f, `CREATE CHANGEFEED FOR foo FAMILY onlya`)
+			defer closeFeed(t, testFeed)
 
-		tsr := sqlDB.QueryRow(t, `INSERT INTO foo VALUES(1, 'hello') RETURNING cluster_logical_timestamp()`)
-		var insertTsDecStr string
-		tsr.Scan(&insertTsDecStr)
-		insertTs := parseTimeToHLC(t, insertTsDecStr)
+			tsr := sqlDB.QueryRow(t, `INSERT INTO foo VALUES(1, 'hello') RETURNING cluster_logical_timestamp()`)
+			var insertTsDecStr string
+			tsr.Scan(&insertTsDecStr)
+			insertTs := parseTimeToHLC(t, insertTsDecStr)
 
-		assertPayloads(t, testFeed, []string{
-			`foo.onlya: [1]->{"after": {"a": 1}}`,
-		})
+			assertPayloads(t, testFeed, []string{
+				`foo.onlya: [1]->{"after": {"a": 1}}`,
+			})
 
-		feed, ok := testFeed.(cdctest.EnterpriseTestFeed)
-		require.True(t, ok)
+			feed, ok := testFeed.(cdctest.EnterpriseTestFeed)
+			require.True(t, ok)
 
-		// Wait for the high water mark (aka resolved ts) to advance past the row we inserted's
-		// mvcc ts. Otherwise, we'd see [1] again due to a catch up scan, and it
-		// would muddy the waters.
-		testutils.SucceedsSoon(t, func() error {
-			registry := s.Server.JobRegistry().(*jobs.Registry)
-			job, err := registry.LoadJob(context.Background(), feed.JobID())
-			require.NoError(t, err)
-			prog := job.Progress()
-			if p := prog.GetHighWater(); p != nil && !p.IsEmpty() && insertTs.Less(*p) {
-				return nil
+			// Wait for the high water mark (aka resolved ts) to advance past the row we inserted's
+			// mvcc ts. Otherwise, we'd see [1] again due to a catch up scan, and it
+			// would muddy the waters.
+			testutils.SucceedsSoon(t, func() error {
+				registry := s.Server.JobRegistry().(*jobs.Registry)
+				job, err := registry.LoadJob(context.Background(), feed.JobID())
+				require.NoError(t, err)
+				prog := job.Progress()
+				if p := prog.GetHighWater(); p != nil && !p.IsEmpty() && insertTs.Less(*p) {
+					return nil
+				}
+				return errors.New("waiting for highwater")
+			})
+
+			sqlDB.Exec(t, `PAUSE JOB $1`, feed.JobID())
+			waitForJobState(sqlDB, t, feed.JobID(), `paused`)
+
+			alterCmd := `ADD foo FAMILY onlyb DROP foo FAMILY onlya`
+			if dropFirst {
+				alterCmd = `DROP foo FAMILY onlya ADD foo FAMILY onlyb`
 			}
-			return errors.New("waiting for highwater")
-		})
+			sqlDB.Exec(t, fmt.Sprintf(`ALTER CHANGEFEED %d %s`, feed.JobID(), alterCmd))
 
-		sqlDB.Exec(t, `PAUSE JOB $1`, feed.JobID())
-		waitForJobState(sqlDB, t, feed.JobID(), `paused`)
+			sqlDB.Exec(t, fmt.Sprintf(`RESUME JOB %d`, feed.JobID()))
+			waitForJobState(sqlDB, t, feed.JobID(), `running`)
 
-		sqlDB.Exec(t, fmt.Sprintf(`ALTER CHANGEFEED %d ADD foo FAMILY onlyb DROP foo FAMILY onlya`, feed.JobID()))
+			sqlDB.Exec(t, `INSERT INTO foo VALUES(2, 'goodbye')`)
+			assertPayloads(t, testFeed, []string{
+				// Note that we don't see foo.onlyb.[1] here, because we're not
+				// doing a catchup scan and we've already processed that tuple.
+				`foo.onlyb: [2]->{"after": {"b": "goodbye"}}`,
+			})
+		}
 
-		sqlDB.Exec(t, fmt.Sprintf(`RESUME JOB %d`, feed.JobID()))
-		waitForJobState(sqlDB, t, feed.JobID(), `running`)
-
-		sqlDB.Exec(t, `INSERT INTO foo VALUES(2, 'goodbye')`)
-		assertPayloads(t, testFeed, []string{
-			// Note that we don't see foo.onlyb.[1] here, because we're not
-			// doing a catchup scan and we've already processed that tuple.
-			`foo.onlyb: [2]->{"after": {"b": "goodbye"}}`,
-		})
-	}
-
-	// TODO: Figure out why this freezes on other sinks (ex: cloudstorage)
-	cdcTest(t, testFn, feedTestForceSink("kafka"), feedTestNoExternalConnection)
+		// TODO: Figure out why this freezes on other sinks (ex: cloudstorage)
+		cdcTest(t, testFn, feedTestForceSink("kafka"), feedTestNoExternalConnection)
+	})
 }
 
 func TestAlterChangefeedDropTarget(t *testing.T) {
@@ -1040,7 +1048,9 @@ func TestAlterChangefeedAddTargetErrors(t *testing.T) {
 		sqlDB.Exec(t, `CREATE TABLE bar (a INT PRIMARY KEY)`)
 		sqlDB.Exec(t, `INSERT INTO bar VALUES (1), (2), (3)`)
 		sqlDB.ExpectErr(t,
-			`pq: target "bar" cannot be resolved as of the creation time of the changefeed. Please wait until the high water mark progresses past the creation time of this target in order to add it to the changefeed.`,
+			`pq: target "bar" cannot be resolved as of the resume time .+\. `+
+				`Please wait until the high water mark progresses past the creation `+
+				`time of this target in order to add it to the changefeed.`,
 			fmt.Sprintf(`ALTER CHANGEFEED %d ADD bar`, feed.JobID()),
 		)
 
@@ -1070,7 +1080,9 @@ func TestAlterChangefeedAddTargetErrors(t *testing.T) {
 		sqlDB.Exec(t, `INSERT INTO baz VALUES (1), (2), (3)`)
 
 		sqlDB.ExpectErr(t,
-			`pq: target "baz" cannot be resolved as of the high water mark. Please wait until the high water mark progresses past the creation time of this target in order to add it to the changefeed.`,
+			`pq: target "baz" cannot be resolved as of the resume time .+\. `+
+				`Please wait until the high water mark progresses past the creation `+
+				`time of this target in order to add it to the changefeed.`,
 			fmt.Sprintf(`ALTER CHANGEFEED %d ADD baz`, feed.JobID()),
 		)
 	}
@@ -2142,7 +2154,7 @@ func TestAlterChangefeedAlterTableName(t *testing.T) {
 	cdcTest(t, testFn, feedTestEnterpriseSinks, feedTestNoExternalConnection, feedTestUseRootUserConnection)
 }
 
-func TestAlterChangefeedAddTargetsDuringSchemaChangeError(t *testing.T) {
+func TestAlterChangefeedAddTargetsDuringSchemaChangeBackfill(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
@@ -2184,12 +2196,23 @@ WITH resolved = '1s', no_initial_scan, min_checkpoint_frequency='1ns'`,
 		jobRegistry := s.Server.JobRegistry().(*jobs.Registry)
 
 		// Kafka feeds are not buffered, so we have to consume messages.
+		// Track which bar keys we see to verify the initial scan.
+		var seenBarKeys struct {
+			syncutil.Mutex
+			keys map[string]struct{}
+		}
+		seenBarKeys.keys = make(map[string]struct{})
 		g := ctxgroup.WithContext(context.Background())
 		g.Go(func() error {
 			for {
-				_, err := testFeed.Next()
+				msg, err := testFeed.Next()
 				if err != nil {
 					return err
+				}
+				if msg != nil && msg.Topic == `bar` && len(msg.Key) > 0 {
+					seenBarKeys.Lock()
+					seenBarKeys.keys[string(msg.Key)] = struct{}{}
+					seenBarKeys.Unlock()
 				}
 			}
 		})
@@ -2273,11 +2296,36 @@ WITH resolved = '1s', no_initial_scan, min_checkpoint_frequency='1ns'`,
 		require.NoError(t, jobFeed.Pause())
 		waitForJobState(sqlDB, t, jobFeed.JobID(), `paused`)
 
-		errMsg := fmt.Sprintf(
-			`pq: cannot perform initial scan on newly added targets while the checkpoint is non-empty, please unpause the changefeed and wait until the high watermark progresses past the current value %s to add these targets.`,
-			backfillTimestamp.Prev().AsOfSystemTime(),
-		)
-		sqlDB.ExpectErr(t, errMsg, fmt.Sprintf(`ALTER CHANGEFEED %d ADD bar WITH initial_scan`, jobFeed.JobID()))
+		// Adding a target with initial_scan during a schema change backfill
+		// is supported — the new table's spans are merged into the existing
+		// checkpoint.
+		sqlDB.Exec(t, fmt.Sprintf(`ALTER CHANGEFEED %d ADD bar WITH initial_scan`, jobFeed.JobID()))
+
+		// Verify the highwater was reset so the initial scan triggers.
+		progress := loadProgress(t, jobFeed, jobRegistry)
+		h := progress.GetHighWater()
+		require.True(t, h == nil || h.IsEmpty())
+
+		// Stop filtering spans so the changefeed can make progress.
+		knobs.FilterSpanWithMutation = func(r *jobspb.ResolvedSpan) (bool, error) {
+			return false, nil
+		}
+
+		require.NoError(t, jobFeed.Resume())
+
+		// Wait for highwater to advance, proving the schema change backfill
+		// completed and bar's initial scan succeeded.
+		waitForHighwater(t, jobFeed, jobRegistry)
+
+		// Verify we received bar's initial scan for all 1000 rows.
+		testutils.SucceedsSoon(t, func() error {
+			seenBarKeys.Lock()
+			defer seenBarKeys.Unlock()
+			if len(seenBarKeys.keys) < 1000 {
+				return errors.Newf("waiting for bar keys: %d/1000", len(seenBarKeys.keys))
+			}
+			return nil
+		})
 	}
 
 	cdcTestWithSystem(t, testFn, feedTestEnterpriseSinks, feedTestNoExternalConnection)
@@ -2791,8 +2839,7 @@ func TestAlterChangefeedAddDropSameTarget(t *testing.T) {
 		require.NoError(t, feed.Resume())
 		sqlDB.Exec(t, `INSERT INTO bar VALUES(2)`)
 		assertPayloads(t, testFeed, []string{
-			// TODO(#144032): This row should be produced.
-			// `bar: [1]->{"after": {"a": 1}}`,
+			`bar: [1]->{"after": {"a": 1}}`,
 			`bar: [2]->{"after": {"a": 2}}`,
 		})
 	}

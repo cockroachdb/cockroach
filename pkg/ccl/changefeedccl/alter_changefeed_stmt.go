@@ -32,7 +32,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -227,17 +226,17 @@ func alterDatabaseChangefeed(
 	newProgress := job.Progress()
 	newStatementTime := prevDetails.StatementTime
 
-	var resolveTime hlc.Timestamp
+	var resumeTS hlc.Timestamp
 	highWater := newProgress.GetHighWater()
 	if highWater != nil && !highWater.IsEmpty() {
-		resolveTime = *highWater
+		resumeTS = *highWater
 	} else {
-		resolveTime = newStatementTime
+		resumeTS = newStatementTime
 	}
 
 	annotatedStmt := &annotatedChangefeedStatement{
 		CreateChangefeed:    newChangefeedStmt,
-		alterChangefeedAsOf: resolveTime,
+		alterChangefeedAsOf: resumeTS,
 	}
 
 	newDescription, err := makeChangefeedDescription(
@@ -297,11 +296,29 @@ func alterTableChangefeed(
 		return errors.Errorf("cannot set filters for table level changefeeds")
 	}
 
-	newTargets, newProgress, newStatementTime, originalSpecs, err :=
+	prevProgress := job.Progress()
+	var prevHighWater hlc.Timestamp
+	if hw := prevProgress.GetHighWater(); hw != nil {
+		prevHighWater = *hw
+	}
+	resumeTS := prevHighWater
+	if resumeTS.IsEmpty() {
+		resumeTS = prevDetails.StatementTime
+	}
+
+	newTargets, originalSpecs, primaryIndexIDs, tableOps, err :=
 		generateAndValidateNewTargetsForTableLevelFeed(
 			ctx, exprEval, p, alterChangefeedStmt.Cmds, newOptions,
-			prevDetails, job.Progress(), newSinkURI,
+			prevDetails, resumeTS, newSinkURI,
 		)
+	if err != nil {
+		return err
+	}
+
+	// Compute the new progress based on the table ops.
+	newProgress, err := generateNewProgressForTableOps(
+		p, prevProgress, prevHighWater, resumeTS, primaryIndexIDs, tableOps,
+	)
 	if err != nil {
 		return err
 	}
@@ -320,18 +337,10 @@ func alterTableChangefeed(
 		newChangefeedStmt.Select = query
 	}
 
-	var resolveTime hlc.Timestamp
-	highWater := newProgress.GetHighWater()
-	if highWater != nil && !highWater.IsEmpty() {
-		resolveTime = *highWater
-	} else {
-		resolveTime = newStatementTime
-	}
-
 	annotatedStmt := &annotatedChangefeedStatement{
 		CreateChangefeed:    newChangefeedStmt,
 		originalSpecs:       originalSpecs,
-		alterChangefeedAsOf: resolveTime,
+		alterChangefeedAsOf: resumeTS,
 	}
 
 	newDescription, err := makeChangefeedDescription(
@@ -349,14 +358,14 @@ func alterTableChangefeed(
 	}
 
 	newDetails := jobRecord.Details.(jobspb.ChangefeedDetails)
-	newDetails.StatementTime = newStatementTime
+	newDetails.StatementTime = resumeTS
 
 	// For table-level feeds, set the initial scan option to its default
 	// value of "yes" so that we can do an initial scan for new targets.
 	newDetails.Opts[changefeedbase.OptInitialScan] = ``
 
 	return finalizeAlterChangefeed(
-		ctx, p, job, jobID, jobRecord, newDetails, newProgress, targets, resultsCh,
+		ctx, p, job, jobID, jobRecord, newDetails, &newProgress, targets, resultsCh,
 	)
 }
 
@@ -557,6 +566,33 @@ func generateNewOpts(
 	return changefeedbase.MakeStatementOptions(newOptions), sinkURI, nil
 }
 
+// targetOp describes what happened to a target during an ALTER CHANGEFEED.
+type targetOp int
+
+// The targetOp's are sorted in order of increasing precedence (i.e. which op
+// wins for a table when multiple families are changed).
+const (
+	_ targetOp = iota
+	// targetOpDrop indicates the target was dropped.
+	targetOpDrop
+	// targetOpAdd indicates the target was added without an initial scan.
+	targetOpAdd
+	// targetOpAddWithInitialScan indicates the target was added with
+	// an initial scan requested.
+	targetOpAddWithInitialScan
+)
+
+// generateAndValidateNewTargetsForTableLevelFeed processes all ADD/DROP
+// commands for a table-level changefeed and returns the new target list,
+// statement time, original specs, and a map describing which tables were
+// added or dropped. Commands are processed in order with last-writer-wins
+// semantics (e.g. DROP then ADD re-adds the table). Adding a table that
+// is already watched, or dropping a table that is not watched, returns
+// an error. The caller is responsible for updating the job progress
+// based on the returned tableOps map.
+//
+// resumeTS is the timestamp the changefeed will resume from (highwater or
+// original statement time).
 func generateAndValidateNewTargetsForTableLevelFeed(
 	ctx context.Context,
 	exprEval exprutil.Evaluator,
@@ -564,29 +600,32 @@ func generateAndValidateNewTargetsForTableLevelFeed(
 	alterCmds tree.AlterChangefeedCmds,
 	opts changefeedbase.StatementOptions,
 	prevDetails jobspb.ChangefeedDetails,
-	prevProgress jobspb.Progress,
+	resumeTS hlc.Timestamp,
 	sinkURI string,
 ) (
-	tree.ChangefeedTableTargets,
-	*jobspb.Progress,
-	hlc.Timestamp,
-	map[tree.ChangefeedTableTarget]jobspb.ChangefeedTargetSpecification,
-	error,
+	newTargetList tree.ChangefeedTableTargets,
+	originalSpecs map[tree.ChangefeedTableTarget]jobspb.ChangefeedTargetSpecification,
+	primaryIndexIDs map[descpb.ID]descpb.IndexID,
+	tableOps map[descpb.ID]targetOp,
+	err error,
 ) {
 	type targetKey struct {
 		TableID    descpb.ID
 		FamilyName tree.Name
 	}
 	newTargets := make(map[targetKey]tree.ChangefeedTableTarget)
-	droppedTargets := make(map[targetKey]tree.ChangefeedTableTarget)
 	newTableDescs := make(map[descpb.ID]catalog.Descriptor)
+	// targetOps tracks ADD/DROP per family target during the command
+	// loop. After all commands are processed, these are consolidated
+	// into the returned table-level tableOps map.
+	targetOps := make(map[targetKey]targetOp)
 
 	// originalSpecs provides a mapping between tree.ChangefeedTargets that
 	// existed prior to the alteration of the changefeed to their corresponding
-	// jobspb.ChangefeedTargetSpecification. The purpose of this mapping is to ensure
-	// that the StatementTimeName of the existing targets are not modified when the
-	// name of the target was modified.
-	originalSpecs := make(map[tree.ChangefeedTableTarget]jobspb.ChangefeedTargetSpecification)
+	// jobspb.ChangefeedTargetSpecification. The purpose of this mapping is to
+	// ensure that the StatementTimeName of the existing targets are not modified
+	// when the name of the target was modified.
+	originalSpecs = make(map[tree.ChangefeedTableTarget]jobspb.ChangefeedTargetSpecification)
 
 	// We want to store the value of whether or not the original changefeed had
 	// initial_scan set to only so that we only do an initial scan on an alter
@@ -594,7 +633,7 @@ func generateAndValidateNewTargetsForTableLevelFeed(
 	// initial_scan = 'only'.
 	originalInitialScanType, err := opts.GetInitialScanType()
 	if err != nil {
-		return nil, nil, hlc.Timestamp{}, nil, err
+		return nil, nil, nil, nil, err
 	}
 	originalInitialScanOnlyOption := originalInitialScanType == changefeedbase.OnlyInitialScan
 
@@ -604,43 +643,32 @@ func generateAndValidateNewTargetsForTableLevelFeed(
 	// description. However, to ensure that we do perform the initial scan on
 	// newly added targets, we will introduce the initial_scan opt after the
 	// job record is created.
-
 	opts.Unset(changefeedbase.OptInitialScanOnly)
 	opts.Unset(changefeedbase.OptNoInitialScan)
 	opts.Unset(changefeedbase.OptInitialScan)
-
-	// the new progress and statement time will start from the progress and
-	// statement time of the job prior to the alteration of the changefeed. Each
-	// time we add a new set of targets we update the newJobProgress and
-	// newJobStatementTime accordingly.
-	newJobProgress := prevProgress
-	newJobStatementTime := prevDetails.StatementTime
 
 	statementTime := hlc.Timestamp{
 		WallTime: p.ExtendedEvalContext().GetStmtTimestamp().UnixNano(),
 	}
 
-	// we attempt to resolve the changefeed targets as of the current time to
-	// ensure that all targets exist. However, we also need to make sure that all
-	// targets can be resolved at the time in which the changefeed is resumed. We
-	// perform these validations in the validateNewTargets function.
+	// We attempt to resolve the changefeed targets as of the current time to
+	// ensure that all targets exist. However, we also need to make sure that
+	// all targets can be resolved at the time in which the changefeed is
+	// resumed. We perform these validations in validateNewTargetsAtResumeTime.
 	allDescs, err := backupresolver.LoadAllDescs(ctx, p.ExecCfg(), statementTime)
 	if err != nil {
-		return nil, nil, hlc.Timestamp{}, nil, err
+		return nil, nil, nil, nil, err
 	}
 	descResolver, err := backupresolver.NewDescriptorResolver(allDescs)
 	if err != nil {
-		return nil, nil, hlc.Timestamp{}, nil, err
+		return nil, nil, nil, nil, err
 	}
 
-	targetTS := prevProgress.GetHighWater()
-	if targetTS == nil || targetTS.IsEmpty() {
-		targetTS = &prevDetails.StatementTime
-	}
-	prevTargets, err := AllTargets(ctx, prevDetails, p.ExecCfg(), *targetTS)
+	prevTargets, err := AllTargets(ctx, prevDetails, p.ExecCfg(), resumeTS)
 	if err != nil {
-		return nil, nil, hlc.Timestamp{}, nil, err
+		return nil, nil, nil, nil, err
 	}
+
 	noLongerExist := make(map[string]descpb.ID)
 	if err := prevTargets.EachTarget(func(targetSpec changefeedbase.Target) error {
 		k := targetKey{TableID: targetSpec.DescID, FamilyName: tree.Name(targetSpec.FamilyName)}
@@ -649,8 +677,9 @@ func generateAndValidateNewTargetsForTableLevelFeed(
 			desc = d.(catalog.TableDescriptor)
 		} else {
 			// Table was dropped; that's okay since the changefeed likely
-			// will handle DROP alter command below; and if not, then we'll resume
-			// the changefeed, which will promptly fail if the table no longer exist.
+			// will handle DROP alter command below; and if not, then we'll
+			// resume the changefeed, which will promptly fail if the table
+			// no longer exists.
 			noLongerExist[string(targetSpec.StatementTimeName)] = targetSpec.DescID
 			return nil
 		}
@@ -670,7 +699,7 @@ func generateAndValidateNewTargetsForTableLevelFeed(
 			FamilyName: tree.Name(targetSpec.FamilyName),
 		}
 		newTargets[k] = newTarget
-		newTableDescs[targetSpec.DescID] = descResolver.DescByID[targetSpec.DescID]
+		newTableDescs[targetSpec.DescID] = desc
 
 		originalSpecs[newTarget] = jobspb.ChangefeedTargetSpecification{
 			Type:              targetSpec.Type,
@@ -680,7 +709,7 @@ func generateAndValidateNewTargetsForTableLevelFeed(
 		}
 		return nil
 	}); err != nil {
-		return nil, nil, hlc.Timestamp{}, nil, err
+		return nil, nil, nil, nil, err
 	}
 
 	checkIfCommandAllowed := func() error {
@@ -700,21 +729,21 @@ func generateAndValidateNewTargetsForTableLevelFeed(
 		switch v := cmd.(type) {
 		case *tree.AlterChangefeedAddTarget:
 			if err := checkIfCommandAllowed(); err != nil {
-				return nil, nil, hlc.Timestamp{}, nil, err
+				return nil, nil, nil, nil, err
 			}
 
 			targetOpts, err := exprEval.KVOptions(
 				ctx, v.Options, changefeedvalidators.AlterTargetOptionValidations,
 			)
 			if err != nil {
-				return nil, nil, hlc.Timestamp{}, nil, err
+				return nil, nil, nil, nil, err
 			}
 
 			initialScanType, initialScanSet := targetOpts[changefeedbase.OptInitialScan]
 			_, noInitialScanSet := targetOpts[changefeedbase.OptNoInitialScan]
 
 			if initialScanType != `` && initialScanType != `yes` && initialScanType != `no` && initialScanType != `only` {
-				return nil, nil, hlc.Timestamp{}, nil, pgerror.Newf(
+				return nil, nil, nil, nil, pgerror.Newf(
 					pgcode.InvalidParameterValue,
 					`cannot set %q to %q. possible values for initial_scan are "yes", "no", "only", or no value`,
 					changefeedbase.OptInitialScan, initialScanType,
@@ -722,38 +751,27 @@ func generateAndValidateNewTargetsForTableLevelFeed(
 			}
 
 			if initialScanSet && noInitialScanSet {
-				return nil, nil, hlc.Timestamp{}, nil, pgerror.Newf(
+				return nil, nil, nil, nil, pgerror.Newf(
 					pgcode.InvalidParameterValue,
 					`cannot specify both %q and %q`, changefeedbase.OptInitialScan,
 					changefeedbase.OptNoInitialScan,
 				)
 			}
 
+			// By default, we will not perform an initial scan on newly added
+			// targets. Hence, the user must explicitly state that they want
+			// an initial scan performed on the new targets.
 			withInitialScan := (initialScanType == `` && initialScanSet) ||
 				initialScanType == `yes` ||
 				(initialScanType == `only` && originalInitialScanOnlyOption)
 
-			// TODO(#142376): Audit whether this list is generated correctly.
-			var existingTargetSpanIDs []spanID
-			for _, targetDesc := range newTableDescs {
-				tableDesc, ok := targetDesc.(catalog.TableDescriptor)
-				if !ok {
-					return nil, nil, hlc.Timestamp{}, nil, errors.AssertionFailedf("expected table descriptor")
-				}
-				existingTargetSpanIDs = append(existingTargetSpanIDs, spanID{
-					tableID: tableDesc.GetID(),
-					indexID: tableDesc.GetPrimaryIndexID(),
-				})
-			}
-			existingTargetSpans := fetchSpansForDescs(p, existingTargetSpanIDs)
-			var addedTargetSpanIDs []spanID
 			for _, target := range v.Targets {
 				desc, found, err := getTargetDesc(ctx, p, descResolver, target.TableName)
 				if err != nil {
-					return nil, nil, hlc.Timestamp{}, nil, err
+					return nil, nil, nil, nil, err
 				}
 				if !found {
-					return nil, nil, hlc.Timestamp{}, nil, pgerror.Newf(
+					return nil, nil, nil, nil, pgerror.Newf(
 						pgcode.InvalidParameterValue,
 						`target %q does not exist`,
 						tree.ErrString(&target),
@@ -761,52 +779,41 @@ func generateAndValidateNewTargetsForTableLevelFeed(
 				}
 
 				k := targetKey{TableID: desc.GetID(), FamilyName: target.FamilyName}
+				if _, exists := newTargets[k]; exists && targetOps[k] != targetOpDrop {
+					return nil, nil, nil, nil, pgerror.Newf(
+						pgcode.InvalidParameterValue,
+						`target %q already watched by changefeed`,
+						tree.ErrString(&target),
+					)
+				}
 				newTargets[k] = target
 				newTableDescs[desc.GetID()] = desc
-				tableDesc, ok := desc.(catalog.TableDescriptor)
-				if !ok {
-					return nil, nil, hlc.Timestamp{}, nil, errors.AssertionFailedf("expected table descriptor")
+				if withInitialScan {
+					targetOps[k] = targetOpAddWithInitialScan
+				} else {
+					targetOps[k] = targetOpAdd
 				}
-				addedTargetSpanIDs = append(addedTargetSpanIDs, spanID{
-					tableID: tableDesc.GetID(),
-					indexID: tableDesc.GetPrimaryIndexID(),
-				})
-			}
-
-			addedTargetSpans := fetchSpansForDescs(p, addedTargetSpanIDs)
-
-			// By default, we will not perform an initial scan on newly added
-			// targets. Hence, the user must explicitly state that they want an
-			// initial scan performed on the new targets.
-			newJobProgress, newJobStatementTime, err = generateNewProgress(
-				newJobProgress,
-				newJobStatementTime,
-				existingTargetSpans,
-				addedTargetSpans,
-				withInitialScan,
-			)
-			if err != nil {
-				return nil, nil, hlc.Timestamp{}, nil, err
 			}
 			telemetry.CountBucketed(telemetryPath+`.added_targets`, int64(len(v.Targets)))
 		case *tree.AlterChangefeedDropTarget:
 			if err := checkIfCommandAllowed(); err != nil {
-				return nil, nil, hlc.Timestamp{}, nil, err
+				return nil, nil, nil, nil, err
 			}
 
 			for _, target := range v.Targets {
 				desc, found, err := getTargetDesc(ctx, p, descResolver, target.TableName)
 				if err != nil {
-					return nil, nil, hlc.Timestamp{}, nil, err
+					return nil, nil, nil, nil, err
 				}
 				if !found {
 					if id, wasDeleted := noLongerExist[target.TableName.String()]; wasDeleted {
 						// Failed to lookup table because it was deleted.
 						k := targetKey{TableID: id, FamilyName: target.FamilyName}
-						droppedTargets[k] = target
+						delete(newTargets, k)
+						targetOps[k] = targetOpDrop
 						continue
 					} else {
-						return nil, nil, hlc.Timestamp{}, nil, pgerror.Newf(
+						return nil, nil, nil, nil, pgerror.Newf(
 							pgcode.InvalidParameterValue,
 							`target %q does not exist`,
 							tree.ErrString(&target),
@@ -814,52 +821,41 @@ func generateAndValidateNewTargetsForTableLevelFeed(
 					}
 				}
 				k := targetKey{TableID: desc.GetID(), FamilyName: target.FamilyName}
-				droppedTargets[k] = target
 				_, recognized := newTargets[k]
 				if !recognized {
-					return nil, nil, hlc.Timestamp{}, nil, pgerror.Newf(
+					return nil, nil, nil, nil, pgerror.Newf(
 						pgcode.InvalidParameterValue,
 						`target %q already not watched by changefeed`,
 						tree.ErrString(&target),
 					)
 				}
-				newTableDescs[desc.GetID()] = desc
 				delete(newTargets, k)
+				targetOps[k] = targetOpDrop
 			}
 			telemetry.CountBucketed(telemetryPath+`.dropped_targets`, int64(len(v.Targets)))
 		}
 	}
 
-	// Remove tables from the job progress if and only if the number of
-	// targets referencing them has fallen to zero. For example, we might
-	// drop one column family from a table and add another at the same time,
-	// and since we watch entire table spans the set of spans won't change.
-	if len(droppedTargets) > 0 {
-		addedTargets := make(map[descpb.ID]struct{}, len(newTargets))
-		for k := range newTargets {
-			addedTargets[k.TableID] = struct{}{}
-		}
-		droppedSpanIDs := make([]spanID, 0, len(droppedTargets))
-		for k := range droppedTargets {
-			if _, wasAdded := addedTargets[k.TableID]; !wasAdded {
-				// For dropped tables, we might not have the desc anymore so
-				// we can't get the index ID. In any case, it's safe to wipe
-				// out the entire table span.
-				droppedSpanIDs = append(droppedSpanIDs, spanID{
-					tableID: k.TableID,
-				})
-			}
-		}
-		droppedTargetSpans := fetchSpansForDescs(p, droppedSpanIDs)
-		if err := removeSpansFromProgress(newJobProgress, droppedTargetSpans); err != nil {
-			return nil, nil, hlc.Timestamp{}, nil, err
-		}
-	}
-
-	newTargetList := tree.ChangefeedTableTargets{}
-
+	// Build the final target list.
 	for _, target := range newTargets {
 		newTargetList = append(newTargetList, target)
+	}
+
+	// Validate targets at the resume timestamp and get the primary index
+	// IDs as of that time.
+	primaryIndexIDs, err = validateNewTargetsAtResumeTime(
+		ctx, p, newTargetList, resumeTS)
+	if err != nil {
+		return nil, nil, nil, nil, err
+	}
+
+	// Consolidate per-family targetOps into table-level tableOps
+	// following the order of precedence defined for targetOp's.
+	tableOps = make(map[descpb.ID]targetOp)
+	for k, op := range targetOps {
+		if op > tableOps[k.TableID] {
+			tableOps[k.TableID] = op
+		}
 	}
 
 	hasSelectPrivOnAllTables := true
@@ -867,192 +863,171 @@ func generateAndValidateNewTargetsForTableLevelFeed(
 	for _, desc := range newTableDescs {
 		hasSelect, hasChangefeed, err := checkPrivilegesForDescriptor(ctx, p, desc)
 		if err != nil {
-			return nil, nil, hlc.Timestamp{}, nil, err
+			return nil, nil, nil, nil, err
 		}
 		hasSelectPrivOnAllTables = hasSelectPrivOnAllTables && hasSelect
 		hasChangefeedPrivOnAllTables = hasChangefeedPrivOnAllTables && hasChangefeed
 	}
 	if err := authorizeUserToCreateChangefeed(
 		ctx, p, sinkURI, hasSelectPrivOnAllTables, hasChangefeedPrivOnAllTables, tree.ChangefeedLevelTable); err != nil {
-		return nil, nil, hlc.Timestamp{}, nil, err
+		return nil, nil, nil, nil, err
 	}
 
-	if err := validateNewTargets(ctx, p, newTargetList, newJobProgress, newJobStatementTime); err != nil {
-		return nil, nil, hlc.Timestamp{}, nil, err
-	}
-
-	return newTargetList, &newJobProgress, newJobStatementTime, originalSpecs, nil
+	return newTargetList, originalSpecs, primaryIndexIDs, tableOps, nil
 }
 
-func validateNewTargets(
+// validateNewTargetsAtResumeTime validates that all targets can be resolved
+// at the given resumeTS (the changefeed's highwater or original statement
+// time). It also returns a map of table IDs to their primary index IDs as of
+// resumeTS, which should be used for span computation since that's the
+// timestamp the changefeed will resume from.
+func validateNewTargetsAtResumeTime(
 	ctx context.Context,
 	p sql.PlanHookState,
 	newTargets tree.ChangefeedTableTargets,
-	jobProgress jobspb.Progress,
-	jobStatementTime hlc.Timestamp,
-) error {
+	resumeTS hlc.Timestamp,
+) (map[descpb.ID]descpb.IndexID, error) {
 	if len(newTargets) == 0 {
-		return pgerror.New(pgcode.InvalidParameterValue, "cannot drop all targets")
+		return nil, pgerror.New(
+			pgcode.InvalidParameterValue, "cannot drop all targets")
 	}
 
-	// when we resume the changefeed, we need to ensure that the newly added
-	// targets can be resolved at the time of the high watermark. If the high
-	// watermark is empty, then we need to ensure that the newly added targets can
-	// be resolved at the StatementTime of the changefeed job.
-	var resolveTime hlc.Timestamp
-	highWater := jobProgress.GetHighWater()
-	if highWater != nil && !highWater.IsEmpty() {
-		resolveTime = *highWater
-	} else {
-		resolveTime = jobStatementTime
-	}
-
-	allDescs, err := backupresolver.LoadAllDescs(ctx, p.ExecCfg(), resolveTime)
+	allDescs, err := backupresolver.LoadAllDescs(ctx, p.ExecCfg(), resumeTS)
 	if err != nil {
-		return errors.Wrap(err, `error while validating new targets`)
+		return nil, errors.Wrap(err, `error while validating new targets`)
 	}
 	descResolver, err := backupresolver.NewDescriptorResolver(allDescs)
 	if err != nil {
-		return errors.Wrap(err, `error while validating new targets`)
+		return nil, errors.Wrap(err, `error while validating new targets`)
 	}
 
+	primaryIndexIDs := make(map[descpb.ID]descpb.IndexID, len(newTargets))
 	for _, target := range newTargets {
 		targetName := target.TableName
-		_, found, err := getTargetDesc(ctx, p, descResolver, targetName)
+		desc, found, err := getTargetDesc(ctx, p, descResolver, targetName)
 		if err != nil {
-			return errors.Wrap(err, `error while validating new targets`)
+			return nil, errors.Wrap(err, `error while validating new targets`)
 		}
 		if !found {
-			if highWater != nil && !highWater.IsEmpty() {
-				return errors.Errorf(`target %q cannot be resolved as of the high water mark. `+
-					`Please wait until the high water mark progresses past the creation time of this target in order to add it to the changefeed.`,
-					tree.ErrString(targetName),
-				)
-			}
-			return errors.Errorf(`target %q cannot be resolved as of the creation time of the changefeed. `+
-				`Please wait until the high water mark progresses past the creation time of this target in order to add it to the changefeed.`,
-				tree.ErrString(targetName),
+			return nil, errors.Errorf(
+				`target %q cannot be resolved as of the resume time %s. `+
+					`Please wait until the high water mark progresses past the creation `+
+					`time of this target in order to add it to the changefeed.`,
+				tree.ErrString(targetName), resumeTS,
 			)
 		}
+		tableDesc, ok := desc.(catalog.TableDescriptor)
+		if !ok {
+			return nil, errors.AssertionFailedf(
+				"expected table descriptor for %s", targetName)
+		}
+		primaryIndexIDs[tableDesc.GetID()] = tableDesc.GetPrimaryIndexID()
 	}
 
-	return nil
+	return primaryIndexIDs, nil
 }
 
-// generateNewProgress determines if the progress of a changefeed job needs to
-// be updated based on the targets that have been added, the options associated
-// with each target we are adding/removing (i.e. with initial_scan or
-// no_initial_scan), and the current status of the job. If the progress does not
-// need to be updated, we will simply return the previous progress and statement
-// time that is passed into the function.
-func generateNewProgress(
+// generateNewProgressForTableOps computes the new job progress for the
+// given table operations. It modifies the checkpoint to ensure that we
+// don't do any extra initial scans of any targets.
+func generateNewProgressForTableOps(
+	p sql.PlanHookState,
 	prevProgress jobspb.Progress,
-	prevStatementTime hlc.Timestamp,
-	existingTargetSpans []roachpb.Span,
-	newSpans []roachpb.Span,
-	withInitialScan bool,
-) (jobspb.Progress, hlc.Timestamp, error) {
-	prevHighWater := prevProgress.GetHighWater()
-	changefeedProgress := prevProgress.GetChangefeed()
-
-	haveHighwater := prevHighWater != nil && prevHighWater.IsSet()
-	// TODO(#142376): Whether a checkpoint exists seems orthogonal to what
-	// we do in this function. Consider removing this flag.
-	haveCheckpoint := changefeedProgress != nil && !changefeedProgress.SpanLevelCheckpoint.IsEmpty()
-
-	// Check if the progress does not need to be updated. The progress does not
-	// need to be updated if:
-	// * the high watermark is empty, and we would like to perform an initial scan.
-	// * the high watermark is non-empty, the checkpoint is empty, and we do not want to
-	//   perform an initial scan.
-	// TODO(#142376): Consider in the scenario where we have a highwater whether
-	// we should starting sending events for the new table starting at the ALTER
-	// CHANGEFEED statement time instead of the current highwater.
-	if (!haveHighwater && withInitialScan) || (haveHighwater && !haveCheckpoint && !withInitialScan) {
-		return prevProgress, prevStatementTime, nil
+	prevHighWater hlc.Timestamp,
+	resumeTS hlc.Timestamp,
+	primaryIndexIDs map[descpb.ID]descpb.IndexID,
+	tableOps map[descpb.ID]targetOp,
+) (jobspb.Progress, error) {
+	if len(tableOps) == 0 {
+		return prevProgress, nil
 	}
 
-	// Check if the user is trying to perform an initial scan during a
-	// non-initial backfill.
-	if haveHighwater && haveCheckpoint && withInitialScan {
-		return prevProgress, prevStatementTime, errors.Errorf(
-			`cannot perform initial scan on newly added targets while the checkpoint is non-empty, `+
-				`please unpause the changefeed and wait until the high watermark progresses past the current value %s to add these targets.`,
-			eval.TimestampToDecimalDatum(*prevHighWater).Decimal.String(),
-		)
-	}
-
-	// TODO(#142369): We should create a new PTS record instead of just
-	// copying the old one.
 	var ptsRecord uuid.UUID
-	if changefeedProgress != nil {
+	var checkpoint *jobspb.TimestampSpansMap
+	if changefeedProgress := prevProgress.GetChangefeed(); changefeedProgress != nil {
+		// TODO(#142369): We should create a new PTS record instead of just
+		// keeping the old one.
 		ptsRecord = changefeedProgress.ProtectedTimestampRecord
+		checkpoint = changefeedProgress.SpanLevelCheckpoint
 	}
 
-	// Check if the user is trying to perform an initial scan while the high
-	// watermark is non-empty but the checkpoint is empty.
-	if haveHighwater && !haveCheckpoint && withInitialScan {
-		// If we would like to perform an initial scan on the new targets,
-		// we need to reset the high watermark. However, by resetting the high
-		// watermark, the initial scan will be performed on existing targets as well.
-		// To avoid this, we update the statement time of the job to the previous high
-		// watermark, and add all the existing targets to the checkpoint to skip the
-		// initial scan on these targets.
-		// TODO(#142376): Consider whether we want to set the new statement time
-		// to the actual new statement time (ALTER CHANGEFEED statement time).
-		newStatementTime := *prevHighWater
+	var alteredSpanIDs, addedWithoutScanSpanIDs, addedWithScanSpanIDs []spanID
+	for id, op := range tableOps {
+		spID := spanID{
+			tableID: id,
+			indexID: primaryIndexIDs[id],
+		}
+		alteredSpanIDs = append(alteredSpanIDs, spID)
+		switch op {
+		case targetOpAdd:
+			addedWithoutScanSpanIDs = append(addedWithoutScanSpanIDs, spID)
+		case targetOpAddWithInitialScan:
+			addedWithScanSpanIDs = append(addedWithScanSpanIDs, spID)
+		default:
+		}
+	}
+	alteredSpans := fetchSpansForDescs(p, alteredSpanIDs)
+	addedWithoutScanSpans := fetchSpansForDescs(p, addedWithoutScanSpanIDs)
 
-		newProgress := jobspb.Progress{
+	// Remove all altered spans from the checkpoint.
+	checkpoint = removeSpansFromCheckpoint(checkpoint, alteredSpans)
+
+	// If we're still in an initial scan, all we need to do is add any new
+	// targets that don't need to be scanned to the checkpoint.
+	if prevHighWater.IsEmpty() {
+		checkpoint = addSpansToCheckpoint(checkpoint, addedWithoutScanSpans, resumeTS)
+		return jobspb.Progress{
 			Progress: &jobspb.Progress_HighWater{},
 			Details: &jobspb.Progress_Changefeed{
 				Changefeed: &jobspb.ChangefeedProgress{
 					ProtectedTimestampRecord: ptsRecord,
-					SpanLevelCheckpoint: jobspb.NewTimestampSpansMap(map[hlc.Timestamp]roachpb.Spans{
-						newStatementTime: existingTargetSpans,
-					}),
+					SpanLevelCheckpoint:      checkpoint,
 				},
 			},
+		}, nil
+	}
+
+	// If we're done the initial scan already and don't need to do an initial scan
+	// for any of the new targets, we don't need to do anything else.
+	if len(addedWithScanSpanIDs) == 0 {
+		return jobspb.Progress{
+			Progress: &jobspb.Progress_HighWater{
+				HighWater: &prevHighWater,
+			},
+			Details: &jobspb.Progress_Changefeed{
+				Changefeed: &jobspb.ChangefeedProgress{
+					ProtectedTimestampRecord: ptsRecord,
+					SpanLevelCheckpoint:      checkpoint,
+				},
+			},
+		}, nil
+	}
+
+	// Otherwise, we'll need to reset the highwater so that we do an initial scan
+	// for all the new targets that need scans. We ensure we don't re-scan any
+	// the existing tables or newly added targets that don't need scans by
+	// adding them to the checkpoint.
+	var unchangedSpanIDs []spanID
+	for tableID, indexID := range primaryIndexIDs {
+		if _, ok := tableOps[tableID]; !ok {
+			unchangedSpanIDs = append(unchangedSpanIDs, spanID{
+				tableID: tableID,
+				indexID: indexID,
+			})
 		}
-
-		return newProgress, newStatementTime, nil
 	}
-
-	// At this point, we are left with one of two cases:
-	// * the high watermark is empty, and we do not want to perform
-	//   an initial scan on the new targets.
-	// * the high watermark is non-empty, the checkpoint is non-empty,
-	//   and we do not want to perform an initial scan on the new targets.
-	// In either case, we need to update the checkpoint to include the spans
-	// of the newly added targets so that the changefeed will skip performing
-	// a backfill on these targets.
-
-	// TODO(#142376): In the case where we have a highwater, we will resend
-	// events since the original statement time for all existing tables.
-	// We might want to change this. We might also want to change whether
-	// the events for the new table start at the ALTER CHANGEFEED statement
-	// time instead.
-
-	spanLevelCheckpoint, err := getSpanLevelCheckpointFromProgress(prevProgress)
-	if err != nil {
-		return jobspb.Progress{}, hlc.Timestamp{}, err
-	}
-
-	checkpointSpansMap := maps.Collect(spanLevelCheckpoint.All())
-	var spanGroup roachpb.SpanGroup
-	spanGroup.Add(checkpointSpansMap[prevStatementTime]...)
-	spanGroup.Add(newSpans...)
-	checkpointSpansMap[prevStatementTime] = spanGroup.Slice()
-
-	newProgress := jobspb.Progress{
+	unchangedSpans := fetchSpansForDescs(p, unchangedSpanIDs)
+	checkpoint = addSpansToCheckpoint(checkpoint, unchangedSpans, resumeTS)
+	checkpoint = addSpansToCheckpoint(checkpoint, addedWithoutScanSpans, resumeTS)
+	return jobspb.Progress{
 		Progress: &jobspb.Progress_HighWater{},
 		Details: &jobspb.Progress_Changefeed{
 			Changefeed: &jobspb.ChangefeedProgress{
 				ProtectedTimestampRecord: ptsRecord,
-				SpanLevelCheckpoint:      jobspb.NewTimestampSpansMap(checkpointSpansMap),
+				SpanLevelCheckpoint:      checkpoint,
 			},
 		},
-	}
-	return newProgress, prevStatementTime, nil
+	}, nil
 }
 
 // storeFilterChangeFrontierForDatabaseChangefeed uses the persistent job frontier to ensure that
@@ -1135,36 +1110,40 @@ func storeFilterChangeFrontierForDatabaseChangefeed(
 	return jobfrontier.Store(ctx, p.InternalSQLTxn(), jobID, `alter_changefeed`, frontier)
 }
 
-func removeSpansFromProgress(progress jobspb.Progress, spansToRemove []roachpb.Span) error {
-	spanLevelCheckpoint, err := getSpanLevelCheckpointFromProgress(progress)
-	if err != nil {
-		return err
-	}
-	if spanLevelCheckpoint == nil {
-		return nil
-	}
+// addSpansToCheckpoint returns a new checkpoint with the given spans
+// merged in at the given timestamp.
+func addSpansToCheckpoint(
+	checkpoint *jobspb.TimestampSpansMap, spans []roachpb.Span, ts hlc.Timestamp,
+) *jobspb.TimestampSpansMap {
 	checkpointSpansMap := make(map[hlc.Timestamp]roachpb.Spans)
-	for ts, sp := range spanLevelCheckpoint.All() {
-		var spanGroup roachpb.SpanGroup
-		spanGroup.Add(sp...)
-		spanGroup.Sub(spansToRemove...)
-		if spans := spanGroup.Slice(); len(spans) > 0 {
-			checkpointSpansMap[ts] = spans
-		}
+	if checkpoint != nil {
+		checkpointSpansMap = maps.Collect(checkpoint.All())
 	}
-	progress.GetChangefeed().SpanLevelCheckpoint = jobspb.NewTimestampSpansMap(checkpointSpansMap)
-
-	return nil
+	var spanGroup roachpb.SpanGroup
+	spanGroup.Add(checkpointSpansMap[ts]...)
+	spanGroup.Add(spans...)
+	checkpointSpansMap[ts] = spanGroup.Slice()
+	return jobspb.NewTimestampSpansMap(checkpointSpansMap)
 }
 
-func getSpanLevelCheckpointFromProgress(
-	progress jobspb.Progress,
-) (*jobspb.TimestampSpansMap, error) {
-	changefeedProgress := progress.GetChangefeed()
-	if changefeedProgress == nil {
-		return nil, nil
+// removeSpansFromCheckpoint returns a new checkpoint with the given
+// spans removed from all timestamps.
+func removeSpansFromCheckpoint(
+	checkpoint *jobspb.TimestampSpansMap, spans []roachpb.Span,
+) *jobspb.TimestampSpansMap {
+	if checkpoint == nil || checkpoint.IsEmpty() {
+		return checkpoint
 	}
-	return changefeedProgress.SpanLevelCheckpoint, nil
+	checkpointSpansMap := make(map[hlc.Timestamp]roachpb.Spans)
+	for ts, sp := range checkpoint.All() {
+		var spanGroup roachpb.SpanGroup
+		spanGroup.Add(sp...)
+		spanGroup.Sub(spans...)
+		if remaining := spanGroup.Slice(); len(remaining) > 0 {
+			checkpointSpansMap[ts] = remaining
+		}
+	}
+	return jobspb.NewTimestampSpansMap(checkpointSpansMap)
 }
 
 type spanID struct {
