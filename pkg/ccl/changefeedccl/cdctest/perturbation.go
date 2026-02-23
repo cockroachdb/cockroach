@@ -53,6 +53,17 @@ type perturbation struct {
 	// non-PK columns from initial table creation.
 	columns []perturbColumn
 
+	// familyNames holds the column family names when column families are
+	// used. Empty when families are not used. With families, each DML
+	// operation generates one changefeed event per family, and the
+	// changefeed targets each family explicitly.
+	familyNames []string
+
+	// numFamilies is 1 when column families are not used, otherwise
+	// len(familyNames). DML event counts are multiplied by this value
+	// to compute expected rows.
+	numFamilies int
+
 	// addedColumnCount tracks columns added via schema changes during the
 	// test. These use names like "sc_0", "sc_1", etc.
 	addedColumnCount int
@@ -163,8 +174,41 @@ func generateColumns(rng *rand.Rand) []perturbColumn {
 	return cols
 }
 
-// buildCreateTable returns a CREATE TABLE statement for the given columns.
-func buildCreateTable(tableName string, cols []perturbColumn) string {
+// familyDef describes a column family for table creation.
+type familyDef struct {
+	name       string
+	columnIdxs []int // indices into the columns array
+}
+
+// buildFamilies splits the columns into two families: fam_a contains the
+// PK plus the first half of non-PK columns, fam_b contains the rest.
+func buildFamilies(cols []perturbColumn) ([]familyDef, []string) {
+	numNonPK := len(cols) - 1
+	firstHalf := numNonPK / 2
+	if firstHalf < 1 {
+		firstHalf = 1
+	}
+
+	famA := familyDef{name: "fam_a"}
+	famB := familyDef{name: "fam_b"}
+
+	// PK + first half of non-PK columns go into fam_a.
+	for i := 0; i <= firstHalf; i++ {
+		famA.columnIdxs = append(famA.columnIdxs, i)
+	}
+	// Remaining non-PK columns go into fam_b.
+	for i := firstHalf + 1; i < len(cols); i++ {
+		famB.columnIdxs = append(famB.columnIdxs, i)
+	}
+
+	families := []familyDef{famA, famB}
+	names := []string{famA.name, famB.name}
+	return families, names
+}
+
+// buildCreateTable returns a CREATE TABLE statement for the given columns,
+// optionally with column family definitions.
+func buildCreateTable(tableName string, cols []perturbColumn, families []familyDef) string {
 	var sb strings.Builder
 	fmt.Fprintf(&sb, "CREATE TABLE %s (", tableName)
 	for i, col := range cols {
@@ -177,13 +221,26 @@ func buildCreateTable(tableName string, cols []perturbColumn) string {
 			fmt.Fprintf(&sb, "%s %s", col.name, col.typ.SQLString())
 		}
 	}
+	for _, fam := range families {
+		sb.WriteString(", FAMILY ")
+		sb.WriteString(fam.name)
+		sb.WriteString(" (")
+		for j, idx := range fam.columnIdxs {
+			if j > 0 {
+				sb.WriteString(", ")
+			}
+			sb.WriteString(cols[idx].name)
+		}
+		sb.WriteString(")")
+	}
 	sb.WriteString(")")
 	return sb.String()
 }
 
 // randomDatumSQL generates a random SQL literal for the given type, formatted
-// so it can be embedded in a SQL statement. It retries up to 10 times to avoid
-// returning "NULL" when RandDatum returns DNull despite nullOk=false.
+// so it can be embedded in a SQL statement. It tries to avoid returning "NULL"
+// because with column families, a family whose columns are all NULL has no KV
+// entry and produces no changefeed event, causing expectedRows to overcount.
 func randomDatumSQL(rng *rand.Rand, typ *types.T) string {
 	for i := 0; i < 10; i++ {
 		d := randgen.RandDatum(rng, typ, false /* nullOk */)
@@ -222,7 +279,10 @@ func generateOptions(rng *rand.Rand, testName string) perturbationOptions {
 }
 
 // buildChangefeedStatement constructs the CREATE CHANGEFEED statement.
-func buildChangefeedStatement(tableName string, opts perturbationOptions) string {
+// When familyNames is non-empty, each family is listed as a separate target.
+func buildChangefeedStatement(
+	tableName string, opts perturbationOptions, familyNames []string,
+) string {
 	var parts []string
 	parts = append(parts, "updated", "resolved", "format=json")
 
@@ -245,8 +305,17 @@ func buildChangefeedStatement(tableName string, opts perturbationOptions) string
 			changefeedbase.OptSchemaChangeEvents, opts.schemaEvents))
 	}
 
+	target := tableName
+	if len(familyNames) > 0 {
+		targets := make([]string, len(familyNames))
+		for i, fn := range familyNames {
+			targets[i] = fmt.Sprintf("TABLE %s FAMILY %s", tableName, fn)
+		}
+		target = strings.Join(targets, ", ")
+	}
+
 	return fmt.Sprintf(
-		"CREATE CHANGEFEED FOR %s WITH %s", tableName, strings.Join(parts, ", "),
+		"CREATE CHANGEFEED FOR %s WITH %s", target, strings.Join(parts, ", "),
 	)
 }
 
@@ -290,8 +359,20 @@ func RunPerturbation(
 	columns := generateColumns(rng)
 	tableName := "perturb"
 
-	createStmt := buildCreateTable(tableName, columns)
-	log.Changefeed.Infof(ctx, "perturbation: %s", createStmt)
+	// Use column families 50% of the time. Column families exercise a
+	// different code path in the schema feed's column-drop detection
+	// (droppedColumnIsWatched) and are required to reproduce #149861.
+	useColumnFamilies := rng.Intn(2) == 0
+	var families []familyDef
+	var familyNames []string
+	numFamilies := 1
+	if useColumnFamilies {
+		families, familyNames = buildFamilies(columns)
+		numFamilies = len(familyNames)
+	}
+
+	createStmt := buildCreateTable(tableName, columns, families)
+	log.Changefeed.Infof(ctx, "perturbation: %s (families=%v)", createStmt, useColumnFamilies)
 	if _, err := db.Exec(createStmt); err != nil {
 		return nil, errors.Wrap(err, "creating table")
 	}
@@ -304,12 +385,14 @@ func RunPerturbation(
 	}
 
 	p := &perturbation{
-		rng:        rng,
-		db:         db,
-		tableName:  tableName,
-		columns:    columns,
-		isSinkless: isSinkless,
-		seenRows:   make(map[string]struct{}),
+		rng:         rng,
+		db:          db,
+		tableName:   tableName,
+		columns:     columns,
+		familyNames: familyNames,
+		numFamilies: numFamilies,
+		isSinkless:  isSinkless,
+		seenRows:    make(map[string]struct{}),
 	}
 
 	// Insert some initial rows.
@@ -330,7 +413,7 @@ func RunPerturbation(
 	// Generate changefeed options.
 	opts := generateOptions(rng, testName)
 
-	changefeedStmt := buildChangefeedStatement(tableName, opts)
+	changefeedStmt := buildChangefeedStatement(tableName, opts, familyNames)
 	log.Changefeed.Infof(ctx, "perturbation: %s", changefeedStmt)
 
 	feed, err := f.Feed(changefeedStmt)
@@ -346,11 +429,14 @@ func RunPerturbation(
 	// COLUMN) alter the table schema. The validator does AS OF SYSTEM TIME
 	// queries that include columns from the changefeed value, which may not
 	// exist at the queried timestamp.
-	tV := NewTopicValidator(tableName, opts.fullTableName)
-
+	//
+	// TopicValidator is not used with column families because family-based
+	// topics (e.g., "perturb.fam_a") don't match the bare table name.
 	validators := Validators{
 		NewOrderValidator(tableName),
-		tV,
+	}
+	if len(familyNames) == 0 {
+		validators = append(validators, NewTopicValidator(tableName, opts.fullTableName))
 	}
 
 	if opts.keyInValue {
@@ -367,12 +453,15 @@ func RunPerturbation(
 
 	p.v = NewCountValidator(validators)
 
-	// Count actual rows in the table for the initial scan.
+	// Count actual rows in the table for the initial scan. With column
+	// families, each row produces one event per family.
+	var tableRows int
 	if err := db.QueryRow(
 		fmt.Sprintf(`SELECT count(*) FROM %s`, tableName),
-	).Scan(&p.availableRows); err != nil {
+	).Scan(&tableRows); err != nil {
 		return nil, err
 	}
+	p.availableRows = tableRows * numFamilies
 	p.expectedRows = p.availableRows
 
 	// Build weighted event list.
@@ -405,6 +494,20 @@ func RunPerturbation(
 	// have been delivered. At this point no new DML or schema changes are
 	// generated, so expectedRows is fixed. This catches bugs where
 	// backfills are silently skipped (e.g., #149861).
+	//
+	// With column families, expectedRows may overcount because DML events
+	// are counted as numFamilies per operation, but families with all-NULL
+	// columns don't produce changefeed events. Subtract the maximum
+	// possible overcounting: each DML could produce (numFamilies - 1)
+	// fewer events than counted. This is a tight upper bound.
+	if p.numFamilies > 1 {
+		numDMLOps := p.stats.inserts + p.stats.updates + p.stats.deletes + p.stats.aborts
+		maxOvercount := numDMLOps * (p.numFamilies - 1)
+		p.expectedRows -= maxOvercount
+		if p.expectedRows < 0 {
+			p.expectedRows = 0
+		}
+	}
 	if err := p.drainExpectedRows(ctx); err != nil {
 		return nil, err
 	}
@@ -414,11 +517,11 @@ func RunPerturbation(
 		"perturbation stats: DML: inserts=%d updates=%d deletes=%d; "+
 			"perturbations: splits=%d pauses=%d resumes=%d pushes=%d aborts=%d "+
 			"addColumns=%d dropColumns=%d; "+
-			"feed: rows=%d expected=%d resolved=%d duplicates=%d",
+			"feed: rows=%d expected=%d resolved=%d duplicates=%d families=%d",
 		s.inserts, s.updates, s.deletes,
 		s.splits, s.pauses, s.resumes, s.pushes, s.aborts,
 		s.addColumns, s.dropColumns,
-		s.rows, p.expectedRows, s.resolved, s.duplicates,
+		s.rows, p.expectedRows, s.resolved, s.duplicates, p.numFamilies,
 	)
 
 	return p.v, nil
@@ -592,8 +695,8 @@ func (p *perturbation) doFeedMessage(ctx context.Context) error {
 }
 
 // doInsert inserts a new row with random data. If the insert with random data
-// fails (e.g., due to out-of-range values), it retries with new random values
-// up to 3 times, then falls back to a PK-only insert.
+// fails (e.g., due to out-of-range values), it retries with just the primary
+// key and NULL values for other columns.
 func (p *perturbation) doInsert(ctx context.Context) error {
 	id := p.nextRowID
 	p.nextRowID++
@@ -640,6 +743,8 @@ func (p *perturbation) doInsert(ctx context.Context) error {
 			}
 		}
 		if !succeeded {
+			// Final fallback: PK-only insert. With column families, only
+			// the primary family produces an event, so count 1 not numFamilies.
 			stmt = fmt.Sprintf("INSERT INTO %s (id) VALUES (%d)", p.tableName, id)
 			if _, err := p.db.Exec(stmt); err != nil {
 				return err
@@ -651,8 +756,8 @@ func (p *perturbation) doInsert(ctx context.Context) error {
 		}
 	}
 	p.stats.inserts++
-	p.availableRows++
-	p.expectedRows++
+	p.availableRows += p.numFamilies
+	p.expectedRows += p.numFamilies
 	return nil
 }
 
@@ -689,8 +794,10 @@ func (p *perturbation) doUpdate(ctx context.Context) error {
 		return err
 	}
 	p.stats.updates++
-	p.availableRows += int(affected)
-	p.expectedRows += int(affected)
+	// Updates touch columns in all families, so each affected row produces
+	// one event per family.
+	p.availableRows += int(affected) * p.numFamilies
+	p.expectedRows += int(affected) * p.numFamilies
 	return nil
 }
 
@@ -712,8 +819,9 @@ func (p *perturbation) doDelete(ctx context.Context) error {
 		return err
 	}
 	p.stats.deletes++
-	p.availableRows += int(affected)
-	p.expectedRows += int(affected)
+	// Deletes produce one event per family.
+	p.availableRows += int(affected) * p.numFamilies
+	p.expectedRows += int(affected) * p.numFamilies
 	return nil
 }
 
@@ -789,8 +897,8 @@ func (p *perturbation) doAbort(ctx context.Context) error {
 		return err
 	}
 	p.stats.aborts++
-	p.availableRows += deletedRows
-	p.expectedRows += deletedRows
+	p.availableRows += deletedRows * p.numFamilies
+	p.expectedRows += deletedRows * p.numFamilies
 	return nil
 }
 
@@ -834,8 +942,10 @@ func (p *perturbation) doAddColumn(ctx context.Context) error {
 	p.addedColumnCount++
 	p.stats.addColumns++
 
-	// A schema change with a default triggers a backfill, producing one row
-	// event per existing row.
+	// A schema change with a default triggers a backfill. Without column
+	// families, this produces one row event per existing row. With column
+	// families, the new column goes into the first family (fam_a), and only
+	// that family emits backfill events.
 	var rows int
 	if err := p.db.QueryRow(
 		fmt.Sprintf(`SELECT count(*) FROM %s`, p.tableName),
@@ -852,14 +962,14 @@ func (p *perturbation) doAddColumn(ctx context.Context) error {
 // changes are generated during this phase, expectedRows is fixed. If
 // maxConsecutiveResolves resolved timestamps pass without a single row, the
 // drain concludes that all rows have been delivered. If the final unique row
-// count falls short of expectedRows by more than 50%, it indicates a real
+// count falls short of expectedRows by more than 20%, it indicates a real
 // problem (e.g., a skipped backfill).
 //
 // The 50% tolerance accounts for inherent imprecision in expectedRows counting:
 // schema change backfills may not produce exactly one event per row when rows
 // are concurrently modified, DELETE operations may target already-deleted rows,
-// and the count(*) done in doAddColumn/doDropColumn races with concurrent DML.
-// A wall-clock deadline prevents the drain from blocking indefinitely.
+// and column family interactions can cause overcounting. A wall-clock deadline
+// prevents the drain from blocking indefinitely.
 func (p *perturbation) drainExpectedRows(ctx context.Context) error {
 	uniqueRows := p.stats.rows - p.stats.duplicates
 	if uniqueRows >= p.expectedRows {
@@ -946,12 +1056,12 @@ func (p *perturbation) drainExpectedRows(ctx context.Context) error {
 			"drain phase: expected at least %d unique rows (50%% of %d) "+
 				"but only got %d (%d total, %d duplicates); "+
 				"DML: inserts=%d updates=%d deletes=%d aborts=%d; "+
-				"schema: addColumns=%d dropColumns=%d; "+
+				"schema: addColumns=%d dropColumns=%d; families=%d; "+
 				"changefeed may have skipped backfill rows",
 			minRequired, p.expectedRows, uniqueRows,
 			s.rows, s.duplicates,
 			s.inserts, s.updates, s.deletes, s.aborts,
-			s.addColumns, s.dropColumns,
+			s.addColumns, s.dropColumns, p.numFamilies,
 		)
 	}
 
