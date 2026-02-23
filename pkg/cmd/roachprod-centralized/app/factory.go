@@ -48,6 +48,8 @@ import (
 	shealth "github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/services/health"
 	shealthtypes "github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/services/health/types"
 	sprovisionings "github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/services/provisionings"
+	sprovhooks "github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/services/provisionings/hooks"
+	sprovssh "github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/services/provisionings/ssh"
 	sprovtemplates "github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/services/provisionings/templates"
 	sprovtypes "github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/services/provisionings/types"
 	spublicdns "github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/services/public-dns"
@@ -360,6 +362,13 @@ func NewServicesFromConfig(
 			provBackend = sprovtemplates.NewLocalBackend()
 		}
 
+		// Create hook infrastructure for post-provisioning actions.
+		hookRegistry := sprovhooks.NewRegistry()
+		hookSSHClient := sprovssh.NewSSHClient()
+		hookRegistry.Register("run-command",
+			sprovhooks.NewRunCommandExecutor(hookSSHClient))
+		hookOrchestrator := sprovhooks.NewOrchestrator(hookRegistry)
+
 		provisioningsService = sprovisionings.NewService(
 			provisioningsRepository,
 			environmentsService,
@@ -374,6 +383,7 @@ func NewServicesFromConfig(
 				GCWatcherInterval: gcWatcherInterval,
 			},
 			provBackend,
+			hookOrchestrator,
 		)
 	}
 

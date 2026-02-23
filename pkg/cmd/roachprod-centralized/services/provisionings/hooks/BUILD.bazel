@@ -1,0 +1,44 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "hooks",
+    srcs = [
+        "executor.go",
+        "jq.go",
+        "orchestrator.go",
+        "registry.go",
+        "run_command.go",
+        "script.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/services/provisionings/hooks",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/cmd/roachprod-centralized/models/provisionings",
+        "//pkg/cmd/roachprod-centralized/services/environments/types",
+        "//pkg/cmd/roachprod-centralized/services/provisionings/ssh",
+        "//pkg/cmd/roachprod-centralized/services/provisionings/templates",
+        "//pkg/cmd/roachprod-centralized/utils/logger",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_itchyny_gojq//:gojq",
+    ],
+)
+
+go_test(
+    name = "hooks_test",
+    srcs = [
+        "jq_test.go",
+        "orchestrator_test.go",
+        "run_command_test.go",
+        "script_test.go",
+    ],
+    embed = [":hooks"],
+    deps = [
+        "//pkg/cmd/roachprod-centralized/models/environments",
+        "//pkg/cmd/roachprod-centralized/models/provisionings",
+        "//pkg/cmd/roachprod-centralized/services/environments/types",
+        "//pkg/cmd/roachprod-centralized/utils/logger",
+        "//pkg/util/uuid",
+        "@com_github_stretchr_testify//assert",
+        "@com_github_stretchr_testify//require",
+    ],
+)

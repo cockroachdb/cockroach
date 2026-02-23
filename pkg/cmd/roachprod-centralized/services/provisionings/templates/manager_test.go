@@ -6,6 +6,9 @@
 package templates
 
 import (
+	"archive/tar"
+	"bytes"
+	"compress/gzip"
 	"os"
 	"path/filepath"
 	"testing"
@@ -248,7 +251,7 @@ func TestSnapshotTemplateRejectsOutsideSymlink(t *testing.T) {
 	assert.Contains(t, err.Error(), "outside templates directory")
 }
 
-func TestSnapshotExcludesMarkerFile(t *testing.T) {
+func TestSnapshotIncludesMarkerFile(t *testing.T) {
 	dir := setupTestTemplatesDir(t)
 	mgr := NewManager(dir)
 
@@ -259,9 +262,145 @@ func TestSnapshotExcludesMarkerFile(t *testing.T) {
 	err = ExtractSnapshot(archive, extractDir)
 	require.NoError(t, err)
 
-	// template.yaml should not be in the extracted archive.
+	// template.yaml should be in the extracted archive (needed for hooks).
 	_, err = os.Stat(filepath.Join(extractDir, "template.yaml"))
-	assert.True(t, os.IsNotExist(err), "template.yaml should not be in the snapshot")
+	assert.NoError(t, err, "template.yaml should be in the snapshot")
+}
+
+func TestParseMetadataFromDir(t *testing.T) {
+	dir := setupTestTemplatesDir(t)
+	tmplDir := filepath.Join(dir, "my-template")
+
+	meta, err := ParseMetadataFromDir(tmplDir)
+	require.NoError(t, err)
+	assert.Equal(t, "my-template", meta.Name)
+	assert.Equal(t, "A test template", meta.Description)
+}
+
+func TestParseMetadataFromDir_NoMarker(t *testing.T) {
+	dir := t.TempDir()
+	_, err := ParseMetadataFromDir(dir)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "no template.yaml")
+}
+
+func TestParseMetadataFromDir_WithHooks(t *testing.T) {
+	dir := t.TempDir()
+	tmplDir := filepath.Join(dir, "hooked")
+	require.NoError(t, os.MkdirAll(tmplDir, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(tmplDir, "template.yaml"), []byte(`
+name: hooked
+description: Template with hooks
+ssh:
+  private_key_var: ssh_key
+  machines: .instances[].public_ip
+  user: ubuntu
+hooks:
+  - name: wait-ready
+    type: run-command
+    ssh: true
+    command: test -f /.ready
+    optional: false
+    retry:
+      interval: "10s"
+      timeout: "5m"
+    triggers: [post_apply]
+`), 0o644))
+
+	meta, err := ParseMetadataFromDir(tmplDir)
+	require.NoError(t, err)
+	assert.Equal(t, "hooked", meta.Name)
+	require.NotNil(t, meta.SSH)
+	assert.Equal(t, "ssh_key", meta.SSH.PrivateKeyVar)
+	assert.Equal(t, ".instances[].public_ip", meta.SSH.Machines)
+	assert.Equal(t, "ubuntu", meta.SSH.User)
+	require.Len(t, meta.Hooks, 1)
+	assert.Equal(t, "wait-ready", meta.Hooks[0].Name)
+	assert.Equal(t, "run-command", meta.Hooks[0].Type)
+	assert.True(t, meta.Hooks[0].SSH)
+	assert.Equal(t, "test -f /.ready", meta.Hooks[0].Command)
+	assert.False(t, meta.Hooks[0].Optional)
+	require.NotNil(t, meta.Hooks[0].Retry)
+	assert.Equal(t, "10s", meta.Hooks[0].Retry.Interval)
+	assert.Equal(t, "5m", meta.Hooks[0].Retry.Timeout)
+	require.Len(t, meta.Hooks[0].Triggers, 1)
+	assert.True(t, meta.Hooks[0].HasTrigger(provisionings.TriggerPostApply))
+}
+
+func TestParseMetadataFromSnapshot(t *testing.T) {
+	dir := t.TempDir()
+	tmplDir := filepath.Join(dir, "snap-tmpl")
+	require.NoError(t, os.MkdirAll(tmplDir, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(tmplDir, "template.yaml"), []byte(`
+name: snap-tmpl
+description: Snapshot metadata test
+ssh:
+  private_key_var: my_key
+  machines: .vms[].ip
+  user: root
+hooks:
+  - name: init-setup
+    type: run-command
+    ssh: true
+    command: echo hello
+    triggers: [post_apply]
+`), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(tmplDir, "main.tf"), []byte(
+		`variable "identifier" { type = string }`,
+	), 0o644))
+
+	mgr := NewManager(dir)
+	archive, _, err := mgr.SnapshotTemplate("snap-tmpl")
+	require.NoError(t, err)
+
+	meta, err := ParseMetadataFromSnapshot(archive)
+	require.NoError(t, err)
+	assert.Equal(t, "snap-tmpl", meta.Name)
+	require.NotNil(t, meta.SSH)
+	assert.Equal(t, "my_key", meta.SSH.PrivateKeyVar)
+	require.Len(t, meta.Hooks, 1)
+	assert.Equal(t, "init-setup", meta.Hooks[0].Name)
+}
+
+func TestParseMetadataFromSnapshot_NoMarker(t *testing.T) {
+	dir := t.TempDir()
+	tmplDir := filepath.Join(dir, "no-marker")
+	require.NoError(t, os.MkdirAll(tmplDir, 0o755))
+	// Create a minimal template.yaml for snapshot (required by GetTemplate),
+	// then remove it from the archive by creating a custom archive without it.
+	require.NoError(t, os.WriteFile(filepath.Join(tmplDir, "template.yaml"), []byte(
+		"name: no-marker\n",
+	), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(tmplDir, "main.tf"), []byte(
+		`variable "identifier" { type = string }`,
+	), 0o644))
+
+	// Build a custom archive with only main.tf (no template.yaml).
+	var buf bytes.Buffer
+	gz := gzip.NewWriter(&buf)
+	tw := tar.NewWriter(gz)
+	data := []byte(`variable "identifier" { type = string }`)
+	require.NoError(t, tw.WriteHeader(&tar.Header{
+		Name: "main.tf", Size: int64(len(data)), Mode: 0o644,
+	}))
+	_, err := tw.Write(data)
+	require.NoError(t, err)
+	require.NoError(t, tw.Close())
+	require.NoError(t, gz.Close())
+
+	_, err = ParseMetadataFromSnapshot(buf.Bytes())
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "no template.yaml")
+}
+
+func TestParseMetadataFromDir_NoHooks(t *testing.T) {
+	dir := setupTestTemplatesDir(t)
+	tmplDir := filepath.Join(dir, "my-template")
+
+	meta, err := ParseMetadataFromDir(tmplDir)
+	require.NoError(t, err)
+	assert.Nil(t, meta.SSH)
+	assert.Empty(t, meta.Hooks)
 }
 
 func TestWriteBackendTF(t *testing.T) {

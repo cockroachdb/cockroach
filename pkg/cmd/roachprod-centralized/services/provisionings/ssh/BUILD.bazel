@@ -1,0 +1,20 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "ssh",
+    srcs = ["client.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/services/provisionings/ssh",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/cmd/roachprod-centralized/utils/logger",
+        "@com_github_cockroachdb_errors//:errors",
+        "@org_golang_x_crypto//ssh",
+    ],
+)
+
+go_test(
+    name = "ssh_test",
+    srcs = ["client_test.go"],
+    embed = [":ssh"],
+    deps = ["@com_github_stretchr_testify//assert"],
+)

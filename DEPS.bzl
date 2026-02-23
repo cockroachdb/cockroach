@@ -1682,6 +1682,26 @@ def go_deps():
         ],
     )
     go_repository(
+        name = "com_github_clipperhouse_stringish",
+        build_file_proto_mode = "disable_global",
+        importpath = "github.com/clipperhouse/stringish",
+        sha256 = "b64486091fd9c743a51a025c0c171b0d6f43e5a8fbba799e6d3029f79315621f",
+        strip_prefix = "github.com/clipperhouse/stringish@v0.1.1",
+        urls = [
+            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/clipperhouse/stringish/com_github_clipperhouse_stringish-v0.1.1.zip",
+        ],
+    )
+    go_repository(
+        name = "com_github_clipperhouse_uax29_v2",
+        build_file_proto_mode = "disable_global",
+        importpath = "github.com/clipperhouse/uax29/v2",
+        sha256 = "511135f99f7f21d94de17848d1fc763be2ba36544ad5a0c1eb24b71f7078e649",
+        strip_prefix = "github.com/clipperhouse/uax29/v2@v2.3.0",
+        urls = [
+            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/clipperhouse/uax29/v2/com_github_clipperhouse_uax29_v2-v2.3.0.zip",
+        ],
+    )
+    go_repository(
         name = "com_github_cloudykit_fastprinter",
         build_file_proto_mode = "disable_global",
         importpath = "github.com/CloudyKit/fastprinter",
@@ -5051,6 +5071,36 @@ def go_deps():
         ],
     )
     go_repository(
+        name = "com_github_itchyny_go_yaml",
+        build_file_proto_mode = "disable_global",
+        importpath = "github.com/itchyny/go-yaml",
+        sha256 = "4c9766586642d7feabc425c7fe2d24df5f455368484b4465a2be134e88a25bf6",
+        strip_prefix = "github.com/itchyny/go-yaml@v0.0.0-20251001235044-fca9a0999f15",
+        urls = [
+            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/itchyny/go-yaml/com_github_itchyny_go_yaml-v0.0.0-20251001235044-fca9a0999f15.zip",
+        ],
+    )
+    go_repository(
+        name = "com_github_itchyny_gojq",
+        build_file_proto_mode = "disable_global",
+        importpath = "github.com/itchyny/gojq",
+        sha256 = "9151159ef2bdaa6467d11f1bc2a128e5411ff7658faf34b178df7d8797857e39",
+        strip_prefix = "github.com/itchyny/gojq@v0.12.18",
+        urls = [
+            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/itchyny/gojq/com_github_itchyny_gojq-v0.12.18.zip",
+        ],
+    )
+    go_repository(
+        name = "com_github_itchyny_timefmt_go",
+        build_file_proto_mode = "disable_global",
+        importpath = "github.com/itchyny/timefmt-go",
+        sha256 = "8f1fae55a6889c06e7a02d0d8a3ceae35583cc4bbf04bd1c0f9810b59affac62",
+        strip_prefix = "github.com/itchyny/timefmt-go@v0.1.7",
+        urls = [
+            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/itchyny/timefmt-go/com_github_itchyny_timefmt_go-v0.1.7.zip",
+        ],
+    )
+    go_repository(
         name = "com_github_j_keck_arping",
         build_file_proto_mode = "disable_global",
         importpath = "github.com/j-keck/arping",
@@ -6218,10 +6268,10 @@ def go_deps():
         name = "com_github_mattn_go_runewidth",
         build_file_proto_mode = "disable_global",
         importpath = "github.com/mattn/go-runewidth",
-        sha256 = "364ef5ed31f6571dad56730305b5c2288a53da06d9832680ade5e21d97a748e7",
-        strip_prefix = "github.com/mattn/go-runewidth@v0.0.14",
+        sha256 = "4a99857860b6c26557e6d275d737df8bc29a542cc28fb041d47a417515906876",
+        strip_prefix = "github.com/mattn/go-runewidth@v0.0.19",
         urls = [
-            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/mattn/go-runewidth/com_github_mattn_go_runewidth-v0.0.14.zip",
+            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/mattn/go-runewidth/com_github_mattn_go_runewidth-v0.0.19.zip",
         ],
     )
     go_repository(

@@ -18,6 +18,7 @@ import (
 	taskmodels "github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/models/tasks"
 	provrepo "github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/repositories/provisionings"
 	envtypes "github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/services/environments/types"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/services/provisionings/hooks"
 	ptasks "github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/services/provisionings/tasks"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/services/provisionings/templates"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/services/provisionings/tofu"
@@ -35,13 +36,14 @@ import (
 
 // Service implements the provisionings service interface.
 type Service struct {
-	repo        provrepo.IProvisioningsRepository
-	envService  envtypes.IService
-	taskService stasks.IService
-	executor    tofu.IExecutor
-	templateMgr *templates.Manager
-	options     types.Options
-	backend     templates.Backend // GCS or local state backend
+	repo             provrepo.IProvisioningsRepository
+	envService       envtypes.IService
+	taskService      stasks.IService
+	executor         tofu.IExecutor
+	templateMgr      *templates.Manager
+	options          types.Options
+	backend          templates.Backend // GCS or local state backend
+	hookOrchestrator hooks.IOrchestrator
 
 	backgroundJobsCancelFunc context.CancelFunc
 	backgroundJobsWg         *sync.WaitGroup
@@ -54,15 +56,17 @@ func NewService(
 	taskService stasks.IService,
 	opts types.Options,
 	backend templates.Backend,
+	hookOrchestrator hooks.IOrchestrator,
 ) *Service {
 	return &Service{
-		repo:        repo,
-		envService:  envService,
-		taskService: taskService,
-		executor:    tofu.NewExecutor(opts.TofuBinary),
-		templateMgr: templates.NewManager(opts.TemplatesDir),
-		options:     opts,
-		backend:     backend,
+		repo:             repo,
+		envService:       envService,
+		taskService:      taskService,
+		executor:         tofu.NewExecutor(opts.TofuBinary),
+		templateMgr:      templates.NewManager(opts.TemplatesDir),
+		options:          opts,
+		backend:          backend,
+		hookOrchestrator: hookOrchestrator,
 	}
 }
 

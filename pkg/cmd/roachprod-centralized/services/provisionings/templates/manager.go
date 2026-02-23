@@ -6,6 +6,10 @@
 package templates
 
 import (
+	"archive/tar"
+	"bytes"
+	"compress/gzip"
+	"io"
 	"os"
 	"path/filepath"
 
@@ -113,4 +117,71 @@ func readTemplateMarker(dir string) (provisionings.TemplateMetadata, bool) {
 		return meta, true
 	}
 	return provisionings.TemplateMetadata{}, false
+}
+
+// ParseMetadataFromDir reads template.yaml or template.yml from a filesystem
+// directory and returns the parsed metadata. Used by HandleProvision where the
+// working directory already contains the extracted snapshot.
+func ParseMetadataFromDir(dir string) (provisionings.TemplateMetadata, error) {
+	meta, found := readTemplateMarker(dir)
+	if !found {
+		return provisionings.TemplateMetadata{}, errors.Newf(
+			"no template.yaml or template.yml found in %s", dir,
+		)
+	}
+	return meta, nil
+}
+
+// ParseMetadataFromSnapshot extracts and parses template.yaml from a tar.gz
+// archive in memory without writing to disk. Used by HandleSetupSSHKeys
+// (Commit 12) where no working directory exists.
+func ParseMetadataFromSnapshot(archive []byte) (provisionings.TemplateMetadata, error) {
+	gz, err := gzip.NewReader(bytes.NewReader(archive))
+	if err != nil {
+		return provisionings.TemplateMetadata{}, errors.Wrap(
+			err, "open gzip reader for metadata extraction",
+		)
+	}
+	defer gz.Close()
+
+	tr := tar.NewReader(gz)
+	for {
+		header, err := tr.Next()
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			return provisionings.TemplateMetadata{}, errors.Wrap(
+				err, "read tar entry for metadata extraction",
+			)
+		}
+
+		if header.Name != "template.yaml" && header.Name != "template.yml" {
+			continue
+		}
+
+		data, err := io.ReadAll(tr)
+		if err != nil {
+			return provisionings.TemplateMetadata{}, errors.Wrapf(
+				err, "read %s from snapshot", header.Name,
+			)
+		}
+
+		var meta provisionings.TemplateMetadata
+		if err := yaml.Unmarshal(data, &meta); err != nil {
+			return provisionings.TemplateMetadata{}, errors.Wrapf(
+				err, "unmarshal %s from snapshot", header.Name,
+			)
+		}
+		if meta.Name == "" {
+			return provisionings.TemplateMetadata{}, errors.Newf(
+				"%s in snapshot has empty name", header.Name,
+			)
+		}
+		return meta, nil
+	}
+
+	return provisionings.TemplateMetadata{}, errors.New(
+		"no template.yaml or template.yml found in snapshot",
+	)
 }

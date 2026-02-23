@@ -12,11 +12,14 @@ import (
 )
 
 // TemplateMetadata holds the name and description parsed from a template's
-// template.yaml or template.yml marker file.
+// template.yaml or template.yml marker file. SSH and Hooks are optional fields
+// that declare post-provisioning hook behavior.
 type TemplateMetadata struct {
-	Name            string `yaml:"name" json:"name"`
-	Description     string `yaml:"description,omitempty" json:"description,omitempty"`
-	DefaultLifetime string `yaml:"default_lifetime,omitempty" json:"default_lifetime,omitempty"`
+	Name            string            `yaml:"name" json:"name"`
+	Description     string            `yaml:"description,omitempty" json:"description,omitempty"`
+	DefaultLifetime string            `yaml:"default_lifetime,omitempty" json:"default_lifetime,omitempty"`
+	SSH             *SSHConfig        `yaml:"ssh,omitempty" json:"ssh,omitempty"`
+	Hooks           []HookDeclaration `yaml:"hooks,omitempty" json:"hooks,omitempty"`
 }
 
 // Template represents a discovered terraform template with its parsed variable
@@ -25,10 +28,10 @@ type Template struct {
 	TemplateMetadata
 	// DirName is the directory name under the templates root. This is the
 	// canonical lookup key used by GetTemplate, inspect, and snapshot.
-	DirName   string                   `json:"dir_name"`
+	DirName   string                    `json:"dir_name"`
 	Variables map[string]TemplateOption `json:"variables"`
-	Checksum  string                   `json:"checksum,omitempty"`
-	Path      string                   `json:"-"`
+	Checksum  string                    `json:"checksum,omitempty"`
+	Path      string                    `json:"-"`
 }
 
 // TemplateOption is a recursive type that fully describes an HCL variable's
@@ -50,12 +53,12 @@ type TemplateOption struct {
 	// wrappers and nested structure (e.g.
 	// "object({region=optional(string,"us-east1"),…})").
 	// Only set on top-level variables, not on recursive children.
-	FullType    string                    `json:"full_type,omitempty"`
-	Value       interface{}               `json:"default,omitempty"`
-	InnerTypes  []TemplateOption          `json:"inner_types,omitempty"`
-	Required    bool                      `json:"required"`
-	Sensitive   bool                      `json:"sensitive,omitempty"`
-	Description string                    `json:"description,omitempty"`
+	FullType    string           `json:"full_type,omitempty"`
+	Value       interface{}      `json:"default,omitempty"`
+	InnerTypes  []TemplateOption `json:"inner_types,omitempty"`
+	Required    bool             `json:"required"`
+	Sensitive   bool             `json:"sensitive,omitempty"`
+	Description string           `json:"description,omitempty"`
 }
 
 // GetAsInterface recursively converts a TemplateOption tree back to native

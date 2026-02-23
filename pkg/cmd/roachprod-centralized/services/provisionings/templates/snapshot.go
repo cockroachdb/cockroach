@@ -62,11 +62,9 @@ func (m *Manager) SnapshotTemplate(name string) ([]byte, string, error) {
 			return errors.Wrapf(err, "rel path for %s", path)
 		}
 
-		// Skip the template marker files in the archive — they're metadata,
-		// not terraform configuration.
-		if relPath == "template.yaml" || relPath == "template.yml" {
-			return nil
-		}
+		// Include template.yaml/template.yml in the archive — hooks and SSH
+		// config declared in the marker are needed for post-provisioning
+		// actions and manual trigger replay.
 
 		// Resolve symlinks: follow them and include the actual files.
 		realPath := path

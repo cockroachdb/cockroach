@@ -96,7 +96,7 @@ func newTestService(
 		DefaultLifetime:   12 * time.Hour,
 		LifetimeExtension: 12 * time.Hour,
 		GCWatcherInterval: 5 * time.Minute,
-	}, templates.NewLocalBackend())
+	}, templates.NewLocalBackend(), nil)
 }
 
 func TestCreateProvisioning_SchedulesTask(t *testing.T) {

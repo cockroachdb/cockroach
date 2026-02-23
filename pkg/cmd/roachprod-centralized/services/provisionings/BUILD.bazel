@@ -15,6 +15,7 @@ go_library(
         "//pkg/cmd/roachprod-centralized/models/tasks",
         "//pkg/cmd/roachprod-centralized/repositories/provisionings",
         "//pkg/cmd/roachprod-centralized/services/environments/types",
+        "//pkg/cmd/roachprod-centralized/services/provisionings/hooks",
         "//pkg/cmd/roachprod-centralized/services/provisionings/tasks",
         "//pkg/cmd/roachprod-centralized/services/provisionings/templates",
         "//pkg/cmd/roachprod-centralized/services/provisionings/tofu",

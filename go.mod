@@ -184,9 +184,11 @@ require (
 	github.com/grpc-ecosystem/grpc-gateway v1.16.0
 	github.com/guptarohit/asciigraph v0.7.3
 	github.com/hashicorp/hcl/v2 v2.24.0
+	github.com/hashicorp/terraform-json v0.27.2
 	github.com/iancoleman/strcase v0.2.0
 	github.com/influxdata/influxdb-client-go/v2 v2.3.1-0.20210518120617-5d1fff431040
 	github.com/irfansharif/recorder v0.0.0-20211218081646-a21b46510fd6
+	github.com/itchyny/gojq v0.12.18
 	github.com/jackc/pgx/v5 v5.7.2
 	github.com/jaegertracing/jaeger v1.18.1
 	github.com/jordan-wright/email v4.0.1-0.20210109023952-943e75fe5223+incompatible
@@ -325,6 +327,8 @@ require (
 	github.com/charmbracelet/bubbletea v0.23.1 // indirect
 	github.com/charmbracelet/lipgloss v0.6.0 // indirect
 	github.com/chenzhuoyu/base64x v0.0.0-20221115062448-fe3a3abad311 // indirect
+	github.com/clipperhouse/stringish v0.1.1 // indirect
+	github.com/clipperhouse/uax29/v2 v2.3.0 // indirect
 	github.com/cockroachdb/crlfmt v0.0.0-20221214225007-b2fc5c302548 // indirect
 	github.com/cockroachdb/go-test-teamcity v0.0.0-20191211140407-cff980ad0a55 // indirect
 	github.com/cockroachdb/stress v0.0.0-20220803192808-1806698b1b7b // indirect
@@ -392,12 +396,12 @@ require (
 	github.com/hashicorp/go-uuid v1.0.3 // indirect
 	github.com/hashicorp/go-version v1.7.0 // indirect
 	github.com/hashicorp/hcl v1.0.0 // indirect
-	github.com/hashicorp/terraform-json v0.27.2 // indirect
 	github.com/huandu/xstrings v1.3.0 // indirect
 	github.com/ianlancetaylor/demangle v0.0.0-20230524184225-eabc099b10ab // indirect
 	github.com/imdario/mergo v0.3.13 // indirect
 	github.com/inconshreveable/mousetrap v1.0.1 // indirect
 	github.com/influxdata/line-protocol v0.0.0-20200327222509-2487e7298839 // indirect
+	github.com/itchyny/timefmt-go v0.1.7 // indirect
 	github.com/jackc/puddle/v2 v2.2.2 // indirect
 	github.com/jcmturner/aescts/v2 v2.0.0 // indirect
 	github.com/jcmturner/dnsutils/v2 v2.0.0 // indirect
@@ -424,7 +428,7 @@ require (
 	github.com/mailru/easyjson v0.7.7 // indirect
 	github.com/mattn/go-colorable v0.1.13 // indirect
 	github.com/mattn/go-localereader v0.0.1 // indirect
-	github.com/mattn/go-runewidth v0.0.14 // indirect
+	github.com/mattn/go-runewidth v0.0.19 // indirect
 	github.com/matttproud/golang_protobuf_extensions v1.0.4 // indirect
 	github.com/minio/asm2plan9s v0.0.0-20200509001527-cdd76441f9d8 // indirect
 	github.com/minio/c2goasm v0.0.0-20190812172519-36a3d3bbc4f3 // indirect
@@ -460,7 +464,6 @@ require (
 	github.com/pseudomuto/protoc-gen-doc v1.3.2 // indirect
 	github.com/pseudomuto/protokit v0.2.0 // indirect
 	github.com/puzpuzpuz/xsync/v3 v3.5.1 // indirect
-	github.com/rivo/uniseg v0.2.0 // indirect
 	github.com/rogpeppe/go-internal v1.14.1 // indirect
 	github.com/rs/xid v1.3.0 // indirect
 	github.com/russross/blackfriday/v2 v2.1.0 // indirect

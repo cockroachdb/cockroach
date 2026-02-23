@@ -141,6 +141,18 @@ func (s *Service) HandleProvision(
 	}
 	prov.Outputs = outputs
 
+	// Step: Post-apply hooks
+	if s.hookOrchestrator != nil {
+		prov.LastStep = "hooks"
+		prov.UpdatedAt = time.Now().UTC()
+		if err := s.repo.UpdateProvisioning(ctx, l, prov); err != nil {
+			return s.failProvision(ctx, l, &prov, errors.Wrap(err, "update last_step to hooks"))
+		}
+		if err := s.hookOrchestrator.RunPostApply(ctx, l, prov, workingDir, resolvedEnv); err != nil {
+			return s.failProvision(ctx, l, &prov, errors.Wrap(err, "post-apply hooks"))
+		}
+	}
+
 	// Done
 	prov.SetState(provmodels.ProvisioningStateProvisioned, l)
 	prov.LastStep = "done"
