@@ -14,7 +14,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts/tracker"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/kvflowcontrolpb"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/rac2"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvstorage"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/leases"
@@ -1216,19 +1215,11 @@ func (rp *replicaProposer) verifyLeaseRequestSafetyRLocked(
 		BypassSafetyChecks: bypassSafetyChecks,
 		DesiredLeaseType:   r.desiredLeaseType(r.descRLocked()),
 	}
-	// For lease transfers, check whether the target has a send queue. This
-	// matches the logic in excludeReplicasInNeedOfCatchup: a replica that is
-	// not in StateReplicate or has a send queue is behind on its log and may
-	// cause proportional unavailability if it becomes the leaseholder. When
-	// send stream stats are unavailable (not the leader, RACv2 not active),
-	// we conservatively leave TargetHasSendQueue=false to allow the transfer.
-	if in.Transfer() && !bypassSafetyChecks {
-		var stats rac2.RangeSendStreamStats
-		r.SendStreamStats(&stats)
-		if replStats, ok := stats.ReplicaSendStreamStats(nextLease.Replica.ReplicaID); ok {
-			in.TargetHasSendQueue = !replStats.IsStateReplicate || replStats.HasSendQueue
-		}
-	}
+	// NOTE: we do NOT check send-queue status here. Calling SendStreamStats
+	// is unsafe under repl.mu (lock ordering: rcReferenceUpdateMu < repl.mu).
+	// The above-raft check in InitOrJoinRequest handles the send-queue check
+	// before lease revocation. The proposal buffer retains the airtight
+	// snapshot check via ReplicaMayNeedSnapshot in leases.Verify.
 	if err := leases.Verify(ctx, st, in); err != nil {
 		if in.Transfer() {
 			// The lease transfer is deemed to be unsafe. The intended consequence of

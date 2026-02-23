@@ -74,9 +74,6 @@ type testProposer struct {
 	leaderReplicaType roachpb.ReplicaType
 	// rangePolicy is used in closedTimestampTarget.
 	rangePolicy ctpb.RangeClosedTimestampPolicy
-	// targetHasSendQueue is used in verifyLeaseRequestSafetyRLocked to simulate
-	// the target having a send queue.
-	targetHasSendQueue bool
 }
 
 var _ proposer = &testProposer{}
@@ -256,7 +253,6 @@ func (t *testProposer) verifyLeaseRequestSafetyRLocked(
 		PrevLeaseExpired:   !t.validLease,
 		NextLeaseHolder:    nextLease.Replica,
 		BypassSafetyChecks: bypassSafetyChecks,
-		TargetHasSendQueue: t.targetHasSendQueue,
 	}
 	return leases.Verify(ctx, st, in)
 }
@@ -691,9 +687,8 @@ func TestProposalBufferRejectUnsafeLeaseTransfer(t *testing.T) {
 		name          string
 		proposerState raftpb.StateType
 		// math.MaxUint64 if the target is not in the raft group.
-		targetState        rafttracker.StateType
-		targetMatch        kvpb.RaftIndex
-		targetHasSendQueue bool
+		targetState rafttracker.StateType
+		targetMatch kvpb.RaftIndex
 
 		expRejection    bool
 		expRejectionMsg string // substring expected in the rejection error
@@ -753,23 +748,6 @@ func TestProposalBufferRejectUnsafeLeaseTransfer(t *testing.T) {
 			targetMatch:   proposerCompactedIndex + 1,
 			expRejection:  false,
 		},
-		{
-			name:               "leader, target has send queue",
-			proposerState:      raftpb.StateLeader,
-			targetState:        rafttracker.StateReplicate,
-			targetMatch:        proposerCompactedIndex,
-			targetHasSendQueue: true,
-			expRejection:       true,
-			expRejectionMsg:    "target has a send queue",
-		},
-		{
-			name:               "leader, target has no send queue",
-			proposerState:      raftpb.StateLeader,
-			targetState:        rafttracker.StateReplicate,
-			targetMatch:        proposerCompactedIndex,
-			targetHasSendQueue: false,
-			expRejection:       false,
-		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			var p testProposer
@@ -810,7 +788,6 @@ func TestProposalBufferRejectUnsafeLeaseTransfer(t *testing.T) {
 			}
 			p.raftGroup = r
 			p.ci = proposerCompactedIndex
-			p.targetHasSendQueue = tc.targetHasSendQueue
 
 			var b propBuf
 			clock := hlc.NewClockForTesting(nil)
