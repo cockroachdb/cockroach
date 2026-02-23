@@ -305,7 +305,7 @@ var opWeights = []int{
 	createSequence:                    1,
 	createTable:                       10,
 	createTableAs:                     1,
-	createTrigger:                     1,
+	createTrigger:                     0, /* Not GA and breaks with DROP TABLE CASCADE */
 	createTypeEnum:                    1,
 	createTypeComposite:               1,
 	createView:                        1,
@@ -315,7 +315,7 @@ var opWeights = []int{
 	dropSchema:                        1,
 	dropSequence:                      1,
 	dropTable:                         1,
-	dropTrigger:                       1,
+	dropTrigger:                       0, /* Not GA and breaks with DROP TABLE CASCADE */
 	dropView:                          1,
 	renameIndex:                       1,
 	renameSequence:                    1,
