@@ -47,6 +47,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/constraint"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvadmission"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/rac2"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/leases"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness"
@@ -386,6 +387,17 @@ func (p *pendingLeaseRequest) InitOrJoinRequest(
 		NextLeaseHolder:       nextLeaseHolder,
 		BypassSafetyChecks:    bypassSafetyChecks,
 		DesiredLeaseType:      p.repl.desiredLeaseType(p.repl.descRLocked()),
+	}
+	// For lease transfers, check whether the target has a send queue. This is
+	// a best-effort early check that avoids the more disruptive rejection after
+	// lease revocation in the proposal buffer. When stats are unavailable, we
+	// leave TargetHasSendQueue=false to conservatively allow the transfer.
+	if in.Transfer() && !bypassSafetyChecks {
+		var stats rac2.RangeSendStreamStats
+		p.repl.SendStreamStats(&stats)
+		if replStats, ok := stats.ReplicaSendStreamStats(nextLeaseHolder.ReplicaID); ok {
+			in.TargetHasSendQueue = !replStats.IsStateReplicate || replStats.HasSendQueue
+		}
 	}
 	out, err := leases.VerifyAndBuild(ctx, st, nl, in)
 	if err != nil {
@@ -1019,11 +1031,15 @@ func (r *Replica) AdminTransferLease(
 			select {
 			case pErr := <-transfer.C():
 				err = pErr.GoError()
-				if IsLeaseTransferRejectedBecauseTargetMayNeedSnapshotError(err) && transferRejectedRetry.Next() {
+				if (IsLeaseTransferRejectedBecauseTargetMayNeedSnapshotError(err) ||
+					IsLeaseTransferRejectedBecauseTargetHasSendQueueError(err)) &&
+					transferRejectedRetry.Next() {
 					// If the lease transfer was rejected because the target may need a
-					// snapshot, try again. After the backoff, we may have become the Raft
-					// leader (through maybeTransferRaftLeadershipToLeaseholderLocked) or
-					// may have learned more about the state of the lease target's log.
+					// snapshot or has a send queue, try again. After the backoff, we may
+					// have become the Raft leader (through
+					// maybeTransferRaftLeadershipToLeaseholderLocked), may have learned
+					// more about the state of the lease target's log, or the send queue
+					// may have drained.
 					log.VEventf(ctx, 2, "retrying lease transfer to store %d after rejection", target)
 					continue
 				}
