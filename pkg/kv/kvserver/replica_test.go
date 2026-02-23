@@ -123,6 +123,7 @@ func (mg mockGuard) IsKeyLockedByConflictingTxn(
 func (mg mockGuard) IntentsToResolveVirtually() []roachpb.LockUpdate {
 	return nil
 }
+func (mg mockGuard) PrepareForLockConflictRetry(context.Context) {}
 
 var _ concurrency.Guard = (*mockGuard)(nil)
 
