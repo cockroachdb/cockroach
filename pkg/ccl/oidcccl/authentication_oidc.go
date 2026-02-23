@@ -687,6 +687,22 @@ var ConfigureOIDC = func(
 			return
 		}
 
+		// Update estimated_last_login_time for OIDC-authenticated users when
+		// OIDC provisioning is enabled.
+		if oidcAuthentication.conf.provisioningEnabled {
+			sqlUsername, err := secuser.MakeSQLUsernameFromUserInput(username, secuser.PurposeValidation)
+			if err != nil {
+				log.Dev.Errorf(ctx, "OIDC: invalid username for last login update: %v", err)
+				http.Error(w, genericCallbackHTTPError, http.StatusInternalServerError)
+				return
+			}
+			if err := sql.UpdateLastLoginTime(ctx, oidcAuthentication.execCfg, []secuser.SQLUsername{sqlUsername}); err != nil {
+				log.Dev.Errorf(ctx, "OIDC: failed to update last login time for %s: %v", username, err)
+				http.Error(w, genericCallbackHTTPError, http.StatusInternalServerError)
+				return
+			}
+		}
+
 		cookie, err := userLoginFromSSO(ctx, username)
 		if err != nil {
 			log.Dev.Errorf(ctx, "OIDC: failed to complete authentication: unable to create session for %s: %v", username, err)
