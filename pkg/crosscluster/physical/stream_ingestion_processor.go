@@ -41,6 +41,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/rangedesc"
+	"github.com/cockroachdb/cockroach/pkg/util/rangescanstats/rangescanstatspb"
 	"github.com/cockroachdb/cockroach/pkg/util/span"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
@@ -289,7 +290,7 @@ type streamIngestionProcessor struct {
 	aggTimer timeutil.Timer
 
 	// Pipelines to report range stats down to frontier processor.
-	rangeStatsCh chan *streampb.StreamEvent_RangeStats
+	rangeStatsCh chan *rangescanstatspb.RangeStats
 }
 
 // PartitionEvent augments a normal event with the partition it came from.
@@ -346,7 +347,7 @@ func newStreamIngestionDataProcessor(
 		flushCh:          make(chan flushableBuffer),
 		checkpointCh:     make(chan *jobspb.ResolvedSpans),
 		errCh:            make(chan error, 1),
-		rangeStatsCh:     make(chan *streampb.StreamEvent_RangeStats),
+		rangeStatsCh:     make(chan *rangescanstatspb.RangeStats),
 		rekeyer:          rekeyer,
 		rewriteToDiffKey: spec.TenantRekey.NewID != spec.TenantRekey.OldID,
 		logBufferEvery:   log.Every(30 * time.Second),

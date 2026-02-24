@@ -5,6 +5,7 @@ go_library(
     srcs = [
         "alter_changefeed_stmt.go",
         "authorization.go",
+        "backfill_stats_collector.go",
         "batching_sink.go",
         "changefeed.go",
         "changefeed_dist.go",
@@ -163,6 +164,8 @@ go_library(
         "//pkg/util/protoutil",
         "//pkg/util/quotapool",
         "//pkg/util/randutil",
+        "//pkg/util/rangescanstats",
+        "//pkg/util/rangescanstats/rangescanstatspb",
         "//pkg/util/retry",
         "//pkg/util/span",
         "//pkg/util/syncutil",
@@ -207,6 +210,7 @@ go_test(
     size = "enormous",
     srcs = [
         "alter_changefeed_test.go",
+        "backfill_stats_collector_test.go",
         "changefeed_dist_test.go",
         "changefeed_job_info_test.go",
         "changefeed_memory_test.go",

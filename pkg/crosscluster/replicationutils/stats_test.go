@@ -8,8 +8,8 @@ package replicationutils
 import (
 	"testing"
 
-	"github.com/cockroachdb/cockroach/pkg/repstream/streampb"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/rangescanstats/rangescanstatspb"
 	"github.com/stretchr/testify/require"
 )
 
@@ -18,22 +18,22 @@ func TestRangeStats(t *testing.T) {
 
 	type testCase struct {
 		name        string
-		stats       streampb.StreamEvent_RangeStats
+		stats       rangescanstatspb.RangeStats
 		fraction    float32
 		expectedMsg string
 
-		inputStats map[int32]*streampb.StreamEvent_RangeStats
+		inputStats map[int32]*rangescanstatspb.RangeStats
 	}
 
 	testCases := []testCase{
 		{
 			name: "steady state",
-			stats: streampb.StreamEvent_RangeStats{
+			stats: rangescanstatspb.RangeStats{
 				RangeCount: 10,
 			},
 			fraction:    1,
 			expectedMsg: "",
-			inputStats: map[int32]*streampb.StreamEvent_RangeStats{
+			inputStats: map[int32]*rangescanstatspb.RangeStats{
 				1: {RangeCount: 5},
 				2: {RangeCount: 3},
 				3: {RangeCount: 2},
@@ -41,14 +41,14 @@ func TestRangeStats(t *testing.T) {
 		},
 		{
 			name: "initial scan",
-			stats: streampb.StreamEvent_RangeStats{
+			stats: rangescanstatspb.RangeStats{
 				RangeCount:         10,
 				ScanningRangeCount: 6,
 				LaggingRangeCount:  2,
 			},
 			fraction:    0.4,
 			expectedMsg: "initial scan on 6 out of 10 ranges",
-			inputStats: map[int32]*streampb.StreamEvent_RangeStats{
+			inputStats: map[int32]*rangescanstatspb.RangeStats{
 				1: {RangeCount: 5, ScanningRangeCount: 4},
 				2: {RangeCount: 3, ScanningRangeCount: 2},
 				3: {RangeCount: 2, ScanningRangeCount: 0, LaggingRangeCount: 2},
@@ -56,13 +56,13 @@ func TestRangeStats(t *testing.T) {
 		},
 		{
 			name: "lagging",
-			stats: streampb.StreamEvent_RangeStats{
+			stats: rangescanstatspb.RangeStats{
 				RangeCount:        10,
 				LaggingRangeCount: 2,
 			},
 			fraction:    0.8,
 			expectedMsg: "catching up on 2 out of 10 ranges",
-			inputStats: map[int32]*streampb.StreamEvent_RangeStats{
+			inputStats: map[int32]*rangescanstatspb.RangeStats{
 				1: {RangeCount: 5},
 				2: {RangeCount: 3},
 				3: {RangeCount: 2, LaggingRangeCount: 2},
@@ -87,7 +87,7 @@ func TestRangeStats(t *testing.T) {
 				r.Add(id, stats)
 			}
 			total, fraction, msg = rInitializing.RollupStats()
-			require.Equal(t, total, streampb.StreamEvent_RangeStats{})
+			require.Equal(t, total, rangescanstatspb.RangeStats{})
 			require.Equal(t, float32(0), fraction)
 			require.Contains(t, msg, "starting streams")
 		})

@@ -86,6 +86,7 @@ go_library(
         "//pkg/util/metric",
         "//pkg/util/protoutil",
         "//pkg/util/rangedesc",
+        "//pkg/util/rangescanstats/rangescanstatspb",
         "//pkg/util/retry",
         "//pkg/util/span",
         "//pkg/util/syncutil",

@@ -541,6 +541,7 @@ func makePlan(
 				ProgressConfig:      progressConfig,
 				ResolvedSpans:       resolvedSpans,
 				SchemaTS:            &schemaTS,
+				AggregatorID:        int32(i),
 			}
 		}
 
@@ -558,6 +559,7 @@ func makePlan(
 			ProgressConfig:      progressConfig,
 			ResolvedSpans:       resolvedSpans,
 			SchemaTS:            &schemaTS,
+			NumAggregators:      int32(len(aggregatorSpecs)),
 		}
 
 		if haveKnobs && maybeCfKnobs.OnDistflowSpec != nil {

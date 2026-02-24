@@ -540,6 +540,10 @@ func TestChangefeedIdentifyDependentTablesForProtecting(t *testing.T) {
 		trimmed := trimRx.FindStringSubmatch(msg)[1]
 		spanStmts := strings.Split(trimmed, ", ")
 		for _, spanStmt := range spanStmts {
+			// The range stats poller scans the Meta2, which don't need to be protected with PTS.
+			if strings.Contains(spanStmt, "/Meta1/") || strings.Contains(spanStmt, "/Meta2/") {
+				continue
+			}
 			spanStmt = strings.Replace(spanStmt, "Scan ", "", 1)
 			startEnd := strings.Split(strings.Trim(spanStmt, "[)"), ",")
 			require.Len(t, startEnd, 2)
@@ -1954,6 +1958,9 @@ func TestChangefeedLaggingRangesMetrics(t *testing.T) {
 			context.Background(), &s.Server.ClusterSettings().SV, 20*time.Millisecond)
 		closedts.TargetDuration.Override(
 			context.Background(), &s.Server.ClusterSettings().SV, 20*time.Millisecond)
+		// Disable quantizing as we are asserting our timestamps are within a 250ms threshold.
+		changefeedbase.Quantize.Override(
+			context.Background(), &s.Server.ClusterSettings().SV, 0)
 
 		skipMu := syncutil.Mutex{}
 		skippedRanges := map[string]struct{}{}
@@ -2108,73 +2115,130 @@ func TestChangefeedTotalRangesMetric(t *testing.T) {
 	cdcTest(t, testFn, feedTestEnterpriseSinks)
 }
 
+// TestChangefeedBackfillObservability tests that changefeed.backfill_pending_ranges is
+// properly reported during initial and schemachange backfills. It also verifies that
+// the job status is emitted with the progress of the backfill.
 func TestChangefeedBackfillObservability(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
-		sqlDB := sqlutils.MakeSQLRunner(s.DB)
+	for _, tc := range []struct {
+		name       string
+		dropColumn bool
+	}{
+		{
+			// TestChangfeedBackfillObservability/initial-scan
+			name: "initial-scan",
+		},
+		{
+			// TestChangfeedBackfillObservability/schemachange
+			name:       "schemachange",
+			dropColumn: true,
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
+				sqlDB := sqlutils.MakeSQLRunner(s.DB)
 
-		knobs := s.TestingKnobs.DistSQL.(*execinfra.TestingKnobs).Changefeed.(*TestingKnobs)
-		registry := s.Server.JobRegistry().(*jobs.Registry)
-		sli, err := registry.MetricsStruct().Changefeed.(*Metrics).getSLIMetrics(defaultSLIScope)
-		require.NoError(t, err)
-		pendingRanges := sli.BackfillPendingRanges
+				knobs := s.TestingKnobs.DistSQL.(*execinfra.TestingKnobs).Changefeed.(*TestingKnobs)
+				registry := s.Server.JobRegistry().(*jobs.Registry)
+				sli, err := registry.MetricsStruct().Changefeed.(*Metrics).getSLIMetrics(defaultSLIScope)
+				require.NoError(t, err)
+				pendingRanges := sli.BackfillPendingRanges
 
-		// Create a table with multiple ranges
-		numRanges := 10
-		rowsPerRange := 20
-		sqlDB.Exec(t, fmt.Sprintf(`
-  CREATE TABLE foo (key INT PRIMARY KEY);
+				// Create a table with multiple ranges
+				numRanges := 10
+				rowsPerRange := 20
+				sqlDB.Exec(t, fmt.Sprintf(`
+  CREATE TABLE foo (key INT PRIMARY KEY, v STRING DEFAULT 'd');
   INSERT INTO foo (key) SELECT * FROM generate_series(1, %d);
   ALTER TABLE foo SPLIT AT (SELECT * FROM generate_series(%d, %d, %d));
   `, numRanges*rowsPerRange, rowsPerRange, (numRanges-1)*rowsPerRange, rowsPerRange))
-		sqlDB.CheckQueryResults(t, `SELECT count(*) FROM [SHOW RANGES FROM TABLE foo]`,
-			[][]string{{fmt.Sprint(numRanges)}},
-		)
+				sqlDB.CheckQueryResults(t, `SELECT count(*) FROM [SHOW RANGES FROM TABLE foo]`,
+					[][]string{{fmt.Sprint(numRanges)}},
+				)
 
-		// Allow control of the scans
-		scanCtx, scanCancel := context.WithCancel(context.Background())
-		scanChan := make(chan struct{})
-		knobs.FeedKnobs.BeforeScanRequest = func(b *kv.Batch) error {
-			select {
-			case <-scanCtx.Done():
-				return scanCtx.Err()
-			case <-scanChan:
-				return nil
+				// Allow control of the scans
+				scanCtx, scanCancel := context.WithCancel(context.Background())
+				scanChan := make(chan struct{})
+				knobs.FeedKnobs.BeforeScanRequest = func(b *kv.Batch) error {
+					select {
+					case <-scanCtx.Done():
+						return scanCtx.Err()
+					case <-scanChan:
+						return nil
+					}
+				}
+
+				require.Equal(t, pendingRanges.Value(), int64(0))
+
+				// We want to see our backfill progress emitted to the job progress, so
+				// set a low checkpoint interval and always flush the aggregator.
+				changefeedbase.SpanCheckpointInterval.Override(
+					context.Background(), &s.Server.ClusterSettings().SV, 20*time.Nanosecond)
+				knobs.ShouldFlushFrontier = func(_ jobspb.ResolvedSpan) bool {
+					return true
+				}
+				feedOpts := `lagging_ranges_polling_interval="25ms"`
+				// If we're testing a schema change, we want to skip the initial backfill.
+				if tc.dropColumn {
+					feedOpts = `lagging_ranges_polling_interval="25ms", initial_scan='no'`
+				}
+
+				foo := feed(t, f, fmt.Sprintf(`CREATE CHANGEFEED FOR foo WITH %s`, feedOpts))
+				defer closeFeed(t, foo)
+
+				if tc.dropColumn {
+					sqlDB.Exec(t, `ALTER TABLE foo DROP COLUMN v`)
+				}
+
+				// Progress the backfill halfway through its ranges
+				for i := 0; i < numRanges/2; i++ {
+					scanChan <- struct{}{}
+				}
+				testutils.SucceedsSoon(t, func() error {
+					count := pendingRanges.Value()
+					if count != int64(numRanges/2) {
+						return fmt.Errorf("range count %d should be %d", count, numRanges/2)
+					}
+					return nil
+				})
+
+				// Verify the job status reports the backfill scan progress.
+				jobFeed := foo.(cdctest.EnterpriseTestFeed)
+				expectedStatus := fmt.Sprintf("initial scan on %d out of %d ranges", numRanges/2, numRanges)
+				if tc.dropColumn {
+					expectedStatus = fmt.Sprintf("schemachange backfill on %d out of %d ranges", numRanges/2, numRanges)
+				}
+				testutils.SucceedsSoon(t, func() error {
+					progress, err := jobs.LoadJobProgress(context.Background(), s.Server.InternalDB().(isql.DB), jobFeed.JobID())
+					if err != nil {
+						return err
+					}
+					status := progress.StatusMessage
+
+					if !strings.Contains(status, expectedStatus) {
+						return fmt.Errorf("expected job status %s, observed %s", expectedStatus, status)
+					}
+					return nil
+				})
+
+				// Ensure that the pending count is cleared if the backfill completes
+				// regardless of successful scans
+				scanCancel()
+				testutils.SucceedsSoon(t, func() error {
+					count := pendingRanges.Value()
+					if count > 0 {
+						return fmt.Errorf("range count %d should be 0", count)
+					}
+					return nil
+				})
 			}
-		}
 
-		require.Equal(t, pendingRanges.Value(), int64(0))
-		foo := feed(t, f, `CREATE CHANGEFEED FOR foo`)
-		defer closeFeed(t, foo)
-
-		// Progress the initial backfill halfway through its ranges
-		for i := 0; i < numRanges/2; i++ {
-			scanChan <- struct{}{}
-		}
-		testutils.SucceedsSoon(t, func() error {
-			count := pendingRanges.Value()
-			if count != int64(numRanges/2) {
-				return fmt.Errorf("range count %d should be %d", count, numRanges/2)
-			}
-			return nil
-		})
-
-		// Ensure that the pending count is cleared if the backfill completes
-		// regardless of successful scans
-		scanCancel()
-		testutils.SucceedsSoon(t, func() error {
-			count := pendingRanges.Value()
-			if count > 0 {
-				return fmt.Errorf("range count %d should be 0", count)
-			}
-			return nil
+			// Can't run on tenants due to lack of SPLIT AT support (#54254)
+			cdcTest(t, testFn, feedTestNoTenants, feedTestEnterpriseSinks)
 		})
 	}
-
-	// Can't run on tenants due to lack of SPLIT AT support (#54254)
-	cdcTest(t, testFn, feedTestNoTenants, feedTestEnterpriseSinks)
 }
 
 func TestChangefeedUserDefinedTypes(t *testing.T) {

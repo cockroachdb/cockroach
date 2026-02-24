@@ -1,0 +1,30 @@
+// Copyright 2026 The Cockroach Authors.
+//
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
+
+syntax = "proto3";
+package cockroach.util.rangescanstatspb;
+option go_package = "github.com/cockroachdb/cockroach/pkg/util/rangescanstats/rangescanstatspb";
+
+import "gogoproto/gogo.proto";
+
+// RangeStats contains statistics about ranges being scanned during initial
+// and catchup scans.
+message RangeStats {
+  option (gogoproto.equal) = true;
+
+  // RangeCount is the number of ranges covered by the spans specified when
+  // starting the stream. The number of ranges is counted per requested
+  // span, so the count will be an overestimate if a range is shared between
+  // multiple requested spans.
+  int64 range_count = 1;
+
+  // ScanningRangeCount is the number of ranges that have yet to complete the
+  // initial scan. ScanningRangeCount <= RangeCount.
+  int64 scanning_range_count = 2;
+
+  // LaggingRangeCount is the number of ranges that are significantly behind,
+  // after completing the initial scan.
+  int64 lagging_range_count = 3;
+}

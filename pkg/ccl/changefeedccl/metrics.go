@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log/logcrash"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/metric/aggmetric"
+	"github.com/cockroachdb/cockroach/pkg/util/rangescanstats/rangescanstatspb"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/crlib/crstrings"
@@ -1435,10 +1436,9 @@ func (a *AggMetrics) getOrCreateScope(scope string) (*sliMetrics, error) {
 	return sm, nil
 }
 
-// getLaggingRangesCallback returns a function which can be called to update the
-// lagging ranges metric. It should be called with the current number of lagging
-// ranges.
-func (m *sliMetrics) getLaggingRangesCallback() func(lagging int64, total int64) {
+// getRangeStatsCallback returns a function which can be called to update our
+// range stats metrics: lagging ranges, scanning ranges, and total ranges.
+func (m *sliMetrics) getRangeStatsCallback() func(stats *rangescanstatspb.RangeStats) {
 	// Because this gauge is shared between changefeeds in the same metrics scope,
 	// we must instead modify it using `Inc` and `Dec` (as opposed to `Update`) to
 	// ensure values written by others are not overwritten. The code below is used
@@ -1458,7 +1458,13 @@ func (m *sliMetrics) getLaggingRangesCallback() func(lagging int64, total int64)
 		lagging int64
 		total   int64
 	}{}
-	return func(lagging int64, total int64) {
+	return func(stats *rangescanstatspb.RangeStats) {
+		total, scanning, lagging := stats.RangeCount, stats.ScanningRangeCount, stats.LaggingRangeCount
+		// We don't want to report lagging ranges during an initial scan.
+		if scanning > 0 {
+			lagging = 0
+		}
+
 		last.Lock()
 		defer last.Unlock()
 

@@ -19,9 +19,6 @@ export enum JobStatusVisual {
 }
 
 export function jobToVisual(job: Job): JobStatusVisual {
-  if (job.type === "CHANGEFEED") {
-    return JobStatusVisual.BadgeOnly;
-  }
   if (job.type === "REPLICATION STREAM PRODUCER") {
     return JobStatusVisual.BadgeOnly;
   }
@@ -30,9 +27,13 @@ export function jobToVisual(job: Job): JobStatusVisual {
   }
   if (
     job.type === "REPLICATION STREAM INGESTION" ||
-    job.type === "LOGICAL REPLICATION"
+    job.type === "LOGICAL REPLICATION" ||
+    job.type === "CHANGEFEED"
   ) {
-    return jobToVisualForReplicationIngestion(job);
+    if (job.fraction_completed > 0 && job.status === JOB_STATUS_RUNNING) {
+      return JobStatusVisual.ProgressBarWithDuration;
+    }
+    return JobStatusVisual.BadgeWithMessage;
   }
   switch (job.status) {
     case JOB_STATUS_SUCCEEDED:
@@ -54,13 +55,6 @@ export function jobToVisual(job: Job): JobStatusVisual {
     default:
       return JobStatusVisual.BadgeOnly;
   }
-}
-
-function jobToVisualForReplicationIngestion(job: Job): JobStatusVisual {
-  if (job.fraction_completed > 0 && job.status === JOB_STATUS_RUNNING) {
-    return JobStatusVisual.ProgressBarWithDuration;
-  }
-  return JobStatusVisual.BadgeWithMessage;
 }
 
 export const JOB_STATUS_SUCCEEDED = "succeeded";
