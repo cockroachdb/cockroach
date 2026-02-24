@@ -477,8 +477,14 @@ func (n *createStatsNode) makeJobRecord(ctx context.Context) (*jobs.Record, erro
 		whereClause = tree.AsString(n.Options.Where.Expr)
 	}
 
-	if err := n.p.CheckPrivilege(ctx, tableDesc, privilege.SELECT); err != nil {
-		return nil, err
+	// ANALYZE requires MAINTAIN or SELECT privilege on the table. In a future
+	// release, we could require only MAINTAIN and remove the SELECT fallback.
+	// The SELECT check is kept for backwards compatibility with pre-26.2
+	// behavior.
+	if maintainErr := n.p.CheckPrivilege(ctx, tableDesc, privilege.MAINTAIN); maintainErr != nil {
+		if err := n.p.CheckPrivilege(ctx, tableDesc, privilege.SELECT); err != nil {
+			return nil, maintainErr
+		}
 	}
 
 	var colStats []jobspb.CreateStatsDetails_ColStat

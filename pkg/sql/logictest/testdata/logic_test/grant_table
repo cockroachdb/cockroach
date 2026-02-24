@@ -1672,6 +1672,7 @@ a  public  t  readwrite  BACKUP             false
 a  public  t  readwrite  CHANGEFEED         false
 a  public  t  readwrite  CREATE             false
 a  public  t  readwrite  DROP               false
+a  public  t  readwrite  MAINTAIN           false
 a  public  t  readwrite  REPLICATIONDEST    false
 a  public  t  readwrite  REPLICATIONSOURCE  false
 a  public  t  readwrite  SELECT             false
@@ -1683,6 +1684,7 @@ a  public  t  test-user  BACKUP             false
 a  public  t  test-user  CHANGEFEED         false
 a  public  t  test-user  CREATE             false
 a  public  t  test-user  DROP               false
+a  public  t  test-user  MAINTAIN           false
 a  public  t  test-user  REPLICATIONDEST    false
 a  public  t  test-user  REPLICATIONSOURCE  false
 a  public  t  test-user  SELECT             false
@@ -1697,6 +1699,7 @@ a  public  t  readwrite  BACKUP             false
 a  public  t  readwrite  CHANGEFEED         false
 a  public  t  readwrite  CREATE             false
 a  public  t  readwrite  DROP               false
+a  public  t  readwrite  MAINTAIN           false
 a  public  t  readwrite  REPLICATIONDEST    false
 a  public  t  readwrite  REPLICATIONSOURCE  false
 a  public  t  readwrite  SELECT             false
@@ -1707,6 +1710,7 @@ a  public  t  test-user  BACKUP             false
 a  public  t  test-user  CHANGEFEED         false
 a  public  t  test-user  CREATE             false
 a  public  t  test-user  DROP               false
+a  public  t  test-user  MAINTAIN           false
 a  public  t  test-user  REPLICATIONDEST    false
 a  public  t  test-user  REPLICATIONSOURCE  false
 a  public  t  test-user  SELECT             false
@@ -1725,6 +1729,7 @@ a  public  t  readwrite  BACKUP             false
 a  public  t  readwrite  CHANGEFEED         false
 a  public  t  readwrite  CREATE             false
 a  public  t  readwrite  DROP               false
+a  public  t  readwrite  MAINTAIN           false
 a  public  t  readwrite  REPLICATIONDEST    false
 a  public  t  readwrite  REPLICATIONSOURCE  false
 a  public  t  readwrite  SELECT             false
@@ -1736,6 +1741,7 @@ a  public  t  test-user  BACKUP             false
 a  public  t  test-user  CHANGEFEED         false
 a  public  t  test-user  CREATE             false
 a  public  t  test-user  DROP               false
+a  public  t  test-user  MAINTAIN           false
 a  public  t  test-user  REPLICATIONDEST    false
 a  public  t  test-user  REPLICATIONSOURCE  false
 a  public  t  test-user  TRIGGER            false
@@ -1749,6 +1755,7 @@ a  public  t  readwrite  BACKUP             false
 a  public  t  readwrite  CHANGEFEED         false
 a  public  t  readwrite  CREATE             false
 a  public  t  readwrite  DROP               false
+a  public  t  readwrite  MAINTAIN           false
 a  public  t  readwrite  REPLICATIONDEST    false
 a  public  t  readwrite  REPLICATIONSOURCE  false
 a  public  t  readwrite  SELECT             false
@@ -1759,6 +1766,7 @@ a  public  t  test-user  BACKUP             false
 a  public  t  test-user  CHANGEFEED         false
 a  public  t  test-user  CREATE             false
 a  public  t  test-user  DROP               false
+a  public  t  test-user  MAINTAIN           false
 a  public  t  test-user  REPLICATIONDEST    false
 a  public  t  test-user  REPLICATIONSOURCE  false
 a  public  t  test-user  TRIGGER            false
@@ -1825,6 +1833,7 @@ a  public  v  readwrite  BACKUP             false
 a  public  v  readwrite  CHANGEFEED         false
 a  public  v  readwrite  CREATE             false
 a  public  v  readwrite  DROP               false
+a  public  v  readwrite  MAINTAIN           false
 a  public  v  readwrite  REPLICATIONDEST    false
 a  public  v  readwrite  REPLICATIONSOURCE  false
 a  public  v  readwrite  SELECT             false
@@ -1836,6 +1845,7 @@ a  public  v  test-user  BACKUP             false
 a  public  v  test-user  CHANGEFEED         false
 a  public  v  test-user  CREATE             false
 a  public  v  test-user  DROP               false
+a  public  v  test-user  MAINTAIN           false
 a  public  v  test-user  REPLICATIONDEST    false
 a  public  v  test-user  REPLICATIONSOURCE  false
 a  public  v  test-user  SELECT             false
@@ -1850,6 +1860,7 @@ a  public  v  readwrite  BACKUP             false
 a  public  v  readwrite  CHANGEFEED         false
 a  public  v  readwrite  CREATE             false
 a  public  v  readwrite  DROP               false
+a  public  v  readwrite  MAINTAIN           false
 a  public  v  readwrite  REPLICATIONDEST    false
 a  public  v  readwrite  REPLICATIONSOURCE  false
 a  public  v  readwrite  SELECT             false
@@ -1860,6 +1871,7 @@ a  public  v  test-user  BACKUP             false
 a  public  v  test-user  CHANGEFEED         false
 a  public  v  test-user  CREATE             false
 a  public  v  test-user  DROP               false
+a  public  v  test-user  MAINTAIN           false
 a  public  v  test-user  REPLICATIONDEST    false
 a  public  v  test-user  REPLICATIONSOURCE  false
 a  public  v  test-user  SELECT             false
@@ -1878,6 +1890,7 @@ a  public  v  readwrite  BACKUP             false
 a  public  v  readwrite  CHANGEFEED         false
 a  public  v  readwrite  CREATE             false
 a  public  v  readwrite  DROP               false
+a  public  v  readwrite  MAINTAIN           false
 a  public  v  readwrite  REPLICATIONDEST    false
 a  public  v  readwrite  REPLICATIONSOURCE  false
 a  public  v  readwrite  SELECT             false
@@ -1889,6 +1902,7 @@ a  public  v  test-user  BACKUP             false
 a  public  v  test-user  CHANGEFEED         false
 a  public  v  test-user  CREATE             false
 a  public  v  test-user  DROP               false
+a  public  v  test-user  MAINTAIN           false
 a  public  v  test-user  REPLICATIONDEST    false
 a  public  v  test-user  REPLICATIONSOURCE  false
 a  public  v  test-user  TRIGGER            false
@@ -1902,6 +1916,7 @@ a  public  v  readwrite  BACKUP             false
 a  public  v  readwrite  CHANGEFEED         false
 a  public  v  readwrite  CREATE             false
 a  public  v  readwrite  DROP               false
+a  public  v  readwrite  MAINTAIN           false
 a  public  v  readwrite  REPLICATIONDEST    false
 a  public  v  readwrite  REPLICATIONSOURCE  false
 a  public  v  readwrite  SELECT             false
@@ -1912,6 +1927,7 @@ a  public  v  test-user  BACKUP             false
 a  public  v  test-user  CHANGEFEED         false
 a  public  v  test-user  CREATE             false
 a  public  v  test-user  DROP               false
+a  public  v  test-user  MAINTAIN           false
 a  public  v  test-user  REPLICATIONDEST    false
 a  public  v  test-user  REPLICATIONSOURCE  false
 a  public  v  test-user  TRIGGER            false
@@ -1928,6 +1944,7 @@ a  public  v     table     readwrite  BACKUP             false
 a  public  v     table     readwrite  CHANGEFEED         false
 a  public  v     table     readwrite  CREATE             false
 a  public  v     table     readwrite  DROP               false
+a  public  v     table     readwrite  MAINTAIN           false
 a  public  v     table     readwrite  REPLICATIONDEST    false
 a  public  v     table     readwrite  REPLICATIONSOURCE  false
 a  public  v     table     readwrite  SELECT             false
@@ -1938,6 +1955,7 @@ a  public  v     table     test-user  BACKUP             false
 a  public  v     table     test-user  CHANGEFEED         false
 a  public  v     table     test-user  CREATE             false
 a  public  v     table     test-user  DROP               false
+a  public  v     table     test-user  MAINTAIN           false
 a  public  v     table     test-user  REPLICATIONDEST    false
 a  public  v     table     test-user  REPLICATIONSOURCE  false
 a  public  v     table     test-user  TRIGGER            false
@@ -2171,3 +2189,87 @@ db             public       NULL         schema       public   CREATE          f
 db             public       NULL         schema       public   USAGE           false
 db             public       table1       table        roach    ALL             false
 db             public       table2       table        roach    ALL             false
+
+subtest grant_maintain
+
+user root
+
+statement ok
+USE test
+
+statement ok
+CREATE TABLE maintain_grant_t (a INT PRIMARY KEY);
+CREATE MATERIALIZED VIEW maintain_grant_mv AS SELECT * FROM maintain_grant_t;
+CREATE USER maintain_grant_user
+
+# GRANT MAINTAIN on a table.
+statement ok
+GRANT MAINTAIN ON maintain_grant_t TO maintain_grant_user
+
+query TTTTTB rowsort
+SELECT * FROM [SHOW GRANTS ON maintain_grant_t] WHERE grantee = 'maintain_grant_user'
+----
+test  public  maintain_grant_t  maintain_grant_user  MAINTAIN  false
+
+# GRANT MAINTAIN on a materialized view.
+statement ok
+GRANT MAINTAIN ON maintain_grant_mv TO maintain_grant_user
+
+query TTTTTB rowsort
+SELECT * FROM [SHOW GRANTS ON maintain_grant_mv] WHERE grantee = 'maintain_grant_user'
+----
+test  public  maintain_grant_mv  maintain_grant_user  MAINTAIN  false
+
+# REVOKE MAINTAIN from the table.
+statement ok
+REVOKE MAINTAIN ON maintain_grant_t FROM maintain_grant_user
+
+query TTTTTB rowsort
+SELECT * FROM [SHOW GRANTS ON maintain_grant_t] WHERE grantee = 'maintain_grant_user'
+----
+
+# MAINTAIN WITH GRANT OPTION.
+statement ok
+GRANT MAINTAIN ON maintain_grant_mv TO maintain_grant_user WITH GRANT OPTION
+
+query TTTTTB rowsort
+SELECT * FROM [SHOW GRANTS ON maintain_grant_mv] WHERE grantee = 'maintain_grant_user'
+----
+test  public  maintain_grant_mv  maintain_grant_user  MAINTAIN  true
+
+statement ok
+REVOKE MAINTAIN ON maintain_grant_mv FROM maintain_grant_user
+
+# GRANT MAINTAIN on a sequence should fail since MAINTAIN is a table privilege.
+statement ok
+CREATE SEQUENCE maintain_grant_seq
+
+statement error pq: invalid privilege type MAINTAIN for sequence
+GRANT MAINTAIN ON maintain_grant_seq TO maintain_grant_user
+
+# GRANT MAINTAIN on a view should succeed since views use table privileges.
+statement ok
+CREATE VIEW maintain_grant_v AS SELECT * FROM maintain_grant_t
+
+statement ok
+GRANT MAINTAIN ON maintain_grant_v TO maintain_grant_user
+
+statement ok
+REVOKE MAINTAIN ON maintain_grant_v FROM maintain_grant_user
+
+# GRANT MAINTAIN on a type should fail since MAINTAIN is a table privilege.
+statement ok
+CREATE TYPE maintain_grant_typ AS ENUM ('a', 'b')
+
+statement error pq: invalid privilege type MAINTAIN for type
+GRANT MAINTAIN ON TYPE maintain_grant_typ TO maintain_grant_user
+
+statement ok
+DROP TYPE maintain_grant_typ;
+DROP VIEW maintain_grant_v;
+DROP SEQUENCE maintain_grant_seq;
+DROP MATERIALIZED VIEW maintain_grant_mv;
+DROP TABLE maintain_grant_t;
+DROP USER maintain_grant_user
+
+subtest end

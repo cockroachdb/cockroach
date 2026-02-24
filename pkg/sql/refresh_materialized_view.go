@@ -13,6 +13,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotice"
+	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
@@ -34,17 +35,8 @@ func (p *planner) RefreshMaterializedView(
 		return nil, pgerror.Newf(pgcode.WrongObjectType, "%q is not a materialized view", desc.Name)
 	}
 
-	hasOwnership, err := p.HasOwnership(ctx, desc)
-	if err != nil {
+	if err := p.CheckPrivilege(ctx, desc, privilege.MAINTAIN); err != nil {
 		return nil, err
-	}
-
-	if !hasOwnership {
-		return nil, pgerror.Newf(
-			pgcode.InsufficientPrivilege,
-			"must be owner of materialized view %s",
-			desc.Name,
-		)
 	}
 
 	return &refreshMaterializedViewNode{n: n}, nil

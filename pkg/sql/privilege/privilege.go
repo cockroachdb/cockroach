@@ -87,7 +87,7 @@ var (
 	ReadWriteData         = List{SELECT, INSERT, DELETE, UPDATE}
 	ReadWriteSequenceData = List{SELECT, UPDATE, USAGE}
 	DBPrivileges          = List{ALL, BACKUP, CHANGEFEED, CONNECT, CREATE, DROP, RESTORE, ZONECONFIG}
-	TablePrivileges       = List{ALL, BACKUP, CHANGEFEED, CREATE, DROP, SELECT, INSERT, DELETE, UPDATE, ZONECONFIG, TRIGGER, REPLICATIONDEST, REPLICATIONSOURCE}
+	TablePrivileges       = List{ALL, BACKUP, CHANGEFEED, CREATE, DROP, SELECT, INSERT, DELETE, UPDATE, ZONECONFIG, TRIGGER, REPLICATIONDEST, REPLICATIONSOURCE, MAINTAIN}
 	SchemaPrivileges      = List{ALL, CREATE, CHANGEFEED, USAGE}
 	TypePrivileges        = List{ALL, USAGE}
 	RoutinePrivileges     = List{ALL, EXECUTE}
@@ -353,19 +353,20 @@ func GetValidPrivilegesForObject(objectType ObjectType) (List, error) {
 
 // privToACL is a map of privilege -> ACL character
 var privToACL = map[Kind]string{
-	CREATE:  "C",
-	SELECT:  "r",
-	INSERT:  "a",
-	DELETE:  "d",
-	UPDATE:  "w",
-	USAGE:   "U",
-	CONNECT: "c",
-	EXECUTE: "X",
-	TRIGGER: "t",
+	CREATE:   "C",
+	SELECT:   "r",
+	INSERT:   "a",
+	DELETE:   "d",
+	UPDATE:   "w",
+	USAGE:    "U",
+	CONNECT:  "c",
+	EXECUTE:  "X",
+	MAINTAIN: "m",
+	TRIGGER:  "t",
 }
 
-// orderedPrivs is the list of privileges sorted in alphanumeric order based on the ACL character -> CUacdrtwX
-var orderedPrivs = List{CREATE, USAGE, INSERT, CONNECT, DELETE, SELECT, TRIGGER, UPDATE, EXECUTE}
+// orderedPrivs is the list of privileges sorted in alphanumeric order based on the ACL character -> CUacdmrtwX
+var orderedPrivs = List{CREATE, USAGE, INSERT, CONNECT, DELETE, MAINTAIN, SELECT, TRIGGER, UPDATE, EXECUTE}
 
 // ListToACL converts a list of privileges to a list of Postgres
 // ACL items.

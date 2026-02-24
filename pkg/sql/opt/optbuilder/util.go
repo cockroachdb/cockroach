@@ -702,6 +702,73 @@ func (b *Builder) resolveDataSourceRef(
 	return ds, depName
 }
 
+// resolveDataSourceForCreateStats resolves a data source for CREATE STATISTICS
+// / ANALYZE, checking for MAINTAIN privilege first and falling back to SELECT.
+// If neither privilege is held, the error message mentions both privileges.
+func (b *Builder) resolveDataSourceForCreateStats(
+	tn *tree.TableName,
+) (cat.DataSource, opt.MDDepName, cat.DataSourceName) {
+	var flags cat.Flags
+	if b.insideViewDef || b.insideFuncDef || b.insideTriggerDef {
+		flags.AvoidDescriptorCaches = true
+	}
+	ds, resName, err := b.catalog.ResolveDataSource(b.ctx, flags, tn)
+	if err != nil {
+		panic(err)
+	}
+	depName := opt.DepByName(tn)
+	b.checkMaintainOrSelectPrivilege(depName, ds)
+
+	if b.qualifyDataSourceNamesInAST {
+		*tn = resName
+		tn.ExplicitCatalog = true
+		tn.ExplicitSchema = true
+	}
+	return ds, depName, resName
+}
+
+// resolveDataSourceRefForCreateStats resolves a data source ref for CREATE
+// STATISTICS / ANALYZE, checking for MAINTAIN privilege first and falling back
+// to SELECT.
+func (b *Builder) resolveDataSourceRefForCreateStats(
+	ref *tree.TableRef,
+) (cat.DataSource, opt.MDDepName) {
+	var flags cat.Flags
+	if b.insideViewDef || b.insideFuncDef || b.insideTriggerDef {
+		flags.AvoidDescriptorCaches = true
+	}
+	ds, _, err := b.catalog.ResolveDataSourceByID(b.ctx, flags, cat.StableID(ref.TableID))
+	if err != nil {
+		panic(pgerror.Wrapf(err, pgcode.UndefinedObject, "%s", tree.ErrString(ref)))
+	}
+	depName := opt.DepByID(cat.StableID(ref.TableID))
+	b.checkMaintainOrSelectPrivilege(depName, ds)
+	return ds, depName
+}
+
+// checkMaintainOrSelectPrivilege checks for MAINTAIN privilege first, then
+// falls back to SELECT. If neither is held, panics with the MAINTAIN error.
+//
+// In a future release, we could require only MAINTAIN and remove the SELECT
+// fallback. The SELECT check is kept for backwards compatibility with pre-26.2
+// behavior where SELECT was the only privilege required for ANALYZE / CREATE
+// STATISTICS.
+func (b *Builder) checkMaintainOrSelectPrivilege(name opt.MDDepName, ds cat.DataSource) {
+	// Try MAINTAIN first.
+	maintainErr := b.catalog.CheckPrivilege(b.ctx, ds, b.checkPrivilegeUser, privilege.MAINTAIN)
+	if maintainErr == nil {
+		b.factory.Metadata().AddDependency(name, ds, privilege.MAINTAIN)
+		return
+	}
+	// Fall back to SELECT for backwards compatibility with pre-26.2 behavior.
+	if err := b.catalog.CheckPrivilege(b.ctx, ds, b.checkPrivilegeUser, privilege.SELECT); err == nil {
+		b.factory.Metadata().AddDependency(name, ds, privilege.SELECT)
+		return
+	}
+	// Neither privilege is held.
+	panic(maintainErr)
+}
+
 // checkPrivilege ensures that the current user has the privilege needed to
 // access the given object in the catalog. If not, then checkPrivilege raises an
 // error. It also adds the object and it's original unresolved name as a

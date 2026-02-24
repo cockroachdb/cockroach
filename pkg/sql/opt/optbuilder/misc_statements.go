@@ -18,7 +18,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/partialidx"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
-	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/idxtype"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -166,9 +165,9 @@ func (b *Builder) buildCreateStatistics(n *tree.CreateStats, inScope *scope) (ou
 	switch t := n.Table.(type) {
 	case *tree.UnresolvedObjectName:
 		tn := t.ToTableName()
-		ds, _, _ = b.resolveDataSource(&tn, privilege.SELECT)
+		ds, _, _ = b.resolveDataSourceForCreateStats(&tn)
 	case *tree.TableRef:
-		ds, _ = b.resolveDataSourceRef(t, privilege.SELECT)
+		ds, _ = b.resolveDataSourceRefForCreateStats(t)
 	default:
 		panic(errors.AssertionFailedf("unexpected table type: %T", t))
 	}

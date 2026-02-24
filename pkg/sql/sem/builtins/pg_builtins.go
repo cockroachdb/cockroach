@@ -1837,6 +1837,8 @@ FROM defaults_parsed
 				"TRIGGER WITH GRANT OPTION":    {Kind: privilege.CREATE, GrantOption: true},
 				"RULE":                         {Kind: privilege.RULE},
 				"RULE WITH GRANT OPTION":       {Kind: privilege.RULE, GrantOption: true},
+				"MAINTAIN":                     {Kind: privilege.MAINTAIN},
+				"MAINTAIN WITH GRANT OPTION":   {Kind: privilege.MAINTAIN, GrantOption: true},
 			})
 			if err != nil {
 				return eval.HasNoPrivilege, err

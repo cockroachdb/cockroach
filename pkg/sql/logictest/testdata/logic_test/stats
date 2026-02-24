@@ -126,3 +126,51 @@ query II
 SELECT row_count, distinct_count FROM [SHOW STATISTICS FOR TABLE t141448] WHERE column_names = ARRAY['b'];
 ----
 3  1
+
+subtest maintain_privilege_analyze
+
+user root
+
+statement ok
+CREATE TABLE maintain_analyze_t (a INT PRIMARY KEY);
+INSERT INTO maintain_analyze_t VALUES (1), (2), (3)
+
+# testuser without any privilege cannot ANALYZE.
+user testuser
+
+statement error pq: user testuser does not have MAINTAIN privilege on relation maintain_analyze_t
+ANALYZE maintain_analyze_t
+
+user root
+
+# Grant MAINTAIN to testuser.
+statement ok
+GRANT MAINTAIN ON maintain_analyze_t TO testuser
+
+user testuser
+
+# With MAINTAIN privilege, ANALYZE should succeed.
+statement ok
+ANALYZE maintain_analyze_t
+
+user root
+
+# Revoke MAINTAIN, grant SELECT instead.
+statement ok
+REVOKE MAINTAIN ON maintain_analyze_t FROM testuser;
+GRANT SELECT ON maintain_analyze_t TO testuser
+
+user testuser
+
+# With SELECT privilege (no MAINTAIN), ANALYZE should also succeed.
+statement ok
+ANALYZE maintain_analyze_t
+
+user root
+
+# Cleanup.
+statement ok
+REVOKE ALL ON maintain_analyze_t FROM testuser;
+DROP TABLE maintain_analyze_t
+
+subtest end
