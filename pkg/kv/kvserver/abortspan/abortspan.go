@@ -135,6 +135,67 @@ func (sc *AbortSpan) Put(
 	return storage.MVCCPutProto(ctx, readWriter, key, hlc.Timestamp{}, entry, storage.MVCCWriteOptions{Stats: ms})
 }
 
+// Entry pairs a transaction ID with its AbortSpanEntry, representing a single
+// abort span record suitable for copying between ranges.
+type Entry struct {
+	TxnID uuid.UUID
+	roachpb.AbortSpanEntry
+}
+
+// Collect returns the abort span entries that are newer than the GC threshold.
+// Entries older than the threshold are filtered out, as they would be garbage
+// collected. Filtering is important because certain workloads create sizable
+// abort spans, and repeated splitting can blow them up further. Once the abort
+// span reaches approximately the Raft MaxCommandSize, splits become impossible
+// (see #25233).
+func (sc *AbortSpan) Collect(
+	ctx context.Context,
+	r storage.Reader,
+	ts hlc.Timestamp,
+	txnCleanupThreshold time.Duration,
+) ([]Entry, error) {
+	threshold := ts.Add(-txnCleanupThreshold.Nanoseconds(), 0)
+	var entries []Entry
+	var scratch [64]byte
+	var skipped int
+	if err := sc.Iterate(ctx, r, func(k roachpb.Key, entry roachpb.AbortSpanEntry) error {
+		if entry.Timestamp.Less(threshold) {
+			skipped++
+			return nil
+		}
+		txnID, err := keys.DecodeAbortSpanKey(k, scratch[:0])
+		if err != nil {
+			return err
+		}
+		entries = append(entries, Entry{TxnID: txnID, AbortSpanEntry: entry})
+		return nil
+	}); err != nil {
+		return nil, errors.Wrap(err, "AbortSpan.Collect")
+	}
+	log.Eventf(ctx, "abort span: collected %d entries, skipped %d", len(entries), skipped)
+	return entries, nil
+}
+
+// WriteTo writes the given abort span entries into the abort span for
+// targetRangeID.
+func WriteTo(
+	ctx context.Context,
+	w storage.ReadWriter,
+	ms *enginepb.MVCCStats,
+	targetRangeID roachpb.RangeID,
+	entries []Entry,
+) error {
+	for i := range entries {
+		if err := storage.MVCCPutProto(ctx, w,
+			keys.AbortSpanKey(targetRangeID, entries[i].TxnID),
+			hlc.Timestamp{}, &entries[i].AbortSpanEntry, storage.MVCCWriteOptions{Stats: ms},
+		); err != nil {
+			return errors.Wrap(err, "AbortSpan.WriteTo")
+		}
+	}
+	return nil
+}
+
 // CopyTo copies the abort span entries to the abort span for the range
 // identified by newRangeID. Entries are read from r and written to w. It is
 // safe for r and w to be the same object.
@@ -152,37 +213,9 @@ func (sc *AbortSpan) CopyTo(
 	newRangeID roachpb.RangeID,
 	txnCleanupThreshold time.Duration,
 ) error {
-	var abortSpanCopyCount, abortSpanSkipCount int
-	// Abort span entries before this span are eligible for GC, so we don't
-	// copy them into the new range. We could try to delete them from the LHS
-	// as well, but that could create a large Raft command in itself. Plus,
-	// we'd have to adjust the stats computations.
-	threshold := ts.Add(-txnCleanupThreshold.Nanoseconds(), 0)
-	var scratch [64]byte
-	if err := sc.Iterate(ctx, r, func(k roachpb.Key, entry roachpb.AbortSpanEntry) error {
-		if entry.Timestamp.Less(threshold) {
-			// The entry would be garbage collected (if GC had run), so
-			// don't bother copying it. Note that we can't filter on the key,
-			// that is just where the txn record lives, but it doesn't tell
-			// us whether the intents that triggered the abort span record
-			// where on the LHS, RHS, or both.
-			abortSpanSkipCount++
-			return nil
-		}
-
-		abortSpanCopyCount++
-		var txnID uuid.UUID
-		txnID, err := keys.DecodeAbortSpanKey(k, scratch[:0])
-		if err != nil {
-			return err
-		}
-		return storage.MVCCPutProto(ctx, w,
-			keys.AbortSpanKey(newRangeID, txnID),
-			hlc.Timestamp{}, &entry, storage.MVCCWriteOptions{Stats: ms},
-		)
-	}); err != nil {
-		return errors.Wrap(err, "AbortSpan.CopyTo")
+	entries, err := sc.Collect(ctx, r, ts, txnCleanupThreshold)
+	if err != nil {
+		return err
 	}
-	log.Eventf(ctx, "abort span: copied %d entries, skipped %d", abortSpanCopyCount, abortSpanSkipCount)
-	return nil
+	return WriteTo(ctx, w, ms, newRangeID, entries)
 }

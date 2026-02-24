@@ -420,12 +420,21 @@ func TestReplicaLifecycleDataDriven(t *testing.T) {
 				batch := tc.stateStorage.NewBatch()
 				rec := tc.makeEvalCtx(lhsRS, &lhsDesc)
 
+				// Collect the RHS abort span entries upfront, matching
+				// the pattern in RunCommitTrigger. Use a zero timestamp
+				// and duration so all entries are collected.
+				rhsAbortSpanEntries, err := rhsRS.abortspan.Collect(
+					ctx, tc.stateStorage, hlc.Timestamp{}, 0,
+				)
+				require.NoError(t, err)
+
 				var ms enginepb.MVCCStats
-				_, err := batcheval.TestingMergeTrigger(
+				_, err = batcheval.TestingMergeTrigger(
 					ctx, rec, batch, &ms, &merge, hlc.Timestamp{},
 					batcheval.MergeTriggerHelperInput{
-						LHSGCHint: &lhsRS.gcHint,
-						RHSGCHint: &rhsRS.gcHint,
+						LHSGCHint:           &lhsRS.gcHint,
+						RHSGCHint:           &rhsRS.gcHint,
+						RHSAbortSpanEntries: rhsAbortSpanEntries,
 					},
 				)
 				require.NoError(t, err)
@@ -718,12 +727,12 @@ func (tc *testCtx) makeEvalCtx(
 	rs *rangeState, desc *roachpb.RangeDescriptor,
 ) batcheval.EvalContext {
 	return (&batcheval.MockEvalCtx{
-		ClusterSettings:       tc.st,
-		Desc:                  desc,
-		Clock:                 tc.clock,
-		AbortSpan:             rs.abortspan,
+		ClusterSettings:        tc.st,
+		Desc:                   desc,
+		Clock:                  tc.clock,
+		AbortSpan:              rs.abortspan,
 		LastReplicaGCTimestamp: rs.lastGCTimestamp,
-		RangeLeaseDuration:    tc.rangeLeaseDuration,
+		RangeLeaseDuration:     tc.rangeLeaseDuration,
 	}).EvalContext()
 }
 
