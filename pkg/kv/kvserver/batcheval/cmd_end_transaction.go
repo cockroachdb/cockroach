@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/lockspanset"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/rditer"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/readsummary"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/readsummary/rspb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/spanset"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
@@ -970,7 +971,17 @@ func RunCommitTrigger(
 				ctx, errors.Wrap(err, "unable to load RHS GCHint"),
 			)
 		}
-		in := MergeTriggerHelperInput{LHSGCHint: lhsHint, RHSGCHint: rhsHint}
+		lhsPriorReadSummary, err := readsummary.Load(ctx, batch, rec.GetRangeID())
+		if err != nil {
+			return result.Result{}, maybeWrapReplicaCorruptionError(
+				ctx, errors.Wrap(err, "unable to load LHS prior read summary"),
+			)
+		}
+		in := MergeTriggerHelperInput{
+			LHSGCHint:           lhsHint,
+			RHSGCHint:           rhsHint,
+			LHSPriorReadSummary: lhsPriorReadSummary,
+		}
 		res, err := mergeTrigger(ctx, rec, batch, ms, mt, txn.WriteTimestamp, in)
 		if err != nil {
 			return result.Result{}, maybeWrapReplicaCorruptionError(ctx, err)
@@ -1355,8 +1366,9 @@ type SplitTriggerHelperInput struct {
 
 // MergeTriggerHelperInput contains metadata required by the mergeTrigger.
 type MergeTriggerHelperInput struct {
-	LHSGCHint *roachpb.GCHint
-	RHSGCHint *roachpb.GCHint
+	LHSGCHint          *roachpb.GCHint
+	RHSGCHint          *roachpb.GCHint
+	LHSPriorReadSummary *rspb.ReadSummary
 }
 
 // splitTriggerHelper continues the work begun by splitTrigger, but has a
@@ -1659,10 +1671,8 @@ func mergeTrigger(
 	// not updated by the SubsumeRequest.
 	if merge.RightReadSummary != nil {
 		mergedSum := merge.RightReadSummary.Clone()
-		if priorSum, err := readsummary.Load(ctx, batch, rec.GetRangeID()); err != nil {
-			return result.Result{}, err
-		} else if priorSum != nil {
-			mergedSum.Merge(*priorSum)
+		if in.LHSPriorReadSummary != nil {
+			mergedSum.Merge(*in.LHSPriorReadSummary)
 		}
 		// Compress the persisted read summary, as it will likely never be needed.
 		mergedSum.Compress(0)
