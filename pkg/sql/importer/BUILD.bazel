@@ -261,5 +261,6 @@ go_test(
         "@com_github_linkedin_goavro_v2//:goavro",
         "@com_github_stretchr_testify//assert",
         "@com_github_stretchr_testify//require",
+        "@org_uber_go_atomic//:atomic",
     ],
 )
