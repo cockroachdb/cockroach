@@ -336,6 +336,12 @@ depending on the type of call (unary/stream) and the application logic.
 		Unit:        metric.Unit_NANOSECONDS,
 		MetricType:  prometheusgo.MetricType_HISTOGRAM,
 	}
+	metaDRPCEnabled = metric.Metadata{
+		Name:        "rpc.drpc.enabled",
+		Help:        "1 if this node is using DRPC for internode RPC, 0 otherwise.",
+		Measurement: "Enabled",
+		Unit:        metric.Unit_CONST,
+	}
 	metaClientMsgReceivedDuration = metric.Metadata{
 		Name: "rpc.client.msg.received.duration.nanos",
 		Help: "Histogram of response latency (" +
@@ -400,6 +406,7 @@ func newMetrics(locality roachpb.Locality) *Metrics {
 		ConnectionAvgRoundTripLatency: aggmetric.NewGauge(metaConnectionAvgRoundTripLatency, childLabels...),
 		ConnectionTCPRTT:              aggmetric.NewGauge(metaConnectionTCPRTT, childLabels...),
 		ConnectionTCPRTTVar:           aggmetric.NewGauge(metaConnectionTCPRTTVar, childLabels...),
+		DRPCEnabled:                   metric.NewGauge(metaDRPCEnabled),
 	}
 	m.mu.peerMetrics = make(map[string]peerMetrics)
 	m.mu.localityMetrics = make(map[string]localityMetrics)
@@ -446,6 +453,7 @@ type Metrics struct {
 	ConnectionAvgRoundTripLatency *aggmetric.AggGauge
 	ConnectionTCPRTT              *aggmetric.AggGauge
 	ConnectionTCPRTTVar           *aggmetric.AggGauge
+	DRPCEnabled                   *metric.Gauge
 	mu                            struct {
 		syncutil.Mutex
 		// peerMetrics is a map of peerKey to peerMetrics.
