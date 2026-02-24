@@ -16,6 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
+	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
@@ -28,6 +29,7 @@ type mockAuthConn struct {
 	setDbUserCalled   bool
 	dbUserSet         username.SQLUsername
 	systemIdentitySet string
+	metrics           *tenantSpecificMetrics
 }
 
 var _ AuthConn = (*mockAuthConn)(nil)
@@ -52,7 +54,7 @@ func (m *mockAuthConn) LogAuthFailed(
 func (m *mockAuthConn) LogAuthOK(ctx context.Context)                        {}
 func (m *mockAuthConn) LogSessionEnd(ctx context.Context, endTime time.Time) {}
 func (m *mockAuthConn) GetTenantSpecificMetrics() *tenantSpecificMetrics {
-	return nil
+	return m.metrics
 }
 
 // TestCheckClientUsernameMatchesMapping tests the checkClientUsernameMatchesMapping
@@ -289,8 +291,11 @@ func TestCheckClientUsernameMatchesMapping(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// Create mock AuthConn
-			mockAC := &mockAuthConn{}
+			// Create mock AuthConn with real metrics
+			sqlMetrics := sql.MakeMemMetrics("test", metric.TestSampleInterval)
+			mockAC := &mockAuthConn{
+				metrics: newTenantSpecificMetrics(sqlMetrics, metric.TestSampleInterval),
+			}
 
 			// Create AuthBehaviors with appropriate mapper
 			behaviors := &AuthBehaviors{}
@@ -331,4 +336,32 @@ func TestCheckClientUsernameMatchesMapping(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestAuthCertSANMetrics(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	// Verify MarkUsedCertSANAuth / UsedCertSANAuth tracking.
+	b := &AuthBehaviors{}
+	require.False(t, b.UsedCertSANAuth())
+	b.MarkUsedCertSANAuth()
+	require.True(t, b.UsedCertSANAuth())
+
+	// Verify metric counters are properly initialized and incrementable.
+	sqlMetrics := sql.MakeMemMetrics("test", metric.TestSampleInterval)
+	metrics := newTenantSpecificMetrics(sqlMetrics, metric.TestSampleInterval)
+	require.NotNil(t, metrics.AuthCertSANConnTotal)
+	require.NotNil(t, metrics.AuthCertSANConnSuccess)
+
+	metrics.AuthCertSANConnTotal.Inc(1)
+	require.Equal(t, int64(1), metrics.AuthCertSANConnTotal.Count())
+
+	metrics.AuthCertSANConnSuccess.Inc(1)
+	require.Equal(t, int64(1), metrics.AuthCertSANConnSuccess.Count())
+
+	// Verify failure count = total - success.
+	metrics.AuthCertSANConnTotal.Inc(1)
+	failures := metrics.AuthCertSANConnTotal.Count() - metrics.AuthCertSANConnSuccess.Count()
+	require.Equal(t, int64(1), failures)
 }
