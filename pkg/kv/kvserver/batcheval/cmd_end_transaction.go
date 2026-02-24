@@ -942,11 +942,21 @@ func RunCommitTrigger(
 				ctx, errors.Wrap(err, "unable to load replica version"),
 			)
 		}
+		lhsAbortSpanEntries, err := rec.AbortSpan().Collect(
+			ctx, batch, txn.WriteTimestamp,
+			gc.TxnCleanupThreshold.Get(&rec.ClusterSettings().SV),
+		)
+		if err != nil {
+			return result.Result{}, maybeWrapReplicaCorruptionError(
+				ctx, errors.Wrap(err, "unable to collect LHS abort span entries"),
+			)
+		}
 		in := SplitTriggerHelperInput{
-			LeftLease:      lhsLease,
-			GCThreshold:    gcThreshold,
-			GCHint:         gcHint,
-			ReplicaVersion: replicaVersion,
+			LeftLease:           lhsLease,
+			GCThreshold:        gcThreshold,
+			GCHint:             gcHint,
+			ReplicaVersion:     replicaVersion,
+			LHSAbortSpanEntries: lhsAbortSpanEntries,
 		}
 
 		newMS, res, err := splitTrigger(
@@ -1368,10 +1378,11 @@ func makeScanStatsFn(
 // SplitTriggerHelperInput contains metadata needed by the RHS when running the
 // splitTriggerHelper.
 type SplitTriggerHelperInput struct {
-	LeftLease      roachpb.Lease
-	GCThreshold    *hlc.Timestamp
-	GCHint         *roachpb.GCHint
-	ReplicaVersion roachpb.Version
+	LeftLease            roachpb.Lease
+	GCThreshold          *hlc.Timestamp
+	GCHint               *roachpb.GCHint
+	ReplicaVersion       roachpb.Version
+	LHSAbortSpanEntries  []abortspan.Entry
 }
 
 // MergeTriggerHelperInput contains metadata required by the mergeTrigger.
@@ -1483,10 +1494,10 @@ func splitTriggerHelper(
 		return enginepb.MVCCStats{}, result.Result{}, err
 	}
 
-	// Initialize the RHS range's AbortSpan by copying the LHS's.
-	if err := rec.AbortSpan().CopyTo(
-		ctx, batch, batch, h.AbsPostSplitRight(), ts, split.RightDesc.RangeID,
-		gc.TxnCleanupThreshold.Get(&rec.ClusterSettings().SV),
+	// Initialize the RHS range's AbortSpan by writing the LHS's entries into
+	// the RHS.
+	if err := abortspan.WriteTo(
+		ctx, batch, h.AbsPostSplitRight(), split.RightDesc.RangeID, in.LHSAbortSpanEntries,
 	); err != nil {
 		return enginepb.MVCCStats{}, result.Result{}, err
 	}
