@@ -252,3 +252,69 @@ set-active-store-key id=v2key version=2
 get-active-data-key
 ----
 encryption_type:AES_128_CTR_V2 creation_time:26 source:"data key manager" parent_key_id:"v2key"
+
+close
+----
+
+# Test that simulates the upgrade path for #160004: a store key was registered
+# with AES_192_CTR_V2 (the buggy EncryptionType), and after upgrade the corrected
+# AES_256_CTR_V2 type is set for the same key ID. The data key should be rotated
+# with the corrected type, and old data keys should remain accessible.
+
+init
+dir_migration
+5
+active-store-key migkey
+active-data-key olddata
+----
+
+load
+----
+
+# Before "upgrade": the store key is AES_192_CTR_V2 (wrong) and the data key
+# was generated under that type.
+get-active-store-key
+----
+migkey
+
+get-store-key id=migkey
+----
+encryption_type:AES128_CTR key_id:"migkey"
+
+get-active-data-key
+----
+encryption_type:AES192_CTR creation_time:26
+
+record-active-data-key
+----
+
+# Simulate the upgrade: set the same key ID but with AES_256_CTR_V2
+# (the corrected type from LoadKeyFromFile). Since the EncryptionType differs,
+# SetActiveStoreKeyInfo should NOT short-circuit and should rotate the data key.
+set-active-store-key id=migkey type=AES_256_CTR_V2
+----
+
+# The data key should have been rotated with the new type.
+compare-active-data-key
+----
+different
+
+get-active-data-key
+----
+encryption_type:AES_256_CTR_V2 creation_time:26 source:"data key manager" parent_key_id:"migkey"
+
+# Record the new rotated data key.
+record-active-data-key
+----
+
+# The store key in the registry should now have the corrected type.
+get-store-key id=migkey
+----
+encryption_type:AES_256_CTR_V2 key_id:"migkey"
+
+# Both old and new data keys are in the registry (backward compatibility).
+check-all-recorded-data-keys
+----
+
+close
+----

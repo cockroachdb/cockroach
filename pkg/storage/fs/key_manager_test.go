@@ -312,16 +312,28 @@ func TestDataKeyManager(t *testing.T) {
 			case "set-active-store-key":
 				var id string
 				d.ScanArgs(t, "id", &id)
-				version := 1
-				d.MaybeScanArgs(t, "version", &version)
+				// Allow specifying the exact EncryptionType by name (e.g.
+				// type=AES_256_CTR_V2), or fall back to the version shorthand.
+				var typeName string
+				d.MaybeScanArgs(t, "type", &typeName)
 				var et enginepb.EncryptionType
-				switch version {
-				case 1:
-					et = enginepb.EncryptionType_AES128_CTR
-				case 2:
-					et = enginepb.EncryptionType_AES_128_CTR_V2
-				default:
-					t.Fatalf("unknown version %d", version)
+				if typeName != "" {
+					val, ok := enginepb.EncryptionType_value[typeName]
+					if !ok {
+						t.Fatalf("unknown EncryptionType %s", typeName)
+					}
+					et = enginepb.EncryptionType(val)
+				} else {
+					version := 1
+					d.MaybeScanArgs(t, "version", &version)
+					switch version {
+					case 1:
+						et = enginepb.EncryptionType_AES128_CTR
+					case 2:
+						et = enginepb.EncryptionType_AES_128_CTR_V2
+					default:
+						t.Fatalf("unknown version %d", version)
+					}
 				}
 				return setActiveStoreKey(dkm, id, et)
 			case "set-active-store-key-plain":

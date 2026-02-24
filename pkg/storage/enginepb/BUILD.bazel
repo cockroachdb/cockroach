@@ -61,6 +61,7 @@ go_test(
     size = "small",
     srcs = [
         "decode_test.go",
+        "key_registry_test.go",
         "mvcc3_test.go",
         "mvcc_test.go",
     ],

@@ -22,7 +22,7 @@ func (e EncryptionType) JWKAlgorithm() (string, error) {
 	case EncryptionType_AES_192_CTR_V2:
 		return "cockroach-aes-192-ctr-v2", nil
 	case EncryptionType_AES_256_CTR_V2:
-		return "cockroach-aes-192-ctr-v2", nil
+		return "cockroach-aes-256-ctr-v2", nil
 	}
 	return "", fmt.Errorf("unknown EncryptionType %d", e)
 }

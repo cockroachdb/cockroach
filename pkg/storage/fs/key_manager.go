@@ -179,6 +179,12 @@ func LoadKeyFromFile(fs vfs.FS, filename string) (*enginepb.SecretKey, error) {
 			return nil, fmt.Errorf("error converting jwk.Key to SymmetricKey")
 		}
 		key.Key = symKey.Octets()
+		// A historical bug (#160004) caused AES-256-CTR-V2 keys to be written
+		// with the algorithm string "cockroach-aes-192-ctr-v2". Correct the
+		// EncryptionType based on the actual key length.
+		if key.Info.EncryptionType == enginepb.EncryptionType_AES_192_CTR_V2 && len(key.Key) == 32 {
+			key.Info.EncryptionType = enginepb.EncryptionType_AES_256_CTR_V2
+		}
 	} else {
 		// keyIDLength bytes for the ID, followed by the key.
 		keyLength := len(b) - keyIDLength
@@ -385,16 +391,22 @@ func (m *DataKeyManager) SetActiveStoreKeyInfo(
 	m.writeMu.rotationEnabled = true
 	prevActiveStoreKey, found :=
 		m.writeMu.mu.keyRegistry.StoreKeys[m.writeMu.mu.keyRegistry.ActiveStoreKeyId]
-	if found && prevActiveStoreKey.KeyId == storeKeyInfo.KeyId && m.writeMu.mu.activeKey != nil {
+	if found && prevActiveStoreKey.KeyId == storeKeyInfo.KeyId &&
+		prevActiveStoreKey.EncryptionType == storeKeyInfo.EncryptionType &&
+		m.writeMu.mu.activeKey != nil {
 		// The active store key has not changed and we already have an active data key,
 		// so no need to do anything.
 		return nil
 	}
 	// For keys other than plaintext, make sure the user is not reusing inactive keys.
+	// Allow re-registration of the current active key (e.g. when its EncryptionType
+	// is corrected after a bug fix).
 	if storeKeyInfo.EncryptionType != enginepb.EncryptionType_Plaintext {
 		if _, found := m.writeMu.mu.keyRegistry.StoreKeys[storeKeyInfo.KeyId]; found {
-			return fmt.Errorf("new active store key ID %s already exists as an inactive key -- this"+
-				"is really dangerous", storeKeyInfo.KeyId)
+			if storeKeyInfo.KeyId != m.writeMu.mu.keyRegistry.ActiveStoreKeyId {
+				return fmt.Errorf("new active store key ID %s already exists as an inactive key -- this"+
+					"is really dangerous", storeKeyInfo.KeyId)
+			}
 		}
 	}
 
