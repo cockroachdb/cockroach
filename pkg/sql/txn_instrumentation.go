@@ -14,10 +14,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/persistedsqlstats/sqlstatsutil"
 	"github.com/cockroachdb/cockroach/pkg/sql/stmtdiagnostics"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/memzipper"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
+	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 )
 
@@ -28,6 +30,7 @@ const (
 	txnDiagnosticsNotStarted
 	txnDiagnosticsInProgress
 	txnDiagnosticsReadyToFinalize
+	txnDiagnosticsSkipped
 )
 
 type txnDiagnosticsCollector struct {
@@ -57,6 +60,10 @@ func newTxnDiagnosticsCollector(
 
 func (tds *txnDiagnosticsCollector) IsReset() bool {
 	return tds.state == txnDiagnosticsReset
+}
+
+func (tds *txnDiagnosticsCollector) IsSkipped() bool {
+	return tds.state == txnDiagnosticsSkipped
 }
 
 func (tds *txnDiagnosticsCollector) NotStarted() bool {
@@ -156,6 +163,11 @@ The UI can then be accessed at http://localhost:16686/search`, idStr)
 type txnInstrumentationHelper struct {
 	TxnDiagnosticsRecorder *stmtdiagnostics.TxnRegistry
 	diagnosticsCollector   txnDiagnosticsCollector
+	// txnFingerprintHash points to the FNV64 hash accumulating statement
+	// fingerprint IDs for the current transaction. This is set from the
+	// connExecutor during transaction setup and allows Finalize to compute
+	// the actual transaction fingerprint for logging.
+	txnFingerprintHash *util.FNV64
 }
 
 func (h *txnInstrumentationHelper) StartDiagnostics(
@@ -164,11 +176,6 @@ func (h *txnInstrumentationHelper) StartDiagnostics(
 	h.diagnosticsCollector = newTxnDiagnosticsCollector(txnRequest, reqID, span)
 }
 
-//
-//func (h *txnInstrumentationHelper) ReadyToStartDiagnostics() bool {
-//	return h.diagnosticsCollector.state == txnDiagnosticsNotStarted
-//}
-
 func (h *txnInstrumentationHelper) Reset() {
 	if h.diagnosticsCollector.requestId != 0 {
 		h.TxnDiagnosticsRecorder.ResetTxnRequest(h.diagnosticsCollector.requestId)
@@ -176,6 +183,13 @@ func (h *txnInstrumentationHelper) Reset() {
 
 	h.diagnosticsCollector.span.Finish()
 	h.diagnosticsCollector = txnDiagnosticsCollector{}
+}
+
+// Skip marks the transaction diagnostics collection as skipped. This means
+// that the current transaction will not be considered for diagnostics
+// collection.
+func (h *txnInstrumentationHelper) Skip() {
+	h.diagnosticsCollector.UpdateState(txnDiagnosticsSkipped)
 }
 
 // AddStatementBundle adds a statement diagnostic bundle to the transaction
@@ -208,7 +222,11 @@ func (h *txnInstrumentationHelper) AddStatementBundle(
 // started. If a new diagnostics collection is started, it returns a new
 // context that should be used to capture transaction traces.
 func (h *txnInstrumentationHelper) MaybeStartDiagnostics(
-	ctx context.Context, stmt tree.Statement, stmtFpId uint64, tracer *tracing.Tracer,
+	ctx context.Context,
+	stmt tree.Statement,
+	stmtFpId uint64,
+	tracer *tracing.Tracer,
+	txnID uuid.UUID,
 ) (newCtx context.Context, diagnosticsStarted bool) {
 	if h.diagnosticsCollector.NotStarted() {
 		if h.diagnosticsCollector.shouldAllowStatement(stmt) {
@@ -222,6 +240,12 @@ func (h *txnInstrumentationHelper) MaybeStartDiagnostics(
 			// collection for the rest of the transaction.
 			collectDiagnostics, requestId, req := h.TxnDiagnosticsRecorder.ShouldStartTxnDiagnostic(ctx, stmtFpId)
 			if collectDiagnostics {
+				log.Dev.VInfof(ctx, 2, "txn diag: starting collection for request %d, "+
+					"txn %s, triggered by stmt fingerprint %s",
+					requestId,
+					txnID,
+					sqlstatsutil.EncodeStmtFingerprintIDToString(
+						appstatspb.StmtFingerprintID(stmtFpId)))
 				var sp *tracing.Span
 				if !req.IsRedacted() {
 					ctx, sp = tracing.EnsureChildSpan(ctx, tracer, "txn-diag-bundle",
@@ -230,7 +254,7 @@ func (h *txnInstrumentationHelper) MaybeStartDiagnostics(
 				h.StartDiagnostics(req, requestId, sp)
 				return ctx, true
 			} else {
-				h.Reset()
+				h.Skip()
 			}
 		}
 	}
@@ -243,7 +267,7 @@ func (h *txnInstrumentationHelper) MaybeStartDiagnostics(
 // context with the diagnostics recording span. Otherwise, collection is
 // aborted and future statements will not be considered for diagnostics.
 func (h *txnInstrumentationHelper) MaybeContinueDiagnostics(
-	ctx context.Context, stmt tree.Statement, stmtFpId uint64,
+	ctx context.Context, stmt tree.Statement, stmtFpId uint64, txnID uuid.UUID,
 ) (newCtx context.Context, shouldContinue bool) {
 	if !h.diagnosticsCollector.InProgress() {
 		return ctx, false
@@ -258,6 +282,21 @@ func (h *txnInstrumentationHelper) MaybeContinueDiagnostics(
 	}
 
 	if !shouldContinue {
+		var expected string
+		if len(h.diagnosticsCollector.stmtsFpsToCapture) != 0 {
+			expected = sqlstatsutil.EncodeStmtFingerprintIDToString(
+				appstatspb.StmtFingerprintID(h.diagnosticsCollector.stmtsFpsToCapture[0]))
+		} else {
+			expected = "terminal statement"
+		}
+		log.Dev.VInfof(ctx, 2, "txn diag: aborting collection for request %d, "+
+			"txn %s, stmt fingerprint %s did not match (expected %s), collected %d bundles so far",
+			h.diagnosticsCollector.requestId,
+			txnID,
+			sqlstatsutil.EncodeStmtFingerprintIDToString(
+				appstatspb.StmtFingerprintID(stmtFpId)),
+			expected,
+			len(h.diagnosticsCollector.stmtBundles))
 		h.Reset()
 	} else {
 		// TODO (kyle.wong): due to the existing hierarchy of spans, we have to
@@ -277,10 +316,32 @@ func (h *txnInstrumentationHelper) ShouldRedact() bool {
 
 // Finalize finalizes the transaction diagnostics collection by writing all
 // the collected data to the underlying system tables.
-func (h *txnInstrumentationHelper) Finalize(ctx context.Context, executionDuration time.Duration) {
+func (h *txnInstrumentationHelper) Finalize(
+	ctx context.Context, executionDuration time.Duration, txnID uuid.UUID,
+) {
 	defer h.Reset()
 	collector := h.diagnosticsCollector
+	// If the collection was skipped or never started, then we shouldn't have
+	// done any work, so there's nothing to finalize.
+	if collector.IsSkipped() || collector.NotStarted() {
+		return
+	}
+	var txnFp appstatspb.TransactionFingerprintID
+
+	if h.txnFingerprintHash != nil {
+		txnFp = appstatspb.TransactionFingerprintID(h.txnFingerprintHash.Sum())
+	}
+	txnFpStr := sqlstatsutil.EncodeTxnFingerprintIDToString(txnFp)
+	if collector.IsReset() {
+		log.Dev.VInfof(ctx, 2, "txn diag: finalize aborted collection "+
+			"txn %s, txn fingerprint %s",
+			txnID, txnFpStr)
+		return
+	}
 	if collector.InProgress() {
+		log.Dev.VInfof(ctx, 2, "txn diag: finalizing collection for "+
+			"request %d, txn %s, txn fingerprint %s",
+			collector.requestId, txnID, txnFpStr)
 		collector.UpdateState(txnDiagnosticsReadyToFinalize)
 	}
 	if collector.ShouldCollect(executionDuration) {

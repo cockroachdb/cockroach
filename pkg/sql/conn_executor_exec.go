@@ -4402,6 +4402,7 @@ func (ex *connExecutor) recordTransactionStart(txnID uuid.UUID) {
 	ex.phaseTimes.SetSessionPhaseTime(sessionphase.SessionMostRecentStartExecTransaction,
 		ex.phaseTimes.GetSessionPhaseTime(sessionphase.SessionFirstStartExecTransaction))
 	ex.extraTxnState.transactionStatementsHash = util.MakeFNV64()
+	ex.state.txnInstrumentationHelper.txnFingerprintHash = &ex.extraTxnState.transactionStatementsHash
 	ex.extraTxnState.transactionStatementFingerprintIDs = nil
 	ex.extraTxnState.numRows = 0
 	ex.extraTxnState.accumulatedStats = execstats.QueryLevelStats{}
