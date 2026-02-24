@@ -71,6 +71,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/desctestutils"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
@@ -7401,6 +7402,7 @@ func TestClientDisconnect(t *testing.T) {
 				}
 			}
 
+			var sqlCodec atomic.Pointer[keys.SQLCodec]
 			args := base.TestClusterArgs{}
 			knobs := base.TestingKnobs{
 				DistSQL: &execinfra.TestingKnobs{BackupRestoreTestingKnobs: &sql.BackupRestoreTestingKnobs{RunAfterProcessingRestoreSpanEntry: func(ctx context.Context, _ *execinfrapb.RestoreSpanEntry) error {
@@ -7409,9 +7411,14 @@ func TestClientDisconnect(t *testing.T) {
 				}}},
 				Store: &kvserver.StoreTestingKnobs{
 					TestingResponseFilter: func(ctx context.Context, ba *kvpb.BatchRequest, br *kvpb.BatchResponse) *kvpb.Error {
-						for _, ru := range br.Responses {
+						for idx, ru := range br.Responses {
 							switch ru.GetInner().(type) {
 							case *kvpb.ExportResponse:
+								// Lease manager also uses exports after schema changes, so start
+								// intercepting exports when necessary.
+								if lease.TestIsLeasingTxnExportRequest(sqlCodec.Load(), ba, ba.Requests[idx].GetExport()) {
+									return nil
+								}
 								blockBackupOrRestore(ctx)
 							}
 						}
@@ -7422,6 +7429,8 @@ func TestClientDisconnect(t *testing.T) {
 			args.ServerArgs.Knobs = knobs
 			tc, sqlDB, _, cleanup := backupRestoreTestSetupWithParams(t, multiNode, 2 /* numAccounts */, InitManualReplication, args)
 			defer cleanup()
+			codec := tc.Server(0).Codec()
+			sqlCodec.Store(&codec)
 			ctx, cancel := context.WithCancel(context.Background())
 			defer cancel()
 
@@ -8914,8 +8923,9 @@ func TestBackupWorkerFailure(t *testing.T) {
 
 	allowResponse := make(chan struct{})
 	params := base.TestClusterArgs{}
+	var sqlCodec atomic.Pointer[keys.SQLCodec]
 	params.ServerArgs.Knobs.Store = &kvserver.StoreTestingKnobs{
-		TestingResponseFilter: jobutils.BulkOpResponseFilter(&allowResponse),
+		TestingResponseFilter: jobutils.BulkOpResponseFilter(&sqlCodec, &allowResponse),
 	}
 	params.ServerArgs.Knobs.JobsTestingKnobs = jobs.NewTestingKnobsWithShortIntervals()
 
@@ -8923,6 +8933,8 @@ func TestBackupWorkerFailure(t *testing.T) {
 
 	tc, _, _, cleanup := backupRestoreTestSetupWithParams(t, multiNode, numAccounts,
 		InitManualReplication, params)
+	codec := tc.Server(0).Codec()
+	sqlCodec.Store(&codec)
 	conn := tc.Conns[0]
 	sqlDB := sqlutils.MakeSQLRunner(conn)
 	defer cleanup()
