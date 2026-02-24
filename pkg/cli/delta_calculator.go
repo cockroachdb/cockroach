@@ -9,6 +9,7 @@ import (
 	"hash/fnv"
 	"math"
 	"sort"
+	"time"
 
 	"github.com/DataDog/datadog-api-client-go/v2/api/datadogV2"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
@@ -53,13 +54,23 @@ func (dc *CumulativeToDeltaProcessor) getMetricKey(metricName string, tags []str
 	return hash.Sum64()
 }
 
-// processCounterMetric converts cumulative counter values to deltas between consecutive points
-// by modifying the series in-place. First point keeps original value. Subsequent points
-// become delta from previous point. Counter resets (current < previous) are handled by
-// using current value as delta.
+// baselineOffset is the duration by which the first observed counter value
+// is shifted into the past by 60 days. This moves the raw cumulative baseline out of
+// the visible dashboard window so it doesn't appear as a spike, while
+// still preserving it in Datadog for cumsum() reconstruction.
+const baselineOffset = 60 * 24 * time.Hour
+
+// processCounterMetric converts cumulative counter values to deltas between
+// consecutive points by modifying the series in-place. The first data point
+// for a newly-seen metric retains its original cumulative value but its
+// timestamp is shifted to T - 60 days so the baseline lives outside the
+// visible dashboard window (avoiding the initial spike). Subsequent points
+// become deltas from the previous point. Counter resets (current < previous)
+// are handled by using current value as delta.
 //
-// The isSorted parameter indicates whether the points are already sorted by timestamp,
-// avoiding an unnecessary sort operation when the data is already in order.
+// The isSorted parameter indicates whether the points are already sorted by
+// timestamp, avoiding an unnecessary sort operation when the data is already
+// in order.
 func (dc *CumulativeToDeltaProcessor) processCounterMetric(
 	series *datadogV2.MetricSeries, isSorted bool,
 ) error {
@@ -91,6 +102,10 @@ func (dc *CumulativeToDeltaProcessor) processCounterMetric(
 		if state.firstSeen {
 			state.previousValue = currentValue
 			state.firstSeen = false
+			// Shift the baseline data point to T - 60 days so the raw
+			// cumulative value doesn't appear as a spike in the actual
+			// data window. The value is preserved for cumsum() queries.
+			*point.Timestamp = time.Unix(*point.Timestamp, 0).Add(-baselineOffset).Unix()
 			continue
 		}
 

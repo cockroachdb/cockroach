@@ -540,6 +540,44 @@ func createMockTimeSeriesKV(
 	return roachpb.KeyValue{Key: key, Value: roachValue}, nil
 }
 
+// createMockTimeSeriesKVWithResolution is like createMockTimeSeriesKV but
+// allows specifying the time series resolution (e.g., ts.Resolution10s,
+// ts.Resolution30m).
+func createMockTimeSeriesKVWithResolution(
+	name, source string, timestamp int64, value float64, resolution ts.Resolution,
+) (roachpb.KeyValue, error) {
+	tsData := tspb.TimeSeriesData{
+		Name:   name,
+		Source: source,
+		Datapoints: []tspb.TimeSeriesDatapoint{
+			{TimestampNanos: timestamp, Value: value},
+		},
+	}
+
+	idatas, err := tsData.ToInternal(
+		resolution.SlabDuration(),
+		resolution.SampleDuration(),
+		true,
+	)
+	if err != nil {
+		return roachpb.KeyValue{}, err
+	}
+
+	if len(idatas) != 1 {
+		return roachpb.KeyValue{}, fmt.Errorf("expected 1 internal data entry, got %d", len(idatas))
+	}
+
+	idata := idatas[0]
+	key := ts.MakeDataKey(name, source, resolution, idata.StartTimestampNanos)
+
+	var roachValue roachpb.Value
+	if err := roachValue.SetProto(&idata); err != nil {
+		return roachpb.KeyValue{}, err
+	}
+
+	return roachpb.KeyValue{Key: key, Value: roachValue}, nil
+}
+
 // generateMockJSONFromInput creates a mock JSON file from input data.
 // The input data is written directly to the JSON file.
 // This is useful for testing JSON file generation functionality.
@@ -627,6 +665,13 @@ func TestDeltaCalculationForCounters(t *testing.T) {
 				expectedValue := tc.expectedValues[i]
 				require.Equal(t, expectedValue, actualValue,
 					"Call %d: expected %f, got %f", i+1, expectedValue, actualValue)
+
+				if i == 0 {
+					// First point's timestamp should be shifted back by 60 days.
+					expectedTS := time.Unix(0, timestamp).Add(-baselineOffset).Unix()
+					require.Equal(t, expectedTS, *series.Points[0].Timestamp,
+						"first point timestamp should be shifted to T-60days")
+				}
 			}
 		})
 	}
@@ -651,6 +696,9 @@ func TestDeltaCalculationResetDetection(t *testing.T) {
 	series1, err := writer.dump(&kv1)
 	require.NoError(t, err)
 	require.Equal(t, 100.0, *series1.Points[0].Value)
+	// First point timestamp should be shifted back by 60 days.
+	expectedTS := time.Unix(0, timestamp).Add(-baselineOffset).Unix()
+	require.Equal(t, expectedTS, *series1.Points[0].Timestamp)
 
 	// Second call with value 150 (normal increment)
 	kv2, err := createMockTimeSeriesKV(metricName, source, timestamp+1e10, 150)
@@ -686,7 +734,7 @@ func TestDeltaCalculationCrossBatchPersistence(t *testing.T) {
 	metricName := "cr.node.cross-batch-test-count"
 	source := "1"
 
-	timestamp := time.Date(2025, 6, 26, 22, 49, 24, 0, time.UTC).UnixNano()
+	timestamp := time.Date(2025, 6, 26, 22, 49, 20, 0, time.UTC).UnixNano()
 
 	// Simulate first batch
 	kv1, err := createMockTimeSeriesKV(metricName, source, timestamp, 100)
@@ -694,6 +742,9 @@ func TestDeltaCalculationCrossBatchPersistence(t *testing.T) {
 	series1, err := writer.dump(&kv1)
 	require.NoError(t, err)
 	require.Equal(t, 100.0, *series1.Points[0].Value) // first value
+	// First point timestamp should be shifted back by 60 days.
+	expectedTS := time.Unix(0, timestamp).Add(-baselineOffset).Unix()
+	require.Equal(t, expectedTS, *series1.Points[0].Timestamp)
 
 	// Simulate processing other metrics (different batch)
 	otherKv, err := createMockTimeSeriesKV("cr.node.other-metric-count", "2", timestamp+5e9, 50)
@@ -752,13 +803,13 @@ func TestDeltaCalculationWithUnsortedTimestamps(t *testing.T) {
 	// After processing, points should be sorted by timestamp and have correct deltas
 	require.Len(t, series.Points, 3)
 
-	// Check that points are now sorted by timestamp
-	require.Equal(t, int64(100), *series.Points[0].Timestamp)
+	// First point's timestamp is shifted back by 60 days; the rest are unchanged.
+	require.Equal(t, time.Unix(100, 0).Add(-baselineOffset).Unix(), *series.Points[0].Timestamp)
 	require.Equal(t, int64(500), *series.Points[1].Timestamp)
 	require.Equal(t, int64(1000), *series.Points[2].Timestamp)
 
 	// Check that delta calculation is correct (based on chronological order)
-	require.Equal(t, 100.0, *series.Points[0].Value) // first point: keep original value
+	require.Equal(t, 100.0, *series.Points[0].Value) // first point: keep original value (timestamp shifted)
 	require.Equal(t, 50.0, *series.Points[1].Value)  // delta: 150 - 100
 	require.Equal(t, 150.0, *series.Points[2].Value) // delta: 300 - 150
 }
@@ -1107,6 +1158,85 @@ func TestHasTagKey(t *testing.T) {
 		t.Run(tc.key, func(t *testing.T) {
 			result := hasTagKey(tags, tc.key)
 			require.Equal(t, tc.expected, result)
+		})
+	}
+}
+
+// TestBuildDashboardLink verifies that buildDashboardLink produces a URL whose
+// from_ts/to_ts query parameters reflect the actual tsdump data time range, and
+// that the fallback (now - 30 days) is used when no data was processed.
+func TestBuildDashboardLink(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	now := time.Date(2024, 11, 14, 0, 0, 0, 0, time.UTC)
+	defer testutils.TestingHook(&getCurrentTime, func() time.Time {
+		return now
+	})()
+
+	earliest := time.Date(2024, 6, 1, 10, 0, 0, 0, time.UTC)
+	latest := time.Date(2024, 6, 15, 12, 0, 0, 0, time.UTC)
+	middle := time.Date(2024, 6, 10, 8, 0, 0, 0, time.UTC)
+
+	type metricInput struct {
+		name       string
+		source     string
+		tsNanos    int64
+		value      float64
+		resolution ts.Resolution
+	}
+
+	testCases := []struct {
+		name           string
+		metrics        []metricInput
+		expectedFromTS int64
+		expectedToTS   int64
+	}{
+		{
+			name: "url reflects actual data time range",
+			metrics: []metricInput{
+				{"cr.node.test.gauge", "1", earliest.UnixNano(), 10, ts.Resolution10s},
+				{"cr.node.test.gauge2", "1", latest.UnixNano(), 20, ts.Resolution10s},
+				{"cr.node.test.gauge3", "1", middle.UnixNano(), 30, ts.Resolution10s},
+			},
+			expectedFromTS: (earliest.Unix() + 10) * 1000,
+			expectedToTS:   latest.Unix() * 1000,
+		},
+		{
+			name: "mixed resolutions uses smallest interval",
+			metrics: []metricInput{
+				{"cr.node.test.gauge", "1", earliest.UnixNano(), 10, ts.Resolution10s},
+				{"cr.node.test.rollup", "1", latest.UnixNano(), 20, ts.Resolution30m},
+			},
+			expectedFromTS: (earliest.Unix() + 10) * 1000,
+			expectedToTS:   latest.Unix() * 1000,
+		},
+		{
+			name:           "fallback when no data points processed",
+			metrics:        nil,
+			expectedFromTS: now.UnixMilli() - (30 * 24 * 60 * 60 * 1000),
+			expectedToTS:   now.UnixMilli(),
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			writer, err := makeDatadogWriter("us5", false, "test-api-key", 100, "", 1, false)
+			require.NoError(t, err)
+			debugTimeSeriesDumpOpts.clusterLabel = "test-cluster"
+
+			for _, m := range tc.metrics {
+				kv, err := createMockTimeSeriesKVWithResolution(
+					m.name, m.source, m.tsNanos, m.value, m.resolution,
+				)
+				require.NoError(t, err)
+				_, err = writer.dump(&kv)
+				require.NoError(t, err)
+			}
+
+			link := writer.buildDashboardLink()
+			require.Contains(t, link, fmt.Sprintf("from_ts=%d", tc.expectedFromTS))
+			require.Contains(t, link, fmt.Sprintf("to_ts=%d", tc.expectedToTS))
 		})
 	}
 }
