@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -320,17 +321,17 @@ func (r *replicationStreamManagerImpl) buildReplicationStreamSpec(
 	}
 
 	for _, sp := range spanPartitions {
-		nodeInfo, err := dsp.GetSQLInstanceInfo(sp.SQLInstanceID)
+		instanceInfo, err := dsp.GetSQLInstanceInfo(ctx, sp.SQLInstanceID)
 		if err != nil {
 			return nil, err
 		}
 		if r.knobs != nil && r.knobs.OnGetSQLInstanceInfo != nil {
-			nodeInfo = r.knobs.OnGetSQLInstanceInfo(nodeInfo)
+			instanceInfo = r.knobs.OnGetSQLInstanceInfo(instanceInfo)
 		}
 		res.Partitions = append(res.Partitions, streampb.ReplicationStreamSpec_Partition{
 			NodeID:     roachpb.NodeID(sp.SQLInstanceID),
-			SQLAddress: nodeInfo.SQLAddress,
-			Locality:   nodeInfo.Locality,
+			SQLAddress: util.MakeUnresolvedAddr("tcp", instanceInfo.InstanceSQLAddr),
+			Locality:   instanceInfo.Locality,
 			SourcePartition: &streampb.SourcePartition{
 				Spans: sp.Spans,
 			},
