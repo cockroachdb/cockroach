@@ -5893,7 +5893,7 @@ func TestLeaseTransferReplicatesLocks(t *testing.T) {
 	})
 	defer tc.Stopper().Stop(ctx)
 
-	scratch := tc.ScratchRange(t)
+	scratch := tc.ScratchRangeWithExpirationLease(t)
 	k1 := append(scratch[:len(scratch):len(scratch)], uuid.MakeV4().String()...)
 	// Write a value for the key because at the moment we don't create locks for
 	// non-existent keys.
