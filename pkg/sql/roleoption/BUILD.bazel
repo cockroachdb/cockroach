@@ -10,7 +10,6 @@ go_library(
     importpath = "github.com/cockroachdb/cockroach/pkg/sql/roleoption",
     visibility = ["//visibility:public"],
     deps = [
-        "//pkg/base",
         "//pkg/cli/cliflags",
         "//pkg/clusterversion",
         "//pkg/security/distinguishedname",

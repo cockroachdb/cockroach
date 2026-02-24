@@ -23,7 +23,6 @@ go_library(
     deps = [
         "//pkg/backup",
         "//pkg/base",
-        "//pkg/ccl/utilccl",
         "//pkg/cloud",
         "//pkg/cloud/externalconn",
         "//pkg/cloud/externalconn/connectionpb",

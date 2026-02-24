@@ -9,7 +9,6 @@ import (
 	"context"
 	"math"
 
-	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl"
 	"github.com/cockroachdb/cockroach/pkg/crosscluster/streamclient"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
@@ -132,13 +131,6 @@ func ingestionPlanHook(
 		}()
 		ctx, span := tracing.ChildSpan(ctx, stmt.StatementTag())
 		defer span.Finish()
-
-		if err := utilccl.CheckEnterpriseEnabled(
-			p.ExecCfg().Settings,
-			"CREATE VIRTUAL CLUSTER FROM REPLICATION",
-		); err != nil {
-			return err
-		}
 
 		if err := sql.CanManageTenant(ctx, p); err != nil {
 			return err

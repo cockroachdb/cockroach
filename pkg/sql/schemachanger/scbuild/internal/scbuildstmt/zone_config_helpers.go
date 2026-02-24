@@ -382,13 +382,7 @@ func evaluateZoneOptions(
 					pgerror.Newf(pgcode.InvalidParameterValue, "unsupported NULL value for %q",
 						tree.ErrString(name))
 			}
-			opt := zone.SupportedZoneConfigOptions[*name]
-			if opt.CheckAllowed != nil {
-				if err := opt.CheckAllowed(b, b.ClusterSettings(), datum); err != nil {
-					return nil, nil, nil, err
-				}
-			}
-			setter := opt.Setter
+			setter := zone.SupportedZoneConfigOptions[*name].Setter
 			setters = append(setters, func(c *zonepb.ZoneConfig) { setter(c, datum) })
 			optionsStr = append(optionsStr, fmt.Sprintf("%s = %s", name, datum))
 		}

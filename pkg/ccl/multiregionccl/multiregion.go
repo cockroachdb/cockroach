@@ -9,7 +9,6 @@ import (
 	"context"
 	"sort"
 
-	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
@@ -38,12 +37,6 @@ func initializeMultiRegionMetadata(
 	dataPlacement tree.DataPlacement,
 	secondaryRegion catpb.RegionName,
 ) (*multiregion.RegionConfig, error) {
-	if err := CheckClusterSupportsMultiRegion(
-		settings,
-	); err != nil {
-		return nil, err
-	}
-
 	survivalGoal, err := sql.TranslateSurvivalGoal(goal)
 	if err != nil {
 		return nil, err
@@ -122,25 +115,9 @@ func initializeMultiRegionMetadata(
 	return &regionConfig, nil
 }
 
-// CheckClusterSupportsMultiRegion returns whether the current cluster supports
-// multi-region features.
-func CheckClusterSupportsMultiRegion(settings *cluster.Settings) error {
-	return utilccl.CheckEnterpriseEnabled(
-		settings,
-		"multi-region features",
-	)
-}
-
 func getMultiRegionEnumAddValuePlacement(
 	execCfg *sql.ExecutorConfig, typeDesc *typedesc.Mutable, region tree.Name,
 ) (tree.AlterTypeAddValue, error) {
-	if err := utilccl.CheckEnterpriseEnabled(
-		execCfg.Settings,
-		"ADD REGION",
-	); err != nil {
-		return tree.AlterTypeAddValue{}, err
-	}
-
 	// Find the location in the enum where we should insert the new value. We much search
 	// for the location (and not append to the end), as we want to keep the values in sorted
 	// order.

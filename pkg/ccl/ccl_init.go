@@ -34,7 +34,6 @@ func init() {
 	// functions we bind is in utilccl, but license checks only work once
 	// utilccl.AllCCLCodeImported is set, above; that's why this hookup is done in
 	// this `ccl` pkg.
-	base.CheckEnterpriseEnabled = utilccl.CheckEnterpriseEnabled
 	base.LicenseType = utilccl.GetLicenseType
 	base.GetLicenseTTL = utilccl.GetLicenseTTL
 	license.RegisterCallbackOnLicenseChange = utilccl.RegisterCallbackOnLicenseChange

@@ -18,7 +18,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/backup/backupinfo"
 	"github.com/cockroachdb/cockroach/pkg/backup/backuppb"
 	"github.com/cockroachdb/cockroach/pkg/backup/backuputils"
-	"github.com/cockroachdb/cockroach/pkg/ccl/multiregionccl"
 	"github.com/cockroachdb/cockroach/pkg/cloud"
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/featureflag"
@@ -2364,16 +2363,6 @@ func planDatabaseModifiersForRestore(
 	if defaultPrimaryRegion == "" {
 		return nil, nil, nil
 	}
-	if err := multiregionccl.CheckClusterSupportsMultiRegion(
-		p.ExecCfg().Settings,
-	); err != nil {
-		return nil, nil, errors.WithHintf(
-			err,
-			"try disabling the default PRIMARY REGION by using RESET CLUSTER SETTING %s",
-			sqlclustersettings.DefaultPrimaryRegionClusterSettingName,
-		)
-	}
-
 	l, err := sql.GetLiveClusterRegions(ctx, p)
 	if err != nil {
 		return nil, nil, err

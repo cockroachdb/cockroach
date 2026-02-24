@@ -16,7 +16,6 @@ import (
 	"crypto/tls"
 	"strings"
 
-	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql"
@@ -96,12 +95,7 @@ func authGSS(
 				return errors.New("GSSAPI did not return realm but realm matching was requested")
 			}
 		}
-
-		// Do the license check last so that administrators are able to test whether
-		// their GSS configuration is correct. That is, the presence of this error
-		// message means they have a correctly functioning GSS/Kerberos setup,
-		// but now need to enable enterprise features.
-		return utilccl.CheckEnterpriseEnabled(execCfg.Settings, "GSS authentication")
+		return nil
 	})
 	return behaviors, nil
 }

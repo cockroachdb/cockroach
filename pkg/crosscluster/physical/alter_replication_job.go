@@ -11,7 +11,6 @@ import (
 	"math"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl"
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/crosscluster/replicationutils"
 	"github.com/cockroachdb/cockroach/pkg/crosscluster/streamclient"
@@ -211,13 +210,6 @@ func alterReplicationJobHook(
 	}
 
 	fn := func(ctx context.Context, resultsCh chan<- tree.Datums) error {
-		if err := utilccl.CheckEnterpriseEnabled(
-			p.ExecCfg().Settings,
-			alterReplicationJobOp,
-		); err != nil {
-			return err
-		}
-
 		if err := sql.CanManageTenant(ctx, p); err != nil {
 			return err
 		}

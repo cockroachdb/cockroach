@@ -24,11 +24,6 @@ func init() {
 		Types:      tree.ParamTypes{},
 		ReturnType: tree.FixedReturnType(types.Bool),
 		Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
-			if err := utilccl.CheckEnterpriseEnabled(
-				evalCtx.Settings, "fips_ready",
-			); err != nil {
-				return nil, err
-			}
 			// It's debatable whether we need a permission check here at all.
 			// It's not very sensitive and is (currently) a very cheap function
 			// call. However, it's something that regular users should have no

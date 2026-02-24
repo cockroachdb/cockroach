@@ -6,13 +6,10 @@
 package zone
 
 import (
-	"context"
 	"sort"
 
-	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
-	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/errors"
@@ -31,9 +28,6 @@ type ZoneConfigOption struct {
 	RequiredType *types.T
 	// Setter is used to set `Field` in the `zone config` to `datum`.
 	Setter func(*zonepb.ZoneConfig, tree.Datum)
-	// CheckAllowed, if not nil, is called to check if one is allowed to set this
-	// zone config field.
-	CheckAllowed func(context.Context, *cluster.Settings, tree.Datum) error
 }
 
 func loadYAML(dst interface{}, yamlString string) {
@@ -68,16 +62,6 @@ func init() {
 			Field:        config.GlobalReads,
 			RequiredType: types.Bool,
 			Setter:       func(c *zonepb.ZoneConfig, d tree.Datum) { c.GlobalReads = proto.Bool(bool(tree.MustBeDBool(d))) },
-			CheckAllowed: func(ctx context.Context, settings *cluster.Settings, d tree.Datum) error {
-				if !tree.MustBeDBool(d) {
-					// Always allow the value to be unset.
-					return nil
-				}
-				return base.CheckEnterpriseEnabled(
-					settings,
-					"global_reads",
-				)
-			},
 		},
 		{
 			Field:        config.NumReplicas,

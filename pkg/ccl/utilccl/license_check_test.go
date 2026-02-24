@@ -26,39 +26,6 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestSettingAndCheckingLicense(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-
-	ctx := context.Background()
-	t0 := timeutil.Unix(0, 0)
-
-	licA, _ := (&licenseccl.License{
-		Type:              licenseccl.License_Enterprise,
-		ValidUntilUnixSec: t0.AddDate(0, 1, 0).Unix(),
-	}).Encode()
-
-	st := cluster.MakeTestingClusterSettings()
-
-	for _, tc := range []struct {
-		lic string
-	}{
-		// NB: we're observing the update manifest as changed behavior -- detailed
-		// testing of that behavior is left to licenseccl's own tests.
-		{""},
-		// adding a valid lic.
-		{licA},
-		// clearing an existing lic.
-		{""},
-	} {
-		updater := st.MakeUpdater()
-		if err := setLicense(ctx, updater, tc.lic); err != nil {
-			t.Fatal(err)
-		}
-		err := CheckEnterpriseEnabled(st, "")
-		require.NoError(t, err)
-	}
-}
-
 func TestGetLicenseTypePresent(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 

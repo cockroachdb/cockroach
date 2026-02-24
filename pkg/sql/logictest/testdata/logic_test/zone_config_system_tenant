@@ -26,11 +26,6 @@ ALTER TABLE t CONFIGURE ZONE USING num_replicas = 3;
 statement ok
 CREATE TABLE a(id INT PRIMARY KEY)
 
-# Check that global_reads cannot be set without a CCL binary and enterprise license.
-skipif config enterprise-configs
-statement error OSS binaries do not include enterprise features
-ALTER TABLE a CONFIGURE ZONE USING global_reads = true
-
 query IT
 SELECT zone_id, target FROM crdb_internal.zones ORDER BY 1
 ----

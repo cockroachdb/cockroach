@@ -8,7 +8,6 @@ package ldapccl
 import (
 	"context"
 
-	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl"
 	"github.com/cockroachdb/cockroach/pkg/security/distinguishedname"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
@@ -53,10 +52,6 @@ func (authManager *ldapAuthManager) FetchLDAPUserDN(
 	entry *hba.Entry,
 	_ *identmap.Conf,
 ) (retrievedUserDN *ldap.DN, detailedErrorMsg redact.RedactableString, authError error) {
-	if err := utilccl.CheckEnterpriseEnabled(st, "LDAP authentication"); err != nil {
-		return nil, "", err
-	}
-
 	authManager.mu.Lock()
 	defer authManager.mu.Unlock()
 	if !authManager.mu.enabled {
@@ -131,10 +126,6 @@ func (authManager *ldapAuthManager) ValidateLDAPLogin(
 	entry *hba.Entry,
 	_ *identmap.Conf,
 ) (detailedErrorMsg redact.RedactableString, authError error) {
-	if err := utilccl.CheckEnterpriseEnabled(st, "LDAP authentication"); err != nil {
-		return "", err
-	}
-
 	authManager.mu.Lock()
 	defer authManager.mu.Unlock()
 

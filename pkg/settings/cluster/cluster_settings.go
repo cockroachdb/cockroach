@@ -46,7 +46,7 @@ type Settings struct {
 	Version clusterversion.Handle
 
 	// Cache can be used for arbitrary caching, e.g. to cache decoded
-	// enterprises licenses for utilccl.CheckEnterpriseEnabled().
+	// enterprises licenses.
 	Cache syncutil.Map[any, any]
 
 	// OverridesInformer can be nil.

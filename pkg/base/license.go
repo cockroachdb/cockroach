@@ -12,19 +12,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
-	"github.com/cockroachdb/errors"
 )
-
-var errEnterpriseNotEnabled = errors.New("OSS binaries do not include enterprise features")
-
-// CheckEnterpriseEnabled returns a non-nil error if the requested enterprise
-// feature is not enabled, including information or a link explaining how to
-// enable it.
-//
-// This function is overridden by an init hook in CCL builds.
-var CheckEnterpriseEnabled = func(_ *cluster.Settings, feature string) error {
-	return errEnterpriseNotEnabled // nb: this is squarely in the hot path on OSS builds
-}
 
 var LicenseTTLMetadata = metric.Metadata{
 	// This metric name isn't namespaced for backwards
