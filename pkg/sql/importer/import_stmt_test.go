@@ -4588,7 +4588,9 @@ func TestImportWorkerFailure(t *testing.T) {
 	params := base.TestClusterArgs{}
 	params.ServerArgs.Knobs.JobsTestingKnobs = jobs.NewTestingKnobsWithShortIntervals()
 	params.ServerArgs.Knobs.Store = &kvserver.StoreTestingKnobs{
-		TestingResponseFilter: jobutils.BulkOpResponseFilter(&allowResponse),
+		TestingResponseFilter: func(ctx context.Context, request *kvpb.BatchRequest, response *kvpb.BatchResponse) *kvpb.Error {
+			return jobutils.BulkOpResponseFilter(&allowResponse)(ctx, request, response)
+		},
 	}
 
 	ctx := context.Background()

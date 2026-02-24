@@ -72,6 +72,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/desctestutils"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
@@ -7410,9 +7411,14 @@ func TestClientDisconnect(t *testing.T) {
 				}}},
 				Store: &kvserver.StoreTestingKnobs{
 					TestingResponseFilter: func(ctx context.Context, ba *kvpb.BatchRequest, br *kvpb.BatchResponse) *kvpb.Error {
-						for _, ru := range br.Responses {
+						for idx, ru := range br.Responses {
 							switch ru.GetInner().(type) {
 							case *kvpb.ExportResponse:
+								// Lease manager also uses exports after schema changes, so start
+								// intercepting exports when necessary.
+								if lease.TestIsLeasingTxnExportRequest(ba, ba.Requests[idx].GetExport()) {
+									return nil
+								}
 								blockBackupOrRestore(ctx)
 							}
 						}

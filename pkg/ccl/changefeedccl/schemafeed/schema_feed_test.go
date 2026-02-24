@@ -195,27 +195,33 @@ func TestFetchDescriptorVersionsCPULimiterPagination(t *testing.T) {
 	var numRequests int
 	first := true
 	srv, db, _ := serverutils.StartServer(t, base.TestServerArgs{
-		Knobs: base.TestingKnobs{Store: &kvserver.StoreTestingKnobs{
-			TestingRequestFilter: func(ctx context.Context, request *kvpb.BatchRequest) *kvpb.Error {
-				for _, ru := range request.Requests {
-					if _, ok := ru.GetInner().(*kvpb.ExportRequest); ok {
-						numRequests++
-						h := admission.ElasticCPUWorkHandleFromContext(ctx)
-						if h == nil {
-							t.Fatalf("expected context to have CPU work handle")
-						}
-						h.TestingOverrideOverLimit(func() (bool, time.Duration) {
-							if first {
-								first = false
-								return true, 0
+		Knobs: base.TestingKnobs{
+			Store: &kvserver.StoreTestingKnobs{
+				TestingRequestFilter: func(ctx context.Context, request *kvpb.BatchRequest) *kvpb.Error {
+					for _, ru := range request.Requests {
+						if exportRequest, ok := ru.GetInner().(*kvpb.ExportRequest); ok {
+							// Lease manager also uses exports after schema changes, so start
+							// intercepting exports when necessary.
+							if lease.TestIsLeasingTxnExportRequest(request, exportRequest) {
+								return nil
 							}
-							return false, 0
-						})
+							numRequests++
+							h := admission.ElasticCPUWorkHandleFromContext(ctx)
+							if h == nil {
+								t.Fatalf("expected context to have CPU work handle")
+							}
+							h.TestingOverrideOverLimit(func() (bool, time.Duration) {
+								if first {
+									first = false
+									return true, 0
+								}
+								return false, 0
+							})
+						}
 					}
-				}
-				return nil
-			},
-		}},
+					return nil
+				},
+			}},
 	})
 	defer srv.Stopper().Stop(ctx)
 	s := srv.ApplicationLayer()
