@@ -79,35 +79,57 @@ jobs:
           BAZEL_UPDATED=false
 
           for name in $DIAGRAM_NAMES; do
-            # Skip if name ends with _stmt (HTML file won't have _stmt suffix)
+            # html_name is the canonical name for all BZL entries: strip _stmt if present.
+            # The docgen generates BNF files named after the spec's name field, and the
+            # BUILD.bazel svg genrule strips _stmt from HTML outputs automatically. So all
+            # four BZL files should use html_name (without _stmt), not the raw name.
             html_name="${name%_stmt}"
 
-            # Check and update BUILD.bazel
-            if ! grep -q "\"${name}\"" docs/generated/sql/bnf/BUILD.bazel; then
-              echo "Adding ${name} to BUILD.bazel"
-              # Find the right alphabetical position and insert
-              sed -i "/\"analyze_stmt\",/a\\    \"${name}\"," docs/generated/sql/bnf/BUILD.bazel
+            # BUILD.bazel: if an _stmt entry exists for this diagram but the clean entry
+            # does not, rename it. This handles the common case where a grammar rule
+            # show_X_stmt was auto-populated into BUILD.bazel before a diagrams.go entry
+            # with name: "show_X" was added. Adding a duplicate would break the bnf
+            # genrule validation, which requires FILES to exactly match docgen output.
+            if grep -q "\"${html_name}_stmt\"" docs/generated/sql/bnf/BUILD.bazel && \
+               ! grep -q "\"${html_name}\"," docs/generated/sql/bnf/BUILD.bazel; then
+              echo "Renaming ${html_name}_stmt to ${html_name} in BUILD.bazel"
+              sed -i "s/\"${html_name}_stmt\"/\"${html_name}\"/" docs/generated/sql/bnf/BUILD.bazel
+              BAZEL_UPDATED=true
+            elif ! grep -q "\"${html_name}\"" docs/generated/sql/bnf/BUILD.bazel; then
+              echo "Adding ${html_name} to BUILD.bazel"
+              sed -i "/\"analyze_stmt\",/a\\    \"${html_name}\"," docs/generated/sql/bnf/BUILD.bazel
               BAZEL_UPDATED=true
             fi
 
-            # Check and update bnf.bzl
-            if ! grep -q "${name}.bnf" pkg/gen/bnf.bzl; then
-              echo "Adding ${name}.bnf to bnf.bzl"
-              sed -i "/analyze_stmt.bnf/a\\    \"//docs/generated/sql/bnf:${name}.bnf\"," pkg/gen/bnf.bzl
+            # bnf.bzl: same rename-or-add logic.
+            if grep -q ":${html_name}_stmt\.bnf" pkg/gen/bnf.bzl && \
+               ! grep -q ":${html_name}\.bnf" pkg/gen/bnf.bzl; then
+              echo "Renaming ${html_name}_stmt.bnf to ${html_name}.bnf in bnf.bzl"
+              sed -i "s/${html_name}_stmt\.bnf/${html_name}.bnf/" pkg/gen/bnf.bzl
+              BAZEL_UPDATED=true
+            elif ! grep -q ":${html_name}\.bnf" pkg/gen/bnf.bzl; then
+              echo "Adding ${html_name}.bnf to bnf.bzl"
+              sed -i "/analyze_stmt.bnf/a\\    \"//docs/generated/sql/bnf:${html_name}.bnf\"," pkg/gen/bnf.bzl
               BAZEL_UPDATED=true
             fi
 
-            # Check and update diagrams.bzl (uses html_name without _stmt)
-            if ! grep -q "${html_name}.html" pkg/gen/diagrams.bzl; then
+            # diagrams.bzl: the svg genrule already strips _stmt from HTML names, so
+            # this file should never have _stmt entries. Add if missing.
+            if ! grep -q ":${html_name}\.html" pkg/gen/diagrams.bzl; then
               echo "Adding ${html_name}.html to diagrams.bzl"
               sed -i "/analyze.html/a\\    \"//docs/generated/sql/bnf:${html_name}.html\"," pkg/gen/diagrams.bzl
               BAZEL_UPDATED=true
             fi
 
-            # Check and update docs.bzl
-            if ! grep -q "${name}.bnf" pkg/gen/docs.bzl; then
-              echo "Adding ${name}.bnf to docs.bzl"
-              sed -i "/analyze_stmt.bnf/a\\    \"//docs/generated/sql/bnf:${name}.bnf\"," pkg/gen/docs.bzl
+            # docs.bzl: same rename-or-add logic as bnf.bzl.
+            if grep -q ":${html_name}_stmt\.bnf" pkg/gen/docs.bzl && \
+               ! grep -q ":${html_name}\.bnf" pkg/gen/docs.bzl; then
+              echo "Renaming ${html_name}_stmt.bnf to ${html_name}.bnf in docs.bzl"
+              sed -i "s/${html_name}_stmt\.bnf/${html_name}.bnf/" pkg/gen/docs.bzl
+              BAZEL_UPDATED=true
+            elif ! grep -q ":${html_name}\.bnf" pkg/gen/docs.bzl; then
+              echo "Adding ${html_name}.bnf to docs.bzl"
+              sed -i "/analyze_stmt.bnf/a\\    \"//docs/generated/sql/bnf:${html_name}.bnf\"," pkg/gen/docs.bzl
               BAZEL_UPDATED=true
             fi
           done
@@ -191,7 +213,10 @@ jobs:
         id: generate-bnf
         run: |
           echo "::group::Generating BNF files from sql.y"
-          # Use bazel directly to avoid dev wrapper issues
+          # set -o pipefail ensures that a bazel failure is not masked by the tee.
+          # Without this, tee always exits 0 and a silent docgen crash produces no
+          # BNF files while the step still reports success.
+          set -o pipefail
           bazel run //pkg/cmd/docgen -- grammar bnf docs/generated/sql/bnf/ --addr pkg/sql/parser/sql.y 2>&1 | tee bnf_generation.log
           echo "::endgroup::"
 
@@ -459,8 +484,14 @@ jobs:
           echo "::group::Packaging diagram artifacts"
           mkdir -p artifacts/diagrams
 
-          # Copy BNF files
+          # Copy BNF files from the working tree (written by docgen during generate-bnf).
           cp -r docs/generated/sql/bnf/*.bnf artifacts/diagrams/ 2>/dev/null || true
+          # Also copy BNF files from Bazel's intermediate output directory. When a new
+          # diagrams.go entry is added, Bazel builds its BNF as an intermediate artifact
+          # in _bazel/bin/ for the svg genrule. If the docgen working-tree step fails or
+          # the entry is brand-new, the _bazel/bin/ copy ensures the file is captured.
+          # The working-tree copy above takes precedence for any file present in both.
+          cp -r _bazel/bin/docs/generated/sql/bnf/*.bnf artifacts/diagrams/ 2>/dev/null || true
 
           # Copy HTML files (SVG diagrams)
           cp -r _bazel/bin/docs/generated/sql/bnf/*.html artifacts/diagrams/ 2>/dev/null || true
