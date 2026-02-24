@@ -1,7 +1,8 @@
 /* setup */
 CREATE DATABASE multiregion_db PRIMARY REGION "us-east1" REGIONS "us-east2", "us-east3" SURVIVE REGION FAILURE;
 CREATE TABLE multiregion_db.public.table_regional_by_row (
-  k INT NOT NULL,
+  k1 INT NOT NULL PRIMARY KEY,
+  k2 INT NOT NULL,
   V STRING
 ) LOCALITY REGIONAL BY ROW;
 CREATE INDEX idx_v on multiregion_db.table_regional_by_row(v);
@@ -14,7 +15,7 @@ CREATE INDEX idx_v on multiregion_db.table_regional_by_row(v);
 +object {104 105 table_regional_by_row} -> 108
 
 /* test */
-alter table multiregion_db.table_regional_by_row add column m int8 default unique_rowid(), alter primary key using columns(k) USING HASH;
+alter table multiregion_db.table_regional_by_row add column m int8 default unique_rowid(), alter primary key using columns(k2) USING HASH;
 ----
 begin transaction #1
 # begin StatementPhase
@@ -28,7 +29,7 @@ write *eventpb.AlterTable to event log:
   mutationId: 1
   sql:
     descriptorId: 108
-    statement: ALTER TABLE ‹multiregion_db›.‹public›.‹table_regional_by_row› ADD COLUMN ‹m› INT8 DEFAULT unique_rowid(), ALTER PRIMARY KEY USING COLUMNS (‹k›) USING HASH
+    statement: ALTER TABLE ‹multiregion_db›.‹public›.‹table_regional_by_row› ADD COLUMN ‹m› INT8 DEFAULT unique_rowid(), ALTER PRIMARY KEY USING COLUMNS (‹k2›) USING HASH
     tag: ALTER TABLE
     user: root
   tableName: multiregion_db.public.table_regional_by_row
@@ -36,7 +37,7 @@ write *eventpb.AlterTable to event log:
   mutationId: 1
   sql:
     descriptorId: 108
-    statement: ALTER TABLE ‹multiregion_db›.‹public›.‹table_regional_by_row› ADD COLUMN ‹m› INT8 DEFAULT unique_rowid(), ALTER PRIMARY KEY USING COLUMNS (‹k›) USING HASH
+    statement: ALTER TABLE ‹multiregion_db›.‹public›.‹table_regional_by_row› ADD COLUMN ‹m› INT8 DEFAULT unique_rowid(), ALTER PRIMARY KEY USING COLUMNS (‹k2›) USING HASH
     tag: ALTER TABLE
     user: root
   tableName: multiregion_db.public.table_regional_by_row
@@ -47,10 +48,10 @@ upsert descriptor #108
        - 4
   +    - 5
        columnNames:
-       - k
+       - k1
   ...
+       - v
        - crdb_region
-       - rowid
   +    - m
        name: primary
      formatVersion: 3
@@ -83,11 +84,11 @@ upsert descriptor #108
   +      - ASC
   +      - ASC
   +      keyColumnIds:
-  +      - 3
   +      - 4
+  +      - 1
   +      keyColumnNames:
   +      - crdb_region
-  +      - rowid
+  +      - k1
   +      name: crdb_internal_index_8_name_placeholder
   +      partitioning:
   +        list:
@@ -107,11 +108,11 @@ upsert descriptor #108
   +        numImplicitColumns: 1
   +      sharded: {}
   +      storeColumnIds:
-  +      - 1
   +      - 2
+  +      - 3
   +      - 5
   +      storeColumnNames:
-  +      - k
+  +      - k2
   +      - v
   +      - m
   +      unique: true
@@ -132,11 +133,11 @@ upsert descriptor #108
   +      - ASC
   +      - ASC
   +      keyColumnIds:
-  +      - 3
   +      - 4
+  +      - 1
   +      keyColumnNames:
   +      - crdb_region
-  +      - rowid
+  +      - k1
   +      name: crdb_internal_index_9_name_placeholder
   +      partitioning:
   +        list:
@@ -156,11 +157,11 @@ upsert descriptor #108
   +        numImplicitColumns: 1
   +      sharded: {}
   +      storeColumnIds:
-  +      - 1
   +      - 2
+  +      - 3
   +      - 5
   +      storeColumnNames:
-  +      - k
+  +      - k2
   +      - v
   +      - m
   +      unique: true
@@ -170,10 +171,10 @@ upsert descriptor #108
   +    mutationId: 1
   +    state: DELETE_ONLY
   +  - column:
-  +      computeExpr: mod(fnv32(md5(crdb_internal.datums_to_bytes(k))), 16:::INT8)
+  +      computeExpr: mod(fnv32(md5(crdb_internal.datums_to_bytes(k2))), 16:::INT8)
   +      hidden: true
   +      id: 6
-  +      name: crdb_internal_k_shard_16
+  +      name: crdb_internal_k2_shard_16
   +      nullable: true
   +      type:
   +        family: IntFamily
@@ -197,13 +198,13 @@ upsert descriptor #108
   +      - ASC
   +      - ASC
   +      keyColumnIds:
-  +      - 3
+  +      - 4
   +      - 6
-  +      - 1
+  +      - 2
   +      keyColumnNames:
   +      - crdb_region
-  +      - crdb_internal_k_shard_16
-  +      - k
+  +      - crdb_internal_k2_shard_16
+  +      - k2
   +      name: crdb_internal_index_10_name_placeholder
   +      partitioning:
   +        list:
@@ -223,16 +224,16 @@ upsert descriptor #108
   +        numImplicitColumns: 1
   +      sharded:
   +        columnNames:
-  +        - k
+  +        - k2
   +        isSharded: true
-  +        name: crdb_internal_k_shard_16
+  +        name: crdb_internal_k2_shard_16
   +        shardBuckets: 16
   +      storeColumnIds:
-  +      - 4
-  +      - 2
+  +      - 1
+  +      - 3
   +      - 5
   +      storeColumnNames:
-  +      - rowid
+  +      - k1
   +      - v
   +      - m
   +      unique: true
@@ -275,30 +276,30 @@ upsert descriptor #108
   +    jobId: "1"
   +    nameMapping:
   +      columns:
-  +        "1": k
-  +        "2": v
-  +        "3": crdb_region
-  +        "4": rowid
+  +        "1": k1
+  +        "2": k2
+  +        "3": v
+  +        "4": crdb_region
   +        "5": m
-  +        "6": crdb_internal_k_shard_16
+  +        "6": crdb_internal_k2_shard_16
   +        "4294967292": crdb_internal_origin_timestamp
   +        "4294967293": crdb_internal_origin_id
   +        "4294967294": tableoid
   +        "4294967295": crdb_internal_mvcc_timestamp
   +      constraints:
-  +        "2": check_crdb_internal_k_shard_16
+  +        "2": check_crdb_internal_k2_shard_16
   +      families:
   +        "0": primary
   +      id: 108
   +      indexes:
   +        "4": idx_v
-  +        "6": table_regional_by_row_rowid_key
+  +        "6": table_regional_by_row_k1_key
   +        "10": table_regional_by_row_pkey
   +      name: table_regional_by_row
   +    relevantStatements:
   +    - statement:
-  +        redactedStatement: ALTER TABLE ‹multiregion_db›.‹public›.‹table_regional_by_row› ADD COLUMN ‹m› INT8 DEFAULT unique_rowid(), ALTER PRIMARY KEY USING COLUMNS (‹k›) USING HASH
-  +        statement: ALTER TABLE multiregion_db.table_regional_by_row ADD COLUMN m INT8 DEFAULT unique_rowid(), ALTER PRIMARY KEY USING COLUMNS (k) USING HASH
+  +        redactedStatement: ALTER TABLE ‹multiregion_db›.‹public›.‹table_regional_by_row› ADD COLUMN ‹m› INT8 DEFAULT unique_rowid(), ALTER PRIMARY KEY USING COLUMNS (‹k2›) USING HASH
+  +        statement: ALTER TABLE multiregion_db.table_regional_by_row ADD COLUMN m INT8 DEFAULT unique_rowid(), ALTER PRIMARY KEY USING COLUMNS (k2) USING HASH
   +        statementTag: ALTER TABLE
   +    revertible: true
   +    targetRanks: <redacted>
@@ -310,10 +311,10 @@ upsert descriptor #108
        - 4
   +    - 5
        columnNames:
-       - k
+       - k1
   ...
+       - v
        - crdb_region
-       - rowid
   +    - m
        name: primary
      formatVersion: 3
@@ -346,11 +347,11 @@ upsert descriptor #108
   +      - ASC
   +      - ASC
   +      keyColumnIds:
-  +      - 3
   +      - 4
+  +      - 1
   +      keyColumnNames:
   +      - crdb_region
-  +      - rowid
+  +      - k1
   +      name: crdb_internal_index_8_name_placeholder
   +      partitioning:
   +        list:
@@ -370,11 +371,11 @@ upsert descriptor #108
   +        numImplicitColumns: 1
   +      sharded: {}
   +      storeColumnIds:
-  +      - 1
   +      - 2
+  +      - 3
   +      - 5
   +      storeColumnNames:
-  +      - k
+  +      - k2
   +      - v
   +      - m
   +      unique: true
@@ -395,11 +396,11 @@ upsert descriptor #108
   +      - ASC
   +      - ASC
   +      keyColumnIds:
-  +      - 3
   +      - 4
+  +      - 1
   +      keyColumnNames:
   +      - crdb_region
-  +      - rowid
+  +      - k1
   +      name: crdb_internal_index_9_name_placeholder
   +      partitioning:
   +        list:
@@ -419,11 +420,11 @@ upsert descriptor #108
   +        numImplicitColumns: 1
   +      sharded: {}
   +      storeColumnIds:
-  +      - 1
   +      - 2
+  +      - 3
   +      - 5
   +      storeColumnNames:
-  +      - k
+  +      - k2
   +      - v
   +      - m
   +      unique: true
@@ -433,10 +434,10 @@ upsert descriptor #108
   +    mutationId: 1
   +    state: DELETE_ONLY
   +  - column:
-  +      computeExpr: mod(fnv32(md5(crdb_internal.datums_to_bytes(k))), 16:::INT8)
+  +      computeExpr: mod(fnv32(md5(crdb_internal.datums_to_bytes(k2))), 16:::INT8)
   +      hidden: true
   +      id: 6
-  +      name: crdb_internal_k_shard_16
+  +      name: crdb_internal_k2_shard_16
   +      nullable: true
   +      type:
   +        family: IntFamily
@@ -460,13 +461,13 @@ upsert descriptor #108
   +      - ASC
   +      - ASC
   +      keyColumnIds:
-  +      - 3
+  +      - 4
   +      - 6
-  +      - 1
+  +      - 2
   +      keyColumnNames:
   +      - crdb_region
-  +      - crdb_internal_k_shard_16
-  +      - k
+  +      - crdb_internal_k2_shard_16
+  +      - k2
   +      name: crdb_internal_index_10_name_placeholder
   +      partitioning:
   +        list:
@@ -486,16 +487,16 @@ upsert descriptor #108
   +        numImplicitColumns: 1
   +      sharded:
   +        columnNames:
-  +        - k
+  +        - k2
   +        isSharded: true
-  +        name: crdb_internal_k_shard_16
+  +        name: crdb_internal_k2_shard_16
   +        shardBuckets: 16
   +      storeColumnIds:
-  +      - 4
-  +      - 2
+  +      - 1
+  +      - 3
   +      - 5
   +      storeColumnNames:
-  +      - rowid
+  +      - k1
   +      - v
   +      - m
   +      unique: true
@@ -522,7 +523,7 @@ upsert descriptor #108
   +  version: "9"
 upsert zone config for #108
 persist all catalog changes to storage
-create job #1 (non-cancelable: false): "ALTER TABLE multiregion_db.public.table_regional_by_row ADD COLUMN m INT8 DEFAULT unique_rowid(), ALTER PRIMARY KEY USING COLUMNS (k) USING HASH"
+create job #1 (non-cancelable: false): "ALTER TABLE multiregion_db.public.table_regional_by_row ADD COLUMN m INT8 DEFAULT unique_rowid(), ALTER PRIMARY KEY USING COLUMNS (k2) USING HASH"
   descriptor IDs: [108]
 # end PreCommitPhase
 commit transaction #1
@@ -537,9 +538,9 @@ upsert descriptor #108
   +  checks:
   +  - columnIds:
   +    - 6
-  +    expr: crdb_internal_k_shard_16 IS NOT NULL
+  +    expr: crdb_internal_k2_shard_16 IS NOT NULL
   +    isNonNullConstraint: true
-  +    name: crdb_internal_k_shard_16_auto_not_null
+  +    name: crdb_internal_k2_shard_16_auto_not_null
   +    validity: Validating
      columns:
      - id: 1
@@ -556,7 +557,7 @@ upsert descriptor #108
   -    state: DELETE_ONLY
   +    state: WRITE_ONLY
      - column:
-         computeExpr: mod(fnv32(md5(crdb_internal.datums_to_bytes(k))), 16:::INT8)
+         computeExpr: mod(fnv32(md5(crdb_internal.datums_to_bytes(k2))), 16:::INT8)
   ...
        direction: ADD
        mutationId: 1
@@ -571,13 +572,13 @@ upsert descriptor #108
   +      check:
   +        columnIds:
   +        - 6
-  +        expr: crdb_internal_k_shard_16 IS NOT NULL
+  +        expr: crdb_internal_k2_shard_16 IS NOT NULL
   +        isNonNullConstraint: true
-  +        name: crdb_internal_k_shard_16_auto_not_null
+  +        name: crdb_internal_k2_shard_16_auto_not_null
   +        validity: Validating
   +      constraintType: NOT_NULL
   +      foreignKey: {}
-  +      name: crdb_internal_k_shard_16_auto_not_null
+  +      name: crdb_internal_k2_shard_16_auto_not_null
   +      notNullColumn: 6
   +      uniqueWithoutIndexConstraint: {}
   +    direction: ADD
@@ -655,7 +656,7 @@ upsert descriptor #108
   -    state: WRITE_ONLY
   +    state: DELETE_ONLY
      - column:
-         computeExpr: mod(fnv32(md5(crdb_internal.datums_to_bytes(k))), 16:::INT8)
+         computeExpr: mod(fnv32(md5(crdb_internal.datums_to_bytes(k2))), 16:::INT8)
   ...
        time: {}
      unexposedParentSchemaId: 105
@@ -689,7 +690,7 @@ upsert descriptor #108
          keyColumnDirections:
   ...
          - crdb_region
-         - rowid
+         - k1
   -      name: crdb_internal_index_8_name_placeholder
   +      name: crdb_internal_index_9_name_placeholder
          partitioning:
@@ -703,10 +704,10 @@ upsert descriptor #108
        mutationId: 1
   +    state: DELETE_ONLY
   +  - column:
-  +      computeExpr: mod(fnv32(md5(crdb_internal.datums_to_bytes(k))), 16:::INT8)
+  +      computeExpr: mod(fnv32(md5(crdb_internal.datums_to_bytes(k2))), 16:::INT8)
   +      hidden: true
   +      id: 6
-  +      name: crdb_internal_k_shard_16
+  +      name: crdb_internal_k2_shard_16
   +      nullable: true
   +      type:
   +        family: IntFamily
@@ -733,13 +734,13 @@ upsert descriptor #108
          - ASC
   +      - ASC
          keyColumnIds:
-         - 3
+         - 4
   +      - 6
-  +      - 1
+  +      - 2
   +      keyColumnNames:
   +      - crdb_region
-  +      - crdb_internal_k_shard_16
-  +      - k
+  +      - crdb_internal_k2_shard_16
+  +      - k2
   +      name: crdb_internal_index_10_name_placeholder
   +      partitioning:
   +        list:
@@ -759,16 +760,16 @@ upsert descriptor #108
   +        numImplicitColumns: 1
   +      sharded:
   +        columnNames:
-  +        - k
+  +        - k2
   +        isSharded: true
-  +        name: crdb_internal_k_shard_16
+  +        name: crdb_internal_k2_shard_16
   +        shardBuckets: 16
   +      storeColumnIds:
-         - 4
-  +      - 2
+         - 1
+  +      - 3
   +      - 5
   +      storeColumnNames:
-  +      - rowid
+  +      - k1
   +      - v
   +      - m
   +      unique: true
@@ -780,13 +781,13 @@ upsert descriptor #108
   +      check:
   +        columnIds:
   +        - 6
-  +        expr: crdb_internal_k_shard_16 IS NOT NULL
+  +        expr: crdb_internal_k2_shard_16 IS NOT NULL
   +        isNonNullConstraint: true
-  +        name: crdb_internal_k_shard_16_auto_not_null
+  +        name: crdb_internal_k2_shard_16_auto_not_null
   +        validity: Validating
   +      constraintType: NOT_NULL
   +      foreignKey: {}
-  +      name: crdb_internal_k_shard_16_auto_not_null
+  +      name: crdb_internal_k2_shard_16_auto_not_null
   +      notNullColumn: 6
   +      uniqueWithoutIndexConstraint: {}
   +    direction: ADD
@@ -805,21 +806,21 @@ upsert descriptor #108
   +      - ASC
   +      - ASC
   +      keyColumnIds:
-  +      - 3
   +      - 4
+  +      - 1
          keyColumnNames:
          - crdb_region
-         - rowid
+         - k1
   -      name: crdb_internal_index_9_name_placeholder
   +      name: crdb_internal_index_1_name_placeholder
          partitioning:
            list:
   ...
-         - 1
          - 2
+         - 3
   -      - 5
          storeColumnNames:
-         - k
+         - k2
          - v
   -      - m
          unique: true
@@ -829,10 +830,10 @@ upsert descriptor #108
        mutationId: 1
   -    state: DELETE_ONLY
   -  - column:
-  -      computeExpr: mod(fnv32(md5(crdb_internal.datums_to_bytes(k))), 16:::INT8)
+  -      computeExpr: mod(fnv32(md5(crdb_internal.datums_to_bytes(k2))), 16:::INT8)
   -      hidden: true
   -      id: 6
-  -      name: crdb_internal_k_shard_16
+  -      name: crdb_internal_k2_shard_16
   -      nullable: true
   -      type:
   -        family: IntFamily
@@ -855,8 +856,8 @@ upsert descriptor #108
          interleave: {}
          keyColumnDirections:
   ...
-         - crdb_internal_k_shard_16
-         - k
+         - crdb_internal_k2_shard_16
+         - k2
   -      name: crdb_internal_index_10_name_placeholder
   +      name: crdb_internal_index_11_name_placeholder
          partitioning:
@@ -882,13 +883,13 @@ upsert descriptor #108
   +      - ASC
   +      - ASC
   +      keyColumnIds:
+  +      - 4
   +      - 3
-  +      - 2
   +      keyColumnNames:
   +      - crdb_region
   +      - v
   +      keySuffixColumnIds:
-  +      - 1
+  +      - 2
   +      - 6
   +      name: crdb_internal_index_4_name_placeholder
   +      partitioning:
@@ -917,9 +918,9 @@ upsert descriptor #108
   -      check:
   -        columnIds:
   -        - 6
-  -        expr: crdb_internal_k_shard_16 IS NOT NULL
+  -        expr: crdb_internal_k2_shard_16 IS NOT NULL
   -        isNonNullConstraint: true
-  -        name: crdb_internal_k_shard_16_auto_not_null
+  -        name: crdb_internal_k2_shard_16_auto_not_null
   -        validity: Validating
   -      constraintType: NOT_NULL
   +  - direction: ADD
@@ -927,7 +928,7 @@ upsert descriptor #108
   +      constraintId: 4
   +      createdExplicitly: true
          foreignKey: {}
-  -      name: crdb_internal_k_shard_16_auto_not_null
+  -      name: crdb_internal_k2_shard_16_auto_not_null
   -      notNullColumn: 6
   -      uniqueWithoutIndexConstraint: {}
   -    direction: ADD
@@ -938,13 +939,13 @@ upsert descriptor #108
   +      - ASC
   +      - ASC
   +      keyColumnIds:
+  +      - 4
   +      - 3
-  +      - 2
   +      keyColumnNames:
   +      - crdb_region
   +      - v
   +      keySuffixColumnIds:
-  +      - 1
+  +      - 2
   +      - 6
   +      name: crdb_internal_index_5_name_placeholder
   +      partitioning:
@@ -994,11 +995,11 @@ upsert descriptor #108
        interleave: {}
        keyColumnDirections:
   ...
-       - 1
        - 2
+       - 3
   +    - 5
        storeColumnNames:
-       - k
+       - k2
        - v
   +    - m
        unique: true
@@ -1145,52 +1146,73 @@ commit transaction #16
 begin transaction #17
 ## PostCommitPhase stage 15 of 24 with 3 ValidationType ops
 validate forward indexes [10 4] in table #108
-validate CHECK constraint crdb_internal_k_shard_16_auto_not_null in table #108
+validate CHECK constraint crdb_internal_k2_shard_16_auto_not_null in table #108
 commit transaction #17
 begin transaction #18
-## PostCommitPhase stage 16 of 24 with 23 MutationType ops
+## PostCommitPhase stage 16 of 24 with 21 MutationType ops
 upsert descriptor #108
    table:
   -  checks:
   -  - columnIds:
   -    - 6
-  -    expr: crdb_internal_k_shard_16 IS NOT NULL
+  -    expr: crdb_internal_k2_shard_16 IS NOT NULL
   -    isNonNullConstraint: true
-  -    name: crdb_internal_k_shard_16_auto_not_null
+  -    name: crdb_internal_k2_shard_16_auto_not_null
   -    validity: Validating
   +  checks: []
      columns:
      - id: 1
   ...
-     id: 108
-     indexes:
-  -  - createdAtNanos: "1640995200000000000"
-  +  - constraintId: 3
-  +    createdAtNanos: "1640998800000000000"
-       createdExplicitly: true
-       foreignKey: {}
-       geoConfig: {}
-  -    id: 2
-  +    id: 4
-       interleave: {}
-       keyColumnDirections:
-  ...
-       - v
-       keySuffixColumnIds:
-  -    - 4
-  +    - 1
-  +    - 6
-       name: idx_v
-       partitioning:
-  ...
-         numImplicitColumns: 1
-       sharded: {}
-  +    storeColumnNames: []
        vecConfig: {}
        version: 4
+  +  - constraintId: 3
+  +    createdAtNanos: "1640998800000000000"
+  +    createdExplicitly: true
+  +    foreignKey: {}
+  +    geoConfig: {}
+  +    hideForPrimaryKeyRecreate: true
+  +    id: 4
+  +    interleave: {}
+  +    invisibility: 1
+  +    keyColumnDirections:
+  +    - ASC
+  +    - ASC
+  +    keyColumnIds:
+  +    - 4
+  +    - 3
+  +    keyColumnNames:
+  +    - crdb_region
+  +    - v
+  +    keySuffixColumnIds:
+  +    - 2
+  +    - 6
+  +    name: crdb_internal_idx_v_recreated
+  +    notVisible: true
+  +    partitioning:
+  +      list:
+  +      - name: us-east1
+  +        subpartitioning: {}
+  +        values:
+  +        - BgFA
+  +      - name: us-east2
+  +        subpartitioning: {}
+  +        values:
+  +        - BgGA
+  +      - name: us-east3
+  +        subpartitioning: {}
+  +        values:
+  +        - BgHA
+  +      numColumns: 1
+  +      numImplicitColumns: 1
+  +    sharded: {}
+  +    storeColumnNames: []
+  +    vecConfig: {}
+  +    version: 4
+     localityConfig:
+       regionalByRow: {}
   ...
          id: 6
-         name: crdb_internal_k_shard_16
+         name: crdb_internal_k2_shard_16
   -      nullable: true
          type:
            family: IntFamily
@@ -1201,13 +1223,13 @@ upsert descriptor #108
   -      check:
   -        columnIds:
   -        - 6
-  -        expr: crdb_internal_k_shard_16 IS NOT NULL
+  -        expr: crdb_internal_k2_shard_16 IS NOT NULL
   -        isNonNullConstraint: true
-  -        name: crdb_internal_k_shard_16_auto_not_null
+  -        name: crdb_internal_k2_shard_16_auto_not_null
   -        validity: Validating
   -      constraintType: NOT_NULL
   -      foreignKey: {}
-  -      name: crdb_internal_k_shard_16_auto_not_null
+  -      name: crdb_internal_k2_shard_16_auto_not_null
   -      notNullColumn: 6
   -      uniqueWithoutIndexConstraint: {}
   -    direction: ADD
@@ -1232,7 +1254,7 @@ upsert descriptor #108
          interleave: {}
          keyColumnDirections:
   ...
-         - 1
+         - 2
          - 6
   -      name: crdb_internal_index_4_name_placeholder
   +      name: crdb_internal_index_5_name_placeholder
@@ -1262,19 +1284,19 @@ upsert descriptor #108
          keyColumnDirections:
   ...
          keyColumnIds:
-         - 3
-  -      - 2
-  +      - 4
+         - 4
+  -      - 3
+  +      - 1
          keyColumnNames:
          - crdb_region
   -      - v
-  +      - rowid
+  +      - k1
          keySuffixColumnIds:
-  -      - 1
+  -      - 2
          - 6
   -      name: crdb_internal_index_5_name_placeholder
-  +      - 1
-  +      name: table_regional_by_row_rowid_key
+  +      - 2
+  +      name: table_regional_by_row_k1_key
          partitioning:
            list:
   ...
@@ -1297,14 +1319,14 @@ upsert descriptor #108
   +      - ASC
   +      - ASC
   +      keyColumnIds:
-  +      - 3
   +      - 4
+  +      - 1
   +      keyColumnNames:
   +      - crdb_region
-  +      - rowid
+  +      - k1
   +      keySuffixColumnIds:
   +      - 6
-  +      - 1
+  +      - 2
   +      name: crdb_internal_index_7_name_placeholder
   +      partitioning: {}
   +      sharded: {}
@@ -1312,52 +1334,6 @@ upsert descriptor #108
   +      unique: true
          useDeletePreservingEncoding: true
          vecConfig: {}
-  ...
-       mutationId: 1
-       state: DELETE_ONLY
-  +  - direction: DROP
-  +    index:
-  +      createdAtNanos: "1640995200000000000"
-  +      createdExplicitly: true
-  +      foreignKey: {}
-  +      geoConfig: {}
-  +      id: 2
-  +      interleave: {}
-  +      keyColumnDirections:
-  +      - ASC
-  +      - ASC
-  +      keyColumnIds:
-  +      - 3
-  +      - 2
-  +      keyColumnNames:
-  +      - crdb_region
-  +      - v
-  +      keySuffixColumnIds:
-  +      - 4
-  +      name: idx_v
-  +      partitioning:
-  +        list:
-  +        - name: us-east1
-  +          subpartitioning: {}
-  +          values:
-  +          - BgFA
-  +        - name: us-east2
-  +          subpartitioning: {}
-  +          values:
-  +          - BgGA
-  +        - name: us-east3
-  +          subpartitioning: {}
-  +          values:
-  +          - BgHA
-  +        numColumns: 1
-  +        numImplicitColumns: 1
-  +      sharded: {}
-  +      vecConfig: {}
-  +      version: 4
-  +    mutationId: 1
-  +    state: WRITE_ONLY
-     name: table_regional_by_row
-     nextColumnId: 7
   ...
        time: {}
      unexposedParentSchemaId: 105
@@ -1375,8 +1351,8 @@ upsert descriptor #108
        mutationId: 1
   -    state: DELETE_ONLY
   +    state: WRITE_ONLY
-     - direction: DROP
-       index:
+     name: table_regional_by_row
+     nextColumnId: 7
   ...
        time: {}
      unexposedParentSchemaId: 105
@@ -1446,8 +1422,8 @@ upsert descriptor #108
        mutationId: 1
   -    state: WRITE_ONLY
   +    state: DELETE_ONLY
-     - direction: DROP
-       index:
+     name: table_regional_by_row
+     nextColumnId: 7
   ...
        time: {}
      unexposedParentSchemaId: 105
@@ -1464,7 +1440,7 @@ begin transaction #26
 ## PostCommitPhase stage 24 of 24 with 4 MutationType ops
 upsert descriptor #108
   ...
-           statement: ALTER TABLE multiregion_db.table_regional_by_row ADD COLUMN m INT8 DEFAULT unique_rowid(), ALTER PRIMARY KEY USING COLUMNS (k) USING HASH
+           statement: ALTER TABLE multiregion_db.table_regional_by_row ADD COLUMN m INT8 DEFAULT unique_rowid(), ALTER PRIMARY KEY USING COLUMNS (k2) USING HASH
            statementTag: ALTER TABLE
   -    revertible: true
        targetRanks: <redacted>
@@ -1483,15 +1459,15 @@ upsert descriptor #108
   +    - ASC
   +    - ASC
   +    keyColumnIds:
-  +    - 3
   +    - 4
+  +    - 1
   +    keyColumnNames:
   +    - crdb_region
-  +    - rowid
+  +    - k1
   +    keySuffixColumnIds:
   +    - 6
-  +    - 1
-  +    name: table_regional_by_row_rowid_key
+  +    - 2
+  +    name: table_regional_by_row_k1_key
   +    partitioning:
   +      list:
   +      - name: us-east1
@@ -1531,15 +1507,15 @@ upsert descriptor #108
   -      - ASC
   -      - ASC
   -      keyColumnIds:
-  -      - 3
   -      - 4
+  -      - 1
   -      keyColumnNames:
   -      - crdb_region
-  -      - rowid
+  -      - k1
   -      keySuffixColumnIds:
   -      - 6
-  -      - 1
-  -      name: table_regional_by_row_rowid_key
+  -      - 2
+  -      name: table_regional_by_row_k1_key
   -      partitioning:
   -        list:
   -        - name: us-east1
@@ -1572,11 +1548,11 @@ upsert descriptor #108
   +  version: "24"
 persist all catalog changes to storage
 adding table for stats refresh: 108
-update progress of schema change job #1: "Pending: Updating schema metadata (33 operations) — PostCommitNonRevertible phase (stage 1 of 6)."
+update progress of schema change job #1: "Pending: Updating schema metadata (28 operations) — PostCommitNonRevertible phase (stage 1 of 6)."
 set schema change job #1 to non-cancellable
 commit transaction #26
 begin transaction #27
-## PostCommitNonRevertiblePhase stage 1 of 6 with 35 MutationType ops
+## PostCommitNonRevertiblePhase stage 1 of 6 with 30 MutationType ops
 upsert descriptor #108
   ...
        mutationId: 1
@@ -1594,11 +1570,11 @@ upsert descriptor #108
   -      - ASC
   -      - ASC
   -      keyColumnIds:
-  -      - 3
   -      - 4
+  -      - 1
   -      keyColumnNames:
   -      - crdb_region
-  -      - rowid
+  -      - k1
   -      name: crdb_internal_index_9_name_placeholder
   -      partitioning:
   -        list:
@@ -1618,11 +1594,11 @@ upsert descriptor #108
   -        numImplicitColumns: 1
   -      sharded: {}
   -      storeColumnIds:
-  -      - 1
   -      - 2
+  -      - 3
   -      - 5
   -      storeColumnNames:
-  -      - k
+  -      - k2
   -      - v
   -      - m
   -      unique: true
@@ -1632,7 +1608,7 @@ upsert descriptor #108
   -    mutationId: 1
   -    state: DELETE_ONLY
      - column:
-         computeExpr: mod(fnv32(md5(crdb_internal.datums_to_bytes(k))), 16:::INT8)
+         computeExpr: mod(fnv32(md5(crdb_internal.datums_to_bytes(k2))), 16:::INT8)
   ...
          version: 4
        mutationId: 1
@@ -1651,13 +1627,13 @@ upsert descriptor #108
   -      - ASC
   -      - ASC
   -      keyColumnIds:
-  -      - 3
+  -      - 4
   -      - 6
-  -      - 1
+  -      - 2
   -      keyColumnNames:
   -      - crdb_region
-  -      - crdb_internal_k_shard_16
-  -      - k
+  -      - crdb_internal_k2_shard_16
+  -      - k2
   -      name: crdb_internal_index_11_name_placeholder
   -      partitioning:
   -        list:
@@ -1677,16 +1653,16 @@ upsert descriptor #108
   -        numImplicitColumns: 1
   -      sharded:
   -        columnNames:
-  -        - k
+  -        - k2
   -        isSharded: true
-  -        name: crdb_internal_k_shard_16
+  -        name: crdb_internal_k2_shard_16
   -        shardBuckets: 16
   -      storeColumnIds:
-  -      - 4
-  -      - 2
+  -      - 1
+  -      - 3
   -      - 5
   -      storeColumnNames:
-  -      - rowid
+  -      - k1
   -      - v
   -      - m
   -      unique: true
@@ -1695,8 +1671,8 @@ upsert descriptor #108
   -      version: 4
   -    mutationId: 1
        state: DELETE_ONLY
-     - direction: DROP
-       index:
+  -  - direction: DROP
+  -    index:
   -      constraintId: 4
   -      createdExplicitly: true
   -      foreignKey: {}
@@ -1707,13 +1683,13 @@ upsert descriptor #108
   -      - ASC
   -      - ASC
   -      keyColumnIds:
+  -      - 4
   -      - 3
-  -      - 2
   -      keyColumnNames:
   -      - crdb_region
   -      - v
   -      keySuffixColumnIds:
-  -      - 1
+  -      - 2
   -      - 6
   -      name: crdb_internal_index_5_name_placeholder
   -      partitioning:
@@ -1751,14 +1727,14 @@ upsert descriptor #108
   -      - ASC
   -      - ASC
   -      keyColumnIds:
-  -      - 3
   -      - 4
+  -      - 1
   -      keyColumnNames:
   -      - crdb_region
-  -      - rowid
+  -      - k1
   -      keySuffixColumnIds:
   -      - 6
-  -      - 1
+  -      - 2
   -      name: crdb_internal_index_7_name_placeholder
   -      partitioning: {}
   -      sharded: {}
@@ -1769,22 +1745,6 @@ upsert descriptor #108
   -      version: 4
   -    mutationId: 1
   -    state: DELETE_ONLY
-  -  - direction: DROP
-  -    index:
-         createdAtNanos: "1640995200000000000"
-         createdExplicitly: true
-  ...
-         keySuffixColumnIds:
-         - 4
-  -      name: idx_v
-  +      name: crdb_internal_index_2_name_placeholder
-         partitioning:
-           list:
-  ...
-         version: 4
-       mutationId: 1
-  -    state: WRITE_ONLY
-  +    state: DELETE_ONLY
      name: table_regional_by_row
      nextColumnId: 7
   ...
@@ -1793,10 +1753,10 @@ upsert descriptor #108
   -  version: "24"
   +  version: "25"
 persist all catalog changes to storage
-update progress of schema change job #1: "Pending: Updating schema metadata (12 operations) — PostCommitNonRevertible phase (stage 2 of 6)."
+update progress of schema change job #1: "Pending: Updating schema metadata (13 operations) — PostCommitNonRevertible phase (stage 2 of 6)."
 commit transaction #27
 begin transaction #28
-## PostCommitNonRevertiblePhase stage 2 of 6 with 14 MutationType ops
+## PostCommitNonRevertiblePhase stage 2 of 6 with 15 MutationType ops
 upsert descriptor #108
    table:
   -  checks: []
@@ -1804,15 +1764,15 @@ upsert descriptor #108
   +  - columnIds:
   +    - 6
   +    constraintId: 2
-  +    expr: crdb_internal_k_shard_16 IN (0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15)
+  +    expr: crdb_internal_k2_shard_16 IN (0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15)
   +    fromHashShardedColumn: true
-  +    name: check_crdb_internal_k_shard_16
+  +    name: check_crdb_internal_k2_shard_16
   +    validity: Validating
      columns:
      - id: 1
   ...
-         oid: 20
-         width: 64
+         udtMetadata:
+           arrayTypeOid: 100107
   +  - defaultExpr: unique_rowid()
   +    id: 5
   +    name: m
@@ -1821,10 +1781,10 @@ upsert descriptor #108
   +      family: IntFamily
   +      oid: 20
   +      width: 64
-  +  - computeExpr: mod(fnv32(md5(crdb_internal.datums_to_bytes(k))), 16:::INT8)
+  +  - computeExpr: mod(fnv32(md5(crdb_internal.datums_to_bytes(k2))), 16:::INT8)
   +    hidden: true
   +    id: 6
-  +    name: crdb_internal_k_shard_16
+  +    name: crdb_internal_k2_shard_16
   +    type:
   +      family: IntFamily
   +      oid: 20
@@ -1832,6 +1792,65 @@ upsert descriptor #108
   +    virtual: true
      createAsOfTime:
        wallTime: "1640995200000000000"
+  ...
+     id: 108
+     indexes:
+  -  - createdAtNanos: "1640995200000000000"
+  -    createdExplicitly: true
+  -    foreignKey: {}
+  -    geoConfig: {}
+  -    id: 2
+  -    interleave: {}
+  -    keyColumnDirections:
+  -    - ASC
+  -    - ASC
+  -    keyColumnIds:
+  -    - 4
+  -    - 3
+  -    keyColumnNames:
+  -    - crdb_region
+  -    - v
+  -    keySuffixColumnIds:
+  -    - 1
+  -    name: idx_v
+  -    partitioning:
+  -      list:
+  -      - name: us-east1
+  -        subpartitioning: {}
+  -        values:
+  -        - BgFA
+  -      - name: us-east2
+  -        subpartitioning: {}
+  -        values:
+  -        - BgGA
+  -      - name: us-east3
+  -        subpartitioning: {}
+  -        values:
+  -        - BgHA
+  -      numColumns: 1
+  -      numImplicitColumns: 1
+  -    sharded: {}
+  -    vecConfig: {}
+  -    version: 4
+     - constraintId: 3
+       createdAtNanos: "1640998800000000000"
+  ...
+       foreignKey: {}
+       geoConfig: {}
+  -    hideForPrimaryKeyRecreate: true
+       id: 4
+       interleave: {}
+  -    invisibility: 1
+       keyColumnDirections:
+       - ASC
+  ...
+       - 2
+       - 6
+  -    name: crdb_internal_idx_v_recreated
+  -    notVisible: true
+  +    name: idx_v
+       partitioning:
+         list:
   ...
      modificationTime: {}
      mutations:
@@ -1848,10 +1867,10 @@ upsert descriptor #108
   -    mutationId: 1
   -    state: WRITE_ONLY
   -  - column:
-  -      computeExpr: mod(fnv32(md5(crdb_internal.datums_to_bytes(k))), 16:::INT8)
+  -      computeExpr: mod(fnv32(md5(crdb_internal.datums_to_bytes(k2))), 16:::INT8)
   -      hidden: true
   -      id: 6
-  -      name: crdb_internal_k_shard_16
+  -      name: crdb_internal_k2_shard_16
   -      type:
   -        family: IntFamily
   -        oid: 20
@@ -1864,90 +1883,82 @@ upsert descriptor #108
   +  - direction: DROP
        index:
   -      constraintId: 9
-  +      constraintId: 7
+  +      createdAtNanos: "1640995200000000000"
          createdExplicitly: true
-         encodingType: 1
+  -      encodingType: 1
          foreignKey: {}
          geoConfig: {}
   -      id: 10
-  +      id: 8
+  +      id: 2
          interleave: {}
          keyColumnDirections:
          - ASC
          - ASC
   -      - ASC
          keyColumnIds:
-         - 3
+         - 4
   -      - 6
-  -      - 1
-  -      keyColumnNames:
-  -      - crdb_region
-  -      - crdb_internal_k_shard_16
-  -      - k
+  -      - 2
+  +      - 3
+         keyColumnNames:
+         - crdb_region
+  -      - crdb_internal_k2_shard_16
+  -      - k2
   -      name: crdb_internal_index_10_name_placeholder
-  -      partitioning:
-  -        list:
-  -        - name: us-east1
-  -          subpartitioning: {}
-  -          values:
-  -          - BgFA
-  -        - name: us-east2
-  -          subpartitioning: {}
-  -          values:
-  -          - BgGA
-  -        - name: us-east3
-  -          subpartitioning: {}
-  -          values:
-  -          - BgHA
-  -        numColumns: 1
-  -        numImplicitColumns: 1
+  +      - v
+  +      keySuffixColumnIds:
+  +      - 1
+  +      name: idx_v
+         partitioning:
+           list:
+  ...
+           numColumns: 1
+           numImplicitColumns: 1
   -      sharded:
   -        columnNames:
-  -        - k
+  -        - k2
   -        isSharded: true
-  -        name: crdb_internal_k_shard_16
+  -        name: crdb_internal_k2_shard_16
   -        shardBuckets: 16
   -      storeColumnIds:
-         - 4
-  -      - 2
+  -      - 1
+  -      - 3
   -      - 5
   -      storeColumnNames:
-  -      - rowid
+  -      - k1
   -      - v
   -      - m
   -      unique: true
-  -      vecConfig: {}
-  -      version: 4
-  -    mutationId: 1
-  -    state: WRITE_ONLY
-  -  - direction: DROP
-  -    index:
+  +      sharded: {}
+         vecConfig: {}
+         version: 4
+  ...
+     - direction: DROP
+       index:
   -      constraintId: 1
   -      createdAtNanos: "1640995200000000000"
-  -      encodingType: 1
-  -      foreignKey: {}
-  -      geoConfig: {}
+  +      constraintId: 7
+  +      createdExplicitly: true
+         encodingType: 1
+         foreignKey: {}
+         geoConfig: {}
   -      id: 1
-  -      interleave: {}
-  -      keyColumnDirections:
-  -      - ASC
-  -      - ASC
-  -      keyColumnIds:
-  -      - 3
-  -      - 4
-         keyColumnNames:
+  +      id: 8
+         interleave: {}
+         keyColumnDirections:
+  ...
          - crdb_region
-         - rowid
+         - k1
   -      name: crdb_internal_index_1_name_placeholder
   +      name: crdb_internal_index_8_name_placeholder
          partitioning:
            list:
   ...
-         - 1
          - 2
+         - 3
   +      - 5
          storeColumnNames:
-         - k
+         - k2
          - v
   +      - m
          unique: true
@@ -1955,60 +1966,21 @@ upsert descriptor #108
          version: 4
        mutationId: 1
   -    state: DELETE_ONLY
-  -  - direction: DROP
-  -    index:
-  -      createdAtNanos: "1640995200000000000"
-  -      createdExplicitly: true
   +    state: WRITE_ONLY
   +  - constraint:
   +      check:
   +        columnIds:
   +        - 6
   +        constraintId: 2
-  +        expr: crdb_internal_k_shard_16 IN (0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15)
+  +        expr: crdb_internal_k2_shard_16 IN (0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15)
   +        fromHashShardedColumn: true
   +        name: crdb_internal_constraint_2_name_placeholder
   +        validity: Validating
-         foreignKey: {}
-  -      geoConfig: {}
-  -      id: 2
-  -      interleave: {}
-  -      keyColumnDirections:
-  -      - ASC
-  -      - ASC
-  -      keyColumnIds:
-  -      - 3
-  -      - 2
-  -      keyColumnNames:
-  -      - crdb_region
-  -      - v
-  -      keySuffixColumnIds:
-  -      - 4
-  -      name: crdb_internal_index_2_name_placeholder
-  -      partitioning:
-  -        list:
-  -        - name: us-east1
-  -          subpartitioning: {}
-  -          values:
-  -          - BgFA
-  -        - name: us-east2
-  -          subpartitioning: {}
-  -          values:
-  -          - BgGA
-  -        - name: us-east3
-  -          subpartitioning: {}
-  -          values:
-  -          - BgHA
-  -        numColumns: 1
-  -        numImplicitColumns: 1
-  -      sharded: {}
-  -      vecConfig: {}
-  -      version: 4
+  +      foreignKey: {}
   +      name: crdb_internal_constraint_2_name_placeholder
   +      uniqueWithoutIndexConstraint: {}
   +    direction: ADD
-       mutationId: 1
-  -    state: DELETE_ONLY
+  +    mutationId: 1
   +    state: WRITE_ONLY
      name: table_regional_by_row
      nextColumnId: 7
@@ -2029,15 +2001,15 @@ upsert descriptor #108
        - ASC
   +    - ASC
        keyColumnIds:
-       - 3
-  -    - 4
+       - 4
+  -    - 1
   +    - 6
-  +    - 1
+  +    - 2
        keyColumnNames:
        - crdb_region
-  -    - rowid
-  +    - crdb_internal_k_shard_16
-  +    - k
+  -    - k1
+  +    - crdb_internal_k2_shard_16
+  +    - k2
        name: table_regional_by_row_pkey
        partitioning:
   ...
@@ -2046,18 +2018,18 @@ upsert descriptor #108
   -    sharded: {}
   +    sharded:
   +      columnNames:
-  +      - k
+  +      - k2
   +      isSharded: true
-  +      name: crdb_internal_k_shard_16
+  +      name: crdb_internal_k2_shard_16
   +      shardBuckets: 16
        storeColumnIds:
-  -    - 1
-  +    - 4
-       - 2
+  -    - 2
+  +    - 1
+       - 3
        - 5
        storeColumnNames:
-  -    - k
-  +    - rowid
+  -    - k2
+  +    - k1
        - v
        - m
   ...
@@ -2071,17 +2043,31 @@ update progress of schema change job #1: "Pending: Validating CHECK constraint (
 commit transaction #28
 begin transaction #29
 ## PostCommitNonRevertiblePhase stage 3 of 6 with 1 ValidationType op
-validate CHECK constraint check_crdb_internal_k_shard_16 in table #108
+validate CHECK constraint check_crdb_internal_k2_shard_16 in table #108
 commit transaction #29
 begin transaction #30
-## PostCommitNonRevertiblePhase stage 4 of 6 with 9 MutationType ops
+## PostCommitNonRevertiblePhase stage 4 of 6 with 14 MutationType ops
 upsert descriptor #108
   ...
        fromHashShardedColumn: true
-       name: check_crdb_internal_k_shard_16
+       name: check_crdb_internal_k2_shard_16
   -    validity: Validating
      columns:
      - id: 1
+  ...
+         keySuffixColumnIds:
+         - 1
+  -      name: idx_v
+  +      name: crdb_internal_index_2_name_placeholder
+         partitioning:
+           list:
+  ...
+         version: 4
+       mutationId: 1
+  -    state: WRITE_ONLY
+  +    state: DELETE_ONLY
+     - direction: DROP
+       index:
   ...
          version: 4
        mutationId: 1
@@ -2091,7 +2077,7 @@ upsert descriptor #108
   -        columnIds:
   -        - 6
   -        constraintId: 2
-  -        expr: crdb_internal_k_shard_16 IN (0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15)
+  -        expr: crdb_internal_k2_shard_16 IN (0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15)
   -        fromHashShardedColumn: true
   -        name: crdb_internal_constraint_2_name_placeholder
   -        validity: Validating
@@ -2110,15 +2096,56 @@ upsert descriptor #108
   -  version: "26"
   +  version: "27"
 persist all catalog changes to storage
-update progress of schema change job #1: "Pending: Updating schema metadata (8 operations) — PostCommitNonRevertible phase (stage 5 of 6)."
+update progress of schema change job #1: "Pending: Updating schema metadata (9 operations) — PostCommitNonRevertible phase (stage 5 of 6)."
 commit transaction #30
 begin transaction #31
-## PostCommitNonRevertiblePhase stage 5 of 6 with 10 MutationType ops
+## PostCommitNonRevertiblePhase stage 5 of 6 with 11 MutationType ops
 upsert descriptor #108
   ...
        regionalByRow: {}
      modificationTime: {}
   -  mutations:
+  -  - direction: DROP
+  -    index:
+  -      createdAtNanos: "1640995200000000000"
+  -      createdExplicitly: true
+  -      foreignKey: {}
+  -      geoConfig: {}
+  -      id: 2
+  -      interleave: {}
+  -      keyColumnDirections:
+  -      - ASC
+  -      - ASC
+  -      keyColumnIds:
+  -      - 4
+  -      - 3
+  -      keyColumnNames:
+  -      - crdb_region
+  -      - v
+  -      keySuffixColumnIds:
+  -      - 1
+  -      name: crdb_internal_index_2_name_placeholder
+  -      partitioning:
+  -        list:
+  -        - name: us-east1
+  -          subpartitioning: {}
+  -          values:
+  -          - BgFA
+  -        - name: us-east2
+  -          subpartitioning: {}
+  -          values:
+  -          - BgGA
+  -        - name: us-east3
+  -          subpartitioning: {}
+  -          values:
+  -          - BgHA
+  -        numColumns: 1
+  -        numImplicitColumns: 1
+  -      sharded: {}
+  -      vecConfig: {}
+  -      version: 4
+  -    mutationId: 1
+  -    state: DELETE_ONLY
   -  - direction: DROP
   -    index:
   -      constraintId: 7
@@ -2132,11 +2159,11 @@ upsert descriptor #108
   -      - ASC
   -      - ASC
   -      keyColumnIds:
-  -      - 3
   -      - 4
+  -      - 1
   -      keyColumnNames:
   -      - crdb_region
-  -      - rowid
+  -      - k1
   -      name: crdb_internal_index_8_name_placeholder
   -      partitioning:
   -        list:
@@ -2156,11 +2183,11 @@ upsert descriptor #108
   -        numImplicitColumns: 1
   -      sharded: {}
   -      storeColumnIds:
-  -      - 1
   -      - 2
+  -      - 3
   -      - 5
   -      storeColumnNames:
-  -      - k
+  -      - k2
   -      - v
   -      - m
   -      unique: true
@@ -2177,7 +2204,7 @@ upsert descriptor #108
   -  version: "27"
   +  version: "28"
 persist all catalog changes to storage
-create job #2 (non-cancelable: true): "GC for ALTER TABLE multiregion_db.public.table_regional_by_row ADD COLUMN m INT8 DEFAULT unique_rowid(), ALTER PRIMARY KEY USING COLUMNS (k) USING HASH"
+create job #2 (non-cancelable: true): "GC for ALTER TABLE multiregion_db.public.table_regional_by_row ADD COLUMN m INT8 DEFAULT unique_rowid(), ALTER PRIMARY KEY USING COLUMNS (k2) USING HASH"
   descriptor IDs: [108]
 update progress of schema change job #1: "Pending: Updating schema metadata (1 operation) — PostCommitNonRevertible phase (stage 6 of 6)."
 commit transaction #31
@@ -2195,30 +2222,30 @@ upsert descriptor #108
   -    jobId: "1"
   -    nameMapping:
   -      columns:
-  -        "1": k
-  -        "2": v
-  -        "3": crdb_region
-  -        "4": rowid
+  -        "1": k1
+  -        "2": k2
+  -        "3": v
+  -        "4": crdb_region
   -        "5": m
-  -        "6": crdb_internal_k_shard_16
+  -        "6": crdb_internal_k2_shard_16
   -        "4294967292": crdb_internal_origin_timestamp
   -        "4294967293": crdb_internal_origin_id
   -        "4294967294": tableoid
   -        "4294967295": crdb_internal_mvcc_timestamp
   -      constraints:
-  -        "2": check_crdb_internal_k_shard_16
+  -        "2": check_crdb_internal_k2_shard_16
   -      families:
   -        "0": primary
   -      id: 108
   -      indexes:
   -        "4": idx_v
-  -        "6": table_regional_by_row_rowid_key
+  -        "6": table_regional_by_row_k1_key
   -        "10": table_regional_by_row_pkey
   -      name: table_regional_by_row
   -    relevantStatements:
   -    - statement:
-  -        redactedStatement: ALTER TABLE ‹multiregion_db›.‹public›.‹table_regional_by_row› ADD COLUMN ‹m› INT8 DEFAULT unique_rowid(), ALTER PRIMARY KEY USING COLUMNS (‹k›) USING HASH
-  -        statement: ALTER TABLE multiregion_db.table_regional_by_row ADD COLUMN m INT8 DEFAULT unique_rowid(), ALTER PRIMARY KEY USING COLUMNS (k) USING HASH
+  -        redactedStatement: ALTER TABLE ‹multiregion_db›.‹public›.‹table_regional_by_row› ADD COLUMN ‹m› INT8 DEFAULT unique_rowid(), ALTER PRIMARY KEY USING COLUMNS (‹k2›) USING HASH
+  -        statement: ALTER TABLE multiregion_db.table_regional_by_row ADD COLUMN m INT8 DEFAULT unique_rowid(), ALTER PRIMARY KEY USING COLUMNS (k2) USING HASH
   -        statementTag: ALTER TABLE
   -    targetRanks: <redacted>
   -    targets: <redacted>

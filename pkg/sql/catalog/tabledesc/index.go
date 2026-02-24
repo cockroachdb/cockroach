@@ -49,6 +49,12 @@ func (w index) IndexDescDeepCopy() descpb.IndexDescriptor {
 	return *protoutil.Clone(w.desc).(*descpb.IndexDescriptor)
 }
 
+// Adding returns true if this index is not yet usable for reads. This is
+// the case either when the index is in an ADD mutation (not yet public) or
+// when it is a secondary index being recreated during an ALTER PRIMARY KEY
+// operation and the new primary key has not yet become public. In the
+// latter case, the recreated index may lack key columns from the old
+// primary key and cannot serve correct results.
 func (w index) Adding() bool {
 	// Either the index is adding or is a recreated index that needs
 	// to be temporarily hidden.
