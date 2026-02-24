@@ -1722,14 +1722,6 @@ func (pic *primaryIndexChain) deflate(b BuildCtx) {
 		redundants = append(redundants, idxSpec)
 		redundantIDs[idxSpec] = true
 	}
-	hasRedundantID := func(id catid.IndexID) bool {
-		for _, r := range redundants {
-			if r.indexID() == id {
-				return true
-			}
-		}
-		return false
-	}
 
 	if haveSameIndexCols(b, tableID, pic.oldSpec.primary.IndexID, pic.inter1Spec.primary.IndexID) {
 		markAsRedundant(&pic.inter1Spec)
@@ -1771,24 +1763,12 @@ func (pic *primaryIndexChain) deflate(b BuildCtx) {
 	// primary index will cause us to fail to retrieve the element to drop).
 	for _, redundant := range redundants {
 		// For new replacement secondary indexes we need to select the index to
-		// publish this index with. The source index ID is an excellent candidate
-		// as long as its not the old primary index (i.e. we folded all earlier
-		// primary indexes).
-		recreateTargetID := redundant.SourceIndexID()
-		if recreateTargetID == pic.oldSpec.primary.IndexID || hasRedundantID(recreateTargetID) {
-			// Otherwise, we need to select the next valid index in the chain, that
-			// follows the redundant one.
-			firstMatch := false
-			specs := pic.allPrimaryIndexSpecs(func(spec *indexSpec) bool {
-				if spec.indexID() == recreateTargetID {
-					firstMatch = true
-					return false
-				}
-				return !redundantIDs[spec] && firstMatch
-			})
-			if len(specs) > 0 {
-				recreateTargetID = specs[0].indexID()
-			}
+		// publish this index with. The final index ID is an excellent candidate
+		// because it is guaranteed to have the new key columns. If the final index
+		// is also redundant, we can use old primary index ID as the replacement
+		recreateTargetID := pic.finalSpec.indexID()
+		if redundantIDs[&pic.finalSpec] {
+			recreateTargetID = pic.oldSpec.indexID()
 		}
 		updateElementsToDependOnNewFromOld(b, tableID,
 			redundant.indexID(), redundant.SourceIndexID(), recreateTargetID, catid.IndexSet{} /* excludes */)

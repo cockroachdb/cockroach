@@ -1,7 +1,8 @@
 setup
 CREATE DATABASE multiregion_db PRIMARY REGION "us-east1" REGIONS "us-east2", "us-east3" SURVIVE REGION FAILURE;
 CREATE TABLE multiregion_db.public.table_regional_by_row (
-  k INT NOT NULL,
+  k1 INT NOT NULL PRIMARY KEY,
+  k2 INT NOT NULL,
   V STRING
 ) LOCALITY REGIONAL BY ROW;
 CREATE INDEX idx_v on multiregion_db.table_regional_by_row(v);
@@ -9,14 +10,14 @@ CREATE INDEX idx_v on multiregion_db.table_regional_by_row(v);
 
 stage-exec phase=PostCommitPhase stage=:
 USE multiregion_db;
-INSERT INTO multiregion_db.table_regional_by_row(k) VALUES($stageKey);
-INSERT INTO  multiregion_db.table_regional_by_row(k) VALUES($stageKey + 1);
+INSERT INTO multiregion_db.table_regional_by_row(k1, k2) VALUES($stageKey, $stageKey);
+INSERT INTO  multiregion_db.table_regional_by_row(k1, k2) VALUES($stageKey + 1, $stageKey + 1);
 ----
 
 stage-exec phase=PostCommitNonRevertiblePhase stage=:
 USE multiregion_db;
-INSERT INTO multiregion_db.table_regional_by_row(k) VALUES($stageKey);
-INSERT INTO multiregion_db.table_regional_by_row(k) VALUES($stageKey + 1);
+INSERT INTO multiregion_db.table_regional_by_row(k1, k2) VALUES($stageKey, $stageKey);
+INSERT INTO multiregion_db.table_regional_by_row(k1, k2) VALUES($stageKey + 1, $stageKey + 1);
 ----
 
 stage-exec phase=PostCommitPhase stage=:
@@ -50,11 +51,10 @@ stage-query phase=PostCommitNonRevertiblePhase stage=:
 SELECT index_name FROM crdb_internal.table_indexes WHERE descriptor_name='table_regional_by_row' ORDER BY index_name;
 ----
 idx_v
+table_regional_by_row_k1_key
 table_regional_by_row_pkey
-table_regional_by_row_rowid_key
-
 
 
 test
-alter table multiregion_db.table_regional_by_row add column m int8 default unique_rowid(), alter primary key using columns(k) USING HASH;
+alter table multiregion_db.table_regional_by_row add column m int8 default unique_rowid(), alter primary key using columns(k2) USING HASH;
 ----

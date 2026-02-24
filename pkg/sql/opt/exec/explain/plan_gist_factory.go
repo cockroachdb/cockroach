@@ -706,6 +706,10 @@ func (u *unknownIndex) GetInvisibility() float64 {
 	return 0.0
 }
 
+func (u *unknownIndex) Adding() bool {
+	return false
+}
+
 func (u *unknownIndex) ColumnCount() int {
 	return 0
 }

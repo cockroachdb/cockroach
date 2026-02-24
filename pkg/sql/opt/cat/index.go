@@ -56,6 +56,9 @@ type Index interface {
 	// GetInvisibility returns index invisibility.
 	GetInvisibility() float64
 
+	// Adding returns true if this index is being added or recreated.
+	Adding() bool
+
 	// ColumnCount returns the number of columns in the index. This includes
 	// columns that were part of the index definition (including the STORING
 	// clause), as well as implicitly added primary key columns. It also contains

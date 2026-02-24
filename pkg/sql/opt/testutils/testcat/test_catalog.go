@@ -1390,6 +1390,11 @@ func (ti *Index) GetInvisibility() float64 {
 	return ti.Invisibility
 }
 
+// Adding is part of the cat.Index interface.
+func (ti *Index) Adding() bool {
+	return false
+}
+
 // ColumnCount is part of the cat.Index interface.
 func (ti *Index) ColumnCount() int {
 	return len(ti.Columns)

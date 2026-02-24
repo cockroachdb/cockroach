@@ -1856,6 +1856,11 @@ func (oi *optIndex) GetInvisibility() float64 {
 	return oi.idx.GetInvisibility()
 }
 
+// Adding is part of the cat.Index interface.
+func (oi *optIndex) Adding() bool {
+	return oi.idx.Adding()
+}
+
 // ColumnCount is part of the cat.Index interface.
 func (oi *optIndex) ColumnCount() int {
 	return oi.numCols
@@ -2838,6 +2843,14 @@ func (oi *optVirtualIndex) IsUnique() bool {
 // GetInvisibility is part of the cat.Index interface.
 func (oi *optVirtualIndex) GetInvisibility() float64 {
 	return 0.0
+}
+
+// Adding is part of the cat.Index interface.
+func (oi *optVirtualIndex) Adding() bool {
+	if oi.idx == nil {
+		return false
+	}
+	return oi.idx.Adding()
 }
 
 // ExplicitColumnCount is part of the cat.Index interface.

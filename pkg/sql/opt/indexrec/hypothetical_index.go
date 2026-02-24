@@ -120,6 +120,11 @@ func (hi *hypotheticalIndex) GetInvisibility() float64 {
 	return 0.0
 }
 
+// Adding is part of the cat.Index interface.
+func (hi *hypotheticalIndex) Adding() bool {
+	return false
+}
+
 // ColumnCount is part of the cat.Index interface.
 func (hi *hypotheticalIndex) ColumnCount() int {
 	return len(hi.cols) + len(hi.suffixKeyCols) + len(hi.storedCols)

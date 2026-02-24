@@ -232,6 +232,14 @@ func (it *scanIndexIter) ForEachStartingAfter(ord int, f enumerateIndexFunc) {
 				!it.evalCtx.SessionData().OptimizerUseNotVisibleIndexes {
 				continue
 			}
+			// Ignore indexes that are being added or recreated. In an ALTER PRIMARY KEY,
+			// the recreated indexes are not usable before the new primary key goes PUBLIC.
+			// Example: ALTER PRIMARY KEY (k1, k2) --> (k1)
+			// The recreated secondary index might not have k2. This would cause issues
+			// such as "lookup join with no lookup columns" down the line.
+			if index.Adding() {
+				continue
+			}
 		}
 
 		// Skip over inverted indexes if rejectInvertedIndexes is set.
