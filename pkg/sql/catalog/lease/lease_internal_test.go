@@ -1533,24 +1533,31 @@ func TestGetDescriptorsFromStoreForIntervalCPULimiterPagination(t *testing.T) {
 
 	ctx := context.Background()
 	var numRequests int
+	var interceptExportRequests atomic.Bool
 	srv, db, kvDB := serverutils.StartServer(t, base.TestServerArgs{
-		Knobs: base.TestingKnobs{Store: &kvserver.StoreTestingKnobs{
-			TestingRequestFilter: func(ctx context.Context, request *kvpb.BatchRequest) *kvpb.Error {
-				for _, ru := range request.Requests {
-					if _, ok := ru.GetInner().(*kvpb.ExportRequest); ok {
-						numRequests++
-						h := admission.ElasticCPUWorkHandleFromContext(ctx)
-						if h == nil {
-							t.Fatalf("expected context to have CPU work handle")
-						}
-						h.TestingOverrideOverLimit(func() (bool, time.Duration) {
-							return true, 0
-						})
+		Knobs: base.TestingKnobs{
+			Store: &kvserver.StoreTestingKnobs{
+				TestingRequestFilter: func(ctx context.Context, request *kvpb.BatchRequest) *kvpb.Error {
+					// Lease manager also uses exports after schema changes, so start
+					// intercepting exports when necessary.
+					if !interceptExportRequests.Load() {
+						return nil
 					}
-				}
-				return nil
-			},
-		}},
+					for _, ru := range request.Requests {
+						if _, ok := ru.GetInner().(*kvpb.ExportRequest); ok {
+							numRequests++
+							h := admission.ElasticCPUWorkHandleFromContext(ctx)
+							if h == nil {
+								t.Fatalf("expected context to have CPU work handle")
+							}
+							h.TestingOverrideOverLimit(func() (bool, time.Duration) {
+								return true, 0
+							})
+						}
+					}
+					return nil
+				},
+			}},
 	})
 	defer srv.Stopper().Stop(ctx)
 	s := srv.ApplicationLayer()
@@ -1563,11 +1570,13 @@ func TestGetDescriptorsFromStoreForIntervalCPULimiterPagination(t *testing.T) {
 	afterCreate := hlc.Timestamp{WallTime: timeutil.Now().UnixNano()}
 	var tableID int
 	sqlDB.QueryRow(t, `SELECT id FROM system.namespace WHERE name = 'baz'`).Scan(&tableID)
+	interceptExportRequests.Store(true)
+	defer interceptExportRequests.Store(false)
 	descs, err := getDescriptorsFromStoreForInterval(ctx, kvDB, s.Codec(), descpb.ID(tableID),
 		beforeCreate, afterCreate, false /*isOffline */)
 	require.NoError(t, err)
 	require.Len(t, descs, 3)
-	require.Equal(t, numRequests, 1)
+	require.Equal(t, 1, numRequests)
 }
 
 // TestLeaseCountDetailSessionBased will test out the extra debugging info that

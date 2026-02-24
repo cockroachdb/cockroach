@@ -15,6 +15,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/testutils/fingerprintutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -46,8 +47,11 @@ func TestFingerprint(t *testing.T) {
 					mu.Lock()
 					defer mu.Unlock()
 					for i, ru := range br.Responses {
-						if _, ok := ba.Requests[i].GetInner().(*kvpb.ExportRequest); ok {
+						if exportRequest, ok := ba.Requests[i].GetInner().(*kvpb.ExportRequest); ok {
 							exportResponse := ru.GetInner().(*kvpb.ExportResponse)
+							if lease.TestIsLeasingTxnExportRequest(ba, exportRequest) {
+								return nil
+							}
 							numExportResponses++
 							numSSTsInExportResponses += len(exportResponse.Files)
 						}

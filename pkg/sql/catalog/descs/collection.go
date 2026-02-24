@@ -536,10 +536,13 @@ func (tc *Collection) EmitDescriptorUpdatesKey(ctx context.Context, txn *kv.Txn)
 	// This key is only emitted for 25.4 and above. Additionally, PCR
 	// reader catalog can update a large number of descriptors in a transaction,
 	// and are exempt from this logic.
+	// Starting 26.2 we no will stop generating these special update keys,
+	// and the lease manager will use Export to get the same information.
 	if !tc.settings.Version.IsActive(ctx, clusterversion.V25_4) ||
 		tc.readerCatalogSetup ||
 		tc.uncommitted.uncommitted.Len() == 0 ||
-		!lease.GetLockedLeaseTimestampEnabled(ctx, tc.settings) {
+		!lease.GetLockedLeaseTimestampEnabled(ctx, tc.settings) ||
+		tc.settings.Version.IsActive(ctx, clusterversion.V26_2) {
 		return nil
 	}
 	updates := &descpb.DescriptorUpdates{}

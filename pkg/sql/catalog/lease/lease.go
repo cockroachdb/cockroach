@@ -795,12 +795,14 @@ func getDescriptorsFromStoreForInterval(
 		ReturnElasticCPUResumeSpans: true,
 	}
 	descriptorKey := catalogkeys.MakeDescMetadataKey(codec, id)
+	// Even if we resume below, the end key should stay constant.
+	descriptorEndKey := descriptorKey.PrefixEnd()
 	// Unmarshal key span retrieved from export request to construct historical descs.
 	var descriptorsRead []historicalDescriptor
 	for {
 		requestHeader := kvpb.RequestHeader{
 			Key:    descriptorKey,
-			EndKey: descriptorKey.PrefixEnd(),
+			EndKey: descriptorEndKey,
 		}
 		req := &kvpb.ExportRequest{
 			RequestHeader: requestHeader,
@@ -1026,6 +1028,170 @@ func (m *Manager) readOlderVersionForTimestamp(
 	}
 
 	return descs, nil
+}
+
+// getDescriptorsInTxnAtTimestamp determines which descriptors and their
+// versions were published at a timestamp. This is done by issuing an
+// export request and extracting both IDs and versions. Offline and
+// dropped descriptors are ignored.
+func (m *Manager) getDescriptorsInTxnAtTimestamp(
+	ctx context.Context, timestamp hlc.Timestamp,
+) (descpb.DescriptorUpdates, error) {
+	updates := descpb.DescriptorUpdates{}
+	// Create an export request (1 kv call) for all descriptors for given
+	// descriptor ID written during the interval [timestamp, endTimestamp).
+	batchRequestHeader := kvpb.Header{
+		Timestamp:                   timestamp,
+		ReturnElasticCPUResumeSpans: true,
+	}
+	descriptorKey := catalogkeys.MakeAllDescsMetadataKey(m.Codec())
+	descriptorKeyEnd := descriptorKey.PrefixEnd()
+	for {
+		// Unmarshal key span retrieved from the export request to construct historical descs.
+		requestHeader := kvpb.RequestHeader{
+			Key:    descriptorKey,
+			EndKey: descriptorKeyEnd,
+		}
+		req := &kvpb.ExportRequest{
+			RequestHeader: requestHeader,
+			StartTime:     timestamp.Prev(),
+			MVCCFilter:    kvpb.MVCCFilter_Latest,
+		}
+
+		// Export request returns descriptors in decreasing modification time.
+		res, pErr := kv.SendWrappedWithAdmission(ctx, m.storage.db.KV().NonTransactionalSender(), batchRequestHeader, kvpb.AdmissionHeader{
+			Priority:                 int32(admissionpb.BulkNormalPri),
+			CreateTime:               timeutil.Now().UnixNano(),
+			Source:                   kvpb.AdmissionHeader_FROM_SQL,
+			NoMemoryReservedAtSource: true,
+		},
+			req)
+		if pErr != nil {
+			return updates, pErr.GoError()
+		}
+		exportResp := res.(*kvpb.ExportResponse)
+		for _, file := range exportResp.Files {
+			if err := func() error {
+				it, err := kvstorage.NewMemSSTIterator(file.SST, false, /* verify */
+					kvstorage.IterOptions{
+						// NB: We assume there will be no MVCC range tombstones here.
+						KeyTypes:   kvstorage.IterKeyTypePointsOnly,
+						LowerBound: keys.MinKey,
+						UpperBound: keys.MaxKey,
+					})
+				if err != nil {
+					return err
+				}
+				defer func() {
+					if it != nil {
+						it.Close()
+					}
+				}()
+
+				// Convert each MVCC key value pair corresponding to the specified
+				// descriptor ID.
+				for it.SeekGE(kvstorage.NilKey); ; it.Next() {
+					if ok, err := it.Valid(); err != nil {
+						return err
+					} else if !ok {
+						// Close and nil out the iter to release the underlying resources.
+						it.Close()
+						it = nil
+						return nil
+					}
+
+					// Decode key and value of descriptor.
+					k := it.UnsafeKey()
+					descContent, err := it.UnsafeValue()
+					if err != nil {
+						return err
+					}
+					// If the descriptors was deleted this can be empty.
+					if len(descContent) == 0 {
+						continue
+					}
+					// Construct a plain descriptor.
+					value := roachpb.Value{RawBytes: descContent, Timestamp: k.Timestamp}
+					descBuilder, err := descbuilder.FromSerializedValue(&value)
+					if err != nil {
+						return err
+					}
+					desc := descBuilder.BuildImmutable()
+					if desc.Dropped() || desc.Offline() {
+						continue
+					}
+					updates.DescriptorIDs = append(updates.DescriptorIDs, desc.GetID())
+					updates.DescriptorVersions = append(updates.DescriptorVersions, desc.GetVersion())
+				}
+			}(); err != nil {
+				return updates, err
+			}
+		}
+
+		if exportResp.ResumeSpan == nil {
+			break
+		}
+		descriptorKey = exportResp.ResumeSpan.Key
+	}
+	return updates, nil
+}
+
+// generateDescriptorTxnInfo will determine all descriptors that have
+// been modified at a given timestamp and then generate a descriptorTxnUpdate
+// event. This is used by the leases manager to know which descriptors should be
+// published together in a txn.
+func (m *Manager) generateDescriptorTxnInfo(
+	ctx context.Context, descriptor catalog.Descriptor, timestamp hlc.Timestamp,
+) error {
+	// If the descriptor is offline or dropped, no transaction
+	// information needs to be generated. If there are other
+	// descriptors in the same batch we will wait for those.
+	if descriptor.Dropped() || descriptor.Offline() {
+		return nil
+	}
+	hasEntry := func() bool {
+		m.mu.Lock()
+		defer m.mu.Unlock()
+		// If we have alraedy surpassed the timestamp, then
+		// no entry is required.
+		if timestamp.Less(m.closeTimestamp.Load().(*closeTimeStampHandle).timestamp) {
+			return true
+		}
+		// If we already have an entry at this timestamp nothing needs
+		// to be done.
+		key := &descriptorTxnUpdate{timestamp: timestamp}
+		_, hasTS := m.mu.descriptorTxnUpdatesToProcess.Get(key)
+		return hasTS
+	}
+	if hasEntry() {
+		return nil
+	}
+	// Otherwise, let's start a single flight to populate transaction data.
+	m.storage.group.DoChan(ctx, fmt.Sprintf("generateDescriptorTxnInfo: %s", timestamp),
+		singleflight.DoOpts{
+			Stop:               m.stopper,
+			InheritCancelation: true,
+		}, func(ctx context.Context) (interface{}, error) {
+			if hasEntry() {
+				return nil, nil
+			}
+			// Generate an update entry for this timestamp first.
+			updateEntry, err := m.getDescriptorsInTxnAtTimestamp(ctx, timestamp)
+			if err != nil {
+				return nil, err
+			}
+			update := &descriptorTxnUpdate{
+				timestamp: timestamp,
+			}
+			update.mu.DescriptorUpdates = updateEntry
+			select {
+			case <-m.stopper.ShouldQuiesce():
+			case <-ctx.Done():
+			case m.descMetaDataUpdateCh <- update:
+			}
+			return nil, nil
+		})
+	return nil
 }
 
 // wrapMemoryError adds a hint on memory errors to indicate
@@ -1667,7 +1833,6 @@ type descriptorTxnUpdate struct {
 		descpb.DescriptorUpdates
 	}
 	timestamp hlc.Timestamp
-	key       roachpb.Key
 }
 
 // closeTimeStampHandle represents a close timestamp tracked by the lease
@@ -2831,27 +2996,7 @@ func (m *Manager) watchForUpdates(ctx context.Context) {
 				log.Dev.Warningf(ctx, "unable to decode update metadata key %v", ev.Key)
 				return
 			}
-			// Ignore deletes on this key space.
-			if len(ev.Value.RawBytes) == 0 {
-				return
-			}
-			// Otherwise, this is a descriptor update key.
-			var descUpdates descpb.DescriptorUpdates
-			err := ev.Value.GetProto(&descUpdates)
-			if err != nil {
-				log.Dev.Warningf(ctx, "unable to decode descriptor update value %v", err)
-				return
-			}
-			update := &descriptorTxnUpdate{
-				key:       ev.Key,
-				timestamp: ev.Timestamp(),
-			}
-			update.mu.DescriptorUpdates = descUpdates
-			select {
-			case <-m.stopper.ShouldQuiesce():
-			case <-ctx.Done():
-			case m.descMetaDataUpdateCh <- update:
-			}
+			// Starting 26.2 we no longer need these special update keys.
 			return
 		} else if len(ev.Value.RawBytes) == 0 {
 			id, err := m.Codec().DecodeDescMetadataID(ev.Key)
@@ -2878,6 +3023,9 @@ func (m *Manager) watchForUpdates(ctx context.Context) {
 		if log.V(2) {
 			log.Dev.Infof(ctx, "%s: refreshing lease on descriptor: %d (%s), version: %d",
 				ev.Key, mut.GetID(), mut.GetName(), mut.GetVersion())
+		}
+		if err := m.generateDescriptorTxnInfo(ctx, mut, ev.Timestamp()); err != nil {
+			log.Dev.Infof(ctx, "unable to generate descriptor txn info: %v", err)
 		}
 		select {
 		case <-m.stopper.ShouldQuiesce():
@@ -3040,11 +3188,9 @@ func (m *Manager) RunBackgroundLeasingTask(ctx context.Context) {
 				m.refreshSomeLeases(ctx, true /*refreshAndPurgeAllDescriptors*/)
 			case <-refreshTimer.C:
 				refreshTimer.Reset(getRefreshTimerDuration() / 2)
-
 				// Check for any react to any range feed availability problems, and
 				// if needed refresh the full set of descriptors.
 				m.handleRangeFeedAvailability(ctx)
-
 				// Clean up session based leases that have expired.
 				m.cleanupExpiredSessionLeases(ctx)
 			case <-descriptorUpdateCleanupTimer.C:
@@ -3164,6 +3310,10 @@ func (m *Manager) cleanupExpiredSessionLeases(ctx context.Context) {
 // cleanupUpdateKeys updates special keys that exist for tracking descriptor
 // updates within transactions.
 func (m *Manager) cleanupUpdateKeys(ctx context.Context) {
+	// If we are on 26.2, these keys are no longer generated.
+	if m.settings.Version.IsActive(ctx, clusterversion.V26_2) {
+		return
+	}
 	// Only clean update keys if we received any range feed updates.
 	m.mu.Lock()
 	hasUpdates := m.mu.hasUpdatesToDelete
@@ -3767,4 +3917,17 @@ func TestingLeasedVersionIsActive(descriptor LeasedDescriptor) (bool, int) {
 	state.mu.Lock()
 	defer state.mu.Unlock()
 	return state.mu.lease != nil, int(state.refcount.Load())
+}
+
+// TestIsLeasingTxnExportRequest returns true if the export request could be from
+// a lease metadata transaction request. It does this heuristically based on
+// the timestamp.
+func TestIsLeasingTxnExportRequest(
+	batch *kvpb.BatchRequest, exportRequest *kvpb.ExportRequest,
+) bool {
+	// Lease manager has requests of size 1
+	if len(batch.Requests) > 1 {
+		return false
+	}
+	return exportRequest.StartTime == batch.Timestamp.Prev()
 }
