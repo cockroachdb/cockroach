@@ -507,6 +507,10 @@ func buildKgoConfig(
 		opts = append(opts, kgo.ClientID(sinkCfg.ClientID))
 	}
 
+	if time.Duration(sinkCfg.ProducerLinger) >= 0 {
+		opts = append(opts, kgo.ProducerLinger(time.Duration(sinkCfg.ProducerLinger)))
+	}
+
 	switch strings.ToUpper(sinkCfg.RequiredAcks) {
 	case ``, `ONE`, `1`: // This is our default.
 		opts = append(opts, kgo.RequiredAcks(kgo.LeaderAck()))
