@@ -325,6 +325,18 @@ func TestBasicDatums(t *testing.T) {
 			},
 		},
 		{
+			name: "bitarray_empty",
+			sch: &colSchema{
+				columnTypes: []*types.T{types.MakeBit(0), types.MakeBit(0)},
+				columnNames: []string{"a", "b"},
+			},
+			datums: func() ([][]tree.Datum, error) {
+				return [][]tree.Datum{
+					{&tree.DBitArray{BitArray: bitarray.MakeZeroBitArray(0)}, tree.DNull},
+				}, nil
+			},
+		},
+		{
 			name: "bytes",
 			sch: &colSchema{
 				columnTypes: []*types.T{types.Bytes, types.Bytes},
