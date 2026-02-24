@@ -15,6 +15,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"math"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -228,6 +229,17 @@ type datadogWriter struct {
 	gapFillProcessor *GapFillProcessor
 	// metricsNameMap maps metric names to their Datadog format
 	metricsNameMap map[string]string
+	// minDataTimestamp and maxDataTimestamp track the actual time range of the
+	// tsdump data (in Unix seconds). These are used to generate a dashboard URL
+	// that reflects the real data window rather than a generic "now - 30 days".
+	// minDataTimestamp is offset by the smallest observed interval so the
+	// dashboard starts just past the first data point, whose cumulative counter
+	// value would otherwise appear as a misleading spike.
+	minDataTimestamp int64
+	maxDataTimestamp int64
+	// minInterval tracks the smallest data resolution (in seconds) seen across
+	// all series, used to offset the dashboard from_ts past the initial spike.
+	minInterval int64
 }
 
 func makeDatadogWriter(
@@ -300,6 +312,9 @@ func makeDatadogWriter(
 		cumulativeToDeltaProcessor:      NewCumulativeToDeltaProcessor(),
 		gapFillProcessor:                NewGapFillProcessor(),
 		metricsNameMap:                  metricsNameMap,
+		minDataTimestamp:                math.MaxInt64,
+		maxDataTimestamp:                0,
+		minInterval:                     math.MaxInt64,
 	}, nil
 }
 
@@ -476,6 +491,15 @@ func (d *datadogWriter) dump(kv *roachpb.KeyValue) (*datadogV2.MetricSeries, err
 			series.Points[i].Value = datadog.PtrFloat64(idata.Samples[i].Sum)
 		}
 
+		// Track the actual time range of the tsdump data for the dashboard URL.
+		pointTS := *series.Points[i].Timestamp
+		if pointTS < d.minDataTimestamp {
+			d.minDataTimestamp = pointTS
+		}
+		if pointTS > d.maxDataTimestamp {
+			d.maxDataTimestamp = pointTS
+		}
+
 		if !isSorted {
 			// if we already found a point out of order, we can skip further checks
 			continue
@@ -487,11 +511,17 @@ func (d *datadogWriter) dump(kv *roachpb.KeyValue) (*datadogV2.MetricSeries, err
 		// 2. pkg/storage/pebble_merge.go sortAndDeduplicateRows/Columns shows storage merge
 		//    operations can result in out-of-order data before final sorting
 		// 3. Data from different storage slabs may be interleaved during tsdump reads
-		currentTimestamp := *series.Points[i].Timestamp
-		if i > 0 && previousTimestamp > currentTimestamp {
+		if i > 0 && previousTimestamp > pointTS {
 			isSorted = false
 		}
-		previousTimestamp = currentTimestamp
+		previousTimestamp = pointTS
+	}
+
+	// Track the smallest resolution interval across all series so we can
+	// offset the dashboard from_ts past the initial cumulative counter spike.
+	intervalSec := int64(res.Duration().Seconds())
+	if intervalSec > 0 && intervalSec < d.minInterval {
+		d.minInterval = intervalSec
 	}
 
 	if !debugTimeSeriesDumpOpts.disableDeltaProcessing {
@@ -938,11 +968,8 @@ func (d *datadogWriter) upload(fileName string) error {
 	}
 
 	wg.Wait()
-	toUnixTimestamp := timeutil.Now().UnixMilli()
-	//create timestamp for T-30 days.
-	fromUnixTimestamp := toUnixTimestamp - (30 * 24 * 60 * 60 * 1000)
-	year, month, day := d.uploadTime.Date()
-	dashboardLink := fmt.Sprintf(datadogDashboardURLFormat, debugTimeSeriesDumpOpts.clusterLabel, d.uploadID, day, int(month), year, fromUnixTimestamp, toUnixTimestamp)
+
+	dashboardLink := d.buildDashboardLink()
 
 	var uploadStatus string
 	if metricsUploadState.isSingleUploadSucceeded && d.hasFailedRequestsInUpload {
@@ -1055,6 +1082,31 @@ func (d *datadogWriter) upload(fileName string) error {
 
 	close(ch)
 	return nil
+}
+
+// buildDashboardLink returns the Datadog dashboard URL using the actual tsdump
+// data time range. from_ts is offset by the smallest observed data interval so
+// the dashboard view starts just past each metric's first data point (whose raw
+// cumulative counter value would otherwise appear as a misleading spike).
+// Falls back to a 30-day window ending at the current time when no data points
+// were processed.
+func (d *datadogWriter) buildDashboardLink() string {
+	var fromUnixTimestamp, toUnixTimestamp int64
+	if d.minDataTimestamp < math.MaxInt64 && d.maxDataTimestamp > 0 {
+		offset := d.minInterval
+		if offset <= 0 || offset == math.MaxInt64 {
+			offset = 10 // default to 10s (finest resolution)
+		}
+		fromUnixTimestamp = (d.minDataTimestamp + offset) * 1000 // seconds to millis
+		toUnixTimestamp = d.maxDataTimestamp * 1000
+	} else {
+		toUnixTimestamp = getCurrentTime().UnixMilli()
+		fromUnixTimestamp = toUnixTimestamp - (30 * 24 * 60 * 60 * 1000)
+	}
+	year, month, day := d.uploadTime.Date()
+	return fmt.Sprintf(datadogDashboardURLFormat,
+		debugTimeSeriesDumpOpts.clusterLabel, d.uploadID,
+		day, int(month), year, fromUnixTimestamp, toUnixTimestamp)
 }
 
 func (d *datadogWriter) populateNodeAndStoreMap(fileName string) {

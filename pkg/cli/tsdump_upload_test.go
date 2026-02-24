@@ -540,6 +540,44 @@ func createMockTimeSeriesKV(
 	return roachpb.KeyValue{Key: key, Value: roachValue}, nil
 }
 
+// createMockTimeSeriesKVWithResolution is like createMockTimeSeriesKV but
+// allows specifying the time series resolution (e.g., ts.Resolution10s,
+// ts.Resolution30m).
+func createMockTimeSeriesKVWithResolution(
+	name, source string, timestamp int64, value float64, resolution ts.Resolution,
+) (roachpb.KeyValue, error) {
+	tsData := tspb.TimeSeriesData{
+		Name:   name,
+		Source: source,
+		Datapoints: []tspb.TimeSeriesDatapoint{
+			{TimestampNanos: timestamp, Value: value},
+		},
+	}
+
+	idatas, err := tsData.ToInternal(
+		resolution.SlabDuration(),
+		resolution.SampleDuration(),
+		true,
+	)
+	if err != nil {
+		return roachpb.KeyValue{}, err
+	}
+
+	if len(idatas) != 1 {
+		return roachpb.KeyValue{}, fmt.Errorf("expected 1 internal data entry, got %d", len(idatas))
+	}
+
+	idata := idatas[0]
+	key := ts.MakeDataKey(name, source, resolution, idata.StartTimestampNanos)
+
+	var roachValue roachpb.Value
+	if err := roachValue.SetProto(&idata); err != nil {
+		return roachpb.KeyValue{}, err
+	}
+
+	return roachpb.KeyValue{Key: key, Value: roachValue}, nil
+}
+
 // generateMockJSONFromInput creates a mock JSON file from input data.
 // The input data is written directly to the JSON file.
 // This is useful for testing JSON file generation functionality.
@@ -1109,6 +1147,100 @@ func TestHasTagKey(t *testing.T) {
 			require.Equal(t, tc.expected, result)
 		})
 	}
+}
+
+// TestBuildDashboardLink verifies that buildDashboardLink produces a URL whose
+// from_ts/to_ts query parameters reflect the actual tsdump data time range, and
+// that the fallback (now - 30 days) is used when no data was processed.
+func TestBuildDashboardLink(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	defer testutils.TestingHook(&getCurrentTime, func() time.Time {
+		return time.Date(2024, 11, 14, 0, 0, 0, 0, time.UTC)
+	})()
+
+	t.Run("url reflects actual data time range", func(t *testing.T) {
+		writer, err := makeDatadogWriter("us5", false, "test-api-key", 100, "", 1, false)
+		require.NoError(t, err)
+		debugTimeSeriesDumpOpts.clusterLabel = "test-cluster"
+
+		// Dump metrics at different timestamps (all 10s resolution).
+		ts1 := time.Date(2024, 6, 1, 10, 0, 0, 0, time.UTC).UnixNano()  // earliest
+		ts2 := time.Date(2024, 6, 15, 12, 0, 0, 0, time.UTC).UnixNano() // latest
+		ts3 := time.Date(2024, 6, 10, 8, 0, 0, 0, time.UTC).UnixNano()  // middle
+
+		kv1, err := createMockTimeSeriesKV("cr.node.test.gauge", "1", ts1, 10)
+		require.NoError(t, err)
+		_, err = writer.dump(&kv1)
+		require.NoError(t, err)
+
+		kv2, err := createMockTimeSeriesKV("cr.node.test.gauge2", "1", ts2, 20)
+		require.NoError(t, err)
+		_, err = writer.dump(&kv2)
+		require.NoError(t, err)
+
+		kv3, err := createMockTimeSeriesKV("cr.node.test.gauge3", "1", ts3, 30)
+		require.NoError(t, err)
+		_, err = writer.dump(&kv3)
+		require.NoError(t, err)
+
+		link := writer.buildDashboardLink()
+
+		// from_ts = (minDataTimestamp + minInterval) * 1000
+		expectedMinSec := ts1 / 1_000_000_000
+		expectedFromTS := (expectedMinSec + 10) * 1000 // offset by 10s interval
+		// to_ts = maxDataTimestamp * 1000
+		expectedMaxSec := ts2 / 1_000_000_000
+		expectedToTS := expectedMaxSec * 1000
+
+		require.Contains(t, link, fmt.Sprintf("from_ts=%d", expectedFromTS))
+		require.Contains(t, link, fmt.Sprintf("to_ts=%d", expectedToTS))
+	})
+
+	t.Run("mixed resolutions uses smallest interval", func(t *testing.T) {
+		writer, err := makeDatadogWriter("us5", false, "test-api-key", 100, "", 1, false)
+		require.NoError(t, err)
+		debugTimeSeriesDumpOpts.clusterLabel = "test-cluster"
+
+		ts1 := time.Date(2024, 6, 1, 10, 0, 0, 0, time.UTC).UnixNano()
+		ts2 := time.Date(2024, 6, 15, 12, 0, 0, 0, time.UTC).UnixNano()
+
+		// 10s resolution metric
+		kv1, err := createMockTimeSeriesKV("cr.node.test.gauge", "1", ts1, 10)
+		require.NoError(t, err)
+		_, err = writer.dump(&kv1)
+		require.NoError(t, err)
+
+		// 30m resolution metric
+		kv2, err := createMockTimeSeriesKVWithResolution("cr.node.test.rollup", "1", ts2, 20, ts.Resolution30m)
+		require.NoError(t, err)
+		_, err = writer.dump(&kv2)
+		require.NoError(t, err)
+
+		link := writer.buildDashboardLink()
+
+		// minInterval should be 10 (from the 10s metric), not 1800.
+		expectedMinSec := ts1 / 1_000_000_000
+		expectedFromTS := (expectedMinSec + 10) * 1000
+		require.Contains(t, link, fmt.Sprintf("from_ts=%d", expectedFromTS))
+	})
+
+	t.Run("fallback when no data points processed", func(t *testing.T) {
+		writer, err := makeDatadogWriter("us5", false, "test-api-key", 100, "", 1, false)
+		require.NoError(t, err)
+		debugTimeSeriesDumpOpts.clusterLabel = "test-cluster"
+
+		link := writer.buildDashboardLink()
+
+		// Fallback: to_ts = now (mocked to 2024-11-14), from_ts = now - 30 days.
+		nowMillis := time.Date(2024, 11, 14, 0, 0, 0, 0, time.UTC).UnixMilli()
+		expectedToTS := nowMillis
+		expectedFromTS := nowMillis - (30 * 24 * 60 * 60 * 1000)
+
+		require.Contains(t, link, fmt.Sprintf("from_ts=%d", expectedFromTS))
+		require.Contains(t, link, fmt.Sprintf("to_ts=%d", expectedToTS))
+	})
 }
 
 // TestChildMetricDumpParsing tests that child metrics with labels are correctly
