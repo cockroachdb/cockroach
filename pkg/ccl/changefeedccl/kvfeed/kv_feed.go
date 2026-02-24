@@ -168,11 +168,25 @@ func Run(ctx context.Context, cfg Config) error {
 	// Regardless of whether drain succeeds, we must also close the buffer to release
 	// any resources, and to let the consumer (changeAggregator) know that no more writes
 	// are expected so that it can transition to a draining state.
-	if err := f.writer.Drain(ctx); err != nil {
-		err := errors.Wrap(err, "failed to drain kv feed writer")
-		return errors.CombineErrors(err, f.writer.CloseWithReason(ctx, err))
+	drainAndClose := func() (retErr error) {
+		var drainErr error
+		defer func() {
+			closeReason := kvevent.ErrNormalRestartReason
+			if drainErr != nil {
+				closeReason = drainErr
+			}
+			if closeErr := f.writer.CloseWithReason(ctx, closeReason); closeErr != nil {
+				retErr = errors.CombineErrors(retErr, closeErr)
+			}
+		}()
+
+		drainErr = f.writer.Drain(ctx)
+		if drainErr != nil {
+			return errors.Wrap(drainErr, "failed to drain kv feed writer")
+		}
+		return nil
 	}
-	if err := f.writer.CloseWithReason(ctx, kvevent.ErrNormalRestartReason); err != nil {
+	if err := drainAndClose(); err != nil {
 		return err
 	}
 
