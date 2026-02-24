@@ -832,6 +832,16 @@ var specs = []stmtSpec{
 		nosplit: true,
 	},
 	{
+		name: "create_policy",
+		stmt: "create_policy_stmt",
+		inline: []string{
+			"opt_policy_type",
+			"opt_policy_command",
+			"opt_policy_roles",
+			"opt_policy_exprs",
+		},
+	},
+	{
 		name:   "create_schedule_for_backup_stmt",
 		inline: []string{"string_or_placeholder_opt_list", "string_or_placeholder_list", "opt_with_backup_options", "cron_expr", "opt_full_backup_clause", "opt_with_schedule_options", "opt_backup_targets"},
 		replace: map[string]string{
