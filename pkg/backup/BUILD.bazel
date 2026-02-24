@@ -282,6 +282,7 @@ go_test(
         "//pkg/sql/catalog/descs",
         "//pkg/sql/catalog/desctestutils",
         "//pkg/sql/catalog/funcdesc",
+        "//pkg/sql/catalog/lease",
         "//pkg/sql/catalog/schemadesc",
         "//pkg/sql/catalog/systemschema",
         "//pkg/sql/catalog/tabledesc",

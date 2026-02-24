@@ -172,6 +172,7 @@ func TestStreamIngestionJobWithRandomClient(t *testing.T) {
 	var receivedRevertRequest chan struct{}
 	var allowResponse chan struct{}
 	var revertRangeTargetTime hlc.Timestamp
+	var sqlCodec atomic.Pointer[keys.SQLCodec]
 	params := base.TestClusterArgs{
 		ServerArgs: base.TestServerArgs{
 			DefaultTestTenant: base.TestControlsTenantsExplicitly,
@@ -194,7 +195,7 @@ func TestStreamIngestionJobWithRandomClient(t *testing.T) {
 			}
 			return nil
 		},
-		TestingResponseFilter: jobutils.BulkOpResponseFilter(&allowResponse),
+		TestingResponseFilter: jobutils.BulkOpResponseFilter(&sqlCodec, &allowResponse),
 	}
 	params.ServerArgs.Knobs.JobsTestingKnobs = jobs.NewTestingKnobsWithShortIntervals()
 	params.ServerArgs.Knobs.Streaming = &sql.StreamingTestingKnobs{
@@ -204,6 +205,8 @@ func TestStreamIngestionJobWithRandomClient(t *testing.T) {
 	numNodes := 3
 	tc := testcluster.StartTestCluster(t, numNodes, params)
 	defer tc.Stopper().Stop(ctx)
+	codec := tc.Server(0).Codec()
+	sqlCodec.Store(&codec)
 	sqlDB := sqlutils.MakeSQLRunner(tc.ServerConn(0))
 	conn := tc.Conns[0]
 

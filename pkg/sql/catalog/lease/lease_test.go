@@ -4084,7 +4084,7 @@ func TestLeaseManagerLockedTimestampRenames(t *testing.T) {
 		// a leased descriptor.
 		_, err = txn2.Exec("ALTER TABLE t1 RENAME TO t2;")
 		require.NotNilf(t, err, "expected error when renaming table with stale descriptor")
-		require.Regexp(t, `pq: restart transaction: the descriptor t1\(\d+\) has been renamed before timestamp.*`, err)
+		require.Regexp(t, `pq: restart transaction: (the descriptor t1\(\d+\) has been renamed before timestamp|TransactionRetryWithProtoRefreshError: ReadWithinUncertaintyIntervalError:).*`, err)
 		require.NoError(t, txn2.Rollback())
 		runner.Exec(t, "SET CLUSTER SETTING jobs.debug.pausepoints=''")
 	})

@@ -7,6 +7,7 @@ package backup
 
 import (
 	"context"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -15,6 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/admission"
@@ -33,11 +35,17 @@ func TestGetAllRevisionsCPULimiterPagination(t *testing.T) {
 	ctx := context.Background()
 	first := true
 	var numRequests int
+	var sqlCodec atomic.Pointer[keys.SQLCodec]
 	srv, db, kvDB := serverutils.StartServer(t, base.TestServerArgs{
 		Knobs: base.TestingKnobs{Store: &kvserver.StoreTestingKnobs{
-			TestingRequestFilter: func(ctx context.Context, request *kvpb.BatchRequest) *kvpb.Error {
-				for _, ru := range request.Requests {
-					if _, ok := ru.GetInner().(*kvpb.ExportRequest); ok {
+			TestingRequestFilter: func(ctx context.Context, batch *kvpb.BatchRequest) *kvpb.Error {
+				for _, ru := range batch.Requests {
+					if exportRequest, ok := ru.GetInner().(*kvpb.ExportRequest); ok {
+						// Lease manager also uses exports after schema changes, so start
+						// intercepting exports when necessary.
+						if lease.TestIsLeasingTxnExportRequest(sqlCodec.Load(), batch, exportRequest) {
+							return nil
+						}
 						numRequests++
 						h := admission.ElasticCPUWorkHandleFromContext(ctx)
 						if h == nil {
@@ -58,6 +66,8 @@ func TestGetAllRevisionsCPULimiterPagination(t *testing.T) {
 	})
 	defer srv.Stopper().Stop(ctx)
 	s := srv.ApplicationLayer()
+	codec := s.Codec()
+	sqlCodec.Store(&codec)
 
 	sqlDB := sqlutils.MakeSQLRunner(db)
 	beforeCreate := hlc.Timestamp{WallTime: timeutil.Now().UnixNano()}
