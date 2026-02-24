@@ -959,6 +959,12 @@ func RunCommitTrigger(
 				ctx, errors.Wrap(err, "unable to load consistency checker last run"),
 			)
 		}
+		lastReplicaGCTS, err := rec.GetLastReplicaGCTimestamp(ctx)
+		if err != nil {
+			return result.Result{}, maybeWrapReplicaCorruptionError(
+				ctx, errors.Wrap(err, "unable to load last replica GC timestamp"),
+			)
+		}
 		in := SplitTriggerHelperInput{
 			LeftLease:                 lhsLease,
 			GCThreshold:              gcThreshold,
@@ -966,6 +972,7 @@ func RunCommitTrigger(
 			ReplicaVersion:           replicaVersion,
 			LHSAbortSpanEntries:      lhsAbortSpanEntries,
 			ConsistencyCheckerLastRun: consistencyCheckerLastRun,
+			LastReplicaGCTimestamp:    lastReplicaGCTS,
 		}
 
 		newMS, res, err := splitTrigger(
@@ -1393,6 +1400,7 @@ type SplitTriggerHelperInput struct {
 	ReplicaVersion             roachpb.Version
 	LHSAbortSpanEntries        []abortspan.Entry
 	ConsistencyCheckerLastRun  hlc.Timestamp
+	LastReplicaGCTimestamp      hlc.Timestamp
 }
 
 // MergeTriggerHelperInput contains metadata required by the mergeTrigger.
@@ -1428,15 +1436,10 @@ func splitTriggerHelper(
 	// Copy the last replica GC timestamp. This value is unreplicated,
 	// which is why the MVCC stats are set to nil on calls to
 	// MVCCPutProto.
-	replicaGCTS, err := rec.GetLastReplicaGCTimestamp(ctx)
-	if err != nil {
-		return enginepb.MVCCStats{}, result.Result{}, errors.Wrap(err, "unable to fetch last replica GC timestamp")
-	}
-
 	if err := storage.MVCCPutProto(
 		ctx, spanset.DisableForbiddenSpanAssertions(batch),
 		keys.RangeLastReplicaGCTimestampKey(split.RightDesc.RangeID), hlc.Timestamp{},
-		&replicaGCTS, storage.MVCCWriteOptions{Category: fs.BatchEvalReadCategory}); err != nil {
+		&in.LastReplicaGCTimestamp, storage.MVCCWriteOptions{Category: fs.BatchEvalReadCategory}); err != nil {
 		return enginepb.MVCCStats{}, result.Result{}, errors.Wrap(err, "unable to copy last replica GC timestamp")
 	}
 
@@ -1480,6 +1483,7 @@ func splitTriggerHelper(
 
 	computeAccurateStats := (noPreComputedStats || manualSplit || emptyLeftOrRight || preComputedStatsDiff)
 	computeAccurateStats = computeAccurateStats && !shouldUseCrudeEstimates
+	var err error
 	if computeAccurateStats {
 		var reason redact.RedactableString
 		if noPreComputedStats {
