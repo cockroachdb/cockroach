@@ -16,6 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
@@ -105,9 +106,13 @@ func WaitForJobToHaveStatus(
 // discussion on RunJob for where this might be useful.
 func BulkOpResponseFilter(allowProgressIota *chan struct{}) kvserverbase.ReplicaResponseFilter {
 	return func(ctx context.Context, ba *kvpb.BatchRequest, br *kvpb.BatchResponse) *kvpb.Error {
-		for _, ru := range br.Responses {
+		for idx, ru := range br.Responses {
 			switch ru.GetInner().(type) {
 			case *kvpb.ExportResponse, *kvpb.AddSSTableResponse:
+				// Skip over lease manager export requests.
+				if exp := ba.Requests[idx].GetExport(); exp != nil && lease.TestIsLeasingTxnExportRequest(ba, exp) {
+					return nil
+				}
 				select {
 				case <-*allowProgressIota:
 				case <-ctx.Done():
