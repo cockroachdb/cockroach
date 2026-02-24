@@ -8,6 +8,7 @@ package sql
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/hintpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
@@ -122,12 +123,25 @@ func (p *planner) ShowStatementHints(
 			))
 			fingerprintStr := tree.FormatStatementHideConstants(stmt, fingerprintFlags)
 
+			versionHasHintTypeCol := p.execCfg.Settings.Version.IsActive(
+				ctx, clusterversion.V26_2_StatementHintsTypeNameEnabledColumnsAdded,
+			)
+
 			// Query system.statement_hints table.
-			query := `
-SELECT row_id, fingerprint, hint, created_at
+			var query string
+			if versionHasHintTypeCol {
+				query = `
+SELECT row_id, fingerprint, hint, created_at, hint_type
 FROM system.statement_hints
 WHERE fingerprint = $1
 ORDER BY created_at DESC, row_id DESC`
+			} else {
+				query = `
+SELECT row_id, fingerprint, hint, created_at, NULL::STRING AS hint_type
+FROM system.statement_hints
+WHERE fingerprint = $1
+ORDER BY created_at DESC, row_id DESC`
+			}
 
 			rows, err := p.InternalSQLTxn().QueryBufferedEx(
 				ctx,
@@ -148,15 +162,15 @@ ORDER BY created_at DESC, row_id DESC`
 				fp := row[1]        // STRING
 				hintBytes := row[2] // BYTES
 				createdAt := row[3] // TIMESTAMPTZ
+				hintType := row[4]  // STRING (hint_type column)
 
-				// Decode the hint to determine type and details.
-				var hintType tree.Datum = tree.NewDString("unknown")
-				var details tree.Datum = tree.DNull
-
-				if hintBytes != tree.DNull {
+				var details = tree.DNull
+				if (!versionHasHintTypeCol || n.Options.Details) && hintBytes != tree.DNull {
 					hint, err := parseHint(hintBytes)
 					if err == nil {
-						hintType = tree.NewDString(hint.HintType())
+						if !versionHasHintTypeCol {
+							hintType = tree.NewDString(hint.HintType())
+						}
 						if n.Options.Details {
 							var detailJSON json.JSON
 							detailJSON, err = hint.Details()
@@ -166,9 +180,7 @@ ORDER BY created_at DESC, row_id DESC`
 						}
 					}
 					if err != nil {
-						// If decode fails, hintType remains "unknown" and details remains
-						// NULL. Log the error and continue.
-						log.Dev.Warningf(ctx, "failed to decode hint: %v", err)
+						log.Dev.Warningf(ctx, "failed to decode hint details: %v", err)
 					}
 				}
 

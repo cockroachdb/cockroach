@@ -181,7 +181,7 @@ func InsertHintIntoDB(
 	var args []interface{}
 	if settings.Version.IsActive(ctx, clusterversion.V26_2_StatementHintsTypeNameEnabledColumnsAdded) {
 		insertStmt = `INSERT INTO system.statement_hints ("fingerprint", "hint", "hint_type", "enabled") VALUES ($1, $2, $3, $4) RETURNING "row_id"`
-		args = []interface{}{fingerprint, hintBytes, hintpb.HintTypeRewriteInlineHints, true}
+		args = []interface{}{fingerprint, hintBytes, hint.HintType(), true}
 	} else {
 		insertStmt = `INSERT INTO system.statement_hints ("fingerprint", "hint") VALUES ($1, $2) RETURNING "row_id"`
 		args = []interface{}{fingerprint, hintBytes}

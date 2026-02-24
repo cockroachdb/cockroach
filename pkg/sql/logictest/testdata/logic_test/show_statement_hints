@@ -64,7 +64,7 @@ SELECT fingerprint, hint_type
 FROM [SHOW STATEMENT HINTS FOR 'SELECT * FROM xy WHERE y = 10'];
 ----
 fingerprint                   hint_type
-SELECT * FROM xy WHERE y = _  rewrite_inline_hints
+SELECT * FROM xy WHERE y = _  REWRITE INLINE HINTS
 
 # Test SHOW STATEMENT HINTS with DETAILS.
 query TTT colnames
@@ -72,14 +72,14 @@ SELECT fingerprint, hint_type, details
 FROM [SHOW STATEMENT HINTS FOR 'SELECT * FROM xy WHERE y = 10' WITH DETAILS];
 ----
 fingerprint                   hint_type             details
-SELECT * FROM xy WHERE y = _  rewrite_inline_hints  {"donorSql": "SELECT * FROM xy@xy_y_idx WHERE y = _"}
+SELECT * FROM xy WHERE y = _  REWRITE INLINE HINTS  {"donorSql": "SELECT * FROM xy@xy_y_idx WHERE y = _"}
 
 # Case with a placeholder in the requested statement.
 query TTT
 SELECT fingerprint, hint_type, details
 FROM [SHOW STATEMENT HINTS FOR 'SELECT * FROM xy WHERE y = $1' WITH DETAILS];
 ----
-SELECT * FROM xy WHERE y = _  rewrite_inline_hints  {"donorSql": "SELECT * FROM xy@xy_y_idx WHERE y = _"}
+SELECT * FROM xy WHERE y = _  REWRITE INLINE HINTS  {"donorSql": "SELECT * FROM xy@xy_y_idx WHERE y = _"}
 
 # Case with a CTE.
 statement ok
@@ -94,7 +94,7 @@ FROM [SHOW STATEMENT HINTS FOR 'WITH cte AS (SELECT * FROM xy WHERE y = 10) SELE
 ORDER BY created_at DESC, row_id DESC;
 ----
 fingerprint                                                   hint_type             details
-WITH cte AS (SELECT * FROM xy WHERE y = _) SELECT * FROM cte  rewrite_inline_hints  {"donorSql": "WITH cte AS (SELECT * FROM xy@xy_y_idx WHERE y = _) SELECT * FROM cte"}
+WITH cte AS (SELECT * FROM xy WHERE y = _) SELECT * FROM cte  REWRITE INLINE HINTS  {"donorSql": "WITH cte AS (SELECT * FROM xy@xy_y_idx WHERE y = _) SELECT * FROM cte"}
 
 # Test with non-existent fingerprint.
 query ITTT
@@ -118,8 +118,8 @@ SELECT fingerprint, hint_type
 FROM [SHOW STATEMENT HINTS FOR 'SELECT * FROM xy WHERE y = 10']
 ORDER BY created_at DESC, row_id DESC;
 ----
-SELECT * FROM xy WHERE y = _  rewrite_inline_hints
-SELECT * FROM xy WHERE y = _  rewrite_inline_hints
+SELECT * FROM xy WHERE y = _  REWRITE INLINE HINTS
+SELECT * FROM xy WHERE y = _  REWRITE INLINE HINTS
 
 query TTT colnames
 SELECT fingerprint, hint_type, details
@@ -127,8 +127,8 @@ FROM [SHOW STATEMENT HINTS FOR 'SELECT * FROM xy WHERE y = 10' WITH DETAILS]
 ORDER BY created_at DESC, row_id DESC;
 ----
 fingerprint                   hint_type             details
-SELECT * FROM xy WHERE y = _  rewrite_inline_hints  {"donorSql": "SELECT * FROM xy@primary WHERE y = _"}
-SELECT * FROM xy WHERE y = _  rewrite_inline_hints  {"donorSql": "SELECT * FROM xy@xy_y_idx WHERE y = _"}
+SELECT * FROM xy WHERE y = _  REWRITE INLINE HINTS  {"donorSql": "SELECT * FROM xy@primary WHERE y = _"}
+SELECT * FROM xy WHERE y = _  REWRITE INLINE HINTS  {"donorSql": "SELECT * FROM xy@xy_y_idx WHERE y = _"}
 
 # Test that SHOW STATEMENT HINTS works inside a SELECT
 query I
@@ -180,7 +180,7 @@ FROM [SHOW STATEMENT HINTS FOR 'CREATE INDEX ON xy (y)']
 ORDER BY created_at DESC, row_id DESC;
 ----
 fingerprint             hint_type
-CREATE INDEX ON xy (y)  rewrite_inline_hints
+CREATE INDEX ON xy (y)  REWRITE INLINE HINTS
 
 # Test with a semicolon in the statement - ensure it still matches.
 statement ok
@@ -195,7 +195,7 @@ FROM [SHOW STATEMENT HINTS FOR 'SELECT * FROM ab WHERE a = 1;']
 ORDER BY created_at DESC, row_id DESC;
 ----
 fingerprint                   hint_type
-SELECT * FROM ab WHERE a = _  rewrite_inline_hints
+SELECT * FROM ab WHERE a = _  REWRITE INLINE HINTS
 
 # Test with dollar-quoted string containing a semicolon.
 query TT colnames
@@ -204,7 +204,7 @@ FROM [SHOW STATEMENT HINTS FOR $$ SELECT * FROM ab WHERE a = 1; $$]
 ORDER BY created_at DESC, row_id DESC;
 ----
 fingerprint                   hint_type
-SELECT * FROM ab WHERE a = _  rewrite_inline_hints
+SELECT * FROM ab WHERE a = _  REWRITE INLINE HINTS
 
 # Test with a placeholder instead of a constant string.
 statement ok
@@ -215,7 +215,7 @@ query TT colnames
 EXECUTE show_hints_stmt('SELECT * FROM ab WHERE a = 1')
 ----
 fingerprint                   hint_type
-SELECT * FROM ab WHERE a = _  rewrite_inline_hints
+SELECT * FROM ab WHERE a = _  REWRITE INLINE HINTS
 
 # Test with different casing - input is lowercase, fingerprint is uppercase.
 query TT colnames
@@ -224,7 +224,7 @@ FROM [SHOW STATEMENT HINTS FOR 'select * from ab where a = 1']
 ORDER BY created_at DESC, row_id DESC;
 ----
 fingerprint                   hint_type
-SELECT * FROM ab WHERE a = _  rewrite_inline_hints
+SELECT * FROM ab WHERE a = _  REWRITE INLINE HINTS
 
 # Test with mixed casing.
 query TT colnames
@@ -233,7 +233,7 @@ FROM [SHOW STATEMENT HINTS FOR 'SeLeCt * FrOm ab WhErE a = 1']
 ORDER BY created_at DESC, row_id DESC;
 ----
 fingerprint                   hint_type
-SELECT * FROM ab WHERE a = _  rewrite_inline_hints
+SELECT * FROM ab WHERE a = _  REWRITE INLINE HINTS
 
 # Test with extra whitespace and newlines.
 query TT colnames
@@ -242,7 +242,7 @@ FROM [SHOW STATEMENT HINTS FOR '  SELECT   *   FROM   ab   WHERE   a   =   1  ']
 ORDER BY created_at DESC, row_id DESC;
 ----
 fingerprint                   hint_type
-SELECT * FROM ab WHERE a = _  rewrite_inline_hints
+SELECT * FROM ab WHERE a = _  REWRITE INLINE HINTS
 
 # Test with optional AS keyword for table alias - should match with or without AS.
 statement ok
@@ -258,7 +258,7 @@ FROM [SHOW STATEMENT HINTS FOR 'SELECT * FROM ab AS t WHERE t.a = 1']
 ORDER BY created_at DESC, row_id DESC;
 ----
 fingerprint                          hint_type
-SELECT * FROM ab AS t WHERE t.a = _  rewrite_inline_hints
+SELECT * FROM ab AS t WHERE t.a = _  REWRITE INLINE HINTS
 
 # Query without AS keyword - should match same fingerprint.
 query TT colnames
@@ -267,7 +267,7 @@ FROM [SHOW STATEMENT HINTS FOR 'SELECT * FROM ab t WHERE t.a = 1']
 ORDER BY created_at DESC, row_id DESC;
 ----
 fingerprint                          hint_type
-SELECT * FROM ab AS t WHERE t.a = _  rewrite_inline_hints
+SELECT * FROM ab AS t WHERE t.a = _  REWRITE INLINE HINTS
 
 # Column references are not allowed.
 statement ok
