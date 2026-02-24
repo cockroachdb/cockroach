@@ -255,8 +255,59 @@ func TestUniquenessCheck(t *testing.T) {
 				data TEXT,
 				PRIMARY KEY (crdb_region, filler, id)
 				)`,
-			// TODO(154551): Add support for this case.
-			expectError: "the unique column must be immediately after the regionality column",
+			createSpan: func(cfg *execinfra.ServerConfig, tableDesc catalog.TableDescriptor) roachpb.Span {
+				index := tableDesc.GetPrimaryIndex()
+
+				indexPrefix := cfg.Codec.IndexPrefix(uint32(tableDesc.GetID()), uint32(index.GetID()))
+
+				regionColID := index.GetKeyColumnID(0)
+				regionCol, err := catalog.MustFindColumnByID(tableDesc, regionColID)
+				require.NoError(t, err)
+
+				// Use the faked "us-east1" region for testing then the filler
+				// column and the unique-constrained INT64 [1, 10000).
+
+				testRegion := "us-east1"
+				regionDatum, err := tree.MakeDEnumFromLogicalRepresentation(regionCol.GetType(), testRegion)
+				require.NoError(t, err)
+
+				regionPrefixBytes, err := keyside.Encode(indexPrefix, &regionDatum, encoding.Ascending)
+				require.NoError(t, err)
+
+				// Create a tight bound for the second column in the key. The test will use a filler outside this range.
+				startFillerDatum := tree.NewDString("colombo")
+				startKey, err := keyside.Encode(slices.Clone(regionPrefixBytes), startFillerDatum, encoding.Ascending)
+				require.NoError(t, err)
+				endFillerDatum := tree.NewDString("dhaka")
+				endKey, err := keyside.Encode(slices.Clone(regionPrefixBytes), endFillerDatum, encoding.Ascending)
+				require.NoError(t, err)
+
+				startID := tree.NewDInt(1)
+				startKey, err = keyside.Encode(startKey, startID, encoding.Ascending)
+				require.NoError(t, err)
+				endID := tree.NewDInt(10000)
+				endKey, err = keyside.Encode(endKey, endID, encoding.Ascending)
+				require.NoError(t, err)
+
+				span := roachpb.Span{
+					Key:    roachpb.Key(startKey),
+					EndKey: roachpb.Key(endKey),
+				}
+
+				return span
+			},
+			insertStmts: []string{
+				// The test region row is inside the filler range.
+				`INSERT INTO test.%s (crdb_region, filler, id, data) VALUES ('us-east1', 'dakar', 100, 'foo')`,
+				// The remote region is outside and should be found.
+				`INSERT INTO test.%s (crdb_region, filler, id, data) VALUES ('us-west1', 'paris', 100, 'bar')`,
+
+				// These are not duplicated and should yield no issues.
+				`INSERT INTO test.%s (crdb_region, filler, id, data) VALUES ('us-east1', 'damascus', 200, 'toto')`,
+				`INSERT INTO test.%s (crdb_region, filler, id, data) VALUES ('us-west4', 'rome', 300, 'toto')`,
+			},
+			expectDuplicates: true,
+			expectedCount:    1,
 		},
 	}
 
