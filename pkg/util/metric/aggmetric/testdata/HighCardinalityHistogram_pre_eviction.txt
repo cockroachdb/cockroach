@@ -165,18 +165,6 @@ histo_gram_bucket{database="1",application_name="9",le="60"} 1
 histo_gram_bucket{database="1",application_name="9",le="70"} 1
 histo_gram_bucket{database="1",application_name="9",le="80"} 1
 histo_gram_bucket{database="1",application_name="9",le="90"} 1
-histo_gram_bucket{le="+Inf"} 15
-histo_gram_bucket{le="0"} 0
-histo_gram_bucket{le="10"} 10
-histo_gram_bucket{le="20"} 15
-histo_gram_bucket{le="30"} 15
-histo_gram_bucket{le="40"} 15
-histo_gram_bucket{le="50"} 15
-histo_gram_bucket{le="60"} 15
-histo_gram_bucket{le="70"} 15
-histo_gram_bucket{le="80"} 15
-histo_gram_bucket{le="90"} 15
-histo_gram_count 15
 histo_gram_count{database="1",application_name="0"} 1
 histo_gram_count{database="1",application_name="1"} 1
 histo_gram_count{database="1",application_name="10"} 1
@@ -192,7 +180,6 @@ histo_gram_count{database="1",application_name="6"} 1
 histo_gram_count{database="1",application_name="7"} 1
 histo_gram_count{database="1",application_name="8"} 1
 histo_gram_count{database="1",application_name="9"} 1
-histo_gram_sum 120
 histo_gram_sum{database="1",application_name="0"} 1
 histo_gram_sum{database="1",application_name="1"} 2
 histo_gram_sum{database="1",application_name="10"} 11

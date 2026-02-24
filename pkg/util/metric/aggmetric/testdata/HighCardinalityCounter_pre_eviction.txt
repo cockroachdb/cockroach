@@ -1,6 +1,5 @@
 echo
 ----
-foo_counter 15
 foo_counter{database="1",application_name="0"} 1
 foo_counter{database="1",application_name="1"} 1
 foo_counter{database="1",application_name="10"} 1

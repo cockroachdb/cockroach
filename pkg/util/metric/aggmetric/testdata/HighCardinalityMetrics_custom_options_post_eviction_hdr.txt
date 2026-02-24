@@ -1,12 +1,12 @@
 echo
 ----
-custom_options_counter 11
+custom_options_counter{database="_evicted",application_name="_evicted"} 6
 custom_options_counter{database="db1",application_name="6"} 1
 custom_options_counter{database="db1",application_name="7"} 1
 custom_options_counter{database="db2",application_name="10"} 1
 custom_options_counter{database="db2",application_name="8"} 1
 custom_options_counter{database="db2",application_name="9"} 1
-custom_options_gauge 51
+custom_options_gauge{database="_evicted",application_name="_evicted"} 21
 custom_options_gauge{database="db1",application_name="6"} 7
 custom_options_gauge{database="db1",application_name="7"} 8
 custom_options_gauge{database="db2",application_name="10"} 5
@@ -22,25 +22,11 @@ custom_options_histogram_bucket{database="db2",application_name="8",le="+Inf"} 1
 custom_options_histogram_bucket{database="db2",application_name="8",le="18"} 1
 custom_options_histogram_bucket{database="db2",application_name="9",le="+Inf"} 1
 custom_options_histogram_bucket{database="db2",application_name="9",le="19"} 1
-custom_options_histogram_bucket{le="+Inf"} 11
-custom_options_histogram_bucket{le="1"} 1
-custom_options_histogram_bucket{le="18"} 9
-custom_options_histogram_bucket{le="19"} 10
-custom_options_histogram_bucket{le="2"} 2
-custom_options_histogram_bucket{le="20"} 11
-custom_options_histogram_bucket{le="3"} 3
-custom_options_histogram_bucket{le="4"} 4
-custom_options_histogram_bucket{le="5"} 5
-custom_options_histogram_bucket{le="6"} 6
-custom_options_histogram_bucket{le="7"} 7
-custom_options_histogram_bucket{le="8"} 8
-custom_options_histogram_count 11
 custom_options_histogram_count{database="db1",application_name="6"} 1
 custom_options_histogram_count{database="db1",application_name="7"} 1
 custom_options_histogram_count{database="db2",application_name="10"} 1
 custom_options_histogram_count{database="db2",application_name="8"} 1
 custom_options_histogram_count{database="db2",application_name="9"} 1
-custom_options_histogram_sum 93
 custom_options_histogram_sum{database="db1",application_name="6"} 7
 custom_options_histogram_sum{database="db1",application_name="7"} 8
 custom_options_histogram_sum{database="db2",application_name="10"} 20
