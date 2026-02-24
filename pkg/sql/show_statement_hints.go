@@ -124,7 +124,7 @@ func (p *planner) ShowStatementHints(
 
 			// Query system.statement_hints table.
 			query := `
-SELECT row_id, fingerprint, hint, created_at
+SELECT row_id, fingerprint, hint, created_at, hint_type
 FROM system.statement_hints
 WHERE fingerprint = $1
 ORDER BY created_at DESC, row_id DESC`
@@ -148,27 +148,20 @@ ORDER BY created_at DESC, row_id DESC`
 				fp := row[1]        // STRING
 				hintBytes := row[2] // BYTES
 				createdAt := row[3] // TIMESTAMPTZ
+				hintType := row[4]  // STRING (hint_type column)
 
-				// Decode the hint to determine type and details.
-				var hintType tree.Datum = tree.NewDString("unknown")
-				var details tree.Datum = tree.DNull
-
-				if hintBytes != tree.DNull {
+				var details = tree.DNull
+				if n.Options.Details && hintBytes != tree.DNull {
 					hint, err := parseHint(hintBytes)
 					if err == nil {
-						hintType = tree.NewDString(hint.HintType())
-						if n.Options.Details {
-							var detailJSON json.JSON
-							detailJSON, err = hint.Details()
-							if err == nil {
-								details = tree.NewDJSON(detailJSON)
-							}
+						var detailJSON json.JSON
+						detailJSON, err = hint.Details()
+						if err == nil {
+							details = tree.NewDJSON(detailJSON)
 						}
 					}
 					if err != nil {
-						// If decode fails, hintType remains "unknown" and details remains
-						// NULL. Log the error and continue.
-						log.Dev.Warningf(ctx, "failed to decode hint: %v", err)
+						log.Dev.Warningf(ctx, "failed to decode hint details: %v", err)
 					}
 				}
 

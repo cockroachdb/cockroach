@@ -14,12 +14,12 @@ import (
 func TestHintType(t *testing.T) {
 	// Test empty (unset) hint returns UNKNOWN.
 	var emptyHint StatementHintUnion
-	require.Equal(t, HintTypeEmpty, emptyHint.HintTypeStr())
+	require.Equal(t, HintTypeEmpty, emptyHint.HintType())
 
 	// Test InjectHints returns REWRITE INLINE HINTS.
 	var injectHint StatementHintUnion
 	injectHint.SetValue(&InjectHints{DonorSQL: "SELECT * FROM t"})
-	require.Equal(t, HintTypeRewriteInlineHints, injectHint.HintTypeStr())
+	require.Equal(t, HintTypeRewriteInlineHints, injectHint.HintType())
 }
 
 func TestFromToBytes(t *testing.T) {
