@@ -903,6 +903,11 @@ type optTable struct {
 	// indexes.
 	indexes []optIndex
 
+	// readableIndexCount is the number of indexes usable for reads. Non-readable
+	// public indexes (e.g. those being recreated during ALTER PRIMARY KEY) are
+	// reordered past this boundary.
+	readableIndexCount int
+
 	// codec is capable of encoding sql table keys.
 	codec keys.SQLCodec
 
@@ -1086,7 +1091,37 @@ func newOptTable(
 		}
 	}
 
-	// Build the indexes.
+	// Build the indexes. Reorder public secondary indexes so that readable
+	// indexes (those not being added or recreated) come before non-readable
+	// ones. This allows IndexCount to only include indexes that can be used
+	// for reads.
+	// Non-readable indexes are the secondary indexes that are recreated
+	// during a primary key swap that may lack key columns from the old
+	// primary key and cannot be used for look ups.
+	numPublicSecondary := len(desc.ActiveIndexes()) - 1
+	readableCount := 0
+	for i := 0; i < numPublicSecondary; i++ {
+		if !secondaryIndexes[i].Adding() {
+			readableCount++
+		}
+	}
+	if readableCount < numPublicSecondary {
+		reordered := make([]catalog.Index, len(secondaryIndexes))
+		ri, ni := 0, readableCount
+		for i := 0; i < numPublicSecondary; i++ {
+			if !secondaryIndexes[i].Adding() {
+				reordered[ri] = secondaryIndexes[i]
+				ri++
+			} else {
+				reordered[ni] = secondaryIndexes[i]
+				ni++
+			}
+		}
+		copy(reordered[numPublicSecondary:], secondaryIndexes[numPublicSecondary:])
+		secondaryIndexes = reordered
+	}
+	ot.readableIndexCount = 1 + readableCount
+
 	ot.indexes = make([]optIndex, 1+len(secondaryIndexes))
 	// partZones is allocated lazily and is reused for all indexes.
 	var partZones map[string]cat.Zone
@@ -1427,8 +1462,7 @@ func (ot *optTable) getCol(i int) catalog.Column {
 
 // IndexCount is part of the cat.Table interface.
 func (ot *optTable) IndexCount() int {
-	// Primary index is always present, so count is always >= 1.
-	return len(ot.desc.ActiveIndexes())
+	return ot.readableIndexCount
 }
 
 // WritableIndexCount is part of the cat.Table interface.
