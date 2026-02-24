@@ -123,6 +123,11 @@ func (c *conn) handleAuthentication(
 		return connClose, c.sendError(ctx, pgerror.WithCandidateCode(err, pgcode.InvalidAuthorizationSpecification))
 	}
 
+	// If SAN-based authentication is being used, increment the total attempt counter.
+	if behaviors.UsedCertSANAuth() {
+		c.metrics.AuthCertSANConnTotal.Inc(1)
+	}
+
 	// Choose the system identity that we'll use below for mapping
 	// externally-provisioned principals to database users. The system identity
 	// always is normalized to lower case.
@@ -283,6 +288,11 @@ func (c *conn) handleAuthentication(
 	// If user has PROVISIONSRC set, increment the login success counter
 	if provisioningSource != nil {
 		telemetry.Inc(provisioning.ProvisionedUserLoginSuccessCounter)
+	}
+
+	// If SAN-based authentication was successful, increment the SAN success counter
+	if behaviors.UsedCertSANAuth() {
+		c.metrics.AuthCertSANConnSuccess.Inc(1)
 	}
 
 	// Compute the authentication latency needed to serve a SQL query.
