@@ -14,7 +14,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
@@ -430,7 +429,6 @@ var varGen = map[string]sessionVar{
 		Set: func(ctx context.Context, m sessionmutator.SessionDataMutator, s string) error {
 			allowReadCommitted := allowReadCommittedIsolation.Get(&m.Settings.SV)
 			allowRepeatableRead := allowRepeatableReadIsolation.Get(&m.Settings.SV)
-			hasLicense := base.CCLDistributionAndEnterpriseEnabled(m.Settings)
 			var allowedValues = []string{"serializable"}
 			if allowRepeatableRead {
 				allowedValues = append(allowedValues, "repeatable read")
@@ -443,10 +441,10 @@ var varGen = map[string]sessionVar{
 				return newVarValueError(`default_transaction_isolation`, s, allowedValues...)
 			}
 			originalLevel := level
-			level, upgraded, upgradedDueToLicense := level.UpgradeToEnabledLevel(
-				allowReadCommitted, allowRepeatableRead, hasLicense)
+			level, upgraded := level.UpgradeToEnabledLevel(
+				allowReadCommitted, allowRepeatableRead)
 			if f := m.UpgradedIsolationLevel; upgraded && f != nil {
-				f(ctx, originalLevel, upgradedDueToLicense)
+				f(ctx, originalLevel)
 			}
 			m.SetDefaultTransactionIsolationLevel(level)
 			return nil

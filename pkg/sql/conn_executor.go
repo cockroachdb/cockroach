@@ -16,7 +16,6 @@ import (
 	"time"
 	"unicode/utf8"
 
-	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -1287,23 +1286,10 @@ func (s *Server) newConnExecutor(
 	}
 
 	ex.dataMutatorIterator.UpgradedIsolationLevel = func(
-		ctx context.Context, upgradedFrom tree.IsolationLevel, requiresNotice bool,
+		ctx context.Context, upgradedFrom tree.IsolationLevel,
 	) {
 		telemetry.Inc(sqltelemetry.IsolationLevelUpgradedCounter(ctx, upgradedFrom))
 		ex.metrics.ExecutedStatementCounters.TxnUpgradedCount.Inc(1)
-		if requiresNotice {
-			const msgFmt = "%s isolation level is not allowed without an enterprise license; upgrading to SERIALIZABLE"
-			displayLevel := upgradedFrom
-			if upgradedFrom == tree.ReadUncommittedIsolation {
-				displayLevel = tree.ReadCommittedIsolation
-			} else if upgradedFrom == tree.SnapshotIsolation {
-				displayLevel = tree.RepeatableReadIsolation
-			}
-			if logIsolationLevelLimiter.ShouldLog() {
-				log.Dev.Warningf(ctx, msgFmt, displayLevel)
-			}
-			ex.planner.BufferClientNotice(ctx, pgnotice.Newf(msgFmt, displayLevel))
-		}
 	}
 
 	ex.applicationName.Store(ex.sessionData().ApplicationName)
@@ -3743,8 +3729,6 @@ var allowBufferedWritesForWeakIsolation = settings.RegisterBoolSetting(
 	false,
 )
 
-var logIsolationLevelLimiter = log.Every(10 * time.Second)
-
 func (ex *connExecutor) txnIsolationLevelToKV(
 	ctx context.Context, level tree.IsolationLevel,
 ) isolation.Level {
@@ -3754,11 +3738,9 @@ func (ex *connExecutor) txnIsolationLevelToKV(
 	originalLevel := level
 	allowReadCommitted := allowReadCommittedIsolation.Get(&ex.server.cfg.Settings.SV)
 	allowRepeatableRead := allowRepeatableReadIsolation.Get(&ex.server.cfg.Settings.SV)
-	hasLicense := base.CCLDistributionAndEnterpriseEnabled(ex.server.cfg.Settings)
-	level, upgraded, upgradedDueToLicense := level.UpgradeToEnabledLevel(
-		allowReadCommitted, allowRepeatableRead, hasLicense)
+	level, upgraded := level.UpgradeToEnabledLevel(allowReadCommitted, allowRepeatableRead)
 	if f := ex.dataMutatorIterator.UpgradedIsolationLevel; upgraded && f != nil {
-		f(ctx, originalLevel, upgradedDueToLicense)
+		f(ctx, originalLevel)
 	}
 
 	ret := level.ToKVIsoLevel()

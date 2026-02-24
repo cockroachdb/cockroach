@@ -10,7 +10,6 @@ package upgradejob
 import (
 	"context"
 
-	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
@@ -61,11 +60,9 @@ func (r resumer) Resume(ctx context.Context, execCtxI interface{}) error {
 	v := pl.GetMigration().ClusterVersion.Version
 	db := execCtx.ExecCfg().InternalDB
 	ex := db.Executor()
-	enterpriseEnabled := base.CCLDistributionAndEnterpriseEnabled(
-		execCtx.ExecCfg().Settings)
+
 	alreadyCompleted, err := migrationstable.CheckIfMigrationCompleted(
-		ctx, v, nil /* txn */, ex,
-		enterpriseEnabled, migrationstable.ConsistentRead,
+		ctx, v, nil /* txn */, ex, migrationstable.ConsistentRead,
 	)
 	if alreadyCompleted || err != nil {
 		return errors.Wrapf(err, "checking migration completion for %v", v)

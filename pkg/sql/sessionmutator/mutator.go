@@ -88,7 +88,7 @@ type SessionDataMutatorCallbacks struct {
 	// session variable is configured and the isolation level is automatically
 	// upgraded to a stronger one. It's also used when the isolation level is
 	// upgraded in BEGIN or SET TRANSACTION statements.
-	UpgradedIsolationLevel func(ctx context.Context, upgradedFrom tree.IsolationLevel, requiresNotice bool)
+	UpgradedIsolationLevel func(ctx context.Context, upgradedFrom tree.IsolationLevel)
 	// OnTempSchemaCreation is called when the temporary schema is set
 	// on the search path (the first and only time).
 	// It can be nil, in which case nothing triggers on execution.

@@ -83,12 +83,7 @@ const (
 // enterpriseEnabled is set and the StaleRead option is passed, then AS OF
 // SYSTEM TIME with_max_staleness('1h') is used for the query.
 func CheckIfMigrationCompleted(
-	ctx context.Context,
-	v roachpb.Version,
-	txn *kv.Txn,
-	ex isql.Executor,
-	enterpriseEnabled bool,
-	staleOpt StaleReadOpt,
+	ctx context.Context, v roachpb.Version, txn *kv.Txn, ex isql.Executor, staleOpt StaleReadOpt,
 ) (alreadyCompleted bool, _ error) {
 	if txn != nil && staleOpt == StaleRead {
 		return false, errors.AssertionFailedf(
@@ -104,7 +99,7 @@ SELECT count(*)
 	 AND internal = $4
 `
 	var query string
-	if staleOpt == StaleRead && enterpriseEnabled {
+	if staleOpt == StaleRead {
 		query = fmt.Sprintf(queryFormat, "AS OF SYSTEM TIME with_max_staleness('1h')")
 	} else {
 		query = fmt.Sprintf(queryFormat, "")
