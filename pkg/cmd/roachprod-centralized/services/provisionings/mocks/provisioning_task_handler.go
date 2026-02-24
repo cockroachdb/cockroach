@@ -60,13 +60,51 @@ func (_m *IProvisioningTaskHandler) HandleProvision(
 	return r0
 }
 
+// HandleGC provides a mock function with given fields: ctx, l
+func (_m *IProvisioningTaskHandler) HandleGC(ctx context.Context, l *logger.Logger) error {
+	ret := _m.Called(ctx, l)
+
+	if len(ret) == 0 {
+		panic("no return value specified for HandleGC")
+	}
+
+	var r0 error
+	if rf, ok := ret.Get(0).(func(context.Context, *logger.Logger) error); ok {
+		r0 = rf(ctx, l)
+	} else {
+		r0 = ret.Error(0)
+	}
+
+	return r0
+}
+
+// HandleSetupSSHKeys provides a mock function with given fields: ctx, l, provisioningID
+func (_m *IProvisioningTaskHandler) HandleSetupSSHKeys(
+	ctx context.Context, l *logger.Logger, provisioningID uuid.UUID,
+) error {
+	ret := _m.Called(ctx, l, provisioningID)
+
+	if len(ret) == 0 {
+		panic("no return value specified for HandleSetupSSHKeys")
+	}
+
+	var r0 error
+	if rf, ok := ret.Get(0).(func(context.Context, *logger.Logger, uuid.UUID) error); ok {
+		r0 = rf(ctx, l, provisioningID)
+	} else {
+		r0 = ret.Error(0)
+	}
+
+	return r0
+}
+
 // NewIProvisioningTaskHandler creates a new instance of IProvisioningTaskHandler. It also registers a testing interface on the mock and a cleanup function to assert the mocks expectations.
 // The first argument is typically a *testing.T value.
 func NewIProvisioningTaskHandler(
 	t interface {
-	mock.TestingT
-	Cleanup(func())
-},
+		mock.TestingT
+		Cleanup(func())
+	},
 ) *IProvisioningTaskHandler {
 	mock := &IProvisioningTaskHandler{}
 	mock.Mock.Test(t)

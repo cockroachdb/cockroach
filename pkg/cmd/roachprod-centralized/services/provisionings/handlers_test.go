@@ -37,18 +37,23 @@ type mockOrchestrator struct {
 }
 
 func (m *mockOrchestrator) RunPostApply(
-	_ context.Context, _ *logger.Logger,
-	_ provmodels.Provisioning, _ string,
+	_ context.Context,
+	_ *logger.Logger,
+	_ provmodels.Provisioning,
+	_ string,
 	_ envtypes.ResolvedEnvironment,
 ) error {
 	m.called = true
 	return m.runPostApplyErr
 }
 
-func (m *mockOrchestrator) RunSingle(
-	_ context.Context, _ *logger.Logger,
-	_ provmodels.Provisioning, _ provmodels.TemplateMetadata,
-	_ string, _ envtypes.ResolvedEnvironment,
+func (m *mockOrchestrator) RunByType(
+	_ context.Context,
+	_ *logger.Logger,
+	_ provmodels.Provisioning,
+	_ provmodels.TemplateMetadata,
+	_ string,
+	_ envtypes.ResolvedEnvironment,
 ) error {
 	return nil
 }
@@ -144,11 +149,12 @@ func TestHandleProvision_CanceledContextStillPersistsFailure(t *testing.T) {
 // newHandlerTestService creates a Service with a mock executor and the given
 // orchestrator. Used by the hook integration tests below.
 func newHandlerTestService(
-	t *testing.T,
-	templatesDir string,
-	orch hooks.IOrchestrator,
-) (*Service, *provisioningsrepmock.IProvisioningsRepository,
-	*environmensmock.IService, *provisioningsmock.IExecutor,
+	t *testing.T, templatesDir string, orch hooks.IOrchestrator,
+) (
+	*Service,
+	*provisioningsrepmock.IProvisioningsRepository,
+	*environmensmock.IService,
+	*provisioningsmock.IExecutor,
 ) {
 	t.Helper()
 	repo := provisioningsrepmock.NewIProvisioningsRepository(t)

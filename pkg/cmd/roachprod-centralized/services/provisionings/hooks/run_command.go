@@ -48,7 +48,7 @@ func (e *RunCommandExecutor) Execute(
 	return runOnMachines(
 		ctx, l, e.sshClient,
 		hctx.MachineIPs, hctx.SSHUser, hctx.SSHPrivateKey,
-		script, defaultMaxConcurrency,
+		script, defaultMaxConcurrency, hctx.Declaration.Name,
 	)
 }
 
@@ -177,6 +177,7 @@ func runOnMachines(
 	privateKey []byte,
 	script string,
 	maxConcurrency int,
+	hookName string,
 ) error {
 	sem := make(chan struct{}, maxConcurrency)
 	var mu sync.Mutex
@@ -190,14 +191,21 @@ func runOnMachines(
 			sem <- struct{}{}
 			defer func() { <-sem }()
 
-			l.Info("hook: running on machine", slog.String("machine", addr))
+			l.Info("hook: running on machine",
+				slog.String("hook", hookName),
+				slog.String("machine", addr),
+			)
 
 			_, stderr, err := sshClient.RunCommand(
 				ctx, l, addr, user, privateKey, script,
 			)
 			if err != nil {
-				l.Info("hook: machine failed", slog.String("machine", addr))
+				l.Info("hook: machine failed",
+					slog.String("hook", hookName),
+					slog.String("machine", addr),
+				)
 				l.Debug("command failed on machine",
+					slog.String("hook", hookName),
 					slog.String("machine", addr),
 					slog.String("stderr", stderr),
 				)
@@ -206,7 +214,9 @@ func runOnMachines(
 				errs = append(errs, errors.Wrapf(err, "machine %s", addr))
 			} else {
 				l.Info("hook: machine succeeded",
-					slog.String("machine", addr))
+					slog.String("hook", hookName),
+					slog.String("machine", addr),
+				)
 			}
 		}(ip)
 	}

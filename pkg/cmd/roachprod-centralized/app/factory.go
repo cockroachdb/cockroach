@@ -366,7 +366,27 @@ func NewServicesFromConfig(
 		hookRegistry := sprovhooks.NewRegistry()
 		hookSSHClient := sprovssh.NewSSHClient()
 		hookRegistry.Register("run-command",
-			sprovhooks.NewRunCommandExecutor(hookSSHClient))
+			sprovhooks.NewRunCommandExecutor(hookSSHClient),
+		)
+
+		// Register ssh-keys-setup executor if GCP project is configured.
+		if cfg.Provisionings.SSHKeysGCPProject != "" {
+			// TODO(golgeek): Close gcpProjectsClient on application shutdown.
+			// The compute.ProjectsClient has a Close() method that should be
+			// called during graceful shutdown.
+			gcpProjectsClient, gcpErr := sprovhooks.NewGCPProjectsClient(appCtx)
+			if gcpErr != nil {
+				return nil, errors.Wrap(gcpErr,
+					"create GCP projects client for SSH keys provider")
+			}
+			keysProvider := sprovhooks.NewGCPMetadataKeysProvider(
+				gcpProjectsClient, cfg.Provisionings.SSHKeysGCPProject, l,
+			)
+			hookRegistry.Register("ssh-keys-setup",
+				sprovhooks.NewSSHKeysSetupExecutor(hookSSHClient, keysProvider),
+			)
+		}
+
 		hookOrchestrator := sprovhooks.NewOrchestrator(hookRegistry)
 
 		provisioningsService = sprovisionings.NewService(

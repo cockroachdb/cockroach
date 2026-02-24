@@ -6,6 +6,7 @@ go_library(
         "destroy.go",
         "gc.go",
         "provision.go",
+        "ssh_keys_setup.go",
         "types.go",
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/services/provisionings/tasks",

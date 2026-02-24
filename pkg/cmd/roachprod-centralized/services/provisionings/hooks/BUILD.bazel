@@ -3,12 +3,16 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 go_library(
     name = "hooks",
     srcs = [
+        "authorized_keys.go",
+        "authorized_keys_gcp.go",
         "executor.go",
         "jq.go",
         "orchestrator.go",
         "registry.go",
         "run_command.go",
         "script.go",
+        "ssh_keys.go",
+        "validate.go",
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/services/provisionings/hooks",
     visibility = ["//visibility:public"],
@@ -19,17 +23,24 @@ go_library(
         "//pkg/cmd/roachprod-centralized/services/provisionings/templates",
         "//pkg/cmd/roachprod-centralized/utils/logger",
         "@com_github_cockroachdb_errors//:errors",
+        "@com_github_googleapis_gax_go_v2//:gax-go",
         "@com_github_itchyny_gojq//:gojq",
+        "@com_google_cloud_go_compute//apiv1",
+        "@com_google_cloud_go_compute//apiv1/computepb",
+        "@org_golang_x_crypto//ssh",
     ],
 )
 
 go_test(
     name = "hooks_test",
     srcs = [
+        "authorized_keys_gcp_test.go",
         "jq_test.go",
         "orchestrator_test.go",
         "run_command_test.go",
         "script_test.go",
+        "ssh_keys_test.go",
+        "validate_test.go",
     ],
     embed = [":hooks"],
     deps = [
@@ -38,7 +49,11 @@ go_test(
         "//pkg/cmd/roachprod-centralized/services/environments/types",
         "//pkg/cmd/roachprod-centralized/utils/logger",
         "//pkg/util/uuid",
+        "@com_github_googleapis_gax_go_v2//:gax-go",
         "@com_github_stretchr_testify//assert",
         "@com_github_stretchr_testify//require",
+        "@com_google_cloud_go_compute//apiv1/computepb",
+        "@org_golang_google_protobuf//proto",
+        "@org_golang_x_crypto//ssh",
     ],
 )

@@ -142,6 +142,20 @@ func NewController(service provtypes.IService) *Controller {
 				},
 			},
 		},
+		// TODO(golgeek): Consider per-environment permission gating for hook
+		// endpoints. SSH key deployment may warrant environment-scoped
+		// permissions in the future (e.g., provisionings:update:env:prod).
+		&controllers.ControllerHandler{
+			Method: "POST",
+			Path:   types.ControllerPath + "/:id/hooks/ssh-keys-setup",
+			Func:   ctrl.SetupSSHKeys,
+			Authorization: &auth.AuthorizationRequirement{
+				AnyOf: []string{
+					provtypes.PermissionUpdateAll,
+					provtypes.PermissionUpdateOwn,
+				},
+			},
+		},
 	}
 	return ctrl
 }
@@ -342,6 +356,29 @@ func (ctrl *Controller) ExtendLifetime(c *gin.Context) {
 		return
 	}
 	ctrl.Render(c, types.NewProvisioningResult(&prov, nil, nil))
+}
+
+// SetupSSHKeys triggers SSH key setup on a provisioning.
+func (ctrl *Controller) SetupSSHKeys(c *gin.Context) {
+	principal, _ := controllers.GetPrincipal(c)
+
+	id, err := parseUUID(c.Param("id"))
+	if err != nil {
+		ctrl.Render(c, &controllers.BadRequestResult{Error: err})
+		return
+	}
+
+	prov, taskID, err := ctrl.service.SetupSSHKeys(
+		c.Request.Context(),
+		ctrl.GetRequestLogger(c),
+		principal,
+		id,
+	)
+	if err != nil {
+		ctrl.Render(c, types.NewProvisioningResult(nil, nil, err))
+		return
+	}
+	ctrl.Render(c, types.NewProvisioningResult(&prov, taskID, nil))
 }
 
 // parseUUID parses a UUID string and returns a user-friendly error.

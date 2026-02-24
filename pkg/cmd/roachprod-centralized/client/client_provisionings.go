@@ -231,3 +231,24 @@ func (c *Client) ExtendProvisioningLifetime(
 	}
 	return &response.Data, nil
 }
+
+// SetupSSHKeys triggers SSH key setup on a provisioning.
+// POST /v1/provisionings/:id/hooks/ssh-keys-setup
+func (c *Client) SetupSSHKeys(
+	ctx context.Context, l *logger.Logger, id string,
+) (*ProvisioningResponse, error) {
+	if !c.IsEnabled() {
+		return nil, ErrDisabled
+	}
+	endpoint := fmt.Sprintf(
+		"%s%s/%s/hooks/ssh-keys-setup",
+		c.config.BaseURL, provtypes.ControllerPath, url.PathEscape(id),
+	)
+	var response ProvisioningResponse
+	if err := c.makeRequest(
+		ctx, l, "POST", endpoint, nil, &response, "setup ssh keys",
+	); err != nil {
+		return nil, err
+	}
+	return &response, nil
+}

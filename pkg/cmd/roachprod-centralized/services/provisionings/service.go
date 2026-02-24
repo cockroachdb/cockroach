@@ -410,6 +410,14 @@ func (s *Service) CreateProvisioning(
 		return provmodels.Provisioning{}, nil, utils.NewPublicError(err)
 	}
 
+	// Validate that hook environment references are resolvable. This catches
+	// missing SSH key vars and hook env mappings before infra is created.
+	if err := hooks.ValidateHookEnvironment(
+		tmpl.TemplateMetadata, resolvedEnv,
+	); err != nil {
+		return provmodels.Provisioning{}, nil, utils.NewPublicError(err)
+	}
+
 	// Snapshot the template.
 	archive, checksum, err := s.templateMgr.SnapshotTemplate(input.TemplateType)
 	if err != nil {
@@ -651,6 +659,69 @@ func getOwnerEmail(principal *auth.Principal) string {
 		}
 	}
 	return ""
+}
+
+// SetupSSHKeys creates a task to run ssh-keys-setup on a provisioning.
+// The provisioning must be in 'provisioned' state.
+func (s *Service) SetupSSHKeys(
+	ctx context.Context, l *logger.Logger, principal *auth.Principal, id uuid.UUID,
+) (provmodels.Provisioning, *uuid.UUID, error) {
+	prov, err := s.getProvisioningWithAccess(
+		ctx, l, principal, id,
+		types.PermissionUpdateAll, types.PermissionUpdateOwn,
+	)
+	if err != nil {
+		return provmodels.Provisioning{}, nil, err
+	}
+
+	if prov.State != provmodels.ProvisioningStateProvisioned {
+		return prov, nil, types.ErrInvalidState
+	}
+
+	task, err := ptasks.NewTaskSSHKeysSetup(prov.ID)
+	if err != nil {
+		return provmodels.Provisioning{}, nil, errors.Wrap(
+			err, "create ssh-keys-setup task",
+		)
+	}
+
+	if _, err = s.taskService.CreateTask(ctx, l, task); err != nil {
+		return provmodels.Provisioning{}, nil, errors.Wrap(
+			err, "schedule ssh-keys-setup task",
+		)
+	}
+
+	taskID := task.GetID()
+	prov.PlanOutput = nil
+	prov.Outputs = nil
+	return prov, &taskID, nil
+}
+
+// HandleSetupSSHKeys runs the ssh-keys-setup hook for a provisioning.
+// Called by the task handler, not directly by API callers.
+func (s *Service) HandleSetupSSHKeys(
+	ctx context.Context, l *logger.Logger, provisioningID uuid.UUID,
+) error {
+	prov, err := s.repo.GetProvisioning(ctx, l, provisioningID)
+	if err != nil {
+		return errors.Wrap(err, "get provisioning")
+	}
+
+	resolvedEnv, err := s.envService.GetEnvironmentResolved(
+		ctx, l, prov.Environment,
+	)
+	if err != nil {
+		return errors.Wrap(err, "resolve environment")
+	}
+
+	meta, err := templates.ParseMetadataFromSnapshot(prov.TemplateSnapshot)
+	if err != nil {
+		return errors.Wrap(err, "parse template metadata from snapshot")
+	}
+
+	return s.hookOrchestrator.RunByType(
+		ctx, l, prov, meta, "ssh-keys-setup", resolvedEnv,
+	)
 }
 
 // GetRepo returns the provisioning repository (used by task handlers).

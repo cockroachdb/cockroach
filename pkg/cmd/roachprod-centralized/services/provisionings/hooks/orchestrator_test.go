@@ -418,3 +418,100 @@ hooks:
 	assert.Contains(t, err.Error(), "SSH hooks but no SSH configuration")
 	assert.Empty(t, exec.calls)
 }
+
+func TestOrchestrator_RunByType_NoMatchingHookReturnsError(t *testing.T) {
+	meta := provmodels.TemplateMetadata{
+		Name: "test-template",
+		SSH: &provmodels.SSHConfig{
+			PrivateKeyVar: "ssh_key",
+			Machines:      ".instances[].public_ip",
+			User:          "ubuntu",
+		},
+		Hooks: []provmodels.HookDeclaration{
+			{
+				Name:     "wait-ready",
+				Type:     "run-command",
+				SSH:      true,
+				Triggers: []provmodels.HookTrigger{provmodels.TriggerPostApply},
+			},
+		},
+	}
+
+	registry := NewRegistry()
+	registry.Register("run-command", &mockExecutor{})
+	orch := NewOrchestrator(registry)
+	prov := makeTestProv()
+
+	err := orch.RunByType(
+		context.Background(), logger.DefaultLogger, prov, meta,
+		"ssh-keys-setup", makeResolvedEnv(),
+	)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "no hook of type")
+	assert.Contains(t, err.Error(), "ssh-keys-setup")
+	assert.Contains(t, err.Error(), "test-template")
+}
+
+func TestOrchestrator_RunByType_UnregisteredExecutorSkipsWithWarning(t *testing.T) {
+	meta := provmodels.TemplateMetadata{
+		Name: "test-template",
+		SSH: &provmodels.SSHConfig{
+			PrivateKeyVar: "ssh_key",
+			Machines:      ".instances[].public_ip",
+			User:          "ubuntu",
+		},
+		Hooks: []provmodels.HookDeclaration{
+			{
+				Name:     "setup-keys",
+				Type:     "ssh-keys-setup",
+				SSH:      true,
+				Triggers: []provmodels.HookTrigger{provmodels.TriggerPostApply},
+			},
+		},
+	}
+
+	// Empty registry — no executor for ssh-keys-setup.
+	registry := NewRegistry()
+	orch := NewOrchestrator(registry)
+	prov := makeTestProv()
+	env := makeResolvedEnv(envtypes.ResolvedVariable{
+		Key: "ssh_key", Value: "fake-key",
+	})
+
+	err := orch.RunByType(
+		context.Background(), logger.DefaultLogger, prov, meta,
+		"ssh-keys-setup", env,
+	)
+	// Should succeed with a warning (not an error).
+	require.NoError(t, err)
+}
+
+func TestOrchestrator_RunPostApply_SSHKeysSetupWithoutSSHFlagFails(t *testing.T) {
+	dir := t.TempDir()
+	writeTestMetadata(t, dir, `
+name: ssh-keys-no-flag
+ssh:
+  private_key_var: ssh_key
+  machines: .instances[].public_ip
+  user: ubuntu
+hooks:
+  - name: setup-keys
+    type: ssh-keys-setup
+    ssh: false
+    triggers: [post_apply]
+`)
+
+	registry := NewRegistry()
+	registry.Register("ssh-keys-setup", &mockExecutor{})
+	orch := NewOrchestrator(registry)
+	prov := makeTestProv()
+	env := makeResolvedEnv(envtypes.ResolvedVariable{
+		Key: "ssh_key", Value: "fake-key",
+	})
+
+	err := orch.RunPostApply(
+		context.Background(), logger.DefaultLogger, prov, dir, env,
+	)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "ssh-keys-setup type requires ssh: true")
+}

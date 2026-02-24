@@ -25,7 +25,7 @@ type IOrchestrator interface {
 		workingDir string,
 		resolvedEnv envtypes.ResolvedEnvironment,
 	) error
-	RunSingle(
+	RunByType(
 		ctx context.Context, l *logger.Logger,
 		prov provmodels.Provisioning,
 		meta provmodels.TemplateMetadata,
@@ -59,11 +59,14 @@ func (o *Orchestrator) RunPostApply(
 ) error {
 	meta, err := templates.ParseMetadataFromDir(workingDir)
 	if err != nil {
-		l.Warn("skipping hooks: could not parse template metadata",
-			slog.String("provisioning_id", prov.ID.String()),
-			slog.Any("error", err),
-		)
-		return nil
+		if errors.Is(err, templates.ErrNoTemplateMarker) {
+			l.Debug("no template metadata found, skipping hooks",
+				slog.String("provisioning_id", prov.ID.String()),
+			)
+			return nil
+		}
+		// File exists but is malformed — this is a real error.
+		return errors.Wrapf(err, "parse template metadata in %s", workingDir)
 	}
 
 	return o.runHooksForTrigger(
@@ -71,9 +74,10 @@ func (o *Orchestrator) RunPostApply(
 	)
 }
 
-// RunSingle runs all hooks of the given type. Used by manual trigger flows
-// (e.g., ssh-keys-setup in Commit 12).
-func (o *Orchestrator) RunSingle(
+// RunByType runs all hooks of the given type. Used by manual trigger flows
+// (e.g., ssh-keys-setup). Returns an error if no hook of the requested type
+// is declared in the template.
+func (o *Orchestrator) RunByType(
 	ctx context.Context,
 	l *logger.Logger,
 	prov provmodels.Provisioning,
@@ -85,16 +89,24 @@ func (o *Orchestrator) RunSingle(
 		return errors.Newf("template %q has no SSH configuration", meta.Name)
 	}
 
+	found := false
 	for i := range meta.Hooks {
 		hook := &meta.Hooks[i]
 		if hook.Type != hookType {
 			continue
 		}
+		found = true
 		if err := o.executeHook(
 			ctx, l, prov, meta, hook, resolvedEnv,
 		); err != nil {
 			return err
 		}
+	}
+	if !found {
+		return errors.Newf(
+			"no hook of type %q declared in template %q",
+			hookType, meta.Name,
+		)
 	}
 	return nil
 }
@@ -176,13 +188,18 @@ func (o *Orchestrator) executeHook(
 
 	executor, err := o.registry.Get(hook.Type)
 	if err != nil {
-		return err
+		l.Warn("hook executor not registered, skipping",
+			slog.String("hook", hook.Name),
+			slog.String("type", hook.Type),
+			slog.Any("error", err),
+		)
+		return nil
 	}
 
 	// Validate that SSH-dependent hook types declare ssh: true.
-	if hook.Type == "run-command" && !hook.SSH {
+	if (hook.Type == "run-command" || hook.Type == "ssh-keys-setup") && !hook.SSH {
 		return errors.Newf(
-			"hook %q: run-command type requires ssh: true", hook.Name,
+			"hook %q: %s type requires ssh: true", hook.Name, hook.Type,
 		)
 	}
 

@@ -41,6 +41,7 @@ func (cr *commandRegistry) buildProvisioningCmd() *cobra.Command {
 		cr.buildProvLogsCmd(),
 		cr.buildProvExtendCmd(),
 		cr.buildProvTemplatesCmd(),
+		cr.buildProvSetupSSHCmd(),
 	)
 	return cmd
 }
@@ -500,6 +501,52 @@ func (cr *commandRegistry) buildProvExtendCmd() *cobra.Command {
 		}),
 	}
 
+	cr.addToExcludeFromBashCompletion(cmd)
+	cr.addToExcludeFromClusterFlagsMulti(cmd)
+
+	return cmd
+}
+
+// buildProvSetupSSHCmd triggers SSH key setup on a provisioning.
+func (cr *commandRegistry) buildProvSetupSSHCmd() *cobra.Command {
+	var detachFlag bool
+
+	cmd := &cobra.Command{
+		Use:   "setup-ssh <id>",
+		Short: "setup SSH keys on provisioned machines",
+		Long: `Trigger SSH key refresh on all machines in a provisioning.
+Fetches engineer SSH public keys from GCP project metadata and writes
+them to ~/.ssh/authorized_keys on each machine.`,
+		Args: cobra.ExactArgs(1),
+		Run: Wrap(func(cmd *cobra.Command, args []string) error {
+			c, l, err := newAuthClient()
+			if err != nil {
+				return errors.Wrap(err, "create API client")
+			}
+
+			resp, err := c.SetupSSHKeys(context.Background(), l, args[0])
+			if err != nil {
+				return errors.Wrap(err, "setup ssh keys")
+			}
+
+			fmt.Printf("SSH key setup initiated for provisioning %s.\n", args[0])
+
+			if resp.TaskID != "" {
+				if detachFlag {
+					fmt.Printf("Task: %s (detached)\n", resp.TaskID)
+					return nil
+				}
+				fmt.Printf("Task: %s\nStreaming logs...\n\n", resp.TaskID)
+				ctx, cancel := context.WithCancel(context.Background())
+				defer cancel()
+				return streamSSELogs(ctx, c, resp.TaskID, 0)
+			}
+
+			return nil
+		}),
+	}
+
+	cmd.Flags().BoolVarP(&detachFlag, "detach", "d", false, "do not stream logs")
 	cr.addToExcludeFromBashCompletion(cmd)
 	cr.addToExcludeFromClusterFlagsMulti(cmd)
 

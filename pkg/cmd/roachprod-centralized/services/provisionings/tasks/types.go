@@ -22,4 +22,7 @@ const (
 	// ProvisioningsTaskGC is the task type for garbage-collecting expired
 	// provisionings. Only one GC task runs at a time across all instances.
 	ProvisioningsTaskGC ProvisioningsTaskType = TaskServiceName + "_gc"
+	// ProvisioningsTaskSSHKeysSetup is the task type for running ssh-keys-setup
+	// hooks on a provisioning.
+	ProvisioningsTaskSSHKeysSetup ProvisioningsTaskType = TaskServiceName + "_ssh_keys_setup"
 )

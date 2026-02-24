@@ -16,5 +16,8 @@ go_test(
     name = "ssh_test",
     srcs = ["client_test.go"],
     embed = [":ssh"],
-    deps = ["@com_github_stretchr_testify//assert"],
+    deps = [
+        "//pkg/cmd/roachprod-centralized/utils/logger",
+        "@com_github_stretchr_testify//assert",
+    ],
 )

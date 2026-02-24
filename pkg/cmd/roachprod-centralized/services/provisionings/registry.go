@@ -20,9 +20,10 @@ func (s *Service) GetTaskServiceName() string {
 // by this service.
 func (s *Service) GetHandledTasks() map[string]stasks.ITask {
 	return map[string]stasks.ITask{
-		string(ptasks.ProvisioningsTaskProvision): &ptasks.TaskProvision{Service: s},
-		string(ptasks.ProvisioningsTaskDestroy):   &ptasks.TaskDestroy{Service: s},
-		string(ptasks.ProvisioningsTaskGC):        &ptasks.TaskGC{Service: s},
+		string(ptasks.ProvisioningsTaskProvision):    &ptasks.TaskProvision{Service: s},
+		string(ptasks.ProvisioningsTaskDestroy):      &ptasks.TaskDestroy{Service: s},
+		string(ptasks.ProvisioningsTaskGC):           &ptasks.TaskGC{Service: s},
+		string(ptasks.ProvisioningsTaskSSHKeysSetup): &ptasks.TaskSSHKeysSetup{Service: s},
 	}
 }
 
@@ -41,6 +42,11 @@ func (s *Service) CreateTaskInstance(taskType string) (tasks.ITask, error) {
 		}, nil
 	case string(ptasks.ProvisioningsTaskGC):
 		return &ptasks.TaskGC{
+			Task:    tasks.Task{Type: taskType},
+			Service: s,
+		}, nil
+	case string(ptasks.ProvisioningsTaskSSHKeysSetup):
+		return &ptasks.TaskSSHKeysSetup{
 			Task:    tasks.Task{Type: taskType},
 			Service: s,
 		}, nil

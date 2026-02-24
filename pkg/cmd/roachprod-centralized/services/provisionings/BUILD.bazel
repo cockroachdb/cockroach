@@ -49,6 +49,7 @@ go_test(
         "//pkg/cmd/roachprod-centralized/repositories/provisionings/mocks",
         "//pkg/cmd/roachprod-centralized/services/environments/mocks",
         "//pkg/cmd/roachprod-centralized/services/environments/types",
+        "//pkg/cmd/roachprod-centralized/services/provisionings/hooks",
         "//pkg/cmd/roachprod-centralized/services/provisionings/mocks",
         "//pkg/cmd/roachprod-centralized/services/provisionings/tasks",
         "//pkg/cmd/roachprod-centralized/services/provisionings/templates",

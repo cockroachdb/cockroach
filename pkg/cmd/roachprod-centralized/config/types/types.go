@@ -84,6 +84,7 @@ type Config struct {
 		DefaultLifetime   string `env:"DEFAULT_LIFETIME" default:"12h" description:"Default provisioning lifetime when template doesn't specify one"`
 		LifetimeExtension string `env:"LIFETIME_EXTENSION" default:"12h" description:"Amount to extend lifetime by"`
 		GCWatcherInterval string `env:"GC_WATCHER_INTERVAL" default:"5m" description:"Interval for GC watcher polling"`
+		SSHKeysGCPProject string `env:"SSH_KEYS_GCP_PROJECT" default:"" description:"GCP project for SSH keys metadata lookup"`
 	} `env:"PROVISIONINGS" description:"Terraform provisioning configuration"`
 }
 

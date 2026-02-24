@@ -69,6 +69,7 @@ type IService interface {
 	GetProvisioningPlan(ctx context.Context, l *logger.Logger, principal *auth.Principal, id uuid.UUID) (json.RawMessage, error)
 	GetProvisioningOutputs(ctx context.Context, l *logger.Logger, principal *auth.Principal, id uuid.UUID) (map[string]interface{}, error)
 	ExtendLifetime(ctx context.Context, l *logger.Logger, principal *auth.Principal, id uuid.UUID) (provmodels.Provisioning, error)
+	SetupSSHKeys(ctx context.Context, l *logger.Logger, principal *auth.Principal, id uuid.UUID) (provmodels.Provisioning, *uuid.UUID, error)
 }
 
 // IProvisioningTaskHandler is the interface used by task handlers to call
@@ -78,6 +79,7 @@ type IProvisioningTaskHandler interface {
 	HandleProvision(ctx context.Context, l *logger.Logger, provisioningID uuid.UUID) error
 	HandleDestroy(ctx context.Context, l *logger.Logger, provisioningID uuid.UUID) error
 	HandleGC(ctx context.Context, l *logger.Logger) error
+	HandleSetupSSHKeys(ctx context.Context, l *logger.Logger, provisioningID uuid.UUID) error
 }
 
 // InputCreateDTO is the service-layer DTO for creating a provisioning.

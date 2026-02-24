@@ -18,6 +18,12 @@ import (
 	"gopkg.in/yaml.v2"
 )
 
+// ErrNoTemplateMarker is returned by ParseMetadataFromDir when neither
+// template.yaml nor template.yml exists in the directory. Callers can use
+// errors.Is to distinguish "no marker" (safe to skip hooks) from parse
+// errors (should fail).
+var ErrNoTemplateMarker = errors.New("no template marker file found")
+
 // ITemplateManager defines the interface for template discovery and management.
 type ITemplateManager interface {
 	ListTemplates() ([]provisionings.Template, error)
@@ -122,14 +128,40 @@ func readTemplateMarker(dir string) (provisionings.TemplateMetadata, bool) {
 // ParseMetadataFromDir reads template.yaml or template.yml from a filesystem
 // directory and returns the parsed metadata. Used by HandleProvision where the
 // working directory already contains the extracted snapshot.
+//
+// Unlike readTemplateMarker (used during template discovery, where skipping
+// malformed files is acceptable), this function distinguishes "file not found"
+// from "file found but malformed" and returns an error for the latter.
 func ParseMetadataFromDir(dir string) (provisionings.TemplateMetadata, error) {
-	meta, found := readTemplateMarker(dir)
-	if !found {
-		return provisionings.TemplateMetadata{}, errors.Newf(
-			"no template.yaml or template.yml found in %s", dir,
-		)
+	for _, name := range []string{"template.yaml", "template.yml"} {
+		path := filepath.Join(dir, name)
+		data, err := os.ReadFile(path)
+		if err != nil {
+			if errors.Is(err, os.ErrNotExist) {
+				continue // file does not exist, try next
+			}
+			return provisionings.TemplateMetadata{}, errors.Wrapf(
+				err, "read %s in %s", name, dir,
+			)
+		}
+		// File exists — parse errors are real failures, not "no hooks."
+		var meta provisionings.TemplateMetadata
+		if yamlErr := yaml.Unmarshal(data, &meta); yamlErr != nil {
+			return provisionings.TemplateMetadata{}, errors.Wrapf(
+				yamlErr, "parse %s in %s", name, dir,
+			)
+		}
+		if meta.Name == "" {
+			return provisionings.TemplateMetadata{}, errors.Newf(
+				"%s in %s has empty name field", name, dir,
+			)
+		}
+		return meta, nil
 	}
-	return meta, nil
+	return provisionings.TemplateMetadata{}, errors.Wrapf(
+		ErrNoTemplateMarker,
+		"no template.yaml or template.yml in %s", dir,
+	)
 }
 
 // ParseMetadataFromSnapshot extracts and parses template.yaml from a tar.gz
