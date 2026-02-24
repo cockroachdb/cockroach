@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings"
@@ -260,6 +261,24 @@ var (
 		Category:    metric.Metadata_SQL,
 		HowToUse:    `See Description.`,
 	}
+	AuthCertSANConnTotal = metric.Metadata{
+		Name:        "auth.cert.san.conn.total",
+		Help:        "Total number of SQL connection attempts using SAN-based certificate authentication",
+		Measurement: "Connections",
+		Unit:        metric.Unit_COUNT,
+		Visibility:  metric.Metadata_ESSENTIAL,
+		Category:    metric.Metadata_SQL,
+		HowToUse:    "This metric tracks all authentication attempts when SAN-based certificate validation is enabled. Compare with auth.cert.san.conn.success to calculate failure rate.",
+	}
+	AuthCertSANConnSuccess = metric.Metadata{
+		Name:        "auth.cert.san.conn.success",
+		Help:        "Number of successful SQL connections using SAN-based certificate authentication",
+		Measurement: "Connections",
+		Unit:        metric.Unit_COUNT,
+		Visibility:  metric.Metadata_ESSENTIAL,
+		Category:    metric.Metadata_SQL,
+		HowToUse:    "This metric tracks successful authentications when SAN-based certificate validation is enabled. Use this to monitor adoption and success rate of SAN authentication. Failure rate = auth.cert.san.conn.total - auth.cert.san.conn.success.",
+	}
 )
 
 const (
@@ -420,6 +439,8 @@ type tenantSpecificMetrics struct {
 	AuthGSSConnLatency          metric.IHistogram
 	AuthScramConnLatency        metric.IHistogram
 	AuthLDAPConnLatencyInternal metric.IHistogram
+	AuthCertSANConnTotal        *metric.Counter
+	AuthCertSANConnSuccess      *metric.Counter
 }
 
 func newTenantSpecificMetrics(
@@ -456,6 +477,8 @@ func newTenantSpecificMetrics(
 			getHistogramOptionsForIOLatency(AuthScramConnLatency, histogramWindow)),
 		AuthLDAPConnLatencyInternal: metric.NewHistogram(
 			getHistogramOptionsForIOLatency(AuthLDAPConnLatencyInternal, histogramWindow)),
+		AuthCertSANConnTotal:   metric.NewCounter(AuthCertSANConnTotal),
+		AuthCertSANConnSuccess: metric.NewCounter(AuthCertSANConnSuccess),
 	}
 }
 
@@ -535,6 +558,9 @@ func MakeServer(
 	ConnIdentityMapConf.SetOnChange(&st.SV, func(ctx context.Context) {
 		loadLocalIdentityMapUponRemoteSettingChange(ctx, server, st)
 	})
+
+	// Setup cert based SAN authentication telemetry tracking.
+	security.SetupCertSANTelemetry(st)
 
 	return server
 }

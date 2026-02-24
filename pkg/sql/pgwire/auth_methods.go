@@ -422,7 +422,7 @@ func scramAuthenticator(
 // certificate.
 func authCert(
 	_ context.Context,
-	_ AuthConn,
+	c AuthConn,
 	_ username.SQLUsername,
 	tlsState tls.ConnectionState,
 	execCfg *sql.ExecutorConfig,
@@ -439,6 +439,15 @@ func authCert(
 		// Use regular mapper for non-SAN authentication.
 		b.SetRoleMapper(HbaMapper(hbaEntry, identMap))
 	}
+
+	// Mark that SAN authentication will be used if SAN is required.
+	// Also increment the total SAN auth attempt counter here where we know
+	// this is SAN-based authentication.
+	if clientCertSANRequired {
+		b.MarkUsedCertSANAuth()
+		c.GetTenantSpecificMetrics().AuthCertSANConnTotal.Inc(1)
+	}
+
 	b.SetAuthenticator(func(
 		ctx context.Context,
 		systemIdentity string,
@@ -478,7 +487,7 @@ func authCert(
 		if clientCertSANRequired {
 			identityList := security.ExtractSANsFromCertificate(tlsState.PeerCertificates[0])
 			if len(identityList) == 0 {
-				return nil, errors.New("client certificate SAN is required, but no SAN found in the certificate")
+				return b, errors.New("client certificate SAN is required, but no SAN found in the certificate")
 			}
 			b.SetSANIdentities(identityList)
 		} else {

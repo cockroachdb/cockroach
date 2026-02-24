@@ -284,6 +284,11 @@ func (c *conn) handleAuthentication(
 		telemetry.Inc(provisioning.ProvisionedUserLoginSuccessCounter)
 	}
 
+	// If SAN-based authentication was used, increment the SAN success counter
+	if behaviors.UsedCertSANAuth() {
+		c.metrics.AuthCertSANConnSuccess.Inc(1)
+	}
+
 	// Compute the authentication latency needed to serve a SQL query.
 	// The metric published is based on the authentication type.
 	duration := timeutil.Since(authStartTime).Nanoseconds()

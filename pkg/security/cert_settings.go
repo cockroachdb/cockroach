@@ -5,7 +5,14 @@
 
 package security
 
-import "github.com/cockroachdb/cockroach/pkg/settings"
+import (
+	"context"
+
+	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
+	"github.com/cockroachdb/cockroach/pkg/settings"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
+)
 
 // All cluster settings necessary for tls client cert authentication.
 const (
@@ -38,3 +45,26 @@ var ClientCertSANRequired = settings.RegisterBoolSetting(
 	settings.WithVisibility(settings.Reserved),
 	settings.WithReportable(false),
 )
+
+// SAN authentication telemetry counter for feature enablement tracking.
+const (
+	enableCertSANCounterName = "auth.cert.san.enable"
+)
+
+var (
+	enableCertSANCounter = telemetry.GetCounterOnce(enableCertSANCounterName)
+)
+
+// SetupCertSANTelemetry configures telemetry tracking for SAN-based certificate
+// authentication. It should be called during server initialization to track when
+// the SAN authentication feature is enabled via the cluster setting.
+func SetupCertSANTelemetry(settings *cluster.Settings) {
+	ClientCertSANRequired.SetOnChange(&settings.SV, func(ctx context.Context) {
+		if ClientCertSANRequired.Get(&settings.SV) {
+			telemetry.Inc(enableCertSANCounter)
+			log.Ops.Infof(ctx, "SAN-based certificate authentication has been enabled")
+		} else {
+			log.Ops.Infof(ctx, "SAN-based certificate authentication has been disabled")
+		}
+	})
+}
