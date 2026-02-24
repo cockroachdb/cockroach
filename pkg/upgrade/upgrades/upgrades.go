@@ -111,6 +111,13 @@ var upgrades = []upgradebase.Upgrade{
 		upgrade.RestoreActionNotRequired("cluster restore does not restore the new column"),
 	),
 
+	upgrade.NewTenantUpgrade(
+		"cleanup lease manager descriptor txn keys",
+		clusterversion.V26_2_DescriptorTxnKeyCleanup.Version(),
+		upgrade.NoPrecondition,
+		descriptorTxnKeyCleanup,
+		upgrade.RestoreActionImplemented("handled in RunRestoreChanges"),
+	),
 	// Note: when starting a new release version, the first upgrade (for
 	// Vxy_zStart) must be a newFirstUpgrade. Keep this comment at the bottom.
 }
