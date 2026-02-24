@@ -641,13 +641,23 @@ func UserAuthCertHook(
 			}
 			return nil
 		}
-		return errors.WithDetailf(
-			errors.Errorf(
-				"certificate authentication failed for user %q (DN: %s)",
-				systemIdentity,
-				roleSubject,
-			),
-			"The client certificate (DN: %s) is valid for %s.", certSubject, FormatUserScopes(certUserScope))
+
+		// Build error message with SAN details when SAN authentication is enabled
+		baseErr := errors.Errorf(
+			"certificate authentication failed for user %q (DN: %s)",
+			systemIdentity,
+			roleSubject,
+		)
+
+		detailMsg := fmt.Sprintf("The client certificate (DN: %s) is valid for %s",
+			certSubject, FormatUserScopes(certUserScope))
+
+		if clientCertSANRequired {
+			detailMsg += fmt.Sprintf(" SAN authentication is enabled. Certificate SANs: [%s]. Expected user: %q",
+				strings.Join(certSANs, ", "), systemIdentity)
+		}
+
+		return errors.WithDetailf(baseErr, "%s", detailMsg)
 	}, nil
 }
 

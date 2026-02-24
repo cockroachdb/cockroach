@@ -439,6 +439,12 @@ func authCert(
 		// Use regular mapper for non-SAN authentication.
 		b.SetRoleMapper(HbaMapper(hbaEntry, identMap))
 	}
+
+	// Mark that SAN authentication will be used if SAN is required.
+	if clientCertSANRequired {
+		b.MarkUsedCertSANAuth()
+	}
+
 	b.SetAuthenticator(func(
 		ctx context.Context,
 		systemIdentity string,
@@ -478,7 +484,7 @@ func authCert(
 		if clientCertSANRequired {
 			identityList := security.ExtractSANsFromCertificate(tlsState.PeerCertificates[0])
 			if len(identityList) == 0 {
-				return nil, errors.New("client certificate SAN is required, but no SAN found in the certificate")
+				return b, errors.New("client certificate SAN is required, but no SAN found in the certificate")
 			}
 			b.SetSANIdentities(identityList)
 		} else {
