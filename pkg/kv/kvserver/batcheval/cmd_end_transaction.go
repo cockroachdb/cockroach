@@ -977,10 +977,20 @@ func RunCommitTrigger(
 				ctx, errors.Wrap(err, "unable to load LHS prior read summary"),
 			)
 		}
+		rhsAbortSpanEntries, err := abortspan.New(mt.RightDesc.RangeID).Collect(
+			ctx, batch, txn.WriteTimestamp,
+			gc.TxnCleanupThreshold.Get(&rec.ClusterSettings().SV),
+		)
+		if err != nil {
+			return result.Result{}, maybeWrapReplicaCorruptionError(
+				ctx, errors.Wrap(err, "unable to collect RHS abort span entries"),
+			)
+		}
 		in := MergeTriggerHelperInput{
 			LHSGCHint:           lhsHint,
 			RHSGCHint:           rhsHint,
 			LHSPriorReadSummary: lhsPriorReadSummary,
+			RHSAbortSpanEntries: rhsAbortSpanEntries,
 		}
 		res, err := mergeTrigger(ctx, rec, batch, ms, mt, txn.WriteTimestamp, in)
 		if err != nil {
@@ -1366,9 +1376,10 @@ type SplitTriggerHelperInput struct {
 
 // MergeTriggerHelperInput contains metadata required by the mergeTrigger.
 type MergeTriggerHelperInput struct {
-	LHSGCHint          *roachpb.GCHint
-	RHSGCHint          *roachpb.GCHint
+	LHSGCHint           *roachpb.GCHint
+	RHSGCHint           *roachpb.GCHint
 	LHSPriorReadSummary *rspb.ReadSummary
+	RHSAbortSpanEntries []abortspan.Entry
 }
 
 // splitTriggerHelper continues the work begun by splitTrigger, but has a
@@ -1643,9 +1654,8 @@ func mergeTrigger(
 			desc.EndKey, merge.LeftDesc.EndKey)
 	}
 
-	if err := abortspan.New(merge.RightDesc.RangeID).CopyTo(
-		ctx, batch, batch, ms, ts, merge.LeftDesc.RangeID,
-		gc.TxnCleanupThreshold.Get(&rec.ClusterSettings().SV),
+	if err := abortspan.WriteTo(
+		ctx, batch, ms, merge.LeftDesc.RangeID, in.RHSAbortSpanEntries,
 	); err != nil {
 		return result.Result{}, err
 	}
