@@ -341,7 +341,13 @@ func (b *blockingBuffer) Drain(ctx context.Context) (err error) {
 		}
 	}
 
-	return nil
+	// Check if context was cancelled even if buffer is already empty.
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	default:
+		return nil
+	}
 }
 
 // CloseWithReason implements Writer interface.
