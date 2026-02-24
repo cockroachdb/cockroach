@@ -765,9 +765,7 @@ type Reportable struct {
 }
 
 // reporter builds a DRPC metrics reporter with pre-computed label maps.
-func (r *Reportable) reporter(
-	meta drpcCallMeta, kind drpcMetricsKind,
-) drpcMetricsReporter {
+func (r *Reportable) reporter(meta drpcCallMeta, kind drpcMetricsKind) drpcMetricsReporter {
 	baseLabels := map[string]string{
 		RPCTypeLabel:    meta.drpcType,
 		RPCServiceLabel: meta.drpcService,
