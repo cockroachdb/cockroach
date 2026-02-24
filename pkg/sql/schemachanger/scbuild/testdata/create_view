@@ -1,0 +1,157 @@
+setup
+CREATE TABLE defaultdb.public.t1 (id INT PRIMARY KEY, name TEXT, val INT);
+CREATE TABLE defaultdb.public.t2 (id INT PRIMARY KEY, data TEXT);
+CREATE SEQUENCE defaultdb.public.sq1;
+CREATE TYPE defaultdb.public.color AS ENUM ('red', 'green', 'blue');
+CREATE VIEW defaultdb.public.v1 AS SELECT name FROM defaultdb.public.t1;
+----
+
+build
+CREATE VIEW defaultdb.public.v2 AS SELECT name, val FROM defaultdb.public.t1 WHERE val > 0
+----
+- [[View:{DescID: 110}, PUBLIC], ABSENT]
+  {forwardReferences: [{columnIds: [2, 3], toId: 104}], usesRelationIds: [104], viewId: 110}
+- [[Namespace:{DescID: 110, Name: v2, ReferencedDescID: 100, IntValue: 101}, PUBLIC], ABSENT]
+  {databaseId: 100, descriptorId: 110, name: v2, schemaId: 101}
+- [[SchemaChild:{DescID: 110, ReferencedDescID: 101}, PUBLIC], ABSENT]
+  {childObjectId: 110, schemaId: 101}
+- [[Column:{DescID: 110, ColumnID: 1}, PUBLIC], ABSENT]
+  {columnId: 1, tableId: 110}
+- [[ColumnName:{DescID: 110, Name: name, ColumnID: 1}, PUBLIC], ABSENT]
+  {columnId: 1, name: name, tableId: 110}
+- [[ColumnType:{DescID: 110, ColumnFamilyID: 0, ColumnID: 1, TypeName: STRING}, PUBLIC], ABSENT]
+  {columnId: 1, elementCreationMetadata: {in261OrLater: true}, tableId: 110, type: {family: StringFamily, oid: 25}, typeName: STRING}
+- [[Column:{DescID: 110, ColumnID: 2}, PUBLIC], ABSENT]
+  {columnId: 2, tableId: 110}
+- [[ColumnName:{DescID: 110, Name: val, ColumnID: 2}, PUBLIC], ABSENT]
+  {columnId: 2, name: val, tableId: 110}
+- [[ColumnType:{DescID: 110, ColumnFamilyID: 0, ColumnID: 2, TypeName: INT8}, PUBLIC], ABSENT]
+  {columnId: 2, elementCreationMetadata: {in261OrLater: true}, tableId: 110, type: {family: IntFamily, oid: 20, width: 64}, typeName: INT8}
+- [[ViewQuery:{DescID: 110}, PUBLIC], ABSENT]
+  {query: 'SELECT name, val FROM defaultdb.public.t1 WHERE val > 0;', usesTables: [{columnIds: [2, 3], tableId: 104}], viewId: 110}
+- [[Owner:{DescID: 110}, PUBLIC], ABSENT]
+  {descriptorId: 110, owner: root}
+- [[UserPrivileges:{DescID: 110, Name: admin}, PUBLIC], ABSENT]
+  {descriptorId: 110, privileges: "2", userName: admin, withGrantOption: "2"}
+- [[UserPrivileges:{DescID: 110, Name: root}, PUBLIC], ABSENT]
+  {descriptorId: 110, privileges: "2", userName: root, withGrantOption: "2"}
+
+build
+CREATE VIEW defaultdb.public.v3 AS SELECT name, data FROM defaultdb.public.t1 JOIN defaultdb.public.t2 ON t1.id = t2.id
+----
+- [[View:{DescID: 111}, PUBLIC], ABSENT]
+  {forwardReferences: [{columnIds: [1, 2], toId: 104}, {columnIds: [1, 2], toId: 105}], usesRelationIds: [104, 105], viewId: 111}
+- [[Namespace:{DescID: 111, Name: v3, ReferencedDescID: 100, IntValue: 101}, PUBLIC], ABSENT]
+  {databaseId: 100, descriptorId: 111, name: v3, schemaId: 101}
+- [[SchemaChild:{DescID: 111, ReferencedDescID: 101}, PUBLIC], ABSENT]
+  {childObjectId: 111, schemaId: 101}
+- [[Column:{DescID: 111, ColumnID: 1}, PUBLIC], ABSENT]
+  {columnId: 1, tableId: 111}
+- [[ColumnName:{DescID: 111, Name: name, ColumnID: 1}, PUBLIC], ABSENT]
+  {columnId: 1, name: name, tableId: 111}
+- [[ColumnType:{DescID: 111, ColumnFamilyID: 0, ColumnID: 1, TypeName: STRING}, PUBLIC], ABSENT]
+  {columnId: 1, elementCreationMetadata: {in261OrLater: true}, tableId: 111, type: {family: StringFamily, oid: 25}, typeName: STRING}
+- [[Column:{DescID: 111, ColumnID: 2}, PUBLIC], ABSENT]
+  {columnId: 2, tableId: 111}
+- [[ColumnName:{DescID: 111, Name: data, ColumnID: 2}, PUBLIC], ABSENT]
+  {columnId: 2, name: data, tableId: 111}
+- [[ColumnType:{DescID: 111, ColumnFamilyID: 0, ColumnID: 2, TypeName: STRING}, PUBLIC], ABSENT]
+  {columnId: 2, elementCreationMetadata: {in261OrLater: true}, tableId: 111, type: {family: StringFamily, oid: 25}, typeName: STRING}
+- [[ViewQuery:{DescID: 111}, PUBLIC], ABSENT]
+  {query: 'SELECT name, data FROM defaultdb.public.t1 JOIN defaultdb.public.t2 ON t1.id = t2.id;', usesTables: [{columnIds: [1, 2], tableId: 104}, {columnIds: [1, 2], tableId: 105}], viewId: 111}
+- [[Owner:{DescID: 111}, PUBLIC], ABSENT]
+  {descriptorId: 111, owner: root}
+- [[UserPrivileges:{DescID: 111, Name: admin}, PUBLIC], ABSENT]
+  {descriptorId: 111, privileges: "2", userName: admin, withGrantOption: "2"}
+- [[UserPrivileges:{DescID: 111, Name: root}, PUBLIC], ABSENT]
+  {descriptorId: 111, privileges: "2", userName: root, withGrantOption: "2"}
+
+build
+CREATE VIEW defaultdb.public.v_on_v AS SELECT name FROM defaultdb.public.v1
+----
+- [[View:{DescID: 112}, PUBLIC], ABSENT]
+  {forwardReferences: [{columnIds: [1], toId: 109}], usesRelationIds: [109], viewId: 112}
+- [[Namespace:{DescID: 112, Name: v_on_v, ReferencedDescID: 100, IntValue: 101}, PUBLIC], ABSENT]
+  {databaseId: 100, descriptorId: 112, name: v_on_v, schemaId: 101}
+- [[SchemaChild:{DescID: 112, ReferencedDescID: 101}, PUBLIC], ABSENT]
+  {childObjectId: 112, schemaId: 101}
+- [[Column:{DescID: 112, ColumnID: 1}, PUBLIC], ABSENT]
+  {columnId: 1, tableId: 112}
+- [[ColumnName:{DescID: 112, Name: name, ColumnID: 1}, PUBLIC], ABSENT]
+  {columnId: 1, name: name, tableId: 112}
+- [[ColumnType:{DescID: 112, ColumnFamilyID: 0, ColumnID: 1, TypeName: STRING}, PUBLIC], ABSENT]
+  {columnId: 1, elementCreationMetadata: {in261OrLater: true}, tableId: 112, type: {family: StringFamily, oid: 25}, typeName: STRING}
+- [[ViewQuery:{DescID: 112}, PUBLIC], ABSENT]
+  {query: SELECT name FROM defaultdb.public.v1;, usesViews: [{columnIds: [1], viewId: 109}], viewId: 112}
+- [[Owner:{DescID: 112}, PUBLIC], ABSENT]
+  {descriptorId: 112, owner: root}
+- [[UserPrivileges:{DescID: 112, Name: admin}, PUBLIC], ABSENT]
+  {descriptorId: 112, privileges: "2", userName: admin, withGrantOption: "2"}
+- [[UserPrivileges:{DescID: 112, Name: root}, PUBLIC], ABSENT]
+  {descriptorId: 112, privileges: "2", userName: root, withGrantOption: "2"}
+
+build
+CREATE VIEW defaultdb.public.v_typed AS SELECT id, c FROM (SELECT 1 AS id, 'red'::defaultdb.public.color AS c)
+----
+- [[View:{DescID: 113}, PUBLIC], ABSENT]
+  {usesTypeIds: [107, 108], viewId: 113}
+- [[Namespace:{DescID: 113, Name: v_typed, ReferencedDescID: 100, IntValue: 101}, PUBLIC], ABSENT]
+  {databaseId: 100, descriptorId: 113, name: v_typed, schemaId: 101}
+- [[SchemaChild:{DescID: 113, ReferencedDescID: 101}, PUBLIC], ABSENT]
+  {childObjectId: 113, schemaId: 101}
+- [[Column:{DescID: 113, ColumnID: 1}, PUBLIC], ABSENT]
+  {columnId: 1, tableId: 113}
+- [[ColumnName:{DescID: 113, Name: id, ColumnID: 1}, PUBLIC], ABSENT]
+  {columnId: 1, name: id, tableId: 113}
+- [[ColumnType:{DescID: 113, ColumnFamilyID: 0, ColumnID: 1, TypeName: INT8}, PUBLIC], ABSENT]
+  {columnId: 1, elementCreationMetadata: {in261OrLater: true}, tableId: 113, type: {family: IntFamily, oid: 20, width: 64}, typeName: INT8}
+- [[Column:{DescID: 113, ColumnID: 2}, PUBLIC], ABSENT]
+  {columnId: 2, tableId: 113}
+- [[ColumnName:{DescID: 113, Name: c, ColumnID: 2}, PUBLIC], ABSENT]
+  {columnId: 2, name: c, tableId: 113}
+- [[ColumnType:{DescID: 113, ReferencedTypeIDs: [107 108], ColumnFamilyID: 0, ColumnID: 2, TypeName: public.color}, PUBLIC], ABSENT]
+  {closedTypeIds: [107, 108], columnId: 2, elementCreationMetadata: {in261OrLater: true}, tableId: 113, type: {family: EnumFamily, oid: 100107, udtMetadata: {arrayTypeOid: 100108}}, typeName: public.color}
+- [[ViewQuery:{DescID: 113}, PUBLIC], ABSENT]
+  {query: 'SELECT id, c FROM (SELECT 1 AS id, b''@'':::@100107 AS c) AS "?subquery1?";', usesTypeIds: [107, 108], viewId: 113}
+- [[Owner:{DescID: 113}, PUBLIC], ABSENT]
+  {descriptorId: 113, owner: root}
+- [[UserPrivileges:{DescID: 113, Name: admin}, PUBLIC], ABSENT]
+  {descriptorId: 113, privileges: "2", userName: admin, withGrantOption: "2"}
+- [[UserPrivileges:{DescID: 113, Name: root}, PUBLIC], ABSENT]
+  {descriptorId: 113, privileges: "2", userName: root, withGrantOption: "2"}
+
+build
+CREATE VIEW defaultdb.public.v_seq AS SELECT nextval('defaultdb.public.sq1')
+----
+- [[View:{DescID: 114}, PUBLIC], ABSENT]
+  {usesRelationIds: [106], viewId: 114}
+- [[Namespace:{DescID: 114, Name: v_seq, ReferencedDescID: 100, IntValue: 101}, PUBLIC], ABSENT]
+  {databaseId: 100, descriptorId: 114, name: v_seq, schemaId: 101}
+- [[SchemaChild:{DescID: 114, ReferencedDescID: 101}, PUBLIC], ABSENT]
+  {childObjectId: 114, schemaId: 101}
+- [[Column:{DescID: 114, ColumnID: 1}, PUBLIC], ABSENT]
+  {columnId: 1, tableId: 114}
+- [[ColumnName:{DescID: 114, Name: nextval, ColumnID: 1}, PUBLIC], ABSENT]
+  {columnId: 1, name: nextval, tableId: 114}
+- [[ColumnType:{DescID: 114, ColumnFamilyID: 0, ColumnID: 1, TypeName: INT8}, PUBLIC], ABSENT]
+  {columnId: 1, elementCreationMetadata: {in261OrLater: true}, tableId: 114, type: {family: IntFamily, oid: 20, width: 64}, typeName: INT8}
+- [[ViewQuery:{DescID: 114}, PUBLIC], ABSENT]
+  {query: 'SELECT nextval(106:::REGCLASS);', usesSequenceIds: [106], viewId: 114}
+- [[Owner:{DescID: 114}, PUBLIC], ABSENT]
+  {descriptorId: 114, owner: root}
+- [[UserPrivileges:{DescID: 114, Name: admin}, PUBLIC], ABSENT]
+  {descriptorId: 114, privileges: "2", userName: admin, withGrantOption: "2"}
+- [[UserPrivileges:{DescID: 114, Name: root}, PUBLIC], ABSENT]
+  {descriptorId: 114, privileges: "2", userName: root, withGrantOption: "2"}
+
+build
+CREATE VIEW IF NOT EXISTS defaultdb.public.v1 AS SELECT name FROM defaultdb.public.t1
+----
+
+unimplemented
+CREATE MATERIALIZED VIEW defaultdb.public.mv AS SELECT name FROM defaultdb.public.t1
+----
+
+unimplemented
+CREATE OR REPLACE VIEW defaultdb.public.v1 AS SELECT name FROM defaultdb.public.t1
+----
