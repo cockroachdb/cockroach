@@ -595,6 +595,16 @@ View : []ForwardReferences
 View :  IsTemporary
 View :  IsMaterialized
 
+object ViewQuery
+
+ViewQuery :  ViewID
+ViewQuery :  Query
+ViewQuery : []UsesTables
+ViewQuery : []UsesViews
+ViewQuery : []UsesSequenceIDs
+ViewQuery : []UsesTypeIDs
+ViewQuery : []UsesFunctionIDs
+
 Table <|-- CheckConstraint
 Table <|-- CheckConstraintUnvalidated
 Table <|-- Column
@@ -725,4 +735,5 @@ Database <|-- UserPrivileges
 Schema <|-- UserPrivileges
 AliasType <|-- UserPrivileges
 EnumType <|-- UserPrivileges
+View <|-- ViewQuery
 @enduml

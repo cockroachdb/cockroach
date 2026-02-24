@@ -11,6 +11,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/norm"
@@ -30,6 +31,8 @@ type referenceProvider struct {
 	referencedSequences catalog.DescriptorIDSet
 	referencedTypes     catalog.DescriptorIDSet
 	allRelationIDs      catalog.DescriptorIDSet
+	viewQuery           string
+	viewColumns         colinfo.ResultColumns
 }
 
 func newReferenceProvider() *referenceProvider {
@@ -105,6 +108,16 @@ func (r *referenceProvider) ReferencedRoutines() catalog.DescriptorIDSet {
 	return r.referencedFunctions
 }
 
+// ViewQuery implements scbuildstmt.ReferenceProvider.
+func (r *referenceProvider) ViewQuery() string {
+	return r.viewQuery
+}
+
+// ViewColumns implements scbuildstmt.ReferenceProvider.
+func (r *referenceProvider) ViewColumns() colinfo.ResultColumns {
+	return r.viewColumns
+}
+
 type referenceProviderFactory struct {
 	p *planner
 }
@@ -126,11 +139,15 @@ func (f *referenceProviderFactory) NewReferenceProvider(
 		typeDeps typeDependencies
 		funcDeps functionDependencies
 	)
+	var createViewExpr *memo.CreateViewExpr
 	switch t := optFactory.Memo().RootExpr().(type) {
 	case *memo.CreateFunctionExpr:
 		planDeps, typeDeps, funcDeps, err = toPlanDependencies(t.Deps, t.TypeDeps, t.FuncDeps)
 	case *memo.CreateTriggerExpr:
 		planDeps, typeDeps, funcDeps, err = toPlanDependencies(t.Deps, t.TypeDeps, t.FuncDeps)
+	case *memo.CreateViewExpr:
+		planDeps, typeDeps, funcDeps, err = toPlanDependencies(t.Deps, t.TypeDeps, t.FuncDeps)
+		createViewExpr = t
 	default:
 		return nil, errors.AssertionFailedf("unexpected root expression: %s", t.Op())
 	}
@@ -139,6 +156,18 @@ func (f *referenceProviderFactory) NewReferenceProvider(
 	}
 
 	ret := newReferenceProvider()
+
+	if createViewExpr != nil {
+		ret.viewQuery = createViewExpr.ViewQuery
+		md := optFactory.Memo().Metadata()
+		ret.viewColumns = make(colinfo.ResultColumns, len(createViewExpr.Columns))
+		for i, col := range createViewExpr.Columns {
+			ret.viewColumns[i] = colinfo.ResultColumn{
+				Name: col.Alias,
+				Typ:  md.ColumnMeta(col.ID).Type,
+			}
+		}
+	}
 
 	for descID, refs := range planDeps {
 		ret.allRelationIDs.Add(descID)

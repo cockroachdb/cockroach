@@ -62,6 +62,7 @@ var supportedStatements = map[reflect.Type]supportedStatement{
 	reflect.TypeOf((*tree.CreateSchema)(nil)):        {fn: CreateSchema, statementTags: []string{tree.CreateSchemaTag}, on: true, checks: nil},
 	reflect.TypeOf((*tree.CreateSequence)(nil)):      {fn: CreateSequence, statementTags: []string{tree.CreateSequenceTag}, on: true, checks: nil},
 	reflect.TypeOf((*tree.CreateTrigger)(nil)):       {fn: CreateTrigger, statementTags: []string{tree.CreateTriggerTag}, on: true, checks: nil},
+	reflect.TypeOf((*tree.CreateView)(nil)):          {fn: CreateView, statementTags: []string{"CREATE VIEW"}, on: true, checks: createViewChecks},
 	reflect.TypeOf((*tree.DropDatabase)(nil)):        {fn: DropDatabase, statementTags: []string{tree.DropDatabaseTag}, on: true, checks: nil},
 	reflect.TypeOf((*tree.DropRoutine)(nil)):         {fn: DropFunction, statementTags: []string{tree.DropFunctionTag, tree.DropProcedureTag}, on: true, checks: nil},
 	reflect.TypeOf((*tree.DropIndex)(nil)):           {fn: DropIndex, statementTags: []string{tree.DropIndexTag}, on: true, checks: nil},
@@ -270,5 +271,17 @@ var isV261Active = func(_ tree.NodeFormatter, _ sessiondatapb.NewSchemaChangerMo
 }
 
 var isV262Active = func(_ tree.NodeFormatter, _ sessiondatapb.NewSchemaChangerMode, activeVersion clusterversion.ClusterVersion) bool {
+	return activeVersion.IsActive(clusterversion.V26_2)
+}
+
+var createViewChecks = func(
+	n *tree.CreateView,
+	mode sessiondatapb.NewSchemaChangerMode,
+	activeVersion clusterversion.ClusterVersion,
+) bool {
+	// Only regular (non-materialized, non-temporary, non-replace) views.
+	if n.Materialized || n.Persistence.IsTemporary() || n.Replace {
+		return false
+	}
 	return activeVersion.IsActive(clusterversion.V26_2)
 }

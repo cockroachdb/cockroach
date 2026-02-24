@@ -145,6 +145,8 @@ DROP SCHEMA defaultdb.SC1 CASCADE
   {descriptorId: 108, privileges: "2", userName: root, withGrantOption: "2"}
 - [[View:{DescID: 108}, ABSENT], PUBLIC]
   {forwardReferences: [{columnIds: [2], toId: 107}], usesRelationIds: [107], viewId: 108}
+- [[ViewQuery:{DescID: 108}, ABSENT], PUBLIC]
+  {query: (SELECT name FROM defaultdb.sc1.t1), usesTables: [{columnIds: [2], tableId: 107}], viewId: 108}
 - [[SchemaChild:{DescID: 108, ReferencedDescID: 104}, ABSENT], PUBLIC]
   {childObjectId: 108, schemaId: 104}
 - [[Column:{DescID: 108, ColumnID: 1}, ABSENT], PUBLIC]
@@ -195,6 +197,8 @@ DROP SCHEMA defaultdb.SC1 CASCADE
   {descriptorId: 109, privileges: "2", userName: root, withGrantOption: "2"}
 - [[View:{DescID: 109}, ABSENT], PUBLIC]
   {forwardReferences: [{columnIds: [1], toId: 108}], usesRelationIds: [108], viewId: 109}
+- [[ViewQuery:{DescID: 109}, ABSENT], PUBLIC]
+  {query: '(SELECT name AS n1, name AS n2 FROM defaultdb.sc1.v1)', usesViews: [{columnIds: [1], viewId: 108}], viewId: 109}
 - [[SchemaChild:{DescID: 109, ReferencedDescID: 104}, ABSENT], PUBLIC]
   {childObjectId: 109, schemaId: 104}
 - [[Column:{DescID: 109, ColumnID: 1}, ABSENT], PUBLIC]
@@ -251,6 +255,8 @@ DROP SCHEMA defaultdb.SC1 CASCADE
   {descriptorId: 110, privileges: "2", userName: root, withGrantOption: "2"}
 - [[View:{DescID: 110}, ABSENT], PUBLIC]
   {forwardReferences: [{columnIds: [1], toId: 108}, {columnIds: [1, 2], toId: 109}], usesRelationIds: [108, 109], viewId: 110}
+- [[ViewQuery:{DescID: 110}, ABSENT], PUBLIC]
+  {query: '(SELECT name, n1 FROM defaultdb.sc1.v1, defaultdb.sc1.v2)', usesViews: [{columnIds: [1], viewId: 108}, {columnIds: [1, 2], viewId: 109}], viewId: 110}
 - [[SchemaChild:{DescID: 110, ReferencedDescID: 104}, ABSENT], PUBLIC]
   {childObjectId: 110, schemaId: 104}
 - [[Column:{DescID: 110, ColumnID: 1}, ABSENT], PUBLIC]
@@ -307,6 +313,8 @@ DROP SCHEMA defaultdb.SC1 CASCADE
   {descriptorId: 111, privileges: "2", userName: root, withGrantOption: "2"}
 - [[View:{DescID: 111}, ABSENT], PUBLIC]
   {forwardReferences: [{columnIds: [1, 2], toId: 109}], usesRelationIds: [109], viewId: 111}
+- [[ViewQuery:{DescID: 111}, ABSENT], PUBLIC]
+  {query: '(SELECT n2, n1 FROM defaultdb.sc1.v2)', usesViews: [{columnIds: [1, 2], viewId: 109}], viewId: 111}
 - [[SchemaChild:{DescID: 111, ReferencedDescID: 104}, ABSENT], PUBLIC]
   {childObjectId: 111, schemaId: 104}
 - [[Column:{DescID: 111, ColumnID: 1}, ABSENT], PUBLIC]
@@ -393,6 +401,8 @@ DROP SCHEMA defaultdb.SC1 CASCADE
   {descriptorId: 114, privileges: "2", userName: root, withGrantOption: "2"}
 - [[View:{DescID: 114}, ABSENT], PUBLIC]
   {forwardReferences: [{columnIds: [1, 2], toId: 111}], usesRelationIds: [111], usesTypeIds: [112, 113], viewId: 114}
+- [[ViewQuery:{DescID: 114}, ABSENT], PUBLIC]
+  {query: '(SELECT b''\x80'':::@100112::STRING AS k, n2, n1 FROM defaultdb.sc1.v4)', usesTypeIds: [112, 113], usesViews: [{columnIds: [1, 2], viewId: 111}], viewId: 114}
 - [[SchemaChild:{DescID: 114, ReferencedDescID: 104}, ABSENT], PUBLIC]
   {childObjectId: 114, schemaId: 104}
 - [[Column:{DescID: 114, ColumnID: 1}, ABSENT], PUBLIC]
@@ -455,6 +465,8 @@ DROP SCHEMA defaultdb.SC1 CASCADE
   {descriptorId: 115, privileges: "2", userName: root, withGrantOption: "2"}
 - [[View:{DescID: 115}, ABSENT], PUBLIC]
   {forwardReferences: [{columnIds: [1, 2], toId: 111}], usesRelationIds: [111], usesTypeIds: [112, 113], viewId: 115}
+- [[ViewQuery:{DescID: 115}, ABSENT], PUBLIC]
+  {query: '(SELECT b''\x80'':::@100112::STRING AS k, n2, n1 FROM defaultdb.sc1.v4)', usesTypeIds: [112, 113], usesViews: [{columnIds: [1, 2], viewId: 111}], viewId: 115}
 - [[SchemaChild:{DescID: 115, ReferencedDescID: 105}, ABSENT], PUBLIC]
   {childObjectId: 115, schemaId: 105}
 - [[Column:{DescID: 115, ColumnID: 1}, ABSENT], PUBLIC]

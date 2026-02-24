@@ -500,6 +500,19 @@ ElementState:
     usesTypeIds: []
     viewId: 112
   Status: PUBLIC
+- ViewQuery:
+    query: (SELECT id FROM db1.sc1.t1)
+    usesFunctionIds: []
+    usesSequenceIds: []
+    usesTables:
+    - columnIds:
+      - 1
+      indexId: 0
+      tableId: 109
+    usesTypeIds: []
+    usesViews: []
+    viewId: 112
+  Status: PUBLIC
 
 decompose
 v2
@@ -814,5 +827,19 @@ ElementState:
     usesTypeIds:
     - 110
     - 111
+    viewId: 113
+  Status: PUBLIC
+- ViewQuery:
+    query: (SELECT b'\x80':::@100110::STRING AS k, id FROM db1.sc1.v1)
+    usesFunctionIds: []
+    usesSequenceIds: []
+    usesTables: []
+    usesTypeIds:
+    - 110
+    - 111
+    usesViews:
+    - columnIds:
+      - 1
+      viewId: 112
     viewId: 113
   Status: PUBLIC

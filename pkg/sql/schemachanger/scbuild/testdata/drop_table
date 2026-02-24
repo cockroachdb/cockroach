@@ -181,6 +181,8 @@ DROP TABLE defaultdb.shipments CASCADE;
   {descriptorId: 111, privileges: "2", userName: root, withGrantOption: "2"}
 - [[View:{DescID: 111}, ABSENT], PUBLIC]
   {forwardReferences: [{columnIds: [2, 4], toId: 109}], usesRelationIds: [109], viewId: 111}
+- [[ViewQuery:{DescID: 111}, ABSENT], PUBLIC]
+  {query: '(SELECT customer_id, carrier FROM defaultdb.public.shipments)', usesTables: [{columnIds: [2, 4], tableId: 109}], viewId: 111}
 - [[SchemaChild:{DescID: 111, ReferencedDescID: 101}, ABSENT], PUBLIC]
   {childObjectId: 111, schemaId: 101}
 - [[Column:{DescID: 111, ColumnID: 1}, ABSENT], PUBLIC]

@@ -138,7 +138,7 @@ func VersionSupportsElementUse(el scpb.Element, version clusterversion.ClusterVe
 		return version.IsActive(clusterversion.V25_3)
 	case *scpb.ColumnGeneratedAsIdentity, *scpb.ColumnHidden, *scpb.SequenceValue, *scpb.TableStorageParam:
 		return version.IsActive(clusterversion.V26_1)
-	case *scpb.FunctionParams:
+	case *scpb.FunctionParams, *scpb.ViewQuery:
 		return version.IsActive(clusterversion.V26_2)
 	default:
 		panic(errors.AssertionFailedf("unknown element %T", el))

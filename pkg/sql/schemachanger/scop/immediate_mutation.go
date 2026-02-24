@@ -1108,6 +1108,48 @@ type CreateSequenceDescriptor struct {
 	Temporary  bool
 }
 
+// CreateViewDescriptor creates a new view descriptor with a minimal skeleton.
+// Other elements (Namespace, SchemaChild, Owner, etc.) fill in the remaining
+// fields during the same transaction.
+type CreateViewDescriptor struct {
+	immediateMutationOp
+	ViewID    descpb.ID
+	Temporary bool
+}
+
+// SetViewQuery sets the view query string on a view descriptor.
+type SetViewQuery struct {
+	immediateMutationOp
+	ViewID descpb.ID
+	Query  string
+}
+
+// UpdateViewBackReferencesInRelations sets DependsOn on the view descriptor
+// and adds DependedOnBy back-references on the referenced relations.
+type UpdateViewBackReferencesInRelations struct {
+	immediateMutationOp
+	ViewID          descpb.ID
+	TableReferences []scpb.FunctionBody_TableReference
+	ViewReferences  []scpb.FunctionBody_ViewReference
+	SequenceIDs     []descpb.ID
+}
+
+// UpdateViewBackReferencesInTypes sets DependsOnTypes on the view descriptor
+// and adds ReferencingDescriptorIDs back-references on the referenced types.
+type UpdateViewBackReferencesInTypes struct {
+	immediateMutationOp
+	ViewID  descpb.ID
+	TypeIDs []descpb.ID
+}
+
+// UpdateViewBackReferencesInRoutines sets DependsOnFunctions on the view
+// descriptor and adds DependedOnBy back-references on the referenced routines.
+type UpdateViewBackReferencesInRoutines struct {
+	immediateMutationOp
+	ViewID      descpb.ID
+	FunctionIDs []descpb.ID
+}
+
 type SetSequenceOption struct {
 	immediateMutationOp
 	SequenceID descpb.ID

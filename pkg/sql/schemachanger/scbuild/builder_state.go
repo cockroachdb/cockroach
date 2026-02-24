@@ -1925,6 +1925,47 @@ func (b *builderState) WrapFunctionBody(
 	return fnBody
 }
 
+func (b *builderState) WrapViewQuery(
+	viewID descpb.ID, queryStr string, refProvider scbuildstmt.ReferenceProvider,
+) *scpb.ViewQuery {
+	// Replace sequence names with IDs and serialize user-defined types, matching
+	// the pattern in WrapFunctionBody for SQL language bodies.
+	queryStr = b.replaceSeqNamesWithIDs(queryStr, catpb.Function_SQL)
+	queryStr = b.serializeUserDefinedTypes(queryStr, catpb.Function_SQL)
+
+	vq := &scpb.ViewQuery{
+		ViewID: viewID,
+		Query:  queryStr,
+	}
+	if err := refProvider.ForEachTableReference(func(
+		tblID descpb.ID, idxID descpb.IndexID, colIDs descpb.ColumnIDs,
+	) error {
+		vq.UsesTables = append(vq.UsesTables, scpb.FunctionBody_TableReference{
+			TableID:   tblID,
+			ColumnIDs: colIDs,
+			IndexID:   idxID,
+		})
+		return nil
+	}); err != nil {
+		panic(err)
+	}
+	if err := refProvider.ForEachViewReference(func(
+		viewRefID descpb.ID, colIDs descpb.ColumnIDs,
+	) error {
+		vq.UsesViews = append(vq.UsesViews, scpb.FunctionBody_ViewReference{
+			ViewID:    viewRefID,
+			ColumnIDs: colIDs,
+		})
+		return nil
+	}); err != nil {
+		panic(err)
+	}
+	vq.UsesFunctionIDs = refProvider.ReferencedRoutines().Ordered()
+	vq.UsesSequenceIDs = refProvider.ReferencedSequences().Ordered()
+	vq.UsesTypeIDs = refProvider.ReferencedTypes().Ordered()
+	return vq
+}
+
 func (b *builderState) ReplaceSeqTypeNamesInStatements(
 	queryStr string, lang catpb.Function_Language,
 ) string {

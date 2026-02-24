@@ -186,7 +186,10 @@ message ElementProto {
     PolicyWithCheckExpr policy_with_check_expr = 243 [(gogoproto.moretags) = "parent:\"Policy\""];
     PolicyDeps policy_deps = 244 [(gogoproto.moretags) = "parent:\"Policy\""];
 
-    // Next element group start id: 250
+    // View elements.
+    ViewQuery view_query = 250 [(gogoproto.moretags) = "parent:\"View\""];
+
+    // Next element group start id: 260
   }
 
   // Reserved for the now-removed SecondaryIndexPartial element.
@@ -524,6 +527,16 @@ message View {
 
   bool is_temporary = 10;
   bool is_materialized = 11;
+}
+
+message ViewQuery {
+  uint32 view_id = 1 [(gogoproto.customname) = "ViewID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.DescID"];
+  string query = 2;
+  repeated FunctionBody.TableReference uses_tables = 3 [(gogoproto.nullable) = false];
+  repeated FunctionBody.ViewReference uses_views = 4 [(gogoproto.nullable) = false];
+  repeated uint32 uses_sequence_ids = 5 [(gogoproto.customname) = "UsesSequenceIDs", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.DescID"];
+  repeated uint32 uses_type_ids = 6 [(gogoproto.customname) = "UsesTypeIDs", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.DescID"];
+  repeated uint32 uses_function_ids = 7 [(gogoproto.customname) = "UsesFunctionIDs", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.DescID"];
 }
 
 message Table {

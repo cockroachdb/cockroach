@@ -232,6 +232,8 @@ func dropCascadeDescriptor(b BuildCtx, id catid.DescID) {
 			dropCascadeDescriptor(next, t.TypeID)
 		case *scpb.CompositeType:
 			dropCascadeDescriptor(next, t.TypeID)
+		case *scpb.ViewQuery:
+			dropCascadeDescriptor(next, t.ViewID)
 		case *scpb.FunctionBody:
 			dropCascadeDescriptor(next, t.FunctionID)
 		case *scpb.FunctionParams:

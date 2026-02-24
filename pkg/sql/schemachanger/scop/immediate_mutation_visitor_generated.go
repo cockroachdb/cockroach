@@ -159,6 +159,11 @@ type ImmediateMutationVisitor interface {
 	UpdateOwner(context.Context, UpdateOwner) error
 	CreateSchemaDescriptor(context.Context, CreateSchemaDescriptor) error
 	CreateSequenceDescriptor(context.Context, CreateSequenceDescriptor) error
+	CreateViewDescriptor(context.Context, CreateViewDescriptor) error
+	SetViewQuery(context.Context, SetViewQuery) error
+	UpdateViewBackReferencesInRelations(context.Context, UpdateViewBackReferencesInRelations) error
+	UpdateViewBackReferencesInTypes(context.Context, UpdateViewBackReferencesInTypes) error
+	UpdateViewBackReferencesInRoutines(context.Context, UpdateViewBackReferencesInRoutines) error
 	SetSequenceOption(context.Context, SetSequenceOption) error
 	UnsetSequenceOption(context.Context, UnsetSequenceOption) error
 	MaybeUpdateSequenceValue(context.Context, MaybeUpdateSequenceValue) error
@@ -896,6 +901,31 @@ func (op CreateSchemaDescriptor) Visit(ctx context.Context, v ImmediateMutationV
 // Visit is part of the ImmediateMutationOp interface.
 func (op CreateSequenceDescriptor) Visit(ctx context.Context, v ImmediateMutationVisitor) error {
 	return v.CreateSequenceDescriptor(ctx, op)
+}
+
+// Visit is part of the ImmediateMutationOp interface.
+func (op CreateViewDescriptor) Visit(ctx context.Context, v ImmediateMutationVisitor) error {
+	return v.CreateViewDescriptor(ctx, op)
+}
+
+// Visit is part of the ImmediateMutationOp interface.
+func (op SetViewQuery) Visit(ctx context.Context, v ImmediateMutationVisitor) error {
+	return v.SetViewQuery(ctx, op)
+}
+
+// Visit is part of the ImmediateMutationOp interface.
+func (op UpdateViewBackReferencesInRelations) Visit(ctx context.Context, v ImmediateMutationVisitor) error {
+	return v.UpdateViewBackReferencesInRelations(ctx, op)
+}
+
+// Visit is part of the ImmediateMutationOp interface.
+func (op UpdateViewBackReferencesInTypes) Visit(ctx context.Context, v ImmediateMutationVisitor) error {
+	return v.UpdateViewBackReferencesInTypes(ctx, op)
+}
+
+// Visit is part of the ImmediateMutationOp interface.
+func (op UpdateViewBackReferencesInRoutines) Visit(ctx context.Context, v ImmediateMutationVisitor) error {
+	return v.UpdateViewBackReferencesInRoutines(ctx, op)
 }
 
 // Visit is part of the ImmediateMutationOp interface.
