@@ -1181,7 +1181,11 @@ func (g *GaugeFloat64) Inspect(f func(interface{})) { f(g) }
 
 // MarshalJSON marshals to JSON.
 func (g *GaugeFloat64) MarshalJSON() ([]byte, error) {
-	return json.Marshal(g.Value())
+	v := g.Value()
+	if math.IsInf(v, 0) || math.IsNaN(v) {
+		v = 0
+	}
+	return json.Marshal(v)
 }
 
 // ToPrometheusMetric returns a filled-in prometheus metric of the right type.
