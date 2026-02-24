@@ -216,8 +216,15 @@ jobs:
           # set -o pipefail ensures that a bazel failure is not masked by the tee.
           # Without this, tee always exits 0 and a silent docgen crash produces no
           # BNF files while the step still reports success.
+          # Build the docgen binary first, then run it directly from the workspace
+          # root. Using `bazel run` would execute the binary inside Bazel's
+          # runfiles sandbox, where relative paths like pkg/sql/parser/sql.y are
+          # not accessible (only declared data dependencies are present there).
+          # Running the pre-built binary directly keeps the working directory as
+          # the workspace root, so all relative paths resolve correctly.
           set -o pipefail
-          bazel run //pkg/cmd/docgen -- grammar bnf docs/generated/sql/bnf/ --addr pkg/sql/parser/sql.y 2>&1 | tee bnf_generation.log
+          bazel build //pkg/cmd/docgen 2>&1 | tee bnf_generation.log
+          ./_bazel/bin/pkg/cmd/docgen/docgen_/docgen grammar bnf docs/generated/sql/bnf/ --addr pkg/sql/parser/sql.y 2>&1 | tee -a bnf_generation.log
           echo "::endgroup::"
 
       - name: Build SVG diagrams
