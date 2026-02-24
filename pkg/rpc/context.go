@@ -592,6 +592,10 @@ func NewContext(ctx context.Context, opts ContextOptions) *Context {
 		metrics:         newMetrics(opts.Locality),
 	}
 
+	if opts.UseDRPC {
+		rpcCtx.metrics.DRPCEnabled.Update(1)
+	}
+
 	rpcCtx.dialbackMu.Lock()
 	rpcCtx.dialbackMu.m = map[roachpb.NodeID]*GRPCConnection{}
 	rpcCtx.dialbackMu.Unlock()

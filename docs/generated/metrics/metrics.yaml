@@ -7238,14 +7238,46 @@ layers:
       unit: COUNT
       aggregation: AVG
       derivative: NONE
-    - name: rpc.server.request.duration.nanos
-      exported_name: rpc_server_request_duration_nanos
-      description: Duration of an RPC request in nanoseconds.
+    - name: rpc.drpc.enabled
+      exported_name: rpc_drpc_enabled
+      description: 1 if this node is using DRPC for internode RPC, 0 otherwise.
+      y_axis_label: Enabled
+      type: GAUGE
+      unit: CONST
+      aggregation: AVG
+      derivative: NONE
+    - name: rpc.server.msg.receive.duration.nanos
+      exported_name: rpc_server_msg_receive_duration_nanos
+      description: Duration of a single RPC message receive in nanoseconds at the server.
       y_axis_label: Duration
       type: HISTOGRAM
       unit: NANOSECONDS
       aggregation: AVG
       derivative: NONE
+    - name: rpc.server.msg.send.duration.nanos
+      exported_name: rpc_server_msg_send_duration_nanos
+      description: Duration of a single RPC message send in nanoseconds at the server.
+      y_axis_label: Duration
+      type: HISTOGRAM
+      unit: NANOSECONDS
+      aggregation: AVG
+      derivative: NONE
+    - name: rpc.server.request.duration.nanos
+      exported_name: rpc_server_request_duration_nanos
+      description: Duration of an RPC request at the server in nanoseconds.
+      y_axis_label: Duration
+      type: HISTOGRAM
+      unit: NANOSECONDS
+      aggregation: AVG
+      derivative: NONE
+    - name: rpc.server.requests.total
+      exported_name: rpc_server_requests_total
+      description: Total number of RPCs requests received by the server.
+      y_axis_label: Requests
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
     - name: schedules.BACKUP.last-completed-time-by-virtual_cluster
       exported_name: schedules_BACKUP_last_completed_time_by_virtual_cluster
       description: The unix timestamp of the most recently completed host scheduled backup by virtual cluster specified as maintaining this metric

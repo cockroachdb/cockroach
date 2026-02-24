@@ -123,11 +123,12 @@ var sourceAddr = func() net.Addr {
 }()
 
 type serverOpts struct {
-	interceptor                   func(fullMethod string) error
-	metricsInterceptor            RequestMetricsInterceptor
-	drpcRequestMetricsInterceptor DRPCRequestMetricsInterceptor
-	tlsConfig                     *tls.Config
-	tlsCipherRestrict             func(conn net.Conn) error
+	interceptor                         func(fullMethod string) error
+	metricsInterceptor                  RequestMetricsInterceptor
+	tlsConfig                           *tls.Config
+	tlsCipherRestrict                   func(conn net.Conn) error
+	drpcUnaryRequestMetricsInterceptor  DRPCUnaryServerRequestMetricsInterceptor
+	drpcStreamRequestMetricsInterceptor DRPCStreamServerRequestMetricsInterceptor
 }
 
 // ServerOption is a configuration option passed to NewServer.
@@ -158,10 +159,19 @@ func WithMetricsServerInterceptor(interceptor RequestMetricsInterceptor) ServerO
 	}
 }
 
-// WithDRPCMetricsServerInterceptor adds a DRPCRequestMetricsInterceptor to the DRPC server.
-func WithDRPCMetricsServerInterceptor(interceptor DRPCRequestMetricsInterceptor) ServerOption {
+// WithDRPCMetricsUnaryServerInterceptor adds a DRPCUnaryServerRequestMetricsInterceptor to the DRPC server.
+func WithDRPCMetricsUnaryServerInterceptor(
+	interceptor DRPCUnaryServerRequestMetricsInterceptor) ServerOption {
 	return func(opts *serverOpts) {
-		opts.drpcRequestMetricsInterceptor = interceptor
+		opts.drpcUnaryRequestMetricsInterceptor = interceptor
+	}
+}
+
+// WithDRPCMetricsUnaryServerInterceptor adds a DRPCUnaryServerRequestMetricsInterceptor to the DRPC server.
+func WithDRPCMetricsStreamServerInterceptor(
+	interceptor DRPCStreamServerRequestMetricsInterceptor) ServerOption {
+	return func(opts *serverOpts) {
+		opts.drpcStreamRequestMetricsInterceptor = interceptor
 	}
 }
 

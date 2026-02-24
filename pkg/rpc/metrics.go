@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/VividCortex/ewma"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -208,12 +209,70 @@ over this connection.
 		Help:        `Counter of TCP bytes received via gRPC on connections we initiated.`,
 		Measurement: "Bytes",
 	}
-	metaRequestDuration = metric.Metadata{
+	metaServerRequestDuration = metric.Metadata{
 		Name:        "rpc.server.request.duration.nanos",
-		Help:        "Duration of an RPC request in nanoseconds.",
+		Help:        "Duration of an RPC request at the server in nanoseconds.",
 		Measurement: "Duration",
 		Unit:        metric.Unit_NANOSECONDS,
 		MetricType:  prometheusgo.MetricType_HISTOGRAM,
+	}
+	metaServerMsgSendDuration = metric.Metadata{
+		Name: "rpc.server.msg.send.duration.nanos",
+		Help: "Duration of a single RPC message send in nanoseconds at the" +
+			" server.",
+		Measurement: "Duration",
+		Unit:        metric.Unit_NANOSECONDS,
+	}
+	metaServerMsgReceiveDuration = metric.Metadata{
+		Name: "rpc.server.msg.receive.duration.nanos",
+		Help: "Duration of a single RPC message receive in nanoseconds at" +
+			" the server.",
+		Measurement: "Duration",
+		Unit:        metric.Unit_NANOSECONDS,
+		MetricType:  prometheusgo.MetricType_HISTOGRAM,
+	}
+	metaServerRequestsTotal = metric.Metadata{
+		Name:        "rpc.server.requests.total",
+		Help:        "Total number of RPCs requests received by the server.",
+		Measurement: "Requests",
+		Unit:        metric.Unit_COUNT,
+		MetricType:  prometheusgo.MetricType_COUNTER,
+	}
+	metaClientRequestsTotal = metric.Metadata{
+		Name:        "rpc.client.started.total",
+		Help:        "Total number of RPC requests sent by the client.",
+		Measurement: "Requests",
+		Unit:        metric.Unit_COUNT,
+		MetricType:  prometheusgo.MetricType_COUNTER,
+	}
+	metaClientRequestDuration = metric.Metadata{
+		Name:        "rpc.client.request.duration.nanos",
+		Help:        "Duration of a RPC request at the client in nanoseconds.",
+		Measurement: "Duration",
+		Unit:        metric.Unit_NANOSECONDS,
+		MetricType:  prometheusgo.MetricType_HISTOGRAM,
+	}
+	metaClientMsgSendDuration = metric.Metadata{
+		Name: "rpc.client.msg.send.duration.nanos",
+		Help: "Duration of a single RPC message send in nanoseconds at the" +
+			" client.",
+		Measurement: "Duration",
+		Unit:        metric.Unit_NANOSECONDS,
+		MetricType:  prometheusgo.MetricType_HISTOGRAM,
+	}
+	metaClientMsgReceivedDuration = metric.Metadata{
+		Name: "rpc.client.msg.received.duration.nanos",
+		Help: "Duration of a single RPC message receive in nanoseconds at" +
+			" the client.",
+		Measurement: "Duration",
+		Unit:        metric.Unit_NANOSECONDS,
+		MetricType:  prometheusgo.MetricType_HISTOGRAM,
+	}
+	metaDRPCEnabled = metric.Metadata{
+		Name:        "rpc.drpc.enabled",
+		Help:        "1 if this node is using DRPC for internode RPC, 0 otherwise.",
+		Measurement: "Enabled",
+		Unit:        metric.Unit_CONST,
 	}
 )
 
@@ -271,6 +330,7 @@ func newMetrics(locality roachpb.Locality) *Metrics {
 		ConnectionAvgRoundTripLatency: aggmetric.NewGauge(metaConnectionAvgRoundTripLatency, childLabels...),
 		ConnectionTCPRTT:              aggmetric.NewGauge(metaConnectionTCPRTT, childLabels...),
 		ConnectionTCPRTTVar:           aggmetric.NewGauge(metaConnectionTCPRTTVar, childLabels...),
+		DRPCEnabled:                   metric.NewGauge(metaDRPCEnabled),
 	}
 	m.mu.peerMetrics = make(map[string]peerMetrics)
 	m.mu.localityMetrics = make(map[string]localityMetrics)
@@ -317,6 +377,7 @@ type Metrics struct {
 	ConnectionAvgRoundTripLatency *aggmetric.AggGauge
 	ConnectionTCPRTT              *aggmetric.AggGauge
 	ConnectionTCPRTTVar           *aggmetric.AggGauge
+	DRPCEnabled                   *metric.Gauge
 	mu                            struct {
 		syncutil.Mutex
 		// peerMetrics is a map of peerKey to peerMetrics.
@@ -435,9 +496,10 @@ func (m *Metrics) acquire(
 }
 
 const (
-	RpcMethodLabel     = "methodName"
-	RpcStatusCodeLabel = "statusCode"
-	RpcProtocolLabel   = "protocol"
+	// RPC method label
+	RPCMethodLabel     = "methodName"
+	RPCStatusCodeLabel = "statusCode"
+	RPCTypeLabel       = "rpcType"
 
 	rpcProtocolGRPC = "grpc"
 	rpcProtocolDRPC = "drpc"
@@ -451,14 +513,13 @@ type RequestMetrics struct {
 func NewRequestMetrics() *RequestMetrics {
 	return &RequestMetrics{
 		Duration: metric.NewExportedHistogramVec(
-			metaRequestDuration,
+			metaServerRequestDuration,
 			metric.ResponseTime30sBuckets,
-			[]string{RpcMethodLabel, RpcStatusCodeLabel, RpcProtocolLabel}),
+			[]string{RPCMethodLabel, RPCStatusCodeLabel}),
 	}
 }
 
 type RequestMetricsInterceptor grpc.UnaryServerInterceptor
-type DRPCRequestMetricsInterceptor drpcmux.UnaryServerInterceptor
 
 // NewRequestMetricsInterceptor creates a new gRPC server interceptor that records
 // the duration of each RPC. The metric is labeled by the method name and the
@@ -488,21 +549,245 @@ func NewRequestMetricsInterceptor(
 		}
 
 		requestMetrics.Duration.Observe(map[string]string{
-			RpcMethodLabel:     info.FullMethod,
-			RpcStatusCodeLabel: code.String(),
-			RpcProtocolLabel:   rpcProtocolGRPC,
+			RPCMethodLabel:     info.FullMethod,
+			RPCStatusCodeLabel: code.String(),
 		}, float64(duration.Nanoseconds()))
 		return resp, err
 	}
 }
 
-// NewDRPCRequestMetricsInterceptor creates a new DRPC server interceptor that records
-// the duration of each RPC. The metric is labeled by the method name and the
-// status code of the RPC. The interceptor will only record durations if
-// shouldRecord returns true. Otherwise, this interceptor will be a no-op.
-func NewDRPCRequestMetricsInterceptor(
-	requestMetrics *RequestMetrics, shouldRecord func(rpc string) bool,
-) DRPCRequestMetricsInterceptor {
+// DRPC request metrics
+
+type drpcType string
+
+const (
+	drpcUnary  drpcType = "unary"
+	drpcStream drpcType = "stream"
+)
+
+func drpcCodeString(err error) string {
+	return status.Code(err).String()
+}
+
+// drpcCallMeta holds the parsed RPC type, service, and method for a DRPC call.
+type drpcCallMeta struct {
+	drpcType   string
+	drpcMethod string
+}
+
+func newDRPCCallMeta(rpc string, isStream bool) drpcCallMeta {
+	typ := drpcUnary
+	if isStream {
+		typ = drpcStream
+	}
+	return drpcCallMeta{
+		drpcType:   string(typ),
+		drpcMethod: rpc,
+	}
+}
+
+// drpcReport captures the call metadata and start time for a single DRPC invocation.
+type drpcReport struct {
+	callMeta  drpcCallMeta
+	startTime time.Time
+}
+
+// Callbacks for recording DRPC call, send, and receive metrics.
+type drpcMetricsReporter interface {
+	PostCall(err error, rpcDuration time.Duration)
+	PostMsgSend(sendDuration time.Duration)
+	PostMsgReceive(recvDuration time.Duration)
+}
+
+type drpcMetricsKind int
+
+const (
+	drpcMetricsClient drpcMetricsKind = iota
+	drpcMetricsServer
+)
+
+// DRPCClientRequestMetrics contains client metrics for DRPC requests.
+type DRPCClientRequestMetrics struct {
+	RequestsTotal   *metric.CounterVec
+	RequestDuration *metric.HistogramVec
+	MsgSendDuration *metric.HistogramVec
+	MsgRecvDuration *metric.HistogramVec
+}
+
+// DRPCServerRequestMetrics contains server metrics for DRPC requests.
+type DRPCServerRequestMetrics struct {
+	RequestsTotal   *metric.CounterVec
+	RequestDuration *metric.HistogramVec
+	MsgSendDuration *metric.HistogramVec
+	MsgRecvDuration *metric.HistogramVec
+}
+
+// drpcReporter implements drpcMetricsReporter, recording metrics via pre-computed
+// label maps.
+type drpcReporter struct {
+	kind          drpcMetricsKind
+	clientMetrics *DRPCClientRequestMetrics
+	serverMetrics *DRPCServerRequestMetrics
+	baseLabels    map[string]string // type, method
+	codeLabels    map[string]string // type, method, code (code mutated per-call)
+}
+
+// PostCall increments RequestsTotal with the actual status code via codeLabels,
+// marking a request as "completed". The delta between statusCode="" and statusCode!=""
+// gives in-flight requests.
+func (r *drpcReporter) PostCall(err error, rpcDuration time.Duration) {
+	r.codeLabels[RPCStatusCodeLabel] = drpcCodeString(err)
+	switch r.kind {
+	case drpcMetricsClient:
+		r.clientMetrics.RequestsTotal.Inc(r.codeLabels, 1)
+		r.clientMetrics.RequestDuration.Observe(r.codeLabels, float64(rpcDuration.Nanoseconds()))
+	case drpcMetricsServer:
+		r.serverMetrics.RequestsTotal.Inc(r.codeLabels, 1)
+		r.serverMetrics.RequestDuration.Observe(r.codeLabels, float64(rpcDuration.Nanoseconds()))
+	}
+}
+
+func (r *drpcReporter) PostMsgSend(sendDuration time.Duration) {
+	switch r.kind {
+	case drpcMetricsClient:
+		r.clientMetrics.MsgSendDuration.Observe(r.baseLabels, float64(sendDuration.Nanoseconds()))
+	case drpcMetricsServer:
+		r.serverMetrics.MsgSendDuration.Observe(r.baseLabels, float64(sendDuration.Nanoseconds()))
+	}
+}
+
+func (r *drpcReporter) PostMsgReceive(recvDuration time.Duration) {
+	switch r.kind {
+	case drpcMetricsClient:
+		r.clientMetrics.MsgRecvDuration.Observe(r.baseLabels, float64(recvDuration.Nanoseconds()))
+	case drpcMetricsServer:
+		r.serverMetrics.MsgRecvDuration.Observe(r.baseLabels, float64(recvDuration.Nanoseconds()))
+	}
+}
+
+// Reportable holds the client and server DRPC metrics and builds reporters for each call.
+type Reportable struct {
+	ClientMetrics *DRPCClientRequestMetrics
+	ServerMetrics *DRPCServerRequestMetrics
+}
+
+// reporter builds a DRPC metrics reporter with pre-computed label maps.
+func (r *Reportable) reporter(meta drpcCallMeta, kind drpcMetricsKind) drpcMetricsReporter {
+	baseLabels := map[string]string{
+		RPCTypeLabel:   meta.drpcType,
+		RPCMethodLabel: meta.drpcMethod,
+	}
+	codeLabels := map[string]string{
+		RPCTypeLabel:       meta.drpcType,
+		RPCMethodLabel:     meta.drpcMethod,
+		RPCStatusCodeLabel: "", // set per-call in PostCall
+	}
+	return &drpcReporter{
+		clientMetrics: r.ClientMetrics,
+		serverMetrics: r.ServerMetrics,
+		kind:          kind,
+		baseLabels:    baseLabels,
+		codeLabels:    codeLabels,
+	}
+}
+
+// serverReporter builds a DRPC reporter and records the start counter.
+func (r *Reportable) serverReporter(meta drpcCallMeta) drpcMetricsReporter {
+	reporter := r.reporter(meta, drpcMetricsServer)
+	// baseLabels omits statusCode (3 labels vs the 4 declared on
+	// RequestsTotal). The missing key resolves to statusCode="" which marks this
+	// as a "started" request.
+	r.ServerMetrics.RequestsTotal.Inc(reporter.(*drpcReporter).baseLabels, 1)
+	return reporter
+}
+
+// monitoredDRPCServerStream wraps a drpc.Stream to record send and receive metrics.
+type monitoredDRPCServerStream struct {
+	drpc.Stream
+
+	reporter drpcMetricsReporter
+}
+
+func (s *monitoredDRPCServerStream) MsgSend(msg drpc.Message, enc drpc.Encoding) error {
+	start := timeutil.Now()
+	err := s.Stream.MsgSend(msg, enc)
+	if err == nil {
+		s.reporter.PostMsgSend(timeutil.Since(start))
+	}
+	return err
+}
+
+func (s *monitoredDRPCServerStream) MsgRecv(msg drpc.Message, enc drpc.Encoding) error {
+	start := timeutil.Now()
+	err := s.Stream.MsgRecv(msg, enc)
+	if err == nil {
+		s.reporter.PostMsgReceive(timeutil.Since(start))
+	}
+	return err
+}
+
+func newDRPCReport(callMeta drpcCallMeta) drpcReport {
+	return drpcReport{
+		startTime: timeutil.Now(),
+		callMeta:  callMeta,
+	}
+}
+
+func NewDRPCServerRequestMetrics() *DRPCServerRequestMetrics {
+	return &DRPCServerRequestMetrics{
+		RequestsTotal: metric.NewExportedCounterVec(
+			metaServerRequestsTotal,
+			[]string{RPCTypeLabel, RPCMethodLabel, RPCStatusCodeLabel}),
+		RequestDuration: metric.NewExportedHistogramVec(
+			metaServerRequestDuration,
+			metric.ResponseTime30sBuckets,
+			[]string{RPCTypeLabel, RPCMethodLabel, RPCStatusCodeLabel}),
+		MsgSendDuration: metric.NewExportedHistogramVec(
+			metaServerMsgSendDuration,
+			metric.ResponseTime30sBuckets,
+			[]string{RPCTypeLabel, RPCMethodLabel}),
+		MsgRecvDuration: metric.NewExportedHistogramVec(
+			metaServerMsgReceiveDuration,
+			metric.ResponseTime30sBuckets, []string{RPCTypeLabel, RPCMethodLabel}),
+	}
+}
+
+func NewDRPCClientRequestMetrics() *DRPCClientRequestMetrics {
+	return &DRPCClientRequestMetrics{
+		RequestsTotal: metric.NewExportedCounterVec(
+			metaClientRequestsTotal,
+			[]string{RPCTypeLabel, RPCMethodLabel, RPCStatusCodeLabel}),
+		RequestDuration: metric.NewExportedHistogramVec(
+			metaClientRequestDuration,
+			metric.ResponseTime30sBuckets,
+			[]string{RPCTypeLabel, RPCMethodLabel, RPCStatusCodeLabel}),
+		MsgSendDuration: metric.NewExportedHistogramVec(
+			metaClientMsgSendDuration,
+			metric.ResponseTime30sBuckets,
+			[]string{RPCTypeLabel, RPCMethodLabel}),
+		MsgRecvDuration: metric.NewExportedHistogramVec(
+			metaClientMsgReceivedDuration,
+			metric.ResponseTime30sBuckets,
+			[]string{RPCTypeLabel, RPCMethodLabel}),
+	}
+}
+
+// DRPCUnaryServerRequestMetricsInterceptor is a DRPC unary server interceptor
+// that records request metrics.
+type DRPCUnaryServerRequestMetricsInterceptor drpcmux.UnaryServerInterceptor
+
+// DRPCStreamServerRequestMetricsInterceptor is a DRPC streaming server
+// interceptor that records request metrics.
+type DRPCStreamServerRequestMetricsInterceptor drpcmux.StreamServerInterceptor
+
+// NewDRPCUnaryServerRequestMetricsInterceptor creates a new DRPC server interceptor
+// that records server request metrics for each unary RPC.
+// The metric is labeled by the method name and the status code of the RPC.
+// The interceptor will only record durations if shouldRecord returns true.
+// Otherwise, this interceptor will be a no-op.
+func NewDRPCUnaryServerRequestMetricsInterceptor(
+	reportable *Reportable, shouldRecord func(rpc string) bool,
+) DRPCUnaryServerRequestMetricsInterceptor {
 	return func(
 		ctx context.Context,
 		req any,
@@ -512,22 +797,35 @@ func NewDRPCRequestMetricsInterceptor(
 		if !shouldRecord(rpc) {
 			return handler(ctx, req)
 		}
-		startTime := timeutil.Now()
+		r := newDRPCReport(newDRPCCallMeta(rpc, false))
+		reporter := reportable.serverReporter(r.callMeta)
 		resp, err := handler(ctx, req)
-		duration := timeutil.Since(startTime)
-		var code codes.Code
-		if err != nil {
-			// TODO(server): use drpc status code
-			code = status.Code(err)
-		} else {
-			code = codes.OK
-		}
+		reporter.PostCall(err, timeutil.Since(r.startTime))
+		return resp, err
+	}
+}
 
-		requestMetrics.Duration.Observe(map[string]string{
-			RpcMethodLabel:     rpc,
-			RpcStatusCodeLabel: code.String(),
-			RpcProtocolLabel:   rpcProtocolDRPC,
-		}, float64(duration.Nanoseconds()))
+// NewDRPCStreamServerRequestMetricsInterceptor creates a new DRPC server
+// interceptor that records server request metrics for each streaming RPC.
+// The metric is labeled by the method name and the status code of the RPC.
+// The interceptor will only record durations if shouldRecord returns true.
+// Otherwise, this interceptor will be a no-op.
+func NewDRPCStreamServerRequestMetricsInterceptor(
+	reportable *Reportable, shouldRecord func(rpc string) bool,
+) DRPCStreamServerRequestMetricsInterceptor {
+	return func(
+		stream drpc.Stream,
+		rpc string,
+		handler drpcmux.StreamHandler,
+	) (interface{}, error) {
+		if !shouldRecord(rpc) {
+			return handler(stream)
+		}
+		r := newDRPCReport(newDRPCCallMeta(rpc, true))
+		reporter := reportable.serverReporter(r.callMeta)
+		resp, err := handler(&monitoredDRPCServerStream{Stream: stream,
+			reporter: reporter})
+		reporter.PostCall(err, timeutil.Since(r.startTime))
 		return resp, err
 	}
 }
