@@ -951,12 +951,21 @@ func RunCommitTrigger(
 				ctx, errors.Wrap(err, "unable to collect LHS abort span entries"),
 			)
 		}
+		var consistencyCheckerLastRun hlc.Timestamp
+		if _, err := storage.MVCCGetProto(ctx, batch,
+			keys.QueueLastProcessedKey(ct.SplitTrigger.LeftDesc.StartKey, "consistencyChecker"),
+			hlc.Timestamp{}, &consistencyCheckerLastRun, storage.MVCCGetOptions{}); err != nil {
+			return result.Result{}, maybeWrapReplicaCorruptionError(
+				ctx, errors.Wrap(err, "unable to load consistency checker last run"),
+			)
+		}
 		in := SplitTriggerHelperInput{
-			LeftLease:           lhsLease,
-			GCThreshold:        gcThreshold,
-			GCHint:             gcHint,
-			ReplicaVersion:     replicaVersion,
-			LHSAbortSpanEntries: lhsAbortSpanEntries,
+			LeftLease:                 lhsLease,
+			GCThreshold:              gcThreshold,
+			GCHint:                   gcHint,
+			ReplicaVersion:           replicaVersion,
+			LHSAbortSpanEntries:      lhsAbortSpanEntries,
+			ConsistencyCheckerLastRun: consistencyCheckerLastRun,
 		}
 
 		newMS, res, err := splitTrigger(
@@ -1378,11 +1387,12 @@ func makeScanStatsFn(
 // SplitTriggerHelperInput contains metadata needed by the RHS when running the
 // splitTriggerHelper.
 type SplitTriggerHelperInput struct {
-	LeftLease            roachpb.Lease
-	GCThreshold          *hlc.Timestamp
-	GCHint               *roachpb.GCHint
-	ReplicaVersion       roachpb.Version
-	LHSAbortSpanEntries  []abortspan.Entry
+	LeftLease                  roachpb.Lease
+	GCThreshold                *hlc.Timestamp
+	GCHint                     *roachpb.GCHint
+	ReplicaVersion             roachpb.Version
+	LHSAbortSpanEntries        []abortspan.Entry
+	ConsistencyCheckerLastRun  hlc.Timestamp
 }
 
 // MergeTriggerHelperInput contains metadata required by the mergeTrigger.
@@ -1505,20 +1515,9 @@ func splitTriggerHelper(
 	// Copy the last consistency checker run timestamp from the LHS to the RHS.
 	// This avoids running the consistency checker on the RHS immediately after
 	// the split.
-	lastTS := hlc.Timestamp{}
-	// TODO(arul): instead of fetching the consistency checker timestamp here
-	// like this, we should instead pass it using the SplitTriggerHelperInput to
-	// make it easier to test.
-	if _, err := storage.MVCCGetProto(ctx, batch,
-		keys.QueueLastProcessedKey(split.LeftDesc.StartKey, "consistencyChecker"),
-		hlc.Timestamp{}, &lastTS, storage.MVCCGetOptions{}); err != nil {
-		return enginepb.MVCCStats{}, result.Result{}, errors.Wrap(err,
-			"unable to fetch the last consistency checker run for LHS")
-	}
-
 	if err := storage.MVCCPutProto(ctx, batch,
 		keys.QueueLastProcessedKey(split.RightDesc.StartKey, "consistencyChecker"),
-		hlc.Timestamp{}, &lastTS,
+		hlc.Timestamp{}, &in.ConsistencyCheckerLastRun,
 		storage.MVCCWriteOptions{Stats: h.AbsPostSplitRight(), Category: fs.BatchEvalReadCategory}); err != nil {
 		return enginepb.MVCCStats{}, result.Result{}, errors.Wrap(err,
 			"unable to copy the last consistency checker run to RHS")
