@@ -196,26 +196,3 @@ func WriteTo(
 	return nil
 }
 
-// CopyTo copies the abort span entries to the abort span for the range
-// identified by newRangeID. Entries are read from r and written to w. It is
-// safe for r and w to be the same object.
-//
-// CopyTo takes care to only copy records that are required: certain workloads
-// create sizable abort spans, and repeated splitting can blow them up further.
-// Once it reaches approximately the Raft MaxCommandSize, splits become
-// impossible, which is pretty bad (see #25233).
-func (sc *AbortSpan) CopyTo(
-	ctx context.Context,
-	r storage.Reader,
-	w storage.ReadWriter,
-	ms *enginepb.MVCCStats,
-	ts hlc.Timestamp,
-	newRangeID roachpb.RangeID,
-	txnCleanupThreshold time.Duration,
-) error {
-	entries, err := sc.Collect(ctx, r, ts, txnCleanupThreshold)
-	if err != nil {
-		return err
-	}
-	return WriteTo(ctx, w, ms, newRangeID, entries)
-}
