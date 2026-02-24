@@ -29,24 +29,27 @@ import (
 type Service struct {
 	repo            environments.IEnvironmentsRepository
 	secretsRegistry *secrets.Registry
-	gcpProject      string
 }
 
 // NewService creates a new environments service with an empty secrets
-// registry.
-func NewService(repo environments.IEnvironmentsRepository, opts types.Options) *Service {
+// registry. Use RegisterResolver or RegisterGCPResolver to add secret
+// providers before processing secret-type variables.
+func NewService(repo environments.IEnvironmentsRepository) *Service {
 	return &Service{
 		repo:            repo,
 		secretsRegistry: secrets.NewRegistry(),
-		gcpProject:      opts.GCPProject,
 	}
 }
 
-// RegisterGCPResolver registers the GCP Secret Manager resolver under the
-// "gcp" prefix. After this call, secret references like
-// "gcp:projects/p/secrets/s/versions/latest" will be resolved via GCP.
-func (s *Service) RegisterGCPResolver(ctx context.Context) error {
-	resolver, err := secrets.NewGCPResolver(ctx)
+// RegisterGCPResolver creates a GCP Secret Manager resolver configured for
+// the given project and prefix, and registers it under the "gcp" prefix.
+// After this call, secret references like
+// "gcp:projects/p/secrets/s/versions/latest" will be resolved via GCP,
+// and raw secret values will be auto-written to this project.
+func (s *Service) RegisterGCPResolver(
+	ctx context.Context, project string, secretPrefix string,
+) error {
+	resolver, err := secrets.NewGCPResolver(ctx, project, secretPrefix)
 	if err != nil {
 		return errors.Wrap(err, "create GCP secret resolver")
 	}
@@ -400,8 +403,8 @@ func (s *Service) GetEnvironmentResolved(
 
 // processSecretValue handles a secret variable's value. If the value matches
 // a registered resolver prefix (e.g. "gcp:..."), it is verified against the
-// secret manager. Otherwise it is treated as a raw value and auto-written to
-// Secret Manager using the configured GCP project.
+// secret manager. Otherwise it is treated as a raw value and auto-written
+// using the "gcp" resolver (which owns its project and prefix configuration).
 func (s *Service) processSecretValue(
 	ctx context.Context, envName, key, value string,
 ) (string, error) {
@@ -413,12 +416,12 @@ func (s *Service) processSecretValue(
 		return value, nil
 	}
 
-	// Raw value -- auto-write to Secret Manager.
-	if s.gcpProject == "" {
+	// Raw value -- auto-write via the "gcp" resolver.
+	if !s.secretsRegistry.CanWrite("gcp") {
 		return "", types.ErrSecretWriteFailed
 	}
 	secretID := envName + "--" + key
-	ref, err := s.secretsRegistry.Write(ctx, "gcp", s.gcpProject, secretID, value)
+	ref, err := s.secretsRegistry.Write(ctx, "gcp", secretID, value)
 	if err != nil {
 		return "", types.ErrSecretWriteFailed
 	}

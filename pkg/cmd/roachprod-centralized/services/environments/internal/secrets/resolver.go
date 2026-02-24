@@ -15,14 +15,15 @@ import (
 )
 
 // ISecretResolver resolves a secret reference (with the provider prefix
-// already stripped) into the actual secret value. A single
-// implementation must support both read and write.
+// already stripped) into the actual secret value. Each resolver owns its
+// provider-specific configuration (project, prefix, credentials).
 type ISecretResolver interface {
 	// Resolve retrieves the secret value for the given reference.
 	Resolve(ctx context.Context, reference string) (string, error)
-	// Write creates or updates a secret in the provider and returns the
-	// resource reference (without provider prefix).
-	Write(ctx context.Context, project, secretID, value string) (reference string, err error)
+	// Write creates or updates a secret and returns the resource reference
+	// (without provider prefix). The resolver uses its own project/prefix
+	// configuration to determine where to write.
+	Write(ctx context.Context, secretID, value string) (reference string, err error)
 	// Verify checks that a secret reference is readable.
 	Verify(ctx context.Context, reference string) error
 }
@@ -81,18 +82,23 @@ func (r *Registry) Resolve(ctx context.Context, reference string) (string, error
 
 // Write creates or updates a secret via the resolver registered under the
 // given prefix and returns the fully prefixed reference (e.g. "gcp:<ref>").
-func (r *Registry) Write(
-	ctx context.Context, prefix, project, secretID, value string,
-) (string, error) {
+func (r *Registry) Write(ctx context.Context, prefix, secretID, value string) (string, error) {
 	resolver, ok := r.getResolver(prefix)
 	if !ok {
 		return "", errors.Newf("no resolver registered for prefix %q", prefix)
 	}
-	ref, err := resolver.Write(ctx, project, secretID, value)
+	ref, err := resolver.Write(ctx, secretID, value)
 	if err != nil {
 		return "", errors.Wrapf(err, "write secret (provider=%s)", prefix)
 	}
 	return prefix + ":" + ref, nil
+}
+
+// CanWrite returns true if a write-capable resolver is registered under
+// the given prefix.
+func (r *Registry) CanWrite(prefix string) bool {
+	_, ok := r.getResolver(prefix)
+	return ok
 }
 
 // Verify checks that a secret reference is readable by dispatching to the

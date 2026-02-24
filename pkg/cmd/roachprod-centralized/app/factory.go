@@ -44,7 +44,6 @@ import (
 	sclusters "github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/services/clusters"
 	dnsregistry "github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/services/dns/registry"
 	senvironments "github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/services/environments"
-	senvironmentstypes "github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/services/environments/types"
 	shealth "github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/services/health"
 	shealthtypes "github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/services/health/types"
 	sprovisionings "github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/services/provisionings"
@@ -323,11 +322,11 @@ func NewServicesFromConfig(
 	})
 
 	// Create the environments service.
-	environmentsService := senvironments.NewService(environmentsRepository, senvironmentstypes.Options{
-		GCPProject: cfg.Secrets.GCPProject,
-	})
+	environmentsService := senvironments.NewService(environmentsRepository)
 	if cfg.Secrets.GCPProject != "" {
-		if err := environmentsService.RegisterGCPResolver(appCtx); err != nil {
+		if err := environmentsService.RegisterGCPResolver(
+			appCtx, cfg.Secrets.GCPProject, cfg.Secrets.Prefix,
+		); err != nil {
 			l.Error("failed to register GCP secret resolver",
 				slog.Any("error", err))
 			return nil, errors.Wrap(err, "error registering GCP secret resolver")

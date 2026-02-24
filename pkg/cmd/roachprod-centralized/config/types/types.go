@@ -74,6 +74,7 @@ type Config struct {
 	} `env:"BOOTSTRAP" description:"Bootstrap configuration for initial setup"`
 	Secrets struct {
 		GCPProject string `env:"GCP_PROJECT" default:"" description:"GCP project for auto-writing secrets to Secret Manager"`
+		Prefix     string `env:"PREFIX" default:"" description:"Optional prefix for secrets written to Secret Manager"`
 	} `env:"SECRETS" description:"Secret management configuration"`
 	Provisionings struct {
 		Enabled           bool   `env:"ENABLED" default:"false" description:"Enable terraform provisioning"`

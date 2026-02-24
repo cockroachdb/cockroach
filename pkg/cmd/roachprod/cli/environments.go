@@ -265,23 +265,67 @@ func (cr *commandRegistry) buildEnvVarGetCmd() *cobra.Command {
 
 // buildEnvVarSetCmd sets (creates or updates) a variable.
 func (cr *commandRegistry) buildEnvVarSetCmd() *cobra.Command {
-	var secretFlag bool
+	var (
+		typeFlag      string
+		valueFileFlag string
+	)
 
 	cmd := &cobra.Command{
-		Use:   "set <env> <key> <value>",
+		Use:   "set <env> <key> [value]",
 		Short: "set a variable (creates or updates)",
-		Args:  cobra.ExactArgs(3),
+		Long: `Set an environment variable (creates if new, updates if exists).
+
+The value can be provided as a positional argument or read from a file
+with --value-file. Use --value-file for multiline values like SSH keys
+to avoid shell escaping issues.
+
+Variable types control how values are delivered to OpenTofu:
+  plaintext        -var flag + TF_VAR_* env + raw env (default)
+  secret           raw env only (provider credentials like AWS_ACCESS_KEY_ID)
+  template_secret  TF_VAR_* env + raw env (sensitive template vars like db_password)
+
+Examples:
+  roachprod env var set my-env region us-east1
+  roachprod env var set my-env db_password hunter2 --type template_secret
+  roachprod env var set my-env ssh_key --value-file ~/.ssh/id_ed25519 --type template_secret`,
+		Args: cobra.RangeArgs(2, 3),
 		Run: Wrap(func(cmd *cobra.Command, args []string) error {
-			envName, key, value := args[0], args[1], args[2]
+			envName, key := args[0], args[1]
+
+			var value string
+			switch {
+			case valueFileFlag != "" && len(args) == 3:
+				return errors.New(
+					"cannot specify both a value argument and --value-file",
+				)
+			case valueFileFlag != "":
+				data, err := os.ReadFile(valueFileFlag)
+				if err != nil {
+					return errors.Wrapf(err, "read value file %q", valueFileFlag)
+				}
+				value = string(data)
+			case len(args) == 3:
+				value = args[2]
+			default:
+				return errors.New(
+					"value is required: provide as argument or use --value-file",
+				)
+			}
 
 			c, l, err := newAuthClient()
 			if err != nil {
 				return errors.Wrap(err, "create API client")
 			}
 
-			varType := envmodels.VarTypePlaintext
-			if secretFlag {
-				varType = envmodels.VarTypeSecret
+			varType := envmodels.EnvironmentVarType(typeFlag)
+			switch varType {
+			case envmodels.VarTypePlaintext, envmodels.VarTypeSecret,
+				envmodels.VarTypeTemplateSecret:
+			default:
+				return errors.Newf(
+					"invalid type %q: must be plaintext, secret, or template_secret",
+					typeFlag,
+				)
 			}
 
 			ctx := context.Background()
@@ -314,7 +358,16 @@ func (cr *commandRegistry) buildEnvVarSetCmd() *cobra.Command {
 		}),
 	}
 
-	cmd.Flags().BoolVar(&secretFlag, "secret", false, "store as secret")
+	cmd.Flags().StringVar(&typeFlag, "type", "plaintext",
+		"variable type: plaintext, secret, or template_secret")
+	cmd.Flags().StringVar(&valueFileFlag, "value-file", "",
+		"read value from file (for multiline content like SSH keys)")
+	_ = cmd.RegisterFlagCompletionFunc("type", func(
+		cmd *cobra.Command, args []string, toComplete string,
+	) ([]string, cobra.ShellCompDirective) {
+		return []string{"plaintext", "secret", "template_secret"},
+			cobra.ShellCompDirectiveNoFileComp
+	})
 	cr.addToExcludeFromBashCompletion(cmd)
 	cr.addToExcludeFromClusterFlagsMulti(cmd)
 

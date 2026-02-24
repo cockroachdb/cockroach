@@ -45,14 +45,12 @@ func (r *stubSecretResolver) Resolve(_ context.Context, reference string) (strin
 	return "resolved-" + reference, nil
 }
 
-func (r *stubSecretResolver) Write(
-	_ context.Context, project, secretID, value string,
-) (string, error) {
+func (r *stubSecretResolver) Write(_ context.Context, secretID, value string) (string, error) {
 	if r.written == nil {
 		r.written = make(map[string]string)
 	}
 	r.written[secretID] = value
-	return fmt.Sprintf("projects/%s/secrets/%s/versions/latest", project, secretID), nil
+	return fmt.Sprintf("projects/test-project/secrets/%s/versions/latest", secretID), nil
 }
 
 func (r *stubSecretResolver) Verify(_ context.Context, _ string) error {
@@ -64,7 +62,7 @@ var _ secrets.ISecretResolver = (*stubSecretResolver)(nil)
 func TestService_CreateAndGet(t *testing.T) {
 	ctx := context.Background()
 	l := logger.DefaultLogger
-	svc := NewService(memory.NewEnvironmentsRepository(), types.Options{})
+	svc := NewService(memory.NewEnvironmentsRepository())
 
 	admin := newPrincipal("admin@x.com", types.PermissionCreate, types.PermissionViewAll)
 
@@ -86,7 +84,7 @@ func TestService_CreateAndGet(t *testing.T) {
 func TestService_CreateDuplicate(t *testing.T) {
 	ctx := context.Background()
 	l := logger.DefaultLogger
-	svc := NewService(memory.NewEnvironmentsRepository(), types.Options{})
+	svc := NewService(memory.NewEnvironmentsRepository())
 	admin := newPrincipal("admin@x.com", types.PermissionCreate)
 
 	_, err := svc.CreateEnvironment(ctx, l, admin, types.InputCreateDTO{Name: "dup"})
@@ -99,7 +97,7 @@ func TestService_CreateDuplicate(t *testing.T) {
 func TestService_Validation(t *testing.T) {
 	ctx := context.Background()
 	l := logger.DefaultLogger
-	svc := NewService(memory.NewEnvironmentsRepository(), types.Options{})
+	svc := NewService(memory.NewEnvironmentsRepository())
 	admin := newPrincipal("admin@x.com", types.PermissionCreate)
 
 	t.Run("empty name", func(t *testing.T) {
@@ -111,7 +109,7 @@ func TestService_Validation(t *testing.T) {
 func TestService_OwnerPermissions_ViewAll(t *testing.T) {
 	ctx := context.Background()
 	l := logger.DefaultLogger
-	svc := NewService(memory.NewEnvironmentsRepository(), types.Options{})
+	svc := NewService(memory.NewEnvironmentsRepository())
 
 	admin := newPrincipal("admin@x.com", types.PermissionCreate, types.PermissionViewAll)
 	viewer := newPrincipal("viewer@x.com", types.PermissionViewAll)
@@ -132,7 +130,7 @@ func TestService_OwnerPermissions_ViewAll(t *testing.T) {
 func TestService_OwnerPermissions_ViewOwn(t *testing.T) {
 	ctx := context.Background()
 	l := logger.DefaultLogger
-	svc := NewService(memory.NewEnvironmentsRepository(), types.Options{})
+	svc := NewService(memory.NewEnvironmentsRepository())
 
 	owner := newPrincipal("alice@x.com",
 		types.PermissionCreate, types.PermissionViewOwn)
@@ -149,7 +147,7 @@ func TestService_OwnerPermissions_ViewOwn(t *testing.T) {
 func TestService_GetAll_FiltersByOwnership(t *testing.T) {
 	ctx := context.Background()
 	l := logger.DefaultLogger
-	svc := NewService(memory.NewEnvironmentsRepository(), types.Options{})
+	svc := NewService(memory.NewEnvironmentsRepository())
 
 	alice := newPrincipal("alice@x.com",
 		types.PermissionCreate, types.PermissionViewOwn)
@@ -184,7 +182,7 @@ func TestService_GetAll_FiltersByOwnership(t *testing.T) {
 func TestService_UpdateOwn(t *testing.T) {
 	ctx := context.Background()
 	l := logger.DefaultLogger
-	svc := NewService(memory.NewEnvironmentsRepository(), types.Options{})
+	svc := NewService(memory.NewEnvironmentsRepository())
 
 	owner := newPrincipal("alice@x.com",
 		types.PermissionCreate, types.PermissionViewAll,
@@ -215,7 +213,7 @@ func TestService_UpdateOwn(t *testing.T) {
 func TestService_DeleteOwn(t *testing.T) {
 	ctx := context.Background()
 	l := logger.DefaultLogger
-	svc := NewService(memory.NewEnvironmentsRepository(), types.Options{})
+	svc := NewService(memory.NewEnvironmentsRepository())
 
 	owner := newPrincipal("alice@x.com",
 		types.PermissionCreate, types.PermissionDeleteOwn)
@@ -236,7 +234,7 @@ func TestService_DeleteOwn(t *testing.T) {
 func TestService_DeleteAll(t *testing.T) {
 	ctx := context.Background()
 	l := logger.DefaultLogger
-	svc := NewService(memory.NewEnvironmentsRepository(), types.Options{})
+	svc := NewService(memory.NewEnvironmentsRepository())
 
 	creator := newPrincipal("alice@x.com", types.PermissionCreate)
 	admin := newPrincipal("admin@x.com", types.PermissionDeleteAll)
@@ -254,7 +252,7 @@ func TestService_DeleteAll(t *testing.T) {
 func TestService_CreateVariable_Plaintext(t *testing.T) {
 	ctx := context.Background()
 	l := logger.DefaultLogger
-	svc := NewService(memory.NewEnvironmentsRepository(), types.Options{})
+	svc := NewService(memory.NewEnvironmentsRepository())
 
 	admin := newPrincipal("admin@x.com",
 		types.PermissionCreate, types.PermissionUpdateAll, types.PermissionViewAll)
@@ -284,9 +282,7 @@ func TestService_CreateVariable_SecretAutoWrite(t *testing.T) {
 	ctx := context.Background()
 	l := logger.DefaultLogger
 	stub := &stubSecretResolver{}
-	svc := NewService(memory.NewEnvironmentsRepository(), types.Options{
-		GCPProject: "my-project",
-	})
+	svc := NewService(memory.NewEnvironmentsRepository())
 	svc.RegisterResolver("gcp", stub)
 
 	admin := newPrincipal("admin@x.com",
@@ -304,7 +300,7 @@ func TestService_CreateVariable_SecretAutoWrite(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, envmodels.VarTypeSecret, v.Type)
 	// Value should be the prefixed reference from the stub.
-	require.Equal(t, "gcp:projects/my-project/secrets/env1--API_KEY/versions/latest", v.Value)
+	require.Equal(t, "gcp:projects/test-project/secrets/env1--API_KEY/versions/latest", v.Value)
 	// Stub should have recorded the write.
 	require.Equal(t, "super-secret-value", stub.written["env1--API_KEY"])
 }
@@ -312,7 +308,7 @@ func TestService_CreateVariable_SecretAutoWrite(t *testing.T) {
 func TestService_CreateVariable_SecretAutoWrite_NoProject(t *testing.T) {
 	ctx := context.Background()
 	l := logger.DefaultLogger
-	svc := NewService(memory.NewEnvironmentsRepository(), types.Options{})
+	svc := NewService(memory.NewEnvironmentsRepository())
 
 	admin := newPrincipal("admin@x.com",
 		types.PermissionCreate, types.PermissionUpdateAll)
@@ -333,7 +329,7 @@ func TestService_CreateVariable_SecretVerifyReference(t *testing.T) {
 	ctx := context.Background()
 	l := logger.DefaultLogger
 	stub := &stubSecretResolver{}
-	svc := NewService(memory.NewEnvironmentsRepository(), types.Options{})
+	svc := NewService(memory.NewEnvironmentsRepository())
 	svc.RegisterResolver("gcp", stub)
 
 	admin := newPrincipal("admin@x.com",
@@ -359,7 +355,7 @@ func TestService_CreateVariable_SecretVerifyFails(t *testing.T) {
 	ctx := context.Background()
 	l := logger.DefaultLogger
 	stub := &stubSecretResolver{verifyErr: fmt.Errorf("not readable")}
-	svc := NewService(memory.NewEnvironmentsRepository(), types.Options{})
+	svc := NewService(memory.NewEnvironmentsRepository())
 	svc.RegisterResolver("gcp", stub)
 
 	admin := newPrincipal("admin@x.com",
@@ -379,7 +375,7 @@ func TestService_CreateVariable_SecretVerifyFails(t *testing.T) {
 func TestService_UpdateVariable(t *testing.T) {
 	ctx := context.Background()
 	l := logger.DefaultLogger
-	svc := NewService(memory.NewEnvironmentsRepository(), types.Options{})
+	svc := NewService(memory.NewEnvironmentsRepository())
 
 	admin := newPrincipal("admin@x.com",
 		types.PermissionCreate, types.PermissionUpdateAll, types.PermissionViewAll)
@@ -406,7 +402,7 @@ func TestService_UpdateVariable(t *testing.T) {
 func TestService_DeleteVariable_OwnershipCheck(t *testing.T) {
 	ctx := context.Background()
 	l := logger.DefaultLogger
-	svc := NewService(memory.NewEnvironmentsRepository(), types.Options{})
+	svc := NewService(memory.NewEnvironmentsRepository())
 
 	owner := newPrincipal("alice@x.com",
 		types.PermissionCreate, types.PermissionUpdateOwn, types.PermissionViewOwn)
@@ -438,7 +434,7 @@ func TestService_DeleteVariable_OwnershipCheck(t *testing.T) {
 func TestService_GetVariables(t *testing.T) {
 	ctx := context.Background()
 	l := logger.DefaultLogger
-	svc := NewService(memory.NewEnvironmentsRepository(), types.Options{})
+	svc := NewService(memory.NewEnvironmentsRepository())
 
 	alice := newPrincipal("alice@x.com",
 		types.PermissionCreate, types.PermissionUpdateOwn, types.PermissionViewOwn)
@@ -473,7 +469,7 @@ func TestService_GetVariables(t *testing.T) {
 func TestService_CreateVariable_Validation(t *testing.T) {
 	ctx := context.Background()
 	l := logger.DefaultLogger
-	svc := NewService(memory.NewEnvironmentsRepository(), types.Options{})
+	svc := NewService(memory.NewEnvironmentsRepository())
 
 	admin := newPrincipal("admin@x.com",
 		types.PermissionCreate, types.PermissionUpdateAll)
@@ -529,7 +525,7 @@ func TestService_CreateVariable_Validation(t *testing.T) {
 func TestService_CreateVariable_Duplicate(t *testing.T) {
 	ctx := context.Background()
 	l := logger.DefaultLogger
-	svc := NewService(memory.NewEnvironmentsRepository(), types.Options{})
+	svc := NewService(memory.NewEnvironmentsRepository())
 
 	admin := newPrincipal("admin@x.com",
 		types.PermissionCreate, types.PermissionUpdateAll)

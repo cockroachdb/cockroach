@@ -29,8 +29,8 @@ func (r *stubResolver) Resolve(_ context.Context, reference string) (string, err
 	return val, nil
 }
 
-func (r *stubResolver) Write(_ context.Context, project, secretID, value string) (string, error) {
-	ref := fmt.Sprintf("projects/%s/secrets/%s/versions/latest", project, secretID)
+func (r *stubResolver) Write(_ context.Context, secretID, value string) (string, error) {
+	ref := fmt.Sprintf("projects/stub-project/secrets/%s/versions/latest", secretID)
 	if r.written == nil {
 		r.written = make(map[string]string)
 	}
@@ -125,16 +125,16 @@ func TestRegistry_Write(t *testing.T) {
 		reg := NewRegistry()
 		reg.Register("gcp", stub)
 
-		ref, err := reg.Write(ctx, "gcp", "my-project", "my-secret", "val")
+		ref, err := reg.Write(ctx, "gcp", "my-secret", "val")
 		require.NoError(t, err)
-		require.Equal(t, "gcp:projects/my-project/secrets/my-secret/versions/latest", ref)
+		require.Equal(t, "gcp:projects/stub-project/secrets/my-secret/versions/latest", ref)
 		require.Equal(t, "val", stub.written["my-secret"])
 	})
 
 	t.Run("unregistered prefix returns error", func(t *testing.T) {
 		reg := NewRegistry()
 
-		_, err := reg.Write(ctx, "vault", "proj", "sec", "val")
+		_, err := reg.Write(ctx, "vault", "sec", "val")
 		require.Error(t, err)
 		require.Contains(t, err.Error(), "no resolver registered")
 	})

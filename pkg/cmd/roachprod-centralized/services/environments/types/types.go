@@ -85,13 +85,6 @@ const (
 	PermissionDeleteOwn = PermissionDelete + ":own"
 )
 
-// Options configures the environments service.
-type Options struct {
-	// GCPProject is the GCP project for auto-writing secrets to Secret
-	// Manager. If empty, raw secret values cannot be auto-written.
-	GCPProject string
-}
-
 // IService is the interface for the environments service.
 type IService interface {
 	// GetEnvironment returns the environment by name. Principals with :all
