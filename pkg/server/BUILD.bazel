@@ -83,6 +83,8 @@ go_library(
         "testserver_http.go",
         "testserver_sqlconn.go",
         "transaction_diagnostics_requests.go",
+        "upload_debug_data.go",
+        "upload_debug_data_client.go",
         "user.go",
     ],
     cgo = True,

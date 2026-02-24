@@ -1412,6 +1412,7 @@ var pebbleToolFS = &autoDecryptFS{}
 
 func init() {
 	debugZipCmd.AddCommand(debugZipUploadCmd)
+	debugZipCmd.AddCommand(debugZipUploadServerCmd)
 	DebugCmd.AddCommand(debugCmds...)
 
 	// Note: we hook up FormatValue here in order to avoid a circular dependency
@@ -1589,6 +1590,15 @@ func init() {
 	// --dry-run is a hidden flag that is only meant to be used for testing and diagnostics
 	f.BoolVar(&debugZipUploadOpts.dryRun, "dry-run", false, "run in dry-run mode without making any actual uploads")
 	f.Lookup("dry-run").Hidden = true
+
+	f = debugZipUploadServerCmd.Flags()
+	f.StringVar(&uploadServerCtx.serverURL, cliflags.UploadServerURL.Name, "",
+		cliflags.UploadServerURL.Usage())
+	f.StringVar(&uploadServerCtx.apiKey, cliflags.UploadServerAPIKey.Name,
+		getEnvOrDefault(cliflags.UploadServerAPIKey.EnvVar, ""),
+		cliflags.UploadServerAPIKey.Usage())
+	f.StringSliceVar(&uploadServerCtx.labels, cliflags.UploadServerLabels.Name, nil,
+		cliflags.UploadServerLabels.Usage())
 
 	f = debugDecodeKeyCmd.Flags()
 	f.Var(&decodeKeyOptions.encoding, "encoding", "key argument encoding")

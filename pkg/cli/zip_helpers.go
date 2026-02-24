@@ -23,7 +23,25 @@ import (
 	"github.com/cockroachdb/redact"
 )
 
-// zipper is the interface to the zip file stored on disk.
+// zipOutput abstracts the destination for debug zip data. It can target
+// either a local zip file (via zipper) or a remote upload server
+// (via uploadZipOutput).
+type zipOutput interface {
+	createRaw(s *zipReporter, name string, b []byte) error
+	createJSON(s *zipReporter, name string, m interface{}) error
+	createError(s *zipReporter, name string, e error) error
+	createJSONOrError(s *zipReporter, name string, m interface{}, e error) error
+	createRawOrError(s *zipReporter, name string, b []byte, e error) error
+	createLocked(name string, mtime time.Time) (io.Writer, error)
+	close() error
+	Lock()
+	Unlock()
+	AssertHeld()
+}
+
+var _ zipOutput = (*zipper)(nil)
+
+// zipper is the local zip file implementation of zipOutput.
 type zipper struct {
 	// zipper implements Mutex because it's not possible for multiple
 	// goroutines to write concurrently to a zip.Writer.
