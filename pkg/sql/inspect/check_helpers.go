@@ -143,7 +143,8 @@ func extractRegionFromSpan(
 	return regionEnum.LogicalRep, nil
 }
 
-// spanForRegion returns an equivalent span with the region column set to the specific region.
+// spanForRegion returns an equivalent span with the region column set to the
+// specific region.
 func spanForRegion(
 	ctx context.Context,
 	cfg *execinfra.ServerConfig,
@@ -168,16 +169,11 @@ func spanForRegion(
 		return roachpb.Span{}, err
 	}
 
-	regionDatum, err := tree.MakeDEnumFromLogicalRepresentation(regionCol.GetType(), region)
+	regionSpan, err := spanForFullRegion(cfg, tableDesc, region)
 	if err != nil {
-		return roachpb.Span{}, errors.Wrapf(err, "invalid region %q", region)
+		return roachpb.Span{}, err
 	}
-
-	regionPrefixBytes, err := keyside.Encode(indexPrefix, &regionDatum, encoding.Ascending)
-	if err != nil {
-		return roachpb.Span{}, errors.Wrap(err, "encoding region")
-	}
-	regionPrefix := roachpb.Key(regionPrefixBytes)
+	regionPrefix := regionSpan.Key
 
 	startKeyAfterIndex := span.Key[len(indexPrefix):]
 	endKeyAfterIndex := span.EndKey[len(indexPrefix):]
@@ -209,6 +205,40 @@ func spanForRegion(
 		Key:    key,
 		EndKey: endKey,
 	}, nil
+}
+
+// spanForFullRegion returns a span that covers the full region of a regional by
+// row table.
+func spanForFullRegion(
+	cfg *execinfra.ServerConfig, tableDesc catalog.TableDescriptor, region string,
+) (roachpb.Span, error) {
+	priIndex := tableDesc.GetPrimaryIndex()
+
+	indexPrefix := cfg.Codec.IndexPrefix(uint32(tableDesc.GetID()), uint32(priIndex.GetID()))
+
+	regionColID := priIndex.GetKeyColumnID(0)
+	regionCol, err := catalog.MustFindColumnByID(tableDesc, regionColID)
+	if err != nil {
+		return roachpb.Span{}, err
+	}
+
+	regionDatum, err := tree.MakeDEnumFromLogicalRepresentation(regionCol.GetType(), region)
+	if err != nil {
+		return roachpb.Span{}, errors.Wrapf(err, "invalid region %q", region)
+	}
+
+	regionPrefixBytes, err := keyside.Encode(indexPrefix, &regionDatum, encoding.Ascending)
+	if err != nil {
+		return roachpb.Span{}, errors.Wrap(err, "encoding region")
+	}
+	regionPrefix := roachpb.Key(regionPrefixBytes)
+
+	span := roachpb.Span{
+		Key:    regionPrefix,
+		EndKey: regionPrefix.PrefixEnd(),
+	}
+
+	return span, nil
 }
 
 // getPredicateAndQueryArgs generates query bounds from the span to limit the query to the specified range.

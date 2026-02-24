@@ -149,11 +149,11 @@ func (c *uniquenessCheck) Start(
 	colList := strings.Join(encodedColNames, ", ")
 
 	queryWithRemoteRegionsGrouped := fmt.Sprintf(`
-WITH sub AS (
+WITH all_regions AS (
   %s
 )
 SELECT %s, array_agg(remote_region) as remote_regions
-FROM sub
+FROM all_regions
 GROUP BY %s
 `,
 		query, colList, colList)
@@ -218,9 +218,18 @@ func (c *uniquenessCheck) getRemotePredicatesAndQueryArgs(
 	endPlaceholderOffset int,
 ) (remotePredicates []string, remoteArgs []interface{}, err error) {
 	for _, region := range remoteRegions {
-		remoteSpan, err := spanForRegion(ctx, cfg, span, c.tableDesc, region)
-		if err != nil {
-			return nil, nil, errors.Wrapf(err, "creating span for region %q", region)
+		var remoteSpan roachpb.Span
+		// Limit the scan of the remote region if possible
+		if c.uniqueColIdx == 1 {
+			remoteSpan, err = spanForRegion(ctx, cfg, span, c.tableDesc, region)
+			if err != nil {
+				return nil, nil, errors.Wrapf(err, "creating span for region %q", region)
+			}
+		} else {
+			remoteSpan, err = spanForFullRegion(cfg, c.tableDesc, region)
+			if err != nil {
+				return nil, nil, errors.Wrapf(err, "creating span for full region %q", region)
+			}
 		}
 
 		rPredicate, rQueryArgs, err := getPredicateAndQueryArgs(
@@ -430,11 +439,6 @@ func (c *uniquenessCheck) loadCatalogInfo(ctx context.Context) error {
 		return errors.AssertionFailedf("index has no `unique_rowid()` or `unordered_unique_rowid()` column to be unique checked")
 	} else if len(uniqueColIdxs) > 1 {
 		return errors.AssertionFailedf("uniqueness check for indexes with multiple `unique_rowid()` or `unordered_unique_rowid()` columns is not supported")
-	}
-
-	// TODO(154551): Support full scans of the remote regions.
-	if uniqueColIdxs[0] != 1 {
-		return errors.AssertionFailedf("the unique column must be immediately after the regionality column")
 	}
 
 	c.index = index
