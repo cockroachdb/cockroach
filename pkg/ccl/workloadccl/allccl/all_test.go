@@ -40,19 +40,59 @@ func bigInitialData(meta workload.Meta) bool {
 	}
 }
 
-func TestAllRegisteredImportFixture(t *testing.T) {
+// runImportFixtureTest runs the import fixture test for a given workload.
+func runImportFixtureTest(
+	t *testing.T, meta workload.Meta, gen workload.Generator, sqlMemoryPoolSize int64,
+) {
+	if bigInitialData(meta) {
+		skip.UnderShort(t, fmt.Sprintf(`%s loads a lot of data`, meta.Name))
+	}
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{
+		UseDatabase:       "d",
+		SQLMemoryPoolSize: sqlMemoryPoolSize,
+	})
+	defer s.Stopper().Stop(ctx)
+	sqlutils.MakeSQLRunner(db).Exec(t, `CREATE DATABASE d`)
+
+	l := workloadccl.ImportDataLoader{}
+	if _, err := workloadsql.Setup(ctx, db, gen, l); err != nil {
+		t.Fatalf(`%+v`, err)
+	}
+
+	// Run the consistency check if this workload has one.
+	if h, ok := gen.(workload.Hookser); ok {
+		if checkConsistencyFn := h.Hooks().CheckConsistency; checkConsistencyFn != nil {
+			if err := checkConsistencyFn(ctx, db); err != nil {
+				t.Errorf(`%+v`, err)
+			}
+		}
+	}
+}
+
+// runImportFixtures runs import fixture tests with include or exclude filtering.
+func runImportFixtures(t *testing.T, workloads []string, includeMode bool) {
 	defer leaktest.AfterTest(t)()
+	skip.UnderDeadlock(t)
 
 	sqlMemoryPoolSize := int64(1000 << 20) // 1GiB
 
+	workloadMap := make(map[string]bool)
+	for _, name := range workloads {
+		workloadMap[name] = true
+	}
+
 	for _, meta := range workload.Registered() {
-		if meta.Name == `workload_generator` {
-			// This will take its schema generation data from flags at run time,
-			// so static checks are not valid. (This is done separately from the
-			// switch below to avoid calling gen.Tables() which would print an
-			// error.)
-			continue
+		shouldRun := workloadMap[meta.Name]
+		if includeMode && !shouldRun {
+			continue // Not in include list
 		}
+		if !includeMode && shouldRun {
+			continue // In exclude list
+		}
+
 		meta := meta
 		gen := meta.New()
 		hasInitialData := len(gen.Tables()) != 0
@@ -66,55 +106,33 @@ func TestAllRegisteredImportFixture(t *testing.T) {
 			continue
 		}
 
-		// This test is big enough that it causes timeout issues under heavy
-		// configs, so only run one workload. Doing any more than this doesn't
-		// get us enough to be worth the hassle.
 		if skip.Duress() && meta.Name != `bank` {
 			continue
 		}
 
-		switch meta.Name {
-		case `startrek`, `roachmart`, `ttlbench`:
-			// These don't work with IMPORT.
-			continue
-		case `tpch`:
-			// TODO(dan): Implement a timmed down version of TPCH to keep the test
-			// runtime down.
-			continue
-		}
-
 		t.Run(meta.Name, func(t *testing.T) {
-			if meta.Name == "tpcc" || meta.Name == "tpccmultidb" {
-				t.Parallel() // SAFE FOR TESTING
-			}
-			if bigInitialData(meta) {
-				skip.UnderShort(t, fmt.Sprintf(`%s loads a lot of data`, meta.Name))
-			}
-			defer log.Scope(t).Close(t)
-
-			ctx := context.Background()
-			s, db, _ := serverutils.StartServer(t, base.TestServerArgs{
-				UseDatabase:       "d",
-				SQLMemoryPoolSize: sqlMemoryPoolSize,
-			})
-			defer s.Stopper().Stop(ctx)
-			sqlutils.MakeSQLRunner(db).Exec(t, `CREATE DATABASE d`)
-
-			l := workloadccl.ImportDataLoader{}
-			if _, err := workloadsql.Setup(ctx, db, gen, l); err != nil {
-				t.Fatalf(`%+v`, err)
-			}
-
-			// Run the consistency check if this workload has one.
-			if h, ok := gen.(workload.Hookser); ok {
-				if checkConsistencyFn := h.Hooks().CheckConsistency; checkConsistencyFn != nil {
-					if err := checkConsistencyFn(ctx, db); err != nil {
-						t.Errorf(`%+v`, err)
-					}
-				}
-			}
+			runImportFixtureTest(t, meta, gen, sqlMemoryPoolSize)
 		})
 	}
+}
+
+// TestImportFixture_TPC runs tpcc and tpccmultidb sequentially.
+// These must run sequentially to avoid log.Scope() race condition (see #164266).
+func TestImportFixture_TPC(t *testing.T) {
+	runImportFixtures(t, []string{"tpcc", "tpccmultidb"}, true /* includeMode */)
+}
+
+// TestImportFixture_Others runs all workloads except tpcc, tpccmultidb, and those that don't work with IMPORT.
+func TestImportFixture_Others(t *testing.T) {
+	runImportFixtures(t, []string{
+		"tpcc",
+		"tpccmultidb",
+		"workload_generator", // Takes schema from flags at runtime
+		"startrek",           // Doesn't work with IMPORT
+		"roachmart",          // Doesn't work with IMPORT
+		"ttlbench",           // Doesn't work with IMPORT
+		"tpch",               // Excluded (TODO: implement trimmed version)
+	}, false /* includeMode */)
 }
 
 func TestAllRegisteredSetup(t *testing.T) {
