@@ -22,16 +22,9 @@ func init() {
 }
 
 func TestMain(m *testing.M) {
-	serverutils.InitTestServerFactory(server.TestServerFactory)
+	serverutils.InitTestServerFactory(server.TestServerFactory,
+		serverutils.WithDRPCOption(base.TestDRPCEnabledRandomly),
+		serverutils.WithTenantOption(base.TestIsForStuffThatShouldWorkWithSecondaryTenantsButDoesntYet(156327)))
 	randutil.SeedForTests()
-
-	defer serverutils.TestingSetDefaultTenantSelectionOverride(
-		base.TestIsForStuffThatShouldWorkWithSecondaryTenantsButDoesntYet(156327),
-	)()
-
-	defer serverutils.TestingGlobalDRPCOption(
-		base.TestDRPCEnabledRandomly,
-	)()
-
 	os.Exit(m.Run())
 }

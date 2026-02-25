@@ -23,7 +23,7 @@ func init() {
 
 func TestMain(m *testing.M) {
 	serverutils.InitTestServerFactory(server.TestServerFactory,
-		serverutils.TestingGlobalDRPCOption(base.TestDRPCEnabledRandomly))
+		serverutils.WithDRPCOption(base.TestDRPCEnabledRandomly))
 	serverutils.InitTestClusterFactory(testcluster.TestClusterFactory)
 	os.Exit(m.Run())
 }

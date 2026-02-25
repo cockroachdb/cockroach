@@ -52,8 +52,8 @@ var (
 func TestMain(m *testing.M) {
 	securityassets.SetLoader(securitytest.EmbeddedAssets)
 	randutil.SeedForTests()
-	serverutils.InitTestServerFactory(server.TestServerFactory)
-	serverutils.TestingGlobalDRPCOption(base.TestDRPCEnabledRandomly)
+	serverutils.InitTestServerFactory(server.TestServerFactory,
+		serverutils.WithDRPCOption(base.TestDRPCEnabledRandomly))
 	serverutils.InitTestClusterFactory(testcluster.TestClusterFactory)
 	os.Exit(func() int {
 		ctx := context.Background()

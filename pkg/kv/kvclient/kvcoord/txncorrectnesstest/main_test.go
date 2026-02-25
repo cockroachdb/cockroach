@@ -20,7 +20,7 @@ import (
 func TestMain(m *testing.M) {
 	securityassets.SetLoader(securitytest.EmbeddedAssets)
 	serverutils.InitTestServerFactory(server.TestServerFactory,
-		serverutils.TestingGlobalDRPCOption(base.TestDRPCEnabledRandomly))
+		serverutils.WithDRPCOption(base.TestDRPCEnabledRandomly))
 	randutil.SeedForTests()
 
 	os.Exit(m.Run())

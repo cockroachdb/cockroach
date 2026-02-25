@@ -26,7 +26,7 @@ func init() {
 func TestMain(m *testing.M) {
 	randutil.SeedForTests()
 	serverutils.InitTestServerFactory(server.TestServerFactory,
-		serverutils.TestingGlobalDRPCOption(base.TestDRPCEnabledRandomly))
+		serverutils.WithDRPCOption(base.TestDRPCEnabledRandomly))
 	serverutils.InitTestClusterFactory(testcluster.TestClusterFactory)
 
 	code := m.Run()

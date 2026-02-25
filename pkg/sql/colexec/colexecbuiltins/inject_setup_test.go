@@ -20,6 +20,6 @@ func init() {
 	// use NewColOperator without an import cycle.
 	colexecargs.TestNewColOperator = colbuilder.NewColOperator
 	securityassets.SetLoader(securitytest.EmbeddedAssets)
-	serverutils.InitTestServerFactory(server.TestServerFactory)
-	serverutils.TestingGlobalDRPCOption(base.TestDRPCEnabledRandomly)
+	serverutils.InitTestServerFactory(server.TestServerFactory,
+		serverutils.WithDRPCOption(base.TestDRPCEnabledRandomly))
 }

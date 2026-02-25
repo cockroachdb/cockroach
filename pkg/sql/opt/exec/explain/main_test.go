@@ -20,7 +20,7 @@ import (
 func TestMain(m *testing.M) {
 	defer ccl.TestingEnableEnterprise()()
 	securityassets.SetLoader(securitytest.EmbeddedAssets)
-	serverutils.InitTestServerFactory(server.TestServerFactory)
-	serverutils.TestingGlobalDRPCOption(base.TestDRPCEnabledRandomly)
+	serverutils.InitTestServerFactory(server.TestServerFactory,
+		serverutils.WithDRPCOption(base.TestDRPCEnabledRandomly))
 	os.Exit(m.Run())
 }
