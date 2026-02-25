@@ -1180,6 +1180,11 @@ type WriteBatch interface {
 	CommitNoSyncWait() error
 	// SyncWait waits for the disk write initiated by a call to CommitNoSyncWait
 	// to complete.
+	//
+	// An error means the WAL write or fsync failed; the data was already applied
+	// to the memtable and is visible, but durability is not guaranteed. After an
+	// error the batch must not be reused and the caller should treat the error
+	// as fatal.
 	SyncWait() error
 	// Empty returns whether the batch has been written to or not.
 	Empty() bool
