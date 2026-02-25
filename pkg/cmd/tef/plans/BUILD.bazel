@@ -1,9 +1,15 @@
 load("@io_bazel_rules_go//go:def.bzl", "go_library")
 
+# Plan registration for TEF plans in the CockroachDB repository.
+# Plans that need CockroachDB dependencies should be added here.
+# The TEF CLI (in the private task-exec-framework repo) imports this package.
 go_library(
     name = "plans",
     srcs = ["registry.go"],
     importpath = "github.com/cockroachdb/cockroach/pkg/cmd/tef/plans",
     visibility = ["//visibility:public"],
-    deps = ["//pkg/cmd/tef/planners"],
+    deps = [
+        "//pkg/cmd/tef/planners",
+        "//pkg/cmd/tef/plans/crdb_demo",
+    ],
 )

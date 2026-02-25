@@ -1,15 +1,15 @@
-load("@io_bazel_rules_go//go:def.bzl", "go_binary", "go_library")
-
-go_library(
-    name = "tef_lib",
-    srcs = ["main.go"],
-    importpath = "github.com/cockroachdb/cockroach/pkg/cmd/tef",
-    visibility = ["//visibility:private"],
-    deps = ["//pkg/cmd/tef/cli"],
-)
-
-go_binary(
-    name = "tef",
-    embed = [":tef_lib"],
-    visibility = ["//visibility:public"],
-)
+# Task Execution Framework (TEF)
+#
+# This package contains the framework-agnostic core of TEF.
+# The TEF binary and CLI have been moved to the private repository:
+# https://github.com/cockroachlabs/task-exec-framework
+#
+# What's in this package:
+# - planners/: Core interfaces (Registry, Planner, PlannerManager, etc.)
+#              and framework-agnostic implementations (BasePlanner, Task types)
+# - plans/:    Plan implementations that register with the framework
+#
+# The private repository contains:
+# - Temporal-specific PlannerManager implementation
+# - CLI commands (start-worker, execute, resume, etc.)
+# - Binary build configuration

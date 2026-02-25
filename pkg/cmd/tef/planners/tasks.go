@@ -47,45 +47,46 @@ type Task interface {
 	// validate checks that the task is properly configured.
 	// The failedPath parameter indicates whether this task is reachable via a Fail path,
 	// which affects parameter validation (tasks in Fail paths receive an extra error string).
-	validate(failedPath bool) error
+	Validate(failedPath bool) error
 	// isStepTask returns true if the task has Next and Fail paths.
-	isStepTask() bool
+	IsStepTask() bool
 	// getNextTask returns the next task to execute on success (nil if not a step task).
-	getNextTask() Task
+	GetNextTask() Task
 	// getFailTask returns the task to execute on failure (nil if not a step task or no fail path).
-	getFailTask() Task
+	GetFailTask() Task
 }
 
 // baseTask provides the foundational fields and methods shared by all task types.
-// It implements the Name() and isStepTask() methods of the Task interface.
+// It implements the Name() and IsStepTask() methods of the Task interface.
 type baseTask struct {
-	taskName string
+	// TaskName is the unique identifier for this task. Exported for use by BasePlanner in private repo.
+	TaskName string
 }
 
 // Name returns the task's unique identifier.
 func (b *baseTask) Name() string {
-	return b.taskName
+	return b.TaskName
 }
 
 // isStepTask returns false for baseTask, as it does not have Next/Fail paths.
-// This method is overridden by stepTask to return true.
-func (b *baseTask) isStepTask() bool {
+// This method is overridden by StepTask to return true.
+func (b *baseTask) IsStepTask() bool {
 	return false
 }
 
 // getNextTask returns nil for baseTask, as it has no next task.
-func (b *baseTask) getNextTask() Task {
+func (b *baseTask) GetNextTask() Task {
 	return nil
 }
 
 // getFailTask returns nil for baseTask, as it has no fail task.
-func (b *baseTask) getFailTask() Task {
+func (b *baseTask) GetFailTask() Task {
 	return nil
 }
 
-// stepTask extends baseTask with Next and Fail paths for sequential execution.
-// Most task types embed stepTask to support success and failure paths.
-type stepTask struct {
+// StepTask extends baseTask with Next and Fail paths for sequential execution.
+// Most task types embed StepTask to support success and failure paths.
+type StepTask struct {
 	baseTask
 	// Next is the task to execute upon successful completion.
 	Next Task
@@ -93,57 +94,44 @@ type stepTask struct {
 	Fail Task
 }
 
-// The stepTask type partially implements the Task interface.
-var _ Task = &stepTask{}
+// The StepTask type partially implements the Task interface.
+var _ Task = &StepTask{}
 
-// Type returns an empty string as stepTask is abstract and should not be instantiated directly.
-func (s *stepTask) Type() TaskType {
+// Type returns an empty string as StepTask is abstract and should not be instantiated directly.
+func (s *StepTask) Type() TaskType {
 	return ""
 }
 
 // validate checks that the task has a name and a Next task defined.
-func (s *stepTask) validate(_ bool) error {
-	if s.taskName == "" {
+func (s *StepTask) Validate(_ bool) error {
+	if s.TaskName == "" {
 		return errors.Newf("task name is missing")
 	}
 	if s.Next == nil {
-		return errors.Newf("next task is missing for task <%s>", s.taskName)
+		return errors.Newf("next task is missing for task <%s>", s.TaskName)
 	}
 	return nil
 }
 
 // isStepTask returns true, indicating this task has Next and Fail paths.
-func (s *stepTask) isStepTask() bool {
+func (s *StepTask) IsStepTask() bool {
 	return true
 }
 
 // getNextTask returns the next task to execute on success.
-func (s *stepTask) getNextTask() Task {
+func (s *StepTask) GetNextTask() Task {
 	return s.Next
 }
 
 // getFailTask returns the task to execute on failure, which may be nil.
-func (s *stepTask) getFailTask() Task {
-	return s.Fail
-}
-
-// NextTask returns the task to execute on successful completion.
-// This is a public accessor for the Next field.
-func (s *stepTask) NextTask() Task {
-	return s.Next
-}
-
-// FailTask returns the task to execute on failure.
-// Returns nil if no failure handler is defined.
-// This is a public accessor for the Fail field.
-func (s *stepTask) FailTask() Task {
+func (s *StepTask) GetFailTask() Task {
 	return s.Fail
 }
 
 // ExecutionTask executes a registered executor function with optional parameters.
-// It embeds stepTask to support Next and Fail paths based on execution results.
+// It embeds StepTask to support Next and Fail paths based on execution results.
 type ExecutionTask struct {
-	stepTask
+	StepTask
 	// ExecutorFn is the function to execute, which must be registered with the planner.
 	ExecutorFn interface{}
 	// Params contains tasks whose results are passed as additional inputs to the executor.
@@ -164,33 +152,33 @@ func (e *ExecutionTask) Type() TaskType {
 
 // validate ensures the task has a name and an executor function.
 // When failedPath is true, the executor must accept one additional string parameter (error message).
-func (e *ExecutionTask) validate(failedPath bool) error {
-	if e.taskName == "" {
+func (e *ExecutionTask) Validate(failedPath bool) error {
+	if e.TaskName == "" {
 		return errors.Newf("task name is missing")
 	}
 	if e.ExecutorFn == nil {
-		return errors.Newf("executor is missing for execution task <%s>", e.taskName)
+		return errors.Newf("executor is missing for execution task <%s>", e.TaskName)
 	}
 
 	// Validate that ExecutorFn has the correct parameter signature
 	fnType := reflect.TypeOf(e.ExecutorFn)
 	if fnType.Kind() != reflect.Func {
-		return errors.Newf("executor for execution task <%s> must be a function", e.taskName)
+		return errors.Newf("executor for execution task <%s> must be a function", e.TaskName)
 	}
 	if fnType.NumIn() < 3 {
-		return errors.Newf("executor for execution task <%s> must take at least 3 parameters (context.Context, *PlanExecutionInfo, input interface{}), got %d parameters", e.taskName, fnType.NumIn())
+		return errors.Newf("executor for execution task <%s> must take at least 3 parameters (context.Context, *PlanExecutionInfo, input interface{}), got %d parameters", e.TaskName, fnType.NumIn())
 	}
 
 	// Validate first parameter is context.Context
 	contextType := reflect.TypeOf((*context.Context)(nil)).Elem()
 	if !fnType.In(0).Implements(contextType) {
-		return errors.Newf("executor for execution task <%s> must have context.Context as first parameter, got %s", e.taskName, fnType.In(0))
+		return errors.Newf("executor for execution task <%s> must have context.Context as first parameter, got %s", e.TaskName, fnType.In(0))
 	}
 
 	// Validate second parameter is *PlanExecutionInfo
 	planExecutionInfoType := reflect.TypeOf(&PlanExecutionInfo{})
 	if fnType.In(1) != planExecutionInfoType {
-		return errors.Newf("executor for execution task <%s> must have *PlanExecutionInfo as second parameter, got %s", e.taskName, fnType.In(1))
+		return errors.Newf("executor for execution task <%s> must have *PlanExecutionInfo as second parameter, got %s", e.TaskName, fnType.In(1))
 	}
 
 	// Validate that the number of Params matches the number of additional parameters beyond the 3 required ones.
@@ -207,30 +195,30 @@ func (e *ExecutionTask) validate(failedPath bool) error {
 	}
 	if len(e.Params) != expectedParams {
 		if failedPath {
-			return errors.Newf("executor for execution task <%s> in failure path expects %d Param(s), got %d (signature should be: func(ctx, planInfo, input, ...%d params, errorString))", e.taskName, expectedParams, len(e.Params), expectedParams)
+			return errors.Newf("executor for execution task <%s> in failure path expects %d Param(s), got %d (signature should be: func(ctx, planInfo, input, ...%d params, errorString))", e.TaskName, expectedParams, len(e.Params), expectedParams)
 		}
-		return errors.Newf("executor for execution task <%s> expects %d Param(s), got %d (signature should be: func(ctx, planInfo, input, ...%d params))", e.taskName, expectedParams, len(e.Params), expectedParams)
+		return errors.Newf("executor for execution task <%s> expects %d Param(s), got %d (signature should be: func(ctx, planInfo, input, ...%d params))", e.TaskName, expectedParams, len(e.Params), expectedParams)
 	}
 
 	// Validate return signature: (interface{}, error)
 	if fnType.NumOut() != 2 {
-		return errors.Newf("executor for execution task <%s> must return exactly 2 values (interface{}, error), got %d return values", e.taskName, fnType.NumOut())
+		return errors.Newf("executor for execution task <%s> must return exactly 2 values (interface{}, error), got %d return values", e.TaskName, fnType.NumOut())
 	}
 	errorInterface := reflect.TypeOf((*error)(nil)).Elem()
 	if !fnType.Out(1).Implements(errorInterface) {
-		return errors.Newf("executor for execution task <%s> must return error as second return value, got %s", e.taskName, fnType.Out(1))
+		return errors.Newf("executor for execution task <%s> must return error as second return value, got %s", e.TaskName, fnType.Out(1))
 	}
 
 	return nil
 }
 
 // ForkTask executes multiple task branches in parallel.
-// It embeds stepTask, and the Next task is executed after all parallel branches complete.
+// It embeds StepTask, and the Next task is executed after all parallel branches complete.
 // All parallel branches must converge to the same Join point (a ForkJoinTask) before execution
 // continues to Next. The Join ForkJoinTask acts as a synchronization barrier, not as termination
 // of the entire execution path.
 type ForkTask struct {
-	stepTask
+	StepTask
 	// Tasks contain the list of task branches to execute in parallel.
 	Tasks []Task
 	// Join specifies the ForkJoinTask where all parallel branches must converge.
@@ -246,18 +234,18 @@ func (f *ForkTask) Type() TaskType {
 }
 
 // validate ensures the task has a name, a Next task, at least one parallel branch, and a Join point.
-func (f *ForkTask) validate(_ bool) error {
-	if f.taskName == "" {
+func (f *ForkTask) Validate(_ bool) error {
+	if f.TaskName == "" {
 		return errors.Newf("task name is missing")
 	}
 	if f.Next == nil {
-		return errors.Newf("next task is missing for task <%s>", f.taskName)
+		return errors.Newf("next task is missing for task <%s>", f.TaskName)
 	}
 	if len(f.Tasks) == 0 {
-		return errors.Newf("tasks is missing for fork task <%s>", f.taskName)
+		return errors.Newf("tasks is missing for fork task <%s>", f.TaskName)
 	}
 	if f.Join == nil {
-		return errors.Newf("join point is missing for fork task <%s>", f.taskName)
+		return errors.Newf("join point is missing for fork task <%s>", f.TaskName)
 	}
 	return nil
 }
@@ -289,8 +277,8 @@ func (f *ForkJoinTask) Type() TaskType {
 }
 
 // validate ensures the task has a name.
-func (f *ForkJoinTask) validate(_ bool) error {
-	if f.taskName == "" {
+func (f *ForkJoinTask) Validate(_ bool) error {
+	if f.TaskName == "" {
 		return errors.Newf("task name is missing")
 	}
 	return nil
@@ -308,8 +296,8 @@ func (e *EndTask) Type() TaskType {
 }
 
 // validate ensures the task has a name.
-func (e *EndTask) validate(_ bool) error {
-	if e.taskName == "" {
+func (e *EndTask) Validate(_ bool) error {
+	if e.TaskName == "" {
 		return errors.Newf("task name is missing")
 	}
 	return nil
@@ -336,53 +324,53 @@ func (i *ConditionTask) Type() TaskType {
 
 // validate ensures the task has an executor and both Then and Else branches.
 // ConditionTask validation does not differ between normal and failure paths.
-func (i *ConditionTask) validate(_ bool) error {
+func (i *ConditionTask) Validate(_ bool) error {
 	if i.ExecutorFn == nil {
-		return errors.Newf("executor is missing for execution task <%s>", i.taskName)
+		return errors.Newf("executor is missing for execution task <%s>", i.TaskName)
 	}
 	// Validate that ExecutorFn has the correct signature: (params...) (bool, error)
 	fnType := reflect.TypeOf(i.ExecutorFn)
 	if fnType.Kind() != reflect.Func {
-		return errors.Newf("executor for condition task <%s> must be a function", i.taskName)
+		return errors.Newf("executor for condition task <%s> must be a function", i.TaskName)
 	}
 	if fnType.NumIn() < 3 {
-		return errors.Newf("executor for condition task <%s> must take at least 3 parameters (context.Context, *PlanExecutionInfo, input interface{}), got %d parameters", i.taskName, fnType.NumIn())
+		return errors.Newf("executor for condition task <%s> must take at least 3 parameters (context.Context, *PlanExecutionInfo, input interface{}), got %d parameters", i.TaskName, fnType.NumIn())
 	}
 
 	// Validate first parameter is context.Context
 	contextType := reflect.TypeOf((*context.Context)(nil)).Elem()
 	if !fnType.In(0).Implements(contextType) {
-		return errors.Newf("executor for condition task <%s> must have context.Context as first parameter, got %s", i.taskName, fnType.In(0))
+		return errors.Newf("executor for condition task <%s> must have context.Context as first parameter, got %s", i.TaskName, fnType.In(0))
 	}
 
 	// Validate second parameter is *PlanExecutionInfo
 	planExecutionInfoType := reflect.TypeOf(&PlanExecutionInfo{})
 	if fnType.In(1) != planExecutionInfoType {
-		return errors.Newf("executor for condition task <%s> must have *PlanExecutionInfo as second parameter, got %s", i.taskName, fnType.In(1))
+		return errors.Newf("executor for condition task <%s> must have *PlanExecutionInfo as second parameter, got %s", i.TaskName, fnType.In(1))
 	}
 
 	// Validate that the number of Params matches the number of additional parameters beyond the 3 required ones.
 	// Note: ConditionTask does not receive an error parameter even in failure paths, as it doesn't use hasFailed logic.
 	expectedParams := fnType.NumIn() - 3
 	if len(i.Params) != expectedParams {
-		return errors.Newf("executor for condition task <%s> expects %d additional parameter(s) beyond (context.Context, *PlanExecutionInfo, input), got %d Params", i.taskName, expectedParams, len(i.Params))
+		return errors.Newf("executor for condition task <%s> expects %d additional parameter(s) beyond (context.Context, *PlanExecutionInfo, input), got %d Params", i.TaskName, expectedParams, len(i.Params))
 	}
 
 	if fnType.NumOut() != 2 {
-		return errors.Newf("executor for condition task <%s> must return exactly 2 values (bool, error), got %d return values", i.taskName, fnType.NumOut())
+		return errors.Newf("executor for condition task <%s> must return exactly 2 values (bool, error), got %d return values", i.TaskName, fnType.NumOut())
 	}
 	if fnType.Out(0).Kind() != reflect.Bool {
-		return errors.Newf("executor for condition task <%s> must return bool as first return value, got %s", i.taskName, fnType.Out(0).Kind())
+		return errors.Newf("executor for condition task <%s> must return bool as first return value, got %s", i.TaskName, fnType.Out(0).Kind())
 	}
 	errorInterface := reflect.TypeOf((*error)(nil)).Elem()
 	if !fnType.Out(1).Implements(errorInterface) {
-		return errors.Newf("executor for condition task <%s> must return error as second return value, got %s", i.taskName, fnType.Out(1))
+		return errors.Newf("executor for condition task <%s> must return error as second return value, got %s", i.TaskName, fnType.Out(1))
 	}
 	if i.Then == nil {
-		return errors.Newf("then is missing for execution task <%s>", i.taskName)
+		return errors.Newf("then is missing for execution task <%s>", i.TaskName)
 	}
 	if i.Else == nil {
-		return errors.Newf("else is missing for execution task <%s>", i.taskName)
+		return errors.Newf("else is missing for execution task <%s>", i.TaskName)
 	}
 	return nil
 }
@@ -395,10 +383,10 @@ func (i *ConditionTask) GetExecutorName(executorRegistry map[string]*Executor) s
 }
 
 // CallbackTask initiates an operation and waits for callback-driven completion.
-// It embeds stepTask and starts an operation that returns a step ID,
+// It embeds StepTask and starts an operation that returns a step ID,
 // then waits for an external signal to resume with the result.
 type CallbackTask struct {
-	stepTask
+	StepTask
 	// ExecutionFn is the function to execute, which must return a step ID as string.
 	// Expected signature: func(ctx context.Context, input...) (string, error)
 	ExecutionFn interface{}
@@ -416,36 +404,36 @@ func (a *CallbackTask) Type() TaskType {
 
 // validate ensures the task has a name, both executor functions, and a Next task.
 // When failedPath is true, both functions must accept one additional string parameter (error message).
-func (a *CallbackTask) validate(failedPath bool) error {
-	if a.taskName == "" {
+func (a *CallbackTask) Validate(failedPath bool) error {
+	if a.TaskName == "" {
 		return errors.Newf("task name is missing")
 	}
 	if a.ExecutionFn == nil {
-		return errors.Newf("execution function is missing for callback task <%s>", a.taskName)
+		return errors.Newf("execution function is missing for callback task <%s>", a.TaskName)
 	}
 	if a.ResultProcessorFn == nil {
-		return errors.Newf("result processor function is missing for callback task <%s>", a.taskName)
+		return errors.Newf("result processor function is missing for callback task <%s>", a.TaskName)
 	}
 
 	// Validate that ExecutionFn has the correct signature: (params...) (string, error)
 	fnType := reflect.TypeOf(a.ExecutionFn)
 	if fnType.Kind() != reflect.Func {
-		return errors.Newf("execution function for callback task <%s> must be a function", a.taskName)
+		return errors.Newf("execution function for callback task <%s> must be a function", a.TaskName)
 	}
 	if fnType.NumIn() < 3 {
-		return errors.Newf("execution function for callback task <%s> must take at least 3 parameters (context.Context, *PlanExecutionInfo, input interface{}), got %d parameters", a.taskName, fnType.NumIn())
+		return errors.Newf("execution function for callback task <%s> must take at least 3 parameters (context.Context, *PlanExecutionInfo, input interface{}), got %d parameters", a.TaskName, fnType.NumIn())
 	}
 
 	// Validate first parameter is context.Context
 	contextType := reflect.TypeOf((*context.Context)(nil)).Elem()
 	if !fnType.In(0).Implements(contextType) {
-		return errors.Newf("execution function for callback task <%s> must have context.Context as first parameter, got %s", a.taskName, fnType.In(0))
+		return errors.Newf("execution function for callback task <%s> must have context.Context as first parameter, got %s", a.TaskName, fnType.In(0))
 	}
 
 	// Validate second parameter is *PlanExecutionInfo
 	planExecutionInfoType := reflect.TypeOf(&PlanExecutionInfo{})
 	if fnType.In(1) != planExecutionInfoType {
-		return errors.Newf("execution function for callback task <%s> must have *PlanExecutionInfo as second parameter, got %s", a.taskName, fnType.In(1))
+		return errors.Newf("execution function for callback task <%s> must have *PlanExecutionInfo as second parameter, got %s", a.TaskName, fnType.In(1))
 	}
 
 	// Validate that the number of Params matches the number of additional parameters beyond the 3 required ones.
@@ -462,46 +450,46 @@ func (a *CallbackTask) validate(failedPath bool) error {
 	}
 	if len(a.Params) != expectedParams {
 		if failedPath {
-			return errors.Newf("execution function for callback task <%s> in failure path expects %d Param(s), got %d (signature should be: func(ctx, planInfo, input, ...%d params, errorString))", a.taskName, expectedParams, len(a.Params), expectedParams)
+			return errors.Newf("execution function for callback task <%s> in failure path expects %d Param(s), got %d (signature should be: func(ctx, planInfo, input, ...%d params, errorString))", a.TaskName, expectedParams, len(a.Params), expectedParams)
 		}
-		return errors.Newf("execution function for callback task <%s> expects %d Param(s), got %d (signature should be: func(ctx, planInfo, input, ...%d params))", a.taskName, expectedParams, len(a.Params), expectedParams)
+		return errors.Newf("execution function for callback task <%s> expects %d Param(s), got %d (signature should be: func(ctx, planInfo, input, ...%d params))", a.TaskName, expectedParams, len(a.Params), expectedParams)
 	}
 
 	if fnType.NumOut() != 2 {
-		return errors.Newf("execution function for callback task <%s> must return exactly 2 values (string, error), got %d return values", a.taskName, fnType.NumOut())
+		return errors.Newf("execution function for callback task <%s> must return exactly 2 values (string, error), got %d return values", a.TaskName, fnType.NumOut())
 	}
 	if fnType.Out(0).Kind() != reflect.String {
-		return errors.Newf("execution function for callback task <%s> must return string as first return value, got %s", a.taskName, fnType.Out(0).Kind())
+		return errors.Newf("execution function for callback task <%s> must return string as first return value, got %s", a.TaskName, fnType.Out(0).Kind())
 	}
 	errorInterface := reflect.TypeOf((*error)(nil)).Elem()
 	if !fnType.Out(1).Implements(errorInterface) {
-		return errors.Newf("execution function for callback task <%s> must return error as second return value, got %s", a.taskName, fnType.Out(1))
+		return errors.Newf("execution function for callback task <%s> must return error as second return value, got %s", a.TaskName, fnType.Out(1))
 	}
 
 	// Validate that ResultProcessorFn has the correct signature: (ctx, input, stepID, result) (interface{}, error)
 	processorType := reflect.TypeOf(a.ResultProcessorFn)
 	if processorType.Kind() != reflect.Func {
-		return errors.Newf("result processor function for callback task <%s> must be a function", a.taskName)
+		return errors.Newf("result processor function for callback task <%s> must be a function", a.TaskName)
 	}
 	if processorType.NumIn() < 5 {
-		return errors.Newf("result processor function for callback task <%s> must take at least 4 parameters (context.Context, *PlanExecutionInfo, input interface{}, stepID string, asyncResult string), got %d parameters", a.taskName, processorType.NumIn())
+		return errors.Newf("result processor function for callback task <%s> must take at least 4 parameters (context.Context, *PlanExecutionInfo, input interface{}, stepID string, asyncResult string), got %d parameters", a.TaskName, processorType.NumIn())
 	}
 
 	// Validate first parameter is context.Context
 	if !processorType.In(0).Implements(contextType) {
-		return errors.Newf("result processor function for callback task <%s> must have context.Context as first parameter, got %s", a.taskName, processorType.In(0))
+		return errors.Newf("result processor function for callback task <%s> must have context.Context as first parameter, got %s", a.TaskName, processorType.In(0))
 	}
 
 	// Validate second parameter is *PlanExecutionInfo
 	if processorType.In(1) != planExecutionInfoType {
-		return errors.Newf("result processor function for callback task <%s> must have *PlanExecutionInfo as second parameter, got %s", a.taskName, processorType.In(1))
+		return errors.Newf("result processor function for callback task <%s> must have *PlanExecutionInfo as second parameter, got %s", a.TaskName, processorType.In(1))
 	}
 
 	if processorType.NumOut() != 2 {
-		return errors.Newf("result processor function for callback task <%s> must return exactly 2 values (interface{}, error), got %d return values", a.taskName, processorType.NumOut())
+		return errors.Newf("result processor function for callback task <%s> must return exactly 2 values (interface{}, error), got %d return values", a.TaskName, processorType.NumOut())
 	}
 	if !processorType.Out(1).Implements(errorInterface) {
-		return errors.Newf("result processor function for callback task <%s> must return error as second return value, got %s", a.taskName, processorType.Out(1))
+		return errors.Newf("result processor function for callback task <%s> must return error as second return value, got %s", a.TaskName, processorType.Out(1))
 	}
 
 	// Note: Next is validated in validateStepTaskPaths based on execution context (normal vs failure path).
@@ -532,10 +520,10 @@ type ChildTaskInfo struct {
 }
 
 // ChildPlanTask executes a child plan synchronously by invoking ExecutePlanSync on the appropriate manager.
-// It embeds a stepTask and waits for the child plan to complete before continuing to Next.
+// It embeds a StepTask and waits for the child plan to complete before continuing to Next.
 // The assumption is that the worker for the child plan is already running; otherwise the task fails.
 type ChildPlanTask struct {
-	stepTask
+	StepTask
 	// PlanName is the name of the child plan to execute.
 	PlanName string
 	// ChildTaskInfoFn is the function to execute, which must return a ChildTaskInfo containing the plan variant and input.
@@ -553,36 +541,36 @@ func (c *ChildPlanTask) Type() TaskType {
 // validate ensures the task has a name, plan name, an executor function, and a Next task.
 // validate ensures the task has a name, plan name, an executor function, and a Next task.
 // When failedPath is true, the executor must accept one additional string parameter (error message).
-func (c *ChildPlanTask) validate(failedPath bool) error {
-	if c.taskName == "" {
+func (c *ChildPlanTask) Validate(failedPath bool) error {
+	if c.TaskName == "" {
 		return errors.Newf("task name is missing")
 	}
 	if c.PlanName == "" {
-		return errors.Newf("plan name is missing for child task <%s>", c.taskName)
+		return errors.Newf("plan name is missing for child task <%s>", c.TaskName)
 	}
 	if c.ChildTaskInfoFn == nil {
-		return errors.Newf("executor function is missing for child task <%s>", c.taskName)
+		return errors.Newf("executor function is missing for child task <%s>", c.TaskName)
 	}
 
 	// Validate that ChildTaskInfoFn has the correct signature: (params...) (ChildTaskInfo, error)
 	fnType := reflect.TypeOf(c.ChildTaskInfoFn)
 	if fnType.Kind() != reflect.Func {
-		return errors.Newf("executor for child task <%s> must be a function", c.taskName)
+		return errors.Newf("executor for child task <%s> must be a function", c.TaskName)
 	}
 	if fnType.NumIn() < 3 {
-		return errors.Newf("executor for child task <%s> must take at least 3 parameters (context.Context, *PlanExecutionInfo, input interface{}), got %d parameters", c.taskName, fnType.NumIn())
+		return errors.Newf("executor for child task <%s> must take at least 3 parameters (context.Context, *PlanExecutionInfo, input interface{}), got %d parameters", c.TaskName, fnType.NumIn())
 	}
 
 	// Validate first parameter is context.Context
 	contextType := reflect.TypeOf((*context.Context)(nil)).Elem()
 	if !fnType.In(0).Implements(contextType) {
-		return errors.Newf("executor for child task <%s> must have context.Context as first parameter, got %s", c.taskName, fnType.In(0))
+		return errors.Newf("executor for child task <%s> must have context.Context as first parameter, got %s", c.TaskName, fnType.In(0))
 	}
 
 	// Validate second parameter is *PlanExecutionInfo
 	planExecutionInfoType := reflect.TypeOf(&PlanExecutionInfo{})
 	if fnType.In(1) != planExecutionInfoType {
-		return errors.Newf("executor for child task <%s> must have *PlanExecutionInfo as second parameter, got %s", c.taskName, fnType.In(1))
+		return errors.Newf("executor for child task <%s> must have *PlanExecutionInfo as second parameter, got %s", c.TaskName, fnType.In(1))
 	}
 
 	// Validate that the number of Params matches the number of additional parameters beyond the 3 required ones.
@@ -599,21 +587,21 @@ func (c *ChildPlanTask) validate(failedPath bool) error {
 	}
 	if len(c.Params) != expectedParams {
 		if failedPath {
-			return errors.Newf("executor for child task <%s> in failure path expects %d Param(s), got %d (signature should be: func(ctx, planInfo, input, ...%d params, errorString))", c.taskName, expectedParams, len(c.Params), expectedParams)
+			return errors.Newf("executor for child task <%s> in failure path expects %d Param(s), got %d (signature should be: func(ctx, planInfo, input, ...%d params, errorString))", c.TaskName, expectedParams, len(c.Params), expectedParams)
 		}
-		return errors.Newf("executor for child task <%s> expects %d Param(s), got %d (signature should be: func(ctx, planInfo, input, ...%d params))", c.taskName, expectedParams, len(c.Params), expectedParams)
+		return errors.Newf("executor for child task <%s> expects %d Param(s), got %d (signature should be: func(ctx, planInfo, input, ...%d params))", c.TaskName, expectedParams, len(c.Params), expectedParams)
 	}
 
 	if fnType.NumOut() != 2 {
-		return errors.Newf("executor for child task <%s> must return exactly 2 values (ChildTaskInfo, error), got %d return values", c.taskName, fnType.NumOut())
+		return errors.Newf("executor for child task <%s> must return exactly 2 values (ChildTaskInfo, error), got %d return values", c.TaskName, fnType.NumOut())
 	}
 	childTaskInfoType := reflect.TypeOf(ChildTaskInfo{})
 	if fnType.Out(0) != childTaskInfoType {
-		return errors.Newf("executor for child task <%s> must return ChildTaskInfo as first return value, got %s", c.taskName, fnType.Out(0))
+		return errors.Newf("executor for child task <%s> must return ChildTaskInfo as first return value, got %s", c.TaskName, fnType.Out(0))
 	}
 	errorInterface := reflect.TypeOf((*error)(nil)).Elem()
 	if !fnType.Out(1).Implements(errorInterface) {
-		return errors.Newf("executor for child task <%s> must return error as second return value, got %s", c.taskName, fnType.Out(1))
+		return errors.Newf("executor for child task <%s> must return error as second return value, got %s", c.TaskName, fnType.Out(1))
 	}
 
 	// Note: Next is validated in validateStepTaskPaths based on execution context (normal vs failure path).

@@ -17,91 +17,91 @@ import (
 
 func TestBaseTask(t *testing.T) {
 	t.Run("Name returns task name", func(t *testing.T) {
-		task := &baseTask{taskName: "test_task"}
+		task := &baseTask{TaskName: "test_task"}
 		require.Equal(t, "test_task", task.Name())
 	})
 
 	t.Run("isStepTask returns false", func(t *testing.T) {
 		task := &baseTask{}
-		require.False(t, task.isStepTask())
+		require.False(t, task.IsStepTask())
 	})
 
 	t.Run("getNextTask returns nil", func(t *testing.T) {
 		task := &baseTask{}
-		require.Nil(t, task.getNextTask())
+		require.Nil(t, task.GetNextTask())
 	})
 
 	t.Run("getFailTask returns nil", func(t *testing.T) {
 		task := &baseTask{}
-		require.Nil(t, task.getFailTask())
+		require.Nil(t, task.GetFailTask())
 	})
 }
 
 func TestStepTask(t *testing.T) {
 	end := &EndTask{}
-	end.taskName = "end"
+	end.TaskName = "end"
 
 	fail := &EndTask{}
-	fail.taskName = "fail"
+	fail.TaskName = "fail"
 
 	t.Run("Type returns empty string", func(t *testing.T) {
-		task := &stepTask{}
+		task := &StepTask{}
 		require.Equal(t, TaskType(""), task.Type())
 	})
 
 	t.Run("validate requires task name", func(t *testing.T) {
-		task := &stepTask{}
-		err := task.validate(false)
+		task := &StepTask{}
+		err := task.Validate(false)
 		require.Error(t, err)
 		require.Contains(t, err.Error(), "task name is missing")
 	})
 
 	t.Run("validate requires next task", func(t *testing.T) {
-		task := &stepTask{}
-		task.taskName = "test"
-		err := task.validate(false)
+		task := &StepTask{}
+		task.TaskName = "test"
+		err := task.Validate(false)
 		require.Error(t, err)
 		require.Contains(t, err.Error(), "next task is missing")
 	})
 
 	t.Run("validate succeeds with name and next", func(t *testing.T) {
-		task := &stepTask{
+		task := &StepTask{
 			Next: end,
 		}
-		task.taskName = "test"
-		err := task.validate(false)
+		task.TaskName = "test"
+		err := task.Validate(false)
 		require.NoError(t, err)
 	})
 
 	t.Run("isStepTask returns true", func(t *testing.T) {
-		task := &stepTask{}
-		require.True(t, task.isStepTask())
+		task := &StepTask{}
+		require.True(t, task.IsStepTask())
 	})
 
 	t.Run("getNextTask returns Next", func(t *testing.T) {
-		task := &stepTask{Next: end}
-		require.Equal(t, end, task.getNextTask())
+		task := &StepTask{Next: end}
+		require.Equal(t, end, task.GetNextTask())
 	})
 
 	t.Run("getFailTask returns Fail", func(t *testing.T) {
-		task := &stepTask{Fail: fail}
-		require.Equal(t, fail, task.getFailTask())
+		task := &StepTask{Fail: fail}
+		require.Equal(t, fail, task.GetFailTask())
 	})
 
 	t.Run("NextTask returns Next", func(t *testing.T) {
-		task := &stepTask{Next: end}
-		require.Equal(t, end, task.NextTask())
+		task := &StepTask{Next: end}
+		require.Equal(t, end, task.GetNextTask())
 	})
 
 	t.Run("FailTask returns Fail", func(t *testing.T) {
-		task := &stepTask{Fail: fail}
-		require.Equal(t, fail, task.FailTask())
+		task := &StepTask{Fail: fail}
+		require.Equal(t, fail, task.GetFailTask())
 	})
 }
 
 func TestExecutionTask(t *testing.T) {
 	end := &EndTask{}
-	end.taskName = "end"
+	end.TaskName = "end"
 
 	t.Run("Type returns TaskTypeExecution", func(t *testing.T) {
 		task := &ExecutionTask{}
@@ -110,15 +110,15 @@ func TestExecutionTask(t *testing.T) {
 
 	t.Run("validate requires task name", func(t *testing.T) {
 		task := &ExecutionTask{}
-		err := task.validate(false)
+		err := task.Validate(false)
 		require.Error(t, err)
 		require.Contains(t, err.Error(), "task name is missing")
 	})
 
 	t.Run("validate requires executor", func(t *testing.T) {
 		task := &ExecutionTask{}
-		task.taskName = "test"
-		err := task.validate(false)
+		task.TaskName = "test"
+		err := task.Validate(false)
 		require.Error(t, err)
 		require.Contains(t, err.Error(), "executor is missing")
 	})
@@ -127,8 +127,8 @@ func TestExecutionTask(t *testing.T) {
 		task := &ExecutionTask{
 			ExecutorFn: "not a function",
 		}
-		task.taskName = "test"
-		err := task.validate(false)
+		task.TaskName = "test"
+		err := task.Validate(false)
 		require.Error(t, err)
 		require.Contains(t, err.Error(), "must be a function")
 	})
@@ -140,8 +140,8 @@ func TestExecutionTask(t *testing.T) {
 		task := &ExecutionTask{
 			ExecutorFn: invalidFunc,
 		}
-		task.taskName = "test"
-		err := task.validate(false)
+		task.TaskName = "test"
+		err := task.Validate(false)
 		require.Error(t, err)
 		require.Contains(t, err.Error(), "must take at least 3 parameters")
 	})
@@ -153,8 +153,8 @@ func TestExecutionTask(t *testing.T) {
 		task := &ExecutionTask{
 			ExecutorFn: invalidFunc,
 		}
-		task.taskName = "test"
-		err := task.validate(false)
+		task.TaskName = "test"
+		err := task.Validate(false)
 		require.Error(t, err)
 		require.Contains(t, err.Error(), "must have context.Context as first parameter")
 	})
@@ -166,8 +166,8 @@ func TestExecutionTask(t *testing.T) {
 		task := &ExecutionTask{
 			ExecutorFn: invalidFunc,
 		}
-		task.taskName = "test"
-		err := task.validate(false)
+		task.TaskName = "test"
+		err := task.Validate(false)
 		require.Error(t, err)
 		require.Contains(t, err.Error(), "must have *PlanExecutionInfo as second parameter")
 	})
@@ -176,8 +176,8 @@ func TestExecutionTask(t *testing.T) {
 		task := &ExecutionTask{
 			ExecutorFn: validExecutor,
 		}
-		task.taskName = "test"
-		err := task.validate(false)
+		task.TaskName = "test"
+		err := task.Validate(false)
 		require.NoError(t, err)
 	})
 
@@ -207,16 +207,16 @@ func TestExecutionTask(t *testing.T) {
 
 func TestForkTask(t *testing.T) {
 	end := &EndTask{}
-	end.taskName = "end"
+	end.TaskName = "end"
 
 	branch1 := &EndTask{}
-	branch1.taskName = "branch1"
+	branch1.TaskName = "branch1"
 
 	branch2 := &EndTask{}
-	branch2.taskName = "branch2"
+	branch2.TaskName = "branch2"
 
 	join := &ForkJoinTask{}
-	join.taskName = "join"
+	join.TaskName = "join"
 
 	t.Run("Type returns TaskTypeFork", func(t *testing.T) {
 		task := &ForkTask{}
@@ -225,41 +225,41 @@ func TestForkTask(t *testing.T) {
 
 	t.Run("validate requires task name", func(t *testing.T) {
 		task := &ForkTask{}
-		err := task.validate(false)
+		err := task.Validate(false)
 		require.Error(t, err)
 		require.Contains(t, err.Error(), "task name is missing")
 	})
 
 	t.Run("validate requires next task", func(t *testing.T) {
 		task := &ForkTask{}
-		task.taskName = "test"
-		err := task.validate(false)
+		task.TaskName = "test"
+		err := task.Validate(false)
 		require.Error(t, err)
 		require.Contains(t, err.Error(), "next task is missing")
 	})
 
 	t.Run("validate requires tasks", func(t *testing.T) {
 		task := &ForkTask{
-			stepTask: stepTask{
+			StepTask: StepTask{
 				Next: end,
 			},
 		}
-		task.taskName = "test"
-		err := task.validate(false)
+		task.TaskName = "test"
+		err := task.Validate(false)
 		require.Error(t, err)
 		require.Contains(t, err.Error(), "tasks is missing")
 	})
 
 	t.Run("validate succeeds with all required fields", func(t *testing.T) {
 		task := &ForkTask{
-			stepTask: stepTask{
+			StepTask: StepTask{
 				Next: end,
 			},
 			Tasks: []Task{branch1, branch2},
 			Join:  join,
 		}
-		task.taskName = "test"
-		err := task.validate(false)
+		task.TaskName = "test"
+		err := task.Validate(false)
 		require.NoError(t, err)
 	})
 }
@@ -272,25 +272,25 @@ func TestEndTask(t *testing.T) {
 
 	t.Run("validate requires task name", func(t *testing.T) {
 		task := &EndTask{}
-		err := task.validate(false)
+		err := task.Validate(false)
 		require.Error(t, err)
 		require.Contains(t, err.Error(), "task name is missing")
 	})
 
 	t.Run("validate succeeds with task name", func(t *testing.T) {
 		task := &EndTask{}
-		task.taskName = "end"
-		err := task.validate(false)
+		task.TaskName = "end"
+		err := task.Validate(false)
 		require.NoError(t, err)
 	})
 }
 
 func TestConditionTask(t *testing.T) {
 	thenTask := &EndTask{}
-	thenTask.taskName = "then"
+	thenTask.TaskName = "then"
 
 	elseTask := &EndTask{}
-	elseTask.taskName = "else"
+	elseTask.TaskName = "else"
 
 	t.Run("Type returns TaskTypeConditionTask", func(t *testing.T) {
 		task := &ConditionTask{}
@@ -299,8 +299,8 @@ func TestConditionTask(t *testing.T) {
 
 	t.Run("validate requires executor", func(t *testing.T) {
 		task := &ConditionTask{}
-		task.taskName = "test"
-		err := task.validate(false)
+		task.TaskName = "test"
+		err := task.Validate(false)
 		require.Error(t, err)
 		require.Contains(t, err.Error(), "executor is missing")
 	})
@@ -309,8 +309,8 @@ func TestConditionTask(t *testing.T) {
 		task := &ConditionTask{
 			ExecutorFn: "not a function",
 		}
-		task.taskName = "test"
-		err := task.validate(false)
+		task.TaskName = "test"
+		err := task.Validate(false)
 		require.Error(t, err)
 		require.Contains(t, err.Error(), "must be a function")
 	})
@@ -322,8 +322,8 @@ func TestConditionTask(t *testing.T) {
 		task := &ConditionTask{
 			ExecutorFn: invalidFunc,
 		}
-		task.taskName = "test"
-		err := task.validate(false)
+		task.TaskName = "test"
+		err := task.Validate(false)
 		require.Error(t, err)
 		require.Contains(t, err.Error(), "must take at least 3 parameters")
 	})
@@ -335,8 +335,8 @@ func TestConditionTask(t *testing.T) {
 		task := &ConditionTask{
 			ExecutorFn: invalidFunc,
 		}
-		task.taskName = "test"
-		err := task.validate(false)
+		task.TaskName = "test"
+		err := task.Validate(false)
 		require.Error(t, err)
 		require.Contains(t, err.Error(), "must have context.Context as first parameter")
 	})
@@ -348,8 +348,8 @@ func TestConditionTask(t *testing.T) {
 		task := &ConditionTask{
 			ExecutorFn: invalidFunc,
 		}
-		task.taskName = "test"
-		err := task.validate(false)
+		task.TaskName = "test"
+		err := task.Validate(false)
 		require.Error(t, err)
 		require.Contains(t, err.Error(), "must have *PlanExecutionInfo as second parameter")
 	})
@@ -361,8 +361,8 @@ func TestConditionTask(t *testing.T) {
 		task := &ConditionTask{
 			ExecutorFn: invalidFunc,
 		}
-		task.taskName = "test"
-		err := task.validate(false)
+		task.TaskName = "test"
+		err := task.Validate(false)
 		require.Error(t, err)
 		require.Contains(t, err.Error(), "must return exactly 2 values")
 	})
@@ -371,8 +371,8 @@ func TestConditionTask(t *testing.T) {
 		task := &ConditionTask{
 			ExecutorFn: invalidIfExecutor,
 		}
-		task.taskName = "test"
-		err := task.validate(false)
+		task.TaskName = "test"
+		err := task.Validate(false)
 		require.Error(t, err)
 		require.Contains(t, err.Error(), "must return bool as first return value")
 	})
@@ -384,8 +384,8 @@ func TestConditionTask(t *testing.T) {
 		task := &ConditionTask{
 			ExecutorFn: invalidFunc,
 		}
-		task.taskName = "test"
-		err := task.validate(false)
+		task.TaskName = "test"
+		err := task.Validate(false)
 		require.Error(t, err)
 		require.Contains(t, err.Error(), "must return error as second return value")
 	})
@@ -394,8 +394,8 @@ func TestConditionTask(t *testing.T) {
 		task := &ConditionTask{
 			ExecutorFn: validBoolExecutor,
 		}
-		task.taskName = "test"
-		err := task.validate(false)
+		task.TaskName = "test"
+		err := task.Validate(false)
 		require.Error(t, err)
 		require.Contains(t, err.Error(), "then is missing")
 	})
@@ -405,8 +405,8 @@ func TestConditionTask(t *testing.T) {
 			ExecutorFn: validBoolExecutor,
 			Then:       thenTask,
 		}
-		task.taskName = "test"
-		err := task.validate(false)
+		task.TaskName = "test"
+		err := task.Validate(false)
 		require.Error(t, err)
 		require.Contains(t, err.Error(), "else is missing")
 	})
@@ -417,8 +417,8 @@ func TestConditionTask(t *testing.T) {
 			Then:       thenTask,
 			Else:       elseTask,
 		}
-		task.taskName = "test"
-		err := task.validate(false)
+		task.TaskName = "test"
+		err := task.Validate(false)
 		require.NoError(t, err)
 	})
 
@@ -439,7 +439,7 @@ func TestConditionTask(t *testing.T) {
 
 func TestCallbackTask(t *testing.T) {
 	end := &EndTask{}
-	end.taskName = "end"
+	end.TaskName = "end"
 
 	t.Run("Type returns TaskTypeCallbackTask", func(t *testing.T) {
 		task := &CallbackTask{}
@@ -448,15 +448,15 @@ func TestCallbackTask(t *testing.T) {
 
 	t.Run("validate requires task name", func(t *testing.T) {
 		task := &CallbackTask{}
-		err := task.validate(false)
+		err := task.Validate(false)
 		require.Error(t, err)
 		require.Contains(t, err.Error(), "task name is missing")
 	})
 
 	t.Run("validate requires execution function", func(t *testing.T) {
 		task := &CallbackTask{}
-		task.taskName = "test"
-		err := task.validate(false)
+		task.TaskName = "test"
+		err := task.Validate(false)
 		require.Error(t, err)
 		require.Contains(t, err.Error(), "execution function is missing")
 	})
@@ -465,8 +465,8 @@ func TestCallbackTask(t *testing.T) {
 		task := &CallbackTask{
 			ExecutionFn: validAsyncExecutor,
 		}
-		task.taskName = "test"
-		err := task.validate(false)
+		task.TaskName = "test"
+		err := task.Validate(false)
 		require.Error(t, err)
 		require.Contains(t, err.Error(), "result processor function is missing")
 	})
@@ -476,8 +476,8 @@ func TestCallbackTask(t *testing.T) {
 			ExecutionFn:       "not a function",
 			ResultProcessorFn: validAsyncResultProcessor,
 		}
-		task.taskName = "test"
-		err := task.validate(false)
+		task.TaskName = "test"
+		err := task.Validate(false)
 		require.Error(t, err)
 		require.Contains(t, err.Error(), "must be a function")
 	})
@@ -490,8 +490,8 @@ func TestCallbackTask(t *testing.T) {
 			ExecutionFn:       invalidFunc,
 			ResultProcessorFn: validAsyncResultProcessor,
 		}
-		task.taskName = "test"
-		err := task.validate(false)
+		task.TaskName = "test"
+		err := task.Validate(false)
 		require.Error(t, err)
 		require.Contains(t, err.Error(), "must take at least 3 parameters")
 	})
@@ -504,8 +504,8 @@ func TestCallbackTask(t *testing.T) {
 			ExecutionFn:       invalidFunc,
 			ResultProcessorFn: validAsyncResultProcessor,
 		}
-		task.taskName = "test"
-		err := task.validate(false)
+		task.TaskName = "test"
+		err := task.Validate(false)
 		require.Error(t, err)
 		require.Contains(t, err.Error(), "must have context.Context as first parameter")
 	})
@@ -518,8 +518,8 @@ func TestCallbackTask(t *testing.T) {
 			ExecutionFn:       invalidFunc,
 			ResultProcessorFn: validAsyncResultProcessor,
 		}
-		task.taskName = "test"
-		err := task.validate(false)
+		task.TaskName = "test"
+		err := task.Validate(false)
 		require.Error(t, err)
 		require.Contains(t, err.Error(), "must have *PlanExecutionInfo as second parameter")
 	})
@@ -529,8 +529,8 @@ func TestCallbackTask(t *testing.T) {
 			ExecutionFn:       invalidAsyncExecutor,
 			ResultProcessorFn: validAsyncResultProcessor,
 		}
-		task.taskName = "test"
-		err := task.validate(false)
+		task.TaskName = "test"
+		err := task.Validate(false)
 		require.Error(t, err)
 		require.Contains(t, err.Error(), "must return exactly 2 values")
 	})
@@ -543,8 +543,8 @@ func TestCallbackTask(t *testing.T) {
 			ExecutionFn:       invalidFunc,
 			ResultProcessorFn: validAsyncResultProcessor,
 		}
-		task.taskName = "test"
-		err := task.validate(false)
+		task.TaskName = "test"
+		err := task.Validate(false)
 		require.Error(t, err)
 		require.Contains(t, err.Error(), "must return string as first return value")
 	})
@@ -557,8 +557,8 @@ func TestCallbackTask(t *testing.T) {
 			ExecutionFn:       invalidFunc,
 			ResultProcessorFn: validAsyncResultProcessor,
 		}
-		task.taskName = "test"
-		err := task.validate(false)
+		task.TaskName = "test"
+		err := task.Validate(false)
 		require.Error(t, err)
 		require.Contains(t, err.Error(), "must return error as second return value")
 	})
@@ -568,8 +568,8 @@ func TestCallbackTask(t *testing.T) {
 			ExecutionFn:       validAsyncExecutor,
 			ResultProcessorFn: "not a function",
 		}
-		task.taskName = "test"
-		err := task.validate(false)
+		task.TaskName = "test"
+		err := task.Validate(false)
 		require.Error(t, err)
 		require.Contains(t, err.Error(), "must be a function")
 	})
@@ -579,8 +579,8 @@ func TestCallbackTask(t *testing.T) {
 			ExecutionFn:       validAsyncExecutor,
 			ResultProcessorFn: invalidAsyncResultProcessor,
 		}
-		task.taskName = "test"
-		err := task.validate(false)
+		task.TaskName = "test"
+		err := task.Validate(false)
 		require.Error(t, err)
 		require.Contains(t, err.Error(), "must take at least 4 parameters")
 	})
@@ -593,8 +593,8 @@ func TestCallbackTask(t *testing.T) {
 			ExecutionFn:       validAsyncExecutor,
 			ResultProcessorFn: invalidFunc,
 		}
-		task.taskName = "test"
-		err := task.validate(false)
+		task.TaskName = "test"
+		err := task.Validate(false)
 		require.Error(t, err)
 		require.Contains(t, err.Error(), "must have context.Context as first parameter")
 	})
@@ -607,8 +607,8 @@ func TestCallbackTask(t *testing.T) {
 			ExecutionFn:       validAsyncExecutor,
 			ResultProcessorFn: invalidFunc,
 		}
-		task.taskName = "test"
-		err := task.validate(false)
+		task.TaskName = "test"
+		err := task.Validate(false)
 		require.Error(t, err)
 		require.Contains(t, err.Error(), "must have *PlanExecutionInfo as second parameter")
 	})
@@ -621,8 +621,8 @@ func TestCallbackTask(t *testing.T) {
 			ExecutionFn:       validAsyncExecutor,
 			ResultProcessorFn: invalidFunc,
 		}
-		task.taskName = "test"
-		err := task.validate(false)
+		task.TaskName = "test"
+		err := task.Validate(false)
 		require.Error(t, err)
 		require.Contains(t, err.Error(), "must return exactly 2 values")
 	})
@@ -635,8 +635,8 @@ func TestCallbackTask(t *testing.T) {
 			ExecutionFn:       validAsyncExecutor,
 			ResultProcessorFn: invalidFunc,
 		}
-		task.taskName = "test"
-		err := task.validate(false)
+		task.TaskName = "test"
+		err := task.Validate(false)
 		require.Error(t, err)
 		require.Contains(t, err.Error(), "must return error as second return value")
 	})
@@ -646,21 +646,21 @@ func TestCallbackTask(t *testing.T) {
 			ExecutionFn:       validAsyncExecutor,
 			ResultProcessorFn: validAsyncResultProcessor,
 		}
-		task.taskName = "test"
-		err := task.validate(false)
+		task.TaskName = "test"
+		err := task.Validate(false)
 		require.NoError(t, err)
 	})
 
 	t.Run("validate succeeds with all required fields", func(t *testing.T) {
 		task := &CallbackTask{
-			stepTask: stepTask{
+			StepTask: StepTask{
 				Next: end,
 			},
 			ExecutionFn:       validAsyncExecutor,
 			ResultProcessorFn: validAsyncResultProcessor,
 		}
-		task.taskName = "test"
-		err := task.validate(false)
+		task.TaskName = "test"
+		err := task.Validate(false)
 		require.NoError(t, err)
 	})
 
@@ -753,37 +753,37 @@ func TestForkJoinTask(t *testing.T) {
 
 	t.Run("validate requires task name", func(t *testing.T) {
 		task := &ForkJoinTask{}
-		err := task.validate(false)
+		err := task.Validate(false)
 		require.Error(t, err)
 		require.Contains(t, err.Error(), "task name is missing")
 	})
 
 	t.Run("validate succeeds with task name", func(t *testing.T) {
 		task := &ForkJoinTask{}
-		task.taskName = "join"
-		err := task.validate(false)
+		task.TaskName = "join"
+		err := task.Validate(false)
 		require.NoError(t, err)
 	})
 
 	t.Run("isStepTask returns false", func(t *testing.T) {
 		task := &ForkJoinTask{}
-		require.False(t, task.isStepTask())
+		require.False(t, task.IsStepTask())
 	})
 
 	t.Run("getNextTask returns nil", func(t *testing.T) {
 		task := &ForkJoinTask{}
-		require.Nil(t, task.getNextTask())
+		require.Nil(t, task.GetNextTask())
 	})
 
 	t.Run("getFailTask returns nil", func(t *testing.T) {
 		task := &ForkJoinTask{}
-		require.Nil(t, task.getFailTask())
+		require.Nil(t, task.GetFailTask())
 	})
 }
 
 func TestChildPlanTask(t *testing.T) {
 	end := &EndTask{}
-	end.taskName = "end"
+	end.TaskName = "end"
 
 	childTaskInfoFn := func(_ context.Context, _ *PlanExecutionInfo, _ string) (ChildTaskInfo, error) {
 		return ChildTaskInfo{PlanVariant: "variant1", Input: "input"}, nil
@@ -796,15 +796,15 @@ func TestChildPlanTask(t *testing.T) {
 
 	t.Run("validate requires task name", func(t *testing.T) {
 		task := &ChildPlanTask{}
-		err := task.validate(false)
+		err := task.Validate(false)
 		require.Error(t, err)
 		require.Contains(t, err.Error(), "task name is missing")
 	})
 
 	t.Run("validate requires plan name", func(t *testing.T) {
 		task := &ChildPlanTask{}
-		task.taskName = "test"
-		err := task.validate(false)
+		task.TaskName = "test"
+		err := task.Validate(false)
 		require.Error(t, err)
 		require.Contains(t, err.Error(), "plan name is missing")
 	})
@@ -813,8 +813,8 @@ func TestChildPlanTask(t *testing.T) {
 		task := &ChildPlanTask{
 			PlanName: "child_plan",
 		}
-		task.taskName = "test"
-		err := task.validate(false)
+		task.TaskName = "test"
+		err := task.Validate(false)
 		require.Error(t, err)
 		require.Contains(t, err.Error(), "executor function is missing")
 	})
@@ -824,8 +824,8 @@ func TestChildPlanTask(t *testing.T) {
 			PlanName:        "child_plan",
 			ChildTaskInfoFn: "not a function",
 		}
-		task.taskName = "test"
-		err := task.validate(false)
+		task.TaskName = "test"
+		err := task.Validate(false)
 		require.Error(t, err)
 		require.Contains(t, err.Error(), "must be a function")
 	})
@@ -838,8 +838,8 @@ func TestChildPlanTask(t *testing.T) {
 			PlanName:        "child_plan",
 			ChildTaskInfoFn: invalidFunc,
 		}
-		task.taskName = "test"
-		err := task.validate(false)
+		task.TaskName = "test"
+		err := task.Validate(false)
 		require.Error(t, err)
 		require.Contains(t, err.Error(), "must take at least 3 parameters")
 	})
@@ -852,8 +852,8 @@ func TestChildPlanTask(t *testing.T) {
 			PlanName:        "child_plan",
 			ChildTaskInfoFn: invalidFunc,
 		}
-		task.taskName = "test"
-		err := task.validate(false)
+		task.TaskName = "test"
+		err := task.Validate(false)
 		require.Error(t, err)
 		require.Contains(t, err.Error(), "must have context.Context as first parameter")
 	})
@@ -866,8 +866,8 @@ func TestChildPlanTask(t *testing.T) {
 			PlanName:        "child_plan",
 			ChildTaskInfoFn: invalidFunc,
 		}
-		task.taskName = "test"
-		err := task.validate(false)
+		task.TaskName = "test"
+		err := task.Validate(false)
 		require.Error(t, err)
 		require.Contains(t, err.Error(), "must have *PlanExecutionInfo as second parameter")
 	})
@@ -880,8 +880,8 @@ func TestChildPlanTask(t *testing.T) {
 			PlanName:        "child_plan",
 			ChildTaskInfoFn: invalidFunc,
 		}
-		task.taskName = "test"
-		err := task.validate(false)
+		task.TaskName = "test"
+		err := task.Validate(false)
 		require.Error(t, err)
 		require.Contains(t, err.Error(), "must return exactly 2 values")
 	})
@@ -894,8 +894,8 @@ func TestChildPlanTask(t *testing.T) {
 			PlanName:        "child_plan",
 			ChildTaskInfoFn: invalidFunc,
 		}
-		task.taskName = "test"
-		err := task.validate(false)
+		task.TaskName = "test"
+		err := task.Validate(false)
 		require.Error(t, err)
 		require.Contains(t, err.Error(), "must return ChildTaskInfo as first return value")
 	})
@@ -908,22 +908,22 @@ func TestChildPlanTask(t *testing.T) {
 			PlanName:        "child_plan",
 			ChildTaskInfoFn: invalidFunc,
 		}
-		task.taskName = "test"
-		err := task.validate(false)
+		task.TaskName = "test"
+		err := task.Validate(false)
 		require.Error(t, err)
 		require.Contains(t, err.Error(), "must return error as second return value")
 	})
 
 	t.Run("validate succeeds with all required fields", func(t *testing.T) {
 		task := &ChildPlanTask{
-			stepTask: stepTask{
+			StepTask: StepTask{
 				Next: end,
 			},
 			PlanName:        "child_plan",
 			ChildTaskInfoFn: childTaskInfoFn,
 		}
-		task.taskName = "test"
-		err := task.validate(false)
+		task.TaskName = "test"
+		err := task.Validate(false)
 		require.NoError(t, err)
 	})
 
@@ -932,8 +932,8 @@ func TestChildPlanTask(t *testing.T) {
 			PlanName:        "child_plan",
 			ChildTaskInfoFn: childTaskInfoFn,
 		}
-		task.taskName = "test"
-		err := task.validate(false)
+		task.TaskName = "test"
+		err := task.Validate(false)
 		require.NoError(t, err)
 	})
 
@@ -974,15 +974,15 @@ func TestChildPlanTask(t *testing.T) {
 		}
 
 		param := &EndTask{}
-		param.taskName = "param"
+		param.TaskName = "param"
 
 		task := &ChildPlanTask{
 			PlanName:        "child_plan",
 			ChildTaskInfoFn: childTaskInfoFnWithParam,
 			Params:          []Task{param},
 		}
-		task.taskName = "test"
-		err := task.validate(false)
+		task.TaskName = "test"
+		err := task.Validate(false)
 		require.NoError(t, err)
 	})
 
@@ -996,8 +996,8 @@ func TestChildPlanTask(t *testing.T) {
 			ChildTaskInfoFn: childTaskInfoFnWithParam,
 			Params:          []Task{}, // Expects 1, got 0
 		}
-		task.taskName = "test"
-		err := task.validate(false)
+		task.TaskName = "test"
+		err := task.Validate(false)
 		require.Error(t, err)
 		require.Contains(t, err.Error(), "expects 1 Param(s), got 0")
 	})
@@ -1008,15 +1008,15 @@ func TestChildPlanTask(t *testing.T) {
 		}
 
 		param := &EndTask{}
-		param.taskName = "param"
+		param.TaskName = "param"
 
 		task := &ChildPlanTask{
 			PlanName:        "child_plan",
 			ChildTaskInfoFn: childTaskInfoFnFailure,
 			Params:          []Task{param},
 		}
-		task.taskName = "test"
-		err := task.validate(true) // failure path
+		task.TaskName = "test"
+		err := task.Validate(true) // failure path
 		require.NoError(t, err)
 	})
 
@@ -1026,15 +1026,15 @@ func TestChildPlanTask(t *testing.T) {
 		}
 
 		param := &EndTask{}
-		param.taskName = "param"
+		param.TaskName = "param"
 
 		task := &ChildPlanTask{
 			PlanName:        "child_plan",
 			ChildTaskInfoFn: childTaskInfoFnFailure,
 			Params:          []Task{param}, // Expects 0 params (3 base + 1 error), got 1
 		}
-		task.taskName = "test"
-		err := task.validate(true) // failure path
+		task.TaskName = "test"
+		err := task.Validate(true) // failure path
 		require.Error(t, err)
 		require.Contains(t, err.Error(), "in failure path expects 0 Param(s), got 1")
 	})
@@ -1047,17 +1047,17 @@ func TestExecutionTaskAdditionalValidation(t *testing.T) {
 		}
 
 		param1 := &EndTask{}
-		param1.taskName = "param1"
+		param1.TaskName = "param1"
 
 		param2 := &EndTask{}
-		param2.taskName = "param2"
+		param2.TaskName = "param2"
 
 		task := &ExecutionTask{
 			ExecutorFn: executorWithTwoParams,
 			Params:     []Task{param1, param2},
 		}
-		task.taskName = "test"
-		err := task.validate(false)
+		task.TaskName = "test"
+		err := task.Validate(false)
 		require.NoError(t, err)
 	})
 
@@ -1069,8 +1069,8 @@ func TestExecutionTaskAdditionalValidation(t *testing.T) {
 		task := &ExecutionTask{
 			ExecutorFn: executorOneOutput,
 		}
-		task.taskName = "test"
-		err := task.validate(false)
+		task.TaskName = "test"
+		err := task.Validate(false)
 		require.Error(t, err)
 		require.Contains(t, err.Error(), "must return exactly 2 values")
 	})
@@ -1083,8 +1083,8 @@ func TestExecutionTaskAdditionalValidation(t *testing.T) {
 		task := &ExecutionTask{
 			ExecutorFn: executorWrongOutput,
 		}
-		task.taskName = "test"
-		err := task.validate(false)
+		task.TaskName = "test"
+		err := task.Validate(false)
 		require.Error(t, err)
 		require.Contains(t, err.Error(), "must return error as second return value")
 	})
@@ -1093,20 +1093,20 @@ func TestExecutionTaskAdditionalValidation(t *testing.T) {
 func TestForkTaskAdditionalValidation(t *testing.T) {
 	t.Run("validate requires join point", func(t *testing.T) {
 		end := &EndTask{}
-		end.taskName = "end"
+		end.TaskName = "end"
 
 		branch := &EndTask{}
-		branch.taskName = "branch"
+		branch.TaskName = "branch"
 
 		task := &ForkTask{
-			stepTask: stepTask{
+			StepTask: StepTask{
 				Next: end,
 			},
 			Tasks: []Task{branch},
 			// Join is nil
 		}
-		task.taskName = "fork"
-		err := task.validate(false)
+		task.TaskName = "fork"
+		err := task.Validate(false)
 		require.Error(t, err)
 		require.Contains(t, err.Error(), "join point is missing")
 	})
@@ -1119,16 +1119,16 @@ func TestConditionTaskAdditionalValidation(t *testing.T) {
 		}
 
 		param1 := &EndTask{}
-		param1.taskName = "param1"
+		param1.TaskName = "param1"
 
 		param2 := &EndTask{}
-		param2.taskName = "param2"
+		param2.TaskName = "param2"
 
 		thenTask := &EndTask{}
-		thenTask.taskName = "then"
+		thenTask.TaskName = "then"
 
 		elseTask := &EndTask{}
-		elseTask.taskName = "else"
+		elseTask.TaskName = "else"
 
 		task := &ConditionTask{
 			ExecutorFn: condExecutorWithTwoParams,
@@ -1136,8 +1136,8 @@ func TestConditionTaskAdditionalValidation(t *testing.T) {
 			Then:       thenTask,
 			Else:       elseTask,
 		}
-		task.taskName = "test"
-		err := task.validate(false)
+		task.TaskName = "test"
+		err := task.Validate(false)
 		require.NoError(t, err)
 	})
 }
@@ -1153,18 +1153,18 @@ func TestCallbackTaskAdditionalValidation(t *testing.T) {
 		}
 
 		param1 := &EndTask{}
-		param1.taskName = "param1"
+		param1.TaskName = "param1"
 
 		param2 := &EndTask{}
-		param2.taskName = "param2"
+		param2.TaskName = "param2"
 
 		task := &CallbackTask{
 			ExecutionFn:       callbackExecutorWithTwoParams,
 			ResultProcessorFn: callbackResultProcessor,
 			Params:            []Task{param1, param2},
 		}
-		task.taskName = "test"
-		err := task.validate(false)
+		task.TaskName = "test"
+		err := task.Validate(false)
 		require.NoError(t, err)
 	})
 
@@ -1178,15 +1178,15 @@ func TestCallbackTaskAdditionalValidation(t *testing.T) {
 		}
 
 		param1 := &EndTask{}
-		param1.taskName = "param1"
+		param1.TaskName = "param1"
 
 		task := &CallbackTask{
 			ExecutionFn:       callbackExecutorWithTwoParams,
 			ResultProcessorFn: callbackResultProcessor,
 			Params:            []Task{param1}, // Expects 2 params, got 1
 		}
-		task.taskName = "test"
-		err := task.validate(false)
+		task.TaskName = "test"
+		err := task.Validate(false)
 		require.Error(t, err)
 		require.Contains(t, err.Error(), "expects 2 Param(s), got 1")
 	})
@@ -1201,15 +1201,15 @@ func TestCallbackTaskAdditionalValidation(t *testing.T) {
 		}
 
 		param := &EndTask{}
-		param.taskName = "param"
+		param.TaskName = "param"
 
 		task := &CallbackTask{
 			ExecutionFn:       callbackExecutorFailure,
 			ResultProcessorFn: callbackResultProcessor,
 			Params:            []Task{param},
 		}
-		task.taskName = "test"
-		err := task.validate(true) // failure path
+		task.TaskName = "test"
+		err := task.Validate(true) // failure path
 		require.NoError(t, err)
 	})
 
@@ -1223,15 +1223,15 @@ func TestCallbackTaskAdditionalValidation(t *testing.T) {
 		}
 
 		param := &EndTask{}
-		param.taskName = "param"
+		param.TaskName = "param"
 
 		task := &CallbackTask{
 			ExecutionFn:       callbackExecutorFailure,
 			ResultProcessorFn: callbackResultProcessor,
 			Params:            []Task{param}, // Expects 0 params (3 base + 1 error), got 1
 		}
-		task.taskName = "test"
-		err := task.validate(true) // failure path
+		task.TaskName = "test"
+		err := task.Validate(true) // failure path
 		require.Error(t, err)
 		require.Contains(t, err.Error(), "in failure path expects 0 Param(s), got 1")
 	})

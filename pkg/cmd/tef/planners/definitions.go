@@ -3,10 +3,10 @@
 // Use of this software is governed by the CockroachDB Software License
 // included in the /LICENSE file.
 
-// Package planners define the core interfaces and types for the Task Execution
-// Framework (TEF). This file contains the foundational interface definitions for
-// planners, executors, registries, and plan execution services. These interfaces
-// are framework-agnostic and can be implemented by different orchestration engines.
+// Package planners provide the minimal framework-agnostic interfaces and types
+// needed for writing TEF (Task Execution Framework) plans. This package contains
+// only the essential types that plan authors need - all implementation details
+// are in the private task-exec-framework repository.
 package planners
 
 import (
@@ -71,60 +71,9 @@ type Registry interface {
 	AddStartWorkerCmdFlags(cmd *cobra.Command)
 }
 
-// PlanExecutor defines the interface for plan-specific execution operations.
-// These operations require plan-specific knowledge (task graph, executors, etc.)
-// and must be implemented by plan-specific manager instances.
-type PlanExecutor interface {
-	// StartWorker initializes and starts the worker that processes plan executions.
-	// The plan variant is part of the planID and is used for worker disambiguation.
-	StartWorker(ctx context.Context, planID string) error
-	// ExecutePlan executes the plan identified by planID with the given input and returns a workflow identifier.
-	ExecutePlan(ctx context.Context, input interface{}, planID string) (string, error)
-}
-
-// PlanMetadata contains metadata about a plan discovered from the execution framework.
-type PlanMetadata struct {
-	// PlanID is the unique identifier for the plan instance (e.g., "tef_plan_my-plan_variant").
-	PlanID string
-	// Description is the human-readable description of what this plan does.
-	// This may be empty if the plan was started without description metadata.
-	Description string
-}
-
-// SharedPlanService defines the interface for plan-agnostic operations that work across all plans.
-// These operations don't require plan-specific knowledge and can be implemented by a shared
-// service instance. This includes both query operations (status, list) and control operations
-// (resume) that operate at the framework level rather than the plan level.
-type SharedPlanService interface {
-	// GetExecutionStatus queries the execution status of a specific workflow execution.
-	GetExecutionStatus(ctx context.Context, planID, workflowID string) (*ExecutionStatus, error)
-	// ListExecutions retrieves a list of workflow execution summaries for a specified planID.
-	ListExecutions(ctx context.Context, planID string) ([]*WorkflowExecutionInfo, error)
-	// ListAllPlanIDs queries the execution framework for all active plan instances and their metadata.
-	ListAllPlanIDs(ctx context.Context) ([]PlanMetadata, error)
-	// ResumeTask resumes a callback task with the provided result.
-	// It signals the workflow identified by planID and workflowID with the result for the specified stepID.
-	// This is a framework-level operation that doesn't require plan-specific knowledge.
-	ResumeTask(ctx context.Context, planID, workflowID, stepID, result string) error
-	// AddPlannerFlags allows planner implementations to add framework-specific flags to commands.
-	// This method is called by the API server CLI and Start Worker CLI that needs to connect to the Planner
-	AddPlannerFlags(cmd *cobra.Command)
-	// ClonePropertiesFrom copies planner-specific configuration properties from another manager.
-	// This is used to ensure child plan managers inherit the same connection configuration as the parent plan manager.
-	ClonePropertiesFrom(source PlannerManager)
-}
-
-// PlannerManager defines the combined interface for managing plan execution and shared operations.
-// Implementations should satisfy both PlanExecutor and SharedPlanService interfaces.
-// This interface is maintained for backward compatibility, but new code should use
-// PlanExecutor and SharedPlanService directly.
-type PlannerManager interface {
-	PlanExecutor
-	SharedPlanService
-}
-
 // PlanExecutionInfo contains metadata about the execution of a specific plan within a workflow.
 // It creates a chain of execution context, allowing correlation of parent-child plan relationships.
+// Executor functions receive this as their second parameter.
 type PlanExecutionInfo struct {
 	// WorkflowID is the unique identifier of the associated workflow.
 	WorkflowID string
