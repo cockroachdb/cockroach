@@ -104,6 +104,9 @@ func (m *testBurstManager) refillBurstBuckets(toAdd int64, capacity int64) {
 	if m.tokens > capacity {
 		m.tokens = capacity
 	}
+	if m.tokens < -capacity/4 {
+		m.tokens = -capacity / 4
+	}
 }
 
 func (m *testModel) init() {}
@@ -206,13 +209,15 @@ func TestCPUTimeTokenAllocator(t *testing.T) {
 			d.ScanArgs(t, "remaining", &remainingTicks)
 			allocator.allocateTokens(remainingTicks)
 			return flushAndReset()
-		case "clear":
-			granter.mu.buckets[testTier0][canBurst].tokens = 0
-			granter.mu.buckets[testTier0][noBurst].tokens = 0
-			granter.mu.buckets[testTier1][canBurst].tokens = 0
-			granter.mu.buckets[testTier1][noBurst].tokens = 0
-			burstMgrs[testTier0].tokens = 0
-			burstMgrs[testTier1].tokens = 0
+		case "set-tokens":
+			var v int64
+			d.ScanArgs(t, "v", &v)
+			granter.mu.buckets[testTier0][canBurst].tokens = v
+			granter.mu.buckets[testTier0][noBurst].tokens = v
+			granter.mu.buckets[testTier1][canBurst].tokens = v
+			granter.mu.buckets[testTier1][noBurst].tokens = v
+			burstMgrs[testTier0].tokens = v
+			burstMgrs[testTier1].tokens = v
 			return flushAndReset()
 		case "setClusterSettings":
 			ctx := context.Background()

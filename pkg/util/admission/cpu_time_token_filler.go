@@ -231,6 +231,10 @@ type rates [numResourceTiers][numBurstQualifications]int64
 // buckets, one per bucket in cpuTimeTokenGranter.
 type capacities [numResourceTiers][numBurstQualifications]int64
 
+// minimums stores the minimum number of tokens that can be in the
+// buckets, one per bucket in cpuTimeTokenGranter.
+type minimums [numResourceTiers][numBurstQualifications]int64
+
 // tokenCounts stores unit-less token counts, one per bucket in
 // cpuTimeTokenGranter.
 type tokenCounts [numResourceTiers][numBurstQualifications]int64
@@ -239,6 +243,23 @@ type tokenCounts [numResourceTiers][numBurstQualifications]int64
 // 0.8 for 80% CPU utilization), one per bucket in CPUTimeTokenGranter. This
 // is aggregate CPU usage, so 0.8 means 80% of CPU time across all cores.
 type targetUtilizations [numResourceTiers][numBurstQualifications]float64
+
+// computeMinimums computes per-bucket minimums from refill rates. The top
+// priority bucket (tier0/canBurst) has a floor of 0. Each subsequent bucket's
+// floor is its rate minus the top priority rate, which is negative. This ensures
+// that when multiple buckets are very in debt, the difference in token counts
+// between a higher priority bucket and a lower priority one is still set by
+// cpuTimeTokenLinearModel.
+func computeMinimums(r rates) minimums {
+	var m minimums
+	topRate := r[0][0]
+	for tier := range r {
+		for qual := range r[tier] {
+			m[tier][qual] = r[tier][qual] - topRate
+		}
+	}
+	return m
+}
 
 // allocateTokens allocates tokens to a cpuTimeTokenGranter. allocateTokens
 // adds the desired number of tokens every interval, while respecting the bucket
@@ -278,7 +299,11 @@ func (a *cpuTimeTokenAllocator) allocateTokens(expectedRemainingTicksInInterval 
 	// one second worth of tokens at the current refill rate. This is a fairly
 	// arbitrary decision.
 	bucketCapacities := capacities(a.refillRates)
-	a.granter.refill(allocations, bucketCapacities)
+	// Each bucket has a minimum allowed token count. This prevents
+	// higher priority work from putting lower priority buckets into
+	// unbounded token debt.
+	bucketMinimums := computeMinimums(a.refillRates)
+	a.granter.refill(allocations, bucketCapacities, bucketMinimums)
 
 	// Refill per-tenant burst buckets in the WorkQueues. The burst bucket
 	// refill rate and capacity should be 1/4th of the noBurst refill rate
@@ -335,9 +360,10 @@ func (a *cpuTimeTokenAllocator) resetInterval(ctx context.Context) {
 		}
 	}
 	// See comment above the call to refill in allocateTokens for a discussion of
-	// bucketCapacities.
+	// bucketCapacities and bucketMinimums.
 	bucketCapacities := capacities(newRefillRates)
-	a.granter.refill(deltaRefillRates, bucketCapacities)
+	bucketMinimums := computeMinimums(newRefillRates)
+	a.granter.refill(deltaRefillRates, bucketCapacities, bucketMinimums)
 	a.refillRates = newRefillRates
 
 	// Apply the delta to the per-tenant burst buckets also.

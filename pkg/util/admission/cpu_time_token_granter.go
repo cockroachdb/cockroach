@@ -21,8 +21,6 @@ import (
 //
 // The tier determination for a request happens at a layer outside the admission package.
 //
-// TODO(josh): Add docs re: tentative usage after a discussion with Sumeer.
-//
 // NB: Inter-tenant fair sharing only works within a tier.
 //
 // TODO(josh): Move this definition to admission.go. Export publicly.
@@ -110,29 +108,22 @@ func (cg *cpuTimeTokenChildGranter) continueGrantChain(grantChainID grantChainID
 // 6.4 seconds of CPU time per second. In limiting CPU usage to some max, goroutine
 // scheduling latency can be kept low.
 //
-// TODO(josh): Add docs about resourceTier after a discussion with Sumeer.
-//
 // Note that cpuTimeTokenGranter does not handle replenishing the buckets.
 //
 // For more, see the initial design sketch:
 // https://docs.google.com/document/d/1-Kr2gRFTk0QV8kBs7AXRXUwFpK2ZxR1cqIwWCuOx22Q/edit?tab=t.0
-// TODO(josh): Turn into a proper design documnet.
 type cpuTimeTokenGranter struct {
 	requester [numResourceTiers]requester
 	mu        struct {
-		// TODO(josh): I suspect putting the mutex here is better than in
-		// CPUTimeTokenGrantCoordinator, but for now the decision is tentative.
-		// Think better to decice when I put up a PR that introduces
-		// CPUTimeTokenGrantCoordinator & cpuTimeTokenAdjusterNew.
 		syncutil.Mutex
 		// Invariant #1: For any two buckets A & B, if A has a lower ordinal resourceTier,
 		// then A must have more tokens than B.
 		// Invariant #2: For any two buckets A & B, if A & B have the same resourceTier,
 		// and if A has a lower ordinal burstQualification, then A must have more tokens than B.
 		//
-		// Since admission deducts from all buckets, these invariants are true, so long as token bucket
-		// replenishing respects it also. Token bucket replenishing is not yet implemented. See
-		// tryGrantLocked for a situation where invariant #1 is relied on.
+		// Since admission deducts from all buckets, these invariants are true, so long as token
+		// bucket replenishing respects it also. See tryGrantLocked for a situation where
+		// invariant #1 is relied on.
 		buckets    [numResourceTiers][numBurstQualifications]tokenBucket
 		tokensUsed int64
 	}
@@ -274,11 +265,16 @@ func (stg *cpuTimeTokenGranter) resetTokensUsedInInterval() int64 {
 }
 
 // refill adds toAdd tokens to the corresponding buckets, while respecting
-// the capacity info stored in bucketCapacities. That is, tokens that would
-// bring the bucket above capacity will be discarded instead. refill attempts
-// to grant admission to waiting requests in case where tokens are added to
-// some bucket.
-func (stg *cpuTimeTokenGranter) refill(toAdd tokenCounts, bucketCapacities capacities) {
+// the capacity info stored in bucketCapacities and enforcing per-bucket
+// minimums from bucketMinimums. Tokens that would bring the bucket above
+// capacity will be discarded, and if the token count is below the minimum,
+// it will be raised to the minimum. The minimums bound recovery time after
+// periods of overuse, preventing a bucket from accumulating unbounded token
+// debt. refill attempts to grant admission to waiting requests in case
+// where tokens are added to some bucket.
+func (stg *cpuTimeTokenGranter) refill(
+	toAdd tokenCounts, bucketCapacities capacities, bucketMinimums minimums,
+) {
 	stg.mu.Lock()
 	defer stg.mu.Unlock()
 
@@ -289,9 +285,8 @@ func (stg *cpuTimeTokenGranter) refill(toAdd tokenCounts, bucketCapacities capac
 				shouldGrant = true
 			}
 			newTokenCount := stg.mu.buckets[wc][kind].tokens + toAdd[wc][kind]
-			if newTokenCount > bucketCapacities[wc][kind] {
-				newTokenCount = bucketCapacities[wc][kind]
-			}
+			newTokenCount = min(newTokenCount, bucketCapacities[wc][kind])
+			newTokenCount = max(newTokenCount, bucketMinimums[wc][kind])
 			stg.mu.buckets[wc][kind].tokens = newTokenCount
 		}
 	}
