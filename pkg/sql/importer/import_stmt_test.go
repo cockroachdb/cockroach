@@ -109,7 +109,6 @@ func TestImportDistributedMerge(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	skip.WithIssue(t, 163425)
 	dirname, cleanup := testutils.TempDir(t)
 	t.Cleanup(cleanup)
 
@@ -1655,7 +1654,7 @@ func TestImportCSVStmt(t *testing.T) {
 			`IMPORT INTO t CSV DATA (%s)`,
 			testFiles.filesWithDups,
 			``,
-			"duplicate key in primary index",
+			"duplicate key",
 		},
 		{
 			"no-database",
@@ -5682,7 +5681,7 @@ CREATE TABLE f (
 )
 `)
 		data = "1,1\n1,2"
-		sqlDB.ExpectErr(t, "duplicate key in index: duplicate key: (/Tenant/10)?/Table/109/2/1/0",
+		sqlDB.ExpectErr(t, "duplicate key: duplicate key: (/Tenant/10)?/Table/\\d+/2/1/0",
 			fmt.Sprintf(`IMPORT INTO f (a,b) CSV DATA ('%s')`, srv.URL))
 	})
 
@@ -5743,8 +5742,6 @@ CREATE TABLE t (
 func TestImportDistributedMergeStoragePrefixTracking(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-
-	skip.WithIssue(t, 163380)
 
 	ctx := context.Background()
 

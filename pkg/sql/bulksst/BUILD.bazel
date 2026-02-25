@@ -33,6 +33,7 @@ go_library(
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/cloud",
+        "//pkg/jobs/jobspb",
         "//pkg/keys",
         "//pkg/kv/kvpb",
         "//pkg/kv/kvserver/kvserverbase",

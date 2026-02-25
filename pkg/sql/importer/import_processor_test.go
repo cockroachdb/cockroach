@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/bulksst"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
@@ -235,6 +236,7 @@ func TestImportIgnoresProcessedFiles(t *testing.T) {
 		EvalCtx: &evalCtx,
 		Mon:     evalCtx.TestingMon,
 		Cfg: &execinfra.ServerConfig{
+			NodeID:          base.NewSQLIDContainerForNode(&base.NodeIDContainer{}),
 			JobRegistry:     &jobs.Registry{},
 			Settings:        cluster.MakeTestingClusterSettings(),
 			ExternalStorage: externalStorageFactory,
@@ -356,6 +358,7 @@ func TestImportHonorsResumePosition(t *testing.T) {
 		EvalCtx: &evalCtx,
 		Mon:     evalCtx.TestingMon,
 		Cfg: &execinfra.ServerConfig{
+			NodeID:          base.NewSQLIDContainerForNode(&base.NodeIDContainer{}),
 			JobRegistry:     &jobs.Registry{},
 			Settings:        cluster.MakeTestingClusterSettings(),
 			ExternalStorage: externalStorageFactory,
@@ -446,7 +449,7 @@ func TestImportHonorsResumePosition(t *testing.T) {
 					}
 				}()
 
-				_, _, err := runImport(ctx, flowCtx, spec, progCh, nil /* seqChunkProvider */)
+				_, err := runImport(ctx, flowCtx, spec, 0 /* processorID */, progCh, nil /* seqChunkProvider */)
 				if err != nil {
 					t.Fatal(err)
 				}
@@ -488,6 +491,7 @@ func TestImportHandlesDuplicateKVs(t *testing.T) {
 		EvalCtx: &evalCtx,
 		Mon:     evalCtx.TestingMon,
 		Cfg: &execinfra.ServerConfig{
+			NodeID:          base.NewSQLIDContainerForNode(&base.NodeIDContainer{}),
 			JobRegistry:     &jobs.Registry{},
 			Settings:        cluster.MakeTestingClusterSettings(),
 			ExternalStorage: externalStorageFactory,
@@ -523,10 +527,115 @@ func TestImportHandlesDuplicateKVs(t *testing.T) {
 				}
 			}()
 
-			_, _, err := runImport(ctx, flowCtx, spec, progCh, nil /* seqChunkProvider */)
+			_, err := runImport(ctx, flowCtx, spec, 0 /* processorID */, progCh, nil /* seqChunkProvider */)
 			require.True(t, errors.HasType(err, &kvserverbase.DuplicateKeyError{}))
 		})
 	}
+}
+
+// mockSink is a minimal BulkSink for testing importProgressTracker.
+type mockSink struct {
+	onFlush  func(kvpb.BulkOpSummary)
+	manifest []jobspb.BulkSSTManifest
+	empty    bool
+}
+
+var _ bulksst.BulkSink = (*mockSink)(nil)
+
+func (m *mockSink) Add(context.Context, roachpb.Key, []byte) error { return nil }
+func (m *mockSink) Close(context.Context)                          {}
+func (m *mockSink) Flush(context.Context) error                    { return nil }
+func (m *mockSink) IsEmpty() bool                                  { return m.empty }
+
+func (m *mockSink) SetOnFlush(fn func(kvpb.BulkOpSummary)) { m.onFlush = fn }
+
+func (m *mockSink) ConsumeFlushManifests() []jobspb.BulkSSTManifest {
+	out := m.manifest
+	m.manifest = nil
+	return out
+}
+
+// simulateFlush triggers the OnFlush callback with the given summary,
+// as if the sink had just flushed data.
+func (m *mockSink) simulateFlush(summary kvpb.BulkOpSummary) {
+	if m.onFlush != nil {
+		m.onFlush(summary)
+	}
+}
+
+func TestImportProgressTracker(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	nodeIDContainer := &base.NodeIDContainer{}
+	nodeIDContainer.Set(context.Background(), 7)
+	sqlIDContainer := base.NewSQLIDContainerForNode(nodeIDContainer)
+
+	// Use non-contiguous file IDs to verify the offset mapping works.
+	spec := &execinfrapb.ReadImportDataSpec{
+		Uri: map[int32]string{2: "file-a.csv", 5: "file-b.csv"},
+	}
+	flowCtx := &execinfra.FlowCtx{
+		Cfg: &execinfra.ServerConfig{NodeID: sqlIDContainer},
+	}
+
+	tracker := newImportProgressTracker(flowCtx, spec)
+
+	pkSink := &mockSink{}
+	idxSink := &mockSink{}
+	tracker.registerSink(pkSink)
+	tracker.registerSink(idxSink)
+
+	// Before any batches or flushes, progress should be zero.
+	prog, err := tracker.formatProgress()
+	require.NoError(t, err)
+	require.Equal(t, int64(0), prog.ResumePos[2])
+	require.Equal(t, int64(0), prog.ResumePos[5])
+	require.Equal(t, base.SQLInstanceID(7), prog.NodeID)
+
+	// Record some KV batches.
+	tracker.recordKVBatch(row.KVBatch{Source: 2, LastRow: 100, Progress: 0.5})
+	tracker.recordKVBatch(row.KVBatch{Source: 5, LastRow: 200, Progress: 0.8})
+
+	// Simulate the PK sink flushing (copies unflushedRows into its slot).
+	// The index sink has not flushed but has buffered data (empty=false),
+	// so it holds back the resume position.
+	pkSink.empty = true
+	idxSink.empty = false
+	pkSink.simulateFlush(kvpb.BulkOpSummary{DataSize: 1000})
+
+	prog, err = tracker.formatProgress()
+	require.NoError(t, err)
+	require.Equal(t, int64(0), prog.ResumePos[2], "index sink has data, holds back resume")
+	require.Equal(t, int64(0), prog.ResumePos[5], "index sink has data, holds back resume")
+	require.Equal(t, float32(0.5), prog.CompletedFraction[2])
+	require.Equal(t, float32(0.8), prog.CompletedFraction[5])
+	require.Equal(t, int64(1000), prog.BulkSummary.DataSize)
+
+	// If the index sink is empty (no buffered data), it should not hold
+	// back the resume position.
+	idxSink.empty = true
+	prog, err = tracker.formatProgress()
+	require.NoError(t, err)
+	require.Equal(t, int64(100), prog.ResumePos[2], "empty index sink does not hold back")
+	require.Equal(t, int64(200), prog.ResumePos[5], "empty index sink does not hold back")
+
+	// Now the index sink flushes too.
+	idxSink.empty = false
+	idxSink.simulateFlush(kvpb.BulkOpSummary{DataSize: 500})
+
+	// Both sinks have flushed, so resume position should be the row
+	// positions that were current when each flushed (both saw 100/200).
+	prog, err = tracker.formatProgress()
+	require.NoError(t, err)
+	require.Equal(t, int64(100), prog.ResumePos[2])
+	require.Equal(t, int64(200), prog.ResumePos[5])
+	// Summary should only include the index sink's flush (PK was already
+	// reported in the previous formatProgress call).
+	require.Equal(t, int64(500), prog.BulkSummary.DataSize)
+
+	// totalSummary accumulates across all flushes.
+	total := tracker.fetchSummary()
+	require.Equal(t, int64(1500), total.DataSize)
 }
 
 // syncBarrier allows 2 threads (a controller and a worker) to
@@ -677,13 +786,29 @@ func TestCSVImportCanBeResumed(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
+	for _, useDistributedMerge := range []bool{false, true} {
+		name := "legacy"
+		if useDistributedMerge {
+			name = "distributed_merge"
+		}
+		t.Run(name, func(t *testing.T) {
+			testCSVImportCanBeResumed(t, useDistributedMerge)
+		})
+	}
+}
+
+func testCSVImportCanBeResumed(t *testing.T, useDistributedMerge bool) {
 	defer setImportReaderParallelism(1)()
 	const batchSize = 5
 	defer TestingSetParallelImporterReaderBatchSize(batchSize)()
-	defer row.TestingSetDatumRowConverterBatchSize(2 * batchSize)()
+	defer row.TestingSetDatumRowConverterBatchSize(batchSize)()
+
+	// Create a temp directory for nodelocal storage used by distributed merge.
+	tempDir := t.TempDir()
 
 	srv, db, _ := serverutils.StartServer(t,
 		base.TestServerArgs{
+			ExternalIODir: tempDir,
 			Knobs: base.TestingKnobs{
 				JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
 				DistSQL: &execinfra.TestingKnobs{
@@ -698,6 +823,9 @@ func TestCSVImportCanBeResumed(t *testing.T) {
 
 	sqlDB := sqlutils.MakeSQLRunner(db)
 	setSmallIngestBufferSizes(t, sqlDB)
+	if useDistributedMerge {
+		sqlDB.Exec(t, `SET CLUSTER SETTING bulkio.import.distributed_merge.enabled = true`)
+	}
 	sqlDB.Exec(t, `CREATE DATABASE d`)
 	sqlDB.Exec(t, "CREATE TABLE t (id INT, data STRING)")
 	defer sqlDB.Exec(t, `DROP TABLE t`)
@@ -736,7 +864,9 @@ func TestCSVImportCanBeResumed(t *testing.T) {
 
 	// Convince distsql to use our "external" storage implementation.
 	storage := newGeneratedStorage(csv1)
-	s.DistSQLServer().(*distsql.ServerImpl).ServerConfig.ExternalStorage = storage.externalStorageFactory()
+	// Save the original factory (which knows about ExternalIODir) before replacing it
+	originalFactory := s.DistSQLServer().(*distsql.ServerImpl).ServerConfig.ExternalStorage
+	s.DistSQLServer().(*distsql.ServerImpl).ServerConfig.ExternalStorage = storage.externalStorageFactory(originalFactory)
 
 	// Execute import; ignore any errors returned
 	// (since we're aborting the first import run.).
@@ -764,7 +894,6 @@ func TestCSVImportCanBeResumed(t *testing.T) {
 	// Get updated resume position counter.
 	js = queryJobUntil(t, sqlDB.DB, jobID, func(js jobState) bool { return jobs.StatePaused == js.status })
 	resumePos := js.prog.ResumePos[0]
-	t.Logf("Resume pos: %v\n", js.prog.ResumePos[0])
 
 	// Unpause the job and wait for it to complete.
 	if err := registry.Unpause(ctx, nil, jobID); err != nil {
@@ -773,7 +902,7 @@ func TestCSVImportCanBeResumed(t *testing.T) {
 	js = queryJobUntil(t, sqlDB.DB, jobID, func(js jobState) bool { return jobs.StateSucceeded == js.status })
 
 	// Verify that the import proceeded from the resumeRow position.
-	assert.Equal(t, importSummary.Rows, int64(csv1.numRows)-resumePos)
+	require.Equal(t, int64(csv1.numRows)-resumePos, importSummary.Rows)
 
 	sqlDB.CheckQueryResults(t, `SELECT id FROM t ORDER BY id`,
 		sqlDB.QueryStr(t, `SELECT generate_series(0, $1)`, csv1.numRows-1),
@@ -889,8 +1018,21 @@ func TestCSVImportMarksFilesFullyProcessed(t *testing.T) {
 	}
 }
 
-func (ses *generatedStorage) externalStorageFactory() cloud.ExternalStorageFactory {
-	return func(_ context.Context, es cloudpb.ExternalStorage, _ ...cloud.ExternalStorageOption) (cloud.ExternalStorage, error) {
+func (ses *generatedStorage) externalStorageFactory(
+	originalFactory ...cloud.ExternalStorageFactory,
+) cloud.ExternalStorageFactory {
+	return func(ctx context.Context, es cloudpb.ExternalStorage, opts ...cloud.ExternalStorageOption) (cloud.ExternalStorage, error) {
+		// For non-HTTP providers (like nodelocal used by distributed merge),
+		// fall back to the original server factory (if provided).
+		if es.Provider != cloudpb.ExternalStorageProvider_http {
+			if len(originalFactory) == 1 && originalFactory[0] != nil {
+				return originalFactory[0](ctx, es, opts...)
+			} else if len(originalFactory) > 1 {
+				return nil, errors.Newf("need at most one fallback storage factory, %d provided", len(originalFactory))
+			}
+			return nil, errors.Newf("no storage factory for provider type: %v", es.Provider)
+		}
+
 		uri, err := url.Parse(es.HttpPath.BaseUri)
 		if err != nil {
 			return nil, err
