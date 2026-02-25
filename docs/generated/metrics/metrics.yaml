@@ -7182,6 +7182,14 @@ layers:
       unit: COUNT
       aggregation: AVG
       derivative: NONE
+    - name: rpc.drpc.enabled
+      exported_name: rpc_drpc_enabled
+      description: 1 if this node is using DRPC for internode RPC, 0 otherwise.
+      y_axis_label: Enabled
+      type: GAUGE
+      unit: CONST
+      aggregation: AVG
+      derivative: NONE
     - name: rpc.server.errors.total
       exported_name: rpc_server_errors_total
       description: Total number of RPC errors on the server.

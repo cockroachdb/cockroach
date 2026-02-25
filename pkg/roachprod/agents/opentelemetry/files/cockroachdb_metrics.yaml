@@ -2165,6 +2165,7 @@ rpc_connection_tcp_rtt: rpc.connection.tcp_rtt
 rpc_connection_tcp_rtt_var: rpc.connection.tcp_rtt_var
 rpc_connection_unhealthy: rpc.connection.unhealthy
 rpc_connection_unhealthy_nanos: rpc.connection.unhealthy_nanos
+rpc_drpc_enabled: rpc.drpc.enabled
 rpc_method_addsstable_recv: rpc.method.addsstable.recv
 rpc_method_adminchangereplicas_recv: rpc.method.adminchangereplicas.recv
 rpc_method_adminmerge_recv: rpc.method.adminmerge.recv
