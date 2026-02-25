@@ -573,6 +573,7 @@ github.com/cockroachdb/datadriven v1.0.3-0.20251123150250-ddff6747b112 h1:T1++5V
 github.com/cockroachdb/datadriven v1.0.3-0.20251123150250-ddff6747b112/go.mod h1:jsaKMvD3RBCATk1/jbUZM8C9idWBJME9+VRZ5+Liq1g=
 github.com/cockroachdb/drpc v0.0.0-20260210055719-ba071c6f9395 h1:SlzBv3SQjCp/NL8KF3+Nl6qi0W1RaL3dG6vxZaRUicw=
 github.com/cockroachdb/drpc v0.0.0-20260210055719-ba071c6f9395/go.mod h1:jeOpcnHh3/TvQ7K2kYXyLUMOMoMpuxp5vtdmtNPVW+8=
+github.com/cockroachdb/drpc v0.0.0-20260219063044-823759f1ba91 h1:x0+2XaibMkat9uN38ig9qNb62mm0XMuLLr9Y7nzALEI=
 github.com/cockroachdb/drpc v0.0.0-20260219063044-823759f1ba91/go.mod h1:jeOpcnHh3/TvQ7K2kYXyLUMOMoMpuxp5vtdmtNPVW+8=
 github.com/cockroachdb/errors v1.12.1-0.20251010171200-64801262cd6f h1:lUmJxzb2/ukuRIvKTaNkvuj5LwlX4u/KxnI3zmx1SSw=
 github.com/cockroachdb/errors v1.12.1-0.20251010171200-64801262cd6f/go.mod h1:SvzfYNNBshAVbZ8wzNc/UPK3w1vf0dKDUP41ucAIf7g=
