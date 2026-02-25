@@ -234,6 +234,8 @@ type Catalog interface {
 	// returns an error.
 	CheckExecutionPrivilege(ctx context.Context, oid oid.Oid, user username.SQLUsername) error
 
+	GetStmtHint(ctx context.Context, fingerprint string, ast tree.Statement, fmtFlags tree.FmtFlags) tree.Statement
+
 	// HasAdminRole checks that the current user has admin privileges. If yes,
 	// returns true. Returns an error if query on the `system.users` table failed
 	HasAdminRole(ctx context.Context) (bool, error)

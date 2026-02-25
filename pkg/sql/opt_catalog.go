@@ -478,6 +478,69 @@ func (oc *optCatalog) CheckExecutionPrivilege(
 	return oc.planner.CheckPrivilegeForUser(ctx, desc, privilege.EXECUTE, user)
 }
 
+func (oc *optCatalog) GetStmtHint(
+	ctx context.Context, fingerprint string, ast tree.Statement, fmtFlags tree.FmtFlags,
+) tree.Statement {
+	hintCache := oc.planner.execCfg.StatementHintsCache
+	stmtHints, hintIDs := hintCache.MaybeGetStatementHints(ctx, fingerprint, fmtFlags)
+
+	var ASTWithInjectedHints tree.Statement
+
+	for i, hint := range stmtHints {
+		if !hint.Enabled || hint.Err != nil {
+			continue
+		}
+		if hd := hint.HintInjectionDonor; hd != nil && ASTWithInjectedHints == nil {
+			if err := hd.Validate(ast, fmtFlags); err != nil {
+				log.Eventf(
+					ctx, "failed to validate hint injection donor from external statement hint %v: %v",
+					hintIDs[i], err,
+				)
+				// Do not return the error. Instead we'll simply execute the query
+				// without this hint.
+				continue
+			}
+			injectedAST, injected, err := hd.InjectHints(ast)
+			if err != nil {
+				log.Eventf(
+					ctx, "failed to inject hints from external statement hint %v: %v", hintIDs[i], err,
+				)
+				// Do not return the error. Instead we'll simply execute the query
+				// without this hint.
+				continue
+			}
+			if injected {
+				log.Eventf(ctx, "injected hints from external statement hint %v", hintIDs[i])
+				// If we unwrapped the AST above, we need to re-wrap the rewritten AST here.
+				ASTWithInjectedHints = injectedAST
+				switch e := ast.(type) {
+				case *tree.CopyTo:
+					copyTo := *e
+					copyTo.Statement = injectedAST
+					ASTWithInjectedHints = &copyTo
+				case *tree.Explain:
+					explain := *e
+					explain.Statement = injectedAST
+					ASTWithInjectedHints = &explain
+				case *tree.ExplainAnalyze:
+					explain := *e
+					explain.Statement = injectedAST
+					ASTWithInjectedHints = &explain
+				case *tree.Prepare:
+					prepare := *e
+					prepare.Statement = injectedAST
+					ASTWithInjectedHints = &prepare
+				}
+				break
+			}
+		}
+	}
+	if ASTWithInjectedHints == nil {
+		return ast
+	}
+	return ASTWithInjectedHints
+}
+
 // HasAdminRole is part of the cat.Catalog interface.
 func (oc *optCatalog) HasAdminRole(ctx context.Context) (bool, error) {
 	return oc.planner.HasAdminRole(ctx)

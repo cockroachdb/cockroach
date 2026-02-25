@@ -322,6 +322,12 @@ func (tc *Catalog) CheckAnyPrivilege(ctx context.Context, o cat.Object) error {
 	return nil
 }
 
+func (tc *Catalog) GetStmtHint(
+	ctx context.Context, fingerprint string, ast tree.Statement, fmtFlags tree.FmtFlags,
+) tree.Statement {
+	return nil
+}
+
 // CheckExecutionPrivilege is part of the cat.Catalog interface.
 func (tc *Catalog) CheckExecutionPrivilege(
 	ctx context.Context, oid oid.Oid, user username.SQLUsername,
