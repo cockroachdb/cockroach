@@ -440,10 +440,11 @@ func (i ignoreLevel) String() string {
 // motivated by the following observations:
 //
 // 1. The high level objective is mostly to move towards the mean along all
-// resource dimensions. For now, we are fuzzy on whether this should be the
-// usage mean or the utilization mean, since historically the allocated has
-// considered the former only, while mmaprototype in loadSummaryForDimension considers
-// both.
+// resource dimensions. For capacity-enabled resources (CPURate, ByteSize),
+// loadSummaryForDimension compares utilization (load/capacity) against the
+// capacity-weighted mean utilization. For resources without a known capacity
+// (WriteBandwidth), it falls back to comparing absolute load against the
+// mean load.
 //
 // 2. We want to minimize range movement (and to a lesser extent lease
 // movement) when moving towards the mean, so it is preferable to first move
