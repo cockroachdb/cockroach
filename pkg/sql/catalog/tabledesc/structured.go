@@ -847,6 +847,9 @@ func (desc *Mutable) allocateIndexIDs(columnNames map[string]descpb.ColumnID) er
 				idx.IndexDesc().KeyColumnIDs[j] = columnNames[colName]
 			}
 		}
+		if idx.Primary() {
+			primaryColIDs = idx.CollectKeyColumnIDs()
+		}
 
 		// Rebuild KeySuffixColumnIDs, StoreColumnIDs and CompositeColumnIDs.
 		indexHasOldStoredColumns := idx.HasOldStoredColumns()
@@ -911,20 +914,18 @@ func (desc *Mutable) allocateIndexIDs(columnNames map[string]descpb.ColumnID) er
 		//
 		// TODO(postamar): AllocateIDs should not do user input validation.
 		// The only errors it should return should be assertion failures.
+		var filteredStoreColumnNames []string
 		for _, colName := range idx.IndexDesc().StoreColumnNames {
 			col, err := catalog.MustFindColumnByName(desc, colName)
 			if err != nil {
 				return err
 			}
-			if primaryColIDs.Contains(col.GetID()) && idx.GetEncodingType() == catenumpb.SecondaryIndexEncoding {
-				// If the primary index contains a stored column, we don't need to
-				// store it - it's already part of the index.
-				err = errors.WithDetailf(
-					sqlerrors.NewColumnAlreadyExistsInIndexError(idx.GetName(), col.GetName()),
-					"column %q is part of the primary index and therefore implicit in all indexes", col.GetName())
-				return err
-			}
 			if colIDs.Contains(col.GetID()) {
+				if primaryColIDs.Contains(col.GetID()) &&
+					!idx.CollectKeyColumnIDs().Contains(col.GetID()) &&
+					idx.GetEncodingType() == catenumpb.SecondaryIndexEncoding {
+					continue
+				}
 				return sqlerrors.NewColumnAlreadyExistsInIndexError(idx.GetName(), col.GetName())
 			}
 			if indexHasOldStoredColumns {
@@ -933,7 +934,9 @@ func (desc *Mutable) allocateIndexIDs(columnNames map[string]descpb.ColumnID) er
 				idx.IndexDesc().StoreColumnIDs = append(idx.IndexDesc().StoreColumnIDs, col.GetID())
 			}
 			colIDs.Add(col.GetID())
+			filteredStoreColumnNames = append(filteredStoreColumnNames, colName)
 		}
+		idx.IndexDesc().StoreColumnNames = filteredStoreColumnNames
 
 		// CompositeColumnIDs is defined as the subset of columns in the index key
 		// or in the primary key whose type has a composite encoding, like DECIMAL

@@ -51,10 +51,25 @@ SELECT a, b, d FROM t@d_idx
 statement error index "error" already contains column "d"
 CREATE INDEX error ON t (d) STORING (d)
 
-statement error index "error" already contains column "a"
-CREATE INDEX error ON t (d) STORING (a)
+skipif config local-legacy-schema-changer
+query T noticetrace
+CREATE INDEX pk_stored_idx ON t (d) STORING (a)
+----
+NOTICE: index "pk_stored_idx" already contains column "a" which is part of the primary key and therefore implicit in all indexes
 
-statement error index "b_idx" already contains column "a"
+skipif config local-legacy-schema-changer
+statement ok
+DROP INDEX pk_stored_idx
+
+onlyif config local-legacy-schema-changer
+statement ok
+CREATE INDEX pk_stored_idx ON t (d) STORING (a)
+
+onlyif config local-legacy-schema-changer
+statement ok
+DROP INDEX pk_stored_idx
+
+statement ok
 CREATE TABLE t30984 (
   a INT PRIMARY KEY,
   b INT,
@@ -62,7 +77,10 @@ CREATE TABLE t30984 (
   INDEX b_idx (b) STORING (c, a)
 )
 
-statement error index "b_idx" already contains column "a"
+statement ok
+DROP TABLE t30984
+
+statement ok
 CREATE TABLE t30984 (
   a INT PRIMARY KEY,
   b INT,
@@ -70,7 +88,10 @@ CREATE TABLE t30984 (
   UNIQUE INDEX b_idx (b) STORING (c, a)
 )
 
-statement error index "b_idx" already contains column "d"
+statement ok
+DROP TABLE t30984
+
+statement ok
 CREATE TABLE t30984 (
   a INT,
   b INT,
@@ -79,6 +100,9 @@ CREATE TABLE t30984 (
   PRIMARY KEY (a, d),
   UNIQUE INDEX b_idx (b) STORING (c, d)
 )
+
+statement ok
+DROP TABLE t30984
 
 statement ok
 CREATE UNIQUE INDEX a_idx ON t (a) STORING (b)
