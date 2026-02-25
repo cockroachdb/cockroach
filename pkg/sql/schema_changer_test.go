@@ -4166,6 +4166,7 @@ func TestSchemaChangeErrorOnCommit(t *testing.T) {
 func TestIndexBackfillAfterGC(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+	skip.UnderDuress(t, "flaky under race")
 
 	var tc serverutils.TestClusterInterface
 	ctx := context.Background()
