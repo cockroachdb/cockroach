@@ -22,7 +22,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
-	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/bufalloc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -30,6 +29,25 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/workload/workloadsql"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
+)
+
+var (
+	// tpcWorkloads are the TPC-* workloads that must run sequentially
+	// to avoid log.Scope() race condition (see #164266).
+	tpcWorkloads = map[string]struct{}{
+		"tpcc":        {},
+		"tpccmultidb": {},
+	}
+
+	// unsupportedWorkloads are workloads that don't work with IMPORT or have other issues.
+	unsupportedWorkloads = map[string]struct{}{
+		"workload_generator":     {}, // Takes schema from flags at runtime
+		"startrek":               {}, // Doesn't work with IMPORT
+		"roachmart":              {}, // Doesn't work with IMPORT
+		"interleavedpartitioned": {}, // Doesn't work with IMPORT
+		"ttlbench":               {}, // Doesn't work with IMPORT
+		"tpch":                   {}, // Excluded (TODO: implement trimmed version)
+	}
 )
 
 func bigInitialData(meta workload.Meta) bool {
@@ -41,13 +59,73 @@ func bigInitialData(meta workload.Meta) bool {
 	}
 }
 
-func TestAllRegisteredImportFixture(t *testing.T) {
-	defer leaktest.AfterTest(t)()
+// runImportFixtureTest runs the import fixture test for a given workload.
+func runImportFixtureTest(
+	t *testing.T, meta workload.Meta, gen workload.Generator, sqlMemoryPoolSize int64,
+) {
+	if bigInitialData(meta) {
+		skip.UnderShort(t, fmt.Sprintf(`%s loads a lot of data`, meta.Name))
+	}
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{
+		// The test tenant needs to be disabled for this test until
+		// we address #75449.
+		DefaultTestTenant: base.TODOTestTenantDisabled,
+		UseDatabase:       "d",
+		SQLMemoryPoolSize: sqlMemoryPoolSize,
+	})
+	defer s.Stopper().Stop(ctx)
+	sqlutils.MakeSQLRunner(db).Exec(t, `CREATE DATABASE d`)
+
+	l := workloadccl.ImportDataLoader{}
+	if _, err := workloadsql.Setup(ctx, db, gen, l); err != nil {
+		t.Fatalf(`%+v`, err)
+	}
+
+	// Run the consistency check if this workload has one.
+	if h, ok := gen.(workload.Hookser); ok {
+		if checkConsistencyFn := h.Hooks().CheckConsistency; checkConsistencyFn != nil {
+			if err := checkConsistencyFn(ctx, db); err != nil {
+				t.Errorf(`%+v`, err)
+			}
+		}
+	}
+}
+
+// runImportFixtures runs import fixture tests for the provided workloads.
+func runImportFixtures(t *testing.T, metas []workload.Meta) {
+	skip.UnderDeadlock(t)
 
 	sqlMemoryPoolSize := int64(1000 << 20) // 1GiB
 
-	for _, meta := range workload.Registered() {
+	for _, meta := range metas {
 		meta := meta
+		gen := meta.New()
+
+		if skip.Duress() && meta.Name != `bank` {
+			continue
+		}
+
+		t.Run(meta.Name, func(t *testing.T) {
+			runImportFixtureTest(t, meta, gen, sqlMemoryPoolSize)
+		})
+	}
+}
+
+// TestImportFixture_TPC runs tpcc and tpccmultidb sequentially.
+// These must run sequentially to avoid log.Scope() race condition (see #164266).
+func TestImportFixture_TPCC(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	// Filter registered workloads to only include TPCC-* workloads.
+	var metas []workload.Meta
+	for _, meta := range workload.Registered() {
+		if _, ok := tpcWorkloads[meta.Name]; !ok {
+			continue
+		}
+
 		gen := meta.New()
 		hasInitialData := len(gen.Tables()) != 0
 		for _, table := range gen.Tables() {
@@ -60,58 +138,44 @@ func TestAllRegisteredImportFixture(t *testing.T) {
 			continue
 		}
 
-		// This test is big enough that it causes timeout issues under race, so only
-		// run one workload. Doing any more than this doesn't get us enough to be
-		// worth the hassle.
-		if util.RaceEnabled && meta.Name != `bank` {
-			continue
-		}
-
-		switch meta.Name {
-		case `startrek`, `roachmart`, `interleavedpartitioned`, `ttlbench`:
-			// These don't work with IMPORT.
-			continue
-		case `tpch`:
-			// TODO(dan): Implement a timmed down version of TPCH to keep the test
-			// runtime down.
-			continue
-		}
-
-		t.Run(meta.Name, func(t *testing.T) {
-			if meta.Name == "tpcc" || meta.Name == "tpccmultidb" {
-				t.Parallel() // SAFE FOR TESTING
-			}
-			if bigInitialData(meta) {
-				skip.UnderShort(t, fmt.Sprintf(`%s loads a lot of data`, meta.Name))
-			}
-			defer log.Scope(t).Close(t)
-
-			ctx := context.Background()
-			s, db, _ := serverutils.StartServer(t, base.TestServerArgs{
-				// The test tenant needs to be disabled for this test until
-				// we address #75449.
-				DefaultTestTenant: base.TODOTestTenantDisabled,
-				UseDatabase:       "d",
-				SQLMemoryPoolSize: sqlMemoryPoolSize,
-			})
-			defer s.Stopper().Stop(ctx)
-			sqlutils.MakeSQLRunner(db).Exec(t, `CREATE DATABASE d`)
-
-			l := workloadccl.ImportDataLoader{}
-			if _, err := workloadsql.Setup(ctx, db, gen, l); err != nil {
-				t.Fatalf(`%+v`, err)
-			}
-
-			// Run the consistency check if this workload has one.
-			if h, ok := gen.(workload.Hookser); ok {
-				if checkConsistencyFn := h.Hooks().CheckConsistency; checkConsistencyFn != nil {
-					if err := checkConsistencyFn(ctx, db); err != nil {
-						t.Errorf(`%+v`, err)
-					}
-				}
-			}
-		})
+		metas = append(metas, meta)
 	}
+
+	require.NotEmpty(t, metas, "no TPC workloads registered to run")
+	runImportFixtures(t, metas)
+}
+
+// TestImportFixture_Others runs all workloads except tpcc, tpccmultidb, and those that don't work with IMPORT.
+func TestImportFixture_Others(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	// Filter registered workloads, excluding TPCC-* and unsupported workloads.
+	var metas []workload.Meta
+	for _, meta := range workload.Registered() {
+		if _, ok := tpcWorkloads[meta.Name]; ok {
+			continue
+		}
+		if _, ok := unsupportedWorkloads[meta.Name]; ok {
+			continue
+		}
+
+		gen := meta.New()
+		hasInitialData := len(gen.Tables()) != 0
+		for _, table := range gen.Tables() {
+			if table.InitialRows.FillBatch == nil {
+				hasInitialData = false
+				break
+			}
+		}
+		if !hasInitialData {
+			continue
+		}
+
+		metas = append(metas, meta)
+	}
+
+	require.NotEmpty(t, metas, "no other workloads registered to run")
+	runImportFixtures(t, metas)
 }
 
 func TestAllRegisteredSetup(t *testing.T) {
@@ -123,10 +187,10 @@ func TestAllRegisteredSetup(t *testing.T) {
 			continue
 		}
 
-		// This test is big enough that it causes timeout issues under race, so only
-		// run one workload. Doing any more than this doesn't get us enough to be
-		// worth the hassle.
-		if util.RaceEnabled && meta.Name != `bank` {
+		// This test is big enough that it causes timeout issues under heavy
+		// configs, so only run one workload. Doing any more than this doesn't
+		// get us enough to be worth the hassle.
+		if skip.Duress() && meta.Name != `bank` {
 			continue
 		}
 
@@ -141,25 +205,26 @@ func TestAllRegisteredSetup(t *testing.T) {
 			}); err != nil {
 				t.Fatal(err)
 			}
-		case `interleavedpartitioned`:
-			// This require a specific node locality setup
-			continue
 		case `ttlbench`:
+			continue
+		case `vecann`:
+			// This requires downloading from a GCP bucket and storing in the
+			// machine's ~/.cache directory.
+			continue
+		case `workload_generator`:
+			// This will take its schema generation data from flags at run time, so static checks are not valid.
 			continue
 		}
 
 		t.Run(meta.Name, func(t *testing.T) {
 			defer log.Scope(t).Close(t)
 			ctx := context.Background()
-			s, db, _ := serverutils.StartServer(t, base.TestServerArgs{
-				// Need to disable the test tenant here until we resolve
-				// #75449 as this test makes use of import through a fixture.
-				DefaultTestTenant: base.TODOTestTenantDisabled,
-				UseDatabase:       "d",
+			srv, db, _ := serverutils.StartServer(t, base.TestServerArgs{
+				UseDatabase: "d",
 			})
-			defer s.Stopper().Stop(ctx)
+			defer srv.Stopper().Stop(ctx)
 			sqlutils.MakeSQLRunner(db).Exec(t, `CREATE DATABASE d`)
-			sqlutils.MakeSQLRunner(db).Exec(t, `SET CLUSTER SETTING kv.range_merge.queue.enabled = false`)
+			sqlutils.MakeSQLRunner(srv.SystemLayer().SQLConn(t)).Exec(t, `SET CLUSTER SETTING kv.range_merge.queue.enabled = false`)
 
 			var l workloadsql.InsertsDataLoader
 			if _, err := workloadsql.Setup(ctx, db, gen, l); err != nil {
@@ -243,6 +308,18 @@ func hashTableInitialData(
 				for i := 0; i < b.Length(); i++ {
 					_, _ = h.Write(colBytes.Get(i))
 				}
+			case types.TimestampFamily, types.TimestampTZFamily:
+				colTime := col.Timestamp()
+
+				for i := 0; i < b.Length(); i++ {
+					binary.LittleEndian.PutUint64(scratch[:8], uint64(colTime[i].UnixNano()))
+					_, _ = h.Write(scratch[:8])
+				}
+			case types.DecimalFamily:
+				colDecimal := col.Decimal()
+				for i := 0; i < b.Length(); i++ {
+					_, _ = h.Write([]byte(colDecimal[i].String()))
+				}
 			default:
 				return errors.Errorf(`unhandled type %s`, col.Type())
 			}
@@ -266,21 +343,21 @@ func TestDeterministicInitialData(t *testing.T) {
 	// TODO(dan): We're starting to accumulate these various lists, bigInitialData
 	// is another. Consider moving them to be properties on the workload.Meta.
 	fingerprintGoldens := map[string]uint64{
-		`bank`:       0xb9065bb21c3594a2,
+		`bank`:       0xb443139c2fc1a1a3,
 		`bulkingest`: 0xcf3e4028ac084aea,
 		`indexes`:    0xcbf29ce484222325,
 		`intro`:      0x81c6a8cfd9c3452a,
 		`json`:       0xcbf29ce484222325,
 		`ledger`:     0xebe27d872d980271,
-		`movr`:       0x79940f4ba5d5e6a3,
+		`movr`:       0x05e20fbb5586c9b0,
 		`queue`:      0xcbf29ce484222325,
 		`rand`:       0xcbf29ce484222325,
 		`roachmart`:  0xda5e73423dbdb2d9,
 		`sqlsmith`:   0xcbf29ce484222325,
 		`startrek`:   0xa0249fbdf612734c,
-		`tpcc`:       0xab32e4f5e899eb2f,
-		`tpch`:       0xe4fd28db230b9149,
-		`ycsb`:       0xcfd3f148a01a2c47,
+		`tpcc`:       0xccfecd06eed59975,
+		`tpch`:       0x95bafd37ccb1eb7d,
+		`ycsb`:       0xa00a7efc9d3b8532,
 	}
 
 	var a bufalloc.ByteAllocator
