@@ -79,57 +79,64 @@ jobs:
           BAZEL_UPDATED=false
 
           for name in $DIAGRAM_NAMES; do
-            # html_name is the canonical name for all BZL entries: strip _stmt if present.
-            # The docgen generates BNF files named after the spec's name field, and the
-            # BUILD.bazel svg genrule strips _stmt from HTML outputs automatically. So all
-            # four BZL files should use html_name (without _stmt), not the raw name.
+            # bnf_name: the exact BNF filename docgen produces (= name field as-is).
+            # BUILD.bazel, bnf.bzl, and docs.bzl all reference BNF files, so they must
+            # use bnf_name. Do NOT strip _stmt here — when name itself ends in _stmt
+            # (old-style entries like alter_default_privileges_stmt), the BNF file is
+            # named alter_default_privileges_stmt.bnf and BUILD.bazel must list
+            # alter_default_privileges_stmt, not alter_default_privileges.
+            bnf_name="$name"
+
+            # html_name: the HTML filename the SVG genrule produces. The genrule strips
+            # a trailing _stmt from the BNF entry name to form the HTML output name, so
+            # diagrams.bzl (which references HTML outputs) uses html_name.
             html_name="${name%_stmt}"
 
-            # BUILD.bazel: if an _stmt entry exists for this diagram but the clean entry
-            # does not, rename it. This handles the common case where a grammar rule
-            # show_X_stmt was auto-populated into BUILD.bazel before a diagrams.go entry
-            # with name: "show_X" was added. Adding a duplicate would break the bnf
-            # genrule validation, which requires FILES to exactly match docgen output.
-            if grep -q "\"${html_name}_stmt\"" docs/generated/sql/bnf/BUILD.bazel && \
-               ! grep -q "\"${html_name}\"," docs/generated/sql/bnf/BUILD.bazel; then
-              echo "Renaming ${html_name}_stmt to ${html_name} in BUILD.bazel"
-              sed -i "s/\"${html_name}_stmt\"/\"${html_name}\"/" docs/generated/sql/bnf/BUILD.bazel
+            # BUILD.bazel: if an entry named {bnf_name}_stmt exists but {bnf_name} does
+            # not, rename it. This handles the case where a grammar rule named foo was
+            # auto-populated as foo_stmt before a diagrams.go entry with name: "foo" was
+            # added. Using bnf_name (not html_name) ensures we never touch entries like
+            # alter_default_privileges_stmt that are already correctly named.
+            if grep -q "\"${bnf_name}_stmt\"" docs/generated/sql/bnf/BUILD.bazel && \
+               ! grep -q "\"${bnf_name}\"," docs/generated/sql/bnf/BUILD.bazel; then
+              echo "Renaming ${bnf_name}_stmt to ${bnf_name} in BUILD.bazel"
+              sed -i "s/\"${bnf_name}_stmt\"/\"${bnf_name}\"/" docs/generated/sql/bnf/BUILD.bazel
               BAZEL_UPDATED=true
-            elif ! grep -q "\"${html_name}\"" docs/generated/sql/bnf/BUILD.bazel; then
-              echo "Adding ${html_name} to BUILD.bazel"
-              sed -i "/\"analyze_stmt\",/a\\    \"${html_name}\"," docs/generated/sql/bnf/BUILD.bazel
-              BAZEL_UPDATED=true
-            fi
-
-            # bnf.bzl: same rename-or-add logic.
-            if grep -q ":${html_name}_stmt\.bnf" pkg/gen/bnf.bzl && \
-               ! grep -q ":${html_name}\.bnf" pkg/gen/bnf.bzl; then
-              echo "Renaming ${html_name}_stmt.bnf to ${html_name}.bnf in bnf.bzl"
-              sed -i "s/${html_name}_stmt\.bnf/${html_name}.bnf/" pkg/gen/bnf.bzl
-              BAZEL_UPDATED=true
-            elif ! grep -q ":${html_name}\.bnf" pkg/gen/bnf.bzl; then
-              echo "Adding ${html_name}.bnf to bnf.bzl"
-              sed -i "/analyze_stmt.bnf/a\\    \"//docs/generated/sql/bnf:${html_name}.bnf\"," pkg/gen/bnf.bzl
+            elif ! grep -q "\"${bnf_name}\"" docs/generated/sql/bnf/BUILD.bazel; then
+              echo "Adding ${bnf_name} to BUILD.bazel"
+              sed -i "/\"analyze_stmt\",/a\\    \"${bnf_name}\"," docs/generated/sql/bnf/BUILD.bazel
               BAZEL_UPDATED=true
             fi
 
-            # diagrams.bzl: the svg genrule already strips _stmt from HTML names, so
-            # this file should never have _stmt entries. Add if missing.
+            # bnf.bzl: same rename-or-add logic using bnf_name.
+            if grep -q ":${bnf_name}_stmt\.bnf" pkg/gen/bnf.bzl && \
+               ! grep -q ":${bnf_name}\.bnf" pkg/gen/bnf.bzl; then
+              echo "Renaming ${bnf_name}_stmt.bnf to ${bnf_name}.bnf in bnf.bzl"
+              sed -i "s/${bnf_name}_stmt\.bnf/${bnf_name}.bnf/" pkg/gen/bnf.bzl
+              BAZEL_UPDATED=true
+            elif ! grep -q ":${bnf_name}\.bnf" pkg/gen/bnf.bzl; then
+              echo "Adding ${bnf_name}.bnf to bnf.bzl"
+              sed -i "/analyze_stmt.bnf/a\\    \"//docs/generated/sql/bnf:${bnf_name}.bnf\"," pkg/gen/bnf.bzl
+              BAZEL_UPDATED=true
+            fi
+
+            # diagrams.bzl: the svg genrule strips _stmt from HTML output names, so this
+            # file references html_name (without _stmt). Add if missing.
             if ! grep -q ":${html_name}\.html" pkg/gen/diagrams.bzl; then
               echo "Adding ${html_name}.html to diagrams.bzl"
               sed -i "/analyze.html/a\\    \"//docs/generated/sql/bnf:${html_name}.html\"," pkg/gen/diagrams.bzl
               BAZEL_UPDATED=true
             fi
 
-            # docs.bzl: same rename-or-add logic as bnf.bzl.
-            if grep -q ":${html_name}_stmt\.bnf" pkg/gen/docs.bzl && \
-               ! grep -q ":${html_name}\.bnf" pkg/gen/docs.bzl; then
-              echo "Renaming ${html_name}_stmt.bnf to ${html_name}.bnf in docs.bzl"
-              sed -i "s/${html_name}_stmt\.bnf/${html_name}.bnf/" pkg/gen/docs.bzl
+            # docs.bzl: same rename-or-add logic as bnf.bzl, using bnf_name.
+            if grep -q ":${bnf_name}_stmt\.bnf" pkg/gen/docs.bzl && \
+               ! grep -q ":${bnf_name}\.bnf" pkg/gen/docs.bzl; then
+              echo "Renaming ${bnf_name}_stmt.bnf to ${bnf_name}.bnf in docs.bzl"
+              sed -i "s/${bnf_name}_stmt\.bnf/${bnf_name}.bnf/" pkg/gen/docs.bzl
               BAZEL_UPDATED=true
-            elif ! grep -q ":${html_name}\.bnf" pkg/gen/docs.bzl; then
-              echo "Adding ${html_name}.bnf to docs.bzl"
-              sed -i "/analyze_stmt.bnf/a\\    \"//docs/generated/sql/bnf:${html_name}.bnf\"," pkg/gen/docs.bzl
+            elif ! grep -q ":${bnf_name}\.bnf" pkg/gen/docs.bzl; then
+              echo "Adding ${bnf_name}.bnf to docs.bzl"
+              sed -i "/analyze_stmt.bnf/a\\    \"//docs/generated/sql/bnf:${bnf_name}.bnf\"," pkg/gen/docs.bzl
               BAZEL_UPDATED=true
             fi
           done
