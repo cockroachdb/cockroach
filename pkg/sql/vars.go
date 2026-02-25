@@ -1700,6 +1700,82 @@ var varGen = map[string]sessionVar{
 		GlobalDefault: globalTrue,
 	},
 
+	// See https://www.postgresql.org/docs/current/runtime-config-connection.html
+	`tcp_keepalives_idle`: {
+		Set: func(ctx context.Context, m sessionmutator.SessionDataMutator, s string) error {
+			i, err := strconv.ParseInt(s, 10, 32)
+			if err != nil || i < 0 {
+				return pgerror.Newf(pgcode.InvalidParameterValue,
+					"invalid value for parameter \"tcp_keepalives_idle\": %q", s)
+			}
+			m.SetTcpKeepalivesIdle(int32(i))
+			return nil
+		},
+		Get: func(evalCtx *extendedEvalContext, _ *kv.Txn) (string, error) {
+			return strconv.Itoa(int(evalCtx.SessionData().TcpKeepalivesIdle)), nil
+		},
+		GlobalDefault: func(sv *settings.Values) string {
+			return "0"
+		},
+		Unit: "s",
+	},
+
+	`tcp_keepalives_interval`: {
+		Set: func(ctx context.Context, m sessionmutator.SessionDataMutator, s string) error {
+			i, err := strconv.ParseInt(s, 10, 32)
+			if err != nil || i < 0 {
+				return pgerror.Newf(pgcode.InvalidParameterValue,
+					"invalid value for parameter \"tcp_keepalives_interval\": %q", s)
+			}
+			m.SetTcpKeepalivesInterval(int32(i))
+			return nil
+		},
+		Get: func(evalCtx *extendedEvalContext, _ *kv.Txn) (string, error) {
+			return strconv.Itoa(int(evalCtx.SessionData().TcpKeepalivesInterval)), nil
+		},
+		GlobalDefault: func(sv *settings.Values) string {
+			return "0"
+		},
+		Unit: "s",
+	},
+
+	`tcp_keepalives_count`: {
+		Set: func(ctx context.Context, m sessionmutator.SessionDataMutator, s string) error {
+			i, err := strconv.ParseInt(s, 10, 32)
+			if err != nil || i < 0 {
+				return pgerror.Newf(pgcode.InvalidParameterValue,
+					"invalid value for parameter \"tcp_keepalives_count\": %q", s)
+			}
+			m.SetTcpKeepalivesCount(int32(i))
+			return nil
+		},
+		Get: func(evalCtx *extendedEvalContext, _ *kv.Txn) (string, error) {
+			return strconv.Itoa(int(evalCtx.SessionData().TcpKeepalivesCount)), nil
+		},
+		GlobalDefault: func(sv *settings.Values) string {
+			return "0"
+		},
+	},
+
+	`tcp_user_timeout`: {
+		Set: func(ctx context.Context, m sessionmutator.SessionDataMutator, s string) error {
+			i, err := strconv.ParseInt(s, 10, 32)
+			if err != nil || i < 0 {
+				return pgerror.Newf(pgcode.InvalidParameterValue,
+					"invalid value for parameter \"tcp_user_timeout\": %q", s)
+			}
+			m.SetTcpUserTimeout(int32(i))
+			return nil
+		},
+		Get: func(evalCtx *extendedEvalContext, _ *kv.Txn) (string, error) {
+			return strconv.Itoa(int(evalCtx.SessionData().TcpUserTimeout)), nil
+		},
+		GlobalDefault: func(sv *settings.Values) string {
+			return "0"
+		},
+		Unit: "ms",
+	},
+
 	`statement_timeout`: {
 		GetStringVal: makeTimeoutVarGetter(`statement_timeout`),
 		Set:          stmtTimeoutVarSet,

@@ -18,6 +18,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
+	"github.com/cockroachdb/cockroach/pkg/server/tcpkeepalive"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql"
@@ -289,6 +290,12 @@ func (c *conn) sendInitialConnData(
 		_ /* err */ = c.writeErr(ctx, err, c.conn)
 		return sql.ConnectionHandler{}, err
 	}
+	sv := &sqlServer.GetExecutorConfig().Settings.SV
+	connHandler.SetOnTCPKeepAliveChange(func(
+		idle, interval time.Duration, count int, userTimeout time.Duration,
+	) {
+		tcpkeepalive.ConfigureConnKeepAlive(c.conn, idle, interval, count, userTimeout, sv)
+	})
 
 	// Send the initial "status parameters" to the client.  This
 	// overlaps partially with session variables. The client wants to

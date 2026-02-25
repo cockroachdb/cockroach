@@ -1984,6 +1984,7 @@ GO_TARGETS = [
     "//pkg/server/structlogging:structlogging_test",
     "//pkg/server/systemconfigwatcher:systemconfigwatcher",
     "//pkg/server/systemconfigwatcher:systemconfigwatcher_test",
+    "//pkg/server/tcpkeepalive:tcpkeepalive",
     "//pkg/server/telemetry:telemetry",
     "//pkg/server/telemetry:telemetry_test",
     "//pkg/server/tenantsettingswatcher:tenantsettingswatcher",

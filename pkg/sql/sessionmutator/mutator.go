@@ -102,6 +102,9 @@ type SessionDataMutatorCallbacks struct {
 	// needed because the stats writer needs to be notified of changes to the
 	// application name.
 	OnApplicationNameChange func(string)
+	// OnTCPKeepAliveSettingChange is called when any of the TCP keepalive session
+	// variables change. Zero values mean "use the cluster setting default."
+	OnTCPKeepAliveSettingChange func(idle, interval time.Duration, count int, userTimeout time.Duration)
 }
 
 // SessionDataMutatorIterator generates SessionDataMutators which allow
@@ -1125,4 +1128,35 @@ func (m *SessionDataMutator) SetOptimizerInlineAnyUnnestSubquery(val bool) {
 
 func (m *SessionDataMutator) SetUseBackupsWithIDs(val bool) {
 	m.Data.UseBackupsWithIDs = val
+}
+
+func (m *SessionDataMutator) SetTcpKeepalivesIdle(val int32) {
+	m.Data.TcpKeepalivesIdle = val
+	m.notifyTCPKeepAliveChange()
+}
+
+func (m *SessionDataMutator) SetTcpKeepalivesInterval(val int32) {
+	m.Data.TcpKeepalivesInterval = val
+	m.notifyTCPKeepAliveChange()
+}
+
+func (m *SessionDataMutator) SetTcpKeepalivesCount(val int32) {
+	m.Data.TcpKeepalivesCount = val
+	m.notifyTCPKeepAliveChange()
+}
+
+func (m *SessionDataMutator) SetTcpUserTimeout(val int32) {
+	m.Data.TcpUserTimeout = val
+	m.notifyTCPKeepAliveChange()
+}
+
+func (m *SessionDataMutator) notifyTCPKeepAliveChange() {
+	if m.OnTCPKeepAliveSettingChange != nil {
+		m.OnTCPKeepAliveSettingChange(
+			time.Duration(m.Data.TcpKeepalivesIdle)*time.Second,
+			time.Duration(m.Data.TcpKeepalivesInterval)*time.Second,
+			int(m.Data.TcpKeepalivesCount),
+			time.Duration(m.Data.TcpUserTimeout)*time.Millisecond,
+		)
+	}
 }
