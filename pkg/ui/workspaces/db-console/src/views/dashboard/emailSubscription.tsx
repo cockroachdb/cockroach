@@ -3,13 +3,13 @@
 // Use of this software is governed by the CockroachDB Software License
 // included in the /LICENSE file.
 
-import React from "react";
-import { connect } from "react-redux";
+import React, { useEffect } from "react";
+import { useDispatch, useSelector } from "react-redux";
 
 import { emailSubscriptionAlertLocalSetting } from "src/redux/alerts";
 import { signUpForEmailSubscription } from "src/redux/customAnalytics";
 import { clusterIdSelector } from "src/redux/nodes";
-import { AdminUIState } from "src/redux/state";
+import { AdminUIState, AppDispatch } from "src/redux/state";
 import {
   loadUIData,
   RELEASE_NOTES_SIGNUP_DISMISSED_KEY,
@@ -20,85 +20,61 @@ import { EmailSubscriptionForm } from "src/views/shared/components/emailSubscrip
 
 import "./emailSubscription.scss";
 
-type EmailSubscriptionProps = MapDispatchToProps & MapStateToProps;
+const EmailSubscription: React.FC = () => {
+  const dispatch: AppDispatch = useDispatch();
+  const isHiddenPanel = useSelector((state: AdminUIState) =>
+    dismissReleaseNotesSignupForm(state),
+  );
+  const clusterId = useSelector((state: AdminUIState) =>
+    clusterIdSelector(state),
+  );
 
-class EmailSubscription extends React.Component<EmailSubscriptionProps> {
-  componentDidMount() {
-    this.props.refresh();
-  }
+  useEffect(() => {
+    dispatch(loadUIData(RELEASE_NOTES_SIGNUP_DISMISSED_KEY));
+    return () => {
+      dispatch(emailSubscriptionAlertLocalSetting.set(false));
+    };
+  }, [dispatch]);
 
-  handleEmailSubscriptionSubmit = (email: string) => {
-    this.props.signUpForEmailSubscription(this.props.clusterId, email);
+  const handleEmailSubscriptionSubmit = (email: string) => {
+    dispatch(signUpForEmailSubscription(clusterId, email));
   };
 
-  handlePanelHide = () => {
-    this.props.dismissAlertMessage();
-    this.props.hidePanel();
+  const handlePanelHide = () => {
+    dispatch(emailSubscriptionAlertLocalSetting.set(false));
+    dispatch(
+      saveUIData({
+        key: RELEASE_NOTES_SIGNUP_DISMISSED_KEY,
+        value: true,
+      }),
+    );
   };
 
-  componentWillUnmount() {
-    this.props.dismissAlertMessage();
+  if (isHiddenPanel) {
+    return null;
   }
 
-  render() {
-    const { isHiddenPanel } = this.props;
-
-    if (isHiddenPanel) {
-      return null;
-    }
-
-    return (
-      <section className="section">
-        <div className="crl-email-subscription">
-          <div className="crl-email-subscription__text">
-            <div>
-              Keep up-to-date with CockroachDB software releases and best
-              practices.
-            </div>
-          </div>
-          <div className="crl-email-subscription__controls">
-            <EmailSubscriptionForm
-              onSubmit={this.handleEmailSubscriptionSubmit}
-            />
-          </div>
-          <div
-            onClick={this.handlePanelHide}
-            className="crl-email-subscription__close-button"
-          >
-            &times;
+  return (
+    <section className="section">
+      <div className="crl-email-subscription">
+        <div className="crl-email-subscription__text">
+          <div>
+            Keep up-to-date with CockroachDB software releases and best
+            practices.
           </div>
         </div>
-      </section>
-    );
-  }
-}
-
-interface MapDispatchToProps {
-  signUpForEmailSubscription: (clusterId: string, email: string) => void;
-  hidePanel: () => void;
-  refresh: () => void;
-  dismissAlertMessage: () => void;
-}
-
-const mapDispatchToProps = {
-  signUpForEmailSubscription,
-  refresh: () => loadUIData(RELEASE_NOTES_SIGNUP_DISMISSED_KEY),
-  hidePanel: () => {
-    return saveUIData({
-      key: RELEASE_NOTES_SIGNUP_DISMISSED_KEY,
-      value: true,
-    });
-  },
-  dismissAlertMessage: () => emailSubscriptionAlertLocalSetting.set(false),
+        <div className="crl-email-subscription__controls">
+          <EmailSubscriptionForm onSubmit={handleEmailSubscriptionSubmit} />
+        </div>
+        <div
+          onClick={handlePanelHide}
+          className="crl-email-subscription__close-button"
+        >
+          &times;
+        </div>
+      </div>
+    </section>
+  );
 };
 
-interface MapStateToProps {
-  isHiddenPanel: boolean;
-  clusterId: string;
-}
-const mapStateToProps = (state: AdminUIState) => ({
-  isHiddenPanel: dismissReleaseNotesSignupForm(state),
-  clusterId: clusterIdSelector(state),
-});
-
-export default connect(mapStateToProps, mapDispatchToProps)(EmailSubscription);
+export default EmailSubscription;
