@@ -295,3 +295,129 @@ dequeue r=req5
 num=1
  lock: "a"
   holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, ts: 12.000000000,0, info: repl [Intent]
+
+# -------------------------------------------------------------
+# When a lock is discovered for a transaction that has queued
+# locking requests, discoveredLock calls releaseLockingRequestsFromTxn
+# to remove those requests. After this removal, remaining active
+# waiters that were only conflicting with the removed requests
+# (not with the lock holder) must be re-evaluated and released
+# if they no longer conflict.
+#
+# Setup: txn1 claims an Exclusive lock on key "a" (inactive)
+#        txn2 queues a Shared request behind txn1 (active, because
+#        Shared conflicts with Exclusive)
+#
+# Test:  Discover a Shared lock from txn1 on key "a".
+#        txn1's queued request is removed.
+#        txn2's Shared request should stop actively waiting because
+#        Shared does not conflict with the Shared lock holder.
+# -------------------------------------------------------------
+
+new-lock-table maxlocks=10000
+----
+
+new-txn txn=txn1 ts=10 epoch=0
+----
+
+new-txn txn=txn2 ts=10 epoch=0
+----
+
+new-txn txn=txn3 ts=10 epoch=0
+----
+
+# txn3 acquires an Exclusive lock on key "a".
+new-request r=req1 txn=txn3 ts=10 spans=exclusive@a
+----
+
+scan r=req1
+----
+start-waiting: false
+
+acquire r=req1 k=a durability=u strength=exclusive
+----
+num=1
+ lock: "a"
+  holder: txn: 00000000-0000-0000-0000-000000000003 epoch: 0, iso: Serializable, ts: 10.000000000,0, info: unrepl [(str: Exclusive seq: 0)]
+
+dequeue r=req1
+----
+num=1
+ lock: "a"
+  holder: txn: 00000000-0000-0000-0000-000000000003 epoch: 0, iso: Serializable, ts: 10.000000000,0, info: unrepl [(str: Exclusive seq: 0)]
+
+# txn1 queues an Exclusive request on key "a", waiting on txn3's lock.
+new-request r=req2 txn=txn1 ts=10 spans=exclusive@a
+----
+
+scan r=req2
+----
+start-waiting: true
+
+# txn2 queues a Shared request on key "a", waiting on txn3's Exclusive lock.
+new-request r=req3 txn=txn2 ts=10 spans=shared@a
+----
+
+scan r=req3
+----
+start-waiting: true
+
+print
+----
+num=1
+ lock: "a"
+  holder: txn: 00000000-0000-0000-0000-000000000003 epoch: 0, iso: Serializable, ts: 10.000000000,0, info: unrepl [(str: Exclusive seq: 0)]
+   queued locking requests:
+    active: true req: 2, strength: Exclusive, txn: 00000000-0000-0000-0000-000000000001
+    active: true req: 3, strength: Shared, txn: 00000000-0000-0000-0000-000000000002
+
+# txn3's lock is released; txn1 gets claim (inactive), txn2 now waits on txn1's
+# Exclusive claim.
+release txn=txn3 span=a
+----
+num=1
+ lock: "a"
+   queued locking requests:
+    active: false req: 2, strength: Exclusive, txn: 00000000-0000-0000-0000-000000000001
+    active: true req: 3, strength: Shared, txn: 00000000-0000-0000-0000-000000000002
+
+guard-state r=req2
+----
+new: state=doneWaiting
+
+guard-state r=req3
+----
+new: state=waitFor txn=txn1 key="a" held=false guard-strength=Shared
+
+# Now a Shared lock from txn1 is discovered on key "a". This causes:
+# 1. txn1 is added as a Shared lock holder
+# 2. txn1's queued Exclusive request (req2) is removed from the queue
+# 3. txn2's Shared request (req3) should be released because Shared does not
+#    conflict with the Shared lock holder.
+add-discovered r=req3 k=a txn=txn1 strength=shared
+----
+num=1
+ lock: "a"
+  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, info: repl [Shared]
+   queued locking requests:
+    active: false req: 3, strength: Shared, txn: 00000000-0000-0000-0000-000000000002
+
+# req3 should be done waiting -- its Shared request does not conflict with
+# txn1's Shared lock.
+guard-state r=req3
+----
+new: state=doneWaiting
+
+dequeue r=req2
+----
+num=1
+ lock: "a"
+  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, info: repl [Shared]
+   queued locking requests:
+    active: false req: 3, strength: Shared, txn: 00000000-0000-0000-0000-000000000002
+
+dequeue r=req3
+----
+num=1
+ lock: "a"
+  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, info: repl [Shared]

@@ -3166,7 +3166,7 @@ func (kl *keyLocks) acquireLock(
 	//
 	// TODO(arul): Replace the call to releaseLockingRequestsFromTxn with
 	// recomputeWaitQueue, and push the responsibility of re-ordering the wait
-	// queue into there. Ditto for the call in addDiscoveredLock.
+	// queue into there. Ditto for the call in discoveredLock.
 	kl.releaseLockingRequestsFromTxn(&acq.Txn)
 
 	// Sanity check that there aren't any waiting readers on this lock. There
@@ -3279,13 +3279,7 @@ func (kl *keyLocks) discoveredLock(
 		e := kl.heldBy[foundLock.Txn.ID]
 		tl = e.Value
 
-		beforeTs := tl.writeTS()
-
 		tl.replicatedInfo.acquire(foundLock.Strength, foundLock.Txn.WriteTimestamp)
-
-		if beforeTs.Less(tl.writeTS()) {
-			kl.recomputeWaitQueues(st)
-		}
 		// TODO(arul): If the discovered lock indicates a newer epoch than what's
 		// being tracked, should we clear out unreplicatedLockInfo here?
 	} else {
@@ -3340,8 +3334,13 @@ func (kl *keyLocks) discoveredLock(
 	// If there are waiting requests from the same txn, they no longer need to wait.
 	kl.releaseLockingRequestsFromTxn(&foundLock.Txn)
 
-	// Active waiters need to be told about who they are waiting for.
-	kl.informActiveWaiters()
+	// Recompute wait queues to account for all state changes above: the lock
+	// holder's timestamp may have advanced, the holder's queued requests were
+	// removed (and active waiters that were only conflicting with them may no
+	// longer need to wait), and the discovering request may have been enqueued.
+	// recomputeWaitQueues also calls informActiveWaiters, letting remaining
+	// active waiters know who they are waiting for.
+	kl.recomputeWaitQueues(st)
 	return nil
 }
 
@@ -4175,16 +4174,12 @@ func (kl *keyLocks) verify(st *cluster.Settings) error {
 				}
 			}
 		}
-		// TODO(arul): uncomment once 115694 is resolved. This validation has been
-		// regularly failing on KVNemesis -- for now, we disable it to ensure legit
-		// bugs aren't drowned out by the noise.
-		// validation
-		//if !conflicts {
-		//	return errors.AssertionFailedf(
-		//		"queued locking request %d does not conflict with holder/waiting requests %s",
-		//		qlr.guard.seqNum, kl,
-		//	)
-		//}
+		if !conflicts {
+			return errors.AssertionFailedf(
+				"queued locking request %d does not conflict with holder/waiting requests %s",
+				qlr.guard.seqNum, kl,
+			)
+		}
 	}
 
 	// 4. Assert some invariants around the queuedLockingRequests wait queue if
