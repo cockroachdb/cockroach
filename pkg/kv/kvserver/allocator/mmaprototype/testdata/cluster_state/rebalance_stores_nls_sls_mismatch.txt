@@ -99,7 +99,7 @@ rebalance-stores store-id=1
 [mmaid=1] load summary for dim=ByteSize (s1): loadNormal, reason: load is within 5% of mean [load=0 meanLoad=0 fractionUsed=0.00% meanUtil=0.00% capacity=1000000000]
 [mmaid=1] load summary for dim=CPURate (n1): overloadSlow, reason: fractionUsed < 75% [load=7000000000 meanLoad=4000000000 fractionUsed=43.75% meanUtil=33.33% capacity=16000000000]
 [mmaid=1] considering replica-transfer r1 from s1: store load [cpu:1s/s, write-bandwidth:50 MB/s, byte-size:0 B]
-[mmaid=1] candidates are:
+[mmaid=1] candidates for r1:
 [mmaid=1] result(failed): no candidates found for r1 after exclusions
 [mmaid=1] start processing shedding store s2: cpu node load overloadSlow, store load overloadSlow, worst dim CPURate
 [mmaid=1] no top-K[CPURate] ranges found for s2 with lease on local s1

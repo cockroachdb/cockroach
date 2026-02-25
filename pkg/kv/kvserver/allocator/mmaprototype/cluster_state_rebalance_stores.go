@@ -556,9 +556,13 @@ func (re *rebalanceEnv) rebalanceReplicas(
 		cands, ssSLS := re.computeCandidatesForReplicaTransfer(ctx, conj, existingReplicas, re.scratch.postMeansExclusions, store.StoreID, re.passObs)
 		log.KvDistribution.VEventf(ctx, 2, "considering replica-transfer r%v from s%v: store load %v",
 			rangeID, store.StoreID, ss.adjusted.load)
-		log.KvDistribution.VEventf(ctx, 3, "candidates are:")
-		for _, c := range cands.candidates {
-			log.KvDistribution.VEventf(ctx, 3, " s%d: %s", c.StoreID, c.storeLoadSummary)
+		if log.ExpensiveLogEnabled(ctx, 3) {
+			var buf redact.StringBuilder
+			buf.Printf("candidates for r%d:", rangeID)
+			for _, c := range cands.candidates {
+				buf.Printf("\n\ts%d: %s", c.StoreID, c.storeLoadSummary)
+			}
+			log.KvDistribution.VEventf(ctx, 3, "%s", buf.RedactableString())
 		}
 
 		if len(cands.candidates) == 0 {
