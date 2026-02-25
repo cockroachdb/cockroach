@@ -50,7 +50,7 @@ Schema change plan for rolling back ALTER TABLE multiregion_db.public.t SET LOCA
       │    │    ├── PUBLIC                → ABSENT      IndexColumn:{DescID: 108 (t), ColumnID: 5 (crdb_region-), IndexID: 10 (t_pkey-)}
       │    │    ├── PUBLIC                → ABSENT      IndexColumn:{DescID: 108 (t), ColumnID: 5 (crdb_region-), IndexID: 11}
       │    │    ├── WRITE_ONLY            → ABSENT      ColumnNotNull:{DescID: 108 (t), ColumnID: 5 (crdb_region-), IndexID: 10 (t_pkey-)}
-      │    │    ├── BACKFILL_ONLY         → ABSENT      SecondaryIndex:{DescID: 108 (t), IndexID: 4 (t_j_key-), ConstraintID: 3, TemporaryIndexID: 5, SourceIndexID: 8 (t_pkey-), RecreateSourceIndexID: 2, RecreateTargetIndexID: 8}
+      │    │    ├── BACKFILL_ONLY         → ABSENT      SecondaryIndex:{DescID: 108 (t), IndexID: 4 (t_j_key-), ConstraintID: 3, TemporaryIndexID: 5, SourceIndexID: 8 (t_pkey-), RecreateSourceIndexID: 2, RecreateTargetIndexID: 10}
       │    │    ├── PUBLIC                → ABSENT      IndexPartitioning:{DescID: 108 (t), IndexID: 4 (t_j_key-)}
       │    │    ├── PUBLIC                → ABSENT      IndexColumn:{DescID: 108 (t), ColumnID: 5 (crdb_region-), IndexID: 4 (t_j_key-)}
       │    │    ├── PUBLIC                → ABSENT      IndexColumn:{DescID: 108 (t), ColumnID: 3 (j), IndexID: 4 (t_j_key-)}
@@ -60,7 +60,7 @@ Schema change plan for rolling back ALTER TABLE multiregion_db.public.t SET LOCA
       │    │    ├── PUBLIC                → ABSENT      IndexColumn:{DescID: 108 (t), ColumnID: 5 (crdb_region-), IndexID: 5}
       │    │    ├── PUBLIC                → ABSENT      IndexColumn:{DescID: 108 (t), ColumnID: 3 (j), IndexID: 5}
       │    │    ├── PUBLIC                → ABSENT      IndexColumn:{DescID: 108 (t), ColumnID: 1 (pk), IndexID: 5}
-      │    │    ├── BACKFILL_ONLY         → ABSENT      SecondaryIndex:{DescID: 108 (t), IndexID: 6 (idx-), ConstraintID: 5, TemporaryIndexID: 7, SourceIndexID: 8 (t_pkey-), RecreateSourceIndexID: 3, RecreateTargetIndexID: 8}
+      │    │    ├── BACKFILL_ONLY         → ABSENT      SecondaryIndex:{DescID: 108 (t), IndexID: 6 (idx-), ConstraintID: 5, TemporaryIndexID: 7, SourceIndexID: 8 (t_pkey-), RecreateSourceIndexID: 3, RecreateTargetIndexID: 10}
       │    │    ├── PUBLIC                → ABSENT      IndexPartitioning:{DescID: 108 (t), IndexID: 6 (idx-)}
       │    │    ├── PUBLIC                → ABSENT      IndexColumn:{DescID: 108 (t), ColumnID: 5 (crdb_region-), IndexID: 6 (idx-)}
       │    │    ├── PUBLIC                → ABSENT      IndexColumn:{DescID: 108 (t), ColumnID: 2 (i), IndexID: 6 (idx-)}

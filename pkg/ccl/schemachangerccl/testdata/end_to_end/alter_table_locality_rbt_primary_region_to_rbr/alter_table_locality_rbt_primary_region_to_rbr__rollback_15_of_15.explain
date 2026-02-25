@@ -42,7 +42,7 @@ Schema change plan for rolling back ALTER TABLE multiregion_db.public.t SET LOCA
       │    │    ├── WRITE_ONLY            → ABSENT      ColumnNotNull:{DescID: 108 (t), ColumnID: 4 (crdb_region-), IndexID: 10 (t_pkey-)}
       │    │    ├── PUBLIC                → ABSENT      IndexPartitioning:{DescID: 108 (t), IndexID: 10 (t_pkey-)}
       │    │    ├── TRANSIENT_ABSENT      → ABSENT      IndexPartitioning:{DescID: 108 (t), IndexID: 11}
-      │    │    ├── WRITE_ONLY            → DELETE_ONLY SecondaryIndex:{DescID: 108 (t), IndexID: 4 (t_j_key-), ConstraintID: 3, TemporaryIndexID: 5, SourceIndexID: 8 (t_pkey-), RecreateSourceIndexID: 2, RecreateTargetIndexID: 8}
+      │    │    ├── WRITE_ONLY            → DELETE_ONLY SecondaryIndex:{DescID: 108 (t), IndexID: 4 (t_j_key-), ConstraintID: 3, TemporaryIndexID: 5, SourceIndexID: 8 (t_pkey-), RecreateSourceIndexID: 2, RecreateTargetIndexID: 10}
       │    │    ├── PUBLIC                → ABSENT      IndexPartitioning:{DescID: 108 (t), IndexID: 4 (t_j_key-)}
       │    │    ├── PUBLIC                → ABSENT      IndexColumn:{DescID: 108 (t), ColumnID: 4 (crdb_region-), IndexID: 4 (t_j_key-)}
       │    │    ├── PUBLIC                → ABSENT      IndexColumn:{DescID: 108 (t), ColumnID: 3 (j), IndexID: 4 (t_j_key-)}
@@ -52,7 +52,7 @@ Schema change plan for rolling back ALTER TABLE multiregion_db.public.t SET LOCA
       │    │    ├── PUBLIC                → ABSENT      IndexColumn:{DescID: 108 (t), ColumnID: 4 (crdb_region-), IndexID: 5}
       │    │    ├── PUBLIC                → ABSENT      IndexColumn:{DescID: 108 (t), ColumnID: 3 (j), IndexID: 5}
       │    │    ├── PUBLIC                → ABSENT      IndexColumn:{DescID: 108 (t), ColumnID: 1 (pk), IndexID: 5}
-      │    │    ├── WRITE_ONLY            → DELETE_ONLY SecondaryIndex:{DescID: 108 (t), IndexID: 6 (idx-), ConstraintID: 5, TemporaryIndexID: 7, SourceIndexID: 8 (t_pkey-), RecreateSourceIndexID: 3, RecreateTargetIndexID: 8}
+      │    │    ├── WRITE_ONLY            → DELETE_ONLY SecondaryIndex:{DescID: 108 (t), IndexID: 6 (idx-), ConstraintID: 5, TemporaryIndexID: 7, SourceIndexID: 8 (t_pkey-), RecreateSourceIndexID: 3, RecreateTargetIndexID: 10}
       │    │    ├── PUBLIC                → ABSENT      IndexPartitioning:{DescID: 108 (t), IndexID: 6 (idx-)}
       │    │    ├── PUBLIC                → ABSENT      IndexColumn:{DescID: 108 (t), ColumnID: 4 (crdb_region-), IndexID: 6 (idx-)}
       │    │    ├── PUBLIC                → ABSENT      IndexColumn:{DescID: 108 (t), ColumnID: 2 (i), IndexID: 6 (idx-)}
@@ -118,8 +118,8 @@ Schema change plan for rolling back ALTER TABLE multiregion_db.public.t SET LOCA
       │    │    ├── PUBLIC      → ABSENT      IndexColumn:{DescID: 108 (t), ColumnID: 3 (j), IndexID: 8 (t_pkey-)}
       │    │    ├── DELETE_ONLY → ABSENT      PrimaryIndex:{DescID: 108 (t), IndexID: 10 (t_pkey-), ConstraintID: 9, TemporaryIndexID: 11, SourceIndexID: 8 (t_pkey-)}
       │    │    ├── PUBLIC      → ABSENT      IndexColumn:{DescID: 108 (t), ColumnID: 4 (crdb_region-), IndexID: 8 (t_pkey-)}
-      │    │    ├── DELETE_ONLY → ABSENT      SecondaryIndex:{DescID: 108 (t), IndexID: 4 (t_j_key-), ConstraintID: 3, TemporaryIndexID: 5, SourceIndexID: 8 (t_pkey-), RecreateSourceIndexID: 2, RecreateTargetIndexID: 8}
-      │    │    └── DELETE_ONLY → ABSENT      SecondaryIndex:{DescID: 108 (t), IndexID: 6 (idx-), ConstraintID: 5, TemporaryIndexID: 7, SourceIndexID: 8 (t_pkey-), RecreateSourceIndexID: 3, RecreateTargetIndexID: 8}
+      │    │    ├── DELETE_ONLY → ABSENT      SecondaryIndex:{DescID: 108 (t), IndexID: 4 (t_j_key-), ConstraintID: 3, TemporaryIndexID: 5, SourceIndexID: 8 (t_pkey-), RecreateSourceIndexID: 2, RecreateTargetIndexID: 10}
+      │    │    └── DELETE_ONLY → ABSENT      SecondaryIndex:{DescID: 108 (t), IndexID: 6 (idx-), ConstraintID: 5, TemporaryIndexID: 7, SourceIndexID: 8 (t_pkey-), RecreateSourceIndexID: 3, RecreateTargetIndexID: 10}
       │    └── 12 Mutation operations
       │         ├── MakeIndexAbsent {"IndexID":10,"TableID":108}
       │         ├── MakeIndexAbsent {"IndexID":4,"TableID":108}
