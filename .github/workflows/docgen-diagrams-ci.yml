@@ -591,30 +591,35 @@ jobs:
           mkdir -p generated-diagrams/bnf
           mkdir -p generated-diagrams/grammar_svg
 
-          # Copy only BNF files that are new or differ from generated-diagrams master.
-          # Copying all BNF files unconditionally causes unrelated diagrams (e.g.
-          # begin_stmt.bnf) to appear in every sync PR simply because they were
-          # regenerated but were never merged into generated-diagrams master.
-          for bnf_file in artifacts/*.bnf; do
-            [[ -f "$bnf_file" ]] || continue
-            filename=$(basename "$bnf_file")
-            existing="generated-diagrams/bnf/$filename"
-            if [[ ! -f "$existing" ]] || ! diff -q "$bnf_file" "$existing" > /dev/null 2>&1; then
-              cp "$bnf_file" generated-diagrams/bnf/
-              echo "Syncing BNF: $filename"
-            fi
-          done
+          # Only sync BNF and HTML files for diagrams that actually changed.
+          # changed_diagram_list contains the HTML filenames that differ from
+          # generated-diagrams master (e.g. "show_constraints.html"). Syncing
+          # all generated files causes unrelated diagrams like begin_stmt.bnf
+          # to appear in every PR — docgen regenerates all BNF files on every
+          # run, but most are identical to what is already in generated-diagrams.
+          CHANGED_LIST="${{ needs.generate-diagrams.outputs.changed_diagram_list }}"
 
-          # Copy only HTML files that are new or differ from generated-diagrams master.
-          for html_file in artifacts/*.html; do
-            [[ -f "$html_file" ]] || continue
-            filename=$(basename "$html_file")
-            existing="generated-diagrams/grammar_svg/$filename"
-            if [[ ! -f "$existing" ]] || ! diff -q "$html_file" "$existing" > /dev/null 2>&1; then
-              cp "$html_file" generated-diagrams/grammar_svg/
-              echo "Syncing HTML: $filename"
-            fi
-          done
+          if [[ -z "$CHANGED_LIST" ]]; then
+            echo "No changed diagrams to sync."
+          else
+            for html_filename in $CHANGED_LIST; do
+              # Derive diagram name (strip .html) to find the matching BNF file.
+              diagram_name="${html_filename%.html}"
+              bnf_filename="${diagram_name}.bnf"
+
+              # Sync BNF file if it exists in artifacts.
+              if [[ -f "artifacts/${bnf_filename}" ]]; then
+                cp "artifacts/${bnf_filename}" generated-diagrams/bnf/
+                echo "Syncing BNF: ${bnf_filename}"
+              fi
+
+              # Sync HTML file.
+              if [[ -f "artifacts/${html_filename}" ]]; then
+                cp "artifacts/${html_filename}" generated-diagrams/grammar_svg/
+                echo "Syncing HTML: ${html_filename}"
+              fi
+            done
+          fi
 
           # Note: manifest.json and PNGs are NOT synced to generated-diagrams
           # PNGs are pushed to a separate preview branch for PR comment images only
