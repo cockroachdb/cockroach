@@ -58,6 +58,10 @@ type BulkSink interface {
 	// to external storage. For legacy BulkAdder sinks, this always returns nil.
 	// Calling this method clears the internal manifest buffer.
 	ConsumeFlushManifests() []jobspb.BulkSSTManifest
+
+	// IsEmpty returns true if the sink has no buffered data waiting to be
+	// flushed.
+	IsEmpty() bool
 }
 
 // BulkAdderSink wraps a kvserverbase.BulkAdder to implement the BulkSink
@@ -161,6 +165,11 @@ func (s *SSTSink) SetOnFlush(fn func(summary kvpb.BulkOpSummary)) {
 			s.onFlush(summary)
 		}
 	})
+}
+
+// IsEmpty implements the BulkSink interface.
+func (s *SSTSink) IsEmpty() bool {
+	return s.writer.IsEmpty()
 }
 
 // ConsumeFlushManifests implements the BulkSink interface.

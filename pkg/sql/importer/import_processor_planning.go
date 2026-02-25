@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/backfill"
 	"github.com/cockroachdb/cockroach/pkg/sql/bulkmerge"
 	"github.com/cockroachdb/cockroach/pkg/sql/bulksst"
 	"github.com/cockroachdb/cockroach/pkg/sql/bulkutil"
@@ -38,6 +39,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
+	gogotypes "github.com/gogo/protobuf/types"
 )
 
 var replanThreshold = settings.RegisterFloatSetting(
@@ -202,6 +204,8 @@ func distImport(
 	rowProgress := make([]int64, len(from))
 	fractionProgress := make([]uint32, len(from))
 
+	var manifestBuf *backfill.SSTManifestBuffer
+
 	updateJobProgress := func() error {
 		return job.DebugNameNoTxn(importProgressDebugName).FractionProgressed(ctx, func(
 			ctx context.Context, details jobspb.ProgressDetails,
@@ -220,9 +224,37 @@ func distImport(
 			accumulatedBulkSummary.Lock()
 			prog.Summary = accumulatedBulkSummary.BulkOpSummary.DeepCopy()
 			accumulatedBulkSummary.Unlock()
+
+			// Persist complete SST manifest snapshot for distributed merge, following
+			// the index backfiller pattern. This replaces the entire list rather than
+			// appending deltas, ensuring job state is always complete and eliminating
+			// the timing window for orphaned SSTs.
+			if useDistributedMerge && manifestBuf != nil {
+				if manifestBuf.Dirty() {
+					prog.CompletedMapWork = manifestBuf.SnapshotAndMarkClean()
+				} else {
+					prog.CompletedMapWork = manifestBuf.Snapshot()
+				}
+			}
+
 			return overall / float32(len(from))
 		},
 		)
+	}
+
+	var res kvpb.BulkOpSummary
+
+	// Restore SST metadata checkpointed from prior attempts. On the first
+	// attempt these are empty. On retries, they contain manifests from files
+	// written in previous attempts, ensuring already-written SSTs are not lost.
+	processorOutput := make([]bulksst.SSTFiles, 0)
+	var resumeManifests []jobspb.BulkSSTManifest
+	if importProgress := job.Progress().Details.(*jobspb.Progress_Import).Import; importProgress != nil && len(importProgress.CompletedMapWork) > 0 {
+		resumeManifests = importProgress.CompletedMapWork
+		processorOutput = append(processorOutput, bulksst.ManifestsToSSTFiles(importProgress.CompletedMapWork))
+	}
+	if useDistributedMerge {
+		manifestBuf = backfill.NewSSTManifestBuffer(resumeManifests)
 	}
 
 	metaFn := func(ctx context.Context, meta *execinfrapb.ProducerMetadata) error {
@@ -238,6 +270,21 @@ func distImport(
 			accumulatedBulkSummary.Add(meta.BulkProcessorProgress.BulkSummary)
 			accumulatedBulkSummary.Unlock()
 
+			// Accumulate SST metadata emitted by processors during distributed merge,
+			// following the index backfiller pattern.
+			var mapProgress execinfrapb.BulkMapProgress
+			if gogotypes.Is(&meta.BulkProcessorProgress.ProgressDetails, &mapProgress) {
+				if err := gogotypes.UnmarshalAny(&meta.BulkProcessorProgress.ProgressDetails, &mapProgress); err != nil {
+					return err
+				}
+				if len(mapProgress.SSTManifests) > 0 {
+					if manifestBuf != nil {
+						manifestBuf.Append(mapProgress.SSTManifests)
+					}
+					processorOutput = append(processorOutput, bulksst.ManifestsToSSTFiles(mapProgress.SSTManifests))
+				}
+			}
+
 			// For distributed merge, record storage prefix for nodes that report progress
 			if useDistributedMerge && meta.BulkProcessorProgress.NodeID != 0 {
 				prefix := fmt.Sprintf("nodelocal://%d/", meta.BulkProcessorProgress.NodeID)
@@ -252,22 +299,12 @@ func distImport(
 		}
 		return nil
 	}
-
-	var res kvpb.BulkOpSummary
-	var processorOutput []bulksst.SSTFiles
 	rowResultWriter := sql.NewCallbackResultWriter(func(ctx context.Context, row tree.Datums) error {
 		var counts kvpb.BulkOpSummary
 		if err := protoutil.Unmarshal([]byte(*row[0].(*tree.DBytes)), &counts); err != nil {
 			return err
 		}
 		res.Add(counts)
-		if len(row) == 3 {
-			var sstFiles bulksst.SSTFiles
-			if err := protoutil.Unmarshal([]byte(*row[2].(*tree.DBytes)), &sstFiles); err != nil {
-				return err
-			}
-			processorOutput = append(processorOutput, sstFiles)
-		}
 		return nil
 	})
 
@@ -406,6 +443,10 @@ func makeImportReaderSpecs(
 	inputSpecs := make([]*execinfrapb.ReadImportDataSpec, 0, numSQLInstances*procsPerNode)
 	progress := job.Progress()
 	importProgress := progress.GetImport()
+	var distributedMergeFilePrefix string
+	if details.UseDistributedMerge {
+		distributedMergeFilePrefix = bulkutil.NewDistMergePaths(job.ID()).MapPath()
+	}
 	for i, input := range from {
 		// Round robin assign CSV files to processors. Files 0 through len(specs)-1
 		// creates the spec. Future files just add themselves to the Uris.
@@ -420,13 +461,14 @@ func makeImportReaderSpecs(
 					JobID: job.ID(),
 					Slot:  int32(i),
 				},
-				WalltimeNanos:         walltime,
-				Uri:                   make(map[int32]string),
-				ResumePos:             make(map[int32]int64),
-				UserProto:             user.EncodeProto(),
-				DatabasePrimaryRegion: details.DatabasePrimaryRegion,
-				InitialSplits:         int32(initialSplitsPerProc),
-				UseDistributedMerge:   details.UseDistributedMerge,
+				WalltimeNanos:              walltime,
+				Uri:                        make(map[int32]string),
+				ResumePos:                  make(map[int32]int64),
+				UserProto:                  user.EncodeProto(),
+				DatabasePrimaryRegion:      details.DatabasePrimaryRegion,
+				InitialSplits:              int32(initialSplitsPerProc),
+				UseDistributedMerge:        details.UseDistributedMerge,
+				DistributedMergeFilePrefix: distributedMergeFilePrefix,
 			}
 			inputSpecs = append(inputSpecs, spec)
 		}
