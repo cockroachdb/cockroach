@@ -12,6 +12,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/models/provisionings"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
+	"github.com/cockroachdb/errors/oserror"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -419,7 +420,7 @@ func TestParseGCSBucketTemplate(t *testing.T) {
 
 	// The test uses a relative path to the test-data directory.
 	// Skip if the directory doesn't exist (e.g., in CI without the full repo).
-	if _, err := os.Stat(templateDir); os.IsNotExist(err) {
+	if _, err := os.Stat(templateDir); oserror.IsNotExist(err) {
 		skip.IgnoreLint(t, "test-data/gcs-bucket not found, skipping")
 	}
 

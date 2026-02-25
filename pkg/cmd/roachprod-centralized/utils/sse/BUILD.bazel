@@ -13,6 +13,7 @@ go_test(
     srcs = ["stream_test.go"],
     embed = [":sse"],
     deps = [
+        "//pkg/util/httputil",
         "@com_github_gin_gonic_gin//:gin",
         "@com_github_stretchr_testify//assert",
         "@com_github_stretchr_testify//require",

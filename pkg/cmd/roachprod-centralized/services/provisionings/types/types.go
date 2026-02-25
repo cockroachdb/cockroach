@@ -1,4 +1,4 @@
-// Copyright 2025 The Cockroach Authors.
+// Copyright 2026 The Cockroach Authors.
 //
 // Use of this software is governed by the CockroachDB Software License
 // included in the /LICENSE file.
@@ -43,7 +43,7 @@ var (
 	ErrEnvironmentNotFound       = utils.NewPublicError(fmt.Errorf("environment not found"))
 	ErrInvalidState              = utils.NewPublicError(fmt.Errorf("invalid provisioning state for this operation"))
 	ErrTaskInProgress            = utils.NewPublicError(fmt.Errorf("a task is in progress for this provisioning"))
-	ErrInvalidLifetime           = utils.NewPublicError(fmt.Errorf("invalid lifetime format; must be a duration string like '1h', '30m', etc."))
+	ErrInvalidLifetime           = utils.NewPublicError(fmt.Errorf("invalid lifetime format; must be a duration string ('1h', '30m', etc.)"))
 	ErrIdentifierCollision       = fmt.Errorf("identifier collision after max retries")
 )
 

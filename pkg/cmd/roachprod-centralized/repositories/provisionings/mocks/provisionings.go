@@ -187,9 +187,9 @@ func (_m *IProvisioningsRepository) UpdateProvisioning(
 // The first argument is typically a *testing.T value.
 func NewIProvisioningsRepository(
 	t interface {
-	mock.TestingT
-	Cleanup(func())
-},
+		mock.TestingT
+		Cleanup(func())
+	},
 ) *IProvisioningsRepository {
 	mock := &IProvisioningsRepository{}
 	mock.Mock.Test(t)

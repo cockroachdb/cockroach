@@ -1,4 +1,4 @@
-// Copyright 2025 The Cockroach Authors.
+// Copyright 2026 The Cockroach Authors.
 //
 // Use of this software is governed by the CockroachDB Software License
 // included in the /LICENSE file.
@@ -7,15 +7,15 @@ package logstore
 
 import (
 	"context"
-	"sync"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/utils/logger"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 )
 
 // MemoryLogStore stores log entries in memory. Safe for concurrent use.
 type MemoryLogStore struct {
-	mu       sync.Mutex
+	mu       syncutil.Mutex
 	logs     map[uuid.UUID][]logger.LogEntry
 	complete map[uuid.UUID]bool
 }

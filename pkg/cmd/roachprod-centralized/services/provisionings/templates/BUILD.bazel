@@ -18,6 +18,7 @@ go_library(
     deps = [
         "//pkg/cmd/roachprod-centralized/models/provisionings",
         "//pkg/cmd/roachprod-centralized/utils/logger",
+        "//pkg/util/yamlutil",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_hashicorp_hcl_v2//:hcl",
         "@com_github_hashicorp_hcl_v2//ext/typeexpr",
@@ -26,7 +27,6 @@ go_library(
         "@com_github_zclconf_go_cty//cty/convert",
         "@com_github_zclconf_go_cty//cty/json",
         "@com_google_cloud_go_storage//:storage",
-        "@in_gopkg_yaml_v2//:yaml_v2",
         "@org_golang_google_api//iterator",
     ],
 )
@@ -44,6 +44,7 @@ go_test(
         "//pkg/cmd/roachprod-centralized/models/provisionings",
         "//pkg/cmd/roachprod-centralized/utils/logger",
         "//pkg/testutils/skip",
+        "@com_github_cockroachdb_errors//oserror",
         "@com_github_stretchr_testify//assert",
         "@com_github_stretchr_testify//require",
     ],

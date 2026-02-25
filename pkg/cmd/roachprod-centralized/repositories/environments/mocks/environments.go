@@ -268,9 +268,9 @@ func (_m *IEnvironmentsRepository) UpdateVariable(
 // The first argument is typically a *testing.T value.
 func NewIEnvironmentsRepository(
 	t interface {
-	mock.TestingT
-	Cleanup(func())
-},
+		mock.TestingT
+		Cleanup(func())
+	},
 ) *IEnvironmentsRepository {
 	mock := &IEnvironmentsRepository{}
 	mock.Mock.Test(t)

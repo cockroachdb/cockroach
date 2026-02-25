@@ -13,6 +13,8 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/services/provisionings/ssh"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/utils/logger"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 )
 
@@ -66,9 +68,9 @@ func (e *RunCommandExecutor) runWithRetry(
 		return errors.Wrapf(err, "parse retry timeout %q", hctx.Declaration.Retry.Timeout)
 	}
 
-	deadline := time.Now().Add(timeout)
+	deadline := timeutil.Now().Add(timeout)
 	sem := make(chan struct{}, defaultMaxConcurrency)
-	var mu sync.Mutex
+	var mu syncutil.Mutex
 	var finalErrs []error
 
 	var wg sync.WaitGroup
@@ -135,7 +137,7 @@ func (e *RunCommandExecutor) retryOnMachine(
 			return nil
 		}
 
-		if time.Now().After(deadline) {
+		if timeutil.Now().After(deadline) {
 			l.Info("hook: machine timed out",
 				slog.String("hook", hookName),
 				slog.String("machine", addr),
@@ -180,7 +182,7 @@ func runOnMachines(
 	hookName string,
 ) error {
 	sem := make(chan struct{}, maxConcurrency)
-	var mu sync.Mutex
+	var mu syncutil.Mutex
 	var errs []error
 
 	var wg sync.WaitGroup

@@ -11,7 +11,8 @@ import (
 	"log/slog"
 	"os"
 	"strings"
-	"time"
+
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
 
 var (
@@ -153,7 +154,7 @@ func (w *LineWriter) writeToSink(line string) {
 		return
 	}
 	entry := LogEntry{
-		Timestamp: time.Now().UTC(),
+		Timestamp: timeutil.Now().UTC(),
 		Level:     w.level.String(),
 		Message:   line,
 	}

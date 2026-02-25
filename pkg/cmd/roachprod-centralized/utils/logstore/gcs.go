@@ -1,4 +1,4 @@
-// Copyright 2025 The Cockroach Authors.
+// Copyright 2026 The Cockroach Authors.
 //
 // Use of this software is governed by the CockroachDB Software License
 // included in the /LICENSE file.
@@ -13,11 +13,11 @@ import (
 	"io"
 	"sort"
 	"strings"
-	"sync"
 	"time"
 
 	"cloud.google.com/go/storage"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/utils/logger"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	"google.golang.org/api/iterator"
@@ -204,7 +204,7 @@ type gcsSink struct {
 	taskID uuid.UUID
 	prefix string
 
-	mu       sync.Mutex
+	mu       syncutil.Mutex
 	entries  []logger.LogEntry
 	chunkSeq int
 

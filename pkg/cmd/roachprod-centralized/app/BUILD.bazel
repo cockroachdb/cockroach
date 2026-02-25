@@ -43,7 +43,6 @@ go_library(
         "//pkg/cmd/roachprod-centralized/services/clusters",
         "//pkg/cmd/roachprod-centralized/services/dns/registry",
         "//pkg/cmd/roachprod-centralized/services/environments",
-        "//pkg/cmd/roachprod-centralized/services/environments/types",
         "//pkg/cmd/roachprod-centralized/services/health",
         "//pkg/cmd/roachprod-centralized/services/health/types",
         "//pkg/cmd/roachprod-centralized/services/provisionings",

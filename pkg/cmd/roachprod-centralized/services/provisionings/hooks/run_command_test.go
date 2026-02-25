@@ -8,12 +8,12 @@ package hooks
 import (
 	"context"
 	"fmt"
-	"sync"
 	"sync/atomic"
 	"testing"
 
 	provmodels "github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/models/provisionings"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/utils/logger"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -21,7 +21,7 @@ import (
 // mockSSHClient is a test SSH client that records calls and returns
 // configurable results.
 type mockSSHClient struct {
-	mu      sync.Mutex
+	mu      syncutil.Mutex
 	calls   []mockSSHCall
 	handler func(addr, user string, privateKey []byte, script string) (string, string, error)
 }

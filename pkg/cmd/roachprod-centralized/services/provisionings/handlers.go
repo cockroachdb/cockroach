@@ -1,4 +1,4 @@
-// Copyright 2025 The Cockroach Authors.
+// Copyright 2026 The Cockroach Authors.
 //
 // Use of this software is governed by the CockroachDB Software License
 // included in the /LICENSE file.
@@ -16,8 +16,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/services/provisionings/templates"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/services/provisionings/vars"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/utils/logger"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/errors/oserror"
 )
 
 const failurePersistTimeout = 5 * time.Second
@@ -83,7 +85,7 @@ func (s *Service) HandleProvision(
 	// Step: Init
 	prov.SetState(provmodels.ProvisioningStateInitializing, l)
 	prov.LastStep = "init"
-	prov.UpdatedAt = time.Now().UTC()
+	prov.UpdatedAt = timeutil.Now().UTC()
 	if err := s.repo.UpdateProvisioning(ctx, l, prov); err != nil {
 		return s.failProvision(ctx, l, &prov, errors.Wrap(err, "update state to initializing"))
 	}
@@ -94,7 +96,7 @@ func (s *Service) HandleProvision(
 	// Step: Plan
 	prov.SetState(provmodels.ProvisioningStatePlanning, l)
 	prov.LastStep = "plan"
-	prov.UpdatedAt = time.Now().UTC()
+	prov.UpdatedAt = timeutil.Now().UTC()
 	if err := s.repo.UpdateProvisioning(ctx, l, prov); err != nil {
 		return s.failProvision(ctx, l, &prov, errors.Wrap(err, "update state to planning"))
 	}
@@ -103,7 +105,7 @@ func (s *Service) HandleProvision(
 		return s.failProvision(ctx, l, &prov, errors.Wrap(err, "tofu plan"))
 	}
 	prov.PlanOutput = planJSON
-	prov.UpdatedAt = time.Now().UTC()
+	prov.UpdatedAt = timeutil.Now().UTC()
 	if err := s.repo.UpdateProvisioning(ctx, l, prov); err != nil {
 		return s.failProvision(ctx, l, &prov, errors.Wrap(err, "store plan output"))
 	}
@@ -111,14 +113,14 @@ func (s *Service) HandleProvision(
 	// Step: Apply
 	prov.SetState(provmodels.ProvisioningStateProvisioning, l)
 	prov.LastStep = "apply"
-	prov.UpdatedAt = time.Now().UTC()
+	prov.UpdatedAt = timeutil.Now().UTC()
 	if err := s.repo.UpdateProvisioning(ctx, l, prov); err != nil {
 		return s.failProvision(ctx, l, &prov, errors.Wrap(err, "update state to provisioning"))
 	}
 
 	// Check if plan file still exists (idempotency: re-plan if missing).
 	planFile := filepath.Join(workingDir, "plan.tfplan")
-	if _, statErr := os.Stat(planFile); os.IsNotExist(statErr) {
+	if _, statErr := os.Stat(planFile); oserror.IsNotExist(statErr) {
 		l.Info("plan file missing, re-running plan for idempotency",
 			slog.String("provisioning_id", prov.ID.String()),
 		)
@@ -134,7 +136,7 @@ func (s *Service) HandleProvision(
 
 	// Step: Output
 	prov.LastStep = "output"
-	prov.UpdatedAt = time.Now().UTC()
+	prov.UpdatedAt = timeutil.Now().UTC()
 	outputs, err := s.executor.Output(ctx, l, workingDir, envVars)
 	if err != nil {
 		return s.failProvision(ctx, l, &prov, errors.Wrap(err, "tofu output"))
@@ -144,7 +146,7 @@ func (s *Service) HandleProvision(
 	// Step: Post-apply hooks
 	if s.hookOrchestrator != nil {
 		prov.LastStep = "hooks"
-		prov.UpdatedAt = time.Now().UTC()
+		prov.UpdatedAt = timeutil.Now().UTC()
 		if err := s.repo.UpdateProvisioning(ctx, l, prov); err != nil {
 			return s.failProvision(ctx, l, &prov, errors.Wrap(err, "update last_step to hooks"))
 		}
@@ -156,7 +158,7 @@ func (s *Service) HandleProvision(
 	// Done
 	prov.SetState(provmodels.ProvisioningStateProvisioned, l)
 	prov.LastStep = "done"
-	prov.UpdatedAt = time.Now().UTC()
+	prov.UpdatedAt = timeutil.Now().UTC()
 	if err := s.repo.UpdateProvisioning(ctx, l, prov); err != nil {
 		return errors.Wrap(err, "update state to provisioned")
 	}
@@ -227,7 +229,7 @@ func (s *Service) HandleDestroy(
 
 	// Step: Init
 	prov.LastStep = "init"
-	prov.UpdatedAt = time.Now().UTC()
+	prov.UpdatedAt = timeutil.Now().UTC()
 	if err := s.repo.UpdateProvisioning(ctx, l, prov); err != nil {
 		return s.failDestroy(ctx, l, &prov, errors.Wrap(err, "update last_step to init"))
 	}
@@ -237,7 +239,7 @@ func (s *Service) HandleDestroy(
 
 	// Step: Destroy
 	prov.LastStep = "destroy"
-	prov.UpdatedAt = time.Now().UTC()
+	prov.UpdatedAt = timeutil.Now().UTC()
 	if err := s.repo.UpdateProvisioning(ctx, l, prov); err != nil {
 		return s.failDestroy(ctx, l, &prov, errors.Wrap(err, "update last_step to destroy"))
 	}
@@ -256,7 +258,7 @@ func (s *Service) HandleDestroy(
 	prov.LastStep = "done"
 	prov.PlanOutput = nil
 	prov.Outputs = make(map[string]interface{}) // stores as {} in JSONB
-	prov.UpdatedAt = time.Now().UTC()
+	prov.UpdatedAt = timeutil.Now().UTC()
 	if err := s.repo.UpdateProvisioning(ctx, l, prov); err != nil {
 		return errors.Wrap(err, "update state to destroyed")
 	}
@@ -274,7 +276,7 @@ func (s *Service) failProvision(
 ) error {
 	prov.Error = provErr.Error()
 	prov.SetState(provmodels.ProvisioningStateFailed, l)
-	prov.UpdatedAt = time.Now().UTC()
+	prov.UpdatedAt = timeutil.Now().UTC()
 	repoCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), failurePersistTimeout)
 	defer cancel()
 	if updateErr := s.repo.UpdateProvisioning(repoCtx, l, *prov); updateErr != nil {
@@ -293,7 +295,7 @@ func (s *Service) failDestroy(
 ) error {
 	prov.Error = provErr.Error()
 	prov.SetState(provmodels.ProvisioningStateDestroyFailed, l)
-	prov.UpdatedAt = time.Now().UTC()
+	prov.UpdatedAt = timeutil.Now().UTC()
 	repoCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), failurePersistTimeout)
 	defer cancel()
 	if updateErr := s.repo.UpdateProvisioning(repoCtx, l, *prov); updateErr != nil {

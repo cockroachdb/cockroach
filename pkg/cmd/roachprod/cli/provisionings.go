@@ -17,9 +17,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/client"
 	provtypes "github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/controllers/provisionings/types"
 	provmodels "github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/models/provisionings"
+	"github.com/cockroachdb/cockroach/pkg/util/yamlutil"
 	"github.com/cockroachdb/errors"
 	"github.com/spf13/cobra"
-	"gopkg.in/yaml.v3"
 )
 
 // buildProvisioningCmd creates the parent "provisioning" command.
@@ -826,7 +826,7 @@ func parseVarFile(path string) (map[string]interface{}, error) {
 	if strings.HasSuffix(path, ".json") {
 		err = json.Unmarshal(data, &result)
 	} else {
-		err = yaml.Unmarshal(data, &result)
+		err = yamlutil.UnmarshalStrict(data, &result)
 	}
 	if err != nil {
 		return nil, errors.Wrapf(err, "parse var file %q", path)

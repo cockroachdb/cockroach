@@ -59,8 +59,7 @@ func NewSSHClient() *SSHClient {
 // context-interruptible: if ctx is cancelled during execution, the SSH
 // session is closed to terminate the remote process.
 func (c *SSHClient) RunCommand(
-	ctx context.Context, l *logger.Logger, addr, user string,
-	privateKey []byte, script string,
+	ctx context.Context, l *logger.Logger, addr, user string, privateKey []byte, script string,
 ) (string, string, error) {
 	signer, err := ssh.ParsePrivateKey(privateKey)
 	if err != nil {

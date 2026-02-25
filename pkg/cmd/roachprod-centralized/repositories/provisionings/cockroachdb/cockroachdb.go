@@ -1,4 +1,4 @@
-// Copyright 2025 The Cockroach Authors.
+// Copyright 2026 The Cockroach Authors.
 //
 // Use of this software is governed by the CockroachDB Software License
 // included in the /LICENSE file.
@@ -45,7 +45,9 @@ const allColumns = "id, name, environment, template_type, template_checksum, " +
 // scanProvisioning scans a single row into a Provisioning. The row must
 // contain the columns listed in allColumns, in that order.
 func scanProvisioning(
-	scanner interface{ Scan(dest ...interface{}) error },
+	scanner interface {
+		Scan(dest ...interface{}) error
+	},
 ) (provmodels.Provisioning, error) {
 	var p provmodels.Provisioning
 

@@ -1,4 +1,4 @@
-// Copyright 2025 The Cockroach Authors.
+// Copyright 2026 The Cockroach Authors.
 //
 // Use of this software is governed by the CockroachDB Software License
 // included in the /LICENSE file.
@@ -6,13 +6,14 @@
 package sse
 
 import (
+	"context"
 	"fmt"
 	"io"
-	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/util/httputil"
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -38,7 +39,7 @@ func TestStream_SendsLogEvents(t *testing.T) {
 		_ = pw.Close()
 	}()
 
-	resp, err := http.Get(srv.URL + "/test")
+	resp, err := httputil.Get(context.Background(), srv.URL+"/test")
 	require.NoError(t, err)
 	defer resp.Body.Close()
 
@@ -66,7 +67,7 @@ func TestStream_SendsErrorOnPipeError(t *testing.T) {
 		_ = pw.CloseWithError(fmt.Errorf("read failure"))
 	}()
 
-	resp, err := http.Get(srv.URL + "/test")
+	resp, err := httputil.Get(context.Background(), srv.URL+"/test")
 	require.NoError(t, err)
 	defer resp.Body.Close()
 
@@ -100,7 +101,7 @@ func TestStream_LongLine(t *testing.T) {
 		_ = pw.Close()
 	}()
 
-	resp, err := http.Get(srv.URL + "/test")
+	resp, err := httputil.Get(context.Background(), srv.URL+"/test")
 	require.NoError(t, err)
 	defer resp.Body.Close()
 
@@ -125,7 +126,7 @@ func TestStream_EmptyReader(t *testing.T) {
 
 	go func() { _ = pw.Close() }()
 
-	resp, err := http.Get(srv.URL + "/test")
+	resp, err := httputil.Get(context.Background(), srv.URL+"/test")
 	require.NoError(t, err)
 	defer resp.Body.Close()
 
@@ -150,7 +151,7 @@ func TestStream_SetsHeaders(t *testing.T) {
 
 	go func() { _ = pw.Close() }()
 
-	resp, err := http.Get(srv.URL + "/test")
+	resp, err := httputil.Get(context.Background(), srv.URL+"/test")
 	require.NoError(t, err)
 	defer resp.Body.Close()
 	_, _ = io.ReadAll(resp.Body)

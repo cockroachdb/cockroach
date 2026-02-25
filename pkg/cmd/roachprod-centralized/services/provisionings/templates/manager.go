@@ -14,8 +14,8 @@ import (
 	"path/filepath"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/models/provisionings"
+	"github.com/cockroachdb/cockroach/pkg/util/yamlutil"
 	"github.com/cockroachdb/errors"
-	"gopkg.in/yaml.v2"
 )
 
 // ErrNoTemplateMarker is returned by ParseMetadataFromDir when neither
@@ -114,7 +114,7 @@ func readTemplateMarker(dir string) (provisionings.TemplateMetadata, bool) {
 			continue
 		}
 		var meta provisionings.TemplateMetadata
-		if yamlErr := yaml.Unmarshal(data, &meta); yamlErr != nil {
+		if yamlErr := yamlutil.UnmarshalStrict(data, &meta); yamlErr != nil {
 			continue
 		}
 		if meta.Name == "" {
@@ -146,7 +146,7 @@ func ParseMetadataFromDir(dir string) (provisionings.TemplateMetadata, error) {
 		}
 		// File exists — parse errors are real failures, not "no hooks."
 		var meta provisionings.TemplateMetadata
-		if yamlErr := yaml.Unmarshal(data, &meta); yamlErr != nil {
+		if yamlErr := yamlutil.UnmarshalStrict(data, &meta); yamlErr != nil {
 			return provisionings.TemplateMetadata{}, errors.Wrapf(
 				yamlErr, "parse %s in %s", name, dir,
 			)
@@ -200,7 +200,7 @@ func ParseMetadataFromSnapshot(archive []byte) (provisionings.TemplateMetadata, 
 		}
 
 		var meta provisionings.TemplateMetadata
-		if err := yaml.Unmarshal(data, &meta); err != nil {
+		if err := yamlutil.UnmarshalStrict(data, &meta); err != nil {
 			return provisionings.TemplateMetadata{}, errors.Wrapf(
 				err, "unmarshal %s from snapshot", header.Name,
 			)
