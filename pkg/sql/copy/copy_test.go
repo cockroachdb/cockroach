@@ -728,6 +728,8 @@ func TestLargeCopy(t *testing.T) {
 	if rng.Float64() < 0.5 {
 		_, err = sqlDB.Exec("SET copy_from_atomic_enabled = false")
 		require.NoError(t, err)
+		_, err = sqlDB.Exec("SET copy_from_retries_enabled = true")
+		require.NoError(t, err)
 		atomicCopy = false
 	}
 
