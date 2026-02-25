@@ -113,25 +113,14 @@ func (s *sstIndexBackfillSink) collectNewManifests() []jobspb.BulkSSTManifest {
 	if len(files.SST) <= s.emittedFileCount {
 		return nil
 	}
-	outputs := make([]jobspb.BulkSSTManifest, 0, len(files.SST)-s.emittedFileCount)
-	for _, f := range files.SST[s.emittedFileCount:] {
-		span := &roachpb.Span{
-			Key:    append(roachpb.Key(nil), f.StartKey...),
-			EndKey: append(roachpb.Key(nil), f.EndKey...),
-		}
-		ts := s.writeTS
-		output := jobspb.BulkSSTManifest{
-			URI:            f.URI,
-			Span:           span,
-			FileSize:       f.FileSize,
-			RowSample:      append(roachpb.Key(nil), f.RowSample...),
-			WriteTimestamp: &ts,
-			KeyCount:       f.KeyCount,
-		}
-		outputs = append(outputs, output)
+	// Extract only the new files since last collection
+	newFiles := &bulksst.SSTFiles{
+		SST: files.SST[s.emittedFileCount:],
 	}
 	s.emittedFileCount = len(files.SST)
-	return outputs
+
+	// Use shared conversion function, passing writeTS for index backfill
+	return bulksst.SSTFilesToManifests(newFiles, &s.writeTS)
 }
 
 func (s *sstIndexBackfillSink) Close(ctx context.Context) {
