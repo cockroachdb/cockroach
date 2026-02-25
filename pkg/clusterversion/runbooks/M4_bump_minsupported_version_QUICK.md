@@ -308,17 +308,17 @@ Release note: None"
 
 ## Validation
 
-### Run Tests
-
+Before creating or re-pushing the PR, run the pre-push validation script:
 ```bash
-./dev test pkg/clusterversion pkg/storage
+./pkg/clusterversion/runbooks/scripts/validate-m4.sh
 ```
+This runs the unit tests most likely to fail after an M.4 change and rewrites test data where appropriate.
 
-### Build
-
+Also compare changed files against the most recent reference PR to catch unexpected scope:
 ```bash
-./dev build short
+./pkg/clusterversion/runbooks/scripts/compare-with-reference-pr.sh 158225
 ```
+Justify any differences — version-specific file names are expected to differ.
 
 ### Check Commits
 
@@ -332,25 +332,6 @@ Expected:
 3. Remove 25.2 bootstrap data
 4. Update mixed_version tests to use 25.3 testserver
 5. Remove local-mixed-25.2 test configuration
-
-### Compare with Reference PR
-
-```bash
-# Get files from reference PR
-gh pr view 157767 --json files --jq '.files[].path' | sort > /tmp/ref_files.txt
-
-# Get your files
-git diff --name-only master | sort > /tmp/current_files.txt
-
-# Compare
-echo "=== Only in current ==="
-comm -13 /tmp/ref_files.txt /tmp/current_files.txt
-
-echo "=== Only in reference ==="
-comm -23 /tmp/ref_files.txt /tmp/current_files.txt
-```
-
-Justify differences (version-specific files are expected to differ).
 
 ---
 

@@ -385,6 +385,19 @@ Expected: All tests pass.
 
 ### Verification Checklist
 
+Before creating or re-pushing the PR, run the pre-push validation script:
+```bash
+./pkg/clusterversion/runbooks/scripts/validate-m2.sh 25.4
+```
+This verifies bootstrap file integrity (presence + SHA256), then runs the initial
+keys test and a quick logictest smoke test with the new config.
+
+Also compare changed files against the reference PR. Note that PR #156183 combined
+M.1 and M.2, so filter for M.2-specific files when comparing:
+```bash
+./pkg/clusterversion/runbooks/scripts/compare-with-reference-pr.sh 156183
+```
+
 Before creating the PR, verify:
 
 - [ ] Bootstrap data generated from correct release branch (release-25.4)

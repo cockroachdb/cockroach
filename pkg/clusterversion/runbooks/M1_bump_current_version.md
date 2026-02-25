@@ -407,6 +407,17 @@ A typical M.1 bump should modify approximately 15-20 files:
 
 ### Verification Checklist
 
+Before creating or re-pushing the PR, run the pre-push validation script:
+```bash
+./pkg/clusterversion/runbooks/scripts/validate-m1.sh
+```
+This rewrites test data and runs the unit tests most likely to fail after an M.1 change.
+
+Also compare changed files against the reference PR to catch unexpected scope:
+```bash
+./pkg/clusterversion/runbooks/scripts/compare-with-reference-pr.sh 149494
+```
+
 Before committing, verify:
 
 - [ ] All version constants follow naming conventions (V{MAJOR}_{MINOR}_Start)
@@ -416,7 +427,8 @@ Before committing, verify:
 - [ ] First upgrade added for new version
 - [ ] version.txt updated to new alpha version
 - [ ] Schema changer rules copied and updated
-- [ ] All tests pass: `./dev test pkg/clusterversion pkg/roachpb pkg/sql/schemachanger/scplan/internal/rules/... pkg/cli -f DeclarativeRules`
+- [ ] validate-m1.sh passes cleanly
+- [ ] compare-with-reference-pr.sh shows no unexpected file changes
 - [ ] Git status shows expected number of modified files (~15-20)
 - [ ] Releases file no longer contains the forked release version
 

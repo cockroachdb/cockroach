@@ -82,9 +82,20 @@ A typical beta release preparation should modify approximately 10-12 files:
 
 ## Verification
 
+Before creating or re-pushing the PR, run the pre-push validation script:
+```bash
+./pkg/clusterversion/runbooks/scripts/validate-r1.sh
+```
+This regenerates docs and rewrites test data, then verifies the bootstrap test passes.
+
+Also compare changed files against the reference PR to catch unexpected scope:
+```bash
+./pkg/clusterversion/runbooks/scripts/compare-with-reference-pr.sh 148382
+```
+
 After making all changes:
 1. Run the bootstrap test to ensure it passes: `./dev test pkg/sql/catalog/bootstrap -f TestInitialValuesToString`
-2. Check git status to verify expected number of modified files
+2. Check git status to verify expected number of modified files (~10-12)
 3. All tests should pass before proceeding with the release
 
 ## Notes

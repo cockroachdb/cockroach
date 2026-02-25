@@ -428,6 +428,18 @@ grep "25.4.0-rc.1" pkg/sql/logictest/REPOSITORIES.bzl
 
 ### Code PR
 
+Before creating or re-pushing PR 2, run the pre-push validation script:
+```bash
+./pkg/clusterversion/runbooks/scripts/validate-m3.sh
+```
+This rewrites the DeclarativeRules corpus and runs the unit tests most likely
+to fail after bumping PreviousRelease.
+
+Also compare changed files against the reference PR:
+```bash
+./pkg/clusterversion/runbooks/scripts/compare-with-reference-pr.sh 152080
+```
+
 ```bash
 # Verify PreviousRelease updated
 grep "const PreviousRelease" pkg/clusterversion/cockroach_versions.go
