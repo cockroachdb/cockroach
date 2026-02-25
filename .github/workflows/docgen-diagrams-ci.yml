@@ -591,11 +591,30 @@ jobs:
           mkdir -p generated-diagrams/bnf
           mkdir -p generated-diagrams/grammar_svg
 
-          # Copy BNF files
-          cp artifacts/*.bnf generated-diagrams/bnf/ 2>/dev/null || echo "No BNF files to copy"
+          # Copy only BNF files that are new or differ from generated-diagrams master.
+          # Copying all BNF files unconditionally causes unrelated diagrams (e.g.
+          # begin_stmt.bnf) to appear in every sync PR simply because they were
+          # regenerated but were never merged into generated-diagrams master.
+          for bnf_file in artifacts/*.bnf; do
+            [[ -f "$bnf_file" ]] || continue
+            filename=$(basename "$bnf_file")
+            existing="generated-diagrams/bnf/$filename"
+            if [[ ! -f "$existing" ]] || ! diff -q "$bnf_file" "$existing" > /dev/null 2>&1; then
+              cp "$bnf_file" generated-diagrams/bnf/
+              echo "Syncing BNF: $filename"
+            fi
+          done
 
-          # Copy HTML/SVG files
-          cp artifacts/*.html generated-diagrams/grammar_svg/ 2>/dev/null || echo "No HTML files to copy"
+          # Copy only HTML files that are new or differ from generated-diagrams master.
+          for html_file in artifacts/*.html; do
+            [[ -f "$html_file" ]] || continue
+            filename=$(basename "$html_file")
+            existing="generated-diagrams/grammar_svg/$filename"
+            if [[ ! -f "$existing" ]] || ! diff -q "$html_file" "$existing" > /dev/null 2>&1; then
+              cp "$html_file" generated-diagrams/grammar_svg/
+              echo "Syncing HTML: $filename"
+            fi
+          done
 
           # Note: manifest.json and PNGs are NOT synced to generated-diagrams
           # PNGs are pushed to a separate preview branch for PR comment images only
