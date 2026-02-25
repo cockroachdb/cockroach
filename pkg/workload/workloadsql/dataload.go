@@ -27,6 +27,12 @@ import (
 type InsertsDataLoader struct {
 	BatchSize   int
 	Concurrency int
+	// DisableCRDBDDL skips CockroachDB-specific DDL optimizations when creating tables.
+	DisableCRDBDDL bool
+}
+
+type sqlExecer interface {
+	ExecContext(context.Context, string, ...interface{}) (gosql.Result, error)
 }
 
 // InitialDataLoad implements the InitialDataLoader interface.
@@ -65,7 +71,22 @@ func (l InsertsDataLoader) InitialDataLoad(
 	for currentTable < len(tables) {
 		batchEnd := min(currentTable+maxTableBatchSize, len(tables))
 		nextBatch := tables[currentTable:batchEnd]
-		if err := crdb.ExecuteTx(ctx, db, &gosql.TxOptions{}, func(tx *gosql.Tx) error {
+		if l.DisableCRDBDDL {
+			for _, table := range nextBatch {
+				if table.ObjectPrefix != nil && table.ObjectPrefix.ExplicitCatalog {
+					return 0, errors.Errorf("multi-database table %q is not supported for non-CRDB init", table.Name)
+				}
+				tableName := table.GetResolvedName()
+				createStmt := fmt.Sprintf(`CREATE TABLE IF NOT EXISTS %s %s`, tableName.String(), table.Schema)
+				if _, err := db.ExecContext(ctx, createStmt); err != nil {
+					return 0, errors.WithDetailf(errors.Wrapf(err, "could not create table: %q", table.Name),
+						"SQL: %s", createStmt)
+				}
+				if err := execIndexStatements(ctx, db, table); err != nil {
+					return 0, err
+				}
+			}
+		} else if err := crdb.ExecuteTx(ctx, db, &gosql.TxOptions{}, func(tx *gosql.Tx) error {
 			// Run the operations in a single txn so they complete more quickly.
 			if _, err := tx.Exec("SET LOCAL autocommit_before_ddl = false"); err != nil {
 				return err
@@ -88,6 +109,9 @@ func (l InsertsDataLoader) InitialDataLoad(
 				if _, err := tx.ExecContext(ctx, createStmt); err != nil {
 					return errors.WithDetailf(errors.Wrapf(err, "could not create table: %q", table.Name),
 						"SQL: %s", createStmt)
+				}
+				if err := execIndexStatements(ctx, tx, table); err != nil {
+					return err
 				}
 			}
 			return nil
@@ -182,4 +206,14 @@ func (l InsertsDataLoader) InitialDataLoad(
 		)
 	}
 	return bytesAtomic.Load(), nil
+}
+
+func execIndexStatements(ctx context.Context, execer sqlExecer, table workload.Table) error {
+	for _, stmt := range table.Indexes {
+		if _, err := execer.ExecContext(ctx, stmt); err != nil {
+			return errors.WithDetailf(errors.Wrapf(err, "could not create index for table: %q", table.Name),
+				"SQL: %s", stmt)
+		}
+	}
+	return nil
 }

@@ -1,0 +1,33 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "dbexec",
+    srcs = [
+        "crdb_executor.go",
+        "dialect.go",
+        "executor.go",
+        "pgx_executor.go",
+        "spanner_executor.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/workload/dbexec",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/workload",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_jackc_pgx_v5//:pgx",
+        "@com_github_jackc_pgx_v5//pgxpool",
+        "@com_google_cloud_go_spanner//:spanner",
+        "@org_golang_google_api//iterator",
+        "@org_golang_google_grpc//codes",
+    ],
+)
+
+go_test(
+    name = "dbexec_test",
+    srcs = [
+        "crdb_executor_test.go",
+        "dialect_test.go",
+    ],
+    embed = [":dbexec"],
+    deps = ["@com_github_stretchr_testify//require"],
+)

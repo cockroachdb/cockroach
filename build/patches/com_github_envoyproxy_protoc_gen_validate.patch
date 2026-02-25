@@ -1,0 +1,14 @@
+diff --git a/validate/BUILD b/validate/BUILD
+--- a/validate/BUILD
++++ b/validate/BUILD
+@@ -34,5 +34,10 @@
+ go_proto_library(
+     name = "validate_go_proto",
+     importpath = "github.com/envoyproxy/protoc-gen-validate/validate",
+     proto = ":validate_proto",
++    deps = [
++        "@com_github_golang_protobuf//protoc-gen-go/descriptor:go_default_library",
++        "@com_github_golang_protobuf//ptypes/duration:go_default_library",
++        "@com_github_golang_protobuf//ptypes/timestamp:go_default_library",
++    ],
+ )

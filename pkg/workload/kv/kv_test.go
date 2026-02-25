@@ -190,3 +190,81 @@ func TestInitialSeqValidation(t *testing.T) {
 		})
 	}
 }
+
+func TestDialectValidation(t *testing.T) {
+	testCases := []struct {
+		name    string
+		dialect string
+		setup   func(*kv)
+		wantErr string
+	}{
+		{
+			name:    "valid crdb dialect",
+			dialect: "crdb",
+			wantErr: "",
+		},
+		{
+			name:    "valid postgres dialect",
+			dialect: "postgres",
+			wantErr: "",
+		},
+		{
+			name:    "valid spanner dialect",
+			dialect: "spanner",
+			wantErr: "",
+		},
+		{
+			name:    "invalid dialect",
+			dialect: "mysql",
+			wantErr: "unknown dialect",
+		},
+		{
+			name:    "postgres with hash sharding",
+			dialect: "postgres",
+			setup: func(k *kv) {
+				k.shards = 4
+				k.sequential = true // Required for shards to pass basic validation
+			},
+			wantErr: "--num-shards",
+		},
+		{
+			name:    "postgres with follower reads",
+			dialect: "postgres",
+			setup:   func(k *kv) { k.followerReadPercent = 50 },
+			wantErr: "--follower-read-percent",
+		},
+		{
+			name:    "postgres with txn qos",
+			dialect: "postgres",
+			setup:   func(k *kv) { k.txnQoS = "critical" },
+			wantErr: "--txn-qos",
+		},
+		{
+			name:    "spanner allows follower reads",
+			dialect: "spanner",
+			setup:   func(k *kv) { k.followerReadPercent = 50 },
+			wantErr: "", // Spanner supports stale reads
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			k := &kv{
+				dialect:                tc.dialect,
+				cycleLength:            1000,
+				txnQoS:                 "regular",
+				targetCompressionRatio: 1.0,
+			}
+			if tc.setup != nil {
+				tc.setup(k)
+			}
+			err := k.validateConfig()
+			if tc.wantErr == "" {
+				require.NoError(t, err)
+			} else {
+				require.Error(t, err)
+				require.Contains(t, err.Error(), tc.wantErr)
+			}
+		})
+	}
+}

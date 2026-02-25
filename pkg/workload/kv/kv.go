@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/workload"
+	"github.com/cockroachdb/cockroach/pkg/workload/dbexec"
 	"github.com/cockroachdb/cockroach/pkg/workload/histogram"
 	"github.com/cockroachdb/errors"
 	"github.com/jackc/pgx/v5"
@@ -34,26 +35,9 @@ import (
 	"github.com/spf13/pflag"
 )
 
-const (
-	kvSchema = `(
-		k %s NOT NULL PRIMARY KEY,
-		v BYTES NOT NULL
-	)`
-	kvSchemaWithIndex = `(
-		k %s NOT NULL PRIMARY KEY,
-		v BYTES NOT NULL,
-		INDEX (v)
-	)`
-	shardedKvSchema = `(
-		k %s NOT NULL PRIMARY KEY USING HASH WITH (bucket_count = %d),
-		v BYTES NOT NULL
-	)`
-	shardedKvSchemaWithIndex = `(
-		k %s NOT NULL PRIMARY KEY USING HASH WITH (bucket_count = %d),
-		v BYTES NOT NULL,
-		INDEX (v)
-	)`
-)
+// Ensure kv implements the DialectProvider interface.
+var _ workload.DialectProvider = (*kv)(nil)
+var _ workload.DialectSetter = (*kv)(nil)
 
 var RandomSeed = workload.NewInt64RandomSeed()
 
@@ -98,6 +82,7 @@ type kv struct {
 	prepareReadOnly                      bool
 	writesUseSelect1                     bool
 	alwaysIncKeySeq                      bool
+	dialect                              string
 }
 
 func init() {
@@ -212,6 +197,18 @@ var kvMeta = workload.Meta{
 // Meta implements the Generator interface.
 func (*kv) Meta() workload.Meta { return kvMeta }
 
+// Dialect implements the DialectProvider interface.
+func (w *kv) Dialect() string { return w.dialect }
+
+// SetDialect implements the DialectSetter interface.
+func (w *kv) SetDialect(dialect string) error {
+	w.dialect = strings.ToLower(dialect)
+	if w.dialect == "" {
+		w.dialect = "crdb"
+	}
+	return nil
+}
+
 // Flags implements the Flagser interface.
 func (w *kv) Flags() workload.Flags { return w.flags }
 
@@ -222,16 +219,9 @@ func (w *kv) ConnFlags() *workload.ConnFlags { return w.connFlags }
 func (w *kv) Hooks() workload.Hooks {
 	return workload.Hooks{
 		PostLoad: func(_ context.Context, db *gosql.DB) error {
-			if w.enum {
-				_, err := db.Exec(`
-CREATE TYPE enum_type AS ENUM ('v');
-ALTER TABLE kv ADD COLUMN e enum_type NOT NULL AS ('v') STORED;`)
-				if err != nil {
-					return err
-				}
-			}
-			if w.scatter {
-				if _, err := db.Exec(`ALTER TABLE kv SCATTER`); err != nil {
+			sd := w.createSchemaDialect()
+			for _, stmt := range sd.PostLoadStmts("kv", w.enum, w.scatter) {
+				if _, err := db.Exec(stmt); err != nil {
 					return err
 				}
 			}
@@ -314,6 +304,55 @@ func (w *kv) validateConfig() (err error) {
 			"`--insert-count` (%d) is greater than the number of unique keys that could be possibly generated [%d,%d)",
 			w.insertCount, kg.kr.min, kg.kr.max)
 	}
+
+	// Validate dialect.
+	validDialects := map[string]bool{
+		"crdb": true, "": true, "postgres": true, "aurora": true, "dsql": true, "spanner": true,
+	}
+	if !validDialects[w.dialect] {
+		return errors.Errorf("unknown dialect: %s", w.dialect)
+	}
+
+	// Validate dialect-specific features.
+	if w.dialect != "crdb" && w.dialect != "" {
+		var unsupported []string
+		if w.shards > 0 {
+			unsupported = append(unsupported, "--num-shards")
+		}
+		if w.txnQoS != "regular" && w.txnQoS != "" {
+			unsupported = append(unsupported, "--txn-qos")
+		}
+		if w.splits > 0 {
+			unsupported = append(unsupported, "--splits")
+		}
+		if w.scatter {
+			unsupported = append(unsupported, "--scatter")
+		}
+		if w.enum {
+			unsupported = append(unsupported, "--enum")
+		}
+		// --sfu-writes and --sel1-writes are handled by validateCapabilities
+		// since they are supported by both CRDBExecutor and PGXExecutor.
+		if w.longRunningTxn {
+			unsupported = append(unsupported, "--long-running-txn")
+		}
+		if w.prepareReadOnly {
+			unsupported = append(unsupported, "--prepare-read-only")
+		}
+		// For postgres dialects, follower reads are not supported.
+		if (w.dialect == "postgres" || w.dialect == "aurora" || w.dialect == "dsql") &&
+			w.followerReadPercent > 0 {
+			unsupported = append(unsupported, "--follower-read-percent")
+		}
+		if len(unsupported) > 0 {
+			return errors.Errorf(
+				"flags %s are not supported for dialect %s",
+				strings.Join(unsupported, ", "),
+				w.dialect,
+			)
+		}
+	}
+
 	return nil
 }
 
@@ -382,6 +421,21 @@ func (w *kv) createKeyGenerator() keyGeneratorConfig {
 	return kg
 }
 
+// createSchemaDialect returns the appropriate SchemaDialect for the configured
+// dialect. Used by Tables() and Hooks().PostLoad for schema generation.
+func (w *kv) createSchemaDialect() dbexec.SchemaDialect {
+	switch w.dialect {
+	case "crdb", "":
+		return dbexec.CockroachDialect{}
+	case "postgres", "aurora", "dsql":
+		return dbexec.PostgresDialect{}
+	case "spanner":
+		return dbexec.SpannerSchemaDialect{}
+	default:
+		return dbexec.CockroachDialect{} // validated elsewhere
+	}
+}
+
 func splitFinder(i, splits int, r keyRange, k keyTransformer) interface{} {
 	if splits < 0 || i >= splits {
 		panic(fmt.Sprintf("programming error: split index (%d) cannot be less than 0, "+
@@ -403,230 +457,224 @@ func insertCountKey(idx, count int64, kr keyRange) int64 {
 
 // Tables implements the Generator interface.
 func (w *kv) Tables() []workload.Table {
-	// Tables should only run on initialized workload, safe to call create without
-	// having a panic. We don't need to defer this to the actual table callbacks
-	// like Splits or InitialRows.
+	sd := w.createSchemaDialect()
 	kg := w.createKeyGenerator()
 
-	table := workload.Table{Name: `kv`}
-	table.Splits = workload.Tuples(
-		w.splits,
-		func(splitIdx int) []interface{} {
-			return []interface{}{splitFinder(splitIdx, w.splits, kg.kr, kg.transformer)}
-		},
-	)
+	table := workload.Table{
+		Name:   "kv",
+		Schema: sd.SchemaFragment(w.keySize, w.secondaryIndex, w.shards),
+	}
 
-	if w.shards > 0 {
-		schema := shardedKvSchema
-		if w.secondaryIndex {
-			schema = shardedKvSchemaWithIndex
-		}
-		table.Schema = fmt.Sprintf(schema, kg.transformer.keySQLType(), w.shards)
-	} else {
-		schema := kvSchema
-		if w.secondaryIndex {
-			schema = kvSchemaWithIndex
-		}
-		table.Schema = fmt.Sprintf(schema, kg.transformer.keySQLType())
+	// Add secondary index DDL if requested. For CRDB, the index is inline
+	// in the schema; for other dialects, it's a separate CREATE INDEX statement.
+	if w.secondaryIndex {
+		table.Indexes = sd.SecondaryIndexStmts("kv")
+	}
+
+	// Add split points if configured. Only effective for CRDB (other dialects
+	// don't support splits, and validateConfig rejects --splits for them).
+	if w.splits > 0 {
+		table.Splits = workload.Tuples(
+			w.splits,
+			func(splitIdx int) []interface{} {
+				return []interface{}{splitFinder(splitIdx, w.splits, kg.kr, kg.transformer)}
+			},
+		)
 	}
 
 	if w.insertCount > 0 {
-		const batchSize = 1000
-		table.InitialRows = workload.BatchedTuples{
-			NumBatches: (w.insertCount + batchSize - 1) / batchSize,
-			// If the key sequence is not sequential, duplicates are possible.
-			// The zipfian distribution produces duplicates by design, and the
-			// hash key mapper can also produce duplicates at larger insert
-			// counts (it's at least inevitable at ~1b rows). Marking that the
-			// keys may contain duplicates will cause the data loader to use
-			// INSERT ... ON CONFLICT DO NOTHING statements.
-			MayContainDuplicates: !w.sequential,
-			FillBatch: func(batchIdx int, cb coldata.Batch, a *bufalloc.ByteAllocator) {
-				rowBegin, rowEnd := batchIdx*batchSize, (batchIdx+1)*batchSize
-				if rowEnd > w.insertCount {
-					rowEnd = w.insertCount
-				}
-
-				var kvtableTypes = []*types.T{
-					kg.transformer.getColumnType(),
-					types.Bytes,
-				}
-
-				cb.Reset(kvtableTypes, rowEnd-rowBegin, coldata.StandardColumnFactory)
-
-				{
-					seq := rowBegin
-					kg.transformer.fillColumnBatch(cb, a, func() (s int64, ok bool) {
-						if seq < rowEnd {
-							seq++
-							return insertCountKey(int64(seq-1), int64(w.insertCount), kg.kr), true
-						}
-						return 0, false
-					})
-				}
-
-				valCol := cb.ColVec(1).Bytes()
-				// coldata.Bytes only allows appends so we have to reset it.
-				valCol.Reset()
-				rndBlock := rand.New(rand.NewSource(RandomSeed.Seed()))
-
-				for rowIdx := rowBegin; rowIdx < rowEnd; rowIdx++ {
-					rowOffset := rowIdx - rowBegin
-					var payload []byte
-					blockSize, uniqueSize := w.randBlockSize(rndBlock)
-					*a, payload = a.Alloc(blockSize)
-					w.randFillBlock(rndBlock, payload, uniqueSize)
-					valCol.Set(rowOffset, payload)
-				}
-			},
-		}
+		w.addInitialRows(&table, kg)
 	}
 
 	return []workload.Table{table}
+}
+
+func (w *kv) addInitialRows(table *workload.Table, kg keyGeneratorConfig) {
+	if w.insertCount <= 0 {
+		return
+	}
+	const batchSize = 1000
+	table.InitialRows = workload.BatchedTuples{
+		NumBatches: (w.insertCount + batchSize - 1) / batchSize,
+		// If the key sequence is not sequential, duplicates are possible.
+		// The zipfian distribution produces duplicates by design, and the
+		// hash key mapper can also produce duplicates at larger insert
+		// counts (it's at least inevitable at ~1b rows). Marking that the
+		// keys may contain duplicates will cause the data loader to use
+		// INSERT ... ON CONFLICT DO NOTHING statements.
+		MayContainDuplicates: !w.sequential,
+		FillBatch: func(batchIdx int, cb coldata.Batch, a *bufalloc.ByteAllocator) {
+			rowBegin, rowEnd := batchIdx*batchSize, (batchIdx+1)*batchSize
+			if rowEnd > w.insertCount {
+				rowEnd = w.insertCount
+			}
+
+			var kvtableTypes = []*types.T{
+				kg.transformer.getColumnType(),
+				types.Bytes,
+			}
+
+			cb.Reset(kvtableTypes, rowEnd-rowBegin, coldata.StandardColumnFactory)
+
+			{
+				seq := rowBegin
+				kg.transformer.fillColumnBatch(cb, a, func() (s int64, ok bool) {
+					if seq < rowEnd {
+						seq++
+						return insertCountKey(int64(seq-1), int64(w.insertCount), kg.kr), true
+					}
+					return 0, false
+				})
+			}
+
+			valCol := cb.ColVec(1).Bytes()
+			// coldata.Bytes only allows appends so we have to reset it.
+			valCol.Reset()
+			rndBlock := rand.New(rand.NewSource(RandomSeed.Seed()))
+
+			for rowIdx := rowBegin; rowIdx < rowEnd; rowIdx++ {
+				rowOffset := rowIdx - rowBegin
+				var payload []byte
+				blockSize, uniqueSize := w.randBlockSize(rndBlock)
+				*a, payload = a.Alloc(blockSize)
+				w.randFillBlock(rndBlock, payload, uniqueSize)
+				valCol.Set(rowOffset, payload)
+			}
+		},
+	}
 }
 
 // Ops implements the Opser interface.
 func (w *kv) Ops(
 	ctx context.Context, urls []string, reg *histogram.Registry,
 ) (workload.QueryLoad, error) {
-	cfg := workload.NewMultiConnPoolCfgFromFlags(w.connFlags)
-	cfg.MaxTotalConnections = w.connFlags.Concurrency + 1
-	mcp, err := workload.NewMultiConnPool(ctx, cfg, urls...)
+	exec, err := w.createExecutor(ctx, urls)
 	if err != nil {
 		return workload.QueryLoad{}, err
 	}
 
-	// Read statement
-	var buf strings.Builder
-	var folBuf strings.Builder
-	if w.enum {
-		buf.WriteString(`SELECT k, v, e FROM kv WHERE k IN (`)
-		folBuf.WriteString(`SELECT k, v, e FROM kv AS OF SYSTEM TIME follower_read_timestamp() WHERE k IN (`)
-	} else {
-		buf.WriteString(`SELECT k, v FROM kv WHERE k IN (`)
-		folBuf.WriteString(`SELECT k, v FROM kv AS OF SYSTEM TIME follower_read_timestamp() WHERE k IN (`)
+	if err := w.validateCapabilities(exec.Capabilities()); err != nil {
+		_ = exec.Close()
+		return workload.QueryLoad{}, err
 	}
-	for i := 0; i < w.batchSize; i++ {
-		if i > 0 {
-			buf.WriteString(", ")
-			folBuf.WriteString(", ")
-		}
-		fmt.Fprintf(&buf, `$%d`, i+1)
-		fmt.Fprintf(&folBuf, `$%d`, i+1)
-	}
-	buf.WriteString(`)`)
-	folBuf.WriteString(`)`)
-
-	readStmtStr := buf.String()
-	followerReadStmtStr := folBuf.String()
-
-	// Write statement
-	buf.Reset()
-	buf.WriteString(`UPSERT INTO kv (k, v) VALUES`)
-	for i := 0; i < w.batchSize; i++ {
-		j := i * 2
-		if i > 0 {
-			buf.WriteString(", ")
-		}
-		fmt.Fprintf(&buf, ` ($%d, $%d)`, j+1, j+2)
-	}
-	writeStmtStr := buf.String()
-
-	// Select for update statement
-	var sfuStmtStr string
-	if w.writesUseSelectForUpdate {
-		buf.Reset()
-		buf.WriteString(`SELECT k, v FROM kv WHERE k IN (`)
-		for i := 0; i < w.batchSize; i++ {
-			if i > 0 {
-				buf.WriteString(", ")
-			}
-			fmt.Fprintf(&buf, `$%d`, i+1)
-		}
-		buf.WriteString(`) FOR UPDATE`)
-		sfuStmtStr = buf.String()
-	}
-
-	// Span statement
-	buf.Reset()
-	buf.WriteString(`SELECT count(v) FROM [SELECT v FROM kv`)
-	if w.spanLimit > 0 {
-		// Span statements without a limit query all ranges. However, if there's
-		// a span limit specified, we want to randomly choose the range from which
-		// the limited scan starts at. We do this by introducing the k >= $1
-		// predicate.
-		fmt.Fprintf(&buf, ` WHERE k >= $1 ORDER BY k LIMIT %d`, w.spanLimit)
-	}
-	buf.WriteString(`]`)
-	spanStmtStr := buf.String()
-
-	// Del statement
-	buf.Reset()
-	buf.WriteString(`DELETE FROM kv WHERE k IN (`)
-	for i := 0; i < w.batchSize; i++ {
-		if i > 0 {
-			buf.WriteString(", ")
-		}
-		fmt.Fprintf(&buf, `$%d`, i+1)
-	}
-	buf.WriteString(`)`)
-	delStmtStr := buf.String()
 
 	kg := w.createKeyGenerator()
 	ql := workload.QueryLoad{}
 	var numEmptyResults atomic.Int64
+
 	for i := 0; i < w.connFlags.Concurrency; i++ {
 		op := &kvOp{
 			config:          w,
 			hists:           reg.GetHandle(),
+			exec:            exec,
+			kg:              kg,
+			ks:              kg.newState(),
 			numEmptyResults: &numEmptyResults,
 		}
-		op.readStmt = op.sr.Define(readStmtStr)
-		op.followerReadStmt = op.sr.Define(followerReadStmtStr)
-		if !op.config.prepareReadOnly {
-			op.writeStmt = op.sr.Define(writeStmtStr)
-		}
-		if len(sfuStmtStr) > 0 && !op.config.prepareReadOnly {
-			op.sfuStmt = op.sr.Define(sfuStmtStr)
-		}
-		op.sel1Stmt = op.sr.Define("SELECT 1")
-		op.spanStmt = op.sr.Define(spanStmtStr)
-		if w.txnQoS != `regular` {
-			stmt := op.sr.Define(fmt.Sprintf(
-				" SET default_transaction_quality_of_service = %s", w.txnQoS))
-			op.qosStmt = &stmt
-		}
-		if !op.config.prepareReadOnly {
-			op.delStmt = op.sr.Define(delStmtStr)
-		}
-		if err := op.sr.Init(ctx, "kv", mcp); err != nil {
-			return workload.QueryLoad{}, err
-		}
-		op.mcp = mcp
-		op.kg = kg
-		op.ks = kg.newState()
 		ql.WorkerFns = append(ql.WorkerFns, op.run)
-		ql.Close = op.close
 	}
+
+	ql.Close = func(ctx context.Context) error {
+		if empty := numEmptyResults.Load(); empty != 0 {
+			fmt.Printf("Number of reads that didn't return any results: %d.\n", empty)
+		}
+		fmt.Printf("Write sequence could be resumed by passing --write-seq=%s to the next run.\n",
+			kg.cursor())
+		return exec.Close()
+	}
+
 	return ql, nil
 }
 
+// keyType returns the SQL key type string for the dbexec.Config.
+func (w *kv) keyType() string {
+	if w.keySize > 0 {
+		return fmt.Sprintf("VARCHAR(%d)", w.keySize)
+	}
+	return "BIGINT"
+}
+
+// createExecutor creates and initializes the appropriate Executor based on the
+// configured dialect.
+func (w *kv) createExecutor(ctx context.Context, urls []string) (dbexec.Executor, error) {
+	var exec dbexec.Executor
+	switch w.dialect {
+	case "crdb", "":
+		exec = dbexec.NewCRDBExecutor()
+	case "postgres", "aurora", "dsql":
+		exec = dbexec.NewPGXExecutor(dbexec.PostgresDialect{})
+	case "spanner":
+		exec = dbexec.NewSpannerExecutor()
+	default:
+		return nil, errors.Errorf("unknown dialect: %s", w.dialect)
+	}
+
+	cfg := dbexec.Config{
+		URLs:           urls,
+		Table:          "kv",
+		BatchSize:      w.batchSize,
+		KeyType:        w.keyType(),
+		SecondaryIndex: w.secondaryIndex,
+		NumShards:      w.shards,
+		Concurrency:    w.connFlags.Concurrency,
+		Enum:           w.enum,
+		SpanLimit:      w.spanLimit,
+		TxnQoS:         w.txnQoS,
+	}
+
+	if err := exec.Init(ctx, cfg, w.connFlags); err != nil {
+		return nil, err
+	}
+	return exec, nil
+}
+
+// validateCapabilities checks that all requested features are supported by the
+// executor. Returns an error listing any unsupported flags.
+func (w *kv) validateCapabilities(caps dbexec.Capabilities) error {
+	var unsupported []string
+
+	if w.followerReadPercent > 0 && !caps.FollowerReads {
+		unsupported = append(unsupported, "--follower-read-percent")
+	}
+	if w.writesUseSelectForUpdate && !caps.SelectForUpdate {
+		unsupported = append(unsupported, "--sfu-writes")
+	}
+	if w.longRunningTxn && !caps.TransactionPriority {
+		unsupported = append(unsupported, "--long-running-txn")
+	}
+	if w.txnQoS != "regular" && w.txnQoS != "" && !caps.TransactionQoS {
+		unsupported = append(unsupported, "--txn-qos")
+	}
+	if w.shards > 0 && !caps.HashShardedPK {
+		unsupported = append(unsupported, "--num-shards")
+	}
+	if w.splits > 0 && !caps.Splits {
+		unsupported = append(unsupported, "--splits")
+	}
+	if w.scatter && !caps.Scatter {
+		unsupported = append(unsupported, "--scatter")
+	}
+	if w.enum && !caps.EnumColumn {
+		unsupported = append(unsupported, "--enum")
+	}
+	if w.writesUseSelect1 && !caps.Select1 {
+		unsupported = append(unsupported, "--sel1-writes")
+	}
+
+	if len(unsupported) > 0 {
+		return errors.Errorf("flags %s are not supported for dialect %q",
+			strings.Join(unsupported, ", "), w.dialect)
+	}
+	return nil
+}
+
 type kvOp struct {
-	config           *kv
-	hists            *histogram.Histograms
-	sr               workload.SQLRunner
-	mcp              *workload.MultiConnPool
-	qosStmt          *workload.StmtHandle
-	readStmt         workload.StmtHandle
-	followerReadStmt workload.StmtHandle
-	writeStmt        workload.StmtHandle
-	spanStmt         workload.StmtHandle
-	sfuStmt          workload.StmtHandle
-	sel1Stmt         workload.StmtHandle
-	delStmt          workload.StmtHandle
-	kg               keyGeneratorConfig
-	ks               *keyGeneratorState
-	numEmptyResults  *atomic.Int64
+	config          *kv
+	hists           *histogram.Histograms
+	exec            dbexec.Executor
+	kg              keyGeneratorConfig
+	ks              *keyGeneratorState
+	numEmptyResults *atomic.Int64
 }
 
 func (o *kvOp) run(ctx context.Context) (retErr error) {
@@ -636,172 +684,223 @@ func (o *kvOp) run(ctx context.Context) (retErr error) {
 		defer cancel()
 	}
 
-	if o.qosStmt != nil {
-		_, err := o.qosStmt.Exec(ctx)
-		if err != nil {
-			return err
-		}
-	}
 	statementProbability := o.ks.rand.Intn(100) // Determines what statement is executed.
-	if statementProbability < o.config.readPercent {
-		args := make([]interface{}, o.config.batchSize)
-		for i := 0; i < o.config.batchSize; i++ {
-			key := o.kg.readKey(o.ks)
-			if o.config.alwaysIncKeySeq {
-				key = o.kg.writeKey(o.ks)
-			}
-			args[i] = o.kg.transformer.getKey(key)
-		}
-		start := timeutil.Now()
-		readStmt := o.readStmt
-		opName := `read`
 
-		if o.ks.rand.Intn(100) < o.config.followerReadPercent {
-			readStmt = o.followerReadStmt
-			opName = `follower-read`
-		}
-		rows, err := readStmt.Query(ctx, args...)
-		if err != nil {
-			return err
-		}
-		empty := true
-		for rows.Next() {
-			empty = false
-		}
-		if empty {
-			o.numEmptyResults.Add(1)
-		}
-		elapsed := timeutil.Since(start)
-		o.hists.Get(opName).Record(elapsed)
-		return rows.Err()
+	// Read operation.
+	if statementProbability < o.config.readPercent {
+		return o.doRead(ctx)
 	}
-	// Since we know the statement is not a read, we recalibrate
-	// statementProbability to only consider the other statements.
 	statementProbability -= o.config.readPercent
+
+	// Delete operation.
 	if statementProbability < o.config.delPercent {
-		start := timeutil.Now()
-		args := make([]interface{}, o.config.batchSize)
-		for i := 0; i < o.config.batchSize; i++ {
-			args[i] = o.kg.readKey(o.ks)
-			if o.config.alwaysIncKeySeq {
-				args[i] = o.kg.writeKey(o.ks)
-			}
-		}
-		_, err := o.delStmt.Exec(ctx, args...)
-		if err != nil {
-			return err
-		}
-		elapsed := timeutil.Since(start)
-		o.hists.Get(`del`).Record(elapsed)
-		return nil
+		return o.doDelete(ctx)
 	}
 	statementProbability -= o.config.delPercent
+
+	// Span operation.
 	if statementProbability < o.config.spanPercent {
-		start := timeutil.Now()
-		var err error
-		if o.config.spanLimit > 0 {
-			arg := o.kg.readKey(o.ks)
-			if o.config.alwaysIncKeySeq {
-				arg = o.kg.writeKey(o.ks)
-			}
-			_, err = o.spanStmt.Exec(ctx, arg)
-		} else {
-			_, err = o.spanStmt.Exec(ctx)
-		}
-		if err != nil {
-			return err
-		}
-		elapsed := timeutil.Since(start)
-		o.hists.Get(`span`).Record(elapsed)
-		return err
+		return o.doSpan(ctx)
 	}
-	makeWriteBatchArgs := func() ([]interface{}, []interface{}) {
-		const argCount = 2
-		writeArgs := make([]interface{}, argCount*o.config.batchSize)
-		var sfuArgs []interface{}
-		if o.config.writesUseSelectForUpdate {
-			sfuArgs = make([]interface{}, o.config.batchSize)
+
+	// Write operation (default).
+	return o.doWrite(ctx)
+}
+
+// doRead executes a read operation using the executor.
+func (o *kvOp) doRead(ctx context.Context) error {
+	keys := make([]interface{}, o.config.batchSize)
+	for i := range keys {
+		key := o.kg.readKey(o.ks)
+		if o.config.alwaysIncKeySeq {
+			key = o.kg.writeKey(o.ks)
 		}
-		for i := 0; i < o.config.batchSize; i++ {
-			j := i * argCount
-			writeArgs[j+0] = o.kg.transformer.getKey(o.kg.writeKey(o.ks))
-			if sfuArgs != nil {
-				sfuArgs[i] = writeArgs[j]
-			}
-			writeArgs[j+1] = o.config.randBlock(o.ks.rand)
-		}
-		return writeArgs, sfuArgs
+		keys[i] = o.kg.transformer.getKey(key)
 	}
+
 	start := timeutil.Now()
+	var rows dbexec.Rows
 	var err error
-	if o.config.writesUseSelect1 || o.config.writesUseSelectForUpdate || o.config.longRunningTxn {
-		// We could use crdb.ExecuteTx, but we avoid retries in this workload so
-		// that each run call makes 1 attempt, so that rate limiting in workerRun
-		// behaves as expected.
-		var tx pgx.Tx
-		txnOptions := pgx.TxOptions{}
-		txnOptions.BeginQuery = fmt.Sprintf("BEGIN PRIORITY %s", o.config.longRunningTxnPriority)
-		tx, err := o.mcp.Get().BeginTx(ctx, txnOptions)
-		if err != nil {
-			return err
-		}
-		defer func() {
-			rollbackErr := tx.Rollback(ctx)
-			if !errors.Is(rollbackErr, pgx.ErrTxClosed) {
-				retErr = errors.CombineErrors(retErr, rollbackErr)
-			}
-		}()
-		iterations := 1
-		if o.config.longRunningTxn {
-			iterations = o.config.longRunningTxnNumWrites
-		}
-		for i := 0; i < iterations; i++ {
-			writeArgs, sfuArgs := makeWriteBatchArgs()
-			if o.config.writesUseSelect1 {
-				rows, err := o.sel1Stmt.QueryTx(ctx, tx)
-				if err != nil {
-					return err
-				}
-				rows.Close()
-				if err = rows.Err(); err != nil {
-					return err
-				}
-			}
-			if o.config.writesUseSelectForUpdate {
-				rows, err := o.sfuStmt.QueryTx(ctx, tx, sfuArgs...)
-				if err != nil {
-					return err
-				}
-				rows.Close()
-				if err = rows.Err(); err != nil {
-					// The transaction may have experienced an error in the meantime.
-					return o.tryHandleWriteErr("write-write-err", start, err)
-				}
-			}
-			// Simulate a transaction that does other work between the sel1 / SFU and write.
-			time.Sleep(o.config.sfuDelay)
-			if _, err = o.writeStmt.ExecTx(ctx, tx, writeArgs...); err != nil {
-				// Multiple write transactions can contend and encounter
-				// a serialization failure. We swallow such an error.
-				return o.tryHandleWriteErr("write-write-err", start, err)
-			}
-		}
-		if err = tx.Commit(ctx); err != nil {
-			return o.tryHandleWriteErr("write-commit-err", start, err)
-		}
+	opName := "read"
+
+	if o.ks.rand.Intn(100) < o.config.followerReadPercent {
+		rows, err = o.exec.FollowerRead(ctx, keys)
+		opName = "follower-read"
 	} else {
-		writeArgs, _ := makeWriteBatchArgs()
-		_, err = o.writeStmt.Exec(ctx, writeArgs...)
+		rows, err = o.exec.Read(ctx, keys)
 	}
+
 	if err != nil {
 		return err
 	}
+	defer rows.Close()
+
+	empty := true
+	for rows.Next() {
+		empty = false
+	}
+	if err := rows.Err(); err != nil {
+		return err
+	}
+	if empty {
+		o.numEmptyResults.Add(1)
+	}
+
 	elapsed := timeutil.Since(start)
-	o.hists.Get(`write`).Record(elapsed)
+	o.hists.Get(opName).Record(elapsed)
+	return nil
+}
+
+// doDelete executes a delete operation using the executor.
+func (o *kvOp) doDelete(ctx context.Context) error {
+	keys := make([]interface{}, o.config.batchSize)
+	for i := range keys {
+		key := o.kg.readKey(o.ks)
+		if o.config.alwaysIncKeySeq {
+			key = o.kg.writeKey(o.ks)
+		}
+		keys[i] = o.kg.transformer.getKey(key)
+	}
+
+	start := timeutil.Now()
+	err := o.exec.Delete(ctx, keys)
+	elapsed := timeutil.Since(start)
+	o.hists.Get("del").Record(elapsed)
 	return err
 }
 
+// doSpan executes a span operation using the executor.
+func (o *kvOp) doSpan(ctx context.Context) error {
+	start := timeutil.Now()
+	var startKey interface{}
+	if o.config.spanLimit > 0 {
+		key := o.kg.readKey(o.ks)
+		if o.config.alwaysIncKeySeq {
+			key = o.kg.writeKey(o.ks)
+		}
+		startKey = o.kg.transformer.getKey(key)
+	}
+	_, err := o.exec.Span(ctx, startKey, o.config.spanLimit)
+	elapsed := timeutil.Since(start)
+	o.hists.Get("span").Record(elapsed)
+	return err
+}
+
+// doWrite executes a write operation. For simple writes, it uses the executor's
+// Write method. For transactional writes (SFU, SELECT 1, long-running txn), it
+// uses BeginTx and type-asserts to ExtendedTx for prepared statement access.
+func (o *kvOp) doWrite(ctx context.Context) (retErr error) {
+	// Helper to generate write rows.
+	generateWriteRows := func() []dbexec.Row {
+		rows := make([]dbexec.Row, o.config.batchSize)
+		for i := range rows {
+			rows[i].K = o.kg.transformer.getKey(o.kg.writeKey(o.ks))
+			rows[i].V = o.config.randBlock(o.ks.rand)
+		}
+		return rows
+	}
+
+	start := timeutil.Now()
+
+	// Check if we need transactional writes (CRDB-specific features).
+	needsTxn := o.config.writesUseSelect1 || o.config.writesUseSelectForUpdate || o.config.longRunningTxn
+	if !needsTxn {
+		// Simple non-transactional write.
+		rows := generateWriteRows()
+		err := o.exec.Write(ctx, rows)
+		if err != nil {
+			return err
+		}
+		elapsed := timeutil.Since(start)
+		o.hists.Get("write").Record(elapsed)
+		return nil
+	}
+
+	// Transactional write path (CRDB-specific).
+	txOpts := dbexec.TxOptions{}
+	if o.config.longRunningTxn {
+		txOpts.Priority = o.config.longRunningTxnPriority
+	}
+
+	tx, err := o.exec.BeginTx(ctx, txOpts)
+	if err != nil {
+		return err
+	}
+	defer func() {
+		rollbackErr := tx.Rollback(ctx)
+		if rollbackErr != nil && !errors.Is(rollbackErr, pgx.ErrTxClosed) {
+			retErr = errors.CombineErrors(retErr, rollbackErr)
+		}
+	}()
+
+	// Type assert to ExtendedTx for transactional operations using prepared
+	// statements (SFU, SELECT 1, Write within transaction).
+	extTx, ok := tx.(dbexec.ExtendedTx)
+	if !ok {
+		// This shouldn't happen since validateCapabilities should have rejected
+		// these flags for executors that don't support ExtendedTx.
+		return errors.New("transactional writes with SFU/SELECT1/long-running-txn require ExtendedTx support")
+	}
+
+	iterations := 1
+	if o.config.longRunningTxn {
+		iterations = o.config.longRunningTxnNumWrites
+	}
+
+	for i := 0; i < iterations; i++ {
+		rows := generateWriteRows()
+		keys := make([]interface{}, len(rows))
+		for j, r := range rows {
+			keys[j] = r.K
+		}
+
+		// SELECT 1 warmup.
+		if o.config.writesUseSelect1 {
+			if err := extTx.Select1(ctx); err != nil {
+				return err
+			}
+		}
+
+		// SELECT FOR UPDATE.
+		if o.config.writesUseSelectForUpdate {
+			sfuRows, err := extTx.SelectForUpdate(ctx, keys)
+			if err != nil {
+				return o.tryHandleWriteErr("write-write-err", start, err)
+			}
+			sfuRows.Close()
+			if err = sfuRows.Err(); err != nil {
+				return o.tryHandleWriteErr("write-write-err", start, err)
+			}
+		}
+
+		// Simulate a transaction that does other work between the
+		// sel1 / SFU and write.
+		time.Sleep(o.config.sfuDelay)
+
+		// Write within the transaction.
+		if err = extTx.Write(ctx, rows); err != nil {
+			return o.tryHandleWriteErr("write-write-err", start, err)
+		}
+	}
+
+	if err = tx.Commit(ctx); err != nil {
+		return o.tryHandleWriteErr("write-commit-err", start, err)
+	}
+
+	elapsed := timeutil.Since(start)
+	o.hists.Get("write").Record(elapsed)
+	return nil
+}
+
+// tryHandleWriteErr handles write errors by checking if they are serialization
+// failures. For CRDB executors that support serialization retry, these errors
+// are recorded as metrics rather than returned as failures.
 func (o *kvOp) tryHandleWriteErr(name string, start time.Time, err error) error {
+	// Only handle serialization failures if the executor supports it.
+	if !o.exec.Capabilities().SerializationRetry {
+		return err
+	}
+
 	// If the error is not an instance of pgconn.PgError, then it is unexpected.
 	pgErr := new(pgconn.PgError)
 	if !errors.As(err, &pgErr) {
@@ -815,15 +914,6 @@ func (o *kvOp) tryHandleWriteErr(name string, start time.Time, err error) error 
 		return nil
 	}
 	return err
-}
-
-func (o *kvOp) close(context.Context) error {
-	if empty := o.numEmptyResults.Load(); empty != 0 {
-		fmt.Printf("Number of reads that didn't return any results: %d.\n", empty)
-	}
-	fmt.Printf("Write sequence could be resumed by passing --write-seq=%s to the next run.\n",
-		o.kg.cursor())
-	return nil
 }
 
 type sequence struct {

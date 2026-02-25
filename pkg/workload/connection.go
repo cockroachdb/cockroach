@@ -83,14 +83,38 @@ func NewConnFlags(genFlags *Flags) *ConnFlags {
 	return c
 }
 
+func dialectForGen(gen Generator) string {
+	if dp, ok := gen.(DialectProvider); ok {
+		if dialect := strings.ToLower(dp.Dialect()); dialect != "" {
+			return dialect
+		}
+	}
+	return "crdb"
+}
+
 // SanitizeUrls verifies that the give SQL connection strings have the correct
 // SQL database set, rewriting them in place if necessary. This database name is
 // returned.
+//
+// For Spanner URLs (projects/PROJECT/instances/INSTANCE/databases/DATABASE),
+// the URL is passed through unchanged and the database name from the path is returned.
 func SanitizeUrls(gen Generator, connFlags *ConnFlags, urls []string) (string, error) {
 	dbName := gen.Meta().Name
 	if connFlags != nil && connFlags.DBOverride != `` {
 		dbName = connFlags.DBOverride
 	}
+
+	if dialectForGen(gen) == "spanner" {
+		// For Spanner, accept database paths and skip URL validation.
+		if len(urls) > 0 {
+			parts := strings.Split(urls[0], "/")
+			if len(parts) >= 6 && parts[4] == "databases" {
+				dbName = parts[5]
+			}
+		}
+		return dbName, nil
+	}
+
 	for i := range urls {
 		parsed, err := url.Parse(urls[i])
 		if err != nil {
@@ -115,10 +139,27 @@ func SanitizeUrls(gen Generator, connFlags *ConnFlags, urls []string) (string, e
 // SetUrlConnVars augments the provided URLs with additional query parameters
 // which are used by the SQL server during connection establishment to configure
 // default session variables.
+//
+// For Spanner URLs, this function is a no-op since Spanner doesn't use
+// PostgreSQL-style connection variables.
+//
+// For non-CockroachDB PostgreSQL-compatible dialects (postgres, aurora, dsql),
+// CockroachDB-specific variables like allow_unsafe_internals are omitted.
 func SetUrlConnVars(gen Generator, connFlags *ConnFlags, urls []string) error {
+	// Skip for Spanner - it doesn't use PostgreSQL connection variables.
+	if dialectForGen(gen) == "spanner" {
+		return nil
+	}
+
+	// Check if the generator uses a non-CRDB dialect.
+	isCRDB := dialectForGen(gen) == "crdb"
+
 	vars := make(map[string]string)
 	vars["application_name"] = gen.Meta().Name
-	vars["allow_unsafe_internals"] = "true"
+	// Only set CRDB-specific variables for CockroachDB.
+	if isCRDB {
+		vars["allow_unsafe_internals"] = "true"
+	}
 	if connFlags != nil {
 		if connFlags.IsoLevel != "" {
 			// As a convenience, replace underscores with spaces. This allows users of

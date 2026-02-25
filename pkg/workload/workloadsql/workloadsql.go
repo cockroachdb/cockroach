@@ -93,13 +93,15 @@ func maybeDisableMergeQueue(db *gosql.DB) error {
 
 // Split creates the range splits defined by the given table.
 func Split(ctx context.Context, db *gosql.DB, table workload.Table, concurrency int) error {
+	// Early exit if there are no splits to create. This also allows non-CockroachDB
+	// databases to skip the CRDB-specific merge queue logic below.
+	if table.Splits.NumBatches <= 0 {
+		return nil
+	}
+
 	// Prevent the merge queue from immediately discarding our splits.
 	if err := maybeDisableMergeQueue(db); err != nil {
 		return err
-	}
-
-	if table.Splits.NumBatches <= 0 {
-		return nil
 	}
 
 	splitPoints := make([][]interface{}, 0, table.Splits.NumBatches)

@@ -317,6 +317,14 @@ func dumpBuildDirectivesForRepo(repoName string) {
 	} else if repoName == "io_opentelemetry_go_proto_otlp" {
 		directives = append(directives,
 			"gazelle:resolve go go github.com/golang/protobuf/descriptor @com_github_golang_protobuf//descriptor:go_default_library_gen")
+	} else if repoName == "com_github_census_instrumentation_opencensus_proto" {
+		directives = append(directives,
+			"gazelle:resolve go go github.com/census-instrumentation/opencensus-proto/gen-go/resource/v1 @com_github_census_instrumentation_opencensus_proto//gen-go/resource/v1:go_default_library")
+	} else if repoName == "com_github_envoyproxy_protoc_gen_validate" {
+		directives = append(directives,
+			"gazelle:resolve go go github.com/golang/protobuf/protoc-gen-go/descriptor @com_github_golang_protobuf//protoc-gen-go/descriptor:go_default_library",
+			"gazelle:resolve go go github.com/golang/protobuf/ptypes/duration @com_github_golang_protobuf//ptypes/duration:go_default_library",
+			"gazelle:resolve go go github.com/golang/protobuf/ptypes/timestamp @com_github_golang_protobuf//ptypes/timestamp:go_default_library")
 	}
 
 	if len(directives) > 0 {

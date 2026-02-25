@@ -57,6 +57,8 @@ var drop = initFlags.Bool("drop", false, "Drop the existing database, if it exis
 
 var sharedFlags = pflag.NewFlagSet(`shared`, pflag.ContinueOnError)
 var pprofport = sharedFlags.Int("pprofport", 33333, "Port for pprof endpoint.")
+var dialect = sharedFlags.String("dialect", "crdb",
+	"Database dialect: crdb (default), postgres, aurora, dsql, spanner")
 var dataLoader = sharedFlags.String("data-loader", `AUTO`,
 	"How to load initial table data. All workloads support INSERT; some support IMPORT, which AUTO prefers if available.")
 var initConns = sharedFlags.Int("init-conns", 16,
@@ -217,6 +219,18 @@ func CmdHelper(
 			}
 		}
 
+		dialectName := strings.ToLower(*dialect)
+		if dialectName == "" {
+			dialectName = "crdb"
+		}
+		if ds, ok := gen.(workload.DialectSetter); ok {
+			if err := ds.SetDialect(dialectName); err != nil {
+				return errors.Wrapf(err, "could not set dialect")
+			}
+		} else if dialectName != "crdb" {
+			return errors.Errorf("workload %s does not support --dialect=%s", gen.Meta().Name, dialectName)
+		}
+
 		if h, ok := gen.(workload.Hookser); ok {
 			if h.Hooks().Validate != nil {
 				if err := h.Hooks().Validate(); err != nil {
@@ -330,13 +344,30 @@ func workerRun(
 
 func runInit(gen workload.Generator, urls []string, dbName string) error {
 	ctx := context.Background()
+	startPProfEndPoint(ctx)
+	maybeLogRandomSeed(ctx, gen)
+
+	dialectName := strings.ToLower(*dialect)
+	if dialectName == "" {
+		dialectName = "crdb"
+	}
+	switch dialectName {
+	case "spanner":
+		if len(urls) != 1 {
+			return errors.New("spanner init requires exactly one database URL")
+		}
+		return runSpannerInit(ctx, gen, urls[0], *drop)
+	case "postgres", "aurora", "dsql":
+		return runSQLInitNonCRDB(ctx, gen, urls)
+	case "crdb":
+	default:
+		return errors.Errorf("unknown dialect: %s", dialectName)
+	}
+
 	initDB, err := gosql.Open(`cockroach`, strings.Join(urls, ` `))
 	if err != nil {
 		return err
 	}
-
-	startPProfEndPoint(ctx)
-	maybeLogRandomSeed(ctx, gen)
 	return runInitImpl(ctx, gen, initDB, dbName)
 }
 

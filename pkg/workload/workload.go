@@ -107,6 +107,24 @@ type Hookser interface {
 	Hooks() Hooks
 }
 
+// DialectProvider is optionally implemented by generators that support multiple
+// database dialects. This allows the workload framework to adjust behavior
+// (e.g., skip CockroachDB-specific connection variables) based on the target database.
+type DialectProvider interface {
+	Generator
+	// Dialect returns the target database dialect (e.g., "crdb", "postgres", "spanner").
+	// An empty string means CockroachDB (the default).
+	Dialect() string
+}
+
+// DialectSetter is optionally implemented by generators that support multiple
+// database dialects. The workload CLI uses this to apply the global --dialect
+// flag to the generator before validation and execution.
+type DialectSetter interface {
+	Generator
+	SetDialect(string) error
+}
+
 // Hooks stores functions to be called at points in the workload lifecycle.
 type Hooks struct {
 	// Validate is called after workload flags are parsed. It should return an
@@ -176,6 +194,9 @@ type Table struct {
 	// Schema is the SQL formatted schema for this table, with the `CREATE TABLE
 	// <name>` prefix omitted.
 	Schema string
+	// Indexes holds optional index DDL statements to run after table creation.
+	// These statements must be valid for the target dialect.
+	Indexes []string
 	// InitialRows is the initial rows that will be present in the table after
 	// setup is completed. Note that the default value of NumBatches (zero) is
 	// special - such a Table will be skipped during `init`; non-zero NumBatches
