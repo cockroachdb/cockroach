@@ -179,7 +179,7 @@ func spanForRegion(
 	endKeyAfterIndex := span.EndKey[len(indexPrefix):]
 
 	// Decode and skip the region column from the original span
-	_, startSuffix, err := keyside.Decode(
+	startRegionDatum, startSuffix, err := keyside.Decode(
 		nil, /* alloc */
 		regionCol.GetType(),
 		startKeyAfterIndex,
@@ -189,6 +189,23 @@ func spanForRegion(
 		return roachpb.Span{}, errors.Wrap(err, "decoding region from start key")
 	}
 
+	// If the original span uses the `PrefixEnd` of the region value, the updated
+	// span does as well.
+	startRegionEncoded, err := keyside.Encode(nil, startRegionDatum, encoding.Ascending)
+	if err != nil {
+		return roachpb.Span{}, errors.Wrap(err, "encoding start region")
+	}
+
+	if isPrefixEnd := bytes.Equal(endKeyAfterIndex, roachpb.Key(startRegionEncoded).PrefixEnd()); isPrefixEnd {
+		key := append(slices.Clone(regionPrefix), startSuffix...)
+		endKey := regionSpan.EndKey
+		return roachpb.Span{
+			Key:    key,
+			EndKey: endKey,
+		}, nil
+	}
+
+	// Decode the end key normally
 	_, endSuffix, err := keyside.Decode(
 		nil, /* alloc */
 		regionCol.GetType(),
@@ -368,4 +385,27 @@ func findUniqueColIdxs(tableDesc catalog.TableDescriptor, index catalog.Index) (
 
 	}
 	return uniqueColIdxs, nil
+}
+
+// getRegionsForTable retrieves the list of regions from an RBR table.
+func getRegionsForTable(ctx context.Context, tableDesc catalog.TableDescriptor) ([]string, error) {
+	if !tableDesc.IsLocalityRegionalByRow() {
+		if !buildutil.CrdbTestBuild && !testing.Testing() { // For ease of testing, allow faked multi-region databases.
+			return nil, errors.AssertionFailedf("table is not REGIONAL BY ROW")
+		}
+	}
+
+	regionColID := tableDesc.GetPrimaryIndex().GetKeyColumnID(0)
+	regionCol, err := catalog.MustFindColumnByID(tableDesc, regionColID)
+	if err != nil {
+		return nil, err
+	}
+
+	regionType := regionCol.GetType()
+	if regionType.TypeMeta.EnumData == nil {
+		return nil, errors.AssertionFailedf("region column is not an enum type")
+	}
+	allRegions := regionType.TypeMeta.EnumData.LogicalRepresentations
+
+	return allRegions, nil
 }
