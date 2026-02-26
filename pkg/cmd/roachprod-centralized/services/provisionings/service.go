@@ -405,7 +405,7 @@ func (s *Service) CreateProvisioning(
 		Identifier:   "validation",
 		TemplateType: input.TemplateType,
 		Environment:  input.Environment,
-		Owner:        getOwnerEmail(principal),
+		Owner:        principal.GetOwnerIdentifier(),
 	}); err != nil {
 		return provmodels.Provisioning{}, nil, utils.NewPublicError(err)
 	}
@@ -454,7 +454,7 @@ func (s *Service) CreateProvisioning(
 		TemplateSnapshot: archive,
 		State:            provmodels.ProvisioningStateNew,
 		Variables:        input.Variables,
-		Owner:            getOwnerEmail(principal),
+		Owner:            principal.GetOwnerIdentifier(),
 		Lifetime:         lifetime,
 		ExpiresAt:        &expiresAt,
 		CreatedAt:        now,
@@ -637,28 +637,7 @@ func (s *Service) checkAccess(
 
 // isOwner checks whether the principal owns the provisioning.
 func (s *Service) isOwner(principal *auth.Principal, prov provmodels.Provisioning) bool {
-	if principal.User != nil {
-		return principal.User.Email == prov.Owner
-	}
-	if principal.Claims != nil {
-		if email, ok := principal.Claims["email"].(string); ok {
-			return email == prov.Owner
-		}
-	}
-	return false
-}
-
-// getOwnerEmail extracts the email from the principal.
-func getOwnerEmail(principal *auth.Principal) string {
-	if principal.User != nil {
-		return principal.User.Email
-	}
-	if principal.Claims != nil {
-		if email, ok := principal.Claims["email"].(string); ok {
-			return email
-		}
-	}
-	return ""
+	return principal.GetOwnerIdentifier() == prov.Owner
 }
 
 // SetupSSHKeys creates a task to run ssh-keys-setup on a provisioning.

@@ -79,12 +79,7 @@ func (s *Service) GetCluster(
 	// Check view permissions
 	if !checkClusterAccessPermission(principal, &c, types.PermissionView, s.providerEnvironments) {
 		l.Warn("principal not authorized to access cluster",
-			slog.String("principal_email", func() string {
-				if principal.User != nil {
-					return principal.User.Email
-				}
-				return "unknown"
-			}()),
+			slog.String("principal", principal.GetOwnerIdentifier()),
 			slog.String("cluster_name", input.Name),
 		)
 		return nil, types.ErrClusterNotFound
@@ -107,17 +102,9 @@ func (s *Service) RegisterCluster(
 	}
 
 	// Cluster's owner is set to the principal's user email or service account name.
-	if principal.User != nil {
-		input.Cluster.User = principal.User.Email
-	} else if principal.ServiceAccount != nil {
-		if principal.DelegatedFrom != nil && principal.DelegatedFromEmail != "" {
-			input.Cluster.User = principal.DelegatedFromEmail
-		} else {
-			input.Cluster.User = principal.ServiceAccount.Name
-		}
-	} else {
-		// This should not happen as only user or service account principals
-		// can call this method.
+	input.Cluster.User = principal.GetOwnerIdentifier()
+	if input.Cluster.User == "" {
+		// This should not happen as only user or service account principals can call this method.
 		return nil, types.ErrForbidden
 	}
 
@@ -368,17 +355,7 @@ func checkClusterAccessPermission(
 ) bool {
 	// Check ownership. For users compare email, for service accounts
 	// compare name or delegated user email.
-	isUserOwner := principal.User != nil && principal.User.Email == cluster.User
-
-	isSAOwner := false
-	if principal.ServiceAccount != nil {
-		if principal.ServiceAccount.Name == cluster.User {
-			isSAOwner = true
-		} else if principal.DelegatedFrom != nil && principal.DelegatedFromEmail == cluster.User {
-			isSAOwner = true
-		}
-	}
-	isOwner := isUserOwner || isSAOwner
+	isOwner := principal.GetOwnerIdentifier() == cluster.User
 
 	allClustersPermission := requiredPermission + ":all"
 	ownClustersPermission := requiredPermission + ":own"

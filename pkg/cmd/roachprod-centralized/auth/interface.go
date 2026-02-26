@@ -117,6 +117,37 @@ type Principal struct {
 	Claims map[string]interface{}
 }
 
+func (p *Principal) GetOwnerIdentifier() string {
+
+	// If the principal is a user, return the email as the identifier.
+	if p.User != nil {
+		return p.User.Email
+	}
+
+	// If the principal is a service account,
+	if p.ServiceAccount != nil {
+
+		// it might be a delegated service account, in which case we return
+		// the delegating user's email for ownership purposes.
+		if p.DelegatedFrom != nil && p.DelegatedFromEmail != "" {
+			return p.DelegatedFromEmail
+		}
+
+		// Otherwise, return the service account name.
+		return p.ServiceAccount.Name
+	}
+
+	// If the principal has claims (e.g., from JWT), attempt to extract
+	// the email claim as the identifier.
+	if p.Claims != nil {
+		if email, ok := p.Claims["email"].(string); ok {
+			return email
+		}
+	}
+
+	return ""
+}
+
 // HasPermission checks if the principal has a specific permission (any scope).
 // This is used by middleware to verify the user can attempt this action.
 // Supports wildcard: if the principal has a permission with value "*", it matches any permission.
