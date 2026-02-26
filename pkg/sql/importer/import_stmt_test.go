@@ -4590,9 +4590,7 @@ func TestImportWorkerFailure(t *testing.T) {
 	var sqlCodec atomic.Pointer[keys.SQLCodec]
 	params.ServerArgs.Knobs.JobsTestingKnobs = jobs.NewTestingKnobsWithShortIntervals()
 	params.ServerArgs.Knobs.Store = &kvserver.StoreTestingKnobs{
-		TestingResponseFilter: func(ctx context.Context, request *kvpb.BatchRequest, response *kvpb.BatchResponse) *kvpb.Error {
-			return jobutils.BulkOpResponseFilter(&sqlCodec, &allowResponse)(ctx, request, response)
-		},
+		TestingResponseFilter: jobutils.BulkOpResponseFilter(&sqlCodec, &allowResponse),
 	}
 
 	ctx := context.Background()
