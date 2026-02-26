@@ -10,7 +10,6 @@ import (
 	"fmt"
 	"slices"
 	"strings"
-	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -22,7 +21,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
-	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
@@ -405,7 +403,7 @@ func (c *uniquenessCheck) loadCatalogInfo(ctx context.Context) error {
 		return err
 	}
 	if !tableDesc.IsLocalityRegionalByRow() {
-		if !buildutil.CrdbTestBuild && !testing.Testing() { // For ease of testing, allow faked multi-region databases.
+		if !isTesting() { // For ease of testing, allow faked multi-region databases.
 			return errors.AssertionFailedf("uniqueness check is only supported for tables with REGIONAL BY ROW locality")
 		}
 	}

@@ -1,0 +1,38 @@
+# LogicTest: multiregion-9node-3region-3azs
+# knob-opt: allow-unsafe
+
+statement ok
+CREATE DATABASE mr_db PRIMARY REGION "ca-central-1" REGIONS "ap-southeast-2", "us-east-1"
+
+subtest uniqueness_check
+
+statement ok
+USE mr_db
+
+statement ok
+CREATE TABLE uniqueness_check (
+  id INT64 DEFAULT unordered_unique_rowid(),
+  data TEXT,
+  PRIMARY KEY (id)
+) LOCALITY REGIONAL BY ROW;
+
+statement ok
+INSERT INTO uniqueness_check (crdb_region, id, data) VALUES ('ap-southeast-2', 100, 'foo');
+INSERT INTO uniqueness_check (crdb_region, id, data) VALUES ('ap-southeast-2', 200, 'titi');
+INSERT INTO uniqueness_check (crdb_region, id, data) VALUES ('ca-central-1', 300, 'bar');
+INSERT INTO uniqueness_check (crdb_region, id, data) VALUES ('ca-central-1', 400, 'toto');
+INSERT INTO uniqueness_check (crdb_region, id, data) VALUES ('us-east-1', 500, 'baz');
+
+statement ok
+INSPECT TABLE uniqueness_check WITH OPTIONS INDEX (uniqueness_check_pkey);
+
+statement ok
+DROP TABLE uniqueness_check;
+
+statement ok
+USE system
+
+subtest end
+
+statement ok
+DROP DATABASE mr_db CASCADE;
