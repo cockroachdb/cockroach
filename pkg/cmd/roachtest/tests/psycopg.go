@@ -79,7 +79,7 @@ func registerPsycopg(r registry.Registry) {
 		if err := repeatRunE(
 			ctx, t, c, node,
 			"install dependencies",
-			`sudo apt-get -qq install make python3 libpq-dev python3-dev gcc python3-virtualenv python3-setuptools python-setuptools`,
+			`sudo apt-get -qq install make python3.10 libpq-dev python3.10-dev gcc python3-virtualenv python3-setuptools python-setuptools python3.10-distutils`,
 		); err != nil {
 			t.Fatal(err)
 		}
