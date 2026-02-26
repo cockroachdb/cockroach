@@ -1,0 +1,525 @@
+# LogicTest: !local-legacy-schema-changer !local-mixed-24.3 !local-mixed-25.1
+# Regression test for #164426. When selecting from a view, verify that the view
+# owner still has SELECT privilege on the underlying tables.
+subtest view_owner_privilege_check
+
+statement ok
+USE test
+
+# Must set the cluster setting to enable the new behavior.
+statement ok
+SET CLUSTER SETTING sql.auth.skip_underlying_view_privilege_checks.enabled = false;
+
+statement ok
+CREATE TABLE t_vop (a INT PRIMARY KEY, b INT);
+INSERT INTO t_vop VALUES (1, 10), (2, 20);
+
+statement ok
+CREATE USER view_owner;
+GRANT ALL ON TABLE t_vop TO view_owner;
+GRANT CREATE ON SCHEMA public TO view_owner;
+REVOKE SELECT ON TABLE t_vop FROM view_owner;
+
+# Create a view as view_owner.
+statement ok
+SET ROLE view_owner
+
+# Create view should fail because view_owner does not have access to underlying table.
+statement error pgcode 42501 user view_owner does not have SELECT privilege on relation t_vop
+CREATE VIEW v_vop AS SELECT a, b FROM t_vop
+
+statement ok
+SET ROLE root
+
+statement ok
+GRANT SELECT ON TABLE t_vop TO view_owner;
+
+statement ok
+SET ROLE view_owner
+
+# Now Create should succeed because view_owner has access to underlying table.
+statement ok
+CREATE VIEW v_vop AS SELECT a, b FROM t_vop
+
+statement ok
+SET ROLE root
+
+# Grant SELECT on the view to testuser so they can query through it.
+statement ok
+GRANT SELECT ON v_vop TO testuser
+
+# Verify the view works initially.
+user testuser
+
+query II
+SELECT * FROM v_vop ORDER BY a
+----
+1  10
+2  20
+
+user root
+
+query II
+SELECT * FROM v_vop ORDER BY a
+----
+1  10
+2  20
+
+statement ok
+SET ROLE view_owner
+
+query II
+SELECT * FROM v_vop ORDER BY a
+----
+1  10
+2  20
+
+statement ok
+SET ROLE root
+
+# Revoke view owner's SELECT on the underlying table.
+statement ok
+REVOKE SELECT ON t_vop FROM view_owner
+
+# Now querying through the view should fail because the view owner no longer
+# has SELECT on the underlying table.
+user testuser
+
+statement error pgcode 42501 user view_owner does not have SELECT privilege on relation t_vop
+SELECT * FROM v_vop
+
+user root
+
+statement error pgcode 42501 user view_owner does not have SELECT privilege on relation t_vop
+SELECT * FROM v_vop
+
+statement ok
+SET ROLE view_owner
+
+statement error pgcode 42501 user view_owner does not have SELECT privilege on relation t_vop
+SELECT * FROM v_vop
+
+statement ok
+SET ROLE root
+
+# Re-grant SELECT to the view owner. The view should work again.
+statement ok
+GRANT SELECT ON t_vop TO view_owner
+
+user testuser
+
+query II
+SELECT * FROM v_vop ORDER BY a
+----
+1  10
+2  20
+
+user root
+
+query II
+SELECT * FROM v_vop ORDER BY a
+----
+1  10
+2  20
+
+statement ok
+SET ROLE view_owner
+
+query II
+SELECT * FROM v_vop ORDER BY a
+----
+1  10
+2  20
+
+statement ok
+SET ROLE root
+
+# Test nested views: each level checks its own owner's privileges.
+statement ok
+CREATE USER view_owner2;
+GRANT SELECT ON t_vop TO view_owner;
+GRANT SELECT ON v_vop TO view_owner2;
+GRANT CREATE ON SCHEMA public TO view_owner2;
+
+statement ok
+SET ROLE view_owner2
+
+statement ok
+CREATE VIEW v_vop_nested AS SELECT a FROM v_vop
+
+statement ok
+SET ROLE root
+
+statement ok
+GRANT SELECT ON v_vop_nested TO testuser
+
+# Both owners have SELECT, so nested view works.
+user testuser
+
+query I
+SELECT * FROM v_vop_nested ORDER BY a
+----
+1
+2
+
+user root
+
+# Revoke the outer view owner's SELECT on the underlying table. The nested
+# view should still work because the inner view's owner has access.
+statement ok
+REVOKE SELECT ON t_vop FROM view_owner2
+
+user testuser
+
+query I
+SELECT * FROM v_vop_nested ORDER BY a
+----
+1
+2
+
+user root
+
+# Revoke the inner view owner's SELECT on the underlying table. The nested
+# view should fail because the inner view's owner lost access.
+statement ok
+REVOKE SELECT ON t_vop FROM view_owner
+
+user testuser
+
+statement error pgcode 42501 user view_owner does not have SELECT privilege on relation t_vop
+SELECT * FROM v_vop_nested
+
+user root
+
+# Enable skip_underlying_view_privilege_checks. testuser can SELECT from the view now.
+statement ok
+SET CLUSTER SETTING sql.auth.skip_underlying_view_privilege_checks.enabled = true;
+
+user testuser
+
+query I
+SELECT * FROM v_vop_nested ORDER BY a
+----
+1
+2
+
+user root
+
+# Disable skip_underlying_view_privilege_checks. testuser cannot SELECT from the view.
+statement ok
+SET CLUSTER SETTING sql.auth.skip_underlying_view_privilege_checks.enabled = false;
+
+user testuser
+
+statement error pgcode 42501 user view_owner does not have SELECT privilege on relation t_vop
+SELECT * FROM v_vop_nested
+
+subtest end
+
+# Test nested views with multiple owners and multiple underlying tables. Four
+# nested views are created covering all (outer_owner, inner_owner) combinations
+# to verify that privilege checks walk the entire view dependency chain.
+subtest nested_view_owner_privilege_matrix
+
+user root
+
+statement ok
+CREATE USER nvo1;
+CREATE USER nvo2;
+
+statement ok
+CREATE TABLE t_nv1 (a INT PRIMARY KEY, b INT);
+INSERT INTO t_nv1 VALUES (1, 10), (2, 20);
+
+statement ok
+CREATE TABLE t_nv2 (x INT PRIMARY KEY, y INT);
+INSERT INTO t_nv2 VALUES (100, 1000), (200, 2000);
+
+# Grant base privileges so that nvo1 and nvo2 can create views.
+statement ok
+GRANT CREATE ON SCHEMA public TO nvo1, nvo2;
+GRANT SELECT ON t_nv1 TO nvo1;
+GRANT SELECT ON t_nv2 TO nvo2;
+
+# nvo1 creates v_nv1 on t_nv1.
+statement ok
+SET ROLE nvo1
+
+statement ok
+CREATE VIEW v_nv1 AS SELECT a, b FROM t_nv1
+
+statement ok
+SET ROLE root
+
+# nvo2 creates v_nv2 on t_nv2.
+statement ok
+SET ROLE nvo2
+
+statement ok
+CREATE VIEW v_nv2 AS SELECT x, y FROM t_nv2
+
+statement ok
+SET ROLE root
+
+# Grant cross-view SELECT so both owners can build nested views.
+statement ok
+GRANT SELECT ON v_nv1 TO nvo1, nvo2;
+GRANT SELECT ON v_nv2 TO nvo1, nvo2;
+
+# Create four nested views covering all (outer_owner, inner_view) combos:
+#   v_nested_1_1: nvo1 owns, wraps v_nv1 (nvo1 owns inner)
+#   v_nested_1_2: nvo1 owns, wraps v_nv2 (nvo2 owns inner)
+#   v_nested_2_1: nvo2 owns, wraps v_nv1 (nvo1 owns inner)
+#   v_nested_2_2: nvo2 owns, wraps v_nv2 (nvo2 owns inner)
+statement ok
+SET ROLE nvo1
+
+statement ok
+CREATE VIEW v_nested_1_1 AS SELECT a, b FROM v_nv1
+
+statement ok
+CREATE VIEW v_nested_1_2 AS SELECT x, y FROM v_nv2
+
+statement ok
+SET ROLE nvo2
+
+statement ok
+CREATE VIEW v_nested_2_1 AS SELECT a, b FROM v_nv1
+
+statement ok
+CREATE VIEW v_nested_2_2 AS SELECT x, y FROM v_nv2
+
+statement ok
+SET ROLE root
+
+# Grant testuser SELECT on all nested views.
+statement ok
+GRANT SELECT ON v_nested_1_1, v_nested_1_2, v_nested_2_1, v_nested_2_2 TO testuser
+
+# With all privileges intact, every nested view should work.
+user testuser
+
+query II
+SELECT * FROM v_nested_1_1 ORDER BY a
+----
+1  10
+2  20
+
+query II
+SELECT * FROM v_nested_1_2 ORDER BY x
+----
+100  1000
+200  2000
+
+query II
+SELECT * FROM v_nested_2_1 ORDER BY a
+----
+1  10
+2  20
+
+query II
+SELECT * FROM v_nested_2_2 ORDER BY x
+----
+100  1000
+200  2000
+
+user root
+
+# Revoke nvo1's SELECT on t_nv1. This should break v_nv1 (owned by nvo1)
+# and therefore v_nested_1_1 and v_nested_2_1 (both wrap v_nv1).
+# v_nested_1_2 and v_nested_2_2 (wrap v_nv2, owned by nvo2) are unaffected.
+statement ok
+REVOKE SELECT ON t_nv1 FROM nvo1
+
+user testuser
+
+statement error pgcode 42501 user nvo1 does not have SELECT privilege on relation t_nv1
+SELECT * FROM v_nested_1_1
+
+query II
+SELECT * FROM v_nested_1_2 ORDER BY x
+----
+100  1000
+200  2000
+
+statement error pgcode 42501 user nvo1 does not have SELECT privilege on relation t_nv1
+SELECT * FROM v_nested_2_1
+
+query II
+SELECT * FROM v_nested_2_2 ORDER BY x
+----
+100  1000
+200  2000
+
+user root
+
+# Re-grant nvo1's SELECT and revoke nvo2's SELECT on t_nv2 instead.
+# Now v_nv2 (owned by nvo2) is broken, affecting v_nested_1_2 and v_nested_2_2.
+statement ok
+GRANT SELECT ON t_nv1 TO nvo1;
+REVOKE SELECT ON t_nv2 FROM nvo2;
+
+user testuser
+
+query II
+SELECT * FROM v_nested_1_1 ORDER BY a
+----
+1  10
+2  20
+
+statement error pgcode 42501 user nvo2 does not have SELECT privilege on relation t_nv2
+SELECT * FROM v_nested_1_2
+
+query II
+SELECT * FROM v_nested_2_1 ORDER BY a
+----
+1  10
+2  20
+
+statement error pgcode 42501 user nvo2 does not have SELECT privilege on relation t_nv2
+SELECT * FROM v_nested_2_2
+
+user root
+
+# Revoke both owners' SELECT. All four nested views should fail.
+statement ok
+REVOKE SELECT ON t_nv1 FROM nvo1;
+
+user testuser
+
+statement error pgcode 42501 user nvo1 does not have SELECT privilege on relation t_nv1
+SELECT * FROM v_nested_1_1
+
+statement error pgcode 42501 user nvo2 does not have SELECT privilege on relation t_nv2
+SELECT * FROM v_nested_1_2
+
+statement error pgcode 42501 user nvo1 does not have SELECT privilege on relation t_nv1
+SELECT * FROM v_nested_2_1
+
+statement error pgcode 42501 user nvo2 does not have SELECT privilege on relation t_nv2
+SELECT * FROM v_nested_2_2
+
+user root
+
+# Re-grant both. All nested views should work again.
+statement ok
+GRANT SELECT ON t_nv1 TO nvo1;
+GRANT SELECT ON t_nv2 TO nvo2;
+
+user testuser
+
+query II
+SELECT * FROM v_nested_1_1 ORDER BY a
+----
+1  10
+2  20
+
+query II
+SELECT * FROM v_nested_1_2 ORDER BY x
+----
+100  1000
+200  2000
+
+query II
+SELECT * FROM v_nested_2_1 ORDER BY a
+----
+1  10
+2  20
+
+query II
+SELECT * FROM v_nested_2_2 ORDER BY x
+----
+100  1000
+200  2000
+
+subtest end
+
+
+# Test that RLS policies on the underlying table are evaluated against the view
+# owner (definer semantics), not the invoking user. When an invoker selects from
+# the view, the view owner RLS policies apply.
+subtest view_rls_definer_semantics
+
+user root
+
+statement ok
+CREATE ROLE rls_view_owner LOGIN;
+
+statement ok
+CREATE ROLE rls_invoker LOGIN;
+
+statement ok
+CREATE TABLE view_rls_t (id INT PRIMARY KEY, val INT);
+
+statement ok
+INSERT INTO view_rls_t VALUES (1, 10), (2, 20), (3, 30), (4, 40);
+
+statement ok
+ALTER TABLE view_rls_t ENABLE ROW LEVEL SECURITY;
+
+# Only allow rls_view_owner to see even rows.
+statement ok
+CREATE POLICY even_rows ON view_rls_t FOR SELECT TO rls_view_owner USING (id % 2 = 0);
+
+# Only allow rls_invoker to see odd rows.
+statement ok
+CREATE POLICY odd_rows ON view_rls_t FOR SELECT TO rls_invoker USING (id % 2 = 1);
+
+statement ok
+GRANT SELECT ON view_rls_t TO rls_view_owner;
+
+statement ok
+GRANT CREATE ON SCHEMA public TO rls_view_owner;
+
+# Create the view as rls_view_owner.
+statement ok
+SET ROLE rls_view_owner;
+
+statement ok
+CREATE VIEW view_rls_v AS SELECT * FROM view_rls_t;
+
+statement ok
+GRANT SELECT ON view_rls_v TO rls_invoker;
+
+# As rls_view_owner, selecting from the table directly applies the even_rows policy.
+query II rowsort
+SELECT * FROM view_rls_t;
+----
+2  20
+4  40
+
+# As rls_view_owner, selecting through the view also applies the even_rows policy.
+query II rowsort
+SELECT * FROM view_rls_v;
+----
+2  20
+4  40
+
+# Switch to rls_invoker and select from the view. The view uses definer semantics,
+# so RLS is evaluated as rls_view_owner, and the even_rows policy applies.
+statement ok
+SET ROLE rls_invoker;
+
+query II rowsort
+SELECT * FROM view_rls_v;
+----
+2  20
+4  40
+
+# Clean up.
+statement ok
+RESET ROLE;
+
+statement ok
+DROP VIEW view_rls_v;
+
+statement ok
+DROP TABLE view_rls_t;
+
+statement ok
+REVOKE CREATE ON SCHEMA public FROM rls_view_owner;
+
+statement ok
+DROP ROLE rls_view_owner, rls_invoker;
+
+subtest end

@@ -9,6 +9,7 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
@@ -369,7 +370,9 @@ func (c *CustomFuncs) foldOIDFamilyCast(
 				return nil, true, err
 			}
 
-			c.mem.Metadata().AddDependency(opt.DepByName(&resName), ds, privilege.SELECT)
+			// Pass an empty user so that re-validation uses the current
+			// session user (this is not a definer context).
+			c.mem.Metadata().AddDependency(opt.DepByName(&resName), ds, privilege.SELECT, username.SQLUsername{})
 			dOid = tree.NewDOidWithTypeAndName(
 				oid.Oid(ds.PostgresDescriptorID()), types.RegClass, string(tn.ObjectName),
 			)
