@@ -11,7 +11,6 @@ import (
 	"fmt"
 	"math/rand"
 	"slices"
-	"strings"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -344,25 +343,24 @@ func (re *rebalanceEnv) rebalanceStore(
 
 	topKRanges := ss.adjusted.topKRanges[localStoreID]
 	n := topKRanges.len()
-	if true {
-		// Debug logging.
-		if n > 0 {
-			var b strings.Builder
-			for i := 0; i < n; i++ {
-				rangeID := topKRanges.index(i)
-				rstate := re.ranges[rangeID]
-				load := rstate.load.Load
-				if !ss.adjusted.replicas[rangeID].IsLeaseholder {
-					load[CPURate] = rstate.load.RaftCPU
-				}
-				_, _ = fmt.Fprintf(&b, " r%d:%v", rangeID, load)
+	// Debug logging.
+	if n > 0 {
+		var buf redact.StringBuilder
+		buf.Printf("top-K[%d] ranges for s%d with lease on local s%d:", topKRanges.dim,
+			store.StoreID, localStoreID)
+		for i := 0; i < n; i++ {
+			rangeID := topKRanges.index(i)
+			rstate := re.ranges[rangeID]
+			load := rstate.load.Load
+			if !ss.adjusted.replicas[rangeID].IsLeaseholder {
+				load[CPURate] = rstate.load.RaftCPU
 			}
-			log.KvDistribution.VEventf(ctx, 2, "top-K[%s] ranges for s%d with lease on local s%d:%s",
-				topKRanges.dim, store.StoreID, localStoreID, redact.SafeString(b.String()))
-		} else {
-			log.KvDistribution.VEventf(ctx, 2, "no top-K[%s] ranges found for s%d with lease on local s%d",
-				topKRanges.dim, store.StoreID, localStoreID)
+			buf.Printf(" r%d:%v", rangeID, load)
 		}
+		log.KvDistribution.VEventf(ctx, 2, "%s", buf.RedactableString())
+	} else {
+		log.KvDistribution.VEventf(ctx, 2, "no top-K[%s] ranges found for s%d with lease on local s%d",
+			topKRanges.dim, store.StoreID, localStoreID)
 	}
 	if n == 0 {
 		return
@@ -481,10 +479,12 @@ func (re *rebalanceEnv) rebalanceReplicas(
 		if len(rstate.pendingChanges) > 0 {
 			// If the range has pending changes, don't make more changes.
 			log.KvDistribution.VEventf(ctx, 2, "skipping r%d: has pending changes", rangeID)
+			re.passObs.replicaShed(rangeTransient)
 			continue
 		}
 		if re.now.Sub(rstate.lastFailedChange) < re.lastFailedChangeDelayDuration {
 			log.KvDistribution.VEventf(ctx, 2, "skipping r%d: too soon after failed change", rangeID)
+			re.passObs.replicaShed(rangeTransient)
 			continue
 		}
 		re.ensureAnalyzedConstraints(ctx, rstate)
@@ -494,6 +494,7 @@ func (re *rebalanceEnv) rebalanceReplicas(
 					"skipping r%d: no constraints analyzed (conf=%v replicas=%v)",
 					rangeID, rstate.conf, rstate.replicas)
 			}
+			re.passObs.replicaShed(rangeConstraintsError)
 			continue
 		}
 		isVoter, isNonVoter := rstate.constraints.replicaRole(store.StoreID)
@@ -555,13 +556,16 @@ func (re *rebalanceEnv) rebalanceReplicas(
 		cands, ssSLS := re.computeCandidatesForReplicaTransfer(ctx, conj, existingReplicas, re.scratch.postMeansExclusions, store.StoreID, re.passObs)
 		log.KvDistribution.VEventf(ctx, 2, "considering replica-transfer r%v from s%v: store load %v",
 			rangeID, store.StoreID, ss.adjusted.load)
-		log.KvDistribution.VEventf(ctx, 3, "candidates are:")
-		for _, c := range cands.candidates {
-			log.KvDistribution.VEventf(ctx, 3, " s%d: %s", c.StoreID, c.storeLoadSummary)
+		if log.ExpensiveLogEnabled(ctx, 3) {
+			var buf redact.StringBuilder
+			buf.Printf("candidates for r%d:", rangeID)
+			for _, c := range cands.candidates {
+				buf.Printf("\n\ts%d: %s", c.StoreID, c.storeLoadSummary)
+			}
+			log.KvDistribution.VEventf(ctx, 3, "%s", buf.RedactableString())
 		}
 
 		if len(cands.candidates) == 0 {
-			re.passObs.replicaShed(noCandidate)
 			log.KvDistribution.VEventf(ctx, 2, "result(failed): no candidates found for r%d after exclusions", rangeID)
 			continue
 		}
@@ -672,6 +676,7 @@ func (re *rebalanceEnv) rebalanceLeasesFromLocalStoreID(
 		if len(rstate.pendingChanges) > 0 {
 			// If the range has pending changes, don't make more changes.
 			log.KvDistribution.VEventf(ctx, 2, "skipping r%d: has pending changes", rangeID)
+			re.passObs.leaseShed(rangeTransient)
 			continue
 		}
 		foundLocalReplica := false
@@ -701,6 +706,7 @@ func (re *rebalanceEnv) rebalanceLeasesFromLocalStoreID(
 		}
 		if re.now.Sub(rstate.lastFailedChange) < re.lastFailedChangeDelayDuration {
 			log.KvDistribution.VEventf(ctx, 2, "skipping r%d: too soon after failed change", rangeID)
+			re.passObs.leaseShed(rangeTransient)
 			continue
 		}
 		re.ensureAnalyzedConstraints(ctx, rstate)
@@ -710,6 +716,7 @@ func (re *rebalanceEnv) rebalanceLeasesFromLocalStoreID(
 					"skipping r%d: no constraints analyzed (conf=%v replicas=%v)",
 					rangeID, rstate.conf, rstate.replicas)
 			}
+			re.passObs.leaseShed(rangeConstraintsError)
 			continue
 		}
 		if rstate.constraints.leaseholderID != store.StoreID {

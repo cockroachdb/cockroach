@@ -93,17 +93,20 @@ rebalance-stores store-id=1
 [mmaid=1] skipping lease shedding for calling store s1: not cpu overloaded: loadLow
 [mmaid=1] attempting to shed replicas next
 [mmaid=1] skipping s2 for replica transfer: replica disposition refusing (health ok)
-[mmaid=1] pre-means filtered 1 stores → remaining [1 3], means: store={[1000000000 50000000 0] [8000000000 100000000 1000000000] [0.125 0.5 0] [0 0]} node={4000000000 12000000000 0.3333333333333333}
+[mmaid=1] pre-means filtered 1 stores → remaining [1 3], means: store={[cpu:1s/s, write-bandwidth:50 MB/s, byte-size:0 B] [cpu:8s/s, write-bandwidth:100 MB/s, byte-size:1.0 GB] [cpu-util:0.12 byte-util:0.00] [lease:0, replica:0] node={4000000000 12000000000 0.3333333333333333}
 [mmaid=1] load summary for dim=CPURate (s1): loadNormal, reason: load is within 5% of mean [load=1000000000 meanLoad=1000000000 fractionUsed=12.50% meanUtil=12.50% capacity=8000000000]
 [mmaid=1] load summary for dim=WriteBandwidth (s1): loadNormal, reason: load is within 5% of mean [load=50000000 meanLoad=50000000 fractionUsed=50.00% meanUtil=50.00% capacity=100000000]
 [mmaid=1] load summary for dim=ByteSize (s1): loadNormal, reason: load is within 5% of mean [load=0 meanLoad=0 fractionUsed=0.00% meanUtil=0.00% capacity=1000000000]
 [mmaid=1] load summary for dim=CPURate (n1): overloadSlow, reason: fractionUsed < 75% [load=7000000000 meanLoad=4000000000 fractionUsed=43.75% meanUtil=33.33% capacity=16000000000]
 [mmaid=1] considering replica-transfer r1 from s1: store load [cpu:1s/s, write-bandwidth:50 MB/s, byte-size:0 B]
-[mmaid=1] candidates are:
+[mmaid=1] candidates for r1:
 [mmaid=1] result(failed): no candidates found for r1 after exclusions
 [mmaid=1] start processing shedding store s2: cpu node load overloadSlow, store load overloadSlow, worst dim CPURate
 [mmaid=1] no top-K[CPURate] ranges found for s2 with lease on local s1
 [mmaid=1] start processing shedding store s3: cpu node load loadLow, store load overloadSlow, worst dim WriteBandwidth
 [mmaid=1] no top-K[WriteBandwidth] ranges found for s3 with lease on local s1
-[mmaid=1] rebalancing pass failures (store,reason:count): (s1,not-overloaded:1)
+[mmaid=1] rebalancing pass summary [local=s1]:
+	overloaded:
+		short: [s1]
+	failure: [{s1, total: 1, not-overloaded:1}]
 pending(0)

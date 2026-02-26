@@ -58,18 +58,18 @@ type ReplicaIDAndType struct {
 
 // SafeFormat implements the redact.SafeFormatter interface.
 func (rit ReplicaIDAndType) SafeFormat(w redact.SafePrinter, _ rune) {
-	w.Print("replica-id=")
+	w.SafeString("replica-id=")
 	switch rit.ReplicaID {
 	case unknownReplicaID:
-		w.Print("unknown")
+		w.SafeString("unknown")
 	case noReplicaID:
-		w.Print("none")
+		w.SafeString("none")
 	default:
 		w.Print(rit.ReplicaID)
 	}
 	w.Printf(" type=%v", rit.ReplicaType.ReplicaType)
 	if rit.IsLeaseholder {
-		w.Print(" leaseholder=true")
+		w.SafeString(" leaseholder=true")
 	}
 }
 
@@ -123,10 +123,20 @@ type ReplicaState struct {
 	LeaseDisposition LeaseDisposition
 }
 
+// SafeFormat implements the redact.SafeFormatter interface.
+func (rs ReplicaState) SafeFormat(w redact.SafePrinter, c rune) {
+	rs.ReplicaIDAndType.SafeFormat(w, c)
+	if rs.LeaseDisposition != LeaseDispositionOK {
+		w.Printf(" lease-disposition=%v", rs.LeaseDisposition)
+	}
+}
+
 // changeID is a unique ID, in the context of this data-structure and when
 // receiving updates about enactment having happened or having been rejected
 // (by the component responsible for change enactment).
 type changeID uint64
+
+func (changeID) SafeValue() {}
 
 type ReplicaChangeType int
 
@@ -143,20 +153,25 @@ const (
 	ChangeReplica
 )
 
-func (s ReplicaChangeType) String() string {
-	switch s {
+func (rct ReplicaChangeType) String() string {
+	return redact.StringWithoutMarkers(rct)
+}
+
+// SafeFormat implements the redact.SafeFromatter interface.
+func (rct ReplicaChangeType) SafeFormat(w redact.SafePrinter, _ rune) {
+	switch rct {
 	case Unknown:
-		return "Unknown"
+		w.SafeString("Unknown")
 	case AddLease:
-		return "AddLease"
+		w.SafeString("AddLease")
 	case RemoveLease:
-		return "RemoveLease"
+		w.SafeString("RemoveLease")
 	case AddReplica:
-		return "AddReplica"
+		w.SafeString("AddReplica")
 	case RemoveReplica:
-		return "RemoveReplica"
+		w.SafeString("RemoveReplica")
 	case ChangeReplica:
-		return "ChangeReplica"
+		w.SafeString("ChangeReplica")
 	default:
 		panic("unknown ReplicaChangeType")
 	}
@@ -539,7 +554,7 @@ func (prc PendingRangeChange) String() string {
 // previous state and next state.
 func (prc PendingRangeChange) SafeFormat(w redact.SafePrinter, _ rune) {
 	w.Printf("r%v=[", prc.RangeID)
-	nextAddOrChangeReplicaStr := func(next ReplicaType) string {
+	nextAddOrChangeReplicaStr := func(next ReplicaType) redact.SafeString {
 		if next.ReplicaType == roachpb.NON_VOTER {
 			return "non-voter"
 		}
@@ -550,7 +565,7 @@ func (prc PendingRangeChange) SafeFormat(w redact.SafePrinter, _ rune) {
 	}
 	for i, c := range prc.pendingReplicaChanges {
 		if i > 0 {
-			w.Print(" ")
+			w.SafeRune(' ')
 		}
 		w.Printf("id:%d", c.changeID)
 		switch c.replicaChangeType() {
@@ -569,7 +584,7 @@ func (prc PendingRangeChange) SafeFormat(w redact.SafePrinter, _ rune) {
 				c.target.StoreID)
 		}
 	}
-	w.Print("]")
+	w.SafeRune(']')
 }
 
 // StringForTesting prints the untransformed internal state for testing.
@@ -2408,7 +2423,7 @@ func (cs *clusterState) canShedAndAddLoad(
 	srcSS.adjusted.load.add(delta)
 	srcNS.adjustedCPU += delta[CPURate]
 
-	var failureReason strings.Builder
+	var failureReason redact.StringBuilder
 	populateFailureReason := log.ExpensiveLogEnabled(ctx, 2)
 	defer func() {
 		if canAddLoad {
@@ -2416,16 +2431,16 @@ func (cs *clusterState) canShedAndAddLoad(
 				targetNS.NodeID, targetSS.StoreID, canAddLoad, targetSLS, srcSLS)
 		} else if populateFailureReason {
 			log.KvDistribution.VEventf(ctx, 2,
-				"cannot add load from n%vs%v to n%vs%v for r%v due to %s: delta(%v) targetSLS[%v] srcSLS[%v]",
+				"cannot add load from n%vs%v to n%vs%v for r%v due to %v: delta(%v) targetSLS[%v] srcSLS[%v]",
 				srcNS.NodeID, srcSS.StoreID, targetNS.NodeID, targetSS.StoreID, rangeID,
-				failureReason.String(), delta, targetSLS, srcSLS)
+				&failureReason, delta, targetSLS, srcSLS)
 		}
 	}()
 	// Check if the target would have high disk utilization after the transfer.
 	// We compute this using the post-transfer load (current + delta).
 	if postTransferHighDiskSpaceUtil {
 		if populateFailureReason {
-			failureReason.WriteString("(post-transfer) targetSLS.highDiskSpaceUtilization")
+			failureReason.SafeString("(post-transfer) targetSLS.highDiskSpaceUtilization")
 		}
 		return false
 	}
@@ -2445,7 +2460,7 @@ func (cs *clusterState) canShedAndAddLoad(
 	}
 	if targetSummary >= overloadUrgent {
 		if populateFailureReason {
-			failureReason.WriteString("overloadUrgent")
+			failureReason.SafeString("overloadUrgent")
 		}
 		return false
 	}
@@ -2554,43 +2569,37 @@ func (cs *clusterState) canShedAndAddLoad(
 		return true
 	}
 	if populateFailureReason {
-		if !overloadedDimPermitsChange {
+		appendSep := func() {
 			if failureReason.Len() != 0 {
-				failureReason.WriteRune(',')
+				failureReason.SafeRune(',')
 			}
-			failureReason.WriteString("!overloadedDimPermitsChange")
+		}
+		if !overloadedDimPermitsChange {
+			appendSep()
+			failureReason.SafeString("!overloadedDimPermitsChange")
 		}
 		if otherDimensionsBecameWorseInTarget {
-			if failureReason.Len() != 0 {
-				failureReason.WriteRune(',')
-			}
-			failureReason.WriteString("otherDimensionsBecameWorseInTarget")
+			appendSep()
+			failureReason.SafeString("otherDimensionsBecameWorseInTarget")
 		}
 		if targetSummary >= loadNoChange {
-			if failureReason.Len() != 0 {
-				failureReason.WriteRune(',')
-			}
-			failureReason.WriteString(fmt.Sprintf("target_summary(%s)>=loadNoChange", targetSummary))
+			appendSep()
+			failureReason.Printf("target_summary(%v)>=loadNoChange", targetSummary)
 		}
 		if targetSLS.maxFractionPendingIncrease >= epsilon || targetSLS.maxFractionPendingDecrease >= epsilon {
-			if failureReason.Len() != 0 {
-				failureReason.WriteRune(',')
-			}
-			failureReason.WriteString(fmt.Sprintf("targetSLS.frac_pending(%.2for%.2f>=epsilon)",
-				targetSLS.maxFractionPendingIncrease, targetSLS.maxFractionPendingDecrease))
+			appendSep()
+			failureReason.Printf("targetSLS.frac_pending(%.2for%.2f>=epsilon)",
+				redact.SafeFloat(targetSLS.maxFractionPendingIncrease),
+				redact.SafeFloat(targetSLS.maxFractionPendingDecrease))
 		}
 		if targetSLS.sls > srcSLS.sls {
-			if failureReason.Len() != 0 {
-				failureReason.WriteRune(',')
-			}
-			failureReason.WriteString(fmt.Sprintf("target-store(%s)>src-store(%s)", targetSLS.sls, srcSLS.sls))
+			appendSep()
+			failureReason.Printf("target-store(%v)>src-store(%v)", targetSLS.sls, srcSLS.sls)
 		}
 		if targetSLS.nls > targetSLS.sls {
-			if failureReason.Len() != 0 {
-				failureReason.WriteRune(',')
-			}
-			failureReason.WriteString(fmt.Sprintf("target-node(%s)>target-store(%s)",
-				targetSLS.nls, targetSLS.sls))
+			appendSep()
+			failureReason.Printf("target-node(%v)>target-store(%v)",
+				targetSLS.nls, targetSLS.sls)
 		}
 	}
 	return false
@@ -2606,17 +2615,17 @@ func (cs *clusterState) computeLoadSummary(
 
 // TODO(wenyihu6): check to make sure obs here is correct
 func (cs *clusterState) loadSummaryForAllStores(ctx context.Context) string {
-	var b strings.Builder
+	var buf redact.StringBuilder
 	clusterMeans := cs.meansMemo.getMeans(nil)
-	b.WriteString(fmt.Sprintf("cluster means: (stores-load %s) (stores-capacity %s)\n",
-		clusterMeans.storeLoad.load, clusterMeans.storeLoad.capacity))
-	b.WriteString(fmt.Sprintf("(nodes-cpu-load %d) (nodes-cpu-capacity %d)\n",
-		clusterMeans.nodeLoad.loadCPU, clusterMeans.nodeLoad.capacityCPU))
+	buf.Printf("cluster means: (stores-load %v) (stores-capacity %v)\n",
+		clusterMeans.storeLoad.load, clusterMeans.storeLoad.capacity)
+	buf.Printf("(nodes-cpu-load %v) (nodes-cpu-capacity %v)\n",
+		clusterMeans.nodeLoad.loadCPU, clusterMeans.nodeLoad.capacityCPU)
 	for storeID, ss := range cs.stores {
 		sls := cs.meansMemo.getStoreLoadSummary(ctx, clusterMeans, storeID, ss.loadSeqNum)
-		b.WriteString(fmt.Sprintf("evaluating store s%d for shedding: load summary %v", storeID, sls))
+		buf.Printf("evaluating store s%v for shedding: load summary %v", storeID, sls)
 	}
-	return b.String()
+	return string(buf.RedactableString())
 }
 
 func computeLoadSummary(

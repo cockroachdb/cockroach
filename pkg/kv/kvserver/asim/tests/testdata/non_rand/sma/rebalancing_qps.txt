@@ -20,7 +20,7 @@ gen_load rate=7000 rw_ratio=0.95 access_skew=false min_block=128 max_block=256
 66 KiB/s goodput
 
 # Add two assertions (balanced, stable steady state) on QPS of the cluster.
-assertion stat=qps type=balance ticks=6 upper_bound=1.15
+assertion stat=qps type=balance ticks=6 upper_bound=1.15 issue=https://cockroachlabs.atlassian.net/browse/CRDB-58513
 ----
 asserting: max_{stores}(qps)/mean_{stores}(qps) ≤ 1.15 at each of last 6 ticks
 

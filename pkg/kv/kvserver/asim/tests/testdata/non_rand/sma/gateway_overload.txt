@@ -34,7 +34,7 @@ gen_load rate=5000 rw_ratio=0.95 min_block=128 max_block=128 request_cpu_per_acc
 
 # Assert that leases are stable (not bouncing) over the last 100 ticks.
 # SMA is expected to fail this due to the diluted-mean churn described above.
-assertion type=steady stat=leases ticks=100 upper_bound=0.15
+assertion type=steady stat=leases ticks=100 upper_bound=0.15 issue=https://github.com/cockroachdb/cockroach/issues/162590
 ----
 asserting: |leases(t)/mean_{T}(leases) - 1| ≤ 0.15 ∀ t∈T and each store (T=last 100 ticks)
 

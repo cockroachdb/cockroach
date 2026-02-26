@@ -131,7 +131,10 @@ rebalance-stores store-id=1 fraction-pending-decrease-threshold=10.0 max-lease-t
 [mmaid=1] load summary for dim=CPURate (n1): loadLow, reason: load is >10% below mean [load=310 meanLoad=400 fractionUsed=31.00% meanUtil=40.00% capacity=1000]
 [mmaid=1] cannot add load from n1s1 to n2s2 for r1 due to !overloadedDimPermitsChange,target_summary(overloadSlow)>=loadNoChange,targetSLS.frac_pending(2.53or0.00>=epsilon),target-store(overloadSlow)>src-store(loadNormal): delta([cpu:230ns/s, write-bandwidth:0 B/s, byte-size:0 B]) targetSLS[(store=overloadSlow worst=CPURate cpu=overloadSlow writes=loadNormal bytes=loadNormal node=overloadSlow frac_pending=2.53,0.00(false))] srcSLS[(store=loadNormal worst=WriteBandwidth cpu=loadLow writes=loadNormal bytes=loadNormal node=loadLow frac_pending=0.00,0.46(false))]
 [mmaid=1] skipping replica transfers for s1 to try more leases next time
-[mmaid=1] rebalancing pass shed: {s1}
+[mmaid=1] rebalancing pass summary [local=s1]:
+	overloaded:
+		short: [s1]
+	success: [s1]
 pending(4)
 change-id=1 store-id=1 node-id=1 range-id=4 load-delta=[cpu:-230ns/s, write-bandwidth:0 B/s, byte-size:0 B] start=0s gc=1m0s
   prev=(replica-id=1 type=VOTER_FULL leaseholder=true)
