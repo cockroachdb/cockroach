@@ -587,3 +587,360 @@ func TestRestorePausepointSkipsRetries(t *testing.T) {
 		t, 1, mu.attemptCount, "expected only 1 restore attempt since pausepoint should skip retries",
 	)
 }
+
+func TestRestoreWithGrants(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	_, db, _, cleanup := backuptestutils.StartBackupRestoreTestCluster(t, 1)
+	defer cleanup()
+
+	tests := []struct {
+		name              string
+		setupStmts        []string
+		grantStmts        []string
+		backupStmt        string
+		dropBeforeRestore []string
+		restoreStmt       string
+		ownerChecks       []ownerCheck
+		privilegeChecks   []privilegeCheck
+		expectError       string // if non-empty, expect this error message
+	}{
+		// Database ownership tests
+		{
+			name: "owner-preserved-database",
+			setupStmts: []string{
+				"CREATE DATABASE testdb",
+				"CREATE USER testowner",
+			},
+			grantStmts: []string{
+				"ALTER DATABASE testdb OWNER TO testowner",
+			},
+			backupStmt:  "BACKUP DATABASE testdb INTO 'nodelocal://1/test-owner-db'",
+			restoreStmt: "RESTORE DATABASE testdb FROM LATEST IN 'nodelocal://1/test-owner-db' WITH GRANTS, new_db_name = newtestdb",
+			ownerChecks: []ownerCheck{
+				{objectType: "database", objectName: "newtestdb", expectedOwner: "testowner"},
+			},
+		},
+		{
+			name: "owner-not-preserved",
+			setupStmts: []string{
+				"CREATE DATABASE testdb2",
+				"CREATE USER testowner2",
+			},
+			grantStmts: []string{
+				"ALTER DATABASE testdb2 OWNER TO testowner2",
+			},
+			backupStmt: "BACKUP DATABASE testdb2 INTO 'nodelocal://1/test-owner-dropped'",
+			dropBeforeRestore: []string{
+				"DROP DATABASE testdb2",
+				"DROP USER testowner2",
+			},
+			restoreStmt: "RESTORE DATABASE testdb2 FROM LATEST IN 'nodelocal://1/test-owner-dropped' WITH GRANTS",
+			ownerChecks: []ownerCheck{
+				{objectType: "database", objectName: "testdb2", expectedOwner: "root"},
+			},
+		},
+
+		// Grant option tests
+		{
+			name: "grant-option-on-select",
+			setupStmts: []string{
+				"CREATE DATABASE grantoptdb",
+				"CREATE TABLE grantoptdb.t (id INT PRIMARY KEY)",
+				"CREATE USER user1",
+			},
+			grantStmts: []string{
+				"GRANT SELECT ON TABLE grantoptdb.t TO user1 WITH GRANT OPTION",
+				"GRANT INSERT ON TABLE grantoptdb.t TO user1",
+			},
+			backupStmt:  "BACKUP DATABASE grantoptdb INTO 'nodelocal://1/test-grant-option'",
+			restoreStmt: "RESTORE DATABASE grantoptdb FROM LATEST IN 'nodelocal://1/test-grant-option' WITH GRANTS, new_db_name = newgrantoptdb",
+			privilegeChecks: []privilegeCheck{
+				hasGrantablePriv("user1", "TABLE", "newgrantoptdb.t", "SELECT"),
+				hasPriv("user1", "TABLE", "newgrantoptdb.t", "INSERT"),
+			},
+		},
+
+		// Multi-privilege tests
+		{
+			name: "multiple-table-privileges",
+			setupStmts: []string{
+				"CREATE DATABASE multiprivdb",
+				"CREATE TABLE multiprivdb.t (id INT PRIMARY KEY)",
+				"CREATE USER user3",
+			},
+			grantStmts: []string{
+				"GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE multiprivdb.t TO user3",
+			},
+			backupStmt:      "BACKUP DATABASE multiprivdb INTO 'nodelocal://1/test-multi-priv'",
+			restoreStmt:     "RESTORE TABLE multiprivdb.t FROM LATEST IN 'nodelocal://1/test-multi-priv' WITH GRANTS, into_db = testdb",
+			privilegeChecks: hasPrivs("user3", "TABLE", "testdb.t", "SELECT", "INSERT", "UPDATE", "DELETE"),
+		},
+
+		// Object type privilege tests
+		{
+			name: "multi-desc-types",
+			setupStmts: []string{
+				"CREATE DATABASE descdb",
+				"CREATE SCHEMA descdb.testschema",
+				"CREATE TYPE descdb.myenum AS ENUM ('a', 'b', 'c')",
+				"CREATE USER user5",
+			},
+			grantStmts: []string{
+				"GRANT CREATE ON DATABASE descdb TO user5",
+				"GRANT CREATE ON SCHEMA descdb.testschema TO user5",
+				"GRANT USAGE ON TYPE descdb.myenum TO user5",
+			},
+			backupStmt:  "BACKUP DATABASE descdb INTO 'nodelocal://1/test-multi-desc'",
+			restoreStmt: "RESTORE DATABASE descdb FROM LATEST IN 'nodelocal://1/test-multi-desc' WITH GRANTS, new_db_name = newdescdb",
+			privilegeChecks: []privilegeCheck{
+				hasPriv("user5", "DATABASE", "newdescdb", "CREATE"),
+				hasPriv("user5", "SCHEMA", "newdescdb.testschema", "CREATE"),
+				hasPriv("user5", "TYPE", "newdescdb.myenum", "USAGE"),
+			},
+		},
+
+		// Multi-user scenarios
+		{
+			name: "multiple-users",
+			setupStmts: []string{
+				"CREATE DATABASE multiuserdb",
+				"CREATE USER alice",
+				"CREATE USER bob",
+				"CREATE USER charlie",
+			},
+			grantStmts: []string{
+				"GRANT CREATE ON DATABASE multiuserdb TO alice",
+				"GRANT CONNECT ON DATABASE multiuserdb TO bob",
+				"GRANT CREATE ON DATABASE multiuserdb TO charlie",
+			},
+			backupStmt: "BACKUP DATABASE multiuserdb INTO 'nodelocal://1/test-multi-user'",
+			dropBeforeRestore: []string{
+				"DROP DATABASE multiuserdb",
+				"DROP USER bob",
+			},
+			restoreStmt: "RESTORE DATABASE multiuserdb FROM LATEST IN 'nodelocal://1/test-multi-user' WITH GRANTS",
+			privilegeChecks: []privilegeCheck{
+				hasPriv("alice", "DATABASE", "multiuserdb", "CREATE"),
+				lacksPriv("bob", "DATABASE", "multiuserdb", "CONNECT"),
+				hasPriv("charlie", "DATABASE", "multiuserdb", "CREATE"),
+			},
+		},
+
+		// Edge cases and error conditions
+		{
+			name: "without-grants-option",
+			setupStmts: []string{
+				"CREATE DATABASE nograntdb",
+				"CREATE USER user7",
+			},
+			grantStmts: []string{
+				"GRANT CREATE ON DATABASE nograntdb TO user7",
+			},
+			backupStmt:  "BACKUP DATABASE nograntdb INTO 'nodelocal://1/test-no-grants'",
+			restoreStmt: "RESTORE DATABASE nograntdb FROM LATEST IN 'nodelocal://1/test-no-grants' WITH new_db_name = newnograntdb",
+			privilegeChecks: []privilegeCheck{
+				lacksPriv("user7", "DATABASE", "newnograntdb", "CREATE"),
+			},
+		},
+		{
+			name: "cluster-restore-rejected",
+			setupStmts: []string{
+				"CREATE DATABASE clusterdb",
+			},
+			backupStmt:  "BACKUP INTO 'nodelocal://1/test-cluster'",
+			restoreStmt: "RESTORE FROM LATEST IN 'nodelocal://1/test-cluster' WITH GRANTS",
+			expectError: "only supported for database and table level restores",
+		},
+		{
+			name: "system-users-restore-rejected",
+			setupStmts: []string{
+				"CREATE DATABASE systemusersdb",
+			},
+			backupStmt:  "BACKUP INTO 'nodelocal://1/test-system-users'",
+			restoreStmt: "RESTORE SYSTEM USERS FROM LATEST IN 'nodelocal://1/test-system-users' WITH GRANTS",
+			expectError: "does not support the WITH GRANTS option",
+		},
+
+		// Table-level operations
+		{
+			name: "table-level-backup",
+			setupStmts: []string{
+				"CREATE DATABASE tablebackupdb",
+				"CREATE TABLE tablebackupdb.t1 (id INT PRIMARY KEY)",
+				"CREATE USER user8",
+			},
+			grantStmts: []string{
+				"GRANT SELECT, INSERT ON TABLE tablebackupdb.t1 TO user8",
+			},
+			backupStmt: "BACKUP TABLE tablebackupdb.t1 INTO 'nodelocal://1/test-table-backup'",
+			dropBeforeRestore: []string{
+				"DROP TABLE tablebackupdb.t1",
+			},
+			restoreStmt:     "RESTORE TABLE tablebackupdb.t1 FROM LATEST IN 'nodelocal://1/test-table-backup' WITH GRANTS",
+			privilegeChecks: hasPrivs("user8", "TABLE", "tablebackupdb.t1", "SELECT", "INSERT"),
+		},
+
+		// Complex scenarios
+		{
+			name: "nested-objects",
+			setupStmts: []string{
+				"CREATE DATABASE nesteddb",
+				"CREATE SCHEMA nesteddb.myschema",
+				"CREATE TABLE nesteddb.myschema.t1 (id INT PRIMARY KEY)",
+				"CREATE USER user9",
+			},
+			grantStmts: []string{
+				"GRANT CREATE ON DATABASE nesteddb TO user9",
+				"GRANT USAGE ON SCHEMA nesteddb.myschema TO user9",
+				"GRANT SELECT ON TABLE nesteddb.myschema.t1 TO user9",
+			},
+			backupStmt:  "BACKUP DATABASE nesteddb INTO 'nodelocal://1/test-nested'",
+			restoreStmt: "RESTORE DATABASE nesteddb FROM LATEST IN 'nodelocal://1/test-nested' WITH GRANTS, new_db_name = newnesteddb",
+			privilegeChecks: []privilegeCheck{
+				hasPriv("user9", "DATABASE", "newnesteddb", "CREATE"),
+				hasPriv("user9", "SCHEMA", "newnesteddb.myschema", "USAGE"),
+				hasPriv("user9", "TABLE", "newnesteddb.myschema.t1", "SELECT"),
+			},
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			// Setup.
+			for _, stmt := range tc.setupStmts {
+				db.Exec(t, stmt)
+			}
+			for _, stmt := range tc.grantStmts {
+				db.Exec(t, stmt)
+			}
+
+			// Backup.
+			db.Exec(t, tc.backupStmt)
+
+			// Drop before restore.
+			for _, stmt := range tc.dropBeforeRestore {
+				db.Exec(t, stmt)
+			}
+
+			// Restore.
+			if tc.expectError != "" {
+				db.ExpectErr(t, tc.expectError, tc.restoreStmt)
+				return
+			}
+			db.Exec(t, tc.restoreStmt)
+
+			// Verify ownership.
+			for _, check := range tc.ownerChecks {
+				verifyOwner(t, db, check)
+			}
+
+			// Verify privileges.
+			for _, check := range tc.privilegeChecks {
+				verifyPrivilege(t, db, check)
+			}
+		})
+	}
+}
+
+// hasPriv creates a privilege check expecting a non-grantable privilege to be present.
+func hasPriv(grantee, objectType, objectName, privilege string) privilegeCheck {
+	return privilegeCheck{
+		grantee:         grantee,
+		objectType:      objectType,
+		objectName:      objectName,
+		privilege:       privilege,
+		expectPresent:   true,
+		expectGrantable: false,
+	}
+}
+
+func hasPrivs(grantee, objectType, objectName string, privileges ...string) []privilegeCheck {
+	checks := make([]privilegeCheck, len(privileges))
+	for i, priv := range privileges {
+		checks[i] = hasPriv(grantee, objectType, objectName, priv)
+	}
+	return checks
+}
+
+// hasGrantablePriv creates a privilege check expecting a grantable privilege to be present.
+func hasGrantablePriv(grantee, objectType, objectName, privilege string) privilegeCheck {
+	return privilegeCheck{
+		grantee:         grantee,
+		objectType:      objectType,
+		objectName:      objectName,
+		privilege:       privilege,
+		expectPresent:   true,
+		expectGrantable: true,
+	}
+}
+
+// lacksPriv creates a privilege check expecting a privilege to be absent.
+func lacksPriv(grantee, objectType, objectName, privilege string) privilegeCheck {
+	return privilegeCheck{
+		grantee:       grantee,
+		objectType:    objectType,
+		objectName:    objectName,
+		privilege:     privilege,
+		expectPresent: false,
+	}
+}
+
+// ownerCheck specifies an ownership verification.
+type ownerCheck struct {
+	objectType    string // "database", "table", "schema", "type"
+	objectName    string
+	expectedOwner string
+}
+
+// privilegeCheck specifies a privilege verification.
+type privilegeCheck struct {
+	grantee         string
+	objectType      string // "DATABASE", "TABLE", "SCHEMA", "TYPE"
+	objectName      string
+	privilege       string // "SELECT", "INSERT", "CREATE", etc.
+	expectPresent   bool
+	expectGrantable bool // only checked if expectPresent is true
+}
+
+// verifyOwner checks that an object has the expected owner.
+func verifyOwner(t *testing.T, db *sqlutils.SQLRunner, check ownerCheck) {
+	t.Helper()
+	var query string
+	switch check.objectType {
+	case "database":
+		query = fmt.Sprintf("SELECT owner FROM [SHOW DATABASES] WHERE database_name = '%s'", check.objectName)
+	case "table":
+		// objectName format is "database.table" or "database.schema.table"
+		query = fmt.Sprintf("SELECT owner FROM [SHOW TABLES] WHERE table_name = '%s'", check.objectName)
+	case "schema":
+		// objectName format is "database.schema"
+		query = fmt.Sprintf("SELECT owner FROM [SHOW SCHEMAS] WHERE schema_name = '%s'", check.objectName)
+	default:
+		t.Fatalf("unknown object type: %s", check.objectType)
+	}
+
+	var owner string
+	db.QueryRow(t, query).Scan(&owner)
+	require.Equal(t, check.expectedOwner, owner, "owner mismatch for %s %s", check.objectType, check.objectName)
+}
+
+// verifyPrivilege checks that a privilege is present or absent as expected.
+func verifyPrivilege(t *testing.T, db *sqlutils.SQLRunner, check privilegeCheck) {
+	t.Helper()
+	query := fmt.Sprintf(
+		"SELECT is_grantable FROM [SHOW GRANTS ON %s %s] WHERE grantee = '%s' AND privilege_type = '%s'",
+		check.objectType, check.objectName, check.grantee, check.privilege)
+
+	rows := db.Query(t, query)
+	defer rows.Close()
+
+	require.Equal(t, check.expectPresent, rows.Next())
+
+	if check.expectPresent {
+		var isGrantable bool
+		require.NoError(t, rows.Scan(&isGrantable))
+		require.Equal(t, check.expectGrantable, isGrantable)
+	}
+}
