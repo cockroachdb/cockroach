@@ -39,6 +39,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities"
 	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities/tenantcapabilitiesauthorizer"
 	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcostmodel"
+	"github.com/cockroachdb/cockroach/pkg/obs/ash"
 	"github.com/cockroachdb/cockroach/pkg/obs/clustermetrics"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
@@ -856,6 +857,18 @@ func (s *SQLServerWrapper) PreStart(ctx context.Context) error {
 		s.stopper,
 		s.sqlServer.cfg.TestingKnobs,
 		orphanedLeasesTimeThresholdNanos,
+	); err != nil {
+		return err
+	}
+
+	// Initialize the process-global ASH sampler. This is a no-op if
+	// already initialized by a topLevelServer; for standalone SQL pods
+	// this is the first initialization point.
+	if err := ash.InitGlobalSampler(
+		ctx,
+		roachpb.NodeID(s.sqlServer.SQLInstanceID()),
+		s.ClusterSettings(),
+		s.stopper,
 	); err != nil {
 		return err
 	}
