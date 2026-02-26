@@ -805,8 +805,10 @@ func getDescriptorsFromStoreForInterval(
 		}
 		req := &kvpb.ExportRequest{
 			RequestHeader: requestHeader,
-			StartTime:     lowerBound.Prev(),
-			MVCCFilter:    kvpb.MVCCFilter_All,
+			// MVCCFilter_Latest can be used together with start timestamp and its
+			// also used for non-revision history incremental backups.
+			StartTime:  lowerBound.Prev(),
+			MVCCFilter: kvpb.MVCCFilter_Latest,
 		}
 
 		// Export request returns descriptors in decreasing modification time.
@@ -1037,10 +1039,11 @@ func (m *Manager) getDescriptorsInTxnAtTimestamp(
 	ctx context.Context, timestamp hlc.Timestamp,
 ) (descpb.DescriptorUpdates, error) {
 	updates := descpb.DescriptorUpdates{}
-	// We are going to export the entire descriptor table from [timestamp.Prev(), timestamp),
-	// which will fetch only the changed descriptors in the system.descriptor table. This
-	// export request should be fairly inexpensive even with a large number of descriptors,
-	// since it can take advantage of the time-bound iterator to skip SST files.
+	// We are going to export the entire descriptor table at (timestamp.Prev(), timestamp],
+	// which will  fetch only the changed descriptors in the system.descriptor table.
+	// This export  request should be fairly inexpensive even with a large number of
+	// descriptors, since it can take advantage of the time-bound iterator to skip SST
+	// files.
 	batchRequestHeader := kvpb.Header{
 		Timestamp:                   timestamp,
 		ReturnElasticCPUResumeSpans: true,
@@ -1055,7 +1058,7 @@ func (m *Manager) getDescriptorsInTxnAtTimestamp(
 		req := &kvpb.ExportRequest{
 			RequestHeader: requestHeader,
 			StartTime:     timestamp.Prev(),
-			MVCCFilter:    kvpb.MVCCFilter_Latest,
+			MVCCFilter:    kvpb.MVCCFilter_All,
 		}
 
 		res, pErr := kv.SendWrappedWithAdmission(ctx, m.storage.db.KV().NonTransactionalSender(), batchRequestHeader, kvpb.AdmissionHeader{
@@ -1066,7 +1069,7 @@ func (m *Manager) getDescriptorsInTxnAtTimestamp(
 		},
 			req)
 		if pErr != nil {
-			return updates, pErr.GoError()
+			return descpb.DescriptorUpdates{}, pErr.GoError()
 		}
 		exportResp := res.(*kvpb.ExportResponse)
 		for _, file := range exportResp.Files {
@@ -1123,7 +1126,8 @@ func (m *Manager) getDescriptorsInTxnAtTimestamp(
 					updates.DescriptorVersions = append(updates.DescriptorVersions, desc.GetVersion())
 				}
 			}(); err != nil {
-				return updates, err
+				return descpb.DescriptorUpdates{}, errors.Wrapf(err,
+					"processing export file at timestamp %s", timestamp)
 			}
 		}
 
@@ -1137,7 +1141,7 @@ func (m *Manager) getDescriptorsInTxnAtTimestamp(
 
 // generateDescriptorTxnInfo will determine all descriptors that have
 // been modified at a given timestamp and then generate a descriptorTxnUpdate
-// event. This is used by the leases manager to know which descriptors should be
+// event. This is used by the lease manager to know which descriptors should be
 // published together in a txn.
 func (m *Manager) generateDescriptorTxnInfo(
 	ctx context.Context, descriptor catalog.Descriptor, timestamp hlc.Timestamp,
@@ -1151,13 +1155,13 @@ func (m *Manager) generateDescriptorTxnInfo(
 	hasEntryOrSkipIfNotLeased := func(skipIfDescriptorIsJustLeased bool) bool {
 		m.mu.Lock()
 		defer m.mu.Unlock()
-		// If we have alraedy surpassed the timestamp, then
+		// If we have already surpassed the timestamp, then
 		// no entry is required.
 		if timestamp.Less(m.closeTimestamp.Load().(*closeTimeStampHandle).timestamp) {
 			return true
 		}
 		// If this is a new descriptor, and we have not leased it yet,
-		// then generating txn data. If it does modify existing descriptors
+		// then skip generating txn data. If it does modify existing descriptors
 		// this data can be generated later.
 		if skipIfDescriptorIsJustLeased {
 			if _, exists := m.mu.descriptors[descriptor.GetID()]; !exists {
@@ -1174,10 +1178,15 @@ func (m *Manager) generateDescriptorTxnInfo(
 		return nil
 	}
 	// Otherwise, let's start a single flight to populate transaction data.
+	// Note: We ignore the future here because even if the export request
+	// fails, our alternative mechanism is the range feed checkpoint, which
+	// will also move the lease manager timestamp forward. The stopper passed
+	// in is responsible for ensuring this go routine does not leak, and cancels
+	// when the server terminates.
 	m.storage.group.DoChan(ctx, fmt.Sprintf("generateDescriptorTxnInfo: %s", timestamp),
 		singleflight.DoOpts{
 			Stop:               m.stopper,
-			InheritCancelation: true,
+			InheritCancelation: false,
 		}, func(ctx context.Context) (interface{}, error) {
 			if hasEntryOrSkipIfNotLeased(false /* include new descriptors */) {
 				return nil, nil
@@ -1185,6 +1194,7 @@ func (m *Manager) generateDescriptorTxnInfo(
 			// Generate an update entry for this timestamp first.
 			updateEntry, err := m.getDescriptorsInTxnAtTimestamp(ctx, timestamp)
 			if err != nil {
+				log.Dev.Warningf(ctx, "unable to get descriptors at timestamp %s: %v", timestamp, err)
 				return nil, err
 			}
 			update := &descriptorTxnUpdate{
@@ -3032,7 +3042,7 @@ func (m *Manager) watchForUpdates(ctx context.Context) {
 				ev.Key, mut.GetID(), mut.GetName(), mut.GetVersion())
 		}
 		if err := m.generateDescriptorTxnInfo(ctx, mut, ev.Timestamp()); err != nil {
-			log.Dev.Infof(ctx, "unable to generate descriptor txn info: %v", err)
+			log.Dev.Warningf(ctx, "unable to generate descriptor txn info: %v", err)
 		}
 		select {
 		case <-m.stopper.ShouldQuiesce():
@@ -3116,7 +3126,7 @@ func (m *Manager) getRangeFeedMonitorSettings() (timeout time.Duration, monitori
 
 // checkRangeFeedStatus ensures that the range feed is always checkpointing and
 // receiving data. On recovery, we will always refresh all descriptors with the
-// assumption we have lost updates (especially if restarts have ocurred).
+// assumption we have lost updates (especially if restarts have occurred).
 func (m *Manager) checkRangeFeedStatus(ctx context.Context) (forceRefresh bool) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -3202,7 +3212,9 @@ func (m *Manager) RunBackgroundLeasingTask(ctx context.Context) {
 				m.cleanupExpiredSessionLeases(ctx)
 			case <-descriptorUpdateCleanupTimer.C:
 				// Clean up the update key space.
-				m.cleanupUpdateKeys(ctx)
+				if err := m.cleanupUpdateKeys(ctx, false /*force */); err != nil {
+					log.Dev.Warningf(ctx, "error cleaning up update keys: %v", err)
+				}
 				descriptorUpdateCleanupTimer.Reset(descriptorUpdateCleanupTimerDuration)
 			}
 		}
@@ -3314,19 +3326,23 @@ func (m *Manager) cleanupExpiredSessionLeases(ctx context.Context) {
 	}
 }
 
-// cleanupUpdateKeys updates special keys that exist for tracking descriptor
-// updates within transactions.
-func (m *Manager) cleanupUpdateKeys(ctx context.Context) {
-	// If we are on 26.2, these keys are no longer generated.
-	if m.settings.Version.IsActive(ctx, clusterversion.V26_2) {
-		return
-	}
+// CleanUpdateKeysForUpgrade starting 26.2 special transaction keys are
+// not in use, so we can clean the keyspace up.
+func (m *Manager) CleanUpdateKeysForUpgrade(ctx context.Context) error {
+	return m.cleanupUpdateKeys(ctx, true /* force */)
+}
+
+// cleanupUpdateKeys deletes special keys that exist for tracking descriptor
+// updates within transactions. The force flag will clean the key space, even
+// if this lease manager has no updates (via the range feed).
+func (m *Manager) cleanupUpdateKeys(ctx context.Context, force bool) error {
 	// Only clean update keys if we received any range feed updates.
 	m.mu.Lock()
 	hasUpdates := m.mu.hasUpdatesToDelete
+	m.mu.hasUpdatesToDelete = false
 	m.mu.Unlock()
-	if !hasUpdates {
-		return
+	if !hasUpdates && !force {
+		return nil
 	}
 	// Issue a DelRange on this key space.
 	err := m.storage.db.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
@@ -3335,8 +3351,9 @@ func (m *Manager) cleanupUpdateKeys(ctx context.Context) {
 		return err
 	})
 	if err != nil {
-		log.Dev.Infof(ctx, "unable to delete descriptor update keys from storage: %v", err)
+		return err
 	}
+	return nil
 }
 
 // Refresh some of the current leases. If refreshAndPurgeAllDescriptors is set,
@@ -3458,7 +3475,9 @@ func (m *Manager) DeleteOrphanedLeases(
 		retryOpts.MaxRetries = 10
 		m.deleteOrphanedLeasesFromStaleSession(ctx, retryOpts, timeThreshold, locality)
 		m.deleteOrphanedLeasesWithSameInstanceID(ctx, retryOpts, timeThreshold, instanceID)
-		m.cleanupUpdateKeys(ctx)
+		if err := m.cleanupUpdateKeys(ctx, true /* force */); err != nil {
+			log.Dev.Warningf(ctx, "error cleaning up update keys: %v", err)
+		}
 	})
 }
 
@@ -3932,7 +3951,9 @@ func TestingLeasedVersionIsActive(descriptor LeasedDescriptor) (bool, int) {
 func TestIsLeasingTxnExportRequest(
 	codec *keys.SQLCodec, batch *kvpb.BatchRequest, exportRequest *kvpb.ExportRequest,
 ) bool {
-	// If codec is then assume its always a lease manager request.
+	// If codec is nil then assume its always a lease manager request. This happens
+	// because the testing knob can be executed before the codec is setup for the
+	// testing hook.
 	if codec == nil {
 		return true
 	}
@@ -3940,11 +3961,22 @@ func TestIsLeasingTxnExportRequest(
 	if len(batch.Requests) > 1 {
 		return false
 	}
-	// The export requests also for the lease manager only scan
-	// the descriptor table.
+	// The lease manager uses two types of export requests:
+	// 1) The entire leasing table for transaction update extraction.
+	// 2) Single descriptor for historical queries.
 	descriptorKey := catalogkeys.MakeAllDescsMetadataKey(*codec)
-	if !exportRequest.Key.Equal(descriptorKey) || !exportRequest.EndKey.Equal(descriptorKey.PrefixEnd()) {
+	isEntireDescriptorSpan := exportRequest.Key.Equal(descriptorKey) && exportRequest.EndKey.Equal(descriptorKey.PrefixEnd())
+	_, err := codec.DecodeDescMetadataID(exportRequest.Key)
+	isSingleDescriptor := exportRequest.EndKey.Equal(exportRequest.Key.PrefixEnd())
+	if err != nil {
+		isSingleDescriptor = false
+	}
+	if !isEntireDescriptorSpan && !isSingleDescriptor {
 		return false
+	} else if isSingleDescriptor {
+		// Single descriptor export is a historical query from
+		// the lease manager.
+		return true
 	}
 	// The lease manager export requests started in getDescriptorsInTxnAtTimestamp,
 	// after a schema change will always have timestamps that are attempting to
