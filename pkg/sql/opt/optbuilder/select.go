@@ -9,6 +9,7 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
@@ -27,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/cast"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlclustersettings"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -344,15 +346,44 @@ func (b *Builder) buildView(
 		b.factory.Metadata().AddView(view)
 	}
 
-	// When building the view, we don't want to check for the SELECT privilege
-	// on the underlying tables, just on the view itself. Checking on the
-	// underlying tables as well would defeat the purpose of having separate
-	// SELECT privileges on the view, which is intended to allow for exposing
-	// some subset of a restricted table's data to less privileged users.
-	if !b.skipSelectPrivilegeChecks {
-		b.skipSelectPrivilegeChecks = true
-		defer func() { b.skipSelectPrivilegeChecks = false }()
+	skipUnderlyingPrivilegeChecks := sqlclustersettings.SkipUnderlyingViewPrivilegeChecks.Get(&b.evalCtx.Settings.SV)
+	// When building the view, we don't want to check the SELECT privilege of
+	// the invoker on the underlying tables. Checking the invoker would defeat
+	// the purpose of having separate SELECT privileges on the view, which is
+	// intended to allow exposing some subset of a restricted table's data to
+	// less privileged users. We also DisableUnsafeInternalCheck to allow
+	// reading system tables through user-defined views.
+	//
+	// For user-created views, we check the SELECT privilege of the view owner
+	// (definer) on the underlying tables to ensure the view owner still has
+	// access. This also means that the definer's RLS policies are enforced
+	// rather than the invoker's.
+	//
+	// For system views (e.g. pg_catalog.pg_description,
+	// crdb_internal.transaction_statistics), we skip SELECT privilege checks
+	// entirely since they are system-defined and always valid.
+	//
+	// The SkipUnderlyingViewPrivilegeChecks cluster setting can be used to revert
+	// to the pre-v26.2 behavior where no privilege checks were performed on the
+	// underlying tables, and the invoker RLS is enforced. It is enabled by default
+	// to avoid backward-incompatible changes.
+	if skipUnderlyingPrivilegeChecks || view.IsSystemView() {
+		if !b.skipSelectPrivilegeChecks {
+			b.skipSelectPrivilegeChecks = true
+			defer func() { b.skipSelectPrivilegeChecks = false }()
+		}
+	} else {
+		defer func(dataSourcePrivilegeUserOverride username.SQLUsername) {
+			b.dataSourcePrivilegeUserOverride = dataSourcePrivilegeUserOverride
+		}(b.dataSourcePrivilegeUserOverride)
+		b.dataSourcePrivilegeUserOverride = view.Owner()
+		defer b.DisableUnsafeInternalCheck()()
+		if b.skipSelectPrivilegeChecks {
+			b.skipSelectPrivilegeChecks = false
+			defer func() { b.skipSelectPrivilegeChecks = true }()
+		}
 	}
+
 	// We are only interested in the direct dependency on this view descriptor.
 	// Any further dependency by the view's query should not be tracked.
 	trackViewDep := b.trackSchemaDeps
