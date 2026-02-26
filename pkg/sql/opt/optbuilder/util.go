@@ -6,6 +6,7 @@
 package optbuilder
 
 import (
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
@@ -699,14 +700,14 @@ func (b *Builder) resolveDataSourceRef(
 	return ds, depName
 }
 
-// checkPrivilege ensures that the current user has the privilege needed to
+// checkPrivilege ensures that the checkPrivilegeUser has the privilege needed to
 // access the given object in the catalog. If not, then checkPrivilege raises an
 // error. It also adds the object and it's original unresolved name as a
 // dependency to the metadata, so that the privileges can be re-checked on reuse
 // of the memo.
 func (b *Builder) checkPrivilege(name opt.MDDepName, ds cat.DataSource, priv privilege.Kind) {
 	if !(priv == privilege.SELECT && b.skipSelectPrivilegeChecks) {
-		err := b.catalog.CheckPrivilege(b.ctx, ds, b.checkPrivilegeUser, priv)
+		err := b.catalog.CheckPrivilege(b.ctx, ds, b.checkPrivilegeUser(), priv)
 		if err != nil {
 			panic(err)
 		}
@@ -717,7 +718,19 @@ func (b *Builder) checkPrivilege(name opt.MDDepName, ds cat.DataSource, priv pri
 
 	// Add dependency on this object to the metadata, so that the metadata can be
 	// cached and later checked for freshness.
-	b.factory.Metadata().AddDependency(name, ds, priv)
+	depUser := b.privilegeDependencyUser()
+	b.factory.Metadata().AddDependency(name, ds, priv, depUser)
+}
+
+// privilegeDependencyUser returns the user to store in privilege dependency
+// keys. When in a definer context (SECURITY DEFINER view or routine), it
+// returns the definer's username so re-validation checks the definer. Otherwise
+// current session user. This avoids memo invalidation on SET ROLE.
+func (b *Builder) privilegeDependencyUser() username.SQLUsername {
+	if b.dataSourcePrivilegeUserOverride.Undefined() {
+		return username.SQLUsername{}
+	}
+	return b.dataSourcePrivilegeUserOverride
 }
 
 // resolveNumericColumnRefs converts a list of tree.ColumnIDs from a
