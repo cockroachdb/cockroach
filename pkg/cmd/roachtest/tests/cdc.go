@@ -676,12 +676,6 @@ func (ct *cdcTester) verifyMetrics(
 func (ct *cdcTester) runFeedLatencyVerifier(
 	cj changefeedJob, targets latencyTargets,
 ) (waitForCompletion func()) {
-	return ct.runFeedLatencyVerifierWithCallback(cj, targets, nil)
-}
-
-func (ct *cdcTester) runFeedLatencyVerifierWithCallback(
-	cj changefeedJob, targets latencyTargets, onSteadyLatency func(value time.Duration),
-) (waitForCompletion func()) {
 	info, err := getChangefeedInfo(ct.DB(), cj.jobID)
 	if err != nil {
 		ct.t.Fatalf("failed to get changefeed info: %s", err.Error())
@@ -704,11 +698,14 @@ func (ct *cdcTester) runFeedLatencyVerifierWithCallback(
 
 		err := verifier.pollLatencyUntilJobSucceeds(ctx, ct.DB(), cj.jobID, time.Second, ct.doneCh)
 		if err != nil {
+			if targets.onLatencyError != nil {
+				targets.onLatencyError(ctx, err)
+			}
 			return err
 		}
 
-		if onSteadyLatency != nil {
-			onSteadyLatency(verifier.maxSeenSteadyLatency)
+		if targets.onSteadyLatency != nil {
+			targets.onSteadyLatency(verifier.maxSeenSteadyLatency)
 		}
 
 		verifier.assertValid(ct.t)
@@ -872,6 +869,14 @@ func (ct *cdcTester) startGrafana() {
 type latencyTargets struct {
 	initialScanLatency time.Duration
 	steadyLatency      time.Duration
+
+	// onSteadyLatency, if set, is called with the maximum observed steady
+	// latency after the changefeed job succeeds.
+	onSteadyLatency func(value time.Duration)
+	// onLatencyError, if set, is called when the latency verifier
+	// encounters an error (e.g. latency threshold exceeded). This can be
+	// used to collect debug artifacts before the test fails.
+	onLatencyError func(ctx context.Context, err error)
 }
 
 type cdcBankConfig struct {
@@ -2667,10 +2672,11 @@ CONFIGURE ZONE USING
 				sinkType: pubsubSink,
 				targets:  allTpccTargets,
 			})
-			ct.runFeedLatencyVerifierWithCallback(feed, latencyTargets{
+			ct.runFeedLatencyVerifier(feed, latencyTargets{
 				initialScanLatency: 30 * time.Minute,
-			}, func(value time.Duration) {
-				ct.exportLatencyToRoachperf(value, startTime)
+				onSteadyLatency: func(value time.Duration) {
+					ct.exportLatencyToRoachperf(value, startTime)
+				},
 			})
 
 			ct.waitForWorkload()
@@ -3266,6 +3272,11 @@ CONFIGURE ZONE USING
 
 					ct.runFeedLatencyVerifier(feed, latencyTargets{
 						steadyLatency: 2 * time.Minute,
+						onLatencyError: func(ctx context.Context, err error) {
+							if fetchErr := ct.cluster.FetchDebugZip(ctx, ct.logger, "latency_debug.zip", ct.crdbNodes); fetchErr != nil {
+								ct.logger.Printf("failed to fetch debug zip: %v", fetchErr)
+							}
+						},
 					})
 
 					ct.waitForWorkload()
