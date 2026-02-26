@@ -246,6 +246,53 @@ func TestUniquenessCheck(t *testing.T) {
 			expectedCount:    2,
 		},
 		{
+			name: "span_covers_full_index",
+			insertStmts: []string{
+				// Insert rows in us-east1 with specific IDs
+				`INSERT INTO test.%s (crdb_region, id, data) VALUES ('us-east1', 100, 'foo')`,
+				`INSERT INTO test.%s (crdb_region, id, data) VALUES ('us-east1', 200, 'titi')`,
+				// "Unsafe" inserts to duplicate IDs in a second region
+				`INSERT INTO test.%s (crdb_region, id, data) VALUES ('us-west1', 100, 'bar')`,
+				`INSERT INTO test.%s (crdb_region, id, data) VALUES ('us-west1', 200, 'toto')`,
+				// "Unsafe" insert to duplicate ID in a third region
+				`INSERT INTO test.%s (crdb_region, id, data) VALUES ('us-west4', 100, 'baz')`,
+			},
+			createSpan: func(cfg *execinfra.ServerConfig, tableDesc catalog.TableDescriptor) roachpb.Span {
+				index := tableDesc.GetPrimaryIndex()
+
+				indexPrefix := cfg.Codec.IndexPrefix(uint32(tableDesc.GetID()), uint32(index.GetID()))
+
+				span := roachpb.Span{
+					Key:    indexPrefix,
+					EndKey: indexPrefix.PrefixEnd(),
+				}
+
+				return span
+			},
+			expectDuplicates: true,
+			expectedCount:    3,
+		},
+		{
+			name: "span_covers_full_region",
+			insertStmts: []string{
+				// Insert rows in us-east1 with specific IDs
+				`INSERT INTO test.%s (crdb_region, id, data) VALUES ('us-east1', 100, 'foo')`,
+				`INSERT INTO test.%s (crdb_region, id, data) VALUES ('us-east1', 200, 'titi')`,
+				// "Unsafe" inserts to duplicate IDs in a second region
+				`INSERT INTO test.%s (crdb_region, id, data) VALUES ('us-west1', 100, 'bar')`,
+				`INSERT INTO test.%s (crdb_region, id, data) VALUES ('us-west1', 200, 'toto')`,
+				// "Unsafe" insert to duplicate ID in a third region
+				`INSERT INTO test.%s (crdb_region, id, data) VALUES ('us-west4', 100, 'baz')`,
+			},
+			createSpan: func(cfg *execinfra.ServerConfig, tableDesc catalog.TableDescriptor) roachpb.Span {
+				span, err := spanForFullRegion(ctx, cfg, tableDesc, "us-east1")
+				require.NoError(t, err)
+				return span
+			},
+			expectDuplicates: true,
+			expectedCount:    2,
+		},
+		{
 			// The unique column is not immediately after the region column
 			name: "complex_primary_key",
 			createTableStmt: `CREATE TABLE test.%s (

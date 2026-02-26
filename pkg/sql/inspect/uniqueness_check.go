@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
@@ -80,6 +81,15 @@ func (c *uniquenessCheck) Start(
 
 	if err := c.loadCatalogInfo(ctx); err != nil {
 		return err
+	}
+
+	// For a span covering the full index, the check breaks the span up by
+	// region and processes those as sub-checks.
+	indexPrefix := cfg.Codec.IndexPrefix(uint32(c.tableDesc.GetID()), uint32(c.index.GetID()))
+	nextIndexPrefix := cfg.Codec.IndexPrefix(uint32(c.tableDesc.GetID()), uint32(c.index.GetID()+1))
+	coversFullIndex := span.Key.Compare(indexPrefix) <= 0 && span.EndKey.Compare(nextIndexPrefix) >= 0
+	if coversFullIndex {
+		return c.startWithFullIndex(ctx, cfg, span, workerIndex)
 	}
 
 	keyColNames := make([]string, c.index.NumKeyColumns())
@@ -175,6 +185,53 @@ GROUP BY %s
 	}
 
 	c.rowIter = it
+	c.state = checkRunning
+
+	return nil
+}
+
+// startWithFullIndex takes a span that covers a full index and starts
+// sub-checks that process spans corresponding to each region in the table.
+func (c *uniquenessCheck) startWithFullIndex(
+	ctx context.Context, cfg *execinfra.ServerConfig, span roachpb.Span, workerIndex int,
+) error {
+	allRegions, err := c.getRemoteRegions(ctx, "")
+	if err != nil {
+		return err
+	}
+
+	if len(allRegions) == 1 {
+		c.state = checkDone
+		return nil
+	}
+
+	rowsItr := &uniquenessChecksRows{}
+	for _, region := range allRegions {
+		regionSpan, err := spanForFullRegion(ctx, cfg, c.tableDesc, region)
+		if err != nil {
+			return err
+		}
+
+		check := &uniquenessCheck{
+			uniquenessCheckApplicability: uniquenessCheckApplicability{
+				tableID: c.tableDesc.GetID(),
+			},
+			execCfg:      c.execCfg,
+			indexID:      c.index.GetID(),
+			tableVersion: c.tableVersion,
+			asOf:         c.asOf,
+		}
+
+		err = check.Start(ctx, cfg, regionSpan, workerIndex)
+		if err != nil {
+			return err
+		}
+		if !check.Done(ctx) {
+			rowsItr.rows = append(rowsItr.rows, check.rowIter)
+		}
+	}
+
+	c.rowIter = rowsItr
 	c.state = checkRunning
 
 	return nil
@@ -445,4 +502,70 @@ func (c *uniquenessCheck) loadCatalogInfo(ctx context.Context) error {
 	c.uniqueColIdx = uniqueColIdxs[0]
 
 	return nil
+}
+
+// uniquenessChecksRows wraps multiple isql.Rows iterators and presents them
+// as a single iterator. It iterates through each underlying iterator
+// sequentially until all are exhausted.
+type uniquenessChecksRows struct {
+	rows       []isql.Rows
+	currentIdx int
+}
+
+var _ isql.Rows = (*uniquenessChecksRows)(nil)
+
+func (r uniquenessChecksRows) Next(ctx context.Context) (bool, error) {
+	for r.currentIdx < len(r.rows) {
+		ok, err := r.rows[r.currentIdx].Next(ctx)
+		if err != nil {
+			return false, err
+		}
+		if ok {
+			return true, nil
+		}
+		r.currentIdx++
+	}
+
+	return false, nil
+}
+
+func (r uniquenessChecksRows) Cur() tree.Datums {
+	if r.currentIdx >= len(r.rows) {
+		return nil
+	}
+	return r.rows[r.currentIdx].Cur()
+}
+
+func (r uniquenessChecksRows) RowsAffected() int {
+	total := 0
+	for _, rows := range r.rows {
+		total += rows.RowsAffected()
+	}
+	return total
+}
+
+func (r uniquenessChecksRows) Close() error {
+	var err error
+	for _, rows := range r.rows {
+		if closeErr := rows.Close(); closeErr != nil {
+			err = errors.CombineErrors(err, closeErr)
+		}
+	}
+	return err
+}
+
+func (r uniquenessChecksRows) Types() colinfo.ResultColumns {
+	if len(r.rows) == 0 {
+		return nil
+	}
+	return r.rows[0].Types()
+}
+
+func (r uniquenessChecksRows) HasResults() bool {
+	for _, rows := range r.rows {
+		if rows.HasResults() {
+			return true
+		}
+	}
+	return false
 }
