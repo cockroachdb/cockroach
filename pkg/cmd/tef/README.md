@@ -172,6 +172,30 @@ func waitTime(ctx context.Context, input *DemoInput) (time.Duration, error) {
 }
 ```
 
+## Visualizing Your Plan
+
+TEF can generate visual representations of your workflow as DOT graphs and PNG images:
+
+```bash
+./dev build tef
+./bin/tef gen-view demo
+```
+
+This creates:
+- `demo.dot` - DOT format graph definition
+- `demo.png` - Visual diagram of the workflow
+
+**Requirements:** Graphviz must be installed (`brew install graphviz` on macOS, `apt install graphviz` on Linux)
+
+The visualization shows:
+- Task execution flow with arrows
+- Parallel execution with colored boxes
+- Conditional branches (Then/Else)
+- Failure paths (optional with `--with-failure-paths` flag)
+- Different shapes for different task types (boxes, diamonds, circles, etc.)
+
+Use this during development to verify your workflow structure and ensure all branches converge correctly.
+
 ## Breakdown of the Example
 
 Let's walk through each part of the example:

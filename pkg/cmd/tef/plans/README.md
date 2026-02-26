@@ -530,8 +530,80 @@ Quick reference for the most common commands:
 ./bin/tef execute <planname> '<json-input>' <variant>
 
 # Visualize workflow
-./bin/tef gen-view <planname>
+./bin/tef gen-view <planname> [--output-dir <dir>] [--with-failure-paths]
 ```
+
+## Visualizing Plans
+
+TEF generates visual workflow diagrams to help you understand and debug complex plans.
+
+### Requirements
+
+Install Graphviz:
+```bash
+# macOS
+brew install graphviz
+
+# Ubuntu/Debian
+apt install graphviz
+
+# RHEL/CentOS
+yum install graphviz
+```
+
+### Generating Visualizations
+
+```bash
+# Basic visualization (excludes failure paths)
+./bin/tef gen-view myplan
+
+# Include failure paths
+./bin/tef gen-view myplan --with-failure-paths
+
+# Custom output directory
+./bin/tef gen-view myplan --output-dir ./diagrams
+```
+
+### Output Files
+
+- `<planname>.dot` - DOT format graph (text-based graph definition)
+- `<planname>.png` - PNG image of the workflow
+
+### Visual Elements
+
+**Shapes** indicate task types:
+- Box: ExecutionTask
+- Diamond: ConditionTask
+- Parallelogram: ForkTask
+- Circle: ForkJoinTask
+- Double Circle: EndTask
+- Octagon: CallbackTask
+
+**Colors** show execution paths:
+- Green: "then" branch (ConditionTask)
+- Orange: "else" branch (ConditionTask)
+- Blue: fork branches
+- Red: failure paths (with `--with-failure-paths`)
+- Gray shades: nesting levels (darker = deeper nesting)
+
+**Edges** show task flow:
+- Standard arrows: success paths ("next")
+- Red arrows: failure paths ("fail")
+
+### Example Usage
+
+After creating or modifying a plan, generate the visualization:
+
+```bash
+./bin/tef gen-view myplan --with-failure-paths
+```
+
+Review the generated `myplan.png` to verify:
+- All execution paths converge to a common EndTask
+- Fork branches properly converge to their Join point
+- Conditional branches (Then/Else) lead to expected tasks
+- Failure paths are defined for critical tasks
+- No unexpected cycles or disconnected tasks
 
 ## Validation and Error Handling
 
@@ -651,7 +723,7 @@ The TEF performs comprehensive validation when a plan is registered. The framewo
 1. **Always create a single EndTask** and ensure all paths lead to it
 2. **Register all executors** before referencing them in tasks
 3. **Use unique names** for all tasks and executors
-4. **Test your plan** using `gen-view-<planname>` to visualize the workflow
+4. **Test your plan** using `gen-view <planname>` to visualize the workflow structure
 5. **Verify executor signatures** match task requirements:
    - `bool` for ConditionTask
    - `(string, error)` for CallbackTask ExecutionFn
@@ -985,9 +1057,10 @@ See the complete examples in:
 ## Tips for Development
 
 1. **Start simple**: Begin with a sequential workflow before adding complexity
-2. **Use visualization**: Run `gen-view <planname>` frequently to verify structure
+2. **Use visualization**: Run `gen-view <planname>` after any structural changes to verify the workflow graph. This helps catch convergence issues, missing tasks, and incorrect branching early
 3. **Test incrementally**: Add one task at a time and validate
 4. **Handle failures**: Always define `Fail` paths for critical tasks
 5. **Document executors**: Provide clear descriptions for all executors
 6. **Set defaults**: Parse input with sensible defaults for optional parameters
 7. **Validate early**: The framework will panic on invalid plans - fix issues before runtime
+8. **Review visualizations with failure paths**: Use `--with-failure-paths` flag to verify all error handling paths are correct
