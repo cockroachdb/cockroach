@@ -8,6 +8,7 @@ package inspect
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
@@ -94,7 +95,7 @@ func checksForDatabase(
 	checks := []*jobspb.InspectDetails_Check{}
 
 	if err := tables.ForEachDescriptor(func(desc catalog.Descriptor) error {
-		tableChecks, err := ChecksForTable(ctx, p, desc.(catalog.TableDescriptor), nil /* rowCount */)
+		tableChecks, err := ChecksForTable(ctx, p.ExecCfg(), p, desc.(catalog.TableDescriptor), nil /* rowCount */)
 		if err != nil {
 			return err
 		}
@@ -109,13 +110,32 @@ func checksForDatabase(
 
 // ChecksForTable generates checks on every supported index on the given table.
 func ChecksForTable(
-	ctx context.Context, p sql.PlanHookState, table catalog.TableDescriptor, expectedRowCount *uint64,
+	ctx context.Context,
+	execCfg *sql.ExecutorConfig,
+	p sql.PlanHookState,
+	table catalog.TableDescriptor,
+	expectedRowCount *uint64,
 ) ([]*jobspb.InspectDetails_Check, error) {
 	checks := []*jobspb.InspectDetails_Check{}
 
 	// Skip virtual tables since they don't have physical storage to inspect.
 	if table.IsVirtualTable() {
 		return checks, nil
+	}
+
+	priIndex := table.GetPrimaryIndex()
+
+	if uniquenessCheckEnabled.Get(execCfg.SV()) && execCfg.Settings.Version.IsActive(ctx, clusterversion.V26_2) {
+		if uniqueColIdxs, err := findUniqueColIdxs(table, priIndex); err != nil {
+			return nil, err
+		} else if table.IsLocalityRegionalByRow() && len(uniqueColIdxs) == 1 {
+			checks = append(checks, &jobspb.InspectDetails_Check{
+				Type:         jobspb.InspectCheckUniqueness,
+				TableID:      table.GetID(),
+				IndexID:      priIndex.GetID(),
+				TableVersion: table.GetVersion(),
+			})
+		}
 	}
 
 	for _, index := range table.PublicNonPrimaryIndexes() {
@@ -147,19 +167,23 @@ func ChecksForTable(
 	return checks, nil
 }
 
-type indexKey struct {
-	descpb.ID
-	descpb.IndexID
-}
-
 // checksByIndexNames generates checks for the specified index names.
 // If index names are not found or are not supported for inspection, an error is returned.
 // Index names are deduplicated.
 func checksByIndexNames(
-	ctx context.Context, p sql.PlanHookState, names tree.TableIndexNames,
+	ctx context.Context, execCfg *sql.ExecutorConfig, p sql.PlanHookState, names tree.TableIndexNames,
 ) ([]*jobspb.InspectDetails_Check, error) {
 	checks := []*jobspb.InspectDetails_Check{}
 
+	// Collect the indexes and dedupe them.
+	type indexKey struct {
+		descpb.ID
+		descpb.IndexID
+	}
+	var indexes []struct {
+		catalog.TableDescriptor
+		catalog.Index
+	}
 	var seenIndexes = make(map[indexKey]struct{})
 	for _, indexName := range names {
 		_, table, index, err := p.GetTableAndIndex(ctx, indexName, privilege.INSPECT, false /* skipCache */)
@@ -170,18 +194,48 @@ func checksByIndexNames(
 		if _, ok := seenIndexes[indexKey{table.GetID(), index.GetID()}]; ok {
 			continue
 		}
-		seenIndexes[indexKey{table.GetID(), index.GetID()}] = struct{}{}
+		key := indexKey{table.GetID(), index.GetID()}
+		if _, ok := seenIndexes[key]; !ok {
+			indexes = append(indexes, struct {
+				catalog.TableDescriptor
+				catalog.Index
+			}{table, index})
+		}
+		seenIndexes[key] = struct{}{}
+	}
 
-		if reason := isSupportedIndexForIndexConsistencyCheck(index, table); reason != "" {
-			return nil, pgerror.Newf(pgcode.InvalidName, "index %q on table %q is not supported for index consistency checking", index.GetName(), table.GetName())
+	for _, idx := range indexes {
+		index := idx.Index
+		table := idx.TableDescriptor
+
+		var isIndexSupportedForChecks bool
+		if reason := isSupportedIndexForIndexConsistencyCheck(index, table); reason == "" {
+			isIndexSupportedForChecks = true
+			checks = append(checks,
+				&jobspb.InspectDetails_Check{
+					Type:         jobspb.InspectCheckIndexConsistency,
+					TableID:      table.GetID(),
+					IndexID:      index.GetID(),
+					TableVersion: table.GetVersion(),
+				})
+		}
+		if uniquenessCheckEnabled.Get(execCfg.SV()) && execCfg.Settings.Version.IsActive(ctx, clusterversion.V26_2) {
+			if uniqueColIdxs, err := findUniqueColIdxs(table, index); err != nil {
+				return nil, err
+			} else if (table.IsLocalityRegionalByRow() || isTesting()) && index.Primary() && len(uniqueColIdxs) == 1 {
+				isIndexSupportedForChecks = true
+				checks = append(checks, &jobspb.InspectDetails_Check{
+					Type:         jobspb.InspectCheckUniqueness,
+					TableID:      table.GetID(),
+					IndexID:      index.GetID(),
+					TableVersion: table.GetVersion(),
+				})
+			}
 		}
 
-		checks = append(checks, &jobspb.InspectDetails_Check{
-			Type:         jobspb.InspectCheckIndexConsistency,
-			TableID:      table.GetID(),
-			IndexID:      index.GetID(),
-			TableVersion: table.GetVersion(),
-		})
+		if !isIndexSupportedForChecks {
+			return nil, pgerror.Newf(pgcode.InvalidParameterValue, "index %q on table %q is not supported by INSPECT checks", index.GetName(), table.GetName())
+		}
 	}
 
 	return checks, nil

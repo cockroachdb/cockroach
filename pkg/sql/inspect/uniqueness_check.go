@@ -10,11 +10,11 @@ import (
 	"fmt"
 	"slices"
 	"strings"
-	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
@@ -22,10 +22,16 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
-	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
+)
+
+var uniquenessCheckEnabled = settings.RegisterBoolSetting(
+	settings.ApplicationLevel,
+	"sql.inspect.uniqueness_check.enabled",
+	"if true, the uniqueness check is enabled for INSPECT jobs on tables and primary indexes",
+	false,
 )
 
 type uniquenessCheck struct {
@@ -405,7 +411,7 @@ func (c *uniquenessCheck) loadCatalogInfo(ctx context.Context) error {
 		return err
 	}
 	if !tableDesc.IsLocalityRegionalByRow() {
-		if !buildutil.CrdbTestBuild && !testing.Testing() { // For ease of testing, allow faked multi-region databases.
+		if !isTesting() { // For ease of testing, allow faked multi-region databases.
 			return errors.AssertionFailedf("uniqueness check is only supported for tables with REGIONAL BY ROW locality")
 		}
 	}
