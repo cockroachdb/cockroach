@@ -41,6 +41,15 @@ type SchemaID int32
 // 1 << privilege.Kind, so that multiple privileges can be stored.
 type privilegeBitmap uint64
 
+// privilegeKey identifies a privilege dependency by the data source and the
+// user whose privilege was checked. This allows memo dependency validation to
+// re-check the correct user's privilege (e.g., the view owner for tables
+// accessed through a view) rather than always checking the session user.
+type privilegeKey struct {
+	ID   cat.StableID
+	User username.SQLUsername
+}
+
 type routineDep struct {
 	overload        *tree.Overload
 	invocationTypes []*types.T
@@ -135,8 +144,10 @@ type Metadata struct {
 	objectRefsByName map[cat.StableID]tree.UnresolvedObjectNameSet
 
 	// privileges stores the privileges needed to access each object that the
-	// query depends on.
-	privileges map[cat.StableID]privilegeBitmap
+	// query depends on, keyed by data source ID and the user whose privileges
+	// were checked. This ensures that memo dependency re-validation checks the
+	// correct user (e.g., the view owner for tables accessed through a view).
+	privileges map[privilegeKey]privilegeBitmap
 
 	// builtinRefsByName stores the names used to reference builtin functions in
 	// the query. This is necessary to handle the case where changes to the search
@@ -215,10 +226,10 @@ func (md *Metadata) Init() {
 
 	privileges := md.privileges
 	if privileges == nil {
-		privileges = make(map[cat.StableID]privilegeBitmap)
+		privileges = make(map[privilegeKey]privilegeBitmap)
 	}
-	for id := range md.privileges {
-		delete(md.privileges, id)
+	for key := range md.privileges {
+		delete(md.privileges, key)
 	}
 
 	builtinRefsByName := md.builtinRefsByName
@@ -318,11 +329,11 @@ func (md *Metadata) CopyFrom(from *Metadata, copyScalarFn func(Expr) Expr) {
 		md.objectRefsByName[id] = newNames
 	}
 
-	for id, privilegeSet := range from.privileges {
+	for key, privilegeSet := range from.privileges {
 		if md.privileges == nil {
-			md.privileges = make(map[cat.StableID]privilegeBitmap)
+			md.privileges = make(map[privilegeKey]privilegeBitmap)
 		}
-		md.privileges[id] = privilegeSet
+		md.privileges[key] = privilegeSet
 	}
 
 	for name := range from.builtinRefsByName {
@@ -368,14 +379,18 @@ func DepByID(id cat.StableID) MDDepName {
 }
 
 // AddDependency tracks one of the catalog data sources on which the query
-// depends, as well as the privilege required to access that data source. If
-// the Memo using this metadata is cached, then a call to CheckDependencies can
-// detect if the name resolves to a different data source now, or if changes to
-// schema or permissions on the data source has invalidated the cached metadata.
-func (md *Metadata) AddDependency(name MDDepName, ds cat.DataSource, priv privilege.Kind) {
+// depends, as well as the privilege required to access that data source and
+// the user whose privilege was checked. If the Memo using this metadata is
+// cached, then a call to CheckDependencies can detect if the name resolves to
+// a different data source now, or if changes to schema or permissions on the
+// data source has invalidated the cached metadata.
+func (md *Metadata) AddDependency(
+	name MDDepName, ds cat.DataSource, priv privilege.Kind, user username.SQLUsername,
+) {
 	id := ds.ID()
 	md.dataSourceDeps[id] = ds
-	md.privileges[id] = md.privileges[id] | (1 << priv)
+	key := privilegeKey{ID: id, User: user}
+	md.privileges[key] = md.privileges[key] | (1 << priv)
 	if name.byID == 0 {
 		// This data source was referenced by name.
 		names := md.objectRefsByName[id]
@@ -648,9 +663,13 @@ func maybeSwallowMetadataResolveErr(err error) error {
 // checkDataSourcePrivileges checks that none of the privileges required by the
 // query for the referenced data sources have been revoked.
 func (md *Metadata) checkDataSourcePrivileges(ctx context.Context, optCatalog cat.Catalog) error {
-	for _, dataSource := range md.dataSourceDeps {
+	for key, privileges := range md.privileges {
 		err := func() error {
-			privileges := md.privileges[dataSource.ID()]
+			dataSource, ok := md.dataSourceDeps[key.ID]
+			if !ok {
+				// No need to check privileges because ID is not in dataSourceDeps
+				return errors.AssertionFailedf("Data source dependeny with ID %d does not exist.", key.ID)
+			}
 
 			// Check if this dependency has the special builtin-allowed privilege.
 			// If so, disable unsafe internal checks for all privilege checks on this data source.
@@ -669,7 +688,10 @@ func (md *Metadata) checkDataSourcePrivileges(ctx context.Context, optCatalog ca
 				// privileges do not need to be checked). Ignore the "zero privilege".
 				priv := privilege.Kind(bits.TrailingZeros32(uint32(privs)))
 				if priv != 0 {
-					if err := optCatalog.CheckPrivilege(ctx, dataSource, optCatalog.GetCurrentUser(), priv); err != nil {
+					// Use the user stored in the dependency key rather than
+					// the session user, so that privileges checked as the
+					// view owner are re-validated for the same owner.
+					if err := optCatalog.CheckPrivilege(ctx, dataSource, key.User, priv); err != nil {
 						return err
 					}
 				}
@@ -1236,7 +1258,7 @@ func (md *Metadata) TestingObjectRefsByName() map[cat.StableID]tree.UnresolvedOb
 }
 
 // TestingPrivileges exposes the privileges for testing.
-func (md *Metadata) TestingPrivileges() map[cat.StableID]privilegeBitmap {
+func (md *Metadata) TestingPrivileges() map[privilegeKey]privilegeBitmap {
 	return md.privileges
 }
 
