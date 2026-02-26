@@ -264,22 +264,22 @@ SELECT * FROM last_inspect_job;
 ----
 succeeded  2
 
-statement error pq: index "t2_pkey" on table "t2" is not supported for index consistency checking
+statement error pq: index "t2_pkey" on table "t2" is not supported by INSPECT checks
 INSPECT TABLE t2 WITH OPTIONS INDEX (t2@t2_pkey);
 
-statement error pq: index "hash_idx" on table "t2" is not supported for index consistency checking
+statement error pq: index "hash_idx" on table "t2" is not supported by INSPECT checks
 INSPECT TABLE t2 WITH OPTIONS INDEX (hash_idx);
 
-statement error pq: index "expr_idx" on table "t2" is not supported for index consistency checking
+statement error pq: index "expr_idx" on table "t2" is not supported by INSPECT checks
 INSPECT TABLE t2 WITH OPTIONS INDEX (expr_idx);
 
-statement error pq: index "vector_idx" on table "t2" is not supported for index consistency checking
+statement error pq: index "vector_idx" on table "t2" is not supported by INSPECT checks
 INSPECT TABLE t2 WITH OPTIONS INDEX (vector_idx);
 
-statement error pq: index "partial_idx" on table "t2" is not supported for index consistency checking
+statement error pq: index "partial_idx" on table "t2" is not supported by INSPECT checks
 INSPECT TABLE t2 WITH OPTIONS INDEX (partial_idx);
 
-statement error pq: index "inverted_idx" on table "t2" is not supported for index consistency checking
+statement error pq: index "inverted_idx" on table "t2" is not supported by INSPECT checks
 INSPECT TABLE t2 WITH OPTIONS INDEX (inverted_idx);
 
 # Confirm no jobs were run.
@@ -321,7 +321,7 @@ SELECT * FROM last_inspect_job;
 succeeded  1
 
 # Explicitly specifying the virtual column index should fail.
-statement error pq: index "idx_c2" on table "t_virtual" is not supported for index consistency checking
+statement error pq: index "idx_c2" on table "t_virtual" is not supported by INSPECT checks
 INSPECT TABLE t_virtual WITH OPTIONS INDEX (idx_c2);
 
 # Explicitly specifying the regular index should succeed.
@@ -357,7 +357,7 @@ SELECT * FROM last_inspect_job;
 succeeded  1
 
 # Explicitly specifying the index with virtual columns should fail.
-statement error pq: index "idx_virtual_combo" on table "t_multi_virtual" is not supported for index consistency checking
+statement error pq: index "idx_virtual_combo" on table "t_multi_virtual" is not supported by INSPECT checks
 INSPECT TABLE t_multi_virtual WITH OPTIONS INDEX (idx_virtual_combo);
 
 statement ok
@@ -714,5 +714,41 @@ DROP TABLE pgvector_tbl;
 
 statement ok
 DROP TABLE multi_type_tbl;
+
+subtest end
+
+subtest uniqueness_check
+
+statement ok
+CREATE TYPE test.region_enum AS ENUM ('eu-central1', 'us-east1', 'us-west1', 'us-west4');
+CREATE TABLE uniqueness_check (
+  crdb_region test.region_enum NOT NULL,
+  id INT64 DEFAULT unordered_unique_rowid(),
+  data TEXT,
+  PRIMARY KEY (crdb_region, id)
+);
+
+statement ok
+INSERT INTO uniqueness_check (crdb_region, id, data) VALUES ('us-east1', 100, 'foo');
+INSERT INTO uniqueness_check (crdb_region, id, data) VALUES ('us-west1', 100, 'biz');
+INSERT INTO uniqueness_check (crdb_region, id, data) VALUES ('us-west4', 100, 'toto');
+
+statement ok
+INSERT INTO uniqueness_check (crdb_region, id, data) VALUES ('us-east1', 200, 'bar');
+INSERT INTO uniqueness_check (crdb_region, id, data) VALUES ('us-west1', 200, 'baz');
+
+statement ok
+INSERT INTO uniqueness_check (crdb_region, id, data) VALUES ('us-west1', 300, 'titi');
+INSERT INTO uniqueness_check (crdb_region, id, data) VALUES ('us-west4', 300, 'tata');
+
+onlyif config local
+statement error pq: INSPECT found inconsistencies
+INSPECT TABLE uniqueness_check WITH OPTIONS INDEX (uniqueness_check_pkey);
+
+onlyif config local
+query TI retry
+SELECT * FROM last_inspect_job
+----
+failed  1
 
 subtest end

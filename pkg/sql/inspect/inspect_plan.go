@@ -109,7 +109,7 @@ func newInspectRun(
 		// No INDEX options or INDEX ALL specified - inspect all indexes.
 		switch stmt.Typ {
 		case tree.InspectTable:
-			checks, err := ChecksForTable(ctx, p, run.table, nil /* rowCount */)
+			checks, err := ChecksForTable(ctx, p.ExecCfg(), p, run.table, nil /* rowCount */)
 			if err != nil {
 				return inspectRun{}, err
 			}
@@ -152,7 +152,7 @@ func newInspectRun(
 			}
 		}
 
-		if checks, err := checksByIndexNames(ctx, p, run.namedIndexes); err != nil {
+		if checks, err := checksByIndexNames(ctx, p.ExecCfg(), p, run.namedIndexes); err != nil {
 			return inspectRun{}, err
 		} else {
 			run.checks = checks
