@@ -628,14 +628,15 @@ func generateAndValidateNewTargetsForTableLevelFeed(
 	originalSpecs = make(map[tree.ChangefeedTableTarget]jobspb.ChangefeedTargetSpecification)
 
 	// We want to store the value of whether or not the original changefeed had
-	// initial_scan set to only so that we only do an initial scan on an alter
-	// changefeed with initial_scan = 'only' if the original one also had
-	// initial_scan = 'only'.
+	// initial_scan set to only so that we can reject initial_scan = 'only' on
+	// ADD targets for non-scan-only changefeeds. A scan-only changefeed scans
+	// and then exits, so adding targets with initial_scan = 'only' only makes
+	// sense if the whole changefeed is scan-only.
 	originalInitialScanType, err := opts.GetInitialScanType()
 	if err != nil {
 		return nil, nil, nil, nil, err
 	}
-	originalInitialScanOnlyOption := originalInitialScanType == changefeedbase.OnlyInitialScan
+	originalInitialScanOnly := originalInitialScanType == changefeedbase.OnlyInitialScan
 
 	// When we add new targets with or without initial scans, indicating
 	// initial_scan or no_initial_scan in the job description would lose its
@@ -750,6 +751,14 @@ func generateAndValidateNewTargetsForTableLevelFeed(
 				)
 			}
 
+			if initialScanType == `only` && !originalInitialScanOnly {
+				return nil, nil, nil, nil, pgerror.Newf(
+					pgcode.InvalidParameterValue,
+					`cannot use %s = 'only' when adding targets to a non-scan-only changefeed`,
+					changefeedbase.OptInitialScan,
+				)
+			}
+
 			if initialScanSet && noInitialScanSet {
 				return nil, nil, nil, nil, pgerror.Newf(
 					pgcode.InvalidParameterValue,
@@ -763,7 +772,7 @@ func generateAndValidateNewTargetsForTableLevelFeed(
 			// an initial scan performed on the new targets.
 			withInitialScan := (initialScanType == `` && initialScanSet) ||
 				initialScanType == `yes` ||
-				(initialScanType == `only` && originalInitialScanOnlyOption)
+				(initialScanType == `only` && originalInitialScanOnly)
 
 			for _, target := range v.Targets {
 				desc, found, err := getTargetDesc(ctx, p, descResolver, target.TableName)

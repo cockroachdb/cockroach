@@ -302,7 +302,18 @@ func TestAlterChangefeedAddTargetAfterInitialScan(t *testing.T) {
 			sqlDB.Exec(t, `PAUSE JOB $1`, feed.JobID())
 			waitForJobState(sqlDB, t, feed.JobID(), `paused`)
 
-			sqlDB.Exec(t, fmt.Sprintf(`ALTER CHANGEFEED %d ADD bar WITH initial_scan = '%s'`, feed.JobID(), initialScan))
+			switch initialScan {
+			case "only":
+				// initial_scan = 'only' is not supported when adding targets
+				// to a non-scan-only changefeed.
+				sqlDB.ExpectErr(t,
+					`cannot use initial_scan = 'only' when adding targets to a non-scan-only changefeed`,
+					fmt.Sprintf(`ALTER CHANGEFEED %d ADD bar WITH initial_scan = 'only'`, feed.JobID()),
+				)
+				return
+			default:
+				sqlDB.Exec(t, fmt.Sprintf(`ALTER CHANGEFEED %d ADD bar WITH initial_scan = '%s'`, feed.JobID(), initialScan))
+			}
 
 			sqlDB.Exec(t, `RESUME JOB $1`, feed.JobID())
 			waitForJobState(sqlDB, t, feed.JobID(), `running`)
@@ -316,9 +327,6 @@ func TestAlterChangefeedAddTargetAfterInitialScan(t *testing.T) {
 					// because it was inserted before the highwater.
 					`bar: [2]->{"after": {"a": 2, "b": 9}}`,
 				})
-			case "only":
-				// Strangely, when initial_scan = 'only', we don't do an initial
-				// scan unless the original changefeed was initial_scan = 'only'.
 			case "no":
 			default:
 				t.Fatalf("unknown initial scan type %q", initialScan)
@@ -2643,7 +2651,6 @@ func TestAlterChangefeedInitialScan(t *testing.T) {
 	for _, initialScanOpt := range []string{
 		"initial_scan = 'yes'",
 		"initial_scan = 'no'",
-		"initial_scan = 'only'",
 		"initial_scan",
 		"no_initial_scan",
 	} {
@@ -2972,17 +2979,13 @@ func TestAlterChangefeedRandomizedTargetChanges(t *testing.T) {
 
 					write(` ADD %s`, addTarget)
 
-					switch rnd.Intn(4) {
+					switch rnd.Intn(3) {
 					case 0:
 						write(` WITH initial_scan='yes'`)
 						expectedRows = append(expectedRows, makeInitialScanRows([]string{addTarget}, hw)...)
 					case 1:
-						write(` WITH initial_scan='only'`)
-						// We don't do an initial scan because the original
-						// changefeed did not have initial_scan='only'.
-					case 2:
 						write(` WITH initial_scan='no'`)
-					case 3:
+					case 2:
 						// The default option is initial_scan='no'.
 					}
 					expectedRows = append(expectedRows,
