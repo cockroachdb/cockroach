@@ -2549,6 +2549,166 @@ An error wrapper object for ListSessionsResponse.
 
 
 
+## ListActiveSessionHistory
+
+
+
+ListActiveSessionHistory retrieves ASH samples across the cluster.
+
+Support status: [reserved](#support-status)
+
+#### Request Parameters
+
+
+
+
+Request object for ListActiveSessionHistory and
+ListLocalActiveSessionHistory.
+
+
+| Field | Type | Label | Description | Support status |
+| ----- | ---- | ----- | ----------- | -------------- |
+| per_node_limit | [int32](#cockroach.server.serverpb.ListActiveSessionHistoryRequest-int32) |  | Maximum number of ASH samples to return per node during fan-out. ListActiveSessionHistory defaults this to the cluster setting sql.ash.response_limit when zero; ListLocalActiveSessionHistory applies it as-is (zero means unlimited). | [reserved](#support-status) |
+
+
+
+
+
+
+
+#### Response Parameters
+
+
+
+
+Response object for ListActiveSessionHistory and
+ListLocalActiveSessionHistory.
+
+
+| Field | Type | Label | Description | Support status |
+| ----- | ---- | ----- | ----------- | -------------- |
+| samples | [ASHSample](#cockroach.server.serverpb.ListActiveSessionHistoryResponse-cockroach.server.serverpb.ASHSample) | repeated | ASH samples collected from nodes. | [reserved](#support-status) |
+| errors | [ListActiveSessionHistoryError](#cockroach.server.serverpb.ListActiveSessionHistoryResponse-cockroach.server.serverpb.ListActiveSessionHistoryError) | repeated | Any errors that occurred during fan-out calls to other nodes. | [reserved](#support-status) |
+
+
+
+
+
+
+<a name="cockroach.server.serverpb.ListActiveSessionHistoryResponse-cockroach.server.serverpb.ASHSample"></a>
+#### ASHSample
+
+ASHSample represents a single active session history sample.
+
+| Field | Type | Label | Description | Support status |
+| ----- | ---- | ----- | ----------- | -------------- |
+| sample_time | [google.protobuf.Timestamp](#cockroach.server.serverpb.ListActiveSessionHistoryResponse-google.protobuf.Timestamp) |  | SampleTime is when this sample was taken. | [reserved](#support-status) |
+| node_id | [int32](#cockroach.server.serverpb.ListActiveSessionHistoryResponse-int32) |  | NodeID is the node where this sample was captured. | [reserved](#support-status) |
+| workload_id | [string](#cockroach.server.serverpb.ListActiveSessionHistoryResponse-string) |  | WorkloadID identifies the workload (e.g., statement fingerprint). | [reserved](#support-status) |
+| work_event_type | [WorkEventType](#cockroach.server.serverpb.ListActiveSessionHistoryResponse-cockroach.server.serverpb.WorkEventType) |  | WorkEventType categorizes the work by resource type (e.g., CPU, NETWORK, LOCK). | [reserved](#support-status) |
+| work_event | [string](#cockroach.server.serverpb.ListActiveSessionHistoryResponse-string) |  | WorkEvent is a more specific identifier for the work (e.g., "DistSenderLocal"). | [reserved](#support-status) |
+| goroutine_id | [int64](#cockroach.server.serverpb.ListActiveSessionHistoryResponse-int64) |  | GoroutineID is the ID of the goroutine that was sampled. | [reserved](#support-status) |
+| tenant_id | [uint64](#cockroach.server.serverpb.ListActiveSessionHistoryResponse-uint64) |  | TenantID identifies which tenant this sample belongs to. | [reserved](#support-status) |
+
+
+
+
+
+<a name="cockroach.server.serverpb.ListActiveSessionHistoryResponse-cockroach.server.serverpb.ListActiveSessionHistoryError"></a>
+#### ListActiveSessionHistoryError
+
+An error wrapper for ListActiveSessionHistory fan-out.
+
+| Field | Type | Label | Description | Support status |
+| ----- | ---- | ----- | ----------- | -------------- |
+| node_id | [int32](#cockroach.server.serverpb.ListActiveSessionHistoryResponse-int32) |  | ID of node that was being contacted when this error occurred. | [reserved](#support-status) |
+| message | [string](#cockroach.server.serverpb.ListActiveSessionHistoryResponse-string) |  | Error message. | [reserved](#support-status) |
+
+
+
+
+
+
+## ListLocalActiveSessionHistory
+
+
+
+ListLocalActiveSessionHistory retrieves ASH samples on this node.
+
+Support status: [reserved](#support-status)
+
+#### Request Parameters
+
+
+
+
+Request object for ListActiveSessionHistory and
+ListLocalActiveSessionHistory.
+
+
+| Field | Type | Label | Description | Support status |
+| ----- | ---- | ----- | ----------- | -------------- |
+| per_node_limit | [int32](#cockroach.server.serverpb.ListActiveSessionHistoryRequest-int32) |  | Maximum number of ASH samples to return per node during fan-out. ListActiveSessionHistory defaults this to the cluster setting sql.ash.response_limit when zero; ListLocalActiveSessionHistory applies it as-is (zero means unlimited). | [reserved](#support-status) |
+
+
+
+
+
+
+
+#### Response Parameters
+
+
+
+
+Response object for ListActiveSessionHistory and
+ListLocalActiveSessionHistory.
+
+
+| Field | Type | Label | Description | Support status |
+| ----- | ---- | ----- | ----------- | -------------- |
+| samples | [ASHSample](#cockroach.server.serverpb.ListActiveSessionHistoryResponse-cockroach.server.serverpb.ASHSample) | repeated | ASH samples collected from nodes. | [reserved](#support-status) |
+| errors | [ListActiveSessionHistoryError](#cockroach.server.serverpb.ListActiveSessionHistoryResponse-cockroach.server.serverpb.ListActiveSessionHistoryError) | repeated | Any errors that occurred during fan-out calls to other nodes. | [reserved](#support-status) |
+
+
+
+
+
+
+<a name="cockroach.server.serverpb.ListActiveSessionHistoryResponse-cockroach.server.serverpb.ASHSample"></a>
+#### ASHSample
+
+ASHSample represents a single active session history sample.
+
+| Field | Type | Label | Description | Support status |
+| ----- | ---- | ----- | ----------- | -------------- |
+| sample_time | [google.protobuf.Timestamp](#cockroach.server.serverpb.ListActiveSessionHistoryResponse-google.protobuf.Timestamp) |  | SampleTime is when this sample was taken. | [reserved](#support-status) |
+| node_id | [int32](#cockroach.server.serverpb.ListActiveSessionHistoryResponse-int32) |  | NodeID is the node where this sample was captured. | [reserved](#support-status) |
+| workload_id | [string](#cockroach.server.serverpb.ListActiveSessionHistoryResponse-string) |  | WorkloadID identifies the workload (e.g., statement fingerprint). | [reserved](#support-status) |
+| work_event_type | [WorkEventType](#cockroach.server.serverpb.ListActiveSessionHistoryResponse-cockroach.server.serverpb.WorkEventType) |  | WorkEventType categorizes the work by resource type (e.g., CPU, NETWORK, LOCK). | [reserved](#support-status) |
+| work_event | [string](#cockroach.server.serverpb.ListActiveSessionHistoryResponse-string) |  | WorkEvent is a more specific identifier for the work (e.g., "DistSenderLocal"). | [reserved](#support-status) |
+| goroutine_id | [int64](#cockroach.server.serverpb.ListActiveSessionHistoryResponse-int64) |  | GoroutineID is the ID of the goroutine that was sampled. | [reserved](#support-status) |
+| tenant_id | [uint64](#cockroach.server.serverpb.ListActiveSessionHistoryResponse-uint64) |  | TenantID identifies which tenant this sample belongs to. | [reserved](#support-status) |
+
+
+
+
+
+<a name="cockroach.server.serverpb.ListActiveSessionHistoryResponse-cockroach.server.serverpb.ListActiveSessionHistoryError"></a>
+#### ListActiveSessionHistoryError
+
+An error wrapper for ListActiveSessionHistory fan-out.
+
+| Field | Type | Label | Description | Support status |
+| ----- | ---- | ----- | ----------- | -------------- |
+| node_id | [int32](#cockroach.server.serverpb.ListActiveSessionHistoryResponse-int32) |  | ID of node that was being contacted when this error occurred. | [reserved](#support-status) |
+| message | [string](#cockroach.server.serverpb.ListActiveSessionHistoryResponse-string) |  | Error message. | [reserved](#support-status) |
+
+
+
+
+
+
 ## CancelQuery
 
 `POST /_status/cancel_query/{node_id}`

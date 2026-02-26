@@ -67,6 +67,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities"
 	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities/tenantcapabilitiesauthorizer"
 	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities/tenantcapabilitieswatcher"
+	"github.com/cockroachdb/cockroach/pkg/obs/ash"
 	"github.com/cockroachdb/cockroach/pkg/obs/clustermetrics"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
@@ -1879,6 +1880,13 @@ func (s *topLevelServer) PreStart(ctx context.Context) error {
 	// initialized before store startup continues.
 	s.sqlServer.execCfg.DistSQLPlanner.SetGatewaySQLInstanceID(base.SQLInstanceID(state.nodeID))
 	s.sqlServer.execCfg.DistSQLPlanner.ConstructAndSetSpanResolver(ctx, state.nodeID, s.cfg.Locality)
+
+	// Initialize the process-global ASH sampler now that the node ID is
+	// known. The sampler is a process-wide singleton tied to the
+	// process-level stopper.
+	if err := ash.InitGlobalSampler(ctx, state.nodeID, s.st, s.stopper); err != nil {
+		return err
+	}
 
 	// TODO(irfansharif): Now that we have our node ID, we should run another
 	// check here to make sure we've not been decommissioned away (if we're here

@@ -1157,6 +1157,75 @@ message ListSessionsResponse {
   string internal_app_name_prefix = 3;
 }
 
+// Request object for ListActiveSessionHistory and
+// ListLocalActiveSessionHistory.
+message ListActiveSessionHistoryRequest {
+  // Maximum number of ASH samples to return per node during fan-out.
+  // ListActiveSessionHistory defaults this to the cluster setting
+  // sql.ash.response_limit when zero; ListLocalActiveSessionHistory
+  // applies it as-is (zero means unlimited).
+  int32 per_node_limit = 1;
+}
+
+// WorkEventType categorizes the type of work event observed during
+// ASH sampling.
+enum WorkEventType {
+  WORK_EVENT_TYPE_UNKNOWN   = 0;
+  WORK_EVENT_TYPE_CPU       = 1;
+  WORK_EVENT_TYPE_ADMISSION = 2;
+  WORK_EVENT_TYPE_IO        = 3;
+  WORK_EVENT_TYPE_NETWORK   = 4;
+  WORK_EVENT_TYPE_LOCK      = 5;
+  WORK_EVENT_TYPE_OTHER     = 6;
+}
+
+// ASHSample represents a single active session history sample.
+message ASHSample {
+  // SampleTime is when this sample was taken.
+  google.protobuf.Timestamp sample_time = 1
+      [ (gogoproto.nullable) = false, (gogoproto.stdtime) = true ];
+  // NodeID is the node where this sample was captured.
+  int32 node_id = 2 [
+    (gogoproto.customname) = "NodeID",
+    (gogoproto.casttype) =
+        "github.com/cockroachdb/cockroach/pkg/roachpb.NodeID"
+  ];
+  // WorkloadID identifies the workload (e.g., statement fingerprint).
+  string workload_id = 3 [(gogoproto.customname) = "WorkloadID"];
+  // WorkEventType categorizes the work by resource type (e.g., CPU,
+  // NETWORK, LOCK).
+  WorkEventType work_event_type = 4;
+  // WorkEvent is a more specific identifier for the work (e.g.,
+  // "DistSenderLocal").
+  string work_event = 5;
+  // GoroutineID is the ID of the goroutine that was sampled.
+  int64 goroutine_id = 6 [(gogoproto.customname) = "GoroutineID"];
+  // TenantID identifies which tenant this sample belongs to.
+  uint64 tenant_id = 7 [(gogoproto.customname) = "TenantID"];
+}
+
+// An error wrapper for ListActiveSessionHistory fan-out.
+message ListActiveSessionHistoryError {
+  // ID of node that was being contacted when this error occurred.
+  int32 node_id = 1 [
+    (gogoproto.customname) = "NodeID",
+    (gogoproto.casttype) =
+        "github.com/cockroachdb/cockroach/pkg/roachpb.NodeID"
+  ];
+  // Error message.
+  string message = 2;
+}
+
+// Response object for ListActiveSessionHistory and
+// ListLocalActiveSessionHistory.
+message ListActiveSessionHistoryResponse {
+  // ASH samples collected from nodes.
+  repeated ASHSample samples = 1 [ (gogoproto.nullable) = false ];
+  // Any errors that occurred during fan-out calls to other nodes.
+  repeated ListActiveSessionHistoryError errors = 2
+      [ (gogoproto.nullable) = false ];
+}
+
 // Request object for issuing a query cancel request.
 message CancelQueryRequest {
   // ID of gateway node for the query to be canceled.
@@ -2403,6 +2472,14 @@ service Status {
       get : "/_status/local_sessions"
     };
   }
+
+  // ListActiveSessionHistory retrieves ASH samples across the cluster.
+  rpc ListActiveSessionHistory(ListActiveSessionHistoryRequest)
+      returns (ListActiveSessionHistoryResponse) {}
+
+  // ListLocalActiveSessionHistory retrieves ASH samples on this node.
+  rpc ListLocalActiveSessionHistory(ListActiveSessionHistoryRequest)
+      returns (ListActiveSessionHistoryResponse) {}
 
   // CancelQuery cancels a SQL query given its ID.
   rpc CancelQuery(CancelQueryRequest) returns (CancelQueryResponse) {

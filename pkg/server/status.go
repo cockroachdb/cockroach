@@ -43,6 +43,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
 	"github.com/cockroachdb/cockroach/pkg/multitenant/mtinfopb"
+	"github.com/cockroachdb/cockroach/pkg/obs/ash"
 	raft "github.com/cockroachdb/cockroach/pkg/raft"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
@@ -3348,6 +3349,97 @@ func (s *statusServer) ListLocalSessions(
 		sessions[i].NodeID = roachpb.NodeID(s.serverIterator.getID())
 	}
 	return &serverpb.ListSessionsResponse{Sessions: sessions}, nil
+}
+
+// ListLocalActiveSessionHistory returns ASH samples from this node.
+// In a shared-process multi-tenant environment, the global ring
+// buffer contains samples from all tenants. Secondary tenants only
+// receive samples matching their tenant ID; the system tenant sees
+// all samples.
+func (s *statusServer) ListLocalActiveSessionHistory(
+	ctx context.Context, req *serverpb.ListActiveSessionHistoryRequest,
+) (*serverpb.ListActiveSessionHistoryResponse, error) {
+	ctx = s.AnnotateCtx(ctx)
+	ashSamples := ash.GetSamples()
+
+	tID, ok := roachpb.ClientTenantFromContext(ctx)
+	filterByTenant := ok && !tID.IsSystem()
+
+	protoSamples := make([]serverpb.ASHSample, 0, len(ashSamples))
+	for _, sample := range ashSamples {
+		if filterByTenant && sample.TenantID != tID {
+			continue
+		}
+		protoSamples = append(protoSamples, serverpb.ASHSample{
+			SampleTime:    sample.SampleTime,
+			NodeID:        sample.NodeID,
+			TenantID:      sample.TenantID.ToUint64(),
+			WorkloadID:    sample.WorkloadID,
+			WorkEventType: serverpb.WorkEventType(sample.WorkEventType),
+			WorkEvent:     sample.WorkEvent,
+			GoroutineID:   sample.GoroutineID,
+		})
+	}
+
+	// Apply per-node limit, keeping only the newest samples.
+	if limit := int(req.PerNodeLimit); limit > 0 && len(protoSamples) > limit {
+		protoSamples = protoSamples[len(protoSamples)-limit:]
+	}
+
+	return &serverpb.ListActiveSessionHistoryResponse{
+		Samples: protoSamples,
+	}, nil
+}
+
+// ListActiveSessionHistory returns ASH samples from all nodes in the cluster.
+func (s *statusServer) ListActiveSessionHistory(
+	ctx context.Context, req *serverpb.ListActiveSessionHistoryRequest,
+) (*serverpb.ListActiveSessionHistoryResponse, error) {
+	ctx = authserver.ForwardSQLIdentityThroughRPCCalls(ctx)
+	ctx = s.AnnotateCtx(ctx)
+
+	// Apply the default per-node limit from the cluster setting when
+	// the caller has not specified one.
+	if req.PerNodeLimit == 0 {
+		req.PerNodeLimit = int32(ashResponseLimit.Get(&s.st.SV))
+	}
+
+	response := &serverpb.ListActiveSessionHistoryResponse{
+		Samples: make([]serverpb.ASHSample, 0),
+		Errors:  make([]serverpb.ListActiveSessionHistoryError, 0),
+	}
+
+	nodeFn := func(
+		ctx context.Context,
+		statusClient serverpb.RPCStatusClient,
+		_ roachpb.NodeID,
+	) ([]serverpb.ASHSample, error) {
+		resp, err := statusClient.ListLocalActiveSessionHistory(ctx, req)
+		if resp != nil && err == nil {
+			return resp.Samples, nil
+		}
+		return nil, err
+	}
+
+	responseFn := func(_ roachpb.NodeID, samples []serverpb.ASHSample) {
+		response.Samples = append(response.Samples, samples...)
+	}
+
+	errorFn := func(nodeID roachpb.NodeID, err error) {
+		response.Errors = append(response.Errors, serverpb.ListActiveSessionHistoryError{
+			NodeID:  nodeID,
+			Message: err.Error(),
+		})
+	}
+
+	if err := iterateNodes(
+		ctx, s.serverIterator, s.stopper,
+		redact.Sprint("active session history"), noTimeout,
+		s.dialNode, nodeFn, responseFn, errorFn,
+	); err != nil {
+		return nil, srverrors.ServerError(ctx, err)
+	}
+	return response, nil
 }
 
 // iterateNodes calls iterateNodesExt with max concurrency
