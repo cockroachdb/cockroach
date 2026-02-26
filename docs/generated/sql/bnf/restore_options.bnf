@@ -19,3 +19,4 @@ restore_options ::=
 	| 'EXPERIMENTAL' 'DEFERRED' 'COPY'
 	| 'EXPERIMENTAL' 'COPY'
 	| 'REMOVE_REGIONS'
+	| 'GRANTS'

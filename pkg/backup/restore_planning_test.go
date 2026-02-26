@@ -79,6 +79,7 @@ func TestRestoreResolveOptionsForJobDescription(t *testing.T) {
 		NewDBName:            tree.NewDString("test expr"),
 		DecryptionKMSURI:     []tree.Expr{tree.NewDString("http://example.com")},
 		EncryptionPassphrase: tree.NewDString("test expr"),
+		Grants:               true,
 	}
 
 	ensureAllStructFieldsSet := func(s tree.RestoreOptions, name string) {

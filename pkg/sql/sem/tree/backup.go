@@ -128,6 +128,7 @@ type RestoreOptions struct {
 	ExperimentalOnline               bool
 	ExperimentalCopy                 bool
 	RemoveRegions                    bool
+	Grants                           bool
 }
 
 func (opts *RestoreOptions) OnlineImpl() bool {
@@ -496,6 +497,11 @@ func (o *RestoreOptions) Format(ctx *FmtCtx) {
 		maybeAddSep()
 		ctx.WriteString("remove_regions")
 	}
+
+	if o.Grants {
+		maybeAddSep()
+		ctx.WriteString("grants")
+	}
 }
 
 // CombineWith merges other backup options into this backup options struct.
@@ -647,6 +653,14 @@ func (o *RestoreOptions) CombineWith(other *RestoreOptions) error {
 		o.RemoveRegions = other.RemoveRegions
 	}
 
+	if o.Grants {
+		if other.Grants {
+			return errors.New("grants specified multiple times")
+		}
+	} else {
+		o.Grants = other.Grants
+	}
+
 	return nil
 }
 
@@ -672,7 +686,8 @@ func (o RestoreOptions) IsDefault() bool {
 		o.ExecutionLocality == options.ExecutionLocality &&
 		o.ExperimentalOnline == options.ExperimentalOnline &&
 		o.ExperimentalCopy == options.ExperimentalCopy &&
-		o.RemoveRegions == options.RemoveRegions
+		o.RemoveRegions == options.RemoveRegions &&
+		o.Grants == options.Grants
 }
 
 // BackupTargetList represents a list of targets.
