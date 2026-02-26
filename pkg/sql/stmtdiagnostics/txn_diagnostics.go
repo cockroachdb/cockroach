@@ -86,6 +86,14 @@ func (t *TxnRequest) MinExecutionLatency() time.Duration {
 	return t.minExecutionLatency
 }
 
+// TxnRequestMatch pairs a request ID with its TxnRequest. Returned by
+// ShouldStartTxnDiagnostic to allow callers to track multiple matching
+// requests simultaneously.
+type TxnRequestMatch struct {
+	ID      RequestID
+	Request TxnRequest
+}
+
 // TxnDiagnostic is a container for all the diagnostic data that has been
 // collected and will be persisted for a transaction. This will be downloadable
 // as a transaction diagnostic bundle
@@ -114,14 +122,8 @@ type TxnRegistry struct {
 		syncutil.Mutex
 		// requests is a map of all the transaction diagnostic requests that are
 		// pending to be collected. Requests will be removed from this map once
-		// it has been fulfilled, has expired, or if moved to the
-		// unconditionalOngoingRequests map.
+		// it has been fulfilled or has expired.
 		requests map[RequestID]TxnRequest
-		// unconditionalOngoingRequests contains requests that are currently being
-		// recorded and expected to be recorded unconditionally. This means that
-		// these requests should be recorded on their next execution, regardless
-		// of the transaction's latency or other conditions.
-		unconditionalOngoingRequests map[RequestID]TxnRequest
 
 		// epoch is observed before reading system.transaction_diagnostics_requests, and then
 		// checked again before loading the tables contents. If the value changed in
@@ -187,52 +189,40 @@ func NewTxnRegistry(
 	}
 	r.mu.rand = rand.New(rand.NewSource(ts.Now().UnixNano()))
 	r.mu.requests = make(map[RequestID]TxnRequest)
-	r.mu.unconditionalOngoingRequests = make(map[RequestID]TxnRequest)
 	return r
 }
 
-// ShouldStartTxnDiagnostic returns the first txn request whose first
-// statement fingerprint id matches the provided stmtFingerprintId. There may
-// be multiple transaction diagnostic requests that the stmtFingerprintId
-// matches, in which case we will stop at the first one we find.
+// ShouldStartTxnDiagnostic returns all txn requests whose first statement
+// fingerprint id matches the provided stmtFingerprintId. Multiple transactions
+// may share the same first statement fingerprint, so returning all matches
+// allows callers to progressively narrow candidates as subsequent statements
+// are observed.
 func (r *TxnRegistry) ShouldStartTxnDiagnostic(
 	ctx context.Context, stmtFingerprintId uint64,
-) (shouldStart bool, reqID RequestID, req TxnRequest) {
+) []TxnRequestMatch {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
 	if len(r.mu.requests) == 0 {
-		return false, 0, req
+		return nil
 	}
 
+	now := r.ts.Now()
+	roll := r.mu.rand.Float64()
+	var matches []TxnRequestMatch
 	for id, f := range r.mu.requests {
 		if len(f.stmtFingerprintIds) > 0 && f.stmtFingerprintIds[0] == stmtFingerprintId {
-			if f.isExpired(r.ts.Now()) {
+			if f.isExpired(now) {
 				delete(r.mu.requests, id)
-				return false, 0, req
+				continue
 			}
-			req = f
-			reqID = id
-			break
+			if f.samplingProbability != 0 && roll >= f.samplingProbability {
+				continue
+			}
+			matches = append(matches, TxnRequestMatch{ID: id, Request: f})
 		}
 	}
-	if reqID == 0 {
-		return false, 0, TxnRequest{}
-	}
-
-	// Unconditional requests are those that will be recorded on the next
-	// execution. In this case, we move the request to the unconditional
-	// ongoing requests map, so that it is not considered for future
-	// transactions until it is reset.
-	if !req.IsConditional() {
-		r.mu.unconditionalOngoingRequests[reqID] = req
-		delete(r.mu.requests, reqID)
-	}
-
-	if req.samplingProbability == 0 || r.mu.rand.Float64() < req.samplingProbability {
-		return true, reqID, req
-	}
-	return false, 0, TxnRequest{}
+	return matches
 }
 
 func (r *TxnRegistry) InsertTxnRequest(
@@ -361,28 +351,6 @@ func (r *TxnRegistry) insertTxnRequestInternal(
 	return reqID, nil
 }
 
-// ResetTxnRequest moves the TxnRequest of the given requestID from the ongoing
-// requests map back to the requests map, which makes it available to be picked
-// up to be recorded again.
-func (r *TxnRegistry) ResetTxnRequest(requestID RequestID) (req TxnRequest, ok bool) {
-	if requestID == 0 {
-		return TxnRequest{}, false
-	}
-
-	r.mu.Lock()
-	defer r.mu.Unlock()
-
-	req, ok = r.mu.unconditionalOngoingRequests[requestID]
-	if !ok {
-		return TxnRequest{}, false
-	}
-
-	delete(r.mu.unconditionalOngoingRequests, requestID)
-	r.mu.requests[requestID] = req
-
-	return req, true
-}
-
 // InsertTxnDiagnostic persists the collected transaction diagnostic bundle. It
 // will persist all the collected statement diagnostic bundles as well as the
 // transaction trace, and update the request as completed.
@@ -495,7 +463,6 @@ func (r *TxnRegistry) RemoveFromRegistry(requestID RequestID) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	delete(r.mu.requests, requestID)
-	delete(r.mu.unconditionalOngoingRequests, requestID)
 }
 
 func (r *TxnRegistry) addTxnRequestInternalLocked(
@@ -535,8 +502,7 @@ func (r *TxnRegistry) findTxnRequestLocked(requestID RequestID) bool {
 		}
 		return true
 	}
-	_, ok = r.mu.unconditionalOngoingRequests[requestID]
-	return ok
+	return false
 }
 
 // pollTxnRequests reads the pending rows from system.transaction_diagnostics_requests and

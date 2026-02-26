@@ -14,9 +14,6 @@ func (r *TxnRegistry) GetRequest(requestID RequestID) (TxnRequest, bool) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	req, ok := r.mu.requests[requestID]
-	if !ok {
-		req, ok = r.mu.unconditionalOngoingRequests[requestID]
-	}
 	return req, ok
 }
 

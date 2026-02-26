@@ -85,29 +85,19 @@ func TestTxnRegistry_ShouldStartTxnDiagnostic(t *testing.T) {
 			requestId := RequestID(1)
 			registry.mu.requests[requestId] = request
 
-			shouldCollect, id, actual := registry.ShouldStartTxnDiagnostic(context.Background(), tc.queryFingerprintId)
+			matches := registry.ShouldStartTxnDiagnostic(context.Background(), tc.queryFingerprintId)
 
-			require.Equal(t, tc.expectedShouldStart, shouldCollect)
-			var expectedRequest TxnRequest
-			var expectedRequestId RequestID
 			if tc.expectedShouldStart {
-				expectedRequestId = requestId
-				expectedRequest = request
-				if actual.IsConditional() {
-					requestInMap, ok := registry.mu.requests[requestId]
-					require.True(t, ok)
-					require.Equal(t, expectedRequest, requestInMap)
-					require.Empty(t, registry.mu.unconditionalOngoingRequests)
-				} else {
-					requestInOngoing, ok := registry.mu.unconditionalOngoingRequests[requestId]
-					require.True(t, ok)
-					require.Equal(t, expectedRequest, requestInOngoing)
-					require.Empty(t, registry.mu.requests)
-
-				}
+				require.Len(t, matches, 1)
+				require.Equal(t, requestId, matches[0].ID)
+				require.Equal(t, request, matches[0].Request)
+				// Request should remain in the requests map (no exclusive ownership).
+				requestInMap, ok := registry.mu.requests[requestId]
+				require.True(t, ok)
+				require.Equal(t, request, requestInMap)
+			} else {
+				require.Empty(t, matches)
 			}
-			require.Equal(t, expectedRequestId, id)
-			require.Equal(t, expectedRequest, actual)
 		})
 	}
 
@@ -122,17 +112,62 @@ func TestTxnRegistry_ShouldStartTxnDiagnostic(t *testing.T) {
 		}
 		registry.mu.requests[requestId] = expectedRequest
 		testutils.SucceedsSoon(t, func() error {
-			shouldCollect, id, actual := registry.ShouldStartTxnDiagnostic(context.Background(), 1111)
-			if shouldCollect {
-				require.Contains(t, registry.mu.requests, id)
+			matches := registry.ShouldStartTxnDiagnostic(context.Background(), 1111)
+			if len(matches) > 0 {
+				require.Contains(t, registry.mu.requests, matches[0].ID)
 				return errors.New("waiting till we don't find")
 			}
 
-			require.Equal(t, RequestID(0), id)
-			require.Equal(t, TxnRequest{}, actual)
 			require.Contains(t, registry.mu.requests, requestId)
 			return nil
 		})
+	})
+
+	t.Run("multiple_matching_requests", func(t *testing.T) {
+		registry := NewTxnRegistry(noopDb{}, nil, nil, timeutil.NewManualTime(timeutil.Now()))
+		req1 := TxnRequest{
+			txnFingerprintId:   1111,
+			stmtFingerprintIds: []uint64{1111, 2222, 3333},
+		}
+		req2 := TxnRequest{
+			txnFingerprintId:   2222,
+			stmtFingerprintIds: []uint64{1111, 4444, 5555},
+		}
+		registry.mu.requests[RequestID(1)] = req1
+		registry.mu.requests[RequestID(2)] = req2
+
+		matches := registry.ShouldStartTxnDiagnostic(context.Background(), 1111)
+		require.Len(t, matches, 2)
+
+		// Both requests should still be in the map.
+		require.Contains(t, registry.mu.requests, RequestID(1))
+		require.Contains(t, registry.mu.requests, RequestID(2))
+	})
+
+	t.Run("expired_filtered_non_expired_returned", func(t *testing.T) {
+		now := timeutil.Now()
+		registry := NewTxnRegistry(noopDb{}, nil, nil, timeutil.NewManualTime(now))
+		expiredReq := TxnRequest{
+			txnFingerprintId:   1111,
+			stmtFingerprintIds: []uint64{1111, 2222},
+			expiresAt:          now.Add(-time.Hour),
+		}
+		validReq := TxnRequest{
+			txnFingerprintId:   2222,
+			stmtFingerprintIds: []uint64{1111, 3333},
+		}
+		registry.mu.requests[RequestID(1)] = expiredReq
+		registry.mu.requests[RequestID(2)] = validReq
+
+		matches := registry.ShouldStartTxnDiagnostic(context.Background(), 1111)
+		require.Len(t, matches, 1)
+		require.Equal(t, RequestID(2), matches[0].ID)
+		require.Equal(t, validReq, matches[0].Request)
+
+		// Expired request should have been removed.
+		require.NotContains(t, registry.mu.requests, RequestID(1))
+		// Valid request should still be present.
+		require.Contains(t, registry.mu.requests, RequestID(2))
 	})
 }
 
@@ -242,57 +277,6 @@ func TestTxnRegistry_InsertTxnRequest(t *testing.T) {
 			}
 		})
 	}
-}
-
-func TestTxnRegistry_ResetTxnRequest(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-
-	t.Run("request_reset", func(t *testing.T) {
-		registry := NewTxnRegistry(noopDb{}, nil, nil, timeutil.NewManualTime(timeutil.Now()))
-		requestId := RequestID(1)
-		expectedRequest := TxnRequest{
-			txnFingerprintId:    1111,
-			stmtFingerprintIds:  []uint64{1111, 2222, 3333},
-			redacted:            false,
-			username:            "",
-			expiresAt:           time.Time{},
-			minExecutionLatency: 0,
-			samplingProbability: 0,
-		}
-		registry.mu.unconditionalOngoingRequests[requestId] = expectedRequest
-
-		require.Empty(t, registry.mu.requests)
-		actualReq, ok := registry.ResetTxnRequest(requestId)
-		require.True(t, ok)
-		require.Equal(t, expectedRequest, actualReq)
-		// unconditionalOngoingRequests should be empty now
-		require.Empty(t, registry.mu.unconditionalOngoingRequests)
-
-		// Should be in the requests map now
-		req, ok := registry.mu.requests[requestId]
-		require.True(t, ok)
-		require.Equal(t, expectedRequest, req)
-	})
-
-	t.Run("request_not_found", func(t *testing.T) {
-		registry := NewTxnRegistry(noopDb{}, nil, nil, timeutil.NewManualTime(timeutil.Now()))
-		requestId := RequestID(1)
-		expectedRequest := TxnRequest{
-			txnFingerprintId:    1111,
-			stmtFingerprintIds:  []uint64{1111, 2222, 3333},
-			redacted:            false,
-			username:            "",
-			expiresAt:           time.Time{},
-			minExecutionLatency: 0,
-			samplingProbability: 0,
-		}
-		registry.mu.unconditionalOngoingRequests[requestId] = expectedRequest
-		actualReq, ok := registry.ResetTxnRequest(RequestID(2))
-		require.False(t, ok)
-		require.Equal(t, TxnRequest{}, actualReq)
-		require.Contains(t, registry.mu.unconditionalOngoingRequests, requestId)
-	})
 }
 
 func TestTxnRegistry_InsertTxnDiagnostic(t *testing.T) {
@@ -406,7 +390,7 @@ func TestTxnRegistry_InsertTxnDiagnostic(t *testing.T) {
 		)
 
 		row := runner.QueryRow(t, `
-		SELECT td.transaction_fingerprint_id, 
+		SELECT td.transaction_fingerprint_id,
 		       td.transaction_fingerprint,
 		       td.statement_fingerprint_ids,
 		       td.collected_at,
@@ -425,7 +409,6 @@ func TestTxnRegistry_InsertTxnDiagnostic(t *testing.T) {
 		require.True(t, dbRequestCompleted, "request should be completed")
 		require.Equal(t, now, dbCollectedAt, "collection time should match current time")
 		require.NotContains(t, registry.mu.requests, requestID, "request should be removed from registry")
-		require.NotContains(t, registry.mu.unconditionalOngoingRequests, requestID, "request should be removed from registry")
 	})
 
 	t.Run("already completed", func(t *testing.T) {
@@ -494,13 +477,13 @@ func checkDatabaseForRequest(
 	t.Helper()
 	row := runner.QueryRow(t, `
 			SELECT transaction_fingerprint_id,
-			       CAST(EXTRACT(EPOCH FROM min_execution_latency) * 1000000000 AS INT8), 
-			       expires_at, 
-			       sampling_probability, 
-			       redacted, 
+			       CAST(EXTRACT(EPOCH FROM min_execution_latency) * 1000000000 AS INT8),
+			       expires_at,
+			       sampling_probability,
+			       redacted,
 			       username,
 			       statement_fingerprint_ids
-			FROM system.transaction_diagnostics_requests 
+			FROM system.transaction_diagnostics_requests
 			WHERE id = $1
 		`, id)
 	// Query the database to get the inserted TxnRequest data

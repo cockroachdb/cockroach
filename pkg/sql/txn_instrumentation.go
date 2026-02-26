@@ -30,25 +30,43 @@ const (
 	txnDiagnosticsReadyToFinalize
 )
 
-type txnDiagnosticsCollector struct {
+// candidateRequest tracks a single diagnostic request candidate through
+// progressive fingerprint matching. As each statement executes, candidates
+// whose next expected fingerprint doesn't match are eliminated.
+type candidateRequest struct {
+	id                stmtdiagnostics.RequestID
 	request           stmtdiagnostics.TxnRequest
-	requestId         stmtdiagnostics.RequestID
-	z                 memzipper.Zipper
-	stmtBundles       []stmtdiagnostics.StmtDiagnostic
 	stmtsFpsToCapture []uint64
-	span              *tracing.Span
-	state             txnDiagnosticsState
+}
+
+type txnDiagnosticsCollector struct {
+	candidates  []candidateRequest
+	z           memzipper.Zipper
+	stmtBundles []stmtdiagnostics.StmtDiagnostic
+	span        *tracing.Span
+	state       txnDiagnosticsState
 }
 
 func newTxnDiagnosticsCollector(
-	request stmtdiagnostics.TxnRequest, requestId stmtdiagnostics.RequestID, span *tracing.Span,
+	matches []stmtdiagnostics.TxnRequestMatch, span *tracing.Span,
 ) txnDiagnosticsCollector {
+	candidates := make([]candidateRequest, len(matches))
+	for i, m := range matches {
+		// Copy the fingerprint slice so each candidate tracks its own
+		// progress independently.
+		fps := m.Request.StmtFingerprintIds()
+		fpsCopy := make([]uint64, len(fps))
+		copy(fpsCopy, fps)
+		candidates[i] = candidateRequest{
+			id:                m.ID,
+			request:           m.Request,
+			stmtsFpsToCapture: fpsCopy,
+		}
+	}
 	collector := txnDiagnosticsCollector{
-		stmtsFpsToCapture: request.StmtFingerprintIds(),
-		request:           request,
-		stmtBundles:       nil,
-		requestId:         requestId,
-		span:              span,
+		candidates:  candidates,
+		stmtBundles: nil,
+		span:        span,
 	}
 	collector.UpdateState(txnDiagnosticsInProgress)
 	collector.z.Init()
@@ -75,18 +93,25 @@ func (tds *txnDiagnosticsCollector) UpdateState(state txnDiagnosticsState) {
 	tds.state = state
 }
 
+// ShouldCollect returns true if the collector is ready to finalize and at
+// least one candidate's MinExecutionLatency constraint is satisfied.
 func (tds *txnDiagnosticsCollector) ShouldCollect(executionDuration time.Duration) bool {
 	if !tds.ReadyToFinalize() {
 		return false
 	}
-
-	return executionDuration >= tds.request.MinExecutionLatency()
+	for i := range tds.candidates {
+		if executionDuration >= tds.candidates[i].request.MinExecutionLatency() {
+			return true
+		}
+	}
+	return false
 }
 
 // AddStatementBundle adds a statement diagnostic bundle to the transaction
-// diagnostics collector. It returns true if the bundle was added, and
-// false otherwise. If a statement bundle is added while the collector is not
-// in progress, an error is also returned.
+// diagnostics collector. It filters candidates: those whose next expected
+// fingerprint doesn't match are eliminated. If no candidates survive, it
+// returns (false, nil) to signal the caller to reset. If a statement bundle
+// is added while the collector is not in progress, an error is returned.
 func (tds *txnDiagnosticsCollector) AddStatementBundle(
 	stmtFingerprintId uint64, stmt tree.Statement, bundle stmtdiagnostics.StmtDiagnostic,
 ) (added bool, err error) {
@@ -95,16 +120,38 @@ func (tds *txnDiagnosticsCollector) AddStatementBundle(
 	}
 
 	if !tds.shouldAllowStatement(stmt) {
-		if len(tds.stmtsFpsToCapture) > 0 {
-			nextStmtToCapture := tds.stmtsFpsToCapture[0]
-			if nextStmtToCapture != stmtFingerprintId {
-				return false, nil
+		// Filter candidates based on expected fingerprint.
+		surviving := tds.candidates[:0]
+		for _, c := range tds.candidates {
+			if len(c.stmtsFpsToCapture) > 0 {
+				if c.stmtsFpsToCapture[0] == stmtFingerprintId {
+					c.stmtsFpsToCapture = c.stmtsFpsToCapture[1:]
+					surviving = append(surviving, c)
+				}
+				// else: mismatch, candidate eliminated
+			} else {
+				// No more fingerprints expected; only terminal statements pass.
+				if isTerminalStatement(stmt) {
+					surviving = append(surviving, c)
+				}
 			}
-			tds.stmtsFpsToCapture = tds.stmtsFpsToCapture[1:]
-		} else {
-			if !isTerminalStatement(stmt) {
-				return false, errors.Newf("Expected a terminal statement, got %s", stmt)
+		}
+		tds.candidates = surviving
+
+		if len(tds.candidates) == 0 {
+			return false, nil
+		}
+
+		// Check if all surviving candidates have exhausted their fingerprint
+		// list and this is a terminal statement — if so, transition to ready.
+		allDone := true
+		for _, c := range tds.candidates {
+			if len(c.stmtsFpsToCapture) > 0 {
+				allDone = false
+				break
 			}
+		}
+		if allDone && isTerminalStatement(stmt) {
 			tds.UpdateState(txnDiagnosticsReadyToFinalize)
 		}
 	}
@@ -113,8 +160,10 @@ func (tds *txnDiagnosticsCollector) AddStatementBundle(
 	return true, nil
 }
 
-func (tds *txnDiagnosticsCollector) collectTrace() {
-	if tds.request.IsRedacted() {
+// collectTrace collects the transaction trace and adds it to the zip bundle.
+// The redacted parameter controls whether the trace is actually collected.
+func (tds *txnDiagnosticsCollector) collectTrace(redacted bool, txnFingerprintId uint64) {
+	if redacted {
 		tds.z.AddFile("trace.txt", "trace not collected due to redacted request")
 		return
 	}
@@ -134,7 +183,7 @@ func (tds *txnDiagnosticsCollector) collectTrace() {
 	}
 
 	idStr := sqlstatsutil.EncodeTxnFingerprintIDToString(
-		appstatspb.TransactionFingerprintID(tds.request.TxnFingerprintId()),
+		appstatspb.TransactionFingerprintID(txnFingerprintId),
 	)
 	// The JSON is not very human-readable, so we include another format too.
 	tds.z.AddFile("trace.txt", fmt.Sprintf("%s\n\n\n\n%s", idStr, trace.String()))
@@ -159,21 +208,12 @@ type txnInstrumentationHelper struct {
 }
 
 func (h *txnInstrumentationHelper) StartDiagnostics(
-	txnRequest stmtdiagnostics.TxnRequest, reqID stmtdiagnostics.RequestID, span *tracing.Span,
+	matches []stmtdiagnostics.TxnRequestMatch, span *tracing.Span,
 ) {
-	h.diagnosticsCollector = newTxnDiagnosticsCollector(txnRequest, reqID, span)
+	h.diagnosticsCollector = newTxnDiagnosticsCollector(matches, span)
 }
 
-//
-//func (h *txnInstrumentationHelper) ReadyToStartDiagnostics() bool {
-//	return h.diagnosticsCollector.state == txnDiagnosticsNotStarted
-//}
-
 func (h *txnInstrumentationHelper) Reset() {
-	if h.diagnosticsCollector.requestId != 0 {
-		h.TxnDiagnosticsRecorder.ResetTxnRequest(h.diagnosticsCollector.requestId)
-	}
-
 	h.diagnosticsCollector.span.Finish()
 	h.diagnosticsCollector = txnDiagnosticsCollector{}
 }
@@ -220,14 +260,22 @@ func (h *txnInstrumentationHelper) MaybeStartDiagnostics(
 			// provided statement fingerprint. If there are, start collecting diagnostics.
 			// Otherwise, reset the diagnostics collector to avoid diagnostics
 			// collection for the rest of the transaction.
-			collectDiagnostics, requestId, req := h.TxnDiagnosticsRecorder.ShouldStartTxnDiagnostic(ctx, stmtFpId)
-			if collectDiagnostics {
+			matches := h.TxnDiagnosticsRecorder.ShouldStartTxnDiagnostic(ctx, stmtFpId)
+			if len(matches) > 0 {
 				var sp *tracing.Span
-				if !req.IsRedacted() {
+				// Start verbose tracing if any candidate is non-redacted.
+				anyNonRedacted := false
+				for _, m := range matches {
+					if !m.Request.IsRedacted() {
+						anyNonRedacted = true
+						break
+					}
+				}
+				if anyNonRedacted {
 					ctx, sp = tracing.EnsureChildSpan(ctx, tracer, "txn-diag-bundle",
 						tracing.WithRecording(tracingpb.RecordingVerbose))
 				}
-				h.StartDiagnostics(req, requestId, sp)
+				h.StartDiagnostics(matches, sp)
 				return ctx, true
 			} else {
 				h.Reset()
@@ -251,10 +299,21 @@ func (h *txnInstrumentationHelper) MaybeContinueDiagnostics(
 
 	if h.diagnosticsCollector.shouldAllowStatement(stmt) {
 		shouldContinue = true
-	} else if len(h.diagnosticsCollector.stmtsFpsToCapture) != 0 {
-		shouldContinue = h.diagnosticsCollector.stmtsFpsToCapture[0] == stmtFpId
 	} else {
-		shouldContinue = isTerminalStatement(stmt)
+		// Check if any candidate can accept this statement.
+		for _, c := range h.diagnosticsCollector.candidates {
+			if len(c.stmtsFpsToCapture) != 0 {
+				if c.stmtsFpsToCapture[0] == stmtFpId {
+					shouldContinue = true
+					break
+				}
+			} else {
+				if isTerminalStatement(stmt) {
+					shouldContinue = true
+					break
+				}
+			}
+		}
 	}
 
 	if !shouldContinue {
@@ -270,33 +329,54 @@ func (h *txnInstrumentationHelper) MaybeContinueDiagnostics(
 	return ctx, shouldContinue
 }
 
-// ShouldRedact returns whether diagnostics being collected should be redacted
+// ShouldRedact returns whether diagnostics being collected should be redacted.
+// Returns true if ANY candidate requests redaction (conservative approach).
 func (h *txnInstrumentationHelper) ShouldRedact() bool {
-	return h.diagnosticsCollector.request.IsRedacted()
+	for _, c := range h.diagnosticsCollector.candidates {
+		if c.request.IsRedacted() {
+			return true
+		}
+	}
+	return false
 }
 
 // Finalize finalizes the transaction diagnostics collection by writing all
-// the collected data to the underlying system tables.
+// the collected data to the underlying system tables. It picks the first
+// surviving candidate whose MinExecutionLatency constraint is satisfied.
 func (h *txnInstrumentationHelper) Finalize(ctx context.Context, executionDuration time.Duration) {
 	defer h.Reset()
-	collector := h.diagnosticsCollector
+	collector := &h.diagnosticsCollector
 	if collector.InProgress() {
 		collector.UpdateState(txnDiagnosticsReadyToFinalize)
 	}
-	if collector.ShouldCollect(executionDuration) {
-		collector.collectTrace()
-		buf, err := collector.z.Finalize()
-		var b []byte
-		if err != nil {
-			log.Ops.Errorf(ctx, "Error finalizing txn collector zip for request: %d. err: %s", collector.requestId, err.Error())
-		} else {
-			b = buf.Bytes()
+	if !collector.ShouldCollect(executionDuration) {
+		return
+	}
+
+	// Pick the first candidate whose latency constraint is satisfied.
+	var chosen *candidateRequest
+	for i := range collector.candidates {
+		if executionDuration >= collector.candidates[i].request.MinExecutionLatency() {
+			chosen = &collector.candidates[i]
+			break
 		}
-		txnDiag := stmtdiagnostics.NewTxnDiagnostic(collector.stmtBundles, b)
-		_, err = h.TxnDiagnosticsRecorder.InsertTxnDiagnostic(ctx, collector.requestId, collector.request, txnDiag)
-		if err != nil {
-			log.Ops.Errorf(ctx, "Error inserting diagnostics for request: %d. err: %s", collector.requestId, err.Error())
-		}
+	}
+	if chosen == nil {
+		return
+	}
+
+	collector.collectTrace(chosen.request.IsRedacted(), chosen.request.TxnFingerprintId())
+	buf, err := collector.z.Finalize()
+	var b []byte
+	if err != nil {
+		log.Ops.Errorf(ctx, "Error finalizing txn collector zip for request: %d. err: %s", chosen.id, err.Error())
+	} else {
+		b = buf.Bytes()
+	}
+	txnDiag := stmtdiagnostics.NewTxnDiagnostic(collector.stmtBundles, b)
+	_, err = h.TxnDiagnosticsRecorder.InsertTxnDiagnostic(ctx, chosen.id, chosen.request, txnDiag)
+	if err != nil {
+		log.Ops.Errorf(ctx, "Error inserting diagnostics for request: %d. err: %s", chosen.id, err.Error())
 	}
 }
 
