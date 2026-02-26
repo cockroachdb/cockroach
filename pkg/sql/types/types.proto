@@ -536,14 +536,9 @@ message InternalType {
     // more details.
     optional string locale = 5;
 
-    // VisibleType is deprecated in 19.2, since it is now superseded by the Oid
-    // field. It previously contained an alias for any types where our internal
-    // representation is different than the user specification. Examples are INT4,
-    // FLOAT4, etc. Mostly for Postgres compatibility.
-    // TODO(rafi): remove when we no longer need compatibility with 25.3, which
-    // is the last version to reference VisibleType.
-    // See https://github.com/cockroachdb/cockroach/issues/152629.
-    optional int32 visible_type = 6 [(gogoproto.nullable) = false];
+    // VisibleType was deprecated in 19.2 and removed in 25.4. It was superseded
+    // by the Oid field. Field number 6 is reserved to prevent reuse.
+    reserved 6;
 
     // ArrayElemType is deprecated in 19.2, since it is now superseded by the
     // ArrayContents field. It previously contained the type family of array

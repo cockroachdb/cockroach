@@ -55,7 +55,6 @@ StatementPhase stage 1 of 1 with 8 MutationType ops
               width: 0
               precision: 0
               locale: ""
-              visible_type: 0
               oid: 100107
               time_precision_is_set: false
               udt_metadata: <
@@ -125,7 +124,6 @@ PreCommitPhase stage 2 of 2 with 8 MutationType ops
               width: 0
               precision: 0
               locale: ""
-              visible_type: 0
               oid: 100107
               time_precision_is_set: false
               udt_metadata: <
