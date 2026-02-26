@@ -1152,7 +1152,7 @@ func (m *Manager) generateDescriptorTxnInfo(
 	hasEntryOrSkipIfNotLeased := func(skipIfDescriptorIsJustLeased bool) bool {
 		m.mu.Lock()
 		defer m.mu.Unlock()
-		// If we have alraedy surpassed the timestamp, then
+		// If we have already surpassed the timestamp, then
 		// no entry is required.
 		if timestamp.Less(m.closeTimestamp.Load().(*closeTimeStampHandle).timestamp) {
 			return true
@@ -1175,6 +1175,9 @@ func (m *Manager) generateDescriptorTxnInfo(
 		return nil
 	}
 	// Otherwise, let's start a single flight to populate transaction data.
+	// Note: We ignore the future here because even if the export request
+	// fails, our alternative mechanism is the range feed checkpoint, which
+	// will also move the lease manager timestamp forward.
 	m.storage.group.DoChan(ctx, fmt.Sprintf("generateDescriptorTxnInfo: %s", timestamp),
 		singleflight.DoOpts{
 			Stop:               m.stopper,
@@ -1186,6 +1189,7 @@ func (m *Manager) generateDescriptorTxnInfo(
 			// Generate an update entry for this timestamp first.
 			updateEntry, err := m.getDescriptorsInTxnAtTimestamp(ctx, timestamp)
 			if err != nil {
+				log.Dev.Warningf(ctx, "unable to get descriptors at timestamp %s: %v", timestamp, err)
 				return nil, err
 			}
 			update := &descriptorTxnUpdate{
@@ -3033,7 +3037,7 @@ func (m *Manager) watchForUpdates(ctx context.Context) {
 				ev.Key, mut.GetID(), mut.GetName(), mut.GetVersion())
 		}
 		if err := m.generateDescriptorTxnInfo(ctx, mut, ev.Timestamp()); err != nil {
-			log.Dev.Infof(ctx, "unable to generate descriptor txn info: %v", err)
+			log.Dev.Warningf(ctx, "unable to generate descriptor txn info: %v", err)
 		}
 		select {
 		case <-m.stopper.ShouldQuiesce():
@@ -3117,7 +3121,7 @@ func (m *Manager) getRangeFeedMonitorSettings() (timeout time.Duration, monitori
 
 // checkRangeFeedStatus ensures that the range feed is always checkpointing and
 // receiving data. On recovery, we will always refresh all descriptors with the
-// assumption we have lost updates (especially if restarts have ocurred).
+// assumption we have lost updates (especially if restarts have occured).
 func (m *Manager) checkRangeFeedStatus(ctx context.Context) (forceRefresh bool) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -3203,7 +3207,9 @@ func (m *Manager) RunBackgroundLeasingTask(ctx context.Context) {
 				m.cleanupExpiredSessionLeases(ctx)
 			case <-descriptorUpdateCleanupTimer.C:
 				// Clean up the update key space.
-				m.cleanupUpdateKeys(ctx)
+				if err := m.cleanupUpdateKeys(ctx, false /* force */); err != nil {
+					log.Dev.Warningf(ctx, "error cleaning up update keys: %v", err)
+				}
 				descriptorUpdateCleanupTimer.Reset(descriptorUpdateCleanupTimerDuration)
 			}
 		}
@@ -3315,19 +3321,27 @@ func (m *Manager) cleanupExpiredSessionLeases(ctx context.Context) {
 	}
 }
 
-// cleanupUpdateKeys updates special keys that exist for tracking descriptor
-// updates within transactions.
-func (m *Manager) cleanupUpdateKeys(ctx context.Context) {
+// CleanUpdateKeysForUpgrade starting 26.2 special transaction keys are
+// not in use, so we can clean the keyspace up.
+func (m *Manager) CleanUpdateKeysForUpgrade(ctx context.Context) error {
+	return m.cleanupUpdateKeys(ctx, true /* force */)
+}
+
+// cleanupUpdateKeys deletes special keys that exist for tracking descriptor
+// updates within transactions. The force flag skips the version check, and
+// if any updates have already occured.
+func (m *Manager) cleanupUpdateKeys(ctx context.Context, force bool) error {
 	// If we are on 26.2, these keys are no longer generated.
-	if m.settings.Version.IsActive(ctx, clusterversion.V26_2) {
-		return
+	if m.settings.Version.IsActive(ctx, clusterversion.V26_2_DescriptorTxnKeyCleanup) && !force {
+		return nil
 	}
 	// Only clean update keys if we received any range feed updates.
 	m.mu.Lock()
 	hasUpdates := m.mu.hasUpdatesToDelete
+	m.mu.hasUpdatesToDelete = false
 	m.mu.Unlock()
-	if !hasUpdates {
-		return
+	if !hasUpdates && !force {
+		return nil
 	}
 	// Issue a DelRange on this key space.
 	err := m.storage.db.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
@@ -3336,8 +3350,9 @@ func (m *Manager) cleanupUpdateKeys(ctx context.Context) {
 		return err
 	})
 	if err != nil {
-		log.Dev.Infof(ctx, "unable to delete descriptor update keys from storage: %v", err)
+		return err
 	}
+	return nil
 }
 
 // Refresh some of the current leases. If refreshAndPurgeAllDescriptors is set,
@@ -3459,7 +3474,9 @@ func (m *Manager) DeleteOrphanedLeases(
 		retryOpts.MaxRetries = 10
 		m.deleteOrphanedLeasesFromStaleSession(ctx, retryOpts, timeThreshold, locality)
 		m.deleteOrphanedLeasesWithSameInstanceID(ctx, retryOpts, timeThreshold, instanceID)
-		m.cleanupUpdateKeys(ctx)
+		if err := m.cleanupUpdateKeys(ctx, false /* force */); err != nil {
+			log.Dev.Warningf(ctx, "error cleaning up update keys: %v", err)
+		}
 	})
 }
 
