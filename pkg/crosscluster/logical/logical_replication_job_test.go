@@ -2763,7 +2763,9 @@ func TestPartialIndexes(t *testing.T) {
 
 // TODO(msbutler): migrate TestLogicalReplicationCreationChecks to this test
 // which has subtests and no weird cross case dependencies.
-func TestSupportedSchemaChecks(t *testing.T) {
+// TestSupportedSchemas tests schema configurations that are compatible with
+// logical replication. These are positive tests where replication succeeds.
+func TestSupportedSchemas(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	skip.UnderDeadlock(t)
 	defer log.Scope(t).Close(t)
@@ -2847,6 +2849,52 @@ func TestSupportedSchemaChecks(t *testing.T) {
 		// Verify data was replicated correctly, and virtual columns are computed correctly on destination.
 		dbVColB.CheckQueryResults(t, "SELECT pk, v, virtual_col FROM b ORDER BY pk", [][]string{{"1", "100", "110"}, {"2", "200", "210"}, {"3", "300", "310"}})
 	})
+
+	t.Run("different_default_values", func(t *testing.T) {
+		dbA.Exec(t, "CREATE DATABASE dva")
+		dbA.Exec(t, "CREATE DATABASE dvb")
+		dbDVA := sqlutils.MakeSQLRunner(s.SQLConn(t, serverutils.DBName("dva")))
+		dbDVB := sqlutils.MakeSQLRunner(s.SQLConn(t, serverutils.DBName("dvb")))
+
+		dbDVBURL := replicationtestutils.GetExternalConnectionURI(t, s, s, serverutils.DBName("dvb"))
+
+		dbDVA.Exec(t, "CREATE TABLE tab2 (pk INT PRIMARY KEY, payload STRING DEFAULT 'cat')")
+		dbDVB.Exec(t, "CREATE TABLE tab2 (pk INT PRIMARY KEY, payload STRING DEFAULT 'dog')")
+		dbDVB.Exec(t, "Insert into tab2 values (1)")
+
+		var jobAID jobspb.JobID
+		dbDVA.QueryRow(t,
+			"CREATE LOGICAL REPLICATION STREAM FROM TABLE tab2 ON $1 INTO TABLE tab2 WITH MODE = 'validated'",
+			dbDVBURL.String(),
+		).Scan(&jobAID)
+		WaitUntilReplicatedTime(t, s.Clock().Now(), dbDVA, jobAID)
+		dbDVA.CheckQueryResults(t, "SELECT * FROM tab2", [][]string{{"1", "dog"}})
+	})
+
+	t.Run("unique_indexes", func(t *testing.T) {
+		dbA.Exec(t, "CREATE DATABASE muia")
+		dbA.Exec(t, "CREATE DATABASE muib")
+		dbMUIA := sqlutils.MakeSQLRunner(s.SQLConn(t, serverutils.DBName("muia")))
+		dbMUIB := sqlutils.MakeSQLRunner(s.SQLConn(t, serverutils.DBName("muib")))
+
+		dbMUIBURL := replicationtestutils.GetExternalConnectionURI(t, s, s, serverutils.DBName("muib"))
+
+		dbMUIA.Exec(t, "CREATE TABLE tab (pk INT PRIMARY KEY, payload STRING, composite_col DECIMAL NOT NULL)")
+		dbMUIB.Exec(t, "CREATE TABLE tab (pk INT PRIMARY KEY, payload STRING, composite_col DECIMAL NOT NULL)")
+		dbMUIA.Exec(t, "CREATE UNIQUE INDEX payload_idx ON tab(payload)")
+		dbMUIA.Exec(t, "CREATE UNIQUE INDEX multi_idx ON tab(composite_col, pk)")
+		dbMUIB.Exec(t, "CREATE UNIQUE INDEX multi_idx ON tab(composite_col, pk)")
+		dbMUIB.Exec(t, "CREATE UNIQUE INDEX payload_idx ON tab(payload)")
+
+		// Create the UNIQUE indexes on each side and verify the stream can be
+		// created. Note that the indexes don't need to be created in the same order
+		// for the check to pass.
+		var jobAID jobspb.JobID
+		dbMUIA.QueryRow(t,
+			"CREATE LOGICAL REPLICATION STREAM FROM TABLE tab ON $1 INTO TABLE tab WITH MODE = 'validated'",
+			dbMUIBURL.String(),
+		).Scan(&jobAID)
+	})
 }
 
 // TestLogicalReplicationCreationChecks verifies that we check that the table
@@ -2915,6 +2963,16 @@ func TestLogicalReplicationCreationChecks(t *testing.T) {
 	dbA.Exec(t, "ALTER TABLE tab ALTER PRIMARY KEY USING COLUMNS (pk)")
 	dbA.Exec(t, "DROP INDEX tab_pk_key")
 	dbA.Exec(t, "DROP INDEX tab_pk_virtual_col_key")
+
+	// Check that UNIQUE indexes match.
+	dbA.Exec(t, "CREATE UNIQUE INDEX payload_idx ON tab(payload)")
+	dbB.Exec(t, "CREATE UNIQUE INDEX multi_idx ON b.tab(composite_col, pk)")
+	expectErr(t, "tab", "cannot create logical replication stream: destination table tab UNIQUE indexes do not match source table tab")
+	replicationtestutils.WaitForAllProducerJobsToFail(t, dbB)
+
+	// Drop the indexes for subsequent tests.
+	dbA.Exec(t, "DROP INDEX payload_idx")
+	dbB.Exec(t, "DROP INDEX b.multi_idx")
 
 	// Check that CHECK constraints match.
 	dbA.Exec(t, "ALTER TABLE tab ADD CONSTRAINT check_constraint_1 CHECK (pk > 0)")
@@ -3001,50 +3059,10 @@ func TestLogicalReplicationCreationChecks(t *testing.T) {
 	expectErr(t, "tab", "cannot create logical replication stream: .* destination type USER DEFINED RECORD: public.composite_typ tuple element 0 does not match source type USER DEFINED RECORD: composite_typ tuple element 0: destination type INT8 does not match source type STRING")
 	replicationtestutils.WaitForAllProducerJobsToFail(t, dbB)
 
-	// Check that UNIQUE indexes match.
-	dbA.Exec(t, "ALTER TABLE tab DROP COLUMN composite_udt_col")
-	dbB.Exec(t, "ALTER TABLE b.tab DROP COLUMN composite_udt_col")
-	dbA.Exec(t, "CREATE UNIQUE INDEX payload_idx ON tab(payload)")
-	dbB.Exec(t, "CREATE UNIQUE INDEX multi_idx ON b.tab(composite_col, pk)")
-	expectErr(t, "tab", "cannot create logical replication stream: destination table tab UNIQUE indexes do not match source table tab")
-	replicationtestutils.WaitForAllProducerJobsToFail(t, dbB)
-
-	// Create the missing indexes on each side and verify the stream can be
-	// created. Note that the indexes don't need to be created in the same order
-	// for the check to pass.
-	dbA.Exec(t, "CREATE UNIQUE INDEX multi_idx ON tab(composite_col, pk)")
-	dbB.Exec(t, "CREATE UNIQUE INDEX payload_idx ON b.tab(payload)")
-	dbA.QueryRow(t,
-		"CREATE LOGICAL REPLICATION STREAM FROM TABLE tab ON $1 INTO TABLE tab WITH MODE = 'validated'",
-		dbBURL.String(),
-	).Scan(&jobAID)
-
-	// Kill replication job.
-	dbA.Exec(t, "CANCEL JOB $1", jobAID)
-	jobutils.WaitForJobToCancel(t, dbA, jobAID)
-	replicationtestutils.WaitForAllProducerJobsToFail(t, dbB)
-
 	// Check that REFCURSOR columns are not allowed.
 	dbA.Exec(t, "CREATE TABLE tab_with_refcursor (pk INT PRIMARY KEY, curs REFCURSOR)")
 	dbB.Exec(t, "CREATE TABLE b.tab_with_refcursor (pk INT PRIMARY KEY, curs REFCURSOR)")
 	expectErr(t, "tab_with_refcursor", "cannot create logical replication stream: RefCursor is not supported by LDR")
-
-	// Add different default values to to the source and dest, verify the stream
-	// can be created, and that the default value is sent over the wire.
-	dbA.Exec(t, "CREATE TABLE tab2 (pk INT PRIMARY KEY, payload STRING DEFAULT 'cat')")
-	dbB.Exec(t, "CREATE TABLE b.tab2 (pk INT PRIMARY KEY, payload STRING DEFAULT 'dog')")
-	dbB.Exec(t, "Insert into tab2 values (1)")
-	dbA.QueryRow(t,
-		"CREATE LOGICAL REPLICATION STREAM FROM TABLE tab2 ON $1 INTO TABLE tab2 WITH MODE = 'validated'",
-		dbBURL.String(),
-	).Scan(&jobAID)
-	WaitUntilReplicatedTime(t, s.Clock().Now(), dbA, jobAID)
-	dbA.CheckQueryResults(t, "SELECT * FROM tab2", [][]string{{"1", "dog"}})
-
-	// Kill replication job.
-	dbA.Exec(t, "CANCEL JOB $1", jobAID)
-	jobutils.WaitForJobToCancel(t, dbA, jobAID)
-	replicationtestutils.WaitForAllProducerJobsToFail(t, dbB)
 }
 
 func TestFailDestAfterSourceFailure(t *testing.T) {
