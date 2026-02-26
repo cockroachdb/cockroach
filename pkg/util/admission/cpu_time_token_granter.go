@@ -11,6 +11,7 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"github.com/cockroachdb/redact"
 	"github.com/olekukonko/tablewriter"
 )
 
@@ -45,6 +46,22 @@ const (
 	appTenant
 	numResourceTiers
 )
+
+func (rt resourceTier) String() string {
+	return redact.StringWithoutMarkers(rt)
+}
+
+// SafeFormat implements the redact.SafeFormatter interface.
+func (rt resourceTier) SafeFormat(s redact.SafePrinter, _ rune) {
+	switch rt {
+	case systemTenant:
+		s.SafeString("system_tenant")
+	case appTenant:
+		s.SafeString("app_tenant")
+	default:
+		s.Printf("resourceTier(%d)", redact.Safe(rt))
+	}
+}
 
 // cpuTimeTokenChildGranter implements granter. It stores resourceTier and proxies
 // proxies to cpuTimeTokenGranter. See the declaration comment for cpuTimeTokenGranter
@@ -119,6 +136,7 @@ func (cg *cpuTimeTokenChildGranter) continueGrantChain(grantChainID grantChainID
 // TODO(josh): Turn into a proper design documnet.
 type cpuTimeTokenGranter struct {
 	requester [numResourceTiers]requester
+	metrics   *cpuTimeTokenMetrics
 	mu        struct {
 		// TODO(josh): I suspect putting the mutex here is better than in
 		// CPUTimeTokenGrantCoordinator, but for now the decision is tentative.
@@ -145,6 +163,11 @@ type tokenBucket struct {
 }
 
 func (stg *cpuTimeTokenGranter) String() string {
+	return redact.StringWithoutMarkers(stg)
+}
+
+// SafeFormat implements the redact.SafeFormatter interface.
+func (stg *cpuTimeTokenGranter) SafeFormat(s redact.SafePrinter, _ rune) {
 	stg.mu.Lock()
 	defer stg.mu.Unlock()
 	var buf strings.Builder
@@ -173,7 +196,7 @@ func (stg *cpuTimeTokenGranter) String() string {
 		tw.Append(row[:])
 	}
 	tw.Render()
-	return buf.String()
+	s.SafeString(redact.SafeString(buf.String()))
 }
 
 // tryGet is the helper for implementing granter.tryGet.
@@ -208,6 +231,15 @@ func (stg *cpuTimeTokenGranter) tookWithoutPermission(count int64) {
 
 func (stg *cpuTimeTokenGranter) tookWithoutPermissionLocked(count int64) {
 	stg.mu.tokensUsed += count
+	// Token usage is split into two cumulative counters (consumed and
+	// returned) rather than a single net gauge, so that DD/Prometheus can
+	// compute rate(consumed) - rate(returned) over arbitrary windows
+	// (1m, 30m, etc.).
+	if count > 0 {
+		stg.metrics.TokensConsumed.Inc(count)
+	} else {
+		stg.metrics.TokensReturned.Inc(-count)
+	}
 	for tier := range stg.mu.buckets {
 		for qual := range stg.mu.buckets[tier] {
 			stg.mu.buckets[tier][qual].tokens -= count
@@ -278,21 +310,33 @@ func (stg *cpuTimeTokenGranter) resetTokensUsedInInterval() int64 {
 // bring the bucket above capacity will be discarded instead. refill attempts
 // to grant admission to waiting requests in case where tokens are added to
 // some bucket.
-func (stg *cpuTimeTokenGranter) refill(toAdd tokenCounts, bucketCapacities capacities) {
+func (stg *cpuTimeTokenGranter) refill(
+	toAdd tokenCounts, bucketCapacities capacities, updateMetrics bool) {
 	stg.mu.Lock()
 	defer stg.mu.Unlock()
 
 	var shouldGrant bool
-	for wc := range stg.mu.buckets {
-		for kind := range stg.mu.buckets[wc] {
-			if toAdd[wc][kind] > 0 {
+	for tier := range stg.mu.buckets {
+		for qual := range stg.mu.buckets[tier] {
+			// refill updates these metrics before tokens are added / grants happen. This
+			// way, if a bucket is consistently empty, we will see it an empty in the
+			// graphs. If refill updated metrics after adding tokens / doing grants, it
+			// always will show positive tokens.
+			//
+			// Note that this metric only provides a coarse view into bucket state. For
+			// a fine-grained view, see TODO().
+			if updateMetrics {
+				stg.metrics.BucketTokens.Update(
+					stg.metrics.labelMaps[tier][qual], stg.mu.buckets[tier][qual].tokens)
+			}
+			if toAdd[tier][qual] > 0 {
 				shouldGrant = true
 			}
-			newTokenCount := stg.mu.buckets[wc][kind].tokens + toAdd[wc][kind]
-			if newTokenCount > bucketCapacities[wc][kind] {
-				newTokenCount = bucketCapacities[wc][kind]
+			newTokenCount := stg.mu.buckets[tier][qual].tokens + toAdd[tier][qual]
+			if newTokenCount > bucketCapacities[tier][qual] {
+				newTokenCount = bucketCapacities[tier][qual]
 			}
-			stg.mu.buckets[wc][kind].tokens = newTokenCount
+			stg.mu.buckets[tier][qual].tokens = newTokenCount
 		}
 	}
 

@@ -16,6 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/redact"
 )
 
 // Below two are the non-burstable utilization goals. See resetInterval for
@@ -212,6 +213,7 @@ type cpuTimeTokenAllocator struct {
 	queues   [numResourceTiers]workQueueIForAllocator
 	settings *cluster.Settings
 	model    cpuTimeModel
+	metrics  *cpuTimeTokenMetrics
 
 	// refillRates stores the number of CPU time tokens to add to each bucket
 	// per interval (1s).
@@ -226,6 +228,27 @@ type cpuTimeTokenAllocator struct {
 // rates at which we add tokens per second, one per bucket in
 // cpuTimeTokenGranter.
 type rates [numResourceTiers][numBurstQualifications]int64
+
+func (r rates) String() string {
+	return redact.StringWithoutMarkers(r)
+}
+
+// SafeFormat implements the redact.SafeFormatter interface.
+func (r rates) SafeFormat(s redact.SafePrinter, _ rune) {
+	s.SafeRune('[')
+	first := true
+	for tier := resourceTier(0); tier < numResourceTiers; tier++ {
+		for qual := burstQualification(0); qual < numBurstQualifications; qual++ {
+			if !first {
+				s.SafeRune(' ')
+			}
+			first = false
+			s.Printf("%s-%s=%s",
+				tier, qual, redact.Safe(time.Duration(r[tier][qual])))
+		}
+	}
+	s.SafeRune(']')
+}
 
 // capacities stores the maximum number of tokens that can be in the
 // buckets, one per bucket in cpuTimeTokenGranter.
@@ -278,7 +301,9 @@ func (a *cpuTimeTokenAllocator) allocateTokens(expectedRemainingTicksInInterval 
 	// one second worth of tokens at the current refill rate. This is a fairly
 	// arbitrary decision.
 	bucketCapacities := capacities(a.refillRates)
-	a.granter.refill(allocations, bucketCapacities)
+	// Metrics don't need higher fidelity than one update per second. For example,
+	// in CC, we scrape metrics once every 10s.
+	a.granter.refill(allocations, bucketCapacities, false /* updateMetrics */)
 
 	// Refill per-tenant burst buckets in the WorkQueues. The burst bucket
 	// refill rate and capacity should be 1/4th of the noBurst refill rate
@@ -337,7 +362,9 @@ func (a *cpuTimeTokenAllocator) resetInterval(ctx context.Context) {
 	// See comment above the call to refill in allocateTokens for a discussion of
 	// bucketCapacities.
 	bucketCapacities := capacities(newRefillRates)
-	a.granter.refill(deltaRefillRates, bucketCapacities)
+	// Metrics don't need higher fidelity than one update per second. For example,
+	// in CC, we scrape metrics once every 10s.
+	a.granter.refill(deltaRefillRates, bucketCapacities, true /* updateMetrics */)
 	a.refillRates = newRefillRates
 
 	// Apply the delta to the per-tenant burst buckets also.
@@ -351,6 +378,13 @@ func (a *cpuTimeTokenAllocator) resetInterval(ctx context.Context) {
 	for wc := range a.allocated {
 		for kind := range a.allocated[wc] {
 			a.allocated[wc][kind] = 0
+		}
+	}
+
+	for tier := range newRefillRates {
+		for qual := range newRefillRates[tier] {
+			a.metrics.RefillRate.Update(
+				a.metrics.labelMaps[tier][qual], newRefillRates[tier][qual])
 		}
 	}
 }
@@ -432,6 +466,7 @@ type cpuTimeTokenLinearModel struct {
 	granter            tokenUsageTracker
 	cpuMetricsProvider CPUMetricsProvider
 	timeSource         timeutil.TimeSource
+	metrics            *cpuTimeTokenMetrics
 
 	// True after first call to fit.
 	init bool
@@ -633,7 +668,17 @@ func (m *cpuTimeTokenLinearModel) fit(ctx context.Context, targets targetUtiliza
 			alpha*tokenToCPUTimeMultiplier + (1-alpha)*m.tokenToCPUTimeMultiplier
 	}
 
-	return m.computeRefillRates(targets, m.tokenToCPUTimeMultiplier, cpuCapacity)
+	refillRates := m.computeRefillRates(targets, m.tokenToCPUTimeMultiplier, cpuCapacity)
+	m.metrics.Multiplier.Update(m.tokenToCPUTimeMultiplier)
+	log.Dev.Infof(ctx,
+		"fit: elapsed=%s cpuCapacity=%.2f intCPU=%s tokensUsed=%s isLowCPU=%t "+
+			"multiplier=%.4f refillRates=%s",
+		elapsedSinceLastFit, cpuCapacity,
+		intCPUTime, time.Duration(tokensUsed),
+		isLowCPUUtil, m.tokenToCPUTimeMultiplier,
+		refillRates,
+	)
+	return refillRates
 }
 
 // computeRefillRates is a pure helper function that computes refill rates.

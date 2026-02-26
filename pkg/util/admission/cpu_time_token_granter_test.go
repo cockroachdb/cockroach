@@ -26,7 +26,7 @@ func TestCPUTimeTokenGranter(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	var requesters [numResourceTiers]*testRequester
-	granter := &cpuTimeTokenGranter{}
+	granter := &cpuTimeTokenGranter{metrics: makeCPUTimeTokenMetrics()}
 	tier0Granter := &cpuTimeTokenChildGranter{
 		tier:   testTier0,
 		parent: granter,
@@ -163,7 +163,7 @@ func TestCPUTimeTokenGranter(t *testing.T) {
 			bucketCapacity[testTier0][noBurst] = 3
 			bucketCapacity[testTier1][canBurst] = 10
 			bucketCapacity[testTier1][noBurst] = 1
-			granter.refill(delta, bucketCapacity)
+			granter.refill(delta, bucketCapacity, true /* updateMetrics */)
 			fmt.Fprint(&buf, "refill(\n")
 			for tier := int(numResourceTiers - 1); tier >= 0; tier-- {
 				for qual := int(numBurstQualifications - 1); qual >= 0; qual-- {

@@ -130,7 +130,8 @@ func TestCPUTimeTokenAllocator(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	granter := &cpuTimeTokenGranter{}
+	metrics := makeCPUTimeTokenMetrics()
+	granter := &cpuTimeTokenGranter{metrics: metrics}
 	tier0Granter := &cpuTimeTokenChildGranter{
 		tier:   testTier0,
 		parent: granter,
@@ -174,6 +175,7 @@ func TestCPUTimeTokenAllocator(t *testing.T) {
 		granter:  granter,
 		settings: cluster.MakeClusterSettings(),
 		model:    model,
+		metrics:  metrics,
 		queues: [numResourceTiers]workQueueIForAllocator{
 			testTier0: burstMgrs[testTier0],
 			testTier1: burstMgrs[testTier1],
@@ -247,6 +249,7 @@ func TestCPUTimeTokenLinearModel(t *testing.T) {
 		lastFitTime:              testTime.Now(),
 		totalCPUTime:             0,
 		tokenToCPUTimeMultiplier: 1,
+		metrics:                  makeCPUTimeTokenMetrics(),
 	}
 	tokenCPUTime := &testTokenUsageTracker{}
 	model.granter = tokenCPUTime
@@ -432,6 +435,20 @@ func TestCPUTimeTokenLinearModel(t *testing.T) {
 	defer log.ResetExitFunc()
 	_ = model.fit(ctx, targets)
 	require.True(t, exited, "expected log.Fatalf to be called")
+}
+
+func TestRatesString(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	var r rates
+	r[systemTenant][canBurst] = int64(9500 * time.Millisecond)
+	r[systemTenant][noBurst] = int64(9000 * time.Millisecond)
+	r[appTenant][canBurst] = int64(8500 * time.Millisecond)
+	r[appTenant][noBurst] = int64(8000 * time.Millisecond)
+	require.Equal(t,
+		"[system_tenant-canBurst=9.5s system_tenant-noBurst=9s app_tenant-canBurst=8.5s app_tenant-noBurst=8s]",
+		r.String(),
+	)
 }
 
 type testTokenUsageTracker struct {
