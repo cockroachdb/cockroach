@@ -58,7 +58,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/gossiputil"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
-	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -66,6 +65,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
@@ -2370,7 +2370,7 @@ func TestStoreScanIntentsRespectsLimit(t *testing.T) {
 //     3-5. Added to lock table (now 6 > max 4), evicting intents 0-2.
 //  3. Re-sequence clears toResolve, repopulates from lock table (only 3-5).
 //     VIR resolves 3-5, rediscovers evicted 0-2. Cycle repeats.
-func TestVirtualIntentResolutionLivelock(t *testing.T) {
+func TestVirtualIntentResolutionReentryAfterEvaluationLiveLock(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	ctx := context.Background()
@@ -2432,18 +2432,186 @@ func TestVirtualIntentResolutionLivelock(t *testing.T) {
 	)
 	readerTxnID.Store(readerTxn.ID)
 
+	readerCtx, cancel := context.WithTimeout(ctx, 15*time.Second)
+
+	tracer := tc.Server(0).TracerI().(*tracing.Tracer)
+	traceCtx, finishAndGetRecording := tracing.ContextWithRecordingSpan(
+		readerCtx, tracer, "test-vir-livelock",
+	)
+	defer func() {
+		recording := finishAndGetRecording()
+		if t.Failed() {
+			t.Logf("full trace:\n%s", recording)
+		}
+	}()
+
+	defer cancel()
+	_, pErr := kv.SendWrappedWith(traceCtx, store.TestSender(), kvpb.Header{
+		Txn: readerTxn,
+	}, scanArgs(startKey, endKey))
+	require.NoError(t, pErr.GoError(), "reader failed (%d lock conflicts observed)", lockConflictCount.Load())
+}
+
+// TestVirtualIntentResolutionReentryBeforeEvaluationLiveLock demonstrates that
+// we don't livelock in the ScanAndEnqueue -> WaitOn -> re-ScanAndEnqueue cycle
+// for VIR-enabled requests when the pending txn cache loses entries between
+// re-scans.
+//
+// Test Setup:
+//
+//  1. Two writers (low priority) each create an intent on separate keys.
+//  2. Reader 1 (high priority) scans, discovering both intents and adding them
+//     as contended entries in the lock table.
+//  3. Reader 2 (high priority, VIR enabled) scans. Its first ScanAndEnqueue
+//     finds both locks already in the lock table and enters WaitOn.
+//  4. While reader 2 is pushing the second writer, the shared txnStatusCache
+//     overflows.
+//
+// Currently, we prevent this from livelocking by maintaining a per-request
+// cache of resolvable txns that survives ScanAndEnqueue Reentry.
+func TestVirtualIntentResolutionReentryBeforeEvaluationLiveLock(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	ctx := context.Background()
+
+	// Track push count for our writers from reader 2.
+	var pushCount atomic.Int32
+	var reader2TxnID atomic.Value
+	reader2TxnID.Store(uuid.Nil)
+
+	// writerIDs tracks the two writer txn IDs so we can identify pushes
+	// targeting them.
+	exists := &struct{}{}
+	var writerIDs syncutil.Map[uuid.UUID, struct{}]
+
+	// repl will be set after cluster start so the response filter can access
+	// the concurrency manager.
+	var repl atomic.Pointer[Replica]
+
+	tc := serverutils.StartCluster(t, 1, base.TestClusterArgs{
+		ServerArgs: base.TestServerArgs{
+			Knobs: base.TestingKnobs{
+				Store: &StoreTestingKnobs{
+					TestingResponseFilter: func(
+						ctx context.Context, ba *kvpb.BatchRequest, br *kvpb.BatchResponse,
+					) *kvpb.Error {
+						if br == nil || len(ba.Requests) != 1 {
+							return nil
+						}
+						pushReq, ok := ba.Requests[0].GetInner().(*kvpb.PushTxnRequest)
+						if !ok {
+							return nil
+						}
+						// Only intercept pushes from reader 2 targeting our writers.
+						if pushReq.PusherTxn.ID != reader2TxnID.Load().(uuid.UUID) {
+							return nil
+						}
+						if _, isOurWriter := writerIDs.Load(pushReq.PusheeTxn.ID); !isOurWriter {
+							return nil
+						}
+
+						pushCount.Add(1)
+
+						// Flood the pending txn cache with dummy entries to evict
+						// whatever was there before this push's result is recorded.
+						r := repl.Load()
+						if r == nil {
+							return nil
+						}
+						cm := r.GetConcurrencyManager()
+						ts := pushReq.PusherTxn.WriteTimestamp
+						for i := 0; i < 8; i++ {
+							cm.TestingPushedTransactionUpdated(&roachpb.Transaction{
+								TxnMeta: enginepb.TxnMeta{ID: uuid.MakeV4(), WriteTimestamp: ts},
+								Status:  roachpb.PENDING,
+							}, roachpb.ObservedTimestamp{NodeID: 1, Timestamp: hlc.ClockTimestamp(ts)})
+						}
+
+						return nil
+					},
+				},
+			},
+		},
+	})
+	defer tc.Stopper().Stop(ctx)
+
+	st := tc.Server(0).ClusterSettings()
+	concurrency.VirtualIntentResolution.Override(ctx, &st.SV, true)
+
+	store, err := tc.Server(0).GetStores().(*Stores).GetStore(tc.Server(0).GetFirstStoreID())
+	require.NoError(t, err)
+
+	// Look up the replica for the scratch range and stash it for the filter.
+	r := store.LookupReplica(keys.MustAddr(keys.ScratchRangeMin))
+	require.NotNil(t, r)
+	repl.Store(r)
+
+	// Two writers create intents on separate keys.
+	keyA := append(keys.ScratchRangeMin.Clone(), 'a')
+	keyB := append(keys.ScratchRangeMin.Clone(), 'b')
+
+	writerTxn1 := newTransaction(
+		"writer1", keys.ScratchRangeMin, roachpb.NormalUserPriority, tc.Server(0).Clock(),
+	)
+	writerIDs.Store(writerTxn1.ID, exists)
+	putReq := putArgs(keyA, []byte("val-a"))
+	assignSeqNumsForReqs(writerTxn1, &putReq)
+	_, pErr := kv.SendWrappedWith(
+		ctx, store.TestSender(), kvpb.Header{Txn: writerTxn1}, &putReq,
+	)
+	require.Nil(t, pErr)
+
+	writerTxn2 := newTransaction(
+		"writer2", keys.ScratchRangeMin, roachpb.NormalUserPriority, tc.Server(0).Clock(),
+	)
+	writerIDs.Store(writerTxn2.ID, exists)
+	putReq = putArgs(keyB, []byte("val-b"))
+	assignSeqNumsForReqs(writerTxn2, &putReq)
+	_, pErr = kv.SendWrappedWith(
+		ctx, store.TestSender(), kvpb.Header{Txn: writerTxn2}, &putReq,
+	)
+	require.Nil(t, pErr)
+
+	// Reader 1 scans to discover both intents and create contended lock table
+	// entries.
+	readerTxn1 := newTransaction(
+		"reader1", keys.ScratchRangeMin, roachpb.MaxUserPriority, tc.Server(0).Clock(),
+	)
+	scanReq := scanArgs(keys.ScratchRangeMin, keys.ScratchRangeMax)
+	_, pErr = kv.SendWrappedWith(
+		ctx, store.TestSender(), kvpb.Header{Txn: readerTxn1}, scanReq,
+	)
+	require.Nil(t, pErr)
+
+	// Reader 2 scans with VIR. The response filter will sabotage the pending
+	// txn cache on every push, causing a livelock.
+	readerTxn2 := newTransaction(
+		"reader2", keys.ScratchRangeMin, roachpb.MaxUserPriority, tc.Server(0).Clock(),
+	)
+	reader2TxnID.Store(readerTxn2.ID)
+
 	readCtx, cancel := context.WithTimeout(ctx, 15*time.Second)
 	defer cancel()
-	g := ctxgroup.WithContext(readCtx)
-	g.GoCtx(func(ctx context.Context) error {
-		_, pErr := kv.SendWrappedWith(ctx, store.TestSender(), kvpb.Header{
-			Txn: readerTxn,
-		}, scanArgs(startKey, endKey))
-		return pErr.GoError()
-	})
-	require.NoError(t, g.Wait(), "reader failed (%d lock conflicts observed)", lockConflictCount.Load())
-	count := lockConflictCount.Load()
-	t.Logf("reader completed with %d lock conflict retries", count)
+
+	tracer := tc.Server(0).TracerI().(*tracing.Tracer)
+	traceCtx, finishAndGetRecording := tracing.ContextWithRecordingSpan(
+		readCtx, tracer, "test-vir-livelock",
+	)
+
+	scanReq = scanArgs(keys.ScratchRangeMin, keys.ScratchRangeMax)
+	_, pErr = kv.SendWrappedWith(
+		traceCtx, store.TestSender(), kvpb.Header{Txn: readerTxn2}, scanReq,
+	)
+
+	defer func() {
+		recording := finishAndGetRecording()
+		if t.Failed() {
+			t.Logf("full trace:\n%s", recording)
+		}
+	}()
+
+	require.NoError(t, pErr.GoError())
+	require.Equal(t, pushCount.Load(), int32(2), "unexpected number of txn pushes")
 }
 
 // TestStoreScanInconsistentResolvesIntents lays down 10 intents,
