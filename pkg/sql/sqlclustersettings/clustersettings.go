@@ -168,3 +168,21 @@ var LDRImmediateModeWriter = settings.RegisterStringSetting(
 		return nil
 	}),
 )
+
+// SkipUnderlyingViewPrivilegeChecks controls whether privilege checks on underlying
+// tables are skipped when selecting from a view. When set to false, the view
+// owner's privileges are checked on the underlying tables, and the owner's
+// row-level security (RLS) policies are enforced. When enabled, all privilege
+// checks on the underlying tables are skipped and the invoker RLS is enforced.
+// This means that any user with SELECT privileges on the view can query it
+// regardless of the underlying table privileges. This restores the pre-v26.2 behavior.
+var SkipUnderlyingViewPrivilegeChecks = settings.RegisterBoolSetting(
+	settings.ApplicationLevel,
+	"sql.auth.skip_underlying_view_privilege_checks.enabled",
+	"determines whether to skip privilege checks on tables underlying views. "+
+		"When enabled, users with SELECT privileges on a view can query it regardless of "+
+		"their privileges on the underlying tables, and row-level security "+
+		"policies are evaluated as the invoking user rather than the view owner. "+
+		"This restores pre-v26.2 behavior.",
+	true,
+	settings.WithPublic)

@@ -1152,6 +1152,21 @@ SELECT * FROM mv;
 statement ok
 SET ROLE root;
 
+statement ok
+GRANT SELECT ON xy TO bob;
+
+statement ok
+SET ROLE bob;
+
+statement error pgcode 42501 pq: user bob does not have EXECUTE privilege on function f_scalar
+SELECT * FROM v;
+
+statement ok
+SET ROLE root;
+
+statement ok
+REVOKE SELECT ON xy FROM bob;
+
 statement error pgcode 0A000 cannot rename function "f_scalar" because other functions or views \(\[test.public.v, test.public.mv\]\) still depend on it
 ALTER FUNCTION f_scalar RENAME TO f_scalar_renamed;
 
@@ -1406,5 +1421,134 @@ DROP TYPE user_profile;
 
 statement ok
 DROP TYPE user_status;
+
+subtest end
+
+# Regression test: views should use the view owner's privileges for direct
+# table access, but SECURITY INVOKER functions called by the view should run
+# with the invoker's privileges (matching PostgreSQL behavior).
+subtest view_function_privilege_separation
+
+# Must set the cluster setting to enable the new behavior.
+statement ok
+SET CLUSTER SETTING sql.auth.skip_underlying_view_privilege_checks.enabled = false;
+
+statement ok
+CREATE TABLE priv_t (id INT PRIMARY KEY, val TEXT);
+INSERT INTO priv_t VALUES (1, 'hello'), (2, 'world');
+
+statement ok
+CREATE FUNCTION priv_f() RETURNS SETOF priv_t LANGUAGE SQL AS $$
+  SELECT * FROM priv_t;
+$$;
+
+statement ok
+CREATE VIEW priv_v AS SELECT * FROM priv_f();
+
+statement ok
+CREATE ROLE IF NOT EXISTS alice;
+GRANT USAGE ON SCHEMA public TO alice;
+GRANT SELECT ON priv_v TO alice;
+REVOKE ALL ON priv_t FROM alice;
+REVOKE EXECUTE ON FUNCTION priv_f() FROM alice;
+REVOKE EXECUTE ON FUNCTION priv_f() FROM public;
+
+# Part 1: alice has SELECT on view, but no EXECUTE on function and no
+# SELECT on table.
+statement ok
+SET ROLE alice
+
+statement error pgcode 42501 user alice does not have SELECT privilege on relation priv_t
+SELECT * FROM priv_t
+
+statement error pgcode 42501 user alice does not have EXECUTE privilege on function priv_f
+SELECT * FROM priv_f()
+
+# The view calls priv_f which is SECURITY INVOKER. The EXECUTE privilege on
+# priv_f is checked against the invoker (alice), not the view owner.
+statement error pgcode 42501 user alice does not have EXECUTE privilege on function priv_f
+SELECT * FROM priv_v
+
+statement ok
+RESET ROLE
+
+# Part 2: grant EXECUTE on the function to alice. The function is
+# SECURITY INVOKER (default), so its body runs with alice's privileges.
+# Since alice does not have SELECT on priv_t, the function body fails.
+statement ok
+GRANT EXECUTE ON FUNCTION priv_f() TO alice
+
+statement ok
+SET ROLE alice
+
+statement error pgcode 42501 user alice does not have SELECT privilege on relation priv_t
+SELECT * FROM priv_t
+
+# alice can execute priv_f, but priv_f is SECURITY INVOKER and its body
+# reads priv_t — which alice cannot access.
+statement error pgcode 42501 user alice does not have SELECT privilege on relation priv_t
+SELECT * FROM priv_f()
+
+# Same result through the view: priv_f runs as alice (INVOKER), who
+# cannot read priv_t.
+statement error pgcode 42501 user alice does not have SELECT privilege on relation priv_t
+SELECT * FROM priv_v
+
+statement ok
+RESET ROLE
+
+# Part 3: create a SECURITY DEFINER version of the function and a view that
+# uses it. The definer (root) has SELECT on priv_t, so alice should be
+# able to read through the view as long as she has EXECUTE on the function.
+statement ok
+CREATE FUNCTION priv_f_definer() RETURNS SETOF priv_t LANGUAGE SQL
+SECURITY DEFINER AS $$
+  SELECT * FROM priv_t;
+$$;
+
+statement ok
+CREATE VIEW priv_v_definer AS SELECT * FROM priv_f_definer();
+GRANT SELECT ON priv_v_definer TO alice;
+GRANT EXECUTE ON FUNCTION priv_f_definer() TO alice;
+
+statement ok
+SET ROLE alice
+
+# Still fails: alice has no SELECT on priv_t.
+statement error pgcode 42501 user alice does not have SELECT privilege on relation priv_t
+SELECT * FROM priv_t
+
+# Succeeds: priv_f_definer is SECURITY DEFINER, so its body runs with the
+# owner's (root) privileges. root has SELECT on priv_t.
+query IT nosort
+SELECT * FROM priv_f_definer() ORDER BY id
+----
+1  hello
+2  world
+
+# Succeeds through the view as well: alice has SELECT on the view and
+# EXECUTE on the definer function, which runs as root.
+query IT nosort
+SELECT * FROM priv_v_definer ORDER BY id
+----
+1  hello
+2  world
+
+statement ok
+RESET ROLE
+
+# Cleanup.
+statement ok
+DROP VIEW priv_v;
+DROP VIEW priv_v_definer;
+DROP FUNCTION priv_f;
+DROP FUNCTION priv_f_definer;
+DROP TABLE priv_t;
+REVOKE USAGE ON SCHEMA public FROM alice;
+DROP ROLE alice;
+
+# Must reset the cluster setting to disable the new behavior.
+statement ok
+SET CLUSTER SETTING sql.auth.skip_underlying_view_privilege_checks.enabled = true;
 
 subtest end
