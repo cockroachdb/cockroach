@@ -240,7 +240,7 @@ type Config struct {
 	// IsTransactionRefreshing checks whether the given transaction is
 	// currently refreshing its read spans. Used by the txnwait queue to
 	// block pushers while the pushee is refreshing.
-	IsTransactionRefreshing func(ctx context.Context, txnKey roachpb.Key, txnID uuid.UUID, epoch enginepb.TxnEpoch) bool
+	IsTransactionRefreshing func(ctx context.Context, txnKey roachpb.Key, txnID uuid.UUID) bool
 }
 
 func (c *Config) initDefaults() {

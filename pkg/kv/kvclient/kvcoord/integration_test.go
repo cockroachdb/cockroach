@@ -323,8 +323,9 @@ func TestRefreshingPreventsStarvation(t *testing.T) {
 }
 
 // TestRefreshingToPendingAllowsPush verifies that after a failed refresh the
-// refreshing marker in the timestamp cache is canceled via HeartbeatTxn with
-// UpdateTSCacheOnly, so pushers can then push the transaction normally.
+// refreshing marker in the timestamp cache is canceled when the transaction
+// restarts at a new epoch and the heartbeater sends a heartbeat with the
+// bumped epoch, so pushers can then push the transaction normally.
 //
 // The scenario:
 //  1. T1 reads key A, writes key B.
@@ -333,17 +334,18 @@ func TestRefreshingPreventsStarvation(t *testing.T) {
 //     commits.
 //  4. T1 commits. EndTxn returns RETRY_SERIALIZABLE and adds a refreshing
 //     marker to the timestamp cache. The refresh fails (key A changed).
-//     The txnSpanRefresher sends HeartbeatTxn(UpdateTSCacheOnly=true) to cancel
-//     the marker, then returns RETRY_SERIALIZABLE.
+//     The txnSpanRefresher returns RETRY_SERIALIZABLE. The client retries
+//     with a new epoch, and the heartbeater sends a heartbeat that cancels
+//     the stale refreshing marker.
 //  5. T3 (high priority) reads key B. It pushes T1, which succeeds because
-//     the refreshing marker has been canceled.
+//     the refreshing marker has been canceled by the epoch-bump heartbeat.
 func TestRefreshingToPendingAllowsPush(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	ctx := context.Background()
 
 	var t1ID atomic.Value
-	var heartbeatSeen atomic.Bool
+	var epochBumpHeartbeatSeen atomic.Bool
 
 	s, _, db := serverutils.StartServer(t, base.TestServerArgs{
 		Knobs: base.TestingKnobs{
@@ -351,7 +353,7 @@ func TestRefreshingToPendingAllowsPush(t *testing.T) {
 				TestingRequestFilter: func(
 					ctx context.Context, ba *kvpb.BatchRequest,
 				) *kvpb.Error {
-					hbReq, ok := ba.GetArg(kvpb.HeartbeatTxn)
+					_, ok := ba.GetArg(kvpb.HeartbeatTxn)
 					if !ok {
 						return nil
 					}
@@ -362,8 +364,11 @@ func TestRefreshingToPendingAllowsPush(t *testing.T) {
 					if !ba.Txn.ID.Equal(v.(uuid.UUID)) {
 						return nil
 					}
-					if hbReq.(*kvpb.HeartbeatTxnRequest).UpdateTSCacheOnly {
-						heartbeatSeen.Store(true)
+					// A heartbeat at epoch > 0 means the transaction restarted
+					// and the heartbeater is sending the epoch-bump heartbeat
+					// that will cancel the stale refreshing marker.
+					if ba.Txn.Epoch > 0 {
+						epochBumpHeartbeatSeen.Store(true)
 					}
 					return nil
 				},
@@ -377,38 +382,46 @@ func TestRefreshingToPendingAllowsPush(t *testing.T) {
 	keyA := roachpb.Key("a")
 	keyB := roachpb.Key("b")
 
-	// T1: read key A (refresh span), write key B.
-	t1 := db.NewTxn(ctx, "t1")
-	_, err := t1.Get(ctx, keyA)
+	// T1: use a client-side retry loop so the epoch bump happens automatically.
+	err := db.Txn(ctx, func(ctx context.Context, t1 *kv.Txn) error {
+		if t1ID.Load() == nil {
+			t1ID.Store(t1.ID())
+		}
+		// Read key A (refresh span), write key B.
+		if _, err := t1.Get(ctx, keyA); err != nil {
+			return err
+		}
+		if err := t1.Put(ctx, keyB, "b-t1"); err != nil {
+			return err
+		}
+
+		// On the first attempt only, invalidate T1's read and push it.
+		if t1.Epoch() == 0 {
+			// Invalidate T1's read.
+			if err := db.Put(ctx, keyA, "a-overwritten"); err != nil {
+				return err
+			}
+
+			// T2: Push T1 with a high-priority reader.
+			t2 := db.NewTxn(ctx, "t2")
+			if err := t2.SetUserPriority(roachpb.MaxUserPriority); err != nil {
+				return err
+			}
+			if _, err := t2.Get(ctx, keyB); err != nil {
+				return err
+			}
+			if err := t2.Commit(ctx); err != nil {
+				return err
+			}
+		}
+		return t1.Commit(ctx)
+	})
 	require.NoError(t, err)
-	require.NoError(t, t1.Put(ctx, keyB, "b-t1"))
-	t1ID.Store(t1.ID())
 
-	// Invalidate T1's read.
-	require.NoError(t, db.Put(ctx, keyA, "a-overwritten"))
-
-	// T2: Push T1 with a high-priority reader.
-	t2 := db.NewTxn(ctx, "t2")
-	require.NoError(t, t2.SetUserPriority(roachpb.MaxUserPriority))
-	_, err = t2.Get(ctx, keyB)
-	require.NoError(t, err)
-	require.NoError(t, t2.Commit(ctx))
-
-	// T1 commit attempt adds a refreshing marker to the tscache, but the
-	// refresh fails (key A was overwritten). The txnSpanRefresher cancels
-	// the marker via HeartbeatTxn(UpdateTSCacheOnly=true), then returns
-	// RETRY_SERIALIZABLE to the client.
-	require.Error(t, t1.Commit(ctx))
-	require.True(t, heartbeatSeen.Load(),
-		"expected HeartbeatTxn with UpdateTSCacheOnly to cancel refreshing marker")
-
-	// T1 can now be pushed.
-	t3 := db.NewTxn(ctx, "t3")
-	require.NoError(t, t3.SetUserPriority(roachpb.MaxUserPriority))
-	_, err = t3.Get(ctx, keyB)
-	require.NoError(t, err)
-
-	require.NoError(t, t1.Rollback(ctx))
+	// After the retry, the heartbeater should have sent a heartbeat with
+	// the new epoch, which canceled the stale refreshing marker.
+	require.True(t, epochBumpHeartbeatSeen.Load(),
+		"expected HeartbeatTxn with bumped epoch to cancel refreshing marker")
 }
 
 // TestRefreshingServerSideRetry verifies that when a transaction has no read

@@ -164,6 +164,18 @@ type txnHeartbeater struct {
 		// arrive during rollback, the TxnCoordSender blocks any others due to
 		// finalObservedStatus.
 		abortTxnAsyncResultC chan abortTxnAsyncResult
+
+		// epochBumpC is a buffered channel (cap 1) used to signal the heartbeat
+		// loop that an epoch bump occurred and it should heartbeat immediately.
+		// The immediate heartbeat cancels any stale refreshing marker in the
+		// timestamp cache at the old epoch.
+		epochBumpC chan struct{}
+
+		// loopStartTimer holds the delayed-start timer for the heartbeat loop
+		// goroutine. It is non-nil between startHeartbeatLoopLocked and the
+		// timer callback firing. If an epoch bump arrives before the timer
+		// fires, we reset it to fire immediately.
+		loopStartTimer *time.Timer
 	}
 }
 
@@ -199,6 +211,7 @@ func (h *txnHeartbeater) init(
 	h.gatekeeper = gatekeeper
 	h.mu.Locker = mu
 	h.mu.txn = txn
+	h.mu.epochBumpC = make(chan struct{}, 1)
 }
 
 // SendLocked is part of the txnInterceptor interface.
@@ -298,7 +311,26 @@ func (*txnHeartbeater) importLeafFinalState(context.Context, *roachpb.LeafTxnFin
 }
 
 // epochBumpedLocked is part of the txnInterceptor interface.
-func (h *txnHeartbeater) epochBumpedLocked() {}
+//
+// When the epoch is bumped, we signal the heartbeat loop to send an immediate
+// heartbeat. The heartbeat carries the new epoch to the leaseholder, which
+// cancels any stale refreshing marker from the previous epoch in the timestamp
+// cache.
+func (h *txnHeartbeater) epochBumpedLocked() {
+	if !h.mu.loopStarted || h.mu.loopCancel == nil {
+		return
+	}
+	// If the heartbeat loop goroutine hasn't been spawned yet (delayed start),
+	// fire the timer immediately so it starts right away.
+	if h.mu.loopStartTimer != nil && h.mu.loopStartTimer.Stop() {
+		h.mu.loopStartTimer.Reset(0)
+	}
+	// Signal the heartbeat loop to send an immediate heartbeat.
+	select {
+	case h.mu.epochBumpC <- struct{}{}:
+	default:
+	}
+}
 
 // createSavepointLocked is part of the txnInterceptor interface.
 func (*txnHeartbeater) createSavepointLocked(context.Context, *savepoint) {}
@@ -356,6 +388,10 @@ func (h *txnHeartbeater) startHeartbeatLoopLocked(ctx context.Context) {
 	// avoid the associated cost for small write transactions. In benchmarks,
 	// this gave a 3% throughput increase for point writes at high concurrency.
 	timer := time.AfterFunc(heartbeatLoopDelay, func() {
+		h.mu.Lock()
+		h.mu.loopStartTimer = nil
+		h.mu.Unlock()
+
 		const taskName = "kv.TxnCoordSender: heartbeat loop"
 		var span *tracing.Span
 		hbCtx, span = h.AmbientContext.Tracer.StartSpanCtx(hbCtx, taskName)
@@ -364,6 +400,7 @@ func (h *txnHeartbeater) startHeartbeatLoopLocked(ctx context.Context) {
 		// Only errors on quiesce, which is safe to ignore.
 		_ = h.stopper.RunTask(hbCtx, taskName, h.heartbeatLoop)
 	})
+	h.mu.loopStartTimer = timer
 
 	h.mu.loopCancel = func() {
 		timer.Stop()
@@ -412,6 +449,10 @@ func (h *txnHeartbeater) heartbeatLoop(ctx context.Context) {
 			if !h.heartbeat(ctx) {
 				// The heartbeat noticed a finalized transaction,
 				// so shut down the heartbeat loop.
+				return
+			}
+		case <-h.mu.epochBumpC:
+			if !h.heartbeat(ctx) {
 				return
 			}
 		case <-ctx.Done():
