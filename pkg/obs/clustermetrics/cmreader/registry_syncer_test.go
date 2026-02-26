@@ -8,12 +8,14 @@ package cmreader
 import (
 	"context"
 	"testing"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/obs/clustermetrics/cmmetrics"
 	"github.com/cockroachdb/cockroach/pkg/obs/clustermetrics/cmwatcher"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/stretchr/testify/require"
 )
 
@@ -46,7 +48,7 @@ func TestUpdateMetricLocked(t *testing.T) {
 				})
 		},
 		rows: []cmwatcher.ClusterMetricRow{{
-			ID: 1, Name: "test.gauge", Type: "gauge", Value: 42,
+			ID: 1, Name: "test.gauge", Type: "GAUGE", Value: 42,
 		}},
 		verify: func(t *testing.T, u *registrySyncer, reg *registry) {
 			require.Contains(t, u.mu.trackedMetrics, "test.gauge")
@@ -73,9 +75,9 @@ func TestUpdateMetricLocked(t *testing.T) {
 				})
 		},
 		rows: []cmwatcher.ClusterMetricRow{{
-			ID: 1, Name: "test.gauge", Type: "gauge", Value: 10,
+			ID: 1, Name: "test.gauge", Type: "GAUGE", Value: 10,
 		}, {
-			ID: 1, Name: "test.gauge", Type: "gauge", Value: 99,
+			ID: 1, Name: "test.gauge", Type: "GAUGE", Value: 99,
 		}},
 		verify: func(t *testing.T, u *registrySyncer, _ *registry) {
 			g := u.mu.trackedMetrics["test.gauge"].(*metric.Gauge)
@@ -91,9 +93,9 @@ func TestUpdateMetricLocked(t *testing.T) {
 				})
 		},
 		rows: []cmwatcher.ClusterMetricRow{{
-			ID: 1, Name: "test.counter", Type: "counter", Value: 0,
+			ID: 1, Name: "test.counter", Type: "COUNTER", Value: 0,
 		}, {
-			ID: 1, Name: "test.counter", Type: "counter", Value: 42,
+			ID: 1, Name: "test.counter", Type: "COUNTER", Value: 42,
 		}},
 		verify: func(t *testing.T, u *registrySyncer, _ *registry) {
 			c := u.mu.trackedMetrics["test.counter"].(*metric.Counter)
@@ -103,7 +105,7 @@ func TestUpdateMetricLocked(t *testing.T) {
 		name:  "not found",
 		setup: func() func() { return func() {} },
 		rows: []cmwatcher.ClusterMetricRow{{
-			ID: 999, Name: "nonexistent.metric", Type: "gauge", Value: 42,
+			ID: 999, Name: "nonexistent.metric", Type: "GAUGE", Value: 42,
 		}},
 		verify: func(t *testing.T, u *registrySyncer, _ *registry) {
 			require.Empty(t, u.mu.trackedMetrics)
@@ -121,7 +123,7 @@ func TestUpdateMetricLocked(t *testing.T) {
 		rows: []cmwatcher.ClusterMetricRow{{
 			ID: 1, Name: "test.gaugevec",
 			Labels: map[string]string{"store": "1"},
-			Type:   "gauge", Value: 42,
+			Type:   "GAUGE", Value: 42,
 		}},
 		verify: func(t *testing.T, u *registrySyncer, reg *registry) {
 			require.Contains(t, u.mu.trackedMetrics, "test.gaugevec")
@@ -149,11 +151,11 @@ func TestUpdateMetricLocked(t *testing.T) {
 		rows: []cmwatcher.ClusterMetricRow{{
 			ID: 1, Name: "test.gaugevec",
 			Labels: map[string]string{"store": "1"},
-			Type:   "gauge", Value: 10,
+			Type:   "GAUGE", Value: 10,
 		}, {
 			ID: 2, Name: "test.gaugevec",
 			Labels: map[string]string{"store": "2"},
-			Type:   "gauge", Value: 20,
+			Type:   "GAUGE", Value: 20,
 		}},
 		verify: func(t *testing.T, u *registrySyncer, _ *registry) {
 			require.Contains(t, u.mu.trackedRows, int64(1))
@@ -173,11 +175,11 @@ func TestUpdateMetricLocked(t *testing.T) {
 		rows: []cmwatcher.ClusterMetricRow{{
 			ID: 1, Name: "test.gaugevec",
 			Labels: map[string]string{"store": "1"},
-			Type:   "gauge", Value: 10,
+			Type:   "GAUGE", Value: 10,
 		}, {
 			ID: 1, Name: "test.gaugevec",
 			Labels: map[string]string{"store": "1"},
-			Type:   "gauge", Value: 99,
+			Type:   "GAUGE", Value: 99,
 		}},
 		verify: func(t *testing.T, u *registrySyncer, _ *registry) {
 			require.Contains(t, u.mu.trackedRows, int64(1))
@@ -196,15 +198,15 @@ func TestUpdateMetricLocked(t *testing.T) {
 		rows: []cmwatcher.ClusterMetricRow{{
 			ID: 1, Name: "test.countervec",
 			Labels: map[string]string{"store": "1"},
-			Type:   "counter", Value: 10,
+			Type:   "COUNTER", Value: 10,
 		}, {
 			ID: 2, Name: "test.countervec",
 			Labels: map[string]string{"store": "2"},
-			Type:   "counter", Value: 20,
+			Type:   "COUNTER", Value: 20,
 		}, {
 			ID: 1, Name: "test.countervec",
 			Labels: map[string]string{"store": "1"},
-			Type:   "counter", Value: 50,
+			Type:   "COUNTER", Value: 50,
 		}},
 		verify: func(t *testing.T, u *registrySyncer, _ *registry) {
 			require.Contains(t, u.mu.trackedMetrics, "test.countervec")
@@ -215,6 +217,115 @@ func TestUpdateMetricLocked(t *testing.T) {
 				cv.Count(map[string]string{"store": "1"}))
 			require.Equal(t, int64(20),
 				cv.Count(map[string]string{"store": "2"}))
+		},
+	}, {
+		name: "new stopwatch",
+		setup: func() func() {
+			return cmmetrics.TestingRegisterClusterMetric(
+				"test.stopwatch", metric.Metadata{
+					Name: "test.stopwatch",
+					Help: "A test stopwatch",
+				})
+		},
+		rows: []cmwatcher.ClusterMetricRow{{
+			ID: 1, Name: "test.stopwatch", Type: "STOPWATCH",
+			Value: timeutil.Now().Add(-10 * time.Second).UnixNano(),
+		}},
+		verify: func(t *testing.T, u *registrySyncer, reg *registry) {
+			require.Contains(t, u.mu.trackedMetrics, "test.stopwatch")
+			require.Contains(t, u.mu.trackedRows, int64(1))
+
+			var found bool
+			reg.Each(func(name string, _ interface{}) {
+				if name == "test.stopwatch" {
+					found = true
+				}
+			})
+			require.True(t, found, "metric should be in registry")
+
+			// A DerivedGauge is a type alias for *metric.Gauge. Its Value()
+			// method applies the timeElapsedSince callback, so the result
+			// should be at least 10s of nanoseconds.
+			g := u.mu.trackedMetrics["test.stopwatch"].(*metric.Gauge)
+			require.GreaterOrEqual(t, g.Value(), int64(10*time.Second))
+		},
+	}, {
+		name: "existing stopwatch update",
+		setup: func() func() {
+			return cmmetrics.TestingRegisterClusterMetric(
+				"test.stopwatch", metric.Metadata{
+					Name: "test.stopwatch",
+					Help: "A test stopwatch",
+				})
+		},
+		rows: []cmwatcher.ClusterMetricRow{{
+			ID: 1, Name: "test.stopwatch", Type: "STOPWATCH",
+			Value: timeutil.Now().Add(-10 * time.Second).UnixNano(),
+		}, {
+			// Simulate a stopwatch reset: update with a recent timestamp.
+			ID: 1, Name: "test.stopwatch", Type: "STOPWATCH",
+			Value: timeutil.Now().UnixNano(),
+		}},
+		verify: func(t *testing.T, u *registrySyncer, _ *registry) {
+			g := u.mu.trackedMetrics["test.stopwatch"].(*metric.Gauge)
+			// After reset the elapsed time should be much less than 10s.
+			require.Less(t, g.Value(), int64(5*time.Second))
+			require.Greater(t, g.Value(), int64(0))
+		},
+	}, {
+		name: "new stopwatch vec",
+		setup: func() func() {
+			return cmmetrics.TestingRegisterLabeledClusterMetric(
+				"test.stopwatchvec", metric.Metadata{
+					Name: "test.stopwatchvec",
+					Help: "A test stopwatch vec",
+				}, []string{"store"})
+		},
+		rows: []cmwatcher.ClusterMetricRow{{
+			ID: 1, Name: "test.stopwatchvec",
+			Labels: map[string]string{"store": "1"},
+			Type:   "STOPWATCH",
+			Value:  timeutil.Now().Add(-10 * time.Second).UnixNano(),
+		}},
+		verify: func(t *testing.T, u *registrySyncer, reg *registry) {
+			require.Contains(t, u.mu.trackedMetrics, "test.stopwatchvec")
+			_, ok := u.mu.trackedMetrics["test.stopwatchvec"].(*metric.GaugeVec)
+			require.True(t, ok, "expected *metric.GaugeVec")
+			require.Contains(t, u.mu.trackedRows, int64(1))
+
+			var found bool
+			reg.Each(func(name string, _ interface{}) {
+				if name == "test.stopwatchvec" {
+					found = true
+				}
+			})
+			require.True(t, found, "metric should be in registry")
+		},
+	}, {
+		name: "stopwatch vec second label set",
+		setup: func() func() {
+			return cmmetrics.TestingRegisterLabeledClusterMetric(
+				"test.stopwatchvec", metric.Metadata{
+					Name: "test.stopwatchvec",
+					Help: "A test stopwatch vec",
+				}, []string{"store"})
+		},
+		rows: []cmwatcher.ClusterMetricRow{{
+			ID: 1, Name: "test.stopwatchvec",
+			Labels: map[string]string{"store": "1"},
+			Type:   "STOPWATCH",
+			Value:  timeutil.Now().Add(-10 * time.Second).UnixNano(),
+		}, {
+			ID: 2, Name: "test.stopwatchvec",
+			Labels: map[string]string{"store": "2"},
+			Type:   "STOPWATCH",
+			Value:  timeutil.Now().UnixNano(),
+		}},
+		verify: func(t *testing.T, u *registrySyncer, _ *registry) {
+			require.Contains(t, u.mu.trackedRows, int64(1))
+			require.Contains(t, u.mu.trackedRows, int64(2))
+			require.Len(t, u.mu.trackedMetrics, 1)
+			require.Contains(t, u.mu.trackedMetrics, "test.stopwatchvec")
 		},
 	}}
 
@@ -256,7 +367,7 @@ func TestDeleteMetricLocked(t *testing.T) {
 				})
 		},
 		insertRows: []cmwatcher.ClusterMetricRow{{
-			ID: 1, Name: "test.gauge", Type: "gauge", Value: 42,
+			ID: 1, Name: "test.gauge", Type: "GAUGE", Value: 42,
 		}},
 		deleteRow: cmwatcher.ClusterMetricRow{ID: 1},
 		verify: func(t *testing.T, u *registrySyncer, reg *registry) {
@@ -279,7 +390,7 @@ func TestDeleteMetricLocked(t *testing.T) {
 		insertRows: []cmwatcher.ClusterMetricRow{{
 			ID: 1, Name: "test.vec",
 			Labels: map[string]string{"store": "1"},
-			Type:   "gauge", Value: 42,
+			Type:   "GAUGE", Value: 42,
 		}},
 		deleteRow: cmwatcher.ClusterMetricRow{ID: 1},
 		verify: func(t *testing.T, u *registrySyncer, reg *registry) {
@@ -344,10 +455,10 @@ func TestStop(t *testing.T) {
 
 	u.mu.Lock()
 	u.updateMetricLocked(ctx, cmwatcher.ClusterMetricRow{
-		ID: 1, Name: "gauge_one", Type: "gauge", Value: 1,
+		ID: 1, Name: "gauge_one", Type: "GAUGE", Value: 1,
 	})
 	u.updateMetricLocked(ctx, cmwatcher.ClusterMetricRow{
-		ID: 2, Name: "gauge_two", Type: "gauge", Value: 2,
+		ID: 2, Name: "gauge_two", Type: "GAUGE", Value: 2,
 	})
 	u.mu.Unlock()
 
@@ -385,7 +496,7 @@ func TestOnRefresh(t *testing.T) {
 	// Pre-populate with an old metric.
 	u.mu.Lock()
 	u.updateMetricLocked(ctx, cmwatcher.ClusterMetricRow{
-		ID: 1, Name: "gauge.old", Type: "gauge", Value: 1,
+		ID: 1, Name: "gauge.old", Type: "GAUGE", Value: 1,
 	})
 	u.mu.Unlock()
 
@@ -393,8 +504,8 @@ func TestOnRefresh(t *testing.T) {
 
 	// Simulate a full refresh with a different set of rows.
 	refreshRows := map[int64]cmwatcher.ClusterMetricRow{
-		10: {ID: 10, Name: "gauge.new", Type: "gauge", Value: 100},
-		20: {ID: 20, Name: "counter.new", Type: "counter", Value: 200},
+		10: {ID: 10, Name: "gauge.new", Type: "GAUGE", Value: 100},
+		20: {ID: 20, Name: "counter.new", Type: "COUNTER", Value: 200},
 	}
 	u.reloadAllMetrics(ctx, refreshRows)
 

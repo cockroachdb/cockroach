@@ -99,13 +99,21 @@ func TestToMetric(t *testing.T) {
 
 	gaugeMeta := metric.Metadata{Name: "test.gauge", Help: "A test gauge"}
 	counterMeta := metric.Metadata{Name: "test.counter", Help: "A test counter"}
+	stopwatchMeta := metric.Metadata{Name: "test.stopwatch", Help: "A test stopwatch"}
 	labeledGaugeMeta := metric.Metadata{Name: "test.labeled.gauge", Help: "A labeled gauge"}
 	labeledCounterMeta := metric.Metadata{Name: "test.labeled.counter", Help: "A labeled counter"}
+	labeledStopwatchMeta := metric.Metadata{
+		Name: "test.labeled.stopwatch", Help: "A labeled stopwatch",
+	}
 
 	cleanupGauge := clustermetrics.TestingRegisterClusterMetric("test.gauge", gaugeMeta)
 	defer cleanupGauge()
 	cleanupCounter := clustermetrics.TestingRegisterClusterMetric("test.counter", counterMeta)
 	defer cleanupCounter()
+	cleanupStopwatch := clustermetrics.TestingRegisterClusterMetric(
+		"test.stopwatch", stopwatchMeta,
+	)
+	defer cleanupStopwatch()
 	cleanupLabeledGauge := clustermetrics.TestingRegisterLabeledClusterMetric(
 		"test.labeled.gauge", labeledGaugeMeta, []string{"store"},
 	)
@@ -114,6 +122,10 @@ func TestToMetric(t *testing.T) {
 		"test.labeled.counter", labeledCounterMeta, []string{"node"},
 	)
 	defer cleanupLabeledCounter()
+	cleanupLabeledStopwatch := clustermetrics.TestingRegisterLabeledClusterMetric(
+		"test.labeled.stopwatch", labeledStopwatchMeta, []string{"store"},
+	)
+	defer cleanupLabeledStopwatch()
 
 	tests := []struct {
 		name     string
@@ -124,7 +136,7 @@ func TestToMetric(t *testing.T) {
 		name: "gauge without labels",
 		row: cmwatcher.ClusterMetricRow{
 			Name:  "test.gauge",
-			Type:  "gauge",
+			Type:  "GAUGE",
 			Value: 42,
 		},
 		wantType: &metric.Gauge{},
@@ -132,7 +144,7 @@ func TestToMetric(t *testing.T) {
 		name: "counter without labels",
 		row: cmwatcher.ClusterMetricRow{
 			Name:  "test.counter",
-			Type:  "counter",
+			Type:  "COUNTER",
 			Value: 100,
 		},
 		wantType: &metric.Counter{},
@@ -141,7 +153,7 @@ func TestToMetric(t *testing.T) {
 		row: cmwatcher.ClusterMetricRow{
 			Name:   "test.labeled.gauge",
 			Labels: map[string]string{"store": "1"},
-			Type:   "gauge",
+			Type:   "GAUGE",
 			Value:  7,
 		},
 		wantType: &metric.GaugeVec{},
@@ -150,10 +162,27 @@ func TestToMetric(t *testing.T) {
 		row: cmwatcher.ClusterMetricRow{
 			Name:   "test.labeled.counter",
 			Labels: map[string]string{"node": "3"},
-			Type:   "counter",
+			Type:   "COUNTER",
 			Value:  55,
 		},
 		wantType: &metric.CounterVec{},
+	}, {
+		name: "stopwatch without labels",
+		row: cmwatcher.ClusterMetricRow{
+			Name:  "test.stopwatch",
+			Type:  "STOPWATCH",
+			Value: 1000,
+		},
+		wantType: &metric.Gauge{},
+	}, {
+		name: "labeled stopwatch",
+		row: cmwatcher.ClusterMetricRow{
+			Name:   "test.labeled.stopwatch",
+			Labels: map[string]string{"store": "1"},
+			Type:   "STOPWATCH",
+			Value:  2000,
+		},
+		wantType: &metric.GaugeVec{},
 	}, {
 		name: "unknown type without labels",
 		row: cmwatcher.ClusterMetricRow{
@@ -175,7 +204,7 @@ func TestToMetric(t *testing.T) {
 		name: "unregistered metric without labels",
 		row: cmwatcher.ClusterMetricRow{
 			Name:  "nonexistent.metric",
-			Type:  "gauge",
+			Type:  "GAUGE",
 			Value: 1,
 		},
 		wantErr: "no metadata found for metric nonexistent.metric",
@@ -184,7 +213,7 @@ func TestToMetric(t *testing.T) {
 		row: cmwatcher.ClusterMetricRow{
 			Name:   "nonexistent.labeled",
 			Labels: map[string]string{"k": "v"},
-			Type:   "gauge",
+			Type:   "GAUGE",
 			Value:  1,
 		},
 		wantErr: "no metadata found for metric nonexistent.labeled",

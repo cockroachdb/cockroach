@@ -131,6 +131,9 @@ func (s *registrySyncer) deregisterMetricLocked(
 func (s *registrySyncer) start(
 	ctx context.Context, tableResolver catalog.SystemTableIDResolver,
 ) error {
+	if s.knobs != nil && s.knobs.OnRegistrySyncerPreStart != nil {
+		s.knobs.OnRegistrySyncerPreStart()
+	}
 	err := s.tableWatcher.Start(ctx, tableResolver)
 	if err != nil {
 		log.Dev.Errorf(ctx, "failed to start cluster metrics rangefeed: %s", err)
@@ -183,6 +186,9 @@ func (s *registrySyncer) reloadAllMetrics(
 	s.mu.trackedRows = make(map[int64]cmwatcher.ClusterMetricRow)
 	for _, row := range metrics {
 		s.updateMetricLocked(ctx, row)
+	}
+	if s.knobs != nil && s.knobs.OnReloadComplete != nil {
+		s.knobs.OnReloadComplete()
 	}
 }
 
