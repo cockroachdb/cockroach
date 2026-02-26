@@ -669,7 +669,9 @@ message RestoreDetails {
     (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb.ID"
   ];
 
-  // NEXT ID: 39.
+  bool grants = 39;
+
+  // NEXT ID: 40.
 }
 
 

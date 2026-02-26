@@ -1237,6 +1237,7 @@ func resolveOptionsForRestoreJobDescription(
 		ExperimentalOnline:               opts.ExperimentalOnline,
 		ExperimentalCopy:                 opts.ExperimentalCopy,
 		RemoveRegions:                    opts.RemoveRegions,
+		Grants:                           opts.Grants,
 	}
 
 	if opts.EncryptionPassphrase != nil {
@@ -1435,6 +1436,19 @@ func restorePlanHook(
 
 	if restoreStmt.Options.OnlineImpl() && restoreStmt.Options.VerifyData {
 		return nil, nil, false, errors.New("cannot run online restore with verify_backup_table_data")
+	}
+
+	if restoreStmt.Options.Grants {
+		switch restoreStmt.DescriptorCoverage {
+		case tree.AllDescriptors:
+			return nil, nil, false, errors.New(
+				"RESTORE ... WITH GRANTS is only supported for database and table level restores",
+			)
+		case tree.SystemUsers:
+			return nil, nil, false, errors.New(
+				"RESTORE SYSTEM USERS does not support the WITH GRANTS option",
+			)
+		}
 	}
 
 	var newTenantID *roachpb.TenantID
@@ -2142,6 +2156,7 @@ func doRestorePlan(
 		RemoveRegions:                    restoreStmt.Options.RemoveRegions,
 		UnsafeRestoreIncompatibleVersion: restoreStmt.Options.UnsafeRestoreIncompatibleVersion,
 		TempSystemID:                     tempSysDBID,
+		Grants:                           restoreStmt.Options.Grants,
 	}
 
 	jr := jobs.Record{
