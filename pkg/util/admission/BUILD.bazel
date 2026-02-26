@@ -9,6 +9,7 @@ go_library(
         "cpu_time_token_filler.go",
         "cpu_time_token_grant_coordinator.go",
         "cpu_time_token_granter.go",
+        "cpu_time_token_metrics.go",
         "disk_bandwidth.go",
         "elastic_cpu_grant_coordinator.go",
         "elastic_cpu_granter.go",

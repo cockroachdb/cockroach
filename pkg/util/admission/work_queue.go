@@ -699,8 +699,13 @@ func (q *WorkQueue) Admit(ctx context.Context, info WorkInfo) (AdmitResponse, er
 	if q.mu.overrideAllToBypassAdmission {
 		info.BypassAdmission = true
 	}
+	burstQual := tenant.cpuTimeBurstBucket.burstQualification()
 	if info.BypassAdmission {
 		q.adjustTenantUsedLocked(tenant, info.RequestedCount)
+		tenant.intervalStats.admittedCount++
+		if burstQual == canBurst {
+			tenant.intervalStats.canBurstCount++
+		}
 		q.mu.Unlock()
 		q.granter.tookWithoutPermission(info.RequestedCount)
 		q.metrics.incAdmitted(info.Priority)
@@ -715,7 +720,6 @@ func (q *WorkQueue) Admit(ctx context.Context, info WorkInfo) (AdmitResponse, er
 	// threshold for LIFO queueing based on observed admission latency.
 	tenant.priorityStates.requestAtPriority(info.Priority)
 
-	burstQual := tenant.cpuTimeBurstBucket.burstQualification()
 	if (len(q.mu.tenantHeap) == 0 ||
 		// tenant not in heap, so doesn't have waiting requests, and is canBurst, while
 		// the top of the heap was noBurst.
@@ -724,8 +728,12 @@ func (q *WorkQueue) Admit(ctx context.Context, info WorkInfo) (AdmitResponse, er
 			q.mu.tenantHeap[0].cpuTimeBurstBucket.burstQualification() == noBurst)) &&
 		!q.knobs.DisableWorkQueueFastPath {
 		// Fast-path. Try to grab token/slot.
-		// Optimistically update used to avoid locking again.
+		// Optimistically update used and intervalStats to avoid locking again.
 		q.adjustTenantUsedLocked(tenant, info.RequestedCount)
+		tenant.intervalStats.admittedCount++
+		if burstQual == canBurst {
+			tenant.intervalStats.canBurstCount++
+		}
 		q.mu.Unlock()
 		// We have unlocked q.mu, so another concurrent request can also do tryGet
 		// and get ahead of this request. We don't need to be fair for such
@@ -789,6 +797,10 @@ func (q *WorkQueue) Admit(ctx context.Context, info WorkInfo) (AdmitResponse, er
 			q.mu.tenants[tenantID] = tenant
 		}
 		q.adjustTenantUsedLocked(tenant, -info.RequestedCount)
+		tenant.intervalStats.admittedCount--
+		if burstQual == canBurst {
+			tenant.intervalStats.canBurstCount--
+		}
 	}
 
 	// Check for cancellation.
@@ -1060,6 +1072,11 @@ func (q *WorkQueue) granted(grantChainID grantChainID) int64 {
 	waitDur := now.Sub(item.enqueueingTime)
 	tenant.priorityStates.updateDelayLocked(item.priority, waitDur, false /* canceled */)
 	q.adjustTenantUsedLocked(tenant, item.requestedCount)
+	tenant.intervalStats.admittedCount++
+	if tenant.cpuTimeBurstBucket.burstQualification() == canBurst {
+		tenant.intervalStats.canBurstCount++
+	}
+	tenant.intervalStats.waitTimeSum += waitDur
 	if !isInTenantHeap(tenant) {
 		q.mu.tenantHeap.remove(tenant)
 	}
@@ -1131,6 +1148,20 @@ func (q *WorkQueue) gcTenantsResetUsedAndUpdateEstimators() {
 			delete(q.mu.tenants, id)
 			releaseTenantInfo(info)
 		} else {
+			if q.mode == usesCPUTimeTokens && info.intervalStats.admittedCount > 0 {
+				log.Dev.Infof(q.ambientCtx,
+					"WorkQueue %s tenant %d: count=%d(canBurst-frac=%.2f) mean-wait=%s "+
+						"tokens(per-work)=%s(%s)",
+					q.queueKind,
+					id,
+					info.intervalStats.admittedCount,
+					float64(info.intervalStats.canBurstCount)/float64(info.intervalStats.admittedCount),
+					info.intervalStats.waitTimeSum/time.Duration(info.intervalStats.admittedCount),
+					time.Duration(info.intervalStats.used),
+					time.Duration(info.intervalStats.used/info.intervalStats.admittedCount),
+				)
+			}
+			info.intervalStats = tenantIntervalStats{}
 			info.cpuTimeTokenEstimator.update()
 			info.used = 0
 			// All the heap members will reset used=0, so no need to change heap
@@ -1155,6 +1186,7 @@ func (q *WorkQueue) adjustTenantUsed(tenantID roachpb.TenantID, delta int64) {
 }
 
 func (q *WorkQueue) adjustTenantUsedLocked(tenant *tenantInfo, delta int64) {
+	tenant.intervalStats.used += delta
 	if delta < 0 {
 		toReturn := uint64(-delta)
 		if tenant.used < toReturn {
@@ -1578,6 +1610,17 @@ type tenantInfo struct {
 	// priority. Only used if mode == usesCPUTimeTokens. See
 	// cpu_time_token_burst.go for more.
 	cpuTimeBurstBucket cpuTimeBurstBucket
+
+	// intervalStats tracks per-tenant statistics over the current interval
+	// (between successive calls to gcTenantsResetUsedAndUpdateEstimators).
+	intervalStats tenantIntervalStats
+}
+
+type tenantIntervalStats struct {
+	admittedCount int64
+	canBurstCount int64
+	used          int64
+	waitTimeSum   time.Duration
 }
 
 // tenantHeap is a heap of tenants with waiting work, ordered in increasing

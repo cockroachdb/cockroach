@@ -9,6 +9,7 @@ import (
 	"context"
 	"fmt"
 	"math"
+	"strings"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/settings"
@@ -212,6 +213,7 @@ type cpuTimeTokenAllocator struct {
 	queues   [numResourceTiers]workQueueIForAllocator
 	settings *cluster.Settings
 	model    cpuTimeModel
+	metrics  *cpuTimeTokenMetrics
 
 	// refillRates stores the number of CPU time tokens to add to each bucket
 	// per interval (1s).
@@ -226,6 +228,24 @@ type cpuTimeTokenAllocator struct {
 // rates at which we add tokens per second, one per bucket in
 // cpuTimeTokenGranter.
 type rates [numResourceTiers][numBurstQualifications]int64
+
+func (r rates) String() string {
+	var buf strings.Builder
+	buf.WriteByte('[')
+	first := true
+	for tier := resourceTier(0); tier < numResourceTiers; tier++ {
+		for qual := burstQualification(0); qual < numBurstQualifications; qual++ {
+			if !first {
+				buf.WriteByte(' ')
+			}
+			first = false
+			fmt.Fprintf(&buf, "%s-%s=%s",
+				tier.String(), qual.String(), time.Duration(r[tier][qual]))
+		}
+	}
+	buf.WriteByte(']')
+	return buf.String()
+}
 
 // capacities stores the maximum number of tokens that can be in the
 // buckets, one per bucket in cpuTimeTokenGranter.
@@ -353,6 +373,13 @@ func (a *cpuTimeTokenAllocator) resetInterval(ctx context.Context) {
 			a.allocated[wc][kind] = 0
 		}
 	}
+
+	for tier := range newRefillRates {
+		for qual := range newRefillRates[tier] {
+			a.metrics.RefillRate.Update(
+				a.metrics.labelMaps[tier][qual], newRefillRates[tier][qual])
+		}
+	}
 }
 
 // workQueueIForAllocator abstracts the burst bucket refill method in WorkQueue,
@@ -432,6 +459,7 @@ type cpuTimeTokenLinearModel struct {
 	granter            tokenUsageTracker
 	cpuMetricsProvider CPUMetricsProvider
 	timeSource         timeutil.TimeSource
+	metrics            *cpuTimeTokenMetrics
 
 	// True after first call to fit.
 	init bool
@@ -633,7 +661,17 @@ func (m *cpuTimeTokenLinearModel) fit(ctx context.Context, targets targetUtiliza
 			alpha*tokenToCPUTimeMultiplier + (1-alpha)*m.tokenToCPUTimeMultiplier
 	}
 
-	return m.computeRefillRates(targets, m.tokenToCPUTimeMultiplier, cpuCapacity)
+	refillRates := m.computeRefillRates(targets, m.tokenToCPUTimeMultiplier, cpuCapacity)
+	m.metrics.Multiplier.Update(m.tokenToCPUTimeMultiplier)
+	log.Dev.Infof(ctx,
+		"fit: elapsed=%s cpuCapacity=%.2f intCPU=%s tokensUsed=%s isLowCPU=%t "+
+			"multiplier=%.4f refillRates=%s",
+		elapsedSinceLastFit, cpuCapacity,
+		intCPUTime, time.Duration(tokensUsed),
+		isLowCPUUtil, m.tokenToCPUTimeMultiplier,
+		refillRates.String(),
+	)
+	return refillRates
 }
 
 // computeRefillRates is a pure helper function that computes refill rates.

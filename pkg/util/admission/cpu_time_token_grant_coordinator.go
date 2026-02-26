@@ -111,7 +111,9 @@ func makeCPUTimeTokenGrantCoordinator(
 	registry *metric.Registry,
 	knobs *TestingKnobs,
 ) *cpuTimeTokenGrantCoordinator {
-	granter := &cpuTimeTokenGranter{}
+	metrics := makeCPUTimeTokenMetrics()
+	registry.AddMetricStruct(metrics)
+	granter := &cpuTimeTokenGranter{metrics: metrics}
 	var childGranters [numResourceTiers]cpuTimeTokenChildGranter
 	for tier := resourceTier(0); tier < numResourceTiers; tier++ {
 		childGranters[tier] = cpuTimeTokenChildGranter{
@@ -127,11 +129,13 @@ func makeCPUTimeTokenGrantCoordinator(
 	allocator := &cpuTimeTokenAllocator{
 		granter:  granter,
 		settings: settings,
+		metrics:  metrics,
 	}
 	model := &cpuTimeTokenLinearModel{
 		granter:            granter,
 		cpuMetricsProvider: opts.CPUMetricsProvider,
 		timeSource:         timeSource,
+		metrics:            metrics,
 	}
 	allocator.model = model
 	filler.allocator = allocator

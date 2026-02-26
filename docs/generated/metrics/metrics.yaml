@@ -11313,6 +11313,30 @@ layers:
       unit: COUNT
       aggregation: AVG
       derivative: NON_NEGATIVE_DERIVATIVE
+    - name: admission.cpu_time_tokens.bucket_tokens
+      exported_name: admission_cpu_time_tokens_bucket_tokens
+      description: The current number of tokens in each CPU time token bucket, broken down by resource tier and burst qualification
+      y_axis_label: Tokens
+      type: GAUGE
+      unit: COUNT
+      aggregation: AVG
+      derivative: NONE
+    - name: admission.cpu_time_tokens.multiplier
+      exported_name: admission_cpu_time_tokens_multiplier
+      description: The token-to-CPU-time multiplier used by the CPU time token linear model to adjust refill rates; computed as the ratio of total CPU time to tracked CPU time
+      y_axis_label: Multiplier
+      type: GAUGE
+      unit: COUNT
+      aggregation: AVG
+      derivative: NONE
+    - name: admission.cpu_time_tokens.refill_rate
+      exported_name: admission_cpu_time_tokens_refill_rate
+      description: The rate at which CPU time tokens are added per second, broken down by resource tier and burst qualification
+      y_axis_label: Tokens
+      type: GAUGE
+      unit: COUNT
+      aggregation: AVG
+      derivative: NONE
     - name: admission.elastic_cpu.acquired_nanos
       exported_name: admission_elastic_cpu_acquired_nanos
       description: Total CPU nanoseconds acquired by elastic work

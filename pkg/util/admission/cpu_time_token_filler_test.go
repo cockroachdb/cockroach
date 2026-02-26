@@ -130,7 +130,8 @@ func TestCPUTimeTokenAllocator(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	granter := &cpuTimeTokenGranter{}
+	metrics := makeCPUTimeTokenMetrics()
+	granter := &cpuTimeTokenGranter{metrics: metrics}
 	tier0Granter := &cpuTimeTokenChildGranter{
 		tier:   testTier0,
 		parent: granter,
@@ -174,6 +175,7 @@ func TestCPUTimeTokenAllocator(t *testing.T) {
 		granter:  granter,
 		settings: cluster.MakeClusterSettings(),
 		model:    model,
+		metrics:  metrics,
 		queues: [numResourceTiers]workQueueIForAllocator{
 			testTier0: burstMgrs[testTier0],
 			testTier1: burstMgrs[testTier1],
@@ -247,6 +249,7 @@ func TestCPUTimeTokenLinearModel(t *testing.T) {
 		lastFitTime:              testTime.Now(),
 		totalCPUTime:             0,
 		tokenToCPUTimeMultiplier: 1,
+		metrics:                  makeCPUTimeTokenMetrics(),
 	}
 	tokenCPUTime := &testTokenUsageTracker{}
 	model.granter = tokenCPUTime

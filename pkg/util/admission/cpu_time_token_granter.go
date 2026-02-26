@@ -46,6 +46,17 @@ const (
 	numResourceTiers
 )
 
+func (rt resourceTier) String() string {
+	switch rt {
+	case systemTenant:
+		return "system_tenant"
+	case appTenant:
+		return "app_tenant"
+	default:
+		return fmt.Sprintf("resourceTier(%d)", rt)
+	}
+}
+
 // cpuTimeTokenChildGranter implements granter. It stores resourceTier and proxies
 // proxies to cpuTimeTokenGranter. See the declaration comment for cpuTimeTokenGranter
 // for more details.
@@ -119,6 +130,7 @@ func (cg *cpuTimeTokenChildGranter) continueGrantChain(grantChainID grantChainID
 // TODO(josh): Turn into a proper design documnet.
 type cpuTimeTokenGranter struct {
 	requester [numResourceTiers]requester
+	metrics   *cpuTimeTokenMetrics
 	mu        struct {
 		// TODO(josh): I suspect putting the mutex here is better than in
 		// CPUTimeTokenGrantCoordinator, but for now the decision is tentative.
@@ -283,16 +295,18 @@ func (stg *cpuTimeTokenGranter) refill(toAdd tokenCounts, bucketCapacities capac
 	defer stg.mu.Unlock()
 
 	var shouldGrant bool
-	for wc := range stg.mu.buckets {
-		for kind := range stg.mu.buckets[wc] {
-			if toAdd[wc][kind] > 0 {
+	for tier := range stg.mu.buckets {
+		for qual := range stg.mu.buckets[tier] {
+			stg.metrics.BucketTokens.Update(
+				stg.metrics.labelMaps[tier][qual], stg.mu.buckets[tier][qual].tokens)
+			if toAdd[tier][qual] > 0 {
 				shouldGrant = true
 			}
-			newTokenCount := stg.mu.buckets[wc][kind].tokens + toAdd[wc][kind]
-			if newTokenCount > bucketCapacities[wc][kind] {
-				newTokenCount = bucketCapacities[wc][kind]
+			newTokenCount := stg.mu.buckets[tier][qual].tokens + toAdd[tier][qual]
+			if newTokenCount > bucketCapacities[tier][qual] {
+				newTokenCount = bucketCapacities[tier][qual]
 			}
-			stg.mu.buckets[wc][kind].tokens = newTokenCount
+			stg.mu.buckets[tier][qual].tokens = newTokenCount
 		}
 	}
 

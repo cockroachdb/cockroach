@@ -26,7 +26,7 @@ func TestCPUTimeTokenGranter(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	var requesters [numResourceTiers]*testRequester
-	granter := &cpuTimeTokenGranter{}
+	granter := &cpuTimeTokenGranter{metrics: makeCPUTimeTokenMetrics()}
 	tier0Granter := &cpuTimeTokenChildGranter{
 		tier:   testTier0,
 		parent: granter,
