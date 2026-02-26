@@ -234,6 +234,11 @@ type Catalog interface {
 	// returns an error.
 	CheckExecutionPrivilege(ctx context.Context, oid oid.Oid, user username.SQLUsername) error
 
+	// TryRewriteWithStmtHints looks up statement hints for the given
+	// fingerprint and returns a rewritten AST with injected hints. If no
+	// hints match, it returns the original AST.
+	TryRewriteWithStmtHints(ctx context.Context, fingerprint string, ast tree.Statement, fmtFlags tree.FmtFlags) tree.Statement
+
 	// HasAdminRole checks that the current user has admin privileges. If yes,
 	// returns true. Returns an error if query on the `system.users` table failed
 	HasAdminRole(ctx context.Context) (bool, error)

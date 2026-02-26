@@ -1516,3 +1516,90 @@ statement hints count: 1
           missing stats
           table: abc@abc_pkey
           spans: [/6 - ]
+
+subtest within_routine_hints
+
+statement ok
+CREATE TABLE drivers (
+  id INT PRIMARY KEY,
+  name STRING,
+  team STRING,
+  INDEX drivers_name_idx (name) STORING (team)
+)
+
+statement ok
+CREATE FUNCTION op() RETURNS STRING LANGUAGE SQL STABLE AS $$
+SELECT team FROM drivers WHERE name = 'oscar piastri';
+$$;
+
+statement ok
+SELECT information_schema.crdb_rewrite_inline_hints(
+  'SELECT team FROM drivers WHERE name = _',
+  'SELECT team FROM drivers@drivers_pkey WHERE name = _'
+)
+
+statement ok
+SELECT crdb_internal.await_statement_hints_cache()
+
+# Routine body statements use fully-qualified table names, so the hint
+# fingerprint must also use fully-qualified names. So though with hints,
+# we still use the drivers_name_idx, since the table name is not fully
+# qualified in the added hint.
+query T
+EXPLAIN SELECT op();
+----
+distribution: local
+·
+• root
+│
+├── • values
+│     size: 1 column, 1 row
+│
+└── • subquery
+    │ id: @S1
+    │ original sql: <unknown>
+    │ exec mode: one row
+    │
+    └── • scan
+          missing stats
+          table: drivers@drivers_name_idx
+          spans: [/'oscar piastri' - /'oscar piastri']
+          limit: 1
+
+# Insert statement hint with fully qualified table name.
+statement ok
+SELECT information_schema.crdb_rewrite_inline_hints(
+  'SELECT team FROM test.public.drivers WHERE name = _',
+  'SELECT team FROM test.public.drivers@drivers_pkey WHERE name = _'
+)
+
+statement ok
+SELECT crdb_internal.await_statement_hints_cache()
+
+query T
+EXPLAIN SELECT op();
+----
+distribution: local
+·
+• root
+│
+├── • values
+│     size: 1 column, 1 row
+│
+└── • subquery
+    │ id: @S1
+    │ original sql: <unknown>
+    │ exec mode: one row
+    │
+    └── • limit
+        │ count: 1
+        │
+        └── • filter
+            │ filter: name = 'oscar piastri'
+            │
+            └── • scan
+                  missing stats
+                  table: drivers@drivers_pkey
+                  spans: FULL SCAN (SOFT LIMIT)
+
+subtest end

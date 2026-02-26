@@ -256,6 +256,77 @@ func DeleteHintFromDB(
 	return rowIDs, fingerprints, hintBytes, nil
 }
 
+// TryInjectHints attempts to apply hint injection to the given AST
+// using the provided hints. It returns the rewritten AST if a hint was
+// successfully injected, or nil if no hints were applied. The
+// wrapperAST is the original (possibly wrapper) AST used to re-wrap the
+// injected AST when the original was a wrapper statement (e.g. CopyTo,
+// Explain, ExplainAnalyze and Prepare). nil for wrapperAST when no
+// re-wrapping is needed (e.g. routine bodies).
+func TryInjectHints(
+	ctx context.Context,
+	stmtHints []Hint,
+	hintIDs []int64,
+	ast tree.Statement,
+	wrapperAST tree.Statement,
+	fmtFlags tree.FmtFlags,
+) tree.Statement {
+	for i, hint := range stmtHints {
+		if !hint.Enabled || hint.Err != nil {
+			continue
+		}
+		hd := hint.HintInjectionDonor
+		if hd == nil {
+			continue
+		}
+		if err := hd.Validate(ast, fmtFlags); err != nil {
+			log.Eventf(
+				ctx, "failed to validate hint injection donor from external statement hint %v: %v",
+				hintIDs[i], err,
+			)
+			// Do not return the error. Instead we'll simply execute the query
+			// without this hint.
+			continue
+		}
+		injectedAST, injected, err := hd.InjectHints(ast)
+		if err != nil {
+			log.Eventf(
+				ctx, "failed to inject hints from external statement hint %v: %v", hintIDs[i], err,
+			)
+			// Do not return the error. Instead we'll simply execute the query
+			// without this hint.
+			continue
+		}
+		if !injected {
+			continue
+		}
+		log.Eventf(ctx, "injected hints from external statement hint %v", hintIDs[i])
+		// Re-wrap the injected AST if the original was a wrapper statement.
+		if wrapperAST != nil {
+			switch e := wrapperAST.(type) {
+			case *tree.CopyTo:
+				copyTo := *e
+				copyTo.Statement = injectedAST
+				return &copyTo
+			case *tree.Explain:
+				explain := *e
+				explain.Statement = injectedAST
+				return &explain
+			case *tree.ExplainAnalyze:
+				explain := *e
+				explain.Statement = injectedAST
+				return &explain
+			case *tree.Prepare:
+				prepare := *e
+				prepare.Statement = injectedAST
+				return &prepare
+			}
+		}
+		return injectedAST
+	}
+	return nil
+}
+
 // Size returns an estimate of the memory usage of the Hint in bytes.
 func (hint *Hint) Size() int64 {
 	res := int64(unsafe.Sizeof(*hint))
