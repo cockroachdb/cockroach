@@ -138,7 +138,7 @@ func (s Statement) String() string {
 func (s *Statement) ReloadHintsIfStale(
 	ctx context.Context, fmtFlags tree.FmtFlags, statementHintsCache *hints.StatementHintsCache,
 ) bool {
-	var hints []hints.Hint
+	var stmtHints []hints.Hint
 	var hintIDs []int64
 	var hintsGeneration int64
 	if statementHintsCache != nil {
@@ -167,69 +167,20 @@ func (s *Statement) ReloadHintsIfStale(
 			ast = e.Statement
 			hintStmtFingerprint = tree.FormatStatementHideConstants(ast, fmtFlags)
 		}
-		hints, hintIDs = statementHintsCache.MaybeGetStatementHints(ctx, hintStmtFingerprint, fmtFlags)
+		stmtHints, hintIDs = statementHintsCache.MaybeGetStatementHints(ctx, hintStmtFingerprint, fmtFlags)
 	}
 	if slices.Equal(hintIDs, s.HintIDs) {
 		return false
 	}
-	s.Hints = hints
+	s.Hints = stmtHints
 	s.HintIDs = hintIDs
 	s.HintsGeneration = hintsGeneration
-	s.ASTWithInjectedHints = nil
 
 	log.Eventf(
 		ctx, "loaded %d external statement hints from the statement hints cache: %v",
 		len(s.Hints), s.HintIDs,
 	)
 
-	for i, hint := range s.Hints {
-		if !hint.Enabled || hint.Err != nil {
-			continue
-		}
-		if hd := hint.HintInjectionDonor; hd != nil && s.ASTWithInjectedHints == nil {
-			if err := hd.Validate(ast, fmtFlags); err != nil {
-				log.Eventf(
-					ctx, "failed to validate hint injection donor from external statement hint %v: %v",
-					s.HintIDs[i], err,
-				)
-				// Do not return the error. Instead we'll simply execute the query
-				// without this hint.
-				continue
-			}
-			injectedAST, injected, err := hd.InjectHints(ast)
-			if err != nil {
-				log.Eventf(
-					ctx, "failed to inject hints from external statement hint %v: %v", s.HintIDs[i], err,
-				)
-				// Do not return the error. Instead we'll simply execute the query
-				// without this hint.
-				continue
-			}
-			if injected {
-				log.Eventf(ctx, "injected hints from external statement hint %v", s.HintIDs[i])
-				// If we unwrapped the AST above, we need to re-wrap the rewritten AST here.
-				s.ASTWithInjectedHints = injectedAST
-				switch e := s.AST.(type) {
-				case *tree.CopyTo:
-					copyTo := *e
-					copyTo.Statement = injectedAST
-					s.ASTWithInjectedHints = &copyTo
-				case *tree.Explain:
-					explain := *e
-					explain.Statement = injectedAST
-					s.ASTWithInjectedHints = &explain
-				case *tree.ExplainAnalyze:
-					explain := *e
-					explain.Statement = injectedAST
-					s.ASTWithInjectedHints = &explain
-				case *tree.Prepare:
-					prepare := *e
-					prepare.Statement = injectedAST
-					s.ASTWithInjectedHints = &prepare
-				}
-				break
-			}
-		}
-	}
+	s.ASTWithInjectedHints = hints.TryInjectHints(ctx, s.Hints, s.HintIDs, ast, s.AST, fmtFlags)
 	return true
 }
