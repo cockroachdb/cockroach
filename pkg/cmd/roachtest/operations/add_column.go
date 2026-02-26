@@ -30,7 +30,7 @@ func (cl *cleanupAddedColumn) Cleanup(
 	defer conn.Close()
 
 	o.Status(fmt.Sprintf("dropping column %s", cl.column))
-	_, err := conn.ExecContext(ctx, fmt.Sprintf("ALTER TABLE %s.%s DROP COLUMN %s CASCADE", cl.db, cl.table, cl.column))
+	_, err := conn.ExecContext(ctx, fmt.Sprintf("ALTER TABLE %s.%s DROP COLUMN IF EXISTS %s CASCADE", cl.db, cl.table, cl.column))
 	if err != nil {
 		o.Fatal(err)
 	}
@@ -65,7 +65,6 @@ func runAddColumn(
 	if err != nil {
 		o.Fatal(err)
 	}
-
 	o.Status(fmt.Sprintf("column %s created", colName))
 
 	return &cleanupAddedColumn{

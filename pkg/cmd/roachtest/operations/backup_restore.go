@@ -37,7 +37,7 @@ func (cl *backupRestoreCleanup) Cleanup(
 	defer conn.Close()
 
 	o.Status(fmt.Sprintf("dropping newly created db %s", cl.db))
-	_, err := conn.ExecContext(ctx, fmt.Sprintf("DROP DATABASE %s CASCADE", cl.db))
+	_, err := conn.ExecContext(ctx, fmt.Sprintf("DROP DATABASE IF EXISTS %s CASCADE", cl.db))
 	if err != nil {
 		o.Fatal(err)
 	}
@@ -45,7 +45,12 @@ func (cl *backupRestoreCleanup) Cleanup(
 
 func runBackupRestore(
 	ctx context.Context, o operation.Operation, c cluster.Cluster, online bool, validate bool,
-) registry.OperationCleanup {
+) (cleanup registry.OperationCleanup) {
+	defer func() {
+		if r := recover(); r != nil {
+			o.Errorf("error during backup restore: %v", r)
+		}
+	}()
 	// This operation looks for the district table in a database named cct_tpcc or tpcc.
 	rng, _ := randutil.NewPseudoRand()
 	dbWhitelist := []string{"cct_tpcc", "tpcc"}
@@ -115,6 +120,11 @@ outer:
 
 	restoreDBName := fmt.Sprintf("backup_restore_op_%d", rng.Int63())
 
+	// Assign cleanup handler early, before RESTORE creates the database.
+	// The cleanup uses DROP DATABASE IF EXISTS, so it's safe even if the
+	// RESTORE fails and the database was never created.
+	cleanup = &backupRestoreCleanup{db: restoreDBName}
+
 	onlineStr := "online"
 	if !online {
 		onlineStr = "offline"
@@ -132,16 +142,40 @@ outer:
 		var id, tables, approxRows, approxBytes int64
 		var downloadJobId catpb.JobID
 		o.Status("beginning online restore")
-		res := conn.QueryRowContext(ctx, fmt.Sprintf("RESTORE DATABASE %s FROM LATEST IN '%s' WITH OPTIONS (new_db_name = '%s', EXPERIMENTAL DEFERRED COPY)", dbName, bucket, restoreDBName))
 
-		err := res.Scan(&id, &tables, &approxRows, &approxBytes, &downloadJobId)
-		if err != nil {
-			o.Fatal(err)
+		type scanResult struct {
+			id, tables, approxRows, approxBytes int64
+			downloadJobId                       catpb.JobID
+			err                                 error
+		}
+		resCh := make(chan scanResult, 1)
+		go func() {
+			var r scanResult
+			row := conn.QueryRowContext(ctx, fmt.Sprintf("RESTORE DATABASE %s FROM LATEST IN '%s' WITH OPTIONS (new_db_name = '%s', EXPERIMENTAL DEFERRED COPY)", dbName, bucket, restoreDBName))
+			r.err = row.Scan(&r.id, &r.tables, &r.approxRows, &r.approxBytes, &r.downloadJobId)
+			resCh <- r
+		}()
+
+		var scanErr error
+		select {
+		case r := <-resCh:
+			id, tables, approxRows, approxBytes, downloadJobId = r.id, r.tables, r.approxRows, r.approxBytes, r.downloadJobId
+			scanErr = r.err
+			if scanErr != nil {
+				o.Fatal(scanErr)
+			}
+		case <-ctx.Done():
+			o.Fatal(ctx.Err())
 		}
 
-		err = tests.WaitForSucceeded(ctx, conn, downloadJobId, 8760*time.Hour /* 1 year - test specs define their own timeouts */)
-		if err != nil {
-			o.Fatal(err)
+		// Suppress unused variable warnings for id, tables, approxRows, approxBytes.
+		_, _, _, _ = id, tables, approxRows, approxBytes
+
+		if scanErr == nil {
+			err = tests.WaitForSucceeded(ctx, conn, downloadJobId, 8760*time.Hour /* 1 year - test specs define their own timeouts */)
+			if err != nil {
+				o.Fatal(err)
+			}
 		}
 	}
 	o.Status(fmt.Sprintf("completed restore in %v", timeutil.Since(startTime)))
@@ -164,7 +198,7 @@ outer:
 		}
 	}
 
-	return &backupRestoreCleanup{db: restoreDBName}
+	return cleanup
 }
 
 func runBackupRestoreFn(

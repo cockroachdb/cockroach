@@ -34,7 +34,7 @@ func (cl *cleanupAddedIndex) Cleanup(
 	defer conn.Close()
 
 	o.Status(fmt.Sprintf("dropping index %s", cl.index))
-	_, err := conn.ExecContext(ctx, fmt.Sprintf("DROP INDEX %s.%s@%s", cl.db, cl.table, cl.index))
+	_, err := conn.ExecContext(ctx, fmt.Sprintf("DROP INDEX IF EXISTS %s.%s@%s", cl.db, cl.table, cl.index))
 	if err != nil {
 		o.Fatal(err)
 	}
@@ -140,7 +140,6 @@ WHERE
 	if err != nil {
 		o.Fatal(err)
 	}
-
 	o.Status(fmt.Sprintf("index %s created", indexName))
 
 	return &cleanupAddedIndex{

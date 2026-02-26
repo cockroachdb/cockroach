@@ -305,17 +305,6 @@ func (r *opsRunner) runOperation(
 		workerId:        workerIdx,
 	}
 
-	defer func() {
-		if rc := recover(); rc != nil {
-			stack := debugutil.Stack()
-			// Include recorded failures (from o.Fatal) before the panic+stack entry
-			// so the actual error message surfaces in Datadog events.
-			failures := append(op.Failures(), fmt.Errorf("panic: %v\n\n%s", rc, stack))
-			emitter.EmitCompleted(resultPanicked, failures)
-			r.logger.Printf("recovered from panic: %v\n%s", rc, stack)
-		}
-	}()
-
 	cSpec := spec.ClusterSpec{NodeCount: r.nodeCount}
 	c := &dynamicClusterImpl{
 		&clusterImpl{
@@ -367,6 +356,57 @@ func (r *opsRunner) runOperation(
 	emitter.EmitStarted()
 	op.Status(fmt.Sprintf("running operation %s with run id %d", op.spec.Name, operationRunID))
 	var cleanup registry.OperationCleanup
+	var pendingCleanupIncremented bool
+
+	defer func() {
+		// Handle panic if it occurred during operation execution.
+		if rc := recover(); rc != nil {
+			stack := debugutil.Stack()
+			// Include recorded failures (from o.Fatal) before the panic+stack entry
+			// so the actual error message surfaces in Datadog events.
+			failures := append(op.Failures(), fmt.Errorf("panic: %v\n\n%s", rc, stack))
+			emitter.EmitCompleted(resultPanicked, failures)
+			r.logger.Printf("recovered from panic: %v\n%s", rc, stack)
+		}
+
+		// If no cleanup handler was returned, nothing to clean up.
+		if cleanup == nil {
+			if !op.Failed() {
+				op.Status("operation ran successfully")
+				emitter.EmitCleanupCompleted(cleanupResultSkipped, nil)
+			}
+			return
+		}
+
+		// Run cleanup with a fresh context (independent of operation context).
+		op.Status("running cleanup")
+
+		// Clear run-phase failures so that op.Failed() after cleanup only
+		// reflects whether cleanup itself failed. The run-phase failure has
+		// already been logged and emitted above.
+		func() {
+			op.mu.Lock()
+			defer op.mu.Unlock()
+			op.mu.failures = nil
+		}()
+
+		if pendingCleanupIncremented {
+			r.metrics.pendingCleanups.WithLabelValues(opName).Dec()
+		}
+		cleanupCtx, cleanupCancel := context.WithTimeout(context.Background(), opSpec.Timeout)
+		defer cleanupCancel()
+		cleanup.Cleanup(cleanupCtx, op, c)
+
+		cleanupResult := cleanupResultSuccess
+		var cleanupFailures []error
+		if op.Failed() {
+			cleanupResult = cleanupResultFailed
+			cleanupFailures = op.Failures()
+			op.Status("operation cleanup failed")
+		}
+		emitter.EmitCleanupCompleted(cleanupResult, cleanupFailures)
+	}()
+
 	func() {
 		ctx, cancel := context.WithTimeout(ctx, opSpec.Timeout)
 		defer cancel()
@@ -374,57 +414,38 @@ func (r *opsRunner) runOperation(
 		cleanup = opSpec.Run(ctx, op, c)
 	}()
 
-	if op.Failed() {
+	opFailed := op.Failed()
+	if opFailed {
 		op.Status("operation failed")
 		failures := op.Failures()
 		emitter.EmitCompleted(resultFailed, failures)
+		// Don't return early — defer will run cleanup if a cleanup handler
+		// was returned by the operation.
 		return failures[0]
 	}
 
 	emitter.EmitCompleted(resultSuccess, nil)
 
 	if cleanup == nil {
-		op.Status("operation ran successfully")
-		emitter.EmitCleanupCompleted(cleanupResultSkipped, nil)
+		// No cleanup needed; the defer will emit cleanupResultSkipped.
 		return nil
 	}
 
+	// Wait before cleanup if operation succeeded.
 	waitBeforeCleanup := roachtestflags.WaitBeforeCleanup
 	if opSpec.WaitBeforeCleanup != 0 {
 		waitBeforeCleanup = opSpec.WaitBeforeCleanup
 	}
 
 	r.metrics.pendingCleanups.WithLabelValues(opName).Inc()
+	pendingCleanupIncremented = true
 	op.Status(fmt.Sprintf("operation ran successfully; waiting %s before cleanup", waitBeforeCleanup))
 	select {
 	case <-time.After(waitBeforeCleanup):
 	case <-ctx.Done():
-		r.metrics.pendingCleanups.WithLabelValues(opName).Dec()
-		op.Status("context canceled during wait before cleanup")
-		return ctx.Err()
+		op.Status("context canceled during wait; proceeding to cleanup immediately")
 	}
 
-	// Cleanup phase.
-	r.metrics.pendingCleanups.WithLabelValues(opName).Dec()
-	op.Status("running cleanup")
-	func() {
-		ctx, cancel := context.WithTimeout(context.Background(), opSpec.Timeout)
-		defer cancel()
-
-		cleanup.Cleanup(ctx, op, c)
-	}()
-
-	cleanupResult := cleanupResultSuccess
-	var cleanupFailures []error
-	if op.Failed() {
-		cleanupResult = cleanupResultFailed
-		cleanupFailures = op.Failures()
-	}
-	emitter.EmitCleanupCompleted(cleanupResult, cleanupFailures)
-
-	if op.Failed() {
-		op.Status("operation cleanup failed")
-		return op.Failures()[0]
-	}
+	// Function ends, defer runs and executes cleanup.
 	return nil
 }

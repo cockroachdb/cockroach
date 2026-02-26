@@ -1375,7 +1375,21 @@ func (p *Provider) copyLabelsToNewVMs(l *logger.Logger, sourceVM vm.VM, newVMs v
 		}
 		labels[key] = value
 	}
-	return p.AddLabels(l, newVMs, labels)
+	if err := p.AddLabels(l, newVMs, labels); err != nil {
+		return err
+	}
+
+	// Update the VM objects in memory to match the AWS tags we just added.
+	// This ensures that when saveCluster() is called, the cache file has the correct labels.
+	for i := range newVMs {
+		if newVMs[i].Labels == nil {
+			newVMs[i].Labels = make(map[string]string)
+		}
+		for key, value := range labels {
+			newVMs[i].Labels[key] = value
+		}
+	}
+	return nil
 }
 
 // Shrink removes VMs from a managed cluster.
