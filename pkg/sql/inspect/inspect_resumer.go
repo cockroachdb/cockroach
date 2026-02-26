@@ -8,6 +8,7 @@ package inspect
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptpb"
@@ -49,7 +50,7 @@ func (c *inspectResumer) Resume(ctx context.Context, execCtx interface{}) error 
 		return nil
 	}
 
-	pkSpans, err := c.getPrimaryIndexSpans(ctx, execCfg)
+	allSpans, err := c.getSpans(ctx, execCfg)
 	if err != nil {
 		return err
 	}
@@ -70,7 +71,7 @@ func (c *inspectResumer) Resume(ctx context.Context, execCtx interface{}) error 
 	}
 	defer cleanupProgress()
 
-	remainingSpans := c.filterCompletedSpans(pkSpans, completedSpans)
+	remainingSpans := c.filterCompletedSpans(allSpans, completedSpans)
 
 	if len(remainingSpans) > 0 {
 		plan, planCtx, err := c.planInspectProcessors(ctx, jobExecCtx, remainingSpans)
@@ -140,9 +141,9 @@ func (c *inspectResumer) maybeRunAfterProtectedTimestampHook(execCfg *sql.Execut
 	return execCfg.InspectTestingKnobs.OnInspectAfterProtectedTimestamp()
 }
 
-// getPrimaryIndexSpans returns the primary index spans for all tables involved in
-// the INSPECT job's checks.
-func (c *inspectResumer) getPrimaryIndexSpans(
+// getSpans returns the spans for all tables involved in the INSPECT
+// job's checks.
+func (c *inspectResumer) getSpans(
 	ctx context.Context, execCfg *sql.ExecutorConfig,
 ) ([]roachpb.Span, error) {
 	details := c.job.Details().(jobspb.InspectDetails)
@@ -154,18 +155,44 @@ func (c *inspectResumer) getPrimaryIndexSpans(
 		uniqueTableIDs[details.Checks[i].TableID] = struct{}{}
 	}
 
-	spans := make([]roachpb.Span, 0, len(uniqueTableIDs))
+	// Collect the table descriptors.
+	tableDescs := make([]catalog.TableDescriptor, 0, len(uniqueTableIDs))
 	err := execCfg.InternalDB.DescsTxn(ctx, func(ctx context.Context, txn descs.Txn) error {
 		for tableID := range uniqueTableIDs {
 			desc, err := txn.Descriptors().ByIDWithLeased(txn.KV()).WithoutNonPublic().Get().Table(ctx, tableID)
 			if err != nil {
 				return err
 			}
-			spans = append(spans, desc.PrimaryIndexSpan(execCfg.Codec))
+			tableDescs = append(tableDescs, desc)
 		}
 		return nil
 	})
-	return spans, err
+	if err != nil {
+		return nil, err
+	}
+
+	// Get the primary index spans. For RBR tables, partition them to region-specific spans.
+	spans := make([]roachpb.Span, 0, len(uniqueTableIDs))
+	for _, desc := range tableDescs {
+		if !desc.IsLocalityRegionalByRow() ||
+			c.job.Payload().CreationClusterVersion.Less(clusterversion.V26_2_Start.Version()) {
+			spans = append(spans, desc.PrimaryIndexSpan(execCfg.Codec))
+		} else {
+			regions, err := getRegionsForTable(ctx, desc)
+			if err != nil {
+				return nil, err
+			}
+			for _, region := range regions {
+				regionSpan, err := spanForFullRegion(&execCfg.DistSQLSrv.ServerConfig, desc, region)
+				if err != nil {
+					return nil, err
+				}
+				spans = append(spans, regionSpan)
+			}
+		}
+	}
+
+	return spans, nil
 }
 
 // planInspectProcessors constructs the physical plan for the INSPECT job by
