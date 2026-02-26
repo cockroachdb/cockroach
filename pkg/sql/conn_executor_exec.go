@@ -3435,6 +3435,10 @@ func (ex *connExecutor) makeExecPlan(
 		ex.metrics.EngineMetrics.FullTableOrIndexScanCount.Inc(1, ex.sessionData().Database, ex.sessionData().ApplicationName)
 	}
 
+	if flags.IsSet(planFlagUsesRLS) {
+		ex.metrics.EngineMetrics.RLSPoliciesAppliedCount.Inc(1)
+	}
+
 	// TODO(knz): Remove this accounting if/when savepoint rollbacks
 	// support rolling back over DDL.
 	if flags.IsSet(planFlagIsDDL) {

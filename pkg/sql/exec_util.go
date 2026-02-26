@@ -914,6 +914,13 @@ var (
 		Unit:        metric.Unit_COUNT,
 		Category:    metric.Metadata_SQL,
 	}
+	MetaRLSPoliciesApplied = metric.Metadata{
+		Name:        "sql.rls.policies_applied.count",
+		Help:        "Number of SQL statements where row-level security policies were applied",
+		Measurement: "SQL Statements",
+		Unit:        metric.Unit_COUNT,
+		Category:    metric.Metadata_SQL,
+	}
 	MetaTxnAbort = metric.Metadata{
 		Name:        "sql.txn.abort.count",
 		Help:        "Number of SQL transaction abort errors",

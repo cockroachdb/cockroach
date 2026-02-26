@@ -90,6 +90,9 @@ const (
 	// PlanFlagContainsUpsert is set if at least one UPSERT stmt is found in the
 	// whole plan.
 	PlanFlagContainsUpsert
+
+	// PlanFlagUsesRLS is set if the plan applies row-level security policies.
+	PlanFlagUsesRLS
 )
 
 // IsSet returns true if the receiver has all of the given flags set.

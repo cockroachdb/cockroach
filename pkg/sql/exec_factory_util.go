@@ -120,6 +120,9 @@ func constructPlan(
 	if flags.IsSet(exec.PlanFlagContainsUpsert) {
 		res.flags.Set(planFlagContainsUpsert)
 	}
+	if flags.IsSet(exec.PlanFlagUsesRLS) {
+		res.flags.Set(planFlagUsesRLS)
+	}
 
 	return res, nil
 }

@@ -2542,6 +2542,8 @@ sql_restart_savepoint_rollback_started_count: sql.restart_savepoint.rollback.sta
 sql_restart_savepoint_rollback_started_count_internal: sql.restart_savepoint.rollback.started.internal
 sql_restart_savepoint_started_count: sql.restart_savepoint.started.count
 sql_restart_savepoint_started_count_internal: sql.restart_savepoint.started.internal
+sql_rls_policies_applied_count: sql.rls.policies_applied.count
+sql_rls_policies_applied_count_internal: sql.rls.policies_applied.count.internal
 sql_routine_delete_count: sql.routine.delete.count
 sql_routine_delete_count_internal: sql.routine.delete.count.internal
 sql_routine_delete_started_count: sql.routine.delete.started.count

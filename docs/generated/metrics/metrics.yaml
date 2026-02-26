@@ -1417,6 +1417,22 @@ layers:
       unit: COUNT
       aggregation: AVG
       derivative: NON_NEGATIVE_DERIVATIVE
+    - name: sql.rls.policies_applied.count
+      exported_name: sql_rls_policies_applied_count
+      description: Number of SQL statements where row-level security policies were applied
+      y_axis_label: SQL Statements
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+    - name: sql.rls.policies_applied.count.internal
+      exported_name: sql_rls_policies_applied_count_internal
+      description: Number of SQL statements where row-level security policies were applied (internal queries)
+      y_axis_label: SQL Internal Statements
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
     - name: sql.routine.delete.count
       exported_name: sql_routine_delete_count
       labeled_name: 'sql.count{query_type: routine_delete}'

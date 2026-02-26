@@ -102,6 +102,10 @@ type EngineMetrics struct {
 
 	// QueryWithStatementHintsCount counts queries executed with external statement hints.
 	QueryWithStatementHintsCount *metric.Counter
+
+	// RLSPoliciesAppliedCount counts the number of SQL statements where
+	// row-level security policies were applied during query planning.
+	RLSPoliciesAppliedCount *metric.Counter
 }
 
 // EngineMetrics implements the metric.Struct interface.
