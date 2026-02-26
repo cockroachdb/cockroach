@@ -1799,7 +1799,6 @@ func createImportingDescriptors(
 	return p.ExecCfg().InternalDB.DescsTxn(ctx, func(
 		ctx context.Context, txn descs.Txn,
 	) error {
-
 		descsCol := txn.Descriptors()
 		includePublicSchemaCreatePriv := sqlclustersettings.PublicSchemaCreatePrivilegeEnabled.Get(&p.ExecCfg().Settings.SV)
 		if err := ingesting.WriteDescriptors(
@@ -2029,6 +2028,60 @@ func createImportingDescriptors(
 	})
 }
 
+// getUsersToPreserve finds the intersection of usernames which have privileges on, or are an owner
+// of, a descriptor in backupDescs, and currently exist in the restoring cluster.
+// It returns this intersection as a set, and is intended for use with `RESTORE ... WITH GRANTS`.
+func getUsersToPreserve(
+	ctx context.Context, txn isql.Txn, backupDescs []catalog.Descriptor,
+) (map[username.SQLUsername]struct{}, error) {
+	preserveUsers := make(map[username.SQLUsername]struct{})
+
+	// Collect and dedup users which have privileges on our descriptors.
+	for _, backupDesc := range backupDescs {
+		backupDescPrivs := backupDesc.GetPrivileges()
+
+		// Include owner.
+		owner := backupDescPrivs.Owner()
+		if !owner.IsReserved() && !owner.IsAdminRole() && !owner.IsRootUser() {
+			preserveUsers[owner] = struct{}{}
+		}
+
+		// Include users with explicit privileges.
+		for _, userPrivs := range backupDescPrivs.Users {
+			sqlUser := userPrivs.User()
+			if sqlUser.IsReserved() || sqlUser.IsAdminRole() || sqlUser.IsRootUser() {
+				continue
+			}
+			preserveUsers[sqlUser] = struct{}{}
+		}
+	}
+
+	// Query for the intersection of our backed up users and existing users.
+	allBackedUpUsers := make([]string, 0, len(preserveUsers))
+	for username := range preserveUsers {
+		allBackedUpUsers = append(allBackedUpUsers, username.SQLIdentifier())
+	}
+	rows, err := txn.QueryBufferedEx(ctx, "restore-with-grants-select-existing-users",
+		txn.KV(), sessiondata.NoSessionDataOverride,
+		"SELECT username FROM system.users WHERE username = ANY($1)",
+		allBackedUpUsers,
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	// Collect intersection into our final output set.
+	clear(preserveUsers)
+	for _, row := range rows {
+		username := username.MakeSQLUsernameFromPreNormalizedString(
+			string(tree.MustBeDString(row[0])),
+		)
+		preserveUsers[username] = struct{}{}
+	}
+
+	return preserveUsers, nil
+}
+
 // protectRestoreTargets issues a protected timestamp over the targets we seek
 // to restore and writes the pts record to the job record. If a pts already
 // exists in the job record, due to previous call of this function, this noops.
@@ -2186,7 +2239,7 @@ func (r *restoreResumer) doResume(ctx context.Context, execCtx interface{}) erro
 	defer mem.Close(ctx)
 	// Note that we ignore memSize because the memory account is closed in a
 	// defer anyway.
-	backupManifests, latestBackupManifest, sqlDescs, _, err := loadBackupSQLDescs(
+	backupManifests, latestBackupManifest, backupDescs, _, err := loadBackupSQLDescs(
 		ctx, &mem, p, details, details.Encryption, &kmsEnv,
 	)
 	if err != nil {
@@ -2211,10 +2264,10 @@ func (r *restoreResumer) doResume(ctx context.Context, execCtx interface{}) erro
 	if err != nil {
 		return err
 	}
-	if err := createImportingDescriptors(ctx, p, sqlDescs, r); err != nil {
+	if err := createImportingDescriptors(ctx, p, backupDescs, r); err != nil {
 		return err
 	}
-	preData, preValidateData, mainData, err := createRestoreFlows(ctx, r, backupCodec, sqlDescs)
+	preData, preValidateData, mainData, err := createRestoreFlows(ctx, r, backupCodec, backupDescs)
 	if err != nil {
 		return err
 	}
@@ -2267,7 +2320,8 @@ func (r *restoreResumer) doResume(ctx context.Context, execCtx interface{}) erro
 		// the first place, as a special case.
 		publishDescriptors := func(ctx context.Context, txn descs.Txn) error {
 			return r.publishDescriptors(
-				ctx, p.ExecCfg().JobRegistry, p.ExecCfg().JobsKnobs(), txn, p.User(), details, sqlDescs, p.ExecCfg().NodeInfo.LogicalClusterID(),
+				ctx, p.ExecCfg().JobRegistry, p.ExecCfg().JobsKnobs(),
+				txn, p.User(), details, backupDescs, p.ExecCfg().NodeInfo.LogicalClusterID(),
 			)
 		}
 		if err := r.execCfg.InternalDB.DescsTxn(ctx, publishDescriptors); err != nil {
@@ -2431,7 +2485,7 @@ func (r *restoreResumer) doResume(ctx context.Context, execCtx interface{}) erro
 	publishDescriptors := func(ctx context.Context, txn descs.Txn) (err error) {
 		return r.publishDescriptors(
 			ctx, p.ExecCfg().JobRegistry, p.ExecCfg().JobsKnobs(), txn, p.User(),
-			details, sqlDescs, p.ExecCfg().NodeInfo.LogicalClusterID(),
+			details, backupDescs, p.ExecCfg().NodeInfo.LogicalClusterID(),
 		)
 	}
 	if err := r.execCfg.InternalDB.DescsTxn(ctx, publishDescriptors); err != nil {
@@ -2940,7 +2994,7 @@ func (r *restoreResumer) publishDescriptors(
 	txn descs.Txn,
 	user username.SQLUsername,
 	details jobspb.RestoreDetails,
-	sqlDesc []catalog.Descriptor,
+	backupDescs []catalog.Descriptor,
 	clusterID uuid.UUID,
 ) (err error) {
 	if details.DescriptorsPublished {
@@ -2970,7 +3024,9 @@ func (r *restoreResumer) publishDescriptors(
 	}
 
 	// Add type descriptors referenced by schema change targets.
-	all, err = addReferencedTypeDescriptorsFromSchemaChangeState(ctx, txn, all, sqlDesc, details.DescriptorRewrites)
+	all, err = addReferencedTypeDescriptorsFromSchemaChangeState(
+		ctx, txn, all, backupDescs, details.DescriptorRewrites,
+	)
 	if err != nil {
 		return err
 	}
@@ -3087,9 +3143,58 @@ func (r *restoreResumer) publishDescriptors(
 		fn := all.LookupDescriptor(details.FunctionDescs[i].GetID()).(catalog.FunctionDescriptor)
 		newFunctions = append(newFunctions, fn.FuncDesc())
 	}
+
+	// Build helper maps for restore with grants.
+	//
+	// Note that this feature could be implemented inside createImportingDescriptors,
+	// however, if we intend to extend the feature to restore users as well, we wouldn't be able
+	// to implement it in createImportingDescriptors, as we need the temp system db for that
+	// functionality, so keeping this logic here gives us a much more simple foundation for future
+	// extensions.
+	var usersToPreserve map[username.SQLUsername]struct{}
+	var newToOld map[descpb.ID]catalog.Descriptor
+	restoreGrants := shouldRestoreGrants(r.job.Payload().CreationClusterVersion, details)
+	if restoreGrants {
+		usersToPreserve, err = getUsersToPreserve(ctx, txn, backupDescs)
+		if err != nil {
+			return errors.Wrap(err, "finding users to preserve for restore with grants")
+		}
+		newToOld = make(map[descpb.ID]catalog.Descriptor)
+		for _, desc := range backupDescs {
+			oldID := desc.GetID()
+			rewrite, ok := details.DescriptorRewrites[oldID]
+			if !ok {
+				return errors.AssertionFailedf("backup descriptor ID not in descriptor rewrite map")
+			}
+			newToOld[rewrite.ID] = desc
+		}
+	}
+
 	b := txn.KV().NewBatch()
 	if err := all.ForEachDescriptor(func(desc catalog.Descriptor) error {
 		d := desc.(catalog.MutableDescriptor)
+
+		if restoreGrants {
+			oldDesc, ok := newToOld[d.GetID()]
+			if !ok {
+				return errors.AssertionFailedf("new descriptor ID not in new to old ID map")
+			}
+			updatedPrivileges := d.GetPrivileges()
+
+			for _, userPrivs := range oldDesc.GetPrivileges().Users {
+				if _, ok := usersToPreserve[userPrivs.User()]; ok {
+					userEntry := updatedPrivileges.FindOrCreateUser(userPrivs.User())
+					userEntry.Privileges = userPrivs.Privileges
+					userEntry.WithGrantOption = userPrivs.WithGrantOption
+				}
+			}
+
+			originalOwner := oldDesc.GetPrivileges().Owner()
+			if _, ok := usersToPreserve[originalOwner]; ok {
+				updatedPrivileges.SetOwner(originalOwner)
+			}
+		}
+
 		if details.OnlineImpl() && epochBasedInProgressImport(desc) {
 			log.Dev.Infof(ctx, "table %q (%d) with in-progress IMPORT remaining offline", desc.GetName(), desc.GetID())
 		} else {
@@ -3137,6 +3242,15 @@ func (r *restoreResumer) publishDescriptors(
 			"updating job details after publishing tables")
 	}
 	return nil
+}
+
+func shouldRestoreGrants(
+	jobCreationClusterVersion roachpb.Version, details jobspb.RestoreDetails,
+) bool {
+	if jobCreationClusterVersion.AtLeast(clusterversion.V26_1.Version()) {
+		return details.Grants
+	}
+	return false
 }
 
 // prefetchDescriptors calculates the set of descriptors needed by looking

@@ -3132,6 +3132,7 @@ restore_options ::=
 	| 'EXPERIMENTAL' 'DEFERRED' 'COPY'
 	| 'EXPERIMENTAL' 'COPY'
 	| 'REMOVE_REGIONS'
+	| 'GRANTS'
 
 scrub_option_list ::=
 	( scrub_option ) ( ( ',' scrub_option ) )*
