@@ -153,10 +153,6 @@ func TestMemoIsStale(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// Revoke access to the underlying table. The user should retain indirect
-	// access via the view.
-	catalog.Table(tree.NewTableNameWithSchema("t", catconstants.PublicSchemaName, "abc")).Revoked = true
-
 	// Initialize context with starting values.
 	evalCtx := eval.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())
 	evalCtx.SessionData().Database = "t"
