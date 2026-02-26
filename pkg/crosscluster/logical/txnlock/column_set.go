@@ -17,13 +17,13 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-func uniqueIndexMixin(tableID descpb.ID, ucID descpb.ConstraintID) (uint64, error) {
+func constraintMixin(tableID descpb.ID, ucID descpb.ConstraintID) (uint64, error) {
 	h := fnv.New64a()
 	var buf [8]byte
 	binary.BigEndian.PutUint32(buf[:4], uint32(tableID))
 	binary.BigEndian.PutUint32(buf[4:], uint32(ucID))
 	if _, err := h.Write(buf[:]); err != nil {
-		return 0, errors.Wrap(err, "hashing unique index mixin")
+		return 0, errors.Wrap(err, "hashing constraint mixin")
 	}
 	return h.Sum64(), nil
 }
@@ -89,6 +89,29 @@ func (c *columnSet) equal(
 	}
 	for _, idx := range c.columns {
 		cmp, err := rowA[idx].Compare(ctx, evalCtx, rowB[idx])
+		if err != nil {
+			return false, errors.Wrap(err, "comparing datums for lock derivation")
+		}
+		if cmp != 0 {
+			return false, nil
+		}
+	}
+	return true, nil
+}
+
+// crossTableEqual is like columnSet.equal but compares columns from two different column sets
+// in the context of foreign key constraints.
+func crossTableEqual(
+	ctx context.Context, evalCtx *eval.Context, colA, colB columnSet, rowA, rowB tree.Datums,
+) (bool, error) {
+	if len(colA.columns) != len(colB.columns) {
+		return false, errors.New("mismatched column count in cross-table equal")
+	}
+	if colA.null(rowA) || colB.null(rowB) {
+		return false, nil
+	}
+	for i := range colA.columns {
+		cmp, err := rowA[colA.columns[i]].Compare(ctx, evalCtx, rowB[colB.columns[i]])
 		if err != nil {
 			return false, errors.Wrap(err, "comparing datums for lock derivation")
 		}
