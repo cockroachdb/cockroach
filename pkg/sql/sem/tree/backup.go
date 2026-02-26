@@ -128,6 +128,7 @@ type RestoreOptions struct {
 	ExperimentalOnline               bool
 	ExperimentalCopy                 bool
 	RemoveRegions                    bool
+	Grants                           bool
 }
 
 func (opts *RestoreOptions) OnlineImpl() bool {
