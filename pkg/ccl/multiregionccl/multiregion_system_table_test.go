@@ -67,6 +67,14 @@ func TestMrSystemDatabase(t *testing.T) {
 
 	tDB := sqlutils.MakeSQLRunner(tenantSQL)
 
+	// Disable automatic stats collection to prevent a race condition during the
+	// multi-region system database conversion. The conversion changes the
+	// crdb_region column type from bytes to the crdb_internal_region enum and
+	// deletes old stats, but automatic stats collection can re-insert stats with
+	// the old column type before the async refresh completes, causing
+	// "unsupported comparison: bytes to crdb_internal_region" errors.
+	tDB.Exec(t, `SET CLUSTER SETTING sql.stats.automatic_collection.enabled = false`)
+
 	// Generate stats for system.sqlinstances. See the "QueryByEnum" test for
 	// details.
 	tDB.Exec(t, `ANALYZE system.sqlliveness;`)
@@ -85,6 +93,7 @@ func TestMrSystemDatabase(t *testing.T) {
 
 	sDB := sqlutils.MakeSQLRunner(systemSQL)
 
+	sDB.Exec(t, `SET CLUSTER SETTING sql.stats.automatic_collection.enabled = false`)
 	sDB.Exec(t, `ANALYZE system.sqlliveness;`)
 	sDB.Exec(t, `SET CLUSTER SETTING sql.multiregion.system_database_multiregion.enabled = true`)
 	sDB.Exec(t, `ALTER DATABASE system SET PRIMARY REGION "us-east1"`)
