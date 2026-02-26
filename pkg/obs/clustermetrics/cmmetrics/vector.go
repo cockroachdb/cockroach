@@ -14,6 +14,7 @@ package cmmetrics
 
 import (
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	prometheusgo "github.com/prometheus/client_model/go"
 )
@@ -48,6 +49,10 @@ type GaugeVec struct {
 	*metric.GaugeVec
 	metric.IsNonExportableMetric
 	IsClusterMetric
+	mu struct {
+		syncutil.Mutex
+		deleted []map[string]string
+	}
 }
 
 // NewGaugeVec creates a new GaugeVec with the given metadata and label
@@ -78,6 +83,37 @@ func (v *GaugeVec) Reset() {
 // Inspect passes the GaugeVec itself (not the embedded metric.GaugeVec).
 func (v *GaugeVec) Inspect(f func(interface{})) { f(v) }
 
+// Delete removes a child from the underlying prometheus vec and queues
+// the label set for deletion from the store on the next flush.
+func (v *GaugeVec) Delete(labels map[string]string) {
+	v.GaugeVec.Delete(labels)
+	v.mu.Lock()
+	defer v.mu.Unlock()
+	v.mu.deleted = append(v.mu.deleted, labels)
+}
+
+// CollectDeleted returns snapshots of deleted children and clears
+// the pending list (drain semantics).
+func (v *GaugeVec) CollectDeleted() []WritableMetric {
+	v.mu.Lock()
+	defer v.mu.Unlock()
+	if len(v.mu.deleted) == 0 {
+		return nil
+	}
+	result := make([]WritableMetric, len(v.mu.deleted))
+	for i, labels := range v.mu.deleted {
+		result[i] = &metricSnapshot{
+			VecChildSnapshot: &metric.VecChildSnapshot{
+				Metadata: v.GaugeVec.Metadata,
+				Labels:   labels,
+			},
+			metricType: prometheusgo.MetricType_GAUGE.Enum(),
+		}
+	}
+	v.mu.deleted = nil
+	return result
+}
+
 // CounterVec wraps metric.CounterVec for the cluster metrics writer.
 // All children present at flush time are written; Reset clears all
 // children so only the delta since the last flush is emitted.
@@ -85,6 +121,10 @@ type CounterVec struct {
 	*metric.CounterVec
 	metric.IsNonExportableMetric
 	IsClusterMetric
+	mu struct {
+		syncutil.Mutex
+		deleted []map[string]string
+	}
 }
 
 // NewCounterVec creates a new CounterVec with the given metadata and
@@ -117,6 +157,37 @@ func (v *CounterVec) Reset() {
 // Inspect passes the CounterVec itself (not the embedded metric.CounterVec).
 func (v *CounterVec) Inspect(f func(interface{})) { f(v) }
 
+// Delete removes a child from the underlying prometheus vec and queues
+// the label set for deletion from the store on the next flush.
+func (v *CounterVec) Delete(labels map[string]string) {
+	v.CounterVec.Delete(labels)
+	v.mu.Lock()
+	defer v.mu.Unlock()
+	v.mu.deleted = append(v.mu.deleted, labels)
+}
+
+// CollectDeleted returns snapshots of deleted children and clears
+// the pending list (drain semantics).
+func (v *CounterVec) CollectDeleted() []WritableMetric {
+	v.mu.Lock()
+	defer v.mu.Unlock()
+	if len(v.mu.deleted) == 0 {
+		return nil
+	}
+	result := make([]WritableMetric, len(v.mu.deleted))
+	for i, labels := range v.mu.deleted {
+		result[i] = &metricSnapshot{
+			VecChildSnapshot: &metric.VecChildSnapshot{
+				Metadata: v.CounterVec.Metadata,
+				Labels:   labels,
+			},
+			metricType: prometheusgo.MetricType_COUNTER.Enum(),
+		}
+	}
+	v.mu.deleted = nil
+	return result
+}
+
 // WriteStopwatchVec wraps metric.GaugeVec for labeled stopwatch
 // metrics. Each child records a unix-second timestamp set via
 // SetStartTime. All children present at flush time are written;
@@ -127,6 +198,10 @@ type WriteStopwatchVec struct {
 	metric.IsNonExportableMetric
 	IsClusterMetric
 	timeSource timeutil.TimeSource
+	mu         struct {
+		syncutil.Mutex
+		deleted []map[string]string
+	}
 }
 
 // NewWriteStopwatchVec creates a new WriteStopwatchVec with the
@@ -165,3 +240,35 @@ func (v *WriteStopwatchVec) Reset() {
 
 // Inspect passes the WriteStopwatchVec itself.
 func (v *WriteStopwatchVec) Inspect(f func(interface{})) { f(v) }
+
+// Delete removes a child from the underlying prometheus vec and queues
+// the label set for deletion from the store on the next flush.
+func (v *WriteStopwatchVec) Delete(labels map[string]string) {
+	v.GaugeVec.Delete(labels)
+	v.mu.Lock()
+	defer v.mu.Unlock()
+	v.mu.deleted = append(v.mu.deleted, labels)
+}
+
+// CollectDeleted returns snapshots of deleted children and clears
+// the pending list (drain semantics).
+func (v *WriteStopwatchVec) CollectDeleted() []WritableMetric {
+	v.mu.Lock()
+	defer v.mu.Unlock()
+	if len(v.mu.deleted) == 0 {
+		return nil
+	}
+	result := make([]WritableMetric, len(v.mu.deleted))
+	for i, labels := range v.mu.deleted {
+		result[i] = &metricSnapshot{
+			VecChildSnapshot: &metric.VecChildSnapshot{
+				Metadata: v.GaugeVec.Metadata,
+				Labels:   labels,
+			},
+			metricType: prometheusgo.MetricType_GAUGE.Enum(),
+			typeString: "STOPWATCH",
+		}
+	}
+	v.mu.deleted = nil
+	return result
+}

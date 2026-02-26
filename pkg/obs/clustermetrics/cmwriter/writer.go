@@ -28,6 +28,9 @@ import (
 type MetricStore interface {
 	// Write writes the given metrics to storage.
 	Write(ctx context.Context, metrics []cmmetrics.WritableMetric) error
+	// Delete removes the given metrics from storage, identified by
+	// their name and labels. Value and type are ignored.
+	Delete(ctx context.Context, metrics []cmmetrics.WritableMetric) error
 }
 
 // Writer manages registered cluster metrics and periodically flushes their
@@ -114,21 +117,34 @@ type resettable interface {
 	Reset()
 }
 
-// collectDirty returns the dirty metrics and their resetters under the lock.
+// collectDirty returns dirty metrics to write, metrics to delete,
+// items to reset after a fully successful flush, and scalar metric
+// names to remove from the tracked map after a successful delete.
 func (w *Writer) collectDirty(
 	ctx context.Context,
-) (toWrite []cmmetrics.WritableMetric, toReset []resettable) {
+) (
+	toWrite []cmmetrics.WritableMetric,
+	toDelete []cmmetrics.WritableMetric,
+	toReset []resettable,
+	toUntrack []string,
+) {
 	w.mu.Lock()
 	defer w.mu.Unlock()
-	for _, tracked := range w.mu.tracked {
+	for name, tracked := range w.mu.tracked {
 		tracked.Inspect(func(val interface{}) {
 			switch m := val.(type) {
 			case cmmetrics.Metric:
-				if m.IsDirty() {
+				if m.IsDeleted() {
+					toDelete = append(toDelete, m)
+					toUntrack = append(toUntrack, name)
+				} else if m.IsDirty() {
 					toWrite = append(toWrite, m)
 					toReset = append(toReset, m)
 				}
 			case cmmetrics.MetricVec:
+				// Collect deleted children first.
+				toDelete = append(toDelete, m.CollectDeleted()...)
+				// Then collect dirty children for writing.
 				shouldReset := false
 				m.Each(func(snap cmmetrics.WritableMetric) {
 					toWrite = append(toWrite, snap)
@@ -143,41 +159,78 @@ func (w *Writer) collectDirty(
 			}
 		})
 	}
-	return toWrite, toReset
+	return toWrite, toDelete, toReset, toUntrack
 }
 
 // Flush triggers an immediate flush of all registered metrics to the store.
-// Only metrics that have changed since the last flush are written.
+// Only metrics that have changed since the last flush are written. Deleted
+// metrics are removed from the store before writes so that a delete-then-
+// re-add in the same cycle produces the correct final state.
 //
 // Scalar metrics (Metric) are collected when their dirty flag is set.
 // Vector metrics (MetricVec) yield read-only snapshots of all children;
 // the parent vec is cleared after a successful write so only values set
 // since the last flush appear next time.
+//
+// Deleted scalar metrics are removed from the tracked map after a
+// successful flush. Their deleted flag remains set so that any
+// subsequent mutations on the metric instance are silently ignored.
+//
+// If either the delete or write call fails, the flush returns early
+// without resetting any state. Scalar metrics retry naturally on the
+// next flush because their dirty/deleted flags remain set. Vec
+// deletions use drain semantics and may be lost on failure; this is
+// acceptable because cluster metrics have an implicit TTL that will
+// eventually clean up stale rows.
 func (w *Writer) Flush(ctx context.Context) {
 	startTime := timeutil.Now()
-	toWrite, toReset := w.collectDirty(ctx)
+	toWrite, toDelete, toReset, toUntrack := w.collectDirty(ctx)
 
-	if len(toWrite) == 0 {
+	if len(toWrite) == 0 && len(toDelete) == 0 {
 		return
 	}
 
-	// Write the metrics to the downstream store.
-	err := w.store.Write(ctx, toWrite)
+	defer func() {
+		elapsed := timeutil.Since(startTime)
+		w.metrics.FlushLatency.Update(elapsed.Nanoseconds())
+		w.metrics.FlushCount.Inc(1)
+	}()
 
-	// Record meta metrics.
-	elapsed := timeutil.Since(startTime)
-	w.metrics.FlushLatency.Update(elapsed.Nanoseconds())
-	w.metrics.FlushCount.Inc(1)
-	if err != nil {
+	// Execute deletes before writes so that a vec child deleted and
+	// re-added in the same flush cycle ends up with the new value
+	// (UPSERT after DELETE).
+	if err := w.store.Delete(ctx, toDelete); err != nil {
+		w.metrics.FlushErrors.Inc(1)
+		log.Ops.Warningf(ctx, "failed to delete cluster metrics: %v", err)
+		return
+	}
+
+	if err := w.store.Write(ctx, toWrite); err != nil {
 		w.metrics.FlushErrors.Inc(1)
 		log.Ops.Warningf(ctx, "failed to flush cluster metrics: %v", err)
 		return
 	}
-	w.metrics.MetricsWritten.Inc(int64(len(toWrite)))
 
-	// Reset metrics after successful write.
+	// Both operations succeeded — reset all state and record counts.
+	w.metrics.MetricsDeleted.Inc(int64(len(toDelete)))
+	w.metrics.MetricsWritten.Inc(int64(len(toWrite)))
 	for _, r := range toReset {
 		r.Reset()
+	}
+
+	// Remove deleted scalar metrics from the tracked map. The deleted
+	// flag on each metric remains set so future mutations are no-ops.
+	if len(toUntrack) > 0 {
+		w.untrack(toUntrack)
+	}
+}
+
+// untrack removes the named metrics from the tracked map.
+func (w *Writer) untrack(names []string) {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	for _, name := range names {
+		delete(w.mu.tracked, name)
 	}
 }
 

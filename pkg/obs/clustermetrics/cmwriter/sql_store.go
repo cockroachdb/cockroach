@@ -47,6 +47,9 @@ func newSQLStore(db isql.DB, sqlIDContainer *base.SQLIDContainer, st *cluster.Se
 // added to the existing stored value. Gauges and stopwatches replace:
 // the stored value is overwritten.
 func (s *SQLStore) Write(ctx context.Context, metrics []cmmetrics.WritableMetric) error {
+	if len(metrics) == 0 {
+		return nil
+	}
 	if !s.st.Version.IsActive(ctx, clusterversion.V26_2_AddSystemClusterMetricsTable) {
 		return nil
 	}
@@ -102,6 +105,48 @@ func (s *SQLStore) Write(ctx context.Context, metrics []cmmetrics.WritableMetric
 		   node_id = excluded.node_id, last_updated = now()`
 
 		_, err := txn.ExecEx(ctx, "upsert-cluster-metrics", txn.KV(),
+			sessiondata.NodeUserSessionDataOverride,
+			stmt, args...,
+		)
+		return err
+	})
+}
+
+// Delete removes the given metrics from the system.cluster_metrics
+// table in a single batched DELETE. Each metric identifies a row by
+// its (name, labels) unique index; value and type are ignored.
+func (s *SQLStore) Delete(ctx context.Context, metrics []cmmetrics.WritableMetric) error {
+	if len(metrics) == 0 {
+		return nil
+	}
+	if !s.st.Version.IsActive(ctx, clusterversion.V26_2_AddSystemClusterMetricsTable) {
+		return nil
+	}
+
+	return s.db.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+		var buf strings.Builder
+		args := make([]interface{}, 0, len(metrics)*2)
+		for i, m := range metrics {
+			if i > 0 {
+				buf.WriteString(" OR ")
+			}
+			p := i*2 + 1
+			fmt.Fprintf(&buf, "(name = $%d AND labels = $%d::JSONB)", p, p+1)
+
+			labels := m.GetLabels()
+			labelsJSON := "{}"
+			if len(labels) > 0 {
+				b, err := json.Marshal(labels)
+				if err != nil {
+					return err
+				}
+				labelsJSON = string(b)
+			}
+			args = append(args, m.GetName(false /* useStaticLabels */), labelsJSON)
+		}
+
+		stmt := `DELETE FROM system.cluster_metrics WHERE ` + buf.String()
+		_, err := txn.ExecEx(ctx, "delete-cluster-metrics", txn.KV(),
 			sessiondata.NodeUserSessionDataOverride,
 			stmt, args...,
 		)
