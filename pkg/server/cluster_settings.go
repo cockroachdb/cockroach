@@ -46,6 +46,18 @@ var PersistedInsightsUIEnabled = settings.RegisterBoolSetting(
 	"enable the insights endpoint to get data from the persisted insights tables",
 	false)
 
+// ashResponseLimit controls the maximum number of ASH samples returned
+// per node during ListActiveSessionHistory fan-out responses. This
+// prevents a single node from returning its entire ring buffer and
+// causing OOM on the coordinating node.
+var ashResponseLimit = settings.RegisterIntSetting(
+	settings.ApplicationLevel,
+	"obs.ash.response_limit",
+	"maximum number of ASH samples returned per node in fan-out responses",
+	10_000,
+	settings.PositiveInt,
+)
+
 // DebugZipRedactAddressesEnabled guards whether hostname / ip address and other sensitive fields
 // should be redacted in the debug zip
 var DebugZipRedactAddressesEnabled = settings.RegisterBoolSetting(

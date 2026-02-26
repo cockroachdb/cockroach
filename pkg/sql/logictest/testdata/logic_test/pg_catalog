@@ -2653,14 +2653,14 @@ JOIN pg_catalog.pg_namespace n ON n.oid = p.pronamespace
 WHERE proname='substring'
 ----
 proname    pronamespace  nspname     proowner  prolang  procost  prorows  provariadic
-substring  4294967091    pg_catalog  NULL      12       NULL     NULL     0
-substring  4294967091    pg_catalog  NULL      12       NULL     NULL     0
-substring  4294967091    pg_catalog  NULL      12       NULL     NULL     0
-substring  4294967091    pg_catalog  NULL      12       NULL     NULL     0
-substring  4294967091    pg_catalog  NULL      12       NULL     NULL     0
-substring  4294967091    pg_catalog  NULL      12       NULL     NULL     0
-substring  4294967091    pg_catalog  NULL      12       NULL     NULL     0
-substring  4294967091    pg_catalog  NULL      12       NULL     NULL     0
+substring  4294967089    pg_catalog  NULL      12       NULL     NULL     0
+substring  4294967089    pg_catalog  NULL      12       NULL     NULL     0
+substring  4294967089    pg_catalog  NULL      12       NULL     NULL     0
+substring  4294967089    pg_catalog  NULL      12       NULL     NULL     0
+substring  4294967089    pg_catalog  NULL      12       NULL     NULL     0
+substring  4294967089    pg_catalog  NULL      12       NULL     NULL     0
+substring  4294967089    pg_catalog  NULL      12       NULL     NULL     0
+substring  4294967089    pg_catalog  NULL      12       NULL     NULL     0
 
 query TTBB colnames,rowsort
 SELECT proname, prokind, prosecdef, proleakproof
