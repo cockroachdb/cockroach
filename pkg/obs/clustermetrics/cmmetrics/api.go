@@ -65,6 +65,11 @@ type Metric interface {
 	WritableMetric
 	// IsDirty returns true if the metric has changed since the last flush.
 	IsDirty() bool
+	// IsDeleted returns true if the metric has been marked for deletion.
+	// A deleted metric is collected for removal on the next flush.
+	// Delete takes precedence over dirty: if both are set, the metric
+	// is deleted rather than written.
+	IsDeleted() bool
 	// Reset resets the metric's state after a successful flush.
 	// For counters, this resets the count to zero and clears the dirty flag.
 	// For gauges, this clears the dirty flag (value is retained).
@@ -84,6 +89,13 @@ type MetricVec interface {
 	Each(f func(WritableMetric))
 	// Reset clears all children. Called after a successful flush.
 	Reset()
+	// CollectDeleted returns snapshots of children that have been
+	// deleted since the last collection and clears the pending list
+	// (drain semantics). Returns nil when no deletions are pending.
+	// The returned WritableMetric values carry the metric name and
+	// labels needed to identify the row; value and type are ignored
+	// by the delete path.
+	CollectDeleted() []WritableMetric
 }
 
 // MetricTypeString returns the type string stored in the

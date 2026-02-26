@@ -28,11 +28,18 @@ var (
 
 // Counter wraps a metric.Counter to satisfy the Metric interface.
 // Tracks whether it has been updated since the last flush via a dirty flag.
+//
+// The dirty and deleted flags are stored as separate atomics, so a
+// concurrent reader may briefly observe an inconsistent pair (e.g.
+// dirty=true and deleted=true simultaneously). This is acceptable
+// because flush runs on a periodic timer and either outcome (delete
+// or write) is correct under concurrent access.
 type Counter struct {
 	*metric.Counter
 	metric.IsNonExportableMetric
 	IsClusterMetric
-	dirty atomic.Bool
+	dirty   atomic.Bool
+	deleted atomic.Bool
 }
 
 // NewCounter creates a new Counter with the given metadata. The
@@ -45,10 +52,12 @@ func NewCounter(metadata metric.Metadata) *Counter {
 	}
 }
 
-// Inc increments the counter and marks it as dirty.
+// Inc increments the counter and marks it as dirty. Clears any
+// pending deletion so that a write after Delete() is respected.
 func (c *Counter) Inc(i int64) {
 	c.Counter.Inc(i)
 	c.dirty.Store(true)
+	c.deleted.Store(false)
 }
 
 // Value returns the current count.
@@ -61,11 +70,12 @@ func (c *Counter) IsDirty() bool {
 	return c.dirty.Load()
 }
 
-// Reset resets the counter to zero and clears the dirty flag.
-// Called after a successful flush.
+// Reset resets the counter to zero and clears the dirty and deleted
+// flags. Called after a successful flush.
 func (c *Counter) Reset() {
 	c.Counter.Clear()
 	c.dirty.Store(false)
+	c.deleted.Store(false)
 }
 
 // Inspect calls the given closure with the Counter itself.
@@ -80,6 +90,16 @@ func (c *Counter) GetLabels() map[string]string {
 	return nil
 }
 
+// Delete marks the counter for deletion on the next flush.
+func (c *Counter) Delete() {
+	c.deleted.Store(true)
+}
+
+// IsDeleted returns true if the counter has been marked for deletion.
+func (c *Counter) IsDeleted() bool {
+	return c.deleted.Load()
+}
+
 // Gauge wraps a metric.Gauge to track whether it has been updated
 // since the last flush. Only gauges that have been explicitly updated will
 // be written to the store.
@@ -87,7 +107,8 @@ type Gauge struct {
 	*metric.Gauge
 	metric.IsNonExportableMetric
 	IsClusterMetric
-	dirty atomic.Bool
+	dirty   atomic.Bool
+	deleted atomic.Bool
 }
 
 // NewGauge creates a new Gauge with the given metadata. The
@@ -100,22 +121,28 @@ func NewGauge(metadata metric.Metadata) *Gauge {
 	}
 }
 
-// Update updates the gauge's value and marks it as dirty.
+// Update updates the gauge's value and marks it as dirty. Clears any
+// pending deletion so that a write after Delete() is respected.
 func (g *Gauge) Update(v int64) {
 	g.Gauge.Update(v)
 	g.dirty.Store(true)
+	g.deleted.Store(false)
 }
 
-// Inc increments the gauge's value and marks it as dirty.
+// Inc increments the gauge's value and marks it as dirty. Clears any
+// pending deletion so that a write after Delete() is respected.
 func (g *Gauge) Inc(i int64) {
 	g.Gauge.Inc(i)
 	g.dirty.Store(true)
+	g.deleted.Store(false)
 }
 
-// Dec decrements the gauge's value and marks it as dirty.
+// Dec decrements the gauge's value and marks it as dirty. Clears any
+// pending deletion so that a write after Delete() is respected.
 func (g *Gauge) Dec(i int64) {
 	g.Gauge.Dec(i)
 	g.dirty.Store(true)
+	g.deleted.Store(false)
 }
 
 // Value returns the current value of the gauge.
@@ -128,10 +155,11 @@ func (g *Gauge) IsDirty() bool {
 	return g.dirty.Load()
 }
 
-// Reset clears the dirty flag. Called after a successful flush.
-// This does not reset the gauge value itself.
+// Reset clears the dirty and deleted flags. Called after a successful
+// flush. This does not reset the gauge value itself.
 func (g *Gauge) Reset() {
 	g.dirty.Store(false)
+	g.deleted.Store(false)
 }
 
 // Inspect calls the given closure with the Gauge itself.
@@ -146,6 +174,16 @@ func (g *Gauge) GetLabels() map[string]string {
 	return nil
 }
 
+// Delete marks the gauge for deletion on the next flush.
+func (g *Gauge) Delete() {
+	g.deleted.Store(true)
+}
+
+// IsDeleted returns true if the gauge has been marked for deletion.
+func (g *Gauge) IsDeleted() bool {
+	return g.deleted.Load()
+}
+
 // WriteStopwatch wraps a metric.Gauge to record the unix-second
 // timestamp at which Start() was called. The stored value is the
 // timestamp itself, not elapsed time. Dirty tracking ensures that
@@ -155,6 +193,7 @@ type WriteStopwatch struct {
 	metric.IsNonExportableMetric
 	IsClusterMetric
 	dirty      atomic.Bool
+	deleted    atomic.Bool
 	timeSource timeutil.TimeSource
 }
 
@@ -170,10 +209,12 @@ func NewWriteStopwatch(metadata metric.Metadata, timeSource timeutil.TimeSource)
 }
 
 // SetStartTime records the current time as the start time and marks
-// dirty.
+// dirty. Clears any pending deletion so that a write after Delete()
+// is respected.
 func (s *WriteStopwatch) SetStartTime() {
 	s.Gauge.Update(s.timeSource.Now().Unix())
 	s.dirty.Store(true)
+	s.deleted.Store(false)
 }
 
 // Value returns the stored unix timestamp (seconds), or 0 if not started.
@@ -186,9 +227,11 @@ func (s *WriteStopwatch) IsDirty() bool {
 	return s.dirty.Load()
 }
 
-// Reset clears the dirty flag. Called after a successful flush.
+// Reset clears the dirty and deleted flags. Called after a successful
+// flush.
 func (s *WriteStopwatch) Reset() {
 	s.dirty.Store(false)
+	s.deleted.Store(false)
 }
 
 // Inspect calls the given closure with the WriteStopwatch itself.
@@ -207,4 +250,14 @@ func (s *WriteStopwatch) GetType() *prometheusgo.MetricType {
 // GetLabels returns nil for unlabeled stopwatches.
 func (s *WriteStopwatch) GetLabels() map[string]string {
 	return nil
+}
+
+// Delete marks the stopwatch for deletion on the next flush.
+func (s *WriteStopwatch) Delete() {
+	s.deleted.Store(true)
+}
+
+// IsDeleted returns true if the stopwatch has been marked for deletion.
+func (s *WriteStopwatch) IsDeleted() bool {
+	return s.deleted.Load()
 }
