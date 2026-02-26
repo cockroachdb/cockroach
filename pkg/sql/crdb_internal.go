@@ -234,6 +234,8 @@ var crdbInternal = virtualSchema{
 		catconstants.CrdbInternalStoreLivenessSupportFrom:           crdbInternalStoreLivenessSupportFromTable,
 		catconstants.CrdbInternalStoreLivenessSupportFor:            crdbInternalStoreLivenessSupportForTable,
 		catconstants.CrdbInternalClusterInspectErrorsViewID:         crdbInternalClusterInspectErrorsView,
+		catconstants.CrdbInternalNodeActiveSessionHistoryTableID:    crdbInternalNodeActiveSessionHistoryTable,
+		catconstants.CrdbInternalClusterActiveSessionHistoryTableID: crdbInternalClusterActiveSessionHistoryTable,
 	},
 	validWithNoDatabaseContext: true,
 }
@@ -9825,6 +9827,99 @@ func populateStoreLivenessSupportForResponse(
 		}
 	}
 	return nil
+}
+
+// crdbInternalNodeActiveSessionHistoryTable exposes Active Session History
+// samples from the local node's in-memory buffer. Tenant filtering is
+// performed by ListLocalActiveSessionHistory, so secondary tenants
+// only see their own samples.
+var crdbInternalNodeActiveSessionHistoryTable = virtualSchemaTable{
+	comment: `sampled active session history from this node (RAM)`,
+	schema: `
+CREATE TABLE crdb_internal.node_active_session_history (
+  sample_time      TIMESTAMPTZ NOT NULL,
+  node_id          INT NOT NULL,
+  tenant_id        INT NOT NULL,
+  workload_id      STRING,
+  work_event_type  STRING NOT NULL,
+  work_event       STRING NOT NULL,
+  goroutine_id     INT NOT NULL
+)`,
+	populate: func(ctx context.Context, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
+		response, err := p.extendedEvalCtx.SQLStatusServer.ListLocalActiveSessionHistory(ctx, &serverpb.ListActiveSessionHistoryRequest{})
+		if err != nil {
+			return err
+		}
+
+		for _, sample := range response.Samples {
+			sampleTime, err := tree.MakeDTimestampTZ(sample.SampleTime, time.Microsecond)
+			if err != nil {
+				return err
+			}
+			if err := addRow(
+				sampleTime,
+				tree.NewDInt(tree.DInt(sample.NodeID)),
+				tree.NewDInt(tree.DInt(sample.TenantID)),
+				tree.NewDString(sample.WorkloadID),
+				tree.NewDString(sample.WorkEventType),
+				tree.NewDString(sample.WorkEvent),
+				tree.NewDInt(tree.DInt(sample.GoroutineID)),
+			); err != nil {
+				return err
+			}
+		}
+		return nil
+	},
+}
+
+// crdbInternalClusterActiveSessionHistoryTable exposes Active Session History
+// samples from all nodes in the cluster via RPC fan-out. Tenant
+// filtering is performed at the RPC level in
+// ListLocalActiveSessionHistory, so secondary tenants never receive
+// other tenants' data over the wire.
+var crdbInternalClusterActiveSessionHistoryTable = virtualSchemaTable{
+	comment: `sampled active session history from all nodes in the cluster (cluster RPC; expensive!)`,
+	schema: `
+CREATE TABLE crdb_internal.cluster_active_session_history (
+  sample_time      TIMESTAMPTZ NOT NULL,
+  node_id          INT NOT NULL,
+  tenant_id        INT NOT NULL,
+  workload_id      STRING,
+  work_event_type  STRING NOT NULL,
+  work_event       STRING NOT NULL,
+  goroutine_id     INT NOT NULL
+)`,
+	populate: func(ctx context.Context, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
+		response, err := p.extendedEvalCtx.SQLStatusServer.ListActiveSessionHistory(ctx, &serverpb.ListActiveSessionHistoryRequest{})
+		if err != nil {
+			return err
+		}
+
+		for _, sample := range response.Samples {
+			sampleTime, err := tree.MakeDTimestampTZ(sample.SampleTime, time.Microsecond)
+			if err != nil {
+				return err
+			}
+			if err := addRow(
+				sampleTime,
+				tree.NewDInt(tree.DInt(sample.NodeID)),
+				tree.NewDInt(tree.DInt(sample.TenantID)),
+				tree.NewDString(sample.WorkloadID),
+				tree.NewDString(sample.WorkEventType),
+				tree.NewDString(sample.WorkEvent),
+				tree.NewDInt(tree.DInt(sample.GoroutineID)),
+			); err != nil {
+				return err
+			}
+		}
+
+		// Log any errors from individual nodes, but don't fail the query.
+		for _, rpcErr := range response.Errors {
+			log.Dev.Warningf(ctx, "error collecting ASH samples from node %d: %v", rpcErr.NodeID, rpcErr.Message)
+		}
+
+		return nil
+	},
 }
 
 // crdb_internal.cluster_inspect_errors is a view to give permission to
