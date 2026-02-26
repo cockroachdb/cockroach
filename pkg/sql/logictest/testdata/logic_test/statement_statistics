@@ -1,6 +1,7 @@
 # Disable SQL Stats flush to prevents stats from being cleared from the
 # in-memory store.
 # LogicTest: local 3node-tenant
+# knob-opt: allow-unsafe
 
 statement ok
 SET CLUSTER SETTING sql.stats.flush.enabled = false;
