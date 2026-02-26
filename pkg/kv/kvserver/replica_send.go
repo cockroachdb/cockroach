@@ -793,7 +793,7 @@ func (r *Replica) handleTransactionPushError(
 		// MaybeWaitForPush will block the pusher based on the refreshing
 		// marker in the timestamp cache.
 		if dontRetry && r.IsTransactionRefreshing(
-			ctx, t.PusheeTxn.Key, t.PusheeTxn.ID, t.PusheeTxn.Epoch,
+			ctx, t.PusheeTxn.Key, t.PusheeTxn.ID,
 		) {
 			dontRetry = false
 		}

@@ -82,11 +82,9 @@ type EvalContext interface {
 	MinTxnCommitTS(ctx context.Context, txnID uuid.UUID, txnKey []byte) hlc.Timestamp
 
 	// IsTransactionRefreshing returns true if the transaction is currently
-	// refreshing its read spans at the given epoch, as indicated by a refreshing
-	// marker in the timestamp cache. See Replica.IsTransactionRefreshing.
-	IsTransactionRefreshing(
-		ctx context.Context, txnKey roachpb.Key, txnID uuid.UUID, epoch enginepb.TxnEpoch,
-	) bool
+	// refreshing its read spans, as indicated by a refreshing marker in the
+	// timestamp cache. See Replica.IsTransactionRefreshing.
+	IsTransactionRefreshing(ctx context.Context, txnKey roachpb.Key, txnID uuid.UUID) bool
 
 	// GetMVCCStats returns a snapshot of the MVCC stats for the range.
 	// If called from a command that declares a read/write span on the
@@ -299,7 +297,7 @@ func (m *mockEvalCtxImpl) MinTxnCommitTS(
 	return m.MinTxnCommitTSFn()
 }
 func (m *mockEvalCtxImpl) IsTransactionRefreshing(
-	ctx context.Context, txnKey roachpb.Key, txnID uuid.UUID, epoch enginepb.TxnEpoch,
+	ctx context.Context, txnKey roachpb.Key, txnID uuid.UUID,
 ) bool {
 	if m.IsTransactionRefreshingFn == nil {
 		return false

@@ -135,7 +135,6 @@ type txnSpanRefresher struct {
 	riGen   rangeIteratorFactory
 	wrapped lockedSender
 	metrics *TxnMetrics
-	clock   *hlc.Clock
 
 	// refreshFootprint contains key spans which were read during the
 	// transaction. In case the transaction's timestamp needs to be pushed, we can
@@ -179,10 +178,10 @@ func (sr *txnSpanRefresher) SendLocked(
 		// REFRESHING must never escape the txnSpanRefresher. It is a
 		// transient server-to-client signal that the refresher handles.
 		// If REFRESHING is still on the error txn at this point, we've
-		// exhausted refresh attempts. Cancel the marker so it doesn't
-		// block pushers indefinitely.
+		// exhausted refresh attempts. The marker will be canceled when the
+		// transaction restarts at a new epoch and the heartbeater sends a
+		// heartbeat with the bumped epoch.
 		if txn := pErr.GetTxn(); txn != nil && txn.Status == roachpb.REFRESHING {
-			sr.cancelRefreshingMarker(ctx, txn)
 			pErr.SetTxn(cloneWithStatus(txn, roachpb.PENDING))
 		}
 		return nil, pErr
@@ -431,29 +430,6 @@ func (sr *txnSpanRefresher) splitEndTxnAndRetrySend(
 			"txn status not finalized after successful retried EndTxn: %v", br.Txn))
 	}
 	return br, nil
-}
-
-// cancelRefreshingMarker sends a HeartbeatTxn with UpdateTSCacheOnly to cancel
-// the refreshing marker in the timestamp cache after a failed refresh. This
-// prevents the marker from blocking pushers indefinitely.
-func (sr *txnSpanRefresher) cancelRefreshingMarker(ctx context.Context, txn *roachpb.Transaction) {
-	ba := &kvpb.BatchRequest{}
-	ba.Txn = txn.Clone()
-	ba.Txn.Status = roachpb.PENDING
-	ba.Add(&kvpb.HeartbeatTxnRequest{
-		RequestHeader: kvpb.RequestHeader{
-			Key: txn.Key,
-		},
-		Now:               sr.clock.Now(),
-		UpdateTSCacheOnly: true,
-	})
-	log.VEventf(ctx, 2, "canceling refreshing marker after failed refresh")
-	_, pErr := sr.wrapped.SendLocked(ctx, ba)
-	if pErr != nil {
-		// Best-effort. The marker is epoch-scoped, so it becomes irrelevant
-		// once the transaction restarts at a new epoch.
-		log.VEventf(ctx, 1, "failed to cancel refreshing marker: %s", pErr)
-	}
 }
 
 func (sr *txnSpanRefresher) maybeSetUseRefreshingStatus(

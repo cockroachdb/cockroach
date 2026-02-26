@@ -227,7 +227,7 @@ func PushTxn(
 		// the garbage in the path of future writers).
 		pushType = kvpb.PUSH_ABORT
 		pusherWins = true
-	case cArgs.EvalCtx.IsTransactionRefreshing(ctx, reply.PusheeTxn.Key, reply.PusheeTxn.ID, reply.PusheeTxn.Epoch):
+	case cArgs.EvalCtx.IsTransactionRefreshing(ctx, reply.PusheeTxn.Key, reply.PusheeTxn.ID):
 		// The transaction is currently refreshing its read spans after being
 		// pushed at commit time. Do not push it to prevent starvation.
 		pusherWins = false

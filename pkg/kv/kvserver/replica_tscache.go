@@ -182,38 +182,40 @@ func (r *Replica) updateTimestampCache(
 				for _, sp := range resp.(*kvpb.EndTxnResponse).ReplicatedLocalLocksReleasedOnCommit {
 					addToTSCache(sp.Key, sp.EndKey, br.Txn.WriteTimestamp, txnID)
 				}
-			} else if t.UseRefreshingStatus &&
+			} else if t.UseRefreshingStatus && t.Commit &&
 				r.ClusterSettings().Version.IsActive(ctx, clusterversion.V26_2) {
-				// EndTxn returned RETRY_SERIALIZABLE and the client requested
-				// refreshing protection. Add a refreshing marker so that concurrent
-				// pushers see the transaction as unpushable during the refresh window.
-				errTxn := pErr.GetTxn()
-				epoch := errTxn.Epoch
-				key := transactionRefreshingMarker(start, txnID, epoch)
-				addToTSCache(key, nil, ts, txnID)
-				// Signal to the client that a marker was placed by setting the
-				// txn status to REFRESHING on the error. The txnSpanRefresher
-				// detects this and sends a HeartbeatTxn to cancel the marker
-				// if the refresh fails.
-				clone := errTxn.Clone()
-				clone.Status = roachpb.REFRESHING
-				pErr.SetTxn(clone)
+				// EndTxn(commit=true) returned a refreshable error and the client
+				// requested refreshing protection. Add a refreshing marker so that
+				// concurrent pushers see the transaction as unpushable during the
+				// refresh window. The marker value encodes the epoch so that a
+				// heartbeat with a newer epoch can cancel it.
+				errIsRefreshable, _ := kvpb.TransactionRefreshTimestamp(pErr)
+				if errIsRefreshable {
+					errTxn := pErr.GetTxn()
+					key := transactionRefreshingMarker(start, txnID)
+					addToTSCache(key, nil, ts, refreshingMarkerValue(errTxn.Epoch))
+					// Signal to the client that a marker was placed by setting the
+					// txn status to REFRESHING on the error.
+					clone := errTxn.Clone()
+					clone.Status = roachpb.REFRESHING
+					pErr.SetTxn(clone)
+				}
 			}
 		case *kvpb.HeartbeatTxnRequest:
-			if t.UpdateTSCacheOnly {
-				// Cancel a refreshing marker for this transaction. Write an entry
-				// with uuid.Nil so that IsTransactionRefreshing's txnID check
-				// fails, effectively invalidating the marker.
-				epoch := ba.Txn.Epoch
-				key := transactionRefreshingMarker(start, txnID, epoch)
-				addToTSCache(key, nil, ts, uuid.Nil)
-			} else {
-				// HeartbeatTxn requests record a tombstone entry when the record is
-				// initially written. This is used when considering potential 1PC
-				// evaluation, avoiding checking for a transaction record on disk.
-				key := transactionTombstoneMarker(start, txnID)
-				addToTSCache(key, nil, ts, txnID)
+			// If this heartbeat is at a newer epoch than an existing refreshing
+			// marker, cancel the marker. This happens when a refresh fails, the
+			// transaction restarts at a new epoch, and the heartbeater sends an
+			// immediate heartbeat.
+			refreshKey := transactionRefreshingMarker(start, txnID)
+			_, markerVal := r.store.tsCache.GetMax(ctx, refreshKey, nil)
+			if markerVal != uuid.Nil && refreshingMarkerEpoch(markerVal) < ba.Txn.Epoch {
+				addToTSCache(refreshKey, nil, ts, uuid.Nil)
 			}
+			// HeartbeatTxn requests record a tombstone entry when the record is
+			// initially written. This is used when considering potential 1PC
+			// evaluation, avoiding checking for a transaction record on disk.
+			key := transactionTombstoneMarker(start, txnID)
+			addToTSCache(key, nil, ts, txnID)
 		case *kvpb.RecoverTxnRequest:
 			// A successful RecoverTxn request may or may not have finalized the
 			// transaction that it was trying to recover. If so, then we record
@@ -718,15 +720,15 @@ func (r *Replica) MinTxnCommitTS(
 }
 
 // IsTransactionRefreshing returns true if a refreshing marker exists in the
-// timestamp cache for the given transaction at the given epoch, indicating that
-// the transaction is currently refreshing its read spans and should not be
-// pushed.
+// timestamp cache for the given transaction, indicating that the transaction is
+// currently refreshing its read spans and should not be pushed. The marker is
+// canceled (set to uuid.Nil) when a heartbeat arrives with a newer epoch.
 func (r *Replica) IsTransactionRefreshing(
-	ctx context.Context, txnKey roachpb.Key, txnID uuid.UUID, epoch enginepb.TxnEpoch,
+	ctx context.Context, txnKey roachpb.Key, txnID uuid.UUID,
 ) bool {
-	key := transactionRefreshingMarker(txnKey, txnID, epoch)
-	ts, markerTxnID := r.store.tsCache.GetMax(ctx, key, nil)
-	return !ts.IsEmpty() && markerTxnID == txnID
+	key := transactionRefreshingMarker(txnKey, txnID)
+	_, val := r.store.tsCache.GetMax(ctx, key, nil)
+	return val != uuid.Nil
 }
 
 // Pseudo range local key suffixes used to construct "marker" keys for use
@@ -761,15 +763,30 @@ func transactionPushMarker(key roachpb.Key, txnID uuid.UUID) roachpb.Key {
 // a transaction is currently refreshing its read spans after being pushed at
 // commit time. While this marker is present, concurrent pushers should not push
 // the transaction, preventing starvation by high-priority pushers during the
-// refresh window. The epoch is included so that stale markers from previous
-// epochs are invisible to pushers observing the transaction at a newer epoch.
-func transactionRefreshingMarker(
-	key roachpb.Key, txnID uuid.UUID, epoch enginepb.TxnEpoch,
-) roachpb.Key {
-	var epochBytes [4]byte
-	binary.BigEndian.PutUint32(epochBytes[:], uint32(epoch))
-	suffix := append(txnID.GetBytes(), epochBytes[:]...)
-	return keys.MakeRangeKey(keys.MustAddr(key), localTxnRefreshingMarkerSuffix, suffix)
+// refresh window.
+//
+// The marker's tscache value encodes the epoch via refreshingMarkerValue. A
+// heartbeat arriving with a newer epoch cancels the marker by writing uuid.Nil.
+func transactionRefreshingMarker(key roachpb.Key, txnID uuid.UUID) roachpb.Key {
+	return keys.MakeRangeKey(keys.MustAddr(key), localTxnRefreshingMarkerSuffix, txnID.GetBytes())
+}
+
+// refreshingMarkerValue encodes a transaction epoch into a UUID for use as a
+// tscache value in the refreshing marker. Byte 4 is set to 0x01 so that epoch
+// 0 produces a non-nil UUID, distinguishing it from uuid.Nil (which means "no
+// marker").
+func refreshingMarkerValue(epoch enginepb.TxnEpoch) uuid.UUID {
+	var val uuid.UUID
+	binary.BigEndian.PutUint32(val[:4], uint32(epoch))
+	val[4] = 0x01 // sentinel
+	return val
+}
+
+// refreshingMarkerEpoch extracts the epoch from a refreshing marker tscache
+// value produced by refreshingMarkerValue. The caller must check that val !=
+// uuid.Nil before calling this.
+func refreshingMarkerEpoch(val uuid.UUID) enginepb.TxnEpoch {
+	return enginepb.TxnEpoch(binary.BigEndian.Uint32(val[:4]))
 }
 
 // GetCurrentReadSummary returns a new ReadSummary reflecting all reads served
