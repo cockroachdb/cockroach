@@ -710,7 +710,7 @@ func (b *Builder) resolveDataSourceRef(
 	return ds, depName
 }
 
-// checkPrivilege ensures that the current user has at least one of the given
+// checkPrivilege ensures that the checkPrivilegeUser has at least one of the given
 // privileges on the given object in the catalog. If not, then checkPrivilege
 // raises an error. It also adds the object and its original unresolved name as
 // a dependency to the metadata, so that the privileges can be re-checked on
