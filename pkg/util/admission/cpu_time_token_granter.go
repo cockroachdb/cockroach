@@ -9,8 +9,12 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/redact"
 	"github.com/olekukonko/tablewriter"
 )
 
@@ -43,6 +47,22 @@ const (
 	appTenant
 	numResourceTiers
 )
+
+func (rt resourceTier) String() string {
+	return redact.StringWithoutMarkers(rt)
+}
+
+// SafeFormat implements the redact.SafeFormatter interface.
+func (rt resourceTier) SafeFormat(s redact.SafePrinter, _ rune) {
+	switch rt {
+	case systemTenant:
+		s.SafeString("system_tenant")
+	case appTenant:
+		s.SafeString("app_tenant")
+	default:
+		s.Printf("resourceTier(%d)", redact.Safe(rt))
+	}
+}
 
 // cpuTimeTokenChildGranter implements granter. It stores resourceTier and proxies
 // proxies to cpuTimeTokenGranter. See the declaration comment for cpuTimeTokenGranter
@@ -113,8 +133,10 @@ func (cg *cpuTimeTokenChildGranter) continueGrantChain(grantChainID grantChainID
 // For more, see the initial design sketch:
 // https://docs.google.com/document/d/1-Kr2gRFTk0QV8kBs7AXRXUwFpK2ZxR1cqIwWCuOx22Q/edit?tab=t.0
 type cpuTimeTokenGranter struct {
-	requester [numResourceTiers]requester
-	mu        struct {
+	requester  [numResourceTiers]requester
+	metrics    *cpuTimeTokenMetrics
+	timeSource timeutil.TimeSource
+	mu         struct {
 		syncutil.Mutex
 		// Invariant #1: For any two buckets A & B, if A has a lower ordinal resourceTier,
 		// then A must have more tokens than B.
@@ -129,13 +151,66 @@ type cpuTimeTokenGranter struct {
 	}
 }
 
-// TODO(josh): Make this observable. See here for one approach:
-// https://github.com/cockroachdb/cockroach/commit/06967f5fa72115348d57fc66fe895aec514261d5#diff-6212d039fab53dd464bd989bdbd537947b11d37a9c8fe77ca497870b49e28a9cR367
+func newCPUTimeTokenGranter(
+	metrics *cpuTimeTokenMetrics, timeSource timeutil.TimeSource,
+) *cpuTimeTokenGranter {
+	g := &cpuTimeTokenGranter{metrics: metrics, timeSource: timeSource}
+	// Buckets start at 0 tokens (exhausted) before the first refill, so
+	// initialize exhaustedStart and wire the per-bucket counters.
+	now := timeSource.Now()
+	for tier := resourceTier(0); tier < numResourceTiers; tier++ {
+		for qual := burstQualification(0); qual < numBurstQualifications; qual++ {
+			g.mu.buckets[tier][qual].exhaustedStart = now
+			g.mu.buckets[tier][qual].exhaustedDuration =
+				metrics.ExhaustedDurationNanos[perBucketIdx(tier, qual)]
+		}
+	}
+	return g
+}
+
 type tokenBucket struct {
 	tokens int64
+	// exhaustedStart is the time at which the bucket entered the exhausted
+	// state (tokens <= 0). Zero when the bucket is not exhausted.
+	exhaustedStart time.Time
+	// exhaustedDuration is a cumulative counter of nanoseconds spent exhausted.
+	exhaustedDuration *metric.Counter
+}
+
+// updateTokenCount sets the bucket's token count and updates the
+// exhausted-duration counter based on the transition into or out of the
+// exhausted state (tokens <= 0).
+//
+// Three transitions are handled:
+//  1. wasExhausted && !isExhausted — recovery: flush elapsed time to counter.
+//  2. !wasExhausted && isExhausted — entering exhaustion: record start time.
+//  3. isExhausted && flushToMetricNow — still exhausted but in this case,
+//     updateTokenCount flushes accumulated duration to the counter. This
+//     way, sustained exhaustion is visible in metrics even over shorter
+//     periods such as 1m. flushToMetricNow is set to true on a call to
+//     updateTokenCount once every second.
+func (tb *tokenBucket) updateTokenCount(newTokens int64, now time.Time, flushToMetricNow bool) {
+	wasExhausted := tb.tokens <= 0
+	tb.tokens = newTokens
+	isExhausted := tb.tokens <= 0
+	switch {
+	case wasExhausted && !isExhausted:
+		tb.exhaustedDuration.Inc(now.Sub(tb.exhaustedStart).Nanoseconds())
+		tb.exhaustedStart = time.Time{}
+	case !wasExhausted && isExhausted:
+		tb.exhaustedStart = now
+	case isExhausted && flushToMetricNow:
+		tb.exhaustedDuration.Inc(now.Sub(tb.exhaustedStart).Nanoseconds())
+		tb.exhaustedStart = now
+	}
 }
 
 func (stg *cpuTimeTokenGranter) String() string {
+	return redact.StringWithoutMarkers(stg)
+}
+
+// SafeFormat implements the redact.SafeFormatter interface.
+func (stg *cpuTimeTokenGranter) SafeFormat(s redact.SafePrinter, _ rune) {
 	stg.mu.Lock()
 	defer stg.mu.Unlock()
 	var buf strings.Builder
@@ -164,7 +239,7 @@ func (stg *cpuTimeTokenGranter) String() string {
 		tw.Append(row[:])
 	}
 	tw.Render()
-	return buf.String()
+	s.SafeString(redact.SafeString(buf.String()))
 }
 
 // tryGet is the helper for implementing granter.tryGet.
@@ -199,9 +274,21 @@ func (stg *cpuTimeTokenGranter) tookWithoutPermission(count int64) {
 
 func (stg *cpuTimeTokenGranter) tookWithoutPermissionLocked(count int64) {
 	stg.mu.tokensUsed += count
+	// Token usage is split into two cumulative counters (consumed and
+	// returned) rather than a single net gauge, so that DD/Prometheus can
+	// compute rate(consumed) - rate(returned) over arbitrary windows
+	// (1m, 30m, etc.).
+	if count > 0 {
+		stg.metrics.TokensConsumed.Inc(count)
+	} else {
+		stg.metrics.TokensReturned.Inc(-count)
+	}
+	now := stg.timeSource.Now()
 	for tier := range stg.mu.buckets {
 		for qual := range stg.mu.buckets[tier] {
-			stg.mu.buckets[tier][qual].tokens -= count
+			newTokenCount := stg.mu.buckets[tier][qual].tokens - count
+			stg.mu.buckets[tier][qual].updateTokenCount(
+				newTokenCount, now, false /* flushToMetricNow */)
 		}
 	}
 }
@@ -271,23 +358,26 @@ func (stg *cpuTimeTokenGranter) resetTokensUsedInInterval() int64 {
 // it will be raised to the minimum. The minimums bound recovery time after
 // periods of overuse, preventing a bucket from accumulating unbounded token
 // debt. refill attempts to grant admission to waiting requests in case
-// where tokens are added to some bucket.
+// where tokens are added to some bucket. updateMetrics controls whether
+// gauge and exhausted-duration metrics are updated.
 func (stg *cpuTimeTokenGranter) refill(
-	toAdd tokenCounts, bucketCapacities capacities, bucketMinimums minimums,
+	toAdd tokenCounts, bucketCapacities capacities, bucketMinimums minimums, updateMetrics bool,
 ) {
 	stg.mu.Lock()
 	defer stg.mu.Unlock()
 
+	now := stg.timeSource.Now()
 	var shouldGrant bool
-	for wc := range stg.mu.buckets {
-		for kind := range stg.mu.buckets[wc] {
-			if toAdd[wc][kind] > 0 {
+	for tier := range stg.mu.buckets {
+		for qual := range stg.mu.buckets[tier] {
+			if toAdd[tier][qual] > 0 {
 				shouldGrant = true
 			}
-			newTokenCount := stg.mu.buckets[wc][kind].tokens + toAdd[wc][kind]
-			newTokenCount = min(newTokenCount, bucketCapacities[wc][kind])
-			newTokenCount = max(newTokenCount, bucketMinimums[wc][kind])
-			stg.mu.buckets[wc][kind].tokens = newTokenCount
+			newTokenCount := stg.mu.buckets[tier][qual].tokens + toAdd[tier][qual]
+			newTokenCount = min(newTokenCount, bucketCapacities[tier][qual])
+			newTokenCount = max(newTokenCount, bucketMinimums[tier][qual])
+			stg.mu.buckets[tier][qual].updateTokenCount(
+				newTokenCount, now, updateMetrics /* flushToMetricNow */)
 		}
 	}
 
