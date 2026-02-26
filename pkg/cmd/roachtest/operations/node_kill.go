@@ -69,15 +69,15 @@ func runNodeKill(
 	}
 
 	o.Status(fmt.Sprintf("killing node %s with signal %d", node.NodeIDsString(), signal))
-	err := c.RunE(ctx, option.WithNodes(node), "pkill", fmt.Sprintf("-%d", signal), "-f", "cockroach\\ start")
-	if err != nil {
-		o.Fatal(err)
+	if err := c.RunE(ctx, option.WithNodes(node), "pkill", fmt.Sprintf("-%d", signal), "-f", "cockroach\\ start"); err != nil {
+		o.Errorf("failed to kill node: %v", err)
 	}
 
 	o.Status(fmt.Sprintf("sent signal %d to node %s, waiting for process to exit", signal, node.NodeIDsString()))
 	for {
 		if err := ctx.Err(); err != nil {
-			o.Fatal(err)
+			o.Errorf("context canceled waiting for process to exit: %v", err)
+			break
 		}
 		err := c.RunE(ctx, option.WithNodes(node), "pgrep", "-f", "cockroach\\ start")
 		if err != nil {
@@ -86,7 +86,8 @@ func runNodeKill(
 				o.Status(fmt.Sprintf("killed node %s with signal %d", node.NodeIDsString(), signal))
 				break
 			}
-			o.Fatal(err)
+			o.Errorf("error checking process status: %v", err)
+			break
 		}
 		time.Sleep(1 * time.Second)
 	}

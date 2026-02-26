@@ -13,6 +13,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/operation"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/operations/helpers"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestflags"
@@ -122,26 +123,51 @@ outer:
 	o.Status(fmt.Sprintf("restoring %s into db %s", onlineStr, restoreDBName))
 
 	startTime := timeutil.Now()
+	// From this point on, the RESTORE may create a new database. Use o.Errorf
+	// instead of o.Fatal so that we always return the cleanup handler, ensuring
+	// the restored database is dropped even if the restore or validation fails.
 	if !online {
 		o.Status("beginning offline restore")
-		_, err = conn.ExecContext(ctx, fmt.Sprintf("RESTORE DATABASE %s FROM LATEST IN '%s' WITH OPTIONS (new_db_name = '%s')", dbName, bucket, restoreDBName))
-		if err != nil {
-			o.Fatal(err)
-		}
+		helpers.ExecDDL(ctx, o, conn, fmt.Sprintf("RESTORE DATABASE %s FROM LATEST IN '%s' WITH OPTIONS (new_db_name = '%s')", dbName, bucket, restoreDBName))
 	} else {
 		var id, tables, approxRows, approxBytes int64
 		var downloadJobId catpb.JobID
 		o.Status("beginning online restore")
-		res := conn.QueryRowContext(ctx, fmt.Sprintf("RESTORE DATABASE %s FROM LATEST IN '%s' WITH OPTIONS (new_db_name = '%s', EXPERIMENTAL DEFERRED COPY)", dbName, bucket, restoreDBName))
 
-		err := res.Scan(&id, &tables, &approxRows, &approxBytes, &downloadJobId)
-		if err != nil {
-			o.Fatal(err)
+		type scanResult struct {
+			id, tables, approxRows, approxBytes int64
+			downloadJobId                       catpb.JobID
+			err                                 error
+		}
+		resCh := make(chan scanResult, 1)
+		go func() {
+			var r scanResult
+			row := conn.QueryRowContext(ctx, fmt.Sprintf("RESTORE DATABASE %s FROM LATEST IN '%s' WITH OPTIONS (new_db_name = '%s', EXPERIMENTAL DEFERRED COPY)", dbName, bucket, restoreDBName))
+			r.err = row.Scan(&r.id, &r.tables, &r.approxRows, &r.approxBytes, &r.downloadJobId)
+			resCh <- r
+		}()
+
+		var scanErr error
+		select {
+		case r := <-resCh:
+			id, tables, approxRows, approxBytes, downloadJobId = r.id, r.tables, r.approxRows, r.approxBytes, r.downloadJobId
+			scanErr = r.err
+			if scanErr != nil {
+				o.Errorf("failed online restore scan: %v", scanErr)
+			}
+		case <-ctx.Done():
+			o.Errorf("context cancelled during online restore: %v", ctx.Err())
+			scanErr = ctx.Err()
 		}
 
-		err = tests.WaitForSucceeded(ctx, conn, downloadJobId, 8760*time.Hour /* 1 year - test specs define their own timeouts */)
-		if err != nil {
-			o.Fatal(err)
+		// Suppress unused variable warnings for id, tables, approxRows, approxBytes.
+		_, _, _, _ = id, tables, approxRows, approxBytes
+
+		if scanErr == nil {
+			err = tests.WaitForSucceeded(ctx, conn, downloadJobId, 8760*time.Hour /* 1 year - test specs define their own timeouts */)
+			if err != nil {
+				o.Errorf("failed waiting for download job: %v", err)
+			}
 		}
 	}
 	o.Status(fmt.Sprintf("completed restore in %v", timeutil.Since(startTime)))
@@ -150,17 +176,17 @@ outer:
 		o.Status(fmt.Sprintf("verifying db %s matches %s", dbName, restoreDBName))
 		sourceFingerprints, err := fingerprintutils.FingerprintDatabase(ctx, conn, dbName, fingerprintutils.AOST(backupTS), fingerprintutils.Stripped())
 		if err != nil {
-			o.Fatal(err)
+			o.Errorf("failed to fingerprint source: %v", err)
 		}
 
 		// No AOST here; the timestamps are rewritten on restore. But nobody else is touching this database, so that's fine.
 		destFingerprints, err := fingerprintutils.FingerprintDatabase(ctx, conn, restoreDBName, fingerprintutils.Stripped())
 		if err != nil {
-			o.Fatal(err)
+			o.Errorf("failed to fingerprint destination: %v", err)
 		}
 
-		if !reflect.DeepEqual(sourceFingerprints, destFingerprints) {
-			o.Fatalf("backup and restore fingerprints do not match: %v != %v", sourceFingerprints, destFingerprints)
+		if sourceFingerprints != nil && destFingerprints != nil && !reflect.DeepEqual(sourceFingerprints, destFingerprints) {
+			o.Errorf("backup and restore fingerprints do not match: %v != %v", sourceFingerprints, destFingerprints)
 		}
 	}
 

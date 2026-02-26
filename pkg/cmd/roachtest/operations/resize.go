@@ -46,7 +46,7 @@ func (cl *cleanupResize) Cleanup(ctx context.Context, o operation.Operation, c c
 // duration, then drains and decommissions the new nodes.
 func resizeCluster(
 	ctx context.Context, o operation.Operation, c cluster.Cluster, growCount int,
-) *cleanupResize {
+) (cl *cleanupResize) {
 	// Create a temporary directory to store the required files for this operation.
 	tmpDir, err := os.MkdirTemp("", "")
 	if err != nil {
@@ -74,6 +74,18 @@ func resizeCluster(
 	if err != nil {
 		o.Fatal(err)
 	}
+
+	// After Grow, new nodes are provisioned. Set the cleanup struct now so it's
+	// always returned even if subsequent setup steps (Put, Start) fail. The
+	// deferred recovery ensures that panics from infrastructure operations don't
+	// prevent cleanup from being returned.
+	cl = &cleanupResize{growCount: growCount, origClusterSize: origClusterSize}
+	defer func() {
+		if r := recover(); r != nil {
+			o.Errorf("error during resize setup: %v", r)
+		}
+	}()
+
 	// Grow command generate new certificates, update certificate on workload cluster.
 	if wc := o.WorkloadCluster(); wc != nil {
 		_ = c.Get(ctx, o.L(), "certs", path.Join(tmpDir, "certs"), c.Node(1))
@@ -90,7 +102,7 @@ func resizeCluster(
 	startOpts.RoachprodOpts.IsRestart = false
 	c.Start(ctx, o.L(), startOpts, o.ClusterSettings(), newNodes)
 
-	return &cleanupResize{growCount: growCount, origClusterSize: origClusterSize}
+	return cl
 }
 
 func registerResize(r registry.Registry) {

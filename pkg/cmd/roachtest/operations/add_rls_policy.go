@@ -129,9 +129,10 @@ func runAddRLSPolicy(
 	}
 
 	o.Status(fmt.Sprintf("enabling row level security on table %s.%s%s", dbName, tableName, forceClause))
-	_, err = conn.ExecContext(ctx, fmt.Sprintf("ALTER TABLE %s.%s ENABLE ROW LEVEL SECURITY%s", dbName, tableName, forceClause))
-	if err != nil {
-		o.Fatal(err)
+	execCtx, execCancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer execCancel()
+	if _, err = conn.ExecContext(execCtx, fmt.Sprintf("ALTER TABLE %s.%s ENABLE ROW LEVEL SECURITY%s", dbName, tableName, forceClause)); err != nil {
+		o.Errorf("failed to enable RLS: %v", err)
 	}
 
 	// Create between 0-5 policies
@@ -178,15 +179,20 @@ func runAddRLSPolicy(
 			using = fmt.Sprintf("USING (%s)", usingExpr)
 		}
 
-		_, err = conn.ExecContext(ctx, fmt.Sprintf(`
-			CREATE POLICY %s ON %s.%s 
-			FOR %s 
-			TO %s 
-			%s 
+		// Use a background context so that even if the parent context is cancelled
+		// (e.g., by a signal), the CREATE POLICY completes and we always return the
+		// cleanup handler.
+		policyCtx, policyCancel := context.WithTimeout(context.Background(), 30*time.Second)
+		_, err = conn.ExecContext(policyCtx, fmt.Sprintf(`
+			CREATE POLICY %s ON %s.%s
+			FOR %s
+			TO %s
+			%s
 			%s
 		`, policyName, dbName, tableName, operation, user, using, withCheck))
+		policyCancel()
 		if err != nil {
-			o.Fatal(err)
+			o.Errorf("failed to create policy %s: %v", policyName, err)
 		}
 	}
 

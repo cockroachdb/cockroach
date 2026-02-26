@@ -205,6 +205,28 @@ func PickRandomStore(ctx context.Context, o operation.Operation, conn *gosql.DB,
 	return stores[rng.Intn(len(stores))]
 }
 
+// ExecDDL runs a SQL statement in a goroutine and returns immediately if
+// the context is cancelled. This works around a lib/pq limitation where
+// ExecContext continues blocking on recvMessage after sending a cancel
+// request to the server. The leaked goroutine finishes when the server
+// responds or the process exits.
+func ExecDDL(ctx context.Context, o operation.Operation, conn *gosql.DB, stmt string) {
+	errCh := make(chan error, 1)
+	go func() {
+		_, err := conn.ExecContext(ctx, stmt)
+		errCh <- err
+	}()
+
+	select {
+	case err := <-errCh:
+		if err != nil {
+			o.Errorf("DDL failed: %v", err)
+		}
+	case <-ctx.Done():
+		o.Errorf("context cancelled during DDL: %v", ctx.Err())
+	}
+}
+
 // ExecuteQuery executes the query and invokes the rowEvaluator for processing each row
 func ExecuteQuery(ctx context.Context, cb rowEvaluator, conn *gosql.DB, query string) error {
 	rows, err := conn.QueryContext(ctx, query)

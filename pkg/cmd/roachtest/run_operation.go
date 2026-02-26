@@ -223,14 +223,6 @@ func (r *opsRunner) runOperation(
 	// operationRunID is used for datadog event aggregation and logging.
 	operationRunID := rng.Uint64()
 
-	defer func() {
-		if rc := recover(); rc != nil {
-			maybeEmitDatadogEvent(ctx, r.datadogEventClient, opSpec, r.clusterName, eventOpError, operationRunID, r.datadogTags)
-			r.logger.Printf("recovered from panic: %v", rc)
-			debug.PrintStack()
-		}
-	}()
-
 	config := struct {
 		ClusterSettings install.ClusterSettings
 		StartOpts       option.StartOpts
@@ -304,47 +296,85 @@ func (r *opsRunner) runOperation(
 	maybeEmitDatadogEvent(ctx, r.datadogEventClient, opSpec, r.clusterName, eventOpStarted, operationRunID, r.datadogTags)
 	op.Status(fmt.Sprintf("running operation %s with run id %d", op.spec.Name, operationRunID))
 	var cleanup registry.OperationCleanup
+	var cleanupAttempted bool
+
+	defer func() {
+		if rc := recover(); rc != nil {
+			maybeEmitDatadogEvent(ctx, r.datadogEventClient, opSpec, r.clusterName, eventOpError, operationRunID, r.datadogTags)
+			r.logger.Printf("recovered from panic: %v", rc)
+			debug.PrintStack()
+			// Attempt cleanup if the operation returned a cleanup handler
+			// before it failed, and cleanup hasn't already been attempted
+			// (to avoid infinite panic loops if cleanup itself panics).
+			if cleanup != nil && !cleanupAttempted {
+				cleanupAttempted = true
+				r.logger.Printf("attempting cleanup after panic")
+				cleanupCtx, cleanupCancel := context.WithTimeout(context.Background(), opSpec.Timeout)
+				defer cleanupCancel()
+				cleanup.Cleanup(cleanupCtx, op, c)
+			}
+		}
+	}()
 	func() {
 		ctx, cancel := context.WithTimeout(ctx, opSpec.Timeout)
 		defer cancel()
 
 		cleanup = opSpec.Run(ctx, op, c)
 	}()
-	if op.Failed() {
+	opFailed := op.Failed()
+	if opFailed {
 		op.Status("operation failed")
 		maybeEmitDatadogEvent(ctx, r.datadogEventClient, opSpec, r.clusterName, eventOpError, operationRunID, r.datadogTags)
-		return op.mu.failures[0]
+	} else {
+		maybeEmitDatadogEvent(ctx, r.datadogEventClient, opSpec, r.clusterName, eventOpRan, operationRunID, r.datadogTags)
 	}
 
-	maybeEmitDatadogEvent(ctx, r.datadogEventClient, opSpec, r.clusterName, eventOpRan, operationRunID, r.datadogTags)
 	if cleanup == nil {
-		op.Status("operation ran successfully")
-		maybeEmitDatadogEvent(ctx, r.datadogEventClient, opSpec, r.clusterName, eventOpFinishedCleanup, operationRunID, r.datadogTags)
+		if !opFailed {
+			op.Status("operation ran successfully")
+			maybeEmitDatadogEvent(ctx, r.datadogEventClient, opSpec, r.clusterName, eventOpFinishedCleanup, operationRunID, r.datadogTags)
+		}
 		return nil
 	}
 
-	waitBeforeCleanup := roachtestflags.WaitBeforeCleanup
-	if opSpec.WaitBeforeCleanup != 0 {
-		// if opSpec.WaitBeforeCleanup is set, use it instead of the default
-		waitBeforeCleanup = opSpec.WaitBeforeCleanup
-	}
+	// Run cleanup regardless of whether the operation failed. The operation
+	// may have modified cluster state before encountering an error, and
+	// cleanup is needed to restore the original state.
+	if !opFailed {
+		waitBeforeCleanup := roachtestflags.WaitBeforeCleanup
+		if opSpec.WaitBeforeCleanup != 0 {
+			// if opSpec.WaitBeforeCleanup is set, use it instead of the default
+			waitBeforeCleanup = opSpec.WaitBeforeCleanup
+		}
 
-	op.Status(fmt.Sprintf("operation ran successfully; waiting %s before cleanup", waitBeforeCleanup))
-	select {
-	case <-time.After(waitBeforeCleanup):
-		// Wait completed successfully.
-	case <-ctx.Done():
-		// Context was canceled; exit early.
-		op.Status("context canceled during wait before cleanup")
-		return ctx.Err()
+		op.Status(fmt.Sprintf("operation ran successfully; waiting %s before cleanup", waitBeforeCleanup))
+		select {
+		case <-time.After(waitBeforeCleanup):
+			// Wait completed successfully.
+		case <-ctx.Done():
+			// Context was canceled; proceed to cleanup immediately instead of
+			// skipping it, so that operations can restore cluster state.
+			op.Status("context canceled during wait; proceeding to cleanup immediately")
+		}
 	}
 
 	op.Status("running cleanup")
-	func() {
-		ctx, cancel := context.WithTimeout(context.Background(), opSpec.Timeout)
-		defer cancel()
+	cleanupAttempted = true
 
-		cleanup.Cleanup(ctx, op, c)
+	// Clear run-phase failures so that op.Failed() after cleanup only
+	// reflects whether cleanup itself failed. The run-phase failure has
+	// already been logged and emitted to Datadog above.
+	func() {
+		op.mu.Lock()
+		defer op.mu.Unlock()
+		op.mu.failures = nil
+	}()
+
+	func() {
+		cleanupCtx, cleanupCancel := context.WithTimeout(context.Background(), opSpec.Timeout)
+		defer cleanupCancel()
+
+		cleanup.Cleanup(cleanupCtx, op, c)
 	}()
 
 	if op.Failed() {

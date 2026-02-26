@@ -55,8 +55,13 @@ func runSQLOperation(
 		createStmt := createSQL(name)
 
 		o.Status(fmt.Sprintf("creating %s %s", objectType, name))
-		if _, err := conn.ExecContext(ctx, createStmt); err != nil {
-			o.Fatal(err)
+		// Use a background context so that even if the parent context is cancelled
+		// (e.g., by a signal), the CREATE completes and we always return the
+		// cleanup handler.
+		execCtx, execCancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer execCancel()
+		if _, err := conn.ExecContext(execCtx, createStmt); err != nil {
+			o.Errorf("failed to create %s: %v", objectType, err)
 		}
 
 		o.Status(fmt.Sprintf("%s %s created", objectType, name))

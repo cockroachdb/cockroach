@@ -18,6 +18,7 @@ import (
 	"runtime"
 	"strconv"
 	"strings"
+	"syscall"
 	"time"
 
 	"github.com/DataDog/datadog-api-client-go/v2/api/datadog"
@@ -344,7 +345,7 @@ func initRunFlagsBinariesAndLibraries(cmd *cobra.Command) error {
 func CtrlC(ctx context.Context, l *logger.Logger, cancel func(), cr *clusterRegistry) {
 	// Shut down test clusters when interrupted (for example CTRL-C).
 	sig := make(chan os.Signal, 1)
-	signal.Notify(sig, os.Interrupt)
+	signal.Notify(sig, os.Interrupt, syscall.SIGTERM, syscall.SIGHUP, syscall.SIGQUIT)
 	go func() {
 		select {
 		case <-sig:
@@ -355,12 +356,18 @@ func CtrlC(ctx context.Context, l *logger.Logger, cancel func(), cr *clusterRegi
 			"Signaled received. Canceling workers and waiting up to 5s for them.")
 		// Signal runner.Run() to stop.
 		cancel()
-		<-time.After(5 * time.Second)
 		if cr == nil {
-			shout(ctx, l, os.Stderr, "5s elapsed. No clusters registered; nothing to destroy.")
+			// Operation mode: no clusters to destroy, but operations may need
+			// time to run cleanup (e.g., DROP INDEX, restore license). Wait up
+			// to 2 minutes for workers to finish before force-exiting.
+			shout(ctx, l, os.Stderr,
+				"Signal received in operation mode. Waiting up to 2m for cleanup to finish.")
+			<-time.After(2 * time.Minute)
+			shout(ctx, l, os.Stderr, "2m elapsed. Force exiting.")
 			l.Printf("all stacks:\n\n%s\n", allstacks.Get())
 			os.Exit(2)
 		}
+		<-time.After(5 * time.Second)
 		shout(ctx, l, os.Stderr, "5s elapsed. Will brutally destroy all clusters.")
 		// Make sure there are no leftover clusters.
 		destroyCh := make(chan struct{})

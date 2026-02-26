@@ -69,9 +69,10 @@ func runAddExpiredLicenseToTriggerThrottle(
 	// the license enforcement policies. Connection throttling, no more than 5 concurrent
 	// transactions opened, will be in effect.
 	o.Status(fmt.Sprintf("updating license from %q to %q", cleanup.license, newLicense))
-	_, err = conn.ExecContext(ctx, fmt.Sprintf("SET CLUSTER SETTING enterprise.license = '%s'", newLicense))
-	if err != nil {
-		o.Fatal(err)
+	setCtx, setCancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer setCancel()
+	if _, err = conn.ExecContext(setCtx, fmt.Sprintf("SET CLUSTER SETTING enterprise.license = '%s'", newLicense)); err != nil {
+		o.Errorf("failed to set expired license: %v", err)
 	}
 
 	return cleanup

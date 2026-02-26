@@ -59,9 +59,10 @@ func runAddDatabase(
 	dbName := fmt.Sprintf("add_database_op_%d", rng.Uint32())
 	o.Status(fmt.Sprintf("adding database %s", dbName))
 	createDatabaseStmt := fmt.Sprintf("CREATE DATABASE %s%s", dbName, withOpts)
-	_, err := conn.ExecContext(ctx, createDatabaseStmt)
-	if err != nil {
-		o.Fatal(err)
+	execCtx, execCancel := context.WithTimeout(context.Background(), 1*time.Minute)
+	defer execCancel()
+	if _, err := conn.ExecContext(execCtx, createDatabaseStmt); err != nil {
+		o.Errorf("failed to create database: %v", err)
 	}
 
 	o.Status(fmt.Sprintf("database %s created", dbName))

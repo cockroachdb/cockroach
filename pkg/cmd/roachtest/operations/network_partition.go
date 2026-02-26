@@ -56,9 +56,15 @@ func createNetworkPartialPartition(
 	}
 	otherNodeIP := ips[0]
 	o.Status(fmt.Sprintf("creating a partition between nodes n%d and n%d", nodeID, otherNodeID))
+	iptCtx, iptCancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer iptCancel()
 	// Block all input and output traffic between the two nodes.
-	c.Run(ctx, option.WithNodes(c.Node(nodeID)), fmt.Sprintf(`sudo iptables -A INPUT  -p tcp -s %s -j DROP`, otherNodeIP))
-	c.Run(ctx, option.WithNodes(c.Node(nodeID)), fmt.Sprintf(`sudo iptables -A OUTPUT -p tcp -d %s -j DROP`, otherNodeIP))
+	if err := c.RunE(iptCtx, option.WithNodes(c.Node(nodeID)), fmt.Sprintf(`sudo iptables -A INPUT  -p tcp -s %s -j DROP`, otherNodeIP)); err != nil {
+		o.Errorf("failed to add INPUT iptables rule: %v", err)
+	}
+	if err := c.RunE(iptCtx, option.WithNodes(c.Node(nodeID)), fmt.Sprintf(`sudo iptables -A OUTPUT -p tcp -d %s -j DROP`, otherNodeIP)); err != nil {
+		o.Errorf("failed to add OUTPUT iptables rule: %v", err)
+	}
 
 	return &cleanupNetworkPartition{nodeID: nodeID}
 }
@@ -76,11 +82,22 @@ func createNetworkFullPartition(
 
 	// Drop bi-directional traffic between the node and all other nodes on the
 	// pgport.
+	// Use a background context so that even if the parent context is cancelled
+	// (e.g., by a signal), the iptables commands complete and we always return the
+	// cleanup handler.
 	o.Status(fmt.Sprintf("partition node n%d from the cluster", nodeID))
-	c.Run(ctx, option.WithNodes(c.Node(nodeID)), fmt.Sprintf(`sudo iptables -A INPUT  -p tcp --sport {pgport:%d} -j DROP`, nodeID))
-	c.Run(ctx, option.WithNodes(c.Node(nodeID)), fmt.Sprintf(`sudo iptables -A OUTPUT -p tcp --sport {pgport:%d} -j DROP`, nodeID))
-	c.Run(ctx, option.WithNodes(c.Node(nodeID)), fmt.Sprintf(`sudo iptables -A INPUT  -p tcp --dport {pgport:%d} -j DROP`, nodeID))
-	c.Run(ctx, option.WithNodes(c.Node(nodeID)), fmt.Sprintf(`sudo iptables -A OUTPUT -p tcp --dport {pgport:%d} -j DROP`, nodeID))
+	iptCtx, iptCancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer iptCancel()
+	for _, rule := range []string{
+		fmt.Sprintf(`sudo iptables -A INPUT  -p tcp --sport {pgport:%d} -j DROP`, nodeID),
+		fmt.Sprintf(`sudo iptables -A OUTPUT -p tcp --sport {pgport:%d} -j DROP`, nodeID),
+		fmt.Sprintf(`sudo iptables -A INPUT  -p tcp --dport {pgport:%d} -j DROP`, nodeID),
+		fmt.Sprintf(`sudo iptables -A OUTPUT -p tcp --dport {pgport:%d} -j DROP`, nodeID),
+	} {
+		if err := c.RunE(iptCtx, option.WithNodes(c.Node(nodeID)), rule); err != nil {
+			o.Errorf("failed to add iptables rule: %v", err)
+		}
+	}
 
 	return &cleanupNetworkPartition{nodeID: nodeID}
 }

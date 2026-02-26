@@ -66,18 +66,21 @@ func runGrantRole(
 	// Create both roles.
 	for _, role := range []string{grantedRole, granteeRole} {
 		o.Status(fmt.Sprintf("Creating role %s", role))
-		_, err := conn.ExecContext(ctx, fmt.Sprintf("CREATE ROLE %s", role))
+		roleCtx, roleCancel := context.WithTimeout(context.Background(), 30*time.Second)
+		_, err := conn.ExecContext(roleCtx, fmt.Sprintf("CREATE ROLE %s", role))
+		roleCancel()
 		if err != nil {
-			o.Fatal(err)
+			o.Errorf("failed to create role %s: %v", role, err)
 		}
 		o.Status(fmt.Sprintf("Created role %s", role))
 	}
 
 	// Grant one role to the other.
 	o.Status(fmt.Sprintf("Granting role %s to role %s", grantedRole, granteeRole))
-	_, err := conn.ExecContext(ctx, fmt.Sprintf("GRANT %s TO %s", grantedRole, granteeRole))
-	if err != nil {
-		o.Fatal(err)
+	grantCtx, grantCancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer grantCancel()
+	if _, err := conn.ExecContext(grantCtx, fmt.Sprintf("GRANT %s TO %s", grantedRole, granteeRole)); err != nil {
+		o.Errorf("failed to grant role: %v", err)
 	}
 	o.Status(fmt.Sprintf("Granted role %s to role %s", grantedRole, granteeRole))
 

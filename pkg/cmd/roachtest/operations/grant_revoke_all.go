@@ -61,15 +61,17 @@ func runGrant(
 	dbUser := fmt.Sprintf("roachprod_ops_add_role_%s", randutil.RandString(rng, 10, randutil.PrintableKeyAlphabet))
 
 	o.Status(fmt.Sprintf("Creating user %s", dbUser))
-	_, err := conn.ExecContext(ctx, fmt.Sprintf("CREATE USER %s WITH PASSWORD '%s'", dbUser, dbUser))
-	if err != nil {
-		o.Fatal(err)
+	createCtx, createCancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer createCancel()
+	if _, err := conn.ExecContext(createCtx, fmt.Sprintf("CREATE USER %s WITH PASSWORD '%s'", dbUser, dbUser)); err != nil {
+		o.Errorf("failed to create user: %v", err)
 	}
 
 	o.Status(fmt.Sprintf("Granting ALL for user %s to table %s.%s", dbUser, dbName, tableName))
-	_, err = conn.ExecContext(ctx, fmt.Sprintf("GRANT ALL ON TABLE %s.%s TO %s", dbName, tableName, dbUser))
-	if err != nil {
-		o.Fatal(err)
+	grantCtx, grantCancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer grantCancel()
+	if _, err := conn.ExecContext(grantCtx, fmt.Sprintf("GRANT ALL ON TABLE %s.%s TO %s", dbName, tableName, dbUser)); err != nil {
+		o.Errorf("failed to grant privileges: %v", err)
 	}
 
 	o.Status(fmt.Sprintf("Granted ALL for user %s to table %s.%s", dbUser, dbName, tableName))
