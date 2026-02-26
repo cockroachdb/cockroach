@@ -102,10 +102,8 @@ func extractRegionFromSpan(
 	span roachpb.Span,
 	tableDesc catalog.TableDescriptor,
 ) (string, error) {
-	if !tableDesc.IsLocalityRegionalByRow() {
-		if !buildutil.CrdbTestBuild && !testing.Testing() { // For ease of testing, allow faked multi-region databases.
-			return "", errors.AssertionFailedf("table is not REGIONAL BY ROW, cannot extract region from span")
-		}
+	if !isRegionalByRow(tableDesc) {
+		return "", errors.AssertionFailedf("table is not REGIONAL BY ROW, cannot extract region from span")
 	}
 
 	priIndex := tableDesc.GetPrimaryIndex()
@@ -389,10 +387,8 @@ func findUniqueColIdxs(tableDesc catalog.TableDescriptor, index catalog.Index) (
 
 // getRegionsForTable retrieves the list of regions from an RBR table.
 func getRegionsForTable(ctx context.Context, tableDesc catalog.TableDescriptor) ([]string, error) {
-	if !tableDesc.IsLocalityRegionalByRow() {
-		if !buildutil.CrdbTestBuild && !testing.Testing() { // For ease of testing, allow faked multi-region databases.
-			return nil, errors.AssertionFailedf("table is not REGIONAL BY ROW")
-		}
+	if !isRegionalByRow(tableDesc) {
+		return nil, errors.AssertionFailedf("table is not REGIONAL BY ROW")
 	}
 
 	regionColID := tableDesc.GetPrimaryIndex().GetKeyColumnID(0)
@@ -408,4 +404,24 @@ func getRegionsForTable(ctx context.Context, tableDesc catalog.TableDescriptor) 
 	allRegions := regionType.TypeMeta.EnumData.LogicalRepresentations
 
 	return allRegions, nil
+}
+
+func isTesting() bool {
+	return buildutil.CrdbTestBuild || testing.Testing()
+}
+
+// isRegionalByRow checks whether a table is regional by row or if it's a mock
+// RBR table run under test.
+//
+// Mocked RBR tables (in unit and base logic tests) allow for duplicated values
+// in unique columns whereas the genuine articles (in CCL logic tests) are
+// blocked by the uniqueness constraints. Single-node mock RBR tables are used
+// to test the duplicated uniques case; multi-node RBR tables are used to test
+// the unduplicated case.
+func isRegionalByRow(table catalog.TableDescriptor) bool {
+	priIndex := table.GetPrimaryIndex()
+
+	isMockedRegionalByRow := isTesting() && priIndex.IndexDesc().KeyColumnNames[0] == tree.RegionalByRowRegionDefaultCol
+
+	return table.IsLocalityRegionalByRow() || isMockedRegionalByRow
 }

@@ -542,6 +542,18 @@ func buildInspectCheckFactories(
 					expected: specCheck.RowCount,
 				}
 			})
+		case jobspb.InspectCheckUniqueness:
+			checkFactories = append(checkFactories, func(asOf hlc.Timestamp) inspectCheck {
+				return &uniquenessCheck{
+					uniquenessCheckApplicability: uniquenessCheckApplicability{
+						tableID: tableID,
+					},
+					execCfg:      execCfg,
+					indexID:      indexID,
+					tableVersion: tableVersion,
+					asOf:         asOf,
+				}
+			})
 		default:
 			return nil, errors.AssertionFailedf("unsupported inspect check type: %v", specCheck.Type)
 		}
