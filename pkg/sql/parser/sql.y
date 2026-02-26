@@ -1005,7 +1005,7 @@ func (u *sqlSymUnion) filterType() tree.FilterType {
 %token <str> BUCKET_COUNT
 %token <str> BOOLEAN BOTH BOX2D BY BYPASSRLS
 
-%token <str> CACHE CALL CALLED CANCEL CANCELQUERY CAPABILITIES CAPABILITY CASCADE CASE CAST CBRT CHANGEFEED CHAR
+%token <str> CACHE CALL CALLED CANCEL CANCELQUERY CAPABILITIES CAPABILITY CASCADE CASE CAST CBRT CHAIN CHANGEFEED CHAR
 %token <str> CHARACTER CHARACTERISTICS CHECK CHECK_FILES CLOSE
 %token <str> CLUSTER CLUSTERS COALESCE COLLATE COLLATION COLUMN COLUMNS COMMENT COMMENTS COMMIT
 %token <str> COMMITTED COMPACT COMPLETE COMPLETIONS CONCAT CONCURRENTLY CONFIGURATION CONFIGURATIONS CONFIGURE
@@ -1473,7 +1473,7 @@ func (u *sqlSymUnion) filterType() tree.FilterType {
 %type <tree.Statement> fetch_cursor_stmt
 %type <tree.Statement> move_cursor_stmt
 %type <tree.CursorStmt> cursor_movement_specifier
-%type <bool> opt_hold opt_binary
+%type <bool> opt_hold opt_binary opt_transaction_chain
 %type <tree.CursorSensitivity> opt_sensitivity
 %type <tree.CursorScrollOption> opt_scroll
 %type <int64> opt_forward_backward forward_backward
@@ -13688,7 +13688,7 @@ transaction_stmt:
 // %Help: BEGIN - start a transaction
 // %Category: Txn
 // %Text:
-// BEGIN [TRANSACTION] [ <txnparameter> [[,] ...] ]
+// BEGIN [TRANSACTION | WORK] [ <txnparameter> [[,] ...] ]
 // START TRANSACTION [ <txnparameter> [[,] ...] ]
 //
 // Transaction parameters:
@@ -13708,37 +13708,32 @@ begin_stmt:
 // %Help: COMMIT - commit the current transaction
 // %Category: Txn
 // %Text:
-// COMMIT [TRANSACTION]
-// END [TRANSACTION]
+// COMMIT [TRANSACTION | WORK] [AND [NO] CHAIN]
+// END [TRANSACTION | WORK] [AND [NO] CHAIN]
 // %SeeAlso: BEGIN, ROLLBACK, WEBDOCS/commit-transaction.html
 commit_stmt:
-  COMMIT opt_transaction
+  COMMIT opt_transaction opt_transaction_chain
   {
-    $$.val = &tree.CommitTransaction{}
+    $$.val = &tree.CommitTransaction{Chain: $3.bool()}
   }
 | COMMIT error // SHOW HELP: COMMIT
 
 abort_stmt:
-  ABORT opt_abort_mod
+  ABORT opt_transaction opt_transaction_chain
   {
-    $$.val = &tree.RollbackTransaction{}
+    $$.val = &tree.RollbackTransaction{Chain: $3.bool()}
   }
-
-opt_abort_mod:
-  TRANSACTION {}
-| WORK        {}
-| /* EMPTY */ {}
 
 // %Help: ROLLBACK - abort the current (sub-)transaction
 // %Category: Txn
 // %Text:
-// ROLLBACK [TRANSACTION]
-// ROLLBACK [TRANSACTION] TO [SAVEPOINT] <savepoint name>
+// ROLLBACK [TRANSACTION | WORK] [AND [NO] CHAIN]
+// ROLLBACK [TRANSACTION | WORK] TO [SAVEPOINT] <savepoint name>
 // %SeeAlso: BEGIN, COMMIT, SAVEPOINT, WEBDOCS/rollback-transaction.html
 rollback_stmt:
-  ROLLBACK opt_transaction
+  ROLLBACK opt_transaction opt_transaction_chain
   {
-     $$.val = &tree.RollbackTransaction{}
+     $$.val = &tree.RollbackTransaction{Chain: $3.bool()}
   }
 | ROLLBACK opt_transaction TO savepoint_name
   {
@@ -13761,16 +13756,31 @@ legacy_begin_stmt:
 | BEGIN error // SHOW HELP: BEGIN
 
 legacy_end_stmt:
-  END opt_transaction
+  END opt_transaction opt_transaction_chain
   {
-    $$.val = &tree.CommitTransaction{}
+    $$.val = &tree.CommitTransaction{Chain: $3.bool()}
   }
 | END error // SHOW HELP: COMMIT
 
 
 opt_transaction:
   TRANSACTION {}
+| WORK        {}
 | /* EMPTY */ {}
+
+opt_transaction_chain:
+  AND CHAIN
+  {
+    $$.val = true
+  }
+| AND NO CHAIN
+  {
+    $$.val = false
+  }
+| /* EMPTY */
+  {
+    $$.val = false
+  }
 
 savepoint_name:
   SAVEPOINT name
@@ -18723,6 +18733,7 @@ unreserved_keyword:
 | CAPABILITIES
 | CAPABILITY
 | CASCADE
+| CHAIN
 | CHANGEFEED
 | CHECK_FILES
 | CLOSE
@@ -19243,6 +19254,7 @@ bare_label_keywords:
 | CASCADE
 | CASE
 | CAST
+| CHAIN
 | CHANGEFEED
 | CHARACTERISTICS
 | CHECK
