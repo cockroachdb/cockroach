@@ -251,6 +251,26 @@ func (_m *ITasksRepository) UpdateError(
 	return r0
 }
 
+// UpdatePayload provides a mock function with given fields: _a0, _a1, _a2, _a3
+func (_m *ITasksRepository) UpdatePayload(
+	_a0 context.Context, _a1 *logger.Logger, _a2 uuid.UUID, _a3 []byte,
+) error {
+	ret := _m.Called(_a0, _a1, _a2, _a3)
+
+	if len(ret) == 0 {
+		panic("no return value specified for UpdatePayload")
+	}
+
+	var r0 error
+	if rf, ok := ret.Get(0).(func(context.Context, *logger.Logger, uuid.UUID, []byte) error); ok {
+		r0 = rf(_a0, _a1, _a2, _a3)
+	} else {
+		r0 = ret.Error(0)
+	}
+
+	return r0
+}
+
 // UpdateState provides a mock function with given fields: _a0, _a1, _a2, _a3
 func (_m *ITasksRepository) UpdateState(
 	_a0 context.Context, _a1 *logger.Logger, _a2 uuid.UUID, _a3 tasks.TaskState,

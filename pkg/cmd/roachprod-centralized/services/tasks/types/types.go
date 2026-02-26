@@ -47,6 +47,10 @@ var (
 	// ErrMetricsCollectionDisabled is returned when metrics collection is disabled
 	// and a metrics-related operation is attempted.
 	ErrMetricsCollectionDisabled = fmt.Errorf("metrics collection is disabled")
+	// ErrTaskYield is returned by a task's Process() method to signal that the
+	// task wants to release its worker and be re-scheduled later. The executor
+	// persists the task's updated payload and transitions it to yielded state.
+	ErrTaskYield = fmt.Errorf("task yielded")
 )
 
 const (

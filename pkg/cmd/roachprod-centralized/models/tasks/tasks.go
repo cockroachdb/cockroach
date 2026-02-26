@@ -13,7 +13,8 @@ import (
 )
 
 // TaskState represents the current execution state of a background task.
-// Tasks progress through these states during their lifecycle: pending -> running -> done/failed.
+// Tasks progress through these states during their lifecycle:
+// pending -> running -> done/failed/yielded, where yielded tasks cycle back to running.
 type TaskState string
 
 const (
@@ -25,6 +26,10 @@ const (
 	TaskStateDone TaskState = "done"
 	// TaskStateFailed indicates a task encountered an error and could not complete.
 	TaskStateFailed TaskState = "failed"
+	// TaskStateYielded indicates a task voluntarily released its worker
+	// and is waiting to be re-scheduled. Used by parent tasks that spawn
+	// children and need to wait for them without holding a worker hostage.
+	TaskStateYielded TaskState = "yielded"
 )
 
 // ITask defines the interface for background tasks in the roachprod-centralized system.

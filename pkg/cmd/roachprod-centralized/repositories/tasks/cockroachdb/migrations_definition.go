@@ -113,5 +113,15 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_tasks_concurrency_key_running_unique
     WHERE concurrency_key IS NOT NULL AND state = 'running';
 				`,
 		},
+		{
+			Version:     6,
+			Description: "Allow yielded task state for worker release and re-scheduling",
+			SQL: `
+-- Update CHECK constraint to allow yielded state.
+-- Yielded tasks voluntarily released their worker and wait to be re-scheduled.
+ALTER TABLE tasks DROP CONSTRAINT check_state;
+ALTER TABLE tasks ADD CONSTRAINT check_state CHECK (state IN ('pending', 'running', 'done', 'failed', 'yielded'));
+			`,
+		},
 	}
 }

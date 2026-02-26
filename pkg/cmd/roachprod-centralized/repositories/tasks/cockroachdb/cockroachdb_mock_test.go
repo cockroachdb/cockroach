@@ -243,6 +243,7 @@ func TestClaimNextTask_ReturnsTask(t *testing.T) {
 			sqlmock.AnyArg(),
 			string(tasks.TaskStatePending),
 			string(tasks.TaskStateRunning),
+			string(tasks.TaskStateYielded),
 		).
 		WillReturnRows(rows)
 
@@ -264,6 +265,7 @@ func TestClaimNextTask_ReturnsFalseWhenNoPendingTasks(t *testing.T) {
 			sqlmock.AnyArg(),
 			string(tasks.TaskStatePending),
 			string(tasks.TaskStateRunning),
+			string(tasks.TaskStateYielded),
 		).
 		WillReturnError(gosql.ErrNoRows)
 
@@ -284,6 +286,7 @@ func TestClaimNextTask_ReturnsFalseOnConcurrencyKeyRunningConflict(t *testing.T)
 			sqlmock.AnyArg(),
 			string(tasks.TaskStatePending),
 			string(tasks.TaskStateRunning),
+			string(tasks.TaskStateYielded),
 		).
 		WillReturnError(
 			errors.New(`duplicate key value violates unique constraint "idx_tasks_concurrency_key_running_unique"`),

@@ -264,6 +264,68 @@ func TestProcessTask_Failed_MarkAsRunningFailed(t *testing.T) {
 	assert.ErrorIs(t, err, expectedErr)
 }
 
+func TestProcessTask_Yield(t *testing.T) {
+	mockRepo := &tasksrepomock.ITasksRepository{}
+	taskService := NewService(mockRepo, "test-instance", nil, types.Options{
+		DefaultTasksTimeout: 50 * time.Millisecond,
+	})
+
+	service := &MockITasksService{}
+	task := &MockTask{
+		Task: tasks.Task{ID: uuid.MakeV4(), Type: "test_type", Payload: []byte(`{"key":"value"}`)},
+	}
+
+	// Expected flow: running → yield → persist payload → mark yielded
+	mockRepo.On("UpdateState", mock.Anything, mock.Anything, task.GetID(), tasks.TaskStateRunning).Return(nil).Once()
+	service.On("GetTaskServiceName").Return("test_type").Once()
+	service.On("GetHandledTasks").Return(map[string]types.ITask{"test_type": task}).Once()
+	task.On("GetType").Return("test_type").Once()
+	service.On("CreateTaskInstance", mock.Anything).Return(task, nil).Maybe()
+	task.On("Process", mock.Anything, mock.Anything).Return(types.ErrTaskYield).Once()
+	mockRepo.On("UpdatePayload", mock.Anything, mock.Anything, task.GetID(), task.GetPayload()).Return(nil).Once()
+	mockRepo.On("UpdateState", mock.Anything, mock.Anything, task.GetID(), tasks.TaskStateYielded).Return(nil).Once()
+
+	taskService.RegisterTasksService(service)
+	err := taskService.processTask(context.Background(), logger.DefaultLogger, task)
+
+	// Yield is not an error for the worker
+	assert.Nil(t, err)
+
+	// Verify no UpdateError or TaskStateFailed/TaskStateDone transitions
+	mockRepo.AssertExpectations(t)
+	service.AssertExpectations(t)
+}
+
+func TestProcessTask_Yield_WithMetrics(t *testing.T) {
+	mockRepo := &tasksrepomock.ITasksRepository{}
+	taskService := NewService(mockRepo, "test-instance", nil, types.Options{
+		DefaultTasksTimeout: 50 * time.Millisecond,
+		CollectMetrics:      true,
+	})
+
+	service := &MockITasksService{}
+	task := &MockTask{
+		Task: tasks.Task{ID: uuid.MakeV4(), Type: "test_type"},
+	}
+
+	mockRepo.On("UpdateState", mock.Anything, mock.Anything, task.GetID(), tasks.TaskStateRunning).Return(nil).Once()
+	service.On("GetTaskServiceName").Return("test_type").Once()
+	service.On("GetHandledTasks").Return(map[string]types.ITask{"test_type": task}).Once()
+	task.On("GetType").Return("test_type").Once()
+	service.On("CreateTaskInstance", mock.Anything).Return(task, nil).Maybe()
+	task.On("Process", mock.Anything, mock.Anything).Return(types.ErrTaskYield).Once()
+	mockRepo.On("UpdatePayload", mock.Anything, mock.Anything, task.GetID(), mock.Anything).Return(nil).Once()
+	mockRepo.On("UpdateState", mock.Anything, mock.Anything, task.GetID(), tasks.TaskStateYielded).Return(nil).Once()
+
+	taskService.RegisterTasksService(service)
+	err := taskService.processTask(context.Background(), logger.DefaultLogger, task)
+	assert.Nil(t, err)
+
+	// Verify yield metric was incremented (no panic = metric counter exists)
+	// Completion metrics should NOT have been recorded (taskYielded flag skips the defer)
+	mockRepo.AssertExpectations(t)
+}
+
 func TestMarkTaskAs(t *testing.T) {
 	mockRepo := &tasksrepomock.ITasksRepository{}
 	taskService := NewService(mockRepo, "test-instance", nil, types.Options{})

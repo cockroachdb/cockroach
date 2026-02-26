@@ -48,6 +48,10 @@ type TaskExecutor interface {
 	// NewLogSink creates a log sink for the given task.
 	// Returns nil if log streaming is not configured.
 	NewLogSink(taskID uuid.UUID) logger.LogSink
+	// UpdatePayload persists the task's updated payload (used on yield)
+	UpdatePayload(ctx context.Context, l *logger.Logger, id uuid.UUID, payload []byte) error
+	// RecordTaskYield increments the yield counter for a task type
+	RecordTaskYield(taskType string)
 }
 
 // ExecuteTask processes a task and updates its status in the repository.
@@ -106,12 +110,17 @@ func ExecuteTask(
 	// Log the hydrated task with deserialized options (not base64 payload)
 	taskLogger.LogAttrs(ctx, slog.LevelDebug, "Processing task", hydratedTask.AsLogAttributes()...)
 
-	// Start timing for metrics (measure total execution time including state updates)
+	// Start timing for metrics (measure total execution time including state updates).
+	// taskYielded is set when Process() returns ErrTaskYield; completion metrics
+	// are skipped in that case because the task is not truly finished.
 	var errTaskProcess error
+	var taskYielded bool
 	start := timeutil.Now()
 	defer func() {
+		if taskYielded {
+			return // skip completion metrics for yielded tasks
+		}
 		duration := timeutil.Since(start).Seconds()
-		// Record metrics for both success and failure cases
 		if executor.GetMetricsEnabled() {
 			executor.RecordTaskCompletion(hydratedTask.GetType(), errTaskProcess == nil, duration)
 		}
@@ -134,6 +143,43 @@ func ExecuteTask(
 	}
 
 	errTaskProcess = executeTaskWithTimeout(ctx, taskLogger, hydratedTask, executor)
+
+	// Handle yield: the task wants to release its worker and be re-scheduled.
+	// Persist updated payload (e.g. children IDs) and transition to yielded state.
+	if errors.Is(errTaskProcess, types.ErrTaskYield) {
+		taskYielded = true
+
+		if errPayload := executor.UpdatePayload(
+			ctx, l, hydratedTask.GetID(), hydratedTask.GetPayload(),
+		); errPayload != nil {
+			l.Error(
+				"Failed to persist payload on yield",
+				slog.Any("task_id", hydratedTask.GetID()),
+				slog.Any("error", errPayload),
+			)
+		}
+
+		if errYieldStatus := executor.MarkTaskAs(
+			ctx, l, hydratedTask.GetID(), mtasks.TaskStateYielded,
+		); errYieldStatus != nil {
+			l.Error(
+				"Failed to update task status to yielded",
+				slog.Any("task_id", hydratedTask.GetID()),
+				slog.Any("error", errYieldStatus),
+			)
+		}
+
+		if executor.GetMetricsEnabled() {
+			executor.RecordTaskYield(hydratedTask.GetType())
+		}
+
+		taskLogger.Info(
+			"Task yielded, will be re-scheduled",
+			slog.Any("task_id", hydratedTask.GetID()),
+		)
+		return nil // not an error for the worker
+	}
+
 	if errTaskProcess != nil {
 		taskLogger.Error(
 			"Unable to process task",

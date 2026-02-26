@@ -71,6 +71,7 @@ type taskMetrics struct {
 	taskProcessingDuration *prometheus.HistogramVec
 	taskQueueAge           *prometheus.HistogramVec
 	taskTimeouts           *prometheus.CounterVec
+	taskYields             *prometheus.CounterVec
 	totalTasks             *prometheus.GaugeVec
 	maxWorkers             prometheus.Gauge
 	activeWorkers          prometheus.Gauge
@@ -176,6 +177,16 @@ func (s *Service) newMetrics(registerer prometheus.Registerer) *taskMetrics {
 			prometheus.CounterOpts{
 				Name:        fmt.Sprintf("%s_timeouts_total", types.TaskServiceName),
 				Help:        "Total number of task timeouts by type",
+				Namespace:   configtypes.MetricsNamespace,
+				ConstLabels: promGlobalLabels,
+			},
+			[]string{"task_type"},
+		),
+		// Prometheus counter of task yields by type
+		taskYields: factory.NewCounterVec(
+			prometheus.CounterOpts{
+				Name:        fmt.Sprintf("%s_yields_total", types.TaskServiceName),
+				Help:        "Total number of task yields by type",
 				Namespace:   configtypes.MetricsNamespace,
 				ConstLabels: promGlobalLabels,
 			},
@@ -432,6 +443,18 @@ func (s *Service) IncrementTimeouts(taskType string) {
 
 func (s *Service) GetDefaultTimeout() types.TimeoutGetter {
 	return &timeoutGetter{timeout: s.options.DefaultTasksTimeout}
+}
+
+func (s *Service) UpdatePayload(
+	ctx context.Context, l *logger.Logger, id uuid.UUID, payload []byte,
+) error {
+	return s.store.UpdatePayload(ctx, l, id, payload)
+}
+
+func (s *Service) RecordTaskYield(taskType string) {
+	if s.metrics != nil {
+		s.metrics.taskYields.WithLabelValues(taskType).Inc()
+	}
 }
 
 // NewLogSink creates a log sink for the given task.

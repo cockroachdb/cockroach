@@ -236,6 +236,34 @@ func (r *CRDBTasksRepo) UpdateError(
 	return nil
 }
 
+// UpdatePayload replaces the serialized payload for a task.
+func (r *CRDBTasksRepo) UpdatePayload(
+	ctx context.Context, l *logger.Logger, taskID uuid.UUID, payload []byte,
+) error {
+	query := "UPDATE tasks SET payload = $1, update_datetime = $2 WHERE id = $3"
+
+	var p interface{}
+	if len(payload) > 0 {
+		p = payload
+	}
+
+	result, err := r.db.ExecContext(ctx, query, p, timeutil.Now(), taskID.String())
+	if err != nil {
+		return errors.Wrap(err, "failed to update task payload")
+	}
+
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		return errors.Wrap(err, "failed to get rows affected")
+	}
+
+	if rowsAffected == 0 {
+		return rtasks.ErrTaskNotFound
+	}
+
+	return nil
+}
+
 // GetStatistics returns task statistics grouped by state.
 func (r *CRDBTasksRepo) GetStatistics(
 	ctx context.Context, l *logger.Logger,
@@ -334,7 +362,9 @@ func (r *CRDBTasksRepo) GetTasksForProcessing(
 	}
 }
 
-// claimNextTask atomically claims the next pending task.
+// claimNextTask atomically claims the next pending or yielded task.
+// Both pending and yielded tasks compete fairly by update_datetime so that
+// children created just before a parent yields are naturally scheduled first.
 func (r *CRDBTasksRepo) claimNextTask(
 	ctx context.Context, l *logger.Logger, instanceID string,
 ) (tasks.ITask, bool, error) {
@@ -343,7 +373,7 @@ func (r *CRDBTasksRepo) claimNextTask(
 			SET state = $1, consumer_id = $2, update_datetime = $3
 			WHERE id = (
 				SELECT candidate.id FROM tasks AS candidate
-				WHERE candidate.state = $4
+				WHERE candidate.state IN ($4, $6)
 				AND (
 					candidate.concurrency_key IS NULL
 					OR NOT EXISTS (
@@ -353,7 +383,7 @@ func (r *CRDBTasksRepo) claimNextTask(
 						AND running.state = $5
 					)
 				)
-				ORDER BY candidate.creation_datetime
+				ORDER BY candidate.update_datetime
 				LIMIT 1
 			)
 			RETURNING id, type, state, consumer_id, creation_datetime, update_datetime, payload, error, reference, concurrency_key
@@ -366,6 +396,7 @@ func (r *CRDBTasksRepo) claimNextTask(
 		now,
 		string(tasks.TaskStatePending),
 		string(tasks.TaskStateRunning),
+		string(tasks.TaskStateYielded),
 	)
 
 	task, err := r.scanTask(row)

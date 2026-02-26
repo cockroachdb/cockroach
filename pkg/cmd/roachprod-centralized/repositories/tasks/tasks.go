@@ -36,6 +36,10 @@ type ITasksRepository interface {
 	UpdateState(context.Context, *logger.Logger, uuid.UUID, tasks.TaskState) error
 	// UpdateError sets the error message for a task.
 	UpdateError(context.Context, *logger.Logger, uuid.UUID, string) error
+	// UpdatePayload replaces the serialized payload for a task.
+	// Used when a yielding task persists updated state (e.g. children IDs)
+	// before releasing its worker.
+	UpdatePayload(context.Context, *logger.Logger, uuid.UUID, []byte) error
 	// GetStatistics returns aggregated counts of tasks grouped by their current state.
 	GetStatistics(context.Context, *logger.Logger) (Statistics, error)
 	// PurgeTasks removes tasks in the specified state that are older than the given duration.
