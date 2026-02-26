@@ -115,7 +115,7 @@ func BulkOpResponseFilter(
 			case *kvpb.ExportResponse, *kvpb.AddSSTableResponse:
 				// Skip over lease manager export requests.
 				if exp := ba.Requests[idx].GetExport(); exp != nil && lease.TestIsLeasingTxnExportRequest(codec.Load(), ba, exp) {
-					return nil
+					continue
 				}
 				select {
 				case <-*allowProgressIota:

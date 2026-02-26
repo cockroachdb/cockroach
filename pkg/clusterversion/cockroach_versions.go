@@ -219,6 +219,14 @@ const (
 	// columns to the system.statement_hints table.
 	V26_2_StatementHintsTypeColumnBackfilled
 
+	// V26_2_DescriptorTxnKeyGeneration stops generation of lease manager transaction
+	// keys from Collection.EmitDescriptorUpdatesKey, which was a hidden index for
+	// tracking all descriptors involved in a txn.
+	V26_2_DescriptorTxnKeyGeneration
+
+	// V26_2_DescriptorTxnKeyCleanup cleans up any keys stored in a hidden index
+	// used for tracking all descriptors involved in a txn.
+	V26_2_DescriptorTxnKeyCleanup
 	// *************************************************
 	// Step (1) Add new versions above this comment.
 	// Do not add new versions to a patch release.
@@ -275,6 +283,9 @@ var versionTable = [numKeys]roachpb.Version{
 
 	V26_2_StatementHintsTypeColumnBackfilled: {Major: 26, Minor: 1, Internal: 12},
 
+	V26_2_DescriptorTxnKeyGeneration: {Major: 26, Minor: 1, Internal: 14},
+
+	V26_2_DescriptorTxnKeyCleanup: {Major: 26, Minor: 1, Internal: 16},
 	// *************************************************
 	// Step (2): Add new versions above this comment.
 	// Do not add new versions to a patch release.
