@@ -450,10 +450,11 @@ func (b *Builder) buildRoutine(
 		bodyProps = make([]*physical.Required, len(stmts))
 		bodyTags = make([]string, len(stmts))
 		bodyASTs = make([]tree.Statement, len(stmts))
+		fmtFlags := tree.FmtHideConstants | tree.FmtFlags(tree.QueryFormattingForFingerprintsMask.Get(&b.evalCtx.Settings.SV))
 		for i := range stmts {
-			// TODO(michae2): We should be checking the statement hints cache here to
-			// find any external statement hints that could apply to this statement.
-			stmtScope := b.buildStmtAtRootWithScope(stmts[i].AST, nil /* desiredTypes */, bodyScope)
+			hintStmtFingerprint := tree.FormatStatementHideConstants(stmts[i].AST, fmtFlags)
+			maybeHintedStmt := b.catalog.TryRewriteWithStmtHints(b.ctx, hintStmtFingerprint, stmts[i].AST, fmtFlags)
+			stmtScope := b.buildStmtAtRootWithScope(maybeHintedStmt, nil /* desiredTypes */, bodyScope)
 
 			// The last statement produces the output of the UDF.
 			if i == len(stmts)-1 {
@@ -468,7 +469,7 @@ func (b *Builder) buildRoutine(
 			if appendedNullForVoidReturn && i == len(stmts)-1 {
 				bodyTags[i] = ""
 			} else {
-				bodyTags[i] = stmts[i].AST.StatementTag()
+				bodyTags[i] = maybeHintedStmt.StatementTag()
 			}
 
 		}

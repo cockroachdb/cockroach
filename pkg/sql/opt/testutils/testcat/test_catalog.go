@@ -322,6 +322,13 @@ func (tc *Catalog) CheckAnyPrivilege(ctx context.Context, o cat.Object) error {
 	return nil
 }
 
+// TryRewriteWithStmtHints is part of the cat.Catalog interface.
+func (tc *Catalog) TryRewriteWithStmtHints(
+	ctx context.Context, fingerprint string, ast tree.Statement, fmtFlags tree.FmtFlags,
+) tree.Statement {
+	return ast
+}
+
 // CheckExecutionPrivilege is part of the cat.Catalog interface.
 func (tc *Catalog) CheckExecutionPrivilege(
 	ctx context.Context, oid oid.Oid, user username.SQLUsername,
