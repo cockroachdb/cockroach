@@ -10,8 +10,10 @@ import (
 	"fmt"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/obs/clustermetrics"
 	"github.com/cockroachdb/cockroach/pkg/obs/clustermetrics/cmmetrics"
 	clustermetricutils "github.com/cockroachdb/cockroach/pkg/obs/clustermetrics/utils"
@@ -21,7 +23,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
-	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -30,17 +31,16 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// TestRegistrySyncerIntegration starts a real test server, wires the registrySyncer into the
+// TestRegistrySyncer starts a real test server, wires the registrySyncer into the
 // server's cluster metric registry via cmreader.Start, inserts rows into
 // system.cluster_metrics, and verifies that:
 //   - metrics appear in the registry and respond to inserts, upserts, and deletes
 //   - multiple labeled rows for the same GaugeVec are tracked correctly
 //   - metrics are visible through the /_status/vars prometheus endpoint
 //   - scalar metrics appear in TSDB time series data while labeled (vec) metrics do not
-func TestRegistrySyncerIntegration(t *testing.T) {
+func TestRegistrySyncer(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	skip.UnderStress(t, "test is too slow to run under stress")
 
 	// Register test metric metadata so ToMetric() can resolve them.
 	defer cmmetrics.TestingRegisterLabeledClusterMetric(
@@ -58,16 +58,33 @@ func TestRegistrySyncerIntegration(t *testing.T) {
 		Name: "test.scalar",
 		Help: "A scalar gauge for value verification",
 	})()
+	defer clustermetrics.TestingRegisterClusterMetric("test.stopwatch", metric.Metadata{
+		Name: "test.stopwatch",
+		Help: "A scalar stopwatch",
+	})()
+	defer clustermetrics.TestingRegisterLabeledClusterMetric(
+		"test.stopwatch_labeled", metric.Metadata{
+			Name: "test.stopwatch_labeled",
+			Help: "A labeled stopwatch",
+		},
+		[]string{"store"},
+	)()
 
 	ctx := context.Background()
-	startedChan := make(chan struct{})
-	defer close(startedChan)
+	preStartChan := make(chan struct{})
+	defer close(preStartChan)
+	fullTableLoadComplete := make(chan struct{})
+	defer close(fullTableLoadComplete)
 	srv, db, _ := serverutils.StartServer(t, base.TestServerArgs{
 		DefaultTestTenant: base.TestIsSpecificToStorageLayerAndNeedsASystemTenant,
 		Knobs: base.TestingKnobs{
+			JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
 			ClusterMetricsKnobs: &clustermetricutils.TestingKnobs{
-				OnRegistrySyncerStart: func() {
-					startedChan <- struct{}{}
+				OnRegistrySyncerPreStart: func() {
+					preStartChan <- struct{}{}
+				},
+				OnReloadComplete: func() {
+					fullTableLoadComplete <- struct{}{}
 				},
 			},
 		},
@@ -81,15 +98,28 @@ func TestRegistrySyncerIntegration(t *testing.T) {
 	// them up via OnRefresh.
 	r.Exec(t, `INSERT INTO system.cluster_metrics
 		(id, name, labels, type, value, node_id)
-		VALUES (100, 'test.gauge_labeled', '{"store": "1"}', 'gauge', 42, 1)`)
+		VALUES (100, 'test.gauge_labeled', '{"store": "1"}', 'GAUGE', 42, 1)`)
 	r.Exec(t, `INSERT INTO system.cluster_metrics
 		(id, name, labels, type, value, node_id)
-		VALUES (200, 'test.counter', '{}', 'counter', 10, 1)`)
+		VALUES (200, 'test.counter', '{}', 'COUNTER', 10, 1)`)
 	r.Exec(t, `INSERT INTO system.cluster_metrics
 		(id, name, labels, type, value, node_id)
-		VALUES (300, 'test.scalar', '{}', 'gauge', 50, 1)`)
+		VALUES (300, 'test.scalar', '{}', 'GAUGE', 50, 1)`)
 
-	<-startedChan
+	// Insert stopwatch metrics with a timestamp 10 seconds in the past so
+	// the computed elapsed time is non-trivial and easy to assert on.
+	swTimestamp := time.Now().Add(-10 * time.Second).UnixNano()
+	r.Exec(t, fmt.Sprintf(`INSERT INTO system.cluster_metrics
+		(id, name, labels, type, value, node_id)
+		VALUES (500, 'test.stopwatch', '{}', 'STOPWATCH', %d, 1)`, swTimestamp))
+	r.Exec(t, fmt.Sprintf(`INSERT INTO system.cluster_metrics
+		(id, name, labels, type, value, node_id)
+		VALUES (600, 'test.stopwatch_labeled', '{"store": "1"}', 'STOPWATCH', %d, 1)`,
+		swTimestamp))
+
+	<-preStartChan
+	<-fullTableLoadComplete
+
 	execCfg := ts.ExecutorConfig().(sql.ExecutorConfig)
 
 	// Get a handle to the cluster metric registry for direct inspection.
@@ -100,17 +130,92 @@ func TestRegistrySyncerIntegration(t *testing.T) {
 	requireMetricExists(t, reg, "test.gauge_labeled")
 	requireMetricExists(t, reg, "test.counter")
 	requireMetricExists(t, reg, "test.scalar")
+	requireMetricExists(t, reg, "test.stopwatch")
+	requireMetricExists(t, reg, "test.stopwatch_labeled")
 
 	// Verify initial values for scalar metrics.
 	requireCounterValue(t, reg, "test.counter", 10)
 	requireScalarGaugeValue(t, reg, "test.scalar", 50)
+
+	// Verify the scalar stopwatch reports positive elapsed time.
+	// The stored timestamp is ~10s in the past, so Value() should return
+	// at least 10 seconds worth of nanoseconds.
+	requireStopwatchElapsed(t, reg, "test.stopwatch", 10*time.Second)
+
+	// Verify the labeled stopwatch reports positive elapsed time in
+	// prometheus output (the derived fn is applied during scraping).
+	requireStopwatchVecElapsed(
+		t, reg, "test.stopwatch_labeled",
+		map[string]string{"store": "1"}, 10*time.Second,
+	)
+
+	// ---------------------------------------------------------------
+	// Insert a second label set for the labeled stopwatch, then
+	// verify both label sets show correct elapsed times.
+	// ---------------------------------------------------------------
+	swTimestamp2 := time.Now().Add(-2 * time.Second).UnixNano()
+	r.Exec(t, fmt.Sprintf(`INSERT INTO system.cluster_metrics
+		(id, name, labels, type, value, node_id)
+		VALUES (601, 'test.stopwatch_labeled', '{"store": "2"}', 'STOPWATCH', %d, 1)`,
+		swTimestamp2))
+
+	testutils.SucceedsSoon(t, func() error {
+		return checkStopwatchVecElapsed(
+			reg, "test.stopwatch_labeled",
+			map[string]string{"store": "2"}, 2*time.Second,
+		)
+	})
+
+	// The original label set should still be present and show a longer
+	// elapsed time than the newly inserted one.
+	requireStopwatchVecElapsed(
+		t, reg, "test.stopwatch_labeled",
+		map[string]string{"store": "1"}, 10*time.Second,
+	)
+
+	// ---------------------------------------------------------------
+	// Upsert the labeled stopwatch's store=1 with a fresh timestamp
+	// (simulating a stopwatch reset). The elapsed time should drop to
+	// near zero since the new timestamp is "now".
+	// ---------------------------------------------------------------
+	swTimestamp3 := time.Now().UnixNano()
+	r.Exec(t, fmt.Sprintf(`UPSERT INTO system.cluster_metrics
+		(id, name, labels, type, value, node_id)
+		VALUES (600, 'test.stopwatch_labeled', '{"store": "1"}', 'STOPWATCH', %d, 1)`,
+		swTimestamp3))
+
+	testutils.SucceedsSoon(t, func() error {
+		return checkStopwatchVecElapsedLessThan(
+			reg, "test.stopwatch_labeled",
+			map[string]string{"store": "1"}, 30*time.Second,
+		)
+	})
+
+	// ---------------------------------------------------------------
+	// Upsert the scalar stopwatch with a fresh timestamp (simulating
+	// a reset). The elapsed time should drop from ~10s to near zero.
+	// SucceedsSoon polls rapidly until the rangefeed delivers the
+	// update; the 5s threshold is generous since the new timestamp
+	// is "now".
+	// ---------------------------------------------------------------
+	swTimestamp4 := time.Now().UnixNano()
+	r.Exec(t, fmt.Sprintf(`UPSERT INTO system.cluster_metrics
+		(id, name, labels, type, value, node_id)
+		VALUES (500, 'test.stopwatch', '{}', 'STOPWATCH', %d, 1)`,
+		swTimestamp4))
+
+	testutils.SucceedsSoon(t, func() error {
+		return checkScalarStopwatchElapsedLessThan(
+			reg, "test.stopwatch", 5*time.Second,
+		)
+	})
 
 	// ---------------------------------------------------------------
 	// Upsert the scalar gauge and verify the updated value.
 	// ---------------------------------------------------------------
 	r.Exec(t, `UPSERT INTO system.cluster_metrics
 		(id, name, labels, type, value, node_id)
-		VALUES (300, 'test.scalar', '{}', 'gauge', 123, 1)`)
+		VALUES (300, 'test.scalar', '{}', 'GAUGE', 123, 1)`)
 
 	testutils.SucceedsSoon(t, func() error {
 		return checkScalarGaugeValue(reg, "test.scalar", 123)
@@ -122,7 +227,7 @@ func TestRegistrySyncerIntegration(t *testing.T) {
 	// ---------------------------------------------------------------
 	r.Exec(t, `INSERT INTO system.cluster_metrics
 		(id, name, labels, type, value, node_id)
-		VALUES (101, 'test.gauge_labeled', '{"store": "2"}', 'gauge', 77, 1)`)
+		VALUES (101, 'test.gauge_labeled', '{"store": "2"}', 'GAUGE', 77, 1)`)
 
 	testutils.SucceedsSoon(t, func() error {
 		return checkGaugeVecValue(reg, "test.gauge_labeled", map[string]string{"store": "2"}, 77)
@@ -134,7 +239,7 @@ func TestRegistrySyncerIntegration(t *testing.T) {
 	// Upsert the first label set with a new value.
 	r.Exec(t, `UPSERT INTO system.cluster_metrics
 		(id, name, labels, type, value, node_id)
-		VALUES (100, 'test.gauge_labeled', '{"store": "1"}', 'gauge', 99, 1)`)
+		VALUES (100, 'test.gauge_labeled', '{"store": "1"}', 'GAUGE', 99, 1)`)
 
 	testutils.SucceedsSoon(t, func() error {
 		return checkGaugeVecValue(reg, "test.gauge_labeled", map[string]string{"store": "1"}, 99)
@@ -150,7 +255,7 @@ func TestRegistrySyncerIntegration(t *testing.T) {
 
 	r.Exec(t, `INSERT INTO system.cluster_metrics
 		(id, name, labels, type, value, node_id)
-		VALUES (400, 'test.newgauge', '{}', 'gauge', 55, 1)`)
+		VALUES (400, 'test.newgauge', '{}', 'GAUGE', 55, 1)`)
 
 	testutils.SucceedsSoon(t, func() error {
 		return checkScalarGaugeValue(reg, "test.newgauge", 55)
@@ -168,6 +273,8 @@ func TestRegistrySyncerIntegration(t *testing.T) {
 	require.Contains(t, promOutput, "test_counter", "test.counter should appear in /_status/vars")
 	require.Contains(t, promOutput, "test_scalar", "test.scalar should appear in /_status/vars")
 	require.Contains(t, promOutput, "test_newgauge", "test.newgauge should appear in /_status/vars")
+	require.Contains(t, promOutput, "test_stopwatch", "test.stopwatch should appear in /_status/vars")
+	require.Contains(t, promOutput, "test_stopwatch_labeled", "test.stopwatch_labeled should appear in /_status/vars")
 	// Verify labeled metrics include both label sets.
 	require.Contains(t, promOutput, `store="1"`, "store=1 label should appear in /_status/vars")
 	require.Contains(t, promOutput, `store="2"`, "store=2 label should appear in /_status/vars")
@@ -212,9 +319,14 @@ func TestRegistrySyncerIntegration(t *testing.T) {
 	require.Equal(t, float64(10), tsNames["cr.cluster.test.counter"])
 	require.Equal(t, float64(55), tsNames["cr.cluster.test.newgauge"])
 
+	// Scalar stopwatch should appear in TSDB with a positive elapsed value.
+	require.Contains(t, tsNames, "cr.cluster.test.stopwatch")
+	require.Greater(t, tsNames["cr.cluster.test.stopwatch"], float64(0))
+
 	// Labeled (vec) metrics should NOT be in TSDB data. The recorder's
 	// extractValue function returns a no-op for PrometheusVector types.
 	require.NotContains(t, tsNames, "cr.cluster.test.gauge_labeled")
+	require.NotContains(t, tsNames, "cr.cluster.test.stopwatch_labeled")
 
 	// ---------------------------------------------------------------
 	// DELETE a labeled metric row and verify it's removed from
@@ -449,6 +561,176 @@ func checkGaugeVecLabelAbsent(
 	return nil
 }
 
+// requireStopwatchElapsed asserts that a scalar *metric.Gauge (backed by a
+// functional gauge) reports an elapsed time of at least minElapsed.
+func requireStopwatchElapsed(
+	t *testing.T, reg metric.RegistryReader, name string, minElapsed time.Duration,
+) {
+	t.Helper()
+	var g *metric.Gauge
+	reg.Each(func(n string, v interface{}) {
+		if n == name {
+			if gauge, ok := v.(*metric.Gauge); ok {
+				g = gauge
+			}
+		}
+	})
+	require.NotNilf(t, g, "stopwatch gauge %q not found in registry", name)
+	elapsedNanos := g.Value()
+	require.Greater(t, elapsedNanos, int64(0),
+		"stopwatch %q should report positive elapsed time", name)
+	require.GreaterOrEqual(t, elapsedNanos, int64(minElapsed),
+		"stopwatch %q elapsed %s should be >= %s",
+		name, time.Duration(elapsedNanos), minElapsed)
+}
+
+// checkScalarStopwatchElapsedLessThan returns nil if the scalar stopwatch
+// reports a positive elapsed time strictly less than maxElapsed.
+func checkScalarStopwatchElapsedLessThan(
+	reg metric.RegistryReader, name string, maxElapsed time.Duration,
+) error {
+	var g *metric.Gauge
+	reg.Each(func(n string, v interface{}) {
+		if n == name {
+			if gauge, ok := v.(*metric.Gauge); ok {
+				g = gauge
+			}
+		}
+	})
+	if g == nil {
+		return fmt.Errorf("stopwatch gauge %q not found in registry", name)
+	}
+	elapsed := g.Value()
+	if elapsed <= 0 {
+		return fmt.Errorf(
+			"stopwatch %q: expected positive elapsed, got %d", name, elapsed)
+	}
+	if elapsed >= int64(maxElapsed) {
+		return fmt.Errorf(
+			"stopwatch %q: elapsed %s >= max %s",
+			name, time.Duration(elapsed), maxElapsed)
+	}
+	return nil
+}
+
+// requireStopwatchVecElapsed asserts that a labeled stopwatch (backed by a
+// DerivedGaugeVec with a derived fn) reports an elapsed time of at least
+// minElapsed for the given label set. The derived fn is applied during
+// prometheus scraping.
+func requireStopwatchVecElapsed(
+	t *testing.T,
+	reg metric.RegistryReader,
+	name string,
+	labels map[string]string,
+	minElapsed time.Duration,
+) {
+	t.Helper()
+	err := checkStopwatchVecElapsed(reg, name, labels, minElapsed)
+	require.NoError(t, err)
+}
+
+func checkStopwatchVecElapsed(
+	reg metric.RegistryReader, name string, labels map[string]string, minElapsed time.Duration,
+) error {
+	actual, err := scrapeStopwatchVecValue(reg, name, labels)
+	if err != nil {
+		return err
+	}
+	if actual <= 0 {
+		return fmt.Errorf(
+			"stopwatch vec %q labels=%v: expected positive elapsed, got %d",
+			name, labels, actual)
+	}
+	if actual < int64(minElapsed) {
+		return fmt.Errorf(
+			"stopwatch vec %q labels=%v: elapsed %s < min %s",
+			name, labels, time.Duration(actual), minElapsed)
+	}
+	return nil
+}
+
+// checkStopwatchVecElapsedLessThan returns nil if the labeled stopwatch reports
+// a positive elapsed time that is strictly less than maxElapsed.
+func checkStopwatchVecElapsedLessThan(
+	reg metric.RegistryReader, name string, labels map[string]string, maxElapsed time.Duration,
+) error {
+	actual, err := scrapeStopwatchVecValue(reg, name, labels)
+	if err != nil {
+		return err
+	}
+	if actual <= 0 {
+		return fmt.Errorf(
+			"stopwatch vec %q labels=%v: expected positive elapsed, got %d",
+			name, labels, actual)
+	}
+	if actual >= int64(maxElapsed) {
+		return fmt.Errorf(
+			"stopwatch vec %q labels=%v: elapsed %s >= max %s",
+			name, labels, time.Duration(actual), maxElapsed)
+	}
+	return nil
+}
+
+// scrapeStopwatchVecValue scrapes the registry for a labeled gauge and returns
+// the raw gauge value for the matching label set.
+func scrapeStopwatchVecValue(
+	reg metric.RegistryReader, name string, labels map[string]string,
+) (int64, error) {
+	var gv *metric.GaugeVec
+	reg.Each(func(n string, v interface{}) {
+		if n == name {
+			if vec, ok := v.(*metric.GaugeVec); ok {
+				gv = vec
+			}
+		}
+	})
+	if gv == nil {
+		return 0, fmt.Errorf("stopwatch vec %q not found in registry", name)
+	}
+
+	pe := metric.MakePrometheusExporter()
+	var buf strings.Builder
+	err := pe.ScrapeAndPrintAsText(
+		&buf, expfmt.FmtText, func(exporter *metric.PrometheusExporter) {
+			exporter.ScrapeRegistry(reg)
+		})
+	if err != nil {
+		return 0, fmt.Errorf("failed to scrape registry: %w", err)
+	}
+
+	var parser expfmt.TextParser
+	families, err := parser.TextToMetricFamilies(strings.NewReader(buf.String()))
+	if err != nil {
+		return 0, fmt.Errorf("failed to parse prometheus output: %w", err)
+	}
+
+	exportedName := strings.ReplaceAll(name, ".", "_")
+	family, ok := families[exportedName]
+	if !ok {
+		return 0, fmt.Errorf(
+			"metric family %q not found in prometheus output", exportedName)
+	}
+
+	for _, m := range family.GetMetric() {
+		metricLabels := make(map[string]string, len(m.GetLabel()))
+		for _, lp := range m.GetLabel() {
+			metricLabels[lp.GetName()] = lp.GetValue()
+		}
+		match := true
+		for k, v := range labels {
+			if metricLabels[k] != v {
+				match = false
+				break
+			}
+		}
+		if match {
+			return int64(m.GetGauge().GetValue()), nil
+		}
+	}
+	return 0, fmt.Errorf(
+		"stopwatch vec %q: no metric found with labels %v", name, labels)
+}
+
 // TestRegistrySyncerMultiTenant starts a system tenant and a shared-process
 // secondary tenant, inserts metrics with the same name into each tenant's
 // system.cluster_metrics table with different values, and verifies that each
@@ -457,7 +739,6 @@ func checkGaugeVecLabelAbsent(
 func TestRegistrySyncerMultiTenant(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	skip.UnderStress(t, "test is too slow to run under stress")
 
 	defer clustermetrics.TestingRegisterClusterMetric("test.mt_gauge", metric.Metadata{
 		Name: "test.mt_gauge",
@@ -466,29 +747,41 @@ func TestRegistrySyncerMultiTenant(t *testing.T) {
 
 	ctx := context.Background()
 
-	// Use buffered channels so the registrySyncer goroutines do not block if the
-	// test hasn't started receiving yet.
-	sysStartedChan := make(chan struct{}, 1)
+	preStartChan := make(chan struct{})
+	defer close(preStartChan)
+	fullTableLoadComplete := make(chan struct{})
+	defer close(fullTableLoadComplete)
 	srv, sysDB, _ := serverutils.StartServer(t, base.TestServerArgs{
 		DefaultTestTenant: base.TestControlsTenantsExplicitly,
 		Knobs: base.TestingKnobs{
+			JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
 			ClusterMetricsKnobs: &clustermetricutils.TestingKnobs{
-				OnRegistrySyncerStart: func() {
-					sysStartedChan <- struct{}{}
+				OnRegistrySyncerPreStart: func() {
+					preStartChan <- struct{}{}
+				},
+				OnReloadComplete: func() {
+					fullTableLoadComplete <- struct{}{}
 				},
 			},
 		},
 	})
 	defer srv.Stopper().Stop(ctx)
 
-	tenantStartedChan := make(chan struct{}, 1)
+	tenantPreStartChan := make(chan struct{})
+	defer close(tenantPreStartChan)
+	tenantFullTableLoadComplete := make(chan struct{})
+	defer close(tenantFullTableLoadComplete)
 	tenant, tenantDB := serverutils.StartSharedProcessTenant(t, srv,
 		base.TestSharedProcessTenantArgs{
 			TenantName: "app",
 			Knobs: base.TestingKnobs{
+				JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
 				ClusterMetricsKnobs: &clustermetricutils.TestingKnobs{
-					OnRegistrySyncerStart: func() {
-						tenantStartedChan <- struct{}{}
+					OnRegistrySyncerPreStart: func() {
+						tenantPreStartChan <- struct{}{}
+					},
+					OnReloadComplete: func() {
+						tenantFullTableLoadComplete <- struct{}{}
 					},
 				},
 			},
@@ -501,14 +794,16 @@ func TestRegistrySyncerMultiTenant(t *testing.T) {
 	// system.cluster_metrics table, but with different values.
 	sysRunner.Exec(t, `INSERT INTO system.cluster_metrics
 		(id, name, labels, type, value, node_id)
-		VALUES (100, 'test.mt_gauge', '{}', 'gauge', 42, 1)`)
+		VALUES (100, 'test.mt_gauge', '{}', 'GAUGE', 42, 1)`)
 	tenantRunner.Exec(t, `INSERT INTO system.cluster_metrics
 		(id, name, labels, type, value, node_id)
-		VALUES (100, 'test.mt_gauge', '{}', 'gauge', 99, 1)`)
+		VALUES (100, 'test.mt_gauge', '{}', 'GAUGE', 99, 1)`)
 
 	// Wait for both registry syncers to complete their initial scan.
-	<-sysStartedChan
-	<-tenantStartedChan
+	<-preStartChan
+	<-fullTableLoadComplete
+	<-tenantPreStartChan
+	<-tenantFullTableLoadComplete
 
 	tenantExecCfg := tenant.ExecutorConfig().(sql.ExecutorConfig)
 	tenantID := tenantExecCfg.Codec.TenantID
@@ -529,7 +824,7 @@ func TestRegistrySyncerMultiTenant(t *testing.T) {
 	// ---------------------------------------------------------------
 	sysRunner.Exec(t, `UPSERT INTO system.cluster_metrics
 		(id, name, labels, type, value, node_id)
-		VALUES (100, 'test.mt_gauge', '{}', 'gauge', 100, 1)`)
+		VALUES (100, 'test.mt_gauge', '{}', 'GAUGE', 100, 1)`)
 
 	testutils.SucceedsSoon(t, func() error {
 		return checkScalarGaugeValue(sysReg, "test.mt_gauge", 100)
@@ -542,7 +837,7 @@ func TestRegistrySyncerMultiTenant(t *testing.T) {
 	// ---------------------------------------------------------------
 	tenantRunner.Exec(t, `UPSERT INTO system.cluster_metrics
 		(id, name, labels, type, value, node_id)
-		VALUES (100, 'test.mt_gauge', '{}', 'gauge', 200, 1)`)
+		VALUES (100, 'test.mt_gauge', '{}', 'GAUGE', 200, 1)`)
 
 	testutils.SucceedsSoon(t, func() error {
 		return checkScalarGaugeValue(tenantReg, "test.mt_gauge", 200)
