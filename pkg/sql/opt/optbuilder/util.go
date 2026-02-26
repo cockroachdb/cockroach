@@ -710,7 +710,7 @@ func (b *Builder) resolveDataSourceRef(
 	return ds, depName
 }
 
-// checkPrivilege ensures that the current user has at least one of the given
+// checkPrivilege ensures that the checkPrivilegeUser has at least one of the given
 // privileges on the given object in the catalog. If not, then checkPrivilege
 // raises an error. It also adds the object and its original unresolved name as
 // a dependency to the metadata, so that the privileges can be re-checked on
@@ -723,7 +723,7 @@ func (b *Builder) checkPrivilege(name opt.MDDepName, ds cat.DataSource, privs ..
 	priv := privs[0]
 	if priv == privilege.SELECT && b.skipSelectPrivilegeChecks {
 		// The check is skipped, so don't recheck when dependencies are checked.
-		b.factory.Metadata().AddDependency(name, ds, 0)
+		b.factory.Metadata().AddDependency(name, ds, 0, b.checkPrivilegeUser)
 		return
 	}
 
@@ -752,13 +752,13 @@ func (b *Builder) checkPrivilege(name opt.MDDepName, ds cat.DataSource, privs ..
 
 	// Add dependency on this object to the metadata, so that the metadata can be
 	// cached and later checked for freshness.
-	b.factory.Metadata().AddDependency(name, ds, priv)
+	b.factory.Metadata().AddDependency(name, ds, priv, b.checkPrivilegeUser)
 
 	// If we're building within a builtin context (unsafe checks disabled),
 	// mark this dependency as coming from a builtin so it can bypass unsafe
 	// checks during memo staleness checking.
 	if b.skipUnsafeInternalsCheck {
-		b.factory.Metadata().AddDependency(name, ds, privilege.BUILTIN_UNSAFE_ALLOWED)
+		b.factory.Metadata().AddDependency(name, ds, privilege.BUILTIN_UNSAFE_ALLOWED, b.checkPrivilegeUser)
 	}
 }
 
