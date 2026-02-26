@@ -2897,6 +2897,88 @@ func TestSupportedSchemas(t *testing.T) {
 	})
 }
 
+// TestSchemaValidationBypass tests that the SKIP SCHEMA CHECK option allows
+// users to bypass schema validation checks for specific scenarios where the
+// user takes responsibility for schema compatibility.
+//
+// Note: Each subtest sets up its own server to avoid cross-subtest dependencies.
+// This is necessary because WaitForAllProducerJobsToFail queries all producer
+// jobs globally, not just jobs for specific databases. Without isolated servers,
+// jobs from one subtest would interfere with assertions in another.
+func TestSchemaValidationBypass(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	skip.UnderDeadlock(t)
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+
+	t.Run("check_constraints", func(t *testing.T) {
+		server, s, dbA, dbB := setupLogicalTestServer(t, ctx, testClusterBaseClusterArgs, 1)
+		defer server.Stopper().Stop(ctx)
+
+		dbBURL := replicationtestutils.GetExternalConnectionURI(t, s, s, serverutils.DBName("b"))
+
+		dbA.Exec(t, "ALTER TABLE tab ADD CONSTRAINT check_constraint_1 CHECK (pk > 0)")
+		dbB.Exec(t, "ALTER TABLE tab ADD CONSTRAINT check_constraint_1 CHECK (length(payload) > 1)")
+
+		dbA.ExpectErr(t, "cannot create logical replication stream: destination table tab CHECK constraints do not match source table tab",
+			"CREATE LOGICAL REPLICATION STREAM FROM TABLE tab ON $1 INTO TABLE tab WITH MODE = 'validated'",
+			dbBURL.String())
+		replicationtestutils.WaitForAllProducerJobsToFail(t, dbB)
+
+		// Allow user to create LDR stream with mismatched CHECK via SKIP SCHEMA CHECK.
+		var jobIDSkipSchemaCheck jobspb.JobID
+		dbA.QueryRow(t,
+			"CREATE LOGICAL REPLICATION STREAM FROM TABLE tab ON $1 INTO TABLE tab WITH SKIP SCHEMA CHECK",
+			dbBURL.String(),
+		).Scan(&jobIDSkipSchemaCheck)
+		dbA.Exec(t, "CANCEL JOB $1", jobIDSkipSchemaCheck)
+		jobutils.WaitForJobToCancel(t, dbA, jobIDSkipSchemaCheck)
+		replicationtestutils.WaitForAllProducerJobsToFail(t, dbB)
+
+		// Add missing CHECK constraints, and verify that the stream can be created.
+		dbA.Exec(t, "ALTER TABLE tab ADD CONSTRAINT check_constraint_2 CHECK (length(payload) > 1)")
+		dbB.Exec(t, "ALTER TABLE tab ADD CONSTRAINT check_constraint_2 CHECK (pk > 0)")
+		var jobAID jobspb.JobID
+		dbA.QueryRow(t,
+			"CREATE LOGICAL REPLICATION STREAM FROM TABLE tab ON $1 INTO TABLE tab WITH MODE = 'validated'",
+			dbBURL.String(),
+		).Scan(&jobAID)
+
+		dbA.Exec(t, "CANCEL JOB $1", jobAID)
+		jobutils.WaitForJobToCancel(t, dbA, jobAID)
+		replicationtestutils.WaitForAllProducerJobsToFail(t, dbB)
+	})
+
+	t.Run("enum_types", func(t *testing.T) {
+		server, s, dbA, dbB := setupLogicalTestServer(t, ctx, testClusterBaseClusterArgs, 1)
+		defer server.Stopper().Stop(ctx)
+
+		dbBURL := replicationtestutils.GetExternalConnectionURI(t, s, s, serverutils.DBName("b"))
+
+		dbA.Exec(t, "CREATE TYPE mytype AS ENUM ('a', 'b')")
+		dbB.Exec(t, "CREATE TYPE mytype AS ENUM ('a', 'b', 'c')")
+		dbA.Exec(t, "ALTER TABLE tab ADD COLUMN enum_col mytype NOT NULL DEFAULT 'a'")
+		dbB.Exec(t, "ALTER TABLE tab ADD COLUMN enum_col mytype NOT NULL DEFAULT 'a'")
+
+		dbA.ExpectErr(t,
+			`cannot create logical replication stream: .* destination type USER DEFINED ENUM: public.mytype has logical representations \[a b\], but the source type USER DEFINED ENUM: mytype has \[a b c\]`,
+			"CREATE LOGICAL REPLICATION STREAM FROM TABLE tab ON $1 INTO TABLE tab WITH MODE = 'validated'",
+			dbBURL.String())
+		replicationtestutils.WaitForAllProducerJobsToFail(t, dbB)
+
+		// Allows user to create LDR stream with UDT via SKIP SCHEMA CHECK.
+		var jobIDSkipSchemaCheck jobspb.JobID
+		dbA.QueryRow(t,
+			"CREATE LOGICAL REPLICATION STREAM FROM TABLE tab ON $1 INTO TABLE tab WITH SKIP SCHEMA CHECK",
+			dbBURL.String(),
+		).Scan(&jobIDSkipSchemaCheck)
+		dbA.Exec(t, "CANCEL JOB $1", jobIDSkipSchemaCheck)
+		jobutils.WaitForJobToCancel(t, dbA, jobIDSkipSchemaCheck)
+		replicationtestutils.WaitForAllProducerJobsToFail(t, dbB)
+	})
+}
+
 // TestLogicalReplicationCreationChecks verifies that we check that the table
 // schemas are compatible when creating the replication stream.
 func TestLogicalReplicationCreationChecks(t *testing.T) {
@@ -2974,36 +3056,6 @@ func TestLogicalReplicationCreationChecks(t *testing.T) {
 	dbA.Exec(t, "DROP INDEX payload_idx")
 	dbB.Exec(t, "DROP INDEX b.multi_idx")
 
-	// Check that CHECK constraints match.
-	dbA.Exec(t, "ALTER TABLE tab ADD CONSTRAINT check_constraint_1 CHECK (pk > 0)")
-	dbB.Exec(t, "ALTER TABLE b.tab ADD CONSTRAINT check_constraint_1 CHECK (length(payload) > 1)")
-	expectErr(t, "tab", "cannot create logical replication stream: destination table tab CHECK constraints do not match source table tab")
-	replicationtestutils.WaitForAllProducerJobsToFail(t, dbB)
-
-	// Allow user to create LDR stream with mismatched CHECK via SKIP SCHEMA CHECK.
-	var jobIDSkipSchemaCheck jobspb.JobID
-	dbA.QueryRow(t,
-		"CREATE LOGICAL REPLICATION STREAM FROM TABLE tab ON $1 INTO TABLE tab WITH SKIP SCHEMA CHECK",
-		dbBURL.String(),
-	).Scan(&jobIDSkipSchemaCheck)
-	dbA.Exec(t, "CANCEL JOB $1", jobIDSkipSchemaCheck)
-	jobutils.WaitForJobToCancel(t, dbA, jobIDSkipSchemaCheck)
-	replicationtestutils.WaitForAllProducerJobsToFail(t, dbB)
-
-	// Add missing CHECK constraints, and verify that the stream can be created.
-	dbA.Exec(t, "ALTER TABLE tab ADD CONSTRAINT check_constraint_2 CHECK (length(payload) > 1)")
-	dbB.Exec(t, "ALTER TABLE b.tab ADD CONSTRAINT check_constraint_2 CHECK (pk > 0)")
-	var jobAID jobspb.JobID
-	dbA.QueryRow(t,
-		"CREATE LOGICAL REPLICATION STREAM FROM TABLE tab ON $1 INTO TABLE tab WITH MODE = 'validated'",
-		dbBURL.String(),
-	).Scan(&jobAID)
-
-	// Kill replication job.
-	dbA.Exec(t, "CANCEL JOB $1", jobAID)
-	jobutils.WaitForJobToCancel(t, dbA, jobAID)
-	replicationtestutils.WaitForAllProducerJobsToFail(t, dbB)
-
 	// Check if the table references a UDF.
 	dbA.Exec(t, "CREATE OR REPLACE FUNCTION my_udf() RETURNS INT AS $$ SELECT 1 $$ LANGUAGE SQL")
 	dbA.Exec(t, "ALTER TABLE tab ADD COLUMN udf_col INT NOT NULL")
@@ -3029,29 +3081,8 @@ func TestLogicalReplicationCreationChecks(t *testing.T) {
 	expectErr(t, "tab", `cannot create logical replication stream: table tab references triggers \[my_trigger\]`)
 	replicationtestutils.WaitForAllProducerJobsToFail(t, dbB)
 
-	// Verify that the stream cannot be created with mismatched enum types.
-	dbA.Exec(t, "DROP TRIGGER my_trigger ON tab")
-	dbA.Exec(t, "CREATE TYPE mytype AS ENUM ('a', 'b', 'c')")
-	dbB.Exec(t, "CREATE TYPE b.mytype AS ENUM ('a', 'b')")
-	dbA.Exec(t, "ALTER TABLE tab ADD COLUMN enum_col mytype NOT NULL")
-	dbB.Exec(t, "ALTER TABLE b.tab ADD COLUMN enum_col b.mytype NOT NULL")
-	expectErr(t, "tab",
-		`cannot create logical replication stream: .* destination type USER DEFINED ENUM: public.mytype has logical representations \[a b c\], but the source type USER DEFINED ENUM: mytype has \[a b\]`,
-	)
-	replicationtestutils.WaitForAllProducerJobsToFail(t, dbB)
-
-	// Allows user to create LDR stream with UDT via SKIP SCHEMA CHECK.
-	dbA.QueryRow(t,
-		"CREATE LOGICAL REPLICATION STREAM FROM TABLE tab ON $1 INTO TABLE tab WITH SKIP SCHEMA CHECK",
-		dbBURL.String(),
-	).Scan(&jobIDSkipSchemaCheck)
-	dbA.Exec(t, "CANCEL JOB $1", jobIDSkipSchemaCheck)
-	jobutils.WaitForJobToCancel(t, dbA, jobIDSkipSchemaCheck)
-	replicationtestutils.WaitForAllProducerJobsToFail(t, dbB)
-
 	// Verify that the stream cannot be created with mismatched composite types.
-	dbA.Exec(t, "ALTER TABLE tab DROP COLUMN enum_col")
-	dbB.Exec(t, "ALTER TABLE b.tab DROP COLUMN enum_col")
+	dbA.Exec(t, "DROP TRIGGER my_trigger ON tab")
 	dbA.Exec(t, "CREATE TYPE composite_typ AS (a INT, b TEXT)")
 	dbB.Exec(t, "CREATE TYPE b.composite_typ AS (a TEXT, b INT)")
 	dbA.Exec(t, "ALTER TABLE tab ADD COLUMN composite_udt_col composite_typ NOT NULL")
