@@ -45,6 +45,7 @@ const (
 	gossipFileName          = "gossip.json"
 	statusFileName          = "status.json"
 	cpuProfileFileName      = "cpu.pprof"
+	mutexPprofFileName      = "mutex.pprof"
 	detailsName             = "details"
 	gossipName              = "gossip"
 )
@@ -104,6 +105,11 @@ func (zc *debugZipContext) collectPerNodeData(
 	}
 
 	err = zc.getCurrentHeapProfile(ctx, nodePrinter, id, prefix)
+	if err != nil {
+		return err
+	}
+
+	err = zc.getMutexProfile(ctx, nodePrinter, id, prefix)
 	if err != nil {
 		return err
 	}
@@ -575,6 +581,32 @@ func (zc *debugZipContext) getCurrentHeapProfile(
 			return err
 		})
 	if err := zc.z.createRawOrError(s, prefix+"/"+heapPprofFileName, heapData, requestErr); err != nil {
+		return err
+	}
+	return nil
+}
+
+func (zc *debugZipContext) getMutexProfile(
+	ctx context.Context, nodePrinter *zipReporter, id string, prefix string,
+) error {
+	if !zipCtx.files.shouldIncludeFile(path.Join(prefix, mutexPprofFileName)) {
+		nodePrinter.info("skipping %s due to file filters", mutexPprofFileName)
+		return nil
+	}
+	var mutexData []byte
+	s := nodePrinter.start("requesting mutex profile")
+	requestErr := zc.runZipFn(ctx, s,
+		func(ctx context.Context) error {
+			mutex, err := zc.status.Profile(ctx, &serverpb.ProfileRequest{
+				NodeId: id,
+				Type:   serverpb.ProfileRequest_MUTEX,
+			})
+			if err == nil {
+				mutexData = mutex.Data
+			}
+			return err
+		})
+	if err := zc.z.createRawOrError(s, prefix+"/"+mutexPprofFileName, mutexData, requestErr); err != nil {
 		return err
 	}
 	return nil
