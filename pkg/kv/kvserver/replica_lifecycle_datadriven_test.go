@@ -9,6 +9,7 @@
 package kvserver
 
 import (
+	"bytes"
 	"cmp"
 	"context"
 	"fmt"
@@ -25,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvstorage"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvstorage/wag"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvstorage/wag/wagpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/logstore"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/print"
 	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
@@ -338,9 +340,9 @@ func TestReplicaLifecycleDataDriven(t *testing.T) {
 					rhsRangeState.replica.ReplicaID > rhsReplDesc.ReplicaID
 
 				in := splitPreApplyInput{
-					lhsID:              lhsRangeState.replica.FullReplicaID,
-					storeID:            1, // s1
-					raftIndex:          ps.raftIndex,
+					lhsID:               lhsRangeState.replica.FullReplicaID,
+					storeID:             1, // s1
+					raftIndex:           ps.raftIndex,
 					destroyed:           destroyed,
 					rhsDesc:             split.RightDesc,
 					initClosedTimestamp: hlc.Timestamp{WallTime: 100}, // dummy timestamp
@@ -581,9 +583,16 @@ func (tc *testCtx) mutate(t *testing.T, write func(stateBatch, raftBatch storage
 
 	write(stateBatch, raftBatch)
 
-	stateOutput, err := print.DecodeWriteBatch(stateBatch.Repr())
+	stateRepr := stateBatch.Repr()
+	raftRepr := raftBatch.Repr()
+
+	stateOutput, err := print.DecodeWriteBatch(stateRepr)
 	require.NoError(t, err)
-	raftOutput, err := print.DecodeWriteBatch(raftBatch.Repr())
+	// OmitWAGMutationBatch replaces the printed embedded mutation batch in WAG
+	// nodes with a placeholder; assertWAGMutationBatch verifies the actual
+	// content matches at the byte level.
+	assertWAGMutationBatch(t, raftRepr, stateRepr)
+	raftOutput, err := print.DecodeWriteBatch(raftRepr, print.OmitWAGMutationBatch())
 	require.NoError(t, err)
 
 	require.NoError(t, raftBatch.Commit(false))
@@ -606,6 +615,33 @@ func (tc *testCtx) mutate(t *testing.T, write func(stateBatch, raftBatch storage
 		sb.WriteString(raftOutput)
 	}
 	return sb.String()
+}
+
+// assertWAGMutationBatch asserts that at most one WAG node in the raft batch
+// carries an embedded state engine batch, and that it matches stateRepr at the
+// byte level.
+func assertWAGMutationBatch(t *testing.T, raftRepr, stateRepr []byte) {
+	t.Helper()
+	r, err := storage.NewBatchReader(raftRepr)
+	require.NoError(t, err)
+	var found bool
+	for r.Next() {
+		key, err := r.EngineKey()
+		require.NoError(t, err)
+		if !bytes.HasPrefix(key.Key, keys.StoreWAGPrefix()) {
+			continue
+		}
+		var node wagpb.Node
+		require.NoError(t, node.Unmarshal(r.Value())) // nolint:protounmarshal
+		if len(node.Mutation.Batch) == 0 {
+			continue
+		}
+		require.False(t, found,
+			"expected exactly one WAG node with a mutation batch, found multiple")
+		found = true
+		require.Equal(t, stateRepr, node.Mutation.Batch,
+			"WAG mutation batch for %s should match state engine batch", node.Addr)
+	}
 }
 
 // createRangeDesc creates a new RangeDescriptor for the given keys span and list

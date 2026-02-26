@@ -94,10 +94,10 @@ func SprintMVCCRangeKey(rangeKey storage.MVCCRangeKey) string {
 // SprintEngineKeyValue is like PrintEngineKeyValue, but returns a string.  In
 // the case of an MVCCKey, it will utilize SprintMVCCKeyValue for proper MVCC
 // formatting.
-func SprintEngineKeyValue(k storage.EngineKey, v []byte) string {
+func SprintEngineKeyValue(k storage.EngineKey, v []byte, opts ...Option) string {
 	if k.IsMVCCKey() {
 		if key, err := k.ToMVCCKey(); err == nil {
-			return SprintMVCCKeyValue(storage.MVCCKeyValue{Key: key, Value: v}, true /* printKey */)
+			return SprintMVCCKeyValue(storage.MVCCKeyValue{Key: key, Value: v}, true /* printKey */, opts...)
 		}
 	} else if k.IsLockTableKey() {
 		if key, err := k.ToLockTableKey(); err == nil {
@@ -130,7 +130,12 @@ var DebugSprintMVCCRangeKeyValueDecoders []func(rkv storage.MVCCRangeKeyValue) (
 // SprintMVCCKeyValue is like PrintMVCCKeyValue, but returns a string. If
 // printKey is true, prints the key and the value together; otherwise,
 // prints just the value.
-func SprintMVCCKeyValue(kv storage.MVCCKeyValue, printKey bool) string {
+func SprintMVCCKeyValue(kv storage.MVCCKeyValue, printKey bool, opts ...Option) string {
+	var cfg config
+	for _, o := range opts {
+		o(&cfg)
+	}
+
 	var sb strings.Builder
 	if printKey {
 		sb.WriteString(SprintMVCCKey(kv.Key))
@@ -147,7 +152,7 @@ func SprintMVCCKeyValue(kv storage.MVCCKeyValue, printKey bool) string {
 		tryTxn,
 		tryTimeSeries,
 		tryIntent,
-		tryWAGKey,
+		makeWAGDecoder(cfg).tryWAGKey,
 		func(kv storage.MVCCKeyValue) (string, error) {
 			// No better idea, just print raw bytes and hope that folks use `less -S`.
 			return fmt.Sprintf("%q", kv.Value), nil
@@ -233,7 +238,22 @@ func tryIntent(kv storage.MVCCKeyValue) (string, error) {
 	return s, nil
 }
 
-func DecodeWriteBatch(writeBatch []byte) (string, error) {
+// Option configures the output of print functions.
+type Option func(*config)
+
+type config struct {
+	omitWAGMutationBatch bool
+}
+
+// OmitWAGMutationBatch replaces the printed embedded mutation batch in WAG
+// nodes with a short placeholder.
+func OmitWAGMutationBatch() Option {
+	return func(c *config) {
+		c.omitWAGMutationBatch = true
+	}
+}
+
+func DecodeWriteBatch(writeBatch []byte, opts ...Option) (string, error) {
 	// Ensure that we always update this function to consider any necessary
 	// updates when a new key kind is introduced. To do this, we assert
 	// pebble.KeyKindDeleteSized is the most recent key kind, ensuring that
@@ -266,7 +286,7 @@ func DecodeWriteBatch(writeBatch []byte) (string, error) {
 			if err != nil {
 				return sb.String(), err
 			}
-			sb.WriteString(fmt.Sprintf("Put: %s\n", SprintEngineKeyValue(engineKey, r.Value())))
+			sb.WriteString(fmt.Sprintf("Put: %s\n", SprintEngineKeyValue(engineKey, r.Value(), opts...)))
 		case pebble.InternalKeyKindMerge:
 			engineKey, err := r.EngineKey()
 			if err != nil {
@@ -470,7 +490,18 @@ func tryRangeIDKey(kv storage.MVCCKeyValue) (string, error) {
 	return msg.String(), nil
 }
 
-func tryWAGKey(kv storage.MVCCKeyValue) (string, error) {
+// wagDecoder decodes WAG key-value pairs. When cfg.omitWAGMutationBatch is
+// set, the embedded mutation batch is replaced with a short placeholder instead
+// of being recursively decoded.
+type wagDecoder struct {
+	cfg config
+}
+
+func makeWAGDecoder(cfg config) wagDecoder {
+	return wagDecoder{cfg: cfg}
+}
+
+func (d wagDecoder) tryWAGKey(kv storage.MVCCKeyValue) (string, error) {
 	if !bytes.HasPrefix(kv.Key.Key, keys.StoreWAGPrefix()) {
 		return "", errors.New("not a WAG node key")
 	}
@@ -490,11 +521,15 @@ func tryWAGKey(kv storage.MVCCKeyValue) (string, error) {
 	}
 
 	if b := node.Mutation.Batch; len(b) > 0 {
-		bs, err := DecodeWriteBatch(b)
-		if err != nil {
-			bs = "failed to decode write batch: " + err.Error()
+		if d.cfg.omitWAGMutationBatch {
+			str = fmt.Appendf(str, "\n> (omitted)")
+		} else {
+			bs, err := DecodeWriteBatch(b)
+			if err != nil {
+				bs = "failed to decode write batch: " + err.Error()
+			}
+			str = fmt.Appendf(str, "\n%s", text.Indent(bs, "> "))
 		}
-		str = fmt.Appendf(str, "\n%s", text.Indent(bs, "> "))
 	}
 	if ing := node.Mutation.Ingestion; ing != nil {
 		// TODO(pav-kv): make this format nicely. Currently, this proto is too big.
