@@ -597,9 +597,9 @@ func (m *managerImpl) HandleLockConflictError(
 	// Either way, there is no possibility of the request entering an infinite
 	// loop without making progress.
 
-	// If VIR was used, collapse point resolve entries into persistent range
-	// entries before they are cleared by the next ScanAndEnqueue. This prevents
-	// livelock when the lock table evicts entries under memory pressure.
+	// Condense point resolve entries into range entries before they are cleared
+	// by the next ScanAndEnqueue. This prevents livelock when the lock table
+	// evicts entries under memory pressure.
 	g.PrepareForLockConflictRetry(ctx)
 
 	consultTxnStatusCache :=
@@ -831,6 +831,13 @@ func (m *managerImpl) TestingTxnWaitQueue() *txnwait.Queue {
 	return m.twq.(*txnwait.Queue)
 }
 
+// TestingPushedTransactionUpdated implements the TestingAccessor interface.
+func (m *managerImpl) TestingPushedTransactionUpdated(
+	txn *roachpb.Transaction, clockObs roachpb.ObservedTimestamp,
+) {
+	m.lt.PushedTransactionUpdated(txn, clockObs)
+}
+
 // SetMaxLockTableSize implements the LockManager interface.
 func (m *managerImpl) SetMaxLockTableSize(maxLocks int64) {
 	m.lt.SetMaxLockTableSize(maxLocks)
@@ -905,6 +912,7 @@ func (g *guardImpl) HoldingLatches() bool {
 	return g != nil && g.lg != nil
 }
 
+// PrepareForLockConflictRetry implements the Guard interface.
 func (g *guardImpl) PrepareForLockConflictRetry(ctx context.Context) {
 	if g != nil && g.ltg != nil {
 		g.ltg.PrepareForLockConflictRetry(ctx)

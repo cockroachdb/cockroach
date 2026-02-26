@@ -2215,15 +2215,11 @@ func TestKeyLocksSafeFormatWaitQueue(t *testing.T) {
 		redact.Sprint(kl).Redact())
 }
 
-// TestPrepareForLockConflictRetry exercises the guard's collapse and VIR
-// disable behavior. Point entries in toResolve are collapsed into range entries
-// in toResolveRange on each lock conflict retry. When the number of distinct
-// txns in toResolveRange exceeds the configured threshold, VIR is disabled
-// stickily for the guard's lifetime.
-func TestPrepareForLockConflictRetry(t *testing.T) {
+// TestResolvableLocks exercises the condense, contains, collect, and
+// isResolvableTxn behavior of resolvableLocks.
+func TestResolvableLocks(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	ctx := context.Background()
 
 	makeTxnMeta := func(name string) enginepb.TxnMeta {
 		return enginepb.TxnMeta{
@@ -2239,143 +2235,113 @@ func TestPrepareForLockConflictRetry(t *testing.T) {
 			Status: roachpb.PENDING,
 		}
 	}
+	makeRL := func(vir bool, updates ...roachpb.LockUpdate) resolvableLocks {
+		rl := resolvableLocks{virEnabled: vir}
+		for _, lu := range updates {
+			rl.add(lu)
+		}
+		return rl
+	}
 	txn := makeTxnMeta("txn1")
 
-	t.Run("noop when VIR disabled", func(t *testing.T) {
-		g := &lockTableGuardImpl{
-			virtuallyResolveIntents: false,
-			maxToResolveRangeTxns:   2,
-			toResolve: []roachpb.LockUpdate{
-				makeLockUpdate(txn, roachpb.Key("a")),
-			},
-		}
-		g.PrepareForLockConflictRetry(ctx)
-		// toResolve should be untouched since VIR is disabled.
-		require.Len(t, g.toResolve, 1)
-		require.Nil(t, g.toResolveRange)
+	t.Run("condense noop when VIR disabled", func(t *testing.T) {
+		rl := makeRL(false, makeLockUpdate(txn, roachpb.Key("a")))
+		require.False(t, rl.maybeCondense(0))
+		require.Len(t, rl.toResolve, 1)
+		require.Nil(t, rl.toResolveRange)
 	})
 
-	t.Run("noop when toResolve is empty", func(t *testing.T) {
-		g := &lockTableGuardImpl{
-			virtuallyResolveIntents: true,
-			maxToResolveRangeTxns:   2,
-		}
-		g.PrepareForLockConflictRetry(ctx)
-		require.Nil(t, g.toResolveRange)
+	t.Run("condense noop when empty", func(t *testing.T) {
+		rl := makeRL(true)
+		require.False(t, rl.maybeCondense(0))
+		require.Nil(t, rl.toResolveRange)
 	})
 
-	t.Run("collapse single txn", func(t *testing.T) {
-		g := &lockTableGuardImpl{
-			virtuallyResolveIntents: true,
-			maxToResolveRangeTxns:   10,
-			toResolve: []roachpb.LockUpdate{
-				makeLockUpdate(txn, roachpb.Key("b")),
-				makeLockUpdate(txn, roachpb.Key("d")),
-				makeLockUpdate(txn, roachpb.Key("a")),
-			},
-		}
-		g.PrepareForLockConflictRetry(ctx)
-		require.Empty(t, g.toResolve)
-		require.Len(t, g.toResolveRange, 1)
+	t.Run("condense single txn", func(t *testing.T) {
+		rl := makeRL(true,
+			makeLockUpdate(txn, roachpb.Key("b")),
+			makeLockUpdate(txn, roachpb.Key("d")),
+			makeLockUpdate(txn, roachpb.Key("a")),
+		)
+		require.True(t, rl.maybeCondense(0))
+		require.Empty(t, rl.toResolve)
+		require.Len(t, rl.toResolveRange, 1)
 		// Range should span [a, d.Next()).
-		rangeUp := g.toResolveRange[txn.ID]
+		rangeUp := rl.toResolveRange[txn.ID]
 		require.Equal(t, roachpb.Key("a"), rangeUp.Key)
 		require.Equal(t, roachpb.Key("d").Next(), rangeUp.EndKey)
-		require.True(t, g.virtuallyResolveIntents)
 	})
 
 	t.Run("extend existing range", func(t *testing.T) {
-		g := &lockTableGuardImpl{
-			virtuallyResolveIntents: true,
-			maxToResolveRangeTxns:   10,
-			toResolve: []roachpb.LockUpdate{
-				makeLockUpdate(txn, roachpb.Key("b")),
-				makeLockUpdate(txn, roachpb.Key("c")),
-			},
-		}
-		// First round: collapse "b" and "c".
-		g.PrepareForLockConflictRetry(ctx)
-		require.Empty(t, g.toResolve)
-		require.Equal(t, roachpb.Key("b"), g.toResolveRange[txn.ID].Key)
-		require.Equal(t, roachpb.Key("c").Next(), g.toResolveRange[txn.ID].EndKey)
+		rl := makeRL(true,
+			makeLockUpdate(txn, roachpb.Key("b")),
+			makeLockUpdate(txn, roachpb.Key("c")),
+		)
+		// First round: condense "b" and "c".
+		rl.condense()
+		require.Empty(t, rl.toResolve)
+		require.Equal(t, roachpb.Key("b"), rl.toResolveRange[txn.ID].Key)
+		require.Equal(t, roachpb.Key("c").Next(), rl.toResolveRange[txn.ID].EndKey)
 
 		// Second round: extend left with "a" and right with "e".
-		g.toResolve = append(g.toResolve,
-			makeLockUpdate(txn, roachpb.Key("a")),
-			makeLockUpdate(txn, roachpb.Key("e")),
-		)
-		g.PrepareForLockConflictRetry(ctx)
-		require.Len(t, g.toResolveRange, 1)
-		rangeUp := g.toResolveRange[txn.ID]
+		rl.add(makeLockUpdate(txn, roachpb.Key("a")))
+		rl.add(makeLockUpdate(txn, roachpb.Key("e")))
+		rl.condense()
+		require.Len(t, rl.toResolveRange, 1)
+		rangeUp := rl.toResolveRange[txn.ID]
 		require.Equal(t, roachpb.Key("a"), rangeUp.Key)
 		require.Equal(t, roachpb.Key("e").Next(), rangeUp.EndKey)
 	})
 
-	t.Run("covered keys skipped", func(t *testing.T) {
-		g := &lockTableGuardImpl{
-			virtuallyResolveIntents: true,
-			maxToResolveRangeTxns:   10,
-			toResolve: []roachpb.LockUpdate{
-				makeLockUpdate(txn, roachpb.Key("a")),
-				makeLockUpdate(txn, roachpb.Key("c")),
-			},
-		}
-		g.PrepareForLockConflictRetry(ctx)
+	t.Run("covered keys skipped on add", func(t *testing.T) {
+		rl := makeRL(true,
+			makeLockUpdate(txn, roachpb.Key("a")),
+			makeLockUpdate(txn, roachpb.Key("c")),
+		)
+		rl.condense()
 		// "b" is inside the range [a, c.Next()) and should be covered.
-		require.True(t, g.keyAlreadyCoveredByRangeResolve(txn.ID, roachpb.Key("b")))
+		require.True(t, rl.contains(txn.ID, roachpb.Key("b")))
 		// "d" is outside.
-		require.False(t, g.keyAlreadyCoveredByRangeResolve(txn.ID, roachpb.Key("d")))
+		require.False(t, rl.contains(txn.ID, roachpb.Key("d")))
 		// Unknown txn is not covered.
-		require.False(t, g.keyAlreadyCoveredByRangeResolve(uuid.MakeV4(), roachpb.Key("b")))
+		require.False(t, rl.contains(uuid.MakeV4(), roachpb.Key("b")))
+
+		// Adding a key already covered by the range should be a no-op.
+		rl.add(makeLockUpdate(txn, roachpb.Key("b")))
+		require.Empty(t, rl.toResolve)
 	})
 
-	t.Run("VIR disabled when threshold exceeded", func(t *testing.T) {
-		g := &lockTableGuardImpl{
-			virtuallyResolveIntents: true,
-			maxToResolveRangeTxns:   2,
-			toResolve: []roachpb.LockUpdate{
-				makeLockUpdate(txn, roachpb.Key("a")),
-				makeLockUpdate(makeTxnMeta("txn2"), roachpb.Key("b")),
-				makeLockUpdate(makeTxnMeta("txn3"), roachpb.Key("c")),
-			},
-		}
-		g.PrepareForLockConflictRetry(ctx)
-		require.False(t, g.virtuallyResolveIntents)
-		require.Nil(t, g.toResolveRange)
-		require.Empty(t, g.toResolve)
+	t.Run("isResolvableTxn tracks added txns", func(t *testing.T) {
+		rl := makeRL(true, makeLockUpdate(txn, roachpb.Key("a")))
+		ok, _ := rl.isResolvableTxn(txn.ID)
+		require.True(t, ok)
+		ok, _ = rl.isResolvableTxn(uuid.MakeV4())
+		require.False(t, ok)
 	})
 
-	t.Run("below threshold no disable", func(t *testing.T) {
-		g := &lockTableGuardImpl{
-			virtuallyResolveIntents: true,
-			maxToResolveRangeTxns:   3,
-			toResolve: []roachpb.LockUpdate{
-				makeLockUpdate(txn, roachpb.Key("a")),
-				makeLockUpdate(makeTxnMeta("txn2"), roachpb.Key("b")),
-				makeLockUpdate(makeTxnMeta("txn3"), roachpb.Key("c")),
-			},
-		}
-		// 3 txns at threshold of 3 — should not disable.
-		g.PrepareForLockConflictRetry(ctx)
-		require.True(t, g.virtuallyResolveIntents)
-		require.Len(t, g.toResolveRange, 3)
+	t.Run("isResolvableTxn noop when VIR disabled", func(t *testing.T) {
+		rl := makeRL(false, makeLockUpdate(txn, roachpb.Key("a")))
+		ok, _ := rl.isResolvableTxn(txn.ID)
+		require.False(t, ok)
 	})
 
-	t.Run("IntentsToResolveVirtually combines point and range", func(t *testing.T) {
+	t.Run("isResolvableTxn persists across clear", func(t *testing.T) {
+		rl := makeRL(true, makeLockUpdate(txn, roachpb.Key("a")))
+		rl.clear()
+		require.Empty(t, rl.toResolve)
+		ok, _ := rl.isResolvableTxn(txn.ID)
+		require.True(t, ok)
+	})
+
+	t.Run("collect combines point and range", func(t *testing.T) {
 		txn2 := makeTxnMeta("txn2")
-		g := &lockTableGuardImpl{
-			virtuallyResolveIntents: true,
-			maxToResolveRangeTxns:   10,
-			toResolve: []roachpb.LockUpdate{
-				makeLockUpdate(txn, roachpb.Key("a")),
-			},
-		}
-		// Collapse txn into toResolveRange.
-		g.PrepareForLockConflictRetry(ctx)
-		// Add a point entry for txn2 (not yet collapsed).
-		g.toResolve = append(g.toResolve, makeLockUpdate(txn2, roachpb.Key("x")))
+		rl := makeRL(true, makeLockUpdate(txn, roachpb.Key("a")))
+		// Condense txn into toResolveRange.
+		rl.condense()
+		// Add a point entry for txn2 (not yet condensed).
+		rl.add(makeLockUpdate(txn2, roachpb.Key("x")))
 
-		combined := g.IntentsToResolveVirtually()
+		combined := rl.collect()
 		require.Len(t, combined, 2)
 		// One point (txn2) and one range (txn).
 		var hasPoint, hasRange bool
@@ -2390,6 +2356,19 @@ func TestPrepareForLockConflictRetry(t *testing.T) {
 		}
 		require.True(t, hasPoint)
 		require.True(t, hasRange)
+	})
+
+	t.Run("reset clears everything", func(t *testing.T) {
+		rl := makeRL(true,
+			makeLockUpdate(txn, roachpb.Key("a")),
+			makeLockUpdate(makeTxnMeta("txn2"), roachpb.Key("b")),
+		)
+		rl.condense()
+		rl.reset(false)
+		require.Empty(t, rl.toResolve)
+		require.Nil(t, rl.toResolveRange)
+		require.Nil(t, rl.resolvableTxns)
+		require.False(t, rl.virEnabled)
 	})
 }
 
@@ -2424,5 +2403,65 @@ func TestCanElideWaitingStateUpdateConsidersAllFields(t *testing.T) {
 			t.Fatalf("%s field not considered", fieldName)
 		}
 		typ.Field(i)
+	}
+}
+
+// BenchmarkResolvableLocksAdd benchmarks the add path of resolvableLocks with
+// and without VIR enabled, varying the number of locks, distinct transactions,
+// and key sizes.
+func BenchmarkResolvableLocksAdd(b *testing.B) {
+	const maxTxns = 64
+	const maxKeysPerTxn = 256
+	txns := make([]enginepb.TxnMeta, maxTxns)
+	for i := range txns {
+		txns[i] = enginepb.TxnMeta{
+			ID:             uuid.MakeV4(),
+			WriteTimestamp: hlc.Timestamp{WallTime: 10},
+		}
+	}
+
+	makeKey := func(keySize, idx int) roachpb.Key {
+		k := make(roachpb.Key, keySize)
+		// Write the index into the last 8 bytes to ensure uniqueness.
+		s := strconv.AppendInt(k[:0], int64(idx), 10)
+		copy(k[keySize-len(s):], s)
+		return k
+	}
+
+	makeUpdate := func(txn enginepb.TxnMeta, key roachpb.Key) roachpb.LockUpdate {
+		return roachpb.LockUpdate{
+			Span:   roachpb.Span{Key: key},
+			Txn:    txn,
+			Status: roachpb.COMMITTED,
+		}
+	}
+
+	for _, keySize := range []int{32, 64, 128} {
+		keys := make([]roachpb.Key, maxKeysPerTxn)
+		for i := range keys {
+			keys[i] = makeKey(keySize, i)
+		}
+		for _, numTxns := range []int{1, 8, 64} {
+			for _, keysPerTxn := range []int{1, 32, 256} {
+				updates := make([]roachpb.LockUpdate, 0, numTxns*keysPerTxn)
+				for t := 0; t < numTxns; t++ {
+					for k := 0; k < keysPerTxn; k++ {
+						updates = append(updates, makeUpdate(txns[t], keys[k]))
+					}
+				}
+				for _, vir := range []bool{false, true} {
+					name := fmt.Sprintf("keySize=%d/txns=%d/keys=%d/vir=%t",
+						keySize, numTxns, keysPerTxn, vir)
+					b.Run(name, func(b *testing.B) {
+						for i := 0; i < b.N; i++ {
+							rl := resolvableLocks{virEnabled: vir}
+							for j := range updates {
+								rl.add(updates[j])
+							}
+						}
+					})
+				}
+			}
+		}
 	}
 }
