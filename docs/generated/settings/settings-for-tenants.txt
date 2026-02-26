@@ -184,6 +184,7 @@ sql.auth.change_own_password.enabled	boolean	false	controls whether a user is al
 sql.auth.grant_option_for_owner.enabled	boolean	true	determines whether the GRANT OPTION for privileges is implicitly given to the owner of an object	application
 sql.auth.grant_option_inheritance.enabled	boolean	true	determines whether the GRANT OPTION for privileges is inherited through role membership	application
 sql.auth.public_schema_create_privilege.enabled	boolean	true	determines whether to grant all users the CREATE privileges on the public schema when it is created	application
+sql.auth.skip_all_view_privilege_checks.enabled	boolean	false	determines whether to skip all privilege checks when selecting from a view. When enabled, no privilege checks are enforced on the underlying tables, meaning that any user can select from a view as long as they have access to the view itself.	application
 sql.catalog.allow_leased_descriptors.enabled	boolean	true	if true, catalog views (crdb_internal, information_schema, pg_catalog) can use leased descriptors for improved performance	application
 sql.closed_session_cache.capacity	integer	1000	the maximum number of sessions in the cache	application
 sql.closed_session_cache.time_to_live	integer	3600	the maximum time to live, in seconds	application

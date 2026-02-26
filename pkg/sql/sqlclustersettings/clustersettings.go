@@ -163,3 +163,19 @@ var UseInstanceInfoForSQLInstances = settings.RegisterBoolSetting(
 	"use sqlinstance.InstanceInfo instead of NodeDescriptor for SQL instance lookups; "+
 		"enables proper handling of SQL instances in serverless environments",
 	metamorphic.ConstantWithTestBool("sql.instance_info.use_instance_resolver.enabled", true))
+
+// SkipAllViewPrivilegeChecks controls whether privilege checks on underlying
+// tables are skipped when selecting from a view. By default (false), the view
+// owner's privileges are checked on the underlying tables, and the owner's
+// row-level security (RLS) policies are enforced. When enabled, all privilege
+// checks and RLS on the underlying tables are skipped, and any user with
+// SELECT on the view can query it regardless of the underlying table
+// privileges. This restores the pre-v25.2 behavior.
+var SkipAllViewPrivilegeChecks = settings.RegisterBoolSetting(
+	settings.ApplicationLevel,
+	"sql.auth.skip_all_view_privilege_checks.enabled",
+	"determines whether to skip all privilege checks when selecting from a view. "+
+		"When enabled, no privilege checks are enforced on the underlying tables, meaning that "+
+		"any user can select from a view as long as they have access to the view itself.",
+	false,
+	settings.WithPublic)
