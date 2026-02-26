@@ -61,7 +61,7 @@ func (b *Builder) buildCreateTrigger(ct *tree.CreateTrigger, inScope *scope) (ou
 		panic(errors.AssertionFailedf("%s is not a function", funcExpr.Func.String()))
 	}
 	o := f.ResolvedOverload()
-	if err := b.catalog.CheckExecutionPrivilege(b.ctx, o.Oid, b.checkPrivilegeUser); err != nil {
+	if err := b.catalog.CheckExecutionPrivilege(b.ctx, o.Oid, b.checkExecutePrivilegeUser()); err != nil {
 		panic(err)
 	}
 
