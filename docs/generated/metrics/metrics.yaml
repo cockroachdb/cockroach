@@ -6946,7 +6946,7 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
     - name: obs.clustermetrics.flush.errors
       exported_name: obs_clustermetrics_flush_errors
-      description: Number of cluster metrics flush errors
+      description: Number of flush errors (write or delete failures)
       y_axis_label: Errors
       type: COUNTER
       unit: COUNT
@@ -6960,6 +6960,14 @@ layers:
       unit: NANOSECONDS
       aggregation: AVG
       derivative: NONE
+    - name: obs.clustermetrics.flush.metrics_deleted
+      exported_name: obs_clustermetrics_flush_metrics_deleted
+      description: Number of individual metrics deleted per flush
+      y_axis_label: Metrics
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
     - name: obs.clustermetrics.flush.metrics_written
       exported_name: obs_clustermetrics_flush_metrics_written
       description: Number of individual metrics written per flush

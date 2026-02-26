@@ -180,3 +180,77 @@ func TestSQLStore_Write(t *testing.T) {
 		require.Equal(t, int64(200), gm.Value())
 	})
 }
+
+func TestSQLStore_Delete(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	defer cmmetrics.TestingAllowNonInitConstruction()()
+
+	t.Run("delete scalar", func(t *testing.T) {
+		env := newSQLStoreTestEnv(t)
+		c := cmmetrics.NewCounter(metric.Metadata{Name: "test.del.counter"})
+		c.Inc(42)
+		require.NoError(t, env.store.Write(env.ctx, []cmmetrics.WritableMetric{c}))
+
+		// Pass the metric itself to Delete.
+		require.NoError(t, env.store.Delete(env.ctx, []cmmetrics.WritableMetric{c}))
+
+		metrics, err := env.store.Get(env.ctx)
+		require.NoError(t, err)
+		require.Empty(t, metrics)
+	})
+
+	t.Run("delete labeled metric", func(t *testing.T) {
+		env := newSQLStoreTestEnv(t)
+		gv := cmmetrics.NewGaugeVec(metric.Metadata{Name: "test.del.gv"}, "region")
+
+		// Write two children.
+		var children []cmmetrics.WritableMetric
+		gv.Update(map[string]string{"region": "us-east"}, 10)
+		gv.Update(map[string]string{"region": "us-west"}, 20)
+		gv.Each(func(m cmmetrics.WritableMetric) {
+			children = append(children, m)
+		})
+		require.NoError(t, env.store.Write(env.ctx, children))
+
+		// Delete one child via CollectDeleted snapshot.
+		gv.Delete(map[string]string{"region": "us-east"})
+		deleted := gv.CollectDeleted()
+		require.Len(t, deleted, 1)
+		require.NoError(t, env.store.Delete(env.ctx, deleted))
+
+		metrics, err := env.store.Get(env.ctx)
+		require.NoError(t, err)
+		require.Len(t, metrics, 1)
+		require.Equal(t, int64(20), metrics[0].Value())
+	})
+
+	t.Run("delete nonexistent", func(t *testing.T) {
+		env := newSQLStoreTestEnv(t)
+
+		// Deleting a metric that doesn't exist should not error.
+		c := cmmetrics.NewCounter(metric.Metadata{Name: "nonexistent.metric"})
+		require.NoError(t, env.store.Delete(env.ctx, []cmmetrics.WritableMetric{c}))
+	})
+
+	t.Run("delete multiple", func(t *testing.T) {
+		env := newSQLStoreTestEnv(t)
+		c1 := cmmetrics.NewCounter(metric.Metadata{Name: "test.del.m1"})
+		c2 := cmmetrics.NewCounter(metric.Metadata{Name: "test.del.m2"})
+		g := cmmetrics.NewGauge(metric.Metadata{Name: "test.del.m3"})
+		c1.Inc(1)
+		c2.Inc(2)
+		g.Update(3)
+
+		require.NoError(t, env.store.Write(env.ctx, []cmmetrics.WritableMetric{c1, c2, g}))
+
+		// Delete c1 and g, keep c2.
+		require.NoError(t, env.store.Delete(env.ctx, []cmmetrics.WritableMetric{c1, g}))
+
+		metrics, err := env.store.Get(env.ctx)
+		require.NoError(t, err)
+		require.Len(t, metrics, 1)
+		require.Equal(t, "test.del.m2", metrics[0].GetName(false))
+		require.Equal(t, int64(2), metrics[0].Value())
+	})
+}

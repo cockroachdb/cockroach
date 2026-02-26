@@ -1789,6 +1789,7 @@ node_id: node_id
 obs_clustermetrics_flush_count: obs.clustermetrics.flush.count
 obs_clustermetrics_flush_errors: obs.clustermetrics.flush.errors
 obs_clustermetrics_flush_latency: obs.clustermetrics.flush.latency
+obs_clustermetrics_flush_metrics_deleted: obs.clustermetrics.flush.metrics_deleted
 obs_clustermetrics_flush_metrics_written: obs.clustermetrics.flush.metrics_written
 obs_tablemetadata_update_job_duration: obs.tablemetadata.update_job.duration
 obs_tablemetadata_update_job_duration_bucket: obs.tablemetadata.update_job.duration.bucket
