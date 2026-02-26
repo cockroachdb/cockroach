@@ -174,8 +174,11 @@ func (c *inspectResumer) getSpans(
 	// Get the primary index spans. For RBR tables, partition them to region-specific spans.
 	spans := make([]roachpb.Span, 0, len(uniqueTableIDs))
 	for _, desc := range tableDescs {
-		if !desc.IsLocalityRegionalByRow() ||
-			c.job.Payload().CreationClusterVersion.Less(clusterversion.V26_2_Start.Version()) {
+		// Genuine RBR tables or mocks of RBR tables in tests.
+		isRegionalByRow := desc.IsLocalityRegionalByRow() || (isTesting() &&
+			desc.TableDesc().PrimaryIndex.KeyColumnNames[0] == "crdb_region")
+
+		if c.job.Payload().CreationClusterVersion.Less(clusterversion.V26_2_Start.Version()) || !isRegionalByRow {
 			spans = append(spans, desc.PrimaryIndexSpan(execCfg.Codec))
 		} else {
 			regions, err := getRegionsForTable(ctx, desc)
@@ -403,6 +406,10 @@ func buildApplicabilityCheckers(
 			})
 		case jobspb.InspectCheckRowCount:
 			checkers = append(checkers, &rowCountCheckApplicability{
+				tableID: specCheck.TableID,
+			})
+		case jobspb.InspectCheckUniqueness:
+			checkers = append(checkers, &uniquenessCheckApplicability{
 				tableID: specCheck.TableID,
 			})
 		default:

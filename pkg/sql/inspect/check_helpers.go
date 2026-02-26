@@ -103,7 +103,7 @@ func extractRegionFromSpan(
 	tableDesc catalog.TableDescriptor,
 ) (string, error) {
 	if !tableDesc.IsLocalityRegionalByRow() {
-		if !buildutil.CrdbTestBuild && !testing.Testing() { // For ease of testing, allow faked multi-region databases.
+		if !isTesting() { // For ease of testing, allow faked multi-region databases.
 			return "", errors.AssertionFailedf("table is not REGIONAL BY ROW, cannot extract region from span")
 		}
 	}
@@ -390,7 +390,7 @@ func findUniqueColIdxs(tableDesc catalog.TableDescriptor, index catalog.Index) (
 // getRegionsForTable retrieves the list of regions from an RBR table.
 func getRegionsForTable(ctx context.Context, tableDesc catalog.TableDescriptor) ([]string, error) {
 	if !tableDesc.IsLocalityRegionalByRow() {
-		if !buildutil.CrdbTestBuild && !testing.Testing() { // For ease of testing, allow faked multi-region databases.
+		if !isTesting() { // For ease of testing, allow faked multi-region databases.
 			return nil, errors.AssertionFailedf("table is not REGIONAL BY ROW")
 		}
 	}
@@ -408,4 +408,8 @@ func getRegionsForTable(ctx context.Context, tableDesc catalog.TableDescriptor) 
 	allRegions := regionType.TypeMeta.EnumData.LogicalRepresentations
 
 	return allRegions, nil
+}
+
+func isTesting() bool {
+	return buildutil.CrdbTestBuild || testing.Testing()
 }

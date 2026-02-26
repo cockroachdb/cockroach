@@ -90,6 +90,13 @@ func TestCCLLogic_global_placement_restricted(
 	runCCLLogicTest(t, "global_placement_restricted")
 }
 
+func TestCCLLogic_inspect(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runCCLLogicTest(t, "inspect")
+}
+
 func TestCCLLogic_multi_region(
 	t *testing.T,
 ) {
