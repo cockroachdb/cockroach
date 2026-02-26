@@ -185,17 +185,10 @@ GROUP BY %s
 func (c *uniquenessCheck) getRemoteRegions(
 	ctx context.Context, localRegion string,
 ) ([]string, error) {
-	regionColID := c.tableDesc.GetPrimaryIndex().GetKeyColumnID(0)
-	regionCol, err := catalog.MustFindColumnByID(c.tableDesc, regionColID)
+	allRegions, err := getRegionsForTable(ctx, c.tableDesc)
 	if err != nil {
 		return nil, err
 	}
-
-	regionType := regionCol.GetType()
-	if regionType.TypeMeta.EnumData == nil {
-		return nil, errors.AssertionFailedf("region column is not an enum type")
-	}
-	allRegions := regionType.TypeMeta.EnumData.LogicalRepresentations
 
 	var remoteRegions []string
 	for _, region := range allRegions {
