@@ -2324,6 +2324,13 @@ func TestRepeatableReadLogic_txn_as_of(
 	runLogicTest(t, "txn_as_of")
 }
 
+func TestRepeatableReadLogic_txn_chain(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "txn_chain")
+}
+
 func TestRepeatableReadLogic_txn_retry(
 	t *testing.T,
 ) {

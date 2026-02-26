@@ -1508,6 +1508,13 @@ func TestLogic_tuple_local(
 	runLogicTest(t, "tuple_local")
 }
 
+func TestLogic_txn_chain(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "txn_chain")
+}
+
 func TestLogic_txn_stats(
 	t *testing.T,
 ) {

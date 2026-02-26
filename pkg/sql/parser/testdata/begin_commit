@@ -215,6 +215,38 @@ COMMIT TRANSACTION -- literals removed
 COMMIT TRANSACTION -- identifiers removed
 
 parse
+COMMIT AND CHAIN
+----
+COMMIT TRANSACTION AND CHAIN -- normalized!
+COMMIT TRANSACTION AND CHAIN -- fully parenthesized
+COMMIT TRANSACTION AND CHAIN -- literals removed
+COMMIT TRANSACTION AND CHAIN -- identifiers removed
+
+parse
+COMMIT TRANSACTION AND CHAIN
+----
+COMMIT TRANSACTION AND CHAIN
+COMMIT TRANSACTION AND CHAIN -- fully parenthesized
+COMMIT TRANSACTION AND CHAIN -- literals removed
+COMMIT TRANSACTION AND CHAIN -- identifiers removed
+
+parse
+COMMIT AND NO CHAIN
+----
+COMMIT TRANSACTION -- normalized!
+COMMIT TRANSACTION -- fully parenthesized
+COMMIT TRANSACTION -- literals removed
+COMMIT TRANSACTION -- identifiers removed
+
+parse
+END AND CHAIN
+----
+COMMIT TRANSACTION AND CHAIN -- normalized!
+COMMIT TRANSACTION AND CHAIN -- fully parenthesized
+COMMIT TRANSACTION AND CHAIN -- literals removed
+COMMIT TRANSACTION AND CHAIN -- identifiers removed
+
+parse
 END
 ----
 COMMIT TRANSACTION -- normalized!
@@ -271,6 +303,30 @@ ROLLBACK TRANSACTION -- literals removed
 ROLLBACK TRANSACTION -- identifiers removed
 
 parse
+ROLLBACK AND CHAIN
+----
+ROLLBACK TRANSACTION AND CHAIN -- normalized!
+ROLLBACK TRANSACTION AND CHAIN -- fully parenthesized
+ROLLBACK TRANSACTION AND CHAIN -- literals removed
+ROLLBACK TRANSACTION AND CHAIN -- identifiers removed
+
+parse
+ROLLBACK TRANSACTION AND CHAIN
+----
+ROLLBACK TRANSACTION AND CHAIN
+ROLLBACK TRANSACTION AND CHAIN -- fully parenthesized
+ROLLBACK TRANSACTION AND CHAIN -- literals removed
+ROLLBACK TRANSACTION AND CHAIN -- identifiers removed
+
+parse
+ROLLBACK AND NO CHAIN
+----
+ROLLBACK TRANSACTION -- normalized!
+ROLLBACK TRANSACTION -- fully parenthesized
+ROLLBACK TRANSACTION -- literals removed
+ROLLBACK TRANSACTION -- identifiers removed
+
+parse
 ROLLBACK TRANSACTION
 ----
 ROLLBACK TRANSACTION
@@ -317,6 +373,14 @@ ROLLBACK TRANSACTION -- normalized!
 ROLLBACK TRANSACTION -- fully parenthesized
 ROLLBACK TRANSACTION -- literals removed
 ROLLBACK TRANSACTION -- identifiers removed
+
+parse
+ABORT AND CHAIN
+----
+ROLLBACK TRANSACTION AND CHAIN -- normalized!
+ROLLBACK TRANSACTION AND CHAIN -- fully parenthesized
+ROLLBACK TRANSACTION AND CHAIN -- literals removed
+ROLLBACK TRANSACTION AND CHAIN -- identifiers removed
 
 parse
 ABORT WORK

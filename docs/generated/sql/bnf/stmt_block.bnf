@@ -191,7 +191,7 @@ legacy_begin_stmt ::=
 	'BEGIN' opt_transaction begin_transaction
 
 legacy_end_stmt ::=
-	'END' opt_transaction
+	'END' opt_transaction opt_transaction_chain
 
 alter_stmt ::=
 	alter_ddl_stmt
@@ -494,14 +494,14 @@ begin_stmt ::=
 	'START' 'TRANSACTION' begin_transaction
 
 commit_stmt ::=
-	'COMMIT' opt_transaction
+	'COMMIT' opt_transaction opt_transaction_chain
 
 rollback_stmt ::=
-	'ROLLBACK' opt_transaction
+	'ROLLBACK' opt_transaction opt_transaction_chain
 	| 'ROLLBACK' opt_transaction 'TO' savepoint_name
 
 abort_stmt ::=
-	'ABORT' opt_abort_mod
+	'ABORT' opt_abort_mod opt_transaction_chain
 
 prepare_transaction_stmt ::=
 	'PREPARE' 'TRANSACTION' 'SCONST'
@@ -556,6 +556,11 @@ opt_transaction ::=
 
 begin_transaction ::=
 	transaction_mode_list
+	| 
+
+opt_transaction_chain ::=
+	'AND' 'CHAIN'
+	| 'AND' 'NO' 'CHAIN'
 	| 
 
 alter_ddl_stmt ::=
@@ -1160,6 +1165,7 @@ unreserved_keyword ::=
 	| 'CAPABILITIES'
 	| 'CAPABILITY'
 	| 'CASCADE'
+	| 'CHAIN'
 	| 'CHANGEFEED'
 	| 'CHECK_FILES'
 	| 'CLOSE'
@@ -4097,6 +4103,7 @@ bare_label_keywords ::=
 	| 'CASCADE'
 	| 'CASE'
 	| 'CAST'
+	| 'CHAIN'
 	| 'CHANGEFEED'
 	| 'CHARACTERISTICS'
 	| 'CHECK'

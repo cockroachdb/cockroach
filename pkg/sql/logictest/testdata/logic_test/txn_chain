@@ -1,0 +1,245 @@
+# Tests for COMMIT AND CHAIN / ROLLBACK AND CHAIN.
+
+# Set up READ COMMITTED as the default isolation level so that the tests below
+# can verify that CHAIN preserves a non-default SERIALIZABLE override.
+statement ok
+SET CLUSTER SETTING sql.txn.read_committed_isolation.enabled = true
+
+statement ok
+SET default_transaction_isolation = 'read committed'
+
+# Basic COMMIT AND CHAIN preserves isolation level.
+statement ok
+BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE
+
+statement ok
+COMMIT AND CHAIN
+
+query T
+SHOW transaction_isolation
+----
+serializable
+
+statement ok
+COMMIT
+
+# COMMIT AND CHAIN preserves READ ONLY.
+statement ok
+BEGIN TRANSACTION READ ONLY
+
+statement ok
+COMMIT AND CHAIN
+
+query T
+SHOW transaction_read_only
+----
+on
+
+statement ok
+COMMIT
+
+# ROLLBACK AND CHAIN preserves isolation level.
+statement ok
+BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE
+
+statement ok
+ROLLBACK AND CHAIN
+
+query T
+SHOW transaction_isolation
+----
+serializable
+
+statement ok
+COMMIT
+
+# ROLLBACK AND CHAIN from aborted state.
+statement ok
+BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE
+
+statement error division by zero
+SELECT 1/0
+
+statement ok
+ROLLBACK AND CHAIN
+
+query T
+SHOW transaction_isolation
+----
+serializable
+
+statement ok
+COMMIT
+
+# COMMIT AND CHAIN from aborted state (treated as ROLLBACK AND CHAIN).
+statement ok
+BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE
+
+statement error division by zero
+SELECT 1/0
+
+statement ok
+COMMIT AND CHAIN
+
+query T
+SHOW transaction_isolation
+----
+serializable
+
+statement ok
+COMMIT
+
+# AND NO CHAIN is same as plain COMMIT.
+statement ok
+BEGIN
+
+statement ok
+COMMIT AND NO CHAIN
+
+query T
+SHOW transaction_status
+----
+NoTxn
+
+# Multiple chains in sequence.
+statement ok
+BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE
+
+statement ok
+COMMIT AND CHAIN
+
+statement ok
+COMMIT AND CHAIN
+
+query T
+SHOW transaction_isolation
+----
+serializable
+
+statement ok
+COMMIT
+
+# SET TRANSACTION changes are chained.
+statement ok
+BEGIN
+
+statement ok
+SET TRANSACTION ISOLATION LEVEL SERIALIZABLE
+
+statement ok
+COMMIT AND CHAIN
+
+query T
+SHOW transaction_isolation
+----
+serializable
+
+statement ok
+COMMIT
+
+# Chain does not inherit AS OF SYSTEM TIME (new txn uses current time).
+# Just verify the chained txn is read-write by default.
+statement ok
+BEGIN
+
+statement ok
+ROLLBACK AND CHAIN
+
+statement ok
+CREATE TABLE IF NOT EXISTS chain_test (id INT PRIMARY KEY)
+
+statement ok
+COMMIT
+
+statement ok
+DROP TABLE IF EXISTS chain_test
+
+# COMMIT AND CHAIN preserves PRIORITY.
+statement ok
+BEGIN TRANSACTION PRIORITY HIGH
+
+statement ok
+COMMIT AND CHAIN
+
+query T
+SHOW transaction_priority
+----
+high
+
+statement ok
+COMMIT
+
+# END AND CHAIN works.
+statement ok
+BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE
+
+statement ok
+END AND CHAIN
+
+query T
+SHOW transaction_isolation
+----
+serializable
+
+statement ok
+COMMIT
+
+# ABORT AND CHAIN works.
+statement ok
+BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE
+
+statement ok
+ABORT AND CHAIN
+
+query T
+SHOW transaction_isolation
+----
+serializable
+
+statement ok
+COMMIT
+
+# ROLLBACK AND CHAIN from a successful transaction (not aborted).
+statement ok
+BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE
+
+statement ok
+SELECT 1
+
+statement ok
+ROLLBACK AND CHAIN
+
+query T
+SHOW transaction_isolation
+----
+serializable
+
+statement ok
+COMMIT
+
+# COMMIT AND CHAIN preserves PRIORITY HIGH and isolation level.
+statement ok
+BEGIN TRANSACTION PRIORITY HIGH, ISOLATION LEVEL SERIALIZABLE
+
+statement ok
+COMMIT AND CHAIN
+
+query T
+SHOW transaction_priority
+----
+high
+
+query T
+SHOW transaction_isolation
+----
+serializable
+
+statement ok
+COMMIT
+
+# Reset to defaults.
+statement ok
+SET default_transaction_isolation = 'serializable'
+
+statement ok
+SET CLUSTER SETTING sql.txn.read_committed_isolation.enabled = false

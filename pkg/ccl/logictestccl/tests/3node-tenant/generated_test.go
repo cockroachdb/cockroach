@@ -2367,6 +2367,13 @@ func TestTenantLogic_txn_as_of(
 	runLogicTest(t, "txn_as_of")
 }
 
+func TestTenantLogic_txn_chain(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "txn_chain")
+}
+
 func TestTenantLogic_txn_retry(
 	t *testing.T,
 ) {

@@ -1536,6 +1536,14 @@ type HasAdminRoleCache struct {
 	IsSet bool
 }
 
+// chainedTransactionModes holds the transaction characteristics to carry
+// forward when AND CHAIN is used with COMMIT or ROLLBACK.
+type chainedTransactionModes struct {
+	pri      roachpb.UserPriority
+	readOnly tree.ReadWriteMode
+	isoLevel isolation.Level
+}
+
 type connExecutor struct {
 	_ util.NoCopy
 
@@ -1828,6 +1836,11 @@ type connExecutor struct {
 		// telemetrySkippedTxns contains the number of transactions skipped by
 		// telemetry logging prior to this one.
 		telemetrySkippedTxns uint64
+
+		// chainTxnModes is set when COMMIT AND CHAIN or ROLLBACK AND CHAIN is
+		// executed. After the current transaction finishes, a new explicit
+		// transaction is started with these modes.
+		chainTxnModes *chainedTransactionModes
 	}
 
 	// sessionDataStack contains the user-configurable connection variables.
@@ -4295,6 +4308,48 @@ func (ex *connExecutor) txnStateTransitionsApplyWrapper(
 		return advanceInfo{}, errors.AssertionFailedf(
 			"unexpected event: %v", errors.Safe(advInfo.txnEvent))
 	}
+
+	// Handle AND CHAIN: after the commit/rollback has been fully processed,
+	// start a new explicit transaction with the saved modes.
+	if ex.extraTxnState.chainTxnModes != nil {
+		chainModes := ex.extraTxnState.chainTxnModes
+		ex.extraTxnState.chainTxnModes = nil
+		if _, isNoTxn := ex.machine.CurState().(stateNoTxn); isNoTxn {
+			ex.sessionDataStack.PushTopClone()
+			now := ex.server.cfg.Clock.PhysicalTime()
+			chainPayload := makeEventTxnStartPayload(
+				chainModes.pri,
+				chainModes.readOnly,
+				now,
+				nil, // historicalTimestamp not chained
+				ex.transitionCtx,
+				ex.QualityOfService(),
+				chainModes.isoLevel,
+				ex.omitInRangefeeds(),
+				ex.bufferedWritesEnabled(ex.Ctx()),
+				ex.rng.internal,
+			)
+			chainEvent := eventTxnStart{ImplicitTxn: fsm.False}
+			err := func() error {
+				ex.mu.Lock()
+				defer ex.mu.Unlock()
+				return ex.machine.ApplyWithPayload(
+					ex.Ctx(), chainEvent, chainPayload,
+				)
+			}()
+			if err != nil {
+				return advanceInfo{}, err
+			}
+			chainAdvInfo := ex.state.consumeAdvanceInfo()
+			ex.recordTransactionStart(chainAdvInfo.txnEvent.txnID)
+			ex.totalActiveTimeStopWatch.Start()
+			if err := ex.maybeSetSQLLivenessSessionAndGeneration(); err != nil {
+				return advanceInfo{}, err
+			}
+			advInfo = chainAdvInfo
+		}
+	}
+
 	return advInfo, nil
 }
 
