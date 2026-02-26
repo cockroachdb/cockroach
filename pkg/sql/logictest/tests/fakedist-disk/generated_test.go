@@ -2666,6 +2666,13 @@ func TestLogic_views(
 	runLogicTest(t, "views")
 }
 
+func TestLogic_views_definer_privileges(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "views_definer_privileges")
+}
+
 func TestLogic_virtual_columns(
 	t *testing.T,
 ) {
