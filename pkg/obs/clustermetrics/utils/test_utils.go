@@ -6,7 +6,9 @@
 package clustermetricutils
 
 type TestingKnobs struct {
-	OnRegistrySyncerStart func()
+	OnRegistrySyncerPreStart func()
+	OnRegistrySyncerStart    func()
+	OnReloadComplete         func()
 }
 
 // ModuleTestingKnobs implements base.ModuleTestingKnobs interface.

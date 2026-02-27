@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc/valueside"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 )
 
@@ -54,12 +55,16 @@ func (cmr ClusterMetricRow) toLabeledMetric(
 	metadata metric.Metadata, labels []string,
 ) (metric.Iterable, error) {
 	switch cmr.Type {
-	case "gauge":
+	case "GAUGE":
 		vec := metric.NewExportedGaugeVec(metadata, labels)
 		vec.Update(cmr.Labels, cmr.Value)
 		return vec, nil
-	case "counter":
+	case "COUNTER":
 		vec := metric.NewExportedCounterVec(metadata, labels)
+		vec.Update(cmr.Labels, cmr.Value)
+		return vec, nil
+	case "STOPWATCH":
+		vec := metric.NewDerivedExportedGaugeVec(metadata, labels, timeElapsedSince)
 		vec.Update(cmr.Labels, cmr.Value)
 		return vec, nil
 	default:
@@ -69,14 +74,18 @@ func (cmr ClusterMetricRow) toLabeledMetric(
 
 func (cmr ClusterMetricRow) toMetric(metadata metric.Metadata) (metric.Iterable, error) {
 	switch cmr.Type {
-	case "gauge":
+	case "GAUGE":
 		gauge := metric.NewGauge(metadata)
 		gauge.Update(cmr.Value)
 		return gauge, nil
-	case "counter":
+	case "COUNTER":
 		counter := metric.NewCounter(metadata)
 		counter.Update(cmr.Value)
 		return counter, nil
+	case "STOPWATCH":
+		sw := metric.NewDerivedGauge(metadata, timeElapsedSince)
+		sw.Update(cmr.Value)
+		return sw, nil
 	default:
 		return nil, errors.Newf("unknown metric type %s for metric %s", cmr.Type, cmr.Name)
 	}
@@ -156,4 +165,11 @@ func (d *RowDecoder) DecodeRow(kv roachpb.KeyValue) (_ ClusterMetricRow, tombsto
 	}
 
 	return row, false, nil
+}
+
+func timeElapsedSince(val int64) int64 {
+	if val == 0 {
+		return 0
+	}
+	return timeutil.Now().UnixNano() - val
 }
