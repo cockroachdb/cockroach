@@ -63,13 +63,9 @@ docker tag \
 docker push "${gcr_repository}:amd64-${version_cloudonly}"
 docker push "${gcr_repository}:arm64-${version_cloudonly}"
 
-docker manifest rm "$manifest" || :
-docker manifest create \
-  "$manifest" \
+create_and_push_multi_arch_manifest "$manifest" \
   "${gcr_repository}:amd64-${version_cloudonly}" \
   "${gcr_repository}:arm64-${version_cloudonly}"
-
-docker manifest push "$manifest" 
 echo "==========="
 echo "published to"
 echo "$manifest"
