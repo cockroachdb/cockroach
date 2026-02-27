@@ -4431,9 +4431,13 @@ https://www.postgresql.org/docs/17/view-pg-policies.html`,
 				permissive = "restrictive"
 			}
 
-			// Create a NAME array for roles
+			// Create a NAME array for roles. Skip NULL elements which can
+			// appear when a policy references a role that has been dropped.
 			roleNames := tree.NewDArray(types.Name)
 			for _, role := range roles.Array {
+				if role == tree.DNull {
+					continue
+				}
 				roleName := tree.MustBeDString(role)
 				if err := roleNames.Append(tree.NewDName(string(roleName))); err != nil {
 					return err

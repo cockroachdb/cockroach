@@ -3958,6 +3958,10 @@ stub_catalog_tables                                              on
 synchronize_seqscans                                             on
 synchronous_commit                                               on
 system_identity                                                  root
+tcp_keepalives_count                                             0
+tcp_keepalives_idle                                              0
+tcp_keepalives_interval                                          0
+tcp_user_timeout                                                 0
 testing_optimizer_cost_perturbation                              0
 testing_optimizer_disable_rule_probability                       0
 testing_optimizer_inject_panics                                  off

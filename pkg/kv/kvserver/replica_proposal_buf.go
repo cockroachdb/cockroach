@@ -1215,6 +1215,11 @@ func (rp *replicaProposer) verifyLeaseRequestSafetyRLocked(
 		BypassSafetyChecks: bypassSafetyChecks,
 		DesiredLeaseType:   r.desiredLeaseType(r.descRLocked()),
 	}
+	// NOTE: we do NOT check send-queue status here. Calling SendStreamStats
+	// is unsafe under repl.mu (lock ordering: rcReferenceUpdateMu < repl.mu).
+	// The above-raft check in InitOrJoinRequest handles the send-queue check
+	// before lease revocation. The proposal buffer retains the airtight
+	// snapshot check via ReplicaMayNeedSnapshot in leases.Verify.
 	if err := leases.Verify(ctx, st, in); err != nil {
 		if in.Transfer() {
 			// The lease transfer is deemed to be unsafe. The intended consequence of

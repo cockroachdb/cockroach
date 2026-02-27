@@ -9,41 +9,13 @@ import (
 	"context"
 	"net"
 	"sync/atomic"
-	"time"
 
 	"github.com/cockroachdb/cmux"
-	"github.com/cockroachdb/cockroach/pkg/settings"
+	"github.com/cockroachdb/cockroach/pkg/server/tcpkeepalive"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/sysutil"
 	"github.com/cockroachdb/errors"
-)
-
-var KeepAliveProbeCount = settings.RegisterIntSetting(
-	settings.ApplicationLevel,
-	"server.sql_tcp_keep_alive.count",
-	"maximum number of probes that will be sent out before a connection is dropped because "+
-		"it's unresponsive (Linux and Darwin only)",
-	3,
-	settings.WithPublic,
-)
-
-var KeepAliveProbeFrequency = settings.RegisterDurationSetting(
-	settings.ApplicationLevel,
-	"server.sql_tcp_keep_alive.interval",
-	"time between keep alive probes and idle time before probes are sent out",
-	time.Second*10,
-	settings.WithPublic,
-)
-
-var TCPUserTimeout = settings.RegisterDurationSetting(
-	settings.ApplicationLevel,
-	"server.sql_tcp_user.timeout",
-	"specifies the maximum amount of time that transmitted data "+
-		"can remain unacknowledged before the underlying TCP connection is forcefully closed. "+
-		"(Linux and Darwin only)",
-	time.Second*30,
-	settings.WithPublic,
 )
 
 type tcpKeepAliveManager struct {
@@ -82,13 +54,15 @@ func (k *tcpKeepAliveManager) configure(ctx context.Context, conn net.Conn) {
 		return true
 	}
 
-	// Based on the maximum connection life span and probe interval, pick a maximum
-	// probe count.
-	probeCount := KeepAliveProbeCount.Get(&k.settings.SV)
-	probeFrequency := KeepAliveProbeFrequency.Get(&k.settings.SV)
+	probeCount := tcpkeepalive.ProbeCount.Get(&k.settings.SV)
+	probeFrequency := tcpkeepalive.ProbeInterval.Get(&k.settings.SV)
+	idleTime := tcpkeepalive.IdleTime.Get(&k.settings.SV)
+	if idleTime == 0 {
+		idleTime = probeFrequency
+	}
 	err := tcpConn.SetKeepAliveConfig(net.KeepAliveConfig{
 		Enable:   true,
-		Idle:     probeFrequency,
+		Idle:     idleTime,
 		Interval: probeFrequency,
 		Count:    int(probeCount),
 	})
@@ -96,7 +70,7 @@ func (k *tcpKeepAliveManager) configure(ctx context.Context, conn net.Conn) {
 		return
 	}
 
-	userTimeout := TCPUserTimeout.Get(&k.settings.SV)
+	userTimeout := tcpkeepalive.UserTimeout.Get(&k.settings.SV)
 	rawConn, err := tcpConn.SyscallConn()
 	if handleErr("TCP user timeout", err) {
 		return

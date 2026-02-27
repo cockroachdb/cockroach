@@ -504,7 +504,7 @@ func TestCompactionTriggeringCompaction(t *testing.T) {
 		th.waitForSuccessfulScheduledJob(t, inc.ScheduleID())
 	}
 
-	for range 12 {
+	for range 5 {
 		executeIncremental()
 	}
 

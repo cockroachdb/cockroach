@@ -40,7 +40,7 @@ func setup(t *testing.T) (context.Context, *timeutil.ManualTime, *stop.Stopper, 
 	return ctx, clock, stopper, teardown
 }
 
-func metricsHasUser(metrics *aggmetric.AggGauge, user string) bool {
+func metricsHasUser(metrics metric.PrometheusIterable, user string) bool {
 	has := false
 	metrics.Each([]*io_prometheus_client.LabelPair{}, func(metric *io_prometheus_client.Metric) {
 		if metric.GetLabel()[0].GetValue() == user {
@@ -51,7 +51,7 @@ func metricsHasUser(metrics *aggmetric.AggGauge, user string) bool {
 }
 
 func assertMetricsHasUser(
-	t *testing.T, expiration *aggmetric.AggGauge, ttl *aggmetric.AggGauge, user string,
+	t *testing.T, expiration *aggmetric.AggGauge, ttl *aggmetric.AggFunctionalGauge, user string,
 ) {
 	if !metricsHasUser(expiration, user) {
 		t.Fatal("expiration metrics does not contain user", user)
@@ -62,7 +62,7 @@ func assertMetricsHasUser(
 }
 
 func assertMetricsMissingUser(
-	t *testing.T, expiration *aggmetric.AggGauge, ttl *aggmetric.AggGauge, user string,
+	t *testing.T, expiration *aggmetric.AggGauge, ttl *aggmetric.AggFunctionalGauge, user string,
 ) {
 	if metricsHasUser(expiration, user) {
 		t.Fatal("expiration metrics does not contain user", user)
@@ -73,6 +73,14 @@ func assertMetricsMissingUser(
 }
 
 func assertMetricValue(t *testing.T, metrics *aggmetric.AggGauge, user string, value int64) {
+	c := metrics.GetChild(user)
+	require.NotNil(t, c)
+	require.Equal(t, value, c.Value())
+}
+
+func assertMetricValueFunctional(
+	t *testing.T, metrics *aggmetric.AggFunctionalGauge, user string, value int64,
+) {
 	c := metrics.GetChild(user)
 	require.NotNil(t, c)
 	require.Equal(t, value, c.Value())
@@ -120,8 +128,8 @@ func TestEntryCache(t *testing.T) {
 	clock.AdvanceTo(when)
 	cache.Upsert(ctx, fooUser, defaultSerial, closerExpiration)
 	cache.Upsert(ctx, barUser, defaultSerial, laterExpiration)
-	assertMetricValue(t, ttlMetrics, fooUser, int64(0))
-	assertMetricValue(t, ttlMetrics, barUser, laterExpiration-(closerExpiration+20))
+	assertMetricValueFunctional(t, ttlMetrics, fooUser, int64(0))
+	assertMetricValueFunctional(t, ttlMetrics, barUser, laterExpiration-(closerExpiration+20))
 }
 
 func TestPurge(t *testing.T) {
@@ -205,6 +213,36 @@ func TestConcurrentUpdates(t *testing.T) {
 	}
 	wg.Wait()
 	cache.Clear()
+}
+
+func TestConcurrentUpsertAndMetricRead(t *testing.T) {
+	ctx, clock, stopper, teardown := setup(t)
+	defer teardown()
+	cache, _, ttlMetrics := newCacheAndMetrics(ctx, clock, stopper)
+
+	const user = "testUser"
+
+	// Seed the cache so the TTL child gauge exists.
+	cache.Upsert(ctx, user, defaultSerial, 1000)
+
+	const N = 8000
+	var wg sync.WaitGroup
+	wg.Add(N)
+	for i := range N {
+		go func(i int) {
+			defer wg.Done()
+			if i%2 == 0 {
+				// Writer: update the expiration, triggering upsertMetricsLocked.
+				cache.Upsert(ctx, user, defaultSerial, int64(1000+i))
+			} else {
+				// Reader: read the TTL metric value (simulates metric scraping).
+				if c := ttlMetrics.GetChild(user); c != nil {
+					_ = c.Value()
+				}
+			}
+		}(i)
+	}
+	wg.Wait()
 }
 
 func TestUpsert(t *testing.T) {
@@ -401,7 +439,12 @@ func TestTTL(t *testing.T) {
 		cache, _, ttlMetrics := newCacheAndMetrics(ctx, manClock, stopper)
 
 		cache.Upsert(ctx, "user1", "serial1", 100)
-		assertMetricValue(t, ttlMetrics, "user1", 50)
+		assertMetricValueFunctional(t, ttlMetrics, "user1", 50)
+
+		// Update the expiration date to assert that the TTL function has been
+		// updated with the new expiration.
+		cache.Upsert(ctx, "user1", "serial1", 60)
+		assertMetricValueFunctional(t, ttlMetrics, "user1", 10)
 	})
 
 	t.Run("negative ttls get clamped to 0", func(t *testing.T) {
@@ -409,7 +452,7 @@ func TestTTL(t *testing.T) {
 		cache, _, ttlMetrics := newCacheAndMetrics(ctx, manClock, stopper)
 		cache.Upsert(ctx, "user1", "serial1", 49)
 
-		assertMetricValue(t, ttlMetrics, "user1", 0)
+		assertMetricValueFunctional(t, ttlMetrics, "user1", 0)
 	})
 }
 
@@ -437,7 +480,7 @@ func newCache(
 
 func newCacheAndMetrics(
 	ctx context.Context, clock *timeutil.ManualTime, stopper *stop.Stopper,
-) (*clientcert.Cache, *aggmetric.AggGauge, *aggmetric.AggGauge) {
+) (*clientcert.Cache, *aggmetric.AggGauge, *aggmetric.AggFunctionalGauge) {
 	cache, expirationMetrics, ttlMetrics, _ := newCacheAndMetricsAndAccount(ctx, clock, stopper)
 	return cache, expirationMetrics, ttlMetrics
 }
@@ -451,10 +494,10 @@ func newCacheAndAccount(
 
 func newCacheAndMetricsAndAccount(
 	ctx context.Context, clock *timeutil.ManualTime, stopper *stop.Stopper,
-) (*clientcert.Cache, *aggmetric.AggGauge, *aggmetric.AggGauge, *mon.BoundAccount) {
+) (*clientcert.Cache, *aggmetric.AggGauge, *aggmetric.AggFunctionalGauge, *mon.BoundAccount) {
 	clientcert.CacheTTL = time.Minute
 	expirationMetrics := aggmetric.MakeBuilder("user").Gauge(metric.Metadata{})
-	ttlMetrics := aggmetric.MakeBuilder("user").Gauge(metric.Metadata{})
+	ttlMetrics := aggmetric.MakeBuilder("user").FunctionalGauge(metric.Metadata{}, func(_ []int64) int64 { return 0 })
 	account := mon.NewStandaloneUnlimitedAccount()
 	cache := clientcert.NewCache(clock, account, expirationMetrics, ttlMetrics)
 	return cache, expirationMetrics, ttlMetrics, account

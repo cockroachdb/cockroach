@@ -31,7 +31,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/fingerprintutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/jobutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
-	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -1215,12 +1214,6 @@ func TestOnlineRestoreRevisionHistoryLayers(t *testing.T) {
 func TestOnlineRestoreLinkingNonexistentFiles(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-
-	// Pebble's overlap checker currently opens backing files to probe for data
-	// overlap during ingestion, causing a crash when the files are missing.
-	// Once the SkipProbe fix lands in Pebble, remove this skip.
-	// See: https://github.com/cockroachdb/pebble/issues/5771
-	skip.WithIssue(t, 163977, "pebble overlap checker does IO during ingest; see cockroachdb/pebble#5771")
 
 	tmpDir := t.TempDir()
 	defer nodelocal.ReplaceNodeLocalForTesting(tmpDir)()

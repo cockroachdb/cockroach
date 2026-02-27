@@ -11,7 +11,6 @@ import (
 	"fmt"
 	"os"
 	"strconv"
-	"strings"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
@@ -204,29 +203,6 @@ func PickRandomStore(ctx context.Context, o operation.Operation, conn *gosql.DB,
 		o.Fatalf("unexpected zero active stores found in node %d", nodeId)
 	}
 	return stores[rng.Intn(len(stores))]
-}
-
-// IsSchemaLocked returns true if the schema_locked parameter is set on this table.
-func IsSchemaLocked(o operation.Operation, conn *gosql.DB, db, tbl string) bool {
-	showTblStmt := fmt.Sprintf("SHOW CREATE %s.%s", db, tbl)
-	var tblName, createStmt string
-	err := conn.QueryRow(showTblStmt).Scan(&tblName, &createStmt)
-	if err != nil {
-		o.Fatal(err)
-	}
-	return strings.Contains(createStmt, "schema_locked = true")
-}
-
-// SetSchemaLocked sets the schema_locked storage parameter.
-func SetSchemaLocked(
-	ctx context.Context, o operation.Operation, conn *gosql.DB, db, tbl string, lock bool,
-) {
-	stmt := fmt.Sprintf("ALTER TABLE %s.%s SET (schema_locked=%v)", db, tbl, lock)
-	o.Status(fmt.Sprintf("setting schema_locked = %v on table %s.%s", lock, db, tbl))
-	_, err := conn.ExecContext(ctx, stmt)
-	if err != nil {
-		o.Fatal(err)
-	}
 }
 
 // ExecuteQuery executes the query and invokes the rowEvaluator for processing each row

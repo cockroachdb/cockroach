@@ -892,7 +892,11 @@ func extractValue(name string, mtr interface{}, fn func(string, float64)) error 
 		// NB: this branch is intentionally at the bottom since all metrics implement it.
 		m := mtr.ToPrometheusMetric()
 		if m.Gauge != nil {
-			fn(name, *m.Gauge.Value)
+			v := *m.Gauge.Value
+			if math.IsInf(v, 0) || math.IsNaN(v) {
+				v = 0
+			}
+			fn(name, v)
 		} else if m.Counter != nil {
 			fn(name, *m.Counter.Value)
 		}

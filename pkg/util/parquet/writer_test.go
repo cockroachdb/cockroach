@@ -325,6 +325,28 @@ func TestBasicDatums(t *testing.T) {
 			},
 		},
 		{
+			// Regression test for #137757. The SQL layer produces BIT(0) values
+			// with a non-nil empty words slice, while the parquet decoder's
+			// bitarray.Parse("") returns a nil words slice. Both are semantically
+			// equivalent. Use FromEncodingParts to construct the expected value
+			// with a non-nil empty words slice, matching what the SQL layer
+			// produces.
+			name: "bitarray_empty",
+			sch: &colSchema{
+				columnTypes: []*types.T{types.MakeBit(0), types.MakeBit(0)},
+				columnNames: []string{"a", "b"},
+			},
+			datums: func() ([][]tree.Datum, error) {
+				ba, err := bitarray.FromEncodingParts([]uint64{}, 0)
+				if err != nil {
+					return nil, err
+				}
+				return [][]tree.Datum{
+					{&tree.DBitArray{BitArray: ba}, tree.DNull},
+				}, nil
+			},
+		},
+		{
 			name: "bytes",
 			sch: &colSchema{
 				columnTypes: []*types.T{types.Bytes, types.Bytes},

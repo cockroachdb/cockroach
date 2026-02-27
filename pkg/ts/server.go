@@ -8,6 +8,7 @@ package ts
 import (
 	"context"
 	"math"
+	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvtenant"
@@ -121,13 +122,32 @@ func (t *TenantServer) Query(
 	ctx = t.AnnotateCtx(ctx)
 	// Currently, secondary tenants are only able to view their own metrics.
 	for i, q := range req.Queries {
-		// Tenant-scoped metrics get marked with the tenantID, otherwise we
-		// leave the request as-is for system-level metrics.
-		if t.tenantRegistry.Contains(q.Name) {
+		// Tenant-scoped metrics get marked with the tenantID. This includes both
+		// app-level metrics (in tenantRegistry) and store-level tenant metrics
+		// (identified by isStoreTenantMetric).
+		metricName := strings.TrimPrefix(q.Name, "cr.store.")
+		if t.tenantRegistry.Contains(q.Name) || isStoreTenantMetric(metricName) {
 			req.Queries[i].TenantID = t.tenantID
 		}
 	}
 	return t.tenantConnect.Query(ctx, req)
+}
+
+// storeTenantMetrics mirrors kvbase.TenantsStorageMetricsSet. We maintain a
+// hardcoded copy here to avoid import cycles with kvbase.
+var storeTenantMetrics = map[string]struct{}{
+	"livebytes": {}, "sysbytes": {}, "keybytes": {}, "valbytes": {},
+	"rangekeybytes": {}, "rangevalbytes": {}, "totalbytes": {},
+	"intentbytes": {}, "lockbytes": {}, "livecount": {}, "keycount": {},
+	"valcount": {}, "rangekeycount": {}, "rangevalcount": {},
+	"intentcount": {}, "lockcount": {}, "lockage": {}, "gcbytesage": {},
+	"syscount": {}, "abortspanbytes": {},
+}
+
+// isStoreTenantMetric returns true if name is in storeTenantMetrics.
+func isStoreTenantMetric(name string) bool {
+	_, ok := storeTenantMetrics[name]
+	return ok
 }
 
 // RegisterService registers the GRPC service.

@@ -65,6 +65,12 @@ var UndefinedConfidenceInterval = ConfidenceInterval{
 	Center: math.NaN(),
 }
 
+// IsUndefinedConfidenceInterval returns true if the confidence interval is
+// undefined.
+func IsUndefinedConfidenceInterval(ci ConfidenceInterval) bool {
+	return math.IsNaN(ci.Low) || math.IsNaN(ci.High) || math.IsNaN(ci.Center)
+}
+
 // ComparisonResult holds the comparison results for a specific metric.
 type ComparisonResult struct {
 	Metric      *Metric

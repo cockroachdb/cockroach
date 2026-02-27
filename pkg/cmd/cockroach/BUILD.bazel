@@ -8,7 +8,6 @@ go_library(
     visibility = ["//visibility:private"],
     deps = [
         "//pkg/ccl",
-        "//pkg/ccl/cliccl",
         "//pkg/cli",
         "//pkg/ui/distccl",
     ],

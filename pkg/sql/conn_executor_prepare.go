@@ -9,7 +9,9 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/hints"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/optbuilder"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgwirebase"
@@ -524,6 +526,59 @@ func (ex *connExecutor) execBind(
 		log.Dev.Infof(ctx, "%s outformats: %v, AST: %T, prepared statements: %s", err.Error(),
 			bindCmd.OutFormats, ps.AST, ex.extraTxnState.prepStmtsNamespace.String())
 		return retErr(err)
+	}
+
+	// Validate that the prepared statement's result type hasn't changed due to
+	// schema changes. This check needs to happen during Bind (not Execute) to
+	// match PostgreSQL's behavior of returning errors before sending BindComplete.
+	// See issue #152791.
+	if len(ps.Columns) > 0 {
+		// Use chooseGenericPlan to determine which memo will actually be used
+		// during Execute, then check that memo for staleness. This mirrors
+		// the logic in chooseValidPreparedMemo.
+		p := &ex.planner
+		ex.resetPlanner(ctx, p, ex.state.mu.txn, ex.server.cfg.Clock.PhysicalTime())
+		p.stmt.Prepared = ps
+		opc := &p.optPlanningCtx
+		opc.reset(ctx)
+		cachedMemo := ps.BaseMemo
+		if opc.chooseGenericPlan(ctx) {
+			cachedMemo = ps.GenericMemo
+		}
+		if cachedMemo != nil {
+			// Phase 1: Check if the memo's dependencies are stale. This is a
+			// cheap descriptor version comparison that avoids rebuilding the
+			// optbuilder expression on every Bind call.
+			isStale, err := cachedMemo.IsStale(ctx, p.EvalContext(), opc.catalog)
+			if err != nil {
+				return retErr(err)
+			}
+			if isStale {
+				// Phase 2: The schema has changed. Rebuild the expression to get
+				// the current result columns, then compare against the prepared
+				// statement's columns.
+				p.semaCtx.Placeholders.Init(len(ps.TypeHints), ps.TypeHints)
+				f := opc.optimizer.Factory()
+				bld := optbuilder.New(ctx, &p.semaCtx, p.EvalContext(), opc.catalog, f, ps.AST)
+				bld.KeepPlaceholders = true
+				if err := bld.Build(); err != nil {
+					return retErr(err)
+				}
+
+				newMemo := f.Memo()
+				md := newMemo.Metadata()
+				physical := newMemo.RootProps()
+				currentCols := make(colinfo.ResultColumns, len(physical.Presentation))
+				for i, col := range physical.Presentation {
+					colMeta := md.ColumnMeta(col.ID)
+					currentCols[i].Name = col.Alias
+					currentCols[i].Typ = colMeta.Type
+				}
+				if !ps.Columns.TypesEqual(currentCols) {
+					return retErr(pgerror.New(pgcode.FeatureNotSupported, "cached plan must not change result type"))
+				}
+			}
+		}
 	}
 
 	columnFormatCodes := bindCmd.OutFormats

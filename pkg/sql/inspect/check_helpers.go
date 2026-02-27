@@ -8,7 +8,9 @@ package inspect
 import (
 	"bytes"
 	"context"
+	"slices"
 	"strings"
+	"testing"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -19,8 +21,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/lexbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowenc/keyside"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/spanutils"
+	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
+	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
@@ -89,7 +94,125 @@ func encodeColumnName(columnName string) string {
 	return buf.String()
 }
 
+// extractRegionFromSpan extracts the value of the leading (region) column from
+// a span on a regional by row table.
+func extractRegionFromSpan(
+	ctx context.Context,
+	cfg *execinfra.ServerConfig,
+	span roachpb.Span,
+	tableDesc catalog.TableDescriptor,
+) (string, error) {
+	if !tableDesc.IsLocalityRegionalByRow() {
+		if !buildutil.CrdbTestBuild && !testing.Testing() { // For ease of testing, allow faked multi-region databases.
+			return "", errors.AssertionFailedf("table is not REGIONAL BY ROW, cannot extract region from span")
+		}
+	}
+
+	priIndex := tableDesc.GetPrimaryIndex()
+
+	indexPrefix := cfg.Codec.IndexPrefix(uint32(tableDesc.GetID()), uint32(priIndex.GetID()))
+
+	if len(span.Key) <= len(indexPrefix) {
+		return "", errors.Newf("span does not contain region column data")
+	}
+
+	regionColID := priIndex.GetKeyColumnID(0)
+	regionCol, err := catalog.MustFindColumnByID(tableDesc, regionColID)
+	if err != nil {
+		return "", err
+	}
+
+	// Decode the region value from the span key.
+	remainingKey := span.Key[len(indexPrefix):]
+	var regionDatum tree.Datum
+	regionDatum, _, err = keyside.Decode(
+		nil, /* alloc */
+		regionCol.GetType(),
+		remainingKey,
+		encoding.Ascending,
+	)
+	if err != nil {
+		return "", errors.Wrap(err, "decoding region from span")
+	}
+
+	regionEnum, ok := regionDatum.(*tree.DEnum)
+	if !ok {
+		return "", errors.Newf("region column is not an enum type")
+	}
+
+	return regionEnum.LogicalRep, nil
+}
+
+// spanForRegion returns an equivalent span with the region column set to the specific region.
+func spanForRegion(
+	ctx context.Context,
+	cfg *execinfra.ServerConfig,
+	span roachpb.Span,
+	tableDesc catalog.TableDescriptor,
+	region string,
+) (roachpb.Span, error) {
+	priIndex := tableDesc.GetPrimaryIndex()
+
+	indexPrefix := cfg.Codec.IndexPrefix(uint32(tableDesc.GetID()), uint32(priIndex.GetID()))
+
+	if len(span.Key) <= len(indexPrefix) {
+		return roachpb.Span{}, errors.AssertionFailedf("span.Key is missing index prefix")
+	}
+	if len(span.EndKey) <= len(indexPrefix) {
+		return roachpb.Span{}, errors.AssertionFailedf("span.EndKey is missing index prefix")
+	}
+
+	regionColID := priIndex.GetKeyColumnID(0)
+	regionCol, err := catalog.MustFindColumnByID(tableDesc, regionColID)
+	if err != nil {
+		return roachpb.Span{}, err
+	}
+
+	regionDatum, err := tree.MakeDEnumFromLogicalRepresentation(regionCol.GetType(), region)
+	if err != nil {
+		return roachpb.Span{}, errors.Wrapf(err, "invalid region %q", region)
+	}
+
+	regionPrefixBytes, err := keyside.Encode(indexPrefix, &regionDatum, encoding.Ascending)
+	if err != nil {
+		return roachpb.Span{}, errors.Wrap(err, "encoding region")
+	}
+	regionPrefix := roachpb.Key(regionPrefixBytes)
+
+	startKeyAfterIndex := span.Key[len(indexPrefix):]
+	endKeyAfterIndex := span.EndKey[len(indexPrefix):]
+
+	// Decode and skip the region column from the original span
+	_, startSuffix, err := keyside.Decode(
+		nil, /* alloc */
+		regionCol.GetType(),
+		startKeyAfterIndex,
+		encoding.Ascending,
+	)
+	if err != nil {
+		return roachpb.Span{}, errors.Wrap(err, "decoding region from start key")
+	}
+
+	_, endSuffix, err := keyside.Decode(
+		nil, /* alloc */
+		regionCol.GetType(),
+		endKeyAfterIndex,
+		encoding.Ascending,
+	)
+	if err != nil {
+		return roachpb.Span{}, errors.Wrap(err, "decoding region from end key")
+	}
+
+	key := append(slices.Clone(regionPrefix), startSuffix...)
+	endKey := append(slices.Clone(regionPrefix), endSuffix...)
+	return roachpb.Span{
+		Key:    key,
+		EndKey: endKey,
+	}, nil
+}
+
 // getPredicateAndQueryArgs generates query bounds from the span to limit the query to the specified range.
+// When no rows are found in a span, an empty predicate is returned.
 func getPredicateAndQueryArgs(
 	ctx context.Context,
 	cfg *execinfra.ServerConfig,
@@ -98,6 +221,7 @@ func getPredicateAndQueryArgs(
 	priIndex catalog.Index,
 	asOf hlc.Timestamp,
 	pkColNames []string,
+	endPlaceholderOffset int,
 ) (predicate string, queryArgs []interface{}, err error) {
 	// Assert that we get meaningful spans
 	if span.Key.Equal(span.EndKey) || len(span.Key) == 0 || len(span.EndKey) == 0 {
@@ -128,10 +252,8 @@ func getPredicateAndQueryArgs(
 		return "", nil, errors.Wrap(err, "converting span to query bounds")
 	}
 
-	// If no rows exist in the primary index span, we still need to check for dangling
-	// secondary index entries. We run the check with an empty predicate, which will
-	// scan the entire secondary index within the span. Any secondary index entries found
-	// will be dangling since there are no corresponding primary index rows.
+	// If no rows exist in the primary index span, return an empty predicate
+	// and no query arguments. Callers decide how to handle this case.
 	if !hasRows {
 		// Use empty predicate and no query arguments
 		predicate = ""
@@ -147,10 +269,7 @@ func getPredicateAndQueryArgs(
 		for i, colName := range pkColNames {
 			encodedPkColNames[i] = encodeColumnName(colName)
 		}
-		predicate, err = spanutils.RenderQueryBounds(
-			encodedPkColNames, pkColDirs, pkColTypes,
-			len(bounds.Start), len(bounds.End), true, 1,
-		)
+		predicate, err = spanutils.RenderQueryBounds(encodedPkColNames, pkColDirs, pkColTypes, len(bounds.Start), len(bounds.End), true, endPlaceholderOffset)
 		if err != nil {
 			return "", nil, errors.Wrap(err, "rendering query bounds")
 		}
@@ -199,4 +318,24 @@ func errorToInternalInspectIssue(
 		ObjectID:   tableDesc.GetID(),
 		Details:    dets,
 	}
+}
+
+// findUniqueColIdxs returns the indexes of the unique columns in the index.
+func findUniqueColIdxs(tableDesc catalog.TableDescriptor, index catalog.Index) ([]int, error) {
+	var uniqueColIdxs []int
+	for i := 0; i < index.NumKeyColumns(); i++ {
+		colID := index.GetKeyColumnID(i)
+		col, err := catalog.MustFindColumnByID(tableDesc, colID)
+		if err != nil {
+			return nil, err
+		}
+		if col.HasDefault() {
+			switch col.GetDefaultExpr() {
+			case "unique_rowid()", "unordered_unique_rowid()":
+				uniqueColIdxs = append(uniqueColIdxs, i)
+			}
+		}
+
+	}
+	return uniqueColIdxs, nil
 }

@@ -96,3 +96,15 @@ func (b *EventBuilder) DeleteEvent(
 		PrevValue: kv.Value,
 	}
 }
+
+// TombstoneEvent creates a tombstone delete event (a delete with no previous
+// value) for the given row at the specified timestamp.
+func (b *EventBuilder) TombstoneEvent(time hlc.Timestamp, row tree.Datums) streampb.StreamEvent_KV {
+	kv := b.encodeRow(time, row)
+	return streampb.StreamEvent_KV{
+		KeyValue: roachpb.KeyValue{
+			Key:   kv.Key,
+			Value: roachpb.Value{Timestamp: time},
+		},
+	}
+}

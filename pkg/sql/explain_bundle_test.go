@@ -1178,6 +1178,61 @@ CREATE TABLE users(id UUID DEFAULT gen_random_uuid() PRIMARY KEY, promo_id INT R
 		)
 	})
 
+	t.Run("schema for udt", func(t *testing.T) {
+		r.Exec(t, `CREATE SCHEMA "schema.1"`)
+		r.Exec(t, `CREATE TYPE "schema.1".test_type1 AS ENUM ('hello','world')`)
+		r.Exec(t, `CREATE TABLE udt_schema_t (x INT PRIMARY KEY, y "schema.1".test_type1)`)
+		rows := r.QueryStr(t, "EXPLAIN ANALYZE (DEBUG) SELECT * FROM udt_schema_t")
+		checkBundle(
+			t, fmt.Sprint(rows), "udt_schema_t", func(name, contents string) error {
+				if name == "schema.sql" {
+					reg := regexp.MustCompile(`CREATE SCHEMA IF NOT EXISTS \"schema.1\"`)
+					if reg.FindString(contents) == "" {
+						return errors.Errorf(`could not find CREATE SCHEMA for \"schema.1\" in schema.sql`)
+					}
+				}
+				return nil
+			}, false, /* expectErrors */
+			base, plans, "distsql.html vec.txt vec-v.txt stats-defaultdb.public.udt_schema_t.sql",
+		)
+	})
+
+	t.Run("schema for udf", func(t *testing.T) {
+		r.Exec(t, `CREATE SCHEMA "schema.2"`)
+		r.Exec(t, `CREATE FUNCTION "schema.2".r1() RETURNS INT LANGUAGE SQL AS 'SELECT 1'`)
+		rows := r.QueryStr(t, `EXPLAIN ANALYZE (DEBUG) SELECT "schema.2".r1()`)
+		checkBundle(
+			t, fmt.Sprint(rows), "t", func(name, contents string) error {
+				if name == "schema.sql" {
+					reg := regexp.MustCompile(`CREATE SCHEMA IF NOT EXISTS \"schema.2\"`)
+					if reg.FindString(contents) == "" {
+						return errors.Errorf(`could not find CREATE SCHEMA for \"schema.2\" in schema.sql`)
+					}
+				}
+				return nil
+			}, false, /* expectErrors */
+			base, plans, "distsql.html vec.txt vec-v.txt",
+		)
+	})
+
+	t.Run("schema with unique chars", func(t *testing.T) {
+		r.Exec(t, `CREATE SCHEMA "schema.3"`)
+		r.Exec(t, `CREATE TABLE "schema.3"."op.81" (X INT)`)
+		rows := r.QueryStr(t, `EXPLAIN ANALYZE (DEBUG) SELECT * FROM "schema.3"."op.81"`)
+		checkBundle(
+			t, fmt.Sprint(rows), `"op.81"`, func(name, contents string) error {
+				if name == "schema.sql" {
+					reg := regexp.MustCompile(`CREATE SCHEMA "schema.3"`)
+					if reg.FindString(contents) == "" {
+						return errors.Errorf(`could not find CREATE SCHEMA for \"schema.3\" in schema.sql`)
+					}
+				}
+				return nil
+			}, false, /* expectErrors */
+			base, plans, "distsql.html vec.txt vec-v.txt stats-defaultdb._schema.3_._op.81_.sql",
+		)
+	})
+
 	// TODO(yuzefovich): figure out why this test occasionally fails under
 	// stress (i.e. it seems that no bundle is collected altogether).
 	//t.Run("under different users", func(t *testing.T) {

@@ -7,11 +7,12 @@ package kvserver
 
 import (
 	"context"
-	"sync/atomic"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvadmission"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/lockspanset"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -33,13 +34,6 @@ func TestVirtualizedIntentResolution(t *testing.T) {
 	defer stopper.Stop(ctx)
 
 	tsc := TestStoreConfig(hlc.NewClockForTesting(tc.manualClock))
-	var intentsToResolve atomic.Value // []roachpb.LockUpdate
-	tsc.TestingKnobs.InjectIntentsToResolveVirtually = func() []roachpb.LockUpdate {
-		if intentsToResolve.Load() != nil {
-			return intentsToResolve.Load().([]roachpb.LockUpdate)
-		}
-		return nil
-	}
 	tc.StartWithStoreConfig(ctx, t, stopper, tsc)
 
 	// The manual clock starts at time 123.
@@ -117,13 +111,20 @@ func TestVirtualizedIntentResolution(t *testing.T) {
 	}
 
 	for _, c := range testCases {
-		// Set up the intents to resolve.
+		// Build a mock guard, injecting any intents to resolve virtually.
+		var intents []roachpb.LockUpdate
 		if c.toResolve != nil {
 			writeTxn.TxnMeta.WriteTimestamp = c.toResolve.txnWriteTs
 			status := c.toResolve.txnStatus
 			obs := roachpb.ObservedTimestamp{Timestamp: hlc.ClockTimestamp(c.toResolve.obsTs), NodeID: roachpb.NodeID(c.toResolve.obsNode)}
-			intents := []roachpb.LockUpdate{{Span: roachpb.Span{Key: k}, Status: status, Txn: writeTxn.TxnMeta, ClockWhilePending: obs}}
-			intentsToResolve.Store(intents)
+			intents = []roachpb.LockUpdate{{Span: roachpb.Span{Key: k}, Status: status, Txn: writeTxn.TxnMeta, ClockWhilePending: obs}}
+		}
+		g := mockGuard{
+			req: concurrency.Request{
+				LatchSpans: allSpans(),
+				LockSpans:  lockspanset.New(),
+			},
+			intentsToResolveVirtually: intents,
 		}
 		// Construct the read-only request.
 		ba := &kvpb.BatchRequest{}
@@ -144,10 +145,7 @@ func TestVirtualizedIntentResolution(t *testing.T) {
 		}
 		gArgs := getArgs(k)
 		ba.Add(&gArgs)
-		// TODO(mira): It would be nice to inject the intents to resolve in the
-		// concurrency.Guard passed below, instead of injecting them via a knob.
-		// Currently, this is not possible because the Guard is not an interface.
-		br, _, _, pErr := tc.repl.executeReadOnlyBatch(ctx, ba, allSpansGuard(), kvadmission.AdmissionInfo{})
+		br, _, _, pErr := tc.repl.executeReadOnlyBatch(ctx, ba, g, kvadmission.AdmissionInfo{})
 
 		if c.exp.error == "" {
 			require.NoError(t, pErr.GoError())

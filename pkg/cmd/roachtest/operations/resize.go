@@ -16,6 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/operation"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/operations/helpers"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/errors"
 )
 
@@ -97,7 +98,7 @@ func registerResize(r registry.Registry) {
 		Name:               "resize/grow=3",
 		Owner:              registry.OwnerStorage,
 		Timeout:            30 * time.Minute,
-		CompatibleClouds:   registry.OnlyGCE,
+		CompatibleClouds:   registry.Clouds(spec.GCE, spec.AWS),
 		CanRunConcurrently: registry.OperationCannotRunConcurrentlyWithItself,
 		Dependencies:       []registry.OperationDependency{registry.OperationRequiresNodes},
 		Run: func(ctx context.Context, o operation.Operation, c cluster.Cluster) registry.OperationCleanup {

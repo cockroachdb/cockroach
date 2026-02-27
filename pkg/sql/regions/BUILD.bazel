@@ -31,14 +31,19 @@ go_library(
 
 go_test(
     name = "regions_test",
-    srcs = ["region_provider_test.go"],
+    srcs = [
+        "region_provider_test.go",
+        "region_util_test.go",
+    ],
+    embed = [":regions"],
     deps = [
-        ":regions",
+        "//pkg/config/zonepb",
         "//pkg/keys",
         "//pkg/kv",
         "//pkg/roachpb",
         "//pkg/server/serverpb",
         "//pkg/sql/catalog",
+        "//pkg/sql/catalog/catpb",
         "//pkg/sql/catalog/catsessiondata",
         "//pkg/sql/catalog/descpb",
         "//pkg/sql/catalog/descs",

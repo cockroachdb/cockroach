@@ -47,7 +47,7 @@ go_test(
         "main_test.go",
     ],
     embed = [":allccl"],
-    shard_count = 4,
+    shard_count = 5,
     deps = [
         "//pkg/base",
         "//pkg/ccl",

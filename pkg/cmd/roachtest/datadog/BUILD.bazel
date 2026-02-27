@@ -12,6 +12,7 @@ go_library(
         "//pkg/cmd/roachtest/spec",
         "//pkg/roachprod/logger",
         "//pkg/roachprod/vm",
+        "//pkg/util/timeutil",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_datadog_datadog_api_client_go_v2//api/datadog",
         "@com_github_datadog_datadog_api_client_go_v2//api/datadogV2",

@@ -18,7 +18,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/nstree"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/upgrade"
@@ -49,25 +48,21 @@ func FirstUpgradeFromRelease(
 	if !RunFirstUpgradePrecondition {
 		return nil
 	}
-	var all nstree.Catalog
-	if err := d.DB.DescsTxn(ctx, func(ctx context.Context, txn descs.Txn) (err error) {
-		all, err = txn.Descriptors().GetAll(ctx, txn.KV())
-		return err
-	}); err != nil {
-		return err
-	}
 	var descsToUpdate catalog.DescriptorIDSet
-	if err := all.ForEachDescriptor(func(desc catalog.Descriptor) error {
-		// SKip virtual and synthetic descriptors.
-		switch d := desc.(type) {
+
+	// maybeAddDescForUpdate checks whether a descriptor needs to be updated and
+	// adds it to the descsToUpdate set if so.
+	maybeAddDescForUpdate := func(desc catalog.Descriptor) {
+		// Skip virtual and synthetic descriptors.
+		switch sd := desc.(type) {
 		case catalog.SchemaDescriptor:
-			switch d.SchemaKind() {
+			switch sd.SchemaKind() {
 			case catalog.SchemaPublic, catalog.SchemaVirtual, catalog.SchemaTemporary:
-				return nil
+				return
 			}
 		case catalog.TableDescriptor:
-			if d.IsVirtualTable() {
-				return nil
+			if sd.IsVirtualTable() {
+				return
 			}
 		}
 		changes := desc.GetPostDeserializationChanges()
@@ -79,13 +74,47 @@ func FirstUpgradeFromRelease(
 			// See https://github.com/cockroachdb/cockroach/issues/152629.
 			duringUpgradeTo25_4 := d.Settings.Version.IsActive(ctx, clusterversion.V25_3) && !d.Settings.Version.IsActive(ctx, clusterversion.V25_4)
 			if !duringUpgradeTo25_4 || desc.DescriptorType() == catalog.Database {
-				return nil
+				return
 			}
 		}
 		descsToUpdate.Add(desc.GetID())
-		return nil
+	}
+
+	// Load descriptors per-database rather than all at once, to avoid excessive
+	// memory usage in clusters with many descriptors.
+	// See #162465.
+	var dbDescs []catalog.DatabaseDescriptor
+	if err := d.DB.DescsTxn(ctx, func(ctx context.Context, txn descs.Txn) error {
+		dbs, err := txn.Descriptors().GetAllDatabases(ctx, txn.KV())
+		if err != nil {
+			return err
+		}
+		return dbs.ForEachDescriptor(func(db catalog.Descriptor) error {
+			maybeAddDescForUpdate(db)
+			dbDesc, ok := db.(catalog.DatabaseDescriptor)
+			if !ok {
+				log.Dev.Warningf(ctx, "expected database descriptor, got %T", db)
+				return nil
+			}
+			dbDescs = append(dbDescs, dbDesc)
+			return nil
+		})
 	}); err != nil {
 		return err
+	}
+	for _, dbDesc := range dbDescs {
+		if err := d.DB.DescsTxn(ctx, func(ctx context.Context, txn descs.Txn) error {
+			inDB, err := txn.Descriptors().GetAllInDatabase(ctx, txn.KV(), dbDesc)
+			if err != nil {
+				return err
+			}
+			return inDB.ForEachDescriptor(func(desc catalog.Descriptor) error {
+				maybeAddDescForUpdate(desc)
+				return nil
+			})
+		}); err != nil {
+			return err
+		}
 	}
 	return upgradeDescriptors(ctx, d, descsToUpdate)
 }

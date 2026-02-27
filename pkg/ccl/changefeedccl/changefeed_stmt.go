@@ -19,7 +19,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedvalidators"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/checkpoint"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/tableset"
-	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl"
 	"github.com/cockroachdb/cockroach/pkg/cloud"
 	"github.com/cockroachdb/cockroach/pkg/cloud/externalconn"
 	"github.com/cockroachdb/cockroach/pkg/docs"
@@ -938,13 +937,6 @@ func createChangefeedJobRecord(
 	}
 
 	if scope, ok := opts.GetMetricScope(); ok {
-		if err := utilccl.CheckEnterpriseEnabled(
-			p.ExecCfg().Settings, "CHANGEFEED",
-		); err != nil {
-			return nil, changefeedbase.Targets{}, errors.Wrapf(err,
-				"use of %q option requires an enterprise license.", changefeedbase.OptMetricsScope)
-		}
-
 		if scope == defaultSLIScope {
 			return nil, changefeedbase.Targets{}, pgerror.Newf(pgcode.InvalidParameterValue,
 				"%[1]q=%[2]q is the default metrics scope which keeps track of statistics "+
@@ -965,15 +957,6 @@ func createChangefeedJobRecord(
 	}
 
 	if details.SinkURI == `` {
-
-		if details.Select != `` {
-			if err := utilccl.CheckEnterpriseEnabled(
-				p.ExecCfg().Settings, "CHANGEFEED",
-			); err != nil {
-				return nil, changefeedbase.Targets{}, errors.Wrap(err, "use of AS SELECT requires an enterprise license.")
-			}
-		}
-
 		details.Opts = opts.AsMap()
 		// Jobs should not be created for sinkless changefeeds. However, note that
 		// we create and return a job record for sinkless changefeeds below. This is
@@ -986,12 +969,6 @@ func createChangefeedJobRecord(
 			Details:     details,
 		}
 		return sinklessRecord, targets, nil
-	}
-
-	if err := utilccl.CheckEnterpriseEnabled(
-		p.ExecCfg().Settings, "CHANGEFEED",
-	); err != nil {
-		return nil, changefeedbase.Targets{}, err
 	}
 
 	if telemetryPath != `` {
@@ -1018,12 +995,6 @@ func createChangefeedJobRecord(
 	details.Opts = opts.AsMap()
 
 	if locFilter := details.Opts[changefeedbase.OptExecutionLocality]; locFilter != "" {
-		if err := utilccl.CheckEnterpriseEnabled(
-			p.ExecCfg().Settings, changefeedbase.OptExecutionLocality,
-		); err != nil {
-			return nil, changefeedbase.Targets{}, err
-		}
-
 		var executionLocality roachpb.Locality
 		if err := executionLocality.Set(locFilter); err != nil {
 			return nil, changefeedbase.Targets{}, err

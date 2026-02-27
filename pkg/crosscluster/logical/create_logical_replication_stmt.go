@@ -10,7 +10,6 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl"
 	"github.com/cockroachdb/cockroach/pkg/cloud"
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/crosscluster"
@@ -95,13 +94,6 @@ func createLogicalReplicationStreamPlanHook(
 		}()
 		ctx, span := tracing.ChildSpan(ctx, stmt.StatementTag())
 		defer span.Finish()
-
-		if err := utilccl.CheckEnterpriseEnabled(
-			p.ExecCfg().Settings,
-			"CREATE LOGICAL REPLICATION",
-		); err != nil {
-			return err
-		}
 
 		if stmt.From.Database != "" {
 			return errors.UnimplementedErrorf(errors.IssueLink{}, "logical replication streams on databases are unsupported")

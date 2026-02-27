@@ -67,7 +67,7 @@ TABLE regional_by_row_table
  │         │    │    └── ('ap-southeast-2')
  │         │    └── ZONE
  │         │         ├── replica constraints
- │         │         │    ├── 1 replicas: [+region=ap-southeast-2]
+ │         │         │    ├── 2 replicas: [+region=ap-southeast-2]
  │         │         │    ├── 2 replicas: [+region=ca-central-1]
  │         │         │    └── 1 replicas: [+region=us-east-1]
  │         │         ├── voter constraints: [+region=ap-southeast-2]
@@ -78,7 +78,7 @@ TABLE regional_by_row_table
  │         │    └── ZONE
  │         │         ├── replica constraints
  │         │         │    ├── 2 replicas: [+region=ap-southeast-2]
- │         │         │    ├── 1 replicas: [+region=ca-central-1]
+ │         │         │    ├── 2 replicas: [+region=ca-central-1]
  │         │         │    └── 1 replicas: [+region=us-east-1]
  │         │         ├── voter constraints: [+region=ca-central-1]
  │         │         └── lease preference: [+region=ca-central-1]
@@ -89,7 +89,7 @@ TABLE regional_by_row_table
  │                   ├── replica constraints
  │                   │    ├── 2 replicas: [+region=ap-southeast-2]
  │                   │    ├── 1 replicas: [+region=ca-central-1]
- │                   │    └── 1 replicas: [+region=us-east-1]
+ │                   │    └── 2 replicas: [+region=us-east-1]
  │                   ├── voter constraints: [+region=us-east-1]
  │                   └── lease preference: [+region=us-east-1]
  ├── INDEX regional_by_row_table_a_idx
@@ -109,7 +109,7 @@ TABLE regional_by_row_table
  │         │    │    └── ('ap-southeast-2')
  │         │    └── ZONE
  │         │         ├── replica constraints
- │         │         │    ├── 1 replicas: [+region=ap-southeast-2]
+ │         │         │    ├── 2 replicas: [+region=ap-southeast-2]
  │         │         │    ├── 2 replicas: [+region=ca-central-1]
  │         │         │    └── 1 replicas: [+region=us-east-1]
  │         │         ├── voter constraints: [+region=ap-southeast-2]
@@ -120,7 +120,7 @@ TABLE regional_by_row_table
  │         │    └── ZONE
  │         │         ├── replica constraints
  │         │         │    ├── 2 replicas: [+region=ap-southeast-2]
- │         │         │    ├── 1 replicas: [+region=ca-central-1]
+ │         │         │    ├── 2 replicas: [+region=ca-central-1]
  │         │         │    └── 1 replicas: [+region=us-east-1]
  │         │         ├── voter constraints: [+region=ca-central-1]
  │         │         └── lease preference: [+region=ca-central-1]
@@ -131,7 +131,7 @@ TABLE regional_by_row_table
  │                   ├── replica constraints
  │                   │    ├── 2 replicas: [+region=ap-southeast-2]
  │                   │    ├── 1 replicas: [+region=ca-central-1]
- │                   │    └── 1 replicas: [+region=us-east-1]
+ │                   │    └── 2 replicas: [+region=us-east-1]
  │                   ├── voter constraints: [+region=us-east-1]
  │                   └── lease preference: [+region=us-east-1]
  ├── UNIQUE INDEX regional_by_row_table_b_key
@@ -151,7 +151,7 @@ TABLE regional_by_row_table
  │         │    │    └── ('ap-southeast-2')
  │         │    └── ZONE
  │         │         ├── replica constraints
- │         │         │    ├── 1 replicas: [+region=ap-southeast-2]
+ │         │         │    ├── 2 replicas: [+region=ap-southeast-2]
  │         │         │    ├── 2 replicas: [+region=ca-central-1]
  │         │         │    └── 1 replicas: [+region=us-east-1]
  │         │         ├── voter constraints: [+region=ap-southeast-2]
@@ -162,7 +162,7 @@ TABLE regional_by_row_table
  │         │    └── ZONE
  │         │         ├── replica constraints
  │         │         │    ├── 2 replicas: [+region=ap-southeast-2]
- │         │         │    ├── 1 replicas: [+region=ca-central-1]
+ │         │         │    ├── 2 replicas: [+region=ca-central-1]
  │         │         │    └── 1 replicas: [+region=us-east-1]
  │         │         ├── voter constraints: [+region=ca-central-1]
  │         │         └── lease preference: [+region=ca-central-1]
@@ -173,7 +173,7 @@ TABLE regional_by_row_table
  │                   ├── replica constraints
  │                   │    ├── 2 replicas: [+region=ap-southeast-2]
  │                   │    ├── 1 replicas: [+region=ca-central-1]
- │                   │    └── 1 replicas: [+region=us-east-1]
+ │                   │    └── 2 replicas: [+region=us-east-1]
  │                   ├── voter constraints: [+region=us-east-1]
  │                   └── lease preference: [+region=us-east-1]
  ├── INVERTED INDEX regional_by_row_table_j_idx
@@ -193,7 +193,7 @@ TABLE regional_by_row_table
  │         │    │    └── ('ap-southeast-2')
  │         │    └── ZONE
  │         │         ├── replica constraints
- │         │         │    ├── 1 replicas: [+region=ap-southeast-2]
+ │         │         │    ├── 2 replicas: [+region=ap-southeast-2]
  │         │         │    ├── 2 replicas: [+region=ca-central-1]
  │         │         │    └── 1 replicas: [+region=us-east-1]
  │         │         ├── voter constraints: [+region=ap-southeast-2]
@@ -204,7 +204,7 @@ TABLE regional_by_row_table
  │         │    └── ZONE
  │         │         ├── replica constraints
  │         │         │    ├── 2 replicas: [+region=ap-southeast-2]
- │         │         │    ├── 1 replicas: [+region=ca-central-1]
+ │         │         │    ├── 2 replicas: [+region=ca-central-1]
  │         │         │    └── 1 replicas: [+region=us-east-1]
  │         │         ├── voter constraints: [+region=ca-central-1]
  │         │         └── lease preference: [+region=ca-central-1]
@@ -215,7 +215,7 @@ TABLE regional_by_row_table
  │                   ├── replica constraints
  │                   │    ├── 2 replicas: [+region=ap-southeast-2]
  │                   │    ├── 1 replicas: [+region=ca-central-1]
- │                   │    └── 1 replicas: [+region=us-east-1]
+ │                   │    └── 2 replicas: [+region=us-east-1]
  │                   ├── voter constraints: [+region=us-east-1]
  │                   └── lease preference: [+region=us-east-1]
  ├── UNIQUE WITHOUT INDEX (pk)

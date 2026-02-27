@@ -86,7 +86,8 @@ import (
 )
 
 type mockGuard struct {
-	req concurrency.Request
+	req                       concurrency.Request
+	intentsToResolveVirtually []roachpb.LockUpdate
 }
 
 func (mg mockGuard) Req() concurrency.Request {
@@ -121,7 +122,7 @@ func (mg mockGuard) IsKeyLockedByConflictingTxn(
 	return false, nil, nil
 }
 func (mg mockGuard) IntentsToResolveVirtually() []roachpb.LockUpdate {
-	return nil
+	return mg.intentsToResolveVirtually
 }
 
 var _ concurrency.Guard = (*mockGuard)(nil)

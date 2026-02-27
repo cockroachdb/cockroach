@@ -24,7 +24,6 @@ type cleanupRLSPolicy struct {
 	db, table       string
 	policies        []string
 	originalRLSStmt string
-	locked          bool
 	waitDuration    time.Duration
 }
 
@@ -54,11 +53,6 @@ func (cl *cleanupRLSPolicy) Cleanup(ctx context.Context, o operation.Operation, 
 		o.Status(fmt.Sprintf("switching to database %s for cleanup", cl.db))
 		if _, err := conn.ExecContext(ctx, fmt.Sprintf("USE %s", cl.db)); err != nil {
 			o.Fatal(err)
-		}
-
-		if cl.locked {
-			helpers.SetSchemaLocked(ctx, o, conn, cl.db, cl.table, false /* lock */)
-			defer helpers.SetSchemaLocked(ctx, o, conn, cl.db, cl.table, true /* lock */)
 		}
 
 		// Drop all policies that were created
@@ -125,14 +119,6 @@ func runAddRLSPolicy(
 				break
 			}
 		}
-	}
-
-	// If the table's schema is locked, then unlock the table and make sure it will
-	// be re-locked during cleanup.
-	locked := helpers.IsSchemaLocked(o, conn, dbName, tableName)
-	if locked {
-		helpers.SetSchemaLocked(ctx, o, conn, dbName, tableName, false /* lock */)
-		defer helpers.SetSchemaLocked(ctx, o, conn, dbName, tableName, true /* lock */)
 	}
 
 	// Enable RLS on the table with random FORCE option
@@ -213,7 +199,6 @@ func runAddRLSPolicy(
 		table:           tableName,
 		policies:        policies,
 		originalRLSStmt: originalRLSStmt,
-		locked:          locked,
 		waitDuration:    waitTime,
 	}
 }

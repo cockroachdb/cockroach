@@ -10,6 +10,7 @@ import (
 	"slices"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
@@ -23,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree/treebin"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/lib/pq/oid"
 )
@@ -94,6 +96,13 @@ func WithTableDescriptor(tn tree.TableName, desc descpb.TableDescriptor) Smither
 	}
 }
 
+func (s *Smither) log(format string, args ...any) {
+	if s.logFn != nil {
+		s.logFn("[%s] "+format,
+			append([]any{timeutil.Now().Format(time.RFC3339Nano)}, args...)...)
+	}
+}
+
 // ReloadSchemas loads tables from the database.
 func (s *Smither) ReloadSchemas() error {
 	if s.db == nil {
@@ -103,26 +112,32 @@ func (s *Smither) ReloadSchemas() error {
 	s.lock.Lock()
 	defer s.lock.Unlock()
 	var err error
+	s.log("extracting types")
 	s.types, err = s.extractTypes()
 	if err != nil {
 		return err
 	}
+	s.log("extracting tables")
 	s.tables, err = s.extractTables()
 	if err != nil {
 		return err
 	}
+	s.log("extracting implicit record types")
 	s.types.tableImplicitRecordTypes, s.types.tableImplicitRecordTypeNames, err = s.extractTableImplicitRecordTypes()
 	if err != nil {
 		return err
 	}
+	s.log("extracting schemas")
 	s.schemas, err = s.extractSchemas()
 	if err != nil {
 		return err
 	}
+	s.log("extracting sequences")
 	s.sequences, err = s.extractSequences()
 	if err != nil {
 		return err
 	}
+	s.log("extracting indexes")
 	s.indexes, err = s.extractIndexes(s.tables)
 	s.columns = make(map[tree.TableName]map[tree.Name]*tree.ColumnTableDef)
 	for _, ref := range s.tables {
@@ -131,6 +146,8 @@ func (s *Smither) ReloadSchemas() error {
 			s.columns[*ref.TableName][col.Name] = col
 		}
 	}
+	s.log("schema reload complete: %d tables, %d schemas, %d sequences",
+		len(s.tables), len(s.schemas), len(s.sequences))
 	return err
 }
 

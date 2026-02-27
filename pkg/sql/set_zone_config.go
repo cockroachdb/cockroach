@@ -296,13 +296,8 @@ func evaluateZoneOptions(
 				return nil, nil, nil, pgerror.Newf(pgcode.InvalidParameterValue,
 					"unsupported NULL value for %q", tree.ErrString(name))
 			}
-			opt := zone.SupportedZoneConfigOptions[*name]
-			if opt.CheckAllowed != nil {
-				if err := opt.CheckAllowed(params.ctx, params.ExecCfg().Settings, datum); err != nil {
-					return nil, nil, nil, err
-				}
-			}
-			setter := opt.Setter
+
+			setter := zone.SupportedZoneConfigOptions[*name].Setter
 			setters = append(setters, func(c *zonepb.ZoneConfig) { setter(c, datum) })
 			optionsStr = append(optionsStr, fmt.Sprintf("%s = %s", name, datum))
 		}

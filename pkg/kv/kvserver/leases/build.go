@@ -136,6 +136,10 @@ type BuildInput struct {
 	// can't tolerate rejected lease transfers.
 	BypassSafetyChecks bool
 
+	// TargetHasSendQueue indicates that the lease transfer target has a send
+	// queue. See VerifyInput.TargetHasSendQueue.
+	TargetHasSendQueue bool
+
 	// DesiredLeaseType is the desired lease type for this replica.
 	DesiredLeaseType roachpb.LeaseType
 }
@@ -262,6 +266,7 @@ func (i BuildInput) toVerifyInput() VerifyInput {
 		PrevLeaseExpired:   i.PrevLeaseExpired,
 		NextLeaseHolder:    i.NextLeaseHolder,
 		BypassSafetyChecks: i.BypassSafetyChecks,
+		TargetHasSendQueue: i.TargetHasSendQueue,
 		DesiredLeaseType:   i.DesiredLeaseType,
 	}
 }

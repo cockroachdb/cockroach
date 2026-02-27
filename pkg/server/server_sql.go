@@ -1237,6 +1237,7 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 	// Create cluster metrics writer.
 	clusterMetricsWriter := cmwriter.NewWriter(internalDB, cfg.nodeIDContainer, cfg.Settings)
 	cfg.registry.AddMetricStruct(clusterMetricsWriter.Metrics())
+	execCfg.ClusterMetricsWriter = clusterMetricsWriter
 
 	execCfg.IndexBackfiller = sql.NewIndexBackfiller(execCfg)
 	execCfg.IndexSpanSplitter = sql.NewIndexSplitAndScatter(execCfg)

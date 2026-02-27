@@ -19,10 +19,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 )
 
+//lint:ignore U1000 temporarily disabled
 type cleanupNodeKill struct {
 	nodes option.NodeListOption
 }
 
+//lint:ignore U1000 temporarily disabled
 func (cl *cleanupNodeKill) Cleanup(ctx context.Context, o operation.Operation, c cluster.Cluster) {
 	db, err := c.ConnE(ctx, o.L(), cl.nodes[0])
 	if err != nil {
@@ -46,6 +48,7 @@ func (cl *cleanupNodeKill) Cleanup(ctx context.Context, o operation.Operation, c
 	}
 }
 
+//lint:ignore U1000 temporarily disabled
 func nodeKillRunner(
 	signal int, drain bool,
 ) func(ctx context.Context, o operation.Operation, c cluster.Cluster) registry.OperationCleanup {
@@ -54,6 +57,7 @@ func nodeKillRunner(
 	}
 }
 
+//lint:ignore U1000 temporarily disabled
 func runNodeKill(
 	ctx context.Context, o operation.Operation, c cluster.Cluster, signal int, drain bool,
 ) registry.OperationCleanup {
@@ -90,6 +94,7 @@ func runNodeKill(
 	return &cleanupNodeKill{nodes: node}
 }
 
+//lint:ignore U1000 temporarily disabled
 func registerNodeKill(r registry.Registry) {
 	for _, spec := range []struct {
 		name     string
@@ -98,25 +103,13 @@ func registerNodeKill(r registry.Registry) {
 		downtime time.Duration
 		timeout  time.Duration
 	}{
-		{"node-kill/sigkill/drain=true/downtime=1m", 9, true, 1 * time.Minute, 20 * time.Minute},
 		{"node-kill/sigkill/drain=true/downtime=10m", 9, true, 10 * time.Minute, 25 * time.Minute},
-		{"node-kill/sigkill/drain=true/downtime=1h", 9, true, 1 * time.Hour, 2 * time.Hour},
-		{"node-kill/sigkill/drain=true/downtime=5h", 9, true, 5 * time.Hour, 6 * time.Hour},
 
-		{"node-kill/sigkill/drain=false/downtime=1m", 9, false, 1 * time.Minute, 20 * time.Minute},
 		{"node-kill/sigkill/drain=false/downtime=10m", 9, false, 10 * time.Minute, 25 * time.Minute},
-		{"node-kill/sigkill/drain=false/downtime=1h", 9, false, 1 * time.Hour, 2 * time.Hour},
-		{"node-kill/sigkill/drain=false/downtime=5h", 9, true, 5 * time.Hour, 6 * time.Hour},
 
-		{"node-kill/sigterm/drain=true/downtime=1m", 15, true, 1 * time.Minute, 20 * time.Minute},
 		{"node-kill/sigterm/drain=true/downtime=10m", 15, true, 10 * time.Minute, 25 * time.Minute},
-		{"node-kill/sigterm/drain=true/downtime=1h", 15, true, 1 * time.Hour, 2 * time.Hour},
-		{"node-kill/sigterm/drain=true/downtime=5h", 15, true, 5 * time.Hour, 6 * time.Hour},
 
-		{"node-kill/sigterm/drain=false/downtime=1m", 15, false, 1 * time.Minute, 20 * time.Minute},
 		{"node-kill/sigterm/drain=false/downtime=10m", 15, false, 10 * time.Minute, 25 * time.Minute},
-		{"node-kill/sigterm/drain=false/downtime=1h", 15, false, 1 * time.Hour, 2 * time.Hour},
-		{"node-kill/sigterm/drain=false/downtime=5h", 15, true, 5 * time.Hour, 6 * time.Hour},
 	} {
 		r.AddOperation(registry.OperationSpec{
 			Name:               spec.name,

@@ -70,9 +70,6 @@ func (r *Replica) executeReadOnlyBatch(
 
 	var rw storage.ReadWriter
 	intentsToResolveVirtually := g.IntentsToResolveVirtually()
-	if itrv := r.store.TestingKnobs().InjectIntentsToResolveVirtually; itrv != nil {
-		intentsToResolveVirtually = itrv()
-	}
 	// If there are intents to be resolved virtually, use a storage batch in which
 	// the intent resolution will be evaluated before the read-only batch request.
 	if len(intentsToResolveVirtually) > 0 {

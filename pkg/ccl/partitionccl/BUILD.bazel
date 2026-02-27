@@ -6,7 +6,6 @@ go_library(
     importpath = "github.com/cockroachdb/cockroach/pkg/ccl/partitionccl",
     visibility = ["//visibility:public"],
     deps = [
-        "//pkg/ccl/utilccl",
         "//pkg/config/zonepb",
         "//pkg/settings/cluster",
         "//pkg/sql",

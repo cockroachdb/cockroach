@@ -3,7 +3,7 @@
 // Use of this software is governed by the CockroachDB Software License
 // included in the /LICENSE file.
 
-package cliccl
+package cli
 
 import (
 	"context"
@@ -16,7 +16,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/sqlproxyccl/tenant"
 	"github.com/cockroachdb/cockroach/pkg/ccl/sqlproxyccl/tenantdirsvr"
-	"github.com/cockroachdb/cockroach/pkg/cli"
 	"github.com/cockroachdb/cockroach/pkg/cli/clierrorplus"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -47,7 +46,7 @@ HTTP API endpoints:
 
 func runStaticTestDirectory(cmd *cobra.Command, args []string) (returnErr error) {
 	ctx := context.Background()
-	stopper, err := cli.ClearStoresAndSetupLoggingForMTCommands(cmd, ctx)
+	stopper, err := ClearStoresAndSetupLoggingForMTCommands(cmd, ctx)
 	if err != nil {
 		return err
 	}
@@ -107,7 +106,7 @@ func runStaticTestDirectory(cmd *cobra.Command, args []string) (returnErr error)
 
 	// Wait for shutdown signal
 	signalCh := make(chan os.Signal, 1)
-	signal.Notify(signalCh, cli.DrainSignals...)
+	signal.Notify(signalCh, DrainSignals...)
 
 	select {
 	case <-stopper.ShouldQuiesce():

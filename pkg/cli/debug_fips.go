@@ -3,7 +3,7 @@
 // Use of this software is governed by the CockroachDB Software License
 // included in the /LICENSE file.
 
-package cliccl
+package cli
 
 import (
 	"crypto/fips140"
@@ -11,7 +11,6 @@ import (
 	"runtime"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/securityccl/fipsccl"
-	"github.com/cockroachdb/cockroach/pkg/cli"
 	"github.com/cockroachdb/cockroach/pkg/cli/clierrorplus"
 	"github.com/cockroachdb/errors"
 	"github.com/olekukonko/tablewriter"
@@ -32,7 +31,7 @@ mode in the current environment.
 		RunE: clierrorplus.MaybeDecorateError(runCheckFips),
 	}
 
-	cli.DebugCmd.AddCommand(checkFipsCmd)
+	DebugCmd.AddCommand(checkFipsCmd)
 }
 
 func runCheckFips(cmd *cobra.Command, args []string) error {

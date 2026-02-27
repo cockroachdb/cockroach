@@ -5865,6 +5865,15 @@ func (og *operationGenerator) setTableStorageParam(
 		// exclude_data_from_backup cannot be set on tables with inbound FK
 		// references.
 		stmt.potentialExecErrors.add(pgcode.ObjectNotInPrerequisiteState)
+		// Before version 26.2, the error for inbound FK constraints used
+		// pgcode.Uncategorized instead of pgcode.ObjectNotInPrerequisiteState.
+		hasPgcodeBug, err := isClusterVersionLessThan(ctx, tx, clusterversion.V26_2.Version())
+		if err != nil {
+			return nil, err
+		}
+		if hasPgcodeBug {
+			stmt.potentialExecErrors.add(pgcode.Uncategorized)
+		}
 	}
 
 	return stmt, nil

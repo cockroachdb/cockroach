@@ -1,0 +1,20 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "cmmetrics",
+    srcs = [
+        "api.go",
+        "metadata.go",
+        "metric.go",
+        "vector.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/obs/clustermetrics/cmmetrics",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/util/buildutil",
+        "//pkg/util/metric",
+        "//pkg/util/syncutil",
+        "//pkg/util/timeutil",
+        "@com_github_prometheus_client_model//go",
+    ],
+)

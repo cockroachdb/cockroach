@@ -6,9 +6,13 @@
 package main
 
 import (
+	"context"
+	"fmt"
 	"io"
 	"log"
 	stdos "os"
+	"path/filepath"
+	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/dev/io/exec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/dev/io/os"
@@ -179,8 +183,74 @@ Typical usage:
 		if ret.debug {
 			ret.log.SetOutput(stdos.Stderr)
 		}
+
+		if localPebble != "" {
+			if err := ret.prepareLocalPebble(ctx); err != nil {
+				return err
+			}
+		}
+
 		return nil
 	}
 
 	return &ret
+}
+
+// prepareLocalPebble resolves the local pebble path, validates it, and
+// runs `make gen-bazel` in the pebble directory. After this method
+// returns, the localPebble variable is set to the resolved absolute
+// path, ready for use by addCommonBazelArguments.
+func (d *dev) prepareLocalPebble(ctx context.Context) error {
+	if buildutil.CrdbTestBuild {
+		// In test mode, skip validation and gen-bazel; just resolve the path.
+		if !filepath.IsAbs(localPebble) {
+			localPebble = filepath.Join("crdb-checkout", localPebble)
+		}
+		return nil
+	}
+
+	workspace, err := d.getWorkspace(ctx)
+	if err != nil {
+		return err
+	}
+
+	// Resolve relative paths against the workspace root.
+	pebblePath := localPebble
+	if !filepath.IsAbs(pebblePath) {
+		pebblePath = filepath.Join(workspace, pebblePath)
+	}
+	pebblePath, err = filepath.Abs(pebblePath)
+	if err != nil {
+		return fmt.Errorf("resolving pebble path: %w", err)
+	}
+
+	// Validate the directory exists.
+	isDir, err := d.os.IsDir(pebblePath)
+	if err != nil {
+		return fmt.Errorf("checking pebble directory %s: %w", pebblePath, err)
+	}
+	if !isDir {
+		return fmt.Errorf("pebble directory %s does not exist or is not a directory", pebblePath)
+	}
+
+	// Validate go.mod contains the pebble module.
+	goModPath := filepath.Join(pebblePath, "go.mod")
+	goModContents, err := d.os.ReadFile(goModPath)
+	if err != nil {
+		return fmt.Errorf("reading %s: %w", goModPath, err)
+	}
+	if !strings.Contains(goModContents, "github.com/cockroachdb/pebble") {
+		return fmt.Errorf("%s does not appear to be a cockroachdb/pebble checkout (go.mod does not contain github.com/cockroachdb/pebble)", pebblePath)
+	}
+
+	// Run gen-bazel to ensure BUILD.bazel files are up to date.
+	log.Printf("running make gen-bazel in %s", pebblePath)
+	if err := d.exec.CommandContextInheritingStdStreams(
+		ctx, "make", "-C", pebblePath, "gen-bazel",
+	); err != nil {
+		return fmt.Errorf("running make gen-bazel in %s: %w", pebblePath, err)
+	}
+
+	localPebble = pebblePath
+	return nil
 }

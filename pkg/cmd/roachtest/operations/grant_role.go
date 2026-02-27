@@ -95,7 +95,7 @@ func registerGrantRole(r registry.Registry) {
 		CompatibleClouds:   registry.AllClouds,
 		CanRunConcurrently: registry.OperationCanRunConcurrently,
 		Dependencies:       []registry.OperationDependency{registry.OperationRequiresNodes},
-		WaitBeforeCleanup:  1 * time.Hour,
 		Run:                runGrantRole,
+		WaitBeforeCleanup:  1 * time.Hour,
 	})
 }

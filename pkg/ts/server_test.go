@@ -310,8 +310,15 @@ func TestServerQueryTenant(t *testing.T) {
 	tenantMetricName := "sql.insert.count"
 	// This metric exists only in the host/system registry since it's process-level.
 	hostMetricName := "sys.rss"
+	// This is a store-level metric identified by isStoreTenantMetric.
+	storeMetricName := "cr.store.livebytes"
 
-	// Populate data directly.
+	// Populate data directly. Aggregate sources ("1", "10") contain the sum
+	// of all tenants' data. Per-tenant sources ("1-2", "10-2") track tenant 2's
+	// individual contribution. The aggregate values are set to be the obvious
+	// sum so that the test clearly demonstrates no double-counting occurs:
+	//   node 1 aggregate (101) = tenant 2 (1) + other tenants (100)
+	//   node 10 aggregate (204) = tenant 2 (4) + other tenants (200)
 	tsdb := s.TsDB().(*ts.DB)
 	if err := tsdb.StoreData(context.Background(), ts.Resolution10s, []tspb.TimeSeriesData{
 		{
@@ -320,11 +327,11 @@ func TestServerQueryTenant(t *testing.T) {
 			Datapoints: []tspb.TimeSeriesDatapoint{
 				{
 					TimestampNanos: 400 * 1e9,
-					Value:          100.0,
+					Value:          101.0,
 				},
 				{
 					TimestampNanos: 500 * 1e9,
-					Value:          200.0,
+					Value:          202.0,
 				},
 			},
 		},
@@ -348,11 +355,11 @@ func TestServerQueryTenant(t *testing.T) {
 			Datapoints: []tspb.TimeSeriesDatapoint{
 				{
 					TimestampNanos: 400 * 1e9,
-					Value:          200.0,
+					Value:          204.0,
 				},
 				{
 					TimestampNanos: 500 * 1e9,
-					Value:          400.0,
+					Value:          405.0,
 				},
 			},
 		},
@@ -398,11 +405,44 @@ func TestServerQueryTenant(t *testing.T) {
 				},
 			},
 		},
+		// Store-level tenant metric data follows the same aggregate/per-tenant
+		// pattern. Aggregate "1" = 50 (includes tenant 2's 10), "1-2" = 10.
+		{
+			Name:   storeMetricName,
+			Source: "1",
+			Datapoints: []tspb.TimeSeriesDatapoint{
+				{
+					TimestampNanos: 400 * 1e9,
+					Value:          50.0,
+				},
+				{
+					TimestampNanos: 500 * 1e9,
+					Value:          70.0,
+				},
+			},
+		},
+		{
+			Name:   storeMetricName,
+			Source: "1-2",
+			Datapoints: []tspb.TimeSeriesDatapoint{
+				{
+					TimestampNanos: 400 * 1e9,
+					Value:          10.0,
+				},
+				{
+					TimestampNanos: 500 * 1e9,
+					Value:          20.0,
+				},
+			},
+		},
 	}); err != nil {
 		t.Fatal(err)
 	}
 
-	// Undefined tenant ID should aggregate across all tenants.
+	// Undefined tenant ID should return aggregate values only (no double-counting).
+	// The aggregate source "1" has values 101.0 and 202.0, and source "10" has 204.0 and 405.0.
+	// Note these are the aggregate values, NOT aggregate + per-tenant (which would be
+	// 102.0 and 204.0 for source "1" if double-counting occurred).
 	expectedAggregatedResult := &tspb.TimeSeriesQueryResponse{
 		Results: []tspb.TimeSeriesQueryResponse_Result{
 			{
@@ -464,7 +504,7 @@ func TestServerQueryTenant(t *testing.T) {
 	}
 	require.Equal(t, expectedAggregatedResult, aggregatedResponse)
 
-	// System tenant ID should provide system tenant ts data.
+	// System tenant ID should provide system tenant ts data (same as aggregate).
 	systemID := roachpb.MustMakeTenantID(1)
 	expectedSystemResult := &tspb.TimeSeriesQueryResponse{
 		Results: []tspb.TimeSeriesQueryResponse_Result{
@@ -477,11 +517,11 @@ func TestServerQueryTenant(t *testing.T) {
 				Datapoints: []tspb.TimeSeriesDatapoint{
 					{
 						TimestampNanos: 400 * 1e9,
-						Value:          100.0,
+						Value:          101.0,
 					},
 					{
 						TimestampNanos: 500 * 1e9,
-						Value:          200.0,
+						Value:          202.0,
 					},
 				},
 			},
@@ -494,11 +534,11 @@ func TestServerQueryTenant(t *testing.T) {
 				Datapoints: []tspb.TimeSeriesDatapoint{
 					{
 						TimestampNanos: 400 * 1e9,
-						Value:          300.0,
+						Value:          305.0,
 					},
 					{
 						TimestampNanos: 500 * 1e9,
-						Value:          600.0,
+						Value:          607.0,
 					},
 				},
 			},
@@ -597,6 +637,77 @@ func TestServerQueryTenant(t *testing.T) {
 		sort.Strings(r.Sources)
 	}
 	require.Equal(t, expectedTenantResponse, tenantResponse)
+
+	// Store-level tenant metrics (e.g. cr.store.livebytes) should be scoped
+	// to the tenant via isStoreTenantMetric, even though they're not in the
+	// tenant registry. Tenant 2 should see only its per-tenant data.
+	expectedTenantStoreResponse := &tspb.TimeSeriesQueryResponse{
+		Results: []tspb.TimeSeriesQueryResponse_Result{
+			{
+				Query: tspb.Query{
+					Name:     storeMetricName,
+					Sources:  []string{"1"},
+					TenantID: tenantID,
+				},
+				Datapoints: []tspb.TimeSeriesDatapoint{
+					{
+						TimestampNanos: 400 * 1e9,
+						Value:          10.0,
+					},
+					{
+						TimestampNanos: 500 * 1e9,
+						Value:          20.0,
+					},
+				},
+			},
+		},
+	}
+	tenantStoreResponse, err := tenantClient.Query(context.Background(), &tspb.TimeSeriesQueryRequest{
+		StartNanos: 400 * 1e9,
+		EndNanos:   500 * 1e9,
+		Queries: []tspb.Query{
+			{
+				Name:    storeMetricName,
+				Sources: []string{"1"},
+			},
+		},
+	})
+	require.NoError(t, err)
+	require.Equal(t, expectedTenantStoreResponse, tenantStoreResponse)
+
+	// The system tenant should see the aggregate store metric values.
+	expectedSystemStoreResponse := &tspb.TimeSeriesQueryResponse{
+		Results: []tspb.TimeSeriesQueryResponse_Result{
+			{
+				Query: tspb.Query{
+					Name:    storeMetricName,
+					Sources: []string{"1"},
+				},
+				Datapoints: []tspb.TimeSeriesDatapoint{
+					{
+						TimestampNanos: 400 * 1e9,
+						Value:          50.0,
+					},
+					{
+						TimestampNanos: 500 * 1e9,
+						Value:          70.0,
+					},
+				},
+			},
+		},
+	}
+	systemStoreResponse, err := client.Query(context.Background(), &tspb.TimeSeriesQueryRequest{
+		StartNanos: 400 * 1e9,
+		EndNanos:   500 * 1e9,
+		Queries: []tspb.Query{
+			{
+				Name:    storeMetricName,
+				Sources: []string{"1"},
+			},
+		},
+	})
+	require.NoError(t, err)
+	require.Equal(t, expectedSystemStoreResponse, systemStoreResponse)
 
 	// Test that host metrics are inaccessible to tenant without capability.
 	hostMetricsRequest := &tspb.TimeSeriesQueryRequest{

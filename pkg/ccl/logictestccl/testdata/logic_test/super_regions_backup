@@ -65,7 +65,7 @@ PARTITION "us-east-1" OF TABLE mr1.public.t2  ALTER PARTITION "us-east-1" OF TAB
                                                 gc.ttlseconds = 14400,
                                                 num_replicas = 4,
                                                 num_voters = 3,
-                                                constraints = '{+region=ap-southeast-2: 1, +region=us-east-1: 1}',
+                                                constraints = '{+region=ap-southeast-2: 2, +region=us-east-1: 2}',
                                                 voter_constraints = '[+region=us-east-1]',
                                                 lease_preferences = '[[+region=us-east-1]]'
 
@@ -103,7 +103,7 @@ PARTITION "us-east-1" OF TABLE mr1.public.t2  ALTER PARTITION "us-east-1" OF TAB
                                                 gc.ttlseconds = 14400,
                                                 num_replicas = 4,
                                                 num_voters = 3,
-                                                constraints = '{+region=ap-southeast-2: 1, +region=us-east-1: 1}',
+                                                constraints = '{+region=ap-southeast-2: 2, +region=us-east-1: 2}',
                                                 voter_constraints = '[+region=us-east-1]',
                                                 lease_preferences = '[[+region=us-east-1]]'
 

@@ -39,29 +39,6 @@ func NewGauge(metadata metric.Metadata, childLabels ...string) *AggGauge {
 	return g
 }
 
-// NewFunctionalGauge constructs a new AggGauge whose value is determined when
-// asked for by calling the provided function with the current values of every
-// child of the AggGauge.
-func NewFunctionalGauge(
-	metadata metric.Metadata, f func(childValues []int64) int64, childLabels ...string,
-) *AggGauge {
-	g := &AggGauge{}
-	gaugeFn := func() int64 {
-		values := make([]int64, 0)
-		g.childSet.mu.Lock()
-		defer g.childSet.mu.Unlock()
-		g.childSet.mu.children.ForEach(func(metric ChildMetric) {
-			cg := metric.(*Gauge)
-			values = append(values, cg.Value())
-		})
-		return f(values)
-	}
-	g.g = metric.NewFunctionalGauge(metadata, gaugeFn)
-	g.baseAggMetric = newBaseAggMetric(g.g)
-	g.initWithBTreeStorageType(childLabels)
-	return g
-}
-
 // Inspect is part of the metric.Iterable interface.
 func (g *AggGauge) Inspect(f func(interface{})) { f(g) }
 
@@ -76,19 +53,6 @@ func (g *AggGauge) AddChild(labelVals ...string) *Gauge {
 	child := &Gauge{
 		parent:           g,
 		labelValuesSlice: labelValuesSlice(labelVals),
-	}
-	g.add(child)
-	return child
-}
-
-// AddFunctionalChild adds a Gauge to this AggGauge where the value is
-// determined when asked for. This method panics if a Gauge already exists for
-// this set of labelVals.
-func (g *AggGauge) AddFunctionalChild(fn func() int64, labelVals ...string) *Gauge {
-	child := &Gauge{
-		parent:           g,
-		labelValuesSlice: labelValuesSlice(labelVals),
-		fn:               fn,
 	}
 	g.add(child)
 	return child
@@ -119,15 +83,6 @@ func (g *AggGauge) Dec(i int64, labelVals ...string) {
 func (g *AggGauge) Update(val int64, labelVals ...string) {
 	child := g.getOrCreateChild(labelVals...)
 	child.Update(val)
-}
-
-// UpdateFn updates the Gauge value by val for the given label values. If a
-// Gauge with the given label values doesn't exist yet, it creates a new
-// Gauge and updates it. Panics if the number of label values doesn't
-// match the number of labels defined for this Gauge.
-func (g *AggGauge) UpdateFn(f func() int64, labelVals ...string) {
-	child := g.getOrCreateChild(labelVals...)
-	child.UpdateFn(f)
 }
 
 // GetChild returns the gauge for a set of given label values
@@ -173,7 +128,6 @@ type Gauge struct {
 	labelValuesSlice
 	parent *AggGauge
 	value  int64
-	fn     func() int64
 }
 
 // ToPrometheusMetric constructs a prometheus metric for this Gauge.
@@ -197,9 +151,6 @@ func (g *Gauge) Unlink() {
 
 // Value returns the gauge's current value.
 func (g *Gauge) Value() int64 {
-	if g.fn != nil {
-		return g.fn()
-	}
 	return atomic.LoadInt64(&g.value)
 }
 
@@ -220,9 +171,126 @@ func (g *Gauge) Update(val int64) {
 	g.parent.g.Inc(val - old)
 }
 
-// UpdateFn updates the function on the gauge.
-func (g *Gauge) UpdateFn(fn func() int64) {
-	g.fn = fn
+// AggFunctionalGauge maintains a value computed on-demand from its children.
+// Each child has a callback function that produces its value. The aggregate
+// value is computed by collecting all child values and applying a user-provided
+// aggregation function. Unlike AggGauge, no mutable state is stored for either
+// the parent or the children — values are always computed fresh via callbacks.
+type AggFunctionalGauge struct {
+	g *metric.FunctionalGauge
+	*baseAggMetric
+}
+
+var _ metric.Iterable = (*AggFunctionalGauge)(nil)
+var _ metric.PrometheusIterable = (*AggFunctionalGauge)(nil)
+var _ metric.PrometheusExportable = (*AggFunctionalGauge)(nil)
+
+// NewFunctionalGauge constructs a new AggFunctionalGauge whose value is
+// determined when asked for by calling the provided function with the current
+// values of every child.
+func NewFunctionalGauge(
+	metadata metric.Metadata, f func(childValues []int64) int64, childLabels ...string,
+) *AggFunctionalGauge {
+	g := &AggFunctionalGauge{}
+	gaugeFn := func() int64 {
+		values := make([]int64, 0)
+		g.childSet.mu.Lock()
+		defer g.childSet.mu.Unlock()
+		g.childSet.mu.children.ForEach(func(metric ChildMetric) {
+			cg := metric.(*FunctionalGauge)
+			values = append(values, cg.Value())
+		})
+		return f(values)
+	}
+	g.g = metric.NewFunctionalGauge(metadata, gaugeFn)
+	g.baseAggMetric = newBaseAggMetric(g.g)
+	g.initWithBTreeStorageType(childLabels)
+	return g
+}
+
+// Inspect is part of the metric.Iterable interface.
+func (g *AggFunctionalGauge) Inspect(f func(interface{})) { f(g) }
+
+// Value returns the aggregate value computed from all children.
+func (g *AggFunctionalGauge) Value() int64 {
+	return g.g.Value()
+}
+
+// GetChild returns the gauge for a set of given label values
+// if it exists. If the labels specified are incorrect, or if
+// the child doesn't exist, it returns a nil value.
+func (g *AggFunctionalGauge) GetChild(labelVals ...string) *FunctionalGauge {
+	child, ok := g.get(labelVals...)
+	if !ok {
+		return nil
+	}
+	return child.(*FunctionalGauge)
+}
+
+func (g *AggFunctionalGauge) GetOrCreateChild(
+	fn func() int64, labelVals ...string,
+) *FunctionalGauge {
+	if len(g.labels) != len(labelVals) {
+		panic(errors.AssertionFailedf(
+			"cannot add child with %d label values %v to a metric with %d labels %v",
+			len(labelVals), labelVals, len(g.labels), g.labels))
+	}
+
+	// If the child already exists then return it.
+	if child, ok := g.get(labelVals...); ok {
+		return child.(*FunctionalGauge)
+	}
+
+	// Otherwise, create a new child then return it.
+	child := g.AddChild(fn, labelVals...)
+	return child
+}
+
+// AddChild adds a FunctionalGauge child to this AggFunctionalGauge. This
+// method panics if a child already exists for this set of labelVals.
+func (g *AggFunctionalGauge) AddChild(fn func() int64, labelVals ...string) *FunctionalGauge {
+	child := &FunctionalGauge{
+		parent:           g,
+		labelValuesSlice: labelValuesSlice(labelVals),
+		fn:               fn,
+	}
+	g.add(child)
+	return child
+}
+
+// RemoveChild removes a FunctionalGauge from this AggFunctionalGauge. This
+// method panics if a child does not exist for this set of labelVals.
+func (g *AggFunctionalGauge) RemoveChild(labelVals ...string) {
+	key := &FunctionalGauge{labelValuesSlice: labelValuesSlice(labelVals)}
+	g.remove(key)
+}
+
+// FunctionalGauge is a child of an AggFunctionalGauge. Its value is computed
+// on-demand by calling the provided callback function. It has no mutable state.
+type FunctionalGauge struct {
+	labelValuesSlice
+	parent *AggFunctionalGauge
+	fn     func() int64
+}
+
+// ToPrometheusMetric constructs a prometheus metric for this FunctionalGauge.
+func (g *FunctionalGauge) ToPrometheusMetric() *io_prometheus_client.Metric {
+	return &io_prometheus_client.Metric{
+		Gauge: &io_prometheus_client.Gauge{
+			Value: proto.Float64(float64(g.Value())),
+		},
+	}
+}
+
+// Unlink unlinks this child from the parent, i.e. the parent will no longer
+// track this child (i.e. won't generate labels for it, etc).
+func (g *FunctionalGauge) Unlink() {
+	g.parent.remove(g)
+}
+
+// Value returns the gauge's current value by calling the callback function.
+func (g *FunctionalGauge) Value() int64 {
+	return g.fn()
 }
 
 // AggGaugeFloat64 maintains a value as the sum of its children. The gauge will

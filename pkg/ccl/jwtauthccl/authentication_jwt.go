@@ -13,7 +13,6 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -221,10 +220,6 @@ func (authenticator *jwtAuthenticator) ValidateJWTLogin(
 		return "", errors.WithDetailf(
 			errors.Newf("JWT authentication: invalid audience"),
 			"token issued with an audience of %s", parsedToken.Audience())
-	}
-
-	if err = utilccl.CheckEnterpriseEnabled(st, "JWT authentication"); err != nil {
-		return "", err
 	}
 
 	telemetry.Inc(loginSuccessUseCounter)

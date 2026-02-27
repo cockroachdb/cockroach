@@ -84,3 +84,27 @@ rm crdb-checkout/cockroach-short
 cp sandbox/pkg/cmd/cockroach-short/cockroach-short_/cockroach-short crdb-checkout/cockroach-short
 rm crdb-checkout/cockroach
 cp sandbox/pkg/cmd/cockroach-short/cockroach-short_/cockroach-short crdb-checkout/cockroach
+
+exec
+dev build cockroach-short --local-pebble=/some/pebble/path
+----
+bazel build --override_repository=com_github_cockroachdb_pebble=/some/pebble/path //pkg/cmd/cockroach-short:cockroach-short --build_event_binary_file=/tmp/path
+bazel info workspace --color=no
+mkdir crdb-checkout/bin
+bazel info bazel-bin --color=no
+rm crdb-checkout/cockroach-short
+cp sandbox/pkg/cmd/cockroach-short/cockroach-short_/cockroach-short crdb-checkout/cockroach-short
+rm crdb-checkout/cockroach
+cp sandbox/pkg/cmd/cockroach-short/cockroach-short_/cockroach-short crdb-checkout/cockroach
+
+exec
+dev build cockroach-short --local-pebble=../my-pebble
+----
+bazel build --override_repository=com_github_cockroachdb_pebble=my-pebble //pkg/cmd/cockroach-short:cockroach-short --build_event_binary_file=/tmp/path
+bazel info workspace --color=no
+mkdir crdb-checkout/bin
+bazel info bazel-bin --color=no
+rm crdb-checkout/cockroach-short
+cp sandbox/pkg/cmd/cockroach-short/cockroach-short_/cockroach-short crdb-checkout/cockroach-short
+rm crdb-checkout/cockroach
+cp sandbox/pkg/cmd/cockroach-short/cockroach-short_/cockroach-short crdb-checkout/cockroach

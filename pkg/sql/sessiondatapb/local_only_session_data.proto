@@ -774,6 +774,26 @@ message LocalOnlySessionData {
   // normalization rule that inlines unnest subqueries in ANY comparisons.
   bool optimizer_inline_any_unnest_subquery = 198;
 
+  // TcpKeepalivesIdle is the time (in seconds) with no network activity before
+  // sending a TCP keepalive probe. 0 means use the cluster setting default.
+  // Corresponds to PostgreSQL's tcp_keepalives_idle.
+  int32 tcp_keepalives_idle = 199;
+
+  // TcpKeepalivesInterval is the time (in seconds) between TCP keepalive
+  // retransmissions. 0 means use the cluster setting default.
+  // Corresponds to PostgreSQL's tcp_keepalives_interval.
+  int32 tcp_keepalives_interval = 200;
+
+  // TcpKeepalivesCount is the maximum number of TCP keepalive probes before
+  // the connection is dropped. 0 means use the cluster setting default.
+  // Corresponds to PostgreSQL's tcp_keepalives_count.
+  int32 tcp_keepalives_count = 201;
+
+  // TcpUserTimeout is the maximum time (in milliseconds) that transmitted data
+  // may remain unacknowledged before the connection is dropped. 0 means use the
+  // cluster setting default. Corresponds to PostgreSQL's tcp_user_timeout.
+  int32 tcp_user_timeout = 202;
+
   ///////////////////////////////////////////////////////////////////////////
   // WARNING: consider whether a session parameter you're adding needs to  //
   // be propagated to the remote nodes. If so, that parameter should live  //

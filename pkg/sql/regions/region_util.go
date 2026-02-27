@@ -641,11 +641,65 @@ func synthesizeLeasePreferencesForTable(
 	return SynthesizeLeasePreferences(tableData.GetDatabasePrimaryRegion(), tableData.GetDatabaseSecondaryRegion())
 }
 
+// distributeReplicasAcrossRegions distributes numReplicas across the given
+// regions, ensuring all replicas are constrained within the region set. The
+// affinityRegion receives priority for any extra replicas beyond an even
+// distribution. The affinityRegion must be a member of the regions slice.
+func distributeReplicasAcrossRegions(
+	numReplicas int32, regions catpb.RegionNames, affinityRegion catpb.RegionName,
+) ([]zonepb.ConstraintsConjunction, error) {
+	numRegions := int32(len(regions))
+	if numRegions == 0 {
+		return nil, errors.AssertionFailedf("cannot distribute replicas across empty region set")
+	}
+	if !regions.Contains(affinityRegion) {
+		return nil, errors.AssertionFailedf("affinity region %s must be a member of the region set %v", affinityRegion, regions)
+	}
+	base := numReplicas / numRegions
+	extra := numReplicas % numRegions
+
+	// Determine which regions get an extra replica. The affinity region gets
+	// first priority, then remaining extras go to other regions in their
+	// original order.
+	getsExtra := make(map[catpb.RegionName]bool)
+	remaining := extra
+	if remaining > 0 {
+		getsExtra[affinityRegion] = true
+		remaining--
+	}
+	for _, r := range regions {
+		if remaining == 0 {
+			break
+		}
+		if r != affinityRegion {
+			getsExtra[r] = true
+			remaining--
+		}
+	}
+
+	// Emit constraints in original region order so that zone configs are
+	// deterministic and predictable across runs.
+	var constraints []zonepb.ConstraintsConjunction
+	for _, region := range regions {
+		n := base
+		if getsExtra[region] {
+			n++
+		}
+		if n > 0 {
+			constraints = append(constraints, zonepb.ConstraintsConjunction{
+				NumReplicas: n,
+				Constraints: []zonepb.Constraint{MakeRequiredConstraintForRegion(region)},
+			})
+		}
+	}
+	return constraints, nil
+}
+
 // AddConstraintsForSuperRegion updates the ZoneConfig.Constraints field such
 // that every replica is guaranteed to be constrained to a region within the
-// super region.
-// If !regionConfig.IsMemberOfSuperRegion(affinityRegion), and error
-// will be returned.
+// super region. Replicas are distributed evenly across regions with the
+// affinity region receiving priority for any remainder. An error is returned
+// if the affinity region is not a member of a super region.
 func AddConstraintsForSuperRegion(
 	zc *zonepb.ZoneConfig, regionConfig multiregion.RegionConfig, affinityRegion catpb.RegionName,
 ) error {
@@ -656,61 +710,11 @@ func AddConstraintsForSuperRegion(
 	_, numReplicas := GetNumVotersAndNumReplicas(regionConfig.WithRegions(regions))
 
 	zc.NumReplicas = &numReplicas
-	zc.Constraints = nil
-	zc.InheritedConstraints = false
-
-	switch regionConfig.SurvivalGoal() {
-	case descpb.SurvivalGoal_ZONE_FAILURE:
-		for _, region := range regions {
-			zc.Constraints = append(zc.Constraints, zonepb.ConstraintsConjunction{
-				NumReplicas: 1,
-				Constraints: []zonepb.Constraint{MakeRequiredConstraintForRegion(region)},
-			})
-		}
-		return nil
-	case descpb.SurvivalGoal_REGION_FAILURE:
-		// Under survival goal REGION_FAILURE with 5 replicas, we must ensure all replicas
-		// are placed within the super region. If any replica is unconstrained, it could be
-		// allocated outside the super region in larger clusters.
-		//
-		// We only apply extra replica constraints when:
-		// - There are exactly 3 regions, and
-		// - Either there is no secondary region,
-		//   OR the affinity region is the secondary region.
-		//
-		// In those cases, we explicitly assign a second replica to a non-primary,
-		// non-secondary region.
-		//
-		// The existing placement logic works without modification in the following cases:
-		// - The database has more than 3 regions
-		// - The database has both a primary and a secondary region, and the super region's
-		//   affinity is not set to the secondary region
-		//
-		// In these scenarios, the default logic ensures that all 5 replicas are distributed
-		// correctly without over-constraining.
-		//
-		// See: https://github.com/cockroachdb/cockroach/issues/63617 for more.
-		secondaryRegion := regionConfig.SecondaryRegion()
-
-		shouldDoubleUp := len(regions) == 3 &&
-			(!regionConfig.HasSecondaryRegion() || affinityRegion == secondaryRegion)
-
-		doubleUpAssigned := false
-
-		for _, region := range regions {
-			n := int32(1)
-			if shouldDoubleUp && !doubleUpAssigned &&
-				region != affinityRegion && region != secondaryRegion {
-				n = 2
-				doubleUpAssigned = true
-			}
-			zc.Constraints = append(zc.Constraints, zonepb.ConstraintsConjunction{
-				NumReplicas: n,
-				Constraints: []zonepb.Constraint{MakeRequiredConstraintForRegion(region)},
-			})
-		}
-		return nil
-	default:
-		return errors.AssertionFailedf("unknown survival goal: %v", regionConfig.SurvivalGoal())
+	constraints, err := distributeReplicasAcrossRegions(numReplicas, regions, affinityRegion)
+	if err != nil {
+		return err
 	}
+	zc.Constraints = constraints
+	zc.InheritedConstraints = false
+	return nil
 }

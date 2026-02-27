@@ -1853,9 +1853,13 @@ func Grow(
 		// reload the clusters before returning.
 		err = LoadClusters()
 	default:
-		// Save the cluster to the cache.
+		// Save the cluster to the cache and reload in-memory state so that
+		// subsequent operations (e.g., SetupSSH, Put) see the new nodes.
 		err = saveCluster(l, &c.Cluster)
 		if err != nil {
+			return err
+		}
+		if err = LoadClusters(); err != nil {
 			return err
 		}
 		err = SetupSSH(ctx, l, clusterName, false /* sync */)

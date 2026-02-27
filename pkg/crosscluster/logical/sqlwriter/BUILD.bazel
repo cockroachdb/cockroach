@@ -3,6 +3,7 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 go_library(
     name = "sqlwriter",
     srcs = [
+        "errors.go",
         "replication_statements.go",
         "session.go",
         "sql_row_reader.go",
@@ -11,12 +12,14 @@ go_library(
     importpath = "github.com/cockroachdb/cockroach/pkg/crosscluster/logical/sqlwriter",
     visibility = ["//visibility:public"],
     deps = [
+        "//pkg/kv/kvpb",
         "//pkg/settings",
         "//pkg/settings/cluster",
         "//pkg/sql/catalog",
         "//pkg/sql/isql",
         "//pkg/sql/parser",
         "//pkg/sql/parser/statements",
+        "//pkg/sql/pgwire/pgerror",
         "//pkg/sql/sem/catid",
         "//pkg/sql/sem/tree",
         "//pkg/sql/sem/tree/treecmp",

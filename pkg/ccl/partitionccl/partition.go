@@ -9,7 +9,6 @@ import (
 	"context"
 	"strings"
 
-	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl"
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
@@ -335,10 +334,6 @@ func createPartitioning(
 	allowedNewColumnNames []tree.Name,
 	allowImplicitPartitioning bool,
 ) (newImplicitCols []catalog.Column, newPartitioning catpb.PartitioningDescriptor, err error) {
-	if err := utilccl.CheckEnterpriseEnabled(st, "partitions"); err != nil {
-		return nil, newPartitioning, err
-	}
-
 	// Truncate existing implicitly partitioned column names.
 	newIdxColumnNames := oldKeyColumnNames[oldNumImplicitColumns:]
 

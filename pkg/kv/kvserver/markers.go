@@ -34,6 +34,7 @@ var errMarkCanRetryReplicationChangeWithUpdatedDesc = errors.New("should retry w
 func IsRetriableReplicationChangeError(err error) bool {
 	return errors.Is(err, errMarkCanRetryReplicationChangeWithUpdatedDesc) ||
 		IsLeaseTransferRejectedBecauseTargetMayNeedSnapshotError(err) ||
+		IsLeaseTransferRejectedBecauseTargetHasSendQueueError(err) ||
 		IsLeaseTransferRejectedBecauseTargetCannotReceiveLease(err) ||
 		isSnapshotError(err)
 }
@@ -99,6 +100,14 @@ func IsReplicationChangeInProgressError(err error) bool {
 // periodically requested in maybeTransferRaftLeadershipToLeaseholderLocked.
 func IsLeaseTransferRejectedBecauseTargetMayNeedSnapshotError(err error) bool {
 	return errors.Is(err, leases.ErrMarkLeaseTransferRejectedBecauseTargetMayNeedSnapshot)
+}
+
+// IsLeaseTransferRejectedBecauseTargetHasSendQueueError detects whether an
+// error (assumed to have been emitted by a lease transfer request) indicates
+// that the lease transfer failed because the lease transfer target has a send
+// queue, meaning it is behind on its raft log.
+func IsLeaseTransferRejectedBecauseTargetHasSendQueueError(err error) bool {
+	return errors.Is(err, leases.ErrMarkLeaseTransferRejectedBecauseTargetHasSendQueue)
 }
 
 // IsLeaseTransferRejectedBecauseTargetCannotReceiveLease returns true if err

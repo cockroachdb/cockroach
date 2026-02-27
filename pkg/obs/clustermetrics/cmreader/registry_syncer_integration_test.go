@@ -13,6 +13,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/obs/clustermetrics"
+	"github.com/cockroachdb/cockroach/pkg/obs/clustermetrics/cmmetrics"
 	clustermetricutils "github.com/cockroachdb/cockroach/pkg/obs/clustermetrics/utils"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/apiconstants"
@@ -42,18 +43,18 @@ func TestRegistrySyncerIntegration(t *testing.T) {
 	skip.UnderStress(t, "test is too slow to run under stress")
 
 	// Register test metric metadata so ToMetric() can resolve them.
-	defer clustermetrics.TestingRegisterLabeledClusterMetric(
+	defer cmmetrics.TestingRegisterLabeledClusterMetric(
 		"test.gauge_labeled", metric.Metadata{
 			Name: "test.gauge_labeled",
 			Help: "A test gauge",
 		},
 		[]string{"store"},
 	)()
-	defer clustermetrics.TestingRegisterClusterMetric("test.counter", metric.Metadata{
+	defer cmmetrics.TestingRegisterClusterMetric("test.counter", metric.Metadata{
 		Name: "test.counter",
 		Help: "A test counter",
 	})()
-	defer clustermetrics.TestingRegisterClusterMetric("test.scalar", metric.Metadata{
+	defer cmmetrics.TestingRegisterClusterMetric("test.scalar", metric.Metadata{
 		Name: "test.scalar",
 		Help: "A scalar gauge for value verification",
 	})()
@@ -142,7 +143,7 @@ func TestRegistrySyncerIntegration(t *testing.T) {
 	// ---------------------------------------------------------------
 	// Insert a new metric after the initial scan (via OnUpsert).
 	// ---------------------------------------------------------------
-	defer clustermetrics.TestingRegisterClusterMetric("test.newgauge", metric.Metadata{
+	defer cmmetrics.TestingRegisterClusterMetric("test.newgauge", metric.Metadata{
 		Name: "test.newgauge",
 		Help: "A new gauge added after initial scan",
 	})()

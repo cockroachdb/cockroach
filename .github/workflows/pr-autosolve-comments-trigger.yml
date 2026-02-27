@@ -1,0 +1,50 @@
+name: PR Comment Addresser (Trigger)
+
+# This is the first half of a two-workflow pattern to work around GitHub's
+# restriction that secrets are not available to workflows triggered by fork PR
+# events. This lightweight workflow captures the event context and saves it as
+# an artifact. The handler workflow (pr-autosolve-comments.yml) is triggered by
+# workflow_run, runs in the base repo context with full secret access, and does
+# the actual work.
+
+on:
+  # Native GitHub review comments (inline code comments)
+  pull_request_review_comment:
+    types: [created]
+  # PR reviews (used by Reviewable.io - comments are embedded in review body)
+  pull_request_review:
+    types: [submitted]
+
+jobs:
+  save-context:
+    runs-on: ubuntu-latest
+    # Only trigger for:
+    # - PRs from the autosolver bot's fork (security: prevents force-push to other branches)
+    # - PRs with 'o-autosolver' label
+    # - Comments/reviews NOT from the bot itself
+    # - For review_comment events: comments NOT containing our response marker
+    # - For review events: only COMMENTED or CHANGES_REQUESTED (not APPROVED/DISMISSED)
+    if: |
+      github.event.pull_request.head.repo.full_name == 'cockroach-teamcity/cockroach' &&
+      contains(github.event.pull_request.labels.*.name, 'o-autosolver') &&
+      github.actor != 'github-actions[bot]' &&
+      github.actor != 'cockroach-teamcity' &&
+      (
+        (github.event_name == 'pull_request_review_comment' && !contains(github.event.comment.body, '[autosolve-response]')) ||
+        (github.event_name == 'pull_request_review' && (github.event.review.state == 'commented' || github.event.review.state == 'changes_requested'))
+      )
+
+    steps:
+      - name: Save event context
+        run: |
+          mkdir -p /tmp/event-context
+          cp "$GITHUB_EVENT_PATH" /tmp/event-context/event.json
+          echo "${{ github.event_name }}" > /tmp/event-context/event_name.txt
+          echo "${{ github.actor }}" > /tmp/event-context/actor.txt
+
+      - name: Upload context
+        uses: actions/upload-artifact@v4
+        with:
+          name: pr-comment-context
+          path: /tmp/event-context/
+          retention-days: 1

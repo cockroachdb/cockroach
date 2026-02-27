@@ -3,7 +3,7 @@
 // Use of this software is governed by the CockroachDB Software License
 // included in the /LICENSE file.
 
-package cliccl
+package cli
 
 import (
 	"context"
@@ -14,7 +14,6 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/sqlproxyccl"
-	"github.com/cockroachdb/cockroach/pkg/cli"
 	"github.com/cockroachdb/cockroach/pkg/cli/clierrorplus"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/severity"
@@ -45,7 +44,7 @@ determined by the arguments used.
 
 func runStartSQLProxy(cmd *cobra.Command, args []string) (returnErr error) {
 	// Initialize logging, stopper and context that can be canceled
-	ctx, stopper, err := initLogging(cmd)
+	ctx, stopper, err := initProxyLogging(cmd)
 	if err != nil {
 		return err
 	}
@@ -99,12 +98,12 @@ func runStartSQLProxy(cmd *cobra.Command, args []string) (returnErr error) {
 		return err
 	}
 
-	return waitForSignals(ctx, server, stopper, proxyLn, proxyProtocolLn, errChan)
+	return waitForProxySignals(ctx, server, stopper, proxyLn, proxyProtocolLn, errChan)
 }
 
-func initLogging(cmd *cobra.Command) (ctx context.Context, stopper *stop.Stopper, err error) {
+func initProxyLogging(cmd *cobra.Command) (ctx context.Context, stopper *stop.Stopper, err error) {
 	ctx = context.Background()
-	stopper, err = cli.ClearStoresAndSetupLoggingForMTCommands(cmd, ctx)
+	stopper, err = ClearStoresAndSetupLoggingForMTCommands(cmd, ctx)
 	if err != nil {
 		return ctx, nil, err
 	}
@@ -114,7 +113,7 @@ func initLogging(cmd *cobra.Command) (ctx context.Context, stopper *stop.Stopper
 	return ctx, stopper, err
 }
 
-func waitForSignals(
+func waitForProxySignals(
 	ctx context.Context,
 	server *sqlproxyccl.Server,
 	stopper *stop.Stopper,
@@ -124,7 +123,7 @@ func waitForSignals(
 ) (returnErr error) {
 	// Need to alias the signals if this has to run on non-unix OSes too.
 	signalCh := make(chan os.Signal, 1)
-	signal.Notify(signalCh, cli.DrainSignals...)
+	signal.Notify(signalCh, DrainSignals...)
 
 	select {
 	case err := <-errChan:

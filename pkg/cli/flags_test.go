@@ -1368,6 +1368,7 @@ Available Commands:
   help              Help about any command
 
 Flags:
+      --enterprise-require-fips-ready      abort if FIPS readiness checks fail
   -h, --help                               help for cockroach
       --log <string>                       
                                             Logging configuration, expressed using YAML syntax. For example, you can

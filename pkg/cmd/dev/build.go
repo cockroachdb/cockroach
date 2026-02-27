@@ -193,6 +193,21 @@ func (d *dev) crossBuild(
 ) error {
 	bazelArgs = append(bazelArgs, fmt.Sprintf("--config=%s", crossConfig), "--config=nolintonbuild", "-c", "opt", "--config=pgo")
 	configArgs := getConfigArgs(bazelArgs)
+
+	// When using a local pebble checkout, mount it into the container
+	// and rewrite the override_repository arg that was added to bazelArgs
+	// by addCommonBazelArguments to use the container path instead.
+	if localPebble != "" {
+		const containerPebblePath = "/pebble"
+		dockerArgs = append(dockerArgs, "-v", localPebble+":"+containerPebblePath)
+		overridePrefix := "--override_repository=" + pebbleOverrideRepo + "="
+		for i, arg := range bazelArgs {
+			if strings.HasPrefix(arg, overridePrefix) {
+				bazelArgs[i] = overridePrefix + containerPebblePath
+			}
+		}
+	}
+
 	dockerArgs, err := d.getDockerRunArgs(ctx, volume, false, dockerArgs)
 	if err != nil {
 		return err

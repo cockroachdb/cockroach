@@ -1092,6 +1092,7 @@ func TestLint(t *testing.T) {
 			":!util/syncutil/mutex_tracing.go",
 			":!util/timeutil/time.go",
 			":!util/timeutil/zoneinfo.go",
+			":!cmd/dev/**",
 			":!cmd/roachtest/tests/gorm_helpers.go",
 		)
 		if err != nil {
@@ -1276,7 +1277,7 @@ func TestLint(t *testing.T) {
 			":!server/server_obs_service.go",
 			":!server/testserver.go",
 			":!util/tracing/*_test.go",
-			":!ccl/cliccl/mt_http_test_directory.go",
+			":!cli/mt_http_test_directory.go",
 			":!ccl/sqlproxyccl/tenantdirsvr/test_directory_svr.go",
 			":!ccl/sqlproxyccl/tenantdirsvr/test_simple_directory_svr.go",
 			":!ccl/sqlproxyccl/tenantdirsvr/test_static_directory_svr.go",

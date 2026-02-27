@@ -26,6 +26,7 @@ import (
 func TestClusterMetricsWriterIntegration(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+	defer clustermetrics.TestingAllowNonInitConstruction()()
 
 	ctx := context.Background()
 	srv := serverutils.StartServerOnly(t, base.TestServerArgs{})
@@ -60,7 +61,7 @@ func TestClusterMetricsWriterIntegration(t *testing.T) {
 	}{{
 		name:       "counter persisted to system table",
 		metricName: "test.int.counter",
-		wantType:   "counter",
+		wantType:   "COUNTER",
 		flushes: []flushOp{{
 			before: func() { counter.Inc(42) },
 			want:   42,
@@ -68,7 +69,7 @@ func TestClusterMetricsWriterIntegration(t *testing.T) {
 	}, {
 		name:       "gauge persisted to system table",
 		metricName: "test.int.gauge",
-		wantType:   "gauge",
+		wantType:   "GAUGE",
 		flushes: []flushOp{{
 			before: func() { gauge.Update(99) },
 			want:   99,
@@ -76,7 +77,7 @@ func TestClusterMetricsWriterIntegration(t *testing.T) {
 	}, {
 		name:       "counter accumulates across flushes",
 		metricName: "test.int.counter.accum",
-		wantType:   "counter",
+		wantType:   "COUNTER",
 		flushes: []flushOp{{
 			before: func() { counterAccum.Inc(10) },
 			want:   10,
@@ -87,7 +88,7 @@ func TestClusterMetricsWriterIntegration(t *testing.T) {
 	}, {
 		name:       "gauge updates in place",
 		metricName: "test.int.gauge.update",
-		wantType:   "gauge",
+		wantType:   "GAUGE",
 		flushes: []flushOp{{
 			before: func() { gaugeUpdate.Update(100) },
 			want:   100,

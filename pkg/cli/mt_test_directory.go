@@ -3,7 +3,7 @@
 // Use of this software is governed by the CockroachDB Software License
 // included in the /LICENSE file.
 
-package cliccl
+package cli
 
 import (
 	"bufio"
@@ -18,7 +18,6 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/sqlproxyccl/tenantdirsvr"
-	"github.com/cockroachdb/cockroach/pkg/cli"
 	"github.com/cockroachdb/cockroach/pkg/cli/clierrorplus"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
@@ -34,16 +33,16 @@ Run a test directory service that starts and manages tenant SQL instances as
 processes on the local machine.
 
 Use two dashes (--) to separate the test directory command's arguments from
-the remaining arguments that specify the executable (and the arguments) that 
+the remaining arguments that specify the executable (and the arguments) that
 will be ran when starting each tenant.
 
 For example:
 cockroach mt test-directory --port 1234 -- cockroach mt start-sql --kv-addrs=:2222 --certs-dir=./certs --base-dir=./base
-or 
-cockroach mt test-directory --port 1234 -- bash -c ./tenant_start.sh 
+or
+cockroach mt test-directory --port 1234 -- bash -c ./tenant_start.sh
 
 test-directory command will always add the following arguments (in that order):
---sql-addr <addr/host>[:<port>] 
+--sql-addr <addr/host>[:<port>]
 --http-addr <addr/host>[:<port>]
 --tenant-id number
 `,
@@ -53,7 +52,7 @@ test-directory command will always add the following arguments (in that order):
 
 func runDirectorySvr(cmd *cobra.Command, args []string) (returnErr error) {
 	ctx := context.Background()
-	stopper, err := cli.ClearStoresAndSetupLoggingForMTCommands(cmd, ctx)
+	stopper, err := ClearStoresAndSetupLoggingForMTCommands(cmd, ctx)
 	if err != nil {
 		return err
 	}

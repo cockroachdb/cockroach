@@ -40,7 +40,7 @@ import (
 )
 
 // TestingReset resets global mutable state so that Run can be called multiple
-// times from the same test process. It is public for cliccl.
+// times from the same test process.
 func TestingReset() {
 	// Reset the client contexts for each test.
 	initCLIDefaults()

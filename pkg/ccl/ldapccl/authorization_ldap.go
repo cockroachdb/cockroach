@@ -8,7 +8,6 @@ package ldapccl
 import (
 	"context"
 
-	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl"
 	"github.com/cockroachdb/cockroach/pkg/security/distinguishedname"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
@@ -54,10 +53,6 @@ func (authManager *ldapAuthManager) FetchLDAPGroups(
 	entry *hba.Entry,
 	_ *identmap.Conf,
 ) (_ []*ldap.DN, detailedErrorMsg redact.RedactableString, authError error) {
-	if err := utilccl.CheckEnterpriseEnabled(st, "LDAP authorization"); err != nil {
-		return nil, "", err
-	}
-
 	authManager.mu.Lock()
 	defer authManager.mu.Unlock()
 

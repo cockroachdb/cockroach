@@ -58,6 +58,7 @@ go_test(
         "//pkg/ccl/changefeedccl",
         "//pkg/ccl/multitenantccl/tenantcostserver",
         "//pkg/cloud",
+        "//pkg/cloud/impl:cloudimpl",
         "//pkg/cloud/nodelocal",
         "//pkg/cloud/nullsink",
         "//pkg/jobs",

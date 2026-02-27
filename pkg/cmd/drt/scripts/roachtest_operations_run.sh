@@ -85,6 +85,7 @@ while true; do
   ./roachtest-operations run-operation "${CLUSTER}" ".*" \
     --datadog-api-key "${DD_API_KEY}" \
     --datadog-tags "env:development,cluster:${WORKLOAD_CLUSTER},team:drt,service:drt-cockroachdb" \
-    --certs-dir ./certs | tee -a roachtest_ops.log
+    --certs-dir ./certs \
+    --cloud aws --workload-cluster "${WORKLOAD_CLUSTER}" | tee -a roachtest_ops.log
   sleep 600
 done

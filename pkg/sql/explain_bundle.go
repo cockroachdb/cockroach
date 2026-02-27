@@ -1392,18 +1392,22 @@ func (c *stmtEnvCollector) PrintCreateSequence(w io.Writer, tn *tree.TableName) 
 func (c *stmtEnvCollector) PrintCreateUDT(w io.Writer, id oid.Oid, redactValues bool) error {
 	descID := catid.UserDefinedOIDToID(id)
 	// Use "".crdb_internal to allow for cross-DB lookups.
-	query := fmt.Sprintf(`SELECT database_name, create_statement FROM "".crdb_internal.create_type_statements WHERE descriptor_id = %d::OID`, descID)
+	query := fmt.Sprintf(`SELECT database_name, schema_name, create_statement FROM "".crdb_internal.create_type_statements WHERE descriptor_id = %d::OID`, descID)
 	if redactValues {
-		query = fmt.Sprintf("SELECT database_name, crdb_internal.redact(crdb_internal.redactable_sql_constants(create_statement)) FROM (%s)", query)
+		query = fmt.Sprintf("SELECT database_name, schema_name, crdb_internal.redact(crdb_internal.redactable_sql_constants(create_statement)) FROM (%s)", query)
 	}
 	// Implicit crdb_internal_region type won't be found via the vtable, so we
 	// allow empty result.
-	res, err := c.queryEx(query, 2 /* numCols */, true /* emptyOk */)
+	res, err := c.queryEx(query, 3 /* numCols */, true /* emptyOk */)
 	if err != nil {
 		return err
 	}
-	if res[0] != "" {
-		printCreateStatement(w, tree.Name(res[0]) /* dbName */, res[1] /* createStatement */)
+	if dbStr := res[0]; dbStr != "" {
+		if schemaStr := res[1]; schemaStr != "" && schemaStr != "public" {
+			schemaName := tree.Name(schemaStr)
+			printCreateStatement(w, tree.Name(dbStr) /* dbName */, fmt.Sprintf("CREATE SCHEMA IF NOT EXISTS %s", schemaName.String()))
+		}
+		printCreateStatement(w, tree.Name(dbStr) /* dbName */, res[2] /* createStatement */)
 	}
 	return nil
 }
@@ -1414,7 +1418,7 @@ func (c *stmtEnvCollector) PrintCreateRoutine(
 	var createRoutineQuery string
 	descID := catid.UserDefinedOIDToID(id)
 	// Use "".crdb_internal to allow for cross-DB lookups.
-	queryTemplate := `SELECT database_name, create_statement FROM "".crdb_internal.create_%[1]s_statements WHERE %[1]s_id = %[2]d::OID`
+	queryTemplate := `SELECT database_name, schema_name, create_statement FROM "".crdb_internal.create_%[1]s_statements WHERE %[1]s_id = %[2]d::OID`
 	if procedure {
 		createRoutineQuery = fmt.Sprintf(queryTemplate, "procedure", descID)
 	} else {
@@ -1422,15 +1426,22 @@ func (c *stmtEnvCollector) PrintCreateRoutine(
 	}
 	if redactValues {
 		createRoutineQuery = fmt.Sprintf(
-			"SELECT database_name, crdb_internal.redact(crdb_internal.redactable_sql_constants(create_statement)) FROM (%s)",
+			"SELECT database_name, schema_name, crdb_internal.redact(crdb_internal.redactable_sql_constants(create_statement)) FROM (%s)",
 			createRoutineQuery,
 		)
 	}
-	res, err := c.queryEx(createRoutineQuery, 2 /* numCols */, false /* emptyOk */)
+	res, err := c.queryEx(createRoutineQuery, 3 /* numCols */, false /* emptyOk */)
 	if err != nil {
 		return err
 	}
-	printCreateStatement(w, tree.Name(res[0]) /* dbName */, res[1] /* createStatement */)
+	if dbStr := res[0]; dbStr != "" {
+		if schemaStr := res[1]; schemaStr != "" && schemaStr != "public" {
+			schemaName := tree.Name(schemaStr)
+			printCreateStatement(w, tree.Name(dbStr), fmt.Sprintf("CREATE SCHEMA IF NOT EXISTS %s", schemaName.String()))
+		}
+		printCreateStatement(w, tree.Name(dbStr) /* dbName */, res[2] /* createStatement */)
+	}
+
 	return nil
 }
 

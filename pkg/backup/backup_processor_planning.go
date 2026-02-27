@@ -44,7 +44,6 @@ func distBackupPlanSpecs(
 	mvccFilter kvpb.MVCCFilter,
 	startTime, endTime hlc.Timestamp,
 	elide execinfrapb.ElidePrefix,
-	includeValueHeader bool,
 ) (map[base.SQLInstanceID]*execinfrapb.BackupDataSpec, error) {
 	var span *tracing.Span
 	ctx, span = tracing.ChildSpan(ctx, "backup.distBackupPlanSpecs")
@@ -108,7 +107,7 @@ func distBackupPlanSpecs(
 			BackupEndTime:          endTime,
 			UserProto:              user.EncodeProto(),
 			ElidePrefix:            elide,
-			IncludeMVCCValueHeader: includeValueHeader,
+			IncludeMVCCValueHeader: true,
 			StrictLocality:         strictLocalityFiltering,
 		}
 		sqlInstanceIDToSpec[partition.SQLInstanceID] = spec
@@ -132,7 +131,7 @@ func distBackupPlanSpecs(
 				BackupStartTime:        startTime,
 				BackupEndTime:          endTime,
 				UserProto:              user.EncodeProto(),
-				IncludeMVCCValueHeader: includeValueHeader,
+				IncludeMVCCValueHeader: true,
 				StrictLocality:         strictLocalityFiltering,
 			}
 			sqlInstanceIDToSpec[partition.SQLInstanceID] = spec

@@ -370,6 +370,15 @@ func (tfi TestFailureIssue) String() string {
 	}
 }
 
+// branchTitlePrefix returns a prefix for issue titles on non-master branches
+// so that issues are visually distinguishable when scanning issue lists.
+func branchTitlePrefix(branch string) string {
+	if branch == "master" || branch == "" {
+		return ""
+	}
+	return branch + ": "
+}
+
 func (p *poster) post(
 	origCtx context.Context, formatter IssueFormatter, req PostRequest,
 ) (*TestFailureIssue, error) {
@@ -382,7 +391,7 @@ func (p *poster) post(
 
 	// We just want the title this time around, as we're going to use
 	// it to figure out if an issue already exists.
-	title := formatter.Title(data)
+	title := branchTitlePrefix(p.Branch) + formatter.Title(data)
 
 	// We carry out two searches below, one attempting to find an issue that we
 	// adopt (i.e. add a comment to) and one finding "related issues", i.e. those

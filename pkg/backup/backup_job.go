@@ -22,7 +22,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/backup/backuputils"
 	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/cloud"
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/joberror"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
@@ -211,7 +210,6 @@ func backup(
 		backupManifest.StartTime,
 		backupManifest.EndTime,
 		backupManifest.ElidedPrefix,
-		backupManifest.ClusterVersion.AtLeast(clusterversion.V24_1.Version()),
 	)
 	if err != nil {
 		return roachpb.RowCount{}, 0, err

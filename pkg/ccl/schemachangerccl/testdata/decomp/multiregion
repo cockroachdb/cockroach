@@ -898,7 +898,7 @@ ElementState:
         - key: region
           type: REQUIRED
           value: us-east2
-        numReplicas: 1
+        numReplicas: 2
       - constraints:
         - key: region
           type: REQUIRED
@@ -1393,7 +1393,7 @@ ElementState:
           - key: region
             type: REQUIRED
             value: us-east1
-          numReplicas: 1
+          numReplicas: 2
         - constraints:
           - key: region
             type: REQUIRED
@@ -1451,7 +1451,7 @@ ElementState:
           - key: region
             type: REQUIRED
             value: us-east2
-          numReplicas: 1
+          numReplicas: 2
         - constraints:
           - key: region
             type: REQUIRED
@@ -1509,7 +1509,7 @@ ElementState:
           - key: region
             type: REQUIRED
             value: us-east3
-          numReplicas: 1
+          numReplicas: 2
         gc: null
         globalReads: null
         inheritedConstraints: false
@@ -1615,7 +1615,7 @@ ElementState:
             - key: region
               type: REQUIRED
               value: us-east1
-            numReplicas: 1
+            numReplicas: 2
           - constraints:
             - key: region
               type: REQUIRED
@@ -1661,7 +1661,7 @@ ElementState:
             - key: region
               type: REQUIRED
               value: us-east2
-            numReplicas: 1
+            numReplicas: 2
           - constraints:
             - key: region
               type: REQUIRED
@@ -1707,7 +1707,7 @@ ElementState:
             - key: region
               type: REQUIRED
               value: us-east3
-            numReplicas: 1
+            numReplicas: 2
           gc: null
           globalReads: null
           inheritedConstraints: false

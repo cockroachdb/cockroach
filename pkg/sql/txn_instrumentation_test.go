@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
+	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/stretchr/testify/require"
 )
 
@@ -298,7 +299,7 @@ func TestTxnInstrumentationHelper_MaybeContinueDiagnostics(t *testing.T) {
 		tracer := tracing.NewTracer()
 		sp := tracer.StartSpan("parent-span", tracing.WithRecording(tracingpb.RecordingVerbose))
 		helper.StartDiagnostics(request, requestID, sp)
-		newCtx, actual := helper.MaybeContinueDiagnostics(ctx, tc.stmt.stmt, tc.stmt.fpId)
+		newCtx, actual := helper.MaybeContinueDiagnostics(ctx, tc.stmt.stmt, tc.stmt.fpId, uuid.MakeV4())
 		require.Equal(t, tc.shouldContinue, actual)
 
 		if !tc.shouldContinue {
@@ -345,10 +346,11 @@ func TestTxnInstrumentationHelper_collectionFlow(t *testing.T) {
 	helper.diagnosticsCollector.stmtsFpsToCapture = expectedFingerprints
 
 	ctx := context.Background()
+	testTxnID := uuid.MakeV4()
 
 	// Process first statement
 	stmt1 := &tree.Select{Select: &tree.SelectClause{}}
-	_, shouldContinue := helper.MaybeContinueDiagnostics(ctx, stmt1, 100)
+	_, shouldContinue := helper.MaybeContinueDiagnostics(ctx, stmt1, 100, testTxnID)
 	require.True(t, shouldContinue)
 
 	bundle1 := diagnosticsBundle{zip: []byte("stmt1-zip")}
@@ -360,7 +362,7 @@ func TestTxnInstrumentationHelper_collectionFlow(t *testing.T) {
 
 	// Process second statement
 	stmt2 := &tree.Select{Select: &tree.SelectClause{}}
-	_, shouldContinue = helper.MaybeContinueDiagnostics(ctx, stmt2, 200)
+	_, shouldContinue = helper.MaybeContinueDiagnostics(ctx, stmt2, 200, testTxnID)
 	require.True(t, shouldContinue)
 
 	bundle2 := diagnosticsBundle{zip: []byte("stmt2-zip")}
@@ -372,7 +374,7 @@ func TestTxnInstrumentationHelper_collectionFlow(t *testing.T) {
 
 	// Process third statement
 	stmt3 := &tree.Select{Select: &tree.SelectClause{}}
-	_, shouldContinue = helper.MaybeContinueDiagnostics(ctx, stmt2, 300)
+	_, shouldContinue = helper.MaybeContinueDiagnostics(ctx, stmt2, 300, testTxnID)
 	require.True(t, shouldContinue)
 
 	bundle3 := diagnosticsBundle{zip: []byte("stmt3-zip")}
@@ -384,7 +386,7 @@ func TestTxnInstrumentationHelper_collectionFlow(t *testing.T) {
 
 	// Process commit statement
 	commit := &tree.CommitTransaction{}
-	_, shouldContinue = helper.MaybeContinueDiagnostics(ctx, commit, 0)
+	_, shouldContinue = helper.MaybeContinueDiagnostics(ctx, commit, 0, testTxnID)
 	require.True(t, shouldContinue)
 
 	bundleCommit := diagnosticsBundle{zip: []byte("commit-zip")}
@@ -520,9 +522,9 @@ func TestTxnDiagnosticsCollector_MaybeStartDiagnostics(t *testing.T) {
 			expectedState txnDiagnosticsState
 		}{
 			{
-				name:          "should reset",
+				name:          "should skip",
 				stmt:          &tree.Select{Select: &tree.SelectClause{}},
-				expectedState: txnDiagnosticsReset,
+				expectedState: txnDiagnosticsSkipped,
 			}, {
 				name:          "should stay not started",
 				stmt:          &tree.Savepoint{},
@@ -532,7 +534,8 @@ func TestTxnDiagnosticsCollector_MaybeStartDiagnostics(t *testing.T) {
 			t.Run(tc.name, func(t *testing.T) {
 				helper := baseHelper
 				helper.diagnosticsCollector.UpdateState(txnDiagnosticsNotStarted)
-				newCtx, started := helper.MaybeStartDiagnostics(ctx, tc.stmt, 123, nil)
+				testTxnID := uuid.MakeV4()
+				newCtx, started := helper.MaybeStartDiagnostics(ctx, tc.stmt, 123, nil, testTxnID)
 				require.False(t, started)
 				require.Equal(t, ctx, newCtx)
 				require.Equal(t, tc.expectedState, helper.diagnosticsCollector.state)
@@ -555,7 +558,8 @@ func TestTxnDiagnosticsCollector_MaybeStartDiagnostics(t *testing.T) {
 				_, err := helper.TxnDiagnosticsRecorder.InsertTxnRequest(ctx, 1, []uint64{123}, "testuser", 0, 0, 0, false)
 				require.NoError(t, err)
 				helper.diagnosticsCollector.UpdateState(state)
-				newCtx, started := helper.MaybeStartDiagnostics(ctx, &tree.Select{Select: &tree.SelectClause{}}, 123, ts.Tracer())
+				testTxnID := uuid.MakeV4()
+				newCtx, started := helper.MaybeStartDiagnostics(ctx, &tree.Select{Select: &tree.SelectClause{}}, 123, ts.Tracer(), testTxnID)
 				require.False(t, started)
 				require.Equal(t, ctx, newCtx)
 			})
@@ -575,7 +579,8 @@ func TestTxnDiagnosticsCollector_MaybeStartDiagnostics(t *testing.T) {
 			_, err := helper.TxnDiagnosticsRecorder.InsertTxnRequest(ctx, 1, []uint64{123}, "testuser", 0, 0, 0, redacted)
 			require.NoError(t, err)
 
-			newCtx, started := helper.MaybeStartDiagnostics(ctx, &tree.Select{Select: &tree.SelectClause{}}, 123, ts.Tracer())
+			testTxnID := uuid.MakeV4()
+			newCtx, started := helper.MaybeStartDiagnostics(ctx, &tree.Select{Select: &tree.SelectClause{}}, 123, ts.Tracer(), testTxnID)
 			require.True(t, started)
 			require.True(t, helper.diagnosticsCollector.InProgress())
 			if redacted {

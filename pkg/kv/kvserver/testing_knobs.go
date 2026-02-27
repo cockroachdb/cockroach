@@ -595,11 +595,6 @@ type StoreTestingKnobs struct {
 	// BeforeSplitAcquiresLocksOnRHS is invoked during a split application before
 	// we start acquiring locks on the right hand side.
 	BeforeSplitAcquiresLocksOnRHS func(context.Context, *Replica)
-
-	// InjectIntentsToResolveVirtually is called while executing read-only
-	// requests; it helps inject intents to be resolved virtually, usually passed
-	// in by the lock table guard.
-	InjectIntentsToResolveVirtually func() []roachpb.LockUpdate
 }
 
 // ModuleTestingKnobs is part of the base.ModuleTestingKnobs interface.

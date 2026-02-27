@@ -1,22 +1,25 @@
 name: PR Comment Addresser
 
+# This is the second half of a two-workflow pattern. The trigger workflow
+# (pr-autosolve-comments-trigger.yml) captures event context from fork PR
+# review events and saves it as an artifact. This handler workflow runs via
+# workflow_run in the base repo context, giving it full access to secrets
+# that GitHub otherwise withholds from fork PR event workflows.
+
 on:
-  # Native GitHub review comments (inline code comments)
-  pull_request_review_comment:
-    types: [created]
-  # PR reviews (used by Reviewable.io - comments are embedded in review body)
-  pull_request_review:
-    types: [submitted]
+  workflow_run:
+    workflows: ["PR Comment Addresser (Trigger)"]
+    types: [completed]
 
 concurrency:
-  group: autosolve-pr-${{ github.event.pull_request.number }}
+  # Use the trigger's head branch for concurrency grouping. For autosolve PRs
+  # this is the fix/issue-XXXX branch, providing per-PR concurrency control.
+  group: autosolve-pr-${{ github.event.workflow_run.head_branch }}
   # Don't cancel in-progress runs as they may be mid-push, which could leave state inconsistent
   cancel-in-progress: false
 
 env:
   # Autosolver fork configuration - update these if the bot account changes
-  # NOTE: The job-level 'if' condition below must also be updated manually since
-  # GitHub Actions doesn't support env var substitution in job-level conditions.
   AUTOSOLVER_FORK_OWNER: cockroach-teamcity
   AUTOSOLVER_FORK_REPO: cockroach
 
@@ -24,42 +27,93 @@ jobs:
   address-review-comments:
     runs-on: ubuntu-latest
     timeout-minutes: 60
-    # Only trigger for:
-    # - PRs from the autosolver bot's fork (security: prevents force-push to other branches)
-    # - PRs with 'o-autosolver' label
-    # - Comments/reviews NOT from the bot itself
-    # - For review_comment events: comments NOT containing our response marker
-    # - For review events: only COMMENTED or CHANGES_REQUESTED (not APPROVED/DISMISSED)
-    # NOTE: The fork name below must match AUTOSOLVER_FORK_OWNER/AUTOSOLVER_FORK_REPO above
-    if: |
-      github.event.pull_request.head.repo.full_name == 'cockroach-teamcity/cockroach' &&
-      contains(github.event.pull_request.labels.*.name, 'o-autosolver') &&
-      github.actor != 'github-actions[bot]' &&
-      github.actor != 'cockroach-teamcity' &&
-      (
-        (github.event_name == 'pull_request_review_comment' && !contains(github.event.comment.body, '[autosolve-response]')) ||
-        (github.event_name == 'pull_request_review' && (github.event.review.state == 'commented' || github.event.review.state == 'changes_requested'))
-      )
+    if: github.event.workflow_run.conclusion == 'success'
     permissions:
       contents: write
       pull-requests: write
       id-token: write
+      actions: read  # needed to download artifacts from workflow_run
 
     steps:
+      - name: Check if trigger produced an artifact
+        id: check_trigger
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # The trigger workflow's job may have been skipped by its 'if' condition
+          # (e.g., non-autosolve PR comment). In that case, no artifact was uploaded
+          # and we should exit early to avoid noisy failures.
+          ARTIFACT_COUNT=$(gh api "repos/${{ github.repository }}/actions/runs/${{ github.event.workflow_run.id }}/artifacts" \
+            --jq '[.artifacts[] | select(.name == "pr-comment-context")] | length')
+          if [ "$ARTIFACT_COUNT" = "0" ]; then
+            echo "No artifact found - trigger was filtered out, nothing to do"
+            echo "has_artifact=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "has_artifact=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Download event context
+        id: download
+        if: steps.check_trigger.outputs.has_artifact == 'true'
+        uses: actions/download-artifact@v4
+        with:
+          name: pr-comment-context
+          run-id: ${{ github.event.workflow_run.id }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          path: /tmp/event-context
+
+      - name: Parse event context
+        if: steps.check_trigger.outputs.has_artifact == 'true'
+        id: context
+        run: |
+          EVENT_FILE="/tmp/event-context/event.json"
+          EVENT_NAME=$(cat /tmp/event-context/event_name.txt)
+          ACTOR=$(cat /tmp/event-context/actor.txt)
+
+          echo "event_name=$EVENT_NAME" >> "$GITHUB_OUTPUT"
+          echo "actor=$ACTOR" >> "$GITHUB_OUTPUT"
+
+          # PR metadata
+          echo "pr_number=$(jq -r '.pull_request.number' "$EVENT_FILE")" >> "$GITHUB_OUTPUT"
+          echo "head_repo=$(jq -r '.pull_request.head.repo.full_name' "$EVENT_FILE")" >> "$GITHUB_OUTPUT"
+          echo "head_ref=$(jq -r '.pull_request.head.ref' "$EVENT_FILE")" >> "$GITHUB_OUTPUT"
+
+          # Native review comment fields
+          echo "comment_user=$(jq -r '.comment.user.login // empty' "$EVENT_FILE")" >> "$GITHUB_OUTPUT"
+          echo "comment_path=$(jq -r '.comment.path // empty' "$EVENT_FILE")" >> "$GITHUB_OUTPUT"
+          echo "comment_line=$(jq -r '.comment.line // empty' "$EVENT_FILE")" >> "$GITHUB_OUTPUT"
+
+          # Use a random delimiter for multiline outputs to prevent injection
+          DELIM="AUTOSOLVE_DELIM_$(openssl rand -hex 8)"
+
+          {
+            echo "comment_body<<$DELIM"
+            jq -r '.comment.body // empty' "$EVENT_FILE"
+            echo "$DELIM"
+          } >> "$GITHUB_OUTPUT"
+
+          # Reviewable review fields
+          echo "review_user=$(jq -r '.review.user.login // empty' "$EVENT_FILE")" >> "$GITHUB_OUTPUT"
+
+          {
+            echo "review_body<<$DELIM"
+            jq -r '.review.body // empty' "$EVENT_FILE"
+            echo "$DELIM"
+          } >> "$GITHUB_OUTPUT"
+
       - name: Validate configuration
         run: |
           # Validate that env vars match expected fork (defense against misconfiguration)
-          # This ensures the hard-coded value in the job-level 'if' stays in sync
           EXPECTED_FORK="${AUTOSOLVER_FORK_OWNER}/${AUTOSOLVER_FORK_REPO}"
           if [ "$EXPECTED_FORK" != "cockroach-teamcity/cockroach" ]; then
-            echo "::error::AUTOSOLVER_FORK_OWNER/AUTOSOLVER_FORK_REPO mismatch. Update the env vars AND the job-level 'if' condition."
+            echo "::error::AUTOSOLVER_FORK_OWNER/AUTOSOLVER_FORK_REPO mismatch. Update the env vars."
             exit 1
           fi
 
       - name: Verify commenter has write permissions
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          COMMENTER: ${{ github.actor }}
+          COMMENTER: ${{ steps.context.outputs.actor }}
         run: |
           # Check that the user who left the comment has write access to the repository
           # This prevents unauthorized users from influencing the autosolver via comments
@@ -78,8 +132,8 @@ jobs:
       - name: Checkout PR branch from fork
         uses: actions/checkout@v5
         with:
-          repository: ${{ github.event.pull_request.head.repo.full_name }}
-          ref: ${{ github.event.pull_request.head.ref }}
+          repository: ${{ steps.context.outputs.head_repo }}
+          ref: ${{ steps.context.outputs.head_ref }}
           fetch-depth: 0
           token: ${{ secrets.AUTOSOLVER_PAT }}
 
@@ -94,9 +148,10 @@ jobs:
         id: fetch_comments
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_NUMBER: ${{ steps.context.outputs.pr_number }}
         run: |
           # Get all review comments on this PR (native GitHub inline comments)
-          COMMENTS=$(gh api repos/${{ github.repository }}/pulls/${{ github.event.pull_request.number }}/comments)
+          COMMENTS=$(gh api "repos/${{ github.repository }}/pulls/${PR_NUMBER}/comments")
           {
             echo 'comments<<EOF'
             echo "$COMMENTS"
@@ -105,10 +160,10 @@ jobs:
 
       - name: Parse Reviewable comments from review body
         id: parse_reviewable
-        if: github.event_name == 'pull_request_review'
+        if: steps.context.outputs.event_name == 'pull_request_review'
         env:
-          REVIEW_BODY: ${{ github.event.review.body }}
-          REVIEWER: ${{ github.event.review.user.login }}
+          REVIEW_BODY: ${{ steps.context.outputs.review_body }}
+          REVIEWER: ${{ steps.context.outputs.review_user }}
         run: |
           # Parse Reviewable-style comments from review body
           # Format: *[`path/to/file.go` line 123 at r1](url):*
@@ -199,16 +254,16 @@ jobs:
           CLOUD_ML_REGION: us-east5
           # Pass user-controlled content via env vars to prevent prompt injection
           # For native review comments:
-          COMMENT_USER: ${{ github.event.comment.user.login || '' }}
-          COMMENT_PATH: ${{ github.event.comment.path || '' }}
-          COMMENT_LINE: ${{ github.event.comment.line || '' }}
-          COMMENT_BODY: ${{ github.event.comment.body || '' }}
+          COMMENT_USER: ${{ steps.context.outputs.comment_user }}
+          COMMENT_PATH: ${{ steps.context.outputs.comment_path }}
+          COMMENT_LINE: ${{ steps.context.outputs.comment_line }}
+          COMMENT_BODY: ${{ steps.context.outputs.comment_body }}
           # For Reviewable reviews:
-          REVIEW_USER: ${{ github.event.review.user.login || '' }}
-          REVIEW_BODY: ${{ github.event.review.body || '' }}
+          REVIEW_USER: ${{ steps.context.outputs.review_user }}
+          REVIEW_BODY: ${{ steps.context.outputs.review_body }}
           REVIEWABLE_COMMENTS: ${{ steps.parse_reviewable.outputs.reviewable_comments || '[]' }}
           # Common:
-          EVENT_TYPE: ${{ github.event_name }}
+          EVENT_TYPE: ${{ steps.context.outputs.event_name }}
           ALL_COMMENTS: ${{ steps.fetch_comments.outputs.comments }}
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
@@ -249,7 +304,7 @@ jobs:
             </untrusted_user_content>
 
             <task>
-            PR #${{ github.event.pull_request.number }} has received review feedback.
+            This PR has received review feedback.
 
             Instructions:
             1. Read CLAUDE.md for project conventions
@@ -379,7 +434,8 @@ jobs:
           # Force push to the fork
           # NOTE: This is safe because this workflow only runs on PRs with 'o-autosolver' label,
           # which are bot-owned branches. We never force push to branches owned by humans.
-          git push --force origin ${{ github.event.pull_request.head.ref }}
+          HEAD_REF="${{ steps.context.outputs.head_ref }}"
+          git push --force origin "$HEAD_REF"
 
           echo "pushed=true" >> "$GITHUB_OUTPUT"
 
@@ -387,6 +443,7 @@ jobs:
         if: steps.commit.outputs.pushed == 'true'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_NUMBER: ${{ steps.context.outputs.pr_number }}
           # Pass Claude output via env var to prevent command/markdown injection
           CLAUDE_RESULT: ${{ steps.claude_result.outputs.result }}
         run: |
@@ -412,7 +469,7 @@ jobs:
             echo ""
             echo "Please review the updated code."
           } > "$COMMENT_FILE"
-          gh pr comment ${{ github.event.pull_request.number }} --body-file "$COMMENT_FILE"
+          gh pr comment "$PR_NUMBER" --body-file "$COMMENT_FILE"
 
       - name: Post no-changes comment
         if: |
@@ -420,6 +477,7 @@ jobs:
           steps.commit.outputs.pushed == 'false'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_NUMBER: ${{ steps.context.outputs.pr_number }}
           # Pass Claude output via env var to prevent command/markdown injection
           CLAUDE_RESULT: ${{ steps.claude_result.outputs.result }}
         run: |
@@ -442,15 +500,17 @@ jobs:
             echo "$SANITIZED_RESULT"
             echo '```'
           } > "$COMMENT_FILE"
-          gh pr comment ${{ github.event.pull_request.number }} --body-file "$COMMENT_FILE"
+          gh pr comment "$PR_NUMBER" --body-file "$COMMENT_FILE"
 
       - name: Post failure comment
         if: |
           always() &&
+          steps.context.conclusion == 'success' &&
           (steps.claude_result.outputs.changes_status == 'FAILED' ||
            (steps.address.conclusion == 'failure' && steps.claude_result.conclusion != 'success'))
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_NUMBER: ${{ steps.context.outputs.pr_number }}
           CLAUDE_RESULT: ${{ steps.claude_result.outputs.result }}
         run: |
           COMMENT_FILE=$(mktemp)
@@ -473,4 +533,4 @@ jobs:
             echo ""
             echo "This may require human intervention."
           } > "$COMMENT_FILE"
-          gh pr comment ${{ github.event.pull_request.number }} --body-file "$COMMENT_FILE"
+          gh pr comment "$PR_NUMBER" --body-file "$COMMENT_FILE"

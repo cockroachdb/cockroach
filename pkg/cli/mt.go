@@ -14,7 +14,13 @@ import (
 
 func init() {
 	cockroachCmd.AddCommand(MTCmd)
-	MTCmd.AddCommand(mtStartSQLCmd)
+	MTCmd.AddCommand(
+		mtStartSQLCmd,
+		mtStartSQLProxyCmd,
+		mtCertsCmd,
+		mtTestDirectorySvr,
+		mtHTTPTestDirectorySvr,
+	)
 
 	mtCertsCmd.AddCommand(
 		mtCreateTenantCACertCmd,
@@ -22,7 +28,9 @@ func init() {
 		mtCreateTenantSigningCertCmd,
 	)
 
-	MTCmd.AddCommand(mtCertsCmd)
+	RegisterCommandWithCustomLogging(mtStartSQLProxyCmd)
+	RegisterCommandWithCustomLogging(mtTestDirectorySvr)
+	RegisterCommandWithCustomLogging(mtHTTPTestDirectorySvr)
 }
 
 // MTCmd is the base command for functionality related to multi-tenancy.
