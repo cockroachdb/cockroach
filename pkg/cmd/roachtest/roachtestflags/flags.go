@@ -470,6 +470,12 @@ var (
 			The http port on which to expose prom metrics from the roachtest
 			process`,
 	})
+	_ = registerRunOpsFlag(&PromPort, FlagInfo{
+		Name: "prom-port",
+		Usage: `
+			The http port on which to expose prom metrics from the roachtest
+			operations runner process`,
+	})
 
 	SelectProbability float64 = 1.0
 	_                         = registerRunFlag(&SelectProbability, FlagInfo{

@@ -9,8 +9,9 @@ import (
 	"context"
 	"fmt"
 	"math/rand"
+	"net/http"
 	"os"
-	"runtime/debug"
+	"strconv"
 	"sync"
 	"time"
 
@@ -24,10 +25,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachprod"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
+	"github.com/cockroachdb/cockroach/pkg/util/debugutil"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"golang.org/x/sync/errgroup"
 	"gopkg.in/yaml.v2"
 )
@@ -42,8 +45,9 @@ type opsRunner struct {
 	workloadClusterName string
 	workloadNodes       int
 
-	seed   int64
-	logger *logger.Logger
+	seed    int64
+	logger  *logger.Logger
+	metrics *operationMetrics
 
 	datadogEventClient *datadogV1.EventsApi
 	datadogTags        []string
@@ -90,12 +94,24 @@ func runOperations(register func(registry.Registry), filter, clusterName string)
 	ctx = newDatadogContext(ctx)
 	CtrlC(ctx, l, cancel, nil)
 
+	metrics := newOperationMetrics(r.PromFactory())
+
+	go func() {
+		if err := http.ListenAndServe(
+			fmt.Sprintf(":%d", roachtestflags.PromPort),
+			promhttp.HandlerFor(r.promRegistry, promhttp.HandlerOpts{}),
+		); err != nil {
+			l.Errorf("error serving prometheus: %v", err)
+		}
+	}()
+
 	or := opsRunner{
 		clusterName:             clusterName,
 		nodeCount:               cluster.VMs.Len(),
 		opsToRun:                opSpecs,
 		seed:                    seed,
 		logger:                  l,
+		metrics:                 metrics,
 		datadogEventClient:      datadogV1.NewEventsApi(datadog.NewAPIClient(datadog.NewConfiguration())),
 		datadogTags:             getDatadogTags(),
 		waitBeforeNextExecution: roachtestflags.WaitBeforeNextExecution,
@@ -126,22 +142,43 @@ func runOperations(register func(registry.Registry), filter, clusterName string)
 	return wg.Wait()
 }
 
+// setWorkerState updates the workerCurrentOperation gauge for a worker,
+// clearing the previous state and setting the new one.
+func (r *opsRunner) setWorkerState(workerLabel, prevOp, prevState, newOp, newState string) {
+	if prevOp != "" && prevState != "" {
+		r.metrics.workerCurrentOperation.
+			WithLabelValues(workerLabel, prevOp, prevState).Set(0)
+	}
+	if newOp != "" && newState != "" {
+		r.metrics.workerCurrentOperation.
+			WithLabelValues(workerLabel, newOp, newState).Set(1)
+	}
+}
+
 // runWorker manages the infinite loop for one operation runner worker.
 func (r *opsRunner) runWorker(ctx context.Context, workerIdx int, runForever bool) {
 	rng := rand.New(rand.NewSource(r.seed + int64(workerIdx)))
+	workerLabel := strconv.Itoa(workerIdx)
+
+	// Start idle.
+	r.setWorkerState(workerLabel, "", "", workerOperationIdle, workerStateIdle)
+
 	for {
 		if err := ctx.Err(); err != nil {
+			r.setWorkerState(workerLabel, workerOperationIdle, workerStateIdle, "", "")
 			return
 		}
 
 		opSpec := r.selectOperationToRun(ctx, rng, workerIdx)
 		if opSpec == nil {
+			// Already idle, stay idle.
 			sleepDuration := time.Duration(baseSleepTime+rng.Intn(baseSleepTime)) * time.Second
 			r.logger.Printf("[%d] couldn't find candidate operation to run, sleeping for %s", workerIdx, sleepDuration)
 			time.Sleep(sleepDuration)
 			continue
 		}
 
+		r.setWorkerState(workerLabel, workerOperationIdle, workerStateIdle, opSpec.NamePrefix(), workerStateExecuting)
 		_ = r.runOperation(ctx, opSpec, rng, workerIdx)
 		func() {
 			r.status.Lock()
@@ -154,11 +191,13 @@ func (r *opsRunner) runWorker(ctx context.Context, workerIdx int, runForever boo
 			r.status.lastRun[opSpec.NamePrefix()] = timeutil.Now()
 		}()
 
+		r.setWorkerState(workerLabel, opSpec.NamePrefix(), workerStateExecuting, workerOperationIdle, workerStateIdle)
+
 		if !runForever {
+			r.setWorkerState(workerLabel, workerOperationIdle, workerStateIdle, "", "")
 			return
 		}
-		// give sometime to worker before picking next operation to run
-		sleepDuration := time.Duration(5+rng.Intn(5)) * time.Minute
+		sleepDuration := time.Duration(1+rng.Intn(2)) * time.Minute
 		r.logger.Printf("[%d] going idle for %s", workerIdx, sleepDuration)
 		time.Sleep(sleepDuration)
 	}
@@ -179,19 +218,19 @@ func (r *opsRunner) selectOperationToRun(
 	r.status.Lock()
 	defer r.status.Unlock()
 
-	// operation which cannotRunConcurrently with other operation is currently running by another worker.
-	// blocking operation selection for now.
+	// operation which cannotRunConcurrently with other operation is currently
+	// running by another worker — blocking operation selection for now.
 	if r.status.lockOperationSelection {
 		return nil
 	}
 
-	// operation is already running choose another one
+	// operation is already running, choose another one
 	if _, ok := r.status.running[opSpec.NamePrefix()]; ok {
 		return nil
 	}
 
-	// If the time since the last run of the operation has not exceeded its cadence,
-	// choose another operation
+	// If the time since the last run of the operation has not exceeded its
+	// cadence, choose another operation.
 	if lastRun, ok := r.status.lastRun[opSpec.NamePrefix()]; ok {
 		nextRunTime := lastRun.Add(r.waitBeforeNextExecution)
 		if timeutil.Now().Before(nextRunTime) {
@@ -201,14 +240,17 @@ func (r *opsRunner) selectOperationToRun(
 
 	if opSpec.CanRunConcurrently == registry.OperationCannotRunConcurrently {
 		r.status.lockOperationSelection = true
-		// selected operation cannot run concurrently with other operations
-		// wait for other running operation completion
+		// selected operation cannot run concurrently with other operations —
+		// wait for other running operation completion.
+		workerLabel := strconv.Itoa(workerID)
 		for {
 			if len(r.status.running) == 0 {
 				break
 			}
+			r.setWorkerState(workerLabel, workerOperationIdle, workerStateIdle, opSpec.NamePrefix(), workerStateWaitingLock)
 			r.logger.Printf("[%d] operation: %s waiting for other operation to complete", workerID, opSpec.Name)
 			r.status.operationRunCompleted.Wait()
+			r.setWorkerState(workerLabel, opSpec.NamePrefix(), workerStateWaitingLock, workerOperationIdle, workerStateIdle)
 		}
 	}
 
@@ -222,14 +264,17 @@ func (r *opsRunner) runOperation(
 ) error {
 	// operationRunID is used for datadog event aggregation and logging.
 	operationRunID := rng.Uint64()
+	opName := opSpec.NamePrefix()
+	owner := string(opSpec.Owner)
+	workerLabel := strconv.Itoa(workerIdx)
 
-	defer func() {
-		if rc := recover(); rc != nil {
-			maybeEmitDatadogEvent(ctx, r.datadogEventClient, opSpec, r.clusterName, eventOpError, operationRunID, r.datadogTags)
-			r.logger.Printf("recovered from panic: %v", rc)
-			debug.PrintStack()
-		}
-	}()
+	r.metrics.activeOps.WithLabelValues(opName, workerLabel).Inc()
+	defer r.metrics.activeOps.WithLabelValues(opName, workerLabel).Dec()
+
+	emitter := newOperationEventEmitter(
+		ctx, r.datadogEventClient, opSpec, r.clusterName, operationRunID,
+		owner, workerLabel, r.datadogTags,
+	)
 
 	config := struct {
 		ClusterSettings install.ClusterSettings
@@ -259,6 +304,17 @@ func (r *opsRunner) runOperation(
 		spec:            opSpec,
 		workerId:        workerIdx,
 	}
+
+	defer func() {
+		if rc := recover(); rc != nil {
+			stack := debugutil.Stack()
+			// Include recorded failures (from o.Fatal) before the panic+stack entry
+			// so the actual error message surfaces in Datadog events.
+			failures := append(op.Failures(), fmt.Errorf("panic: %v\n\n%s", rc, stack))
+			emitter.EmitCompleted(resultPanicked, failures)
+			r.logger.Printf("recovered from panic: %v\n%s", rc, stack)
+		}
+	}()
 
 	cSpec := spec.ClusterSpec{NodeCount: r.nodeCount}
 	c := &dynamicClusterImpl{
@@ -291,17 +347,24 @@ func (r *opsRunner) runOperation(
 	op.mu.cancel = cancel
 	op.Status(fmt.Sprintf("checking if operation %s dependencies are met", opSpec.Name))
 
+	// Dependency check phase.
 	if roachtestflags.SkipDependencyCheck {
 		op.Status("skipping dependency check")
-	} else if ok, err := operations.CheckDependencies(ctx, c, r.logger, opSpec); !ok || err != nil {
+	} else {
+		ok, err := operations.CheckDependencies(ctx, c, r.logger, opSpec)
 		if err != nil {
+			emitter.EmitDepCheckFailed(depCheckError, []error{err})
 			op.Fatalf("error checking dependencies: %s", err)
 		}
-		op.Status("operation dependencies not met. Use --skip-dependency-check to skip this check.")
-		return nil
+		if !ok {
+			emitter.EmitDepCheckFailed(depCheckFailed, nil)
+			op.Status("operation dependencies not met. Use --skip-dependency-check to skip this check.")
+			return nil
+		}
 	}
 
-	maybeEmitDatadogEvent(ctx, r.datadogEventClient, opSpec, r.clusterName, eventOpStarted, operationRunID, r.datadogTags)
+	// Run phase.
+	emitter.EmitStarted()
 	op.Status(fmt.Sprintf("running operation %s with run id %d", op.spec.Name, operationRunID))
 	var cleanup registry.OperationCleanup
 	func() {
@@ -310,35 +373,39 @@ func (r *opsRunner) runOperation(
 
 		cleanup = opSpec.Run(ctx, op, c)
 	}()
+
 	if op.Failed() {
 		op.Status("operation failed")
-		maybeEmitDatadogEvent(ctx, r.datadogEventClient, opSpec, r.clusterName, eventOpError, operationRunID, r.datadogTags)
-		return op.mu.failures[0]
+		failures := op.Failures()
+		emitter.EmitCompleted(resultFailed, failures)
+		return failures[0]
 	}
 
-	maybeEmitDatadogEvent(ctx, r.datadogEventClient, opSpec, r.clusterName, eventOpRan, operationRunID, r.datadogTags)
+	emitter.EmitCompleted(resultSuccess, nil)
+
 	if cleanup == nil {
 		op.Status("operation ran successfully")
-		maybeEmitDatadogEvent(ctx, r.datadogEventClient, opSpec, r.clusterName, eventOpFinishedCleanup, operationRunID, r.datadogTags)
+		emitter.EmitCleanupCompleted(cleanupResultSkipped, nil)
 		return nil
 	}
 
 	waitBeforeCleanup := roachtestflags.WaitBeforeCleanup
 	if opSpec.WaitBeforeCleanup != 0 {
-		// if opSpec.WaitBeforeCleanup is set, use it instead of the default
 		waitBeforeCleanup = opSpec.WaitBeforeCleanup
 	}
 
+	r.metrics.pendingCleanups.WithLabelValues(opName).Inc()
 	op.Status(fmt.Sprintf("operation ran successfully; waiting %s before cleanup", waitBeforeCleanup))
 	select {
 	case <-time.After(waitBeforeCleanup):
-		// Wait completed successfully.
 	case <-ctx.Done():
-		// Context was canceled; exit early.
+		r.metrics.pendingCleanups.WithLabelValues(opName).Dec()
 		op.Status("context canceled during wait before cleanup")
 		return ctx.Err()
 	}
 
+	// Cleanup phase.
+	r.metrics.pendingCleanups.WithLabelValues(opName).Dec()
 	op.Status("running cleanup")
 	func() {
 		ctx, cancel := context.WithTimeout(context.Background(), opSpec.Timeout)
@@ -347,11 +414,17 @@ func (r *opsRunner) runOperation(
 		cleanup.Cleanup(ctx, op, c)
 	}()
 
+	cleanupResult := cleanupResultSuccess
+	var cleanupFailures []error
+	if op.Failed() {
+		cleanupResult = cleanupResultFailed
+		cleanupFailures = op.Failures()
+	}
+	emitter.EmitCleanupCompleted(cleanupResult, cleanupFailures)
+
 	if op.Failed() {
 		op.Status("operation cleanup failed")
-		maybeEmitDatadogEvent(ctx, r.datadogEventClient, opSpec, r.clusterName, eventOpError, operationRunID, r.datadogTags)
-		return op.mu.failures[0]
+		return op.Failures()[0]
 	}
-	maybeEmitDatadogEvent(ctx, r.datadogEventClient, opSpec, r.clusterName, eventOpFinishedCleanup, operationRunID, r.datadogTags)
 	return nil
 }

@@ -81,11 +81,10 @@ if [ -z "${DD_API_KEY}" ]; then
   exit 1
 fi
 
-while true; do
-  ./roachtest-operations run-operation "${CLUSTER}" ".*" \
-    --datadog-api-key "${DD_API_KEY}" \
-    --datadog-tags "env:development,cluster:${WORKLOAD_CLUSTER},team:drt,service:drt-cockroachdb" \
-    --certs-dir ./certs \
-    --cloud aws --workload-cluster "${WORKLOAD_CLUSTER}" | tee -a roachtest_ops.log
-  sleep 600
-done
+./roachtest-operations run-operation "${CLUSTER}" ".*" \
+  --datadog-api-key "${DD_API_KEY}" \
+  --datadog-app-key "unused" \
+  --datadog-tags "env:development,cluster:${CLUSTER},workload:${WORKLOAD_CLUSTER},team:drt,service:drt-cockroachdb" \
+  --certs-dir ./certs --prom-port 2115 \
+  --cloud "${CLOUD}" --workload-cluster "${WORKLOAD_CLUSTER}" --run-forever | tee -a roachtest_ops.log
+

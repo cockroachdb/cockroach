@@ -1,0 +1,623 @@
+{
+  "title": "DRT Operations Runner v2",
+  "description": "Observability dashboard for the roachtest operations runner. Uses Datadog events for streams and gauges for current state.",
+  "widgets": [
+    {
+      "id": 6844866719167520,
+      "definition": {
+        "title": "Executions",
+        "type": "group",
+        "layout_type": "ordered",
+        "widgets": [
+          {
+            "id": 7830604519284064,
+            "definition": {
+              "title": "Currently Running Operations",
+              "type": "query_value",
+              "requests": [
+                {
+                  "response_format": "scalar",
+                  "queries": [
+                    {
+                      "data_source": "metrics",
+                      "name": "query1",
+                      "query": "sum:roachtest_operation_active_operations{cluster:$cluster.value}",
+                      "aggregator": "last"
+                    }
+                  ]
+                }
+              ],
+              "precision": 0
+            },
+            "layout": {
+              "x": 0,
+              "y": 0,
+              "width": 3,
+              "height": 1
+            }
+          },
+          {
+            "id": 8706777004172329,
+            "definition": {
+              "title": "Total Operations Executed",
+              "type": "query_value",
+              "requests": [
+                {
+                  "queries": [
+                    {
+                      "data_source": "events",
+                      "name": "a",
+                      "search": {
+                        "query": "cluster:$cluster.value phase:run result:(success OR failed OR panicked)"
+                      },
+                      "compute": {
+                        "aggregation": "count"
+                      }
+                    }
+                  ],
+                  "formulas": [
+                    {
+                      "formula": "a"
+                    }
+                  ],
+                  "response_format": "scalar"
+                }
+              ],
+              "precision": 0
+            },
+            "layout": {
+              "x": 3,
+              "y": 0,
+              "width": 3,
+              "height": 1
+            }
+          },
+          {
+            "id": 7761887439129290,
+            "definition": {
+              "title": "Currently Active Operations",
+              "type": "query_table",
+              "requests": [
+                {
+                  "response_format": "scalar",
+                  "queries": [
+                    {
+                      "data_source": "metrics",
+                      "name": "query1",
+                      "query": "sum:roachtest_operation_active_operations{cluster:$cluster.value} by {operation,worker}",
+                      "aggregator": "last"
+                    }
+                  ],
+                  "formulas": [
+                    {
+                      "formula": "query1",
+                      "alias": "active",
+                      "conditional_formats": [
+                        {
+                          "comparator": ">",
+                          "value": 0,
+                          "palette": "white_on_green"
+                        },
+                        {
+                          "comparator": "<=",
+                          "value": 0,
+                          "palette": "white_on_gray"
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            },
+            "layout": {
+              "x": 6,
+              "y": 0,
+              "width": 6,
+              "height": 3
+            }
+          },
+          {
+            "id": 3869064051060210,
+            "definition": {
+              "title": "Total Operations Succeeded",
+              "type": "query_value",
+              "requests": [
+                {
+                  "queries": [
+                    {
+                      "name": "a",
+                      "data_source": "events",
+                      "search": {
+                        "query": "cluster:$cluster.value phase:run result:(success)"
+                      },
+                      "indexes": [
+                        "*"
+                      ],
+                      "group_by": [],
+                      "compute": {
+                        "aggregation": "count"
+                      },
+                      "storage": "hot"
+                    }
+                  ],
+                  "formulas": [
+                    {
+                      "formula": "a"
+                    }
+                  ],
+                  "response_format": "scalar"
+                }
+              ],
+              "precision": 0
+            },
+            "layout": {
+              "x": 0,
+              "y": 1,
+              "width": 3,
+              "height": 1
+            }
+          },
+          {
+            "id": 7119760008279525,
+            "definition": {
+              "title": "Operation Success Rate",
+              "type": "query_value",
+              "requests": [
+                {
+                  "queries": [
+                    {
+                      "name": "a",
+                      "data_source": "events",
+                      "search": {
+                        "query": "cluster:$cluster.value phase:run result:(success)"
+                      },
+                      "indexes": [
+                        "*"
+                      ],
+                      "group_by": [],
+                      "compute": {
+                        "aggregation": "count"
+                      },
+                      "storage": "hot"
+                    },
+                    {
+                      "name": "query1",
+                      "data_source": "events",
+                      "search": {
+                        "query": "cluster:$cluster.value phase:run result:(success OR failed OR panicked)"
+                      },
+                      "indexes": [
+                        "*"
+                      ],
+                      "group_by": [],
+                      "compute": {
+                        "aggregation": "count"
+                      },
+                      "storage": "hot"
+                    }
+                  ],
+                  "formulas": [
+                    {
+                      "formula": "a / query1 * 100",
+                      "number_format": {
+                        "unit": {
+                          "type": "canonical_unit",
+                          "unit_name": "percent"
+                        }
+                      }
+                    }
+                  ],
+                  "response_format": "scalar"
+                }
+              ],
+              "precision": 0
+            },
+            "layout": {
+              "x": 3,
+              "y": 1,
+              "width": 3,
+              "height": 1
+            }
+          },
+          {
+            "id": 365442178071209,
+            "definition": {
+              "title": "Total Operations Failed",
+              "type": "query_value",
+              "requests": [
+                {
+                  "queries": [
+                    {
+                      "name": "a",
+                      "data_source": "events",
+                      "search": {
+                        "query": "cluster:$cluster.value phase:run result:(failed)"
+                      },
+                      "indexes": [
+                        "*"
+                      ],
+                      "group_by": [],
+                      "compute": {
+                        "aggregation": "count"
+                      },
+                      "storage": "hot"
+                    }
+                  ],
+                  "formulas": [
+                    {
+                      "formula": "a"
+                    }
+                  ],
+                  "response_format": "scalar"
+                }
+              ],
+              "precision": 0
+            },
+            "layout": {
+              "x": 0,
+              "y": 2,
+              "width": 3,
+              "height": 1
+            }
+          },
+          {
+            "id": 1349130806248567,
+            "definition": {
+              "title": "Total Operations Panicked",
+              "type": "query_value",
+              "requests": [
+                {
+                  "queries": [
+                    {
+                      "name": "a",
+                      "data_source": "events",
+                      "search": {
+                        "query": "cluster:$cluster.value phase:run result:(panicked)"
+                      },
+                      "indexes": [
+                        "*"
+                      ],
+                      "group_by": [],
+                      "compute": {
+                        "aggregation": "count"
+                      },
+                      "storage": "hot"
+                    }
+                  ],
+                  "formulas": [
+                    {
+                      "formula": "a"
+                    }
+                  ],
+                  "response_format": "scalar"
+                }
+              ],
+              "precision": 0
+            },
+            "layout": {
+              "x": 3,
+              "y": 2,
+              "width": 3,
+              "height": 1
+            }
+          },
+          {
+            "id": 4918230571639842,
+            "definition": {
+              "title": "Executions Count Per Operation",
+              "time": {},
+              "type": "query_table",
+              "requests": [
+                {
+                  "queries": [
+                    {
+                      "name": "a",
+                      "data_source": "events",
+                      "search": {
+                        "query": "cluster:$cluster.value phase:run result:(success OR failed OR panicked)"
+                      },
+                      "indexes": [
+                        "*"
+                      ],
+                      "group_by": [
+                        {
+                          "facet": "operation-name",
+                          "limit": 50,
+                          "sort": {
+                            "aggregation": "count",
+                            "order": "desc"
+                          }
+                        }
+                      ],
+                      "compute": {
+                        "aggregation": "count"
+                      },
+                      "storage": "hot"
+                    }
+                  ],
+                  "response_format": "scalar",
+                  "formulas": [
+                    {
+                      "formula": "a",
+                      "alias": "executions"
+                    }
+                  ]
+                }
+              ]
+            },
+            "layout": {
+              "x": 0,
+              "y": 3,
+              "width": 12,
+              "height": 3
+            }
+          }
+        ]
+      },
+      "layout": {
+        "x": 0,
+        "y": 0,
+        "width": 12,
+        "height": 7
+      }
+    },
+    {
+      "id": 6570812673100223,
+      "definition": {
+        "title": "Workers",
+        "type": "group",
+        "layout_type": "ordered",
+        "widgets": [
+          {
+            "id": 309960646447406,
+            "definition": {
+              "title": "Workers and State",
+              "type": "query_table",
+              "requests": [
+                {
+                  "response_format": "scalar",
+                  "queries": [
+                    {
+                      "data_source": "metrics",
+                      "name": "query1",
+                      "query": "sum:roachtest_operation_worker_current_operation{cluster:$cluster.value} by {worker,state}",
+                      "aggregator": "last"
+                    }
+                  ],
+                  "formulas": [
+                    {
+                      "formula": "query1",
+                      "alias": "status"
+                    }
+                  ]
+                }
+              ]
+            },
+            "layout": {
+              "x": 0,
+              "y": 0,
+              "width": 4,
+              "height": 2
+            }
+          },
+          {
+            "id": 5032931957840174,
+            "definition": {
+              "title": "Worker-Operation Timeseries",
+              "show_legend": false,
+              "type": "timeseries",
+              "requests": [
+                {
+                  "response_format": "timeseries",
+                  "queries": [
+                    {
+                      "data_source": "metrics",
+                      "name": "query1",
+                      "query": "sum:roachtest_operation_worker_current_operation{state:executing,cluster:$cluster.value} by {worker,operation}"
+                    }
+                  ],
+                  "display_type": "area"
+                }
+              ]
+            },
+            "layout": {
+              "x": 5,
+              "y": 0,
+              "width": 4,
+              "height": 2
+            }
+          }
+        ]
+      },
+      "layout": {
+        "x": 0,
+        "y": 7,
+        "width": 12,
+        "height": 3
+      }
+    },
+    {
+      "id": 7256790409669781,
+      "definition": {
+        "title": "Cleanups",
+        "type": "group",
+        "layout_type": "ordered",
+        "widgets": [
+          {
+            "id": 5598678960410012,
+            "definition": {
+              "title": "Pending Cleanups",
+              "type": "query_table",
+              "requests": [
+                {
+                  "response_format": "scalar",
+                  "queries": [
+                    {
+                      "data_source": "metrics",
+                      "name": "query1",
+                      "query": "sum:roachtest_operation_pending_cleanups{cluster:$cluster.value} by {operation}",
+                      "aggregator": "last"
+                    }
+                  ],
+                  "formulas": [
+                    {
+                      "formula": "query1",
+                      "alias": "pending",
+                      "conditional_formats": [
+                        {
+                          "comparator": ">",
+                          "value": 0,
+                          "palette": "yellow_on_white"
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            },
+            "layout": {
+              "x": 0,
+              "y": 0,
+              "width": 4,
+              "height": 3
+            }
+          },
+          {
+            "id": 3436750958343098,
+            "definition": {
+              "title": "Cleanup Failures",
+              "requests": [
+                {
+                  "query": {
+                    "query_string": "cluster:$cluster.value phase:cleanup result:failed",
+                    "data_source": "event_stream",
+                    "event_size": "s"
+                  },
+                  "columns": [],
+                  "response_format": "event_list"
+                }
+              ],
+              "type": "list_stream"
+            },
+            "layout": {
+              "x": 4,
+              "y": 0,
+              "width": 8,
+              "height": 3
+            }
+          }
+        ]
+      },
+      "layout": {
+        "x": 0,
+        "y": 10,
+        "width": 12,
+        "height": 4,
+        "is_column_break": true
+      }
+    },
+    {
+      "id": 4268083574471386,
+      "definition": {
+        "title": "Events",
+        "type": "group",
+        "layout_type": "ordered",
+        "widgets": [
+          {
+            "id": 4287333198026765,
+            "definition": {
+              "title": "Operation Event Stream",
+              "requests": [
+                {
+                  "query": {
+                    "query_string": "cluster:$cluster.value phase:run",
+                    "data_source": "event_stream",
+                    "event_size": "s"
+                  },
+                  "columns": [],
+                  "response_format": "event_list"
+                }
+              ],
+              "type": "list_stream"
+            },
+            "layout": {
+              "x": 0,
+              "y": 0,
+              "width": 6,
+              "height": 4
+            }
+          },
+          {
+            "id": 2628075111062195,
+            "definition": {
+              "title": "Errors & Failures",
+              "requests": [
+                {
+                  "query": {
+                    "query_string": "cluster:$cluster.value result:(failed OR panicked) phase:run",
+                    "data_source": "event_stream",
+                    "event_size": "s"
+                  },
+                  "columns": [],
+                  "response_format": "event_list"
+                }
+              ],
+              "type": "list_stream"
+            },
+            "layout": {
+              "x": 6,
+              "y": 0,
+              "width": 6,
+              "height": 4
+            }
+          },
+          {
+            "id": 2707925680156456,
+            "definition": {
+              "title": "Dependency Check Failures",
+              "requests": [
+                {
+                  "query": {
+                    "query_string": "cluster:$cluster.value phase:dependency-check",
+                    "data_source": "event_stream",
+                    "event_size": "s"
+                  },
+                  "columns": [],
+                  "response_format": "event_list"
+                }
+              ],
+              "type": "list_stream"
+            },
+            "layout": {
+              "x": 0,
+              "y": 4,
+              "width": 6,
+              "height": 4
+            }
+          }
+        ]
+      },
+      "layout": {
+        "x": 0,
+        "y": 14,
+        "width": 12,
+        "height": 9
+      }
+    }
+  ],
+  "template_variables": [
+    {
+      "name": "cluster",
+      "prefix": "cluster",
+      "available_values": [],
+      "default": "*"
+    }
+  ],
+  "layout_type": "ordered",
+  "notify_list": [],
+  "pause_auto_refresh": false,
+  "reflow_type": "fixed",
+  "tags": [
+    "team:drt"
+  ]
+}

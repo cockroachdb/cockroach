@@ -145,6 +145,13 @@ func (o *operationImpl) Failed() bool {
 	return len(o.mu.failures) > 0
 }
 
+// Failures returns a copy of the recorded failures.
+func (o *operationImpl) Failures() []error {
+	o.mu.RLock()
+	defer o.mu.RUnlock()
+	return append([]error(nil), o.mu.failures...)
+}
+
 // WorkloadCluster can return nil if o.workLoadCluster is not set.
 func (o *operationImpl) WorkloadCluster() cluster.Cluster {
 	if o.workLoadCluster == nil {
