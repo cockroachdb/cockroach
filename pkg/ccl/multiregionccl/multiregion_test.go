@@ -276,7 +276,7 @@ func TestSuperRegionConstraintConformance(t *testing.T) {
 	skip.UnderShort(t)
 	skip.UnderDuress(t)
 
-	// The topology uses 4 regions across 8 nodes (2 per region):
+	// The topology uses 5 regions across 10 nodes (2 per region):
 	//
 	//   - Super region "americas": {us-east-1, us-central-1, us-west-1} — a
 	//     non-primary super region, exercising the AddConstraintsForSuperRegion
@@ -284,6 +284,9 @@ func TestSuperRegionConstraintConformance(t *testing.T) {
 	//   - Primary region: {ap-southeast-1} — outside any super region, which
 	//     also ensures RBR partitions and RBT tables homing here get normal
 	//     inherited constraints rather than super-region-confined ones.
+	//   - Secondary region: {eu-west-1} — outside any super region, used to
+	//     verify that super-region-confined partitions do not leak this region
+	//     into their lease_preferences (#164422).
 	//
 	// With exactly 3 regions per super region + SURVIVE REGION FAILURE, we get
 	// 5 voters and 0 non-voters — the tightest possible constraint configuration
@@ -292,6 +295,7 @@ func TestSuperRegionConstraintConformance(t *testing.T) {
 	regionNames := []string{
 		"ap-southeast-1",                         // primary (standalone)
 		"us-east-1", "us-central-1", "us-west-1", // super region "americas"
+		"eu-west-1", // secondary region (standalone)
 	}
 	tc, sqlDB, cleanup :=
 		multiregionccltestutils.TestingCreateMultiRegionClusterWithRegionList(
@@ -310,22 +314,23 @@ func TestSuperRegionConstraintConformance(t *testing.T) {
 	tdb.Exec(t, "SET CLUSTER SETTING kv.closed_timestamp.side_transport_interval = '10ms'")
 	tdb.Exec(t, "SET CLUSTER SETTING kv.rangefeed.closed_timestamp_refresh_interval = '10ms'")
 
-	// Setup MR database with all 4 regions.
+	// Setup MR database with all 5 regions.
 	tdb.Exec(t, `CREATE DATABASE testdb PRIMARY REGION "ap-southeast-1"
-		REGIONS "us-east-1", "us-central-1", "us-west-1"`)
+		REGIONS "us-east-1", "us-central-1", "us-west-1", "eu-west-1"`)
 	tdb.Exec(t, `SET enable_super_regions = 'on'`)
 	tdb.Exec(t, `ALTER DATABASE testdb ADD SUPER REGION "americas"
 		VALUES "us-east-1", "us-central-1", "us-west-1"`)
+	tdb.Exec(t, `ALTER DATABASE testdb SET SECONDARY REGION "eu-west-1"`) // Set a secondary outside the super region.
 	tdb.Exec(t, `ALTER DATABASE testdb SURVIVE REGION FAILURE`)
 
-	// Create a REGIONAL BY ROW table with rows in all 4 regions, exercising
+	// Create a REGIONAL BY ROW table with rows in all 5 regions, exercising
 	// every partition's subzone config — both super-region-confined and normal.
 	tdb.Exec(t,
 		`CREATE TABLE testdb.rbr(k INT PRIMARY KEY, v INT)
 		 LOCALITY REGIONAL BY ROW`)
 	tdb.Exec(t, `INSERT INTO testdb.rbr(crdb_region, k, v) VALUES
 		('us-east-1', 1, 10), ('us-central-1', 2, 20), ('us-west-1', 3, 30),
-		('ap-southeast-1', 4, 40)`)
+		('ap-southeast-1', 4, 40), ('eu-west-1', 5, 50)`)
 
 	// RBT in a super region (non-primary). Tests AddConstraintsForSuperRegion
 	// at the table level.
@@ -361,20 +366,30 @@ func TestSuperRegionConstraintConformance(t *testing.T) {
 		}
 	}
 	// RBT in super region: all replicas confined to americas super region.
+	// The secondary region (eu-west-1) must NOT appear in lease_preferences
+	// because no replica can exist outside the super region.
 	verifyZoneConfig(
 		`SHOW ZONE CONFIGURATION FOR TABLE testdb.rbt_sr`,
 		[]string{
 			"voter_constraints", "us-east-1",
 			"constraints", "us-central-1", "us-west-1",
+			"lease_preferences = '[[+region=us-east-1]]'",
 		},
 	)
 	// RBT in primary region (standalone): voters in ap-southeast-1, no super
-	// region confinement.
+	// region confinement. The secondary region correctly appears here.
 	verifyZoneConfig(
 		`SHOW ZONE CONFIGURATION FOR TABLE testdb.rbt_standalone`,
-		[]string{"voter_constraints", "ap-southeast-1"},
+		[]string{
+			"voter_constraints", "ap-southeast-1",
+			"lease_preferences = '[[+region=ap-southeast-1], [+region=eu-west-1]]'",
+		},
 	)
-	// RBR partitions inside the super region.
+	// RBR partitions inside the super region. The secondary region
+	// (eu-west-1) must NOT appear in lease_preferences because no replica
+	// can exist outside the super region (#164422). The exact
+	// lease_preferences assertion ensures only the partition's own region
+	// is listed.
 	for _, region := range []string{"us-east-1", "us-central-1", "us-west-1"} {
 		verifyZoneConfig(
 			fmt.Sprintf(
@@ -383,13 +398,30 @@ func TestSuperRegionConstraintConformance(t *testing.T) {
 			[]string{
 				"voter_constraints", region,
 				"constraints", "us-east-1", "us-central-1", "us-west-1",
+				fmt.Sprintf(
+					"lease_preferences = '[[+region=%s]]'", region),
 			},
 		)
 	}
-	// RBR partition outside any super region.
+	// RBR partition outside any super region. The secondary region
+	// (eu-west-1) correctly appears in lease_preferences here because this
+	// partition is not confined to a super region.
 	verifyZoneConfig(
 		`SHOW ZONE CONFIGURATION FOR PARTITION "ap-southeast-1" OF TABLE testdb.rbr`,
-		[]string{"voter_constraints", "ap-southeast-1"},
+		[]string{
+			"voter_constraints", "ap-southeast-1",
+			"lease_preferences = '[[+region=ap-southeast-1], [+region=eu-west-1]]'",
+		},
+	)
+	// RBR partition for the secondary region itself, outside any super
+	// region. The secondary region is the partition's own region so
+	// lease_preferences list it once.
+	verifyZoneConfig(
+		`SHOW ZONE CONFIGURATION FOR PARTITION "eu-west-1" OF TABLE testdb.rbr`,
+		[]string{
+			"voter_constraints", "eu-west-1",
+			"lease_preferences = '[[+region=eu-west-1]]'",
+		},
 	)
 
 	forceProcess := func() error {

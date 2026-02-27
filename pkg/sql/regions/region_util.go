@@ -113,9 +113,19 @@ func ZoneConfigForMultiRegionTable(
 		if err != nil {
 			return zonepb.ZoneConfig{}, err
 		}
+		secondaryRegion := regionConfig.SecondaryRegion()
+		if SecondaryRegionOutsideSuperRegion(affinityRegion, regionConfig) {
+			// Remove the secondary region voter constraint; it references a
+			// region outside the super region where no replica can exist.
+			voterConstraints, err = removeSecondaryVoterConstraint(voterConstraints)
+			if err != nil {
+				return zonepb.ZoneConfig{}, err
+			}
+			secondaryRegion = ""
+		}
 		zc.VoterConstraints = voterConstraints
 		zc.NullVoterConstraintsIsEmpty = true
-		zc.LeasePreferences = SynthesizeLeasePreferences(affinityRegion, "" /* secondaryRegion */)
+		zc.LeasePreferences = SynthesizeLeasePreferences(affinityRegion, secondaryRegion)
 		zc.InheritedLeasePreferences = false
 
 		return regionConfig.ExtendZoneConfigWithRegionalIn(zc, affinityRegion)
@@ -163,16 +173,79 @@ func ZoneConfigForMultiRegionPartition(
 		zc.InheritedConstraints = false
 	}
 
+	// For partitions that are confined to a super region, the secondary region
+	// must not appear in voter_constraints or lease_preferences if it lies
+	// outside the super region, because all replicas are confined to the super
+	// region. We clear the secondary region for both.
+	secondaryOutside := SecondaryRegionOutsideSuperRegion(partitionRegion, regionConfig)
 	voterConstraints, err := SynthesizeVoterConstraints(partitionRegion, regionConfig)
 	if err != nil {
 		return zonepb.ZoneConfig{}, err
 	}
+	if secondaryOutside {
+		// Remove the secondary region voter constraint that
+		// SynthesizeVoterConstraints added; it references a region
+		// outside the super region where no replica can exist.
+		voterConstraints, err = removeSecondaryVoterConstraint(voterConstraints)
+		if err != nil {
+			return zonepb.ZoneConfig{}, err
+		}
+	}
 	zc.VoterConstraints = voterConstraints
 	zc.NullVoterConstraintsIsEmpty = true
-	zc.LeasePreferences = SynthesizeLeasePreferences(partitionRegion, regionConfig.SecondaryRegion())
+	secondaryRegion := regionConfig.SecondaryRegion()
+	if secondaryOutside {
+		secondaryRegion = ""
+	}
+	zc.LeasePreferences = SynthesizeLeasePreferences(partitionRegion, secondaryRegion)
 	zc.InheritedLeasePreferences = false
 
 	return regionConfig.ExtendZoneConfigWithRegionalIn(zc, partitionRegion)
+}
+
+// SecondaryRegionOutsideSuperRegion returns true when the given region belongs
+// to a super region and the database's secondary region is set but is NOT a
+// member of that same super region.
+func SecondaryRegionOutsideSuperRegion(
+	region catpb.RegionName, regionConfig multiregion.RegionConfig,
+) bool {
+	if !regionConfig.HasSecondaryRegion() {
+		return false
+	}
+	superRegionMembers, ok := regionConfig.GetSuperRegionRegionsForRegion(region)
+	if !ok {
+		return false
+	}
+	secondary := regionConfig.SecondaryRegion()
+	for _, r := range superRegionMembers {
+		if r == secondary {
+			return false
+		}
+	}
+	return true
+}
+
+// removeSecondaryVoterConstraint strips the secondary-region entry that
+// SynthesizeVoterConstraints appends when a secondary region is configured.
+// This is needed for super-region-confined tables/partitions where the
+// secondary region lies outside the super region and no replica can exist
+// there.
+//
+// SynthesizeVoterConstraints returns at most two elements (one under zone
+// survival, up to two under region survival): the first for the home region,
+// and an optional second for the secondary region. We keep only the first.
+func removeSecondaryVoterConstraint(
+	vc []zonepb.ConstraintsConjunction,
+) ([]zonepb.ConstraintsConjunction, error) {
+	switch len(vc) {
+	case 1:
+		return vc, nil
+	case 2:
+		return vc[:1], nil
+	default:
+		return nil, errors.AssertionFailedf(
+			"expected 1 or 2 voter constraints, got %d", len(vc))
+	}
 }
 
 // IsPlaceholderZoneConfigForMultiRegion returns whether a given zone config
