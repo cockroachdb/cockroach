@@ -722,7 +722,14 @@ func (b *Builder) resolveDataSourceRef(
 func (b *Builder) checkPrivilege(name opt.MDDepName, ds cat.DataSource, privs ...privilege.Kind) {
 	priv := privs[0]
 	if priv == privilege.SELECT && b.skipSelectPrivilegeChecks {
-		// The check is skipped, so don't recheck when dependencies are checked.
+		// We skip the session user's SELECT check, but if we're inside a view,
+		// verify that the view owner still has SELECT on this data source.
+		if !b.viewOwnerForSelectChecks.Undefined() {
+			if err := b.catalog.CheckPrivilege(b.ctx, ds, b.viewOwnerForSelectChecks, priv); err != nil {
+				panic(err)
+			}
+		}
+		// Don't recheck session user privileges when dependencies are checked.
 		b.factory.Metadata().AddDependency(name, ds, 0)
 		return
 	}

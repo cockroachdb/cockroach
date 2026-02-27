@@ -797,6 +797,9 @@ type View struct {
 	ColumnNames tree.NameList
 	Triggers    []Trigger
 
+	// ViewOwner is the owner of this view.
+	ViewOwner username.SQLUsername
+
 	// If Revoked is true, then the user has had privileges on the view revoked.
 	Revoked bool
 }
@@ -846,6 +849,14 @@ func (tv *View) fqName() cat.DataSourceName {
 // IsSystemView is part of the cat.View interface.
 func (tv *View) IsSystemView() bool {
 	return false
+}
+
+// Owner is part of the cat.View interface.
+func (tv *View) Owner() username.SQLUsername {
+	if tv.ViewOwner.Undefined() {
+		return username.RootUserName()
+	}
+	return tv.ViewOwner
 }
 
 // Query is part of the cat.View interface.

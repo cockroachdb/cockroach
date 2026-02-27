@@ -10,6 +10,7 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
@@ -33,6 +34,15 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/intsets"
 	"github.com/cockroachdb/errors"
+)
+
+var checkViewOwnerPrivileges = settings.RegisterBoolSetting(
+	settings.ApplicationLevel,
+	"sql.auth.check_view_owner_privileges.enabled",
+	"if true, verify that the view owner retains SELECT privilege on "+
+		"underlying tables when a query uses the view",
+	true,
+	settings.WithPublic,
 )
 
 // buildDataSource builds a set of memo groups that represent the given table
@@ -352,6 +362,17 @@ func (b *Builder) buildView(
 	if !b.skipSelectPrivilegeChecks {
 		b.skipSelectPrivilegeChecks = true
 		defer func() { b.skipSelectPrivilegeChecks = false }()
+	}
+	// Even though we skip the session user's SELECT privilege check above, we
+	// still need to verify that the view owner retains SELECT on the underlying
+	// tables. This mirrors PostgreSQL behavior: if the view owner's SELECT is
+	// revoked, queries through the view fail. Save/restore per view level so
+	// nested views each check their own owner.
+	if !view.IsSystemView() &&
+		checkViewOwnerPrivileges.Get(&b.evalCtx.Settings.SV) {
+		savedOwner := b.viewOwnerForSelectChecks
+		b.viewOwnerForSelectChecks = view.Owner()
+		defer func() { b.viewOwnerForSelectChecks = savedOwner }()
 	}
 	// We are only interested in the direct dependency on this view descriptor.
 	// Any further dependency by the view's query should not be tracked.

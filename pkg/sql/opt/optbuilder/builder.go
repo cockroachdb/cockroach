@@ -119,6 +119,13 @@ type Builder struct {
 	// be used with care.
 	skipSelectPrivilegeChecks bool
 
+	// viewOwnerForSelectChecks stores the view owner when building within a
+	// view body. When skipSelectPrivilegeChecks is true and this is set, we
+	// perform a build-time privilege check as the view owner on underlying
+	// tables. This ensures the view owner still has SELECT privilege on the
+	// tables the view references.
+	viewOwnerForSelectChecks username.SQLUsername
+
 	// views contains a cache of views that have already been parsed, in case they
 	// are referenced multiple times in the same query.
 	views map[cat.View]*tree.Select

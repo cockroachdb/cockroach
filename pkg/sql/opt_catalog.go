@@ -805,6 +805,11 @@ func (ov *optView) IsSystemView() bool {
 	return ov.desc.IsVirtualTable()
 }
 
+// Owner is part of the cat.View interface.
+func (ov *optView) Owner() username.SQLUsername {
+	return ov.desc.GetPrivileges().Owner()
+}
+
 // Query is part of the cat.View interface.
 func (ov *optView) Query() string {
 	return ov.desc.GetViewQuery()

@@ -8,6 +8,7 @@ package cat
 import (
 	"bytes"
 
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/treeprinter"
 )
@@ -33,6 +34,10 @@ type View interface {
 	// IsSystemView returns true if this view is a system view (like
 	// crdb_internal.ranges).
 	IsSystemView() bool
+
+	// Owner returns the owner of this view. This is used to check that the
+	// view owner retains SELECT privilege on underlying tables.
+	Owner() username.SQLUsername
 
 	// TriggerCount returns the number of triggers present on the view.
 	TriggerCount() int
