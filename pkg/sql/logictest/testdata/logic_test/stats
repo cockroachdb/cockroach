@@ -111,6 +111,46 @@ FROM [SHOW STATISTICS FOR TABLE t139381]
 {j}  histogram_collected
 {v}  histogram_collected
 
+# Regression test related to #163346. Do not collect histograms on non-indexed
+# JSON columns by default if it is in partial index.
+statement ok
+RESET CLUSTER SETTING sql.stats.non_indexed_json_histograms.enabled;
+
+statement ok
+CREATE TABLE t163346 (
+    k INT PRIMARY KEY,
+    j JSONB
+);
+
+statement ok
+CREATE INDEX idx_partial_163346 ON t163346 (k) WHERE j->>'a' = '1';
+
+statement ok
+ANALYZE t163346
+
+query TT rowsort
+SELECT column_names, IF(histogram_id IS NOT NULL, 'histogram_collected', 'no_histogram_collected')
+FROM [SHOW STATISTICS FOR TABLE t163346]
+----
+{k}  histogram_collected
+{j}  no_histogram_collected
+
+statement ok
+SET CLUSTER SETTING sql.stats.non_indexed_json_histograms.enabled = true
+
+statement ok
+ANALYZE t163346
+
+query TT rowsort
+SELECT column_names, IF(histogram_id IS NOT NULL, 'histogram_collected', 'no_histogram_collected')
+FROM [SHOW STATISTICS FOR TABLE t163346]
+----
+{k}  histogram_collected
+{j}  histogram_collected
+
+statement ok
+RESET CLUSTER SETTING sql.stats.non_indexed_json_histograms.enabled;
+
 # Regression test for inflating the distinct count due to including column ID
 # delta in the sketch (#141448).
 statement ok

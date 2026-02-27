@@ -728,9 +728,14 @@ func createStatsDefaultColumns(
 			return nil
 		}
 
+		hasHistogram := !isInverted
+		if col.GetType().Family() == types.JsonFamily {
+			hasHistogram = nonIndexJSONHistograms
+		}
+
 		colStat := jobspb.CreateStatsDetails_ColStat{
 			ColumnIDs:           colIDs,
-			HasHistogram:        !isInverted,
+			HasHistogram:        hasHistogram,
 			HistogramMaxBuckets: defaultHistogramBuckets,
 		}
 		colStats = append(colStats, colStat)
