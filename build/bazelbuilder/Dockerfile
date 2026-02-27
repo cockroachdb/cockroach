@@ -43,6 +43,7 @@ RUN apt-get update \
     netbase \
     openjdk-8-jre \
     openssh-client \
+    patch \
     python-is-python3 \
     python3 \
     python3.12-venv \
