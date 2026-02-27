@@ -297,7 +297,7 @@ func (ltc *LocalTestCluster) Start(t testing.TB, initFactory InitFactoryFn) {
 
 	if err := kvserver.WriteInitialClusterData(
 		ctx,
-		ltc.Eng.TODOEngine(),
+		ltc.Eng,
 		initialValues,
 		clusterversion.Latest.Version(),
 		1, /* numStores */
