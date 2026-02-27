@@ -482,6 +482,18 @@ Co-Authored-By: Claude <noreply@anthropic.com>"
           } > "$COMMENT_FILE"
           gh pr comment "$PR_NUMBER" --body-file "$COMMENT_FILE"
 
+      - name: Re-request review from commenter
+        if: steps.commit.outputs.pushed == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_NUMBER: ${{ steps.context.outputs.pr_number }}
+          REVIEWER: ${{ steps.context.outputs.actor }}
+        run: |
+          # Re-request review so the reviewer is notified that their feedback was addressed
+          gh api "repos/${{ github.repository }}/pulls/${PR_NUMBER}/requested_reviewers" \
+            -f "reviewers[]=${REVIEWER}" 2>/dev/null || \
+            echo "::warning::Could not re-request review from ${REVIEWER}"
+
       - name: Post no-changes comment
         if: |
           steps.claude_result.outputs.changes_status == 'SUCCESS' &&
