@@ -153,6 +153,9 @@ func WriteInitialClusterData(
 			ctx, 2, "creating range %d [%s, %s). Initial values: %d",
 			desc.RangeID, desc.StartKey, desc.EndKey, len(rangeInitialValues))
 
+		// TODO(#97616): the ranges are written one by one, so it is possible to end
+		// up with a partially initialized store if there is a crash in the middle.
+		// Write through a single batch, or find another way to make this atomic.
 		err := func() error {
 			batch := eng.NewBatch()
 			defer batch.Close()
@@ -249,6 +252,10 @@ func WriteInitialClusterData(
 			); err != nil {
 				return err
 			}
+
+			// TODO(sep-raft-log): the computed stats much be reflected in the WAG
+			// node written in WriteInitialRangeState, before the write is committed.
+			// Decompose WriteInitialRangeState to make it possible.
 			computedStats, err := rditer.ComputeStatsForRange(
 				ctx, desc, batch.State(), fs.UnknownReadCategory, now.WallTime)
 			if err != nil {
