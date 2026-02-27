@@ -19,34 +19,33 @@ interface LeaseTableProps {
   info: protos.cockroach.server.serverpb.IRangeInfo;
 }
 
-export default class LeaseTable extends React.Component<LeaseTableProps, {}> {
-  renderLeaseCell(value: string, title = "") {
-    if (isEmpty(title)) {
-      return (
-        <td className="lease-table__cell" title={value}>
-          {value}
-        </td>
-      );
-    }
+function renderLeaseCell(value: string, title = "") {
+  if (isEmpty(title)) {
     return (
-      <td className="lease-table__cell" title={title}>
+      <td className="lease-table__cell" title={value}>
         {value}
       </td>
     );
   }
+  return (
+    <td className="lease-table__cell" title={title}>
+      {value}
+    </td>
+  );
+}
 
-  renderLeaseTimestampCell(timestamp: protos.cockroach.util.hlc.ITimestamp) {
-    if (isNil(timestamp)) {
-      return this.renderLeaseCell("<no value>");
-    }
-
-    const value = Print.Timestamp(timestamp);
-    return this.renderLeaseCell(
-      value,
-      `${value}\n${timestamp.wall_time.toString()}`,
-    );
+function renderLeaseTimestampCell(
+  timestamp: protos.cockroach.util.hlc.ITimestamp,
+) {
+  if (isNil(timestamp)) {
+    return renderLeaseCell("<no value>");
   }
 
+  const value = Print.Timestamp(timestamp);
+  return renderLeaseCell(value, `${value}\n${timestamp.wall_time.toString()}`);
+}
+
+export default class LeaseTable extends React.Component<LeaseTableProps, {}> {
   render() {
     const { info } = this.props;
     // TODO(bram): Maybe search for the latest lease record instead of just trusting the
@@ -114,29 +113,29 @@ export default class LeaseTable extends React.Component<LeaseTableProps, {}> {
               }
               return (
                 <tr key={key} className="lease-table__row">
-                  {this.renderLeaseCell(
+                  {renderLeaseCell(
                     Print.ReplicaID(rangeID, lease.replica),
                   )}
                   {isEpoch
-                    ? this.renderLeaseCell(
+                    ? renderLeaseCell(
                         `n${lease.replica.node_id}, ${lease.epoch.toString()}`,
                       )
                     : null}
-                  {this.renderLeaseTimestampCell(lease.proposed_ts)}
-                  {this.renderLeaseCell(
+                  {renderLeaseTimestampCell(lease.proposed_ts)}
+                  {renderLeaseCell(
                     Print.TimestampDelta(
                       lease.proposed_ts,
                       prevProposedTimestamp,
                     ),
                   )}
                   {!isEpoch
-                    ? this.renderLeaseTimestampCell(lease.expiration)
+                    ? renderLeaseTimestampCell(lease.expiration)
                     : null}
-                  {this.renderLeaseTimestampCell(lease.start)}
-                  {this.renderLeaseCell(
+                  {renderLeaseTimestampCell(lease.start)}
+                  {renderLeaseCell(
                     Print.TimestampDelta(lease.start, prevStart),
                   )}
-                  {this.renderLeaseCell(
+                  {renderLeaseCell(
                     protos.cockroach.roachpb.LeaseAcquisitionType[
                       lease.acquisition_type
                     ],

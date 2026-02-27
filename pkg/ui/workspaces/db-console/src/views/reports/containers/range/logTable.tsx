@@ -44,6 +44,32 @@ function printLogEventType(
   }
 }
 
+function renderLogInfoDescriptor(title: string, desc: string) {
+  if (isEmpty(desc)) {
+    return null;
+  }
+  return (
+    <li>
+      {title}: {desc}
+    </li>
+  );
+}
+
+function renderLogInfo(
+  info: protos.cockroach.server.serverpb.RangeLogResponse.IPrettyInfo,
+) {
+  return (
+    <ul className="log-entries-list">
+      {renderLogInfoDescriptor("Updated Range Descriptor", info.updated_desc)}
+      {renderLogInfoDescriptor("New Range Descriptor", info.new_desc)}
+      {renderLogInfoDescriptor("Added Replica", info.added_replica)}
+      {renderLogInfoDescriptor("Removed Replica", info.removed_replica)}
+      {renderLogInfoDescriptor("Reason", info.reason)}
+      {renderLogInfoDescriptor("Details", info.details)}
+    </ul>
+  );
+}
+
 export default class LogTable extends React.Component<LogTableProps, {}> {
   // If there is no otherRangeID, it comes back as the number 0.
   renderRangeID(otherRangeID: Long | number) {
@@ -61,35 +87,6 @@ export default class LogTable extends React.Component<LogTableProps, {}> {
       <a href={`#/reports/range/${fixedOtherRangeID.toString()}`}>
         r{fixedOtherRangeID.toString()}
       </a>
-    );
-  }
-
-  renderLogInfoDescriptor(title: string, desc: string) {
-    if (isEmpty(desc)) {
-      return null;
-    }
-    return (
-      <li>
-        {title}: {desc}
-      </li>
-    );
-  }
-
-  renderLogInfo(
-    info: protos.cockroach.server.serverpb.RangeLogResponse.IPrettyInfo,
-  ) {
-    return (
-      <ul className="log-entries-list">
-        {this.renderLogInfoDescriptor(
-          "Updated Range Descriptor",
-          info.updated_desc,
-        )}
-        {this.renderLogInfoDescriptor("New Range Descriptor", info.new_desc)}
-        {this.renderLogInfoDescriptor("Added Replica", info.added_replica)}
-        {this.renderLogInfoDescriptor("Removed Replica", info.removed_replica)}
-        {this.renderLogInfoDescriptor("Reason", info.reason)}
-        {this.renderLogInfoDescriptor("Details", info.details)}
-      </ul>
     );
   }
 
@@ -136,7 +133,7 @@ export default class LogTable extends React.Component<LogTableProps, {}> {
                 {this.renderRangeID(event.event.other_range_id)}
               </td>
               <td className="log-table__cell">
-                {this.renderLogInfo(event.pretty_info)}
+                {renderLogInfo(event.pretty_info)}
               </td>
             </tr>
           ))}
