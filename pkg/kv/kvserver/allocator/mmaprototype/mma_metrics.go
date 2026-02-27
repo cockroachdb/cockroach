@@ -196,8 +196,8 @@ var (
 	metaRebalanceLeaseChangeSuccess = metric.Metadata{
 		Name: "mma.change.rebalance.lease.success",
 		Help: "Number of MMA-initiated lease transfers (moving the leaseholder to balance load) " +
-			"that completed successfully. MMA transfers leases away from overloaded stores to " +
-			"reduce their CPU load, since leaseholders handle all reads and coordinate writes.",
+			"that completed successfully. MMA transfers leases away from CPU-overloaded stores " +
+			"since leaseholders handle all reads and coordinate writes.",
 		Measurement: "Lease Change",
 		Unit:        metric.Unit_COUNT,
 		LabeledName: "mma.change",
@@ -375,9 +375,9 @@ var (
 		Name: "mma.overloaded_store.lease_grace.success",
 		Help: "Number of overloaded stores in the lease shedding grace period (first 2 min of " +
 			"overload) where at least one lease or replica was successfully moved away during " +
-			"this store's MMA rebalancing pass. During this grace period, MMA waits for the " +
-			"overloaded store to shed its own leases before intervening. This metric should " +
-			"normally be 0 since MMA skips shedding during the grace period.",
+			"this store's MMA rebalancing pass. During this grace period, MMA holds off on " +
+			"replica moves to give the overloaded store time to shed its own leases. This " +
+			"metric should normally be 0 since MMA skips shedding during the grace period.",
 		Measurement: "Stores",
 		Unit:        metric.Unit_COUNT,
 		LabeledName: "mma.overloaded_store",
@@ -388,9 +388,8 @@ var (
 		Name: "mma.overloaded_store.lease_grace.failure",
 		Help: "Number of overloaded stores in the lease shedding grace period (first 2 min of " +
 			"overload) where all shedding attempts failed during this store's MMA rebalancing " +
-			"pass. During this grace period, MMA waits for the overloaded store to shed its " +
-			"own leases before intervening. A non-zero value indicates stores were observed " +
-			"but intentionally skipped.",
+			"pass. During this grace period, MMA holds off on replica moves to give the " +
+			"overloaded store time to shed its own leases.",
 		Measurement: "Stores",
 		Unit:        metric.Unit_COUNT,
 		LabeledName: "mma.overloaded_store",
