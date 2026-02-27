@@ -360,6 +360,9 @@ type Context struct {
 	// thumb is: the cached memo, either in query cache or prepared stmt,
 	// are always for stable stats.
 	UseCanaryStats bool
+
+	// WorkloadID for ASH sampling.
+	WorkloadID uint64
 }
 
 // RoutineStatementCounters encapsulates metrics for tracking the execution
