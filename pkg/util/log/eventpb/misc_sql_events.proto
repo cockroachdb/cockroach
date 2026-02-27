@@ -64,6 +64,8 @@ message RewriteInlineHints {
   string donor_sql = 4 [(gogoproto.customname) = "DonorSQL", (gogoproto.jsontag) = ",omitempty", (gogoproto.moretags) = "redact:\"nonsensitive\""];
   // The hint ID of the newly created statement hint.
   int64 hint_id = 5 [(gogoproto.customname) = "HintID", (gogoproto.jsontag) = ",omitempty"];
+  // The database to which the hint is scoped, if any.
+  string database = 6 [(gogoproto.jsontag) = ",omitempty", (gogoproto.moretags) = "redact:\"nonsensitive\""];
 }
 
 // DeleteRewriteInlineHints is recorded when a rewrite inline hint is

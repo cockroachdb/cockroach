@@ -36,6 +36,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/stmtdiagnostics"
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
+	"github.com/cockroachdb/cockroach/pkg/util/errorutil"
 	"github.com/cockroachdb/cockroach/pkg/util/intsets"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/memzipper"
@@ -564,6 +565,8 @@ var stmtBundleIncludeAllFKReferences = settings.RegisterBoolSetting(
 func (c *stmtEnvCollector) getStmtHintRecreateStmts(
 	ctx context.Context, stmt string, sv *settings.Values,
 ) (recreateStmts []string, err error) {
+	// Catch panics from unmarshaling protobuf below.
+	defer errorutil.MaybeCatchPanic(&err, nil /* errCallback */)
 	fingerprint, err := parserutils.FingerprintStatement(
 		parserutils.FingerprintTagStatement, stmt,
 		tree.FmtFlags(tree.QueryFormattingForFingerprintsMask.Get(
@@ -594,12 +597,8 @@ func (c *stmtEnvCollector) getStmtHintRecreateStmts(
 		if row[0] == tree.DNull {
 			continue
 		}
-		hintBytes, ok := row[0].(*tree.DBytes)
-		if !ok {
-			return nil, errors.AssertionFailedf("expected hint to be bytes, got %T", row[0])
-		}
 		// Deserialize from the protobuf.
-		hint, err := hintpb.FromBytes([]byte(*hintBytes))
+		hint, err := hintpb.FromBytes([]byte(tree.MustBeDBytes(row[0])))
 		if err != nil {
 			return nil, errors.Wrap(err, "deserializing statement hint")
 		}
@@ -1080,6 +1079,7 @@ func (b *stmtBundleBuilder) addEnv(ctx context.Context) {
 	}
 
 	if !b.flags.RedactValues {
+		blankLine()
 		if err := c.PrintStmtHints(ctx, b.stmt, b.sv, &buf); err != nil {
 			b.printError(fmt.Sprintf("-- error getting statement hints: %v", err), &buf)
 		}

@@ -9809,6 +9809,7 @@ WHERE object_id = table_descriptor_id
 			DistsqlBlocklist: true,
 		},
 		rewriteInlineHintsOverload,
+		rewriteInlineHintsWithDatabaseOverload,
 	),
 	"information_schema.crdb_rewrite_inline_hints": makeBuiltin(
 		tree.FunctionProperties{
@@ -9816,6 +9817,7 @@ WHERE object_id = table_descriptor_id
 			DistsqlBlocklist: true,
 		},
 		rewriteInlineHintsOverload,
+		rewriteInlineHintsWithDatabaseOverload,
 	),
 	"information_schema.crdb_delete_statement_hints": makeBuiltin(
 		tree.FunctionProperties{
@@ -13050,11 +13052,11 @@ var datumsToBytesOverload = tree.Overload{
 
 var nilRegionsError = errors.AssertionFailedf("evalCtx.Regions is nil")
 
-// rewriteInlineHintsImpl is the shared implementation for the
-// crdb_internal.inject_hint and information_schema.crdb_rewrite_inline_hints
-// builtins.
+// rewriteInlineHintsImpl is the shared implementation for the 2-arg and 3-arg
+// overloads of crdb_internal.inject_hint and
+// information_schema.crdb_rewrite_inline_hints.
 func rewriteInlineHintsImpl(
-	ctx context.Context, evalCtx *eval.Context, targetArg, donorArg string,
+	ctx context.Context, evalCtx *eval.Context, targetArg, donorArg, optDatabase string,
 ) (tree.Datum, error) {
 	// The user must have REPAIRCLUSTER to use this builtin.
 	if err := evalCtx.SessionAccessor.CheckPrivilege(
@@ -13127,7 +13129,7 @@ func rewriteInlineHintsImpl(
 	// Now that we've passed some basic validation, insert into statement_hints.
 	var hint hintpb.StatementHintUnion
 	hint.SetValue(&hintpb.InjectHints{DonorSQL: donorSQL})
-	hintID, err := evalCtx.Planner.InsertStatementHint(ctx, targetSQL, hint)
+	hintID, err := evalCtx.Planner.InsertStatementHint(ctx, targetSQL, hint, optDatabase)
 	if err != nil {
 		return nil, err
 	}
@@ -13137,6 +13139,7 @@ func rewriteInlineHintsImpl(
 		StatementFingerprint: targetSQL,
 		DonorSQL:             donorSQL,
 		HintID:               hintID,
+		Database:             optDatabase,
 	}); err != nil {
 		return nil, err
 	}
@@ -13153,11 +13156,32 @@ var rewriteInlineHintsOverload = tree.Overload{
 	Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
 		targetArg := string(tree.MustBeDString(args[0]))
 		donorArg := string(tree.MustBeDString(args[1]))
-		return rewriteInlineHintsImpl(ctx, evalCtx, targetArg, donorArg)
+		return rewriteInlineHintsImpl(ctx, evalCtx, targetArg, donorArg, "" /* optDatabase */)
 	},
 	Info: `This function adds an inline-hints rewrite rule for a statement fingerprint. It ` +
 		`returns the hint ID of the newly created rewrite rule. The rewrite rule only applies to ` +
 		`matching statement fingerprints. It first removes all inline hints from the target ` +
+		`statement, and then copies inline hints from the donor statement.`,
+	Volatility: volatility.Volatile,
+}
+
+var rewriteInlineHintsWithDatabaseOverload = tree.Overload{
+	Types: tree.ParamTypes{
+		{Name: "statement_fingerprint", Typ: types.String},
+		{Name: "donor_sql", Typ: types.String},
+		{Name: "database", Typ: types.String},
+	},
+	ReturnType: tree.FixedReturnType(types.Int),
+	Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
+		targetArg := string(tree.MustBeDString(args[0]))
+		donorArg := string(tree.MustBeDString(args[1]))
+		database := string(tree.MustBeDString(args[2]))
+		return rewriteInlineHintsImpl(ctx, evalCtx, targetArg, donorArg, database)
+	},
+	Info: `This function adds an inline-hints rewrite rule for a statement fingerprint, scoped ` +
+		`to the given database. It returns the hint ID of the newly created rewrite rule. The ` +
+		`rewrite rule only applies to matching statement fingerprints when the current database ` +
+		`matches the specified database. It first removes all inline hints from the target ` +
 		`statement, and then copies inline hints from the donor statement.`,
 	Volatility: volatility.Volatile,
 }

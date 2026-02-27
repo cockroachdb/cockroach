@@ -610,7 +610,10 @@ func (ep *DummyEvalPlanner) ProcessVectorIndexFixups(
 
 // InsertStatementHint is part of the eval.Planner interface.
 func (ep *DummyEvalPlanner) InsertStatementHint(
-	ctx context.Context, statementFingerprint string, hint hintpb.StatementHintUnion,
+	ctx context.Context,
+	statementFingerprint string,
+	hint hintpb.StatementHintUnion,
+	optDatabase string,
 ) (int64, error) {
 	return 0, nil
 }

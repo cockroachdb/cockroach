@@ -4614,6 +4614,16 @@ func (m *RewriteInlineHints) AppendJSONFields(printComma bool, b redact.Redactab
 		b = strconv.AppendInt(b, int64(m.HintID), 10)
 	}
 
+	if m.Database != "" {
+		if printComma {
+			b = append(b, ',')
+		}
+		printComma = true
+		b = append(b, "\"Database\":\""...)
+		b = redact.RedactableBytes(jsonbytes.EncodeString([]byte(b), string(m.Database)))
+		b = append(b, '"')
+	}
+
 	return printComma, b
 }
 

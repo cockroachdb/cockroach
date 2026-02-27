@@ -501,8 +501,9 @@ type Planner interface {
 
 	// InsertStatementHint adds a new hint for the given statement fingerprint to
 	// the system.statement_hints table. It returns the hint ID of the newly
-	// created hint.
-	InsertStatementHint(ctx context.Context, statementFingerprint string, hint hintpb.StatementHintUnion) (int64, error)
+	// created hint. If optDatabase is non-empty, the hint is scoped to the
+	// given database.
+	InsertStatementHint(ctx context.Context, statementFingerprint string, hint hintpb.StatementHintUnion, optDatabase string) (int64, error)
 
 	// DeleteStatementHint deletes statement hints from
 	// system.statement_hints, filtered by the row ID or fingerprint. If the
