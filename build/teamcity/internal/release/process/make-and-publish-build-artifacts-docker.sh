@@ -59,7 +59,5 @@ tc_end_block "Variable Setup"
 tc_start_block "Make and push multi-arch docker image"
 docker_login_with_google
 gcr_tag="${gcr_repository}:${build_name}"
-docker manifest rm "${gcr_tag}" || :
-docker manifest create "${gcr_tag}" "${gcr_repository}:amd64-${build_name}" "${gcr_repository}:arm64-${build_name}" "${gcr_repository}:s390x-${build_name}"
-docker manifest push "${gcr_tag}"
+create_and_push_multi_arch_manifest "${gcr_tag}" "${gcr_repository}:amd64-${build_name}" "${gcr_repository}:arm64-${build_name}" "${gcr_repository}:s390x-${build_name}"
 tc_end_block "Make and push multi-arch docker images"

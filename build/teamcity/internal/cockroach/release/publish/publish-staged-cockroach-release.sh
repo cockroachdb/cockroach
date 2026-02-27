@@ -143,23 +143,8 @@ done
 
 docker_login_gcr "$gcr_repository" "$gcr_credentials"
 
-docker manifest rm "${gcr_tag}" || :
-docker manifest create "${gcr_tag}" "${gcr_arch_tags[@]}"
-docker manifest push "${gcr_tag}"
-
-docker manifest rm "${dockerhub_tag}" || :
-docker manifest create "${dockerhub_tag}" "${dockerhub_arch_tags[@]}"
-docker manifest push "${dockerhub_tag}"
-
-docker manifest rm "${gcr_repository}:latest" || :
-docker manifest create "${gcr_repository}:latest" "${gcr_arch_tags[@]}"
-docker manifest rm "${gcr_repository}:latest-${release_branch}" || :
-docker manifest create "${gcr_repository}:latest-${release_branch}" "${gcr_arch_tags[@]}"
-
-docker manifest rm "${dockerhub_repository}:latest" || :
-docker manifest create "${dockerhub_repository}:latest" "${dockerhub_arch_tags[@]}"
-docker manifest rm "${dockerhub_repository}:latest-${release_branch}" || :
-docker manifest create "${dockerhub_repository}:latest-${release_branch}" "${dockerhub_arch_tags[@]}"
+create_and_push_multi_arch_manifest "${gcr_tag}" "${gcr_arch_tags[@]}"
+create_and_push_multi_arch_manifest "${dockerhub_tag}" "${dockerhub_arch_tags[@]}"
 tc_end_block "Make and push multiarch docker images"
 
 
@@ -214,7 +199,7 @@ tc_end_block "Publish binaries and archive as latest"
 
 tc_start_block "Tag docker image as latest-RELEASE_BRANCH"
 if [[ $prerelease == false ]]; then
-  docker manifest push "${dockerhub_repository}:latest-${release_branch}"
+  create_and_push_multi_arch_manifest "${dockerhub_repository}:latest-${release_branch}" "${dockerhub_arch_tags[@]}"
 else
   echo "The ${dockerhub_repository}:latest-${release_branch} docker image tags were _not_ pushed."
 fi
@@ -227,7 +212,7 @@ tc_start_block "Tag docker images as latest"
 # https://github.com/cockroachdb/cockroach/issues/41067
 # https://github.com/cockroachdb/cockroach/issues/48309
 if [[ -n "${PUBLISH_LATEST}" || $prerelease == true ]]; then
-  docker manifest push "${dockerhub_repository}:latest"
+  create_and_push_multi_arch_manifest "${dockerhub_repository}:latest" "${dockerhub_arch_tags[@]}"
 else
   echo "The ${dockerhub_repository}:latest docker image tags were _not_ pushed."
 fi
