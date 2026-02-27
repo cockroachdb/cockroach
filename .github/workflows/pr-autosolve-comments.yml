@@ -440,13 +440,13 @@ Co-Authored-By: Claude <noreply@anthropic.com>"
           # NOTE: This is safe because this workflow only runs on PRs with 'o-autosolver' label,
           # which are bot-owned branches. We never force push to branches owned by humans.
           #
-          # In workflow_run context, origin may point to the base repo instead of the fork.
-          # Explicitly set the remote URL to ensure we push to the fork.
-          # The AUTOSOLVER_PAT credentials from checkout's persist-credentials apply to all
-          # github.com URLs via the extraheader, so no token in the URL is needed.
-          git remote set-url origin "https://github.com/${AUTOSOLVER_FORK_OWNER}/${AUTOSOLVER_FORK_REPO}.git"
+          # Push directly to the fork URL with the PAT for authentication.
+          # We can't rely on origin or the checkout extraheader because:
+          # 1. In workflow_run context, origin points to the base repo
+          # 2. The claude-code-action step may overwrite the extraheader credentials
+          # The PAT value is masked in logs by GitHub Actions since it's a registered secret.
           HEAD_REF="${{ steps.context.outputs.head_ref }}"
-          git push --force origin "$HEAD_REF"
+          git push --force "https://x-access-token:${AUTOSOLVER_PAT}@github.com/${AUTOSOLVER_FORK_OWNER}/${AUTOSOLVER_FORK_REPO}.git" "$HEAD_REF"
 
           echo "pushed=true" >> "$GITHUB_OUTPUT"
 
