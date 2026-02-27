@@ -525,12 +525,7 @@ func TestTypes(t *testing.T) {
 			if !tc.actual.Identical(tc.expected) {
 				t.Errorf("expected <%v>, got <%v>", tc.expected.DebugString(), tc.actual.DebugString())
 			}
-			if !cmp.Equal(tc.actual, tc.expected, cmp.FilterPath(
-				func(path cmp.Path) bool {
-					// VisibleType is only for compatibility with v25.3 and earlier.
-					return path.Last().String() == "VisibleType"
-				}, cmp.Ignore()),
-			) {
+			if !cmp.Equal(tc.actual, tc.expected) {
 				t.Errorf("expected <%v>, got <%v>", tc.expected.DebugString(), tc.actual.DebugString())
 			}
 
@@ -754,29 +749,29 @@ func TestUnmarshalCompat(t *testing.T) {
 		to   *T
 	}{
 		// ARRAY
-		{InternalType{Family: ArrayFamily, ArrayElemType: &intElemType, VisibleType: visibleSMALLINT},
+		{InternalType{Family: ArrayFamily, ArrayElemType: &intElemType, Width: 16},
 			MakeArray(Int2)},
-		{InternalType{Family: ArrayFamily, ArrayElemType: &floatElemType, VisibleType: visibleDOUBLE},
+		{InternalType{Family: ArrayFamily, ArrayElemType: &floatElemType},
 			MakeArray(Float)},
 
 		// BIT
-		{InternalType{Family: BitFamily, VisibleType: visibleVARBIT}, VarBit},
-		{InternalType{Family: BitFamily, VisibleType: visibleVARBIT, Width: 20}, MakeVarBit(20)},
+		{InternalType{Family: BitFamily}, MakeBit(0)},
+		{InternalType{Family: BitFamily, Oid: oid.T_varbit}, VarBit},
+		{InternalType{Family: BitFamily, Oid: oid.T_varbit, Width: 20}, MakeVarBit(20)},
 
 		// FLOAT
 		{InternalType{Family: FloatFamily}, Float},
-		{InternalType{Family: FloatFamily, VisibleType: visibleREAL}, Float4},
-		{InternalType{Family: FloatFamily, VisibleType: visibleDOUBLE}, Float},
 		{InternalType{Family: FloatFamily, Precision: 1}, Float4},
 		{InternalType{Family: FloatFamily, Precision: 24}, Float4},
 		{InternalType{Family: FloatFamily, Precision: 25}, Float},
 		{InternalType{Family: FloatFamily, Precision: 60}, Float},
+		{InternalType{Family: FloatFamily, Width: 32}, Float4},
+		{InternalType{Family: FloatFamily, Width: 64}, Float},
 
 		// INT
-		{InternalType{Family: IntFamily, VisibleType: visibleSMALLINT}, Int2},
-		{InternalType{Family: IntFamily, VisibleType: visibleINTEGER}, Int4},
-		{InternalType{Family: IntFamily, VisibleType: visibleBIGINT}, Int},
-		{InternalType{Family: IntFamily, VisibleType: visibleBIT}, Int},
+		{InternalType{Family: IntFamily, Width: 16}, Int2},
+		{InternalType{Family: IntFamily, Width: 32}, Int4},
+		{InternalType{Family: IntFamily, Width: 64}, Int},
 		{InternalType{Family: IntFamily, Width: 20}, Int},
 		{InternalType{Family: IntFamily}, Int},
 
@@ -785,10 +780,10 @@ func TestUnmarshalCompat(t *testing.T) {
 
 		// STRING
 		{InternalType{Family: StringFamily}, String},
-		{InternalType{Family: StringFamily, VisibleType: visibleVARCHAR}, VarChar},
-		{InternalType{Family: StringFamily, VisibleType: visibleVARCHAR, Width: 20}, MakeVarChar(20)},
-		{InternalType{Family: StringFamily, VisibleType: visibleCHAR}, BPChar},
-		{InternalType{Family: StringFamily, VisibleType: visibleQCHAR, Width: 1}, QChar},
+		{InternalType{Family: StringFamily, Oid: oid.T_varchar}, VarChar},
+		{InternalType{Family: StringFamily, Oid: oid.T_varchar, Width: 20}, MakeVarChar(20)},
+		{InternalType{Family: StringFamily, Oid: oid.T_bpchar}, BPChar},
+		{InternalType{Family: StringFamily, Oid: oid.T_char, Width: 1}, QChar},
 		{InternalType{Family: name}, Name},
 	}
 
@@ -966,20 +961,6 @@ func TestUpgradeType(t *testing.T) {
 				IntervalDurationField: &IntervalDurationField{
 					DurationType: IntervalDurationType_SECOND,
 				},
-			}},
-		},
-		{
-			desc: "varbit types are not assigned the default family Oid value",
-			input: &T{InternalType: InternalType{
-				Family:      BitFamily,
-				VisibleType: visibleVARBIT,
-				Locale:      &emptyLocale,
-			}},
-			expected: &T{InternalType: InternalType{
-				Family:      BitFamily,
-				VisibleType: visibleVARBIT,
-				Oid:         oid.T_varbit,
-				Locale:      &emptyLocale,
 			}},
 		},
 		{

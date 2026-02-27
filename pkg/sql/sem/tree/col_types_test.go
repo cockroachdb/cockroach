@@ -85,12 +85,7 @@ func TestParseColumnType(t *testing.T) {
 				t.Fatalf("%d: expected tree.ColumnTableDef, but got %T", i, createTable.Defs[0])
 			}
 			colType := tree.MustBeStaticallyKnownType(columnDef.Type)
-			if !cmp.Equal(d.expectedType, colType, cmp.FilterPath(
-				func(path cmp.Path) bool {
-					// VisibleType is only for compatibility with v25.3 and earlier.
-					return path.Last().String() == "VisibleType"
-				}, cmp.Ignore()),
-			) {
+			if !cmp.Equal(d.expectedType, colType) {
 				t.Fatalf("%d: expected %s, but got %s",
 					i, d.expectedType.DebugString(), colType.DebugString())
 			}

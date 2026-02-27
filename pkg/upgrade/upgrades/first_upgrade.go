@@ -67,15 +67,7 @@ func FirstUpgradeFromRelease(
 		}
 		changes := desc.GetPostDeserializationChanges()
 		if !changes.HasChanges() || (changes.Len() == 1 && changes.Contains(catalog.SetModTimeToMVCCTimestamp)) {
-			// In the upgrade to 25.4 (in between 25.3 and 25.4), we do a one-time
-			// rewrite of all descriptors in order to upgrade them to use the new type
-			// serialization format. Skip the unconditional rewrite if this is a
-			// database descriptor, as those never reference types.
-			// See https://github.com/cockroachdb/cockroach/issues/152629.
-			duringUpgradeTo25_4 := d.Settings.Version.IsActive(ctx, clusterversion.V25_3) && !d.Settings.Version.IsActive(ctx, clusterversion.V25_4)
-			if !duringUpgradeTo25_4 || desc.DescriptorType() == catalog.Database {
-				return
-			}
+			return
 		}
 		descsToUpdate.Add(desc.GetID())
 	}

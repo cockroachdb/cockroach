@@ -16065,9 +16065,6 @@ character_with_length:
       return 1
     }
     $$.val = types.MakeScalar(types.StringFamily, colTyp.Oid(), colTyp.Precision(), n, colTyp.Locale())
-    // TODO(rafi): Once compatibility with 25.3 is no longer needed, remove
-    // VisibleType.
-    $$.val.(*types.T).InternalType.VisibleType = colTyp.InternalType.VisibleType
   }
 
 character_without_length:
