@@ -177,10 +177,16 @@ func (s *GCSLogStore) ReadLogs(
 }
 
 // DeleteLogs removes all stored log data for the given task.
+// Object names are collected before any deletions to avoid mutating the bucket
+// during iteration. Individual object deletions are best-effort: objects that
+// no longer exist are silently skipped, and the first real deletion error (if
+// any) is returned after attempting all objects.
 func (s *GCSLogStore) DeleteLogs(ctx context.Context, taskID uuid.UUID) error {
 	prefix := s.taskPrefix(taskID)
 	bkt := s.client.Bucket(s.bucket)
 
+	// Collect all object names first to avoid mutating during iteration.
+	var names []string
 	it := bkt.Objects(ctx, &storage.Query{Prefix: prefix})
 	for {
 		attrs, err := it.Next()
@@ -190,11 +196,22 @@ func (s *GCSLogStore) DeleteLogs(ctx context.Context, taskID uuid.UUID) error {
 		if err != nil {
 			return errors.Wrap(err, "list objects for deletion")
 		}
-		if err := bkt.Object(attrs.Name).Delete(ctx); err != nil {
-			return errors.Wrapf(err, "delete object %s", attrs.Name)
+		names = append(names, attrs.Name)
+	}
+
+	// Delete all collected objects.
+	var firstErr error
+	for _, name := range names {
+		if err := bkt.Object(name).Delete(ctx); err != nil {
+			if errors.Is(err, storage.ErrObjectNotExist) {
+				continue
+			}
+			if firstErr == nil {
+				firstErr = errors.Wrapf(err, "delete object %s", name)
+			}
 		}
 	}
-	return nil
+	return firstErr
 }
 
 // gcsSink buffers log entries and periodically flushes them as JSONL chunks

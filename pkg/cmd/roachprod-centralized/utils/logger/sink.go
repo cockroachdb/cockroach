@@ -16,7 +16,8 @@ type LogEntry struct {
 }
 
 // LogSink receives structured log entries for external persistence.
-// A single LineWriter owns its sink; no concurrent Write calls occur.
+// Entries are written by the sinkHandler installed via Logger.WithSink,
+// which mirrors every slog call (Info, Warn, Error, …) to the sink.
 type LogSink interface {
 	// WriteEntry sends a single log entry to the sink.
 	WriteEntry(entry LogEntry) error

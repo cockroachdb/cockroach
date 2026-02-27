@@ -16,10 +16,10 @@ import (
 
 func TestGCSBackend_GenerateTF(t *testing.T) {
 	b := NewGCSBackend(nil, "my-bucket")
-	content := b.GenerateTF("provisioning-abc12345")
+	content := b.GenerateTF("provisionings/abc12345")
 	assert.Contains(t, content, `backend "gcs"`)
 	assert.Contains(t, content, `bucket = "my-bucket"`)
-	assert.Contains(t, content, `prefix = "provisioning-abc12345"`)
+	assert.Contains(t, content, `prefix = "provisionings/abc12345"`)
 }
 
 func TestLocalBackend_GenerateTF(t *testing.T) {

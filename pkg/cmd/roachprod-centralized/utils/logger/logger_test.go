@@ -138,6 +138,51 @@ func TestLineWriter_NilSink(t *testing.T) {
 	require.NoError(t, w.Close())
 }
 
+func TestLogger_InfoReachesSink(t *testing.T) {
+	sink := &mockSink{}
+	l := NewLogger("info").WithSink(sink)
+
+	l.Info("direct log call")
+
+	require.Len(t, sink.entries, 1)
+	assert.Equal(t, "direct log call", sink.entries[0].Message)
+	assert.Equal(t, "INFO", sink.entries[0].Level)
+}
+
+func TestLogger_WithAttrsPreservedInSink(t *testing.T) {
+	sink := &mockSink{}
+	l := NewLogger("info").WithSink(sink)
+	l = l.With(slog.String("task_id", "abc-123"))
+
+	l.Info("task started")
+
+	require.Len(t, sink.entries, 1)
+	assert.Equal(t, "task started", sink.entries[0].Message)
+	assert.Equal(t, "abc-123", sink.entries[0].Attrs["task_id"])
+}
+
+func TestLogger_WarnAndErrorReachSink(t *testing.T) {
+	sink := &mockSink{}
+	l := NewLogger("info").WithSink(sink)
+
+	l.Warn("warning message")
+	l.Error("error message")
+
+	require.Len(t, sink.entries, 2)
+	assert.Equal(t, "WARN", sink.entries[0].Level)
+	assert.Equal(t, "ERROR", sink.entries[1].Level)
+}
+
+func TestLogger_DebugFilteredBySink(t *testing.T) {
+	sink := &mockSink{}
+	// Logger level is INFO, so DEBUG calls should be filtered out.
+	l := NewLogger("info").WithSink(sink)
+
+	l.Debug("debug message")
+
+	assert.Empty(t, sink.entries)
+}
+
 func TestLineWriter_MultipleWrites(t *testing.T) {
 	sink := &mockSink{}
 	l := NewLogger("info").WithSink(sink)

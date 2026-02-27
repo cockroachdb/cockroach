@@ -56,7 +56,7 @@ func (s *Service) HandleProvision(
 	}
 
 	// Write backend.tf for state storage.
-	statePrefix := "provisioning-" + prov.ID.String()
+	statePrefix := "provisionings/" + prov.ID.String()
 	backendContent := s.backend.GenerateTF(statePrefix)
 	if err := templates.WriteBackendTF(workingDir, backendContent); err != nil {
 		return s.failProvision(ctx, l, &prov, errors.Wrap(err, "write backend.tf"))
@@ -201,7 +201,7 @@ func (s *Service) HandleDestroy(
 	}
 
 	// Write backend.tf.
-	statePrefix := "provisioning-" + prov.ID.String()
+	statePrefix := "provisionings/" + prov.ID.String()
 	backendContent := s.backend.GenerateTF(statePrefix)
 	if err := templates.WriteBackendTF(workingDir, backendContent); err != nil {
 		return s.failDestroy(ctx, l, &prov, errors.Wrap(err, "write backend.tf"))
