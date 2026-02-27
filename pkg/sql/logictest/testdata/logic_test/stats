@@ -69,6 +69,52 @@ ALTER TYPE greeting ADD VALUE 'hey';
 SELECT * FROM t122312 WHERE g = 'hi';
 COMMIT;
 
+subtest json_col_histogram
+# The histogram generation for JSON columns requires special handling
+# in certain scenarios.
+# - Forward indexed JSON columns, in primary or secondary index: always generate histogram.
+# - Non-indexed JSON columns always respect sql.stats.non_indexed_json_histograms.enabled.
+
+statement ok
+RESET CLUSTER SETTING sql.stats.non_indexed_json_histograms.enabled;
+
+# JSON column as a key column in a forward secondary index. Since this column
+# is now directly indexed, it should always get a histogram.
+statement ok
+CREATE TABLE t163346_fwd_idx (
+    k INT PRIMARY KEY,
+    j JSONB,
+    INDEX (j)
+);
+
+statement ok
+ANALYZE t163346_fwd_idx
+
+query TT rowsort
+SELECT column_names, IF(histogram_id IS NOT NULL, 'histogram_collected', 'no_histogram_collected')
+FROM [SHOW STATISTICS FOR TABLE t163346_fwd_idx]
+----
+{k}  histogram_collected
+{j}  histogram_collected
+
+statement ok
+CREATE TABLE t163346_pk (
+    k INT,
+    j JSONB,
+    PRIMARY KEY (k, j)
+);
+
+statement ok
+ANALYZE t163346_pk
+
+query TT rowsort
+SELECT column_names, IF(histogram_id IS NOT NULL, 'histogram_collected', 'no_histogram_collected')
+FROM [SHOW STATISTICS FOR TABLE t163346_pk]
+----
+{k}    histogram_collected
+{k,j}  no_histogram_collected
+{j}    histogram_collected
+
 # Regression test related to #139381. Do not collect histograms on non-indexed
 # JSON columns by default.
 statement ok
@@ -110,6 +156,107 @@ FROM [SHOW STATISTICS FOR TABLE t139381]
 {k}  histogram_collected
 {j}  histogram_collected
 {v}  histogram_collected
+
+# Regression test related to #163346. Do not collect histograms on non-indexed
+# JSON columns by default if referenced only in a partial index predicate.
+statement ok
+RESET CLUSTER SETTING sql.stats.non_indexed_json_histograms.enabled;
+
+statement ok
+CREATE TABLE t163346_partial (
+    k INT PRIMARY KEY,
+    j JSONB
+);
+
+statement ok
+CREATE INDEX ON t163346_partial (k) WHERE j->>'a' = '1';
+
+statement ok
+ANALYZE t163346_partial
+
+query TT rowsort
+SELECT column_names, IF(histogram_id IS NOT NULL, 'histogram_collected', 'no_histogram_collected')
+FROM [SHOW STATISTICS FOR TABLE t163346_partial]
+----
+{k}  histogram_collected
+{j}  no_histogram_collected
+
+statement ok
+SET CLUSTER SETTING sql.stats.non_indexed_json_histograms.enabled = true
+
+statement ok
+ANALYZE t163346_partial
+
+query TT rowsort
+SELECT column_names, IF(histogram_id IS NOT NULL, 'histogram_collected', 'no_histogram_collected')
+FROM [SHOW STATISTICS FOR TABLE t163346_partial]
+----
+{k}  histogram_collected
+{j}  histogram_collected
+
+statement ok
+RESET CLUSTER SETTING sql.stats.non_indexed_json_histograms.enabled;
+
+# USING EXTREMES partial stats only collect stats on forward index
+# prefix columns. A JSON column that is not a forward index prefix should not
+# get stats. Once it becomes a forward index prefix, it should get a histogram
+# because it is now an indexed column.
+statement ok
+CREATE TABLE t163346_partial_stats (
+    k INT PRIMARY KEY,
+    j JSONB
+);
+
+statement ok
+INSERT INTO t163346_partial_stats VALUES (1, '{"a": 1}'), (2, '{"a": 2}');
+
+# Collect full stats first, since partial stats needs to merge with
+# existing full stats.
+statement ok
+ANALYZE t163346_partial_stats
+
+statement ok
+INSERT INTO t163346_partial_stats VALUES (3, '{"a": 3}');
+
+statement ok
+SELECT crdb_internal.clear_table_stats_cache();
+
+# No forward index on j, so partial stats should only collect stats for k.
+statement ok
+CREATE STATISTICS s1 FROM t163346_partial_stats USING EXTREMES
+
+query empty
+SELECT column_names, IF(histogram_id IS NOT NULL, 'histogram_collected', 'no_histogram_collected')
+FROM [SHOW STATISTICS FOR TABLE t163346_partial_stats]
+WHERE statistics_name = 's2'
+----
+
+# Add a forward index with j as the prefix and refresh full stats so that
+# partial stats have a base to merge with.
+statement ok
+CREATE INDEX ON t163346_partial_stats (j)
+
+statement ok
+ANALYZE t163346_partial_stats
+
+statement ok
+INSERT INTO t163346_partial_stats VALUES (4, '{"a": 4}');
+
+statement ok
+SELECT crdb_internal.clear_table_stats_cache();
+
+statement ok
+CREATE STATISTICS s2 FROM t163346_partial_stats USING EXTREMES
+
+query TT rowsort
+SELECT column_names, IF(histogram_id IS NOT NULL, 'histogram_collected', 'no_histogram_collected')
+FROM [SHOW STATISTICS FOR TABLE t163346_partial_stats]
+WHERE statistics_name = 's2'
+----
+{k}  histogram_collected
+{j}  histogram_collected
+
+subtest end
 
 # Regression test for inflating the distinct count due to including column ID
 # delta in the sketch (#141448).

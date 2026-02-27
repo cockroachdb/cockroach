@@ -637,10 +637,10 @@ const maxNonIndexCols = 100
 // If nonIndexJsonHistograms is true, 2-bucket histograms are collected for
 // non-indexed JSON columns.
 //
-// If partialStats is true, we only collect statistics on single columns that
-// are prefixes of forward indexes, and skip over partial, sharded, and
-// implicitly partitioned indexes. Partial statistic creation only supports
-// these columns.
+// If partialStatsUsingExtremes is true, we only collect statistics on
+// single columns that are prefixes of forward indexes, and skip over
+// partial, sharded, and implicitly partitioned indexes. Partial
+// statistic creation only supports these columns.
 //
 // In addition to the index columns, we collect stats on up to maxNonIndexCols
 // other columns from the table. We only collect histograms for index columns,
@@ -648,7 +648,7 @@ const maxNonIndexCols = 100
 func createStatsDefaultColumns(
 	ctx context.Context,
 	desc catalog.TableDescriptor,
-	virtColEnabled, multiColEnabled, nonIndexJSONHistograms, partialStats bool,
+	virtColEnabled, multiColEnabled, nonIndexJSONHistograms, partialStatsUsingExtremes bool,
 	defaultHistogramBuckets uint32,
 	evalCtx *eval.Context,
 ) ([]jobspb.CreateStatsDetails_ColStat, error) {
@@ -701,6 +701,18 @@ func createStatsDefaultColumns(
 		return false
 	}
 
+	// nonIndexColHasHistogram returns whether a non-indexed column should
+	// have a histogram collected.
+	nonIndexColHasHistogram := func(col catalog.Column) bool {
+		if colinfo.ColumnTypeIsOnlyInvertedIndexable(col.GetType()) {
+			return false
+		}
+		if col.GetType().Family() == types.JsonFamily {
+			return nonIndexJSONHistograms
+		}
+		return true
+	}
+
 	// addIndexColumnStatsIfNotExists appends column stats for the given column
 	// ID if they have not already been added. Histogram stats are collected for
 	// every indexed column.
@@ -748,10 +760,10 @@ func createStatsDefaultColumns(
 		return nil
 	}
 
-	// Only collect statistics on single columns that are prefixes of forward
-	// indexes for partial statistics, and skip over partial, sharded, and
-	// implicitly partitioned indexes.
-	if partialStats {
+	// Only collect statistics on single columns that are prefixes of
+	// forward indexes for USING EXTREMES partial statistics, and skip over
+	// partial, sharded, and implicitly partitioned indexes.
+	if partialStatsUsingExtremes {
 		for _, idx := range desc.ActiveIndexes() {
 			if idx.GetType() != idxtype.FORWARD ||
 				idx.IsPartial() ||
@@ -878,6 +890,9 @@ func createStatsDefaultColumns(
 		}
 
 		// Add columns referenced in partial index predicate expressions.
+		// These columns are not directly indexed, so they should not get
+		// inverted index stats, and json type columns should respect the
+		// sql.stats.non_indexed_json_histograms.enabled cluster setting.
 		if idx.IsPartial() {
 			expr, err := parser.ParseExpr(idx.GetPredicate())
 			if err != nil {
@@ -896,10 +911,21 @@ func createStatsDefaultColumns(
 				if err != nil {
 					return nil, err
 				}
-				isInverted := colinfo.ColumnTypeIsOnlyInvertedIndexable(col.GetType())
-				if err := addIndexColumnStatsIfNotExists(colID, isInverted); err != nil {
-					return nil, err
+				if !col.Public() {
+					continue
 				}
+				if isUnsupportedVirtual(col) {
+					continue
+				}
+				cIDs := []descpb.ColumnID{colID}
+				if ok := sortAndTrackStatsExists(cIDs); ok {
+					continue
+				}
+				colStats = append(colStats, jobspb.CreateStatsDetails_ColStat{
+					ColumnIDs:           cIDs,
+					HasHistogram:        nonIndexColHasHistogram(col),
+					HistogramMaxBuckets: defaultHistogramBuckets,
+				})
 			}
 		}
 	}
@@ -929,13 +955,9 @@ func createStatsDefaultColumns(
 		if col.GetType().Family() == types.BoolFamily || col.GetType().Family() == types.EnumFamily {
 			maxHistBuckets = defaultHistogramBuckets
 		}
-		hasHistogram := !colinfo.ColumnTypeIsOnlyInvertedIndexable(col.GetType())
-		if col.GetType().Family() == types.JsonFamily {
-			hasHistogram = nonIndexJSONHistograms
-		}
 		colStats = append(colStats, jobspb.CreateStatsDetails_ColStat{
 			ColumnIDs:           colIDs,
-			HasHistogram:        hasHistogram,
+			HasHistogram:        nonIndexColHasHistogram(col),
 			HistogramMaxBuckets: maxHistBuckets,
 		})
 		nonIdxCols++
