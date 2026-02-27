@@ -835,3 +835,32 @@ query TTT
 SHOW SUPER REGIONS FROM DATABASE mr3
 ----
 mr3  r1  {ap-southeast-2,ca-central-1,us-central-1,us-east-1,us-west-1}
+
+subtest primary_secondary_per_super_region
+
+statement error pq: unimplemented: ALTER DATABASE \.\.\. ALTER SUPER REGION \.\.\. SET PRIMARY REGION
+ALTER DATABASE db ALTER SUPER REGION "test" SET PRIMARY REGION "us-east-1"
+
+statement error pq: unimplemented: ALTER DATABASE \.\.\. ALTER SUPER REGION \.\.\. SET SECONDARY REGION
+ALTER DATABASE db ALTER SUPER REGION "test" SET SECONDARY REGION "ap-southeast-2"
+
+statement error pq: unimplemented: ALTER DATABASE \.\.\. ADD SUPER REGION \.\.\. PRIMARY REGION
+ALTER DATABASE db ADD SUPER REGION "test3" VALUES "ap-southeast-2", "us-east-1" PRIMARY REGION "us-east-1"
+
+statement error pq: unimplemented: ALTER DATABASE \.\.\. ADD SUPER REGION \.\.\. SECONDARY REGION
+ALTER DATABASE db ADD SUPER REGION "test3" VALUES "ap-southeast-2", "us-east-1" SECONDARY REGION "ap-southeast-2"
+
+statement error pq: unimplemented: ALTER DATABASE \.\.\. ADD SUPER REGION \.\.\. PRIMARY REGION
+ALTER DATABASE db ADD SUPER REGION "test3" VALUES "ap-southeast-2", "us-east-1" PRIMARY REGION "us-east-1" SECONDARY REGION "ap-southeast-2"
+
+subtest end
+
+subtest regional_by_table_in_super_region
+
+statement error pq: unimplemented: ALTER TABLE \.\.\. SET LOCALITY REGIONAL BY TABLE IN SUPER REGION
+ALTER TABLE db3.t SET LOCALITY REGIONAL BY TABLE IN SUPER REGION "test1"
+
+statement error pq: unimplemented: CREATE TABLE \.\.\. LOCALITY REGIONAL BY TABLE IN SUPER REGION
+CREATE TABLE db3.t_sr(x INT) LOCALITY REGIONAL BY TABLE IN SUPER REGION "test1"
+
+subtest end

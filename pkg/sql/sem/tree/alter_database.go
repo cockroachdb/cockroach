@@ -115,6 +115,8 @@ type AlterDatabaseAddSuperRegion struct {
 	DatabaseName    Name
 	SuperRegionName Name
 	Regions         []Name
+	PrimaryRegion   Name
+	SecondaryRegion Name
 }
 
 var _ Statement = &AlterDatabaseAddSuperRegion{}
@@ -131,6 +133,14 @@ func (node *AlterDatabaseAddSuperRegion) Format(ctx *FmtCtx) {
 			ctx.WriteString(",")
 		}
 		ctx.FormatNode(&node.Regions[i])
+	}
+	if node.PrimaryRegion != "" {
+		ctx.WriteString(" PRIMARY REGION ")
+		ctx.FormatNode(&node.PrimaryRegion)
+	}
+	if node.SecondaryRegion != "" {
+		ctx.WriteString(" SECONDARY REGION ")
+		ctx.FormatNode(&node.SecondaryRegion)
 	}
 }
 
@@ -174,6 +184,46 @@ func (node *AlterDatabaseAlterSuperRegion) Format(ctx *FmtCtx) {
 		}
 		ctx.FormatNode(&node.Regions[i])
 	}
+}
+
+// AlterDatabaseSuperRegionSetPrimaryRegion represents a
+// ALTER DATABASE ... ALTER SUPER REGION ... SET PRIMARY REGION ... statement.
+type AlterDatabaseSuperRegionSetPrimaryRegion struct {
+	DatabaseName    Name
+	SuperRegionName Name
+	PrimaryRegion   Name
+}
+
+var _ Statement = &AlterDatabaseSuperRegionSetPrimaryRegion{}
+
+// Format implements the NodeFormatter interface.
+func (node *AlterDatabaseSuperRegionSetPrimaryRegion) Format(ctx *FmtCtx) {
+	ctx.WriteString("ALTER DATABASE ")
+	ctx.FormatNode(&node.DatabaseName)
+	ctx.WriteString(" ALTER SUPER REGION ")
+	ctx.FormatNode(&node.SuperRegionName)
+	ctx.WriteString(" SET PRIMARY REGION ")
+	ctx.FormatNode(&node.PrimaryRegion)
+}
+
+// AlterDatabaseSuperRegionSetSecondaryRegion represents a
+// ALTER DATABASE ... ALTER SUPER REGION ... SET SECONDARY REGION ... statement.
+type AlterDatabaseSuperRegionSetSecondaryRegion struct {
+	DatabaseName    Name
+	SuperRegionName Name
+	SecondaryRegion Name
+}
+
+var _ Statement = &AlterDatabaseSuperRegionSetSecondaryRegion{}
+
+// Format implements the NodeFormatter interface.
+func (node *AlterDatabaseSuperRegionSetSecondaryRegion) Format(ctx *FmtCtx) {
+	ctx.WriteString("ALTER DATABASE ")
+	ctx.FormatNode(&node.DatabaseName)
+	ctx.WriteString(" ALTER SUPER REGION ")
+	ctx.FormatNode(&node.SuperRegionName)
+	ctx.WriteString(" SET SECONDARY REGION ")
+	ctx.FormatNode(&node.SecondaryRegion)
 }
 
 // AlterDatabaseSecondaryRegion represents a

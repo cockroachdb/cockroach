@@ -53,6 +53,9 @@ type Locality struct {
 	// RegionalByRowColumn is set if col_name on REGIONAL BY ROW ON <col_name> is
 	// set.
 	RegionalByRowColumn Name
+	// SuperRegion is set if LocalityLevelTable and the table is regional by table
+	// in a super region rather than a specific region.
+	SuperRegion Name
 }
 
 // Format implements the NodeFormatter interface.
@@ -62,11 +65,14 @@ func (node *Locality) Format(ctx *FmtCtx) {
 	case LocalityLevelGlobal:
 		ctx.WriteString("GLOBAL")
 	case LocalityLevelTable:
-		ctx.WriteString("REGIONAL BY TABLE IN ")
-		if node.TableRegion != "" {
+		if node.SuperRegion != "" {
+			ctx.WriteString("REGIONAL BY TABLE IN SUPER REGION ")
+			ctx.FormatNode(&node.SuperRegion)
+		} else if node.TableRegion != "" {
+			ctx.WriteString("REGIONAL BY TABLE IN ")
 			ctx.FormatNode(&node.TableRegion)
 		} else {
-			ctx.WriteString("PRIMARY REGION")
+			ctx.WriteString("REGIONAL BY TABLE IN PRIMARY REGION")
 		}
 	case LocalityLevelRow:
 		ctx.WriteString("REGIONAL BY ROW")

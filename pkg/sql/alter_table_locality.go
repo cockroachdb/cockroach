@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/volatility"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
+	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 	"github.com/cockroachdb/errors"
 )
@@ -43,6 +44,13 @@ type alterTableSetLocalityNode struct {
 func (p *planner) AlterTableLocality(
 	ctx context.Context, n *tree.AlterTableLocality,
 ) (planNode, error) {
+	if n.Locality != nil && n.Locality.SuperRegion != "" {
+		return nil, unimplemented.NewWithIssue(
+			164497,
+			"ALTER TABLE ... SET LOCALITY REGIONAL BY TABLE IN SUPER REGION",
+		)
+	}
+
 	if err := checkSchemaChangeEnabled(
 		ctx,
 		p.ExecCfg(),

@@ -1430,6 +1430,13 @@ func NewTableDesc(
 	setter.TableDesc.RowLevelTTL = setter.UpdatedRowLevelTTL
 
 	indexEncodingVersion := descpb.StrictIndexColumnIDGuaranteesVersion
+	if n.Locality != nil && n.Locality.SuperRegion != "" {
+		return nil, unimplemented.NewWithIssue(
+			164497,
+			"CREATE TABLE ... LOCALITY REGIONAL BY TABLE IN SUPER REGION",
+		)
+	}
+
 	isRegionalByRow := n.Locality != nil && n.Locality.LocalityLevel == tree.LocalityLevelRow
 
 	var partitionAllBy *tree.PartitionBy

@@ -35,6 +35,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlclustersettings"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
+	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/intsets"
 	"github.com/cockroachdb/cockroach/pkg/util/iterutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
@@ -1573,6 +1574,19 @@ type alterDatabaseAddSuperRegion struct {
 func (p *planner) AlterDatabaseAddSuperRegion(
 	ctx context.Context, n *tree.AlterDatabaseAddSuperRegion,
 ) (planNode, error) {
+	if n.PrimaryRegion != "" {
+		return nil, unimplemented.NewWithIssue(
+			164497,
+			"ALTER DATABASE ... ADD SUPER REGION ... PRIMARY REGION",
+		)
+	}
+	if n.SecondaryRegion != "" {
+		return nil, unimplemented.NewWithIssue(
+			164497,
+			"ALTER DATABASE ... ADD SUPER REGION ... SECONDARY REGION",
+		)
+	}
+
 	if err := p.isSuperRegionEnabled(); err != nil {
 		return nil, err
 	}
@@ -1878,6 +1892,28 @@ func (n *alterDatabaseAlterSuperRegion) startExec(params runParams) error {
 	// Validate that adding the super region with the new regions is valid.
 	return params.p.addSuperRegion(params.ctx, n.desc, typeDesc, n.n.Regions, n.n.SuperRegionName, tree.AsStringWithFQNames(n.n, params.Ann()))
 
+}
+
+// AlterDatabaseSuperRegionSetPrimaryRegion sets the primary region for a
+// super region.
+func (p *planner) AlterDatabaseSuperRegionSetPrimaryRegion(
+	ctx context.Context, n *tree.AlterDatabaseSuperRegionSetPrimaryRegion,
+) (planNode, error) {
+	return nil, unimplemented.NewWithIssue(
+		164497,
+		"ALTER DATABASE ... ALTER SUPER REGION ... SET PRIMARY REGION",
+	)
+}
+
+// AlterDatabaseSuperRegionSetSecondaryRegion sets the secondary region for a
+// super region.
+func (p *planner) AlterDatabaseSuperRegionSetSecondaryRegion(
+	ctx context.Context, n *tree.AlterDatabaseSuperRegionSetSecondaryRegion,
+) (planNode, error) {
+	return nil, unimplemented.NewWithIssue(
+		164497,
+		"ALTER DATABASE ... ALTER SUPER REGION ... SET SECONDARY REGION",
+	)
 }
 
 func (p *planner) addSuperRegion(

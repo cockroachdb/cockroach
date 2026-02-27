@@ -1532,6 +1532,7 @@ func (u *sqlSymUnion) filterType() tree.FilterType {
 %type <str> opt_template_clause opt_encoding_clause opt_lc_collate_clause opt_lc_ctype_clause
 %type <tree.NameList> opt_regions_list
 %type <str> region_name primary_region_clause opt_primary_region_clause secondary_region_clause opt_secondary_region_clause
+%type <str> opt_super_region_primary_region opt_super_region_secondary_region
 %type <tree.SuperRegion> super_region_clause opt_super_region_clause
 %type <tree.DataPlacement> opt_placement_clause placement_clause
 %type <tree.NameList> region_name_list
@@ -2314,12 +2315,14 @@ alter_database_primary_region_stmt:
   }
 
 alter_database_add_super_region:
-  ALTER DATABASE database_name ADD SUPER REGION region_name VALUES region_name_list
+  ALTER DATABASE database_name ADD SUPER REGION region_name VALUES region_name_list opt_super_region_primary_region opt_super_region_secondary_region
   {
     $$.val = &tree.AlterDatabaseAddSuperRegion{
       DatabaseName: tree.Name($3),
       SuperRegionName: tree.Name($7),
       Regions: $9.nameList(),
+      PrimaryRegion: tree.Name($10),
+      SecondaryRegion: tree.Name($11),
     }
   }
 
@@ -2339,6 +2342,22 @@ alter_database_alter_super_region:
       DatabaseName: tree.Name($3),
       SuperRegionName: tree.Name($7),
       Regions: $9.nameList(),
+    }
+  }
+| ALTER DATABASE database_name ALTER SUPER REGION region_name SET PRIMARY REGION region_name
+  {
+    $$.val = &tree.AlterDatabaseSuperRegionSetPrimaryRegion{
+      DatabaseName: tree.Name($3),
+      SuperRegionName: tree.Name($7),
+      PrimaryRegion: tree.Name($11),
+    }
+  }
+| ALTER DATABASE database_name ALTER SUPER REGION region_name SET SECONDARY REGION region_name
+  {
+    $$.val = &tree.AlterDatabaseSuperRegionSetSecondaryRegion{
+      DatabaseName: tree.Name($3),
+      SuperRegionName: tree.Name($7),
+      SecondaryRegion: tree.Name($11),
     }
   }
 
@@ -13119,6 +13138,13 @@ locality:
       LocalityLevel: tree.LocalityLevelTable,
     }
   }
+| LOCALITY REGIONAL BY TABLE IN SUPER REGION region_name
+  {
+    $$.val = &tree.Locality{
+      LocalityLevel: tree.LocalityLevelTable,
+      SuperRegion: tree.Name($8),
+    }
+  }
 | LOCALITY REGIONAL BY TABLE
   {
     $$.val = &tree.Locality{
@@ -13979,6 +14005,26 @@ SUPER REGION region_name VALUES region_name_list
 {
   $$.val = tree.SuperRegion{Name: tree.Name($3), Regions: $5.nameList()}
 }
+
+opt_super_region_primary_region:
+  PRIMARY REGION region_name
+  {
+    $$ = $3
+  }
+| /* EMPTY */
+  {
+    $$ = ""
+  }
+
+opt_super_region_secondary_region:
+  SECONDARY REGION region_name
+  {
+    $$ = $3
+  }
+| /* EMPTY */
+  {
+    $$ = ""
+  }
 
 opt_placement_clause:
   placement_clause

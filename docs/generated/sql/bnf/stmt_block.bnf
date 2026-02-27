@@ -2535,10 +2535,12 @@ alter_database_set_stmt ::=
 	'ALTER' 'DATABASE' database_name set_or_reset_clause
 
 alter_database_add_super_region ::=
-	'ALTER' 'DATABASE' database_name 'ADD' 'SUPER' 'REGION' region_name 'VALUES' region_name_list
+	'ALTER' 'DATABASE' database_name 'ADD' 'SUPER' 'REGION' region_name 'VALUES' region_name_list opt_super_region_primary_region opt_super_region_secondary_region
 
 alter_database_alter_super_region ::=
 	'ALTER' 'DATABASE' database_name 'ALTER' 'SUPER' 'REGION' region_name 'VALUES' region_name_list
+	| 'ALTER' 'DATABASE' database_name 'ALTER' 'SUPER' 'REGION' region_name 'SET' 'PRIMARY' 'REGION' region_name
+	| 'ALTER' 'DATABASE' database_name 'ALTER' 'SUPER' 'REGION' region_name 'SET' 'SECONDARY' 'REGION' region_name
 
 alter_database_drop_super_region ::=
 	'ALTER' 'DATABASE' database_name 'DROP' 'SUPER' 'REGION' region_name
@@ -3333,6 +3335,7 @@ locality ::=
 	'LOCALITY' 'GLOBAL'
 	| 'LOCALITY' 'REGIONAL' 'BY' 'TABLE' 'IN' region_name
 	| 'LOCALITY' 'REGIONAL' 'BY' 'TABLE' 'IN' 'PRIMARY' 'REGION'
+	| 'LOCALITY' 'REGIONAL' 'BY' 'TABLE' 'IN' 'SUPER' 'REGION' region_name
 	| 'LOCALITY' 'REGIONAL' 'BY' 'TABLE'
 	| 'LOCALITY' 'REGIONAL' 'IN' region_name
 	| 'LOCALITY' 'REGIONAL' 'IN' 'PRIMARY' 'REGION'
@@ -3369,6 +3372,14 @@ placement_clause ::=
 
 region_name_list ::=
 	( region_name ) ( ( ',' region_name ) )*
+
+opt_super_region_primary_region ::=
+	'PRIMARY' 'REGION' region_name
+	| 
+
+opt_super_region_secondary_region ::=
+	'SECONDARY' 'REGION' region_name
+	| 
 
 secondary_region_clause ::=
 	'SECONDARY' 'REGION' opt_equal region_name

@@ -25,6 +25,10 @@ import (
 // AlterTableLocality implements ALTER TABLE ... LOCALITY ... for the declarative schema changer.
 // Using this operation, user can set table locality to GLOBAL, REGIONAL BY TABLE, or REGIONAL BY ROW.
 func AlterTableLocality(b BuildCtx, t *tree.AlterTableLocality) {
+	if t.Locality != nil && t.Locality.SuperRegion != "" {
+		panic(scerrors.NotImplementedErrorf(t,
+			"ALTER TABLE ... SET LOCALITY REGIONAL BY TABLE IN SUPER REGION"))
+	}
 
 	// Resolve the table
 	elts := b.ResolveTable(t.Name, ResolveParams{

@@ -1565,6 +1565,15 @@ func (node *Locality) doc(p *PrettyCfg) pretty.Doc {
 		return ret
 	case LocalityLevelTable:
 		byTable := pretty.ConcatSpace(localityKW, pretty.Keyword("REGIONAL BY TABLE IN"))
+		if node.SuperRegion != "" {
+			return pretty.ConcatSpace(
+				byTable,
+				pretty.ConcatSpace(
+					pretty.Keyword("SUPER REGION"),
+					p.Doc(&node.SuperRegion),
+				),
+			)
+		}
 		if node.TableRegion == "" {
 			return pretty.ConcatSpace(
 				byTable,

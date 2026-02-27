@@ -2379,11 +2379,16 @@ func (o TenantReplicationOptions) ExpirationWindowSet() bool {
 	return o.ExpirationWindow != options.ExpirationWindow
 }
 
+// SuperRegion defines a super region with its member regions and optional
+// primary/secondary region overrides.
 type SuperRegion struct {
-	Name    Name
-	Regions NameList
+	Name            Name
+	Regions         NameList
+	PrimaryRegion   Name
+	SecondaryRegion Name
 }
 
+// Format implements the NodeFormatter interface.
 func (node *SuperRegion) Format(ctx *FmtCtx) {
 	ctx.WriteString(" SUPER REGION ")
 	ctx.FormatNode(&node.Name)
@@ -2393,5 +2398,13 @@ func (node *SuperRegion) Format(ctx *FmtCtx) {
 			ctx.WriteString(",")
 		}
 		ctx.FormatNode(&node.Regions[i])
+	}
+	if node.PrimaryRegion != "" {
+		ctx.WriteString(" PRIMARY REGION ")
+		ctx.FormatNode(&node.PrimaryRegion)
+	}
+	if node.SecondaryRegion != "" {
+		ctx.WriteString(" SECONDARY REGION ")
+		ctx.FormatNode(&node.SecondaryRegion)
 	}
 }

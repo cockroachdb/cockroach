@@ -23,8 +23,10 @@ alter_database_stmt ::=
 	| 'ALTER' 'DATABASE' database_name 'SET' variable 'TO' value ( ( ',' value ) )*
 	| 'ALTER' 'DATABASE' database_name 'RESET_ALL' 'ALL'
 	| 'ALTER' 'DATABASE' database_name 'RESET' session_var
-	| 'ALTER' 'DATABASE' database_name 'ADD' 'SUPER' 'REGION' region_name 'VALUES' region_name_list
+	| 'ALTER' 'DATABASE' database_name 'ADD' 'SUPER' 'REGION' region_name 'VALUES' region_name_list opt_super_region_primary_region opt_super_region_secondary_region
 	| 'ALTER' 'DATABASE' database_name 'ALTER' 'SUPER' 'REGION' region_name 'VALUES' region_name_list
+	| 'ALTER' 'DATABASE' database_name 'ALTER' 'SUPER' 'REGION' region_name 'SET' 'PRIMARY' 'REGION' region_name
+	| 'ALTER' 'DATABASE' database_name 'ALTER' 'SUPER' 'REGION' region_name 'SET' 'SECONDARY' 'REGION' region_name
 	| 'ALTER' 'DATABASE' database_name 'DROP' 'SUPER' 'REGION' region_name
 	| 'ALTER' 'DATABASE' database_name 'SET' 'SECONDARY' 'REGION' '=' region_name
 	| 'ALTER' 'DATABASE' database_name 'SET' 'SECONDARY' 'REGION'  region_name
