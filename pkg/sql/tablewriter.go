@@ -92,6 +92,8 @@ type tableWriterBase struct {
 	// originally written with before being replicated via Logical Data
 	// Replication.
 	originTimestamp hlc.Timestamp
+	// workloadID is the statement fingerprint ID or job ID for ASH sampling.
+	workloadID uint64
 }
 
 var maxBatchBytes = settings.RegisterByteSizeSetting(
@@ -119,6 +121,7 @@ func (tb *tableWriterBase) init(
 		tb.deadlockTimeout = evalCtx.SessionData().DeadlockTimeout
 		tb.originID = evalCtx.SessionData().OriginIDForLogicalDataReplication
 		tb.originTimestamp = evalCtx.SessionData().OriginTimestampForLogicalDataReplication
+		tb.workloadID = evalCtx.WorkloadID
 	}
 	tb.forceProductionBatchSizes = evalCtx != nil && evalCtx.TestingKnobs.ForceProductionValues
 	tb.maxBatchSize = mutations.MaxBatchSize(tb.forceProductionBatchSizes)
@@ -211,6 +214,7 @@ func (tb *tableWriterBase) tryDoResponseAdmission(ctx context.Context) error {
 			TenantID:   roachpb.SystemTenantID,
 			Priority:   admissionpb.WorkPriority(requestAdmissionHeader.Priority),
 			CreateTime: requestAdmissionHeader.CreateTime,
+			WorkloadID: tb.workloadID,
 		}
 		if _, err := responseAdmissionQ.Admit(ctx, responseAdmission); err != nil {
 			return err
