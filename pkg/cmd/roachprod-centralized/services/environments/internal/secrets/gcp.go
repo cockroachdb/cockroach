@@ -24,7 +24,7 @@ import (
 // The "gcp:" prefix is already stripped by the Registry before calling Resolve.
 //
 // The project and optional secretPrefix are configured at construction time.
-// When writing, secrets are created with ID "{secretPrefix}{secretID}" in the
+// When writing, secrets are created with ID "{secretPrefix}-{secretID}" in the
 // configured project. The prefix enables instance isolation when multiple
 // roachprod-centralized deployments share the same GCP project.
 type GCPResolver struct {
@@ -35,14 +35,19 @@ type GCPResolver struct {
 
 // NewGCPResolver creates a new GCP Secret Manager resolver that reads and
 // writes secrets in the given project. The optional secretPrefix is prepended
-// to all secret IDs during writes, enabling isolation between multiple
-// instances sharing a GCP project.
+// to all secret IDs during writes (separated by "-"), enabling isolation
+// between multiple instances sharing a GCP project.
 func NewGCPResolver(
 	ctx context.Context, project string, secretPrefix string,
 ) (*GCPResolver, error) {
 	client, err := secretmanager.NewClient(ctx)
 	if err != nil {
 		return nil, errors.Wrap(err, "create secretmanager client")
+	}
+	// Normalize prefix so it always ends with "-" when non-empty,
+	// ensuring a clean separator between prefix and secret ID.
+	if secretPrefix != "" && secretPrefix[len(secretPrefix)-1] != '-' {
+		secretPrefix += "-"
 	}
 	return &GCPResolver{
 		client:       client,

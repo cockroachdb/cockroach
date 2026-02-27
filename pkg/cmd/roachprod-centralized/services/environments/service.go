@@ -264,7 +264,7 @@ func (s *Service) CreateVariable(
 
 	value := input.Value
 	if isSecretType(input.Type) {
-		value, err = s.processSecretValue(ctx, envName, input.Key, value)
+		value, err = s.processSecretValue(ctx, l, envName, input.Key, value)
 		if err != nil {
 			return envmodels.EnvironmentVariable{}, err
 		}
@@ -312,7 +312,7 @@ func (s *Service) UpdateVariable(
 
 	value := input.Value
 	if isSecretType(input.Type) {
-		value, err = s.processSecretValue(ctx, envName, key, value)
+		value, err = s.processSecretValue(ctx, l, envName, key, value)
 		if err != nil {
 			return envmodels.EnvironmentVariable{}, err
 		}
@@ -406,11 +406,15 @@ func (s *Service) GetEnvironmentResolved(
 // secret manager. Otherwise it is treated as a raw value and auto-written
 // using the "gcp" resolver (which owns its project and prefix configuration).
 func (s *Service) processSecretValue(
-	ctx context.Context, envName, key, value string,
+	ctx context.Context, l *logger.Logger, envName, key, value string,
 ) (string, error) {
 	if s.secretsRegistry.HasResolver(value) {
 		// Value is already a prefixed reference -- verify it.
 		if err := s.secretsRegistry.Verify(ctx, value); err != nil {
+			l.Error("failed to verify secret",
+				slog.String("key", key),
+				slog.Any("error", err),
+			)
 			return "", types.ErrSecretVerifyFailed
 		}
 		return value, nil
@@ -418,11 +422,18 @@ func (s *Service) processSecretValue(
 
 	// Raw value -- auto-write via the "gcp" resolver.
 	if !s.secretsRegistry.CanWrite("gcp") {
+		l.Error("failed to write secret: gcp resolver not available",
+			slog.String("key", key),
+		)
 		return "", types.ErrSecretWriteFailed
 	}
 	secretID := envName + "--" + key
 	ref, err := s.secretsRegistry.Write(ctx, "gcp", secretID, value)
 	if err != nil {
+		l.Error("failed to write secret",
+			slog.String("key", key),
+			slog.Any("error", err),
+		)
 		return "", types.ErrSecretWriteFailed
 	}
 	return ref, nil
