@@ -2140,7 +2140,7 @@ func (d *BackupRestoreTestDriver) createBackupCollection(
 	)
 
 	// Create full backup.
-	if _, err := builder.TakeFull(ctx); err != nil {
+	if _, err := builder.TakeFullSync(ctx); err != nil {
 		return nil, err
 	}
 
@@ -2153,7 +2153,7 @@ func (d *BackupRestoreTestDriver) createBackupCollection(
 
 	for range numIncrementals {
 		d.randomWait(l, rng)
-		if _, err := builder.TakeInc(ctx); err != nil {
+		if _, err := builder.TakeIncSync(ctx); err != nil {
 			return nil, err
 		}
 
@@ -2164,7 +2164,7 @@ func (d *BackupRestoreTestDriver) createBackupCollection(
 			startIdx := 1 + rng.Intn(builder.BackupCount()-2)
 			endIdx := builder.BackupCount() - 1
 
-			if _, err := builder.TakeCompacted(ctx, startIdx, endIdx); err != nil {
+			if _, err := builder.TakeCompactedSync(ctx, startIdx, endIdx); err != nil {
 				return nil, err
 			}
 		}
@@ -2215,6 +2215,8 @@ type CollectionBuilder struct {
 
 	// incCount tracks the number of incremental backups taken.
 	incCount int
+
+	lastJobID int
 }
 
 // NewCollectionBuilder creates a new builder for constructing a backup collection.
@@ -2242,7 +2244,26 @@ func (d *BackupRestoreTestDriver) NewCollectionBuilder(
 	return cb
 }
 
-// TakeFull creates a full backup and waits for it to complete.
+// WaitForLastJob waits for the last backup job to complete.
+// This must be called after every async backup call (TakeFull, TakeInc, TakeCompacted)
+// before starting another backup, as the builder does not support multiple backup jobs
+// running concurrently.
+func (cb *CollectionBuilder) WaitForLastJob(ctx context.Context) error {
+	if cb.lastJobID == 0 {
+		return nil
+	}
+
+	if err := cb.driver.testUtils.waitForJobSuccess(
+		ctx, cb.l, cb.rng, cb.lastJobID, cb.internalSystemJobs,
+	); err != nil {
+		return err
+	}
+
+	cb.lastJobID = 0
+	return nil
+}
+
+// TakeFull creates a full backup and returns immediately without waiting for completion.
 func (cb *CollectionBuilder) TakeFull(ctx context.Context) (jobID int, err error) {
 	if cb.finalized {
 		return 0, errors.New("cannot take backup: builder has been finalized")
@@ -2271,23 +2292,31 @@ func (cb *CollectionBuilder) TakeFull(ctx context.Context) (jobID int, err error
 	cb.fullStarted = true
 	cb.collection = collection
 	cb.backupEndTimes = []string{endTime}
+	cb.lastJobID = jobID
 
-	if err := cb.driver.testUtils.waitForJobSuccess(
-		ctx, cb.l, cb.rng, jobID, cb.internalSystemJobs,
-	); err != nil {
-		return 0, err
-	}
-
+	cb.l.Printf("started full backup job %d", jobID)
 	return jobID, nil
 }
 
-// TakeInc creates an incremental backup and waits for it to complete.
+// TakeFullSync creates a full backup and waits for it to complete.
+func (cb *CollectionBuilder) TakeFullSync(ctx context.Context) (jobID int, err error) {
+	jobID, err = cb.TakeFull(ctx)
+	if err != nil {
+		return 0, err
+	}
+	return jobID, cb.WaitForLastJob(ctx)
+}
+
+// TakeInc creates an incremental backup and returns immediately without waiting for completion.
 func (cb *CollectionBuilder) TakeInc(ctx context.Context) (jobID int, err error) {
 	if cb.finalized {
 		return 0, errors.New("cannot take backup: builder has been finalized")
 	}
 	if !cb.fullStarted {
 		return 0, errors.New("must start full backup before incremental backup")
+	}
+	if cb.lastJobID != 0 {
+		return 0, errors.Newf("cannot start incremental backup: job %d still running", cb.lastJobID)
 	}
 
 	incNum := cb.incCount + 1
@@ -2309,17 +2338,22 @@ func (cb *CollectionBuilder) TakeInc(ctx context.Context) (jobID int, err error)
 
 	cb.incCount = incNum
 	cb.backupEndTimes = append(cb.backupEndTimes, endTime)
+	cb.lastJobID = jobID
 
-	if err := cb.driver.testUtils.waitForJobSuccess(
-		ctx, cb.l, cb.rng, jobID, cb.internalSystemJobs,
-	); err != nil {
-		return 0, err
-	}
-
+	cb.l.Printf("started incremental backup job %d", jobID)
 	return jobID, nil
 }
 
-// TakeCompacted creates a compacted backup and waits for it to complete.
+// TakeIncSync creates an incremental backup and waits for it to complete.
+func (cb *CollectionBuilder) TakeIncSync(ctx context.Context) (jobID int, err error) {
+	jobID, err = cb.TakeInc(ctx)
+	if err != nil {
+		return 0, err
+	}
+	return jobID, cb.WaitForLastJob(ctx)
+}
+
+// TakeCompacted creates a compacted backup and returns immediately without waiting for completion.
 // The indices refer to positions in the backup chain (0 = full, 1 = first inc, etc.).
 // NB: startIdx must be >= 1 since the full backup (index 0) cannot be compacted.
 func (cb *CollectionBuilder) TakeCompacted(
@@ -2330,6 +2364,9 @@ func (cb *CollectionBuilder) TakeCompacted(
 	}
 	if !cb.fullStarted {
 		return 0, errors.New("must take full backup before compacted backup")
+	}
+	if cb.lastJobID != 0 {
+		return 0, errors.Newf("cannot start compacted backup: job %d still running", cb.lastJobID)
 	}
 	if startIdx <= 0 || endIdx >= len(cb.backupEndTimes) {
 		return 0, errors.Newf(
@@ -2387,14 +2424,23 @@ func (cb *CollectionBuilder) TakeCompacted(
 	// compacted backup and compaction will fail due to being unable to find
 	// the starting backup.
 	cb.backupEndTimes = slices.Delete(cb.backupEndTimes, startIdx, endIdx)
+	cb.lastJobID = jobID
 
-	if err := cb.driver.testUtils.waitForJobSuccess(
-		ctx, cb.l, cb.rng, jobID, cb.internalSystemJobs,
-	); err != nil {
+	cb.l.Printf("started compacted backup job %d", jobID)
+	return jobID, nil
+}
+
+// TakeCompactedSync creates a compacted backup and waits for it to complete.
+// The indices refer to positions in the backup chain (0 = full, 1 = first inc, etc.).
+// NB: startIdx must be >= 1 since the full backup (index 0) cannot be compacted.
+func (cb *CollectionBuilder) TakeCompactedSync(
+	ctx context.Context, startIdx, endIdx int,
+) (jobID int, err error) {
+	jobID, err = cb.TakeCompacted(ctx, startIdx, endIdx)
+	if err != nil {
 		return 0, err
 	}
-
-	return jobID, nil
+	return jobID, cb.WaitForLastJob(ctx)
 }
 
 // BackupCount returns the shortest length of the shortest chain to the latest
@@ -2415,6 +2461,11 @@ func (cb *CollectionBuilder) Finalize(ctx context.Context) (*backupCollection, e
 	if !cb.fullStarted {
 		return nil, errors.New("cannot finalize: no full backup taken")
 	}
+
+	if err := cb.WaitForLastJob(ctx); err != nil {
+		return nil, err
+	}
+
 	cb.finalized = true
 
 	collection := cb.collection
