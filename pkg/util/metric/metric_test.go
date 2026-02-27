@@ -119,6 +119,22 @@ func TestGaugeFloat64(t *testing.T) {
 	}
 }
 
+func TestGaugeFloat64MarshalInfNaN(t *testing.T) {
+	g := NewGaugeFloat64(emptyMetadata)
+
+	g.Update(math.Inf(1))
+	testMarshal(t, g, "0")
+
+	g.Update(math.Inf(-1))
+	testMarshal(t, g, "0")
+
+	g.Update(math.NaN())
+	testMarshal(t, g, "0")
+
+	g.Update(42.5)
+	testMarshal(t, g, "42.5")
+}
+
 func TestCounter(t *testing.T) {
 	c := NewCounter(emptyMetadata)
 	c.Inc(90)
