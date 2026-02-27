@@ -11,7 +11,6 @@ import (
 	"sort"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
@@ -53,7 +52,11 @@ var maxRowSizeLog = settings.RegisterByteSizeSetting(
 	"maximum size of row (or column family if multiple column families are in use) that SQL can "+
 		"write to the database, above which an event is logged to SQL_PERF (or SQL_INTERNAL_PERF "+
 		"if the mutating statement was internal); use 0 to disable",
-	kvserverbase.MaxCommandSizeDefault,
+	// Default matches sql.conn.max_read_buffer_message_size and
+	// kv.bulk_sst.target_size (both 16 MiB), so that rows approaching the
+	// pgwire message size limit or exceeding the backup SST target size are
+	// logged.
+	16<<20, /* 16 MiB */
 	settings.IntInRangeOrZeroDisable(maxRowSizeFloor, maxRowSizeCeil),
 	settings.WithPublic,
 )
@@ -63,7 +66,9 @@ var maxRowSizeErr = settings.RegisterByteSizeSetting(
 	"sql.guardrails.max_row_size_err",
 	"maximum size of row (or column family if multiple column families are in use) that SQL can "+
 		"write to the database, above which an error is returned; use 0 to disable",
-	512<<20, /* 512 MiB */
+	// Default matches kv.bulk_sst.target_size + kv.bulk_sst.max_allowed_overage
+	// (16 MiB + 64 MiB = 80 MiB), above which rows cannot be backed up.
+	80<<20, /* 80 MiB */
 	settings.IntInRangeOrZeroDisable(maxRowSizeFloor, maxRowSizeCeil),
 	settings.WithPublic,
 )
