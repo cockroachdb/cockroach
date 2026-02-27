@@ -13050,6 +13050,100 @@ var datumsToBytesOverload = tree.Overload{
 
 var nilRegionsError = errors.AssertionFailedf("evalCtx.Regions is nil")
 
+// rewriteInlineHintsImpl is the shared implementation for the
+// crdb_internal.inject_hint and information_schema.crdb_rewrite_inline_hints
+// builtins.
+func rewriteInlineHintsImpl(
+	ctx context.Context, evalCtx *eval.Context, targetArg, donorArg string,
+) (tree.Datum, error) {
+	// The user must have REPAIRCLUSTER to use this builtin.
+	if err := evalCtx.SessionAccessor.CheckPrivilege(
+		ctx, syntheticprivilege.GlobalPrivilegeObject, privilege.REPAIRCLUSTER,
+	); err != nil {
+		return nil, err
+	}
+
+	// First, parse both arguments and convert both to statement fingerprints if
+	// they are not already.
+	fingerprintFlags := tree.FmtFlags(tree.QueryFormattingForFingerprintsMask.Get(
+		&evalCtx.Settings.SV,
+	))
+	parse := func(arg string, tag parserutils.FingerprintTag, evalCtx *eval.Context) (stmt statements.Statement[tree.Statement], fingerprint string, err error) {
+		fingerprint, err = parserutils.FingerprintStatement(tag, arg, fingerprintFlags)
+		if err != nil {
+			return stmt, fingerprint, err
+		}
+		if fingerprint != arg {
+			evalCtx.ClientNoticeSender.BufferClientNotice(
+				ctx, pgnotice.Newf("%s changed to: %s", tag, fingerprint),
+			)
+		}
+		stmt, err = parserutils.ParseOne(fingerprint)
+		if err != nil {
+			// Assertion failure is appropriate here, so no error wrapping.
+			return stmt, fingerprint, err
+		}
+		return stmt, fingerprint, nil
+	}
+
+	targetStmt, targetSQL, err := parse(targetArg, parserutils.FingerprintTagStatementFingerprint, evalCtx)
+	if err != nil {
+		return nil, err
+	}
+
+	donorStmt, donorSQL, err := parse(donorArg, parserutils.FingerprintTagHintDonor, evalCtx)
+	if err != nil {
+		return nil, err
+	}
+
+	// Validate that the donor statement matches the target statement
+	// without hints.
+	donor, err := tree.NewHintInjectionDonor(donorStmt.AST, fingerprintFlags)
+	if err != nil {
+		return nil, errors.NewAssertionErrorWithWrappedErrf(err, "error while creating donor")
+	}
+	if err := donor.Validate(targetStmt.AST, fingerprintFlags); err != nil {
+		return nil, pgerror.WithCandidateCode(err, pgcode.InvalidParameterValue)
+	}
+
+	// Do a trial hint injection to validate that the target statement gets
+	// rewritten into the donor statement.
+	result, _, err := donor.InjectHints(targetStmt.AST)
+	if err != nil {
+		return nil, pgerror.WithCandidateCode(err, pgcode.InvalidParameterValue)
+	}
+	// The donor statement could be non-fingerprint or fingerprint, so for an
+	// apples-to-apples comparison we convert both to fingerprints.
+	resultFingerprint := tree.FormatStatementHideConstants(result, fingerprintFlags)
+	donorFingerprint := tree.FormatStatementHideConstants(donorStmt.AST, fingerprintFlags)
+	if resultFingerprint != donorFingerprint {
+		return nil, pgerror.Newf(
+			pgcode.InvalidParameterValue,
+			"could not validate that target statement is rewritten as donor statement (%s): %s",
+			donorFingerprint, resultFingerprint,
+		)
+	}
+
+	// Now that we've passed some basic validation, insert into statement_hints.
+	var hint hintpb.StatementHintUnion
+	hint.SetValue(&hintpb.InjectHints{DonorSQL: donorSQL})
+	hintID, err := evalCtx.Planner.InsertStatementHint(ctx, targetSQL, hint)
+	if err != nil {
+		return nil, err
+	}
+
+	// Log the statement hint injection event.
+	if err := evalCtx.Planner.LogEvent(ctx, &eventpb.RewriteInlineHints{
+		StatementFingerprint: targetSQL,
+		DonorSQL:             donorSQL,
+		HintID:               hintID,
+	}); err != nil {
+		return nil, err
+	}
+
+	return tree.NewDInt(tree.DInt(hintID)), nil
+}
+
 var rewriteInlineHintsOverload = tree.Overload{
 	Types: tree.ParamTypes{
 		{Name: "statement_fingerprint", Typ: types.String},
@@ -13057,95 +13151,9 @@ var rewriteInlineHintsOverload = tree.Overload{
 	},
 	ReturnType: tree.FixedReturnType(types.Int),
 	Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
-		// The user must have REPAIRCLUSTER to use this builtin.
-		if err := evalCtx.SessionAccessor.CheckPrivilege(
-			ctx, syntheticprivilege.GlobalPrivilegeObject, privilege.REPAIRCLUSTER,
-		); err != nil {
-			return nil, err
-		}
-
 		targetArg := string(tree.MustBeDString(args[0]))
 		donorArg := string(tree.MustBeDString(args[1]))
-
-		// First, parse both arguments and convert both to statement fingerprints if
-		// they are not already.
-		fingerprintFlags := tree.FmtFlags(tree.QueryFormattingForFingerprintsMask.Get(
-			&evalCtx.Settings.SV,
-		))
-		parse := func(arg string, tag parserutils.FingerprintTag, evalCtx *eval.Context) (stmt statements.Statement[tree.Statement], fingerprint string, err error) {
-			fingerprint, err = parserutils.FingerprintStatement(tag, arg, fingerprintFlags)
-			if err != nil {
-				return stmt, fingerprint, err
-			}
-			if fingerprint != arg {
-				evalCtx.ClientNoticeSender.BufferClientNotice(
-					ctx, pgnotice.Newf("%s changed to: %s", tag, fingerprint),
-				)
-			}
-			stmt, err = parserutils.ParseOne(fingerprint)
-			if err != nil {
-				// Assertion failure is appropriate here, so no error wrapping.
-				return stmt, fingerprint, err
-			}
-			return stmt, fingerprint, nil
-		}
-
-		targetStmt, targetSQL, err := parse(targetArg, parserutils.FingerprintTagStatementFingerprint, evalCtx)
-		if err != nil {
-			return nil, err
-		}
-
-		donorStmt, donorSQL, err := parse(donorArg, parserutils.FingerprintTagHintDonor, evalCtx)
-		if err != nil {
-			return nil, err
-		}
-
-		// Validate that the donor statement matches the target statement
-		// without hints.
-		donor, err := tree.NewHintInjectionDonor(donorStmt.AST, fingerprintFlags)
-		if err != nil {
-			return nil, errors.NewAssertionErrorWithWrappedErrf(err, "error while creating donor")
-		}
-		if err := donor.Validate(targetStmt.AST, fingerprintFlags); err != nil {
-			return nil, pgerror.WithCandidateCode(err, pgcode.InvalidParameterValue)
-		}
-
-		// Do a trial hint injection to validate that the target statement gets
-		// rewritten into the donor statement.
-		result, _, err := donor.InjectHints(targetStmt.AST)
-		if err != nil {
-			return nil, pgerror.WithCandidateCode(err, pgcode.InvalidParameterValue)
-		}
-		// The donor statement could be non-fingerprint or fingerprint, so for an
-		// apples-to-apples comparison we convert both to fingerprints.
-		resultFingerprint := tree.FormatStatementHideConstants(result, fingerprintFlags)
-		donorFingerprint := tree.FormatStatementHideConstants(donorStmt.AST, fingerprintFlags)
-		if resultFingerprint != donorFingerprint {
-			return nil, pgerror.Newf(
-				pgcode.InvalidParameterValue,
-				"could not validate that target statement is rewritten as donor statement (%s): %s",
-				donorFingerprint, resultFingerprint,
-			)
-		}
-
-		// Now that we've passed some basic validation, insert into statement_hints.
-		var hint hintpb.StatementHintUnion
-		hint.SetValue(&hintpb.InjectHints{DonorSQL: donorSQL})
-		hintID, err := evalCtx.Planner.InsertStatementHint(ctx, targetSQL, hint)
-		if err != nil {
-			return nil, err
-		}
-
-		// Log the statement hint injection event.
-		if err := evalCtx.Planner.LogEvent(ctx, &eventpb.RewriteInlineHints{
-			StatementFingerprint: targetSQL,
-			DonorSQL:             donorSQL,
-			HintID:               hintID,
-		}); err != nil {
-			return nil, err
-		}
-
-		return tree.NewDInt(tree.DInt(hintID)), nil
+		return rewriteInlineHintsImpl(ctx, evalCtx, targetArg, donorArg)
 	},
 	Info: `This function adds an inline-hints rewrite rule for a statement fingerprint. It ` +
 		`returns the hint ID of the newly created rewrite rule. The rewrite rule only applies to ` +
