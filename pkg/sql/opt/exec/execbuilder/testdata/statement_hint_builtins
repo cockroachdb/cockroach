@@ -1516,3 +1516,51 @@ statement hints count: 1
           missing stats
           table: abc@abc_pkey
           spans: [/6 - ]
+
+# Test the 3-arg overload that sets the database column.
+
+# Insert a hint scoped to the "test" database using the 3-arg overload.
+let $db_hint_id
+SELECT information_schema.crdb_rewrite_inline_hints(
+  'SELECT x FROM xy WHERE x = _',
+  'SELECT x FROM xy@xy_y_idx WHERE x = _',
+  'test'
+)
+
+# Verify the database column is set in system.statement_hints.
+query TTT
+SELECT database, '|', fingerprint
+FROM system.statement_hints
+WHERE row_id = $db_hint_id
+----
+test  |  SELECT x FROM xy WHERE x = _
+
+# Insert a hint without specifying a database using the 2-arg overload.
+let $no_db_hint_id
+SELECT information_schema.crdb_rewrite_inline_hints(
+  'SELECT x FROM xy WHERE x = _',
+  'SELECT x FROM xy@xy_y_idx WHERE x = _'
+)
+
+# Verify the database column is NULL for the 2-arg overload.
+query TTT
+SELECT database, '|', fingerprint
+FROM system.statement_hints
+WHERE row_id = $no_db_hint_id
+----
+NULL  |  SELECT x FROM xy WHERE x = _
+
+# Also test the 3-arg overload of crdb_internal.inject_hint.
+let $inject_db_hint_id
+SELECT crdb_internal.inject_hint(
+  'SELECT y FROM xy WHERE y = _',
+  'SELECT y FROM xy@xy_y_idx WHERE y = _',
+  'mydb'
+)
+
+query TTT
+SELECT database, '|', fingerprint
+FROM system.statement_hints
+WHERE row_id = $inject_db_hint_id
+----
+mydb  |  SELECT y FROM xy WHERE y = _
