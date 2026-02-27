@@ -4940,6 +4940,9 @@ type MVCCScanOptions struct {
 	// roachpb.Value whose RawBytes may contain MVCCValueHeader
 	// data.
 	ReturnRawMVCCValues bool
+	// WorkloadID identifies the workload that triggered the scan (e.g.
+	// statement fingerprint ID, job ID). Used for ASH sampling.
+	WorkloadID uint64
 }
 
 func (opts *MVCCScanOptions) validate() error {

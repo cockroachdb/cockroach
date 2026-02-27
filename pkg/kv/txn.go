@@ -82,6 +82,11 @@ type Txn struct {
 	// It will be attached to all requests sent through this transaction.
 	gatewayNodeID roachpb.NodeID
 
+	// workloadID, if != 0, is the identifier for the workload that is using
+	// this transaction (e.g., statement fingerprint ID, job ID). It will be
+	// attached to all requests sent through this transaction.
+	workloadID uint64
+
 	// The following fields are not safe for concurrent modification.
 	// They should be set before operating on the transaction.
 
@@ -236,6 +241,19 @@ func NewLeafTxn(
 	tis *roachpb.LeafTxnInputState,
 	header *kvpb.AdmissionHeader,
 ) *Txn {
+	return NewLeafTxnWithWorkloadInfo(ctx, db, gatewayNodeID, tis, header, 0 /* workloadID */)
+}
+
+// NewLeafTxnWithWorkloadInfo instantiates a new leaf transaction with the given
+// workloadID for ASH sampling (e.g. statement fingerprint ID, job ID).
+func NewLeafTxnWithWorkloadInfo(
+	ctx context.Context,
+	db *DB,
+	gatewayNodeID roachpb.NodeID,
+	tis *roachpb.LeafTxnInputState,
+	header *kvpb.AdmissionHeader,
+	workloadID uint64,
+) *Txn {
 	if db == nil {
 		panic(errors.WithContextTags(
 			errors.AssertionFailedf("attempting to create leaf txn with nil db for Transaction: %s", tis.Txn), ctx))
@@ -245,7 +263,7 @@ func NewLeafTxn(
 			errors.AssertionFailedf("can't create leaf txn with non-PENDING proto: %s", tis.Txn), ctx))
 	}
 	tis.Txn.AssertInitialized(ctx)
-	txn := &Txn{db: db, typ: LeafTxn, gatewayNodeID: gatewayNodeID}
+	txn := &Txn{db: db, typ: LeafTxn, gatewayNodeID: gatewayNodeID, workloadID: workloadID}
 	txn.mu.ID = tis.Txn.ID
 	txn.mu.userPriority = roachpb.NormalUserPriority
 	txn.mu.sender = db.factory.LeafTransactionalSender(tis)
@@ -439,6 +457,12 @@ func (txn *Txn) DebugName() string {
 
 func (txn *Txn) debugNameLocked() string {
 	return fmt.Sprintf("%s (id: %s)", txn.mu.debugName, txn.mu.ID)
+}
+
+// SetWorkloadID sets the workload ID for ASH sampling.
+// Automatically propagated to all BatchRequests sent through this transaction.
+func (txn *Txn) SetWorkloadID(workloadID uint64) {
+	txn.workloadID = workloadID
 }
 
 // SetBufferedWritesEnabled toggles whether the writes are buffered on the
@@ -1351,6 +1375,10 @@ func (txn *Txn) Send(
 	// place I found to set this field.
 	if txn.gatewayNodeID != 0 {
 		ba.Header.GatewayNodeID = txn.gatewayNodeID
+	}
+
+	if txn.workloadID != 0 && ba.Header.WorkloadID == 0 {
+		ba.Header.WorkloadID = txn.workloadID
 	}
 
 	// Requests with a bounded staleness header should use NegotiateAndSend.
