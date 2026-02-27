@@ -70,11 +70,14 @@ function renderLogInfo(
   );
 }
 
-export default class LogTable extends React.Component<LogTableProps, {}> {
+export default function LogTable({
+  rangeID,
+  log,
+}: LogTableProps): React.ReactElement {
   // If there is no otherRangeID, it comes back as the number 0.
-  renderRangeID(otherRangeID: Long | number) {
+  const renderRangeID = (otherRangeID: Long | number) => {
     const fixedOtherRangeID = FixLong(otherRangeID);
-    const fixedCurrentRangeID = FixLong(this.props.rangeID);
+    const fixedCurrentRangeID = FixLong(rangeID);
     if (fixedOtherRangeID.eq(0)) {
       return null;
     }
@@ -88,11 +91,9 @@ export default class LogTable extends React.Component<LogTableProps, {}> {
         r{fixedOtherRangeID.toString()}
       </a>
     );
-  }
+  };
 
-  renderContent = () => {
-    const { log } = this.props;
-
+  const renderContent = () => {
     // Sort by descending timestamp.
     const events = orderBy(
       log && log.data && log.data.events,
@@ -127,10 +128,10 @@ export default class LogTable extends React.Component<LogTableProps, {}> {
                 {printLogEventType(event.event.event_type)}
               </td>
               <td className="log-table__cell">
-                {this.renderRangeID(event.event.range_id)}
+                {renderRangeID(event.event.range_id)}
               </td>
               <td className="log-table__cell">
-                {this.renderRangeID(event.event.other_range_id)}
+                {renderRangeID(event.event.other_range_id)}
               </td>
               <td className="log-table__cell">
                 {renderLogInfo(event.pretty_info)}
@@ -142,19 +143,15 @@ export default class LogTable extends React.Component<LogTableProps, {}> {
     );
   };
 
-  render() {
-    const { log } = this.props;
-
-    return (
-      <div>
-        <h2 className="base-heading">Range Log</h2>
-        <Loading
-          loading={!log || log.inFlight}
-          page={"log table"}
-          error={log && log.lastError}
-          render={this.renderContent}
-        />
-      </div>
-    );
-  }
+  return (
+    <div>
+      <h2 className="base-heading">Range Log</h2>
+      <Loading
+        loading={!log || log.inFlight}
+        page={"log table"}
+        error={log && log.lastError}
+        render={renderContent}
+      />
+    </div>
+  );
 }

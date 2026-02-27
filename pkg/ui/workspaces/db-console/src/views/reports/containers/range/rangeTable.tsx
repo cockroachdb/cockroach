@@ -673,329 +673,313 @@ function renderRangeReplicaRow(
   );
 }
 
-export default class RangeTable extends React.Component<RangeTableProps, {}> {
-  render() {
-    const { infos, replicas } = this.props;
-    const leader = head(infos);
-    const rangeID = leader.state.state.desc.range_id;
+export default function RangeTable({
+  infos,
+  replicas,
+}: RangeTableProps): React.ReactElement {
+  const leader = head(infos);
+  const rangeID = leader.state.state.desc.range_id;
 
-    // We want to display ordered by store ID.
-    const sortedStoreIDs = flow(
-      (infos: IRangeInfo[]) => map(infos, info => info.source_store_id),
-      storeIds => sortBy(storeIds, id => id),
-    )(infos);
+  // We want to display ordered by store ID.
+  const sortedStoreIDs = flow(
+    (infos: IRangeInfo[]) => map(infos, info => info.source_store_id),
+    storeIds => sortBy(storeIds, id => id),
+  )(infos);
 
-    const dormantStoreIDs: Set<number> = new Set();
+  const dormantStoreIDs: Set<number> = new Set();
 
-    const now = moment();
+  const now = moment();
 
-    // Convert the infos to a simpler object for display purposes. This helps when trying to
-    // determine if any warnings should be displayed.
-    const detailsByStoreID: Map<number, RangeTableDetail> = new Map();
-    forEach(infos, info => {
-      const localReplica = RangeInfo.GetLocalReplica(info);
-      const awaitingGC = isNil(localReplica);
-      const lease = info.state.state.lease;
-      const leaseEpoch = Lease.IsEpoch(lease);
-      const leaseLeader = Lease.IsLeader(lease);
-      const leaseExpiration = !leaseEpoch && !leaseLeader;
-      const raftLeader =
-        !awaitingGC &&
-        FixLong(info.raft_state.lead).eq(localReplica.replica_id);
-      const leaseHolder =
-        !awaitingGC && localReplica.replica_id === lease.replica.replica_id;
-      const mvcc = info.state.state.stats;
-      const raftState = contentRaftState(info.raft_state.state);
-      const vote = FixLong(info.raft_state.hard_state.vote);
-      let leaseState: RangeTableCellContent;
-      if (isNil(info.lease_status)) {
-        leaseState = rangeTableEmptyContentWithWarning;
-      } else {
-        leaseState = createContent(
-          convertLeaseState(info.lease_status.state),
-          info.lease_status.state ===
-            protos.cockroach.kv.kvserver.storagepb.LeaseState.VALID
-            ? ""
-            : "range-table__cell--warning",
-        );
-      }
-      const dormant = raftState.value[0] === "dormant";
-      if (dormant) {
-        dormantStoreIDs.add(info.source_store_id);
-      }
-      detailsByStoreID.set(info.source_store_id, {
-        id: createContent(
-          Print.ReplicaID(
-            rangeID,
-            localReplica,
-            info.source_node_id,
-            info.source_store_id,
-          ),
-        ),
-        keyRange: createContent(
-          `${info.span.start_key} to ${info.span.end_key}`,
-        ),
-        problems: contentProblems(info.problems, awaitingGC),
-        replicaType: awaitingGC
-          ? createContent("") // `problems` above will report "Awaiting GC" in this case
-          : createContent(contentReplicaType(localReplica.type)),
-        raftState: raftState,
-        leadSupportUntil: contentTimestamp(
-          info.raft_state.lead_support_until,
-          now,
-        ),
-        quiescent: info.quiescent
-          ? rangeTableQuiescent
-          : rangeTableEmptyContent,
-        ticking: createContent(info.ticking.toString()),
-        leaseState: leaseState,
-        leaseHolder: createContent(
-          Print.ReplicaID(rangeID, lease.replica),
-          leaseHolder
-            ? "range-table__cell--lease-holder"
-            : "range-table__cell--lease-follower",
-        ),
-        leaseType: createContent(
-          leaseEpoch ? "epoch" : leaseLeader ? "leader" : "expiration",
-        ),
-        leaseEpoch: leaseEpoch
-          ? createContent(lease.epoch)
-          : rangeTableEmptyContent,
-        leaseTerm: leaseLeader
-          ? createContent(lease.term)
-          : rangeTableEmptyContent,
-        isLeaseholder: createContent(String(info.is_leaseholder)),
-        leaseValid: createContent(String(info.lease_valid)),
-        leaseStart: contentTimestamp(lease.start, now),
-        leaseExpiration: leaseExpiration
-          ? contentTimestamp(lease.expiration, now)
-          : rangeTableEmptyContent,
-        leaseMinExpiration: !leaseExpiration
-          ? contentTimestamp(lease.min_expiration, now)
-          : rangeTableEmptyContent,
-        leaseAppliedIndex: createContent(
-          FixLong(info.state.state.lease_applied_index),
-        ),
-        raftLeader: contentIf(!dormant, () =>
-          createContent(
-            FixLong(info.raft_state.lead),
-            raftLeader
-              ? "range-table__cell--raftstate-leader"
-              : "range-table__cell--raftstate-follower",
-          ),
-        ),
-        vote: contentIf(!dormant, () =>
-          createContent(vote.greaterThan(0) ? vote : "-"),
-        ),
-        term: contentIf(!dormant, () =>
-          createContent(FixLong(info.raft_state.hard_state.term)),
-        ),
-        leadTransferee: contentIf(!dormant, () => {
-          const leadTransferee = FixLong(info.raft_state.lead_transferee);
-          return createContent(
-            leadTransferee.greaterThan(0) ? leadTransferee : "-",
-          );
-        }),
-        applied: contentIf(!dormant, () =>
-          createContent(FixLong(info.raft_state.applied)),
-        ),
-        commit: contentIf(!dormant, () =>
-          createContent(FixLong(info.raft_state.hard_state.commit)),
-        ),
-        lastIndex: createContent(FixLong(info.state.last_index)),
-        logSize: contentBytes(
-          FixLong(info.state.raft_log_size),
-          info.state.raft_log_size_trusted ? "" : "range-table__cell--dormant",
-          "Log size is known to not be correct. This isn't an error condition. " +
-            "The log size will became exact the next time it is recomputed. " +
-            "This replica does not perform log truncation (because the log might already " +
-            "be truncated sufficiently).",
-        ),
-        leaseHolderQPS: leaseHolder
-          ? createContent(info.stats.queries_per_second.toFixed(4))
-          : rangeTableEmptyContent,
-        keysWrittenPS: createContent(
-          info.stats.writes_per_second.toFixed(4),
-        ),
-        approxProposalQuota: raftLeader
-          ? createContent(FixLong(info.state.approximate_proposal_quota))
-          : rangeTableEmptyContent,
-        pendingCommands: createContent(FixLong(info.state.num_pending)),
-        droppedCommands: createContent(
-          FixLong(info.state.num_dropped),
-          FixLong(info.state.num_dropped).greaterThan(0)
-            ? "range-table__cell--warning"
-            : "",
-        ),
-        truncatedIndex: createContent(
-          FixLong(info.state.state.truncated_state.index),
-        ),
-        truncatedTerm: createContent(
-          FixLong(info.state.state.truncated_state.term),
-        ),
-        mvccLastUpdate: contentNanos(FixLong(mvcc.last_update_nanos)),
-        mvccLiveBytesCount: contentMVCC(
-          FixLong(mvcc.live_bytes),
-          FixLong(mvcc.live_count),
-        ),
-        mvccKeyBytesCount: contentMVCC(
-          FixLong(mvcc.key_bytes),
-          FixLong(mvcc.key_count),
-        ),
-        mvccValueBytesCount: contentMVCC(
-          FixLong(mvcc.val_bytes),
-          FixLong(mvcc.val_count),
-        ),
-        mvccRangeKeyBytesCount: contentMVCC(
-          FixLong(mvcc.range_key_bytes || 0),
-          FixLong(mvcc.range_key_count || 0),
-        ),
-        mvccRangeValueBytesCount: contentMVCC(
-          FixLong(mvcc.range_val_bytes || 0),
-          FixLong(mvcc.range_val_count || 0),
-        ),
-        mvccIntentBytesCount: contentMVCC(
-          FixLong(mvcc.intent_bytes),
-          FixLong(mvcc.intent_count),
-        ),
-        mvccSystemBytesCount: contentMVCC(
-          FixLong(mvcc.sys_bytes),
-          FixLong(mvcc.sys_count),
-        ),
-        rangeMaxBytes: contentBytes(FixLong(info.state.range_max_bytes)),
-        mvccIntentAge: contentDuration(FixLong(mvcc.lock_age)),
-
-        gcAvgAge: contentGCAvgAge(mvcc),
-        gcBytesAge: createContent(FixLong(mvcc.gc_bytes_age)),
-
-        numIntents: createContent(FixLong(mvcc.intent_count)),
-        intentAvgAge: createContentIntentAvgAge(mvcc),
-        intentAge: createContent(FixLong(mvcc.lock_age)),
-
-        readLatches: createContent(FixLong(info.read_latches)),
-        writeLatches: createContent(FixLong(info.write_latches)),
-        locks: createContent(FixLong(info.locks)),
-        locksWithWaitQueues: createContent(
-          FixLong(info.locks_with_wait_queues),
-        ),
-        lockWaitQueueWaiters: createContent(
-          FixLong(info.lock_wait_queue_waiters),
-        ),
-        top_k_locks_by_wait_queue_waiters: contentIf(
-          size(info.top_k_locks_by_wait_queue_waiters) > 0,
-          () => ({
-            value: map(
-              info.top_k_locks_by_wait_queue_waiters,
-              lock => `${lock.pretty_key} (${lock.waiters} waiters)`,
-            ),
-          }),
-        ),
-
-        closedTimestampPolicy: createContent(
-          // We index into the enum in order to get the label string, instead of
-          // the numeric value.
-          cockroach.roachpb.RangeClosedTimestampPolicy[
-            info.state.closed_timestamp_policy
-          ],
-          info.state.closed_timestamp_policy ===
-            cockroach.roachpb.RangeClosedTimestampPolicy.LEAD_FOR_GLOBAL_READS
-            ? "range-table__cell--global-range"
-            : "",
-        ),
-        closedTimestampRaft: contentTimestamp(
-          info.state.state.raft_closed_timestamp,
-          now,
-        ),
-        closedTimestampSideTransportReplica: contentTimestamp(
-          info.state.closed_timestamp_sidetransport_info.replica_closed,
-          now,
-        ),
-        closedTimestampSideTransportReplicaLAI: createContent(
-          FixLong(info.state.closed_timestamp_sidetransport_info.replica_lai),
-          // Warn if the LAI hasn't applied yet.
-          FixLong(info.state.state.lease_applied_index) <
-            FixLong(info.state.closed_timestamp_sidetransport_info.replica_lai)
-            ? "range-table__cell--warning"
-            : "",
-        ),
-        closedTimestampSideTransportCentral: contentTimestamp(
-          info.state.closed_timestamp_sidetransport_info.central_closed,
-          now,
-        ),
-        closedTimestampSideTransportCentralLAI: createContent(
-          FixLong(info.state.closed_timestamp_sidetransport_info.central_lai),
-          // Warn if the LAI hasn't applied yet.
-          FixLong(info.state.state.lease_applied_index) <
-            FixLong(info.state.closed_timestamp_sidetransport_info.central_lai)
-            ? "range-table__cell--warning"
-            : "",
-        ),
-        circuitBreakerError: createContent(
-          info.state.circuit_breaker_error,
-        ),
-        locality: contentIf(size(info.locality.tiers) > 0, () => ({
-          value: map(info.locality.tiers, tier => `${tier.key}: ${tier.value}`),
-        })),
-        pausedFollowers: createContent(
-          info.state.paused_replicas?.join(", "),
-        ),
-      });
-    });
-
-    const leaderReplicaIDs = new Set(
-      map(leader.state.state.desc.internal_replicas, rep => rep.replica_id),
-    );
-
-    // Go through all the replicas and add them to map for easy printing.
-    const replicasByReplicaIDByStoreID: Map<
-      number,
-      Map<number, protos.cockroach.roachpb.IReplicaDescriptor>
-    > = new Map();
-    forEach(infos, info => {
-      const replicasByReplicaID: Map<
-        number,
-        protos.cockroach.roachpb.IReplicaDescriptor
-      > = new Map();
-      forEach(info.state.state.desc.internal_replicas, rep => {
-        replicasByReplicaID.set(rep.replica_id, rep);
-      });
-      replicasByReplicaIDByStoreID.set(
-        info.source_store_id,
-        replicasByReplicaID,
+  // Convert the infos to a simpler object for display purposes. This helps when trying to
+  // determine if any warnings should be displayed.
+  const detailsByStoreID: Map<number, RangeTableDetail> = new Map();
+  forEach(infos, info => {
+    const localReplica = RangeInfo.GetLocalReplica(info);
+    const awaitingGC = isNil(localReplica);
+    const lease = info.state.state.lease;
+    const leaseEpoch = Lease.IsEpoch(lease);
+    const leaseLeader = Lease.IsLeader(lease);
+    const leaseExpiration = !leaseEpoch && !leaseLeader;
+    const raftLeader =
+      !awaitingGC && FixLong(info.raft_state.lead).eq(localReplica.replica_id);
+    const leaseHolder =
+      !awaitingGC && localReplica.replica_id === lease.replica.replica_id;
+    const mvcc = info.state.state.stats;
+    const raftState = contentRaftState(info.raft_state.state);
+    const vote = FixLong(info.raft_state.hard_state.vote);
+    let leaseState: RangeTableCellContent;
+    if (isNil(info.lease_status)) {
+      leaseState = rangeTableEmptyContentWithWarning;
+    } else {
+      leaseState = createContent(
+        convertLeaseState(info.lease_status.state),
+        info.lease_status.state ===
+          protos.cockroach.kv.kvserver.storagepb.LeaseState.VALID
+          ? ""
+          : "range-table__cell--warning",
       );
-    });
+    }
+    const dormant = raftState.value[0] === "dormant";
+    if (dormant) {
+      dormantStoreIDs.add(info.source_store_id);
+    }
+    detailsByStoreID.set(info.source_store_id, {
+      id: createContent(
+        Print.ReplicaID(
+          rangeID,
+          localReplica,
+          info.source_node_id,
+          info.source_store_id,
+        ),
+      ),
+      keyRange: createContent(`${info.span.start_key} to ${info.span.end_key}`),
+      problems: contentProblems(info.problems, awaitingGC),
+      replicaType: awaitingGC
+        ? createContent("") // `problems` above will report "Awaiting GC" in this case
+        : createContent(contentReplicaType(localReplica.type)),
+      raftState: raftState,
+      leadSupportUntil: contentTimestamp(
+        info.raft_state.lead_support_until,
+        now,
+      ),
+      quiescent: info.quiescent ? rangeTableQuiescent : rangeTableEmptyContent,
+      ticking: createContent(info.ticking.toString()),
+      leaseState: leaseState,
+      leaseHolder: createContent(
+        Print.ReplicaID(rangeID, lease.replica),
+        leaseHolder
+          ? "range-table__cell--lease-holder"
+          : "range-table__cell--lease-follower",
+      ),
+      leaseType: createContent(
+        leaseEpoch ? "epoch" : leaseLeader ? "leader" : "expiration",
+      ),
+      leaseEpoch: leaseEpoch
+        ? createContent(lease.epoch)
+        : rangeTableEmptyContent,
+      leaseTerm: leaseLeader
+        ? createContent(lease.term)
+        : rangeTableEmptyContent,
+      isLeaseholder: createContent(String(info.is_leaseholder)),
+      leaseValid: createContent(String(info.lease_valid)),
+      leaseStart: contentTimestamp(lease.start, now),
+      leaseExpiration: leaseExpiration
+        ? contentTimestamp(lease.expiration, now)
+        : rangeTableEmptyContent,
+      leaseMinExpiration: !leaseExpiration
+        ? contentTimestamp(lease.min_expiration, now)
+        : rangeTableEmptyContent,
+      leaseAppliedIndex: createContent(
+        FixLong(info.state.state.lease_applied_index),
+      ),
+      raftLeader: contentIf(!dormant, () =>
+        createContent(
+          FixLong(info.raft_state.lead),
+          raftLeader
+            ? "range-table__cell--raftstate-leader"
+            : "range-table__cell--raftstate-follower",
+        ),
+      ),
+      vote: contentIf(!dormant, () =>
+        createContent(vote.greaterThan(0) ? vote : "-"),
+      ),
+      term: contentIf(!dormant, () =>
+        createContent(FixLong(info.raft_state.hard_state.term)),
+      ),
+      leadTransferee: contentIf(!dormant, () => {
+        const leadTransferee = FixLong(info.raft_state.lead_transferee);
+        return createContent(
+          leadTransferee.greaterThan(0) ? leadTransferee : "-",
+        );
+      }),
+      applied: contentIf(!dormant, () =>
+        createContent(FixLong(info.raft_state.applied)),
+      ),
+      commit: contentIf(!dormant, () =>
+        createContent(FixLong(info.raft_state.hard_state.commit)),
+      ),
+      lastIndex: createContent(FixLong(info.state.last_index)),
+      logSize: contentBytes(
+        FixLong(info.state.raft_log_size),
+        info.state.raft_log_size_trusted ? "" : "range-table__cell--dormant",
+        "Log size is known to not be correct. This isn't an error condition. " +
+          "The log size will became exact the next time it is recomputed. " +
+          "This replica does not perform log truncation (because the log might already " +
+          "be truncated sufficiently).",
+      ),
+      leaseHolderQPS: leaseHolder
+        ? createContent(info.stats.queries_per_second.toFixed(4))
+        : rangeTableEmptyContent,
+      keysWrittenPS: createContent(info.stats.writes_per_second.toFixed(4)),
+      approxProposalQuota: raftLeader
+        ? createContent(FixLong(info.state.approximate_proposal_quota))
+        : rangeTableEmptyContent,
+      pendingCommands: createContent(FixLong(info.state.num_pending)),
+      droppedCommands: createContent(
+        FixLong(info.state.num_dropped),
+        FixLong(info.state.num_dropped).greaterThan(0)
+          ? "range-table__cell--warning"
+          : "",
+      ),
+      truncatedIndex: createContent(
+        FixLong(info.state.state.truncated_state.index),
+      ),
+      truncatedTerm: createContent(
+        FixLong(info.state.state.truncated_state.term),
+      ),
+      mvccLastUpdate: contentNanos(FixLong(mvcc.last_update_nanos)),
+      mvccLiveBytesCount: contentMVCC(
+        FixLong(mvcc.live_bytes),
+        FixLong(mvcc.live_count),
+      ),
+      mvccKeyBytesCount: contentMVCC(
+        FixLong(mvcc.key_bytes),
+        FixLong(mvcc.key_count),
+      ),
+      mvccValueBytesCount: contentMVCC(
+        FixLong(mvcc.val_bytes),
+        FixLong(mvcc.val_count),
+      ),
+      mvccRangeKeyBytesCount: contentMVCC(
+        FixLong(mvcc.range_key_bytes || 0),
+        FixLong(mvcc.range_key_count || 0),
+      ),
+      mvccRangeValueBytesCount: contentMVCC(
+        FixLong(mvcc.range_val_bytes || 0),
+        FixLong(mvcc.range_val_count || 0),
+      ),
+      mvccIntentBytesCount: contentMVCC(
+        FixLong(mvcc.intent_bytes),
+        FixLong(mvcc.intent_count),
+      ),
+      mvccSystemBytesCount: contentMVCC(
+        FixLong(mvcc.sys_bytes),
+        FixLong(mvcc.sys_count),
+      ),
+      rangeMaxBytes: contentBytes(FixLong(info.state.range_max_bytes)),
+      mvccIntentAge: contentDuration(FixLong(mvcc.lock_age)),
 
-    return (
-      <div>
-        <h2 className="base-heading">
-          Range r{rangeID.toString()} at {Print.Time(moment().utc())} UTC
-        </h2>
-        <table className="range-table">
-          <tbody>
-            {map(rangeTableDisplayList, (title, key) =>
-              renderRangeRow(
-                title,
-                detailsByStoreID,
-                dormantStoreIDs,
-                leader.source_store_id,
-                sortedStoreIDs,
-                key,
-              ),
-            )}
-            {map(replicas, (replica, key) =>
-              renderRangeReplicaRow(
-                replicasByReplicaIDByStoreID,
-                replica,
-                leaderReplicaIDs,
-                dormantStoreIDs,
-                sortedStoreIDs,
-                rangeID,
-                "replica" + key,
-              ),
-            )}
-          </tbody>
-        </table>
-      </div>
-    );
-  }
+      gcAvgAge: contentGCAvgAge(mvcc),
+      gcBytesAge: createContent(FixLong(mvcc.gc_bytes_age)),
+
+      numIntents: createContent(FixLong(mvcc.intent_count)),
+      intentAvgAge: createContentIntentAvgAge(mvcc),
+      intentAge: createContent(FixLong(mvcc.lock_age)),
+
+      readLatches: createContent(FixLong(info.read_latches)),
+      writeLatches: createContent(FixLong(info.write_latches)),
+      locks: createContent(FixLong(info.locks)),
+      locksWithWaitQueues: createContent(FixLong(info.locks_with_wait_queues)),
+      lockWaitQueueWaiters: createContent(
+        FixLong(info.lock_wait_queue_waiters),
+      ),
+      top_k_locks_by_wait_queue_waiters: contentIf(
+        size(info.top_k_locks_by_wait_queue_waiters) > 0,
+        () => ({
+          value: map(
+            info.top_k_locks_by_wait_queue_waiters,
+            lock => `${lock.pretty_key} (${lock.waiters} waiters)`,
+          ),
+        }),
+      ),
+
+      closedTimestampPolicy: createContent(
+        // We index into the enum in order to get the label string, instead of
+        // the numeric value.
+        cockroach.roachpb.RangeClosedTimestampPolicy[
+          info.state.closed_timestamp_policy
+        ],
+        info.state.closed_timestamp_policy ===
+          cockroach.roachpb.RangeClosedTimestampPolicy.LEAD_FOR_GLOBAL_READS
+          ? "range-table__cell--global-range"
+          : "",
+      ),
+      closedTimestampRaft: contentTimestamp(
+        info.state.state.raft_closed_timestamp,
+        now,
+      ),
+      closedTimestampSideTransportReplica: contentTimestamp(
+        info.state.closed_timestamp_sidetransport_info.replica_closed,
+        now,
+      ),
+      closedTimestampSideTransportReplicaLAI: createContent(
+        FixLong(info.state.closed_timestamp_sidetransport_info.replica_lai),
+        // Warn if the LAI hasn't applied yet.
+        FixLong(info.state.state.lease_applied_index) <
+          FixLong(info.state.closed_timestamp_sidetransport_info.replica_lai)
+          ? "range-table__cell--warning"
+          : "",
+      ),
+      closedTimestampSideTransportCentral: contentTimestamp(
+        info.state.closed_timestamp_sidetransport_info.central_closed,
+        now,
+      ),
+      closedTimestampSideTransportCentralLAI: createContent(
+        FixLong(info.state.closed_timestamp_sidetransport_info.central_lai),
+        // Warn if the LAI hasn't applied yet.
+        FixLong(info.state.state.lease_applied_index) <
+          FixLong(info.state.closed_timestamp_sidetransport_info.central_lai)
+          ? "range-table__cell--warning"
+          : "",
+      ),
+      circuitBreakerError: createContent(info.state.circuit_breaker_error),
+      locality: contentIf(size(info.locality.tiers) > 0, () => ({
+        value: map(info.locality.tiers, tier => `${tier.key}: ${tier.value}`),
+      })),
+      pausedFollowers: createContent(info.state.paused_replicas?.join(", ")),
+    });
+  });
+
+  const leaderReplicaIDs = new Set(
+    map(leader.state.state.desc.internal_replicas, rep => rep.replica_id),
+  );
+
+  // Go through all the replicas and add them to map for easy printing.
+  const replicasByReplicaIDByStoreID: Map<
+    number,
+    Map<number, protos.cockroach.roachpb.IReplicaDescriptor>
+  > = new Map();
+  forEach(infos, info => {
+    const replicasByReplicaID: Map<
+      number,
+      protos.cockroach.roachpb.IReplicaDescriptor
+    > = new Map();
+    forEach(info.state.state.desc.internal_replicas, rep => {
+      replicasByReplicaID.set(rep.replica_id, rep);
+    });
+    replicasByReplicaIDByStoreID.set(info.source_store_id, replicasByReplicaID);
+  });
+
+  return (
+    <div>
+      <h2 className="base-heading">
+        Range r{rangeID.toString()} at {Print.Time(moment().utc())} UTC
+      </h2>
+      <table className="range-table">
+        <tbody>
+          {map(rangeTableDisplayList, (title, key) =>
+            renderRangeRow(
+              title,
+              detailsByStoreID,
+              dormantStoreIDs,
+              leader.source_store_id,
+              sortedStoreIDs,
+              key,
+            ),
+          )}
+          {map(replicas, (replica, key) =>
+            renderRangeReplicaRow(
+              replicasByReplicaIDByStoreID,
+              replica,
+              leaderReplicaIDs,
+              dormantStoreIDs,
+              sortedStoreIDs,
+              rangeID,
+              "replica" + key,
+            ),
+          )}
+        </tbody>
+      </table>
+    </div>
+  );
 }
