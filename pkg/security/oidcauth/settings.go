@@ -42,6 +42,7 @@ const (
 	OIDCAuthZEnabledSettingName                    = baseOIDCSettingName + "authorization.enabled"
 	OIDCAuthGroupClaimSettingName                  = baseOIDCSettingName + "group_claim"
 	OIDCAuthUserinfoGroupKeySettingName            = baseOIDCSettingName + "userinfo_group_key"
+	OIDCTLSInsecureSkipVerifySettingName           = baseOIDCSettingName + "tls_insecure_skip_verify.enabled"
 )
 
 // OIDCEnabled enables or disabled OIDC login for the DB Console.
@@ -112,6 +113,16 @@ var OIDCAuthUserinfoGroupKey = settings.RegisterStringSetting(
 	OIDCAuthUserinfoGroupKeySettingName, // "server.oidc_authentication.userinfo_group_key"
 	"sets the field name in userinfo JSON containing the groups claim for authorization",
 	"groups",
+)
+
+// OIDCTLSInsecureSkipVerify controls whether to skip TLS verification when contacting the OIDC provider.
+var OIDCTLSInsecureSkipVerify = settings.RegisterBoolSetting(
+	settings.ApplicationLevel,
+	OIDCTLSInsecureSkipVerifySettingName,
+	"if true, TLS certificate verification is skipped for connections to the OIDC provider (insecure)",
+	false,
+	settings.WithPublic,
+	settings.WithReportable(true),
 )
 
 type redirectURLConf struct {

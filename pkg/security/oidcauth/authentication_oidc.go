@@ -420,6 +420,7 @@ func reloadConfigLocked(
 			httputil.WithClientTimeout(clientTimeout),
 			httputil.WithDialerTimeout(clientTimeout),
 			httputil.WithCustomCAPEM(OIDCProviderCustomCA.Get(&st.SV)),
+			httputil.WithInsecureSkipVerify(OIDCTLSInsecureSkipVerify.Get(&st.SV)),
 		),
 		authZEnabled:        OIDCAuthZEnabled.Get(&st.SV),
 		groupClaim:          OIDCAuthGroupClaim.Get(&st.SV),
@@ -1021,6 +1022,9 @@ func ConfigureOIDC(
 		reloadConfig(ambientCtx.AnnotateCtx(ctx), oidcAuthentication, locality, st)
 	})
 	provisioning.OIDCProvisioningEnabled.SetOnChange(&st.SV, func(ctx context.Context) {
+		reloadConfig(ambientCtx.AnnotateCtx(ctx), oidcAuthentication, locality, st)
+	})
+	OIDCTLSInsecureSkipVerify.SetOnChange(&st.SV, func(ctx context.Context) {
 		reloadConfig(ambientCtx.AnnotateCtx(ctx), oidcAuthentication, locality, st)
 	})
 
