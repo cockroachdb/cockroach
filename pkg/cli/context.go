@@ -32,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log/logconfig"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logcrash"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/errors"
 	isatty "github.com/mattn/go-isatty"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
@@ -640,8 +641,52 @@ func setSqlfmtContextDefaults() {
 	sqlfmtCtx.execStmts = nil
 }
 
+type convertURLFormat string
+
+const (
+	convertURLFormatPQ   convertURLFormat = "pq"
+	convertURLFormatDSN  convertURLFormat = "dsn"
+	convertURLFormatJDBC convertURLFormat = "jdbc"
+	convertURLFormatCRDB convertURLFormat = "crdb"
+)
+
+var convertURLFormats = []convertURLFormat{
+	convertURLFormatPQ,
+	convertURLFormatDSN,
+	convertURLFormatJDBC,
+	convertURLFormatCRDB,
+}
+
+func (f *convertURLFormat) String() string {
+	return string(*f)
+}
+
+func (f *convertURLFormat) Set(s string) error {
+	switch s {
+	case "pq", "dsn", "jdbc", "crdb":
+		*f = convertURLFormat(s)
+		return nil
+	default:
+		return errors.Newf("must be one of %s", convertURLFormats)
+	}
+}
+
+func (f *convertURLFormat) Type() string {
+	return "string"
+}
+
 var convertCtx struct {
-	url string
+	url        string
+	sslInline  bool
+	database   string
+	username   string
+	password   string
+	cluster    string
+	certsDir   string
+	caCertPath string
+	certPath   string
+	keyPath    string
+	format     convertURLFormat
 }
 
 // setConvContextDefaults set the default values in convertCtx.  This
@@ -649,6 +694,15 @@ var convertCtx struct {
 // test that exercises command-line parsing.
 func setConvContextDefaults() {
 	convertCtx.url = ""
+	convertCtx.sslInline = false
+	convertCtx.database = ""
+	convertCtx.username = ""
+	convertCtx.password = ""
+	convertCtx.cluster = ""
+	convertCtx.certsDir = ""
+	convertCtx.caCertPath = ""
+	convertCtx.certPath = ""
+	convertCtx.keyPath = ""
 }
 
 // demoCtx captures the command-line parameters of the `demo` command.
