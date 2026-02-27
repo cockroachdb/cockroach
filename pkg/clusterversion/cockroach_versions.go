@@ -237,6 +237,15 @@ const (
 	// columns to the system.statement_hints table.
 	V26_2_StatementHintsTypeColumnBackfilled
 
+	// V26_2_AddStatementStatisticsComputedColumns adds new computed columns and
+	// a covering index to the system.statement_statistics table to support
+	// efficient aggregation queries.
+	V26_2_AddStatementStatisticsComputedColumns
+
+	// V26_2_AddTransactionStatisticsComputedColumns adds new computed columns
+	// and a covering index to the system.transaction_statistics table to support
+	// efficient aggregation queries.
+	V26_2_AddTransactionStatisticsComputedColumns
 	// *************************************************
 	// Step (1) Add new versions above this comment.
 	// Do not add new versions to a patch release.
@@ -299,6 +308,9 @@ var versionTable = [numKeys]roachpb.Version{
 
 	V26_2_StatementHintsTypeColumnBackfilled: {Major: 26, Minor: 1, Internal: 12},
 
+	V26_2_AddStatementStatisticsComputedColumns: {Major: 26, Minor: 1, Internal: 14},
+
+	V26_2_AddTransactionStatisticsComputedColumns: {Major: 26, Minor: 1, Internal: 16},
 	// *************************************************
 	// Step (2): Add new versions above this comment.
 	// Do not add new versions to a patch release.
