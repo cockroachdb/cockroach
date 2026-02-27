@@ -27,6 +27,12 @@ type TestingKnobs struct {
 		createTime int64,
 	)
 
+	// WorkQueueAdmitInterceptor, if set, is called at the start of every
+	// WorkQueue.Admit call with the WorkInfo being submitted. Tests can use
+	// this to observe what workload information reaches admission control
+	// (e.g. to verify WorkloadID propagation).
+	WorkQueueAdmitInterceptor func(info WorkInfo)
+
 	// DisableWorkQueueFastPath disables the fast-path in work queues.
 	DisableWorkQueueFastPath bool
 

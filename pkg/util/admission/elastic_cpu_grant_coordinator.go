@@ -15,7 +15,10 @@ import (
 )
 
 func makeElasticCPUGrantCoordinator(
-	ambientCtx log.AmbientContext, st *cluster.Settings, registry *metric.Registry,
+	ambientCtx log.AmbientContext,
+	st *cluster.Settings,
+	registry *metric.Registry,
+	knobs *TestingKnobs,
 ) *ElasticCPUGrantCoordinator {
 	schedulerLatencyListenerMetrics := makeSchedulerLatencyListenerMetrics()
 	registry.AddMetricStruct(schedulerLatencyListenerMetrics)
@@ -30,7 +33,7 @@ func makeElasticCPUGrantCoordinator(
 	elasticCPUInternalWorkQueue := &WorkQueue{}
 	initWorkQueue(elasticCPUInternalWorkQueue, ambientCtx, KVWork, "kv-elastic-cpu-queue", elasticCPUGranter, st,
 		elasticWorkQueueMetrics,
-		workQueueOptions{mode: usesTokens}, nil /* knobs */) // will be closed by the embedding *ElasticCPUWorkQueue
+		workQueueOptions{mode: usesTokens}, knobs) // will be closed by the embedding *ElasticCPUWorkQueue
 	elasticCPUWorkQueue := makeElasticCPUWorkQueue(st, elasticCPUInternalWorkQueue, elasticCPUGranter, elasticCPUGranterMetrics)
 	elasticCPUGrantCoordinator := newElasticCPUGrantCoordinator(elasticCPUGranter, elasticCPUWorkQueue, schedulerLatencyListener)
 	elasticCPUGranter.setRequester(elasticCPUInternalWorkQueue)
