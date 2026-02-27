@@ -267,7 +267,6 @@ func init() {
 		DebugCmd,
 		sqlfmtCmd,
 		workloadCmd,
-		encodeURICmd,
 	)
 }
 
