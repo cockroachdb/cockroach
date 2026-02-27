@@ -428,6 +428,13 @@ OuterLoop:
 		rbrUsingConstraintName = param.(*tree.StrVal).RawString()
 	}
 
+	// Parse the skip_rbr_unique_rowid_checks setting.
+	if param := stmt.StorageParams.GetVal(catpb.RBRSkipUniqueRowIDChecksTableSettingName); param != nil {
+		if val, ok := param.(*tree.DBool); ok && bool(*val) {
+			tab.skipRBRUniqueRowIDCrossRegionChecks = true
+		}
+	}
+
 	// Search for foreign key constraints. We want to process them after first
 	// processing all the indexes (otherwise the foreign keys could add
 	// unnecessary indexes).

@@ -2476,6 +2476,17 @@ func NewTableDesc(
 		}
 	}
 
+	// Validate that skip_rbr_unique_rowid_checks is only set on RBR tables.
+	if n.StorageParams.GetVal(catpb.RBRSkipUniqueRowIDChecksTableSettingName) != nil {
+		if desc.LocalityConfig == nil || desc.LocalityConfig.GetRegionalByRow() == nil {
+			return nil, pgerror.Newf(
+				pgcode.InvalidParameterValue,
+				`storage parameter "%s" can only be set on REGIONAL BY ROW tables`,
+				catpb.RBRSkipUniqueRowIDChecksTableSettingName,
+			)
+		}
+	}
+
 	return &desc, nil
 }
 

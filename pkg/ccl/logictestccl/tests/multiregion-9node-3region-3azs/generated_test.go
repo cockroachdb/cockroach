@@ -293,6 +293,13 @@ func TestCCLLogic_regional_by_row_safe_updates(
 	runCCLLogicTest(t, "regional_by_row_safe_updates")
 }
 
+func TestCCLLogic_regional_by_row_unique_constraint(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runCCLLogicTest(t, "regional_by_row_unique_constraint")
+}
+
 func TestCCLLogic_regional_by_table_placement_restricted(
 	t *testing.T,
 ) {
