@@ -38,6 +38,8 @@ var ExportRequestTargetFileSize = settings.RegisterByteSizeSetting(
 		"export requests (i.e. BACKUP) may buffer up to the sum of %s and %s in memory",
 		SSTTargetSizeSetting, MaxExportOverageSetting,
 	),
+	// If the default changes, consider also changing the defaults of
+	// sql.guardrails.max_row_size_log and sql.guardrails.max_row_size_err.
 	16<<20,
 	settings.WithPublic)
 
@@ -56,6 +58,8 @@ var ExportRequestMaxAllowedFileSizeOverage = settings.RegisterByteSizeSetting(
 		"export requests (i.e. BACKUP) may buffer up to the sum of %s and %s in memory",
 		SSTTargetSizeSetting, MaxExportOverageSetting,
 	),
+	// If the default changes, consider also changing the default of
+	// sql.guardrails.max_row_size_err.
 	64<<20, /* 64 MiB */
 	settings.WithPublic)
 

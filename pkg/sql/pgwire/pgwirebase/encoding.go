@@ -50,6 +50,8 @@ import (
 )
 
 const (
+	// If the default changes, consider also changing the default of
+	// sql.guardrails.max_row_size_log.
 	defaultMaxReadBufferMessageSize = 1 << 24
 	minReadBufferMessageSize        = 1 << 14
 )
