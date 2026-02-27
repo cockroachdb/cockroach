@@ -114,3 +114,56 @@ ALTER TYPE test RENAME to test1
 # testuser should be able to drop the type now.
 statement ok
 DROP TYPE test1
+
+subtest array_type_privilege_inheritance
+
+# Regression test for #164470. Array type privileges should inherit from the
+# base type. GRANT/REVOKE on an array type should redirect to the base type.
+
+user root
+
+statement ok
+REVOKE root FROM testuser;
+
+statement ok
+CREATE TYPE myenum AS ENUM ('a', 'b', 'c')
+
+# GRANT on an array type should redirect to the base type with a notice.
+statement notice NOTICE: privileges on array type _myenum are applied to the element type myenum
+GRANT USAGE ON TYPE _myenum TO testuser
+
+# REVOKE on an array type should also redirect to the base type.
+statement notice NOTICE: privileges on array type _myenum are applied to the element type myenum
+REVOKE USAGE ON TYPE _myenum FROM testuser
+
+# Revoke USAGE from public on both the base and array types, then grant only on
+# the base type. Creating a table should still succeed because the array type
+# privilege check delegates to the base type.
+statement ok
+REVOKE USAGE ON TYPE myenum FROM public
+
+statement notice NOTICE: privileges on array type _myenum are applied to the element type myenum
+REVOKE USAGE ON TYPE _myenum FROM public
+
+statement ok
+GRANT USAGE ON TYPE myenum TO testuser
+
+user testuser
+
+# Creating a table with the enum column should succeed even though USAGE was not
+# explicitly granted on the array type.
+statement ok
+CREATE TABLE t_enum(x myenum)
+
+# Creating a table with an array column of the enum type should also succeed.
+statement ok
+CREATE TABLE t_enum_arr(x myenum[])
+
+user root
+
+statement ok
+DROP TABLE t_enum;
+DROP TABLE t_enum_arr;
+DROP TYPE myenum;
+
+subtest end

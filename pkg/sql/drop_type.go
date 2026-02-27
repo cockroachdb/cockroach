@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 	"github.com/cockroachdb/errors"
@@ -164,11 +165,25 @@ func (p *planner) addTypeBackReference(
 		return err
 	}
 
-	// Check if this user has USAGE privilege on the type. This function if an
-	// object has a dependency on a type, the user must have USAGE privilege on
-	// the type to create a dependency.
-	if err := p.CheckPrivilege(ctx, mutDesc, privilege.USAGE); err != nil {
-		return err
+	// Check if this user has USAGE privilege on the type. If an object has a
+	// dependency on a type, the user must have USAGE privilege on the type to
+	// create a dependency. For implicit array types (ALIAS), check the
+	// privilege on the base element type instead, matching PostgreSQL behavior.
+	if mutDesc.Kind == descpb.TypeDescriptor_ALIAS &&
+		mutDesc.Alias != nil &&
+		mutDesc.Alias.Family() == types.ArrayFamily {
+		baseTypeID := typedesc.GetUserDefinedTypeDescID(mutDesc.Alias.ArrayContents())
+		baseDesc, err := p.Descriptors().MutableByID(p.txn).Type(ctx, baseTypeID)
+		if err != nil {
+			return err
+		}
+		if err := p.CheckPrivilege(ctx, baseDesc, privilege.USAGE); err != nil {
+			return err
+		}
+	} else {
+		if err := p.CheckPrivilege(ctx, mutDesc, privilege.USAGE); err != nil {
+			return err
+		}
 	}
 
 	if !mutDesc.AddReferencingDescriptorID(ref) {
