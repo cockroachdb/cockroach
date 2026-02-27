@@ -113,6 +113,11 @@ func ZoneConfigForMultiRegionTable(
 		if err != nil {
 			return zonepb.ZoneConfig{}, err
 		}
+		if SecondaryRegionOutsideSuperRegion(affinityRegion, regionConfig) {
+			// Remove the secondary region voter constraint; it references a
+			// region outside the super region where no replica can exist.
+			voterConstraints = voterConstraints[:1]
+		}
 		zc.VoterConstraints = voterConstraints
 		zc.NullVoterConstraintsIsEmpty = true
 		zc.LeasePreferences = SynthesizeLeasePreferences(affinityRegion, "" /* secondaryRegion */)
@@ -163,16 +168,56 @@ func ZoneConfigForMultiRegionPartition(
 		zc.InheritedConstraints = false
 	}
 
+	// For super-region-confined partitions, the secondary region must not
+	// appear in voter_constraints or lease_preferences if it lies outside
+	// the super region, because all replicas are confined to the super
+	// region. We clear the secondary region for both, matching the pattern
+	// used in ZoneConfigForMultiRegionTable.
+	secondaryOutside := SecondaryRegionOutsideSuperRegion(partitionRegion, regionConfig)
 	voterConstraints, err := SynthesizeVoterConstraints(partitionRegion, regionConfig)
 	if err != nil {
 		return zonepb.ZoneConfig{}, err
 	}
+	if secondaryOutside {
+		// Remove the secondary region voter constraint that
+		// SynthesizeVoterConstraints added; it references a region
+		// outside the super region where no replica can exist.
+		voterConstraints = voterConstraints[:1]
+	}
 	zc.VoterConstraints = voterConstraints
 	zc.NullVoterConstraintsIsEmpty = true
-	zc.LeasePreferences = SynthesizeLeasePreferences(partitionRegion, regionConfig.SecondaryRegion())
+	secondaryRegion := regionConfig.SecondaryRegion()
+	if secondaryOutside {
+		secondaryRegion = ""
+	}
+	zc.LeasePreferences = SynthesizeLeasePreferences(partitionRegion, secondaryRegion)
 	zc.InheritedLeasePreferences = false
 
 	return regionConfig.ExtendZoneConfigWithRegionalIn(zc, partitionRegion)
+}
+
+// SecondaryRegionOutsideSuperRegion returns true when the given region belongs
+// to a super region and the database's secondary region is set but is NOT a
+// member of that same super region. In this case, references to the secondary
+// region in voter_constraints and lease_preferences would be incorrect because
+// all replicas are confined to the super region.
+func SecondaryRegionOutsideSuperRegion(
+	region catpb.RegionName, regionConfig multiregion.RegionConfig,
+) bool {
+	if !regionConfig.HasSecondaryRegion() {
+		return false
+	}
+	superRegionMembers, ok := regionConfig.GetSuperRegionRegionsForRegion(region)
+	if !ok {
+		return false
+	}
+	secondary := regionConfig.SecondaryRegion()
+	for _, r := range superRegionMembers {
+		if r == secondary {
+			return false
+		}
+	}
+	return true
 }
 
 // IsPlaceholderZoneConfigForMultiRegion returns whether a given zone config
