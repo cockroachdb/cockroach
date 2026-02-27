@@ -12,6 +12,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -255,23 +256,21 @@ func (dl *DatasetLoader) downloadTrainFiles(
 }
 
 // downloadAndUnzip downloads a zip file from GCP and extracts the contained
-// file to destPath.
+// file to destPath. All intermediate files use process-unique temp paths so
+// that concurrent processes downloading the same dataset do not corrupt each
+// other's files. The final extraction is installed via atomic rename, ensuring
+// that destPath is either absent or contains a complete file.
 func (dl *DatasetLoader) downloadAndUnzip(
 	ctx context.Context, baseName, objectFile, destPath string,
-) (retErr error) {
+) error {
 	objectName := fmt.Sprintf("%s/%s/%s", bucketDirName, baseName, objectFile)
-	tempZipFile := destPath + ".zip"
-	defer func() {
-		retErr = errors.CombineErrors(retErr, os.Remove(tempZipFile))
-	}()
+	destDir := filepath.Dir(destPath)
 
 	client, err := storage.NewClient(ctx)
 	if err != nil {
 		return errors.Wrapf(err, "creating GCS client")
 	}
-	defer func() {
-		retErr = errors.CombineErrors(retErr, client.Close())
-	}()
+	defer func() { _ = client.Close() }()
 
 	bucket := client.Bucket(bucketName)
 	object := bucket.Object(objectName)
@@ -283,59 +282,73 @@ func (dl *DatasetLoader) downloadAndUnzip(
 	// Only report progress once we know file exists.
 	dl.OnProgress(ctx, "Downloading %s from %s", objectName, bucketName)
 
-	tempZip, err := os.Create(tempZipFile)
+	// Download to a unique temp file to avoid races with concurrent downloaders
+	// sharing the same cache directory.
+	tempZip, err := os.CreateTemp(destDir, ".dl-*.zip")
 	if err != nil {
-		return errors.Wrapf(err, "creating temp zip file %s", tempZipFile)
+		return errors.Wrapf(err, "creating temp zip file in %s", destDir)
 	}
-	defer func() {
-		retErr = errors.CombineErrors(retErr, tempZip.Close())
-	}()
+	tempZipPath := tempZip.Name()
+	defer func() { _ = os.Remove(tempZipPath) }()
 
 	reader, err := object.NewReader(ctx)
 	if err != nil {
+		_ = tempZip.Close()
 		return errors.Wrapf(err, "creating reader for %s/%s", bucketName, objectName)
 	}
-	defer func() {
-		retErr = errors.CombineErrors(retErr, reader.Close())
-	}()
 
 	writer := makeProgressWriter(tempZip, attrs.Size)
 	writer.OnProgress = dl.OnDownloadProgress
-	if _, err := io.Copy(&writer, reader); err != nil {
-		return errors.Wrapf(err, "downloading to file %s", tempZipFile)
+	_, copyErr := io.Copy(&writer, reader)
+	_ = reader.Close()
+	closeErr := tempZip.Close()
+	if copyErr != nil {
+		return errors.Wrapf(copyErr, "downloading %s", objectName)
+	}
+	if closeErr != nil {
+		return errors.Wrapf(closeErr, "closing temp zip file %s", tempZipPath)
 	}
 
-	// Unzip the file
-	zipR, err := zip.OpenReader(tempZipFile)
+	// Unzip the downloaded file.
+	zipR, err := zip.OpenReader(tempZipPath)
 	if err != nil {
-		return errors.Wrapf(err, "opening zip file %s", tempZipFile)
+		return errors.Wrapf(err, "opening zip file %s", tempZipPath)
 	}
-	defer func() {
-		retErr = errors.CombineErrors(retErr, zipR.Close())
-	}()
+	defer func() { _ = zipR.Close() }()
 
 	if len(zipR.File) == 0 {
-		return errors.Newf("zip file %s is empty", tempZipFile)
+		return errors.Newf("zip file %s is empty", tempZipPath)
 	}
 	zfile := zipR.File[0]
 	zreader, err := zfile.Open()
 	if err != nil {
 		return errors.Wrapf(err, "opening zipped file %s", zfile.Name)
 	}
-	defer zreader.Close()
-	out, err := os.Create(destPath)
+	defer func() { _ = zreader.Close() }()
+
+	// Extract to a unique temp file, then atomically rename to the destination.
+	// This ensures the cached file is either absent or complete, never a
+	// truncated partial write.
+	tempOut, err := os.CreateTemp(destDir, ".extract-*.tmp")
 	if err != nil {
-		return errors.Wrapf(err, "creating output file %s", destPath)
+		return errors.Wrapf(err, "creating temp output file in %s", destDir)
 	}
-	defer func() {
-		out.Close()
-		if retErr != nil {
-			// If we're returning an error, remove the potentially corrupted file.
-			_ = os.Remove(destPath)
-		}
-	}()
-	if _, err := io.Copy(out, zreader); err != nil {
-		return errors.Wrapf(err, "extracting to %s", destPath)
+	tempOutPath := tempOut.Name()
+	defer func() { _ = os.Remove(tempOutPath) }()
+
+	if _, err := io.Copy(tempOut, zreader); err != nil {
+		_ = tempOut.Close()
+		return errors.Wrapf(err, "extracting %s", zfile.Name)
+	}
+	if err := tempOut.Close(); err != nil {
+		return errors.Wrapf(err, "closing temp output file %s", tempOutPath)
+	}
+
+	// Atomic rename: the destination is either absent or contains the complete
+	// extracted file. Concurrent processes performing the same download will
+	// each rename their own temp file, with the last writer winning.
+	if err := os.Rename(tempOutPath, destPath); err != nil {
+		return errors.Wrapf(err, "moving extracted file to %s", destPath)
 	}
 	return nil
 }
