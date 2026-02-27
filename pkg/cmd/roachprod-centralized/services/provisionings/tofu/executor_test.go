@@ -74,7 +74,8 @@ func setupTestDir(t *testing.T) string {
 	err := os.WriteFile(filepath.Join(dir, "main.tf"), []byte(testMainTF), 0o644)
 	require.NoError(t, err)
 
-	backendContent := templates.NewLocalBackend().GenerateTF("")
+	backendContent, err := templates.NewLocalBackend().GenerateTF(context.Background(), "")
+	require.NoError(t, err)
 	err = templates.WriteBackendTF(dir, backendContent)
 	require.NoError(t, err)
 

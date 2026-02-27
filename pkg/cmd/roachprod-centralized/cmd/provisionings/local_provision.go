@@ -187,7 +187,10 @@ func runLocalProvision(cmd *cobra.Command, _ []string) error {
 
 	// Step 6: WriteBackendTF with local backend.
 	localBackend := templates.NewLocalBackend()
-	backendContent := localBackend.GenerateTF("")
+	backendContent, err := localBackend.GenerateTF(ctx, "")
+	if err != nil {
+		return errors.Wrap(err, "generate backend.tf")
+	}
 	if err := templates.WriteBackendTF(workingDir, backendContent); err != nil {
 		return errors.Wrap(err, "write backend.tf")
 	}

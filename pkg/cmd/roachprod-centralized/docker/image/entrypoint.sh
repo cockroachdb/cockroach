@@ -62,7 +62,10 @@ az login --service-principal -u "${AZURE_USER_ID}" -p "${AZURE_PASSWORD}" -t "${
 # Configure IBM Cloud
 export IBM_APIKEY="${IBM_APIKEY}"
 
-# Set the GOOGLE_APPLICATION_CREDENTIALS environment variable
-export GOOGLE_APPLICATION_CREDENTIALS="/secrets/gcloud.json"
+# Note: We intentionally do NOT set GOOGLE_APPLICATION_CREDENTIALS so that
+# GCP clients (GCS, Secret Manager, etc.) fall through to the Cloud Run
+# service account via ADC. GCE cloud providers and SDK DNS providers that
+# need the legacy service account specify credentialsFile per-provider in
+# the application config (pointing to /secrets/gcloud.json).
 
 exec /usr/local/bin/roachprod-centralized "$@"

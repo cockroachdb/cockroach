@@ -9,6 +9,7 @@ import (
 	"archive/tar"
 	"bytes"
 	"compress/gzip"
+	"context"
 	"os"
 	"path/filepath"
 	"testing"
@@ -405,8 +406,9 @@ func TestParseMetadataFromDir_NoHooks(t *testing.T) {
 
 func TestWriteBackendTF(t *testing.T) {
 	dir := t.TempDir()
-	content := NewLocalBackend().GenerateTF("")
-	err := WriteBackendTF(dir, content)
+	content, err := NewLocalBackend().GenerateTF(context.Background(), "")
+	require.NoError(t, err)
+	err = WriteBackendTF(dir, content)
 	require.NoError(t, err)
 
 	written, err := os.ReadFile(filepath.Join(dir, "backend.tf"))

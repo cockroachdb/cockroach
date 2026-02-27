@@ -28,6 +28,8 @@ go_library(
         "@com_github_zclconf_go_cty//cty/json",
         "@com_google_cloud_go_storage//:storage",
         "@org_golang_google_api//iterator",
+        "@org_golang_x_oauth2//:oauth2",
+        "@org_golang_x_oauth2//google",
     ],
 )
 
@@ -47,5 +49,6 @@ go_test(
         "@com_github_cockroachdb_errors//oserror",
         "@com_github_stretchr_testify//assert",
         "@com_github_stretchr_testify//require",
+        "@org_golang_x_oauth2//:oauth2",
     ],
 )

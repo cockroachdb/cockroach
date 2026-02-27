@@ -22,13 +22,13 @@ func NewLocalBackend() *LocalBackend {
 }
 
 // GenerateTF returns a backend.tf configured for local state storage.
-func (b *LocalBackend) GenerateTF(_ string) string {
+func (b *LocalBackend) GenerateTF(_ context.Context, _ string) (string, error) {
 	return `terraform {
   backend "local" {
     path = "terraform.tfstate"
   }
 }
-`
+`, nil
 }
 
 // CleanupState is a no-op for local backends. The working directory
