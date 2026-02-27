@@ -10,6 +10,7 @@ package planners
 
 import (
 	"context"
+	"fmt"
 	"strings"
 	"testing"
 
@@ -55,7 +56,7 @@ func TestGetColor(t *testing.T) {
 	}
 
 	for _, tt := range tests {
-		t.Run(string(rune(tt.level)), func(t *testing.T) {
+		t.Run(fmt.Sprintf("level_%d", tt.level), func(t *testing.T) {
 			color := getColor(tt.level)
 			require.Equal(t, tt.expected, color)
 		})
@@ -244,7 +245,74 @@ func (r *testRegistry) PrepareExecution(ctx context.Context) error       { retur
 // AddStartWorkerCmdFlags is a no-op for testing.
 func (r *testRegistry) AddStartWorkerCmdFlags(_ *cobra.Command) {}
 
+// TestVisitTask_ForkTask tests that visitTask correctly renders fork tasks with subgraphs,
+// join points, and proper next edge from the join point (not from the end of the next chain).
+func TestVisitTask_ForkTask(t *testing.T) {
+	ctx := ContextWithLogger(context.Background(), NewLogger("info"))
+
+	// Create a plan with a fork task: Fork -> [Branch1, Branch2] -> Join -> Next -> End
+	registry := &testRegistry{
+		planName: "test-fork",
+		generateFunc: func(ctx context.Context, p Planner) {
+			end := p.NewEndTask(ctx, "end")
+
+			nextTask := p.NewExecutionTask(ctx, "next-task")
+			nextTask.Next = end
+			nextTask.ExecutorFn = testExecutor1
+
+			join := p.NewForkJoinTask(ctx, "join")
+
+			branch1 := p.NewExecutionTask(ctx, "branch1")
+			branch1.ExecutorFn = testExecutor1
+			branch1.Next = join
+
+			branch2 := p.NewExecutionTask(ctx, "branch2")
+			branch2.ExecutorFn = testExecutor1
+			branch2.Next = join
+
+			fork := p.NewForkTask(ctx, "fork")
+			fork.Tasks = []Task{branch1, branch2}
+			fork.Join = join
+			fork.Next = nextTask
+
+			p.RegisterExecutor(ctx, &Executor{Name: "testExecutor1", Func: testExecutor1})
+			p.RegisterPlan(ctx, fork, nil)
+		},
+	}
+
+	planner, err := NewBasePlanner(ctx, registry)
+	require.NoError(t, err)
+
+	visited := make(map[visitedKey]struct{})
+	dot, endStep := visitTask(planner.First, visited, 0, false /* withFailurePath */)
+
+	// Verify the end step is the end task
+	require.NotNil(t, endStep)
+	require.Equal(t, "end", endStep.Name())
+
+	// Verify fork task is rendered in a subgraph
+	require.Contains(t, dot, "subgraph cluster_fork_fork")
+	require.Contains(t, dot, `"fork" [label="fork [fork task]" shape=parallelogram]`)
+
+	// Verify branches are connected to the fork
+	require.Contains(t, dot, `"fork" -> "branch1" [label="fork 1" color=blue]`)
+	require.Contains(t, dot, `"fork" -> "branch2" [label="fork 2" color=blue]`)
+
+	// Verify join point is rendered
+	require.Contains(t, dot, `"join" [label="join [fork join task]" shape=circle]`)
+
+	// Verify next edge from join to next-task (not from end!)
+	// This verifies the fix for B1 - the edge should come from the join point, not the end task
+	require.Contains(t, dot, `"join" -> "next-task" [label="next"]`)
+
+	// Verify next-task connects to end
+	require.Contains(t, dot, `"next-task" -> "end" [label="next"]`)
+}
+
 // testConditionExecutor is a test executor for condition tasks that returns a boolean.
+// Note: Executor function signatures are validated at plan generation time by the framework,
+// not at registration, so test executors can use various signatures (string, any, or omit
+// the third parameter) as long as they're used consistently with their task definitions.
 func testConditionExecutor(context.Context, *PlanExecutionInfo, any) (bool, error) {
 	return true, nil
 }

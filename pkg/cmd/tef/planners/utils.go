@@ -40,8 +40,9 @@ const (
 // This allows for testing edge cases where runtime.FuncForPC might return nil.
 var funcForPC = runtime.FuncForPC
 
-// visitedKey uniquely identifies an edge in the task graph for deduplication.
-// It tracks transitions from one task to another with a specific status (next/fail).
+// visitedKey serves dual purposes in the graph traversal:
+// 1. Node definition tracking: visitedKey{fromName: taskName} (toName/status are zero values)
+// 2. Edge deduplication: visitedKey{fromName: src, toName: dst, status: "next"/"fail"}
 // Task names are used instead of Task pointers to ensure stable map keys.
 // NOTE: This assumes task names are unique within a plan, which is enforced during
 // plan validation.
@@ -60,6 +61,42 @@ func escapeDOTLabel(s string) string {
 	s = strings.ReplaceAll(s, "\n", `\n`)
 	s = strings.ReplaceAll(s, "\t", `\t`)
 	return s
+}
+
+// generateDOT generates the DOT graph representation of the plan.
+// This is a pure function that doesn't perform I/O, making it suitable for testing.
+// If withFailurePath is false, failure edges are excluded from the visualization.
+// Returns the DOT graph string and an error if traversal fails.
+func generateDOT(seq *BasePlanner, withFailurePath bool) (string, error) {
+	// Traverse the task graph to build the DOT representation.
+	visited := make(map[visitedKey]struct{})
+	body, endStep := visitTask(seq.First, visited, 0, withFailurePath)
+
+	// Verify that an end step was found.
+	if endStep == nil {
+		return "", errors.Newf("failed to determine end step for plan %s", seq.Name)
+	}
+
+	// Assemble the DOT graph structure with start and end nodes.
+	// The first task node is not rendered here as it's rendered during traversal.
+	endStepName := escapeDOTLabel(endStep.Name())
+	endStepLabel := formatTaskLabel(endStep)
+	firstTaskName := escapeDOTLabel(seq.First.Name())
+	body = fmt.Sprintf(
+		`digraph sequence {
+"Start" [shape=circle style=filled fillcolor=lightgreen];
+"%s" [label="%s" shape=%s];
+%s
+"Start" -> "%s" [label="next"];
+}`,
+		endStepName,
+		endStepLabel,
+		getTaskShape(endStep.Type()),
+		body,
+		firstTaskName,
+	)
+
+	return addIndent(body), nil
 }
 
 // GeneratePlan generates a visual representation of the plan as a DOT graph and PNG image.
@@ -88,49 +125,27 @@ func GeneratePlan(
 		return errors.Wrap(err, "create output directory")
 	}
 
-	// Create a DOT file to contain the graph definition.
+	// Generate the DOT graph representation.
+	dotContent, err := generateDOT(seq, withFailurePath)
+	if err != nil {
+		return err
+	}
+
+	// Write the DOT file.
 	f, err := os.Create(dotFile)
 	if err != nil {
 		return errors.Wrap(err, "create dot file")
 	}
-	defer func() {
-		_ = f.Close()
-	}()
 
-	// Traverse the task graph to build the DOT representation.
-	visited := make(map[visitedKey]struct{})
-	body, endStep := visitTask(seq.First, visited, 0, withFailurePath)
-
-	// Verify that an end step was found.
-	if endStep == nil {
-		return errors.Newf("failed to determine end step for plan %s", seq.Name)
-	}
-
-	// Assemble the DOT graph structure with start and end nodes.
-	// The first task node is not rendered here as it's rendered during traversal.
-	endStepName := escapeDOTLabel(endStep.Name())
-	endStepLabel := endStepName + " [" + string(endStep.Type()) + "]"
-	firstTaskName := escapeDOTLabel(seq.First.Name())
-	body = fmt.Sprintf(
-		`digraph sequence {
-"Start" [shape=circle style=filled fillcolor=lightgreen];
-"%s" [label="%s" shape=%s];
-%s
-"Start" -> "%s" [label="next"];
-}`,
-		endStepName,
-		endStepLabel,
-		getTaskShape(endStep.Type()),
-		body,
-		firstTaskName,
-	)
-
-	if _, err := fmt.Fprintf(f, "%s", addIndent(body)); err != nil {
+	if _, err := fmt.Fprintf(f, "%s", dotContent); err != nil {
 		return errors.Wrap(err, "write dot file")
+	}
+	if err := f.Close(); err != nil {
+		return errors.Wrap(err, "close dot file")
 	}
 
 	// Generate a PNG image from the DOT file using the Graphviz dot command.
-	cmd := exec.Command("dot", "-Tpng", dotFile, "-o", pngFile)
+	cmd := exec.CommandContext(ctx, "dot", "-Tpng", dotFile, "-o", pngFile)
 	if err := cmd.Run(); err != nil {
 		return errors.Wrap(err, "generate png")
 	}
@@ -238,10 +253,12 @@ func visitTask(
 		if t.isStepTask() {
 			nextTask := t.getNextTask()
 			failTask := t.getFailTask()
-			if nextTask != nil && endStep != nil {
-				if _, ok := visited[visitedKey{fromName: endStep.Name(), toName: nextTask.Name(), status: "next"}]; !ok {
-					_, _ = fmt.Fprintf(builder, `"%s" -> "%s" [label="next"];`+"\n", escapeDOTLabel(endStep.Name()), escapeDOTLabel(nextTask.Name()))
-					visited[visitedKey{fromName: endStep.Name(), toName: nextTask.Name(), status: "next"}] = struct{}{}
+			// Save the join point before visiting the next chain, as endStep will be reassigned
+			joinStep := endStep
+			if nextTask != nil && joinStep != nil {
+				if _, ok := visited[visitedKey{fromName: joinStep.Name(), toName: nextTask.Name(), status: "next"}]; !ok {
+					_, _ = fmt.Fprintf(builder, `"%s" -> "%s" [label="next"];`+"\n", escapeDOTLabel(joinStep.Name()), escapeDOTLabel(nextTask.Name()))
+					visited[visitedKey{fromName: joinStep.Name(), toName: nextTask.Name(), status: "next"}] = struct{}{}
 				}
 				body, endStep = visitTask(nextTask, visited, level, withFailurePath)
 				if body != "" {
@@ -249,10 +266,11 @@ func visitTask(
 				}
 			}
 			// Only add fail edges if withFailurePath is true
-			if withFailurePath && failTask != nil && endStep != nil {
-				if _, ok := visited[visitedKey{fromName: endStep.Name(), toName: failTask.Name(), status: "fail"}]; !ok {
-					_, _ = fmt.Fprintf(builder, `"%s" -> "%s" [label="fail" color=red];`+"\n", escapeDOTLabel(endStep.Name()), escapeDOTLabel(failTask.Name()))
-					visited[visitedKey{fromName: endStep.Name(), toName: failTask.Name(), status: "fail"}] = struct{}{}
+			// Use joinStep (not endStep) to ensure the edge originates from the fork/join point
+			if withFailurePath && failTask != nil && joinStep != nil {
+				if _, ok := visited[visitedKey{fromName: joinStep.Name(), toName: failTask.Name(), status: "fail"}]; !ok {
+					_, _ = fmt.Fprintf(builder, `"%s" -> "%s" [label="fail" color=red];`+"\n", escapeDOTLabel(joinStep.Name()), escapeDOTLabel(failTask.Name()))
+					visited[visitedKey{fromName: joinStep.Name(), toName: failTask.Name(), status: "fail"}] = struct{}{}
 				}
 				body, endStep = visitTask(failTask, visited, level, withFailurePath)
 				if body != "" {

@@ -569,6 +569,10 @@ yum install graphviz
 - `<planname>.dot` - DOT format graph (text-based graph definition)
 - `<planname>.png` - PNG image of the workflow
 
+**Example: Cluster Setup Plan Visualization**
+
+![Cluster Setup Workflow](cluster-setup.png)
+
 ### Visual Elements
 
 **Shapes** indicate task types:
