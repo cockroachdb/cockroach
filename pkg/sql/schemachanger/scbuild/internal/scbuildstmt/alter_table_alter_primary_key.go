@@ -396,13 +396,31 @@ func isNewPrimaryKeySameAsOldPrimaryKey(b BuildCtx, tbl *scpb.Table, t alterPrim
 		}
 	}
 
-	// Check whether they have the same number of key columns.
-	if len(oldPrimaryIndexKeyColumns) != len(t.Columns) {
+	// Check whether they are both sharded or both not sharded.
+	if (oldPrimaryIndexElem.Sharding == nil) != (t.Sharded == nil) {
 		return false
 	}
 
-	// Check whether they are both sharded or both not sharded.
-	if (oldPrimaryIndexElem.Sharding == nil) != (t.Sharded == nil) {
+	// If both are sharded, filter out the shard column from the old index's
+	// key columns. The user-specified columns (t.Columns) don't include the
+	// shard column, but the old index's key columns do.
+	if oldPrimaryIndexElem.Sharding != nil {
+		shardColID := getColumnIDFromColumnName(
+			b, tbl.TableID, tree.Name(oldPrimaryIndexElem.Sharding.Name), false,
+		)
+		if shardColID != 0 {
+			filtered := make([]*scpb.IndexColumn, 0, len(oldPrimaryIndexKeyColumns)-1)
+			for _, col := range oldPrimaryIndexKeyColumns {
+				if col.ColumnID != shardColID {
+					filtered = append(filtered, col)
+				}
+			}
+			oldPrimaryIndexKeyColumns = filtered
+		}
+	}
+
+	// Check whether they have the same number of key columns.
+	if len(oldPrimaryIndexKeyColumns) != len(t.Columns) {
 		return false
 	}
 
