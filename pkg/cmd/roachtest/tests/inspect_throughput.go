@@ -25,7 +25,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/workload/histogram"
 	"github.com/cockroachdb/cockroach/pkg/workload/histogram/exporter"
-	"github.com/stretchr/testify/require"
 )
 
 func registerInspectThoughput(r registry.Registry) {
@@ -245,7 +244,7 @@ func makeInspectThroughputTest(
 				tickHistogram(cfg.metricName)
 				before := timeutil.Now()
 
-				inspectSQL := fmt.Sprintf("INSPECT TABLE bulkingest.bulkingest WITH OPTIONS INDEX (%s)", cfg.indexListSQL)
+				inspectSQL := fmt.Sprintf("INSPECT TABLE bulkingest.bulkingest WITH OPTIONS INDEX (%s), DETACHED", cfg.indexListSQL)
 				jobID := runInspectInBackground(ctx, t, db, inspectSQL)
 
 				// Tick after INSPECT completes to capture elapsed time for this specific metric.
@@ -298,31 +297,20 @@ func disableRowCountValidation(t test.Test, db *gosql.DB) {
 	}
 }
 
-// runInspectInBackground runs an INSPECT command with a short statement timeout,
-// forcing it to run as a background job. It then polls the job until completion,
-// reporting progress at 10% intervals. Returns the job ID.
+// runInspectInBackground runs an INSPECT DETACHED command, which starts the
+// job in the background and returns immediately. It then looks up the job ID
+// and polls until completion, reporting progress at 10% intervals. Returns the
+// job ID.
 func runInspectInBackground(
 	ctx context.Context, t test.Test, db *gosql.DB, inspectSQL string,
 ) (jobID int64) {
-	// Set a short statement timeout to force INSPECT to run as a background job.
-	_, err := db.Exec("SET statement_timeout = '5s'")
-	require.NoError(t, err)
-
-	// Reset statement timeout after we're done.
-	defer func() {
-		_, resetErr := db.Exec("RESET statement_timeout")
-		require.NoError(t, resetErr)
-	}()
-
-	_, err = db.Exec(inspectSQL)
-
-	// This may fail if the INSPECT took longer than the statement_timeout to run.
-	// So, we tolerate only statement timeout errors here.
-	if err != nil {
-		require.ErrorContains(t, err, "statement timeout")
+	// INSPECT ... DETACHED starts the job in the background and returns
+	// immediately, avoiding the need for a statement timeout hack.
+	if _, err := db.Exec(inspectSQL); err != nil {
+		t.Fatalf("failed to start INSPECT job: %v", err)
 	}
 
-	// Get the INSPECT job ID.
+	// Look up the INSPECT job ID.
 	getJobIDSQL := `
 		SELECT job_id
 		FROM [SHOW JOBS]
