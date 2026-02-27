@@ -224,6 +224,8 @@ type cFetcherArgs struct {
 
 	// tenantID is required in some places for AC/bookkeeping.
 	tenantID roachpb.TenantID
+	// workloadID is used for ASH sampling.
+	workloadID uint64
 }
 
 // noOutputColumn is a sentinel value to denote that a system column is not
@@ -286,7 +288,7 @@ type cFetcher struct {
 	// cpuStopWatch tracks the CPU time spent by this cFetcher while fulfilling KV
 	// requests *in the current goroutine*.
 	cpuStopWatch *timeutil.CPUStopWatch
-	pacer        *admission.Pacer
+	pacer *admission.Pacer
 
 	// machine contains fields that get updated during the run of the fetcher.
 	machine struct {
@@ -566,7 +568,10 @@ func (cf *cFetcher) Init(
 			cf.pacer = cf.txn.DB().AdmissionPacerFactory.NewPacer(
 				50*time.Millisecond, // Request a realistic per-batch amount.
 				admission.WorkInfo{
-					TenantID: cf.tenantID, Priority: pri, CreateTime: timeutil.Now().UnixNano(),
+					TenantID:   cf.tenantID,
+					Priority:   pri,
+					CreateTime: timeutil.Now().UnixNano(),
+					WorkloadID: cf.workloadID,
 				},
 			)
 		}
