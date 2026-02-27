@@ -752,11 +752,48 @@ func init() {
 		cliflagcfg.StringSliceFlag(f, &cliCtx.certPrincipalMap, cliflags.CertPrincipalMap)
 	}
 
-	// convert-url is not really a client command. It just recognizes (some)
-	// client flags.
 	{
 		f := convertURLCmd.PersistentFlags()
 		cliflagcfg.StringFlag(f, &convertCtx.url, cliflags.URL)
+
+		// We use the default values from `setConvContextDefaults` to maintain a
+		// single source of truth.
+		f.BoolVar(
+			&convertCtx.sslInline, "inline", convertCtx.sslInline,
+			"whether to inline certificates (supported by CRDB's Physical Cluster Replication feature)",
+		)
+		f.StringVar(
+			&convertCtx.database, "database", convertCtx.database,
+			"database to connect to",
+		)
+		f.StringVar(
+			&convertCtx.username, "username", convertCtx.username,
+			"username to connect as",
+		)
+		f.StringVar(
+			&convertCtx.password, "password", convertCtx.password,
+			"password to connect with",
+		)
+		f.StringVar(
+			&convertCtx.cluster, "cluster", convertCtx.cluster,
+			"virtual cluster name to connect to",
+		)
+		f.StringVar(
+			&convertCtx.certsDir, "certs-dir", convertCtx.certsDir,
+			"certs directory to automatically load certs from",
+		)
+		f.StringVar(
+			&convertCtx.caCertPath, "ca-cert", convertCtx.caCertPath,
+			"path to CA certificate",
+		)
+		f.StringVar(
+			&convertCtx.certPath, "cert", convertCtx.certPath,
+			"path to certificate for client-cert authentication",
+		)
+		f.StringVar(
+			&convertCtx.keyPath, "key", convertCtx.keyPath,
+			"path to key for client-cert authentication",
+		)
 	}
 
 	// Auth commands.
