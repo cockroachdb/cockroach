@@ -3,8 +3,7 @@
 Pre-built query templates for investigating MMA behavior. Replace `{cluster}`
 with the actual cluster name/tag and adjust time ranges as needed.
 
-For guidance on Datadog MCP tools vs pup CLI, Flex tier usage, and tool
-selection, use the built-in `datadog` skill.
+Use the built-in `datadog` skill for reading from to Datadog.
 
 **Important:** All CockroachDB metrics in Datadog use the `cockroachdb.`
 prefix (e.g. `cockroachdb.mma.store.cpu.utilization`).
@@ -294,11 +293,11 @@ Use the Datadog MCP `analyze_datadog_logs` tool for aggregation. Always set
 
 ```sql
 -- Count rebalancing passes over time
-SELECT DATE_TRUNC('hour', timestamp) as hour, count(*)
+SELECT date_trunc('hour', timestamp) as hour, count(*)
 FROM logs
 WHERE message LIKE '%rebalanceStores begins%'
-GROUP BY DATE_TRUNC('hour', timestamp)
-ORDER BY DATE_TRUNC('hour', timestamp)
+GROUP BY date_trunc('hour', timestamp)
+ORDER BY date_trunc('hour', timestamp)
 
 -- Count successes vs failures
 SELECT

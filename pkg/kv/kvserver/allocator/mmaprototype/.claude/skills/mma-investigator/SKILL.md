@@ -40,8 +40,7 @@ subsequent Datadog queries must be scoped to this cluster and time window.
 
 ## Using Datadog
 
-Use the built-in `datadog` skill (available via roachdev) for guidance on
-Datadog MCP tool usage.
+Use the built-in `datadog` skill for guidance on Datadog MCP tool usage.
 
 MMA-specific Datadog tips:
 - Always query the **Flex tier** for logs (`storage_tier: "flex"` or
@@ -82,7 +81,7 @@ these common causes before concluding the data doesn't exist:
    using `storage_tier: "flex_and_indexes"`.
 3. **Incorrect tag names or values.** Verify tag names with the dashboard or
    `get_datadog_metric_context`. Common pitfalls:
-   - `cluster` vs `cluster_name`
+   - The cluster name should be in `cluster`, or sometimes a substring of `hostname`
    - `store` vs `store_id` (check which tag key the metric actually uses)
    - `node_id` vs `instance`
 4. **Time range mismatch.** Double-check that `from` and `to` match the
@@ -226,8 +225,7 @@ broader codebase searches, use the `Explore` agent via the Task tool.
 **Only do this after you understand the cluster state.** Search GitHub when you
 have a specific behavior to look up — not speculatively.
 
-Use the built-in `github` skill (available via roachdev) for searching issues
-and PRs. Useful search terms:
+Use the built-in `github` skill for searching issues and PRs. Useful search terms:
 
 - MMA-related issues: `mma`, `multi-metric allocator`, `mmaprototype`
 - Label-based: `label:A-kv-allocator`
