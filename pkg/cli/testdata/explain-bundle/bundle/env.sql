@@ -179,6 +179,7 @@
 --   server.oidc_authentication.provider_url =   (sets OIDC provider URL ({provider_url}/.well-known/openid-configuration must resolve) (this feature is experimental))
 --   server.oidc_authentication.redirect_url = https://localhost:8080/oidc/v1/callback  (sets OIDC redirect URL via a URL string or a JSON string containing a required `redirect_urls` key with an object that maps from region keys to URL strings (URLs should point to your load balancer and must route to the path /oidc/v1/callback) (this feature is experimental))
 --   server.oidc_authentication.scopes = openid  (sets OIDC scopes to include with authentication request (space delimited list of strings, required to start with `openid`) (this feature is experimental))
+--   server.oidc_authentication.tls_insecure_skip_verify = false  (if true, TLS certificate verification is skipped for connections to the OIDC provider (insecure) (this feature is experimental))
 --   server.rangelog.ttl = 720h0m0s  (if nonzero, range log entries older than this duration are deleted every 10m0s. Should not be lowered below 24 hours.)
 --   server.shutdown.initial_wait = 0s  (the amount of time a server waits in an unready state before proceeding with the rest of the shutdown process)
 --   server.shutdown.lease_transfer_iteration.timeout = 5s  (the amount of time a server waits to transfer range leases before proceeding with the rest of the shutdown process)

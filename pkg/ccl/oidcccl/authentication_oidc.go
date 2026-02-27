@@ -421,6 +421,7 @@ func reloadConfigLocked(
 			httputil.WithClientTimeout(clientTimeout),
 			httputil.WithDialerTimeout(clientTimeout),
 			httputil.WithCustomCAPEM(OIDCProviderCustomCA.Get(&st.SV)),
+			httputil.WithInsecureSkipVerify(OIDCTLSInsecureSkipVerify.Get(&st.SV)),
 		),
 		authZEnabled:        OIDCAuthZEnabled.Get(&st.SV),
 		groupClaim:          OIDCAuthGroupClaim.Get(&st.SV),

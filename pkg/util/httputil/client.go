@@ -23,9 +23,10 @@ var DefaultClient = NewClientWithTimeout(StandardHTTPTimeout)
 const StandardHTTPTimeout time.Duration = 3 * time.Second
 
 type clientOptions struct {
-	clientTimeout time.Duration
-	dialerTimeout time.Duration
-	customCAPEM   string
+	clientTimeout      time.Duration
+	dialerTimeout      time.Duration
+	customCAPEM        string
+	insecureSkipVerify bool
 }
 
 // ClientOption overrides behavior of NewClient.
@@ -60,6 +61,13 @@ func WithCustomCAPEM(customCAPEM string) ClientOption {
 	})
 }
 
+// WithInsecureSkipVerify configures the client to skip TLS certificate verification.
+func WithInsecureSkipVerify(insecureSkipVerify bool) ClientOption {
+	return clientOptionFunc(func(o *clientOptions) {
+		o.insecureSkipVerify = insecureSkipVerify
+	})
+}
+
 // NewClient defines a new http.Client as per the provided options.
 func NewClient(opts ...ClientOption) *Client {
 	options := &clientOptions{}
@@ -69,13 +77,16 @@ func NewClient(opts ...ClientOption) *Client {
 
 	t := http.DefaultTransport.(*http.Transport)
 	var tlsConf *tls.Config
-	if options.customCAPEM != "" {
-		certPool := x509.NewCertPool()
-		if !certPool.AppendCertsFromPEM([]byte(options.customCAPEM)) {
-			return nil
-		}
+	if options.customCAPEM != "" || options.insecureSkipVerify {
 		tlsConf = &tls.Config{
-			RootCAs: certPool,
+			InsecureSkipVerify: options.insecureSkipVerify,
+		}
+		if options.customCAPEM != "" {
+			certPool := x509.NewCertPool()
+			if !certPool.AppendCertsFromPEM([]byte(options.customCAPEM)) {
+				return nil
+			}
+			tlsConf.RootCAs = certPool
 		}
 	}
 
