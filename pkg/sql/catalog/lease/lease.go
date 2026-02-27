@@ -100,20 +100,20 @@ var LeaseMonitorRangeFeedResetTime = settings.RegisterDurationSetting(
 	time.Minute*25,
 )
 
-// diableLeasedDescriptorsByDefaultThreshold any value above this is considered
+// disableLeasedDescriptorsByDefaultThreshold any value above this is considered
 // disabled, making it 10% odds of disabled.
-const diableLeasedDescriptorsByDefaultThreshold = 90
+const disableLeasedDescriptorsByDefaultThreshold = 90
 
 // disableLeasedDescriptorThresholdDefault, by default, leased descriptors
 // are enabled.
 const disableLeasedDescriptorThresholdDefault = 0
 
-// UseLeasedDescriptorsForCatalogDefault determines if leased descrptor are used for catalog
+// UseLeasedDescriptorsForCatalogDefault determines if leased descriptors are used for catalog
 // views.
 var UseLeasedDescriptorsForCatalogDefault = metamorphic.ConstantWithTestRange("disable-catalog-leased-descriptors-threshold",
 	disableLeasedDescriptorThresholdDefault,
 	0,
-	100) < diableLeasedDescriptorsByDefaultThreshold
+	100) < disableLeasedDescriptorsByDefaultThreshold
 
 var WaitForInitialVersion = settings.RegisterBoolSetting(settings.ApplicationLevel,
 	"sql.catalog.descriptor_wait_for_initial_version.enabled",
