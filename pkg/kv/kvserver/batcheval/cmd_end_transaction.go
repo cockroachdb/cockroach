@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/lockspanset"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/rditer"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/readsummary"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/readsummary/rspb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/spanset"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
@@ -941,11 +942,37 @@ func RunCommitTrigger(
 				ctx, errors.Wrap(err, "unable to load replica version"),
 			)
 		}
+		lhsAbortSpanEntries, err := rec.AbortSpan().Collect(
+			ctx, batch, txn.WriteTimestamp,
+			gc.TxnCleanupThreshold.Get(&rec.ClusterSettings().SV),
+		)
+		if err != nil {
+			return result.Result{}, maybeWrapReplicaCorruptionError(
+				ctx, errors.Wrap(err, "unable to collect LHS abort span entries"),
+			)
+		}
+		var consistencyCheckerLastRun hlc.Timestamp
+		if _, err := storage.MVCCGetProto(ctx, batch,
+			keys.QueueLastProcessedKey(ct.SplitTrigger.LeftDesc.StartKey, "consistencyChecker"),
+			hlc.Timestamp{}, &consistencyCheckerLastRun, storage.MVCCGetOptions{}); err != nil {
+			return result.Result{}, maybeWrapReplicaCorruptionError(
+				ctx, errors.Wrap(err, "unable to load consistency checker last run"),
+			)
+		}
+		lastReplicaGCTS, err := rec.GetLastReplicaGCTimestamp(ctx)
+		if err != nil {
+			return result.Result{}, maybeWrapReplicaCorruptionError(
+				ctx, errors.Wrap(err, "unable to load last replica GC timestamp"),
+			)
+		}
 		in := SplitTriggerHelperInput{
-			LeftLease:      lhsLease,
-			GCThreshold:    gcThreshold,
-			GCHint:         gcHint,
-			ReplicaVersion: replicaVersion,
+			LeftLease:                 lhsLease,
+			GCThreshold:              gcThreshold,
+			GCHint:                   gcHint,
+			ReplicaVersion:           replicaVersion,
+			LHSAbortSpanEntries:      lhsAbortSpanEntries,
+			ConsistencyCheckerLastRun: consistencyCheckerLastRun,
+			LastReplicaGCTimestamp:    lastReplicaGCTS,
 		}
 
 		newMS, res, err := splitTrigger(
@@ -958,7 +985,40 @@ func RunCommitTrigger(
 		return res, nil
 	}
 	if mt := ct.GetMergeTrigger(); mt != nil {
-		res, err := mergeTrigger(ctx, rec, batch, ms, mt, txn.WriteTimestamp)
+		lhsHint, err := MakeStateLoader(rec).LoadGCHint(ctx, batch)
+		if err != nil {
+			return result.Result{}, maybeWrapReplicaCorruptionError(
+				ctx, errors.Wrap(err, "unable to load LHS GCHint"),
+			)
+		}
+		rhsHint, err := kvstorage.MakeStateLoader(mt.RightDesc.RangeID).LoadGCHint(ctx, batch)
+		if err != nil {
+			return result.Result{}, maybeWrapReplicaCorruptionError(
+				ctx, errors.Wrap(err, "unable to load RHS GCHint"),
+			)
+		}
+		lhsPriorReadSummary, err := readsummary.Load(ctx, batch, rec.GetRangeID())
+		if err != nil {
+			return result.Result{}, maybeWrapReplicaCorruptionError(
+				ctx, errors.Wrap(err, "unable to load LHS prior read summary"),
+			)
+		}
+		rhsAbortSpanEntries, err := abortspan.New(mt.RightDesc.RangeID).Collect(
+			ctx, batch, txn.WriteTimestamp,
+			gc.TxnCleanupThreshold.Get(&rec.ClusterSettings().SV),
+		)
+		if err != nil {
+			return result.Result{}, maybeWrapReplicaCorruptionError(
+				ctx, errors.Wrap(err, "unable to collect RHS abort span entries"),
+			)
+		}
+		in := MergeTriggerHelperInput{
+			LHSGCHint:           lhsHint,
+			RHSGCHint:           rhsHint,
+			LHSPriorReadSummary: lhsPriorReadSummary,
+			RHSAbortSpanEntries: rhsAbortSpanEntries,
+		}
+		res, err := mergeTrigger(ctx, rec, batch, ms, mt, txn.WriteTimestamp, in)
 		if err != nil {
 			return result.Result{}, maybeWrapReplicaCorruptionError(ctx, err)
 		}
@@ -1254,6 +1314,20 @@ func splitTrigger(
 	return splitTriggerHelper(ctx, rec, batch, in, h, split, ts)
 }
 
+// TestingMergeTrigger is a wrapper around mergeTrigger that is exported for
+// testing purposes.
+func TestingMergeTrigger(
+	ctx context.Context,
+	rec EvalContext,
+	batch storage.Batch,
+	ms *enginepb.MVCCStats,
+	merge *roachpb.MergeTrigger,
+	ts hlc.Timestamp,
+	in MergeTriggerHelperInput,
+) (result.Result, error) {
+	return mergeTrigger(ctx, rec, batch, ms, merge, ts, in)
+}
+
 // TestingSplitTrigger is a wrapper around splitTrigger that is exported for
 // testing purposes.
 func TestingSplitTrigger(
@@ -1320,10 +1394,21 @@ func makeScanStatsFn(
 // SplitTriggerHelperInput contains metadata needed by the RHS when running the
 // splitTriggerHelper.
 type SplitTriggerHelperInput struct {
-	LeftLease      roachpb.Lease
-	GCThreshold    *hlc.Timestamp
-	GCHint         *roachpb.GCHint
-	ReplicaVersion roachpb.Version
+	LeftLease                  roachpb.Lease
+	GCThreshold                *hlc.Timestamp
+	GCHint                     *roachpb.GCHint
+	ReplicaVersion             roachpb.Version
+	LHSAbortSpanEntries        []abortspan.Entry
+	ConsistencyCheckerLastRun  hlc.Timestamp
+	LastReplicaGCTimestamp      hlc.Timestamp
+}
+
+// MergeTriggerHelperInput contains metadata required by the mergeTrigger.
+type MergeTriggerHelperInput struct {
+	LHSGCHint           *roachpb.GCHint
+	RHSGCHint           *roachpb.GCHint
+	LHSPriorReadSummary *rspb.ReadSummary
+	RHSAbortSpanEntries []abortspan.Entry
 }
 
 // splitTriggerHelper continues the work begun by splitTrigger, but has a
@@ -1351,15 +1436,10 @@ func splitTriggerHelper(
 	// Copy the last replica GC timestamp. This value is unreplicated,
 	// which is why the MVCC stats are set to nil on calls to
 	// MVCCPutProto.
-	replicaGCTS, err := rec.GetLastReplicaGCTimestamp(ctx)
-	if err != nil {
-		return enginepb.MVCCStats{}, result.Result{}, errors.Wrap(err, "unable to fetch last replica GC timestamp")
-	}
-
 	if err := storage.MVCCPutProto(
 		ctx, spanset.DisableForbiddenSpanAssertions(batch),
 		keys.RangeLastReplicaGCTimestampKey(split.RightDesc.RangeID), hlc.Timestamp{},
-		&replicaGCTS, storage.MVCCWriteOptions{Category: fs.BatchEvalReadCategory}); err != nil {
+		&in.LastReplicaGCTimestamp, storage.MVCCWriteOptions{Category: fs.BatchEvalReadCategory}); err != nil {
 		return enginepb.MVCCStats{}, result.Result{}, errors.Wrap(err, "unable to copy last replica GC timestamp")
 	}
 
@@ -1403,6 +1483,7 @@ func splitTriggerHelper(
 
 	computeAccurateStats := (noPreComputedStats || manualSplit || emptyLeftOrRight || preComputedStatsDiff)
 	computeAccurateStats = computeAccurateStats && !shouldUseCrudeEstimates
+	var err error
 	if computeAccurateStats {
 		var reason redact.RedactableString
 		if noPreComputedStats {
@@ -1427,10 +1508,10 @@ func splitTriggerHelper(
 		return enginepb.MVCCStats{}, result.Result{}, err
 	}
 
-	// Initialize the RHS range's AbortSpan by copying the LHS's.
-	if err := rec.AbortSpan().CopyTo(
-		ctx, batch, batch, h.AbsPostSplitRight(), ts, split.RightDesc.RangeID,
-		gc.TxnCleanupThreshold.Get(&rec.ClusterSettings().SV),
+	// Initialize the RHS range's AbortSpan by writing the LHS's entries into
+	// the RHS.
+	if err := abortspan.WriteTo(
+		ctx, batch, h.AbsPostSplitRight(), split.RightDesc.RangeID, in.LHSAbortSpanEntries,
 	); err != nil {
 		return enginepb.MVCCStats{}, result.Result{}, err
 	}
@@ -1438,20 +1519,9 @@ func splitTriggerHelper(
 	// Copy the last consistency checker run timestamp from the LHS to the RHS.
 	// This avoids running the consistency checker on the RHS immediately after
 	// the split.
-	lastTS := hlc.Timestamp{}
-	// TODO(arul): instead of fetching the consistency checker timestamp here
-	// like this, we should instead pass it using the SplitTriggerHelperInput to
-	// make it easier to test.
-	if _, err := storage.MVCCGetProto(ctx, batch,
-		keys.QueueLastProcessedKey(split.LeftDesc.StartKey, "consistencyChecker"),
-		hlc.Timestamp{}, &lastTS, storage.MVCCGetOptions{}); err != nil {
-		return enginepb.MVCCStats{}, result.Result{}, errors.Wrap(err,
-			"unable to fetch the last consistency checker run for LHS")
-	}
-
 	if err := storage.MVCCPutProto(ctx, batch,
 		keys.QueueLastProcessedKey(split.RightDesc.StartKey, "consistencyChecker"),
-		hlc.Timestamp{}, &lastTS,
+		hlc.Timestamp{}, &in.ConsistencyCheckerLastRun,
 		storage.MVCCWriteOptions{Stats: h.AbsPostSplitRight(), Category: fs.BatchEvalReadCategory}); err != nil {
 		return enginepb.MVCCStats{}, result.Result{}, errors.Wrap(err,
 			"unable to copy the last consistency checker run to RHS")
@@ -1586,6 +1656,7 @@ func mergeTrigger(
 	ms *enginepb.MVCCStats,
 	merge *roachpb.MergeTrigger,
 	ts hlc.Timestamp,
+	in MergeTriggerHelperInput,
 ) (result.Result, error) {
 	desc := rec.Desc()
 	if !bytes.Equal(desc.StartKey, merge.LeftDesc.StartKey) {
@@ -1597,9 +1668,8 @@ func mergeTrigger(
 			desc.EndKey, merge.LeftDesc.EndKey)
 	}
 
-	if err := abortspan.New(merge.RightDesc.RangeID).CopyTo(
-		ctx, batch, batch, ms, ts, merge.LeftDesc.RangeID,
-		gc.TxnCleanupThreshold.Get(&rec.ClusterSettings().SV),
+	if err := abortspan.WriteTo(
+		ctx, batch, ms, merge.LeftDesc.RangeID, in.RHSAbortSpanEntries,
 	); err != nil {
 		return result.Result{}, err
 	}
@@ -1625,10 +1695,8 @@ func mergeTrigger(
 	// not updated by the SubsumeRequest.
 	if merge.RightReadSummary != nil {
 		mergedSum := merge.RightReadSummary.Clone()
-		if priorSum, err := readsummary.Load(ctx, batch, rec.GetRangeID()); err != nil {
-			return result.Result{}, err
-		} else if priorSum != nil {
-			mergedSum.Merge(*priorSum)
+		if in.LHSPriorReadSummary != nil {
+			mergedSum.Merge(*in.LHSPriorReadSummary)
 		}
 		// Compress the persisted read summary, as it will likely never be needed.
 		mergedSum.Compress(0)
@@ -1672,21 +1740,12 @@ func mergeTrigger(
 	pd.Replicated.DoTimelyApplicationToAllReplicas = true
 
 	{
-		// If we have GC hints populated that means we are trying to perform
-		// optimized garbage removal in future.
-		// We will try to merge both hints if possible and set new hint on LHS.
-		lhsLoader := MakeStateLoader(rec)
-		lhsHint, err := lhsLoader.LoadGCHint(ctx, batch)
-		if err != nil {
-			return result.Result{}, err
-		}
-		rhsLoader := kvstorage.MakeStateLoader(merge.RightDesc.RangeID)
-		rhsHint, err := rhsLoader.LoadGCHint(ctx, batch)
-		if err != nil {
-			return result.Result{}, err
-		}
+		// Merge the GC hints from both sides. If the merged hint differs from the
+		// LHS hint, persist the updated hint.
+		lhsHint := in.LHSGCHint
+		rhsHint := in.RHSGCHint
 		if lhsHint.Merge(rhsHint, rec.GetMVCCStats().HasNoUserData(), merge.RightMVCCStats.HasNoUserData()) {
-			if err := lhsLoader.SetGCHint(ctx, batch, ms, lhsHint); err != nil {
+			if err := MakeStateLoader(rec).SetGCHint(ctx, batch, ms, lhsHint); err != nil {
 				return result.Result{}, err
 			}
 			pd.Replicated.State = &kvserverpb.ReplicaState{
