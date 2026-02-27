@@ -131,7 +131,7 @@ func TestCPUTimeTokenAllocator(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	metrics := makeCPUTimeTokenMetrics()
-	granter := &cpuTimeTokenGranter{metrics: metrics}
+	granter := newCPUTimeTokenGranter(metrics, timeutil.DefaultTimeSource{})
 	tier0Granter := &cpuTimeTokenChildGranter{
 		tier:   testTier0,
 		parent: granter,

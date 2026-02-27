@@ -6,6 +6,8 @@
 package admission
 
 import (
+	"fmt"
+
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/crlib/crstrings"
 )
@@ -80,7 +82,23 @@ type cpuTimeTokenMetrics struct {
 	TokensConsumed *metric.Counter
 	TokensReturned *metric.Counter
 
-	// Avoids allocations.
+	// ExhaustedDurationNanos tracks cumulative nanoseconds each bucket has
+	// spent exhausted. Each (tier, qual) bucket gets its own counter rather
+	// than using a CounterVec, because tookWithoutPermissionLocked is on the
+	// hot admission path: Counter.Inc is a single atomic add, whereas
+	// CounterVec.Inc involves allocations, mutex grabs, and hash lookups.
+	//
+	// The counter accumulates nanoseconds of exhaustion. Applying
+	// rate(exhausted_duration_nanos) in DD/Prometheus yields the fraction of
+	// wall-clock time the bucket was exhausted, queryable over any window
+	// (1m, 5m, 30m, etc.).
+	//
+	// This is a flat array indexed by exhaustedDurationIdx(tier, qual)
+	// rather than a nested [tier][qual] array, because AddMetricStruct
+	// cannot register metrics inside nested arrays.
+	ExhaustedDurationNanos [int(numResourceTiers) * int(numBurstQualifications)]*metric.Counter
+
+	// labelMaps avoids allocations when updating GaugeVec metrics.
 	labelMaps [numResourceTiers][numBurstQualifications]map[string]string
 }
 
@@ -91,6 +109,22 @@ func makeCPUTimeTokenMetrics() *cpuTimeTokenMetrics {
 		BucketTokens:   metric.NewExportedGaugeVec(cpuTimeTokenBucketTokensMeta, []string{tierLabel, burstQualLabel}),
 		TokensConsumed: metric.NewCounter(cpuTimeTokensConsumedMeta),
 		TokensReturned: metric.NewCounter(cpuTimeTokensReturnedMeta),
+	}
+	for tier := resourceTier(0); tier < numResourceTiers; tier++ {
+		for qual := burstQualification(0); qual < numBurstQualifications; qual++ {
+			m.ExhaustedDurationNanos[exhaustedDurationIdx(tier, qual)] = metric.NewCounter(metric.Metadata{
+				Name: fmt.Sprintf(
+					"admission.cpu_time_tokens.exhausted_duration_nanos.%s.%s",
+					tier, qual),
+				Help: fmt.Sprintf(
+					"Cumulative nanoseconds the %s/%s CPU time token bucket has spent "+
+						"exhausted (tokens <= 0); rate() gives the fraction of wall-clock "+
+						"time the bucket was exhausted",
+					tier, qual),
+				Measurement: "Nanoseconds",
+				Unit:        metric.Unit_NANOSECONDS,
+			})
+		}
 	}
 	for tier := resourceTier(0); tier < numResourceTiers; tier++ {
 		for qual := burstQualification(0); qual < numBurstQualifications; qual++ {
@@ -105,3 +139,9 @@ func makeCPUTimeTokenMetrics() *cpuTimeTokenMetrics {
 
 // MetricStruct implements the metric.Struct interface.
 func (cpuTimeTokenMetrics) MetricStruct() {}
+
+// exhaustedDurationIdx returns the flat index into
+// ExhaustedDurationNanos for the given (tier, qual) pair.
+func exhaustedDurationIdx(tier resourceTier, qual burstQualification) int {
+	return int(tier)*int(numBurstQualifications) + int(qual)
+}

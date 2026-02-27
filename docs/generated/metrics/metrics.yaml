@@ -11321,6 +11321,46 @@ layers:
       unit: COUNT
       aggregation: AVG
       derivative: NONE
+    - name: admission.cpu_time_tokens.consumed
+      exported_name: admission_cpu_time_tokens_consumed
+      description: Cumulative number of CPU time tokens consumed (deducted from buckets) by admitted work
+      y_axis_label: Tokens
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+    - name: admission.cpu_time_tokens.exhausted_duration_nanos.app_tenant.canBurst
+      exported_name: admission_cpu_time_tokens_exhausted_duration_nanos_app_tenant_canBurst
+      description: Cumulative nanoseconds the app_tenant/canBurst CPU time token bucket has spent exhausted (tokens <= 0); rate() gives the fraction of wall-clock time the bucket was exhausted
+      y_axis_label: Nanoseconds
+      type: COUNTER
+      unit: NANOSECONDS
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+    - name: admission.cpu_time_tokens.exhausted_duration_nanos.app_tenant.noBurst
+      exported_name: admission_cpu_time_tokens_exhausted_duration_nanos_app_tenant_noBurst
+      description: Cumulative nanoseconds the app_tenant/noBurst CPU time token bucket has spent exhausted (tokens <= 0); rate() gives the fraction of wall-clock time the bucket was exhausted
+      y_axis_label: Nanoseconds
+      type: COUNTER
+      unit: NANOSECONDS
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+    - name: admission.cpu_time_tokens.exhausted_duration_nanos.system_tenant.canBurst
+      exported_name: admission_cpu_time_tokens_exhausted_duration_nanos_system_tenant_canBurst
+      description: Cumulative nanoseconds the system_tenant/canBurst CPU time token bucket has spent exhausted (tokens <= 0); rate() gives the fraction of wall-clock time the bucket was exhausted
+      y_axis_label: Nanoseconds
+      type: COUNTER
+      unit: NANOSECONDS
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+    - name: admission.cpu_time_tokens.exhausted_duration_nanos.system_tenant.noBurst
+      exported_name: admission_cpu_time_tokens_exhausted_duration_nanos_system_tenant_noBurst
+      description: Cumulative nanoseconds the system_tenant/noBurst CPU time token bucket has spent exhausted (tokens <= 0); rate() gives the fraction of wall-clock time the bucket was exhausted
+      y_axis_label: Nanoseconds
+      type: COUNTER
+      unit: NANOSECONDS
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
     - name: admission.cpu_time_tokens.multiplier
       exported_name: admission_cpu_time_tokens_multiplier
       description: The token-to-CPU-time multiplier used by the CPU time token linear model to adjust refill rates; computed as the ratio of total CPU time to tracked CPU time
@@ -11331,12 +11371,20 @@ layers:
       derivative: NONE
     - name: admission.cpu_time_tokens.refill_rate
       exported_name: admission_cpu_time_tokens_refill_rate
-      description: The rate at which CPU time tokens are added per second, broken down by resource tier and burst qualification
+      description: The rate at which CPU time tokens are added per second, broken down by resource tier and burst qualification; note that the refill rate of a bucket is also the capacity of the bucket
       y_axis_label: Tokens
       type: GAUGE
       unit: COUNT
       aggregation: AVG
       derivative: NONE
+    - name: admission.cpu_time_tokens.returned
+      exported_name: admission_cpu_time_tokens_returned
+      description: Cumulative number of CPU time tokens returned (credited back to buckets), for example when actual CPU usage was lower than the initial estimate
+      y_axis_label: Tokens
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
     - name: admission.elastic_cpu.acquired_nanos
       exported_name: admission_elastic_cpu_acquired_nanos
       description: Total CPU nanoseconds acquired by elastic work

@@ -9,8 +9,11 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/redact"
 	"github.com/olekukonko/tablewriter"
 )
@@ -135,9 +138,10 @@ func (cg *cpuTimeTokenChildGranter) continueGrantChain(grantChainID grantChainID
 // https://docs.google.com/document/d/1-Kr2gRFTk0QV8kBs7AXRXUwFpK2ZxR1cqIwWCuOx22Q/edit?tab=t.0
 // TODO(josh): Turn into a proper design documnet.
 type cpuTimeTokenGranter struct {
-	requester [numResourceTiers]requester
-	metrics   *cpuTimeTokenMetrics
-	mu        struct {
+	requester  [numResourceTiers]requester
+	metrics    *cpuTimeTokenMetrics
+	timeSource timeutil.TimeSource
+	mu         struct {
 		// TODO(josh): I suspect putting the mutex here is better than in
 		// CPUTimeTokenGrantCoordinator, but for now the decision is tentative.
 		// Think better to decice when I put up a PR that introduces
@@ -156,10 +160,58 @@ type cpuTimeTokenGranter struct {
 	}
 }
 
-// TODO(josh): Make this observable. See here for one approach:
-// https://github.com/cockroachdb/cockroach/commit/06967f5fa72115348d57fc66fe895aec514261d5#diff-6212d039fab53dd464bd989bdbd537947b11d37a9c8fe77ca497870b49e28a9cR367
+func newCPUTimeTokenGranter(
+	metrics *cpuTimeTokenMetrics, timeSource timeutil.TimeSource,
+) *cpuTimeTokenGranter {
+	g := &cpuTimeTokenGranter{metrics: metrics, timeSource: timeSource}
+	// Buckets start at 0 tokens (exhausted) before the first refill, so
+	// initialize exhaustedStart and wire the per-bucket counters.
+	now := timeSource.Now()
+	for tier := resourceTier(0); tier < numResourceTiers; tier++ {
+		for qual := burstQualification(0); qual < numBurstQualifications; qual++ {
+			g.mu.buckets[tier][qual].exhaustedStart = now
+			g.mu.buckets[tier][qual].exhaustedDuration =
+				metrics.ExhaustedDurationNanos[exhaustedDurationIdx(tier, qual)]
+		}
+	}
+	return g
+}
+
 type tokenBucket struct {
 	tokens int64
+	// exhaustedStart is the time at which the bucket entered the exhausted
+	// state (tokens <= 0). Zero when the bucket is not exhausted.
+	exhaustedStart time.Time
+	// exhaustedDuration is a cumulative counter of nanoseconds spent exhausted.
+	exhaustedDuration *metric.Counter
+}
+
+// updateTokenCount sets the bucket's token count and updates the
+// exhausted-duration counter based on the transition into or out of the
+// exhausted state (tokens <= 0).
+//
+// Three transitions are handled:
+//  1. wasExhausted && !isExhausted — recovery: flush elapsed time to counter.
+//  2. !wasExhausted && isExhausted — entering exhaustion: record start time.
+//  3. isExhausted && flushToMetricNow — still exhausted but in this case,
+//     updateTokenCount flushes accumulated duration to the counter. This
+//     way, sustained exhaustion is visible in metrics even over shorter
+//     periods such as 1m. flushToMetricNow is set to true on a call to
+//     updateTokenCount once every second.
+func (tb *tokenBucket) updateTokenCount(newTokens int64, now time.Time, flushToMetricNow bool) {
+	wasExhausted := tb.tokens <= 0
+	tb.tokens = newTokens
+	isExhausted := tb.tokens <= 0
+	switch {
+	case wasExhausted && !isExhausted:
+		tb.exhaustedDuration.Inc(now.Sub(tb.exhaustedStart).Nanoseconds())
+		tb.exhaustedStart = time.Time{}
+	case !wasExhausted && isExhausted:
+		tb.exhaustedStart = now
+	case isExhausted && flushToMetricNow:
+		tb.exhaustedDuration.Inc(now.Sub(tb.exhaustedStart).Nanoseconds())
+		tb.exhaustedStart = now
+	}
 }
 
 func (stg *cpuTimeTokenGranter) String() string {
@@ -240,9 +292,12 @@ func (stg *cpuTimeTokenGranter) tookWithoutPermissionLocked(count int64) {
 	} else {
 		stg.metrics.TokensReturned.Inc(-count)
 	}
+	now := stg.timeSource.Now()
 	for tier := range stg.mu.buckets {
 		for qual := range stg.mu.buckets[tier] {
-			stg.mu.buckets[tier][qual].tokens -= count
+			newTokenCount := stg.mu.buckets[tier][qual].tokens - count
+			stg.mu.buckets[tier][qual].updateTokenCount(
+				newTokenCount, now, false /* flushToMetricNow */)
 		}
 	}
 }
@@ -309,12 +364,15 @@ func (stg *cpuTimeTokenGranter) resetTokensUsedInInterval() int64 {
 // the capacity info stored in bucketCapacities. That is, tokens that would
 // bring the bucket above capacity will be discarded instead. refill attempts
 // to grant admission to waiting requests in case where tokens are added to
-// some bucket.
+// some bucket. updateMetrics controls whether gauge and exhausted-duration
+// metrics are updated.
 func (stg *cpuTimeTokenGranter) refill(
-	toAdd tokenCounts, bucketCapacities capacities, updateMetrics bool) {
+	toAdd tokenCounts, bucketCapacities capacities, updateMetrics bool,
+) {
 	stg.mu.Lock()
 	defer stg.mu.Unlock()
 
+	now := stg.timeSource.Now()
 	var shouldGrant bool
 	for tier := range stg.mu.buckets {
 		for qual := range stg.mu.buckets[tier] {
@@ -324,7 +382,7 @@ func (stg *cpuTimeTokenGranter) refill(
 			// always will show positive tokens.
 			//
 			// Note that this metric only provides a coarse view into bucket state. For
-			// a fine-grained view, see TODO().
+			// a fine-grained view, see the exhausted-duration counters.
 			if updateMetrics {
 				stg.metrics.BucketTokens.Update(
 					stg.metrics.labelMaps[tier][qual], stg.mu.buckets[tier][qual].tokens)
@@ -336,7 +394,8 @@ func (stg *cpuTimeTokenGranter) refill(
 			if newTokenCount > bucketCapacities[tier][qual] {
 				newTokenCount = bucketCapacities[tier][qual]
 			}
-			stg.mu.buckets[tier][qual].tokens = newTokenCount
+			stg.mu.buckets[tier][qual].updateTokenCount(
+				newTokenCount, now, updateMetrics /* flushToMetricNow */)
 		}
 	}
 

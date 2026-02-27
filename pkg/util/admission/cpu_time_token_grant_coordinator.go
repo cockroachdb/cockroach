@@ -113,7 +113,8 @@ func makeCPUTimeTokenGrantCoordinator(
 ) *cpuTimeTokenGrantCoordinator {
 	metrics := makeCPUTimeTokenMetrics()
 	registry.AddMetricStruct(metrics)
-	granter := &cpuTimeTokenGranter{metrics: metrics}
+	timeSource := timeutil.DefaultTimeSource{}
+	granter := newCPUTimeTokenGranter(metrics, timeSource)
 	var childGranters [numResourceTiers]cpuTimeTokenChildGranter
 	for tier := resourceTier(0); tier < numResourceTiers; tier++ {
 		childGranters[tier] = cpuTimeTokenChildGranter{
@@ -121,7 +122,6 @@ func makeCPUTimeTokenGrantCoordinator(
 			parent: granter,
 		}
 	}
-	timeSource := timeutil.DefaultTimeSource{}
 	filler := &cpuTimeTokenFiller{
 		timeSource: timeSource,
 		closeCh:    make(chan struct{}),
