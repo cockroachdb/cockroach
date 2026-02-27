@@ -19,9 +19,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	kv2 "github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvstorage"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
-	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/ts"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -70,20 +70,18 @@ func newKVNative(b *testing.B) kvInterface {
 	}
 }
 
-func newKVNativeAndEngine(tb testing.TB) (*kvNative, storage.Engine) {
+func newKVNativeAndEngines(tb testing.TB) (*kvNative, kvstorage.Engines) {
 	st := cluster.MakeTestingClusterSettings()
 	disableBackgroundWork(st)
 	s, _, db := serverutils.StartServer(tb, base.TestServerArgs{Settings: st})
 	engines := s.Engines()
-	if len(engines) != 1 {
-		tb.Fatalf("unexpected number of engines %d", len(engines))
-	}
+	require.Len(tb, engines, 1, "unexpected number of engines")
 	return &kvNative{
 		db: db,
 		doneFn: func() {
 			s.Stopper().Stop(context.Background())
 		},
-	}, engines[0].TODOEngine()
+	}, engines[0]
 }
 
 func (kv *kvNative) Insert(rows, run int) error {
@@ -501,7 +499,7 @@ func BenchmarkKVAndStorageMultipleVersions(b *testing.B) {
 					continue
 				}
 				b.Run(fmt.Sprintf("last-is-tombstone=%t", lastVersionIsTombstone), func(b *testing.B) {
-					kv, eng := newKVNativeAndEngine(b)
+					kv, eng := newKVNativeAndEngines(b)
 					defer kv.done()
 					if err := kv.prepWithAdditionalLength(numRows, additionalLen); err != nil {
 						b.Fatal(err)
@@ -518,7 +516,10 @@ func BenchmarkKVAndStorageMultipleVersions(b *testing.B) {
 							require.NoError(b, kv.Update(numRows, 0))
 						}
 					}
-					require.NoError(b, eng.Flush())
+					require.NoError(b, eng.LogEngine().Flush())
+					if eng.Separated() {
+						require.NoError(b, eng.StateEngine().Flush())
+					}
 					b.ResetTimer()
 					for i := 0; i < b.N; i++ {
 						if err := kv.scanWithRowCountExpectation(numRows, expectedRows); err != nil {
