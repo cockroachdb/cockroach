@@ -100,7 +100,7 @@ func TestFindTimeSeries(t *testing.T) {
 		}
 	}
 
-	e := tm.LocalTestCluster.Eng.TODOEngine()
+	stateEng := tm.LocalTestCluster.Eng.StateEngine()
 	for i, tcase := range []struct {
 		start     roachpb.RKey
 		end       roachpb.RKey
@@ -304,7 +304,7 @@ func TestFindTimeSeries(t *testing.T) {
 			},
 		},
 	} {
-		snap := e.NewSnapshot()
+		snap := stateEng.NewSnapshot()
 		actual, err := tm.DB.findTimeSeries(
 			context.Background(), snap, tcase.start, tcase.end, tcase.timestamp)
 		snap.Close()
