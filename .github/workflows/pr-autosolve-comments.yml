@@ -318,9 +318,14 @@ jobs:
 
             Provide a concise summary of changes made to address each comment.
 
-            **OUTPUT REQUIREMENT**: End your response with a single line containing only:
-            - `CHANGES_RESULT - SUCCESS` if you successfully addressed the feedback (with or without code changes)
-            - `CHANGES_RESULT - FAILED` if you were unable to address the feedback
+            CRITICAL - You MUST end your response with EXACTLY one of these two lines:
+            CHANGES_RESULT - SUCCESS
+            CHANGES_RESULT - FAILED
+
+            Use SUCCESS if you addressed the feedback (with or without code changes).
+            Use FAILED only if you were unable to address the feedback.
+            This line MUST be the very last line of your response. Do NOT omit it.
+            The automation pipeline depends on this marker to proceed.
             </task>
 
       - name: Extract Claude Result
