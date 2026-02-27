@@ -187,6 +187,8 @@ type WorkInfo struct {
 	// ReplicatedWorkInfo groups everything needed to admit replicated writes, done
 	// so asynchronously below-raft as part of replication admission control.
 	ReplicatedWorkInfo ReplicatedWorkInfo
+	// WorkloadID is used for ASH sampling.
+	WorkloadID uint64
 }
 
 // ReplicatedWorkInfo groups everything needed to admit replicated writes, done

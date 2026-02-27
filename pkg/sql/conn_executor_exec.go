@@ -656,6 +656,13 @@ func (ex *connExecutor) execStmtInOpenState(
 	ctx = ih.Setup(ctx, ex, p, &stmt, os.ImplicitTxn.Get(),
 		ex.state.mu.priority, ex.state.mu.autoRetryCounter)
 
+	// Set workload ID for ASH sampling. ih.Setup already computed the
+	// statement fingerprint ID, so reuse it here.
+	p.extendedEvalCtx.WorkloadID = uint64(ih.fingerprintId)
+	if p.txn != nil {
+		p.txn.SetWorkloadID(uint64(ih.fingerprintId))
+	}
+
 	// Note that here we always unconditionally defer a function that takes care
 	// of finishing the instrumentation helper. This is needed since in order to
 	// support plan-gist-matching of the statement diagnostics we might not know
@@ -1726,6 +1733,13 @@ func (ex *connExecutor) execStmtInOpenStateWithPausablePortal(
 	p.extendedEvalCtx.Annotations = &p.semaCtx.Annotations
 	p.semaCtx.Placeholders.Assign(pinfo, vars.stmt.NumPlaceholders)
 	p.extendedEvalCtx.Placeholders = &p.semaCtx.Placeholders
+
+	// Set workload ID for ASH sampling. ih.Setup already computed the
+	// statement fingerprint ID, so reuse it here.
+	p.extendedEvalCtx.WorkloadID = uint64(ih.fingerprintId)
+	if p.txn != nil {
+		p.txn.SetWorkloadID(uint64(ih.fingerprintId))
+	}
 
 	if buildutil.CrdbTestBuild {
 		// Ensure that each statement is formatted regardless of logging

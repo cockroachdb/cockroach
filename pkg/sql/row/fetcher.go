@@ -353,6 +353,9 @@ type FetcherInitArgs struct {
 	// row is being processed. In practice, this means that span IDs must be
 	// passed in when SpansCanOverlap is true.
 	SpansCanOverlap bool
+	// WorkloadID is the identifier for the workload that triggered this fetch
+	// (e.g. statement fingerprint ID, job ID) for ASH sampling.
+	WorkloadID uint64
 }
 
 // Init sets up a Fetcher for a given table and index.
@@ -518,6 +521,7 @@ func (rf *Fetcher) Init(ctx context.Context, args FetcherInitArgs) error {
 			kvPairsRead:                &kvPairsRead,
 			batchRequestsIssued:        &batchRequestsIssued,
 			kvCPUTime:                  &kvCPUTime,
+			workloadID:                 args.WorkloadID,
 		}
 		if args.Txn != nil {
 			fetcherArgs.sendFn = makeSendFunc(args.Txn, args.Spec.External, &batchRequestsIssued, &kvCPUTime)

@@ -3022,9 +3022,13 @@ message Header {
   // evaluated in descending range order.
   bool is_reverse = 38;
 
+  // workload_id identifies the workload that triggered this batch (statement
+  // fingerprint ID, job ID, etc.). Used for ASH sampling and profiling.
+  uint64 workload_id = 39 [(gogoproto.customname) = "WorkloadID"];
+
   reserved 7, 10, 12, 14, 20, 24;
 
-  // Next ID: 39
+  // Next ID: 40
 }
 
 message WriteOptions {
