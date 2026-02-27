@@ -187,6 +187,8 @@ type WorkInfo struct {
 	// ReplicatedWorkInfo groups everything needed to admit replicated writes, done
 	// so asynchronously below-raft as part of replication admission control.
 	ReplicatedWorkInfo ReplicatedWorkInfo
+	// WorkloadID is used for ASH sampling.
+	WorkloadID uint64
 }
 
 // ReplicatedWorkInfo groups everything needed to admit replicated writes, done
@@ -322,6 +324,8 @@ type workQueueOptions struct {
 	// The background resetting of used and GC'ing of tenants can be disabled
 	// for tests.
 	disableGCTenantsAndResetUsed bool
+	// knobs, if set, provides testing knobs to the work queue.
+	knobs *TestingKnobs
 }
 
 func makeWorkQueueOptions(workKind WorkKind) workQueueOptions {
@@ -351,7 +355,7 @@ func makeWorkQueue(
 	if workKind == KVWork {
 		queueKind = "kv-regular-cpu-queue"
 	}
-	initWorkQueue(q, ambientCtx, workKind, queueKind, granter, settings, metrics, opts, nil)
+	initWorkQueue(q, ambientCtx, workKind, queueKind, granter, settings, metrics, opts, opts.knobs)
 	return q
 }
 
@@ -622,6 +626,9 @@ type AdmitResponse struct {
 // AdmitResponse.Enabled=true && error==nil, and the WorkKind for this
 // queue is KVWork.
 func (q *WorkQueue) Admit(ctx context.Context, info WorkInfo) (AdmitResponse, error) {
+	if fn := q.knobs.WorkQueueAdmitInterceptor; fn != nil {
+		fn(info)
+	}
 	if !info.ReplicatedWorkInfo.Enabled {
 		enabledSetting := admissionControlEnabledSettings[q.workKind]
 		if enabledSetting != nil && !enabledSetting.Get(&q.settings.SV) {

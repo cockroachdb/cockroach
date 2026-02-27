@@ -213,7 +213,7 @@ func NewGrantCoordinators(
 			slotsCoord:   slotsCoord,
 			cpuTimeCoord: cpuTimeTokenCoord,
 		},
-		ElasticCPU: makeElasticCPUGrantCoordinator(ambientCtx, st, registry),
+		ElasticCPU: makeElasticCPUGrantCoordinator(ambientCtx, st, registry, knobs),
 	}
 }
 
@@ -263,7 +263,9 @@ func makeRegularGrantCoordinator(
 
 	kvSlotAdjuster.granter = kvg
 	wqMetrics := makeWorkQueueMetrics(KVWork.String(), registry)
-	req := makeRequester(ambientCtx, KVWork, kvg, st, wqMetrics, makeWorkQueueOptions(KVWork))
+	kvOpts := makeWorkQueueOptions(KVWork)
+	kvOpts.knobs = knobs
+	req := makeRequester(ambientCtx, KVWork, kvg, st, wqMetrics, kvOpts)
 	coord.queues[KVWork] = req
 	kvg.requester = req
 	coord.granters[KVWork] = kvg
@@ -276,8 +278,9 @@ func makeRegularGrantCoordinator(
 		cpuOverload:          kvSlotAdjuster,
 	}
 	wqMetrics = makeWorkQueueMetrics(SQLKVResponseWork.String(), registry)
-	req = makeRequester(
-		ambientCtx, SQLKVResponseWork, tg, st, wqMetrics, makeWorkQueueOptions(SQLKVResponseWork))
+	sqlKVOpts := makeWorkQueueOptions(SQLKVResponseWork)
+	sqlKVOpts.knobs = knobs
+	req = makeRequester(ambientCtx, SQLKVResponseWork, tg, st, wqMetrics, sqlKVOpts)
 	coord.queues[SQLKVResponseWork] = req
 	tg.requester = req
 	coord.granters[SQLKVResponseWork] = tg
@@ -290,8 +293,9 @@ func makeRegularGrantCoordinator(
 		cpuOverload:          kvSlotAdjuster,
 	}
 	wqMetrics = makeWorkQueueMetrics(SQLSQLResponseWork.String(), registry)
-	req = makeRequester(ambientCtx,
-		SQLSQLResponseWork, tg, st, wqMetrics, makeWorkQueueOptions(SQLSQLResponseWork))
+	sqlSQLOpts := makeWorkQueueOptions(SQLSQLResponseWork)
+	sqlSQLOpts.knobs = knobs
+	req = makeRequester(ambientCtx, SQLSQLResponseWork, tg, st, wqMetrics, sqlSQLOpts)
 	coord.queues[SQLSQLResponseWork] = req
 	tg.requester = req
 	coord.granters[SQLSQLResponseWork] = tg

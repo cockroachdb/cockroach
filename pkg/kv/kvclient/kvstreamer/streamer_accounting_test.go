@@ -104,6 +104,7 @@ func TestStreamerMemoryAccounting(t *testing.T) {
 			lock.None,
 			lock.Unreplicated,
 			reverse,
+			0, /* workloadID */
 		)
 		s.Init(OutOfOrder, Hints{UniqueRequests: true}, 1 /* maxKeysPerRow */, nil /* diskBuffer */)
 		return s
