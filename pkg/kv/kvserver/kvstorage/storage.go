@@ -248,9 +248,9 @@ func (e *Engines) SetStoreID(ctx context.Context, id roachpb.StoreID) error {
 // NewWriteBatch creates a new write batch to storage. If engines are separated,
 // it consists of two batches, one per engine.
 // TODO(sep-raft-log): generalize this so that the LogEngine batch is lazy.
-func (e *Engines) NewWriteBatch() WriteBatch {
+func (e *Engines) NewWriteBatch() Batch[storage.WriteBatch] {
 	if e.Separated() {
-		return WriteBatch{
+		return Batch[storage.WriteBatch]{
 			state:     e.StateEngine().NewWriteBatch(),
 			raft:      e.LogEngine().NewWriteBatch(),
 			separated: true,
@@ -259,37 +259,64 @@ func (e *Engines) NewWriteBatch() WriteBatch {
 	// With a single engine, create one batch, and reference it by both pointers.
 	b := e.Engine().NewWriteBatch()
 	if !spanset.EnableAssertions {
-		return WriteBatch{state: b, raft: b}
+		return Batch[storage.WriteBatch]{state: b, raft: b}
 	}
 	// Additionally, if assertions are enabled, enclose the batch into the
 	// corresponding per-engine wrappers. With EnableAssertions, State/LogEngine
 	// are always wrapped, so we don't use conditional type assertions.
-	type wrapper interface {
-		WrapWriteBatch(wb storage.WriteBatch) storage.WriteBatch
-	}
-	return WriteBatch{
-		state: e.StateEngine().(wrapper).WrapWriteBatch(b),
-		raft:  e.LogEngine().(wrapper).WrapWriteBatch(b),
+	return Batch[storage.WriteBatch]{
+		state: e.StateEngine().(batchWrapper).WrapWriteBatch(b),
+		raft:  e.LogEngine().(batchWrapper).WrapWriteBatch(b),
 	}
 }
 
-// WriteBatch is a write batch to storage which is aware whether the log and
-// state machine engines are separated.
-type WriteBatch struct {
-	state     storage.WriteBatch
+// NewBatch is like NewWriteBatch, but the StateEngine batch is a read-write
+// storage.Batch rather than a write-only storage.WriteBatch.
+func (e *Engines) NewBatch() Batch[storage.Batch] {
+	if e.Separated() {
+		return Batch[storage.Batch]{
+			state:     e.StateEngine().NewBatch(),
+			raft:      e.LogEngine().NewWriteBatch(),
+			separated: true,
+		}
+	}
+	// With a single engine, create one batch, and reference it by both pointers.
+	b := e.Engine().NewBatch()
+	if !spanset.EnableAssertions {
+		return Batch[storage.Batch]{state: b, raft: b}
+	}
+	// Additionally, if assertions are enabled, enclose the batch into the
+	// corresponding per-engine wrappers. With EnableAssertions, State/LogEngine
+	// are always wrapped, so we don't use conditional type assertions.
+	return Batch[storage.Batch]{
+		state: e.StateEngine().(batchWrapper).WrapBatch(b),
+		raft:  e.LogEngine().(batchWrapper).WrapWriteBatch(b),
+	}
+}
+
+// Batch is a write batch to storage which is aware whether the log and state
+// machine engines are separated. It supports any wrapper around
+// storage.WriteBatch, in particular a read-write storage.Batch.
+type Batch[B storage.WriteBatch] struct {
+	state     B
 	raft      storage.WriteBatch
 	separated bool
 }
 
-// Writers returns the state machine and raft engine writer into this batch.
-func (b *WriteBatch) Writers() (StateWO, RaftWO) {
-	return b.state, b.raft
+// State returns the StateEngine batch.
+func (b *Batch[B]) State() B {
+	return b.state
+}
+
+// Raft returns the LogEngine writer.
+func (b *Batch[B]) Raft() RaftWO {
+	return b.raft
 }
 
 // CommitAndSync commits and syncs the batch to storage. When engines are
 // separated, only the LogEngine batch is synced, and the StateEngine part is
 // expected to be replayable from the LogEngine batch.
-func (b *WriteBatch) CommitAndSync() error {
+func (b *Batch[B]) CommitAndSync() error {
 	if !b.separated {
 		return b.state.Commit(true /* sync */)
 	}
@@ -300,7 +327,7 @@ func (b *WriteBatch) CommitAndSync() error {
 }
 
 // Close closes the batch.
-func (b *WriteBatch) Close() {
+func (b *Batch[B]) Close() {
 	b.state.Close()
 	if b.separated {
 		b.raft.Close()
@@ -430,4 +457,11 @@ func validateIsRaftEngineSpan(span spanset.TrickySpan) error {
 	}
 
 	return nil
+}
+
+// batchWrapper is a sub-interface of storage.Engine wrapper in the spanset
+// package used here for engine access assertions.
+type batchWrapper interface {
+	WrapWriteBatch(storage.WriteBatch) storage.WriteBatch
+	WrapBatch(storage.Batch) storage.Batch
 }
