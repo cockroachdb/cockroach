@@ -790,6 +790,10 @@ SET CLUSTER SETTING kv.closed_timestamp.follower_reads.enabled = true;
 				// Transfer the RHS lease while the RHS is subsumed.
 				log.KvDistribution.Infof(ctx, "test: transferring RHS lease...")
 				rightLeaseholder, rhsLeaseStart = test.transferLease(ctx, t, tc, rightDesc, rightLeaseholder, manual)
+				// Pin the RHS lease to the new leaseholder to prevent it from
+				// bouncing back to the original leaseholder due to clock advancement
+				// in MoveRangeLeaseNonCooperatively's retry loop.
+				pinnedLeases.PinLease(rightDesc.RangeID, rightLeaseholder.StoreID)
 				// Sanity check.
 				require.True(t, freezeStartTimestamp.Less(rhsLeaseStart))
 				log.KvDistribution.Infof(ctx, "test: transferring RHS lease... done")
