@@ -86,6 +86,22 @@ message MVCCMetadata {
   // per transaction. In that case, when this is true, one can optimize
   // removal of the MVCCMetadata by doing a SingleDelete instead of Delete.
   optional bool txn_did_not_update_meta = 9;
+
+  // When true, this intent should not be rewritten at a higher timestamp during
+  // intent resolution, even if the transaction's write timestamp has been
+  // pushed forward. This preserves the original blocking timestamp of the
+  // intent, providing lock-like semantics where reads are blocked from the time
+  // the lock was originally acquired rather than when the transaction eventually
+  // commits.
+  //
+  // Note: This flag only affects Intents (lock strength = Intent). Other lock
+  // strengths (Shared, Exclusive) are never rewritten at higher timestamps
+  // during intent resolution, so they already have this behavior by default.
+  //
+  // This is primarily used for constraint checking in read-committed
+  // transactions, where locks need to provide serialization guarantees from
+  // the time they are acquired.
+  optional bool preserve_timestamp = 10;
 }
 
 // A mirror of MVCCMetadata intended for serializing non-MVCC data that is

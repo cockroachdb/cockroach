@@ -390,6 +390,16 @@ type TxnSender interface {
 	// (*kv.DB).Txn() to return the retries. This lives here since the
 	// TxnSender is what has access to the server's client testing knobs.
 	TestingShouldRetry() bool
+
+	// MaybeRefreshSpans refreshes all tracked read spans up to the transaction's
+	// current provisional commit timestamp (WriteTimestamp). This is used by Read
+	// Committed transactions to validate constraint check and foreign key cascade
+	// reads before committing, ensuring they remain valid at the final commit
+	// timestamp even though the intents were written at earlier timestamps.
+	//
+	// Returns an error if the refresh fails, indicating that reads are no longer
+	// valid at the current WriteTimestamp and the transaction cannot commit.
+	MaybeRefreshSpans(context.Context) error
 }
 
 // SteppingMode is the argument type to ConfigureStepping.

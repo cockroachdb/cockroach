@@ -317,3 +317,273 @@ CREATE UNIQUE INDEX ON t137341b(u2)
 
 statement error pgcode 23505 pq: duplicate key value violates unique constraint "t137341b_u2_key"
 UPDATE t137341b SET u2 = 'u2-a' WHERE u2 = 'u2-b'
+
+# ==============================================================================
+# Test non-locking checks for Read Committed with regional by row tables.
+# ==============================================================================
+
+statement ok
+SET read_committed_non_locking_checks_enabled = true
+
+# Create parent and child tables for FK testing with cascades.
+statement ok
+CREATE TABLE parent_cascade (
+  p INT PRIMARY KEY,
+  v INT,
+  FAMILY (p, v)
+) LOCALITY REGIONAL BY ROW
+
+statement ok
+CREATE TABLE child_cascade (
+  c INT PRIMARY KEY,
+  p INT REFERENCES parent_cascade(p) ON DELETE CASCADE ON UPDATE CASCADE,
+  FAMILY (c, p)
+) LOCALITY REGIONAL BY ROW
+
+statement ok
+GRANT ALL ON TABLE parent_cascade TO testuser;
+GRANT ALL ON TABLE child_cascade TO testuser;
+
+statement ok
+INSERT INTO parent_cascade (p, v, crdb_region) VALUES (1, 10, 'ca-central-1'), (2, 20, 'ap-southeast-2'), (3, 30, 'us-east-1')
+
+statement ok
+INSERT INTO child_cascade (c, p, crdb_region) VALUES (100, 1, 'ca-central-1'), (200, 2, 'ap-southeast-2')
+
+# Create parent and child tables for FK testing with restrict
+statement ok
+CREATE TABLE parent_check (
+  p INT PRIMARY KEY,
+  v INT,
+  FAMILY (p, v)
+) LOCALITY REGIONAL BY ROW
+
+statement ok
+CREATE TABLE child_check (
+  c INT PRIMARY KEY,
+  p INT REFERENCES parent_check(p),
+  FAMILY (c, p)
+) LOCALITY REGIONAL BY ROW
+
+statement ok
+GRANT ALL ON TABLE parent_check TO testuser;
+GRANT ALL ON TABLE child_check TO testuser
+
+user testuser newsession
+
+statement ok
+USE multi_region_test_db
+
+statement ok
+SET SESSION CHARACTERISTICS AS TRANSACTION ISOLATION LEVEL READ COMMITTED
+
+statement ok
+SET read_committed_non_locking_checks_enabled = true
+
+user root
+
+statement ok
+INSERT INTO parent_check (p, v, crdb_region) VALUES (1, 10, 'ca-central-1'), (2, 20, 'ap-southeast-2'), (3, 30, 'us-east-1')
+
+statement ok
+INSERT INTO child_check (c, p, crdb_region) VALUES (100, 1, 'ca-central-1'), (200, 2, 'ap-southeast-2')
+
+# ------------------------------------------------------------------------------
+# FK CASCADE tests.
+# ------------------------------------------------------------------------------
+
+user root
+
+statement ok
+USE multi_region_test_db
+
+statement ok
+SET SESSION CHARACTERISTICS AS TRANSACTION ISOLATION LEVEL READ COMMITTED
+
+statement ok
+
+# Test successful DELETE with CASCADE.
+statement ok
+BEGIN
+
+statement count 1
+DELETE FROM parent_cascade WHERE p = 3
+
+statement ok
+COMMIT
+
+query IIT rowsort
+SELECT *, crdb_region FROM parent_cascade
+----
+1  10  ca-central-1
+2  20  ap-southeast-2
+
+query IIT rowsort
+SELECT *, crdb_region FROM child_cascade
+----
+100  1  ca-central-1
+200  2  ap-southeast-2
+
+user root
+
+# Test RC DELETE with FK CASCADE + concurrent INSERT into child.
+# This should trigger a refresh so that the cascade sees the new row.
+statement ok
+BEGIN
+
+statement async fk_delete_cascade_rbr
+WITH sleep AS (SELECT pg_sleep(2)) DELETE FROM parent_cascade WHERE p = 1
+
+user testuser
+
+statement ok
+INSERT INTO child_cascade (c, p, crdb_region) VALUES (300, 1, 'ca-central-1')
+
+user root
+
+awaitstatement fk_delete_cascade_rbr
+
+# Should fail on refresh.
+statement ok
+COMMIT
+
+query IIT rowsort
+SELECT *, crdb_region FROM parent_cascade
+----
+2  20  ap-southeast-2
+
+query IIT rowsort
+SELECT *, crdb_region FROM child_cascade
+----
+200  2  ap-southeast-2
+
+# ------------------------------------------------------------------------------
+# FK CHECK tests.
+# ------------------------------------------------------------------------------
+
+user root
+
+statement ok
+USE multi_region_test_db
+
+statement ok
+SET SESSION CHARACTERISTICS AS TRANSACTION ISOLATION LEVEL READ COMMITTED
+
+statement ok
+SET read_committed_non_locking_checks_enabled = true
+
+# Test RC INSERT into child + concurrent DELETE of parent (FK CHECK).
+statement ok
+BEGIN
+
+statement async conflict error pgcode 23503 insert on table "child_check" violates foreign key constraint "child_check_p_fkey
+WITH sleep AS (SELECT pg_sleep(2)) INSERT INTO child_check (c, p, crdb_region) VALUES (300, 3, 'us-east-1')
+
+user testuser
+
+statement count 1
+DELETE FROM parent_check WHERE p = 3
+
+user root
+
+statement ok
+USE multi_region_test_db
+
+awaitstatement conflict
+
+statement ok
+ABORT
+
+query IIT rowsort
+SELECT *, crdb_region FROM parent_check
+----
+1  10  ca-central-1
+2  20  ap-southeast-2
+
+query IIT rowsort
+SELECT *, crdb_region FROM child_check
+----
+100  1  ca-central-1
+200  2  ap-southeast-2
+
+# ------------------------------------------------------------------------------
+# UNIQUE WITHOUT INDEX tests.
+# ------------------------------------------------------------------------------
+
+user root
+
+statement ok
+USE multi_region_test_db
+
+statement ok
+SET SESSION CHARACTERISTICS AS TRANSACTION ISOLATION LEVEL READ COMMITTED
+
+statement ok
+SET read_committed_non_locking_checks_enabled = true
+
+# Test UNIQUE WITHOUT INDEX under RC with non-locking checks.
+statement ok
+SET experimental_enable_unique_without_index_constraints = true
+
+statement ok
+CREATE TABLE unique_test (
+  k INT PRIMARY KEY,
+  u INT,
+  UNIQUE WITHOUT INDEX (u),
+  FAMILY (k, u)
+) LOCALITY REGIONAL BY ROW
+
+statement ok
+GRANT ALL ON TABLE unique_test TO testuser;
+
+statement ok
+INSERT INTO unique_test (k, u, crdb_region) VALUES (1, 10, 'ca-central-1'), (2, 20, 'ap-southeast-2')
+
+# Test concurrent INSERT with same unique value
+statement ok
+BEGIN
+
+statement async conflict error pgcode 23505 pq: duplicate key value violates unique constraint "unique_u"
+WITH sleep AS (SELECT pg_sleep(2)) INSERT INTO unique_test (k, u, crdb_region) VALUES (3, 30, 'us-east-1')
+
+user testuser
+
+statement ok
+INSERT INTO unique_test (k, u, crdb_region) VALUES (4, 30, 'ca-central-1')
+
+user root
+
+statement ok
+USE multi_region_test_db
+
+awaitstatement conflict
+
+statement ok
+ABORT
+
+query IIT rowsort
+SELECT *, crdb_region FROM unique_test
+----
+1  10  ca-central-1
+2  20  ap-southeast-2
+4  30  ca-central-1
+
+user root
+
+# Test successful case (no concurrent conflict)
+statement ok
+BEGIN
+
+statement ok
+INSERT INTO unique_test (k, u, crdb_region) VALUES (5, 50, 'us-east-1')
+
+statement ok
+COMMIT
+
+query IIT rowsort
+SELECT *, crdb_region FROM unique_test
+----
+1  10  ca-central-1
+2  20  ap-southeast-2
+4  30  ca-central-1
+5  50  us-east-1

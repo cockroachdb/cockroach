@@ -2733,6 +2733,23 @@ func (ex *connExecutor) dispatchReadCommittedStmtToExecutionEngine(
 		maybeRetryableErr := res.Err()
 		if maybeRetryableErr == nil {
 			// If there was no error, then we must release the savepoint and break.
+			if ex.planner.curPlan.flags.IsSet(planFlagContainsMutation) {
+				// For mutation statements, we need to refresh reads to ensure that
+				// reads for checks and cascades do not see stale data as of the current
+				// provisional commit timestamp. This is only needed when using the
+				// non-locking checks optimization.
+				//
+				// TODO(drewk): We could do this refresh only when there are checks or
+				// cascades and/or we could do it only for the subset of reads performed
+				// by checks and cascades.
+				//
+				// TODO(drewk): We should retry the statement if the refresh fails.
+				if ex.sessionData().ReadCommittedNonLockingChecksEnabled {
+					if refreshErr := ex.state.mu.txn.MaybeRefreshSpans(ctx); refreshErr != nil {
+						return refreshErr
+					}
+				}
+			}
 			if err := ex.state.mu.txn.ReleaseSavepoint(ctx, readCommittedSavePointToken); err != nil {
 				return err
 			}
