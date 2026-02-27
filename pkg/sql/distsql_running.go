@@ -395,6 +395,7 @@ func serializeEvalContext(evalCtx *eval.Context) execinfrapb.EvalContext {
 		StmtTimestampNanos:                evalCtx.StmtTimestamp.UnixNano(),
 		TxnTimestampNanos:                 evalCtx.TxnTimestamp.UnixNano(),
 		TestingKnobsForceProductionValues: evalCtx.TestingKnobs.ForceProductionValues,
+		WorkloadID:                        evalCtx.WorkloadID,
 	}
 }
 
@@ -474,9 +475,10 @@ func (dsp *DistSQLPlanner) setupFlows(
 		StatementSQL:      statementSQL,
 	}
 	if localState.IsLocal {
-		// VectorizeMode is the only field that the setup code expects to be set
+		// VectorizeMode, and workloadID are the only fields that the setup code expects to be set
 		// in the local flows.
 		setupReq.EvalContext.SessionData.VectorizeMode = evalCtx.SessionData().VectorizeMode
+		setupReq.EvalContext.WorkloadID = evalCtx.WorkloadID
 	} else {
 		// In distributed plans populate some extra state.
 		setupReq.EvalContext = serializeEvalContext(evalCtx)

@@ -4129,6 +4129,8 @@ func TestBatchHeaderFieldsAreAccountedForInBufferedWrites(t *testing.T) {
 		"HasBufferedAllPrecedingWrites": iSwearFieldDoesNotNeedHandling,
 		// Our flush should never need isReverse.
 		"IsReverse": fieldIsHandledByBatchSplitting,
+		// Observability label, doesn't affect batch processing.
+		"WorkloadID": iSwearFieldDoesNotNeedHandling,
 	}
 
 	header := kvpb.Header{}
