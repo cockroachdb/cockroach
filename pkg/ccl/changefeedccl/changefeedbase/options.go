@@ -1088,7 +1088,7 @@ func (s StatementOptions) GetFilters() Filters {
 // DefaultWebhookClientTimeout is the default timeout used for webhook HTTP
 // client connections when no explicit webhook_client_timeout is specified.
 // This matches the documented default of 3 seconds.
-var DefaultWebhookClientTimeout = 3 * time.Second
+const DefaultWebhookClientTimeout = 3 * time.Second
 
 // WebhookSinkOptions are passed in WITH args but
 // are specific to the webhook sink.
