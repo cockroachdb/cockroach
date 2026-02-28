@@ -415,8 +415,6 @@
 /pkg/ccl/serverccl/admin_*   @cockroachdb/obs-prs
 /pkg/ccl/serverccl/api_*     @cockroachdb/obs-prs
 
-/pkg/ccl/telemetryccl/       @cockroachdb/obs-prs
-
 /pkg/ccl/testccl/authccl/    @cockroachdb/cloud-identity @cockroachdb/security-engineering @cockroachdb/product-security
 /pkg/ccl/testccl/sqlccl/     @cockroachdb/sql-queries-prs
 /pkg/ccl/testccl/workload/schemachange/ @cockroachdb/sql-foundations
