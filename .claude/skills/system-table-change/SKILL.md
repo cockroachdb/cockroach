@@ -1,6 +1,6 @@
 ---
 name: system-table-change
-description: Checklist for modifying system table schemas in CockroachDB. Covers schema definitions, migrations, version gates, golden files, and test hashes. Use when adding, removing, or modifying columns/indexes on system tables.
+description: Use when adding, removing, or modifying columns/indexes on system tables. Provides a checklist covering schema definitions, migrations, version gates, golden files, and test hashes.
 ---
 
 # System Table Schema Change Checklist
@@ -15,18 +15,37 @@ Update the table's schema string and descriptor literal in:
   - The `CREATE TABLE` schema string (e.g., `StatementDiagnosticsRequestsTableSchema`)
   - The descriptor literal (e.g., `StatementDiagnosticsRequestsTable`): columns, column IDs, family column names/IDs, index store column names/IDs, `NextColumnID`
 
-## 2. Version Gate
+## 2. New Table Registration (skip if modifying existing table)
+
+If creating a brand new system table, register it in these additional files:
+
+- **`pkg/sql/sem/catconstants/constants.go`**
+  - Add a SystemTableName constant for the new table
+
+- **`pkg/sql/catalog/catprivilege/system.go`**
+  - Register privileges (read-write, read-only, etc.) for the table
+
+- **`pkg/sql/catalog/bootstrap/metadata.go`**
+  - Add the table descriptor to the bootstrap metadata
+
+- **`pkg/backup/system_schema.go`**
+  - Define backup/restore behavior for the table
+
+- **`pkg/sql/opt/testutils/testcat/vtable.go`**
+  - Register the schema string in the optimizer test catalog
+
+## 3. Version Gate (skip if creating new table)
 
 If the change requires a migration (any change to an existing table):
 
 - **`pkg/clusterversion/cockroach_versions.go`**
   - Add a new version constant (e.g., `V26_2_MyChange`)
-  - Add the version mapping in `versionsSingleton` (must use even `Internal` values, incrementing by 2)
+  - Add the version mapping in `versionTable` (must use even `Internal` values, incrementing by 2)
 
 - **`pkg/sql/catalog/systemschema/system.go`**
   - Update `SystemDatabaseSchemaBootstrapVersion` to your new version constant
 
-## 3. Migration
+## 4. Migration (skip if creating new table)
 
 - **`pkg/upgrade/upgrades/`**
   - Create a migration file (e.g., `v26_2_my_change.go`) with the `ALTER TABLE` / `CREATE INDEX` operations
@@ -34,9 +53,9 @@ If the change requires a migration (any change to an existing table):
   - Register the migration in `upgrades.go`
   - Add the old table descriptor constructor to `schema_changes.go` if needed
   - Update `helpers_test.go` if adding new helper functions
-  - Update `BUILD.bazel` if adding new files
+  - Run `./dev gen bazel` if adding new files
 
-## 4. Golden Files (must regenerate, not manually edit)
+## 5. Golden Files (must regenerate, not manually edit)
 
 These files contain serialized representations of the schema and must be regenerated after schema changes. Update hashes first, then run tests with `--rewrite`.
 
@@ -61,6 +80,15 @@ These files contain serialized representations of the schema and must be regener
   - Test: `./dev testlogic --files=pg_catalog --rewrite`
   - Test: `./dev testlogic --files=crdb_internal_catalog --rewrite`
 
+### Initial bootstrap keys and catalog cache test data
+
+- **`pkg/sql/tests/testdata/initial_keys`** — initial bootstrap keys
+  - Test: `./dev test pkg/sql/tests -f TestInitialKeys -v --rewrite`
+
+- **`pkg/sql/catalog/internal/catkv/testdata/testdata_app`** — catalog cache test data for app tenant
+- **`pkg/sql/catalog/internal/catkv/testdata/testdata_system`** — catalog cache test data for system tenant
+  - Test: `./dev test pkg/sql/catalog/internal/catkv -v --rewrite`
+
 ### Previous-release bootstrap data (only if changing an existing release's schema)
 
 - **`pkg/sql/catalog/bootstrap/data/{version}_system.keys`**
@@ -70,7 +98,15 @@ These files contain serialized representations of the schema and must be regener
   - These are for hardcoded previous release versions, NOT the current `Latest`
   - Only need updating if you're modifying a released schema (rare)
 
-## 5. Runtime Version Gating
+## 6. Documentation
+
+Regenerate documentation to reflect the schema changes:
+
+```bash
+./dev gen docs
+```
+
+## 7. Runtime Version Gating
 
 If the schema change adds a column/index used at runtime, gate usage on the version:
 
@@ -82,7 +118,7 @@ if r.st.Version.IsActive(ctx, clusterversion.V26_2_MyChange) {
 
 This ensures mixed-version clusters work during rolling upgrades.
 
-## 6. Verification Tests
+## 8. Verification Tests
 
 Run these tests to verify everything is consistent:
 
@@ -104,7 +140,7 @@ Run these tests to verify everything is consistent:
 ./dev test pkg/my/package -v
 ```
 
-## 7. Rebase Conflicts
+## 9. Rebase Conflicts
 
 Golden files frequently conflict during rebases because multiple PRs change system tables concurrently. The resolution pattern:
 
