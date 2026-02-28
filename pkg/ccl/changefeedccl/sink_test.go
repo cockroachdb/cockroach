@@ -856,6 +856,98 @@ func TestSaramaConfigOptionParsing(t *testing.T) {
 	})
 }
 
+func TestKafkaTopLevelCompression(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+
+	t.Run("v1 top-level compression applies when json config has none", func(t *testing.T) {
+		for _, codec := range []string{"gzip", "GZIP", "snappy", "lz4", "zstd"} {
+			t.Run(codec, func(t *testing.T) {
+				u, err := url.Parse("kafka://localhost:9092")
+				require.NoError(t, err)
+				sinkURL := &changefeedbase.SinkURL{URL: u}
+				cfg, err := buildKafkaConfig(ctx, sinkURL, `{}`, codec, nil, nil)
+				require.NoError(t, err)
+
+				expected := saramaCompressionCodecOptions[strings.ToUpper(codec)]
+				require.Equal(t, expected, cfg.Producer.Compression)
+			})
+		}
+	})
+
+	t.Run("v1 conflicting compression options returns error", func(t *testing.T) {
+		u, err := url.Parse("kafka://localhost:9092")
+		require.NoError(t, err)
+		sinkURL := &changefeedbase.SinkURL{URL: u}
+		_, err = buildKafkaConfig(
+			ctx, sinkURL, `{"Compression":"ZSTD"}`, "gzip", nil, nil)
+		require.Error(t, err)
+		require.Contains(t, err.Error(), "conflicts with kafka_sink_config")
+	})
+
+	t.Run("v1 matching compression options succeeds", func(t *testing.T) {
+		u, err := url.Parse("kafka://localhost:9092")
+		require.NoError(t, err)
+		sinkURL := &changefeedbase.SinkURL{URL: u}
+		cfg, err := buildKafkaConfig(
+			ctx, sinkURL, `{"Compression":"GZIP"}`, "gzip", nil, nil)
+		require.NoError(t, err)
+		require.Equal(t, sarama.CompressionGZIP, cfg.Producer.Compression)
+	})
+
+	t.Run("v1 invalid top-level compression returns error", func(t *testing.T) {
+		u, err := url.Parse("kafka://localhost:9092")
+		require.NoError(t, err)
+		sinkURL := &changefeedbase.SinkURL{URL: u}
+		_, err = buildKafkaConfig(ctx, sinkURL, `{}`, "invalid", nil, nil)
+		require.Error(t, err)
+		require.Contains(t, err.Error(), "unsupported compression codec")
+	})
+
+	t.Run("v2 top-level compression applies when json config has none", func(t *testing.T) {
+		for _, codec := range []string{"gzip", "GZIP", "snappy", "lz4", "zstd"} {
+			t.Run(codec, func(t *testing.T) {
+				u, err := url.Parse("kafka://localhost:9092")
+				require.NoError(t, err)
+				sinkURL := &changefeedbase.SinkURL{URL: u}
+				_, err = buildKgoConfig(ctx, sinkURL, `{}`, codec, nil)
+				require.NoError(t, err)
+			})
+		}
+	})
+
+	t.Run("v2 conflicting compression options returns error", func(t *testing.T) {
+		u, err := url.Parse("kafka://localhost:9092")
+		require.NoError(t, err)
+		sinkURL := &changefeedbase.SinkURL{URL: u}
+		_, err = buildKgoConfig(
+			ctx, sinkURL, `{"Compression":"ZSTD"}`, "gzip", nil)
+		require.Error(t, err)
+		require.Contains(t, err.Error(), "conflicts with kafka_sink_config")
+	})
+
+	t.Run("v2 matching compression options succeeds", func(t *testing.T) {
+		u, err := url.Parse("kafka://localhost:9092")
+		require.NoError(t, err)
+		sinkURL := &changefeedbase.SinkURL{URL: u}
+		_, err = buildKgoConfig(
+			ctx, sinkURL, `{"Compression":"GZIP"}`, "gzip", nil)
+		require.NoError(t, err)
+	})
+
+	t.Run("v2 invalid top-level compression returns error", func(t *testing.T) {
+		u, err := url.Parse("kafka://localhost:9092")
+		require.NoError(t, err)
+		sinkURL := &changefeedbase.SinkURL{URL: u}
+		_, err = buildKgoConfig(ctx, sinkURL, `{}`, "invalid", nil)
+		require.Error(t, err)
+		require.Contains(t, err.Error(), "unsupported compression codec")
+	})
+
+}
+
 func TestKafkaSinkTracksMemory(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)

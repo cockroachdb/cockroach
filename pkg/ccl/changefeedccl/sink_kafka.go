@@ -1128,6 +1128,7 @@ func buildKafkaConfig(
 	ctx context.Context,
 	u *changefeedbase.SinkURL,
 	jsonStr changefeedbase.SinkSpecificJSONConfig,
+	topLevelCompression string,
 	kafkaThrottlingMetrics metrics.Histogram,
 	netMetrics *cidr.NetMetrics,
 ) (*sarama.Config, error) {
@@ -1206,6 +1207,26 @@ func buildKafkaConfig(
 		return nil, errors.Wrap(err, "invalid sarama configuration")
 	}
 
+	// Apply top-level compression if set, erroring on conflict with kafka_sink_config.
+	if topLevelCompression != "" {
+		topCodec, ok := saramaCompressionCodecOptions[strings.ToUpper(topLevelCompression)]
+		if !ok {
+			return nil, errors.Errorf(
+				`unsupported compression codec %q for Kafka sink; valid options are %s`,
+				topLevelCompression, getValidCompressionCodecs())
+		}
+		jsonCodec := sarama.CompressionCodec(saramaCfg.Compression)
+		if jsonCodec != sarama.CompressionNone && jsonCodec != topCodec {
+			return nil, errors.Newf(
+				`compression option %q conflicts with kafka_sink_config Compression %q; `+
+					`remove one or make them match`,
+				topLevelCompression, strings.ToUpper(jsonCodec.String()))
+		}
+		if jsonCodec == sarama.CompressionNone {
+			saramaCfg.Compression = compressionCodec(topCodec)
+		}
+	}
+
 	// Apply configures config based on saramaCfg.
 	if err := saramaCfg.Apply(config); err != nil {
 		return nil, errors.Wrap(err, "failed to apply kafka client configuration")
@@ -1240,7 +1261,7 @@ func makeKafkaSink(
 	}
 
 	m := mb(requiresResourceAccounting)
-	config, err := buildKafkaConfig(ctx, u, jsonStr, m.getKafkaThrottlingMetrics(settings), m.netMetrics())
+	config, err := buildKafkaConfig(ctx, u, jsonStr, sinkOpts.Compression, m.getKafkaThrottlingMetrics(settings), m.netMetrics())
 	if err != nil {
 		return nil, err
 	}
