@@ -3,7 +3,7 @@
 // Use of this software is governed by the CockroachDB Software License
 // included in the /LICENSE file.
 
-package rttanalysisccl
+package rttanalysis
 
 import (
 	gosql "database/sql"
@@ -13,8 +13,9 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/bench/rttanalysis"
+	_ "github.com/cockroachdb/cockroach/pkg/ccl/multiregionccl"
 	"github.com/cockroachdb/cockroach/pkg/ccl/multiregionccl/multiregionccltestutils"
+	_ "github.com/cockroachdb/cockroach/pkg/ccl/partitionccl"
 	"github.com/cockroachdb/cockroach/pkg/testutils/pgurlutils"
 )
 
@@ -22,7 +23,7 @@ const numNodes = 4
 
 // RunRoundTripBenchmarkMultiRegion sets up a multi-region db run the RoundTripBenchTestCase test cases
 // and counts how many round trips the Stmt specified by the test case performs.
-var reg = rttanalysis.NewRegistry(numNodes, rttanalysis.MakeClusterConstructor(func(
+var multiRegionReg = NewRegistry(numNodes, MakeClusterConstructor(func(
 	tb testing.TB, knobs base.TestingKnobs,
 ) (*gosql.DB, *gosql.DB, func()) {
 	cluster, _, cleanup := multiregionccltestutils.TestingCreateMultiRegionCluster(
@@ -43,7 +44,7 @@ var reg = rttanalysis.NewRegistry(numNodes, rttanalysis.MakeClusterConstructor(f
 		tb.Fatal(err)
 	}
 	url, testuserCleanup := pgurlutils.PGUrl(
-		tb, cluster.Server(0).ApplicationLayer().AdvSQLAddr(), "rttanalysisccl", url.User("testuser"),
+		tb, cluster.Server(0).ApplicationLayer().AdvSQLAddr(), "rttanalysis", url.User("testuser"),
 	)
 	conn, err := gosql.Open("postgres", url.String())
 	if err != nil {
@@ -55,7 +56,7 @@ var reg = rttanalysis.NewRegistry(numNodes, rttanalysis.MakeClusterConstructor(f
 	}
 }))
 
-func TestBenchmarkExpectation(t *testing.T) { reg.RunExpectations(t) }
+func TestMultiRegionBenchmarkExpectation(t *testing.T) { multiRegionReg.RunExpectations(t) }
 
 const (
 	multipleTableFixture = `
@@ -105,9 +106,9 @@ USE test;`)
 	return b.String()
 }
 
-func BenchmarkAlterRegions(b *testing.B) { reg.Run(b) }
+func BenchmarkAlterRegions(b *testing.B) { multiRegionReg.Run(b) }
 func init() {
-	reg.Register("AlterRegions", []rttanalysis.RoundTripBenchTestCase{
+	multiRegionReg.Register("AlterRegions", []RoundTripBenchTestCase{
 		{
 			Name:  "alter empty database add region",
 			Setup: `CREATE DATABASE test PRIMARY REGION "us-east1"`,
@@ -135,9 +136,9 @@ func init() {
 	})
 }
 
-func BenchmarkAlterPrimaryRegion(b *testing.B) { reg.Run(b) }
+func BenchmarkAlterPrimaryRegion(b *testing.B) { multiRegionReg.Run(b) }
 func init() {
-	reg.Register("AlterPrimaryRegion", []rttanalysis.RoundTripBenchTestCase{
+	multiRegionReg.Register("AlterPrimaryRegion", []RoundTripBenchTestCase{
 		{
 			Name:  "alter empty database set initial primary region",
 			Setup: "CREATE DATABASE test",
@@ -178,9 +179,9 @@ CREATE TABLE test10 (p int);
 	})
 }
 
-func BenchmarkAlterSurvivalGoals(b *testing.B) { reg.Run(b) }
+func BenchmarkAlterSurvivalGoals(b *testing.B) { multiRegionReg.Run(b) }
 func init() {
-	reg.Register("AlterSurvivalGoals", []rttanalysis.RoundTripBenchTestCase{
+	multiRegionReg.Register("AlterSurvivalGoals", []RoundTripBenchTestCase{
 		{
 			Name:  "alter empty database from zone to region",
 			Setup: `CREATE DATABASE test PRIMARY REGION "us-east1" REGIONS "us-east2","us-east3"`,
@@ -209,9 +210,9 @@ ALTER DATABASE test SURVIVE REGION FAILURE`,
 	})
 }
 
-func BenchmarkAlterTableLocality(b *testing.B) { reg.Run(b) }
+func BenchmarkAlterTableLocality(b *testing.B) { multiRegionReg.Run(b) }
 func init() {
-	reg.Register("AlterTableLocality", []rttanalysis.RoundTripBenchTestCase{
+	multiRegionReg.Register("AlterTableLocality", []RoundTripBenchTestCase{
 		{
 			Name: "alter from global to regional by table",
 			Setup: `
@@ -275,9 +276,9 @@ CREATE TABLE test (p int) WITH (schema_locked = false) LOCALITY REGIONAL BY ROW;
 	})
 }
 
-func BenchmarkVirtualTableQueries(b *testing.B) { reg.Run(b) }
+func BenchmarkMultiRegionVirtualTableQueries(b *testing.B) { multiRegionReg.Run(b) }
 func init() {
-	reg.Register("VirtualTableQueries", []rttanalysis.RoundTripBenchTestCase{
+	multiRegionReg.Register("MultiRegionVirtualTableQueries", []RoundTripBenchTestCase{
 		{
 			Name:  "select from crdb_internal.zones (10 tables)",
 			Setup: multipleTableFixtures(10),
