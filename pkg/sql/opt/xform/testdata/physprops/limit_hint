@@ -587,7 +587,7 @@ exec-ddl
 CREATE VIEW v44683(c0) AS SELECT 1 FROM t44683 LIMIT -1
 ----
 
-opt
+opt disable=(EliminateZeroCardSelect,EliminateZeroCardProject)
 SELECT DISTINCT t44683.c0 FROM t44683, v44683 LIMIT -1;
 ----
 limit
@@ -634,7 +634,7 @@ CREATE VIEW v0(c0) AS SELECT 0 FROM t1 LIMIT -1
 
 # Regression test for #46187. Ensure that the estimated cost of a lookup join
 # with a limit hint is finite when the number of output rows is 0.
-opt
+opt disable=(EliminateZeroCardSelect,EliminateZeroCardProject)
 SELECT * FROM v0, t0 NATURAL JOIN t1 LIMIT -1
 ----
 project
