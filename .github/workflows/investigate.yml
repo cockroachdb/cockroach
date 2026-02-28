@@ -134,6 +134,23 @@ jobs:
           service_account: 'ai-review@dev-inf-prod.iam.gserviceaccount.com'
           workload_identity_provider: 'projects/72497726731/locations/global/workloadIdentityPools/ai-review/providers/ai-review'
 
+      - name: Retrieve EngFlow certificates
+        if: env.HAS_API_KEY != 'true'
+        id: engflow-certs
+        run: |
+          CERT_DIR=$(mktemp -d)
+          if gcloud secrets versions access 2 --secret=engflow-mesolite-key --project=crl-github-actions > "$CERT_DIR/engflow.key" 2>/dev/null &&
+             gcloud secrets versions access 2 --secret=engflow-mesolite-crt --project=crl-github-actions > "$CERT_DIR/engflow.crt" 2>/dev/null; then
+            chmod 600 "$CERT_DIR/engflow.key" "$CERT_DIR/engflow.crt"
+            echo "ENGFLOW_CERT_FILE=$CERT_DIR/engflow.crt" >> "$GITHUB_ENV"
+            echo "ENGFLOW_KEY_FILE=$CERT_DIR/engflow.key" >> "$GITHUB_ENV"
+            echo "has_engflow=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "::warning::Could not retrieve EngFlow certificates — EngFlow artifact access will be unavailable"
+            echo "has_engflow=false" >> "$GITHUB_OUTPUT"
+            rm -rf "$CERT_DIR"
+          fi
+
       - name: Investigate
         uses: cockroachdb/claude-code-action@v1
         env:
@@ -151,7 +168,7 @@ jobs:
           # based permissions may work after upgrading the action.
           claude_args: |
             --model ${{ inputs.cheap == true && 'claude-sonnet-4-5' || 'claude-opus-4-6' }}
-            --allowedTools "Write,Read,Grep,Glob,WebFetch,Bash(cat:*),Bash(head:*),Bash(tail:*),Bash(grep:*),Bash(rg:*),Bash(awk:*),Bash(cut:*),Bash(tr:*),Bash(sort:*),Bash(uniq:*),Bash(wc:*),Bash(tee:*),Bash(diff:*),Bash(file:*),Bash(strings:*),Bash(jq:*),Bash(ls:*),Bash(find:*),Bash(tree:*),Bash(stat:*),Bash(du:*),Bash(mkdir:*),Bash(git:*),Bash(gh issue view:*),Bash(gh issue list:*),Bash(gh pr view:*),Bash(gh pr list:*),Bash(gh pr diff:*),Bash(gh search:*),Bash(fetch-url:*),Bash(unzip:*),Bash(tar x*),Bash(tar -x*),Bash(tar --extract:*),Bash(go mod download:*),Bash(go env:*)"
+            --allowedTools "Write,Read,Grep,Glob,WebFetch,Bash(cat:*),Bash(head:*),Bash(tail:*),Bash(grep:*),Bash(rg:*),Bash(awk:*),Bash(cut:*),Bash(tr:*),Bash(sort:*),Bash(uniq:*),Bash(wc:*),Bash(tee:*),Bash(diff:*),Bash(file:*),Bash(strings:*),Bash(jq:*),Bash(ls:*),Bash(find:*),Bash(tree:*),Bash(stat:*),Bash(du:*),Bash(mkdir:*),Bash(git:*),Bash(gh issue view:*),Bash(gh issue list:*),Bash(gh pr view:*),Bash(gh pr list:*),Bash(gh pr diff:*),Bash(gh search:*),Bash(fetch-url:*),Bash(unzip:*),Bash(tar x*),Bash(tar -x*),Bash(tar --extract:*),Bash(go mod download:*),Bash(go env:*),Bash(python3 .claude/skills/engflow-artifacts/engflow_artifacts.py:*)"
           prompt: |
             Read and follow the instructions in the prompt file
             `.github/prompts/${{ inputs.smoke_test == true && 'investigate-smoke' || 'investigate' }}.md`.
@@ -183,3 +200,9 @@ jobs:
               --repo ${{ github.repository }} \
               --body "Investigation did not produce findings. Check the [workflow run](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}) for details."
           fi
+
+      - name: Clean up EngFlow certificates
+        if: always() && steps.engflow-certs.outputs.has_engflow == 'true'
+        run: |
+          rm -f "$ENGFLOW_CERT_FILE" "$ENGFLOW_KEY_FILE"
+          rmdir "$(dirname "$ENGFLOW_CERT_FILE")" 2>/dev/null || true
