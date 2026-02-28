@@ -38,9 +38,7 @@ tc_end_block "Variable Setup"
 
 gcr_tag="${gcr_staged_repository}:${version}"
 docker_login_gcr "$gcr_staged_repository" "$gcr_credentials"
-docker manifest rm "${gcr_tag}" || :
-docker manifest create "${gcr_tag}" "${gcr_staged_repository}:amd64-${version}" "${gcr_staged_repository}:arm64-${version}" "${gcr_staged_repository}:s390x-${version}"
-docker manifest push "${gcr_tag}"
+create_and_push_multi_arch_manifest "${gcr_tag}" "${gcr_staged_repository}:amd64-${version}" "${gcr_staged_repository}:arm64-${version}" "${gcr_staged_repository}:s390x-${version}"
 
 tc_start_block "Verify docker images"
 error=0
