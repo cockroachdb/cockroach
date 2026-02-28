@@ -190,8 +190,48 @@ Log files are generally large. Prefer searching them with grep first
 to find interesting sections, but `test.log` is often worth reading
 in full.
 
-If there is no TeamCity build ID (e.g. EngFlow builds), note this in
-your findings and work with what is available in the issue.
+**EngFlow artifacts:**
+
+Some CI builds run on EngFlow (mesolite.cluster.engflow.com) instead
+of TeamCity. You can recognize these by:
+- EngFlow invocation URLs in the issue:
+  `https://mesolite.cluster.engflow.com/invocations/default/<ID>`
+- Bazel target labels like `//pkg/sql/...`
+- Issues that mention EngFlow but have no TeamCity build ID
+
+Use the [`engflow_artifacts.py`](../.claude/skills/engflow-artifacts/engflow_artifacts.py)
+script to download artifacts. Authentication is handled via environment
+variables set by the workflow — no manual login needed. Run the script
+from its directory. The workflow is:
+
+1. **Discover failed targets:**
+   ```bash
+   ./engflow_artifacts.py targets <invocation_id>
+   ```
+
+2. **List artifacts for a target:**
+   ```bash
+   ./engflow_artifacts.py list <invocation_id> --target <target_label>
+   ```
+
+3. **Download artifacts for a shard:**
+   ```bash
+   DEST="/tmp/engflow-artifacts"
+   ./engflow_artifacts.py download <invocation_id> \
+     --target <target_label> --shard <N> --outdir "$DEST"
+   ```
+
+Key artifacts per shard:
+- `test.log` — test stdout/stderr (start here)
+- `test.xml` — JUnit results
+- `outputs.zip` — CockroachDB server logs (auto-extracted on download)
+
+If EngFlow certificates are unavailable (e.g. on a personal fork or
+if IAM permissions are not yet configured), note this limitation in
+your findings rather than failing the investigation.
+
+If there is no TeamCity build ID and no EngFlow invocation URL, work
+with what is available in the issue.
 
 ### Step 5: Write Your Findings
 
