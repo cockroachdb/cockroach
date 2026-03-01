@@ -630,6 +630,31 @@ func (w *tpcc) Hooks() workload.Hooks {
 			return nil
 		},
 		CheckConsistency: func(ctx context.Context, db *gosql.DB) error {
+			// Temporarily disable the server.sql_tcp_user.timeout setting while
+			// running consistency checks. The setting was introduced in #164037
+			// with a 30s default, which causes long-running check queries
+			// (especially the expensive order table checks) to be killed with
+			// "connection reset by peer". We disable it for the duration of the
+			// checks and restore the previous value afterward.
+			var prevTimeout string
+			if err := db.QueryRowContext(ctx,
+				`SHOW CLUSTER SETTING server.sql_tcp_user.timeout`,
+			).Scan(&prevTimeout); err != nil {
+				return errors.Wrap(err, "reading server.sql_tcp_user.timeout")
+			}
+			if _, err := db.ExecContext(ctx,
+				`SET CLUSTER SETTING server.sql_tcp_user.timeout = '0s'`,
+			); err != nil {
+				return errors.Wrap(err, "disabling server.sql_tcp_user.timeout")
+			}
+			defer func() {
+				if _, err := db.ExecContext(ctx,
+					`SET CLUSTER SETTING server.sql_tcp_user.timeout = $1`, prevTimeout,
+				); err != nil {
+					log.Dev.Warningf(ctx, "failed to restore server.sql_tcp_user.timeout: %v", err)
+				}
+			}()
+
 			for _, check := range AllChecks() {
 				if !w.expensiveChecks && check.Expensive {
 					continue
