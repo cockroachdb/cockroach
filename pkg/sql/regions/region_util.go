@@ -531,6 +531,11 @@ type MultiRegionTableValidatorData interface {
 
 	// GetDatabaseSecondaryRegion returns the database secondary region name
 	GetDatabaseSecondaryRegion() catpb.RegionName
+
+	// IsSecondaryRegionOutsideSuperRegion returns true when the given region
+	// belongs to a super region and the database's secondary region is NOT a
+	// member of that same super region.
+	IsSecondaryRegionOutsideSuperRegion(region catpb.RegionName) bool
 }
 
 // ValidateZoneConfigForMultiRegionTable validates that the multi-region fields
@@ -708,10 +713,17 @@ func buildValidationError(
 func synthesizeLeasePreferencesForTable(
 	tableData MultiRegionTableValidatorData,
 ) []zonepb.LeasePreference {
+	var affinityRegion catpb.RegionName
 	if rbtSecondaryRegion := tableData.GetTableLocalitySecondaryRegion(); rbtSecondaryRegion != nil {
-		return SynthesizeLeasePreferences(*rbtSecondaryRegion, tableData.GetDatabaseSecondaryRegion())
+		affinityRegion = *rbtSecondaryRegion
+	} else {
+		affinityRegion = tableData.GetDatabasePrimaryRegion()
 	}
-	return SynthesizeLeasePreferences(tableData.GetDatabasePrimaryRegion(), tableData.GetDatabaseSecondaryRegion())
+	secondaryRegion := tableData.GetDatabaseSecondaryRegion()
+	if tableData.IsSecondaryRegionOutsideSuperRegion(affinityRegion) {
+		secondaryRegion = ""
+	}
+	return SynthesizeLeasePreferences(affinityRegion, secondaryRegion)
 }
 
 // distributeReplicasAcrossRegions distributes numReplicas across the given

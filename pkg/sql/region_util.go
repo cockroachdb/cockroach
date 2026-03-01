@@ -781,6 +781,7 @@ func (p *planner) ValidateAllMultiRegionZoneConfigsInCurrentDatabase(ctx context
 				regionConfig: regionConfig,
 			},
 		},
+		regionConfig,
 	)
 }
 
@@ -870,6 +871,7 @@ func (p *planner) validateAllMultiRegionZoneConfigsInDatabase(
 	ctx context.Context,
 	dbDesc catalog.DatabaseDescriptor,
 	zoneConfigForMultiRegionValidator zoneConfigForMultiRegionValidator,
+	regionConfig multiregion.RegionConfig,
 ) error {
 	var ids []descpb.ID
 	if err := p.forEachMutableTableInDatabase(
@@ -914,6 +916,7 @@ func (p *planner) validateAllMultiRegionZoneConfigsInDatabase(
 				tbDesc,
 				tbZoneConfig,
 				zoneConfigForMultiRegionValidator,
+				regionConfig,
 			)
 		},
 	)
@@ -1573,13 +1576,15 @@ func (p *planner) validateZoneConfigForMultiRegionTableWasNotModifiedByUser(
 				regionConfig: regionConfig,
 			},
 		},
+		regionConfig,
 	)
 }
 
 // multiRegionTableValidatorData implements zoneconfig.MultiRegionTableValidatorData for legacy schema changer.
 type multiRegionTableValidatorData struct {
-	desc   catalog.TableDescriptor
-	dbDesc catalog.DatabaseDescriptor
+	desc         catalog.TableDescriptor
+	dbDesc       catalog.DatabaseDescriptor
+	regionConfig multiregion.RegionConfig
 }
 
 var _ regions.MultiRegionTableValidatorData = (*multiRegionTableValidatorData)(nil)
@@ -1640,6 +1645,12 @@ func (v *multiRegionTableValidatorData) GetDatabaseSecondaryRegion() catpb.Regio
 	return regionConfig.SecondaryRegion
 }
 
+func (v *multiRegionTableValidatorData) IsSecondaryRegionOutsideSuperRegion(
+	region catpb.RegionName,
+) bool {
+	return regions.SecondaryRegionOutsideSuperRegion(region, v.regionConfig)
+}
+
 func (v *multiRegionTableValidatorData) GetTableLocalitySecondaryRegion() *catpb.RegionName {
 	regionConfig := v.dbDesc.GetRegionConfig()
 	if regionConfig == nil || regionConfig.SecondaryRegion == "" {
@@ -1662,6 +1673,7 @@ func (p *planner) validateZoneConfigForMultiRegionTable(
 	desc catalog.TableDescriptor,
 	currentZoneConfig *zonepb.ZoneConfig,
 	zoneConfigForMultiRegionValidator zoneConfigForMultiRegionValidator,
+	regionConfig multiregion.RegionConfig,
 ) error {
 	if currentZoneConfig == nil {
 		currentZoneConfig = zonepb.NewZoneConfig()
@@ -1677,8 +1689,9 @@ func (p *planner) validateZoneConfigForMultiRegionTable(
 	}
 
 	validatorData := multiRegionTableValidatorData{
-		desc:   desc,
-		dbDesc: dbDesc,
+		desc:         desc,
+		dbDesc:       dbDesc,
+		regionConfig: regionConfig,
 	}
 
 	return regions.ValidateZoneConfigForMultiRegionTable(
