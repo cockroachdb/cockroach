@@ -3,7 +3,7 @@
 // Use of this software is governed by the CockroachDB Software License
 // included in the /LICENSE file.
 
-package partitionccl
+package partitioning_test
 
 import (
 	"context"
@@ -12,7 +12,6 @@ import (
 
 	"github.com/cockroachdb/cockroach-go/v2/crdb"
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/sql"
@@ -28,7 +27,6 @@ import (
 func TestRemovePartitioningExpiredLicense(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	defer utilccl.TestingEnableEnterprise()()
 
 	ctx := context.Background()
 	srv, sqlDBRaw, _ := serverutils.StartServer(t, base.TestServerArgs{
@@ -50,10 +48,7 @@ func TestRemovePartitioningExpiredLicense(t *testing.T) {
 	sqlDB.Exec(t, `ALTER INDEX t@t_pkey CONFIGURE ZONE USING DEFAULT`)
 	sqlDB.Exec(t, `ALTER INDEX t@i CONFIGURE ZONE USING DEFAULT`)
 
-	// Remove the enterprise license.
-	defer utilccl.TestingDisableEnterprise()()
-
-	// Partitions and zone configs can now be modified without a valid license.
+	// Partitions and zone configs can be modified.
 	sqlDB.Exec(t, `ALTER TABLE t PARTITION BY LIST (a) (PARTITION p2 VALUES IN (2))`)
 	sqlDB.Exec(t, `ALTER INDEX t@i PARTITION BY RANGE (a) (PARTITION p45 VALUES FROM (4) TO (5))`)
 	sqlDB.Exec(t, `ALTER PARTITION p2 OF TABLE t CONFIGURE ZONE USING DEFAULT`)

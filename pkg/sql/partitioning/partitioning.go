@@ -3,7 +3,7 @@
 // Use of this software is governed by the CockroachDB Software License
 // included in the /LICENSE file.
 
-package partitionccl
+package partitioning
 
 import (
 	"context"
@@ -11,7 +11,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
-	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
@@ -20,7 +19,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc/valueside"
-	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scdeps"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/volatility"
@@ -321,9 +319,9 @@ func findColumnByNameOnTable(
 	return nil, colinfo.NewUndefinedColumnError(string(col))
 }
 
-// createPartitioning constructs the partitioning descriptor for an index that
+// CreatePartitioning constructs the partitioning descriptor for an index that
 // is partitioned into ranges, each addressable by zone configs.
-func createPartitioning(
+func CreatePartitioning(
 	ctx context.Context,
 	st *cluster.Settings,
 	evalCtx *eval.Context,
@@ -360,7 +358,7 @@ func createPartitioning(
 	// If we had implicit column partitioning beforehand, check we have the
 	// same implicitly partitioned columns.
 	// Having different implicitly partitioned columns requires rewrites,
-	// which is outside the scope of createPartitioning.
+	// which is outside the scope of CreatePartitioning.
 	if oldNumImplicitColumns > 0 {
 		if len(newImplicitCols) != oldNumImplicitColumns {
 			return nil, newPartitioning, errors.AssertionFailedf(
@@ -390,9 +388,4 @@ func createPartitioning(
 		return nil, catpb.PartitioningDescriptor{}, err
 	}
 	return newImplicitCols, newPartitioning, err
-}
-
-func init() {
-	sql.CreatePartitioningCCL = createPartitioning
-	scdeps.CreatePartitioningCCL = createPartitioning
 }
