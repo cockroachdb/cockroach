@@ -6,11 +6,34 @@
 package hintpb
 
 import (
+	"fmt"
+
+	"github.com/cockroachdb/cockroach/pkg/sql/lexbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/protoreflect"
 	"github.com/cockroachdb/cockroach/pkg/util/json"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/errors"
 )
+
+const (
+	// HintTypeEmpty is the default value, used if the hint type cannot be
+	// determined.
+	HintTypeEmpty = "EMPTY"
+	// HintTypeRewriteInlineHints is used for "hint injection" hints that rewrite
+	// the inline hints within the AST of a statement.
+	HintTypeRewriteInlineHints = "REWRITE INLINE HINTS"
+)
+
+// HintTypeStr returns the string representation of the type of the given hint,
+// suitable for use in the statement_hints table.
+func (hint *StatementHintUnion) HintTypeStr() string {
+	switch hint.GetValue().(type) {
+	case *InjectHints:
+		return HintTypeRewriteInlineHints
+	default:
+		return HintTypeEmpty
+	}
+}
 
 // FromBytes converts the raw bytes from system.statement_hints into a
 // StatementHintUnion object.
@@ -41,6 +64,21 @@ func (h StatementHintUnion) HintType() string {
 		return "rewrite_inline_hints"
 	default:
 		return "unknown"
+	}
+}
+
+// RecreateStmt returns the SQL statement that can be used to recreate the hint.
+// Returns the empty string and false if the hint type is not supported.
+func (h StatementHintUnion) RecreateStmt(stmt string) (string, bool) {
+	switch t := h.GetValue().(type) {
+	case *InjectHints:
+		return fmt.Sprintf(
+			"SELECT information_schema.crdb_rewrite_inline_hints(%s, %s);",
+			lexbase.EscapeSQLString(stmt),
+			lexbase.EscapeSQLString(t.DonorSQL),
+		), true
+	default:
+		return "", false
 	}
 }
 

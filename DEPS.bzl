@@ -1854,10 +1854,10 @@ def go_deps():
         patches = [
             "@com_github_cockroachdb_cockroach//build/patches:com_github_cockroachdb_pebble.patch",
         ],
-        sha256 = "2db1ccaee77608c73f253d6c10494fc5afe4e452347284a2d1f4167a71ed5109",
-        strip_prefix = "github.com/cockroachdb/pebble@v0.0.0-20260126153023-03153d8aca55",
+        sha256 = "d7ace2b49355715f452cfc6c10e5ac9490619445d5311b4a49f3fa6b61fd71ac",
+        strip_prefix = "github.com/cockroachdb/pebble@v0.0.0-20260225195533-66e843342e32",
         urls = [
-            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/cockroachdb/pebble/com_github_cockroachdb_pebble-v0.0.0-20260126153023-03153d8aca55.zip",
+            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/cockroachdb/pebble/com_github_cockroachdb_pebble-v0.0.0-20260225195533-66e843342e32.zip",
         ],
     )
     go_repository(
@@ -2578,6 +2578,16 @@ def go_deps():
         strip_prefix = "github.com/dgryski/go-sip13@v0.0.0-20200911182023-62edffca9245",
         urls = [
             "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/dgryski/go-sip13/com_github_dgryski_go_sip13-v0.0.0-20200911182023-62edffca9245.zip",
+        ],
+    )
+    go_repository(
+        name = "com_github_di_wu_parser",
+        build_file_proto_mode = "disable_global",
+        importpath = "github.com/di-wu/parser",
+        sha256 = "dd92c5b611ae80dbbb32982e10611169a62f78c58fc953ca0f04d118faf7a60c",
+        strip_prefix = "github.com/di-wu/parser@v0.2.2",
+        urls = [
+            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/di-wu/parser/com_github_di_wu_parser-v0.2.2.zip",
         ],
     )
     go_repository(
@@ -3929,20 +3939,20 @@ def go_deps():
         name = "com_github_golang_jwt_jwt_v4",
         build_file_proto_mode = "disable_global",
         importpath = "github.com/golang-jwt/jwt/v4",
-        sha256 = "bea2e7c045b07f50b60211bee94b62c442322ded7fa893e3fda49dcdce0e2908",
-        strip_prefix = "github.com/golang-jwt/jwt/v4@v4.2.0",
+        sha256 = "ec5ee69a31fd478fc197fddce7c06dad1abe7543095a55c4ee6546ae79d99a0f",
+        strip_prefix = "github.com/golang-jwt/jwt/v4@v4.5.2",
         urls = [
-            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/golang-jwt/jwt/v4/com_github_golang_jwt_jwt_v4-v4.2.0.zip",
+            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/golang-jwt/jwt/v4/com_github_golang_jwt_jwt_v4-v4.5.2.zip",
         ],
     )
     go_repository(
         name = "com_github_golang_jwt_jwt_v5",
         build_file_proto_mode = "disable_global",
         importpath = "github.com/golang-jwt/jwt/v5",
-        sha256 = "ad5cdc5c6bac562a2b890e96347208ffdb30a940243b558465ab7de90913a180",
-        strip_prefix = "github.com/golang-jwt/jwt/v5@v5.2.1",
+        sha256 = "278980d9e52498b7c54baf21fed203b942aa1d08b7f62eec494110b61b6fd3c9",
+        strip_prefix = "github.com/golang-jwt/jwt/v5@v5.2.2",
         urls = [
-            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/golang-jwt/jwt/v5/com_github_golang_jwt_jwt_v5-v5.2.1.zip",
+            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/golang-jwt/jwt/v5/com_github_golang_jwt_jwt_v5-v5.2.2.zip",
         ],
     )
     go_repository(
@@ -7921,6 +7931,16 @@ def go_deps():
         strip_prefix = "github.com/schollz/closestmatch@v2.1.0+incompatible",
         urls = [
             "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/schollz/closestmatch/com_github_schollz_closestmatch-v2.1.0+incompatible.zip",
+        ],
+    )
+    go_repository(
+        name = "com_github_scim2_filter_parser_v2",
+        build_file_proto_mode = "disable_global",
+        importpath = "github.com/scim2/filter-parser/v2",
+        sha256 = "ec719dc423397cf534d53605a94f7f81790e4aaa44a2df8120046e5850775c31",
+        strip_prefix = "github.com/scim2/filter-parser/v2@v2.2.0",
+        urls = [
+            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/scim2/filter-parser/v2/com_github_scim2_filter_parser_v2-v2.2.0.zip",
         ],
     )
     go_repository(

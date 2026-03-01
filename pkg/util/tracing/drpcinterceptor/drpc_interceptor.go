@@ -22,6 +22,14 @@ import (
 	"storj.io/drpc/drpcmux"
 )
 
+// drpcRequestKey is a context key type used to mark a request as coming via DRPC.
+type drpcRequestKey struct{}
+
+// IsDRPCRequest returns true if the context indicates this request came via DRPC.
+func IsDRPCRequest(ctx context.Context) bool {
+	return ctx.Value(drpcRequestKey{}) != nil
+}
+
 // ExtractSpanMetaFromDRPCCtx retrieves trace context (as a SpanMeta) that has
 // been propagated through DRPC metadata in the context.
 func ExtractSpanMetaFromDRPCCtx(
@@ -45,6 +53,7 @@ func ServerInterceptor(tracer *tracing.Tracer) drpcmux.UnaryServerInterceptor {
 		rpc string,
 		handler drpcmux.UnaryHandler,
 	) (interface{}, error) {
+		ctx = context.WithValue(ctx, drpcRequestKey{}, struct{}{})
 		if tracingutil.MethodExcludedFromTracing(rpc) {
 			return handler(ctx, req)
 		}
@@ -83,6 +92,10 @@ func StreamServerInterceptor(tracer *tracing.Tracer) drpcmux.StreamServerInterce
 		rpc string,
 		handler drpcmux.StreamHandler,
 	) (interface{}, error) {
+		stream = &tracingServerStream{
+			Stream: stream,
+			ctx:    context.WithValue(stream.Context(), drpcRequestKey{}, struct{}{}),
+		}
 		if tracingutil.MethodExcludedFromTracing(rpc) {
 			return handler(stream)
 		}

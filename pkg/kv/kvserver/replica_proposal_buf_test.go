@@ -690,49 +690,49 @@ func TestProposalBufferRejectUnsafeLeaseTransfer(t *testing.T) {
 		targetState rafttracker.StateType
 		targetMatch kvpb.RaftIndex
 
-		expRejection       bool
-		expRejectionReason raftutil.ReplicaNeedsSnapshotStatus
+		expRejection    bool
+		expRejectionMsg string // substring expected in the rejection error
 	}{
 		{
-			name:               "follower",
-			proposerState:      raftpb.StateFollower,
-			expRejection:       true,
-			expRejectionReason: raftutil.LocalReplicaNotLeader,
+			name:            "follower",
+			proposerState:   raftpb.StateFollower,
+			expRejection:    true,
+			expRejectionMsg: raftutil.LocalReplicaNotLeader.String(),
 		},
 		{
-			name:               "candidate",
-			proposerState:      raftpb.StateCandidate,
-			expRejection:       true,
-			expRejectionReason: raftutil.LocalReplicaNotLeader,
+			name:            "candidate",
+			proposerState:   raftpb.StateCandidate,
+			expRejection:    true,
+			expRejectionMsg: raftutil.LocalReplicaNotLeader.String(),
 		},
 		{
-			name:               "leader, no progress for target",
-			proposerState:      raftpb.StateLeader,
-			targetState:        math.MaxUint64,
-			expRejection:       true,
-			expRejectionReason: raftutil.ReplicaUnknown,
+			name:            "leader, no progress for target",
+			proposerState:   raftpb.StateLeader,
+			targetState:     math.MaxUint64,
+			expRejection:    true,
+			expRejectionMsg: raftutil.ReplicaUnknown.String(),
 		},
 		{
-			name:               "leader, target state probe",
-			proposerState:      raftpb.StateLeader,
-			targetState:        rafttracker.StateProbe,
-			expRejection:       true,
-			expRejectionReason: raftutil.ReplicaStateProbe,
+			name:            "leader, target state probe",
+			proposerState:   raftpb.StateLeader,
+			targetState:     rafttracker.StateProbe,
+			expRejection:    true,
+			expRejectionMsg: raftutil.ReplicaStateProbe.String(),
 		},
 		{
-			name:               "leader, target state snapshot",
-			proposerState:      raftpb.StateLeader,
-			targetState:        rafttracker.StateSnapshot,
-			expRejection:       true,
-			expRejectionReason: raftutil.ReplicaStateSnapshot,
+			name:            "leader, target state snapshot",
+			proposerState:   raftpb.StateLeader,
+			targetState:     rafttracker.StateSnapshot,
+			expRejection:    true,
+			expRejectionMsg: raftutil.ReplicaStateSnapshot.String(),
 		},
 		{
-			name:               "leader, target state replicate, match+1 < firstIndex",
-			proposerState:      raftpb.StateLeader,
-			targetState:        rafttracker.StateReplicate,
-			targetMatch:        proposerCompactedIndex - 1,
-			expRejection:       true,
-			expRejectionReason: raftutil.ReplicaMatchBelowLeadersFirstIndex,
+			name:            "leader, target state replicate, match+1 < firstIndex",
+			proposerState:   raftpb.StateLeader,
+			targetState:     rafttracker.StateReplicate,
+			targetMatch:     proposerCompactedIndex - 1,
+			expRejection:    true,
+			expRejectionMsg: raftutil.ReplicaMatchBelowLeadersFirstIndex.String(),
 		},
 		{
 			name:          "leader, target state replicate, match+1 == firstIndex",
@@ -811,7 +811,7 @@ func TestProposalBufferRejectUnsafeLeaseTransfer(t *testing.T) {
 			require.NoError(t, b.flushLocked(ctx))
 			if tc.expRejection {
 				require.NotNil(t, rejectedErr)
-				require.Contains(t, rejectedErr.Error(), tc.expRejectionReason.String())
+				require.Contains(t, rejectedErr.Error(), tc.expRejectionMsg)
 			} else {
 				require.Nil(t, rejectedErr)
 			}

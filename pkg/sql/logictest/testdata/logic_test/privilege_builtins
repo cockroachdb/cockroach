@@ -1556,3 +1556,58 @@ SELECT has_system_privilege(99999::OID, 'BACKUP')
 false
 
 subtest end
+
+subtest has_table_privilege_maintain
+
+statement ok
+CREATE TABLE maintain_priv_t (a INT PRIMARY KEY)
+
+# Root should have MAINTAIN via ALL.
+query BB
+SELECT has_table_privilege('maintain_priv_t', 'MAINTAIN'),
+       has_table_privilege('maintain_priv_t', 'MAINTAIN WITH GRANT OPTION')
+----
+true  true
+
+statement ok
+CREATE USER maintain_priv_user
+
+# User without MAINTAIN should not have it.
+query BB
+SELECT has_table_privilege('maintain_priv_user', 'maintain_priv_t', 'MAINTAIN'),
+       has_table_privilege('maintain_priv_user', 'maintain_priv_t', 'MAINTAIN WITH GRANT OPTION')
+----
+false  false
+
+statement ok
+GRANT MAINTAIN ON maintain_priv_t TO maintain_priv_user
+
+query BB
+SELECT has_table_privilege('maintain_priv_user', 'maintain_priv_t', 'MAINTAIN'),
+       has_table_privilege('maintain_priv_user', 'maintain_priv_t', 'MAINTAIN WITH GRANT OPTION')
+----
+true  false
+
+statement ok
+GRANT MAINTAIN ON maintain_priv_t TO maintain_priv_user WITH GRANT OPTION
+
+query BB
+SELECT has_table_privilege('maintain_priv_user', 'maintain_priv_t', 'MAINTAIN'),
+       has_table_privilege('maintain_priv_user', 'maintain_priv_t', 'MAINTAIN WITH GRANT OPTION')
+----
+true  true
+
+statement ok
+REVOKE MAINTAIN ON maintain_priv_t FROM maintain_priv_user
+
+query BB
+SELECT has_table_privilege('maintain_priv_user', 'maintain_priv_t', 'MAINTAIN'),
+       has_table_privilege('maintain_priv_user', 'maintain_priv_t', 'MAINTAIN WITH GRANT OPTION')
+----
+false  false
+
+statement ok
+DROP TABLE maintain_priv_t;
+DROP USER maintain_priv_user
+
+subtest end

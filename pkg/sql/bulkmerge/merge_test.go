@@ -15,7 +15,6 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/ccl/storageccl"
 	"github.com/cockroachdb/cockroach/pkg/cloud"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
@@ -37,6 +36,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/taskset"
 	"github.com/cockroachdb/errors"
@@ -104,7 +104,7 @@ func TestDistributedMergeProcessorFailurePropagates(t *testing.T) {
 			DistSQL: &execinfra.TestingKnobs{
 				BulkMergeTestingKnobs: &TestingKnobs{
 					RunBeforeMergeTask: func(
-						ctx context.Context, flowID execinfrapb.FlowID, taskID taskset.TaskID,
+						_ context.Context, _ *execinfra.FlowCtx, _ taskset.TaskID, _ execinfrapb.BulkMergeSpec,
 					) error {
 						return injectedErr
 					},
@@ -430,7 +430,7 @@ func verifySSTs(
 			UpperBound: sst.EndKey,
 		}
 
-		iter, err := storageccl.ExternalSSTReader(ctx, []storageccl.StoreFile{file}, nil, iterOpts)
+		iter, err := storage.ExternalSSTReader(ctx, []storage.StoreFile{file}, nil, iterOpts)
 		require.NoError(t, err)
 		defer iter.Close()
 
@@ -611,7 +611,7 @@ func TestMergeSSTsSplitsAtRowBoundaries(t *testing.T) {
 			UpperBound: sst.EndKey,
 		}
 
-		iter, err := storageccl.ExternalSSTReader(ctx, []storageccl.StoreFile{file}, nil, iterOpts)
+		iter, err := storage.ExternalSSTReader(ctx, []storage.StoreFile{file}, nil, iterOpts)
 		require.NoError(t, err)
 		defer iter.Close()
 
@@ -893,6 +893,96 @@ func TestCrossSSTDuplicateHandling(t *testing.T) {
 					"duplicate key error should reference key-2")
 			} else {
 				require.NoError(t, err, "merge without uniqueness enforcement should succeed")
+			}
+		})
+	}
+}
+
+func TestMergeMemoryMonitorSelection(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	testCases := []struct {
+		name    string
+		monitor execinfrapb.BulkMergeSpec_MemoryMonitor
+	}{
+		{
+			name:    "bulk_monitor",
+			monitor: execinfrapb.BulkMergeSpec_BULK_MONITOR,
+		},
+		{
+			name:    "backfill_monitor",
+			monitor: execinfrapb.BulkMergeSpec_BACKFILL_MONITOR,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			ctx := context.Background()
+			dir, cleanup := testutils.TempDir(t)
+			defer cleanup()
+
+			var capturedMonitor execinfrapb.BulkMergeSpec_MemoryMonitor
+			var capturedMonitorPtr *mon.BytesMonitor
+			var knobCalled bool
+			srv := serverutils.StartServerOnly(t, base.TestServerArgs{
+				ExternalIODir: dir,
+				Knobs: base.TestingKnobs{
+					DistSQL: &execinfra.TestingKnobs{
+						BulkMergeTestingKnobs: &TestingKnobs{
+							RunBeforeMergeTask: func(
+								_ context.Context, flowCtx *execinfra.FlowCtx, _ taskset.TaskID, spec execinfrapb.BulkMergeSpec,
+							) error {
+								capturedMonitor = spec.MemoryMonitor
+								capturedMonitorPtr = resolveMemoryMonitor(flowCtx, spec.MemoryMonitor)
+								knobCalled = true
+								return nil
+							},
+						},
+					},
+				},
+			})
+			defer srv.Stopper().Stop(ctx)
+			s := srv.ApplicationLayer()
+			execCfg := s.ExecutorConfig().(sql.ExecutorConfig)
+
+			tsa := newTestServerAllocator(t, ctx, execCfg)
+			fileAllocator := bulksst.NewExternalFileAllocator(tsa.es, tsa.prefixUri, s.Clock())
+			batcher := bulksst.NewUnsortedSSTBatcher(s.ClusterSettings(), fileAllocator)
+			writeTS := hlc.Timestamp{WallTime: 1}
+			writeSpecificKeys(t, ctx, batcher, []int{0, 1, 2}, writeTS, s.Codec())
+			ssts := importToMerge(fileAllocator.GetFileList())
+			spans := []roachpb.Span{{Key: roachpb.KeyMin, EndKey: roachpb.KeyMax}}
+
+			jobExecCtx, jobCleanup := sql.MakeJobExecContext(
+				ctx, "test-mon-selection", username.RootUserName(), &sql.MemoryMetrics{}, &execCfg,
+			)
+			defer jobCleanup()
+
+			mergeWriteTS := execCfg.Clock.Now()
+			_, err := Merge(ctx, jobExecCtx, ssts, spans,
+				func(instanceID base.SQLInstanceID) (string, error) {
+					return fmt.Sprintf("nodelocal://%d/merge/mon-test/", instanceID), nil
+				},
+				MergeOptions{
+					Iteration:      1,
+					MaxIterations:  1,
+					WriteTimestamp: &mergeWriteTS,
+					MemoryMonitor:  tc.monitor,
+				},
+			)
+			require.NoError(t, err)
+			require.True(t, knobCalled, "RunBeforeMergeTask was not called")
+			require.Equal(t, tc.monitor, capturedMonitor,
+				"spec.MemoryMonitor should match the enum passed via MergeOptions")
+
+			// Verify that the captured monitor pointer matches the expected
+			// server-level monitor.
+			switch tc.monitor {
+			case execinfrapb.BulkMergeSpec_BULK_MONITOR:
+				require.Same(t, execCfg.DistSQLSrv.BulkMonitor, capturedMonitorPtr)
+			default:
+				require.Same(t, execCfg.DistSQLSrv.BackfillerMonitor, capturedMonitorPtr)
 			}
 		})
 	}

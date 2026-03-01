@@ -72,7 +72,7 @@ vectorized: true
             │
             └── • lookup join (anti)
                 │ columns: (crdb_internal_id_shard_16_eq, pid)
-                │ estimated row count: 0 (missing stats)
+                │ estimated row count: 1 (missing stats)
                 │ table: t_parent@t_parent_pkey
                 │ equality cols are key
                 │ lookup condition: ((crdb_region IN ('ca-central-1', 'us-east-1')) AND (crdb_internal_id_shard_16_eq = crdb_internal_id_shard_16)) AND (pid = id)
@@ -80,7 +80,7 @@ vectorized: true
                 │
                 └── • lookup join (anti)
                     │ columns: (crdb_internal_id_shard_16_eq, pid)
-                    │ estimated row count: 0 (missing stats)
+                    │ estimated row count: 1 (missing stats)
                     │ table: t_parent@t_parent_pkey
                     │ equality cols are key
                     │ lookup condition: ((crdb_region = 'ap-southeast-2') AND (crdb_internal_id_shard_16_eq = crdb_internal_id_shard_16)) AND (pid = id)
@@ -159,7 +159,7 @@ vectorized: true
             │
             └── • lookup join (anti)
                 │ columns: (crdb_internal_id_shard_16_eq, pid)
-                │ estimated row count: 0 (missing stats)
+                │ estimated row count: 1 (missing stats)
                 │ table: t_parent@t_parent_pkey
                 │ equality cols are key
                 │ lookup condition: ((crdb_region IN ('ca-central-1', 'us-east-1')) AND (crdb_internal_id_shard_16_eq = crdb_internal_id_shard_16)) AND (pid = id)
@@ -167,7 +167,7 @@ vectorized: true
                 │
                 └── • lookup join (anti)
                     │ columns: (crdb_internal_id_shard_16_eq, pid)
-                    │ estimated row count: 0 (missing stats)
+                    │ estimated row count: 1 (missing stats)
                     │ table: t_parent@t_parent_pkey
                     │ equality cols are key
                     │ lookup condition: ((crdb_region = 'ap-southeast-2') AND (crdb_internal_id_shard_16_eq = crdb_internal_id_shard_16)) AND (pid = id)
@@ -258,7 +258,7 @@ vectorized: true
         │
         └── • lookup join (anti)
             │ columns: (crdb_internal_user_id_shard_16_eq, crdb_internal_user_id_shard_16_comp, val_cast, user_id_default, crdb_region_default)
-            │ estimated row count: 0 (missing stats)
+            │ estimated row count: 1 (missing stats)
             │ table: t_gen_random_uuid@t_gen_random_uuid_pkey
             │ equality cols are key
             │ lookup condition: ((crdb_region IN ('ca-central-1', 'us-east-1')) AND (crdb_internal_user_id_shard_16_eq = crdb_internal_user_id_shard_16)) AND (user_id_default = user_id)
@@ -266,7 +266,7 @@ vectorized: true
             │
             └── • lookup join (anti)
                 │ columns: (crdb_internal_user_id_shard_16_eq, crdb_internal_user_id_shard_16_comp, val_cast, user_id_default, crdb_region_default)
-                │ estimated row count: 0 (missing stats)
+                │ estimated row count: 1 (missing stats)
                 │ table: t_gen_random_uuid@t_gen_random_uuid_pkey
                 │ equality cols are key
                 │ lookup condition: ((crdb_region = 'ap-southeast-2') AND (crdb_internal_user_id_shard_16_eq = crdb_internal_user_id_shard_16)) AND (user_id_default = user_id)
@@ -311,7 +311,7 @@ vectorized: true
     │
     └── • distinct
         │ columns: (val_cast, user_id_default, crdb_region_default, crdb_internal_user_id_shard_16_comp)
-        │ estimated row count: 0 (missing stats)
+        │ estimated row count: 1 (missing stats)
         │ distinct on: user_id_default
         │ nulls are distinct
         │
@@ -320,7 +320,7 @@ vectorized: true
             │
             └── • lookup join (anti)
                 │ columns: (crdb_internal_user_id_shard_16_eq, crdb_internal_user_id_shard_16_comp, val_cast, user_id_default, crdb_region_default)
-                │ estimated row count: 0 (missing stats)
+                │ estimated row count: 1 (missing stats)
                 │ table: t_gen_random_uuid@t_gen_random_uuid_pkey
                 │ equality cols are key
                 │ lookup condition: ((crdb_region IN ('ca-central-1', 'us-east-1')) AND (crdb_internal_user_id_shard_16_eq = crdb_internal_user_id_shard_16)) AND (user_id_default = user_id)
@@ -456,7 +456,7 @@ vectorized: true
         │
         └── • lookup join (anti)
             │ columns: (crdb_internal_id_shard_16_eq, crdb_internal_id_shard_16_comp, crdb_region_default, column1)
-            │ estimated row count: 0 (missing stats)
+            │ estimated row count: 1 (missing stats)
             │ table: t_unique_hash_pk@t_unique_hash_pk_pkey
             │ equality cols are key
             │ lookup condition: ((crdb_region IN ('ca-central-1', 'us-east-1')) AND (crdb_internal_id_shard_16_eq = crdb_internal_id_shard_16)) AND (column1 = id)
@@ -559,7 +559,7 @@ vectorized: true
         │
         └── • lookup join (anti)
             │ columns: (crdb_internal_id_shard_16_eq, crdb_internal_id_shard_16_comp, crdb_region_default, column1)
-            │ estimated row count: 0 (missing stats)
+            │ estimated row count: 1 (missing stats)
             │ table: t_unique_hash_pk@t_unique_hash_pk_pkey
             │ equality cols are key
             │ lookup condition: ((crdb_region IN ('ca-central-1', 'us-east-1')) AND (crdb_internal_id_shard_16_eq = crdb_internal_id_shard_16)) AND (column1 = id)
@@ -1033,7 +1033,7 @@ vectorized: true
         │
         └── • lookup join (anti)
             │ columns: (crdb_internal_email_shard_16_eq, column1, column2, crdb_region_default, crdb_internal_email_shard_16_comp)
-            │ estimated row count: 0 (missing stats)
+            │ estimated row count: 1 (missing stats)
             │ table: t_unique_hash_sec_key@idx_uniq_hash_email
             │ equality cols are key
             │ lookup condition: ((crdb_region IN ('ca-central-1', 'us-east-1')) AND (crdb_internal_email_shard_16_eq = crdb_internal_email_shard_16)) AND (column2 = email)
@@ -1041,7 +1041,7 @@ vectorized: true
             │
             └── • lookup join (anti)
                 │ columns: (crdb_internal_email_shard_16_eq, column1, column2, crdb_region_default, crdb_internal_email_shard_16_comp)
-                │ estimated row count: 0 (missing stats)
+                │ estimated row count: 1 (missing stats)
                 │ table: t_unique_hash_sec_key@idx_uniq_hash_email
                 │ equality cols are key
                 │ lookup condition: ((crdb_region = 'ap-southeast-2') AND (crdb_internal_email_shard_16_eq = crdb_internal_email_shard_16)) AND (column2 = email)
@@ -1110,63 +1110,56 @@ vectorized: true
     │ render crdb_region_default: crdb_region_default
     │ render crdb_internal_email_shard_16_comp: crdb_internal_email_shard_16_comp
     │
-    └── • project
+    └── • lookup join (anti)
         │ columns: (column1, column2, crdb_region_default, crdb_internal_email_shard_16_comp)
+        │ estimated row count: 1 (missing stats)
+        │ table: t_unique_hash_sec_key@t_unique_hash_sec_key_pkey
+        │ equality cols are key
+        │ lookup condition: (crdb_region IN ('ca-central-1', 'us-east-1')) AND (column1 = id)
+        │ parallel
         │
         └── • lookup join (anti)
-            │ columns: (crdb_internal_email_shard_16_eq, column1, column2, crdb_region_default, crdb_internal_email_shard_16_comp)
-            │ estimated row count: 0 (missing stats)
-            │ table: t_unique_hash_sec_key@idx_uniq_hash_email
+            │ columns: (column1, column2, crdb_region_default, crdb_internal_email_shard_16_comp)
+            │ estimated row count: 1 (missing stats)
+            │ table: t_unique_hash_sec_key@t_unique_hash_sec_key_pkey
             │ equality cols are key
-            │ lookup condition: ((crdb_region IN ('ca-central-1', 'us-east-1')) AND (crdb_internal_email_shard_16_eq = crdb_internal_email_shard_16)) AND (column2 = email)
+            │ lookup condition: (crdb_region = 'ap-southeast-2') AND (column1 = id)
             │ parallel
             │
-            └── • lookup join (anti)
-                │ columns: (crdb_internal_email_shard_16_eq, column1, column2, crdb_region_default, crdb_internal_email_shard_16_comp)
-                │ estimated row count: 0 (missing stats)
-                │ table: t_unique_hash_sec_key@idx_uniq_hash_email
-                │ equality cols are key
-                │ lookup condition: ((crdb_region = 'ap-southeast-2') AND (crdb_internal_email_shard_16_eq = crdb_internal_email_shard_16)) AND (column2 = email)
-                │ parallel
+            └── • project
+                │ columns: (column1, column2, crdb_region_default, crdb_internal_email_shard_16_comp)
                 │
-                └── • render
-                    │ columns: (crdb_internal_email_shard_16_eq, column1, column2, crdb_region_default, crdb_internal_email_shard_16_comp)
-                    │ render crdb_internal_email_shard_16_eq: mod(fnv32(md5(crdb_internal.datums_to_bytes(column2))), 16)
-                    │ render column1: column1
-                    │ render column2: column2
-                    │ render crdb_region_default: crdb_region_default
-                    │ render crdb_internal_email_shard_16_comp: crdb_internal_email_shard_16_comp
+                └── • lookup join (anti)
+                    │ columns: (crdb_internal_email_shard_16_eq, crdb_internal_email_shard_16_comp, crdb_region_default, column1, column2)
+                    │ estimated row count: 1 (missing stats)
+                    │ table: t_unique_hash_sec_key@idx_uniq_hash_email
+                    │ equality cols are key
+                    │ lookup condition: ((crdb_region IN ('ca-central-1', 'us-east-1')) AND (crdb_internal_email_shard_16_eq = crdb_internal_email_shard_16)) AND (column2 = email)
+                    │ parallel
                     │
                     └── • lookup join (anti)
-                        │ columns: (crdb_internal_email_shard_16_comp, crdb_region_default, column1, column2)
-                        │ estimated row count: 0 (missing stats)
-                        │ table: t_unique_hash_sec_key@t_unique_hash_sec_key_pkey
+                        │ columns: (crdb_internal_email_shard_16_eq, crdb_internal_email_shard_16_comp, crdb_region_default, column1, column2)
+                        │ estimated row count: 1 (missing stats)
+                        │ table: t_unique_hash_sec_key@idx_uniq_hash_email
                         │ equality cols are key
-                        │ lookup condition: (crdb_region IN ('ca-central-1', 'us-east-1')) AND (column1 = id)
+                        │ lookup condition: ((crdb_region = 'ap-southeast-2') AND (crdb_internal_email_shard_16_eq = crdb_internal_email_shard_16)) AND (column2 = email)
                         │ parallel
                         │
-                        └── • lookup join (anti)
-                            │ columns: (crdb_internal_email_shard_16_comp, crdb_region_default, column1, column2)
-                            │ estimated row count: 1 (missing stats)
-                            │ table: t_unique_hash_sec_key@t_unique_hash_sec_key_pkey
-                            │ equality cols are key
-                            │ lookup condition: (crdb_region = 'ap-southeast-2') AND (column1 = id)
-                            │ parallel
+                        └── • render
+                            │ columns: (crdb_internal_email_shard_16_eq, crdb_internal_email_shard_16_comp, crdb_region_default, column1, column2)
+                            │ render crdb_internal_email_shard_16_eq: mod(fnv32(md5(crdb_internal.datums_to_bytes(column2))), 16)
+                            │ render crdb_internal_email_shard_16_comp: mod(fnv32(md5(crdb_internal.datums_to_bytes(column2))), 16)
+                            │ render crdb_region_default: 'ap-southeast-2'
+                            │ render column1: column1
+                            │ render column2: column2
                             │
-                            └── • render
-                                │ columns: (crdb_internal_email_shard_16_comp, crdb_region_default, column1, column2)
-                                │ render crdb_internal_email_shard_16_comp: mod(fnv32(md5(crdb_internal.datums_to_bytes(column2))), 16)
-                                │ render crdb_region_default: 'ap-southeast-2'
-                                │ render column1: column1
-                                │ render column2: column2
-                                │
-                                └── • values
-                                      columns: (column1, column2)
-                                      size: 2 columns, 2 rows
-                                      row 0, expr 0: 4321
-                                      row 0, expr 1: 'some_email'
-                                      row 1, expr 0: 8765
-                                      row 1, expr 1: 'another_email'
+                            └── • values
+                                  columns: (column1, column2)
+                                  size: 2 columns, 2 rows
+                                  row 0, expr 0: 4321
+                                  row 0, expr 1: 'some_email'
+                                  row 1, expr 0: 8765
+                                  row 1, expr 1: 'another_email'
 
 query T
 EXPLAIN (VERBOSE) INSERT INTO t_unique_hash_sec_key (id, email) VALUES (4321, 'some_email') ON CONFLICT (email) DO NOTHING;
@@ -1282,7 +1275,7 @@ vectorized: true
 │               │
 │               └── • lookup join (anti)
 │                   │ columns: (crdb_internal_email_shard_16_eq, crdb_internal_email_shard_16_comp, crdb_region_default, column1, column2)
-│                   │ estimated row count: 0 (missing stats)
+│                   │ estimated row count: 1 (missing stats)
 │                   │ table: t_unique_hash_sec_key@idx_uniq_hash_email
 │                   │ equality cols are key
 │                   │ lookup condition: ((crdb_region IN ('ca-central-1', 'us-east-1')) AND (crdb_internal_email_shard_16_eq = crdb_internal_email_shard_16)) AND (column2 = email)

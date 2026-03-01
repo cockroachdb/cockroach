@@ -9,7 +9,6 @@ import (
 	"bytes"
 	"context"
 	gosql "database/sql"
-	"errors"
 	"fmt"
 	"io"
 	"strings"
@@ -26,17 +25,20 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/workload/histogram"
 	"github.com/cockroachdb/cockroach/pkg/workload/histogram/exporter"
-	"github.com/lib/pq"
-	"github.com/stretchr/testify/require"
 )
 
 func registerInspectThoughput(r registry.Registry) {
 	// Short run: 12 nodes × 8 CPUs, 500M rows, 1 index check, ~1 hour (in v25.4)
-	r.Add(makeInspectThroughputTest(r, 12, 8, 500_000_000, 3*time.Hour, 1))
+	r.Add(makeInspectThroughputTest(r, 12, 8, 500_000_000, 3*time.Hour, 1, true))
 
 	// Long run: 12 nodes × 8 CPUs, 1B rows, 2 index checks (runs INSPECT twice: 1 index, then 2 indexes), ~5 hours (in v25.4)
 	const indexesForLongRun = 2
-	r.Add(makeInspectThroughputTest(r, 12, 8, 1_000_000_000, 11*time.Hour, indexesForLongRun))
+	r.Add(makeInspectThroughputTest(r, 12, 8, 1_000_000_000, 11*time.Hour, indexesForLongRun, true))
+
+	// Variants with admission control disabled, allowing INSPECT throughput
+	// to be measured independently of elastic CPU control.
+	r.Add(makeInspectThroughputTest(r, 12, 8, 500_000_000, 3*time.Hour, 1, false))
+	r.Add(makeInspectThroughputTest(r, 12, 8, 1_000_000_000, 11*time.Hour, indexesForLongRun, false))
 }
 
 // initInspectHistograms creates a histogram registry with multiple named metrics.
@@ -63,7 +65,11 @@ func initInspectHistograms(
 }
 
 func makeInspectThroughputTest(
-	r registry.Registry, numNodes, numCPUs, numRows int, length time.Duration, numChecks int,
+	r registry.Registry,
+	numNodes, numCPUs, numRows int,
+	length time.Duration,
+	numChecks int,
+	admissionControl bool,
 ) registry.TestSpec {
 	// Define index names that will be created.
 	indexNames := []string{
@@ -80,8 +86,13 @@ func makeInspectThroughputTest(
 		numChecks = 1
 	}
 
+	name := fmt.Sprintf("inspect/throughput/bulkingest/nodes=%d/cpu=%d/rows=%d/checks=%d", numNodes, numCPUs, numRows, numChecks)
+	if !admissionControl {
+		name += "/elastic=false"
+	}
+
 	return registry.TestSpec{
-		Name:                fmt.Sprintf("inspect/throughput/bulkingest/nodes=%d/cpu=%d/rows=%d/checks=%d", numNodes, numCPUs, numRows, numChecks),
+		Name:                name,
 		Owner:               registry.OwnerSQLFoundations,
 		Benchmark:           true,
 		Cluster:             r.MakeClusterSpec(numNodes, spec.WorkloadNode(), spec.CPU(numCPUs)),
@@ -143,6 +154,13 @@ func makeInspectThroughputTest(
 			defer db.Close()
 
 			disableRowCountValidation(t, db)
+
+			if !admissionControl {
+				t.L().Printf("Disabling admission control for INSPECT")
+				if _, err := db.ExecContext(ctx, "SET CLUSTER SETTING sql.inspect.admission_control.enabled = false"); err != nil {
+					t.Fatal(err)
+				}
+			}
 
 			// Import bulkingest data without the default index. We'll create custom
 			// indexes based on the checks parameter.
@@ -226,7 +244,7 @@ func makeInspectThroughputTest(
 				tickHistogram(cfg.metricName)
 				before := timeutil.Now()
 
-				inspectSQL := fmt.Sprintf("INSPECT TABLE bulkingest.bulkingest WITH OPTIONS INDEX (%s)", cfg.indexListSQL)
+				inspectSQL := fmt.Sprintf("INSPECT TABLE bulkingest.bulkingest WITH OPTIONS INDEX (%s), DETACHED", cfg.indexListSQL)
 				jobID := runInspectInBackground(ctx, t, db, inspectSQL)
 
 				// Tick after INSPECT completes to capture elapsed time for this specific metric.
@@ -273,54 +291,26 @@ func makeInspectThroughputTest(
 func disableRowCountValidation(t test.Test, db *gosql.DB) {
 	t.Helper()
 	t.L().Printf("Disabling automatic row count validation")
-	_, err := db.Exec("SET CLUSTER SETTING bulkio.import.row_count_validation.unsafe.mode = 'off'")
-	// If we get an error, it's because the cluster setting is considered unsafe.
-	// So, we need extract the interlock key from the error.
+	_, err := db.Exec("SET CLUSTER SETTING bulkio.import.row_count_validation.mode = 'off'")
 	if err != nil {
-		var pqErr *pq.Error
-		if !errors.As(err, &pqErr) {
-			t.Fatalf("expected pq.Error, got %T: %v", err, err)
-		}
-		if !strings.HasPrefix(pqErr.Detail, "key: ") {
-			t.Fatalf("expected error detail to start with 'key: ', got: %s", pqErr.Detail)
-		}
-		interlockKey := strings.TrimPrefix(pqErr.Detail, "key: ")
-
-		// Set the interlock key and retry.
-		if _, err := db.Exec("SET unsafe_setting_interlock_key = $1", interlockKey); err != nil {
-			t.Fatal(err)
-		}
-		if _, err := db.Exec("SET CLUSTER SETTING bulkio.import.row_count_validation.unsafe.mode = 'off'"); err != nil {
-			t.Fatal(err)
-		}
+		t.Fatal(err)
 	}
 }
 
-// runInspectInBackground runs an INSPECT command with a short statement timeout,
-// forcing it to run as a background job. It then polls the job until completion,
-// reporting progress at 10% intervals. Returns the job ID.
+// runInspectInBackground runs an INSPECT DETACHED command, which starts the
+// job in the background and returns immediately. It then looks up the job ID
+// and polls until completion, reporting progress at 10% intervals. Returns the
+// job ID.
 func runInspectInBackground(
 	ctx context.Context, t test.Test, db *gosql.DB, inspectSQL string,
 ) (jobID int64) {
-	// Set a short statement timeout to force INSPECT to run as a background job.
-	_, err := db.Exec("SET statement_timeout = '5s'")
-	require.NoError(t, err)
-
-	// Reset statement timeout after we're done.
-	defer func() {
-		_, resetErr := db.Exec("RESET statement_timeout")
-		require.NoError(t, resetErr)
-	}()
-
-	_, err = db.Exec(inspectSQL)
-
-	// This may fail if the INSPECT took longer than the statement_timeout to run.
-	// So, we tolerate only statement timeout errors here.
-	if err != nil {
-		require.ErrorContains(t, err, "statement timeout")
+	// INSPECT ... DETACHED starts the job in the background and returns
+	// immediately, avoiding the need for a statement timeout hack.
+	if _, err := db.Exec(inspectSQL); err != nil {
+		t.Fatalf("failed to start INSPECT job: %v", err)
 	}
 
-	// Get the INSPECT job ID.
+	// Look up the INSPECT job ID.
 	getJobIDSQL := `
 		SELECT job_id
 		FROM [SHOW JOBS]

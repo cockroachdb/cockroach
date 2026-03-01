@@ -43,6 +43,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts"
 	"github.com/cockroachdb/cockroach/pkg/multitenant"
 	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities"
+	clustermetricutils "github.com/cockroachdb/cockroach/pkg/obs/clustermetrics/utils"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
@@ -96,6 +97,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sessioninit"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessionmutator"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessionphase"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlinstance"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats"
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
@@ -912,6 +914,13 @@ var (
 		Unit:        metric.Unit_COUNT,
 		Category:    metric.Metadata_SQL,
 	}
+	MetaRLSPoliciesApplied = metric.Metadata{
+		Name:        "sql.rls.policies_applied.count",
+		Help:        "Number of SQL statements where row-level security policies were applied",
+		Measurement: "SQL Statements",
+		Unit:        metric.Unit_COUNT,
+		Category:    metric.Metadata_SQL,
+	}
 	MetaTxnAbort = metric.Metadata{
 		Name:        "sql.txn.abort.count",
 		Help:        "Number of SQL transaction abort errors",
@@ -1646,6 +1655,7 @@ type NodeInfo struct {
 type limitedMetricsRecorder interface {
 	GenerateNodeStatus(ctx context.Context) *statuspb.NodeStatus
 	AppRegistry() *metric.Registry
+	ClusterMetricRegistry(id roachpb.TenantID) metric.RegistryReader
 }
 
 // SystemTenantOnly wraps an object in the ExecutorConfig that is only
@@ -1685,6 +1695,13 @@ var empty = &emptySystemTenantOnly[any]{}
 // returns an error.
 func EmptySystemTenantOnly[T any]() SystemTenantOnly[T] {
 	return (*emptySystemTenantOnly[T])(empty)
+}
+
+// ClusterMetricAdder registers metrics for periodic flushing to
+// system.cluster_metrics. Implemented by cmwriter.Writer.
+type ClusterMetricAdder interface {
+	AddMetric(m metric.Iterable)
+	AddMetricStruct(s interface{})
 }
 
 // An ExecutorConfig encompasses the auxiliary objects and configuration
@@ -1733,6 +1750,10 @@ type ExecutorConfig struct {
 	RowMetrics           *rowinfra.Metrics
 	InternalRowMetrics   *rowinfra.Metrics
 
+	// ClusterMetricsWriter registers metrics for periodic flushing to
+	// system.cluster_metrics. Implemented by cmwriter.Writer.
+	ClusterMetricsWriter ClusterMetricAdder
+
 	TestingKnobs                         ExecutorTestingKnobs
 	UpgradeTestingKnobs                  *upgradebase.TestingKnobs
 	PGWireTestingKnobs                   *PGWireTestingKnobs
@@ -1756,6 +1777,7 @@ type ExecutorConfig struct {
 	ExternalConnectionTestingKnobs       *externalconn.TestingKnobs
 	EventLogTestingKnobs                 *eventlog.EventLogTestingKnobs
 	TableMetadataKnobs                   *tablemetadatacache_util.TestingKnobs
+	ClusterMetricsKnobs                  *clustermetricutils.TestingKnobs
 
 	// HistogramWindowInterval is (server.Config).HistogramWindowInterval.
 	HistogramWindowInterval time.Duration
@@ -2304,7 +2326,7 @@ type StreamingTestingKnobs struct {
 
 	SpanConfigRangefeedCacheKnobs *rangefeedcache.TestingKnobs
 
-	OnGetSQLInstanceInfo func(cluster *roachpb.NodeDescriptor) *roachpb.NodeDescriptor
+	OnGetSQLInstanceInfo func(cluster sqlinstance.InstanceInfo) sqlinstance.InstanceInfo
 
 	FailureRate uint32
 }

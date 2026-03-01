@@ -256,11 +256,11 @@ func (w *lockTableWaiterImpl) WaitOn(
 				if req.LockTimeout != 0 {
 					return doWithTimeoutAndFallback(
 						ctx, req.LockTimeout,
-						func(ctx context.Context) *Error { return w.pushLockTxn(ctx, req, state) },
-						func(ctx context.Context) *Error { return w.pushLockTxnAfterTimeout(ctx, req, state) },
+						func(ctx context.Context) *Error { return w.pushLockTxn(ctx, req, state, guard) },
+						func(ctx context.Context) *Error { return w.pushLockTxnAfterTimeout(ctx, req, state, guard) },
 					)
 				}
-				return w.pushLockTxn(ctx, req, state)
+				return w.pushLockTxn(ctx, req, state, guard)
 
 			case waitSelf:
 				// Another request from the same transaction has claimed the lock (but
@@ -357,7 +357,7 @@ func (w *lockTableWaiterImpl) WaitOn(
 					// edges in the local portion of its dependency graph for deadlock
 					// detection, as doing so is cheaper that finding out the same
 					// information using (QueryTxnRequest) RPCs.
-					err = w.pushLockTxn(pushCtx, req, timerWaitingState)
+					err = w.pushLockTxn(pushCtx, req, timerWaitingState, guard)
 				} else {
 					// The request conflicts with another request that's claimed an unheld
 					// lock. The conflicting request may exit the lock table without
@@ -383,7 +383,7 @@ func (w *lockTableWaiterImpl) WaitOn(
 			pushNoWait := func(ctx context.Context) *Error {
 				// Resolve the conflict without waiting by pushing the lock holder's
 				// transaction.
-				return w.pushLockTxnAfterTimeout(ctx, req, timerWaitingState)
+				return w.pushLockTxnAfterTimeout(ctx, req, timerWaitingState, guard)
 			}
 
 			// We push with or without the option to wait on the conflict,
@@ -391,7 +391,7 @@ func (w *lockTableWaiterImpl) WaitOn(
 			// and depending on the wait policy.
 			var err *Error
 			if req.WaitPolicy == lock.WaitPolicy_Error {
-				err = w.pushLockTxn(ctx, req, timerWaitingState)
+				err = w.pushLockTxn(ctx, req, timerWaitingState, guard)
 			} else if !lockDeadline.IsZero() {
 				untilDeadline := w.timeUntilDeadline(lockDeadline)
 				if untilDeadline == 0 {
@@ -434,7 +434,7 @@ func (w *lockTableWaiterImpl) WaitOn(
 // expect to have an updated waitingState. Otherwise, the method returns with a
 // WriteIntentError and without blocking on the lock holder transaction.
 func (w *lockTableWaiterImpl) pushLockTxn(
-	ctx context.Context, req Request, ws waitingState,
+	ctx context.Context, req Request, ws waitingState, guard lockTableGuard,
 ) *Error {
 	if w.disableTxnPushing {
 		return newWriteIntentErr(req, ws, reasonWaitPolicy)
@@ -442,14 +442,14 @@ func (w *lockTableWaiterImpl) pushLockTxn(
 
 	// Construct the request header and determine which form of push to use.
 	h := w.pushHeader(req)
+	beforePushObs := roachpb.ObservedTimestamp{
+		NodeID:    w.nodeDesc.NodeID,
+		Timestamp: w.clock.NowAsClockTimestamp(),
+	}
+
 	var pushType kvpb.PushTxnType
-	var beforePushObs roachpb.ObservedTimestamp
 	if ws.guardStrength == lock.None {
 		pushType = kvpb.PUSH_TIMESTAMP
-		beforePushObs = roachpb.ObservedTimestamp{
-			NodeID:    w.nodeDesc.NodeID,
-			Timestamp: w.clock.NowAsClockTimestamp(),
-		}
 		// TODO(nvanbenschoten): because information about the local_timestamp
 		// leading the MVCC timestamp of an intent is lost, we also need to push
 		// the intent up to the top of the transaction's local uncertainty limit
@@ -602,6 +602,12 @@ func (w *lockTableWaiterImpl) pushLockTxn(
 		// after the reader's read timestamp surpasses its global uncertainty limit.
 		resolve.ClockWhilePending = beforePushObs
 	}
+	// If the guard resolves intents virtually, skip the physical resolution.
+	// The intent is already queued in the guard's toResolve list and will be
+	// resolved virtually during evaluation.
+	if guard.VirtuallyResolvesIntents() {
+		return nil
+	}
 	logResolveIntent(ctx, resolve)
 	opts := intentresolver.ResolveOptions{Poison: true, AdmissionHeader: req.AdmissionHeader}
 	return w.ir.ResolveIntent(ctx, resolve, opts)
@@ -613,10 +619,10 @@ func (w *lockTableWaiterImpl) pushLockTxn(
 // elapsed, and returns a WriteIntentErrors with a LOCK_TIMEOUT reason if the
 // lock holder is not abandoned.
 func (w *lockTableWaiterImpl) pushLockTxnAfterTimeout(
-	ctx context.Context, req Request, ws waitingState,
+	ctx context.Context, req Request, ws waitingState, guard lockTableGuard,
 ) *Error {
 	req.WaitPolicy = lock.WaitPolicy_Error
-	err := w.pushLockTxn(ctx, req, ws)
+	err := w.pushLockTxn(ctx, req, ws, guard)
 	if _, ok := err.GetDetail().(*kvpb.WriteIntentError); ok {
 		err = newWriteIntentErr(req, ws, reasonLockTimeout)
 	}
@@ -941,8 +947,9 @@ func (c *finalizedTxnCache) insertFrontLocked(txn *roachpb.Transaction) {
 //
 // The zero value of this struct is ready for use.
 type pendingTxnCache struct {
-	mu   syncutil.Mutex
-	txns [8]*pendingTxnCacheEntry // [MRU, ..., LRU]
+	mu     syncutil.Mutex
+	nodeID roachpb.NodeID           // set on first add, asserted thereafter
+	txns   [8]*pendingTxnCacheEntry // [MRU, ..., LRU]
 }
 
 // pendingTxnCacheEntry holds a pending transaction and the clock observation
@@ -968,11 +975,22 @@ func (c *pendingTxnCache) get(id uuid.UUID) (*pendingTxnCacheEntry, bool) {
 func (c *pendingTxnCache) add(
 	txn *roachpb.Transaction, clockObservation roachpb.ObservedTimestamp,
 ) {
+	assert(!clockObservation.Timestamp.IsEmpty(), "pendingTxnCache: clock observation must be non-empty")
+
 	c.mu.Lock()
 	defer c.mu.Unlock()
+
+	// All observations must come from the same node.
+	if c.nodeID == 0 {
+		c.nodeID = clockObservation.NodeID
+	}
+	assert(clockObservation.NodeID == c.nodeID, "pendingTxnCache: unexpected NodeID")
+
 	if idx := c.getIdxLocked(txn.ID); idx >= 0 {
 		currentEntry := c.txns[idx]
 		newEntry := *currentEntry
+		assert(!currentEntry.ClockWhilePending.Timestamp.IsEmpty(), "pendingTxnCache: cache entry without clock observation")
+		assert(clockObservation.NodeID == currentEntry.ClockWhilePending.NodeID, "pendingTxnCache: NodeID mismatch on update")
 
 		// Only update the cached transaction if the inbound copy has a newer
 		// WriteTimestamp.
@@ -981,11 +999,9 @@ func (c *pendingTxnCache) add(
 		}
 
 		// Always keep the latest ClockWhilePending available.
-		if !clockObservation.Timestamp.IsEmpty() &&
-			currentEntry.ClockWhilePending.Timestamp.Less(clockObservation.Timestamp) {
+		if currentEntry.ClockWhilePending.Timestamp.Less(clockObservation.Timestamp) {
 			newEntry.ClockWhilePending = clockObservation
 		}
-
 		c.moveFrontLocked(&newEntry, idx)
 	} else {
 		c.insertFrontLocked(&pendingTxnCacheEntry{Txn: txn, ClockWhilePending: clockObservation})
@@ -995,6 +1011,7 @@ func (c *pendingTxnCache) add(
 func (c *pendingTxnCache) clear() {
 	c.mu.Lock()
 	defer c.mu.Unlock()
+	c.nodeID = 0
 	for i := range c.txns {
 		c.txns[i] = nil
 	}

@@ -12,6 +12,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/util/admission"
 	"github.com/cockroachdb/cockroach/pkg/util/cancelchecker"
 )
 
@@ -28,6 +29,15 @@ type CancelChecker struct {
 	// Number of times check() has been called since last context cancellation
 	// check.
 	callsSinceLastCheck uint32
+
+	// sqlCPUHandle is the SQL-level CPU handle from which a per-goroutine
+	// handle is lazily registered on the first CheckEveryCall. Registration
+	// is deferred from Init to the first check because Init and Next may
+	// run on different goroutines (e.g. ParallelUnorderedSynchronizer
+	// initializes operator trees on the main goroutine but runs them on
+	// child goroutines).
+	sqlCPUHandle *admission.SQLCPUHandle
+	cpuHandle    *admission.GoroutineCPUHandle
 }
 
 var _ colexecop.Operator = &CancelChecker{}
@@ -47,6 +57,7 @@ func (c *CancelChecker) Init(ctx context.Context) {
 		// Check*() methods, and the input remains nil then.
 		c.Input.Init(c.Ctx)
 	}
+	c.sqlCPUHandle = admission.SQLCPUHandleFromContext(ctx)
 }
 
 // Next is part of colexecop.Operator interface.
@@ -81,5 +92,13 @@ func (c *CancelChecker) CheckEveryCall() {
 	case <-c.Ctx.Done():
 		colexecerror.ExpectedError(cancelchecker.QueryCanceledError)
 	default:
+	}
+	if c.cpuHandle == nil && c.sqlCPUHandle != nil {
+		c.cpuHandle = c.sqlCPUHandle.RegisterGoroutine()
+	}
+	if c.cpuHandle != nil {
+		if err := c.cpuHandle.MeasureAndAdmit(c.Ctx); err != nil {
+			colexecerror.ExpectedError(cancelchecker.QueryCanceledError)
+		}
 	}
 }

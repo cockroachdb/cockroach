@@ -17,6 +17,14 @@ const (
 	TaskServiceName = "health"
 )
 
+const (
+	// Options defaults
+	DefaultHeartbeatInterval = 1 * time.Second
+	DefaultInstanceTimeout   = 3 * time.Second
+	DefaultCleanupInterval   = 1 * time.Hour
+	DefaultCleanupRetention  = 24 * time.Hour
+)
+
 // IHealthService defines the health-specific interface.
 type IHealthService interface {
 	// Health-specific methods only
@@ -28,27 +36,12 @@ type IHealthService interface {
 	CleanupDeadInstances(ctx context.Context, l *logger.Logger, instanceTimeout, cleanupRetention time.Duration) (int, error)
 }
 
-// FileInfo contains information about a single file.
-type FileInfo struct {
-	Path         string
-	SizeBytes    int64
-	ModifiedTime string // ISO 8601 format
-	IsDir        bool
-}
-
-// DiskUsageDiagnostics contains disk usage information for a directory.
-type DiskUsageDiagnostics struct {
-	Path        string
-	TotalBytes  uint64
-	UsedBytes   uint64
-	AvailBytes  uint64
-	UsedPercent float64
-	FileCount   int
-	Files       []*FileInfo
-	Error       string
-}
-
-// TempDirsDiagnostics contains diagnostics for temporary directories.
-type TempDirsDiagnostics struct {
-	Directories []*DiskUsageDiagnostics
+// Options configures the health service.
+type Options struct {
+	HeartbeatInterval time.Duration // Default: 1s
+	InstanceTimeout   time.Duration // Default: 3s
+	CleanupInterval   time.Duration // Default: 1h
+	CleanupRetention  time.Duration // Default: 24h
+	WorkersEnabled    bool          // Whether task workers are enabled
+	Mode              health.Mode   // Service mode: APIOnly, WorkersOnly, APIWithWorkers
 }

@@ -8,6 +8,7 @@ package blobs
 import (
 	"bytes"
 	"context"
+	"crypto/rand"
 	"io"
 	"net"
 	"os"
@@ -19,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -49,6 +51,21 @@ func setUpService(
 	remoteNodeID roachpb.NodeID,
 	localExternalDir string,
 	remoteExternalDir string,
+) BlobClientFactory {
+	return setUpServiceWithSettings(
+		t, rpcContext, localNodeID, remoteNodeID,
+		localExternalDir, remoteExternalDir, cluster.MakeTestingClusterSettings(),
+	)
+}
+
+func setUpServiceWithSettings(
+	t testing.TB,
+	rpcContext *rpc.Context,
+	localNodeID roachpb.NodeID,
+	remoteNodeID roachpb.NodeID,
+	localExternalDir string,
+	remoteExternalDir string,
+	st *cluster.Settings,
 ) BlobClientFactory {
 	ctx := context.Background()
 	s, err := rpc.NewServer(ctx, rpcContext)
@@ -87,6 +104,7 @@ func setUpService(
 		localDialer,
 		localExternalDir,
 		true, /* allowLocalFastpath */
+		st,
 	)
 }
 
@@ -571,4 +589,43 @@ func TestBlobClientReadFileClose(t *testing.T) {
 	require.NoError(t, reader.Close(context.Background()))
 
 	<-mock.ctx.Done()
+}
+
+func TestFlowControlledStreamLargeFile(t *testing.T) {
+	localNodeID := roachpb.NodeID(1)
+	remoteNodeID := roachpb.NodeID(2)
+	localExternalDir, remoteExternalDir, stopper, cleanUpFn := createTestResources(t)
+	defer cleanUpFn()
+
+	ctx := context.Background()
+	clock := hlc.NewClockForTesting(nil)
+	rpcContext := rpc.NewInsecureTestingContext(ctx, clock, stopper)
+	rpcContext.TestingAllowNamedRPCToAnonymousServer = true
+
+	// Use a small flow control window to force multiple ack round-trips.
+	st := cluster.MakeTestingClusterSettings()
+	FlowControlWindow.Override(ctx, &st.SV, 2)
+
+	blobClientFactory := setUpServiceWithSettings(
+		t, rpcContext, localNodeID, remoteNodeID,
+		localExternalDir, remoteExternalDir, st,
+	)
+
+	// Create a file larger than window * ChunkSize (2 * 128KB = 256KB).
+	// 5 chunks = 640KB, requiring multiple ack round-trips.
+	fileSize := 5 * ChunkSize
+	fileContent := make([]byte, fileSize)
+	_, err := rand.Read(fileContent)
+	require.NoError(t, err)
+	writeTestFile(t, filepath.Join(remoteExternalDir, "large.bin"), fileContent)
+
+	blobClient, err := blobClientFactory(ctx, remoteNodeID)
+	require.NoError(t, err)
+
+	reader, _, err := blobClient.ReadFile(ctx, "large.bin", 0)
+	require.NoError(t, err)
+
+	content, err := ioctx.ReadAll(ctx, reader)
+	require.NoError(t, err)
+	require.Equal(t, fileContent, content)
 }

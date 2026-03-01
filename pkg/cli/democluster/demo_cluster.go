@@ -1887,19 +1887,20 @@ func (c *transientCluster) runWorkload(
 	return nil
 }
 
-// EnableEnterprise enables enterprise features if available in this build.
-func (c *transientCluster) EnableEnterprise(ctx context.Context) (func(), error) {
+// EnableEnterprise enables enterprise features for this demo.
+func (c *transientCluster) EnableEnterprise(ctx context.Context) error {
 	purl, err := c.getNetworkURLForServer(ctx, 0, true /* includeAppName */, forSystemTenant)
 	if err != nil {
-		return nil, err
+		return err
 	}
 	connURL := purl.ToPQ().String()
 	db, err := gosql.Open("postgres", connURL)
 	if err != nil {
-		return nil, err
+		return err
 	}
 	defer db.Close()
-	return EnableEnterprise(db, demoOrg)
+	_, err = db.Exec(`SET CLUSTER SETTING cluster.organization = $1`, demoOrg)
+	return err
 }
 
 // sockForServer generates the metadata for a unix socket for the given node.

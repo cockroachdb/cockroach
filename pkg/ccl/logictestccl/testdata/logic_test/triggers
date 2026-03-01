@@ -913,6 +913,349 @@ DROP FUNCTION depth_a_tf, depth_b_tf, depth_c_tf;
 
 subtest end
 
+# ==============================================================================
+# Test replacing a trigger function with active triggers (issue #134555).
+# The new function body should take effect for all dependent triggers.
+# ==============================================================================
+
+subtest replace_trigger_function_with_active_triggers
+
+skipif config local-mixed-25.4 local-mixed-26.1
+statement ok
+CREATE TABLE t_replace (a INT PRIMARY KEY, b TEXT);
+
+skipif config local-mixed-25.4 local-mixed-26.1
+statement ok
+CREATE TABLE audit_log (op TEXT, val TEXT);
+
+# Create a trigger function that logs 'v1' to identify the original version.
+skipif config local-mixed-25.4 local-mixed-26.1
+statement ok
+CREATE FUNCTION tf_replace() RETURNS TRIGGER LANGUAGE PLpgSQL AS $$
+  BEGIN
+    INSERT INTO audit_log VALUES (tg_op, 'v1');
+    RETURN NEW;
+  END
+$$;
+
+skipif config local-mixed-25.4 local-mixed-26.1
+statement ok
+CREATE TRIGGER tr_replace BEFORE INSERT ON t_replace FOR EACH ROW EXECUTE FUNCTION tf_replace();
+
+# Verify the trigger fires with the original function body.
+skipif config local-mixed-25.4 local-mixed-26.1
+statement ok
+INSERT INTO t_replace VALUES (1, 'hello');
+
+skipif config local-mixed-25.4 local-mixed-26.1
+query TT
+SELECT * FROM audit_log ORDER BY op;
+----
+INSERT  v1
+
+skipif config local-mixed-25.4 local-mixed-26.1
+statement count 1
+DELETE FROM audit_log;
+
+# Replace the trigger function with a new body that logs 'v2'.
+skipif config local-mixed-25.4 local-mixed-26.1
+statement ok
+CREATE OR REPLACE FUNCTION tf_replace() RETURNS TRIGGER LANGUAGE PLpgSQL AS $$
+  BEGIN
+    INSERT INTO audit_log VALUES (tg_op, 'v2');
+    RETURN NEW;
+  END
+$$;
+
+# Verify the trigger fires with the new function body.
+skipif config local-mixed-25.4 local-mixed-26.1
+statement ok
+INSERT INTO t_replace VALUES (2, 'world');
+
+skipif config local-mixed-25.4 local-mixed-26.1
+query TT
+SELECT * FROM audit_log ORDER BY op;
+----
+INSERT  v2
+
+skipif config local-mixed-25.4 local-mixed-26.1
+statement ok
+DROP TRIGGER tr_replace ON t_replace;
+
+skipif config local-mixed-25.4 local-mixed-26.1
+statement ok
+DROP TABLE t_replace, audit_log;
+
+skipif config local-mixed-25.4 local-mixed-26.1
+statement ok
+DROP FUNCTION tf_replace;
+
+subtest end
+
+subtest replace_trigger_function_multiple_triggers
+
+skipif config local-mixed-25.4 local-mixed-26.1
+statement ok
+CREATE TABLE t_m1 (a INT PRIMARY KEY);
+
+skipif config local-mixed-25.4 local-mixed-26.1
+statement ok
+CREATE TABLE t_m2 (a INT PRIMARY KEY);
+
+skipif config local-mixed-25.4 local-mixed-26.1
+statement ok
+CREATE TABLE audit_log (src TEXT, val TEXT);
+
+skipif config local-mixed-25.4 local-mixed-26.1
+statement ok
+CREATE FUNCTION tf_multi() RETURNS TRIGGER LANGUAGE PLpgSQL AS $$
+  BEGIN
+    INSERT INTO audit_log VALUES (tg_table_name, 'v1');
+    RETURN NEW;
+  END
+$$;
+
+skipif config local-mixed-25.4 local-mixed-26.1
+statement ok
+CREATE TRIGGER tr1 BEFORE INSERT ON t_m1 FOR EACH ROW EXECUTE FUNCTION tf_multi();
+
+skipif config local-mixed-25.4 local-mixed-26.1
+statement ok
+CREATE TRIGGER tr2 BEFORE INSERT ON t_m2 FOR EACH ROW EXECUTE FUNCTION tf_multi();
+
+skipif config local-mixed-25.4 local-mixed-26.1
+statement ok
+INSERT INTO t_m1 VALUES (1);
+
+skipif config local-mixed-25.4 local-mixed-26.1
+statement ok
+INSERT INTO t_m2 VALUES (1);
+
+skipif config local-mixed-25.4 local-mixed-26.1
+query TT rowsort
+SELECT * FROM audit_log;
+----
+t_m1  v1
+t_m2  v1
+
+skipif config local-mixed-25.4 local-mixed-26.1
+statement count 2
+DELETE FROM audit_log;
+
+# Replace the function — both triggers should pick up the new body.
+skipif config local-mixed-25.4 local-mixed-26.1
+statement ok
+CREATE OR REPLACE FUNCTION tf_multi() RETURNS TRIGGER LANGUAGE PLpgSQL AS $$
+  BEGIN
+    INSERT INTO audit_log VALUES (tg_table_name, 'v2');
+    RETURN NEW;
+  END
+$$;
+
+skipif config local-mixed-25.4 local-mixed-26.1
+statement ok
+INSERT INTO t_m1 VALUES (2);
+
+skipif config local-mixed-25.4 local-mixed-26.1
+statement ok
+INSERT INTO t_m2 VALUES (2);
+
+skipif config local-mixed-25.4 local-mixed-26.1
+query TT rowsort
+SELECT * FROM audit_log;
+----
+t_m1  v2
+t_m2  v2
+
+skipif config local-mixed-25.4 local-mixed-26.1
+statement ok
+DROP TRIGGER tr1 ON t_m1;
+
+skipif config local-mixed-25.4 local-mixed-26.1
+statement ok
+DROP TRIGGER tr2 ON t_m2;
+
+skipif config local-mixed-25.4 local-mixed-26.1
+statement ok
+DROP TABLE t_m1, t_m2, audit_log;
+
+skipif config local-mixed-25.4 local-mixed-26.1
+statement ok
+DROP FUNCTION tf_multi;
+
+subtest end
+
+# ==============================================================================
+# Test that replacing a trigger function correctly updates dependency tracking.
+# After replacement, new deps should be tracked and old deps should be released.
+# ==============================================================================
+
+subtest replace_trigger_function_deps
+
+skipif config local-mixed-25.4 local-mixed-26.1
+statement ok
+CREATE TYPE my_enum AS ENUM ('a', 'b');
+
+skipif config local-mixed-25.4 local-mixed-26.1
+statement ok
+CREATE TABLE t_deps (a INT PRIMARY KEY);
+
+skipif config local-mixed-25.4 local-mixed-26.1
+statement ok
+CREATE TABLE log_deps (val TEXT);
+
+skipif config local-mixed-25.4 local-mixed-26.1
+statement ok
+CREATE TABLE other_log (val TEXT);
+
+# Start with a simple trigger function that does not reference the type or other_log.
+skipif config local-mixed-25.4 local-mixed-26.1
+statement ok
+CREATE FUNCTION tf_deps() RETURNS TRIGGER LANGUAGE PLpgSQL AS $$
+  BEGIN
+    INSERT INTO log_deps VALUES ('fired');
+    RETURN NEW;
+  END
+$$;
+
+skipif config local-mixed-25.4 local-mixed-26.1
+statement ok
+CREATE TRIGGER tr_deps BEFORE INSERT ON t_deps FOR EACH ROW EXECUTE FUNCTION tf_deps();
+
+# The type and other_log are not yet referenced, so they can be dropped.
+# (Don't actually drop them — just verify no dependency error.)
+
+# Replace the function to reference the enum type and other_log table.
+skipif config local-mixed-25.4 local-mixed-26.1
+statement ok
+CREATE OR REPLACE FUNCTION tf_deps() RETURNS TRIGGER LANGUAGE PLpgSQL AS $$
+  BEGIN
+    INSERT INTO other_log VALUES ('a'::my_enum::TEXT);
+    RETURN NEW;
+  END
+$$;
+
+# Verify the trigger fires with the new body.
+skipif config local-mixed-25.4 local-mixed-26.1
+statement ok
+INSERT INTO t_deps VALUES (1);
+
+skipif config local-mixed-25.4 local-mixed-26.1
+query T
+SELECT * FROM other_log;
+----
+a
+
+# Now the type and other_log are referenced — dropping them should be blocked.
+skipif config local-mixed-25.4 local-mixed-26.1
+statement error pq: cannot drop type "my_enum" because other objects \(\[test.public.t_deps\]\) still depend on it
+DROP TYPE my_enum;
+
+skipif config local-mixed-25.4 local-mixed-26.1
+statement error pgcode 2BP01 pq: cannot drop table other_log because other objects depend on it
+DROP TABLE other_log;
+
+# log_deps is no longer referenced after the replace, so it can be dropped.
+skipif config local-mixed-25.4 local-mixed-26.1
+statement ok
+DROP TABLE log_deps;
+
+# Clean up.
+skipif config local-mixed-25.4 local-mixed-26.1
+statement ok
+DROP TRIGGER tr_deps ON t_deps;
+
+skipif config local-mixed-25.4 local-mixed-26.1
+statement ok
+DROP TABLE t_deps, other_log;
+
+skipif config local-mixed-25.4 local-mixed-26.1
+statement ok
+DROP FUNCTION tf_deps;
+
+skipif config local-mixed-25.4 local-mixed-26.1
+statement ok
+DROP TYPE my_enum;
+
+subtest end
+
+# Regression test: replacing a trigger function that only changes relation
+# references (no type or routine changes) must update the trigger's forward
+# references correctly.
+subtest replace_trigger_function_relation_deps_only
+
+skipif config local-mixed-25.4 local-mixed-26.1
+statement ok
+CREATE TABLE t_rel (a INT PRIMARY KEY);
+
+skipif config local-mixed-25.4 local-mixed-26.1
+statement ok
+CREATE TABLE log1 (val TEXT);
+
+skipif config local-mixed-25.4 local-mixed-26.1
+statement ok
+CREATE TABLE log2 (val TEXT);
+
+# Simple trigger function referencing log1.
+skipif config local-mixed-25.4 local-mixed-26.1
+statement ok
+CREATE FUNCTION tf_rel() RETURNS TRIGGER LANGUAGE PLpgSQL AS $$
+  BEGIN
+    INSERT INTO log1 VALUES ('fired');
+    RETURN NEW;
+  END
+$$;
+
+skipif config local-mixed-25.4 local-mixed-26.1
+statement ok
+CREATE TRIGGER tr_rel BEFORE INSERT ON t_rel FOR EACH ROW EXECUTE FUNCTION tf_rel();
+
+# Replace function to reference log2 instead (no type changes — only relation change).
+skipif config local-mixed-25.4 local-mixed-26.1
+statement ok
+CREATE OR REPLACE FUNCTION tf_rel() RETURNS TRIGGER LANGUAGE PLpgSQL AS $$
+  BEGIN
+    INSERT INTO log2 VALUES ('replaced');
+    RETURN NEW;
+  END
+$$;
+
+# Verify the trigger fires with the new body.
+skipif config local-mixed-25.4 local-mixed-26.1
+statement ok
+INSERT INTO t_rel VALUES (1);
+
+skipif config local-mixed-25.4 local-mixed-26.1
+query T
+SELECT * FROM log2;
+----
+replaced
+
+# log1 is no longer referenced, so it should be droppable.
+skipif config local-mixed-25.4 local-mixed-26.1
+statement ok
+DROP TABLE log1;
+
+# log2 is now referenced — dropping should be blocked.
+skipif config local-mixed-25.4 local-mixed-26.1
+statement error pgcode 2BP01 pq: cannot drop table log2 because other objects depend on it
+DROP TABLE log2;
+
+# Clean up.
+skipif config local-mixed-25.4 local-mixed-26.1
+statement ok
+DROP TRIGGER tr_rel ON t_rel;
+
+skipif config local-mixed-25.4 local-mixed-26.1
+statement ok
+DROP TABLE t_rel, log2;
+
+skipif config local-mixed-25.4 local-mixed-26.1
+statement ok
+DROP FUNCTION tf_rel;
+
+subtest end
+
 subtest regression_134630
 
 statement ok
@@ -4261,7 +4604,13 @@ select "eventType" from system.eventlog WHERE "eventType" <> 'finish_schema_chan
 ----
 create_trigger
 
+# Replacing a trigger function with active triggers is now supported (#134555).
+onlyif config local-mixed-25.4 local-mixed-26.1
 statement error pgcode 0A000 pq: unimplemented: cannot replace a trigger function with an active trigger
+CREATE OR REPLACE FUNCTION f() RETURNS TRIGGER LANGUAGE PLpgSQL AS $$ BEGIN RETURN NEW; END $$;
+
+skipif config local-mixed-25.4 local-mixed-26.1
+statement ok
 CREATE OR REPLACE FUNCTION f() RETURNS TRIGGER LANGUAGE PLpgSQL AS $$ BEGIN RETURN NEW; END $$;
 
 statement ok
@@ -4272,10 +4621,6 @@ query T retry
 select "eventType" from system.eventlog order by timestamp desc limit 1;
 ----
 drop_trigger
-
-# CREATE OR REPLACE still works if there are no referencing triggers.
-statement ok
-CREATE OR REPLACE FUNCTION f() RETURNS TRIGGER LANGUAGE PLpgSQL AS $$ BEGIN RETURN NEW; END $$;
 
 # ==============================================================================
 # Test that descriptor backreferences are cleaned up.

@@ -72,6 +72,10 @@ message ChangeAggregatorSpec {
   // SchemaTS is, during changefeed startup or resumption, the time at which the
   // aggregator's targets' schemas should be used from.
   optional util.hlc.Timestamp schema_ts = 12 [(gogoproto.customname) = "SchemaTS"];
+
+  // AggregatorID is a unique identifier for this aggregator processor. It
+  // is used only for aggregating range stats.
+  optional int32 aggregator_id = 13 [(gogoproto.nullable) = false, (gogoproto.customname) = "AggregatorID"];
 }
 
 // ChangeFrontierSpec is the specification for a processor that receives
@@ -114,6 +118,9 @@ message ChangeFrontierSpec {
   // SchemaTS is, during changefeed startup or resumption, the time at which the
   // change frontier's targets' schemas should be used from.
   optional util.hlc.Timestamp schema_ts = 9 [(gogoproto.customname) = "SchemaTS"];
+
+  // NumAggregators is the number of aggregator processors in the job.
+  optional int32 num_aggregators = 10 [(gogoproto.nullable) = false];
 }
 
 // ChangefeedProgressConfig is the configuration for the changefeed's progress tracking.

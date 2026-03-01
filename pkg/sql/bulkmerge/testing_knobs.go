@@ -9,6 +9,7 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/util/taskset"
 )
@@ -19,8 +20,9 @@ type TestingKnobs struct {
 	// a specific task. Returning an error causes the processor to fail the task.
 	RunBeforeMergeTask func(
 		ctx context.Context,
-		flowID execinfrapb.FlowID,
+		flowCtx *execinfra.FlowCtx,
 		taskID taskset.TaskID,
+		spec execinfrapb.BulkMergeSpec,
 	) error
 
 	// InjectDuplicateKey is called for each key during merge. Returning true

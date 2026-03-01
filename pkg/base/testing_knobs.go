@@ -61,4 +61,5 @@ type TestingKnobs struct {
 	PolicyRefresherTestingKnobs    ModuleTestingKnobs
 	NodeCapacityProviderKnobs      ModuleTestingKnobs
 	CloudStorageKnobs              ModuleTestingKnobs
+	ClusterMetricsKnobs            ModuleTestingKnobs
 }

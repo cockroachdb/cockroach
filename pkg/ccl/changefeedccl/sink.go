@@ -148,7 +148,7 @@ func getEventSink(
 	m metricsRecorder,
 	targets changefeedbase.Targets,
 ) (EventSink, error) {
-	return getAndDialSink(ctx, serverCfg, feedCfg, timestampOracle, user, jobID, m, targets)
+	return getAndDialSink(ctx, serverCfg, feedCfg, timestampOracle, user, jobID, m, targets, false /* initialValidation */)
 }
 
 func getResolvedTimestampSink(
@@ -161,7 +161,7 @@ func getResolvedTimestampSink(
 	m metricsRecorder,
 	targets changefeedbase.Targets,
 ) (ResolvedTimestampSink, error) {
-	return getAndDialSink(ctx, serverCfg, feedCfg, timestampOracle, user, jobID, m, targets)
+	return getAndDialSink(ctx, serverCfg, feedCfg, timestampOracle, user, jobID, m, targets, false /* initialValidation */)
 }
 
 func getAndDialSink(
@@ -173,8 +173,9 @@ func getAndDialSink(
 	jobID jobspb.JobID,
 	m metricsRecorder,
 	targets changefeedbase.Targets,
+	initialValidation bool,
 ) (Sink, error) {
-	sink, err := getSink(ctx, serverCfg, feedCfg, timestampOracle, user, jobID, m, targets)
+	sink, err := getSink(ctx, serverCfg, feedCfg, timestampOracle, user, jobID, m, targets, initialValidation)
 	if err != nil {
 		return nil, err
 	}
@@ -207,10 +208,16 @@ func getSink(
 	jobID jobspb.JobID,
 	m metricsRecorder,
 	targets changefeedbase.Targets,
+	initialValidation bool,
 ) (Sink, error) {
 	u, err := url.Parse(feedCfg.SinkURI)
 	if err != nil {
 		return nil, err
+	}
+	if initialValidation {
+		if err := changefeedbase.ValidateSinkURIParams(u); err != nil {
+			return nil, err
+		}
 	}
 	if scheme, ok := changefeedbase.NoLongerExperimental[u.Scheme]; ok {
 		u.Scheme = scheme

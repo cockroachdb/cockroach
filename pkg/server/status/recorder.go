@@ -286,6 +286,20 @@ func (mr *MetricsRecorder) StoreRegistry(id roachpb.StoreID) *metric.Registry {
 	return mr.mu.storeRegistries[id]
 }
 
+// ClusterMetricRegistry returns the metric registry for cluster-level metrics
+// for the specified tenant ID.
+func (mr *MetricsRecorder) ClusterMetricRegistry(id roachpb.TenantID) metric.RegistryReader {
+	mr.mu.Lock()
+	defer mr.mu.Unlock()
+	if id == mr.tenantID {
+		return mr.mu.clusterMetricsRegistry
+	}
+	if registries, ok := mr.mu.tenantRegistries[id]; ok {
+		return registries.ClusterMetricsRegistry()
+	}
+	return nil
+}
+
 // AddNode adds various metric registries an initialized server, along
 // with its descriptor and start time.
 // The registries are:
@@ -533,9 +547,14 @@ func (mr *MetricsRecorder) GetTimeSeriesData(childMetrics bool) []tspb.TimeSerie
 	// Now record the system metrics.
 	recorder.registry = mr.mu.sysRegistry
 	recorder.record(&data)
-	// Now record the cluster metrics.
-	recorder.registry = mr.mu.clusterMetricsRegistry
-	recorder.record(&data)
+
+	cmRecorder := registryRecorder{
+		registry:       mr.mu.clusterMetricsRegistry,
+		format:         clusterTimeSeriesPrefix,
+		source:         mr.mu.desc.NodeID.String(),
+		timestampNanos: now.UnixNano(),
+	}
+	cmRecorder.record(&data)
 
 	// Record time series from app-level registries for secondary tenants.
 	for tenantID, r := range mr.mu.tenantRegistries {
@@ -873,7 +892,11 @@ func extractValue(name string, mtr interface{}, fn func(string, float64)) error 
 		// NB: this branch is intentionally at the bottom since all metrics implement it.
 		m := mtr.ToPrometheusMetric()
 		if m.Gauge != nil {
-			fn(name, *m.Gauge.Value)
+			v := *m.Gauge.Value
+			if math.IsInf(v, 0) || math.IsNaN(v) {
+				v = 0
+			}
+			fn(name, v)
 		} else if m.Counter != nil {
 			fn(name, *m.Counter.Value)
 		}

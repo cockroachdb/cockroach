@@ -25,7 +25,6 @@ import (
 
 type cleanupAddedIndex struct {
 	db, table, index string
-	locked           bool
 }
 
 func (cl *cleanupAddedIndex) Cleanup(
@@ -34,10 +33,6 @@ func (cl *cleanupAddedIndex) Cleanup(
 	conn := c.Conn(ctx, o.L(), 1, option.VirtualClusterName(roachtestflags.VirtualCluster))
 	defer conn.Close()
 
-	if cl.locked {
-		helpers.SetSchemaLocked(ctx, o, conn, cl.db, cl.table, false /* lock */)
-		defer helpers.SetSchemaLocked(ctx, o, conn, cl.db, cl.table, true /* lock */)
-	}
 	o.Status(fmt.Sprintf("dropping index %s", cl.index))
 	_, err := conn.ExecContext(ctx, fmt.Sprintf("DROP INDEX %s.%s@%s", cl.db, cl.table, cl.index))
 	if err != nil {
@@ -80,15 +75,6 @@ WHERE
 		o.Fatal(err)
 	}
 
-	// If the table's schema is locked, then unlock the table and make sure it will
-	// be re-locked during cleanup.
-	// TODO(#129694): Remove schema unlocking/re-locking once automation is internalized.
-	locked := helpers.IsSchemaLocked(o, conn, dbName, tableName)
-	if locked {
-		helpers.SetSchemaLocked(ctx, o, conn, dbName, tableName, false /* lock */)
-		defer helpers.SetSchemaLocked(ctx, o, conn, dbName, tableName, true /* lock */)
-	}
-
 	predicateClause := ""
 	// If a types OID is known basic SQL type, we can optionally choose to make
 	// this a partial index.
@@ -121,9 +107,11 @@ WHERE
 			}
 		}
 	}
-	// Fallback to hash index randomly if not inverted
-	if indexUsingClause == "" && rng.Intn(2) == 0 {
-		indexUsingClause = "USING HASH "
+	// Fallback to hash-sharded index randomly if not inverted. Hash-sharded
+	// indexes cannot be combined with partial indexes (WHERE clause).
+	hashClause := ""
+	if indexUsingClause == "" && predicateClause == "" && rng.Intn(2) == 0 {
+		hashClause = "USING HASH"
 	}
 
 	o.Status(fmt.Sprintf("adding index %s on %s.%s (column %s) %s", indexName, dbName, tableName, colName, predicateClause))
@@ -138,12 +126,12 @@ WHERE
 			predicateClause,
 		)
 	} else {
-		createIndexStmt = fmt.Sprintf("CREATE INDEX %s ON %s.%s %s(%s) %s",
+		createIndexStmt = fmt.Sprintf("CREATE INDEX %s ON %s.%s (%s) %s %s",
 			indexName,
 			dbName,
 			tableName,
-			indexUsingClause,
 			colName,
+			hashClause,
 			predicateClause,
 		)
 	}
@@ -156,10 +144,9 @@ WHERE
 	o.Status(fmt.Sprintf("index %s created", indexName))
 
 	return &cleanupAddedIndex{
-		db:     dbName,
-		table:  tableName,
-		index:  indexName,
-		locked: locked,
+		db:    dbName,
+		table: tableName,
+		index: indexName,
 	}
 }
 

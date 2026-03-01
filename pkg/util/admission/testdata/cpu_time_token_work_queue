@@ -1,19 +1,23 @@
+###
+# The first test here is mostly a test of AdmittedWorkDone (work-done).
+# So AC admits requests, one to tenant ID 53 and another to tenant ID
+# 54. The test granter has been set up to allow granting of all requests.
+# This is just test setup.
+###
 init
 ----
 
-# See comment above TestCPUTimeTokenWorkQueue for background. This is
-# mostly a test of AdmittedWorkDone (work-done). So AC admits requests,
-# one to tenant ID 53 and another to tenant ID 54. The test granter
-# has been set up to allow granting of all requests. This is just test
-# setup.
+set-try-get-return-value v=true
+----
+
 admit id=1 tenant=53 requested-count=3
 ----
-tryGet: returning true
+tryGet: input noBurst, returning true
 id 1: admit succeeded
 
 admit id=2 tenant=54 requested-count=8
 ----
-tryGet: returning true
+tryGet: input noBurst, returning true
 id 2: admit succeeded
 
 print
@@ -21,6 +25,7 @@ print
 closed epoch: 0 tenantHeap len: 0
  tenant-id: 53 used: 3, w: 1, fifo: -128
  tenant-id: 54 used: 8, w: 1, fifo: -128
+burst-buckets: t53=fullness=0.0% tokens=-3 capacity=0 qual=noBurst t54=fullness=0.0% tokens=-8 capacity=0 qual=noBurst
 
 # requested-count at admit time was 3. cpu-time below is 1. This
 # simulates a situation where at admit time, the predicted CPU usage
@@ -40,6 +45,7 @@ print
 closed epoch: 0 tenantHeap len: 0
  tenant-id: 53 used: 1, w: 1, fifo: -128
  tenant-id: 54 used: 8, w: 1, fifo: -128
+burst-buckets: t53=fullness=0.0% tokens=-1 capacity=0 qual=noBurst t54=fullness=0.0% tokens=-8 capacity=0 qual=noBurst
 
 # In this case, measured CPU usage was more than predicted CPU usage.
 # So, we should take additional tokens from the granter this time.
@@ -53,3 +59,523 @@ print
 closed epoch: 0 tenantHeap len: 0
  tenant-id: 53 used: 1, w: 1, fifo: -128
  tenant-id: 54 used: 15, w: 1, fifo: -128
+burst-buckets: t53=fullness=0.0% tokens=-1 capacity=0 qual=noBurst t54=fullness=0.0% tokens=-15 capacity=0 qual=noBurst
+
+###
+# This test is of the integration of burstQualification with the tenant
+# heap sorting in WorkQueue. That is, we check that work associated with
+# canBurst tenants sort to the top of the heap. See
+# cpu_time_token_burst.go for more.
+###
+init
+----
+
+set-try-get-return-value v=true
+----
+
+admit id=1 tenant=53 requested-count=1
+----
+tryGet: input noBurst, returning true
+id 1: admit succeeded
+
+admit id=2 tenant=54 requested-count=1
+----
+tryGet: input noBurst, returning true
+id 2: admit succeeded
+
+# Set up buckets so that tenant 53 can burst, while tenant
+# 54 cannot burst (call to Admit below empties 54's token
+# bucket).
+refill-burst-buckets to-add=100 capacity=100
+----
+
+admit id=1000 tenant=54 requested-count=100
+----
+tryGet: input canBurst, returning true
+id 1000: admit succeeded
+
+print
+----
+closed epoch: 0 tenantHeap len: 0
+ tenant-id: 53 used: 1, w: 1, fifo: -128
+ tenant-id: 54 used: 101, w: 1, fifo: -128
+burst-buckets: t53=fullness=99.0% tokens=99 capacity=100 qual=canBurst t54=fullness=-1.0% tokens=-1 capacity=100 qual=noBurst
+
+set-try-get-return-value v=false
+----
+
+# Some work from 54 is queued this time. Then some work from 53
+# tries to admit. The work from 53 is admitted, since 53 can
+# burst, and the backlog is all for work that cannot burst, and
+# since the granter says the work from 53 can proceed (there are
+# available canBurst CPU time tokens in the granter).
+admit id=5 tenant=54 requested-count=15
+----
+tryGet: input noBurst, returning false
+
+set-try-get-return-value v=true
+----
+
+admit id=6 tenant=53 requested-count=1
+----
+tryGet: input canBurst, returning true
+id 6: admit succeeded
+
+granted chain-id=1
+----
+continueGrantChain 1
+id 5: admit succeeded
+granted: returned 15
+
+set-try-get-return-value v=false
+----
+
+# Work from 54 is queued before work from 53. Still, the work
+# from 53 is granted admission before the work from 54, since
+# 53 can burst.
+admit id=7 tenant=54 requested-count=15
+----
+tryGet: input noBurst, returning false
+
+admit id=8 tenant=53 requested-count=1
+----
+tryGet: input canBurst, returning false
+
+# See Less implementation in WorkQueue. We clear used to be sure
+# that the reason the WorkQueue sorts the heap the way it does below
+# is the burstQualifications.
+gc-tenants-and-reset-used
+----
+
+granted chain-id=1
+----
+continueGrantChain 1
+id 8: admit succeeded
+granted: returned 1
+
+granted chain-id=1
+----
+continueGrantChain 1
+id 7: admit succeeded
+granted: returned 15
+
+###
+# This test exercises the burst qualification logic. It verifies that
+# the correct burstQualification is passed to the granter's tryGet
+# method based on the tenant's burst bucket state. It tests the 90%
+# fullness threshold, the capacity cap, negative bucket recovery,
+# AdmittedWorkDone token refunds, and capacity changes.
+###
+init
+----
+
+set-try-get-return-value v=true
+----
+
+# Init tenant 1 before refillBurstBuckets has been called. The bucket
+# does not have a capacity set yet. It is important to test that a
+# zero-valued capacity does not cause bad behavior, such as a panic.
+# refillBurstBuckets is called every 1ms, so AC does not stay in this
+# state for long.
+admit id=1 tenant=1 requested-count=1
+----
+tryGet: input noBurst, returning true
+id 1: admit succeeded
+
+# Fill tenant 1's burst bucket to the top with 100 tokens.
+refill-burst-buckets to-add=100 capacity=100
+----
+
+# Tenant 2 is inited after the first call to refillBurstBuckets. Burst
+# buckets start full, so on the first call to Admit, it can burst.
+admit id=2 tenant=2 requested-count=1
+----
+tryGet: input canBurst, returning true
+id 2: admit succeeded
+
+# Call refillBurstBuckets again. Since both buckets are already full,
+# the cap on tokens is tested here. That is, at the end of this call,
+# the buckets should each have 100 tokens, not more than 100 tokens.
+refill-burst-buckets to-add=100 capacity=100
+----
+
+print
+----
+closed epoch: 0 tenantHeap len: 0
+ tenant-id: 1 used: 1, w: 1, fifo: -128
+ tenant-id: 2 used: 1, w: 1, fifo: -128
+burst-buckets: t1=fullness=100.0% tokens=100 capacity=100 qual=canBurst t2=fullness=100.0% tokens=100 capacity=100 qual=canBurst
+
+# Since both burst buckets are full, both tenants can burst.
+admit id=3 tenant=1 requested-count=1
+----
+tryGet: input canBurst, returning true
+id 3: admit succeeded
+
+print
+----
+closed epoch: 0 tenantHeap len: 0
+ tenant-id: 1 used: 2, w: 1, fifo: -128
+ tenant-id: 2 used: 1, w: 1, fifo: -128
+burst-buckets: t1=fullness=99.0% tokens=99 capacity=100 qual=canBurst t2=fullness=100.0% tokens=100 capacity=100 qual=canBurst
+
+admit id=4 tenant=2 requested-count=1
+----
+tryGet: input canBurst, returning true
+id 4: admit succeeded
+
+print
+----
+closed epoch: 0 tenantHeap len: 0
+ tenant-id: 1 used: 2, w: 1, fifo: -128
+ tenant-id: 2 used: 2, w: 1, fifo: -128
+burst-buckets: t1=fullness=99.0% tokens=99 capacity=100 qual=canBurst t2=fullness=99.0% tokens=99 capacity=100 qual=canBurst
+
+# Bucket started at 100 tokens. First call to Admit removed 1 token.
+# This call to Admit removes 7 tokens. 100-1-7 = 92 tokens in bucket.
+# So tenant 1 can burst still, since bucket is more than 90% full.
+admit id=5 tenant=1 requested-count=7
+----
+tryGet: input canBurst, returning true
+id 5: admit succeeded
+
+print
+----
+closed epoch: 0 tenantHeap len: 0
+ tenant-id: 1 used: 9, w: 1, fifo: -128
+ tenant-id: 2 used: 2, w: 1, fifo: -128
+burst-buckets: t1=fullness=92.0% tokens=92 capacity=100 qual=canBurst t2=fullness=99.0% tokens=99 capacity=100 qual=canBurst
+
+# Bucket started at 100 tokens. First call to Admit removed 1 token.
+# This call to Admit removes 10 tokens. 100-1-10 = 89 tokens in bucket.
+# Tenant 2 can burst this time, but won't be able to the next call to
+# admit.
+admit id=6 tenant=2 requested-count=10
+----
+tryGet: input canBurst, returning true
+id 6: admit succeeded
+
+print
+----
+closed epoch: 0 tenantHeap len: 0
+ tenant-id: 1 used: 9, w: 1, fifo: -128
+ tenant-id: 2 used: 12, w: 1, fifo: -128
+burst-buckets: t1=fullness=92.0% tokens=92 capacity=100 qual=canBurst t2=fullness=89.0% tokens=89 capacity=100 qual=noBurst
+
+# 100-1-7-1 = 91 tokens in the bucket. So tenant 1 can burst still.
+admit id=7 tenant=1 requested-count=1
+----
+tryGet: input canBurst, returning true
+id 7: admit succeeded
+
+print
+----
+closed epoch: 0 tenantHeap len: 0
+ tenant-id: 1 used: 10, w: 1, fifo: -128
+ tenant-id: 2 used: 12, w: 1, fifo: -128
+burst-buckets: t1=fullness=91.0% tokens=91 capacity=100 qual=canBurst t2=fullness=89.0% tokens=89 capacity=100 qual=noBurst
+
+# 100-1-10-1 = 88. Tenant 2 cannot burst this time.
+admit id=8 tenant=2 requested-count=1
+----
+tryGet: input noBurst, returning true
+id 8: admit succeeded
+
+print
+----
+closed epoch: 0 tenantHeap len: 0
+ tenant-id: 1 used: 10, w: 1, fifo: -128
+ tenant-id: 2 used: 13, w: 1, fifo: -128
+burst-buckets: t1=fullness=91.0% tokens=91 capacity=100 qual=canBurst t2=fullness=88.0% tokens=88 capacity=100 qual=noBurst
+
+# 100-1-7-1-1 = 90. So this call to Admit, tenant 1 can burst, but
+# the next call, tenant 1 cannot burst.
+admit id=9 tenant=1 requested-count=1
+----
+tryGet: input canBurst, returning true
+id 9: admit succeeded
+
+print
+----
+closed epoch: 0 tenantHeap len: 0
+ tenant-id: 1 used: 11, w: 1, fifo: -128
+ tenant-id: 2 used: 13, w: 1, fifo: -128
+burst-buckets: t1=fullness=90.0% tokens=90 capacity=100 qual=noBurst t2=fullness=88.0% tokens=88 capacity=100 qual=noBurst
+
+admit id=10 tenant=1 requested-count=1
+----
+tryGet: input noBurst, returning true
+id 10: admit succeeded
+
+print
+----
+closed epoch: 0 tenantHeap len: 0
+ tenant-id: 1 used: 12, w: 1, fifo: -128
+ tenant-id: 2 used: 13, w: 1, fifo: -128
+burst-buckets: t1=fullness=89.0% tokens=89 capacity=100 qual=noBurst t2=fullness=88.0% tokens=88 capacity=100 qual=noBurst
+
+# Fill to full again. Both tenants thus can burst.
+refill-burst-buckets to-add=100 capacity=100
+----
+
+admit id=11 tenant=1 requested-count=1
+----
+tryGet: input canBurst, returning true
+id 11: admit succeeded
+
+admit id=12 tenant=2 requested-count=1
+----
+tryGet: input canBurst, returning true
+id 12: admit succeeded
+
+# Deduct huge number of tokens from tenant 1's bucket. Can
+# burst, since bucket is mostly full before this call.
+admit id=13 tenant=1 requested-count=100000000
+----
+tryGet: input canBurst, returning true
+id 13: admit succeeded
+
+# First refill will cap tenant 1 bucket at the min, which is
+# -bucketCapacity/4 = -100/4 = -25. Second refill adds 116, so
+# bucket is just barely 90% full after second refill. So can
+# burst.
+refill-burst-buckets to-add=10 capacity=100
+----
+
+print
+----
+closed epoch: 0 tenantHeap len: 0
+ tenant-id: 1 used: 100000013, w: 1, fifo: -128
+ tenant-id: 2 used: 14, w: 1, fifo: -128
+burst-buckets: t1=fullness=-25.0% tokens=-25 capacity=100 qual=noBurst t2=fullness=100.0% tokens=100 capacity=100 qual=canBurst
+
+refill-burst-buckets to-add=116 capacity=100
+----
+
+print
+----
+closed epoch: 0 tenantHeap len: 0
+ tenant-id: 1 used: 100000013, w: 1, fifo: -128
+ tenant-id: 2 used: 14, w: 1, fifo: -128
+burst-buckets: t1=fullness=91.0% tokens=91 capacity=100 qual=canBurst t2=fullness=100.0% tokens=100 capacity=100 qual=canBurst
+
+admit id=14 tenant=1 requested-count=1
+----
+tryGet: input canBurst, returning true
+id 14: admit succeeded
+
+# Since bucket was only barely 90% full, after one more call to
+# Admit, it is below 90% full. No burst.
+admit id=15 tenant=1 requested-count=1
+----
+tryGet: input noBurst, returning true
+id 15: admit succeeded
+
+# In production, requestedCount is a prediction of the CPU time
+# used by a request. Actual usage is measured by grunning and passed
+# to AdmittedWorkDone. In this test case, actual usage is way way
+# lower than the predicted usage. AdmittedWorkDone will thus add
+# tokens to the bucket. We refill to full first, then admit with a
+# large requested-count and complete with small cpu-time. The admit
+# deducts 1000000 tokens and work-done refunds 999999 (1000000-1),
+# so the net effect is -1 token on the burst bucket (99 after).
+# The first subsequent Admit puts bucket below 90% full, and the
+# second confirms noBurst.
+refill-burst-buckets to-add=100 capacity=100
+----
+
+admit id=16 tenant=1 requested-count=1000000
+----
+tryGet: input canBurst, returning true
+id 16: admit succeeded
+
+print
+----
+closed epoch: 0 tenantHeap len: 0
+ tenant-id: 1 used: 101000015, w: 1, fifo: -128
+ tenant-id: 2 used: 14, w: 1, fifo: -128
+burst-buckets: t1=fullness=-999900.0% tokens=-999900 capacity=100 qual=noBurst t2=fullness=100.0% tokens=100 capacity=100 qual=canBurst
+
+work-done id=16 cpu-time=1
+----
+returnGrant 999999
+
+print
+----
+closed epoch: 0 tenantHeap len: 0
+ tenant-id: 1 used: 100000016, w: 1, fifo: -128
+ tenant-id: 2 used: 14, w: 1, fifo: -128
+burst-buckets: t1=fullness=99.0% tokens=99 capacity=100 qual=canBurst t2=fullness=100.0% tokens=100 capacity=100 qual=canBurst
+
+admit id=17 tenant=1 requested-count=10
+----
+tryGet: input canBurst, returning true
+id 17: admit succeeded
+
+admit id=18 tenant=1 requested-count=1
+----
+tryGet: input noBurst, returning true
+id 18: admit succeeded
+
+# Test a bucket capacity change. On first call to Admit, bucket is
+# full. On second call, bucket is less than 90% full.
+refill-burst-buckets to-add=20 capacity=20
+----
+
+print
+----
+closed epoch: 0 tenantHeap len: 0
+ tenant-id: 1 used: 100000027, w: 1, fifo: -128
+ tenant-id: 2 used: 14, w: 1, fifo: -128
+burst-buckets: t1=fullness=100.0% tokens=20 capacity=20 qual=canBurst t2=fullness=100.0% tokens=20 capacity=20 qual=canBurst
+
+admit id=19 tenant=1 requested-count=2
+----
+tryGet: input canBurst, returning true
+id 19: admit succeeded
+
+admit id=20 tenant=1 requested-count=1
+----
+tryGet: input noBurst, returning true
+id 20: admit succeeded
+
+###
+# This is a test of WorkQueue deducting tokens from the burst buckets.
+# This test is an integration test. It ensures that the burst bucket
+# state correctly captures the usage seen by the WorkQueue, regardless
+# of exactly how the usage has flowed thru the WorkQueue. See the
+# earlier test in this file for a test focused on the burst qualification
+# logic in cpu_time_token_burst.go specifically.
+###
+init
+----
+
+set-try-get-return-value v=true
+----
+
+# Init a tenant, fill its burst bucket to the top.
+admit id=1 tenant=53 requested-count=1
+----
+tryGet: input noBurst, returning true
+id 1: admit succeeded
+
+refill-burst-buckets to-add=100 capacity=100
+----
+
+# The rest of this test is mostly of the burstBucket state
+# below. It starts at 99% full. The call to Admit put the
+# bucket at -1 tokens. The call to refill added 100 tokens.
+#
+# The rest of the test is self-explanatory, so I will not
+# add comments above every call to print. Calls to Admit
+# or AdmittedWorkDone are made, and they both adjust used
+# and adjust the burst bucket state.
+print
+----
+closed epoch: 0 tenantHeap len: 0
+ tenant-id: 53 used: 1, w: 1, fifo: -128
+burst-buckets: t53=fullness=99.0% tokens=99 capacity=100 qual=canBurst
+
+admit id=2 tenant=53 requested-count=5
+----
+tryGet: input canBurst, returning true
+id 2: admit succeeded
+
+print
+----
+closed epoch: 0 tenantHeap len: 0
+ tenant-id: 53 used: 6, w: 1, fifo: -128
+burst-buckets: t53=fullness=94.0% tokens=94 capacity=100 qual=canBurst
+
+set-try-get-return-value v=false
+----
+
+admit id=3 tenant=53 requested-count=1
+----
+tryGet: input canBurst, returning false
+
+print
+----
+closed epoch: 0 tenantHeap len: 1 top tenant: 53
+ tenant-id: 53 used: 6, w: 1, fifo: -128 waiting work heap: [0: pri: normal-pri, ct: 1, epoch: 0, qt: 100]
+burst-buckets: t53=fullness=94.0% tokens=94 capacity=100 qual=canBurst
+
+granted chain-id=1
+----
+continueGrantChain 1
+id 3: admit succeeded
+granted: returned 1
+
+print
+----
+closed epoch: 0 tenantHeap len: 0
+ tenant-id: 53 used: 7, w: 1, fifo: -128
+burst-buckets: t53=fullness=93.0% tokens=93 capacity=100 qual=canBurst
+
+work-done id=1 cpu-time=2
+----
+tookWithoutPermission 1
+
+print
+----
+closed epoch: 0 tenantHeap len: 0
+ tenant-id: 53 used: 8, w: 1, fifo: -128
+burst-buckets: t53=fullness=92.0% tokens=92 capacity=100 qual=canBurst
+
+work-done id=2 cpu-time=3
+----
+returnGrant 2
+
+print
+----
+closed epoch: 0 tenantHeap len: 0
+ tenant-id: 53 used: 6, w: 1, fifo: -128
+burst-buckets: t53=fullness=94.0% tokens=94 capacity=100 qual=canBurst
+
+admit id=4 tenant=53 requested-count=1 bypass
+----
+tookWithoutPermission 1
+id 4: admit succeeded
+
+print
+----
+closed epoch: 0 tenantHeap len: 0
+ tenant-id: 53 used: 7, w: 1, fifo: -128
+burst-buckets: t53=fullness=93.0% tokens=93 capacity=100 qual=canBurst
+
+set-try-get-return-value v=false
+----
+
+admit id=5 tenant=53 requested-count=1
+----
+tryGet: input canBurst, returning false
+
+cancel-work id=5
+----
+id 5: admit failed
+
+print
+----
+closed epoch: 0 tenantHeap len: 0
+ tenant-id: 53 used: 7, w: 1, fifo: -128
+burst-buckets: t53=fullness=93.0% tokens=93 capacity=100 qual=canBurst
+
+# Check the transition to no burst.
+set-try-get-return-value v=true
+----
+
+admit id=6 tenant=53 requested-count=5
+----
+tryGet: input canBurst, returning true
+id 6: admit succeeded
+
+admit id=7 tenant=53 requested-count=1
+----
+tryGet: input noBurst, returning true
+id 7: admit succeeded
+
+print
+----
+closed epoch: 0 tenantHeap len: 0
+ tenant-id: 53 used: 13, w: 1, fifo: -128
+burst-buckets: t53=fullness=87.0% tokens=87 capacity=100 qual=noBurst

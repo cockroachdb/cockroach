@@ -14,8 +14,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
+	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -292,6 +295,128 @@ func TestResolveTargets(t *testing.T) {
 					}
 				}
 			}
+		})
+	}
+}
+
+// TestResolveWildcard tests the resolveWildcard helper that determines the
+// database, optional target schema, and schema scope for wildcard patterns.
+func TestResolveWildcard(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	defer s.Stopper().Stop(ctx)
+	db := sqlutils.MakeSQLRunner(sqlDB)
+
+	// Set up databases and schemas for the test scenarios.
+	db.Exec(t, `CREATE DATABASE my_db`)
+	db.Exec(t, `CREATE SCHEMA my_db.my_schema`)
+	// "ambig" exists as both a database and a schema within my_db, so we can
+	// verify that the database match takes priority for 2-part patterns.
+	db.Exec(t, `CREATE DATABASE ambig`)
+	db.Exec(t, `CREATE SCHEMA my_db.ambig`)
+
+	currentDB := "my_db"
+	searchPath := sessiondata.MakeSearchPath([]string{"public"})
+
+	testCases := []struct {
+		name                string
+		pattern             string
+		expectedDB          string
+		expectedSchema      string
+		expectedSchemaScope bool
+		expectedErr         string
+	}{{
+		name:                "db wildcard",
+		pattern:             "my_db.*",
+		expectedDB:          "my_db",
+		expectedSchema:      "",
+		expectedSchemaScope: false,
+	}, {
+		name:                "schema wildcard",
+		pattern:             "my_db.my_schema.*",
+		expectedDB:          "my_db",
+		expectedSchema:      "my_schema",
+		expectedSchemaScope: true,
+	}, {
+		name:                "public schema wildcard",
+		pattern:             "my_db.public.*",
+		expectedDB:          "my_db",
+		expectedSchema:      "public",
+		expectedSchemaScope: true,
+	}, {
+		// 2-part where first part is a schema (not a database).
+		//
+		// TODO(msbutler): this will lead to the caller backing up the whole db if
+		// the currentDB is my_db, which is unexpected.
+		name:                "schema wildcard, no db",
+		pattern:             "my_schema.*",
+		expectedDB:          "my_db",
+		expectedSchema:      "my_schema",
+		expectedSchemaScope: false,
+	}, {
+		// Bare wildcard.
+		//
+		// TODO(msbutler): this also seems unexpected. Why constrain to the public
+		// schema?
+		name:                "bare *",
+		pattern:             "*",
+		expectedDB:          "my_db",
+		expectedSchema:      "public",
+		expectedSchemaScope: false,
+	}, {
+		// Ambiguous: name matches both a database and a schema. The database
+		// match takes priority for a 2-part pattern.
+		name:                "ambiguous name prefers db",
+		pattern:             "ambig.*",
+		expectedDB:          "ambig",
+		expectedSchema:      "",
+		expectedSchemaScope: false,
+	}, {
+		// Error: name matches nothing.
+		name:        "unknown name",
+		pattern:     "no_such_thing.*",
+		expectedErr: "no_such_thing",
+	}}
+
+	execCfg := s.ExecutorConfig().(sql.ExecutorConfig)
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			stmts, err := parser.Parse(
+				fmt.Sprintf("BACKUP TABLE %s INTO 'nodelocal://1/test'", tc.pattern),
+			)
+			require.NoError(t, err)
+			backupStmt := stmts[0].AST.(*tree.Backup)
+			pattern, err := backupStmt.Targets.Tables.TablePatterns[0].NormalizeTablePattern()
+			require.NoError(t, err)
+			sel, ok := pattern.(*tree.AllTablesSelector)
+			require.True(t, ok, "expected AllTablesSelector, got %T", pattern)
+
+			err = sql.DescsTxn(ctx, &execCfg, func(
+				ctx context.Context, txn isql.Txn, col *descs.Collection,
+			) error {
+				r := &simpleResolver{col: col, txn: txn.KV()}
+				res, err := resolveWildcard(ctx, sel, r, currentDB, searchPath)
+				if tc.expectedErr != "" {
+					require.Error(t, err)
+					require.ErrorContains(t, err, tc.expectedErr)
+					return nil
+				}
+				require.NoError(t, err)
+				require.Equal(t, tc.expectedDB, res.db.GetName())
+				if tc.expectedSchema == "" {
+					require.Nil(t, res.targetSchema,
+						"expected nil targetSchema but got %v", res.targetSchema)
+				} else {
+					require.Equal(t, tc.expectedSchema, res.targetSchema.GetName())
+				}
+				require.Equal(t, tc.expectedSchemaScope, res.hasSchemaScope)
+				return nil
+			})
+			require.NoError(t, err)
 		})
 	}
 }

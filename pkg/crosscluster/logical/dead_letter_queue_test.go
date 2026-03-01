@@ -15,6 +15,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdcevent"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdctest"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
+	"github.com/cockroachdb/cockroach/pkg/crosscluster/logical/sqlwriter"
 	"github.com/cockroachdb/cockroach/pkg/crosscluster/replicationtestutils"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/kv"
@@ -397,17 +398,17 @@ func TestDLQAllowList(t *testing.T) {
 	}
 
 	require.ErrorContains(t,
-		canDlqError(errors.New("some unknown error")),
+		sqlwriter.CanDLQError(errors.New("some unknown error")),
 		"can only DLQ errors with pg codes")
 
 	require.ErrorContains(t,
-		canDlqError(pgErr(pgcode.StatementCompletionUnknown)),
+		sqlwriter.CanDLQError(pgErr(pgcode.StatementCompletionUnknown)),
 		"unable to DLQ pgcode that indicates an internal or retryable error")
 	require.ErrorContains(t,
-		canDlqError(pgErr(pgcode.SerializationFailure)),
+		sqlwriter.CanDLQError(pgErr(pgcode.SerializationFailure)),
 		"unable to DLQ pgcode that indicates an internal or retryable error")
 
-	require.NoError(t, canDlqError(pgErr(pgcode.CheckViolation)))
+	require.NoError(t, sqlwriter.CanDLQError(pgErr(pgcode.CheckViolation)))
 }
 
 func TestDLQJSONQuery(t *testing.T) {

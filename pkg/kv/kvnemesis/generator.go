@@ -390,6 +390,9 @@ type ChangeLeaseConfig struct {
 type ChangeSettingConfig struct {
 	// SetLeaseType changes the default range lease type.
 	SetLeaseType int
+	// ToggleVirtualIntentResolution toggles the VIR cluster setting, exercising
+	// transitions between physical and virtual intent resolution.
+	ToggleVirtualIntentResolution int
 }
 
 // ChangeZoneConfig configures the relative probability of generating a zone
@@ -546,7 +549,8 @@ func newAllOperationsConfig() GeneratorConfig {
 			TransferLease: 1,
 		},
 		ChangeSetting: ChangeSettingConfig{
-			SetLeaseType: 1,
+			SetLeaseType:                  1,
+			ToggleVirtualIntentResolution: 1,
 		},
 		ChangeZone: ChangeZoneConfig{
 			ToggleGlobalReads: 1,
@@ -949,6 +953,7 @@ func (g *generator) RandStep(rng *rand.Rand) Step {
 	}
 
 	addOpGen(&allowed, setLeaseType, g.Config.Ops.ChangeSetting.SetLeaseType)
+	addOpGen(&allowed, toggleVirtualIntentResolution, g.Config.Ops.ChangeSetting.ToggleVirtualIntentResolution)
 	addOpGen(&allowed, toggleGlobalReads, g.Config.Ops.ChangeZone.ToggleGlobalReads)
 	addOpGen(&allowed, addRandNetworkPartition, g.Config.Ops.Fault.AddNetworkPartition)
 	addOpGen(&allowed, removeRandNetworkPartition, g.Config.Ops.Fault.RemoveNetworkPartition)
@@ -1865,6 +1870,12 @@ func setLeaseType(_ *generator, rng *rand.Rand) Operation {
 	leaseType := leaseTypes[rng.Intn(len(leaseTypes))]
 	op := changeSetting(ChangeSettingType_SetLeaseType)
 	op.ChangeSetting.LeaseType = leaseType
+	return op
+}
+
+func toggleVirtualIntentResolution(_ *generator, rng *rand.Rand) Operation {
+	op := changeSetting(ChangeSettingType_ToggleVirtualIntentResolution)
+	op.ChangeSetting.VirEnabled = rng.Intn(2) == 0
 	return op
 }
 

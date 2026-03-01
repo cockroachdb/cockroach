@@ -169,6 +169,8 @@ func jobModeToStateMode(
 	switch jobMode {
 	case jobspb.IndexBackfillDistributedMergeMode_Enabled:
 		return scpb.DistributedMergeModeEnabled
+	case jobspb.IndexBackfillDistributedMergeMode_Force:
+		return scpb.DistributedMergeModeForce
 	case jobspb.IndexBackfillDistributedMergeMode_Disabled:
 		return scpb.DistributedMergeModeDisabled
 	default:

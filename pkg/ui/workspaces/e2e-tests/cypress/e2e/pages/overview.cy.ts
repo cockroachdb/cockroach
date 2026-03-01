@@ -4,7 +4,7 @@
 // included in the /LICENSE file.
 
 import { SQLPrivilege } from "../../support/types";
-import { isTextGreaterThanZero } from "../../support/e2e";
+import { isTextGreaterThanZero } from "../../support/utils";
 import commonChecks from "../../support/commonChecks";
 
 describe("overview page", () => {

@@ -2493,123 +2493,115 @@ opt
 	LIMIT
 		100;
 ----
-limit
+top-k
  ├── columns: cd_gender:37 cd_marital_status:38 cd_education_status:39 cnt1:237!null cd_purchase_estimate:40 cnt2:237!null cd_credit_rating:41 cnt3:237!null
  ├── internal-ordering: +37,+38,+39,+40,+41
+ ├── k: 100
  ├── cardinality: [0 - 100]
  ├── key: (37-41)
  ├── fd: (37-41)-->(237)
  ├── ordering: +37,+38,+39,+40,+41
- ├── group-by (streaming)
- │    ├── columns: cd_gender:37 cd_marital_status:38 cd_education_status:39 cd_purchase_estimate:40 cd_credit_rating:41 count_rows:237!null
- │    ├── grouping columns: cd_gender:37 cd_marital_status:38 cd_education_status:39 cd_purchase_estimate:40 cd_credit_rating:41
- │    ├── key: (37-41)
- │    ├── fd: (37-41)-->(237)
- │    ├── ordering: +37,+38,+39,+40,+41
- │    ├── limit hint: 100.00
- │    ├── inner-join (lookup customer_address [as=ca])
- │    │    ├── columns: c_customer_sk:1!null c_current_cdemo_sk:3!null c_current_addr_sk:5!null ca_address_sk:21!null ca_state:29!null cd_demo_sk:36!null cd_gender:37 cd_marital_status:38 cd_education_status:39 cd_purchase_estimate:40 cd_credit_rating:41
- │    │    ├── key columns: [5] = [21]
- │    │    ├── lookup columns are key
- │    │    ├── key: (1)
- │    │    ├── fd: (1)-->(3,5), (21)-->(29), (36)-->(37-41), (5)==(21), (21)==(5), (3)==(36), (36)==(3)
- │    │    ├── ordering: +37,+38,+39,+40,+41
- │    │    ├── sort
- │    │    │    ├── columns: c_customer_sk:1!null c_current_cdemo_sk:3!null c_current_addr_sk:5 cd_demo_sk:36!null cd_gender:37 cd_marital_status:38 cd_education_status:39 cd_purchase_estimate:40 cd_credit_rating:41
- │    │    │    ├── key: (1)
- │    │    │    ├── fd: (1)-->(3,5), (36)-->(37-41), (3)==(36), (36)==(3)
- │    │    │    ├── ordering: +37,+38,+39,+40,+41
- │    │    │    └── semi-join (hash)
- │    │    │         ├── columns: c_customer_sk:1!null c_current_cdemo_sk:3!null c_current_addr_sk:5 cd_demo_sk:36!null cd_gender:37 cd_marital_status:38 cd_education_status:39 cd_purchase_estimate:40 cd_credit_rating:41
- │    │    │         ├── key: (1)
- │    │    │         ├── fd: (1)-->(3,5), (36)-->(37-41), (3)==(36), (36)==(3)
- │    │    │         ├── inner-join (lookup customer_demographics)
- │    │    │         │    ├── columns: c_customer_sk:1!null c_current_cdemo_sk:3!null c_current_addr_sk:5 cd_demo_sk:36!null cd_gender:37 cd_marital_status:38 cd_education_status:39 cd_purchase_estimate:40 cd_credit_rating:41
- │    │    │         │    ├── key columns: [3] = [36]
- │    │    │         │    ├── lookup columns are key
- │    │    │         │    ├── key: (1)
- │    │    │         │    ├── fd: (1)-->(3,5), (36)-->(37-41), (3)==(36), (36)==(3)
- │    │    │         │    ├── anti-join (hash)
- │    │    │         │    │    ├── columns: c_customer_sk:1!null c_current_cdemo_sk:3 c_current_addr_sk:5
- │    │    │         │    │    ├── key: (1)
- │    │    │         │    │    ├── fd: (1)-->(3,5)
- │    │    │         │    │    ├── anti-join (hash)
- │    │    │         │    │    │    ├── columns: c_customer_sk:1!null c_current_cdemo_sk:3 c_current_addr_sk:5
- │    │    │         │    │    │    ├── key: (1)
- │    │    │         │    │    │    ├── fd: (1)-->(3,5)
- │    │    │         │    │    │    ├── scan customer [as=c]
- │    │    │         │    │    │    │    ├── columns: c_customer_sk:1!null c_current_cdemo_sk:3 c_current_addr_sk:5
- │    │    │         │    │    │    │    ├── key: (1)
- │    │    │         │    │    │    │    └── fd: (1)-->(3,5)
- │    │    │         │    │    │    ├── inner-join (hash)
- │    │    │         │    │    │    │    ├── columns: ws_sold_date_sk:102!null ws_bill_customer_sk:106 d_date_sk:138!null d_year:144!null d_moy:146!null
- │    │    │         │    │    │    │    ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-more)
- │    │    │         │    │    │    │    ├── fd: ()-->(144), (138)-->(146), (102)==(138), (138)==(102)
- │    │    │         │    │    │    │    ├── scan web_sales
- │    │    │         │    │    │    │    │    └── columns: ws_sold_date_sk:102 ws_bill_customer_sk:106
- │    │    │         │    │    │    │    ├── select
- │    │    │         │    │    │    │    │    ├── columns: d_date_sk:138!null d_year:144!null d_moy:146!null
- │    │    │         │    │    │    │    │    ├── key: (138)
- │    │    │         │    │    │    │    │    ├── fd: ()-->(144), (138)-->(146)
- │    │    │         │    │    │    │    │    ├── scan date_dim
- │    │    │         │    │    │    │    │    │    ├── columns: d_date_sk:138!null d_year:144 d_moy:146
- │    │    │         │    │    │    │    │    │    ├── key: (138)
- │    │    │         │    │    │    │    │    │    └── fd: (138)-->(144,146)
- │    │    │         │    │    │    │    │    └── filters
- │    │    │         │    │    │    │    │         ├── (d_moy:146 >= 1) AND (d_moy:146 <= 3) [outer=(146), constraints=(/146: [/1 - /3]; tight)]
- │    │    │         │    │    │    │    │         └── d_year:144 = 2002 [outer=(144), constraints=(/144: [/2002 - /2002]; tight), fd=()-->(144)]
- │    │    │         │    │    │    │    └── filters
- │    │    │         │    │    │    │         └── ws_sold_date_sk:102 = d_date_sk:138 [outer=(102,138), constraints=(/102: (/NULL - ]; /138: (/NULL - ]), fd=(102)==(138), (138)==(102)]
- │    │    │         │    │    │    └── filters
- │    │    │         │    │    │         └── c_customer_sk:1 = ws_bill_customer_sk:106 [outer=(1,106), constraints=(/1: (/NULL - ]; /106: (/NULL - ]), fd=(1)==(106), (106)==(1)]
- │    │    │         │    │    ├── inner-join (hash)
- │    │    │         │    │    │    ├── columns: cs_sold_date_sk:168!null cs_ship_customer_sk:175 d_date_sk:204!null d_year:210!null d_moy:212!null
- │    │    │         │    │    │    ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-more)
- │    │    │         │    │    │    ├── fd: ()-->(210), (204)-->(212), (168)==(204), (204)==(168)
- │    │    │         │    │    │    ├── scan catalog_sales
- │    │    │         │    │    │    │    └── columns: cs_sold_date_sk:168 cs_ship_customer_sk:175
- │    │    │         │    │    │    ├── select
- │    │    │         │    │    │    │    ├── columns: d_date_sk:204!null d_year:210!null d_moy:212!null
- │    │    │         │    │    │    │    ├── key: (204)
- │    │    │         │    │    │    │    ├── fd: ()-->(210), (204)-->(212)
- │    │    │         │    │    │    │    ├── scan date_dim
- │    │    │         │    │    │    │    │    ├── columns: d_date_sk:204!null d_year:210 d_moy:212
- │    │    │         │    │    │    │    │    ├── key: (204)
- │    │    │         │    │    │    │    │    └── fd: (204)-->(210,212)
- │    │    │         │    │    │    │    └── filters
- │    │    │         │    │    │    │         ├── (d_moy:212 >= 1) AND (d_moy:212 <= 3) [outer=(212), constraints=(/212: [/1 - /3]; tight)]
- │    │    │         │    │    │    │         └── d_year:210 = 2002 [outer=(210), constraints=(/210: [/2002 - /2002]; tight), fd=()-->(210)]
- │    │    │         │    │    │    └── filters
- │    │    │         │    │    │         └── cs_sold_date_sk:168 = d_date_sk:204 [outer=(168,204), constraints=(/168: (/NULL - ]; /204: (/NULL - ]), fd=(168)==(204), (204)==(168)]
- │    │    │         │    │    └── filters
- │    │    │         │    │         └── c_customer_sk:1 = cs_ship_customer_sk:175 [outer=(1,175), constraints=(/1: (/NULL - ]; /175: (/NULL - ]), fd=(1)==(175), (175)==(1)]
- │    │    │         │    └── filters (true)
- │    │    │         ├── inner-join (hash)
- │    │    │         │    ├── columns: ss_sold_date_sk:47!null ss_customer_sk:50 d_date_sk:72!null d_year:78!null d_moy:80!null
- │    │    │         │    ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-more)
- │    │    │         │    ├── fd: ()-->(78), (72)-->(80), (47)==(72), (72)==(47)
- │    │    │         │    ├── scan store_sales
- │    │    │         │    │    └── columns: ss_sold_date_sk:47 ss_customer_sk:50
- │    │    │         │    ├── select
- │    │    │         │    │    ├── columns: d_date_sk:72!null d_year:78!null d_moy:80!null
- │    │    │         │    │    ├── key: (72)
- │    │    │         │    │    ├── fd: ()-->(78), (72)-->(80)
- │    │    │         │    │    ├── scan date_dim
- │    │    │         │    │    │    ├── columns: d_date_sk:72!null d_year:78 d_moy:80
- │    │    │         │    │    │    ├── key: (72)
- │    │    │         │    │    │    └── fd: (72)-->(78,80)
- │    │    │         │    │    └── filters
- │    │    │         │    │         ├── (d_moy:80 >= 1) AND (d_moy:80 <= 3) [outer=(80), constraints=(/80: [/1 - /3]; tight)]
- │    │    │         │    │         └── d_year:78 = 2002 [outer=(78), constraints=(/78: [/2002 - /2002]; tight), fd=()-->(78)]
- │    │    │         │    └── filters
- │    │    │         │         └── ss_sold_date_sk:47 = d_date_sk:72 [outer=(47,72), constraints=(/47: (/NULL - ]; /72: (/NULL - ]), fd=(47)==(72), (72)==(47)]
- │    │    │         └── filters
- │    │    │              └── c_customer_sk:1 = ss_customer_sk:50 [outer=(1,50), constraints=(/1: (/NULL - ]; /50: (/NULL - ]), fd=(1)==(50), (50)==(1)]
- │    │    └── filters
- │    │         └── ca_state:29 IN ('IL', 'ME', 'TX') [outer=(29), constraints=(/29: [/'IL' - /'IL'] [/'ME' - /'ME'] [/'TX' - /'TX']; tight)]
- │    └── aggregations
- │         └── count-rows [as=count_rows:237]
- └── 100
+ └── group-by (hash)
+      ├── columns: cd_gender:37 cd_marital_status:38 cd_education_status:39 cd_purchase_estimate:40 cd_credit_rating:41 count_rows:237!null
+      ├── grouping columns: cd_gender:37 cd_marital_status:38 cd_education_status:39 cd_purchase_estimate:40 cd_credit_rating:41
+      ├── key: (37-41)
+      ├── fd: (37-41)-->(237)
+      ├── semi-join (hash)
+      │    ├── columns: c_customer_sk:1!null c_current_cdemo_sk:3!null c_current_addr_sk:5!null ca_address_sk:21!null ca_state:29!null cd_demo_sk:36!null cd_gender:37 cd_marital_status:38 cd_education_status:39 cd_purchase_estimate:40 cd_credit_rating:41
+      │    ├── key: (1)
+      │    ├── fd: (1)-->(3,5), (21)-->(29), (36)-->(37-41), (5)==(21), (21)==(5), (3)==(36), (36)==(3)
+      │    ├── inner-join (lookup customer_address [as=ca])
+      │    │    ├── columns: c_customer_sk:1!null c_current_cdemo_sk:3!null c_current_addr_sk:5!null ca_address_sk:21!null ca_state:29!null cd_demo_sk:36!null cd_gender:37 cd_marital_status:38 cd_education_status:39 cd_purchase_estimate:40 cd_credit_rating:41
+      │    │    ├── key columns: [5] = [21]
+      │    │    ├── lookup columns are key
+      │    │    ├── key: (1)
+      │    │    ├── fd: (21)-->(29), (1)-->(3,5), (36)-->(37-41), (3)==(36), (36)==(3), (5)==(21), (21)==(5)
+      │    │    ├── inner-join (lookup customer_demographics)
+      │    │    │    ├── columns: c_customer_sk:1!null c_current_cdemo_sk:3!null c_current_addr_sk:5 cd_demo_sk:36!null cd_gender:37 cd_marital_status:38 cd_education_status:39 cd_purchase_estimate:40 cd_credit_rating:41
+      │    │    │    ├── key columns: [3] = [36]
+      │    │    │    ├── lookup columns are key
+      │    │    │    ├── key: (1)
+      │    │    │    ├── fd: (1)-->(3,5), (36)-->(37-41), (3)==(36), (36)==(3)
+      │    │    │    ├── anti-join (hash)
+      │    │    │    │    ├── columns: c_customer_sk:1!null c_current_cdemo_sk:3 c_current_addr_sk:5
+      │    │    │    │    ├── key: (1)
+      │    │    │    │    ├── fd: (1)-->(3,5)
+      │    │    │    │    ├── anti-join (hash)
+      │    │    │    │    │    ├── columns: c_customer_sk:1!null c_current_cdemo_sk:3 c_current_addr_sk:5
+      │    │    │    │    │    ├── key: (1)
+      │    │    │    │    │    ├── fd: (1)-->(3,5)
+      │    │    │    │    │    ├── scan customer [as=c]
+      │    │    │    │    │    │    ├── columns: c_customer_sk:1!null c_current_cdemo_sk:3 c_current_addr_sk:5
+      │    │    │    │    │    │    ├── key: (1)
+      │    │    │    │    │    │    └── fd: (1)-->(3,5)
+      │    │    │    │    │    ├── inner-join (hash)
+      │    │    │    │    │    │    ├── columns: ws_sold_date_sk:102!null ws_bill_customer_sk:106 d_date_sk:138!null d_year:144!null d_moy:146!null
+      │    │    │    │    │    │    ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-more)
+      │    │    │    │    │    │    ├── fd: ()-->(144), (138)-->(146), (102)==(138), (138)==(102)
+      │    │    │    │    │    │    ├── scan web_sales
+      │    │    │    │    │    │    │    └── columns: ws_sold_date_sk:102 ws_bill_customer_sk:106
+      │    │    │    │    │    │    ├── select
+      │    │    │    │    │    │    │    ├── columns: d_date_sk:138!null d_year:144!null d_moy:146!null
+      │    │    │    │    │    │    │    ├── key: (138)
+      │    │    │    │    │    │    │    ├── fd: ()-->(144), (138)-->(146)
+      │    │    │    │    │    │    │    ├── scan date_dim
+      │    │    │    │    │    │    │    │    ├── columns: d_date_sk:138!null d_year:144 d_moy:146
+      │    │    │    │    │    │    │    │    ├── key: (138)
+      │    │    │    │    │    │    │    │    └── fd: (138)-->(144,146)
+      │    │    │    │    │    │    │    └── filters
+      │    │    │    │    │    │    │         ├── (d_moy:146 >= 1) AND (d_moy:146 <= 3) [outer=(146), constraints=(/146: [/1 - /3]; tight)]
+      │    │    │    │    │    │    │         └── d_year:144 = 2002 [outer=(144), constraints=(/144: [/2002 - /2002]; tight), fd=()-->(144)]
+      │    │    │    │    │    │    └── filters
+      │    │    │    │    │    │         └── ws_sold_date_sk:102 = d_date_sk:138 [outer=(102,138), constraints=(/102: (/NULL - ]; /138: (/NULL - ]), fd=(102)==(138), (138)==(102)]
+      │    │    │    │    │    └── filters
+      │    │    │    │    │         └── c_customer_sk:1 = ws_bill_customer_sk:106 [outer=(1,106), constraints=(/1: (/NULL - ]; /106: (/NULL - ]), fd=(1)==(106), (106)==(1)]
+      │    │    │    │    ├── inner-join (hash)
+      │    │    │    │    │    ├── columns: cs_sold_date_sk:168!null cs_ship_customer_sk:175 d_date_sk:204!null d_year:210!null d_moy:212!null
+      │    │    │    │    │    ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-more)
+      │    │    │    │    │    ├── fd: ()-->(210), (204)-->(212), (168)==(204), (204)==(168)
+      │    │    │    │    │    ├── scan catalog_sales
+      │    │    │    │    │    │    └── columns: cs_sold_date_sk:168 cs_ship_customer_sk:175
+      │    │    │    │    │    ├── select
+      │    │    │    │    │    │    ├── columns: d_date_sk:204!null d_year:210!null d_moy:212!null
+      │    │    │    │    │    │    ├── key: (204)
+      │    │    │    │    │    │    ├── fd: ()-->(210), (204)-->(212)
+      │    │    │    │    │    │    ├── scan date_dim
+      │    │    │    │    │    │    │    ├── columns: d_date_sk:204!null d_year:210 d_moy:212
+      │    │    │    │    │    │    │    ├── key: (204)
+      │    │    │    │    │    │    │    └── fd: (204)-->(210,212)
+      │    │    │    │    │    │    └── filters
+      │    │    │    │    │    │         ├── (d_moy:212 >= 1) AND (d_moy:212 <= 3) [outer=(212), constraints=(/212: [/1 - /3]; tight)]
+      │    │    │    │    │    │         └── d_year:210 = 2002 [outer=(210), constraints=(/210: [/2002 - /2002]; tight), fd=()-->(210)]
+      │    │    │    │    │    └── filters
+      │    │    │    │    │         └── cs_sold_date_sk:168 = d_date_sk:204 [outer=(168,204), constraints=(/168: (/NULL - ]; /204: (/NULL - ]), fd=(168)==(204), (204)==(168)]
+      │    │    │    │    └── filters
+      │    │    │    │         └── c_customer_sk:1 = cs_ship_customer_sk:175 [outer=(1,175), constraints=(/1: (/NULL - ]; /175: (/NULL - ]), fd=(1)==(175), (175)==(1)]
+      │    │    │    └── filters (true)
+      │    │    └── filters
+      │    │         └── ca_state:29 IN ('IL', 'ME', 'TX') [outer=(29), constraints=(/29: [/'IL' - /'IL'] [/'ME' - /'ME'] [/'TX' - /'TX']; tight)]
+      │    ├── inner-join (hash)
+      │    │    ├── columns: ss_sold_date_sk:47!null ss_customer_sk:50 d_date_sk:72!null d_year:78!null d_moy:80!null
+      │    │    ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-more)
+      │    │    ├── fd: ()-->(78), (72)-->(80), (47)==(72), (72)==(47)
+      │    │    ├── scan store_sales
+      │    │    │    └── columns: ss_sold_date_sk:47 ss_customer_sk:50
+      │    │    ├── select
+      │    │    │    ├── columns: d_date_sk:72!null d_year:78!null d_moy:80!null
+      │    │    │    ├── key: (72)
+      │    │    │    ├── fd: ()-->(78), (72)-->(80)
+      │    │    │    ├── scan date_dim
+      │    │    │    │    ├── columns: d_date_sk:72!null d_year:78 d_moy:80
+      │    │    │    │    ├── key: (72)
+      │    │    │    │    └── fd: (72)-->(78,80)
+      │    │    │    └── filters
+      │    │    │         ├── (d_moy:80 >= 1) AND (d_moy:80 <= 3) [outer=(80), constraints=(/80: [/1 - /3]; tight)]
+      │    │    │         └── d_year:78 = 2002 [outer=(78), constraints=(/78: [/2002 - /2002]; tight), fd=()-->(78)]
+      │    │    └── filters
+      │    │         └── ss_sold_date_sk:47 = d_date_sk:72 [outer=(47,72), constraints=(/47: (/NULL - ]; /72: (/NULL - ]), fd=(47)==(72), (72)==(47)]
+      │    └── filters
+      │         └── c_customer_sk:1 = ss_customer_sk:50 [outer=(1,50), constraints=(/1: (/NULL - ]; /50: (/NULL - ]), fd=(1)==(50), (50)==(1)]
+      └── aggregations
+           └── count-rows [as=count_rows:237]
 
 # --------------------------------------------------
 # Q70

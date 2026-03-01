@@ -90,8 +90,8 @@ func FromKVIsoLevel(level isolation.Level) IsolationLevel {
 // UpgradeToEnabledLevel upgrades the isolation level to the weakest enabled
 // isolation level that is stronger than or equal to the input level.
 func (i IsolationLevel) UpgradeToEnabledLevel(
-	allowReadCommitted, allowRepeatableRead, hasLicense bool,
-) (_ IsolationLevel, upgraded, upgradedDueToLicense bool) {
+	allowReadCommitted, allowRepeatableRead bool,
+) (_ IsolationLevel, upgraded bool) {
 	switch i {
 	case ReadUncommittedIsolation:
 		// READ UNCOMMITTED is mapped to READ COMMITTED. PostgreSQL also does
@@ -99,31 +99,25 @@ func (i IsolationLevel) UpgradeToEnabledLevel(
 		upgraded = true
 		fallthrough
 	case ReadCommittedIsolation:
-		// READ COMMITTED is only allowed if the cluster setting is enabled and the
-		// cluster has a license. Otherwise, it is mapped to a stronger isolation
-		// level (REPEATABLE READ if enabled, SERIALIZABLE otherwise).
-		if allowReadCommitted && hasLicense {
-			return ReadCommittedIsolation, upgraded, upgradedDueToLicense
+		// READ COMMITTED is only allowed if the cluster setting is enabled.
+		// Otherwise, it is mapped to a stronger isolation level (REPEATABLE READ if
+		// enabled, SERIALIZABLE otherwise).
+		if allowReadCommitted {
+			return ReadCommittedIsolation, upgraded
 		}
 		upgraded = true
-		if allowReadCommitted && !hasLicense {
-			upgradedDueToLicense = true
-		}
 		fallthrough
 	case RepeatableReadIsolation, SnapshotIsolation:
 		// REPEATABLE READ and SNAPSHOT are considered aliases. The isolation levels
-		// are only allowed if the cluster setting is enabled and the cluster has a
-		// license. Otherwise, they are mapped to SERIALIZABLE.
-		if allowRepeatableRead && hasLicense {
-			return RepeatableReadIsolation, upgraded, upgradedDueToLicense
+		// are only allowed if the cluster setting is enabled. Otherwise, they are
+		// mapped to SERIALIZABLE.
+		if allowRepeatableRead {
+			return RepeatableReadIsolation, upgraded
 		}
 		upgraded = true
-		if allowRepeatableRead && !hasLicense {
-			upgradedDueToLicense = true
-		}
 		fallthrough
 	case SerializableIsolation:
-		return SerializableIsolation, upgraded, upgradedDueToLicense
+		return SerializableIsolation, upgraded
 	default:
 		panic(fmt.Sprintf("unknown isolation level: %s", i))
 	}

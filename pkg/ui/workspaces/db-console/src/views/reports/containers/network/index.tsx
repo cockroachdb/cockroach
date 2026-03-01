@@ -20,7 +20,7 @@ import union from "lodash/union";
 import values from "lodash/values";
 import moment from "moment-timezone";
 import { common } from "protobufjs";
-import React, { Fragment } from "react";
+import React, { Fragment, useEffect, useState } from "react";
 import { Helmet } from "react-helmet";
 import { connect } from "react-redux";
 import { withRouter, RouteComponentProps } from "react-router-dom";
@@ -95,11 +95,6 @@ export interface NetworkSort {
   filters: Array<{ name: string; address: string }>;
 }
 
-interface INetworkState {
-  collapsed: boolean;
-  filter: NetworkFilter | null;
-}
-
 function contentAvailable(nodesSummary: NodesSummary) {
   return (
     !isUndefined(nodesSummary) &&
@@ -151,76 +146,69 @@ export function getValueFromString(
 /**
  * Renders the Network Report page.
  */
-export class Network extends React.Component<NetworkProps, INetworkState> {
-  state: INetworkState = {
-    collapsed: false,
-    filter: null,
+export function Network({
+  nodesSummary,
+  nodeSummaryErrors,
+  connectivity,
+  refreshNodes: refreshNodesAction,
+  refreshLiveness: refreshLivenessAction,
+  refreshConnectivity: refreshConnectivityAction,
+  match,
+  location,
+}: NetworkProps): React.ReactElement {
+  const [collapsed, setCollapsed] = useState(false);
+  const [networkFilter, setNetworkFilter] = useState<NetworkFilter | null>(
+    null,
+  );
+
+  useEffect(() => {
+    refreshLivenessAction();
+    refreshNodesAction();
+    refreshConnectivityAction();
+  });
+
+  const onChangeCollapse = (newCollapsed: boolean) => {
+    trackCollapseNodes(newCollapsed);
+    setCollapsed(newCollapsed);
   };
 
-  refresh() {
-    this.props.refreshLiveness();
-    this.props.refreshNodes();
-    this.props.refreshConnectivity();
-  }
-
-  componentDidMount() {
-    // Refresh nodes status query when mounting.
-    this.refresh();
-  }
-
-  componentDidUpdate(_prevProps: NetworkProps) {
-    this.refresh();
-  }
-
-  onChangeCollapse = (collapsed: boolean) => {
-    trackCollapseNodes(collapsed);
-    this.setState({ collapsed });
-  };
-
-  onChangeFilter = (key: string, value: string) => {
-    const { filter } = this.state;
-    const newFilter = filter ? filter : {};
-    const data = newFilter[key] || [];
-    const values =
+  const onChangeFilter = (key: string, value: string) => {
+    const currentFilter = networkFilter ? networkFilter : {};
+    const data = currentFilter[key] || [];
+    const newValues =
       data.indexOf(value) === -1
         ? [...data, value]
         : data.length === 1
           ? null
           : data.filter((m: string | number) => m !== value);
     trackFilter(capitalize(key), value);
-    this.setState({
-      filter: {
-        ...newFilter,
-        [key]: values,
-      },
+    setNetworkFilter({
+      ...currentFilter,
+      [key]: newValues,
     });
   };
 
-  deselectFilterByKey = (key: string) => {
-    const { filter } = this.state;
-    const newFilter = filter ? filter : {};
+  const deselectFilterByKey = (key: string) => {
+    const currentFilter = networkFilter ? networkFilter : {};
     trackFilter(capitalize(key), "deselect all");
-    this.setState({
-      filter: {
-        ...newFilter,
-        [key]: null,
-      },
+    setNetworkFilter({
+      ...currentFilter,
+      [key]: null,
     });
   };
 
-  filteredDisplayIdentities = (displayIdentities: Identity[]) => {
-    const { filter } = this.state;
+  const filteredDisplayIdentities = (displayIdentities: Identity[]) => {
     let data: Identity[] = [];
     let selectedIndex = 0;
     if (
-      !filter ||
-      Object.keys(filter).length === 0 ||
-      Object.keys(filter).every(x => filter[x] === null)
+      !networkFilter ||
+      Object.keys(networkFilter).length === 0 ||
+      Object.keys(networkFilter).every(x => networkFilter[x] === null)
     ) {
       return displayIdentities;
     }
     displayIdentities.forEach(identities => {
-      Object.keys(filter).forEach((key, index) => {
+      Object.keys(networkFilter).forEach((key, index) => {
         const value = getValueFromString(
           key,
           key === "cluster"
@@ -229,15 +217,15 @@ export class Network extends React.Component<NetworkProps, INetworkState> {
         );
         if (
           (!data.length || selectedIndex === index) &&
-          filter[key] &&
-          filter[key].indexOf(value) !== -1
+          networkFilter[key] &&
+          networkFilter[key].indexOf(value) !== -1
         ) {
           data.push(identities);
           selectedIndex = index;
-        } else if (filter[key]) {
+        } else if (networkFilter[key]) {
           data = data.filter(
             identity =>
-              filter[key].indexOf(
+              networkFilter[key].indexOf(
                 getValueFromString(
                   key,
                   key === "cluster"
@@ -252,12 +240,82 @@ export class Network extends React.Component<NetworkProps, INetworkState> {
     return data;
   };
 
-  renderLatencyTable(latencies: number[], displayIdentities: Identity[]) {
-    const { match } = this.props;
+  // getSortParams builds a list of sorting and filtering options based on provided list of nodes.
+  // It is possible to filter data by: nodes ID, region, or availability zone. For instance this
+  // function returns can return NetworkSort instance { id: "region", filters: [{name: "us-west1", ...}, {name: "us-west2"}]}
+  // that later used to populate Sort and Filter dropdowns with available options.
+  const getSortParams = (data: Identity[]): NetworkSort[] => {
+    const sort: NetworkSort[] = [];
+    const searchQuery = (params: string) => `cluster,${params}`;
+    data
+      .filter(d => !!d.locality) // filter out dead nodes that don't have locality props
+      .forEach(vals => {
+        const localities = searchQuery(vals.locality).split(",");
+        localities.forEach((locality: string) => {
+          if (locality === "") return;
+          const value = locality.match(/^\w+/gi)
+            ? locality.match(/^\w+/gi)[0]
+            : null;
+          if (sort.some(x => x.id === value)) return;
+          const sortValue: NetworkSort = { id: value, filters: [] };
+          data
+            .filter(d => !!d.locality) // filter out dead nodes that don't have locality props
+            .forEach(item => {
+              const valueLocality = searchQuery(vals.locality).split(",");
+              const itemLocality = searchQuery(item.locality);
+              valueLocality.forEach(val => {
+                const address = item.address ?? "";
+                const itemLocalitySplited = val.match(/^\w+/gi)
+                  ? val.match(/^\w+/gi)[0]
+                  : null;
+                if (val === "cluster" && value === "cluster") {
+                  sortValue.filters = [
+                    ...sortValue.filters,
+                    { name: item.nodeID.toString(), address },
+                  ];
+                } else if (
+                  itemLocalitySplited === value &&
+                  !sortValue.filters.some(
+                    f => f.name === getValueFromString(value, itemLocality),
+                  )
+                ) {
+                  sortValue.filters = [
+                    ...sortValue.filters,
+                    { name: getValueFromString(value, itemLocality), address },
+                  ];
+                }
+              });
+            });
+          sort.push(sortValue);
+        });
+      });
+    return sort;
+  };
+
+  const getDisplayIdentities = (
+    identityByID: Map<number, Identity>,
+  ): Identity[] => {
     const nodeId = getMatchParamByName(match, "node_id");
-    const { collapsed, filter } = this.state;
+    const identityContent = sortBy(
+      Array.from(identityByID.values()),
+      identity => identity.nodeID,
+    );
+    const sort = getSortParams(identityContent);
+    if (sort.some(x => x.id === nodeId)) {
+      return sortBy(identityContent, identity =>
+        getValueFromString(nodeId, identity.locality, true),
+      );
+    }
+    return identityContent;
+  };
+
+  const renderLatencyTable = (
+    latencies: number[],
+    displayIdentities: Identity[],
+  ) => {
+    const nodeId = getMatchParamByName(match, "node_id");
     const mean = d3Mean(latencies);
-    const sortParams = this.getSortParams(displayIdentities);
+    const sortParams = getSortParams(displayIdentities);
     let stddev = d3Deviation(latencies);
     if (isUndefined(stddev)) {
       stddev = 0;
@@ -270,7 +328,7 @@ export class Network extends React.Component<NetworkProps, INetworkState> {
     const stddevMinus2 = stddev > 0 ? max([stddevMinus1 - stddev, 0]) : 0;
     const latencyTable = (
       <Latency
-        displayIdentities={this.filteredDisplayIdentities(displayIdentities)}
+        displayIdentities={filteredDisplayIdentities(displayIdentities)}
         multipleHeader={nodeId !== "cluster"}
         node_id={nodeId}
         collapsed={collapsed}
@@ -292,12 +350,12 @@ export class Network extends React.Component<NetworkProps, INetworkState> {
     return (
       <Fragment>
         <Sort
-          onChangeCollapse={this.onChangeCollapse}
+          onChangeCollapse={onChangeCollapse}
           collapsed={collapsed}
           sort={sortParams}
-          filter={filter}
-          onChangeFilter={this.onChangeFilter}
-          deselectFilterByKey={this.deselectFilterByKey}
+          filter={networkFilter}
+          onChangeFilter={onChangeFilter}
+          deselectFilterByKey={deselectFilterByKey}
         />
         <div className="section">
           <Legend
@@ -311,88 +369,14 @@ export class Network extends React.Component<NetworkProps, INetworkState> {
         </div>
       </Fragment>
     );
-  }
-
-  // getSortParams builds a list of sorting and filtering options based on provided list of nodes.
-  // It is possible to filter data by: nodes ID, region, or availability zone. For instance this
-  // function returns can return NetworkSort instance { id: "region", filters: [{name: "us-west1", ...}, {name: "us-west2"}]}
-  // that later used to populate Sort and Filter dropdowns with available options.
-  getSortParams = (data: Identity[]): NetworkSort[] => {
-    const sort: NetworkSort[] = [];
-    const searchQuery = (params: string) => `cluster,${params}`;
-    data
-      .filter(d => !!d.locality) // filter out dead nodes that don't have locality props
-      .forEach(values => {
-        const localities = searchQuery(values.locality).split(",");
-        localities.forEach((locality: string) => {
-          if (locality === "") return;
-          const value = locality.match(/^\w+/gi)
-            ? locality.match(/^\w+/gi)[0]
-            : null;
-          if (sort.some(x => x.id === value)) return;
-          const sortValue: NetworkSort = { id: value, filters: [] };
-          data
-            .filter(d => !!d.locality) // filter out dead nodes that don't have locality props
-            .forEach(item => {
-              const valueLocality = searchQuery(values.locality).split(",");
-              const itemLocality = searchQuery(item.locality);
-              valueLocality.forEach(val => {
-                const address = item.address ?? "";
-                const itemLocalitySplited = val.match(/^\w+/gi)
-                  ? val.match(/^\w+/gi)[0]
-                  : null;
-                if (val === "cluster" && value === "cluster") {
-                  sortValue.filters = [
-                    ...sortValue.filters,
-                    {
-                      name: item.nodeID.toString(),
-                      address: address,
-                    },
-                  ];
-                } else if (
-                  itemLocalitySplited === value &&
-                  !sortValue.filters.some(
-                    f => f.name === getValueFromString(value, itemLocality),
-                  )
-                ) {
-                  sortValue.filters = [
-                    ...sortValue.filters,
-                    {
-                      name: getValueFromString(value, itemLocality),
-                      address: address,
-                    },
-                  ];
-                }
-              });
-            });
-          sort.push(sortValue);
-        });
-      });
-    return sort;
   };
 
-  getDisplayIdentities = (identityByID: Map<number, Identity>): Identity[] => {
-    const { match } = this.props;
-    const nodeId = getMatchParamByName(match, "node_id");
-    const identityContent = sortBy(
-      Array.from(identityByID.values()),
-      identity => identity.nodeID,
-    );
-    const sort = this.getSortParams(identityContent);
-    if (sort.some(x => x.id === nodeId)) {
-      return sortBy(identityContent, identity =>
-        getValueFromString(nodeId, identity.locality, true),
-      );
-    }
-    return identityContent;
-  };
-
-  renderContent(
-    nodesSummary: NodesSummary,
+  const renderContent = (
+    summary: NodesSummary,
     filters: NodeFilterListProps,
     connections: protos.cockroach.server.serverpb.NetworkConnectivityResponse["connections"],
-  ) {
-    if (!contentAvailable(nodesSummary)) {
+  ) => {
+    if (!contentAvailable(summary)) {
       return null;
     }
     // Following states can be observed:
@@ -402,7 +386,7 @@ export class Network extends React.Component<NetworkProps, INetworkState> {
     // Combine Node Ids known by gossip client (from `connectivity`) and from
     // Nodes api to make sure we show all known nodes.
     const knownNodeIds = union(
-      Object.keys(nodesSummary.livenessByNodeID),
+      Object.keys(summary.livenessByNodeID),
       Object.keys(connections),
     );
 
@@ -411,14 +395,14 @@ export class Network extends React.Component<NetworkProps, INetworkState> {
 
     knownNodeIds.forEach(nodeId => {
       const nodeIdInt = parseInt(nodeId);
-      const status = nodesSummary.nodeStatusByID[nodeId];
+      const status = summary.nodeStatusByID[nodeId];
       identityByID.set(nodeIdInt, {
         nodeID: nodeIdInt,
         address: status?.desc.address.address_field,
         locality: status && localityToString(status.desc.locality),
         updatedAt: status && util.LongToMoment(status.updated_at),
         livenessStatus:
-          nodesSummary.livenessStatusByNodeID[nodeId] ||
+          summary.livenessStatusByNodeID[nodeId] ||
           protos.cockroach.kv.kvserver.liveness.livenesspb.NodeLivenessStatus
             .NODE_STATUS_UNKNOWN,
         connectivity: connections[nodeId],
@@ -437,8 +421,7 @@ export class Network extends React.Component<NetworkProps, INetworkState> {
       }
     });
 
-    const displayIdentities: Identity[] =
-      this.getDisplayIdentities(identityByID);
+    const displayIdentities: Identity[] = getDisplayIdentities(identityByID);
 
     const latencies = flow([
       values,
@@ -458,54 +441,50 @@ export class Network extends React.Component<NetworkProps, INetworkState> {
         </h2>
       );
     }
-    return this.renderLatencyTable(latencies, displayIdentities);
-  }
+    return renderLatencyTable(latencies, displayIdentities);
+  };
 
-  render() {
-    const { nodesSummary, location, connectivity } = this.props;
-    const filters = getFilters(location);
-    const canShowPage =
-      !getDataFromServer().FeatureFlags.disable_kv_level_advanced_debug;
+  const filters = getFilters(location);
+  const canShowPage =
+    !getDataFromServer().FeatureFlags.disable_kv_level_advanced_debug;
 
-    return (
-      <Fragment>
-        <Helmet title="Network" />
-        <h3 className="base-heading">Network</h3>
-        {!canShowPage && (
-          <section className="section">
-            <InlineAlert
-              title="The network page is only available via the system interface."
-              intent="warning"
-            />
-          </section>
-        )}
-        {canShowPage && (
-          <Loading
-            loading={
-              !contentAvailable(nodesSummary) ||
-              !connectivity?.data?.connections
-            }
-            page={"network"}
-            error={this.props.nodeSummaryErrors}
-            className="loading-image loading-image__spinner-left loading-image__spinner-left__padded"
-            render={() => (
-              <div>
-                <NodeFilterList
-                  nodeIDs={filters.nodeIDs}
-                  localityRegex={filters.localityRegex}
-                />
-                {this.renderContent(
-                  nodesSummary,
-                  filters,
-                  connectivity?.data?.connections,
-                )}
-              </div>
-            )}
+  return (
+    <Fragment>
+      <Helmet title="Network" />
+      <h3 className="base-heading">Network</h3>
+      {!canShowPage && (
+        <section className="section">
+          <InlineAlert
+            title="The network page is only available via the system interface."
+            intent="warning"
           />
-        )}
-      </Fragment>
-    );
-  }
+        </section>
+      )}
+      {canShowPage && (
+        <Loading
+          loading={
+            !contentAvailable(nodesSummary) || !connectivity?.data?.connections
+          }
+          page={"network"}
+          error={nodeSummaryErrors}
+          className="loading-image loading-image__spinner-left loading-image__spinner-left__padded"
+          render={() => (
+            <div>
+              <NodeFilterList
+                nodeIDs={filters.nodeIDs}
+                localityRegex={filters.localityRegex}
+              />
+              {renderContent(
+                nodesSummary,
+                filters,
+                connectivity?.data?.connections,
+              )}
+            </div>
+          )}
+        />
+      )}
+    </Fragment>
+  );
 }
 
 const nodeSummaryErrors = createSelector(

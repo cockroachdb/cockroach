@@ -17,10 +17,10 @@ const (
 
 // InstanceInfo represents information about a service instance.
 type InstanceInfo struct {
-	InstanceID    string            `json:"instance_id"`
-	Hostname      string            `json:"hostname"`
-	Mode          Mode              `json:"mode"`
-	StartedAt     time.Time         `json:"started_at"`
-	LastHeartbeat time.Time         `json:"last_heartbeat"`
-	Metadata      map[string]string `json:"metadata,omitempty"`
+	InstanceID    string            `json:"instance_id" db:"instance_id"`
+	Hostname      string            `json:"hostname" db:"hostname"`
+	Mode          Mode              `json:"mode" db:"mode"`
+	StartedAt     time.Time         `json:"started_at" db:"started_at"`
+	LastHeartbeat time.Time         `json:"last_heartbeat" db:"last_heartbeat"`
+	Metadata      map[string]string `json:"metadata,omitempty" db:"metadata,omitempty"`
 }

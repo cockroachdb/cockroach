@@ -53,6 +53,7 @@ go_test(
     name = "execinfrapb_test",
     size = "small",
     srcs = [
+        "api_test.go",
         "component_stats_test.go",
         "flow_diagram_external_test.go",
         "flow_diagram_test.go",
@@ -60,6 +61,7 @@ go_test(
     embed = [":execinfrapb"],
     deps = [
         "//pkg/base",
+        "//pkg/jobs/jobspb",
         "//pkg/keys",
         "//pkg/roachpb",
         "//pkg/security/username",
@@ -68,6 +70,7 @@ go_test(
         "//pkg/sql/catalog/descpb",
         "//pkg/sql/catalog/fetchpb",
         "//pkg/sql/rowenc",
+        "//pkg/util/hlc",
         "//pkg/util/leaktest",
         "//pkg/util/optional",
         "@com_github_stretchr_testify//require",

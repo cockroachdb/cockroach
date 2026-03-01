@@ -182,7 +182,7 @@ func WriteInitialClusterData(
 			}
 
 			// Replica GC timestamp.
-			if err := storage.MVCCPutProto(
+			if err := storage.MVCCBlindPutProto(
 				ctx, batch, keys.RangeLastReplicaGCTimestampKey(desc.RangeID),
 				hlc.Timestamp{}, &now, storage.MVCCWriteOptions{},
 			); err != nil {

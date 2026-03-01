@@ -425,6 +425,8 @@ func TestRandStep(t *testing.T) {
 			switch o.Type {
 			case ChangeSettingType_SetLeaseType:
 				counts.ChangeSetting.SetLeaseType++
+			case ChangeSettingType_ToggleVirtualIntentResolution:
+				counts.ChangeSetting.ToggleVirtualIntentResolution++
 			}
 		case *ChangeZoneOperation:
 			switch o.Type {

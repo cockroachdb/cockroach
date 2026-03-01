@@ -366,6 +366,7 @@ func runOneRoundQueryComparison(
 			sqlsmith.SetComplexity(.3),
 			sqlsmith.SetScalarComplexity(.1),
 			sqlsmith.SimpleNames(),
+			sqlsmith.SetLogger(t.L().Printf),
 		)
 		if err != nil {
 			t.Fatal(err)
@@ -445,6 +446,7 @@ func newMutatingSmither(
 		sqlsmith.SetComplexity(.05),
 		sqlsmith.SetScalarComplexity(.01),
 		sqlsmith.SimpleNames(),
+		sqlsmith.SetLogger(t.L().Printf),
 	)
 	if disableDelete {
 		smitherOpts = append(smitherOpts, sqlsmith.InsUpdOnly())

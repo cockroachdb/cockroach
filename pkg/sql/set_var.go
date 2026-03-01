@@ -7,6 +7,7 @@ package sql
 
 import (
 	"context"
+	"math"
 	"strings"
 	"time"
 
@@ -402,6 +403,86 @@ func validateTimeoutVar(
 	}
 
 	return timeout, nil
+}
+
+// makeTCPKeepAliveVarGetter returns a getStringValFn for TCP keepalive
+// session variables. When the user provides a plain integer via SET, it
+// is treated as seconds (for keepalive vars) or milliseconds (for
+// tcp_user_timeout). String and interval values are passed through for
+// parsing in the Set function.
+func makeTCPKeepAliveVarGetter(varName string, defaultUnit time.Duration) getStringValFn {
+	return func(
+		ctx context.Context,
+		evalCtx *extendedEvalContext,
+		values []tree.TypedExpr,
+		txn *kv.Txn,
+	) (string, error) {
+		if len(values) != 1 {
+			return "", newSingleArgVarError(varName)
+		}
+		d, err := eval.Expr(ctx, &evalCtx.Context, values[0])
+		if err != nil {
+			return "", err
+		}
+		switch v := eval.UnwrapDatum(ctx, &evalCtx.Context, d).(type) {
+		case *tree.DString:
+			return string(*v), nil
+		case *tree.DInterval:
+			dur, err := durationToTotalNanos(v.Duration)
+			if err != nil {
+				return "", wrapSetVarError(err, varName, values[0].String())
+			}
+			return dur.String(), nil
+		case *tree.DInt:
+			dur := time.Duration(*v) * defaultUnit
+			return dur.String(), nil
+		default:
+			return "", newVarValueError(varName, values[0].String())
+		}
+	}
+}
+
+// parseTCPKeepAliveVar parses a string value for a TCP keepalive session
+// variable. It accepts plain integers (interpreted according to
+// defaultDurationType — seconds or milliseconds) and duration strings
+// (e.g., "1m30s"). The result is truncated to the given unit (seconds
+// or milliseconds) and must be non-negative.
+func parseTCPKeepAliveVar(
+	style duration.IntervalStyle,
+	s string,
+	varName string,
+	defaultDurationType types.IntervalDurationType,
+	truncateUnit time.Duration,
+) (int32, error) {
+	interval, err := tree.ParseIntervalWithTypeMetadata(
+		style,
+		s,
+		types.IntervalTypeMetadata{
+			DurationField: types.IntervalDurationField{
+				DurationType: defaultDurationType,
+			},
+		},
+	)
+	if err != nil {
+		return 0, pgerror.Newf(pgcode.InvalidParameterValue,
+			"invalid value for parameter %q: %q", redact.SafeString(varName), s)
+	}
+	dur, err := durationToTotalNanos(interval)
+	if err != nil {
+		return 0, pgerror.Newf(pgcode.InvalidParameterValue,
+			"invalid value for parameter %q: %q", redact.SafeString(varName), s)
+	}
+	if dur < 0 {
+		return 0, pgerror.Newf(pgcode.InvalidParameterValue,
+			"%v cannot be negative", redact.SafeString(varName))
+	}
+	// Truncate to the storage unit.
+	result := int64(dur / truncateUnit)
+	if result > math.MaxInt32 {
+		return 0, pgerror.Newf(pgcode.InvalidParameterValue,
+			"value out of range for parameter %q: %q", redact.SafeString(varName), s)
+	}
+	return int32(result), nil
 }
 
 func stmtTimeoutVarSet(ctx context.Context, m sessionmutator.SessionDataMutator, s string) error {

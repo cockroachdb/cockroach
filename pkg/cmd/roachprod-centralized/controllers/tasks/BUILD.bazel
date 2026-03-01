@@ -6,10 +6,12 @@ go_library(
     importpath = "github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/controllers/tasks",
     visibility = ["//visibility:public"],
     deps = [
+        "//pkg/cmd/roachprod-centralized/auth",
         "//pkg/cmd/roachprod-centralized/controllers",
         "//pkg/cmd/roachprod-centralized/controllers/tasks/types",
         "//pkg/cmd/roachprod-centralized/services/tasks/types",
-        "//pkg/cmd/roachprod-centralized/utils/api/bindings",
+        "//pkg/cmd/roachprod-centralized/utils/api/bindings/stripe",
+        "//pkg/cmd/roachprod-centralized/utils/api/query",
         "//pkg/util/uuid",
         "@com_github_gin_gonic_gin//:gin",
     ],
@@ -21,6 +23,7 @@ go_test(
     embed = [":tasks"],
     deps = [
         "//pkg/cmd/roachprod-centralized/app",
+        "//pkg/cmd/roachprod-centralized/auth/disabled",
         "//pkg/cmd/roachprod-centralized/controllers",
         "//pkg/cmd/roachprod-centralized/models/tasks",
         "//pkg/cmd/roachprod-centralized/services/tasks/mocks",

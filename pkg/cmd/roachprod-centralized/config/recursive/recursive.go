@@ -77,12 +77,49 @@ func ProcessFieldsRecursive(
 			continue
 		}
 		if field.Type.Kind() == reflect.Slice {
-			// Handle slice fields by creating flags for discovered indices
-			if createFlags {
-				err := flags.CreateSliceFlags(fs, field, fieldPrefixes, flagEnvPrefixes)
-				if err != nil {
-					return errors.Wrapf(err, "creating slice flags for field %s", field.Name)
+			elemKind := field.Type.Elem().Kind()
+			if elemKind == reflect.Struct {
+				// Handle slice of structs by creating indexed flags
+				if createFlags {
+					err := flags.CreateSliceFlags(fs, field, fieldPrefixes, flagEnvPrefixes)
+					if err != nil {
+						return errors.Wrapf(err, "creating slice flags for field %s", field.Name)
+					}
 				}
+				continue
+			}
+			// Handle slice of primitives (e.g., []string, []int, []bool)
+			// with pflag's native slice support
+			fieldName := strings.Join(
+				append(append([]string{}, fieldPrefixes...), field.Name), ".",
+			)
+			flagName := strings.Join(
+				append(append([]string{}, flagEnvPrefixes...), strcase.ToKebab(envTag)), "-",
+			)
+			envName := strings.ToUpper(strings.ReplaceAll(flagName, "-", "_"))
+			if createFlags {
+				switch elemKind {
+				case reflect.String:
+					fs.StringSlice(flagName, nil, desc)
+				case reflect.Int:
+					fs.IntSlice(flagName, nil, desc)
+				case reflect.Bool:
+					fs.BoolSlice(flagName, nil, desc)
+				default:
+					continue
+				}
+				if err := e.BindPFlag(fieldName, fs.Lookup(flagName)); err != nil {
+					return errors.Wrapf(err, "binding flag for %s", fieldName)
+				}
+			} else {
+				if flag := fs.Lookup(flagName); flag != nil {
+					if err := e.BindPFlag(fieldName, flag); err != nil {
+						return errors.Wrapf(err, "binding flag for %s", fieldName)
+					}
+				}
+			}
+			if err := e.BindEnv(fieldName, fmt.Sprintf("%s_%s", types.EnvPrefix, envName)); err != nil {
+				return errors.Wrapf(err, "binding env var for %s", fieldName)
 			}
 			continue
 		}

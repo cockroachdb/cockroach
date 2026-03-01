@@ -15,6 +15,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdctest"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
+	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/resolvedspan"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobfrontier"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
@@ -23,9 +24,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/span"
@@ -312,4 +315,172 @@ WITH no_initial_scan, min_checkpoint_frequency='1s', resolved, metrics_label='%s
 
 		cdcTest(t, testFn)
 	})
+}
+
+// TestCoreChangefeedProgress verifies that core (sinkless) changefeeds
+// save and restore their full span frontier across retries. It creates
+// a changefeed over two tables with one table's resolved timestamps
+// frozen, waits for the frontier to be persisted with distinct
+// per-span timestamps, injects a retryable error, and checks that the
+// restored frontier on retry matches the saved one.
+func TestCoreChangefeedProgress(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
+		// Create two tables so the frontier has multiple spans.
+		sqlDB := sqlutils.MakeSQLRunner(s.DB)
+		sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY)`)
+		sqlDB.Exec(t, `CREATE TABLE bar (a INT PRIMARY KEY)`)
+		sqlDB.Exec(t, `INSERT INTO foo VALUES (1), (2), (3)`)
+		sqlDB.Exec(t, `INSERT INTO bar VALUES (4), (5), (6)`)
+
+		knobs := s.TestingKnobs.
+			DistSQL.(*execinfra.TestingKnobs).
+			Changefeed.(*TestingKnobs)
+
+		// Force the aggregator to flush its frontier on every resolved
+		// span. Without this, the aggregator batches updates and the
+		// coordinator may not receive rows frequently enough.
+		knobs.ShouldFlushFrontier = func(_ jobspb.ResolvedSpan) bool {
+			return true
+		}
+
+		// Freeze bar's resolved timestamps at the first non-zero value.
+		// Foo continues advancing, so the frontier has two spans at
+		// different timestamps. This ensures the test verifies per-span
+		// frontier restoration, not just highwater restoration.
+		barTableSpan := desctestutils.
+			TestingGetPublicTableDescriptor(s.Server.DB(), s.Codec, "d", "bar").
+			PrimaryIndexSpan(s.Codec)
+		var barFrozenAt atomic.Int64
+		knobs.FilterSpanWithMutation = func(rs *jobspb.ResolvedSpan) (bool, error) {
+			if barTableSpan.ContainsKey(rs.Span.Key) && !rs.Timestamp.IsEmpty() {
+				if frozen := barFrozenAt.Load(); frozen != 0 {
+					rs.Timestamp.WallTime = frozen
+				} else {
+					barFrozenAt.Store(rs.Timestamp.WallTime)
+				}
+			}
+			return false, nil
+		}
+
+		// Snapshot the restored frontier on each run so we can compare.
+		var hasRestoredFrontier atomic.Bool
+		var initialFrontier, retryFrontier []jobspb.ResolvedSpan
+		knobs.AfterCoordinatorFrontierRestore = func(frontier *resolvedspan.CoordinatorFrontier) {
+			var spans []jobspb.ResolvedSpan
+			for rs := range frontier.All() {
+				spans = append(spans, rs)
+			}
+			if initialFrontier == nil {
+				initialFrontier = spans
+			} else {
+				retryFrontier = spans
+				hasRestoredFrontier.Store(true)
+			}
+		}
+
+		// Track the initial highwater on each run.
+		var startedOnce atomic.Bool
+		var initialHighwater, retryHighwater hlc.Timestamp
+		knobs.StartDistChangefeedInitialHighwater = func(_ context.Context, hw hlc.Timestamp) {
+			if startedOnce.Load() {
+				retryHighwater = hw
+			} else {
+				initialHighwater = hw
+				startedOnce.Store(true)
+			}
+		}
+
+		// Record the last persisted frontier spans. Once the frontier has
+		// multiple spans with distinct non-empty timestamps, inject a
+		// retryable error exactly once so the retry can restore the frontier.
+		var errorInjected atomic.Bool
+		var savedSpans []jobspb.ResolvedSpan
+		var savedHighwater hlc.Timestamp
+		knobs.AfterPersistFrontier = func(state eval.CoreChangefeedState) error {
+			if errorInjected.Load() {
+				return nil
+			}
+			cp := state.(*coreProgress)
+			require.NotNil(t, cp)
+			// Wait until the frontier has multiple spans with non-empty,
+			// distinct timestamps before signaling. Distinct timestamps
+			// ensure we're testing per-span restoration, not just highwater.
+			if len(cp.frontierSpans) < 2 {
+				return nil
+			}
+			timestamps := make(map[int64]struct{})
+			for _, rs := range cp.frontierSpans {
+				if rs.Timestamp.IsEmpty() {
+					return nil
+				}
+				timestamps[rs.Timestamp.WallTime] = struct{}{}
+			}
+			if len(timestamps) < 2 {
+				return nil
+			}
+			savedSpans = make([]jobspb.ResolvedSpan, len(cp.frontierSpans))
+			copy(savedSpans, cp.frontierSpans)
+			if hw := cp.progress.GetHighWater(); hw != nil {
+				savedHighwater = *hw
+			}
+			if errorInjected.CompareAndSwap(false, true) {
+				return changefeedbase.MarkRetryableError(errors.New("AfterPersistFrontier"))
+			}
+			return nil
+		}
+
+		// Run changefeed.
+		cf := feed(t, f, `CREATE CHANGEFEED FOR foo, bar
+WITH resolved='1ns', min_checkpoint_frequency='1ns'`)
+		defer closeFeed(t, cf)
+
+		// Drain initial rows so the changefeed can advance past them.
+		assertPayloads(t, cf, []string{
+			`foo: [1]->{"after": {"a": 1}}`,
+			`foo: [2]->{"after": {"a": 2}}`,
+			`foo: [3]->{"after": {"a": 3}}`,
+			`bar: [4]->{"after": {"a": 4}}`,
+			`bar: [5]->{"after": {"a": 5}}`,
+			`bar: [6]->{"after": {"a": 6}}`,
+		})
+
+		// Wait for the frontier to be restored on retry.
+		testutils.SucceedsSoon(t, func() error {
+			if !hasRestoredFrontier.Load() {
+				return errors.New("waiting for retry")
+			}
+			return nil
+		})
+
+		// The persisted frontier should have multiple spans with non-empty
+		// timestamps, and at least two distinct timestamps (bar is frozen
+		// behind foo) to verify per-span restoration.
+		require.Greater(t, len(savedSpans), 1)
+		timestamps := make(map[hlc.Timestamp]struct{})
+		for _, rs := range savedSpans {
+			require.False(t, rs.Timestamp.IsEmpty())
+			timestamps[rs.Timestamp] = struct{}{}
+		}
+		require.Greater(t, len(timestamps), 1,
+			"expected spans at different timestamps to verify per-span restoration")
+
+		// On first run, the highwater and frontier start empty.
+		require.True(t, initialHighwater.IsEmpty())
+		require.NotEmpty(t, initialFrontier)
+		for _, rs := range initialFrontier {
+			require.True(t, rs.Timestamp.IsEmpty())
+		}
+
+		// On retry, the highwater and frontier should match what was saved.
+		require.False(t, savedHighwater.IsEmpty())
+		require.Equal(t, savedHighwater, retryHighwater)
+		require.NotEmpty(t, retryFrontier)
+		require.ElementsMatch(t, savedSpans, retryFrontier)
+	}
+
+	cdcTest(t, testFn, feedTestForceSink("sinkless"),
+		withAllowChangefeedErr("test injects retryable error"))
 }

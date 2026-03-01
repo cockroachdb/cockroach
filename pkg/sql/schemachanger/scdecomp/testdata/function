@@ -51,7 +51,6 @@ ElementState:
           tupleLabels: []
           udtMetadata:
             arrayTypeOid: 100109
-          visibleType: 0
           width: 0
         typeName: public.notmyworkday
     returnSet: false
@@ -71,7 +70,6 @@ ElementState:
         tupleContents: []
         tupleLabels: []
         udtMetadata: null
-        visibleType: 0
         width: 64
       typeName: INT8
   Status: PUBLIC
@@ -148,7 +146,6 @@ ElementState:
           tupleLabels: []
           udtMetadata:
             arrayTypeOid: 100109
-          visibleType: 0
           width: 0
         typeName: public.notmyworkday
     returnType: null

@@ -63,6 +63,7 @@ go_test(
     name = "security_test",
     size = "medium",
     srcs = [
+        "auth_internal_test.go",
         "auth_test.go",
         "certificate_loader_test.go",
         "certificate_manager_test.go",

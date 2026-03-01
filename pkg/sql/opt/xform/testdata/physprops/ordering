@@ -3149,7 +3149,7 @@ CREATE TABLE table2_88649 (
 )
 ----
 
-opt
+opt disable=(EliminateZeroCardSelect,EliminateZeroCardProject)
 SELECT
   CASE WHEN true THEN tab_923.col1_4 ELSE tab_923.col1_3 END AS col_2150
 FROM

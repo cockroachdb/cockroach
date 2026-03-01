@@ -45,6 +45,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/idxtype"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlclustersettings"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlinstance"
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/jobutils"
@@ -52,7 +53,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
-	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/allstacks"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -414,6 +414,116 @@ func TestLogicalStreamIngestionJobWithCursor(t *testing.T) {
 	}
 	dbA.CheckQueryResults(t, "SELECT * from a.tab", expectedRowsA)
 	dbB.CheckQueryResults(t, "SELECT * from b.tab", expectedRowsB)
+}
+
+func TestLogicalReplicationCursorPreventsReEmitAfterSchemaChangeRestart(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	skip.UnderDeadlock(t)
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	server, s, dbA, dbB := setupLogicalTestServer(t, ctx, testClusterBaseClusterArgs, 1)
+	defer server.Stopper().Stop(ctx)
+
+	dbAURL := replicationtestutils.GetExternalConnectionURI(t, s, s, serverutils.DBName("a"))
+
+	var jobBID jobspb.JobID
+	dbB.QueryRow(t, "CREATE LOGICAL REPLICATION STREAM FROM TABLE tab ON $1 INTO TABLE tab",
+		dbAURL.String()).Scan(&jobBID)
+
+	dbA.Exec(t, "INSERT INTO tab VALUES (1, 'before schema change')")
+
+	WaitUntilReplicatedTime(t, s.Clock().Now(), dbB, jobBID)
+
+	var firstRowReplicatedMVCC float64
+	dbB.QueryRow(t, "SELECT crdb_internal_mvcc_timestamp FROM tab WHERE pk = 1").Scan(&firstRowReplicatedMVCC)
+
+	dbB.Exec(t, "CANCEL JOB $1", jobBID)
+	jobutils.WaitForJobToCancel(t, dbB, jobBID)
+
+	testutils.SucceedsSoon(t, func() error {
+		_, err := dbA.DB.ExecContext(ctx, "ALTER TABLE tab ADD COLUMN extra INT")
+		return err
+	})
+	dbB.Exec(t, "ALTER TABLE tab ADD COLUMN extra INT")
+
+	schemaChangeTS := s.Clock().Now()
+
+	dbA.Exec(t, "INSERT INTO tab VALUES (2, 'after schema change', 10)")
+
+	dbB.QueryRow(t, "CREATE LOGICAL REPLICATION STREAM FROM TABLE tab ON $1 INTO TABLE tab with cursor = $2",
+		dbAURL.String(), schemaChangeTS.AsOfSystemTime()).Scan(&jobBID)
+
+	WaitUntilReplicatedTime(t, s.Clock().Now(), dbB, jobBID)
+
+	dbB.CheckQueryResults(t, "SELECT * FROM tab ORDER BY pk", [][]string{{"1", "before schema change", "NULL"}, {"2", "after schema change", "10"}})
+
+	var beforeSchemaChangeInsertMVCC, afterSchemaChangeInsertMVCC float64
+	dbB.QueryRow(t, "SELECT crdb_internal_mvcc_timestamp FROM tab WHERE pk = 1").Scan(&beforeSchemaChangeInsertMVCC)
+	dbB.QueryRow(t, "SELECT crdb_internal_mvcc_timestamp FROM tab WHERE pk = 2").Scan(&afterSchemaChangeInsertMVCC)
+	// Verify that the row inserted before the schema change/cursor hasn't changed.
+	require.Equal(t, firstRowReplicatedMVCC, beforeSchemaChangeInsertMVCC)
+	require.Less(t, beforeSchemaChangeInsertMVCC, float64(schemaChangeTS.WallTime))
+	require.Less(t, float64(schemaChangeTS.WallTime), afterSchemaChangeInsertMVCC)
+}
+
+func TestLogicalReplicationCursorBeforeSchemaChange(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	skip.UnderDeadlock(t)
+	defer log.Scope(t).Close(t)
+
+	skip.WithIssue(t, 164290)
+
+	ctx := context.Background()
+	server, s, dbA, dbB := setupLogicalTestServer(t, ctx, testClusterBaseClusterArgs, 1)
+	defer server.Stopper().Stop(ctx)
+
+	dbAURL := replicationtestutils.GetExternalConnectionURI(t, s, s, serverutils.DBName("a"))
+
+	var jobBID jobspb.JobID
+	beforeSchemaChangeTS := s.Clock().Now()
+	dbA.Exec(t, "INSERT INTO tab VALUES (1, 'before schema change')")
+	dbB.QueryRow(t, "CREATE LOGICAL REPLICATION STREAM FROM TABLE tab ON $1 INTO TABLE tab WITH cursor = $2",
+		dbAURL.String(), beforeSchemaChangeTS.AsOfSystemTime()).Scan(&jobBID)
+
+	WaitUntilReplicatedTime(t, s.Clock().Now(), dbB, jobBID)
+
+	dbB.CheckQueryResults(t, "SELECT * FROM tab ORDER BY pk", [][]string{{"1", "before schema change", "NULL"}})
+}
+
+func TestLogicalReplicationOnDBWithCursor(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	skip.UnderDeadlock(t)
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	server, s, dbA, dbB := setupLogicalTestServer(t, ctx, testClusterBaseClusterArgs, 1)
+	defer server.Stopper().Stop(ctx)
+
+	dbA.Exec(t, "CREATE TABLE tab2 (pk int primary key, payload string)")
+	dbB.Exec(t, "CREATE TABLE tab2 (pk int primary key, payload string)")
+
+	dbA.Exec(t, "INSERT INTO tab VALUES (1, 'pre-cursor')")
+	dbA.Exec(t, "INSERT INTO tab2 VALUES (1, 'pre-cursor')")
+
+	cursorTS := s.Clock().Now()
+
+	dbA.Exec(t, "INSERT INTO tab VALUES (2, 'post-cursor')")
+	dbA.Exec(t, "INSERT INTO tab2 VALUES (2, 'post-cursor')")
+
+	dbAURL := replicationtestutils.GetExternalConnectionURI(t, s, s, serverutils.DBName("a"))
+
+	var jobBID jobspb.JobID
+	dbB.QueryRow(t,
+		"CREATE LOGICAL REPLICATION STREAM FROM TABLES (tab, tab2) ON $1 INTO TABLES (tab, tab2) WITH CURSOR = $2",
+		dbAURL.String(), cursorTS.AsOfSystemTime()).Scan(&jobBID)
+
+	WaitUntilReplicatedTime(t, s.Clock().Now(), dbB, jobBID)
+
+	dbB.CheckQueryResults(t, "SELECT * FROM tab",
+		[][]string{{"2", "post-cursor"}})
+	dbB.CheckQueryResults(t, "SELECT * FROM tab2",
+		[][]string{{"2", "post-cursor"}})
 }
 
 func TestCreateTables(t *testing.T) {
@@ -2422,13 +2532,9 @@ func TestLogicalReplicationGatewayRoute(t *testing.T) {
 	// config connection url was used for all streams.
 	args := testClusterBaseClusterArgs
 	args.ServerArgs.Knobs.Streaming = &sql.StreamingTestingKnobs{
-		OnGetSQLInstanceInfo: func(node *roachpb.NodeDescriptor) *roachpb.NodeDescriptor {
-			copy := *node
-			copy.SQLAddress = util.UnresolvedAddr{
-				NetworkField: "tcp",
-				AddressField: blackhole.Addr().String(),
-			}
-			return &copy
+		OnGetSQLInstanceInfo: func(node sqlinstance.InstanceInfo) sqlinstance.InstanceInfo {
+			node.InstanceSQLAddr = blackhole.Addr().String()
+			return node
 		},
 	}
 	ts, s, runners, dbs := setupServerWithNumDBs(t, context.Background(), args, 1, 2)

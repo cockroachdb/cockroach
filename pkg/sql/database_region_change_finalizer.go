@@ -11,12 +11,14 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/multiregion"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 )
 
@@ -101,7 +103,13 @@ func (r *databaseRegionChangeFinalizer) finalize(ctx context.Context, txn descs.
 	if err := r.preDrop(ctx, txn); err != nil {
 		return err
 	}
-	return r.updateGlobalTablesZoneConfig(ctx, txn)
+	if err := r.updateGlobalTablesZoneConfig(ctx, txn); err != nil {
+		return err
+	}
+	if err := r.updateSystemTableRegionReferences(ctx, txn); err != nil {
+		return err
+	}
+	return nil
 }
 
 // preDrop is called in advance of dropping regions from a multi-region
@@ -165,6 +173,102 @@ func (r *databaseRegionChangeFinalizer) updateGlobalTablesZoneConfig(
 	err = r.localPlanner.refreshZoneConfigsForTables(ctx, dbDesc, WithOnlyGlobalTables)
 	if err != nil {
 		return err
+	}
+
+	return nil
+}
+
+// updateSystemTableRegionReferences fixes REGIONAL BY TABLE system tables
+// that reference a region no longer present in the database. Tables that
+// explicitly reference a non-existent region are reset to implicitly follow
+// the primary region.
+func (r *databaseRegionChangeFinalizer) updateSystemTableRegionReferences(
+	ctx context.Context, txn descs.Txn,
+) error {
+	// Only applies to the system database. Non-system databases have stricter
+	// checks in CanDropRegion that enforce survivability goals before allowing a
+	// region drop, preventing tables from referencing a dropped region. The system
+	// database skips those survivability checks, so a region can be dropped even
+	// if system tables still reference it — hence the need for this cleanup.
+	if r.dbID != keys.SystemDatabaseID {
+		return nil
+	}
+
+	regionConfig, err := SynthesizeRegionConfig(ctx, txn.KV(), r.dbID, r.localPlanner.Descriptors())
+	if err != nil {
+		return err
+	}
+
+	dbDesc, err := r.localPlanner.Descriptors().ByIDWithoutLeased(txn.KV()).WithoutNonPublic().Get().Database(ctx, r.dbID)
+	if err != nil {
+		return err
+	}
+
+	primaryRegion := regionConfig.PrimaryRegion()
+
+	// Collect tables that need to be updated.
+	var tablesToUpdate []*tabledesc.Mutable
+
+	// Find all system tables that have REGIONAL BY TABLE locality.
+	err = r.localPlanner.forEachMutableTableInDatabase(
+		ctx,
+		dbDesc,
+		func(ctx context.Context, scName string, tableDesc *tabledesc.Mutable) error {
+			// Skip if not REGIONAL BY TABLE.
+			if !tableDesc.IsLocalityRegionalByTable() {
+				return nil
+			}
+
+			// Get the current region.
+			currentRegion, err := tableDesc.GetRegionalByTableRegion()
+			if err != nil {
+				return err
+			}
+
+			// If already set to primary (explicit or implicit), nothing to do.
+			if currentRegion == primaryRegion || currentRegion == catpb.RegionName(tree.PrimaryRegionNotSpecifiedName) {
+				return nil
+			}
+
+			// If the table's current region still exists in the database, leave
+			// it alone.
+			if regionConfig.IsValidRegionNameString(string(currentRegion)) {
+				return nil
+			}
+
+			// The table references a region that no longer exists. Reset it to
+			// implicitly follow the primary region.
+			tableDesc.SetTableLocalityRegionalByTable(tree.PrimaryRegionNotSpecifiedName)
+			tablesToUpdate = append(tablesToUpdate, tableDesc)
+
+			// Also regenerate the zone config to match the new region.
+			return ApplyZoneConfigForMultiRegionTable(
+				ctx,
+				txn,
+				r.localPlanner.ExecCfg(),
+				r.localPlanner.extendedEvalCtx.Tracing.KVTracingEnabled(),
+				regionConfig,
+				tableDesc,
+				ApplyZoneConfigForMultiRegionTableOptionTableAndIndexes,
+			)
+		},
+	)
+	if err != nil {
+		return err
+	}
+
+	// Write all table descriptor updates in a batch.
+	if len(tablesToUpdate) > 0 {
+		b := txn.KV().NewBatch()
+		for _, t := range tablesToUpdate {
+			const kvTrace = false
+			if err := r.localPlanner.Descriptors().WriteDescToBatch(
+				ctx, kvTrace, t, b,
+			); err != nil {
+				return err
+			}
+		}
+		return txn.KV().Run(ctx, b)
 	}
 
 	return nil

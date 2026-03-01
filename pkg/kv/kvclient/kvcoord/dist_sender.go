@@ -369,20 +369,6 @@ var metamorphicRouteToLeaseholderFirst = metamorphic.ConstantWithTestBool(
 	true,
 )
 
-// CanSendToFollower is used by the DistSender to determine if it needs to look
-// up the current lease holder for a request. It is used by the
-// followerreadsccl code to inject logic to check if follower reads are enabled.
-// By default, without CCL code, this function returns false.
-var CanSendToFollower = func(
-	_ context.Context,
-	_ *cluster.Settings,
-	_ *hlc.Clock,
-	_ roachpb.RangeClosedTimestampPolicy,
-	_ *kvpb.BatchRequest,
-) bool {
-	return false
-}
-
 const (
 	// The default scaling factor for the number of async ops per vCPU.
 	DefaultSenderStreamsPerVCPU = 384
@@ -765,6 +751,16 @@ type DistSender struct {
 	// HealthFunc returns true if the node is alive and not draining.
 	healthFunc HealthFunc
 
+	// canSendToFollower, if set, determines whether a batch can be routed to a
+	// follower replica. When nil, all requests are routed to the leaseholder.
+	canSendToFollower func(
+		ctx context.Context,
+		st *cluster.Settings,
+		clock *hlc.Clock,
+		ctPolicy roachpb.RangeClosedTimestampPolicy,
+		ba *kvpb.BatchRequest,
+	) bool
+
 	onRangeSpanningNonTxnalBatch func(ba *kvpb.BatchRequest) *kvpb.Error
 
 	// locality is the description of the topography of the server on which the
@@ -838,6 +834,17 @@ type DistSenderConfig struct {
 	HealthFunc HealthFunc
 
 	LatencyFunc LatencyFunc
+
+	// CanSendToFollower, if set, is called to determine whether a batch request
+	// may be routed to a follower replica rather than the leaseholder. If nil,
+	// follower reads are disabled and all requests are routed to the leaseholder.
+	CanSendToFollower func(
+		ctx context.Context,
+		st *cluster.Settings,
+		clock *hlc.Clock,
+		ctPolicy roachpb.RangeClosedTimestampPolicy,
+		ba *kvpb.BatchRequest,
+	) bool
 }
 
 // NewDistSender returns a batch.Sender instance which connects to the
@@ -949,6 +956,8 @@ func NewDistSender(cfg DistSenderConfig) *DistSender {
 	if cfg.TestingKnobs.OnRangeSpanningNonTxnalBatch != nil {
 		ds.onRangeSpanningNonTxnalBatch = cfg.TestingKnobs.OnRangeSpanningNonTxnalBatch
 	}
+
+	ds.canSendToFollower = cfg.CanSendToFollower
 
 	// Some tests don't set the healthFunc.
 	if ds.healthFunc == nil {
@@ -2602,7 +2611,8 @@ func (ds *DistSender) sendToReplicas(
 	// assume that it's LEAD_FOR_GLOBAL_READS, because if it is, and we assumed
 	// otherwise, we may send a request to a remote region unnecessarily.
 	if ba.RoutingPolicy == kvpb.RoutingPolicy_LEASEHOLDER &&
-		CanSendToFollower(
+		ds.canSendToFollower != nil &&
+		ds.canSendToFollower(
 			ctx, ds.st, ds.clock,
 			routing.ClosedTimestampPolicy(rangecache.DefaultSendClosedTimestampPolicy), ba,
 		) {

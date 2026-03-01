@@ -1215,7 +1215,9 @@ func TestSplitRetriesOnFailedExitOfJointConfig(t *testing.T) {
 	}
 }
 
-func TestReplicateQueueSeesLearnerOrJointConfig(t *testing.T) {
+// TestReplicateQueueSeesLearner verifies that the replicate queue will
+// correctly remove a learner replica and upreplicate to the desired RF.
+func TestReplicateQueueSeesLearner(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	// NB also see TestAllocatorRemoveLearner for a lower-level test.
@@ -1252,36 +1254,57 @@ func TestReplicateQueueSeesLearnerOrJointConfig(t *testing.T) {
 
 	// Run the replicate queue only for our target range.
 	store, repl := getFirstStoreReplica(t, tc.Server(0), scratchStartKey)
-	{
-		// Set our target range ID in the knobs.
-		targetRangeID.Store(repl.RangeID)
-		require.Equal(t, int64(0), getFirstStoreMetric(t, tc.Server(0), `queue.replicate.removelearnerreplica`))
-		traceCtx, finish := tracing.ContextWithRecordingSpan(ctx, store.GetStoreConfig().Tracer(), "trace-enqueue")
-		processErr, err := store.Enqueue(
-			traceCtx, "replicate", repl, true /* skipShouldQueue */, false, /* async */
-		)
-		rec := finish()
-		require.NoError(t, err)
-		require.NoError(t, processErr)
-		action := "next replica action: remove learner"
-		require.NoError(t, testutils.MatchInOrder(rec.String(), []string{action}...))
-		require.Equal(t, int64(1), getFirstStoreMetric(t, tc.Server(0), `queue.replicate.removelearnerreplica`))
+	targetRangeID.Store(repl.RangeID)
+	require.Equal(t, int64(0), getFirstStoreMetric(t, tc.Server(0), `queue.replicate.removelearnerreplica`))
+	traceCtx, finish := tracing.ContextWithRecordingSpan(ctx, store.GetStoreConfig().Tracer(), "trace-enqueue")
+	processErr, err := store.Enqueue(
+		traceCtx, "replicate", repl, true /* skipShouldQueue */, false, /* async */
+	)
+	rec := finish()
+	require.NoError(t, err)
+	require.NoError(t, processErr)
+	action := "next replica action: remove learner"
+	require.NoError(t, testutils.MatchInOrder(rec.String(), []string{action}...))
+	require.Equal(t, int64(1), getFirstStoreMetric(t, tc.Server(0), `queue.replicate.removelearnerreplica`))
 
-		testutils.SucceedsSoon(t, func() error {
-			desc := tc.LookupRangeOrFatal(t, scratchStartKey)
-			if len(desc.Replicas().LearnerDescriptors()) != 0 {
-				return errors.Newf("Mismatch in num learners %v, desc: %v", desc.Replicas().LearnerDescriptors(), desc)
-			}
-			if len(desc.Replicas().VoterDescriptors()) != 3 {
-				return errors.Newf("Mismatch in num voters %v, desc: %v", desc.Replicas().VoterDescriptors(), desc)
-			}
-			return nil
-		})
-		// Unset the target range ID before the next test.
-		targetRangeID.Store(roachpb.RangeID(0))
+	testutils.SucceedsSoon(t, func() error {
+		desc := tc.LookupRangeOrFatal(t, scratchStartKey)
+		if len(desc.Replicas().LearnerDescriptors()) != 0 {
+			return errors.Newf("Mismatch in num learners %v, desc: %v", desc.Replicas().LearnerDescriptors(), desc)
+		}
+		if len(desc.Replicas().VoterDescriptors()) != 3 {
+			return errors.Newf("Mismatch in num voters %v, desc: %v", desc.Replicas().VoterDescriptors(), desc)
+		}
+		return nil
+	})
+}
+
+// TestReplicateQueueSeesJointConfig verifies that the replicate queue
+// correctly finalizes a range that is stuck in a joint configuration.
+func TestReplicateQueueSeesJointConfig(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	testutils.SetVModule(t, "queue=4,replicate_queue=4,replica_command=4,allocator=4,replicate=4")
+
+	ctx := context.Background()
+	_, ltk := makeReplicationTestKnobs()
+	var targetRangeID atomic.Value
+	ltk.storeKnobs.BaseQueueDisabledBypassFilter = func(rangeID roachpb.RangeID) bool {
+		if target := targetRangeID.Load(); target != nil && rangeID == target {
+			return true
+		}
+		return false
 	}
+	tc := testcluster.StartTestCluster(t, 3, base.TestClusterArgs{
+		ServerArgs:      base.TestServerArgs{Knobs: base.TestingKnobs{Store: &ltk.storeKnobs}},
+		ReplicationMode: base.ReplicationManual,
+	})
+	defer tc.Stopper().Stop(ctx)
 
-	// Create a VOTER_OUTGOING, i.e. a joint configuration.
+	scratchStartKey := tc.ScratchRange(t)
+	tc.AddVotersOrFatal(t, scratchStartKey, tc.Target(1), tc.Target(2))
+
+	store, repl := getFirstStoreReplica(t, tc.Server(0), scratchStartKey)
 	ltk.withStopAfterJointConfig(func() {
 		// Set our target range ID in the knobs.
 		targetRangeID.Store(repl.RangeID)
@@ -1305,7 +1328,6 @@ func TestReplicateQueueSeesLearnerOrJointConfig(t *testing.T) {
 			}
 			return nil
 		})
-		targetRangeID.Store(roachpb.RangeID(0))
 	})
 }
 

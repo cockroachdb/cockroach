@@ -16,6 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -133,6 +134,13 @@ type TestingKnobs struct {
 	// the initial timestamps are computed and before the changefeed targets'
 	// descriptors are fetched.
 	AfterComputeDistChangefeedTimestamps func(context.Context)
+
+	// AfterPersistFrontier is called after the frontier is persisted
+	// (either to CoreChangefeedState or the job frontier table). For
+	// core changefeeds, the CoreChangefeedState is passed; for job-based
+	// changefeeds, it is nil. A non-nil return error is propagated to
+	// the change frontier.
+	AfterPersistFrontier func(eval.CoreChangefeedState) error
 }
 
 // ModuleTestingKnobs is part of the base.ModuleTestingKnobs interface.

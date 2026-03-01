@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/vm"
 	"github.com/cockroachdb/cockroach/pkg/testutils/release"
+	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/version"
 	"github.com/stretchr/testify/require"
@@ -240,6 +241,18 @@ func Test_assertValidTest(t *testing.T) {
 		`mixedversion.NewTest: invalid test options: minimum bootstrap version (v24.2.0) should be from an older release series than current version (v23.1.2)`,
 		fatalErr.Error(),
 	)
+
+	// Validating that AlwaysUseLatestPredecessors and same-series upgrades
+	// cannot be used together.
+	mvt = newTest(AlwaysUseLatestPredecessors, WithSameSeriesUpgradeProbability(0.5))
+	assertValidTest(mvt, fatalFunc())
+	require.Error(t, fatalErr)
+	require.Contains(t, fatalErr.Error(), "same-series upgrades (probability=0.50) cannot be used with AlwaysUseLatestPredecessors")
+
+	// Verify that using AlwaysUseLatestPredecessors alone is fine.
+	mvt = newTest(AlwaysUseLatestPredecessors)
+	assertValidTest(mvt, fatalFunc())
+	require.NoError(t, fatalErr)
 }
 
 func Test_choosePreviousReleases(t *testing.T) {
@@ -303,7 +316,9 @@ func Test_choosePreviousReleases(t *testing.T) {
 			mvt._arch = &tc.arch
 
 			assertValidTest(mvt, t.Fatal)
-			releases, err := mvt.chooseUpgradePath(mvt.numUpgrades(), mvt.prng.Float64() < mvt.options.skipVersionProbability)
+			enableSameSeriesUpgrades := mvt.options.sameSeriesUpgradeProbability > 0 && mvt.prng.Float64() < mvt.options.sameSeriesUpgradeProbability
+			majorUpgrades, sameSeriesUpgrades := mvt.numUpgrades(enableSameSeriesUpgrades)
+			releases, err := mvt.chooseUpgradePath(majorUpgrades, sameSeriesUpgrades, mvt.prng.Float64() < mvt.options.skipVersionProbability)
 			if tc.expectedErr == "" {
 				require.NoError(t, err)
 				var expectedVersions []*clusterupgrade.Version
@@ -318,6 +333,123 @@ func Test_choosePreviousReleases(t *testing.T) {
 			}
 		})
 	}
+}
+
+func Test_chooseSameSeriesUpgrades(t *testing.T) {
+	defer withTestBuildVersion("v24.3.0")()
+
+	t.Run("same-series upgrades disabled", func(t *testing.T) {
+		_ = release.WithReleaseData(testReleaseData, func() error {
+			mvt := newTest(DisableSameSeriesUpgrades, DisableSkipVersionUpgrades, NumUpgrades(2))
+			rng, _ := randutil.NewTestRand()
+			mvt.prng = rng
+			mvt.options.predecessorFunc = func(_ *rand.Rand, v *clusterupgrade.Version) (*clusterupgrade.Version, error) {
+				return testPredecessorMapping[v.Series()], nil
+			}
+			assertValidTest(mvt, t.Fatal)
+
+			enableSameSeriesUpgrades := mvt.options.sameSeriesUpgradeProbability > 0 && mvt.prng.Float64() < mvt.options.sameSeriesUpgradeProbability
+			majorUpgrades, sameSeriesUpgrades := mvt.numUpgrades(enableSameSeriesUpgrades)
+			releases, err := mvt.chooseUpgradePath(majorUpgrades, sameSeriesUpgrades, false)
+			require.NoError(t, err)
+
+			// With same-series upgrades disabled, expect: [predecessor1, predecessor2, current]
+			// No extra versions should be inserted.
+			expectedLen := 3 // 2 upgrades + current version
+			require.Equal(t, expectedLen, len(releases),
+				"expected %d versions but got %d: %v", expectedLen, len(releases), releases)
+
+			// Verify no same-series pairs exist (each version should be from a different series).
+			for i := 0; i < len(releases)-1; i++ {
+				require.NotEqual(t, releases[i].Series(), releases[i+1].Series(),
+					"unexpected same-series pair: %s and %s", releases[i], releases[i+1])
+			}
+			return nil
+		})
+	})
+
+	t.Run("same-series upgrades enabled", func(t *testing.T) {
+		_ = release.WithReleaseData(testReleaseData, func() error {
+			// With the two-value numUpgrades() design, majorUpgrades and
+			// sameSeriesUpgrades are determined separately. We pass explicit
+			// counts to chooseUpgradePath to test rejection sampling.
+			const numMajorUpgrades = 2
+			const numSameSeriesUpgrades = 2
+			mvt := newTest(WithSameSeriesUpgradeProbability(1), DisableSkipVersionUpgrades)
+			rng, _ := randutil.NewTestRand()
+			mvt.prng = rng
+			mvt.options.predecessorFunc = func(_ *rand.Rand, v *clusterupgrade.Version) (*clusterupgrade.Version, error) {
+				return testPredecessorMapping[v.Series()], nil
+			}
+			assertValidTest(mvt, t.Fatal)
+
+			releases, err := mvt.chooseUpgradePath(numMajorUpgrades, numSameSeriesUpgrades, false)
+			require.NoError(t, err)
+
+			// Verify at least one same-series upgrade exists in the path.
+			hasSameSeriesPair := false
+			for i := 0; i < len(releases)-1; i++ {
+				if releases[i].Series() == releases[i+1].Series() {
+					hasSameSeriesPair = true
+					// Verify the first version in the pair is older (lower patch number).
+					require.Less(t, releases[i].Patch(), releases[i+1].Patch(),
+						"same-series pair should have older version first: %s -> %s",
+						releases[i], releases[i+1])
+				}
+			}
+			require.True(t, hasSameSeriesPair,
+				"expected at least one same-series upgrade pair in path: %v", releases)
+
+			// Verify the path is ordered correctly (each version < next version).
+			for i := 0; i < len(releases)-1; i++ {
+				require.True(t, releases[i].Version.LessThan(releases[i+1].Version),
+					"version %s should be less than %s", releases[i], releases[i+1])
+			}
+
+			// Verify the last version is current.
+			require.Equal(t, clusterupgrade.CurrentVersion().String(), releases[len(releases)-1].String())
+
+			// Verify total upgrades does not exceed the requested number.
+			actualUpgrades := len(releases) - 1 // upgrades = versions - 1
+			require.LessOrEqual(t, actualUpgrades, numMajorUpgrades+numSameSeriesUpgrades,
+				"total upgrades %d should not exceed requested %d", actualUpgrades, numMajorUpgrades+numSameSeriesUpgrades)
+
+			return nil
+		})
+	})
+
+	t.Run("same-series upgrades respect minimumBootstrapVersion", func(t *testing.T) {
+		_ = release.WithReleaseData(testReleaseData, func() error {
+			// Set mbv so fewer older patches are available.
+			// Use 1 major upgrade and 1 same-series insertion to test mbv filtering.
+			mvt := newTest(
+				WithSameSeriesUpgradeProbability(1),
+				DisableSkipVersionUpgrades,
+				NumUpgrades(1),
+				MinimumBootstrapVersion("v24.1.1"),
+			)
+			rng, _ := randutil.NewTestRand()
+			mvt.prng = rng
+			mvt.options.predecessorFunc = func(_ *rand.Rand, v *clusterupgrade.Version) (*clusterupgrade.Version, error) {
+				return testPredecessorMapping[v.Series()], nil
+			}
+			assertValidTest(mvt, t.Fatal)
+
+			releases, err := mvt.chooseUpgradePath(1, 1, false)
+			require.NoError(t, err)
+
+			// Verify all versions in the path are >= minimumBootstrapVersion.
+			mbv := clusterupgrade.MustParseVersion("v24.1.1")
+			for _, v := range releases {
+				if v.Series() == mbv.Series() {
+					require.GreaterOrEqual(t, v.Patch(), mbv.Patch(),
+						"version %s should be >= minimumBootstrapVersion %s", v, mbv)
+				}
+			}
+
+			return nil
+		})
+	})
 }
 
 func TestTest_plan(t *testing.T) {

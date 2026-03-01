@@ -8,9 +8,11 @@ package bulkmerge
 import (
 	"bytes"
 	"context"
+	"fmt"
+	"math"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/ccl/storageccl"
+	"github.com/cockroachdb/cockroach/pkg/blobs"
 	"github.com/cockroachdb/cockroach/pkg/cloud/nodelocal"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/bulk"
@@ -27,7 +29,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/taskset"
 	"github.com/cockroachdb/errors"
@@ -36,6 +40,18 @@ import (
 var (
 	_ execinfra.Processor = &bulkMergeProcessor{}
 	_ execinfra.RowSource = &bulkMergeProcessor{}
+)
+
+// rpcInflightFraction is the estimated fraction of remote SST files that are
+// actively streaming at any time during a merge. This is used to reserve memory
+// for the RPC transport buffers that accumulate in-flight chunks.
+var rpcInflightFraction = settings.RegisterFloatSetting(
+	settings.ApplicationLevel,
+	"bulkio.merge.rpc_inflight_fraction",
+	"estimated fraction of remote SST files that are actively streaming "+
+		"during a merge; used to reserve memory for RPC transport buffers",
+	0.50,
+	settings.FloatInRange(0.0, 1.0),
 )
 
 // targetFileSize controls the target SST size for non-final merge iterations
@@ -76,6 +92,9 @@ type bulkMergeProcessor struct {
 	// processMergedData to decide whether to strip suffixes and check
 	// for cross-SST duplicates.
 	usingSuffixedIter bool
+	// rpcMemAcct reserves memory for estimated in-flight RPC transport
+	// buffers when streaming remote SST files.
+	rpcMemAcct mon.BoundAccount
 }
 
 type mergeProcessorInput struct {
@@ -169,7 +188,7 @@ func (m *bulkMergeProcessor) handleRow(row rowenc.EncDatumRow) (rowenc.EncDatumR
 
 	if knobs, ok := m.flowCtx.Cfg.TestingKnobs.BulkMergeTestingKnobs.(*TestingKnobs); ok {
 		if knobs.RunBeforeMergeTask != nil {
-			if err := knobs.RunBeforeMergeTask(m.Ctx(), m.flowCtx.ID, input.taskID); err != nil {
+			if err := knobs.RunBeforeMergeTask(m.Ctx(), m.flowCtx, input.taskID, m.spec); err != nil {
 				return nil, err
 			}
 		}
@@ -209,6 +228,10 @@ func (m *bulkMergeProcessor) Start(ctx context.Context) {
 			m.spec.Iteration, localInstanceID)
 		m.iter, err = m.createIterLocalOnly(ctx, localInstanceID)
 	} else {
+		if err := m.reserveRPCMemory(ctx); err != nil {
+			m.MoveToDraining(err)
+			return
+		}
 		log.Dev.Infof(ctx, "final iteration %d: opening iterator for %d SSTs",
 			m.spec.Iteration, len(m.spec.SSTs))
 		m.iter, err = m.createIter(ctx)
@@ -219,10 +242,73 @@ func (m *bulkMergeProcessor) Start(ctx context.Context) {
 	}
 }
 
+// reserveRPCMemory estimates the memory used by in-flight RPC transport
+// buffers for remote SST streams and reserves it from the memory monitor.
+// Each remote stream can buffer up to window * ChunkSize bytes in gRPC;
+// we estimate the number of concurrently active streams using the
+// rpcInflightFraction setting.
+func (m *bulkMergeProcessor) reserveRPCMemory(ctx context.Context) error {
+	sv := &m.flowCtx.EvalCtx.Settings.SV
+	window := blobs.FlowControlWindow.Get(sv)
+	if window == 0 {
+		// Flow control is disabled, so per-stream buffering is unbounded and
+		// we cannot produce a reliable memory reservation. Enable flow control
+		// (bulkio.blob.flow_control_window > 0) to make per-stream memory
+		// deterministic and accountable.
+		return nil
+	}
+
+	localInstanceID := m.flowCtx.NodeID.SQLInstanceID()
+	var remoteFiles int
+	for _, sst := range m.spec.SSTs {
+		sourceID, err := nodelocal.ParseInstanceID(sst.URI)
+		if err != nil {
+			return err
+		}
+		if sourceID != localInstanceID {
+			remoteFiles++
+		}
+	}
+	if remoteFiles == 0 {
+		return nil
+	}
+
+	fraction := rpcInflightFraction.Get(sv)
+	inflight := int64(math.Ceil(float64(remoteFiles) * fraction))
+	rpcMemory := inflight * window * int64(blobs.ChunkSize)
+
+	memMon := resolveMemoryMonitor(m.flowCtx, m.spec.MemoryMonitor)
+	m.rpcMemAcct = memMon.MakeBoundAccount()
+	if err := m.rpcMemAcct.Grow(ctx, rpcMemory); err != nil {
+		fileSz := targetFileSize.Get(sv)
+		detail := fmt.Sprintf(
+			"Memory for distributed merge could not be reserved. "+
+				"Consider: (1) increasing --max-sql-memory, "+
+				"(2) reducing bulkio.merge.rpc_inflight_fraction (currently %.2f), "+
+				"(3) reducing bulkio.blob.flow_control_window (currently %d, "+
+				"each stream buffers %s), or "+
+				"(4) increasing bulkio.merge.file_size (currently %s) to reduce "+
+				"the number of remote files.",
+			fraction, window, humanizeutil.IBytes(window*int64(blobs.ChunkSize)),
+			humanizeutil.IBytes(fileSz))
+		// Note: since this error is consumed by the jobs framework, adding the
+		// extra detail as a hint gets lost. Include the extra detail in the main
+		// error message to account for this.
+		return errors.Wrapf(err,
+			"reserving %s for RPC transport buffers (%d remote files, %d estimated inflight); %s",
+			humanizeutil.IBytes(rpcMemory), remoteFiles, inflight, detail)
+	}
+	log.Dev.Infof(ctx,
+		"reserved %d bytes for RPC transport buffers (%d remote files, %d estimated inflight)",
+		rpcMemory, remoteFiles, inflight)
+	return nil
+}
+
 func (m *bulkMergeProcessor) Close(ctx context.Context) {
 	if m.iter != nil {
 		m.iter.Close()
 	}
+	m.rpcMemAcct.Close(ctx)
 	err := m.storageMux.Close()
 	if err != nil {
 		log.Dev.Errorf(ctx, "failed to close external storage mux: %v", err)
@@ -427,7 +513,7 @@ func (m *bulkMergeProcessor) ingestFinalIteration(
 		disallowShadowingBelow,
 		false, // writeAtBatchTs
 		true,  // scatterSplitRanges
-		m.flowCtx.Cfg.BackupMonitor.MakeConcurrentBoundAccount(),
+		resolveMemoryMonitor(m.flowCtx, m.spec.MemoryMonitor).MakeConcurrentBoundAccount(),
 		m.flowCtx.Cfg.BulkSenderLimiter,
 		nil, // range cache
 	)
@@ -438,6 +524,19 @@ func (m *bulkMergeProcessor) ingestFinalIteration(
 	writer := newKVStorageWriter(batcher, writeTS)
 	defer writer.Close(ctx)
 	return m.processMergedData(ctx, iter, mergeSpan, writer)
+}
+
+// resolveMemoryMonitor returns the BytesMonitor indicated by the given
+// MemoryMonitor enum.
+func resolveMemoryMonitor(
+	flowCtx *execinfra.FlowCtx, m execinfrapb.BulkMergeSpec_MemoryMonitor,
+) *mon.BytesMonitor {
+	switch m {
+	case execinfrapb.BulkMergeSpec_BACKFILL_MONITOR:
+		return flowCtx.Cfg.BackfillerMonitor
+	default: // execinfrapb.BulkMergeSpec_BULK_MONITOR
+		return flowCtx.Cfg.BulkMonitor
+	}
 }
 
 // createIter builds an iterator over all input SSTs. When EnforceUniqueness
@@ -471,7 +570,7 @@ func (m *bulkMergeProcessor) createIter(ctx context.Context) (storage.SimpleMVCC
 func (m *bulkMergeProcessor) createStandardIter(
 	ctx context.Context, iterOpts storage.IterOptions,
 ) (storage.SimpleMVCCIterator, error) {
-	var storeFiles []storageccl.StoreFile
+	var storeFiles []storage.StoreFile
 	for _, sst := range m.spec.SSTs {
 		file, err := m.storageMux.StoreFile(ctx, sst.URI)
 		if err != nil {
@@ -479,7 +578,7 @@ func (m *bulkMergeProcessor) createStandardIter(
 		}
 		storeFiles = append(storeFiles, file)
 	}
-	return storageccl.ExternalSSTReader(ctx, storeFiles, nil, iterOpts)
+	return storage.ExternalSSTReader(ctx, storeFiles, nil, iterOpts)
 }
 
 // createSuffixedIter creates individual iterators for each SST, wraps them
@@ -505,8 +604,8 @@ func (m *bulkMergeProcessor) createSuffixedIter(
 		}
 
 		// Create iterator for single SST.
-		baseIter, err := storageccl.ExternalSSTReader(
-			ctx, []storageccl.StoreFile{file}, nil, iterOpts,
+		baseIter, err := storage.ExternalSSTReader(
+			ctx, []storage.StoreFile{file}, nil, iterOpts,
 		)
 		if err != nil {
 			cleanup()
@@ -568,7 +667,7 @@ func (m *bulkMergeProcessor) createIterLocalOnly(
 		return m.createSuffixedIter(ctx, localSSTs, iterOpts)
 	}
 
-	var storeFiles []storageccl.StoreFile
+	var storeFiles []storage.StoreFile
 	for _, sst := range localSSTs {
 		file, err := m.storageMux.StoreFile(ctx, sst.URI)
 		if err != nil {
@@ -576,7 +675,7 @@ func (m *bulkMergeProcessor) createIterLocalOnly(
 		}
 		storeFiles = append(storeFiles, file)
 	}
-	return storageccl.ExternalSSTReader(ctx, storeFiles, nil, iterOpts)
+	return storage.ExternalSSTReader(ctx, storeFiles, nil, iterOpts)
 }
 
 // containsKey returns true if the given key is within the mergeSpan.

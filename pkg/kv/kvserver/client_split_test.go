@@ -14,6 +14,7 @@ import (
 	"reflect"
 	"sort"
 	"strconv"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -32,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/abortspan"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/isolation"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/gc"
@@ -4727,4 +4729,104 @@ func TestGCRequestStraddlingSplit(t *testing.T) {
 			require.True(t, ok, "expected RangeKeyMismatchError, got %v", pErr)
 		})
 	}
+}
+
+// TestSplitWithConcurrentLockAcquisitionOnRHS is a regression test for #155318,
+// which was a bug caused by the fact that, during a split, a Replica becomes
+// available for requests before the end of the application of the EndTxn that
+// creates the replica.
+func TestSplitWithConcurrentLockAcquisitionOnRHS(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+
+	// Create a key that will be on the RHS after the split.
+	rhsKey := roachpb.Key("z")
+	splitKey := roachpb.Key("m")
+
+	// We install a BeforeSplitAcquiresLocksOnRHS testing hook that will pause the
+	// split we issue for splitKey during application so that we can then send a
+	// request targeted to the new RHS replica.
+	splitPaused := make(chan roachpb.RangeID)
+	splitResume := make(chan struct{})
+	requestFailedOnce := &sync.Once{}
+	requestFailed := make(chan struct{})
+
+	st := cluster.MakeTestingClusterSettings()
+	concurrency.UnreplicatedLockReliabilitySplit.Override(ctx, &st.SV, true)
+	s := serverutils.StartServerOnly(t, base.TestServerArgs{
+		Settings: st,
+		Knobs: base.TestingKnobs{
+			Store: &kvserver.StoreTestingKnobs{
+				DisableMergeQueue: true,
+				DisableSplitQueue: true,
+				BeforeSplitAcquiresLocksOnRHS: func(ctx context.Context, rhsRepl *kvserver.Replica) {
+					startKey := rhsRepl.Desc().StartKey.AsRawKey()
+					if !startKey.Equal(splitKey) {
+						return
+					}
+
+					t.Logf("pausing split for RHS %d: %s", rhsRepl.RangeID, startKey)
+					splitPaused <- rhsRepl.RangeID
+					<-splitResume
+					t.Logf("split resumed for RHS %d", rhsRepl.RangeID)
+				},
+			},
+		},
+	})
+	defer s.Stopper().Stop(ctx)
+
+	store, err := s.GetStores().(*kvserver.Stores).GetStore(s.GetFirstStoreID())
+	require.NoError(t, err)
+	db := s.DB()
+	require.NoError(t, db.Put(ctx, rhsKey, "initial value"))
+
+	// Acquire a lock on rhsKey via txn1.
+	txn1 := kv.NewTxn(ctx, db, s.NodeID())
+	_, err = txn1.GetForUpdate(ctx, rhsKey, kvpb.BestEffort)
+	require.NoError(t, err)
+
+	// Split the range. This blocks until we explicitly unblock it below.
+	g := ctxgroup.WithContext(ctx)
+	g.GoCtx(func(ctx context.Context) error {
+		_, _, err := s.SplitRange(splitKey)
+		return err
+	})
+	rID := <-splitPaused
+
+	// Send a Put to rhsKey targeted at the new range ID. While ReadyToServe()
+	// is false, each attempt returns NLHE. We retry until the request either
+	// succeeds or returns a non-NLHE error.
+	g.GoCtx(func(ctx context.Context) error {
+		txn2 := db.NewTxn(ctx, "test-txn-2")
+		header := kvpb.Header{
+			Txn:     txn2.TestingCloneTxn(),
+			RangeID: rID,
+		}
+		for {
+			req := putArgs(rhsKey, []byte("hello"))
+			t.Logf("sending: %v", req)
+			_, pErr := kv.SendWrappedWith(ctx, store.TestSender(), header, req)
+			if pErr == nil {
+				return nil
+			}
+			if _, ok := pErr.GetDetail().(*kvpb.NotLeaseHolderError); ok {
+				requestFailedOnce.Do(func() { close(requestFailed) })
+				time.Sleep(1 * time.Millisecond)
+				continue
+			}
+			return pErr.GoError()
+		}
+	})
+
+	// Let the split proceed.
+	<-requestFailed
+	t.Logf("resuming split")
+	close(splitResume)
+
+	// Rollback txn1 so that txn2 can proceed. The lock from txn1 was
+	// transferred to the RHS during the split, so txn2 waits on it.
+	require.NoError(t, txn1.Rollback(ctx))
+	require.NoError(t, g.Wait())
 }

@@ -28,6 +28,9 @@ const (
 	DistributedMergeModeDisabled
 	// DistributedMergeModeEnabled indicates distributed merge should be used.
 	DistributedMergeModeEnabled
+	// DistributedMergeModeForce indicates distributed merge should always be
+	// used, even when the backfill data is sorted relative to the PK.
+	DistributedMergeModeForce
 )
 
 // CurrentState is a TargetState decorated with the current status of the

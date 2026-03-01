@@ -449,3 +449,69 @@ func runTestIngest(t *testing.T, init func(*cluster.Settings)) {
 		})
 	}
 }
+
+// TestPartitionFilesByLinkability tests that files are correctly partitioned
+// based on their UseLink flag for hybrid restore.
+func TestPartitionFilesByLinkability(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	tests := []struct {
+		name               string
+		files              []execinfrapb.RestoreFileSpec
+		expectedLinkable   int
+		expectedIngestable int
+	}{
+		{
+			name: "all linkable",
+			files: []execinfrapb.RestoreFileSpec{
+				{Path: "a.sst", UseLink: true},
+				{Path: "b.sst", UseLink: true},
+			},
+			expectedLinkable:   2,
+			expectedIngestable: 0,
+		},
+		{
+			name: "all ingestable",
+			files: []execinfrapb.RestoreFileSpec{
+				{Path: "a.sst", UseLink: false},
+				{Path: "b.sst", UseLink: false},
+			},
+			expectedLinkable:   0,
+			expectedIngestable: 2,
+		},
+		{
+			name: "mixed",
+			files: []execinfrapb.RestoreFileSpec{
+				{Path: "a.sst", UseLink: true},
+				{Path: "b.sst", UseLink: false},
+				{Path: "c.sst", UseLink: true},
+				{Path: "d.sst", UseLink: false},
+			},
+			expectedLinkable:   2,
+			expectedIngestable: 2,
+		},
+		{
+			name:               "empty",
+			files:              []execinfrapb.RestoreFileSpec{},
+			expectedLinkable:   0,
+			expectedIngestable: 0,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			linkable, ingestable := partitionFilesByLinkability(tc.files)
+			require.Equal(t, tc.expectedLinkable, len(linkable), "linkable count mismatch")
+			require.Equal(t, tc.expectedIngestable, len(ingestable), "ingestable count mismatch")
+
+			// Verify all linkable files have UseLink=true.
+			for _, f := range linkable {
+				require.True(t, f.UseLink, "file in linkable set should have UseLink=true")
+			}
+			// Verify all ingestable files have UseLink=false.
+			for _, f := range ingestable {
+				require.False(t, f.UseLink, "file in ingestable set should have UseLink=false")
+			}
+		})
+	}
+}

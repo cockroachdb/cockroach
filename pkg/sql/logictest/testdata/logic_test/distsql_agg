@@ -546,6 +546,10 @@ SELECT c, min(b), a FROM sorted_data GROUP BY a, c ORDER BY a
 23    -2   9
 -3.1  100  10
 
+# Require some reasonable minimum workmem (necessary for the streamer).
+statement ok
+SET distsql_workmem = '100KiB';
+
 # If the underlying ordering isn't from the primary index, it needs to be hinted
 # for now.
 query IR rowsort

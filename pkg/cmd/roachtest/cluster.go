@@ -2161,8 +2161,10 @@ func (c *clusterImpl) StartE(
 	defer c.clearStatusForClusterOpt(startOpts.RoachtestOpts.Worker)
 
 	startOpts.RoachprodOpts.EncryptedStores = c.encAtRest
-	if c.t.Spec().(*registry.TestSpec).Benchmark {
-		startOpts.RoachprodOpts.ScheduleBackups = false
+	if c.t != nil {
+		if ts, ok := c.t.Spec().(*registry.TestSpec); ok && ts.Benchmark {
+			startOpts.RoachprodOpts.ScheduleBackups = false
+		}
 	}
 
 	// Needed for backward-compat on crdb_internal.ranges{_no_leases}.
@@ -2254,7 +2256,9 @@ func (c *clusterImpl) StartE(
 	// If starting the cluster was successful, mark the nodes as healthy. N.B. we must wait
 	// until cluster startup succeeds as we may have tests that purposely inject failures into
 	// cluster startup.
-	c.t.Monitor().ExpectProcessAlive(nodes)
+	if c.t != nil {
+		c.t.Monitor().ExpectProcessAlive(nodes)
+	}
 	return nil
 }
 
@@ -2363,6 +2367,12 @@ func (c *clusterImpl) RefetchCertsFromNode(ctx context.Context, node int) error 
 	// that might cause fallout) by using a non-existing dir here.
 	c.localCertsDir = filepath.Join(c.localCertsDir, install.CockroachNodeCertsDir)
 	return roachprod.FetchCertsDir(ctx, c.l, c.MakeNodes(c.Node(node)), fmt.Sprintf("./%s", install.CockroachNodeCertsDir), c.localCertsDir)
+}
+
+// LocalCertsDir returns the local directory where the cluster's
+// certificates are stored, i.e. the roachtest runner's certs.
+func (c *clusterImpl) LocalCertsDir() string {
+	return c.localCertsDir
 }
 
 func (c *clusterImpl) SetDefaultVirtualCluster(name string) {

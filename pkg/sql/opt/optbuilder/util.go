@@ -652,13 +652,17 @@ func (b *Builder) resolveTableRef(ref *tree.TableRef, priv privilege.Kind) cat.T
 
 // resolveDataSource returns the data source in the catalog with the given name,
 // along with the table's MDDepName and data source name. If the name does not
-// resolve to a table, or if the current user does not have the given privilege,
-// then resolveDataSource raises an error.
+// resolve to a table, or if the current user does not have any of the given
+// privileges, then resolveDataSource raises an error.
+//
+// When multiple privileges are provided, they are checked in order and the
+// first one the user holds is used. If none are held, the error from the first
+// privilege check is raised.
 //
 // If the b.qualifyDataSourceNamesInAST flag is set, tn is updated to contain
 // the fully qualified name.
 func (b *Builder) resolveDataSource(
-	tn *tree.TableName, priv privilege.Kind,
+	tn *tree.TableName, privs ...privilege.Kind,
 ) (cat.DataSource, opt.MDDepName, cat.DataSourceName) {
 	var flags cat.Flags
 	if b.insideViewDef || b.insideFuncDef || b.insideTriggerDef {
@@ -671,7 +675,7 @@ func (b *Builder) resolveDataSource(
 		panic(err)
 	}
 	depName := opt.DepByName(tn)
-	b.checkPrivilege(depName, ds, priv)
+	b.checkPrivilege(depName, ds, privs...)
 
 	if b.qualifyDataSourceNamesInAST {
 		*tn = resName
@@ -683,10 +687,14 @@ func (b *Builder) resolveDataSource(
 
 // resolveDataSourceFromRef returns the data source in the catalog that matches
 // the given TableRef spec, along with the table's MDDepName. If no data source
-// matches, or if the current user does not have the given privilege, then
-// resolveDataSourceFromRef raises an error.
+// matches, or if the current user does not have any of the given privileges,
+// then resolveDataSourceFromRef raises an error.
+//
+// When multiple privileges are provided, they are checked in order and the
+// first one the user holds is used. If none are held, the error from the first
+// privilege check is raised.
 func (b *Builder) resolveDataSourceRef(
-	ref *tree.TableRef, priv privilege.Kind,
+	ref *tree.TableRef, privs ...privilege.Kind,
 ) (cat.DataSource, opt.MDDepName) {
 	var flags cat.Flags
 	if b.insideViewDef || b.insideFuncDef || b.insideTriggerDef {
@@ -698,24 +706,48 @@ func (b *Builder) resolveDataSourceRef(
 		panic(pgerror.Wrapf(err, pgcode.UndefinedObject, "%s", tree.ErrString(ref)))
 	}
 	depName := opt.DepByID(cat.StableID(ref.TableID))
-	b.checkPrivilege(depName, ds, priv)
+	b.checkPrivilege(depName, ds, privs...)
 	return ds, depName
 }
 
-// checkPrivilege ensures that the current user has the privilege needed to
-// access the given object in the catalog. If not, then checkPrivilege raises an
-// error. It also adds the object and it's original unresolved name as a
-// dependency to the metadata, so that the privileges can be re-checked on reuse
-// of the memo.
-func (b *Builder) checkPrivilege(name opt.MDDepName, ds cat.DataSource, priv privilege.Kind) {
-	if !(priv == privilege.SELECT && b.skipSelectPrivilegeChecks) {
-		err := b.catalog.CheckPrivilege(b.ctx, ds, b.checkPrivilegeUser, priv)
-		if err != nil {
+// checkPrivilege ensures that the current user has at least one of the given
+// privileges on the given object in the catalog. If not, then checkPrivilege
+// raises an error. It also adds the object and its original unresolved name as
+// a dependency to the metadata, so that the privileges can be re-checked on
+// reuse of the memo.
+//
+// When multiple privileges are provided, they are tried in order and the first
+// one the user holds is used. If none are held, the error from the first
+// privilege check is raised.
+func (b *Builder) checkPrivilege(name opt.MDDepName, ds cat.DataSource, privs ...privilege.Kind) {
+	priv := privs[0]
+	if priv == privilege.SELECT && b.skipSelectPrivilegeChecks {
+		// The check is skipped, so don't recheck when dependencies are checked.
+		b.factory.Metadata().AddDependency(name, ds, 0)
+		return
+	}
+
+	if len(privs) == 1 {
+		if err := b.catalog.CheckPrivilege(b.ctx, ds, b.checkPrivilegeUser, priv); err != nil {
 			panic(err)
 		}
 	} else {
-		// The check is skipped, so don't recheck when dependencies are checked.
-		priv = 0
+		// Try each privilege in order. Use the first one the user holds.
+		var firstErr error
+		for _, p := range privs {
+			if err := b.catalog.CheckPrivilege(b.ctx, ds, b.checkPrivilegeUser, p); err != nil {
+				if firstErr == nil {
+					firstErr = err
+				}
+				continue
+			}
+			priv = p
+			firstErr = nil
+			break
+		}
+		if firstErr != nil {
+			panic(firstErr)
+		}
 	}
 
 	// Add dependency on this object to the metadata, so that the metadata can be

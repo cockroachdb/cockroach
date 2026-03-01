@@ -9,6 +9,7 @@ import (
 	"context"
 	gosql "database/sql"
 	"fmt"
+	"net/http"
 	"net/url"
 	"strings"
 	"testing"
@@ -387,5 +388,116 @@ func TestLDAPAuthorizationDBConsole(t *testing.T) {
 
 		// Verify the role was successfully revoked.
 		require.Empty(t, getRoles(username.MakeSQLUsernameFromPreNormalizedString("alice")), "alice should have no roles after revocation")
+	})
+}
+
+func TestLDAPProvisioningDBConsole(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	// Intercept the call to NewLDAPUtil and return the mocked NewLDAPUtil function.
+	mockLDAP, newMockLDAPUtil := LDAPMocks()
+	defer testutils.TestingHook(
+		&NewLDAPUtil,
+		newMockLDAPUtil,
+	)()
+
+	ctx := context.Background()
+	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	defer s.Stopper().Stop(ctx)
+	ts := s.ApplicationLayer()
+	tdb := sqlutils.MakeSQLRunner(db)
+
+	const hbaConf = `host all all all ldap ldapserver=localhost ldapport=636 ` +
+		`ldapbasedn="dc=crdb,dc=io" ldapbinddn="cn=admin,dc=crdb,dc=io" ` +
+		`ldapbindpasswd=admin ldapsearchattribute=cn ` +
+		`"ldapsearchfilter=(objectClass=*)" ` +
+		`"ldapgrouplistfilter=(objectClass=groupOfNames)"`
+	tdb.Exec(t, "SET CLUSTER SETTING server.host_based_authentication.configuration = $1", hbaConf)
+	tdb.Exec(t, "CREATE ROLE db_admins")
+
+	httpLogin := func(user, password string) (*http.Response, error) {
+		req := &serverpb.UserLoginRequest{
+			Username: user,
+			Password: password,
+		}
+		var resp serverpb.UserLoginResponse
+		httpClient, err := ts.GetUnauthenticatedHTTPClient()
+		if err != nil {
+			return nil, err
+		}
+		return httputil.PostJSONWithRequest(
+			httpClient,
+			ts.AdminURL().WithPath(authserver.LoginPath).String(),
+			req,
+			&resp,
+		)
+	}
+
+	t.Run("provisioning disabled, new user fails login", func(t *testing.T) {
+		tdb.Exec(t, "SET CLUSTER SETTING security.provisioning.ldap.enabled = false")
+		mockLDAP.SetGroups("cn=newuser1", []string{"cn=db_admins"})
+
+		resp, err := httpLogin("newuser1", "password")
+		require.Error(t, err)
+		require.Equal(t, http.StatusUnauthorized, resp.StatusCode)
+
+		// Verify the user was NOT created.
+		rows := tdb.QueryStr(t,
+			`SELECT username FROM system.users WHERE username = 'newuser1'`)
+		require.Empty(t, rows,
+			"user should not have been provisioned when setting is disabled")
+	})
+
+	t.Run("provisioning enabled, new user succeeds login", func(t *testing.T) {
+		tdb.Exec(t, "SET CLUSTER SETTING security.provisioning.ldap.enabled = true")
+		mockLDAP.SetGroups("cn=newuser2", []string{"cn=db_admins"})
+
+		resp, err := httpLogin("newuser2", "password")
+		require.NoError(t, err, "DB Console login should succeed with provisioning enabled")
+		require.Equal(t, http.StatusOK, resp.StatusCode,
+			"expected 200 OK for successful LDAP login")
+		require.NotEmpty(t, resp.Cookies(),
+			"expected session cookie in successful login response")
+
+		// Expose internal tables for debugging
+		tdb.Exec(t, "SET allow_unsafe_internals = true")
+
+		// Verify the user was created.
+		rows := tdb.QueryStr(t,
+			`SELECT username FROM system.users WHERE username = 'newuser2'`)
+		require.Len(t, rows, 1, "user should have been provisioned")
+
+		// Verify PROVISIONSRC is set.
+		rows = tdb.QueryStr(t,
+			`SELECT options FROM [SHOW USERS] WHERE username = 'newuser2'`)
+		require.Len(t, rows, 1)
+		require.Contains(t, rows[0][0], "PROVISIONSRC=ldap:localhost")
+	})
+
+	t.Run("provisioning enabled, existing user", func(t *testing.T) {
+		tdb.Exec(t, "SET CLUSTER SETTING security.provisioning.ldap.enabled = true")
+		tdb.Exec(t, "CREATE USER existinguser")
+		mockLDAP.SetGroups("cn=existinguser", []string{"cn=db_admins"})
+
+		resp, err := httpLogin("existinguser", "password")
+		require.NoError(t, err, "DB Console login should succeed for existing user")
+		require.Equal(t, http.StatusOK, resp.StatusCode)
+	})
+
+	t.Run("provisioning enabled, invalid ldap credentials", func(t *testing.T) {
+		tdb.Exec(t, "SET CLUSTER SETTING security.provisioning.ldap.enabled = true")
+		mockLDAP.SetGroups("cn=badcreds", []string{"cn=db_admins"})
+
+		// The mock rejects passwords containing "invalid".
+		resp, err := httpLogin("badcreds", "invalid")
+		require.Error(t, err)
+		require.Equal(t, http.StatusUnauthorized, resp.StatusCode)
+
+		// Verify the user was NOT created since LDAP auth failed.
+		rows := tdb.QueryStr(t,
+			`SELECT username FROM system.users WHERE username = 'badcreds'`)
+		require.Empty(t, rows,
+			"user should not have been provisioned with invalid LDAP credentials")
 	})
 }

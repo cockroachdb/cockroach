@@ -1,14 +1,14 @@
 post
 ----
 ----
-searchIssue repo:"cockroach" user:"cockroachdb" is:issue is:open in:title sort:created-desc "cmd/roachtest: some-roachtest failed" label:O-robot label:branch-release-0.1 -label:X-noreuse: []
-searchIssue repo:"cockroach" user:"cockroachdb" is:issue is:open in:title sort:created-desc "cmd/roachtest: some-roachtest failed" label:O-robot -label:branch-release-0.1: []
+searchIssue repo:"cockroach" user:"cockroachdb" is:issue is:open in:title sort:created-desc "release-0.1: cmd/roachtest: some-roachtest failed" label:O-robot label:branch-release-0.1 -label:X-noreuse: []
+searchIssue repo:"cockroach" user:"cockroachdb" is:issue is:open in:title sort:created-desc "release-0.1: cmd/roachtest: some-roachtest failed" label:O-robot -label:branch-release-0.1: []
 getBinaryVersion: result v3.3.0
 listMilestones owner=cockroachdb repo=cockroach: result [github.Milestone{Number:2, Title:"3.3"} github.Milestone{Number:1, Title:"3.2"}]
 createIssue owner=cockroachdb repo=cockroach:
 github.IssueRequest{Labels:["O-robot" "C-test-failure" "release-blocker" "branch-release-0.1"], Milestone:2}
 
-cmd/roachtest: some-roachtest failed
+release-0.1: cmd/roachtest: some-roachtest failed
 
 **Note:** first note
 
@@ -41,6 +41,6 @@ See: [FooBar README](https://github.com/cockroachdb/cockroach)
 </sub>
 
 
-Rendered: https://github.com/cockroachdb/cockroach/issues/new?body=%2A%2ANote%3A%2A%2A+first+note%0A%0A%2A%2ANote%3A%2A%2A+second+note%0A%0Acmd%2Froachtest.some-roachtest+%5Bfailed%5D%28https%3A%2F%2Fteamcity.example.com%2FbuildConfiguration%2Fnightly123%2F8008135%3FbuildTab%3Dlog%29+on+release-0.1+%40+%5Babcd123%5D%28https%3A%2F%2Fgithub.com%2Fcockroachdb%2Fcockroach%2Fcommits%2Fabcd123%29%3A%0A%0A%0A%60%60%60%0Aboom%0A%60%60%60%0A%0AParameters%3A%0A+-+%3Ccode%3EGOFLAGS%3Drace%3C%2Fcode%3E%0A+-+%3Ccode%3EROACHTEST_cloud%3Dgce%3C%2Fcode%3E%0A+-+%3Ccode%3ETAGS%3Ddeadlock%3C%2Fcode%3E%0A%3Cdetails%3E%3Csummary%3EHelp%3C%2Fsummary%3E%0A%3Cp%3E%0A%0A%0ASee%3A+%5BFooBar+README%5D%28https%3A%2F%2Fgithub.com%2Fcockroachdb%2Fcockroach%29%0A%0A%3C%2Fp%3E%0A%3C%2Fdetails%3E%0A%2Fcc+%40cockroachdb%2Fidonotexistbecausethisisatest%0A%3Csub%3E%0A%0A%5BThis+test+on+roachdash%5D%28https%3A%2F%2Froachdash.crdb.dev%2F%3Ffilter%3Dstatus%3Aopen%2520t%3A.%2Asome-roachtest.%2A%26sort%3Dtitle%2Bcreated%26display%3Dlastcommented%2Bproject%29+%7C+%5BImprove+this+report%21%5D%28https%3A%2F%2Fgithub.com%2Fcockroachdb%2Fcockroach%2Ftree%2Fmaster%2Fpkg%2Fcmd%2Fbazci%2Fgithubpost%2Fissues%29%0A%0A%3C%2Fsub%3E%0A&template=none&title=cmd%2Froachtest%3A+some-roachtest+failed
+Rendered: https://github.com/cockroachdb/cockroach/issues/new?body=%2A%2ANote%3A%2A%2A+first+note%0A%0A%2A%2ANote%3A%2A%2A+second+note%0A%0Acmd%2Froachtest.some-roachtest+%5Bfailed%5D%28https%3A%2F%2Fteamcity.example.com%2FbuildConfiguration%2Fnightly123%2F8008135%3FbuildTab%3Dlog%29+on+release-0.1+%40+%5Babcd123%5D%28https%3A%2F%2Fgithub.com%2Fcockroachdb%2Fcockroach%2Fcommits%2Fabcd123%29%3A%0A%0A%0A%60%60%60%0Aboom%0A%60%60%60%0A%0AParameters%3A%0A+-+%3Ccode%3EGOFLAGS%3Drace%3C%2Fcode%3E%0A+-+%3Ccode%3EROACHTEST_cloud%3Dgce%3C%2Fcode%3E%0A+-+%3Ccode%3ETAGS%3Ddeadlock%3C%2Fcode%3E%0A%3Cdetails%3E%3Csummary%3EHelp%3C%2Fsummary%3E%0A%3Cp%3E%0A%0A%0ASee%3A+%5BFooBar+README%5D%28https%3A%2F%2Fgithub.com%2Fcockroachdb%2Fcockroach%29%0A%0A%3C%2Fp%3E%0A%3C%2Fdetails%3E%0A%2Fcc+%40cockroachdb%2Fidonotexistbecausethisisatest%0A%3Csub%3E%0A%0A%5BThis+test+on+roachdash%5D%28https%3A%2F%2Froachdash.crdb.dev%2F%3Ffilter%3Dstatus%3Aopen%2520t%3A.%2Asome-roachtest.%2A%26sort%3Dtitle%2Bcreated%26display%3Dlastcommented%2Bproject%29+%7C+%5BImprove+this+report%21%5D%28https%3A%2F%2Fgithub.com%2Fcockroachdb%2Fcockroach%2Ftree%2Fmaster%2Fpkg%2Fcmd%2Fbazci%2Fgithubpost%2Fissues%29%0A%0A%3C%2Fsub%3E%0A&template=none&title=release-0.1%3A+cmd%2Froachtest%3A+some-roachtest+failed
 ----
 ----

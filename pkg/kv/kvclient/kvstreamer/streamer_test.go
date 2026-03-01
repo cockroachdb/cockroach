@@ -686,6 +686,11 @@ ALTER TABLE t SPLIT AT SELECT i*2000 FROM generate_series(0, 2) AS g(i);
 	// extremely suboptimal).
 	kvGRPCCallsRegex := regexp.MustCompile(`KV gRPC calls: ([\d,]+)`)
 	for i := 0; i < 10; i++ {
+		// Clear the pool so that each iteration gets a fresh helper with no
+		// retained allocations from previous iterations. Reused helpers with
+		// large slices eat into the workmem budget, forcing smaller TargetBytes
+		// and more gRPC batches.
+		kvcoord.TestingResetBatchTruncationHelperPool()
 		// Pick random workmem limit in [2MiB; 16MiB] range.
 		workmem := 2<<20 + rng.Intn(14<<20)
 		runner.Exec(t, fmt.Sprintf("SET distsql_workmem = '%dB'", workmem))
@@ -702,7 +707,7 @@ ALTER TABLE t SPLIT AT SELECT i*2000 FROM generate_series(0, 2) AS g(i);
 				}
 			}
 			require.Greater(t, gRPCCalls, 0, rows)
-			require.Greater(t, 250, gRPCCalls, rows)
+			require.Greater(t, 150, gRPCCalls, rows)
 		}
 	}
 }

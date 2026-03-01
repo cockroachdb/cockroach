@@ -76,5 +76,5 @@ func (t *TaskCleanup) Process(ctx context.Context, l *logger.Logger) error {
 
 // GetTimeout returns the timeout for the cleanup task.
 func (t *TaskCleanup) GetTimeout() time.Duration {
-	return 5 * time.Minute
+	return 1 * time.Minute
 }

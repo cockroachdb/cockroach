@@ -28,7 +28,22 @@ message SpanStatsRequest {
 
   repeated Span spans = 4 [(gogoproto.nullable) = false];
 
+  // SkipMvccStats when set will result in nodes only collecting stats on the physical data
+  // from their local stores. Nodes will not make a RangeStats RPC to determine stats on
+  // logical data.
   bool skip_mvcc_stats = 5;
+
+  // SkipApproxTotalStats when set allows for an optimization for SpanStats calls that perform
+  // fan outs. Specifically, only one node per span will make RangeStats RPCs to determine
+  // stats on the logical data (MVCC stats). When set ApproximateTotalStats will equal
+  // TotalStats since MVCC stats are collected from only one node rather than accumulated
+  // across all replicas.
+  bool skip_approx_total_stats = 6;
+
+  // SpansRequiringMvcc specifies which spans in the request need MVCC stats collected.
+  // When populated, MVCC stats will only be collected for spans in this list.
+  // This facilitates the SkipApproxTotalStats optimization used during fan outs.
+  repeated Span spans_requiring_mvcc = 7 [(gogoproto.nullable) = false];
 }
 
 message SpanStats {

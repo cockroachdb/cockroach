@@ -145,6 +145,12 @@ func makeKVRangefeedOptions(c cluster.Cluster) (option.StartOpts, install.Cluste
 	// is happening server-side since we'll have less work queued client-side.
 	settings.ClusterSettings["changefeed.memory.per_changefeed_limit"] = "512KiB"
 	settings.ClusterSettings["kv.rangefeed.buffered_sender.enabled"] = "true"
+	// TODO(#161392): Disable per-event elastic CPU control for changefeeds as
+	// an experiment to see if the test is stable in the absence of changefeed
+	// throttling. The AC pacer's runtime.Yield adds enough delay on the node
+	// running the changefeed to reduce throughput below the sink rate assumed
+	// by this test.
+	settings.ClusterSettings["changefeed.cpu.per_event_elastic_control.enabled"] = "false"
 	return startOpts, settings
 }
 
@@ -259,25 +265,25 @@ func runKVRangefeed(ctx context.Context, t test.Test, c cluster.Cluster, opts kv
 		t.Fatal(err)
 	}
 
-	// Assert that the changefeed caught up in a reasonable time.
-	actualCatchUpDuration := findP99Below(metrics["changefeed-resolved"], resolvedTarget*2) - opts.changefeedDelay
+	// Assert that the changefeed caught up in a reasonable time. We look for the
+	// point where we fall below 2*resolvedTarget rather than just resolvedTarget
+	// because we will never actually observe the resolved timestamp below
+	// resolvedTarget since it also depends on the checkpoint interval.
+	caughtUpAt, caughtUp := findP99Below(metrics["changefeed-resolved"], resolvedTarget*2)
 	if opts.expectChangefeedCatchesUp {
+		if !caughtUp {
+			t.Fatalf("changefeed never caught up")
+		}
+		actualCatchUpDuration := caughtUpAt - opts.changefeedDelay
 		// We allow the changefeed to miss the expected runtime by 10% to hopefully
 		// cut down on infra-flakes.
 		allowedCatchUpDuration := time.Duration(int64(float64(catchUpDur) * catchUpToleranceMultiplier))
-		// Note that we look for the point where we fall below 2*resolvedTarget
-		// rather than just resolvedTarget because we will never actually observe
-		// the resolved timestamp below resolvedTarget since it also depends on the
-		// checkpoint interval.
-		if actualCatchUpDuration <= 0 {
-			t.Fatalf("changefeed never caught up: %s <= 0", actualCatchUpDuration)
-		} else if actualCatchUpDuration > allowedCatchUpDuration {
+		if actualCatchUpDuration > allowedCatchUpDuration {
 			t.Fatalf("changefeed caught up too slowly: %s > %s (%s+10%%)", actualCatchUpDuration, allowedCatchUpDuration, catchUpDur)
-		} else {
-			t.L().Printf("changefeed caught up quickly enough %s < %s", actualCatchUpDuration, allowedCatchUpDuration)
 		}
+		t.L().Printf("changefeed caught up quickly enough %s < %s", actualCatchUpDuration, allowedCatchUpDuration)
 	} else {
-		if actualCatchUpDuration > 0 {
+		if caughtUp {
 			t.Fatal("changefeed unexpectedly caught up in under-provisioned state, are we testing what we think we are?")
 		}
 	}
@@ -354,9 +360,9 @@ func p99sBetween(
 	return ret
 }
 
-func findP99Below(ticks []exporter.SnapshotTick, target time.Duration) time.Duration {
+func findP99Below(ticks []exporter.SnapshotTick, target time.Duration) (time.Duration, bool) {
 	if len(ticks) == 0 {
-		return 0
+		return 0, false
 	}
 
 	startTime := ticks[0].Now
@@ -375,10 +381,10 @@ func findP99Below(ticks []exporter.SnapshotTick, target time.Duration) time.Dura
 		// changefeed-resolved to indicate no resolved timestamp has been received.
 		p99 := time.Duration(h.ValueAtQuantile(99))
 		if p99 > 0 && p99 < target {
-			return tick.Now.Sub(startTime)
+			return tick.Now.Sub(startTime), true
 		}
 	}
-	return 0
+	return 0, false
 }
 
 func metricsFileName(t test.Test) string {

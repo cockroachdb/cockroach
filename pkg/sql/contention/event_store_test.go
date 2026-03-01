@@ -15,6 +15,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/appstatspb"
@@ -411,7 +412,8 @@ func TestLogResolvedEvents(t *testing.T) {
 
 	for _, tc := range testCases {
 		spy.Reset()
-		logResolvedEvents(ctx, tc.events)
+		// Pass nil for db since these tests don't require key decoding.
+		logResolvedEvents(ctx, tc.events, nil /* db */, keys.SystemSQLCodec)
 		contentionLogs := spy.GetLogs(logpb.Channel_SQL_EXEC)
 		require.Len(t, contentionLogs, len(tc.expected))
 		for _, exepectedContentionLog := range tc.expected {

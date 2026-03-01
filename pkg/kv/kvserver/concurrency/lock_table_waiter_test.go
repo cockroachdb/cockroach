@@ -58,10 +58,11 @@ func (m *mockIntentResolver) ResolveIntents(
 }
 
 type mockLockTableGuard struct {
-	state         waitingState
-	signal        chan struct{}
-	stateObserved chan struct{}
-	toResolve     []roachpb.LockUpdate
+	state                   waitingState
+	signal                  chan struct{}
+	stateObserved           chan struct{}
+	toResolve               []roachpb.LockUpdate
+	virtuallyResolveIntents bool
 }
 
 var _ lockTableGuard = &mockLockTableGuard{}
@@ -78,6 +79,12 @@ func (g *mockLockTableGuard) CurState() (waitingState, error) {
 }
 func (g *mockLockTableGuard) ResolveBeforeScanning() []roachpb.LockUpdate {
 	return g.toResolve
+}
+func (g *mockLockTableGuard) IntentsToResolveVirtually() []roachpb.LockUpdate {
+	return g.toResolve
+}
+func (g *mockLockTableGuard) VirtuallyResolvesIntents() bool {
+	return g.virtuallyResolveIntents
 }
 func (g *mockLockTableGuard) CheckOptimisticNoConflicts(*lockspanset.LockSpanSet) (ok bool) {
 	return true
@@ -376,6 +383,56 @@ func testWaitPush(t *testing.T, k waitKind, makeReq func() Request, expPushTS hl
 			require.Nil(t, err)
 		})
 	})
+}
+
+// TestLockTableWaiterSkipsResolveWithVIR verifies that pushLockTxn does not
+// physically resolve the intent when the guard has virtual intent resolution
+// enabled.
+func TestLockTableWaiterSkipsResolveWithVIR(t *testing.T) {
+	ctx := context.Background()
+	w, ir, g, _ := setupLockTableWaiterTest()
+	defer w.stopper.Stop(ctx)
+
+	g.virtuallyResolveIntents = true
+
+	pusheeTxn := makeTxnProto("pushee")
+	pusherTxn := makeTxnProto("pusher")
+	req := Request{
+		Txn:       &pusherTxn,
+		Timestamp: pusherTxn.ReadTimestamp,
+	}
+	keyA := roachpb.Key("keyA")
+
+	g.state = waitingState{
+		kind:          waitFor,
+		txn:           &pusheeTxn.TxnMeta,
+		key:           keyA,
+		held:          true,
+		guardStrength: lock.None,
+	}
+	g.notify()
+
+	ir.pushTxn = func(
+		_ context.Context,
+		pusheeArg *enginepb.TxnMeta,
+		h kvpb.Header,
+		pushType kvpb.PushTxnType,
+	) (*roachpb.Transaction, bool, *Error) {
+		resp := &roachpb.Transaction{TxnMeta: *pusheeArg, Status: roachpb.ABORTED}
+		w.lt.(*mockLockTable).txnFinalizedFn = func(txn *roachpb.Transaction) {}
+		// With VIR, the physical resolve should be skipped. Transition
+		// directly to doneWaiting.
+		g.state = waitingState{kind: doneWaiting}
+		g.notify()
+		return resp, false, nil
+	}
+	ir.resolveIntent = func(context.Context, roachpb.LockUpdate, intentresolver.ResolveOptions) *Error {
+		t.Fatal("ResolveIntent should not be called when VIR is enabled")
+		return nil
+	}
+
+	err := w.WaitOn(ctx, req, g)
+	require.Nil(t, err)
 }
 
 func testWaitNoopUntilDone(t *testing.T, k waitKind, makeReq func() Request) {
@@ -887,11 +944,15 @@ func TestPendingTxnCache(t *testing.T) {
 	for i := range txns {
 		txns[i] = makeTxnProto(fmt.Sprintf("txn %d", i))
 	}
+	obs := roachpb.ObservedTimestamp{
+		NodeID:    1,
+		Timestamp: hlc.ClockTimestamp{WallTime: 1},
+	}
 
 	// Add each txn to the cache. Observe LRU eviction policy.
 	for i := range txns {
 		txn := &txns[i]
-		c.add(txn, roachpb.ObservedTimestamp{})
+		c.add(txn, obs)
 		for j, entryInCache := range c.txns {
 			if j <= i {
 				require.Equal(t, &txns[i-j], entryInCache.Txn)
@@ -925,10 +986,14 @@ func TestPendingTxnCache(t *testing.T) {
 
 func TestPendingTxnCacheUpdatesTxn(t *testing.T) {
 	var c pendingTxnCache
+	obs := roachpb.ObservedTimestamp{
+		NodeID:    1,
+		Timestamp: hlc.ClockTimestamp{WallTime: 1},
+	}
 
 	// Add txn to cache.
 	txnOrig := makeTxnProto("txn")
-	c.add(txnOrig.Clone(), roachpb.ObservedTimestamp{})
+	c.add(txnOrig.Clone(), obs)
 	entryInCache, ok := c.get(txnOrig.ID)
 	require.True(t, ok)
 	require.Equal(t, txnOrig.WriteTimestamp, entryInCache.Txn.WriteTimestamp)
@@ -936,14 +1001,14 @@ func TestPendingTxnCacheUpdatesTxn(t *testing.T) {
 	// Add pushed txn with higher write timestamp.
 	txnPushed := txnOrig.Clone()
 	txnPushed.WriteTimestamp.Forward(txnPushed.WriteTimestamp.Add(1, 0))
-	c.add(txnPushed, roachpb.ObservedTimestamp{})
+	c.add(txnPushed, obs)
 	entryInCache, ok = c.get(txnOrig.ID)
 	require.True(t, ok)
 	require.NotEqual(t, txnOrig.WriteTimestamp, entryInCache.Txn.WriteTimestamp)
 	require.Equal(t, txnPushed.WriteTimestamp, entryInCache.Txn.WriteTimestamp)
 
 	// Re-add txn with lower timestamp. Timestamp should not regress.
-	c.add(txnOrig.Clone(), roachpb.ObservedTimestamp{})
+	c.add(txnOrig.Clone(), obs)
 	entryInCache, ok = c.get(txnOrig.ID)
 	require.True(t, ok)
 	require.NotEqual(t, txnOrig.WriteTimestamp, entryInCache.Txn.WriteTimestamp)
@@ -972,14 +1037,24 @@ func TestPendingTxnCacheClockWhilePending(t *testing.T) {
 		require.Equal(t, obs, entry.ClockWhilePending)
 	})
 
-	t.Run("new txn without observation stores zero value", func(t *testing.T) {
+	t.Run("empty observation panics", func(t *testing.T) {
 		var c pendingTxnCache
 		txn := makeTxnProto("txn")
 
-		c.add(txn.Clone(), roachpb.ObservedTimestamp{})
-		entry, ok := c.get(txn.ID)
-		require.True(t, ok)
-		require.Equal(t, roachpb.ObservedTimestamp{}, entry.ClockWhilePending)
+		require.Panics(t, func() {
+			c.add(txn.Clone(), roachpb.ObservedTimestamp{})
+		})
+	})
+
+	t.Run("mismatched NodeID panics", func(t *testing.T) {
+		var c pendingTxnCache
+		txn1 := makeTxnProto("txn1")
+		txn2 := makeTxnProto("txn2")
+
+		c.add(txn1.Clone(), makeObs(1, 100))
+		require.Panics(t, func() {
+			c.add(txn2.Clone(), makeObs(2, 100))
+		})
 	})
 
 	t.Run("newest ClockWhilePending observation is preserved when WriteTimestamp advances", func(t *testing.T) {
@@ -1019,41 +1094,6 @@ func TestPendingTxnCacheClockWhilePending(t *testing.T) {
 		require.True(t, ok)
 		require.Equal(t, obs1, entry.ClockWhilePending)
 	})
-
-	t.Run("empty observation does not replace existing", func(t *testing.T) {
-		var c pendingTxnCache
-		txn := makeTxnProto("txn")
-		obs := makeObs(1, 100)
-
-		c.add(txn.Clone(), obs)
-
-		// Add same txn with empty observation. Existing observation is kept.
-		c.add(txn.Clone(), roachpb.ObservedTimestamp{})
-
-		entry, ok := c.get(txn.ID)
-		require.True(t, ok)
-		require.Equal(t, obs, entry.ClockWhilePending)
-	})
-
-	t.Run("non-empty observation replaces empty", func(t *testing.T) {
-		var c pendingTxnCache
-		txn := makeTxnProto("txn")
-		obs := makeObs(1, 100)
-
-		// Add txn with empty observation.
-		c.add(txn.Clone(), roachpb.ObservedTimestamp{})
-
-		entry, ok := c.get(txn.ID)
-		require.True(t, ok)
-		require.Equal(t, roachpb.ObservedTimestamp{}, entry.ClockWhilePending)
-
-		// Add same txn with non-empty observation. New observation replaces.
-		c.add(txn.Clone(), obs)
-
-		entry, ok = c.get(txn.ID)
-		require.True(t, ok)
-		require.Equal(t, obs, entry.ClockWhilePending)
-	})
 }
 
 func BenchmarkPendingTxnCache(b *testing.B) {
@@ -1067,10 +1107,14 @@ func BenchmarkPendingTxnCache(b *testing.B) {
 	for i := range txnOps {
 		txnOps[i] = &txns[rng.Intn(len(txns))]
 	}
+	obs := roachpb.ObservedTimestamp{
+		NodeID:    1,
+		Timestamp: hlc.ClockTimestamp{WallTime: 1},
+	}
 	b.ResetTimer()
 	for i, txnOp := range txnOps {
 		if i%2 == 0 {
-			c.add(txnOp, roachpb.ObservedTimestamp{})
+			c.add(txnOp, obs)
 		} else {
 			_, _ = c.get(txnOp.ID)
 		}

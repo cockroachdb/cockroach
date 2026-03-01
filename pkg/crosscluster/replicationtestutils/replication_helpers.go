@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
+	"github.com/cockroachdb/cockroach/pkg/util/rangescanstats/rangescanstatspb"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
@@ -156,7 +157,7 @@ func (rf *ReplicationFeed) ObserveResolved(ctx context.Context, lo hlc.Timestamp
 
 // ObserveRangeStats consumes the feed until we recieve a checkpoint that
 // contains range stats. Returns the stats from the checkpoint.
-func (rf *ReplicationFeed) ObserveRangeStats(ctx context.Context) streampb.StreamEvent_RangeStats {
+func (rf *ReplicationFeed) ObserveRangeStats(ctx context.Context) rangescanstatspb.RangeStats {
 	if !ContainsRangeStats()(rf.msg) {
 		rf.consumeUntil(ctx, ContainsRangeStats(), func(err error) bool {
 			return false

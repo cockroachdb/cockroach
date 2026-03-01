@@ -278,6 +278,8 @@ type DB struct {
 	// Especially SettingsValue.
 	SQLKVResponseAdmissionQ *admission.WorkQueue
 	AdmissionPacerFactory   admission.PacerFactory
+
+	SQLCPUProvider admission.SQLCPUProvider
 }
 
 // NonTransactionalSender returns a Sender that can be used for sending

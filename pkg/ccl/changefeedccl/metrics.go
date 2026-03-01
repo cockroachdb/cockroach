@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log/logcrash"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/metric/aggmetric"
+	"github.com/cockroachdb/cockroach/pkg/util/rangescanstats/rangescanstatspb"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/crlib/crstrings"
@@ -86,16 +87,16 @@ type AggMetrics struct {
 	InternalRetryMessageCount   *aggmetric.AggGauge
 	SchemaRegistrations         *aggmetric.AggCounter
 	SchemaRegistryRetries       *aggmetric.AggCounter
-	AggregatorProgress          *aggmetric.AggGauge
-	CheckpointProgress          *aggmetric.AggGauge
+	AggregatorProgress          *aggmetric.AggFunctionalGauge
+	CheckpointProgress          *aggmetric.AggFunctionalGauge
 	LaggingRanges               *aggmetric.AggGauge
 	TotalRanges                 *aggmetric.AggGauge
 	CloudstorageBufferedBytes   *aggmetric.AggGauge
 	KafkaThrottlingNanos        *aggmetric.AggHistogram
 	SinkErrors                  *aggmetric.AggCounter
-	MaxBehindNanos              *aggmetric.AggGauge
-	SpanProgressSkew            *aggmetric.AggGauge
-	TableProgressSkew           *aggmetric.AggGauge
+	MaxBehindNanos              *aggmetric.AggFunctionalGauge
+	SpanProgressSkew            *aggmetric.AggFunctionalGauge
+	TableProgressSkew           *aggmetric.AggFunctionalGauge
 
 	Timers *timers.Timers
 
@@ -177,16 +178,16 @@ type sliMetrics struct {
 	InternalRetryMessageCount   *aggmetric.Gauge
 	SchemaRegistrations         *aggmetric.Counter
 	SchemaRegistryRetries       *aggmetric.Counter
-	AggregatorProgress          *aggmetric.Gauge
-	CheckpointProgress          *aggmetric.Gauge
+	AggregatorProgress          *aggmetric.FunctionalGauge
+	CheckpointProgress          *aggmetric.FunctionalGauge
 	LaggingRanges               *aggmetric.Gauge
 	TotalRanges                 *aggmetric.Gauge
 	CloudstorageBufferedBytes   *aggmetric.Gauge
 	KafkaThrottlingNanos        *aggmetric.Histogram
 	SinkErrors                  *aggmetric.Counter
-	MaxBehindNanos              *aggmetric.Gauge
-	SpanProgressSkew            *aggmetric.Gauge
-	TableProgressSkew           *aggmetric.Gauge
+	MaxBehindNanos              *aggmetric.FunctionalGauge
+	SpanProgressSkew            *aggmetric.FunctionalGauge
+	TableProgressSkew           *aggmetric.FunctionalGauge
 
 	Timers *timers.ScopedTimers
 
@@ -416,7 +417,7 @@ func (m *sliMetrics) timers() *timers.ScopedTimers {
 // components because they don't support reliable deregistration, which is
 // desirable in this use-case.
 type JobScopedUsageMetrics struct {
-	UsageTableBytes    *metric.Gauge
+	UsageTableBytes    *metric.FunctionalGauge
 	UsageErrorCount    *metric.Counter
 	UsageQueryDuration metric.IHistogram
 
@@ -1423,22 +1424,21 @@ func (a *AggMetrics) getOrCreateScope(scope string) (*sliMetrics, error) {
 		}
 	}
 
-	sm.AggregatorProgress = a.AggregatorProgress.AddFunctionalChild(minTimestampGetter(sm.mu.resolved), scope)
-	sm.CheckpointProgress = a.CheckpointProgress.AddFunctionalChild(minTimestampGetter(sm.mu.checkpoint), scope)
-	sm.MaxBehindNanos = a.MaxBehindNanos.AddFunctionalChild(maxBehindNanosGetter(sm.mu.resolved), scope)
-	sm.SpanProgressSkew = a.SpanProgressSkew.AddFunctionalChild(
+	sm.AggregatorProgress = a.AggregatorProgress.AddChild(minTimestampGetter(sm.mu.resolved), scope)
+	sm.CheckpointProgress = a.CheckpointProgress.AddChild(minTimestampGetter(sm.mu.checkpoint), scope)
+	sm.MaxBehindNanos = a.MaxBehindNanos.AddChild(maxBehindNanosGetter(sm.mu.resolved), scope)
+	sm.SpanProgressSkew = a.SpanProgressSkew.AddChild(
 		maxTimestampSkewGetter(sm.mu.spanSkew), scope)
-	sm.TableProgressSkew = a.TableProgressSkew.AddFunctionalChild(
+	sm.TableProgressSkew = a.TableProgressSkew.AddChild(
 		maxTimestampSkewGetter(sm.mu.tableSkew), scope)
 
 	a.mu.sliMetrics[scope] = sm
 	return sm, nil
 }
 
-// getLaggingRangesCallback returns a function which can be called to update the
-// lagging ranges metric. It should be called with the current number of lagging
-// ranges.
-func (m *sliMetrics) getLaggingRangesCallback() func(lagging int64, total int64) {
+// getRangeStatsCallback returns a function which can be called to update our
+// range stats metrics: lagging ranges, scanning ranges, and total ranges.
+func (m *sliMetrics) getRangeStatsCallback() func(stats *rangescanstatspb.RangeStats) {
 	// Because this gauge is shared between changefeeds in the same metrics scope,
 	// we must instead modify it using `Inc` and `Dec` (as opposed to `Update`) to
 	// ensure values written by others are not overwritten. The code below is used
@@ -1458,7 +1458,13 @@ func (m *sliMetrics) getLaggingRangesCallback() func(lagging int64, total int64)
 		lagging int64
 		total   int64
 	}{}
-	return func(lagging int64, total int64) {
+	return func(stats *rangescanstatspb.RangeStats) {
+		total, scanning, lagging := stats.RangeCount, stats.ScanningRangeCount, stats.LaggingRangeCount
+		// We don't want to report lagging ranges during an initial scan.
+		if scanning > 0 {
+			lagging = 0
+		}
+
 		last.Lock()
 		defer last.Unlock()
 

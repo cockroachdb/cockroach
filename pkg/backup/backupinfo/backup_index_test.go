@@ -333,45 +333,6 @@ func TestDontWriteBackupIndexMetadata(t *testing.T) {
 		CollectionURI: "nodelocal://1/backup",
 	}
 
-	t.Run("pre v25.4 version", func(t *testing.T) {
-		st := cluster.MakeTestingClusterSettingsWithVersions(
-			clusterversion.V25_3.Version(),
-			clusterversion.V25_3.Version(),
-			true,
-		)
-		const collectionURI = "nodelocal://1/backup"
-		dir, dirCleanupFn := testutils.TempDir(t)
-		defer dirCleanupFn()
-		externalStorage, err = cloud.ExternalStorageFromURI(
-			ctx,
-			collectionURI,
-			base.ExternalIODirConfig{},
-			st,
-			blobs.TestBlobServiceClient(dir),
-			username.RootUserName(),
-			nil, /* db */
-			nil, /* limiters */
-			cloud.NilMetrics,
-		)
-		require.NoError(t, err)
-		execCfg := &sql.ExecutorConfig{Settings: st}
-
-		start := hlc.Timestamp{}
-		end := hlc.Timestamp{WallTime: 20}
-		details.StartTime = start
-		details.EndTime = end
-
-		require.NoError(t, WriteBackupIndexMetadata(
-			ctx, execCfg, username.RootUserName(), makeExternalStorage, details, hlc.Timestamp{},
-		))
-
-		filepath, err := getBackupIndexFilePath(subdir, start, end)
-		require.NoError(t, err)
-
-		_, _, err = externalStorage.ReadFile(ctx, filepath, cloud.ReadOptions{})
-		require.ErrorContains(t, err, "does not exist")
-	})
-
 	t.Run("missing full backup index", func(t *testing.T) {
 		st := cluster.MakeTestingClusterSettingsWithVersions(
 			clusterversion.Latest.Version(),

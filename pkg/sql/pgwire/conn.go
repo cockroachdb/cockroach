@@ -18,6 +18,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
+	"github.com/cockroachdb/cockroach/pkg/server/tcpkeepalive"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql"
@@ -288,6 +289,25 @@ func (c *conn) sendInitialConnData(
 	if err != nil {
 		_ /* err */ = c.writeErr(ctx, err, c.conn)
 		return sql.ConnectionHandler{}, err
+	}
+	sv := &sqlServer.GetExecutorConfig().Settings.SV
+	connHandler.SetOnTCPKeepAliveChange(func(
+		idle, interval time.Duration, count int, userTimeout time.Duration,
+	) {
+		if err := tcpkeepalive.ConfigureConnKeepAlive(
+			c.conn, idle, interval, count, userTimeout, sv,
+		); err != nil {
+			log.Ops.Warningf(ctx, "failed to apply TCP keepalive settings: %v", err)
+		}
+	})
+	// Apply any TCP keepalive values that were set during SetupConn from
+	// connection string options or ALTER ROLE SET defaults.
+	if idle, interval, count, userTimeout := connHandler.GetTCPKeepAliveSessionData(); idle != 0 || interval != 0 || count != 0 || userTimeout != 0 {
+		if err := tcpkeepalive.ConfigureConnKeepAlive(
+			c.conn, idle, interval, count, userTimeout, sv,
+		); err != nil {
+			log.Ops.Warningf(ctx, "failed to apply initial TCP keepalive settings: %v", err)
+		}
 	}
 
 	// Send the initial "status parameters" to the client.  This

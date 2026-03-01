@@ -270,8 +270,8 @@ type Context struct {
 	// RangeStatsFetcher is used to fetch RangeStats.
 	RangeStatsFetcher RangeStatsFetcher
 
-	// ChangefeedState stores the state (progress) of core changefeeds.
-	ChangefeedState ChangefeedState
+	// CoreChangefeedState stores the in-memory progress of core changefeeds.
+	CoreChangefeedState CoreChangefeedState
 
 	// ParseHelper makes date parsing more efficient.
 	ParseHelper pgdate.ParseHelper

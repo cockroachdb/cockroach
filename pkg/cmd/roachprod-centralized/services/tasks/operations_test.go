@@ -12,6 +12,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/models/tasks"
 	tasksrepomock "github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/repositories/tasks/mocks"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/services/tasks/types"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/utils/logger"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/assert"
@@ -20,7 +21,7 @@ import (
 
 func TestPurgeTasks(t *testing.T) {
 	mockRepo := &tasksrepomock.ITasksRepository{}
-	taskService := NewService(mockRepo, "test-instance", Options{
+	taskService := NewService(mockRepo, "test-instance", types.Options{
 		PurgeDoneTaskOlderThan:   time.Second,
 		PurgeFailedTaskOlderThan: time.Minute,
 	})
@@ -43,7 +44,7 @@ func TestPurgeTasks(t *testing.T) {
 
 func TestPurgeTasks_ErrorOnDonePurge(t *testing.T) {
 	mockRepo := &tasksrepomock.ITasksRepository{}
-	taskService := NewService(mockRepo, "test-instance", Options{
+	taskService := NewService(mockRepo, "test-instance", types.Options{
 		PurgeDoneTaskOlderThan: time.Second,
 	})
 
@@ -62,7 +63,7 @@ func TestPurgeTasks_ErrorOnDonePurge(t *testing.T) {
 
 func TestPurgeTasks_ErrorOnFailedPurge(t *testing.T) {
 	mockRepo := &tasksrepomock.ITasksRepository{}
-	taskService := NewService(mockRepo, "test-instance", Options{
+	taskService := NewService(mockRepo, "test-instance", types.Options{
 		PurgeDoneTaskOlderThan:   time.Second,
 		PurgeFailedTaskOlderThan: time.Minute,
 	})
@@ -86,7 +87,7 @@ func TestPurgeTasks_ErrorOnFailedPurge(t *testing.T) {
 
 func TestPurgeTasksInState_Error(t *testing.T) {
 	mockRepo := &tasksrepomock.ITasksRepository{}
-	taskService := NewService(mockRepo, "test-instance", Options{})
+	taskService := NewService(mockRepo, "test-instance", types.Options{})
 
 	mockRepo.
 		On("PurgeTasks", mock.Anything, mock.Anything, time.Minute, tasks.TaskStatePending).
@@ -101,7 +102,7 @@ func TestPurgeTasksInState_Error(t *testing.T) {
 
 func TestPurgeTasksInState(t *testing.T) {
 	mockRepo := &tasksrepomock.ITasksRepository{}
-	taskService := NewService(mockRepo, "test-instance", Options{})
+	taskService := NewService(mockRepo, "test-instance", types.Options{})
 
 	mockRepo.
 		On("PurgeTasks", mock.Anything, mock.Anything, time.Minute, tasks.TaskStatePending).

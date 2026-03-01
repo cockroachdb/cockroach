@@ -10,8 +10,7 @@ go_library(
     importpath = "github.com/cockroachdb/cockroach/pkg/ccl/jwtauthccl",
     visibility = ["//visibility:public"],
     deps = [
-        "//pkg/ccl/securityccl/jwthelper",
-        "//pkg/ccl/utilccl",
+        "//pkg/security/jwthelper",
         "//pkg/security/username",
         "//pkg/server/telemetry",
         "//pkg/settings",

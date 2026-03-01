@@ -1166,7 +1166,7 @@ func (p *planner) ProcessVectorIndexFixups(
 func (p *planner) InsertStatementHint(
 	ctx context.Context, statementFingerprint string, hint hintpb.StatementHintUnion,
 ) (int64, error) {
-	return hints.InsertHintIntoDB(ctx, p.InternalSQLTxn(), statementFingerprint, hint)
+	return hints.InsertHintIntoDB(ctx, p.execCfg.Settings, p.InternalSQLTxn(), statementFingerprint, hint)
 }
 
 // UsingHintInjection is part of the eval.Planner interface.

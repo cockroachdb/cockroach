@@ -214,13 +214,17 @@ ALTER TABLE t DROP CONSTRAINT bar
 statement ok
 ALTER TABLE t DROP CONSTRAINT IF EXISTS bar
 
+onlyif config local-mixed-25.4 local-mixed-26.1
+statement ok
+ALTER TABLE t SET (schema_locked = false)
+
 # Legacy schema changer does not support dropping unique constraints via
 # ALTER TABLE DROP CONSTRAINT.
-onlyif config local-legacy-schema-changer
+onlyif config local-legacy-schema-changer local-mixed-25.4 local-mixed-26.1
 statement error cannot drop UNIQUE constraint \"foo\" using ALTER TABLE DROP CONSTRAINT, use DROP INDEX CASCADE instead
 ALTER TABLE t DROP CONSTRAINT foo
 
-onlyif config local-legacy-schema-changer
+onlyif config local-legacy-schema-changer local-mixed-25.4 local-mixed-26.1
 statement ok
 DROP INDEX foo CASCADE
 
@@ -237,11 +241,11 @@ SCHEMA CHANGE     DROP INDEX test.public.t@foo CASCADE         root  succeeded  
 
 # Declarative schema changer supports dropping unique constraints via
 # ALTER TABLE DROP CONSTRAINT.
-skipif config local-legacy-schema-changer
+skipif config local-legacy-schema-changer local-mixed-25.4 local-mixed-26.1
 statement ok
 ALTER TABLE t DROP CONSTRAINT foo
 
-skipif config local-legacy-schema-changer
+skipif config local-legacy-schema-changer local-mixed-25.4 local-mixed-26.1
 query TTTTRT retry
 SELECT job_type, description, user_name, status, fraction_completed, error
 FROM crdb_internal.jobs
@@ -1891,17 +1895,21 @@ unique_without_index  unique_without_index_c_key  UNIQUE       UNIQUE (c ASC)   
 unique_without_index  unique_without_index_pkey   PRIMARY KEY  PRIMARY KEY (rowid ASC)                 true
 
 # Drop an index-backed unique constraint using ALTER TABLE DROP CONSTRAINT.
-skipif config local-legacy-schema-changer
+skipif config local-legacy-schema-changer local-mixed-25.4 local-mixed-26.1
 statement ok
 ALTER TABLE unique_without_index DROP CONSTRAINT unique_without_index_c_key
 
+onlyif config local-mixed-25.4 local-mixed-26.1
+statement ok
+ALTER TABLE unique_without_index SET (schema_locked = false)
+
 # Dropping the constraint only works with the declarative schema changer.
 # For the legacy config, drop the index itself.
-onlyif config local-legacy-schema-changer
+onlyif config local-legacy-schema-changer local-mixed-25.4 local-mixed-26.1
 statement error pgcode 0A000 cannot drop UNIQUE constraint \"unique_without_index_c_key\"
 ALTER TABLE unique_without_index DROP CONSTRAINT unique_without_index_c_key
 
-onlyif config local-legacy-schema-changer
+onlyif config local-legacy-schema-changer local-mixed-25.4 local-mixed-26.1
 statement ok
 DROP INDEX unique_without_index_c_key CASCADE
 

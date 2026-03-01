@@ -23,6 +23,7 @@ The YAML configuration file follows this structure:
 providers:
   # GCE Provider
   - type: gce
+    environment: gcp-engineering  # authorization scope for permission checks
     gce:
       project: project-id
       metadata_project: metadata-project-id
@@ -31,21 +32,33 @@ providers:
       dns_public_domain: public-domain
       dns_managed_zone: managed-zone
       dns_managed_domain: managed-domain
-  
+
   # AWS Provider
   - type: aws
+    environment: aws-staging  # authorization scope for permission checks
     aws:
       account_id: "account-id"
       assume_sts_role: true
-  
+
   # Azure Provider
   - type: azure
+    environment: azure-production  # authorization scope for permission checks
     azure:
       subscription_name: subscription-name
-  
+
   # IBM Provider
   - type: ibm
+    environment: ibm-default  # authorization scope for permission checks
 ```
+
+### Common Provider Fields
+
+Each provider entry supports these common fields:
+
+| Field | Required | Description |
+|-------|----------|-------------|
+| `type` | Yes | Cloud provider type: `gce`, `aws`, `azure`, or `ibm` |
+| `environment` | Yes | Maps the provider to an authorization scope used for permission checks. Users are granted access to specific environments, and operations on a provider are authorized against its environment value. Choose a name that reflects the provider's purpose (e.g., `ephemeral`, `drt`, `aws-default`, `azure-infra`). |
 
 See the example configuration file at `pkg/cmd/roachprod-centralized/examples/cloud_config.yaml.example`.
 
@@ -72,9 +85,15 @@ Override the project of the first GCE provider:
 ROACHPROD_PROVIDERS_0_GCE_PROJECT=my-custom-project
 ```
 
+Set the environment (authorization scope) for a provider:
+```
+ROACHPROD_PROVIDERS_0_ENVIRONMENT=ephemeral
+```
+
 Add a new Azure provider:
 ```
 ROACHPROD_PROVIDERS_9_TYPE=azure
+ROACHPROD_PROVIDERS_9_ENVIRONMENT=azure-staging
 ROACHPROD_PROVIDERS_9_AZURE_SUBSCRIPTION_NAME=my-subscription
 ```
 

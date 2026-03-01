@@ -23,7 +23,7 @@ sequence req=req1
 handle-lock-conflict-error req=req1 lease-seq=1
   lock txn=txn1 key=k
 ----
-[2] handle lock conflict error req1: handled conflicting locks on ‹"k"›, released latches
+[2] handle lock conflict error req1: added 1 discovered lock(s) to lock table: conflicting locks on ‹"k"›
 
 debug-lock-table
 ----
@@ -90,8 +90,7 @@ sequence req=req1
 handle-lock-conflict-error req=req1 lease-seq=2
   lock txn=txn1 key=k
 ----
-[2] handle lock conflict error req1: intent on ‹"k"› discovered but not added to disabled lock table
-[2] handle lock conflict error req1: handled conflicting locks on ‹"k"›, released latches
+[2] handle lock conflict error req1: discovered lock on ‹"k"› not added to disabled lock table
 
 sequence req=req1
 ----
@@ -139,8 +138,7 @@ sequence req=req1
 handle-lock-conflict-error req=req1 lease-seq=2
   lock txn=txn1 key=k
 ----
-[2] handle lock conflict error req1: intent on ‹"k"› discovered but not added to disabled lock table
-[2] handle lock conflict error req1: handled conflicting locks on ‹"k"›, released latches
+[2] handle lock conflict error req1: discovered lock on ‹"k"› not added to disabled lock table
 
 sequence req=req1
 ----

@@ -16,7 +16,6 @@ import (
 	"time"
 	"unicode/utf8"
 
-	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -662,6 +661,7 @@ func makeMetrics(internal bool, sv *settings.Values) Metrics {
 			StatementIndexRowsWritten:         metric.NewCounter(getMetricMeta(MetaStatementIndexRowsWritten, internal)),
 			StatementIndexBytesWritten:        metric.NewCounter(getMetricMeta(MetaStatementIndexBytesWritten, internal)),
 			QueryWithStatementHintsCount:      metric.NewCounter(getMetricMeta(MetaQueryWithStatementHints, internal)),
+			RLSPoliciesAppliedCount:           metric.NewCounter(getMetricMeta(MetaRLSPoliciesApplied, internal)),
 		},
 		StartedStatementCounters:  makeStartedStatementCounters(internal),
 		ExecutedStatementCounters: makeExecutedStatementCounters(internal),
@@ -1055,6 +1055,31 @@ type ConnectionHandler struct {
 	ex *connExecutor
 }
 
+// SetOnTCPKeepAliveChange registers a callback that is invoked when any
+// TCP keepalive session variable changes. This allows the pgwire layer
+// to apply updated TCP socket options to the underlying connection.
+func (h ConnectionHandler) SetOnTCPKeepAliveChange(
+	fn func(idle, interval time.Duration, count int, userTimeout time.Duration),
+) {
+	h.ex.dataMutatorIterator.OnTCPKeepAliveSettingChange = fn
+}
+
+// GetTCPKeepAliveSessionData returns the current TCP keepalive session
+// variable values, converted to time.Duration. These may have been set
+// during SetupConn from connection string options or ALTER ROLE SET
+// defaults.
+func (h ConnectionHandler) GetTCPKeepAliveSessionData() (
+	idle, interval time.Duration,
+	count int,
+	userTimeout time.Duration,
+) {
+	sd := h.ex.sessionData()
+	return time.Duration(sd.TcpKeepalivesIdle) * time.Second,
+		time.Duration(sd.TcpKeepalivesInterval) * time.Second,
+		int(sd.TcpKeepalivesCount),
+		time.Duration(sd.TcpUserTimeout) * time.Millisecond
+}
+
 // GetParamStatus retrieves the configured value of the session
 // variable identified by varName. This is used for the initial
 // message sent to a client during a session set-up.
@@ -1287,23 +1312,10 @@ func (s *Server) newConnExecutor(
 	}
 
 	ex.dataMutatorIterator.UpgradedIsolationLevel = func(
-		ctx context.Context, upgradedFrom tree.IsolationLevel, requiresNotice bool,
+		ctx context.Context, upgradedFrom tree.IsolationLevel,
 	) {
 		telemetry.Inc(sqltelemetry.IsolationLevelUpgradedCounter(ctx, upgradedFrom))
 		ex.metrics.ExecutedStatementCounters.TxnUpgradedCount.Inc(1)
-		if requiresNotice {
-			const msgFmt = "%s isolation level is not allowed without an enterprise license; upgrading to SERIALIZABLE"
-			displayLevel := upgradedFrom
-			if upgradedFrom == tree.ReadUncommittedIsolation {
-				displayLevel = tree.ReadCommittedIsolation
-			} else if upgradedFrom == tree.SnapshotIsolation {
-				displayLevel = tree.RepeatableReadIsolation
-			}
-			if logIsolationLevelLimiter.ShouldLog() {
-				log.Dev.Warningf(ctx, msgFmt, displayLevel)
-			}
-			ex.planner.BufferClientNotice(ctx, pgnotice.Newf(msgFmt, displayLevel))
-		}
 	}
 
 	ex.applicationName.Store(ex.sessionData().ApplicationName)
@@ -3743,8 +3755,6 @@ var allowBufferedWritesForWeakIsolation = settings.RegisterBoolSetting(
 	false,
 )
 
-var logIsolationLevelLimiter = log.Every(10 * time.Second)
-
 func (ex *connExecutor) txnIsolationLevelToKV(
 	ctx context.Context, level tree.IsolationLevel,
 ) isolation.Level {
@@ -3754,11 +3764,9 @@ func (ex *connExecutor) txnIsolationLevelToKV(
 	originalLevel := level
 	allowReadCommitted := allowReadCommittedIsolation.Get(&ex.server.cfg.Settings.SV)
 	allowRepeatableRead := allowRepeatableReadIsolation.Get(&ex.server.cfg.Settings.SV)
-	hasLicense := base.CCLDistributionAndEnterpriseEnabled(ex.server.cfg.Settings)
-	level, upgraded, upgradedDueToLicense := level.UpgradeToEnabledLevel(
-		allowReadCommitted, allowRepeatableRead, hasLicense)
+	level, upgraded := level.UpgradeToEnabledLevel(allowReadCommitted, allowRepeatableRead)
 	if f := ex.dataMutatorIterator.UpgradedIsolationLevel; upgraded && f != nil {
-		f(ctx, originalLevel, upgradedDueToLicense)
+		f(ctx, originalLevel)
 	}
 
 	ret := level.ToKVIsoLevel()

@@ -12,7 +12,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/controllers"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/models/tasks"
 	stasks "github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/services/tasks/types"
-	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/utils/api/bindings"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/utils/api/bindings/stripe"
 	filtertypes "github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/utils/filters/types"
 	"github.com/cockroachdb/errors"
 )
@@ -26,15 +26,15 @@ const (
 // for the tasks.GetAll() controller.
 // Examples: ?type=test&state[in]=pending,running
 type InputGetAllDTO struct {
-	Type             bindings.FilterValue[string]          `stripe:"type" validate:"omitempty,max=50"`
-	State            bindings.FilterValue[tasks.TaskState] `stripe:"state" validate:"omitempty,oneof=pending running done failed"`
-	CreationDatetime bindings.FilterValue[time.Time]       `stripe:"creation_datetime" validate:"omitempty"`
-	UpdateDatetime   bindings.FilterValue[time.Time]       `stripe:"update_datetime" validate:"omitempty"`
+	Type             stripe.FilterValue[string]          `stripe:"type" validate:"omitempty,max=50"`
+	State            stripe.FilterValue[tasks.TaskState] `stripe:"state" validate:"omitempty,oneof=pending running done failed"`
+	CreationDatetime stripe.FilterValue[time.Time]       `stripe:"creation_datetime" validate:"omitempty"`
+	UpdateDatetime   stripe.FilterValue[time.Time]       `stripe:"update_datetime" validate:"omitempty"`
 }
 
 // ToFilterSet converts the InputGetAllDTO to a filters.FilterSet for use by the service layer
 func (dto *InputGetAllDTO) ToFilterSet() filtertypes.FilterSet {
-	return bindings.ToFilterSet(*dto)
+	return stripe.ToFilterSet(*dto)
 }
 
 // ToServiceInputGetAllDTO converts the InputGetAllDTO to the service layer DTO
@@ -77,8 +77,10 @@ func (dto *TasksResultError) GetAssociatedStatusCode() int {
 }
 
 // TasksResult is the output data transfer object for the tasks controller.
+// It embeds PaginationMetadata to automatically implement IPaginatedResult.
 type TasksResult struct {
 	TasksResultError
+	controllers.PaginationMetadata
 	Data []tasks.ITask `json:"data,omitempty"`
 }
 
@@ -87,11 +89,27 @@ func (dto *TasksResult) GetData() any {
 	return dto.Data
 }
 
-// FromService converts the return value of the tasks service to a TaskResult.
-func (dto *TasksResult) FromService(tasks []tasks.ITask, err error) *TasksResult {
-	dto.Data = tasks
-	dto.Error = err
-	return dto
+// NewTasksListResult creates a new TasksResult with pagination metadata.
+// The pagination parameter is optional - if nil, startIndex defaults to 1.
+func NewTasksListResult(
+	tasksList []tasks.ITask, totalCount int, pagination *filtertypes.PaginationParams, err error,
+) *TasksResult {
+	result := &TasksResult{}
+	result.TasksResultError.Error = err
+
+	if err != nil {
+		return result
+	}
+
+	result.Data = tasksList
+	result.TotalCount = totalCount
+	result.Count = len(tasksList)
+	result.StartIndex = 1
+	if pagination != nil {
+		result.StartIndex = pagination.StartIndex
+	}
+
+	return result
 }
 
 // TaskResult is the output data transfer object for the tasks controller.
@@ -105,9 +123,10 @@ func (dto *TaskResult) GetData() any {
 	return dto.Data
 }
 
-// FromService converts the return values of the task service to a TaskResult.
-func (dto *TaskResult) FromService(task tasks.ITask, err error) *TaskResult {
-	dto.Data = task
-	dto.Error = err
-	return dto
+// NewTaskResult creates a new TaskResult.
+func NewTaskResult(task tasks.ITask, err error) *TaskResult {
+	return &TaskResult{
+		TasksResultError: TasksResultError{Error: err},
+		Data:             task,
+	}
 }

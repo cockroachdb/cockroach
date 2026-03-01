@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/security/password"
+	"github.com/cockroachdb/cockroach/pkg/security/provisioning"
 	secuser "github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server/apiutil"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
@@ -197,10 +198,6 @@ func (s *authenticationServer) userLogin(
 	if err != nil {
 		return nil, srverrors.APIInternalError(ctx, err)
 	}
-	if !verified {
-		return nil, errWebAuthenticationFailure
-	}
-
 	ldapAuthSuccess := false
 	var ldapUserDN *ldap.DN
 	originIP := s.lookupIncomingRequestOriginIP(ctx)
@@ -239,9 +236,33 @@ func (s *authenticationServer) userLogin(
 		}
 	}
 
+	// If the user does not exist but LDAP authentication succeeded, attempt
+	// to provision the user if LDAP provisioning is enabled.
+	if !verified && ldapAuthSuccess {
+		execCfg := s.sqlServer.ExecutorConfig()
+		if provisioning.ClusterProvisioningConfig(execCfg.Settings).Enabled("ldap") {
+			if log.V(1) {
+				log.Dev.Infof(ctx, "LDAP authentication succeeded for non-existent user %s; attempting provisioning", username)
+			}
+			if err := pgwire.ProvisionLDAPHelper(ctx, execCfg, username, hbaEntry); err != nil {
+				log.Ops.VWarningf(ctx, 1, "LDAP provisioning failed for user %s: %v", username, err)
+				return nil, errWebAuthenticationFailure
+			}
+			// Re-verify the user after provisioning.
+			verified, pwRetrieveFn, err = s.VerifyUserSessionDBConsole(ctx, username)
+			if err != nil {
+				return nil, srverrors.APIInternalError(ctx, err)
+			}
+		}
+	}
+
 	if !ldapAuthSuccess {
+		if !verified {
+			return nil, errWebAuthenticationFailure
+		}
 		// Verify the provided username/password pair.
-		verified, expired, err := s.VerifyPasswordDBConsole(ctx, username, req.Password, pwRetrieveFn)
+		var expired bool
+		verified, expired, err = s.VerifyPasswordDBConsole(ctx, username, req.Password, pwRetrieveFn)
 		if err != nil {
 			return nil, srverrors.APIInternalError(ctx, err)
 		}
@@ -255,6 +276,12 @@ func (s *authenticationServer) userLogin(
 		if !verified {
 			return nil, errWebAuthenticationFailure
 		}
+	}
+
+	// Final verification check: handles the case where LDAP auth succeeded
+	// but provisioning was disabled and the user doesn't exist.
+	if !verified {
+		return nil, errWebAuthenticationFailure
 	}
 
 	// If LDAP authentication was successful and the HBA entry includes a

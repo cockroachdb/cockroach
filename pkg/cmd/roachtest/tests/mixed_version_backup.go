@@ -415,9 +415,8 @@ type (
 		nodelocal bool
 	}
 
-	fullBackup struct {
-		namePrefix string
-	}
+	fullBackup struct{}
+
 	incrementalBackup struct {
 		collection backupCollection
 		incNum     int
@@ -1228,10 +1227,6 @@ type BackupRestoreTestDriver struct {
 
 	roachNodes option.NodeListOption
 
-	// counter that is incremented atomically to provide unique
-	// identifiers to backups created during the test
-	currentBackupID int64
-
 	// databases where user data is being inserted
 	dbs    []string
 	tables [][]string
@@ -1896,10 +1891,6 @@ func (d *BackupRestoreTestDriver) randomWait(l *logger.Logger, rng *rand.Rand) {
 	time.Sleep(dur)
 }
 
-func (d *BackupRestoreTestDriver) nextBackupID() int64 {
-	return atomic.AddInt64(&d.currentBackupID, 1)
-}
-
 func (d *BackupRestoreTestDriver) nextRestoreID() int64 {
 	return atomic.AddInt64(&d.currentRestoreID, 1)
 }
@@ -1921,15 +1912,6 @@ func (mvb *mixedVersionBackup) backupNamePrefix(h *mixedversion.Helper, label st
 		"%s-to-%s_%s%s",
 		fromVersion, toVersion, sanitizedLabel, finalizing,
 	)
-}
-
-// backupCollectionName creates a backup collection name based on an unique ID,
-// prefix, and the target scope of the backup.
-func (d *BackupRestoreTestDriver) backupCollectionName(
-	id int64, prefix string, btype backupScope,
-) string {
-	sanitizedType := strings.ReplaceAll(btype.Desc(), " ", "-")
-	return fmt.Sprintf("%d_%s_%s", id, prefix, sanitizedType)
 }
 
 // waitForJobSuccess waits for the given job with the given ID to
@@ -2077,157 +2059,6 @@ func (d *BackupRestoreTestDriver) saveContents(
 	return collection, nil
 }
 
-func (d *BackupRestoreTestDriver) runBackup(
-	ctx context.Context,
-	l *logger.Logger,
-	tasker task.Tasker,
-	rng *rand.Rand,
-	nodes option.NodeListOption,
-	pauseProbability float64,
-	bType fmt.Stringer,
-	internalSystemJobs bool,
-	isMultitenant bool,
-) (backupCollection, string, error) {
-	pauseAfter := 1024 * time.Hour // infinity
-	var pauseResumeDB *gosql.DB
-	if rng.Float64() < pauseProbability {
-		possibleDurations := []time.Duration{
-			10 * time.Second, 30 * time.Second, 2 * time.Minute,
-		}
-		pauseAfter = possibleDurations[rng.Intn(len(possibleDurations))]
-
-		var node int
-		node, pauseResumeDB = d.testUtils.RandomDB(rng, d.roachNodes)
-		l.Printf("attempting pauses in %s through node %d", pauseAfter, node)
-	}
-
-	// NB: we need to run with the `detached` option + poll the
-	// `system.jobs` table because we are intentionally disabling job
-	// adoption in some nodes in the mixed-version test. Running the job
-	// without the `detached` option will cause a `node liveness` error
-	// to be returned when running the `BACKUP` statement.
-	options := []string{"detached"}
-
-	var latest string
-	var collection backupCollection
-	switch b := bType.(type) {
-	case fullBackup:
-		btype := d.newBackupScope(rng, isMultitenant)
-		name := d.backupCollectionName(d.nextBackupID(), b.namePrefix, btype)
-		createOptions := newBackupOptions(rng, d.testUtils.onlineRestore)
-		collection = newBackupCollection(name, btype, createOptions, d.cluster.IsLocal())
-		l.Printf("creating full backup for %s", collection.name)
-	case incrementalBackup:
-		collection = b.collection
-		latest = " LATEST IN"
-		l.Printf("creating incremental backup num %d for %s", b.incNum, collection.name)
-	case compactedBackup:
-		collection = b.collection
-
-		// This latest var is only required to comply with this driver. It has no
-		// effect on compacted backup construction, as the full subdir passed to the
-		// cmd determines the full we compact on.
-		latest = " LATEST IN"
-		l.Printf("creating compacted backup for %s from start %s to end %s", collection.name, b.startTime, b.endTime)
-	}
-
-	for _, opt := range collection.options {
-		options = append(options, opt.String())
-	}
-
-	backupTime := d.testUtils.now()
-	node, db := d.testUtils.RandomDB(rng, nodes)
-
-	stmt := fmt.Sprintf(
-		"%s INTO%s '%s' AS OF SYSTEM TIME '%s' WITH %s",
-		collection.btype.BackupCommand(),
-		latest,
-		collection.uri(),
-		backupTime,
-		strings.Join(options, ", "),
-	)
-
-	var jobID int
-	if compactData, ok := bType.(compactedBackup); ok {
-		backupTime = compactData.endTime
-		if err := db.QueryRowContext(ctx,
-			`SELECT crdb_internal.backup_compaction(
-				0,
-				$1,
-				$2,
-				$3::DECIMAL, $4::DECIMAL
-			)`, stmt, compactData.fullSubdir, compactData.startTime, compactData.endTime).Scan(&jobID); err != nil {
-			return backupCollection{}, "", fmt.Errorf("error while creating %s compacted backup %s: %w", bType, collection.name, err)
-		}
-	} else {
-		l.Printf("creating %s backup via node %d: %s", bType, node, stmt)
-		if err := db.QueryRowContext(ctx, stmt).Scan(&jobID); err != nil {
-			return backupCollection{}, "", fmt.Errorf("error while creating %s backup %s: %w", bType, collection.name, err)
-		}
-	}
-	backupErr := make(chan error)
-	tasker.Go(func(ctx context.Context, l *logger.Logger) error {
-		defer close(backupErr)
-		l.Printf("waiting for job %d (%s)", jobID, collection.name)
-		if err := d.testUtils.waitForJobSuccess(ctx, l, rng, jobID, internalSystemJobs); err != nil {
-			backupErr <- err
-		}
-		return nil
-	},
-		task.Logger(l),
-		task.Name(fmt.Sprintf("backup %s", collection.name)),
-	)
-
-	var numPauses int
-	for {
-		select {
-		case err := <-backupErr:
-			if err != nil {
-				return backupCollection{}, "", err
-			}
-			return collection, backupTime, nil
-
-		case <-time.After(pauseAfter):
-			if numPauses >= maxPauses {
-				continue
-			}
-
-			pauseDur := 5 * time.Second
-			l.Printf("pausing job %d for %s", jobID, pauseDur)
-			if _, err := pauseResumeDB.Exec(fmt.Sprintf("PAUSE JOB %d", jobID)); err != nil {
-				// We just log the error if pausing the job fails since we
-				// cannot guarantee the job is still running by the time we
-				// attempt to pause it. If that's the case, the next iteration
-				// of the loop should read from the backupErr channel.
-				l.Printf("error pausing job %d: %s", jobID, err)
-				continue
-			}
-
-			if err := testutils.SucceedsSoonError(func() error {
-				var status string
-				if err := pauseResumeDB.QueryRow(`SELECT status FROM [SHOW JOB $1]`, jobID).Scan(&status); err != nil {
-					return err
-				}
-				if status != "paused" {
-					return errors.Newf("expected status `paused` but found %s", status)
-				}
-				return nil
-			}); err != nil {
-				return backupCollection{}, "", err
-			}
-
-			time.Sleep(pauseDur)
-
-			l.Printf("resuming job %d", jobID)
-			if _, err := pauseResumeDB.Exec(fmt.Sprintf("RESUME JOB %d", jobID)); err != nil {
-				return backupCollection{}, "", fmt.Errorf("error resuming job %d: %w", jobID, err)
-			}
-
-			numPauses++
-		}
-	}
-}
-
 // runJobOnOneOf disables job adoption on cockroach nodes that are not
 // in the `nodes` list. The function passed is then executed and job
 // adoption is re-enabled at the end of the function. The function
@@ -2302,23 +2133,16 @@ func (d *BackupRestoreTestDriver) createBackupCollection(
 	internalSystemJobs bool,
 	isMultitenant bool,
 ) (*backupCollection, error) {
-	var collection backupCollection
-	backupEndTimes := make([]string, 0)
-	var latestIncBackupEndTime string
-	var fullBackupEndTime string
+	builder := d.NewCollectionBuilder(
+		l, tasker, rng, backupNamePrefix,
+		fullBackupSpec, incBackupSpec,
+		internalSystemJobs, isMultitenant,
+	)
 
 	// Create full backup.
-	if err := d.testUtils.runJobOnOneOf(ctx, l, fullBackupSpec.Execute.Nodes, func() error {
-		var err error
-		collection, fullBackupEndTime, err = d.runBackup(
-			ctx, l, tasker, rng, fullBackupSpec.Plan.Nodes, fullBackupSpec.PauseProbability,
-			fullBackup{backupNamePrefix}, internalSystemJobs, isMultitenant,
-		)
-		return err
-	}); err != nil {
+	if _, err := builder.TakeFull(ctx); err != nil {
 		return nil, err
 	}
-	backupEndTimes = append(backupEndTimes, fullBackupEndTime)
 
 	// Create incremental backups.
 	numIncrementals := possibleNumIncrementalBackups[rng.Intn(len(possibleNumIncrementalBackups))]
@@ -2326,72 +2150,458 @@ func (d *BackupRestoreTestDriver) createBackupCollection(
 		numIncrementals = 2
 	}
 	l.Printf("creating %d incremental backups", numIncrementals)
-	for i := range numIncrementals {
+
+	for range numIncrementals {
 		d.randomWait(l, rng)
-		if err := d.testUtils.runJobOnOneOf(ctx, l, incBackupSpec.Execute.Nodes, func() error {
-			var err error
-			collection, latestIncBackupEndTime, err = d.runBackup(
-				ctx, l, tasker, rng, incBackupSpec.Plan.Nodes, incBackupSpec.PauseProbability,
-				incrementalBackup{collection: collection, incNum: i + 1}, internalSystemJobs, isMultitenant,
-			)
-			return err
-		}); err != nil {
+		if _, err := builder.TakeInc(ctx); err != nil {
 			return nil, err
 		}
-		backupEndTimes = append(backupEndTimes, latestIncBackupEndTime)
 
-		if d.testUtils.compactionEnabled && !collection.withRevisionHistory() && len(backupEndTimes) >= 3 {
-			// Require that endIdx - startIdx >= 2 so at least 2 inc backups are
-			// compacted. If there are 3 backupEndTimes, the start must be the the
-			// 0th. Thn endIdx is always the last index for now, so the compacted
-			// backup gets selected to restore.
-			startIdx := rng.Intn(len(backupEndTimes) - 2)
-			endIdx := len(backupEndTimes) - 1
+		if d.testUtils.compactionEnabled && builder.BackupCount() >= 3 {
+			// Compact a random range of incremental backups.
+			// startIdx must be >= 1 since full backup (index 0) cannot be compacted.
+			// Example: with 3 backups [full=0, inc1=1, inc2=2], we can compact [1,2].
+			startIdx := 1 + rng.Intn(builder.BackupCount()-2)
+			endIdx := builder.BackupCount() - 1
 
-			var fullPath string
-			_, db := d.testUtils.RandomDB(rng, d.roachNodes)
-			row := db.QueryRowContext(ctx, fmt.Sprintf(`SELECT path
-        FROM [SHOW BACKUPS IN '%s']
-        ORDER BY path DESC
-        LIMIT 1`, collection.uri()))
-			if err := row.Scan(&fullPath); err != nil {
-				return nil, errors.Wrapf(err, "error while getting full backup path %s", collection.name)
-			}
-			compact := compactedBackup{collection: collection, startTime: backupEndTimes[startIdx], endTime: backupEndTimes[endIdx], fullSubdir: fullPath}
-			if err := d.testUtils.runJobOnOneOf(ctx, l, incBackupSpec.Execute.Nodes, func() error {
-				var err error
-				collection, latestIncBackupEndTime, err = d.runBackup(
-					ctx, l, tasker, rng, incBackupSpec.Plan.Nodes, incBackupSpec.PauseProbability,
-					compact, internalSystemJobs, isMultitenant)
-				return err
-			}); err != nil {
+			if _, err := builder.TakeCompacted(ctx, startIdx, endIdx); err != nil {
 				return nil, err
 			}
-			// Since a compacted backup was made, then the backup end times of the
-			// backups it compacted should be removed from the slice. This prevents a
-			// scenario where a later compaction attempts to pick a start time from
-			// one of the backups that were compacted. Since compaction looks at the
-			// elided backup chain, these compacted backups are replaced by the
-			// compacted backup and compaction will fail due to being unable to find
-			// the starting backup.
-			backupEndTimes = slices.Delete(backupEndTimes, startIdx+1, endIdx)
 		}
 	}
 
-	if err := collection.maybeUseRestoreAOST(l, rng, fullBackupEndTime, latestIncBackupEndTime); err != nil {
+	return builder.Finalize(ctx)
+}
+
+// CollectionBuilder provides a stateful builder for constructing backup collections.
+//
+// This type is NOT thread-safe. All methods should be called from a single goroutine.
+//
+// Usage:
+//
+//	builder := driver.NewCollectionBuilder(l, tasker, rng, namePrefix, fullSpec, incSpec, internalSystemJobs, isMultitenant)
+//	jobID, err := builder.TakeFull(ctx)
+//	incJobID, err := builder.TakeInc(ctx)
+//	collection, err := builder.Finalize(ctx)
+type CollectionBuilder struct {
+	// Immutable configuration set at construction.
+	driver             *BackupRestoreTestDriver
+	l                  *logger.Logger
+	tasker             task.Tasker
+	rng                *rand.Rand
+	namePrefix         string
+	fullBackupSpec     backupSpec
+	incBackupSpec      backupSpec
+	internalSystemJobs bool
+	isMultitenant      bool
+
+	// Mutable state tracking backup progress.
+
+	// finalized indicates whether Finalize() has been called.
+	// Once true, no further backups can be taken.
+	finalized bool
+
+	// fullStarted indicates whether a full backup has been started.
+	fullStarted bool
+
+	// collection holds the backup metadata, initialized after full backup.
+	collection backupCollection
+
+	// backupEndTimes tracks the end time of each backup in order:
+	// [0] = full backup end time
+	// [1] = first incremental end time
+	// etc.
+	backupEndTimes []string
+
+	// incCount tracks the number of incremental backups taken.
+	incCount int
+}
+
+// NewCollectionBuilder creates a new builder for constructing a backup collection.
+func (d *BackupRestoreTestDriver) NewCollectionBuilder(
+	l *logger.Logger,
+	tasker task.Tasker,
+	rng *rand.Rand,
+	namePrefix string,
+	fullBackupSpec backupSpec,
+	incBackupSpec backupSpec,
+	internalSystemJobs bool,
+	isMultitenant bool,
+) *CollectionBuilder {
+	cb := &CollectionBuilder{
+		driver:             d,
+		l:                  l,
+		tasker:             tasker,
+		rng:                rng,
+		namePrefix:         namePrefix,
+		fullBackupSpec:     fullBackupSpec,
+		incBackupSpec:      incBackupSpec,
+		internalSystemJobs: internalSystemJobs,
+		isMultitenant:      isMultitenant,
+	}
+	return cb
+}
+
+// TakeFull creates a full backup and waits for it to complete.
+func (cb *CollectionBuilder) TakeFull(ctx context.Context) (jobID int, err error) {
+	if cb.finalized {
+		return 0, errors.New("cannot take backup: builder has been finalized")
+	}
+	if cb.fullStarted {
+		return 0, errors.New("full backup already started for this collection")
+	}
+
+	var collection backupCollection
+	var endTime string
+	if err := cb.driver.testUtils.runJobOnOneOf(
+		ctx, cb.l, cb.fullBackupSpec.Execute.Nodes, func() error {
+			var execErr error
+			collection, endTime, jobID, execErr = cb.executeBackup(
+				ctx,
+				cb.fullBackupSpec.Plan.Nodes,
+				cb.fullBackupSpec.PauseProbability,
+				fullBackup{},
+			)
+			return execErr
+		},
+	); err != nil {
+		return 0, err
+	}
+
+	cb.fullStarted = true
+	cb.collection = collection
+	cb.backupEndTimes = []string{endTime}
+
+	if err := cb.driver.testUtils.waitForJobSuccess(
+		ctx, cb.l, cb.rng, jobID, cb.internalSystemJobs,
+	); err != nil {
+		return 0, err
+	}
+
+	return jobID, nil
+}
+
+// TakeInc creates an incremental backup and waits for it to complete.
+func (cb *CollectionBuilder) TakeInc(ctx context.Context) (jobID int, err error) {
+	if cb.finalized {
+		return 0, errors.New("cannot take backup: builder has been finalized")
+	}
+	if !cb.fullStarted {
+		return 0, errors.New("must start full backup before incremental backup")
+	}
+
+	incNum := cb.incCount + 1
+	var endTime string
+	if err := cb.driver.testUtils.runJobOnOneOf(
+		ctx, cb.l, cb.incBackupSpec.Execute.Nodes, func() error {
+			var execErr error
+			cb.collection, endTime, jobID, execErr = cb.executeBackup(
+				ctx,
+				cb.incBackupSpec.Plan.Nodes,
+				cb.incBackupSpec.PauseProbability,
+				incrementalBackup{collection: cb.collection, incNum: incNum},
+			)
+			return execErr
+		},
+	); err != nil {
+		return 0, err
+	}
+
+	cb.incCount = incNum
+	cb.backupEndTimes = append(cb.backupEndTimes, endTime)
+
+	if err := cb.driver.testUtils.waitForJobSuccess(
+		ctx, cb.l, cb.rng, jobID, cb.internalSystemJobs,
+	); err != nil {
+		return 0, err
+	}
+
+	return jobID, nil
+}
+
+// TakeCompacted creates a compacted backup and waits for it to complete.
+// The indices refer to positions in the backup chain (0 = full, 1 = first inc, etc.).
+// NB: startIdx must be >= 1 since the full backup (index 0) cannot be compacted.
+func (cb *CollectionBuilder) TakeCompacted(
+	ctx context.Context, startIdx, endIdx int,
+) (jobID int, err error) {
+	if cb.finalized {
+		return 0, errors.New("cannot take backup: builder has been finalized")
+	}
+	if !cb.fullStarted {
+		return 0, errors.New("must take full backup before compacted backup")
+	}
+	if startIdx <= 0 || endIdx >= len(cb.backupEndTimes) {
+		return 0, errors.Newf(
+			"invalid compaction range [%d, %d]: must be in range [1, %d] (full backup at index 0 cannot be compacted)",
+			startIdx, endIdx, len(cb.backupEndTimes)-1,
+		)
+	}
+	if startIdx >= endIdx {
+		return 0, errors.Newf(
+			"invalid compaction range [%d, %d]: startIdx must be < endIdx (range is inclusive)",
+			startIdx, endIdx,
+		)
+	}
+
+	var fullPath string
+	_, db := cb.driver.testUtils.RandomDB(cb.rng, cb.driver.roachNodes)
+	row := db.QueryRowContext(ctx, fmt.Sprintf(
+		`SELECT path FROM [SHOW BACKUPS IN '%s'] ORDER BY path DESC LIMIT 1`,
+		cb.collection.uri(),
+	))
+	if err := row.Scan(&fullPath); err != nil {
+		return 0, errors.Wrapf(err, "error while getting full backup path for %s", cb.collection.name)
+	}
+
+	compact := compactedBackup{
+		collection: cb.collection,
+		// Compacted backup spans from end of previous backup to end of last backup.
+		// Example: backups [full=0, inc1=1, inc2=2] with times [t0, t1, t2]
+		// Compacting [1,2] spans [t0, t2] where t0 = endTimes[0], t2 = endTimes[2]
+		startTime:  cb.backupEndTimes[startIdx-1],
+		endTime:    cb.backupEndTimes[endIdx],
+		fullSubdir: fullPath,
+	}
+
+	if err := cb.driver.testUtils.runJobOnOneOf(
+		ctx, cb.l, cb.incBackupSpec.Execute.Nodes, func() error {
+			var execErr error
+			cb.collection, _, jobID, execErr = cb.executeBackup(
+				ctx,
+				cb.incBackupSpec.Plan.Nodes,
+				cb.incBackupSpec.PauseProbability,
+				compact,
+			)
+			return execErr
+		},
+	); err != nil {
+		return 0, err
+	}
+
+	// Since a compacted backup was made, then the backup end times of the
+	// backups it compacted should be removed from the slice. This prevents a
+	// scenario where a later compaction attempts to pick a start time from
+	// one of the backups that were compacted. Since compaction looks at the
+	// elided backup chain, these compacted backups are replaced by the
+	// compacted backup and compaction will fail due to being unable to find
+	// the starting backup.
+	cb.backupEndTimes = slices.Delete(cb.backupEndTimes, startIdx, endIdx)
+
+	if err := cb.driver.testUtils.waitForJobSuccess(
+		ctx, cb.l, cb.rng, jobID, cb.internalSystemJobs,
+	); err != nil {
+		return 0, err
+	}
+
+	return jobID, nil
+}
+
+// BackupCount returns the shortest length of the shortest chain to the latest
+// end time in the backup collection.
+func (cb *CollectionBuilder) BackupCount() int {
+	return len(cb.backupEndTimes)
+}
+
+// Finalize completes the backup collection by:
+//  1. Optionally selecting a restore AOST
+//  2. Computing and saving table fingerprints
+//
+// After calling Finalize(), no further backups can be taken with this builder.
+func (cb *CollectionBuilder) Finalize(ctx context.Context) (*backupCollection, error) {
+	if cb.finalized {
+		return nil, errors.New("builder has already been finalized")
+	}
+	if !cb.fullStarted {
+		return nil, errors.New("cannot finalize: no full backup taken")
+	}
+	cb.finalized = true
+
+	collection := cb.collection
+	fullBackupEndTime := cb.backupEndTimes[0]
+	var latestIncBackupEndTime string
+	if len(cb.backupEndTimes) > 1 {
+		latestIncBackupEndTime = cb.backupEndTimes[len(cb.backupEndTimes)-1]
+	}
+
+	if err := collection.maybeUseRestoreAOST(
+		cb.l, cb.rng, fullBackupEndTime, latestIncBackupEndTime,
+	); err != nil {
 		return nil, err
 	}
 
 	fingerprintAOST := latestIncBackupEndTime
 	if fingerprintAOST == "" {
-		// If latestIncBackupEndTime is empty, we never took an incremental backup.
-		// Fingerprint on the full backup endtime instead.
 		fingerprintAOST = fullBackupEndTime
 	}
 	if collection.restoreAOST != "" {
 		fingerprintAOST = collection.restoreAOST
 	}
-	return d.saveContents(ctx, l, rng, &collection, fingerprintAOST)
+
+	return cb.driver.saveContents(ctx, cb.l, cb.rng, &collection, fingerprintAOST)
+}
+
+// backupCollectionName creates a backup collection name based on the prefix
+// and the target scope of the backup. Uniqueness is provided by the nonce in
+// the backupCollection struct.
+func (cb *CollectionBuilder) backupCollectionName(btype backupScope) string {
+	sanitizedType := strings.ReplaceAll(btype.Desc(), " ", "-")
+	return fmt.Sprintf("%s_%s", cb.namePrefix, sanitizedType)
+}
+
+// executeBackup executes a backup and returns the collection, end time, and jobID.
+//
+// Note: This method must be called within runJobOnOneOf to handle node selection.
+func (cb *CollectionBuilder) executeBackup(
+	ctx context.Context,
+	planNodes option.NodeListOption,
+	pauseProbability float64,
+	bType fmt.Stringer,
+) (backupCollection, string, int, error) {
+	// NB: we need to run with the `detached` option + poll the
+	// `system.jobs` table because we are intentionally disabling job
+	// adoption in some nodes in the mixed-version test. Running the job
+	// without the `detached` option will cause a `node liveness` error
+	// to be returned when running the `BACKUP` statement.
+	options := []string{"detached"}
+
+	var latest string
+	var collection backupCollection
+	switch b := bType.(type) {
+	case fullBackup:
+		btype := cb.driver.newBackupScope(cb.rng, cb.isMultitenant)
+		name := cb.backupCollectionName(btype)
+		createOptions := newBackupOptions(cb.rng, cb.driver.testUtils.onlineRestore)
+		collection = newBackupCollection(name, btype, createOptions, cb.driver.cluster.IsLocal())
+		cb.l.Printf("creating full backup for %s", collection.name)
+	case incrementalBackup:
+		collection = b.collection
+		latest = " LATEST IN"
+		cb.l.Printf("creating incremental backup num %d for %s", b.incNum, collection.name)
+	case compactedBackup:
+		collection = b.collection
+		latest = " LATEST IN"
+		cb.l.Printf(
+			"creating compacted backup for %s from start %s to end %s",
+			collection.name, b.startTime, b.endTime,
+		)
+	}
+
+	for _, opt := range collection.options {
+		options = append(options, opt.String())
+	}
+
+	backupTime := cb.driver.testUtils.now()
+	node, db := cb.driver.testUtils.RandomDB(cb.rng, planNodes)
+
+	stmt := fmt.Sprintf(
+		"%s INTO%s '%s' AS OF SYSTEM TIME '%s' WITH %s",
+		collection.btype.BackupCommand(),
+		latest,
+		collection.uri(),
+		backupTime,
+		strings.Join(options, ", "),
+	)
+
+	var jobID int
+	if compactData, ok := bType.(compactedBackup); ok {
+		backupTime = compactData.endTime
+		if err := db.QueryRowContext(ctx,
+			`SELECT crdb_internal.backup_compaction(0, $1, $2, $3::DECIMAL, $4::DECIMAL)`,
+			stmt, compactData.fullSubdir, compactData.startTime, compactData.endTime,
+		).Scan(&jobID); err != nil {
+			return backupCollection{}, "", 0, errors.Wrapf(
+				err, "error while creating %s compacted backup %s", bType, collection.name,
+			)
+		}
+	} else {
+		cb.l.Printf("creating %s backup via node %d: %s", bType, node, stmt)
+		if err := db.QueryRowContext(ctx, stmt).Scan(&jobID); err != nil {
+			return backupCollection{}, "", 0, errors.Wrapf(
+				err, "error while creating %s backup %s", bType, collection.name,
+			)
+		}
+	}
+
+	cb.maybePauseResumeLoop(ctx, cb.l, jobID, pauseProbability)
+	return collection, backupTime, jobID, nil
+}
+
+// maybePauseResumeLoop randomly decides whether to start a pause/resume loop on
+// the given job ID.
+func (cb *CollectionBuilder) maybePauseResumeLoop(
+	ctx context.Context, l *logger.Logger, jobID int, pauseProbability float64,
+) {
+	if cb.rng.Float64() >= pauseProbability {
+		return
+	}
+	possibleDurations := []time.Duration{
+		10 * time.Second, 30 * time.Second, 2 * time.Minute,
+	}
+	pauseAfter := possibleDurations[cb.rng.Intn(len(possibleDurations))]
+
+	var node int
+	node, db := cb.driver.testUtils.RandomDB(cb.rng, cb.driver.roachNodes)
+	cb.l.Printf("attempting pauses in %s through node %d", pauseAfter, node)
+
+	cb.tasker.Go(
+		func(ctx context.Context, l *logger.Logger) error {
+			var numPauses int
+			ticker := time.NewTicker(pauseAfter)
+			defer ticker.Stop()
+
+			for {
+				select {
+				case <-ctx.Done():
+					return ctx.Err()
+				case <-ticker.C:
+					if numPauses >= maxPauses {
+						continue
+					}
+
+					var status string
+					if err := db.QueryRow(`SELECT status FROM [SHOW JOB $1]`, jobID).Scan(&status); err != nil {
+						l.Printf("error querying job %d status: %s", jobID, err)
+						continue
+					}
+					if jobs.State(status) == jobs.StateFailed || jobs.State(status) == jobs.StateSucceeded {
+						return nil
+					}
+
+					pauseDur := 5 * time.Second
+					l.Printf("pausing job %d for %s", jobID, pauseDur)
+					if _, err := db.Exec(fmt.Sprintf("PAUSE JOB %d", jobID)); err != nil {
+						l.Printf("error pausing job %d: %s", jobID, err)
+						continue
+					}
+
+					if err := testutils.SucceedsSoonError(func() error {
+						var status string
+						if err := db.QueryRow(`SELECT status FROM [SHOW JOB $1]`, jobID).Scan(&status); err != nil {
+							return err
+						}
+						if status != "paused" {
+							return errors.Newf("expected status `paused` but found %s", status)
+						}
+						return nil
+					}); err != nil {
+						return err
+					}
+
+					time.Sleep(pauseDur)
+
+					l.Printf("resuming job %d", jobID)
+					if _, err := db.Exec(fmt.Sprintf("RESUME JOB %d", jobID)); err != nil {
+						return errors.Wrapf(err, "error resuming job %d", jobID)
+					}
+
+					numPauses++
+				}
+			}
+		},
+		task.Logger(cb.l),
+		task.Name(fmt.Sprintf("pause-resume monitor for job %d", jobID)),
+	)
 }
 
 // deleteSSTFromBackupLayers deletes one SST from each layer of a backup

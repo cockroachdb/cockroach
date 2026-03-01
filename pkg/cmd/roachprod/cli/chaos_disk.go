@@ -56,7 +56,7 @@ Examples:
   roachprod chaos disk-stall mycluster --type cgroup --nodes 1 --run-forever
 
   # Stall for 15 minutes before recovery
-  roachprod chaos disk-stall mycluster --type cgroup --nodes 1 --wait-before-cleanup 15m
+  roachprod chaos disk-stall mycluster --type cgroup --nodes 1 --wait-before-recover 15m
 
   # For a secure cluster, specify the local path to certificates
   roachprod chaos disk-stall mycluster --type cgroup --nodes 1 --certs-dir /path/to/certs --secure

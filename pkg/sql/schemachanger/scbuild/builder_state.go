@@ -225,30 +225,57 @@ func (b *builderState) ensureDescriptors(e scpb.Element) {
 // content while preserving its key. It sets initial=ABSENT, current=ABSENT,
 // target=ToPublic so the planner emits "add" operations that update the
 // already-existing descriptor. This is used for CREATE OR REPLACE FUNCTION.
+//
+// This method uses key-attribute matching rather than ElementString lookup
+// because the replacement element may have different non-key schema attributes
+// (e.g., ReferencedTypeIDs on TriggerDeps) that change the ElementString.
 func (b *builderState) replaceElement(e scpb.Element, meta scpb.TargetMetadata) {
-	existing := b.getExistingElementState(e)
+	b.ensureDescriptors(e)
+	id := screl.GetDescID(e)
+	c := b.descCache[id]
+
+	// Find the existing element by key attributes (DescID, TriggerID, etc.).
+	var existing *elementState
+	for _, idx := range c.outputIndexes {
+		es := &b.output[idx]
+		if screl.EqualElementKeys(es.element, e) {
+			existing = es
+			break
+		}
+	}
 	if existing == nil {
 		panic(errors.AssertionFailedf(
 			"Replace called on non-existent element %s", screl.ElementString(e),
 		))
 	}
-	if !screl.EqualElementKeys(existing.element, e) {
-		panic(errors.AssertionFailedf(
-			"Replace element key mismatch: existing %s vs new %s",
-			screl.ElementString(existing.element), screl.ElementString(e),
-		))
+
+	// Update elementIndexMap if the ElementString changed (due to non-key
+	// schema attributes like ReferencedTypeIDs).
+	oldKey := screl.ElementString(existing.element)
+	newKey := screl.ElementString(e)
+	if oldKey != newKey {
+		idx := c.elementIndexMap[oldKey]
+		delete(c.elementIndexMap, oldKey)
+		c.elementIndexMap[newKey] = idx
 	}
-	b.ensureDescriptors(e)
-	id := screl.GetDescID(e)
-	c := b.descCache[id]
+
 	c.cachedCollection = nil
-	b.upsertElementState(elementState{
+	newState := elementState{
 		element:  e,
 		initial:  scpb.Status_ABSENT,
 		current:  scpb.Status_ABSENT,
 		target:   scpb.ToPublic,
 		metadata: meta,
-	})
+	}
+	if err := b.localMemAcc.Grow(b.ctx, newState.byteSize()-existing.byteSize()); err != nil {
+		panic(err)
+	}
+	// Overwrite the element in place via the pointer into b.output. We do this
+	// directly rather than calling upsertElementState because upsertElementState
+	// uses getExistingElementState internally, which would fail if the
+	// ElementString changed. The pointer is safe because we are modifying an
+	// existing slice element, not appending (same pattern as upsertElementState).
+	*existing = newState
 }
 
 func (b *builderState) upsertElementState(es elementState) {

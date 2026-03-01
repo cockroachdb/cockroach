@@ -25,7 +25,25 @@ var ErrMarkLeaseTransferRejectedBecauseTargetMayNeedSnapshot = errors.New(
 func NewLeaseTransferRejectedBecauseTargetMayNeedSnapshotError(
 	target roachpb.ReplicaDescriptor, snapStatus raftutil.ReplicaNeedsSnapshotStatus,
 ) error {
-	err := errors.Errorf("refusing to transfer lease to %d because target may need a Raft snapshot: %s",
+	err := errors.Errorf("refusing to transfer lease to %v because target may need a Raft snapshot: %s",
 		target, snapStatus)
 	return errors.Mark(err, ErrMarkLeaseTransferRejectedBecauseTargetMayNeedSnapshot)
+}
+
+// ErrMarkLeaseTransferRejectedBecauseTargetHasSendQueue indicates that the
+// lease transfer failed because the lease transfer target has a send queue,
+// meaning it is behind on its raft log and may cause proportional
+// unavailability if it becomes the leaseholder.
+var ErrMarkLeaseTransferRejectedBecauseTargetHasSendQueue = errors.New(
+	"lease transfer rejected because the target has a send queue")
+
+// NewLeaseTransferRejectedBecauseTargetHasSendQueueError returns an error
+// indicating that a lease transfer failed because the lease transfer target
+// has a send queue.
+func NewLeaseTransferRejectedBecauseTargetHasSendQueueError(
+	target roachpb.ReplicaDescriptor,
+) error {
+	err := errors.Errorf("refusing to transfer lease to %v because target has a send queue",
+		target)
+	return errors.Mark(err, ErrMarkLeaseTransferRejectedBecauseTargetHasSendQueue)
 }

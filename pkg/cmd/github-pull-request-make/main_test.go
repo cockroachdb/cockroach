@@ -29,7 +29,7 @@ func ciStressTestdataFile(t *testing.T, file string) string {
 func TestPkgsFromDiff(t *testing.T) {
 	for filename, expPkgs := range map[string]map[string]pkg{
 		ciStressTestdataFile(t, "skip.diff"): {
-			"pkg/ccl/storageccl": makePkg([]string{"TestPutS3"}),
+			"pkg/storage": makePkg([]string{"TestEncryptDecrypt"}),
 		},
 		ciStressTestdataFile(t, "modified.diff"): {
 			"pkg/crosscluster/physical": makePkg([]string{"TestStreamingAutoReplan"}),

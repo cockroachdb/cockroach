@@ -819,6 +819,7 @@ message TypeSchemaChangeProgress {
 enum IndexBackfillDistributedMergeMode {
   INDEX_BACKFILL_DISTRIBUTED_MERGE_MODE_DISABLED = 0 [(gogoproto.enumvalue_customname) = "Disabled"];
   INDEX_BACKFILL_DISTRIBUTED_MERGE_MODE_ENABLED = 1 [(gogoproto.enumvalue_customname) = "Enabled"];
+  INDEX_BACKFILL_DISTRIBUTED_MERGE_MODE_FORCE = 2 [(gogoproto.enumvalue_customname) = "Force"];
 }
 
 // NewSchemaChangeDetails is the job detail information for the new schema change job.
@@ -1265,11 +1266,7 @@ message ResolvedSpan {
 message ResolvedSpans {
   repeated ResolvedSpan resolved_spans = 1 [(gogoproto.nullable) = false];
 
-  message Stats {
-    uint64 recent_kv_count = 1;
-  }
-
-  Stats stats = 2 [(gogoproto.nullable) = false];
+  reserved 2;
 }
 
 // TimestampSpansMap is a map from timestamps to lists of spans.

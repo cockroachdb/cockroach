@@ -80,24 +80,6 @@ func TestingDisableEnterprise() func() {
 	return func() {}
 }
 
-// CheckEnterpriseEnabled previously returned a non-nil error if the requested enterprise
-// feature was not enabled. It is now deprecated and always returns nil. Callers should
-// remove any usage of this function.
-//
-// Deprecated
-func CheckEnterpriseEnabled(*cluster.Settings, string) error {
-	return nil
-}
-
-// IsEnterpriseEnabled previously returned whether the requested enterprise
-// feature was enabled. It is now deprecated and always returns true. Callers
-// should remove usage of this function.
-//
-// Deprecated
-func IsEnterpriseEnabled(*cluster.Settings, string) bool {
-	return true
-}
-
 // GetLicenseTTL is a function which returns the TTL for the active cluster.
 // This is done by reading the license information from the cluster settings
 // and subtracting the epoch from the expiry timestamp.

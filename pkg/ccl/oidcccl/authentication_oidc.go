@@ -17,7 +17,6 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/jwtauthccl"
-	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/provisioning"
 	secuser "github.com/cockroachdb/cockroach/pkg/security/username"
@@ -692,11 +691,6 @@ var ConfigureOIDC = func(
 		if err != nil {
 			log.Dev.Errorf(ctx, "OIDC: failed to complete authentication: unable to create session for %s: %v", username, err)
 			http.Error(w, genericCallbackHTTPError, http.StatusForbidden)
-			return
-		}
-
-		if err := utilccl.CheckEnterpriseEnabled(st, "OIDC"); err != nil {
-			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}
 

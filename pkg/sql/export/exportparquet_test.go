@@ -229,22 +229,6 @@ func TestRandomParquetExports(t *testing.T) {
 					require.NoError(t, err)
 
 					for _, col := range cols {
-						// Skip tables with BIT(0) columns (or arrays of BIT(0)).
-						// The testutils parquet decoder cannot decode these as
-						// into the expected empty bit array and decodes the as
-						// nil. Ignore these to avoid these flakes.
-						colTyp := col.Typ
-						if colTyp.Family() == types.ArrayFamily {
-							colTyp = colTyp.ArrayContents()
-						}
-						if colTyp.Family() == types.BitFamily && colTyp.Width() == 0 {
-							// We skip these because of the aforementioned
-							// decoder issue.
-							t.Logf("skipping table '%s' because it has BIT(0) column '%s' (type: %s)",
-								tableName, col.Name, colTyp.String())
-							return fmt.Errorf("table has BIT(0) column")
-						}
-
 						// TODO(#104278): don't call this function to check if a type is supported.
 						// We should explicitly use the ones supported by  util/parquet).
 						_, err := parquet.NewSchema([]string{"test"}, []*types.T{col.Typ})

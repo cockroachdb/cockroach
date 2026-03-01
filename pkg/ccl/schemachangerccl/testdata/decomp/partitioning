@@ -194,7 +194,6 @@ ElementState:
       tupleContents: []
       tupleLabels: []
       udtMetadata: null
-      visibleType: 0
       width: 64
     typeName: INT8
   Status: PUBLIC
@@ -221,7 +220,6 @@ ElementState:
       tupleContents: []
       tupleLabels: []
       udtMetadata: null
-      visibleType: 0
       width: 64
     typeName: INT8
   Status: PUBLIC
@@ -248,7 +246,6 @@ ElementState:
       tupleContents: []
       tupleLabels: []
       udtMetadata: null
-      visibleType: 0
       width: 0
     typeName: JSONB
   Status: PUBLIC
@@ -275,7 +272,6 @@ ElementState:
       tupleContents: []
       tupleLabels: []
       udtMetadata: null
-      visibleType: 0
       width: 0
     typeName: DECIMAL
   Status: PUBLIC
@@ -302,7 +298,6 @@ ElementState:
       tupleContents: []
       tupleLabels: []
       udtMetadata: null
-      visibleType: 0
       width: 32
     typeName: INT4
   Status: PUBLIC
@@ -329,7 +324,6 @@ ElementState:
       tupleContents: []
       tupleLabels: []
       udtMetadata: null
-      visibleType: 0
       width: 0
     typeName: OID
   Status: PUBLIC
@@ -356,7 +350,6 @@ ElementState:
       tupleContents: []
       tupleLabels: []
       udtMetadata: null
-      visibleType: 0
       width: 0
     typeName: DECIMAL
   Status: PUBLIC
@@ -701,7 +694,6 @@ ElementState:
       tupleContents: []
       tupleLabels: []
       udtMetadata: null
-      visibleType: 0
       width: 64
     typeName: INT8
   Status: PUBLIC
@@ -728,7 +720,6 @@ ElementState:
       tupleContents: []
       tupleLabels: []
       udtMetadata: null
-      visibleType: 0
       width: 64
     typeName: INT8
   Status: PUBLIC
@@ -755,7 +746,6 @@ ElementState:
       tupleContents: []
       tupleLabels: []
       udtMetadata: null
-      visibleType: 0
       width: 0
     typeName: DECIMAL
   Status: PUBLIC
@@ -782,7 +772,6 @@ ElementState:
       tupleContents: []
       tupleLabels: []
       udtMetadata: null
-      visibleType: 0
       width: 32
     typeName: INT4
   Status: PUBLIC
@@ -809,7 +798,6 @@ ElementState:
       tupleContents: []
       tupleLabels: []
       udtMetadata: null
-      visibleType: 0
       width: 0
     typeName: OID
   Status: PUBLIC
@@ -836,7 +824,6 @@ ElementState:
       tupleContents: []
       tupleLabels: []
       udtMetadata: null
-      visibleType: 0
       width: 0
     typeName: DECIMAL
   Status: PUBLIC

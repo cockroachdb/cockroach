@@ -890,6 +890,14 @@ func changeClusterSettingInEnv(ctx context.Context, env *Env, op *ChangeSettingO
 		default:
 			panic(errors.AssertionFailedf(`unknown LeaseType: %v`, op.LeaseType))
 		}
+	case ChangeSettingType_ToggleVirtualIntentResolution:
+		val := "false"
+		if op.VirEnabled {
+			val = "true"
+		}
+		settings = map[string]string{
+			"kv.concurrency.virtual_intent_resolution.enabled": val,
+		}
 	default:
 		panic(errors.AssertionFailedf(`unknown ChangeSettingType: %v`, op.Type))
 	}

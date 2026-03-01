@@ -478,6 +478,8 @@ func (op ChangeSettingOperation) format(w *strings.Builder, fctx formatCtx) {
 	switch op.Type {
 	case ChangeSettingType_SetLeaseType:
 		fmt.Fprintf(w, `env.SetClusterSetting(ctx, %s, %s)`, op.Type, op.LeaseType)
+	case ChangeSettingType_ToggleVirtualIntentResolution:
+		fmt.Fprintf(w, `env.SetClusterSetting(ctx, %s, %v)`, op.Type, op.VirEnabled)
 	default:
 		panic(errors.AssertionFailedf(`unknown ChangeSettingType: %v`, op.Type))
 	}

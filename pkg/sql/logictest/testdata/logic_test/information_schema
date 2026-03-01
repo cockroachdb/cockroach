@@ -1590,18 +1590,18 @@ system              public             29_76_1_not_null                         
 system              public             29_76_3_not_null                                                                                                fingerprint IS NOT NULL
 system              public             29_76_4_not_null                                                                                                hint IS NOT NULL
 system              public             29_76_5_not_null                                                                                                created_at IS NOT NULL
+system              public             29_76_6_not_null                                                                                                hint_type IS NOT NULL
+system              public             29_76_8_not_null                                                                                                enabled IS NOT NULL
 system              public             29_77_1_not_null                                                                                                table_id IS NOT NULL
 system              public             29_77_2_not_null                                                                                                kind IS NOT NULL
 system              public             29_77_3_not_null                                                                                                job_ids IS NOT NULL
-system              public             29_78_10_not_null                                                                                               last_updated IS NOT NULL
 system              public             29_78_1_not_null                                                                                                id IS NOT NULL
 system              public             29_78_2_not_null                                                                                                name IS NOT NULL
 system              public             29_78_3_not_null                                                                                                labels IS NOT NULL
 system              public             29_78_4_not_null                                                                                                type IS NOT NULL
+system              public             29_78_5_not_null                                                                                                value IS NOT NULL
 system              public             29_78_6_not_null                                                                                                node_id IS NOT NULL
-system              public             29_78_7_not_null                                                                                                unit IS NOT NULL
-system              public             29_78_8_not_null                                                                                                help_text IS NOT NULL
-system              public             29_78_9_not_null                                                                                                measurement IS NOT NULL
+system              public             29_78_7_not_null                                                                                                last_updated IS NOT NULL
 system              public             29_7_1_not_null                                                                                                 value IS NOT NULL
 system              public             29_8_1_not_null                                                                                                 id IS NOT NULL
 system              public             29_9_1_not_null                                                                                                 crdb_region IS NOT NULL
@@ -2986,6 +2986,7 @@ admin    test           CREATE             NULL
 admin    test           DELETE             NULL
 admin    test           DROP               NULL
 admin    test           INSERT             NULL
+admin    test           MAINTAIN           NULL
 admin    test           REPLICATIONDEST    NULL
 admin    test           REPLICATIONSOURCE  NULL
 admin    test           SELECT             NULL
@@ -2999,6 +3000,7 @@ root     test           CREATE             NULL
 root     test           DELETE             NULL
 root     test           DROP               NULL
 root     test           INSERT             NULL
+root     test           MAINTAIN           NULL
 root     test           REPLICATIONDEST    NULL
 root     test           REPLICATIONSOURCE  NULL
 root     test           SELECT             NULL
@@ -3908,6 +3910,7 @@ optimizer_use_lock_elision_multiple_families                     off
 optimizer_use_lock_op_for_serializable                           off
 optimizer_use_max_frequency_selectivity                          on
 optimizer_use_merged_partial_statistics                          on
+optimizer_use_min_row_count_anti_join_fix                        on
 optimizer_use_multicol_stats                                     on
 optimizer_use_not_visible_indexes                                off
 optimizer_use_polymorphic_parameter_fix                          on
@@ -3956,6 +3959,10 @@ stub_catalog_tables                                              on
 synchronize_seqscans                                             on
 synchronous_commit                                               on
 system_identity                                                  root
+tcp_keepalives_count                                             0
+tcp_keepalives_idle                                              0
+tcp_keepalives_interval                                          0
+tcp_user_timeout                                                 0
 testing_optimizer_cost_perturbation                              0
 testing_optimizer_disable_rule_probability                       0
 testing_optimizer_inject_panics                                  off

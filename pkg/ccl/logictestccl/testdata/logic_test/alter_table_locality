@@ -1,7 +1,7 @@
 # LogicTest: multiregion-9node-3region-3azs multiregion-9node-3region-3azs-no-los
 
 # Disable schema_locked for this test since alter table
-# locality is only in the legacy schema changer.
+# locality to/from RBR is in the legacy schema changer.
 statement ok
 SET create_table_with_schema_locked=false
 

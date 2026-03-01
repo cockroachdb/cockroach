@@ -100,3 +100,4 @@ EXPLAIN ANALYZE (DISTSQL) INSERT INTO c SELECT x, x + 1 FROM (VALUES (1), (2)) A
 # LocalPlanNodes (#62261).
 query error pgcode 23503 insert on table \"c\" violates foreign key constraint \"c_p_fkey\"
 EXPLAIN ANALYZE (DEBUG) INSERT INTO c SELECT x, x + 1 FROM (VALUES (1), (2)) AS v (x)
+

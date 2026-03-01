@@ -94,6 +94,23 @@ var upgrades = []upgradebase.Upgrade{
 		repairTriggerBackrefs,
 		upgrade.RestoreActionImplemented("handled in RunRestoreChanges"),
 	),
+
+	upgrade.NewTenantUpgrade(
+		"add hint_type, hint_name, and enabled columns to statement_hints table",
+		clusterversion.V26_2_StatementHintsTypeNameEnabledColumnsAdded.Version(),
+		upgrade.NoPrecondition,
+		statementHintsAddColumnsTableMigration,
+		upgrade.RestoreActionNotRequired("cluster restore does not restore the new column"),
+	),
+
+	upgrade.NewTenantUpgrade(
+		"remove default value from hint_type column in the statement_hints table",
+		clusterversion.V26_2_StatementHintsTypeColumnBackfilled.Version(),
+		upgrade.NoPrecondition,
+		statementHintsRemoveTypeDefaultTableMigration,
+		upgrade.RestoreActionNotRequired("cluster restore does not restore the new column"),
+	),
+
 	// Note: when starting a new release version, the first upgrade (for
 	// Vxy_zStart) must be a newFirstUpgrade. Keep this comment at the bottom.
 }

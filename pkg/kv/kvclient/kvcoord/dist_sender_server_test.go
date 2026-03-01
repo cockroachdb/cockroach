@@ -4223,6 +4223,88 @@ func TestRefreshFailureIncludesConflictingTxn(t *testing.T) {
 	})
 }
 
+// TestRefreshFailureIncludesConflictKey tests that when a transaction refresh
+// fails, the resulting TransactionRetryWithProtoRefreshError includes the
+// ConflictKey field set to the actual key where the conflict occurred. This is
+// distinct from ConflictingTxn.Key, which is the anchor key of the conflicting
+// transaction (used for transaction record placement).
+func TestRefreshFailureIncludesConflictKey(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	st := cluster.MakeClusterSettings()
+	// Disable randomized anchor key selection so that the test can rely on
+	// keyA (the first key written by txn2) being the anchor key.
+	kvcoord.RandomizedTxnAnchorKeyEnabled.Override(ctx, &st.SV, false)
+
+	s, _, db := serverutils.StartServer(t, base.TestServerArgs{
+		Settings: st,
+	})
+	defer s.Stopper().Stop(ctx)
+
+	// We use three keys:
+	// - keyA: will be the anchor key for txn2 (first write determines anchor)
+	// - keyB: will be read by txn1, then written by txn2 (conflict location)
+	// - keyC: will be written by txn1 to force timestamp push
+	keyA := "a"
+	keyB := "b"
+	keyC := "c"
+
+	// Initialize keyB so txn1 can read it.
+	err := db.Put(ctx, keyB, "initial")
+	require.NoError(t, err)
+
+	txn1 := db.NewTxn(ctx, "original txn")
+	txn2 := db.NewTxn(ctx, "contending txn")
+
+	// txn1 reads keyB. This will need to be refreshed if txn1's timestamp is
+	// pushed.
+	_, err = txn1.Get(ctx, keyB)
+	require.NoError(t, err)
+
+	// txn2 writes to keyA first. This establishes keyA as txn2's anchor key
+	// (TxnMeta.Key), since it's the first key written.
+	err = txn2.Put(ctx, keyA, "anchor")
+	require.NoError(t, err)
+
+	// txn2 then writes to keyB. This creates a conflict with txn1's read.
+	err = txn2.Put(ctx, keyB, "conflict")
+	require.NoError(t, err)
+
+	// Bump the timestamp cache on keyC so that the next put from txn1
+	// causes its write timestamp to be pushed, thereby forcing a refresh.
+	_, err = txn2.Get(ctx, keyC)
+	require.NoError(t, err)
+
+	// txn1 writes to keyC, which will push its timestamp.
+	err = txn1.Put(ctx, keyC, "push")
+	require.NoError(t, err)
+
+	// txn1 tries to commit. This triggers a refresh of keyB, which fails
+	// because txn2 wrote to keyB after txn1 read it.
+	err = txn1.Commit(ctx)
+	require.Error(t, err)
+
+	tErr := (*kvpb.TransactionRetryWithProtoRefreshError)(nil)
+	require.ErrorAs(t, err, &tErr)
+
+	// Verify that ConflictingTxn is set and its Key (anchor key) is keyA.
+	require.NotNil(t, tErr.ConflictingTxn)
+	require.Equal(t, txn2.ID(), tErr.ConflictingTxn.ID)
+	require.Equal(t, roachpb.Key(keyA), roachpb.Key(tErr.ConflictingTxn.Key),
+		"ConflictingTxn.Key should be the anchor key (first key written)")
+
+	// Verify that ConflictKey is set to keyB, where the actual conflict occurred.
+	// This is the key that was read by txn1 and written by txn2.
+	require.Equal(t, roachpb.Key(keyB), tErr.ConflictKey,
+		"ConflictKey should be the actual conflict key, not the anchor key")
+
+	// Verify that ConflictKey differs from the anchor key.
+	require.NotEqual(t, tErr.ConflictingTxn.Key, tErr.ConflictKey,
+		"ConflictKey should differ from the transaction's anchor key")
+}
+
 // TestProxyTracing asserts when enabling a partial partition between two
 // nodes, the request is proxied via a third node and that tracing captures
 // the relevant event.
@@ -4252,7 +4334,7 @@ func TestProxyTracing(t *testing.T) {
 		kvserver.RangeFeedRefreshInterval.Override(ctx, &st.SV, 10*time.Millisecond)
 		// Disable follower reads to ensure that the request is proxied, and not
 		// answered locally due to follower reads.
-		kvserver.FollowerReadsEnabled.Override(ctx, &st.SV, false)
+		closedts.FollowerReadsEnabled.Override(ctx, &st.SV, false)
 		closedts.TargetDuration.Override(ctx, &st.SV, 10*time.Millisecond)
 		closedts.SideTransportCloseInterval.Override(ctx, &st.SV, 10*time.Millisecond)
 

@@ -83,7 +83,7 @@ while true; do
         --prometheus-port 2113 \
         --ramp 5m \
         --display-every 5s \
-        --duration 60m \
+        --duration 24h \
         --tolerate-errors \
         "\${PGURLS_ARR[@]}" | tee "\$RUN_LOG"
     if [ \$? -eq 0 ]; then

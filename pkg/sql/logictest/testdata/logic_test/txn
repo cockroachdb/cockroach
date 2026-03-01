@@ -219,16 +219,9 @@ SQLSTATE: 25P01
 statement ok
 BEGIN TRANSACTION ISOLATION LEVEL REPEATABLE READ; COMMIT
 
-onlyif config enterprise-configs
 query T noticetrace
 BEGIN TRANSACTION ISOLATION LEVEL READ COMMITTED
 ----
-
-skipif config enterprise-configs
-query T noticetrace
-BEGIN TRANSACTION ISOLATION LEVEL READ COMMITTED
-----
-NOTICE: READ COMMITTED isolation level is not allowed without an enterprise license; upgrading to SERIALIZABLE
 
 statement ok
 COMMIT
@@ -245,16 +238,9 @@ BEGIN TRANSACTION; SET TRANSACTION ISOLATION LEVEL SERIALIZABLE; COMMIT
 statement ok
 BEGIN TRANSACTION
 
-onlyif config enterprise-configs
 query T noticetrace
 SET TRANSACTION ISOLATION LEVEL READ COMMITTED
 ----
-
-skipif config enterprise-configs
-query T noticetrace
-SET TRANSACTION ISOLATION LEVEL READ COMMITTED
-----
-NOTICE: READ COMMITTED isolation level is not allowed without an enterprise license; upgrading to SERIALIZABLE
 
 statement ok
 COMMIT
@@ -267,7 +253,6 @@ BEGIN TRANSACTION
 statement ok
 UPDATE kv SET v = 'b' WHERE k in ('a')
 
-onlyif config enterprise-configs
 skipif config weak-iso-level-configs
 statement error pgcode 25001 cannot change the isolation level of a running transaction
 SET TRANSACTION ISOLATION LEVEL READ COMMITTED
@@ -285,7 +270,6 @@ BEGIN TRANSACTION
 statement ok
 SELECT * FROM kv LIMIT 1
 
-onlyif config enterprise-configs
 skipif config weak-iso-level-configs
 statement error pgcode 25001 cannot change the isolation level of a running transaction
 SET transaction_isolation = 'READ COMMITTED'
@@ -383,32 +367,19 @@ SET CLUSTER SETTING sql.txn.repeatable_read_isolation.enabled = true
 statement ok
 SET default_transaction_isolation = 'read committed'
 
-onlyif config enterprise-configs
 query T
 SHOW default_transaction_isolation
 ----
 repeatable read
-
-skipif config enterprise-configs
-query T
-SHOW default_transaction_isolation
-----
-serializable
 
 statement ok
 SET SESSION CHARACTERISTICS AS TRANSACTION ISOLATION LEVEL READ COMMITTED
 
-onlyif config enterprise-configs
 query T
 SHOW DEFAULT_TRANSACTION_ISOLATION
 ----
 repeatable read
 
-skipif config enterprise-configs
-query T
-SHOW DEFAULT_TRANSACTION_ISOLATION
-----
-serializable
 
 # Since repeatable_read_isolation.enabled is true, REPEATABLE READ can be used.
 statement ok
@@ -417,29 +388,15 @@ BEGIN
 statement ok
 SET TRANSACTION ISOLATION LEVEL REPEATABLE READ
 
-onlyif config enterprise-configs
 query T
 SHOW TRANSACTION ISOLATION LEVEL
 ----
 repeatable read
 
-onlyif config enterprise-configs
 query T
 SHOW transaction_isolation
 ----
 repeatable read
-
-skipif config enterprise-configs
-query T
-SHOW TRANSACTION ISOLATION LEVEL
-----
-serializable
-
-skipif config enterprise-configs
-query T
-SHOW transaction_isolation
-----
-serializable
 
 statement ok
 COMMIT
@@ -453,17 +410,10 @@ SET transaction_isolation = 'this is made up'
 statement ok
 BEGIN TRANSACTION ISOLATION LEVEL REPEATABLE READ
 
-onlyif config enterprise-configs
 query T
 SHOW TRANSACTION ISOLATION LEVEL
 ----
 repeatable read
-
-skipif config enterprise-configs
-query T
-SHOW TRANSACTION ISOLATION LEVEL
-----
-serializable
 
 statement ok
 SET TRANSACTION ISOLATION LEVEL SERIALIZABLE
@@ -485,17 +435,10 @@ SET CLUSTER SETTING sql.txn.read_committed_isolation.enabled = true
 statement ok
 BEGIN TRANSACTION ISOLATION LEVEL READ COMMITTED
 
-onlyif config enterprise-configs
 query T
 SHOW TRANSACTION ISOLATION LEVEL
 ----
 read committed
-
-skipif config enterprise-configs
-query T
-SHOW TRANSACTION ISOLATION LEVEL
-----
-serializable
 
 statement ok
 SET TRANSACTION ISOLATION LEVEL SERIALIZABLE
@@ -509,29 +452,15 @@ serializable
 statement ok
 SET transaction_isolation = 'READ COMMITTED'
 
-onlyif config enterprise-configs
 query T
 SHOW TRANSACTION ISOLATION LEVEL
 ----
 read committed
 
-skipif config enterprise-configs
-query T
-SHOW TRANSACTION ISOLATION LEVEL
-----
-serializable
-
-onlyif config enterprise-configs
 query T
 SHOW transaction_isolation
 ----
 read committed
-
-skipif config enterprise-configs
-query T
-SHOW transaction_isolation
-----
-serializable
 
 statement ok
 COMMIT
@@ -842,7 +771,6 @@ SET CLUSTER SETTING sql.txn.repeatable_read_isolation.enabled = true
 statement ok
 BEGIN TRANSACTION ISOLATION LEVEL REPEATABLE READ, PRIORITY LOW
 
-onlyif config enterprise-configs
 query T
 SHOW TRANSACTION ISOLATION LEVEL
 ----
@@ -870,32 +798,18 @@ statement ok
 COMMIT
 
 # With the repeatable_read_isolation.enabled cluster setting set to true,
-# REPEATABLE READ can be used if there is a valid license.
-onlyif config enterprise-configs
+# REPEATABLE READ can be used.
 query T noticetrace
 SET SESSION CHARACTERISTICS AS TRANSACTION ISOLATION LEVEL REPEATABLE READ
 ----
-
-skipif config enterprise-configs
-query T noticetrace
-SET SESSION CHARACTERISTICS AS TRANSACTION ISOLATION LEVEL REPEATABLE READ
-----
-NOTICE: REPEATABLE READ isolation level is not allowed without an enterprise license; upgrading to SERIALIZABLE
 
 statement ok
 SET SESSION CHARACTERISTICS AS TRANSACTION ISOLATION LEVEL REPEATABLE READ
 
-onlyif config enterprise-configs
 query T
 SHOW DEFAULT_TRANSACTION_ISOLATION
 ----
 repeatable read
-
-skipif config enterprise-configs
-query T
-SHOW DEFAULT_TRANSACTION_ISOLATION
-----
-serializable
 
 statement ok
 SET CLUSTER SETTING sql.txn.repeatable_read_isolation.enabled = false
@@ -903,17 +817,10 @@ SET CLUSTER SETTING sql.txn.repeatable_read_isolation.enabled = false
 statement ok
 SET SESSION CHARACTERISTICS AS TRANSACTION ISOLATION LEVEL READ UNCOMMITTED
 
-onlyif config enterprise-configs
 query T
 SHOW DEFAULT_TRANSACTION_ISOLATION
 ----
 read committed
-
-skipif config enterprise-configs
-query T
-SHOW DEFAULT_TRANSACTION_ISOLATION
-----
-serializable
 
 statement ok
 SET SESSION CHARACTERISTICS AS TRANSACTION ISOLATION LEVEL REPEATABLE READ
@@ -940,14 +847,12 @@ serializable
 statement ok
 SET SESSION CHARACTERISTICS AS TRANSACTION ISOLATION LEVEL READ COMMITTED
 
-onlyif config enterprise-configs
 query T
 SHOW DEFAULT_TRANSACTION_ISOLATION
 ----
 read committed
 
 # SHOW without a transaction should create an auto-transaction with the new default level
-onlyif config enterprise-configs
 query T
 SHOW TRANSACTION ISOLATION LEVEL
 ----
@@ -964,40 +869,19 @@ serializable
 statement ok
 SET default_transaction_isolation = 'read uncommitted'
 
-onlyif config enterprise-configs
 query T
 SHOW default_transaction_isolation
 ----
 read committed
 
-skipif config enterprise-configs
-query T
-SHOW default_transaction_isolation
-----
-serializable
-
-onlyif config enterprise-configs
 query T noticetrace
 SET default_transaction_isolation = 'read committed'
 ----
 
-skipif config enterprise-configs
-query T noticetrace
-SET default_transaction_isolation = 'read committed'
-----
-NOTICE: READ COMMITTED isolation level is not allowed without an enterprise license; upgrading to SERIALIZABLE
-
-onlyif config enterprise-configs
 query T
 SHOW default_transaction_isolation
 ----
 read committed
-
-skipif config enterprise-configs
-query T
-SHOW default_transaction_isolation
-----
-serializable
 
 statement ok
 SET CLUSTER SETTING sql.txn.repeatable_read_isolation.enabled = true
@@ -1007,32 +891,18 @@ SET CLUSTER SETTING sql.txn.repeatable_read_isolation.enabled = true
 statement ok
 SET default_transaction_isolation = 'snapshot'
 
-onlyif config enterprise-configs
 query T
 SHOW default_transaction_isolation
 ----
 repeatable read
-
-skipif config enterprise-configs
-query T
-SHOW default_transaction_isolation
-----
-serializable
 
 statement ok
 SET DEFAULT_TRANSACTION_ISOLATION TO 'REPEATABLE READ'
 
-onlyif config enterprise-configs
 query T
 SHOW DEFAULT_TRANSACTION_ISOLATION
 ----
 repeatable read
-
-skipif config enterprise-configs
-query T
-SHOW default_transaction_isolation
-----
-serializable
 
 statement ok
 SET CLUSTER SETTING sql.txn.repeatable_read_isolation.enabled = false
@@ -1073,7 +943,6 @@ COMMIT
 statement ok
 BEGIN TRANSACTION ISOLATION LEVEL READ COMMITTED
 
-onlyif config enterprise-configs
 query T
 SHOW TRANSACTION ISOLATION LEVEL
 ----
@@ -1852,7 +1721,6 @@ ROLLBACK
 statement ok
 BEGIN TRANSACTION ISOLATION LEVEL READ COMMITTED;
 
-onlyif config enterprise-configs
 statement error pq: unsupported in READ COMMITTED isolation
 SELECT cluster_logical_timestamp();
 

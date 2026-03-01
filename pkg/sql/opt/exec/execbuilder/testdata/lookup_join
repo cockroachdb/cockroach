@@ -1110,7 +1110,7 @@ vectorized: true
 │
 └── • lookup join (anti)
     │ columns: (c, a, b, cont)
-    │ estimated row count: 0
+    │ estimated row count: 1
     │ table: large@large_pkey
     │ equality: (a, b) = (a, b)
     │ equality cols are key
@@ -1409,7 +1409,7 @@ vectorized: true
 ·
 • lookup join (anti)
 │ columns: (a, b, c)
-│ estimated row count: 0
+│ estimated row count: 1
 │ table: def@def_pkey
 │ equality: (a) = (f)
 │
@@ -1447,7 +1447,7 @@ vectorized: true
 ·
 • lookup join (anti)
 │ columns: (a, b, c)
-│ estimated row count: 0
+│ estimated row count: 1
 │ table: def@def_pkey
 │ equality: (a, c) = (f, e)
 │ equality cols are key
@@ -2108,14 +2108,14 @@ distribution: full
         │ pred: l_suppkey != l_suppkey
         │
         └── • lookup join
-            │ estimated row count: 0
+            │ estimated row count: 1
             │ table: orders@orders_pkey
             │ equality: (l_orderkey) = (o_orderkey)
             │ equality cols are key
             │ pred: o_orderstatus = 'F'
             │
             └── • lookup join (anti)
-                │ estimated row count: 0
+                │ estimated row count: 1
                 │ table: lineitem@lineitem_pkey
                 │ equality: (l_orderkey) = (l_orderkey)
                 │ pred: l_receiptdate > l_commitdate

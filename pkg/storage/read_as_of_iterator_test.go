@@ -249,3 +249,169 @@ func iterateSimpleMVCCIterator(t *testing.T, it SimpleMVCCIterator, subtest iter
 	}
 	require.Equal(t, subtest.expected, output.String())
 }
+
+// TestReadAsOfIteratorEmitDeletes tests that the ReadAsOfIterator emits
+// tombstones when created with NewReadAsOfIteratorWithEmitDeletes.
+func TestReadAsOfIteratorEmitDeletes(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	pebble, err := Open(context.Background(), InMemory(),
+		cluster.MakeTestingClusterSettings(), CacheSize(1<<20 /* 1 MiB */))
+	require.NoError(t, err)
+	defer pebble.Close()
+
+	tests := []struct {
+		input              string
+		expectedNormal     string // expected output with normal iterator (skips tombstones)
+		expectedEmitDelete string // expected output with emitDeletes iterator
+		asOf               string
+	}{
+		// A tombstone with a value underneath - normal skips both, emitDeletes emits tombstone.
+		{input: "b2Xb1", expectedNormal: "", expectedEmitDelete: "b2X", asOf: ""},
+
+		// Multiple keys, one with a tombstone.
+		{input: "a1b2Xb1c1", expectedNormal: "a1c1", expectedEmitDelete: "a1b2Xc1", asOf: ""},
+
+		// Tombstone only (no live value underneath).
+		{input: "a2X", expectedNormal: "", expectedEmitDelete: "a2X", asOf: ""},
+
+		// Multiple tombstones on different keys.
+		{input: "a2Xa1b2X", expectedNormal: "", expectedEmitDelete: "a2Xb2X", asOf: ""},
+
+		// With AOST - tombstone above AOST should be skipped, value below should be returned.
+		{input: "a3Xa1", expectedNormal: "a1", expectedEmitDelete: "a1", asOf: "2"},
+
+		// With AOST - tombstone at AOST should be emitted.
+		{input: "a2Xa1", expectedNormal: "", expectedEmitDelete: "a2X", asOf: "2"},
+	}
+
+	for i, test := range tests {
+		name := fmt.Sprintf("Test %d: %s, AOST %s", i, test.input, test.asOf)
+		t.Run(name, func(t *testing.T) {
+			batch := pebble.NewBatch()
+			defer batch.Close()
+			populateBatch(t, batch, test.input)
+			iter, err := batch.NewMVCCIterator(context.Background(), MVCCKeyAndIntentsIterKind, IterOptions{UpperBound: roachpb.KeyMax})
+			require.NoError(t, err)
+			defer iter.Close()
+
+			asOf := hlc.Timestamp{}
+			if test.asOf != "" {
+				asOf.WallTime = int64(test.asOf[0])
+			}
+
+			// Test normal iterator (skips tombstones).
+			t.Run("normal", func(t *testing.T) {
+				it := NewReadAsOfIterator(iter, asOf)
+				iterateSimpleMVCCIterator(t, it, iterSubtest{
+					name:     "NextKey",
+					expected: test.expectedNormal,
+					fn:       (SimpleMVCCIterator).NextKey,
+				})
+			})
+
+			// Test emitDeletes iterator (emits tombstones).
+			t.Run("emitDeletes", func(t *testing.T) {
+				iter2, err := batch.NewMVCCIterator(context.Background(), MVCCKeyAndIntentsIterKind, IterOptions{UpperBound: roachpb.KeyMax})
+				require.NoError(t, err)
+				defer iter2.Close()
+
+				it := NewReadAsOfIteratorWithEmitDeletes(iter2, asOf)
+				iterateSimpleMVCCIterator(t, it, iterSubtest{
+					name:     "NextKey",
+					expected: test.expectedEmitDelete,
+					fn:       (SimpleMVCCIterator).NextKey,
+				})
+			})
+		})
+	}
+}
+
+// TestReadAsOfIteratorEmitDeletesSeekGE tests SeekGE behavior with the
+// emitDeletes iterator, particularly when seeking to or past tombstones.
+func TestReadAsOfIteratorEmitDeletesSeekGE(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	pebble, err := Open(context.Background(), InMemory(),
+		cluster.MakeTestingClusterSettings(), CacheSize(1<<20 /* 1 MiB */))
+	require.NoError(t, err)
+	defer pebble.Close()
+
+	tests := []struct {
+		input    string
+		seekKey  string
+		expected string // expected key after SeekGE with emitDeletes
+		asOf     string
+	}{
+		// SeekGE to a key with a tombstone should return the tombstone.
+		{input: "a2Xb1", seekKey: "a", expected: "a2X", asOf: ""},
+
+		// SeekGE to a key past a tombstone should skip it.
+		{input: "a2Xb1", seekKey: "b", expected: "b1", asOf: ""},
+
+		// SeekGE to a tombstone-only key.
+		{input: "a2X", seekKey: "a", expected: "a2X", asOf: ""},
+
+		// SeekGE with AOST - tombstone above AOST should be skipped.
+		{input: "a3Xa1b1", seekKey: "a", expected: "a1", asOf: "2"},
+
+		// SeekGE with AOST - tombstone at AOST should be emitted.
+		{input: "a2Xa1b1", seekKey: "a", expected: "a2X", asOf: "2"},
+
+		// SeekGE to a key with tombstone that shadows a value.
+		{input: "a2Xa1b1", seekKey: "a", expected: "a2X", asOf: ""},
+
+		// SeekGE to exact timestamp of a tombstone.
+		{input: "a2a1Xb1", seekKey: "a", expected: "a2", asOf: ""},
+
+		// SeekGE to a key between keys where first has tombstone.
+		{input: "a2Xc1", seekKey: "b", expected: "c1", asOf: ""},
+	}
+
+	for i, test := range tests {
+		name := fmt.Sprintf("Test %d: seek %s in %s, AOST %s", i, test.seekKey, test.input, test.asOf)
+		t.Run(name, func(t *testing.T) {
+			batch := pebble.NewBatch()
+			defer batch.Close()
+			populateBatch(t, batch, test.input)
+
+			iter, err := batch.NewMVCCIterator(context.Background(), MVCCKeyAndIntentsIterKind, IterOptions{UpperBound: roachpb.KeyMax})
+			require.NoError(t, err)
+			defer iter.Close()
+
+			asOf := hlc.Timestamp{}
+			if test.asOf != "" {
+				asOf.WallTime = int64(test.asOf[0])
+			}
+
+			it := NewReadAsOfIteratorWithEmitDeletes(iter, asOf)
+
+			seekKey := MVCCKey{Key: roachpb.Key(test.seekKey)}
+			it.SeekGE(seekKey)
+
+			ok, err := it.Valid()
+			require.NoError(t, err)
+
+			if test.expected == "" {
+				require.False(t, ok, "expected invalid iterator after SeekGE")
+				return
+			}
+
+			require.True(t, ok, "expected valid iterator after SeekGE")
+
+			var output bytes.Buffer
+			output.Write(it.UnsafeKey().Key)
+			output.WriteByte(byte(it.UnsafeKey().Timestamp.WallTime))
+			v, err := DecodeMVCCValueAndErr(it.UnsafeValue())
+			require.NoError(t, err)
+			if v.IsTombstone() {
+				output.WriteRune('X')
+			}
+
+			require.Equal(t, test.expected, output.String(),
+				"SeekGE(%s) in %s with AOST %s", test.seekKey, test.input, test.asOf)
+		})
+	}
+}

@@ -22,7 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/sqlproxyccl/tenantdirsvr"
 	"github.com/cockroachdb/cockroach/pkg/ccl/sqlproxyccl/throttler"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/security/certmgr"
+	"github.com/cockroachdb/cockroach/pkg/security/dyncert"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/netutil/addr"
@@ -80,10 +80,9 @@ type ProxyOptions struct {
 	// headers set.
 	ProxyProtocolListenAddr string
 	// ListenCert is the file containing PEM-encoded x509 certificate for listen
-	// address. Set to "*" to auto-generate self-signed cert.
+	// address.
 	ListenCert string
 	// ListenKey is the file containing PEM-encoded x509 key for listen address.
-	// Set to "*" to auto-generate self-signed cert.
 	ListenKey string
 	// MetricsAddress is the listen address for incoming connections for metrics
 	// retrieval.
@@ -158,7 +157,7 @@ type proxyHandler struct {
 
 	// incomingCert is the managed cert of the proxy endpoint to
 	// which clients connect.
-	incomingCert certmgr.Cert
+	incomingCert *dyncert.Cert
 
 	// aclWatcher provides access control.
 	aclWatcher *acl.Watcher
@@ -173,7 +172,7 @@ type proxyHandler struct {
 	balancer *balancer.Balancer
 
 	// certManager keeps up to date the certificates used.
-	certManager *certmgr.CertManager
+	certManager *dyncert.Manager
 
 	// cancelInfoMap keeps track of all the cancel request keys for this proxy.
 	cancelInfoMap *cancelInfoMap
@@ -198,15 +197,20 @@ func newProxyHandler(
 	// via the stopper, so we can ignore the cancellation function here.
 	ctx, _ = stopper.WithCancelOnQuiesce(ctx) // nolint:quiesce
 
+	certManager, err := dyncert.NewManager(ctx, stopper)
+	if err != nil {
+		return nil, err
+	}
+
 	handler := proxyHandler{
 		stopper:       stopper,
 		metrics:       proxyMetrics,
 		ProxyOptions:  options,
-		certManager:   certmgr.NewCertManager(ctx),
+		certManager:   certManager,
 		cancelInfoMap: makeCancelInfoMap(),
 	}
 
-	err := handler.setupIncomingCert(ctx)
+	err = handler.setupIncomingCert(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -339,7 +343,13 @@ func (handler *proxyHandler) handle(
 		}
 	}
 
-	fe := FrontendAdmit(incomingConn, handler.incomingTLSConfig())
+	tlsConfig, err := handler.incomingTLSConfig()
+	if err != nil {
+		updateMetricsAndSendErrToClient(err, incomingConn, handler.metrics)
+		return err
+	}
+
+	fe := FrontendAdmit(incomingConn, tlsConfig)
 	defer func() { _ = fe.Conn.Close() }()
 	if fe.Err != nil {
 		// If a startup message cannot be read at all, assume TCP probe, and
@@ -700,23 +710,22 @@ func (handler *proxyHandler) startPodWatcher(ctx context.Context, podWatcher cha
 
 // incomingTLSConfig gets back the current TLS config for the incoming client
 // connection endpoint.
-func (handler *proxyHandler) incomingTLSConfig() *tls.Config {
+func (handler *proxyHandler) incomingTLSConfig() (*tls.Config, error) {
 	if handler.incomingCert == nil {
-		return nil
+		return nil, nil
 	}
 
-	cert := handler.incomingCert.TLSCert()
-	if cert == nil {
-		return nil
+	cert, err := handler.incomingCert.AsTLSCertificate()
+	if err != nil {
+		return nil, err
 	}
 
-	return &tls.Config{Certificates: []tls.Certificate{*cert}}
+	return &tls.Config{Certificates: []tls.Certificate{*cert}}, nil
 }
 
 // setupIncomingCert will setup a managed cert for the incoming connections.
 // They can either be unencrypted (in case a cert and key names are empty),
-// using self-signed, runtime generated cert (if cert is set to *) or
-// using file based cert where the cert/key values refer to file names
+// or using file based cert where the cert/key values refer to file names
 // containing the information.
 func (handler *proxyHandler) setupIncomingCert(ctx context.Context) error {
 	if (handler.ListenKey == "") != (handler.ListenCert == "") {
@@ -727,22 +736,10 @@ func (handler *proxyHandler) setupIncomingCert(ctx context.Context) error {
 		return nil
 	}
 
-	// TODO(darin): change the cert manager so it uses the stopper.
-	certMgr := certmgr.NewCertManager(ctx)
-	var cert certmgr.Cert
-	if handler.ListenCert == "*" {
-		cert = certmgr.NewSelfSignedCert(0, 3, 0, 0)
-	} else if handler.ListenCert != "" {
-		cert = certmgr.NewFileCert(handler.ListenCert, handler.ListenKey)
-	}
-	cert.Reload(ctx)
-	err := cert.Err()
-	if err != nil {
+	if err := handler.certManager.Register("client", handler.ListenCert, handler.ListenKey); err != nil {
 		return err
 	}
-	certMgr.ManageCert("client", cert)
-	handler.certManager = certMgr
-	handler.incomingCert = cert
+	handler.incomingCert = handler.certManager.Get("client")
 
 	return nil
 }

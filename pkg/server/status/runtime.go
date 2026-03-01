@@ -901,7 +901,10 @@ func NewRuntimeStatSampler(ctx context.Context, clock hlc.WallClock) *RuntimeSta
 		log.Dev.Warningf(ctx, "could not parse build timestamp: %v", err)
 	}
 
-	// Build information.
+	// Build information. The labels on this metric enable Prometheus/Datadog
+	// queries to filter or group by CockroachDB version — for example, to
+	// identify which nodes are running a particular release series.
+	year, release := build.BranchReleaseSeries()
 	metaBuildTimestamp := metric.Metadata{
 		Name:        "build.timestamp",
 		Help:        "Build information",
@@ -910,6 +913,8 @@ func NewRuntimeStatSampler(ctx context.Context, clock hlc.WallClock) *RuntimeSta
 	}
 	metaBuildTimestamp.AddLabel("tag", info.Tag)
 	metaBuildTimestamp.AddLabel("go_version", info.GoVersion)
+	metaBuildTimestamp.AddLabel("major", strconv.Itoa(year))
+	metaBuildTimestamp.AddLabel("minor", strconv.Itoa(release))
 
 	buildTimestamp := metric.NewGauge(metaBuildTimestamp)
 	buildTimestamp.Update(timestamp)
@@ -1153,7 +1158,7 @@ func (rsr *RuntimeStatSampler) SampleEnvironment(ctx context.Context, cs *CGoMem
 	hostNiceTime := int64(cpuUsage.Nice * 1.e9)
 
 	var procUrate, procSrate, hostUrate, hostSrate, hostIrqrate, hostSoftIrqrate, hostNiceRate float64
-	if rsr.last.now != 0 { // We cannot compute these rates on the first iteration.
+	if rsr.last.now != 0 && dur > 0 { // We cannot compute these rates on the first iteration or if no time elapsed.
 		procUrate = float64(procUtime-rsr.last.procUtime) / dur
 		procSrate = float64(procStime-rsr.last.procStime) / dur
 		hostUrate = float64(hostUtime-rsr.last.hostUtime) / dur
@@ -1175,14 +1180,20 @@ func (rsr *RuntimeStatSampler) SampleEnvironment(ctx context.Context, cs *CGoMem
 	gcStopTotalNs := int64(gcStopTotal * 1.e9)
 	nonGcStopTotalNs := int64(nonGcStopTotal * 1.e9)
 	gcCount := rsr.goRuntimeSampler.uint64(runtimeMetricGCCount)
-	gcPauseRatio := float64(gcPauseTotalNs-rsr.last.gcPauseTime) / dur
+	var gcPauseRatio float64
+	if dur > 0 {
+		gcPauseRatio = float64(gcPauseTotalNs-rsr.last.gcPauseTime) / dur
+	}
 	runnableSum := goschedstats.CumulativeNormalizedRunnableGoroutines()
 	gcAssistSeconds := rsr.goRuntimeSampler.float64(runtimeMetricGCAssist)
 	gcAssistNS := int64(gcAssistSeconds * 1e9)
 	// The number of runnable goroutines per CPU is a count, but it can vary
 	// quickly. We don't just want to get a current snapshot of it, we want the
 	// average value since the last sampling.
-	runnableAvg := (runnableSum - rsr.last.runnableSum) * 1e9 / dur
+	var runnableAvg float64
+	if dur > 0 {
+		runnableAvg = (runnableSum - rsr.last.runnableSum) * 1e9 / dur
+	}
 	rsr.last.now = now
 	rsr.last.procUtime = procUtime
 	rsr.last.procStime = procStime
@@ -1196,7 +1207,10 @@ func (rsr *RuntimeStatSampler) SampleEnvironment(ctx context.Context, cs *CGoMem
 
 	// Log summary of statistics to console.
 	osStackBytes := rsr.goRuntimeSampler.uint64(runtimeMetricMemStackOSBytes)
-	cgoRate := float64((numCgoCall-rsr.last.cgoCall)*int64(time.Second)) / dur
+	var cgoRate float64
+	if dur > 0 {
+		cgoRate = float64((numCgoCall-rsr.last.cgoCall)*int64(time.Second)) / dur
+	}
 	goAlloc := rsr.goRuntimeSampler.uint64(runtimeMetricHeapAlloc)
 	goTotal := rsr.goRuntimeSampler.uint64(runtimeMetricGoTotal) -
 		rsr.goRuntimeSampler.uint64(runtimeMetricHeapReleasedBytes)

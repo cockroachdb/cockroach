@@ -300,6 +300,22 @@ func (b *Builder) Build() (_ exec.Plan, err error) {
 		return nil, err
 	}
 
+	// Check if RLS policies were applied during query planning. This includes
+	// the case where no policies matched and all rows are filtered out.
+	rlsMeta := b.mem.Metadata().GetRLSMeta()
+	if rlsMeta.IsInitialized {
+		if rlsMeta.NoPoliciesApplied {
+			b.flags.Set(exec.PlanFlagUsesRLS)
+		} else {
+			for _, pa := range rlsMeta.PoliciesApplied {
+				if pa.Filter.Len() > 0 || pa.Check.Len() > 0 {
+					b.flags.Set(exec.PlanFlagUsesRLS)
+					break
+				}
+			}
+		}
+	}
+
 	rootRowCount := int64(b.e.(memo.RelExpr).Relational().Statistics().RowCountIfAvailable())
 	return b.factory.ConstructPlan(
 		plan.root, b.subqueries, b.cascades, b.triggers, b.checks, rootRowCount, b.flags,

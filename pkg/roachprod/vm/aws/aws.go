@@ -917,6 +917,35 @@ func (p *Provider) createInstances(
 	return instanceIDsByRegion, nil
 }
 
+// getIAMProfileForInstance returns the IAM instance profile name attached to the
+// given EC2 instance. Returns an empty string if no profile is attached.
+func (p *Provider) getIAMProfileForInstance(
+	ctx context.Context, l *logger.Logger, region, instanceID string,
+) (string, error) {
+	args := []string{
+		"ec2", "describe-instances",
+		"--instance-ids", instanceID,
+		"--region", region,
+	}
+	var descOutput DescribeInstancesOutput
+	if err := p.runJSONCommandWithContext(ctx, l, args, &descOutput); err != nil {
+		return "", err
+	}
+	if len(descOutput.Reservations) == 0 || len(descOutput.Reservations[0].Instances) == 0 {
+		return "", nil
+	}
+	arn := descOutput.Reservations[0].Instances[0].IamInstanceProfile.Arn
+	if arn == "" {
+		return "", nil
+	}
+	// ARN format: arn:aws:iam::<account>:instance-profile/<profile-name>
+	parts := strings.Split(arn, "/")
+	if len(parts) < 2 {
+		return "", errors.Errorf("unexpected IAM profile ARN format: %s", arn)
+	}
+	return parts[len(parts)-1], nil
+}
+
 // waitForInstancesStatus waits for instances to reach the specified target state.
 // It polls AWS until all instances reach the target state or the timeout is reached.
 func (p *Provider) waitForInstancesStatus(
@@ -1235,6 +1264,15 @@ func (p *Provider) Grow(
 	}
 	machineType := existingVMs[0].MachineType
 	providerOpts := DefaultProviderOpts()
+
+	// Inherit the IAM profile from the existing instances so that new nodes
+	// have the same permissions (e.g., S3 access, CloudWatch, etc.).
+	if iamProfile, err := p.getIAMProfileForInstance(ctx, l, region, existingVMs[0].ProviderID); err != nil {
+		l.Printf("Warning: failed to get IAM profile from existing instance: %v", err)
+	} else if iamProfile != "" {
+		providerOpts.IAMProfile = iamProfile
+	}
+
 	opts := p.buildCreateOptsFromVM(clusterName, existingVMs[0])
 
 	// Create instances in parallel.
@@ -1564,6 +1602,11 @@ func (p *Provider) FindActiveAccount(l *logger.Logger) (string, error) {
 	var err error
 	if p.Profile == "" {
 		account, err = p.iamGetUser(l)
+		if err != nil {
+			// iamGetUser fails with role-based credentials;
+			// fall back to stsGetCallerIdentity.
+			account, err = p.stsGetCallerIdentity(l)
+		}
 		if err != nil {
 			return "", err
 		}

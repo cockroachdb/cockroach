@@ -559,8 +559,7 @@ func (zc *debugZipContext) dumpTableDataForZip(
 	ctx := context.Background()
 	fileName := sanitizeFilename(table)
 	baseName := path.Join(base, fileName)
-	fileNameWithExtension := fileName + "." + zc.clusterPrinter.sqlOutputFilenameExtension
-	if !zipCtx.files.shouldIncludeFile(fileNameWithExtension) {
+	if !zipCtx.files.shouldIncludeFile(baseName + "." + zc.clusterPrinter.sqlOutputFilenameExtension) {
 		zr.info("skipping table data for %s due to file filters", table)
 		return nil
 	}

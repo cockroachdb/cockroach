@@ -74,6 +74,7 @@ go_library(
         "//pkg/sql/sessiondata",
         "//pkg/sql/sqltelemetry",  # keep
         "//pkg/sql/types",
+        "//pkg/util/admission",
         "//pkg/util/buildutil",
         "//pkg/util/cancelchecker",
         "//pkg/util/duration",  # keep

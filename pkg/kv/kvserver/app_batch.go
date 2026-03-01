@@ -150,7 +150,7 @@ func (b *appBatch) addWriteBatch(
 
 type postAddEnv struct {
 	st          *cluster.Settings
-	eng         storage.Engine
+	eng         storage.Engine // StateEngine
 	sideloaded  logstore.SideloadStorage
 	bulkLimiter *rate.Limiter
 }

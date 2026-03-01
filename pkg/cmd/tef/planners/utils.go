@@ -21,6 +21,10 @@ const (
 	PlanIDPrefix = "tef."
 )
 
+// funcForPC is a variable that holds the function for getting function info from a PC.
+// This allows for testing edge cases where runtime.FuncForPC might return nil.
+var funcForPC = runtime.FuncForPC
+
 // GetPlanID generates a plan ID by combining a prefix, the planner's name, and a given variant for unique identification.
 func GetPlanID(planName, planVariant string) string {
 	return fmt.Sprintf("%s%s.%s", PlanIDPrefix, planName, planVariant)
@@ -65,19 +69,17 @@ func GetFunctionName(fn interface{}) string {
 		return "<non-function>"
 	}
 	fnPtr := fnVal.Pointer()
-	// runtime.FuncForPC can return nil for certain edge cases.
-	runtimeFunc := runtime.FuncForPC(fnPtr)
+	// funcForPC can return nil for certain edge cases (e.g., invalid PC values).
+	runtimeFunc := funcForPC(fnPtr)
 	if runtimeFunc == nil {
 		return "<unknown-function>"
 	}
 	fullName := runtimeFunc.Name()
-	// Extract just the function name without the package path
+	// Extract just the function name without the package path.
 	// e.g., "github.com/cockroachdb/cockroach/pkg/cmd/tef/planners.setupCluster" -> "setupCluster"
+	// Note: strings.Split always returns at least one element, so parts[len(parts)-1] is always safe.
 	parts := strings.Split(fullName, ".")
-	if len(parts) > 0 {
-		return parts[len(parts)-1]
-	}
-	return fullName
+	return parts[len(parts)-1]
 }
 
 // GetChildWFID constructs a dot-separated string from workflowID, taskName, planeName, and planVariant.

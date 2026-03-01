@@ -10,8 +10,10 @@ import (
 	"fmt"
 	"time"
 
+	pkgauth "github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/auth"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/models/tasks"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/utils"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/utils/filters"
 	filtertypes "github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/utils/filters/types"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/utils/logger"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
@@ -19,6 +21,14 @@ import (
 
 const (
 	TaskServiceName = "tasks"
+)
+
+const (
+	// Options defaults
+	// DefaultTasksTimeout is the default timeout for tasks.
+	DefaultTasksTimeout = 30 * time.Second
+	// DefaultTasksWorkers is the default number of workers processing tasks.
+	DefaultTasksWorkers = 1
 )
 
 var (
@@ -37,14 +47,20 @@ var (
 	ErrMetricsCollectionDisabled = fmt.Errorf("metrics collection is disabled")
 )
 
+const (
+	PermissionViewAll = TaskServiceName + ":view:all"
+	PermissionViewOwn = TaskServiceName + ":view:own"
+)
+
 // IService defines the interface for the tasks service, which manages background task processing
 // and provides CRUD operations for tasks. This service handles task lifecycle management,
 // worker orchestration, and integration with other services that need to schedule work.
 type IService interface {
 	// GetTasks retrieves multiple tasks based on the provided filters and pagination parameters.
-	GetTasks(context.Context, *logger.Logger, InputGetAllTasksDTO) ([]tasks.ITask, error)
+	// Returns tasks, total count (for pagination), and error.
+	GetTasks(context.Context, *logger.Logger, *pkgauth.Principal, InputGetAllTasksDTO) ([]tasks.ITask, int, error)
 	// GetTask retrieves a single task by its ID.
-	GetTask(context.Context, *logger.Logger, InputGetTaskDTO) (tasks.ITask, error)
+	GetTask(context.Context, *logger.Logger, *pkgauth.Principal, InputGetTaskDTO) (tasks.ITask, error)
 	// CreateTask creates a new task and stores it in the repository for processing.
 	CreateTask(context.Context, *logger.Logger, tasks.ITask) (tasks.ITask, error)
 	// CreateTaskIfNotAlreadyPlanned creates a new task only if a similar task isn't already pending.
@@ -62,9 +78,45 @@ type IService interface {
 	WaitForTaskCompletion(context.Context, *logger.Logger, uuid.UUID, time.Duration) error
 }
 
+// Options contains configuration parameters for the tasks service.
+type Options struct {
+	// Workers specifies the number of concurrent workers that process tasks.
+	// Higher values increase throughput but consume more resources.
+	Workers int
+
+	// WorkersEnabled indicates whether task workers are running
+	WorkersEnabled bool
+
+	// CollectMetrics is a flag to enable metrics collection.
+	CollectMetrics bool
+
+	// DefaultTasksTimeout is the timeout for tasks.
+	DefaultTasksTimeout time.Duration
+
+	// PurgeDoneTaskOlderThan is the duration after which tasks in done state
+	// are purged from the repository.
+	PurgeDoneTaskOlderThan time.Duration
+	// PurgeFailedTaskOlderThan is the duration after which tasks in failed
+	// state are purged from the repository.
+	PurgeFailedTaskOlderThan time.Duration
+	// PurgeTasksInterval is the value for how often tasks are purged from the
+	// repository.
+	PurgeTasksInterval time.Duration
+	// StatisticsUpdateInterval is the value for how often the tasks statistics
+	// are updated.
+	StatisticsUpdateInterval time.Duration
+}
+
 // InputGetAllTasksDTO is the data transfer object to get all tasks.
 type InputGetAllTasksDTO struct {
 	Filters filtertypes.FilterSet `json:"filters,omitempty"`
+}
+
+// NewInputGetAllTasksDTO creates a new InputGetAllTasksDTO with proper defaults.
+func NewInputGetAllTasksDTO() InputGetAllTasksDTO {
+	return InputGetAllTasksDTO{
+		Filters: *filters.NewFilterSet(),
+	}
 }
 
 // InputGetTaskDTO is the data transfer object to get a task.

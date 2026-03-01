@@ -28,10 +28,17 @@ const (
 	shortFlag   = "short"
 )
 
+const (
+	localPebbleFlag        = "local-pebble"
+	defaultLocalPebblePath = "../pebble"
+	pebbleOverrideRepo     = "com_github_cockroachdb_pebble"
+)
+
 var (
 	// Shared flags.
-	numCPUs    int
-	pgoEnabled bool
+	numCPUs     int
+	pgoEnabled  bool
+	localPebble string
 )
 
 var archivedCdepConfigurations = []configuration{
@@ -166,6 +173,8 @@ func (d *dev) getArchivedCdepString(bazelBin string) (string, error) {
 func addCommonBuildFlags(cmd *cobra.Command) {
 	cmd.Flags().IntVar(&numCPUs, "cpus", 0, "cap the number of CPU cores used for building and testing at the Bazel level (note that this has no impact on GOMAXPROCS or the functionality of any build or test action under the Bazel level)")
 	cmd.Flags().BoolVar(&pgoEnabled, "pgo", false, "build with profile-guided optimization (PGO)")
+	cmd.Flags().StringVar(&localPebble, localPebbleFlag, "", "build using a local pebble checkout (default path: ../pebble relative to workspace)")
+	cmd.Flags().Lookup(localPebbleFlag).NoOptDefVal = defaultLocalPebblePath
 }
 
 func addCommonTestFlags(cmd *cobra.Command) {
@@ -270,5 +279,8 @@ func addCommonBazelArguments(args *[]string) {
 	}
 	if pgoEnabled {
 		*args = append(*args, "--config=pgo")
+	}
+	if localPebble != "" {
+		*args = append(*args, fmt.Sprintf("--override_repository=%s=%s", pebbleOverrideRepo, localPebble))
 	}
 }

@@ -5,6 +5,7 @@ go_library(
     srcs = [
         "api.go",
         "coordination.go",
+        "environment.go",
         "registry.go",
         "service.go",
         "sync.go",
@@ -12,6 +13,7 @@ go_library(
     importpath = "github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/services/clusters",
     visibility = ["//visibility:public"],
     deps = [
+        "//pkg/cmd/roachprod-centralized/auth",
         "//pkg/cmd/roachprod-centralized/config/types",
         "//pkg/cmd/roachprod-centralized/models/health",
         "//pkg/cmd/roachprod-centralized/models/tasks",
@@ -41,6 +43,7 @@ go_library(
 go_test(
     name = "clusters_test",
     srcs = [
+        "api_authorization_test.go",
         "api_test.go",
         "coordination_test.go",
         "registry_test.go",
@@ -49,6 +52,8 @@ go_test(
     ],
     embed = [":clusters"],
     deps = [
+        "//pkg/cmd/roachprod-centralized/auth",
+        "//pkg/cmd/roachprod-centralized/models/auth",
         "//pkg/cmd/roachprod-centralized/repositories/clusters",
         "//pkg/cmd/roachprod-centralized/repositories/clusters/mocks",
         "//pkg/cmd/roachprod-centralized/services/clusters/internal/operations",
@@ -63,6 +68,7 @@ go_test(
         "//pkg/cmd/roachprod-centralized/utils/logger",
         "//pkg/roachprod/cloud/types",
         "//pkg/roachprod/vm",
+        "//pkg/util/uuid",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_stretchr_testify//assert",
         "@com_github_stretchr_testify//mock",

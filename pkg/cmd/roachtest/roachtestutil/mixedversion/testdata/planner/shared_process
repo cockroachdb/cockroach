@@ -53,8 +53,8 @@ Plan:
 ├── delete all-tenants override for the `version` key (16) [stage=system:tenant-setup;tenant:tenant-setup]
 ├── run startup hooks concurrently
 │   ├── run "create tables" hookId="planner_test.go:141", after 30s delay (17) [stage=system:on-startup;tenant:on-startup]
-│   └── run "initialize bank workload" hookId="mixedversion.go:885", after 3m0s delay (18) [stage=system:on-startup;tenant:on-startup]
-├── run "bank workload" hookId="mixedversion.go:893" (19) [stage=system:background;tenant:background]
+│   └── run "initialize bank workload" hookId="mixedversion.go:907", after 3m0s delay (18) [stage=system:on-startup;tenant:on-startup]
+├── run "bank workload" hookId="mixedversion.go:915" (19) [stage=system:background;tenant:background]
 ├── upgrade cluster from "v23.1.12" to "v23.2.0"
 │   ├── prevent auto-upgrades on system tenant by setting `preserve_downgrade_option` (20) [stage=system:init;tenant:init]
 │   ├── prevent auto-upgrades on mixed-version-tenant-cyvju tenant by setting `preserve_downgrade_option` (21) [stage=system:init;tenant:init]

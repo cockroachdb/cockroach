@@ -148,6 +148,14 @@ SELECT * FROM t
 user root
 
 subtest my_subtest_name
+```
+
+**Note on `user` directive:** Only `root` and `testuser` have pre-generated TLS
+certificates for the logic test framework. Do not create custom users and switch
+to them with the `user` directive. Instead, use `SET ROLE` to assume a different
+role's permissions while connected as `testuser`.
+
+```sql
 
 repeat 10
 statement ok

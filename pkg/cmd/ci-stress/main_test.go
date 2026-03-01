@@ -16,7 +16,7 @@ import (
 func TestPkgToTests(t *testing.T) {
 	for filename, expPkgs := range map[string]map[string][]string{
 		datapathutils.TestDataPath(t, "skip.diff"): {
-			"pkg/ccl/storageccl": []string{"TestPutS3"},
+			"pkg/storage": []string{"TestEncryptDecrypt"},
 		},
 		datapathutils.TestDataPath(t, "modified.diff"): {
 			"pkg/crosscluster/physical": []string{"TestStreamingAutoReplan"},

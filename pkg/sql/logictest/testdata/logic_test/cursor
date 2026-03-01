@@ -838,7 +838,7 @@ COMMIT
 
 # Regression test for statement timeouts during DECLARE CURSOR.
 # We set timeout to 1s so that DECLARE CURSOR can execute, then sleep
-# 0.5s each to make up 1s and attempt to fetch.
+# 0.3s each to make up 0.6s and attempt to fetch.
 # Setting the timeout to 0.001ms means DECLARE CURSOR times out thus
 # voiding the test.
 statement ok
@@ -850,7 +850,7 @@ DECLARE a CURSOR FOR SELECT * FROM ( VALUES (1), (2) ) t(id);
 # Note we can't set pg_sleep to 1 or else it'll statement timeout!
 retry
 statement ok
-select pg_sleep(0.7)
+select pg_sleep(0.3)
 
 query I
 FETCH 1 FROM a
@@ -859,7 +859,7 @@ FETCH 1 FROM a
 
 retry
 statement ok
-select pg_sleep(0.7)
+select pg_sleep(0.3)
 
 query I
 FETCH 1 FROM a

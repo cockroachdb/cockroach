@@ -12,9 +12,11 @@ go_library(
     importpath = "github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/services/tasks",
     visibility = ["//visibility:public"],
     deps = [
+        "//pkg/cmd/roachprod-centralized/auth",
         "//pkg/cmd/roachprod-centralized/config/types",
         "//pkg/cmd/roachprod-centralized/models/tasks",
         "//pkg/cmd/roachprod-centralized/repositories/tasks",
+        "//pkg/cmd/roachprod-centralized/services",
         "//pkg/cmd/roachprod-centralized/services/tasks/internal/metrics",
         "//pkg/cmd/roachprod-centralized/services/tasks/internal/processor",
         "//pkg/cmd/roachprod-centralized/services/tasks/internal/scheduler",

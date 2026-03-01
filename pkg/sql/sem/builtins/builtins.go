@@ -8,6 +8,7 @@ package builtins
 import (
 	"bytes"
 	"context"
+	"crypto/fips140"
 	"crypto/md5"
 	"crypto/sha1"
 	"crypto/sha256"
@@ -32,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv/followerreads"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -39,7 +41,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings"
-	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/appstatspb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
@@ -4154,8 +4155,55 @@ value if you rely on the HLC for accuracy.`,
 			Volatility: volatility.Immutable,
 		},
 	),
-	"dmetaphone":     makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 56820, Category: builtinconstants.CategoryFuzzyStringMatching}),
-	"dmetaphone_alt": makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 56820, Category: builtinconstants.CategoryFuzzyStringMatching}),
+	"dmetaphone": makeBuiltin(
+		tree.FunctionProperties{Category: builtinconstants.CategoryFuzzyStringMatching},
+		tree.Overload{
+			Types:      tree.ParamTypes{{Name: "source", Typ: types.String}},
+			ReturnType: tree.FixedReturnType(types.String),
+			Fn: func(_ context.Context, _ *eval.Context, args tree.Datums) (tree.Datum, error) {
+				s := string(tree.MustBeDString(args[0]))
+				return tree.NewDString(fuzzystrmatch.DMetaphone(s)), nil
+			},
+			Info:       "Returns the primary Double Metaphone code for the input string.",
+			Volatility: volatility.Immutable,
+		},
+	),
+	"dmetaphone_alt": makeBuiltin(
+		tree.FunctionProperties{Category: builtinconstants.CategoryFuzzyStringMatching},
+		tree.Overload{
+			Types:      tree.ParamTypes{{Name: "source", Typ: types.String}},
+			ReturnType: tree.FixedReturnType(types.String),
+			Fn: func(_ context.Context, _ *eval.Context, args tree.Datums) (tree.Datum, error) {
+				s := string(tree.MustBeDString(args[0]))
+				return tree.NewDString(fuzzystrmatch.DMetaphoneAlt(s)), nil
+			},
+			Info:       "Returns the alternate Double Metaphone code for the input string.",
+			Volatility: volatility.Immutable,
+		},
+	),
+	"daitch_mokotoff": makeBuiltin(
+		tree.FunctionProperties{Category: builtinconstants.CategoryFuzzyStringMatching},
+		tree.Overload{
+			Types:      tree.ParamTypes{{Name: "source", Typ: types.String}},
+			ReturnType: tree.FixedReturnType(types.MakeArray(types.String)),
+			Fn: func(_ context.Context, _ *eval.Context, args tree.Datums) (tree.Datum, error) {
+				s := string(tree.MustBeDString(args[0]))
+				codes := fuzzystrmatch.DaitchMokotoff(s)
+				if codes == nil {
+					return tree.DNull, nil
+				}
+				arr := tree.NewDArray(types.String)
+				for _, code := range codes {
+					if err := arr.Append(tree.NewDString(code)); err != nil {
+						return nil, err
+					}
+				}
+				return arr, nil
+			},
+			Info:       "Returns an array of Daitch-Mokotoff soundex codes for the input string.",
+			Volatility: volatility.Immutable,
+		},
+	),
 	"levenshtein_less_equal": makeBuiltin(
 		tree.FunctionProperties{Category: builtinconstants.CategoryFuzzyStringMatching},
 		tree.Overload{
@@ -6224,6 +6272,39 @@ SELECT
 			Info:             "This function is used only by CockroachDB's developers for testing purposes.",
 			Volatility:       volatility.Volatile,
 			DistsqlBlocklist: true, // applicable only on the gateway
+		},
+	),
+
+	"crdb_internal.fips_ready": makeBuiltin(
+		tree.FunctionProperties{
+			Category: builtinconstants.CategorySystemInfo,
+		},
+		tree.Overload{
+			Types:      tree.ParamTypes{},
+			ReturnType: tree.FixedReturnType(types.Bool),
+			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
+				// It's debatable whether we need a permission check here at all.
+				// It's not very sensitive and is (currently) a very cheap function
+				// call. However, it's something that regular users should have no
+				// reason to look at so in the interest of least privilege we put it
+				// behind the VIEWCLUSTERSETTING privilege.
+				session := evalCtx.SessionAccessor
+				hasView, err := session.HasGlobalPrivilegeOrRoleOption(ctx, privilege.VIEWCLUSTERSETTING)
+				if err != nil {
+					return nil, err
+				} else if !hasView {
+					return nil, pgerror.Newf(pgcode.InsufficientPrivilege,
+						"user %s does not have %s system privilege",
+						evalCtx.SessionData().User(),
+						privilege.VIEWCLUSTERSETTING,
+					)
+				}
+
+				return tree.MakeDBool(tree.DBool(fips140.Enabled())), nil
+			},
+			Info:       "Returns true if all FIPS readiness checks pass.",
+			Class:      tree.NormalClass,
+			Volatility: volatility.Stable,
 		},
 	),
 
@@ -12353,30 +12434,9 @@ func CleanEncodingName(s string) string {
 	return string(b)
 }
 
-// EvalFollowerReadOffset is a function used often with AS OF SYSTEM TIME queries
-// to determine the appropriate offset from now which is likely to be safe for
-// follower reads. It is injected by followerreadsccl. An error may be returned
-// if an enterprise license is not installed.
-var EvalFollowerReadOffset func(_ *cluster.Settings) (time.Duration, error)
-
-func recentTimestamp(ctx context.Context, evalCtx *eval.Context) (time.Time, error) {
-	if EvalFollowerReadOffset == nil {
-		telemetry.Inc(sqltelemetry.FollowerReadDisabledCCLCounter)
-		evalCtx.ClientNoticeSender.BufferClientNotice(
-			ctx,
-			pgnotice.Newf("follower reads disabled because you are running a non-CCL distribution"),
-		)
-		return evalCtx.StmtTimestamp.Add(builtinconstants.DefaultFollowerReadDuration), nil
-	}
-	offset, err := EvalFollowerReadOffset(evalCtx.Settings)
+func recentTimestamp(_ context.Context, evalCtx *eval.Context) (time.Time, error) {
+	offset, err := followerreads.EvalFollowerReadOffset(evalCtx.Settings)
 	if err != nil {
-		if code := pgerror.GetPGCode(err); code == pgcode.CCLValidLicenseRequired {
-			telemetry.Inc(sqltelemetry.FollowerReadDisabledNoEnterpriseLicense)
-			evalCtx.ClientNoticeSender.BufferClientNotice(
-				ctx, pgnotice.Newf("follower reads disabled: %s", err.Error()),
-			)
-			return evalCtx.StmtTimestamp.Add(builtinconstants.DefaultFollowerReadDuration), nil
-		}
 		return time.Time{}, err
 	}
 	return evalCtx.StmtTimestamp.Add(offset), nil
@@ -12391,27 +12451,6 @@ func followerReadTimestamp(
 	}
 	return tree.MakeDTimestampTZ(ts, time.Microsecond)
 }
-
-var (
-	// WithMinTimestamp is an injectable function containing the implementation of the
-	// with_min_timestamp builtin.
-	WithMinTimestamp = func(_ context.Context, _ *eval.Context, t time.Time) (time.Time, error) {
-		return time.Time{}, pgerror.Newf(
-			pgcode.CCLRequired,
-			"%s can only be used with a CCL distribution",
-			asof.WithMinTimestampFunctionName,
-		)
-	}
-	// WithMaxStaleness is an injectable function containing the implementation of the
-	// with_max_staleness builtin.
-	WithMaxStaleness = func(_ context.Context, _ *eval.Context, d duration.Duration) (time.Time, error) {
-		return time.Time{}, pgerror.Newf(
-			pgcode.CCLRequired,
-			"%s can only be used with a CCL distribution",
-			asof.WithMaxStalenessFunctionName,
-		)
-	}
-)
 
 const nearestOnlyInfo = `
 
@@ -12450,7 +12489,7 @@ Note this function requires an enterprise license on a CCL distribution.`,
 }
 
 func withMinTimestamp(ctx context.Context, evalCtx *eval.Context, t time.Time) (tree.Datum, error) {
-	t, err := WithMinTimestamp(ctx, evalCtx, t)
+	t, err := followerreads.EvalMinTimestamp(ctx, evalCtx, t)
 	if err != nil {
 		return nil, err
 	}
@@ -12460,7 +12499,7 @@ func withMinTimestamp(ctx context.Context, evalCtx *eval.Context, t time.Time) (
 func withMaxStaleness(
 	ctx context.Context, evalCtx *eval.Context, d duration.Duration,
 ) (tree.Datum, error) {
-	t, err := WithMaxStaleness(ctx, evalCtx, d)
+	t, err := followerreads.EvalMaxStaleness(ctx, evalCtx, d)
 	if err != nil {
 		return nil, err
 	}

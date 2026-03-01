@@ -65,4 +65,4 @@ export IBM_APIKEY="${IBM_APIKEY}"
 # Set the GOOGLE_APPLICATION_CREDENTIALS environment variable
 export GOOGLE_APPLICATION_CREDENTIALS="/secrets/gcloud.json"
 
-/usr/local/bin/roachprod-centralized "$@"
+exec /usr/local/bin/roachprod-centralized "$@"

@@ -2073,3 +2073,102 @@ func TestFailPrepareFailsTxn(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+// TestTCPKeepAliveConnectionInit verifies that TCP keepalive session values
+// are correctly initialized from connection string options and ALTER ROLE SET
+// defaults during connection startup.
+func TestTCPKeepAliveConnectionInit(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	ctx := context.Background()
+
+	srv, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	defer srv.Stopper().Stop(ctx)
+	s := srv.ApplicationLayer()
+
+	_, err := db.ExecContext(ctx, "CREATE ROLE testuser WITH LOGIN")
+	require.NoError(t, err)
+
+	t.Run("connection string options", func(t *testing.T) {
+		pgURL, cleanup := s.PGUrl(t,
+			serverutils.CertsDirPrefix("TestTCPKeepAlive"),
+			serverutils.User(username.RootUser),
+		)
+		defer cleanup()
+		q := pgURL.Query()
+		// Append to existing options to preserve any cluster routing set by PGUrl.
+		opts := q.Get("options")
+		if opts != "" {
+			opts += " "
+		}
+		opts += "-c tcp_keepalives_idle=25 -c tcp_keepalives_interval=8 -c tcp_keepalives_count=4 -c tcp_user_timeout=15000"
+		q.Set("options", opts)
+		pgURL.RawQuery = q.Encode()
+
+		conn, err := pgx.Connect(ctx, pgURL.String())
+		require.NoError(t, err)
+		defer func() { _ = conn.Close(ctx) }()
+
+		var idle, interval, count, userTimeout string
+		err = conn.QueryRow(ctx, "SHOW tcp_keepalives_idle").Scan(&idle)
+		require.NoError(t, err)
+		require.Equal(t, "25", idle)
+		err = conn.QueryRow(ctx, "SHOW tcp_keepalives_interval").Scan(&interval)
+		require.NoError(t, err)
+		require.Equal(t, "8", interval)
+		err = conn.QueryRow(ctx, "SHOW tcp_keepalives_count").Scan(&count)
+		require.NoError(t, err)
+		require.Equal(t, "4", count)
+		err = conn.QueryRow(ctx, "SHOW tcp_user_timeout").Scan(&userTimeout)
+		require.NoError(t, err)
+		require.Equal(t, "15000", userTimeout)
+	})
+
+	t.Run("ALTER ROLE SET defaults", func(t *testing.T) {
+		_, err := db.ExecContext(ctx,
+			"ALTER ROLE testuser SET tcp_keepalives_idle = '20'")
+		require.NoError(t, err)
+
+		pgURL, cleanup := s.PGUrl(t,
+			serverutils.CertsDirPrefix("TestTCPKeepAlive"),
+			serverutils.User("testuser"),
+		)
+		defer cleanup()
+
+		conn, err := pgx.Connect(ctx, pgURL.String())
+		require.NoError(t, err)
+		defer func() { _ = conn.Close(ctx) }()
+
+		var idle string
+		err = conn.QueryRow(ctx, "SHOW tcp_keepalives_idle").Scan(&idle)
+		require.NoError(t, err)
+		require.Equal(t, "20", idle)
+	})
+
+	t.Run("connection string overrides ALTER ROLE SET", func(t *testing.T) {
+		// ALTER ROLE sets idle=20, but connection string sets idle=30.
+		pgURL, cleanup := s.PGUrl(t,
+			serverutils.CertsDirPrefix("TestTCPKeepAlive"),
+			serverutils.User("testuser"),
+		)
+		defer cleanup()
+		q := pgURL.Query()
+		// Append to existing options to preserve any cluster routing set by PGUrl.
+		opts := q.Get("options")
+		if opts != "" {
+			opts += " "
+		}
+		opts += "-c tcp_keepalives_idle=30"
+		q.Set("options", opts)
+		pgURL.RawQuery = q.Encode()
+
+		conn, err := pgx.Connect(ctx, pgURL.String())
+		require.NoError(t, err)
+		defer func() { _ = conn.Close(ctx) }()
+
+		var idle string
+		err = conn.QueryRow(ctx, "SHOW tcp_keepalives_idle").Scan(&idle)
+		require.NoError(t, err)
+		require.Equal(t, "30", idle)
+	})
+}

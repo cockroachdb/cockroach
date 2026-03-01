@@ -186,8 +186,8 @@ NULL
 user testuser
 
 # testuser should not be able to refresh the materialized view without
-# ownership.
-statement error pq: must be owner of materialized view with_options
+# ownership or MAINTAIN privilege.
+statement error pq: user testuser does not have MAINTAIN privilege on relation with_options
 REFRESH MATERIALIZED VIEW with_options WITH NO DATA
 
 user root
@@ -381,3 +381,76 @@ SELECT a FROM mat_view_as_of_no_data ORDER BY a
 1
 2
 3
+
+subtest maintain_privilege
+
+user root
+
+statement ok
+CREATE TABLE maintain_t (a INT PRIMARY KEY);
+INSERT INTO maintain_t VALUES (1), (2), (3);
+CREATE MATERIALIZED VIEW maintain_mv AS SELECT * FROM maintain_t
+
+# Grant SELECT so testuser can query the view and its underlying table.
+statement ok
+GRANT SELECT ON maintain_mv TO testuser;
+GRANT SELECT ON maintain_t TO testuser
+
+user testuser
+
+# Without MAINTAIN or ownership, refresh should fail.
+statement error pq: user testuser does not have MAINTAIN privilege on relation maintain_mv
+REFRESH MATERIALIZED VIEW maintain_mv
+
+user root
+
+# Grant MAINTAIN to testuser.
+statement ok
+GRANT MAINTAIN ON maintain_mv TO testuser
+
+# SHOW GRANTS should display MAINTAIN.
+query TTTTTB rowsort
+SELECT * FROM [SHOW GRANTS ON maintain_mv] WHERE grantee = 'testuser' ORDER BY privilege_type
+----
+test  public  maintain_mv  testuser  MAINTAIN  false
+test  public  maintain_mv  testuser  SELECT    false
+
+user testuser
+
+# With MAINTAIN privilege, refresh should succeed.
+statement ok
+REFRESH MATERIALIZED VIEW maintain_mv
+
+user root
+
+# Revoke MAINTAIN.
+statement ok
+REVOKE MAINTAIN ON maintain_mv FROM testuser
+
+user testuser
+
+# After revoking MAINTAIN, refresh should fail again.
+statement error pq: user testuser does not have MAINTAIN privilege on relation maintain_mv
+REFRESH MATERIALIZED VIEW maintain_mv
+
+user root
+
+# MAINTAIN on a regular table is valid but does not make it a refreshable matview.
+statement ok
+GRANT MAINTAIN ON maintain_t TO testuser
+
+user testuser
+
+statement error pq: "maintain_t" is not a view
+REFRESH MATERIALIZED VIEW maintain_t
+
+user root
+
+# Cleanup.
+statement ok
+REVOKE ALL ON maintain_mv FROM testuser;
+REVOKE ALL ON maintain_t FROM testuser;
+DROP MATERIALIZED VIEW maintain_mv;
+DROP TABLE maintain_t
+
+subtest end

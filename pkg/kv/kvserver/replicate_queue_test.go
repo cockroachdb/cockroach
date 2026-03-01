@@ -35,6 +35,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvtestutils"
 	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
 	"github.com/cockroachdb/cockroach/pkg/raft/tracker"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -1757,11 +1758,12 @@ func TestLargeUnsplittableRangeReplicate(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	skip.UnderStress(t, 38565)
-	skip.UnderRaceWithIssue(t, 38565)
+	skip.UnderDuressWithIssue(t, 38565)
 	skip.UnderShort(t, 38565)
-	skip.UnderDeadlockWithIssue(t, 38565)
+
 	ctx := context.Background()
+
+	testutils.SetVModule(t, "allocator_scorer=3")
 
 	const rangeMaxSize = 64 << 20
 	zcfg := zonepb.DefaultZoneConfig()
@@ -1799,8 +1801,14 @@ func TestLargeUnsplittableRangeReplicate(t *testing.T) {
 	_, err := db.Exec("create table t (i int primary key, s string)")
 	require.NoError(t, err)
 
-	_, err = db.Exec(`ALTER TABLE t EXPERIMENTAL_RELOCATE VALUES (ARRAY[1,2,3], 1)`)
-	require.NoError(t, err)
+	testutils.SucceedsSoon(t, func() error {
+		_, err := db.Exec(`ALTER TABLE t EXPERIMENTAL_RELOCATE VALUES (ARRAY[1,2,3], 1)`)
+		if kvtestutils.IsExpectedRelocateError(err) {
+			return err
+		}
+		require.NoError(t, err)
+		return nil
+	})
 	_, err = db.Exec(`ALTER TABLE t SPLIT AT VALUES (1)`)
 	require.NoError(t, err)
 	_, err = db.Exec(`ALTER TABLE t SPLIT AT VALUES (2)`)

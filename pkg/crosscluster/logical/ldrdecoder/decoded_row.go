@@ -38,3 +38,19 @@ type DecodedRow struct {
 	// PrevRow may still lose LWW if there is a recent tombstone.
 	PrevRow tree.Datums
 }
+
+func (d *DecodedRow) IsDeleteRow() bool {
+	return d.IsDelete && len(d.PrevRow) != 0
+}
+
+func (d *DecodedRow) IsTombstoneUpdate() bool {
+	return d.IsDelete && len(d.PrevRow) == 0
+}
+
+func (d *DecodedRow) IsInsertRow() bool {
+	return !d.IsDelete && len(d.PrevRow) == 0
+}
+
+func (d *DecodedRow) IsUpdateRow() bool {
+	return !d.IsDelete && len(d.PrevRow) > 0
+}

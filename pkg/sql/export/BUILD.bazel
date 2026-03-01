@@ -46,6 +46,7 @@ go_test(
         ":export",
         "//pkg/base",
         "//pkg/ccl",
+        "//pkg/cloud/impl:cloudimpl",
         "//pkg/col/coldata",
         "//pkg/config",
         "//pkg/config/zonepb",

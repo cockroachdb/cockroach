@@ -13,10 +13,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/backup/backupinfo"
 	"github.com/cockroachdb/cockroach/pkg/backup/backuppb"
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/ccl/kvccl/kvfollowerreadsccl"
 	"github.com/cockroachdb/cockroach/pkg/cloud"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobsprofiler"
+	"github.com/cockroachdb/cockroach/pkg/kv/followerreads"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql"
@@ -31,11 +31,9 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-// runCompactionPlan creates and runs a distsql plan to compact the spans
-// in the backup chain that need to be compacted. It sends updates from the
-// BulkProcessor to the provided progress channel. It is the caller's
-// responsibility to close the progress channel.
-func runCompactionPlan(
+// createCompactionPlan creates an un-finalized physical plan that will
+// distribute spans from a generator across the cluster for compaction.
+func createCompactionPlan(
 	ctx context.Context,
 	execCtx sql.JobExecContext,
 	jobID jobspb.JobID,
@@ -44,8 +42,7 @@ func runCompactionPlan(
 	manifest *backuppb.BackupManifest,
 	defaultStore cloud.ExternalStorage,
 	kmsEnv cloud.KMSEnv,
-	progCh chan *execinfrapb.RemoteProducerMetadata_BulkProcessorProgress,
-) error {
+) (compactionPlan, error) {
 	log.Dev.Infof(
 		ctx, "planning compaction of %d backups: %s",
 		len(compactChain.chainToCompact),
@@ -57,13 +54,13 @@ func runCompactionPlan(
 		compactChain.compactedLocalityInfo, execCtx.User(),
 	)
 	if err != nil {
-		return err
+		return compactionPlan{}, err
 	}
 	introducedSpanFrontier, err := createIntroducedSpanFrontier(
 		compactChain.backupChain, manifest.EndTime,
 	)
 	if err != nil {
-		return err
+		return compactionPlan{}, err
 	}
 	defer introducedSpanFrontier.Release()
 	targetSize := targetRestoreSpanSize.Get(&execCtx.ExecCfg().Settings.SV)
@@ -77,14 +74,14 @@ func runCompactionPlan(
 		maxFiles,
 	)
 	if err != nil {
-		return err
+		return compactionPlan{}, err
 	}
 
 	spansToCompact, err := getSpansToCompact(
 		ctx, execCtx, manifest, compactChain.chainToCompact, details, defaultStore, kmsEnv,
 	)
 	if err != nil {
-		return err
+		return compactionPlan{}, err
 	}
 	genSpan := func(ctx context.Context, spanCh chan execinfrapb.RestoreSpanEntry) error {
 		return errors.Wrap(generateAndSendImportSpans(
@@ -100,13 +97,75 @@ func runCompactionPlan(
 		), "generateAndSendImportSpans")
 	}
 	dsp := execCtx.DistSQLPlanner()
-	plan, planCtx, err := createCompactionPlan(
-		ctx, execCtx, jobID, details, manifest, dsp, genSpan, spansToCompact, targetSize, maxFiles,
+	evalCtx := execCtx.ExtendedEvalContext()
+	oracle := physicalplan.DefaultReplicaChooser
+
+	locFilter := sql.SingleLocalityFilter(details.ExecutionLocality)
+	if useBulkOracle.Get(&evalCtx.Settings.SV) {
+		var err error
+		oracle, err = followerreads.NewLocalityFilteringBulkOracle(
+			dsp.ReplicaOracleConfig(evalCtx.Locality),
+			locFilter,
+		)
+		if err != nil {
+			return compactionPlan{}, errors.Wrap(err, "failed to create locality filtering bulk oracle")
+		}
+	}
+
+	planCtx, instanceIDs, err := dsp.SetupAllNodesPlanningWithOracle(
+		ctx, evalCtx, execCtx.ExecCfg(),
+		oracle, locFilter, sql.NoStrictLocalityFiltering,
 	)
 	if err != nil {
-		return errors.Wrap(err, "creating compaction plan")
+		return compactionPlan{}, errors.Wrap(err, "setting up node planning")
 	}
-	sql.FinalizePlan(ctx, planCtx, plan)
+	instanceLocalities := make([]roachpb.Locality, len(instanceIDs))
+	for i, id := range instanceIDs {
+		sqlInstanceInfo, err := dsp.GetSQLInstanceInfo(ctx, id)
+		if err != nil {
+			return compactionPlan{}, errors.Wrap(err, "getting instance info")
+		}
+		instanceLocalities[i] = sqlInstanceInfo.Locality
+	}
+	localitySets, err := buildLocalitySets(
+		ctx, instanceIDs, instanceLocalities, details.StrictLocalityFiltering, genSpan,
+	)
+	if err != nil {
+		return compactionPlan{}, errors.Wrap(err, "building locality sets")
+	}
+	corePlacements, err := createCompactionCorePlacements(
+		ctx, jobID, execCtx.User(), details, manifest.ElidedPrefix, genSpan,
+		spansToCompact, instanceIDs, localitySets, targetSize, maxFiles,
+	)
+	if err != nil {
+		return compactionPlan{}, errors.Wrap(err, "creating core placements")
+	}
+
+	plan := planCtx.NewPhysicalPlan()
+	plan.AddNoInputStage(
+		corePlacements,
+		execinfrapb.PostProcessSpec{},
+		[]*types.T{},
+		execinfrapb.Ordering{},
+		nil, /* finalizeLastStageCb */
+	)
+	return compactionPlan{plan: plan, planCtx: planCtx, localitySets: localitySets}, nil
+}
+
+type compactionPlan struct {
+	plan         *sql.PhysicalPlan
+	planCtx      *sql.PlanningCtx
+	localitySets map[string]*localitySet
+}
+
+func runCompactionPlan(
+	ctx context.Context,
+	execCtx sql.JobExecContext,
+	jobID jobspb.JobID,
+	compactionPlan compactionPlan,
+	progCh chan *execinfrapb.RemoteProducerMetadata_BulkProcessorProgress,
+) error {
+	sql.FinalizePlan(ctx, compactionPlan.planCtx, compactionPlan.plan)
 
 	metaFn := func(_ context.Context, meta *execinfrapb.ProducerMetadata) error {
 		if meta.BulkProcessorProgress != nil {
@@ -129,81 +188,16 @@ func runCompactionPlan(
 	defer recv.Release()
 
 	jobsprofiler.StorePlanDiagram(
-		ctx, execCtx.ExecCfg().DistSQLSrv.Stopper, plan, execCtx.ExecCfg().InternalDB, jobID,
+		ctx, execCtx.ExecCfg().DistSQLSrv.Stopper,
+		compactionPlan.plan, execCtx.ExecCfg().InternalDB, jobID,
 	)
 
 	evalCtxCopy := execCtx.ExtendedEvalContext().Copy()
-	dsp.Run(ctx, planCtx, nil /* txn */, plan, recv, evalCtxCopy, nil /* finishedSetupFn */)
+	execCtx.DistSQLPlanner().Run(
+		ctx, compactionPlan.planCtx,
+		nil /* txn */, compactionPlan.plan, recv, evalCtxCopy, nil, /* finishedSetupFn */
+	)
 	return rowResultWriter.Err()
-}
-
-// createCompactionPlan creates an un-finalized physical plan that will
-// distribute spans from a generator across the cluster for compaction.
-func createCompactionPlan(
-	ctx context.Context,
-	execCtx sql.JobExecContext,
-	jobID jobspb.JobID,
-	details jobspb.BackupDetails,
-	manifest *backuppb.BackupManifest,
-	dsp *sql.DistSQLPlanner,
-	genSpan func(ctx context.Context, spanCh chan execinfrapb.RestoreSpanEntry) error,
-	spansToCompact roachpb.Spans,
-	targetSize int64,
-	maxFiles int64,
-) (*sql.PhysicalPlan, *sql.PlanningCtx, error) {
-	evalCtx := execCtx.ExtendedEvalContext()
-	oracle := physicalplan.DefaultReplicaChooser
-
-	locFilter := sql.SingleLocalityFilter(details.ExecutionLocality)
-	if useBulkOracle.Get(&evalCtx.Settings.SV) {
-		var err error
-		oracle, err = kvfollowerreadsccl.NewLocalityFilteringBulkOracle(
-			dsp.ReplicaOracleConfig(evalCtx.Locality),
-			locFilter,
-		)
-		if err != nil {
-			return nil, nil, errors.Wrap(err, "failed to create locality filtering bulk oracle")
-		}
-	}
-
-	planCtx, instanceIDs, err := dsp.SetupAllNodesPlanningWithOracle(
-		ctx, evalCtx, execCtx.ExecCfg(),
-		oracle, locFilter, sql.NoStrictLocalityFiltering,
-	)
-	if err != nil {
-		return nil, nil, errors.Wrap(err, "setting up node planning")
-	}
-	instanceLocalities := make([]roachpb.Locality, len(instanceIDs))
-	for i, id := range instanceIDs {
-		desc, err := dsp.GetSQLInstanceInfo(id)
-		if err != nil {
-			return nil, nil, errors.Wrap(err, "getting instance info")
-		}
-		instanceLocalities[i] = desc.Locality
-	}
-	localitySets, err := buildLocalitySets(
-		ctx, instanceIDs, instanceLocalities, details.StrictLocalityFiltering, genSpan,
-	)
-	if err != nil {
-		return nil, nil, errors.Wrap(err, "building locality sets")
-	}
-	corePlacements, err := createCompactionCorePlacements(
-		ctx, jobID, execCtx.User(), details, manifest.ElidedPrefix, genSpan,
-		spansToCompact, instanceIDs, localitySets, targetSize, maxFiles,
-	)
-	if err != nil {
-		return nil, nil, errors.Wrap(err, "creating core placements")
-	}
-
-	plan := planCtx.NewPhysicalPlan()
-	plan.AddNoInputStage(
-		corePlacements,
-		execinfrapb.PostProcessSpec{},
-		[]*types.T{},
-		execinfrapb.Ordering{},
-		nil, /* finalizeLastStageCb */
-	)
-	return plan, planCtx, nil
 }
 
 type localitySet struct {

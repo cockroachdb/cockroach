@@ -9,12 +9,12 @@ go_library(
     importpath = "github.com/cockroachdb/cockroach/pkg/sql/fingerprint",
     visibility = ["//visibility:public"],
     deps = [
-        "//pkg/ccl/kvccl/kvfollowerreadsccl",
         "//pkg/jobs",
         "//pkg/jobs/joberror",
         "//pkg/jobs/jobfrontier",
         "//pkg/jobs/jobspb",
         "//pkg/kv",
+        "//pkg/kv/followerreads",
         "//pkg/kv/kvpb",
         "//pkg/kv/kvserver/protectedts",
         "//pkg/roachpb",

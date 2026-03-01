@@ -22,6 +22,7 @@ import (
 	descpb "github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
+	"github.com/cockroachdb/cockroach/pkg/sql/hintpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
@@ -85,6 +86,16 @@ type systemBackupConfiguration struct {
 	// is provided then `defaultRestoreFunc` is used.
 	customRestoreFunc func(ctx context.Context, deps customRestoreFuncDeps, txn isql.Txn, systemTableName, tempTableName string) error
 
+	// nonClusterMigrationFunc is used instead of migrationFunc during non-cluster
+	// restores (table/database restores). It should filter rows to only include
+	// descriptors being restored, then rekey IDs appropriately.
+	nonClusterMigrationFunc func(ctx context.Context, txn isql.Txn, tempTableName string, rekeys jobspb.DescRewriteMap) error
+
+	// nonClusterRestoreFunc is used instead of customRestoreFunc during non-cluster
+	// restores (table/database restores). It should perform INSERT-based restoration
+	// (not DELETE+INSERT) and error if rows already exist to detect conflicts.
+	nonClusterRestoreFunc func(ctx context.Context, deps customRestoreFuncDeps, txn isql.Txn, systemTableName, tempTableName string) error
+
 	// The following fields are for testing.
 
 	// expectMissingInSystemTenant is true for tables that only exist in secondary tenants.
@@ -117,15 +128,23 @@ func defaultSystemTableRestoreFunc(
 	if err != nil {
 		return errors.Wrapf(err, "deleting data from system.%s", systemTableName)
 	}
+	return insertSystemDataFunc(ctx, customRestoreFuncDeps{}, txn, systemTableName, tempTableName)
+}
 
-	restoreQuery := fmt.Sprintf("INSERT INTO system.%s (SELECT * FROM %s);",
-		systemTableName, tempTableName)
-	opName = redact.Sprintf("%s-data-insert", systemTableName)
-	if _, err := txn.Exec(ctx, opName, txn.KV(), restoreQuery); err != nil {
-		return errors.Wrapf(err, "inserting data to system.%s", systemTableName)
-	}
+func insertSystemDataFunc(
+	ctx context.Context,
+	deps customRestoreFuncDeps,
+	txn isql.Txn,
+	systemTableName, tempTableName string,
+) error {
 
-	return nil
+	insertQuery := fmt.Sprintf(
+		"INSERT INTO system.%s (SELECT * FROM %s)",
+		systemTableName, tempTableName,
+	)
+	opName := redact.Sprintf("%s-data-insert", systemTableName)
+	_, err := txn.Exec(ctx, opName, txn.KV(), insertQuery)
+	return err
 }
 
 // Custom restore functions for different system tables.
@@ -506,6 +525,48 @@ VALUES ($1, $2, $3, $4, $5, $6, (SELECT user_id FROM system.users WHERE username
 	return nil
 }
 
+func statementHintsRestoreFunc(
+	ctx context.Context,
+	deps customRestoreFuncDeps,
+	txn isql.Txn,
+	systemTableName, tempTableName string,
+) error {
+	// Check if the temp table has the new columns (added in 26.2).
+	hasNewColumns, err := tableHasColumnName(ctx, txn, tempTableName, "hint_type")
+	if err != nil {
+		return err
+	}
+	if hasNewColumns {
+		// Temp table has all columns, use default restore.
+		return defaultSystemTableRestoreFunc(ctx, deps, txn, systemTableName, tempTableName)
+	}
+
+	// Restoring from a backup before 26.2.
+	deleteQuery := fmt.Sprintf("DELETE FROM system.%s WHERE true", systemTableName)
+	opName := redact.Sprintf("%s-data-deletion", systemTableName)
+	log.Eventf(ctx, "clearing data from system table %s with query %q",
+		systemTableName, deleteQuery)
+	_, err = txn.Exec(ctx, opName, txn.KV(), deleteQuery)
+	if err != nil {
+		return errors.Wrapf(err, "deleting data from system.%s", systemTableName)
+	}
+
+	// The old schema has 5 columns: row_id, hash (computed), fingerprint, hint,
+	// created_at. We can't insert into the computed 'hash' column, so we select
+	// only the non-computed columns. Make sure to also set the hint_type column
+	// to the only type of hint that currently exists: "REWRITE INLINE HINTS".
+	restoreQuery := fmt.Sprintf(`
+INSERT INTO system.%s (row_id, fingerprint, hint, created_at, hint_type)
+SELECT row_id, fingerprint, hint, created_at, '%s' FROM %s`,
+		systemTableName, hintpb.HintTypeRewriteInlineHints, tempTableName)
+	opName = redact.Sprintf("%s-data-insert", systemTableName)
+	if _, err := txn.Exec(ctx, opName, txn.KV(), restoreQuery); err != nil {
+		return errors.Wrapf(err, "inserting data to system.%s", systemTableName)
+	}
+
+	return nil
+}
+
 func tableHasColumnName(
 	ctx context.Context, txn isql.Txn, tableName string, columnName string,
 ) (bool, error) {
@@ -627,8 +688,10 @@ var systemTableBackupConfiguration = map[string]systemBackupConfiguration{
 		shouldIncludeInClusterBackup: optInToClusterBackup, // ID in "id".
 		// The zones table should be restored before the user data so that the range
 		// allocator properly distributes ranges during the restore.
-		migrationFunc:     rekeySystemTable("id"),
-		restoreBeforeData: true,
+		migrationFunc:           rekeySystemTable("id"),
+		restoreBeforeData:       true,
+		nonClusterMigrationFunc: nonClusterRekeySystemTable("id"),
+		nonClusterRestoreFunc:   insertSystemDataFunc,
 	},
 	systemschema.SettingsTable.GetName(): {
 		// The settings table should be restored after all other system tables have
@@ -875,6 +938,7 @@ var systemTableBackupConfiguration = map[string]systemBackupConfiguration{
 	},
 	systemschema.StatementHintsTable.GetName(): {
 		shouldIncludeInClusterBackup: optInToClusterBackup, // No desc ID columns.
+		customRestoreFunc:            statementHintsRestoreFunc,
 	},
 	systemschema.TableStatisticsLocksTable.GetName(): {
 		shouldIncludeInClusterBackup: optOutOfClusterBackup,
@@ -954,6 +1018,38 @@ func rekeySystemTable(
 		}
 
 		return nil
+	}
+}
+
+func nonClusterRekeySystemTable(
+	colName string,
+) func(context.Context, isql.Txn, string, jobspb.DescRewriteMap) error {
+	return func(ctx context.Context, txn isql.Txn, tempTableName string, rekeys jobspb.DescRewriteMap) error {
+		restoringIDs := make([]string, 0, len(rekeys))
+		for oldID := range rekeys {
+			restoringIDs = append(restoringIDs, fmt.Sprintf("%d", oldID))
+		}
+
+		// Delete all rows for descriptors NOT being restored
+		var deleteQuery string
+		if len(restoringIDs) == 0 {
+			deleteQuery = fmt.Sprintf("DELETE FROM %s", tempTableName)
+		} else {
+			// Keep only rows for descriptors being restored
+			deleteQuery = fmt.Sprintf(
+				"DELETE FROM %s WHERE %s NOT IN (%s)",
+				tempTableName, colName, strings.Join(restoringIDs, ", "),
+			)
+		}
+
+		log.Eventf(ctx, "filtering %s to only restored descriptors", tempTableName)
+		if _, err := txn.Exec(
+			ctx, redact.Sprintf("filter-%s", tempTableName), txn.KV(), deleteQuery,
+		); err != nil {
+			return errors.Wrapf(err, "filtering %s", tempTableName)
+		}
+
+		return rekeySystemTable(colName)(ctx, txn, tempTableName, rekeys)
 	}
 }
 

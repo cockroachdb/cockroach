@@ -45,19 +45,19 @@ sequence req=req1
 
 on-lock-acquired req=req1 key=kSSINormal1 dur=r
 ----
-[-] acquire lock: txn 00000001 @ ‹kSSINormal1›
+[-] acquire lock: txn 00000001 acquiring Replicated Intent lock on ‹"kSSINormal1"›
 
 on-lock-acquired req=req1 key=kSSINormal2 dur=r
 ----
-[-] acquire lock: txn 00000001 @ ‹kSSINormal2›
+[-] acquire lock: txn 00000001 acquiring Replicated Intent lock on ‹"kSSINormal2"›
 
 on-lock-acquired req=req1 key=kSSINormal3 dur=r
 ----
-[-] acquire lock: txn 00000001 @ ‹kSSINormal3›
+[-] acquire lock: txn 00000001 acquiring Replicated Intent lock on ‹"kSSINormal3"›
 
 on-lock-acquired req=req1 key=kSSINormal4 dur=r
 ----
-[-] acquire lock: txn 00000001 @ ‹kSSINormal4›
+[-] acquire lock: txn 00000001 acquiring Replicated Intent lock on ‹"kSSINormal4"›
 
 finish req=req1
 ----
@@ -79,19 +79,19 @@ sequence req=req2
 
 on-lock-acquired req=req2 key=kSSIHigh1 dur=r
 ----
-[-] acquire lock: txn 00000002 @ ‹kSSIHigh1›
+[-] acquire lock: txn 00000002 acquiring Replicated Intent lock on ‹"kSSIHigh1"›
 
 on-lock-acquired req=req2 key=kSSIHigh2 dur=r
 ----
-[-] acquire lock: txn 00000002 @ ‹kSSIHigh2›
+[-] acquire lock: txn 00000002 acquiring Replicated Intent lock on ‹"kSSIHigh2"›
 
 on-lock-acquired req=req2 key=kSSIHigh3 dur=r
 ----
-[-] acquire lock: txn 00000002 @ ‹kSSIHigh3›
+[-] acquire lock: txn 00000002 acquiring Replicated Intent lock on ‹"kSSIHigh3"›
 
 on-lock-acquired req=req2 key=kSSIHigh4 dur=r
 ----
-[-] acquire lock: txn 00000002 @ ‹kSSIHigh4›
+[-] acquire lock: txn 00000002 acquiring Replicated Intent lock on ‹"kSSIHigh4"›
 
 finish req=req2
 ----
@@ -113,19 +113,19 @@ sequence req=req3
 
 on-lock-acquired req=req3 key=kRCNormal1 dur=r
 ----
-[-] acquire lock: txn 00000003 @ ‹kRCNormal1›
+[-] acquire lock: txn 00000003 acquiring Replicated Intent lock on ‹"kRCNormal1"›
 
 on-lock-acquired req=req3 key=kRCNormal2 dur=r
 ----
-[-] acquire lock: txn 00000003 @ ‹kRCNormal2›
+[-] acquire lock: txn 00000003 acquiring Replicated Intent lock on ‹"kRCNormal2"›
 
 on-lock-acquired req=req3 key=kRCNormal3 dur=r
 ----
-[-] acquire lock: txn 00000003 @ ‹kRCNormal3›
+[-] acquire lock: txn 00000003 acquiring Replicated Intent lock on ‹"kRCNormal3"›
 
 on-lock-acquired req=req3 key=kRCNormal4 dur=r
 ----
-[-] acquire lock: txn 00000003 @ ‹kRCNormal4›
+[-] acquire lock: txn 00000003 acquiring Replicated Intent lock on ‹"kRCNormal4"›
 
 finish req=req3
 ----
@@ -147,19 +147,19 @@ sequence req=req4
 
 on-lock-acquired req=req4 key=kRCHigh1 dur=r
 ----
-[-] acquire lock: txn 00000004 @ ‹kRCHigh1›
+[-] acquire lock: txn 00000004 acquiring Replicated Intent lock on ‹"kRCHigh1"›
 
 on-lock-acquired req=req4 key=kRCHigh2 dur=r
 ----
-[-] acquire lock: txn 00000004 @ ‹kRCHigh2›
+[-] acquire lock: txn 00000004 acquiring Replicated Intent lock on ‹"kRCHigh2"›
 
 on-lock-acquired req=req4 key=kRCHigh3 dur=r
 ----
-[-] acquire lock: txn 00000004 @ ‹kRCHigh3›
+[-] acquire lock: txn 00000004 acquiring Replicated Intent lock on ‹"kRCHigh3"›
 
 on-lock-acquired req=req4 key=kRCHigh4 dur=r
 ----
-[-] acquire lock: txn 00000004 @ ‹kRCHigh4›
+[-] acquire lock: txn 00000004 acquiring Replicated Intent lock on ‹"kRCHigh4"›
 
 finish req=req4
 ----
@@ -209,7 +209,7 @@ handle-lock-conflict-error req=reqDiscoverInitial lease-seq=1
   lock txn=txnSSINormalPushee  key=kSSINormal3
   lock txn=txnSSINormalPushee  key=kSSINormal4
 ----
-[6] handle lock conflict error reqDiscoverInitial: handled conflicting locks on ‹"kRCHigh1"›, ‹"kRCHigh2"›, ‹"kRCHigh3"›, ‹"kRCHigh4"›, ‹"kRCNormal1"› ... ‹"kSSIHigh4"›, ‹"kSSINormal1"›, ‹"kSSINormal2"›, ‹"kSSINormal3"›, ‹"kSSINormal4"›, released latches
+[6] handle lock conflict error reqDiscoverInitial: added 16 discovered lock(s) to lock table: conflicting locks on ‹"kRCHigh1"›, ‹"kRCHigh2"›, ‹"kRCHigh3"›, ‹"kRCHigh4"›, ‹"kRCNormal1"› ... ‹"kSSIHigh4"›, ‹"kSSINormal1"›, ‹"kSSINormal2"›, ‹"kSSINormal3"›, ‹"kSSINormal4"›
 
 finish req=reqDiscoverInitial
 ----

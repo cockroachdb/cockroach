@@ -12,6 +12,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/goschedstats"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
@@ -24,6 +25,19 @@ var cpuTimeTokenACEnabled = settings.RegisterBoolSetting(
 	"if true, CPU time token AC will be used for foreground KVWork, instead of slots-based AC -- "+
 		"note that this is not supported in production except on multi-tenant Serverless clusters",
 	false)
+
+// cpuTimeTokenACKillSwitch is an env var kill switch that disables CPU time
+// token AC regardless of the cluster setting. This is useful when SQL is
+// unavailable, preventing the cluster setting from being changed.
+var cpuTimeTokenACKillSwitch = envutil.EnvOrDefaultBool(
+	"COCKROACH_DISABLE_CPU_TIME_TOKEN_AC", false)
+
+// cpuTimeTokenACIsEnabled returns true if CPU time token AC is enabled. It
+// checks both the cluster setting and the env var kill switch. The kill switch
+// takes precedence over the cluster setting.
+func cpuTimeTokenACIsEnabled(sv *settings.Values) bool {
+	return !cpuTimeTokenACKillSwitch && cpuTimeTokenACEnabled.Get(sv)
+}
 
 // CPUGrantCoordinators's main purpose is to act as a shim. Depending on
 // whether admission.cpu_time_tokens.enabled is true or false, a WorkQueue
@@ -45,7 +59,7 @@ type CPUGrantCoordinators struct {
 // tenant WorkQueue. This is a prioritization scheme. For details regarding
 // the granters, see cpu_time_token_granter.go.
 func (coord *CPUGrantCoordinators) GetKVWorkQueue(isSystemTenant bool) *WorkQueue {
-	if !cpuTimeTokenACEnabled.Get(&coord.st.SV) {
+	if !cpuTimeTokenACIsEnabled(&coord.st.SV) {
 		return coord.slotsCoord.GetWorkQueue(KVWork)
 	}
 	if isSystemTenant {
@@ -130,6 +144,9 @@ func makeCPUTimeTokenGrantCoordinator(
 		requesters[tier] = makeWorkQueue(
 			ambientCtx, KVWork, &childGranters[tier], settings, wqMetrics, opts)
 		granter.requester[tier] = requesters[tier]
+		// This type assertion is always valid, since makeWorkQueue always
+		// returns a *WorkQueue.
+		allocator.queues[tier] = requesters[tier].(*WorkQueue)
 	}
 
 	coordinator := &cpuTimeTokenGrantCoordinator{
@@ -146,13 +163,13 @@ func makeCPUTimeTokenGrantCoordinator(
 	// https://github.com/cockroachdb/cockroach/issues/161945
 	if !knobs.DisableCPUTimeTokenFillerGoroutine {
 		var once sync.Once
-		if cpuTimeTokenACEnabled.Get(&settings.SV) {
+		if cpuTimeTokenACIsEnabled(&settings.SV) {
 			once.Do(func() {
 				filler.start(ambientCtx.AnnotateCtx(context.Background()))
 			})
 		}
 		cpuTimeTokenACEnabled.SetOnChange(&settings.SV, func(ctx context.Context) {
-			if cpuTimeTokenACEnabled.Get(&settings.SV) {
+			if cpuTimeTokenACIsEnabled(&settings.SV) {
 				once.Do(func() {
 					filler.start(ambientCtx.AnnotateCtx(context.Background()))
 				})

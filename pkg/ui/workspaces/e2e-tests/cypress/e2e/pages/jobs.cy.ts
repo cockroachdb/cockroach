@@ -69,7 +69,6 @@ describe("jobs page", () => {
     cy.get('[class*="summary--card"]').contains("Status");
     cy.get('[class*="summary--card"]').contains("Creation Time");
     cy.get('[class*="summary--card"]').contains("Last Modified Time");
-    cy.get('[class*="summary--card"]').contains("Completed Time");
     cy.get('[class*="summary--card"]').contains("User Name");
     cy.get('[class*="summary--card"]').contains("Coordinator Node");
 

@@ -77,7 +77,7 @@ func TestHintTableOperations(t *testing.T) {
 	// Insert a hint.
 	var insertedHintID1 int64
 	err = db.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
-		insertedHintID1, err = hints.InsertHintIntoDB(ctx, txn, fingerprint1, hint1.StatementHintUnion)
+		insertedHintID1, err = hints.InsertHintIntoDB(ctx, ts.ClusterSettings(), txn, fingerprint1, hint1.StatementHintUnion)
 		return err
 	})
 	require.NoError(t, err)
@@ -103,7 +103,7 @@ func TestHintTableOperations(t *testing.T) {
 	// Insert multiple hints for the same fingerprint.
 	var insertedHintID2 int64
 	err = db.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
-		insertedHintID2, err = hints.InsertHintIntoDB(ctx, txn, fingerprint1, hint1.StatementHintUnion)
+		insertedHintID2, err = hints.InsertHintIntoDB(ctx, ts.ClusterSettings(), txn, fingerprint1, hint1.StatementHintUnion)
 		return err
 	})
 	require.NoError(t, err)
@@ -125,7 +125,7 @@ func TestHintTableOperations(t *testing.T) {
 	// Insert hint for different fingerprint.
 	var insertedHintID3 int64
 	err = db.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
-		insertedHintID3, err = hints.InsertHintIntoDB(ctx, txn, fingerprint2, hint2.StatementHintUnion)
+		insertedHintID3, err = hints.InsertHintIntoDB(ctx, ts.ClusterSettings(), txn, fingerprint2, hint2.StatementHintUnion)
 		return err
 	})
 	require.NoError(t, err)
@@ -147,7 +147,7 @@ func TestHintTableOperations(t *testing.T) {
 	var hintEmpty hintpb.StatementHintUnion
 	hintEmpty.SetValue(&hintpb.InjectHints{})
 	err = db.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
-		emptyFingerprintHintID, err = hints.InsertHintIntoDB(ctx, txn, "", hintEmpty)
+		emptyFingerprintHintID, err = hints.InsertHintIntoDB(ctx, ts.ClusterSettings(), txn, "", hintEmpty)
 		return err
 	})
 	require.NoError(t, err)

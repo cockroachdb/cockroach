@@ -3886,6 +3886,10 @@ func (t *logicTest) execQuery(query logicQuery) error {
 			for i := range scalars {
 				if scalars[i] == tree.DNull {
 					args[i] = gosql.NullString{}
+				} else if sv, ok := scalars[i].(*tree.StrVal); ok {
+					// Use the raw string directly to avoid FmtBareStrings
+					// escaping non-ASCII characters (e.g. ü → \u00FC).
+					args[i] = sv.RawString()
 				} else {
 					args[i] = strings.Trim(tree.AsStringWithFlags(scalars[i], tree.FmtBareStrings), "'")
 				}

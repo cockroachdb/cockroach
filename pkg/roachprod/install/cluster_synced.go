@@ -392,7 +392,7 @@ func (c *SyncedCluster) roachprodEnvRegex(node Node) string {
 // By wrapping every command with a hostname check as is done here, we
 // ensure that the cached cluster information is still correct.
 func (c *SyncedCluster) validateHostnameCmd(cmd string, node Node) string {
-	isValidHost := fmt.Sprintf("[[ `hostname` == '%s' ]]", vm.Name(c.Name, int(node)))
+	isValidHost := fmt.Sprintf("[[ `hostname` == '%s' ]]", c.VMs[node-1].Name)
 	errMsg := fmt.Sprintf("expected host to be part of %s, but is `hostname`", c.Name)
 	elseBranch := "fi"
 	if cmd != "" {
@@ -1531,6 +1531,7 @@ fi
 %[3]s cert create-node %[4]s $SHARED_ARGS
 %[3]s cert create-tenant-client %[5]d %[4]s $SHARED_ARGS
 %[3]s cert create-client root $TENANT_SCOPE_OPT $SHARED_ARGS
+%[3]s mt cert create-tenant-signing --certs-dir=$CERT_DIR %[5]d
 tar cvf %[6]s $CERT_DIR
 `,
 				CockroachNodeTenantCertsDir,

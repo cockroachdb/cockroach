@@ -1034,9 +1034,10 @@ func TestPaceUpdateSignalling(t *testing.T) {
 	t.Run("pacing_interval=0ms", func(t *testing.T) {
 		closedts.SideTransportPacingRefreshInterval.Override(ctx, &st.SV, 0)
 		testPacing(t, 3 /* seqNum */, func(timeSpread time.Duration) {
-			// The expectation here is many 30x what is typically seen. But, we want
-			// to avoid flakes.
-			require.LessOrEqual(t, timeSpread, 30*time.Millisecond)
+			// With pacing disabled, all 1000 goroutines should be woken nearly
+			// simultaneously. The typical spread is ~1ms, but CI machines under
+			// load need more headroom for goroutine scheduling.
+			require.LessOrEqual(t, timeSpread, 40*time.Millisecond)
 		})
 	})
 }

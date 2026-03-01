@@ -9,6 +9,8 @@ import (
 	"context"
 	"unsafe"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/hintpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/parserutils"
@@ -159,17 +161,33 @@ func parseHint(
 // InsertHintIntoDB inserts a statement hint into the system.statement_hints
 // table. It returns the hint ID of the newly inserted hint if successful.
 func InsertHintIntoDB(
-	ctx context.Context, txn isql.Txn, fingerprint string, hint hintpb.StatementHintUnion,
+	ctx context.Context,
+	settings *cluster.Settings,
+	txn isql.Txn,
+	fingerprint string,
+	hint hintpb.StatementHintUnion,
 ) (int64, error) {
 	const opName = "insert-statement-hint"
 	hintBytes, err := hintpb.ToBytes(hint)
 	if err != nil {
 		return 0, err
 	}
-	const insertStmt = `INSERT INTO system.statement_hints ("fingerprint", "hint") VALUES ($1, $2) RETURNING "row_id"`
+
+	// Check whether the hint_type column has been added by the migration. If
+	// not, fall back to inserting without it.
+	var insertStmt string
+	var args []interface{}
+	if settings.Version.IsActive(ctx, clusterversion.V26_2_StatementHintsTypeNameEnabledColumnsAdded) {
+		insertStmt = `INSERT INTO system.statement_hints ("fingerprint", "hint", "hint_type", "enabled") VALUES ($1, $2, $3, $4) RETURNING "row_id"`
+		args = []interface{}{fingerprint, hintBytes, hintpb.HintTypeRewriteInlineHints, true}
+	} else {
+		insertStmt = `INSERT INTO system.statement_hints ("fingerprint", "hint") VALUES ($1, $2) RETURNING "row_id"`
+		args = []interface{}{fingerprint, hintBytes}
+	}
+
 	row, err := txn.QueryRowEx(
 		ctx, opName, txn.KV(), sessiondata.NodeUserSessionDataOverride,
-		insertStmt, fingerprint, hintBytes,
+		insertStmt, args...,
 	)
 	if err != nil {
 		return 0, err

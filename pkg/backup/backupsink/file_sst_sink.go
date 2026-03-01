@@ -11,7 +11,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/backup/backuppb"
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/ccl/storageccl"
 	"github.com/cockroachdb/cockroach/pkg/cloud"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
@@ -326,7 +325,7 @@ func (s *FileSSTSink) open(ctx context.Context) error {
 		return err
 	}
 	if s.conf.Enc != nil {
-		w, err = storageccl.EncryptingWriter(w, s.conf.Enc.Key)
+		w, err = storage.EncryptingWriter(w, s.conf.Enc.Key)
 		if err != nil {
 			return err
 		}

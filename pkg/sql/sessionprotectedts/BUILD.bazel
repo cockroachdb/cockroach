@@ -26,7 +26,6 @@ go_test(
     deps = [
         ":sessionprotectedts",
         "//pkg/base",
-        "//pkg/kv/kvclient/kvtenant",
         "//pkg/kv/kvserver/protectedts",
         "//pkg/kv/kvserver/protectedts/ptpb",
         "//pkg/kv/kvserver/protectedts/ptreconcile",

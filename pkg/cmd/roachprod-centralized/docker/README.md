@@ -83,7 +83,7 @@ Remote builds use Cloud Build and only produce amd64 images (arm64 emulation is 
 ```bash
 # Basic run with minimal configuration
 podman run -p 8080:8080 -p 8081:8081 \
-  -e ROACHPROD_API_AUTHENTICATION_DISABLED=true \
+  -e ROACHPROD_API_AUTHENTICATION_METHOD=disabled \
   -e ROACHPROD_DATABASE_TYPE=memory \
   us-central1-docker.pkg.dev/cockroach-testeng-infra/roachprod/roachprod-centralized:latest api
 
@@ -108,7 +108,7 @@ services:
     environment:
       # Development configuration
       - ROACHPROD_LOG_LEVEL=debug
-      - ROACHPROD_API_AUTHENTICATION_DISABLED=true
+      - ROACHPROD_API_AUTHENTICATION_METHOD=disabled
       - ROACHPROD_DATABASE_TYPE=memory
       - ROACHPROD_TASKS_WORKERS=2
     volumes:
@@ -148,7 +148,7 @@ ROACHPROD_API_METRICS_ENABLED=true                 # Enable metrics
 ROACHPROD_API_METRICS_PORT=8081                    # Metrics port
 
 # Authentication
-ROACHPROD_API_AUTHENTICATION_DISABLED=true         # Disable auth (dev only)
+ROACHPROD_API_AUTHENTICATION_METHOD=disabled         # Disable auth (dev only)
 ROACHPROD_API_AUTHENTICATION_JWT_HEADER="X-Goog-IAP-JWT-Assertion"
 ROACHPROD_API_AUTHENTICATION_JWT_AUDIENCE=""       # JWT audience
 
@@ -302,7 +302,7 @@ docker exec <container-id> env | grep ROACHPROD
 **Authentication failures:**
 ```bash
 # For development, disable authentication
-docker run -e ROACHPROD_API_AUTHENTICATION_DISABLED=true ...
+docker run -e ROACHPROD_API_AUTHENTICATION_METHOD=disabled ...
 ```
 
 **Database connection issues:**

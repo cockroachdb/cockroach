@@ -1268,11 +1268,12 @@ func (b *logicalPropsBuilder) buildLimitOrTopKProps(
 	// Cardinality
 	// -----------
 	// Limit puts a cap on the number of rows returned by input.
-	rel.Cardinality = inputProps.Cardinality
 	if constLimit <= 0 {
 		rel.Cardinality = props.ZeroCardinality
 	} else if constLimit < math.MaxUint32 {
-		rel.Cardinality = rel.Cardinality.Limit(uint32(constLimit))
+		rel.Cardinality = inputProps.Cardinality.Limit(uint32(constLimit))
+	} else {
+		rel.Cardinality = inputProps.Cardinality.AsLowAs(0)
 	}
 }
 
@@ -1303,7 +1304,7 @@ func (b *logicalPropsBuilder) buildOffsetProps(offset *OffsetExpr, rel *props.Re
 	// Cardinality
 	// -----------
 	// Offset decreases the number of rows that are passed through from input.
-	rel.Cardinality = inputProps.Cardinality
+	rel.Cardinality = inputProps.Cardinality.AsLowAs(0)
 	if cnst, ok := offset.Offset.(*ConstExpr); ok {
 		constOffset := int64(*cnst.Value.(*tree.DInt))
 		if constOffset > 0 {

@@ -27,21 +27,6 @@ func newFlowSpec(flowID execinfrapb.FlowID, gateway base.SQLInstanceID) *execinf
 	return spec
 }
 
-// ReleaseFlowSpec returns this FlowSpec back to the pool of FlowSpecs. It may
-// not be used again after this call.
-func ReleaseFlowSpec(spec *execinfrapb.FlowSpec) {
-	for i := range spec.Processors {
-		if tr := spec.Processors[i].Core.TableReader; tr != nil {
-			releaseTableReaderSpec(tr)
-		}
-		spec.Processors[i] = execinfrapb.ProcessorSpec{}
-	}
-	*spec = execinfrapb.FlowSpec{
-		Processors: spec.Processors[:0],
-	}
-	flowSpecPool.Put(spec)
-}
-
 var trSpecPool = sync.Pool{
 	New: func() interface{} {
 		return &execinfrapb.TableReaderSpec{}

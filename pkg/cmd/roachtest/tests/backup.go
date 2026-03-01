@@ -260,6 +260,7 @@ func registerBackupIntents(r registry.Registry) {
 	r.Add(registry.TestSpec{
 		Name:                      "backup/intents/pending",
 		Owner:                     registry.OwnerKV,
+		Benchmark:                 true,
 		Cluster:                   r.MakeClusterSpec(4),
 		EncryptionSupport:         registry.EncryptionMetamorphic,
 		Leases:                    registry.MetamorphicLeases,
@@ -290,6 +291,7 @@ func registerBackupIntents(r registry.Registry) {
 	r.Add(registry.TestSpec{
 		Name:                      "backup/intents/abandoned",
 		Owner:                     registry.OwnerKV,
+		Benchmark:                 true,
 		Cluster:                   r.MakeClusterSpec(4),
 		EncryptionSupport:         registry.EncryptionMetamorphic,
 		Leases:                    registry.MetamorphicLeases,

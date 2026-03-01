@@ -8,7 +8,7 @@
       "account_file": "gcp_credentials.json",
       "tags": ["ssh-server"],
       "project_id": "crl-teamcity-agents",
-      "source_image_family": "ubuntu-2004-lts",
+      "source_image_family": "ubuntu-2404-lts-amd64",
       "zone": "us-east1-b",
       "machine_type": "n2-standard-32",
       "image_name": "{{user `image_id`}}",

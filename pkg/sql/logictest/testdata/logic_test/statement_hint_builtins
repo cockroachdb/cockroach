@@ -47,6 +47,13 @@ SELECT fingerprint FROM system.statement_hints WHERE row_id = $hint1;
 ----
 SELECT * FROM xy WHERE y = _
 
+# Verify that hint_type and enabled columns are set correctly.
+skipif config local-mixed-25.4 local-mixed-26.1
+query TB
+SELECT hint_type, enabled FROM system.statement_hints WHERE row_id = $hint1;
+----
+REWRITE INLINE HINTS  true
+
 let $hint2
 SELECT information_schema.crdb_rewrite_inline_hints(
   'SELECT * FROM xy WHERE y = 10',

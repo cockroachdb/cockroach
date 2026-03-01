@@ -95,6 +95,17 @@ type testModel struct {
 	rates rates
 }
 
+type testBurstManager struct {
+	tokens int64
+}
+
+func (m *testBurstManager) refillBurstBuckets(toAdd int64, capacity int64) {
+	m.tokens += toAdd
+	if m.tokens > capacity {
+		m.tokens = capacity
+	}
+}
+
 func (m *testModel) init() {}
 
 func (m *testModel) fit(_ context.Context, targets targetUtilizations) rates {
@@ -141,8 +152,10 @@ func TestCPUTimeTokenAllocator(t *testing.T) {
 	granter.requester[testTier1] = requesters[testTier1]
 
 	var buf strings.Builder
+	var printBurstMgrs func() string
 	flushAndReset := func() string {
 		fmt.Fprint(&buf, granter.String())
+		fmt.Fprint(&buf, printBurstMgrs())
 		str := buf.String()
 		buf.Reset()
 		return str
@@ -153,10 +166,25 @@ func TestCPUTimeTokenAllocator(t *testing.T) {
 	model.rates[testTier0][noBurst] = 4000
 	model.rates[testTier1][canBurst] = 3000
 	model.rates[testTier1][noBurst] = 2000
+	burstMgrs := [numResourceTiers]*testBurstManager{
+		testTier0: {},
+		testTier1: {},
+	}
 	allocator := cpuTimeTokenAllocator{
 		granter:  granter,
 		settings: cluster.MakeClusterSettings(),
 		model:    model,
+		queues: [numResourceTiers]workQueueIForAllocator{
+			testTier0: burstMgrs[testTier0],
+			testTier1: burstMgrs[testTier1],
+		},
+	}
+	printBurstMgrs = func() string {
+		var b strings.Builder
+		fmt.Fprintf(&b, "burstM\n")
+		fmt.Fprintf(&b, "tier0  %d\n", burstMgrs[testTier0].tokens)
+		fmt.Fprintf(&b, "tier1  %d\n", burstMgrs[testTier1].tokens)
+		return b.String()
 	}
 
 	ctx := context.Background()
@@ -183,6 +211,8 @@ func TestCPUTimeTokenAllocator(t *testing.T) {
 			granter.mu.buckets[testTier0][noBurst].tokens = 0
 			granter.mu.buckets[testTier1][canBurst].tokens = 0
 			granter.mu.buckets[testTier1][noBurst].tokens = 0
+			burstMgrs[testTier0].tokens = 0
+			burstMgrs[testTier1].tokens = 0
 			return flushAndReset()
 		case "setClusterSettings":
 			ctx := context.Background()

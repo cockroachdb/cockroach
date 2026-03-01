@@ -51,7 +51,7 @@ var importElasticCPUControlEnabled = settings.RegisterBoolSetting(
 	settings.ApplicationLevel,
 	"bulkio.import.elastic_control.enabled",
 	"determines whether import operations integrate with elastic CPU control",
-	false, // TODO(dt): enable this by default after more benchmarking.
+	true,
 )
 
 func getTableFromSpec(

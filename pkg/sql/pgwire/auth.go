@@ -144,11 +144,21 @@ func (c *conn) handleAuthentication(
 
 	// Delegate to the AuthMethod's MapRole to verify that the
 	// client-provided username matches one of the mappings.
-	if err := c.checkClientUsernameMatchesMapping(ctx, ac, behaviors.MapRole, systemIdentity); err != nil {
-		log.Dev.Warningf(ctx, "unable to map incoming identity %q to any database user: %+v", systemIdentity, err)
+	matchedIdentity, err := c.checkClientUsernameMatchesMapping(ctx, ac, behaviors, systemIdentity)
+	if err != nil {
+		log.Dev.Warningf(ctx, "unable to map incoming identity %q, or san identities %q to any database user: %+v", systemIdentity, behaviors.GetSANIdentities(), err)
 		ac.LogAuthFailed(ctx, eventpb.AuthFailReason_USER_NOT_FOUND, err)
 		return connClose, c.sendError(ctx, pgerror.WithCandidateCode(err, pgcode.InvalidAuthorizationSpecification))
 	}
+
+	// Update systemIdentity to the one that actually matched
+	if matchedIdentity != "" {
+		systemIdentity = matchedIdentity
+	}
+
+	// Now we can set the final system identity
+	c.sessionArgs.SystemIdentity = systemIdentity
+	ac.SetSystemIdentity(systemIdentity)
 
 	// Once chooseDbRole() returns, we know that the actual DB username
 	// will be present in c.sessionArgs.User.
@@ -331,9 +341,17 @@ func (c *conn) authOKMessage() error {
 	return c.msgBuilder.finishMsg(c.conn)
 }
 
-// checkClientUsernameMatchesMapping uses the provided RoleMapper to
-// verify that the client-provided username matches one of the
-// mappings for the system identity.
+// checkClientUsernameMatchesMapping verifies that the client
+// provided username matches one of the identity mappings,
+// using either certificate SAN identities via EnhancedMapRole
+// or a single system identity via MapRole.
+//
+// When EnhancedRoleMapper is not set, the function falls back to MapRole
+// with the single systemIdentity (e.g., certificate CN or GSSAPI principal).
+//
+// Returns the matched system identity on success, or an error if the requested
+// username does not correspond to any mapping.
+//
 // See: https://www.postgresql.org/docs/15/auth-username-maps.html
 // "There is no restriction regarding how many database users a given
 // operating system user can correspond to, nor vice versa. Thus,
@@ -344,22 +362,49 @@ func (c *conn) authOKMessage() error {
 // from the external authentication system with the database user name
 // that the user has requested to connect as."
 func (c *conn) checkClientUsernameMatchesMapping(
-	ctx context.Context, ac AuthConn, mapper RoleMapper, systemIdentity string,
-) error {
-	mapped, err := mapper(ctx, systemIdentity)
+	ctx context.Context, ac AuthConn, behaviors *AuthBehaviors, systemIdentity string,
+) (string, error) {
+	// Use the enhanced mapper when available to map from the full set of SAN
+	// identities. This allows selecting which specific SAN identity matched,
+	// which is needed when a certificate contains multiple SANs that could map
+	// to different database users.
+	if behaviors.IsEnhancedRoleMapperSet() {
+		mappings, err := behaviors.EnhancedMapRole(ctx, behaviors.GetSANIdentities())
+		if err != nil {
+			return "", err
+		}
+		if len(mappings) == 0 {
+			return "", errors.Newf("SAN system identities %q did not map to any database role", behaviors.GetSANIdentities())
+		}
+
+		// Find which mapping corresponds to the requested user
+		for _, m := range mappings {
+			if m.MappedUser == c.sessionArgs.User {
+				ac.SetDbUser(m.MappedUser)
+				// Return the specific SAN identity that matched!
+				return m.SystemIdentity, nil
+			}
+		}
+
+		return "", errors.Newf(
+			"requested user identity %q does not correspond to any mapping for SAN identities %q",
+			c.sessionArgs.User, behaviors.GetSANIdentities())
+	}
+
+	mapped, err := behaviors.MapRole(ctx, systemIdentity)
 	if err != nil {
-		return err
+		return "", err
 	}
 	if len(mapped) == 0 {
-		return errors.Newf("system identity %q did not map to a database role", systemIdentity)
+		return "", errors.Newf("system identity %q did not map to a database role", systemIdentity)
 	}
 	for _, m := range mapped {
 		if m == c.sessionArgs.User {
 			ac.SetDbUser(m)
-			return nil
+			return systemIdentity, nil
 		}
 	}
-	return errors.Newf("requested user identity %q does not correspond to any mapping for system identity %q",
+	return "", errors.Newf("requested user identity %q does not correspond to any mapping for system identity %q",
 		c.sessionArgs.User, systemIdentity)
 }
 

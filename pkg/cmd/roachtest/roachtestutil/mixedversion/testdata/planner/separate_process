@@ -44,8 +44,8 @@ Plan:
 ├── delete all-tenants override for the `version` key (9) [stage=system:tenant-setup;tenant:tenant-setup]
 ├── run startup hooks concurrently
 │   ├── run "create tables" hookId="planner_test.go:141", after 3m0s delay (10) [stage=system:on-startup;tenant:on-startup]
-│   └── run "initialize bank workload" hookId="mixedversion.go:885", after 100ms delay (11) [stage=system:on-startup;tenant:on-startup]
-├── run "bank workload" hookId="mixedversion.go:893" (12) [stage=system:background;tenant:background]
+│   └── run "initialize bank workload" hookId="mixedversion.go:907", after 100ms delay (11) [stage=system:on-startup;tenant:on-startup]
+├── run "bank workload" hookId="mixedversion.go:915" (12) [stage=system:background;tenant:background]
 ├── upgrade cluster from "v22.2.3" to "v23.1.4"
 │   ├── upgrade storage cluster
 │   │   ├── prevent auto-upgrades on system tenant by setting `preserve_downgrade_option` (13) [stage=system:init;tenant:upgrading-system]

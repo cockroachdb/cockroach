@@ -3,52 +3,39 @@
 // Use of this software is governed by the CockroachDB Software License
 // included in the /LICENSE file.
 
-import { shallow } from "enzyme";
-import { createMemoryHistory, History } from "history";
+import { render, screen } from "@testing-library/react";
 import React from "react";
-import { match as Match } from "react-router";
+import { MemoryRouter } from "react-router-dom";
 
-import { Sidebar } from "./index";
+import Sidebar from "./index";
+
+const mockUseSelector = jest.fn();
+jest.mock("react-redux", () => ({
+  ...jest.requireActual("react-redux"),
+  useSelector: (...args: any[]) => mockUseSelector(...args),
+}));
 
 describe("LayoutSidebar", () => {
-  let history: History;
-  let match: Match;
-
   beforeEach(() => {
-    history = createMemoryHistory();
-    match = {
-      isExact: true,
-      params: {},
-      path: "/reports/network",
-      url: "",
-    };
+    mockUseSelector.mockReset();
   });
 
-  it("does not show Network link for single node cluster", () => {
-    const wrapper = shallow(
-      <Sidebar
-        history={history}
-        match={match}
-        location={history.location}
-        isSingleNodeCluster={true}
-      />,
+  const renderSidebar = () =>
+    render(
+      <MemoryRouter initialEntries={["/reports/network"]}>
+        <Sidebar />
+      </MemoryRouter>,
     );
-    expect(
-      wrapper.findWhere(w => w.prop("to") === "/reports/network").exists(),
-    ).toBe(false);
+
+  it("does not show Network link for single node cluster", () => {
+    mockUseSelector.mockReturnValue(true);
+    renderSidebar();
+    expect(screen.queryByText("Network")).toBeNull();
   });
 
   it("shows Network link for multi node cluster", () => {
-    const wrapper = shallow(
-      <Sidebar
-        history={history}
-        match={match}
-        location={history.location}
-        isSingleNodeCluster={false}
-      />,
-    );
-    expect(
-      wrapper.findWhere(w => w.prop("to") === "/reports/network").exists(),
-    ).toBe(true);
+    mockUseSelector.mockReturnValue(false);
+    renderSidebar();
+    expect(screen.getByText("Network")).toBeTruthy();
   });
 });

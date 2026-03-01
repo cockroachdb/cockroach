@@ -31,11 +31,6 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-const (
-	// DefaultPeriodicRefreshInterval is the default interval at which the clusters are refreshed.
-	DefaultPeriodicRefreshInterval = 10 * time.Minute
-)
-
 // Service implements the clusters service interface and manages cluster discovery and synchronization
 // across multiple cloud providers. It coordinates with cloud APIs to discover roachprod clusters
 // and maintains an up-to-date view of the distributed cluster infrastructure.
@@ -45,6 +40,12 @@ type Service struct {
 	backgroundJobsCancelFunc context.CancelFunc
 	backgroundJobsWg         *sync.WaitGroup
 	roachprodCloud           *cloud.Cloud
+
+	// providerEnvironments maps providerID (e.g., "gce-my-project") to the
+	// configured environment name (e.g., "gcp-engineering"). Used by
+	// authorization checks to resolve cluster cloud providers to permission
+	// scopes.
+	providerEnvironments map[string]string
 
 	_taskService   stasks.IService
 	_store         clusters.IClustersRepository
@@ -83,6 +84,12 @@ func NewService(
 		_healthService:   healthService,
 		options:          options,
 	}
+
+	// Build the environment mapping from config. This is used by both
+	// worker and API-only modes for authorization scope resolution.
+	service.providerEnvironments = buildProviderEnvironments(
+		slog.Default(), options.CloudProviders,
+	)
 
 	// If instance is API only, skip cloud provider initialization
 	// because no background tasks will be scheduled.
@@ -167,11 +174,18 @@ func NewService(
 		service.roachprodCloud = cloud.NewCloud(
 			cloud.WithProviders(cloudProviders),
 		)
+
+		// Validate that the derived environment mapping matches the real
+		// provider identities. Mismatches indicate a config problem (e.g.,
+		// the AccountID in config doesn't match the credentials).
+		validateProviderEnvironments(
+			slog.Default(), service.providerEnvironments, cloudProviders,
+		)
 	}
 
 	// If the periodic refresh interval is not set, use the default.
 	if service.options.PeriodicRefreshInterval == 0 {
-		service.options.PeriodicRefreshInterval = DefaultPeriodicRefreshInterval
+		service.options.PeriodicRefreshInterval = types.DefaultPeriodicRefreshInterval
 	}
 
 	return service, nil

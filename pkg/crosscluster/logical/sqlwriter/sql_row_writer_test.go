@@ -11,6 +11,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdctest"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
@@ -117,4 +118,16 @@ func TestSQLRowWriter(t *testing.T) {
 	// Test DeleteRow with stale value
 	err = writer.DeleteRow(ctx, s.Clock().Now(), staleRow)
 	require.ErrorIs(t, err, ErrStalePreviousValue)
+
+	// Test InsertRow LWW failure against existing row: inserting with an older
+	// timestamp than the existing row should return a ConditionFailedError.
+	existingRow := makeTestRow(t, desc, 10, "existing")
+	newerTimestamp := s.Clock().Now()
+	require.NoError(t, writer.InsertRow(ctx, newerTimestamp, existingRow))
+	err = session.Txn(ctx, func(ctx context.Context) error {
+		return writer.InsertRow(ctx, newerTimestamp.Prev(), makeTestRow(t, desc, 10, "duplicate"))
+	})
+	var condErr *kvpb.ConditionFailedError
+	require.ErrorAs(t, err, &condErr)
+	require.True(t, condErr.OriginTimestampOlderThan.IsSet())
 }

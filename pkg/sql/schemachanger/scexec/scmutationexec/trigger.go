@@ -123,13 +123,52 @@ func (i *immediateVisitor) SetTriggerForwardReferences(
 	if err != nil {
 		return err
 	}
-	relationIDs := catalog.MakeDescriptorIDSet()
+
+	// Save old dependencies before overwriting. When TriggerDeps is replaced
+	// (e.g., during CREATE OR REPLACE FUNCTION), the toPublic ops only process
+	// the new dependencies. We need to clean up back-references from old
+	// relations and routines that are no longer referenced.
+	oldRelationIDs := catalog.MakeDescriptorIDSet(trigger.DependsOn...)
+	oldRoutineIDs := catalog.MakeDescriptorIDSet(trigger.DependsOnRoutines...)
+
+	// Set new forward references.
+	newRelationIDs := catalog.MakeDescriptorIDSet()
 	for _, ref := range op.Deps.UsesRelations {
-		relationIDs.Add(ref.ID)
+		newRelationIDs.Add(ref.ID)
 	}
-	trigger.DependsOn = relationIDs.Ordered()
+	trigger.DependsOn = newRelationIDs.Ordered()
 	trigger.DependsOnTypes = op.Deps.UsesTypeIDs
 	trigger.DependsOnRoutines = op.Deps.UsesRoutineIDs
+
+	// Remove stale back-references from relations that are no longer referenced.
+	for _, oldRelID := range oldRelationIDs.Difference(newRelationIDs).Ordered() {
+		referenced, err := i.checkOutTable(ctx, oldRelID)
+		if err != nil {
+			return err
+		}
+		newDependedOnBy := referenced.DependedOnBy[:0]
+		for _, backRef := range referenced.DependedOnBy {
+			if backRef.ID == op.Deps.TableID && backRef.TriggerID == op.Deps.TriggerID {
+				continue
+			}
+			newDependedOnBy = append(newDependedOnBy, backRef)
+		}
+		referenced.DependedOnBy = newDependedOnBy
+	}
+
+	// Remove stale back-references from routines that are no longer referenced.
+	newRoutineIDs := catalog.MakeDescriptorIDSet(op.Deps.UsesRoutineIDs...)
+	for _, oldRoutineID := range oldRoutineIDs.Difference(newRoutineIDs).Ordered() {
+		fnDesc, err := i.checkOutFunction(ctx, oldRoutineID)
+		if err != nil {
+			return err
+		}
+		fnDesc.RemoveTriggerReference(op.Deps.TableID, op.Deps.TriggerID)
+	}
+
+	// Type back-references are handled by UpdateTableBackReferencesInTypes,
+	// which is reconciliation-based: it reads all type references from the
+	// table descriptor and adds/removes back-refs accordingly.
 	return nil
 }
 

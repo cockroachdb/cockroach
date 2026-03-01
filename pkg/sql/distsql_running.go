@@ -39,7 +39,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
-	"github.com/cockroachdb/cockroach/pkg/sql/physicalplan"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
@@ -124,7 +123,6 @@ func (req runnerRequest) run() error {
 	res := runnerResult{nodeID: req.sqlInstanceID}
 	defer func() {
 		req.resultChan <- res
-		physicalplan.ReleaseFlowSpec(&req.flowReq.Flow)
 	}()
 
 	client, err := execinfrapb.DialDistSQLClient(req.sqlInstanceDialer, req.ctx, roachpb.NodeID(req.sqlInstanceID), rpcbase.DefaultClass)
@@ -734,17 +732,12 @@ func (dsp *DistSQLPlanner) Run(
 	evalCtx *eval.Context,
 	finishedSetupFn func(localFlow flowinfra.Flow),
 ) {
-	// Ignore the cleanup function since we will release each spec separately.
-	flows, _ := plan.GenerateFlowSpecs()
-	gatewayFlowSpec, ok := flows[dsp.gatewaySQLInstanceID]
-	if !ok {
+	flows, cleanup := plan.GenerateFlowSpecs()
+	defer cleanup(flows)
+	if _, ok := flows[dsp.gatewaySQLInstanceID]; !ok {
 		recv.SetError(errors.Errorf("expected to find gateway flow"))
 		return
 	}
-	// Specs of the remote flows are released after performing the corresponding
-	// SetupFlow RPCs. This is needed in case the local flow is canceled before
-	// the SetupFlow RPCs are issued (which might happen in parallel).
-	defer physicalplan.ReleaseFlowSpec(gatewayFlowSpec)
 
 	var (
 		localState     distsql.LocalState

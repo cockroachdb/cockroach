@@ -35,10 +35,10 @@ Plan:
 ├── install fixtures for version "v22.2.3" (1) [stage=system-setup]
 ├── start cluster at version "v22.2.3" (2) [stage=system-setup]
 ├── wait for all nodes (:1-4) to acknowledge cluster version '22.2' on system tenant (3) [stage=system-setup]
-├── run "initialize bank workload" hookId="mixedversion.go:885" (4) [stage=on-startup]
+├── run "initialize bank workload" hookId="mixedversion.go:907" (4) [stage=on-startup]
 ├── start background hooks concurrently
-│   ├── run "bank workload" hookId="mixedversion.go:893", after 0s delay (5) [stage=background]
-│   └── run "csv server" hookId="mixedversion.go:862", after 0s delay (6) [stage=background]
+│   ├── run "bank workload" hookId="mixedversion.go:915", after 0s delay (5) [stage=background]
+│   └── run "csv server" hookId="mixedversion.go:884", after 0s delay (6) [stage=background]
 ├── upgrade cluster from "v22.2.3" to "v23.1.4"
 │   ├── prevent auto-upgrades on system tenant by setting `preserve_downgrade_option` (7) [stage=init]
 │   ├── upgrade nodes :1-4 from "v22.2.3" to "v23.1.4"

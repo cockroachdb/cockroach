@@ -7,6 +7,8 @@ package cli
 
 import (
 	"context"
+	"strconv"
+	"strings"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/roachprod/config"
@@ -48,7 +50,7 @@ Examples:
   roachprod chaos network-partition mycluster --src 1 --dest 2,3 --type asymmetric --direction incoming
 
   # Run partition for 10 minutes before cleanup
-  roachprod chaos network-partition mycluster --src 1 --dest 2 --type bidirectional --wait-before-cleanup 10m
+  roachprod chaos network-partition mycluster --src 1 --dest 2 --type bidirectional --wait-before-recover 10m
 `,
 		Args: cobra.ExactArgs(1),
 		Run: Wrap(func(cmd *cobra.Command, args []string) error {
@@ -142,10 +144,61 @@ Examples:
 	return cmd
 }
 
+// buildLatencyRule parses and validates a single latency rule from string inputs.
+func buildLatencyRule(
+	clusterName, srcNodesStr, destNodesStr, delayStr string,
+) (failures.ArtificialLatency, error) {
+	// Parse source nodes
+	srcParts := strings.Split(srcNodesStr, ",")
+	srcNodes := make([]int32, 0, len(srcParts))
+	for _, s := range srcParts {
+		n, err := strconv.ParseInt(strings.TrimSpace(s), 10, 32)
+		if err != nil {
+			return failures.ArtificialLatency{}, errors.Wrapf(err, "invalid source node in --src %q", srcNodesStr)
+		}
+		srcNodes = append(srcNodes, int32(n))
+	}
+
+	// Parse destination nodes
+	destParts := strings.Split(destNodesStr, ",")
+	destNodes := make([]int32, 0, len(destParts))
+	for _, s := range destParts {
+		n, err := strconv.ParseInt(strings.TrimSpace(s), 10, 32)
+		if err != nil {
+			return failures.ArtificialLatency{}, errors.Wrapf(err, "invalid destination node in --dest %q", destNodesStr)
+		}
+		destNodes = append(destNodes, int32(n))
+	}
+
+	// Parse delay
+	delay, err := time.ParseDuration(delayStr)
+	if err != nil {
+		return failures.ArtificialLatency{}, errors.Wrapf(err, "invalid delay %q", delayStr)
+	}
+	if delay <= 0 {
+		return failures.ArtificialLatency{}, errors.Newf("--delay must be greater than 0, got %s", delayStr)
+	}
+
+	// Validate nodes in cluster
+	src := parseInt32SliceToNodes(srcNodes)
+	dest := parseInt32SliceToNodes(destNodes)
+	if _, err := validateNodesInCluster(clusterName, src, "source"); err != nil {
+		return failures.ArtificialLatency{}, err
+	}
+	if _, err := validateNodesInCluster(clusterName, dest, "destination"); err != nil {
+		return failures.ArtificialLatency{}, err
+	}
+
+	return failures.ArtificialLatency{
+		Source:      src,
+		Destination: dest,
+		Delay:       delay,
+	}, nil
+}
+
 // buildChaosNetworkLatencyCmd creates the network-latency chaos command
 func (cr *commandRegistry) buildChaosNetworkLatencyCmd() *cobra.Command {
-	var srcNodes, destNodes []int32
-	var delay time.Duration
+	var srcNodesList, destNodesList, delayList []string
 
 	cmd := &cobra.Command{
 		Use:   "network-latency <cluster>",
@@ -166,40 +219,54 @@ Examples:
   # Add 1 second latency between node groups
   roachprod chaos network-latency mycluster --src 1,2 --dest 3,4 --delay 1s
 
+  # Add multiple latency rules at once (specify each flag multiple times)
+  roachprod chaos network-latency mycluster \
+    --src 1,2,3 --dest 4,5,6 --delay 32ms \
+    --src 4,5,6 --dest 1,2,3 --delay 32ms \
+    --src 1,2,3 --dest 7,8,9 --delay 43ms
+
   # Run with custom cleanup time
   roachprod chaos network-latency mycluster \
-    --src 1 --dest 2 --delay 500ms --wait-before-cleanup 15m
+    --src 1 --dest 2 --delay 500ms --wait-before-recover 15m
 `,
 		Args: cobra.ExactArgs(1),
 		Run: Wrap(func(cmd *cobra.Command, args []string) error {
-			if delay <= 0 {
-				return errors.New("--delay must be greater than 0")
+			// Validate that src, dest, and delay lists have the same length,
+			// since we will assume the nth index of each corresponds to a single latency rule.
+			if len(srcNodesList) != len(destNodesList) || len(srcNodesList) != len(delayList) {
+				return errors.Newf("must provide equal number of --src, --dest, and --delay flags (got %d, %d, %d)",
+					len(srcNodesList), len(destNodesList), len(delayList))
 			}
 
 			clusterName := args[0]
-			src := parseInt32SliceToNodes(srcNodes)
-			dest := parseInt32SliceToNodes(destNodes)
-			c, err := validateNodesInCluster(clusterName, src, "source")
+			var artificialLatencies []failures.ArtificialLatency
+
+			// Parse each latency rule
+			for i := 0; i < len(srcNodesList); i++ {
+				rule, err := buildLatencyRule(clusterName, srcNodesList[i], destNodesList[i], delayList[i])
+				if err != nil {
+					return err
+				}
+				artificialLatencies = append(artificialLatencies, rule)
+
+				config.Logger.Printf("Rule %d: Injecting %s latency: %s -> %s",
+					i+1, rule.Delay, formatNodeList(rule.Source), formatNodeList(rule.Destination))
+			}
+
+			// Build failure args with all latency rules
+			failureArgs := failures.NetworkLatencyArgs{
+				ArtificialLatencies: artificialLatencies,
+			}
+
+			opts, err := getGlobalChaosOpts()
 			if err != nil {
 				return err
 			}
-			if _, err := validateNodesInCluster(clusterName, dest, "destination"); err != nil {
-				return err
-			}
 
-			// Build failure args
-			failureArgs := failures.NetworkLatencyArgs{
-				ArtificialLatencies: []failures.ArtificialLatency{{
-					Source:      src,
-					Destination: dest,
-					Delay:       delay,
-				}},
-			}
-
-			config.Logger.Printf("Injecting %s latency: %s -> %s",
-				delay, formatNodeList(src), formatNodeList(dest))
-
-			opts, err := getGlobalChaosOpts()
+			// Redundant validation, since it was done above, but we need to know if the
+			// cluster is secure or not which can't be easily done without constructing
+			// the cluster.
+			c, err := validateNodesInCluster(clusterName, artificialLatencies[0].Source, "source")
 			if err != nil {
 				return err
 			}
@@ -225,14 +292,15 @@ Examples:
 		}),
 	}
 
-	cmd.Flags().Int32SliceVarP(&srcNodes, "src", "s", nil,
-		"source nodes that will experience the injected latency")
-	cmd.Flags().Int32SliceVarP(&destNodes, "dest", "d", nil,
-		"destination nodes that will experience the injected latency")
-	cmd.Flags().DurationVar(&delay, "delay", time.Millisecond*100,
-		"delay to inject between source and destination nodes (e.g. 100ms, 1s), default 100ms")
+	cmd.Flags().StringArrayVarP(&srcNodesList, "src", "s", nil,
+		"source nodes that will experience the injected latency (can be specified multiple times)")
+	cmd.Flags().StringArrayVarP(&destNodesList, "dest", "d", nil,
+		"destination nodes that will experience the injected latency (can be specified multiple times)")
+	cmd.Flags().StringArrayVar(&delayList, "delay", nil,
+		"delay to inject between source and destination nodes (e.g. 100ms, 1s) (can be specified multiple times)")
 	_ = cmd.MarkFlagRequired("src")
 	_ = cmd.MarkFlagRequired("dest")
+	_ = cmd.MarkFlagRequired("delay")
 
 	return cmd
 }

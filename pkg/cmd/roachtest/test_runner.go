@@ -1433,6 +1433,19 @@ func (r *testRunner) runTest(
 			}
 		}
 
+		// Upload test logs to Datadog for failed tests on master/release branches (configurable via flags)
+		if datadog.ShouldUploadLogsToDatadog(t.Failed()) {
+			m := datadog.NewLogMetadata(
+				t.L(), t.spec, !t.Failed(), fmt.Sprintf("%.2f", timeutil.Since(t.start).Seconds()), c.cloud, c.os, c.arch,
+				c.name)
+			uploadStart := timeutil.Now()
+			if err := datadog.MaybeUploadTestLogs(ctx, t.L(), t.artifactsDir, m); err != nil {
+				// Best effort
+				t.L().Printf("error uploading logs to Datadog: %v", err)
+			}
+			t.L().Printf("Datadog log upload completed in %.2fs", timeutil.Since(uploadStart).Seconds())
+		}
+
 		if roachtestflags.TeamCity {
 			// Zip the artifacts. This improves the TeamCity UX where we can navigate
 			// through zip files just fine, but we can't download subtrees of the
@@ -1628,19 +1641,6 @@ func (r *testRunner) runTest(
 	if err := r.inspectArtifacts(ctx, t, c, l); err != nil {
 		// inspect artifacts and potentially add helpful triage information for failed tests
 		l.PrintfCtx(ctx, "error during artifact inspection: %v", err)
-	}
-
-	// Upload test logs to Datadog for failed tests on master/release branches (configurable via flags)
-	if datadog.ShouldUploadLogs(t.Failed()) {
-		t.L().Printf("uploading %s to Datadog", "test.log")
-		logPath := filepath.Join(t.artifactsDir, "test.log")
-		m := datadog.NewLogMetadata(
-			t.L(), t.spec, !t.Failed(), fmt.Sprintf("%.2f", timeutil.Since(t.start).Seconds()), c.cloud, c.os, c.arch,
-			c.name, "test.log")
-		if err := datadog.MaybeUploadTestLog(ctx, t.L(), logPath, m); err != nil {
-			// Best effort
-			t.L().Printf("error uploading logs to Datadog: %v", err)
-		}
 	}
 }
 
@@ -1848,7 +1848,7 @@ func (r *testRunner) teardownTest(
 	// collection below).
 	r.maybeSaveClusterDueToInvariantProblems(ctx, t, c)
 
-	if timedOut || t.Failed() || roachtestflags.AlwaysCollectArtifacts {
+	if timedOut || t.Failed() || roachtestflags.AlwaysCollectArtifacts || datadog.ShouldUploadLogsToDatadog(t.Failed()) {
 		err := r.collectArtifacts(ctx, t, c, timedOut, time.Hour)
 		if err != nil {
 			t.L().Printf("error collecting artifacts: %v", err)

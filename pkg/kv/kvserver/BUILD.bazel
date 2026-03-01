@@ -109,6 +109,7 @@ go_library(
         "stores_store_liveness.go",
         "testing_knobs.go",
         "ts_maintenance_queue.go",
+        ":gen-raftleadertransferoutcome-stringer",  # keep
         ":gen-refreshraftreason-stringer",  # keep
     ],
     embed = [":kvserver_go_proto"],
@@ -367,6 +368,7 @@ go_test(
         "replica_rangefeed_lag_observer_test.go",
         "replica_rangefeed_test.go",
         "replica_rankings_test.go",
+        "replica_read_test.go",
         "replica_sideload_test.go",
         "replica_split_load_test.go",
         "replica_store_liveness_test.go",
@@ -630,6 +632,12 @@ go_proto_library(
         "//pkg/util/uuid",  # keep
         "@com_github_gogo_protobuf//gogoproto",
     ],
+)
+
+stringer(
+    name = "gen-raftleadertransferoutcome-stringer",
+    src = "replica_raft.go",
+    typ = "raftLeaderTransferOutcome",
 )
 
 stringer(

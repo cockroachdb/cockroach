@@ -33,7 +33,7 @@ describe("insights page", () => {
     cy.get("button").contains("Now").should("exist");
   });
 
-  it("displays insights statements table with dynamic column headers", () => {
+  it("displays insights statements table with column headers", () => {
     cy.get('[data-testid="statement-insights-table"]').should("exist");
     // default header
     cy.get('[data-testid="statement-insights-table"]').contains(
@@ -58,21 +58,6 @@ describe("insights page", () => {
     cy.get('[data-testid="statement-insights-table"]').contains(
       "Rows Processed",
     );
-
-    cy.get('[data-testid="statement-insights-table"]').should("exist");
-    // non-default header
-    cy.get('[data-testid="statement-insights-table"]').should(
-      "not.contain.text",
-      "Full Scan",
-    );
-    cy.contains("Columns").click();
-    cy.get('[class*="dropdown-area"]')
-      .should("exist")
-      .within(() => {
-        cy.contains("Full Scan").click();
-        cy.contains("Apply").click();
-      });
-    cy.get('[data-testid="statement-insights-table"]').contains("Full Scan");
   });
 
   it("displays insights transactions table with column headers", () => {

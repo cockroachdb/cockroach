@@ -1,0 +1,43 @@
+/* setup */
+CREATE DATABASE multiregion_db PRIMARY REGION "us-east1" REGIONS "us-east2", "us-east3";
+CREATE TABLE multiregion_db.public.t (  
+  pk INT PRIMARY KEY,
+  i INT NOT NULL,
+  j STRING,
+  INDEX(i)
+) LOCALITY GLOBAL;
+
+/* test */
+EXPLAIN (DDL) ALTER TABLE multiregion_db.t SET LOCALITY REGIONAL BY TABLE;
+----
+Schema change plan for ALTER TABLE ‹multiregion_db›.‹t› SET LOCALITY REGIONAL BY TABLE IN PRIMARY REGION;
+ ├── StatementPhase
+ │    └── Stage 1 of 1 in StatementPhase
+ │         ├── 1 element transitioning toward PUBLIC
+ │         │    └── ABSENT → PUBLIC TableLocalityPrimaryRegion:{DescID: 108 (t)}
+ │         ├── 2 elements transitioning toward ABSENT
+ │         │    ├── PUBLIC → ABSENT TableLocalityGlobal:{DescID: 108 (t)}
+ │         │    └── PUBLIC → ABSENT TableZoneConfig:{DescID: 108 (t), SeqNum: 0}
+ │         └── 3 Mutation operations
+ │              ├── UnsetTableLocality {"TableID":108}
+ │              ├── DiscardTableZoneConfig {"TableID":108}
+ │              └── SetTableLocalityPrimaryRegion {"TableID":108}
+ └── PreCommitPhase
+      ├── Stage 1 of 2 in PreCommitPhase
+      │    ├── 1 element transitioning toward PUBLIC
+      │    │    └── PUBLIC → ABSENT TableLocalityPrimaryRegion:{DescID: 108 (t)}
+      │    ├── 2 elements transitioning toward ABSENT
+      │    │    ├── ABSENT → PUBLIC TableLocalityGlobal:{DescID: 108 (t)}
+      │    │    └── ABSENT → PUBLIC TableZoneConfig:{DescID: 108 (t), SeqNum: 0}
+      │    └── 1 Mutation operation
+      │         └── UndoAllInTxnImmediateMutationOpSideEffects
+      └── Stage 2 of 2 in PreCommitPhase
+           ├── 1 element transitioning toward PUBLIC
+           │    └── ABSENT → PUBLIC TableLocalityPrimaryRegion:{DescID: 108 (t)}
+           ├── 2 elements transitioning toward ABSENT
+           │    ├── PUBLIC → ABSENT TableLocalityGlobal:{DescID: 108 (t)}
+           │    └── PUBLIC → ABSENT TableZoneConfig:{DescID: 108 (t), SeqNum: 0}
+           └── 3 Mutation operations
+                ├── UnsetTableLocality {"TableID":108}
+                ├── DiscardTableZoneConfig {"TableID":108}
+                └── SetTableLocalityPrimaryRegion {"TableID":108}

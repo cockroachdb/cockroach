@@ -46,27 +46,27 @@ BSDTAR_PLATFORMS = {
 
 BSDTAR_PREBUILT = {
     "darwin_arm64": (
-        "https://storage.googleapis.com/public-bazel-artifacts/tar/v3.8.1/tar_darwin_arm64",
+        "https://storage.googleapis.com/public-bazel-artifacts/tar/v3.8.1-fix/tar_darwin_arm64",
         "9e78a0b3e21bc05c67e54004e5b29c2b19c3a9f16ccec4de2a227b1e01aea5fd",
     ),
     "linux_amd64": (
-        "https://storage.googleapis.com/public-bazel-artifacts/tar/v3.8.1/tar_linux_amd64",
+        "https://storage.googleapis.com/public-bazel-artifacts/tar/v3.8.1-fix/tar_linux_amd64",
         "a703af6fc8df1a89f1ca864c651a9003b75069dd6b80bd32dcd94a7d255df07d",
     ),
     "linux_arm64": (
-        "https://storage.googleapis.com/public-bazel-artifacts/tar/v3.8.1/tar_linux_arm64",
+        "https://storage.googleapis.com/public-bazel-artifacts/tar/v3.8.1-fix/tar_linux_arm64",
         "663f498baab2a9b7758e46d0c377b311c5b058758a37958372a0503c5dda4028",
     ),
     "linux_ppc64le": (
-        "https://storage.googleapis.com/public-bazel-artifacts/tar/v3.8.1/tar_linux_ppc64le",
-        "12b6757a0279d4b39748ce63503f0d3dc1c5799effd3cb0a456e9db1512de781",
+        "https://storage.googleapis.com/public-bazel-artifacts/tar/v3.8.1-fix/tar_linux_ppc64le",
+        "6e9b5cae2259474fa02c257c4427d455c41e3057243b619e16d37b5a49d3e809",
     ),
     "linux_s390x": (
-        "https://storage.googleapis.com/public-bazel-artifacts/tar/v3.8.1/tar_linux_s390x",
-        "9591a62eeeedf2d4b061f2f7aefb1a1c3e1b723213d5ce519ebf41542e72465e",
+        "https://storage.googleapis.com/public-bazel-artifacts/tar/v3.8.1-fix/tar_linux_s390x",
+        "4347b76ced22c1be13b4d7c28cbf7fd898026251dc237007416e6cdf6bfd7b6c",
     ),
     "windows_amd64": (
-        "https://storage.googleapis.com/public-bazel-artifacts/tar/v3.8.1/tar_windows_x86_64.exe",
+        "https://storage.googleapis.com/public-bazel-artifacts/tar/v3.8.1-fix/tar_windows_x86_64.exe",
         "f48c81e1812956adb4906c6f057ca856dd280a455e7867d77800e6d5ef9fc81d",
     ),
 }

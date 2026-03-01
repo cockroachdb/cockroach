@@ -19,7 +19,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/backup/backuppb"
 	"github.com/cockroachdb/cockroach/pkg/backup/backuputils"
 	"github.com/cockroachdb/cockroach/pkg/cloud"
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/settings"
@@ -696,26 +695,16 @@ func parseIndexBasename(basename string) (start time.Time, end time.Time, err er
 }
 
 // shouldWriteIndex determines if a backup index file should be written for a
-// given backup. The rule is:
-//  1. An index should only be written on a v25.4+ cluster.
-//  2. An incremental backup only writes an index if its parent full has written
-//     an index file.
-//
-// This ensures that if a backup chain exists in the index directory, then every
-// backup in that chain has an index file, ensuring that the index is usable.
+// given backup. An incremental backup only writes an index if its parent full
+// has written an index file. This ensures that if a backup chain exists in the
+// index directory, then every backup in that chain has an index file, ensuring
+// that the index is usable.
 func shouldWriteIndex(
 	ctx context.Context,
 	execCfg *sql.ExecutorConfig,
 	store cloud.ExternalStorage,
 	details jobspb.BackupDetails,
 ) (bool, error) {
-	// This version check can be removed in v26.1 when we no longer need to worry
-	// about a mixed-version cluster where we have both v25.4+ nodes and pre-v25.4
-	// nodes.
-	if !execCfg.Settings.Version.IsActive(ctx, clusterversion.V25_4) {
-		return false, nil
-	}
-
 	// While `incremental_location` has been removed in 26.2, we still need to
 	// keep this check for one major version. A backup with custom incremental
 	// locations could be started on a 25.4 node, then the cluster could be

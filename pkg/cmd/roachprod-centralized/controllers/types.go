@@ -63,14 +63,55 @@ func (r *BadRequestResult) GetAssociatedStatusCode() int {
 	return http.StatusBadRequest
 }
 
-// AuthenticationType is the type of authentication required for a controller.
-type AuthenticationType string
+// SuccessResult is a generic result for successful operations.
+// Use this for endpoints that return data without domain-specific error handling.
+type SuccessResult struct {
+	Data any
+}
 
-const (
-	// AuthenticationTypeNone is the authentication type that does not
-	// check authentication.
-	AuthenticationTypeNone AuthenticationType = "none"
-	// AuthenticationTypeRequired is the type of authentication that requires
-	// authentication.
-	AuthenticationTypeRequired AuthenticationType = "required"
-)
+// GetData returns the data.
+func (r *SuccessResult) GetData() any {
+	return r.Data
+}
+
+// GetError returns nil (no error).
+func (r *SuccessResult) GetError() error {
+	return nil
+}
+
+// GetAssociatedStatusCode returns 200 OK for successful operations.
+func (r *SuccessResult) GetAssociatedStatusCode() int {
+	return http.StatusOK
+}
+
+// ErrorResult is a generic result for error responses.
+// The error can be either public (shown to user) or internal (logged only).
+type ErrorResult struct {
+	Error      error
+	StatusCode int
+	IsPublic   bool
+}
+
+// GetData returns nil for error responses.
+func (r *ErrorResult) GetData() any {
+	return nil
+}
+
+// GetError returns the error, wrapped as PublicError if IsPublic is true.
+func (r *ErrorResult) GetError() error {
+	if r.Error == nil {
+		return nil
+	}
+	if r.IsPublic {
+		return utils.NewPublicError(r.Error)
+	}
+	return r.Error
+}
+
+// GetAssociatedStatusCode returns the HTTP status code for this error.
+func (r *ErrorResult) GetAssociatedStatusCode() int {
+	if r.StatusCode == 0 {
+		return http.StatusInternalServerError
+	}
+	return r.StatusCode
+}

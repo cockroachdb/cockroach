@@ -8,6 +8,7 @@ go_library(
         "decoded_row.go",
         "row_decoder.go",
         "test_event_encoder.go",
+        "txn_decoder.go",
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/crosscluster/logical/ldrdecoder",
     visibility = ["//visibility:public"],
@@ -38,12 +39,12 @@ go_test(
     srcs = [
         "coalescing_decoder_test.go",
         "main_test.go",
+        "txn_decoder_test.go",
     ],
     embed = [":ldrdecoder"],
     deps = [
         "//pkg/base",
         "//pkg/ccl/changefeedccl/cdctest",
-        "//pkg/ccl/storageccl",
         "//pkg/jobs/jobspb",
         "//pkg/repstream/streampb",
         "//pkg/security/securityassets",

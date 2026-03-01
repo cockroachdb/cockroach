@@ -72,6 +72,43 @@ message StreamChunk {
 message StreamResponse {
 }
 
+// FlowControlledGetRequest initiates a flow-controlled file read stream.
+// The client sends this as the first message to configure the stream parameters.
+message FlowControlledGetRequest {
+  // filename is the path to the file, either relative to external IO dir
+  // or an absolute path contained within the external IO dir.
+  string filename = 1;
+  // offset is the byte offset to start reading from.
+  int64 offset = 2;
+  // flow_control_window is the maximum number of unacknowledged chunks
+  // the server can have in flight at any time.
+  int32 flow_control_window = 3;
+}
+
+// FlowControlledClientMessage is sent by the client during a flow-controlled
+// file transfer. The first message must be a request, subsequent messages
+// are acknowledgments.
+message FlowControlledClientMessage {
+  oneof msg {
+    // request is the initial message containing stream parameters.
+    FlowControlledGetRequest request = 1;
+    // ack indicates the client has processed chunks and the server
+    // may send more. The value indicates how many chunks to acknowledge.
+    int32 ack = 2;
+  }
+}
+
+// FlowControlledServerMessage is sent by the server during a flow-controlled
+// file transfer. Contains either data chunks or an EOF marker.
+message FlowControlledServerMessage {
+  oneof msg {
+    // chunk contains the file data being streamed from server to client.
+    StreamChunk chunk = 1;
+    // eof indicates the server has finished sending all data.
+    bool eof = 2;
+  }
+}
+
 // Blob service allows for inter node file sharing.
 // It is used by ExternalStorage when interacting with
 // files that are stored on a node's local file system.
@@ -81,4 +118,8 @@ service Blob {
   rpc Stat(StatRequest) returns (BlobStat) {}
   rpc GetStream(GetRequest) returns (stream StreamChunk) {}
   rpc PutStream(stream StreamChunk) returns (StreamResponse) {}
+  // GetStreamFlowControlled provides flow-controlled file streaming where
+  // the client sends acknowledgments to control the pace of data transfer.
+  rpc GetStreamFlowControlled(stream FlowControlledClientMessage)
+      returns (stream FlowControlledServerMessage) {}
 }

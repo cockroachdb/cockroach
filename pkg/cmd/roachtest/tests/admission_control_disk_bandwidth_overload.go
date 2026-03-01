@@ -248,6 +248,14 @@ func registerDiskBandwidthOverload(r registry.Registry) {
 				if numErrors > numSuccesses {
 					t.Fatalf("too many errors retrieving metrics")
 				}
+				// Export mean total bandwidth to roachperf.
+				if len(totalBWValues) > 0 {
+					finalMeanTotalBW := roachtestutil.GetMeanOverLastN(len(totalBWValues), totalBWValues)
+					c.Run(ctx, option.WithNodes(c.CRDBNodes()), "mkdir", "-p", t.PerfArtifactsDir())
+					perfResult := fmt.Sprintf(`{"mean_total_bandwidth_mbs": %.1f}`, finalMeanTotalBW)
+					c.Run(ctx, option.WithNodes(c.CRDBNodes()),
+						fmt.Sprintf(`echo '%s' > %s/stats.json`, perfResult, t.PerfArtifactsDir()))
+				}
 				return nil
 			})
 

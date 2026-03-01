@@ -247,11 +247,24 @@ type meanStoreLoad struct {
 	secondaryLoad SecondaryLoadVector
 }
 
+// SafeFormat implements the redact.SafeFormatter interface.
+func (m meanStoreLoad) SafeFormat(w redact.SafePrinter, _ rune) {
+	// Only printing CPU and byte size utilization explicitly since
+	// write bandwidth util is necessarily 0, might need to update in the future.
+	w.Printf("{%v %v [cpu-util:%.2f byte-util:%.2f] %v", m.load, m.capacity,
+		redact.SafeFloat(m.util[CPURate]), redact.SafeFloat(m.util[ByteSize]), m.secondaryLoad)
+}
+
 // The mean node load for a set of NodeLoad.
 type meanNodeLoad struct {
 	loadCPU     LoadValue
 	capacityCPU LoadValue
 	utilCPU     float64
+}
+
+// SafeFormat implements the redact.SafeFormatter interface.
+func (m meanNodeLoad) SafeFormat(w redact.SafePrinter, _ rune) {
+	w.Printf("{%v %v %v}", m.loadCPU, m.capacityCPU, redact.SafeFloat(m.utilCPU))
 }
 
 // The allocator often needs mean load information for a set of stores. This
@@ -452,6 +465,10 @@ func computeMeansForStoreSet(
 	}
 	for i := range means.storeLoad.load {
 		if means.storeLoad.capacity[i] != UnknownCapacity {
+			// NB: capacity can be 0 for CPURate when nodeCPURateUsage >>
+			// nodeCPURateCapacity. Stores with capacity 0 will be classified as
+			// overloadUrgent via fractionUsed = +Inf in
+			// loadSummaryForDimension.
 			means.storeLoad.util[i] =
 				float64(means.storeLoad.load[i]) / float64(means.storeLoad.capacity[i])
 			means.storeLoad.capacity[i] /= LoadValue(n)
@@ -469,6 +486,7 @@ func computeMeansForStoreSet(
 		means.nodeLoad.loadCPU += nl.ReportedCPU
 		means.nodeLoad.capacityCPU += nl.CapacityCPU
 	}
+	// NB: capacityCPU can be 0 if all nodes report 0 store CPU capacity.
 	means.nodeLoad.utilCPU =
 		float64(means.nodeLoad.loadCPU) / float64(means.nodeLoad.capacityCPU)
 	means.nodeLoad.loadCPU /= LoadValue(n)
@@ -569,6 +587,7 @@ func loadSummaryForDimension(
 	fractionAbove := float64(load)/float64(meanLoad) - 1.0
 	var fractionUsed float64
 	if capacity != UnknownCapacity {
+		// NB: capacity can be 0 if nodeCPURateUsage >> nodeCPURateCapacity.
 		fractionUsed = float64(load) / float64(capacity)
 	}
 
@@ -610,24 +629,21 @@ func loadSummaryForDimension(
 			return
 		}
 
-		metrics := fmt.Sprintf("load=%d meanLoad=%d", load, meanLoad)
-		if capacity != UnknownCapacity {
-			metrics += fmt.Sprintf(" fractionUsed=%.2f%% meanUtil=%.2f%% capacity=%d", fractionUsed*100, meanUtil*100, capacity)
-		}
-
-		nodeIdStr := ""
+		var buf redact.StringBuilder
+		buf.Printf("load summary for dim=%v (", dim)
 		if nodeID > nodeIDForLogging {
-			nodeIdStr = fmt.Sprintf("n%v", nodeID)
+			buf.Printf("n%v", nodeID)
 		}
-
-		storeIdStr := ""
 		if storeID > storeIDForLogging {
-			storeIdStr = fmt.Sprintf("s%v", storeID)
+			buf.Printf("s%v", storeID)
 		}
-
-		log.KvDistribution.VEventf(ctx, 3,
-			"load summary for dim=%s (%s%s): %s, reason: %s [%s]",
-			dim, nodeIdStr, storeIdStr, summary, reason, metrics)
+		buf.Printf("): %v, reason: %v [load=%v meanLoad=%v", summary, redact.SafeString(reason), load, meanLoad)
+		if capacity != UnknownCapacity {
+			buf.Printf(" fractionUsed=%.2f%% meanUtil=%.2f%% capacity=%v",
+				redact.SafeFloat(fractionUsed*100), redact.SafeFloat(meanUtil*100), capacity)
+		}
+		buf.SafeRune(']')
+		log.KvDistribution.VEventf(ctx, 3, "%s", buf.RedactableString())
 	}()
 
 	if capacity != UnknownCapacity && meanUtil*1.1 < fractionUsed {
@@ -686,7 +702,7 @@ func loadSummaryForDimension(
 // canShedAndAddLoad and topK) call this function directly.
 func highDiskSpaceUtilization(load LoadValue, capacity LoadValue, threshold float64) bool {
 	if capacity == UnknownCapacity || capacity == 0 {
-		log.KvDistribution.Errorf(context.Background(), "disk capacity is unknown")
+		log.KvDistribution.Errorf(context.Background(), "disk capacity is unknown or zero")
 		return false
 	}
 	// load and capacity are both in terms of logical bytes.

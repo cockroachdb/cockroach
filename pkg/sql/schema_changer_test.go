@@ -3693,24 +3693,32 @@ CREATE TABLE d.t (
 	tableDesc := desctestutils.TestingGetMutableExistingTableDescriptor(
 		kvDB, server.Codec(), "d", "t")
 	// Verify that this descriptor uses the new STORING encoding. Overwrite it
-	// with one that uses the old encoding.
-	for _, index := range tableDesc.PublicNonPrimaryIndexes() {
-		if index.NumKeySuffixColumns() != 1 {
-			t.Fatalf("KeySuffixColumnIDs not set properly: %s", tableDesc)
+	// with one that uses the old encoding. Use TestingDescsTxn so that the
+	// descriptor version is properly incremented and the lease manager waits
+	// for all old leases to drain before proceeding.
+	if err := sqltestutils.TestingDescsTxn(context.Background(), server, func(ctx context.Context, txn isql.Txn, col *descs.Collection) error {
+		tbl, err := col.MutableByID(txn.KV()).Table(ctx, tableDesc.GetID())
+		if err != nil {
+			return err
 		}
-		if index.NumSecondaryStoredColumns() != 1 {
-			t.Fatalf("StoreColumnIDs not set properly: %s", tableDesc)
+		for _, index := range tbl.PublicNonPrimaryIndexes() {
+			if index.NumKeySuffixColumns() != 1 {
+				t.Fatalf("KeySuffixColumnIDs not set properly: %s", tbl)
+			}
+			if index.NumSecondaryStoredColumns() != 1 {
+				t.Fatalf("StoreColumnIDs not set properly: %s", tbl)
+			}
+			newIndexDesc := index.IndexDescDeepCopy()
+			newIndexDesc.KeySuffixColumnIDs = append(newIndexDesc.KeySuffixColumnIDs, newIndexDesc.StoreColumnIDs...)
+			newIndexDesc.StoreColumnIDs = nil
+			tbl.SetPublicNonPrimaryIndex(index.Ordinal(), newIndexDesc)
 		}
-		newIndexDesc := index.IndexDescDeepCopy()
-		newIndexDesc.KeySuffixColumnIDs = append(newIndexDesc.KeySuffixColumnIDs, newIndexDesc.StoreColumnIDs...)
-		newIndexDesc.StoreColumnIDs = nil
-		tableDesc.SetPublicNonPrimaryIndex(index.Ordinal(), newIndexDesc)
-	}
-	if err := kvDB.Put(
-		context.Background(),
-		catalogkeys.MakeDescMetadataKey(server.Codec(), tableDesc.GetID()),
-		tableDesc.DescriptorProto(),
-	); err != nil {
+		ba := txn.KV().NewBatch()
+		if err := col.WriteDescToBatch(ctx, false /* kvTrace */, tbl, ba); err != nil {
+			return err
+		}
+		return txn.KV().Run(ctx, ba)
+	}); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := sqlDB.Exec(`INSERT INTO d.t VALUES (11, 1, 2);`); err != nil {
@@ -4141,6 +4149,7 @@ func TestSchemaChangeErrorOnCommit(t *testing.T) {
 func TestIndexBackfillAfterGC(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+	skip.UnderDuress(t, "flaky under race")
 
 	var tc serverutils.TestClusterInterface
 	ctx := context.Background()

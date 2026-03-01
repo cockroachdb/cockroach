@@ -940,6 +940,10 @@ type Replica struct {
 		// replica because it looks like it's dead).
 		quotaReleaseQueue []*quotapool.IntAlloc
 
+		// leaderTransferDiag tracks diagnostic state for the Raft leadership
+		// transfer mechanism. Updated on the tick path by tick().
+		leaderTransferDiag leaderTransferDiagState
+
 		// Counts calls to Replica.tick()
 		ticks int64
 
@@ -1818,7 +1822,7 @@ func (r *Replica) GetLastReplicaGCTimestamp(ctx context.Context) (hlc.Timestamp,
 
 func (r *Replica) setLastReplicaGCTimestamp(ctx context.Context, timestamp hlc.Timestamp) error {
 	key := keys.RangeLastReplicaGCTimestampKey(r.RangeID)
-	return storage.MVCCPutProto(
+	return storage.MVCCBlindPutProto(
 		ctx, r.store.LogEngine(), key, hlc.Timestamp{}, &timestamp, storage.MVCCWriteOptions{})
 }
 
@@ -2087,7 +2091,7 @@ func (r *Replica) assertStateRaftMuLockedReplicaMuRLocked(
 // might be ok with this if they know that they will end up checking for a
 // pending merge at some later time.
 func (r *Replica) checkExecutionCanProceedBeforeStorageSnapshot(
-	ctx context.Context, ba *kvpb.BatchRequest, g *concurrency.Guard,
+	ctx context.Context, ba *kvpb.BatchRequest, g concurrency.Guard,
 ) (kvserverpb.LeaseStatus, error) {
 	rSpan, err := keys.Range(ba.Requests)
 	if err != nil {
@@ -2143,8 +2147,8 @@ func (r *Replica) checkExecutionCanProceedBeforeStorageSnapshot(
 	// for other reasons first, in case callers don't require this replica to service the request.
 	// Tests such as TestClosedTimestampFrozenAfterSubsumption also rely on this late-checking of
 	// merges by checking for a NotLeaseholderError on replicas in a critical phase for certain
-	// requests.
-	if mergeInProgress && g.HoldingLatches() {
+	// requests. NB: g == nil is the case for requests that ignore latches, see shouldIgnoreLatches.
+	if mergeInProgress && g != nil && g.HoldingLatches() {
 		// We only check for a merge if we are holding latches. In practice,
 		// this means that any request where concurrency.shouldAcquireLatches()
 		// is false (e.g. RequestLeaseRequests) will not wait for a pending
@@ -2228,7 +2232,7 @@ func (r *Replica) checkExecutionCanProceedAfterStorageSnapshot(
 // checkExecutionCanProceedRWOrAdmin returns an error if a batch request going
 // through the RW or admin paths cannot be executed by the Replica.
 func (r *Replica) checkExecutionCanProceedRWOrAdmin(
-	ctx context.Context, ba *kvpb.BatchRequest, g *concurrency.Guard,
+	ctx context.Context, ba *kvpb.BatchRequest, g concurrency.Guard,
 ) (kvserverpb.LeaseStatus, error) {
 	st, err := r.checkExecutionCanProceedBeforeStorageSnapshot(ctx, ba, g)
 	if err != nil {
@@ -2670,11 +2674,13 @@ func (r *Replica) maybeWatchForMergeLocked(ctx context.Context) (bool, error) {
 		r.raftMu.Lock()
 		r.readOnlyCmdMu.Lock()
 		r.mu.Lock()
+		shouldQueueForGC := false
 		if mergeCommitted && r.shMu.destroyStatus.IsAlive() {
 			// The merge committed but the left-hand replica on this store hasn't
 			// subsumed this replica yet. Mark this replica as destroyed so it
 			// doesn't serve requests when we close the mergeCompleteCh below.
 			r.shMu.destroyStatus.Set(kvpb.NewRangeNotFoundError(r.RangeID, r.store.StoreID()), destroyReasonMergePending)
+			shouldQueueForGC = true
 		}
 		// Unblock pending requests. If the merge committed, the requests will
 		// notice that the replica has been destroyed and return an appropriate
@@ -2685,6 +2691,16 @@ func (r *Replica) maybeWatchForMergeLocked(ctx context.Context) (bool, error) {
 		r.mu.Unlock()
 		r.readOnlyCmdMu.Unlock()
 		r.raftMu.Unlock()
+		if shouldQueueForGC {
+			// Queue the replica for GC now that we've marked it as merge-pending.
+			// The scanner won't visit destroyed replicas, and the only other path
+			// into the replica GC queue is via RaftGroupDeletedError responses from
+			// Raft traffic. If the Raft group has quiesced, those responses may
+			// never arrive. Queue directly so the replica GC queue can process this
+			// replica (or place it in purgatory if the left neighbor isn't ready
+			// yet).
+			r.store.replicaGCQueue.AddAsync(ctx, r, replicaGCPriorityDefault)
+		}
 	})
 	if errors.Is(err, stop.ErrUnavailable) {
 		// We weren't able to launch a goroutine to watch for the merge's completion

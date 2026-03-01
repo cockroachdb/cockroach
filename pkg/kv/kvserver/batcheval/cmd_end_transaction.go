@@ -1350,13 +1350,13 @@ func splitTriggerHelper(
 
 	// Copy the last replica GC timestamp. This value is unreplicated,
 	// which is why the MVCC stats are set to nil on calls to
-	// MVCCPutProto.
+	// MVCCBlindPutProto.
 	replicaGCTS, err := rec.GetLastReplicaGCTimestamp(ctx)
 	if err != nil {
 		return enginepb.MVCCStats{}, result.Result{}, errors.Wrap(err, "unable to fetch last replica GC timestamp")
 	}
 
-	if err := storage.MVCCPutProto(
+	if err := storage.MVCCBlindPutProto(
 		ctx, spanset.DisableForbiddenSpanAssertions(batch),
 		keys.RangeLastReplicaGCTimestampKey(split.RightDesc.RangeID), hlc.Timestamp{},
 		&replicaGCTS, storage.MVCCWriteOptions{Category: fs.BatchEvalReadCategory}); err != nil {

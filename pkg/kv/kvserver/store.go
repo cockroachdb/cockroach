@@ -576,7 +576,13 @@ func (rs *storeReplicaVisitor) Visit(visitor func(*Replica) bool) {
 		destroyed := repl.shMu.destroyStatus
 		initialized := repl.IsInitialized()
 		repl.mu.RUnlock()
-		if initialized && destroyed.IsAlive() && !visitor(repl) {
+		// Visit initialized replicas that are alive or merge-pending. Merge-
+		// pending replicas are included so queues (in particular the replica GC
+		// queue) get a chance to process them. This is safe because a replica can
+		// be destroyed between this check and the queue picking it up regardless,
+		// and queues that can't handle destroyed replicas reject them via
+		// replicaCanBeProcessed.
+		if initialized && (destroyed.IsAlive() || destroyed.reason == destroyReasonMergePending) && !visitor(repl) {
 			break
 		}
 	}

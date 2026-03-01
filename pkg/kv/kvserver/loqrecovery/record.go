@@ -205,10 +205,10 @@ func readNodeRecoveryStatusInfo(
 // ReadCleanupActionsInfo reads cleanup actions info if it is present in the
 // reader.
 func ReadCleanupActionsInfo(
-	ctx context.Context, writer storage.ReadWriter,
+	ctx context.Context, reader storage.Reader,
 ) (loqrecoverypb.DeferredRecoveryActions, bool, error) {
 	var result loqrecoverypb.DeferredRecoveryActions
-	exists, err := storage.MVCCGetProto(ctx, writer, keys.StoreLossOfQuorumRecoveryCleanupActionsKey(),
+	exists, err := storage.MVCCGetProto(ctx, reader, keys.StoreLossOfQuorumRecoveryCleanupActionsKey(),
 		hlc.Timestamp{}, &result, storage.MVCCGetOptions{})
 	if err != nil {
 		log.KvExec.Errorf(ctx, "failed to read loss of quorum cleanup actions key: %s", err)

@@ -1,0 +1,208 @@
+# Yaml for creating and configuring the drt-chaos-aws and workload-chaos-aws clusters on AWS.
+# This is the AWS equivalent of drt_chaos.yaml which uses GCE.
+# Uses AWS Auto Scaling Groups (equivalent to GCE managed instance groups).
+environment:
+  ROACHPROD_DNS: drt.crdb.io
+  CLUSTER: drt-chaos-aws
+  CLUSTER_NODES: 6
+  WORKLOAD_CLUSTER: workload-chaos-aws
+  WORKLOAD_NODES: 1
+
+dependent_file_locations:
+  - artifacts/roachprod
+  - artifacts/roachtest
+  - pkg/cmd/drtprod/scripts/setup_datadog_cluster
+  - pkg/cmd/drtprod/scripts/setup_datadog_workload
+  - pkg/cmd/drtprod/scripts/tpcc_init.sh
+  - pkg/cmd/drtprod/scripts/generate_tpcc_run.sh
+  - pkg/cmd/drtprod/scripts/generate_kv_run.sh
+  - pkg/cmd/drtprod/scripts/generate_tpcc_drop.sh
+
+targets:
+  - target_name: $CLUSTER
+    steps:
+      - command: create
+        args:
+          - $CLUSTER
+        flags:
+          clouds: aws
+          aws-managed: true
+          aws-enable-multiple-stores: true
+          aws-zones: "us-east-2a,us-east-2b,us-east-2c"
+          nodes: $CLUSTER_NODES
+          # m6i.4xlarge: 16 vCPU, 64GB RAM (equivalent to n2-standard-16)
+          aws-machine-type: m6i.4xlarge
+          local-ssd: false
+          # 4 EBS gp3 volumes to match 4 local SSDs in GCE config
+          aws-ebs-volume:
+            - >-
+              {"VolumeType":"gp3","VolumeSize":375}
+            - >-
+              {"VolumeType":"gp3","VolumeSize":375}
+            - >-
+              {"VolumeType":"gp3","VolumeSize":375}
+            - >-
+              {"VolumeType":"gp3","VolumeSize":375}
+          username: drt
+          lifetime: 8760h
+          label: drt=true
+          # IAM instance profile for AWS resource access (S3, secrets, etc.)
+          aws-iam-profile: drt-testing
+        on_rollback:
+          - command: destroy
+            args:
+              - $CLUSTER
+      - command: sync
+        flags:
+          clouds: aws
+      - command: stage
+        args:
+          - $CLUSTER
+          - cockroach
+      - script: "pkg/cmd/drtprod/scripts/setup_datadog_cluster"
+      - command: start
+        args:
+          - $CLUSTER
+          - "--binary"
+          - "./cockroach"
+        flags:
+          enable-fluent-sink: true
+          store-count: 4
+          args: --wal-failover=among-stores
+          restart: false
+          sql-port: 26257
+        on_rollback:
+          - command: stop
+            args:
+              - $CLUSTER
+      # setup dmsetup for disk-stalls
+      - command: chaos
+        args:
+          - disk-stall
+          - $CLUSTER
+        flags:
+          type: dmsetup
+          stage: setup
+          nodes: 1
+  - target_name: $WORKLOAD_CLUSTER
+    steps:
+      - command: create
+        args:
+          - $WORKLOAD_CLUSTER
+        flags:
+          clouds: aws
+          aws-zones: "us-east-2c"
+          nodes: $WORKLOAD_NODES
+          # m6i.2xlarge: 8 vCPU, 32GB RAM (equivalent to n2-standard-8)
+          aws-machine-type: m6i.2xlarge
+          local-ssd: false
+          aws-ebs-volume-size: 100
+          username: workload
+          lifetime: 8760h
+          label: drt=true
+          # IAM instance profile for AWS resource access (S3, secrets, etc.)
+          aws-iam-profile: drt-testing
+        on_rollback:
+          - command: destroy
+            args:
+              - $WORKLOAD_CLUSTER
+      - command: sync
+        flags:
+          clouds: aws
+      # Install AWS CLI v2 on workload node
+      - command: run
+        args:
+          - $WORKLOAD_CLUSTER
+          - --
+          - >-
+            sudo apt-get install -y unzip &&
+            curl -fsSL https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip -o /tmp/awscliv2.zip &&
+            cd /tmp &&
+            unzip -q -o awscliv2.zip &&
+            sudo ./aws/install &&
+            rm -rf /tmp/aws /tmp/awscliv2.zip
+      # Create AWS config file so roachprod detects AWS credentials from IAM instance profile
+      - command: run
+        args:
+          - $WORKLOAD_CLUSTER
+          - --
+          - >-
+            mkdir -p ~/.aws &&
+            echo '[default]' > ~/.aws/config &&
+            echo 'region = us-east-1' >> ~/.aws/config
+      - command: stage
+        args:
+          - $WORKLOAD_CLUSTER
+          - cockroach
+      - command: stage
+        args:
+          - $WORKLOAD_CLUSTER
+          - workload
+      - script: "pkg/cmd/drtprod/scripts/setup_datadog_workload"
+  - target_name: post_tasks
+    dependent_targets:
+      - $CLUSTER
+      - $WORKLOAD_CLUSTER
+    steps:
+      # Fetch certs from cluster node 1 to local directory
+      - command: fetch-certs
+        args:
+          - $CLUSTER:1
+          - certs-$CLUSTER
+      # Copy certs to workload cluster
+      - command: put
+        args:
+          - $WORKLOAD_CLUSTER
+          - certs-$CLUSTER
+          - certs
+      # Clean up local certs directory
+      - script: rm
+        args:
+          - -rf
+          - certs-$CLUSTER
+      - command: put
+        args:
+          - $WORKLOAD_CLUSTER
+          - artifacts/roachprod
+          - roachprod
+      - command: put
+        args:
+          - $WORKLOAD_CLUSTER
+          - artifacts/drtprod
+          - drtprod
+      - command: put
+        args:
+          - $WORKLOAD_CLUSTER
+          - artifacts/roachtest
+          - roachtest-operations
+      - command: put
+        args:
+          - $WORKLOAD_CLUSTER
+          - pkg/cmd/drt/scripts/roachtest_operations_run.sh
+          - roachtest_operations_run.sh
+      - script: pkg/cmd/drtprod/scripts/populate_workload_keys.sh
+      - script: "pkg/cmd/drtprod/scripts/tpcc_init.sh"
+        args:
+          - cct_tpcc # suffix added to script name tpcc_init_cct_tpcc.sh
+          - true # determines whether to execute the script immediately on workload node
+        flags:
+          warehouses: 12000
+          db: cct_tpcc
+      - script: "pkg/cmd/drtprod/scripts/generate_tpcc_run.sh"
+        args:
+          - cct_tpcc # suffix added to script name tpcc_run.sh
+          - false # determines whether to execute the script immediately on workload node
+        flags:
+          db: cct_tpcc
+          warehouses: 12000
+          max-rate: 500
+          workers: 50
+          conns: 50
+          ramp: 10m
+          wait: 0
+      - script: "pkg/cmd/drtprod/scripts/generate_kv_run.sh"
+        args:
+          - false # determines whether to execute the script immediately on workload node
+      - script: "pkg/cmd/drtprod/scripts/generate_tpcc_drop.sh"
+        args:
+          - false # determines whether to execute the script immediately on workload node

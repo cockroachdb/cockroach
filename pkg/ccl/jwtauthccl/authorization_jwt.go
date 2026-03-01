@@ -10,7 +10,7 @@ import (
 	"encoding/json"
 	"net/http"
 
-	"github.com/cockroachdb/cockroach/pkg/ccl/securityccl/jwthelper"
+	"github.com/cockroachdb/cockroach/pkg/security/jwthelper"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/errors"

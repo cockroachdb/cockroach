@@ -292,7 +292,7 @@ func getSessionsHoldingDescriptor(
 	ctx context.Context, txn isql.Txn, descID descpb.ID, region string,
 ) ([]sqlliveness.SessionID, error) {
 	queryStr := `
-SELECT DISTINCT session_id FROM system.lease WHERE desc_id=%d AND crdb_internal.sql_liveness_is_alive(session_id) 
+SELECT DISTINCT session_id FROM system.lease WHERE desc_id=%d AND crdb_internal.sql_liveness_is_alive(session_id)
 `
 	if region != "" {
 		queryStr += fmt.Sprintf(" AND crdb_region='%s'", region)
@@ -320,14 +320,14 @@ func countSessionsHoldingStaleDescriptor(
 	// Counts sessions that have previous version of the descriptor but not the current version
 	b.WriteString(fmt.Sprintf(`
 		SELECT count(DISTINCT l1.session_id)
-		FROM system.lease l1 
-		WHERE l1.desc_id = %d 
-		AND l1.version < %d 
+		FROM system.lease l1
+		WHERE l1.desc_id = %d
+		AND l1.version < %d
 		AND crdb_internal.sql_liveness_is_alive(l1.session_id)
 		AND NOT EXISTS (
-			SELECT 1 FROM system.lease l2 
-			WHERE l2.desc_id = l1.desc_id 
-			AND l2.session_id = l1.session_id 
+			SELECT 1 FROM system.lease l2
+			WHERE l2.desc_id = l1.desc_id
+			AND l2.session_id = l1.session_id
 			AND l2.version = %d
 		`, desc.GetID(), desc.GetVersion(), desc.GetVersion()))
 	if region != "" {
@@ -1957,6 +1957,13 @@ func NewLeaseManager(
 	lm.descDelCh = make(chan descpb.ID)
 	lm.descMetaDataUpdateCh = make(chan *descriptorTxnUpdate)
 	lm.rangefeedErrCh = make(chan error)
+	// Allow the bytes monitor to have allocation buffering
+	// by default. When we specify the minimum memory acquired
+	// per-allocation is: DefaultPoolAllocationSize
+	bytesMonitorIncrement := int64(0)
+	if lm.testingKnobs.DisallowBytesMonitorCaching {
+		bytesMonitorIncrement = 1
+	}
 	lm.bytesMonitor = mon.NewMonitor(mon.Options{
 		Name:       mon.MakeName("leased-descriptors"),
 		CurCount:   lm.storage.leasingMetrics.leaseCurBytesCount,
@@ -1964,12 +1971,23 @@ func NewLeaseManager(
 		Res:        mon.MemoryResource,
 		Settings:   settings,
 		LongLiving: true,
+		Increment:  bytesMonitorIncrement,
 	})
 	lm.bytesMonitor.StartNoReserved(context.Background(), rootBytesMonitor)
 	lm.boundAccount = lm.bytesMonitor.MakeConcurrentBoundAccount()
 	// Add a stopper for the bound account that we are using to
 	// track memory usage.
 	lm.stopper.AddCloser(stop.CloserFn(func() {
+		// If there are outstanding leases, we cannot close the account and
+		// properly stop it. This can happen if draining fails, but we have no
+		// way of knowing if draining itself was successful, because an earlier
+		// go routine will attempt it.
+		// The safest option is to emergency-stop the monitor, which prevents
+		// panics inside the release code path.
+		if lm.boundAccount.Used() > 0 {
+			lm.bytesMonitor.EmergencyStop(context.Background())
+			return
+		}
 		lm.boundAccount.Close(ctx)
 		lm.bytesMonitor.Stop(ctx)
 	}))
@@ -3491,13 +3509,18 @@ func (m *Manager) deleteOrphanedLeasesFromStaleSession(
 	}
 	// For multi-region system databases, only focus on our own region; there is
 	// no need to incur cross-region hops.
-	region := string(enum.One)
-	multiRegionSystemDb := tree.MustBeDBool(row[0])
-	if !locality.Empty() && bool(multiRegionSystemDb) {
+	var region string
+	var regionStr redact.RedactableString // Used for logging only.
+	multiRegionSystemDB := bool(tree.MustBeDBool(row[0]))
+	if !locality.Empty() && multiRegionSystemDB {
 		region = locality.Tiers[0].Value
+		regionStr = redact.Sprintf("region %s", region)
+	} else {
+		region = string(enum.One)
+		regionStr = redact.Sprintf("default region (0x%x)", redact.SafeString(region))
 	}
 
-	log.Dev.Infof(ctx, "starting orphaned lease cleanup from stale sessions in region %s", region)
+	log.Dev.Infof(ctx, "starting orphaned lease cleanup from stale sessions in %s", regionStr)
 
 	var distinctSessions []tree.Datums
 	aostTime := hlc.Timestamp{WallTime: initialTimestamp}
@@ -3508,8 +3531,7 @@ func (m *Manager) deleteOrphanedLeasesFromStaleSession(
 	// For single-region, we use the bytes representation.
 	var distinctSessionQuery string
 	var regionParam interface{}
-	isMultiRegion := bool(multiRegionSystemDb)
-	if isMultiRegion {
+	if multiRegionSystemDB {
 		distinctSessionQuery = `SELECT DISTINCT(session_id) FROM system.lease AS OF SYSTEM TIME %s WHERE crdb_region=$1::system.crdb_internal_region AND NOT crdb_internal.sql_liveness_is_alive(session_id, true) LIMIT $2`
 		regionParam = region
 	} else {
@@ -3545,7 +3567,7 @@ func (m *Manager) deleteOrphanedLeasesFromStaleSession(
 		// Delete rows in our lease table with orphaned sessions.
 		for _, sessionRow := range distinctSessions {
 			sessionID := sqlliveness.SessionID(tree.MustBeDBytes(sessionRow[0]))
-			sessionLeasesDeleted, err := deleteLeaseWithSessionIDWithBatch(ctx, ex, retryOpts, isMultiRegion, sessionID, regionParam, limit)
+			sessionLeasesDeleted, err := deleteLeaseWithSessionIDWithBatch(ctx, ex, retryOpts, multiRegionSystemDB, sessionID, regionParam, limit)
 			if err != nil {
 				log.Dev.Warningf(ctx, "unable to delete orphaned leases for session %s: %v", sessionID, err)
 				break
@@ -3558,16 +3580,16 @@ func (m *Manager) deleteOrphanedLeasesFromStaleSession(
 
 		// No more dead sessions to clean up.
 		if len(distinctSessions) < limit {
-			log.Dev.Infof(ctx, "completed orphaned lease cleanup for region %s: %d sessions processed, %d leases deleted",
-				region, totalSessionsProcessed, totalLeasesDeleted)
+			log.Dev.Infof(ctx, "completed orphaned lease cleanup for %s: %d sessions processed, %d leases deleted",
+				regionStr, totalSessionsProcessed, totalLeasesDeleted)
 			return
 		}
 
 		// Log progress for large cleanup operations.
-		log.Dev.Infof(ctx, "orphaned lease cleanup progress for region %s: %d sessions processed, %d leases deleted so far",
-			region, totalSessionsProcessed, totalLeasesDeleted)
+		log.Dev.Infof(ctx, "orphaned lease cleanup progress for %s: %d sessions processed, %d leases deleted so far",
+			regionStr, totalSessionsProcessed, totalLeasesDeleted)
 
-		// Advance our aostTime timstamp so that our query to detect leases with
+		// Advance our aostTime timestamp so that our query to detect leases with
 		// dead sessions is aware of new deletes and does not keep selecting the
 		// same leases.
 		aostTime = hlc.Timestamp{WallTime: m.storage.clock.Now().WallTime}
@@ -3580,7 +3602,7 @@ func deleteLeaseWithSessionIDWithBatch(
 	ctx context.Context,
 	ex isql.Executor,
 	retryOpts retry.Options,
-	multiRegionSystemDb bool,
+	multiRegionSystemDB bool,
 	sessionID sqlliveness.SessionID,
 	regionParam interface{},
 	batchSize int,
@@ -3589,7 +3611,7 @@ func deleteLeaseWithSessionIDWithBatch(
 	// For multi-region, we need to cast the region parameter to the enum type.
 	// For single-region, we use the bytes representation.
 	var deleteOrphanedQuery string
-	if multiRegionSystemDb {
+	if multiRegionSystemDB {
 		deleteOrphanedQuery = `DELETE FROM system.lease WHERE session_id=$1 AND crdb_region=$2::system.crdb_internal_region LIMIT $3`
 	} else {
 		deleteOrphanedQuery = `DELETE FROM system.lease WHERE session_id=$1 AND crdb_region=$2 LIMIT $3`
@@ -3630,7 +3652,7 @@ func (m *Manager) deleteOrphanedLeasesWithSameInstanceID(
 	// doesn't implement AS OF SYSTEM TIME.
 
 	// Read orphaned leases from the system.lease table.
-	query := `SELECT s."desc_id",  s.version, s."session_id", s.crdb_region FROM system.lease as s 
+	query := `SELECT s."desc_id",  s.version, s."session_id", s.crdb_region FROM system.lease as s
 		WHERE s."sql_instance_id"=%d
 `
 	sqlQuery := fmt.Sprintf(query, instanceID)

@@ -6,6 +6,7 @@
 package scbuildstmt
 
 import (
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
@@ -151,6 +152,14 @@ func dropUniqueIndexBackedConstraint(
 	}
 	if !sie.IsUnique {
 		panic(errors.AssertionFailedf("dropping an index-backed constraint but the index is not unique"))
+	}
+
+	// Dropping a unique constraint via ALTER TABLE ... DROP CONSTRAINT was added
+	// in v26.2. In mixed-version clusters, fall back to the legacy schema changer
+	// to avoid inconsistent behavior across nodes.
+	if !b.EvalCtx().Settings.Version.ActiveVersion(b).IsActive(clusterversion.V26_2) {
+		panic(scerrors.NotImplementedErrorf(t,
+			"DROP CONSTRAINT for unique constraints is not supported before v26.2"))
 	}
 
 	// Since this will drop the index as well, guard this behind the

@@ -52,6 +52,7 @@ go_library(
         "cypress/e2e/pages/schedules.cy.ts",
         "cypress/e2e/pages/sqlActivity.cy.ts",
         "cypress/e2e/pages/topRanges.cy.ts",
+        "cypress/support/utils.ts",
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/ui/workspaces/e2e-tests",
     visibility = ["//visibility:public"],

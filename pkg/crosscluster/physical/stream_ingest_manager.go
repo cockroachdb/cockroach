@@ -8,7 +8,6 @@ package physical
 import (
 	"context"
 
-	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl"
 	"github.com/cockroachdb/cockroach/pkg/crosscluster/replicationutils"
 	"github.com/cockroachdb/cockroach/pkg/crosscluster/streamclient"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
@@ -20,8 +19,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/clusterunique"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
-	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
-	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/syntheticprivilege"
@@ -54,13 +51,6 @@ func newStreamIngestManagerWithPrivilegesCheck(
 	ctx context.Context, evalCtx *eval.Context, txn isql.Txn, sessionID clusterunique.ID,
 ) (eval.StreamIngestManager, error) {
 	execCfg := evalCtx.Planner.ExecutorConfig().(*sql.ExecutorConfig)
-	enterpriseCheckErr := utilccl.CheckEnterpriseEnabled(
-		execCfg.Settings, "REPLICATION")
-	if enterpriseCheckErr != nil {
-		return nil, pgerror.Wrap(enterpriseCheckErr,
-			pgcode.CCLValidLicenseRequired, "physical replication requires an enterprise license on the secondary (and primary) cluster")
-	}
-
 	if err := evalCtx.SessionAccessor.CheckPrivilege(ctx,
 		syntheticprivilege.GlobalPrivilegeObject,
 		privilege.MANAGEVIRTUALCLUSTER); err != nil {

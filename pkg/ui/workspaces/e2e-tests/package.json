@@ -16,10 +16,10 @@
   },
   "devDependencies": {
     "@cockroachlabs/eslint-config": "0.1.11",
-    "@testing-library/cypress": "^8.0.2",
+    "@testing-library/cypress": "^10.0.0",
     "@types/node": "^22.0.0",
     "@typescript-eslint/parser": "2.34.0",
-    "cypress": "^10.3.0",
+    "cypress": "^13.13.2",
     "eslint": "7.29.0",
     "eslint-config-prettier": "^8.8.0",
     "eslint-plugin-prettier": "3.4.1",

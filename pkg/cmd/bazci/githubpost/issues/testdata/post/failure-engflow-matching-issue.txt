@@ -1,8 +1,8 @@
 post
 ----
 ----
-searchIssue repo:"cockroach" user:"cockroachdb" is:issue is:open in:title sort:created-desc "storage: TestReplicateQueueRebalance failed" label:O-robot label:branch-release-0.1 -label:X-noreuse: [github.Issue{Number:30, Title:"storage: TestReplicateQueueRebalance failed [failure reason]", Labels:[github.Label{URL:"fake", Name:"C-test-failure"} github.Label{URL:"fake", Name:"O-robot"} github.Label{URL:"fake", Name:"release-0.1"}]} github.Issue{Number:32, Title:"storage: TestReplicateQueueRebalance-similar failed [failure reason]", Labels:[github.Label{URL:"fake", Name:"C-test-failure"} github.Label{URL:"fake", Name:"O-robot"} github.Label{URL:"fake", Name:"release-0.1"}]}]
-searchIssue repo:"cockroach" user:"cockroachdb" is:issue is:open in:title sort:created-desc "storage: TestReplicateQueueRebalance failed" label:O-robot -label:branch-release-0.1: []
+searchIssue repo:"cockroach" user:"cockroachdb" is:issue is:open in:title sort:created-desc "release-0.1: storage: TestReplicateQueueRebalance failed" label:O-robot label:branch-release-0.1 -label:X-noreuse: [github.Issue{Number:30, Title:"release-0.1: storage: TestReplicateQueueRebalance failed [failure reason]", Labels:[github.Label{URL:"fake", Name:"C-test-failure"} github.Label{URL:"fake", Name:"O-robot"} github.Label{URL:"fake", Name:"release-0.1"}]} github.Issue{Number:32, Title:"release-0.1: storage: TestReplicateQueueRebalance-similar failed [failure reason]", Labels:[github.Label{URL:"fake", Name:"C-test-failure"} github.Label{URL:"fake", Name:"O-robot"} github.Label{URL:"fake", Name:"release-0.1"}]}]
+searchIssue repo:"cockroach" user:"cockroachdb" is:issue is:open in:title sort:created-desc "release-0.1: storage: TestReplicateQueueRebalance failed" label:O-robot -label:branch-release-0.1: []
 createComment owner=cockroachdb repo=cockroach issue=30:
 
 storage.TestReplicateQueueRebalance [failed](https://fake.cluster.engflow.com/invocations/default/fake-invocation-id?testReportRun=2&testReportShard=3&testReportAttempt=1#targets-Ly90aGUvZmFrZS9sYWJlbDpsYWJlbF90ZXN0) on release-0.1 @ [abcd123](https://github.com/cockroachdb/cockroach/commits/abcd123):

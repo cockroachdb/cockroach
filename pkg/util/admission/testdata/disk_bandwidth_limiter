@@ -1,23 +1,29 @@
 init
 ----
-diskBandwidthLimiter (writeUtil 0.00, tokensUsed (elastic 0 B, snapshot 0 B, regular 0 B) tokens (write 0 B (prev 0 B), read 0 B (prev 0 B)), writeBW 0 B/s, readBW 0 B/s, provisioned 0 B/s, err(cum,abs,acc) write: 0 B,0 B,0 B read: 0 B,0 B,0 B)
+diskBandwidthLimiter (writeUtil 0.00, tokensUsed (elastic 0 B, snapshot 0 B, regular 0 B) tokens (write 0 B (prev 0 B), read 0 B (prev 0 B)), writeBW 0 B/s, readBW 0 B/s, provisioned 0 B/s, err(cum,abs) write: 0 B,0 B read: 0 B,0 B)
 
 # Since token utilization is from the previous estimation loop, we expect that to be +Inf in the first iteration.
 compute int-read-bytes=50 int-write-bytes=100 int-provisioned-bytes=1000 regular-tokens-used=60 snapshot-tokens-used=5 elastic-tokens-used=20
 ----
-diskBandwidthLimiter (writeUtil 0.00, tokensUsed (elastic 20 B, snapshot 5 B, regular 60 B) tokens (write 850 B (prev 0 B), read 50 B (prev 0 B)), writeBW 6 B/s, readBW 3 B/s, provisioned 66 B/s, err(cum,abs,acc) write: 0 B,0 B,0 B read: 0 B,0 B,0 B)
+diskBandwidthLimiter (writeUtil 0.00, tokensUsed (elastic 20 B, snapshot 5 B, regular 60 B) tokens (write 850 B (prev 0 B), read 50 B (prev 0 B)), writeBW 6 B/s, readBW 3 B/s, provisioned 66 B/s, err(cum,abs) write: 0 B,0 B read: 0 B,0 B)
 
 # Utilization is now not Inf. For token calculation, we adjust using the max of smoothed read bytes and the current value. Here we use 80.
 compute int-read-bytes=80 int-write-bytes=150 int-provisioned-bytes=800 regular-tokens-used=100  snapshot-tokens-used=5 elastic-tokens-used=30
 ----
-diskBandwidthLimiter (writeUtil 0.16, tokensUsed (elastic 30 B, snapshot 5 B, regular 100 B) tokens (write 640 B (prev 850 B), read 80 B (prev 50 B)), writeBW 10 B/s, readBW 5 B/s, provisioned 53 B/s, err(cum,abs,acc) write: 0 B,0 B,0 B read: 0 B,0 B,0 B)
+diskBandwidthLimiter (writeUtil 0.16, tokensUsed (elastic 30 B, snapshot 5 B, regular 100 B) tokens (write 640 B (prev 850 B), read 80 B (prev 50 B)), writeBW 10 B/s, readBW 5 B/s, provisioned 53 B/s, err(cum,abs) write: 0 B,0 B read: 0 B,0 B)
 
 # Now we use 65 for read bandwidth adjustment.
 compute int-read-bytes=50 int-write-bytes=100 int-provisioned-bytes=800 regular-tokens-used=10 snapshot-tokens-used=5 elastic-tokens-used=30
 ----
-diskBandwidthLimiter (writeUtil 0.07, tokensUsed (elastic 30 B, snapshot 5 B, regular 10 B) tokens (write 655 B (prev 640 B), read 65 B (prev 80 B)), writeBW 6 B/s, readBW 3 B/s, provisioned 53 B/s, err(cum,abs,acc) write: 0 B,0 B,0 B read: 0 B,0 B,0 B)
+diskBandwidthLimiter (writeUtil 0.07, tokensUsed (elastic 30 B, snapshot 5 B, regular 10 B) tokens (write 655 B (prev 640 B), read 65 B (prev 80 B)), writeBW 6 B/s, readBW 3 B/s, provisioned 53 B/s, err(cum,abs) write: 0 B,0 B read: 0 B,0 B)
 
 # Now we use 200 for read bandwidth adjustment.
-compute int-read-bytes=200 int-write-bytes=100 int-provisioned-bytes=800 regular-tokens-used=10 snapshot-tokens-used=5 elastic-tokens-used=30 cum-err=20 abs-err=30 acc-err=5
+compute int-read-bytes=200 int-write-bytes=100 int-provisioned-bytes=800 regular-tokens-used=10 snapshot-tokens-used=5 elastic-tokens-used=30 cum-err=20 abs-err=30
 ----
-diskBandwidthLimiter (writeUtil 0.07, tokensUsed (elastic 30 B, snapshot 5 B, regular 10 B) tokens (write 520 B (prev 655 B), read 200 B (prev 65 B)), writeBW 6 B/s, readBW 13 B/s, provisioned 53 B/s, err(cum,abs,acc) write: 20 B,30 B,5 B read: 0 B,0 B,0 B)
+diskBandwidthLimiter (writeUtil 0.07, tokensUsed (elastic 30 B, snapshot 5 B, regular 10 B) tokens (write 520 B (prev 655 B), read 200 B (prev 65 B)), writeBW 6 B/s, readBW 13 B/s, provisioned 53 B/s, err(cum,abs) write: 20 B,30 B read: 0 B,0 B)
+
+# Negative remaining-disk-write-tokens indicates overadmission. -450 over a
+# 15s interval = 30 B/s overadmission rate.
+compute int-read-bytes=200 int-write-bytes=100 int-provisioned-bytes=800 regular-tokens-used=10 snapshot-tokens-used=5 elastic-tokens-used=30 remaining-disk-write-tokens=-450
+----
+diskBandwidthLimiter (writeUtil 0.09, tokensUsed (elastic 30 B, snapshot 5 B, regular 10 B) tokens (write 520 B (prev 520 B), read 200 B (prev 200 B)), writeBW 6 B/s, readBW 13 B/s, provisioned 53 B/s, err(cum,abs) write: 0 B,0 B read: 0 B,0 B) overadmission 30 B/s

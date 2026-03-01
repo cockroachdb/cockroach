@@ -62,9 +62,10 @@ func (dto *TaskResult) GetData() any {
 	return dto.Data
 }
 
-// FromService converts the result of the public DNS service to a TaskResult.
-func (dto *TaskResult) FromService(task tasks.ITask, err error) *TaskResult {
-	dto.Data = task
-	dto.Error = err
-	return dto
+// NewTaskResult creates a new TaskResult.
+func NewTaskResult(task tasks.ITask, err error) *TaskResult {
+	return &TaskResult{
+		PublicDNSResultError: PublicDNSResultError{Error: err},
+		Data:                 task,
+	}
 }

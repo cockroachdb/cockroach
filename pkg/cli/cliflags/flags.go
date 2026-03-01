@@ -1721,8 +1721,17 @@ The default is to not exclude any node.`,
 List of glob patterns that determine files that can be included
 in the output. The list can be specified as a comma-delimited
 list of patterns, or by using the flag multiple times.
-The patterns apply to the base name of the file, without
-a path prefix.
+<PRE>
+
+</PRE>
+Patterns without '/' apply to the base name of the file (e.g. '*.json').
+Patterns containing '/' are matched against the full path within the zip
+archive (e.g. 'debug/nodes/1/*.json' or 'debug/nodes/*/ranges.json').
+The path matching uses Go's filepath.Match syntax, where '*' matches
+any sequence of non-separator characters within a single path component.
+<PRE>
+
+</PRE>
 The default is to include all files.
 <PRE>
 
@@ -1744,8 +1753,14 @@ List of glob patterns that determine files that are to
 be excluded from the output. The list can be specified
 as a comma-delimited list of patterns, or by using the
 flag multiple times.
-The patterns apply to the base name of the file, without
-a path prefix.
+<PRE>
+
+</PRE>
+Patterns without '/' apply to the base name of the file (e.g. '*.log').
+Patterns containing '/' are matched against the full path within the zip
+archive (e.g. 'debug/nodes/*/ranges.json').
+The path matching uses Go's filepath.Match syntax, where '*' matches
+any sequence of non-separator characters within a single path component.
 <PRE>
 
 </PRE>

@@ -27,7 +27,7 @@ import (
 
 // Service implements the health service.
 type Service struct {
-	options    Options
+	options    types.Options
 	instanceID string
 	hostname   string
 
@@ -41,35 +41,25 @@ type Service struct {
 	shutdownOnce             sync.Once
 }
 
-// Options configures the health service.
-type Options struct {
-	HeartbeatInterval time.Duration // Default: 1s
-	InstanceTimeout   time.Duration // Default: 3s
-	CleanupInterval   time.Duration // Default: 1h
-	CleanupRetention  time.Duration // Default: 24h
-	WorkersEnabled    bool          // Whether task workers are enabled
-	Mode              health.Mode   // Service mode: APIOnly, WorkersOnly, APIWithWorkers
-}
-
 // NewService creates a new health service.
 func NewService(
 	repository rhealth.IHealthRepository,
 	taskService stasks.IService,
 	instanceID string,
-	opts Options,
+	opts types.Options,
 ) (*Service, error) {
 	// Set defaults
 	if opts.HeartbeatInterval == 0 {
-		opts.HeartbeatInterval = 1 * time.Second
+		opts.HeartbeatInterval = types.DefaultHeartbeatInterval
 	}
 	if opts.InstanceTimeout == 0 {
-		opts.InstanceTimeout = 3 * time.Second
+		opts.InstanceTimeout = types.DefaultInstanceTimeout
 	}
 	if opts.CleanupInterval == 0 {
-		opts.CleanupInterval = 1 * time.Hour
+		opts.CleanupInterval = types.DefaultCleanupInterval
 	}
 	if opts.CleanupRetention == 0 {
-		opts.CleanupRetention = 24 * time.Hour
+		opts.CleanupRetention = types.DefaultCleanupRetention
 	}
 
 	hostname, _ := os.Hostname()

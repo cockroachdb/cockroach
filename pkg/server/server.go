@@ -32,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keyvisualizer/keyvissubscriber"
 	"github.com/cockroachdb/cockroach/pkg/keyvisualizer/spanstatskvaccessor"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/kv/followerreads"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangefeed"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangestats"
@@ -66,7 +67,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities"
 	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities/tenantcapabilitiesauthorizer"
 	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities/tenantcapabilitieswatcher"
-	"github.com/cockroachdb/cockroach/pkg/obs/clustermetrics/cmreader"
+	"github.com/cockroachdb/cockroach/pkg/obs/clustermetrics"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
@@ -282,7 +283,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (serverctl.ServerStartupInterf
 	// any particular tenant.
 	sysRegistry := metric.NewRegistry()
 
-	clusterMetricsRegistry := cmreader.NewRegistryReader()
+	clusterMetricsRegistry := clustermetrics.NewRegistryReader()
 
 	ruleRegistry := metric.NewRuleRegistry()
 	promRuleExporter := metric.NewPrometheusRuleExporter(ruleRegistry)
@@ -490,6 +491,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (serverctl.ServerStartupInterf
 		FirstRangeProvider: g,
 		Locality:           cfg.Locality,
 		TestingKnobs:       clientTestingKnobs,
+		CanSendToFollower:  followerreads.CanSendToFollower,
 		HealthFunc: func(id roachpb.NodeID) bool {
 			return livenessCache.GetNodeVitality(id).IsLive(livenesspb.DistSender)
 		},
@@ -590,6 +592,8 @@ func NewServer(cfg Config, stopper *stop.Stopper) (serverctl.ServerStartupInterf
 	)
 	db.SQLKVResponseAdmissionQ = gcoords.RegularCPU.GetSQLWorkQueue(admission.SQLKVResponseWork)
 	db.AdmissionPacerFactory = gcoords.ElasticCPU
+	sqlCPUProvider := admission.NewSQLCPUProvider()
+	db.SQLCPUProvider = sqlCPUProvider
 	goschedstats.RegisterSettings(st)
 	if goschedstats.Supported {
 		cbID := goschedstats.RegisterRunnableCountCallback(gcoords.RegularCPU.GetRunnableCountCallback())
@@ -719,7 +723,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (serverctl.ServerStartupInterf
 		CPUCapacityRefreshInterval: cpuCapacityRefreshInterval,
 		CPUUsageMovingAverageAge:   base.DefaultCPUUsageMovingAverageAge,
 	}
-	nodeCapacityProvider := load.NewNodeCapacityProvider(stopper, stores, nodeCapacityProviderConfig)
+	nodeCapacityProvider := load.NewNodeCapacityProvider(stopper, stores, sqlCPUProvider, nodeCapacityProviderConfig)
 
 	// The Executor will be further initialized later, as we create more
 	// of the server's components. There's a circular dependency - many things
@@ -1191,7 +1195,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (serverctl.ServerStartupInterf
 
 	// The settings cache writer is responsible for persisting the
 	// cluster settings on KV nodes across restarts.
-	settingsWriter := newSettingsCacheWriter(engines[0].TODOEngine(), stopper)
+	settingsWriter := newSettingsCacheWriter(engines[0].LogEngine(), stopper)
 	stopTrigger := newStopTrigger()
 
 	// Initialize the pgwire pre-server, which initializes connections,
@@ -1271,6 +1275,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (serverctl.ServerStartupInterf
 		monitorAndMetrics:        sqlMonitorAndMetrics,
 		settingsStorage:          settingsWriter,
 		admissionPacerFactory:    gcoords.ElasticCPU,
+		sqlCPUProvider:           sqlCPUProvider,
 		rangeDescIteratorFactory: rangedesc.NewIteratorFactory(db),
 		tenantCapabilitiesReader: sql.MakeSystemTenantOnly[tenantcapabilities.Reader](tenantCapabilitiesWatcher),
 	})

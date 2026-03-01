@@ -71,6 +71,10 @@ type importResumer struct {
 	settings *cluster.Settings
 	res      roachpb.RowCount
 
+	// inspectJobID is the ID of the background INSPECT job triggered for row
+	// count validation, if any. Zero means no INSPECT job was triggered.
+	inspectJobID jobspb.JobID
+
 	testingKnobs importTestingKnobs
 }
 
@@ -143,15 +147,15 @@ const (
 
 // importRowCountValidationMetamorphicValue determines the default value for
 // importRowCountValidation in metamorphic test builds. It randomly selects
-// between "off", "async", and "sync" modes to increase test coverage.
+// between "async" and "sync" modes to increase test coverage.
 var importRowCountValidationMetamorphicValue = metamorphic.ConstantWithTestChoice(
 	"import-row-count-validation",
-	"off",   // no validation
-	"async", // background validation
+	"async", // background validation (default)
 	"sync",  // blocking validation for tests
 )
 
-// TODO(janexing): tune the default to async when INSPECT is merged in stable release.
+// Note: the internal key retains "unsafe" for backward compatibility, but the
+// setting is no longer unsafe. The public name is set via WithName below.
 var importRowCountValidation = settings.RegisterEnumSetting(
 	settings.ApplicationLevel,
 	"bulkio.import.row_count_validation.unsafe.mode",
@@ -165,7 +169,8 @@ var importRowCountValidation = settings.RegisterEnumSetting(
 		ImportRowCountValidationAsync: "async",
 		ImportRowCountValidationSync:  "sync",
 	},
-	settings.WithUnsafe,
+	settings.WithName("bulkio.import.row_count_validation.mode"),
+	settings.WithPublic,
 	settings.WithRetiredName("bulkio.import.row_count_validation.unsafe.enabled"),
 )
 
@@ -415,7 +420,7 @@ func (r *importResumer) Resume(ctx context.Context, execCtx interface{}) error {
 		}
 
 		if len(checks) > 0 {
-			job, err := inspect.TriggerJob(
+			inspectJob, err := inspect.TriggerJob(
 				ctx,
 				fmt.Sprintf("import-validation-%s", tableName),
 				p.ExecCfg(),
@@ -425,14 +430,15 @@ func (r *importResumer) Resume(ctx context.Context, execCtx interface{}) error {
 			if err != nil {
 				return errors.Wrapf(err, "failed to trigger inspect for import validation for table %s", tableName)
 			}
-			log.Eventf(ctx, "triggered inspect job %d for import validation for table %s with AOST %s", job.ID(), tableName, setPublicTimestamp)
+			r.inspectJobID = inspectJob.ID()
+			log.Eventf(ctx, "triggered inspect job %d for import validation for table %s with AOST %s", inspectJob.ID(), tableName, setPublicTimestamp)
 
 			// For sync mode, wait for the inspect job to complete.
 			if validationMode == ImportRowCountValidationSync {
-				if err := p.ExecCfg().JobRegistry.WaitForJobs(ctx, []jobspb.JobID{job.ID()}); err != nil {
-					return errors.Wrapf(err, "failed to wait for inspect job %d for table %s", job.ID(), tableName)
+				if err := p.ExecCfg().JobRegistry.WaitForJobs(ctx, []jobspb.JobID{inspectJob.ID()}); err != nil {
+					return errors.Wrapf(err, "failed to wait for inspect job %d for table %s", inspectJob.ID(), tableName)
 				}
-				log.Eventf(ctx, "inspect job %d completed for table %s", job.ID(), tableName)
+				log.Eventf(ctx, "inspect job %d completed for table %s", inspectJob.ID(), tableName)
 			}
 		}
 	}
@@ -1178,6 +1184,10 @@ func (r *importResumer) markOnline(
 
 // ReportResults implements JobResultsReporter interface.
 func (r *importResumer) ReportResults(ctx context.Context, resultsCh chan<- tree.Datums) error {
+	var inspectJobIDDatum tree.Datum = tree.DNull
+	if r.inspectJobID != 0 {
+		inspectJobIDDatum = tree.NewDInt(tree.DInt(r.inspectJobID))
+	}
 	select {
 	case resultsCh <- tree.Datums{
 		tree.NewDInt(tree.DInt(r.job.ID())),
@@ -1186,6 +1196,7 @@ func (r *importResumer) ReportResults(ctx context.Context, resultsCh chan<- tree
 		tree.NewDInt(tree.DInt(r.res.Rows)),
 		tree.NewDInt(tree.DInt(r.res.IndexEntries)),
 		tree.NewDInt(tree.DInt(r.res.DataSize)),
+		inspectJobIDDatum,
 	}:
 		return nil
 	case <-ctx.Done():

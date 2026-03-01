@@ -205,7 +205,11 @@ var _ cpuTimeTokenAllocatorI = &cpuTimeTokenAllocator{}
 // every interval, while respecting the bucket capacities. The computation
 // of the rate of tokens to add every interval is left to cpuTimeModel.
 type cpuTimeTokenAllocator struct {
-	granter  *cpuTimeTokenGranter
+	granter *cpuTimeTokenGranter
+	// queues holds references to WorkQueues for each resource tier. Used to
+	// refill per-tenant burst buckets that determine queue priority ordering.
+	// See cpu_time_token_burst.go for more.
+	queues   [numResourceTiers]workQueueIForAllocator
 	settings *cluster.Settings
 	model    cpuTimeModel
 
@@ -275,6 +279,20 @@ func (a *cpuTimeTokenAllocator) allocateTokens(expectedRemainingTicksInInterval 
 	// arbitrary decision.
 	bucketCapacities := capacities(a.refillRates)
 	a.granter.refill(allocations, bucketCapacities)
+
+	// Refill per-tenant burst buckets in the WorkQueues. The burst bucket
+	// refill rate and capacity should be 1/4th of the noBurst refill rate
+	// and capacity (for the corresponding resource tier). If a tenant's
+	// bucket is mostly full, we allow it to get priority in the queue (see
+	// cpu_time_token_burst.go for more). With cluster settings at their
+	// default values, this implies that an application tenant can burst,
+	// if they are using roughly less than 20% of the CPU on a CRDB node
+	// (0.8 * 0.25 = 0.2).
+	for resourceTier := range numResourceTiers {
+		toAdd := allocations[resourceTier][noBurst] / 4
+		burstCapacity := a.refillRates[resourceTier][noBurst] / 4
+		a.queues[resourceTier].refillBurstBuckets(toAdd, burstCapacity)
+	}
 }
 
 // resetInterval is called to signal the beginning of a new interval.
@@ -322,12 +340,25 @@ func (a *cpuTimeTokenAllocator) resetInterval(ctx context.Context) {
 	a.granter.refill(deltaRefillRates, bucketCapacities)
 	a.refillRates = newRefillRates
 
+	// Apply the delta to the per-tenant burst buckets also.
+	for resourceTier := range numResourceTiers {
+		toAdd := deltaRefillRates[resourceTier][noBurst] / 4
+		burstCapacity := bucketCapacities[resourceTier][noBurst] / 4
+		a.queues[resourceTier].refillBurstBuckets(toAdd, burstCapacity)
+	}
+
 	// Reset allocated.
 	for wc := range a.allocated {
 		for kind := range a.allocated[wc] {
 			a.allocated[wc][kind] = 0
 		}
 	}
+}
+
+// workQueueIForAllocator abstracts the burst bucket refill method in WorkQueue,
+// to enable unit testing.
+type workQueueIForAllocator interface {
+	refillBurstBuckets(toAdd int64, capacity int64)
 }
 
 // cpuTimeModel abstracts cpuTimeLinearModel for testing.

@@ -1083,7 +1083,8 @@ func (t *typeSchemaChanger) canRemoveEnumValueFromTable(
 			return err
 		}
 		if catpb.RegionName(member.LogicalRepresentation) == homedRegion {
-			return errors.Newf("could not remove enum value %q as it is the home region for table %q",
+			return pgerror.Newf(pgcode.DependentObjectsStillExist,
+				"could not remove enum value %q as it is the home region for table %q",
 				member.LogicalRepresentation, desc.GetName())
 		}
 	}

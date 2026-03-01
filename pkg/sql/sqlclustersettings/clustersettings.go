@@ -152,3 +152,14 @@ var LDRImmediateModeWriter = settings.RegisterStringSetting(
 		return nil
 	}),
 )
+
+// UseInstanceInfoForSQLInstances controls whether to use sqlinstance.InstanceInfo
+// instead of roachpb.NodeDescriptor when retrieving SQL instance information.
+// This is necessary for proper handling of SQL instances in multi-tenant
+// environments where SQL instances may not have corresponding KV nodes.
+var UseInstanceInfoForSQLInstances = settings.RegisterBoolSetting(
+	settings.ApplicationLevel,
+	"sql.instance_info.use_instance_resolver.enabled",
+	"use sqlinstance.InstanceInfo instead of NodeDescriptor for SQL instance lookups; "+
+		"enables proper handling of SQL instances in serverless environments",
+	metamorphic.ConstantWithTestBool("sql.instance_info.use_instance_resolver.enabled", true))

@@ -42,7 +42,7 @@ The `roachprod-centralized` service provides a unified HTTP API for:
 
 ```bash
 # Set minimum required configuration
-export ROACHPROD_API_AUTHENTICATION_DISABLED=true
+export ROACHPROD_API_AUTHENTICATION_TYPE=disabled
 export ROACHPROD_DATABASE_TYPE=memory
 ```
 
@@ -171,8 +171,11 @@ export ROACHPROD_API_PORT=8080
 export ROACHPROD_API_METRICS_ENABLED=true
 export ROACHPROD_LOG_LEVEL=info
 
-# Authentication (disable for development)
-export ROACHPROD_API_AUTHENTICATION_DISABLED=true
+# Authentication disabled (for development)
+export ROACHPROD_API_AUTHENTICATION_METHOD=disabled
+
+# Authentication via GCP Identity-Aware Proxy
+export ROACHPROD_API_AUTHENTICATION_METHOD=jwt
 export ROACHPROD_API_AUTHENTICATION_JWT_HEADER="X-Goog-IAP-JWT-Assertion"
 export ROACHPROD_API_AUTHENTICATION_JWT_AUDIENCE="your-audience"
 
@@ -244,6 +247,11 @@ The service follows a clean architecture pattern:
 - **Models**: Data structures and entities (`models/`)
 - **Utils**: Shared utilities and helpers (`utils/`)
 
+**Authorization Boundary (Important):**
+- Controllers enforce coarse endpoint access (authentication + required permission family).
+- Services enforce fine-grained authorization (scope/environment, ownership, and resource-level checks).
+- Service-layer authorization must use trusted data (stored resource state or server config), not only request payload.
+
 For detailed architecture information, see [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 
 ## Deployment
@@ -254,8 +262,11 @@ For small production deployments or development:
 
 ```bash
 # Enable authentication
-export ROACHPROD_API_AUTHENTICATION_DISABLED=false
-export ROACHPROD_API_AUTHENTICATION_JWT_AUDIENCE="your-production-audience"
+export ROACHPROD_API_AUTHENTICATION_TYPE=bearer
+export ROACHPROD_API_AUTHENTICATION_BEARER_OKTA_ISSUER="https://your-org.okta.com"
+export ROACHPROD_API_AUTHENTICATION_BEARER_OKTA_AUDIENCE="your-audience"
+export ROACHPROD_API_AUTHENTICATION_BEARER_OKTA_CLIENT_ID="your-client-id"
+export ROACHPROD_API_AUTHENTICATION_BEARER_OKTA_CLIENT_SECRET="your-client-secret"
 
 # Use CockroachDB backend
 export ROACHPROD_DATABASE_TYPE=cockroachdb
@@ -311,10 +322,13 @@ roachprod-centralized workers
 
 ### Production Configuration Checklist
 
-1. **Enable Authentication**:
+1. **Enable Bearer Authentication**:
    ```bash
-   export ROACHPROD_API_AUTHENTICATION_DISABLED=false
-   export ROACHPROD_API_AUTHENTICATION_JWT_AUDIENCE="your-production-audience"
+   export ROACHPROD_API_AUTHENTICATION_TYPE=bearer
+   export ROACHPROD_API_AUTHENTICATION_BEARER_OKTA_ISSUER="https://your-org.okta.com"
+   export ROACHPROD_API_AUTHENTICATION_BEARER_OKTA_AUDIENCE="your-audience"
+   export ROACHPROD_API_AUTHENTICATION_BEARER_OKTA_CLIENT_ID="your-client-id"
+   export ROACHPROD_API_AUTHENTICATION_BEARER_OKTA_CLIENT_SECRET="your-client-secret"
    ```
 
 2. **Use CockroachDB Backend** (required for scaled deployments):
@@ -323,15 +337,23 @@ roachprod-centralized workers
    export ROACHPROD_DATABASE_URL="postgresql://user:password@prod-cluster:26257/roachprod?sslmode=require"
    ```
 
-3. **Configure Cloud Providers**: Set up cloud provider credentials as detailed in [docs/CLOUD_PROVIDER_CONFIG.md](docs/CLOUD_PROVIDER_CONFIG.md)
+3. **Bootstrap SCIM Provisioning**:
+   ```bash
+   # Generate a bootstrap token for initial SCIM setup (first startup only)
+   export ROACHPROD_BOOTSTRAP_SCIM_TOKEN="rp\$sa\$1\$$(openssl rand -base64 32 | tr -dc 'a-zA-Z0-9' | head -c 43)"
+   ```
+   On first startup, this creates a short-lived (6 hour) service account for configuring Okta SCIM.
+   See [docs/services/AUTH.md](docs/services/AUTH.md#bootstrap-configuration) for details.
 
-4. **Resource Limits**:
+4. **Configure Cloud Providers**: Set up cloud provider credentials as detailed in [docs/CLOUD_PROVIDER_CONFIG.md](docs/CLOUD_PROVIDER_CONFIG.md)
+
+5. **Resource Limits**:
    ```bash
    export ROACHPROD_DATABASE_MAX_CONNS=20
    export ROACHPROD_TASKS_WORKERS=5  # Per worker instance
    ```
 
-5. **Monitoring**:
+6. **Monitoring**:
    - Collect Prometheus metrics from `:8081/metrics` (API instances)
    - Collect Prometheus metrics from workers' metrics ports
    - Monitor health endpoints: `/health` and `/health/detailed`
@@ -383,7 +405,7 @@ Error: authentication failed
 ```
 **Solution**: For development, disable authentication:
 ```bash
-export ROACHPROD_API_AUTHENTICATION_DISABLED=true
+export ROACHPROD_API_AUTHENTICATION_METHOD=disabled
 ```
 
 **2. Database Connection Issues**

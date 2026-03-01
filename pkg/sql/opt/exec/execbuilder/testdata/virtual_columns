@@ -791,14 +791,14 @@ vectorized: true
 │
 └── • insert
     │ columns: (a, v)
-    │ estimated row count: 0 (missing stats)
+    │ estimated row count: 1 (missing stats)
     │ into: t(a, b, v)
     │ auto commit
     │ arbiter indexes: t_pkey
     │
     └── • lookup join (anti)
         │ columns: (column1, column2, v_comp)
-        │ estimated row count: 0 (missing stats)
+        │ estimated row count: 1 (missing stats)
         │ table: t@t_pkey
         │ equality: (column1) = (a)
         │ equality cols are key
@@ -1083,20 +1083,20 @@ vectorized: true
 │
 └── • insert
     │ columns: (a, w)
-    │ estimated row count: 0 (missing stats)
+    │ estimated row count: 1 (missing stats)
     │ into: t_idx(a, b, c, v, w)
     │ auto commit
     │ arbiter indexes: t_idx_pkey, t_idx_w_key
     │
     └── • distinct
         │ columns: (column1, column2, column3, v_comp, w_comp)
-        │ estimated row count: 0 (missing stats)
+        │ estimated row count: 1 (missing stats)
         │ distinct on: w_comp
         │ nulls are distinct
         │
         └── • lookup join (anti)
             │ columns: (v_comp, w_comp, column1, column2, column3)
-            │ estimated row count: 0 (missing stats)
+            │ estimated row count: 1 (missing stats)
             │ table: t_idx@t_idx_pkey
             │ equality: (column1) = (a)
             │ equality cols are key
@@ -1104,7 +1104,7 @@ vectorized: true
             │
             └── • lookup join (anti)
                 │ columns: (v_comp, w_comp, column1, column2, column3)
-                │ estimated row count: 0 (missing stats)
+                │ estimated row count: 1 (missing stats)
                 │ table: t_idx@t_idx_w_key
                 │ equality: (w_comp) = (w)
                 │ equality cols are key

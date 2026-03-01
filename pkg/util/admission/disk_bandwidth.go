@@ -6,6 +6,7 @@
 package admission
 
 import (
+	"fmt"
 	"math"
 
 	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
@@ -102,6 +103,9 @@ type diskBandwidthLimiterState struct {
 	// i).
 	prevWriteTokenUtil float64
 	prevDiskErrorStats diskErrorStats
+	// prevRemainingDiskWriteTokens is the disk write token balance at the end
+	// of the previous interval. A negative value indicates overadmission.
+	prevRemainingDiskWriteTokens int64
 	// prevDiskLoad represents the disk load info for the previous
 	// adjustmentInterval.
 	prevDiskLoad intervalDiskLoadInfo
@@ -149,6 +153,7 @@ func (d *diskBandwidthLimiter) computeElasticTokens(
 	id intervalDiskLoadInfo,
 	usedTokens [admissionpb.NumStoreWorkTypes]diskTokens,
 	diskErrStats diskErrorStats,
+	remainingDiskWriteTokens int64,
 ) diskTokens {
 	// TODO(aaditya): Include calculation for read and IOPS.
 	// Issue: https://github.com/cockroachdb/cockroach/issues/107623
@@ -184,12 +189,13 @@ func (d *diskBandwidthLimiter) computeElasticTokens(
 		writeTokenUtil = float64(totalUsedTokens.writeByteTokens) / float64(prevState.tokens.writeByteTokens)
 	}
 	d.state = diskBandwidthLimiterState{
-		tokens:             tokens,
-		prevTokens:         prevState.tokens,
-		prevUsedTokens:     usedTokens,
-		prevWriteTokenUtil: writeTokenUtil,
-		prevDiskErrorStats: diskErrStats,
-		prevDiskLoad:       id,
+		tokens:                       tokens,
+		prevTokens:                   prevState.tokens,
+		prevUsedTokens:               usedTokens,
+		prevWriteTokenUtil:           writeTokenUtil,
+		prevDiskErrorStats:           diskErrStats,
+		prevRemainingDiskWriteTokens: remainingDiskWriteTokens,
+		prevDiskLoad:                 id,
 	}
 	return tokens
 }
@@ -200,9 +206,16 @@ func (d *diskBandwidthLimiter) SafeFormat(p redact.SafePrinter, _ rune) {
 	if d.unlimitedTokensOverride {
 		unlimitedPrefix = " (unlimited)"
 	}
+
+	var overadmissionStr string
+	if d.state.prevRemainingDiskWriteTokens < 0 {
+		overadmissionStr = fmt.Sprintf(" overadmission %s/s",
+			ib(-d.state.prevRemainingDiskWriteTokens/adjustmentInterval))
+	}
+
 	p.Printf("diskBandwidthLimiter%s (writeUtil %.2f, tokensUsed (elastic %s, "+
 		"snapshot %s, regular %s) tokens (write %s (prev %s), read %s (prev %s)), writeBW %s/s, "+
-		"readBW %s/s, provisioned %s/s, err(cum,abs,acc) write: %s,%s,%s read: %s,%s,%s)",
+		"readBW %s/s, provisioned %s/s, err(cum,abs) write: %s,%s read: %s,%s)%s",
 		redact.SafeString(unlimitedPrefix),
 		d.state.prevWriteTokenUtil,
 		ib(d.state.prevUsedTokens[admissionpb.ElasticStoreWorkType].writeByteTokens),
@@ -217,10 +230,9 @@ func (d *diskBandwidthLimiter) SafeFormat(p redact.SafePrinter, _ rune) {
 		ib(d.state.prevDiskLoad.intProvisionedDiskBytes/adjustmentInterval),
 		ib(d.state.prevDiskErrorStats.cumError.writeByteTokens),
 		ib(d.state.prevDiskErrorStats.absError.writeByteTokens),
-		ib(d.state.prevDiskErrorStats.accountedForError.writeByteTokens),
 		ib(d.state.prevDiskErrorStats.cumError.readByteTokens),
 		ib(d.state.prevDiskErrorStats.absError.readByteTokens),
-		ib(d.state.prevDiskErrorStats.accountedForError.readByteTokens),
+		redact.SafeString(overadmissionStr),
 	)
 }
 

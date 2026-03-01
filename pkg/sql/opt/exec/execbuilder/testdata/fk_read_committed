@@ -176,7 +176,7 @@ vectorized: true
         │
         └── • lookup join (anti)
             │ columns: (j_new)
-            │ estimated row count: 0 (missing stats)
+            │ estimated row count: 1 (missing stats)
             │ table: jars@jars_pkey
             │ equality: (j_new) = (j)
             │ equality cols are key
@@ -299,7 +299,7 @@ vectorized: true
 │               │
 │               └── • lookup join (anti)
 │                   │ columns: (j_new)
-│                   │ estimated row count: 0 (missing stats)
+│                   │ estimated row count: 1 (missing stats)
 │                   │ table: jars@jars_pkey
 │                   │ equality: (j_new) = (j)
 │                   │ equality cols are key

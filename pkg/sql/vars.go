@@ -14,7 +14,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
@@ -42,6 +41,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessionmutator"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -430,7 +430,6 @@ var varGen = map[string]sessionVar{
 		Set: func(ctx context.Context, m sessionmutator.SessionDataMutator, s string) error {
 			allowReadCommitted := allowReadCommittedIsolation.Get(&m.Settings.SV)
 			allowRepeatableRead := allowRepeatableReadIsolation.Get(&m.Settings.SV)
-			hasLicense := base.CCLDistributionAndEnterpriseEnabled(m.Settings)
 			var allowedValues = []string{"serializable"}
 			if allowRepeatableRead {
 				allowedValues = append(allowedValues, "repeatable read")
@@ -443,10 +442,10 @@ var varGen = map[string]sessionVar{
 				return newVarValueError(`default_transaction_isolation`, s, allowedValues...)
 			}
 			originalLevel := level
-			level, upgraded, upgradedDueToLicense := level.UpgradeToEnabledLevel(
-				allowReadCommitted, allowRepeatableRead, hasLicense)
+			level, upgraded := level.UpgradeToEnabledLevel(
+				allowReadCommitted, allowRepeatableRead)
 			if f := m.UpgradedIsolationLevel; upgraded && f != nil {
-				f(ctx, originalLevel, upgradedDueToLicense)
+				f(ctx, originalLevel)
 			}
 			m.SetDefaultTransactionIsolationLevel(level)
 			return nil
@@ -1698,6 +1697,101 @@ var varGen = map[string]sessionVar{
 			return nil
 		},
 		GlobalDefault: globalTrue,
+	},
+
+	// See https://www.postgresql.org/docs/current/runtime-config-connection.html.
+	// Accepts plain integers (interpreted as seconds) or duration strings
+	// (e.g., "1m30s"). Duration values are truncated to whole seconds.
+	`tcp_keepalives_idle`: {
+		GetStringVal: makeTCPKeepAliveVarGetter(`tcp_keepalives_idle`, time.Second),
+		Set: func(ctx context.Context, m sessionmutator.SessionDataMutator, s string) error {
+			val, err := parseTCPKeepAliveVar(
+				m.Data.GetIntervalStyle(), s, "tcp_keepalives_idle",
+				types.IntervalDurationType_SECOND, time.Second,
+			)
+			if err != nil {
+				return err
+			}
+			m.SetTcpKeepalivesIdle(val)
+			return nil
+		},
+		Get: func(evalCtx *extendedEvalContext, _ *kv.Txn) (string, error) {
+			return strconv.Itoa(int(evalCtx.SessionData().TcpKeepalivesIdle)), nil
+		},
+		GlobalDefault: func(sv *settings.Values) string {
+			return "0"
+		},
+		Unit: "s",
+	},
+
+	// See https://www.postgresql.org/docs/current/runtime-config-connection.html.
+	// Accepts plain integers (interpreted as seconds) or duration strings
+	// (e.g., "1m30s"). Duration values are truncated to whole seconds.
+	`tcp_keepalives_interval`: {
+		GetStringVal: makeTCPKeepAliveVarGetter(`tcp_keepalives_interval`, time.Second),
+		Set: func(ctx context.Context, m sessionmutator.SessionDataMutator, s string) error {
+			val, err := parseTCPKeepAliveVar(
+				m.Data.GetIntervalStyle(), s, "tcp_keepalives_interval",
+				types.IntervalDurationType_SECOND, time.Second,
+			)
+			if err != nil {
+				return err
+			}
+			m.SetTcpKeepalivesInterval(val)
+			return nil
+		},
+		Get: func(evalCtx *extendedEvalContext, _ *kv.Txn) (string, error) {
+			return strconv.Itoa(int(evalCtx.SessionData().TcpKeepalivesInterval)), nil
+		},
+		GlobalDefault: func(sv *settings.Values) string {
+			return "0"
+		},
+		Unit: "s",
+	},
+
+	// See https://www.postgresql.org/docs/current/runtime-config-connection.html
+	`tcp_keepalives_count`: {
+		GetStringVal: makeIntGetStringValFn(`tcp_keepalives_count`),
+		Set: func(ctx context.Context, m sessionmutator.SessionDataMutator, s string) error {
+			i, err := strconv.ParseInt(s, 10, 32)
+			if err != nil || i < 0 {
+				return pgerror.Newf(pgcode.InvalidParameterValue,
+					"invalid value for parameter \"tcp_keepalives_count\": %q", s)
+			}
+			m.SetTcpKeepalivesCount(int32(i))
+			return nil
+		},
+		Get: func(evalCtx *extendedEvalContext, _ *kv.Txn) (string, error) {
+			return strconv.Itoa(int(evalCtx.SessionData().TcpKeepalivesCount)), nil
+		},
+		GlobalDefault: func(sv *settings.Values) string {
+			return "0"
+		},
+	},
+
+	// See https://www.postgresql.org/docs/current/runtime-config-connection.html.
+	// Accepts plain integers (interpreted as milliseconds) or duration strings
+	// (e.g., "30s"). Duration values are truncated to whole milliseconds.
+	`tcp_user_timeout`: {
+		GetStringVal: makeTCPKeepAliveVarGetter(`tcp_user_timeout`, time.Millisecond),
+		Set: func(ctx context.Context, m sessionmutator.SessionDataMutator, s string) error {
+			val, err := parseTCPKeepAliveVar(
+				m.Data.GetIntervalStyle(), s, "tcp_user_timeout",
+				types.IntervalDurationType_MILLISECOND, time.Millisecond,
+			)
+			if err != nil {
+				return err
+			}
+			m.SetTcpUserTimeout(val)
+			return nil
+		},
+		Get: func(evalCtx *extendedEvalContext, _ *kv.Txn) (string, error) {
+			return strconv.Itoa(int(evalCtx.SessionData().TcpUserTimeout)), nil
+		},
+		GlobalDefault: func(sv *settings.Values) string {
+			return "0"
+		},
+		Unit: "ms",
 	},
 
 	`statement_timeout`: {
@@ -4561,6 +4655,23 @@ var varGen = map[string]sessionVar{
 		},
 		Get: func(evalCtx *extendedEvalContext, _ *kv.Txn) (string, error) {
 			return formatBoolAsPostgresSetting(evalCtx.SessionData().OptimizerInlineAnyUnnestSubquery), nil
+		},
+		GlobalDefault: globalTrue,
+	},
+
+	// CockroachDB extension.
+	`optimizer_use_min_row_count_anti_join_fix`: {
+		GetStringVal: makePostgresBoolGetStringValFn(`optimizer_use_min_row_count_anti_join_fix`),
+		Set: func(_ context.Context, m sessionmutator.SessionDataMutator, s string) error {
+			b, err := paramparse.ParseBoolVar("optimizer_use_min_row_count_anti_join_fix", s)
+			if err != nil {
+				return err
+			}
+			m.SetOptimizerUseMinRowCountAntiJoinFix(b)
+			return nil
+		},
+		Get: func(evalCtx *extendedEvalContext, _ *kv.Txn) (string, error) {
+			return formatBoolAsPostgresSetting(evalCtx.SessionData().OptimizerUseMinRowCountAntiJoinFix), nil
 		},
 		GlobalDefault: globalTrue,
 	},

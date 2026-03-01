@@ -21,8 +21,7 @@ import filter from "lodash/filter";
 import flatMap from "lodash/flatMap";
 import Long from "long";
 import moment from "moment-timezone";
-import React from "react";
-import { createSelector } from "reselect";
+import React, { useCallback, useEffect, useMemo, useRef } from "react";
 import uPlot from "uplot";
 import "uplot/dist/uPlot.min.css";
 
@@ -63,6 +62,7 @@ export interface OwnProps extends MetricsDataComponentProps {
   hoverState?: HoverState;
   preCalcGraphSize?: boolean;
   showMetricsInTooltip?: boolean;
+  children?: React.ReactNode;
 }
 
 export type LineGraphProps = OwnProps & WithTimezoneProps;
@@ -155,68 +155,92 @@ export function fillGaps(
   return yDataWithGaps;
 }
 
-// LineGraph wraps the uPlot library into a React component
-// when the component is first initialized, we wait until
-// data is available and then construct the uPlot object
-// and store its ref in a global variable.
-// Once we receive updates to props, we push new data to the
-// uPlot object.
-// InternalLinegraph is exported for testing.
-export class InternalLineGraph extends React.Component<LineGraphProps, {}> {
-  constructor(props: LineGraphProps) {
-    super(props);
+function hasTimeInfoChanged(
+  newInfo: QueryTimeInfo,
+  prevInfo: QueryTimeInfo,
+): boolean {
+  if (newInfo.start.compare(prevInfo.start) !== 0) return true;
+  if (newInfo.end.compare(prevInfo.end) !== 0) return true;
+  if (newInfo.sampleDuration.compare(prevInfo.sampleDuration) !== 0)
+    return true;
+  return false;
+}
 
-    this.setNewTimeRange = this.setNewTimeRange.bind(this);
-  }
+function hasDataPoints(data: TSResponse): boolean {
+  return data?.results?.some(r => r?.datapoints?.length > 0) ?? false;
+}
 
-  static defaultProps: Partial<LineGraphProps> = {
-    // Marking a graph as not being KV-related is opt-in.
-    isKvGraph: true,
-  };
+// LineGraph wraps the uPlot library into a React component.
+// On first render with data, it constructs a uPlot instance and stores
+// a ref to it. On subsequent data updates it either pushes new data
+// into the existing instance or recreates it when the set of series changes.
+// InternalLineGraph is exported for testing.
+export function InternalLineGraph({
+  title,
+  subtitle,
+  tooltip,
+  preCalcGraphSize,
+  showMetricsInTooltip,
+  data,
+  timeInfo,
+  setMetricsFixedWindow,
+  setTimeScale,
+  adjustTimeScaleOnChange,
+  tenantSource,
+  children,
+  timezone,
+}: LineGraphProps): React.ReactElement {
+  const el = useRef<HTMLDivElement>(null);
+  const uRef = useRef<uPlot>(undefined);
 
-  // axis is copied from the nvd3 LineGraph component above
-  axis = createSelector(
-    (props: { children?: React.ReactNode }) => props.children,
-    children => {
-      const axes: React.ReactElement<AxisProps>[] = findChildrenOfType(
-        children as any,
-        Axis,
+  // yAxisDomain and xAxisDomain are recomputed when data changes.
+  // uPlot options hold closures that read these refs, so updated
+  // domains are used when redrawing the chart.
+  const yAxisDomainRef = useRef<AxisDomain>(undefined);
+  const xAxisDomainRef = useRef<AxisDomain>(undefined);
+
+  // Track previous data and timeInfo for comparison (replaces prevProps).
+  const prevDataRef = useRef<TSResponse>(undefined);
+  const prevTimeInfoRef = useRef<QueryTimeInfo>(undefined);
+
+  // Extract axis and metric child elements (memoized on children identity).
+  const axisElement = useMemo(() => {
+    const axes: React.ReactElement<AxisProps>[] = findChildrenOfType(
+      children as any,
+      Axis,
+    );
+    if (axes.length === 0) {
+      // eslint-disable-next-line no-console
+      console.warn(
+        "LineGraph requires the specification of at least one axis.",
       );
-      if (axes.length === 0) {
-        // eslint-disable-next-line no-console
-        console.warn(
-          "LineGraph requires the specification of at least one axis.",
-        );
-        return null;
-      }
-      if (axes.length > 1) {
-        // eslint-disable-next-line no-console
-        console.warn(
-          "LineGraph currently only supports a single axis; ignoring additional axes.",
-        );
-      }
-      return axes[0];
-    },
-  );
+      return null;
+    }
+    if (axes.length > 1) {
+      // eslint-disable-next-line no-console
+      console.warn(
+        "LineGraph currently only supports a single axis; ignoring additional axes.",
+      );
+    }
+    return axes[0];
+  }, [children]);
 
-  // metrics is copied from the nvd3 LineGraph component above
-  metrics = createSelector(
-    (props: { children?: React.ReactNode }) => props.children,
-    children => {
-      return findChildrenOfType(
-        children as any,
-        Metric,
-      ) as React.ReactElement<MetricProps>[];
-    },
-  );
+  const metricElements = useMemo(() => {
+    return findChildrenOfType(
+      children as any,
+      Metric,
+    ) as React.ReactElement<MetricProps>[];
+  }, [children]);
 
-  // setNewTimeRange forces a
-  // reload of the rest of the dashboard at new ranges via the props
-  // `setMetricsFixedWindow` and `setTimeScale`.
-  // TODO(davidh): centralize management of query params for time range
-  // TODO(davidh): figure out why the timescale doesn't get more granular
-  // automatically when a narrower time frame is selected.
-  setNewTimeRange(startMillis: number, endMillis: number) {
+  // setNewTimeRange is captured by uPlot hooks at chart creation time.
+  // In the class version, `this.props` always gave the latest values;
+  // here we use a ref so the function captured by uPlot always delegates
+  // to the latest implementation (which closes over current props).
+  const setNewTimeRangeRef = useRef<(s: number, e: number) => void>(null);
+  setNewTimeRangeRef.current = (
+    startMillis: number,
+    endMillis: number,
+  ): void => {
     if (startMillis === endMillis) return;
     const start = util.MilliToSeconds(startMillis);
     const end = util.MilliToSeconds(endMillis);
@@ -231,97 +255,69 @@ export class InternalLineGraph extends React.Component<LineGraphProps, {}> {
       windowSize: moment.duration(moment.unix(end).diff(moment.unix(start))),
       fixedWindowEnd: moment.unix(end),
     };
-    if (this.props.adjustTimeScaleOnChange) {
-      newTimeScale = this.props.adjustTimeScaleOnChange(
-        newTimeScale,
-        newTimeWindow,
-      );
+    if (adjustTimeScaleOnChange) {
+      newTimeScale = adjustTimeScaleOnChange(newTimeScale, newTimeWindow);
     }
-    this.props.setMetricsFixedWindow(newTimeWindow);
-    this.props.setTimeScale(newTimeScale);
-  }
-
-  u: uPlot;
-  el = React.createRef<HTMLDivElement>();
-
-  // yAxisDomain holds our computed AxisDomain object
-  // for the y Axis. The function to compute this was
-  // created to support the prior iteration
-  // of our line graphs. We recompute it manually
-  // when data changes, and uPlot options have access
-  // to a closure that holds a reference to this value.
-  yAxisDomain: AxisDomain;
-
-  // xAxisDomain holds our computed AxisDomain object
-  // for the x Axis. The function to compute this was
-  // created to support the prior iteration
-  // of our line graphs. We recompute it manually
-  // when data changes, and uPlot options have access
-  // to a closure that holds a reference to this value.
-  xAxisDomain: AxisDomain;
-
-  newTimeInfo(
-    newTimeInfo: QueryTimeInfo,
-    prevTimeInfo: QueryTimeInfo,
-  ): boolean {
-    if (newTimeInfo.start.compare(prevTimeInfo.start) !== 0) {
-      return true;
-    }
-    if (newTimeInfo.end.compare(prevTimeInfo.end) !== 0) {
-      return true;
-    }
-    if (newTimeInfo.sampleDuration.compare(prevTimeInfo.sampleDuration) !== 0) {
-      return true;
-    }
-
-    return false;
-  }
-
-  hasDataPoints = (data: TSResponse): boolean => {
-    let hasData = false;
-    data?.results?.map(result => {
-      if (result?.datapoints?.length > 0) {
-        hasData = true;
-      }
-    });
-    return hasData;
+    setMetricsFixedWindow(newTimeWindow);
+    setTimeScale(newTimeScale);
   };
 
-  componentDidUpdate(prevProps: Readonly<LineGraphProps>) {
+  // Stable reference that delegates to the ref above.
+  const setNewTimeRange = useCallback(
+    (startMillis: number, endMillis: number) => {
+      setNewTimeRangeRef.current(startMillis, endMillis);
+    },
+    [setNewTimeRangeRef],
+  );
+
+  // Destroy uPlot instance on unmount.
+  useEffect(() => {
+    return () => {
+      if (uRef.current) {
+        uRef.current.destroy();
+        uRef.current = null;
+      }
+    };
+  }, []);
+
+  // Update chart when data, time info, or display dependencies change.
+  // prevDataRef is still needed because the effect uses previous data to
+  // compute prior series keys (deciding whether to setData() on the
+  // existing uPlot or create a new instance).
+  useEffect(() => {
+    const prevData = prevDataRef.current;
+    const prevTimeInfo = prevTimeInfoRef.current;
+    prevDataRef.current = data;
+    prevTimeInfoRef.current = timeInfo;
+
     if (
-      !this.props.data?.results ||
-      (prevProps.data === this.props.data &&
-        this.u !== undefined &&
-        !this.newTimeInfo(this.props.timeInfo, prevProps.timeInfo))
+      !data?.results ||
+      (prevData === data &&
+        uRef.current !== undefined &&
+        !(prevTimeInfo && hasTimeInfoChanged(timeInfo, prevTimeInfo)))
     ) {
       return;
     }
 
-    const data = this.props.data;
-    const metrics = this.metrics(this.props);
-    const axis = this.axis(this.props);
+    const fData = formatMetricData(metricElements, data);
+    const uPlotData = touPlot(fData, timeInfo?.sampleDuration);
 
-    const fData = formatMetricData(metrics, data);
-    const uPlotData = touPlot(fData, this.props.timeInfo?.sampleDuration);
-
-    // The values of `this.yAxisDomain` and `this.xAxisDomain`
-    // are captured in arguments to `configureUPlotLineChart`
-    // and are called when recomputing certain axis and
-    // series options. This lets us use updated domains
-    // when redrawing the uPlot chart on data change.
     const resultDatapoints = flatMap(fData, result =>
       result.values.map(dp => dp.value),
     );
-    this.yAxisDomain = calculateYAxisDomain(axis.props.units, resultDatapoints);
-    this.xAxisDomain = calculateXAxisDomain(
-      util.NanoToMilli(this.props.timeInfo.start.toNumber()),
-      util.NanoToMilli(this.props.timeInfo.end.toNumber()),
-      this.props.timezone,
+    yAxisDomainRef.current = calculateYAxisDomain(
+      axisElement.props.units,
+      resultDatapoints,
+    );
+    xAxisDomainRef.current = calculateXAxisDomain(
+      util.NanoToMilli(timeInfo.start.toNumber()),
+      util.NanoToMilli(timeInfo.end.toNumber()),
+      timezone,
     );
 
     const prevKeys =
-      prevProps.data && prevProps.data.results
-        ? formatMetricData(metrics, prevProps.data).map(s => s.key)
+      prevData && prevData.results
+        ? formatMetricData(metricElements, prevData).map(s => s.key)
         : [];
     const keys = fData.map(s => s.key);
     const sameKeys =
@@ -329,8 +325,8 @@ export class InternalLineGraph extends React.Component<LineGraphProps, {}> {
       prevKeys.every(k => keys.includes(k));
 
     if (
-      this.u && // we already created a uPlot instance
-      prevProps.data && // prior update had data as well
+      uRef.current && // we already created a uPlot instance
+      prevData && // prior update had data as well
       sameKeys // prior update had same set of series identified by key
     ) {
       // The axis label option on uPlot doesn't accept
@@ -339,112 +335,104 @@ export class InternalLineGraph extends React.Component<LineGraphProps, {}> {
       // the scale (this happens on byte/time-based Y
       // axes where can change from MiB or KiB scales,
       // for instance).
-      this.u.axes[1].label =
-        axis.props.label +
-        (this.yAxisDomain.label ? ` (${this.yAxisDomain.label})` : "");
+      uRef.current.axes[1].label =
+        axisElement.props.label +
+        (yAxisDomainRef.current.label
+          ? ` (${yAxisDomainRef.current.label})`
+          : "");
 
-      // Updates existing plot with new points
-      this.u.setData(uPlotData);
+      // Updates existing plot with new points.
+      uRef.current.setData(uPlotData);
     } else {
       const options = configureUPlotLineChart(
-        metrics,
-        axis,
+        metricElements,
+        axisElement,
         data,
-        this.setNewTimeRange,
-        () => this.xAxisDomain,
-        () => this.yAxisDomain,
+        setNewTimeRange,
+        () => xAxisDomainRef.current,
+        () => yAxisDomainRef.current,
       );
 
-      if (this.u) {
-        this.u.destroy();
+      if (uRef.current) {
+        uRef.current.destroy();
       }
-      this.u = new uPlot(options, uPlotData, this.el.current);
+      uRef.current = new uPlot(options, uPlotData, el.current);
+    }
+  }, [data, timeInfo, metricElements, axisElement, timezone, setNewTimeRange]);
+
+  let tt = tooltip;
+  const addLines: React.ReactNode = tooltip ? (
+    <>
+      <br />
+      <br />
+    </>
+  ) : null;
+  // Extend tooltip to include metrics names.
+  if (showMetricsInTooltip) {
+    const visibleMetrics = filter(data?.results, canShowMetric);
+    if (visibleMetrics.length === 1) {
+      tt = (
+        <>
+          {tt}
+          {addLines}
+          Metric: {visibleMetrics[0].query.name}
+        </>
+      );
+    } else if (visibleMetrics.length > 1) {
+      const metricNames = unique(visibleMetrics.map(m => m.query.name));
+      tt = (
+        <>
+          {tt}
+          {addLines}
+          Metrics:
+          <ul>
+            {metricNames.map(m => (
+              <li key={m}>{m}</li>
+            ))}
+          </ul>
+        </>
+      );
     }
   }
 
-  componentWillUnmount() {
-    if (this.u) {
-      this.u.destroy();
-      this.u = null;
-    }
-  }
-
-  render() {
-    const {
-      title,
-      subtitle,
-      tooltip,
-      data,
-      tenantSource,
-      preCalcGraphSize,
-      showMetricsInTooltip,
-    } = this.props;
-    let tt = tooltip;
-    const addLines: React.ReactNode = tooltip ? (
-      <>
-        <br />
-        <br />
-      </>
-    ) : null;
-    // Extend tooltip to include metrics names
-    if (showMetricsInTooltip) {
-      const metrics = filter(data?.results, canShowMetric);
-      if (metrics.length === 1) {
-        tt = (
-          <>
-            {tt}
-            {addLines}
-            Metric: {metrics[0].query.name}
-          </>
-        );
-      } else if (metrics.length > 1) {
-        const metricNames = unique(metrics.map(m => m.query.name));
-        tt = (
-          <>
-            {tt}
-            {addLines}
-            Metrics:
-            <ul>
-              {metricNames.map(m => (
-                <li key={m}>{m}</li>
-              ))}
-            </ul>
-          </>
-        );
-      }
-    }
-
-    if (!this.hasDataPoints(data) && isSecondaryTenant(tenantSource)) {
-      return (
-        <div className="linegraph-empty">
-          <div className="header-empty">
-            <Tooltip placement="bottom" title={tooltip}>
-              <span className="title-empty">{title}</span>
-            </Tooltip>
-          </div>
-          <div className="body-empty">
-            <MonitoringIcon />
-            <span className="body-text-empty">
-              {"Metric is not currently available for this tenant."}
-            </span>
-          </div>
-        </div>
-      );
-    }
+  if (!hasDataPoints(data) && isSecondaryTenant(tenantSource)) {
     return (
-      <Visualization
-        title={title}
-        subtitle={subtitle}
-        tooltip={tt}
-        loading={!data}
-        preCalcGraphSize={preCalcGraphSize}
-      >
-        <div className="linegraph">
-          <div ref={this.el} />
+      <div className="linegraph-empty">
+        <div className="header-empty">
+          <Tooltip placement="bottom" title={tooltip}>
+            <span className="title-empty">{title}</span>
+          </Tooltip>
         </div>
-      </Visualization>
+        <div className="body-empty">
+          <MonitoringIcon />
+          <span className="body-text-empty">
+            {"Metric is not currently available for this tenant."}
+          </span>
+        </div>
+      </div>
     );
   }
+
+  return (
+    <Visualization
+      title={title}
+      subtitle={subtitle}
+      tooltip={tt}
+      loading={!data}
+      preCalcGraphSize={preCalcGraphSize}
+    >
+      <div className="linegraph">
+        <div ref={el} />
+      </div>
+    </Visualization>
+  );
 }
+
+// Marking a graph as not being KV-related is opt-in. defaultProps is
+// needed here (rather than a default parameter) because the parent reads
+// element.props.isKvGraph externally for filtering.
+InternalLineGraph.defaultProps = {
+  isKvGraph: true,
+};
 
 export default WithTimezone<OwnProps>(InternalLineGraph);

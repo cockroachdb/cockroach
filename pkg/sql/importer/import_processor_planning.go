@@ -368,6 +368,7 @@ func distImport(
 			WriteTimestamp: writeTS,
 			// TODO(161447): uniqueness is currently not enforced
 			EnforceUniqueness: false,
+			MemoryMonitor:     execinfrapb.BulkMergeSpec_BULK_MONITOR,
 		})
 
 		return err

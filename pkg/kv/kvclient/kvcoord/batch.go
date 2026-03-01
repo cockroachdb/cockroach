@@ -168,6 +168,20 @@ var batchTruncationHelperPool = sync.Pool{
 	},
 }
 
+// TestingResetBatchTruncationHelperPool clears the pool of
+// BatchTruncationHelpers so that subsequent callers get fresh helpers with no
+// retained allocations. This is useful in tests that are sensitive to the
+// memory overhead of reused helpers.
+//
+// Not safe for concurrent use.
+func TestingResetBatchTruncationHelperPool() {
+	batchTruncationHelperPool = sync.Pool{
+		New: func() interface{} {
+			return &BatchTruncationHelper{}
+		},
+	}
+}
+
 // NewBatchTruncationHelper returns a new BatchTruncationHelper for the given
 // requests. The helper can be reused later for a different set of requests via
 // a separate Init() call. Release() must be called after it's no longer needed,

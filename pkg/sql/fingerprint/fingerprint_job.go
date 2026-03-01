@@ -9,12 +9,12 @@ import (
 	"context"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/ccl/kvccl/kvfollowerreadsccl"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/joberror"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobfrontier"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/kv/followerreads"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -237,8 +237,8 @@ func (p partitionSpans) partition(
 	planCtx, _, err := dsp.SetupAllNodesPlanningWithOracle(
 		ctx, p.ExtendedEvalContext(),
 		p.ExecCfg(),
-		kvfollowerreadsccl.NewStreakBulkOracle(
-			dsp.ReplicaOracleConfig(p.ExecCfg().Locality), kvfollowerreadsccl.StreakConfig{},
+		followerreads.NewStreakBulkOracle(
+			dsp.ReplicaOracleConfig(p.ExecCfg().Locality), followerreads.StreakConfig{},
 		),
 		nil,
 		false,

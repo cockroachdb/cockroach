@@ -66,6 +66,10 @@ type ManagerTestingKnobs struct {
 	RangeFeedResetChannel chan struct{}
 
 	LeaseStoreTestingKnobs StorageTestingKnobs
+
+	// DisallowBytesMonitorCaching determines if the bytes monitor
+	// is allow to allocate extra memory.
+	DisallowBytesMonitorCaching bool
 }
 
 var _ base.ModuleTestingKnobs = &ManagerTestingKnobs{}

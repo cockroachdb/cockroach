@@ -10,6 +10,7 @@ import (
 	gosql "database/sql"
 	"fmt"
 	"os"
+	"path/filepath"
 	"regexp"
 	"sync"
 	"sync/atomic"
@@ -27,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/backfill"
 	"github.com/cockroachdb/cockroach/pkg/sql/bulkmerge"
+	"github.com/cockroachdb/cockroach/pkg/sql/bulkutil"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catenumpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
@@ -35,6 +37,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
@@ -56,6 +59,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"github.com/cockroachdb/cockroach/pkg/util/taskset"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/errors/oserror"
 	"github.com/stretchr/testify/require"
@@ -1545,6 +1549,7 @@ func waitForCheckpointPersisted(
 	expectedSpans []roachpb.Span,
 	expectedPhase int32,
 ) {
+	t.Helper()
 	testutils.SucceedsWithin(t, func() error {
 		stmt := `SELECT payload FROM crdb_internal.system_jobs WHERE id = $1`
 		var payloadBytes []byte
@@ -1586,7 +1591,7 @@ func waitForCheckpointPersisted(
 			return errors.Errorf("waiting for phase %d, current: %d",
 				expectedPhase, bp.DistributedMergePhase)
 		}
-		t.Logf("checkpoint contains %d SST manifests", len(bp.SSTManifests))
+		t.Logf("checkpoint contains %d SST manifests, phase=%d", len(bp.SSTManifests), bp.DistributedMergePhase)
 		return nil
 	}, 5*time.Second)
 }
@@ -1670,6 +1675,15 @@ func TestDistributedMergeResumePreservesProgress(t *testing.T) {
 					state.currentIteration.Store(int32(iteration))
 					state.manifestCountByIteration[iteration] = len(manifests)
 					t.Logf("[%s] after distributed merge iteration %d, manifests count: %d", state.currentTestName, iteration, len(manifests))
+
+					if len(manifests) > 0 {
+						for i, m := range manifests {
+							if len(m.RowSample) == 0 {
+								t.Errorf("[%s] iteration %d: manifest %d has empty RowSample",
+									state.currentTestName, iteration, i)
+							}
+						}
+					}
 
 					if len(manifests) == 0 {
 						t.Logf("[%s] final iteration %d completed (direct KV ingest)", state.currentTestName, iteration)
@@ -1765,6 +1779,7 @@ func TestDistributedMergeResumePreservesProgress(t *testing.T) {
 
 			// Set checkpoint interval based on test variant.
 			sqlDB.Exec(t, `SET CLUSTER SETTING bulkio.index_backfill.checkpoint_interval = $1`, tc.checkpointInterval)
+			sqlDB.Exec(t, `SET CLUSTER SETTING bulkio.index_backfill.progress_interval = '10ms'`)
 			t.Logf("checkpoint interval set to %s, waitForCheckpoint=%v", tc.checkpointInterval, tc.waitForCheckpoint)
 
 			var jobID int
@@ -1895,6 +1910,25 @@ func TestDistributedMergeResumePreservesProgress(t *testing.T) {
 						"MergeIterationCompletedTasks should be cleared after iteration completion")
 					t.Logf("before pause: phase=%d, tasksTotal=%d, completedTasks=%v",
 						phase, tasksTotal, completedTasks)
+
+					// Verify that the progress fraction shows that we are in the final merge iteration (> 60%)
+					testutils.SucceedsWithin(t, func() error {
+						var fractionCompleted float64
+						if err := db.QueryRow(
+							`SELECT fraction_completed FROM crdb_internal.jobs WHERE job_id = $1`,
+							jobID,
+						).Scan(&fractionCompleted); err != nil {
+							return err
+						}
+						if fractionCompleted < 0.6 {
+							return errors.Errorf(
+								"fraction_completed %.3f < 0.6, waiting for progress flush",
+								fractionCompleted)
+						}
+						t.Logf("fraction_completed after iteration %d: %.3f",
+							tc.pauseAfterIteration, fractionCompleted)
+						return nil
+					}, 5*time.Second)
 				}
 
 				// Pause the job while it's blocked in the hook.
@@ -1936,6 +1970,16 @@ func TestDistributedMergeResumePreservesProgress(t *testing.T) {
 				require.True(t, state.finalIterationCompleted.Load(),
 					"expected final iteration (KV ingest) to complete after pause/resume at iteration %d",
 					tc.pauseAfterIteration)
+
+				// Verify that the paused iteration produced multiple manifests. Combined
+				// with the RowSample assertion in AfterDistributedMergeIteration, this
+				// guarantees that CombineFileInfo can split work into multiple merge spans
+				// on resume, preserving parallelism.
+				manifestCount := state.manifestCountByIteration[tc.pauseAfterIteration]
+				require.Greater(t, manifestCount, 1,
+					"expected multiple manifests from iteration %d for parallelism on resume",
+					tc.pauseAfterIteration)
+
 				t.Logf("resumption from iteration %d completed with final KV ingest (total iterations: %d)",
 					tc.pauseAfterIteration, state.currentIteration.Load())
 			}
@@ -2154,4 +2198,120 @@ func TestKVWriteCrossSSTDuplicateDetection(t *testing.T) {
 				"expected error to include key details, got: %v", err)
 		})
 	}
+}
+
+// TestDistributedMergeRedoCleanupSSTs verifies that cleanupRedoIterationSSTs
+// removes orphan SST files from a merge iteration's output directory before
+// starting that iteration. This prevents leftover files from a previous
+// (interrupted) attempt from accumulating.
+func TestDistributedMergeRedoCleanupSSTs(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	tempDir := t.TempDir()
+
+	// orphanPlanted tracks whether we've planted the orphan file.
+	var orphanPlanted atomic.Bool
+	// orphanPath stores the full filesystem path to the orphan file.
+	var orphanPath atomic.Value
+	// orphanCleanedBeforeJobEnd tracks that the orphan was confirmed missing
+	// during the iteration hook, before the job's final cleanup runs.
+	var orphanCleanedBeforeJobEnd atomic.Bool
+
+	// dbPtr is set after StartServer returns so that the hook closure can
+	// query for the job ID.
+	var dbPtr atomic.Pointer[gosql.DB]
+
+	srv, db, _ := serverutils.StartServer(t, base.TestServerArgs{
+		ExternalIODir: tempDir,
+		Knobs: base.TestingKnobs{
+			JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
+			DistSQL: &execinfra.TestingKnobs{
+				BulkAdderFlushesEveryBatch: true,
+				AfterDistributedMergeMapPhase: func(ctx context.Context, manifests []jobspb.IndexBackfillSSTManifest) {
+					sqlDB := dbPtr.Load()
+					if sqlDB == nil {
+						t.Logf("db not yet initialized in hook")
+						return
+					}
+
+					// Find the job ID by querying crdb_internal.jobs. We need the
+					// job ID to construct the correct path for the orphan file.
+					var jobID int64
+					row := sqlDB.QueryRow(`
+						SELECT job_id FROM crdb_internal.jobs
+						WHERE job_type = 'NEW SCHEMA CHANGE'
+						AND description LIKE '%CREATE INDEX idx_cleanup%'
+						ORDER BY created DESC LIMIT 1
+					`)
+					if err := row.Scan(&jobID); err != nil {
+						t.Logf("failed to find job ID in hook: %v", err)
+						return
+					}
+
+					// Construct the path where iteration 1's output files would
+					// live. The nodelocal storage maps directly to tempDir/.
+					mergePaths := bulkutil.NewDistMergePaths(jobspb.JobID(jobID))
+					dir := filepath.Join(tempDir, mergePaths.MergePath(1))
+					path := filepath.Join(dir, "orphan.sst")
+
+					if err := os.MkdirAll(dir, 0755); err != nil {
+						t.Logf("failed to create orphan dir: %v", err)
+						return
+					}
+					if err := os.WriteFile(path, []byte("orphan-data"), 0644); err != nil {
+						t.Logf("failed to write orphan file: %v", err)
+						return
+					}
+					orphanPath.Store(path)
+					orphanPlanted.Store(true)
+					t.Logf("planted orphan SST at %s", path)
+				},
+				BulkMergeTestingKnobs: &bulkmerge.TestingKnobs{
+					RunBeforeMergeTask: func(
+						_ context.Context, _ *execinfra.FlowCtx, _ taskset.TaskID, _ execinfrapb.BulkMergeSpec,
+					) error {
+						if !orphanPlanted.Load() {
+							return nil
+						}
+						path, ok := orphanPath.Load().(string)
+						if !ok {
+							return nil
+						}
+						// cleanupRedoIterationSSTs runs before the merge processors
+						// are created, so by the time this hook fires the orphan
+						// must already be gone.
+						if _, err := os.Stat(path); oserror.IsNotExist(err) {
+							orphanCleanedBeforeJobEnd.Store(true)
+							t.Logf("confirmed orphan cleaned before merge task started")
+						} else {
+							t.Errorf("orphan file %s still exists when merge task started; cleanup did not run before merge", path)
+						}
+						return nil
+					},
+				},
+			},
+		},
+	})
+	defer srv.Stopper().Stop(ctx)
+	dbPtr.Store(db)
+
+	tdb := sqlutils.MakeSQLRunner(db)
+
+	tdb.Exec(t, `SET CLUSTER SETTING bulkio.index_backfill.distributed_merge.mode = 'declarative'`)
+	tdb.Exec(t, `SET CLUSTER SETTING bulkio.merge.file_size = '50KiB'`)
+
+	tdb.Exec(t, `CREATE TABLE t_cleanup (k INT PRIMARY KEY, v TEXT)`)
+	tdb.Exec(t, `INSERT INTO t_cleanup SELECT i, repeat('x', 100) || i::text FROM generate_series(1, 500) AS g(i)`)
+
+	// Run the index backfill. The AfterDistributedMergeMapPhase hook plants
+	// an orphan file before merge iterations begin. cleanupRedoIterationSSTs
+	// should remove it before the merge processors run, and the
+	// RunBeforeMergeTask hook confirms this.
+	tdb.Exec(t, `CREATE INDEX idx_cleanup ON t_cleanup (v)`)
+
+	require.True(t, orphanPlanted.Load(), "expected orphan file to be planted during map phase")
+	require.True(t, orphanCleanedBeforeJobEnd.Load(),
+		"expected orphan to be cleaned up before merge task, not by final job cleanup")
 }

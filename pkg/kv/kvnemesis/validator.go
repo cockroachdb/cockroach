@@ -399,6 +399,7 @@ func transferLeaseResultIsIgnorable(res Result) bool {
 	}
 	return kvserver.IsLeaseTransferRejectedBecauseTargetMayNeedSnapshotError(err) ||
 		kvserver.IsLeaseTransferRejectedBecauseTargetCannotReceiveLease(err) ||
+		kvserver.IsLeaseTransferRejectedBecauseTargetHasSendQueueError(err) ||
 		// A lease transfer is not permitted while a range merge is in its
 		// critical phase.
 		resultIsErrorStr(res, `cannot transfer lease while merge in progress`) ||

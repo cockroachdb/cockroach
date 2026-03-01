@@ -25,8 +25,8 @@ rebalance-stores store-id=1 max-range-move-count=1 fraction-pending-decrease-thr
 [mmaid=2] load summary for dim=ByteSize (s4): loadNormal, reason: load is within 5% of mean [load=0 meanLoad=0 fractionUsed=0.00% meanUtil=0.00% capacity=1000]
 [mmaid=2] load summary for dim=CPURate (n4): loadLow, reason: load is >10% below mean [load=100 meanLoad=525 fractionUsed=10.00% meanUtil=52.50% capacity=1000]
 [mmaid=2] considering replica-transfer r3 from s3: store load [cpu:1µs/s, write-bandwidth:0 B/s, byte-size:0 B]
-[mmaid=2] candidates are:
-[mmaid=2]  s4: (store=loadNormal worst=WriteBandwidth cpu=loadLow writes=loadNormal bytes=loadNormal node=loadLow frac_pending=0.00,0.00(true))
+[mmaid=2] candidates for r3:
+	s4: (store=loadNormal worst=WriteBandwidth cpu=loadLow writes=loadNormal bytes=loadNormal node=loadLow frac_pending=0.00,0.00(true))
 [mmaid=2] sortTargetCandidateSetAndPick: candidates: s4(SLS:loadNormal, overloadedDimLoadSummary:loadLow), overloadedDim:CPURate, picked s4
 [mmaid=2] load summary for dim=CPURate (s4): loadLow, reason: load is >10% below mean [load=210 meanLoad=525 fractionUsed=21.00% meanUtil=52.50% capacity=1000]
 [mmaid=2] load summary for dim=WriteBandwidth (s4): loadNormal, reason: load is within 5% of mean [load=0 meanLoad=0 fractionUsed=0.00% meanUtil=0.00% capacity=1000]
@@ -43,7 +43,10 @@ rebalance-stores store-id=1 max-range-move-count=1 fraction-pending-decrease-thr
 [mmaid=2] addPendingRangeChange: change_id=2, range_id=3, change=r3 type: RemoveReplica target store n3,s3 (replica-id=3 type=VOTER_FULL)->(replica-id=none type=VOTER_FULL)
 [mmaid=2] result(success): rebalancing r3 from s3 to s4 [change: r3=[change_replicas=[{ADD_VOTER n4,s4} {REMOVE_VOTER n3,s3}] cids=1,2]] with resulting loads source: [cpu:900ns/s, write-bandwidth:0 B/s, byte-size:0 B] target: [cpu:210ns/s, write-bandwidth:0 B/s, byte-size:0 B]
 [mmaid=2] reached max range move count 1; done shedding
-[mmaid=2] rebalancing pass shed: {s3}
+[mmaid=2] rebalancing pass summary [local=s1]:
+	overloaded:
+		short: [s3]
+	success: [s3]
 pending(2)
 change-id=1 store-id=4 node-id=4 range-id=3 load-delta=[cpu:110ns/s, write-bandwidth:0 B/s, byte-size:0 B] start=5m0s gc=10m0s
   prev=(replica-id=none type=VOTER_FULL)

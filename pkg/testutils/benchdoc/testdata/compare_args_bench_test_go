@@ -1,0 +1,35 @@
+// Copyright 2026 The Cockroach Authors.
+//
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
+//
+
+package benchdoc
+
+import (
+	"testing"
+)
+
+// benchmark-ci: count=10, benchtime=50x, timeout=20m, suite=manual, post=blocker, threshold=0.3
+func BenchmarkAllArgs(b *testing.B) {
+	// noop
+}
+
+// benchmark-ci: post=none
+func BenchmarkCompareArgsOnly(b *testing.B) {
+	// noop
+}
+
+// benchmark-ci: post=blocker
+func BenchmarkPostBlockerOnly(b *testing.B) {
+	// noop
+}
+
+// benchmark-ci: threshold=1.0
+func BenchmarkThresholdOnly(b *testing.B) {
+	// noop
+}
+
+func BenchmarkNoDoc(b *testing.B) {
+	// noop
+}

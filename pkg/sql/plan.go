@@ -691,6 +691,9 @@ const (
 	planFlagContainsInsert
 	planFlagContainsUpdate
 	planFlagContainsUpsert
+
+	// planFlagUsesRLS is set if the plan applies row-level security policies.
+	planFlagUsesRLS
 )
 
 // IsSet returns true if the receiver has all of the given flags set.

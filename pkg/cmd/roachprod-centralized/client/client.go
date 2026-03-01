@@ -17,6 +17,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/client/auth"
 	clustercontroller "github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/controllers/clusters/types"
 	publicdns "github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/controllers/public-dns/types"
 	tasks "github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/controllers/tasks/types"
@@ -106,20 +107,51 @@ func NewClient(options ...Option) (*Client, error) {
 		return nil, errors.Wrapf(err, "invalid centralized API client configuration")
 	}
 
-	// If no custom IAP Token source is provided, then create one and use
-	// its HTTP client.
+	// Configure HTTP client based on auth mode (if not already set via options)
 	if c.httpClient == nil {
+		if err := c.configureHTTPClient(); err != nil {
+			return nil, err
+		}
+	}
+
+	return c, nil
+}
+
+// configureHTTPClient sets up the HTTP client based on the configured auth mode.
+func (c *Client) configureHTTPClient() error {
+	switch c.config.AuthMode {
+	case AuthModeBearer:
+		// Use bearer token from env var or keyring
+		tokenSource, err := auth.NewBearerTokenSource()
+		if err != nil {
+			return errors.Wrap(err, "failed to create bearer token source")
+		}
+		httpClient, err := tokenSource.GetHTTPClient()
+		if err != nil {
+			return errors.Wrap(err, "failed to get HTTP client with bearer auth")
+		}
+		c.httpClient = httpClient
+
+	case AuthModeIAP:
+		// Use IAP authentication (legacy mode)
 		iapTokenSource, err := roachprodutil.NewIAPTokenSource(roachprodutil.IAPTokenSourceOptions{
 			OAuthClientID:       promhelperclient.OAuthClientID,
 			ServiceAccountEmail: promhelperclient.ServiceAccountEmail,
 		})
 		if err != nil {
-			return nil, err
+			return errors.Wrap(err, "failed to create IAP token source")
 		}
 		c.httpClient = iapTokenSource.GetHTTPClient()
+
+	case AuthModeDisabled:
+		// No authentication
+		c.httpClient = &http.Client{}
+
+	default:
+		return errors.Newf("unknown auth mode: %s", c.config.AuthMode)
 	}
 
-	return c, nil
+	return nil
 }
 
 // NewClientWithConfig creates a new centralized API client using the legacy Config struct.
@@ -344,6 +376,31 @@ func (c *Client) SyncDNS(ctx context.Context, l *logger.Logger) (*tasks.TaskResu
 		return nil, err
 	}
 	return &response, nil
+}
+
+// WhoAmI returns information about the currently authenticated principal.
+func (c *Client) WhoAmI(ctx context.Context, l *logger.Logger) (*auth.WhoAmIResponse, error) {
+	if !c.IsEnabled() {
+		return nil, ErrDisabled
+	}
+
+	endpoint := c.config.BaseURL + "/v1/auth/whoami"
+	var response auth.APIResponse[auth.WhoAmIResponse]
+	if err := c.makeRequest(ctx, l, "GET", endpoint, nil, &response, "whoami"); err != nil {
+		return nil, err
+	}
+
+	return &response.Data, nil
+}
+
+// RevokeToken revokes a specific token by ID.
+func (c *Client) RevokeToken(ctx context.Context, l *logger.Logger, tokenID string) error {
+	if !c.IsEnabled() {
+		return ErrDisabled
+	}
+
+	endpoint := fmt.Sprintf("%s/v1/auth/tokens/%s", c.config.BaseURL, tokenID)
+	return c.makeRequest(ctx, l, "DELETE", endpoint, nil, nil, "revoke token")
 }
 
 // makeRequest makes an HTTP request with retries and proper error handling.

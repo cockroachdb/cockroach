@@ -72,6 +72,7 @@ $BAZEL_BIN/pkg/cmd/bazci/bazci_/bazci -- test $TEST_PACKAGE_TARGETS \
                                       --test_env TC_SERVER_URL \
                                       $TEST_ARGS \
                                       --test_filter="$test_filter" \
+                                      --test_sharding_strategy=disabled \
     || exit_status=$?
 
 exit $exit_status

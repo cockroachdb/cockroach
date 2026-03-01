@@ -5868,6 +5868,7 @@ func TestOptimisticEvalWithConcurrentWriters(t *testing.T) {
 func TestLeaseTransferReplicatesLocks(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+	skip.UnderDuress(t, "can cause uncooperative lease change under leader leases")
 
 	testutils.SetVModule(t, "cmd_lease=2")
 
@@ -5889,6 +5890,26 @@ func TestLeaseTransferReplicatesLocks(t *testing.T) {
 	tc := testcluster.StartTestCluster(t, 3, base.TestClusterArgs{
 		ServerArgs: base.TestServerArgs{
 			Settings: st,
+			RaftConfig: base.RaftConfig{
+				// Suppress timeout-based elections to prevent unexpected
+				// leadership changes (and thus uncooperative lease changes
+				// under leader leases) that would clear the lock table without
+				// exporting unreplicated locks.
+				RaftElectionTimeoutTicks: 1000000,
+			},
+			Knobs: base.TestingKnobs{
+				Store: &kvserver.StoreTestingKnobs{
+					RaftTestingKnobs: &raft.TestingKnobs{
+						// Due to high RaftElectionTimeoutTicks, we only have
+						// one opportunity to campaign which should not be
+						// missed. Under leader leases, in a cold cluster, a
+						// campaign can fail due to missing store liveness
+						// support from the node's peers. Disallow this check to
+						// ensure that the campaign succeeds.
+						DisablePreCampaignStoreLivenessCheck: true,
+					},
+				},
+			},
 		},
 	})
 	defer tc.Stopper().Stop(ctx)

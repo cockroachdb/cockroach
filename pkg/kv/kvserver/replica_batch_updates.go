@@ -181,7 +181,7 @@ func maybeStripInFlightWrites(ba *kvpb.BatchRequest) (*kvpb.BatchRequest, error)
 // works for batches that exclusively contain writes; reads cannot be bumped
 // like this because they've already acquired timestamp-aware latches.
 func maybeBumpReadTimestampToWriteTimestamp(
-	ctx context.Context, ba *kvpb.BatchRequest, g *concurrency.Guard,
+	ctx context.Context, ba *kvpb.BatchRequest, g concurrency.Guard,
 ) (*kvpb.BatchRequest, bool) {
 	if ba.Txn == nil {
 		return ba, false
@@ -217,7 +217,7 @@ func maybeBumpReadTimestampToWriteTimestamp(
 // could not be bumped. Also returns the possibly updated batch request, which
 // is shallow-copied on write.
 func tryBumpBatchTimestamp(
-	ctx context.Context, ba *kvpb.BatchRequest, g *concurrency.Guard, ts hlc.Timestamp,
+	ctx context.Context, ba *kvpb.BatchRequest, g concurrency.Guard, ts hlc.Timestamp,
 ) (*kvpb.BatchRequest, bool) {
 	if g != nil && !g.IsolatedAtLaterTimestamps() {
 		return ba, false

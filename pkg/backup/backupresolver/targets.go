@@ -676,6 +676,68 @@ func LoadAllDescs(
 	return allDescs, nil
 }
 
+// wildcardResult holds the resolved database, optional target schema, and
+// scope flag for an AllTablesSelector wildcard pattern.
+type wildcardResult struct {
+	db catalog.DatabaseDescriptor
+	// targetSchema is non-nil if the wildcard pattern has an explicit schema
+	// component, e.g. `db.schema.*`, `schema.*`, or bare `*`.
+	targetSchema catalog.SchemaDescriptor
+	// hasSchemaScope is true when the wildcard pattern is a 3-part name
+	// like my_db.my_schema.*, i.e. both catalog and schema are explicit.
+	//
+	// TODO(msbutler): we should remove this, and simply rely on targetSchema.
+	// Currently specifying `schema.*` will back up the whole parent database, if
+	// the currentDatabase is the actual parent of the schema,
+	// which is unexpected. If the currentDatabase is some other db,
+	// resolveWildcard will fail.
+	hasSchemaScope bool
+}
+
+// resolveWildcard determines the database, optional target schema, and schema
+// scope for an AllTablesSelector wildcard pattern.
+//
+// TODO(msbutler): we should remove the hasSchemaScope flag, and simply rely on
+// targetSchema. See test cases for how this hasSchemaScope flag leads to
+// weirdness.
+func resolveWildcard(
+	ctx context.Context,
+	p *tree.AllTablesSelector,
+	r *simpleResolver,
+	currentDatabase string,
+	searchPath sessiondata.SearchPath,
+) (wildcardResult, error) {
+	if p.ExplicitSchema && !p.ExplicitCatalog {
+		// 2-part pattern like "db.*". The parser puts the first part in
+		// SchemaName, not CatalogName. Check if it's actually a database.
+		potentialDBName := p.ObjectNamePrefix.Schema()
+		maybeDB, err := r.col.ByName(r.txn).MaybeGet().Database(ctx, potentialDBName)
+		if err != nil {
+			return wildcardResult{}, err
+		}
+		if maybeDB != nil {
+			return wildcardResult{db: maybeDB}, nil
+		}
+	}
+
+	// Normal resolution: treat SchemaName as a schema name (or resolve
+	// bare "*" via the current database and search path).
+	found, prefix, err := resolver.ResolveObjectNamePrefix(
+		ctx, r, currentDatabase, searchPath, &p.ObjectNamePrefix,
+	)
+	if err != nil {
+		return wildcardResult{}, err
+	}
+	if !found {
+		return wildcardResult{}, sqlerrors.NewInvalidWildcardError(tree.ErrString(p))
+	}
+	return wildcardResult{
+		db:             prefix.Database,
+		targetSchema:   prefix.Schema,
+		hasSchemaScope: p.ExplicitSchema && p.ExplicitCatalog,
+	}, nil
+}
+
 // ResolveTargets performs name resolution on a set of targets and returns
 // the resulting descriptors using Collection APIs to avoid loading all
 // descriptors into memory.
@@ -907,42 +969,13 @@ func ResolveTargets(
 				descsByTablePattern[origPattern] = table
 
 			case *tree.AllTablesSelector:
-				// Resolve pattern like db.* or db.schema.*
-				// For 2-part patterns like "db.*", the parser treats the first part as a schema name.
-				// We need to check if it's actually a database name and handle accordingly.
-				var db catalog.DatabaseDescriptor
-				var targetSchema catalog.SchemaDescriptor
-				isDBWildcard := false
-
-				if p.ExplicitSchema && !p.ExplicitCatalog {
-					// This is a 2-part pattern like "my_db.*", but the parser always puts
-					// the first part in SchemaName. Check if it's actually a database name.
-					potentialDBName := p.ObjectNamePrefix.Schema()
-					maybeDB, err := col.ByName(txn.KV()).MaybeGet().Database(ctx, potentialDBName)
-					if err != nil {
-						return err
-					}
-					if maybeDB != nil {
-						// We found a matching database name, so treat as database wildcard.
-						db = maybeDB
-						isDBWildcard = true
-					}
+				res, err := resolveWildcard(ctx, p, r, currentDatabase, searchPath)
+				if err != nil {
+					return err
 				}
-
-				if !isDBWildcard {
-					// Normal resolution treating it as a schema name.
-					found, prefix, err := resolver.ResolveObjectNamePrefix(
-						ctx, r, currentDatabase, searchPath, &p.ObjectNamePrefix,
-					)
-					if err != nil {
-						return err
-					}
-					if !found {
-						return sqlerrors.NewInvalidWildcardError(tree.ErrString(p))
-					}
-					db = prefix.Database
-					targetSchema = prefix.Schema
-				}
+				db := res.db
+				targetSchema := res.targetSchema
+				hasSchemaScope := res.hasSchemaScope
 
 				// Add the database.
 				addDesc(db)
@@ -951,13 +984,6 @@ func ResolveTargets(
 				// This matches the behavior of DescriptorsMatchingTargets which always
 				// adds to ExpandedDB for any wildcard pattern.
 				expandedDBs = append(expandedDBs, db.GetID())
-
-				// Determine if we're scoped to a specific schema.
-				hasSchemaScope := p.ExplicitSchema && p.ExplicitCatalog
-				// For db.* patterns that we identified as database wildcards, don't scope to schema.
-				if isDBWildcard {
-					hasSchemaScope = false
-				}
 
 				if hasSchemaScope && targetSchema != nil {
 					// Skip virtual and temporary schemas.

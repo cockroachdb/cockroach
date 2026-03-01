@@ -485,43 +485,60 @@ user root
 
 subtest statement_hints_table
 
-query IITTT
-SELECT hash, row_id, fingerprint, hint, created_at FROM system.statement_hints ORDER BY row_id
+skipif config local-mixed-25.4 local-mixed-26.1
+query IITTTTTBT
+SELECT hash, row_id, fingerprint, hint, created_at, hint_type, hint_name, enabled, database
+FROM system.statement_hints ORDER BY row_id
 ----
 
+skipif config local-mixed-25.4 local-mixed-26.1
 statement ok
-INSERT INTO system.statement_hints (row_id, fingerprint, hint, created_at)
+INSERT INTO system.statement_hints (row_id, fingerprint, hint, created_at, hint_type, hint_name, database)
 (VALUES
-  (100, 'foo', 'DEADBEEF', '2018-01-01 1:00:00.00000+00:00'),
-  (200, 'bar', 'BEEFDEAD', '2018-01-02 1:00:00.00000+00:00')
+  (100, 'foo', 'DEADBEEF', '2018-01-01 1:00:00.00000+00:00', 'rewrite_inline_hints', 'foo_hint', 'test'),
+  (200, 'bar', 'BEEFDEAD', '2018-01-02 1:00:00.00000+00:00', 'pin_plan', 'bar_hint', NULL),
+  (300, 'baz', 'BEADFEED', '2018-01-03 1:00:00.00000+00:00', 'rewrite_inline_hints', NULL, 'defaultdb')
 )
 
-query IITTT
-SELECT hash, row_id, fingerprint, hint, created_at FROM system.statement_hints ORDER BY row_id
+skipif config local-mixed-25.4 local-mixed-26.1
+query IITTTTTBT
+SELECT hash, row_id, fingerprint, hint, created_at, hint_type, hint_name, enabled, database
+FROM system.statement_hints ORDER BY row_id
 ----
--2824945433545984717  100  foo  DEADBEEF  2018-01-01 01:00:00 +0000 UTC
--2821042167266592640  200  bar  BEEFDEAD  2018-01-02 01:00:00 +0000 UTC
+-2824945433545984717  100  foo  DEADBEEF  2018-01-01 01:00:00 +0000 UTC  rewrite_inline_hints  foo_hint  true  test
+-2821042167266592640  200  bar  BEEFDEAD  2018-01-02 01:00:00 +0000 UTC  pin_plan              bar_hint  true  NULL
+-2821042167266592632  300  baz  BEADFEED  2018-01-03 01:00:00 +0000 UTC  rewrite_inline_hints  NULL      true  defaultdb
 
-query ITTT
-SELECT row_id, fingerprint, hint, created_at FROM system.statement_hints WHERE fingerprint = 'foo' ORDER BY row_id
+skipif config local-mixed-25.4 local-mixed-26.1
+query ITTTTTBT
+SELECT row_id, fingerprint, hint, created_at, hint_type, hint_name, enabled, database
+FROM system.statement_hints WHERE fingerprint = 'foo' ORDER BY row_id
 ----
-100  foo  DEADBEEF  2018-01-01 01:00:00 +0000 UTC
+100  foo  DEADBEEF  2018-01-01 01:00:00 +0000 UTC  rewrite_inline_hints  foo_hint  true  test
 
-query ITTT
-SELECT row_id, fingerprint, hint, created_at FROM system.statement_hints WHERE fingerprint = 'bar' ORDER BY row_id
+skipif config local-mixed-25.4 local-mixed-26.1
+query ITTTTTBT
+SELECT row_id, fingerprint, hint, created_at, hint_type, hint_name, enabled, database
+FROM system.statement_hints WHERE fingerprint = 'bar' ORDER BY row_id
 ----
-200  bar  BEEFDEAD  2018-01-02 01:00:00 +0000 UTC
+200  bar  BEEFDEAD  2018-01-02 01:00:00 +0000 UTC  pin_plan  bar_hint  true  NULL
 
+skipif config local-mixed-25.4 local-mixed-26.1
 query ITTT
 SELECT row_id, fingerprint, hint, created_at FROM system.statement_hints WHERE fingerprint = 'baz' ORDER BY row_id
 ----
+300  baz  BEADFEED  2018-01-03 01:00:00 +0000 UTC
 
+skipif config local-mixed-25.4 local-mixed-26.1
 statement count 1
 DELETE FROM system.statement_hints WHERE fingerprint = 'foo'
 
-query ITTT
-SELECT row_id, fingerprint, hint, created_at FROM system.statement_hints ORDER BY row_id
+skipif config local-mixed-25.4 local-mixed-26.1
+query ITTTTTBT
+SELECT row_id, fingerprint, hint, created_at, hint_type, hint_name, enabled, database
+FROM system.statement_hints ORDER BY row_id
 ----
-200  bar  BEEFDEAD  2018-01-02 01:00:00 +0000 UTC
+200  bar  BEEFDEAD  2018-01-02 01:00:00 +0000 UTC  pin_plan              bar_hint  true  NULL
+300  baz  BEADFEED  2018-01-03 01:00:00 +0000 UTC  rewrite_inline_hints  NULL      true  defaultdb
 
 subtest end

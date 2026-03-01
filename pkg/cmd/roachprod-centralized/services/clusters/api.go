@@ -9,12 +9,12 @@ import (
 	"context"
 	"log/slog"
 
+	pkgauth "github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/auth"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/models/tasks"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/repositories/clusters"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/services/clusters/internal/operations"
 	sclustertasks "github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/services/clusters/tasks"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/services/clusters/types"
-	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/utils/filters"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/utils/logger"
 	cloudcluster "github.com/cockroachdb/cockroach/pkg/roachprod/cloud/types"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/vm"
@@ -22,14 +22,19 @@ import (
 )
 
 // SyncClouds creates a task to sync the clouds.
-func (s *Service) SyncClouds(ctx context.Context, l *logger.Logger) (tasks.ITask, error) {
+func (s *Service) SyncClouds(
+	ctx context.Context, l *logger.Logger, _ *pkgauth.Principal,
+) (tasks.ITask, error) {
 	// Create a task to sync the clouds if one is not already planned.
 	return s._taskService.CreateTaskIfNotAlreadyPlanned(ctx, l, sclustertasks.NewTaskSync())
 }
 
 // GetAllClusters returns all clusters.
 func (s *Service) GetAllClusters(
-	ctx context.Context, l *logger.Logger, input types.InputGetAllClustersDTO,
+	ctx context.Context,
+	l *logger.Logger,
+	principal *pkgauth.Principal,
+	input types.InputGetAllClustersDTO,
 ) (cloudcluster.Clusters, error) {
 
 	c, err := s._store.GetClusters(ctx, l, input.Filters)
@@ -37,33 +42,30 @@ func (s *Service) GetAllClusters(
 		return nil, err
 	}
 
-	return c, nil
-}
-
-func (s *Service) GetAllDNSZoneVMs(
-	ctx context.Context, l *logger.Logger, dnsZone string,
-) (vm.List, error) {
-	c, err := s._store.GetClusters(ctx, l, *filters.NewFilterSet())
-	if err != nil {
-		return nil, err
+	// If the principal has view:all permission, return all clusters directly.
+	if principal.HasPermission(types.PermissionViewAll) {
+		return c, nil
 	}
 
-	var vms vm.List
-	for _, cluster := range c {
-		for _, vm := range cluster.VMs {
-			if vm.PublicDNSZone != dnsZone {
-				continue
-			}
-			vms = append(vms, vm)
+	// Filter clusters based on view permissions.
+	filteredClusters := make(cloudcluster.Clusters, 0)
+	for name, cluster := range c {
+		if !checkClusterAccessPermission(principal, cluster, types.PermissionView, s.providerEnvironments) {
+			continue
 		}
+
+		filteredClusters[name] = cluster
 	}
 
-	return vms, nil
+	return filteredClusters, nil
 }
 
 // GetCluster returns a cluster.
 func (s *Service) GetCluster(
-	ctx context.Context, l *logger.Logger, input types.InputGetClusterDTO,
+	ctx context.Context,
+	l *logger.Logger,
+	principal *pkgauth.Principal,
+	input types.InputGetClusterDTO,
 ) (*cloudcluster.Cluster, error) {
 
 	c, err := s._store.GetCluster(ctx, l, input.Name)
@@ -74,13 +76,50 @@ func (s *Service) GetCluster(
 		return nil, err
 	}
 
+	// Check view permissions
+	if !checkClusterAccessPermission(principal, &c, types.PermissionView, s.providerEnvironments) {
+		l.Warn("principal not authorized to access cluster",
+			slog.String("principal_email", func() string {
+				if principal.User != nil {
+					return principal.User.Email
+				}
+				return "unknown"
+			}()),
+			slog.String("cluster_name", input.Name),
+		)
+		return nil, types.ErrClusterNotFound
+	}
+
 	return &c, nil
 }
 
 // RegisterCluster registers a cluster with the state that was externally created.
 func (s *Service) RegisterCluster(
-	ctx context.Context, l *logger.Logger, input types.InputRegisterClusterDTO,
+	ctx context.Context,
+	l *logger.Logger,
+	principal *pkgauth.Principal,
+	input types.InputRegisterClusterDTO,
 ) (*cloudcluster.Cluster, error) {
+
+	// Check create permissions
+	if !checkClusterCreatePermission(principal, &input.Cluster, s.providerEnvironments) {
+		return nil, types.ErrForbidden
+	}
+
+	// Cluster's owner is set to the principal's user email or service account name.
+	if principal.User != nil {
+		input.Cluster.User = principal.User.Email
+	} else if principal.ServiceAccount != nil {
+		if principal.DelegatedFrom != nil && principal.DelegatedFromEmail != "" {
+			input.Cluster.User = principal.DelegatedFromEmail
+		} else {
+			input.Cluster.User = principal.ServiceAccount.Name
+		}
+	} else {
+		// This should not happen as only user or service account principals
+		// can call this method.
+		return nil, types.ErrForbidden
+	}
 
 	// Check that the cluster does not already exist.
 	_, err := s._store.GetCluster(ctx, l, input.Cluster.Name)
@@ -144,7 +183,10 @@ func (s *Service) RegisterCluster(
 
 // RegisterClusterUpdate registers an external update to a cluster with the state.
 func (s *Service) RegisterClusterUpdate(
-	ctx context.Context, l *logger.Logger, input types.InputRegisterClusterUpdateDTO,
+	ctx context.Context,
+	l *logger.Logger,
+	principal *pkgauth.Principal,
+	input types.InputRegisterClusterUpdateDTO,
 ) (*cloudcluster.Cluster, error) {
 
 	// Check that the cluster exists.
@@ -155,6 +197,16 @@ func (s *Service) RegisterClusterUpdate(
 		}
 		return nil, err
 	}
+
+	// Check update permissions, don't reveal existence otherwise
+	if !checkClusterAccessPermission(principal, &c, types.PermissionUpdate, s.providerEnvironments) {
+		return nil, types.ErrClusterNotFound
+	}
+
+	// Preserve immutable fields
+	input.Name = c.Name
+	input.CreatedAt = c.CreatedAt
+	input.Cluster.User = c.User
 
 	// Create the operation.
 	op := operations.OperationUpdate{
@@ -207,7 +259,10 @@ func (s *Service) RegisterClusterUpdate(
 
 // RegisterClusterDelete registers the external deletion of a cluster with the state.
 func (s *Service) RegisterClusterDelete(
-	ctx context.Context, l *logger.Logger, input types.InputRegisterClusterDeleteDTO,
+	ctx context.Context,
+	l *logger.Logger,
+	principal *pkgauth.Principal,
+	input types.InputRegisterClusterDeleteDTO,
 ) error {
 
 	// Check that the cluster exists.
@@ -217,6 +272,11 @@ func (s *Service) RegisterClusterDelete(
 			return types.ErrClusterNotFound
 		}
 		return err
+	}
+
+	// Check delete permissions, don't reveal existence otherwise
+	if !checkClusterAccessPermission(principal, &c, types.PermissionDelete, s.providerEnvironments) {
+		return types.ErrClusterNotFound
 	}
 
 	// Create the operation.
@@ -270,4 +330,77 @@ func (s *Service) RegisterClusterDelete(
 	}
 
 	return nil
+}
+
+// checkClusterCreatePermission verifies the principal has permission to create
+// the cluster based on their scoped permissions for the cluster's cloud providers.
+func checkClusterCreatePermission(
+	principal *pkgauth.Principal,
+	cluster *cloudcluster.Cluster,
+	providerEnvironments map[string]string,
+) bool {
+	for _, providerID := range cluster.CloudProviders {
+		env, ok := providerEnvironments[providerID]
+		if !ok {
+			// No environment mapping for this provider — deny access.
+			return false
+		}
+
+		if !principal.HasPermissionScoped(types.PermissionCreate, env) {
+			return false
+		}
+	}
+
+	return true
+}
+
+// checkClusterAccessPermission verifies the principal has the required
+// permission for all cloud providers in the cluster. Each providerID in
+// cluster.CloudProviders is resolved to an environment name via the
+// providerEnvironments map; this environment name is then used as the
+// permission scope when calling HasPermissionScoped. Access is denied if
+// a providerID has no mapped environment.
+func checkClusterAccessPermission(
+	principal *pkgauth.Principal,
+	cluster *cloudcluster.Cluster,
+	requiredPermission string, // e.g., "clusters:view", "clusters:delete"
+	providerEnvironments map[string]string,
+) bool {
+	// Check ownership. For users compare email, for service accounts
+	// compare name or delegated user email.
+	isUserOwner := principal.User != nil && principal.User.Email == cluster.User
+
+	isSAOwner := false
+	if principal.ServiceAccount != nil {
+		if principal.ServiceAccount.Name == cluster.User {
+			isSAOwner = true
+		} else if principal.DelegatedFrom != nil && principal.DelegatedFromEmail == cluster.User {
+			isSAOwner = true
+		}
+	}
+	isOwner := isUserOwner || isSAOwner
+
+	allClustersPermission := requiredPermission + ":all"
+	ownClustersPermission := requiredPermission + ":own"
+
+	for _, providerID := range cluster.CloudProviders {
+		env, ok := providerEnvironments[providerID]
+		if !ok {
+			// No environment mapping for this provider — deny access.
+			return false
+		}
+
+		hasPermission := principal.HasPermissionScoped(allClustersPermission, env)
+
+		// Check "own" variant if allowed and user is owner
+		if !hasPermission && isOwner {
+			hasPermission = principal.HasPermissionScoped(ownClustersPermission, env)
+		}
+
+		if !hasPermission {
+			return false
+		}
+	}
+
+	return true
 }

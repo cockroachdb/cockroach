@@ -984,7 +984,7 @@ quality of service: regular
         │           │ MVCC step count (ext/int): 0/0
         │           │ MVCC seek count (ext/int): 0/0
         │           │ actual row count: 0
-        │           │ estimated row count: 0 (missing stats)
+        │           │ estimated row count: 1 (missing stats)
         │           │ table: parent@parent_pkey
         │           │ equality: (fk_new) = (k)
         │           │ equality cols are key

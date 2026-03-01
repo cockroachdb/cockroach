@@ -9,7 +9,6 @@ import (
 	"context"
 	"strings"
 
-	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/cli/cliflags"
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/security/distinguishedname"
@@ -237,9 +236,6 @@ func MakeListFromKVOptions(
 		switch option {
 		case SUBJECT:
 			roleOptions[i].Validate = func(settings *cluster.Settings, u username.SQLUsername, s string) error {
-				if err := base.CheckEnterpriseEnabled(settings, "SUBJECT role option"); err != nil {
-					return err
-				}
 				if u.IsRootUser() {
 					return errors.WithDetailf(
 						pgerror.Newf(pgcode.InvalidParameterValue, "role %q cannot have a SUBJECT", u),

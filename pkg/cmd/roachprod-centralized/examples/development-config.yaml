@@ -46,6 +46,7 @@ Tasks:
 CloudProviders:
   # Example GCE provider - uncomment and configure for your environment
   # - type: gce
+  #   environment: gcp-engineering  # Authorization scope for this provider
   #   gce:
   #     project: "your-gcp-project-id"
   #     metadataProject: "shared-metadata-project"  # Optional
@@ -53,6 +54,7 @@ CloudProviders:
 
   # Example AWS provider
   # - type: aws
+  #   environment: aws-staging  # Authorization scope for this provider
   #   aws:
   #     accountID: "123456789012"
   #     assumeStsRole: true  # Set to false or omit if not using STS
@@ -60,12 +62,16 @@ CloudProviders:
 
   # Example Azure provider
   # - type: azure
+  #   environment: azure-production  # Authorization scope for this provider
   #   azure:
   #     subscriptionName: "your-azure-subscription"
   #   DNSPublicZone: "clusters.example.com"
 
   # Example IBM provider
   # - type: ibm
+  #   environment: ibm-development  # Authorization scope for this provider
+  #   ibm:
+  #     accountID: "abc123def456"  # IBM Cloud account ID (from ibmcloud account show)
   #   DNSPublicZone: "clusters.example.com"
 
 # DNS providers (can be different from cloud providers)

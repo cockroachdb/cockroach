@@ -124,14 +124,14 @@ func maybeRunLossOfQuorumRecoveryCleanup(
 	var cleanup loqrecoverypb.DeferredRecoveryActions
 	var actionsSource storage.ReadWriter
 	err := stores.VisitStores(func(s *kvserver.Store) error {
-		c, found, err := loqrecovery.ReadCleanupActionsInfo(ctx, s.TODOEngine())
+		c, found, err := loqrecovery.ReadCleanupActionsInfo(ctx, s.LogEngine())
 		if err != nil {
 			log.Dev.Errorf(ctx, "failed to read loss of quorum recovery cleanup actions info from store: %s", err)
 			return nil
 		}
 		if found {
 			cleanup = c
-			actionsSource = s.TODOEngine()
+			actionsSource = s.LogEngine()
 			return iterutil.StopIteration()
 		}
 		return nil

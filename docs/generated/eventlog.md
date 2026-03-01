@@ -454,6 +454,15 @@ are resolved.
 | `BlockingTxnFingerprintId` |  | no |
 | `ContendedKey` |  | partially |
 | `Duration` |  | no |
+| `TableId` | Decoded key information (populated when key decoding is available). | no |
+| `IndexId` |  | no |
+| `DatabaseName` |  | no |
+| `SchemaName` |  | no |
+| `TableName` |  | no |
+| `IndexName` |  | no |
+| `KeyColumnNames` | Decoded key column information. Arrays are parallel (same index = same column). Column names (schema metadata, safe). | no |
+| `KeyColumnTypes` | Column types (schema metadata, safe). | no |
+| `KeyColumnValues` | Column values (potentially sensitive user data). | yes |
 
 
 #### Common fields

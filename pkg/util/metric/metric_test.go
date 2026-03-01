@@ -87,6 +87,22 @@ func TestGaugeVector(t *testing.T) {
 	require.Equal(t, "value4", *metrics[1].GetLabel()[1].Value)
 }
 
+func TestDerivedGauge(t *testing.T) {
+
+	g := NewDerivedGauge(emptyMetadata, func(i int64) int64 { return i * 10 })
+
+	require.Zero(t, g.Value())
+
+	g.Update(10)
+	require.Equal(t, int64(100), g.Value())
+
+	g.Dec(1)
+	require.Equal(t, int64(90), g.Value())
+
+	g.Inc(1)
+	require.Equal(t, int64(100), g.Value())
+}
+
 func TestFunctionalGauge(t *testing.T) {
 	valToReturn := int64(10)
 	g := NewFunctionalGauge(emptyMetadata, func() int64 { return valToReturn })
@@ -97,6 +113,33 @@ func TestFunctionalGauge(t *testing.T) {
 	if v := g.Value(); v != 15 {
 		t.Fatalf("unexpected value: %d", v)
 	}
+}
+
+func TestDerivedGaugeVec(t *testing.T) {
+	g := NewDerivedExportedGaugeVec(emptyMetadata, []string{"label1", "label2"}, func(val int64) int64 { return val * 2 })
+
+	ls1 := map[string]string{"label1": "a", "label2": "b"}
+	ls2 := map[string]string{"label1": "c", "label2": "d"}
+
+	g.Update(ls1, 10)
+	g.Update(ls2, 20)
+
+	metrics := g.ToPrometheusMetrics()
+	require.Len(t, metrics, 2)
+	require.Equal(t, 20.0, *metrics[0].Gauge.Value)
+	require.Equal(t, 40.0, *metrics[1].Gauge.Value)
+
+	// Verify labels are correct.
+	require.Equal(t, "label1", *metrics[0].GetLabel()[0].Name)
+	require.Equal(t, "a", *metrics[0].GetLabel()[0].Value)
+	require.Equal(t, "label2", *metrics[0].GetLabel()[1].Name)
+	require.Equal(t, "b", *metrics[0].GetLabel()[1].Value)
+
+	// Update a value and verify the transform applies to the new value.
+	g.Update(ls1, 50)
+	metrics = g.ToPrometheusMetrics()
+	require.Equal(t, 100.0, *metrics[0].Gauge.Value)
+	require.Equal(t, 40.0, *metrics[1].Gauge.Value)
 }
 
 func TestGaugeFloat64(t *testing.T) {
@@ -117,6 +160,22 @@ func TestGaugeFloat64(t *testing.T) {
 	if v := g.Value(); math.Abs(v-10.4) > 0.001 {
 		t.Fatalf("unexpected value: %g", v)
 	}
+}
+
+func TestGaugeFloat64MarshalInfNaN(t *testing.T) {
+	g := NewGaugeFloat64(emptyMetadata)
+
+	g.Update(math.Inf(1))
+	testMarshal(t, g, "0")
+
+	g.Update(math.Inf(-1))
+	testMarshal(t, g, "0")
+
+	g.Update(math.NaN())
+	testMarshal(t, g, "0")
+
+	g.Update(42.5)
+	testMarshal(t, g, "42.5")
 }
 
 func TestCounter(t *testing.T) {
@@ -367,6 +426,36 @@ func TestManualWindowHistogram(t *testing.T) {
 
 	if !reflect.DeepEqual(act, exp) {
 		t.Fatalf("expected differs from actual: %s", pretty.Diff(exp, act))
+	}
+}
+
+// TestValueAtQuantileWithEmptyBuckets verifies that ValueAtQuantile does not
+// return +Inf when adjacent buckets have the same cumulative count (causing a
+// division by zero in the interpolation). This was the root cause of #163958.
+func TestValueAtQuantileWithEmptyBuckets(t *testing.T) {
+	u := func(v uint64) *uint64 { return &v }
+	f := func(v float64) *float64 { return &v }
+
+	// Construct a histogram where the first two buckets have the same
+	// cumulative count, meaning the second bucket is empty. This causes
+	// count to be 0 in the interpolation, producing +Inf via division by zero.
+	h := &prometheusgo.Histogram{
+		SampleCount: u(5),
+		SampleSum:   f(250),
+		Bucket: []*prometheusgo.Bucket{
+			{CumulativeCount: u(0), UpperBound: f(1)},
+			{CumulativeCount: u(0), UpperBound: f(5)},
+			{CumulativeCount: u(2), UpperBound: f(10)},
+			{CumulativeCount: u(3), UpperBound: f(25)},
+			{CumulativeCount: u(5), UpperBound: f(100)},
+		},
+	}
+
+	snap := MakeHistogramSnapshot(h)
+	for q := 0.0; q <= 100.0; q += 10 {
+		val := snap.ValueAtQuantile(q)
+		require.False(t, math.IsInf(val, 0), "ValueAtQuantile(%v) returned infinity", q)
+		require.False(t, math.IsNaN(val), "ValueAtQuantile(%v) returned NaN", q)
 	}
 }
 

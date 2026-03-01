@@ -11,10 +11,15 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/app"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/auth"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/config"
+	admincontroller "github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/controllers/admin"
+	authcontroller "github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/controllers/auth"
 	clusterscontroller "github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/controllers/clusters"
 	healthcontroller "github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/controllers/health"
 	publicdns "github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/controllers/public-dns"
+	scimcontroller "github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/controllers/scim"
+	serviceaccountscontroller "github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/controllers/service-accounts"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/controllers/tasks"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/models/health"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/utils/logger"
@@ -79,25 +84,42 @@ func runAPI(cmd *cobra.Command, args []string) error {
 		return errors.Wrap(err, "error creating services")
 	}
 
-	// Create the application instance with the configured services and controllers.
-	// The application instance is responsible for starting the API server and
-	// handling requests.
-	application, err := app.NewApp(
+	// Create the authenticator based on configuration
+	authenticator, err := app.NewAuthenticatorFromConfig(cfg, l, services.Auth)
+	if err != nil {
+		return errors.Wrap(err, "error creating authenticator")
+	}
+
+	options := []app.IAppOption{
 		app.WithLogger(l),
+		app.WithApiTrustedProxies(cfg.Api.TrustedProxies),
 		app.WithApiPort(cfg.Api.Port),
 		app.WithApiBaseURL(cfg.Api.BasePath),
 		app.WithApiMetrics(cfg.Api.Metrics.Enabled),
 		app.WithApiMetricsPort(cfg.Api.Metrics.Port),
-		app.WithApiAuthenticationDisabled(cfg.Api.Authentication.Disabled),
-		app.WithApiAuthenticationHeader(cfg.Api.Authentication.JWT.Header),
-		app.WithApiAuthenticationAudience(cfg.Api.Authentication.JWT.Audience),
-		app.WithApiAuthenticationIssuer(cfg.Api.Authentication.JWT.Issuer),
+		app.WithApiAuthenticationHeader(cfg.Api.Authentication.Header),
+		app.WithApiAuthenticator(authenticator),
 		app.WithServices(services.ToSlice()),
 		app.WithApiController(healthcontroller.NewController(services.Health)),
 		app.WithApiController(clusterscontroller.NewController(services.Clusters)),
 		app.WithApiController(publicdns.NewController(services.DNS)),
 		app.WithApiController(tasks.NewController(services.Task)),
-	)
+		app.WithApiController(authcontroller.NewController(services.Auth)),
+	}
+
+	if auth.AuthenticationType(strings.ToLower(cfg.Api.Authentication.Type)) == auth.AuthenticationTypeBearer {
+		options = append(options,
+			app.WithApiController(authcontroller.NewControllerBearerAuth(services.Auth)),
+			app.WithApiController(admincontroller.NewController(services.Auth)),
+			app.WithApiController(serviceaccountscontroller.NewController(services.Auth)),
+			app.WithApiController(scimcontroller.NewController(services.Auth)),
+		)
+	}
+
+	// Create the application instance with the configured services and controllers.
+	// The application instance is responsible for starting the API server and
+	// handling requests.
+	application, err := app.NewApp(options...)
 	if err != nil {
 		return errors.Wrap(err, "error creating application")
 	}

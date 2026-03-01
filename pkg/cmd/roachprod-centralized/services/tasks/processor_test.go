@@ -24,7 +24,7 @@ import (
 
 func TestProcessTaskRoutine_Success(t *testing.T) {
 	mockRepo := &tasksrepomock.ITasksRepository{}
-	taskService := NewService(mockRepo, "test-instance", Options{Workers: 1})
+	taskService := NewService(mockRepo, "test-instance", types.Options{Workers: 1})
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -49,7 +49,7 @@ func TestProcessTaskRoutine_Success(t *testing.T) {
 
 func TestProcessTaskRoutine_GetTasksError(t *testing.T) {
 	mockRepo := &tasksrepomock.ITasksRepository{}
-	taskService := NewService(mockRepo, "test-instance", Options{Workers: 1})
+	taskService := NewService(mockRepo, "test-instance", types.Options{Workers: 1})
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -74,7 +74,7 @@ func TestProcessTaskRoutine_GetTasksError(t *testing.T) {
 
 func TestProcessTaskRoutine_GetTask(t *testing.T) {
 	repo := memory.NewTasksRepository()
-	taskService := NewService(repo, "test-instance", Options{Workers: 1})
+	taskService := NewService(repo, "test-instance", types.Options{Workers: 1})
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -109,7 +109,7 @@ func TestProcessTaskRoutine_GetTask(t *testing.T) {
 
 func TestProcessTask(t *testing.T) {
 	mockRepo := &tasksrepomock.ITasksRepository{}
-	taskService := NewService(mockRepo, "test-instance", Options{
+	taskService := NewService(mockRepo, "test-instance", types.Options{
 		DefaultTasksTimeout: 50 * time.Millisecond,
 	})
 
@@ -132,7 +132,7 @@ func TestProcessTask(t *testing.T) {
 
 func TestProcessTask_Error(t *testing.T) {
 	mockRepo := &tasksrepomock.ITasksRepository{}
-	taskService := NewService(mockRepo, "test-instance", Options{
+	taskService := NewService(mockRepo, "test-instance", types.Options{
 		DefaultTasksTimeout: 50 * time.Millisecond,
 	})
 
@@ -159,7 +159,7 @@ func TestProcessTask_Error(t *testing.T) {
 
 func TestProcessTask_Timeout(t *testing.T) {
 	mockRepo := &tasksrepomock.ITasksRepository{}
-	taskService := NewService(mockRepo, "test-instance", Options{
+	taskService := NewService(mockRepo, "test-instance", types.Options{
 		DefaultTasksTimeout: 1 * time.Microsecond,
 	})
 
@@ -186,7 +186,7 @@ func TestProcessTask_Timeout(t *testing.T) {
 
 func TestProcessTask_Unmanaged(t *testing.T) {
 	mockRepo := &tasksrepomock.ITasksRepository{}
-	taskService := NewService(mockRepo, "test-instance", Options{})
+	taskService := NewService(mockRepo, "test-instance", types.Options{})
 
 	task := &MockTask{
 		Task: tasks.Task{
@@ -206,7 +206,7 @@ func TestProcessTask_Unmanaged(t *testing.T) {
 
 func TestProcessTask_MarkAsRunningFailed(t *testing.T) {
 	mockRepo := &tasksrepomock.ITasksRepository{}
-	taskService := NewService(mockRepo, "test-instance", Options{
+	taskService := NewService(mockRepo, "test-instance", types.Options{
 		DefaultTasksTimeout: 50 * time.Millisecond,
 	})
 
@@ -233,7 +233,7 @@ func TestProcessTask_MarkAsRunningFailed(t *testing.T) {
 
 func TestProcessTask_Failed_MarkAsRunningFailed(t *testing.T) {
 	mockRepo := &tasksrepomock.ITasksRepository{}
-	taskService := NewService(mockRepo, "test-instance", Options{
+	taskService := NewService(mockRepo, "test-instance", types.Options{
 		DefaultTasksTimeout: 50 * time.Millisecond,
 	})
 
@@ -266,7 +266,7 @@ func TestProcessTask_Failed_MarkAsRunningFailed(t *testing.T) {
 
 func TestMarkTaskAs(t *testing.T) {
 	mockRepo := &tasksrepomock.ITasksRepository{}
-	taskService := NewService(mockRepo, "test-instance", Options{})
+	taskService := NewService(mockRepo, "test-instance", types.Options{})
 
 	taskID := uuid.MakeV4()
 	mockRepo.

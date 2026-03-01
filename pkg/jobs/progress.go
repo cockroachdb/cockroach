@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
+	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/util/startup"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -24,7 +25,7 @@ import (
 // progressFractionThreshold.
 var (
 	progressTimeThreshold             = 15 * time.Second
-	progressFractionThreshold float32 = 0.05
+	progressFractionThreshold float64 = 0.05
 )
 
 // TestingSetProgressThresholds overrides batching limits to update more often.
@@ -53,35 +54,51 @@ type ChunkProgressLogger struct {
 	batcher ProgressUpdateBatcher
 }
 
-// ProgressUpdateOnly is for use with NewChunkProgressLogger to just update job
-// progress fraction (ie. when a custom func with side-effects is not needed).
-var ProgressUpdateOnly func(context.Context, jobspb.ProgressDetails)
-
+// NewChunkProgressLoggerForJob returns a ChunkProgressLogger which updates a job's
+// fraction_completed via ProgressStorage. expectedChunks is the expected number of chunks left
+// for this job, and fraction_completed is calculated based on this number and startFraction.
 func NewChunkProgressLoggerForJob(
+	jobID jobspb.JobID, db isql.DB, expectedChunks int, startFraction float64,
+) *ChunkProgressLogger {
+	return NewChunkProgressLogger(
+		func(ctx context.Context, fraction float64) error {
+			return db.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+				return ProgressStorage(jobID).SetFraction(ctx, txn, fraction)
+			})
+		},
+		expectedChunks, startFraction,
+	)
+}
+
+// DeprecatedProgressUpdateOnly is for use with DeprecatedNewChunkProgressLoggerForJob to just
+// update job progress fraction (ie. when a custom func with side-effects is not needed).
+var DeprecatedProgressUpdateOnly func(context.Context, jobspb.ProgressDetails)
+
+func DeprecatedNewChunkProgressLoggerForJob(
 	j *Job,
 	expectedChunks int,
 	startFraction float32,
 	progressedFn func(context.Context, jobspb.ProgressDetails),
 ) *ChunkProgressLogger {
 	return NewChunkProgressLogger(
-		func(ctx context.Context, pct float32) error {
+		func(ctx context.Context, fraction float64) error {
 			return j.NoTxn().FractionProgressed(ctx, func(ctx context.Context, details jobspb.ProgressDetails) float32 {
 				if progressedFn != nil {
 					progressedFn(ctx, details)
 				}
-				return pct
+				return float32(fraction)
 			})
-		}, expectedChunks, startFraction)
+		}, expectedChunks, float64(startFraction))
 }
 
 // NewChunkProgressLogger returns a ChunkProgressLogger.
 func NewChunkProgressLogger(
-	report func(ctx context.Context, pct float32) error, expectedChunks int, startFraction float32,
+	report func(ctx context.Context, pct float64) error, expectedChunks int, startFraction float64,
 ) *ChunkProgressLogger {
 	return &ChunkProgressLogger{
 		expectedChunks: expectedChunks,
 		batcher: ProgressUpdateBatcher{
-			perChunkContribution: (1.0 - startFraction) * 1.0 / float32(expectedChunks),
+			perChunkContribution: (1.0 - startFraction) * 1.0 / float64(expectedChunks),
 			start:                startFraction,
 			reported:             startFraction,
 			Report:               report,
@@ -126,17 +143,17 @@ func (jpl *ChunkProgressLogger) Loop(ctx context.Context, chunkCh <-chan struct{
 // not less than 30s apart).
 type ProgressUpdateBatcher struct {
 	// Report is the function called to record progress
-	Report func(context.Context, float32) error
+	Report func(context.Context, float64) error
 
 	// The following are set at initialization time.
 	// start is the starting percentage complete.
-	start                float32
-	perChunkContribution float32
+	start                float64
+	perChunkContribution float64
 
 	syncutil.Mutex
 
 	// reported is the most recently reported value of completed
-	reported  float32
+	reported  float64
 	completed int
 	// lastReported is when we last called report
 	lastReported time.Time
@@ -146,12 +163,12 @@ type ProgressUpdateBatcher struct {
 // change in the completed progress (and enough time has passed) to report the
 // new progress amount.
 func (p *ProgressUpdateBatcher) Add(ctx context.Context) error {
-	shouldReport, completed := func() (bool, float32) {
+	shouldReport, completed := func() (bool, float64) {
 		p.Lock()
 		defer p.Unlock()
 		p.completed += 1
 
-		next := p.start + (float32(p.completed) * p.perChunkContribution)
+		next := p.start + (float64(p.completed) * p.perChunkContribution)
 		sReport := next-p.reported > progressFractionThreshold
 		sReport = sReport || (next > p.reported && p.lastReported.Add(progressTimeThreshold).Before(timeutil.Now()))
 		if sReport {
@@ -170,7 +187,7 @@ func (p *ProgressUpdateBatcher) Add(ctx context.Context) error {
 // worrying about update frequency now that it is done.
 func (p *ProgressUpdateBatcher) Done(ctx context.Context) error {
 	p.Lock()
-	next := p.start + (float32(p.completed) * p.perChunkContribution)
+	next := p.start + (float64(p.completed) * p.perChunkContribution)
 	shouldReport := next-p.reported > progressFractionThreshold
 	p.Unlock()
 	if shouldReport {

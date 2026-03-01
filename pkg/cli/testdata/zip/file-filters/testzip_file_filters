@@ -674,3 +674,49 @@ debug/nodes/1/stacks.txt
 debug/nodes/1/stacks_with_labels.txt
 debug/pprof-summary.sh
 debug/tenant_ranges.err.txt
+
+#path-based include: only node 1 json files
+--include-files=debug/nodes/1/*.json
+----
+debug/debug_zip_command_flags.txt
+debug/hot-ranges-tenant.sh
+debug/hot-ranges.sh
+debug/nodes/1/details.json
+debug/nodes/1/gossip.json
+debug/nodes/1/ranges.json
+debug/nodes/1/status.json
+debug/pprof-summary.sh
+debug/tenant_ranges.err.txt
+
+#path-based exclude: include all json but exclude per-node ranges
+--include-files=*.json --exclude-files=debug/nodes/*/ranges.json
+----
+debug/debug_zip_command_flags.txt
+debug/events.json
+debug/hot-ranges-tenant.sh
+debug/hot-ranges.sh
+debug/liveness.json
+debug/nodes.json
+debug/nodes/1/details.json
+debug/nodes/1/gossip.json
+debug/nodes/1/status.json
+debug/pprof-summary.sh
+debug/rangelog.json
+debug/reports/problemranges.json
+debug/settings.json
+debug/tenant_ranges.err.txt
+
+#path-based exclude: include all json but exclude all node-level json files
+--include-files=*.json --exclude-files=debug/nodes/*/*.json
+----
+debug/debug_zip_command_flags.txt
+debug/events.json
+debug/hot-ranges-tenant.sh
+debug/hot-ranges.sh
+debug/liveness.json
+debug/nodes.json
+debug/pprof-summary.sh
+debug/rangelog.json
+debug/reports/problemranges.json
+debug/settings.json
+debug/tenant_ranges.err.txt

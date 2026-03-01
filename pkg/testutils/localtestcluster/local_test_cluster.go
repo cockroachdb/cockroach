@@ -170,13 +170,6 @@ func (ltc *LocalTestCluster) Start(t testing.TB, initFactory InitFactoryFn) {
 	ltc.Eng = kvstorage.MakeEngines(eng)
 
 	ltc.Stores = kvserver.NewStores(ambient, ltc.Clock)
-	// Faster refresh intervals for testing.
-	cfg.NodeCapacityProvider = load.NewNodeCapacityProvider(ltc.stopper, ltc.Stores, load.NodeCapacityProviderConfig{
-		CPUUsageRefreshInterval:    10 * time.Millisecond,
-		CPUCapacityRefreshInterval: 10 * time.Millisecond,
-		CPUUsageMovingAverageAge:   20,
-	})
-
 	factory := initFactory(ctx, cfg.Settings, nodeDesc, ltc.stopper.Tracer(), ltc.Clock, ltc.Latency,
 		kvserver.ToSenderForTesting(ltc.Stores), ltc.stopper, ltc.Gossip)
 
@@ -201,6 +194,12 @@ func (ltc *LocalTestCluster) Start(t testing.TB, initFactory InitFactoryFn) {
 	}
 	cfg.DB = ltc.DB
 	cfg.Gossip = ltc.Gossip
+	// Faster refresh intervals for testing.
+	cfg.NodeCapacityProvider = load.NewNodeCapacityProvider(ltc.stopper, ltc.Stores, ltc.DB.SQLCPUProvider, load.NodeCapacityProviderConfig{
+		CPUUsageRefreshInterval:    10 * time.Millisecond,
+		CPUCapacityRefreshInterval: 10 * time.Millisecond,
+		CPUUsageMovingAverageAge:   20,
+	})
 	cfg.HistogramWindowInterval = metric.TestSampleInterval
 	active, renewal := cfg.NodeLivenessDurations()
 	cfg.NodeLiveness = liveness.NewNodeLiveness(liveness.NodeLivenessOptions{

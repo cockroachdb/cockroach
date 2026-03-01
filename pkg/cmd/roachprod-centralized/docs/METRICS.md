@@ -13,6 +13,7 @@ This document provides a comprehensive reference for all Prometheus metrics expo
 - [Overview](#overview)
 - [Accessing Metrics](#accessing-metrics)
 - [Grafana Dashboard](#grafana-dashboard)
+- [Auth Service Metrics](#auth-service-metrics)
 - [Tasks Service Metrics](#tasks-service-metrics)
 - [Database Connection Pool Metrics](#database-connection-pool-metrics)
 - [HTTP Server Metrics (Gin)](#http-server-metrics-gin)
@@ -27,10 +28,11 @@ roachprod-centralized exposes Prometheus metrics for monitoring application heal
 
 ### Metric Categories
 
-1. **Tasks Service Metrics** - Task processing and queue statistics
-2. **Database Connection Pool Metrics** - SQL database connection pool statistics
-3. **HTTP Server Metrics** - Gin framework request metrics
-4. **Go Runtime Metrics** - Standard Go process metrics
+1. **Auth Service Metrics** - Authentication, authorization, SCIM, and token statistics
+2. **Tasks Service Metrics** - Task processing and queue statistics
+3. **Database Connection Pool Metrics** - SQL database connection pool statistics
+4. **HTTP Server Metrics** - Gin framework request metrics
+5. **Go Runtime Metrics** - Standard Go process metrics
 
 ### Metric Namespace
 
@@ -97,6 +99,353 @@ The dashboard includes the following variables:
 - **Datasource** - Select your Prometheus datasource
 - **Service** - Filter metrics by service/deployment name (e.g., `roachprod-centralized-prod`, `roachprod-centralized-test`)
 - **State** - Filter task metrics by state (default: All)
+
+## Auth Service Metrics
+
+All auth service metrics use the namespace `roachprod_auth`. These metrics track authentication, authorization, token management, and SCIM provisioning operations.
+
+### Authentication Metrics
+
+#### `roachprod_auth_auth_total`
+
+**Type:** Counter
+**Description:** Total authentication attempts by result and authentication method
+**Labels:**
+- `result` - Authentication result: `success`, `error`
+- `auth_method` - Authentication method: `user`, `service-account`, `jwt`
+
+**Example:**
+```promql
+# Authentication success rate
+sum(rate(roachprod_auth_auth_total{result="success"}[5m]))
+/
+sum(rate(roachprod_auth_auth_total[5m]))
+
+# Authentication failures by method
+sum(rate(roachprod_auth_auth_total{result="error"}[5m])) by (auth_method)
+```
+
+---
+
+#### `roachprod_auth_auth_latency_seconds`
+
+**Type:** Histogram
+**Description:** Full authentication latency including token validation and permission loading
+**Labels:**
+- `result` - Authentication result: `success`, `error`
+- `auth_method` - Authentication method: `user`, `service-account`, `jwt`
+
+**Buckets:** `[0.001, 0.002, 0.004, ..., ~4s]` (exponential)
+
+**Example:**
+```promql
+# 95th percentile authentication latency
+histogram_quantile(0.95, sum(rate(roachprod_auth_auth_latency_seconds_bucket[5m])) by (le))
+```
+
+---
+
+#### `roachprod_auth_auth_okta_exchange_total`
+
+**Type:** Counter
+**Description:** Total Okta token exchanges by result
+**Labels:**
+- `result` - Exchange result: `success`, `error`, `user_not_provisioned`
+
+**Example:**
+```promql
+# Okta exchange success rate
+rate(roachprod_auth_auth_okta_exchange_total{result="success"}[5m])
+```
+
+---
+
+#### `roachprod_auth_auth_okta_exchange_latency_seconds`
+
+**Type:** Histogram
+**Description:** Latency of Okta token exchange operations
+**Buckets:** `[0.01, 0.02, 0.04, ..., ~10s]` (exponential)
+
+---
+
+#### `roachprod_auth_auth_token_validation_total`
+
+**Type:** Counter
+**Description:** Token validations by result
+**Labels:**
+- `result` - Validation result: `success`, `expired`, `revoked`, `invalid`, `user_inactive`
+
+**Example:**
+```promql
+# Token validation failure breakdown
+sum(rate(roachprod_auth_auth_token_validation_total{result!="success"}[5m])) by (result)
+```
+
+---
+
+#### `roachprod_auth_auth_token_validation_latency_seconds`
+
+**Type:** Histogram
+**Description:** Latency of token validation operations
+**Buckets:** `[0.0001, 0.0002, ..., ~400ms]` (exponential)
+
+---
+
+### Token Management Metrics
+
+#### `roachprod_auth_auth_token_issued_total`
+
+**Type:** Counter
+**Description:** Total tokens issued by principal type
+**Labels:**
+- `principal_type` - Token type: `user`, `service-account`
+
+**Example:**
+```promql
+# Tokens issued per hour by type
+sum(increase(roachprod_auth_auth_token_issued_total[1h])) by (principal_type)
+```
+
+---
+
+#### `roachprod_auth_auth_token_revoked_total`
+
+**Type:** Counter
+**Description:** Total tokens revoked by reason
+**Labels:**
+- `reason` - Revocation reason: `self`, `admin`, `deactivation`, `expiry`
+
+---
+
+#### `roachprod_auth_auth_user_not_provisioned_total`
+
+**Type:** Counter
+**Description:** Authentication failures due to unprovisioned users (user exists in Okta but not in SCIM)
+
+**Use Cases:**
+- Detect users attempting to access before SCIM provisioning
+- Monitor SCIM sync issues
+
+---
+
+### Authorization Metrics
+
+#### `roachprod_auth_authz_decision_total`
+
+**Type:** Counter
+**Description:** Authorization decisions by result and context
+**Labels:**
+- `result` - Decision result: `allow`, `deny`
+- `reason` - Decision reason: `has_permission`, `missing_permission`, `no_requirement`
+- `endpoint` - API endpoint path
+- `provider` - Cloud provider context (if applicable)
+
+**Example:**
+```promql
+# Authorization denial rate by endpoint
+sum(rate(roachprod_auth_authz_decision_total{result="deny"}[5m])) by (endpoint)
+
+# Most denied endpoints
+topk(5, sum(rate(roachprod_auth_authz_decision_total{result="deny"}[5m])) by (endpoint))
+```
+
+---
+
+#### `roachprod_auth_authz_latency_seconds`
+
+**Type:** Histogram
+**Description:** Authorization latency by endpoint
+**Labels:**
+- `endpoint` - API endpoint path
+
+**Buckets:** `[0.0001, 0.0002, ..., ~400ms]` (exponential)
+
+---
+
+### SCIM Metrics
+
+#### `roachprod_auth_scim_requests_total`
+
+**Type:** Counter
+**Description:** SCIM requests by operation and result
+**Labels:**
+- `operation` - SCIM operation: `create_user`, `update_user`, `delete_user`, `create_group`, `update_group`, `delete_group`, `list_users`, `list_groups`
+- `result` - Request result: `success`, `error`
+
+**Example:**
+```promql
+# SCIM error rate by operation
+sum(rate(roachprod_auth_scim_requests_total{result="error"}[5m])) by (operation)
+```
+
+---
+
+#### `roachprod_auth_scim_request_latency_seconds`
+
+**Type:** Histogram
+**Description:** SCIM request latency by operation
+**Labels:**
+- `operation` - SCIM operation
+
+**Buckets:** `[0.001, 0.002, ..., ~4s]` (exponential)
+
+---
+
+#### `roachprod_auth_scim_users_provisioned_total`
+
+**Type:** Counter
+**Description:** Total users provisioned via SCIM
+
+---
+
+#### `roachprod_auth_scim_users_deactivated_total`
+
+**Type:** Counter
+**Description:** Total users deactivated via SCIM
+
+---
+
+#### `roachprod_auth_scim_users_reactivated_total`
+
+**Type:** Counter
+**Description:** Total users reactivated via SCIM
+
+---
+
+#### `roachprod_auth_scim_sync_errors_total`
+
+**Type:** Counter
+**Description:** SCIM sync errors by type
+**Labels:**
+- `error_type` - Error type: `validation`, `database`, `conflict`
+
+---
+
+#### `roachprod_auth_scim_groups_created_total`
+
+**Type:** Counter
+**Description:** Total groups created via SCIM
+
+---
+
+#### `roachprod_auth_scim_groups_updated_total`
+
+**Type:** Counter
+**Description:** Total groups updated via SCIM (PUT/PATCH)
+
+---
+
+#### `roachprod_auth_scim_groups_deleted_total`
+
+**Type:** Counter
+**Description:** Total groups deleted via SCIM
+
+---
+
+#### `roachprod_auth_scim_group_members_added_total`
+
+**Type:** Counter
+**Description:** Total group membership additions via SCIM
+
+---
+
+#### `roachprod_auth_scim_group_members_removed_total`
+
+**Type:** Counter
+**Description:** Total group membership removals via SCIM
+
+---
+
+### Service Account Metrics
+
+#### `roachprod_auth_service_accounts_created_total`
+
+**Type:** Counter
+**Description:** Total service accounts created
+
+---
+
+#### `roachprod_auth_service_accounts_deleted_total`
+
+**Type:** Counter
+**Description:** Total service accounts deleted
+
+---
+
+### Token Cleanup Metrics
+
+#### `roachprod_auth_token_cleanup_total`
+
+**Type:** Counter
+**Description:** Tokens cleaned up by status
+**Labels:**
+- `status` - Token status: `expired`, `revoked`
+
+---
+
+#### `roachprod_auth_token_cleanup_latency_seconds`
+
+**Type:** Histogram
+**Description:** Latency of token cleanup operations
+
+---
+
+### Gauge Metrics (Current State)
+
+#### `roachprod_auth_users_total`
+
+**Type:** Gauge
+**Description:** Current number of users by status
+**Labels:**
+- `status` - User status: `active`, `inactive`
+
+**Example:**
+```promql
+# Total active users
+roachprod_auth_users_total{status="active"}
+
+# Inactive user ratio
+roachprod_auth_users_total{status="inactive"}
+/
+sum(roachprod_auth_users_total)
+```
+
+---
+
+#### `roachprod_auth_groups_total`
+
+**Type:** Gauge
+**Description:** Current number of groups
+
+---
+
+#### `roachprod_auth_service_accounts_total`
+
+**Type:** Gauge
+**Description:** Current number of service accounts by enabled status
+**Labels:**
+- `enabled` - Enabled status: `true`, `false`
+
+---
+
+#### `roachprod_auth_tokens_total`
+
+**Type:** Gauge
+**Description:** Current number of tokens by type and status
+**Labels:**
+- `type` - Token type: `user`, `service-account`
+- `status` - Token status: `valid`, `revoked`
+
+**Example:**
+```promql
+# Valid tokens by type
+roachprod_auth_tokens_total{status="valid"}
+
+# Token distribution
+sum(roachprod_auth_tokens_total) by (type, status)
+```
+
+---
 
 ## Tasks Service Metrics
 

@@ -146,12 +146,14 @@ message TransferLeaseOperation {
 
 enum ChangeSettingType {
   SetLeaseType = 0;
+  ToggleVirtualIntentResolution = 1;
 }
 
 message ChangeSettingOperation {
   ChangeSettingType type = 1;
   int32 lease_type = 2 [(gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.LeaseType"];
   Result result = 3 [(gogoproto.nullable) = false];
+  bool vir_enabled = 4;
 }
 
 enum ChangeZoneType {

@@ -14,8 +14,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/repositories/clusters"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/services/clusters/internal/operations"
 	dnstasks "github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/services/public-dns/tasks"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/utils/filters"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/utils/logger"
 	cloudcluster "github.com/cockroachdb/cockroach/pkg/roachprod/cloud/types"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/vm"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 )
@@ -213,4 +215,25 @@ func (s *Service) computeDNSRecordChanges(
 	}
 
 	return
+}
+
+func (s *Service) GetAllDNSZoneVMs(
+	ctx context.Context, l *logger.Logger, dnsZone string,
+) (vm.List, error) {
+	c, err := s._store.GetClusters(ctx, l, *filters.NewFilterSet())
+	if err != nil {
+		return nil, err
+	}
+
+	var vms vm.List
+	for _, cluster := range c {
+		for _, vm := range cluster.VMs {
+			if vm.PublicDNSZone != dnsZone {
+				continue
+			}
+			vms = append(vms, vm)
+		}
+	}
+
+	return vms, nil
 }

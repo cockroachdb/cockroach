@@ -13,7 +13,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedpb"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedvalidators"
-	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl"
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
@@ -334,15 +333,6 @@ func makeScheduledChangefeedSpec(
 			return nil, err
 		}
 		spec.recurrence = &rec
-	}
-
-	enterpriseCheckErr := utilccl.CheckEnterpriseEnabled(
-		p.ExecCfg().Settings,
-		opName)
-
-	if !(enterpriseCheckErr == nil) {
-		// Cannot use SCHEDULED CHANGEFEED w/out enterprise license.
-		return nil, enterpriseCheckErr
 	}
 
 	spec.scheduleOpts, err = exprEval.KVOptions(

@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/kv/followerreads"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -48,6 +49,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/span"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlclustersettings"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlinstance"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -142,11 +144,6 @@ type DistSQLPlanner struct {
 
 const NoStrictLocalityFiltering = false
 
-// ReplicaOraclePolicy controls which policy the physical planner uses to choose
-// a replica for a given range. It is exported so that it may be overwritten
-// during initialization by CCL code to enable follower reads.
-var ReplicaOraclePolicy = replicaoracle.BinPackingChoice
-
 // NewDistSQLPlanner initializes a DistSQLPlanner.
 //
 // sqlInstanceID is the ID of the node on which this planner runs. It is used to
@@ -240,11 +237,30 @@ func (dsp *DistSQLPlanner) GetAllInstancesByLocality(
 	return all[:pos], nil
 }
 
-// GetSQLInstanceInfo gets a node descriptor by node ID.
+// GetSQLInstanceInfo gets SQL instance info by instance ID. This properly handles
+// SQL instances in multi-tenant environments where instances may not map to KV nodes.
+// The previous behavior is available by turning off the instance resolver
+// via cluster settings.
 func (dsp *DistSQLPlanner) GetSQLInstanceInfo(
-	sqlInstanceID base.SQLInstanceID,
-) (*roachpb.NodeDescriptor, error) {
-	return dsp.nodeDescs.GetNodeDescriptor(roachpb.NodeID(sqlInstanceID))
+	ctx context.Context, sqlInstanceID base.SQLInstanceID,
+) (sqlinstance.InstanceInfo, error) {
+	if sqlclustersettings.UseInstanceInfoForSQLInstances.Get(&dsp.st.SV) {
+		return dsp.sqlAddressResolver.GetInstance(ctx, sqlInstanceID)
+	}
+
+	// This only works when SQL instances map 1:1 to KV nodes, i.e. not in
+	// serverless tenants.
+	nodeDesc, err := dsp.nodeDescs.GetNodeDescriptor(roachpb.NodeID(sqlInstanceID))
+	if err != nil {
+		return sqlinstance.InstanceInfo{}, err
+	}
+	return sqlinstance.InstanceInfo{
+		InstanceID:      base.SQLInstanceID(nodeDesc.NodeID),
+		InstanceSQLAddr: nodeDesc.SQLAddress.String(),
+		InstanceRPCAddr: nodeDesc.Address.String(),
+		Locality:        nodeDesc.Locality,
+		BinaryVersion:   nodeDesc.ServerVersion,
+	}, nil
 }
 
 // ReplicaOracleConfig returns the DSP's replicaoracle.Config.
@@ -270,7 +286,7 @@ func (dsp *DistSQLPlanner) ConstructAndSetSpanResolver(
 		log.Dev.Fatal(ctx, "trying to construct and set span resolver when one already exists")
 	}
 	sr := physicalplan.NewSpanResolver(dsp.st, dsp.distSender, dsp.nodeDescs, nodeID, locality,
-		dsp.clock, dsp.rpcCtx, ReplicaOraclePolicy)
+		dsp.clock, dsp.rpcCtx, followerreads.FollowerReadOraclePolicy)
 	dsp.SetSpanResolver(sr)
 }
 

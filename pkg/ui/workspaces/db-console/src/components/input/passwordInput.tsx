@@ -4,7 +4,7 @@
 // included in the /LICENSE file.
 
 import cn from "classnames";
-import React from "react";
+import React, { useState } from "react";
 
 import EyeOff from "assets/eye-off.svg";
 import Eye from "assets/eye.svg";
@@ -21,63 +21,50 @@ interface PasswordInputProps {
   label?: string;
 }
 
-interface PasswordInputState {
-  showPassword?: boolean;
-}
+export const PasswordInput: React.FC<PasswordInputProps> = ({
+  onChange,
+  value,
+  placeholder,
+  className,
+  name,
+  label,
+}) => {
+  const [showPassword, setShowPassword] = useState(false);
 
-export class PasswordInput extends React.Component<
-  PasswordInputProps,
-  PasswordInputState
-> {
-  state = {
-    showPassword: false,
+  const handleOnTextChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    onChange(event.target.value);
   };
 
-  handleOnTextChange = (event: React.ChangeEvent<HTMLInputElement>) => {
-    const value = event.target.value;
-    this.props.onChange(value);
+  const togglePassword = () => {
+    setShowPassword(prev => !prev);
   };
 
-  togglePassword = () => {
-    this.setState({
-      showPassword: !this.state.showPassword,
-    });
-  };
+  const inputType = showPassword ? "text" : "password";
+  const classes = cn(className, "crl-input", "crl-input__password");
 
-  renderPasswordIcon = (showPassword: boolean) => (
-    <Button
-      tabIndex={-1}
-      type="flat"
-      onClick={this.togglePassword}
-      className="crl-button__show-password"
-    >
-      <img src={showPassword ? EyeOff : Eye} alt="Toggle Password" />
-    </Button>
+  return (
+    <div className="crl-input__wrapper">
+      {label && (
+        <label htmlFor={name} className="crl-input__label">
+          {label}
+        </label>
+      )}
+      <input
+        name={name}
+        type={inputType}
+        value={value}
+        placeholder={placeholder}
+        className={classes}
+        onChange={handleOnTextChange}
+      />
+      <Button
+        tabIndex={-1}
+        type="flat"
+        onClick={togglePassword}
+        className="crl-button__show-password"
+      >
+        <img src={showPassword ? EyeOff : Eye} alt="Toggle Password" />
+      </Button>
+    </div>
   );
-
-  render() {
-    const { placeholder, className, name, label, value } = this.props;
-    const { showPassword } = this.state;
-    const inputType = showPassword ? "text" : "password";
-
-    const classes = cn(className, "crl-input", "crl-input__password");
-    return (
-      <div className="crl-input__wrapper">
-        {label && (
-          <label htmlFor={name} className="crl-input__label">
-            {label}
-          </label>
-        )}
-        <input
-          name={name}
-          type={inputType}
-          value={value}
-          placeholder={placeholder}
-          className={classes}
-          onChange={this.handleOnTextChange}
-        />
-        {this.renderPasswordIcon(showPassword)}
-      </div>
-    );
-  }
-}
+};

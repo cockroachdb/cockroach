@@ -16,9 +16,10 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-// convertWithLogicalType implements parquetConversionFunc for Parquet files using
-// LogicalType annotations. This is used for files written by recent tools (Apache Arrow,
-// modern Spark, etc.).
+// convertWithLogicalType converts Parquet values to CockroachDB datums using LogicalType annotations.
+// This is used for files written by recent tools (Apache Arrow, modern Spark, etc.).
+// For legacy files with ConvertedType, the ConvertedType is converted to LogicalType during
+// initialization using Apache Arrow's ToLogicalType() method.
 //
 // Supported LogicalTypes:
 //   - StringLogicalType, JSONLogicalType, EnumLogicalType (BYTE_ARRAY)
@@ -36,18 +37,17 @@ import (
 //
 // Unsupported LogicalTypes (low priority):
 //   - BSONLogicalType - Binary JSON (could convert to JSONB)
-var convertWithLogicalType parquetConversionFunc = func(
+func convertWithLogicalType(
 	value any, targetType *types.T, metadata *parquetColumnMetadata,
 ) (tree.Datum, error) {
-	if metadata.logicalType == nil {
-		return nil, errors.AssertionFailedf("convertWithLogicalType called with nil logicalType")
+	if metadata.logicalType != nil {
+		if _, ok := metadata.logicalType.(schema.NullLogicalType); ok {
+			return tree.DNull, nil
+		}
 	}
-
-	// NullLogicalType represents a column that only contains null values
-	if _, ok := metadata.logicalType.(schema.NullLogicalType); ok {
-		return tree.DNull, nil
-	}
-
+	// Note: logicalType can be nil for plain primitive
+	// types (e.g., a plain INT32 without semantic annotations).
+	// The conversion logic handles these via fallback paths based on physical type.
 	switch v := value.(type) {
 	case bool:
 		return tree.MakeDBool(tree.DBool(v)), nil
@@ -191,27 +191,26 @@ var convertWithLogicalType parquetConversionFunc = func(
 func validateWithLogicalType(
 	physicalType parquet.Type, logicalType schema.LogicalType, targetType *types.T,
 ) error {
-	if logicalType == nil {
-		return errors.AssertionFailedf("validateWithLogicalType called with nil logicalType")
-	}
 
-	// NullLogicalType represents columns that only contain null values - always valid
-	if _, ok := logicalType.(schema.NullLogicalType); ok {
-		return nil
-	}
+	if logicalType != nil {
+		// NullLogicalType represents columns that only contain null values.
+		if _, ok := logicalType.(schema.NullLogicalType); ok {
+			return nil
+		}
 
-	// Check for unsupported LogicalTypes that require nested column handling
-	if _, ok := logicalType.(schema.ListLogicalType); ok {
-		return errors.Newf("ListLogicalType is not supported (requires nested column chunk handling)")
+		// Check for unsupported LogicalTypes that require nested column handling
+		if _, ok := logicalType.(schema.ListLogicalType); ok {
+			return errors.UnimplementedErrorf(errors.IssueLink{IssueURL: "https://github.com/cockroachdb/cockroach/issues/162543"},
+				"ListLogicalType not supported (requires nested column chunk handling)")
+		}
+		if _, ok := logicalType.(schema.MapLogicalType); ok {
+			return errors.UnimplementedErrorf(errors.IssueLink{IssueURL: "https://github.com/cockroachdb/cockroach/issues/162543"},
+				"MapLogicalType not supported (requires nested column chunk handling)")
+		}
+		if _, ok := logicalType.(schema.BSONLogicalType); ok {
+			return errors.Newf("BSONLogicalType is not supported")
+		}
 	}
-	if _, ok := logicalType.(schema.MapLogicalType); ok {
-		return errors.Newf("MapLogicalType is not supported (requires nested column chunk handling)")
-	}
-	if _, ok := logicalType.(schema.BSONLogicalType); ok {
-		return errors.Newf("BSONLogicalType is not supported")
-	}
-
-	// UnknownLogicalType is allowed - we'll use fallback conversions based on physical type
 
 	switch physicalType {
 	case parquet.Types.Boolean:
@@ -219,7 +218,6 @@ func validateWithLogicalType(
 		if targetType.Family() != types.BoolFamily {
 			return errors.Newf("boolean type cannot be converted to %s", targetType.Family())
 		}
-
 	case parquet.Types.Int32:
 		// Check for special logical types first
 		if _, ok := logicalType.(schema.DateLogicalType); ok {

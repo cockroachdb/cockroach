@@ -18,13 +18,13 @@ import (
 
 // Test object to use in memory filter tests
 type TestTask struct {
-	ID        string
-	Type      string
-	State     string
-	Count     int
-	Score     float64
-	Active    bool
-	CreatedAt time.Time
+	ID        string    `db:"id"`
+	Type      string    `db:"type"`
+	State     string    `db:"state"`
+	Count     int       `db:"count"`
+	Score     float64   `db:"score"`
+	Active    bool      `db:"active"`
+	CreatedAt time.Time `db:"creation_datetime"`
 	UpdatedAt time.Time
 }
 
@@ -37,7 +37,7 @@ func TestFilterOperatorValidation(t *testing.T) {
 		{
 			name: "valid equal filter",
 			filter: types.FieldFilter{
-				Field:    "state",
+				Field:    "State",
 				Operator: types.OpEqual,
 				Value:    "pending",
 			},
@@ -46,7 +46,7 @@ func TestFilterOperatorValidation(t *testing.T) {
 		{
 			name: "valid in filter",
 			filter: types.FieldFilter{
-				Field:    "state",
+				Field:    "State",
 				Operator: types.OpIn,
 				Value:    []string{"pending", "running"},
 			},
@@ -64,7 +64,7 @@ func TestFilterOperatorValidation(t *testing.T) {
 		{
 			name: "invalid nil value for equal",
 			filter: types.FieldFilter{
-				Field:    "state",
+				Field:    "State",
 				Operator: types.OpEqual,
 				Value:    nil,
 			},
@@ -73,7 +73,7 @@ func TestFilterOperatorValidation(t *testing.T) {
 		{
 			name: "invalid non-slice for in operator",
 			filter: types.FieldFilter{
-				Field:    "state",
+				Field:    "State",
 				Operator: types.OpIn,
 				Value:    "single_value",
 			},
@@ -82,7 +82,7 @@ func TestFilterOperatorValidation(t *testing.T) {
 		{
 			name: "invalid empty slice for in operator",
 			filter: types.FieldFilter{
-				Field:    "state",
+				Field:    "State",
 				Operator: types.OpIn,
 				Value:    []string{},
 			},
@@ -91,7 +91,7 @@ func TestFilterOperatorValidation(t *testing.T) {
 		{
 			name: "invalid operator",
 			filter: types.FieldFilter{
-				Field:    "state",
+				Field:    "State",
 				Operator: "invalid_op",
 				Value:    "test",
 			},
@@ -137,7 +137,7 @@ func TestFilterSetValidation(t *testing.T) {
 			filterSet: &types.FilterSet{
 				Logic: "invalid_logic",
 				Filters: []types.FieldFilter{
-					{Field: "state", Operator: types.OpEqual, Value: "pending"},
+					{Field: "State", Operator: types.OpEqual, Value: "pending"},
 				},
 			},
 			expectError: true,
@@ -286,7 +286,7 @@ func TestSQLQueryBuilder(t *testing.T) {
 			filterSet: NewFilterSet().
 				AddFilter("State", types.OpEqual, "pending").
 				AddFilter("Type", types.OpEqual, "backup").
-				AddFilter("CreationDatetime", types.OpEqual, "2006-01-02T15:04:05Z"),
+				AddFilter("CreatedAt", types.OpEqual, "2006-01-02T15:04:05Z"),
 			expectedWhere: "WHERE state = $1 AND type = $2 AND creation_datetime = $3",
 			expectedArgs:  []interface{}{"pending", "backup", "2006-01-02T15:04:05Z"},
 			expectError:   false,
@@ -306,7 +306,7 @@ func TestSQLQueryBuilder(t *testing.T) {
 			filterSet: NewFilterSet().
 				AddFilter("CreatedAt", types.OpGreater, "2024-01-01").
 				AddFilter("Count", types.OpLessEq, 100),
-			expectedWhere: "WHERE created_at > $1 AND count <= $2",
+			expectedWhere: "WHERE creation_datetime > $1 AND count <= $2",
 			expectedArgs:  []interface{}{"2024-01-01", 100},
 			expectError:   false,
 		},
@@ -337,15 +337,31 @@ func TestSQLQueryBuilder(t *testing.T) {
 				AddFilter("State", types.OpNotEqual, "failed").
 				AddFilter("Type", types.OpIn, []string{"backup", "restore"}).
 				AddFilter("CreatedAt", types.OpGreater, "2024-01-01"),
-			expectedWhere: "WHERE state != $1 AND type IN ($2, $3) AND created_at > $4",
+			expectedWhere: "WHERE state != $1 AND type IN ($2, $3) AND creation_datetime > $4",
 			expectedArgs:  []interface{}{"failed", "backup", "restore", "2024-01-01"},
+			expectError:   false,
+		},
+		{
+			name: "invalid field name",
+			filterSet: NewFilterSet().
+				AddFilter("NonExistentField", types.OpEqual, "value"),
+			expectedWhere: "",
+			expectedArgs:  nil,
+			expectError:   true,
+		},
+		{
+			name: "field name with no db tag defaults to snake_case",
+			filterSet: NewFilterSet().
+				AddFilter("UpdatedAt", types.OpEqual, "2024-01-02T15:04:05Z"),
+			expectedWhere: "WHERE updated_at = $1",
+			expectedArgs:  []interface{}{"2024-01-02T15:04:05Z"},
 			expectError:   false,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			qb := NewSQLQueryBuilder()
+			qb := NewSQLQueryBuilderWithTypeHint(reflect.TypeOf(TestTask{}))
 			whereClause, args, err := qb.BuildWhere(tt.filterSet)
 
 			if tt.expectError {
@@ -360,7 +376,7 @@ func TestSQLQueryBuilder(t *testing.T) {
 }
 
 func TestMemoryFilterEvaluator_StructFields(t *testing.T) {
-	evaluator := NewMemoryFilterEvaluator()
+	evaluator := NewMemoryFilterEvaluatorWithTypeHint(reflect.TypeOf(TestTask{}))
 	testTime := time.Date(2024, 1, 15, 10, 30, 0, 0, time.UTC)
 
 	task := TestTask{
@@ -497,7 +513,7 @@ func TestMemoryFilterEvaluator_StructFields(t *testing.T) {
 }
 
 func TestMemoryFilterEvaluator_ErrorCases(t *testing.T) {
-	evaluator := NewMemoryFilterEvaluator()
+	evaluator := NewMemoryFilterEvaluatorWithTypeHint(reflect.TypeOf(TestTask{}))
 	task := TestTask{ID: "test", Type: "backup", State: "pending"}
 
 	tests := []struct {
@@ -507,7 +523,7 @@ func TestMemoryFilterEvaluator_ErrorCases(t *testing.T) {
 	}{
 		{
 			name:        "nonexistent field",
-			filterSet:   NewFilterSet().AddFilter("NonexistentField", types.OpEqual, "value"),
+			filterSet:   NewFilterSet().AddFilter("nonexistent_field", types.OpEqual, "value"),
 			expectError: true,
 		},
 		{
@@ -559,7 +575,7 @@ func TestFilterSetBuilderMethods(t *testing.T) {
 }
 
 func TestMemoryFilterEvaluator_EdgeCases(t *testing.T) {
-	evaluator := NewMemoryFilterEvaluator()
+	evaluator := NewMemoryFilterEvaluatorWithTypeHint(reflect.TypeOf(TestTask{}))
 
 	// Test with pointer to struct
 	task := &TestTask{
@@ -584,7 +600,7 @@ func TestMemoryFilterEvaluator_EdgeCases(t *testing.T) {
 }
 
 func TestMemoryFilterEvaluator_NumericComparisons(t *testing.T) {
-	evaluator := NewMemoryFilterEvaluator()
+	evaluator := NewMemoryFilterEvaluatorWithTypeHint(reflect.TypeOf(TestTask{}))
 
 	task := TestTask{
 		Count: 42,
@@ -682,12 +698,12 @@ func TestAddFilter_SliceValueHandling(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			filterSet := NewFilterSet()
-			filterSet.AddFilter("Test_field", tt.operator, tt.inputValue)
+			filterSet.AddFilter("TestField", tt.operator, tt.inputValue)
 
 			require.Equal(t, 1, len(filterSet.Filters))
 			filter := filterSet.Filters[0]
 
-			assert.Equal(t, "Test_field", filter.Field)
+			assert.Equal(t, "TestField", filter.Field)
 			assert.Equal(t, tt.operator, filter.Operator)
 			assert.Equal(t, tt.expectedValue, filter.Value)
 		})
@@ -701,9 +717,9 @@ func TestSQLQueryBuilder_TimezoneHandling(t *testing.T) {
 
 		// Add a filter with timezone-aware time
 		estTime := mustParseTime(t, "2025-09-16T14:00:00-05:00")
-		filterSet.AddFilter("CreationDatetime", types.OpGreater, estTime)
+		filterSet.AddFilter("CreatedAt", types.OpGreater, estTime)
 
-		qb := NewSQLQueryBuilder()
+		qb := NewSQLQueryBuilderWithTypeHint(reflect.TypeOf(TestTask{}))
 		whereClause, args, err := qb.BuildWhere(filterSet)
 
 		require.NoError(t, err)
@@ -858,7 +874,7 @@ func TestCustomStringTypeFiltering(t *testing.T) {
 		},
 	}
 
-	evaluator := NewMemoryFilterEvaluator()
+	evaluator := NewMemoryFilterEvaluatorWithTypeHint(reflect.TypeOf(MockTask{}))
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -931,7 +947,7 @@ func TestCustomStringTypeEdgeCases(t *testing.T) {
 		},
 	}
 
-	evaluator := NewMemoryFilterEvaluator()
+	evaluator := NewMemoryFilterEvaluatorWithTypeHint(reflect.TypeOf(MockEdgeObject{}))
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -1055,7 +1071,7 @@ func TestRealWorldTaskStateScenario(t *testing.T) {
 		},
 	}
 
-	evaluator := NewMemoryFilterEvaluator()
+	evaluator := NewMemoryFilterEvaluatorWithTypeHint(reflect.TypeOf(RealTask{}))
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

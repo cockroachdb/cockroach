@@ -10,7 +10,7 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/cockroachdb/cockroach/pkg/ccl/securityccl/jwthelper"
+	"github.com/cockroachdb/cockroach/pkg/security/jwthelper"
 	secuser "github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/util/log"

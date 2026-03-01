@@ -1929,18 +1929,6 @@ DROP ROLE creator_of_databases
 
 subtest end
 
-subtest subject
-
-skipif config 3node-tenant
-statement error OSS binaries do not include enterprise features
-CREATE ROLE role_with_subject SUBJECT 'foo'
-
-skipif config 3node-tenant
-statement error OSS binaries do not include enterprise features
-ALTER ROLE testuser SUBJECT 'foo'
-
-subtest end
-
 subtest provisionsrc
 
 skipif config 3node-tenant

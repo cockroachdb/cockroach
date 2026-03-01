@@ -27,7 +27,7 @@ import (
 // settings on KV nodes across restarts.
 type settingsCacheWriter struct {
 	stopper *stop.Stopper
-	eng     storage.Engine
+	eng     storage.Engine // LogEngine
 
 	mu struct {
 		syncutil.Mutex
@@ -37,6 +37,9 @@ type settingsCacheWriter struct {
 	}
 }
 
+// newSettingsCacheWriter creates a settingsCacheWriter operating on the given
+// engine. The engine is expected to be the LogEngine, since the settings are
+// persisted in the Store-local keyspace.
 func newSettingsCacheWriter(eng storage.Engine, stopper *stop.Stopper) *settingsCacheWriter {
 	return &settingsCacheWriter{
 		eng:     eng,

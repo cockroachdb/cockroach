@@ -20,6 +20,12 @@ func (defaultCollector) collect(disks []*monitoredDisk, time time.Time) (int, er
 	return len(disks), nil
 }
 
+func (defaultCollector) collectInstantaneous(
+	disks []*monitoredDisk, now time.Time, recorder func(traceEvent), buf []byte,
+) (countCollected int, _ []byte, err error) {
+	return len(disks), buf, nil
+}
+
 func newStatsCollector(fs vfs.FS) (*defaultCollector, error) {
 	return &defaultCollector{}, nil
 }

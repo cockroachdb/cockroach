@@ -16,7 +16,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/backup/backupbase"
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/ccl/storageccl"
 	"github.com/cockroachdb/cockroach/pkg/cloud"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
@@ -25,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/exprutil"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util/ioctx"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/errors"
@@ -214,7 +214,7 @@ func MakeNewEncryptionOptions(
 	var encryptionInfo *jobspb.EncryptionInfo
 	switch encryptionParams.Mode {
 	case jobspb.EncryptionMode_Passphrase:
-		salt, err := storageccl.GenerateSalt()
+		salt, err := storage.GenerateSalt()
 		if err != nil {
 			return nil, nil, err
 		}
@@ -222,7 +222,7 @@ func MakeNewEncryptionOptions(
 		encryptionInfo = &jobspb.EncryptionInfo{Salt: salt}
 		encryptionOptions = &jobspb.BackupEncryptionOptions{
 			Mode: jobspb.EncryptionMode_Passphrase,
-			Key:  storageccl.GenerateKey([]byte(encryptionParams.RawPassphrase), salt),
+			Key:  storage.GenerateKey([]byte(encryptionParams.RawPassphrase), salt),
 		}
 	case jobspb.EncryptionMode_KMS:
 		// Generate a 32 byte/256-bit crypto-random number which will serve as
@@ -381,7 +381,7 @@ func GetEncryptionFromBaseStore(
 	case jobspb.EncryptionMode_Passphrase:
 		encryptionOptions = &jobspb.BackupEncryptionOptions{
 			Mode: jobspb.EncryptionMode_Passphrase,
-			Key:  storageccl.GenerateKey([]byte(encryptionParams.RawPassphrase), opts[0].Salt),
+			Key:  storage.GenerateKey([]byte(encryptionParams.RawPassphrase), opts[0].Salt),
 		}
 	case jobspb.EncryptionMode_KMS:
 		var defaultKMSInfo *jobspb.BackupEncryptionOptions_KMSInfo
@@ -563,7 +563,7 @@ func ResolveEncryptionOptionsFromExpr(
 		if err != nil {
 			return nil, err
 		}
-		encryptionKey := storageccl.GenerateKey([]byte(passphrase), opts[0].Salt)
+		encryptionKey := storage.GenerateKey([]byte(passphrase), opts[0].Salt)
 		encryption = &jobspb.BackupEncryptionOptions{
 			Mode: mode,
 			Key:  encryptionKey,

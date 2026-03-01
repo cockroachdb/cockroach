@@ -1068,6 +1068,9 @@ func (opc *optPlanningCtx) runExecBuilder(
 		planTop.instrumentation.outputRows = mem.RootExpr().Relational().Statistics().RowCount
 	}
 
+	// This check is also performed during Bind for the extended protocol
+	// (see connExecutor.execBind). It remains here for the simple protocol,
+	// which does not go through Bind.
 	if stmt.ExpectedTypes != nil {
 		cols := result.main.planColumns()
 		if !stmt.ExpectedTypes.TypesEqual(cols) {

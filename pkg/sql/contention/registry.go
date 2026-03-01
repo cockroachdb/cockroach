@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/contentionpb"
 	"github.com/cockroachdb/cockroach/pkg/util/cache"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
@@ -250,6 +251,12 @@ func NewRegistry(st *cluster.Settings, endpoint ResolverEndpoint, metrics *Metri
 // Start starts the background goroutines for the Registry.
 func (r *Registry) Start(ctx context.Context, stopper *stop.Stopper) {
 	r.eventStore.start(ctx, stopper)
+}
+
+// SetKeyDecoderDeps sets the dependencies needed to decode contention keys.
+// This is called after the SQL server is fully initialized.
+func (r *Registry) SetKeyDecoderDeps(db descs.DB, codec keys.SQLCodec) {
+	r.eventStore.setKeyDecoderDeps(db, codec)
 }
 
 // AddContentionEvent adds a new ContentionEvent to the Registry.
