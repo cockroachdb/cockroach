@@ -464,32 +464,10 @@ grep "cockroach-go-testserver-25.4" pkg/sql/logictest/logictestbase/logictestbas
 
 ---
 
-## Quick Troubleshooting
+## Troubleshooting
 
-### gceworker Issues
-
-| Error | Fix |
-|-------|-----|
-| SSH connection fails (exit 255) | `./scripts/gceworker.sh start` (retry) or destroy & recreate |
-| "bazel: command not found" | Run `./dev doctor` to install |
-| "COCKROACH_DEV_LICENSE not set" | `export COCKROACH_DEV_LICENSE="<license>"` |
-
-### Fixture Generation
-
-| Error | Fix |
-|-------|-----|
-| "license required" | Verify: `echo $COCKROACH_DEV_LICENSE` |
-| "roachprod cluster exists" | `./bin/roachprod destroy local` |
-| Fixtures 0 bytes or >10MB | Compare with previous version sizes, regenerate if needed |
-
-### REPOSITORIES.bzl
-
-| Error | Fix |
-|-------|-----|
-| Tool removed needed version | `git show HEAD^:pkg/sql/logictest/REPOSITORIES.bzl | grep -A 4 "X.Y.Z"` then restore manually |
-| Nightly build fails "missing binary" | Verify all active testserver versions in REPOSITORIES.bzl |
-
----
+See [failures/m3_failures.md](failures/m3_failures.md) for gceworker issues,
+fixture generation failures, CI failures after PR 2, and REPOSITORIES.bzl problems.
 
 ## Alternative: Single PR Approach
 
