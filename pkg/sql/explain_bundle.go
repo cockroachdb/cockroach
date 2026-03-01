@@ -23,11 +23,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/hintpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/lexbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec/explain"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
+	"github.com/cockroachdb/cockroach/pkg/sql/parserutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -556,6 +558,74 @@ var stmtBundleIncludeAllFKReferences = settings.RegisterBoolSetting(
 	false,
 )
 
+// getStmtHintRecreateStmts returns the SQL statements that can be used to
+// recreate all the statement hints bound to the target statement. The returned
+// statements are sorted in ascending order by the original hints' creation time.
+func (c *stmtEnvCollector) getStmtHintRecreateStmts(
+	ctx context.Context, stmt string, sv *settings.Values,
+) (recreateStmts []string, err error) {
+	fingerprint, err := parserutils.FingerprintStatement(stmt,
+		tree.FmtFlags(tree.QueryFormattingForFingerprintsMask.Get(
+			sv,
+		)))
+	if err != nil {
+		return nil, err
+	}
+
+	query := `SELECT hint FROM system.statement_hints WHERE fingerprint = $1 ORDER BY created_at`
+	rows, err := c.ie.QueryBufferedEx(
+		ctx,
+		"stmtEnvCollector",
+		nil, /* txn */
+		c.ieo,
+		query,
+		fingerprint,
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	recreateStmts = make([]string, 0, len(rows))
+	for _, row := range rows {
+		if len(row) == 0 {
+			return nil, errors.AssertionFailedf("expect not nil row")
+		}
+		if row[0] == tree.DNull {
+			continue
+		}
+		hintBytes, ok := row[0].(*tree.DBytes)
+		if !ok {
+			return nil, errors.AssertionFailedf("expected hint to be bytes, got %T", row[0])
+		}
+		// Deserialize from the protobuf.
+		hint, err := hintpb.FromBytes([]byte(*hintBytes))
+		if err != nil {
+			return nil, errors.Wrap(err, "deserializing statement hint")
+		}
+		recreateSQL, ok := hint.RecreateStmt(stmt)
+		if !ok {
+			continue
+		}
+		recreateStmts = append(recreateStmts, recreateSQL)
+	}
+	return recreateStmts, nil
+}
+
+// PrintStmtHints writes the SQL statements needed to recreate the statement
+// hints for the given statement to w.
+func (c *stmtEnvCollector) PrintStmtHints(
+	ctx context.Context, stmt string, sv *settings.Values, w io.Writer,
+) error {
+	recreateStmts, err := c.getStmtHintRecreateStmts(ctx, stmt, sv)
+	if err != nil {
+		return err
+	}
+	for _, s := range recreateStmts {
+		fmt.Fprintf(w, "%s\n", s)
+	}
+	return nil
+}
+
 // stmtBundleStatsFileRE is a regex that matches all "complex" characters that
 // might not be safe when used in file names on some systems.
 var stmtBundleStatsFileRE = regexp.MustCompile(`[^a-zA-Z0-9_.\-]`)
@@ -1007,6 +1077,13 @@ func (b *stmtBundleBuilder) addEnv(ctx context.Context) {
 			b.printError(fmt.Sprintf("-- error getting schema for view %s: %v", views[i].FQString(), err), &buf)
 		}
 	}
+
+	if !b.flags.RedactValues {
+		if err := c.PrintStmtHints(ctx, b.stmt, b.sv, &buf); err != nil {
+			b.printError(fmt.Sprintf("-- error getting statement hints: %v", err), &buf)
+		}
+	}
+
 	if buf.Len() == 0 {
 		buf.WriteString("-- there were no objects used in this query\n")
 	}

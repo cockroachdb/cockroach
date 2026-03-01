@@ -6,6 +6,9 @@
 package hintpb
 
 import (
+	"fmt"
+
+	"github.com/cockroachdb/cockroach/pkg/sql/lexbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/protoreflect"
 	"github.com/cockroachdb/cockroach/pkg/util/json"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
@@ -61,6 +64,21 @@ func (h StatementHintUnion) HintType() string {
 		return "rewrite_inline_hints"
 	default:
 		return "unknown"
+	}
+}
+
+// RecreateStmt returns the SQL statement that can be used to recreate the hint.
+// Returns the empty string and false if the hint type is not supported.
+func (h StatementHintUnion) RecreateStmt(stmt string) (string, bool) {
+	switch t := h.GetValue().(type) {
+	case *InjectHints:
+		return fmt.Sprintf(
+			"SELECT information_schema.crdb_rewrite_inline_hints(%s, %s);",
+			lexbase.EscapeSQLString(stmt),
+			lexbase.EscapeSQLString(t.DonorSQL),
+		), true
+	default:
+		return "", false
 	}
 }
 
