@@ -3,14 +3,13 @@
 // Use of this software is governed by the CockroachDB Software License
 // included in the /LICENSE file.
 
-package partitionccl_test
+package partitioning_test
 
 import (
 	"os"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/ccl"
 	"github.com/cockroachdb/cockroach/pkg/security/securityassets"
 	"github.com/cockroachdb/cockroach/pkg/security/securitytest"
 	"github.com/cockroachdb/cockroach/pkg/server"
@@ -20,7 +19,6 @@ import (
 )
 
 func TestMain(m *testing.M) {
-	defer ccl.TestingEnableEnterprise()()
 	securityassets.SetLoader(securitytest.EmbeddedAssets)
 	randutil.SeedForTests()
 	serverutils.InitTestServerFactory(server.TestServerFactory,
@@ -29,4 +27,4 @@ func TestMain(m *testing.M) {
 	os.Exit(m.Run())
 }
 
-//go:generate ../../util/leaktest/add-leaktest.sh *_test.go
+//go:generate ../../../util/leaktest/add-leaktest.sh *_test.go

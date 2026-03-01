@@ -64,7 +64,7 @@ type partitionKey struct {
 // the common prefix (the encoded table ID) and if `EndKey` is equal to
 // `Key.PrefixEnd()` it is omitted.
 //
-// This function has tests in the partitionccl package.
+// This function has tests in the partitioning package.
 //
 // TODO(benesch): remove the hasNewSubzones parameter when a statement to clear
 // all subzones at once is introduced.

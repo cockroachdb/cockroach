@@ -15,7 +15,6 @@ go_library(
         "//pkg/ccl/multiregionccl",
         "//pkg/ccl/multitenantccl",
         "//pkg/ccl/oidcccl",
-        "//pkg/ccl/partitionccl",
         "//pkg/ccl/utilccl",
         "//pkg/ccl/workloadccl",
         "//pkg/ccl/workloadccl/cliccl",
