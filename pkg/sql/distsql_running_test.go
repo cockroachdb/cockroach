@@ -999,14 +999,17 @@ func TestDistributedQueryErrorIsRetriedLocally(t *testing.T) {
 
 	// We use different queries to simplify handling the node ID on which the
 	// error should be injected (i.e. we avoid the need for synchronization in
-	// the test). In particular, the difficulty comes from the fact that some of
-	// the SetupFlow RPCs might not be issued at all while others are served
-	// after the corresponding flow on the gateway has exited.
+	// the test).
+	//
+	// We'll inject errors for the first two queries, and they must have such
+	// plans that no query result row can be produced by any flow independently
+	// (i.e. we must have a "final" processor on the gateway that waits for
+	// remote flows' data).
 	queries := []string{
-		"SELECT k FROM test.foo",
+		"SELECT count(v) FROM test.foo",
 		// Run one of the queries via EXPLAIN ANALYZE (DEBUG) so that we can
 		// check the contents of the bundle later.
-		"EXPLAIN ANALYZE (DEBUG) SELECT v FROM test.foo",
+		"EXPLAIN ANALYZE (DEBUG) SELECT max(v) FROM test.foo",
 		"SELECT * FROM test.foo",
 	}
 	stmtToNodeIDForError := map[string]base.SQLInstanceID{
