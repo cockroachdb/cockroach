@@ -31,7 +31,13 @@ type CancelChecker struct {
 	// The number of Check() calls to skip the context cancellation check.
 	checkInterval uint32
 
-	cpuHandle *admission.GoroutineCPUHandle
+	// sqlCPUHandle is the SQL-level CPU handle from which a per-goroutine
+	// handle is lazily registered on the first Check call. Registration is
+	// deferred from Reset to the first Check because Reset and Check may run
+	// on different goroutines (e.g. when a Columnarizer wrapping a row-based
+	// processor runs inside a ParallelUnorderedSynchronizer).
+	sqlCPUHandle *admission.SQLCPUHandle
+	cpuHandle    *admission.GoroutineCPUHandle
 }
 
 // The default interval of Check() calls to wait between checks for context
@@ -50,6 +56,9 @@ func (c *CancelChecker) Check() error {
 			// to Check().
 			return QueryCanceledError
 		default:
+		}
+		if c.cpuHandle == nil && c.sqlCPUHandle != nil {
+			c.cpuHandle = c.sqlCPUHandle.RegisterGoroutine()
 		}
 		if c.cpuHandle != nil {
 			err := c.cpuHandle.MeasureAndAdmit(c.ctx)
@@ -78,10 +87,7 @@ func (c *CancelChecker) Reset(ctx context.Context, checkInterval ...uint32) {
 	} else {
 		c.checkInterval = cancelCheckInterval
 	}
-	cpuHandle := admission.SQLCPUHandleFromContext(ctx)
-	if cpuHandle != nil {
-		c.cpuHandle = cpuHandle.RegisterGoroutine()
-	}
+	c.sqlCPUHandle = admission.SQLCPUHandleFromContext(ctx)
 }
 
 // QueryCanceledError is an error representing query cancellation.
