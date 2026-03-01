@@ -1993,6 +1993,13 @@ func (v *multiRegionTableValidatorData) GetDatabaseSecondaryRegion() catpb.Regio
 	return v.regionConfig.SecondaryRegion()
 }
 
+// IsSecondaryRegionOutsideSuperRegion implements regions.MultiRegionTableValidatorData.
+func (v *multiRegionTableValidatorData) IsSecondaryRegionOutsideSuperRegion(
+	region catpb.RegionName,
+) bool {
+	return regions.SecondaryRegionOutsideSuperRegion(region, v.regionConfig)
+}
+
 // validateZoneConfigForMultiRegionTable validates that the multi-region
 // fields of the table's zone configuration match what is expected for
 // the given table.

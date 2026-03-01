@@ -1166,11 +1166,14 @@ func (n *alterDatabasePrimaryRegionNode) setInitialPrimaryRegion(params runParam
 		return err
 	}
 
-	// Check we are writing valid zone configurations.
+	// Check we are writing valid zone configurations. Pass an empty
+	// RegionConfig because no super regions or secondary region exist yet
+	// during initial primary region setup.
 	if err := params.p.validateAllMultiRegionZoneConfigsInDatabase(
 		params.ctx,
 		n.desc,
 		&zoneConfigForMultiRegionValidatorSetInitialRegion{},
+		multiregion.RegionConfig{},
 	); err != nil {
 		return err
 	}
