@@ -52,7 +52,7 @@ type executorConfig struct {
 type executor struct {
 	executorConfig
 	excludeBenchmarksRegex [][]*regexp.Regexp
-	benchmarkInfoMap       map[string]benchdoc.BenchmarkInfo
+	benchmarkInfoMap       benchmarkInfoMap
 	ignorePackages         map[string]struct{}
 	runOptions             install.RunOptions
 	log                    *logger.Logger
@@ -75,6 +75,22 @@ type benchmarkKey struct {
 	key string
 }
 
+// benchmarkInfoMap maps "pkg/name" keys to their benchmark configuration.
+type benchmarkInfoMap map[string]benchdoc.BenchmarkInfo
+
+func newBenchmarkInfoMap(list BenchmarkInfoList) benchmarkInfoMap {
+	m := make(benchmarkInfoMap, len(list))
+	for _, info := range list {
+		m[fmt.Sprintf("%s/%s", info.Package, info.Name)] = info
+	}
+	return m
+}
+
+func (m benchmarkInfoMap) lookup(pkg, name string) (benchdoc.BenchmarkInfo, bool) {
+	info, ok := m[fmt.Sprintf("%s/%s", pkg, name)]
+	return info, ok
+}
+
 func newExecutor(config executorConfig) (*executor, error) {
 	// Exclude packages that should not to be probed. This is useful for excluding
 	// packages that have known issues and unable to list its benchmarks, or are
@@ -94,7 +110,7 @@ func newExecutor(config executorConfig) (*executor, error) {
 		return nil, err
 	}
 
-	var benchmarkInfoMap map[string]benchdoc.BenchmarkInfo
+	var infoMap benchmarkInfoMap
 	if config.benchmarkConfig != "" {
 		err = util.VerifyPathFlag("benchmark-config", config.benchmarkConfig, false)
 		if err != nil {
@@ -104,11 +120,7 @@ func newExecutor(config executorConfig) (*executor, error) {
 		if listErr != nil {
 			return nil, listErr
 		}
-		benchmarkInfoMap = make(map[string]benchdoc.BenchmarkInfo, len(benchmarkInfoList))
-		for _, info := range benchmarkInfoList {
-			key := fmt.Sprintf("%s/%s", info.Package, info.Name)
-			benchmarkInfoMap[key] = info
-		}
+		infoMap = newBenchmarkInfoMap(benchmarkInfoList)
 	}
 
 	runOptions := install.DefaultRunOptions().WithRetryDisabled()
@@ -151,7 +163,7 @@ func newExecutor(config executorConfig) (*executor, error) {
 	return &executor{
 		executorConfig:         config,
 		excludeBenchmarksRegex: excludeBenchmarks,
-		benchmarkInfoMap:       benchmarkInfoMap,
+		benchmarkInfoMap:       infoMap,
 		ignorePackages:         ignorePackages,
 		runOptions:             runOptions,
 		log:                    l,
@@ -221,6 +233,13 @@ func (e *executor) listBenchmarks(
 				for _, exclusionPair := range e.excludeBenchmarksRegex {
 					if exclusionPair[0].MatchString(pkg) && exclusionPair[1].MatchString(benchmarkName) {
 						continue outer
+					}
+				}
+
+				// Skip benchmarks that are configured for manual-only runs.
+				if info, ok := e.benchmarkInfoMap.lookup(pkg, benchmarkName); ok {
+					if info.RunArgs.Suite == benchdoc.SuiteManual {
+						continue
 					}
 				}
 
@@ -324,14 +343,16 @@ func (e *executor) generateBenchmarkCommands(
 
 	// Generate the commands for each benchmark binary.
 	for _, bench := range benchmarks {
-		benchmarkInfoKey := fmt.Sprintf("%s/%s", bench.pkg, bench.name)
-		benchmarkInfo := e.benchmarkInfoMap[benchmarkInfoKey]
+		runArgs := benchdoc.NewRunArgs()
+		if benchmarkInfo, ok := e.benchmarkInfoMap.lookup(bench.pkg, bench.name); ok {
+			runArgs = benchmarkInfo.RunArgs
+		}
 
 		runCommand := fmt.Sprintf("./run.sh %s -test.benchmem -test.bench=^%s$ -test.run=^$ -test.v",
 			strings.Join(e.testArgs, " "), bench.name)
 
-		if benchmarkInfo.RunArgs.BenchTime != "" {
-			runCommand = fmt.Sprintf("%s -test.benchtime=%s", runCommand, benchmarkInfo.RunArgs.BenchTime)
+		if runArgs.BenchTime != "" {
+			runCommand = fmt.Sprintf("%s -test.benchtime=%s", runCommand, runArgs.BenchTime)
 		}
 		if e.timeout != "" {
 			runCommand = fmt.Sprintf("timeout -k 30s %s %s", e.timeout, runCommand)

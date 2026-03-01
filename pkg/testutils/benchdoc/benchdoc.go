@@ -26,7 +26,7 @@ type (
 	}
 
 	RunArgs struct {
-		Suite     string        `json:"suite,omitempty"`
+		Suite     Suite         `json:"suite,omitempty"`
 		Timeout   time.Duration `json:"timeout,omitempty"`
 		Count     int           `json:"count,omitempty"`
 		BenchTime string        `json:"bench_time,omitempty"`
@@ -39,16 +39,37 @@ type (
 
 	NameResolver func() (string, error)
 	PostIssue    string
+	Suite        string
 )
 
 const (
 	PostIssueNone    PostIssue = "none"
-	PostIssueBlocker PostIssue = "blocker"
+	PostIssueNotify  PostIssue = "notify"
+	PostIssueBlocker PostIssue = "release-blocker"
+)
+
+const (
+	SuiteManual Suite = "manual"
+	SuiteWeekly Suite = "weekly"
 )
 
 const (
 	docMarker = "benchmark-ci:"
 )
+
+// NewRunArgs creates a new RunArgs with default values
+func NewRunArgs() RunArgs {
+	return RunArgs{
+		Suite: SuiteWeekly,
+	}
+}
+
+// NewCompareArgs creates a new CompareArgs with default values
+func NewCompareArgs() CompareArgs {
+	return CompareArgs{
+		PostIssue: PostIssueNone,
+	}
+}
 
 // AnalyzeBenchmarkDocs traverses the provided AST to identify benchmark functions and extract their associated
 // configuration from documentation comments.
@@ -137,8 +158,8 @@ func isTestingB(t ast.Expr) bool {
 // analyzeBenchmarkArgs extracts benchmark configuration from a function's documentation comments.
 // Returns an error if the benchmark-ci documentation is malformed.
 func analyzeBenchmarkArgs(fn *ast.FuncDecl) (RunArgs, CompareArgs, error) {
-	var runArgs RunArgs
-	var compareArgs CompareArgs
+	runArgs := NewRunArgs()
+	compareArgs := NewCompareArgs()
 	if fn.Doc == nil {
 		return runArgs, compareArgs, nil
 	}
@@ -180,14 +201,22 @@ func analyzeBenchmarkArgs(fn *ast.FuncDecl) (RunArgs, CompareArgs, error) {
 				}
 				runArgs.Timeout = d
 			case "suite":
-				runArgs.Suite = val
+				switch val {
+				case "weekly":
+					runArgs.Suite = SuiteWeekly
+				case "manual":
+					runArgs.Suite = SuiteManual
+				default:
+					return RunArgs{}, CompareArgs{},
+						errors.Newf("invalid suite value in %s: %q", fn.Name.Name, val)
+				}
 			case "post":
 				switch val {
-				case "":
-					// use defaults
 				case "none":
 					compareArgs.PostIssue = PostIssueNone
-				case "blocker":
+				case "notify":
+					compareArgs.PostIssue = PostIssueNotify
+				case "release-blocker":
 					compareArgs.PostIssue = PostIssueBlocker
 				default:
 					return RunArgs{}, CompareArgs{},
