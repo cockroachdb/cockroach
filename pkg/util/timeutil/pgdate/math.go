@@ -33,13 +33,13 @@ func DateToJulianDay(year int, month int, day int) int {
 	return jd
 }
 
-// isLeap returns true if the given year is a leap year.
-func isLeap(year int) bool {
+// IsLeap returns true if the given year is a leap year.
+func IsLeap(year int) bool {
 	return (year%4 == 0) && (year%100 != 0 || year%400 == 0)
 }
 
-// julianDayToDate is based on the j2date function in PostgreSQL 10.5.
-func julianDayToDate(j int) (year int, month int, day int) {
+// JulianDayToDate is based on the j2date function in PostgreSQL 10.5.
+func JulianDayToDate(j int) (year int, month int, day int) {
 	jd := uint(j)
 	jd += 32044
 	quad := jd / 146097
