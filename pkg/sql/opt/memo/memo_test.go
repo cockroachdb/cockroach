@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlclustersettings"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
@@ -631,6 +632,12 @@ func TestMemoIsStale(t *testing.T) {
 	evalCtx.SessionData().OptimizerUseMinRowCountAntiJoinFix = false
 	notStale()
 
+	// Stale skip_underlying_view_privilege_checks.
+	sqlclustersettings.SkipUnderlyingViewPrivilegeChecks.Override(ctx, &evalCtx.Settings.SV, true)
+	stale()
+	sqlclustersettings.SkipUnderlyingViewPrivilegeChecks.Override(ctx, &evalCtx.Settings.SV, false)
+	notStale()
+
 	// User no longer has access to view.
 	catalog.View(tree.NewTableNameWithSchema("t", catconstants.PublicSchemaName, "abcview")).Revoked = true
 	_, err = o.Memo().IsStale(ctx, &evalCtx, catalog)
@@ -695,7 +702,7 @@ func TestMemoIsStale(t *testing.T) {
 	oldUser := evalCtx.SessionData().UserProto
 	newUser := username.MakeSQLUsernameFromPreNormalizedString("newuser").EncodeProto()
 	evalCtx.SessionData().UserProto = newUser
-	notStale()
+	stale()
 	evalCtx.SessionData().UserProto = oldUser
 	notStale()
 
@@ -712,7 +719,7 @@ func TestMemoIsStale(t *testing.T) {
 	// User changes (after RLS was reinitialized)
 	o.Memo().Metadata().ClearRLSEnabled()
 	evalCtx.SessionData().UserProto = newUser
-	notStale()
+	stale()
 	evalCtx.SessionData().UserProto = oldUser
 	notStale()
 
