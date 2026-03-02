@@ -301,11 +301,7 @@ func numProcessorToChar(
 	signWrote := false
 	if desc.isPlus() || desc.isMinus() {
 		// MI/PL/SG - write sign in the pattern position, not before number.
-		if desc.isPlus() && !desc.isMinus() {
-			signWrote = false
-		} else {
-			signWrote = true
-		}
+		signWrote = desc.isMinus()
 	} else {
 		if sign != '-' {
 			if desc.isFillMode() {

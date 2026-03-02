@@ -7,6 +7,7 @@ package tochar
 
 import (
 	"strings"
+	"unicode/utf8"
 
 	"github.com/cockroachdb/apd/v3"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
@@ -74,7 +75,8 @@ func numFromChar(input string, nodes []numFormatNode, desc *numDesc) (*apd.Decim
 		if n.typ != formatNodeAction {
 			// Non-pattern character: skip one input character.
 			if inIdx < len(input) {
-				inIdx += charLen(input[inIdx:])
+				_, size := utf8.DecodeRuneInString(input[inIdx:])
+				inIdx += size
 			}
 			continue
 		}
@@ -333,27 +335,8 @@ func eatNonDataChars(input string, idx *int, n int) {
 		if ch == '.' || ch == ',' || ch == '+' || ch == '-' {
 			break
 		}
-		*idx += charLen(input[*idx:])
+		_, size := utf8.DecodeRuneInString(input[*idx:])
+		*idx += size
 		n--
 	}
-}
-
-// charLen returns the byte length of the first UTF-8 character in s.
-func charLen(s string) int {
-	if len(s) == 0 {
-		return 0
-	}
-	if s[0] < 0x80 {
-		return 1
-	}
-	// Multi-byte UTF-8.
-	for i := 1; i < len(s) && i < 4; i++ {
-		if s[i]&0xC0 != 0x80 {
-			return i
-		}
-	}
-	if len(s) < 4 {
-		return len(s)
-	}
-	return 4
 }

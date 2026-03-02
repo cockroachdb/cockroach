@@ -563,15 +563,15 @@ query T
 SELECT to_char(d1, 'DAY Day day DY Dy dy MONTH Month month MON Mon mon')
    FROM TIMESTAMPTZ_TBL ORDER BY id
 ----
-wednesday Wednesday wednesday wed Wed wed JUNE      June      june      JUN Jun jun
-saturday  Saturday  saturday  sat Sat sat SEPTEMBER September september SEP Sep sep
+WEDNESDAY Wednesday wednesday WED Wed wed JUNE      June      june      JUN Jun jun
+SATURDAY  Saturday  saturday  SAT Sat sat SEPTEMBER September september SEP Sep sep
 
 query T
 SELECT to_char(d1, 'FMDAY FMDay FMday FMMONTH FMMonth FMmonth')
    FROM TIMESTAMPTZ_TBL ORDER BY id
 ----
-wednesday Wednesday wednesday JUNE June june
-saturday Saturday saturday SEPTEMBER September september
+WEDNESDAY Wednesday wednesday JUNE June june
+SATURDAY Saturday saturday SEPTEMBER September september
 
 query T
 SELECT to_char(d1, 'Y,YYY YYYY YYY YY Y CC Q MM WW DDD DD D J')
