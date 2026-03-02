@@ -45,6 +45,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/metamorphic"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/span"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
@@ -305,16 +306,37 @@ func encodeSpec(
 	tables ...string,
 ) []byte {
 	spans := spansForTables(h.SysServer.DB(), srcTenant.Codec, tables...)
-	return encodeSpecForSpans(t, initialScanTime, previousReplicatedTime, spans)
+	return encodeSpecForSpansMetamorphic(t, initialScanTime, previousReplicatedTime, spans, false)
+}
+
+func encodeSpecForSpansMetamorphic(
+	t *testing.T,
+	initialScanTime hlc.Timestamp,
+	previousReplicatedTime hlc.Timestamp,
+	spans []roachpb.Span,
+	withDiff bool,
+) []byte {
+	useTransactionalMode := metamorphic.ConstantWithTestBool("use-transactional-ldr-spec", true)
+	return encodeSpecForSpansWithOpts(
+		t, initialScanTime, previousReplicatedTime, spans, withDiff, useTransactionalMode,
+	)
 }
 
 func encodeSpecForSpans(
 	t *testing.T,
 	initialScanTime hlc.Timestamp,
 	previousReplicatedTime hlc.Timestamp,
+	useTransactionalMode bool,
 	spans []roachpb.Span,
 ) []byte {
-	return encodeSpecForSpansWithOpts(t, initialScanTime, previousReplicatedTime, spans, false /* withDiff */)
+	return encodeSpecForSpansWithOpts(
+		t,
+		initialScanTime,
+		previousReplicatedTime,
+		spans,
+		false,                /* withDiff */
+		useTransactionalMode, /* useTransactionalMode */
+	)
 }
 
 func encodeSpecForSpansWithOpts(
@@ -323,6 +345,7 @@ func encodeSpecForSpansWithOpts(
 	previousReplicatedTime hlc.Timestamp,
 	spans []roachpb.Span,
 	withDiff bool,
+	useTransactionMode bool,
 ) []byte {
 	var progress []jobspb.ResolvedSpan
 	for _, span := range spans {
@@ -335,9 +358,11 @@ func encodeSpecForSpansWithOpts(
 		Progress:                    progress,
 		WrappedEvents:               true,
 		WithDiff:                    withDiff,
-		Config: streampb.StreamPartitionSpec_ExecutionConfig{
-			MinCheckpointFrequency: 10 * time.Millisecond,
-		},
+		Config:                      streampb.StreamPartitionSpec_ExecutionConfig{MinCheckpointFrequency: 10 * time.Millisecond},
+	}
+	if useTransactionMode {
+		spec.Type = streampb.ReplicationType_LOGICAL
+		spec.WithMvccOrdering = true
 	}
 
 	opaqueSpec, err := protoutil.Marshal(spec)
@@ -656,7 +681,9 @@ USE d;
 	// Only subscribe to table t1 and t2, not t3.
 	// We start the stream at a resume timestamp to avoid any initial scan.
 	spans := spansForTables(h.SysServer.DB(), srcTenant.Codec, "t1", "t2")
-	spec := encodeSpecForSpans(t, initialScanTimestamp, streamResumeTimestamp, spans)
+	// Do not use useTransactionalMode because SSTable discovery is async and races
+	// with frontier advancement.
+	spec := encodeSpecForSpans(t, initialScanTimestamp, streamResumeTimestamp, false, spans)
 
 	source, feed := startReplication(ctx, t, h, makePartitionStreamDecoder,
 		streamPartitionQuery, streamID, spec)
@@ -1036,7 +1063,7 @@ USE d;
 
 	// Start stream with WithDiff=true and a cursor (PreviousReplicatedTimestamp).
 	// This should trigger a catch-up scan where PrevValue should be populated.
-	spec := encodeSpecForSpansWithOpts(t, initialScanTimestamp, beforeUpdateTS, tableSpans, true /* withDiff */)
+	spec := encodeSpecForSpansMetamorphic(t, initialScanTimestamp, beforeUpdateTS, tableSpans, true /* withDiff */)
 	_, feed := startReplication(ctx, t, h, makePartitionStreamDecoder, streamPartitionQuery, streamID, spec)
 	defer feed.Close(ctx)
 
