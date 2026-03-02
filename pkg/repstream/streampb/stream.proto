@@ -151,7 +151,12 @@ message StreamPartitionSpec {
 
   ReplicationType type = 12;
 
-  // NEXT ID: 13.
+  // When true and type is LOGICAL (LDR), the producer buffers rangefeed KVs and
+  // emits in (timestamp, key) order on frontier. When false or type is PHYSICAL,
+  // KVs are emitted directly (in (key, MVCC) order).
+  bool with_mvcc_ordering = 13;
+
+  // NEXT ID: 14.
 }
 
 // SpanConfigEventStreamSpec is the span config event stream specification.

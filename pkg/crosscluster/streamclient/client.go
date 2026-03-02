@@ -119,6 +119,8 @@ type subscribeConfig struct {
 
 	// batchByteSize requests the producer emit batches up to the specified size.
 	batchByteSize int64
+
+	withMvccOrdering bool
 }
 
 type SubscribeOption func(*subscribeConfig)

@@ -65,6 +65,8 @@ type eventStream struct {
 	lastCheckpointTime time.Time
 	lastCheckpointLen  int
 
+	adapter RangefeedHandler
+
 	seqNum uint64
 	debug  streampb.DebugProducerStatusHolder
 
@@ -142,22 +144,22 @@ func (s *eventStream) Start(ctx context.Context, txn *kv.Txn) (retErr error) {
 		rangefeed.WithPProfLabel("job", fmt.Sprintf("id=%d", s.streamID)),
 		rangefeed.WithMemoryMonitor(s.mon),
 		rangefeed.WithFrontierSpanVisitor(s.maybeCheckpoint),
-		rangefeed.WithOnFrontierAdvance(s.onFrontier),
-		rangefeed.WithOnCheckpoint(s.onCheckpoint),
+		rangefeed.WithOnFrontierAdvance(s.adapter.onFrontier),
+		rangefeed.WithOnCheckpoint(s.adapter.onCheckpoint),
 		rangefeed.WithOnInternalError(func(ctx context.Context, err error) {
 			s.setErr(err)
 		}),
-		rangefeed.WithOnSSTable(s.onSSTable),
-		rangefeed.WithOnDeleteRange(s.onDeleteRange),
+		rangefeed.WithOnSSTable(s.adapter.onSSTable),
+		rangefeed.WithOnDeleteRange(s.adapter.onDeleteRange),
 		rangefeed.WithFrontierQuantized(quantize.Get(&s.execCfg.Settings.SV)),
-		rangefeed.WithOnValues(s.onValues),
+		rangefeed.WithOnValues(s.adapter.onValues),
 		rangefeed.WithDiff(s.spec.WithDiff),
 		rangefeed.WithConsumerID(int64(s.streamID)),
 		rangefeed.WithInvoker(func(fn func() error) error { return fn() }),
 		rangefeed.WithFiltering(s.spec.WithFiltering),
 	}
 	if emitMetadata.Get(&s.execCfg.Settings.SV) {
-		opts = append(opts, rangefeed.WithOnMetadata(s.onMetadata))
+		opts = append(opts, rangefeed.WithOnMetadata(s.adapter.onMetadata))
 	}
 	if s.spec.Type == streampb.ReplicationType_LOGICAL {
 		// To prevent data looping during Logical Replication, only emit events that
@@ -181,7 +183,7 @@ func (s *eventStream) Start(ctx context.Context, txn *kv.Txn) (retErr error) {
 	if s.spec.PreviousReplicatedTimestamp.IsEmpty() {
 		log.Dev.Infof(ctx, "starting event stream with initial scan at %s", initialTimestamp)
 		opts = append(opts,
-			rangefeed.WithInitialScan(s.onInitialScanDone),
+			rangefeed.WithInitialScan(s.adapter.onInitialScanDone),
 			rangefeed.WithRowTimestampInInitialScan(true),
 		)
 	} else {
@@ -200,7 +202,7 @@ func (s *eventStream) Start(ctx context.Context, txn *kv.Txn) (retErr error) {
 
 	// Start rangefeed, which spins up a separate go routine to perform its job.
 	s.rf = s.execCfg.RangeFeedFactory.New(
-		fmt.Sprintf("streamID=%d", s.streamID), initialTimestamp, s.onValue, opts...,
+		fmt.Sprintf("streamID=%d", s.streamID), initialTimestamp, s.adapter.onValue, opts...,
 	)
 
 	if err := s.rf.StartFromFrontier(ctx, s.frontier); err != nil {
@@ -287,9 +289,20 @@ func (s *eventStream) onValues(ctx context.Context, values []kvpb.RangeFeedValue
 
 func (s *eventStream) onValue(ctx context.Context, value *kvpb.RangeFeedValue) {
 	s.seb.addKV(streampb.StreamEvent_KV{
-		KeyValue: roachpb.KeyValue{Key: value.Key, Value: value.Value}, PrevValue: value.PrevValue,
+		KeyValue:  roachpb.KeyValue{Key: value.Key, Value: value.Value},
+		PrevValue: value.PrevValue,
 	})
 	s.setErr(s.maybeFlushBatch(ctx))
+}
+
+// OnValue is called by the ordered adapter when delivering a buffered KV.
+func (s *eventStream) OnValue(ctx context.Context, value *kvpb.RangeFeedValue) {
+	s.onValue(ctx, value)
+}
+
+func (s *eventStream) OnFrontierAdvance(ctx context.Context, timestamp hlc.Timestamp) {
+	s.setErr(s.flushBatch(ctx, streampb.FlushCheckpoint))
+	s.debug.Advance(timestamp.GoTime())
 }
 
 func (s *eventStream) onCheckpoint(ctx context.Context, checkpoint *kvpb.RangeFeedCheckpoint) {
@@ -333,7 +346,7 @@ func (s *eventStream) maybeCheckpoint(
 }
 
 func (s *eventStream) sendCheckpoint(ctx context.Context, frontier rangefeed.VisitableFrontier) {
-	if err := s.flushBatch(ctx, streampb.FlushCheckpoint); err != nil {
+	if isError := s.setErr(s.flushBatch(ctx, streampb.FlushCheckpoint)); isError {
 		return
 	}
 
@@ -510,11 +523,23 @@ func streamPartition(
 
 	execCfg := evalCtx.Planner.ExecutorConfig().(*sql.ExecutorConfig)
 
-	return &eventStream{
+	handler := &eventStream{
 		streamID: streamID,
 		spec:     spec,
 		execCfg:  execCfg,
 		mon:      evalCtx.Planner.TxnMon(),
 		seb:      streamEventBatcher{wrappedKVs: spec.WrappedEvents},
-	}, nil
+	}
+	if spec.Type == streampb.ReplicationType_LOGICAL && spec.WithMvccOrdering {
+		oes := NewOrderedEventStream(handler, &OrderedBufferConfig{
+			settings:               execCfg.Settings,
+			streamID:               streamID,
+			tempStorage:            execCfg.DistSQLSrv.TempStorage,
+			flushByteSizeThreshold: spec.Config.BatchByteSize,
+		})
+		handler.adapter = oes
+		return oes, nil
+	}
+	handler.adapter = handler
+	return handler, nil
 }

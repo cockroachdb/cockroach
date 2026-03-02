@@ -8,6 +8,7 @@ go_library(
         "logical.go",
         "replication_helpers.go",
         "span_config_helpers.go",
+        "stream_test_helpers.go",
         "testutils.go",
         "uri_util.go",
     ],
