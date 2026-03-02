@@ -390,7 +390,7 @@ func (p *planner) ShowCreate(
 	if desc.IsSequence() {
 		return ShowCreateSequence(ctx, &tn, desc)
 	}
-	lCtx := newInternalLookupCtx(allHydratedDescs, nil /* prefix */)
+	lCtx := newInternalLookupCtx(allHydratedDescs, nil /* prefix */, nil /*fallbackFn*/)
 	// Overwrite desc with hydrated descriptor.
 	var err error
 	desc, err = lCtx.getTableByID(desc.GetID())

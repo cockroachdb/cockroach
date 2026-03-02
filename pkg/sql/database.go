@@ -112,7 +112,7 @@ func (p *planner) forEachMutableTableInDatabase(
 	}
 
 	// TODO(ajwerner): Rewrite this to not use the internalLookupCtx.
-	lCtx := newInternalLookupCtx(all.OrderedDescriptors(), dbDesc)
+	lCtx := newInternalLookupCtx(all.OrderedDescriptors(), dbDesc, p.Descriptors().GetLookupContextFallbackFn(ctx, p.Txn()))
 	var droppedRemoved []descpb.ID
 	for _, tbID := range lCtx.tbIDs {
 		desc := lCtx.tbDescs[tbID]
