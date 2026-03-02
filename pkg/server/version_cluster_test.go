@@ -244,9 +244,9 @@ func TestClusterVersionPersistedOnJoin(t *testing.T) {
 	defer tc.TestCluster.Stopper().Stop(ctx)
 
 	for i := 0; i < len(tc.TestCluster.Servers); i++ {
-		for _, engine := range tc.TestCluster.Servers[i].Engines() {
-			cv := engine.TODOEngine().MinVersion()
-			require.Equalf(t, newVersion, cv, "n%d", i+1)
+		for _, e := range tc.TestCluster.Servers[i].Engines() {
+			require.Equalf(t, newVersion, e.StateEngine().MinVersion(), "n%d", i+1)
+			require.Equalf(t, newVersion, e.LogEngine().MinVersion(), "n%d", i+1)
 		}
 	}
 }
