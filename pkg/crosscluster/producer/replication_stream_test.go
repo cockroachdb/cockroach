@@ -37,6 +37,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/jobutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
@@ -308,13 +309,27 @@ func encodeSpec(
 	return encodeSpecForSpans(t, initialScanTime, previousReplicatedTime, spans)
 }
 
+// encodeSpecLDR is like encodeSpec but sets Type = LOGICAL and WithTransactionMode = true
+// so the producer uses the transactional buffer (events in (timestamp, key) order).
+func encodeTransactionalLDRSpec(
+	t *testing.T,
+	h *replicationtestutils.ReplicationHelper,
+	srcTenant replicationtestutils.TenantState,
+	initialScanTime hlc.Timestamp,
+	previousReplicatedTime hlc.Timestamp,
+	tables ...string,
+) []byte {
+	spans := spansForTables(h.SysServer.DB(), srcTenant.Codec, tables...)
+	return encodeSpecForSpansWithOpts(t, initialScanTime, previousReplicatedTime, spans, false /* withDiff */, true /* useTransactionMode */)
+}
+
 func encodeSpecForSpans(
 	t *testing.T,
 	initialScanTime hlc.Timestamp,
 	previousReplicatedTime hlc.Timestamp,
 	spans []roachpb.Span,
 ) []byte {
-	return encodeSpecForSpansWithOpts(t, initialScanTime, previousReplicatedTime, spans, false /* withDiff */)
+	return encodeSpecForSpansWithOpts(t, initialScanTime, previousReplicatedTime, spans, false /* withDiff */, false /* useTransactionMode */)
 }
 
 func encodeSpecForSpansWithOpts(
@@ -323,6 +338,7 @@ func encodeSpecForSpansWithOpts(
 	previousReplicatedTime hlc.Timestamp,
 	spans []roachpb.Span,
 	withDiff bool,
+	useTransactionMode bool,
 ) []byte {
 	var progress []jobspb.ResolvedSpan
 	for _, span := range spans {
@@ -335,14 +351,110 @@ func encodeSpecForSpansWithOpts(
 		Progress:                    progress,
 		WrappedEvents:               true,
 		WithDiff:                    withDiff,
-		Config: streampb.StreamPartitionSpec_ExecutionConfig{
-			MinCheckpointFrequency: 10 * time.Millisecond,
-		},
+		Config:                      streampb.StreamPartitionSpec_ExecutionConfig{MinCheckpointFrequency: 10 * time.Millisecond},
+	}
+	if useTransactionMode {
+		spec.Type = streampb.ReplicationType_LOGICAL
+		spec.WithTransactionMode = true
 	}
 
 	opaqueSpec, err := protoutil.Marshal(spec)
 	require.NoError(t, err)
 	return opaqueSpec
+}
+
+// TestStreamPartitionLDREventOrdering creates a unidirectional LDR stream, does
+// 100 updates over 2 keys, and verifies we receive at least one resolved timestamp
+// and that events are sorted by (timestamp, key).
+func TestStreamPartitionLDREventOrdering(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	dir, dirCleanup := testutils.TempDir(t)
+	defer dirCleanup()
+
+	h, cleanup := replicationtestutils.NewReplicationHelper(t,
+		base.TestServerArgs{
+			DefaultTestTenant: base.TestControlsTenantsExplicitly,
+			ExternalIODir:     dir,
+		})
+	defer cleanup()
+	testTenantName := roachpb.TenantName("test-tenant")
+	srcTenant, cleanupTenant := h.CreateTenant(t, serverutils.TestTenantID(), testTenantName)
+	defer cleanupTenant()
+
+	srcTenant.SQL.Exec(t, `
+CREATE DATABASE d;
+CREATE TABLE d.t1(i int primary key, a string);
+INSERT INTO d.t1 (i, a) VALUES (1, 'a'), (2, 'a');
+USE d;
+`)
+
+	ctx := context.Background()
+	replicationProducerSpec := h.StartReplicationStream(t, testTenantName)
+	streamID := replicationProducerSpec.StreamID
+	initialScanTimestamp := replicationProducerSpec.ReplicationStartTime
+
+	for i := 0; i < 100; i++ {
+		srcTenant.SQL.Exec(t, `UPDATE d.t1 SET a = $1 WHERE i = $2`, fmt.Sprintf("v%d", i), (i%2)+1)
+	}
+
+	afterInsertTS := h.SysServer.Clock().Now()
+
+	spec := encodeTransactionalLDRSpec(t, h, srcTenant, initialScanTimestamp, hlc.Timestamp{}, "t1")
+	const streamPartitionQuery = `SELECT * FROM crdb_internal.stream_partition($1, $2)`
+
+	var kvs []streampb.StreamEvent_KV
+	var sawResolved bool
+	testutils.SucceedsSoon(t, func() error {
+		source, feed := startReplication(ctx, t, h, makePartitionStreamDecoder,
+			streamPartitionQuery, streamID, spec)
+		defer feed.Close(ctx)
+
+		source.mu.Lock()
+		defer source.mu.Unlock()
+		codec := source.mu.codec.(*partitionStreamDecoder)
+		kvs = kvs[:0]
+		sawResolved = false
+
+		for {
+			if !source.mu.rows.Next() {
+				return fmt.Errorf("stream ended before checkpoint (got %d KVs)", len(kvs))
+			}
+			source.mu.codec.decode()
+			if codec.e.Checkpoint != nil {
+				require.GreaterOrEqual(t, len(codec.e.Checkpoint.ResolvedSpans), 1)
+				resolved := codec.e.Checkpoint.ResolvedSpans[0].Timestamp
+				sawResolved = true
+				if afterInsertTS.LessEq(resolved) {
+					return nil
+				}
+			}
+			if codec.e.Batch != nil {
+				kvs = append(kvs, codec.e.Batch.KVs...)
+			}
+		}
+	})
+
+	require.True(t, sawResolved, "expected at least one resolved timestamp")
+	require.GreaterOrEqual(t, len(kvs), 2, "expected at least initial scan (1,'a'), (2,'a') plus updates")
+
+	// Verify sorted by (timestamp, key).
+	for i := 0; i < len(kvs)-1; i++ {
+		prev := kvs[i].KeyValue
+		curr := kvs[i+1].KeyValue
+		prevTS := prev.Value.Timestamp
+		currTS := curr.Value.Timestamp
+		cmp := prevTS.Compare(currTS)
+		if cmp > 0 {
+			t.Fatalf("KVs not sorted by timestamp: event %d has ts %s, event %d has ts %s",
+				i, prevTS, i+1, currTS)
+		}
+		if cmp == 0 && prev.Key.Compare(curr.Key) > 0 {
+			t.Fatalf("KVs not sorted by key at same timestamp %s: event %d key %q, event %d key %q",
+				prevTS, i, prev.Key, i+1, curr.Key)
+		}
+	}
 }
 
 func TestStreamPartition(t *testing.T) {
@@ -1036,7 +1148,7 @@ USE d;
 
 	// Start stream with WithDiff=true and a cursor (PreviousReplicatedTimestamp).
 	// This should trigger a catch-up scan where PrevValue should be populated.
-	spec := encodeSpecForSpansWithOpts(t, initialScanTimestamp, beforeUpdateTS, tableSpans, true /* withDiff */)
+	spec := encodeSpecForSpansWithOpts(t, initialScanTimestamp, beforeUpdateTS, tableSpans, true /* withDiff */, false /* useTransactionMode */)
 	_, feed := startReplication(ctx, t, h, makePartitionStreamDecoder, streamPartitionQuery, streamID, spec)
 	defer feed.Close(ctx)
 

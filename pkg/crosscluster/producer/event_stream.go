@@ -65,6 +65,8 @@ type eventStream struct {
 	lastCheckpointTime time.Time
 	lastCheckpointLen  int
 
+	txnBuffer *transactionalBuffer
+
 	seqNum uint64
 	debug  streampb.DebugProducerStatusHolder
 
@@ -192,6 +194,16 @@ func (s *eventStream) Start(ctx context.Context, txn *kv.Txn) (retErr error) {
 
 	s.stats = rangescanstats.StartStatsPoller(ctx, time.Minute, s.spec.Spans, s.frontier, s.execCfg.RangeDescIteratorFactory, laggingSpanThreshold)
 
+	transactionalBufferEnabled := s.spec.Type == streampb.ReplicationType_LOGICAL && s.spec.WithTransactionMode
+	if transactionalBufferEnabled {
+		s.txnBuffer = newTransactionalBuffer(transactionalBufferConfig{
+			settings:       s.execCfg.Settings,
+			streamID:       s.streamID,
+			tempStorage:    s.execCfg.DistSQLSrv.TempStorage,
+			flushThreshold: defaultTransactionalBufferFlushThreshold,
+		})
+	}
+
 	// Reserve batch kvsSize bytes from monitor.  We might have to do something more fancy
 	// in the future, but for now, grabbing chunk of memory from the monitor would do the trick.
 	if err := s.acc.Grow(ctx, s.spec.Config.BatchByteSize); err != nil {
@@ -269,6 +281,9 @@ func (s *eventStream) Close(ctx context.Context) {
 		s.stats.Close()
 	}
 	s.acc.Close(ctx)
+	if s.txnBuffer != nil {
+		s.setErr(s.txnBuffer.Close(ctx))
+	}
 }
 
 func (s *eventStream) onInitialScanDone(ctx context.Context) {
@@ -276,20 +291,31 @@ func (s *eventStream) onInitialScanDone(ctx context.Context) {
 }
 
 func (s *eventStream) onValues(ctx context.Context, values []kvpb.RangeFeedValue) {
-	for _, i := range values {
-		s.seb.addKV(streampb.StreamEvent_KV{
-			KeyValue:  roachpb.KeyValue{Key: i.Key, Value: i.Value},
-			PrevValue: i.PrevValue,
-		})
+	if s.txnBuffer != nil {
+		for i := range values {
+			s.onValue(ctx, &values[i])
+		}
+	} else {
+		for _, i := range values {
+			s.seb.addKV(streampb.StreamEvent_KV{
+				KeyValue:  roachpb.KeyValue{Key: i.Key, Value: i.Value},
+				PrevValue: i.PrevValue,
+			})
+		}
+		s.setErr(s.maybeFlushBatch(ctx))
 	}
-	s.setErr(s.maybeFlushBatch(ctx))
 }
 
 func (s *eventStream) onValue(ctx context.Context, value *kvpb.RangeFeedValue) {
-	s.seb.addKV(streampb.StreamEvent_KV{
-		KeyValue: roachpb.KeyValue{Key: value.Key, Value: value.Value}, PrevValue: value.PrevValue,
-	})
-	s.setErr(s.maybeFlushBatch(ctx))
+	if s.txnBuffer != nil {
+		s.setErr(s.txnBuffer.Add(ctx, value))
+	} else {
+		s.seb.addKV(streampb.StreamEvent_KV{
+			KeyValue:  roachpb.KeyValue{Key: value.Key, Value: value.Value},
+			PrevValue: value.PrevValue,
+		})
+		s.setErr(s.maybeFlushBatch(ctx))
+	}
 }
 
 func (s *eventStream) onCheckpoint(ctx context.Context, checkpoint *kvpb.RangeFeedCheckpoint) {
@@ -297,6 +323,31 @@ func (s *eventStream) onCheckpoint(ctx context.Context, checkpoint *kvpb.RangeFe
 }
 
 func (s *eventStream) onFrontier(ctx context.Context, timestamp hlc.Timestamp) {
+	if s.txnBuffer == nil {
+		s.debug.Advance(timestamp.GoTime())
+		return
+	}
+	if s.setErr(s.txnBuffer.FlushToDisk(ctx, timestamp)) {
+		return
+	}
+	mvccValues, err := s.txnBuffer.GetMVCCValuesFromDisk(ctx, timestamp)
+	if s.setErr(err) {
+		return
+	}
+	for _, mvccValue := range mvccValues {
+		s.seb.addKV(streampb.StreamEvent_KV{KeyValue: roachpb.KeyValue{
+			Key:   mvccValue.Key.Key,
+			Value: roachpb.Value{RawBytes: mvccValue.Value, Timestamp: mvccValue.Key.Timestamp},
+		}})
+	}
+
+	if isErr := s.setErr(s.flushBatch(ctx, streampb.FlushCheckpoint)); isErr {
+		return
+	}
+
+	if isErr := s.setErr(s.txnBuffer.DeleteResolvedFromDisk(ctx, timestamp)); isErr {
+		return
+	}
 	s.debug.Advance(timestamp.GoTime())
 }
 
@@ -333,7 +384,7 @@ func (s *eventStream) maybeCheckpoint(
 }
 
 func (s *eventStream) sendCheckpoint(ctx context.Context, frontier rangefeed.VisitableFrontier) {
-	if err := s.flushBatch(ctx, streampb.FlushCheckpoint); err != nil {
+	if isError := s.setErr(s.flushBatch(ctx, streampb.FlushCheckpoint)); isError {
 		return
 	}
 
