@@ -1,5 +1,6 @@
-# Replace dead voter: r1 has 3 voters, s3 is dead. MMA should replace s3's
-# replica with one on s4.
+# Repair tracking across store health transitions: a healthy range transitions
+# to needing repair when a store dies, and back to healthy when the store
+# recovers.
 
 set-store quiet=true
   store-id=1 node-id=1 locality-tiers=zone=a
@@ -17,6 +18,12 @@ store-id=1
     config=num_replicas=3
 ----
 
+# Initially healthy: no repair needed.
+repair-needed
+----
+no ranges need repair
+
+# Mark s3 dead: should need ReplaceDeadVoter.
 update-store-status store-id=3 health=dead leases=shedding replicas=shedding
 ----
 dead shedding=leases,replicas
@@ -25,7 +32,11 @@ repair-needed
 ----
 ReplaceDeadVoter: r1
 
-repair store-id=1
+# s3 comes back healthy: no repair needed.
+update-store-status store-id=3 health=ok leases=ok replicas=ok
 ----
-[mmaid=1] repair not yet implemented
-pending(0)
+ok accepting all
+
+repair-needed
+----
+no ranges need repair

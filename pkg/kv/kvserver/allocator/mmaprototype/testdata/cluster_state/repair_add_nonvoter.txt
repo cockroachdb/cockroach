@@ -18,6 +18,10 @@ store-id=1
     config=num_replicas=5 num_voters=3
 ----
 
+repair-needed
+----
+AddNonVoter: r1
+
 repair store-id=1
 ----
 [mmaid=1] repair not yet implemented

@@ -30,6 +30,10 @@ update-store-status store-id=4 health=dead leases=shedding replicas=shedding
 ----
 dead shedding=leases,replicas
 
+repair-needed
+----
+RemoveVoter: r1
+
 repair store-id=1
 ----
 [mmaid=1] repair not yet implemented

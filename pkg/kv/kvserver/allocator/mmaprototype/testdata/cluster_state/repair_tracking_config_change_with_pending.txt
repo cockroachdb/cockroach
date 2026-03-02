@@ -1,0 +1,56 @@
+# Config changes while a pending change exists: a pending non-voter addition
+# gets enacted via a store-leaseholder-msg with an updated config, revealing
+# that more non-voters are still needed.
+
+set-store quiet=true
+  store-id=1 node-id=1 locality-tiers=zone=a
+  store-id=2 node-id=2 locality-tiers=zone=b
+  store-id=3 node-id=3 locality-tiers=zone=c
+  store-id=4 node-id=4 locality-tiers=zone=d
+  store-id=5 node-id=5 locality-tiers=zone=e
+----
+
+# 3-voter range, config says 3 → no repair.
+store-leaseholder-msg
+store-id=1
+  range-id=1
+    store-id=1 type=VOTER_FULL leaseholder=true
+    store-id=2 type=VOTER_FULL
+    store-id=3 type=VOTER_FULL
+    config=num_replicas=3
+----
+
+repair-needed
+----
+no ranges need repair
+
+# Add a pending non-voter on s4 (anticipating a config change).
+make-pending-changes range-id=1
+  add-replica: add-store-id=4 type=NON_VOTER
+----
+pending(1)
+change-id=1 store-id=4 node-id=4 range-id=1 load-delta=[cpu:0s/s, write-bandwidth:0 B/s, byte-size:0 B] start=0s gc=5m0s
+  prev=(replica-id=none type=VOTER_FULL)
+  next=(replica-id=unknown type=NON_VOTER)
+
+# Suppressed by pending change.
+repair-needed
+----
+no ranges need repair
+
+# store-leaseholder-msg with updated config (num_replicas=5 num_voters=3)
+# and s4 added as non-voter (enacts pending change). Still need 1 more
+# non-voter.
+store-leaseholder-msg
+store-id=1
+  range-id=1
+    store-id=1 type=VOTER_FULL leaseholder=true
+    store-id=2 type=VOTER_FULL
+    store-id=3 type=VOTER_FULL
+    store-id=4 type=NON_VOTER
+    config=num_replicas=5 num_voters=3
+----
+
+repair-needed
+----
+AddNonVoter: r1

@@ -17,6 +17,10 @@ store-id=1
     config=num_replicas=3
 ----
 
+repair-needed
+----
+RemoveLearner: r1
+
 repair store-id=1
 ----
 [mmaid=1] repair not yet implemented

@@ -1,0 +1,71 @@
+# Repair tracking across pending change lifecycle: under-replicated range
+# needs repair, pending changes suppress it, rejection restores it, and
+# enactment via store-leaseholder-msg resolves it.
+
+set-store quiet=true
+  store-id=1 node-id=1 locality-tiers=zone=a
+  store-id=2 node-id=2 locality-tiers=zone=b
+  store-id=3 node-id=3 locality-tiers=zone=c
+----
+
+store-leaseholder-msg
+store-id=1
+  range-id=1
+    store-id=1 type=VOTER_FULL leaseholder=true
+    store-id=2 type=VOTER_FULL
+    config=num_replicas=3
+----
+
+# Under-replicated: needs AddVoter.
+repair-needed
+----
+AddVoter: r1
+
+# Pending change suppresses repair.
+make-pending-changes range-id=1
+  add-replica: add-store-id=3 type=VOTER_FULL
+----
+pending(1)
+change-id=1 store-id=3 node-id=3 range-id=1 load-delta=[cpu:0s/s, write-bandwidth:0 B/s, byte-size:0 B] start=0s gc=5m0s
+  prev=(replica-id=none type=VOTER_FULL)
+  next=(replica-id=unknown type=VOTER_FULL)
+
+repair-needed
+----
+no ranges need repair
+
+# Reject the pending change: AddVoter re-emerges.
+reject-pending-changes change-ids=1
+----
+pending(0)
+
+repair-needed
+----
+AddVoter: r1
+
+# Create the pending change again.
+make-pending-changes range-id=1
+  add-replica: add-store-id=3 type=VOTER_FULL
+----
+pending(1)
+change-id=2 store-id=3 node-id=3 range-id=1 load-delta=[cpu:0s/s, write-bandwidth:0 B/s, byte-size:0 B] start=0s gc=5m0s
+  prev=(replica-id=none type=VOTER_FULL)
+  next=(replica-id=unknown type=VOTER_FULL)
+
+repair-needed
+----
+no ranges need repair
+
+# Enact the change via store-leaseholder-msg showing 3 voters.
+store-leaseholder-msg
+store-id=1
+  range-id=1
+    store-id=1 type=VOTER_FULL leaseholder=true
+    store-id=2 type=VOTER_FULL
+    store-id=3 type=VOTER_FULL
+    config=num_replicas=3
+----
+
+repair-needed
+----
+no ranges need repair

@@ -553,7 +553,17 @@ func TestClusterState(t *testing.T) {
 						if !ok {
 							t.Fatalf("store %d not found", storeID)
 						}
+						oldStatus := ss.status
 						parseStatusFromArgs(t, d, &ss.status)
+						// Recompute repair actions for ranges on this store
+						// if the status changed.
+						if oldStatus != ss.status {
+							for rangeID := range ss.adjusted.replicas {
+								if rs, ok := cs.ranges[rangeID]; ok {
+									cs.updateRepairAction(ctx, rangeID, rs)
+								}
+							}
+						}
 						return ss.status.String()
 					}
 
@@ -730,6 +740,34 @@ func TestClusterState(t *testing.T) {
 					rec.SafeFormatMinimal(&sb)
 					return fmt.Sprintf("%s%v\n", safeTrace(t, &sb), out)
 
+				case "repair-needed":
+					var sb strings.Builder
+					// Iterate actions in priority order.
+					for action := FinalizeAtomicReplicationChange; action < NoRepairNeeded; action++ {
+						ranges, ok := cs.repairRanges[action]
+						if !ok || len(ranges) == 0 {
+							continue
+						}
+						// Sort range IDs for deterministic output.
+						ids := make([]roachpb.RangeID, 0, len(ranges))
+						for rid := range ranges {
+							ids = append(ids, rid)
+						}
+						slices.Sort(ids)
+						fmt.Fprintf(&sb, "%s:", action)
+						for i, rid := range ids {
+							if i > 0 {
+								fmt.Fprintf(&sb, ",")
+							}
+							fmt.Fprintf(&sb, " r%d", rid)
+						}
+						fmt.Fprintln(&sb)
+					}
+					if sb.Len() == 0 {
+						return "no ranges need repair"
+					}
+					return sb.String()
+
 				default:
 					panic(fmt.Sprintf("unknown command: %v", d.Cmd))
 				}
@@ -738,3 +776,4 @@ func TestClusterState(t *testing.T) {
 			datadriven.RunTest(t, path, invokeFn)
 		})
 }
+

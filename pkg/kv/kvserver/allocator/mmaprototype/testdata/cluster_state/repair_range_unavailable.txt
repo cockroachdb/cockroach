@@ -24,6 +24,11 @@ update-store-status store-id=3 health=dead leases=shedding replicas=shedding
 ----
 dead shedding=leases,replicas
 
+# No quorum (only 1 of 3 voters alive), range is unavailable.
+repair-needed
+----
+RepairSkipped: r1
+
 repair store-id=1
 ----
 [mmaid=1] repair not yet implemented
