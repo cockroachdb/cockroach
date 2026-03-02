@@ -52,12 +52,14 @@ statement error index "error" already contains column "d"
 CREATE INDEX error ON t (d) STORING (d)
 
 skipif config local-legacy-schema-changer
+skipif config weak-iso-level-configs
 query T noticetrace
 CREATE INDEX pk_stored_idx ON t (d) STORING (a)
 ----
 NOTICE: index "pk_stored_idx" already contains column "a" which is part of the primary key and therefore implicit in all indexes
 
 skipif config local-legacy-schema-changer
+skipif config weak-iso-level-configs
 statement ok
 DROP INDEX pk_stored_idx
 
@@ -69,29 +71,73 @@ onlyif config local-legacy-schema-changer
 statement ok
 DROP INDEX pk_stored_idx
 
+onlyif config weak-iso-level-configs
 statement ok
+CREATE INDEX pk_stored_idx ON t (d) STORING (a)
+
+onlyif config weak-iso-level-configs
+statement ok
+DROP INDEX pk_stored_idx
+
+statement disable-cf-mutator ok
 CREATE TABLE t30984 (
   a INT PRIMARY KEY,
   b INT,
   c INT,
   INDEX b_idx (b) STORING (c, a)
+) WITH (schema_locked = false)
+
+query TTBITTTBBBF rowsort
+SELECT * FROM [SHOW INDEXES FROM t30984] WHERE index_name = 'b_idx'
+----
+t30984      b_idx       true        1             b            b           ASC        false    false     true     1
+t30984      b_idx       true        2             c            c           N/A        true     false     true     1
+t30984      b_idx       true        3             a            a           ASC        false    true      true     1
+
+query T
+SELECT create_statement FROM [SHOW CREATE TABLE t30984]
+----
+CREATE TABLE public.t30984 (
+  a INT8 NOT NULL,
+  b INT8 NULL,
+  c INT8 NULL,
+  CONSTRAINT t30984_pkey PRIMARY KEY (a ASC),
+  INDEX b_idx (b ASC) STORING (c)
 )
 
 statement ok
 DROP TABLE t30984
 
-statement ok
+statement disable-cf-mutator ok
 CREATE TABLE t30984 (
   a INT PRIMARY KEY,
   b INT,
   c INT,
   UNIQUE INDEX b_idx (b) STORING (c, a)
+) WITH (schema_locked = false)
+
+query TTBITTTBBBF rowsort
+SELECT * FROM [SHOW INDEXES FROM t30984] WHERE index_name = 'b_idx'
+----
+t30984      b_idx       false       1             b            b           ASC        false    false     true     1
+t30984      b_idx       false       2             c            c           N/A        true     false     true     1
+t30984      b_idx       false       3             a            a           ASC        true     true      true     1
+
+query T
+SELECT create_statement FROM [SHOW CREATE TABLE t30984]
+----
+CREATE TABLE public.t30984 (
+  a INT8 NOT NULL,
+  b INT8 NULL,
+  c INT8 NULL,
+  CONSTRAINT t30984_pkey PRIMARY KEY (a ASC),
+  UNIQUE INDEX b_idx (b ASC) STORING (c)
 )
 
 statement ok
 DROP TABLE t30984
 
-statement ok
+statement disable-cf-mutator ok
 CREATE TABLE t30984 (
   a INT,
   b INT,
@@ -99,6 +145,59 @@ CREATE TABLE t30984 (
   d INT,
   PRIMARY KEY (a, d),
   UNIQUE INDEX b_idx (b) STORING (c, d)
+) WITH (schema_locked = false)
+
+query TTBITTTBBBF rowsort
+SELECT * FROM [SHOW INDEXES FROM t30984] WHERE index_name = 'b_idx'
+----
+t30984      b_idx       false       1             b            b           ASC        false    false     true     1
+t30984      b_idx       false       2             c            c           N/A        true     false     true     1
+t30984      b_idx       false       3             a            a           ASC        true     true      true     1
+t30984      b_idx       false       4             d            d           ASC        true     true      true     1
+
+query T
+SELECT create_statement FROM [SHOW CREATE TABLE t30984]
+----
+CREATE TABLE public.t30984 (
+  a INT8 NOT NULL,
+  b INT8 NULL,
+  c INT8 NULL,
+  d INT8 NOT NULL,
+  CONSTRAINT t30984_pkey PRIMARY KEY (a ASC, d ASC),
+  UNIQUE INDEX b_idx (b ASC) STORING (c)
+)
+
+statement ok
+DROP TABLE t30984
+
+statement disable-cf-mutator ok
+CREATE TABLE t30984 (
+  a INT,
+  b INT,
+  c INT,
+  d INT,
+  PRIMARY KEY (a, d),
+  INDEX b_idx (b) STORING (c, a, d)
+) WITH (schema_locked = false)
+
+query TTBITTTBBBF rowsort
+SELECT * FROM [SHOW INDEXES FROM t30984] WHERE index_name = 'b_idx'
+----
+t30984      b_idx       true        1             b            b           ASC        false    false     true     1
+t30984      b_idx       true        2             c            c           N/A        true     false     true     1
+t30984      b_idx       true        3             a            a           ASC        false    true      true     1
+t30984      b_idx       true        4             d            d           ASC        false    true      true     1
+
+query T
+SELECT create_statement FROM [SHOW CREATE TABLE t30984]
+----
+CREATE TABLE public.t30984 (
+  a INT8 NOT NULL,
+  b INT8 NULL,
+  c INT8 NULL,
+  d INT8 NOT NULL,
+  CONSTRAINT t30984_pkey PRIMARY KEY (a ASC, d ASC),
+  INDEX b_idx (b ASC) STORING (c)
 )
 
 statement ok

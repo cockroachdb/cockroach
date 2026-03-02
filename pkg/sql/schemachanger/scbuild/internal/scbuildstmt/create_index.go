@@ -705,9 +705,9 @@ func addColumnsForSecondaryIndex(
 				),
 			)
 			primaryKeyStoringCols[columnName.Name] = struct{}{}
-			return
+		} else {
+			columnRefs[columnName.Name] = struct{}{}
 		}
-		columnRefs[columnName.Name] = struct{}{}
 		keySuffixColumns = append(keySuffixColumns, e)
 	})
 	sort.Slice(keySuffixColumns, func(i, j int) bool {
