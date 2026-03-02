@@ -1145,7 +1145,13 @@ SELECT f_scalar();
 
 # Note: Postgres fails with a different error message: "user bob does not have EXECUTE privilege on function f_scalar".
 # This is because psql will first validate access to f_scalar, but crdb first validates access to xy.
+skipif config local-mixed-25.4
+skipif config local-mixed-26.1
 statement error pgcode 42501 pq: user bob does not have SELECT privilege on relation xy
+SELECT * FROM v;
+
+onlyif config local-mixed-25.4 local-mixed-26.1
+statement error pgcode 42501 pq: user bob does not have EXECUTE privilege on function f_scalar
 SELECT * FROM v;
 
 statement ok
@@ -1489,7 +1495,12 @@ SELECT * FROM priv_f()
 
 # Same result through the view: priv_f runs as alice (INVOKER), who
 # cannot read priv_t.
+skipif config local-mixed-25.4 local-mixed-26.1
 statement error pgcode 42501 user alice does not have SELECT privilege on relation priv_t
+SELECT * FROM priv_v
+
+onlyif config local-mixed-25.4 local-mixed-26.1
+statement ok
 SELECT * FROM priv_v
 
 statement ok
