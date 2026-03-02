@@ -10,7 +10,7 @@ package tochar
 type fromCharDateMode int
 
 const (
-	fromCharDateNone = 0
+	fromCharDateNone fromCharDateMode = iota
 	fromCharDateGregorian
 	fromCharDateISOWeek
 )
