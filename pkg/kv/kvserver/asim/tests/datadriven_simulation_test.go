@@ -62,10 +62,15 @@ var runAsimTests = envutil.EnvOrDefaultBool("COCKROACH_RUN_ASIM_TESTS", false)
 //
 //   - "gen_cluster" [nodes=<int>] [stores_per_node=<int>]
 //     [store_byte_capacity_gib=<int>] [node_cpu_cores=<float>]
+//     [cpu_overhead_multiplier=<float>] [space_amplification=<float>]
+//     [reserved_disk_gib=<int>]
 //     Initialize the cluster generator parameters. On the next call to eval,
 //     the cluster generator is called to create the initial state used in the
 //     simulation. The default values are: nodes=3 stores_per_node=1
-//     store_byte_capacity_gib=256, node_cpu_cores=8.0.
+//     store_byte_capacity_gib=256, node_cpu_cores=8.0,
+//     cpu_overhead_multiplier=1.0 (ratio of OS CPU to tracked CPU),
+//     space_amplification=1.25 (Used/LogicalBytes ratio),
+//     reserved_disk_gib=0 (filesystem reserved blocks).
 //
 //   - "load_cluster": config=<name>
 //     Load a defined cluster configuration to be the generated cluster in the
@@ -91,7 +96,7 @@ var runAsimTests = envutil.EnvOrDefaultBool("COCKROACH_RUN_ASIM_TESTS", false)
 //
 //   - set_status store=<int> [delay=<duration>] liveness=(live|unavailable|dead)
 //   - set_status node=<int> [delay=<duration>] [liveness=(live|unavailable|dead)]
-//       [membership=(active|decommissioning|decommissioned)] [draining=<bool>]
+//     [membership=(active|decommissioning|decommissioned)] [draining=<bool>]
 //     Set status signals for stores or nodes. The store= form sets liveness for
 //     a single store. The node= form can set liveness for all stores on a node
 //     and/or set membership/draining (which are per-node). Defaults for node=:
@@ -363,12 +368,18 @@ func TestDataDriven(t *testing.T) {
 					var region []string
 					var nodesPerRegion []int
 					var storeByteCapacityGiB int64 = 256
+					var cpuOverheadMultiplier float64
+					var spaceAmplification float64
+					var reservedDiskGiB int64
 					scanIfExists(t, d, "nodes", &nodes)
 					scanIfExists(t, d, "stores_per_node", &storesPerNode)
 					scanIfExists(t, d, "store_byte_capacity_gib", &storeByteCapacityGiB)
 					scanIfExists(t, d, "region", &region)
 					scanIfExists(t, d, "nodes_per_region", &nodesPerRegion)
 					scanIfExists(t, d, "node_cpu_cores", &nodeCPUCores)
+					scanIfExists(t, d, "cpu_overhead_multiplier", &cpuOverheadMultiplier)
+					scanIfExists(t, d, "space_amplification", &spaceAmplification)
+					scanIfExists(t, d, "reserved_disk_gib", &reservedDiskGiB)
 
 					var buf strings.Builder
 					require.NotEmpty(t, nodeCPUCores)
@@ -395,6 +406,11 @@ func TestDataDriven(t *testing.T) {
 						Region:              region,
 						NodesPerRegion:      nodesPerRegion,
 						NodeCPURateCapacity: state.NodeCPUCores(nodeCPUCores).ToRateCapacityNanos(),
+						NodePhysical: state.NodePhysicalCharacteristics{
+							CPUOverheadMultiplier: cpuOverheadMultiplier,
+							SpaceAmplification:    spaceAmplification,
+							ReservedDiskBytes:     reservedDiskGiB << 30,
+						},
 					}
 					return buf.String()
 				case "load_cluster":
