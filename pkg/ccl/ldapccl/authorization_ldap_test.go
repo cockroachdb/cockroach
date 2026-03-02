@@ -449,6 +449,23 @@ func TestLDAPProvisioningDBConsole(t *testing.T) {
 			"user should not have been provisioned when setting is disabled")
 	})
 
+	t.Run("provisioning disabled, existing user login does not set last login time", func(t *testing.T) {
+		tdb.Exec(t, "SET CLUSTER SETTING security.provisioning.ldap.enabled = false")
+		tdb.Exec(t, "CREATE USER existinguser2")
+		mockLDAP.SetGroups("cn=existinguser2", []string{"cn=db_admins"})
+
+		resp, err := httpLogin("existinguser2", "password")
+		require.NoError(t, err, "DB Console login should succeed for existing user")
+		require.Equal(t, http.StatusOK, resp.StatusCode)
+
+		// estimated_last_login_time should remain NULL since provisioning is
+		// disabled.
+		rows := tdb.QueryStr(t,
+			`SELECT count(*) FROM system.users WHERE username = 'existinguser2' AND estimated_last_login_time IS NOT NULL`)
+		require.Equal(t, "0", rows[0][0],
+			"estimated_last_login_time should not be populated when provisioning is disabled")
+	})
+
 	t.Run("provisioning enabled, new user succeeds login", func(t *testing.T) {
 		tdb.Exec(t, "SET CLUSTER SETTING security.provisioning.ldap.enabled = true")
 		mockLDAP.SetGroups("cn=newuser2", []string{"cn=db_admins"})
@@ -473,6 +490,16 @@ func TestLDAPProvisioningDBConsole(t *testing.T) {
 			`SELECT options FROM [SHOW USERS] WHERE username = 'newuser2'`)
 		require.Len(t, rows, 1)
 		require.Contains(t, rows[0][0], "PROVISIONSRC=ldap:localhost")
+
+		// Verify estimated_last_login_time is populated.
+		testutils.SucceedsSoon(t, func() error {
+			rows := tdb.QueryStr(t,
+				`SELECT count(*) FROM system.users WHERE username = 'newuser2' AND estimated_last_login_time IS NOT NULL`)
+			if len(rows) == 0 || rows[0][0] != "1" {
+				return errors.New("estimated_last_login_time not yet updated for newuser2")
+			}
+			return nil
+		})
 	})
 
 	t.Run("provisioning enabled, existing user", func(t *testing.T) {
