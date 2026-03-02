@@ -71,6 +71,9 @@ type SortedDiskMapBatchWriter interface {
 	// Close flushes all writes to the underlying store and frees up resources
 	// held by the batch writer.
 	Close(context.Context) error
+
+	// Delete removes the given key from the batch. The deletion is applied on Flush(), Close(), or when the batch writer reaches its capacity.
+	Delete(k []byte) error
 }
 
 // SortedDiskMap is an on-disk map. Keys are iterated over in sorted order.

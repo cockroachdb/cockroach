@@ -249,6 +249,12 @@ func (b *pebbleMapBatchWriter) Put(k []byte, v []byte) error {
 	return nil
 }
 
+// Delete implements the SortedDiskMapBatchWriter interface.
+func (b *pebbleMapBatchWriter) Delete(k []byte) error {
+	key := b.makeKey(k)
+	return b.batch.Delete(key, nil)
+}
+
 // Flush implements the SortedDiskMapBatchWriter interface.
 func (b *pebbleMapBatchWriter) Flush() error {
 	if err := b.batch.Commit(pebble.NoSync); err != nil {
