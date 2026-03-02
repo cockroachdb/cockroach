@@ -23,6 +23,7 @@ type ChangeOrigin uint8
 const (
 	OriginExternal ChangeOrigin = iota
 	originMMARebalance
+	originMMARepair
 )
 
 // rangeOperationMetrics contains per-store metrics for range operation outcomes

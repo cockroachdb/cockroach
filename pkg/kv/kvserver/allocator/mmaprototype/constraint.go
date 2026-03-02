@@ -1932,6 +1932,97 @@ func (rac *rangeAnalyzedConstraints) expectEnoughVotersAndNonVoters() error {
 	return nil
 }
 
+// candidatesToConvertFromNonVoterToVoter returns non-voter stores that could
+// be promoted to voter to help satisfy voter constraints.
+//
+// REQUIRES: notEnoughVoters()
+func (rac *rangeAnalyzedConstraints) candidatesToConvertFromNonVoterToVoter() (
+	[]roachpb.StoreID,
+	error,
+) {
+	if err := rac.expectEnoughVoters(false); err != nil {
+		return nil, err
+	}
+	if len(rac.replicas[nonVoterIndex]) == 0 {
+		return nil, nil
+	}
+	var cands []roachpb.StoreID
+	if rac.voterConstraints.isEmpty() && !rac.constraints.isEmpty() {
+		// There are some constraints, and no voter constraints.
+		for i, c := range rac.constraints.constraints {
+			if int(c.numReplicas) > len(rac.constraints.satisfiedByReplica[voterIndex][i]) {
+				// Unsatisfied when solely looking at voter replica. It is acceptable
+				// to add another voter here.
+				cands =
+					append(cands, rac.constraints.satisfiedByReplica[nonVoterIndex][i]...)
+			}
+		}
+		// NB: it is possible that cands is empty since none of the non-voters
+		// satisfy a constraint.
+		return cands, nil
+	}
+	if !rac.voterConstraints.isEmpty() {
+		// There are some voter constraints that need satisfaction.
+		for i, c := range rac.voterConstraints.constraints {
+			if int(c.numReplicas) > len(rac.voterConstraints.satisfiedByReplica[voterIndex][i]) {
+				// Unsatisfied.
+				cands = append(
+					cands, rac.voterConstraints.satisfiedByReplica[nonVoterIndex][i]...)
+			}
+		}
+		// NB: it is possible that cands is empty since none of the non-voters
+		// satisfy a constraint.
+		return cands, nil
+	}
+	// No constraints, so all non-voters qualify.
+	for i := range rac.replicas[nonVoterIndex] {
+		cands = append(cands, rac.replicas[nonVoterIndex][i].StoreID)
+	}
+	return cands, nil
+}
+
+// constraintsForAddingVoter returns the constraint disjunction that should be
+// used to find candidate stores for adding a new voter. Returns nil if there
+// are no constraints to satisfy (any store is acceptable).
+//
+// REQUIRES: notEnoughVoters() and candidatesToConvertFromNonVoterToVoter() is
+// empty.
+func (rac *rangeAnalyzedConstraints) constraintsForAddingVoter() (constraintsDisj, error) {
+	if err := rac.expectEnoughVoters(false); err != nil {
+		return nil, err
+	}
+
+	var constrDisj constraintsDisj
+	if rac.voterConstraints.isEmpty() && !rac.constraints.isEmpty() {
+		// There are some constraints that must not be satisfied since don't have
+		// enough voters and could not find a non-voter to convert.
+		for i, c := range rac.constraints.constraints {
+			if int(c.numReplicas) > len(rac.constraints.satisfiedByReplica[voterIndex][i])+
+				len(rac.constraints.satisfiedByReplica[nonVoterIndex][i]) {
+				constrDisj = append(constrDisj, c.constraints)
+			}
+		}
+		if len(constrDisj) == 0 {
+			return nil, errors.Errorf("could not find unsatisfied constraint")
+		}
+		return constrDisj, nil
+	}
+	if !rac.voterConstraints.isEmpty() {
+		// There are some constraints that are not satisfied.
+		for i, c := range rac.voterConstraints.constraints {
+			if int(c.numReplicas) > len(rac.voterConstraints.satisfiedByReplica[voterIndex][i]) {
+				// Unsatisfied.
+				constrDisj = append(constrDisj, c.constraints)
+			}
+		}
+		if len(constrDisj) == 0 {
+			return nil, errors.Errorf("could not find unsatisfied constraint")
+		}
+		return constrDisj, nil
+	}
+	return nil, nil
+}
+
 func (rac *rangeAnalyzedConstraints) voterConstraintCount() (under, match, over int) {
 	for i, c := range rac.voterConstraints.constraints {
 		neededReplicas := int(c.numReplicas)
