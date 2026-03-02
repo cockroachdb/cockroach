@@ -400,7 +400,7 @@ func (c *CustomFuncs) foldOIDFamilyCast(
 				return nil, true, err
 			}
 
-			c.mem.Metadata().AddDependency(opt.DepByName(&resName), ds, privilege.SELECT)
+			c.mem.Metadata().AddDependency(opt.DepByName(&resName), ds, privilege.SELECT, c.f.catalog.GetCurrentUser())
 			dOid = tree.NewDOidWithTypeAndName(
 				oid.Oid(ds.PostgresDescriptorID()), types.RegClass, string(tn.ObjectName),
 			)
