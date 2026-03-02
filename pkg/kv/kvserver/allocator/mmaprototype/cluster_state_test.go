@@ -160,6 +160,8 @@ func parseStoreLeaseholderMsg(t *testing.T, in string) StoreLeaseholderMsg {
 
 	var rMsg RangeMsg
 	var notPopulatedOverride bool
+	// nextReplicaID auto-assigns replica IDs when not explicitly specified.
+	nextReplicaID := roachpb.ReplicaID(1)
 	tryAppendRangeMsg := func() {
 		if rMsg.RangeID != 0 {
 			if notPopulatedOverride {
@@ -169,6 +171,7 @@ func parseStoreLeaseholderMsg(t *testing.T, in string) StoreLeaseholderMsg {
 			rMsg = RangeMsg{RangeID: 0}
 		}
 		notPopulatedOverride = false
+		nextReplicaID = 1
 	}
 	for _, line := range lines[1:] {
 		line = strings.TrimSpace(line)
@@ -198,7 +201,7 @@ func parseStoreLeaseholderMsg(t *testing.T, in string) StoreLeaseholderMsg {
 		} else {
 			var repl StoreIDAndReplicaState
 			fields := strings.Fields(line)
-			require.Greater(t, len(fields), 2)
+			require.Greater(t, len(fields), 1)
 			for _, field := range fields {
 				parts := strings.Split(field, "=")
 				require.GreaterOrEqual(t, len(parts), 2)
@@ -228,6 +231,13 @@ func parseStoreLeaseholderMsg(t *testing.T, in string) StoreLeaseholderMsg {
 				default:
 					t.Fatalf("unknown argument: %s", parts[0])
 				}
+			}
+			// Auto-assign replica ID if not explicitly set.
+			if repl.ReplicaID == 0 {
+				repl.ReplicaID = nextReplicaID
+				nextReplicaID++
+			} else if repl.ReplicaID >= nextReplicaID {
+				nextReplicaID = repl.ReplicaID + 1
 			}
 			rMsg.Replicas = append(rMsg.Replicas, repl)
 			rMsg.MaybeSpanConfIsPopulated = true
@@ -522,6 +532,9 @@ func TestClusterState(t *testing.T) {
 						// For convenience, in these tests, stores start out
 						// healthy.
 						cs.stores[sal.StoreID].status = Status{Health: HealthOK}
+					}
+					if quiet, ok := dd.ScanArgOpt[bool](t, d, "quiet"); ok && quiet {
+						return ""
 					}
 					return printNodeListMeta(t)
 
