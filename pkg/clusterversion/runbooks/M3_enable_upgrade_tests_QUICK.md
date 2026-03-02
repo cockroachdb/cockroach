@@ -304,11 +304,15 @@ const PreviousRelease Key = V25_4
 
 ```go
 "cockroach-go-testserver-configs": makeConfigSet(
-	"cockroach-go-testserver-25.4",  // Add new version; remove oldest if MinSupported advances
+	"cockroach-go-testserver-25.4",  // keep — still >= MinSupported
+	"cockroach-go-testserver-26.1",  // new
 ),
 ```
 
-**Note:** The set only includes versions >= MinSupported. After M.4 removes old versions, older entries are removed too.
+**Invariant:** The set contains one entry per release from `MinSupported` through
+`PreviousRelease` inclusive. **Do not remove the previous version's entry here** —
+that happens in M.4 when MinSupported advances. If you're unsure what stays,
+check `const MinSupported` in `cockroach_versions.go`.
 
 ---
 
