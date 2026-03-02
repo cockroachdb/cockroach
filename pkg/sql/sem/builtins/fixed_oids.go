@@ -2870,6 +2870,10 @@ var builtinOidsArray = []string{
 	2915: `dmetaphone(source: string) -> string`,
 	2916: `dmetaphone_alt(source: string) -> string`,
 	2917: `daitch_mokotoff(source: string) -> string[]`,
+	2918: `to_number(value: string, format: string) -> decimal`,
+	2919: `to_char(number: int, format: string) -> string`,
+	2920: `to_char(number: float, format: string) -> string`,
+	2921: `to_char(number: decimal, format: string) -> string`,
 }
 
 var builtinOidsBySignature map[string]oid.Oid

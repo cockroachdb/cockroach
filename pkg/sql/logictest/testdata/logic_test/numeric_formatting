@@ -1,0 +1,405 @@
+# LogicTest: local
+
+# Test numeric formatting functions: to_char(numeric, text) and to_number(text, text)
+# These tests are ported from PostgreSQL's src/test/regress/sql/numeric.sql
+
+# Basic integer formatting
+query T
+SELECT to_char(0::int, '9')
+----
+ 0
+
+query T
+SELECT to_char(0::int, '99')
+----
+  0
+
+query T
+SELECT to_char(1::int, '9')
+----
+ 1
+
+query T
+SELECT to_char(-1::int, '9')
+----
+-1
+
+query T
+SELECT to_char(12::int, '99')
+----
+ 12
+
+query T
+SELECT to_char(123::int, '999')
+----
+ 123
+
+query T
+SELECT to_char(485::int, '999')
+----
+ 485
+
+# Overflow
+query T
+SELECT to_char(100::int, '99')
+----
+ ##
+
+# Zero padding with 0
+query T
+SELECT to_char(1::int, '09')
+----
+ 01
+
+query T
+SELECT to_char(1::int, '009')
+----
+ 001
+
+query T
+SELECT to_char(485::int, '0999')
+----
+ 0485
+
+# FM (Fill Mode) - suppresses leading blanks
+query T
+SELECT to_char(485::int, 'FM999')
+----
+485
+
+query T
+SELECT to_char(485::int, 'FM0999')
+----
+0485
+
+# Decimal formatting
+query T
+SELECT to_char(485::numeric, '999.99')
+----
+ 485.00
+
+query T
+SELECT to_char(485::numeric, 'FM999.99')
+----
+485.
+
+query T
+SELECT to_char(485::numeric, 'FM999.90')
+----
+485.00
+
+query T
+SELECT to_char(1.5::numeric, '9.9')
+----
+ 1.5
+
+query T
+SELECT to_char(0.1::numeric, '9.9')
+----
+  .1
+
+# Group separators
+query T
+SELECT to_char(1485::int, '9,999')
+----
+ 1,485
+
+query T
+SELECT to_char(1485::int, '9G999')
+----
+ 1,485
+
+# Sign patterns
+query T
+SELECT to_char(485::int, 'SG999')
+----
++485
+
+query T
+SELECT to_char(-485::int, 'SG999')
+----
+-485
+
+query T
+SELECT to_char(485::int, '999MI')
+----
+485
+
+query T
+SELECT to_char(-485::int, '999MI')
+----
+485-
+
+query T
+SELECT to_char(485::int, 'S999')
+----
++485
+
+query T
+SELECT to_char(-485::int, 'S999')
+----
+-485
+
+# PR (angle brackets for negative)
+query T
+SELECT to_char(-485::int, '999PR')
+----
+<485>
+
+query T
+SELECT to_char(485::int, '999PR')
+----
+ 485
+
+# L (currency symbol)
+query T
+SELECT to_char(12::int, 'L99')
+----
+$ 12
+
+# Roman numerals
+query T
+SELECT to_char(12::int, 'RN')
+----
+            XII
+
+query T
+SELECT to_char(12::int, 'FMRN')
+----
+XII
+
+query T
+SELECT to_char(2345::int, 'RN')
+----
+       MMCCCXLV
+
+# Scientific notation (EEEE)
+query T
+SELECT to_char(123.45::numeric, '9.999EEEE')
+----
+ 1.235e+02
+
+query T
+SELECT to_char(0.0012345::numeric, '9.999EEEE')
+----
+ 1.235e-03
+
+query T
+SELECT to_char(1::int, '9.999EEEE')
+----
+ 1.000e+00
+
+# V pattern (multiply by 10^n)
+query T
+SELECT to_char(12.4::numeric, '99V9')
+----
+ 124
+
+query T
+SELECT to_char(12.45::numeric, '99V99')
+----
+ 1245
+
+# TH ordinal suffix
+query T
+SELECT to_char(1::int, '9th')
+----
+ 1st
+
+query T
+SELECT to_char(2::int, '9th')
+----
+ 2nd
+
+query T
+SELECT to_char(3::int, '9th')
+----
+ 3rd
+
+query T
+SELECT to_char(4::int, '9th')
+----
+ 4th
+
+query T
+SELECT to_char(11::int, '99th')
+----
+ 11th
+
+query T
+SELECT to_char(12::int, '99th')
+----
+ 12th
+
+query T
+SELECT to_char(21::int, '99th')
+----
+ 21st
+
+query T
+SELECT to_char(1::int, '9TH')
+----
+ 1ST
+
+# B (blank integer part when zero)
+query T
+SELECT to_char(0::int, 'B9')
+----
+ 0
+
+query T
+SELECT to_char(1::int, 'B9')
+----
+ 1
+
+# Float formatting
+query T
+SELECT to_char(123.456::float8, '999.99')
+----
+ 123.46
+
+query T
+SELECT to_char(-123.456::float8, '999.99')
+----
+-123.46
+
+# to_char with FM and decimal
+query T
+SELECT to_char(100::numeric, 'FM999.9')
+----
+100.
+
+query T
+SELECT to_char(100::numeric, 'FM999.')
+----
+100
+
+query T
+SELECT to_char(100::numeric, 'FM999')
+----
+100
+
+# Literal text in format strings
+query T
+SELECT to_char(100::numeric, 'foo999')
+----
+foo 100
+
+query T
+SELECT to_char(100::numeric, 'f"ool"999')
+----
+fool 100
+
+# ==============================
+# to_number tests
+# ==============================
+
+query R
+SELECT to_number('-34,338,492', '99G999G999')
+----
+-34338492
+
+query R
+SELECT to_number('-34,338,492.654,878', '99G999G999D999G999')
+----
+-34338492.654878
+
+query R
+SELECT to_number('<564646.654564>', '999999.999999PR')
+----
+-564646.654564
+
+query R
+SELECT to_number('0.00001-', '9.999999S')
+----
+-0.00001
+
+query R
+SELECT to_number('5.01-', 'FM9.999999S')
+----
+-5.01
+
+query R
+SELECT to_number('5.01-', 'FM9.999999MI')
+----
+-5.01
+
+query R
+SELECT to_number('5 4 4 4 4 8 . 7 8', '9 9 9 9 9 9 . 9 9')
+----
+544448.78
+
+query R
+SELECT to_number('.01', 'FM9.99')
+----
+0.01
+
+query R
+SELECT to_number('.0', '99999999.99999999')
+----
+0.0
+
+query R
+SELECT to_number('0', '99.99')
+----
+0
+
+query R
+SELECT to_number('.-01', 'S99.99')
+----
+-0.01
+
+query R
+SELECT to_number('.01-', '99.99S')
+----
+-0.01
+
+query R
+SELECT to_number(' . 0 1-', ' 9 9 . 9 9 S')
+----
+-0.01
+
+query R
+SELECT to_number('34,50','999,99')
+----
+3450
+
+query R
+SELECT to_number('123,000','999G')
+----
+123
+
+query R
+SELECT to_number('123456','999G999')
+----
+123456
+
+query R
+SELECT to_number('$1234.56','L9,999.99')
+----
+1234.56
+
+query R
+SELECT to_number('$1234.56','L99,999.99')
+----
+1234.56
+
+query R
+SELECT to_number('$1,234.56','L99,999.99')
+----
+1234.56
+
+query R
+SELECT to_number('1234.56','L99,999.99')
+----
+1234.56
+
+query R
+SELECT to_number('1,234.56','L99,999.99')
+----
+1234.56
+
+query R
+SELECT to_number('42nd', '99th')
+----
+42
