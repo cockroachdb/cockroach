@@ -190,19 +190,11 @@ func splitPreApply(
 	// getOrCreateReplica (called upstream via maybeAcquireSplitMergeLock) and
 	// will always precede this split node in the WAG sequence.
 	wagWriter.AddDep(wagpb.Node{
-		Addr: wagpb.Addr{
-			RangeID:   in.lhsID.RangeID,
-			ReplicaID: in.lhsID.ReplicaID,
-			Index:     in.raftIndex - 1,
-		},
+		Addr: wagpb.MakeAddr(in.lhsID, in.raftIndex-1),
 		Type: wagpb.NodeType_NodeApply,
 	})
 	wagWriter.SetEvent(wagpb.Node{
-		Addr: wagpb.Addr{
-			RangeID:   in.lhsID.RangeID,
-			ReplicaID: in.lhsID.ReplicaID,
-			Index:     in.raftIndex,
-		},
+		Addr: wagpb.MakeAddr(in.lhsID, in.raftIndex),
 		Type: wagpb.NodeType_NodeSplit,
 	})
 
