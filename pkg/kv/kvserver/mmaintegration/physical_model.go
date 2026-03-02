@@ -1,0 +1,267 @@
+// Copyright 2026 The Cockroach Authors.
+//
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
+
+package mmaintegration
+
+import (
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/mmaprototype"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
+)
+
+// physicalStore holds the physical load, capacity, and amplification
+// factors for a store across all load dimensions. Each vector is indexed by
+// mmaprototype.LoadDimension.
+type physicalStore struct {
+	// load is the per-store physical load in each dimension's native unit
+	// (ns/s for CPURate, bytes/s for WriteBandwidth, bytes for ByteSize).
+	load mmaprototype.LoadVector
+	// capacity is the per-store physical capacity in each dimension's native
+	// unit.
+	capacity mmaprototype.LoadVector
+	// amplificationFactors converts logical per-range loads to physical units.
+	amplificationFactors mmaprototype.AmpVector
+}
+
+// physicalDimension holds the outputs of the physical model for a single
+// load dimension.
+type physicalDimension struct {
+	load                mmaprototype.LoadValue
+	capacity            mmaprototype.LoadValue
+	amplificationFactor mmaprototype.Amp
+}
+
+// computePhysicalCPU computes per-store physical CPU load, capacity, and
+// amplification factor from the store descriptor.
+//
+// The computation has three steps:
+//
+//  1. Estimate the amplification factor: the ratio of total node CPU caused by
+//     store work to the directly-tracked store CPU (CPUPerSecond). This is
+//     clamped to [1, cpuIndirectOverheadMultiplier]. When storesCPURate is 0,
+//     the factor defaults to the cap.
+//
+//  2. Estimate background CPU: node CPU usage not attributable to MMA-tracked
+//     work (e.g. SQL gateway, GC, background jobs). This is
+//     max(0, nodeUsage - storesCPU*ampFactor).
+//
+//  3. Compute per-store load and capacity.
+//     Load uses this store's direct replica CPU (CPUPerSecond) amplified by
+//     the factor, plus an even share of background. This lets stores with more
+//     KV work report higher load while still accounting for node-level overhead.
+//     Falls back to storesCPU/numStores when CPUPerSecond is unavailable.
+//     Capacity is nodeCap/numStores — a real-world quantity (the store's share
+//     of the node's CPU cores) that remains directly interpretable.
+//
+// Design decisions for the CPU physical model. For simplicity, the examples
+// below assume single-store nodes unless stated otherwise.
+//
+// # Background in load, not capacity
+//
+// Background CPU (max(0, nodeUsage - storesCPU*ampFactor)) is added to each
+// store's load rather than subtracted from capacity. Capacity stays a
+// real-world number (nodeCap/numStores) and nodes running hot from any cause
+// become shed candidates.
+//
+// The alternative — subtracting background from capacity — hides pressure in
+// the denominator:
+//
+//	Two nodes, 10-core each:
+//	  X: 80% total CPU (60% background + 20% KV).  bg = 6, KV = 2.
+//	  Y: 60% total CPU (all KV).                   bg = 0, KV = 6.
+//
+//	  Subtract from capacity:  X = 2/(10-6)  = 50%,  Y = 6/10 = 60%.
+//	  Add to load (chosen):    X = 8/10      = 80%,  Y = 6/10 = 60%.
+//
+// With subtraction MMA sees Y as more loaded and sheds from Y to X. But X is
+// the node running at 80% real CPU — sending it more work makes things worse.
+// With addition, X is correctly the hotter node.
+//
+// # Per-store load via CPUPerSecond
+//
+// Each store's load uses its own CPUPerSecond (amplified) instead of an even
+// split of node usage. On a 4-store node (storesCPU=8, nodeUsage=12,
+// nodeCap=16) with S1 at 5 cores and S2 at 1 core: S1 shows 188% util vs S2
+// at 38%. Even splitting hides this — both would show 75%. Falls back to even
+// split when CPUPerSecond is unavailable.
+//
+// # Capacity split evenly, not weighted
+//
+// Each store gets nodeCap/numStores. Weighting by store fraction causes
+// storeCPU to cancel in the utilization ratio (load/capacity =
+// storeCPU*amp / (nodeCap*storeCPU/storesCPU) = amp*storesCPU/nodeCap),
+// making all stores on a node show identical utilization regardless of
+// imbalance. Even split preserves differentiation; the node-level overload
+// check (canShedAndAddLoad) prevents over-accepting.
+//
+// Trade-off: a background-heavy node with little KV work still appears loaded
+// and MMA may try to shed from it. We accept this because: with this model,
+//
+//  1. Operators see balanced total CPU across nodes — they don't need to
+//     distinguish KV from non-KV usage to understand the cluster state.
+//  3. If the node has no ranges at all, the shed attempt is a harmless no-op.
+//  4. The inflated store load raises the topK threshold (minLoadFraction *
+//     adjustedLoad), filtering out tiny ranges that wouldn't meaningfully
+//     reduce load — naturally limiting churn on background-heavy nodes.
+//  5. The alternative (subtracting background from capacity) makes the numbers
+//     harder to reason about and, as shown above, can cause MMA to send work
+//     toward already-hot nodes.
+func computePhysicalCPU(desc roachpb.StoreDescriptor) (res physicalDimension) {
+	nc := desc.NodeCapacity
+	numStores := max(1, float64(nc.NumStores))
+	nodeUsage := float64(nc.NodeCPURateUsage)
+	nodeCap := float64(nc.NodeCPURateCapacity)
+	storesCPU := float64(nc.StoresCPURate)
+
+	// Step 1: Estimate the amplification factor.
+	ampFactor := cpuIndirectOverheadMultiplier
+	if storesCPU > 0 {
+		ampFactor = max(1, min(nodeUsage/storesCPU, cpuIndirectOverheadMultiplier))
+	}
+
+	// Step 2: Attribute CPU to MMA-tracked work vs background.
+	mmaLoad := storesCPU * ampFactor
+	background := max(0, nodeUsage-mmaLoad)
+
+	// Step 3: Compute per-store load and capacity.
+	storeCPU := desc.Capacity.CPUPerSecond
+	if storeCPU <= 0 {
+		storeCPU = storesCPU / numStores
+	}
+
+	// Summing per-store loads across all stores on a node:
+	//
+	//	sum(load_i) = sum(storeCPU_i * ampFactor + background / N)
+	//	            = ampFactor * sum(storeCPU_i) + background
+	//	            = ampFactor * storesCPU + max(0, nodeUsage - storesCPU * ampFactor)
+	//
+	// When ampFactor = nodeUsage/storesCPU (unclamped interior):
+	//
+	//	= nodeUsage + max(0, nodeUsage - nodeUsage) = nodeUsage.  ✓
+	//
+	// When ampFactor is clamped to 1 (storesCPU > nodeUsage):
+	//
+	//	= storesCPU + max(0, nodeUsage - storesCPU)
+	//	= storesCPU + 0 = storesCPU > nodeUsage.
+	//
+	// The overshoot (storesCPU - nodeUsage) is transient and conservative: stores
+	// appear slightly more loaded than reality until the measurement lag resolves.
+	load := mmaprototype.LoadValue(max(0, storeCPU*ampFactor+background/numStores))
+	capacity := mmaprototype.LoadValue(max(0, nodeCap/numStores))
+	if nodeCap <= 0 {
+		capacity = load * 2
+	}
+
+	return physicalDimension{
+		load:                load,
+		capacity:            capacity,
+		amplificationFactor: mmaprototype.Amp(ampFactor),
+	}
+}
+
+// maxDiskSpaceAmplification caps the ratio of physical disk bytes used to
+// logical (MVCC) bytes. Values above this are treated as if the extra physical
+// usage is independent of range data (e.g. WAL, auxiliary files, tombstone
+// bloat). Without this cap, transient LSM bloat could produce extreme
+// amplification factors that massively overcount per-range physical footprint.
+const maxDiskSpaceAmplification = 5.0
+
+// computePhysicalDisk computes physical disk load, capacity, and space
+// amplification factor from the store capacity in the store descriptor.
+//
+// Both load and capacity are in physical bytes so that load/capacity =
+// Used/(Used+Available) = actual disk utilization. The amplification factor
+// is Used/LogicalBytes, capped at maxDiskSpaceAmplification. Values below 1.0
+// (from compression) are preserved. Defaults to 1.0 for empty/new stores.
+func computePhysicalDisk(desc roachpb.StoreDescriptor) physicalDimension {
+	sc := desc.Capacity
+	var ampFactor float64
+	if sc.LogicalBytes > 0 && sc.Used > 0 {
+		ampFactor = min(float64(sc.Used)/float64(sc.LogicalBytes), maxDiskSpaceAmplification)
+	} else {
+		ampFactor = 1.0
+	}
+	return physicalDimension{
+		load:                mmaprototype.LoadValue(sc.Used),
+		capacity:            mmaprototype.LoadValue(sc.Used + sc.Available),
+		amplificationFactor: mmaprototype.Amp(ampFactor),
+	}
+}
+
+// computePhysicalWriteBandwidth computes physical write-bandwidth load from the
+// store descriptor.
+//
+// WriteBytesPerSecond is the sum of per-replica logical write bytes/s, not the
+// actual physical disk write throughput. The amplification factor is set to 1.0
+// because we don't have a measure of physical disk writes to compare against,
+// so there is no meaningful ratio to compute. Capacity is unknown for the same
+// reason: disk write throughput limits depend on hardware and workload
+// characteristics that aren't available in the store descriptor.
+func computePhysicalWriteBandwidth(desc roachpb.StoreDescriptor) physicalDimension {
+	return physicalDimension{
+		load:                mmaprototype.LoadValue(desc.Capacity.WriteBytesPerSecond),
+		capacity:            mmaprototype.UnknownCapacity,
+		amplificationFactor: mmaprototype.Amp(1.0),
+	}
+}
+
+// computePhysicalStore computes the physical load, capacity, and amplification
+// factors for a store across all load dimensions given its descriptor.
+//
+// Design note: MakeStoreLoadMsg and ComputeAmplificationFactors both consume a
+// StoreDescriptor but obtain it through different paths. MakeStoreLoadMsg
+// receives the descriptor from a gossip callback (the snapshot the store most
+// recently published), while ComputeAmplificationFactors is called from
+// mmaStore.amplificationFactors which constructs a descriptor from separately
+// cached local values (CachedCapacity and GetNodeCapacity). Ideally both would
+// use the exact same descriptor snapshot, but in practice the two may be from
+// slightly different points in time. This is acceptable because:
+//  1. The underlying inputs (node CPU EWMA, space amplification) are
+//     slow-moving; the drift between two successive reads is negligible.
+//  2. MMA already tolerates the store-level load not equaling the sum of its
+//     per-range loads: not all ranges report load every cycle, follower
+//     replicas contribute CPU to the store total but don't report range-level
+//     load, and ranges may join or leave between snapshots. A small drift in
+//     amplification factors is negligible compared to these existing gaps.
+//
+// If tighter consistency is ever needed, the result can be returned as a
+// byproduct of MakeStoreLoadMsg and cached alongside the StoreLoadMsg.
+func computePhysicalStore(desc roachpb.StoreDescriptor) (res physicalStore) {
+	res.setDimension(mmaprototype.CPURate, computePhysicalCPU(desc))
+	res.setDimension(mmaprototype.ByteSize, computePhysicalDisk(desc))
+	res.setDimension(mmaprototype.WriteBandwidth, computePhysicalWriteBandwidth(desc))
+	return res
+}
+
+func (r *physicalStore) setDimension(dim mmaprototype.LoadDimension, d physicalDimension) {
+	r.load[dim] = d.load
+	r.capacity[dim] = d.capacity
+	r.amplificationFactors[dim] = d.amplificationFactor
+}
+
+// ComputeAmplificationFactors returns the per-dimension amplification factors
+// for a store, given its descriptor. These factors convert logical per-range
+// loads (direct replica CPU, MVCC bytes) into physical units for use at the
+// MMA integration boundary.
+func ComputeAmplificationFactors(desc roachpb.StoreDescriptor) mmaprototype.AmpVector {
+	return computePhysicalStore(desc).amplificationFactors
+}
+
+// MakePhysicalRangeLoad converts logical per-range load measurements into a
+// physical RangeLoad by applying the amplification factors. This is the single
+// entry point for all logical-to-physical range load conversion and should be
+// called at the integration boundary before passing range loads to MMA.
+func MakePhysicalRangeLoad(
+	requestCPUNanos, raftCPUNanos, writeBytesPerSec float64,
+	logicalBytes int64,
+	amp mmaprototype.AmpVector,
+) mmaprototype.RangeLoad {
+	var rl mmaprototype.RangeLoad
+	cpuNanos := requestCPUNanos + raftCPUNanos
+	rl.Load[mmaprototype.CPURate] = mmaprototype.LoadValue(float64(cpuNanos) * float64(amp[mmaprototype.CPURate]))
+	rl.RaftCPU = mmaprototype.LoadValue(float64(raftCPUNanos) * float64(amp[mmaprototype.CPURate]))
+	rl.Load[mmaprototype.WriteBandwidth] = mmaprototype.LoadValue(float64(writeBytesPerSec) * float64(amp[mmaprototype.WriteBandwidth]))
+	rl.Load[mmaprototype.ByteSize] = mmaprototype.LoadValue(float64(logicalBytes) * float64(amp[mmaprototype.ByteSize]))
+	return rl
+}
