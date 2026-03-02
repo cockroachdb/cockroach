@@ -1,0 +1,138 @@
+# Each "compute" command builds a StoreDescriptor from the given args and runs
+# computePhysicalStore, printing load/capacity/amplification for each dimension
+# plus the public ComputeAmplificationFactors output.
+#
+# CPU args are in cores (1 core = 1e9 ns/s).
+# Disk args are in GiB.
+# Write bandwidth is in bytes/s.
+#
+# Formulas:
+#   CPU:
+#     ampFactor = clamp(nodeUsage / storesCPU, 1, 3)   [defaults to 3 when storesCPU=0]
+#     mmaLoad   = storesCPU * ampFactor
+#     background = max(0, nodeUsage - mmaLoad)
+#     load       = storesCPU / numStores * ampFactor
+#     capacity   = (nodeCap - background) / numStores   [= load*2 when nodeCap=0]
+#   Disk:
+#     ampFactor = min(Used / LogicalBytes, 5.0)          [defaults to 1 when either is 0]
+#     load      = Used
+#     capacity  = Used + Available                        [floored at 1]
+#   WriteBandwidth:
+#     ampFactor = 1.0
+#     load      = WriteBytesPerSecond
+#     capacity  = unknown
+
+# -------------------------------------------------------------------
+# Zero-value descriptor: all inputs are zero.
+# CPU: numStores = max(1, 0) = 1. storesCPU = 0 → ampFactor defaults to 3.
+#   mmaLoad = 0*3 = 0, background = max(0, 0-0) = 0.
+#   load = 0/1*3 = 0, nodeCap = 0 → capacity = load*2 = 0.
+# Disk: LogicalBytes=0, Used=0 → ampFactor = 1. load = 0, capacity = max(1, 0+0) = 1.
+# -------------------------------------------------------------------
+compute num-stores=0 stores-cpu=0 node-cpu-usage=0 node-cpu-capacity=0 logical-gib=0 used-gib=0 available-gib=0 write-bytes-per-sec=0
+----
+cpu:             load=0.00 cores  capacity=0.00 cores  amp=3.0000
+disk:            load=0.00 B  capacity=1.00 B  amp=1.0000
+write-bandwidth: load=0.00 B/s  capacity=unknown  amp=1.0000
+amplification-factors: [cpu=3.0000, disk=1.0000, write-bw=1.0000]
+
+# -------------------------------------------------------------------
+# Single store, normal case: 4 of 16 cores used, 2 direct store CPU.
+# CPU: ampFactor = clamp(4/2, 1, 3) = 2.
+#   mmaLoad = 2*2 = 4, background = max(0, 4-4) = 0.
+#   load = 2*2 = 4, capacity = (16-0)/1 = 16.
+# Disk: ampFactor = min(80/40, 5) = 2. load = 80, capacity = 80+20 = 100.
+# -------------------------------------------------------------------
+compute num-stores=1 stores-cpu=2 node-cpu-usage=4 node-cpu-capacity=16 logical-gib=40 used-gib=80 available-gib=20 write-bytes-per-sec=50000000
+----
+cpu:             load=4.00 cores  capacity=16.00 cores  amp=2.0000
+disk:            load=80.00 GiB  capacity=100.00 GiB  amp=2.0000
+write-bandwidth: load=47.68 MiB/s  capacity=unknown  amp=1.0000
+amplification-factors: [cpu=2.0000, disk=2.0000, write-bw=1.0000]
+
+# -------------------------------------------------------------------
+# Single store, no tracked replica CPU (storesCPU=0).
+# CPU: storesCPU = 0 → ampFactor defaults to 3.
+#   mmaLoad = 0*3 = 0, background = max(0, 4-0) = 4.
+#   load = 0*3 = 0, capacity = (16-4)/1 = 12.
+# -------------------------------------------------------------------
+compute num-stores=1 stores-cpu=0 node-cpu-usage=4 node-cpu-capacity=16 logical-gib=40 used-gib=80 available-gib=20 write-bytes-per-sec=10000000
+----
+cpu:             load=0.00 cores  capacity=12.00 cores  amp=3.0000
+disk:            load=80.00 GiB  capacity=100.00 GiB  amp=2.0000
+write-bandwidth: load=9.54 MiB/s  capacity=unknown  amp=1.0000
+amplification-factors: [cpu=3.0000, disk=2.0000, write-bw=1.0000]
+
+# -------------------------------------------------------------------
+# Single store, storesCPU exceeds nodeUsage (possible due to measurement lag).
+# CPU: ampFactor = clamp(4/8, 1, 3) = 1 (floored at 1).
+#   mmaLoad = 8*1 = 8, background = max(0, 4-8) = 0.
+#   load = 8*1 = 8, capacity = (16-0)/1 = 16.
+# -------------------------------------------------------------------
+compute num-stores=1 stores-cpu=8 node-cpu-usage=4 node-cpu-capacity=16 logical-gib=40 used-gib=80 available-gib=20 write-bytes-per-sec=10000000
+----
+cpu:             load=8.00 cores  capacity=16.00 cores  amp=1.0000
+disk:            load=80.00 GiB  capacity=100.00 GiB  amp=2.0000
+write-bandwidth: load=9.54 MiB/s  capacity=unknown  amp=1.0000
+amplification-factors: [cpu=1.0000, disk=2.0000, write-bw=1.0000]
+
+# -------------------------------------------------------------------
+# Single store, implicit multiplier exceeds cap.
+# CPU: ampFactor = clamp(10/1, 1, 3) = 3 (capped).
+#   mmaLoad = 1*3 = 3, background = max(0, 10-3) = 7.
+#   load = 1*3 = 3, capacity = (16-7)/1 = 9.
+# -------------------------------------------------------------------
+compute num-stores=1 stores-cpu=1 node-cpu-usage=10 node-cpu-capacity=16 logical-gib=40 used-gib=80 available-gib=20 write-bytes-per-sec=10000000
+----
+cpu:             load=3.00 cores  capacity=9.00 cores  amp=3.0000
+disk:            load=80.00 GiB  capacity=100.00 GiB  amp=2.0000
+write-bandwidth: load=9.54 MiB/s  capacity=unknown  amp=1.0000
+amplification-factors: [cpu=3.0000, disk=2.0000, write-bw=1.0000]
+
+# -------------------------------------------------------------------
+# Multi-store: 4 stores on the node. CPU load and capacity split evenly.
+# CPU: ampFactor = clamp(8/4, 1, 3) = 2.
+#   mmaLoad = 4*2 = 8, background = max(0, 8-8) = 0.
+#   load = 4/4*2 = 2, capacity = (16-0)/4 = 4.
+# -------------------------------------------------------------------
+compute num-stores=4 stores-cpu=4 node-cpu-usage=8 node-cpu-capacity=16 logical-gib=40 used-gib=80 available-gib=20 write-bytes-per-sec=10000000
+----
+cpu:             load=2.00 cores  capacity=4.00 cores  amp=2.0000
+disk:            load=80.00 GiB  capacity=100.00 GiB  amp=2.0000
+write-bandwidth: load=9.54 MiB/s  capacity=unknown  amp=1.0000
+amplification-factors: [cpu=2.0000, disk=2.0000, write-bw=1.0000]
+
+# -------------------------------------------------------------------
+# Disk: compression produces amplification < 1.
+# 100GiB logical but only 50GiB physical used → ampFactor = 50/100 = 0.5.
+# load = 50, capacity = 50+50 = 100.
+# -------------------------------------------------------------------
+compute num-stores=1 stores-cpu=2 node-cpu-usage=4 node-cpu-capacity=16 logical-gib=100 used-gib=50 available-gib=50 write-bytes-per-sec=10000000
+----
+cpu:             load=4.00 cores  capacity=16.00 cores  amp=2.0000
+disk:            load=50.00 GiB  capacity=100.00 GiB  amp=0.5000
+write-bandwidth: load=9.54 MiB/s  capacity=unknown  amp=1.0000
+amplification-factors: [cpu=2.0000, disk=0.5000, write-bw=1.0000]
+
+# -------------------------------------------------------------------
+# Empty/new store: LogicalBytes=0, Used=0.
+# Disk: ampFactor defaults to 1. load = 0, capacity = 0+100GiB.
+# -------------------------------------------------------------------
+compute num-stores=1 stores-cpu=2 node-cpu-usage=4 node-cpu-capacity=16 logical-gib=0 used-gib=0 available-gib=100 write-bytes-per-sec=0
+----
+cpu:             load=4.00 cores  capacity=16.00 cores  amp=2.0000
+disk:            load=0.00 B  capacity=100.00 GiB  amp=1.0000
+write-bandwidth: load=0.00 B/s  capacity=unknown  amp=1.0000
+amplification-factors: [cpu=2.0000, disk=1.0000, write-bw=1.0000]
+
+# -------------------------------------------------------------------
+# Early startup: NodeCPURateCapacity=0 (not yet populated).
+# CPU: ampFactor = clamp(4/2, 1, 3) = 2. nodeCap = 0 → capacity = load*2.
+#   load = 2*2 = 4, capacity = 4*2 = 8.
+# -------------------------------------------------------------------
+compute num-stores=1 stores-cpu=2 node-cpu-usage=4 node-cpu-capacity=0 logical-gib=40 used-gib=80 available-gib=20 write-bytes-per-sec=10000000
+----
+cpu:             load=4.00 cores  capacity=8.00 cores  amp=2.0000
+disk:            load=80.00 GiB  capacity=100.00 GiB  amp=2.0000
+write-bandwidth: load=9.54 MiB/s  capacity=unknown  amp=1.0000
+amplification-factors: [cpu=2.0000, disk=2.0000, write-bw=1.0000]
