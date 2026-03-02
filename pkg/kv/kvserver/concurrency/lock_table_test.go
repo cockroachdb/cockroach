@@ -208,6 +208,7 @@ func TestLockTableBasic(t *testing.T) {
 				ltImpl := newLockTable(
 					maxLocks, roachpb.RangeID(3), clock, st,
 					m.LocksShedDueToMemoryLimit, m.NumLockShedDueToMemoryLimitEvents,
+					m.VirtualResolveCondenseCount, m.VirtualResolveDisabledCount,
 				)
 				ltImpl.enabled = true
 				ltImpl.enabledSeq = 1
@@ -868,6 +869,7 @@ func TestLockTableMaxLocks(t *testing.T) {
 	lt := newLockTable(
 		5, roachpb.RangeID(3), hlc.NewClockForTesting(nil), cluster.MakeTestingClusterSettings(),
 		m.LocksShedDueToMemoryLimit, m.NumLockShedDueToMemoryLimitEvents,
+		m.VirtualResolveCondenseCount, m.VirtualResolveDisabledCount,
 	)
 	lt.lockTableLimitsMu.minKeysLocked = 0
 	lt.enabled = true
@@ -1045,6 +1047,7 @@ func TestLockTableMaxLocksWithMultipleNotRemovableRefs(t *testing.T) {
 	lt := newLockTable(
 		2, roachpb.RangeID(3), hlc.NewClockForTesting(nil), cluster.MakeTestingClusterSettings(),
 		m.LocksShedDueToMemoryLimit, m.NumLockShedDueToMemoryLimitEvents,
+		m.VirtualResolveCondenseCount, m.VirtualResolveDisabledCount,
 	)
 	lt.lockTableLimitsMu.minKeysLocked = 0
 	lt.enabled = true
@@ -1331,7 +1334,8 @@ func newWorkLoadExecutor(items []workloadItem, concurrency int) *workloadExecuto
 	)
 	m := TestingMakeLockTableMetricsCfg()
 	ltImpl := newLockTable(maxLocks, roachpb.RangeID(3), clock, settings,
-		m.LocksShedDueToMemoryLimit, m.NumLockShedDueToMemoryLimitEvents)
+		m.LocksShedDueToMemoryLimit, m.NumLockShedDueToMemoryLimitEvents,
+		m.VirtualResolveCondenseCount, m.VirtualResolveDisabledCount)
 	ltImpl.enabled = true
 	lt := maybeWrapInVerifyingLockTable(ltImpl)
 	ex := &workloadExecutor{
@@ -2037,6 +2041,7 @@ func BenchmarkLockTable(b *testing.B) {
 						m := TestingMakeLockTableMetricsCfg()
 						lt := newLockTable(maxLocks, roachpb.RangeID(3), clock, settings,
 							m.LocksShedDueToMemoryLimit, m.NumLockShedDueToMemoryLimitEvents,
+							m.VirtualResolveCondenseCount, m.VirtualResolveDisabledCount,
 						)
 						lt.enabled = true
 						env := benchEnv{
@@ -2085,6 +2090,8 @@ func BenchmarkLockTableMetrics(b *testing.B) {
 				cluster.MakeTestingClusterSettings(),
 				m.LocksShedDueToMemoryLimit,
 				m.NumLockShedDueToMemoryLimitEvents,
+				m.VirtualResolveCondenseCount,
+				m.VirtualResolveDisabledCount,
 			)
 			lt.enabled = true
 
@@ -2394,9 +2401,16 @@ func TestMaybeDisableVIR(t *testing.T) {
 		}
 	}
 
+	m := TestingMakeLockTableMetricsCfg()
+	lt := &lockTableImpl{
+		virtualResolveCondenseCount: m.VirtualResolveCondenseCount,
+		virtualResolveDisabledCount: m.VirtualResolveDisabledCount,
+	}
+
 	t.Run("does not disable when under limit", func(t *testing.T) {
 		g := newLockTableGuardImpl()
 		defer releaseLockTableGuardImpl(g)
+		g.lt = lt
 		g.virtuallyResolveIntents = true
 		g.toResolve.virEnabled = true
 		g.maxToResolveRangeTxns = 2
@@ -2407,13 +2421,16 @@ func TestMaybeDisableVIR(t *testing.T) {
 		g.toResolve.condense()
 		require.Equal(t, 1, g.toResolve.rangeResolves())
 
+		before := m.VirtualResolveDisabledCount.Count()
 		g.maybeDisableVIR(ctx)
 		require.True(t, g.virtuallyResolveIntents)
+		require.Equal(t, before, m.VirtualResolveDisabledCount.Count())
 	})
 
 	t.Run("disables when over limit", func(t *testing.T) {
 		g := newLockTableGuardImpl()
 		defer releaseLockTableGuardImpl(g)
+		g.lt = lt
 		g.virtuallyResolveIntents = true
 		g.toResolve.virEnabled = true
 		g.maxToResolveRangeTxns = 1
@@ -2426,8 +2443,10 @@ func TestMaybeDisableVIR(t *testing.T) {
 		g.toResolve.condense()
 		require.Equal(t, 2, g.toResolve.rangeResolves())
 
+		before := m.VirtualResolveDisabledCount.Count()
 		g.maybeDisableVIR(ctx)
 		require.False(t, g.virtuallyResolveIntents)
+		require.Equal(t, before+1, m.VirtualResolveDisabledCount.Count())
 		// reset should have been called, clearing everything.
 		require.Empty(t, g.toResolve.toResolve)
 		require.Nil(t, g.toResolve.toResolveRange)

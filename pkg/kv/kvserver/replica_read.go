@@ -126,6 +126,7 @@ func (r *Replica) executeReadOnlyBatch(
 					ClockWhilePending: intent.ClockWhilePending,
 				}
 				reply = &kvpb.ResolveIntentRangeResponse{}
+				r.store.metrics.VirtualResolveIntentRangeCount.Inc(1)
 			} else {
 				req = &kvpb.ResolveIntentRequest{
 					RequestHeader:     kvpb.RequestHeaderFromSpan(intent.Span),
@@ -135,6 +136,7 @@ func (r *Replica) executeReadOnlyBatch(
 					ClockWhilePending: intent.ClockWhilePending,
 				}
 				reply = &kvpb.ResolveIntentResponse{}
+				r.store.metrics.VirtualResolveIntentCount.Inc(1)
 			}
 			_, err = evaluateCommand(
 				ctx, rwNoAssert, rec, nil /* ms */, nil /* ss */, h, req,

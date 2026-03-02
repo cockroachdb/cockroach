@@ -14622,6 +14622,38 @@ layers:
       unit: COUNT
       aggregation: AVG
       derivative: NON_NEGATIVE_DERIVATIVE
+    - name: kv.concurrency.virtual_resolve.condense
+      exported_name: kv_concurrency_virtual_resolve_condense
+      description: Number of times point intent resolutions were condensed into range resolutions during virtual intent resolution
+      y_axis_label: Condense Events
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+    - name: kv.concurrency.virtual_resolve.disabled
+      exported_name: kv_concurrency_virtual_resolve_disabled
+      description: Number of times virtual intent resolution was disabled for a request due to excessive range resolve accumulation
+      y_axis_label: Disable Events
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+    - name: kv.concurrency.virtual_resolve.intent
+      exported_name: kv_concurrency_virtual_resolve_intent
+      description: Number of point intents resolved virtually during read evaluation
+      y_axis_label: Intents
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+    - name: kv.concurrency.virtual_resolve.intent_range
+      exported_name: kv_concurrency_virtual_resolve_intent_range
+      description: Number of range intent resolutions resolved virtually during read evaluation
+      y_axis_label: Intent Ranges
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
     - name: kv.loadsplitter.cleardirection
       exported_name: kv_loadsplitter_cleardirection
       description: Load-based splitter observed an access direction greater than 80% left or right in the samples.

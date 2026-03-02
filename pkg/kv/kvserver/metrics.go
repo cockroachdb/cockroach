@@ -3750,6 +3750,10 @@ type StoreMetrics struct {
 	MaxLockWaitQueueWaitersForLock    *metric.Gauge
 	LocksShedDueToMemoryLimit         *metric.Counter
 	NumLockShedDueToMemoryLimitEvents *metric.Counter
+	VirtualResolveCondenseCount       *metric.Counter
+	VirtualResolveDisabledCount       *metric.Counter
+	VirtualResolveIntentCount         *metric.Counter
+	VirtualResolveIntentRangeCount    *metric.Counter
 	LatchWaitDurations                metric.IHistogram
 
 	// Ingestion metrics
@@ -4567,6 +4571,10 @@ func newStoreMetrics(histogramWindow time.Duration) *StoreMetrics {
 		MaxLockWaitQueueWaitersForLock:    metric.NewGauge(metaConcurrencyMaxLockWaitQueueWaitersForLock),
 		LocksShedDueToMemoryLimit:         metric.NewCounter(concurrency.MetaConcurrencyLocksShedDueToMemoryLimit),
 		NumLockShedDueToMemoryLimitEvents: metric.NewCounter(concurrency.MetaConcurrencyNumLockShedDueToMemoryLimitEvents),
+		VirtualResolveCondenseCount:       metric.NewCounter(concurrency.MetaVirtualResolveCondense),
+		VirtualResolveDisabledCount:       metric.NewCounter(concurrency.MetaVirtualResolveDisabled),
+		VirtualResolveIntentCount:         metric.NewCounter(concurrency.MetaVirtualResolveIntent),
+		VirtualResolveIntentRangeCount:    metric.NewCounter(concurrency.MetaVirtualResolveIntentRange),
 		LatchWaitDurations: metric.NewHistogram(metric.HistogramOptions{
 			Mode:         metric.HistogramModePreferHdrLatency,
 			Metadata:     metaLatchConflictWaitDurations,
