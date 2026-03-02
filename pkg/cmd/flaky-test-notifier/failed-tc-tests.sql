@@ -49,4 +49,4 @@ SELECT
     sum(CASE WHEN test_status = 'failure' AND start_date > dateadd(DAY, -?, current_date()) THEN 1 ELSE 0 END) AS recent_fail_cnt
 FROM TC_EXECUTED_TESTS
 GROUP BY 1, 2, 3
-HAVING array_size(failed_builds) > 0 AND pass_cnt + array_size(failed_builds) > 5 AND TO_NUMBER((array_size(failed_builds) / (array_size(failed_builds) + pass_cnt)) * 100, 10, 1) > 0.01 AND recent_fail_cnt > 1
+HAVING array_size(failed_builds) > 0 AND pass_cnt + array_size(failed_builds) > 5 AND to_number((array_size(failed_builds) / (array_size(failed_builds) + pass_cnt)) * 100, 10, 1) > 0.01 AND recent_fail_cnt > 1

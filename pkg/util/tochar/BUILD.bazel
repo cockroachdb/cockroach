@@ -5,6 +5,11 @@ go_library(
     srcs = [
         "cache.go",
         "constants.go",
+        "num_constants.go",
+        "num_desc.go",
+        "num_fromchar.go",
+        "num_parse.go",
+        "num_tochar.go",
         "tochar.go",
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/util/tochar",
@@ -16,6 +21,7 @@ go_library(
         "//pkg/util/duration",
         "//pkg/util/syncutil",
         "//pkg/util/timeutil/pgdate",
+        "@com_github_cockroachdb_apd_v3//:apd",
         "@com_github_cockroachdb_errors//:errors",
     ],
 )

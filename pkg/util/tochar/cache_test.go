@@ -17,9 +17,9 @@ func TestFormatCache(t *testing.T) {
 	hh24 := parseFormat("HH24")
 
 	// Cache is correctly populated.
-	result := c.lookup("HH24")
+	result := c.lookupDCH("HH24")
 	require.Equal(t, hh24, result)
-	rInt, ok := c.mu.cache.Get("HH24")
+	rInt, ok := c.mu.cache.Get(dchCacheKeyPrefix + "HH24")
 	require.True(t, ok)
 	require.Equal(t, hh24, rInt.([]formatNode))
 
@@ -27,17 +27,17 @@ func TestFormatCache(t *testing.T) {
 	longStr := strings.Repeat(",", maxCacheKeySize+1)
 	longFmt := parseFormat(longStr)
 	// result should still be the same.
-	result = c.lookup(longStr)
+	result = c.lookupDCH(longStr)
 	require.Equal(t, longFmt, result)
 	// But the entry should not be in the cache.
-	_, ok = c.mu.cache.Get(longStr)
+	_, ok = c.mu.cache.Get(dchCacheKeyPrefix + longStr)
 	require.False(t, ok)
-	_, ok = c.mu.cache.Get("HH24")
+	_, ok = c.mu.cache.Get(dchCacheKeyPrefix + "HH24")
 	require.True(t, ok)
 }
 
 // TestFormatCacheLookupThreadSafe is non-deterministic. Flakes indicate that
-// FormatCache.lookup is not thread safe.
+// FormatCache.lookupDCH is not thread safe.
 // See https://github.com/cockroachdb/cockroach/issues/95424
 func TestFormatCacheLookupThreadSafe(t *testing.T) {
 	formats := []string{"HH12", "HH24", "MI"}
@@ -45,7 +45,7 @@ func TestFormatCacheLookupThreadSafe(t *testing.T) {
 	for i := 0; i < 100_000; i++ {
 		go func(i int) {
 			format := formats[i%len(formats)]
-			c.lookup(format)
+			c.lookupDCH(format)
 		}(i)
 	}
 }
