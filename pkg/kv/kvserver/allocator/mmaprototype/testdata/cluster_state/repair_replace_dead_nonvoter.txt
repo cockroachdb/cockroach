@@ -1,0 +1,30 @@
+# Replace dead non-voter: s5 is dead, MMA replaces with s6.
+
+set-store quiet=true
+  store-id=1 node-id=1 locality-tiers=zone=a
+  store-id=2 node-id=2 locality-tiers=zone=b
+  store-id=3 node-id=3 locality-tiers=zone=c
+  store-id=4 node-id=4 locality-tiers=zone=d
+  store-id=5 node-id=5 locality-tiers=zone=e
+  store-id=6 node-id=6 locality-tiers=zone=f
+----
+
+store-leaseholder-msg
+store-id=1
+  range-id=1
+    store-id=1 type=VOTER_FULL leaseholder=true
+    store-id=2 type=VOTER_FULL
+    store-id=3 type=VOTER_FULL
+    store-id=4 type=NON_VOTER
+    store-id=5 type=NON_VOTER
+    config=num_replicas=5 num_voters=3
+----
+
+update-store-status store-id=5 health=dead leases=shedding replicas=shedding
+----
+dead shedding=leases,replicas
+
+repair store-id=1
+----
+[mmaid=1] repair not yet implemented
+pending(0)

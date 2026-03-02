@@ -1,0 +1,23 @@
+# Finalize atomic replication change: r1 is in a joint config with
+# VOTER_INCOMING on s3, which should be promoted to VOTER_FULL.
+
+set-store quiet=true
+  store-id=1 node-id=1 locality-tiers=zone=a
+  store-id=2 node-id=2 locality-tiers=zone=b
+  store-id=3 node-id=3 locality-tiers=zone=c
+  store-id=4 node-id=4 locality-tiers=zone=d
+----
+
+store-leaseholder-msg
+store-id=1
+  range-id=1
+    store-id=1 type=VOTER_FULL leaseholder=true
+    store-id=2 type=VOTER_FULL
+    store-id=3 type=VOTER_INCOMING
+    config=num_replicas=3
+----
+
+repair store-id=1
+----
+[mmaid=1] repair not yet implemented
+pending(0)

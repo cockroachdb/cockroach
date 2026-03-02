@@ -1,0 +1,36 @@
+# Remove voter: r1 has 4 voters on s1-s4, config says 3 replicas. s4 is dead,
+# making it the obvious candidate for removal. 11 stores total to make the
+# choice unambiguous.
+
+set-store quiet=true
+  store-id=1 node-id=1 locality-tiers=zone=a
+  store-id=2 node-id=2 locality-tiers=zone=b
+  store-id=3 node-id=3 locality-tiers=zone=c
+  store-id=4 node-id=4 locality-tiers=zone=d
+  store-id=5 node-id=5 locality-tiers=zone=e
+  store-id=6 node-id=6 locality-tiers=zone=f
+  store-id=7 node-id=7 locality-tiers=zone=g
+  store-id=8 node-id=8 locality-tiers=zone=h
+  store-id=9 node-id=9 locality-tiers=zone=i
+  store-id=10 node-id=10 locality-tiers=zone=j
+  store-id=11 node-id=11 locality-tiers=zone=k
+----
+
+store-leaseholder-msg
+store-id=1
+  range-id=1
+    store-id=1 type=VOTER_FULL leaseholder=true
+    store-id=2 type=VOTER_FULL
+    store-id=3 type=VOTER_FULL
+    store-id=4 type=VOTER_FULL
+    config=num_replicas=3
+----
+
+update-store-status store-id=4 health=dead leases=shedding replicas=shedding
+----
+dead shedding=leases,replicas
+
+repair store-id=1
+----
+[mmaid=1] repair not yet implemented
+pending(0)
