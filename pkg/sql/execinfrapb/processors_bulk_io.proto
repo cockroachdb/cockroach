@@ -678,9 +678,9 @@ message BulkMergeSpec {
   // NEXT ID: 9.
 }
 
-// IndexBackfillMapProgress is emitted by map-stage processors to describe newly
-// produced SST manifests.
-message IndexBackfillMapProgress {
+// BulkMapProgress is emitted by map-stage processors (index backfill, import)
+// to describe newly produced SST manifests.
+message BulkMapProgress {
 	repeated jobs.jobspb.BulkSSTManifest sst_manifests = 1 [(gogoproto.nullable) = false, (gogoproto.customname) = "SSTManifests"];
 }
 
