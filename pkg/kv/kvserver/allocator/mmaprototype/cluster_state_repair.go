@@ -344,6 +344,8 @@ func (re *rebalanceEnv) repair(
 				re.repairAddNonVoter(ctx, localStoreID, rangeID, rs)
 			case RemoveNonVoter:
 				re.repairRemoveNonVoter(ctx, localStoreID, rangeID, rs)
+			case RemoveLearner:
+				re.repairRemoveLearner(ctx, localStoreID, rangeID, rs)
 			default:
 				log.KvDistribution.Infof(ctx,
 					"repair action %s for r%d not yet implemented", action, rangeID)
@@ -1005,6 +1007,103 @@ func (re *rebalanceEnv) repairRemoveNonVoter(
 		MakeExternalRangeChange(originMMARepair, localStoreID, rangeChange))
 	log.KvDistribution.Infof(ctx,
 		"result(success): RemoveNonVoter repair for r%d, removing non-voter on s%d",
+		rangeID, removeStoreID)
+}
+
+// repairRemoveLearner removes a stuck LEARNER replica from the range. Learners
+// are always removed unconditionally (computeRepairAction returns RemoveLearner
+// whenever numLearners > 0). If multiple learners exist, candidate selection
+// follows the same priority scheme as other removal actions: dead stores first,
+// then diversity-based tiebreaking among the worst-health bucket.
+func (re *rebalanceEnv) repairRemoveLearner(
+	ctx context.Context, localStoreID roachpb.StoreID, rangeID roachpb.RangeID, rs *rangeState,
+) {
+	// Build candidates: all LEARNER replicas.
+	var candidates []roachpb.StoreID
+	for _, repl := range rs.replicas {
+		if repl.ReplicaType.ReplicaType == roachpb.LEARNER {
+			candidates = append(candidates, repl.StoreID)
+		}
+	}
+	if len(candidates) == 0 {
+		log.KvDistribution.Warningf(ctx,
+			"skipping RemoveLearner repair for r%d: no learners found",
+			rangeID)
+		return
+	}
+
+	// Bucket candidates by removal priority. Take the lowest-priority bucket
+	// (worst health = remove first).
+	bestPriority := math.MaxInt
+	for _, storeID := range candidates {
+		p := removalPriority(re.stores[storeID])
+		if p < bestPriority {
+			bestPriority = p
+		}
+	}
+	var bucket []roachpb.StoreID
+	for _, storeID := range candidates {
+		if removalPriority(re.stores[storeID]) == bestPriority {
+			bucket = append(bucket, storeID)
+		}
+	}
+
+	// Within the bucket, pick by diversity. We need constraint analysis for
+	// the locality tiers. If it fails (shouldn't normally happen), just pick
+	// the first candidate — learners are always removed unconditionally.
+	var removeStoreID roachpb.StoreID
+	re.ensureAnalyzedConstraints(ctx, rs)
+	if rs.constraints != nil && len(bucket) > 1 {
+		removeStoreID = re.pickStoreByDiversity(
+			bucket, rs.constraints.replicaLocalityTiers,
+			(*existingReplicaLocalities).getScoreChangeForReplicaRemoval)
+	}
+	if removeStoreID == 0 {
+		removeStoreID = bucket[0]
+	}
+
+	// Find the ReplicaState for the chosen learner.
+	var prevState ReplicaState
+	found := false
+	for _, repl := range rs.replicas {
+		if repl.StoreID == removeStoreID {
+			prevState = repl.ReplicaState
+			found = true
+			break
+		}
+	}
+	if !found {
+		log.KvDistribution.Warningf(ctx,
+			"skipping RemoveLearner repair for r%d: learner on s%d not found in replicas",
+			rangeID, removeStoreID)
+		return
+	}
+
+	// Create the pending change.
+	removeSS := re.stores[removeStoreID]
+	if removeSS == nil {
+		log.KvDistribution.Warningf(ctx,
+			"skipping RemoveLearner repair for r%d: store s%d has no state",
+			rangeID, removeStoreID)
+		return
+	}
+	removeTarget := roachpb.ReplicationTarget{
+		NodeID:  removeSS.NodeID,
+		StoreID: removeStoreID,
+	}
+	removeChange := MakeRemoveReplicaChange(rangeID, rs.load, prevState, removeTarget)
+	rangeChange := MakePendingRangeChange(rangeID, []ReplicaChange{removeChange})
+	if err := re.preCheckOnApplyReplicaChanges(rangeChange); err != nil {
+		log.KvDistribution.Warningf(ctx,
+			"skipping RemoveLearner repair for r%d: pre-check failed: %v",
+			rangeID, err)
+		return
+	}
+	re.addPendingRangeChange(ctx, rangeChange)
+	re.changes = append(re.changes,
+		MakeExternalRangeChange(originMMARepair, localStoreID, rangeChange))
+	log.KvDistribution.Infof(ctx,
+		"result(success): RemoveLearner repair for r%d, removing learner on s%d",
 		rangeID, removeStoreID)
 }
 
