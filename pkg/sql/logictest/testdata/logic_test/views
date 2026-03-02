@@ -1951,3 +1951,153 @@ show session allow_view_with_security_invoker_clause;
 on
 
 subtest end
+
+# Regression test for #164426. When selecting from a view, verify that the view
+# owner still has SELECT privilege on the underlying tables.
+subtest view_owner_privilege_check
+
+statement ok
+USE test
+
+statement ok
+CREATE TABLE t_vop (a INT PRIMARY KEY, b INT);
+INSERT INTO t_vop VALUES (1, 10), (2, 20);
+
+statement ok
+CREATE USER view_owner;
+GRANT ALL ON TABLE t_vop TO view_owner;
+GRANT CREATE ON SCHEMA public TO view_owner;
+
+# Create a view as view_owner (root can SET ROLE to any role).
+statement ok
+SET ROLE view_owner
+
+statement ok
+CREATE VIEW v_vop AS SELECT a, b FROM t_vop
+
+statement ok
+SET ROLE root
+
+# Grant SELECT on the view to testuser so they can query through it.
+statement ok
+GRANT SELECT ON v_vop TO testuser
+
+# Verify the view works initially.
+user testuser
+
+query II
+SELECT * FROM v_vop ORDER BY a
+----
+1  10
+2  20
+
+user root
+
+# Revoke view owner's SELECT on the underlying table.
+statement ok
+REVOKE SELECT ON t_vop FROM view_owner
+
+# Now querying through the view should fail because the view owner no longer
+# has SELECT on the underlying table.
+user testuser
+
+skipif config local-mixed-25.4 local-mixed-26.1
+statement error pgcode 42501 user view_owner does not have SELECT privilege on relation t_vop
+SELECT * FROM v_vop
+
+onlyif config local-mixed-25.4 local-mixed-26.1
+statement ok
+SELECT * FROM v_vop;
+
+user root
+
+# Re-grant SELECT to the view owner. The view should work again.
+statement ok
+GRANT SELECT ON t_vop TO view_owner
+
+user testuser
+
+query II
+SELECT * FROM v_vop ORDER BY a
+----
+1  10
+2  20
+
+user root
+
+# Test nested views: each level checks its own owner's privileges.
+statement ok
+CREATE USER view_owner2;
+GRANT SELECT ON t_vop TO view_owner;
+GRANT SELECT ON v_vop TO view_owner2;
+GRANT CREATE ON SCHEMA public TO view_owner2;
+
+statement ok
+SET ROLE view_owner2
+
+statement ok
+CREATE VIEW v_vop_nested AS SELECT a FROM v_vop
+
+statement ok
+SET ROLE root
+
+statement ok
+GRANT SELECT ON v_vop_nested TO testuser
+
+# Both owners have SELECT, so nested view works.
+user testuser
+
+query I
+SELECT * FROM v_vop_nested ORDER BY a
+----
+1
+2
+
+user root
+
+# Revoke the inner view owner's SELECT on the underlying table. The nested
+# view should fail because the inner view's owner lost access.
+statement ok
+REVOKE SELECT ON t_vop FROM view_owner
+
+user testuser
+
+skipif config local-mixed-25.4 local-mixed-26.1
+statement error pgcode 42501 user view_owner does not have SELECT privilege on relation t_vop
+SELECT * FROM v_vop_nested
+
+onlyif config local-mixed-25.4 local-mixed-26.1
+statement ok
+SELECT * FROM v_vop_nested
+
+user root
+
+# Enable skip_underlying_view_privilege_checks. testuser can SELECT from the view now.
+statement ok
+SET CLUSTER SETTING sql.auth.skip_underlying_view_privilege_checks.enabled = true;
+
+user testuser
+
+query I
+SELECT * FROM v_vop_nested ORDER BY a
+----
+1
+2
+
+user root
+
+# Enable skip_underlying_view_privilege_checks. testuser cannot SELECT from the view.
+statement ok
+SET CLUSTER SETTING sql.auth.skip_underlying_view_privilege_checks.enabled = false;
+
+user testuser
+
+skipif config local-mixed-25.4 local-mixed-26.1
+statement error pgcode 42501 user view_owner does not have SELECT privilege on relation t_vop
+SELECT * FROM v_vop_nested
+
+onlyif config local-mixed-25.4 local-mixed-26.1
+statement ok
+SELECT * FROM v_vop_nested
+
+subtest end
