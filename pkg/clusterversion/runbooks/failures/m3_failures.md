@@ -32,6 +32,57 @@ when issues arise during fixture generation or CI.
 
 ---
 
+## `./dev gen bazel` Fails Silently
+
+Symptom: the command exits with `ERROR: exit status 1` but prints no useful
+error message, and `pkg/sql/logictest/tests/cockroach-go-testserver-X.Y/`
+is not created.
+
+Create the two files manually:
+
+**1. Compute `configIdx`** — count 0-indexed position of the new config in
+the `LogicTestConfigs` slice in `logictestbase.go`:
+
+```bash
+grep -n "Name:" pkg/sql/logictest/logictestbase/logictestbase.go | grep -n ""
+# Find "cockroach-go-testserver-X.Y" in the output — its left-hand number
+# minus 1 is the configIdx (the grep -n "" adds 1-based line counts).
+```
+
+For example, if it appears as line 24 in the grep output, configIdx = 23.
+
+**2. Create the directory and files:**
+
+```bash
+mkdir -p pkg/sql/logictest/tests/cockroach-go-testserver-X.Y
+```
+
+Copy `pkg/sql/logictest/tests/cockroach-go-testserver-25.4/BUILD.bazel`
+and make two substitutions:
+
+- `cockroach-go-testserver-25_4_test` → `cockroach-go-testserver-X_Y_test`
+  (dots become underscores in the Bazel target name)
+
+Copy `pkg/sql/logictest/tests/cockroach-go-testserver-25.4/generated_test.go`
+and make two substitutions:
+
+- `package testcockroach_go_testserver_254` → `package testcockroach_go_testserver_XY`
+  (dots and underscores dropped; e.g. 26.1 → `261`)
+- `const configIdx = 22` → `const configIdx = <your computed value>`
+
+The list of `TestLogic_*` functions should match the 25.4 file exactly —
+they reflect which logic test files have `cockroach-go-testserver` in their
+header, which rarely changes between M.3 cycles.
+
+**3. Verify:**
+
+```bash
+ls pkg/sql/logictest/tests/cockroach-go-testserver-X.Y/
+# Should show: BUILD.bazel  generated_test.go
+```
+
+---
+
 ## CI Failures After PR 2 (Code Changes)
 
 | Error | Fix |

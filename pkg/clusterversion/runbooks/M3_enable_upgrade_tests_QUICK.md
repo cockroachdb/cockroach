@@ -8,18 +8,32 @@ Enable upgrade tests after the first RC is published using a **2-PR approach** (
 
 **Critical:** Fixtures MUST be generated on **gceworker** (amd64), NOT Mac.
 
-**Reference PRs:**
-- Fixtures: #150712
-- Code: #152080
+**Reference PRs:** Find the most recent M.3 code PR via:
+```bash
+git log --oneline --all | grep -i "PreviousRelease\|M\.3\|upgrade tests" | head -5
+```
+
+---
+
+> **Set your version before starting.** This runbook uses `25.4` / `V25_4` /
+> `v25.4.0-rc.1` as placeholders. Substitute your actual values throughout:
+>
+> | Placeholder | Example | Your value |
+> |-------------|---------|------------|
+> | `X.Y` | `25.4` | ________ |
+> | `VX_Y` | `V25_4` | ________ |
+> | `vX.Y.0-rc.N` | `v25.4.0-rc.1` | ________ |
+> | `enable-upgrade-tests-X.Y-*` | `enable-upgrade-tests-25.4-fixtures` | ________ |
 
 ---
 
 ## Prerequisites Checklist
 
 - [ ] First RC published (e.g., v25.4.0-rc.1) - verify at cockroachlabs.com/docs/releases
-- [ ] M.1 and M.2 completed (V25_4 constant exists, bootstrap data added)
+- [ ] M.1 and M.2 completed (VX_Y constant exists, bootstrap data added)
 - [ ] Access to gceworker (or can create one)
 - [ ] Know exact RC version number
+- [ ] Not already done: `grep "cockroach-go-testserver-X.Y" pkg/sql/logictest/logictestbase/logictestbase.go`
 
 ---
 
@@ -350,9 +364,13 @@ func (t *Test) supportsSkipUpgradeTo(pred, v *clusterupgrade.Version) bool {
 ```
 
 **Generates:**
-- `pkg/sql/logictest/tests/cockroach-go-testserver-25.4/BUILD.bazel`
-- `pkg/sql/logictest/tests/cockroach-go-testserver-25.4/generated_test.go`
+- `pkg/sql/logictest/tests/cockroach-go-testserver-X.Y/BUILD.bazel`
+- `pkg/sql/logictest/tests/cockroach-go-testserver-X.Y/generated_test.go`
 - Updates to various BUILD.bazel files
+
+**If `./dev gen bazel` fails silently:** See
+[failures/m3_failures.md — gen bazel fallback](failures/m3_failures.md#dev-gen-bazel-fails-silently)
+for how to create the files manually.
 
 ---
 
