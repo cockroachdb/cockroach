@@ -336,13 +336,13 @@ func TestReplicaLifecycleDataDriven(t *testing.T) {
 				// destroyed).
 				rhsRangeState := tc.mustGetRangeState(t, split.RightDesc.RangeID)
 				rhsReplDesc := rhsRangeState.mustGetReplicaDescriptor(t, roachpb.NodeID(1))
-				destroyed := rhsRangeState.replica == nil ||
+				rhsDestroyed := rhsRangeState.replica == nil ||
 					rhsRangeState.replica.ReplicaID > rhsReplDesc.ReplicaID
 
 				in := splitPreApplyInput{
 					lhsID:               lhsRangeState.replica.FullReplicaID,
 					raftIndex:           ps.raftIndex,
-					destroyed:           destroyed,
+					rhsDestroyed:        rhsDestroyed,
 					rhsDesc:             split.RightDesc,
 					initClosedTimestamp: hlc.Timestamp{WallTime: 100}, // dummy timestamp
 				}
@@ -361,7 +361,7 @@ func TestReplicaLifecycleDataDriven(t *testing.T) {
 					))
 					// If the RHS replica wasn't destroyed, it is now initialized.
 					// Update the in-memory state to reflect this.
-					if !destroyed {
+					if !rhsDestroyed {
 						tc.updateReplicaStateFromStorage(t, ctx, rhsRangeState, stateBatch, raftBatch, false /* justCreated */)
 					}
 				})
