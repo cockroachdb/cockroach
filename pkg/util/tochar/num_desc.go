@@ -45,8 +45,8 @@ const (
 	numLSignNone = 0
 )
 
-func (n *numDesc) isDecimal() bool { return n.flag&numFlagDecimal != 0 }
-func (n *numDesc) isZero() bool    { return n.flag&numFlagZero != 0 }
+func (n *numDesc) isDecimal() bool  { return n.flag&numFlagDecimal != 0 }
+func (n *numDesc) isZero() bool     { return n.flag&numFlagZero != 0 }
 func (n *numDesc) isBlank() bool    { return n.flag&numFlagBlank != 0 }
 func (n *numDesc) isFillMode() bool { return n.flag&numFlagFillMode != 0 }
 func (n *numDesc) isLSign() bool    { return n.flag&numFlagLSign != 0 }

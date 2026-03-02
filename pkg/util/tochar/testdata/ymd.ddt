@@ -106,13 +106,13 @@ ID
 Dth
 IDTH
 ----
-DAYX: saturday X
+DAYX: SATURDAY X
 DayX: Saturday X
 dayX: saturday X
-FMDAYX: saturdayX
+FMDAYX: SATURDAYX
 FMDayX: SaturdayX
 FMdayX: saturdayX
-DY: sat
+DY: SAT
 Dy: Sat
 dy: sat
 D: 7
@@ -136,13 +136,13 @@ ID
 Dth
 IDTH
 ----
-DAYX: sunday   X
+DAYX: SUNDAY   X
 DayX: Sunday   X
 dayX: sunday   X
-FMDAYX: sundayX
+FMDAYX: SUNDAYX
 FMDayX: SundayX
 FMdayX: sundayX
-DY: sun
+DY: SUN
 Dy: Sun
 dy: sun
 D: 1

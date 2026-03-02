@@ -1,0 +1,377 @@
+# LogicTest: local
+
+# Tests for to_date(text, text) and to_timestamp(text, text).
+
+# Basic date parsing.
+query T
+SELECT to_date('2023-03-15', 'YYYY-MM-DD')::string;
+----
+2023-03-15
+
+query T
+SELECT to_date('20230315', 'YYYYMMDD')::string;
+----
+2023-03-15
+
+query T
+SELECT to_date('2023 03 15', 'YYYY MM DD')::string;
+----
+2023-03-15
+
+# Basic timestamp parsing.
+query T
+SELECT to_timestamp('2023-03-15 14:30:45', 'YYYY-MM-DD HH24:MI:SS')::string;
+----
+2023-03-15 14:30:45+00
+
+query T
+SELECT to_timestamp('2023-03-15 02:30:45 PM', 'YYYY-MM-DD HH12:MI:SS AM')::string;
+----
+2023-03-15 14:30:45+00
+
+query T
+SELECT to_timestamp('2023-03-15 02:30:45 AM', 'YYYY-MM-DD HH12:MI:SS AM')::string;
+----
+2023-03-15 02:30:45+00
+
+# 12-hour clock: 12 AM = 0, 12 PM = 12.
+query T
+SELECT to_timestamp('2023-01-01 12:00:00 AM', 'YYYY-MM-DD HH12:MI:SS AM')::string;
+----
+2023-01-01 00:00:00+00
+
+query T
+SELECT to_timestamp('2023-01-01 12:00:00 PM', 'YYYY-MM-DD HH12:MI:SS AM')::string;
+----
+2023-01-01 12:00:00+00
+
+# Month names.
+query T
+SELECT to_date('15 January 2023', 'DD MONTH YYYY')::string;
+----
+2023-01-15
+
+query T
+SELECT to_date('15 FEBRUARY 2023', 'DD MONTH YYYY')::string;
+----
+2023-02-15
+
+query T
+SELECT to_date('15 march 2023', 'DD MONTH YYYY')::string;
+----
+2023-03-15
+
+query T
+SELECT to_date('15-Jan-2023', 'DD-Mon-YYYY')::string;
+----
+2023-01-15
+
+query T
+SELECT to_date('15-DEC-2023', 'DD-MON-YYYY')::string;
+----
+2023-12-15
+
+# Day of year.
+query T
+SELECT to_date('2023 074', 'YYYY DDD')::string;
+----
+2023-03-15
+
+query T
+SELECT to_date('2024 060', 'YYYY DDD')::string;
+----
+2024-02-29
+
+# Julian day.
+query T
+SELECT to_date('2460019', 'J')::string;
+----
+2023-03-15
+
+# Seconds since midnight (SSSS).
+query T
+SELECT to_timestamp('2023-03-15 52245', 'YYYY-MM-DD SSSS')::string;
+----
+2023-03-15 14:30:45+00
+
+# Fractional seconds: MS (milliseconds).
+query T
+SELECT to_timestamp('2023-03-15 14:30:45.123', 'YYYY-MM-DD HH24:MI:SS.MS')::string;
+----
+2023-03-15 14:30:45.123+00
+
+# MS with fewer than 3 digits should pad the value correctly without
+# advancing the position past subsequent format fields. Regression test for a
+# bug where the padding loop modified the digit count used for position
+# advancement.
+query T
+SELECT to_timestamp('2023-03 14:30:45.1-15', 'YYYY-MM HH24:MI:SS.MS-DD')::string;
+----
+2023-03-15 14:30:45.1+00
+
+# Fractional seconds: US (microseconds).
+query T
+SELECT to_timestamp('2023-03-15 14:30:45.123456', 'YYYY-MM-DD HH24:MI:SS.US')::string;
+----
+2023-03-15 14:30:45.123456+00
+
+# FF1-FF6 fractional second formats.
+query T
+SELECT to_timestamp('2023-03-15 14:30:45.1', 'YYYY-MM-DD HH24:MI:SS.FF1')::string;
+----
+2023-03-15 14:30:45.1+00
+
+query T
+SELECT to_timestamp('2023-03-15 14:30:45.12', 'YYYY-MM-DD HH24:MI:SS.FF2')::string;
+----
+2023-03-15 14:30:45.12+00
+
+query T
+SELECT to_timestamp('2023-03-15 14:30:45.123', 'YYYY-MM-DD HH24:MI:SS.FF3')::string;
+----
+2023-03-15 14:30:45.123+00
+
+query T
+SELECT to_timestamp('2023-03-15 14:30:45.1234', 'YYYY-MM-DD HH24:MI:SS.FF4')::string;
+----
+2023-03-15 14:30:45.1234+00
+
+query T
+SELECT to_timestamp('2023-03-15 14:30:45.12345', 'YYYY-MM-DD HH24:MI:SS.FF5')::string;
+----
+2023-03-15 14:30:45.12345+00
+
+query T
+SELECT to_timestamp('2023-03-15 14:30:45.123456', 'YYYY-MM-DD HH24:MI:SS.FF6')::string;
+----
+2023-03-15 14:30:45.123456+00
+
+# Timezone offsets.
+query T
+SELECT to_timestamp('2023-03-15 14:30:45 +05:30', 'YYYY-MM-DD HH24:MI:SS TZH:TZM')::string;
+----
+2023-03-15 09:00:45+00
+
+query T
+SELECT to_timestamp('2023-03-15 14:30:45 -08:00', 'YYYY-MM-DD HH24:MI:SS TZH:TZM')::string;
+----
+2023-03-15 22:30:45+00
+
+query T
+SELECT to_timestamp('2023-03-15 14:30:45 +00:00', 'YYYY-MM-DD HH24:MI:SS TZH:TZM')::string;
+----
+2023-03-15 14:30:45+00
+
+# BC dates.
+query T
+SELECT to_date('0044 BC', 'YYYY BC')::string;
+----
+0044-01-01 BC
+
+query T
+SELECT to_date('0001 AD', 'YYYY AD')::string;
+----
+0001-01-01
+
+# Century.
+query T
+SELECT to_date('21', 'CC')::string;
+----
+2001-01-01
+
+# Y,YYY format.
+query T
+SELECT to_date('2,023 03 15', 'Y,YYY MM DD')::string;
+----
+2023-03-15
+
+# Roman numeral months.
+query T
+SELECT to_date('2023 III 15', 'YYYY RM DD')::string;
+----
+2023-03-15
+
+query T
+SELECT to_date('2023 XII 25', 'YYYY RM DD')::string;
+----
+2023-12-25
+
+query T
+SELECT to_date('2023 I 01', 'YYYY RM DD')::string;
+----
+2023-01-01
+
+# Default values: missing fields default to 1 for month/day, 0 for time.
+query T
+SELECT to_date('2023', 'YYYY')::string;
+----
+2023-01-01
+
+query T
+SELECT to_timestamp('2023', 'YYYY')::string;
+----
+2023-01-01 00:00:00+00
+
+# ISO week date (IYYY, IW, ID).
+query T
+SELECT to_date('2023 11 3', 'IYYY IW ID')::string;
+----
+2023-03-14
+
+# Short year formats.
+query T
+SELECT to_date('23 03 15', 'YY MM DD')::string;
+----
+2023-03-15
+
+# Lower-case format patterns.
+query T
+SELECT to_date('2023-03-15', 'yyyy-mm-dd')::string;
+----
+2023-03-15
+
+query T
+SELECT to_timestamp('2023-03-15 14:30:45', 'yyyy-mm-dd hh24:mi:ss')::string;
+----
+2023-03-15 14:30:45+00
+
+# Error: TZ/tz not supported in to_date/to_timestamp.
+statement error "TZ"/"tz" format patterns are not supported in to_date/to_timestamp
+SELECT to_timestamp('2023-03-15 14:30:45 EST', 'YYYY-MM-DD HH24:MI:SS TZ');
+
+# Error: invalid hour for 12-hour clock.
+statement error invalid for the 12-hour clock
+SELECT to_timestamp('2023-03-15 13:30:45 PM', 'YYYY-MM-DD HH12:MI:SS AM');
+
+# Error: HH12 validates hour range even without AM/PM.
+statement error invalid for the 12-hour clock
+SELECT to_timestamp('13', 'HH12')::string;
+
+# HH12 with valid hour and no AM/PM.
+query T
+SELECT to_timestamp('11', 'HH12')::string;
+----
+0001-01-01 11:00:00+00
+
+# HH12 hour 12 without AM/PM becomes midnight (matching PostgreSQL).
+query T
+SELECT to_timestamp('12', 'HH12')::string;
+----
+0001-01-01 00:00:00+00
+
+# DDD out of range for non-leap year.
+statement error date/time field value out of range
+SELECT to_date('2023 366', 'YYYY DDD');
+
+# DDD out of range for leap year.
+statement error date/time field value out of range
+SELECT to_date('2024 367', 'YYYY DDD');
+
+# Whitespace handling in non-FX mode.
+query T
+SELECT to_date('2023  03  15', 'YYYY MM DD')::string;
+----
+2023-03-15
+
+# ==============================
+# Additional edge cases
+# ==============================
+
+# Day of week names (ignored for date computation).
+query T
+SELECT to_date('Monday 2023-03-20', 'DAY YYYY-MM-DD')::string
+----
+2023-03-20
+
+query T
+SELECT to_date('Mon 2023-03-20', 'DY YYYY-MM-DD')::string
+----
+2023-03-20
+
+# FX exact mode.
+query T
+SELECT to_date('2023-03-15', 'FXYYYY-MM-DD')::string
+----
+2023-03-15
+
+# Mixed case month name.
+query T
+SELECT to_date('15-jAnUaRy-2023', 'DD-MONTH-YYYY')::string
+----
+2023-01-15
+
+# Two-digit year: 99 maps to 1999 (not 2099).
+query T
+SELECT to_date('99-03-15', 'YY-MM-DD')::string
+----
+1999-03-15
+
+# Two-digit year: 23 maps to 2023.
+query T
+SELECT to_date('23-06-01', 'YY-MM-DD')::string
+----
+2023-06-01
+
+# Day of year edge cases.
+query T
+SELECT to_date('2023 001', 'YYYY DDD')::string
+----
+2023-01-01
+
+query T
+SELECT to_date('2023 365', 'YYYY DDD')::string
+----
+2023-12-31
+
+# Leap year day 366.
+query T
+SELECT to_date('2024 366', 'YYYY DDD')::string
+----
+2024-12-31
+
+# Y,YYY format.
+query T
+SELECT to_date('1,999 12 31', 'Y,YYY MM DD')::string
+----
+1999-12-31
+
+# BC date.
+query T
+SELECT to_date('0100 BC', 'YYYY BC')::string
+----
+0100-01-01 BC
+
+# Roman numeral months - lowercase.
+query T
+SELECT to_date('2023 iv 15', 'YYYY RM DD')::string
+----
+2023-04-15
+
+query T
+SELECT to_date('2023 IX 01', 'YYYY RM DD')::string
+----
+2023-09-01
+
+# Fractional seconds - milliseconds.
+query T
+SELECT to_timestamp('2023-03-15 14:30:45.999', 'YYYY-MM-DD HH24:MI:SS.MS')::string
+----
+2023-03-15 14:30:45.999+00
+
+# Fractional seconds - microseconds.
+query T
+SELECT to_timestamp('2023-03-15 14:30:45.999999', 'YYYY-MM-DD HH24:MI:SS.US')::string
+----
+2023-03-15 14:30:45.999999+00
+
+# SSSS = 0 (midnight).
+query T
+SELECT to_timestamp('2023-03-15 0', 'YYYY-MM-DD SSSS')::string
+----
+2023-03-15 00:00:00+00
+
+# SSSS = 86399 (23:59:59).
+query T
+SELECT to_timestamp('2023-03-15 86399', 'YYYY-MM-DD SSSS')::string
+----
+2023-03-15 23:59:59+00

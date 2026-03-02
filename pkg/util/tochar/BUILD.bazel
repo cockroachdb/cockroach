@@ -5,6 +5,7 @@ go_library(
     srcs = [
         "cache.go",
         "constants.go",
+        "dch_fromchar.go",
         "num_constants.go",
         "num_desc.go",
         "num_fromchar.go",

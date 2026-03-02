@@ -529,6 +529,8 @@
 <p>Note that a TimestampTZ has less precision than a CockroachDB HLC. It is intended as
 a convenience function to display HLCs in a print-friendly form. Use the decimal
 value if you rely on the HLC for accuracy.</p>
+</span></td><td>Immutable</td></tr>
+<tr><td><a name="to_number"></a><code>to_number(value: <a href="string.html">string</a>, format: <a href="string.html">string</a>) &rarr; <a href="decimal.html">decimal</a></code></td><td><span class="funcdesc"><p>Convert a string to a numeric using the given format.</p>
 </span></td><td>Immutable</td></tr></tbody>
 </table>
 
@@ -804,11 +806,21 @@ has no relationship with the commit order of concurrent transactions.</p>
 </span></td><td>Immutable</td></tr>
 <tr><td><a name="to_char"></a><code>to_char(interval: <a href="interval.html">interval</a>, format: <a href="string.html">string</a>) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Convert an interval to a string using the given format.</p>
 </span></td><td>Stable</td></tr>
+<tr><td><a name="to_char"></a><code>to_char(number: <a href="decimal.html">decimal</a>, format: <a href="string.html">string</a>) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Convert a decimal to a string using the given format.</p>
+</span></td><td>Immutable</td></tr>
+<tr><td><a name="to_char"></a><code>to_char(number: <a href="float.html">float</a>, format: <a href="string.html">string</a>) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Convert a float to a string using the given format.</p>
+</span></td><td>Immutable</td></tr>
+<tr><td><a name="to_char"></a><code>to_char(number: <a href="int.html">int</a>, format: <a href="string.html">string</a>) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Convert an integer to a string using the given format.</p>
+</span></td><td>Immutable</td></tr>
 <tr><td><a name="to_char"></a><code>to_char(timestamp: <a href="timestamp.html">timestamp</a>) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Convert an timestamp to a string assuming the ISO, MDY DateStyle.</p>
 </span></td><td>Immutable</td></tr>
 <tr><td><a name="to_char"></a><code>to_char(timestamp: <a href="timestamp.html">timestamp</a>, format: <a href="string.html">string</a>) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Convert an timestamp to a string using the given format.</p>
 </span></td><td>Stable</td></tr>
 <tr><td><a name="to_char"></a><code>to_char(timestamptz: <a href="timestamp.html">timestamptz</a>, format: <a href="string.html">string</a>) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Convert a timestamp with time zone to a string using the given format.</p>
+</span></td><td>Stable</td></tr>
+<tr><td><a name="to_date"></a><code>to_date(date_string: <a href="string.html">string</a>, format: <a href="string.html">string</a>) &rarr; <a href="date.html">date</a></code></td><td><span class="funcdesc"><p>Convert a string to a date using the given format.</p>
+</span></td><td>Immutable</td></tr>
+<tr><td><a name="to_timestamp"></a><code>to_timestamp(date_string: <a href="string.html">string</a>, format: <a href="string.html">string</a>) &rarr; <a href="timestamp.html">timestamptz</a></code></td><td><span class="funcdesc"><p>Convert a string to a timestamp with time zone using the given format.</p>
 </span></td><td>Stable</td></tr>
 <tr><td><a name="to_timestamp"></a><code>to_timestamp(timestamp: <a href="float.html">float</a>) &rarr; <a href="timestamp.html">timestamptz</a></code></td><td><span class="funcdesc"><p>Convert Unix epoch (seconds since 1970-01-01 00:00:00+00) to timestamp with time zone.</p>
 </span></td><td>Immutable</td></tr>

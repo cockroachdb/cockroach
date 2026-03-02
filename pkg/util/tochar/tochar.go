@@ -348,7 +348,7 @@ func timeToChar(t timeInterface, formatNodes []formatNode) (string, error) {
 			d := t.Weekday().String()
 			switch fn.key.id {
 			case DCH_DAY:
-				d = strings.ToLower(d)
+				d = strings.ToUpper(d)
 			case DCH_day:
 				d = strings.ToLower(d)
 			}
@@ -360,7 +360,7 @@ func timeToChar(t timeInterface, formatNodes []formatNode) (string, error) {
 			d := t.Weekday().String()[:3]
 			switch fn.key.id {
 			case DCH_DY:
-				d = strings.ToLower(d)
+				d = strings.ToUpper(d)
 			case DCH_dy:
 				d = strings.ToLower(d)
 			}
