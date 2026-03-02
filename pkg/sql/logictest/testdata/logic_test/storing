@@ -77,6 +77,17 @@ CREATE TABLE t30984 (
   INDEX b_idx (b) STORING (c, a)
 )
 
+query T
+SELECT create_statement FROM [SHOW CREATE TABLE t30984]
+----
+CREATE TABLE public.t30984 (
+  a INT8 NOT NULL,
+  b INT8 NULL,
+  c INT8 NULL,
+  CONSTRAINT t30984_pkey PRIMARY KEY (a ASC),
+  INDEX b_idx (b ASC) STORING (c)
+)
+
 statement ok
 DROP TABLE t30984
 
@@ -86,6 +97,17 @@ CREATE TABLE t30984 (
   b INT,
   c INT,
   UNIQUE INDEX b_idx (b) STORING (c, a)
+)
+
+query T
+SELECT create_statement FROM [SHOW CREATE TABLE t30984]
+----
+CREATE TABLE public.t30984 (
+  a INT8 NOT NULL,
+  b INT8 NULL,
+  c INT8 NULL,
+  CONSTRAINT t30984_pkey PRIMARY KEY (a ASC),
+  UNIQUE INDEX b_idx (b ASC) STORING (c)
 )
 
 statement ok
@@ -99,6 +121,43 @@ CREATE TABLE t30984 (
   d INT,
   PRIMARY KEY (a, d),
   UNIQUE INDEX b_idx (b) STORING (c, d)
+)
+
+query T
+SELECT create_statement FROM [SHOW CREATE TABLE t30984]
+----
+CREATE TABLE public.t30984 (
+  a INT8 NOT NULL,
+  b INT8 NULL,
+  c INT8 NULL,
+  d INT8 NOT NULL,
+  CONSTRAINT t30984_pkey PRIMARY KEY (a ASC, d ASC),
+  UNIQUE INDEX b_idx (b ASC) STORING (c)
+)
+
+statement ok
+DROP TABLE t30984
+
+statement ok
+CREATE TABLE t30984 (
+  a INT,
+  b INT,
+  c INT,
+  d INT,
+  PRIMARY KEY (a, d),
+  INDEX b_idx (b) STORING (c, a, d)
+)
+
+query T
+SELECT create_statement FROM [SHOW CREATE TABLE t30984]
+----
+CREATE TABLE public.t30984 (
+  a INT8 NOT NULL,
+  b INT8 NULL,
+  c INT8 NULL,
+  d INT8 NOT NULL,
+  CONSTRAINT t30984_pkey PRIMARY KEY (a ASC, d ASC),
+  INDEX b_idx (b ASC) STORING (c)
 )
 
 statement ok
