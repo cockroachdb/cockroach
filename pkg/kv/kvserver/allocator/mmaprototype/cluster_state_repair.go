@@ -340,6 +340,8 @@ func (re *rebalanceEnv) repair(
 				re.repairAddVoter(ctx, localStoreID, rangeID, rs)
 			case RemoveVoter:
 				re.repairRemoveVoter(ctx, localStoreID, rangeID, rs)
+			case AddNonVoter:
+				re.repairAddNonVoter(ctx, localStoreID, rangeID, rs)
 			case RemoveNonVoter:
 				re.repairRemoveNonVoter(ctx, localStoreID, rangeID, rs)
 			default:
@@ -706,6 +708,200 @@ func (re *rebalanceEnv) repairRemoveVoter(
 	log.KvDistribution.Infof(ctx,
 		"result(success): RemoveVoter repair for r%d, removing voter on s%d",
 		rangeID, removeStoreID)
+}
+
+// repairAddNonVoter attempts to add a non-voter to an under-replicated range.
+// It follows the decision tree from constraint.go: first try to demote a voter
+// to non-voter, then find a new store to add a non-voter.
+func (re *rebalanceEnv) repairAddNonVoter(
+	ctx context.Context, localStoreID roachpb.StoreID, rangeID roachpb.RangeID, rs *rangeState,
+) {
+	re.ensureAnalyzedConstraints(ctx, rs)
+	if rs.constraints == nil {
+		log.KvDistribution.Warningf(ctx,
+			"skipping AddNonVoter repair for r%d: constraint analysis failed",
+			rangeID)
+		return
+	}
+
+	// Step 1: Try to demote a voter to non-voter.
+	demoteCands, err := rs.constraints.candidatesToConvertFromVoterToNonVoter()
+	if err != nil {
+		log.KvDistribution.Warningf(ctx,
+			"skipping AddNonVoter repair for r%d: %v", rangeID, err)
+		return
+	}
+	if len(demoteCands) > 0 {
+		re.demoteVoterToNonVoter(ctx, localStoreID, rangeID, rs, demoteCands)
+		return
+	}
+
+	// Step 2: Find a new store to add a non-voter.
+	constrDisj, err := rs.constraints.constraintsForAddingNonVoter()
+	if err != nil {
+		log.KvDistribution.Warningf(ctx,
+			"skipping AddNonVoter repair for r%d: %v", rangeID, err)
+		return
+	}
+
+	// Get candidate stores satisfying constraints. For nil constraints (no
+	// constraints configured), constrainStoresForExpr returns all stores.
+	var candidateStores storeSet
+	re.constraintMatcher.constrainStoresForExpr(constrDisj, &candidateStores)
+
+	// Build the set of stores already hosting a replica for this range, and
+	// the set of nodes already hosting a replica (for node-level diversity).
+	var existingReplicas storeSet
+	existingNodes := make(map[roachpb.NodeID]struct{})
+	for _, repl := range rs.replicas {
+		existingReplicas.insert(repl.StoreID)
+		ss := re.stores[repl.StoreID]
+		if ss != nil {
+			existingNodes[ss.NodeID] = struct{}{}
+		}
+	}
+
+	// Filter by ReplicaDispositionOK (excludes dead, decommissioning,
+	// draining, IO-overloaded stores).
+	candidateStores = retainReadyReplicaTargetStoresOnly(
+		ctx, candidateStores, re.stores, existingReplicas)
+
+	// Exclude stores already hosting a replica and stores on nodes already
+	// hosting a replica.
+	var validCandidates storeSet
+	for _, storeID := range candidateStores {
+		if existingReplicas.contains(storeID) {
+			continue
+		}
+		ss := re.stores[storeID]
+		if ss == nil {
+			continue
+		}
+		if _, ok := existingNodes[ss.NodeID]; ok {
+			continue
+		}
+		validCandidates = append(validCandidates, storeID)
+	}
+
+	if len(validCandidates) == 0 {
+		log.KvDistribution.Warningf(ctx,
+			"skipping AddNonVoter repair for r%d: no valid target stores",
+			rangeID)
+		return
+	}
+
+	// Pick the target with the best replica diversity score.
+	bestStoreID := re.pickStoreByDiversity(
+		validCandidates, rs.constraints.replicaLocalityTiers,
+		(*existingReplicaLocalities).getScoreChangeForNewReplica)
+
+	// Create the pending change.
+	targetSS := re.stores[bestStoreID]
+	addTarget := roachpb.ReplicationTarget{
+		NodeID:  targetSS.NodeID,
+		StoreID: bestStoreID,
+	}
+	addIDAndType := ReplicaIDAndType{
+		ReplicaType: ReplicaType{ReplicaType: roachpb.NON_VOTER},
+	}
+	addChange := MakeAddReplicaChange(rangeID, rs.load, addIDAndType, addTarget)
+	rangeChange := MakePendingRangeChange(rangeID, []ReplicaChange{addChange})
+	if err := re.preCheckOnApplyReplicaChanges(rangeChange); err != nil {
+		log.KvDistribution.Warningf(ctx,
+			"skipping AddNonVoter repair for r%d: pre-check failed: %v",
+			rangeID, err)
+		return
+	}
+	re.addPendingRangeChange(ctx, rangeChange)
+	re.changes = append(re.changes,
+		MakeExternalRangeChange(originMMARepair, localStoreID, rangeChange))
+	log.KvDistribution.Infof(ctx,
+		"result(success): AddNonVoter repair for r%d, adding non-voter on s%d",
+		rangeID, bestStoreID)
+}
+
+// demoteVoterToNonVoter demotes the best voter candidate to non-voter,
+// choosing by replica diversity score (higher is better for removal), with ties
+// broken randomly via reservoir sampling. The leaseholder is excluded from
+// demotion.
+func (re *rebalanceEnv) demoteVoterToNonVoter(
+	ctx context.Context,
+	localStoreID roachpb.StoreID,
+	rangeID roachpb.RangeID,
+	rs *rangeState,
+	demoteCands []roachpb.StoreID,
+) {
+	// Exclude the leaseholder from demotion candidates.
+	var filteredCands []roachpb.StoreID
+	for _, storeID := range demoteCands {
+		for _, repl := range rs.replicas {
+			if repl.StoreID == storeID && repl.IsLeaseholder {
+				goto skip
+			}
+		}
+		filteredCands = append(filteredCands, storeID)
+	skip:
+	}
+	if len(filteredCands) == 0 {
+		log.KvDistribution.Warningf(ctx,
+			"skipping AddNonVoter repair for r%d: no demotion candidates (all are leaseholders)",
+			rangeID)
+		return
+	}
+
+	// Pick the best candidate — the voter whose removal from the voter set
+	// hurts voter diversity the least (most redundant).
+	bestStoreID := re.pickStoreByDiversity(
+		filteredCands, rs.constraints.replicaLocalityTiers,
+		(*existingReplicaLocalities).getScoreChangeForReplicaRemoval)
+	if bestStoreID == 0 {
+		log.KvDistribution.Warningf(ctx,
+			"skipping AddNonVoter repair for r%d: no valid demotion candidates",
+			rangeID)
+		return
+	}
+
+	// Find the existing replica state for the voter being demoted.
+	var prevState ReplicaState
+	found := false
+	for _, repl := range rs.replicas {
+		if repl.StoreID == bestStoreID {
+			prevState = repl.ReplicaState
+			found = true
+			break
+		}
+	}
+	if !found {
+		log.KvDistribution.Warningf(ctx,
+			"skipping AddNonVoter repair for r%d: voter on s%d not found in replicas",
+			rangeID, bestStoreID)
+		return
+	}
+
+	// Create the type change from VOTER_FULL to NON_VOTER.
+	targetSS := re.stores[bestStoreID]
+	demoteTarget := roachpb.ReplicationTarget{
+		NodeID:  targetSS.NodeID,
+		StoreID: bestStoreID,
+	}
+	nextIDAndType := ReplicaIDAndType{
+		ReplicaType: ReplicaType{ReplicaType: roachpb.NON_VOTER},
+	}
+	typeChange := MakeReplicaTypeChange(
+		rangeID, rs.load, prevState, nextIDAndType, demoteTarget)
+	rangeChange := MakePendingRangeChange(rangeID, []ReplicaChange{typeChange})
+	if err := re.preCheckOnApplyReplicaChanges(rangeChange); err != nil {
+		log.KvDistribution.Warningf(ctx,
+			"skipping AddNonVoter repair for r%d: pre-check failed: %v",
+			rangeID, err)
+		return
+	}
+	re.addPendingRangeChange(ctx, rangeChange)
+	re.changes = append(re.changes,
+		MakeExternalRangeChange(originMMARepair, localStoreID, rangeChange))
+	log.KvDistribution.Infof(ctx,
+		"result(success): AddNonVoter repair for r%d, demoting voter on s%d to non-voter",
+		rangeID, bestStoreID)
 }
 
 // repairRemoveNonVoter removes an over-replicated non-voter from the range.
