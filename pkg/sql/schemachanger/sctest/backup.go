@@ -377,7 +377,12 @@ func backupRollbacks(
 	}
 	maybeRandomlySkip(t)
 	ctx := context.Background()
-	var urls atomic.Value
+	var mu struct {
+		syncutil.Mutex
+		urls        []string
+		urlsSamples map[string]struct{}
+	}
+	mu.urlsSamples = make(map[string]struct{})
 	var dbForBackup atomic.Pointer[gosql.DB]
 	pe := MakePlanExplainer()
 	var knobEnabled atomic.Bool
@@ -400,13 +405,27 @@ func backupRollbacks(
 				return nil
 			}
 			if p.InRollback {
+				// Discard the first backup, which is going to be the backup taken
+				// right at the very beginning of the rollback. Due to various quirks,
+				// the declarative schema changer state in that backup is going to be
+				// exactly the same as the state pre-rollback.
+				//
+				// This doesn't matter in production, as whichever error triggered the
+				// rollback in the first place will simply manifest itself again during
+				// the post-RESTORE schema change and roll it back.
+				if stageIdx == 0 {
+					return nil
+				}
 				url := fmt.Sprintf("userfile://backups.public.userfiles_$user/data_%s_%d_%d",
 					cs.Phase, cs.StageOrdinal, stageIdx)
-				if v := urls.Load(); v == nil {
-					urls.Store([]string{url})
-				} else {
-					urls.Store(append(v.([]string), url))
+				mu.Lock()
+				defer mu.Unlock()
+				// De-duplicated URLs that occur due to retries.
+				if _, ok := mu.urlsSamples[url]; ok {
+					return nil
 				}
+				mu.urlsSamples[url] = struct{}{}
+				mu.urls = append(mu.urls, url)
 				backupStmt := fmt.Sprintf("BACKUP DATABASE %s INTO '%s'", cs.DatabaseName, url)
 				_, err := dbForBackup.Load().ExecContext(ctx, backupStmt)
 				return err
@@ -457,7 +476,12 @@ func backupRollbacks(
 
 		// Restore the backups of the database taken mid-rolled-back-schema-change
 		// in various ways, check that they end up in the same state as present.
-		for i, url := range urls.Load().([]string) {
+		urls := func() []string {
+			mu.Lock()
+			defer mu.Unlock()
+			return append([]string{}, mu.urls...)
+		}()
+		for i, url := range urls {
 			b := backupRestoreOutcome{
 				url:                url,
 				mayRollback:        true,
@@ -466,23 +490,7 @@ func backupRollbacks(
 				// individual table restores, due to the slower speed due to multiple nodes.
 				excludeAllTablesInDatabaseFlavor: isMultiRegion || isMixedVersion,
 			}
-			var name string
-			switch i {
-			case 0:
-				// Discard the first backup, which is going to be the backup taken
-				// right at the very beginning of the rollback. Due to various quirks,
-				// the declarative schema changer state in that backup is going to be
-				// exactly the same as the state pre-rollback.
-				//
-				// This doesn't matter in production, as whichever error triggered the
-				// rollback in the first place will simply manifest itself again during
-				// the post-RESTORE schema change and roll it back.
-				continue
-			case 1:
-				name = "post_1_rollback_stage_exec"
-			default:
-				name = fmt.Sprintf("post_%d_rollback_stages_exec", i)
-			}
+			name := fmt.Sprintf("post_%d_rollback_stages_exec", i+1)
 			t.Run(name, func(t *testing.T) {
 				exerciseBackupRestore(t, tdb, cs, b, pe)
 			})
