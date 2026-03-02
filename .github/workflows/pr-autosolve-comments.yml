@@ -25,7 +25,7 @@ env:
 
 jobs:
   address-review-comments:
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, ubuntu_2404]
     timeout-minutes: 60
     if: github.event.workflow_run.conclusion == 'success'
     permissions:
@@ -137,12 +137,47 @@ jobs:
           fetch-depth: 0
           token: ${{ secrets.AUTOSOLVER_PAT }}
 
+      - name: Squash bot fixup commits
+        run: |
+          git remote add upstream https://github.com/${{ github.repository }}.git || true
+          git fetch upstream master
+
+          # Count commits ahead of master
+          COMMITS_AHEAD=$(git rev-list --count upstream/master..HEAD)
+          echo "Found $COMMITS_AHEAD commit(s) ahead of master"
+
+          if [ "$COMMITS_AHEAD" -le 1 ]; then
+            echo "Single commit or no commits ahead, nothing to squash"
+            exit 0
+          fi
+
+          # Only squash if ALL commits ahead of master are by the bot.
+          # This preserves any manual human commits on the branch.
+          NON_BOT_COMMITS=$(git log --format='%ae' upstream/master..HEAD | grep -cv 'cockroach-teamcity@users.noreply.github.com' || true)
+          if [ "$NON_BOT_COMMITS" -gt 0 ]; then
+            echo "Found $NON_BOT_COMMITS non-bot commit(s), skipping squash to preserve manual commits"
+            exit 0
+          fi
+
+          echo "All $COMMITS_AHEAD commits are bot-authored, squashing to one..."
+          # Preserve the first (original) commit's message
+          FIRST_COMMIT=$(git log --reverse --format=%H upstream/master..HEAD | head -1)
+          ORIGINAL_MSG=$(git log -1 --format=%B "$FIRST_COMMIT")
+          git reset --soft upstream/master
+          git commit -m "$ORIGINAL_MSG"
+
       - name: Authenticate to Google Cloud
         uses: 'google-github-actions/auth@v3'
         with:
           project_id: 'vertex-model-runners'
           service_account: 'ai-review@dev-inf-prod.iam.gserviceaccount.com'
           workload_identity_provider: 'projects/72497726731/locations/global/workloadIdentityPools/ai-review/providers/ai-review'
+
+      - name: Set up EngFlow
+        run: |
+          ./build/github/get-engflow-keys.sh
+          ENGFLOW_ARGS=$(./build/github/engflow-args.sh)
+          echo "build $ENGFLOW_ARGS" > .bazelrc.user
 
       - name: Fetch all review comments
         id: fetch_comments
@@ -252,6 +287,7 @@ jobs:
         env:
           ANTHROPIC_VERTEX_PROJECT_ID: vertex-model-runners
           CLOUD_ML_REGION: us-east5
+          AUTOMATION: "1"
           # Pass user-controlled content via env vars to prevent prompt injection
           # For native review comments:
           COMMENT_USER: ${{ steps.context.outputs.comment_user }}
@@ -311,7 +347,12 @@ jobs:
             2. Read the environment variables to understand the review feedback
             3. For Reviewable reviews, focus on the parsed REVIEWABLE_COMMENTS JSON
             4. Address the review feedback by making code changes
-            5. Run relevant tests to verify changes
+            5. Run tests to verify your changes:
+               - For Go test files: ./dev test <package> -f=<TestName> -v
+               - For logic test files: ./dev testlogic --files=<testfile> -v
+               Do NOT run tests under `--stress`.
+               You MUST run tests and they MUST pass before staging changes.
+               If tests fail, fix and re-run.
             6. Stage all changes with git add
 
             When formatting commits, follow the guidelines in CLAUDE.md.
@@ -557,3 +598,9 @@ jobs:
             echo "This may require human intervention."
           } > "$COMMENT_FILE"
           gh pr comment "$PR_NUMBER" --body-file "$COMMENT_FILE"
+
+      - name: Cleanup credentials and keys
+        if: always()
+        run: |
+          # Remove EngFlow keys
+          ./build/github/cleanup-engflow-keys.sh
