@@ -466,6 +466,55 @@ func ValidateSuperRegions(
 			errorHandler(err)
 		}
 
+		// Validate per-super-region primary/secondary region settings.
+		if superRegion.SecondaryRegion != "" && superRegion.PrimaryRegion == "" {
+			err := errors.AssertionFailedf(
+				"super region %s has a secondary region but no primary region",
+				superRegion.SuperRegionName,
+			)
+			errorHandler(err)
+		}
+		if superRegion.PrimaryRegion != "" {
+			found := false
+			for _, r := range superRegion.Regions {
+				if r == superRegion.PrimaryRegion {
+					found = true
+					break
+				}
+			}
+			if !found {
+				err := errors.AssertionFailedf(
+					"primary region %s is not part of super region %s",
+					superRegion.PrimaryRegion, superRegion.SuperRegionName,
+				)
+				errorHandler(err)
+			}
+		}
+		if superRegion.SecondaryRegion != "" {
+			found := false
+			for _, r := range superRegion.Regions {
+				if r == superRegion.SecondaryRegion {
+					found = true
+					break
+				}
+			}
+			if !found {
+				err := errors.AssertionFailedf(
+					"secondary region %s is not part of super region %s",
+					superRegion.SecondaryRegion, superRegion.SuperRegionName,
+				)
+				errorHandler(err)
+			}
+		}
+		if superRegion.PrimaryRegion != "" && superRegion.SecondaryRegion != "" &&
+			superRegion.PrimaryRegion == superRegion.SecondaryRegion {
+			err := errors.AssertionFailedf(
+				"super region %s has the same primary and secondary region %s",
+				superRegion.SuperRegionName, superRegion.PrimaryRegion,
+			)
+			errorHandler(err)
+		}
+
 		seenRegionsInCurrentSuperRegion := make(map[catpb.RegionName]struct{})
 		for _, region := range superRegion.Regions {
 			_, found := seenRegionsInCurrentSuperRegion[region]

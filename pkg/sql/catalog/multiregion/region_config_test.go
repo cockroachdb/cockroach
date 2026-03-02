@@ -291,6 +291,100 @@ func TestValidateSuperRegionConfig(t *testing.T) {
 			),
 		},
 		{
+			testName: "secondary region without primary region",
+			err:      "super region sr1 has a secondary region but no primary region",
+			regionConfig: multiregion.MakeRegionConfig(
+				catpb.RegionNames{
+					"region_a",
+					"region_b",
+					"region_c",
+				},
+				"region_b",
+				descpb.SurvivalGoal_ZONE_FAILURE,
+				validRegionEnumID,
+				descpb.DataPlacement_DEFAULT,
+				[]descpb.SuperRegion{
+					{
+						SuperRegionName: "sr1",
+						Regions:         []catpb.RegionName{"region_a", "region_b"},
+						SecondaryRegion: "region_a",
+					},
+				},
+				descpb.ZoneConfigExtensions{},
+			),
+		},
+		{
+			testName: "primary region not in super region",
+			err:      "primary region region_c is not part of super region sr1",
+			regionConfig: multiregion.MakeRegionConfig(
+				catpb.RegionNames{
+					"region_a",
+					"region_b",
+					"region_c",
+				},
+				"region_b",
+				descpb.SurvivalGoal_ZONE_FAILURE,
+				validRegionEnumID,
+				descpb.DataPlacement_DEFAULT,
+				[]descpb.SuperRegion{
+					{
+						SuperRegionName: "sr1",
+						Regions:         []catpb.RegionName{"region_a", "region_b"},
+						PrimaryRegion:   "region_c",
+					},
+				},
+				descpb.ZoneConfigExtensions{},
+			),
+		},
+		{
+			testName: "secondary region not in super region",
+			err:      "secondary region region_c is not part of super region sr1",
+			regionConfig: multiregion.MakeRegionConfig(
+				catpb.RegionNames{
+					"region_a",
+					"region_b",
+					"region_c",
+				},
+				"region_b",
+				descpb.SurvivalGoal_ZONE_FAILURE,
+				validRegionEnumID,
+				descpb.DataPlacement_DEFAULT,
+				[]descpb.SuperRegion{
+					{
+						SuperRegionName: "sr1",
+						Regions:         []catpb.RegionName{"region_a", "region_b"},
+						PrimaryRegion:   "region_a",
+						SecondaryRegion: "region_c",
+					},
+				},
+				descpb.ZoneConfigExtensions{},
+			),
+		},
+		{
+			testName: "primary and secondary region are the same",
+			err:      "super region sr1 has the same primary and secondary region region_a",
+			regionConfig: multiregion.MakeRegionConfig(
+				catpb.RegionNames{
+					"region_a",
+					"region_b",
+					"region_c",
+				},
+				"region_b",
+				descpb.SurvivalGoal_ZONE_FAILURE,
+				validRegionEnumID,
+				descpb.DataPlacement_DEFAULT,
+				[]descpb.SuperRegion{
+					{
+						SuperRegionName: "sr1",
+						Regions:         []catpb.RegionName{"region_a", "region_b"},
+						PrimaryRegion:   "region_a",
+						SecondaryRegion: "region_a",
+					},
+				},
+				descpb.ZoneConfigExtensions{},
+			),
+		},
+		{
 			testName: "a super region should have at least three regions if the survival mode is region failure",
 			err:      "super region sr1 only has 2 region(s): at least 3 regions are required for surviving a region failure",
 			regionConfig: multiregion.MakeRegionConfig(

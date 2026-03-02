@@ -789,52 +789,52 @@ TABLE db3.public.t  ALTER TABLE db3.public.t CONFIGURE ZONE USING
                       voter_constraints = '[+region=us-west-1]',
                       lease_preferences = '[[+region=us-west-1]]'
 
-query ITTT rowsort
-SELECT id, database_name, super_region_name, regions FROM crdb_internal.super_regions
+query ITTTTT rowsort
+SELECT id, database_name, super_region_name, regions, primary_region, secondary_region FROM crdb_internal.super_regions
 ----
-112  db        test           {ap-southeast-2,us-east-1}
-142  db2       test           {ca-central-1}
-146  db3       test1          {us-west-1}
-116  mr1       test           {us-east-1}
-122  mr2       ca-central-sr  {ca-central-1}
-122  mr2       test           {ap-southeast-2,us-east-1}
-137  mr3       r1             {ap-southeast-2,ca-central-1,us-central-1,us-east-1,us-west-1}
-106  oncreate  create         {ap-southeast-2,us-east-1}
+112  db        test           {ap-southeast-2,us-east-1}                                  NULL  NULL
+142  db2       test           {ca-central-1}                                              NULL  NULL
+146  db3       test1          {us-west-1}                                                 NULL  NULL
+116  mr1       test           {us-east-1}                                                 NULL  NULL
+122  mr2       ca-central-sr  {ca-central-1}                                              NULL  NULL
+122  mr2       test           {ap-southeast-2,us-east-1}                                  NULL  NULL
+137  mr3       r1             {ap-southeast-2,ca-central-1,us-central-1,us-east-1,us-west-1}  NULL  NULL
+106  oncreate  create         {ap-southeast-2,us-east-1}                                  NULL  NULL
 
-query TTT
+query TTTTT
 SHOW SUPER REGIONS FROM DATABASE test
 ----
 
-query TTT
+query TTTTT
 SHOW SUPER REGIONS FROM DATABASE db
 ----
-db  test  {ap-southeast-2,us-east-1}
+db  test  {ap-southeast-2,us-east-1}  NULL  NULL
 
-query TTT
+query TTTTT
 SHOW SUPER REGIONS FROM DATABASE db2
 ----
-db2  test  {ca-central-1}
+db2  test  {ca-central-1}  NULL  NULL
 
-query TTT
+query TTTTT
 SHOW SUPER REGIONS FROM DATABASE db3
 ----
-db3  test1  {us-west-1}
+db3  test1  {us-west-1}  NULL  NULL
 
-query TTT
+query TTTTT
 SHOW SUPER REGIONS FROM DATABASE mr1
 ----
-mr1  test  {us-east-1}
+mr1  test  {us-east-1}  NULL  NULL
 
-query TTT rowsort
+query TTTTT rowsort
 SHOW SUPER REGIONS FROM DATABASE mr2
 ----
-mr2  ca-central-sr  {ca-central-1}
-mr2  test           {ap-southeast-2,us-east-1}
+mr2  ca-central-sr  {ca-central-1}              NULL  NULL
+mr2  test           {ap-southeast-2,us-east-1}  NULL  NULL
 
-query TTT
+query TTTTT
 SHOW SUPER REGIONS FROM DATABASE mr3
 ----
-mr3  r1  {ap-southeast-2,ca-central-1,us-central-1,us-east-1,us-west-1}
+mr3  r1  {ap-southeast-2,ca-central-1,us-central-1,us-east-1,us-west-1}  NULL  NULL
 
 subtest primary_secondary_per_super_region
 
@@ -844,14 +844,101 @@ ALTER DATABASE db ALTER SUPER REGION "test" SET PRIMARY REGION "us-east-1"
 statement error pq: unimplemented: ALTER DATABASE \.\.\. ALTER SUPER REGION \.\.\. SET SECONDARY REGION
 ALTER DATABASE db ALTER SUPER REGION "test" SET SECONDARY REGION "ap-southeast-2"
 
-statement error pq: unimplemented: ALTER DATABASE \.\.\. ADD SUPER REGION \.\.\. PRIMARY REGION
-ALTER DATABASE db ADD SUPER REGION "test3" VALUES "ap-southeast-2", "us-east-1" PRIMARY REGION "us-east-1"
+# Drop the existing super region so we can test error cases without overlap.
+statement ok
+ALTER DATABASE db DROP SUPER REGION "test"
 
-statement error pq: unimplemented: ALTER DATABASE \.\.\. ADD SUPER REGION \.\.\. SECONDARY REGION
-ALTER DATABASE db ADD SUPER REGION "test3" VALUES "ap-southeast-2", "us-east-1" SECONDARY REGION "ap-southeast-2"
+# Error: secondary region without primary region.
+statement error pq: super region test has a secondary region but no primary region
+ALTER DATABASE db ADD SUPER REGION "test" VALUES "ap-southeast-2", "us-east-1" SECONDARY REGION "ap-southeast-2"
 
-statement error pq: unimplemented: ALTER DATABASE \.\.\. ADD SUPER REGION \.\.\. PRIMARY REGION
-ALTER DATABASE db ADD SUPER REGION "test3" VALUES "ap-southeast-2", "us-east-1" PRIMARY REGION "us-east-1" SECONDARY REGION "ap-southeast-2"
+# Error: primary region not in super region's region list.
+statement error pq: primary region ca-central-1 is not part of super region test
+ALTER DATABASE db ADD SUPER REGION "test" VALUES "ap-southeast-2", "us-east-1" PRIMARY REGION "ca-central-1"
+
+# Error: secondary region not in super region's region list.
+statement error pq: secondary region ca-central-1 is not part of super region test
+ALTER DATABASE db ADD SUPER REGION "test" VALUES "ap-southeast-2", "us-east-1" PRIMARY REGION "us-east-1" SECONDARY REGION "ca-central-1"
+
+# Error: primary and secondary region are the same.
+statement error pq: super region test has the same primary and secondary region us-east-1
+ALTER DATABASE db ADD SUPER REGION "test" VALUES "ap-southeast-2", "us-east-1" PRIMARY REGION "us-east-1" SECONDARY REGION "us-east-1"
+
+# ADD SUPER REGION with PRIMARY REGION only.
+
+statement ok
+ALTER DATABASE db ADD SUPER REGION "test" VALUES "ap-southeast-2", "us-east-1" PRIMARY REGION "us-east-1"
+
+query TTTTT
+SHOW SUPER REGIONS FROM DATABASE db
+----
+db  test  {ap-southeast-2,us-east-1}  us-east-1  NULL
+
+# ADD SUPER REGION with PRIMARY REGION and SECONDARY REGION.
+statement ok
+ALTER DATABASE db DROP SUPER REGION "test"
+
+statement ok
+ALTER DATABASE db ADD SUPER REGION "test" VALUES "ap-southeast-2", "us-east-1" PRIMARY REGION "us-east-1" SECONDARY REGION "ap-southeast-2"
+
+query TTTTT
+SHOW SUPER REGIONS FROM DATABASE db
+----
+db  test  {ap-southeast-2,us-east-1}  us-east-1  ap-southeast-2
+
+# Verify crdb_internal shows primary/secondary.
+query ITTTTT
+SELECT id, database_name, super_region_name, regions, primary_region, secondary_region FROM crdb_internal.super_regions WHERE database_name = 'db'
+----
+112  db  test  {ap-southeast-2,us-east-1}  us-east-1  ap-southeast-2
+
+# ALTER SUPER REGION preserves primary/secondary when changing regions.
+# db has super region "test" with regions ap-southeast-2, us-east-1,
+# primary us-east-1, secondary ap-southeast-2. Add ca-central-1 to the region list.
+statement ok
+ALTER DATABASE db ALTER SUPER REGION "test" VALUES "ap-southeast-2", "ca-central-1", "us-east-1"
+
+query TTTTT
+SHOW SUPER REGIONS FROM DATABASE db
+----
+db  test  {ap-southeast-2,ca-central-1,us-east-1}  us-east-1  ap-southeast-2
+
+# ALTER SUPER REGION preserves primary/secondary when removing a non-primary,
+# non-secondary region. Remove ca-central-1 (neither primary nor secondary).
+statement ok
+ALTER DATABASE db ALTER SUPER REGION "test" VALUES "ap-southeast-2", "us-east-1"
+
+query TTTTT
+SHOW SUPER REGIONS FROM DATABASE db
+----
+db  test  {ap-southeast-2,us-east-1}  us-east-1  ap-southeast-2
+
+# Re-add ca-central-1 so the next test can remove it to trigger the error.
+statement ok
+ALTER DATABASE db ALTER SUPER REGION "test" VALUES "ap-southeast-2", "ca-central-1", "us-east-1"
+
+# ALTER SUPER REGION errors if the primary region is removed from the region list.
+statement error pq: primary region us-east-1 is not part of super region test
+ALTER DATABASE db ALTER SUPER REGION "test" VALUES "ap-southeast-2", "ca-central-1"
+
+# ALTER SUPER REGION errors if the secondary region is removed from the region list.
+statement error pq: secondary region ap-southeast-2 is not part of super region test
+ALTER DATABASE db ALTER SUPER REGION "test" VALUES "ca-central-1", "us-east-1"
+
+# CREATE DATABASE with super region, then add primary/secondary via ALTER.
+statement ok
+CREATE DATABASE db_sr PRIMARY REGION "ca-central-1" REGIONS "ap-southeast-2", "us-east-1" SUPER REGION "sr1" VALUES "ap-southeast-2", "us-east-1"
+
+statement ok
+ALTER DATABASE db_sr DROP SUPER REGION "sr1"
+
+statement ok
+ALTER DATABASE db_sr ADD SUPER REGION "sr1" VALUES "ap-southeast-2", "us-east-1" PRIMARY REGION "us-east-1" SECONDARY REGION "ap-southeast-2"
+
+query TTTTT
+SHOW SUPER REGIONS FROM DATABASE db_sr
+----
+db_sr  sr1  {ap-southeast-2,us-east-1}  us-east-1  ap-southeast-2
 
 subtest end
 

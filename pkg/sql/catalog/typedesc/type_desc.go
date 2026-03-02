@@ -1051,29 +1051,11 @@ func (desc *immutable) GetElementType(ordinal int) *types.T {
 	return desc.Composite.Elements[ordinal].ElementType
 }
 
-// ForEachRegionInSuperRegion implements the catalog.RegionEnumTypeDescriptor
-// interface.
-func (desc *immutable) ForEachRegionInSuperRegion(
-	superRegionName string, f func(region catpb.RegionName) error,
-) error {
-	for _, s := range desc.RegionConfig.SuperRegions {
-		if superRegionName == s.SuperRegionName {
-			for _, r := range s.Regions {
-				if err := f(r); err != nil {
-					return iterutil.Map(err)
-				}
-			}
-			break
-		}
-	}
-	return nil
-}
-
 // ForEachSuperRegion implements the catalog.RegionEnumTypeDescriptor
 // interface.
-func (desc *immutable) ForEachSuperRegion(f func(superRegionName string) error) error {
+func (desc *immutable) ForEachSuperRegion(f func(superRegion descpb.SuperRegion) error) error {
 	for _, s := range desc.RegionConfig.SuperRegions {
-		if err := f(s.SuperRegionName); err != nil {
+		if err := f(s); err != nil {
 			return iterutil.Map(err)
 		}
 	}

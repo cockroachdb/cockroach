@@ -1574,19 +1574,6 @@ type alterDatabaseAddSuperRegion struct {
 func (p *planner) AlterDatabaseAddSuperRegion(
 	ctx context.Context, n *tree.AlterDatabaseAddSuperRegion,
 ) (planNode, error) {
-	if n.PrimaryRegion != "" {
-		return nil, unimplemented.NewWithIssue(
-			164497,
-			"ALTER DATABASE ... ADD SUPER REGION ... PRIMARY REGION",
-		)
-	}
-	if n.SecondaryRegion != "" {
-		return nil, unimplemented.NewWithIssue(
-			164497,
-			"ALTER DATABASE ... ADD SUPER REGION ... SECONDARY REGION",
-		)
-	}
-
 	if err := p.isSuperRegionEnabled(); err != nil {
 		return nil, err
 	}
@@ -1659,7 +1646,7 @@ func (n *alterDatabaseAddSuperRegion) startExec(params runParams) error {
 	if err != nil {
 		return err
 	}
-	return params.p.addSuperRegion(params.ctx, n.desc, typeDesc, n.n.Regions, n.n.SuperRegionName, tree.AsStringWithFQNames(n.n, params.Ann()))
+	return params.p.addSuperRegion(params.ctx, n.desc, typeDesc, n.n.Regions, n.n.SuperRegionName, n.n.PrimaryRegion, n.n.SecondaryRegion, tree.AsStringWithFQNames(n.n, params.Ann()))
 }
 
 // addSuperRegion adds the super region in sorted order based on the
@@ -1738,7 +1725,7 @@ func (n *alterDatabaseDropSuperRegion) startExec(params runParams) error {
 		return err
 	}
 
-	dropped := removeSuperRegion(typeDesc.RegionConfig, n.n.SuperRegionName)
+	_, dropped := removeSuperRegion(typeDesc.RegionConfig, n.n.SuperRegionName)
 
 	if !dropped {
 		return errors.Newf("super region %s not found", n.n.SuperRegionName)
@@ -1761,16 +1748,17 @@ func (n *alterDatabaseDropSuperRegion) startExec(params runParams) error {
 
 func removeSuperRegion(
 	r *descpb.TypeDescriptor_RegionConfig, superRegionName tree.Name,
-) (dropped bool) {
+) (removed descpb.SuperRegion, dropped bool) {
 	for i, superRegion := range r.SuperRegions {
 		if superRegion.SuperRegionName == string(superRegionName) {
+			removed = superRegion
 			r.SuperRegions = append(r.SuperRegions[:i], r.SuperRegions[i+1:]...)
 			dropped = true
 			break
 		}
 	}
 
-	return dropped
+	return removed, dropped
 }
 
 func (n *alterDatabaseDropSuperRegion) Next(runParams) (bool, error) { return false, nil }
@@ -1881,17 +1869,18 @@ func (n *alterDatabaseAlterSuperRegion) startExec(params runParams) error {
 		}
 	}
 
-	// Remove the old super region.
-	dropped := removeSuperRegion(typeDesc.RegionConfig, n.n.SuperRegionName)
+	// Remove the old super region, preserving its primary/secondary settings.
+	oldSR, dropped := removeSuperRegion(typeDesc.RegionConfig, n.n.SuperRegionName)
 	if !dropped {
 		return errors.WithHint(pgerror.Newf(pgcode.UndefinedObject,
 			"super region %q of database %q does not exist", n.n.SuperRegionName, n.n.DatabaseName),
 			"super region must be added before it can be altered")
 	}
 
-	// Validate that adding the super region with the new regions is valid.
-	return params.p.addSuperRegion(params.ctx, n.desc, typeDesc, n.n.Regions, n.n.SuperRegionName, tree.AsStringWithFQNames(n.n, params.Ann()))
-
+	// Re-add the super region with the new regions, preserving the old
+	// primary/secondary settings. Validation in addSuperRegion will error
+	// if the primary or secondary region is no longer in the region list.
+	return params.p.addSuperRegion(params.ctx, n.desc, typeDesc, n.n.Regions, n.n.SuperRegionName, tree.Name(oldSR.PrimaryRegion), tree.Name(oldSR.SecondaryRegion), tree.AsStringWithFQNames(n.n, params.Ann()))
 }
 
 // AlterDatabaseSuperRegionSetPrimaryRegion sets the primary region for a
@@ -1916,12 +1905,19 @@ func (p *planner) AlterDatabaseSuperRegionSetSecondaryRegion(
 	)
 }
 
+// TODO(#164694): In addition to the SET operations above, we also need DROP
+// variants (ALTER DATABASE ... ALTER SUPER REGION ... DROP PRIMARY
+// REGION / DROP SECONDARY REGION) to allow unsetting these without
+// drop-and-recreate of the super region.
+
 func (p *planner) addSuperRegion(
 	ctx context.Context,
 	desc *dbdesc.Mutable,
 	typeDesc *typedesc.Mutable,
 	regionList []tree.Name,
 	superRegionName tree.Name,
+	primaryRegion tree.Name,
+	secondaryRegion tree.Name,
 	op string,
 ) error {
 	regionsDesc := typeDesc.AsRegionEnumTypeDescriptor()
@@ -1966,23 +1962,55 @@ func (p *planner) addSuperRegion(
 
 	// Ensure that the super region name is not already used and that
 	// the super regions don't overlap.
-	if err := regionsDesc.ForEachSuperRegion(func(superRegion string) error {
-		if superRegion == string(superRegionName) {
-			return errors.Newf("super region %s already exists", superRegion)
+	if err := regionsDesc.ForEachSuperRegion(func(sr descpb.SuperRegion) error {
+		if sr.SuperRegionName == string(superRegionName) {
+			return errors.Newf("super region %s already exists", sr.SuperRegionName)
 		}
-		return regionsDesc.ForEachRegionInSuperRegion(superRegion, func(region catpb.RegionName) error {
+		for _, region := range sr.Regions {
 			if _, found := regionSet[region]; found {
-				return errors.Newf("region %s is already part of super region %s", region, superRegion)
+				return errors.Newf("region %s is already part of super region %s", region, sr.SuperRegionName)
 			}
-			return nil
-		})
+		}
+		return nil
 	}); err != nil {
 		return err
+	}
+
+	// Validate per-super-region primary/secondary region settings.
+	if secondaryRegion != "" && primaryRegion == "" {
+		return pgerror.Newf(pgcode.InvalidParameterValue,
+			"super region %s has a secondary region but no primary region",
+			superRegionName,
+		)
+	}
+	if primaryRegion != "" {
+		if _, found := regionSet[catpb.RegionName(primaryRegion)]; !found {
+			return pgerror.Newf(pgcode.InvalidParameterValue,
+				"primary region %s is not part of super region %s",
+				primaryRegion, superRegionName,
+			)
+		}
+	}
+	if secondaryRegion != "" {
+		if _, found := regionSet[catpb.RegionName(secondaryRegion)]; !found {
+			return pgerror.Newf(pgcode.InvalidParameterValue,
+				"secondary region %s is not part of super region %s",
+				secondaryRegion, superRegionName,
+			)
+		}
+	}
+	if primaryRegion != "" && secondaryRegion != "" && primaryRegion == secondaryRegion {
+		return pgerror.Newf(pgcode.InvalidParameterValue,
+			"super region %s has the same primary and secondary region %s",
+			superRegionName, primaryRegion,
+		)
 	}
 
 	addSuperRegion(typeDesc.RegionConfig, descpb.SuperRegion{
 		SuperRegionName: string(superRegionName),
 		Regions:         regions,
+		PrimaryRegion:   catpb.RegionName(primaryRegion),
+		SecondaryRegion: catpb.RegionName(secondaryRegion),
 	})
 
 	if err := p.writeTypeSchemaChange(ctx, typeDesc, op); err != nil {

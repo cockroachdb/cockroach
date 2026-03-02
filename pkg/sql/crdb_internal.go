@@ -452,8 +452,10 @@ var crdbInternalSuperRegions = virtualSchemaTable{
 CREATE TABLE crdb_internal.super_regions (
 	id INT NOT NULL,
 	database_name STRING NOT NULL,
-  super_region_name STRING NOT NULL,
-	regions STRING[]
+	super_region_name STRING NOT NULL,
+	regions STRING[],
+	primary_region STRING NULL,
+	secondary_region STRING NULL
 )`,
 	populate: func(ctx context.Context, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
 		return forEachDatabaseDesc(ctx, p, nil /* all databases */, true, /* requiresPrivileges */
@@ -476,18 +478,28 @@ CREATE TABLE crdb_internal.super_regions (
 						typeDesc.GetKind(), typeDesc.GetName(), typeDesc.GetID())
 				}
 
-				return regionDesc.ForEachSuperRegion(func(superRegion string) error {
+				return regionDesc.ForEachSuperRegion(func(sr descpb.SuperRegion) error {
 					regionList := tree.NewDArray(types.String)
-					if err := regionDesc.ForEachRegionInSuperRegion(superRegion, func(region catpb.RegionName) error {
-						return regionList.Append(tree.NewDString(region.String()))
-					}); err != nil {
-						return err
+					for _, region := range sr.Regions {
+						if err := regionList.Append(tree.NewDString(region.String())); err != nil {
+							return err
+						}
+					}
+					primaryRegion := tree.DNull
+					if sr.PrimaryRegion != "" {
+						primaryRegion = tree.NewDString(string(sr.PrimaryRegion))
+					}
+					secondaryRegion := tree.DNull
+					if sr.SecondaryRegion != "" {
+						secondaryRegion = tree.NewDString(string(sr.SecondaryRegion))
 					}
 					return addRow(
 						tree.NewDInt(tree.DInt(db.GetID())), // id
 						tree.NewDString(db.GetName()),       // database_name
-						tree.NewDString(superRegion),        // super_region_name
+						tree.NewDString(sr.SuperRegionName), // super_region_name
 						regionList,                          // regions
+						primaryRegion,                       // primary_region
+						secondaryRegion,                     // secondary_region
 					)
 				})
 			})

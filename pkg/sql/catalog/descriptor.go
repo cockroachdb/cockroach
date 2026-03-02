@@ -995,16 +995,9 @@ type RegionEnumTypeDescriptor interface {
 	// Supports iterutil.StopIteration().
 	ForEachRegion(f func(regionName catpb.RegionName, transition descpb.TypeDescriptor_EnumMember_Direction) error) error
 
-	// ForEachSuperRegion applies f on each super-region name.
+	// ForEachSuperRegion applies f on each super region.
 	// Supports iterutil.StopIteration().
-	ForEachSuperRegion(f func(superRegionName string) error) error
-
-	// ForEachRegionInSuperRegion applies f on each region in the super region.
-	// Supports iterutil.StopIteration().
-	ForEachRegionInSuperRegion(
-		superRegion string,
-		f func(region catpb.RegionName) error,
-	) error
+	ForEachSuperRegion(f func(superRegion descpb.SuperRegion) error) error
 }
 
 // AliasTypeDescriptor is the TypeDescriptor subtype for alias types.
