@@ -432,7 +432,8 @@ func (re *rebalanceEnv) repairAddVoter(
 	}
 
 	// Pick the target with the best voter diversity score.
-	bestStoreID := re.pickBestStoreByVoterDiversity(rs, validCandidates)
+	bestStoreID := re.pickStoreByDiversity(
+		rs, validCandidates, (*existingReplicaLocalities).getScoreChangeForNewReplica)
 
 	// Create the pending change.
 	targetSS := re.stores[bestStoreID]
@@ -458,15 +459,21 @@ func (re *rebalanceEnv) repairAddVoter(
 		rangeID, bestStoreID)
 }
 
-// pickBestStoreByVoterDiversity selects the store from candidates that
-// maximizes voter diversity score. Higher score means better locality
-// diversity relative to existing voters. When multiple candidates are
-// tied for the best score, one is chosen uniformly at random via
-// reservoir sampling to avoid systematically favoring any particular
-// store. Returns 0 if no valid candidate is found (e.g. all candidates
-// have nil storeState).
-func (re *rebalanceEnv) pickBestStoreByVoterDiversity(
-	rs *rangeState, candidates []roachpb.StoreID,
+// diversityScorer computes a diversity score for a candidate store's locality
+// relative to existing replica localities. Both getScoreChangeForNewReplica
+// (for additions) and getScoreChangeForReplicaRemoval (for removals) have this
+// signature. In both cases, higher scores are better: for additions, a high
+// score means the candidate is diverse; for removals, a high (least negative)
+// score means the candidate is the most redundant.
+type diversityScorer func(erl *existingReplicaLocalities, lt localityTiers) float64
+
+// pickStoreByDiversity selects the store from candidates that maximizes the
+// given diversity scorer. When multiple candidates are tied for the best score,
+// one is chosen uniformly at random via reservoir sampling to avoid
+// systematically favoring any particular store. Returns 0 if no valid candidate
+// is found (e.g. all candidates have nil storeState).
+func (re *rebalanceEnv) pickStoreByDiversity(
+	rs *rangeState, candidates []roachpb.StoreID, scorer diversityScorer,
 ) roachpb.StoreID {
 	voterLocalities := re.dsm.getExistingReplicaLocalities(
 		rs.constraints.voterLocalityTiers)
@@ -478,7 +485,7 @@ func (re *rebalanceEnv) pickBestStoreByVoterDiversity(
 		if ss == nil {
 			continue
 		}
-		score := voterLocalities.getScoreChangeForNewReplica(ss.localityTiers)
+		score := scorer(voterLocalities, ss.localityTiers)
 		if score > bestScore && !diversityScoresAlmostEqual(score, bestScore) {
 			// Strictly better — reset.
 			bestScore = score
@@ -506,7 +513,8 @@ func (re *rebalanceEnv) promoteNonVoterToVoter(
 	promoteCands []roachpb.StoreID,
 ) {
 	// Pick the best candidate by voter diversity score.
-	bestStoreID := re.pickBestStoreByVoterDiversity(rs, promoteCands)
+	bestStoreID := re.pickStoreByDiversity(
+		rs, promoteCands, (*existingReplicaLocalities).getScoreChangeForNewReplica)
 	if bestStoreID == 0 {
 		log.KvDistribution.Warningf(ctx,
 			"skipping AddVoter repair for r%d: no valid promotion candidates", rangeID)
