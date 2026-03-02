@@ -2878,6 +2878,8 @@ var builtinOidsArray = []string{
 	2923: `to_char(number: int, format: string) -> string`,
 	2924: `to_char(number: float, format: string) -> string`,
 	2925: `to_char(number: decimal, format: string) -> string`,
+	2926: `to_date(date_string: string, format: string) -> date`,
+	2927: `to_timestamp(date_string: string, format: string) -> timestamptz`,
 }
 
 var builtinOidsBySignature map[string]oid.Oid

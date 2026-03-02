@@ -1,0 +1,1358 @@
+# LogicTest: local
+
+# Tests for to_date(text, text) and to_timestamp(text, text).
+
+# Basic date parsing.
+query T
+SELECT to_date('2023-03-15', 'YYYY-MM-DD')::string;
+----
+2023-03-15
+
+query T
+SELECT to_date('20230315', 'YYYYMMDD')::string;
+----
+2023-03-15
+
+query T
+SELECT to_date('2023 03 15', 'YYYY MM DD')::string;
+----
+2023-03-15
+
+# Basic timestamp parsing.
+query T
+SELECT to_timestamp('2023-03-15 14:30:45', 'YYYY-MM-DD HH24:MI:SS')::string;
+----
+2023-03-15 14:30:45+00
+
+query T
+SELECT to_timestamp('2023-03-15 02:30:45 PM', 'YYYY-MM-DD HH12:MI:SS AM')::string;
+----
+2023-03-15 14:30:45+00
+
+query T
+SELECT to_timestamp('2023-03-15 02:30:45 AM', 'YYYY-MM-DD HH12:MI:SS AM')::string;
+----
+2023-03-15 02:30:45+00
+
+# 12-hour clock: 12 AM = 0, 12 PM = 12.
+query T
+SELECT to_timestamp('2023-01-01 12:00:00 AM', 'YYYY-MM-DD HH12:MI:SS AM')::string;
+----
+2023-01-01 00:00:00+00
+
+query T
+SELECT to_timestamp('2023-01-01 12:00:00 PM', 'YYYY-MM-DD HH12:MI:SS AM')::string;
+----
+2023-01-01 12:00:00+00
+
+# Month names.
+query T
+SELECT to_date('15 January 2023', 'DD MONTH YYYY')::string;
+----
+2023-01-15
+
+query T
+SELECT to_date('15 FEBRUARY 2023', 'DD MONTH YYYY')::string;
+----
+2023-02-15
+
+query T
+SELECT to_date('15 march 2023', 'DD MONTH YYYY')::string;
+----
+2023-03-15
+
+query T
+SELECT to_date('15-Jan-2023', 'DD-Mon-YYYY')::string;
+----
+2023-01-15
+
+query T
+SELECT to_date('15-DEC-2023', 'DD-MON-YYYY')::string;
+----
+2023-12-15
+
+# Day of year.
+query T
+SELECT to_date('2023 074', 'YYYY DDD')::string;
+----
+2023-03-15
+
+query T
+SELECT to_date('2024 060', 'YYYY DDD')::string;
+----
+2024-02-29
+
+# Julian day.
+query T
+SELECT to_date('2460019', 'J')::string;
+----
+2023-03-15
+
+# Seconds since midnight (SSSS).
+query T
+SELECT to_timestamp('2023-03-15 52245', 'YYYY-MM-DD SSSS')::string;
+----
+2023-03-15 14:30:45+00
+
+# Fractional seconds: MS (milliseconds).
+query T
+SELECT to_timestamp('2023-03-15 14:30:45.123', 'YYYY-MM-DD HH24:MI:SS.MS')::string;
+----
+2023-03-15 14:30:45.123+00
+
+# MS with fewer than 3 digits should pad the value correctly without
+# advancing the position past subsequent format fields. Regression test for a
+# bug where the padding loop modified the digit count used for position
+# advancement.
+query T
+SELECT to_timestamp('2023-03 14:30:45.1-15', 'YYYY-MM HH24:MI:SS.MS-DD')::string;
+----
+2023-03-15 14:30:45.1+00
+
+# Fractional seconds: US (microseconds).
+query T
+SELECT to_timestamp('2023-03-15 14:30:45.123456', 'YYYY-MM-DD HH24:MI:SS.US')::string;
+----
+2023-03-15 14:30:45.123456+00
+
+# FF1-FF6 fractional second formats.
+query T
+SELECT to_timestamp('2023-03-15 14:30:45.1', 'YYYY-MM-DD HH24:MI:SS.FF1')::string;
+----
+2023-03-15 14:30:45.1+00
+
+query T
+SELECT to_timestamp('2023-03-15 14:30:45.12', 'YYYY-MM-DD HH24:MI:SS.FF2')::string;
+----
+2023-03-15 14:30:45.12+00
+
+query T
+SELECT to_timestamp('2023-03-15 14:30:45.123', 'YYYY-MM-DD HH24:MI:SS.FF3')::string;
+----
+2023-03-15 14:30:45.123+00
+
+query T
+SELECT to_timestamp('2023-03-15 14:30:45.1234', 'YYYY-MM-DD HH24:MI:SS.FF4')::string;
+----
+2023-03-15 14:30:45.1234+00
+
+query T
+SELECT to_timestamp('2023-03-15 14:30:45.12345', 'YYYY-MM-DD HH24:MI:SS.FF5')::string;
+----
+2023-03-15 14:30:45.12345+00
+
+query T
+SELECT to_timestamp('2023-03-15 14:30:45.123456', 'YYYY-MM-DD HH24:MI:SS.FF6')::string;
+----
+2023-03-15 14:30:45.123456+00
+
+# Timezone offsets.
+query T
+SELECT to_timestamp('2023-03-15 14:30:45 +05:30', 'YYYY-MM-DD HH24:MI:SS TZH:TZM')::string;
+----
+2023-03-15 09:00:45+00
+
+query T
+SELECT to_timestamp('2023-03-15 14:30:45 -08:00', 'YYYY-MM-DD HH24:MI:SS TZH:TZM')::string;
+----
+2023-03-15 22:30:45+00
+
+query T
+SELECT to_timestamp('2023-03-15 14:30:45 +00:00', 'YYYY-MM-DD HH24:MI:SS TZH:TZM')::string;
+----
+2023-03-15 14:30:45+00
+
+# BC dates.
+query T
+SELECT to_date('0044 BC', 'YYYY BC')::string;
+----
+0044-01-01 BC
+
+query T
+SELECT to_date('0001 AD', 'YYYY AD')::string;
+----
+0001-01-01
+
+# Century.
+query T
+SELECT to_date('21', 'CC')::string;
+----
+2001-01-01
+
+# Y,YYY format.
+query T
+SELECT to_date('2,023 03 15', 'Y,YYY MM DD')::string;
+----
+2023-03-15
+
+# Roman numeral months.
+query T
+SELECT to_date('2023 III 15', 'YYYY RM DD')::string;
+----
+2023-03-15
+
+query T
+SELECT to_date('2023 XII 25', 'YYYY RM DD')::string;
+----
+2023-12-25
+
+query T
+SELECT to_date('2023 I 01', 'YYYY RM DD')::string;
+----
+2023-01-01
+
+# Default values: missing fields default to 1 for month/day, 0 for time.
+query T
+SELECT to_date('2023', 'YYYY')::string;
+----
+2023-01-01
+
+query T
+SELECT to_timestamp('2023', 'YYYY')::string;
+----
+2023-01-01 00:00:00+00
+
+# ISO week date (IYYY, IW, ID).
+query T
+SELECT to_date('2023 11 3', 'IYYY IW ID')::string;
+----
+2023-03-15
+
+# Short year formats.
+query T
+SELECT to_date('23 03 15', 'YY MM DD')::string;
+----
+2023-03-15
+
+# Lower-case format patterns.
+query T
+SELECT to_date('2023-03-15', 'yyyy-mm-dd')::string;
+----
+2023-03-15
+
+query T
+SELECT to_timestamp('2023-03-15 14:30:45', 'yyyy-mm-dd hh24:mi:ss')::string;
+----
+2023-03-15 14:30:45+00
+
+# Error: TZ/tz not supported in to_date/to_timestamp.
+statement error "TZ"/"tz" format patterns are not supported in to_date/to_timestamp
+SELECT to_timestamp('2023-03-15 14:30:45 EST', 'YYYY-MM-DD HH24:MI:SS TZ');
+
+# Error: invalid hour for 12-hour clock.
+statement error invalid for the 12-hour clock
+SELECT to_timestamp('2023-03-15 13:30:45 PM', 'YYYY-MM-DD HH12:MI:SS AM');
+
+# Error: HH12 validates hour range even without AM/PM.
+statement error invalid for the 12-hour clock
+SELECT to_timestamp('13', 'HH12')::string;
+
+# HH12 with valid hour and no AM/PM. No year specified defaults to 1 BC.
+query T
+SELECT to_timestamp('11', 'HH12')::string;
+----
+0001-01-01 11:00:00+00 BC
+
+# HH12 hour 12 without AM/PM becomes midnight (matching PostgreSQL).
+query T
+SELECT to_timestamp('12', 'HH12')::string;
+----
+0001-01-01 00:00:00+00 BC
+
+# DDD out of range for non-leap year.
+statement error date/time field value out of range
+SELECT to_date('2023 366', 'YYYY DDD');
+
+# DDD out of range for leap year.
+statement error date/time field value out of range
+SELECT to_date('2024 367', 'YYYY DDD');
+
+# Whitespace handling in non-FX mode.
+query T
+SELECT to_date('2023  03  15', 'YYYY MM DD')::string;
+----
+2023-03-15
+
+# ==============================
+# Additional edge cases
+# ==============================
+
+# Day of week names (ignored for date computation).
+query T
+SELECT to_date('Monday 2023-03-20', 'DAY YYYY-MM-DD')::string
+----
+2023-03-20
+
+query T
+SELECT to_date('Mon 2023-03-20', 'DY YYYY-MM-DD')::string
+----
+2023-03-20
+
+# FX exact mode.
+query T
+SELECT to_date('2023-03-15', 'FXYYYY-MM-DD')::string
+----
+2023-03-15
+
+# Mixed case month name.
+query T
+SELECT to_date('15-jAnUaRy-2023', 'DD-MONTH-YYYY')::string
+----
+2023-01-15
+
+# Two-digit year: 99 maps to 1999 (not 2099).
+query T
+SELECT to_date('99-03-15', 'YY-MM-DD')::string
+----
+1999-03-15
+
+# Two-digit year: 23 maps to 2023.
+query T
+SELECT to_date('23-06-01', 'YY-MM-DD')::string
+----
+2023-06-01
+
+# Day of year edge cases.
+query T
+SELECT to_date('2023 001', 'YYYY DDD')::string
+----
+2023-01-01
+
+query T
+SELECT to_date('2023 365', 'YYYY DDD')::string
+----
+2023-12-31
+
+# Leap year day 366.
+query T
+SELECT to_date('2024 366', 'YYYY DDD')::string
+----
+2024-12-31
+
+# Y,YYY format.
+query T
+SELECT to_date('1,999 12 31', 'Y,YYY MM DD')::string
+----
+1999-12-31
+
+# BC date.
+query T
+SELECT to_date('0100 BC', 'YYYY BC')::string
+----
+0100-01-01 BC
+
+# Roman numeral months - lowercase.
+query T
+SELECT to_date('2023 iv 15', 'YYYY RM DD')::string
+----
+2023-04-15
+
+query T
+SELECT to_date('2023 IX 01', 'YYYY RM DD')::string
+----
+2023-09-01
+
+# Fractional seconds - milliseconds.
+query T
+SELECT to_timestamp('2023-03-15 14:30:45.999', 'YYYY-MM-DD HH24:MI:SS.MS')::string
+----
+2023-03-15 14:30:45.999+00
+
+# Fractional seconds - microseconds.
+query T
+SELECT to_timestamp('2023-03-15 14:30:45.999999', 'YYYY-MM-DD HH24:MI:SS.US')::string
+----
+2023-03-15 14:30:45.999999+00
+
+# SSSS = 0 (midnight).
+query T
+SELECT to_timestamp('2023-03-15 0', 'YYYY-MM-DD SSSS')::string
+----
+2023-03-15 00:00:00+00
+
+# SSSS = 86399 (23:59:59).
+query T
+SELECT to_timestamp('2023-03-15 86399', 'YYYY-MM-DD SSSS')::string
+----
+2023-03-15 23:59:59+00
+
+# ==============================
+# Default BC era when no year specified
+# ==============================
+
+# When no year-related field is provided, the default era is BC (year 1 BC),
+# matching PostgreSQL's behavior where tm_year defaults to 0.
+query T
+SELECT to_timestamp('SEP', 'MON')::string
+----
+0001-09-01 00:00:00+00 BC
+
+query T
+SELECT to_timestamp('00', 'SS')::string
+----
+0001-01-01 00:00:00+00 BC
+
+query T
+SELECT to_timestamp('06', 'MM')::string
+----
+0001-06-01 00:00:00+00 BC
+
+query T
+SELECT to_timestamp('TH', 'TH')::string
+----
+0001-01-01 00:00:00+00 BC
+
+query T
+SELECT to_timestamp('ADVI  ', 'ADRM')::string
+----
+0001-06-01 00:00:00+00 BC
+
+# Explicit AD should give year 1 AD.
+query T
+SELECT to_timestamp('000-AD', 'MS-BC')::string
+----
+0001-01-01 00:00:00+00 BC
+
+# ==============================
+# W (week of month) computes day of month
+# ==============================
+
+# W=3 in December: day = (3-1)*7+1 = 15.
+query T
+SELECT to_timestamp('3/DECEMBER ', 'W/MONTH')::string
+----
+0001-12-15 00:00:00+00 BC
+
+query T
+SELECT to_date('2024 03 3', 'YYYY MM W')::string
+----
+2024-03-15
+
+query T
+SELECT to_date('2024 01 1', 'YYYY MM W')::string
+----
+2024-01-01
+
+query T
+SELECT to_date('2024 06 4', 'YYYY MM W')::string
+----
+2024-06-22
+
+# ==============================
+# WW (week of year) computes day of year
+# ==============================
+
+query T
+SELECT to_timestamp('15 0822', 'WW YYYY')::string
+----
+0822-04-09 00:00:00+00
+
+query T
+SELECT to_date('2024 01', 'YYYY WW')::string
+----
+2024-01-01
+
+query T
+SELECT to_date('2024 10', 'YYYY WW')::string
+----
+2024-03-04
+
+query T
+SELECT to_date('2024 52', 'YYYY WW')::string
+----
+2024-12-23
+
+# WW without year should error.
+statement error cannot calculate day of year without year information
+SELECT to_timestamp('24', 'WW')::string
+
+# ==============================
+# CC + short year combination
+# ==============================
+
+# CC=28, Y=4 → year = (28-1)*100 + 4 = 2704.
+query T
+SELECT to_timestamp('28 4', 'CC Y')::string
+----
+2704-01-01 00:00:00+00
+
+# CC=21, YY=23 → year = (21-1)*100 + 23 = 2023.
+query T
+SELECT to_date('21 23', 'CC YY')::string
+----
+2023-01-01
+
+# W with a year: W=3 computes day.
+query T
+SELECT to_timestamp('2-AD:3 2024', 'Q-BC:FMW YYYY')::string
+----
+2024-01-15 00:00:00+00
+
+# Duplicate format fields: PostgreSQL allows the same field to appear multiple
+# times, only erroring when values conflict (non-zero and different).
+
+# Same field repeated with same value.
+query T
+SELECT to_timestamp('0000', 'FF2FF2')::string
+----
+0001-01-01 00:00:00+00 BC
+
+# AD and BC both set the bc field; same era is not a conflict.
+query T
+SELECT to_timestamp('AD AD', 'AD BC')::string
+----
+0001-01-01 00:00:00+00 BC
+
+# HH and HH12 both set the hh field.
+query T
+SELECT to_timestamp('1212', 'HHHH12')::string
+----
+0001-01-01 00:00:00+00 BC
+
+# YYYY and Y,YYY both set the year field; same value is not a conflict.
+query T
+SELECT to_timestamp('2,024:2024', 'Y,YYY:YYYY')::string
+----
+2024-01-01 00:00:00+00
+
+# MON and MONTH both set the mm field; same month is not a conflict.
+query T
+SELECT to_timestamp('FEBFEBRUARY .02.12', 'MONMONTH.MM.HH12')::string
+----
+0001-02-01 00:00:00+00 BC
+
+# RM and MON both set mm; same month is not a conflict.
+query T
+SELECT to_timestamp('VIII:08AUG', 'RM:YYMON')::string
+----
+2008-08-01 00:00:00+00
+
+# Same field with same non-zero value is allowed.
+query T
+SELECT to_timestamp('16231623', 'YYYYYYYY')::string
+----
+1623-01-01 00:00:00+00
+
+# Conflicting values for the same field should still error.
+statement error conflicting values for "YYYY" field
+SELECT to_timestamp('20232024', 'YYYYYYYY')::string
+
+# FF and MS interaction: PostgreSQL makes MS and US additive.
+query T
+SELECT to_timestamp('13500/135', 'FF5/MS')::string
+----
+0001-01-01 00:00:00.27+00 BC
+
+query T
+SELECT to_timestamp('130FF11302', 'FF3"FF1"MSW')::string
+----
+0001-01-08 00:00:00.26+00 BC
+
+# WW with explicit DD and MM: WW should not override explicit month/day.
+query T
+SELECT to_timestamp('49 06 12:12.00', 'WW DD HH:MM.FF2')::string
+----
+0001-12-06 00:00:00+00 BC
+
+# Julian day with W: W overrides the day from J.
+query T
+SELECT to_timestamp('72-3-2460389-FF1', 'FF2-W-J-"FF1"')::string
+----
+2024-03-15 00:00:00.72+00
+
+# YYYY+YYY overlap: conflict detection uses the raw parsed value before
+# adjust_partial_year_to_2020, so YYYY(2024) + YYY(024=24 raw) conflicts.
+statement error conflicting values for "YYY" field
+SELECT to_timestamp('2024024', 'YYYYYYY')::string
+
+# DAY+DY overlap: PostgreSQL increments the d field after setting it,
+# so duplicate day-of-week names always conflict.
+statement error conflicting values for "DY" field
+SELECT to_timestamp('WEDNESDAY-FEBRUARY /FEB WED', 'DAY-MONTH/MON DY')::string
+
+# FF2+FF2 with non-zero values: conflict detection uses the raw parsed
+# value before scaling to microseconds.
+statement error conflicting values for "FF2" field
+SELECT to_timestamp('313106', 'FF2FF2HH')::string
+
+# DAY + D with matching day-of-week: DY sets d to 1-indexed value,
+# D also stores 1-indexed, so matching values don't conflict.
+query T
+SELECT to_timestamp('SAT 7', 'DY D')::string
+----
+0001-01-01 00:00:00+00 BC
+
+# Q (quarter) with TH suffix: TH should be skipped after Q.
+query T
+SELECT to_timestamp('4TH 508', 'QTH YYY')::string
+----
+2508-01-01 00:00:00+00
+
+# Y,YYY format: parse comma-separated year correctly.
+query T
+SELECT to_timestamp('2,0242', 'Y,YYYQ')::text
+----
+2024-01-01 00:00:00+00
+
+query T
+SELECT to_timestamp('1,970-1,9701', 'Y,YYY-Y,YYYW')::text
+----
+1970-01-01 00:00:00+00
+
+query T
+SELECT to_date('0,562107', 'Y,YYYDDD')::text
+----
+0562-04-17
+
+query T
+SELECT to_timestamp('2,0102455280', 'Y,YYYJ')::text
+----
+2010-03-24 00:00:00+00
+
+# Y,YYY without valid comma format should error.
+statement error invalid input string for "Y,YYY"
+SELECT to_timestamp('2024', 'Y,YYY')
+
+# FFn followed by another FFn: isDigit=true means the first FFn reads
+# exactly its fixed width, not all available digits.
+query T
+SELECT to_timestamp('000000', 'FF4FF2')::text
+----
+0001-01-01 00:00:00+00 BC
+
+query T
+SELECT to_timestamp('000000', 'FF3FF3')::text
+----
+0001-01-01 00:00:00+00 BC
+
+query T
+SELECT to_timestamp('0000000000', 'FF5FF5')::text
+----
+0001-01-01 00:00:00+00 BC
+
+# FFn followed by non-digit format elements.
+query T
+SELECT to_timestamp('200623276', 'YYYYFF5')::text
+----
+2006-01-01 00:00:00.23276+00
+
+query T
+SELECT to_timestamp('1011', 'HHFF2')::text
+----
+0001-01-01 10:00:00.11+00 BC
+
+query T
+SELECT to_timestamp('2,00852', 'Y,YYYFF2')::text
+----
+2008-01-01 00:00:00.52+00
+
+query T
+SELECT to_timestamp('216093', 'CCFF4')::text
+----
+2001-01-01 00:00:00.6093+00
+
+# FFn at end of format string (slurp mode).
+query T
+SELECT to_timestamp('4154000', 'YFF6')::text
+----
+2004-01-01 00:00:00.154+00
+
+# HH24 does not set the 12-hour clock mode. When both HH and HH24
+# appear, the 12-hour adjustment from HH still applies.
+query T
+SELECT to_timestamp('12 12', 'HH HH24')::text
+----
+0001-01-01 00:00:00+00 BC
+
+query T
+SELECT to_timestamp('1212', 'HH12HH24')::text
+----
+0001-01-01 00:00:00+00 BC
+
+# AM/PM sets 12-hour clock; when followed by HH24, PG still validates
+# against the 12-hour clock.
+statement error hour "22" is invalid for the 12-hour clock
+SELECT to_timestamp('PM06/22', 'AMMM/HH24')
+
+statement error hour "0" is invalid for the 12-hour clock
+SELECT to_timestamp('AM/00JAN', 'PM/HH24MON')
+
+# Regression tests: FF precision rounding.
+# When FF is specified, to_timestamp rounds the fractional seconds
+# to the FF precision, matching PostgreSQL's AdjustTimestampForTypmod.
+
+# FF1 + MS: round to tenths of a second.
+query T
+SELECT to_timestamp('3783', 'MSFF1')::text
+----
+0001-01-01 00:00:00.7+00 BC
+
+query T
+SELECT to_timestamp('465-4', 'MS-FF1')::text
+----
+0001-01-01 00:00:00.9+00 BC
+
+query T
+SELECT to_timestamp('4.425JUN', 'FF1.MSMON')::text
+----
+0001-06-01 00:00:00.8+00 BC
+
+# FF2 + MS: round to hundredths of a second.
+query T
+SELECT to_timestamp('49491', 'FF2MS')::text
+----
+0001-01-01 00:00:00.98+00 BC
+
+# FF1 + MS order doesn't matter.
+query T
+SELECT to_timestamp('1378', 'FF1MS')::text
+----
+0001-01-01 00:00:00.5+00 BC
+
+# FF4 with literal text: the "FF6" literal consumes input characters,
+# and FF4 parses the remaining digits with precision rounding.
+query T
+SELECT to_timestamp('DECEMBER FF6 0000', 'MONTH"FF6" FF4')::text
+----
+0001-12-01 00:00:00.6+00 BC
+
+# Regression tests: literal character handling.
+# In non-FX mode, whitespace is only skipped before action (keyword)
+# nodes, not before literal character nodes. Literals consume one input
+# character each without checking for a match (matching PostgreSQL).
+
+# DAY followed by quoted literal and YYY.
+query T
+SELECT to_timestamp('SATURDAY HH24021', 'DAY"HH24"YYY')::text
+----
+4021-01-01 00:00:00+00
+
+query T
+SELECT to_timestamp('SATURDAY HH24521', 'DAY"HH24"YYY')::text
+----
+4521-01-01 00:00:00+00
+
+# DAY with no extra whitespace offset: parses correctly.
+query T
+SELECT to_timestamp('MONDAYHH24021', 'DAY"HH24"YYY')::text
+----
+2021-01-01 00:00:00+00
+
+# MONTH followed by quoted literal and SS.
+query T
+SELECT to_timestamp('21AUGUST   .HH12D.44', 'CCMONTH."HH12""D".SS')::text
+----
+2001-08-01 00:00:12+00
+
+# MONTH followed by quoted literal and CC.
+query T
+SELECT to_timestamp('JANUARY  HH12:24', 'MONTH"HH12":YY')::text
+----
+2012-01-01 00:00:00+00
+
+# ==============================
+# Fuzz: separator consumption after padded keywords
+# ==============================
+# After whitespace-padded keywords (DAY, MONTH, RM), a literal separator
+# (e.g. '-') should be consumed as a separator, not as part of the next
+# field's value.
+
+# DAY followed by separator and numeric fields.
+query T
+SELECT to_timestamp('SATURDAY -2024', 'DAY-IYYY')::text
+----
+2024-01-01 00:00:00+00
+
+query T
+SELECT to_timestamp('SATURDAY -01', 'DAY-HH24')::text
+----
+0001-01-01 01:00:00+00 BC
+
+query T
+SELECT to_timestamp('SUNDAY   -10', 'DAY-HH')::text
+----
+0001-01-01 10:00:00+00 BC
+
+query T
+SELECT to_timestamp('THURSDAY -1970', 'DAY-IYYY')::text
+----
+1970-01-01 00:00:00+00
+
+query T
+SELECT to_timestamp('SUNDAY   -08', 'DAY-IW')::text
+----
+0001-02-27 00:00:00+00 BC
+
+query T
+SELECT to_timestamp('SATURDAY -21-2', 'DAY-CC-Q')::text
+----
+2001-01-01 00:00:00+00
+
+query T
+SELECT to_timestamp('THURSDAY -55202415612', 'DAY-SSYYYYMSHH')::text
+----
+2024-01-01 00:00:55.156+00
+
+# MONTH followed by separator and numeric fields.
+query T
+SELECT to_timestamp('OCTOBER  -6024', 'MONTH-YYYY')::text
+----
+6024-10-01 00:00:00+00
+
+query T
+SELECT to_timestamp('JUNE     -024.AD', 'MONTH-YYY.AD')::text
+----
+2024-06-01 00:00:00+00
+
+query T
+SELECT to_timestamp('JANUARY  -0', 'MONTH-Y')::text
+----
+2000-01-01 00:00:00+00
+
+query T
+SELECT to_timestamp('DECEMBER -02 4323', 'MONTH-YY QMS')::text
+----
+2002-12-01 00:00:00.323+00
+
+query T
+SELECT to_timestamp('AUGUST   -05-11.AD', 'MONTH-HH-MI.BC')::text
+----
+0001-08-01 05:11:00+00 BC
+
+query T
+SELECT to_timestamp('JUNE     -792000', 'MONTH-US')::text
+----
+0001-06-01 00:00:00.792+00 BC
+
+query T
+SELECT to_timestamp('JUNE     -07:221', 'MONTH-HH24:QCC')::text
+----
+2001-06-01 07:00:00+00
+
+query T
+SELECT to_timestamp('APRIL    -2612', 'MONTH-DDHH24')::text
+----
+0001-04-26 12:00:00+00 BC
+
+query T
+SELECT to_timestamp('JUNE     -0/0000', 'MONTH-FF1/FF4')::text
+----
+0001-06-01 00:00:00+00 BC
+
+query T
+SELECT to_timestamp('NOVEMBER -1200:12', 'MONTH-HHSS:HH12')::text
+----
+0001-11-01 00:00:00+00 BC
+
+query T
+SELECT to_timestamp('25 MONDAY   AUGUST   -33', 'YY DAYMONTH-WW')::text
+----
+2025-08-13 00:00:00+00
+
+# RM followed by separator and numeric fields.
+query T
+SELECT to_timestamp('VI  -2', 'RM-W')::text
+----
+0001-06-08 00:00:00+00 BC
+
+query T
+SELECT to_timestamp('VI  -15', 'RM-HH24')::text
+----
+0001-06-01 15:00:00+00 BC
+
+query T
+SELECT to_timestamp('VI  -00', 'RM-FF2')::text
+----
+0001-06-01 00:00:00+00 BC
+
+query T
+SELECT to_timestamp('I   -01:JAN', 'RM-DD:MON')::text
+----
+0001-01-01 00:00:00+00 BC
+
+query T
+SELECT to_timestamp('VI  -2', 'RM-Q')::text
+----
+0001-06-01 00:00:00+00 BC
+
+query T
+SELECT to_timestamp('IX  -6', 'RM-FF1')::text
+----
+0001-09-01 00:00:00.6+00 BC
+
+query T
+SELECT to_timestamp('IV  -85272006', 'RM-FF4YYYY')::text
+----
+2006-04-01 00:00:00.8527+00
+
+query T
+SELECT to_timestamp('I   -12', 'RM-HH24')::text
+----
+0001-01-01 12:00:00+00 BC
+
+# Padded keyword followed by separator and text-based keyword.
+query T
+SELECT to_timestamp('TUESDAY  -DEC:AD', 'DAY-MON:AD')::text
+----
+0001-12-01 00:00:00+00 BC
+
+query T
+SELECT to_timestamp('XI  -NOVEMBER ', 'RM-MONTH')::text
+----
+0001-11-01 00:00:00+00 BC
+
+query T
+SELECT to_timestamp('JUNE     -JUNE     ', 'MONTH-MONTH')::text
+----
+0001-06-01 00:00:00+00 BC
+
+query T
+SELECT to_timestamp('JUNE     -VI  ', 'MONTH-RM')::text
+----
+0001-06-01 00:00:00+00 BC
+
+query T
+SELECT to_timestamp('SATURDAY -JULY     ', 'DAY-MONTH')::text
+----
+0001-07-01 00:00:00+00 BC
+
+query T
+SELECT to_timestamp('II  -FEB', 'RM-MON')::text
+----
+0001-02-01 00:00:00+00 BC
+
+query T
+SELECT to_timestamp('MONDAY   -MAR1', 'DAY-MONQ')::text
+----
+0001-03-01 00:00:00+00 BC
+
+# Padded keyword followed by separator and AD/BC.
+query T
+SELECT to_timestamp('SATURDAY -AD:844000', 'DAY-AD:FF6')::text
+----
+0001-01-01 00:00:00.844+00 BC
+
+query T
+SELECT to_timestamp('00:I   -AD', 'FF2:RM-AD')::text
+----
+0001-01-01 00:00:00+00 BC
+
+query T
+SELECT to_timestamp('SATURDAY -ADRM:12HH', 'DAY-AD"RM":HH24"HH"')::text
+----
+0001-01-01 12:00:00+00 BC
+
+query T
+SELECT to_timestamp('J1XI  -AD', '"J"WRM-BC')::text
+----
+0001-11-01 00:00:00+00 BC
+
+query T
+SELECT to_timestamp('YYYYIX  -AD', '"YYYY"RM-AD')::text
+----
+0001-09-01 00:00:00+00 BC
+
+# Padded keyword followed by separator and Y,YYY format.
+query T
+SELECT to_timestamp('JUNE     -2,024 15', 'MONTH-Y,YYY DD')::text
+----
+2024-06-15 00:00:00+00
+
+query T
+SELECT to_timestamp('SUNDAY   -1,378', 'DAY-Y,YYY')::text
+----
+1378-01-01 00:00:00+00
+
+query T
+SELECT to_timestamp('VI  -2,024', 'RM-Y,YYY')::text
+----
+2024-06-01 00:00:00+00
+
+query T
+SELECT to_timestamp('MONDAY   -0,086', 'DAY-Y,YYY')::text
+----
+0086-01-01 00:00:00+00
+
+query T
+SELECT to_timestamp('I   -0,210J', 'RM-Y,YYY"J"')::text
+----
+0210-01-01 00:00:00+00
+
+# Complex cases with padded keyword + separator + multiple fields.
+query T
+SELECT to_timestamp('OCTOBER  -SATURDAY 12594', 'MONTH-DAYHH24YYY')::text
+----
+1594-10-01 12:00:00+00
+
+query T
+SELECT to_timestamp('11.THURSDAY -SEPTEMBER', 'YY.DAY-MONTH')::text
+----
+2011-09-01 00:00:00+00
+
+query T
+SELECT to_timestamp('2012MONNOVEMBER -08', 'YYYY"MON"MONTH-HH12')::text
+----
+2012-11-01 08:00:00+00
+
+query T
+SELECT to_timestamp('ADSATURDAY -12:1,309', 'BCDAY-HH24:Y,YYY')::text
+----
+1309-01-01 12:00:00+00
+
+query T
+SELECT to_timestamp('000.FF6.ADTHURSDAY -970', 'MS."FF6".ADDAY-YYY')::text
+----
+1970-01-01 00:00:00+00
+
+query T
+SELECT to_timestamp('000000JANUARY  -MON.53', 'USMONTH-DY.YY')::text
+----
+2053-01-01 00:00:00+00
+
+query T
+SELECT to_timestamp('MARCH    -SUN030:AD 43', 'MONTH-DYFF3:AD SS')::text
+----
+0001-03-01 00:00:43.03+00 BC
+
+query T
+SELECT to_timestamp('53:30200-JUNE     -SAT', 'SS:FF5-MONTH-DY')::text
+----
+0001-06-01 00:00:53.302+00 BC
+
+query T
+SELECT to_timestamp('000000DECEMBER -WED:08/342', 'FF6MONTH-DY:DD/DDD')::text
+----
+0001-12-08 00:00:00+00 BC
+
+# ==============================
+# Fuzz: FM (fill mode) variable-width parsing
+# ==============================
+# FM mode causes numeric fields to consume variable-width digits.
+
+query T
+SELECT to_timestamp('2108', 'FMCCYY')::text
+----
+210701-01-01 00:00:00+00
+
+query T
+SELECT to_timestamp('4422', 'FMFF1FF3')::text
+----
+0001-01-01 00:00:00.4+00 BC
+
+query T
+SELECT to_timestamp('2401', 'FMYYYHH')::text
+----
+2401-01-01 00:00:00+00
+
+query T
+SELECT to_timestamp('0000034', 'FMFF5WW')::text
+----
+0001-01-01 00:00:00.00003+00 BC
+
+query T
+SELECT to_timestamp('AD/42', 'BC/FMDQ')::text
+----
+0001-01-01 00:00:00+00 BC
+
+query T
+SELECT to_timestamp('000000000000', 'FMUSUS')::text
+----
+0001-01-01 00:00:00+00 BC
+
+query T
+SELECT to_timestamp('00 20113', 'FF2 FMYYYDD')::text
+----
+20113-01-01 00:00:00+00
+
+query T
+SELECT to_timestamp('197000', 'FMIYYYHH24')::text
+----
+197000-01-01 00:00:00+00
+
+query T
+SELECT to_timestamp('19203', 'FMIYYYQ')::text
+----
+19203-01-01 00:00:00+00
+
+query T
+SELECT to_timestamp('MONDAY   01000012', 'DAYMMFMFF4HH24')::text
+----
+0001-01-01 00:00:00+00 BC
+
+query T
+SELECT to_timestamp('180', 'FMIWFF1')::text
+----
+0003-06-09 00:00:00+00
+
+query T
+SELECT to_timestamp('12440588', 'FMIWJ')::text
+----
+238428-03-13 00:00:00+00
+
+query T
+SELECT to_timestamp('2440588112', 'JFMWWHH12')::text
+----
+4714-11-26 00:00:00+00 BC
+
+query T
+SELECT to_timestamp('03:VIII-216', 'HH24:RM-FMCCFF1')::text
+----
+21501-08-01 03:00:00+00
+
+query T
+SELECT to_timestamp('FRIDAY   6214920144', 'DAYFF5FMYYYYQ')::text
+----
+20144-01-01 00:00:00.62149+00
+
+query T
+SELECT to_timestamp('0000001970', 'FMFF6IYYY')::text
+----
+0001-01-01 00:00:00.00197+00 BC
+
+# ==============================
+# Fuzz: out-of-range value validation
+# ==============================
+
+# MS + FF additive overflow: combined fractional seconds exceed valid range.
+statement error date/time field value out of range
+SELECT to_timestamp('633.6', 'MS.FF1')::text
+
+statement error date/time field value out of range
+SELECT to_timestamp('59590', 'FF2MS')::text
+
+statement error date/time field value out of range
+SELECT to_timestamp('8498', 'MSFF1')::text
+
+# J (Julian day) producing out-of-range dates.
+statement error date/time field value out of range
+SELECT to_timestamp('244058801', 'JDD')::text
+
+statement error date/time field value out of range
+SELECT to_timestamp('THURSDAY 244058801', 'DAYJDD')::text
+
+statement error date/time field value out of range
+SELECT to_timestamp('24604773', 'JW')::text
+
+statement error date/time field value out of range
+SELECT to_timestamp('2440588000', 'JFF3')::text
+
+# IYYY/YYYY out of range after J.
+statement error value for "IYYY" in source string is out of range
+SELECT to_timestamp('32756364256', 'JIYYY')::text
+
+statement error value for "YYYY" in source string is out of range
+SELECT to_timestamp('AD24405881970', 'ADJYYYY')::text
+
+statement error value for "YYYY" in source string is out of range
+SELECT to_timestamp('35642425046', 'JYYYY')::text
+
+# FF* value out of range.
+statement error value for "FF5" in source string is out of range
+SELECT to_timestamp('245328205208', 'JFF5')::text
+
+statement error value for "FF4" in source string is out of range
+SELECT to_timestamp('24528607331', 'JFF4')::text
+
+statement error value for "FF6" in source string is out of range
+SELECT to_timestamp('70-2440588000000', 'YY-JFF6')::text
+
+# ==============================
+# Fuzz: quoted literal after padded keyword
+# ==============================
+# After padded keywords (DAY pads to 9, MONTH to 9, RM to 4), trailing
+# padding spaces must be skipped before consuming quoted literal text.
+
+# MONTH + quoted literal + numeric field.
+statement error invalid value
+SELECT to_timestamp('DECEMBER MONTH12', 'MONTH"MONTH"HH24')::text
+
+statement error invalid value
+SELECT to_timestamp('JUNE     MM37', 'MONTH"MM"FF2')::text
+
+statement error invalid value
+SELECT to_timestamp('OCTOBER  SS.12/00-50', 'MONTH"SS".HH24/MI-YY')::text
+
+statement error invalid value
+SELECT to_timestamp('JUNE     :SS:39', 'MONTH:"SS":FF2')::text
+
+statement error invalid value
+SELECT to_timestamp('JUNE     :YYY.604', 'MONTH:"YYY".MS')::text
+
+statement error invalid value
+SELECT to_timestamp('JULY     BC4820', 'MONTH"BC"YYYY')::text
+
+# DAY + quoted literal + numeric field.
+statement error invalid value
+SELECT to_timestamp('SATURDAY /DD24', 'DAY/"DD"WW')::text
+
+statement error invalid value
+SELECT to_timestamp('SATURDAY MI:4', 'DAY"MI":Y')::text
+
+statement error invalid value
+SELECT to_timestamp('THURSDAY Q:70J', 'DAY"Q":YY"J"')::text
+
+statement error invalid value
+SELECT to_timestamp('SATURDAY .SS24', 'DAY."SS"IW')::text
+
+statement error invalid value
+SELECT to_timestamp('THURSDAY /YYY01', 'DAY/"YYY"WW')::text
+
+# RM + quoted literal + numeric field.
+statement error invalid value
+SELECT to_timestamp('VI  CC 06', 'RM"CC" MM')::text
+
+statement error invalid value
+SELECT to_timestamp('II  MI4', 'RM"MI"W')::text
+
+statement error invalid value
+SELECT to_timestamp('VII CC 9', 'RM"CC" FF1')::text
+
+statement error invalid value
+SELECT to_timestamp('I   MM1', 'RM"MM"Q')::text
+
+# Padded keyword + quoted literal + text-based field.
+statement error invalid value
+SELECT to_timestamp('12MONDAY    TH JAN', 'HH12DAY TH MON')::text
+
+statement error invalid value
+SELECT to_timestamp('3AUGUST    DDD-AUGUST    06', 'QMONTH "DDD"-MONTH CC')::text
+
+# ==============================
+# Fuzz: error on non-digit characters after FM-mode field exhaustion
+# ==============================
+# When FM mode causes a field to consume all available digits, the next
+# field sees non-digit characters and should error.
+
+statement error invalid value
+SELECT to_timestamp('912:00', 'FMYHH24:FF2')::text
+
+statement error invalid value
+SELECT to_timestamp('06419JUN.064', 'FMFF3MIMON.MS')::text
+
+statement error invalid value
+SELECT to_timestamp('012:0/4', 'FMMIHH24:FF1/Q')::text
+
+statement error invalid value
+SELECT to_timestamp('0000002 AD', 'FMFF6Y FMBC')::text
+
+statement error invalid value
+SELECT to_timestamp('3-292121AUG', 'Q-FMYYYYYYMON')::text
+
+statement error invalid value
+SELECT to_timestamp('154.AD4', 'FMYYQ.ADQ')::text
+
+# Padded keyword + TH suffix causing misalignment.
+statement error invalid value
+SELECT to_timestamp('JUNE     SATURDAY .TH8190', 'MONTHDAY.THFF4')::text
+
+statement error invalid value
+SELECT to_timestamp('JUNE     .TH.167:9850', 'MONTH.TH.DDD:FF4')::text
+
+statement error invalid value
+SELECT to_timestamp('4 5.APRIL    .TH/04', 'W D.MONTH.TH/HH24')::text
+
+# ==============================
+# Fuzz: FM with mixed Gregorian/ISO date modes
+# ==============================
+# When FM causes the first field to consume all digits and the second
+# field (with a different date mode) hits source exhaustion, parsing
+# stops before the mode check.
+
+query T
+SELECT to_timestamp('238', 'FMDIW')::text
+----
+0001-01-01 00:00:00+00 BC
+
+query T
+SELECT to_timestamp('202424', 'FMYYYYIY')::text
+----
+202424-01-01 00:00:00+00
+
+# ==============================
+# Fuzz: FF rounding for BC dates
+# ==============================
+# FF precision rounding operates on the full timestamp (int64 microseconds),
+# so for negative timestamps (BC dates), the fractional part rounds differently
+# than for positive timestamps.
+
+query T
+SELECT to_timestamp('39 02395', 'FF2 HHMS')::text
+----
+0001-01-01 02:00:00.78+00 BC
+
+# ==============================
+# Fuzz: sign handling in integer parsing
+# ==============================
+# Integer fields handle optional sign characters (+ / -). When a separator
+# like '-' is consumed by the extra_skip mechanism, the next field may see
+# a leading '-' which is parsed as a negative number.
+
+query T
+SELECT to_timestamp('584001-58', 'SSFMQYYY-SS')::text
+----
+1942-01-01 00:00:58+00
+
+query T
+SELECT to_timestamp('7017-000 12', 'FMYDDD-FF3 HH12')::text
+----
+7017-01-01 00:00:00.12+00
+
+query T
+SELECT to_timestamp('000525161-2', 'MSFMCCIYYY-D')::text
+----
+0002-01-01 00:00:00+00 BC
+
+query T
+SELECT to_timestamp('100-00000', 'FMQHH24-FF2FF3')::text
+----
+0001-01-01 00:00:00+00 BC
+
+query T
+SELECT to_timestamp('00000000-00000', 'FMFF6SS-FF5')::text
+----
+0001-01-01 00:00:00+00 BC
+
+# ==============================
+# Fuzz: CC + partial year (yysz) interaction
+# ==============================
+# yysz is determined by the keyword's fixed width (1 for Y, 2 for YY, etc.),
+# not the number of digits actually consumed. This affects CC+year
+# interaction since CC overrides the century only when yysz <= 2.
+
+query T
+SELECT to_timestamp('21:424', 'FMCC:FMYIY')::text
+----
+2024-01-01 00:00:00+00
+
+# ==============================
+# Fuzz: BC leap year dates
+# ==============================
+# Year 0 (1 BC) is a leap year, so Feb 29 is valid. The parser correctly
+# computes month=2, day=29, year=0, but the Go timestamp representation
+# shifts it to Mar 1.
+
+query T
+SELECT to_timestamp('02 29', 'MM DD')::text
+----
+0001-03-01 00:00:00+00 BC
+
+query T
+SELECT to_timestamp('00-0900 TUE.0', 'MI-IWMI DY.FF1')::text
+----
+0001-03-01 00:00:00+00 BC
+
+# ==============================
+# Fuzz: sign consumed as separator causes invalid parse
+# ==============================
+# When FM causes IYYY to slurp all digits, HH24 sees '-' as a sign
+# character but the next character ('D') is not a digit.
+
+statement error invalid value "-D" for "HH24"
+SELECT to_date('202400-DD.3', 'FMIYYYHH24-"DD".W')::text
+
+# When FM causes CC to slurp extra digits, DD sees '-' as a sign and
+# parses a large negative day. The negative day must not be silently
+# defaulted to 1.
+
+statement error date/time field value out of range
+SELECT to_date('2115-2460477', 'FMCCDD-J')::text
