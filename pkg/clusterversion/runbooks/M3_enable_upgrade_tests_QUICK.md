@@ -255,7 +255,7 @@ git checkout -b enable-upgrade-tests-25.4-code
 
 ### Step 2: Update PreviousRelease Constant
 
-**File:** `pkg/clusterversion/cockroach_versions.go` (line ~332)
+**File:** `pkg/clusterversion/cockroach_versions.go` (line ~317)
 
 ```go
 // Before
@@ -271,63 +271,75 @@ const PreviousRelease Key = V25_4
 
 **File:** `pkg/sql/logictest/logictestbase/logictestbase.go`
 
-**Add config** (after 25.3 config, line ~560):
+**Add config** (after the last testserver config block):
 
 ```go
 {
-	// This config runs tests using a 25.4 predecessor binary, testing upgrade
-	// compatibility.
-	Name:                        "cockroach-go-testserver-25.4",
-	NumNodes:                    1,
-	OverrideDistSQLMode:         "off",
-	UseCockroachGoTestserver:    true,
-	CockroachGoTestserverVersion: "v25.4.0",
-	DeclarativeCorpusCollection: true,
+	// This config runs a cluster with 3 nodes, with a separate process per
+	// node. The nodes initially start on v25.4.
+	Name:                     "cockroach-go-testserver-25.4",
+	UseCockroachGoTestserver: true,
+	BootstrapVersion:         clusterversion.V25_4,
+	NumNodes:                 3,
 },
 ```
 
-**Add to set** (line ~615):
+**Note:** The exact fields vary — check the previous version's config (e.g., `cockroach-go-testserver-25.3`) for the current pattern before adding. The `BootstrapVersion` field replaced the older `CockroachGoTestserverVersion` string.
+
+**Add to set** (in the `cockroach-go-testserver-configs` block):
 
 ```go
 "cockroach-go-testserver-configs": makeConfigSet(
-	"cockroach-go-testserver-25.2",
-	"cockroach-go-testserver-25.3",
-	"cockroach-go-testserver-25.4",  // Add this
+	"cockroach-go-testserver-25.4",  // Add new version; remove oldest if MinSupported advances
 ),
 ```
+
+**Note:** The set only includes versions >= MinSupported. After M.4 removes old versions, older entries are removed too.
 
 ---
 
 ### Step 4: Update BUILD.bazel Visibility
 
-**File:** `pkg/sql/logictest/BUILD.bazel` (line ~160)
+**File:** `pkg/sql/logictest/BUILD.bazel`
 
 ```bazel
 cockroach_predecessor_version(
     name = "cockroach_predecessor_version",
     visibility = [
         "//pkg/ccl/logictestccl:__subpackages__",
-        "//pkg/sql/logictest/tests/cockroach-go-testserver-25.2:__pkg__",
-        "//pkg/sql/logictest/tests/cockroach-go-testserver-25.3:__pkg__",
         "//pkg/sql/logictest/tests/cockroach-go-testserver-25.4:__pkg__",  # Add
-        "//pkg/sql/sqlitelogictest:__subpackages__",
+        "//pkg/sqlitelogictest:__subpackages__",
     ],
 )
 ```
+
+**Note:** Only active testserver versions appear here. Check the current file for context — versions removed by M.4 are also removed from this list.
 
 ---
 
 ### Step 5: Verify supportsSkipUpgradeTo
 
-**File:** `pkg/cmd/roachtest/roachtestutil/mixedversion/mixedversion.go` (line ~850)
+**File:** `pkg/cmd/roachtest/roachtestutil/mixedversion/mixedversion.go` (line ~616)
+
+The function uses a year/ordinal switch, not a simple equality check:
 
 ```go
-func supportsSkipUpgradeTo(v *version.Version) bool {
-	return v.Major() == 25 && v.Minor() == 4 && v.Patch() == 0 && v.PreRelease() == ""
+func (t *Test) supportsSkipUpgradeTo(pred, v *clusterupgrade.Version) bool {
+    // ...
+    series := v.Version.Major()
+    switch {
+    case series.Year < 24:
+        return false
+    case series.Year == 24:
+        return series.Ordinal == 3
+    default:
+        // 25.2 and 25.4 are innovation releases that support skip upgrades.
+        return series.Ordinal == 2 || series.Ordinal == 4
+    }
 }
 ```
 
-**Check:** If Minor() == 4 covers 25.4, no changes needed. Otherwise, update condition.
+**Check:** For 25.4 (`Ordinal == 4`), this already returns `true`. No changes needed. For future versions, verify the `default` case covers the new version's ordinal.
 
 ---
 
