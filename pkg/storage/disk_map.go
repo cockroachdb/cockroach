@@ -42,8 +42,8 @@ type pebbleMapBatchWriter struct {
 	makeKey func(k []byte) []byte
 	batch   *pebble.Batch
 	// onFlush will be called after every batch commit.
-	onFlush           func()
-	numPutsSinceFlush int
+	onFlush                func()
+	numMutationsSinceFlush int
 }
 
 // pebbleMapIterator iterates over the keys of a pebbleMap in sorted order.
@@ -147,7 +147,7 @@ func (r *pebbleMap) NewBatchWriterCapacity(capacityBytes int) diskmap.SortedDisk
 		// If we happened to have Put very large keys, we want to lose
 		// references to them.
 		r.gcPrefixSlice()
-		b.numPutsSinceFlush = 0
+		b.numMutationsSinceFlush = 0
 		b.batch = r.store.NewBatch()
 	}
 	return b
@@ -242,7 +242,20 @@ func (b *pebbleMapBatchWriter) Put(k []byte, v []byte) error {
 	if err := b.batch.Set(key, v, nil); err != nil {
 		return err
 	}
-	b.numPutsSinceFlush++
+	b.numMutationsSinceFlush++
+	if len(b.batch.Repr()) >= b.capacity {
+		return b.Flush()
+	}
+	return nil
+}
+
+// Delete implements the SortedDiskMapBatchWriter interface.
+func (b *pebbleMapBatchWriter) Delete(k []byte) error {
+	key := b.makeKey(k)
+	if err := b.batch.Delete(key, nil); err != nil {
+		return err
+	}
+	b.numMutationsSinceFlush++
 	if len(b.batch.Repr()) >= b.capacity {
 		return b.Flush()
 	}
@@ -258,9 +271,9 @@ func (b *pebbleMapBatchWriter) Flush() error {
 	return nil
 }
 
-// NumPutsSinceFlush implements the SortedDiskMapBatchWriter interface.
-func (b *pebbleMapBatchWriter) NumPutsSinceFlush() int {
-	return b.numPutsSinceFlush
+// NumMutationsSinceFlush implements the SortedDiskMapBatchWriter interface.
+func (b *pebbleMapBatchWriter) NumMutationsSinceFlush() int {
+	return b.numMutationsSinceFlush
 }
 
 // Close implements the SortedDiskMapBatchWriter interface.
