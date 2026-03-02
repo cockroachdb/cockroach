@@ -1697,6 +1697,25 @@ func (tc *Collection) LockDescriptorWithLease(
 	return uint64(desc.GetVersion()), err
 }
 
+// GetLookupContextFallbackFn returns a fallback function if leased descriptors
+// are being used for GetAll.*
+func (tc *Collection) GetLookupContextFallbackFn(
+	ctx context.Context, txn *kv.Txn,
+) func(id descpb.ID) (catalog.Descriptor, error) {
+	// Without leased descriptors everything should be fully resolved
+	// within a look up context.
+	if !getAllowLeasedDescriptorsInCatalogViews(ctx, tc.settings) {
+		return nil
+	}
+	// If we are in a concurrent drop scenario, then GetAll will miss
+	// entiries that don't currently have a namespace entry. The locked
+	// descriptor leasing could pick an earlier timestamp, so we still
+	// need some type of look up
+	return func(id descpb.ID) (catalog.Descriptor, error) {
+		return tc.ByIDWithLeased(txn).Get().Desc(ctx, id)
+	}
+}
+
 // MakeTestCollection makes a Collection that can be used for tests.
 func MakeTestCollection(
 	ctx context.Context, codec keys.SQLCodec, leaseManager LeaseManager,

@@ -2696,7 +2696,7 @@ func forEachTypeDesc(
 	if err != nil {
 		return err
 	}
-	lCtx := newInternalLookupCtx(all.OrderedDescriptors(), dbContext)
+	lCtx := newInternalLookupCtx(all.OrderedDescriptors(), dbContext, p.Descriptors().GetLookupContextFallbackFn(ctx, p.Txn()))
 	for _, id := range lCtx.typIDs {
 		typ := lCtx.typDescs[id]
 		dbDesc, err := lCtx.getDatabaseByID(typ.GetParentID())
@@ -2790,7 +2790,7 @@ func forEachTableDescFromDescriptors(
 	opts forEachTableDescOptions,
 	fn func(context.Context, tableDescContext) error,
 ) error {
-	lCtx := newInternalLookupCtx(c.OrderedDescriptors(), dbContext)
+	lCtx := newInternalLookupCtx(c.OrderedDescriptors(), dbContext, p.Descriptors().GetLookupContextFallbackFn(ctx, p.Txn()))
 
 	vOpts := opts.virtualOpts
 	if vOpts == virtualMany || vOpts == virtualCurrentDB {
@@ -2894,7 +2894,7 @@ func forEachTypeDescWithTableLookupInternalFromDescriptors(
 	c nstree.Catalog,
 	fn func(context.Context, catalog.DatabaseDescriptor, catalog.SchemaDescriptor, catalog.TypeDescriptor, tableLookupFn) error,
 ) error {
-	lCtx := newInternalLookupCtx(c.OrderedDescriptors(), dbContext)
+	lCtx := newInternalLookupCtx(c.OrderedDescriptors(), dbContext, p.Descriptors().GetLookupContextFallbackFn(ctx, p.Txn()))
 
 	for _, typID := range lCtx.typIDs {
 		typDesc := lCtx.typDescs[typID]
