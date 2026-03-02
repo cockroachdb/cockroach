@@ -235,9 +235,9 @@ func (desc *wrapper) ValidateForwardReferences(
 	// primary key during the schema change.
 	// This check cannot be performed in ValidateSelf due to a conflict with
 	// AllocateIDs.
-	if desc.PartitionAllBy && !multiregion.IsLocalityChangingFromOrToRBR(desc) {
+	if desc.PartitionAllBy {
 		for _, indexI := range desc.ActiveIndexes() {
-			if !desc.matchingPartitionbyAll(indexI) {
+			if !indexI.Adding() && !desc.matchingPartitionbyAll(indexI) {
 				vea.Report(errors.AssertionFailedf(
 					"table has PARTITION ALL BY defined, but index %s does not have matching PARTITION BY",
 					indexI.GetName(),

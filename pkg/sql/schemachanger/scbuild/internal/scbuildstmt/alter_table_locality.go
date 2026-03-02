@@ -278,10 +278,10 @@ func getTablePartitioningSpec(
 	allowedNewColNames := []tree.Name{newColName}
 	partitionBy := multiregion.PartitionByForRegionalByRow(regionConfig, newColName)
 	colName, err := findColumnByNameOnTable(b, tableID, newColName, allowedNewColNames)
-	implicitCols := []*scpb.ColumnName{colName}
 	if err != nil {
 		panic(err)
 	}
+	implicitCols := []*scpb.ColumnName{colName}
 	return partitioningSpec{
 		PartitionBy:           partitionBy,
 		NewImplicitColumns:    implicitCols,
@@ -304,7 +304,7 @@ func retrieveNonImplicitIndexColumns(
 			Column:    tree.Name(colName.Name),
 			Direction: getIndexColDir(keyCol),
 		}
-		i += 1
+		i++
 	}
 	cols = cols[:i]
 	return cols
@@ -330,9 +330,8 @@ func createOrVerifyRegionColumn(
 	tbl *scpb.Table,
 	t *tree.AlterTableLocality,
 ) {
-	// Check if the region column exists already - if so, use it.
-	// Otherwise, if we have no name was specified, implicitly create the
-	// crdb_region column.
+	// Check if the region column exists already, and return an error if it doesn't.
+	// Implicitly create the crdb_region column if no column was specified.
 	createDefaultRegionCol := false
 	mayNeedImplicitRegionCol := regionColNameNotSpecified(targetLocality.RegionalByRowColumn)
 	newRegionColName := explicitRegionColName(targetLocality.RegionalByRowColumn)
@@ -364,8 +363,8 @@ func panicIfTableLocalityRegionalByRowUsingConstraint(
 		return
 	}
 	currColName := explicitRegionColName(currentLocality.RegionalByRowColumn)
-	rbrUsingConstaint := b.QueryByID(tableID).FilterTableLocalityRegionalByRowUsingConstraint().MustGetZeroOrOneElement()
-	if rbrUsingConstaint != nil && currColName != targetColName {
+	rbrUsingConstraint := b.QueryByID(tableID).FilterTableLocalityRegionalByRowUsingConstraint().MustGetZeroOrOneElement()
+	if rbrUsingConstraint != nil && currColName != targetColName {
 		panic(pgerror.Newf(
 			pgcode.InvalidTableDefinition,
 			`cannot change the REGIONAL BY ROW column from %s to %s when "%s" is set`,
@@ -492,12 +491,12 @@ func checkExistingColIsValidForRegionCol(
 		))
 	}
 
-	// Check whether the given row is NOT NULL.
-	columNotNull := b.QueryByID(tableID).FilterColumnNotNull().Filter(func(
+	// Check whether the given column is NOT NULL.
+	columnNotNull := b.QueryByID(tableID).FilterColumnNotNull().Filter(func(
 		current scpb.Status, target scpb.TargetStatus, e *scpb.ColumnNotNull) bool {
 		return e.ColumnID == partCol.ColumnID
 	}).MustGetZeroOrOneElement()
-	if columNotNull == nil {
+	if columnNotNull == nil {
 		panic(errors.WithHintf(
 			pgerror.Newf(
 				pgcode.InvalidTableDefinition,
@@ -542,7 +541,6 @@ func buildLocalityConfig(locality *tree.Locality) catpb.LocalityConfig {
 		}
 	case tree.LocalityLevelRow:
 		// REGIONAL BY ROW
-		// Note that changes to/from RBR is not supported in the declarative schema changer yet
 		return catpb.LocalityConfig{
 			Locality: &catpb.LocalityConfig_RegionalByRow_{
 				RegionalByRow: &catpb.LocalityConfig_RegionalByRow{},
@@ -577,8 +575,7 @@ func addTargetLocalityElements(
 			})
 		}
 	case tree.LocalityLevelRow:
-		// Note that changes to/from RBR is not supported in the declarative schema changer yet
-		// Determine the column name to use
+		// REGIONAL BY ROW
 		colName := locality.RegionalByRowColumn
 		b.Add(&scpb.TableLocalityRegionalByRow{
 			TableID: tableID,

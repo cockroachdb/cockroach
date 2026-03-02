@@ -2940,7 +2940,7 @@ func (r *restoreResumer) publishDescriptors(
 	txn descs.Txn,
 	user username.SQLUsername,
 	details jobspb.RestoreDetails,
-	sqlDesc []catalog.Descriptor,
+	sqlDescs []catalog.Descriptor,
 	clusterID uuid.UUID,
 ) (err error) {
 	if details.DescriptorsPublished {
@@ -2970,7 +2970,7 @@ func (r *restoreResumer) publishDescriptors(
 	}
 
 	// Add type descriptors referenced by schema change targets.
-	all, err = addReferencedTypeDescriptors(ctx, txn, all, sqlDesc, details.DescriptorRewrites)
+	all, err = addReferencedTypeDescriptors(ctx, txn, all, sqlDescs, details.DescriptorRewrites)
 	if err != nil {
 		return err
 	}

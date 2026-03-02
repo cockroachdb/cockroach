@@ -64,8 +64,7 @@ type partitioningSpec struct {
 	// PartitionBy is the partition definition to apply.
 	PartitionBy *tree.PartitionBy
 
-	// NumImplicitColumns specifies how many leading columns in PartitionBy.Fields
-	// are implicit (prepended to the index but not explicitly in the PK definition).
+	// NewImplicitColumns are implicit columns to add to the index for partitioning.
 	NewImplicitColumns []*scpb.ColumnName
 
 	// AllowedNewColumnNames specifies columns that are allowed to be referenced
@@ -709,7 +708,7 @@ func recreateAllSecondaryIndexes(
 				nil, /* prevSpec */
 				partMutatedSpec,
 				false, /* isPrimary */
-				nil,
+				nil,   /*partitionByIndex*/
 				t.Partitioning /* overridePartitioning */)
 			if err != nil {
 				panic(err)

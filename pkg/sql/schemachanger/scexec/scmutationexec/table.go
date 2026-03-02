@@ -144,8 +144,8 @@ func (i *immediateVisitor) UnsetTableLocality(
 	if err != nil {
 		return err
 	}
-	// We should not reset TableLocality itself, specially for RBR tables. Otherwise,
-	// GC won't cleanup partitions correctly during drop table.
+	// We should not reset TableLocality itself, especially for RBR tables.
+	//  Otherwise, GC won't cleanup partitions correctly during drop table.
 	tbl.PartitionAllBy = false
 	tbl.RBRUsingConstraint = descpb.ConstraintID(0)
 	return nil

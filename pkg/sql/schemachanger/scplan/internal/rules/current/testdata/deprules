@@ -4250,20 +4250,20 @@ deprules
     - $column-Node[CurrentStatus] = TRANSIENT_ABSENT
     - joinTargetNode($index, $index-Target, $index-Node)
     - joinTargetNode($column, $column-Target, $column-Node)
-- name: locality must become public right before old table zone config is absent
-  from: new-locality-Node
+- name: locality must become absent right before old table zone config is absent
+  from: old-locality-Node
   kind: SameStagePrecedence
-  to: new-zone-config-Node
+  to: old-zone-config-Node
   query:
-    - $new-locality[Type] IN ['*scpb.TableLocalityGlobal', '*scpb.TableLocalityPrimaryRegion', '*scpb.TableLocalityRegionalByRow', '*scpb.TableLocalitySecondaryRegion']
-    - $new-zone-config[Type] = '*scpb.TableZoneConfig'
-    - joinOnDescID($new-locality, $new-zone-config, $table-id)
-    - $new-zone-config-Target[TargetStatus] = ABSENT
-    - $new-zone-config-Node[CurrentStatus] = ABSENT
-    - $new-locality-Target[TargetStatus] = ABSENT
-    - $new-locality-Node[CurrentStatus] = ABSENT
-    - joinTargetNode($new-locality, $new-locality-Target, $new-locality-Node)
-    - joinTargetNode($new-zone-config, $new-zone-config-Target, $new-zone-config-Node)
+    - $old-locality[Type] IN ['*scpb.TableLocalityGlobal', '*scpb.TableLocalityPrimaryRegion', '*scpb.TableLocalityRegionalByRow', '*scpb.TableLocalitySecondaryRegion']
+    - $old-zone-config[Type] = '*scpb.TableZoneConfig'
+    - joinOnDescID($old-locality, $old-zone-config, $table-id)
+    - $old-zone-config-Target[TargetStatus] = ABSENT
+    - $old-zone-config-Node[CurrentStatus] = ABSENT
+    - $old-locality-Target[TargetStatus] = ABSENT
+    - $old-locality-Node[CurrentStatus] = ABSENT
+    - joinTargetNode($old-locality, $old-locality-Target, $old-locality-Node)
+    - joinTargetNode($old-zone-config, $old-zone-config-Target, $old-zone-config-Node)
 - name: locality must become public right before table zone config is public
   from: new-locality-Node
   kind: SameStagePrecedence
@@ -9586,20 +9586,20 @@ deprules
     - $column-Node[CurrentStatus] = TRANSIENT_ABSENT
     - joinTargetNode($index, $index-Target, $index-Node)
     - joinTargetNode($column, $column-Target, $column-Node)
-- name: locality must become public right before old table zone config is absent
-  from: new-locality-Node
+- name: locality must become absent right before old table zone config is absent
+  from: old-locality-Node
   kind: SameStagePrecedence
-  to: new-zone-config-Node
+  to: old-zone-config-Node
   query:
-    - $new-locality[Type] IN ['*scpb.TableLocalityGlobal', '*scpb.TableLocalityPrimaryRegion', '*scpb.TableLocalityRegionalByRow', '*scpb.TableLocalitySecondaryRegion']
-    - $new-zone-config[Type] = '*scpb.TableZoneConfig'
-    - joinOnDescID($new-locality, $new-zone-config, $table-id)
-    - $new-zone-config-Target[TargetStatus] = ABSENT
-    - $new-zone-config-Node[CurrentStatus] = ABSENT
-    - $new-locality-Target[TargetStatus] = ABSENT
-    - $new-locality-Node[CurrentStatus] = ABSENT
-    - joinTargetNode($new-locality, $new-locality-Target, $new-locality-Node)
-    - joinTargetNode($new-zone-config, $new-zone-config-Target, $new-zone-config-Node)
+    - $old-locality[Type] IN ['*scpb.TableLocalityGlobal', '*scpb.TableLocalityPrimaryRegion', '*scpb.TableLocalityRegionalByRow', '*scpb.TableLocalitySecondaryRegion']
+    - $old-zone-config[Type] = '*scpb.TableZoneConfig'
+    - joinOnDescID($old-locality, $old-zone-config, $table-id)
+    - $old-zone-config-Target[TargetStatus] = ABSENT
+    - $old-zone-config-Node[CurrentStatus] = ABSENT
+    - $old-locality-Target[TargetStatus] = ABSENT
+    - $old-locality-Node[CurrentStatus] = ABSENT
+    - joinTargetNode($old-locality, $old-locality-Target, $old-locality-Node)
+    - joinTargetNode($old-zone-config, $old-zone-config-Target, $old-zone-config-Node)
 - name: locality must become public right before table zone config is public
   from: new-locality-Node
   kind: SameStagePrecedence

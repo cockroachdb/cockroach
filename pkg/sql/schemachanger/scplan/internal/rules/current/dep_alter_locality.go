@@ -77,13 +77,13 @@ func init() {
 		},
 	)
 
-	// New locality must become public right before the old zone config goes absent.
+	// Old locality must become absent at the same time as the old zone config.
 	// This ensures the zone configuration is updated at the same time as
 	// the locality change takes effect.
 	registerDepRule(
-		"locality must become public right before old table zone config is absent",
+		"locality must become absent right before old table zone config is absent",
 		scgraph.SameStagePrecedence,
-		"new-locality", "new-zone-config",
+		"old-locality", "old-zone-config",
 		func(from, to NodeVars) rel.Clauses {
 			return rel.Clauses{
 				from.TypeFilter(rulesVersionKey, isTableLocalityElement),
