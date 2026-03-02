@@ -809,6 +809,10 @@ func (r *fkSelfResolver) LookupObject(
 	return r.SchemaResolver.LookupObject(ctx, flags, dbName, scName, obName)
 }
 
+// internalLookupCtxFallbackFn fallback function if something
+// is not cached.
+type internalLookupCtxFallbackFn = func(id descpb.ID) (catalog.Descriptor, error)
+
 // internalLookupCtx can be used in contexts where all descriptors
 // have been recently read, to accelerate the lookup of
 // inter-descriptor relationships.
@@ -833,6 +837,8 @@ type internalLookupCtx struct {
 	typIDs      []descpb.ID
 	fnDescs     map[descpb.ID]catalog.FunctionDescriptor
 	fnIDs       []descpb.ID
+	// Optionally, a fallback look up function can be provided.
+	fallbackFn internalLookupCtxFallbackFn
 }
 
 // GetSchemaName looks up a schema with the given id in the LookupContext.
@@ -883,9 +889,12 @@ var useIndexLookupForDescriptorsInDatabase = settings.RegisterBoolSetting(
 type tableLookupFn = *internalLookupCtx
 
 // newInternalLookupCtx provides cached access to a set of descriptors for use
-// in virtual tables.
+// in virtual tables. Optionally, if fallbackFn missing descriptors are
+// looked up, which is required if a leased descriptors were used for population.
 func newInternalLookupCtx(
-	descs []catalog.Descriptor, prefix catalog.DatabaseDescriptor,
+	descs []catalog.Descriptor,
+	prefix catalog.DatabaseDescriptor,
+	fallbackFn internalLookupCtxFallbackFn,
 ) *internalLookupCtx {
 	dbNames := make(map[descpb.ID]string)
 	dbDescs := make(map[descpb.ID]catalog.DatabaseDescriptor)
@@ -948,12 +957,23 @@ func newInternalLookupCtx(
 		dbIDs:       dbIDs,
 		typIDs:      typIDs,
 		fnIDs:       fnIDs,
+		fallbackFn:  fallbackFn,
 	}
 }
 
 func (l *internalLookupCtx) getDatabaseByID(id descpb.ID) (catalog.DatabaseDescriptor, error) {
 	db, ok := l.dbDescs[id]
-	if !ok {
+	if ok {
+		return db, nil
+	}
+	if l.fallbackFn != nil {
+		desc, err := l.fallbackFn(id)
+		if err != nil {
+			return nil, err
+		}
+		db, _ = desc.(catalog.DatabaseDescriptor)
+	}
+	if db == nil {
 		return nil, sqlerrors.NewUndefinedDatabaseError(fmt.Sprintf("[%d]", id))
 	}
 	return db, nil
@@ -961,7 +981,17 @@ func (l *internalLookupCtx) getDatabaseByID(id descpb.ID) (catalog.DatabaseDescr
 
 func (l *internalLookupCtx) getTableByID(id descpb.ID) (catalog.TableDescriptor, error) {
 	tb, ok := l.tbDescs[id]
-	if !ok {
+	if ok {
+		return tb, nil
+	}
+	if l.fallbackFn != nil {
+		desc, err := l.fallbackFn(id)
+		if err != nil {
+			return nil, err
+		}
+		tb, _ = desc.(catalog.TableDescriptor)
+	}
+	if tb == nil {
 		return nil, sqlerrors.NewUndefinedRelationError(
 			tree.NewUnqualifiedTableName(tree.Name(fmt.Sprintf("[%d]", id))))
 	}
@@ -970,7 +1000,17 @@ func (l *internalLookupCtx) getTableByID(id descpb.ID) (catalog.TableDescriptor,
 
 func (l *internalLookupCtx) getTypeByID(id descpb.ID) (catalog.TypeDescriptor, error) {
 	typ, ok := l.typDescs[id]
-	if !ok {
+	if ok {
+		return typ, nil
+	}
+	if l.fallbackFn != nil {
+		desc, err := l.fallbackFn(id)
+		if err != nil {
+			return nil, err
+		}
+		typ, _ = desc.(catalog.TypeDescriptor)
+	}
+	if typ == nil {
 		return nil, sqlerrors.NewUndefinedTypeError(
 			tree.NewUnqualifiedTypeName(fmt.Sprintf("[%d]", id)))
 	}
@@ -983,13 +1023,26 @@ func (l *internalLookupCtx) hasSchemaWithID(id descpb.ID) bool {
 	if id == keys.SystemPublicSchemaID {
 		return true
 	}
-	_, ok := l.schemaDescs[id]
-	return ok
+	sc, err := l.getSchemaByID(id)
+	if err != nil {
+		return false
+	}
+	return sc != nil
 }
 
 func (l *internalLookupCtx) getSchemaByID(id descpb.ID) (catalog.SchemaDescriptor, error) {
 	sc, ok := l.schemaDescs[id]
-	if !ok {
+	if ok {
+		return sc, nil
+	}
+	if l.fallbackFn != nil {
+		desc, err := l.fallbackFn(id)
+		if err != nil {
+			return nil, err
+		}
+		sc, _ = desc.(catalog.SchemaDescriptor)
+	}
+	if sc == nil {
 		if id == keys.SystemPublicSchemaID {
 			return schemadesc.GetPublicSchema(), nil
 		}
@@ -1013,15 +1066,25 @@ func (l *internalLookupCtx) getSchemaNameByID(id descpb.ID) (string, error) {
 }
 
 func (l *internalLookupCtx) getDatabaseName(table catalog.Descriptor) string {
-	parentName := l.dbNames[table.GetParentID()]
-	if parentName == "" {
-		// The parent database was deleted. This is possible e.g. when
-		// a database is dropped with CASCADE, and someone queries
-		// this table before the dropped table descriptors are
-		// effectively deleted.
-		parentName = fmt.Sprintf("[%d]", table.GetParentID())
+	parentName, exists := l.dbNames[table.GetParentID()]
+	if parentName != "" {
+		return parentName
 	}
-	return parentName
+	// Attempt to resolve the parent name from the lookup function.
+	if !exists {
+		desc, err := l.fallbackFn(table.GetParentID())
+		// If we are able to receive the descriptor, and it
+		// is not dropped, then return the name. Otherwise,
+		// no namespace entry exists.
+		if err == nil && !desc.Dropped() {
+			return desc.GetName()
+		}
+	}
+	// The parent database was deleted. This is possible e.g. when
+	// a database is dropped with CASCADE, and someone queries
+	// this table before the dropped table descriptors are
+	// effectively deleted.
+	return fmt.Sprintf("[%d]", table.GetParentID())
 }
 
 func (l *internalLookupCtx) getSchemaName(table catalog.TableDescriptor) string {
