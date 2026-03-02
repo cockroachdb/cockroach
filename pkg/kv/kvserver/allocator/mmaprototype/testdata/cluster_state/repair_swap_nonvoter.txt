@@ -1,0 +1,28 @@
+# Swap misplaced non-voter: 6 stores in 2 zones, constraint requires 2
+# non-voters in zone=b. Currently only 1 non-voter is in zone=b. MMA should
+# swap a non-voter from zone=a to zone=b.
+
+set-store quiet=true
+  store-id=1 node-id=1 locality-tiers=zone=a
+  store-id=2 node-id=2 locality-tiers=zone=a
+  store-id=3 node-id=3 locality-tiers=zone=a
+  store-id=4 node-id=4 locality-tiers=zone=b
+  store-id=5 node-id=5 locality-tiers=zone=b
+  store-id=6 node-id=6 locality-tiers=zone=b
+----
+
+store-leaseholder-msg
+store-id=1
+  range-id=1
+    store-id=1 type=VOTER_FULL leaseholder=true
+    store-id=2 type=VOTER_FULL
+    store-id=3 type=VOTER_FULL
+    store-id=4 type=NON_VOTER
+    store-id=5 type=NON_VOTER
+    config=num_replicas=5 num_voters=3 constraints={'+zone=b':2}
+----
+
+repair store-id=1
+----
+[mmaid=1] repair not yet implemented
+pending(0)

@@ -1,0 +1,30 @@
+# Range unavailable: r1 has 3 voters but s2 and s3 are dead (only 1 of 3
+# alive, no quorum). MMA should detect the range is unavailable and skip it.
+
+set-store quiet=true
+  store-id=1 node-id=1 locality-tiers=zone=a
+  store-id=2 node-id=2 locality-tiers=zone=b
+  store-id=3 node-id=3 locality-tiers=zone=c
+----
+
+store-leaseholder-msg
+store-id=1
+  range-id=1
+    store-id=1 type=VOTER_FULL leaseholder=true
+    store-id=2 type=VOTER_FULL
+    store-id=3 type=VOTER_FULL
+    config=num_replicas=3
+----
+
+update-store-status store-id=2 health=dead leases=shedding replicas=shedding
+----
+dead shedding=leases,replicas
+
+update-store-status store-id=3 health=dead leases=shedding replicas=shedding
+----
+dead shedding=leases,replicas
+
+repair store-id=1
+----
+[mmaid=1] repair not yet implemented
+pending(0)
