@@ -77,6 +77,13 @@ CREATE TABLE t30984 (
   INDEX b_idx (b) STORING (c, a)
 )
 
+query TTBITTTBBBF rowsort
+SELECT * FROM [SHOW INDEXES FROM t30984] WHERE index_name = 'b_idx'
+----
+t30984      b_idx       true        1             b            b           ASC        false    false     true     1
+t30984      b_idx       true        2             c            c           N/A        true     false     true     1
+t30984      b_idx       true        3             a            a           ASC        false    true      true     1
+
 statement ok
 DROP TABLE t30984
 
@@ -87,6 +94,13 @@ CREATE TABLE t30984 (
   c INT,
   UNIQUE INDEX b_idx (b) STORING (c, a)
 )
+
+query TTBITTTBBBF rowsort
+SELECT * FROM [SHOW INDEXES FROM t30984] WHERE index_name = 'b_idx'
+----
+t30984      b_idx       false       1             b            b           ASC        false    false     true     1
+t30984      b_idx       false       2             c            c           N/A        true     false     true     1
+t30984      b_idx       false       3             a            a           ASC        true     true      true     1
 
 statement ok
 DROP TABLE t30984
@@ -100,6 +114,35 @@ CREATE TABLE t30984 (
   PRIMARY KEY (a, d),
   UNIQUE INDEX b_idx (b) STORING (c, d)
 )
+
+query TTBITTTBBBF rowsort
+SELECT * FROM [SHOW INDEXES FROM t30984] WHERE index_name = 'b_idx'
+----
+t30984      b_idx       false       1             b            b           ASC        false    false     true     1
+t30984      b_idx       false       2             c            c           N/A        true     false     true     1
+t30984      b_idx       false       3             a            a           ASC        true     true      true     1
+t30984      b_idx       false       4             d            d           ASC        true     true      true     1
+
+statement ok
+DROP TABLE t30984
+
+statement ok
+CREATE TABLE t30984 (
+  a INT,
+  b INT,
+  c INT,
+  d INT,
+  PRIMARY KEY (a, d),
+  INDEX b_idx (b) STORING (c, a, d)
+)
+
+query TTBITTTBBBF rowsort
+SELECT * FROM [SHOW INDEXES FROM t30984] WHERE index_name = 'b_idx'
+----
+t30984      b_idx       true        1             b            b           ASC        false    false     true     1
+t30984      b_idx       true        2             c            c           N/A        true     false     true     1
+t30984      b_idx       true        3             a            a           ASC        false    true      true     1
+t30984      b_idx       true        4             d            d           ASC        false    true      true     1
 
 statement ok
 DROP TABLE t30984

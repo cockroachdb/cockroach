@@ -921,6 +921,12 @@ func (desc *Mutable) allocateIndexIDs(columnNames map[string]descpb.ColumnID) er
 				return err
 			}
 			if colIDs.Contains(col.GetID()) {
+				// PK columns are already in colIDs because the key suffix column
+				// loop above (which builds KeySuffixColumnIDs) adds all PK column
+				// IDs that aren't already index key columns. So when we encounter
+				// a PK column listed in StoreColumnNames, colIDs.Contains is true
+				// even though it wasn't explicitly added as a stored column. In
+				// that case we silently skip it rather than returning an error.
 				if primaryColIDs.Contains(col.GetID()) &&
 					!idx.CollectKeyColumnIDs().Contains(col.GetID()) &&
 					idx.GetEncodingType() == catenumpb.SecondaryIndexEncoding {
