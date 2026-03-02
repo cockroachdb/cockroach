@@ -346,6 +346,8 @@ func (re *rebalanceEnv) repair(
 				re.repairRemoveNonVoter(ctx, localStoreID, rangeID, rs)
 			case RemoveLearner:
 				re.repairRemoveLearner(ctx, localStoreID, rangeID, rs)
+			case FinalizeAtomicReplicationChange:
+				re.repairFinalizeAtomicReplicationChange(ctx, localStoreID, rangeID, rs)
 			default:
 				log.KvDistribution.Infof(ctx,
 					"repair action %s for r%d not yet implemented", action, rangeID)
@@ -1105,6 +1107,69 @@ func (re *rebalanceEnv) repairRemoveLearner(
 	log.KvDistribution.Infof(ctx,
 		"result(success): RemoveLearner repair for r%d, removing learner on s%d",
 		rangeID, removeStoreID)
+}
+
+// repairFinalizeAtomicReplicationChange finalizes a range that is in a joint
+// configuration. It scans for replicas with joint-config types and converts
+// them to their finalized forms:
+//   - VOTER_INCOMING -> VOTER_FULL (type change)
+//   - VOTER_DEMOTING_LEARNER -> removed (removal)
+//   - VOTER_DEMOTING_NON_VOTER -> NON_VOTER (type change)
+func (re *rebalanceEnv) repairFinalizeAtomicReplicationChange(
+	ctx context.Context, localStoreID roachpb.StoreID, rangeID roachpb.RangeID, rs *rangeState,
+) {
+	var changes []ReplicaChange
+	for _, repl := range rs.replicas {
+		typ := repl.ReplicaType.ReplicaType
+		ss := re.stores[repl.StoreID]
+		if ss == nil {
+			continue
+		}
+		target := roachpb.ReplicationTarget{
+			NodeID:  ss.NodeID,
+			StoreID: repl.StoreID,
+		}
+		switch typ {
+		case roachpb.VOTER_INCOMING:
+			// Promote to full voter.
+			nextIDAndType := ReplicaIDAndType{
+				ReplicaType: ReplicaType{ReplicaType: roachpb.VOTER_FULL},
+			}
+			changes = append(changes,
+				MakeReplicaTypeChange(rangeID, rs.load, repl.ReplicaState, nextIDAndType, target))
+		case roachpb.VOTER_DEMOTING_LEARNER:
+			// Remove the demoting voter.
+			changes = append(changes,
+				MakeRemoveReplicaChange(rangeID, rs.load, repl.ReplicaState, target))
+		case roachpb.VOTER_DEMOTING_NON_VOTER:
+			// Demote to non-voter.
+			nextIDAndType := ReplicaIDAndType{
+				ReplicaType: ReplicaType{ReplicaType: roachpb.NON_VOTER},
+			}
+			changes = append(changes,
+				MakeReplicaTypeChange(rangeID, rs.load, repl.ReplicaState, nextIDAndType, target))
+		}
+	}
+	if len(changes) == 0 {
+		log.KvDistribution.Warningf(ctx,
+			"skipping FinalizeAtomicReplicationChange repair for r%d: no joint-config replicas found",
+			rangeID)
+		return
+	}
+
+	rangeChange := MakePendingRangeChange(rangeID, changes)
+	if err := re.preCheckOnApplyReplicaChanges(rangeChange); err != nil {
+		log.KvDistribution.Warningf(ctx,
+			"skipping FinalizeAtomicReplicationChange repair for r%d: pre-check failed: %v",
+			rangeID, err)
+		return
+	}
+	re.addPendingRangeChange(ctx, rangeChange)
+	re.changes = append(re.changes,
+		MakeExternalRangeChange(originMMARepair, localStoreID, rangeChange))
+	log.KvDistribution.Infof(ctx,
+		"result(success): FinalizeAtomicReplicationChange repair for r%d",
+		rangeID)
 }
 
 // Verify interface compliance.

@@ -1,8 +1,8 @@
 # Repair Actions TODO
 
 ## Easiest
-- [ ] `RemoveLearner` — find the learner replica and remove it. No constraint analysis, no diversity scoring. Simplified `RemoveNonVoter`.
-- [ ] `FinalizeAtomicReplicationChange` — send a finalization command, no store selection needed.
+- [x] `RemoveLearner` — find the learner replica and remove it. No constraint analysis, no diversity scoring. Simplified `RemoveNonVoter`.
+- [x] `FinalizeAtomicReplicationChange` — send a finalization command, no store selection needed.
 
 ## Easy (compose existing Add + Remove)
 - [ ] `ReplaceDeadVoter` — combine remove (targeting dead store) + add (find new store) in a single atomic change.
