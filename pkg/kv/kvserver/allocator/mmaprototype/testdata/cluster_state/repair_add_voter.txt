@@ -19,14 +19,14 @@ repair-needed
 AddVoter: r1
 
 # Round 1: repair adds a voter. With only s1 as an existing voter (zone=a),
-# s2 (zone=b) and s3 (zone=c) are equally diverse; s2 wins by lower StoreID.
+# s2 (zone=b) and s3 (zone=c) are equally diverse; one is chosen at random.
 repair store-id=1
 ----
-[mmaid=1] applying replica change r1 type: AddReplica target store n2,s2 (replica-id=none type=VOTER_FULL)->(replica-id=unknown type=VOTER_FULL) to range 1 on store 2
-[mmaid=1] addPendingRangeChange: change_id=1, range_id=1, change=r1 type: AddReplica target store n2,s2 (replica-id=none type=VOTER_FULL)->(replica-id=unknown type=VOTER_FULL)
-[mmaid=1] result(success): AddVoter repair for r1, adding voter on s2
+[mmaid=1] applying replica change r1 type: AddReplica target store n3,s3 (replica-id=none type=VOTER_FULL)->(replica-id=unknown type=VOTER_FULL) to range 1 on store 3
+[mmaid=1] addPendingRangeChange: change_id=1, range_id=1, change=r1 type: AddReplica target store n3,s3 (replica-id=none type=VOTER_FULL)->(replica-id=unknown type=VOTER_FULL)
+[mmaid=1] result(success): AddVoter repair for r1, adding voter on s3
 pending(1)
-change-id=1 store-id=2 node-id=2 range-id=1 load-delta=[cpu:0s/s, write-bandwidth:0 B/s, byte-size:0 B] start=0s gc=5m0s
+change-id=1 store-id=3 node-id=3 range-id=1 load-delta=[cpu:0s/s, write-bandwidth:0 B/s, byte-size:0 B] start=0s gc=5m0s
   prev=(replica-id=none type=VOTER_FULL)
   next=(replica-id=unknown type=VOTER_FULL)
 
@@ -35,12 +35,12 @@ repair-needed
 ----
 no ranges need repair
 
-# Confirm the first addition: leaseholder reports 2 voters.
+# Confirm the first addition: leaseholder reports 2 voters (s1 and s3).
 store-leaseholder-msg
 store-id=1
   range-id=1
     store-id=1 type=VOTER_FULL leaseholder=true
-    store-id=2 type=VOTER_FULL
+    store-id=3 type=VOTER_FULL
     config=num_replicas=3
 ----
 
@@ -49,18 +49,18 @@ repair-needed
 ----
 AddVoter: r1
 
-# Round 2: repair adds another voter. With s1 (zone=a) and s2 (zone=b),
-# s3 (zone=c) is the only remaining candidate.
+# Round 2: repair adds another voter. With s1 (zone=a) and s3 (zone=c),
+# s2 (zone=b) is the only remaining candidate.
 repair store-id=1
 ----
-[mmaid=2] applying replica change r1 type: AddReplica target store n3,s3 (replica-id=none type=VOTER_FULL)->(replica-id=unknown type=VOTER_FULL) to range 1 on store 3
-[mmaid=2] addPendingRangeChange: change_id=2, range_id=1, change=r1 type: AddReplica target store n3,s3 (replica-id=none type=VOTER_FULL)->(replica-id=unknown type=VOTER_FULL)
-[mmaid=2] result(success): AddVoter repair for r1, adding voter on s3
+[mmaid=2] applying replica change r1 type: AddReplica target store n2,s2 (replica-id=none type=VOTER_FULL)->(replica-id=unknown type=VOTER_FULL) to range 1 on store 2
+[mmaid=2] addPendingRangeChange: change_id=2, range_id=1, change=r1 type: AddReplica target store n2,s2 (replica-id=none type=VOTER_FULL)->(replica-id=unknown type=VOTER_FULL)
+[mmaid=2] result(success): AddVoter repair for r1, adding voter on s2
 pending(2)
-change-id=1 store-id=2 node-id=2 range-id=1 load-delta=[cpu:0s/s, write-bandwidth:0 B/s, byte-size:0 B] start=0s gc=5m0s enacted=0s
+change-id=1 store-id=3 node-id=3 range-id=1 load-delta=[cpu:0s/s, write-bandwidth:0 B/s, byte-size:0 B] start=0s gc=5m0s enacted=0s
   prev=(replica-id=none type=VOTER_FULL)
   next=(replica-id=unknown type=VOTER_FULL)
-change-id=2 store-id=3 node-id=3 range-id=1 load-delta=[cpu:0s/s, write-bandwidth:0 B/s, byte-size:0 B] start=0s gc=5m0s
+change-id=2 store-id=2 node-id=2 range-id=1 load-delta=[cpu:0s/s, write-bandwidth:0 B/s, byte-size:0 B] start=0s gc=5m0s
   prev=(replica-id=none type=VOTER_FULL)
   next=(replica-id=unknown type=VOTER_FULL)
 

@@ -460,9 +460,11 @@ func (re *rebalanceEnv) repairAddVoter(
 
 // pickBestStoreByVoterDiversity selects the store from candidates that
 // maximizes voter diversity score. Higher score means better locality
-// diversity relative to existing voters. Ties are broken by lower StoreID
-// for determinism. Returns 0 if no valid candidate is found (e.g. all
-// candidates have nil storeState).
+// diversity relative to existing voters. When multiple candidates are
+// tied for the best score, one is chosen uniformly at random via
+// reservoir sampling to avoid systematically favoring any particular
+// store. Returns 0 if no valid candidate is found (e.g. all candidates
+// have nil storeState).
 func (re *rebalanceEnv) pickBestStoreByVoterDiversity(
 	rs *rangeState, candidates []roachpb.StoreID,
 ) roachpb.StoreID {
@@ -470,16 +472,24 @@ func (re *rebalanceEnv) pickBestStoreByVoterDiversity(
 		rs.constraints.voterLocalityTiers)
 	bestStoreID := roachpb.StoreID(0)
 	bestScore := math.Inf(-1)
+	tieCount := 0
 	for _, storeID := range candidates {
 		ss := re.stores[storeID]
 		if ss == nil {
 			continue
 		}
 		score := voterLocalities.getScoreChangeForNewReplica(ss.localityTiers)
-		if score > bestScore ||
-			(diversityScoresAlmostEqual(score, bestScore) && storeID < bestStoreID) {
+		if score > bestScore && !diversityScoresAlmostEqual(score, bestScore) {
+			// Strictly better — reset.
 			bestScore = score
 			bestStoreID = storeID
+			tieCount = 1
+		} else if diversityScoresAlmostEqual(score, bestScore) {
+			// Tied — reservoir sampling: replace with probability 1/n.
+			tieCount++
+			if re.rng.Intn(tieCount) == 0 {
+				bestStoreID = storeID
+			}
 		}
 	}
 	return bestStoreID
