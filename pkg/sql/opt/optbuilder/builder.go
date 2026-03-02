@@ -189,8 +189,17 @@ type Builder struct {
 	// checkPrivilegeUser helps identify the username.SQLUsername for privilege
 	// checks performed. For routines that are specified with SECURITY
 	// DEFINER, the owner of the routine is checked. Otherwise, the check is
-	// against the user of the current session.
+	// against the user of the current session. Views override this to the view
+	// owner so that data source privilege checks use the definer's privileges.
 	checkPrivilegeUser username.SQLUsername
+
+	// checkExecutePrivilegeUser is the user whose EXECUTE privilege on
+	// functions/procedures is checked. This is separate from checkPrivilegeUser
+	// because views override checkPrivilegeUser to the view owner for data
+	// source access, but function EXECUTE privilege should still be checked
+	// against the invoker, matching PostgreSQL behavior. SECURITY DEFINER
+	// routines update both fields to the routine owner.
+	checkExecutePrivilegeUser username.SQLUsername
 
 	// builtTriggerFuncs caches already-built trigger functions for a table. It is
 	// necessary to cache these functions since triggers can recursively reference
