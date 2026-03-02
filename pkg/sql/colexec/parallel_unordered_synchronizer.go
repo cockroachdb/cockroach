@@ -327,6 +327,9 @@ func (s *ParallelUnorderedSynchronizer) workerRun(input colexecargs.OpWithMetaIn
 	case <-s.blockWorkersCh:
 	case <-s.exitWorkersCh:
 		return
+	case <-s.Ctx.Done():
+		s.workerSendErr(s.Ctx.Err())
+		return
 	}
 	msg := &unorderedSynchronizerMsg{
 		inputIdx: inputIdx,
