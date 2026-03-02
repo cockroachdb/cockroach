@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
 	"github.com/cockroachdb/cockroach/pkg/multitenant"
+	"github.com/cockroachdb/cockroach/pkg/obs/clustermetrics/cmmetrics"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/server/status/statuspb"
@@ -640,7 +641,7 @@ func (mr *MetricsRecorder) GetMetricsMetadata(
 	mr.mu.appRegistry.WriteMetricsMetadata(appMetrics)
 	mr.mu.logRegistry.WriteMetricsMetadata(srvMetrics)
 	mr.mu.sysRegistry.WriteMetricsMetadata(srvMetrics)
-	mr.mu.clusterMetricsRegistry.WriteMetricsMetadata(srvMetrics)
+	cmmetrics.WriteAllRegisteredMetadata(srvMetrics)
 
 	mr.writeStoreMetricsMetadata(nodeMetrics)
 	return nodeMetrics, appMetrics, srvMetrics
@@ -652,12 +653,16 @@ func (mr *MetricsRecorder) GetRecordedMetricNames(
 	allMetadata map[string]metric.Metadata,
 ) map[string]string {
 	storeMetricsMap := make(map[string]metric.Metadata)
+	clusterMetricsMap := make(map[string]metric.Metadata)
 	tsDbMetricNames := make(map[string]string, len(allMetadata))
 	mr.writeStoreMetricsMetadata(storeMetricsMap)
+	cmmetrics.WriteAllRegisteredMetadata(clusterMetricsMap)
 	for metricName, metadata := range allMetadata {
 		prefix := nodeTimeSeriesPrefix
 		if _, ok := storeMetricsMap[metricName]; ok {
 			prefix = storeTimeSeriesPrefix
+		} else if _, ok := clusterMetricsMap[metricName]; ok {
+			prefix = clusterTimeSeriesPrefix
 		}
 		if metadata.MetricType == prometheusgo.MetricType_HISTOGRAM {
 			for _, metricComputer := range metric.HistogramMetricComputers {

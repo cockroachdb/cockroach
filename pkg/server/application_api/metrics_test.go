@@ -14,15 +14,19 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/obs/clustermetrics"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/apiconstants"
 	"github.com/cockroachdb/cockroach/pkg/server/srvtestutils"
+	"github.com/cockroachdb/cockroach/pkg/server/status"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/util/httputil"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	prometheusgo "github.com/prometheus/client_model/go"
 	"github.com/stretchr/testify/require"
 )
@@ -60,6 +64,30 @@ func TestMetricsMetadata(t *testing.T) {
 	}
 }
 
+func TestMetricMetadata_clusterMetrics(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	manual := timeutil.NewManualTime(timeutil.Unix(0, 100))
+	st := cluster.MakeTestingClusterSettings()
+	recorder := status.NewMetricsRecorder(roachpb.SystemTenantID, roachpb.NewTenantNameContainer(""), nil, nil, manual, st)
+	nodeDesc := roachpb.NodeDescriptor{
+		NodeID: roachpb.NodeID(1),
+	}
+	recorder.AddNode(metric.NewRegistry(), metric.NewRegistry(), metric.NewRegistry(), metric.NewRegistry(), metric.NewRegistry(), nodeDesc, 50, "foo:26257", "foo:26258", "foo:5432")
+	clustermetrics.TestingRegisterClusterMetric("my.custom.metric", metric.Metadata{
+		Name:        "my.custom.metric",
+		Help:        "help text",
+		Measurement: "measurement",
+		Unit:        metric.Unit_COUNT,
+		MetricType:  prometheusgo.MetricType_GAUGE,
+	})
+	md, _, _ := recorder.GetMetricsMetadata(true)
+	require.Contains(t, md, "my.custom.metric")
+	recordedNames := recorder.GetRecordedMetricNames(md)
+	require.Contains(t, recordedNames, "my.custom.metric")
+	require.Equal(t, "cr.cluster.my.custom.metric", recordedNames["my.custom.metric"])
+}
+
 func TestGetRecordedMetricNames(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -69,7 +97,7 @@ func TestGetRecordedMetricNames(t *testing.T) {
 	recordedNames := s.MetricsRecorder().GetRecordedMetricNames(metricsMetadata)
 
 	for _, v := range recordedNames {
-		require.True(t, strings.HasPrefix(v, "cr.node") || strings.HasPrefix(v, "cr.store"))
+		require.True(t, strings.HasPrefix(v, "cr.node") || strings.HasPrefix(v, "cr.store") || strings.HasPrefix(v, "cr.cluster"))
 	}
 }
 

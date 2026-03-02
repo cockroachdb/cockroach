@@ -134,6 +134,18 @@ func testingRemoveMetadata(name string) {
 	delete(metadata.mu.registeredLabeledMetrics, name)
 }
 
+// WriteAllRegisteredMetadata copies all registered cluster metric
+// metadata into dest
+func WriteAllRegisteredMetadata(dest map[string]metric.Metadata) {
+	metadata.mu.RLock()
+	defer metadata.mu.RUnlock()
+	for name, md := range metadata.mu.registeredMetadata {
+		if _, exists := dest[name]; !exists {
+			dest[name] = md
+		}
+	}
+}
+
 // TestingRegisterClusterMetric adds a metric to the registry for testing.
 // It returns a cleanup function that removes the entry.
 func TestingRegisterClusterMetric(name string, md metric.Metadata) func() {
