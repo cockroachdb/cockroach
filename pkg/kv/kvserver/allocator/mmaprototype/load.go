@@ -27,6 +27,8 @@ import (
 // structured that adding additional resource dimensions is easy.
 type LoadDimension uint8
 
+var _ [3 - NumLoadDimensions]struct{}
+
 const (
 	// CPURate is in nanos per second.
 	CPURate LoadDimension = iota
@@ -115,6 +117,41 @@ func (lv *LoadVector) subtract(other LoadVector) {
 	for i := range other {
 		(*lv)[i] -= other[i]
 	}
+}
+
+type Amp float64
+
+func (af Amp) SafeFormat(w redact.SafePrinter, _ rune) {
+	w.Printf("%.2f", af)
+}
+
+func (af Amp) String() string {
+	return redact.StringWithoutMarkers(af)
+}
+
+type AmpVector [NumLoadDimensions]Amp
+
+// IdentityAmpVector returns an AmpVector where all dimensions have an
+// amplification factor of 1.0 (no conversion).
+func IdentityAmpVector() AmpVector {
+	var av AmpVector
+	for i := range av {
+		av[i] = 1.0
+	}
+	return av
+}
+
+func (av AmpVector) String() string {
+	return redact.StringWithoutMarkers(av)
+}
+
+func (av AmpVector) SafeFormat(w redact.SafePrinter, _ rune) {
+	w.Printf(
+		"[cpu:%v, write-bandwidth:%v, byte-size:%v]",
+		av[CPURate],
+		av[WriteBandwidth],
+		av[ByteSize],
+	)
 }
 
 // A resource can have a capacity, which is also expressed using LoadValue.
