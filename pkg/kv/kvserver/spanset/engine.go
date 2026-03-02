@@ -147,6 +147,20 @@ func (s *spanSetEngine) WrapWriteBatch(wb storage.WriteBatch) storage.WriteBatch
 	}
 }
 
+// WrapBatch associates the given Batch with this Engine, and returns a wrapped
+// Batch. This enables the corresponding assertions, e.g. checking that the
+// batch accesses only the keys allowed by this Engine.
+func (s *spanSetEngine) WrapBatch(b storage.Batch) storage.Batch {
+	return &spanSetBatch{
+		spanSetReader: spanSetReader{r: b, spans: s.spans, spansOnly: true},
+		spanSetWriteBatch: spanSetWriteBatch{
+			spanSetWriter: spanSetWriter{w: b, spans: s.spans, spansOnly: true},
+			wb:            b,
+		},
+		b: b, spans: s.spans, spansOnly: true,
+	}
+}
+
 // Attrs implements the storage.EngineWithoutRW interface.
 func (s *spanSetEngine) Attrs() roachpb.Attributes {
 	return s.e.Attrs()

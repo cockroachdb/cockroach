@@ -89,7 +89,7 @@ func (r *Replica) destroyRaftMuLocked(ctx context.Context, nextReplicaID roachpb
 	batch := r.store.internalEngines.NewWriteBatch()
 	defer batch.Close()
 
-	stateWO, raftWO := batch.Writers()
+	stateWO, raftWO := kvstorage.StateWO(batch.State()), batch.Raft()
 	if err := kvstorage.DestroyReplica(
 		ctx, kvstorage.ReadWriter{
 			State: kvstorage.State{RO: r.store.StateEngine(), WO: stateWO},

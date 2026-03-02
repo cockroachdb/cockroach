@@ -133,8 +133,8 @@ func WriteInitialRangeState(
 		return err
 	}
 
-	// TODO(sep-raft-log): when the log storage is separated, raft state must be
-	// written separately.
+	// TODO(sep-raft-log): when the log storage is separated, write a WAG node
+	// here, for crash recovery.
 	return WriteInitialRaftState(ctx, raftWO, desc.RangeID)
 }
 

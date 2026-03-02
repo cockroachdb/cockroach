@@ -308,7 +308,7 @@ func createTestStoreWithoutStart(
 
 	kvs, splits := opts.splits()
 	if err := WriteInitialClusterData(
-		ctx, eng.TODOEngine(), kvs /* initialValues */, cv.Version,
+		ctx, eng, kvs /* initialValues */, cv.Version,
 		1 /* numStores */, splits, cfg.Clock.PhysicalNow(), cfg.TestingKnobs,
 	); err != nil {
 		t.Fatal(err)
