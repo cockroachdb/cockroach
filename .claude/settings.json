@@ -1,0 +1,15 @@
+{
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "FILE=$(jq -r '.tool_input.file_path'); if [[ \"$FILE\" == *.go ]]; then crlfmt -w -tab 2 \"$FILE\"; fi"
+          }
+        ]
+      }
+    ]
+  }
+}
