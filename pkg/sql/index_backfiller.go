@@ -107,7 +107,7 @@ func (ib *IndexBackfillPlanner) BackfillIndexes(
 			return nil
 		}
 		progress.CompletedSpans = addCompleted(meta.BulkProcessorProgress.CompletedSpans...)
-		var mapProgress execinfrapb.IndexBackfillMapProgress
+		var mapProgress execinfrapb.BulkMapProgress
 		if gogotypes.Is(&meta.BulkProcessorProgress.ProgressDetails, &mapProgress) {
 			if err := gogotypes.UnmarshalAny(&meta.BulkProcessorProgress.ProgressDetails, &mapProgress); err != nil {
 				return err

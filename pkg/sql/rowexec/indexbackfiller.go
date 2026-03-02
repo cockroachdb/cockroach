@@ -375,7 +375,7 @@ func (ib *indexBackfiller) ingestIndexEntries(
 			return nil
 		}
 		if len(manifests) > 0 {
-			progress := execinfrapb.IndexBackfillMapProgress{
+			progress := execinfrapb.BulkMapProgress{
 				SSTManifests: manifests,
 			}
 			any, err := gogotypes.MarshalAny(&progress)
