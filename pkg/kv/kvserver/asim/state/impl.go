@@ -259,6 +259,7 @@ func (s *state) updateStoreCapacity(storeID StoreID) {
 			capacity = mergeOverride(capacity, override)
 		}
 		store.desc.Capacity = capacity
+		store.desc.NodeCapacity = s.NodeCapacity(store.nodeID)
 		s.publishNewCapacityEvent(capacity, storeID)
 	}
 }
