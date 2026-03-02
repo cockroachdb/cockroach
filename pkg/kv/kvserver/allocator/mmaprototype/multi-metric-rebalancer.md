@@ -152,6 +152,73 @@ size). Generates lease transfers and replica moves to balance overloaded stores.
 
 ---
 
+## Legacy Allocator Scoring Hierarchy (`allocatorimpl/allocator_scorer.go`)
+
+When the legacy allocator (used by the replicate queue, lease queue, and store rebalancer)
+needs to choose between multiple candidate stores — for allocation, removal, or
+rebalancing — it evaluates each candidate via a `candidate` struct and ranks them using a
+**lexicographic priority hierarchy**. A difference at any higher tier completely overrides
+all lower tiers. The tiers are evaluated in the `candidate.compare()` function:
+
+| Tier | Field | Score | What it checks |
+|------|-------|-------|----------------|
+| 1 | `valid` | ±600 | Does the store satisfy zone config constraints? |
+| 2 | `fullDisk` | ±500 | Is the store nearly full? |
+| 3 | `necessary` | ±400 | Is the store *required* to satisfy a constraint's `num_replicas`? |
+| 4 | `voterNecessary` | ±350 | Same but for voter-specific constraints |
+| 5 | `diversityScore` | ±300 | Locality-based geographic diversity (float in [0,1]) |
+| 6 | `ioOverloaded` | ±250 | Is the store IO overloaded? |
+| 7 | `convergesScore` | 200+δ | Will this move improve load convergence? (discrete: -1/0/+1) |
+| 8 | `balanceScore` | 150+δ | Is the store overfull/underfull/around-mean? (discrete: -1/0/+1) |
+| 9 | `hasNonVoter` | ±100 | Prefer stores already hosting non-voters (for voter promotion) |
+| 10 | `rangeCount` | ratio | Tiebreaker: lower range count wins |
+
+### diversityScore
+
+A float in [0, 1]. For allocation, it's the average pairwise `Locality.DiversityScore()`
+between the candidate and all existing replicas — higher means the candidate is in a
+different locality tier from existing replicas. For rebalancing, a variant
+(`diversityRebalanceFromScore`) computes what diversity would look like after the swap. It
+uses the locality hierarchy (`region > zone > rack`), so two stores in different regions
+score higher than two in different zones of the same region.
+
+### balanceScore
+
+A discrete ternary: `underfull (+1)`, `aroundTheMean (0)`, or `overfull (-1)`. Computed
+differently depending on the scorer type:
+
+- **RangeCountScorerOptions**: Compares range count to `mean ± max(mean * 5%, 2)`.
+- **LoadScorerOptions**: Compares load (CPU/QPS) against overfull/underfull thresholds
+  derived from cluster means + configurable threshold percentages.
+
+### convergesScore
+
+Also discrete (-1/0/+1), computed differently per scorer:
+
+- **RangeCountScorer**: `+1` if moving toward this store reduces range count deviation
+  from mean, `-1` if it increases it.
+- **LoadScorer**: Uses `getRebalanceTargetToMinimizeDelta()` to find the candidate that
+  minimizes the load delta between source and target. Only the best target gets `+1`.
+
+### Scorer variants
+
+Different contexts use different scorer implementations:
+
+| Scorer | Used by | Balances on |
+|--------|---------|-------------|
+| `RangeCountScorerOptions` | Replicate queue (`ConsiderRebalance`) | Range count per store |
+| `LoadScorerOptions` | Store rebalancer | Load (CPU/QPS) per store |
+| `BaseScorerOptionsNoConvergence` | Replicate queue (allocation/repair) | Nothing (convergence disabled) |
+| `ScatterScorerOptions` | `AdminScatter` | Range count with random jitter |
+
+### Contrast with MMA
+
+MMA sidesteps this entire scoring hierarchy. It has its own load summary model
+(`storeLoadSummary` with `Underloaded/Balanced/Overloaded` per dimension) and constraint
+matcher (posting-list index). The absorption will unify these two ranking approaches.
+
+---
+
 ## Key Cluster Settings
 
 | Setting | Default | Controls |
