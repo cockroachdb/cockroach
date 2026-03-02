@@ -1497,6 +1497,13 @@ func TestLogic_notice(
 	runLogicTest(t, "notice")
 }
 
+func TestLogic_numeric_formatting(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "numeric_formatting")
+}
+
 func TestLogic_numeric_references(
 	t *testing.T,
 ) {

@@ -21,12 +21,12 @@ import (
 
 // TimeToChar converts a time and a `to_char` format string to a string.
 func TimeToChar(t time.Time, c *FormatCache, f string) (string, error) {
-	return timeToChar(timeWrapper{t}, c.lookup(f))
+	return timeToChar(timeWrapper{t}, c.lookupDCH(f))
 }
 
 // DurationToChar converts a duration and a `to_char` format string to a string.
 func DurationToChar(d duration.Duration, c *FormatCache, f string) (string, error) {
-	return timeToChar(makeToCharDuration(d), c.lookup(f))
+	return timeToChar(makeToCharDuration(d), c.lookupDCH(f))
 }
 
 // timeInterface is intended as a pass through to timeToChar.
