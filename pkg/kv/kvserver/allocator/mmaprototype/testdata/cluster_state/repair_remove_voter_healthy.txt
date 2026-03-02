@@ -1,0 +1,42 @@
+# Remove voter (all healthy): r1 has 4 healthy voters, config says 3 replicas.
+# s2 and s4 share zone=b, making one of them the most redundant voter. Since
+# s2 appears before s4 in the candidate list (leaseholder s1 is excluded) and
+# diversity scores are tied for s2 and s4, either could be chosen. But s3 is
+# in zone=c (unique) so it should not be removed. The leaseholder (s1) must
+# never be removed.
+
+set-store quiet=true
+  store-id=1 node-id=1 locality-tiers=zone=a
+  store-id=2 node-id=2 locality-tiers=zone=b
+  store-id=3 node-id=3 locality-tiers=zone=c
+  store-id=4 node-id=4 locality-tiers=zone=b
+  store-id=5 node-id=5 locality-tiers=zone=d
+  store-id=6 node-id=6 locality-tiers=zone=e
+----
+
+store-leaseholder-msg
+store-id=1
+  range-id=1
+    store-id=1 type=VOTER_FULL leaseholder=true
+    store-id=2 type=VOTER_FULL
+    store-id=3 type=VOTER_FULL
+    store-id=4 type=VOTER_FULL
+    config=num_replicas=3
+----
+
+repair-needed
+----
+RemoveVoter: r1
+
+# Repair removes a voter from the shared zone=b (s2 or s4). With all stores
+# healthy, diversity is the only factor: removing a zone=b voter (s2 or s4)
+# loses less diversity than removing s3 (zone=c, unique).
+repair store-id=1
+----
+[mmaid=1] applying replica change r1 type: RemoveReplica target store n4,s4 (replica-id=4 type=VOTER_FULL)->(replica-id=none type=VOTER_FULL) to range 1 on store 4
+[mmaid=1] addPendingRangeChange: change_id=1, range_id=1, change=r1 type: RemoveReplica target store n4,s4 (replica-id=4 type=VOTER_FULL)->(replica-id=none type=VOTER_FULL)
+[mmaid=1] result(success): RemoveVoter repair for r1, removing voter on s4
+pending(1)
+change-id=1 store-id=4 node-id=4 range-id=1 load-delta=[cpu:0s/s, write-bandwidth:0 B/s, byte-size:0 B] start=0s gc=5m0s
+  prev=(replica-id=4 type=VOTER_FULL)
+  next=(replica-id=none type=VOTER_FULL)

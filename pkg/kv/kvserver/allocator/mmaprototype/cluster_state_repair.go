@@ -333,6 +333,8 @@ func (re *rebalanceEnv) repair(
 			switch action {
 			case AddVoter:
 				re.repairAddVoter(ctx, localStoreID, rangeID, rs)
+			case RemoveVoter:
+				re.repairRemoveVoter(ctx, localStoreID, rangeID, rs)
 			default:
 				log.KvDistribution.Infof(ctx,
 					"repair action %s for r%d not yet implemented", action, rangeID)
@@ -561,6 +563,136 @@ func (re *rebalanceEnv) promoteNonVoterToVoter(
 	log.KvDistribution.Infof(ctx,
 		"result(success): AddVoter repair for r%d, promoting non-voter on s%d to voter",
 		rangeID, bestStoreID)
+}
+
+// removalPriority returns a priority for removing a replica from the given
+// store. Lower values indicate higher priority for removal (i.e. the store
+// is a better candidate for removal). The ordering follows the design doc:
+// dead > unknown > unhealthy > shedding > refusing > healthy.
+func removalPriority(ss *storeState) int {
+	if ss == nil {
+		return 0 // unknown store, treat like dead
+	}
+	switch ss.status.Health {
+	case HealthDead:
+		return 0
+	case HealthUnknown:
+		return 1
+	case HealthUnhealthy:
+		return 2
+	default: // HealthOK
+		if ss.status.Disposition.Replica == ReplicaDispositionShedding {
+			return 3
+		}
+		if ss.status.Disposition.Replica == ReplicaDispositionRefusing {
+			return 4
+		}
+		return 5
+	}
+}
+
+// repairRemoveVoter removes an over-replicated voter from the range. Candidate
+// selection prefers stores that are dead > unknown > unhealthy > shedding >
+// refusing > healthy. Within the worst-health bucket, the voter whose removal
+// hurts diversity the least (most redundant locality) is chosen.
+func (re *rebalanceEnv) repairRemoveVoter(
+	ctx context.Context, localStoreID roachpb.StoreID, rangeID roachpb.RangeID, rs *rangeState,
+) {
+	re.ensureAnalyzedConstraints(ctx, rs)
+	if rs.constraints == nil {
+		log.KvDistribution.Warningf(ctx,
+			"skipping RemoveVoter repair for r%d: constraint analysis failed", rangeID)
+		return
+	}
+
+	// Build candidates: all voters except the leaseholder.
+	var candidates []roachpb.StoreID
+	for _, repl := range rs.replicas {
+		if !isVoter(repl.ReplicaType.ReplicaType) {
+			continue
+		}
+		if repl.IsLeaseholder {
+			continue
+		}
+		candidates = append(candidates, repl.StoreID)
+	}
+	if len(candidates) == 0 {
+		log.KvDistribution.Warningf(ctx,
+			"skipping RemoveVoter repair for r%d: no removable voters (all are leaseholders)",
+			rangeID)
+		return
+	}
+
+	// Bucket candidates by removal priority. Take the lowest-priority bucket
+	// (worst health = remove first).
+	bestPriority := math.MaxInt
+	for _, storeID := range candidates {
+		p := removalPriority(re.stores[storeID])
+		if p < bestPriority {
+			bestPriority = p
+		}
+	}
+	var bucket []roachpb.StoreID
+	for _, storeID := range candidates {
+		if removalPriority(re.stores[storeID]) == bestPriority {
+			bucket = append(bucket, storeID)
+		}
+	}
+
+	// Within the bucket, pick the voter whose removal hurts diversity the
+	// least (most redundant). getScoreChangeForReplicaRemoval returns negative
+	// values; the least negative (highest) is the most redundant.
+	removeStoreID := re.pickStoreByDiversity(
+		rs, bucket, (*existingReplicaLocalities).getScoreChangeForReplicaRemoval)
+	if removeStoreID == 0 {
+		log.KvDistribution.Warningf(ctx,
+			"skipping RemoveVoter repair for r%d: diversity picker returned no candidate",
+			rangeID)
+		return
+	}
+
+	// Find the ReplicaState for the chosen voter.
+	var prevState ReplicaState
+	found := false
+	for _, repl := range rs.replicas {
+		if repl.StoreID == removeStoreID {
+			prevState = repl.ReplicaState
+			found = true
+			break
+		}
+	}
+	if !found {
+		log.KvDistribution.Warningf(ctx,
+			"skipping RemoveVoter repair for r%d: voter on s%d not found in replicas",
+			rangeID, removeStoreID)
+		return
+	}
+
+	// Create the pending change.
+	removeSS := re.stores[removeStoreID]
+	if removeSS == nil {
+		log.KvDistribution.Warningf(ctx,
+			"skipping RemoveVoter repair for r%d: store s%d has no state",
+			rangeID, removeStoreID)
+		return
+	}
+	removeTarget := roachpb.ReplicationTarget{
+		NodeID:  removeSS.NodeID,
+		StoreID: removeStoreID,
+	}
+	removeChange := MakeRemoveReplicaChange(rangeID, rs.load, prevState, removeTarget)
+	rangeChange := MakePendingRangeChange(rangeID, []ReplicaChange{removeChange})
+	if err := re.preCheckOnApplyReplicaChanges(rangeChange); err != nil {
+		log.KvDistribution.Warningf(ctx,
+			"skipping RemoveVoter repair for r%d: pre-check failed: %v", rangeID, err)
+		return
+	}
+	re.addPendingRangeChange(ctx, rangeChange)
+	re.changes = append(re.changes,
+		MakeExternalRangeChange(originMMARepair, localStoreID, rangeChange))
+	log.KvDistribution.Infof(ctx,
+		"result(success): RemoveVoter repair for r%d, removing voter on s%d",
+		rangeID, removeStoreID)
 }
 
 // Verify interface compliance.

@@ -36,5 +36,30 @@ RemoveVoter: r1
 
 repair store-id=1
 ----
-[mmaid=1] repair action RemoveVoter for r1 not yet implemented
-pending(0)
+[mmaid=1] applying replica change r1 type: RemoveReplica target store n4,s4 (replica-id=4 type=VOTER_FULL)->(replica-id=none type=VOTER_FULL) to range 1 on store 4
+[mmaid=1] addPendingRangeChange: change_id=1, range_id=1, change=r1 type: RemoveReplica target store n4,s4 (replica-id=4 type=VOTER_FULL)->(replica-id=none type=VOTER_FULL)
+[mmaid=1] result(success): RemoveVoter repair for r1, removing voter on s4
+pending(1)
+change-id=1 store-id=4 node-id=4 range-id=1 load-delta=[cpu:0s/s, write-bandwidth:0 B/s, byte-size:0 B] start=0s gc=5m0s
+  prev=(replica-id=4 type=VOTER_FULL)
+  next=(replica-id=none type=VOTER_FULL)
+
+# Pending change suppresses further repair.
+repair-needed
+----
+no ranges need repair
+
+# Confirm the removal: leaseholder reports 3 voters (s1-s3).
+store-leaseholder-msg
+store-id=1
+  range-id=1
+    store-id=1 type=VOTER_FULL leaseholder=true
+    store-id=2 type=VOTER_FULL
+    store-id=3 type=VOTER_FULL
+    config=num_replicas=3
+----
+
+# After removal enacted, range is healthy.
+repair-needed
+----
+no ranges need repair
