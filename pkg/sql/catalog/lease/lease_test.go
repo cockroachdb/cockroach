@@ -4481,3 +4481,88 @@ func TestLeaseManagerMemoryCloser(t *testing.T) {
 	require.Equal(t, int64(0), monitor.AllocBytes())
 	require.Equal(t, lm.TestingGetBoundAccount().Used(), int64(0))
 }
+
+// TestLeaseInternalLookupCtxWithLocked validates that the internal lookup context
+// will look up leased descriptors that are missing for crdb_internal functions.
+// This specifically focuses on the case where a foreign key reference table is
+// dropped, where the namespace entry and descriptor can be marked as dropped together.
+func TestLeaseInternalLookupCtxWithLocked(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	var targetIDs [2]atomic.Int64
+	waitCh := make(chan struct{})
+	allowCh := make(chan struct{})
+	var hookEnabled atomic.Bool
+	st := cluster.MakeTestingClusterSettings()
+	// Locked leasing is required for this test.
+	lease.LockedLeaseTimestamp.Override(ctx, &st.SV, true)
+	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{
+		Settings: st,
+		Knobs: base.TestingKnobs{
+			SQLLeaseManager: &lease.ManagerTestingKnobs{
+				TestingDescriptorUpdateEvent: func(descriptor *descpb.Descriptor) error {
+					if !hookEnabled.Load() {
+						return nil
+					}
+					id, _, _, _, err := descpb.GetDescriptorMetadata(descriptor)
+					if err != nil {
+						return err
+					}
+					if targetIDs[0].Load() != int64(id) && targetIDs[1].Load() != int64(id) {
+						return nil
+					}
+					// Indicate that the descriptor has been updated.
+					<-waitCh
+					// Block the update from being processing.
+					<-allowCh
+					return nil
+				},
+			},
+		},
+	})
+	defer s.Stopper().Stop(ctx)
+
+	r := sqlutils.MakeSQLRunner(db)
+	r.Exec(t, "SET CLUSTER SETTING sql.catalog.virtual_tables.use_index_lookup_for_descriptors_in_database.enabled = true")
+	r.Exec(t, "SET CLUSTER SETTING sql.catalog.allow_leased_descriptors.enabled = true")
+	r.Exec(t, "CREATE TABLE fk_src(n int primary key) WITH (schema_locked=false)")
+	r.Exec(t, "CREATE TABLE fk_dst(n int primary key, j int not null) WITH (schema_locked=false)")
+	r.Exec(t, "ALTER TABLE fk_dst ADD CONSTRAINT fk_name FOREIGN KEY (j) REFERENCES fk_src (n) NOT VALID;")
+	var descID int64
+	r.QueryRow(t, "SELECT 'fk_dst'::regclass::oid").Scan(&descID)
+	targetIDs[0].Store(descID)
+	r.QueryRow(t, "SELECT 'fk_src'::regclass::oid").Scan(&descID)
+	targetIDs[1].Store(descID)
+	r.Exec(t, "SELECT * FROM crdb_internal.create_statements WHERE descriptor_name SIMILAR TO 'fk_+%'\n  AND descriptor_type='table'")
+
+	hookEnabled.Store(true)
+	defer hookEnabled.Store(false)
+	channelsClosed := false
+	closeChannels := func() {
+		if !channelsClosed {
+			close(waitCh)
+			close(allowCh)
+			channelsClosed = true
+		}
+	}
+	defer closeChannels()
+	grp := ctxgroup.WithContext(ctx)
+	// Execute a drop that will clean up the foreign key source.
+	grp.GoCtx(func(ctx context.Context) error {
+		_, err := db.Exec("DROP TABLE fk_src CASCADE")
+		return err
+	})
+	// Wait for the descriptor drop to be visible.
+	waitCh <- struct{}{}
+	// Validate our definition shows the foreign key, since the leasing timestamp is behind.
+	str := r.QueryStr(t, "SELECT create_statement FROM crdb_internal.create_statements WHERE descriptor_name SIMILAR TO 'fk_+%'\n  AND descriptor_type='table'")
+	require.Equal(t, [][]string{{"CREATE TABLE public.fk_dst (\n\tn INT8 NOT NULL,\n\tj INT8 NOT NULL,\n\tCONSTRAINT fk_dst_pkey PRIMARY KEY (n ASC),\n\tCONSTRAINT fk_name FOREIGN KEY (j) REFERENCES public.fk_src(n) NOT VALID\n)"}}, str)
+	allowCh <- struct{}{}
+	// Close the channels and confirm the schema change completes
+	// successfully.
+	closeChannels()
+	require.NoError(t, grp.Wait())
+
+}
