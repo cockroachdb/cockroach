@@ -61,7 +61,7 @@ func NewColSpanAssembler(
 	keyColumns := fetchSpec.KeyColumns()
 	for i := range keyColumns {
 		asc := keyColumns[i].Direction == catenumpb.IndexColumn_ASC
-		sa.spanEncoders = append(sa.spanEncoders, newSpanEncoder(allocator, inputTypes[i], asc, i))
+		sa.spanEncoders = append(sa.spanEncoders, NewSpanEncoder(allocator, inputTypes[i], asc, i))
 	}
 	if cap(sa.spanCols) < len(sa.spanEncoders) {
 		sa.spanCols = make([]*coldata.Bytes, len(sa.spanEncoders))
@@ -143,7 +143,7 @@ type spanAssembler struct {
 
 	// spanEncoders is an ordered list of utility operators that encode each key
 	// column in vectorized fashion.
-	spanEncoders []spanEncoder
+	spanEncoders []SpanEncoder
 
 	// spanCols is used to iterate through the input columns that contain the
 	// key encodings during span construction.
@@ -173,7 +173,7 @@ func (sa *spanAssembler) ConsumeBatch(batch coldata.Batch, startIdx, endIdx int)
 	}
 
 	for i := range sa.spanEncoders {
-		sa.spanCols[i] = sa.spanEncoders[i].next(batch, startIdx, endIdx)
+		sa.spanCols[i] = sa.spanEncoders[i].Next(batch, startIdx, endIdx)
 	}
 
 	oldKeyBytes := sa.keyBytes
@@ -271,7 +271,7 @@ func (sa *spanAssembler) AccountForSpans() {
 // Close implements the ColSpanAssembler interface.
 func (sa *spanAssembler) Close() {
 	for i := range sa.spanEncoders {
-		sa.spanEncoders[i].close()
+		sa.spanEncoders[i].Close()
 	}
 }
 

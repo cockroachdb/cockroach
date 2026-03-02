@@ -582,6 +582,11 @@ INSERT INTO tsvector_tbl VALUES
   (2, 20, 'foo bar'::TSVECTOR);
 
 # First verify that datums_to_bytes does not support TSVECTOR
+skipif config local-vec-off
+statement error pgcode XX000 pq: internal error: unable to encode table key: \*tree.DTSVector
+SELECT crdb_internal.datums_to_bytes(tsv) FROM tsvector_tbl LIMIT 1;
+
+onlyif config local-vec-off
 statement error pq: illegal argument 0 of type tsvector
 SELECT crdb_internal.datums_to_bytes(tsv) FROM tsvector_tbl LIMIT 1;
 
@@ -609,6 +614,11 @@ INSERT INTO tsquery_tbl VALUES
   (2, 20, 'another | query'::TSQUERY);
 
 # First verify that datums_to_bytes does not support TSQUERY
+skipif config local-vec-off
+statement error pgcode XX000 pq: internal error: unable to encode table key: \*tree.DTSQuery
+SELECT crdb_internal.datums_to_bytes(tsq) FROM tsquery_tbl LIMIT 1;
+
+onlyif config local-vec-off
 statement error pq: illegal argument 0 of type tsquery
 SELECT crdb_internal.datums_to_bytes(tsq) FROM tsquery_tbl LIMIT 1;
 
@@ -636,6 +646,11 @@ INSERT INTO pgvector_tbl VALUES
   (2, 20, '[4.0, 5.0, 6.0]'::VECTOR(3));
 
 # First verify that datums_to_bytes does not support VECTOR
+skipif config local-vec-off
+statement error pgcode XX000 pq: internal error: unable to encode table key: \*tree.DPGVector
+SELECT crdb_internal.datums_to_bytes(vec) FROM pgvector_tbl LIMIT 1;
+
+onlyif config local-vec-off
 statement error pq: illegal argument 0 of type vector
 SELECT crdb_internal.datums_to_bytes(vec) FROM pgvector_tbl LIMIT 1;
 
