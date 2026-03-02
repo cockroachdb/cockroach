@@ -26,12 +26,14 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotice"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/syntheticprivilege"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/metamorphic"
 	"github.com/cockroachdb/errors"
 )
@@ -306,6 +308,27 @@ func (p *planner) getDescriptorsFromTargetListForPrivilegeChange(
 			_, descriptor, err := p.ResolveMutableTypeDescriptor(ctx, typ, required)
 			if err != nil {
 				return nil, err
+			}
+
+			// If the resolved type is an implicit array type (ALIAS), redirect the
+			// privilege change to the base element type. This matches PostgreSQL,
+			// which does not allow setting privileges on array types directly.
+			if descriptor.Kind == descpb.TypeDescriptor_ALIAS &&
+				descriptor.Alias != nil &&
+				descriptor.Alias.Family() == types.ArrayFamily {
+				baseTypeID := typedesc.GetUserDefinedTypeDescID(descriptor.Alias.ArrayContents())
+				baseDesc, err := p.Descriptors().MutableByID(p.txn).Type(ctx, baseTypeID)
+				if err != nil {
+					return nil, err
+				}
+				p.BufferClientNotice(
+					ctx,
+					pgnotice.Newf(
+						"privileges on array type %s are applied to the element type %s",
+						descriptor.GetName(), baseDesc.GetName(),
+					),
+				)
+				descriptor = baseDesc
 			}
 
 			descs = append(descs, DescriptorWithObjectType{
