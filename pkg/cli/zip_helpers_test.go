@@ -6,11 +6,15 @@
 package cli
 
 import (
+	"fmt"
+	"math"
+	"os"
 	"testing"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/stretchr/testify/require"
 )
 
 func TestFileSelection(t *testing.T) {
@@ -282,6 +286,61 @@ func TestNodeSelection(t *testing.T) {
 				t.Errorf("incl=%s, excl=%s: mistakenly includes %d", &sel.inclusive, &sel.exclusive, n)
 			}
 		}
+	}
+}
+
+func TestCreateJSONWithNonFiniteFloats(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	f, err := os.CreateTemp("", "test-zip-*.zip")
+	require.NoError(t, err)
+	defer func() { _ = os.Remove(f.Name()) }()
+	z := newZipper(f)
+	defer func() { _ = z.close() }()
+
+	reporter := &zipReporter{
+		flowing: true,
+		prefix:  "[test]",
+		newline: true,
+		inItem:  false,
+	}
+
+	tests := []struct {
+		name    string
+		payload interface{}
+	}{
+		{
+			name:    "map with +Inf",
+			payload: map[string]float64{"metric": math.Inf(1)},
+		},
+		{
+			name:    "map with -Inf",
+			payload: map[string]float64{"metric": math.Inf(-1)},
+		},
+		{
+			name:    "map with NaN",
+			payload: map[string]float64{"metric": math.NaN()},
+		},
+		{
+			name: "struct with Metrics map containing +Inf",
+			payload: struct {
+				Name    string
+				Metrics map[string]float64
+			}{
+				Name:    "node1",
+				Metrics: map[string]float64{"requests": 100, "rate": math.Inf(1)},
+			},
+		},
+	}
+
+	for i, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			s := reporter.start("test item")
+			err := z.createJSON(s, fmt.Sprintf("test%d.json", i), tc.payload)
+			if err != nil {
+				t.Errorf("createJSON failed on %s: %v", tc.name, err)
+			}
+		})
 	}
 }
 

@@ -10,8 +10,10 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"math"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strconv"
 	"strings"
 	"time"
@@ -94,6 +96,7 @@ func (z *zipper) createJSON(s *zipReporter, name string, m interface{}) (err err
 	if err != nil {
 		return s.fail(err)
 	}
+	sanitizeNonFiniteFloats(reflect.ValueOf(m))
 	enc := json.NewEncoder(w)
 	enc.SetIndent("", "  ")
 	if err := enc.Encode(m); err != nil {
@@ -101,6 +104,44 @@ func (z *zipper) createJSON(s *zipReporter, name string, m interface{}) (err err
 	}
 	s.done()
 	return nil
+}
+
+// sanitizeNonFiniteFloats recursively walks v and replaces any +Inf, -Inf, or
+// NaN float64 values with 0, since encoding/json cannot marshal non-finite
+// floats. Only map values can be replaced in place; struct fields with
+// non-finite floats that are not settable are skipped.
+func sanitizeNonFiniteFloats(v reflect.Value) {
+	switch v.Kind() {
+	case reflect.Ptr, reflect.Interface:
+		if !v.IsNil() {
+			sanitizeNonFiniteFloats(v.Elem())
+		}
+	case reflect.Struct:
+		for i := 0; i < v.NumField(); i++ {
+			f := v.Field(i)
+			if f.Kind() == reflect.Float64 && f.CanSet() {
+				if math.IsInf(f.Float(), 0) || math.IsNaN(f.Float()) {
+					f.SetFloat(0)
+				}
+			} else {
+				sanitizeNonFiniteFloats(f)
+			}
+		}
+	case reflect.Slice:
+		for i := 0; i < v.Len(); i++ {
+			sanitizeNonFiniteFloats(v.Index(i))
+		}
+	case reflect.Map:
+		for _, key := range v.MapKeys() {
+			elem := v.MapIndex(key)
+			if (elem.Kind() == reflect.Float64 || elem.Kind() == reflect.Float32) &&
+				(math.IsInf(elem.Float(), 0) || math.IsNaN(elem.Float())) {
+				v.SetMapIndex(key, reflect.Zero(elem.Type()))
+			} else {
+				sanitizeNonFiniteFloats(elem)
+			}
+		}
+	}
 }
 
 // createError reports an error payload.
