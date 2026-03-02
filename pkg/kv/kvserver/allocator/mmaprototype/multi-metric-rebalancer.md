@@ -39,8 +39,8 @@ responsibilities into MMA.
 | Remove stuck learner | Yes (pri 12001) | — | — | No |
 | Range unavailable (no quorum) | Detected, no action | — | — | No |
 | **CONSTRAINT ENFORCEMENT** | | | | |
-| Voter constraint satisfaction | Via rebalance swaps | — | — | Yes (constraint matching) |
-| Non-voter constraint satisfaction | Via rebalance swaps | — | — | Yes (constraint matching) |
+| Voter constraint satisfaction | Via rebalance swaps | — | — | No (checks constraints but won't fix violations) |
+| Non-voter constraint satisfaction | Via rebalance swaps | — | — | No (checks constraints but won't fix violations) |
 | Lease preference enforcement | — | Yes (pri 300) | — | Partial (lease preferences in rebalance) |
 | **LOAD REBALANCING** | | | | |
 | Replica rebalance (count-based) | Yes (pri 0, `ConsiderRebalance`) | — | — | No (separate concern) |
