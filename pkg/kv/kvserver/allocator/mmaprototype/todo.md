@@ -5,7 +5,7 @@
 - [x] `FinalizeAtomicReplicationChange` — send a finalization command, no store selection needed.
 
 ## Easy (compose existing Add + Remove)
-- [ ] `ReplaceDeadVoter` — combine remove (targeting dead store) + add (find new store) in a single atomic change.
+- [x] `ReplaceDeadVoter` — combine remove (targeting dead store) + add (find new store) in a single atomic change.
 - [ ] `ReplaceDeadNonVoter` — same pattern for non-voters.
 - [ ] `ReplaceDecommissioningVoter` — identical to dead voter but targeting decommissioning stores.
 - [ ] `ReplaceDecommissioningNonVoter` — same for non-voters.
