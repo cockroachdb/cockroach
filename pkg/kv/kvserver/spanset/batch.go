@@ -256,10 +256,6 @@ func (i *EngineIterator) Close() {
 
 // SeekEngineKeyGE is part of the storage.EngineIterator interface.
 func (i *EngineIterator) SeekEngineKeyGE(key storage.EngineKey) (valid bool, err error) {
-	valid, err = i.i.SeekEngineKeyGE(key)
-	if !valid {
-		return valid, err
-	}
 	if key.IsMVCCKey() && !i.spansOnly {
 		mvccKey, _ := key.ToMVCCKey()
 		if err := i.spans.CheckAllowedAt(SpanReadOnly, TrickySpan{Key: mvccKey.Key}, i.ts); err != nil {
@@ -268,15 +264,11 @@ func (i *EngineIterator) SeekEngineKeyGE(key storage.EngineKey) (valid bool, err
 	} else if err = i.spans.CheckAllowed(SpanReadOnly, TrickySpan{Key: key.Key}); err != nil {
 		return false, err
 	}
-	return valid, err
+	return i.i.SeekEngineKeyGE(key)
 }
 
 // SeekEngineKeyLT is part of the storage.EngineIterator interface.
 func (i *EngineIterator) SeekEngineKeyLT(key storage.EngineKey) (valid bool, err error) {
-	valid, err = i.i.SeekEngineKeyLT(key)
-	if !valid {
-		return valid, err
-	}
 	if key.IsMVCCKey() && !i.spansOnly {
 		mvccKey, _ := key.ToMVCCKey()
 		if err := i.spans.CheckAllowedAt(SpanReadOnly, TrickySpan{Key: mvccKey.Key}, i.ts); err != nil {
@@ -285,7 +277,7 @@ func (i *EngineIterator) SeekEngineKeyLT(key storage.EngineKey) (valid bool, err
 	} else if err = i.spans.CheckAllowed(SpanReadOnly, TrickySpan{EndKey: key.Key}); err != nil {
 		return false, err
 	}
-	return valid, err
+	return i.i.SeekEngineKeyLT(key)
 }
 
 // NextEngineKey is part of the storage.EngineIterator interface.
