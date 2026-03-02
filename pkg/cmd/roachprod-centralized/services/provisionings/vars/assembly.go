@@ -72,6 +72,8 @@ type BuildVarMapsInput struct {
 //   - plaintext:        raw env + TF_VAR_* env + -var flag (if declared)
 //   - template_secret:  raw env + TF_VAR_* env only (never -var flag)
 //   - secret:           raw env only (no TF_VAR_*, no -var flag)
+//   - secret_file:      raw env only, value written to temp file (env
+//     var set to the file path by PrepareCredentialFiles)
 //
 // Precedence (highest to lowest):
 //  1. Auto-injected variables (identifier, prov_name, environment, owner)
@@ -93,10 +95,11 @@ func BuildVarMaps(
 	//   - All types get raw KEY=VALUE.
 	//   - plaintext and template_secret also get TF_VAR_KEY=VALUE
 	//     (OpenTofu ignores unknown TF_VAR_ vars).
-	//   - secret variables are raw env only (provider credentials).
+	//   - secret and secret_file variables are raw env only (provider
+	//     credentials).
 	for _, v := range input.ResolvedEnv.Variables {
 		envVars[v.Key] = v.Value
-		if v.Type != envmodels.VarTypeSecret {
+		if v.Type != envmodels.VarTypeSecret && v.Type != envmodels.VarTypeSecretFile {
 			envVars["TF_VAR_"+v.Key] = v.Value
 		}
 	}

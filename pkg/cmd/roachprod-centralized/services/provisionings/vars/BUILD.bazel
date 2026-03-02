@@ -2,7 +2,10 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
     name = "vars",
-    srcs = ["assembly.go"],
+    srcs = [
+        "assembly.go",
+        "credentials.go",
+    ],
     importpath = "github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/services/provisionings/vars",
     visibility = ["//visibility:public"],
     deps = [
@@ -15,7 +18,10 @@ go_library(
 
 go_test(
     name = "vars_test",
-    srcs = ["assembly_test.go"],
+    srcs = [
+        "assembly_test.go",
+        "credentials_test.go",
+    ],
     embed = [":vars"],
     deps = [
         "//pkg/cmd/roachprod-centralized/models/environments",

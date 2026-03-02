@@ -200,7 +200,7 @@ func (cr *commandRegistry) buildEnvVarListCmd() *cobra.Command {
 			fmt.Fprintf(tw, "KEY\tTYPE\tVALUE\tUPDATED\n")
 			for _, v := range vars {
 				value := v.Value
-				if v.Type == envmodels.VarTypeSecret {
+				if v.Type == envmodels.VarTypeSecret || v.Type == envmodels.VarTypeSecretFile {
 					value = "********"
 				}
 				fmt.Fprintf(tw, "%s\t%s\t%s\t%s\n",
@@ -246,7 +246,7 @@ func (cr *commandRegistry) buildEnvVarGetCmd() *cobra.Command {
 
 			fmt.Printf("Key:     %s\n", v.Key)
 			fmt.Printf("Type:    %s\n", v.Type)
-			if v.Type == envmodels.VarTypeSecret {
+			if v.Type == envmodels.VarTypeSecret || v.Type == envmodels.VarTypeSecretFile {
 				fmt.Printf("Value:   ********\n")
 			} else {
 				fmt.Printf("Value:   %s\n", v.Value)
@@ -283,11 +283,13 @@ Variable types control how values are delivered to OpenTofu:
   plaintext        -var flag + TF_VAR_* env + raw env (default)
   secret           raw env only (provider credentials like AWS_ACCESS_KEY_ID)
   template_secret  TF_VAR_* env + raw env (sensitive template vars like db_password)
+  secret_file      raw env only, value written to a temp file and env var set to the
+                   file path (for credentials like GOOGLE_APPLICATION_CREDENTIALS)
 
 Examples:
   roachprod env var set my-env region us-east1
   roachprod env var set my-env db_password hunter2 --type template_secret
-  roachprod env var set my-env ssh_key --value-file ~/.ssh/id_ed25519 --type template_secret`,
+  roachprod env var set my-env GOOGLE_APPLICATION_CREDENTIALS --value-file sa-key.json --type secret_file`,
 		Args: cobra.RangeArgs(2, 3),
 		Run: Wrap(func(cmd *cobra.Command, args []string) error {
 			envName, key := args[0], args[1]
@@ -320,10 +322,10 @@ Examples:
 			varType := envmodels.EnvironmentVarType(typeFlag)
 			switch varType {
 			case envmodels.VarTypePlaintext, envmodels.VarTypeSecret,
-				envmodels.VarTypeTemplateSecret:
+				envmodels.VarTypeTemplateSecret, envmodels.VarTypeSecretFile:
 			default:
 				return errors.Newf(
-					"invalid type %q: must be plaintext, secret, or template_secret",
+					"invalid type %q: must be plaintext, secret, template_secret, or secret_file",
 					typeFlag,
 				)
 			}
@@ -359,13 +361,13 @@ Examples:
 	}
 
 	cmd.Flags().StringVar(&typeFlag, "type", "plaintext",
-		"variable type: plaintext, secret, or template_secret")
+		"variable type: plaintext, secret, template_secret, or secret_file")
 	cmd.Flags().StringVar(&valueFileFlag, "value-file", "",
 		"read value from file (for multiline content like SSH keys)")
 	_ = cmd.RegisterFlagCompletionFunc("type", func(
 		cmd *cobra.Command, args []string, toComplete string,
 	) ([]string, cobra.ShellCompDirective) {
-		return []string{"plaintext", "secret", "template_secret"},
+		return []string{"plaintext", "secret", "template_secret", "secret_file"},
 			cobra.ShellCompDirectiveNoFileComp
 	})
 	cr.addToExcludeFromBashCompletion(cmd)

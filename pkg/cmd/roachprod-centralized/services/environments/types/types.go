@@ -56,7 +56,7 @@ var (
 	// ErrInvalidVariableKey is returned when a variable key is invalid.
 	ErrInvalidVariableKey = utils.NewPublicError(fmt.Errorf("invalid variable key: must match [a-zA-Z0-9_-]"))
 	// ErrInvalidVariableType is returned for unsupported variable types.
-	ErrInvalidVariableType = utils.NewPublicError(fmt.Errorf("variable type must be 'plaintext', 'secret', or 'template_secret'"))
+	ErrInvalidVariableType = utils.NewPublicError(fmt.Errorf("variable type must be 'plaintext', 'secret', 'template_secret', or 'secret_file'"))
 	// ErrVariableNotFound is the service-level sentinel error.
 	ErrVariableNotFound = utils.NewPublicError(fmt.Errorf("environment variable not found"))
 	// ErrVariableAlreadyExists is the service-level sentinel error.

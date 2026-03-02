@@ -85,6 +85,22 @@ func (s *Service) HandleProvision(
 		return s.failProvision(ctx, l, &prov, errors.Wrap(err, "build var maps"))
 	}
 
+	// Write secret_file variables to disk and replace env var values with
+	// file paths. Required for env vars like GOOGLE_APPLICATION_CREDENTIALS
+	// that expect a file path, not the credential content.
+	envVars, cleanupCreds, err := vars.PrepareCredentialFiles(workingDir, envVars, resolvedEnv)
+	if err != nil {
+		return s.failProvision(ctx, l, &prov, errors.Wrap(err, "prepare credential files"))
+	}
+	defer func() {
+		if cleanErr := cleanupCreds(); cleanErr != nil {
+			l.Warn("failed to clean up credential files",
+				slog.String("working_dir", workingDir),
+				slog.Any("error", cleanErr),
+			)
+		}
+	}()
+
 	// Step: Init
 	prov.SetState(provmodels.ProvisioningStateInitializing, l)
 	prov.LastStep = "init"
@@ -232,6 +248,21 @@ func (s *Service) HandleDestroy(
 	if err != nil {
 		return s.failDestroy(ctx, l, &prov, errors.Wrap(err, "build var maps"))
 	}
+
+	// Write secret_file variables to disk and replace env var values with
+	// file paths.
+	envVars, cleanupCreds, err := vars.PrepareCredentialFiles(workingDir, envVars, resolvedEnv)
+	if err != nil {
+		return s.failDestroy(ctx, l, &prov, errors.Wrap(err, "prepare credential files"))
+	}
+	defer func() {
+		if cleanErr := cleanupCreds(); cleanErr != nil {
+			l.Warn("failed to clean up credential files",
+				slog.String("working_dir", workingDir),
+				slog.Any("error", cleanErr),
+			)
+		}
+	}()
 
 	// Step: Init
 	prov.LastStep = "init"

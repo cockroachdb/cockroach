@@ -494,7 +494,7 @@ func validateVariable(key string, varType envmodels.EnvironmentVarType) error {
 		return types.ErrInvalidVariableKey
 	}
 	switch varType {
-	case envmodels.VarTypePlaintext, envmodels.VarTypeSecret, envmodels.VarTypeTemplateSecret:
+	case envmodels.VarTypePlaintext, envmodels.VarTypeSecret, envmodels.VarTypeTemplateSecret, envmodels.VarTypeSecretFile:
 		return nil
 	default:
 		return types.ErrInvalidVariableType
@@ -502,9 +502,9 @@ func validateVariable(key string, varType envmodels.EnvironmentVarType) error {
 }
 
 // isSecretType reports whether the variable type requires secret manager
-// resolution (either secret or template_secret).
+// resolution (secret, template_secret, or secret_file).
 func isSecretType(t envmodels.EnvironmentVarType) bool {
-	return t == envmodels.VarTypeSecret || t == envmodels.VarTypeTemplateSecret
+	return t == envmodels.VarTypeSecret || t == envmodels.VarTypeTemplateSecret || t == envmodels.VarTypeSecretFile
 }
 
 // -- Error mapping --

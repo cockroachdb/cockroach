@@ -24,6 +24,14 @@ const (
 	// The value is a secret manager reference resolved at runtime. Passed
 	// as TF_VAR_* env var and raw env var, but never as a -var flag.
 	VarTypeTemplateSecret EnvironmentVarType = "template_secret"
+	// VarTypeSecretFile indicates a variable whose resolved secret value
+	// must be written to a temporary file, with the env var set to the
+	// file path. This is required for env vars like
+	// GOOGLE_APPLICATION_CREDENTIALS where the consuming tool expects a
+	// file path, not the credential content itself. The value is a secret
+	// manager reference resolved at runtime. Like secret, it is passed as
+	// a raw env var only — no TF_VAR_* prefix, no -var flag.
+	VarTypeSecretFile EnvironmentVarType = "secret_file"
 )
 
 // EnvironmentVariable is a single key/value pair belonging to an environment.
