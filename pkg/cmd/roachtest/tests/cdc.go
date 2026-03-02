@@ -1294,8 +1294,8 @@ type rollingRestartParams struct {
 	maxBackoff          string // e.g., "1m" or "10m"
 	doRestarts          bool
 	frontierPersistence bool
-	testDuration        time.Duration // Total test duration (default 15m)
-	restartDuration     time.Duration // How long to do restarts before stopping (default 12m)
+	testDuration        time.Duration // Total test duration (default 20m)
+	restartDuration     time.Duration // How long to do restarts before stopping (default 17m)
 }
 
 // runCDCRollingRestart tests changefeed behavior during rolling node restarts.
@@ -1347,6 +1347,7 @@ func runCDCRollingRestart(
 	// Connect to node 4 (workload node) for queries since we'll be
 	// restarting nodes 1, 2, 3 during the test.
 	db := c.Conn(ctx, t.L(), 4)
+	defer db.Close()
 	t.L().Printf("setting up test with maxBackoff=%s, doRestarts=%t, frontierPersistence=%t",
 		params.maxBackoff, params.doRestarts, params.frontierPersistence)
 	setupStmts := []string{
@@ -1387,13 +1388,23 @@ func runCDCRollingRestart(
 		defer func() {
 			t.L().Printf("done restarting nodes")
 		}()
+
+		if !params.doRestarts {
+			t.L().Printf("control mode: skipping restarts, changefeed will run uninterrupted for %s", testDuration)
+			select {
+			case <-stopRestarts:
+			case <-ctx.Done():
+			}
+			return nil
+		}
+
 		t.L().Printf("starting rolling drain+restarts of nodes 1, 2, 3 at %s interval for %s...", restartInterval, restartDuration)
 
-		timer := time.NewTimer(0 * time.Second)
+		timer := time.NewTimer(0)
 		restartDeadline := testBeginTime.Add(restartDuration)
 		for {
 			for _, n := range []int{1, 2, 3} {
-				if timeutil.Now().After(restartDeadline) && params.doRestarts {
+				if timeutil.Now().After(restartDeadline) {
 					t.L().Printf("=== RESTART DEADLINE REACHED at %s (after %s) ===", timeutil.Now(), timeutil.Since(testBeginTime))
 					t.L().Printf("=== STOPPING RESTARTS TO MEASURE RECOVERY ===")
 					t.L().Printf("Changefeed will now run uninterrupted for remaining %s", testDuration-restartDuration)
@@ -1408,12 +1419,8 @@ func runCDCRollingRestart(
 				case <-timer.C:
 				}
 
-				if !params.doRestarts {
-					t.L().Printf("control mode: NOT restarting node %d", n)
-				} else {
-					if err := restart(n); err != nil {
-						return err
-					}
+				if err := restart(n); err != nil {
+					return err
 				}
 				// Wait between restarts to let changefeeds make progress and
 				// allow backoff to climb higher before the next disruption.
@@ -1452,6 +1459,9 @@ func runCDCRollingRestart(
 				jobID, testDuration, restartDuration, testDuration-restartDuration)
 		}
 
+		const maxLagDuringRestarts = 5 * time.Minute
+		const maxLagAfterRecovery = 2 * time.Minute
+
 		beginTime := timeutil.Now()
 		// Sample every 10 seconds for the duration of the test.
 		numSamples := int(testDuration / (10 * time.Second))
@@ -1459,6 +1469,7 @@ func runCDCRollingRestart(
 		var recoveryPhaseStarted bool
 		var recoveryStartLag time.Duration
 		var recoveryStartTime time.Time
+		var finalLag time.Duration
 
 		for i := 0; i < numSamples; i++ {
 			time.Sleep(10 * time.Second)
@@ -1501,18 +1512,34 @@ func runCDCRollingRestart(
 			}
 
 			if hwNanos.Valid {
-				highwater := timeutil.Unix(0, int64(hwNanos.Float64))
-				lag := timeutil.Since(highwater)
 				t.L().Printf("%s[%s] changefeed %d: status=%s, running_status=%s, lag=%s, highwater=%s",
-					prefix, runtime, jobID, status, runningStatus.String, lag, highwater)
+					prefix, runtime, jobID, status, runningStatus.String, currentLag,
+					timeutil.Unix(0, int64(hwNanos.Float64)))
 			} else {
 				t.L().Printf("%s[%s] changefeed %d: status=%s, running_status=%s, highwater=not yet set",
 					prefix, runtime, jobID, status, runningStatus.String)
 			}
+
+			// Assert that lag never exceeds the maximum during rolling restarts.
+			if params.doRestarts && currentLag > maxLagDuringRestarts {
+				t.Fatalf("changefeed lag %s exceeded maximum allowed %s during rolling restarts",
+					currentLag, maxLagDuringRestarts)
+			}
+
+			finalLag = currentLag
 		}
 
-		t.L().Printf("changefeed %d completed %s test run", jobID, testDuration)
+		t.L().Printf("changefeed %d completed %s test run, final lag=%s", jobID, testDuration, finalLag)
+
+		// After the recovery period, lag should have settled below the threshold.
+		if params.doRestarts && finalLag > maxLagAfterRecovery {
+			t.Fatalf("changefeed lag %s exceeded maximum allowed %s after recovery period",
+				finalLag, maxLagAfterRecovery)
+		}
 	}()
+
+	<-wait
+	m.Wait()
 }
 
 type fineGrainedCheckpointingParams struct {
@@ -2434,9 +2461,7 @@ CONFIGURE ZONE USING
 			Owner:            registry.OwnerCDC,
 			Cluster:          r.MakeClusterSpec(4),
 			CompatibleClouds: registry.OnlyGCE,
-			// This test doesn't currently make any assertions.
-			// If it did, it wouldn't pass (#164041).
-			// TODO(#164041): Investigate this lag and run test in Nightly.
+			// TODO(#164041): Investigate lag issues and promote to Nightly.
 			Suites:  registry.ManualOnly,
 			Timeout: 30 * time.Minute,
 			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {

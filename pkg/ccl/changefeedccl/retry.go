@@ -39,6 +39,7 @@ func getRetry(ctx context.Context, maxBackoff, backoffReset time.Duration) Retry
 		}
 	}
 
+	// useSlowRetry takes precedence over useFastRetry if both are set.
 	if useSlowRetry {
 		opts = retry.Options{
 			InitialBackoff: 32 * time.Second,
