@@ -27,6 +27,7 @@ go_library(
     deps = [
         "//pkg/geo/geoindex",
         "//pkg/kv/kvserver/concurrency/isolation",
+        "//pkg/security/username",
         "//pkg/sql/catalog/colinfo",
         "//pkg/sql/catalog/tabledesc",
         "//pkg/sql/inverted",
@@ -47,6 +48,7 @@ go_library(
         "//pkg/sql/sem/tree",
         "//pkg/sql/sem/tree/treewindow",
         "//pkg/sql/sem/volatility",
+        "//pkg/sql/sqlclustersettings",
         "//pkg/sql/stats",
         "//pkg/sql/types",
         "//pkg/util/buildutil",
@@ -106,6 +108,7 @@ go_test(
         "//pkg/sql/sem/tree",
         "//pkg/sql/sem/tree/treewindow",
         "//pkg/sql/sessiondata",
+        "//pkg/sql/sqlclustersettings",
         "//pkg/sql/types",
         "//pkg/testutils",
         "//pkg/testutils/datapathutils",
