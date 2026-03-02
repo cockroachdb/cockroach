@@ -269,7 +269,7 @@ git checkout -b enable-upgrade-tests-25.4-code
 
 ### Step 2: Update PreviousRelease Constant
 
-**File:** `pkg/clusterversion/cockroach_versions.go` (line ~317)
+**File:** `pkg/clusterversion/cockroach_versions.go`
 
 ```go
 // Before
@@ -337,7 +337,7 @@ cockroach_predecessor_version(
 
 ### Step 5: Verify supportsSkipUpgradeTo
 
-**File:** `pkg/cmd/roachtest/roachtestutil/mixedversion/mixedversion.go` (line ~616)
+**File:** `pkg/cmd/roachtest/roachtestutil/mixedversion/mixedversion.go`
 
 The function uses a year/ordinal switch, not a simple equality check:
 
