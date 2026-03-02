@@ -1,0 +1,15 @@
+# Repair Actions TODO
+
+## Easiest
+- [ ] `RemoveLearner` — find the learner replica and remove it. No constraint analysis, no diversity scoring. Simplified `RemoveNonVoter`.
+- [ ] `FinalizeAtomicReplicationChange` — send a finalization command, no store selection needed.
+
+## Easy (compose existing Add + Remove)
+- [ ] `ReplaceDeadVoter` — combine remove (targeting dead store) + add (find new store) in a single atomic change.
+- [ ] `ReplaceDeadNonVoter` — same pattern for non-voters.
+- [ ] `ReplaceDecommissioningVoter` — identical to dead voter but targeting decommissioning stores.
+- [ ] `ReplaceDecommissioningNonVoter` — same for non-voters.
+
+## Harder (need constraint analysis for swaps)
+- [ ] `SwapVoterForConstraints` — identify which voter violates constraints and find a replacement. Requires helpers from `constraint_unused_test.go`.
+- [ ] `SwapNonVoterForConstraints` — same for non-voters.
