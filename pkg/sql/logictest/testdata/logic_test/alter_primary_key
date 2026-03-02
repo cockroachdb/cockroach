@@ -1425,6 +1425,78 @@ t1_pkey  id    ASC
 t1_pkey  id2   ASC
 t1_pkey  name  N/A
 
+# Validate ALTER PRIMARY KEY idempotence with USING HASH for #130191.
+statement ok
+DROP TABLE IF EXISTS t1;
+
+statement ok
+CREATE TABLE t1 (j INT NOT NULL);
+
+statement ok
+ALTER TABLE t1 ALTER PRIMARY KEY USING COLUMNS (j) USING HASH;
+
+# Repeating the same ALTER PRIMARY KEY with USING HASH should be a no-op.
+statement ok
+ALTER TABLE t1 ALTER PRIMARY KEY USING COLUMNS (j) USING HASH;
+
+# Confirm no schema change operations are generated for the no-op.
+skipif config local-legacy-schema-changer
+query T
+EXPLAIN (DDL) ALTER TABLE t1 ALTER PRIMARY KEY USING COLUMNS (j) USING HASH;
+----
+Schema change plan for ALTER TABLE test.public.t1 ALTER PRIMARY KEY USING COLUMNS (j) USING HASH;
+ ├── StatementPhase
+ │    └── Stage 1 of 1 in StatementPhase
+ └── PreCommitPhase
+      └── Stage 1 of 1 in PreCommitPhase
+           └── 1 Mutation operation
+                └── UndoAllInTxnImmediateMutationOpSideEffects
+
+skipif config local-legacy-schema-changer
+query TTT
+SELECT index_name, column_name, direction
+  FROM [SHOW INDEXES FROM t1]
+  WHERE index_name LIKE 't1_pkey%'
+  ORDER BY seq_in_index;
+----
+t1_pkey  crdb_internal_j_shard_16  ASC
+t1_pkey  j                         ASC
+
+# Multi-column hash-sharded ALTER PRIMARY KEY idempotence.
+statement ok
+DROP TABLE IF EXISTS t1;
+
+statement ok
+CREATE TABLE t1 (a INT NOT NULL, b INT NOT NULL);
+
+statement ok
+ALTER TABLE t1 ALTER PRIMARY KEY USING COLUMNS (a, b) USING HASH;
+
+# Repeating the same multi-column hash-sharded ALTER should be a no-op.
+statement ok
+ALTER TABLE t1 ALTER PRIMARY KEY USING COLUMNS (a, b) USING HASH;
+
+skipif config local-legacy-schema-changer
+query TTT
+SELECT index_name, column_name, direction
+  FROM [SHOW INDEXES FROM t1]
+  WHERE index_name LIKE 't1_pkey%'
+  ORDER BY seq_in_index;
+----
+t1_pkey  crdb_internal_a_b_shard_16  ASC
+t1_pkey  a                           ASC
+t1_pkey  b                           ASC
+
+# Set up t1 for the next subtest.
+statement ok
+DROP TABLE IF EXISTS t1;
+
+statement ok
+create table t1(id integer not null, id2 integer not null, name varchar(32));
+
+statement ok
+alter table t1 alter primary key using columns(id, id2);
+
 skipif config schema-locked-disabled
 statement ok
 ALTER TABLE t1 SET (schema_locked = false)
