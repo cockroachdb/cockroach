@@ -12,6 +12,7 @@ import (
 	"reflect"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/isolation"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
@@ -227,6 +228,11 @@ type Memo struct {
 	// memo staleness calculation.
 	txnIsoLevel isolation.Level
 
+	// currentUser is the user under which the plan was created. SET ROLE can
+	// change the current user, which affects privilege checks, so the memo must
+	// be invalidated when the current user changes.
+	currentUser username.SQLUsername
+
 	// curRank is the highest currently in-use scalar expression rank.
 	curRank opt.ScalarRank
 
@@ -343,6 +349,7 @@ func (m *Memo) Init(ctx context.Context, evalCtx *eval.Context) {
 		inlineAnyUnnestSubquery:                    evalCtx.SessionData().OptimizerInlineAnyUnnestSubquery,
 		useMinRowCountAntiJoinFix:                  evalCtx.SessionData().OptimizerUseMinRowCountAntiJoinFix,
 		txnIsoLevel:                                evalCtx.TxnIsoLevel,
+		currentUser:                                evalCtx.SessionData().User(),
 	}
 	m.metadata.Init()
 	m.logPropsBuilder.init(ctx, evalCtx, m)
@@ -527,6 +534,7 @@ func (m *Memo) IsStale(
 		m.useImprovedRoutineDepsTriggersComputedCols != evalCtx.SessionData().UseImprovedRoutineDepsTriggersAndComputedCols ||
 		m.inlineAnyUnnestSubquery != evalCtx.SessionData().OptimizerInlineAnyUnnestSubquery ||
 		m.useMinRowCountAntiJoinFix != evalCtx.SessionData().OptimizerUseMinRowCountAntiJoinFix ||
+		m.currentUser != evalCtx.SessionData().User() ||
 		m.txnIsoLevel != evalCtx.TxnIsoLevel {
 		return true, nil
 	}
