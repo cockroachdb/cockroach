@@ -72,13 +72,6 @@ good starting point if the overall architecture is relevant to the task.
 
 ## Coding Guidelines
 
-### Code Formatting
-
-After editing Go files, run `crlfmt -w -tab 2 <filename>.go` to format them.
-`crlfmt` is CockroachDB's custom formatter (not `gofmt`); it enforces 100-column
-code lines, 80-column comments, and CockroachDB-specific signature wrapping.
-It also handles import grouping. `crlfmt` only accepts one filename at a time.
-
 ### Engineering Standards
 
 CockroachDB is a complex system and you should write code under the assumption

@@ -1,0 +1,15 @@
+{
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "FILE=$(grep -o '\"file_path\" *: *\"[^\"]*\"' | sed 's/\"file_path\" *: *\"//;s/\"$//'); if [[ \"$FILE\" == *.go ]]; then crlfmt -w -tab 2 \"$FILE\"; fi"
+          }
+        ]
+      }
+    ]
+  }
+}
