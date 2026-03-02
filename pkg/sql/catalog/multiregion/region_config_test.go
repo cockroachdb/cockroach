@@ -328,3 +328,43 @@ func TestValidateSuperRegionConfig(t *testing.T) {
 		)
 	}
 }
+
+func TestGetAffinityRegionForSuperRegion(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	const validRegionEnumID = 100
+
+	regionConfig := multiregion.MakeRegionConfig(
+		catpb.RegionNames{"region_a", "region_b"},
+		"region_a",
+		descpb.SurvivalGoal_ZONE_FAILURE,
+		validRegionEnumID,
+		descpb.DataPlacement_DEFAULT,
+		nil, /* superRegions */
+		descpb.ZoneConfigExtensions{},
+	)
+
+	t.Run("zero-member super region", func(t *testing.T) {
+		sr := descpb.SuperRegion{
+			SuperRegionName: "empty_sr",
+			Regions:         []catpb.RegionName{},
+		}
+		_, err := regionConfig.GetAffinityRegionForSuperRegion(sr)
+		require.Error(t, err)
+		require.True(
+			t,
+			testutils.IsError(err, `super region "empty_sr" has no member regions`),
+			"expected assertion error for empty super region, got: %v", err,
+		)
+	})
+
+	t.Run("valid super region returns first alphabetically", func(t *testing.T) {
+		sr := descpb.SuperRegion{
+			SuperRegionName: "sr1",
+			Regions:         []catpb.RegionName{"region_b", "region_a"},
+		}
+		region, err := regionConfig.GetAffinityRegionForSuperRegion(sr)
+		require.NoError(t, err)
+		require.Equal(t, catpb.RegionName("region_a"), region)
+	})
+}

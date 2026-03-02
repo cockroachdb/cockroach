@@ -14,6 +14,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/util/iterutil"
 	"github.com/cockroachdb/errors"
 )
 
@@ -188,8 +189,39 @@ func ValidateTableLocalityConfig(
 
 	case *catpb.LocalityConfig_RegionalByTable_:
 
-		// Table is homed in an explicit (non-primary) region.
-		if lc.RegionalByTable.Region != nil {
+		// Region and SuperRegionName are mutually exclusive.
+		if lc.RegionalByTable.Region != nil && lc.RegionalByTable.SuperRegionName != nil {
+			return errors.AssertionFailedf(
+				"table %q has both region and super_region_name set in locality config",
+				desc.GetName(),
+			)
+		}
+
+		// Table is homed in a super region.
+		if lc.RegionalByTable.SuperRegionName != nil {
+			// Validate that the super region exists in the database. We don't
+			// validate more strictly here because super region membership can
+			// change independently of the table descriptor.
+			// Super region tables don't reference the enum directly, so no
+			// enum back-reference validation is needed.
+			srName := *lc.RegionalByTable.SuperRegionName
+			found := false
+			if err := regionsEnumDesc.ForEachSuperRegion(func(name string) error {
+				if name == srName {
+					found = true
+					return iterutil.StopIteration()
+				}
+				return nil
+			}); err != nil {
+				return err
+			}
+			if !found {
+				return errors.AssertionFailedf(
+					"table %q references super region %q which does not exist on database %q",
+					desc.GetName(), srName, db.GetName(),
+				)
+			}
+		} else if lc.RegionalByTable.Region != nil {
 			foundRegion := false
 			var regions catpb.RegionNames
 			_ = regionsEnumDesc.ForEachRegion(func(name catpb.RegionName, transition descpb.TypeDescriptor_EnumMember_Direction) error {
@@ -263,11 +295,17 @@ func FormatTableLocalityConfig(c *catpb.LocalityConfig, f *tree.FmtCtx) error {
 		f.WriteString("GLOBAL")
 	case *catpb.LocalityConfig_RegionalByTable_:
 		f.WriteString("REGIONAL BY TABLE IN ")
-		if v.RegionalByTable.Region != nil {
-			region := tree.Name(*v.RegionalByTable.Region)
-			f.FormatNode(&region)
+		if v.RegionalByTable.SuperRegionName != nil {
+			f.WriteString("SUPER REGION ")
+			sr := tree.Name(*v.RegionalByTable.SuperRegionName)
+			f.FormatNode(&sr)
 		} else {
-			f.WriteString("PRIMARY REGION")
+			if v.RegionalByTable.Region != nil {
+				region := tree.Name(*v.RegionalByTable.Region)
+				f.FormatNode(&region)
+			} else {
+				f.WriteString("PRIMARY REGION")
+			}
 		}
 	case *catpb.LocalityConfig_RegionalByRow_:
 		f.WriteString("REGIONAL BY ROW")

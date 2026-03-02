@@ -1748,6 +1748,34 @@ func (n *alterDatabaseDropSuperRegion) startExec(params runParams) error {
 		return err
 	}
 
+	// Clear super region locality from any tables that reference the dropped
+	// super region, converting them to REGIONAL BY TABLE in the primary region.
+	srName := string(n.n.SuperRegionName)
+	if err := params.p.forEachMutableTableInDatabase(
+		params.ctx,
+		n.desc,
+		func(ctx context.Context, scName string, tbDesc *tabledesc.Mutable) error {
+			if rbt := tbDesc.LocalityConfig.GetRegionalByTable(); rbt != nil &&
+				rbt.SuperRegionName != nil && *rbt.SuperRegionName == srName {
+				tbDesc.SetTableLocalityRegionalByTable(tree.PrimaryRegionNotSpecifiedName)
+				params.p.BufferClientNotice(ctx, pgnotice.Newf(
+					"table %q was REGIONAL BY TABLE IN SUPER REGION %q "+
+						"and has been moved to REGIONAL BY TABLE IN PRIMARY REGION",
+					tbDesc.GetName(), srName,
+				))
+				if err := params.p.writeSchemaChange(
+					ctx, tbDesc, descpb.InvalidMutationID,
+					tree.AsStringWithFQNames(n.n, params.Ann()),
+				); err != nil {
+					return err
+				}
+			}
+			return nil
+		},
+	); err != nil {
+		return err
+	}
+
 	// Update all regional and regional by row tables.
 	if err := params.p.refreshZoneConfigsForTables(
 		params.ctx,

@@ -34,6 +34,11 @@ message LocalityConfig {
     option (gogoproto.equal) = true;
     // Region is set if the table has an affinity with a non-primary region.
     optional string region = 1 [(gogoproto.casttype)="RegionName"];
+    // SuperRegionName is set if the table is homed in a super region rather
+    // than a specific region. When set, region should be nil — the affinity
+    // region is resolved at zone config generation time from the super
+    // region's membership.
+    optional string super_region_name = 2;
   }
   message RegionalByRow {
     option (gogoproto.equal) = true;

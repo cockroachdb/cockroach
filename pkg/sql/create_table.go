@@ -1431,10 +1431,23 @@ func NewTableDesc(
 
 	indexEncodingVersion := descpb.StrictIndexColumnIDGuaranteesVersion
 	if n.Locality != nil && n.Locality.SuperRegion != "" {
-		return nil, unimplemented.NewWithIssue(
-			164497,
-			"CREATE TABLE ... LOCALITY REGIONAL BY TABLE IN SUPER REGION",
-		)
+		if regionConfig == nil {
+			return nil, errors.WithHint(pgerror.Newf(
+				pgcode.InvalidTableDefinition,
+				"cannot set LOCALITY on a table in a database that is not multi-region enabled",
+			),
+				"database must first be multi-region enabled using ALTER DATABASE ... SET PRIMARY REGION <region>",
+			)
+		}
+		srName := string(n.Locality.SuperRegion)
+		_, ok := regionConfig.GetSuperRegionByName(srName)
+		if !ok {
+			return nil, pgerror.Newf(
+				pgcode.InvalidParameterValue,
+				"super region %q not found in database",
+				srName,
+			)
+		}
 	}
 
 	isRegionalByRow := n.Locality != nil && n.Locality.LocalityLevel == tree.LocalityLevelRow
@@ -2472,6 +2485,8 @@ func NewTableDesc(
 			// The absence of a locality on the AST node indicates that the table must
 			// be homed in the primary region.
 			desc.SetTableLocalityRegionalByTable(tree.PrimaryRegionNotSpecifiedName)
+		} else if n.Locality.LocalityLevel == tree.LocalityLevelTable && n.Locality.SuperRegion != "" {
+			desc.SetTableLocalityRegionalByTableInSuperRegion(n.Locality.SuperRegion)
 		} else if n.Locality.LocalityLevel == tree.LocalityLevelTable {
 			desc.SetTableLocalityRegionalByTable(n.Locality.TableRegion)
 		} else if n.Locality.LocalityLevel == tree.LocalityLevelGlobal {

@@ -2779,6 +2779,27 @@ func LocalityConfigRegionalByTable(region tree.Name) catpb.LocalityConfig {
 	return catpb.LocalityConfig{Locality: l}
 }
 
+// SetTableLocalityRegionalByTableInSuperRegion sets the descriptor's locality
+// config to regional at the table level, homed in the specified super region.
+// The affinity region is resolved at zone config generation time from the super
+// region's membership.
+func (desc *Mutable) SetTableLocalityRegionalByTableInSuperRegion(superRegion tree.Name) {
+	lc := LocalityConfigRegionalByTableInSuperRegion(superRegion)
+	desc.LocalityConfig = &lc
+}
+
+// LocalityConfigRegionalByTableInSuperRegion returns a config for a
+// REGIONAL BY TABLE IN SUPER REGION table.
+func LocalityConfigRegionalByTableInSuperRegion(superRegion tree.Name) catpb.LocalityConfig {
+	srName := string(superRegion)
+	l := &catpb.LocalityConfig_RegionalByTable_{
+		RegionalByTable: &catpb.LocalityConfig_RegionalByTable{
+			SuperRegionName: &srName,
+		},
+	}
+	return catpb.LocalityConfig{Locality: l}
+}
+
 // SetTableLocalityRegionalByRow sets the descriptor's locality config to
 // regional at the row level. An empty regionColName denotes the default
 // crdb_region partitioning column.

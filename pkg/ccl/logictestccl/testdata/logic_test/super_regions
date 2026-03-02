@@ -857,10 +857,138 @@ subtest end
 
 subtest regional_by_table_in_super_region
 
-statement error pq: unimplemented: ALTER TABLE \.\.\. SET LOCALITY REGIONAL BY TABLE IN SUPER REGION
-ALTER TABLE db3.t SET LOCALITY REGIONAL BY TABLE IN SUPER REGION "test1"
+# First, expand test1 so we can see constraint distribution across super region
+# members. db3 currently has primary region us-west-1.
+statement ok
+ALTER DATABASE db3 ALTER SUPER REGION "test1" VALUES "ca-central-1", "us-west-1";
 
-statement error pq: unimplemented: CREATE TABLE \.\.\. LOCALITY REGIONAL BY TABLE IN SUPER REGION
+# CREATE TABLE with LOCALITY REGIONAL BY TABLE IN SUPER REGION.
+statement ok
 CREATE TABLE db3.t_sr(x INT) LOCALITY REGIONAL BY TABLE IN SUPER REGION "test1"
+
+# The affinity region should be the first member alphabetically (ca-central-1),
+# and replicas should be confined to the super region members.
+query TT
+SHOW ZONE CONFIGURATION FOR TABLE db3.t_sr
+----
+TABLE db3.public.t_sr  ALTER TABLE db3.public.t_sr CONFIGURE ZONE USING
+                         range_min_bytes = 134217728,
+                         range_max_bytes = 536870912,
+                         gc.ttlseconds = 14400,
+                         num_replicas = 4,
+                         num_voters = 3,
+                         constraints = '{+region=ca-central-1: 2, +region=us-west-1: 2}',
+                         voter_constraints = '[+region=ca-central-1]',
+                         lease_preferences = '[[+region=ca-central-1]]'
+
+# SHOW CREATE TABLE should display the super region locality.
+query B
+SELECT create_statement LIKE '%LOCALITY REGIONAL BY TABLE IN SUPER REGION test1%' FROM [SHOW CREATE TABLE db3.t_sr]
+----
+true
+
+# ALTER TABLE to REGIONAL BY TABLE IN SUPER REGION using a fresh table.
+statement ok
+CREATE TABLE db3.t_alter(x INT) LOCALITY REGIONAL BY TABLE
+
+statement ok
+ALTER TABLE db3.t_alter SET (schema_locked = false)
+
+statement ok
+ALTER TABLE db3.t_alter SET LOCALITY REGIONAL BY TABLE IN SUPER REGION "test1"
+
+query TT
+SHOW ZONE CONFIGURATION FOR TABLE db3.t_alter
+----
+TABLE db3.public.t_alter  ALTER TABLE db3.public.t_alter CONFIGURE ZONE USING
+                            range_min_bytes = 134217728,
+                            range_max_bytes = 536870912,
+                            gc.ttlseconds = 14400,
+                            num_replicas = 4,
+                            num_voters = 3,
+                            constraints = '{+region=ca-central-1: 2, +region=us-west-1: 2}',
+                            voter_constraints = '[+region=ca-central-1]',
+                            lease_preferences = '[[+region=ca-central-1]]'
+
+# Error case: non-existent super region.
+statement error pq: super region "nonexistent" not found in database
+CREATE TABLE db3.t_bad(x INT) LOCALITY REGIONAL BY TABLE IN SUPER REGION "nonexistent"
+
+statement error pq: super region "nonexistent" not found in database
+ALTER TABLE db3.t_alter SET LOCALITY REGIONAL BY TABLE IN SUPER REGION "nonexistent"
+
+# Transition from super region locality to GLOBAL.
+statement ok
+SET override_multi_region_zone_config = true
+
+statement ok
+ALTER TABLE db3.t_alter SET LOCALITY GLOBAL
+
+query B
+SELECT create_statement LIKE '%LOCALITY GLOBAL%' FROM [SHOW CREATE TABLE db3.t_alter]
+----
+true
+
+# Transition from GLOBAL back to super region.
+statement ok
+ALTER TABLE db3.t_alter SET LOCALITY REGIONAL BY TABLE IN SUPER REGION "test1"
+
+query TT
+SHOW ZONE CONFIGURATION FOR TABLE db3.t_alter
+----
+TABLE db3.public.t_alter  ALTER TABLE db3.public.t_alter CONFIGURE ZONE USING
+                            range_min_bytes = 134217728,
+                            range_max_bytes = 536870912,
+                            gc.ttlseconds = 14400,
+                            num_replicas = 4,
+                            num_voters = 3,
+                            constraints = '{+region=ca-central-1: 2, +region=us-west-1: 2}',
+                            voter_constraints = '[+region=ca-central-1]',
+                            lease_preferences = '[[+region=ca-central-1]]'
+
+statement ok
+SET override_multi_region_zone_config = false
+
+# DROP SUPER REGION should clear super region locality from affected tables.
+# Both t_sr and t_alter are REGIONAL BY TABLE IN SUPER REGION "test1".
+query T noticetrace
+ALTER DATABASE db3 DROP SUPER REGION "test1"
+----
+NOTICE: table "t_sr" was REGIONAL BY TABLE IN SUPER REGION "test1" and has been moved to REGIONAL BY TABLE IN PRIMARY REGION
+NOTICE: table "t_alter" was REGIONAL BY TABLE IN SUPER REGION "test1" and has been moved to REGIONAL BY TABLE IN PRIMARY REGION
+
+# Verify t_sr is now REGIONAL BY TABLE IN PRIMARY REGION.
+query B
+SELECT create_statement LIKE '%LOCALITY REGIONAL BY TABLE IN PRIMARY REGION%' FROM [SHOW CREATE TABLE db3.t_sr]
+----
+true
+
+# Verify t_alter is now REGIONAL BY TABLE IN PRIMARY REGION.
+query B
+SELECT create_statement LIKE '%LOCALITY REGIONAL BY TABLE IN PRIMARY REGION%' FROM [SHOW CREATE TABLE db3.t_alter]
+----
+true
+
+# Verify zone config inherits from database now that the table is no longer
+# in a super region.
+query TT
+SHOW ZONE CONFIGURATION FOR TABLE db3.t_sr
+----
+DATABASE db3  ALTER DATABASE db3 CONFIGURE ZONE USING
+                range_min_bytes = 134217728,
+                range_max_bytes = 536870912,
+                gc.ttlseconds = 14400,
+                num_replicas = 5,
+                num_voters = 3,
+                constraints = '{+region=ca-central-1: 1, +region=us-east-1: 1, +region=us-west-1: 1}',
+                voter_constraints = '[+region=us-west-1]',
+                lease_preferences = '[[+region=us-west-1]]'
+
+# Clean up.
+statement ok
+DROP TABLE db3.t_alter
+
+statement ok
+DROP TABLE db3.t_sr
 
 subtest end

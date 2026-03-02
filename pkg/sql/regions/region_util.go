@@ -78,10 +78,22 @@ func ZoneConfigForMultiRegionTable(
 		return zc, nil
 	case *catpb.LocalityConfig_RegionalByTable_:
 		affinityRegion := regionConfig.PrimaryRegion()
-		if l.RegionalByTable.Region != nil {
+		if l.RegionalByTable.SuperRegionName != nil {
+			sr, ok := regionConfig.GetSuperRegionByName(*l.RegionalByTable.SuperRegionName)
+			if !ok {
+				return zonepb.ZoneConfig{}, errors.Newf(
+					"super region %q not found", *l.RegionalByTable.SuperRegionName)
+			}
+			var err error
+			affinityRegion, err = regionConfig.GetAffinityRegionForSuperRegion(sr)
+			if err != nil {
+				return zonepb.ZoneConfig{}, err
+			}
+		} else if l.RegionalByTable.Region != nil {
 			affinityRegion = *l.RegionalByTable.Region
 		}
-		if l.RegionalByTable.Region == nil && !regionConfig.IsMemberOfSuperRegion(affinityRegion) {
+		if l.RegionalByTable.SuperRegionName == nil &&
+			l.RegionalByTable.Region == nil && !regionConfig.IsMemberOfSuperRegion(affinityRegion) {
 			// If we don't have an explicit affinity region, use the same
 			// configuration as the database and return a blank zcfg here.
 			return zc, nil

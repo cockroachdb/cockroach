@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/funcdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/internal/validate"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/nstree"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
@@ -4225,6 +4226,170 @@ func TestValidateCrossTableReferences(t *testing.T) {
 				}
 			} else if expectedErr != err.Error() {
 				t.Errorf("%d: expected \"%s\", but found \"%s\"", i, expectedErr, err.Error())
+			}
+		})
+	}
+}
+
+func TestValidateTableLocalitySuperRegion(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	ctx := context.Background()
+
+	// Build a multi-region database with RegionEnumID = 100.
+	dbDesc := dbdesc.NewBuilder(&descpb.DatabaseDescriptor{
+		ID:   1,
+		Name: "mrdb",
+		RegionConfig: &descpb.DatabaseDescriptor_RegionConfig{
+			PrimaryRegion: "us-east-1",
+			RegionEnumID:  100,
+		},
+	}).BuildImmutable()
+
+	// Build the multi-region enum type with one super region "sr1".
+	typeDesc := typedesc.NewBuilder(&descpb.TypeDescriptor{
+		ID:       100,
+		Name:     "crdb_internal_region",
+		ParentID: 1,
+		Kind:     descpb.TypeDescriptor_MULTIREGION_ENUM,
+		EnumMembers: []descpb.TypeDescriptor_EnumMember{
+			{LogicalRepresentation: "us-east-1", PhysicalRepresentation: []byte{0x40}},
+			{LogicalRepresentation: "us-west-1", PhysicalRepresentation: []byte{0x80}},
+		},
+		RegionConfig: &descpb.TypeDescriptor_RegionConfig{
+			PrimaryRegion: "us-east-1",
+			SuperRegions: []descpb.SuperRegion{
+				{SuperRegionName: "sr1", Regions: []catpb.RegionName{"us-east-1"}},
+			},
+		},
+	}).BuildImmutable()
+
+	tests := []struct {
+		name string
+		err  string
+		desc descpb.TableDescriptor
+	}{
+		{
+			name: "valid super region",
+			err:  "",
+			desc: descpb.TableDescriptor{
+				Name:                    "t_valid",
+				ID:                      200,
+				ParentID:                1,
+				UnexposedParentSchemaID: keys.PublicSchemaID,
+				Columns: []descpb.ColumnDescriptor{{
+					ID: 1, Name: "a", Type: types.Int,
+				}},
+				Families: []descpb.ColumnFamilyDescriptor{{
+					ID: 0, Name: "primary", ColumnIDs: []descpb.ColumnID{1}, ColumnNames: []string{"a"},
+				}},
+				PrimaryIndex: descpb.IndexDescriptor{
+					ID: 1, Name: "primary", Unique: true,
+					KeyColumnIDs: []descpb.ColumnID{1}, KeyColumnNames: []string{"a"},
+					KeyColumnDirections: []catenumpb.IndexColumn_Direction{catenumpb.IndexColumn_ASC},
+				},
+				LocalityConfig: &catpb.LocalityConfig{
+					Locality: &catpb.LocalityConfig_RegionalByTable_{
+						RegionalByTable: &catpb.LocalityConfig_RegionalByTable{
+							SuperRegionName: proto.String("sr1"),
+						},
+					},
+				},
+				NextColumnID:     2,
+				NextFamilyID:     1,
+				NextIndexID:      2,
+				NextConstraintID: 1,
+				FormatVersion:    3,
+			},
+		},
+		{
+			name: "super region does not exist",
+			err:  `table "t_invalid" references super region "sr_nonexistent" which does not exist on database "mrdb"`,
+			desc: descpb.TableDescriptor{
+				Name:                    "t_invalid",
+				ID:                      201,
+				ParentID:                1,
+				UnexposedParentSchemaID: keys.PublicSchemaID,
+				Columns: []descpb.ColumnDescriptor{{
+					ID: 1, Name: "a", Type: types.Int,
+				}},
+				Families: []descpb.ColumnFamilyDescriptor{{
+					ID: 0, Name: "primary", ColumnIDs: []descpb.ColumnID{1}, ColumnNames: []string{"a"},
+				}},
+				PrimaryIndex: descpb.IndexDescriptor{
+					ID: 1, Name: "primary", Unique: true,
+					KeyColumnIDs: []descpb.ColumnID{1}, KeyColumnNames: []string{"a"},
+					KeyColumnDirections: []catenumpb.IndexColumn_Direction{catenumpb.IndexColumn_ASC},
+				},
+				LocalityConfig: &catpb.LocalityConfig{
+					Locality: &catpb.LocalityConfig_RegionalByTable_{
+						RegionalByTable: &catpb.LocalityConfig_RegionalByTable{
+							SuperRegionName: proto.String("sr_nonexistent"),
+						},
+					},
+				},
+				NextColumnID:     2,
+				NextFamilyID:     1,
+				NextIndexID:      2,
+				NextConstraintID: 1,
+				FormatVersion:    3,
+			},
+		},
+		{
+			name: "both region and super region name set",
+			err:  `table "t_both" has both region and super_region_name set in locality config`,
+			desc: func() descpb.TableDescriptor {
+				regionName := catpb.RegionName("us-east-1")
+				return descpb.TableDescriptor{
+					Name:                    "t_both",
+					ID:                      202,
+					ParentID:                1,
+					UnexposedParentSchemaID: keys.PublicSchemaID,
+					Columns: []descpb.ColumnDescriptor{{
+						ID: 1, Name: "a", Type: types.Int,
+					}},
+					Families: []descpb.ColumnFamilyDescriptor{{
+						ID: 0, Name: "primary", ColumnIDs: []descpb.ColumnID{1}, ColumnNames: []string{"a"},
+					}},
+					PrimaryIndex: descpb.IndexDescriptor{
+						ID: 1, Name: "primary", Unique: true,
+						KeyColumnIDs: []descpb.ColumnID{1}, KeyColumnNames: []string{"a"},
+						KeyColumnDirections: []catenumpb.IndexColumn_Direction{catenumpb.IndexColumn_ASC},
+					},
+					LocalityConfig: &catpb.LocalityConfig{
+						Locality: &catpb.LocalityConfig_RegionalByTable_{
+							RegionalByTable: &catpb.LocalityConfig_RegionalByTable{
+								Region:          &regionName,
+								SuperRegionName: proto.String("sr1"),
+							},
+						},
+					},
+					NextColumnID:     2,
+					NextFamilyID:     1,
+					NextIndexID:      2,
+					NextConstraintID: 1,
+					FormatVersion:    3,
+				}
+			}(),
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			var cb nstree.MutableCatalog
+			cb.UpsertDescriptor(dbDesc)
+			cb.UpsertDescriptor(typeDesc)
+			test.desc.Privileges = catpb.NewBasePrivilegeDescriptor(username.AdminRoleName())
+			desc := NewBuilder(&test.desc).BuildImmutable()
+			const validateCrossReferencesOnly = catalog.ValidationLevelBackReferences &^ catalog.ValidationLevelSelfOnly
+			results := cb.Validate(ctx, clusterversion.TestingClusterVersion, catalog.NoValidationTelemetry, validateCrossReferencesOnly, desc)
+			if err := results.CombinedError(); err == nil {
+				if test.err != "" {
+					t.Errorf("expected error %q, but found success", test.err)
+				}
+			} else if test.err == "" {
+				t.Errorf("expected success, but found error: %s", err)
+			} else if !testutils.IsError(err, test.err) {
+				t.Errorf("expected error matching %q, but found %q", test.err, err)
 			}
 		})
 	}

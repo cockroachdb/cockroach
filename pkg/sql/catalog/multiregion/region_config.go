@@ -525,6 +525,36 @@ func ValidateZoneConfigExtensions(
 	}
 }
 
+// GetSuperRegionByName looks up a super region by name. Returns the
+// SuperRegion and true if found, or a zero-value SuperRegion and false
+// if not found.
+func (r *RegionConfig) GetSuperRegionByName(name string) (descpb.SuperRegion, bool) {
+	for _, sr := range r.superRegions {
+		if sr.SuperRegionName == name {
+			return sr, true
+		}
+	}
+	return descpb.SuperRegion{}, false
+}
+
+// GetAffinityRegionForSuperRegion returns the affinity region for the given
+// super region. Currently this is the first member region alphabetically.
+// In the future, this will check for an explicit primary region on the super
+// region first.
+func (r *RegionConfig) GetAffinityRegionForSuperRegion(
+	sr descpb.SuperRegion,
+) (catpb.RegionName, error) {
+	if len(sr.Regions) == 0 {
+		return "", errors.AssertionFailedf(
+			"super region %q has no member regions", sr.SuperRegionName,
+		)
+	}
+	sorted := make(catpb.RegionNames, len(sr.Regions))
+	copy(sorted, sr.Regions)
+	slices.Sort(sorted)
+	return sorted[0], nil
+}
+
 // IsMemberOfSuperRegion returns a boolean representing if the region is part
 // of a super region and the name of the super region.
 func IsMemberOfSuperRegion(name catpb.RegionName, config RegionConfig) (bool, string) {

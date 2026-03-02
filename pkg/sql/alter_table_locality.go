@@ -28,7 +28,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/volatility"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
-	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 	"github.com/cockroachdb/errors"
 )
@@ -44,13 +43,6 @@ type alterTableSetLocalityNode struct {
 func (p *planner) AlterTableLocality(
 	ctx context.Context, n *tree.AlterTableLocality,
 ) (planNode, error) {
-	if n.Locality != nil && n.Locality.SuperRegion != "" {
-		return nil, unimplemented.NewWithIssue(
-			164497,
-			"ALTER TABLE ... SET LOCALITY REGIONAL BY TABLE IN SUPER REGION",
-		)
-	}
-
 	if err := checkSchemaChangeEnabled(
 		ctx,
 		p.ExecCfg(),
@@ -86,6 +78,24 @@ func (p *planner) AlterTableLocality(
 		),
 			"database must first be multi-region enabled using ALTER DATABASE ... SET PRIMARY REGION <region>",
 		)
+	}
+
+	// Validate the super region exists when setting locality to a super region.
+	if n.Locality != nil && n.Locality.SuperRegion != "" {
+		regionConfig, err := SynthesizeRegionConfig(
+			ctx, p.txn, dbDesc.GetID(), p.Descriptors(),
+		)
+		if err != nil {
+			return nil, err
+		}
+		srName := string(n.Locality.SuperRegion)
+		if _, ok := regionConfig.GetSuperRegionByName(srName); !ok {
+			return nil, pgerror.Newf(
+				pgcode.InvalidParameterValue,
+				"super region %q not found in database",
+				srName,
+			)
+		}
 	}
 
 	// Disallow schema changes if this table's schema is locked.
@@ -133,10 +143,18 @@ func (n *alterTableSetLocalityNode) alterTableLocalityGlobalToRegionalByTable(
 		return err
 	}
 
-	if err := params.p.alterTableDescLocalityToRegionalByTable(
-		params.ctx, n.n.Locality.TableRegion, n.tableDesc, regionEnumID,
-	); err != nil {
-		return err
+	if n.n.Locality.SuperRegion != "" {
+		if err := params.p.alterTableDescLocalityToRegionalByTableInSuperRegion(
+			params.ctx, n.n.Locality.SuperRegion, n.tableDesc, regionEnumID,
+		); err != nil {
+			return err
+		}
+	} else {
+		if err := params.p.alterTableDescLocalityToRegionalByTable(
+			params.ctx, n.n.Locality.TableRegion, n.tableDesc, regionEnumID,
+		); err != nil {
+			return err
+		}
 	}
 
 	// Finalize the alter by writing a new table descriptor and updating the zone
@@ -195,10 +213,18 @@ func (n *alterTableSetLocalityNode) alterTableLocalityRegionalByTableToRegionalB
 		return err
 	}
 
-	if err := params.p.alterTableDescLocalityToRegionalByTable(
-		params.ctx, n.n.Locality.TableRegion, n.tableDesc, regionEnumID,
-	); err != nil {
-		return err
+	if n.n.Locality.SuperRegion != "" {
+		if err := params.p.alterTableDescLocalityToRegionalByTableInSuperRegion(
+			params.ctx, n.n.Locality.SuperRegion, n.tableDesc, regionEnumID,
+		); err != nil {
+			return err
+		}
+	} else {
+		if err := params.p.alterTableDescLocalityToRegionalByTable(
+			params.ctx, n.n.Locality.TableRegion, n.tableDesc, regionEnumID,
+		); err != nil {
+			return err
+		}
 	}
 
 	// Finalize the alter by writing a new table descriptor and updating the zone configuration.
@@ -588,9 +614,15 @@ func (n *alterTableSetLocalityNode) startExec(params runParams) error {
 				return err
 			}
 		case tree.LocalityLevelTable:
+			var lc catpb.LocalityConfig
+			if n.n.Locality.SuperRegion != "" {
+				lc = tabledesc.LocalityConfigRegionalByTableInSuperRegion(n.n.Locality.SuperRegion)
+			} else {
+				lc = tabledesc.LocalityConfigRegionalByTable(n.n.Locality.TableRegion)
+			}
 			return n.alterTableLocalityFromOrToRegionalByRow(
 				params,
-				tabledesc.LocalityConfigRegionalByTable(n.n.Locality.TableRegion),
+				lc,
 				nil, /* mutationIdxAllowedInSameTxn */
 				nil, /* newColumnName */
 				nil, /*	newColumnID */
@@ -671,6 +703,27 @@ func (p *planner) alterTableDescLocalityToRegionalByTable(
 			fmt.Sprintf("add back ref on mr-enum %d for table %d", regionEnumID, tableDesc.GetID()),
 		)
 	}
+	return nil
+}
+
+// alterTableDescLocalityToRegionalByTableInSuperRegion changes the locality of
+// the given tableDesc to REGIONAL BY TABLE IN SUPER REGION. It also handles
+// the dependency with the multi-region enum.
+func (p *planner) alterTableDescLocalityToRegionalByTableInSuperRegion(
+	ctx context.Context, superRegion tree.Name, tableDesc *tabledesc.Mutable, regionEnumID descpb.ID,
+) error {
+	// Remove existing enum back reference if one exists.
+	if tableDesc.GetMultiRegionEnumDependencyIfExists() {
+		typesDependedOn := []descpb.ID{regionEnumID}
+		if err := p.removeTypeBackReferences(ctx, typesDependedOn, tableDesc.GetID(),
+			fmt.Sprintf("remove back ref on mr-enum %d for table %d", regionEnumID, tableDesc.GetID()),
+		); err != nil {
+			return err
+		}
+	}
+	tableDesc.SetTableLocalityRegionalByTableInSuperRegion(superRegion)
+	// Super region tables don't store a direct region reference, so no enum
+	// back reference is needed.
 	return nil
 }
 

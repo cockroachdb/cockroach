@@ -15,11 +15,12 @@ import (
 
 // Constants to use for telemetry for multi-region table localities.
 const (
-	TelemetryNameGlobal            = "global"
-	TelemetryNameRegionalByTable   = "regional_by_table"
-	TelemetryNameRegionalByTableIn = "regional_by_table_in"
-	TelemetryNameRegionalByRow     = "regional_by_row"
-	TelemetryNameRegionalByRowAs   = "regional_by_row_as"
+	TelemetryNameGlobal                       = "global"
+	TelemetryNameRegionalByTable              = "regional_by_table"
+	TelemetryNameRegionalByTableIn            = "regional_by_table_in"
+	TelemetryNameRegionalByTableInSuperRegion = "regional_by_table_in_super_region"
+	TelemetryNameRegionalByRow                = "regional_by_row"
+	TelemetryNameRegionalByRowAs              = "regional_by_row_as"
 )
 
 // TelemetryNameForLocality returns the telemetry name for a given locality level.
@@ -28,6 +29,9 @@ func TelemetryNameForLocality(node *tree.Locality) string {
 	case tree.LocalityLevelGlobal:
 		return TelemetryNameGlobal
 	case tree.LocalityLevelTable:
+		if node.SuperRegion != "" {
+			return TelemetryNameRegionalByTableInSuperRegion
+		}
 		if node.TableRegion != tree.RegionalByRowRegionNotSpecifiedName {
 			return TelemetryNameRegionalByTableIn
 		}
@@ -49,6 +53,9 @@ func TelemetryNameForLocalityConfig(cfg *catpb.LocalityConfig) (string, error) {
 	case *catpb.LocalityConfig_Global_:
 		return TelemetryNameGlobal, nil
 	case *catpb.LocalityConfig_RegionalByTable_:
+		if l.RegionalByTable.SuperRegionName != nil {
+			return TelemetryNameRegionalByTableInSuperRegion, nil
+		}
 		if l.RegionalByTable.Region != nil {
 			return TelemetryNameRegionalByTableIn, nil
 		}
