@@ -167,7 +167,7 @@ server.shutdown.transactions.timeout (alias: server.shutdown.query_wait)	duratio
 server.sql_tcp_keep_alive.count	integer	3	maximum number of probes that will be sent out before a connection is dropped because it's unresponsive (Linux and Darwin only)	application
 server.sql_tcp_keep_alive.idle	duration	0s	time with no network activity before sending a TCP keepalive probe (Linux and Darwin only). If 0, the value of server.sql_tcp_keep_alive.interval is used.	application
 server.sql_tcp_keep_alive.interval	duration	10s	time between keep alive probes and idle time before probes are sent out	application
-server.sql_tcp_user.timeout	duration	30s	specifies the maximum amount of time that transmitted data can remain unacknowledged before the underlying TCP connection is forcefully closed. (Linux and Darwin only)	application
+server.sql_tcp_user.timeout	duration	0s	specifies the maximum amount of time that transmitted data can remain unacknowledged before the underlying TCP connection is forcefully closed. (Linux and Darwin only)	application
 server.time_until_store_dead	duration	5m0s	the time after which if there is no new gossiped information about a store, it is considered dead	application
 server.user_login.cert_password_method.auto_scram_promotion.enabled	boolean	true	whether to automatically promote cert-password authentication to use SCRAM	application
 server.user_login.downgrade_scram_stored_passwords_to_bcrypt.enabled	boolean	true	if server.user_login.password_encryption=crdb-bcrypt, this controls whether to automatically re-encode stored passwords using scram-sha-256 to crdb-bcrypt	application

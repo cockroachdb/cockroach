@@ -61,7 +61,7 @@ var UserTimeout = settings.RegisterDurationSetting(
 	"specifies the maximum amount of time that transmitted data "+
 		"can remain unacknowledged before the underlying TCP connection is forcefully closed. "+
 		"(Linux and Darwin only)",
-	time.Second*30,
+	0, // Use operating system default.
 	settings.DurationWithMinimum(0),
 	settings.WithPublic,
 )
