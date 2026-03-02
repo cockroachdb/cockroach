@@ -1646,6 +1646,15 @@ func (node *AnnotateTypeExpr) Format(ctx *FmtCtx) {
 				return
 			}
 		}
+		// Similarly, FuncExpr.Format adds its own :::TYPE annotation when
+		// FmtParsable is set and the function has AmbiguousReturnType. Skip
+		// the AnnotateTypeExpr annotation to prevent double type annotation,
+		// which can cause type-check errors on re-parse.
+		if funcExpr, ok := node.Expr.(*FuncExpr); ok {
+			if ctx.HasFlags(FmtParsable) && funcExpr.typ != nil && funcExpr.fnProps != nil && funcExpr.fnProps.AmbiguousReturnType {
+				return
+			}
+		}
 		ctx.WriteString(":::")
 		ctx.FormatTypeReference(node.Type)
 

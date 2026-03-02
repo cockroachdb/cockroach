@@ -174,22 +174,24 @@ func NewFunctionDefinition(
 ) *FunctionDefinition {
 	overloads := make([]*Overload, len(def))
 
+	// Copy props to avoid mutating the caller's pointer.
+	propsCopy := *props
 	for i := range def {
 		if def[i].OverloadPreference == OverloadPreferencePreferred {
 			// Builtins with a preferred overload are always ambiguous.
-			props.AmbiguousReturnType = true
+			propsCopy.AmbiguousReturnType = true
 			break
 		}
 	}
 
 	for i := range def {
-		def[i].FunctionProperties = *props
+		def[i].FunctionProperties = propsCopy
 		overloads[i] = &def[i]
 	}
 	return &FunctionDefinition{
 		Name:               name,
 		Definition:         overloads,
-		FunctionProperties: *props,
+		FunctionProperties: propsCopy,
 	}
 }
 

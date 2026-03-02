@@ -206,6 +206,29 @@ func TestNormalizeAndValidate(t *testing.T) {
 			stmt:      "SELECT *, cdc_prev() FROM foo AS bar",
 			expectErr: `unknown function: cdc_prev()`,
 		},
+		{ // Regression for #147573: type-annotated CDC timestamp functions should
+			// not produce double type annotations after normalization.
+			name:       "statement_timestamp type annotation",
+			desc:       fooDesc,
+			stmt:       "SELECT *, statement_timestamp():::TIMESTAMP FROM foo",
+			expectStmt: "SELECT *, statement_timestamp():::TIMESTAMP FROM foo",
+		},
+		{ // Regression for #147573: event_op has no ambiguous return type, but
+			// the shared cdcFnProps pointer was mutated by cdcTimestampBuiltin
+			// functions (which have preferred overloads), causing event_op to
+			// incorrectly get AmbiguousReturnType and a spurious :::STRING
+			// annotation.
+			name:       "event_op no spurious type annotation",
+			desc:       fooDesc,
+			stmt:       "SELECT *, event_op() FROM foo",
+			expectStmt: "SELECT *, event_op() FROM foo",
+		},
+		{ // Regression for #147573: same as above but with TIMESTAMPTZ.
+			name:       "statement_timestamp timestamptz annotation",
+			desc:       fooDesc,
+			stmt:       "SELECT *, statement_timestamp():::TIMESTAMPTZ FROM foo",
+			expectStmt: "SELECT *, statement_timestamp():::TIMESTAMPTZ FROM foo",
+		},
 		{ // Regression for #115245
 			name:      "changefeed_creation_timestamp",
 			desc:      fooDesc,
@@ -248,8 +271,21 @@ func TestNormalizeAndValidate(t *testing.T) {
 			require.Equal(t, tc.expectStmt, serialized)
 
 			// Make sure we can deserialize back.
-			_, err = ParseChangefeedExpression(serialized)
+			sc2, err := ParseChangefeedExpression(serialized)
 			require.NoError(t, err)
+
+			// Verify that re-normalizing the deserialized expression produces
+			// the same result (idempotent round-trip). This catches bugs where
+			// normalization adds spurious type annotations that accumulate on
+			// each round-trip.
+			norm2, _, _, err := normalizeAndPlan(
+				ctx, &execCfg, username.RootUserName(), defaultDBSessionData,
+				tc.desc, schemaTS, target, sc2, tc.splitColFams,
+			)
+			require.NoError(t, err)
+			serialized2 := AsStringUnredacted(norm2)
+			require.Equal(t, serialized, serialized2,
+				"expression is not stable across round-trips")
 		})
 	}
 }
