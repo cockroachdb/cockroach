@@ -498,6 +498,12 @@ func registerKVLongRunningTxn(r registry.Registry) {
 			`); err != nil {
 				t.Fatal(err)
 			}
+			// Enable virtual intent resolution.
+			if _, err := conn.Exec(`
+				SET CLUSTER SETTING kv.concurrency.virtual_intent_resolution.enabled = true;
+			`); err != nil {
+				t.Fatal(err)
+			}
 
 			t.Status("running workload")
 			const duration = time.Hour
