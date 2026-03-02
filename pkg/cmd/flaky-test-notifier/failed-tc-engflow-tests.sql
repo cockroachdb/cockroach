@@ -56,4 +56,4 @@ WHERE
     test_name IS NOT NULL
     AND a.status NOT IN ('unknown', 'skipped', 'error')
 GROUP BY 1, 2, 3, 4, 5
-HAVING array_size(failed_builds) > 0 AND pass_cnt + array_size(failed_builds) > 5 AND TO_NUMBER((array_size(failed_builds) / (array_size(failed_builds) + pass_cnt)) * 100, 10, 1) > 0.01 AND recent_fail_cnt > 1
+HAVING array_size(failed_builds) > 0 AND pass_cnt + array_size(failed_builds) > 5 AND to_number((array_size(failed_builds) / (array_size(failed_builds) + pass_cnt)) * 100, 10, 1) > 0.01 AND recent_fail_cnt > 1

@@ -1,0 +1,899 @@
+# LogicTest: local
+
+# Test numeric formatting functions: to_char(numeric, text) and to_number(text, text)
+# These tests are ported from PostgreSQL's src/test/regress/sql/numeric.sql
+
+# Basic integer formatting
+query T
+SELECT to_char(0::int, '9')
+----
+ 0
+
+query T
+SELECT to_char(0::int, '99')
+----
+  0
+
+query T
+SELECT to_char(1::int, '9')
+----
+ 1
+
+query T
+SELECT to_char(-1::int, '9')
+----
+-1
+
+query T
+SELECT to_char(12::int, '99')
+----
+ 12
+
+query T
+SELECT to_char(123::int, '999')
+----
+ 123
+
+query T
+SELECT to_char(485::int, '999')
+----
+ 485
+
+# Overflow
+query T
+SELECT to_char(100::int, '99')
+----
+ ##
+
+# Zero padding with 0
+query T
+SELECT to_char(1::int, '09')
+----
+ 01
+
+query T
+SELECT to_char(1::int, '009')
+----
+ 001
+
+query T
+SELECT to_char(485::int, '0999')
+----
+ 0485
+
+# FM (Fill Mode) - suppresses leading blanks
+query T
+SELECT to_char(485::int, 'FM999')
+----
+485
+
+query T
+SELECT to_char(485::int, 'FM0999')
+----
+0485
+
+# Decimal formatting
+query T
+SELECT to_char(485::numeric, '999.99')
+----
+ 485.00
+
+query T
+SELECT to_char(485::numeric, 'FM999.99')
+----
+485.
+
+query T
+SELECT to_char(485::numeric, 'FM999.90')
+----
+485.00
+
+query T
+SELECT to_char(1.5::numeric, '9.9')
+----
+ 1.5
+
+query T
+SELECT to_char(0.1::numeric, '9.9')
+----
+  .1
+
+# Group separators
+query T
+SELECT to_char(1485::int, '9,999')
+----
+ 1,485
+
+query T
+SELECT to_char(1485::int, '9G999')
+----
+ 1,485
+
+# Sign patterns
+query T
+SELECT to_char(485::int, 'SG999')
+----
++485
+
+query T
+SELECT to_char(-485::int, 'SG999')
+----
+-485
+
+query T
+SELECT to_char(485::int, '999MI')
+----
+485
+
+query T
+SELECT to_char(-485::int, '999MI')
+----
+485-
+
+query T
+SELECT to_char(485::int, 'S999')
+----
++485
+
+query T
+SELECT to_char(-485::int, 'S999')
+----
+-485
+
+# PR (angle brackets for negative)
+query T
+SELECT to_char(-485::int, '999PR')
+----
+<485>
+
+query T
+SELECT to_char(485::int, '999PR')
+----
+ 485
+
+# L (currency symbol)
+query T
+SELECT to_char(12::int, 'L99')
+----
+$ 12
+
+# Roman numerals
+query T
+SELECT to_char(12::int, 'RN')
+----
+            XII
+
+query T
+SELECT to_char(12::int, 'FMRN')
+----
+XII
+
+query T
+SELECT to_char(2345::int, 'RN')
+----
+       MMCCCXLV
+
+# Scientific notation (EEEE)
+query T
+SELECT to_char(123.45::numeric, '9.999EEEE')
+----
+ 1.235e+02
+
+query T
+SELECT to_char(0.0012345::numeric, '9.999EEEE')
+----
+ 1.235e-03
+
+query T
+SELECT to_char(1::int, '9.999EEEE')
+----
+ 1.000e+00
+
+# V pattern (multiply by 10^n)
+query T
+SELECT to_char(12.4::numeric, '99V9')
+----
+ 124
+
+query T
+SELECT to_char(12.45::numeric, '99V99')
+----
+ 1245
+
+# TH ordinal suffix
+query T
+SELECT to_char(1::int, '9th')
+----
+ 1st
+
+query T
+SELECT to_char(2::int, '9th')
+----
+ 2nd
+
+query T
+SELECT to_char(3::int, '9th')
+----
+ 3rd
+
+query T
+SELECT to_char(4::int, '9th')
+----
+ 4th
+
+query T
+SELECT to_char(11::int, '99th')
+----
+ 11th
+
+query T
+SELECT to_char(12::int, '99th')
+----
+ 12th
+
+query T
+SELECT to_char(21::int, '99th')
+----
+ 21st
+
+query T
+SELECT to_char(1::int, '9TH')
+----
+ 1ST
+
+# B (blank integer part when zero)
+query T
+SELECT to_char(0::int, 'B9')
+----
+ 0
+
+query T
+SELECT to_char(1::int, 'B9')
+----
+ 1
+
+# Float formatting
+query T
+SELECT to_char(123.456::float8, '999.99')
+----
+ 123.46
+
+query T
+SELECT to_char(-123.456::float8, '999.99')
+----
+-123.46
+
+# to_char with FM and decimal
+query T
+SELECT to_char(100::numeric, 'FM999.9')
+----
+100.
+
+query T
+SELECT to_char(100::numeric, 'FM999.')
+----
+100
+
+query T
+SELECT to_char(100::numeric, 'FM999')
+----
+100
+
+# Literal text in format strings
+query T
+SELECT to_char(100::numeric, 'foo999')
+----
+foo 100
+
+query T
+SELECT to_char(100::numeric, 'f"ool"999')
+----
+fool 100
+
+# ==============================
+# to_number tests
+# ==============================
+
+query R
+SELECT to_number('-34,338,492', '99G999G999')
+----
+-34338492
+
+query R
+SELECT to_number('-34,338,492.654,878', '99G999G999D999G999')
+----
+-34338492.654878
+
+query R
+SELECT to_number('<564646.654564>', '999999.999999PR')
+----
+-564646.654564
+
+query R
+SELECT to_number('0.00001-', '9.999999S')
+----
+-0.00001
+
+query R
+SELECT to_number('5.01-', 'FM9.999999S')
+----
+-5.01
+
+query R
+SELECT to_number('5.01-', 'FM9.999999MI')
+----
+-5.01
+
+query R
+SELECT to_number('5 4 4 4 4 8 . 7 8', '9 9 9 9 9 9 . 9 9')
+----
+544448.78
+
+query R
+SELECT to_number('.01', 'FM9.99')
+----
+0.01
+
+query R
+SELECT to_number('.0', '99999999.99999999')
+----
+0.0
+
+query R
+SELECT to_number('0', '99.99')
+----
+0
+
+query R
+SELECT to_number('.-01', 'S99.99')
+----
+-0.01
+
+query R
+SELECT to_number('.01-', '99.99S')
+----
+-0.01
+
+query R
+SELECT to_number(' . 0 1-', ' 9 9 . 9 9 S')
+----
+-0.01
+
+query R
+SELECT to_number('34,50','999,99')
+----
+3450
+
+query R
+SELECT to_number('123,000','999G')
+----
+123
+
+query R
+SELECT to_number('123456','999G999')
+----
+123456
+
+query R
+SELECT to_number('$1234.56','L9,999.99')
+----
+1234.56
+
+query R
+SELECT to_number('$1234.56','L99,999.99')
+----
+1234.56
+
+query R
+SELECT to_number('$1,234.56','L99,999.99')
+----
+1234.56
+
+query R
+SELECT to_number('1234.56','L99,999.99')
+----
+1234.56
+
+query R
+SELECT to_number('1,234.56','L99,999.99')
+----
+1234.56
+
+query R
+SELECT to_number('42nd', '99th')
+----
+42
+
+# ==============================
+# Additional edge cases
+# ==============================
+
+# EEEE: negative decimal
+query T
+SELECT to_char(-0.0012345::numeric, '9.999EEEE')
+----
+-1.235e-03
+
+# EEEE: large number where mantissa rounds to 10.000
+query T
+SELECT to_char(9999999::numeric, '9.999EEEE')
+----
+ 10.000e+06
+
+# EEEE: very small number
+query T
+SELECT to_char(0.000000001::numeric, '9.999EEEE')
+----
+ 1.000e-09
+
+# EEEE: zero
+query T
+SELECT to_char(0::numeric, '9.999EEEE')
+----
+ 0.000e+00
+
+# EEEE: negative zero
+query T
+SELECT to_char(-0.0::numeric, '9.999EEEE')
+----
+ 0.000e+00
+
+# FM with EEEE is an error in PostgreSQL.
+statement error "EEEE" is incompatible with other formats
+SELECT to_char(123.45::numeric, 'FM9.999EEEE')
+
+# V pattern: zero
+query T
+SELECT to_char(0::numeric, '99V99')
+----
+     0
+
+# V pattern: negative
+query T
+SELECT to_char(-12.34::numeric, '99V99')
+----
+-1234
+
+# V pattern: trailing zeros
+query T
+SELECT to_char(1.2::numeric, '9V999')
+----
+ 1200
+
+# Float: 1/3
+query T
+SELECT to_char(1.0/3.0, '9.999999')
+----
+  .333333
+
+# Rounding: carry across decimal point
+query T
+SELECT to_char(9.995::numeric, '99.99')
+----
+ 10.00
+
+# Rounding: small number
+query T
+SELECT to_char(0.0055::numeric, '9.99')
+----
+  .01
+
+# Rounding: overflow
+query T
+SELECT to_char(99.999::numeric, '99.99')
+----
+ ##.##
+
+# Sign: S suffix on negative
+query T
+SELECT to_char(-485::int, '999S')
+----
+485-
+
+# Sign: S suffix on positive
+query T
+SELECT to_char(485::int, '999S')
+----
+485+
+
+# Multiple comma separators
+query T
+SELECT to_char(1234567::int, '9,999,999')
+----
+ 1,234,567
+
+# Decimal with trailing zeros
+query T
+SELECT to_char(0.001::numeric, '0.000000')
+----
+ 0.001000
+
+# to_number: leading spaces
+query R
+SELECT to_number('  123', '9999')
+----
+123
+
+# to_number: commas
+query R
+SELECT to_number('1,234', '9,999')
+----
+1234
+
+# V multiplier: divides by 10^(number of digits after V).
+query T
+SELECT to_number('12345', '999V99')::numeric(10,2)::text
+----
+123.45
+
+query T
+SELECT to_number('123', '9V99')::numeric(10,2)::text
+----
+1.23
+
+# EEEE not supported for input.
+statement error "EEEE" not supported for input
+SELECT to_number('12.34e+02', '99.99EEEE')
+
+# ==============================
+# NaN and Infinity formatting
+# ==============================
+
+# NaN overflow (format too narrow for literal "NaN").
+query T
+SELECT to_char('NaN'::numeric, '9.999')
+----
+ #.###
+
+query T
+SELECT to_char('NaN'::float8, '9.999')
+----
+ #.###
+
+# NaN literal display (format wide enough).
+query T
+SELECT to_char('NaN'::numeric, '999.9')
+----
+ NaN
+
+query T
+SELECT to_char('NaN'::numeric, '9999')
+----
+  NaN
+
+query T
+SELECT to_char('NaN'::numeric, '99')
+----
+ ##
+
+# Infinity overflow.
+query T
+SELECT to_char('Infinity'::float8, '9.999')
+----
+ #.###
+
+query T
+SELECT to_char('-Infinity'::float8, '9.999')
+----
+-#.###
+
+# Infinity literal display.
+query T
+SELECT to_char('Infinity'::float8, '9999999999')
+----
+   Infinity
+
+query T
+SELECT to_char('-Infinity'::float8, '9999999999')
+----
+  -Infinity
+
+# EEEE NaN/Infinity overflow.
+query T
+SELECT to_char('NaN'::numeric, '9.999EEEE')
+----
+ #.#######
+
+query T
+SELECT to_char('Infinity'::float8, '9.999EEEE')
+----
+ #.#######
+
+query T
+SELECT to_char('-Infinity'::float8, '9.999EEEE')
+----
+ #.#######
+
+# ==============================
+# Fuzz: decimal point and overflow behavior
+# ==============================
+
+# D and . format specifiers should produce decimal point even with no digit
+# positions.
+
+query T
+SELECT to_char(0::numeric, 'D')
+----
+ .
+
+query T
+SELECT to_char(0::numeric, '.')
+----
+ .
+
+query T
+SELECT to_char(855::numeric, '.')
+----
+ .
+
+query T
+SELECT to_char(-536.393433::numeric, 'D')
+----
+-.
+
+query T
+SELECT to_char(-253449736220.25::numeric, '.')
+----
+-.
+
+query T
+SELECT to_char(0::numeric, 'FM.')
+----
+.
+
+# RN (Roman numeral) format should still process surrounding elements
+# like L, PL, MI, G, and comma.
+
+query T
+SELECT to_char(522::numeric, 'RNLTHPL')
+----
+          DXXII$
+
+query T
+SELECT to_char(12262::numeric, 'LRNL')
+----
+$###############$
+
+query T
+SELECT to_char(0::numeric, 'GRNSG')
+----
+ ###############
+
+query T
+SELECT to_char(0::numeric, 'RNRNMI')
+----
+##############################
+
+query T
+SELECT to_char(-341::numeric, 'RNPLG,')
+----
+###############
+
+# Small negative numbers that round to zero should be treated as positive.
+
+query T
+SELECT to_char(-0.0004161297::numeric, 'PL')
+----
++
+
+query T
+SELECT to_char(-0.0000993392::numeric, 'PLSG')
+----
+++
+
+query T
+SELECT to_char(-0.0003899093::numeric, 'PL')
+----
++
+
+query T
+SELECT to_char(-0.0004957701::numeric, '.')
+----
+ .
+
+query T
+SELECT to_char(-0.0000732454::numeric, 'D,')
+----
+ .
+
+query T
+SELECT to_char(-0.0001868529::numeric, '9PRB')
+----
+ 0
+
+# TH format should error when the number string is not a valid integer.
+
+statement error is not a number
+SELECT to_char(219433129409.03::numeric, 'LLTH')
+
+statement error is not a number
+SELECT to_char(8700679::numeric, 'TH')
+
+statement error is not a number
+SELECT to_char(0::numeric, 'THB')
+
+# ==============================
+# Fuzz: additional numeric formatting edge cases
+# ==============================
+
+# RN combined with digit format elements (9, 0, D, .) should not produce
+# extra digit output.
+
+query T
+SELECT '|' || to_char(156::numeric, 'RNPL9MI') || '|'
+----
+|           CLVI  |
+
+query T
+SELECT '|' || to_char(986.214295::numeric, 'RN9MIVTH') || '|'
+----
+|       CMLXXXVI |
+
+query T
+SELECT '|' || to_char(0::numeric, 'RN9') || '|'
+----
+|###############|
+
+query T
+SELECT '|' || to_char(0::numeric, ',RND,') || '|'
+----
+| ############### |
+
+# RN with values outside int32 range should error.
+
+statement error integer out of range
+SELECT to_char(115194410895.02::numeric, 'RN')
+
+statement error integer out of range
+SELECT to_char(-305545638960.34::numeric, 'RNSPR')
+
+# Trailing comma/separator after decimal point with no post-decimal digits
+# should output a space, not a literal comma.
+
+query T
+SELECT '|' || to_char(26.565898::numeric, 'S9D,') || '|'
+----
+|+#. |
+
+query T
+SELECT '|' || to_char(-861.564442::numeric, 'B9D,') || '|'
+----
+|-#. |
+
+query T
+SELECT to_char(0::numeric, '0BB.,')
+----
+ 0
+
+# FM mode should emit post-sign (S after decimal) and PR closing bracket.
+
+query T
+SELECT to_char(8672097::numeric, 'FMDS')
+----
+.+
+
+query T
+SELECT to_char(-620::numeric, 'FMPRPRD')
+----
+<.>
+
+query T
+SELECT to_char(0::numeric, 'SDFMFM')
+----
+.+
+
+# Output should stop when the number string is exhausted at a digit position.
+
+query T
+SELECT to_char(0::numeric, '0PR.PL')
+----
+ 0
+
+query T
+SELECT to_char(-1.705744::numeric, '9SDTHL')
+----
+2
+
+query T
+SELECT '|' || to_char(-0.0001022871::numeric, ',9GPRD') || '|'
+----
+|  0,|
+
+# to_number with no digit positions should error.
+
+statement error invalid input syntax for type numeric
+SELECT to_number('123', 'G')
+
+statement error invalid input syntax for type numeric
+SELECT to_number('5', 'MI')
+
+statement error invalid input syntax for type numeric
+SELECT to_number('0', 'BPL')
+
+statement error invalid input syntax for type numeric
+SELECT to_number('1', ',')
+
+statement error invalid input syntax for type numeric
+SELECT to_number('2', 'L')
+
+# Also errors when all digit positions encounter non-digit characters.
+
+statement error invalid input syntax for type numeric
+SELECT to_number(' #', '9')
+
+statement error invalid input syntax for type numeric
+SELECT to_number('-#', '0')
+
+statement error invalid input syntax for type numeric
+SELECT to_number('-##', '90')
+
+# V format multiplier precision should match PostgreSQL (16+multi decimal
+# places). PostgreSQL computes numeric_power(10, -multi) with 16 significant
+# digits and multiplies, producing 16+multi decimal places in the result.
+
+query T
+SELECT to_number('0', '9V')::text
+----
+0.0000000000000000
+
+query T
+SELECT to_number('0', 'V9')::text
+----
+0.00000000000000000
+
+query T
+SELECT to_number('5', 'V9')::text
+----
+0.50000000000000000
+
+query T
+SELECT to_number('12', '9V9')::text
+----
+1.20000000000000000
+
+query T
+SELECT to_number('0', 'V99')::text
+----
+0.000000000000000000
+
+# S format trailing sign should be read after the last digit.
+
+query R
+SELECT to_number('2-', '0S')
+----
+-2
+
+query R
+SELECT to_number('711-', '999S')
+----
+-711
+
+query R
+SELECT to_number('2+', '0S')
+----
+2
+
+# Comma/G separators in FM mode should skip (not consume input).
+
+query R
+SELECT to_number('5,5', 'FM0G9')
+----
+5
+
+query R
+SELECT to_number('5,+5', 'FM0GSG9')
+----
+5
+
+# Digit positions with leading spaces should advance past the position even
+# when no digit is found.
+
+query R
+SELECT to_number('   0', '9,9')
+----
+0
+
+query R
+SELECT to_number('   0', 'G99')
+----
+0
