@@ -404,6 +404,12 @@ var (
 		Usage: "Interval to wait before the operation next execution after the previous run.",
 	})
 
+	SkipOperations string = ""
+	_                     = registerRunOpsFlag(&SkipOperations, FlagInfo{
+		Name:  "skip",
+		Usage: "A regex pattern for operations to exclude from running.",
+	})
+
 	RunForever bool = false
 	_               = registerRunOpsFlag(&RunForever, FlagInfo{
 		Name:  "run-forever",

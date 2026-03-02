@@ -182,12 +182,19 @@ func (r testRegistryImpl) AllOperations() []registry.OperationSpec {
 }
 
 // FilteredOperations returns operations filtered by the given regex.
-func (r testRegistryImpl) FilteredOperations(regex *regexp.Regexp) []registry.OperationSpec {
+// If skipRegex is non-nil, operations matching it are excluded.
+func (r testRegistryImpl) FilteredOperations(
+	regex *regexp.Regexp, skipRegex *regexp.Regexp,
+) []registry.OperationSpec {
 	var filteredOps []registry.OperationSpec
 	for _, opSpec := range r.AllOperations() {
-		if regex.MatchString(opSpec.Name) {
-			filteredOps = append(filteredOps, opSpec)
+		if !regex.MatchString(opSpec.Name) {
+			continue
 		}
+		if skipRegex != nil && skipRegex.MatchString(opSpec.Name) {
+			continue
+		}
+		filteredOps = append(filteredOps, opSpec)
 	}
 	return filteredOps
 }

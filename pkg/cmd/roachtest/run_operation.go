@@ -63,10 +63,10 @@ type opsRunner struct {
 }
 
 // runOperations spins `parallelism` workers to run operations.
-func runOperations(register func(registry.Registry), filter, clusterName string) error {
+func runOperations(register func(registry.Registry), filter, skip, clusterName string) error {
 	r := makeTestRegistry()
 	register(&r)
-	opSpecs, err := opsToRun(r, filter)
+	opSpecs, err := opsToRun(r, filter, skip)
 	if err != nil {
 		return err
 	}
