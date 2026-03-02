@@ -223,14 +223,15 @@ func New(
 	// be repeated.
 	semaCtx.Properties.IgnoreUnpreferredOverloads = evalCtx.SessionData().LegacyVarcharTyping
 	return &Builder{
-		factory:            factory,
-		stmt:               stmt,
-		ctx:                ctx,
-		verboseTracing:     log.ExpensiveLogEnabled(ctx, 2),
-		semaCtx:            semaCtx,
-		evalCtx:            evalCtx,
-		catalog:            catalog,
-		checkPrivilegeUser: catalog.GetCurrentUser(),
+		factory:                   factory,
+		stmt:                      stmt,
+		ctx:                       ctx,
+		verboseTracing:            log.ExpensiveLogEnabled(ctx, 2),
+		semaCtx:                   semaCtx,
+		evalCtx:                   evalCtx,
+		catalog:                   catalog,
+		checkPrivilegeUser:        catalog.GetCurrentUser(),
+		checkExecutePrivilegeUser: catalog.GetCurrentUser(),
 	}
 }
 
