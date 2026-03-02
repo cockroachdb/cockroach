@@ -12,6 +12,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
@@ -97,7 +98,7 @@ func TestMetadata(t *testing.T) {
 		t.Fatalf("unexpected types")
 	}
 
-	md.AddDependency(opt.DepByName(&tab.TabName), tab, privilege.CREATE)
+	md.AddDependency(opt.DepByName(&tab.TabName), tab, privilege.CREATE, username.RootUserName())
 	depsUpToDate, err := md.CheckDependencies(context.Background(), &evalCtx, testCat)
 	if err == nil || depsUpToDate {
 		t.Fatalf("expected table privilege to be revoked")
@@ -190,8 +191,8 @@ func TestMetadata(t *testing.T) {
 	}
 
 	newPrivileges, oldPrivileges := mdNew.TestingPrivileges(), md.TestingPrivileges()
-	for id, privileges := range oldPrivileges {
-		if newPrivileges[id] != privileges {
+	for key, privileges := range oldPrivileges {
+		if newPrivileges[key] != privileges {
 			t.Fatalf("expected privileges to be copied")
 		}
 	}
