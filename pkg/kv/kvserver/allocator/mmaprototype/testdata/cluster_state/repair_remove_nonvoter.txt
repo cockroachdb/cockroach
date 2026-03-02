@@ -28,5 +28,5 @@ RemoveNonVoter: r1
 
 repair store-id=1
 ----
-[mmaid=1] repair not yet implemented
+[mmaid=1] repair action RemoveNonVoter for r1 not yet implemented
 pending(0)
