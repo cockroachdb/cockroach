@@ -4078,7 +4078,7 @@ func TestSplitPreApplyWithSeparatedEngines(t *testing.T) {
 	rhsDesc.AddReplica(1, 1, roachpb.VOTER_FULL)
 
 	in := splitPreApplyInput{
-		destroyed:           false,
+		rhsDestroyed:        false,
 		rhsDesc:             rhsDesc,
 		initClosedTimestamp: hlc.Timestamp{WallTime: 100},
 	}

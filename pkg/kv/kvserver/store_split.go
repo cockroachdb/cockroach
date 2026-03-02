@@ -28,20 +28,20 @@ type splitPreApplyInput struct {
 	lhsID roachpb.FullReplicaID
 	// raftIndex is the raft log index of the split command.
 	raftIndex kvpb.RaftIndex
-	// destroyed is set to true iff the RHS replica (the one with the matching
-	// ReplicaID from the SplitTrigger used to construct a splitPreApplyInput) has
-	// already been removed from the store.
+	// rhsDestroyed is set to true iff the RHS replica (the one with the
+	// matching ReplicaID from the SplitTrigger used to construct a
+	// splitPreApplyInput) has already been removed from the store.
 	//
 	// If the RHS replica has already been destroyed on the store, then split
-	// application entails "throwing away" the data that would have belonged to
-	// the RHS. Simply put, user data belonging to the RHS needs to be cleared and
-	// any RangeID-local replicated state in the split batch also needs to be
-	// cleared.
-	destroyed bool
+	// application entails "throwing away" the data that would have belonged
+	// to the RHS. Simply put, user data belonging to the RHS needs to be
+	// cleared and any RangeID-local replicated state in the split batch also
+	// needs to be cleared.
+	rhsDestroyed bool
 	// rhsDesc is the descriptor for the post split RHS range.
 	rhsDesc roachpb.RangeDescriptor
 	// initClosedTimestamp is the initial closed timestamp that the RHS replica
-	// inherits from the pre-split range. Set iff destroyed is false.
+	// inherits from the pre-split range. Set iff rhsDestroyed is false.
 	initClosedTimestamp hlc.Timestamp
 }
 
@@ -81,7 +81,7 @@ func validateAndPrepareSplit(
 	// ReplicaID matches the one in the split trigger. In the less common case,
 	// the ReplicaID has already been removed from this store, and it may have
 	// been re-added with a higher ReplicaID one or more times. We use this to
-	// inform the destroyed field.
+	// inform the rhsDestroyed field.
 	rightRepl := r.store.GetReplicaIfExists(split.RightDesc.RangeID)
 	if rightRepl == nil || rightRepl.isNewerThanSplit(&split) {
 		// We're in the rare case where we know that the RHS has been removed or
@@ -106,7 +106,7 @@ func validateAndPrepareSplit(
 		return splitPreApplyInput{
 			lhsID:     roachpb.FullReplicaID{RangeID: r.RangeID, ReplicaID: r.replicaID},
 			raftIndex: raftIndex,
-			destroyed: true,
+			rhsDestroyed: true,
 			rhsDesc:   split.RightDesc,
 		}, nil
 	}
@@ -136,7 +136,7 @@ func validateAndPrepareSplit(
 	return splitPreApplyInput{
 		lhsID:              roachpb.FullReplicaID{RangeID: r.RangeID, ReplicaID: r.replicaID},
 		raftIndex:          raftIndex,
-		destroyed:          false,
+		rhsDestroyed:          false,
 		rhsDesc:            split.RightDesc,
 		initClosedTimestamp: *initClosedTS,
 	}, nil
@@ -206,7 +206,7 @@ func splitPreApply(
 		Type: wagpb.NodeType_NodeSplit,
 	})
 
-	if in.destroyed {
+	if in.rhsDestroyed {
 		// The RHS replica has already been removed from the store. To apply the
 		// split, we must clear the user data the RHS would have inherited from the
 		// LHS due to the split. Additionally, we also want to clear any
