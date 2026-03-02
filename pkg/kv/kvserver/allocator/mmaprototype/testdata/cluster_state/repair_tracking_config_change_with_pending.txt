@@ -36,7 +36,7 @@ change-id=1 store-id=4 node-id=4 range-id=1 load-delta=[cpu:0s/s, write-bandwidt
 # Suppressed by pending change.
 repair-needed
 ----
-no ranges need repair
+RepairPending: r1
 
 # store-leaseholder-msg with updated config (num_replicas=5 num_voters=3)
 # and s4 added as non-voter (enacts pending change). Still need 1 more

@@ -32,7 +32,7 @@ change-id=1 store-id=3 node-id=3 range-id=1 load-delta=[cpu:0s/s, write-bandwidt
 # Pending changes suppress repair.
 repair-needed
 ----
-no ranges need repair
+RepairPending: r1
 
 repair store-id=1
 ----

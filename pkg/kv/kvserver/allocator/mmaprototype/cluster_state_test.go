@@ -763,6 +763,25 @@ func TestClusterState(t *testing.T) {
 						}
 						fmt.Fprintln(&sb)
 					}
+					// RepairPending ranges are not in repairRanges, so
+					// scan for them separately.
+					var pendingIDs []roachpb.RangeID
+					for rid, rs := range cs.ranges {
+						if rs.repairAction == RepairPending {
+							pendingIDs = append(pendingIDs, rid)
+						}
+					}
+					if len(pendingIDs) > 0 {
+						slices.Sort(pendingIDs)
+						fmt.Fprintf(&sb, "RepairPending:")
+						for i, rid := range pendingIDs {
+							if i > 0 {
+								fmt.Fprintf(&sb, ",")
+							}
+							fmt.Fprintf(&sb, " r%d", rid)
+						}
+						fmt.Fprintln(&sb)
+					}
 					if sb.Len() == 0 {
 						return "no ranges need repair"
 					}
@@ -776,4 +795,3 @@ func TestClusterState(t *testing.T) {
 			datadriven.RunTest(t, path, invokeFn)
 		})
 }
-

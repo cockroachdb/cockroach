@@ -1123,8 +1123,8 @@ type rangeState struct {
 
 	// repairAction is the eagerly-computed repair action for this range. It is
 	// recomputed when replicas, config, pending changes, or store statuses
-	// change. Ranges with a repairAction other than NoRepairNeeded are indexed
-	// in clusterState.repairRanges.
+	// change. Ranges with a repairAction other than NoRepairNeeded or
+	// RepairPending are indexed in clusterState.repairRanges.
 	repairAction RepairAction
 
 	// Nil if conf is nil (since conf is required input), or if constraint
@@ -1311,8 +1311,8 @@ type clusterState struct {
 	changeSeqGen   changeID
 
 	// repairRanges indexes ranges by their RepairAction. Ranges with
-	// NoRepairNeeded are NOT stored. This allows repair() to iterate
-	// ranges needing repair without scanning all ranges.
+	// NoRepairNeeded or RepairPending are NOT stored. This allows repair()
+	// to iterate ranges needing repair without scanning all ranges.
 	repairRanges map[RepairAction]map[roachpb.RangeID]struct{}
 
 	*constraintMatcher
@@ -2057,7 +2057,7 @@ func (cs *clusterState) addPendingRangeChange(ctx context.Context, change Pendin
 			"addPendingRangeChange: change_id=%v, range_id=%v, change=%v",
 			cid, rangeID, pendingChange.ReplicaChange)
 	}
-	// Pending changes are now present, so this will set NoRepairNeeded.
+	// Pending changes are now present, so this will set RepairPending.
 	cs.updateRepairAction(ctx, rangeID, cs.ranges[rangeID])
 }
 

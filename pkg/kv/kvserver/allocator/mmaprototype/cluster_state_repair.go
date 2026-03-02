@@ -78,6 +78,10 @@ const (
 	// is impossible right now (e.g. loss of quorum).
 	RepairSkipped
 
+	// RepairPending indicates the range needs repair but already has pending
+	// changes in flight. No further repair is attempted until those complete.
+	RepairPending
+
 	// NoRepairNeeded indicates the range is healthy and conformant.
 	NoRepairNeeded
 )
@@ -96,6 +100,7 @@ var repairActionNames = [...]string{
 	SwapVoterForConstraints:         "SwapVoterForConstraints",
 	SwapNonVoterForConstraints:      "SwapNonVoterForConstraints",
 	RepairSkipped:                   "RepairSkipped",
+	RepairPending:                   "RepairPending",
 	NoRepairNeeded:                  "NoRepairNeeded",
 }
 
@@ -125,7 +130,7 @@ func (cs *clusterState) computeRepairAction(ctx context.Context, rs *rangeState)
 	}
 	// Step 2: Pending changes — being worked on already.
 	if len(rs.pendingChanges) > 0 {
-		return NoRepairNeeded
+		return RepairPending
 	}
 
 	// Step 3: Scan replicas and classify.
@@ -264,7 +269,7 @@ func (cs *clusterState) updateRepairAction(
 		return
 	}
 	// Remove from old bucket.
-	if oldAction != NoRepairNeeded && oldAction != 0 {
+	if oldAction != NoRepairNeeded && oldAction != RepairPending && oldAction != 0 {
 		if m, ok := cs.repairRanges[oldAction]; ok {
 			delete(m, rangeID)
 			if len(m) == 0 {
@@ -273,7 +278,7 @@ func (cs *clusterState) updateRepairAction(
 		}
 	}
 	// Add to new bucket.
-	if newAction != NoRepairNeeded {
+	if newAction != NoRepairNeeded && newAction != RepairPending {
 		m, ok := cs.repairRanges[newAction]
 		if !ok {
 			m = map[roachpb.RangeID]struct{}{}
@@ -287,7 +292,7 @@ func (cs *clusterState) updateRepairAction(
 // removeFromRepairRanges removes a range from the repairRanges index. This
 // should be called before deleting a range from cs.ranges.
 func (cs *clusterState) removeFromRepairRanges(rangeID roachpb.RangeID, rs *rangeState) {
-	if rs.repairAction != NoRepairNeeded && rs.repairAction != 0 {
+	if rs.repairAction != NoRepairNeeded && rs.repairAction != RepairPending && rs.repairAction != 0 {
 		if m, ok := cs.repairRanges[rs.repairAction]; ok {
 			delete(m, rangeID)
 			if len(m) == 0 {

@@ -32,7 +32,7 @@ change-id=1 store-id=3 node-id=3 range-id=1 load-delta=[cpu:0s/s, write-bandwidt
 
 repair-needed
 ----
-no ranges need repair
+RepairPending: r1
 
 # Reject the pending change: AddVoter re-emerges.
 reject-pending-changes change-ids=1
@@ -54,7 +54,7 @@ change-id=2 store-id=3 node-id=3 range-id=1 load-delta=[cpu:0s/s, write-bandwidt
 
 repair-needed
 ----
-no ranges need repair
+RepairPending: r1
 
 # Enact the change via store-leaseholder-msg showing 3 voters.
 store-leaseholder-msg
