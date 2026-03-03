@@ -380,6 +380,27 @@ func replicaStateForStore(rs *rangeState, storeID roachpb.StoreID) (ReplicaState
 	return ReplicaState{}, false
 }
 
+// excludeLeaseholder returns candidates with the leaseholder store removed.
+func excludeLeaseholder(rs *rangeState, candidates []roachpb.StoreID) []roachpb.StoreID {
+	var leaseholderStore roachpb.StoreID
+	for _, repl := range rs.replicas {
+		if repl.IsLeaseholder {
+			leaseholderStore = repl.StoreID
+			break
+		}
+	}
+	if leaseholderStore == 0 {
+		return candidates
+	}
+	var filtered []roachpb.StoreID
+	for _, storeID := range candidates {
+		if storeID != leaseholderStore {
+			filtered = append(filtered, storeID)
+		}
+	}
+	return filtered
+}
+
 // isLeaseholderOnStore returns true if the given store holds the lease for the
 // range.
 func isLeaseholderOnStore(rs *rangeState, storeID roachpb.StoreID) bool {
@@ -846,16 +867,7 @@ func (re *rebalanceEnv) demoteVoterToNonVoter(
 	demoteCands []roachpb.StoreID,
 ) {
 	// Exclude the leaseholder from demotion candidates.
-	var filteredCands []roachpb.StoreID
-	for _, storeID := range demoteCands {
-		for _, repl := range rs.replicas {
-			if repl.StoreID == storeID && repl.IsLeaseholder {
-				goto skip
-			}
-		}
-		filteredCands = append(filteredCands, storeID)
-	skip:
-	}
+	filteredCands := excludeLeaseholder(rs, demoteCands)
 	if len(filteredCands) == 0 {
 		log.KvDistribution.Warningf(ctx,
 			"skipping AddNonVoter repair for r%d: no demotion candidates (all are leaseholders)",
@@ -1797,16 +1809,7 @@ func (re *rebalanceEnv) repairSwapVoterForConstraints(
 	}
 
 	// Pick voter to remove (exclude leaseholder, diversity-based).
-	var removeCands []roachpb.StoreID
-	for _, storeID := range toRemoveVoters {
-		for _, repl := range rs.replicas {
-			if repl.StoreID == storeID && repl.IsLeaseholder {
-				goto skipRemove
-			}
-		}
-		removeCands = append(removeCands, storeID)
-	skipRemove:
-	}
+	removeCands := excludeLeaseholder(rs, toRemoveVoters)
 	if len(removeCands) == 0 {
 		log.KvDistribution.Warningf(ctx,
 			"skipping SwapVoterForConstraints repair for r%d: "+
@@ -1929,16 +1932,7 @@ func (re *rebalanceEnv) roleSwapVoterForConstraints(
 	swapCands [numReplicaKinds][]roachpb.StoreID,
 ) {
 	// Pick voter to demote (exclude leaseholder, diversity removal scoring).
-	var demoteCands []roachpb.StoreID
-	for _, storeID := range swapCands[voterIndex] {
-		for _, repl := range rs.replicas {
-			if repl.StoreID == storeID && repl.IsLeaseholder {
-				goto skipDemote
-			}
-		}
-		demoteCands = append(demoteCands, storeID)
-	skipDemote:
-	}
+	demoteCands := excludeLeaseholder(rs, swapCands[voterIndex])
 	if len(demoteCands) == 0 {
 		log.KvDistribution.Warningf(ctx,
 			"skipping SwapVoterForConstraints role swap for r%d: "+
