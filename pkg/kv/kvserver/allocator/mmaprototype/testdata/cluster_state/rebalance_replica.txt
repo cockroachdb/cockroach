@@ -27,7 +27,7 @@ node-id=2 locality-tiers=region=us-east-1,zone=us-east-1a,node=2
   store-id=2 attrs=yellow
 
 store-load-msg
-  store-id=1 node-id=1 load=[80,80,80] capacity=[100,100,100] secondary-load=0 load-time=0s
+  store-id=1 node-id=1 load=[80,80,80] capacity=[100,100,100] secondary-load=0 load-time=0s node-cpu-load=80 node-cpu-capacity=100
 ----
 
 get-load-info
@@ -78,7 +78,7 @@ store-id=2 node-id=2 status=ok accepting all reported=[cpu:0s/s, write-bandwidth
 
 # Same store load from s1. Results in no change.
 store-load-msg
-  store-id=1 node-id=1 load=[80,80,80] capacity=[100,100,100] secondary-load=0 load-time=0s
+  store-id=1 node-id=1 load=[80,80,80] capacity=[100,100,100] secondary-load=0 load-time=0s node-cpu-load=80 node-cpu-capacity=100
 ----
 
 get-load-info
@@ -139,12 +139,12 @@ store-id=2 node-id=2 status=ok accepting all reported=[cpu:0s/s, write-bandwidth
 
 # Store load msg from s2 showing updated load.
 store-load-msg
-  store-id=2 node-id=2 load=[80,80,80] capacity=[100,100,100] secondary-load=1 load-time=14s
+  store-id=2 node-id=2 load=[80,80,80] capacity=[100,100,100] secondary-load=1 load-time=14s node-cpu-load=80 node-cpu-capacity=100
 ----
 
 # Store load msg from s1 showing updated load.
 store-load-msg
-  store-id=1 node-id=1 load=[5,5,5] capacity=[100,100,100] secondary-load=1 load-time=14s
+  store-id=1 node-id=1 load=[5,5,5] capacity=[100,100,100] secondary-load=1 load-time=14s node-cpu-load=5 node-cpu-capacity=100
 ----
 
 # Both of the load msgs had load-time=14s, while the enacted time was 5s.
@@ -170,12 +170,12 @@ change-id=2 store-id=1 node-id=1 range-id=1 load-delta=[cpu:-80ns/s, write-bandw
 
 # Store load msg from s2 showing updated load.
 store-load-msg
-  store-id=2 node-id=2 load=[80,80,80] capacity=[100,100,100] secondary-load=1 load-time=16s
+  store-id=2 node-id=2 load=[80,80,80] capacity=[100,100,100] secondary-load=1 load-time=16s node-cpu-load=80 node-cpu-capacity=100
 ----
 
 # Store load msg from s1 showing updated load.
 store-load-msg
-  store-id=1 node-id=1 load=[5,5,5] capacity=[100,100,100] secondary-load=1 load-time=16s
+  store-id=1 node-id=1 load=[5,5,5] capacity=[100,100,100] secondary-load=1 load-time=16s node-cpu-load=5 node-cpu-capacity=100
 ----
 
 # Both of the load msgs had load-time=16s, while the enacted time was 5s. So

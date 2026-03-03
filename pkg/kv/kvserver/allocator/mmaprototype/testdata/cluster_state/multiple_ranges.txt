@@ -9,11 +9,11 @@ node-id=2 locality-tiers=region=us-east-1,zone=us-east-1a,node=2
 
 # Both stores are more constrained wrt CPURate.
 store-load-msg
-  store-id=1 node-id=1 load=[100,40,50] capacity=[150,100,100] secondary-load=1 load-time=0s
+  store-id=1 node-id=1 load=[100,40,50] capacity=[150,100,100] secondary-load=1 load-time=0s node-cpu-load=100 node-cpu-capacity=150
 ----
 
 store-load-msg
-  store-id=2 node-id=2 load=[45,40,50] capacity=[50,100,100] secondary-load=1 load-time=0s
+  store-id=2 node-id=2 load=[45,40,50] capacity=[50,100,100] secondary-load=1 load-time=0s node-cpu-load=45 node-cpu-capacity=50
 ----
 
 # Range 4 has the highest cpu on the leaseholder, and range 3 the highest cpu on a follower.
@@ -48,7 +48,7 @@ store-id=2 node-id=2 status=ok accepting all reported=[cpu:45ns/s, write-bandwid
 
 # Store 2 is more constrained wrt ByteSize.
 store-load-msg
-  store-id=2 node-id=2 load=[45,40,50] capacity=[100,100,50] secondary-load=1 load-time=0s
+  store-id=2 node-id=2 load=[45,40,50] capacity=[100,100,50] secondary-load=1 load-time=0s node-cpu-load=45 node-cpu-capacity=100
 ----
 
 # StoreLeaseholderMsg, with no span configs for the ranges.

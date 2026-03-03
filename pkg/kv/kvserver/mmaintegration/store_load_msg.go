@@ -11,7 +11,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
 
-// MakeStoreLoadMsg makes a store load message.
+// MakeStoreLoadMsg constructs a StoreLoadMsg with per-store load/capacity and
+// physical node-level CPU values for node overload detection.
 func MakeStoreLoadMsg(
 	desc roachpb.StoreDescriptor, origTimestampNanos int64,
 ) mmaprototype.StoreLoadMsg {
@@ -55,11 +56,13 @@ func MakeStoreLoadMsg(
 	// 	panic("ouch")
 	// }
 	return mmaprototype.StoreLoadMsg{
-		NodeID:        desc.Node.NodeID,
-		StoreID:       desc.StoreID,
-		Load:          load,
-		Capacity:      capacity,
-		SecondaryLoad: secondaryLoad,
-		LoadTime:      timeutil.FromUnixNanos(origTimestampNanos),
+		NodeID:          desc.Node.NodeID,
+		StoreID:         desc.StoreID,
+		Load:            load,
+		Capacity:        capacity,
+		SecondaryLoad:   secondaryLoad,
+		NodeCPULoad:     mmaprototype.LoadValue(desc.NodeCapacity.NodeCPURateUsage),
+		NodeCPUCapacity: mmaprototype.LoadValue(desc.NodeCapacity.NodeCPURateCapacity),
+		LoadTime:        timeutil.FromUnixNanos(origTimestampNanos),
 	}
 }

@@ -33,17 +33,17 @@ node-id=7 locality-tiers=node=7
 
 # High capacity stores (1000) with high load - these are overloaded
 store-load-msg
-  store-id=1 node-id=1 load=[900,0,0] capacity=[1000,-1,1000] secondary-load=0 load-time=0s
-  store-id=2 node-id=2 load=[900,0,0] capacity=[1000,-1,1000] secondary-load=0 load-time=0s
-  store-id=3 node-id=3 load=[900,0,0] capacity=[1000,-1,1000] secondary-load=0 load-time=0s
+  store-id=1 node-id=1 load=[900,0,0] capacity=[1000,-1,1000] secondary-load=0 load-time=0s node-cpu-load=900 node-cpu-capacity=1000
+  store-id=2 node-id=2 load=[900,0,0] capacity=[1000,-1,1000] secondary-load=0 load-time=0s node-cpu-load=900 node-cpu-capacity=1000
+  store-id=3 node-id=3 load=[900,0,0] capacity=[1000,-1,1000] secondary-load=0 load-time=0s node-cpu-load=900 node-cpu-capacity=1000
 ----
 
 # Low capacity stores (500) with low absolute load but high relative utilization
 store-load-msg
-  store-id=4 node-id=4 load=[300,0,0] capacity=[500,500,500] secondary-load=0 load-time=0s
-  store-id=5 node-id=5 load=[280,0,0] capacity=[500,500,500] secondary-load=0 load-time=0s
-  store-id=6 node-id=6 load=[260,0,0] capacity=[500,500,500] secondary-load=0 load-time=0s
-  store-id=7 node-id=7 load=[250,0,0] capacity=[500,500,500] secondary-load=0 load-time=0s
+  store-id=4 node-id=4 load=[300,0,0] capacity=[500,500,500] secondary-load=0 load-time=0s node-cpu-load=300 node-cpu-capacity=500
+  store-id=5 node-id=5 load=[280,0,0] capacity=[500,500,500] secondary-load=0 load-time=0s node-cpu-load=280 node-cpu-capacity=500
+  store-id=6 node-id=6 load=[260,0,0] capacity=[500,500,500] secondary-load=0 load-time=0s node-cpu-load=260 node-cpu-capacity=500
+  store-id=7 node-id=7 load=[250,0,0] capacity=[500,500,500] secondary-load=0 load-time=0s node-cpu-load=250 node-cpu-capacity=500
 ----
 
 get-load-info

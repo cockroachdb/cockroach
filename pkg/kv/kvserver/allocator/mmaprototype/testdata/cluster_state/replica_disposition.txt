@@ -22,9 +22,9 @@ node-id=3 locality-tiers=region=us,node=3
 
 # Set up stores with normal disk usage (50% used).
 store-load-msg
-  store-id=1 node-id=1 load=[100,0,50] capacity=[200,100,100] load-time=0s
-  store-id=2 node-id=2 load=[50,0,50] capacity=[200,100,100] load-time=0s
-  store-id=3 node-id=3 load=[50,0,50] capacity=[200,100,100] load-time=0s
+  store-id=1 node-id=1 load=[100,0,50] capacity=[200,100,100] load-time=0s node-cpu-load=100 node-cpu-capacity=200
+  store-id=2 node-id=2 load=[50,0,50] capacity=[200,100,100] load-time=0s node-cpu-load=50 node-cpu-capacity=200
+  store-id=3 node-id=3 load=[50,0,50] capacity=[200,100,100] load-time=0s node-cpu-load=50 node-cpu-capacity=200
 ----
 
 store-leaseholder-msg
@@ -114,7 +114,7 @@ retain-ready-replica-target-stores-only in=(1,2,3)
 # Test high disk utilization filtering.
 # Set store 2 to >90% disk usage.
 store-load-msg
-  store-id=2 node-id=2 load=[50,0,95] capacity=[200,100,100] load-time=0s
+  store-id=2 node-id=2 load=[50,0,95] capacity=[200,100,100] load-time=0s node-cpu-load=50 node-cpu-capacity=200
 ----
 
 # Trigger updateStoreStatuses to augment disposition based on disk utilization.
@@ -152,7 +152,7 @@ ok accepting all
 
 # Reset high disk on s2.
 store-load-msg
-  store-id=2 node-id=2 load=[50,0,0] capacity=[200,100,100] load-time=0s
+  store-id=2 node-id=2 load=[50,0,0] capacity=[200,100,100] load-time=0s node-cpu-load=50 node-cpu-capacity=200
 ----
 
 # Trigger updateStoreStatuses to ensure disposition is recalculated
