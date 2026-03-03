@@ -423,6 +423,45 @@ func (re *rebalanceEnv) enactRepair(
 		MakeExternalRangeChange(originMMARepair, localStoreID, rangeChange))
 }
 
+// filterAddCandidates filters candidateStores down to stores that are ready
+// (not dead/draining/IO-overloaded) and not already hosting a replica for the
+// range at the node level. excludeStoreID, if non-zero, is excluded from the
+// existing-replica set (used when a replica on that store is being
+// concurrently removed as part of the same change).
+func (re *rebalanceEnv) filterAddCandidates(
+	ctx context.Context, rs *rangeState, candidateStores storeSet, excludeStoreID roachpb.StoreID,
+) storeSet {
+	var existingReplicas storeSet
+	existingNodes := make(map[roachpb.NodeID]struct{})
+	for _, repl := range rs.replicas {
+		if repl.StoreID == excludeStoreID {
+			continue
+		}
+		existingReplicas.insert(repl.StoreID)
+		ss := re.stores[repl.StoreID]
+		if ss != nil {
+			existingNodes[ss.NodeID] = struct{}{}
+		}
+	}
+	candidateStores = retainReadyReplicaTargetStoresOnly(
+		ctx, candidateStores, re.stores, existingReplicas)
+	var valid storeSet
+	for _, storeID := range candidateStores {
+		if existingReplicas.contains(storeID) {
+			continue
+		}
+		ss := re.stores[storeID]
+		if ss == nil {
+			continue
+		}
+		if _, ok := existingNodes[ss.NodeID]; ok {
+			continue
+		}
+		valid = append(valid, storeID)
+	}
+	return valid
+}
+
 // repairAddVoter attempts to add a voter to an under-replicated range.
 // It follows the decision tree from constraint.go: first try to promote a
 // non-voter, then find a new store to add a voter.
@@ -461,40 +500,7 @@ func (re *rebalanceEnv) repairAddVoter(
 	var candidateStores storeSet
 	re.constraintMatcher.constrainStoresForExpr(constrDisj, &candidateStores)
 
-	// Build the set of stores already hosting a replica for this range, and
-	// the set of nodes already hosting a replica (for node-level diversity).
-	var existingReplicas storeSet
-	existingNodes := make(map[roachpb.NodeID]struct{})
-	for _, repl := range rs.replicas {
-		existingReplicas.insert(repl.StoreID)
-		ss := re.stores[repl.StoreID]
-		if ss != nil {
-			existingNodes[ss.NodeID] = struct{}{}
-		}
-	}
-
-	// Filter by ReplicaDispositionOK (excludes dead, decommissioning,
-	// draining, IO-overloaded stores).
-	candidateStores = retainReadyReplicaTargetStoresOnly(
-		ctx, candidateStores, re.stores, existingReplicas)
-
-	// Exclude stores already hosting a replica and stores on nodes already
-	// hosting a replica.
-	var validCandidates storeSet
-	for _, storeID := range candidateStores {
-		if existingReplicas.contains(storeID) {
-			continue
-		}
-		ss := re.stores[storeID]
-		if ss == nil {
-			continue
-		}
-		if _, ok := existingNodes[ss.NodeID]; ok {
-			continue
-		}
-		validCandidates = append(validCandidates, storeID)
-	}
-
+	validCandidates := re.filterAddCandidates(ctx, rs, candidateStores, 0)
 	if len(validCandidates) == 0 {
 		log.KvDistribution.Warningf(ctx,
 			"skipping AddVoter repair for r%d: no valid target stores", rangeID)
@@ -792,40 +798,7 @@ func (re *rebalanceEnv) repairAddNonVoter(
 	var candidateStores storeSet
 	re.constraintMatcher.constrainStoresForExpr(constrDisj, &candidateStores)
 
-	// Build the set of stores already hosting a replica for this range, and
-	// the set of nodes already hosting a replica (for node-level diversity).
-	var existingReplicas storeSet
-	existingNodes := make(map[roachpb.NodeID]struct{})
-	for _, repl := range rs.replicas {
-		existingReplicas.insert(repl.StoreID)
-		ss := re.stores[repl.StoreID]
-		if ss != nil {
-			existingNodes[ss.NodeID] = struct{}{}
-		}
-	}
-
-	// Filter by ReplicaDispositionOK (excludes dead, decommissioning,
-	// draining, IO-overloaded stores).
-	candidateStores = retainReadyReplicaTargetStoresOnly(
-		ctx, candidateStores, re.stores, existingReplicas)
-
-	// Exclude stores already hosting a replica and stores on nodes already
-	// hosting a replica.
-	var validCandidates storeSet
-	for _, storeID := range candidateStores {
-		if existingReplicas.contains(storeID) {
-			continue
-		}
-		ss := re.stores[storeID]
-		if ss == nil {
-			continue
-		}
-		if _, ok := existingNodes[ss.NodeID]; ok {
-			continue
-		}
-		validCandidates = append(validCandidates, storeID)
-	}
-
+	validCandidates := re.filterAddCandidates(ctx, rs, candidateStores, 0)
 	if len(validCandidates) == 0 {
 		log.KvDistribution.Warningf(ctx,
 			"skipping AddNonVoter repair for r%d: no valid target stores",
@@ -1137,49 +1110,14 @@ func (re *rebalanceEnv) repairReplaceDeadVoter(
 	}
 
 	// Step 2: Find a healthy store for the replacement voter.
-	// Unlike repairAddVoter, we can't use constraintsForAddingVoter() because
-	// the voter count already matches config. We pass nil constraints to get
-	// all stores as candidates and rely on diversity scoring for selection.
+	// The voter count already matches config, so we pass nil constraints to
+	// get all stores as candidates and rely on diversity scoring.
 	// TODO(kvoli): use voter/replica constraints to narrow candidates when
 	// constraints are configured.
 	var candidateStores storeSet
 	re.constraintMatcher.constrainStoresForExpr(nil, &candidateStores)
 
-	// Build the set of stores already hosting a replica (excluding the dead
-	// voter being removed) and the set of nodes already hosting a replica.
-	var existingReplicas storeSet
-	existingNodes := make(map[roachpb.NodeID]struct{})
-	for _, repl := range rs.replicas {
-		if repl.StoreID == removeStoreID {
-			continue
-		}
-		existingReplicas.insert(repl.StoreID)
-		ss := re.stores[repl.StoreID]
-		if ss != nil {
-			existingNodes[ss.NodeID] = struct{}{}
-		}
-	}
-
-	candidateStores = retainReadyReplicaTargetStoresOnly(
-		ctx, candidateStores, re.stores, existingReplicas)
-
-	// Exclude stores already hosting a replica and stores on nodes already
-	// hosting a replica.
-	var validCandidates storeSet
-	for _, storeID := range candidateStores {
-		if existingReplicas.contains(storeID) {
-			continue
-		}
-		ss := re.stores[storeID]
-		if ss == nil {
-			continue
-		}
-		if _, ok := existingNodes[ss.NodeID]; ok {
-			continue
-		}
-		validCandidates = append(validCandidates, storeID)
-	}
-
+	validCandidates := re.filterAddCandidates(ctx, rs, candidateStores, removeStoreID)
 	if len(validCandidates) == 0 {
 		log.KvDistribution.Warningf(ctx,
 			"skipping ReplaceDeadVoter repair for r%d: no valid target stores",
@@ -1291,41 +1229,7 @@ func (re *rebalanceEnv) repairReplaceDeadNonVoter(
 	var candidateStores storeSet
 	re.constraintMatcher.constrainStoresForExpr(nil, &candidateStores)
 
-	// Build the set of stores already hosting a replica (excluding the dead
-	// non-voter being removed) and the set of nodes already hosting a replica.
-	var existingReplicas storeSet
-	existingNodes := make(map[roachpb.NodeID]struct{})
-	for _, repl := range rs.replicas {
-		if repl.StoreID == removeStoreID {
-			continue
-		}
-		existingReplicas.insert(repl.StoreID)
-		ss := re.stores[repl.StoreID]
-		if ss != nil {
-			existingNodes[ss.NodeID] = struct{}{}
-		}
-	}
-
-	candidateStores = retainReadyReplicaTargetStoresOnly(
-		ctx, candidateStores, re.stores, existingReplicas)
-
-	// Exclude stores already hosting a replica and stores on nodes already
-	// hosting a replica.
-	var validCandidates storeSet
-	for _, storeID := range candidateStores {
-		if existingReplicas.contains(storeID) {
-			continue
-		}
-		ss := re.stores[storeID]
-		if ss == nil {
-			continue
-		}
-		if _, ok := existingNodes[ss.NodeID]; ok {
-			continue
-		}
-		validCandidates = append(validCandidates, storeID)
-	}
-
+	validCandidates := re.filterAddCandidates(ctx, rs, candidateStores, removeStoreID)
 	if len(validCandidates) == 0 {
 		log.KvDistribution.Warningf(ctx,
 			"skipping ReplaceDeadNonVoter repair for r%d: no valid target stores",
@@ -1441,42 +1345,7 @@ func (re *rebalanceEnv) repairReplaceDecommissioningVoter(
 	var candidateStores storeSet
 	re.constraintMatcher.constrainStoresForExpr(nil, &candidateStores)
 
-	// Build the set of stores already hosting a replica (excluding the
-	// decommissioning voter being removed) and the set of nodes already
-	// hosting a replica.
-	var existingReplicas storeSet
-	existingNodes := make(map[roachpb.NodeID]struct{})
-	for _, repl := range rs.replicas {
-		if repl.StoreID == removeStoreID {
-			continue
-		}
-		existingReplicas.insert(repl.StoreID)
-		ss := re.stores[repl.StoreID]
-		if ss != nil {
-			existingNodes[ss.NodeID] = struct{}{}
-		}
-	}
-
-	candidateStores = retainReadyReplicaTargetStoresOnly(
-		ctx, candidateStores, re.stores, existingReplicas)
-
-	// Exclude stores already hosting a replica and stores on nodes already
-	// hosting a replica.
-	var validCandidates storeSet
-	for _, storeID := range candidateStores {
-		if existingReplicas.contains(storeID) {
-			continue
-		}
-		ss := re.stores[storeID]
-		if ss == nil {
-			continue
-		}
-		if _, ok := existingNodes[ss.NodeID]; ok {
-			continue
-		}
-		validCandidates = append(validCandidates, storeID)
-	}
-
+	validCandidates := re.filterAddCandidates(ctx, rs, candidateStores, removeStoreID)
 	if len(validCandidates) == 0 {
 		log.KvDistribution.Warningf(ctx,
 			"skipping ReplaceDecommissioningVoter repair for r%d: no valid target stores",
@@ -1588,42 +1457,7 @@ func (re *rebalanceEnv) repairReplaceDecommissioningNonVoter(
 	var candidateStores storeSet
 	re.constraintMatcher.constrainStoresForExpr(nil, &candidateStores)
 
-	// Build the set of stores already hosting a replica (excluding the
-	// decommissioning non-voter being removed) and the set of nodes already
-	// hosting a replica.
-	var existingReplicas storeSet
-	existingNodes := make(map[roachpb.NodeID]struct{})
-	for _, repl := range rs.replicas {
-		if repl.StoreID == removeStoreID {
-			continue
-		}
-		existingReplicas.insert(repl.StoreID)
-		ss := re.stores[repl.StoreID]
-		if ss != nil {
-			existingNodes[ss.NodeID] = struct{}{}
-		}
-	}
-
-	candidateStores = retainReadyReplicaTargetStoresOnly(
-		ctx, candidateStores, re.stores, existingReplicas)
-
-	// Exclude stores already hosting a replica and stores on nodes already
-	// hosting a replica.
-	var validCandidates storeSet
-	for _, storeID := range candidateStores {
-		if existingReplicas.contains(storeID) {
-			continue
-		}
-		ss := re.stores[storeID]
-		if ss == nil {
-			continue
-		}
-		if _, ok := existingNodes[ss.NodeID]; ok {
-			continue
-		}
-		validCandidates = append(validCandidates, storeID)
-	}
-
+	validCandidates := re.filterAddCandidates(ctx, rs, candidateStores, removeStoreID)
 	if len(validCandidates) == 0 {
 		log.KvDistribution.Warningf(ctx,
 			"skipping ReplaceDecommissioningNonVoter repair for r%d: no valid target stores",
@@ -1815,38 +1649,7 @@ func (re *rebalanceEnv) repairSwapVoterForConstraints(
 	var candidateStores storeSet
 	re.constraintMatcher.constrainStoresForExpr(toAdd, &candidateStores)
 
-	// Build existing replicas/nodes, excluding the voter being removed.
-	var existingReplicas storeSet
-	existingNodes := make(map[roachpb.NodeID]struct{})
-	for _, repl := range rs.replicas {
-		if repl.StoreID == removeStoreID {
-			continue
-		}
-		existingReplicas.insert(repl.StoreID)
-		ss := re.stores[repl.StoreID]
-		if ss != nil {
-			existingNodes[ss.NodeID] = struct{}{}
-		}
-	}
-
-	candidateStores = retainReadyReplicaTargetStoresOnly(
-		ctx, candidateStores, re.stores, existingReplicas)
-
-	var validCandidates storeSet
-	for _, storeID := range candidateStores {
-		if existingReplicas.contains(storeID) {
-			continue
-		}
-		ss := re.stores[storeID]
-		if ss == nil {
-			continue
-		}
-		if _, ok := existingNodes[ss.NodeID]; ok {
-			continue
-		}
-		validCandidates = append(validCandidates, storeID)
-	}
-
+	validCandidates := re.filterAddCandidates(ctx, rs, candidateStores, removeStoreID)
 	if len(validCandidates) == 0 {
 		log.KvDistribution.Warningf(ctx,
 			"skipping SwapVoterForConstraints repair for r%d: "+
@@ -2051,38 +1854,7 @@ func (re *rebalanceEnv) repairSwapNonVoterForConstraints(
 	var candidateStores storeSet
 	re.constraintMatcher.constrainStoresForExpr(toAdd, &candidateStores)
 
-	// Build existing replicas/nodes, excluding the non-voter being removed.
-	var existingReplicas storeSet
-	existingNodes := make(map[roachpb.NodeID]struct{})
-	for _, repl := range rs.replicas {
-		if repl.StoreID == removeStoreID {
-			continue
-		}
-		existingReplicas.insert(repl.StoreID)
-		ss := re.stores[repl.StoreID]
-		if ss != nil {
-			existingNodes[ss.NodeID] = struct{}{}
-		}
-	}
-
-	candidateStores = retainReadyReplicaTargetStoresOnly(
-		ctx, candidateStores, re.stores, existingReplicas)
-
-	var validCandidates storeSet
-	for _, storeID := range candidateStores {
-		if existingReplicas.contains(storeID) {
-			continue
-		}
-		ss := re.stores[storeID]
-		if ss == nil {
-			continue
-		}
-		if _, ok := existingNodes[ss.NodeID]; ok {
-			continue
-		}
-		validCandidates = append(validCandidates, storeID)
-	}
-
+	validCandidates := re.filterAddCandidates(ctx, rs, candidateStores, removeStoreID)
 	if len(validCandidates) == 0 {
 		log.KvDistribution.Warningf(ctx,
 			"skipping SwapNonVoterForConstraints repair for r%d: "+
