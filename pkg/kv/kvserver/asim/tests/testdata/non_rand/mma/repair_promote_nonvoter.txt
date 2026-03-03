@@ -1,0 +1,4 @@
+# TODO: implement ASIM integration test for promote non-voter to voter.
+# Mirrors mmaprototype/testdata/cluster_state/repair_promote_nonvoter.txt.
+skip_under_ci
+----

@@ -1,0 +1,4 @@
+# TODO: implement ASIM integration test for over-replicated voters (all healthy).
+# Mirrors mmaprototype/testdata/cluster_state/repair_remove_voter_healthy.txt.
+skip_under_ci
+----

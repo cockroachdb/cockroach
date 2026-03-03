@@ -1,0 +1,4 @@
+# TODO: implement ASIM integration test for joint config finalization.
+# Mirrors mmaprototype/testdata/cluster_state/repair_finalize_atomic.txt.
+skip_under_ci
+----

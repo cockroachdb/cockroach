@@ -1,0 +1,4 @@
+# TODO: implement ASIM integration test for voter constraint swap.
+# Mirrors mmaprototype/testdata/cluster_state/repair_swap_voter.txt.
+skip_under_ci
+----

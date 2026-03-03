@@ -1,0 +1,4 @@
+# TODO: implement ASIM integration test for decommissioning non-voter replacement.
+# Mirrors mmaprototype/testdata/cluster_state/repair_replace_decom_nonvoter.txt.
+skip_under_ci
+----

@@ -1,0 +1,4 @@
+# TODO: implement ASIM integration test for quorum loss (repair skipped).
+# Mirrors mmaprototype/testdata/cluster_state/repair_range_unavailable.txt.
+skip_under_ci
+----

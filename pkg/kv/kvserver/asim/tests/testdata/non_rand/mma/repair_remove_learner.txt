@@ -1,0 +1,4 @@
+# TODO: implement ASIM integration test for stuck LEARNER removal.
+# Mirrors mmaprototype/testdata/cluster_state/repair_remove_learner.txt.
+skip_under_ci
+----

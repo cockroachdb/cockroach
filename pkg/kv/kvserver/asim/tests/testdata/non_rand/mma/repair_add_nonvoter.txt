@@ -1,0 +1,4 @@
+# TODO: implement ASIM integration test for under-replicated non-voters.
+# Mirrors mmaprototype/testdata/cluster_state/repair_add_nonvoter.txt.
+skip_under_ci
+----
