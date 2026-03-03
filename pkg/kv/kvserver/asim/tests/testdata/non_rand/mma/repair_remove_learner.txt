@@ -1,4 +1,23 @@
-# TODO: implement ASIM integration test for stuck LEARNER removal.
-# Mirrors mmaprototype/testdata/cluster_state/repair_remove_learner.txt.
-skip_under_ci
+# This test verifies that MMA repair removes stuck LEARNER replicas. All 10
+# ranges start with 3 voters + 1 learner but the span config requires only 3
+# replicas. The learner is excess and should be removed.
+#
+# Expected outcome: all learners removed, no over-replicated ranges.
+
+gen_cluster nodes=6 region=(a,b,c) nodes_per_region=(2,2,2)
+----
+
+# Create ranges with 3 voters + 1 learner.
+gen_ranges ranges=10 repl_factor=4 placement_type=replica_placement
+{s1:*,s2,s3,s4:LEARNER}:1
+----
+
+set_span_config
+[0,9999999999): num_replicas=3
+----
+
+assertion type=conformance over=0
+----
+
+eval duration=10m seed=42 cfgs=(mma-repair) metrics=(replicas,leases)
 ----

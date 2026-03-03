@@ -1,4 +1,33 @@
-# TODO: implement ASIM integration test for quorum loss (repair skipped).
-# Mirrors mmaprototype/testdata/cluster_state/repair_range_unavailable.txt.
-skip_under_ci
+# This test verifies that MMA repair gracefully handles unavailable ranges
+# (quorum loss). All 10 ranges have 3 voters on s1-s3. Nodes 2 and 3 die,
+# leaving only 1 of 3 voters alive (no quorum). MMA should detect the
+# unavailability and skip repair without crashing or hanging.
+#
+# Expected outcome: all 10 ranges remain unavailable (repair correctly skipped).
+
+gen_cluster nodes=5 region=(a,b,c) nodes_per_region=(2,2,1)
+----
+
+# Place all ranges on s1-s3 so all lose quorum when s2,s3 die.
+gen_ranges ranges=10 repl_factor=3 placement_type=replica_placement
+{s1:*,s2,s3}:1
+----
+
+set_span_config
+[0,9999999999): num_replicas=3 num_voters=3
+----
+
+setting split_queue_enabled=false
+----
+
+set_status node=2 liveness=dead
+----
+
+set_status node=3 liveness=dead
+----
+
+assertion type=conformance unavailable=10
+----
+
+eval duration=10m seed=42 cfgs=(mma-repair) metrics=(replicas,leases)
 ----

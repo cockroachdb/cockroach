@@ -1,4 +1,24 @@
-# TODO: implement ASIM integration test for excess non-voters.
-# Mirrors mmaprototype/testdata/cluster_state/repair_remove_nonvoter.txt.
-skip_under_ci
+# This test verifies that MMA repair removes excess non-voter replicas. All 10
+# ranges start with 3 voters + 3 non-voters (6 total) but the span config
+# requires only 5 replicas (3V+2NV). MMA must remove 1 non-voter per range.
+#
+# Expected outcome: all ranges reduced to 5 replicas, no over-replicated ranges.
+
+gen_cluster nodes=6 region=(a,b,c) nodes_per_region=(2,2,2)
+----
+
+# Create ranges with 3 voters + 3 non-voters.
+gen_ranges ranges=10 repl_factor=6 placement_type=replica_placement
+{s1:*,s2,s3,s4:NON_VOTER,s5:NON_VOTER,s6:NON_VOTER}:1
+----
+
+# Config says 5 replicas with 3 voters (one non-voter is excess).
+set_span_config
+[0,9999999999): num_replicas=5 num_voters=3
+----
+
+assertion type=conformance over=0
+----
+
+eval duration=10m seed=42 cfgs=(mma-repair) metrics=(replicas,leases)
 ----

@@ -1,4 +1,26 @@
-# TODO: implement ASIM integration test for promote non-voter to voter.
-# Mirrors mmaprototype/testdata/cluster_state/repair_promote_nonvoter.txt.
-skip_under_ci
+# This test verifies that MMA repair promotes non-voters to voters when the
+# voter count is insufficient. All 10 ranges start with 2 voters + 1 non-voter
+# but the span config requires 3 voters. MMA should promote the existing
+# non-voter rather than adding a 4th replica.
+#
+# Expected outcome: all non-voters promoted to voters, no under-replicated
+# ranges.
+
+gen_cluster nodes=6 region=(a,b,c) nodes_per_region=(2,2,2)
+----
+
+# Create ranges with 2 voters + 1 non-voter each.
+gen_ranges ranges=10 repl_factor=3 placement_type=replica_placement
+{s1:*,s2,s3:NON_VOTER}:1
+----
+
+# Config says all 3 replicas should be voters.
+set_span_config
+[0,9999999999): num_replicas=3 num_voters=3
+----
+
+assertion type=conformance under=0
+----
+
+eval duration=10m seed=42 cfgs=(mma-repair) metrics=(replicas,leases)
 ----

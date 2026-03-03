@@ -1,4 +1,28 @@
-# TODO: implement ASIM integration test for voter constraint swap.
-# Mirrors mmaprototype/testdata/cluster_state/repair_swap_voter.txt.
-skip_under_ci
+# This test verifies that MMA repair swaps misplaced voters to satisfy
+# voter_constraints. All 10 ranges have 3 voters in region a, but
+# voter_constraints require 2 voters in region b. MMA should swap 2 voters
+# from region a to region b per range, keeping the leaseholder (s1) in a.
+#
+# Expected outcome: all ranges satisfy voter_constraints, no violating ranges.
+
+gen_cluster nodes=6 region=(a,b) nodes_per_region=(3,3)
+----
+
+# All voters initially in region a (s1-s3).
+gen_ranges ranges=10 repl_factor=3 placement_type=replica_placement
+{s1:*,s2,s3}:1
+----
+
+# Require 2 of 3 voters in region b.
+set_span_config
+[0,9999999999): num_replicas=3 voter_constraints={'+region=b':2}
+----
+
+setting split_queue_enabled=false
+----
+
+assertion type=conformance violating=0
+----
+
+eval duration=10m seed=42 cfgs=(mma-repair) metrics=(replicas,leases)
 ----

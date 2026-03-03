@@ -1,4 +1,23 @@
-# TODO: implement ASIM integration test for joint config finalization.
-# Mirrors mmaprototype/testdata/cluster_state/repair_finalize_atomic.txt.
-skip_under_ci
+# This test verifies that MMA repair finalizes stuck joint configs. All 10
+# ranges start with 2 VOTER_FULL + 1 VOTER_INCOMING. The span config requires 3
+# replicas. MMA should finalize by promoting VOTER_INCOMING to VOTER_FULL.
+#
+# Expected outcome: all VOTER_INCOMING promoted, no under-replicated ranges.
+
+gen_cluster nodes=6 region=(a,b,c) nodes_per_region=(2,2,2)
+----
+
+# Create ranges stuck in joint config.
+gen_ranges ranges=10 repl_factor=3 placement_type=replica_placement
+{s1:*,s2,s3:VOTER_INCOMING}:1
+----
+
+set_span_config
+[0,9999999999): num_replicas=3
+----
+
+assertion type=conformance under=0
+----
+
+eval duration=10m seed=42 cfgs=(mma-repair) metrics=(replicas,leases)
 ----

@@ -1,4 +1,31 @@
-# TODO: implement ASIM integration test for dead non-voter replacement.
-# Mirrors mmaprototype/testdata/cluster_state/repair_replace_dead_nonvoter.txt.
-skip_under_ci
+# This test verifies that MMA repair replaces dead non-voters. All 10 ranges
+# start with 3 voters + 2 non-voters (s4,s5). Node 5 dies, making ranges
+# under-replicated. MMA should add a replacement non-voter on s6 and remove
+# the dead non-voter.
+#
+# Expected outcome: all ranges back to 5 replicas (3V+2NV), no under-replicated
+# ranges.
+
+gen_cluster nodes=6 region=(a,b,c) nodes_per_region=(2,2,2)
+----
+
+# Create ranges with 3 voters + 2 non-voters.
+gen_ranges ranges=10 repl_factor=5 placement_type=replica_placement
+{s1:*,s2,s3,s4:NON_VOTER,s5:NON_VOTER}:1
+----
+
+set_span_config
+[0,9999999999): num_replicas=5 num_voters=3
+----
+
+setting split_queue_enabled=false
+----
+
+set_status node=5 liveness=dead
+----
+
+assertion type=conformance under=0
+----
+
+eval duration=10m seed=42 cfgs=(mma-repair) metrics=(replicas,leases)
 ----

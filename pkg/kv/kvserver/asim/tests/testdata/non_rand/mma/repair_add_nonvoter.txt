@@ -1,4 +1,24 @@
-# TODO: implement ASIM integration test for under-replicated non-voters.
-# Mirrors mmaprototype/testdata/cluster_state/repair_add_nonvoter.txt.
-skip_under_ci
+# This test verifies that MMA repair correctly adds non-voter replicas to
+# under-replicated ranges. All 10 ranges start with 3 voters (RF=3) but the
+# span config requires 5 replicas with 3 voters, meaning MMA must add 2
+# non-voters per range across the 6-node cluster spanning 3 regions.
+#
+# Expected outcome: all ranges reach 5 replicas (3V+2NV), no under-replicated
+# ranges.
+
+gen_cluster nodes=6 region=(a,b,c) nodes_per_region=(2,2,2)
+----
+
+gen_ranges ranges=10 repl_factor=3
+----
+
+# Override span config to require 5 replicas with 3 voters.
+set_span_config
+[0,9999999999): num_replicas=5 num_voters=3
+----
+
+assertion type=conformance under=0
+----
+
+eval duration=10m seed=42 cfgs=(mma-repair) metrics=(replicas,leases)
 ----

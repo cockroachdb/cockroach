@@ -1,4 +1,31 @@
-# TODO: implement ASIM integration test for non-voter constraint swap.
-# Mirrors mmaprototype/testdata/cluster_state/repair_swap_nonvoter.txt.
-skip_under_ci
+# This test verifies that MMA repair swaps misplaced non-voters to satisfy
+# constraints. All 10 ranges have 3 voters in region a + 2 non-voters (s4 in
+# region a, s5 in region b). Constraints require 2 total replicas in region b,
+# but only 1 (s5) is there. MMA should swap the non-voter on s4 (region a) to
+# a store in region b.
+#
+# Cluster: 8 nodes, s1-s4 in region a, s5-s8 in region b.
+#
+# Expected outcome: all ranges satisfy constraints, no violating ranges.
+
+gen_cluster nodes=8 region=(a,b) nodes_per_region=(4,4)
+----
+
+# 3 voters in region a, 1 NV misplaced in region a, 1 NV in region b.
+gen_ranges ranges=10 repl_factor=5 placement_type=replica_placement
+{s1:*,s2,s3,s4:NON_VOTER,s5:NON_VOTER}:1
+----
+
+# Require 2 total replicas in region b.
+set_span_config
+[0,9999999999): num_replicas=5 num_voters=3 constraints={'+region=b':2}
+----
+
+setting split_queue_enabled=false
+----
+
+assertion type=conformance violating=0
+----
+
+eval duration=10m seed=42 cfgs=(mma-repair) metrics=(replicas,leases)
 ----
