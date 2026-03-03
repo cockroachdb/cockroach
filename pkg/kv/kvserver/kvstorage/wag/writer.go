@@ -6,8 +6,8 @@
 package wag
 
 import (
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvstorage"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvstorage/wag/wagpb"
+	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/errors"
 )
 
@@ -85,11 +85,11 @@ func (w *Writer) SetEvent(node wagpb.Node) {
 	w.event = node
 }
 
-// Flush writes all staged WAG nodes to the raft engine. The event node's
-// Mutation.Batch is populated with stateBatchRepr, which should be the
-// Repr() of the fully prepared State engine batch. No-ops if no event was
-// staged.
-func (w *Writer) Flush(raftBatch kvstorage.RaftWO, stateBatchRepr []byte) error {
+// Flush writes all staged WAG nodes to the raft engine. The raftBatch must be
+// a writing handle to the raft/log engine. The event node's Mutation.Batch is
+// populated with stateBatchRepr, which should be the Repr() of the fully
+// prepared State engine batch. No-ops if no event was staged.
+func (w *Writer) Flush(raftBatch storage.Writer, stateBatchRepr []byte) error {
 	if w.disabled() {
 		return nil
 	}
