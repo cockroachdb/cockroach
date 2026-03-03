@@ -755,12 +755,14 @@ func inspectEngines(
 		initializedEngines = append(initializedEngines, eng)
 	}
 
-	// Clean up the deprecated store cluster version key from all engines.
-	//
-	// TODO(pav-kv): make it conditional on version, so that this code can be
-	// eventually removed.
-	if err := removeDeprecatedStoreClusterVersionKey(ctx, engines); err != nil {
-		return nil, err
+	// Clean up the deprecated store cluster version key from all engines if we
+	// are on v26.2 or less.
+	// TODO(pav-kv): Remove this cleanup when MinSupported is bumped above V26_2,
+	// as all clusters will have gone through this cleanup by then.
+	if v26dot2 := clusterversion.V26_2.Version(); !v26dot2.Less(minSupportedVersion) {
+		if err := removeDeprecatedStoreClusterVersionKey(ctx, engines); err != nil {
+			return nil, err
+		}
 	}
 
 	clusterVersion, err := kvstorage.SynthesizeClusterVersionFromEngines(
