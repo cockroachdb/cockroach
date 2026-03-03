@@ -91,6 +91,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tochar"
+	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/crlib/crtime"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
@@ -1537,6 +1538,14 @@ type HasAdminRoleCache struct {
 	IsSet bool
 }
 
+// chainedTransactionModes holds the transaction characteristics to carry
+// forward when AND CHAIN is used with COMMIT or ROLLBACK.
+type chainedTransactionModes struct {
+	pri      roachpb.UserPriority
+	readOnly tree.ReadWriteMode
+	isoLevel isolation.Level
+}
+
 type connExecutor struct {
 	_ util.NoCopy
 
@@ -1829,6 +1838,11 @@ type connExecutor struct {
 		// telemetrySkippedTxns contains the number of transactions skipped by
 		// telemetry logging prior to this one.
 		telemetrySkippedTxns uint64
+
+		// chainTxnModes is set when COMMIT AND CHAIN or ROLLBACK AND CHAIN is
+		// executed. After the current transaction finishes, a new explicit
+		// transaction is started with these modes.
+		chainTxnModes *chainedTransactionModes
 	}
 
 	// sessionDataStack contains the user-configurable connection variables.
@@ -4171,12 +4185,7 @@ func (ex *connExecutor) txnStateTransitionsApplyWrapper(
 			}
 		}
 	case txnStart:
-		ex.recordTransactionStart(advInfo.txnEvent.txnID)
-
-		// Session is considered active when executing a transaction.
-		ex.totalActiveTimeStopWatch.Start()
-
-		if err := ex.maybeSetSQLLivenessSessionAndGeneration(); err != nil {
+		if err := ex.onTxnStart(advInfo.txnEvent.txnID); err != nil {
 			return advanceInfo{}, err
 		}
 	case txnCommit:
@@ -4296,7 +4305,55 @@ func (ex *connExecutor) txnStateTransitionsApplyWrapper(
 		return advanceInfo{}, errors.AssertionFailedf(
 			"unexpected event: %v", errors.Safe(advInfo.txnEvent))
 	}
+
+	// Handle AND CHAIN: after the commit/rollback has been fully processed,
+	// start a new explicit transaction with the saved modes.
+	if ex.extraTxnState.chainTxnModes != nil {
+		chainModes := ex.extraTxnState.chainTxnModes
+		ex.extraTxnState.chainTxnModes = nil
+		if _, isNoTxn := ex.machine.CurState().(stateNoTxn); isNoTxn {
+			ex.sessionDataStack.PushTopClone()
+			now := ex.server.cfg.Clock.PhysicalTime()
+			chainPayload := makeEventTxnStartPayload(
+				chainModes.pri,
+				chainModes.readOnly,
+				now,
+				nil, // historicalTimestamp not chained
+				ex.transitionCtx,
+				ex.QualityOfService(),
+				chainModes.isoLevel,
+				ex.omitInRangefeeds(),
+				ex.bufferedWritesEnabled(ex.Ctx()),
+				ex.rng.internal,
+			)
+			chainEvent := eventTxnStart{ImplicitTxn: fsm.False}
+			err := func() error {
+				ex.mu.Lock()
+				defer ex.mu.Unlock()
+				return ex.machine.ApplyWithPayload(
+					ex.Ctx(), chainEvent, chainPayload,
+				)
+			}()
+			if err != nil {
+				return advanceInfo{}, err
+			}
+			chainAdvInfo := ex.state.consumeAdvanceInfo()
+			if err := ex.onTxnStart(chainAdvInfo.txnEvent.txnID); err != nil {
+				return advanceInfo{}, err
+			}
+			advInfo = chainAdvInfo
+		}
+	}
+
 	return advInfo, nil
+}
+
+// onTxnStart performs bookkeeping when a new transaction starts, including
+// recording the transaction start event and marking the session as active.
+func (ex *connExecutor) onTxnStart(txnID uuid.UUID) error {
+	ex.recordTransactionStart(txnID)
+	ex.totalActiveTimeStopWatch.Start()
+	return ex.maybeSetSQLLivenessSessionAndGeneration()
 }
 
 // waitForTxnJobs waits for any jobs created inside this txn
