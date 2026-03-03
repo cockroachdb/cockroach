@@ -224,6 +224,8 @@ type cFetcherArgs struct {
 
 	// tenantID is required in some places for AC/bookkeeping.
 	tenantID roachpb.TenantID
+	// workloadID is used for ASH sampling.
+	workloadID uint64
 }
 
 // noOutputColumn is a sentinel value to denote that a system column is not
@@ -566,7 +568,10 @@ func (cf *cFetcher) Init(
 			cf.pacer = cf.txn.DB().AdmissionPacerFactory.NewPacer(
 				50*time.Millisecond, // Request a realistic per-batch amount.
 				admission.WorkInfo{
-					TenantID: cf.tenantID, Priority: pri, CreateTime: timeutil.Now().UnixNano(),
+					TenantID:   cf.tenantID,
+					Priority:   pri,
+					CreateTime: timeutil.Now().UnixNano(),
+					WorkloadID: cf.workloadID,
 				},
 			)
 		}

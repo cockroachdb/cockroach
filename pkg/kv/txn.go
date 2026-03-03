@@ -82,6 +82,16 @@ type Txn struct {
 	// It will be attached to all requests sent through this transaction.
 	gatewayNodeID roachpb.NodeID
 
+	// workloadID, if != 0, is the identifier for the workload that is using
+	// this transaction (e.g., statement fingerprint ID, job ID). It will be
+	// attached to all requests sent through this transaction.
+	// Note(alyshan): This field can change during the lifetime of the Txn, this
+	// is safe to do since the only use case of doing so involves no concurrent
+	// access of this field. This is when the connExecutor is serving a multi-statement
+	// transaction. In that case, statements are executed sequentially, and the
+	// workloadID is updated after each statement.
+	workloadID uint64
+
 	// The following fields are not safe for concurrent modification.
 	// They should be set before operating on the transaction.
 
@@ -439,6 +449,12 @@ func (txn *Txn) DebugName() string {
 
 func (txn *Txn) debugNameLocked() string {
 	return fmt.Sprintf("%s (id: %s)", txn.mu.debugName, txn.mu.ID)
+}
+
+// SetWorkloadID sets the workload ID for ASH sampling.
+// Automatically propagated to all BatchRequests sent through this transaction.
+func (txn *Txn) SetWorkloadID(workloadID uint64) {
+	txn.workloadID = workloadID
 }
 
 // SetBufferedWritesEnabled toggles whether the writes are buffered on the
@@ -1351,6 +1367,10 @@ func (txn *Txn) Send(
 	// place I found to set this field.
 	if txn.gatewayNodeID != 0 {
 		ba.Header.GatewayNodeID = txn.gatewayNodeID
+	}
+
+	if txn.workloadID != 0 && ba.Header.WorkloadID == 0 {
+		ba.Header.WorkloadID = txn.workloadID
 	}
 
 	// Requests with a bounded staleness header should use NegotiateAndSend.

@@ -216,6 +216,8 @@ type txnKVFetcher struct {
 	requestAdmissionHeader kvpb.AdmissionHeader
 	responseAdmissionQ     *admission.WorkQueue
 	admissionPacer         *admission.Pacer
+	// workloadID is the statement fingerprint ID or job ID for ASH sampling.
+	workloadID uint64
 }
 
 var _ KVBatchFetcher = &txnKVFetcher{}
@@ -368,6 +370,7 @@ type newTxnKVFetcherArgs struct {
 	batchRequestsIssued        *int64
 	kvCPUTime                  *int64
 	rawMVCCValues              bool
+	workloadID                 uint64
 
 	admission struct { // groups AC-related fields
 		requestHeader  kvpb.AdmissionHeader
@@ -398,6 +401,7 @@ func newTxnKVFetcherInternal(args newTxnKVFetcherArgs) *txnKVFetcher {
 		forceProductionKVBatchSize: args.forceProductionKVBatchSize,
 		requestAdmissionHeader:     args.admission.requestHeader,
 		responseAdmissionQ:         args.admission.responseQ,
+		workloadID:                 args.workloadID,
 	}
 
 	f.maybeInitAdmissionPacer(
@@ -446,6 +450,7 @@ func (f *txnKVFetcher) maybeInitAdmissionPacer(
 				TenantID:   roachpb.SystemTenantID,
 				Priority:   admissionPri,
 				CreateTime: admissionHeader.CreateTime,
+				WorkloadID: f.workloadID,
 			})
 	}
 }
@@ -776,6 +781,7 @@ func (f *txnKVFetcher) maybeAdmitBatchResponse(ctx context.Context, br *kvpb.Bat
 			TenantID:   roachpb.SystemTenantID,
 			Priority:   admissionpb.WorkPriority(f.requestAdmissionHeader.Priority),
 			CreateTime: f.requestAdmissionHeader.CreateTime,
+			WorkloadID: f.workloadID,
 		}
 		if _, err := f.responseAdmissionQ.Admit(ctx, responseAdmission); err != nil {
 			return err
