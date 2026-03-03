@@ -15,6 +15,7 @@ gen_cluster nodes=8 region=(a,b) nodes_per_region=(4,4)
 gen_ranges ranges=10 repl_factor=5 placement_type=replica_placement
 {s1:*,s2,s3,s4:NON_VOTER,s5:NON_VOTER}:1
 ----
+{s1:*,s2,s3,s4:NON_VOTER,s5:NON_VOTER}:1
 
 # Require 2 total replicas in region b.
 set_span_config
@@ -29,3 +30,12 @@ assertion type=conformance violating=0
 
 eval duration=10m seed=42 cfgs=(mma-repair) metrics=(replicas,leases)
 ----
+mma-repair:
+leases#1: first: [s1=10, s2=0, s3=0, s4=0, s5=0, s6=0, s7=0, s8=0] (stddev=3.31, mean=1.25, sum=10)
+leases#1: last:  [s1=10, s2=0, s3=0, s4=0, s5=0, s6=0, s7=0, s8=0] (stddev=3.31, mean=1.25, sum=10)
+leases#1: thrash_pct: [s1=0%, s2=0%, s3=0%, s4=0%, s5=0%, s6=0%, s7=0%, s8=0%]  (sum=0%)
+replicas#1: first: [s1=10, s2=10, s3=10, s4=10, s5=10, s6=0, s7=0, s8=0] (stddev=4.84, mean=6.25, sum=50)
+replicas#1: last:  [s1=10, s2=10, s3=10, s4=0, s5=10, s6=4, s7=2, s8=4] (stddev=3.93, mean=6.25, sum=50)
+replicas#1: thrash_pct: [s1=0%, s2=0%, s3=0%, s4=0%, s5=0%, s6=0%, s7=0%, s8=0%]  (sum=0%)
+hash: 41fcd5130c9c854b
+==========================

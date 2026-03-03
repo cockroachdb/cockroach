@@ -12,6 +12,7 @@ gen_cluster nodes=6 region=(a,b) nodes_per_region=(3,3)
 gen_ranges ranges=10 repl_factor=3 placement_type=replica_placement
 {s1:*,s2,s3}:1
 ----
+{s1:*,s2,s3}:1
 
 # Require 2 of 3 voters in region b.
 set_span_config
@@ -26,3 +27,12 @@ assertion type=conformance violating=0
 
 eval duration=10m seed=42 cfgs=(mma-repair) metrics=(replicas,leases)
 ----
+mma-repair:
+leases#1: first: [s1=10, s2=0, s3=0, s4=0, s5=0, s6=0] (stddev=3.73, mean=1.67, sum=10)
+leases#1: last:  [s1=10, s2=0, s3=0, s4=0, s5=0, s6=0] (stddev=3.73, mean=1.67, sum=10)
+leases#1: thrash_pct: [s1=0%, s2=0%, s3=0%, s4=0%, s5=0%, s6=0%]  (sum=0%)
+replicas#1: first: [s1=10, s2=10, s3=10, s4=0, s5=0, s6=0] (stddev=5.00, mean=5.00, sum=30)
+replicas#1: last:  [s1=10, s2=0, s3=0, s4=6, s5=7, s6=7] (stddev=3.74, mean=5.00, sum=30)
+replicas#1: thrash_pct: [s1=0%, s2=0%, s3=0%, s4=0%, s5=0%, s6=0%]  (sum=0%)
+hash: 8c8e7490c3feb90c
+==========================

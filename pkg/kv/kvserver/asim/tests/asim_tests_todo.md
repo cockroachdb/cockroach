@@ -3,21 +3,21 @@
 Status: Each test mirrors a TestClusterState repair scenario from
 `pkg/kv/kvserver/allocator/mmaprototype/testdata/cluster_state/`.
 
-- [x] repair_add_voter — Under-replicated voters (implemented)
-- [ ] repair_add_nonvoter — Under-replicated non-voters
-- [ ] repair_promote_nonvoter — Promote non-voter to voter
-- [ ] repair_remove_voter — Over-replicated voters (dead store)
-- [ ] repair_remove_voter_healthy — Over-replicated voters (all healthy)
-- [ ] repair_remove_nonvoter — Excess non-voters
-- [ ] repair_remove_learner — Stuck LEARNER removal
-- [ ] repair_finalize_atomic — Joint config finalization
-- [ ] repair_replace_dead_voter — Dead voter replacement
-- [ ] repair_replace_dead_nonvoter — Dead non-voter replacement
-- [ ] repair_replace_decom_voter — Decommissioning voter replacement
-- [ ] repair_replace_decom_nonvoter — Decommissioning non-voter replacement
-- [ ] repair_swap_voter — Voter constraint swap
-- [ ] repair_swap_nonvoter — Non-voter constraint swap
-- [ ] repair_range_unavailable — Quorum loss (repair skipped)
+- [x] repair_add_voter — Under-replicated voters
+- [x] repair_add_nonvoter — Under-replicated non-voters
+- [x] repair_promote_nonvoter — Promote non-voter to voter
+- [x] repair_remove_voter — Over-replicated voters (dead store)
+- [x] repair_remove_voter_healthy — Over-replicated voters (all healthy)
+- [x] repair_remove_nonvoter — Excess non-voters
+- [x] repair_remove_learner — Stuck LEARNER removal
+- [x] repair_finalize_atomic — Joint config finalization
+- [x] repair_replace_dead_voter — Dead voter replacement
+- [x] repair_replace_dead_nonvoter — Dead non-voter replacement
+- [x] repair_replace_decom_voter — Decommissioning voter replacement
+- [x] repair_replace_decom_nonvoter — Decommissioning non-voter replacement
+- [x] repair_swap_voter — Voter constraint swap
+- [x] repair_swap_nonvoter — Non-voter constraint swap
+- [x] repair_range_unavailable — Quorum loss (repair skipped)
 
 ---
 
