@@ -85,7 +85,7 @@ var classifiers = map[types.Family]map[types.Family]classifier{
 	},
 	types.IntFamily: {
 		types.IntFamily: func(from *types.T, to *types.T) ColumnConversionKind {
-			return classifierWidth(from, to)
+			return classifierIntWidth(from, to)
 		},
 	},
 	types.BitFamily: {
@@ -194,14 +194,32 @@ func classifierDecimalPrecision(oldType *types.T, newType *types.T) ColumnConver
 	}
 }
 
-// classifierWidth returns trivial only if the new type has a width
-// greater than the existing width.  If they are the same, it returns
-// no-op.  Otherwise, it returns validate.
-func classifierWidth(oldType *types.T, newType *types.T) ColumnConversionKind {
+// classifierIntWidth handles width changes for integer types.
+// For integers, a width of 0 means 64-bit (INT8), so narrowing from
+// width 0 to width < 64 requires validation, while going to 64 is trivial.
+func classifierIntWidth(oldType *types.T, newType *types.T) ColumnConversionKind {
 	switch {
 	case oldType.Width() == newType.Width():
 		return ColumnConversionTrivial
 	case oldType.Width() == 0 && newType.Width() < 64:
+		return ColumnConversionValidate
+	case newType.Width() == 0 || newType.Width() > oldType.Width():
+		return ColumnConversionTrivial
+	default:
+		return ColumnConversionValidate
+	}
+}
+
+// classifierWidth handles width changes for string, bytes, and bit types.
+// For these families, a width of 0 means unbounded (e.g., STRING without a
+// length limit). Going from unbounded to any bounded type always requires
+// validation, since existing values may exceed the new limit.
+func classifierWidth(oldType *types.T, newType *types.T) ColumnConversionKind {
+	switch {
+	case oldType.Width() == newType.Width():
+		return ColumnConversionTrivial
+	case oldType.Width() == 0 && newType.Width() > 0:
+		// Unbounded to bounded always requires validation.
 		return ColumnConversionValidate
 	case newType.Width() == 0 || newType.Width() > oldType.Width():
 		return ColumnConversionTrivial

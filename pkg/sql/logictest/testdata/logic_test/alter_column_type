@@ -2003,3 +2003,107 @@ statement ok
 SET use_declarative_schema_changer = $schema_changer_state
 
 subtest end
+
+# Regression test: altering an unbounded STRING, BYTES, or VARBIT column to a
+# bounded type must validate existing data. Previously, classifierWidth treated
+# width 0 as 64-bit (integer semantics) for all families, so going from
+# unbounded (width 0) to bounded with width >= 64 (e.g., STRING(100)) was
+# incorrectly classified as trivial, skipping the validation scan.
+subtest unbounded_to_bounded_width_validation
+
+statement ok
+CREATE TABLE t_unbounded_string (
+  id INT PRIMARY KEY,
+  s STRING,
+  FAMILY f (id, s)
+) WITH (schema_locked = false)
+
+statement ok
+INSERT INTO t_unbounded_string VALUES (1, repeat('x', 200))
+
+# Altering to STRING(100) must fail because the existing 200-char value
+# exceeds the new limit.
+statement error validation of CHECK
+ALTER TABLE t_unbounded_string ALTER COLUMN s SET DATA TYPE STRING(100)
+
+# Confirm no schema change occurred: the column is still unbounded STRING.
+query TT
+SHOW CREATE TABLE t_unbounded_string
+----
+t_unbounded_string  CREATE TABLE public.t_unbounded_string (
+                      id INT8 NOT NULL,
+                      s STRING NULL,
+                      CONSTRAINT t_unbounded_string_pkey PRIMARY KEY (id ASC),
+                      FAMILY f (id, s)
+                    );
+
+# Altering to a limit that fits the data should succeed.
+statement ok
+ALTER TABLE t_unbounded_string ALTER COLUMN s SET DATA TYPE STRING(200)
+
+query TT
+SHOW CREATE TABLE t_unbounded_string
+----
+t_unbounded_string  CREATE TABLE public.t_unbounded_string (
+                      id INT8 NOT NULL,
+                      s STRING(200) NULL,
+                      CONSTRAINT t_unbounded_string_pkey PRIMARY KEY (id ASC),
+                      FAMILY f (id, s)
+                    );
+
+statement ok
+DROP TABLE t_unbounded_string
+
+# Same test for VARBIT.
+statement ok
+CREATE TABLE t_unbounded_varbit (
+  id INT PRIMARY KEY,
+  v VARBIT,
+  FAMILY f (id, v)
+) WITH (schema_locked = false)
+
+statement ok
+INSERT INTO t_unbounded_varbit VALUES (1, repeat('1', 200)::VARBIT)
+
+statement error validation of CHECK
+ALTER TABLE t_unbounded_varbit ALTER COLUMN v SET DATA TYPE VARBIT(100)
+
+# Confirm the column is still unbounded.
+query TT
+SHOW CREATE TABLE t_unbounded_varbit
+----
+t_unbounded_varbit  CREATE TABLE public.t_unbounded_varbit (
+                      id INT8 NOT NULL,
+                      v VARBIT NULL,
+                      CONSTRAINT t_unbounded_varbit_pkey PRIMARY KEY (id ASC),
+                      FAMILY f (id, v)
+                    );
+
+statement ok
+ALTER TABLE t_unbounded_varbit ALTER COLUMN v SET DATA TYPE VARBIT(200)
+
+statement ok
+DROP TABLE t_unbounded_varbit
+
+# Verify that bounded-to-wider-bounded STRING conversions still work trivially.
+statement ok
+CREATE TABLE t_bounded_string (
+  id INT PRIMARY KEY,
+  s VARCHAR(10),
+  FAMILY f (id, s)
+) WITH (schema_locked = false)
+
+statement ok
+INSERT INTO t_bounded_string VALUES (1, 'hello')
+
+statement ok
+ALTER TABLE t_bounded_string ALTER COLUMN s SET DATA TYPE VARCHAR(20)
+
+# And bounded-to-narrower requires validation.
+statement error validation of CHECK
+ALTER TABLE t_bounded_string ALTER COLUMN s SET DATA TYPE VARCHAR(3)
+
+statement ok
+DROP TABLE t_bounded_string
+
+subtest end
