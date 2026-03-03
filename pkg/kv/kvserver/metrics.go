@@ -3754,6 +3754,8 @@ type StoreMetrics struct {
 	VirtualResolveDisabledCount       *metric.Counter
 	VirtualResolveIntentCount         *metric.Counter
 	VirtualResolveIntentRangeCount    *metric.Counter
+	VirtualResolveBatches             *metric.Counter
+	VirtualResolveBatchErrors         *metric.Counter
 	LatchWaitDurations                metric.IHistogram
 
 	// Ingestion metrics
@@ -4575,6 +4577,8 @@ func newStoreMetrics(histogramWindow time.Duration) *StoreMetrics {
 		VirtualResolveDisabledCount:       metric.NewCounter(concurrency.MetaVirtualResolveDisabled),
 		VirtualResolveIntentCount:         metric.NewCounter(concurrency.MetaVirtualResolveIntent),
 		VirtualResolveIntentRangeCount:    metric.NewCounter(concurrency.MetaVirtualResolveIntentRange),
+		VirtualResolveBatches:             metric.NewCounter(concurrency.MetaVirtualResolveBatches),
+		VirtualResolveBatchErrors:         metric.NewCounter(concurrency.MetaVirtualResolveBatchErrors),
 		LatchWaitDurations: metric.NewHistogram(metric.HistogramOptions{
 			Mode:         metric.HistogramModePreferHdrLatency,
 			Metadata:     metaLatchConflictWaitDurations,

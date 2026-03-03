@@ -178,6 +178,24 @@ var MetaVirtualResolveIntentRange = metric.Metadata{
 	Unit:        metric.Unit_COUNT,
 }
 
+// MetaVirtualResolveBatches counts read batches that attempted virtual intent
+// resolution.
+var MetaVirtualResolveBatches = metric.Metadata{
+	Name:        "kv.concurrency.virtual_resolve.batches",
+	Help:        "Number of read batches that attempted virtual intent resolution",
+	Measurement: "Batches",
+	Unit:        metric.Unit_COUNT,
+}
+
+// MetaVirtualResolveBatchErrors counts read batches where virtual intent
+// resolution failed.
+var MetaVirtualResolveBatchErrors = metric.Metadata{
+	Name:        "kv.concurrency.virtual_resolve.batch_errors",
+	Help:        "Number of read batches where virtual intent resolution failed during evaluation",
+	Measurement: "Batches",
+	Unit:        metric.Unit_COUNT,
+}
+
 // TestingLockTableMetricsCfg is a subset of store metrics that are required to
 // construct a new lock table to be used for testing purposes.
 type TestingLockTableMetricsCfg struct {

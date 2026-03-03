@@ -92,6 +92,7 @@ func (r *Replica) executeReadOnlyBatch(
 	defer rw.Close()
 
 	if len(intentsToResolveVirtually) > 0 {
+		r.store.metrics.VirtualResolveBatches.Inc(1)
 		log.Eventf(
 			ctx, "resolving %d intents virtually before executing read",
 			len(intentsToResolveVirtually),
@@ -143,6 +144,7 @@ func (r *Replica) executeReadOnlyBatch(
 				reply, g, &st, ui, readWrite, false, /* omitInRangefeeds */
 			)
 			if err != nil {
+				r.store.metrics.VirtualResolveBatchErrors.Inc(1)
 				return nil, g, nil, kvpb.NewError(err)
 			}
 		}
