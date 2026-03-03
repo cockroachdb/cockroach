@@ -12,7 +12,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/apply"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvstorage"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvstorage/wag"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -87,7 +86,7 @@ func (r *Replica) destroyRaftMuLocked(ctx context.Context, nextReplicaID roachpb
 	startTime := timeutil.Now()
 
 	ms := r.GetMVCCStats()
-	batch := r.store.internalEngines.NewWriteBatch()
+	batch := r.store.internalEngines.NewLifecycleBatch(&r.store.wagSeq)
 	defer batch.Close()
 
 	stateWO, raftWO := kvstorage.StateWO(batch.State()), batch.Raft()
@@ -96,7 +95,7 @@ func (r *Replica) destroyRaftMuLocked(ctx context.Context, nextReplicaID roachpb
 			State: kvstorage.State{RO: r.store.StateEngine(), WO: stateWO},
 			Raft:  kvstorage.Raft{RO: r.store.LogEngine(), WO: raftWO},
 		},
-		wag.TODOWriter(),
+		batch.WAGWriter(),
 		r.destroyInfoRaftMuLocked(), nextReplicaID,
 	); err != nil {
 		return err

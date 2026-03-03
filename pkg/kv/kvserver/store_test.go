@@ -38,6 +38,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvstorage"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvstorage/wag"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvstorage/wag/wagpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/load"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/rditer"
@@ -4453,6 +4454,67 @@ func TestSplitPreApplyWithSeparatedEngines(t *testing.T) {
 	truncStateFromState, err := rsl.LoadRaftTruncatedState(ctx, stateEng)
 	require.NoError(t, err)
 	require.Equal(t, kvserverpb.RaftTruncatedState{}, truncStateFromState)
+}
+
+// TestRemoveReplicaWritesWAGNode verifies that removing a replica writes a
+// NodeDestroy WAG node to the raft engine. Both initialized and uninitialized
+// replica removal paths are tested.
+func TestRemoveReplicaWritesWAGNode(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	ctx := context.Background()
+	stopper := stop.NewStopper()
+	defer stopper.Stop(ctx)
+
+	eng := storage.NewDefaultInMemForTesting()
+	sepEng := kvstorage.MakeSeparatedEnginesRelaxedForTesting(eng)
+	cfg := TestStoreConfig(
+		hlc.NewClockForTesting(timeutil.NewManualTime(timeutil.Unix(0, 123))),
+	)
+	store := createTestStoreWithConfig(
+		ctx, t, stopper, testStoreOpts{eng: &sepEng}, &cfg,
+	)
+	require.True(t, store.EnginesSeparated())
+
+	testutils.RunTrueAndFalse(t, "initialized", func(t *testing.T, initialized bool) {
+		var repl *Replica
+		var nextReplicaID roachpb.ReplicaID
+		if initialized {
+			var err error
+			repl, err = store.GetReplica(1)
+			require.NoError(t, err)
+			nextReplicaID = repl.Desc().NextReplicaID
+		} else {
+			var created bool
+			var err error
+			repl, created, err = store.getOrCreateReplica(
+				ctx, roachpb.FullReplicaID{RangeID: 42, ReplicaID: 1}, nil, /* creatingReplica */
+			)
+			require.NoError(t, err)
+			require.True(t, created)
+			repl.raftMu.Unlock() // getOrCreateReplica returns with raftMu held
+			require.False(t, repl.IsInitialized())
+			nextReplicaID = repl.replicaID + 1
+		}
+
+		rangeID := repl.RangeID
+		repl.raftMu.Lock()
+		require.NoError(t, store.removeReplicaRaftMuLocked(
+			ctx, repl, nextReplicaID, redact.SafeString(t.Name()),
+		))
+		repl.raftMu.Unlock()
+
+		// Scan the WAG keyspace and verify a NodeDestroy node was written.
+		var iter wag.Iterator
+		var found bool
+		for node := range iter.Iter(ctx, store.LogEngine()) {
+			if node.Type == wagpb.NodeType_NodeDestroy && node.Addr.RangeID == rangeID {
+				found = true
+			}
+		}
+		require.NoError(t, iter.Error())
+		require.True(t, found, "expected a NodeDestroy WAG node for range %d", rangeID)
+	})
 }
 
 func BenchmarkStoreGetReplica(b *testing.B) {
