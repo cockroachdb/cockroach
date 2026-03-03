@@ -527,40 +527,42 @@ func (s *initServer) initializeFirstStoreAfterJoin(
 }
 
 func assertEnginesEmpty(engines []kvstorage.Engines) error {
+	// TODO(pav-kv): remove this key, it's not used.
 	storeClusterVersionKey := keys.DeprecatedStoreClusterVersionKey()
-
 	// TODO(sumeer): plumb a context if necessary.
 	ctx := context.Background()
-	for _, engine := range engines {
-		err := func() error {
-			iter, err := engine.TODOEngine().NewEngineIterator(ctx, storage.IterOptions{
-				KeyTypes:   storage.IterKeyTypePointsAndRanges,
-				UpperBound: roachpb.KeyMax,
-			})
+
+	assertEmpty := func(eng kvstorage.Engines) error {
+		iter, err := eng.TODOEngine().NewEngineIterator(ctx, storage.IterOptions{
+			KeyTypes:   storage.IterKeyTypePointsAndRanges,
+			UpperBound: roachpb.KeyMax,
+		})
+		if err != nil {
+			return err
+		}
+		defer iter.Close()
+
+		valid, err := iter.SeekEngineKeyGE(storage.EngineKey{Key: roachpb.KeyMin})
+		for ; valid && err == nil; valid, err = iter.NextEngineKey() {
+			k, err := iter.UnsafeEngineKey()
 			if err != nil {
 				return err
 			}
-			defer iter.Close()
+			hasPoint, hasRange := iter.HasPointAndRange()
 
-			valid, err := iter.SeekEngineKeyGE(storage.EngineKey{Key: roachpb.KeyMin})
-			for ; valid && err == nil; valid, err = iter.NextEngineKey() {
-				k, err := iter.UnsafeEngineKey()
-				if err != nil {
-					return err
-				}
-				hasPoint, hasRange := iter.HasPointAndRange()
-
-				// The store cluster version key is written multiple times,
-				// including before bootstrapping or joining a cluster.
-				// Skip it if it exists.
-				if hasPoint && !hasRange && storeClusterVersionKey.Equal(k.Key) {
-					continue
-				}
-				return errors.New("engine is not empty")
+			// The store cluster version key is written multiple times,
+			// including before bootstrapping or joining a cluster.
+			// Skip it if it exists.
+			if hasPoint && !hasRange && storeClusterVersionKey.Equal(k.Key) {
+				continue
 			}
-			return err
-		}()
-		if err != nil {
+			return errors.New("engine is not empty")
+		}
+		return err
+	}
+
+	for _, engine := range engines {
+		if err := assertEmpty(engine); err != nil {
 			return err
 		}
 	}
