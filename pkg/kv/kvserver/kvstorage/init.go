@@ -85,7 +85,21 @@ func checkCanInitializeEngine(ctx context.Context, eng storage.Engine) error {
 	// settings, but nothing else. Use EngineIterator to ensure that there are no
 	// keys that cannot be parsed as MVCCKeys (e.g. lock table keys) in the
 	// engine.
-	iter, err := eng.NewEngineIterator(ctx, storage.IterOptions{
+	return CheckEngineKeys(ctx, eng, func(k storage.MVCCKey) error {
+		if _, err := keys.DecodeStoreCachedSettingsKey(k.Key); err != nil {
+			return errors.Errorf("engine cannot be bootstrapped, contains key:\n%s", k.String())
+		}
+		return nil
+	})
+}
+
+// CheckEngineKeys iterates the Engine that is expected to be mostly empty. Some
+// callers allow certain keys to be present in partially initialized engines, so
+// this information is given to the caller via a callback for validation.
+func CheckEngineKeys(
+	ctx context.Context, r storage.Reader, allowed func(key storage.MVCCKey) error,
+) error {
+	iter, err := r.NewEngineIterator(ctx, storage.IterOptions{
 		KeyTypes:   storage.IterKeyTypePointsAndRanges,
 		UpperBound: roachpb.KeyMax,
 	})
@@ -98,6 +112,7 @@ func checkCanInitializeEngine(ctx context.Context, eng storage.Engine) error {
 		return err
 	}
 
+	// NB: only MVCC point keys are possibly allowed in an empty engine.
 	getMVCCKey := func() (storage.MVCCKey, error) {
 		if _, hasRange := iter.HasPointAndRange(); hasRange {
 			bounds, err := iter.EngineRangeBounds()
@@ -106,27 +121,21 @@ func checkCanInitializeEngine(ctx context.Context, eng storage.Engine) error {
 			}
 			return storage.MVCCKey{}, errors.Errorf("found mvcc range key: %s", bounds)
 		}
-		var k storage.EngineKey
-		k, err = iter.EngineKey()
+		k, err := iter.EngineKey()
 		if err != nil {
 			return storage.MVCCKey{}, err
-		}
-		if !k.IsMVCCKey() {
+		} else if !k.IsMVCCKey() {
 			return storage.MVCCKey{}, errors.Errorf("found non-mvcc key: %s", k)
 		}
 		return k.ToMVCCKey()
 	}
 
-	for valid {
-		var k storage.MVCCKey
-		if k, err = getMVCCKey(); err != nil {
+	for ; valid; valid, err = iter.NextEngineKey() {
+		if k, err := getMVCCKey(); err != nil {
+			return err
+		} else if err := allowed(k); err != nil {
 			return err
 		}
-		// Only allowed to find cached cluster settings on an uninitialized engine.
-		if _, err := keys.DecodeStoreCachedSettingsKey(k.Key); err != nil {
-			return errors.Errorf("engine cannot be bootstrapped, contains key:\n%s", k.String())
-		}
-		valid, err = iter.NextEngineKey()
 	}
 	return err
 }
