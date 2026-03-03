@@ -16,16 +16,16 @@ var schemaExprContextAllowingUDF = map[tree.SchemaExprContext]clusterversion.Key
 	tree.ColumnDefaultExprInNewTable:   clusterversion.MinSupported,
 	tree.ColumnDefaultExprInSetDefault: clusterversion.MinSupported,
 
-	tree.PolicyUsingExpr:     clusterversion.V25_2,
-	tree.PolicyWithCheckExpr: clusterversion.V25_2,
+	tree.PolicyUsingExpr:     clusterversion.MinSupported,
+	tree.PolicyWithCheckExpr: clusterversion.MinSupported,
 
-	tree.ColumnDefaultExprInAddColumn: clusterversion.V25_3,
-	tree.ColumnDefaultExprInNewView:   clusterversion.V25_3,
-	tree.ColumnOnUpdateExpr:           clusterversion.V25_3,
-	tree.ExpressionIndexElementExpr:   clusterversion.V25_3,
-	tree.IndexPredicateExpr:           clusterversion.V25_3,
-	tree.StoredComputedColumnExpr:     clusterversion.V25_3,
-	tree.VirtualComputedColumnExpr:    clusterversion.V25_3,
+	tree.ColumnDefaultExprInAddColumn: clusterversion.MinSupported,
+	tree.ColumnDefaultExprInNewView:   clusterversion.MinSupported,
+	tree.ColumnOnUpdateExpr:           clusterversion.MinSupported,
+	tree.ExpressionIndexElementExpr:   clusterversion.MinSupported,
+	tree.IndexPredicateExpr:           clusterversion.MinSupported,
+	tree.StoredComputedColumnExpr:     clusterversion.MinSupported,
+	tree.VirtualComputedColumnExpr:    clusterversion.MinSupported,
 }
 
 // MaybeFailOnUDFUsage returns an error if the given expression or any

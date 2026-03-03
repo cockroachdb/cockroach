@@ -47,18 +47,6 @@ var _ tree.UnsupportedTypeChecker = (*unsupportedTypeChecker)(nil)
 func (tc *unsupportedTypeChecker) CheckType(ctx context.Context, typ *types.T) error {
 	// NB: when adding an unsupported type here, change the constructor to not
 	// return nil.
-	if (typ.Oid() == oidext.T_jsonpath || typ.Oid() == oidext.T__jsonpath) &&
-		!tc.version.IsActive(ctx, clusterversion.V25_2) {
-		return pgerror.Newf(pgcode.FeatureNotSupported,
-			"%s not supported until version 25.2", typ.String(),
-		)
-	}
-	if (typ.Oid() == oidext.T_citext || typ.Oid() == oidext.T__citext) &&
-		!tc.version.IsActive(ctx, clusterversion.V25_3) {
-		return pgerror.Newf(pgcode.FeatureNotSupported,
-			"%s not supported until version 25.3", typ.String(),
-		)
-	}
 	if (typ.Oid() == oidext.T_ltree || typ.Oid() == oidext.T__ltree) &&
 		!tc.version.IsActive(ctx, clusterversion.V25_4) {
 		return pgerror.Newf(pgcode.FeatureNotSupported,

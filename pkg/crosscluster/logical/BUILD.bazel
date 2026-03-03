@@ -28,7 +28,6 @@ go_library(
         "//pkg/ccl/changefeedccl/cdcevent",
         "//pkg/ccl/changefeedccl/changefeedbase",
         "//pkg/cloud",
-        "//pkg/clusterversion",
         "//pkg/crosscluster",
         "//pkg/crosscluster/logical/ldrdecoder",
         "//pkg/crosscluster/logical/sqlwriter",

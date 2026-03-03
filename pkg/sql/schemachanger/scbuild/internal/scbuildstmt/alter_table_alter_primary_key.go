@@ -21,7 +21,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
-	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/idxtype"
@@ -60,14 +59,6 @@ type alterPrimaryKeySpec struct {
 func alterPrimaryKey(
 	b BuildCtx, tn *tree.TableName, tbl *scpb.Table, stmt tree.Statement, t alterPrimaryKeySpec,
 ) {
-	// Check if sql_safe_updates is enabled and the table has a vector index
-	tableElts := b.QueryByID(tbl.TableID).Filter(notFilter(absentTargetFilter))
-	scpb.ForEachSecondaryIndex(tableElts, func(_ scpb.Status, _ scpb.TargetStatus, idx *scpb.SecondaryIndex) {
-		if idx.Type == idxtype.VECTOR && !b.EvalCtx().Settings.Version.ActiveVersion(b).AtLeast(clusterversion.V25_2.Version()) {
-			panic(pgerror.Newf(pgcode.FeatureNotSupported, "cannot alter primary key on a table with vector indexes until finalizing on 25.2"))
-		}
-	})
-
 	// Panic on certain forbidden `ALTER PRIMARY KEY` cases (e.g. one of
 	// the new primary key column is a virtual column). See the comments
 	// for a full list of preconditions we check.
@@ -1029,17 +1020,6 @@ func shouldCreateUniqueIndexOnOldPrimaryKeyColumns(
 	alreadyHasSecondaryIndexOnPKColumns := func(
 		b BuildCtx, tableID catid.DescID, oldPrimaryIndexID catid.IndexID,
 	) (found bool) {
-		// In 25.2 we added the rule "primary index with new columns should validated
-		// before secondary indexes" and "secondary indexes should be in a validated
-		// state before primary indexes can go public" in dep_add_index.go, which
-		// allow us to properly handle more complex cases with ADD COLUMN UNIQUE and
-		// ALTER PRIMARY KEY IN the same transaction. (Otherwise, secondary indexes
-		// can be made public too early). Without this rule versions before 25.2 will fail
-		// during runtime trying to create the new secondary index.
-		if !b.ClusterSettings().Version.IsActive(b, clusterversion.V25_2) &&
-			!b.QueryByID(tableID).Filter(ghostElementFilter).FilterSecondaryIndex().IsEmpty() {
-			panic(scerrors.NotImplementedErrorf(n, "ghost secondary index elements found"))
-		}
 		scpb.ForEachSecondaryIndex(b.QueryByID(tableID).Filter(notFilter(ghostElementFilter)), func(
 			current scpb.Status, target scpb.TargetStatus, candidate *scpb.SecondaryIndex,
 		) {

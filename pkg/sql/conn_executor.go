@@ -17,7 +17,6 @@ import (
 	"unicode/utf8"
 
 	"github.com/cockroachdb/cockroach/pkg/build"
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
@@ -3883,7 +3882,7 @@ func (ex *connExecutor) bufferedWritesEnabled(ctx context.Context) bool {
 	if ex.sessionData() == nil {
 		return false
 	}
-	return ex.sessionData().BufferedWritesEnabled && ex.server.cfg.Settings.Version.IsActive(ctx, clusterversion.V25_2)
+	return ex.sessionData().BufferedWritesEnabled
 }
 
 func (ex *connExecutor) bufferedWritesIsAllowedForIsolationLevel(
@@ -3897,12 +3896,6 @@ func bufferedWritesIsAllowedForIsolationLevel(
 ) bool {
 	if isoLevel == isolation.Serializable {
 		return true
-	}
-
-	// We are at a weaker isolation level that requires lock loss detection which
-	// is only available on 25.3 or greater.
-	if !st.Version.IsActive(ctx, clusterversion.V25_3) {
-		return false
 	}
 
 	return allowBufferedWritesForWeakIsolation.Get(&st.SV)

@@ -10,7 +10,6 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
@@ -1295,9 +1294,6 @@ func (b *plpgsqlBuilder) buildPLpgSQLStatements(stmts []ast.Statement, s *scope)
 			return b.callContinuation(&callCon, s)
 
 		case *ast.DoBlock:
-			if !b.ob.evalCtx.Settings.Version.ActiveVersion(b.ob.ctx).IsActive(clusterversion.V25_1) {
-				panic(doBlockVersionErr)
-			}
 			// DO statements are used to execute an anonymous code block. They are
 			// handled by building the statements in the block into a routine that is
 			// executed immediately.
@@ -3000,8 +2996,5 @@ var (
 	)
 	intForLoopTargetErr = pgerror.New(pgcode.Syntax,
 		"integer FOR loop must have only one target variable",
-	)
-	doBlockVersionErr = unimplemented.Newf("do blocks",
-		"DO statement usage inside a routine definition is not supported until version 25.1",
 	)
 )

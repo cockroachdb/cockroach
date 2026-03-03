@@ -176,24 +176,6 @@ const (
 
 	VBootstrapMax
 
-	// V24_1 is CockroachDB v24.1. It's used for all v24.1.x patch releases.
-	V24_1
-
-	// V24_2 is CockroachDB v24.2. It's used for all v24.2.x patch releases.
-	V24_2
-
-	// V24_3 is CockroachDB v24.3. It's used for all v24.3.x patch releases.
-	V24_3
-
-	// V25_1 is CockroachDB v25.1. It's used for all v25.1.x patch releases.
-	V25_1
-
-	// V25_2 is CockroachDB v25.2. It's used for all v25.2.x patch releases.
-	V25_2
-
-	// V25_3 is CockroachDB v25.3. It's used for all v25.3.x patch releases.
-	V25_3
-
 	// V25_4 is CockroachDB v25.4. It's used for all v25.4.x patch releases.
 	V25_4
 
@@ -269,12 +251,6 @@ var versionTable = [numKeys]roachpb.Version{
 	VBootstrapTenant: {Major: 0, Minor: 0, Internal: 4},
 	VBootstrapMax:    {Major: 0, Minor: 0, Internal: 424242},
 
-	V24_1: {Major: 24, Minor: 1, Internal: 0},
-	V24_2: {Major: 24, Minor: 2, Internal: 0},
-	V24_3: {Major: 24, Minor: 3, Internal: 0},
-	V25_1: {Major: 25, Minor: 1, Internal: 0},
-	V25_2: {Major: 25, Minor: 2, Internal: 0},
-	V25_3: {Major: 25, Minor: 3, Internal: 0},
 	V25_4: {Major: 25, Minor: 4, Internal: 0},
 
 	// v26.1 versions. Internal versions must be even.

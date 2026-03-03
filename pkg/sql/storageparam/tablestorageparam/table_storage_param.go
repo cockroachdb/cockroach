@@ -15,7 +15,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
@@ -738,12 +737,7 @@ var tableParams = map[string]tableParam{
 			return nil
 		},
 		getResetValue: func(ctx context.Context, evalCtx *eval.Context, key string) (string, error) {
-			schemaLockedDefault := evalCtx.SessionData().CreateTableWithSchemaLocked
-			// Before 25.3 tables were never created with schema_locked by default.
-			if !evalCtx.Settings.Version.IsActive(ctx, clusterversion.V25_3) {
-				schemaLockedDefault = false
-			}
-			return fmt.Sprintf("%t", schemaLockedDefault), nil
+			return fmt.Sprintf("%t", evalCtx.SessionData().CreateTableWithSchemaLocked), nil
 		},
 		onReset: func(ctx context.Context, po *Setter, key string, value string) error {
 			boolVal, err := strconv.ParseBool(value)

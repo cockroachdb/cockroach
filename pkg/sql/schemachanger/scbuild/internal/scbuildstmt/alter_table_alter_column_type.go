@@ -8,8 +8,6 @@ package scbuildstmt
 import (
 	"fmt"
 
-	"github.com/cockroachdb/cockroach/pkg/build"
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemaexpr"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
@@ -18,7 +16,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotice"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachange"
-	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/cast"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
@@ -279,7 +276,6 @@ func handleGeneralColumnConversion(
 	oldColType, newColType *scpb.ColumnType,
 ) {
 	failIfExplicitTransaction(b)
-	failIfExperimentalSettingNotSet(b, oldColType, newColType)
 	failIfSafeUpdates(b, t)
 
 	// TODO(#47137): Only support alter statements that only have a single command.
@@ -324,15 +320,6 @@ func handleGeneralColumnConversion(
 		if keyCol.ColumnID == col.ColumnID {
 			panic(sqlerrors.NewAlterColumnTypeColInIndexNotSupportedErr())
 		}
-	}
-
-	// In version 25.1, we introduced the necessary dependency rules to ensure the
-	// general path works. Without these rules, we encounter failures during the
-	// ALTER operation. To avoid this, we revert to legacy handling if not running
-	// on version 25.1.
-	if !b.EvalCtx().Settings.Version.ActiveVersion(b).IsActive(clusterversion.V25_1) {
-		panic(scerrors.NotImplementedErrorf(t,
-			"old active version; ALTER COLUMN TYPE requires backfill. Reverting to legacy handling"))
 	}
 
 	colHidden := retrieveColumnHidden(b, tbl.TableID, col.ColumnID)
@@ -456,24 +443,6 @@ func failIfExplicitTransaction(b BuildCtx) {
 	if !b.EvalCtx().TxnIsSingleStmt &&
 		b.SessionData().NewSchemaChangerMode != sessiondatapb.UseNewSchemaChangerUnsafeAlways {
 		panic(sqlerrors.NewAlterColTypeInTxnNotSupportedErr())
-	}
-}
-
-// failIfExperimentalSettingNotSet checks if the current version requires a
-// setting to be enabled to perform an ALTER COLUMN TYPE operation.
-func failIfExperimentalSettingNotSet(b BuildCtx, oldColType, newColType *scpb.ColumnType) {
-	if !b.SessionData().AlterColumnTypeGeneralEnabled &&
-		!b.EvalCtx().Settings.Version.ActiveVersion(b).IsActive(clusterversion.V25_1) {
-		panic(pgerror.WithCandidateCode(
-			errors.WithHint(
-				errors.WithIssueLink(
-					errors.Newf("ALTER COLUMN TYPE from %v to %v is only "+
-						"supported experimentally",
-						oldColType.Type, newColType.Type),
-					errors.IssueLink{IssueURL: build.MakeIssueURL(49329)}),
-				"you can enable alter column type general support by running "+
-					"`SET enable_experimental_alter_column_type_general = true`"),
-			pgcode.ExperimentalFeature))
 	}
 }
 
