@@ -14,7 +14,7 @@ import (
 
 // NOTE: If you change the number of shards, you must also update the
 // shard_count in BUILD.bazel to match.
-const shardCount = 4
+const shardCount = 5
 
 // Validate that shardCount matches TEST_TOTAL_SHARDS environment variable at init time
 var _ = func() int {
