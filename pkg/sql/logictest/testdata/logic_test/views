@@ -1967,11 +1967,26 @@ statement ok
 CREATE USER view_owner;
 GRANT ALL ON TABLE t_vop TO view_owner;
 GRANT CREATE ON SCHEMA public TO view_owner;
+REVOKE SELECT ON TABLE t_vop FROM view_owner;
 
-# Create a view as view_owner (root can SET ROLE to any role).
+# Create a view as view_owner.
 statement ok
 SET ROLE view_owner
 
+# Create view should fail because view_owner does not have access to underlying table.
+statement error pgcode 42501 user view_owner does not have SELECT privilege on relation t_vop
+CREATE VIEW v_vop AS SELECT a, b FROM t_vop
+
+statement ok
+SET ROLE root
+
+statement ok
+GRANT SELECT ON TABLE t_vop TO view_owner;
+
+statement ok
+SET ROLE view_owner
+
+# Now Create should succeed because view_owner has access to underlying table.
 statement ok
 CREATE VIEW v_vop AS SELECT a, b FROM t_vop
 
@@ -2055,6 +2070,21 @@ SELECT * FROM v_vop_nested ORDER BY a
 
 user root
 
+# Revoke the outter view owner's SELECT on the underlying table. The nested
+# view should still work because the inner view's owner has access.
+statement ok
+REVOKE SELECT ON t_vop FROM view_owner2
+
+user testuser
+
+query I
+SELECT * FROM v_vop_nested ORDER BY a
+----
+1
+2
+
+user root
+
 # Revoke the inner view owner's SELECT on the underlying table. The nested
 # view should fail because the inner view's owner lost access.
 statement ok
@@ -2099,5 +2129,263 @@ SELECT * FROM v_vop_nested
 onlyif config local-mixed-25.4 local-mixed-26.1
 statement ok
 SELECT * FROM v_vop_nested
+
+subtest end
+
+# Test nested views with multiple owners and multiple underlying tables. Four
+# nested views are created covering all (outer_owner, inner_owner) combinations
+# to verify that privilege checks walk the entire view dependency chain.
+subtest nested_view_owner_privilege_matrix
+
+user root
+
+statement ok
+CREATE USER nvo1;
+CREATE USER nvo2;
+
+statement ok
+CREATE TABLE t_nv1 (a INT PRIMARY KEY, b INT);
+INSERT INTO t_nv1 VALUES (1, 10), (2, 20);
+
+statement ok
+CREATE TABLE t_nv2 (x INT PRIMARY KEY, y INT);
+INSERT INTO t_nv2 VALUES (100, 1000), (200, 2000);
+
+# Grant base privileges so that nvo1 and nvo2 can create views.
+statement ok
+GRANT CREATE ON SCHEMA public TO nvo1, nvo2;
+GRANT SELECT ON t_nv1 TO nvo1;
+GRANT SELECT ON t_nv2 TO nvo2;
+
+# nvo1 creates v_nv1 on t_nv1.
+statement ok
+SET ROLE nvo1
+
+statement ok
+CREATE VIEW v_nv1 AS SELECT a, b FROM t_nv1
+
+statement ok
+SET ROLE root
+
+# nvo2 creates v_nv2 on t_nv2.
+statement ok
+SET ROLE nvo2
+
+statement ok
+CREATE VIEW v_nv2 AS SELECT x, y FROM t_nv2
+
+statement ok
+SET ROLE root
+
+# Grant cross-view SELECT so both owners can build nested views.
+statement ok
+GRANT SELECT ON v_nv1 TO nvo1, nvo2;
+GRANT SELECT ON v_nv2 TO nvo1, nvo2;
+
+# Create four nested views covering all (outer_owner, inner_view) combos:
+#   v_nested_1_1: nvo1 owns, wraps v_nv1 (nvo1 owns inner)
+#   v_nested_1_2: nvo1 owns, wraps v_nv2 (nvo2 owns inner)
+#   v_nested_2_1: nvo2 owns, wraps v_nv1 (nvo1 owns inner)
+#   v_nested_2_2: nvo2 owns, wraps v_nv2 (nvo2 owns inner)
+statement ok
+SET ROLE nvo1
+
+statement ok
+CREATE VIEW v_nested_1_1 AS SELECT a, b FROM v_nv1
+
+statement ok
+CREATE VIEW v_nested_1_2 AS SELECT x, y FROM v_nv2
+
+statement ok
+SET ROLE nvo2
+
+statement ok
+CREATE VIEW v_nested_2_1 AS SELECT a, b FROM v_nv1
+
+statement ok
+CREATE VIEW v_nested_2_2 AS SELECT x, y FROM v_nv2
+
+statement ok
+SET ROLE root
+
+# Grant testuser SELECT on all nested views.
+statement ok
+GRANT SELECT ON v_nested_1_1, v_nested_1_2, v_nested_2_1, v_nested_2_2 TO testuser
+
+# With all privileges intact, every nested view should work.
+user testuser
+
+query II
+SELECT * FROM v_nested_1_1 ORDER BY a
+----
+1  10
+2  20
+
+query II
+SELECT * FROM v_nested_1_2 ORDER BY x
+----
+100  1000
+200  2000
+
+query II
+SELECT * FROM v_nested_2_1 ORDER BY a
+----
+1  10
+2  20
+
+query II
+SELECT * FROM v_nested_2_2 ORDER BY x
+----
+100  1000
+200  2000
+
+user root
+
+# Revoke nvo1's SELECT on t_nv1. This should break v_nv1 (owned by nvo1)
+# and therefore v_nested_1_1 and v_nested_2_1 (both wrap v_nv1).
+# v_nested_1_2 and v_nested_2_2 (wrap v_nv2, owned by nvo2) are unaffected.
+statement ok
+REVOKE SELECT ON t_nv1 FROM nvo1
+
+user testuser
+
+skipif config local-mixed-25.4 local-mixed-26.1
+statement error pgcode 42501 user nvo1 does not have SELECT privilege on relation t_nv1
+SELECT * FROM v_nested_1_1
+
+onlyif config local-mixed-25.4 local-mixed-26.1
+statement ok
+SELECT * FROM v_nested_1_1
+
+query II
+SELECT * FROM v_nested_1_2 ORDER BY x
+----
+100  1000
+200  2000
+
+skipif config local-mixed-25.4 local-mixed-26.1
+statement error pgcode 42501 user nvo1 does not have SELECT privilege on relation t_nv1
+SELECT * FROM v_nested_2_1
+
+onlyif config local-mixed-25.4 local-mixed-26.1
+statement ok
+SELECT * FROM v_nested_2_1
+
+query II
+SELECT * FROM v_nested_2_2 ORDER BY x
+----
+100  1000
+200  2000
+
+user root
+
+# Re-grant nvo1's SELECT and revoke nvo2's SELECT on t_nv2 instead.
+# Now v_nv2 (owned by nvo2) is broken, affecting v_nested_1_2 and v_nested_2_2.
+statement ok
+GRANT SELECT ON t_nv1 TO nvo1;
+REVOKE SELECT ON t_nv2 FROM nvo2;
+
+user testuser
+
+query II
+SELECT * FROM v_nested_1_1 ORDER BY a
+----
+1  10
+2  20
+
+skipif config local-mixed-25.4 local-mixed-26.1
+statement error pgcode 42501 user nvo2 does not have SELECT privilege on relation t_nv2
+SELECT * FROM v_nested_1_2
+
+onlyif config local-mixed-25.4 local-mixed-26.1
+statement ok
+SELECT * FROM v_nested_1_2
+
+query II
+SELECT * FROM v_nested_2_1 ORDER BY a
+----
+1  10
+2  20
+
+skipif config local-mixed-25.4 local-mixed-26.1
+statement error pgcode 42501 user nvo2 does not have SELECT privilege on relation t_nv2
+SELECT * FROM v_nested_2_2
+
+onlyif config local-mixed-25.4 local-mixed-26.1
+statement ok
+SELECT * FROM v_nested_2_2
+
+user root
+
+# Revoke both owners' SELECT. All four nested views should fail.
+statement ok
+REVOKE SELECT ON t_nv1 FROM nvo1;
+
+user testuser
+
+skipif config local-mixed-25.4 local-mixed-26.1
+statement error pgcode 42501 user nvo1 does not have SELECT privilege on relation t_nv1
+SELECT * FROM v_nested_1_1
+
+onlyif config local-mixed-25.4 local-mixed-26.1
+statement ok
+SELECT * FROM v_nested_1_1
+
+skipif config local-mixed-25.4 local-mixed-26.1
+statement error pgcode 42501 user nvo2 does not have SELECT privilege on relation t_nv2
+SELECT * FROM v_nested_1_2
+
+onlyif config local-mixed-25.4 local-mixed-26.1
+statement ok
+SELECT * FROM v_nested_1_2
+
+skipif config local-mixed-25.4 local-mixed-26.1
+statement error pgcode 42501 user nvo1 does not have SELECT privilege on relation t_nv1
+SELECT * FROM v_nested_2_1
+
+onlyif config local-mixed-25.4 local-mixed-26.1
+statement ok
+SELECT * FROM v_nested_2_1
+
+skipif config local-mixed-25.4 local-mixed-26.1
+statement error pgcode 42501 user nvo2 does not have SELECT privilege on relation t_nv2
+SELECT * FROM v_nested_2_2
+
+onlyif config local-mixed-25.4 local-mixed-26.1
+statement ok
+SELECT * FROM v_nested_2_2
+
+user root
+
+# Re-grant both. All nested views should work again.
+statement ok
+GRANT SELECT ON t_nv1 TO nvo1;
+GRANT SELECT ON t_nv2 TO nvo2;
+
+user testuser
+
+query II
+SELECT * FROM v_nested_1_1 ORDER BY a
+----
+1  10
+2  20
+
+query II
+SELECT * FROM v_nested_1_2 ORDER BY x
+----
+100  1000
+200  2000
+
+query II
+SELECT * FROM v_nested_2_1 ORDER BY a
+----
+1  10
+2  20
+
+query II
+SELECT * FROM v_nested_2_2 ORDER BY x
+----
+100  1000
+200  2000
 
 subtest end

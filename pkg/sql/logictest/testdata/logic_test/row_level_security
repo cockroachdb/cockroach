@@ -6089,3 +6089,99 @@ statement ok
 DROP USER cascade_test_user;
 
 subtest end
+
+subtest view_rls_definer_semantics
+
+# Test that RLS policies on the underlying table are evaluated against the view
+# owner (definer semantics), not the invoking user. When an invoker selects from
+# the view, the view owner's RLS policies apply.
+
+statement ok
+CREATE ROLE view_owner LOGIN;
+
+statement ok
+CREATE ROLE invoker LOGIN;
+
+statement ok
+CREATE TABLE view_rls_t (id INT PRIMARY KEY, val INT);
+
+statement ok
+INSERT INTO view_rls_t VALUES (1, 10), (2, 20), (3, 30), (4, 40);
+
+statement ok
+ALTER TABLE view_rls_t ENABLE ROW LEVEL SECURITY;
+
+# Only allow view_owner to see even rows.
+statement ok
+CREATE POLICY even_rows ON view_rls_t FOR SELECT TO view_owner USING (id % 2 = 0);
+
+# Only allow invoker to see odd rows.
+statement ok
+CREATE POLICY odd_rows ON view_rls_t FOR SELECT TO invoker USING (id % 2 = 1);
+
+statement ok
+GRANT SELECT ON view_rls_t TO view_owner;
+
+statement ok
+GRANT CREATE ON SCHEMA public TO view_owner;
+
+# Create the view as view_owner.
+statement ok
+SET ROLE view_owner;
+
+statement ok
+CREATE VIEW view_rls_v AS SELECT * FROM view_rls_t;
+
+statement ok
+GRANT SELECT ON view_rls_v TO invoker;
+
+# As view_owner, selecting from the table directly applies the even_rows policy.
+query II rowsort
+SELECT * FROM view_rls_t;
+----
+2  20
+4  40
+
+# As view_owner, selecting through the view also applies the even_rows policy.
+query II rowsort
+SELECT * FROM view_rls_v;
+----
+2  20
+4  40
+
+# Switch to invoker and select from the view. The view uses definer semantics,
+# so RLS is evaluated as view_owner, and the even_rows policy applies.
+statement ok
+SET ROLE invoker;
+
+skipif config local-mixed-25.4 local-mixed-26.1
+query II rowsort
+SELECT * FROM view_rls_v;
+----
+2  20
+4  40
+
+onlyif config local-mixed-25.4 local-mixed-26.1
+query II rowsort
+SELECT * FROM view_rls_v;
+----
+1  10
+3  30
+
+# Clean up.
+statement ok
+RESET ROLE;
+
+statement ok
+DROP VIEW view_rls_v;
+
+statement ok
+DROP TABLE view_rls_t;
+
+statement ok
+REVOKE CREATE ON SCHEMA public FROM view_owner;
+
+statement ok
+DROP ROLE view_owner, invoker;
+
+subtest end
