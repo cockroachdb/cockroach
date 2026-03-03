@@ -217,9 +217,13 @@ func updateReplicationStreamProgress(
 				status.ProtectedTimestamp = &consumedTime
 			}
 			// Allow expiration time to go backwards as user may set a smaller timeout.
-			md.Progress.GetStreamReplication().Expiration = expiration
-			ju.UpdateProgress(md.Progress)
-			return nil
+			details, err := jobs.LoadLegacyProgress(ctx, txn, jobspb.JobID(streamID))
+			if err != nil {
+				return err
+			}
+			progress := details.(jobspb.StreamReplicationProgress)
+			progress.Expiration = expiration
+			return jobs.StoreLegacyProgress(ctx, txn, jobspb.JobID(streamID), progress)
 		}); err != nil {
 			return streampb.StreamReplicationStatus{}, err
 		}
@@ -359,21 +363,25 @@ func completeReplicationStream(
 	) error {
 		// Updates the stream ingestion status, make the job resumer exit running
 		// when picking up the new status.
+		details, err := jobs.LoadLegacyProgress(ctx, txn, jobspb.JobID(streamID))
+		if err != nil {
+			return err
+		}
+		progress := details.(jobspb.StreamReplicationProgress)
 		if (md.State == jobs.StateRunning || md.State == jobs.StatePending) &&
-			md.Progress.GetStreamReplication().StreamIngestionStatus ==
-				jobspb.StreamReplicationProgress_NOT_FINISHED {
+			progress.StreamIngestionStatus == jobspb.StreamReplicationProgress_NOT_FINISHED {
+			var statusMessage string
 			if successfulIngestion {
-				md.Progress.GetStreamReplication().StreamIngestionStatus =
-					jobspb.StreamReplicationProgress_FINISHED_SUCCESSFULLY
-				md.Progress.StatusMessage = "succeeding this producer job as the corresponding " +
-					"stream ingestion finished successfully"
+				progress.StreamIngestionStatus = jobspb.StreamReplicationProgress_FINISHED_SUCCESSFULLY
+				statusMessage = "succeeding this producer job as the corresponding stream ingestion finished successfully"
 			} else {
-				md.Progress.GetStreamReplication().StreamIngestionStatus =
-					jobspb.StreamReplicationProgress_FINISHED_UNSUCCESSFULLY
-				md.Progress.StatusMessage = "canceling this producer job as the corresponding " +
-					"stream ingestion did not finish successfully"
+				progress.StreamIngestionStatus = jobspb.StreamReplicationProgress_FINISHED_UNSUCCESSFULLY
+				statusMessage = "canceling this producer job as the corresponding stream ingestion did not finish successfully"
 			}
-			ju.UpdateProgress(md.Progress)
+			if err := jobs.StoreLegacyProgress(ctx, txn, jobspb.JobID(streamID), progress); err != nil {
+				return err
+			}
+			return jobs.StatusStorage(jobspb.JobID(streamID)).Set(ctx, txn, statusMessage)
 		}
 		return nil
 	})

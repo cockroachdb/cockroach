@@ -494,37 +494,42 @@ func TestCutoverFractionProgressed(t *testing.T) {
 	jobID := registry.MakeJobID()
 	replicationJob, err := registry.CreateJobWithTxn(ctx, mockReplicationJobRecord, jobID, nil)
 	require.NoError(t, err)
-	require.NoError(t, replicationJob.NoTxn().Update(ctx, func(txn isql.Txn, md jobs.JobMetadata, ju *jobs.JobUpdater) error {
-		if err := md.CheckRunningOrReverting(); err != nil {
+	require.NoError(t, execCfg.InternalDB.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+		if err := jobs.CheckRunningOrReverting(ctx, txn, jobID); err != nil {
 			return err
 		}
-		progress := md.Progress
-		streamProgress := progress.Details.(*jobspb.Progress_StreamIngest).StreamIngest
-		streamProgress.ReplicatedTime = cutover
-		progress.Progress = &jobspb.Progress_HighWater{
-			HighWater: &cutover,
+		prog, err := jobs.LoadLegacyProgress(ctx, txn, jobID)
+		if err != nil {
+			return err
 		}
-		ju.UpdateProgress(progress)
-		return nil
+		streamProgress := prog.(jobspb.StreamIngestionProgress)
+		streamProgress.ReplicatedTime = cutover
+		if err := jobs.StoreLegacyProgress(ctx, txn, jobID, streamProgress); err != nil {
+			return err
+		}
+		return jobs.ProgressStorage(jobID).SetResolved(ctx, txn, cutover)
 	}))
 
 	metrics := registry.MetricsStruct().StreamIngest.(*Metrics)
 	require.Equal(t, int64(0), metrics.ReplicationCutoverProgress.Value())
 
-	loadProgress := func() jobspb.Progress {
-		j, err := execCfg.JobRegistry.LoadJob(ctx, jobID)
-		require.NoError(t, err)
-		return j.Progress()
+	loadFraction := func() float64 {
+		var fraction float64
+		require.NoError(t, execCfg.InternalDB.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+			var err error
+			fraction, _, _, err = jobs.ProgressStorage(jobID).Get(ctx, txn)
+			return err
+		}))
+		return fraction
 	}
 
 	var lastRangesLeft int64 = 6
-	var lastFraction float32 = 0
+	var lastFraction float64 = 0
 	var progressUpdates = 0
 	g := ctxgroup.WithContext(ctx)
 	g.GoCtx(func(ctx context.Context) error {
 		for range progressUpdated {
-			sip := loadProgress()
-			curProgress := sip.GetFractionCompleted()
+			curProgress := loadFraction()
 			progressRead <- struct{}{}
 			progressUpdates++
 			if lastFraction >= curProgress {
@@ -550,8 +555,8 @@ func TestCutoverFractionProgressed(t *testing.T) {
 	close(progressUpdated)
 	require.NoError(t, g.Wait())
 
-	sip := loadProgress()
-	require.Equal(t, float32(1), sip.GetFractionCompleted())
+	fraction := loadFraction()
+	require.Equal(t, float64(1), fraction)
 	require.Equal(t, int64(0), metrics.ReplicationCutoverProgress.Value())
 	require.True(t, progressUpdates > 1)
 }
@@ -790,11 +795,17 @@ func TestPhysicalReplicationCancelsProducerOnCutoverFromSystem(t *testing.T) {
 		if err := rows.Scan(&spanConfigJobID); err != nil {
 			return err
 		}
-		spanConfigJob, err := registry.LoadJob(ctx, spanConfigJobID)
-		require.NoError(t, err)
-		spanConfigProg := spanConfigJob.Progress().
-			Details.(*jobspb.Progress_AutoSpanConfigReconciliation).
-			AutoSpanConfigReconciliation
+		var spanConfigProg jobspb.AutoSpanConfigReconciliationProgress
+		if err := c.DestTenantServer.InternalDB().(isql.DB).Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+			details, err := jobs.LoadLegacyProgress(ctx, txn, spanConfigJobID)
+			if err != nil {
+				return err
+			}
+			spanConfigProg = details.(jobspb.AutoSpanConfigReconciliationProgress)
+			return nil
+		}); err != nil {
+			return err
+		}
 
 		if spanConfigProg.Checkpoint.Less(now) {
 			return errors.Newf(
