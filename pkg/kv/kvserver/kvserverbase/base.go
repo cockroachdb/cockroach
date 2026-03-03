@@ -121,11 +121,12 @@ var LoadBasedRebalancingMode = settings.RegisterEnumSetting(
 	"whether to rebalance based on the distribution of load across stores",
 	"leases and replicas",
 	map[LBRebalancingMode]string{
-		LBRebalancingOff:                 LBRebalancingOff.String(),
-		LBRebalancingLeasesOnly:          LBRebalancingLeasesOnly.String(),
-		LBRebalancingLeasesAndReplicas:   LBRebalancingLeasesAndReplicas.String(),
-		LBRebalancingMultiMetricOnly:     LBRebalancingMultiMetricOnly.String(),
-		LBRebalancingMultiMetricAndCount: LBRebalancingMultiMetricAndCount.String(),
+		LBRebalancingOff:                           LBRebalancingOff.String(),
+		LBRebalancingLeasesOnly:                    LBRebalancingLeasesOnly.String(),
+		LBRebalancingLeasesAndReplicas:             LBRebalancingLeasesAndReplicas.String(),
+		LBRebalancingMultiMetricOnly:               LBRebalancingMultiMetricOnly.String(),
+		LBRebalancingMultiMetricAndCount:           LBRebalancingMultiMetricAndCount.String(),
+		LBRebalancingMultiMetricRepairAndRebalance: LBRebalancingMultiMetricRepairAndRebalance.String(),
 	},
 	settings.WithPublic,
 )
@@ -134,7 +135,16 @@ var LoadBasedRebalancingMode = settings.RegisterEnumSetting(
 // uses the multi-metric store rebalancer.
 var LoadBasedRebalancingModeIsMMA = func(sv *settings.Values) bool {
 	mode := LoadBasedRebalancingMode.Get(sv)
-	return mode == LBRebalancingMultiMetricOnly || mode == LBRebalancingMultiMetricAndCount
+	return mode == LBRebalancingMultiMetricOnly ||
+		mode == LBRebalancingMultiMetricAndCount ||
+		mode == LBRebalancingMultiMetricRepairAndRebalance
+}
+
+// LoadBasedRebalancingModeIsMMARepairAndRebalance returns true if MMA handles
+// both rebalancing and repair, with the replicate and lease queues completely
+// disabled.
+var LoadBasedRebalancingModeIsMMARepairAndRebalance = func(sv *settings.Values) bool {
+	return LoadBasedRebalancingMode.Get(sv) == LBRebalancingMultiMetricRepairAndRebalance
 }
 
 // LBRebalancingMode controls if and when we do store-level rebalancing
@@ -162,6 +172,11 @@ const (
 	// across stores. Note that this might cause more thrashing since lease and
 	// replica counts goal may be in conflict with the store-level load goal.
 	LBRebalancingMultiMetricAndCount
+	// LBRebalancingMultiMetricRepairAndRebalance means that MMA handles both
+	// rebalancing AND repair; the replicate and lease queues are completely
+	// disabled. This is the mode under which MMA is solely responsible for all
+	// replica placement decisions.
+	LBRebalancingMultiMetricRepairAndRebalance
 )
 
 func (m LBRebalancingMode) String() string {
@@ -181,6 +196,8 @@ func (m LBRebalancingMode) SafeFormat(w redact.SafePrinter, _ rune) {
 		w.Print("multi-metric only")
 	case LBRebalancingMultiMetricAndCount:
 		w.Print("multi-metric and count")
+	case LBRebalancingMultiMetricRepairAndRebalance:
+		w.Print("multi-metric repair and rebalance")
 	default:
 		w.Printf("unknown(%d)", int64(m))
 	}
