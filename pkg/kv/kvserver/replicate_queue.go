@@ -1132,6 +1132,7 @@ func (rq *replicateQueue) TransferLease(
 		rq.store.StoreID(),
 		rlm.Desc(),
 		rangeUsageInfo,
+		(*mmaStore)(rq.store).amplificationFactors(),
 		source,
 		target,
 	)
@@ -1178,6 +1179,7 @@ func (rq *replicateQueue) changeReplicas(
 		rq.store.StoreID(),
 		desc,
 		rangeUsageInfo,
+		(*mmaStore)(rq.store).amplificationFactors(),
 		chgs,
 		repl.StoreID(),
 	)

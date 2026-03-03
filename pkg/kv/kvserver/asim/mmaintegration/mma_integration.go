@@ -10,6 +10,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/mmaprototype"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/state"
+	kvmmaintegration "github.com/cockroachdb/cockroach/pkg/kv/kvserver/mmaintegration"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 )
 
@@ -74,12 +75,16 @@ func MakeStoreLeaseholderMsgFromState(
 				"msg for s%d: did not find itself in the set of replicas", replica.Range(), storeID))
 		}
 
-		var rl mmaprototype.RangeLoad
 		load := s.RangeUsageInfo(rng.RangeID(), replica.StoreID())
-		rl.Load[mmaprototype.WriteBandwidth] = mmaprototype.LoadValue(load.WriteBytesPerSecond)
-		rl.Load[mmaprototype.ByteSize] = mmaprototype.LoadValue(load.LogicalBytes)
-		rl.Load[mmaprototype.CPURate] = mmaprototype.LoadValue(load.RaftCPUNanosPerSecond + load.RequestCPUNanosPerSecond)
-		rl.RaftCPU = mmaprototype.LoadValue(load.RaftCPUNanosPerSecond)
+		// TODO(wenyihu6): compute real amplification factors from the
+		// simulated store descriptor instead of using the identity (1.0).
+		rl := kvmmaintegration.MakePhysicalRangeLoad(
+			load.RequestCPUNanosPerSecond,
+			load.RaftCPUNanosPerSecond,
+			load.WriteBytesPerSecond,
+			load.LogicalBytes,
+			mmaprototype.IdentityAmpVector(),
+		)
 
 		rangeMsg := mmaprototype.RangeMsg{
 			RangeID:                  roachpb.RangeID(replica.Range()),
