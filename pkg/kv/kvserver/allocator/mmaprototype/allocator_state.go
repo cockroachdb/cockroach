@@ -358,6 +358,9 @@ func (a *allocatorState) ComputeChanges(
 		passObs = a.preparePassMetricsAndLoggerLocked(ctx, opts.LocalStoreID)
 	}
 	re := newRebalanceEnv(a.cs, a.rand, a.diversityScoringMemo, a.cs.ts.Now(), passObs)
+	if opts.IncludeRepair {
+		re.repair(ctx, opts.LocalStoreID)
+	}
 	return re.rebalanceStores(ctx, opts.LocalStoreID)
 }
 
