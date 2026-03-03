@@ -45,6 +45,12 @@ func MakeWriter(seq *Seq) Writer {
 	return Writer{seq: seq}
 }
 
+// TODOWriter returns a disabled Writer. Call sites using TODOWriter are
+// placeholders that need real WAG integration in the future.
+func TODOWriter() *Writer {
+	return &Writer{}
+}
+
 // disabled returns true if the Writer is disabled and no WAG nodes should be
 // written.
 func (w *Writer) disabled() bool {
