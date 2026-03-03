@@ -602,10 +602,11 @@ func (w *lockTableWaiterImpl) pushLockTxn(
 		// after the reader's read timestamp surpasses its global uncertainty limit.
 		resolve.ClockWhilePending = beforePushObs
 	}
-	// If the guard resolves intents virtually, skip the physical resolution.
-	// The intent is already queued in the guard's toResolve list and will be
-	// resolved virtually during evaluation.
+	// If the guard resolves intents virtually, add the lock update to the
+	// guard's toResolve list and signal it to rescan. The guard will skip the
+	// lock on rescan and carry the resolution through to evaluation.
 	if guard.VirtuallyResolvesIntents() {
+		guard.AddReplicatedToResolveAndSignal(resolve)
 		return nil
 	}
 	logResolveIntent(ctx, resolve)

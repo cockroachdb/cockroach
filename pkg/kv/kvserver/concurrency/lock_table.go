@@ -1000,6 +1000,14 @@ func (g *lockTableGuardImpl) doneActivelyWaitingAtLock() {
 	g.notify()
 }
 
+// AddReplicatedToResolveAndSignal implements the lockTableGuard interface.
+func (g *lockTableGuardImpl) AddReplicatedToResolveAndSignal(up roachpb.LockUpdate) {
+	g.toResolve.add(up)
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	g.doneActivelyWaitingAtLock()
+}
+
 func (g *lockTableGuardImpl) txnMeta() *enginepb.TxnMeta {
 	if g.txn == nil {
 		return nil
@@ -1092,11 +1100,16 @@ func (g *lockTableGuardImpl) isSameTxn(txn *enginepb.TxnMeta) bool {
 // conflictWithHeld locks return true if the given lock conflicts with the
 // request for this guard.
 //
-// The resolveMustBeVirtual indicates whether locks which can be resolved based
-// on the txn status cache should only be considered when the request is
-// configured for a virtual resolution.
+// When readOnly is true, the method only checks for conflicts without appending
+// to the guard's toResolve lists. This is used by recomputeWaitQueues, which
+// runs on guards owned by OTHER goroutines, to avoid the data race of mutating
+// toResolve/toResolveUnreplicated concurrently with the guard's own goroutine.
+//
+// When readOnly is false (the normal scan path), locks that can be resolved
+// based on the txn status cache are appended to toResolve and the lock is
+// treated as non-conflicting.
 func (g *lockTableGuardImpl) conflictsWithHeldLock(
-	tl *txnLock, key roachpb.Key, resolveMustBeVirtual bool,
+	tl *txnLock, key roachpb.Key, readOnly bool,
 ) bool {
 	lockHolderTxn := tl.getLockHolderTxn()
 	if g.isSameTxn(lockHolderTxn) {
@@ -1113,12 +1126,10 @@ func (g *lockTableGuardImpl) conflictsWithHeldLock(
 		return false // No conflict for a lock we are going to resolve.
 	}
 
-	if canResolve, up := g.canResolveKeyForHoldingTransaction(lockHolderTxn, g.curStrength(), key); canResolve {
-		// We share this code with a couple of contexts. For now, we want to avoid waking up
-		// readers who are not going to virtually resolve their intents.
-		//
-		// TODO(ssd): Should we just wake up everyone?
-		if (resolveMustBeVirtual && g.virtuallyResolveIntents) || !resolveMustBeVirtual {
+	if !readOnly {
+		if canResolve, up := g.canResolveKeyForHoldingTransaction(
+			lockHolderTxn, g.curStrength(), key,
+		); canResolve {
 			if !tl.isHeldReplicated() {
 				// Only held unreplicated. Accumulate it as an unreplicated lock to
 				// resolve, in case any other waiting readers can benefit from the
@@ -3021,7 +3032,7 @@ func (kl *keyLocks) conflictsWithLockHolders(g *lockTableGuardImpl) bool {
 	}
 
 	for e := kl.holders.Front(); e != nil; e = e.Next() {
-		if g.conflictsWithHeldLock(e.Value, kl.key, false) {
+		if g.conflictsWithHeldLock(e.Value, kl.key, false /* readOnly */) {
 			return true
 		}
 	}
@@ -3843,7 +3854,7 @@ func (kl *keyLocks) recomputeWaitQueues(st *cluster.Settings) {
 		reader := e.Value
 		curr := e
 		e = e.Next()
-		if !reader.conflictsWithHeldLock(txnLock, kl.key, true /* only allow virtual resolve */) {
+		if !reader.conflictsWithHeldLock(txnLock, kl.key, true /* readOnly */) {
 			kl.removeReader(curr)
 		}
 	}
@@ -5061,34 +5072,6 @@ func (t *lockTableImpl) PushedTransactionUpdated(
 	txn *roachpb.Transaction, clockObs roachpb.ObservedTimestamp,
 ) {
 	t.txnStatusCache.add(txn, clockObs)
-	t.maybeWakeReadersForPushedTxn(txn, clockObs)
-}
-
-// maybeWakeReadersForPushedTxn iterates over all locks in the lock table and
-// wakes waiting readers that can virtually resolve replicated locks held by the
-// pushed transaction. For each eligible reader, a LockUpdate is added to its
-// toResolve slice and the reader is removed from the lock's wait queue.
-//
-// TODO(ssd): Currently this is scanning the entire lock table and recomputing
-// the queue for any lock held by the pushed txn. We may want to only wake the
-// queue for the specific key that led to us pushing in the first place.
-func (t *lockTableImpl) maybeWakeReadersForPushedTxn(
-	txn *roachpb.Transaction, clockObs roachpb.ObservedTimestamp,
-) {
-	t.locks.mu.RLock()
-	defer t.locks.mu.RUnlock()
-	iter := t.locks.MakeIter()
-	for iter.First(); iter.Valid(); iter.Next() {
-		kl := iter.Cur()
-		kl.mu.Lock()
-
-		if !kl.isLockedBy(txn.ID) {
-			kl.mu.Unlock()
-			continue
-		}
-		kl.recomputeWaitQueues(t.settings)
-		kl.mu.Unlock()
-	}
 }
 
 // Enable implements the lockTable interface.

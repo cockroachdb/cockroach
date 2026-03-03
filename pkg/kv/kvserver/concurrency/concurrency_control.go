@@ -904,6 +904,10 @@ type lockTableGuard interface {
 	// virtually during evaluation rather than physically before re-scanning.
 	VirtuallyResolvesIntents() bool
 
+	// AddReplicatedToResolveAndSignal adds a lock update for a replicated lock
+	// to the guard's resolve list and signals the guard to rescan.
+	AddReplicatedToResolveAndSignal(roachpb.LockUpdate)
+
 	// PrepareForLockConflictRetry is called when handling a LockConflictError
 	// after evaluation. It condenses point resolve entries into range entries
 	// that persist across re-sequencing.
