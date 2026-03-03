@@ -353,9 +353,9 @@ func (s *Service) injectAutoVars(
 	if _, declared := parsedVars["gce_roachprod_cluster_startup_script"]; declared {
 		script := s.autoStartupScripts.gce
 		// Replace the SSH public key placeholder with the resolved value.
-		if sshPubKey, ok := varMap["ssh_public_key"]; ok && sshPubKey != "" {
-			script = strings.ReplaceAll(script, vm.SSHPublicKeyPlaceholder, sshPubKey)
-		} else if sshPubKey, ok := envVars["TF_VAR_ssh_public_key"]; ok && sshPubKey != "" {
+		// User-provided and environment ssh_public_key values are both
+		// delivered via TF_VAR_* env vars.
+		if sshPubKey, ok := envVars["TF_VAR_ssh_public_key"]; ok && sshPubKey != "" {
 			script = strings.ReplaceAll(script, vm.SSHPublicKeyPlaceholder, sshPubKey)
 		}
 		envVars["TF_VAR_gce_roachprod_cluster_startup_script"] = script

@@ -35,8 +35,9 @@ type IExecutor interface {
 
 	// Plan runs tofu plan and returns whether changes are detected along with
 	// the structured plan JSON output (from tofu show -json).
-	// vars are passed as -var flags; secret vars should be in envVars as
-	// TF_VAR_ instead of in vars.
+	// vars are passed as -var flags (auto-injected variables only).
+	// User-provided and environment variables should be in envVars as
+	// TF_VAR_* entries.
 	Plan(
 		ctx context.Context, l *logger.Logger, workingDir string,
 		vars map[string]string, envVars map[string]string,
@@ -44,7 +45,7 @@ type IExecutor interface {
 
 	// Apply applies infrastructure changes. If a saved plan file exists in
 	// the working directory (from a prior Plan call), it is used directly.
-	// Otherwise, vars are passed as -var flags.
+	// Otherwise, vars (auto-injected) are passed as -var flags.
 	Apply(
 		ctx context.Context, l *logger.Logger, workingDir string,
 		vars map[string]string, envVars map[string]string,
@@ -104,9 +105,9 @@ func (e *Executor) Init(
 //   - 1: error
 //   - 2: changes detected (not an error)
 //
-// vars are converted to -var key=value arguments. Secret variables should be
-// passed via envVars as TF_VAR_* entries instead to avoid appearing in
-// process listings.
+// vars are converted to -var key=value arguments (auto-injected variables
+// only). User-provided and environment variables should be passed via envVars
+// as TF_VAR_* entries.
 func (e *Executor) Plan(
 	ctx context.Context,
 	l *logger.Logger,
@@ -143,7 +144,7 @@ func (e *Executor) Plan(
 // Apply applies infrastructure changes. If a saved plan file (plan.tfplan)
 // exists in the working directory from a prior Plan call, it is used directly
 // and vars are ignored (they are baked into the plan). If no saved plan
-// exists, vars are passed as -var flags with -auto-approve.
+// exists, vars (auto-injected) are passed as -var flags with -auto-approve.
 func (e *Executor) Apply(
 	ctx context.Context,
 	l *logger.Logger,
@@ -172,8 +173,8 @@ func (e *Executor) Apply(
 }
 
 // Destroy tears down all infrastructure managed in the working directory.
-// vars are passed as -var key=value arguments to match the variables used
-// during apply.
+// vars (auto-injected) are passed as -var key=value arguments to match the
+// variables used during apply.
 func (e *Executor) Destroy(
 	ctx context.Context,
 	l *logger.Logger,

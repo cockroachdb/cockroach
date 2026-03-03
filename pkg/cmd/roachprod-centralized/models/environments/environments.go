@@ -12,7 +12,7 @@ type EnvironmentVarType string
 
 const (
 	// VarTypePlaintext indicates a variable whose value is stored as-is.
-	// Passed as -var flag, TF_VAR_* env var, and raw env var.
+	// Passed as TF_VAR_* env var and raw env var.
 	VarTypePlaintext EnvironmentVarType = "plaintext"
 	// VarTypeSecret indicates a variable used for provider credentials or
 	// internal service secrets (e.g. AWS_ACCESS_KEY_ID). The value is a

@@ -145,22 +145,23 @@ roachprod env var delete gcp-ephemeral old_var
 Each variable has a type that controls how its value is delivered to OpenTofu
 and whether it appears in process listings.
 
-| Type | `-var` flag | `TF_VAR_*` env | Raw env | Use case |
-|------|-----------|---------------|---------|----------|
-| `plaintext` | Yes (if declared) | Yes | Yes | Non-sensitive config: project IDs, regions, instance types |
-| `template_secret` | No | Yes | Yes | Sensitive template variables: passwords, certificates |
-| `secret` | No | No | Yes | Provider credentials: `AWS_ACCESS_KEY_ID`, `GOOGLE_APPLICATION_CREDENTIALS` |
+| Type | `TF_VAR_*` env | Raw env | Use case |
+|------|---------------|---------|----------|
+| `plaintext` | Yes | Yes | Non-sensitive config: project IDs, regions, instance types |
+| `template_secret` | Yes | Yes | Sensitive template variables: passwords, certificates |
+| `secret` | No | Yes | Provider credentials: `AWS_ACCESS_KEY_ID`, `GOOGLE_APPLICATION_CREDENTIALS` |
 
 **Why three types?**
 
-- `-var` flags are visible in process listings (`ps aux`). Secrets must never
-  appear there.
 - `TF_VAR_*` environment variables are consumed by OpenTofu for declared
-  template variables. Provider credentials (like `AWS_ACCESS_KEY_ID`) are NOT
-  template variables — they're consumed by providers directly via their
-  standard env var names.
-- `template_secret` bridges the gap: it's a template variable (needs
-  `TF_VAR_*`) but is sensitive (no `-var` flag).
+  template variables. Both `plaintext` and `template_secret` are delivered
+  this way.
+- Provider credentials (like `AWS_ACCESS_KEY_ID`) are NOT template
+  variables — they're consumed by providers directly via their standard env
+  var names, so `secret` type uses raw env only.
+- `template_secret` differs from `plaintext` in that its value is a secret
+  manager reference resolved at runtime, while `plaintext` values are
+  stored as-is.
 
 ### Choosing the right type
 
@@ -245,26 +246,29 @@ and delivers them to OpenTofu through different channels:
 Environment Variables (resolved)
         │
         ├── plaintext vars ──────────────────┬── raw env (KEY=VALUE)
-        │                                    ├── TF_VAR_KEY=VALUE
-        │                                    └── -var KEY=VALUE (if declared in template)
+        │                                    └── TF_VAR_KEY=VALUE
         │
         ├── template_secret vars ────────────┬── raw env (KEY=VALUE)
         │                                    └── TF_VAR_KEY=VALUE
         │
         └── secret vars ─────────────────────└── raw env (KEY=VALUE)
 
-User --var flags ────────────────────────────── -var KEY=VALUE
+User --var flags ────────────────────────────── TF_VAR_KEY=VALUE
 
 Auto-injected (identifier, prov_name, ...) ──── -var KEY=VALUE
 ```
 
-**Plaintext variables** that match a declared template variable name are
-automatically passed as `-var` flags. This is the primary mechanism for
-non-sensitive configuration.
+**Plaintext and template_secret variables** are delivered via `TF_VAR_*`
+environment variables. OpenTofu picks these up automatically for declared
+variables with matching names.
 
-**Template secret variables** are delivered via `TF_VAR_*` environment
-variables. OpenTofu picks these up automatically for declared variables with
-matching names. They never appear as `-var` flags.
+**User-provided `--var` flags** are also delivered via `TF_VAR_*` environment
+variables. This avoids issues with complex values (JSON payloads) that are
+incompatible with `-var` flag quoting.
+
+**Auto-injected variables** (`identifier`, `prov_name`, `environment`, `owner`)
+are the only variables passed as `-var` flags. This enforces that templates
+declare the required variable blocks — tofu errors on unknown `-var` flags.
 
 **Secret variables** are only delivered as raw environment variables (e.g.,
 `AWS_ACCESS_KEY_ID=...`). They're consumed by cloud providers directly, not

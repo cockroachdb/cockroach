@@ -142,14 +142,14 @@ When a provisioning is created, variables are assembled from multiple sources.
 Higher-priority sources override lower ones:
 
 1. **Auto-injected** (always wins): `identifier`, `prov_name`, `environment`,
-   `owner`
-2. **User `--var` flags**: provided at creation time
-3. **User `--var-file`**: YAML or JSON file
-4. **Environment plaintext variables**: if the env var key matches a declared
-   template variable name, the value is passed as a `-var` flag
-5. **Environment `template_secret` variables**: delivered via `TF_VAR_*`
-   environment variables (not visible in process listings)
-6. **Template defaults**: from the `default` attribute in the `variable` block
+   `owner` — passed as `-var` flags to enforce template contract
+2. **User `--var` flags**: provided at creation time — delivered via `TF_VAR_*`
+   environment variables
+3. **User `--var-file`**: YAML or JSON file — delivered via `TF_VAR_*`
+   environment variables
+4. **Environment variables** (`plaintext` and `template_secret`): delivered via
+   `TF_VAR_*` environment variables
+5. **Template defaults**: from the `default` attribute in the `variable` block
 
 If a variable is `required` (no default) and no source provides a value,
 creation fails with a validation error.

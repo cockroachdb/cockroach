@@ -34,11 +34,13 @@ func TestBuildVarMaps_NoEnv_VarFlagsOnly(t *testing.T) {
 	vars, envVars, err := BuildVarMaps(input)
 	require.NoError(t, err)
 
-	assert.Equal(t, "us-east-1", vars["region"])
-	assert.Equal(t, "3", vars["count"])
+	// User vars are passed as TF_VAR_* env vars, not -var flags.
+	assert.Equal(t, "us-east-1", envVars["TF_VAR_region"])
+	assert.Equal(t, "3", envVars["TF_VAR_count"])
+
+	// Only auto-injected identifier should be in vars (as -var flag).
 	assert.Equal(t, "ab12cd34", vars["identifier"])
-	// No environment vars should be set (no resolved env).
-	assert.Empty(t, envVars)
+	assert.Len(t, vars, 1)
 }
 
 func TestBuildVarMaps_EnvVarsAndUserVars(t *testing.T) {
@@ -69,23 +71,24 @@ func TestBuildVarMaps_EnvVarsAndUserVars(t *testing.T) {
 	// Step 1: Plaintext env vars get both raw and TF_VAR_.
 	assert.Equal(t, "vpc-0abc123", envVars["vpc_id"])
 	assert.Equal(t, "vpc-0abc123", envVars["TF_VAR_vpc_id"])
+	// Raw env var retains the environment value.
 	assert.Equal(t, "us-east-1", envVars["aws_region"])
-	assert.Equal(t, "us-east-1", envVars["TF_VAR_aws_region"])
 
 	// Secret env vars get raw only — NO TF_VAR_ prefix.
 	assert.Equal(t, "AKIA...", envVars["AWS_ACCESS_KEY_ID"])
 	_, hasTFVar := envVars["TF_VAR_AWS_ACCESS_KEY_ID"]
 	assert.False(t, hasTFVar, "secret should not have TF_VAR_ prefix")
 
-	// Step 2: Plaintext env vars matching template vars -> in vars.
-	// But user override takes precedence.
-	assert.Equal(t, "vpc-0abc123", vars["vpc_id"])
+	// Step 2: User var overrides env var in TF_VAR_*.
+	assert.Equal(t, "us-west-2", envVars["TF_VAR_aws_region"])
 
-	// Step 3: User var overrides env var.
-	assert.Equal(t, "us-west-2", vars["aws_region"])
+	// Plaintext env vars are NOT in vars — only TF_VAR_* env vars.
+	_, hasVpcInVars := vars["vpc_id"]
+	assert.False(t, hasVpcInVars, "plaintext env var should not be in vars")
 
-	// Step 4: Auto-injected.
+	// Only auto-injected identifier should be in vars.
 	assert.Equal(t, "test1234", vars["identifier"])
+	assert.Len(t, vars, 1)
 
 	// Secret env var should NOT be in vars (only in envVars).
 	_, hasSecret := vars["AWS_ACCESS_KEY_ID"]
@@ -152,9 +155,7 @@ func TestBuildVarMaps_SecretRawEnvOnly(t *testing.T) {
 func TestBuildVarMaps_TemplateSecretMatchingTemplate_UserOverride(t *testing.T) {
 	// A template_secret env var matches a declared template variable,
 	// AND the user explicitly provides an override via --var. The
-	// user's value should appear in vars (it's their explicit choice
-	// to put it on the command line), but the environment's secret
-	// value must not.
+	// user's value should override the env value in TF_VAR_*.
 	input := BuildVarMapsInput{
 		ResolvedEnv: types.ResolvedEnvironment{
 			Name: "test-env",
@@ -176,18 +177,21 @@ func TestBuildVarMaps_TemplateSecretMatchingTemplate_UserOverride(t *testing.T) 
 	vars, envVars, err := BuildVarMaps(input)
 	require.NoError(t, err)
 
-	// User override appears in vars (user's explicit choice).
-	assert.Equal(t, "user-provided-pw", vars["db_password"])
-	// template_secret env value is in envVars only.
+	// User override wins in TF_VAR_* (step 2 overwrites step 1).
+	assert.Equal(t, "user-provided-pw", envVars["TF_VAR_db_password"])
+	// Raw env var retains the env value (not overridden by user).
 	assert.Equal(t, "env-secret-pw", envVars["db_password"])
-	assert.Equal(t, "env-secret-pw", envVars["TF_VAR_db_password"])
+
+	// User var should NOT appear in vars — only auto-injected do.
+	_, hasInVars := vars["db_password"]
+	assert.False(t, hasInVars, "user var should not be in vars")
 }
 
 func TestBuildVarMaps_AutoInjectedOverrideUser(t *testing.T) {
 	input := BuildVarMapsInput{
 		UserVars: map[string]interface{}{
-			"identifier": "user-override", // should be overridden
-			"prov_name":  "user-prov",     // should be overridden
+			"identifier": "user-override", // overridden by auto-inject via -var priority
+			"prov_name":  "user-prov",     // overridden by auto-inject via -var priority
 		},
 		TemplateVars: map[string]provisionings.TemplateOption{
 			"identifier": {Type: "string"},
@@ -197,12 +201,17 @@ func TestBuildVarMaps_AutoInjectedOverrideUser(t *testing.T) {
 		TemplateType: "competitor-rds",
 	}
 
-	vars, _, err := BuildVarMaps(input)
+	vars, envVars, err := BuildVarMaps(input)
 	require.NoError(t, err)
 
-	// Auto-injected always wins.
+	// Auto-injected vars are in vars (-var flags), which have highest
+	// priority in tofu, overriding user TF_VAR_* values.
 	assert.Equal(t, "ab12cd34", vars["identifier"])
 	assert.Equal(t, "competitor-rds-ab12cd34", vars["prov_name"])
+
+	// User values are still in TF_VAR_* but tofu -var takes precedence.
+	assert.Equal(t, "user-override", envVars["TF_VAR_identifier"])
+	assert.Equal(t, "user-prov", envVars["TF_VAR_prov_name"])
 }
 
 func TestBuildVarMaps_ConditionalAutoInject(t *testing.T) {
@@ -257,8 +266,8 @@ func TestBuildVarMaps_ConditionalAutoInject_NotDeclared(t *testing.T) {
 
 func TestBuildVarMaps_EnvVarNotMatchingTemplate_NotInVars(t *testing.T) {
 	// Env var that doesn't match any template variable should not be
-	// in vars (would cause tofu to error), but should still be in
-	// envVars as TF_VAR_ (tofu silently ignores unknown TF_VAR_).
+	// in vars, but should still be in envVars as TF_VAR_ (tofu
+	// silently ignores unknown TF_VAR_).
 	input := BuildVarMapsInput{
 		ResolvedEnv: types.ResolvedEnvironment{
 			Name: "test-env",
@@ -280,9 +289,9 @@ func TestBuildVarMaps_EnvVarNotMatchingTemplate_NotInVars(t *testing.T) {
 	assert.Equal(t, "extra", envVars["EXTRA_VAR"])
 	assert.Equal(t, "extra", envVars["TF_VAR_EXTRA_VAR"])
 
-	// Should NOT be in vars (not a declared template variable).
+	// Should NOT be in vars (only auto-injected vars go into vars).
 	_, hasExtra := vars["EXTRA_VAR"]
-	assert.False(t, hasExtra, "non-matching env var should not be in vars")
+	assert.False(t, hasExtra, "env var should not be in vars")
 }
 
 func TestBuildVarMaps_ComplexUserVar(t *testing.T) {
@@ -305,18 +314,19 @@ func TestBuildVarMaps_ComplexUserVar(t *testing.T) {
 		TemplateType: "test",
 	}
 
-	vars, _, err := BuildVarMaps(input)
+	_, envVars, err := BuildVarMaps(input)
 	require.NoError(t, err)
 
-	assert.Equal(t, "true", vars["enabled"])
-	assert.Equal(t, "5", vars["count"])
+	// User vars are delivered as TF_VAR_* env vars.
+	assert.Equal(t, "true", envVars["TF_VAR_enabled"])
+	assert.Equal(t, "5", envVars["TF_VAR_count"])
 	// Complex type should be JSON-serialized.
-	assert.Contains(t, vars["tags"], `"team"`)
-	assert.Contains(t, vars["tags"], `"cockroach"`)
+	assert.Contains(t, envVars["TF_VAR_tags"], `"team"`)
+	assert.Contains(t, envVars["TF_VAR_tags"], `"cockroach"`)
 }
 
 func TestBuildVarMaps_Precedence(t *testing.T) {
-	// Full precedence test: auto-injected > user > env.
+	// Full precedence test: auto-injected (vars) > user (TF_VAR_) > env (TF_VAR_).
 	input := BuildVarMapsInput{
 		ResolvedEnv: types.ResolvedEnvironment{
 			Name: "test-env",
@@ -337,13 +347,19 @@ func TestBuildVarMaps_Precedence(t *testing.T) {
 		TemplateType: "test",
 	}
 
-	vars, _, err := BuildVarMaps(input)
+	vars, envVars, err := BuildVarMaps(input)
 	require.NoError(t, err)
 
-	// Auto-injected identifier wins over both user and env.
+	// Auto-injected identifier is in vars (-var flag, highest priority
+	// in tofu). User and env values appear in TF_VAR_* but -var wins
+	// at tofu execution time.
 	assert.Equal(t, "auto-id", vars["identifier"])
-	// User var wins over env var.
-	assert.Equal(t, "user-region", vars["region"])
+
+	// User var wins over env var in TF_VAR_* (step 2 overwrites step 1).
+	assert.Equal(t, "user-region", envVars["TF_VAR_region"])
+	// User var for identifier is also in TF_VAR_* (lower priority
+	// than the -var flag that tofu will see).
+	assert.Equal(t, "user-id", envVars["TF_VAR_identifier"])
 }
 
 func TestBuildVarMaps_EmptyInput(t *testing.T) {
@@ -429,10 +445,12 @@ func TestBuildVarMaps_UnknownUserVar_IdentifierAlwaysAllowed(t *testing.T) {
 		TemplateType: "test",
 	}
 
-	vars, _, err := BuildVarMaps(input)
+	vars, envVars, err := BuildVarMaps(input)
 	require.NoError(t, err)
-	// Auto-injected identifier wins over user value.
+	// Auto-injected identifier is in vars (-var flag, highest priority).
 	assert.Equal(t, "ab12cd34", vars["identifier"])
+	// User value is in TF_VAR_* but -var takes precedence at tofu time.
+	assert.Equal(t, "user-id", envVars["TF_VAR_identifier"])
 }
 
 func TestBuildVarMaps_UnknownUserVar_ConditionalAutoInjectRejected(t *testing.T) {
@@ -460,7 +478,8 @@ func TestBuildVarMaps_UnknownUserVar_ConditionalAutoInjectRejected(t *testing.T)
 
 func TestBuildVarMaps_UnknownUserVar_ConditionalAutoInjectDeclared(t *testing.T) {
 	// When the template DOES declare prov_name, the user can provide
-	// it via --var (auto-injection will override their value).
+	// it via --var (auto-injection will override their value via -var
+	// priority in tofu).
 	input := BuildVarMapsInput{
 		UserVars: map[string]interface{}{
 			"prov_name": "user-prov",
@@ -473,10 +492,12 @@ func TestBuildVarMaps_UnknownUserVar_ConditionalAutoInjectDeclared(t *testing.T)
 		TemplateType: "test",
 	}
 
-	vars, _, err := BuildVarMaps(input)
+	vars, envVars, err := BuildVarMaps(input)
 	require.NoError(t, err)
-	// Auto-injected prov_name wins over user value.
+	// Auto-injected prov_name is in vars (-var flag, highest priority).
 	assert.Equal(t, "test-ab12cd34", vars["prov_name"])
+	// User value is in TF_VAR_* but -var takes precedence at tofu time.
+	assert.Equal(t, "user-prov", envVars["TF_VAR_prov_name"])
 }
 
 func TestBuildVarMaps_MissingRequired(t *testing.T) {

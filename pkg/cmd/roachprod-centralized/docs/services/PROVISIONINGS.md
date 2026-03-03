@@ -97,10 +97,12 @@ roachprod prov create \
 ```
 
 **Variable precedence** (highest wins):
-1. Auto-injected (`identifier`, `prov_name`, `environment`, `owner`)
-2. `--var` flags
-3. `--var-file` values
-4. Environment plaintext variables matching template variable names
+1. Auto-injected (`identifier`, `prov_name`, `environment`, `owner`) — passed
+   as `-var` flags
+2. `--var` flags — passed as `TF_VAR_*` env vars
+3. `--var-file` values — passed as `TF_VAR_*` env vars
+4. Environment plaintext and template_secret variables — passed as `TF_VAR_*`
+   env vars
 5. Template defaults
 
 **Dotted paths** are supported for nested objects:
@@ -261,14 +263,15 @@ These are always available to templates. Declare them in `vars.tf` to use them.
 Variables from environments are delivered to OpenTofu in different ways
 depending on their type:
 
-| Type | `TF_VAR_*` | `-var` flag | Raw env | Use case |
-|------|-----------|------------|---------|----------|
-| `plaintext` | Yes | Yes | Yes | Non-sensitive config (project, region) |
-| `template_secret` | Yes | No | Yes | Terraform-consumed secrets (SSH keys) |
-| `secret` | No | No | Yes | Provider credentials (not for Terraform) |
+| Type | `TF_VAR_*` | Raw env | Use case |
+|------|-----------|---------|----------|
+| `plaintext` | Yes | Yes | Non-sensitive config (project, region) |
+| `template_secret` | Yes | Yes | Terraform-consumed secrets (SSH keys) |
+| `secret` | No | Yes | Provider credentials (not for Terraform) |
 
-`-var` flags are visible in process listings. Secrets use `TF_VAR_*` environment
-variables or raw environment injection to avoid exposure.
+Only auto-injected variables (`identifier`, `prov_name`, `environment`, `owner`)
+are passed as `-var` flags to enforce template contract validation. All other
+variables are delivered via `TF_VAR_*` environment variables.
 
 ## Permissions
 

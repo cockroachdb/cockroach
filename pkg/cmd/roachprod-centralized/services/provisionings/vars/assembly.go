@@ -33,11 +33,10 @@ type BuildVarMapsInput struct {
 	UserVars map[string]interface{}
 
 	// TemplateVars is the parsed template variable schema. Used to
-	// determine which environment variables should be passed as -var
-	// flags (only those matching a declared variable block). Nil is
-	// treated as empty — no env vars will be passed as -var flags, and
-	// conditional auto-injected variables (prov_name, environment,
-	// owner) will not be injected.
+	// conditionally inject auto-injected variables (prov_name,
+	// environment, owner) as -var flags, and to validate user-provided
+	// variable names and required variables. Nil is treated as empty —
+	// conditional auto-injected variables will not be injected.
 	TemplateVars map[string]provisionings.TemplateOption
 
 	// Identifier is the 8-char provisioning identifier. Always injected
@@ -62,27 +61,29 @@ type BuildVarMapsInput struct {
 // executor:
 //
 //   - vars: key=value pairs passed as -var flags on the command line.
-//     These are visible in process listings, so secrets must NOT be
-//     included here.
+//     Contains only auto-injected variables (identifier, prov_name,
+//     environment, owner). Passing these as -var flags enforces that
+//     the template declares the required variable blocks — tofu errors
+//     on unknown -var flags.
 //   - envVars: key=value pairs set as process environment variables.
 //     Includes KEY=VALUE for all types, plus TF_VAR_KEY=VALUE for
-//     plaintext and template_secret variables.
+//     plaintext, template_secret, and user-provided variables.
 //
 // Variable type behavior:
-//   - plaintext:        raw env + TF_VAR_* env + -var flag (if declared)
-//   - template_secret:  raw env + TF_VAR_* env only (never -var flag)
-//   - secret:           raw env only (no TF_VAR_*, no -var flag)
+//   - plaintext:        raw env + TF_VAR_* env
+//   - template_secret:  raw env + TF_VAR_* env
+//   - secret:           raw env only (no TF_VAR_*)
 //   - secret_file:      raw env only, value written to temp file (env
 //     var set to the file path by PrepareCredentialFiles)
 //
 // Precedence (highest to lowest):
-//  1. Auto-injected variables (identifier, prov_name, environment, owner)
+//  1. Auto-injected variables (identifier, prov_name, environment,
+//     owner) — passed as -var flags, highest priority in OpenTofu
 //  2. User-provided variables (--var flags / Provisioning.Variables)
-//  3. Plaintext environment variables matching a declared template
-//     variable (via -var flags)
-//  4. Environment variables (via TF_VAR_* env vars, for plaintext and
+//     — passed as TF_VAR_* env vars
+//  3. Environment variables (via TF_VAR_* env vars, for plaintext and
 //     template_secret only)
-//  5. Template defaults (handled by OpenTofu itself)
+//  4. Template defaults (handled by OpenTofu itself)
 //
 // See the reference doc §5 for the full algorithm design.
 func BuildVarMaps(
@@ -104,33 +105,23 @@ func BuildVarMaps(
 		}
 	}
 
-	// Step 2: Plaintext environment variables that match a declared
-	// template variable are ALSO passed as -var flags. We check against
-	// the parsed template schema because tofu errors on unknown -var
-	// flags. template_secret and secret variables never appear as -var
-	// flags.
-	for _, v := range input.ResolvedEnv.Variables {
-		if v.Type != envmodels.VarTypePlaintext {
-			continue
-		}
-		if _, declared := input.TemplateVars[v.Key]; declared {
-			vars[v.Key] = v.Value
-		}
-	}
-
-	// Step 3: User-provided variables override environment vars if the
-	// same key exists. Convert from map[string]interface{} to
-	// map[string]string using JSON for complex types.
+	// Step 2: User-provided variables are passed as TF_VAR_* env vars,
+	// overriding environment values if the same key exists. Complex
+	// types (maps, slices) are JSON-serialized — OpenTofu accepts JSON
+	// for complex variable values via TF_VAR_*.
 	for key, val := range input.UserVars {
 		formatted, fmtErr := formatVarValue(val)
 		if fmtErr != nil {
 			return nil, nil, errors.Wrapf(fmtErr, "format variable %s", key)
 		}
-		vars[key] = formatted
+		envVars["TF_VAR_"+key] = formatted
 	}
 
-	// Step 4: Auto-injected variables always take precedence over user
-	// vars.
+	// Step 3: Auto-injected variables are passed as -var flags so that
+	// tofu validates their presence in the template (tofu errors on
+	// unknown -var flags). They always take precedence over user vars
+	// and TF_VAR_* env vars because -var has the highest priority in
+	// OpenTofu.
 	//
 	// "identifier" is unconditionally injected — every template must
 	// declare it.
@@ -148,7 +139,7 @@ func BuildVarMaps(
 		vars["owner"] = input.Owner
 	}
 
-	// Step 4.1: Validate that all user-provided variable names match a
+	// Step 3.1: Validate that all user-provided variable names match a
 	// declared template variable or an auto-injected variable. This
 	// catches typos and undeclared variables before the slow tofu
 	// init+plan cycle.
@@ -168,7 +159,7 @@ func BuildVarMaps(
 		}
 	}
 
-	// Step 4.2: Validate that all required template variables have a
+	// Step 3.2: Validate that all required template variables have a
 	// value from any source: -var flags, TF_VAR_* env vars, or
 	// auto-injection. A required var is considered satisfied if it
 	// appears in either the vars map or as a TF_VAR_<name> env var.
@@ -207,8 +198,9 @@ func isAutoInjected(name string) bool {
 }
 
 // formatVarValue converts an interface{} value to a string suitable for a
-// -var flag. Primitives are formatted directly; complex types are
-// JSON-serialized (OpenTofu accepts JSON for complex variable values).
+// TF_VAR_* environment variable. Primitives are formatted directly;
+// complex types are JSON-serialized (OpenTofu accepts JSON for complex
+// variable values).
 func formatVarValue(val interface{}) (string, error) {
 	switch v := val.(type) {
 	case string:

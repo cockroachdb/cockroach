@@ -158,8 +158,9 @@ func TestPlanWithChanges(t *testing.T) {
 	assert.NotNil(t, plan.ResourceChanges, "plan should have resource changes")
 }
 
-// TestVarsPassed verifies that -var flags are correctly passed to the tofu
-// subprocess, overriding default values.
+// TestVarsPassed verifies that -var flags (used for auto-injected variables)
+// are correctly passed to the tofu subprocess, overriding default values and
+// TF_VAR_* environment variables.
 func TestVarsPassed(t *testing.T) {
 	skipIfNoTofu(t)
 
