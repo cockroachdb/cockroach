@@ -13,6 +13,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/scheduledjobs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
@@ -32,7 +34,7 @@ const (
 )
 
 func loadSchedules(params runParams, n *tree.ShowCreateSchedules) ([]*jobs.ScheduledJob, error) {
-	env := JobSchedulerEnv(params.ExecCfg().JobsKnobs())
+	env := jobs.JobSchedulerEnv(params.ExecCfg().JobsKnobs())
 	var schedules []*jobs.ScheduledJob
 	var rows []tree.Datums
 	var cols colinfo.ResultColumns
@@ -51,6 +53,9 @@ func loadSchedules(params runParams, n *tree.ShowCreateSchedules) ([]*jobs.Sched
 			tree.NewDInt(tree.DInt(sjID)))
 		if err != nil {
 			return nil, err
+		}
+		if datums == nil {
+			return nil, pgerror.Newf(pgcode.UndefinedObject, "schedule with id %d does not exist", sjID)
 		}
 		rows = append(rows, datums)
 		cols = columns
