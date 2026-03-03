@@ -136,6 +136,71 @@ func newTPCHDataset(name string) *tpchDataset {
 	}
 }
 
+// tpchParquetDataset represents a TPC-H dataset stored in Parquet format.
+type tpchParquetDataset struct {
+	staticDataset
+}
+
+// init implements the dataset interface. Schema is reused from the CSV bucket
+// since table definitions are identical; only the data format differs.
+func (tpq *tpchParquetDataset) init(
+	ctx context.Context, c cluster.Cluster, l *logger.Logger,
+) (err error) {
+	defer func() {
+		if err != nil {
+			err = errors.Wrapf(err, "initializing parquet %s", tpq.tableName)
+		}
+	}()
+	conn := c.Conn(ctx, l, 1)
+	defer conn.Close()
+
+	parquetBaseURL := "gs://cockroach-fixtures-us-east1/tpch-parquet/"
+	csvBaseURL := "gs://cockroach-fixtures-us-east1/tpch-csv/"
+	var scale string
+	if c.IsLocal() {
+		scale = "sf-1"
+	} else {
+		scale = "sf-100"
+	}
+
+	// Reuse schema from CSV bucket.
+	tpq.createTableStmt, err = readFileFromFixture(
+		fmt.Sprintf("%s/schema/%s.sql?AUTH=implicit", csvBaseURL, tpq.tableName), conn)
+	if err != nil {
+		return err
+	}
+
+	fingerprintURL := fmt.Sprintf("%s/%s/%s.fingerprint?AUTH=implicit", parquetBaseURL, scale, tpq.tableName)
+	var fingerprint string
+	fingerprint, err = readFileFromFixture(fingerprintURL, conn)
+	if err != nil {
+		if !strings.Contains(err.Error(), "gcs object does not exist") {
+			return err
+		}
+	} else {
+		err = json.Unmarshal([]byte(fingerprint), &tpq.fingerprint)
+		if err != nil {
+			return errors.Wrapf(err, "error unmarshalling expected table fingerprint: %s", fingerprint)
+		}
+	}
+
+	tpq.dataURLs = make([]string, 0, 8)
+	for i := 1; i <= 8; i++ {
+		tpq.dataURLs = append(tpq.dataURLs,
+			fmt.Sprintf("%s/%s/%s.parquet.%d?AUTH=implicit", parquetBaseURL, scale, tpq.tableName, i))
+	}
+
+	return nil
+}
+
+func newTPCHParquetDataset(name string) *tpchParquetDataset {
+	return &tpchParquetDataset{
+		staticDataset: staticDataset{
+			tableName: name,
+		},
+	}
+}
+
 // datasets is the set of all known datasets to test with.
 var datasets = map[string]dataset{
 	"tpch/customer": newTPCHDataset("customer"),
@@ -144,6 +209,13 @@ var datasets = map[string]dataset{
 	"tpch/part":     newTPCHDataset("part"),
 	"tpch/partsupp": newTPCHDataset("partsupp"),
 	"tpch/supplier": newTPCHDataset("supplier"),
+
+	"tpch-parquet/customer": newTPCHParquetDataset("customer"),
+	"tpch-parquet/lineitem": newTPCHParquetDataset("lineitem"),
+	"tpch-parquet/orders":   newTPCHParquetDataset("orders"),
+	"tpch-parquet/part":     newTPCHParquetDataset("part"),
+	"tpch-parquet/partsupp": newTPCHParquetDataset("partsupp"),
+	"tpch-parquet/supplier": newTPCHParquetDataset("supplier"),
 }
 
 // readFileFromFixture() reads a URI by routing through the read_file() internal
@@ -171,24 +243,56 @@ type FromFunc func(rng *rand.Rand) []string
 
 func (f FromFunc) Strings(rng *rand.Rand) []string { return f(rng) }
 
-func allDatasets(_ *rand.Rand) []string {
-	return slices.Collect(maps.Keys(datasets))
+func allCSVDatasets(_ *rand.Rand) []string {
+	var csvDatasets []string
+	for name := range datasets {
+		if strings.HasPrefix(name, "tpch/") {
+			csvDatasets = append(csvDatasets, name)
+		}
+	}
+	return csvDatasets
 }
 
-func nDatasets(rng *rand.Rand, n int) []string {
-	allDatasets := allDatasets(rng)
-	rng.Shuffle(len(allDatasets), func(i, j int) {
-		allDatasets[i], allDatasets[j] = allDatasets[j], allDatasets[i]
+func nCSVDatasets(rng *rand.Rand, n int) []string {
+	all := allCSVDatasets(rng)
+	rng.Shuffle(len(all), func(i, j int) {
+		all[i], all[j] = all[j], all[i]
 	})
-	return allDatasets[:n]
+	return all[:n]
 }
 
-func anyThreeDatasets(rng *rand.Rand) []string {
-	return nDatasets(rng, 3)
+func anyThreeCSVDatasets(rng *rand.Rand) []string {
+	return nCSVDatasets(rng, 3)
 }
 
-func anyDataset(rng *rand.Rand) []string {
-	return nDatasets(rng, 1)
+func anyCSVDataset(rng *rand.Rand) []string {
+	return nCSVDatasets(rng, 1)
+}
+
+func allParquetDatasets(_ *rand.Rand) []string {
+	var parquetDatasets []string
+	for name := range datasets {
+		if strings.HasPrefix(name, "tpch-parquet/") {
+			parquetDatasets = append(parquetDatasets, name)
+		}
+	}
+	return parquetDatasets
+}
+
+func nParquetDatasets(rng *rand.Rand, n int) []string {
+	all := allParquetDatasets(rng)
+	rng.Shuffle(len(all), func(i, j int) {
+		all[i], all[j] = all[j], all[i]
+	})
+	return all[:n]
+}
+
+func anyThreeParquetDatasets(rng *rand.Rand) []string {
+	return nParquetDatasets(rng, 3)
+}
+
+func anyParquetDataset(rng *rand.Rand) []string {
+	return nParquetDatasets(rng, 1)
 }
 
 // importTestSpec represents a subtest within the import test.
@@ -229,7 +333,7 @@ var tests = []importTestSpec{
 		nodes:        []int{4},
 		manualOnly:   true,
 		calibrate:    true,
-		datasetNames: FromFunc(allDatasets),
+		datasetNames: FromFunc(allCSVDatasets),
 	},
 	// Small dataset for quickly iterating while developing this test.
 	{
@@ -242,7 +346,7 @@ var tests = []importTestSpec{
 	{
 		subtestName:  "basic",
 		nodes:        []int{4},
-		datasetNames: FromFunc(anyDataset),
+		datasetNames: FromFunc(anyCSVDataset),
 	},
 	// Basic test w/benchmarking.
 	{
@@ -255,13 +359,13 @@ var tests = []importTestSpec{
 	{
 		subtestName:  "concurrency",
 		nodes:        []int{4},
-		datasetNames: FromFunc(anyThreeDatasets),
+		datasetNames: FromFunc(anyThreeCSVDatasets),
 	},
 	// Test with a decommissioned node.
 	{
 		subtestName:  "decommissioned",
 		nodes:        []int{4},
-		datasetNames: FromFunc(anyDataset),
+		datasetNames: FromFunc(anyCSVDataset),
 		preTestHook: func(ctx context.Context, t test.Test, c cluster.Cluster, _ *rand.Rand) {
 			nodeToDecommission := 2
 			t.Status(fmt.Sprintf("decommissioning node %d", nodeToDecommission))
@@ -277,7 +381,7 @@ var tests = []importTestSpec{
 	{
 		subtestName:  "nodeShutdown/worker",
 		nodes:        []int{4},
-		datasetNames: FromFunc(anyDataset),
+		datasetNames: FromFunc(anyCSVDataset),
 		importRunner: func(ctx context.Context, t test.Test, c cluster.Cluster, l *logger.Logger, _ *rand.Rand, ds dataset) error {
 			importConn := c.Conn(ctx, l, 2 /* gateway node */)
 			defer importConn.Close()
@@ -291,7 +395,7 @@ var tests = []importTestSpec{
 	{
 		subtestName:  "nodeShutdown/coordinator",
 		nodes:        []int{4},
-		datasetNames: FromFunc(anyDataset),
+		datasetNames: FromFunc(anyCSVDataset),
 		importRunner: func(ctx context.Context, t test.Test, c cluster.Cluster, l *logger.Logger, _ *rand.Rand, ds dataset) error {
 			importConn := c.Conn(ctx, l, 2 /* gateway node */)
 			defer importConn.Close()
@@ -305,22 +409,61 @@ var tests = []importTestSpec{
 	{
 		subtestName:  "cancellation",
 		nodes:        []int{4},
-		datasetNames: FromFunc(anyThreeDatasets),
+		datasetNames: FromFunc(anyThreeCSVDatasets),
 		importRunner: importCancellationRunner,
 	},
 	// Test column families.
 	{
 		subtestName:  "colfam",
 		nodes:        []int{4},
-		datasetNames: FromFunc(anyDataset),
+		datasetNames: FromFunc(anyCSVDataset),
 		preTestHook:  makeColumnFamilies,
 	},
 	// Test pause and resume of import jobs.
 	{
 		subtestName:  "pause",
 		nodes:        []int{4},
-		datasetNames: FromFunc(anyDataset),
+		datasetNames: FromFunc(anyCSVDataset),
 		importRunner: importPauseRunner,
+	},
+	// Parquet import: generate fingerprints for uncalibrated datasets.
+	{
+		subtestName:  "parquet/calibrate",
+		nodes:        []int{4},
+		manualOnly:   true,
+		calibrate:    true,
+		datasetNames: FromFunc(allParquetDatasets),
+		importRunner: parquetImportRunner,
+	},
+	// Parquet import: small dataset for quick iteration.
+	{
+		subtestName:  "parquet/smoke",
+		nodes:        []int{4},
+		manualOnly:   true,
+		datasetNames: One("tpch-parquet/supplier"),
+		importRunner: parquetImportRunner,
+	},
+	// Parquet import: basic test w/o injected failures.
+	{
+		subtestName:  "parquet/basic",
+		nodes:        []int{4},
+		datasetNames: FromFunc(anyParquetDataset),
+		importRunner: parquetImportRunner,
+	},
+	// Parquet import: basic test w/benchmarking.
+	{
+		subtestName:  "parquet/benchmark",
+		benchmark:    true,
+		nodes:        []int{4},
+		datasetNames: One("tpch-parquet/lineitem"),
+		importRunner: parquetImportRunner,
+	},
+	// Parquet import: basic test importing three datasets concurrently.
+	{
+		subtestName:  "parquet/concurrency",
+		nodes:        []int{4},
+		datasetNames: FromFunc(anyThreeParquetDatasets),
+		importRunner: parquetImportRunner,
 	},
 }
 
@@ -932,6 +1075,38 @@ func formatImportStmt(tableName string, urls []string, detached bool) string {
 	}
 
 	return stmt.String()
+}
+
+// formatParquetImportStmt formats a IMPORT INTO ... PARQUET DATA statement.
+func formatParquetImportStmt(tableName string, urls []string, detached bool) string {
+	var stmt strings.Builder
+	fmt.Fprintf(&stmt, `IMPORT INTO import_test.%s PARQUET DATA ('%s')`,
+		tableName, strings.Join(urls, "', '"))
+
+	if detached {
+		stmt.WriteString(" WITH detached")
+	}
+
+	return stmt.String()
+}
+
+// runSyncParquetImportJob runs a Parquet import job and waits for completion.
+func runSyncParquetImportJob(ctx context.Context, conn *gosql.DB, ds dataset) error {
+	importStmt := formatParquetImportStmt(ds.getTableName(), ds.getDataURLs(), false)
+	_, err := conn.ExecContext(ctx, importStmt)
+	if err != nil {
+		err = errors.Wrapf(err, "%s", importStmt)
+	}
+	return err
+}
+
+// parquetImportRunner is the import runner used by Parquet test specs.
+func parquetImportRunner(
+	ctx context.Context, t test.Test, c cluster.Cluster, l *logger.Logger, _ *rand.Rand, ds dataset,
+) error {
+	importConn := c.Conn(ctx, l, 1)
+	defer importConn.Close()
+	return runSyncParquetImportJob(ctx, importConn, ds)
 }
 
 func registerImportTPCC(r registry.Registry) {
