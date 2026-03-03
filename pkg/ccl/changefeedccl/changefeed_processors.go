@@ -2363,7 +2363,7 @@ func newSaveRateLimiter(name redact.SafeString, saveInterval durationSetting) *s
 // canSave returns whether enough time has passed to save progress again.
 func (l *saveRateLimiter) canSave(ctx context.Context, sv *settings.Values) bool {
 	interval := l.saveInterval.Get(sv)
-	if interval == 0 {
+	if interval < 0 {
 		return false
 	}
 	now := timeutil.Now()
