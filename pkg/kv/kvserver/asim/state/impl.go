@@ -480,10 +480,9 @@ func (s *state) SetNodePhysicalCharacteristics(nodeID NodeID, chars NodePhysical
 // updateStoreCapacity to populate StoreDescriptor.NodeCapacity, which feeds
 // into MakeStoreLoadMsg and ComputeAmplificationFactors.
 //
-// NodeCPURateUsage is inflated by cpuOverheadMultiplier to simulate the gap
-// between OS-level CPU (which includes GC, goroutine overhead, etc.) and the
-// directly-tracked per-replica CPU (StoresCPURate). In real clusters this
-// ratio is typically 1.0-3.0.
+// Note: in the simulator NodeCPURateUsage equals StoresCPURate (the sum of
+// per-replica CPU) because we don't model OS-level overhead (GC, goroutine
+// scheduling, etc.). This means the CPU amplification factor is always ~1.0.
 func (s *state) NodeCapacity(nodeID NodeID) roachpb.NodeCapacity {
 	node := s.nodes[nodeID]
 	stores := node.Stores()
