@@ -40,6 +40,7 @@ func TestRowCountCheck(t *testing.T) {
 		name               string
 		createTableStmts   []string // statements to create and populate the table
 		skipTablePopulate  bool     // if true, do not populate the table with data
+		actualRowCount     uint64   // the actual row count in the table after if skipTablePopulate is applied
 		expectedCheckCount int      // expected number of checks from ChecksForTable
 	}{
 		{
@@ -80,6 +81,17 @@ func TestRowCountCheck(t *testing.T) {
 				`ALTER TABLE test.t SPLIT AT VALUES (33), (36)`},
 			expectedCheckCount: 1,
 		},
+		{
+			name: "multiple_spans_with_empty",
+			createTableStmts: []string{
+				`CREATE TABLE test.t (id INT PRIMARY KEY)`,
+				`ALTER TABLE test.t SPLIT AT VALUES (33), (36)`,
+				`INSERT INTO test.t SELECT * FROM generate_series(1, 30)`,
+				`INSERT INTO test.t SELECT * FROM generate_series(41, 110)`},
+			skipTablePopulate:  true,
+			actualRowCount:     100,
+			expectedCheckCount: 1,
+		},
 	}
 
 	for _, tc := range testCases {
@@ -92,7 +104,7 @@ func TestRowCountCheck(t *testing.T) {
 			if !tc.skipTablePopulate {
 				stmts = append(stmts, `INSERT INTO test.t SELECT * FROM generate_series(1, 100)`)
 			} else {
-				actualRowCount = 0
+				actualRowCount = tc.actualRowCount
 			}
 
 			r.ExecMultiple(t,
