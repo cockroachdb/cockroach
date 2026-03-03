@@ -36,6 +36,9 @@ type replicaToApplyChanges interface {
 		chgs kvpb.ReplicationChanges,
 	) (updatedDesc *roachpb.RangeDescriptor, _ error)
 	Desc() *roachpb.RangeDescriptor
+	maybeLeaveAtomicChangeReplicas(
+		ctx context.Context, desc *roachpb.RangeDescriptor,
+	) (*roachpb.RangeDescriptor, error)
 }
 
 // mmaStoreRebalancer is the main struct that implements the mma store
@@ -170,6 +173,10 @@ func (m *mmaStoreRebalancer) applyChange(
 	switch {
 	case change.IsPureTransferLease():
 		err = m.applyLeaseTransfer(ctx, repl, change)
+	case change.IsLeaveJoint():
+		// Leave-joint changes finalize joint configs and must bypass
+		// ReplicationChanges() / changeReplicasImpl (see IsLeaveJoint doc).
+		_, err = repl.maybeLeaveAtomicChangeReplicas(ctx, repl.Desc())
 	case change.IsChangeReplicas():
 		err = m.applyReplicaChanges(ctx, repl, change)
 	default:
