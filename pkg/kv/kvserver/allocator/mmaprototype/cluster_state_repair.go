@@ -652,6 +652,30 @@ func removalPriority(ss *storeState) int {
 	}
 }
 
+// pickBestRemovalCandidate buckets candidates by removalPriority (lowest
+// value = worst health = remove first), then within the worst bucket picks
+// the store whose removal hurts diversity the least. localityTiers controls
+// which replicas' localities are used for scoring.
+func (re *rebalanceEnv) pickBestRemovalCandidate(
+	candidates []roachpb.StoreID, localityTiers replicasLocalityTiers,
+) roachpb.StoreID {
+	bestPriority := math.MaxInt
+	for _, storeID := range candidates {
+		if p := removalPriority(re.stores[storeID]); p < bestPriority {
+			bestPriority = p
+		}
+	}
+	var bucket []roachpb.StoreID
+	for _, storeID := range candidates {
+		if removalPriority(re.stores[storeID]) == bestPriority {
+			bucket = append(bucket, storeID)
+		}
+	}
+	return re.pickStoreByDiversity(
+		bucket, localityTiers,
+		(*existingReplicaLocalities).getScoreChangeForReplicaRemoval)
+}
+
 // repairRemoveVoter removes an over-replicated voter from the range. Candidate
 // selection prefers stores that are dead > unknown > unhealthy > shedding >
 // refusing > healthy. Within the worst-health bucket, the voter whose removal
@@ -684,28 +708,10 @@ func (re *rebalanceEnv) repairRemoveVoter(
 		return
 	}
 
-	// Bucket candidates by removal priority. Take the lowest-priority bucket
-	// (worst health = remove first).
-	bestPriority := math.MaxInt
-	for _, storeID := range candidates {
-		p := removalPriority(re.stores[storeID])
-		if p < bestPriority {
-			bestPriority = p
-		}
-	}
-	var bucket []roachpb.StoreID
-	for _, storeID := range candidates {
-		if removalPriority(re.stores[storeID]) == bestPriority {
-			bucket = append(bucket, storeID)
-		}
-	}
-
-	// Within the bucket, pick the voter whose removal hurts diversity the
-	// least (most redundant). getScoreChangeForReplicaRemoval returns negative
-	// values; the least negative (highest) is the most redundant.
-	removeStoreID := re.pickStoreByDiversity(
-		bucket, rs.constraints.voterLocalityTiers,
-		(*existingReplicaLocalities).getScoreChangeForReplicaRemoval)
+	// Pick the voter whose removal is least impactful: worst-health bucket
+	// first, then diversity-based tiebreaking.
+	removeStoreID := re.pickBestRemovalCandidate(
+		candidates, rs.constraints.voterLocalityTiers)
 	if removeStoreID == 0 {
 		log.KvDistribution.Warningf(ctx,
 			"skipping RemoveVoter repair for r%d: diversity picker returned no candidate",
@@ -950,28 +956,10 @@ func (re *rebalanceEnv) repairRemoveNonVoter(
 		return
 	}
 
-	// Bucket candidates by removal priority. Take the lowest-priority bucket
-	// (worst health = remove first).
-	bestPriority := math.MaxInt
-	for _, storeID := range candidates {
-		p := removalPriority(re.stores[storeID])
-		if p < bestPriority {
-			bestPriority = p
-		}
-	}
-	var bucket []roachpb.StoreID
-	for _, storeID := range candidates {
-		if removalPriority(re.stores[storeID]) == bestPriority {
-			bucket = append(bucket, storeID)
-		}
-	}
-
-	// Within the bucket, pick the non-voter whose removal hurts diversity the
-	// least (most redundant). Use replicaLocalityTiers since non-voter diversity
-	// is scored against all replicas.
-	removeStoreID := re.pickStoreByDiversity(
-		bucket, rs.constraints.replicaLocalityTiers,
-		(*existingReplicaLocalities).getScoreChangeForReplicaRemoval)
+	// Pick the non-voter whose removal is least impactful: worst-health
+	// bucket first, then diversity-based tiebreaking.
+	removeStoreID := re.pickBestRemovalCandidate(
+		candidates, rs.constraints.replicaLocalityTiers)
 	if removeStoreID == 0 {
 		log.KvDistribution.Warningf(ctx,
 			"skipping RemoveNonVoter repair for r%d: diversity picker returned no candidate",
@@ -1036,34 +1024,17 @@ func (re *rebalanceEnv) repairRemoveLearner(
 		return
 	}
 
-	// Bucket candidates by removal priority. Take the lowest-priority bucket
-	// (worst health = remove first).
-	bestPriority := math.MaxInt
-	for _, storeID := range candidates {
-		p := removalPriority(re.stores[storeID])
-		if p < bestPriority {
-			bestPriority = p
-		}
-	}
-	var bucket []roachpb.StoreID
-	for _, storeID := range candidates {
-		if removalPriority(re.stores[storeID]) == bestPriority {
-			bucket = append(bucket, storeID)
-		}
-	}
-
-	// Within the bucket, pick by diversity. We need constraint analysis for
-	// the locality tiers. If it fails (shouldn't normally happen), just pick
-	// the first candidate — learners are always removed unconditionally.
+	// Pick by removal priority + diversity. Constraint analysis is needed for
+	// locality tiers; if it fails (shouldn't normally happen), just pick the
+	// first candidate — learners are always removed unconditionally.
 	var removeStoreID roachpb.StoreID
 	re.ensureAnalyzedConstraints(ctx, rs)
-	if rs.constraints != nil && len(bucket) > 1 {
-		removeStoreID = re.pickStoreByDiversity(
-			bucket, rs.constraints.replicaLocalityTiers,
-			(*existingReplicaLocalities).getScoreChangeForReplicaRemoval)
+	if rs.constraints != nil {
+		removeStoreID = re.pickBestRemovalCandidate(
+			candidates, rs.constraints.replicaLocalityTiers)
 	}
 	if removeStoreID == 0 {
-		removeStoreID = bucket[0]
+		removeStoreID = candidates[0]
 	}
 
 	// Find the ReplicaState for the chosen learner.
