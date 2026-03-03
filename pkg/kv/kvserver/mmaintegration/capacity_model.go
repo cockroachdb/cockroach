@@ -110,6 +110,33 @@ const cpuIndirectOverheadMultiplier = 3.0
 //  5. storeCapacity = mmaDirectCapacity / numStores
 //     Split evenly across stores on the node.
 //
+// Relationship to the naive model:
+//
+// The naive model (computeStoreCPURateCapacityNaive in legacy_model_test.go)
+// attributes all node CPU to MMA-tracked store work. It maintains an
+// invariant that lets node-level utilization be recovered from store values
+// alone:
+//
+//	sum(store loads) / sum(store capacities) = NodeCPURateUsage / NodeCPURateCapacity
+//
+// That model is the special case where cap = infinity (clamping never
+// activates). When clamping does activate (background > 0), this function
+// intentionally breaks the invariant. Example with one store
+// (storesCPURate=2, NodeCPURateUsage=10, NodeCPURateCapacity=16, cap=3):
+//
+//	Naive:  capacity = 2 / (10/16) = 3.2   load/cap = 2/3.2 = 0.625 = 10/16  (matches)
+//	Capped: capacity = (16 - 4) / 3 = 4    load/cap = 2/4   = 0.5   != 10/16 (breaks)
+//
+// The capped model reports lower store utilization because it no longer
+// charges stores for background CPU they do not control. The trade-off is
+// that node-level overload detection cannot sum store values to recover
+// physical utilization. MakeStoreLoadMsg addresses this by passing
+// physical node-level CPU (NodeCPURateUsage, NodeCPURateCapacity) through
+// StoreLoadMsg so that node-level overload detection can use them directly.
+//
+// When no clamping occurs (implicit mult in [1, cap]), backgroundLoad = 0
+// and this function is equivalent to the naive model.
+//
 // When storesCPURate is 0 (no replicas reporting CPU yet), we use the limiting
 // behavior: MMA attributes none of the node usage to itself (all is
 // background), and divides the idle capacity by the multiplier across stores.
