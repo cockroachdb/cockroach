@@ -2,8 +2,7 @@
 
 The file originally contained ~2275 lines split across 13 repair functions.
 Most of the bulk came from a handful of structural patterns repeated verbatim
-across nearly every function. Patterns 1–6 have been extracted; Pattern 7
-remains as a future opportunity.
+across nearly every function. Patterns 1–6 have been extracted.
 
 ---
 
@@ -27,17 +26,18 @@ remains as a future opportunity.
 
 ---
 
-## Remaining Opportunities
+## Considered and Rejected
 
 ### Pattern 7: Add voter vs Add non-voter / Remove voter vs Remove non-voter
 
-`repairAddVoter` and `repairAddNonVoter` are parallel but not identical:
-- AddVoter tries `candidatesToConvertFromNonVoterToVoter` first (promote).
-- AddNonVoter tries `candidatesToConvertFromVoterToNonVoter` first (demote).
+The Add pair shares a "try conversion first, then find a new store" skeleton,
+but the conversion sub-paths differ meaningfully: `promoteNonVoterToVoter` vs
+`demoteVoterToNonVoter` (different leaseholder handling, different diversity
+tiers, opposite type changes). Merging would require a spec struct with ~8
+fields including function-typed fields for conversion candidate selection and
+the conversion helper itself. The indirection costs more than the duplication
+saves — readers would have to mentally inline the spec to follow the logic.
 
-The "try to convert an existing replica first, otherwise find a new store"
-skeleton is the same, but the sub-helpers (`promoteNonVoterToVoter` vs
-`demoteVoterToNonVoter`) have their own non-trivial logic. Similarly for the
-Remove pair. Merging these is feasible but yields less obvious savings and
-requires parametrizing the conversion sub-path. **Recommended as a follow-up**
-after the Replace functions (Pattern 6) are merged.
+The Remove pair (RemoveVoter / RemoveNonVoter) would merge cleanly, but at
+~70 lines each the savings (~40 lines) don't justify the abstraction given
+that both functions are individually straightforward to read.
