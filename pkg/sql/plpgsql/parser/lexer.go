@@ -369,6 +369,70 @@ func (l *lexer) ReadIntegerForLoopControl() (plpgsqltree.ForLoopControl, error) 
 	}, err
 }
 
+// ReadQueryForLoopControl reads a loop control statement that uses a query
+// to determine the loop bounds. Syntax:
+//
+//	[Query expression] LOOP
+func (l *lexer) ReadQueryForLoopControl() (plpgsqltree.ForLoopControl, error) {
+	if l.parser.Lookahead() != -1 {
+		// Push back the lookahead token so that it can be included.
+		l.PushBack(1)
+	}
+
+	queryStr, terminator, err := l.ReadSqlStatement(LOOP)
+	if err != nil {
+		return nil, err
+	}
+	l.lastPos++
+
+	if terminator == 0 {
+		return nil, errors.New("missing LOOP keyword")
+	}
+
+	stmts, err := parser.Parse(queryStr)
+	if err != nil {
+		return nil, err
+	}
+	if len(stmts) != 1 {
+		return nil, errors.New("expected exactly one SQL statement for query loop")
+	}
+
+	return &plpgsqltree.QueryForLoopControl{
+		Query: stmts[0].AST,
+	}, nil
+}
+
+// ReadCursorForLoopControl reads a loop control statement that uses a cursor
+// to determine the loop bounds. Syntax:
+// cursor_name [(optional cursor parameters)] LOOP
+func (l *lexer) ReadCursorForLoopControl() (plpgsqltree.ForLoopControl, error) {
+	if l.parser.Lookahead() != -1 {
+		// Push back the lookahead token so that it can be included.
+		l.PushBack(1)
+	}
+
+	tok := l.Peek()
+	if tok.id != IDENT {
+		return nil, errors.Newf("expected cursor name, got %s", tok.str)
+	}
+
+	// TODO(paulniziolek): We need to check `tok.id` to verify that it's a cursor
+	// variable first.
+
+	cursorName := plpgsqltree.Variable(tok.str)
+	l.lastPos++
+
+	tok = l.Peek()
+	if tok.id != LOOP {
+		return nil, errors.Newf("expected LOOP after cursor name, got %s", tok.str)
+	}
+	l.lastPos++
+
+	return &plpgsqltree.CursorForLoopControl{
+		Cursor: cursorName,
+	}, nil
+}
+
 // makeDoStmt analyzes and parses the options supplied to a DO statement.
 func makeDoStmt(options tree.DoBlockOptions) (*plpgsqltree.DoBlock, error) {
 	doBlockBodyStr, err := tree.AnalyzeDoBlockOptions(options)
@@ -536,8 +600,15 @@ func (l *lexer) getStr(startPos, endPos int) string {
 
 // Peek peeks
 func (l *lexer) Peek() plpgsqlSymType {
-	if l.lastPos+1 < len(l.tokens) {
-		return l.tokens[l.lastPos+1]
+	return l.PeekN(1)
+}
+
+func (l *lexer) PeekN(n int) plpgsqlSymType {
+	if n < 0 {
+		panic(errors.AssertionFailedf("negative n provided to PeekN"))
+	}
+	if l.lastPos+n < len(l.tokens) {
+		return l.tokens[l.lastPos+n]
 	}
 	return plpgsqlSymType{}
 }
