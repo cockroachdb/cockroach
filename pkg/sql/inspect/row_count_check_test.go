@@ -80,6 +80,16 @@ func TestRowCountCheck(t *testing.T) {
 				`ALTER TABLE test.t SPLIT AT VALUES (33), (36)`},
 			expectedCheckCount: 1,
 		},
+		{
+			name: "multiple_spans_with_empty",
+			createTableStmts: []string{
+				`CREATE TABLE test.t (id INT PRIMARY KEY)`,
+				`ALTER TABLE test.t SPLIT AT VALUES (33), (36)`,
+				`INSERT INTO test.t SELECT * FROM generate_series(1, 30)`,
+				`INSERT INTO test.t SELECT * FROM generate_series(40, 100)`},
+			skipTablePopulate:  true,
+			expectedCheckCount: 1,
+		},
 	}
 
 	for _, tc := range testCases {
