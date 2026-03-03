@@ -16,6 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvstorage"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvstorage/wag"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/rditer"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
@@ -79,6 +80,11 @@ type replicaAppBatch struct {
 
 	start                   time.Time // time at NewBatch()
 	followerStoreWriteBytes kvadmission.FollowerStoreWriteBytes
+
+	// wagWriter stages WAG nodes for this batch. Lifecycle triggers (splits,
+	// merges, etc.) populate it during command processing, and it's flushed to
+	// the raft engine before the command is applied to the state machine.
+	wagWriter wag.Writer
 
 	// Reused by addAppliedStateKeyToBatch to avoid heap allocations.
 	asAlloc kvserverpb.RangeAppliedState
@@ -340,12 +346,12 @@ func (b *replicaAppBatch) runPostAddTriggersReplicaOnly(
 		// NB: another reason why we shouldn't write HardState at evaluation time is
 		// that it belongs to the log engine, whereas the evaluated batch must
 		// contain only state machine updates.
-		in, err := validateAndPrepareSplit(ctx, b.r, res.Split.SplitTrigger, cmd.Cmd.ClosedTimestamp)
+		in, err := validateAndPrepareSplit(ctx, b.r, res.Split.SplitTrigger, cmd.Index(), cmd.Cmd.ClosedTimestamp)
 		if err != nil {
 			log.KvExec.Fatalf(ctx, "unable to validate split: %s", err)
 		}
 
-		splitPreApply(ctx, kvstorage.StateRW(b.batch), kvstorage.WrapRaft(b.RaftBatch()), in)
+		splitPreApply(ctx, kvstorage.StateRW(b.batch), kvstorage.WrapRaft(b.RaftBatch()), &b.wagWriter, in)
 
 		// The rangefeed processor will no longer be provided logical ops for
 		// its entire range, so it needs to be shut down and all registrations
@@ -626,6 +632,16 @@ func (b *replicaAppBatch) ApplyToStateMachine(ctx context.Context) error {
 	// doesn't remove us.
 	if !b.changeRemovesReplica {
 		if err := b.addAppliedStateKeyToBatch(ctx); err != nil {
+			return err
+		}
+	}
+
+	// Flush any staged WAG nodes to the raft batch. This must happen after the
+	// state batch is fully prepared (so Repr() captures everything) but before
+	// the raft batch is committed. The Empty() guard avoids eagerly creating a
+	// raft batch and computing Repr() when no WAG nodes were staged.
+	if !b.wagWriter.Empty() {
+		if err := b.wagWriter.Flush(b.RaftBatch(), b.batch.Repr()); err != nil {
 			return err
 		}
 	}

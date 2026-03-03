@@ -76,7 +76,7 @@ func createReplica(s *store, w storage.Writer, id roachpb.FullReplicaID) error {
 		return err
 	}
 	return Write(w, s.seq.Next(1), wagpb.Node{
-		Addr:     wagpb.Addr{RangeID: id.RangeID, ReplicaID: id.ReplicaID, Index: 0},
+		Addr:     wagpb.MakeAddr(id, 0),
 		Type:     wagpb.NodeType_NodeCreate,
 		Mutation: wagpb.Mutation{Batch: b.Repr()},
 	})
@@ -84,7 +84,7 @@ func createReplica(s *store, w storage.Writer, id roachpb.FullReplicaID) error {
 
 func initReplica(s *store, w storage.Writer, id roachpb.FullReplicaID, index uint64) error {
 	return Write(w, s.seq.Next(1), wagpb.Node{
-		Addr: wagpb.Addr{RangeID: id.RangeID, ReplicaID: id.ReplicaID, Index: kvpb.RaftIndex(index)},
+		Addr: wagpb.MakeAddr(id, kvpb.RaftIndex(index)),
 		Type: wagpb.NodeType_NodeSnap,
 		Mutation: wagpb.Mutation{Ingestion: &wagpb.Ingestion{
 			SSTs: []string{"tmp/1.sst", "tmp/2.sst"},
@@ -103,13 +103,13 @@ func splitReplica(s *store, w storage.Writer, id roachpb.FullReplicaID, index ui
 
 	seq := s.seq.Next(2)
 	if err := Write(w, seq, wagpb.Node{
-		Addr: wagpb.Addr{RangeID: id.RangeID, ReplicaID: id.ReplicaID, Index: kvpb.RaftIndex(index - 1)},
+		Addr: wagpb.MakeAddr(id, kvpb.RaftIndex(index-1)),
 		Type: wagpb.NodeType_NodeApply,
 	}); err != nil {
 		return err
 	}
 	return Write(w, seq+1, wagpb.Node{
-		Addr:     wagpb.Addr{RangeID: id.RangeID, ReplicaID: id.ReplicaID, Index: kvpb.RaftIndex(index)},
+		Addr:     wagpb.MakeAddr(id, kvpb.RaftIndex(index)),
 		Type:     wagpb.NodeType_NodeSplit,
 		Mutation: wagpb.Mutation{Batch: b.Repr()},
 		Create:   567, // the RHS range ID

@@ -9,8 +9,11 @@ import (
 	"bytes"
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvstorage"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvstorage/wag"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvstorage/wag/wagpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/load"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
@@ -19,23 +22,26 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-// splitPreApplyInput contains input for the RHS replica required for
-// splitPreApply.
+// splitPreApplyInput contains the input needed for splitPreApply.
 type splitPreApplyInput struct {
-	// destroyed is set to true iff the RHS replica (the one with the matching
-	// ReplicaID from the SplitTrigger used to construct a splitPreApplyInput) has
-	// already been removed from the store.
+	// lhsID identifies the LHS replica applying the split.
+	lhsID roachpb.FullReplicaID
+	// raftIndex is the raft log index of the split command.
+	raftIndex kvpb.RaftIndex
+	// rhsDestroyed is set to true iff the RHS replica (the one with the
+	// matching ReplicaID from the SplitTrigger used to construct a
+	// splitPreApplyInput) has already been removed from the store.
 	//
 	// If the RHS replica has already been destroyed on the store, then split
-	// application entails "throwing away" the data that would have belonged to
-	// the RHS. Simply put, user data belonging to the RHS needs to be cleared and
-	// any RangeID-local replicated state in the split batch also needs to be
-	// cleared.
-	destroyed bool
+	// application entails "throwing away" the data that would have belonged
+	// to the RHS. Simply put, user data belonging to the RHS needs to be
+	// cleared and any RangeID-local replicated state in the split batch also
+	// needs to be cleared.
+	rhsDestroyed bool
 	// rhsDesc is the descriptor for the post split RHS range.
 	rhsDesc roachpb.RangeDescriptor
 	// initClosedTimestamp is the initial closed timestamp that the RHS replica
-	// inherits from the pre-split range. Set iff destroyed is false.
+	// inherits from the pre-split range. Set iff rhsDestroyed is false.
 	initClosedTimestamp hlc.Timestamp
 }
 
@@ -43,11 +49,26 @@ type splitPreApplyInput struct {
 // splitTrigger and, assuming they hold, returns the corresponding input that
 // should be passed to splitPreApply.
 //
+// raftIndex is the log index of the split command being applied. It is threaded
+// through to splitPreApplyInput for use by WAG node staging.
+//
 // initClosedTS is the closed timestamp carried by the split command. It will be
 // used to initialize the closed timestamp of the RHS replica.
 func validateAndPrepareSplit(
-	ctx context.Context, r *Replica, split roachpb.SplitTrigger, initClosedTS *hlc.Timestamp,
+	ctx context.Context,
+	r *Replica,
+	split roachpb.SplitTrigger,
+	raftIndex kvpb.RaftIndex,
+	initClosedTS *hlc.Timestamp,
 ) (splitPreApplyInput, error) {
+	// splitPreApply writes a WAG dependency node requiring everything up to
+	// raftIndex-1 to be applied before the split can be replayed, so
+	// raftIndex must be > 1 for the subtraction to produce a valid index.
+	if raftIndex <= 1 {
+		return splitPreApplyInput{}, errors.AssertionFailedf(
+			"split command has raft index %d, expected > 1", raftIndex)
+	}
+
 	// Sanity check that the store is in the split.
 	splitRightReplDesc, hasRightDesc := split.RightDesc.GetReplicaDescriptor(r.StoreID())
 	_, hasLeftDesc := split.LeftDesc.GetReplicaDescriptor(r.StoreID())
@@ -60,7 +81,7 @@ func validateAndPrepareSplit(
 	// ReplicaID matches the one in the split trigger. In the less common case,
 	// the ReplicaID has already been removed from this store, and it may have
 	// been re-added with a higher ReplicaID one or more times. We use this to
-	// inform the destroyed field.
+	// inform the rhsDestroyed field.
 	rightRepl := r.store.GetReplicaIfExists(split.RightDesc.RangeID)
 	if rightRepl == nil || rightRepl.isNewerThanSplit(&split) {
 		// We're in the rare case where we know that the RHS has been removed or
@@ -82,7 +103,12 @@ func validateAndPrepareSplit(
 			}
 		}
 
-		return splitPreApplyInput{destroyed: true, rhsDesc: split.RightDesc}, nil
+		return splitPreApplyInput{
+			lhsID:        roachpb.FullReplicaID{RangeID: r.RangeID, ReplicaID: r.replicaID},
+			raftIndex:    raftIndex,
+			rhsDestroyed: true,
+			rhsDesc:      split.RightDesc,
+		}, nil
 	}
 	// Sanity check the common case -- the RHS replica that exists should match
 	// the ReplicaID in the split trigger. In particular, it shouldn't older than
@@ -108,17 +134,25 @@ func validateAndPrepareSplit(
 	initClosedTS.Forward(r.GetCurrentClosedTimestamp(ctx))
 
 	return splitPreApplyInput{
-		destroyed:           false,
+		lhsID:               roachpb.FullReplicaID{RangeID: r.RangeID, ReplicaID: r.replicaID},
+		raftIndex:           raftIndex,
+		rhsDestroyed:        false,
 		rhsDesc:             split.RightDesc,
 		initClosedTimestamp: *initClosedTS,
 	}, nil
 }
 
-// splitPreApply is called when the raft command is applied. Any
-// changes to the given ReadWriter will be written atomically with the
-// split commit.
+// splitPreApply is called when the raft command is applied. Any changes to the
+// given ReadWriter will be written atomically with the split commit.
+//
+// WAG nodes for the split are staged on wagWriter. The caller is responsible
+// for flushing the writer after splitPreApply returns.
 func splitPreApply(
-	ctx context.Context, stateRW kvstorage.StateRW, raftRW kvstorage.Raft, in splitPreApplyInput,
+	ctx context.Context,
+	stateRW kvstorage.StateRW,
+	raftRW kvstorage.Raft,
+	wagWriter *wag.Writer,
+	in splitPreApplyInput,
 ) {
 	rsl := kvstorage.MakeStateLoader(in.rhsDesc.RangeID)
 	// After PR #149620, the split trigger batch may only contain replicated state
@@ -145,7 +179,26 @@ func splitPreApply(
 		log.KvExec.Fatalf(ctx, "cannot clear RaftTruncatedState: %v", err)
 	}
 
-	if in.destroyed {
+	// Stage WAG nodes for the split. The LHS state machine must be caught up to
+	// the entry before the split before it can be replayed.
+	//
+	// NB: raftIndex > 1 is verified by validateAndPrepareSplit, so the
+	// subtraction below is safe.
+	//
+	// NB: we don't record an explicit dependency on the RHS's
+	// CreateUninitializedReplica WAG node here. That node is written by
+	// getOrCreateReplica (called upstream via maybeAcquireSplitMergeLock) and
+	// will always precede this split node in the WAG sequence.
+	wagWriter.AddDep(wagpb.Node{
+		Addr: wagpb.MakeAddr(in.lhsID, in.raftIndex-1),
+		Type: wagpb.NodeType_NodeApply,
+	})
+	wagWriter.SetEvent(wagpb.Node{
+		Addr: wagpb.MakeAddr(in.lhsID, in.raftIndex),
+		Type: wagpb.NodeType_NodeSplit,
+	})
+
+	if in.rhsDestroyed {
 		// The RHS replica has already been removed from the store. To apply the
 		// split, we must clear the user data the RHS would have inherited from the
 		// LHS due to the split. Additionally, we also want to clear any

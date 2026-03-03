@@ -9,6 +9,7 @@
 package kvserver
 
 import (
+	"bytes"
 	"cmp"
 	"context"
 	"fmt"
@@ -24,6 +25,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvstorage"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvstorage/wag"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvstorage/wag/wagpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/logstore"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/print"
 	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
@@ -292,9 +295,15 @@ func TestReplicaLifecycleDataDriven(t *testing.T) {
 				require.NoError(t, err)
 
 				batchRepr := batch.Repr()
+				lhsRepl := rs.replica
+				require.NotNil(t, lhsRepl, "LHS replica must exist on n1/s1")
+				// Bump the raft index to account for where the split command
+				// would go in the raft log.
+				lhsRepl.lastIdx++
 				tc.splits[rangeID] = pendingSplit{
 					trigger:   split,
 					batchRepr: batchRepr,
+					raftIndex: lhsRepl.lastIdx,
 				}
 				tc.updatePostSplitRangeState(ctx, t, batch, split)
 				batch.Close()
@@ -315,6 +324,9 @@ func TestReplicaLifecycleDataDriven(t *testing.T) {
 				delete(tc.splits, rangeID)
 				split := ps.trigger
 
+				lhsRangeState := tc.mustGetRangeState(t, rangeID)
+				require.NotNil(t, lhsRangeState.replica, "LHS replica must exist on n1/s1")
+
 				// Determine if the RHS is "destroyed" by checking replica
 				// state. This mirrors the logic in validateAndPrepareSplit:
 				// - if there's no replica for the rhs, it's considered
@@ -324,23 +336,32 @@ func TestReplicaLifecycleDataDriven(t *testing.T) {
 				// destroyed).
 				rhsRangeState := tc.mustGetRangeState(t, split.RightDesc.RangeID)
 				rhsReplDesc := rhsRangeState.mustGetReplicaDescriptor(t, roachpb.NodeID(1))
-				destroyed := rhsRangeState.replica == nil ||
+				rhsDestroyed := rhsRangeState.replica == nil ||
 					rhsRangeState.replica.ReplicaID > rhsReplDesc.ReplicaID
 
 				in := splitPreApplyInput{
-					destroyed:           destroyed,
+					lhsID:               lhsRangeState.replica.FullReplicaID,
+					raftIndex:           ps.raftIndex,
+					rhsDestroyed:        rhsDestroyed,
 					rhsDesc:             split.RightDesc,
 					initClosedTimestamp: hlc.Timestamp{WallTime: 100}, // dummy timestamp
 				}
+				wagWriter := wag.MakeWriter(&tc.wagSeq)
 				return tc.mutate(t, func(stateBatch, raftBatch storage.Batch) {
 					// First, apply the stashed batch from split trigger
 					// evaluation.
 					require.NoError(t, stateBatch.ApplyBatchRepr(ps.batchRepr, false /* sync */))
-					// Then run splitPreApply which does the apply-time tweaks.
-					splitPreApply(ctx, kvstorage.StateRW(stateBatch), kvstorage.WrapRaft(raftBatch), in)
+					// Then run splitPreApply which does the apply-time tweaks
+					// and stages WAG nodes on the writer.
+					splitPreApply(ctx, kvstorage.StateRW(stateBatch), kvstorage.WrapRaft(raftBatch), &wagWriter, in)
+					// Flush WAG nodes to the raft batch, mirroring what
+					// ApplyToStateMachine does in production.
+					require.NoError(t, wagWriter.Flush(
+						kvstorage.WrapRaft(raftBatch).WO, stateBatch.Repr(),
+					))
 					// If the RHS replica wasn't destroyed, it is now initialized.
 					// Update the in-memory state to reflect this.
-					if !destroyed {
+					if !rhsDestroyed {
 						tc.updateReplicaStateFromStorage(t, ctx, rhsRangeState, stateBatch, raftBatch, false /* justCreated */)
 					}
 				})
@@ -503,6 +524,7 @@ func (r *replicaInfo) initialized() bool {
 type pendingSplit struct {
 	trigger   roachpb.SplitTrigger
 	batchRepr []byte
+	raftIndex kvpb.RaftIndex
 }
 
 // testCtx is a single test's context. It tracks the state of all ranges and any
@@ -520,6 +542,8 @@ type testCtx struct {
 	// for Raft.
 	stateStorage storage.Engine
 	raftStorage  storage.Engine
+
+	wagSeq wag.Seq
 }
 
 // newTestCtx constructs and returns a new testCtx.
@@ -558,9 +582,21 @@ func (tc *testCtx) mutate(t *testing.T, write func(stateBatch, raftBatch storage
 
 	write(stateBatch, raftBatch)
 
-	stateOutput, err := print.DecodeWriteBatch(stateBatch.Repr())
-	require.NoError(t, err)
-	raftOutput, err := print.DecodeWriteBatch(raftBatch.Repr())
+	stateRepr := stateBatch.Repr()
+	raftRepr := raftBatch.Repr()
+
+	// If the raft batch contains a WAG node with an embedded state engine
+	// batch, verify it matches and omit the state engine output — the WAG
+	// node in the raft output already contains it.
+	var stateOutput string
+	if assertWAGMutationBatch(t, raftRepr, stateRepr) {
+		stateOutput = "(matches WAG node)\n"
+	} else {
+		var err error
+		stateOutput, err = print.DecodeWriteBatch(stateRepr)
+		require.NoError(t, err)
+	}
+	raftOutput, err := print.DecodeWriteBatch(raftRepr)
 	require.NoError(t, err)
 
 	require.NoError(t, raftBatch.Commit(false))
@@ -583,6 +619,34 @@ func (tc *testCtx) mutate(t *testing.T, write func(stateBatch, raftBatch storage
 		sb.WriteString(raftOutput)
 	}
 	return sb.String()
+}
+
+// assertWAGMutationBatch asserts that at most one WAG node in the raft batch
+// carries an embedded state engine batch, and that it matches stateRepr at
+// the byte level. Returns true if such a node was found.
+func assertWAGMutationBatch(t *testing.T, raftRepr, stateRepr []byte) bool {
+	t.Helper()
+	r, err := storage.NewBatchReader(raftRepr)
+	require.NoError(t, err)
+	var found bool
+	for r.Next() {
+		key, err := r.EngineKey()
+		require.NoError(t, err)
+		if !bytes.HasPrefix(key.Key, keys.StoreWAGPrefix()) {
+			continue
+		}
+		var node wagpb.Node
+		require.NoError(t, node.Unmarshal(r.Value())) // nolint:protounmarshal
+		if len(node.Mutation.Batch) == 0 {
+			continue
+		}
+		require.False(t, found,
+			"expected exactly one WAG node with a mutation batch, found multiple")
+		found = true
+		require.Equal(t, stateRepr, node.Mutation.Batch,
+			"WAG mutation batch for %s should match state engine batch", node.Addr)
+	}
+	return found
 }
 
 // createRangeDesc creates a new RangeDescriptor for the given keys span and list
