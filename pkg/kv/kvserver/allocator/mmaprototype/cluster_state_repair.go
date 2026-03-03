@@ -369,6 +369,17 @@ func (re *rebalanceEnv) repair(
 	return re.changes
 }
 
+// replicaStateForStore returns the ReplicaState of the replica on the given
+// store, and whether it was found.
+func replicaStateForStore(rs *rangeState, storeID roachpb.StoreID) (ReplicaState, bool) {
+	for _, repl := range rs.replicas {
+		if repl.StoreID == storeID {
+			return repl.ReplicaState, true
+		}
+	}
+	return ReplicaState{}, false
+}
+
 // isLeaseholderOnStore returns true if the given store holds the lease for the
 // range.
 func isLeaseholderOnStore(rs *rangeState, storeID roachpb.StoreID) bool {
@@ -554,15 +565,7 @@ func (re *rebalanceEnv) promoteNonVoterToVoter(
 	}
 
 	// Find the existing replica state for the non-voter being promoted.
-	var prevState ReplicaState
-	found := false
-	for _, repl := range rs.replicas {
-		if repl.StoreID == bestStoreID {
-			prevState = repl.ReplicaState
-			found = true
-			break
-		}
-	}
+	prevState, found := replicaStateForStore(rs, bestStoreID)
 	if !found {
 		log.KvDistribution.Warningf(ctx,
 			"skipping AddVoter repair for r%d: non-voter on s%d not found in replicas",
@@ -683,15 +686,7 @@ func (re *rebalanceEnv) repairRemoveVoter(
 	}
 
 	// Find the ReplicaState for the chosen voter.
-	var prevState ReplicaState
-	found := false
-	for _, repl := range rs.replicas {
-		if repl.StoreID == removeStoreID {
-			prevState = repl.ReplicaState
-			found = true
-			break
-		}
-	}
+	prevState, found := replicaStateForStore(rs, removeStoreID)
 	if !found {
 		log.KvDistribution.Warningf(ctx,
 			"skipping RemoveVoter repair for r%d: voter on s%d not found in replicas",
@@ -878,15 +873,7 @@ func (re *rebalanceEnv) demoteVoterToNonVoter(
 	}
 
 	// Find the existing replica state for the voter being demoted.
-	var prevState ReplicaState
-	found := false
-	for _, repl := range rs.replicas {
-		if repl.StoreID == bestStoreID {
-			prevState = repl.ReplicaState
-			found = true
-			break
-		}
-	}
+	prevState, found := replicaStateForStore(rs, bestStoreID)
 	if !found {
 		log.KvDistribution.Warningf(ctx,
 			"skipping AddNonVoter repair for r%d: voter on s%d not found in replicas",
@@ -980,15 +967,7 @@ func (re *rebalanceEnv) repairRemoveNonVoter(
 	}
 
 	// Find the ReplicaState for the chosen non-voter.
-	var prevState ReplicaState
-	found := false
-	for _, repl := range rs.replicas {
-		if repl.StoreID == removeStoreID {
-			prevState = repl.ReplicaState
-			found = true
-			break
-		}
-	}
+	prevState, found := replicaStateForStore(rs, removeStoreID)
 	if !found {
 		log.KvDistribution.Warningf(ctx,
 			"skipping RemoveNonVoter repair for r%d: non-voter on s%d not found in replicas",
@@ -1077,15 +1056,7 @@ func (re *rebalanceEnv) repairRemoveLearner(
 	}
 
 	// Find the ReplicaState for the chosen learner.
-	var prevState ReplicaState
-	found := false
-	for _, repl := range rs.replicas {
-		if repl.StoreID == removeStoreID {
-			prevState = repl.ReplicaState
-			found = true
-			break
-		}
-	}
+	prevState, found := replicaStateForStore(rs, removeStoreID)
 	if !found {
 		log.KvDistribution.Warningf(ctx,
 			"skipping RemoveLearner repair for r%d: learner on s%d not found in replicas",
@@ -1169,15 +1140,7 @@ func (re *rebalanceEnv) repairReplaceDeadVoter(
 	}
 
 	// Find the ReplicaState for the chosen dead voter.
-	var removePrevState ReplicaState
-	found := false
-	for _, repl := range rs.replicas {
-		if repl.StoreID == removeStoreID {
-			removePrevState = repl.ReplicaState
-			found = true
-			break
-		}
-	}
+	removePrevState, found := replicaStateForStore(rs, removeStoreID)
 	if !found {
 		log.KvDistribution.Warningf(ctx,
 			"skipping ReplaceDeadVoter repair for r%d: voter on s%d not found in replicas",
@@ -1326,15 +1289,7 @@ func (re *rebalanceEnv) repairReplaceDeadNonVoter(
 	}
 
 	// Find the ReplicaState for the chosen dead non-voter.
-	var removePrevState ReplicaState
-	found := false
-	for _, repl := range rs.replicas {
-		if repl.StoreID == removeStoreID {
-			removePrevState = repl.ReplicaState
-			found = true
-			break
-		}
-	}
+	removePrevState, found := replicaStateForStore(rs, removeStoreID)
 	if !found {
 		log.KvDistribution.Warningf(ctx,
 			"skipping ReplaceDeadNonVoter repair for r%d: non-voter on s%d not found in replicas",
@@ -1486,15 +1441,7 @@ func (re *rebalanceEnv) repairReplaceDecommissioningVoter(
 	}
 
 	// Find the ReplicaState for the chosen decommissioning voter.
-	var removePrevState ReplicaState
-	found := false
-	for _, repl := range rs.replicas {
-		if repl.StoreID == removeStoreID {
-			removePrevState = repl.ReplicaState
-			found = true
-			break
-		}
-	}
+	removePrevState, found := replicaStateForStore(rs, removeStoreID)
 	if !found {
 		log.KvDistribution.Warningf(ctx,
 			"skipping ReplaceDecommissioningVoter repair for r%d: voter on s%d not found in replicas",
@@ -1643,15 +1590,7 @@ func (re *rebalanceEnv) repairReplaceDecommissioningNonVoter(
 	}
 
 	// Find the ReplicaState for the chosen decommissioning non-voter.
-	var removePrevState ReplicaState
-	found := false
-	for _, repl := range rs.replicas {
-		if repl.StoreID == removeStoreID {
-			removePrevState = repl.ReplicaState
-			found = true
-			break
-		}
-	}
+	removePrevState, found := replicaStateForStore(rs, removeStoreID)
 	if !found {
 		log.KvDistribution.Warningf(ctx,
 			"skipping ReplaceDecommissioningNonVoter repair for r%d: non-voter on s%d not found in replicas",
@@ -1895,15 +1834,7 @@ func (re *rebalanceEnv) repairSwapVoterForConstraints(
 	}
 
 	// Find the ReplicaState for the voter being removed.
-	var removePrevState ReplicaState
-	found := false
-	for _, repl := range rs.replicas {
-		if repl.StoreID == removeStoreID {
-			removePrevState = repl.ReplicaState
-			found = true
-			break
-		}
-	}
+	removePrevState, found := replicaStateForStore(rs, removeStoreID)
 	if !found {
 		log.KvDistribution.Warningf(ctx,
 			"skipping SwapVoterForConstraints repair for r%d: "+
@@ -2049,18 +1980,8 @@ func (re *rebalanceEnv) roleSwapVoterForConstraints(
 	}
 
 	// Find replica states for both.
-	var demotePrevState, promotePrevState ReplicaState
-	demoteFound, promoteFound := false, false
-	for _, repl := range rs.replicas {
-		if repl.StoreID == demoteStoreID {
-			demotePrevState = repl.ReplicaState
-			demoteFound = true
-		}
-		if repl.StoreID == promoteStoreID {
-			promotePrevState = repl.ReplicaState
-			promoteFound = true
-		}
-	}
+	demotePrevState, demoteFound := replicaStateForStore(rs, demoteStoreID)
+	promotePrevState, promoteFound := replicaStateForStore(rs, promoteStoreID)
 	if !demoteFound || !promoteFound {
 		log.KvDistribution.Warningf(ctx,
 			"skipping SwapVoterForConstraints role swap for r%d: "+
@@ -2162,15 +2083,7 @@ func (re *rebalanceEnv) repairSwapNonVoterForConstraints(
 	}
 
 	// Find the ReplicaState for the non-voter being removed.
-	var removePrevState ReplicaState
-	found := false
-	for _, repl := range rs.replicas {
-		if repl.StoreID == removeStoreID {
-			removePrevState = repl.ReplicaState
-			found = true
-			break
-		}
-	}
+	removePrevState, found := replicaStateForStore(rs, removeStoreID)
 	if !found {
 		log.KvDistribution.Warningf(ctx,
 			"skipping SwapNonVoterForConstraints repair for r%d: "+
