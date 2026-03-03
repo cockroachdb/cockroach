@@ -530,26 +530,12 @@ func (s *initServer) initializeFirstStoreAfterJoin(
 func assertEnginesEmpty(engines []kvstorage.Engines) error {
 	// TODO(sumeer): plumb a context if necessary.
 	ctx := context.Background()
-
-	assertEmpty := func(eng kvstorage.Engines) error {
-		iter, err := eng.TODOEngine().NewEngineIterator(ctx, storage.IterOptions{
-			KeyTypes:   storage.IterKeyTypePointsAndRanges,
-			UpperBound: roachpb.KeyMax,
-		})
-		if err != nil {
-			return err
-		}
-		defer iter.Close()
-
-		valid, err := iter.SeekEngineKeyGE(storage.EngineKey{Key: roachpb.KeyMin})
-		if valid && err == nil {
-			return errors.New("engine is not empty")
-		}
-		return err
-	}
-
-	for _, engine := range engines {
-		if err := assertEmpty(engine); err != nil {
+	for _, eng := range engines {
+		if err := kvstorage.IterEmptyEngine(ctx, eng.TODOEngine(),
+			func(_ storage.MVCCKey) error {
+				return errors.New("engine is not empty")
+			},
+		); err != nil {
 			return err
 		}
 	}
