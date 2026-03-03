@@ -290,6 +290,49 @@ update abcde [as=foo]
       └── projections
            └── (c:11 + c:11) + 1 [as=d_comp:17]
 
+# Use ORDER BY with NULLS LAST and LIMIT.
+build
+UPDATE abcde SET b=1 WHERE a>0 ORDER BY a NULLS LAST LIMIT 10
+----
+update abcde
+ ├── columns: <none>
+ ├── fetch columns: a:9 b:10 c:11 d:12 e:13 rowid:14
+ ├── update-mapping:
+ │    ├── b_new:18 => b:2
+ │    └── d_comp:19 => d:4
+ └── project
+      ├── columns: d_comp:19 a:9!null b:10 c:11 d:12 e:13 rowid:14!null crdb_internal_mvcc_timestamp:15 tableoid:16 b_new:18!null
+      ├── project
+      │    ├── columns: b_new:18!null a:9!null b:10 c:11 d:12 e:13 rowid:14!null crdb_internal_mvcc_timestamp:15 tableoid:16
+      │    ├── limit
+      │    │    ├── columns: a:9!null b:10 c:11 d:12 e:13 rowid:14!null crdb_internal_mvcc_timestamp:15 tableoid:16 nulls_ordering_a:17!null
+      │    │    ├── internal-ordering: +17,+9
+      │    │    ├── sort
+      │    │    │    ├── columns: a:9!null b:10 c:11 d:12 e:13 rowid:14!null crdb_internal_mvcc_timestamp:15 tableoid:16 nulls_ordering_a:17!null
+      │    │    │    ├── ordering: +17,+9
+      │    │    │    ├── limit hint: 10.00
+      │    │    │    └── project
+      │    │    │         ├── columns: nulls_ordering_a:17!null a:9!null b:10 c:11 d:12 e:13 rowid:14!null crdb_internal_mvcc_timestamp:15 tableoid:16
+      │    │    │         ├── select
+      │    │    │         │    ├── columns: a:9!null b:10 c:11 d:12 e:13 rowid:14!null crdb_internal_mvcc_timestamp:15 tableoid:16
+      │    │    │         │    ├── scan abcde
+      │    │    │         │    │    ├── columns: a:9!null b:10 c:11 d:12 e:13 rowid:14!null crdb_internal_mvcc_timestamp:15 tableoid:16
+      │    │    │         │    │    ├── computed column expressions
+      │    │    │         │    │    │    ├── d:12
+      │    │    │         │    │    │    │    └── (b:10 + c:11) + 1
+      │    │    │         │    │    │    └── e:13
+      │    │    │         │    │    │         └── a:9
+      │    │    │         │    │    └── flags: avoid-full-scan
+      │    │    │         │    └── filters
+      │    │    │         │         └── a:9 > 0
+      │    │    │         └── projections
+      │    │    │              └── a:9 IS NULL [as=nulls_ordering_a:17]
+      │    │    └── 10
+      │    └── projections
+      │         └── 1 [as=b_new:18]
+      └── projections
+           └── (b_new:18 + c:11) + 1 [as=d_comp:19]
+
 # Use WHERE, ORDER BY, LIMIT.
 build
 UPDATE abcde SET b=1 WHERE a>0 ORDER BY a LIMIT 10
