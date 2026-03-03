@@ -60,32 +60,18 @@ _bazel/bin/pkg/cmd/release/release_/release update-releases-file
 The tool may **incorrectly remove** older version binaries still needed by active testserver configs.
 
 ```bash
-# Check active testserver configs
+# Verify REPOSITORIES.bzl has binaries for ALL active testserver versions
 grep "cockroach-go-testserver-" pkg/sql/logictest/logictestbase/logictestbase.go | grep "Name:"
-
-# Verify REPOSITORIES.bzl has binaries for ALL active versions
-grep -E "^\s+\(\"25\.[0-9]" pkg/sql/logictest/REPOSITORIES.bzl
+grep -E "^\s+\(\"[0-9]" pkg/sql/logictest/REPOSITORIES.bzl
 ```
 
-**If a version is missing:**
-```bash
-# Get old config
-git show HEAD^:pkg/sql/logictest/REPOSITORIES.bzl | grep -A 4 "25.X.Y"
-
-# Manually restore to REPOSITORIES.bzl
-```
-
-**Pattern:** Keep N-2, N-1, and N release binaries until their testserver configs are removed.
+If a version is missing, see [failures/m3_failures.md](failures/m3_failures.md#repositoriesbzl-issues).
 
 ### Commit
 
 ```bash
 git add pkg/testutils/release/cockroach_releases.yaml pkg/sql/logictest/REPOSITORIES.bzl
-git commit -m "master: Update pkg/testutils/release/cockroach_releases.yaml
-
-Updates releases file with v25.4.0-rc.1 RC and adds RC binaries to REPOSITORIES.bzl.
-
-Part of M.3 fixtures preparation.
+git commit -m "master: update releases file and REPOSITORIES.bzl for vX.Y.0-rc.N
 
 Release note: None
 Epic: None"
@@ -216,39 +202,15 @@ ls -lh pkg/cmd/roachtest/fixtures/*/checkpoint-v25.4.tgz
 git add pkg/cmd/roachtest/fixtures/*/checkpoint-v25.4.tgz
 git status  # Verify
 
-git commit -m "roachtest: add 25.4 fixtures
-
-Adds roachtest fixtures for v25.4.0-rc.1 to enable upgrade testing.
-
-Fixtures generated on gceworker by running:
-  ./bin/roachtest run generate-fixtures --local --debug \\
-    --cockroach ./cockroach --suite fixtures
-
-Part of M.3 \"Enable upgrade tests\" checklist.
+git commit -m "roachtest: add X.Y fixtures
 
 Release note: None
-Epic: None
-
-🤖 Generated with [Claude Code](https://claude.com/claude-code)
-
-Co-Authored-By: Claude <noreply@anthropic.com>"
-
-# Push to fork
-git push -u celiala enable-upgrade-tests-25.4-fixtures
-
-# Create PR
-gh pr create --repo cockroachdb/cockroach \
-  --title "master: Update releases file and add 25.4 fixtures" \
-  --body "Part of M.3: Enable upgrade tests for 25.4.
-
-This PR:
-- Updates releases file with v25.4.0-rc.1
-- Updates REPOSITORIES.bzl with RC binaries
-- Adds roachtest fixtures for v25.4.0-rc.1
-
-Fixtures generated on gceworker using amd64 architecture.
-
 Epic: None"
+
+# Push to fork and create PR
+git push -u celiala enable-upgrade-tests-X.Y-fixtures
+gh pr create --repo cockroachdb/cockroach \
+  --title "master: update releases file and add X.Y fixtures"
 ```
 
 **Wait for this PR to merge before proceeding to PR 2.**
@@ -339,25 +301,7 @@ cockroach_predecessor_version(
 
 **File:** `pkg/cmd/roachtest/roachtestutil/mixedversion/mixedversion.go`
 
-The function uses a year/ordinal switch, not a simple equality check:
-
-```go
-func (t *Test) supportsSkipUpgradeTo(pred, v *clusterupgrade.Version) bool {
-    // ...
-    series := v.Version.Major()
-    switch {
-    case series.Year < 24:
-        return false
-    case series.Year == 24:
-        return series.Ordinal == 3
-    default:
-        // 25.2 and 25.4 are innovation releases that support skip upgrades.
-        return series.Ordinal == 2 || series.Ordinal == 4
-    }
-}
-```
-
-**Check:** For 25.4 (`Ordinal == 4`), this already returns `true`. No changes needed. For future versions, verify the `default` case covers the new version's ordinal.
+Read `supportsSkipUpgradeTo` and confirm the `default` case covers the new version's ordinal (2 or 4 for innovation releases). No change is typically needed for even-ordinal releases.
 
 ---
 
@@ -384,45 +328,15 @@ for how to create the files manually.
 git add -A
 git status  # Verify
 
-git commit -m "clusterversion: bump PreviousRelease to V25_4
-
-Updates PreviousRelease constant from V25_3 to V25_4 and adds the
-cockroach-go-testserver-25.4 logictest configuration to enable
-upgrade tests for version 25.4.
-
-Changes:
-- Updated PreviousRelease constant
-- Added cockroach-go-testserver-25.4 test configuration
-- Generated test files for new config
-- Updated BUILD.bazel files via ./dev gen bazel
-
-The supportsSkipUpgradeTo logic already handles 25.4 correctly.
-
-Part of M.3 \"Enable upgrade tests\" checklist.
+git commit -m "clusterversion: bump PreviousRelease to VX_Y
 
 Release note: None
-Epic: None
-
-🤖 Generated with [Claude Code](https://claude.com/claude-code)
-
-Co-Authored-By: Claude <noreply@anthropic.com>"
-
-# Push to fork
-git push -u celiala enable-upgrade-tests-25.4-code
-
-# Create PR
-gh pr create --repo cockroachdb/cockroach \
-  --title "clusterversion: bump PreviousRelease to V25_4" \
-  --body "Part of M.3: Enable upgrade tests for 25.4.
-
-This PR:
-- Updates PreviousRelease constant to V25_4
-- Adds cockroach-go-testserver-25.4 logictest configuration
-- Generates test files for the new configuration
-
-Depends on fixtures PR being merged first.
-
 Epic: None"
+
+# Push to fork and create PR (depends on fixtures PR being merged first)
+git push -u celiala enable-upgrade-tests-X.Y-code
+gh pr create --repo cockroachdb/cockroach \
+  --title "clusterversion: bump PreviousRelease to VX_Y"
 ```
 
 ---
@@ -432,69 +346,16 @@ Epic: None"
 ### PR 1 (Fixtures): ~6 files
 1. `pkg/testutils/release/cockroach_releases.yaml`
 2. `pkg/sql/logictest/REPOSITORIES.bzl`
-3-6. `pkg/cmd/roachtest/fixtures/{1,2,3,4}/checkpoint-v25.4.tgz`
+3-6. `pkg/cmd/roachtest/fixtures/{1,2,3,4}/checkpoint-vX.Y.tgz`
 
 ### PR 2 (Code): ~9 files
 1. `pkg/clusterversion/cockroach_versions.go`
 2. `pkg/sql/logictest/logictestbase/logictestbase.go`
 3. `pkg/sql/logictest/BUILD.bazel`
 4. `pkg/cmd/roachtest/roachtestutil/mixedversion/mixedversion.go` (verify only)
-5. `pkg/sql/logictest/tests/cockroach-go-testserver-25.4/BUILD.bazel` (generated)
-6. `pkg/sql/logictest/tests/cockroach-go-testserver-25.4/generated_test.go` (generated)
+5. `pkg/sql/logictest/tests/cockroach-go-testserver-X.Y/BUILD.bazel` (generated)
+6. `pkg/sql/logictest/tests/cockroach-go-testserver-X.Y/generated_test.go` (generated)
 7-9. Various BUILD.bazel updates from `./dev gen bazel`
-
----
-
-## Validation
-
-### Fixtures PR
-
-```bash
-# Verify fixture sizes
-ls -lh pkg/cmd/roachtest/fixtures/*/checkpoint-v25.4.tgz
-
-# Verify releases file updated
-grep -A 2 '"25.4":' pkg/testutils/release/cockroach_releases.yaml
-
-# Verify REPOSITORIES.bzl has RC binaries
-grep "25.4.0-rc.1" pkg/sql/logictest/REPOSITORIES.bzl
-```
-
-### Code PR
-
-Before creating or re-pushing PR 2, run the pre-push validation script:
-```bash
-./pkg/clusterversion/runbooks/scripts/validate-m3.sh
-```
-This rewrites the DeclarativeRules corpus and runs the unit tests most likely
-to fail after bumping PreviousRelease.
-
-Also compare changed files against the reference PR:
-```bash
-./pkg/clusterversion/runbooks/scripts/compare-with-reference-pr.sh 152080
-```
-
-```bash
-# Verify PreviousRelease updated
-grep "const PreviousRelease" pkg/clusterversion/cockroach_versions.go
-
-# Verify testserver config added
-grep "cockroach-go-testserver-25.4" pkg/sql/logictest/logictestbase/logictestbase.go
-
-# Build succeeds
-./dev build short
-```
-
----
-
-## Critical Warnings
-
-| Warning | Impact | Prevention |
-|---------|--------|------------|
-| ⚠️ **Fixtures on Mac** | Wrong architecture, tests fail | MUST use gceworker (amd64) |
-| ⚠️ **REPOSITORIES.bzl verification** | Nightly builds break | Manually verify ALL active testserver versions present |
-| ⚠️ **gceworker firewall** | Can't connect to gceworker | MUST run `update-firewall` BEFORE `create` |
-| ⚠️ **Session disconnect** | Lose environment vars | Re-export FIXTURE_VERSION and COCKROACH_DEV_LICENSE |
 
 ---
 
@@ -502,13 +363,3 @@ grep "cockroach-go-testserver-25.4" pkg/sql/logictest/logictestbase/logictestbas
 
 See [failures/m3_failures.md](failures/m3_failures.md) for gceworker issues,
 fixture generation failures, CI failures after PR 2, and REPOSITORIES.bzl problems.
-
-## Alternative: Single PR Approach
-
-If you prefer one combined PR (not recommended):
-
-1. Do all steps from PR1 and PR2 on a single branch
-2. Commit everything together (~15 files)
-3. Example: #141765
-
-**Recommendation:** Stick with 2-PR approach for easier review.
