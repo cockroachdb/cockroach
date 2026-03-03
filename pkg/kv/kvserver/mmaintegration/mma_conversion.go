@@ -20,6 +20,7 @@ import (
 func convertLeaseTransferToMMA(
 	desc *roachpb.RangeDescriptor,
 	usage allocator.RangeUsageInfo,
+	amp mmaprototype.AmpVector,
 	transferFrom, transferTo roachpb.ReplicationTarget,
 ) mmaprototype.PendingRangeChange {
 	// TODO(wenyihu6): we are passing existing replicas to
@@ -43,7 +44,7 @@ func convertLeaseTransferToMMA(
 	}
 	replicaChanges := mmaprototype.MakeLeaseTransferChanges(desc.RangeID,
 		existingReplicas,
-		mmaRangeLoad(usage),
+		mmaRangeLoad(usage, amp),
 		transferTo,
 		transferFrom,
 	)
@@ -62,10 +63,11 @@ func convertLeaseTransferToMMA(
 func convertReplicaChangeToMMA(
 	desc *roachpb.RangeDescriptor,
 	usage allocator.RangeUsageInfo,
+	amp mmaprototype.AmpVector,
 	changes kvpb.ReplicationChanges,
 	leaseholderStoreID roachpb.StoreID,
 ) (mmaprototype.PendingRangeChange, error) {
-	rLoad := mmaRangeLoad(usage)
+	rLoad := mmaRangeLoad(usage, amp)
 	replicaChanges := make([]mmaprototype.ReplicaChange, 0, len(changes))
 	replicaSet := desc.Replicas()
 
