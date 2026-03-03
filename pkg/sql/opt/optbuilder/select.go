@@ -357,8 +357,7 @@ func (b *Builder) buildView(
 	// For user-created views, we check the SELECT privilege of the view owner
 	// (definer) on the underlying tables to ensure the view owner still has
 	// access. This also means that the definer's RLS policies are enforced
-	// rather than the invoker's. We also DisableUnsafeInternalCheck to allow
-	// reading system tables through views.
+	// rather than the invoker's.
 	//
 	// For system views (e.g. pg_catalog.pg_description,
 	// crdb_internal.transaction_statistics), we skip SELECT privilege checks
@@ -376,7 +375,6 @@ func (b *Builder) buildView(
 		prevPrivilegeUser := b.checkPrivilegeUser
 		b.checkPrivilegeUser = view.Owner()
 		defer func() { b.checkPrivilegeUser = prevPrivilegeUser }()
-		defer b.DisableUnsafeInternalCheck()()
 		if b.skipSelectPrivilegeChecks {
 			b.skipSelectPrivilegeChecks = false
 			defer func() { b.skipSelectPrivilegeChecks = true }()
