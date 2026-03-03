@@ -15488,6 +15488,42 @@ layers:
       unit: COUNT
       aggregation: AVG
       derivative: NON_NEGATIVE_DERIVATIVE
+    - name: mma.change.repair.lease.failure
+      exported_name: mma_change_repair_lease_failure
+      labeled_name: 'mma.change{origin: repair, type: lease, result: failure}'
+      description: Number of failed MMA-initiated repair operations that transfer the lease
+      y_axis_label: Lease Change
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+    - name: mma.change.repair.lease.success
+      exported_name: mma_change_repair_lease_success
+      labeled_name: 'mma.change{origin: repair, type: lease, result: success}'
+      description: Number of successful MMA-initiated repair operations that transfer the lease
+      y_axis_label: Lease Change
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+    - name: mma.change.repair.replica.failure
+      exported_name: mma_change_repair_replica_failure
+      labeled_name: 'mma.change{origin: repair, type: replica, result: failure}'
+      description: Number of failed MMA-initiated repair operations that change replicas
+      y_axis_label: Range Change
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+    - name: mma.change.repair.replica.success
+      exported_name: mma_change_repair_replica_success
+      labeled_name: 'mma.change{origin: repair, type: replica, result: success}'
+      description: Number of successful MMA-initiated repair operations that change replicas
+      y_axis_label: Range Change
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
     - name: mma.dropped
       exported_name: mma_dropped
       description: Number of operations dropped due to MMA state inconsistency
