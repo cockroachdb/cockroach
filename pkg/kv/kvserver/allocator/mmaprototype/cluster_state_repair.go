@@ -391,6 +391,17 @@ func isLeaseholderOnStore(rs *rangeState, storeID roachpb.StoreID) bool {
 	return false
 }
 
+// enactRepair records a repair change as pending and appends it to the changes
+// list for external delivery. The caller is responsible for logging the success
+// message.
+func (re *rebalanceEnv) enactRepair(
+	ctx context.Context, localStoreID roachpb.StoreID, rangeChange PendingRangeChange,
+) {
+	re.addPendingRangeChange(ctx, rangeChange)
+	re.changes = append(re.changes,
+		MakeExternalRangeChange(originMMARepair, localStoreID, rangeChange))
+}
+
 // repairAddVoter attempts to add a voter to an under-replicated range.
 // It follows the decision tree from constraint.go: first try to promote a
 // non-voter, then find a new store to add a voter.
@@ -490,9 +501,7 @@ func (re *rebalanceEnv) repairAddVoter(
 			"skipping AddVoter repair for r%d: pre-check failed: %v", rangeID, err)
 		return
 	}
-	re.addPendingRangeChange(ctx, rangeChange)
-	re.changes = append(re.changes,
-		MakeExternalRangeChange(originMMARepair, localStoreID, rangeChange))
+	re.enactRepair(ctx, localStoreID, rangeChange)
 	log.KvDistribution.Infof(ctx,
 		"result(success): AddVoter repair for r%v, adding voter on s%v",
 		rangeID, bestStoreID)
@@ -590,9 +599,7 @@ func (re *rebalanceEnv) promoteNonVoterToVoter(
 			"skipping AddVoter repair for r%d: pre-check failed: %v", rangeID, err)
 		return
 	}
-	re.addPendingRangeChange(ctx, rangeChange)
-	re.changes = append(re.changes,
-		MakeExternalRangeChange(originMMARepair, localStoreID, rangeChange))
+	re.enactRepair(ctx, localStoreID, rangeChange)
 	log.KvDistribution.Infof(ctx,
 		"result(success): AddVoter repair for r%d, promoting non-voter on s%d to voter",
 		rangeID, bestStoreID)
@@ -713,9 +720,7 @@ func (re *rebalanceEnv) repairRemoveVoter(
 			"skipping RemoveVoter repair for r%d: pre-check failed: %v", rangeID, err)
 		return
 	}
-	re.addPendingRangeChange(ctx, rangeChange)
-	re.changes = append(re.changes,
-		MakeExternalRangeChange(originMMARepair, localStoreID, rangeChange))
+	re.enactRepair(ctx, localStoreID, rangeChange)
 	log.KvDistribution.Infof(ctx,
 		"result(success): RemoveVoter repair for r%d, removing voter on s%d",
 		rangeID, removeStoreID)
@@ -823,9 +828,7 @@ func (re *rebalanceEnv) repairAddNonVoter(
 			rangeID, err)
 		return
 	}
-	re.addPendingRangeChange(ctx, rangeChange)
-	re.changes = append(re.changes,
-		MakeExternalRangeChange(originMMARepair, localStoreID, rangeChange))
+	re.enactRepair(ctx, localStoreID, rangeChange)
 	log.KvDistribution.Infof(ctx,
 		"result(success): AddNonVoter repair for r%d, adding non-voter on s%d",
 		rangeID, bestStoreID)
@@ -899,9 +902,7 @@ func (re *rebalanceEnv) demoteVoterToNonVoter(
 			rangeID, err)
 		return
 	}
-	re.addPendingRangeChange(ctx, rangeChange)
-	re.changes = append(re.changes,
-		MakeExternalRangeChange(originMMARepair, localStoreID, rangeChange))
+	re.enactRepair(ctx, localStoreID, rangeChange)
 	log.KvDistribution.Infof(ctx,
 		"result(success): AddNonVoter repair for r%d, demoting voter on s%d to non-voter",
 		rangeID, bestStoreID)
@@ -995,9 +996,7 @@ func (re *rebalanceEnv) repairRemoveNonVoter(
 			rangeID, err)
 		return
 	}
-	re.addPendingRangeChange(ctx, rangeChange)
-	re.changes = append(re.changes,
-		MakeExternalRangeChange(originMMARepair, localStoreID, rangeChange))
+	re.enactRepair(ctx, localStoreID, rangeChange)
 	log.KvDistribution.Infof(ctx,
 		"result(success): RemoveNonVoter repair for r%d, removing non-voter on s%d",
 		rangeID, removeStoreID)
@@ -1084,9 +1083,7 @@ func (re *rebalanceEnv) repairRemoveLearner(
 			rangeID, err)
 		return
 	}
-	re.addPendingRangeChange(ctx, rangeChange)
-	re.changes = append(re.changes,
-		MakeExternalRangeChange(originMMARepair, localStoreID, rangeChange))
+	re.enactRepair(ctx, localStoreID, rangeChange)
 	log.KvDistribution.Infof(ctx,
 		"result(success): RemoveLearner repair for r%d, removing learner on s%d",
 		rangeID, removeStoreID)
@@ -1237,9 +1234,7 @@ func (re *rebalanceEnv) repairReplaceDeadVoter(
 			rangeID, err)
 		return
 	}
-	re.addPendingRangeChange(ctx, rangeChange)
-	re.changes = append(re.changes,
-		MakeExternalRangeChange(originMMARepair, localStoreID, rangeChange))
+	re.enactRepair(ctx, localStoreID, rangeChange)
 	log.KvDistribution.Infof(ctx,
 		"result(success): ReplaceDeadVoter repair for r%d, removing voter on s%d, adding voter on s%d",
 		rangeID, removeStoreID, addStoreID)
@@ -1386,9 +1381,7 @@ func (re *rebalanceEnv) repairReplaceDeadNonVoter(
 			rangeID, err)
 		return
 	}
-	re.addPendingRangeChange(ctx, rangeChange)
-	re.changes = append(re.changes,
-		MakeExternalRangeChange(originMMARepair, localStoreID, rangeChange))
+	re.enactRepair(ctx, localStoreID, rangeChange)
 	log.KvDistribution.Infof(ctx,
 		"result(success): ReplaceDeadNonVoter repair for r%d, removing non-voter on s%d, adding non-voter on s%d",
 		rangeID, removeStoreID, addStoreID)
@@ -1539,9 +1532,7 @@ func (re *rebalanceEnv) repairReplaceDecommissioningVoter(
 			rangeID, err)
 		return
 	}
-	re.addPendingRangeChange(ctx, rangeChange)
-	re.changes = append(re.changes,
-		MakeExternalRangeChange(originMMARepair, localStoreID, rangeChange))
+	re.enactRepair(ctx, localStoreID, rangeChange)
 	log.KvDistribution.Infof(ctx,
 		"result(success): ReplaceDecommissioningVoter repair for r%d, removing voter on s%d, adding voter on s%d",
 		rangeID, removeStoreID, addStoreID)
@@ -1688,9 +1679,7 @@ func (re *rebalanceEnv) repairReplaceDecommissioningNonVoter(
 			rangeID, err)
 		return
 	}
-	re.addPendingRangeChange(ctx, rangeChange)
-	re.changes = append(re.changes,
-		MakeExternalRangeChange(originMMARepair, localStoreID, rangeChange))
+	re.enactRepair(ctx, localStoreID, rangeChange)
 	log.KvDistribution.Infof(ctx,
 		"result(success): ReplaceDecommissioningNonVoter repair for r%d, removing non-voter on s%d, adding non-voter on s%d",
 		rangeID, removeStoreID, addStoreID)
@@ -1751,9 +1740,7 @@ func (re *rebalanceEnv) repairFinalizeAtomicReplicationChange(
 			rangeID, err)
 		return
 	}
-	re.addPendingRangeChange(ctx, rangeChange)
-	re.changes = append(re.changes,
-		MakeExternalRangeChange(originMMARepair, localStoreID, rangeChange))
+	re.enactRepair(ctx, localStoreID, rangeChange)
 	log.KvDistribution.Infof(ctx,
 		"result(success): FinalizeAtomicReplicationChange repair for r%d",
 		rangeID)
@@ -1924,9 +1911,7 @@ func (re *rebalanceEnv) repairSwapVoterForConstraints(
 				"pre-check failed: %v", rangeID, err)
 		return
 	}
-	re.addPendingRangeChange(ctx, rangeChange)
-	re.changes = append(re.changes,
-		MakeExternalRangeChange(originMMARepair, localStoreID, rangeChange))
+	re.enactRepair(ctx, localStoreID, rangeChange)
 	log.KvDistribution.Infof(ctx,
 		"result(success): SwapVoterForConstraints repair for r%d, "+
 			"removing voter on s%d, adding voter on s%d",
@@ -2034,9 +2019,7 @@ func (re *rebalanceEnv) roleSwapVoterForConstraints(
 				"pre-check failed: %v", rangeID, err)
 		return
 	}
-	re.addPendingRangeChange(ctx, rangeChange)
-	re.changes = append(re.changes,
-		MakeExternalRangeChange(originMMARepair, localStoreID, rangeChange))
+	re.enactRepair(ctx, localStoreID, rangeChange)
 	log.KvDistribution.Infof(ctx,
 		"result(success): SwapVoterForConstraints role swap for r%d, "+
 			"demoting voter on s%d, promoting non-voter on s%d",
@@ -2173,9 +2156,7 @@ func (re *rebalanceEnv) repairSwapNonVoterForConstraints(
 				"pre-check failed: %v", rangeID, err)
 		return
 	}
-	re.addPendingRangeChange(ctx, rangeChange)
-	re.changes = append(re.changes,
-		MakeExternalRangeChange(originMMARepair, localStoreID, rangeChange))
+	re.enactRepair(ctx, localStoreID, rangeChange)
 	log.KvDistribution.Infof(ctx,
 		"result(success): SwapNonVoterForConstraints repair for r%d, "+
 			"removing non-voter on s%d, adding non-voter on s%d",
