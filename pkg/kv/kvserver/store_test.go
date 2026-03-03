@@ -124,6 +124,9 @@ type testStoreOpts struct {
 	// for a cluster at boostrap.
 	createSystemRanges bool
 	bootstrapVersion   roachpb.Version // defaults to TestingClusterVersion
+	// eng, if set, overrides the default engine creation. Useful for injecting
+	// separated engines in tests.
+	eng *kvstorage.Engines
 }
 
 func (opts *testStoreOpts) splits() (_kvs []roachpb.KeyValue, _splits []roachpb.RKey) {
@@ -224,7 +227,12 @@ func createTestStoreWithoutStart(
 	// to do the same (with some effort). That's unlikely to happen soon, so
 	// let's continue to use the system config span.
 	cfg.SpanConfigsDisabled = true
-	eng := kvstorage.MakeEngines(storage.NewDefaultInMemForTesting())
+	var eng kvstorage.Engines
+	if opts.eng != nil {
+		eng = *opts.eng
+	} else {
+		eng = kvstorage.MakeEngines(storage.NewDefaultInMemForTesting())
+	}
 	stopper.AddCloser(&eng)
 	require.Nil(t, cfg.Transport)
 

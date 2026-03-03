@@ -174,6 +174,28 @@ func MakeSeparatedEnginesForTesting(state, log storage.Engine) Engines {
 	}
 }
 
+// MakeSeparatedEnginesRelaxedForTesting creates an Engines handle that reports
+// as separated (EnginesSeparated() returns true) but keeps TODOEngine()
+// functional by pointing it at the same physical engine. This allows testing
+// code paths that are gated on EnginesSeparated() (e.g. WAG node writing)
+// through a full store boot, which isn't yet possible with
+// MakeSeparatedEnginesForTesting because the boot process still uses
+// TODOEngine() in places.
+//
+// TODO(sep-raft-log): remove once the store can boot up with fully separated
+// engines.
+func MakeSeparatedEnginesRelaxedForTesting(eng storage.Engine) Engines {
+	if !buildutil.CrdbTestBuild {
+		panic("separated engines are not supported")
+	}
+	return Engines{
+		stateEngine: eng,
+		todoEngine:  eng,
+		logEngine:   eng,
+		separated:   true,
+	}
+}
+
 // Engine returns the single engine. Used when the caller implements backwards
 // compatible code and neither StateEngine nor LogEngine can be used. This is
 // different from TODOEngine in that the caller explicitly acknowledges the fact
