@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/allocatorimpl"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/mmaprototype"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/plan"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/storepool"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/config"
@@ -189,11 +190,14 @@ func pushReplicateChange(
 	case plan.AllocationTransferLeaseOp:
 		if as != nil {
 			// as may be nil in some tests.
+			// TODO(wenyihu6): compute real amplification factors from the
+			// simulated store descriptor instead of using the identity (1.0).
 			changeID = as.NonMMAPreTransferLease(
 				ctx,
 				localStoreID,
 				repl.Desc(),
 				repl.RangeUsageInfo(),
+				mmaprototype.IdentityAmpVector(),
 				op.Source,
 				op.Target,
 			)
@@ -207,11 +211,14 @@ func pushReplicateChange(
 	case plan.AllocationChangeReplicasOp:
 		if as != nil {
 			// as may be nil in some tests.
+			// TODO(wenyihu6): compute real amplification factors from the
+			// simulated store descriptor instead of using the identity (1.0).
 			changeID = as.NonMMAPreChangeReplicas(
 				ctx,
 				localStoreID,
 				repl.Desc(),
 				repl.RangeUsageInfo(),
+				mmaprototype.IdentityAmpVector(),
 				op.Chgs,
 				repl.StoreID(), /* leaseholder */
 			)
