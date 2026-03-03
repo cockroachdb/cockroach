@@ -165,8 +165,9 @@ func (msr *MMAStoreRebalancer) Tick(ctx context.Context, tick time.Time, s state
 			msr.allocator.UpdateStoresStatuses(ctx, msr.as.GetMMAStoreStatuses())
 			storeLeaseholderMsg := MakeStoreLeaseholderMsgFromState(s, msr.localStoreID)
 			pendingChanges := msr.allocator.ComputeChanges(ctx, &storeLeaseholderMsg, mmaprototype.ChangeOptions{
-				LocalStoreID: roachpb.StoreID(msr.localStoreID),
-				PeriodicCall: true, /* to exercise observability code paths */
+				LocalStoreID:  roachpb.StoreID(msr.localStoreID),
+				PeriodicCall:  true, /* to exercise observability code paths */
+				IncludeRepair: kvserverbase.LoadBasedRebalancingModeIsMMARepairAndRebalance(&msr.settings.ST.SV),
 			})
 			// After ComputeChanges succeeds, mark the span config as up-to-date
 			// on replicas.

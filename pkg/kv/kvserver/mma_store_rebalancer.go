@@ -140,8 +140,9 @@ func (m *mmaStoreRebalancer) rebalance(ctx context.Context, periodicCall bool) b
 	}
 
 	changes := m.mma.ComputeChanges(ctx, &storeLeaseholderMsg, mmaprototype.ChangeOptions{
-		LocalStoreID: m.store.StoreID(),
-		PeriodicCall: periodicCall,
+		LocalStoreID:  m.store.StoreID(),
+		PeriodicCall:  periodicCall,
+		IncludeRepair: kvserverbase.LoadBasedRebalancingModeIsMMARepairAndRebalance(&m.st.SV),
 	})
 
 	// TODO(wenyihu6): add allocator sync and post apply here
