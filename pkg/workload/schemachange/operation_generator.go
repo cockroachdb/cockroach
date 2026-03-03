@@ -1303,11 +1303,7 @@ func (og *operationGenerator) createTable(ctx context.Context, tx pgx.Tx) (*opSt
 	hasLtreeType := hasColumnTypeWithPrefix("LTREE")
 
 	// Randomly create as schema locked table.
-	versionBefore253, err := isClusterVersionLessThan(ctx, tx, clusterversion.V25_3.Version())
-	if err != nil {
-		return nil, err
-	}
-	if og.params.rng.Intn(2) == 0 && !versionBefore253 {
+	if og.params.rng.Intn(2) == 0 {
 		stmt.StorageParams = append(stmt.StorageParams, tree.StorageParam{
 			Key:   "schema_locked",
 			Value: tree.DBoolTrue,
@@ -3009,14 +3005,7 @@ func (og *operationGenerator) commentOn(ctx context.Context, tx pgx.Tx) (*opStmt
 	var onType string
 
 	// COMMENT ON TYPE is only implemented in the declarative schema changer in v24.2.
-	commentOnTypeNotSupported, err := isClusterVersionLessThan(
-		ctx,
-		tx,
-		clusterversion.V24_2.Version())
-	if err != nil {
-		return nil, err
-	}
-	if og.useDeclarativeSchemaChanger && !commentOnTypeNotSupported {
+	if og.useDeclarativeSchemaChanger {
 		onType = `UNION ALL
 	SELECT 'TYPE ' || quote_ident(schema) || '.' || quote_ident(name) FROM [SHOW TYPES]`
 	}
@@ -4253,23 +4242,6 @@ func (og *operationGenerator) randType(
 		return typName, typ, nil
 	}
 
-	pgVectorNotSupported, err := isClusterVersionLessThan(
-		ctx,
-		tx,
-		clusterversion.V24_2.Version())
-	if err != nil {
-		return nil, nil, err
-	}
-
-	// Block CITEXT usage until v25.3 is finalized.
-	citextNotSupported, err := isClusterVersionLessThan(
-		ctx,
-		tx,
-		clusterversion.V25_3.Version())
-	if err != nil {
-		return nil, nil, err
-	}
-
 	// Block LTREE usage until v25.4 is finalized.
 	ltreeNotSupported, err := isClusterVersionLessThan(
 		ctx,
@@ -4280,9 +4252,7 @@ func (og *operationGenerator) randType(
 	}
 
 	typ := randgen.RandSortingType(og.params.rng)
-	for (pgVectorNotSupported && typ.Family() == types.PGVectorFamily) ||
-		(citextNotSupported && typ.Oid() == oidext.T_citext || typ.Oid() == oidext.T__citext) ||
-		(ltreeNotSupported && (typ.Oid() == oidext.T_ltree || typ.Oid() == oidext.T__ltree)) {
+	for ltreeNotSupported && (typ.Oid() == oidext.T_ltree || typ.Oid() == oidext.T__ltree) {
 		typ = randgen.RandSortingType(og.params.rng)
 	}
 
@@ -4465,11 +4435,6 @@ FROM
 		possibleParamReferences = append(possibleParamReferences, fmt.Sprintf(`enum_%d %s`, i, enum["name"]))
 	}
 
-	citextNotSupported, err := isClusterVersionLessThan(ctx, tx, clusterversion.V25_3.Version())
-	if err != nil {
-		return nil, err
-	}
-
 	ltreeNotSupported, err := isClusterVersionLessThan(ctx, tx, clusterversion.V25_4.Version())
 	if err != nil {
 		return nil, err
@@ -4488,10 +4453,6 @@ FROM
 			continue
 		}
 
-		if citextNotSupported &&
-			(typeVal.Oid() == oidext.T_citext || typeVal.Oid() == oidext.T__citext) {
-			continue
-		}
 		if ltreeNotSupported &&
 			(typeVal.Oid() == oidext.T_ltree || typeVal.Oid() == oidext.T__ltree) {
 			continue

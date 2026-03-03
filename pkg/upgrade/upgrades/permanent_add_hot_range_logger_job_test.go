@@ -11,7 +11,6 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
@@ -24,7 +23,6 @@ func TestCreateHotRangesLoggerJob(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	clusterversion.SkipWhenMinSupportedVersionIsAtLeast(t, clusterversion.V25_3)
 	ctx := context.Background()
 	ts, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer ts.Stopper().Stop(ctx)

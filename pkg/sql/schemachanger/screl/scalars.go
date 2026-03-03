@@ -131,11 +131,14 @@ func VersionSupportsElementUse(el scpb.Element, version clusterversion.ClusterVe
 		// These elements need v24.3 so they can be used without checking any version gates.
 		return true
 	case *scpb.NamedRangeZoneConfig, *scpb.Policy, *scpb.PolicyName:
-		return version.IsActive(clusterversion.V25_1)
+		// These elements need v25.1 so they can be used without checking any version gates.
+		return true
 	case *scpb.PolicyRole, *scpb.PolicyUsingExpr, *scpb.PolicyWithCheckExpr, *scpb.PolicyDeps, *scpb.RowLevelSecurityEnabled, *scpb.RowLevelSecurityForced:
-		return version.IsActive(clusterversion.V25_2)
+		// These elements need v25.2 so they can be used without checking any version gates.
+		return true
 	case *scpb.TableLocalityRegionalByRowUsingConstraint:
-		return version.IsActive(clusterversion.V25_3)
+		// These elements need v25.3 so they can be used without checking any version gates.
+		return true
 	case *scpb.ColumnGeneratedAsIdentity, *scpb.ColumnHidden, *scpb.SequenceValue, *scpb.TableStorageParam:
 		return version.IsActive(clusterversion.V26_1)
 	case *scpb.FunctionParams:

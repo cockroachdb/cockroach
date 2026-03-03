@@ -8,7 +8,6 @@ package vecsettings
 import (
 	"context"
 
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -99,13 +98,6 @@ func MakeVecConfig(
 	default:
 		return vecpb.Config{}, pgerror.Newf(
 			pgcode.UndefinedObject, "operator class %q does not exist", opClass)
-	}
-
-	if config.DistanceMetric != vecpb.L2SquaredDistance {
-		if !evalCtx.Settings.Version.ActiveVersion(ctx).AtLeast(clusterversion.V25_3.Version()) {
-			return vecpb.Config{}, pgerror.Newf(pgcode.FeatureNotSupported,
-				"cannot use %s until finalizing on 25.3", opClass)
-		}
 	}
 
 	return config, nil

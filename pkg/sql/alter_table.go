@@ -2567,14 +2567,6 @@ func extractRBRTableUsingConstraint(
 	if paramVal == nil {
 		return "", nil
 	}
-	if !evalCtx.Settings.Version.IsActive(ctx, clusterversion.V25_3) {
-		return "", pgerror.Newf(
-			pgcode.FeatureNotSupported,
-			`storage parameter "%s" is not supported in this version; `+
-				`finalize the upgrade to v25.3 or later to use it`,
-			catpb.RBRUsingConstraintTableSettingName,
-		)
-	}
 	if !inferRegionUsingConstraintEnabled.Get(&evalCtx.Settings.SV) {
 		return "", pgerror.Newf(
 			pgcode.FeatureNotSupported,

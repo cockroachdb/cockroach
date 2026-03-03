@@ -9,7 +9,6 @@ go_library(
     importpath = "github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts/policyrefresher",
     visibility = ["//visibility:public"],
     deps = [
-        "//pkg/clusterversion",
         "//pkg/kv/kvserver/closedts",
         "//pkg/roachpb",
         "//pkg/settings/cluster",

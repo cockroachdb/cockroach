@@ -15,7 +15,6 @@ import (
 	"time"
 
 	apd "github.com/cockroachdb/apd/v3"
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
@@ -2433,10 +2432,8 @@ func jobHelper(
 		return nil, err
 	}
 
-	// On 25.1+, add any recorded job messages to the response as well.
-	if sqlServer.cfg.Settings.Version.IsActive(ctx, clusterversion.V25_1) {
-		job.Messages = fetchJobMessages(ctx, job.ID, userName, sqlServer)
-	}
+	// Add any recorded job messages to the response as well.
+	job.Messages = fetchJobMessages(ctx, job.ID, userName, sqlServer)
 	return &job, nil
 }
 

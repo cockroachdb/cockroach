@@ -15,7 +15,6 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/multitenant"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -1919,10 +1918,6 @@ func (r *Registry) maybeRecordExecutionFailure(ctx context.Context, err error, j
 		return
 	}
 	updateErr := r.db.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
-		v, err := txn.GetSystemSchemaVersion(ctx)
-		if err != nil || v.Less(clusterversion.V25_1.Version()) {
-			return err
-		}
 		return j.Messages().Record(ctx, txn, "retry", efe.cause.Error())
 	})
 	if ctx.Err() != nil {
