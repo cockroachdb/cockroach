@@ -348,6 +348,8 @@ func (re *rebalanceEnv) repair(
 				re.repairAddNonVoter(ctx, localStoreID, rangeID, rs)
 			case ReplaceDeadNonVoter:
 				re.repairReplaceDeadNonVoter(ctx, localStoreID, rangeID, rs)
+			case ReplaceDecommissioningNonVoter:
+				re.repairReplaceDecommissioningNonVoter(ctx, localStoreID, rangeID, rs)
 			case RemoveNonVoter:
 				re.repairRemoveNonVoter(ctx, localStoreID, rangeID, rs)
 			case RemoveLearner:
@@ -1591,6 +1593,163 @@ func (re *rebalanceEnv) repairReplaceDecommissioningVoter(
 		MakeExternalRangeChange(originMMARepair, localStoreID, rangeChange))
 	log.KvDistribution.Infof(ctx,
 		"result(success): ReplaceDecommissioningVoter repair for r%d, removing voter on s%d, adding voter on s%d",
+		rangeID, removeStoreID, addStoreID)
+}
+
+// repairReplaceDecommissioningNonVoter replaces a non-voter on a
+// decommissioning (shedding) store with one on a healthy store. Identical to
+// repairReplaceDeadNonVoter but targets stores with ReplicaDispositionShedding
+// instead of HealthDead.
+func (re *rebalanceEnv) repairReplaceDecommissioningNonVoter(
+	ctx context.Context, localStoreID roachpb.StoreID, rangeID roachpb.RangeID, rs *rangeState,
+) {
+	re.ensureAnalyzedConstraints(ctx, rs)
+	if rs.constraints == nil {
+		log.KvDistribution.Warningf(ctx,
+			"skipping ReplaceDecommissioningNonVoter repair for r%d: constraint analysis failed",
+			rangeID)
+		return
+	}
+
+	// Step 1: Find the decommissioning non-voter to remove.
+	var decomCandidates []roachpb.StoreID
+	for _, repl := range rs.replicas {
+		if !isNonVoter(repl.ReplicaType.ReplicaType) {
+			continue
+		}
+		ss := re.stores[repl.StoreID]
+		if ss != nil && ss.status.Disposition.Replica == ReplicaDispositionShedding {
+			decomCandidates = append(decomCandidates, repl.StoreID)
+		}
+	}
+	if len(decomCandidates) == 0 {
+		log.KvDistribution.Warningf(ctx,
+			"skipping ReplaceDecommissioningNonVoter repair for r%d: no decommissioning non-voters found",
+			rangeID)
+		return
+	}
+
+	// If multiple decommissioning non-voters, pick the most redundant (whose
+	// removal hurts diversity the least).
+	removeStoreID := re.pickStoreByDiversity(
+		decomCandidates, rs.constraints.replicaLocalityTiers,
+		(*existingReplicaLocalities).getScoreChangeForReplicaRemoval)
+	if removeStoreID == 0 {
+		removeStoreID = decomCandidates[0]
+	}
+
+	// Find the ReplicaState for the chosen decommissioning non-voter.
+	var removePrevState ReplicaState
+	found := false
+	for _, repl := range rs.replicas {
+		if repl.StoreID == removeStoreID {
+			removePrevState = repl.ReplicaState
+			found = true
+			break
+		}
+	}
+	if !found {
+		log.KvDistribution.Warningf(ctx,
+			"skipping ReplaceDecommissioningNonVoter repair for r%d: non-voter on s%d not found in replicas",
+			rangeID, removeStoreID)
+		return
+	}
+
+	removeSS := re.stores[removeStoreID]
+	if removeSS == nil {
+		log.KvDistribution.Warningf(ctx,
+			"skipping ReplaceDecommissioningNonVoter repair for r%d: store s%d has no state",
+			rangeID, removeStoreID)
+		return
+	}
+
+	// Step 2: Find a healthy store for the replacement non-voter.
+	// The non-voter count already matches config, so we pass nil constraints
+	// to get all stores as candidates and rely on diversity scoring.
+	// TODO(kvoli): use voter/replica constraints to narrow candidates when
+	// constraints are configured.
+	var candidateStores storeSet
+	re.constraintMatcher.constrainStoresForExpr(nil, &candidateStores)
+
+	// Build the set of stores already hosting a replica (excluding the
+	// decommissioning non-voter being removed) and the set of nodes already
+	// hosting a replica.
+	var existingReplicas storeSet
+	existingNodes := make(map[roachpb.NodeID]struct{})
+	for _, repl := range rs.replicas {
+		if repl.StoreID == removeStoreID {
+			continue
+		}
+		existingReplicas.insert(repl.StoreID)
+		ss := re.stores[repl.StoreID]
+		if ss != nil {
+			existingNodes[ss.NodeID] = struct{}{}
+		}
+	}
+
+	candidateStores = retainReadyReplicaTargetStoresOnly(
+		ctx, candidateStores, re.stores, existingReplicas)
+
+	// Exclude stores already hosting a replica and stores on nodes already
+	// hosting a replica.
+	var validCandidates storeSet
+	for _, storeID := range candidateStores {
+		if existingReplicas.contains(storeID) {
+			continue
+		}
+		ss := re.stores[storeID]
+		if ss == nil {
+			continue
+		}
+		if _, ok := existingNodes[ss.NodeID]; ok {
+			continue
+		}
+		validCandidates = append(validCandidates, storeID)
+	}
+
+	if len(validCandidates) == 0 {
+		log.KvDistribution.Warningf(ctx,
+			"skipping ReplaceDecommissioningNonVoter repair for r%d: no valid target stores",
+			rangeID)
+		return
+	}
+
+	addStoreID := re.pickStoreByDiversity(
+		validCandidates, rs.constraints.replicaLocalityTiers,
+		(*existingReplicaLocalities).getScoreChangeForNewReplica)
+
+	// Step 3: Create the atomic change (remove decommissioning non-voter +
+	// add new non-voter).
+	addSS := re.stores[addStoreID]
+	addTarget := roachpb.ReplicationTarget{
+		NodeID:  addSS.NodeID,
+		StoreID: addStoreID,
+	}
+	addIDAndType := ReplicaIDAndType{
+		ReplicaType: ReplicaType{ReplicaType: roachpb.NON_VOTER},
+	}
+	addChange := MakeAddReplicaChange(rangeID, rs.load, addIDAndType, addTarget)
+
+	removeTarget := roachpb.ReplicationTarget{
+		NodeID:  removeSS.NodeID,
+		StoreID: removeStoreID,
+	}
+	removeChange := MakeRemoveReplicaChange(
+		rangeID, rs.load, removePrevState, removeTarget)
+
+	rangeChange := MakePendingRangeChange(
+		rangeID, []ReplicaChange{addChange, removeChange})
+	if err := re.preCheckOnApplyReplicaChanges(rangeChange); err != nil {
+		log.KvDistribution.Warningf(ctx,
+			"skipping ReplaceDecommissioningNonVoter repair for r%d: pre-check failed: %v",
+			rangeID, err)
+		return
+	}
+	re.addPendingRangeChange(ctx, rangeChange)
+	re.changes = append(re.changes,
+		MakeExternalRangeChange(originMMARepair, localStoreID, rangeChange))
+	log.KvDistribution.Infof(ctx,
+		"result(success): ReplaceDecommissioningNonVoter repair for r%d, removing non-voter on s%d, adding non-voter on s%d",
 		rangeID, removeStoreID, addStoreID)
 }
 

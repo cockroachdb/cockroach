@@ -8,7 +8,7 @@
 - [x] `ReplaceDeadVoter` — combine remove (targeting dead store) + add (find new store) in a single atomic change.
 - [x] `ReplaceDeadNonVoter` — same pattern for non-voters.
 - [x] `ReplaceDecommissioningVoter` — identical to dead voter but targeting decommissioning stores.
-- [ ] `ReplaceDecommissioningNonVoter` — same for non-voters.
+- [x] `ReplaceDecommissioningNonVoter` — same for non-voters.
 
 ## Harder (need constraint analysis for swaps)
 - [ ] `SwapVoterForConstraints` — identify which voter violates constraints and find a replacement. Requires helpers from `constraint_unused_test.go`.
