@@ -13,7 +13,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/security/provisioning"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
@@ -180,8 +179,7 @@ func (c *conn) handleAuthentication(
 	}
 
 	if !exists {
-		if execCfg.Settings.Version.IsActive(ctx, clusterversion.V25_3) &&
-			behaviors.IsProvisioningEnabled(execCfg.Settings, hbaEntry.Method.String()) {
+		if behaviors.IsProvisioningEnabled(execCfg.Settings, hbaEntry.Method.String()) {
 			err := behaviors.MaybeProvisionUser(ctx, execCfg.Settings, hbaEntry.Method.String())
 			if err != nil {
 				log.Dev.Warningf(ctx, "user provisioning failed for user=%q: %+v", dbUser, err)

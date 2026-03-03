@@ -11,7 +11,6 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/cloud"
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/crosscluster"
 	"github.com/cockroachdb/cockroach/pkg/crosscluster/replicationutils"
 	"github.com/cockroachdb/cockroach/pkg/crosscluster/streamclient"
@@ -155,10 +154,6 @@ func createLogicalReplicationStreamPlanHook(
 
 		if !p.ExtendedEvalContext().TxnIsSingleStmt {
 			return errors.New("cannot CREATE LOGICAL REPLICATION STREAM in a multi-statement transaction")
-		}
-
-		if !p.ExecCfg().Settings.Version.ActiveVersion(ctx).AtLeast(clusterversion.V25_1.Version()) {
-			return errors.New("cannot create ldr stream until finalizing on 25.1")
 		}
 
 		// Commit the planner txn because several operations below may take several

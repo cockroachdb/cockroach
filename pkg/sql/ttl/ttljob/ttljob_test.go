@@ -32,7 +32,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/desctestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/lexbase"
-	"github.com/cockroachdb/cockroach/pkg/sql/oidext"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/randgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
@@ -757,14 +756,6 @@ func TestRowLevelTTLJobRandomEntries(t *testing.T) {
 				// test is wrapping JSON objects in multiple single quotes which
 				// causes parsing errors.
 				return false
-			case types.CollatedStringFamily:
-				if typ.Oid() == oidext.T_citext || typ.Oid() == oidext.T__citext {
-					// CITEXT is only supported in 25.3+, so if we happen to run
-					// the test in the mixed version variant, we can't use the
-					// type.
-					return int(clusterversion.MinSupported) >= int(clusterversion.V25_3)
-				}
-				return true
 			case types.LTreeFamily:
 				// LTREE is only supported in 25.4+, so if we happen to run the
 				// test in the mixed version variant, we can't use the type.

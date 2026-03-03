@@ -14,7 +14,6 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/build"
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/docs"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/kv"
@@ -1954,11 +1953,6 @@ func NewTableDesc(
 				}
 			}
 			if d.Type == idxtype.VECTOR {
-				if !evalCtx.Settings.Version.ActiveVersion(ctx).AtLeast(clusterversion.V25_2.Version()) {
-					return nil, pgerror.Newf(pgcode.FeatureNotSupported, "cannot create a vector index until finalizing on 25.2")
-				}
-				// Disable vector indexes by default in 25.2.
-				// TODO(andyk): Remove this check after 25.2.
 				if err := vecsettings.CheckEnabled(&st.SV); err != nil {
 					return nil, err
 				}
@@ -2604,8 +2598,7 @@ func newTableDesc(
 	if !ret.IsView() && !ret.IsSequence() && !ret.IsTemporary() &&
 		n.StorageParams.GetVal("schema_locked") == nil &&
 		!params.p.SessionData().Internal &&
-		params.p.SessionData().CreateTableWithSchemaLocked &&
-		params.p.IsActive(params.ctx, clusterversion.V25_2) {
+		params.p.SessionData().CreateTableWithSchemaLocked {
 		ret.SchemaLocked = true
 	}
 

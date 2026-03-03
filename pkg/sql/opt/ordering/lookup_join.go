@@ -8,7 +8,6 @@ package ordering
 import (
 	"context"
 
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
@@ -92,12 +91,6 @@ func LookupJoinCanProvideOrdering(
 	// the required ordering.
 	_, direction, ok := getLookupOrdCols(mem, lookupJoin, &remainingRequired, canProjectPrefixCols)
 	if ok && direction == ReverseDirection {
-		// Make sure the cluster is at least at v25.2 before planning a lookup
-		// join with reverse scans.
-		if !evalCtx.Settings.Version.IsActive(ctx, clusterversion.V25_2) {
-			return false, EitherDirection
-		}
-		// Check the session setting.
 		if !evalCtx.SessionData().OptimizerPlanLookupJoinsWithReverseScans {
 			return false, EitherDirection
 		}

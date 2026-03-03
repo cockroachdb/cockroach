@@ -367,34 +367,6 @@ func TestSenderColocateReplicasOnSameNode(t *testing.T) {
 	}, up.AddedOrUpdated)
 }
 
-// TestSenderPolicyCountForDifferentVersions verifies that the sender tracks the
-// correct number of policies based on the cluster version.
-func TestSenderPolicyCountForDifferentVersions(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-	ctx := context.Background()
-
-	testutils.RunTrueAndFalse(t, "cluster version", func(t *testing.T, useOldVersion bool) {
-		var st *cluster.Settings
-		var expectedPolicyCount int
-		if useOldVersion {
-			prevVersion := roachpb.Version{Major: 25, Minor: 1}
-			st = cluster.MakeTestingClusterSettingsWithVersions(prevVersion, prevVersion, true)
-			expectedPolicyCount = int(roachpb.MAX_CLOSED_TIMESTAMP_POLICY)
-		} else {
-			st = cluster.MakeTestingClusterSettings()
-			expectedPolicyCount = int(ctpb.MAX_CLOSED_TIMESTAMP_POLICY)
-		}
-		connFactory := &mockConnFactory{}
-		s, stopper := newMockSenderWithSt(connFactory, st)
-		defer stopper.Stop(ctx)
-
-		s.publish(ctx)
-		require.Len(t, s.trackedMu.tracked, 0)
-		require.Len(t, s.trackedMu.lastClosed, expectedPolicyCount)
-	})
-}
-
 // TestSenderWithLatencyTracker verifies that the sender correctly updates
 // closed timestamp policies based on network latency between nodes.
 func TestSenderWithLatencyTracker(t *testing.T) {
