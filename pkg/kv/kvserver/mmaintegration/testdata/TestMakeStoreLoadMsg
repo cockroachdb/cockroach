@@ -41,24 +41,25 @@ set-store store-id=2 node-id=1
 
 # Store-level CPU loads: s1 = 0.1 cores, s2 = 0.3 cores (sum = 0.4 cores).
 # Physical node CPU: load = 0.8 cores, capacity = 2 cores.
-# mult = 0.8/0.4 = 2, background = 0.
-# Per-store capacity = 2 / (2 * 2) = 0.5 cores.
+# ampFactor = 0.8/0.4 = 2, immovable = 0.
+# Per-store load = storeCPU * ampFactor (s1: 0.2, s2: 0.6).
+# Per-store capacity = nodeCap / numStores = 2 / 2 = 1 core.
 #
 # node-cpu-load = 0.8 cores (physical) differs from what summing store loads
-# would give (0.4 cores).
+# would give (0.4 cores without amplification).
 make-store-load-msg store-id=1 node-id=1 num-stores=2 cpu-per-second=100000000 stores-cpu-rate=400000000 node-cpu-usage=800000000 node-cpu-capacity=2000000000
 ----
-store-id=1 node-id=1 load=[100000000,0,0] capacity=[500000000,9223372036854775807,0] secondary-load=0 load-time=0s node-cpu-load=800000000 node-cpu-capacity=2000000000
+store-id=1 node-id=1 load=[200000000,0,0] capacity=[1000000000,9223372036854775807,1] secondary-load=0 load-time=0s node-cpu-load=800000000 node-cpu-capacity=2000000000
 
 make-store-load-msg store-id=2 node-id=1 num-stores=2 cpu-per-second=300000000 stores-cpu-rate=400000000 node-cpu-usage=800000000 node-cpu-capacity=2000000000
 ----
-store-id=2 node-id=1 load=[300000000,0,0] capacity=[500000000,9223372036854775807,0] secondary-load=0 load-time=0s node-cpu-load=800000000 node-cpu-capacity=2000000000
+store-id=2 node-id=1 load=[600000000,0,0] capacity=[1000000000,9223372036854775807,1] secondary-load=0 load-time=0s node-cpu-load=800000000 node-cpu-capacity=2000000000
 
 # nodes-cpu-load = 0.8 cores (physical node value from MakeStoreLoadMsg),
 # not 0.4 cores (what store-level summing would give). Node utilization
 # is 40% (0.8/2), not 20% (0.4/2).
 load-summary
 ----
-cluster means: (stores-load [cpu:200ms/s, write-bandwidth:0 B/s, byte-size:0 B]) (stores-capacity [cpu:500ms/s, write-bandwidth:unknown/s, byte-size:0 B])
+cluster means: (stores-load [cpu:400ms/s, write-bandwidth:0 B/s, byte-size:0 B]) (stores-capacity [cpu:1s/s, write-bandwidth:unknown/s, byte-size:1 B])
 (nodes-cpu-load 800000000) (nodes-cpu-capacity 2000000000)
 evaluating store s1 for shedding: load summary (store=loadNormal worst=WriteBandwidth cpu=loadLow writes=loadNormal bytes=loadNormal node=loadNormal frac_pending=0.00,0.00(true))evaluating store s2 for shedding: load summary (store=overloadSlow worst=CPURate cpu=overloadSlow writes=loadNormal bytes=loadNormal node=loadNormal frac_pending=0.00,0.00(true))
