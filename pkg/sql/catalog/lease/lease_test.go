@@ -293,7 +293,7 @@ func (t *leaseTest) node(nodeID uint32) *lease.Manager {
 			cfgCpy.RootMemoryMonitor,
 		)
 		ctx := logtags.AddTag(context.Background(), "leasemgr", nodeID)
-		mgr.RunBackgroundLeasingTask(ctx)
+		mgr.RunBackgroundLeasingTasks(ctx)
 		mgr.TestingMarkInit()
 		t.nodes[nodeID] = mgr
 	}
@@ -4454,7 +4454,7 @@ func TestLeaseManagerMemoryCloser(t *testing.T) {
 		app.ExecutorConfig().(sql.ExecutorConfig).RangeFeedFactory,
 		monitor,
 	)
-	lm.RunBackgroundLeasingTask(ctx)
+	lm.RunBackgroundLeasingTasks(ctx)
 	lm.TestingMarkInit()
 
 	// Create a table to lease.
