@@ -56,18 +56,10 @@ func InitEngine(ctx context.Context, eng Engines, ident roachpb.StoreIdent) erro
 	}
 
 	batch := eng.LogEngine().NewBatch()
-	if err := storage.MVCCPutProto(
-		ctx,
-		batch,
-		keys.StoreIdentKey(),
-		hlc.Timestamp{},
-		&ident,
-		storage.MVCCWriteOptions{},
-	); err != nil {
-		batch.Close()
-		return err
-	}
-	if err := batch.Commit(true /* sync */); err != nil {
+	defer batch.Close()
+	if err := WriteStoreIdent(ctx, batch, ident); err != nil {
+		return errors.Wrap(err, "writing StoreIdent")
+	} else if err := batch.Commit(true /* sync */); err != nil {
 		return errors.Wrap(err, "persisting engine initialization data")
 	}
 	// We will set the store ID during start, but we want to set it as quickly as
@@ -239,6 +231,14 @@ func ReadStoreIdent(ctx context.Context, r storage.Reader) (roachpb.StoreIdent, 
 		return roachpb.StoreIdent{}, &NotBootstrappedError{}
 	}
 	return ident, err
+}
+
+// WriteStoreIdent writes the StoreIdent to storage.
+func WriteStoreIdent(ctx context.Context, rw storage.ReadWriter, ident roachpb.StoreIdent) error {
+	return storage.MVCCPutProto(
+		ctx, rw, keys.StoreIdentKey(),
+		hlc.Timestamp{}, &ident, storage.MVCCWriteOptions{},
+	)
 }
 
 // IterateRangeDescriptorsFromDisk discovers the initialized replicas and calls
