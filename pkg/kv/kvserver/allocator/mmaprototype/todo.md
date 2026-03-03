@@ -11,5 +11,5 @@
 - [x] `ReplaceDecommissioningNonVoter` — same for non-voters.
 
 ## Harder (need constraint analysis for swaps)
-- [ ] `SwapVoterForConstraints` — identify which voter violates constraints and find a replacement. Requires helpers from `constraint_unused_test.go`.
-- [ ] `SwapNonVoterForConstraints` — same for non-voters.
+- [x] `SwapVoterForConstraints` — identify which voter violates constraints and find a replacement. Requires helpers from `constraint_unused_test.go`.
+- [x] `SwapNonVoterForConstraints` — same for non-voters.

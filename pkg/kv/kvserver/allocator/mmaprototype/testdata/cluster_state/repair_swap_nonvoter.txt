@@ -27,7 +27,41 @@ repair-needed
 ----
 SwapNonVoterForConstraints: r1
 
+# Repair swaps: removes non-voter on s4 (zone=a) and adds non-voter on s6
+# (zone=b).
 repair store-id=1
 ----
-[mmaid=1] repair action SwapNonVoterForConstraints for r1 not yet implemented
-pending(0)
+[mmaid=1] applying replica change r1 type: AddReplica target store n6,s6 (replica-id=none type=VOTER_FULL)->(replica-id=unknown type=NON_VOTER) to range 1 on store 6
+[mmaid=1] addPendingRangeChange: change_id=1, range_id=1, change=r1 type: AddReplica target store n6,s6 (replica-id=none type=VOTER_FULL)->(replica-id=unknown type=NON_VOTER)
+[mmaid=1] applying replica change r1 type: RemoveReplica target store n4,s4 (replica-id=4 type=NON_VOTER)->(replica-id=none type=VOTER_FULL) to range 1 on store 4
+[mmaid=1] addPendingRangeChange: change_id=2, range_id=1, change=r1 type: RemoveReplica target store n4,s4 (replica-id=4 type=NON_VOTER)->(replica-id=none type=VOTER_FULL)
+[mmaid=1] result(success): SwapNonVoterForConstraints repair for r1, removing non-voter on s4, adding non-voter on s6
+pending(2)
+change-id=1 store-id=6 node-id=6 range-id=1 load-delta=[cpu:0s/s, write-bandwidth:0 B/s, byte-size:0 B] start=0s gc=5m0s
+  prev=(replica-id=none type=VOTER_FULL)
+  next=(replica-id=unknown type=NON_VOTER)
+change-id=2 store-id=4 node-id=4 range-id=1 load-delta=[cpu:0s/s, write-bandwidth:0 B/s, byte-size:0 B] start=0s gc=5m0s
+  prev=(replica-id=4 type=NON_VOTER)
+  next=(replica-id=none type=VOTER_FULL)
+
+# Pending change suppresses further repair.
+repair-needed
+----
+RepairPending: r1
+
+# Confirm the swap: leaseholder reports s6 instead of s4.
+store-leaseholder-msg
+store-id=1
+  range-id=1
+    store-id=1 type=VOTER_FULL leaseholder=true
+    store-id=2 type=VOTER_FULL
+    store-id=3 type=VOTER_FULL
+    store-id=5 type=NON_VOTER
+    store-id=6 type=NON_VOTER
+    config=num_replicas=5 num_voters=3 constraints={'+zone=b':2}
+----
+
+# After swap enacted, range is healthy.
+repair-needed
+----
+no ranges need repair
