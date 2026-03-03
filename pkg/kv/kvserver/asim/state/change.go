@@ -200,6 +200,43 @@ func (rc *ReplicaChange) Apply(ctx context.Context, s State) {
 	targets := kvserver.SynthesizeTargetsByChangeType(rc.Changes)
 	rangeID := rc.RangeID
 
+	// Handle same-store voter type transitions (e.g., VOTER_INCOMING →
+	// VOTER_FULL for joint config finalization). SynthesizeTargetsByChangeType
+	// handles cross-type swaps (NON_VOTER ↔ VOTER) but same-voter-type
+	// transitions appear as matched entries in VoterAdditions and
+	// VoterRemovals. Extract them so we can handle them as type changes
+	// rather than failing the add (which would fail because the store
+	// already has a replica).
+	var voterTypeChanges []roachpb.ReplicationTarget
+	{
+		isVoterRemoval := make(map[roachpb.StoreID]bool, len(targets.VoterRemovals))
+		for _, vr := range targets.VoterRemovals {
+			isVoterRemoval[vr.StoreID] = true
+		}
+		var filteredAdditions []roachpb.ReplicationTarget
+		for _, va := range targets.VoterAdditions {
+			if isVoterRemoval[va.StoreID] {
+				voterTypeChanges = append(voterTypeChanges, va)
+			} else {
+				filteredAdditions = append(filteredAdditions, va)
+			}
+		}
+		if len(voterTypeChanges) > 0 {
+			targets.VoterAdditions = filteredAdditions
+			isTypeChange := make(map[roachpb.StoreID]bool, len(voterTypeChanges))
+			for _, vtc := range voterTypeChanges {
+				isTypeChange[vtc.StoreID] = true
+			}
+			filteredRemovals := targets.VoterRemovals[:0]
+			for _, vr := range targets.VoterRemovals {
+				if !isTypeChange[vr.StoreID] {
+					filteredRemovals = append(filteredRemovals, vr)
+				}
+			}
+			targets.VoterRemovals = filteredRemovals
+		}
+	}
+
 	defer func() {
 		if rollback != nil {
 			log.KvDistribution.VEventf(ctx, 5, "r%d: s%d failed to apply replica change (after %s)", rangeID, rc.Author, rc.Wait)
@@ -281,6 +318,24 @@ func (rc *ReplicaChange) Apply(ctx context.Context, s State) {
 	// or promoted first before removing any previous voters. This is done so
 	// that a lease transfer can occur, if needed, whilst the previous
 	// leaseholder is still a voter.
+	// Apply voter type changes (e.g., VOTER_INCOMING → VOTER_FULL) first.
+	for _, vtc := range voterTypeChanges {
+		rng, _ := s.Range(rangeID)
+		repl, rok := rng.Replica(StoreID(vtc.StoreID))
+		if !rok {
+			return
+		}
+		currentType := repl.Descriptor().Type
+		ok, revert := promoDemo(
+			s, rangeID, StoreID(vtc.StoreID), currentType, roachpb.VOTER_FULL)
+		log.KvDistribution.VEventf(ctx, 5, "r%d: author s%d changed voter type s%s from %s to VOTER_FULL",
+			rangeID, rc.Author, vtc.StoreID, currentType)
+		rollback = append(rollback, revert...)
+		if !ok {
+			return
+		}
+	}
+
 	for _, nonVoterPromotion := range targets.NonVoterPromotions {
 		ok, revert := promoDemo(
 			s, rangeID, StoreID(nonVoterPromotion.StoreID), roachpb.NON_VOTER, roachpb.VOTER_FULL)
