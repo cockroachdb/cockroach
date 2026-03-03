@@ -261,6 +261,27 @@ jobs:
       - name: clean up
         run: ./build/github/cleanup-engflow-keys.sh
         if: always()
+  race_canary:
+    runs-on: [self-hosted, ubuntu_2404]
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.ref }}
+      - name: compute metadata
+        run: echo GITHUB_ACTIONS_BRANCH=${{ github.event.pull_request.number || github.ref_name}} >> "$GITHUB_ENV"
+      - run: ./build/github/get-engflow-keys.sh
+      - run: ./build/github/prepare-summarize-build.sh
+      - name: run race canary test
+        run: ./build/github/race-canary.sh
+      - name: upload build results
+        run: ./build/github/summarize-build.sh bes.bin
+        if: always()
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: clean up
+        run: ./build/github/cleanup-engflow-keys.sh
+        if: always()
   unit_tests:
     runs-on: [self-hosted, ubuntu_2404]
     timeout-minutes: 120
