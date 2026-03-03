@@ -28,6 +28,7 @@ go_library(
 
 go_test(
     name = "replication_test",
+    size = "large",
     srcs = ["reader_catalog_test.go"],
     deps = [
         ":replication",
