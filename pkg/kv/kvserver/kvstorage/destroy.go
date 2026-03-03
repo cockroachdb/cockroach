@@ -10,7 +10,10 @@ import (
 	"math"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvstorage/wag"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvstorage/wag/wagpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/logstore"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/rditer"
 	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
@@ -84,17 +87,29 @@ type DestroyReplicaInfo struct {
 // This call issues all writes ordered by key. This is to support a large
 // variety of uses, including SSTable generation for snapshot application.
 func DestroyReplica(
-	ctx context.Context, rw ReadWriter, info DestroyReplicaInfo, next roachpb.ReplicaID,
+	ctx context.Context,
+	rw ReadWriter,
+	wagWriter *wag.Writer,
+	info DestroyReplicaInfo,
+	next roachpb.ReplicaID,
 ) error {
-	return destroyReplicaImpl(ctx, rw, info, next)
+	return destroyReplicaImpl(ctx, rw, wagWriter, info, next)
 }
 
 func destroyReplicaImpl(
-	ctx context.Context, rw ReadWriter, info DestroyReplicaInfo, next roachpb.ReplicaID,
+	ctx context.Context,
+	rw ReadWriter,
+	wagWriter *wag.Writer,
+	info DestroyReplicaInfo,
+	next roachpb.ReplicaID,
 ) error {
 	if next <= info.ReplicaID {
 		return errors.AssertionFailedf("%v must not survive its own tombstone", info.FullReplicaID)
 	}
+	wagWriter.AddDep(wagpb.Node{
+		Addr: wagpb.MakeAddr(info.FullReplicaID, kvpb.RaftIndex(math.MaxUint64)),
+		Type: wagpb.NodeType_NodeDestroy,
+	})
 	sl := MakeStateLoader(info.RangeID)
 	// Assert that the ReplicaID in storage matches the one being removed.
 	if loaded, err := sl.LoadRaftReplicaID(ctx, rw.State.RO); err != nil {
@@ -200,7 +215,7 @@ func destroyReplicaImpl(
 // by the subsuming range.
 func SubsumeReplica(ctx context.Context, rw ReadWriter, info DestroyReplicaInfo) error {
 	info.Keys = roachpb.RSpan{} // forget about the user keys
-	return destroyReplicaImpl(ctx, rw, info, MergedTombstoneReplicaID)
+	return destroyReplicaImpl(ctx, rw, wag.TODOWriter(), info, MergedTombstoneReplicaID)
 }
 
 // RemoveStaleRHSFromSplit removes all replicated data for the RHS replica of a

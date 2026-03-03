@@ -379,6 +379,7 @@ func TestReplicaLifecycleDataDriven(t *testing.T) {
 					destroyInfo.Keys = rs.desc.RSpan()
 				}
 
+				wagWriter := wag.MakeWriter(&tc.wagSeq)
 				output := tc.mutate(t, func(stateBatch, raftBatch storage.Batch) {
 					rw := kvstorage.ReadWriter{
 						State: kvstorage.WrapState(stateBatch),
@@ -387,8 +388,15 @@ func TestReplicaLifecycleDataDriven(t *testing.T) {
 					require.NoError(t, kvstorage.DestroyReplica(
 						ctx,
 						rw,
+						&wagWriter,
 						destroyInfo,
 						rs.desc.NextReplicaID,
+					))
+					// Flush WAG dependency nodes to the raft batch. The responsibility of
+					// doing so lies at or above the caller of DestroyReplica, so we do so
+					// here in the test.
+					require.NoError(t, wagWriter.FlushDependencies(
+						kvstorage.WrapRaft(raftBatch).WO,
 					))
 				})
 				rs.replica = nil // clear the replica from the range state

@@ -29,6 +29,7 @@ Delete: 0,0 /Local/RangeID/1/u/RaftReplicaID (0x016989757266747200):
 log engine:
 Delete (Sized at 38): 0,0 /Local/RangeID/1/u/RaftHardState (0x016989757266746800): 
 Delete (Sized at 32): 0,0 /Local/RangeID/1/u/RaftTruncatedState (0x016989757266747400): 
+Put: 0,0 /Local/Store/wag/1 (0x01737761676e000000000000000100): NodeDestroy r1/1:18446744073709551615
 
 create-descriptor start=c end=f replicas=(1,2,3,4,5)
 ----
@@ -93,3 +94,4 @@ Delete (Sized at 42): 0,0 /Local/RangeID/2/u/RaftLog/logIndex:11 (0x01698a757266
 Delete (Sized at 42): 0,0 /Local/RangeID/2/u/RaftLog/logIndex:12 (0x01698a757266746c000000000000000c00): 
 Delete (Sized at 42): 0,0 /Local/RangeID/2/u/RaftLog/logIndex:13 (0x01698a757266746c000000000000000d00): 
 Delete (Sized at 32): 0,0 /Local/RangeID/2/u/RaftTruncatedState (0x01698a757266747400): 
+Put: 0,0 /Local/Store/wag/2 (0x01737761676e000000000000000200): NodeDestroy r2/1:18446744073709551615

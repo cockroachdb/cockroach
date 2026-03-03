@@ -65,10 +65,6 @@ func (w *Writer) Empty() bool {
 // AddDep stages a dependency node that must be satisfied before the event
 // can be replayed. These are written before the event node and don't carry
 // a mutation themselves.
-//
-// TODO(arul): as the code evolves, see if we add any dependencies other than
-// application up until a specific index. If we don't, this method can be
-// specialized to accept a wagpb.Addr instead.
 func (w *Writer) AddDep(node wagpb.Node) {
 	if w.disabled() {
 		return
@@ -89,6 +85,26 @@ func (w *Writer) SetEvent(node wagpb.Node) {
 		))
 	}
 	w.event = node
+}
+
+// FlushDependencies writes only the staged dependency nodes to the raft engine.
+// Unlike Flush, it does not require an event to have been staged, and therefore
+// does not need a state engine batch.
+//
+// The raftBatch must be a writing handle to the raft/log engine. No-ops if no
+// dependencies were staged or if the Writer is disabled.
+func (w *Writer) FlushDependencies(raftBatch storage.Writer) error {
+	if w.disabled() || len(w.deps) == 0 {
+		return nil
+	}
+	seq := w.seq.Next(uint64(len(w.deps)))
+	for _, dep := range w.deps {
+		if err := Write(raftBatch, seq, dep); err != nil {
+			return errors.Wrap(err, "writing WAG dependency node")
+		}
+		seq++
+	}
+	return nil
 }
 
 // Flush writes all staged WAG nodes to the raft engine. The raftBatch must be

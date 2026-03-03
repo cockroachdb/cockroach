@@ -481,6 +481,7 @@ func (b *replicaAppBatch) runPostAddTriggersReplicaOnly(
 		// batch, so that when we commit it, the removal is finalized.
 		if err := kvstorage.DestroyReplica(
 			ctx, b.ReadWriter(),
+			wag.TODOWriter(),
 			b.r.destroyInfoRaftMuLocked(), change.NextReplicaID(),
 		); err != nil {
 			return errors.Wrapf(err, "unable to destroy replica before removal")

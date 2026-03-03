@@ -12,6 +12,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/apply"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvstorage"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvstorage/wag"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -95,6 +96,7 @@ func (r *Replica) destroyRaftMuLocked(ctx context.Context, nextReplicaID roachpb
 			State: kvstorage.State{RO: r.store.StateEngine(), WO: stateWO},
 			Raft:  kvstorage.Raft{RO: r.store.LogEngine(), WO: raftWO},
 		},
+		wag.TODOWriter(),
 		r.destroyInfoRaftMuLocked(), nextReplicaID,
 	); err != nil {
 		return err

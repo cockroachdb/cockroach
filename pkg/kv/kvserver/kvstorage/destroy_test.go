@@ -16,6 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvstorage/wag"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/logstore"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/print"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/spanset"
@@ -81,7 +82,7 @@ func TestDestroyReplica(t *testing.T) {
 			r.createStateMachine(ctx, t, w)
 		}) + mutateSep("destroy", e, func(rw ReadWriter) {
 			require.NoError(t, DestroyReplica(
-				ctx, rw,
+				ctx, rw, &wag.Writer{},
 				DestroyReplicaInfo{FullReplicaID: r.id, Keys: r.keys}, r.id.ReplicaID+1,
 			))
 		})
