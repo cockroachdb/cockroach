@@ -1318,6 +1318,20 @@ func (m *Manager) acquireNodeLease(
 				currentVersion = newest.GetVersion()
 				currentSessionID = newest.getSessionID()
 			}
+			// If the version of the lease we are acquiring has changed,
+			// then notify any observers.
+			defer func() {
+				latest, _ := m.findNewest(id)
+				if latest != nil && (newest != nil && currentVersion != latest.GetVersion()) {
+					select {
+					case <-m.stopper.ShouldQuiesce():
+					case <-ctx.Done():
+					case m.observerEvent <- observerEvent{id: id,
+						version:          latest.GetVersion(),
+						modificationTime: latest.GetModificationTime()}:
+					}
+				}
+			}()
 			// A session will always be populated, since we use session based leasing.
 			session, err := m.storage.livenessProvider.Session(ctx)
 			if err != nil {
@@ -1471,7 +1485,14 @@ func (m *Manager) purgeOldVersions(
 		leases, leaseToExpire := func() (leasesToRemove []*storedLease, leasesToExpire *descriptorVersionState) {
 			t.mu.Lock()
 			defer t.mu.Unlock()
+			wasOffline := t.mu.takenOffline
 			t.setTakenOfflineLocked(dropped)
+			// Fire a notification for dropped descriptors.
+			if dropped && !wasOffline {
+				// TODO (fqazi): We won't have an exact timestamp in this scenario, so we are using
+				// now.
+				m.observerEvent <- observerEvent{id: id, version: minVersion, modificationTime: m.storage.clock.Now()}
+			}
 			return t.removeInactiveVersions(ctx), t.mu.active.findPreviousToExpire(dropped)
 		}()
 		for _, l := range leases {
@@ -1775,6 +1796,9 @@ type Manager struct {
 		// activeCloseTimestamps contains the most recent timestamp handles currently
 		// in use by transactions.
 		activeCloseTimestamps []*closeTimeStampHandle
+
+		// observers is list of lease manager observers.
+		observers atomic.Pointer[[]Observer]
 	}
 
 	// closeTimeStamp is the most recent closeTimeStamp handle, for
@@ -1797,6 +1821,8 @@ type Manager struct {
 	descUpdateCh chan catalog.Descriptor
 	// descDelCh receives deleted descriptors from the range feed.
 	descDelCh chan descpb.ID
+	// observerEvent receives an event for the observer.
+	observerEvent chan observerEvent
 	// descMetaDataUpdateCh receives updated transaction metadata from the
 	// range feed.
 	descMetaDataUpdateCh chan *descriptorTxnUpdate
@@ -1933,6 +1959,7 @@ func NewLeaseManager(
 		ambientCtx:       ambientCtx,
 		stopper:          stopper,
 		sem:              quotapool.NewIntPool("lease manager", leaseConcurrencyLimit),
+		observerEvent:    make(chan observerEvent, 20),
 	}
 	lm.leaseGeneration.Swap(1) // Start off with 1 as the initial value.
 	lm.storage.regionPrefix = &atomic.Value{}
@@ -2985,11 +3012,11 @@ func (m *Manager) checkRangeFeedStatus(ctx context.Context) (forceRefresh bool) 
 	return forceRefresh
 }
 
-// RunBackgroundLeasingTask runs background leasing tasks which are
+// RunBackgroundLeasingTasks runs background leasing tasks which are
 // responsible for expiring old descriptor versions, monitoring
 // range feed progress / recovery, and supporting legacy expiry
 // based leases.
-func (m *Manager) RunBackgroundLeasingTask(ctx context.Context) {
+func (m *Manager) RunBackgroundLeasingTasks(ctx context.Context) {
 	ctx = multitenant.WithTenantCostControlExemption(ctx)
 	// The refresh loop is used to clean up leases that have expired (because of
 	// a new version), and track range feed availability. This will run based on
@@ -3051,6 +3078,17 @@ func (m *Manager) RunBackgroundLeasingTask(ctx context.Context) {
 				// Clean up the update key space.
 				m.cleanupUpdateKeys(ctx)
 				descriptorUpdateCleanupTimer.Reset(descriptorUpdateCleanupTimerDuration)
+			}
+		}
+	})
+	// Background thread for lease observers.
+	_ = m.stopper.RunAsyncTask(ctx, "lease-observers", func(ctx context.Context) {
+		for {
+			select {
+			case <-m.stopper.ShouldQuiesce():
+				return
+			case event := <-m.observerEvent:
+				m.notifyObservers(ctx, event.id, event.version, event.modificationTime)
 			}
 		}
 	})

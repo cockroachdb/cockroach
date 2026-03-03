@@ -12,6 +12,7 @@ go_library(
         "lease_test_utils.go",
         "lease_timestamp.go",
         "name_cache.go",
+        "observer.go",
         "storage.go",
         "testutils.go",
     ],
@@ -85,6 +86,7 @@ go_test(
         "lease_internal_test.go",
         "lease_test.go",
         "main_test.go",
+        "observer_test.go",
     ],
     embed = [":lease"],
     exec_properties = {
