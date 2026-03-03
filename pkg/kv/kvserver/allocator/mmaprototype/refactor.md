@@ -2,8 +2,8 @@
 
 The file originally contained ~2275 lines split across 13 repair functions.
 Most of the bulk came from a handful of structural patterns repeated verbatim
-across nearly every function. Patterns 1–5 have been extracted; Patterns 6–7
-remain as future opportunities.
+across nearly every function. Patterns 1–6 have been extracted; Pattern 7
+remains as a future opportunity.
 
 ---
 
@@ -20,46 +20,14 @@ remain as future opportunities.
   `goto`-based loops with a standalone function.
 - **Pattern 5** (`enactRepair`): Commit boilerplate. Extracted to
   `rebalanceEnv` method, replacing 15 call sites.
+- **Pattern 6** (`repairReplaceReplica`): Merged the four Replace functions
+  (dead/decommissioning × voter/non-voter) into a single parametrized
+  `repairReplaceReplica` method driven by a `replaceReplicaSpec` struct.
+  The four public entry points are now thin wrappers.
 
 ---
 
 ## Remaining Opportunities
-
-### Pattern 6: The four Replace functions (voter/non-voter × dead/decommissioning)
-
-`repairReplaceDeadVoter`, `repairReplaceDecommissioningVoter`,
-`repairReplaceDeadNonVoter`, and `repairReplaceDecommissioningNonVoter`
-are structurally identical. The comments even say so: "Identical to X but
-targets stores with Y instead of Z." The only differences are:
-
-| Dimension            | Voter variant             | Non-voter variant           |
-|----------------------|---------------------------|-----------------------------|
-| Replica kind filter  | `isVoter`                 | `isNonVoter`                |
-| Removal condition    | `HealthDead` or `ReplicaDispositionShedding` | same, applied to non-voters |
-| Leaseholder exclude  | yes                       | no                          |
-| Locality tiers       | `voterLocalityTiers`      | `replicaLocalityTiers`      |
-| Add type             | `VOTER_FULL`              | `NON_VOTER`                 |
-
-With patterns 1–5 extracted, each function is ~50 lines. A merged helper
-`repairReplaceReplica` with a small parameter struct collapses all four into
-one ~80-line function:
-
-```go
-type replaceReplicaSpec struct {
-    actionName      string
-    isTargetKind    func(roachpb.ReplicaType) bool
-    isTargetStore   func(*storeState) bool // dead or decommissioning?
-    excludeLeasehdr bool
-    localityTiers   func(*constraintAnalysis) replicasLocalityTiers
-    addReplicaType  roachpb.ReplicaType
-}
-```
-
-The four public entry points become trivial one-line wrappers that pass the
-appropriate spec. This is the highest-value remaining refactor: ~200 lines
-become ~100.
-
----
 
 ### Pattern 7: Add voter vs Add non-voter / Remove voter vs Remove non-voter
 
