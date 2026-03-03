@@ -48,6 +48,11 @@ func NewEngine(engine storage.Engine, forbiddenMatcher func(TrickySpan) error) s
 	}
 }
 
+// UnderlyingEngine returns the raw engine, with disabled assertions.
+func (s *spanSetEngine) UnderlyingEngine() storage.Engine {
+	return s.e
+}
+
 // NewBatch implements the storage.EngineWithoutRW interface.
 func (s *spanSetEngine) NewBatch() storage.Batch {
 	return NewBatch(s.e.NewBatch(), s.spans)

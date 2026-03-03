@@ -465,3 +465,11 @@ type batchWrapper interface {
 	WrapWriteBatch(storage.WriteBatch) storage.WriteBatch
 	WrapBatch(storage.Batch) storage.Batch
 }
+
+// disableAccessAssertions strips the engine from the access assertion wrapper.
+func disableAccessAssertions(eng storage.Engine) storage.Engine {
+	if !spanset.EnableAssertions {
+		return eng
+	}
+	return eng.(interface{ UnderlyingEngine() storage.Engine }).UnderlyingEngine()
+}
