@@ -50,6 +50,7 @@ func AlterTableLocality(b BuildCtx, t *tree.AlterTableLocality) {
 		panic(pgerror.Newf(pgcode.ObjectNotInPrerequisiteState,
 			"table %q is being dropped, try again later", tbl))
 	}
+	defer checkTableSchemaChangePrerequisites(b, elts, t)()
 
 	// Check user has sufficient privileges for this schema change
 	checkPrivilegesForMultiRegionOp(b, tbl, tableName)

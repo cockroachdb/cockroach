@@ -29,7 +29,7 @@ write *eventpb.AlterTable to event log:
     tag: ALTER TABLE
     user: root
   tableName: multiregion_db.public.t
-## StatementPhase stage 1 of 1 with 22 MutationType ops
+## StatementPhase stage 1 of 1 with 23 MutationType ops
 upsert descriptor #108
   ...
        regionalByRow: {}
@@ -210,7 +210,9 @@ upsert descriptor #108
      nextMutationId: 1
      parentId: 104
   ...
-     schemaLocked: true
+     replacementOf:
+       time: {}
+  -  schemaLocked: true
      unexposedParentSchemaId: 105
   -  version: "1"
   +  version: "2"
@@ -219,7 +221,7 @@ upsert descriptor #108
 ## PreCommitPhase stage 1 of 2 with 1 MutationType op
 undo all catalog changes within txn #1
 persist all catalog changes to storage
-## PreCommitPhase stage 2 of 2 with 30 MutationType ops
+## PreCommitPhase stage 2 of 2 with 31 MutationType ops
 upsert descriptor #108
   ...
      createAsOfTime:
@@ -436,7 +438,9 @@ upsert descriptor #108
      nextMutationId: 1
      parentId: 104
   ...
-     schemaLocked: true
+     replacementOf:
+       time: {}
+  -  schemaLocked: true
      unexposedParentSchemaId: 105
   -  version: "1"
   +  version: "2"
@@ -474,7 +478,7 @@ upsert descriptor #108
      name: t
      nextColumnId: 5
   ...
-     schemaLocked: true
+       time: {}
      unexposedParentSchemaId: 105
   -  version: "2"
   +  version: "3"
@@ -510,7 +514,7 @@ upsert descriptor #108
      - direction: ADD
        index:
   ...
-     schemaLocked: true
+       time: {}
      unexposedParentSchemaId: 105
   -  version: "3"
   +  version: "4"
@@ -542,7 +546,7 @@ upsert descriptor #108
      - direction: ADD
        index:
   ...
-     schemaLocked: true
+       time: {}
      unexposedParentSchemaId: 105
   -  version: "4"
   +  version: "5"
@@ -605,7 +609,7 @@ upsert descriptor #108
      name: t
      nextColumnId: 5
   ...
-     schemaLocked: true
+       time: {}
      unexposedParentSchemaId: 105
   -  version: "5"
   +  version: "6"
@@ -617,7 +621,7 @@ begin transaction #9
 validate forward indexes [8 4 6] in table #108
 commit transaction #9
 begin transaction #10
-## PostCommitNonRevertiblePhase stage 1 of 3 with 33 MutationType ops
+## PostCommitNonRevertiblePhase stage 1 of 4 with 33 MutationType ops
 upsert descriptor #108
   ...
            statement: ALTER TABLE multiregion_db.public.t SET LOCALITY GLOBAL
@@ -1005,18 +1009,18 @@ upsert descriptor #108
        - i
        - j
   ...
-     schemaLocked: true
+       time: {}
      unexposedParentSchemaId: 105
   -  version: "6"
   +  version: "7"
 upsert zone config for #108
 persist all catalog changes to storage
 adding table for stats refresh: 108
-update progress of schema change job #1: "Pending: Updating schema metadata (13 operations) — PostCommitNonRevertible phase (stage 2 of 3)."
+update progress of schema change job #1: "Pending: Updating schema metadata (13 operations) — PostCommitNonRevertible phase (stage 2 of 4)."
 set schema change job #1 to non-cancellable
 commit transaction #10
 begin transaction #11
-## PostCommitNonRevertiblePhase stage 2 of 3 with 15 MutationType ops
+## PostCommitNonRevertiblePhase stage 2 of 4 with 15 MutationType ops
 upsert descriptor #108
   ...
          version: 4
@@ -1054,51 +1058,16 @@ upsert descriptor #108
      name: t
      nextColumnId: 5
   ...
-     schemaLocked: true
+       time: {}
      unexposedParentSchemaId: 105
   -  version: "7"
   +  version: "8"
 persist all catalog changes to storage
-update progress of schema change job #1: "Pending: Updating schema metadata (9 operations) — PostCommitNonRevertible phase (stage 3 of 3)."
+update progress of schema change job #1: "Pending: Updating schema metadata (9 operations) — PostCommitNonRevertible phase (stage 3 of 4)."
 commit transaction #11
 begin transaction #12
-## PostCommitNonRevertiblePhase stage 3 of 3 with 11 MutationType ops
+## PostCommitNonRevertiblePhase stage 3 of 4 with 11 MutationType ops
 upsert descriptor #108
-  ...
-     createAsOfTime:
-       wallTime: "1640995200000000000"
-  -  declarativeSchemaChangerState:
-  -    authorization:
-  -      userName: root
-  -    currentStatuses: <redacted>
-  -    jobId: "1"
-  -    nameMapping:
-  -      columns:
-  -        "1": pk
-  -        "2": i
-  -        "3": j
-  -        "4": crdb_region
-  -        "4294967292": crdb_internal_origin_timestamp
-  -        "4294967293": crdb_internal_origin_id
-  -        "4294967294": tableoid
-  -        "4294967295": crdb_internal_mvcc_timestamp
-  -      families:
-  -        "0": primary
-  -      id: 108
-  -      indexes:
-  -        "4": t_j_key
-  -        "6": idx
-  -        "8": t_pkey
-  -      name: t
-  -    relevantStatements:
-  -    - statement:
-  -        redactedStatement: ALTER TABLE ‹multiregion_db›.‹public›.‹t› SET LOCALITY GLOBAL
-  -        statement: ALTER TABLE multiregion_db.public.t SET LOCALITY GLOBAL
-  -        statementTag: ALTER TABLE
-  -    targetRanks: <redacted>
-  -    targets: <redacted>
-     families:
-     - columnIds:
   ...
        global: {}
      modificationTime: {}
@@ -1236,19 +1205,67 @@ upsert descriptor #108
      name: t
      nextColumnId: 5
   ...
-     schemaLocked: true
+       time: {}
      unexposedParentSchemaId: 105
   -  version: "8"
   +  version: "9"
 persist all catalog changes to storage
 create job #2 (non-cancelable: true): "GC for ALTER TABLE multiregion_db.public.t SET LOCALITY GLOBAL"
   descriptor IDs: [108]
+update progress of schema change job #1: "Pending: Updating schema metadata (1 operation) — PostCommitNonRevertible phase (stage 4 of 4)."
+commit transaction #12
+notified job registry to adopt jobs: [2]
+begin transaction #13
+## PostCommitNonRevertiblePhase stage 4 of 4 with 3 MutationType ops
+upsert descriptor #108
+  ...
+     createAsOfTime:
+       wallTime: "1640995200000000000"
+  -  declarativeSchemaChangerState:
+  -    authorization:
+  -      userName: root
+  -    currentStatuses: <redacted>
+  -    jobId: "1"
+  -    nameMapping:
+  -      columns:
+  -        "1": pk
+  -        "2": i
+  -        "3": j
+  -        "4": crdb_region
+  -        "4294967292": crdb_internal_origin_timestamp
+  -        "4294967293": crdb_internal_origin_id
+  -        "4294967294": tableoid
+  -        "4294967295": crdb_internal_mvcc_timestamp
+  -      families:
+  -        "0": primary
+  -      id: 108
+  -      indexes:
+  -        "4": t_j_key
+  -        "6": idx
+  -        "8": t_pkey
+  -      name: t
+  -    relevantStatements:
+  -    - statement:
+  -        redactedStatement: ALTER TABLE ‹multiregion_db›.‹public›.‹t› SET LOCALITY GLOBAL
+  -        statement: ALTER TABLE multiregion_db.public.t SET LOCALITY GLOBAL
+  -        statementTag: ALTER TABLE
+  -    targetRanks: <redacted>
+  -    targets: <redacted>
+     families:
+     - columnIds:
+  ...
+     replacementOf:
+       time: {}
+  +  schemaLocked: true
+     unexposedParentSchemaId: 105
+  -  version: "9"
+  +  version: "10"
+persist all catalog changes to storage
 update progress of schema change job #1: "all stages completed"
 set schema change job #1 to non-cancellable
 updated schema change job #1 descriptor IDs to []
 write *eventpb.FinishSchemaChange to event log:
   sc:
     descriptorId: 108
-commit transaction #12
-notified job registry to adopt jobs: [2]
+commit transaction #13
 # end PostCommitPhase

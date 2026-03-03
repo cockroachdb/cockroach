@@ -15,7 +15,7 @@ EXPLAIN (DDL) rollback at post-commit stage 10 of 15;
 ----
 Schema change plan for rolling back ALTER TABLE multiregion_db.public.t SET LOCALITY REGIONAL BY ROW;
  └── PostCommitNonRevertiblePhase
-      ├── Stage 1 of 3 in PostCommitNonRevertiblePhase
+      ├── Stage 1 of 4 in PostCommitNonRevertiblePhase
       │    ├── 3 elements transitioning toward PUBLIC
       │    │    ├── VALIDATED             → PUBLIC      PrimaryIndex:{DescID: 108 (t), IndexID: 1 (t_pkey+), ConstraintID: 2}
       │    │    ├── ABSENT                → PUBLIC      IndexPartitioning:{DescID: 108 (t), IndexID: 1 (t_pkey+)}
@@ -122,7 +122,7 @@ Schema change plan for rolling back ALTER TABLE multiregion_db.public.t SET LOCA
       │         ├── SetJobStateOnDescriptor {"DescriptorID":107}
       │         ├── SetJobStateOnDescriptor {"DescriptorID":108}
       │         └── UpdateSchemaChangerJob {"IsNonCancelable":true,"RunningStatus":"Pending: Updatin..."}
-      ├── Stage 2 of 3 in PostCommitNonRevertiblePhase
+      ├── Stage 2 of 4 in PostCommitNonRevertiblePhase
       │    ├── 9 elements transitioning toward ABSENT
       │    │    ├── VALIDATED   → DELETE_ONLY PrimaryIndex:{DescID: 108 (t), IndexID: 8 (t_pkey-), ConstraintID: 7, TemporaryIndexID: 9, SourceIndexID: 1 (t_pkey+)}
       │    │    ├── PUBLIC      → ABSENT      IndexColumn:{DescID: 108 (t), ColumnID: 4 (cr), IndexID: 8 (t_pkey-)}
@@ -147,32 +147,41 @@ Schema change plan for rolling back ALTER TABLE multiregion_db.public.t SET LOCA
       │         ├── SetJobStateOnDescriptor {"DescriptorID":107}
       │         ├── SetJobStateOnDescriptor {"DescriptorID":108}
       │         └── UpdateSchemaChangerJob {"IsNonCancelable":true,"RunningStatus":"Pending: Updatin..."}
-      └── Stage 3 of 3 in PostCommitNonRevertiblePhase
-           ├── 11 elements transitioning toward ABSENT
-           │    ├── DELETE_ONLY → ABSENT Column:{DescID: 108 (t), ColumnID: 5 (crdb_region-)}
-           │    ├── PUBLIC      → ABSENT ColumnType:{DescID: 108 (t), ReferencedTypeIDs: [106 (crdb_internal_region), 107 (_crdb_internal_region)], ColumnFamilyID: 0 (primary), ColumnID: 5 (crdb_region-), TypeName: "public.crdb_internal_region"}
-           │    ├── DELETE_ONLY → ABSENT PrimaryIndex:{DescID: 108 (t), IndexID: 8 (t_pkey-), ConstraintID: 7, TemporaryIndexID: 9, SourceIndexID: 1 (t_pkey+)}
-           │    ├── PUBLIC      → ABSENT IndexData:{DescID: 108 (t), IndexID: 8 (t_pkey-)}
-           │    ├── PUBLIC      → ABSENT IndexData:{DescID: 108 (t), IndexID: 9}
-           │    ├── PUBLIC      → ABSENT IndexData:{DescID: 108 (t), IndexID: 10 (t_pkey-)}
-           │    ├── PUBLIC      → ABSENT IndexData:{DescID: 108 (t), IndexID: 11}
-           │    ├── PUBLIC      → ABSENT IndexData:{DescID: 108 (t), IndexID: 4 (t_j_key-)}
-           │    ├── PUBLIC      → ABSENT IndexData:{DescID: 108 (t), IndexID: 5}
-           │    ├── PUBLIC      → ABSENT IndexData:{DescID: 108 (t), IndexID: 6 (idx-)}
-           │    └── PUBLIC      → ABSENT IndexData:{DescID: 108 (t), IndexID: 7}
-           └── 16 Mutation operations
-                ├── RemoveDroppedColumnType {"ColumnID":5,"TableID":108}
-                ├── UpdateTableBackReferencesInTypes {"BackReferencedTableID":108}
-                ├── MakeIndexAbsent {"IndexID":8,"TableID":108}
-                ├── CreateGCJobForIndex {"IndexID":4,"TableID":108}
-                ├── CreateGCJobForIndex {"IndexID":5,"TableID":108}
-                ├── CreateGCJobForIndex {"IndexID":6,"TableID":108}
-                ├── CreateGCJobForIndex {"IndexID":7,"TableID":108}
-                ├── MakeDeleteOnlyColumnAbsent {"ColumnID":5,"TableID":108}
-                ├── CreateGCJobForIndex {"IndexID":8,"TableID":108}
-                ├── CreateGCJobForIndex {"IndexID":9,"TableID":108}
-                ├── CreateGCJobForIndex {"IndexID":10,"TableID":108}
-                ├── CreateGCJobForIndex {"IndexID":11,"TableID":108}
+      ├── Stage 3 of 4 in PostCommitNonRevertiblePhase
+      │    ├── 11 elements transitioning toward ABSENT
+      │    │    ├── DELETE_ONLY → ABSENT Column:{DescID: 108 (t), ColumnID: 5 (crdb_region-)}
+      │    │    ├── PUBLIC      → ABSENT ColumnType:{DescID: 108 (t), ReferencedTypeIDs: [106 (crdb_internal_region), 107 (_crdb_internal_region)], ColumnFamilyID: 0 (primary), ColumnID: 5 (crdb_region-), TypeName: "public.crdb_internal_region"}
+      │    │    ├── DELETE_ONLY → ABSENT PrimaryIndex:{DescID: 108 (t), IndexID: 8 (t_pkey-), ConstraintID: 7, TemporaryIndexID: 9, SourceIndexID: 1 (t_pkey+)}
+      │    │    ├── PUBLIC      → ABSENT IndexData:{DescID: 108 (t), IndexID: 8 (t_pkey-)}
+      │    │    ├── PUBLIC      → ABSENT IndexData:{DescID: 108 (t), IndexID: 9}
+      │    │    ├── PUBLIC      → ABSENT IndexData:{DescID: 108 (t), IndexID: 10 (t_pkey-)}
+      │    │    ├── PUBLIC      → ABSENT IndexData:{DescID: 108 (t), IndexID: 11}
+      │    │    ├── PUBLIC      → ABSENT IndexData:{DescID: 108 (t), IndexID: 4 (t_j_key-)}
+      │    │    ├── PUBLIC      → ABSENT IndexData:{DescID: 108 (t), IndexID: 5}
+      │    │    ├── PUBLIC      → ABSENT IndexData:{DescID: 108 (t), IndexID: 6 (idx-)}
+      │    │    └── PUBLIC      → ABSENT IndexData:{DescID: 108 (t), IndexID: 7}
+      │    └── 16 Mutation operations
+      │         ├── RemoveDroppedColumnType {"ColumnID":5,"TableID":108}
+      │         ├── UpdateTableBackReferencesInTypes {"BackReferencedTableID":108}
+      │         ├── MakeIndexAbsent {"IndexID":8,"TableID":108}
+      │         ├── CreateGCJobForIndex {"IndexID":4,"TableID":108}
+      │         ├── CreateGCJobForIndex {"IndexID":5,"TableID":108}
+      │         ├── CreateGCJobForIndex {"IndexID":6,"TableID":108}
+      │         ├── CreateGCJobForIndex {"IndexID":7,"TableID":108}
+      │         ├── MakeDeleteOnlyColumnAbsent {"ColumnID":5,"TableID":108}
+      │         ├── CreateGCJobForIndex {"IndexID":8,"TableID":108}
+      │         ├── CreateGCJobForIndex {"IndexID":9,"TableID":108}
+      │         ├── CreateGCJobForIndex {"IndexID":10,"TableID":108}
+      │         ├── CreateGCJobForIndex {"IndexID":11,"TableID":108}
+      │         ├── SetJobStateOnDescriptor {"DescriptorID":106}
+      │         ├── SetJobStateOnDescriptor {"DescriptorID":107}
+      │         ├── SetJobStateOnDescriptor {"DescriptorID":108}
+      │         └── UpdateSchemaChangerJob {"IsNonCancelable":true,"RunningStatus":"Pending: Updatin..."}
+      └── Stage 4 of 4 in PostCommitNonRevertiblePhase
+           ├── 1 element transitioning toward TRANSIENT_PUBLIC
+           │    └── ABSENT → TRANSIENT_PUBLIC TableSchemaLocked:{DescID: 108 (t)}
+           └── 5 Mutation operations
+                ├── SetTableSchemaLocked {"Locked":true,"TableID":108}
                 ├── RemoveJobStateFromDescriptor {"DescriptorID":106}
                 ├── RemoveJobStateFromDescriptor {"DescriptorID":107}
                 ├── RemoveJobStateFromDescriptor {"DescriptorID":108}
