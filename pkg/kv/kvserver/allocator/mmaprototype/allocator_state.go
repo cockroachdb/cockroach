@@ -265,6 +265,20 @@ func (a *allocatorState) AdjustPendingChangeDisposition(
 				metrics.RebalanceReplicaChangeFailure.Inc(1)
 			}
 		}
+	case originMMARepair:
+		if isLeaseTransfer {
+			if success {
+				metrics.RepairLeaseChangeSuccess.Inc(1)
+			} else {
+				metrics.RepairLeaseChangeFailure.Inc(1)
+			}
+		} else {
+			if success {
+				metrics.RepairReplicaChangeSuccess.Inc(1)
+			} else {
+				metrics.RepairReplicaChangeFailure.Inc(1)
+			}
+		}
 	}
 	_, ok := a.cs.ranges[change.RangeID]
 	if !ok {

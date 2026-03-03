@@ -45,6 +45,11 @@ type rangeOperationMetrics struct {
 	RebalanceLeaseChangeSuccess   *metric.Counter
 	RebalanceLeaseChangeFailure   *metric.Counter
 
+	RepairReplicaChangeSuccess *metric.Counter
+	RepairReplicaChangeFailure *metric.Counter
+	RepairLeaseChangeSuccess   *metric.Counter
+	RepairLeaseChangeFailure   *metric.Counter
+
 	// Both metrics below counts ranges where the local store is leaseholder and
 	// span config normalization encountered errors. Both metrics persist until a
 	// new config arrives. This does not include cases where constraint analysis
@@ -91,6 +96,10 @@ func makeRangeOperationMetrics() *rangeOperationMetrics {
 		RebalanceReplicaChangeFailure:    metric.NewCounter(metaRebalanceReplicaChangeFailure),
 		RebalanceLeaseChangeSuccess:      metric.NewCounter(metaRebalanceLeaseChangeSuccess),
 		RebalanceLeaseChangeFailure:      metric.NewCounter(metaRebalanceLeaseChangeFailure),
+		RepairReplicaChangeSuccess:       metric.NewCounter(metaRepairReplicaChangeSuccess),
+		RepairReplicaChangeFailure:       metric.NewCounter(metaRepairReplicaChangeFailure),
+		RepairLeaseChangeSuccess:         metric.NewCounter(metaRepairLeaseChangeSuccess),
+		RepairLeaseChangeFailure:         metric.NewCounter(metaRepairLeaseChangeFailure),
 		SpanConfigNormalizationError:     metric.NewGauge(metaSpanConfigNormalizationError),
 		SpanConfigNormalizationSoftError: metric.NewGauge(metaSpanConfigNormalizationSoftError),
 	}
@@ -186,6 +195,42 @@ var (
 		LabeledName: "mma.change",
 		StaticLabels: metric.MakeLabelPairs(
 			metric.LabelOrigin, "rebalance", metric.LabelType, "lease", metric.LabelResult, "failure"),
+	}
+	metaRepairReplicaChangeSuccess = metric.Metadata{
+		Name:        "mma.change.repair.replica.success",
+		Help:        "Number of successful MMA-initiated repair operations that change replicas",
+		Measurement: "Range Change",
+		Unit:        metric.Unit_COUNT,
+		LabeledName: "mma.change",
+		StaticLabels: metric.MakeLabelPairs(
+			metric.LabelOrigin, "repair", metric.LabelType, "replica", metric.LabelResult, "success"),
+	}
+	metaRepairReplicaChangeFailure = metric.Metadata{
+		Name:        "mma.change.repair.replica.failure",
+		Help:        "Number of failed MMA-initiated repair operations that change replicas",
+		Measurement: "Range Change",
+		Unit:        metric.Unit_COUNT,
+		LabeledName: "mma.change",
+		StaticLabels: metric.MakeLabelPairs(
+			metric.LabelOrigin, "repair", metric.LabelType, "replica", metric.LabelResult, "failure"),
+	}
+	metaRepairLeaseChangeSuccess = metric.Metadata{
+		Name:        "mma.change.repair.lease.success",
+		Help:        "Number of successful MMA-initiated repair operations that transfer the lease",
+		Measurement: "Lease Change",
+		Unit:        metric.Unit_COUNT,
+		LabeledName: "mma.change",
+		StaticLabels: metric.MakeLabelPairs(
+			metric.LabelOrigin, "repair", metric.LabelType, "lease", metric.LabelResult, "success"),
+	}
+	metaRepairLeaseChangeFailure = metric.Metadata{
+		Name:        "mma.change.repair.lease.failure",
+		Help:        "Number of failed MMA-initiated repair operations that transfer the lease",
+		Measurement: "Lease Change",
+		Unit:        metric.Unit_COUNT,
+		LabeledName: "mma.change",
+		StaticLabels: metric.MakeLabelPairs(
+			metric.LabelOrigin, "repair", metric.LabelType, "lease", metric.LabelResult, "failure"),
 	}
 	metaSpanConfigNormalizationError = metric.Metadata{
 		Name: "mma.span_config.normalization.error",
