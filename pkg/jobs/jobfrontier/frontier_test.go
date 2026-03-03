@@ -205,6 +205,134 @@ func TestFrontier(t *testing.T) {
 	}
 }
 
+func TestStoreResolvedSpans(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	srv := serverutils.StartServerOnly(t, base.TestServerArgs{})
+	defer srv.Stopper().Stop(ctx)
+
+	s := srv.ApplicationLayer()
+	sp := func(i int) roachpb.Span {
+		return roachpb.Span{
+			Key:    s.Codec().TablePrefix(100 + uint32(i)),
+			EndKey: s.Codec().TablePrefix(101 + uint32(i)),
+		}
+	}
+	sp1, sp2, sp3 := sp(0), sp(1), sp(2)
+
+	ts1, ts2 := hlc.Timestamp{WallTime: 100, Logical: 1}, hlc.Timestamp{WallTime: 200, Logical: 2}
+
+	tests := []struct {
+		name  string
+		spans []jobspb.ResolvedSpan
+	}{
+		{
+			name: "basic",
+			spans: []jobspb.ResolvedSpan{
+				{Span: sp1, Timestamp: ts1},
+				{Span: sp2, Timestamp: ts2},
+				{Span: sp3, Timestamp: ts1},
+			},
+		},
+		{
+			name: "single span",
+			spans: []jobspb.ResolvedSpan{
+				{Span: sp1, Timestamp: ts2},
+			},
+		},
+		{
+			name: "zero timestamps",
+			spans: []jobspb.ResolvedSpan{
+				{Span: sp1},
+				{Span: sp2},
+			},
+		},
+	}
+
+	for i, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			jobID := jobspb.JobID(4000 + i)
+
+			require.NoError(t, s.InternalDB().(isql.DB).Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+				return StoreResolvedSpans(ctx, txn, jobID, tc.name, tc.spans)
+			}))
+
+			require.NoError(t, s.InternalDB().(isql.DB).Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+				spans, found, err := GetResolvedSpans(ctx, txn, jobID, tc.name)
+				require.NoError(t, err)
+				require.True(t, found)
+				require.ElementsMatch(t, tc.spans, spans)
+				return nil
+			}))
+		})
+	}
+
+	t.Run("overwrites prior data", func(t *testing.T) {
+		jobID := jobspb.JobID(4100)
+
+		first := []jobspb.ResolvedSpan{
+			{Span: sp1, Timestamp: ts1},
+			{Span: sp2, Timestamp: ts1},
+			{Span: sp3, Timestamp: ts1},
+		}
+		second := []jobspb.ResolvedSpan{
+			{Span: sp2, Timestamp: ts2},
+		}
+
+		require.NoError(t, s.InternalDB().(isql.DB).Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+			return StoreResolvedSpans(ctx, txn, jobID, "overwrite", first)
+		}))
+
+		// Overwrite with fewer spans at different timestamps.
+		require.NoError(t, s.InternalDB().(isql.DB).Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+			return StoreResolvedSpans(ctx, txn, jobID, "overwrite", second)
+		}))
+
+		require.NoError(t, s.InternalDB().(isql.DB).Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+			spans, found, err := GetResolvedSpans(ctx, txn, jobID, "overwrite")
+			require.NoError(t, err)
+			require.True(t, found)
+			require.ElementsMatch(t, second, spans)
+			return nil
+		}))
+	})
+
+	t.Run("equivalence with Store", func(t *testing.T) {
+		jobID := jobspb.JobID(4101)
+
+		f, err := span.MakeFrontier(sp1, sp2, sp3)
+		require.NoError(t, err)
+		_, err = f.Forward(sp1, ts1)
+		require.NoError(t, err)
+		_, err = f.Forward(sp3, ts2)
+		require.NoError(t, err)
+
+		// Store via Store (frontier-based).
+		require.NoError(t, s.InternalDB().(isql.DB).Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+			return Store(ctx, txn, jobID, "via-frontier", f)
+		}))
+		// Store via StoreResolvedSpans with equivalent data.
+		require.NoError(t, s.InternalDB().(isql.DB).Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+			return StoreResolvedSpans(ctx, txn, jobID, "via-spans", frontierToResolvedSpans(f))
+		}))
+
+		require.NoError(t, s.InternalDB().(isql.DB).Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+			spans1, found1, err := GetResolvedSpans(ctx, txn, jobID, "via-frontier")
+			require.NoError(t, err)
+			require.True(t, found1)
+
+			spans2, found2, err := GetResolvedSpans(ctx, txn, jobID, "via-spans")
+			require.NoError(t, err)
+			require.True(t, found2)
+
+			require.ElementsMatch(t, spans1, spans2)
+			return nil
+		}))
+	})
+}
+
 func TestStoreChunked(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -276,7 +404,7 @@ func TestStoreChunked(t *testing.T) {
 
 			// Store using storeChunked with specified chunk size
 			require.NoError(t, s.InternalDB().(isql.DB).Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
-				return storeChunked(ctx, txn, jobID, tc.name, frontier, tc.chunkSize)
+				return storeChunked(ctx, txn, jobID, tc.name, frontierToResolvedSpans(frontier), tc.chunkSize)
 			}))
 
 			// Verify the frontier can be loaded correctly
@@ -505,12 +633,14 @@ func TestRandomizedFrontier(t *testing.T) {
 
 	persist := func() {
 		require.NoError(t, s.InternalDB().(isql.DB).Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+			spans := frontierToResolvedSpans(frontier)
+
 			// Store sharded version (small chunk size forces sharding)
-			err := storeChunked(ctx, txn, jobID, "sharded", frontier, smallChunkSize)
+			err := storeChunked(ctx, txn, jobID, "sharded", spans, smallChunkSize)
 			require.NoError(t, err)
 
 			// Store unsharded version (large chunk size prevents sharding)
-			err = storeChunked(ctx, txn, jobID, "unsharded", frontier, largeChunkSize)
+			err = storeChunked(ctx, txn, jobID, "unsharded", spans, largeChunkSize)
 			require.NoError(t, err)
 
 			return nil
@@ -569,4 +699,13 @@ func checkSpanFrontierEquality(t *testing.T, expected span.Frontier, actual span
 		}
 		require.True(t, found, "span %d should be found in loaded frontier", eSp)
 	}
+}
+
+// frontierToResolvedSpans converts a frontier's entries to resolved spans.
+func frontierToResolvedSpans(f span.ReadOnlyFrontier) []jobspb.ResolvedSpan {
+	spans := make([]jobspb.ResolvedSpan, 0, f.Len())
+	for sp, ts := range f.Entries() {
+		spans = append(spans, jobspb.ResolvedSpan{Span: sp, Timestamp: ts})
+	}
+	return spans
 }
