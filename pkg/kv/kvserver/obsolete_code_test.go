@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 )
 
@@ -30,4 +31,13 @@ func TestObsoleteCode(t *testing.T) {
 	//		_ = some.Type{}.DeprecatedField
 	//		t.Fatalf("DeprecatedField can be removed")
 	//	}
+
+	// When MinSupported is bumped above V26_2, the deprecated store cluster
+	// version key cleanup code in pkg/server/init.go can be removed, as well as
+	// the DeprecatedStoreClusterVersionKey and its uses.
+	v26dot2 := clusterversion.RemoveDevOffset(clusterversion.V26_2.Version())
+	if !msv.LessEq(v26dot2) {
+		_ = keys.DeprecatedStoreClusterVersionKey()
+		t.Fatalf("DeprecatedStoreClusterVersionKey and its uses can be removed")
+	}
 }

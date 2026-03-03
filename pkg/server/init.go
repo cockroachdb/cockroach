@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/grpcutil"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
@@ -527,40 +528,28 @@ func (s *initServer) initializeFirstStoreAfterJoin(
 }
 
 func assertEnginesEmpty(engines []kvstorage.Engines) error {
-	storeClusterVersionKey := keys.DeprecatedStoreClusterVersionKey()
-
 	// TODO(sumeer): plumb a context if necessary.
 	ctx := context.Background()
-	for _, engine := range engines {
-		err := func() error {
-			iter, err := engine.TODOEngine().NewEngineIterator(ctx, storage.IterOptions{
-				KeyTypes:   storage.IterKeyTypePointsAndRanges,
-				UpperBound: roachpb.KeyMax,
-			})
-			if err != nil {
-				return err
-			}
-			defer iter.Close()
 
-			valid, err := iter.SeekEngineKeyGE(storage.EngineKey{Key: roachpb.KeyMin})
-			for ; valid && err == nil; valid, err = iter.NextEngineKey() {
-				k, err := iter.UnsafeEngineKey()
-				if err != nil {
-					return err
-				}
-				hasPoint, hasRange := iter.HasPointAndRange()
-
-				// The store cluster version key is written multiple times,
-				// including before bootstrapping or joining a cluster.
-				// Skip it if it exists.
-				if hasPoint && !hasRange && storeClusterVersionKey.Equal(k.Key) {
-					continue
-				}
-				return errors.New("engine is not empty")
-			}
-			return err
-		}()
+	assertEmpty := func(eng kvstorage.Engines) error {
+		iter, err := eng.TODOEngine().NewEngineIterator(ctx, storage.IterOptions{
+			KeyTypes:   storage.IterKeyTypePointsAndRanges,
+			UpperBound: roachpb.KeyMax,
+		})
 		if err != nil {
+			return err
+		}
+		defer iter.Close()
+
+		valid, err := iter.SeekEngineKeyGE(storage.EngineKey{Key: roachpb.KeyMin})
+		if valid && err == nil {
+			return errors.New("engine is not empty")
+		}
+		return err
+	}
+
+	for _, engine := range engines {
+		if err := assertEmpty(engine); err != nil {
 			return err
 		}
 	}
@@ -680,6 +669,39 @@ func newInitServerConfig(
 	}
 }
 
+// removeDeprecatedStoreClusterVersionKey removes the deprecated store cluster
+// version key from the given engines if it exists. This key was deprecated in
+// v23.1 and is no longer needed.
+func removeDeprecatedStoreClusterVersionKey(ctx context.Context, engines Engines) error {
+	deprecatedKey := keys.DeprecatedStoreClusterVersionKey()
+	cleanup := func(eng kvstorage.Engines) error {
+		// Check if the key exists before attempting to delete it.
+		if val, err := storage.MVCCGet(
+			ctx, eng.LogEngine(), deprecatedKey, hlc.Timestamp{}, storage.MVCCGetOptions{},
+		); err != nil {
+			return errors.Wrap(err, "checking for deprecated store cluster version key")
+		} else if !val.Value.IsPresent() {
+			return nil // key doesn't exist, nothing to clean up
+		}
+		// Key exists, delete it.
+		batch := eng.LogEngine().NewWriteBatch()
+		defer batch.Close()
+		if err := batch.ClearUnversioned(deprecatedKey, storage.ClearOptions{}); err != nil {
+			return errors.Wrap(err, "clearing deprecated store cluster version key")
+		}
+		if err := batch.Commit(true /* sync */); err != nil {
+			return errors.Wrap(err, "committing deprecated key cleanup")
+		}
+		return nil
+	}
+	for _, eng := range engines {
+		if err := cleanup(eng); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 // inspectEngines goes through engines and constructs an initState. The
 // initState returned by this method will reflect a zero NodeID if none has
 // been assigned yet (i.e. if none of the engines is initialized). See
@@ -732,6 +754,17 @@ func inspectEngines(
 
 		initializedEngines = append(initializedEngines, eng)
 	}
+
+	// Clean up the deprecated store cluster version key from all engines if we
+	// are on v26.2 or less.
+	// TODO(pav-kv): Remove this cleanup when MinSupported is bumped above V26_2,
+	// as all clusters will have gone through this cleanup by then.
+	if v26dot2 := clusterversion.V26_2.Version(); !v26dot2.Less(minSupportedVersion) {
+		if err := removeDeprecatedStoreClusterVersionKey(ctx, engines); err != nil {
+			return nil, err
+		}
+	}
+
 	clusterVersion, err := kvstorage.SynthesizeClusterVersionFromEngines(
 		ctx, initializedEngines, latestVersion, minSupportedVersion,
 	)
