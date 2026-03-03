@@ -20,8 +20,32 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
+	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/stretchr/testify/require"
 )
+
+// TestStoreIdent verifies that WriteStoreIdent and ReadStoreIdent work
+// correctly as a pair.
+func TestStoreIdent(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	eng := storage.NewDefaultInMemForTesting()
+	defer eng.Close()
+
+	// Reading from uninitialized storage should return NotBootstrappedError.
+	_, err := ReadStoreIdent(ctx, eng)
+	require.Error(t, err)
+	require.ErrorIs(t, err, &NotBootstrappedError{})
+
+	// Write a StoreIdent and verify we can read it back.
+	ident := roachpb.StoreIdent{ClusterID: uuid.MakeV4(), NodeID: 42, StoreID: 7}
+	require.NoError(t, WriteStoreIdent(ctx, eng, ident))
+	got, err := ReadStoreIdent(ctx, eng)
+	require.NoError(t, err)
+	require.Equal(t, ident, got)
+}
 
 // TestIterateRangeIDKeys lays down a number of RangeTombstone and ReplicaID
 // keys (at keys.RangeTombstoneKey and keys.RaftReplicaIDKey) interspersed with
