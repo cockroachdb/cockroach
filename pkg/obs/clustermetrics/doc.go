@@ -47,12 +47,32 @@ package clustermetrics
 // - design https://docs.google.com/document/d/1uVA5XhXLI1q-PjcT3V1bFYpjXWO-3LMXvWZep7QY2ck/edit?tab=t.0
 // - issue https://github.com/cockroachdb/cockroach/issues/154466
 //
+// USAGE
+//
+// Cluster metric usage is similar to, but distinct from traditional metrics.
+// There's an api for creating, and registering cluster metrics similar to
+// those seen in the util/metrics package.
+//
+//  var counter = clustermetrics.NewCounter(metric.Metadata{Name: "test.counter"})
+//  ...
+//  writer.AddMetric(counter)
+//
+// However, to ensure that the reader, which often lives on a different node
+// than the writer, can also read out a metric on its end, metrics are required
+// to register their metadata on startup, eg:
+//
+// func init() {
+//	clustermetrics.RegisterClusterMetric("test.counter", counterMeta)
+// }
+//
+// This happens automatically if the metric is constructed within package init.
+//
+// DESIGN
+//
 // Cluster metrics have a few core requirements:
 // - Each node should be able to update a metric.
 // - Only a single value for the metric should be store each interval in tsdb.
 // - Only one node should report that metric on a prometheus-style scrape.
-//
-// DESIGN
 //
 //            ┌──────────────────────┐                                  ┌──────┐
 //        ┌───►system.cluster_metrics│◄──────────────┐                  │tsdb  │
