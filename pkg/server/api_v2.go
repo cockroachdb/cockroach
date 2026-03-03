@@ -132,7 +132,9 @@ func newAPIV2Server(ctx context.Context, opts *apiV2ServerOpts) http.Handler {
 			systemStatus: systemStatus,
 		}
 		dbconsoleAPI := &dbconsole.ApiV2DBConsole{
-			Status: systemStatus.statusServer,
+			Status:     systemStatus.statusServer,
+			Admin:      systemAdmin.adminServer,
+			InternalDB: opts.sqlServer.internalDB,
 		}
 		registerRoutes(innerMux, authMux, inner, a, dbconsoleAPI)
 		return a
@@ -147,7 +149,8 @@ func newAPIV2Server(ctx context.Context, opts *apiV2ServerOpts) http.Handler {
 			db:               opts.db,
 		}
 		dbconsoleAPI := &dbconsole.ApiV2DBConsole{
-			Status: a.status,
+			Status:     a.status,
+			InternalDB: opts.sqlServer.internalDB,
 		}
 		registerRoutes(innerMux, authMux, a, a, dbconsoleAPI)
 		return a

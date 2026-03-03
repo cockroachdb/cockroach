@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/authserver"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/server/srverrors"
+	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 )
 
 // StatusAPI defines the status methods used by dbconsole.
@@ -33,9 +34,14 @@ type StatusAPI interface {
 	NodesUI(ctx context.Context, req *serverpb.NodesRequest) (*serverpb.NodesResponseExternal, error)
 }
 
+// AdminAPI defines admin methods used by dbconsole
+type AdminAPI interface{}
+
 // ApiV2DBConsole implements the DB Console BFF API endpoints.
 type ApiV2DBConsole struct {
-	Status StatusAPI
+	Status     StatusAPI
+	Admin      AdminAPI
+	InternalDB isql.DB
 }
 
 // NodeInfo contains summarized node information for the UI.
