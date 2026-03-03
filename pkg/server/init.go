@@ -528,8 +528,6 @@ func (s *initServer) initializeFirstStoreAfterJoin(
 }
 
 func assertEnginesEmpty(engines []kvstorage.Engines) error {
-	// TODO(pav-kv): remove this key, it's not used.
-	storeClusterVersionKey := keys.DeprecatedStoreClusterVersionKey()
 	// TODO(sumeer): plumb a context if necessary.
 	ctx := context.Background()
 
@@ -544,19 +542,7 @@ func assertEnginesEmpty(engines []kvstorage.Engines) error {
 		defer iter.Close()
 
 		valid, err := iter.SeekEngineKeyGE(storage.EngineKey{Key: roachpb.KeyMin})
-		for ; valid && err == nil; valid, err = iter.NextEngineKey() {
-			k, err := iter.UnsafeEngineKey()
-			if err != nil {
-				return err
-			}
-			hasPoint, hasRange := iter.HasPointAndRange()
-
-			// The store cluster version key is written multiple times,
-			// including before bootstrapping or joining a cluster.
-			// Skip it if it exists.
-			if hasPoint && !hasRange && storeClusterVersionKey.Equal(k.Key) {
-				continue
-			}
+		if valid && err == nil {
 			return errors.New("engine is not empty")
 		}
 		return err

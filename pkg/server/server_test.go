@@ -1029,6 +1029,8 @@ func TestAssertEnginesEmpty(t *testing.T) {
 
 	require.NoError(t, storage.MVCCPutProto(ctx, eng, keys.DeprecatedStoreClusterVersionKey(),
 		hlc.Timestamp{}, &roachpb.Version{Major: 21, Minor: 1, Internal: 122}, storage.MVCCWriteOptions{}))
+	require.Error(t, assertEnginesEmpty(engs))
+	require.NoError(t, removeDeprecatedStoreClusterVersionKey(ctx, engs))
 	require.NoError(t, assertEnginesEmpty(engs))
 
 	batch := eng.NewBatch()
