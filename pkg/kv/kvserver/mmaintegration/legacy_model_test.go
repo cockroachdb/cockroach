@@ -26,8 +26,8 @@ import (
 //  1. Normal: storesCPURate > 0, cpuUtil >= 0.01.
 //     We compute cpuUtil = nodeCPURateUsage / nodeCPURateCapacity, then
 //     derive a per-store capacity = (storesCPURate / cpuUtil) / numStores.
-//     See MakeStoreLoadMsg for why this construction preserves the
-//     node-level utilization as the mean store-level utilization.
+//     This construction preserves node-level utilization as the mean
+//     store-level utilization (see proof below).
 //
 //  2. Low utilization fallback: storesCPURate is zero or cpuUtil < 0.01.
 //     We assume 50% of the node capacity is attributable to stores and
@@ -71,10 +71,14 @@ import (
 //	            = StoresCPURate / StoresCPURateCapacity
 //	            = cpuUtil
 //
-// The above mathematical property is used to avoid having any explicit
-// communication of node load to MMA. The
-// NodeLoad.{ReportedCPU,CapacityCPU} is incrementally maintained as a sum
-// of the load and capacity reported by each store (at different times).
+// The above mathematical property was originally used to avoid explicit
+// communication of node load to MMA: NodeLoad.{ReportedCPU,CapacityCPU}
+// could be incrementally maintained as a sum of per-store load and capacity.
+// However, MakeStoreLoadMsg uses computeCPUCapacityWithCap which applies a
+// capped multiplier that subtracts background CPU, breaking this invariant
+// when background > 0. Node-level overload detection now uses explicit
+// physical node CPU values (NodeCPURateUsage, NodeCPURateCapacity) passed
+// through StoreLoadMsg.NodeCPULoad/NodeCPUCapacity instead.
 //
 // Additionally, when the meanCPUUtil indicates overload, at least one
 // store will be above that mean, so it is overloaded as well and will

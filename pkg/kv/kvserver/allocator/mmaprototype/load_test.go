@@ -104,9 +104,9 @@ func TestMeansMemo(t *testing.T) {
 
 			case "node-load":
 				nLoad := &NodeLoad{
-					NodeID:      dd.ScanArg[roachpb.NodeID](t, d, "node-id"),
-					ReportedCPU: dd.ScanArg[LoadValue](t, d, "cpu-load"),
-					CapacityCPU: dd.ScanArg[LoadValue](t, d, "cpu-capacity"),
+					NodeID:          dd.ScanArg[roachpb.NodeID](t, d, "node-id"),
+					NodeCPULoad:     dd.ScanArg[LoadValue](t, d, "cpu-load"),
+					NodeCPUCapacity: dd.ScanArg[LoadValue](t, d, "cpu-capacity"),
 				}
 				loadProvider.nloads[nLoad.NodeID] = nLoad
 				return ""
