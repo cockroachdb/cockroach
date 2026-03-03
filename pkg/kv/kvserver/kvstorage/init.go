@@ -51,7 +51,7 @@ func InitEngine(ctx context.Context, eng Engines, ident roachpb.StoreIdent) erro
 		return err
 	}
 
-	if err := checkCanInitializeEngine(ctx, eng.TODOEngine()); err != nil {
+	if err := checkCanInitializeEngine(ctx, eng); err != nil {
 		return errors.Wrap(err, "while trying to initialize engine")
 	}
 
@@ -73,9 +73,9 @@ func InitEngine(ctx context.Context, eng Engines, ident roachpb.StoreIdent) erro
 
 // checkCanInitializeEngine ensures that the engine is empty except possibly for
 // cluster version or cached cluster settings.
-func checkCanInitializeEngine(ctx context.Context, eng storage.Engine) error {
+func checkCanInitializeEngine(ctx context.Context, eng Engines) error {
 	// See if this is an already-bootstrapped store.
-	ident, err := ReadStoreIdent(ctx, eng)
+	ident, err := ReadStoreIdent(ctx, eng.LogEngine())
 	if err == nil {
 		return errors.Errorf("engine already initialized as %s", ident.String())
 	} else if !errors.HasType(err, (*NotBootstrappedError)(nil)) {
@@ -85,7 +85,8 @@ func checkCanInitializeEngine(ctx context.Context, eng storage.Engine) error {
 	// settings, but nothing else. Use EngineIterator to ensure that there are no
 	// keys that cannot be parsed as MVCCKeys (e.g. lock table keys) in the
 	// engine.
-	return IterEmptyEngine(ctx, eng, func(k storage.MVCCKey) error {
+	// TODO(pav-kv): verify this is actually true, attempt removing this quirk.
+	return IterEmptyEngine(ctx, eng.TODOEngine(), func(k storage.MVCCKey) error {
 		if _, err := keys.DecodeStoreCachedSettingsKey(k.Key); err != nil {
 			return errors.Errorf("engine cannot be bootstrapped, contains key:\n%s", k.String())
 		}
