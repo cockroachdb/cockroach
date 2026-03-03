@@ -596,6 +596,12 @@ func (m *managerImpl) HandleLockConflictError(
 	//
 	// Either way, there is no possibility of the request entering an infinite
 	// loop without making progress.
+
+	// Condense point resolve entries into range entries before they are cleared
+	// by the next ScanAndEnqueue. This prevents livelock when the lock table
+	// evicts entries under memory pressure.
+	g.PrepareForLockConflictRetry(ctx)
+
 	consultTxnStatusCache :=
 		int64(len(t.Locks)) > DiscoveredLocksThresholdToConsultTxnStatusCache.Get(&m.st.SV)
 	var numAdded int
@@ -825,6 +831,13 @@ func (m *managerImpl) TestingTxnWaitQueue() *txnwait.Queue {
 	return m.twq.(*txnwait.Queue)
 }
 
+// TestingPushedTransactionUpdated implements the TestingAccessor interface.
+func (m *managerImpl) TestingPushedTransactionUpdated(
+	txn *roachpb.Transaction, clockObs roachpb.ObservedTimestamp,
+) {
+	m.lt.PushedTransactionUpdated(txn, clockObs)
+}
+
 // SetMaxLockTableSize implements the LockManager interface.
 func (m *managerImpl) SetMaxLockTableSize(maxLocks int64) {
 	m.lt.SetMaxLockTableSize(maxLocks)
@@ -897,6 +910,13 @@ func (g *guardImpl) TakeSpanSets() (*spanset.SpanSet, *lockspanset.LockSpanSet) 
 // HoldingLatches implements the Guard interface.
 func (g *guardImpl) HoldingLatches() bool {
 	return g != nil && g.lg != nil
+}
+
+// PrepareForLockConflictRetry implements the Guard interface.
+func (g *guardImpl) PrepareForLockConflictRetry(ctx context.Context) {
+	if g != nil && g.ltg != nil {
+		g.ltg.PrepareForLockConflictRetry(ctx)
+	}
 }
 
 // AssertLatches implements the Guard interface.

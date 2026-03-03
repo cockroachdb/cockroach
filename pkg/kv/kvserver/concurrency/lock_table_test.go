@@ -2215,6 +2215,226 @@ func TestKeyLocksSafeFormatWaitQueue(t *testing.T) {
 		redact.Sprint(kl).Redact())
 }
 
+// TestResolvableLocks exercises the condense, contains, collect, and
+// isResolvableTxn behavior of resolvableLocks.
+func TestResolvableLocks(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	makeTxnMeta := func(name string) enginepb.TxnMeta {
+		return enginepb.TxnMeta{
+			ID:             uuid.MakeV4(),
+			WriteTimestamp: hlc.Timestamp{WallTime: 10},
+			Key:            roachpb.Key(name),
+		}
+	}
+	makeLockUpdate := func(txn enginepb.TxnMeta, key roachpb.Key) roachpb.LockUpdate {
+		return roachpb.LockUpdate{
+			Span:   roachpb.Span{Key: key},
+			Txn:    txn,
+			Status: roachpb.PENDING,
+		}
+	}
+	makeRL := func(vir bool, updates ...roachpb.LockUpdate) resolvableLocks {
+		rl := resolvableLocks{virEnabled: vir}
+		for _, lu := range updates {
+			rl.add(lu)
+		}
+		return rl
+	}
+	txn := makeTxnMeta("txn1")
+
+	t.Run("condense noop when VIR disabled", func(t *testing.T) {
+		rl := makeRL(false, makeLockUpdate(txn, roachpb.Key("a")))
+		require.False(t, rl.maybeCondense(0))
+		require.Len(t, rl.toResolve, 1)
+		require.Nil(t, rl.toResolveRange)
+	})
+
+	t.Run("condense noop when empty", func(t *testing.T) {
+		rl := makeRL(true)
+		require.False(t, rl.maybeCondense(0))
+		require.Nil(t, rl.toResolveRange)
+	})
+
+	t.Run("condense single txn", func(t *testing.T) {
+		rl := makeRL(true,
+			makeLockUpdate(txn, roachpb.Key("b")),
+			makeLockUpdate(txn, roachpb.Key("d")),
+			makeLockUpdate(txn, roachpb.Key("a")),
+		)
+		require.True(t, rl.maybeCondense(0))
+		require.Empty(t, rl.toResolve)
+		require.Len(t, rl.toResolveRange, 1)
+		// Range should span [a, d.Next()).
+		rangeUp := rl.toResolveRange[txn.ID]
+		require.Equal(t, roachpb.Key("a"), rangeUp.Key)
+		require.Equal(t, roachpb.Key("d").Next(), rangeUp.EndKey)
+	})
+
+	t.Run("extend existing range", func(t *testing.T) {
+		rl := makeRL(true,
+			makeLockUpdate(txn, roachpb.Key("b")),
+			makeLockUpdate(txn, roachpb.Key("c")),
+		)
+		// First round: condense "b" and "c".
+		rl.condense()
+		require.Empty(t, rl.toResolve)
+		require.Equal(t, roachpb.Key("b"), rl.toResolveRange[txn.ID].Key)
+		require.Equal(t, roachpb.Key("c").Next(), rl.toResolveRange[txn.ID].EndKey)
+
+		// Second round: extend left with "a" and right with "e".
+		rl.add(makeLockUpdate(txn, roachpb.Key("a")))
+		rl.add(makeLockUpdate(txn, roachpb.Key("e")))
+		rl.condense()
+		require.Len(t, rl.toResolveRange, 1)
+		rangeUp := rl.toResolveRange[txn.ID]
+		require.Equal(t, roachpb.Key("a"), rangeUp.Key)
+		require.Equal(t, roachpb.Key("e").Next(), rangeUp.EndKey)
+	})
+
+	t.Run("covered keys skipped on add", func(t *testing.T) {
+		rl := makeRL(true,
+			makeLockUpdate(txn, roachpb.Key("a")),
+			makeLockUpdate(txn, roachpb.Key("c")),
+		)
+		rl.condense()
+		// "b" is inside the range [a, c.Next()) and should be covered.
+		require.True(t, rl.contains(txn.ID, roachpb.Key("b")))
+		// "d" is outside.
+		require.False(t, rl.contains(txn.ID, roachpb.Key("d")))
+		// Unknown txn is not covered.
+		require.False(t, rl.contains(uuid.MakeV4(), roachpb.Key("b")))
+
+		// Adding a key already covered by the range should be a no-op.
+		rl.add(makeLockUpdate(txn, roachpb.Key("b")))
+		require.Empty(t, rl.toResolve)
+	})
+
+	t.Run("isResolvableTxn tracks added txns", func(t *testing.T) {
+		rl := makeRL(true, makeLockUpdate(txn, roachpb.Key("a")))
+		ok, _ := rl.isResolvableTxn(txn.ID)
+		require.True(t, ok)
+		ok, _ = rl.isResolvableTxn(uuid.MakeV4())
+		require.False(t, ok)
+	})
+
+	t.Run("isResolvableTxn noop when VIR disabled", func(t *testing.T) {
+		rl := makeRL(false, makeLockUpdate(txn, roachpb.Key("a")))
+		ok, _ := rl.isResolvableTxn(txn.ID)
+		require.False(t, ok)
+	})
+
+	t.Run("isResolvableTxn persists across clear", func(t *testing.T) {
+		rl := makeRL(true, makeLockUpdate(txn, roachpb.Key("a")))
+		rl.clear()
+		require.Empty(t, rl.toResolve)
+		ok, _ := rl.isResolvableTxn(txn.ID)
+		require.True(t, ok)
+	})
+
+	t.Run("collect combines point and range", func(t *testing.T) {
+		txn2 := makeTxnMeta("txn2")
+		rl := makeRL(true, makeLockUpdate(txn, roachpb.Key("a")))
+		// Condense txn into toResolveRange.
+		rl.condense()
+		// Add a point entry for txn2 (not yet condensed).
+		rl.add(makeLockUpdate(txn2, roachpb.Key("x")))
+
+		combined := rl.collect()
+		require.Len(t, combined, 2)
+		// One point (txn2) and one range (txn).
+		var hasPoint, hasRange bool
+		for _, up := range combined {
+			if len(up.EndKey) > 0 {
+				hasRange = true
+				require.Equal(t, txn.ID, up.Txn.ID)
+			} else {
+				hasPoint = true
+				require.Equal(t, txn2.ID, up.Txn.ID)
+			}
+		}
+		require.True(t, hasPoint)
+		require.True(t, hasRange)
+	})
+
+	t.Run("reset clears everything", func(t *testing.T) {
+		rl := makeRL(true,
+			makeLockUpdate(txn, roachpb.Key("a")),
+			makeLockUpdate(makeTxnMeta("txn2"), roachpb.Key("b")),
+		)
+		rl.condense()
+		rl.reset(false)
+		require.Empty(t, rl.toResolve)
+		require.Nil(t, rl.toResolveRange)
+		require.Nil(t, rl.resolvableTxns)
+		require.False(t, rl.virEnabled)
+	})
+}
+
+// TestMaybeDisableVIR exercises the maybeDisableVIR logic on lockTableGuardImpl.
+func TestMaybeDisableVIR(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+
+	makeTxnMeta := func(name string) enginepb.TxnMeta {
+		return enginepb.TxnMeta{
+			ID:             uuid.MakeV4(),
+			WriteTimestamp: hlc.Timestamp{WallTime: 10},
+			Key:            roachpb.Key(name),
+		}
+	}
+	makeLockUpdate := func(txn enginepb.TxnMeta, key roachpb.Key) roachpb.LockUpdate {
+		return roachpb.LockUpdate{
+			Span:   roachpb.Span{Key: key},
+			Txn:    txn,
+			Status: roachpb.PENDING,
+		}
+	}
+
+	t.Run("does not disable when under limit", func(t *testing.T) {
+		g := newLockTableGuardImpl()
+		defer releaseLockTableGuardImpl(g)
+		g.virtuallyResolveIntents = true
+		g.toResolve.virEnabled = true
+		g.maxToResolveRangeTxns = 2
+
+		// Add and condense one txn — under the limit.
+		txn1 := makeTxnMeta("txn1")
+		g.toResolve.add(makeLockUpdate(txn1, roachpb.Key("a")))
+		g.toResolve.condense()
+		require.Equal(t, 1, g.toResolve.rangeResolves())
+
+		g.maybeDisableVIR(ctx)
+		require.True(t, g.virtuallyResolveIntents)
+	})
+
+	t.Run("disables when over limit", func(t *testing.T) {
+		g := newLockTableGuardImpl()
+		defer releaseLockTableGuardImpl(g)
+		g.virtuallyResolveIntents = true
+		g.toResolve.virEnabled = true
+		g.maxToResolveRangeTxns = 1
+
+		// Add and condense two txns — over the limit.
+		txn1 := makeTxnMeta("txn1")
+		txn2 := makeTxnMeta("txn2")
+		g.toResolve.add(makeLockUpdate(txn1, roachpb.Key("a")))
+		g.toResolve.add(makeLockUpdate(txn2, roachpb.Key("b")))
+		g.toResolve.condense()
+		require.Equal(t, 2, g.toResolve.rangeResolves())
+
+		g.maybeDisableVIR(ctx)
+		require.False(t, g.virtuallyResolveIntents)
+		// reset should have been called, clearing everything.
+		require.Empty(t, g.toResolve.toResolve)
+		require.Nil(t, g.toResolve.toResolveRange)
+		require.Nil(t, g.toResolve.resolvableTxns)
+	})
+}
+
 // TestElideWaitingStateUpdatesConsidersAllFields ensures all fields in the
 // waitingState struct have been considered for inclusion/non-inclusion in the
 // logic of canElideWaitingStateUpdate. The test doesn't check if the
@@ -2246,5 +2466,65 @@ func TestCanElideWaitingStateUpdateConsidersAllFields(t *testing.T) {
 			t.Fatalf("%s field not considered", fieldName)
 		}
 		typ.Field(i)
+	}
+}
+
+// BenchmarkResolvableLocksAdd benchmarks the add path of resolvableLocks with
+// and without VIR enabled, varying the number of locks, distinct transactions,
+// and key sizes.
+func BenchmarkResolvableLocksAdd(b *testing.B) {
+	const maxTxns = 64
+	const maxKeysPerTxn = 256
+	txns := make([]enginepb.TxnMeta, maxTxns)
+	for i := range txns {
+		txns[i] = enginepb.TxnMeta{
+			ID:             uuid.MakeV4(),
+			WriteTimestamp: hlc.Timestamp{WallTime: 10},
+		}
+	}
+
+	makeKey := func(keySize, idx int) roachpb.Key {
+		k := make(roachpb.Key, keySize)
+		// Write the index into the last 8 bytes to ensure uniqueness.
+		s := strconv.AppendInt(k[:0], int64(idx), 10)
+		copy(k[keySize-len(s):], s)
+		return k
+	}
+
+	makeUpdate := func(txn enginepb.TxnMeta, key roachpb.Key) roachpb.LockUpdate {
+		return roachpb.LockUpdate{
+			Span:   roachpb.Span{Key: key},
+			Txn:    txn,
+			Status: roachpb.COMMITTED,
+		}
+	}
+
+	for _, keySize := range []int{32, 64, 128} {
+		keys := make([]roachpb.Key, maxKeysPerTxn)
+		for i := range keys {
+			keys[i] = makeKey(keySize, i)
+		}
+		for _, numTxns := range []int{1, 8, 64} {
+			for _, keysPerTxn := range []int{1, 32, 256} {
+				updates := make([]roachpb.LockUpdate, 0, numTxns*keysPerTxn)
+				for t := 0; t < numTxns; t++ {
+					for k := 0; k < keysPerTxn; k++ {
+						updates = append(updates, makeUpdate(txns[t], keys[k]))
+					}
+				}
+				for _, vir := range []bool{false, true} {
+					name := fmt.Sprintf("keySize=%d/txns=%d/keys=%d/vir=%t",
+						keySize, numTxns, keysPerTxn, vir)
+					b.Run(name, func(b *testing.B) {
+						for i := 0; i < b.N; i++ {
+							rl := resolvableLocks{virEnabled: vir}
+							for j := range updates {
+								rl.add(updates[j])
+							}
+						}
+					})
+				}
+			}
+		}
 	}
 }

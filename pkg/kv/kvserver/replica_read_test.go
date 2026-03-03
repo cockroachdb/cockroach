@@ -110,49 +110,57 @@ func TestVirtualizedIntentResolution(t *testing.T) {
 		{readTs: ts300, readGUL: ts600, toResolve: &toResolve{txnStatus: roachpb.PENDING, txnWriteTs: ts500, obsTs: ts400, obsNode: 2}, exp: res{error: "uncertainty interval"}},
 	}
 
-	for _, c := range testCases {
-		// Build a mock guard, injecting any intents to resolve virtually.
-		var intents []roachpb.LockUpdate
-		if c.toResolve != nil {
-			writeTxn.TxnMeta.WriteTimestamp = c.toResolve.txnWriteTs
-			status := c.toResolve.txnStatus
-			obs := roachpb.ObservedTimestamp{Timestamp: hlc.ClockTimestamp(c.toResolve.obsTs), NodeID: roachpb.NodeID(c.toResolve.obsNode)}
-			intents = []roachpb.LockUpdate{{Span: roachpb.Span{Key: k}, Status: status, Txn: writeTxn.TxnMeta, ClockWhilePending: obs}}
-		}
-		g := mockGuard{
-			req: concurrency.Request{
-				LatchSpans: allSpans(),
-				LockSpans:  lockspanset.New(),
-			},
-			intentsToResolveVirtually: intents,
-		}
-		// Construct the read-only request.
-		ba := &kvpb.BatchRequest{}
-		ba.Timestamp = c.readTs
-		// If the read wants to set a GUL, use a transactional read.
-		if !c.readGUL.IsEmpty() {
-			readTxn := newTransaction("readTxn", k, 1, nil)
-			readTxn.ReadTimestamp = c.readTs
-			readTxn.GlobalUncertaintyLimit = c.readGUL
-			// We need a fairly old observation here to make sure the read's local
-			// uncertainty limit lets it read under the intent with a clock
-			// observation while pending. This observation needs to be lower than the
-			// local timestamp set on the intent (set using ClockWhilePending).
-			// The txn's observed timestamp is usually set when the request is first
-			// received by the store, so here we'll record it as the read's ts.
-			readTxn.UpdateObservedTimestamp(roachpb.NodeID(1), c.readTs.UnsafeToClockTimestamp())
-			ba.Txn = readTxn
-		}
-		gArgs := getArgs(k)
-		ba.Add(&gArgs)
-		br, _, _, pErr := tc.repl.executeReadOnlyBatch(ctx, ba, g, kvadmission.AdmissionInfo{})
+	for _, resolveRange := range []bool{true, false} {
+		for _, c := range testCases {
+			// Build a mock guard, injecting any intents to resolve virtually.
+			var intents []roachpb.LockUpdate
+			if c.toResolve != nil {
+				writeTxn.TxnMeta.WriteTimestamp = c.toResolve.txnWriteTs
+				status := c.toResolve.txnStatus
+				obs := roachpb.ObservedTimestamp{Timestamp: hlc.ClockTimestamp(c.toResolve.obsTs), NodeID: roachpb.NodeID(c.toResolve.obsNode)}
+				var span roachpb.Span
+				if resolveRange {
+					span = roachpb.Span{Key: k, EndKey: k.Next()}
+				} else {
+					span = roachpb.Span{Key: k}
+				}
+				intents = []roachpb.LockUpdate{{Span: span, Status: status, Txn: writeTxn.TxnMeta, ClockWhilePending: obs}}
+			}
+			g := mockGuard{
+				req: concurrency.Request{
+					LatchSpans: allSpans(),
+					LockSpans:  lockspanset.New(),
+				},
+				intentsToResolveVirtually: intents,
+			}
+			// Construct the read-only request.
+			ba := &kvpb.BatchRequest{}
+			ba.Timestamp = c.readTs
+			// If the read wants to set a GUL, use a transactional read.
+			if !c.readGUL.IsEmpty() {
+				readTxn := newTransaction("readTxn", k, 1, nil)
+				readTxn.ReadTimestamp = c.readTs
+				readTxn.GlobalUncertaintyLimit = c.readGUL
+				// We need a fairly old observation here to make sure the read's local
+				// uncertainty limit lets it read under the intent with a clock
+				// observation while pending. This observation needs to be lower than the
+				// local timestamp set on the intent (set using ClockWhilePending).
+				// The txn's observed timestamp is usually set when the request is first
+				// received by the store, so here we'll record it as the read's ts.
+				readTxn.UpdateObservedTimestamp(roachpb.NodeID(1), c.readTs.UnsafeToClockTimestamp())
+				ba.Txn = readTxn
+			}
+			gArgs := getArgs(k)
+			ba.Add(&gArgs)
+			br, _, _, pErr := tc.repl.executeReadOnlyBatch(ctx, ba, g, kvadmission.AdmissionInfo{})
 
-		if c.exp.error == "" {
-			require.NoError(t, pErr.GoError())
-			require.Regexp(t, c.exp.value, string(br.Responses[0].GetGet().Value.RawBytes))
-		} else {
-			require.Nil(t, br)
-			require.Regexp(t, c.exp.error, pErr.GoError())
+			if c.exp.error == "" {
+				require.NoError(t, pErr.GoError())
+				require.Regexp(t, c.exp.value, string(br.Responses[0].GetGet().Value.RawBytes))
+			} else {
+				require.Nil(t, br)
+				require.Regexp(t, c.exp.error, pErr.GoError())
+			}
 		}
 	}
 }

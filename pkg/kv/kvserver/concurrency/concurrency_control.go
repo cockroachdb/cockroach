@@ -359,6 +359,10 @@ type TestingAccessor interface {
 
 	// TestingTxnWaitQueue returns the concurrency manager's txnWaitQueue.
 	TestingTxnWaitQueue() *txnwait.Queue
+
+	// TestingPushedTransactionUpdated exposes PushedTransactionUpdated on the
+	// underlying lock table for use in tests.
+	TestingPushedTransactionUpdated(txn *roachpb.Transaction, clockObs roachpb.ObservedTimestamp)
 }
 
 ///////////////////////////////////
@@ -518,6 +522,11 @@ type Guard interface {
 	// IntentsToResolveVirtually delegates listing the locks to be resolved to the
 	// lock table guard.
 	IntentsToResolveVirtually() []roachpb.LockUpdate
+
+	// PrepareForLockConflictRetry is called on the lock conflict error path,
+	// before the guard is re-sequenced. It condenses point resolve entries into
+	// range entries that persist across re-sequencing.
+	PrepareForLockConflictRetry(context.Context)
 }
 
 // guardImpl implements the Guard interface.
@@ -894,6 +903,11 @@ type lockTableGuard interface {
 	// VirtuallyResolvesIntents returns true if the guard will resolve intents
 	// virtually during evaluation rather than physically before re-scanning.
 	VirtuallyResolvesIntents() bool
+
+	// PrepareForLockConflictRetry is called when handling a LockConflictError
+	// after evaluation. It condenses point resolve entries into range entries
+	// that persist across re-sequencing.
+	PrepareForLockConflictRetry(context.Context)
 
 	// CheckOptimisticNoConflicts uses the LockSpanSet representing the spans that
 	// were actually read, to check for conflicting locks, after an optimistic

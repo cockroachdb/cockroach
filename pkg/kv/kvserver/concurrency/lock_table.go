@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/lockspanset"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/container/list"
@@ -412,6 +413,8 @@ type lockTableGuardImpl struct {
 	// PushUsingCachedClockObservation cluster setting at the this request.
 	pushUsingCachedClockObs bool
 	maxWaitQueueLength      int
+	maxToResolveRangeTxns   int
+	condenseOnScanThreshold int
 
 	// Snapshot of the tree for which this request has some spans. Note that
 	// the lockStates in this snapshot may have been removed from
@@ -510,13 +513,14 @@ type lockTableGuardImpl struct {
 		mustComputeWaitingState bool
 		startWait               bool
 	}
+
 	// Locks to resolve before scanning again. Doesn't need to be protected by
-	// mu since should only be read after the caller has already synced with mu
-	// in realizing that it is doneWaiting.
+	// mu since should only be read after the caller has already synced with mu in
+	// realizing that it is doneWaiting.
 	//
 	// toResolve should only include replicated locks; for unreplicated locks,
 	// toResolveUnreplicated is used instead.
-	toResolve []roachpb.LockUpdate
+	toResolve resolvableLocks
 
 	// toResolveUnreplicated is a list of locks (only held with durability
 	// unreplicated) that are known to belong to finalized transactions. Such
@@ -531,6 +535,168 @@ type lockTableGuardImpl struct {
 	// on locks belonging to finalized transactions, we wouldn't need to bother
 	// scanning requests.
 	toResolveUnreplicated []roachpb.LockUpdate
+}
+
+// resolvableLocks tracks replicated locks that a guard has determined are
+// resolvable. Point entries accumulate in toResolve during lock table scans.
+//
+// When VIR is enabled and toResolve grows beyond condenseThreshold, point
+// entries are condensed into range entries in toResolveRange. The range entries
+// and resolvableTxns persist across scans so the guard does not re-conflict on
+// locks whose txnStatusCache entry has been evicted.
+type resolvableLocks struct {
+	// toResolve holds point LockUpdates accumulated during scanning. This is
+	// cleared on every entry to ScanAndEnqueue.
+	//
+	// For VIR transactions, we rely on previously encountered transactions being
+	// in resolvableTxns
+	toResolve []roachpb.LockUpdate
+
+	// toResolveRange maps txn IDs to range LockUpdates that persist across
+	// scan attempts. Populated by condensing toResolve. Only used when
+	// virtual intent resolution is enabled.
+	//
+	// This is not cleared across ScanAndEnqueue calls.
+	toResolveRange map[uuid.UUID]roachpb.LockUpdate
+
+	// resolvableTxns maps txn IDs to a partial LockUpdate representing that
+	// transaction's last addition to toResolve. This is not cleared across
+	// ScanAndEnqueue.
+	resolvableTxns map[uuid.UUID]roachpb.LockUpdate
+
+	// virEnabled controls whether resolvableLocks should actually use toResolveRange
+	// and resolvableTxns.
+	virEnabled bool
+}
+
+// condense moves all point entries from toResolve into toResolveRange,
+// extending existing range entries per txn ID.
+func (rl *resolvableLocks) condense() {
+	if len(rl.toResolve) == 0 || !rl.virEnabled {
+		return
+	}
+
+	if rl.toResolveRange == nil {
+		rl.toResolveRange = make(map[uuid.UUID]roachpb.LockUpdate)
+	}
+	for i := range rl.toResolve {
+		up := rl.toResolve[i]
+		txnID := up.Txn.ID
+		existing, ok := rl.toResolveRange[txnID]
+		if !ok {
+			up.Span.EndKey = up.Key.Next()
+			rl.toResolveRange[txnID] = up
+		} else if !existing.Span.ContainsKey(up.Key) {
+			existing.Span = existing.Combine(up.Span)
+			rl.toResolveRange[txnID] = existing
+		}
+	}
+	rl.toResolve = rl.toResolve[:0]
+}
+
+// maybeCondense condenses point entries into range entries if toResolve has
+// grown beyond the configured threshold.
+func (rl *resolvableLocks) maybeCondense(threshold int) bool {
+	if rl.virEnabled && len(rl.toResolve) > threshold {
+		rl.condense()
+		return true
+	}
+	return false
+}
+
+// collect returns all resolvable locks — both point and range entries.
+func (rl *resolvableLocks) collect() []roachpb.LockUpdate {
+	if len(rl.toResolveRange) == 0 {
+		return rl.toResolve
+	}
+	combined := make([]roachpb.LockUpdate, 0, len(rl.toResolve)+len(rl.toResolveRange))
+	combined = append(combined, rl.toResolve...)
+	for _, up := range rl.toResolveRange {
+		combined = append(combined, up)
+	}
+	return combined
+}
+
+// contains returns true if the given (txnID, key) pair is already tracked
+// as resolvable via the range entries. Point entries in toResolve are not
+// checked; duplicates are tolerated and eliminated on condensing.
+func (rl *resolvableLocks) contains(txnID uuid.UUID, key roachpb.Key) bool {
+	if rl.toResolveRange != nil {
+		rangeUp, ok := rl.toResolveRange[txnID]
+		return ok && rangeUp.Span.ContainsKey(key)
+	}
+	return false
+}
+
+func (rl *resolvableLocks) isResolvableTxn(txnID uuid.UUID) (bool, roachpb.LockUpdate) {
+	if !rl.virEnabled {
+		return false, roachpb.LockUpdate{}
+	}
+
+	if lu, ok := rl.resolvableTxns[txnID]; ok {
+		return true, lu
+	}
+	return false, roachpb.LockUpdate{}
+}
+
+// add appends a point LockUpdate. If the key is already covered by a range
+// entry for the same txn, the add is skipped. Duplicate point entries for
+// the same (txn, key) are tolerated.
+func (rl *resolvableLocks) add(lu roachpb.LockUpdate) {
+	// We only track resolvableTxns for VIR-enabled txns.
+	if !rl.virEnabled {
+		rl.toResolve = append(rl.toResolve, lu)
+		return
+	}
+
+	if rl.toResolveRange != nil {
+		existing, ok := rl.toResolveRange[lu.Txn.ID]
+		if ok && existing.Span.ContainsKey(lu.Key) {
+			return
+		}
+	}
+	rl.toResolve = append(rl.toResolve, lu)
+
+	if rl.resolvableTxns == nil {
+		rl.resolvableTxns = make(map[uuid.UUID]roachpb.LockUpdate)
+	}
+	cacheEntry := lu
+	cacheEntry.Span = roachpb.Span{}
+	rl.resolvableTxns[cacheEntry.Txn.ID] = cacheEntry
+}
+
+// filterPointResolves removes point entries for which fn returns false.
+func (rl *resolvableLocks) filterPointResolves(fn func(roachpb.LockUpdate) bool) {
+	if len(rl.toResolve) == 0 {
+		return
+	}
+	j := 0
+	for i := range rl.toResolve {
+		if fn(rl.toResolve[i]) {
+			rl.toResolve[j] = rl.toResolve[i]
+			j++
+		}
+	}
+	rl.toResolve = rl.toResolve[:j]
+}
+
+func (rl *resolvableLocks) rangeResolves() int {
+	return len(rl.toResolveRange)
+}
+
+func (rl *resolvableLocks) len() int {
+	return len(rl.toResolve) + len(rl.toResolveRange)
+}
+
+func (rl *resolvableLocks) clear() {
+	rl.toResolve = rl.toResolve[:0]
+}
+
+func (rl *resolvableLocks) reset(virEnabled bool) {
+	rl.toResolve = rl.toResolve[:0]
+	rl.resolvableTxns = nil
+	rl.toResolveRange = nil
+	rl.virEnabled = virEnabled
 }
 
 var _ lockTableGuard = &lockTableGuardImpl{}
@@ -583,25 +749,26 @@ func (g *lockTableGuardImpl) ShouldWait() bool {
 	// resolution is enabled, these locks will be resolved during evaluation (on
 	// a temporary batch) rather than before re-scanning, so the request does not
 	// need to wait.
-	return g.mu.startWait || (!g.virtuallyResolveIntents && len(g.toResolve) > 0)
+	return g.mu.startWait || (!g.virtuallyResolveIntents && g.toResolve.len() > 0)
 }
 
 // ResolveBeforeScanning implements the lockTableGuard interface. The locks to
 // resolve are returned only if virtualized resolution is disabled.
 func (g *lockTableGuardImpl) ResolveBeforeScanning() []roachpb.LockUpdate {
 	if !g.virtuallyResolveIntents {
-		return g.toResolve
+		return g.toResolve.collect()
 	}
 	return nil
 }
 
 // IntentsToResolveVirtually implements the lockTableGuard interface. The locks
-// to resolve are returned only if virtualized resolution is enabled.
+// to resolve are returned only if virtualized resolution is enabled. Returns
+// both point entries from toResolve and range entries from toResolveRange.
 func (g *lockTableGuardImpl) IntentsToResolveVirtually() []roachpb.LockUpdate {
-	if g.virtuallyResolveIntents {
-		return g.toResolve
+	if !g.virtuallyResolveIntents {
+		return nil
 	}
-	return nil
+	return g.toResolve.collect()
 }
 
 // VirtuallyResolvesIntents implements the lockTableGuard interface.
@@ -870,6 +1037,13 @@ func (g *lockTableGuardImpl) hasObservationAtOrBefore(o roachpb.ObservedTimestam
 func (g *lockTableGuardImpl) canResolveKeyForHoldingTransaction(
 	lockHolderTxn *enginepb.TxnMeta, str lock.Strength, key roachpb.Key,
 ) (bool, roachpb.LockUpdate) {
+	// If we already know about this txn in our toResolve set but it has just been
+	// pushed, then we can use it from there.
+	if resolvable, up := g.toResolve.isResolvableTxn(lockHolderTxn.ID); resolvable {
+		up.Span = roachpb.Span{Key: key}
+		return true, up
+	}
+
 	// If the transaction is known to be finalized, then we are good to go.
 	finalizedTxn, ok := g.lt.txnStatusCache.finalizedTxns.get(lockHolderTxn.ID)
 	if ok {
@@ -888,6 +1062,7 @@ func (g *lockTableGuardImpl) canResolveKeyForHoldingTransaction(
 			return true, up
 		}
 	}
+
 	return false, roachpb.LockUpdate{}
 }
 
@@ -934,6 +1109,10 @@ func (g *lockTableGuardImpl) conflictsWithHeldLock(
 		return false // no conflict with a lock held by our own transaction
 	}
 
+	if g.toResolve.contains(lockHolderTxn.ID, key) {
+		return false // No conflict for a lock we are going to resolve.
+	}
+
 	if canResolve, up := g.canResolveKeyForHoldingTransaction(lockHolderTxn, g.curStrength(), key); canResolve {
 		// We share this code with a couple of contexts. For now, we want to avoid waking up
 		// readers who are not going to virtually resolve their intents.
@@ -950,8 +1129,9 @@ func (g *lockTableGuardImpl) conflictsWithHeldLock(
 				// blocking on intents, it can be removed and asserted against.
 				g.toResolveUnreplicated = append(g.toResolveUnreplicated, up)
 			} else {
-				// Resolve to push the replicated intent.
-				g.toResolve = append(g.toResolve, up)
+				// Resolve to push the replicated intent, unless this key
+				// is already covered by a range resolve range request.
+				g.toResolve.add(up)
 			}
 			return false // No conflict on a lock we are going to resolve.
 		}
@@ -1099,8 +1279,7 @@ func (g *lockTableGuardImpl) resumeScan(notify bool) error {
 		span = stepToNextSpan(g)
 	}
 
-	if len(g.toResolve) > 0 && !g.virtuallyResolveIntents {
-		j := 0
+	if !g.virtuallyResolveIntents {
 		// Some of the locks in g.toResolve may already have been claimed by
 		// another concurrent request and removed, or intent resolution could have
 		// happened while this request was waiting (after releasing latches). So
@@ -1116,19 +1295,13 @@ func (g *lockTableGuardImpl) resumeScan(notify bool) error {
 		//
 		// We skip updating the lock table if virtual intent resolution is enabled
 		// since this request won't be committing its intent resolution.
-		for i := range g.toResolve {
-			var doResolve bool
-			if g.toResolve[i].Status.IsFinalized() {
-				doResolve = g.lt.updateLockInternal(&g.toResolve[i])
+		g.toResolve.filterPointResolves(func(lu roachpb.LockUpdate) bool {
+			if lu.Status.IsFinalized() {
+				return g.lt.updateLockInternal(&lu)
 			} else {
-				doResolve = true
+				return true
 			}
-			if doResolve {
-				g.toResolve[j] = g.toResolve[i]
-				j++
-			}
-		}
-		g.toResolve = g.toResolve[:j]
+		})
 	}
 	g.mu.Lock()
 	defer g.mu.Unlock()
@@ -1137,6 +1310,28 @@ func (g *lockTableGuardImpl) resumeScan(notify bool) error {
 		g.notify()
 	}
 	return nil
+}
+
+// PrepareForLockConflictRetry implements the lockTableGuard interface.
+func (g *lockTableGuardImpl) PrepareForLockConflictRetry(_ context.Context) {
+	// If we encountered a LockConflict during evaluation, we need to consider the
+	// possibility that we _won't_ encounter the lock again from the lock table.
+	//
+	// We handle that by condensing _everything_ into resolve ranges. We could
+	// have alternatively handled this by keep toResolve across invocations of
+	// ScanAndEnqueue. If we find that overzealous range resolutions are a
+	// problem, we can re-consider that decision.
+	g.toResolve.maybeCondense(0)
+}
+
+func (g *lockTableGuardImpl) maybeDisableVIR(ctx context.Context) {
+	if l := g.toResolve.rangeResolves(); l > g.maxToResolveRangeTxns {
+		log.VEventf(ctx, 2,
+			"disabling virtual intent resolution: resolve range request count exceeds maximum: %d > %d",
+			l, g.maxToResolveRangeTxns)
+		g.virtuallyResolveIntents = false
+		g.toResolve.reset(g.virtuallyResolveIntents)
+	}
 }
 
 func (g *lockTableGuardImpl) String() string {
@@ -4321,7 +4516,16 @@ func (t *lockTableImpl) ScanAndEnqueue(
 		g.mu.state = waitingState{}
 		g.mu.mustComputeWaitingState = false
 		g.mu.Unlock()
-		g.toResolve = g.toResolve[:0]
+		if g.virtuallyResolveIntents {
+			// Condense accumulated point entries into range entries if the list has
+			// grown large.
+			//
+			// If we've also accumulated too many range resolves, give up trying to
+			// virtually resolve.
+			g.toResolve.maybeCondense(g.condenseOnScanThreshold)
+			g.maybeDisableVIR(ctx)
+		}
+		g.toResolve.clear()
 	}
 	t.doSnapshotForGuard(g)
 
@@ -4349,6 +4553,10 @@ func (t *lockTableImpl) ScanAndEnqueue(
 	return g, nil
 }
 
+// defaultMaxToResolveRangeTxns is the default maximum number of distinct txns
+// tracked in toResolveRange.
+const defaultMaxToResolveRangeTxns = 128
+
 func (t *lockTableImpl) newGuardForReq(req Request) *lockTableGuardImpl {
 	g := newLockTableGuardImpl()
 	g.seqNum = t.seqNum.Add(1)
@@ -4358,10 +4566,13 @@ func (t *lockTableImpl) newGuardForReq(req Request) *lockTableGuardImpl {
 	g.spans = req.LockSpans
 	g.waitPolicy = req.WaitPolicy
 	g.maxWaitQueueLength = req.MaxLockWaitQueueLength
+	g.maxToResolveRangeTxns = defaultMaxToResolveRangeTxns
+	g.condenseOnScanThreshold = int(storage.MaxConflictsPerLockConflictError.Get(&g.lt.settings.SV))
 	g.str = lock.MaxStrength
 	g.index = -1
 	g.pushUsingCachedClockObs = PushUsingCachedClockObservation.Get(&g.lt.settings.SV)
 	g.virtuallyResolveIntents = VirtualIntentResolution.Get(&g.lt.settings.SV) && req.canVirtuallyResolve()
+	g.toResolve.virEnabled = g.virtuallyResolveIntents
 	return g
 }
 
@@ -4459,7 +4670,7 @@ func (t *lockTableImpl) AddDiscoveredLock(
 	}
 	if consultTxnStatusCache {
 		if canResolve, up := g.canResolveKeyForHoldingTransaction(&foundLock.Txn, str, key); canResolve {
-			g.toResolve = append(g.toResolve, up)
+			g.toResolve.add(up)
 			return true, nil
 		}
 	}
