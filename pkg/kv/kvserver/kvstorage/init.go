@@ -227,13 +227,12 @@ func iterateRangeIDKeys(
 	return iterErr
 }
 
-// ReadStoreIdent reads the StoreIdent from the store.
-// It returns *NotBootstrappedError if the ident is missing (meaning that the
-// store needs to be bootstrapped).
-func ReadStoreIdent(ctx context.Context, eng storage.Engine) (roachpb.StoreIdent, error) {
+// ReadStoreIdent reads the StoreIdent. Returns *NotBootstrappedError if the
+// ident is missing, meaning that the store still needs to be bootstrapped.
+func ReadStoreIdent(ctx context.Context, r storage.Reader) (roachpb.StoreIdent, error) {
 	var ident roachpb.StoreIdent
 	ok, err := storage.MVCCGetProto(
-		ctx, eng, keys.StoreIdentKey(), hlc.Timestamp{}, &ident, storage.MVCCGetOptions{})
+		ctx, r, keys.StoreIdentKey(), hlc.Timestamp{}, &ident, storage.MVCCGetOptions{})
 	if err != nil {
 		return roachpb.StoreIdent{}, err
 	} else if !ok {
