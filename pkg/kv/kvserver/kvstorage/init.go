@@ -86,21 +86,30 @@ func checkCanInitializeEngine(ctx context.Context, eng Engines) error {
 	// keys that cannot be parsed as MVCCKeys (e.g. lock table keys) in the
 	// engine.
 	// TODO(pav-kv): verify this is actually true, attempt removing this quirk.
-	return CheckEngineKeys(ctx, eng.TODOEngine(), func(k storage.MVCCKey) error {
+	check := func(k storage.MVCCKey) error {
 		if _, err := keys.DecodeStoreCachedSettingsKey(k.Key); err != nil {
 			return errors.Errorf("engine cannot be bootstrapped, contains key:\n%s", k.String())
 		}
 		return nil
-	})
+	}
+	if eng.Separated() {
+		return CheckEngineKeys(ctx, eng.StateEngine(), check)
+	}
+	return CheckEngineKeys(ctx, eng.LogEngine(), check)
 }
 
 // CheckEngineKeys iterates the Engine that is expected to be mostly empty. Some
 // callers allow certain keys to be present in partially initialized engines, so
 // this information is given to the caller via a callback for validation.
 func CheckEngineKeys(
-	ctx context.Context, r storage.Reader, allowed func(key storage.MVCCKey) error,
+	ctx context.Context, eng storage.Engine, allowed func(key storage.MVCCKey) error,
 ) error {
-	iter, err := r.NewEngineIterator(ctx, storage.IterOptions{
+	// Disable engine access assertions since we are iterating the entirety of the
+	// engine without trying to target specific key subsets. The caller knows what
+	// they are doing.
+	eng = disableAccessAssertions(eng)
+
+	iter, err := eng.NewEngineIterator(ctx, storage.IterOptions{
 		KeyTypes:   storage.IterKeyTypePointsAndRanges,
 		UpperBound: roachpb.KeyMax,
 	})
