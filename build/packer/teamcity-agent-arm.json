@@ -11,12 +11,12 @@
         "access_key": "{{user `aws_access_key`}}",
         "secret_key": "{{user `aws_secret_key`}}",
         "region": "us-east-1",
-        "source_ami": "ami-070650c005cce4203",
+        "source_ami": "ami-0071c8c431eea0edb",
         "instance_type": "g5g.xlarge",
         "ssh_username": "ubuntu",
         "ami_name": "teamcity-arm-agent-{{timestamp}}",
         "ssh_timeout": "10m",
-        "ami_block_device_mappings": {
+        "launch_block_device_mappings": {
             "device_name": "/dev/sda1",
             "volume_size": "512",
             "volume_type": "gp2",
