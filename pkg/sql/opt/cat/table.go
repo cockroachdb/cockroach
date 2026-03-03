@@ -69,6 +69,9 @@ type Table interface {
 	// This method should be used when mutation columns can be ignored (the common
 	// case). The returned indexes include the primary index, so the count is
 	// always >= 1.
+	// This count excludes secondary indexes that are not ready for reads yet.
+	// Those are indexes that are created during a primary index swap and are not
+	// usable until the new primary index goes public.
 	IndexCount() int
 
 	// WritableIndexCount returns the number of public and write-only indexes
