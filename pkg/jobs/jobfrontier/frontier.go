@@ -125,7 +125,24 @@ func Store(
 	name string,
 	frontier span.ReadOnlyFrontier,
 ) error {
-	return storeChunked(ctx, txn, jobID, name, frontier, 2<<20 /* 2mb */)
+	return StoreResolvedSpans(ctx, txn, jobID, name, frontierToResolvedSpans(frontier))
+}
+
+// frontierToResolvedSpans converts a frontier's entries to resolved spans.
+func frontierToResolvedSpans(f span.ReadOnlyFrontier) []jobspb.ResolvedSpan {
+	spans := make([]jobspb.ResolvedSpan, 0, f.Len())
+	for sp, ts := range f.Entries() {
+		spans = append(spans, jobspb.ResolvedSpan{Span: sp, Timestamp: ts})
+	}
+	return spans
+}
+
+// StoreResolvedSpans is like Store except it accepts resolved spans directly
+// so that callers do not need to construct a frontier.
+func StoreResolvedSpans(
+	ctx context.Context, txn isql.Txn, jobID jobspb.JobID, name string, spans []jobspb.ResolvedSpan,
+) error {
+	return storeChunked(ctx, txn, jobID, name, spans, 2<<20 /* 2mb */)
 }
 
 func storeChunked(
@@ -133,7 +150,7 @@ func storeChunked(
 	txn isql.Txn,
 	jobID jobspb.JobID,
 	name string,
-	frontier span.ReadOnlyFrontier,
+	spans []jobspb.ResolvedSpan,
 	chunkSize int,
 ) error {
 	infoStorage := jobs.InfoStorageForJob(txn, jobID)
@@ -150,23 +167,13 @@ func storeChunked(
 		return err
 	}
 
-	// Collect all frontier entries
-	var all []jobspb.ResolvedSpan
-	all = make([]jobspb.ResolvedSpan, 0, frontier.Len())
-	for spanEntry, timestamp := range frontier.Entries() {
-		all = append(all, jobspb.ResolvedSpan{
-			Span:      spanEntry,
-			Timestamp: timestamp,
-		})
-	}
-
-	// Flush the frontier chunks.
+	// Flush the resolved spans in chunks.
 	var chunk, size int
 	var chunkStart int
 	// Group entries by shard.
-	for i, sp := range all {
+	for i, sp := range spans {
 		if size > chunkSize {
-			if err := storeEntries(ctx, infoStorage, name, fmt.Sprintf("%d", chunk), all[chunkStart:i]); err != nil {
+			if err := storeEntries(ctx, infoStorage, name, fmt.Sprintf("%d", chunk), spans[chunkStart:i]); err != nil {
 				return err
 			}
 			chunk++
@@ -176,8 +183,8 @@ func storeChunked(
 
 		size += len(sp.Span.Key) + len(sp.Span.EndKey) + 16 // timestamp/overhead.
 	}
-	if chunkStart < len(all) {
-		if err := storeEntries(ctx, infoStorage, name, fmt.Sprintf("%d", chunk), all[chunkStart:]); err != nil {
+	if chunkStart < len(spans) {
+		if err := storeEntries(ctx, infoStorage, name, fmt.Sprintf("%d", chunk), spans[chunkStart:]); err != nil {
 			return err
 		}
 	}
