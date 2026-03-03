@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -43,21 +44,13 @@ func TestMMAUpreplication(t *testing.T) {
 	st := cluster.MakeTestingClusterSettings()
 	allocator.LoadBasedRebalanceInterval.Override(ctx, &st.SV, time.Second)
 
-	// Use ReplicationManual to avoid automatic upreplication by the replicate
-	// queue. We configure span configs for the scratch range so MMA knows the
-	// desired replication factor.
-	//
-	// NB: we can't use ReplicationAuto here because WaitForFullReplication
-	// calls ForceReplicationScanAndProcess, which bypasses the replicate
-	// queue's shouldQueue check. This means the replicate queue would
-	// upreplicate all ranges even when shouldQueue returns false (as it does
-	// under LBRebalancingMultiMetricRepairAndRebalance).
-	//
-	// TODO(tbg): ForceReplicationScanAndProcess should respect the MMA setting
-	// and route repair work through the MMA rebalancer instead of the replicate
-	// queue when LBRebalancingMultiMetricRepairAndRebalance is active.
+	// Use ReplicationAuto so that system ranges are upreplicated via the
+	// replicate queue before we enable MMA. WaitForFullReplication (called
+	// by StartTestCluster) drives this via ForceReplicationScanAndProcess.
+	// Once MMA is enabled, ForceReplicationScanAndProcess delegates to the
+	// MMA rebalancer instead of the replicate queue.
 	tc := testcluster.StartTestCluster(t, 3, base.TestClusterArgs{
-		ReplicationMode: base.ReplicationManual,
+		ReplicationMode: base.ReplicationAuto,
 		ServerArgs: base.TestServerArgs{
 			Settings: st,
 			Knobs: base.TestingKnobs{
@@ -87,10 +80,17 @@ func TestMMAUpreplication(t *testing.T) {
 		)
 	}
 
-	// Wait for the scratch range to upreplicate to 3 voters. The MMA rebalancer
-	// runs on a 1s timer and can perform multiple repairs per tick (1->2->3),
-	// so this should converge well within SucceedsSoon's timeout.
+	// Wait for the scratch range to upreplicate to 3 voters. We explicitly
+	// call ForceReplicationScanAndProcess on each store to deterministically
+	// drive MMA repair (instead of waiting for the background timer).
 	testutils.SucceedsSoon(t, func() error {
+		for _, server := range tc.Servers {
+			if err := server.GetStores().(*kvserver.Stores).VisitStores(func(s *kvserver.Store) error {
+				return s.ForceReplicationScanAndProcess()
+			}); err != nil {
+				t.Fatal(err)
+			}
+		}
 		desc := tc.LookupRangeOrFatal(t, k)
 		voters := desc.Replicas().VoterDescriptors()
 		if len(voters) != 3 {
