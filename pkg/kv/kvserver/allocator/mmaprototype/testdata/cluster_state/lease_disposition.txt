@@ -20,9 +20,9 @@ node-id=3 locality-tiers=region=us,node=3
 # Set up some stores. The specifics don't matter since we're only testing
 # the lease health checks.
 store-load-msg
-  store-id=1 node-id=1 load=[100,0,0] capacity=[200,100,100] load-time=0s
-  store-id=2 node-id=2 load=[50,0,0] capacity=[200,100,100] load-time=0s
-  store-id=3 node-id=3 load=[50,0,0] capacity=[200,100,100] load-time=0s
+  store-id=1 node-id=1 load=[100,0,0] capacity=[200,100,100] load-time=0s node-cpu-load=100 node-cpu-capacity=200
+  store-id=2 node-id=2 load=[50,0,0] capacity=[200,100,100] load-time=0s node-cpu-load=50 node-cpu-capacity=200
+  store-id=3 node-id=3 load=[50,0,0] capacity=[200,100,100] load-time=0s node-cpu-load=50 node-cpu-capacity=200
 ----
 
 store-leaseholder-msg

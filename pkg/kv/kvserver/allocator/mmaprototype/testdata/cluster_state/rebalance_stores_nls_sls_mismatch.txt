@@ -48,9 +48,9 @@ ok refusing=replicas
 # Node mean = (7B + 1B) / 2 = 4B
 # n1's 7B is 75% above mean => overloadSlow for node CPU
 store-load-msg
-  store-id=1 node-id=1 load=[1000000000,50000000,0] capacity=[8000000000,100000000,1000000000] secondary-load=0 load-time=0s
-  store-id=2 node-id=1 load=[6000000000,10000000,0] capacity=[8000000000,100000000,1000000000] secondary-load=0 load-time=0s
-  store-id=3 node-id=2 load=[1000000000,50000000,0] capacity=[8000000000,100000000,1000000000] secondary-load=0 load-time=0s
+  store-id=1 node-id=1 load=[1000000000,50000000,0] capacity=[8000000000,100000000,1000000000] secondary-load=0 load-time=0s node-cpu-load=7000000000 node-cpu-capacity=16000000000
+  store-id=2 node-id=1 load=[6000000000,10000000,0] capacity=[8000000000,100000000,1000000000] secondary-load=0 load-time=0s node-cpu-load=7000000000 node-cpu-capacity=16000000000
+  store-id=3 node-id=2 load=[1000000000,50000000,0] capacity=[8000000000,100000000,1000000000] secondary-load=0 load-time=0s node-cpu-load=1000000000 node-cpu-capacity=8000000000
 ----
 
 # Single-replica range on s1.

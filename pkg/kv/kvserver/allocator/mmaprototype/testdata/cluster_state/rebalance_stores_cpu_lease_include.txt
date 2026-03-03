@@ -14,15 +14,15 @@ node-id=3 locality-tiers=region=us-central-1,zone=us-central-1a,node=3
   store-id=3 attrs=green
 
 store-load-msg
-  store-id=1 node-id=1 load=[1000,0,0] capacity=[1000,1000,1000] secondary-load=0 load-time=0s
+  store-id=1 node-id=1 load=[1000,0,0] capacity=[1000,1000,1000] secondary-load=0 load-time=0s node-cpu-load=1000 node-cpu-capacity=1000
 ----
 
 store-load-msg
-  store-id=2 node-id=2 load=[100,0,0] capacity=[1000,1000,1000] secondary-load=0 load-time=0s
+  store-id=2 node-id=2 load=[100,0,0] capacity=[1000,1000,1000] secondary-load=0 load-time=0s node-cpu-load=100 node-cpu-capacity=1000
 ----
 
 store-load-msg
-  store-id=3 node-id=3 load=[100,0,0] capacity=[1000,1000,1000] secondary-load=0 load-time=0s
+  store-id=3 node-id=3 load=[100,0,0] capacity=[1000,1000,1000] secondary-load=0 load-time=0s node-cpu-load=100 node-cpu-capacity=1000
 ----
 
 get-load-info

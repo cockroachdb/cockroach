@@ -14,11 +14,11 @@ node-id=2 locality-tiers=region=us-east-1,zone=us-east-1a,node=2
   store-id=2 attrs=yellow
 
 store-load-msg
-  store-id=1 node-id=1 load=[100,100,100] capacity=[200,200,200] secondary-load=0 load-time=0s
+  store-id=1 node-id=1 load=[100,100,100] capacity=[200,200,200] secondary-load=0 load-time=0s node-cpu-load=100 node-cpu-capacity=200
 ----
 
 store-load-msg
-  store-id=2 node-id=2 load=[10,10,10] capacity=[200,200,200] secondary-load=0 load-time=0s
+  store-id=2 node-id=2 load=[10,10,10] capacity=[200,200,200] secondary-load=0 load-time=0s node-cpu-load=10 node-cpu-capacity=200
 ----
 
 get-load-info

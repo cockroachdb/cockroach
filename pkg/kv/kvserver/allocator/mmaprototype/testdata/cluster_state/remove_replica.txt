@@ -8,7 +8,7 @@ node-id=2 locality-tiers=region=us-east-1,zone=us-east-1a,node=2
   store-id=2 attrs=yellow
 
 store-load-msg
-  store-id=2 node-id=2 load=[20,80,80] capacity=[100,100,100] secondary-load=0 load-time=0s
+  store-id=2 node-id=2 load=[20,80,80] capacity=[100,100,100] secondary-load=0 load-time=0s node-cpu-load=20 node-cpu-capacity=100
 ----
 
 get-load-info
@@ -82,7 +82,7 @@ change-id=1 store-id=2 node-id=2 range-id=1 load-delta=[cpu:-20ns/s, write-bandw
   next=(replica-id=none type=VOTER_FULL)
 
 store-load-msg
-  store-id=2 node-id=2 load=[0,0,0] capacity=[100,100,100] secondary-load=0 load-time=15s
+  store-id=2 node-id=2 load=[0,0,0] capacity=[100,100,100] secondary-load=0 load-time=15s node-cpu-load=0 node-cpu-capacity=100
 ----
 
 get-load-info

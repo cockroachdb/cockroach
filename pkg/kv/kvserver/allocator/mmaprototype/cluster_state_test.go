@@ -144,6 +144,10 @@ func parseStoreLoadMsg(t *testing.T, in string) StoreLoadMsg {
 			msg.LoadTime = testingBaseTime.Add(duration)
 		case "secondary-load":
 			msg.SecondaryLoad = parseSecondaryLoadVector(t, parts[1])
+		case "node-cpu-load":
+			msg.NodeCPULoad = LoadValue(parseInt(t, parts[1]))
+		case "node-cpu-capacity":
+			msg.NodeCPUCapacity = LoadValue(parseInt(t, parts[1]))
 		default:
 			t.Fatalf("Unknown argument: %s", parts[0])
 		}
@@ -491,7 +495,7 @@ func TestClusterState(t *testing.T) {
 						fmt.Fprintf(&buf,
 							"store-id=%v node-id=%v status=%s reported=%v adjusted=%v node-reported-cpu=%v node-adjusted-cpu=%v seq"+
 								"=%d\n",
-							ss.StoreID, ss.NodeID, ss.status, ss.reportedLoad, ss.adjusted.load, ns.ReportedCPU, ns.adjustedCPU,
+							ss.StoreID, ss.NodeID, ss.status, ss.reportedLoad, ss.adjusted.load, ns.NodeCPULoad, ns.adjustedCPU,
 							ss.loadSeqNum,
 						)
 						var localStores []roachpb.StoreID

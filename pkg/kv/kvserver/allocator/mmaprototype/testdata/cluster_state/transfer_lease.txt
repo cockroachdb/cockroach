@@ -8,11 +8,11 @@ node-id=2 locality-tiers=region=us-east-1,zone=us-east-1a,node=2
   store-id=2 attrs=yellow
 
 store-load-msg
-  store-id=1 node-id=1 load=[80,80,80] capacity=[100,100,100] secondary-load=1 load-time=0s
+  store-id=1 node-id=1 load=[80,80,80] capacity=[100,100,100] secondary-load=1 load-time=0s node-cpu-load=80 node-cpu-capacity=100
 ----
 
 store-load-msg
-  store-id=2 node-id=2 load=[20,80,80] capacity=[100,100,100] secondary-load=1 load-time=0s
+  store-id=2 node-id=2 load=[20,80,80] capacity=[100,100,100] secondary-load=1 load-time=0s node-cpu-load=20 node-cpu-capacity=100
 ----
 
 get-load-info
