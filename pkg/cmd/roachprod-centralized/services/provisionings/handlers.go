@@ -7,15 +7,18 @@ package provisionings
 
 import (
 	"context"
+	"encoding/json"
 	"log/slog"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	provmodels "github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/models/provisionings"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/services/provisionings/templates"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/services/provisionings/vars"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/utils/logger"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/vm"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
@@ -84,6 +87,9 @@ func (s *Service) HandleProvision(
 	if err != nil {
 		return s.failProvision(ctx, l, &prov, errors.Wrap(err, "build var maps"))
 	}
+
+	// Inject auto-computed variables for roachprod cluster templates.
+	s.injectAutoVars(l, &prov, parsedVars, varMap, envVars)
 
 	// Write secret_file variables to disk and replace env var values with
 	// file paths. Required for env vars like GOOGLE_APPLICATION_CREDENTIALS
@@ -249,6 +255,9 @@ func (s *Service) HandleDestroy(
 		return s.failDestroy(ctx, l, &prov, errors.Wrap(err, "build var maps"))
 	}
 
+	// Inject auto-computed variables for roachprod cluster templates.
+	s.injectAutoVars(l, &prov, parsedVars, varMap, envVars)
+
 	// Write secret_file variables to disk and replace env var values with
 	// file paths.
 	envVars, cleanupCreds, err := vars.PrepareCredentialFiles(workingDir, envVars, resolvedEnv)
@@ -317,6 +326,65 @@ func (s *Service) HandleDestroy(
 		slog.String("identifier", prov.Identifier),
 	)
 	return nil
+}
+
+// injectAutoVars conditionally injects auto-computed TF variables for
+// roachprod cluster templates. Variables are only injected if the template
+// declares them (checked via parsedVars). This allows non-roachprod
+// templates to remain unaffected.
+//
+// Injected variables:
+//   - gce_roachprod_cluster_startup_script: precomputed GCE startup script
+//     with SSHPublicKeyPlaceholder replaced by the resolved ssh_public_key.
+//   - aws_roachprod_cluster_startup_script: precomputed AWS startup script.
+//   - roachprod_vm_labels: JSON-serialized label map for roachprod VMs.
+func (s *Service) injectAutoVars(
+	l *logger.Logger,
+	prov *provmodels.Provisioning,
+	parsedVars map[string]provmodels.TemplateOption,
+	varMap map[string]string,
+	envVars map[string]string,
+) {
+	if s.autoStartupScripts == nil {
+		return
+	}
+
+	// Inject GCE startup script if declared by the template.
+	if _, declared := parsedVars["gce_roachprod_cluster_startup_script"]; declared {
+		script := s.autoStartupScripts.gce
+		// Replace the SSH public key placeholder with the resolved value.
+		if sshPubKey, ok := varMap["ssh_public_key"]; ok && sshPubKey != "" {
+			script = strings.ReplaceAll(script, vm.SSHPublicKeyPlaceholder, sshPubKey)
+		} else if sshPubKey, ok := envVars["TF_VAR_ssh_public_key"]; ok && sshPubKey != "" {
+			script = strings.ReplaceAll(script, vm.SSHPublicKeyPlaceholder, sshPubKey)
+		}
+		envVars["TF_VAR_gce_roachprod_cluster_startup_script"] = script
+	}
+
+	// Inject AWS startup script if declared by the template.
+	if _, declared := parsedVars["aws_roachprod_cluster_startup_script"]; declared {
+		envVars["TF_VAR_aws_roachprod_cluster_startup_script"] = s.autoStartupScripts.aws
+	}
+
+	// Inject roachprod VM labels if declared by the template.
+	if _, declared := parsedVars["roachprod_vm_labels"]; declared {
+		// Use the precomputed ClusterName from CreateProvisioning which
+		// already applies clusterNameFromOwner (email local part + provName).
+		labelMap := vm.GetDefaultLabelMap(vm.CreateOpts{
+			ClusterName: prov.ClusterName,
+			Lifetime:    prov.Lifetime,
+		})
+		labelMap[vm.TagProvisioningIdentifier] = prov.Identifier
+
+		labelJSON, err := json.Marshal(labelMap)
+		if err != nil {
+			l.Warn("failed to marshal roachprod_vm_labels",
+				slog.Any("error", err),
+			)
+			return
+		}
+		envVars["TF_VAR_roachprod_vm_labels"] = string(labelJSON)
+	}
 }
 
 // failProvision marks the provisioning as failed and persists the error.

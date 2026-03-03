@@ -27,6 +27,8 @@ go_library(
         "//pkg/cmd/roachprod-centralized/utils/filters/types",
         "//pkg/cmd/roachprod-centralized/utils/logger",
         "//pkg/roachprod/vm",
+        "//pkg/roachprod/vm/aws",
+        "//pkg/roachprod/vm/gce",
         "//pkg/util/timeutil",
         "//pkg/util/uuid",
         "@com_github_cockroachdb_errors//:errors",

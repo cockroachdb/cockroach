@@ -203,6 +203,33 @@ func generateStartupScriptContent(
 	return buf.String(), nil
 }
 
+// GenerateCentralizedStartupScript generates a GCE startup script for
+// centralized provisioning templates. The hostname is set to
+// vm.HostnamePlaceholder so that Terraform can replace it per-instance.
+// publicKey is installed in the VM's authorized_keys for initial SSH access.
+func GenerateCentralizedStartupScript(publicKey string) (string, error) {
+	type tmplParams struct {
+		vm.StartupArgs
+		PublicKey string
+	}
+
+	args := tmplParams{
+		StartupArgs: vm.DefaultStartupArgs(
+			vm.WithSharedUser(vm.DefaultSharedUser),
+			vm.WithBootDiskOnly(true),
+			vm.WithVMName(vm.HostnamePlaceholder),
+			vm.WithChronyServers([]string{"metadata.google.internal"}),
+		),
+		PublicKey: publicKey,
+	}
+
+	var buf bytes.Buffer
+	if err := vm.GenerateStartupScript(&buf, gceDiskStartupScriptTemplate, args); err != nil {
+		return "", errors.Wrap(err, "generate centralized GCE startup script")
+	}
+	return buf.String(), nil
+}
+
 // SyncDNS implements the InfraProvider interface.
 func (p *Provider) SyncDNS(l *logger.Logger, vms vm.List) error {
 	return p.dnsProvider.SyncDNS(l, vms)

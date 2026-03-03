@@ -31,10 +31,19 @@ import (
 	filtertypes "github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/utils/filters/types"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/utils/logger"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/vm"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/vm/aws"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/vm/gce"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 )
+
+// startupScripts holds precomputed startup scripts for each cloud provider.
+// Generated once at service startup and reused across all provisionings.
+type startupScripts struct {
+	gce string
+	aws string
+}
 
 // Service implements the provisionings service interface.
 type Service struct {
@@ -46,6 +55,11 @@ type Service struct {
 	options          types.Options
 	backend          templates.Backend // GCS or local state backend
 	hookOrchestrator hooks.IOrchestrator
+
+	// autoStartupScripts holds precomputed startup scripts for GCE and AWS.
+	// The GCE script contains vm.SSHPublicKeyPlaceholder which is replaced
+	// per-provisioning with the resolved ssh_public_key value.
+	autoStartupScripts *startupScripts
 
 	backgroundJobsCancelFunc context.CancelFunc
 	backgroundJobsWg         *sync.WaitGroup
@@ -83,6 +97,23 @@ func (s *Service) RegisterTasks(ctx context.Context) error {
 // StartService initializes the service for operation.
 func (s *Service) StartService(ctx context.Context, l *logger.Logger) error {
 	s.backgroundJobsWg = &sync.WaitGroup{}
+
+	// Precompute startup scripts for centralized provisioning templates.
+	// The GCE script uses SSHPublicKeyPlaceholder which is replaced per-provisioning
+	// in the handler injection step.
+	gceScript, err := gce.GenerateCentralizedStartupScript(vm.SSHPublicKeyPlaceholder)
+	if err != nil {
+		return errors.Wrap(err, "precompute GCE startup script")
+	}
+	awsScript, err := aws.GenerateCentralizedStartupScript()
+	if err != nil {
+		return errors.Wrap(err, "precompute AWS startup script")
+	}
+	s.autoStartupScripts = &startupScripts{
+		gce: gceScript,
+		aws: awsScript,
+	}
+
 	return nil
 }
 
