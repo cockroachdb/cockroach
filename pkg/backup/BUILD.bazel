@@ -51,6 +51,7 @@ go_library(
         "//pkg/backup/backuputils",
         "//pkg/base",
         "//pkg/build",
+        "//pkg/build/bazel",
         "//pkg/cloud",
         "//pkg/cloud/cloudpb",
         "//pkg/cloud/externalconn",
