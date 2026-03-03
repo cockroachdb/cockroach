@@ -250,17 +250,16 @@ var (
 	metaStoreCPUCapacity = metric.Metadata{
 		Name: "mma.store.cpu.capacity",
 		Help: crstrings.UnwrapText(`
-			Logical CPU capacity estimated by MMA by extrapolating from the
-			current load and system CPU utilization after accounting for CPU
-			load that MMA cannot account for that scales with KV work (RPC,
-			DistSender, etc.) and load that doesn't (SQL).
+			Physical CPU capacity for this store in nanoseconds per second
+			(nodeCPURateCapacity / numStores). This is the actual CPU
+			capacity of the node divided equally among stores.
 		`),
 		Measurement: "Nanoseconds/Sec",
 		Unit:        metric.Unit_NANOSECONDS,
 	}
 	metaStoreCPUUtilization = metric.Metadata{
 		Name:        "mma.store.cpu.utilization",
-		Help:        "Ratio of logical CPU load to capacity expressed as a percentage",
+		Help:        "Ratio of physical CPU load to capacity expressed as a percentage",
 		Measurement: "CPU Utilization",
 		Unit:        metric.Unit_PERCENT,
 	}
@@ -271,11 +270,10 @@ var (
 		Unit:        metric.Unit_BYTES,
 	}
 	metaStoreDiskLoad = metric.Metadata{
-		Name: "mma.store.disk.logical",
+		Name: "mma.store.disk.load",
 		Help: crstrings.UnwrapText(`
-			Logical bytes consumed by the replicas on this store as reported by
-			MVCC statistics without accounting for any space amplification or
-			compression.
+			Physical disk bytes used by this store (Used). This is the actual
+			disk footprint including space amplification and compression effects.
 		`),
 		Measurement: "Bytes",
 		Unit:        metric.Unit_BYTES,
@@ -283,16 +281,15 @@ var (
 	metaStoreDiskCapacity = metric.Metadata{
 		Name: "mma.store.disk.capacity",
 		Help: crstrings.UnwrapText(`
-			Logical disk capacity estimated by MMA by extrapolating from the
-			logical bytes consumed by the replicas and the current used and free
-			physical disk bytes.
+			Physical disk capacity for this store (Used + Available). This
+			reflects the total usable disk space.
 		`),
 		Measurement: "Bytes",
 		Unit:        metric.Unit_BYTES,
 	}
 	metaStoreDiskUtilization = metric.Metadata{
 		Name:        "mma.store.disk.utilization",
-		Help:        "Ratio of logical disk usage to capacity expressed as a percentage",
+		Help:        "Ratio of physical disk usage to capacity expressed as a percentage",
 		Measurement: "Disk Utilization",
 		Unit:        metric.Unit_PERCENT,
 	}

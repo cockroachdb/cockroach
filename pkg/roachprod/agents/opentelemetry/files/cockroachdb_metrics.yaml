@@ -1782,7 +1782,7 @@ mma_store_cpu_capacity: mma.store.cpu.capacity
 mma_store_cpu_load: mma.store.cpu.load
 mma_store_cpu_utilization: mma.store.cpu.utilization
 mma_store_disk_capacity: mma.store.disk.capacity
-mma_store_disk_logical: mma.store.disk.logical
+mma_store_disk_load: mma.store.disk.load
 mma_store_disk_utilization: mma.store.disk.utilization
 mma_store_write_bandwidth: mma.store.write.bandwidth
 node_id: node_id
