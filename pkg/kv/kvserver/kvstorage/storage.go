@@ -10,6 +10,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvstorage/wag"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/spanset"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
@@ -354,6 +355,41 @@ func (b *Batch[B]) Close() {
 	if b.separated {
 		b.raft.Close()
 	}
+}
+
+// LifecycleBatch is a write batch for out-of-band replica lifecycle operations
+// -- operations that do not happen as part of raft command application (e.g.
+// replica destruction by the Replica GC queue, replica creation etc.). It is
+// engine separation aware.
+type LifecycleBatch struct {
+	Batch[storage.WriteBatch]
+	// wagWriter is non-nil iff engines are separate.
+	wagWriter *wag.Writer
+}
+
+// NewLifecycleBatch creates a LifecycleBatch.
+func (e *Engines) NewLifecycleBatch(seq *wag.Seq) LifecycleBatch {
+	lb := LifecycleBatch{Batch: e.NewWriteBatch()}
+	if e.Separated() {
+		w := wag.MakeWriter(seq)
+		lb.wagWriter = &w
+	}
+	return lb
+}
+
+// WAGWriter returns the WAG writer for this batch. May be nil when engines are
+// not separated.
+func (b *LifecycleBatch) WAGWriter() *wag.Writer {
+	return b.wagWriter
+}
+
+// CommitAndSync flushes WAG dependency nodes to the raft engine, then commits
+// and syncs both engine batches.
+func (b *LifecycleBatch) CommitAndSync() error {
+	if err := b.wagWriter.FlushDependencies(b.Raft()); err != nil {
+		return err
+	}
+	return b.Batch.CommitAndSync()
 }
 
 // validateIsStateEngineSpan asserts that the provided span only overlaps with
