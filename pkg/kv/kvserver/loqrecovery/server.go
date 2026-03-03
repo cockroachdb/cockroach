@@ -244,7 +244,7 @@ func serveClusterReplicasParallelFn(
 			if err == io.EOF {
 				break
 			}
-			if forwardReplicaFilter != nil {
+			if err == nil && forwardReplicaFilter != nil {
 				err = forwardReplicaFilter(r)
 			}
 			if err != nil {
