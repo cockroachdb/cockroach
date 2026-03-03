@@ -354,6 +354,10 @@ func (re *rebalanceEnv) repair(
 				re.repairRemoveNonVoter(ctx, localStoreID, rangeID, rs)
 			case RemoveLearner:
 				re.repairRemoveLearner(ctx, localStoreID, rangeID, rs)
+			case SwapVoterForConstraints:
+				re.repairSwapVoterForConstraints(ctx, localStoreID, rangeID, rs)
+			case SwapNonVoterForConstraints:
+				re.repairSwapNonVoterForConstraints(ctx, localStoreID, rangeID, rs)
 			case FinalizeAtomicReplicationChange:
 				re.repairFinalizeAtomicReplicationChange(ctx, localStoreID, rangeID, rs)
 			default:
@@ -1814,6 +1818,455 @@ func (re *rebalanceEnv) repairFinalizeAtomicReplicationChange(
 	log.KvDistribution.Infof(ctx,
 		"result(success): FinalizeAtomicReplicationChange repair for r%d",
 		rangeID)
+}
+
+// repairSwapVoterForConstraints swaps a misplaced voter with one that
+// satisfies voter constraints. The voter count matches config, so the fix is
+// an atomic remove + add (or a pair of role swaps if a non-voter already
+// exists in the right place).
+//
+// Two strategies are tried in order:
+//  1. Role swap: if a voter can be demoted and a non-voter promoted to satisfy
+//     voter constraints, emit two MakeReplicaTypeChange entries.
+//  2. Fallback: remove a misplaced voter and add a new one on a store that
+//     satisfies the unsatisfied constraint.
+func (re *rebalanceEnv) repairSwapVoterForConstraints(
+	ctx context.Context, localStoreID roachpb.StoreID, rangeID roachpb.RangeID, rs *rangeState,
+) {
+	re.ensureAnalyzedConstraints(ctx, rs)
+	if rs.constraints == nil {
+		log.KvDistribution.Warningf(ctx,
+			"skipping SwapVoterForConstraints repair for r%d: constraint analysis failed",
+			rangeID)
+		return
+	}
+
+	// Strategy 1: Try role swap (voter <-> non-voter).
+	swapCands, err := rs.constraints.candidatesForRoleSwapForConstraints()
+	if err != nil {
+		log.KvDistribution.Warningf(ctx,
+			"skipping SwapVoterForConstraints repair for r%d: %v", rangeID, err)
+		return
+	}
+	if len(swapCands[voterIndex]) > 0 && len(swapCands[nonVoterIndex]) > 0 {
+		re.roleSwapVoterForConstraints(
+			ctx, localStoreID, rangeID, rs, swapCands)
+		return
+	}
+
+	// Strategy 2: Remove misplaced voter + add replacement.
+	toRemoveVoters, toAdd, err :=
+		rs.constraints.candidatesVoterConstraintsUnsatisfied()
+	if err != nil {
+		log.KvDistribution.Warningf(ctx,
+			"skipping SwapVoterForConstraints repair for r%d: %v", rangeID, err)
+		return
+	}
+	if len(toRemoveVoters) == 0 || len(toAdd) == 0 {
+		log.KvDistribution.Warningf(ctx,
+			"skipping SwapVoterForConstraints repair for r%d: "+
+				"no candidates (toRemove=%d, toAdd constraints=%d)",
+			rangeID, len(toRemoveVoters), len(toAdd))
+		return
+	}
+
+	// Pick voter to remove (exclude leaseholder, diversity-based).
+	var removeCands []roachpb.StoreID
+	for _, storeID := range toRemoveVoters {
+		for _, repl := range rs.replicas {
+			if repl.StoreID == storeID && repl.IsLeaseholder {
+				goto skipRemove
+			}
+		}
+		removeCands = append(removeCands, storeID)
+	skipRemove:
+	}
+	if len(removeCands) == 0 {
+		log.KvDistribution.Warningf(ctx,
+			"skipping SwapVoterForConstraints repair for r%d: "+
+				"no removable voters (all candidates are leaseholder)", rangeID)
+		return
+	}
+	removeStoreID := re.pickStoreByDiversity(
+		removeCands, rs.constraints.voterLocalityTiers,
+		(*existingReplicaLocalities).getScoreChangeForReplicaRemoval)
+	if removeStoreID == 0 {
+		removeStoreID = removeCands[0]
+	}
+
+	// Find the ReplicaState for the voter being removed.
+	var removePrevState ReplicaState
+	found := false
+	for _, repl := range rs.replicas {
+		if repl.StoreID == removeStoreID {
+			removePrevState = repl.ReplicaState
+			found = true
+			break
+		}
+	}
+	if !found {
+		log.KvDistribution.Warningf(ctx,
+			"skipping SwapVoterForConstraints repair for r%d: "+
+				"voter on s%d not found in replicas", rangeID, removeStoreID)
+		return
+	}
+
+	removeSS := re.stores[removeStoreID]
+	if removeSS == nil {
+		log.KvDistribution.Warningf(ctx,
+			"skipping SwapVoterForConstraints repair for r%d: "+
+				"store s%d has no state", rangeID, removeStoreID)
+		return
+	}
+
+	// Find a replacement store satisfying the unsatisfied constraint.
+	var candidateStores storeSet
+	re.constraintMatcher.constrainStoresForExpr(toAdd, &candidateStores)
+
+	// Build existing replicas/nodes, excluding the voter being removed.
+	var existingReplicas storeSet
+	existingNodes := make(map[roachpb.NodeID]struct{})
+	for _, repl := range rs.replicas {
+		if repl.StoreID == removeStoreID {
+			continue
+		}
+		existingReplicas.insert(repl.StoreID)
+		ss := re.stores[repl.StoreID]
+		if ss != nil {
+			existingNodes[ss.NodeID] = struct{}{}
+		}
+	}
+
+	candidateStores = retainReadyReplicaTargetStoresOnly(
+		ctx, candidateStores, re.stores, existingReplicas)
+
+	var validCandidates storeSet
+	for _, storeID := range candidateStores {
+		if existingReplicas.contains(storeID) {
+			continue
+		}
+		ss := re.stores[storeID]
+		if ss == nil {
+			continue
+		}
+		if _, ok := existingNodes[ss.NodeID]; ok {
+			continue
+		}
+		validCandidates = append(validCandidates, storeID)
+	}
+
+	if len(validCandidates) == 0 {
+		log.KvDistribution.Warningf(ctx,
+			"skipping SwapVoterForConstraints repair for r%d: "+
+				"no valid target stores", rangeID)
+		return
+	}
+
+	addStoreID := re.pickStoreByDiversity(
+		validCandidates, rs.constraints.voterLocalityTiers,
+		(*existingReplicaLocalities).getScoreChangeForNewReplica)
+
+	// Create atomic change (add + remove).
+	addSS := re.stores[addStoreID]
+	addTarget := roachpb.ReplicationTarget{
+		NodeID:  addSS.NodeID,
+		StoreID: addStoreID,
+	}
+	addIDAndType := ReplicaIDAndType{
+		ReplicaType: ReplicaType{ReplicaType: roachpb.VOTER_FULL},
+	}
+	addChange := MakeAddReplicaChange(
+		rangeID, rs.load, addIDAndType, addTarget)
+
+	removeTarget := roachpb.ReplicationTarget{
+		NodeID:  removeSS.NodeID,
+		StoreID: removeStoreID,
+	}
+	removeChange := MakeRemoveReplicaChange(
+		rangeID, rs.load, removePrevState, removeTarget)
+
+	rangeChange := MakePendingRangeChange(
+		rangeID, []ReplicaChange{addChange, removeChange})
+	if err := re.preCheckOnApplyReplicaChanges(rangeChange); err != nil {
+		log.KvDistribution.Warningf(ctx,
+			"skipping SwapVoterForConstraints repair for r%d: "+
+				"pre-check failed: %v", rangeID, err)
+		return
+	}
+	re.addPendingRangeChange(ctx, rangeChange)
+	re.changes = append(re.changes,
+		MakeExternalRangeChange(originMMARepair, localStoreID, rangeChange))
+	log.KvDistribution.Infof(ctx,
+		"result(success): SwapVoterForConstraints repair for r%d, "+
+			"removing voter on s%d, adding voter on s%d",
+		rangeID, removeStoreID, addStoreID)
+}
+
+// roleSwapVoterForConstraints performs a role swap to satisfy voter
+// constraints: demotes a misplaced voter to non-voter and promotes a
+// well-placed non-voter to voter, both in a single pending range change.
+func (re *rebalanceEnv) roleSwapVoterForConstraints(
+	ctx context.Context,
+	localStoreID roachpb.StoreID,
+	rangeID roachpb.RangeID,
+	rs *rangeState,
+	swapCands [numReplicaKinds][]roachpb.StoreID,
+) {
+	// Pick voter to demote (exclude leaseholder, diversity removal scoring).
+	var demoteCands []roachpb.StoreID
+	for _, storeID := range swapCands[voterIndex] {
+		for _, repl := range rs.replicas {
+			if repl.StoreID == storeID && repl.IsLeaseholder {
+				goto skipDemote
+			}
+		}
+		demoteCands = append(demoteCands, storeID)
+	skipDemote:
+	}
+	if len(demoteCands) == 0 {
+		log.KvDistribution.Warningf(ctx,
+			"skipping SwapVoterForConstraints role swap for r%d: "+
+				"no demotion candidates (all are leaseholders)", rangeID)
+		return
+	}
+
+	demoteStoreID := re.pickStoreByDiversity(
+		demoteCands, rs.constraints.voterLocalityTiers,
+		(*existingReplicaLocalities).getScoreChangeForReplicaRemoval)
+	if demoteStoreID == 0 {
+		demoteStoreID = demoteCands[0]
+	}
+
+	// Pick non-voter to promote (diversity addition scoring).
+	promoteStoreID := re.pickStoreByDiversity(
+		swapCands[nonVoterIndex], rs.constraints.voterLocalityTiers,
+		(*existingReplicaLocalities).getScoreChangeForNewReplica)
+	if promoteStoreID == 0 {
+		log.KvDistribution.Warningf(ctx,
+			"skipping SwapVoterForConstraints role swap for r%d: "+
+				"no valid promotion candidates", rangeID)
+		return
+	}
+
+	// Find replica states for both.
+	var demotePrevState, promotePrevState ReplicaState
+	demoteFound, promoteFound := false, false
+	for _, repl := range rs.replicas {
+		if repl.StoreID == demoteStoreID {
+			demotePrevState = repl.ReplicaState
+			demoteFound = true
+		}
+		if repl.StoreID == promoteStoreID {
+			promotePrevState = repl.ReplicaState
+			promoteFound = true
+		}
+	}
+	if !demoteFound || !promoteFound {
+		log.KvDistribution.Warningf(ctx,
+			"skipping SwapVoterForConstraints role swap for r%d: "+
+				"replica not found (demote s%d found=%t, promote s%d found=%t)",
+			rangeID, demoteStoreID, demoteFound, promoteStoreID, promoteFound)
+		return
+	}
+
+	// Create the two type changes: voter->NON_VOTER, non-voter->VOTER_FULL.
+	demoteSS := re.stores[demoteStoreID]
+	if demoteSS == nil {
+		log.KvDistribution.Warningf(ctx,
+			"skipping SwapVoterForConstraints role swap for r%d: "+
+				"store s%d has no state", rangeID, demoteStoreID)
+		return
+	}
+	promoteSS := re.stores[promoteStoreID]
+	if promoteSS == nil {
+		log.KvDistribution.Warningf(ctx,
+			"skipping SwapVoterForConstraints role swap for r%d: "+
+				"store s%d has no state", rangeID, promoteStoreID)
+		return
+	}
+
+	demoteTarget := roachpb.ReplicationTarget{
+		NodeID:  demoteSS.NodeID,
+		StoreID: demoteStoreID,
+	}
+	demoteNextIDAndType := ReplicaIDAndType{
+		ReplicaType: ReplicaType{ReplicaType: roachpb.NON_VOTER},
+	}
+	demoteChange := MakeReplicaTypeChange(
+		rangeID, rs.load, demotePrevState, demoteNextIDAndType, demoteTarget)
+
+	promoteTarget := roachpb.ReplicationTarget{
+		NodeID:  promoteSS.NodeID,
+		StoreID: promoteStoreID,
+	}
+	promoteNextIDAndType := ReplicaIDAndType{
+		ReplicaType: ReplicaType{ReplicaType: roachpb.VOTER_FULL},
+	}
+	promoteChange := MakeReplicaTypeChange(
+		rangeID, rs.load, promotePrevState, promoteNextIDAndType, promoteTarget)
+
+	rangeChange := MakePendingRangeChange(
+		rangeID, []ReplicaChange{demoteChange, promoteChange})
+	if err := re.preCheckOnApplyReplicaChanges(rangeChange); err != nil {
+		log.KvDistribution.Warningf(ctx,
+			"skipping SwapVoterForConstraints role swap for r%d: "+
+				"pre-check failed: %v", rangeID, err)
+		return
+	}
+	re.addPendingRangeChange(ctx, rangeChange)
+	re.changes = append(re.changes,
+		MakeExternalRangeChange(originMMARepair, localStoreID, rangeChange))
+	log.KvDistribution.Infof(ctx,
+		"result(success): SwapVoterForConstraints role swap for r%d, "+
+			"demoting voter on s%d, promoting non-voter on s%d",
+		rangeID, demoteStoreID, promoteStoreID)
+}
+
+// repairSwapNonVoterForConstraints swaps a misplaced non-voter with one that
+// satisfies placement constraints. The non-voter count matches config, so the
+// fix is an atomic remove + add.
+func (re *rebalanceEnv) repairSwapNonVoterForConstraints(
+	ctx context.Context, localStoreID roachpb.StoreID, rangeID roachpb.RangeID, rs *rangeState,
+) {
+	re.ensureAnalyzedConstraints(ctx, rs)
+	if rs.constraints == nil {
+		log.KvDistribution.Warningf(ctx,
+			"skipping SwapNonVoterForConstraints repair for r%d: "+
+				"constraint analysis failed", rangeID)
+		return
+	}
+
+	toRemoveNonVoters, toAdd, err :=
+		rs.constraints.candidatesNonVoterConstraintsUnsatisfied()
+	if err != nil {
+		log.KvDistribution.Warningf(ctx,
+			"skipping SwapNonVoterForConstraints repair for r%d: %v",
+			rangeID, err)
+		return
+	}
+	if len(toRemoveNonVoters) == 0 || len(toAdd) == 0 {
+		log.KvDistribution.Warningf(ctx,
+			"skipping SwapNonVoterForConstraints repair for r%d: "+
+				"no candidates (toRemove=%d, toAdd constraints=%d)",
+			rangeID, len(toRemoveNonVoters), len(toAdd))
+		return
+	}
+
+	// Pick non-voter to remove (diversity removal scoring with
+	// replicaLocalityTiers — no leaseholder exclusion needed for non-voters).
+	removeStoreID := re.pickStoreByDiversity(
+		toRemoveNonVoters, rs.constraints.replicaLocalityTiers,
+		(*existingReplicaLocalities).getScoreChangeForReplicaRemoval)
+	if removeStoreID == 0 {
+		removeStoreID = toRemoveNonVoters[0]
+	}
+
+	// Find the ReplicaState for the non-voter being removed.
+	var removePrevState ReplicaState
+	found := false
+	for _, repl := range rs.replicas {
+		if repl.StoreID == removeStoreID {
+			removePrevState = repl.ReplicaState
+			found = true
+			break
+		}
+	}
+	if !found {
+		log.KvDistribution.Warningf(ctx,
+			"skipping SwapNonVoterForConstraints repair for r%d: "+
+				"non-voter on s%d not found in replicas", rangeID, removeStoreID)
+		return
+	}
+
+	removeSS := re.stores[removeStoreID]
+	if removeSS == nil {
+		log.KvDistribution.Warningf(ctx,
+			"skipping SwapNonVoterForConstraints repair for r%d: "+
+				"store s%d has no state", rangeID, removeStoreID)
+		return
+	}
+
+	// Find a replacement store satisfying the unsatisfied constraint.
+	var candidateStores storeSet
+	re.constraintMatcher.constrainStoresForExpr(toAdd, &candidateStores)
+
+	// Build existing replicas/nodes, excluding the non-voter being removed.
+	var existingReplicas storeSet
+	existingNodes := make(map[roachpb.NodeID]struct{})
+	for _, repl := range rs.replicas {
+		if repl.StoreID == removeStoreID {
+			continue
+		}
+		existingReplicas.insert(repl.StoreID)
+		ss := re.stores[repl.StoreID]
+		if ss != nil {
+			existingNodes[ss.NodeID] = struct{}{}
+		}
+	}
+
+	candidateStores = retainReadyReplicaTargetStoresOnly(
+		ctx, candidateStores, re.stores, existingReplicas)
+
+	var validCandidates storeSet
+	for _, storeID := range candidateStores {
+		if existingReplicas.contains(storeID) {
+			continue
+		}
+		ss := re.stores[storeID]
+		if ss == nil {
+			continue
+		}
+		if _, ok := existingNodes[ss.NodeID]; ok {
+			continue
+		}
+		validCandidates = append(validCandidates, storeID)
+	}
+
+	if len(validCandidates) == 0 {
+		log.KvDistribution.Warningf(ctx,
+			"skipping SwapNonVoterForConstraints repair for r%d: "+
+				"no valid target stores", rangeID)
+		return
+	}
+
+	addStoreID := re.pickStoreByDiversity(
+		validCandidates, rs.constraints.replicaLocalityTiers,
+		(*existingReplicaLocalities).getScoreChangeForNewReplica)
+
+	// Create atomic change (add + remove).
+	addSS := re.stores[addStoreID]
+	addTarget := roachpb.ReplicationTarget{
+		NodeID:  addSS.NodeID,
+		StoreID: addStoreID,
+	}
+	addIDAndType := ReplicaIDAndType{
+		ReplicaType: ReplicaType{ReplicaType: roachpb.NON_VOTER},
+	}
+	addChange := MakeAddReplicaChange(
+		rangeID, rs.load, addIDAndType, addTarget)
+
+	removeTarget := roachpb.ReplicationTarget{
+		NodeID:  removeSS.NodeID,
+		StoreID: removeStoreID,
+	}
+	removeChange := MakeRemoveReplicaChange(
+		rangeID, rs.load, removePrevState, removeTarget)
+
+	rangeChange := MakePendingRangeChange(
+		rangeID, []ReplicaChange{addChange, removeChange})
+	if err := re.preCheckOnApplyReplicaChanges(rangeChange); err != nil {
+		log.KvDistribution.Warningf(ctx,
+			"skipping SwapNonVoterForConstraints repair for r%d: "+
+				"pre-check failed: %v", rangeID, err)
+		return
+	}
+	re.addPendingRangeChange(ctx, rangeChange)
+	re.changes = append(re.changes,
+		MakeExternalRangeChange(originMMARepair, localStoreID, rangeChange))
+	log.KvDistribution.Infof(ctx,
+		"result(success): SwapNonVoterForConstraints repair for r%d, "+
+			"removing non-voter on s%d, adding non-voter on s%d",
+		rangeID, removeStoreID, addStoreID)
 }
 
 // Verify interface compliance.
