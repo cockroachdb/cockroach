@@ -9,14 +9,18 @@
 #                          reserved blocks and other non-CRDB files
 #   "via Total-Available": (Total - Available) / Total — includes reserved blocks,
 #                          ballast, other non-CRDB files under the mount point
+#
+# physical: shows the physical disk model (load=Used, capacity=Used+Available,
+#           amplification factor = min(Used/LogicalBytes, 5.0))
 
 # Normal case: 1TiB disk, store is 50% full, no significant non-store overhead.
 # Used ≈ Total - Available, so both fraction formulas agree.
 compute logical-bytes=500GiB total=1000GiB used=500GiB available=500GiB
 ----
 fraction-used: 0.5000 (via Used) vs 0.5000 (via Total-Available)
-kv-capacity: 1000 GiB (kv-util: 50.00%, available: 500 GiB)
-kv-capacity(wrong): 1000 GiB (kv-util: 50.00%, available: 500 GiB)
+legacy-capacity: 1000 GiB (kv-util: 50.00%, available: 500 GiB)
+legacy-capacity(wrong): 1000 GiB (kv-util: 50.00%, available: 500 GiB)
+physical: load=500 GiB capacity=1000 GiB (util: 50.00%, amp-factor: 1.00)
 
 # Space amplification: logical=100GiB but physical Used=500GiB (5x amplification
 # from compression ratio, tombstones, LSM overhead, WAL, auxiliary).
@@ -25,22 +29,25 @@ kv-capacity(wrong): 1000 GiB (kv-util: 50.00%, available: 500 GiB)
 compute logical-bytes=100GiB total=1000GiB used=500GiB available=500GiB
 ----
 fraction-used: 0.5000 (via Used) vs 0.5000 (via Total-Available)
-kv-capacity: 200 GiB (kv-util: 50.00%, available: 500 GiB)
-kv-capacity(wrong): 200 GiB (kv-util: 50.00%, available: 500 GiB)
+legacy-capacity: 200 GiB (kv-util: 50.00%, available: 500 GiB)
+legacy-capacity(wrong): 200 GiB (kv-util: 50.00%, available: 500 GiB)
+physical: load=500 GiB capacity=1000 GiB (util: 50.00%, amp-factor: 5.00)
 
 # Almost empty store (fraction-used < 1%). Falls back to available.
 compute logical-bytes=1MiB total=1000GiB used=1MiB available=999GiB
 ----
 fraction-used: 0.0000 (via Used) vs 0.0010 (via Total-Available)
-kv-capacity: 999 GiB (kv-util: 0.00%, available: 999 GiB)
-kv-capacity(wrong): 999 GiB (kv-util: 0.00%, available: 999 GiB)
+legacy-capacity: 999 GiB (kv-util: 0.00%, available: 999 GiB)
+legacy-capacity(wrong): 999 GiB (kv-util: 0.00%, available: 999 GiB)
+physical: load=1.0 MiB capacity=999 GiB (util: 0.00%, amp-factor: 1.00)
 
 # New store: no ranges yet (logicalBytes = 0). Falls back to available.
 compute logical-bytes=0B total=1000GiB used=0B available=1000GiB
 ----
 fraction-used: 0.0000 (via Used) vs 0.0000 (via Total-Available)
-kv-capacity: 1000 GiB (kv-util: 0.00%, available: 1000 GiB)
-kv-capacity(wrong): 1000 GiB (kv-util: 0.00%, available: 1000 GiB)
+legacy-capacity: 1000 GiB (kv-util: 0.00%, available: 1000 GiB)
+legacy-capacity(wrong): 1000 GiB (kv-util: 0.00%, available: 1000 GiB)
+physical: load=0 B capacity=1000 GiB (util: 0.00%, amp-factor: 1.00)
 
 # ---------------------------------------------------------------------------
 # Problems with (Total-Available)/Total
@@ -63,8 +70,9 @@ kv-capacity(wrong): 1000 GiB (kv-util: 0.00%, available: 1000 GiB)
 compute logical-bytes=4.8MiB total=196GiB used=100MiB available=186GiB
 ----
 fraction-used: 0.0005 (via Used) vs 0.0510 (via Total-Available)
-kv-capacity: 186 GiB (kv-util: 0.00%, available: 186 GiB)
-kv-capacity(wrong): 94 MiB (kv-util: 5.10%, available: 186 GiB)
+legacy-capacity: 186 GiB (kv-util: 0.00%, available: 186 GiB)
+legacy-capacity(wrong): 94 MiB (kv-util: 5.10%, available: 186 GiB)
+physical: load=100 MiB capacity=186 GiB (util: 0.05%, amp-factor: 5.00)
 
 # Store has 10GiB of logical data but only 5GiB physical (0.5x amplification
 # due to compression). Still on the 196GiB disk with 10GiB reserved blocks.
@@ -74,5 +82,6 @@ kv-capacity(wrong): 94 MiB (kv-util: 5.10%, available: 186 GiB)
 compute logical-bytes=10GiB total=196GiB used=5GiB available=181GiB
 ----
 fraction-used: 0.0269 (via Used) vs 0.0765 (via Total-Available)
-kv-capacity: 372 GiB (kv-util: 2.69%, available: 181 GiB)
-kv-capacity(wrong): 131 GiB (kv-util: 7.65%, available: 181 GiB)
+legacy-capacity: 372 GiB (kv-util: 2.69%, available: 181 GiB)
+legacy-capacity(wrong): 131 GiB (kv-util: 7.65%, available: 181 GiB)
+physical: load=5.0 GiB capacity=186 GiB (util: 2.69%, amp-factor: 0.50)

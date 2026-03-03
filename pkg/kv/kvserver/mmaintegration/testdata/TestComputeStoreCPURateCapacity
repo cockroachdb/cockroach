@@ -27,6 +27,12 @@
 #   when mult ≤ 3x, all CPU is attributed to KV (background treated as kv
 #   overhead). When mult > 3x, excess is called background (real kv overhead
 #   treated as background if kv overhead exceeds 3x).
+#
+# physical:
+#   Reports raw physical load (nodeCPURateUsage/numStores) and capacity
+#   (nodeCPURateCapacity/numStores). MMA's utilization directly matches
+#   node-level CPU utilization. The amplification factor converts per-range
+#   logical CPU to physical at the integration boundary.
 # 
 # ==========================================================================
 # SECTION 1: No background — all models accurate (0% error)
@@ -41,6 +47,7 @@ node-cpu: 8.00 used / 16.00 capacity (8.00 kv + 0.00 proportional + 0.00 backgro
 truth:    kv-capacity: 16.00 cores/store (true-mult: 1.00)
 naive:    kv-capacity: 16.00 cores/store, capacity_err: 0.00%
 capped:   kv-capacity: 16.00 cores/store, capacity_err: 0.00%
+physical: load: 8.00 capacity: 16.00 (util: 50.00%, amp-factor: 1.00)
 
 # KV + 2x overhead: 4 KV + 8 overhead = 12 total. Multiplier = 12/4 = 3x (at the
 # capped_mult cap).
@@ -50,6 +57,7 @@ node-cpu: 12.00 used / 16.00 capacity (4.00 kv + 8.00 proportional + 0.00 backgr
 truth:    kv-capacity: 5.33 cores/store (true-mult: 3.00)
 naive:    kv-capacity: 5.33 cores/store, capacity_err: 0.00%
 capped:   kv-capacity: 5.33 cores/store, capacity_err: 0.00%
+physical: load: 12.00 capacity: 16.00 (util: 75.00%, amp-factor: 3.00)
 
 # KV + 4x overhead: 4 KV + 16 overhead = 20 total. True mult = 5x.
 # - naive: mult = 20/4 = 5. capacity = 16/5 = 3.2. Correct: 0%.
@@ -62,6 +70,7 @@ node-cpu: 20.00 used / 16.00 capacity (4.00 kv + 16.00 proportional + 0.00 backg
 truth:    kv-capacity: 3.20 cores/store (true-mult: 5.00)
 naive:    kv-capacity: 3.20 cores/store, capacity_err: 0.00%
 capped:   kv-capacity: 2.67 cores/store, capacity_err: -16.67%
+physical: load: 20.00 capacity: 16.00 (util: 125.00%, amp-factor: 3.00)
 
 # Same 4x overhead but on a larger machine (40 cores, only 20 used). Same capped
 # misclassification as above (bgLoad=8 of fake background), but on a bigger
@@ -79,6 +88,7 @@ node-cpu: 20.00 used / 40.00 capacity (4.00 kv + 16.00 proportional + 0.00 backg
 truth:    kv-capacity: 8.00 cores/store (true-mult: 5.00)
 naive:    kv-capacity: 8.00 cores/store, capacity_err: 0.00%
 capped:   kv-capacity: 10.67 cores/store, capacity_err: +33.33%
+physical: load: 20.00 capacity: 40.00 (util: 50.00%, amp-factor: 3.00)
 
 # ==========================================================================
 # SECTION 2: Background load present
@@ -101,6 +111,7 @@ node-cpu: 10.00 used / 16.00 capacity (2.00 kv + 0.00 proportional + 8.00 backgr
 truth:    kv-capacity: 8.00 cores/store (true-mult: 1.00)
 naive:    kv-capacity: 3.20 cores/store, capacity_err: -60.00%
 capped:   kv-capacity: 4.00 cores/store, capacity_err: -50.00%
+physical: load: 10.00 capacity: 16.00 (util: 62.50%, amp-factor: 3.00)
 
 # Background + proportional overhead.
 # kv=2, overhead=2, background=8. True capacity = (16-8)/2 = 4.0.
@@ -113,6 +124,7 @@ node-cpu: 12.00 used / 16.00 capacity (2.00 kv + 2.00 proportional + 8.00 backgr
 truth:    kv-capacity: 4.00 cores/store (true-mult: 2.00)
 naive:    kv-capacity: 2.67 cores/store, capacity_err: -33.33%
 capped:   kv-capacity: 3.33 cores/store, capacity_err: -16.67%
+physical: load: 12.00 capacity: 16.00 (util: 75.00%, amp-factor: 3.00)
 
 # At capacity: kv=4, overhead=4, background=8. Node at 16/16.
 # True capacity = (16-8)/2 = 4.0.
@@ -125,6 +137,7 @@ node-cpu: 16.00 used / 16.00 capacity (4.00 kv + 4.00 proportional + 8.00 backgr
 truth:    kv-capacity: 4.00 cores/store (true-mult: 2.00)
 naive:    kv-capacity: 4.00 cores/store, capacity_err: 0.00%
 capped:   kv-capacity: 4.00 cores/store, capacity_err: 0.00%
+physical: load: 16.00 capacity: 16.00 (util: 100.00%, amp-factor: 3.00)
 
 # Extreme background: kv=0.5, background=13.5, no overhead.
 # True capacity = (16-13.5)/1 = 2.5.
@@ -140,6 +153,7 @@ node-cpu: 14.00 used / 16.00 capacity (0.50 kv + 0.00 proportional + 13.50 backg
 truth:    kv-capacity: 2.50 cores/store (true-mult: 1.00)
 naive:    kv-capacity: 0.57 cores/store, capacity_err: -77.14%
 capped:   kv-capacity: 1.17 cores/store, capacity_err: -53.33%
+physical: load: 14.00 capacity: 16.00 (util: 87.50%, amp-factor: 3.00)
 
 # ==========================================================================
 # SECTION 3: Multi-store scenarios
@@ -156,6 +170,7 @@ node-cpu: 12.00 used / 16.00 capacity (4.00 kv + 2.00 proportional + 6.00 backgr
 truth:    kv-capacity: 3.33 cores/store (true-mult: 1.50)
 naive:    kv-capacity: 2.67 cores/store, capacity_err: -20.00%
 capped:   kv-capacity: 2.67 cores/store, capacity_err: -20.00%
+physical: load: 6.00 capacity: 8.00 (util: 75.00%, amp-factor: 3.00)
 
 # ==========================================================================
 # SECTION 4: Edge cases
@@ -173,6 +188,7 @@ node-cpu: 12.00 used / 16.00 capacity (0.00 kv + 0.00 proportional + 12.00 backg
 truth:    kv-capacity: 4.00 cores/store (true-mult: 1.00)
 naive:    kv-capacity: 8.00 cores/store, capacity_err: +100.00%
 capped:   kv-capacity: 1.33 cores/store, capacity_err: -66.67%
+physical: load: 12.00 capacity: 16.00 (util: 75.00%, amp-factor: 3.00)
 
 # Overloaded node (nodeUsage=18 > nodeCapacity=16) without background.
 # All 14 non-KV cores are proportional overhead (overhead=14, bg=0).
@@ -189,6 +205,7 @@ node-cpu: 18.00 used / 16.00 capacity (4.00 kv + 14.00 proportional + 0.00 backg
 truth:    kv-capacity: 3.56 cores/store (true-mult: 4.50)
 naive:    kv-capacity: 3.56 cores/store, capacity_err: 0.00%
 capped:   kv-capacity: 3.33 cores/store, capacity_err: -6.25%
+physical: load: 18.00 capacity: 16.00 (util: 112.50%, amp-factor: 3.00)
 
 # Same node as above but now with background.
 # True capacity = (16-10)/2 = 3.0: after reserving 10 for background, only 6
@@ -207,6 +224,7 @@ node-cpu: 18.00 used / 16.00 capacity (4.00 kv + 4.00 proportional + 10.00 backg
 truth:    kv-capacity: 3.00 cores/store (true-mult: 2.00)
 naive:    kv-capacity: 3.56 cores/store, capacity_err: +18.52%
 capped:   kv-capacity: 3.33 cores/store, capacity_err: +11.11%
+physical: load: 18.00 capacity: 16.00 (util: 112.50%, amp-factor: 3.00)
 
 # Overloaded: background exceeds node capacity.
 # True capacity = max(0, 16-30)/2 = 0 (node is crushed by background).
@@ -220,6 +238,7 @@ node-cpu: 32.00 used / 16.00 capacity (1.00 kv + 1.00 proportional + 30.00 backg
 truth:    kv-capacity: 0.00 cores/store (true-mult: 2.00)
 naive:    kv-capacity: 0.50 cores/store, capacity_err: +Inf%
 capped:   kv-capacity: 0.00 cores/store, capacity_err: 0.00%
+physical: load: 32.00 capacity: 16.00 (util: 200.00%, amp-factor: 3.00)
 
 # ==========================================================================
 # Mean |capacity_err| across all scenarios (excluding +Inf).

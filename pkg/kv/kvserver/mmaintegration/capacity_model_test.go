@@ -80,6 +80,17 @@ func TestComputeStoreCPURateCapacity(t *testing.T) {
 				// Run models.
 				naiveCap := float64(computeStoreCPURateCapacityNaive(in)) / nsPerCore
 				cappedCap := computeCPUCapacityWithCap(in) / nsPerCore
+				physDesc := roachpb.StoreDescriptor{
+					NodeCapacity: roachpb.NodeCapacity{
+						NumStores:           int32(numStores),
+						StoresCPURate:       int64(kvCPUCores * nsPerCore),
+						NodeCPURateUsage:    int64(nodeUsageCores * nsPerCore),
+						NodeCPURateCapacity: int64(nodeCapCores * nsPerCore),
+					},
+				}
+				physResult := computePhysicalCPU(physDesc)
+				physLoad := float64(physResult.load) / nsPerCore
+				physCap := float64(physResult.capacity) / nsPerCore
 
 				// Compute error percentage.
 				// Negative = pessimistic (underestimates capacity, safer).
@@ -116,11 +127,13 @@ func TestComputeStoreCPURateCapacity(t *testing.T) {
 					"node-cpu: %.2f used / %.2f capacity (%.2f kv + %.2f proportional + %.2f background)\n"+
 						"truth:    kv-capacity: %.2f cores/store (true-mult: %.2f)\n"+
 						"naive:    kv-capacity: %.2f cores/store, capacity_err: %s\n"+
-						"capped:   kv-capacity: %.2f cores/store, capacity_err: %s\n",
+						"capped:   kv-capacity: %.2f cores/store, capacity_err: %s\n"+
+						"physical: load: %.2f capacity: %.2f (util: %.2f%%, amp-factor: %.2f)\n",
 					nodeUsageCores, nodeCapCores, kvCPUCores, propOverhead, bgCores,
 					trueCapPerStore, trueMult,
 					naiveCap, fmtErr(naiveCap),
 					cappedCap, fmtErr(cappedCap),
+					physLoad, physCap, physLoad/physCap*100, float64(physResult.amplificationFactor),
 				)
 
 			case "mean":
@@ -176,7 +189,7 @@ func TestComputeStoreByteSizeCapacity(t *testing.T) {
 				}
 				fractionUsed := sc.FractionUsed()
 
-				// Current model: uses FractionUsed() = Used/(Used+Available).
+				// Legacy model: uses FractionUsed() = Used/(Used+Available).
 				result := computeStoreByteSizeCapacity(
 					mmaprototype.LoadValue(logicalBytes), fractionUsed, available,
 				)
@@ -185,6 +198,16 @@ func TestComputeStoreByteSizeCapacity(t *testing.T) {
 					mmaprototype.LoadValue(logicalBytes), total, available,
 				)
 
+				// Physical model: load=Used, capacity=Used+Available.
+				physDesc := roachpb.StoreDescriptor{
+					Capacity: roachpb.StoreCapacity{
+						LogicalBytes: logicalBytes,
+						Used:         used,
+						Available:    available,
+					},
+				}
+				physResult := computePhysicalDisk(physDesc)
+
 				fmtUtil := func(load int64, cap mmaprototype.LoadValue) string {
 					if cap > 0 {
 						return fmt.Sprintf("%.2f%%", float64(load)/float64(cap)*100)
@@ -192,10 +215,17 @@ func TestComputeStoreByteSizeCapacity(t *testing.T) {
 					return "N/A"
 				}
 				return fmt.Sprintf(
-					"fraction-used: %.4f (via Used) vs %.4f (via Total-Available)\nkv-capacity: %s (kv-util: %s, available: %s)\nkv-capacity(wrong): %s (kv-util: %s, available: %s)\n",
+					"fraction-used: %.4f (via Used) vs %.4f (via Total-Available)\n"+
+						"legacy-capacity: %s (kv-util: %s, available: %s)\n"+
+						"legacy-capacity(wrong): %s (kv-util: %s, available: %s)\n"+
+						"physical: load=%s capacity=%s (util: %s, amp-factor: %.2f)\n",
 					fractionUsed, float64(total-available)/float64(total),
 					humanizeutil.IBytes(int64(result)), fmtUtil(logicalBytes, result), humanizeutil.IBytes(available),
 					humanizeutil.IBytes(int64(wrongResult)), fmtUtil(logicalBytes, wrongResult), humanizeutil.IBytes(available),
+					humanizeutil.IBytes(int64(physResult.load)),
+					humanizeutil.IBytes(int64(physResult.capacity)),
+					fmtUtil(int64(physResult.load), physResult.capacity),
+					float64(physResult.amplificationFactor),
 				)
 
 			default:
