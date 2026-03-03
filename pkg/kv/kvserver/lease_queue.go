@@ -153,6 +153,7 @@ func (lq *leaseQueue) process(
 			lq.store.StoreID(),
 			desc,
 			transferOp.Usage,
+			(*mmaStore)(lq.store).amplificationFactors(),
 			transferOp.Source,
 			transferOp.Target,
 		)

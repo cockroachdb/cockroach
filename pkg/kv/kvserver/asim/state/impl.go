@@ -465,9 +465,13 @@ func (s *state) SetNodeCPURateCapacity(nodeID NodeID, cpuRateCapacity int64) {
 	node.cpuRateCapacity = cpuRateCapacity
 }
 
-// NodeCapacity returns the capacity of the Node with ID NodeID. Note that it is
-// currently unused.
-// TODO(wenyihu6): MMA integration should later use it.
+// NodeCapacity returns the capacity of the Node with ID NodeID. Used by
+// updateStoreCapacity to populate StoreDescriptor.NodeCapacity, which feeds
+// into MakeStoreLoadMsg and ComputeAmplificationFactors.
+//
+// Note: in the simulator NodeCPURateUsage equals StoresCPURate (the sum of
+// per-replica CPU) because we don't model OS-level overhead (GC, goroutine
+// scheduling, etc.). This means the CPU amplification factor is always ~1.0.
 func (s *state) NodeCapacity(nodeID NodeID) roachpb.NodeCapacity {
 	node := s.nodes[nodeID]
 	stores := node.Stores()
