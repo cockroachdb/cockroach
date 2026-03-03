@@ -41,6 +41,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/storage/fs"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/ui"
@@ -1041,6 +1042,63 @@ func TestAssertEnginesEmpty(t *testing.T) {
 	require.NoError(t, batch.PutMVCC(key, value))
 	require.NoError(t, batch.Commit(false))
 	require.Error(t, assertEnginesEmpty(engs))
+}
+
+func TestDeprecatedStoreClusterVersionKeyCleanup(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+
+	// Create sticky VFS registry for in-memory storage.
+	vfsRegistry := fs.NewStickyRegistry()
+	storeSpec := base.DefaultTestStoreSpec
+	storeSpec.StickyVFSID = "deprecated-key-cleanup-test"
+
+	// Open engine and write deprecated key before server startup.
+	env, err := fs.InitEnvFromStoreSpec(ctx, storeSpec,
+		fs.EnvConfig{}, vfsRegistry, nil /* diskWriteStats */)
+	require.NoError(t, err)
+	eng, err := storage.Open(ctx, env, cluster.MakeTestingClusterSettings())
+	require.NoError(t, err)
+
+	// TODO(pav-kv): rm this test when DeprecatedStoreClusterVersionKey is gone.
+	deprecatedKey := keys.DeprecatedStoreClusterVersionKey()
+	require.NoError(t, storage.MVCCPutProto(ctx, eng, deprecatedKey,
+		hlc.Timestamp{}, &roachpb.Version{Major: 22, Minor: 2, Internal: 0},
+		storage.MVCCWriteOptions{}))
+
+	// Verify key exists before server startup.
+	val, err := storage.MVCCGet(ctx, eng, deprecatedKey,
+		hlc.Timestamp{}, storage.MVCCGetOptions{})
+	require.NoError(t, err)
+	require.True(t, val.Value.IsPresent(), "deprecated key should exist before cleanup")
+
+	eng.Close()
+
+	// Start TestServer with the pre-populated engine.
+	// Server startup calls inspectEngines() which triggers cleanup.
+	srv := serverutils.StartServerOnly(t, base.TestServerArgs{
+		StoreSpecs: []base.StoreSpec{storeSpec},
+		Knobs: base.TestingKnobs{
+			Server: &TestingKnobs{
+				StickyVFSRegistry: vfsRegistry,
+			},
+		},
+	})
+	defer srv.Stopper().Stop(ctx)
+
+	// Access the store's engine and verify the key has been removed.
+	storeID := srv.StorageLayer().GetFirstStoreID()
+	store, err := srv.StorageLayer().GetStores().(*kvserver.Stores).GetStore(storeID)
+	require.NoError(t, err)
+
+	// Verify the key has been removed by reading from the engine.
+	val, err = storage.MVCCGet(ctx, store.LogEngine(), deprecatedKey,
+		hlc.Timestamp{}, storage.MVCCGetOptions{})
+	require.NoError(t, err)
+	// TODO(pav-kv): this should become false.
+	require.True(t, val.Value.IsPresent(), "deprecated key removed after server init")
 }
 
 // TestAssertExternalStorageInitializedBeforeJobSchedulerStart is a
