@@ -42,9 +42,12 @@ type physicalDimension struct {
 //
 // Node CPU usage is spread evenly across stores. A proportional distribution
 // (weighted by each store's CPUPerSecond) would be more precise for
-// multi-store but requires per-store info not available here; even splitting
-// matches how we split capacity.
-func computePhysicalCPU(desc roachpb.StoreDescriptor) physicalDimension {
+// multi-store; even splitting matches how we split capacity.
+// TODO(mma): consider using desc.Capacity.CPUPerSecond to weight the
+// per-store share of node CPU instead of splitting evenly.
+func computePhysicalCPU(desc roachpb.StoreDescriptor) (res physicalDimension) {
+	defer func() { res.capacity = max(minCapacity, res.capacity) }()
+
 	nc := desc.NodeCapacity
 	if nc.NumStores <= 0 {
 		return physicalDimension{
@@ -80,6 +83,11 @@ func computePhysicalCPU(desc roachpb.StoreDescriptor) physicalDimension {
 	}
 }
 
+// minCapacity is the floor for per-store physical capacity in any dimension.
+// This prevents zero-capacity values that could arise during early node startup
+// or on empty stores.
+const minCapacity mmaprototype.LoadValue = 1.0
+
 // maxDiskSpaceAmplification caps the ratio of physical disk bytes used to
 // logical (MVCC) bytes. Values above this are treated as if the extra physical
 // usage is independent of range data (e.g. WAL, auxiliary files, tombstone
@@ -94,7 +102,9 @@ const maxDiskSpaceAmplification = 5.0
 // Used/(Used+Available) = actual disk utilization. The amplification factor
 // is Used/LogicalBytes, capped at maxDiskSpaceAmplification. Values below 1.0
 // (from compression) are preserved. Defaults to 1.0 for empty/new stores.
-func computePhysicalDisk(desc roachpb.StoreDescriptor) physicalDimension {
+func computePhysicalDisk(desc roachpb.StoreDescriptor) (res physicalDimension) {
+	defer func() { res.capacity = max(minCapacity, res.capacity) }()
+
 	sc := desc.Capacity
 	var ampFactor float64
 	if sc.LogicalBytes > 0 && sc.Used > 0 {
