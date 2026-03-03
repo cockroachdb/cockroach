@@ -642,6 +642,16 @@ func TestDataDriven(t *testing.T) {
 									Value:            int64(kvserverbase.LBRebalancingMultiMetricAndCount),
 								})
 						},
+						// MMA handles both rebalancing and repair; replicate and lease
+						// queues are completely disabled.
+						"mma-repair": func(eg *gen.StaticEvents) {
+							eg.ScheduleEvent(settingsGen.Settings.StartTime, 0,
+								event.SetSimulationSettingsEvent{
+									IsClusterSetting: true,
+									Key:              "LBRebalancingMode",
+									Value:            int64(kvserverbase.LBRebalancingMultiMetricRepairAndRebalance),
+								})
+						},
 					}
 					var buf strings.Builder
 					// stateStrForOnce stores the string representation of the cluster and

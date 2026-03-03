@@ -112,6 +112,9 @@ func (lq *leaseQueue) MaybeAdd(ctx context.Context, replica state.Replica, s sta
 // time. Replicas in the queue are processed in order of priority, then in FIFO
 // order on ties.
 func (lq *leaseQueue) Tick(ctx context.Context, tick time.Time, s state.State) {
+	if !lq.settings.LeaseQueueEnabled {
+		return
+	}
 	lq.AddLogTag("tick", tick)
 	ctx = lq.AnnotateCtx(ctx)
 	// TODO(wenyihu6): it is unclear why next tick is forwarded to last tick
