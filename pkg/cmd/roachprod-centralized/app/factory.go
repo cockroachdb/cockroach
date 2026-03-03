@@ -386,6 +386,12 @@ func NewServicesFromConfig(
 			)
 		}
 
+		// cluster-register executor — clusters service satisfies ClusterRegistrar
+		// via Go structural typing (no import cycle).
+		hookRegistry.Register("cluster-register",
+			sprovhooks.NewClusterRegisterExecutor(clustersService),
+		)
+
 		hookOrchestrator := sprovhooks.NewOrchestrator(hookRegistry)
 
 		provisioningsService = sprovisionings.NewService(

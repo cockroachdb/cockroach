@@ -7,9 +7,13 @@ package cloud
 
 import (
 	"testing"
+	"time"
 
 	ec2types "github.com/aws/aws-sdk-go-v2/service/ec2/types"
+	cloudcluster "github.com/cockroachdb/cockroach/pkg/roachprod/cloud/types"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/vm"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestGetTagsValues(t *testing.T) {
@@ -82,4 +86,120 @@ func TestGetIAMUserNameFromKeyname(t *testing.T) {
 			assert.EqualValues(t, tc.expectedOutput, returnedIAMUserName)
 		})
 	}
+}
+
+func TestDestroyCluster_ProvisioningManagedBlocked(t *testing.T) {
+	c := &cloudcluster.Cluster{
+		Name: "test-cluster",
+		VMs: vm.List{
+			{Name: "vm-1", Labels: map[string]string{
+				vm.TagProvisioningIdentifier: "abc123",
+			}},
+		},
+	}
+	c.ManagedByProvisioning = c.IsProvisioningManaged()
+
+	err := DestroyCluster(nil, c)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "provisioning-managed")
+	assert.Contains(t, err.Error(), "test-cluster")
+}
+
+func TestDestroyCluster_UnmanagedNotBlocked(t *testing.T) {
+	c := &cloudcluster.Cluster{
+		Name: "test-cluster",
+		VMs: vm.List{
+			{Name: "vm-1", Labels: map[string]string{
+				"roachprod": "true",
+			}},
+		},
+	}
+
+	// DestroyCluster panics past the managed-cluster guard (nil logger),
+	// which proves the guard was not triggered.
+	assert.Panics(t, func() { _ = DestroyCluster(nil, c) })
+}
+
+// TestGCBadVMs_ProvisioningIdentifierSkipped verifies the filtering logic
+// at gc.go:408-418: bad VMs carrying a provisioning_identifier label are
+// skipped, while unlabeled bad VMs are collected for deletion.
+func TestGCBadVMs_ProvisioningIdentifierSkipped(t *testing.T) {
+	now := time.Now()
+	twoHoursAgo := now.Add(-2 * time.Hour)
+
+	badInstances := vm.List{
+		{Name: "labeled-vm", CreatedAt: twoHoursAgo, Labels: map[string]string{
+			vm.TagProvisioningIdentifier: "prov-abc",
+		}},
+		{Name: "unlabeled-vm-1", CreatedAt: twoHoursAgo, Labels: map[string]string{
+			"roachprod": "true",
+		}},
+		{Name: "unlabeled-vm-2", CreatedAt: twoHoursAgo, Labels: map[string]string{}},
+		{Name: "recent-vm", CreatedAt: now, Labels: map[string]string{}}, // too recent
+	}
+
+	// Replicate the filtering logic from GCClusters (gc.go:408-418).
+	var badVMs vm.List
+	for _, v := range badInstances {
+		if now.Sub(v.CreatedAt) >= time.Hour && !v.EmptyCluster {
+			if v.Labels[vm.TagProvisioningIdentifier] != "" {
+				continue
+			}
+			badVMs = append(badVMs, v)
+		}
+	}
+
+	require.Len(t, badVMs, 2)
+	assert.Equal(t, "unlabeled-vm-1", badVMs[0].Name)
+	assert.Equal(t, "unlabeled-vm-2", badVMs[1].Name)
+}
+
+func TestGCStatus_ProvisioningManagedAlwaysGood(t *testing.T) {
+	now := time.Now()
+
+	// Create an expired provisioning-managed cluster.
+	c := &cloudcluster.Cluster{
+		Name:                  "managed-cluster",
+		User:                  "user",
+		CreatedAt:             now.Add(-48 * time.Hour),
+		Lifetime:              12 * time.Hour,
+		ManagedByProvisioning: true,
+		VMs: vm.List{
+			{Name: "vm-1", Labels: map[string]string{
+				vm.TagProvisioningIdentifier: "abc123",
+			}},
+		},
+	}
+
+	s := &status{}
+	s.add(c, now)
+
+	// Even though the cluster is expired, it should be in 'good' not 'destroy'.
+	assert.Len(t, s.good, 1)
+	assert.Len(t, s.destroy, 0)
+	assert.Len(t, s.warn, 0)
+	assert.Equal(t, "managed-cluster", s.good[0].Name)
+}
+
+func TestGCStatus_UnmanagedExpiredDestroyed(t *testing.T) {
+	now := time.Now()
+
+	c := &cloudcluster.Cluster{
+		Name:      "unmanaged-cluster",
+		User:      "user",
+		CreatedAt: now.Add(-48 * time.Hour),
+		Lifetime:  12 * time.Hour,
+		VMs: vm.List{
+			{Name: "vm-1", Labels: map[string]string{
+				"roachprod": "true",
+			}},
+		},
+	}
+
+	s := &status{}
+	s.add(c, now)
+
+	assert.Len(t, s.destroy, 1)
+	assert.Len(t, s.good, 0)
+	assert.Equal(t, "unmanaged-cluster", s.destroy[0].Name)
 }

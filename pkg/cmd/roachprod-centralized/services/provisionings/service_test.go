@@ -858,3 +858,40 @@ func TestGCScheduleDestroy_DuplicatePrevention(t *testing.T) {
 	repo.AssertNotCalled(t, "UpdateProvisioning", mock.Anything, mock.Anything, mock.Anything)
 	taskSvc.AssertNotCalled(t, "CreateTask", mock.Anything, mock.Anything, mock.Anything)
 }
+
+// --- clusterNameFromOwner tests ---
+
+func TestClusterNameFromOwner(t *testing.T) {
+	tests := []struct {
+		owner    string
+		provName string
+		want     string
+	}{{
+		owner:    "ludo.leroux@cockroachlabs.com",
+		provName: "gce-standalone-abc12def",
+		want:     "ludoleroux-gce-standalone-abc12def",
+	}, {
+		owner:    "admin",
+		provName: "tmpl-xyz12345",
+		want:     "admin-tmpl-xyz12345",
+	}, {
+		owner:    "",
+		provName: "tmpl-xyz12345",
+		want:     "tmpl-xyz12345",
+	}, {
+		owner:    "user@example.com",
+		provName: "gce-my-template-abcd1234",
+		want:     "user-gce-my-template-abcd1234",
+	}, {
+		owner:    "Alice.Bob@example.com",
+		provName: "aws-test-12345678",
+		want:     "alicebob-aws-test-12345678",
+	}}
+
+	for _, tt := range tests {
+		t.Run(fmt.Sprintf("%s/%s", tt.owner, tt.provName), func(t *testing.T) {
+			got := clusterNameFromOwner(tt.owner, tt.provName)
+			assert.Equal(t, tt.want, got)
+		})
+	}
+}

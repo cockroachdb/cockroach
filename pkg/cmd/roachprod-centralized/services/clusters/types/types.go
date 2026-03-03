@@ -38,6 +38,9 @@ var (
 	// ErrClusterAlreadyExists is the error returned when a cluster already
 	// exists.
 	ErrClusterAlreadyExists = utils.NewPublicError(fmt.Errorf("cluster already exists"))
+	// ErrClusterManagedByProvisioning is returned when attempting to delete
+	// a cluster that is managed by a provisioning.
+	ErrClusterManagedByProvisioning = utils.NewPublicError(fmt.Errorf("cluster is managed by a provisioning and cannot be deleted directly"))
 	// ErrShutdownTimeout is the error returned when the service shutdown times out.
 	ErrShutdownTimeout = fmt.Errorf("service shutdown timeout")
 )

@@ -32,8 +32,12 @@ import (
 
 // mockOrchestrator implements hooks.IOrchestrator for handler tests.
 type mockOrchestrator struct {
-	runPostApplyErr error
-	called          bool
+	runPostApplyErr  error
+	runPreDestroyErr error
+	called           bool
+	preDestroyCalled bool
+	// callLog records the order of hook invocations (shared with test).
+	callLog *[]string
 }
 
 func (m *mockOrchestrator) RunPostApply(
@@ -45,6 +49,20 @@ func (m *mockOrchestrator) RunPostApply(
 ) error {
 	m.called = true
 	return m.runPostApplyErr
+}
+
+func (m *mockOrchestrator) RunPreDestroy(
+	_ context.Context,
+	_ *logger.Logger,
+	_ provmodels.Provisioning,
+	_ string,
+	_ envtypes.ResolvedEnvironment,
+) error {
+	m.preDestroyCalled = true
+	if m.callLog != nil {
+		*m.callLog = append(*m.callLog, "pre_destroy")
+	}
+	return m.runPreDestroyErr
 }
 
 func (m *mockOrchestrator) RunByType(
@@ -256,4 +274,95 @@ func TestHandleProvision_HooksSucceed_Provisioned(t *testing.T) {
 	finalProv := lastCall.Arguments.Get(2).(provmodels.Provisioning)
 	assert.Equal(t, provmodels.ProvisioningStateProvisioned, finalProv.State)
 	assert.Equal(t, "done", finalProv.LastStep)
+}
+
+// setupDestroyMocks configures mock expectations for a HandleDestroy flow
+// through init (and optionally destroy). Returns the test provisioning.
+func setupDestroyMocks(
+	t *testing.T,
+	repo *provisioningsrepmock.IProvisioningsRepository,
+	envSvc *environmensmock.IService,
+	exec *provisioningsmock.IExecutor,
+	archive []byte,
+	checksum string,
+) (provmodels.Provisioning, uuid.UUID) {
+	t.Helper()
+	provID := uuid.MakeV4()
+	prov := provmodels.Provisioning{
+		ID:               provID,
+		Environment:      "env-a",
+		TemplateType:     "tmpl-meta",
+		TemplateChecksum: checksum,
+		TemplateSnapshot: archive,
+		Identifier:       "abc123de",
+		Owner:            "owner@example.com",
+		State:            provmodels.ProvisioningStateProvisioned,
+	}
+
+	repo.On("GetProvisioning", mock.Anything, mock.Anything, provID).Return(prov, nil).Once()
+	envSvc.On("GetEnvironmentResolved", mock.Anything, mock.Anything, "env-a").
+		Return(envtypes.ResolvedEnvironment{Name: "env-a"}, nil).Once()
+
+	// Allow all state updates throughout the lifecycle.
+	repo.On("UpdateProvisioning", mock.Anything, mock.Anything, mock.Anything).Return(nil)
+
+	// Init succeeds.
+	exec.On("Init", mock.Anything, mock.Anything, mock.Anything, mock.Anything).
+		Return(nil).Once()
+
+	return prov, provID
+}
+
+func TestHandleDestroy_PreDestroyHookCalledBeforeDestroy(t *testing.T) {
+	archive, checksum, templatesDir := makeSnapshotFixture(t)
+
+	// Track call ordering between the orchestrator and the executor.
+	var callLog []string
+	orch := &mockOrchestrator{callLog: &callLog}
+	svc, repo, envSvc, exec := newHandlerTestService(t, templatesDir, orch)
+	_, provID := setupDestroyMocks(t, repo, envSvc, exec, archive, checksum)
+
+	// Destroy succeeds; record the call in the shared log.
+	exec.On("Destroy", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).
+		Run(func(_ mock.Arguments) { callLog = append(callLog, "destroy") }).
+		Return(nil).Once()
+
+	err := svc.HandleDestroy(context.Background(), logger.DefaultLogger, provID)
+	require.NoError(t, err)
+
+	assert.True(t, orch.preDestroyCalled, "pre-destroy hook should have been called")
+	exec.AssertCalled(t, "Destroy", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything)
+
+	// Verify pre-destroy hooks ran before destroy.
+	require.Equal(t, []string{"pre_destroy", "destroy"}, callLog)
+
+	// Verify the final state update was to destroyed.
+	lastCall := repo.Calls[len(repo.Calls)-1]
+	assert.Equal(t, "UpdateProvisioning", lastCall.Method)
+	finalProv := lastCall.Arguments.Get(2).(provmodels.Provisioning)
+	assert.Equal(t, provmodels.ProvisioningStateDestroyed, finalProv.State)
+}
+
+func TestHandleDestroy_PreDestroyHookErrorAbortsFlow(t *testing.T) {
+	archive, checksum, templatesDir := makeSnapshotFixture(t)
+	orch := &mockOrchestrator{runPreDestroyErr: errors.New("hook failed")}
+	svc, repo, envSvc, exec := newHandlerTestService(t, templatesDir, orch)
+	_, provID := setupDestroyMocks(t, repo, envSvc, exec, archive, checksum)
+
+	// Destroy should NOT be called because pre-destroy hooks fail.
+
+	err := svc.HandleDestroy(context.Background(), logger.DefaultLogger, provID)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "pre-destroy hooks")
+	assert.True(t, orch.preDestroyCalled, "pre-destroy hook should have been called")
+
+	// Verify Destroy was never called.
+	exec.AssertNotCalled(t, "Destroy", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything)
+
+	// Verify the final state update was to destroy_failed.
+	lastCall := repo.Calls[len(repo.Calls)-1]
+	assert.Equal(t, "UpdateProvisioning", lastCall.Method)
+	finalProv := lastCall.Arguments.Get(2).(provmodels.Provisioning)
+	assert.Equal(t, provmodels.ProvisioningStateDestroyFailed, finalProv.State)
+	assert.Contains(t, finalProv.Error, "pre-destroy hooks")
 }

@@ -41,6 +41,14 @@ type status struct {
 }
 
 func (s *status) add(c *cloudcluster.Cluster, now time.Time) {
+	// Provisioning-managed clusters are always classified as good — they
+	// cannot be destroyed by GC; their lifecycle is managed by the
+	// provisioning service.
+	if c.IsProvisioningManaged() {
+		s.good = append(s.good, c)
+		return
+	}
+
 	exp := c.ExpiresAt()
 	// Clusters without VMs shouldn't exist and are likely dangling resources.
 	if c.IsEmptyCluster() {
@@ -397,10 +405,15 @@ func GCClusters(l *logger.Logger, cloud *Cloud, dryrun bool) error {
 
 	// Compile list of "bad vms" and destroy them.
 	var badVMs vm.List
-	for _, vm := range cloud.BadInstances {
+	for _, v := range cloud.BadInstances {
 		// We skip fake VMs and only delete "bad vms" if they were created more than 1h ago.
-		if now.Sub(vm.CreatedAt) >= time.Hour && !vm.EmptyCluster {
-			badVMs = append(badVMs, vm)
+		if now.Sub(v.CreatedAt) >= time.Hour && !v.EmptyCluster {
+			// Skip VMs that belong to a provisioning — these are managed
+			// by the provisioning lifecycle, not the GC.
+			if v.Labels[vm.TagProvisioningIdentifier] != "" {
+				continue
+			}
+			badVMs = append(badVMs, v)
 		}
 	}
 	client := makeSlackClient()

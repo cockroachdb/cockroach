@@ -25,6 +25,12 @@ type IOrchestrator interface {
 		workingDir string,
 		resolvedEnv envtypes.ResolvedEnvironment,
 	) error
+	RunPreDestroy(
+		ctx context.Context, l *logger.Logger,
+		prov provmodels.Provisioning,
+		workingDir string,
+		resolvedEnv envtypes.ResolvedEnvironment,
+	) error
 	RunByType(
 		ctx context.Context, l *logger.Logger,
 		prov provmodels.Provisioning,
@@ -74,6 +80,32 @@ func (o *Orchestrator) RunPostApply(
 	)
 }
 
+// RunPreDestroy runs all hooks with the pre_destroy trigger in YAML list
+// order. Reads the template metadata from the working directory. If no
+// hooks with pre_destroy trigger exist, returns nil immediately.
+func (o *Orchestrator) RunPreDestroy(
+	ctx context.Context,
+	l *logger.Logger,
+	prov provmodels.Provisioning,
+	workingDir string,
+	resolvedEnv envtypes.ResolvedEnvironment,
+) error {
+	meta, err := templates.ParseMetadataFromDir(workingDir)
+	if err != nil {
+		if errors.Is(err, templates.ErrNoTemplateMarker) {
+			l.Debug("no template metadata found, skipping hooks",
+				slog.String("provisioning_id", prov.ID.String()),
+			)
+			return nil
+		}
+		return errors.Wrapf(err, "parse template metadata in %s", workingDir)
+	}
+
+	return o.runHooksForTrigger(
+		ctx, l, prov, meta, provmodels.TriggerPreDestroy, resolvedEnv,
+	)
+}
+
 // RunByType runs all hooks of the given type. Used by manual trigger flows
 // (e.g., ssh-keys-setup). Returns an error if no hook of the requested type
 // is declared in the template.
@@ -97,7 +129,7 @@ func (o *Orchestrator) RunByType(
 		}
 		found = true
 		if err := o.executeHook(
-			ctx, l, prov, meta, hook, resolvedEnv,
+			ctx, l, prov, meta, hook, provmodels.TriggerManual, resolvedEnv,
 		); err != nil {
 			return err
 		}
@@ -142,7 +174,8 @@ func (o *Orchestrator) runHooksForTrigger(
 		return nil
 	}
 
-	l.Info("running post-apply hooks",
+	l.Info("running hooks",
+		slog.String("trigger", string(trigger)),
 		slog.String("provisioning_id", prov.ID.String()),
 		slog.Int("hook_count", countHooksForTrigger(meta.Hooks, trigger)),
 	)
@@ -154,7 +187,7 @@ func (o *Orchestrator) runHooksForTrigger(
 		}
 
 		if err := o.executeHook(
-			ctx, l, prov, meta, hook, resolvedEnv,
+			ctx, l, prov, meta, hook, trigger, resolvedEnv,
 		); err != nil {
 			if hook.Optional {
 				l.Warn("optional hook failed, continuing",
@@ -178,6 +211,7 @@ func (o *Orchestrator) executeHook(
 	prov provmodels.Provisioning,
 	meta provmodels.TemplateMetadata,
 	hook *provmodels.HookDeclaration,
+	trigger provmodels.HookTrigger,
 	resolvedEnv envtypes.ResolvedEnvironment,
 ) error {
 	l.Info("executing hook",
@@ -204,6 +238,7 @@ func (o *Orchestrator) executeHook(
 	}
 
 	hctx := HookContext{
+		Trigger:      trigger,
 		Provisioning: prov,
 		Declaration:  *hook,
 	}

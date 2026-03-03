@@ -41,6 +41,8 @@ const (
 	TagArch = "arch"
 	// TagManaged is the label used to identify managed clusters
 	TagManaged = "managed"
+	// TagProvisioningIdentifier marks VMs owned by a provisioning.
+	TagProvisioningIdentifier = "provisioning_identifier"
 
 	ArchARM64   = CPUArch("arm64")
 	ArchAMD64   = CPUArch("amd64")

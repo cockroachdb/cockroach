@@ -274,6 +274,18 @@ func (s *Service) HandleDestroy(
 		return s.failDestroy(ctx, l, &prov, errors.Wrap(err, "tofu init"))
 	}
 
+	// Step: Pre-destroy hooks
+	if s.hookOrchestrator != nil {
+		prov.LastStep = "pre_destroy_hooks"
+		prov.UpdatedAt = timeutil.Now().UTC()
+		if err := s.repo.UpdateProvisioning(ctx, l, prov); err != nil {
+			return s.failDestroy(ctx, l, &prov, errors.Wrap(err, "update last_step to pre_destroy_hooks"))
+		}
+		if err := s.hookOrchestrator.RunPreDestroy(ctx, l, prov, workingDir, resolvedEnv); err != nil {
+			return s.failDestroy(ctx, l, &prov, errors.Wrap(err, "pre-destroy hooks"))
+		}
+	}
+
 	// Step: Destroy
 	prov.LastStep = "destroy"
 	prov.UpdatedAt = timeutil.Now().UTC()

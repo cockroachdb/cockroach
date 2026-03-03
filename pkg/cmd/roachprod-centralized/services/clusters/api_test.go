@@ -7,11 +7,13 @@ package clusters
 
 import (
 	"context"
+	"fmt"
 	"testing"
 	"time"
 
 	pkgauth "github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/auth"
 	authmodels "github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/models/auth"
+	clustersrepo "github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/repositories/clusters"
 	clustersrepomock "github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/repositories/clusters/mocks"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/services/clusters/tasks"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/services/clusters/types"
@@ -22,6 +24,7 @@ import (
 	filtertypes "github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/utils/filters/types"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/utils/logger"
 	cloudcluster "github.com/cockroachdb/cockroach/pkg/roachprod/cloud/types"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/vm"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
@@ -273,4 +276,210 @@ func makeTestPrincipal() *pkgauth.Principal {
 			},
 		},
 	}
+}
+
+func TestService_RegisterClusterInternal(t *testing.T) {
+	t.Run("idempotent skip when cluster exists", func(t *testing.T) {
+		store := clustersrepomock.NewIClustersRepository(t)
+		healthService := healthmock.NewIHealthService(t)
+
+		store.On("GetCluster", mock.Anything, mock.Anything, "existing-cluster").Return(
+			cloudcluster.Cluster{Name: "existing-cluster"}, nil,
+		)
+
+		s, err := NewService(store, nil, healthService, Options{})
+		require.NoError(t, err)
+
+		err = s.RegisterClusterInternal(
+			context.Background(), logger.DefaultLogger,
+			cloudcluster.Cluster{Name: "existing-cluster"},
+		)
+		assert.NoError(t, err)
+
+		// StoreCluster should NOT have been called.
+		store.AssertNotCalled(t, "StoreCluster", mock.Anything, mock.Anything, mock.Anything)
+	})
+
+	t.Run("store lookup error propagates", func(t *testing.T) {
+		store := clustersrepomock.NewIClustersRepository(t)
+		healthService := healthmock.NewIHealthService(t)
+
+		store.On("GetCluster", mock.Anything, mock.Anything, "some-cluster").Return(
+			cloudcluster.Cluster{}, fmt.Errorf("db connection error"),
+		)
+
+		s, err := NewService(store, nil, healthService, Options{})
+		require.NoError(t, err)
+
+		err = s.RegisterClusterInternal(
+			context.Background(), logger.DefaultLogger,
+			cloudcluster.Cluster{Name: "some-cluster"},
+		)
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "db connection error")
+		assert.Contains(t, err.Error(), "check cluster existence")
+	})
+}
+
+func TestService_UnregisterClusterInternal(t *testing.T) {
+	t.Run("not found skips silently", func(t *testing.T) {
+		store := clustersrepomock.NewIClustersRepository(t)
+		healthService := healthmock.NewIHealthService(t)
+
+		store.On("GetCluster", mock.Anything, mock.Anything, "gone-cluster").Return(
+			cloudcluster.Cluster{}, clustersrepo.ErrClusterNotFound,
+		)
+
+		s, err := NewService(store, nil, healthService, Options{})
+		require.NoError(t, err)
+
+		err = s.UnregisterClusterInternal(
+			context.Background(), logger.DefaultLogger,
+			"gone-cluster", "owner@example.com", "prov-id",
+		)
+		assert.NoError(t, err)
+
+		store.AssertNotCalled(t, "DeleteCluster", mock.Anything, mock.Anything, mock.Anything)
+	})
+
+	t.Run("owner mismatch returns error", func(t *testing.T) {
+		store := clustersrepomock.NewIClustersRepository(t)
+		healthService := healthmock.NewIHealthService(t)
+
+		store.On("GetCluster", mock.Anything, mock.Anything, "my-cluster").Return(
+			cloudcluster.Cluster{
+				Name: "my-cluster",
+				User: "alice@example.com",
+				VMs: vm.List{{
+					Name:   "vm-1",
+					Labels: map[string]string{vm.TagProvisioningIdentifier: "prov-id"},
+				}},
+			}, nil,
+		)
+
+		s, err := NewService(store, nil, healthService, Options{})
+		require.NoError(t, err)
+
+		err = s.UnregisterClusterInternal(
+			context.Background(), logger.DefaultLogger,
+			"my-cluster", "bob@example.com", "prov-id",
+		)
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "owner mismatch")
+
+		store.AssertNotCalled(t, "DeleteCluster", mock.Anything, mock.Anything, mock.Anything)
+	})
+
+	t.Run("VM label mismatch returns error", func(t *testing.T) {
+		store := clustersrepomock.NewIClustersRepository(t)
+		healthService := healthmock.NewIHealthService(t)
+
+		store.On("GetCluster", mock.Anything, mock.Anything, "my-cluster").Return(
+			cloudcluster.Cluster{
+				Name: "my-cluster",
+				User: "owner@example.com",
+				VMs: vm.List{{
+					Name:   "vm-1",
+					Labels: map[string]string{vm.TagProvisioningIdentifier: "other-prov"},
+				}},
+			}, nil,
+		)
+
+		s, err := NewService(store, nil, healthService, Options{})
+		require.NoError(t, err)
+
+		err = s.UnregisterClusterInternal(
+			context.Background(), logger.DefaultLogger,
+			"my-cluster", "owner@example.com", "my-prov",
+		)
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "owner label mismatch")
+
+		store.AssertNotCalled(t, "DeleteCluster", mock.Anything, mock.Anything, mock.Anything)
+	})
+
+	t.Run("owner and labels match applies delete", func(t *testing.T) {
+		store := clustersrepomock.NewIClustersRepository(t)
+		healthService := healthmock.NewIHealthService(t)
+
+		cluster := cloudcluster.Cluster{
+			Name: "my-cluster",
+			User: "owner@example.com",
+			VMs: vm.List{{
+				Name:   "vm-1",
+				Labels: map[string]string{vm.TagProvisioningIdentifier: "prov-id"},
+			}},
+		}
+		store.On("GetCluster", mock.Anything, mock.Anything, "my-cluster").Return(cluster, nil)
+		store.On("DeleteCluster", mock.Anything, mock.Anything, mock.MatchedBy(func(c cloudcluster.Cluster) bool {
+			return c.Name == "my-cluster"
+		})).Return(nil)
+		store.On("ConditionalEnqueueOperation", mock.Anything, mock.Anything, mock.Anything, mock.Anything).
+			Return(false, nil)
+		healthService.On("GetInstanceTimeout").Return(3 * time.Second)
+
+		s, err := NewService(store, nil, healthService, Options{})
+		require.NoError(t, err)
+
+		err = s.UnregisterClusterInternal(
+			context.Background(), logger.DefaultLogger,
+			"my-cluster", "owner@example.com", "prov-id",
+		)
+		assert.NoError(t, err)
+
+		store.AssertCalled(t, "DeleteCluster", mock.Anything, mock.Anything, mock.Anything)
+	})
+}
+
+func TestService_RegisterClusterDelete_ManagedCluster(t *testing.T) {
+	store := clustersrepomock.NewIClustersRepository(t)
+	healthService := healthmock.NewIHealthService(t)
+
+	managedCluster := cloudcluster.Cluster{
+		Name:                  "managed-cluster",
+		ManagedByProvisioning: true,
+		VMs: vm.List{{
+			Name:   "vm-1",
+			Labels: map[string]string{vm.TagProvisioningIdentifier: "prov-abc"},
+		}},
+	}
+	store.On("GetCluster", mock.Anything, mock.Anything, "managed-cluster").Return(managedCluster, nil)
+
+	s, err := NewService(store, nil, healthService, Options{})
+	require.NoError(t, err)
+
+	err = s.RegisterClusterDelete(
+		context.Background(), logger.DefaultLogger, makeTestPrincipal(),
+		types.InputRegisterClusterDeleteDTO{Name: "managed-cluster"},
+	)
+	assert.ErrorIs(t, err, types.ErrClusterManagedByProvisioning)
+
+	store.AssertNotCalled(t, "DeleteCluster", mock.Anything, mock.Anything, mock.Anything)
+}
+
+func TestService_RegisterClusterUpdate_ManagedCluster(t *testing.T) {
+	store := clustersrepomock.NewIClustersRepository(t)
+	healthService := healthmock.NewIHealthService(t)
+
+	managedCluster := cloudcluster.Cluster{
+		Name:                  "managed-cluster",
+		User:                  "test@example.com",
+		ManagedByProvisioning: true,
+		VMs: vm.List{{
+			Name:   "vm-1",
+			Labels: map[string]string{vm.TagProvisioningIdentifier: "prov-abc"},
+		}},
+	}
+	store.On("GetCluster", mock.Anything, mock.Anything, "managed-cluster").Return(managedCluster, nil)
+
+	s, err := NewService(store, nil, healthService, Options{})
+	require.NoError(t, err)
+
+	_, err = s.RegisterClusterUpdate(
+		context.Background(), logger.DefaultLogger, makeTestPrincipal(),
+		types.InputRegisterClusterUpdateDTO{Cluster: cloudcluster.Cluster{Name: "managed-cluster"}},
+	)
+	assert.ErrorIs(t, err, types.ErrClusterManagedByProvisioning)
+
+	store.AssertNotCalled(t, "StoreCluster", mock.Anything, mock.Anything, mock.Anything)
 }

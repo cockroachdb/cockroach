@@ -21,6 +21,7 @@ type HookTrigger string
 
 const (
 	TriggerPostApply   HookTrigger = "post_apply"
+	TriggerPreDestroy  HookTrigger = "pre_destroy"
 	TriggerManual      HookTrigger = "manual"
 	TriggerOnKeyChange HookTrigger = "on_key_change"
 )
@@ -40,16 +41,17 @@ type HookEnvMapping map[string]string
 // HookDeclaration represents a single hook declared in a template's
 // template.yaml. Hooks execute in the order they appear in the YAML list.
 type HookDeclaration struct {
-	Name     string         `yaml:"name" json:"name"`
-	Type     string         `yaml:"type" json:"type"`
-	SSH      bool           `yaml:"ssh" json:"ssh"`
-	Machines string         `yaml:"machines,omitempty" json:"machines,omitempty"`
-	User     string         `yaml:"user,omitempty" json:"user,omitempty"`
-	Command  string         `yaml:"command,omitempty" json:"command,omitempty"`
-	Env      HookEnvMapping `yaml:"env,omitempty" json:"env,omitempty"`
-	Optional bool           `yaml:"optional,omitempty" json:"optional,omitempty"`
-	Retry    *RetryConfig   `yaml:"retry,omitempty" json:"retry,omitempty"`
-	Triggers []HookTrigger  `yaml:"triggers" json:"triggers"`
+	Name     string                 `yaml:"name" json:"name"`
+	Type     string                 `yaml:"type" json:"type"`
+	SSH      bool                   `yaml:"ssh" json:"ssh"`
+	Machines string                 `yaml:"machines,omitempty" json:"machines,omitempty"`
+	User     string                 `yaml:"user,omitempty" json:"user,omitempty"`
+	Command  string                 `yaml:"command,omitempty" json:"command,omitempty"`
+	Env      HookEnvMapping         `yaml:"env,omitempty" json:"env,omitempty"`
+	Optional bool                   `yaml:"optional,omitempty" json:"optional,omitempty"`
+	Retry    *RetryConfig           `yaml:"retry,omitempty" json:"retry,omitempty"`
+	Triggers []HookTrigger          `yaml:"triggers" json:"triggers"`
+	Config   map[string]interface{} `yaml:"config,omitempty" json:"config,omitempty"`
 }
 
 // HasTrigger returns true if the hook declares the given trigger.

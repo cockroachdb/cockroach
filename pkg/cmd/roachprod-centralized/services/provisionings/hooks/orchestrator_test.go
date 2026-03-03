@@ -452,6 +452,43 @@ func TestOrchestrator_RunByType_NoMatchingHookReturnsError(t *testing.T) {
 	assert.Contains(t, err.Error(), "test-template")
 }
 
+func TestOrchestrator_RunByType_TriggerIsManual(t *testing.T) {
+	meta := provmodels.TemplateMetadata{
+		Name: "test-template",
+		SSH: &provmodels.SSHConfig{
+			PrivateKeyVar: "ssh_key",
+			Machines:      ".instances[].public_ip",
+			User:          "ubuntu",
+		},
+		Hooks: []provmodels.HookDeclaration{
+			{
+				Name:     "wait-ready",
+				Type:     "run-command",
+				SSH:      true,
+				Triggers: []provmodels.HookTrigger{provmodels.TriggerPostApply},
+			},
+		},
+	}
+
+	exec := &mockExecutor{}
+	registry := NewRegistry()
+	registry.Register("run-command", exec)
+	orch := NewOrchestrator(registry)
+	prov := makeTestProv()
+	env := makeResolvedEnv(envtypes.ResolvedVariable{
+		Key: "ssh_key", Value: "fake-key",
+		Type: envmodels.VarTypeSecret,
+	})
+
+	err := orch.RunByType(
+		context.Background(), logger.DefaultLogger, prov, meta,
+		"run-command", env,
+	)
+	require.NoError(t, err)
+	require.Len(t, exec.calls, 1)
+	assert.Equal(t, provmodels.TriggerManual, exec.calls[0].Trigger)
+}
+
 func TestOrchestrator_RunByType_UnregisteredExecutorSkipsWithWarning(t *testing.T) {
 	meta := provmodels.TemplateMetadata{
 		Name: "test-template",
@@ -514,4 +551,160 @@ hooks:
 	)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "ssh-keys-setup type requires ssh: true")
+}
+
+func TestOrchestrator_RunPreDestroy_NoHooks(t *testing.T) {
+	dir := t.TempDir()
+	writeTestMetadata(t, dir, "name: test\ndescription: no hooks\n")
+
+	registry := NewRegistry()
+	orch := NewOrchestrator(registry)
+	prov := makeTestProv()
+
+	err := orch.RunPreDestroy(
+		context.Background(), logger.DefaultLogger, prov, dir,
+		makeResolvedEnv(),
+	)
+	require.NoError(t, err)
+}
+
+func TestOrchestrator_RunPreDestroy_NoTemplateYAML(t *testing.T) {
+	dir := t.TempDir()
+	// No template.yaml written.
+
+	registry := NewRegistry()
+	orch := NewOrchestrator(registry)
+	prov := makeTestProv()
+
+	err := orch.RunPreDestroy(
+		context.Background(), logger.DefaultLogger, prov, dir,
+		makeResolvedEnv(),
+	)
+	require.NoError(t, err) // graceful: no hooks to run
+}
+
+func TestOrchestrator_RunPreDestroy_ExecutesInOrder(t *testing.T) {
+	dir := t.TempDir()
+	writeTestMetadata(t, dir, `
+name: ordered
+ssh:
+  private_key_var: ssh_key
+  machines: .instances[].public_ip
+  user: ubuntu
+hooks:
+  - name: first
+    type: run-command
+    ssh: true
+    command: echo first
+    triggers: [pre_destroy]
+  - name: second
+    type: run-command
+    ssh: true
+    command: echo second
+    triggers: [pre_destroy]
+  - name: manual-only
+    type: run-command
+    ssh: true
+    command: echo skip
+    triggers: [manual]
+`)
+
+	exec := &mockExecutor{}
+	registry := NewRegistry()
+	registry.Register("run-command", exec)
+	orch := NewOrchestrator(registry)
+	prov := makeTestProv()
+
+	env := makeResolvedEnv(envtypes.ResolvedVariable{
+		Key: "ssh_key", Value: "fake-key",
+		Type: envmodels.VarTypeSecret,
+	})
+
+	err := orch.RunPreDestroy(
+		context.Background(), logger.DefaultLogger, prov, dir, env,
+	)
+	require.NoError(t, err)
+
+	// Should execute 2 hooks (not the manual-only one), in order.
+	require.Len(t, exec.calls, 2)
+	assert.Equal(t, "first", exec.calls[0].Declaration.Name)
+	assert.Equal(t, "second", exec.calls[1].Declaration.Name)
+	assert.Equal(t, provmodels.TriggerPreDestroy, exec.calls[0].Trigger)
+	assert.Equal(t, []string{"1.2.3.4", "5.6.7.8"}, exec.calls[0].MachineIPs)
+	assert.Equal(t, "ubuntu", exec.calls[0].SSHUser)
+}
+
+func TestOrchestrator_RunPreDestroy_OptionalHookFailsContinues(t *testing.T) {
+	dir := t.TempDir()
+	writeTestMetadata(t, dir, `
+name: optional-fail
+ssh:
+  private_key_var: ssh_key
+  machines: .instances[].public_ip
+  user: root
+hooks:
+  - name: optional-hook
+    type: run-command
+    ssh: true
+    command: echo fail
+    optional: true
+    triggers: [pre_destroy]
+  - name: required-hook
+    type: run-command
+    ssh: true
+    command: echo ok
+    triggers: [pre_destroy]
+`)
+
+	// Single executor that fails on first call and succeeds on second.
+	callCount := 0
+	registry := NewRegistry()
+	registry.Register("run-command", HookExecutorFunc(func(
+		ctx context.Context, l *logger.Logger, hctx HookContext,
+	) error {
+		callCount++
+		if callCount == 1 {
+			return fmt.Errorf("boom")
+		}
+		return nil
+	}))
+
+	orch := NewOrchestrator(registry)
+	prov := makeTestProv()
+	env := makeResolvedEnv(envtypes.ResolvedVariable{
+		Key: "ssh_key", Value: "fake-key",
+		Type: envmodels.VarTypeSecret,
+	})
+
+	err := orch.RunPreDestroy(
+		context.Background(), logger.DefaultLogger, prov, dir, env,
+	)
+	require.NoError(t, err) // optional failure should not fail overall
+	assert.Equal(t, 2, callCount)
+}
+
+func TestOrchestrator_RunPostApply_TriggerFieldSet(t *testing.T) {
+	dir := t.TempDir()
+	writeTestMetadata(t, dir, `
+name: trigger-check
+hooks:
+  - name: register-hook
+    type: cluster-register
+    ssh: false
+    triggers: [post_apply]
+`)
+
+	exec := &mockExecutor{}
+	registry := NewRegistry()
+	registry.Register("cluster-register", exec)
+	orch := NewOrchestrator(registry)
+	prov := makeTestProv()
+
+	err := orch.RunPostApply(
+		context.Background(), logger.DefaultLogger, prov, dir,
+		makeResolvedEnv(),
+	)
+	require.NoError(t, err)
+	require.Len(t, exec.calls, 1)
+	assert.Equal(t, provmodels.TriggerPostApply, exec.calls[0].Trigger)
 }

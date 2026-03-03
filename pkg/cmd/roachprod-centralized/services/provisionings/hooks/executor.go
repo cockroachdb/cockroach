@@ -21,6 +21,7 @@ type HookExecutor interface {
 // HookContext carries all resolved values needed to execute a single hook
 // invocation.
 type HookContext struct {
+	Trigger       provmodels.HookTrigger // which trigger caused this execution
 	Provisioning  provmodels.Provisioning
 	Declaration   provmodels.HookDeclaration
 	HookEnv       map[string]string // resolved env vars for this hook

@@ -190,6 +190,12 @@ func (s *Service) RegisterClusterUpdate(
 		return nil, types.ErrClusterNotFound
 	}
 
+	// Block updates to provisioning-managed clusters — their state is
+	// controlled by the provisioning lifecycle.
+	if c.IsProvisioningManaged() {
+		return nil, types.ErrClusterManagedByProvisioning
+	}
+
 	// Preserve immutable fields
 	input.Name = c.Name
 	input.CreatedAt = c.CreatedAt
@@ -266,6 +272,12 @@ func (s *Service) RegisterClusterDelete(
 		return types.ErrClusterNotFound
 	}
 
+	// Block deletion of provisioning-managed clusters — these must be
+	// destroyed via the provisioning lifecycle, not the cluster API.
+	if c.IsProvisioningManaged() {
+		return types.ErrClusterManagedByProvisioning
+	}
+
 	// Create the operation.
 	op := operations.OperationDelete{
 		Cluster: c,
@@ -313,6 +325,133 @@ func (s *Service) RegisterClusterDelete(
 			slog.Any("error", err),
 			slog.String("cluster_name", c.Name),
 			slog.String("trigger_operation", "register_cluster_delete"),
+		)
+	}
+
+	return nil
+}
+
+// RegisterClusterInternal registers a cluster without auth checks.
+// Used by hook executors that run inside task workers where no principal
+// is available. The provisioning was already auth-checked at creation time.
+func (s *Service) RegisterClusterInternal(
+	ctx context.Context, l *logger.Logger, cluster cloudcluster.Cluster,
+) error {
+	// Idempotent: skip if cluster already exists.
+	_, err := s._store.GetCluster(ctx, l, cluster.Name)
+	if err == nil {
+		l.Info("cluster already registered, skipping",
+			slog.String("cluster_name", cluster.Name))
+		return nil
+	}
+	if !errors.Is(err, clusters.ErrClusterNotFound) {
+		return errors.Wrapf(err, "check cluster existence %q", cluster.Name)
+	}
+
+	op := operations.OperationCreate{Cluster: cluster}
+	if err := op.ApplyOnRepository(ctx, l, s._store); err != nil {
+		return err
+	}
+
+	// Enqueue sync operation (same pattern as RegisterCluster).
+	opData, err := s.operationToOperationData(op)
+	if err != nil {
+		l.Error("failed to convert operation to data",
+			slog.Any("error", err),
+			slog.String("cluster_name", cluster.Name),
+			slog.String("operation_type", "create"),
+		)
+	} else {
+		if _, enqErr := s.conditionalEnqueueOperationWithHealthCheck(ctx, l, opData); enqErr != nil {
+			l.Error("failed to enqueue operation",
+				slog.Any("error", enqErr),
+				slog.String("cluster_name", cluster.Name),
+			)
+		}
+	}
+
+	// Trigger DNS record creation.
+	dnsZone, createRecords, deleteRecords := s.computeDNSRecordChanges(
+		ctx, l, cloudcluster.Cluster{VMs: vm.List{}}, cluster)
+	if err := s.enqueueManageDNSRecordTask(ctx, l, cluster.Name, dnsZone, createRecords, deleteRecords); err != nil {
+		l.Error("failed to enqueue DNS records creation task",
+			slog.Any("error", err),
+			slog.String("cluster_name", cluster.Name),
+		)
+	}
+
+	return nil
+}
+
+// UnregisterClusterInternal removes a cluster without auth checks.
+// Verifies ownership: only deletes if the cluster's VMs carry a
+// vm.TagProvisioningIdentifier label matching the given identifier.
+// Idempotent: returns nil if cluster doesn't exist.
+func (s *Service) UnregisterClusterInternal(
+	ctx context.Context,
+	l *logger.Logger,
+	clusterName string,
+	provisioningOwner string,
+	provisioningIdentifier string,
+) error {
+	c, err := s._store.GetCluster(ctx, l, clusterName)
+	if err != nil {
+		if errors.Is(err, clusters.ErrClusterNotFound) {
+			l.Info("cluster not found, skipping unregister",
+				slog.String("cluster_name", clusterName))
+			return nil
+		}
+		return err
+	}
+
+	// Ownership check 1: cluster owner must match provisioning owner.
+	if c.User != provisioningOwner {
+		return errors.Newf(
+			"cluster %q owner mismatch (cluster user=%q, provisioning owner=%q)",
+			clusterName, c.User, provisioningOwner,
+		)
+	}
+
+	// Ownership check 2: every VM must carry the provisioning_identifier label.
+	for i, machine := range c.VMs {
+		vmOwnerID := machine.Labels[vm.TagProvisioningIdentifier]
+		if vmOwnerID != provisioningIdentifier {
+			return errors.Newf(
+				"cluster %q VM[%d]=%q owner label mismatch (expected %s=%q, got %q)",
+				clusterName, i, machine.Name, vm.TagProvisioningIdentifier, provisioningIdentifier, vmOwnerID,
+			)
+		}
+	}
+
+	op := operations.OperationDelete{Cluster: c}
+	if err := op.ApplyOnRepository(ctx, l, s._store); err != nil {
+		return err
+	}
+
+	// Enqueue sync operation.
+	opData, err := s.operationToOperationData(op)
+	if err != nil {
+		l.Error("failed to convert operation to data",
+			slog.Any("error", err),
+			slog.String("cluster_name", clusterName),
+			slog.String("operation_type", "delete"),
+		)
+	} else {
+		if _, enqErr := s.conditionalEnqueueOperationWithHealthCheck(ctx, l, opData); enqErr != nil {
+			l.Error("failed to enqueue operation",
+				slog.Any("error", enqErr),
+				slog.String("cluster_name", clusterName),
+			)
+		}
+	}
+
+	// Trigger DNS record deletion.
+	dnsZone, createRecords, deleteRecords := s.computeDNSRecordChanges(
+		ctx, l, c, cloudcluster.Cluster{VMs: vm.List{}})
+	if err := s.enqueueManageDNSRecordTask(ctx, l, c.Name, dnsZone, createRecords, deleteRecords); err != nil {
+		l.Error("failed to enqueue DNS records deletion task",
+			slog.Any("error", err),
+			slog.String("cluster_name", c.Name),
 		)
 	}
 

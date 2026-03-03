@@ -10,6 +10,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"strings"
 	"sync"
 	"time"
 
@@ -29,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/utils/filters"
 	filtertypes "github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/utils/filters/types"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/utils/logger"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/vm"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
@@ -472,6 +474,11 @@ func (s *Service) CreateProvisioning(
 		prov.Identifier = identifier
 		prov.Name = fmt.Sprintf("%s-%s", input.TemplateType, identifier)
 
+		// Auto-derive ClusterName from owner + prov_name.
+		// Format: <dns-safe-owner>-<template_type>-<identifier>
+		// Matches roachprod's naming convention: clusters start with owner prefix.
+		prov.ClusterName = clusterNameFromOwner(prov.Owner, prov.Name)
+
 		storeErr := s.repo.StoreProvisioning(ctx, l, prov)
 		if storeErr == nil {
 			break
@@ -731,4 +738,22 @@ func (s *Service) GetOptions() types.Options {
 // GetBackend returns the backend (used by task handlers).
 func (s *Service) GetBackend() templates.Backend {
 	return s.backend
+}
+
+// clusterNameFromOwner derives a roachprod-compatible cluster name from the
+// owner email and provisioning name. Extracts the local part of the email
+// (before @), sanitizes it with vm.DNSSafeName, and prepends as a prefix:
+//
+//	"ludo.leroux@cockroachlabs.com", "gce-standalone-abc12def"
+//	→ "ludoleroux-gce-standalone-abc12def"
+func clusterNameFromOwner(owner, provName string) string {
+	localPart := owner
+	if i := strings.Index(owner, "@"); i >= 0 {
+		localPart = owner[:i]
+	}
+	prefix := vm.DNSSafeName(localPart)
+	if prefix == "" {
+		return provName
+	}
+	return prefix + "-" + provName
 }
