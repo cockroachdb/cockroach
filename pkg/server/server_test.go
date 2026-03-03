@@ -1097,8 +1097,7 @@ func TestDeprecatedStoreClusterVersionKeyCleanup(t *testing.T) {
 	val, err = storage.MVCCGet(ctx, store.LogEngine(), deprecatedKey,
 		hlc.Timestamp{}, storage.MVCCGetOptions{})
 	require.NoError(t, err)
-	// TODO(pav-kv): this should become false.
-	require.True(t, val.Value.IsPresent(), "deprecated key removed after server init")
+	require.False(t, val.Value.IsPresent(), "deprecated key present after server init")
 }
 
 // TestAssertExternalStorageInitializedBeforeJobSchedulerStart is a

@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/grpcutil"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
@@ -682,6 +683,39 @@ func newInitServerConfig(
 	}
 }
 
+// removeDeprecatedStoreClusterVersionKey removes the deprecated store cluster
+// version key from the given engines if it exists. This key was deprecated in
+// v23.1 and is no longer needed.
+func removeDeprecatedStoreClusterVersionKey(ctx context.Context, engines Engines) error {
+	deprecatedKey := keys.DeprecatedStoreClusterVersionKey()
+	cleanup := func(eng kvstorage.Engines) error {
+		// Check if the key exists before attempting to delete it.
+		if val, err := storage.MVCCGet(
+			ctx, eng.LogEngine(), deprecatedKey, hlc.Timestamp{}, storage.MVCCGetOptions{},
+		); err != nil {
+			return errors.Wrap(err, "checking for deprecated store cluster version key")
+		} else if !val.Value.IsPresent() {
+			return nil // key doesn't exist, nothing to clean up
+		}
+		// Key exists, delete it.
+		batch := eng.LogEngine().NewWriteBatch()
+		defer batch.Close()
+		if err := batch.ClearUnversioned(deprecatedKey, storage.ClearOptions{}); err != nil {
+			return errors.Wrap(err, "clearing deprecated store cluster version key")
+		}
+		if err := batch.Commit(true /* sync */); err != nil {
+			return errors.Wrap(err, "committing deprecated key cleanup")
+		}
+		return nil
+	}
+	for _, eng := range engines {
+		if err := cleanup(eng); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 // inspectEngines goes through engines and constructs an initState. The
 // initState returned by this method will reflect a zero NodeID if none has
 // been assigned yet (i.e. if none of the engines is initialized). See
@@ -734,6 +768,15 @@ func inspectEngines(
 
 		initializedEngines = append(initializedEngines, eng)
 	}
+
+	// Clean up the deprecated store cluster version key from all engines.
+	//
+	// TODO(pav-kv): make it conditional on version, so that this code can be
+	// eventually removed.
+	if err := removeDeprecatedStoreClusterVersionKey(ctx, engines); err != nil {
+		return nil, err
+	}
+
 	clusterVersion, err := kvstorage.SynthesizeClusterVersionFromEngines(
 		ctx, initializedEngines, latestVersion, minSupportedVersion,
 	)
