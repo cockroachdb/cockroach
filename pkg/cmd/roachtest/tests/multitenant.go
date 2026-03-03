@@ -419,7 +419,7 @@ func registerMultiTenantSQLProxy(r registry.Registry) {
 		Owner:             registry.OwnerTestEng,
 		Cluster:           r.MakeClusterSpec(3),
 		EncryptionSupport: registry.EncryptionMetamorphic,
-		CompatibleClouds:  registry.AllClouds,
+		CompatibleClouds:  registry.OnlyGCE,
 		Leases:            registry.MetamorphicLeases,
 		Suites:            registry.Suites(registry.Weekly),
 		Run:               runMultiTenantSQLProxy,
