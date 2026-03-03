@@ -6,7 +6,7 @@
 
 ## Easy (compose existing Add + Remove)
 - [x] `ReplaceDeadVoter` — combine remove (targeting dead store) + add (find new store) in a single atomic change.
-- [ ] `ReplaceDeadNonVoter` — same pattern for non-voters.
+- [x] `ReplaceDeadNonVoter` — same pattern for non-voters.
 - [ ] `ReplaceDecommissioningVoter` — identical to dead voter but targeting decommissioning stores.
 - [ ] `ReplaceDecommissioningNonVoter` — same for non-voters.
 
