@@ -324,11 +324,12 @@ var tests = []importTestSpec{
 	},
 }
 
+// importTestTimeout is the timeout for import roachtests. This is
+// conservatively large because lineitem SF-100 can take about four hours to
+// import, with about another hour and a half to fingerprint. See #68117.
+const importTestTimeout = 10 * time.Hour
+
 func registerImport(r registry.Registry) {
-	// This may be excessively conservative. During a calibration run, lineitem
-	// IMPORT took about four hours, with about another hour and a half to
-	// fingerprint the imported table. See #68117.
-	timeout := 10 * time.Hour
 	for _, testSpec := range tests {
 		suites := registry.Suites(registry.Nightly)
 		if testSpec.manualOnly {
@@ -345,7 +346,7 @@ func registerImport(r registry.Registry) {
 					Name:              name,
 					Owner:             registry.OwnerSQLQueries,
 					Benchmark:         testSpec.benchmark,
-					Timeout:           timeout,
+					Timeout:           importTestTimeout,
 					Cluster:           r.MakeClusterSpec(numNodes),
 					CompatibleClouds:  registry.Clouds(spec.GCE, spec.Local),
 					Suites:            suites,
@@ -355,7 +356,7 @@ func registerImport(r registry.Registry) {
 					// take too long to complete.
 					CockroachBinary: registry.StandardCockroach,
 					Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
-						runImportTest(ctx, t, c, ts, numNodes, timeout, distMerge)
+						runImportTest(ctx, t, c, ts, numNodes, importTestTimeout, distMerge)
 					},
 				})
 			}
@@ -835,9 +836,8 @@ func importPauseRunner(
 		t.WorkerStatus(fmt.Sprintf("job %d resumed successfully", jobID))
 	}
 
-	// Wait for final completion
 	t.WorkerStatus(fmt.Sprintf("waiting for job %d to complete after %d pause cycles", jobID, numPauses))
-	if err := WaitForSucceeded(ctx, conn, jobID, 30*time.Minute); err != nil {
+	if err := WaitForSucceeded(ctx, conn, jobID, importTestTimeout); err != nil {
 		return errors.Wrapf(err, "waiting for job %d to succeed", jobID)
 	}
 
