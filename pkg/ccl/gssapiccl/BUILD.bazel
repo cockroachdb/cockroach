@@ -21,7 +21,6 @@ go_library(
     visibility = ["//visibility:public"],
     deps = select({
         "@io_bazel_rules_go//go/platform:linux": [
-            "//pkg/ccl/utilccl",
             "//pkg/security/username",
             "//pkg/settings",
             "//pkg/sql",
