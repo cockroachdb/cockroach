@@ -90,6 +90,16 @@ func (s *systemStatusServer) UploadDebugData(
 	}
 	log.Ops.Infof(ctx, "upload session created: %s", client.sessionID)
 
+	// Collect cluster-level data (coordinator only).
+	clusterArtifacts, clusterDataErrs := s.uploadClusterData(
+		ctx, client, req,
+	)
+	clusterTableArtifacts, clusterTableErrs := s.uploadClusterTables(
+		ctx, client, req.Redact,
+	)
+	clusterAllErrs := append(clusterDataErrs, clusterTableErrs...)
+	clusterTotalArtifacts := clusterArtifacts + clusterTableArtifacts
+
 	// Prepare the per-node request.
 	nodeReq := &serverpb.UploadNodeDebugDataRequest{
 		ServerUrl:              req.ServerUrl,
@@ -174,6 +184,16 @@ func (s *systemStatusServer) UploadDebugData(
 		errorFn,
 	); err != nil {
 		return nil, srverrors.ServerError(ctx, err)
+	}
+
+	// Add cluster-level artifacts and status.
+	totalArtifacts += clusterTotalArtifacts
+	if clusterTotalArtifacts > 0 || len(clusterAllErrs) > 0 {
+		nodeStatuses2 = append(nodeStatuses2, serverpb.NodeUploadStatus{
+			NodeId:            0,
+			ArtifactsUploaded: clusterTotalArtifacts,
+			Errors:            clusterAllErrs,
+		})
 	}
 
 	// Complete the session.
@@ -581,13 +601,15 @@ func (s *systemStatusServer) uploadInternalTables(
 	return artifacts, errs
 }
 
-// uploadTableDef defines a per-node internal table to query and upload.
+// uploadTableDef defines an internal table to query and upload.
 // query is used for unredacted mode (or when queryRedacted is empty).
 // queryRedacted is used when redaction is requested.
+// queryFallback is tried if query fails (unredacted mode only).
 type uploadTableDef struct {
 	name          string
 	query         string
 	queryRedacted string
+	queryFallback string
 }
 
 // uploadPerNodeTables mirrors the per-node table list from
@@ -811,5 +833,1063 @@ var uploadPerNodeTables = []uploadTableDef{
 		queryRedacted: "SELECT stream_id, processor_id, state, recv_wait, last_recv_wait, " +
 			"flush_wait, last_flush_wait, events_received, flush_cnt, last_event_age, last_flush_age " +
 			"FROM crdb_internal.cluster_replication_node_processors",
+	},
+}
+
+// uploadClusterData collects and uploads cluster-level status RPC
+// artifacts (nodes, problem ranges, tenant ranges).
+func (s *systemStatusServer) uploadClusterData(
+	ctx context.Context, client *uploadServerRPCClient, req *serverpb.UploadDebugDataRequest,
+) (artifacts int32, errs []string) {
+	// Upload cluster nodes.
+	nodesResp, err := s.Nodes(ctx, &serverpb.NodesRequest{})
+	if err != nil {
+		errs = append(errs, fmt.Sprintf("cluster nodes: %v", err))
+	} else {
+		if uploadErr := client.uploadArtifactJSON(
+			ctx, "cluster/nodes.json", 0, "metadata", nodesResp,
+		); uploadErr != nil {
+			errs = append(errs, fmt.Sprintf("upload cluster nodes: %v", uploadErr))
+		} else {
+			artifacts++
+		}
+	}
+
+	if req.IncludeRangeInfo {
+		// Upload problem ranges.
+		problemRanges, err := s.ProblemRanges(
+			ctx, &serverpb.ProblemRangesRequest{},
+		)
+		if err != nil {
+			errs = append(errs, fmt.Sprintf("problem ranges: %v", err))
+		} else {
+			if uploadErr := client.uploadArtifactJSON(
+				ctx, "cluster/reports/problemranges.json",
+				0, "metadata", problemRanges,
+			); uploadErr != nil {
+				errs = append(errs,
+					fmt.Sprintf("upload problem ranges: %v", uploadErr))
+			} else {
+				artifacts++
+			}
+		}
+
+		// Upload tenant ranges (one file per locality).
+		tenantRanges, err := s.TenantRanges(
+			ctx, &serverpb.TenantRangesRequest{},
+		)
+		if err != nil {
+			errs = append(errs, fmt.Sprintf("tenant ranges: %v", err))
+		} else {
+			localities := make(
+				[]string, 0, len(tenantRanges.RangesByLocality),
+			)
+			for k := range tenantRanges.RangesByLocality {
+				localities = append(localities, k)
+			}
+			sort.Strings(localities)
+			for _, locality := range localities {
+				rangeList := tenantRanges.RangesByLocality[locality]
+				name := fmt.Sprintf(
+					"cluster/tenant_ranges/%s.json", locality,
+				)
+				if uploadErr := client.uploadArtifactJSON(
+					ctx, name, 0, "metadata", rangeList,
+				); uploadErr != nil {
+					errs = append(errs,
+						fmt.Sprintf("upload tenant ranges %s: %v",
+							locality, uploadErr))
+				} else {
+					artifacts++
+				}
+			}
+		}
+	}
+
+	return artifacts, errs
+}
+
+// uploadClusterTables queries cluster-wide internal tables and system
+// tables and uploads the results as tab-separated text.
+func (s *systemStatusServer) uploadClusterTables(
+	ctx context.Context, client *uploadServerRPCClient, doRedact bool,
+) (artifacts int32, errs []string) {
+	allTables := make(
+		[]uploadTableDef, 0,
+		len(uploadClusterWideTables)+len(uploadSystemTables),
+	)
+	allTables = append(allTables, uploadClusterWideTables...)
+	allTables = append(allTables, uploadSystemTables...)
+
+	for _, table := range allTables {
+		query := table.query
+		if doRedact && table.queryRedacted != "" {
+			query = table.queryRedacted
+		}
+
+		it, err := s.internalExecutor.QueryIteratorEx(
+			ctx,
+			redact.RedactableString("upload-"+table.name),
+			nil, // txn
+			sessiondata.NodeUserSessionDataOverride,
+			query,
+		)
+		if err != nil && !doRedact && table.queryFallback != "" {
+			// Try fallback query.
+			it, err = s.internalExecutor.QueryIteratorEx(
+				ctx,
+				redact.RedactableString(
+					"upload-"+table.name+"-fallback",
+				),
+				nil, // txn
+				sessiondata.NodeUserSessionDataOverride,
+				table.queryFallback,
+			)
+		}
+		if err != nil {
+			errs = append(errs,
+				fmt.Sprintf("table %s: %v", table.name, err))
+			continue
+		}
+
+		var buf bytes.Buffer
+
+		// Write column header from iterator metadata.
+		cols := it.Types()
+		for i, col := range cols {
+			if i > 0 {
+				buf.WriteByte('\t')
+			}
+			buf.WriteString(col.Name)
+		}
+		buf.WriteByte('\n')
+
+		// Write rows.
+		var iterErr error
+		for {
+			ok, err := it.Next(ctx)
+			if err != nil {
+				iterErr = err
+				break
+			}
+			if !ok {
+				break
+			}
+			row := it.Cur()
+			for i, d := range row {
+				if i > 0 {
+					buf.WriteByte('\t')
+				}
+				if d == tree.DNull {
+					buf.WriteString("NULL")
+				} else {
+					buf.WriteString(d.String())
+				}
+			}
+			buf.WriteByte('\n')
+		}
+		if closeErr := it.Close(); closeErr != nil {
+			iterErr = errors.CombineErrors(iterErr, closeErr)
+		}
+		if iterErr != nil {
+			errs = append(errs,
+				fmt.Sprintf("table %s iteration: %v",
+					table.name, iterErr))
+			// Still upload partial data if we have any.
+		}
+
+		sanitizedName := strings.ReplaceAll(table.name, ".", "_")
+		artifactName := fmt.Sprintf("cluster/%s.txt", sanitizedName)
+		if uploadErr := client.uploadArtifactBytes(
+			ctx, artifactName, 0, "table", buf.Bytes(),
+		); uploadErr != nil {
+			errs = append(errs,
+				fmt.Sprintf("upload table %s: %v",
+					table.name, uploadErr))
+		} else {
+			artifacts++
+		}
+	}
+	return artifacts, errs
+}
+
+// uploadClusterWideTables mirrors the cluster-wide table list from
+// pkg/cli/zip_table_registry.go (zipInternalTablesPerCluster). When
+// redaction is requested, queryRedacted is used; otherwise query is
+// used.
+var uploadClusterWideTables = []uploadTableDef{
+	{
+		name:  "crdb_internal.cluster_contention_events",
+		query: "SELECT * FROM crdb_internal.cluster_contention_events",
+		queryRedacted: "SELECT table_id, index_id, " +
+			"IF(crdb_internal.is_system_table_key(key), " +
+			"crdb_internal.pretty_key(key, 0), 'redacted') as pretty_key, " +
+			"num_contention_events, cumulative_contention_time, txn_id, count " +
+			"FROM crdb_internal.cluster_contention_events",
+	},
+	{
+		name:          "crdb_internal.cluster_database_privileges",
+		query:         "SELECT * FROM crdb_internal.cluster_database_privileges",
+		queryRedacted: "SELECT database_name, grantee, privilege_type, is_grantable FROM crdb_internal.cluster_database_privileges",
+	},
+	{
+		name:  "crdb_internal.cluster_distsql_flows",
+		query: "SELECT * FROM crdb_internal.cluster_distsql_flows",
+		queryRedacted: "SELECT flow_id, node_id, since, " +
+			"crdb_internal.hide_sql_constants(stmt) as stmt " +
+			"FROM crdb_internal.cluster_distsql_flows",
+	},
+	{
+		name:          "crdb_internal.cluster_inspect_errors",
+		query:         "SELECT * FROM crdb_internal.cluster_inspect_errors",
+		queryRedacted: "SELECT error_id, job_id, error_type, aost, database_id, schema_id, id FROM crdb_internal.cluster_inspect_errors",
+	},
+	{
+		name:  "crdb_internal.cluster_locks",
+		query: "SELECT * FROM crdb_internal.cluster_locks",
+		queryRedacted: "SELECT range_id, table_id, database_name, schema_name, " +
+			"table_name, index_name, txn_id, ts, lock_strength, durability, " +
+			"granted, contended, duration, isolation_level " +
+			"FROM crdb_internal.cluster_locks",
+	},
+	{
+		name:  "crdb_internal.cluster_queries",
+		query: "SELECT * FROM crdb_internal.cluster_queries",
+		queryRedacted: "SELECT query_id, txn_id, node_id, session_id, user_name, " +
+			"start, application_name, distributed, phase, full_scan, " +
+			"crdb_internal.hide_sql_constants(query) as query, " +
+			"num_txn_retries, num_txn_auto_retries " +
+			"FROM crdb_internal.cluster_queries",
+	},
+	{
+		name:  "crdb_internal.cluster_sessions",
+		query: "SELECT * FROM crdb_internal.cluster_sessions",
+		queryRedacted: "SELECT node_id, session_id, user_name, application_name, " +
+			"num_txns_executed, session_start, active_query_start, kv_txn, " +
+			"alloc_bytes, max_alloc_bytes, status, session_end, " +
+			"crdb_internal.hide_sql_constants(active_queries) as active_queries, " +
+			"crdb_internal.hide_sql_constants(last_active_query) as last_active_query, " +
+			"trace_id, goroutine_id " +
+			"FROM crdb_internal.cluster_sessions",
+	},
+	{
+		name: "crdb_internal.cluster_settings",
+		query: `SELECT
+			variable,
+			CASE
+			  WHEN sensitive THEN '<redacted>'
+			  ELSE value
+			END value,
+			type,
+			public,
+			sensitive,
+			reportable,
+			description,
+			default_value,
+			origin
+		FROM crdb_internal.cluster_settings`,
+		queryRedacted: `SELECT
+			variable,
+			CASE
+			  WHEN NOT reportable AND value != default_value THEN '<redacted>'
+			  WHEN sensitive THEN '<redacted>'
+			  ELSE value
+			END value,
+			type,
+			public,
+			sensitive,
+			reportable,
+			description,
+			default_value,
+			origin
+		FROM crdb_internal.cluster_settings`,
+	},
+	{
+		name: "crdb_internal.probe_ranges_1s_read_limit_100",
+		query: `SELECT * FROM crdb_internal.probe_ranges(INTERVAL '1000ms', 'read')` +
+			` WHERE error != '' ORDER BY end_to_end_latency_ms DESC LIMIT 100`,
+		queryRedacted: `SELECT * FROM crdb_internal.probe_ranges(INTERVAL '1000ms', 'read')` +
+			` WHERE error != '' ORDER BY end_to_end_latency_ms DESC LIMIT 100`,
+	},
+	{
+		name:  "crdb_internal.cluster_transactions",
+		query: "SELECT * FROM crdb_internal.cluster_transactions",
+		queryRedacted: "SELECT id, node_id, session_id, start, application_name, " +
+			"num_stmts, num_retries, num_auto_retries, isolation_level, " +
+			"priority, quality_of_service " +
+			"FROM crdb_internal.cluster_transactions",
+	},
+	{
+		name:  "crdb_internal.create_function_statements",
+		query: `SELECT * FROM "".crdb_internal.create_function_statements`,
+		queryRedacted: "SELECT database_id, database_name, schema_id, function_id, " +
+			"function_name, " +
+			"crdb_internal.hide_sql_constants(create_statement) as create_statement " +
+			`FROM "".crdb_internal.create_function_statements`,
+	},
+	{
+		name:  "crdb_internal.create_trigger_statements",
+		query: `SELECT * FROM "".crdb_internal.create_trigger_statements`,
+		queryRedacted: "SELECT database_id, database_name, schema_id, schema_name, " +
+			"table_id, table_name, trigger_id, trigger_name, " +
+			"crdb_internal.hide_sql_constants(create_statement) as create_statement " +
+			`FROM "".crdb_internal.create_trigger_statements`,
+	},
+	{
+		name:  "crdb_internal.create_procedure_statements",
+		query: `SELECT * FROM "".crdb_internal.create_procedure_statements`,
+		queryRedacted: "SELECT database_id, database_name, schema_id, procedure_id, " +
+			"procedure_name, " +
+			"crdb_internal.hide_sql_constants(create_statement) as create_statement " +
+			`FROM "".crdb_internal.create_procedure_statements`,
+	},
+	{
+		name:  "crdb_internal.create_schema_statements",
+		query: `SELECT * FROM "".crdb_internal.create_schema_statements`,
+		queryRedacted: "SELECT database_id, database_name, schema_name, descriptor_id, " +
+			"create_statement " +
+			`FROM "".crdb_internal.create_schema_statements`,
+	},
+	{
+		name:  "crdb_internal.create_statements",
+		query: `SELECT * FROM "".crdb_internal.create_statements`,
+		queryRedacted: "SELECT database_id, database_name, schema_name, descriptor_id, " +
+			"descriptor_type, state, validate_statements, has_partitions, " +
+			"is_multi_region, is_virtual, is_temporary, " +
+			"crdb_internal.hide_sql_constants(create_statement) as create_statement, " +
+			"crdb_internal.hide_sql_constants(fk_statements) as fk_statements, " +
+			"crdb_internal.hide_sql_constants(create_nofks) as create_nofks, " +
+			"crdb_internal.redact(create_redactable) as create_redactable " +
+			`FROM "".crdb_internal.create_statements`,
+	},
+	{
+		name:  "crdb_internal.create_type_statements",
+		query: `SELECT * FROM "".crdb_internal.create_type_statements`,
+		queryRedacted: "SELECT database_id, database_name, schema_name, descriptor_id, " +
+			"descriptor_name, " +
+			"crdb_internal.hide_sql_constants(create_statement) as create_statement " +
+			`FROM "".crdb_internal.create_type_statements`,
+	},
+	{
+		name:          "crdb_internal.cluster_replication_spans",
+		query:         `SELECT * FROM "".crdb_internal.cluster_replication_spans`,
+		queryRedacted: `SELECT job_id, resolved, resolved_age FROM "".crdb_internal.cluster_replication_spans`,
+	},
+	{
+		name:          "crdb_internal.logical_replication_spans",
+		query:         `SELECT * FROM "".crdb_internal.logical_replication_spans`,
+		queryRedacted: `SELECT job_id, resolved, resolved_age FROM "".crdb_internal.logical_replication_spans`,
+	},
+	{
+		name:  "crdb_internal.default_privileges",
+		query: "SELECT * FROM crdb_internal.default_privileges",
+		queryRedacted: "SELECT database_name, schema_name, role, for_all_roles, " +
+			"object_type, grantee, privilege_type, is_grantable " +
+			"FROM crdb_internal.default_privileges",
+	},
+	{
+		name:          "crdb_internal.index_usage_statistics",
+		query:         "SELECT * FROM crdb_internal.index_usage_statistics",
+		queryRedacted: "SELECT table_id, index_id, total_reads, last_read FROM crdb_internal.index_usage_statistics",
+	},
+	{
+		name:  "crdb_internal.invalid_objects",
+		query: "SELECT * FROM crdb_internal.invalid_objects",
+		queryRedacted: "SELECT id, database_name, schema_name, obj_name, " +
+			"crdb_internal.redact(error_redactable) as error_redactable " +
+			"FROM crdb_internal.invalid_objects",
+	},
+	{
+		name:  "crdb_internal.jobs",
+		query: "SELECT * FROM crdb_internal.jobs",
+		queryRedacted: "SELECT job_id, job_type, description, user_name, status, " +
+			"running_status, created, finished, modified, " +
+			"fraction_completed, high_water_timestamp, coordinator_id " +
+			"FROM crdb_internal.jobs",
+	},
+	{
+		name:  "crdb_internal.system_jobs",
+		query: "SELECT * FROM crdb_internal.system_jobs",
+		queryRedacted: `SELECT
+			"id",
+			"status",
+			"created",
+			'redacted' AS "payload",
+			"progress",
+			"created_by_type",
+			"created_by_id",
+			"claim_session_id",
+			"claim_instance_id",
+			"num_runs",
+			"last_run"
+			FROM crdb_internal.system_jobs`,
+	},
+	{
+		name:          "crdb_internal.kv_system_privileges",
+		query:         "SELECT * FROM crdb_internal.kv_system_privileges",
+		queryRedacted: "SELECT username, path, privileges, grant_options, user_id FROM crdb_internal.kv_system_privileges",
+	},
+	{
+		name:          "crdb_internal.kv_node_liveness",
+		query:         "SELECT * FROM crdb_internal.kv_node_liveness",
+		queryRedacted: "SELECT node_id, epoch, expiration, draining, membership FROM crdb_internal.kv_node_liveness",
+	},
+	{
+		name:  "crdb_internal.kv_node_status",
+		query: "SELECT * FROM crdb_internal.kv_node_status",
+		queryRedacted: `SELECT
+				"node_id",
+				"network",
+				'<redacted>' as address,
+				"attrs",
+				"locality",
+				"server_version",
+				"go_version",
+				"tag",
+				"time",
+				"revision",
+				"cgo_compiler",
+				"platform",
+				"distribution",
+				"type",
+				"dependencies",
+				"started_at",
+				"updated_at",
+				"metrics",
+				'<redacted>' as args,
+				'<redacted>' as env,
+				"activity"
+			FROM crdb_internal.kv_node_status`,
+	},
+	{
+		name:  "crdb_internal.kv_store_status",
+		query: "SELECT * FROM crdb_internal.kv_store_status",
+		queryRedacted: "SELECT node_id, store_id, attrs, capacity, available, used, " +
+			"logical_bytes, range_count, lease_count, writes_per_second, " +
+			"bytes_per_replica, writes_per_replica, metrics, properties " +
+			"FROM crdb_internal.kv_store_status",
+	},
+	{
+		name:  "crdb_internal.partitions",
+		query: "SELECT * FROM crdb_internal.partitions",
+		queryRedacted: "SELECT table_id, index_id, parent_name, name, columns, " +
+			"column_names, zone_id, subzone_id " +
+			"FROM crdb_internal.partitions",
+	},
+	{
+		name:          "crdb_internal.regions",
+		query:         "SELECT * FROM crdb_internal.regions",
+		queryRedacted: "SELECT region, zones FROM crdb_internal.regions",
+	},
+	{
+		name:  "crdb_internal.schema_changes",
+		query: "SELECT * FROM crdb_internal.schema_changes",
+		queryRedacted: "SELECT table_id, parent_id, name, type, target_id, " +
+			"target_name, state, direction " +
+			"FROM crdb_internal.schema_changes",
+	},
+	{
+		name:  "crdb_internal.super_regions",
+		query: "SELECT * FROM crdb_internal.super_regions",
+		queryRedacted: "SELECT id, database_name, super_region_name, regions " +
+			"FROM crdb_internal.super_regions",
+	},
+	{
+		name:  "crdb_internal.kv_protected_ts_records",
+		query: "SELECT * FROM crdb_internal.kv_protected_ts_records",
+		queryRedacted: "SELECT id, ts, meta_type, meta, num_spans, spans, verified, " +
+			"target, decoded_meta, decoded_target, num_ranges, last_updated " +
+			"FROM crdb_internal.kv_protected_ts_records",
+	},
+	{
+		name:  "crdb_internal.table_indexes",
+		query: "SELECT * FROM crdb_internal.table_indexes",
+		queryRedacted: "SELECT descriptor_id, descriptor_name, index_id, index_name, " +
+			"index_type, is_unique, is_inverted, is_sharded, is_visible, " +
+			"shard_bucket_count, created_at " +
+			"FROM crdb_internal.table_indexes",
+	},
+	{
+		name: "crdb_internal.transaction_contention_events",
+		query: `
+WITH contention_fingerprints AS (
+    SELECT DISTINCT waiting_stmt_fingerprint_id, blocking_txn_fingerprint_id
+    FROM crdb_internal.transaction_contention_events
+    WHERE blocking_txn_fingerprint_id != '\x0000000000000000'
+),
+fingerprint_queries AS (
+    SELECT DISTINCT fingerprint_id, metadata->>'query' as query
+    FROM system.statement_statistics ss
+    WHERE EXISTS (
+        SELECT 1 FROM contention_fingerprints cf
+        WHERE cf.waiting_stmt_fingerprint_id = ss.fingerprint_id
+    )
+),
+transaction_fingerprints AS (
+    SELECT DISTINCT fingerprint_id, transaction_fingerprint_id
+    FROM system.statement_statistics ss
+    WHERE EXISTS (
+        SELECT 1 FROM contention_fingerprints cf
+        WHERE cf.waiting_stmt_fingerprint_id = ss.fingerprint_id
+    )
+),
+transaction_queries AS (
+    SELECT tf.transaction_fingerprint_id, array_agg(fq.query) as queries
+    FROM fingerprint_queries fq
+    JOIN transaction_fingerprints tf ON tf.fingerprint_id = fq.fingerprint_id
+    GROUP BY tf.transaction_fingerprint_id
+)
+SELECT collection_ts,
+       contention_duration,
+       waiting_txn_id,
+       waiting_txn_fingerprint_id,
+       waiting_stmt_fingerprint_id,
+       fq.query AS waiting_stmt_query,
+       blocking_txn_id,
+       blocking_txn_fingerprint_id,
+       tq.queries AS blocking_txn_queries_unordered,
+       contending_pretty_key,
+       index_name,
+       table_name,
+       database_name
+FROM crdb_internal.transaction_contention_events
+LEFT JOIN fingerprint_queries fq ON fq.fingerprint_id = waiting_stmt_fingerprint_id
+LEFT JOIN transaction_queries tq ON tq.transaction_fingerprint_id = blocking_txn_fingerprint_id
+WHERE fq.fingerprint_id != '\x0000000000000000' AND tq.transaction_fingerprint_id != '\x0000000000000000'
+`,
+		queryFallback: `
+SELECT collection_ts,
+       contention_duration,
+       waiting_txn_id,
+       waiting_txn_fingerprint_id,
+       waiting_stmt_fingerprint_id,
+       blocking_txn_id,
+       blocking_txn_fingerprint_id,
+       contending_pretty_key,
+       index_name,
+       table_name,
+       database_name
+FROM crdb_internal.transaction_contention_events
+`,
+		queryRedacted: "SELECT collection_ts, blocking_txn_id, " +
+			"blocking_txn_fingerprint_id, waiting_txn_id, " +
+			"waiting_txn_fingerprint_id, contention_duration, " +
+			"IF(crdb_internal.is_system_table_key(contending_key), " +
+			"crdb_internal.pretty_key(contending_key, 0), 'redacted') " +
+			"as contending_pretty_key, contention_type " +
+			"FROM crdb_internal.transaction_contention_events",
+	},
+	{
+		name:  "crdb_internal.zones",
+		query: "SELECT * FROM crdb_internal.zones",
+		queryRedacted: "SELECT zone_id, subzone_id, target, range_name, " +
+			"database_name, schema_name, table_name, index_name, " +
+			"partition_name, raw_config_yaml, raw_config_sql, " +
+			"raw_config_protobuf, full_config_yaml, full_config_sql " +
+			"FROM crdb_internal.zones",
+	},
+	{
+		name: "cluster_settings_history",
+		query: `
+WITH setting_events AS (
+	SELECT
+		timestamp,
+		info::jsonb AS info_json
+	FROM system.eventlog
+	WHERE "eventType" = 'set_cluster_setting'
+)
+SELECT
+	info_json ->> 'SettingName' as setting_name,
+	CASE
+      WHEN cs.sensitive AND info_json ->> 'Value' <> 'DEFAULT' THEN '<redacted>'
+      ELSE info_json ->> 'Value'
+	END value,
+	info_json ->> 'DefaultValue' as default_value,
+	cs.default_value as current_default_value,
+	info_json ->> 'ApplicationName' as application_name,
+	se.timestamp
+FROM setting_events se
+JOIN crdb_internal.cluster_settings cs on cs.variable = se.info_json ->> 'SettingName'
+ORDER BY setting_name, timestamp`,
+		queryRedacted: `
+WITH setting_events AS (
+	SELECT
+		timestamp,
+		info::jsonb AS info_json
+	FROM system.eventlog
+	WHERE "eventType" = 'set_cluster_setting'
+)
+SELECT
+	info_json ->> 'SettingName' as setting_name,
+	CASE
+      WHEN (cs.sensitive OR NOT cs.reportable) AND info_json ->> 'Value' <> 'DEFAULT' THEN '<redacted>'
+      ELSE info_json ->> 'Value'
+ 	END value,
+	info_json ->> 'DefaultValue' as default_value,
+	cs.default_value as current_default_value,
+	info_json ->> 'ApplicationName' as application_name,
+	se.timestamp
+FROM setting_events se
+JOIN crdb_internal.cluster_settings cs on cs.variable = se.info_json ->> 'SettingName'
+ORDER BY setting_name, timestamp`,
+	},
+}
+
+// uploadSystemTables mirrors the system table list from
+// pkg/cli/zip_table_registry.go (zipSystemTables). When redaction is
+// requested, queryRedacted is used; otherwise query is used.
+var uploadSystemTables = []uploadTableDef{
+	{
+		name:          "system.database_role_settings",
+		query:         "SELECT * FROM system.database_role_settings",
+		queryRedacted: "SELECT database_id, role_name, settings FROM system.database_role_settings",
+	},
+	{
+		name: "system.descriptor",
+		query: `SELECT
+				id,
+				descriptor
+			FROM system.descriptor`,
+		queryRedacted: `SELECT
+				id,
+				crdb_internal.redact_descriptor(descriptor) AS descriptor
+			FROM system.descriptor`,
+	},
+	{
+		name:  "system.eventlog",
+		query: "SELECT * FROM system.eventlog",
+		queryRedacted: `SELECT timestamp, "eventType", "targetID", "reportingID", ` +
+			`"uniqueID" FROM system.eventlog`,
+	},
+	{
+		name:          "system.external_connections",
+		query:         "SELECT * FROM system.external_connections",
+		queryRedacted: "SELECT connection_name, created, updated, connection_type FROM system.external_connections",
+	},
+	{
+		name:  "system.inspect_errors",
+		query: "SELECT * FROM system.inspect_errors",
+		queryRedacted: "SELECT error_id, job_id, error_type, aost, database_id, " +
+			"schema_id, id, details, crdb_internal_expiration " +
+			"FROM system.inspect_errors",
+	},
+	{
+		name:  "system.jobs",
+		query: "SELECT * FROM system.jobs",
+		queryRedacted: `SELECT id,
+			status,
+			created,
+			created_by_type,
+			created_by_id,
+			claim_session_id,
+			claim_instance_id,
+			num_runs,
+			last_run
+			FROM system.jobs`,
+	},
+	{
+		name:  "system.job_info",
+		query: "SELECT * FROM system.job_info",
+		queryRedacted: `SELECT job_id,
+			info_key,
+			written,
+			'redacted' AS value
+			FROM system.job_info`,
+	},
+	{
+		name:          "system.job_progress",
+		query:         "SELECT * FROM system.job_progress",
+		queryRedacted: "SELECT job_id, written, fraction, resolved FROM system.job_progress",
+	},
+	{
+		name:          "system.job_progress_history",
+		query:         "SELECT * FROM system.job_progress_history",
+		queryRedacted: "SELECT job_id, written, fraction, resolved FROM system.job_progress_history",
+	},
+	{
+		name:          "system.job_status",
+		query:         "SELECT * FROM system.job_status",
+		queryRedacted: "SELECT job_id, written, status FROM system.job_status",
+	},
+	{
+		name:          "system.job_message",
+		query:         "SELECT * FROM system.job_message",
+		queryRedacted: "SELECT job_id, written, kind, message FROM system.job_message",
+	},
+	{
+		name:  "system.lease",
+		query: "SELECT * FROM system.lease",
+		queryRedacted: "SELECT desc_id, version, sql_instance_id, session_id, " +
+			"crdb_region FROM system.lease",
+	},
+	{
+		name:  "system.locations",
+		query: "SELECT * FROM system.locations",
+		queryRedacted: `SELECT "localityKey", "localityValue", latitude, longitude ` +
+			"FROM system.locations",
+	},
+	{
+		name:          "system.migrations",
+		query:         "SELECT * FROM system.migrations",
+		queryRedacted: "SELECT major, minor, patch, internal, completed_at FROM system.migrations",
+	},
+	{
+		name:  "system.mvcc_statistics",
+		query: "SELECT * FROM system.mvcc_statistics",
+		queryRedacted: "SELECT created_at, database_id, table_id, index_id, " +
+			"statistics FROM system.mvcc_statistics",
+	},
+	{
+		name:  "system.namespace",
+		query: "SELECT * FROM system.namespace",
+		queryRedacted: `SELECT "parentID", "parentSchemaID", name, id ` +
+			"FROM system.namespace",
+	},
+	{
+		name:  "system.prepared_transactions",
+		query: "SELECT * FROM system.prepared_transactions",
+		queryRedacted: "SELECT global_id, transaction_id, transaction_key, prepared, " +
+			"owner, database, heuristic FROM system.prepared_transactions",
+	},
+	{
+		name:          "system.privileges",
+		query:         "SELECT * FROM system.privileges",
+		queryRedacted: "SELECT username, path, privileges, grant_options FROM system.privileges",
+	},
+	{
+		name:  "system.protected_ts_meta",
+		query: "SELECT * FROM system.protected_ts_meta",
+		queryRedacted: "SELECT singleton, version, num_records, num_spans, " +
+			"total_bytes FROM system.protected_ts_meta",
+	},
+	{
+		name:  "system.protected_ts_records",
+		query: "SELECT * FROM system.protected_ts_records",
+		queryRedacted: "SELECT id, ts, meta_type, meta, num_spans, spans, " +
+			"verified, target FROM system.protected_ts_records",
+	},
+	{
+		name:  "system.rangelog",
+		query: "SELECT * FROM system.rangelog",
+		queryRedacted: `SELECT timestamp, "rangeID", "storeID", "eventType", ` +
+			`"otherRangeID", info, "uniqueID" FROM system.rangelog`,
+	},
+	{
+		name:          "system.region_liveness",
+		query:         "SELECT * FROM system.region_liveness",
+		queryRedacted: "SELECT crdb_region, unavailable_at FROM system.region_liveness",
+	},
+	{
+		name:  "system.replication_constraint_stats",
+		query: "SELECT * FROM system.replication_constraint_stats",
+		queryRedacted: "SELECT zone_id, subzone_id, type, config, report_id, " +
+			"violation_start, violating_ranges " +
+			"FROM system.replication_constraint_stats",
+	},
+	{
+		name:  "system.replication_critical_localities",
+		query: "SELECT * FROM system.replication_critical_localities",
+		queryRedacted: "SELECT zone_id, subzone_id, locality, report_id, " +
+			"at_risk_ranges FROM system.replication_critical_localities",
+	},
+	{
+		name:  "system.replication_stats",
+		query: "SELECT * FROM system.replication_stats",
+		queryRedacted: "SELECT zone_id, subzone_id, report_id, total_ranges, " +
+			"unavailable_ranges, under_replicated_ranges, " +
+			"over_replicated_ranges FROM system.replication_stats",
+	},
+	{
+		name:          "system.reports_meta",
+		query:         "SELECT * FROM system.reports_meta",
+		queryRedacted: "SELECT id, generated FROM system.reports_meta",
+	},
+	{
+		name:          "system.role_id_seq",
+		query:         "SELECT * FROM system.role_id_seq",
+		queryRedacted: "SELECT last_value, log_cnt, is_called FROM system.role_id_seq",
+	},
+	{
+		name:          "system.role_members",
+		query:         "SELECT * FROM system.role_members",
+		queryRedacted: `SELECT role, member, "isAdmin" FROM system.role_members`,
+	},
+	{
+		name:          "system.role_options",
+		query:         "SELECT * FROM system.role_options",
+		queryRedacted: "SELECT username, option, value FROM system.role_options",
+	},
+	{
+		name:  "system.scheduled_jobs",
+		query: "SELECT * FROM system.scheduled_jobs",
+		queryRedacted: "SELECT schedule_id, schedule_name, created, owner, next_run, " +
+			"schedule_state, schedule_expr, schedule_details, executor_type " +
+			"FROM system.scheduled_jobs",
+	},
+	{
+		name: "system.settings",
+		query: `
+SELECT
+     name,
+     CASE
+          WHEN cs.sensitive THEN '<redacted>'
+          ELSE s.value
+     END value,
+	s."lastUpdated",
+	s."valueType"
+FROM system.settings s
+JOIN crdb_internal.cluster_settings cs ON cs.variable = s.name`,
+		queryRedacted: `
+SELECT
+     name,
+     CASE
+          WHEN cs.sensitive THEN '<redacted>'
+          WHEN NOT cs.reportable THEN '<redacted>'
+          ELSE s.value
+     END value,
+	s."lastUpdated",
+	s."valueType"
+FROM system.settings s
+JOIN crdb_internal.cluster_settings cs ON cs.variable = s.name`,
+	},
+	{
+		name:          "system.span_configurations",
+		query:         "SELECT * FROM system.span_configurations",
+		queryRedacted: "SELECT config, start_key, end_key FROM system.span_configurations",
+	},
+	{
+		name:  "system.sql_instances",
+		query: "SELECT * FROM system.sql_instances",
+		queryRedacted: `SELECT
+			"id",
+			'<redacted>' as addr,
+			"session_id",
+			'<redacted>' as locality,
+			'<redacted>' as sql_addr
+			FROM system.sql_instances`,
+	},
+	{
+		name: "system.sql_stats_cardinality",
+		query: `
+			SELECT table_name, aggregated_ts, row_count
+			FROM (
+					SELECT 'system.statement_statistics' AS table_name, aggregated_ts, count(*) AS row_count
+					FROM system.statement_statistics
+					GROUP BY aggregated_ts
+				UNION
+					SELECT 'system.transaction_statistics' AS table_name, aggregated_ts, count(*) AS row_count
+					FROM system.transaction_statistics
+					GROUP BY aggregated_ts
+				UNION
+					SELECT 'system.statement_activity' AS table_name, aggregated_ts, count(*) AS row_count
+					FROM system.statement_activity
+					GROUP BY aggregated_ts
+				UNION
+					SELECT 'system.transaction_activity' AS table_name, aggregated_ts, count(*) AS row_count
+					FROM system.transaction_activity
+					GROUP BY aggregated_ts
+			)
+			ORDER BY table_name, aggregated_ts DESC`,
+		queryRedacted: `
+			SELECT table_name, aggregated_ts, row_count
+			FROM (
+					SELECT 'system.statement_statistics' AS table_name, aggregated_ts, count(*) AS row_count
+					FROM system.statement_statistics
+					GROUP BY aggregated_ts
+				UNION
+					SELECT 'system.transaction_statistics' AS table_name, aggregated_ts, count(*) AS row_count
+					FROM system.transaction_statistics
+					GROUP BY aggregated_ts
+				UNION
+					SELECT 'system.statement_activity' AS table_name, aggregated_ts, count(*) AS row_count
+					FROM system.statement_activity
+					GROUP BY aggregated_ts
+				UNION
+					SELECT 'system.transaction_activity' AS table_name, aggregated_ts, count(*) AS row_count
+					FROM system.transaction_activity
+					GROUP BY aggregated_ts
+			)
+			ORDER BY table_name, aggregated_ts DESC`,
+	},
+	{
+		name:          "system.sqlliveness",
+		query:         "SELECT * FROM system.sqlliveness",
+		queryRedacted: "SELECT session_id, expiration FROM system.sqlliveness",
+	},
+	{
+		name:  "system.statement_diagnostics",
+		query: "SELECT * FROM system.statement_diagnostics",
+		queryRedacted: "SELECT id, statement_fingerprint, collected_at, statement, " +
+			"error FROM system.statement_diagnostics",
+	},
+	{
+		name:  "system.statement_diagnostics_requests",
+		query: "SELECT * FROM system.statement_diagnostics_requests",
+		queryRedacted: "SELECT id, completed, statement_fingerprint, " +
+			"statement_diagnostics_id, requested_at, min_execution_latency, " +
+			"expires_at, sampling_probability, plan_gist, anti_plan_gist, " +
+			"redacted, username " +
+			"FROM system.statement_diagnostics_requests",
+	},
+	{
+		name:          "system.statement_hints",
+		query:         "SELECT * FROM system.statement_hints",
+		queryRedacted: "SELECT row_id, fingerprint, hint, created_at FROM system.statement_hints",
+	},
+	{
+		name: "system.statement_statistics_limit_5000",
+		query: `SELECT max(ss.aggregated_ts),
+       ss.fingerprint_id,
+       ss.transaction_fingerprint_id,
+       ss.plan_hash,
+       ss.app_name,
+       ss.agg_interval,
+       merge_stats_metadata(ss.metadata)    AS metadata,
+       merge_statement_stats(ss.statistics) AS statistics,
+       ss.plan,
+       ss.index_recommendations
+     FROM system.public.statement_statistics ss
+     WHERE aggregated_ts > (now() - INTERVAL '1 hour') AND
+ ( transaction_fingerprint_id in (SELECT DISTINCT(blocking_txn_fingerprint_id)
+                                      FROM crdb_internal.transaction_contention_events
+                                      WHERE blocking_txn_fingerprint_id != '\x0000000000000000'
+                                      union
+                                      SELECT DISTINCT(waiting_txn_fingerprint_id)
+                                      FROM crdb_internal.transaction_contention_events
+                                      WHERE blocking_txn_fingerprint_id != '\x0000000000000000'
+                                      )
+    OR transaction_fingerprint_id in (SELECT ss_cpu.transaction_fingerprint_id
+                                      FROM system.public.statement_statistics ss_cpu
+                                      group by ss_cpu.transaction_fingerprint_id, ss_cpu.cpu_sql_nanos
+                                      ORDER BY ss_cpu.cpu_sql_nanos desc limit 100))
+GROUP BY ss.aggregated_ts,
+         ss.app_name,
+         ss.fingerprint_id,
+         ss.transaction_fingerprint_id,
+         ss.plan_hash,
+         ss.agg_interval,
+         ss.plan,
+         ss.index_recommendations
+limit 5000;`,
+		queryRedacted: `SELECT max(ss.aggregated_ts),
+       ss.fingerprint_id,
+       ss.transaction_fingerprint_id,
+       ss.plan_hash,
+       ss.app_name,
+       ss.agg_interval,
+       merge_stats_metadata(ss.metadata)    AS metadata,
+       merge_statement_stats(ss.statistics) AS statistics,
+       ss.plan,
+       ss.index_recommendations
+     FROM system.public.statement_statistics ss
+     WHERE aggregated_ts > (now() - INTERVAL '1 hour') AND
+ ( transaction_fingerprint_id in (SELECT DISTINCT(blocking_txn_fingerprint_id)
+                                      FROM crdb_internal.transaction_contention_events
+                                      WHERE blocking_txn_fingerprint_id != '\x0000000000000000'
+                                      union
+                                      SELECT DISTINCT(waiting_txn_fingerprint_id)
+                                      FROM crdb_internal.transaction_contention_events
+                                      WHERE blocking_txn_fingerprint_id != '\x0000000000000000'
+                                      )
+    OR transaction_fingerprint_id in (SELECT ss_cpu.transaction_fingerprint_id
+                                      FROM system.public.statement_statistics ss_cpu
+                                      group by ss_cpu.transaction_fingerprint_id, ss_cpu.cpu_sql_nanos
+                                      ORDER BY ss_cpu.cpu_sql_nanos desc limit 100))
+GROUP BY ss.aggregated_ts,
+         ss.app_name,
+         ss.fingerprint_id,
+         ss.transaction_fingerprint_id,
+         ss.plan_hash,
+         ss.agg_interval,
+         ss.plan,
+         ss.index_recommendations
+limit 5000;`,
+	},
+	{
+		name:  "system.table_metadata",
+		query: "SELECT * FROM system.table_metadata",
+		queryRedacted: "SELECT db_id, table_id, db_name, schema_name, table_name, " +
+			"total_columns, total_indexes, store_ids, " +
+			"replication_size_bytes, total_ranges, total_live_data_bytes, " +
+			"total_data_bytes, perc_live_data, last_update_error, " +
+			"last_updated, table_type, details " +
+			"FROM system.table_metadata",
+	},
+	{
+		name:  "system.table_statistics",
+		query: "SELECT * FROM system.table_statistics",
+		queryRedacted: `SELECT "tableID", "statisticID", name, "columnIDs", ` +
+			`"createdAt", "rowCount", "distinctCount", "nullCount", ` +
+			`"avgSize", "partialPredicate", "fullStatisticID", ` +
+			`"delayDelete" FROM system.table_statistics`,
+	},
+	{
+		name:          "system.table_statistics_locks",
+		query:         "SELECT * FROM system.table_statistics_locks",
+		queryRedacted: "SELECT table_id, kind, job_ids FROM system.table_statistics_locks",
+	},
+	{
+		name:  "system.task_payloads",
+		query: "SELECT * FROM system.task_payloads",
+		queryRedacted: "SELECT id, created, owner, owner_id, min_version, type " +
+			"FROM system.task_payloads",
+	},
+	{
+		name:  "system.tenant_tasks",
+		query: "SELECT * FROM system.tenant_tasks",
+		queryRedacted: "SELECT tenant_id, issuer, task_id, created, payload_id, " +
+			"owner, owner_id FROM system.tenant_tasks",
+	},
+	{
+		name:  "system.tenant_settings",
+		query: "SELECT * FROM system.tenant_settings",
+		queryRedacted: `SELECT * FROM (
+			SELECT *
+			FROM system.tenant_settings
+			WHERE value_type <> 's'
+    	) UNION (
+			SELECT tenant_id, name, '<redacted>' as value, last_updated, value_type, reason
+			FROM system.tenant_settings
+			WHERE value_type = 's'
+    	)`,
+	},
+	{
+		name:  "system.tenant_usage",
+		query: "SELECT * FROM system.tenant_usage",
+		queryRedacted: "SELECT tenant_id, instance_id, next_instance_id, last_update, " +
+			"ru_burst_limit, ru_refill_rate, ru_current, " +
+			"current_share_sum, total_consumption, instance_seq, " +
+			"instance_shares, instance_lease " +
+			"FROM system.tenant_usage",
+	},
+	{
+		name:          "system.tenants",
+		query:         "SELECT * FROM system.tenants",
+		queryRedacted: "SELECT id, active, info FROM system.tenants",
+	},
+	{
+		name:  "system.transaction_diagnostics",
+		query: "SELECT * FROM system.transaction_diagnostics",
+		queryRedacted: "SELECT id, transaction_fingerprint_id, " +
+			"statement_fingerprint_ids, transaction_fingerprint, " +
+			"collected_at, error " +
+			"FROM system.transaction_diagnostics",
+	},
+	{
+		name:  "system.transaction_diagnostics_requests",
+		query: "SELECT * FROM system.transaction_diagnostics_requests",
+		queryRedacted: "SELECT id, completed, transaction_fingerprint_id, " +
+			"statement_fingerprint_ids, transaction_diagnostics_id, " +
+			"requested_at, min_execution_latency, expires_at, " +
+			"sampling_probability, redacted, username " +
+			"FROM system.transaction_diagnostics_requests",
+	},
+	{
+		name: "system.zones",
+		query: `SELECT
+			"id",
+			crdb_internal.pb_to_json('cockroach.config.zonepb.ZoneConfig', config)
+			FROM system.zones`,
+		queryRedacted: `SELECT "id" FROM system.zones`,
 	},
 }
