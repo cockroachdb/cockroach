@@ -153,7 +153,7 @@ const cpuCapacityFloorPerStore = 0.1 * 1e9 // 0.1 cores in ns/s
 //
 // That model is the special case where cap = infinity (clamping never
 // activates). When clamping does activate (background > 0), this function
-// intentionally breaks the invariant. Example with one store
+// mistakenly breaks the invariant. Example with one store
 // (storesCPURate=2, NodeCPURateUsage=10, NodeCPURateCapacity=16, cap=3):
 //
 //	Naive:  capacity = 2 / (10/16) = 3.2   load/cap = 2/3.2 = 0.625 = 10/16  (matches)
