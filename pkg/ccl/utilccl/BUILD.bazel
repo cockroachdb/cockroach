@@ -2,10 +2,7 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
     name = "utilccl",
-    srcs = [
-        "builtins.go",
-        "license_check.go",
-    ],
+    srcs = ["builtins.go"],
     importpath = "github.com/cockroachdb/cockroach/pkg/ccl/utilccl",
     visibility = ["//visibility:public"],
     deps = [

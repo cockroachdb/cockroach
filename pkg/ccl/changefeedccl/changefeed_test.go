@@ -44,8 +44,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/resolvedspan"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/schemafeed/schematestutils"
 	_ "github.com/cockroachdb/cockroach/pkg/ccl/multiregionccl" // locality-related table mutations
-	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl"
-	_ "github.com/cockroachdb/cockroach/pkg/cloud/impl" // registers cloud storage providers
+	_ "github.com/cockroachdb/cockroach/pkg/cloud/impl"         // registers cloud storage providers
 	"github.com/cockroachdb/cockroach/pkg/internal/sqlsmith"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
@@ -4196,9 +4195,6 @@ func TestChangefeedCreateAuthorizationWithChangefeedPriv(t *testing.T) {
 	rootDB.Exec(t, `CREATE TABLE table_b (id int, type type_a)`)
 	rootDB.Exec(t, `INSERT INTO table_a(id) values (0)`)
 	rootDB.Exec(t, `SET CLUSTER SETTING kv.rangefeed.enabled = true`)
-	enableEnterprise := utilccl.TestingDisableEnterprise()
-	enableEnterprise()
-
 	withUser := func(t *testing.T, user string, fn func(*sqlutils.SQLRunner)) {
 		password := `password`
 		rootDB.Exec(t, fmt.Sprintf(`ALTER USER %s WITH PASSWORD '%s'`, user, password))
@@ -11525,8 +11521,6 @@ func TestPubsubValidationErrors(t *testing.T) {
 
 	sqlDB := sqlutils.MakeSQLRunner(s.DB)
 	sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY, b STRING)`)
-	enableEnterprise := utilccl.TestingDisableEnterprise()
-	enableEnterprise()
 
 	for _, tc := range []struct {
 		name          string
