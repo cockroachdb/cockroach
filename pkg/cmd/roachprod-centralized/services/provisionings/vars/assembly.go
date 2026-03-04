@@ -14,6 +14,7 @@ import (
 	envmodels "github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/models/environments"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/models/provisionings"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/services/environments/types"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/vm"
 	"github.com/cockroachdb/errors"
 )
 
@@ -44,16 +45,17 @@ type BuildVarMapsInput struct {
 	Identifier string
 
 	// TemplateType is the template name, used to construct prov_name
-	// ("{type}-{identifier}"). Only used if the template declares a
-	// "prov_name" variable.
+	// ("{owner}-{type}-{identifier}"). Only used if the template
+	// declares a "prov_name" variable.
 	TemplateType string
 
 	// Environment is the environment name. Conditionally injected if the
 	// template declares an "environment" variable.
 	Environment string
 
-	// Owner is the principal email. Conditionally injected if the
-	// template declares an "owner" variable.
+	// Owner is the principal email. Used to construct the owner prefix
+	// in prov_name, and conditionally injected as the "owner" variable
+	// if declared by the template.
 	Owner string
 }
 
@@ -130,7 +132,7 @@ func BuildVarMaps(
 	// "prov_name", "environment", and "owner" are conditionally injected
 	// — only if the template declares them as variable blocks.
 	if _, declared := input.TemplateVars["prov_name"]; declared {
-		vars["prov_name"] = input.TemplateType + "-" + input.Identifier
+		vars["prov_name"] = ProvName(input.Owner, input.TemplateType, input.Identifier)
 	}
 	if _, declared := input.TemplateVars["environment"]; declared {
 		vars["environment"] = input.Environment
@@ -195,6 +197,24 @@ func BuildVarMaps(
 // validated against TemplateVars like any other user-provided variable.
 func isAutoInjected(name string) bool {
 	return name == "identifier"
+}
+
+// ProvName constructs the provisioning name from the owner email, template
+// type, and identifier. The owner's email local part is DNS-sanitized and
+// prepended as a prefix, matching roachprod's convention that VM names
+// start with the owner (e.g., "ludoleroux-gcp-workload-abc12def").
+// This ensures the cluster tag, VM names, and cluster name all align,
+// which is required for clusters_sync owner extraction.
+func ProvName(owner, templateType, identifier string) string {
+	localPart := owner
+	if i := strings.Index(owner, "@"); i >= 0 {
+		localPart = owner[:i]
+	}
+	prefix := vm.DNSSafeName(localPart)
+	if prefix == "" {
+		return templateType + "-" + identifier
+	}
+	return prefix + "-" + templateType + "-" + identifier
 }
 
 // formatVarValue converts an interface{} value to a string suitable for a

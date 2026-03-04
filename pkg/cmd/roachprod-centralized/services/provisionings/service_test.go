@@ -27,6 +27,7 @@ import (
 	ptasks "github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/services/provisionings/tasks"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/services/provisionings/templates"
 	provtypes "github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/services/provisionings/types"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/services/provisionings/vars"
 	tasksmock "github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/services/tasks/mocks"
 	stasktypes "github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/services/tasks/types"
 	filtertypes "github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/utils/filters/types"
@@ -131,7 +132,8 @@ output "identifier" { value = var.identifier }
 			p.State == provmodels.ProvisioningStateNew &&
 			p.Owner == "owner@example.com" &&
 			len(p.Identifier) == provmodels.IdentifierLength &&
-			strings.HasPrefix(p.Name, "tmpl-meta-") &&
+			strings.HasPrefix(p.Name, "owner-tmpl-meta-") &&
+			p.ClusterName == p.Name &&
 			len(p.TemplateSnapshot) > 0 &&
 			p.TemplateChecksum != ""
 	})).Return(nil).Once()
@@ -859,38 +861,44 @@ func TestGCScheduleDestroy_DuplicatePrevention(t *testing.T) {
 	taskSvc.AssertNotCalled(t, "CreateTask", mock.Anything, mock.Anything, mock.Anything)
 }
 
-// --- clusterNameFromOwner tests ---
+// --- vars.ProvName tests ---
 
-func TestClusterNameFromOwner(t *testing.T) {
+func TestProvName(t *testing.T) {
 	tests := []struct {
-		owner    string
-		provName string
-		want     string
+		owner        string
+		templateType string
+		identifier   string
+		want         string
 	}{{
-		owner:    "ludo.leroux@cockroachlabs.com",
-		provName: "gce-standalone-abc12def",
-		want:     "ludoleroux-gce-standalone-abc12def",
+		owner:        "ludo.leroux@cockroachlabs.com",
+		templateType: "gce-standalone",
+		identifier:   "abc12def",
+		want:         "ludoleroux-gce-standalone-abc12def",
 	}, {
-		owner:    "admin",
-		provName: "tmpl-xyz12345",
-		want:     "admin-tmpl-xyz12345",
+		owner:        "admin",
+		templateType: "tmpl",
+		identifier:   "xyz12345",
+		want:         "admin-tmpl-xyz12345",
 	}, {
-		owner:    "",
-		provName: "tmpl-xyz12345",
-		want:     "tmpl-xyz12345",
+		owner:        "",
+		templateType: "tmpl",
+		identifier:   "xyz12345",
+		want:         "tmpl-xyz12345",
 	}, {
-		owner:    "user@example.com",
-		provName: "gce-my-template-abcd1234",
-		want:     "user-gce-my-template-abcd1234",
+		owner:        "user@example.com",
+		templateType: "gce-my-template",
+		identifier:   "abcd1234",
+		want:         "user-gce-my-template-abcd1234",
 	}, {
-		owner:    "Alice.Bob@example.com",
-		provName: "aws-test-12345678",
-		want:     "alicebob-aws-test-12345678",
+		owner:        "Alice.Bob@example.com",
+		templateType: "aws-test",
+		identifier:   "12345678",
+		want:         "alicebob-aws-test-12345678",
 	}}
 
 	for _, tt := range tests {
-		t.Run(fmt.Sprintf("%s/%s", tt.owner, tt.provName), func(t *testing.T) {
-			got := clusterNameFromOwner(tt.owner, tt.provName)
+		t.Run(fmt.Sprintf("%s/%s-%s", tt.owner, tt.templateType, tt.identifier), func(t *testing.T) {
+			got := vars.ProvName(tt.owner, tt.templateType, tt.identifier)
 			assert.Equal(t, tt.want, got)
 		})
 	}

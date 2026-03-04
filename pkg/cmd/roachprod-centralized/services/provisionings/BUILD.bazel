@@ -58,6 +58,7 @@ go_test(
         "//pkg/cmd/roachprod-centralized/services/provisionings/tasks",
         "//pkg/cmd/roachprod-centralized/services/provisionings/templates",
         "//pkg/cmd/roachprod-centralized/services/provisionings/types",
+        "//pkg/cmd/roachprod-centralized/services/provisionings/vars",
         "//pkg/cmd/roachprod-centralized/services/tasks/mocks",
         "//pkg/cmd/roachprod-centralized/services/tasks/types",
         "//pkg/cmd/roachprod-centralized/utils/filters/types",

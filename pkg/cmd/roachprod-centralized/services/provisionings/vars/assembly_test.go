@@ -234,7 +234,7 @@ func TestBuildVarMaps_ConditionalAutoInject(t *testing.T) {
 	require.NoError(t, err)
 
 	assert.Equal(t, "test1234", vars["identifier"])
-	assert.Equal(t, "gcs-bucket-test1234", vars["prov_name"])
+	assert.Equal(t, "user-gcs-bucket-test1234", vars["prov_name"])
 	assert.Equal(t, "gcp-ephemeral", vars["environment"])
 	assert.Equal(t, "user@cockroachlabs.com", vars["owner"])
 }

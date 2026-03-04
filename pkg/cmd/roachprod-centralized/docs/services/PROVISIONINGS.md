@@ -254,7 +254,7 @@ These are always available to templates. Declare them in `vars.tf` to use them.
 | Variable | Always injected | Description | Example |
 |----------|----------------|-------------|---------|
 | `identifier` | Yes | 8-char random string (letter + alphanumeric) | `ab12cd34` |
-| `prov_name` | If declared | `{template}-{identifier}` | `gce-instance-ab12cd34` |
+| `prov_name` | If declared | `{owner}-{template}-{identifier}` | `ludoleroux-gce-instance-ab12cd34` |
 | `environment` | If declared | Environment name | `gcp-ephemeral` |
 | `owner` | If declared | Creator's email | `alice@example.com` |
 

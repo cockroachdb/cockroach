@@ -178,8 +178,11 @@ resource "google_compute_instance" "worker" {
 
 ### `prov_name` (injected if declared)
 
-Format: `{template-type}-{identifier}` (e.g., `gce-instance-ab12cd34`).
-Useful for human-readable resource names and tags.
+Format: `{owner}-{template-type}-{identifier}` (e.g.,
+`ludoleroux-gce-instance-ab12cd34`). The owner prefix is the DNS-sanitized
+local part of the creator's email, matching roachprod's convention that
+resource names start with the owner. Used for VM names, cluster tags, and
+cluster registration.
 
 ```hcl
 variable "prov_name" {
