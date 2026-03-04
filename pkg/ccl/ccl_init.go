@@ -10,7 +10,6 @@ package ccl
 
 import (
 	_ "github.com/cockroachdb/cockroach/pkg/backup"
-	"github.com/cockroachdb/cockroach/pkg/base"
 	_ "github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl"
 	_ "github.com/cockroachdb/cockroach/pkg/ccl/gssapiccl"
 	_ "github.com/cockroachdb/cockroach/pkg/ccl/jwtauthccl"
@@ -28,14 +27,7 @@ import (
 	_ "github.com/cockroachdb/cockroach/pkg/crosscluster/logical"
 	_ "github.com/cockroachdb/cockroach/pkg/crosscluster/physical"
 	_ "github.com/cockroachdb/cockroach/pkg/crosscluster/producer"
-	"github.com/cockroachdb/cockroach/pkg/server/license"
 )
-
-func init() {
-	// Set up license-related hooks from OSS to CCL code.
-	base.LicenseType = license.GetLicenseType
-	base.GetLicenseTTL = license.GetLicenseTTL
-}
 
 // TestingEnableEnterprise allows overriding the license check in tests.
 func TestingEnableEnterprise() func() {

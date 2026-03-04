@@ -503,7 +503,7 @@ func (r *Reporter) buildReportingURL(
 }
 
 func getLicenseType(ctx context.Context, settings *cluster.Settings) string {
-	licenseType, err := base.LicenseType(settings)
+	licenseType, err := license.GetLicenseType(settings)
 	if err != nil {
 		log.Dev.Errorf(ctx, "error retrieving license type: %s", err)
 		return ""

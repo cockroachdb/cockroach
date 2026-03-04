@@ -104,6 +104,11 @@ func TestRefreshLicenseEnforcerOnLicenseChange(t *testing.T) {
 
 			tdb := sqlutils.MakeSQLRunner(sqlDB)
 
+			// Clear the license so that subsequent SET CLUSTER SETTING
+			// triggers the OnChange callback even if the same license
+			// string is being re-applied.
+			tdb.Exec(t, "SET CLUSTER SETTING enterprise.license = ''")
+
 			// Loop through all but the last license. They should all
 			// succeed.
 			for i := 0; i < len(tc.licenses)-1; i++ {

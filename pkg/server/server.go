@@ -79,6 +79,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/debug"
 	"github.com/cockroachdb/cockroach/pkg/server/diagnostics"
 	"github.com/cockroachdb/cockroach/pkg/server/goroutinedumper"
+	"github.com/cockroachdb/cockroach/pkg/server/license"
 	"github.com/cockroachdb/cockroach/pkg/server/privchecker"
 	"github.com/cockroachdb/cockroach/pkg/server/serverctl"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
@@ -448,11 +449,11 @@ func NewServer(cfg Config, stopper *stop.Stopper) (serverctl.ServerStartupInterf
 	// started via the server controller.
 	cfg.RuntimeStatSampler = runtimeSampler
 
-	appRegistry.AddMetric(metric.NewFunctionalGauge(base.LicenseTTLMetadata, func() int64 {
-		return base.GetLicenseTTL(ctx, cfg.Settings, timeutil.DefaultTimeSource{})
+	appRegistry.AddMetric(metric.NewFunctionalGauge(license.LicenseTTLMetadata, func() int64 {
+		return license.GetLicenseTTL(ctx, cfg.Settings, timeutil.DefaultTimeSource{})
 	}))
-	appRegistry.AddMetric(metric.NewFunctionalGauge(base.AdditionalLicenseTTLMetadata, func() int64 {
-		return base.GetLicenseTTL(ctx, cfg.Settings, timeutil.DefaultTimeSource{})
+	appRegistry.AddMetric(metric.NewFunctionalGauge(license.AdditionalLicenseTTLMetadata, func() int64 {
+		return license.GetLicenseTTL(ctx, cfg.Settings, timeutil.DefaultTimeSource{})
 	}))
 
 	// Create and add KV metric rules.
