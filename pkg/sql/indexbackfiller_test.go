@@ -887,7 +887,7 @@ func TestDistributedMergeStoragePrefixTracking(t *testing.T) {
 	testingKnobs := base.TestingKnobs{
 		JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
 		DistSQL: &execinfra.TestingKnobs{
-			AfterDistributedMergeMapPhase: func(_ context.Context, manifests []jobspb.IndexBackfillSSTManifest) {
+			AfterDistributedMergeMapPhase: func(_ context.Context, manifests []jobspb.BulkSSTManifest) {
 				// Extract node IDs from manifest URIs (format: nodelocal://<nodeID>/...).
 				nodeIDRegex := regexp.MustCompile(`^nodelocal://(\d+)/`)
 				for _, m := range manifests {
@@ -1001,7 +1001,7 @@ func TestDistributedMergeStoragePrefixPreservedAcrossPauseResume(t *testing.T) {
 			JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
 			DistSQL: &execinfra.TestingKnobs{
 				BulkAdderFlushesEveryBatch: true,
-				AfterDistributedMergeIteration: func(ctx context.Context, iteration int, manifests []jobspb.IndexBackfillSSTManifest) {
+				AfterDistributedMergeIteration: func(ctx context.Context, iteration int, manifests []jobspb.BulkSSTManifest) {
 					iterationCompleted.Store(int32(iteration))
 					// Block after iteration 1 to allow test to pause the job.
 					// Only block if there are manifests (not the final KV ingest iteration).
@@ -1144,7 +1144,7 @@ func TestMultiMergeIndexBackfill(t *testing.T) {
 		Knobs: base.TestingKnobs{
 			JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
 			DistSQL: &execinfra.TestingKnobs{
-				AfterDistributedMergeIteration: func(ctx context.Context, iteration int, manifests []jobspb.IndexBackfillSSTManifest) {
+				AfterDistributedMergeIteration: func(ctx context.Context, iteration int, manifests []jobspb.BulkSSTManifest) {
 					manifestCountByIteration[iteration] = len(manifests)
 				},
 			},
@@ -1200,7 +1200,7 @@ func TestDistributedMergePhasedProgress(t *testing.T) {
 			JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
 			DistSQL: &execinfra.TestingKnobs{
 				BulkAdderFlushesEveryBatch: true,
-				AfterDistributedMergeMapPhase: func(ctx context.Context, manifests []jobspb.IndexBackfillSSTManifest) {
+				AfterDistributedMergeMapPhase: func(ctx context.Context, manifests []jobspb.BulkSSTManifest) {
 					t.Logf("map phase complete, manifests=%d", len(manifests))
 					mapPhaseComplete.Store(true)
 					// Block to allow test to check progress after map phase.
@@ -1209,7 +1209,7 @@ func TestDistributedMergePhasedProgress(t *testing.T) {
 					case <-ctx.Done():
 					}
 				},
-				AfterDistributedMergeIteration: func(ctx context.Context, iteration int, manifests []jobspb.IndexBackfillSSTManifest) {
+				AfterDistributedMergeIteration: func(ctx context.Context, iteration int, manifests []jobspb.BulkSSTManifest) {
 					currentIteration.Store(int32(iteration))
 					t.Logf("iteration %d complete, manifests=%d", iteration, len(manifests))
 					// Block after iteration 1 (which has manifests) to check progress.
@@ -1394,7 +1394,7 @@ func TestDistributedMergeAcrossNodes(t *testing.T) {
 	testingKnobs := base.TestingKnobs{
 		JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
 		DistSQL: &execinfra.TestingKnobs{
-			AfterDistributedMergeIteration: func(_ context.Context, iteration int, manifests []jobspb.IndexBackfillSSTManifest) {
+			AfterDistributedMergeIteration: func(_ context.Context, iteration int, manifests []jobspb.BulkSSTManifest) {
 				// Extract node IDs from manifest URIs (format: nodelocal://<nodeID>/...).
 				nodeIDRegex := regexp.MustCompile(`^nodelocal://(\d+)/`)
 				mu.Lock()
@@ -1661,7 +1661,7 @@ func TestDistributedMergeResumePreservesProgress(t *testing.T) {
 						}
 					}
 				},
-				AfterDistributedMergeMapPhase: func(ctx context.Context, manifests []jobspb.IndexBackfillSSTManifest) {
+				AfterDistributedMergeMapPhase: func(ctx context.Context, manifests []jobspb.BulkSSTManifest) {
 					state.mapPhaseManifestCount.Store(int32(len(manifests)))
 					t.Logf("[%s] after distributed merge map phase, manifests count: %d", state.currentTestName, len(manifests))
 
@@ -1671,7 +1671,7 @@ func TestDistributedMergeResumePreservesProgress(t *testing.T) {
 						t.Logf("[%s] unblocked by test, continuing with merge iterations", state.currentTestName)
 					}
 				},
-				AfterDistributedMergeIteration: func(ctx context.Context, iteration int, manifests []jobspb.IndexBackfillSSTManifest) {
+				AfterDistributedMergeIteration: func(ctx context.Context, iteration int, manifests []jobspb.BulkSSTManifest) {
 					state.currentIteration.Store(int32(iteration))
 					state.manifestCountByIteration[iteration] = len(manifests)
 					t.Logf("[%s] after distributed merge iteration %d, manifests count: %d", state.currentTestName, iteration, len(manifests))
@@ -2229,7 +2229,7 @@ func TestDistributedMergeRedoCleanupSSTs(t *testing.T) {
 			JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
 			DistSQL: &execinfra.TestingKnobs{
 				BulkAdderFlushesEveryBatch: true,
-				AfterDistributedMergeMapPhase: func(ctx context.Context, manifests []jobspb.IndexBackfillSSTManifest) {
+				AfterDistributedMergeMapPhase: func(ctx context.Context, manifests []jobspb.BulkSSTManifest) {
 					sqlDB := dbPtr.Load()
 					if sqlDB == nil {
 						t.Logf("db not yet initialized in hook")

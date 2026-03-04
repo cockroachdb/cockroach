@@ -185,7 +185,13 @@ message ReadImportDataSpec {
   // distributed merge pipeline. Determined at planning time.
   optional bool use_distributed_merge = 21 [(gogoproto.nullable) = false];
 
-  // NEXTID: 22.
+  // distributed_merge_file_prefix is the ExternalStorage URI path (without
+  // nodelocal://nodeID prefix) to use when writing map outputs for the
+  // distributed merge pipeline. Each processor constructs its full nodelocal
+  // URI using its own node ID at runtime.
+  optional string distributed_merge_file_prefix = 22 [(gogoproto.nullable) = false];
+
+  // NEXTID: 23.
 }
 
 message MergeCoordinatorSpec {
@@ -678,10 +684,10 @@ message BulkMergeSpec {
   // NEXT ID: 9.
 }
 
-// IndexBackfillMapProgress is emitted by map-stage processors to describe newly
-// produced SST manifests.
-message IndexBackfillMapProgress {
-	repeated jobs.jobspb.IndexBackfillSSTManifest sst_manifests = 1 [(gogoproto.nullable) = false, (gogoproto.customname) = "SSTManifests"];
+// BulkMapProgress is emitted by map-stage processors (index backfill, import)
+// to describe newly produced SST manifests.
+message BulkMapProgress {
+	repeated jobs.jobspb.BulkSSTManifest sst_manifests = 1 [(gogoproto.nullable) = false, (gogoproto.customname) = "SSTManifests"];
 }
 
 // IngestFileSpec describes the set of SSTs to be ingested by an ingest
