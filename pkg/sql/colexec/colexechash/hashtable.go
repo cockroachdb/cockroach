@@ -268,7 +268,7 @@ type HashTable struct {
 	allowNullEquality bool
 
 	datumAlloc    tree.DatumAlloc
-	cancelChecker colexecutils.CancelChecker
+	CancelChecker colexecutils.CancelChecker
 
 	BuildMode HashTableBuildMode
 	probeMode HashTableProbeMode
@@ -372,7 +372,7 @@ func NewHashTable(
 		ht.BuildScratch.Next = []keyID{0}
 	}
 
-	ht.cancelChecker.Init(ctx)
+	ht.CancelChecker.Init(ctx)
 	return ht
 }
 
@@ -772,7 +772,7 @@ func (ht *HashTable) ComputeBuckets(buckets []uint32, keys []*coldata.Vec, nKeys
 	}
 
 	for i := range ht.keyCols {
-		rehash(buckets, keys[i], nKeys, sel, ht.cancelChecker, &ht.datumAlloc)
+		rehash(buckets, keys[i], nKeys, sel, ht.CancelChecker, &ht.datumAlloc)
 	}
 
 	finalizeHash(buckets, nKeys, ht.numBuckets)
@@ -805,7 +805,7 @@ func (ht *HashTable) buildNextChains(first, next []keyID, offset, batchSize uint
 			next[firstKeyID] = id
 		}
 	}
-	ht.cancelChecker.CheckEveryCall()
+	ht.CancelChecker.CheckEveryCall()
 }
 
 // SetupLimitedSlices ensures that HeadID, differs, foundNull, ToCheckID, and
