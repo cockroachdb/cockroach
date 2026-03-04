@@ -350,13 +350,16 @@ func prepareZoneConfigForMultiRegionTable(
 	}
 
 	if regionConfig.HasSecondaryRegion() {
-
 		var newLeasePreferences []zonepb.LeasePreference
 		switch {
 		case table.IsLocalityRegionalByTable():
 			localityConfig := table.TableDesc().LocalityConfig.GetRegionalByTable()
 			if region := localityConfig.Region; region != nil {
-				newLeasePreferences = regions.SynthesizeLeasePreferences(*region, regionConfig.SecondaryRegion())
+				secondaryRegion := regionConfig.SecondaryRegion()
+				if regions.SecondaryRegionOutsideSuperRegion(*region, regionConfig) {
+					secondaryRegion = ""
+				}
+				newLeasePreferences = regions.SynthesizeLeasePreferences(*region, secondaryRegion)
 			} else {
 				newLeasePreferences = regions.SynthesizeLeasePreferences(regionConfig.PrimaryRegion(), regionConfig.SecondaryRegion())
 			}

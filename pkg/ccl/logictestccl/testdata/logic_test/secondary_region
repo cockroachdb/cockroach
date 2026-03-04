@@ -646,3 +646,98 @@ non_mr         {}                                                              N
 postgres       {}                                                              NULL            NULL
 system         {}                                                              NULL            NULL
 test           {}                                                              NULL            NULL
+
+# Verify that the secondary region does not leak into lease_preferences and
+# voter_constraints for tables/partitions confined to a super region when the
+# secondary region is outside that super region.
+#
+# mr2 was created earlier with:
+#   Primary: ap-southeast-2 (outside any super region)
+#   Secondary: ca-central-1 (set above, also outside any super region)
+#   Super region test1: us-east-1, us-west-1
+subtest secondary_super_region_leak
+
+statement ok
+USE mr2;
+
+# Expand super region test1 to 3 regions so it meets the minimum for SURVIVE
+# REGION FAILURE.
+statement ok
+ALTER DATABASE mr2 ALTER SUPER REGION "test1" VALUES "us-east-1", "us-west-1", "us-central-1"
+
+statement ok
+ALTER DATABASE mr2 SURVIVE REGION FAILURE
+
+# REGIONAL BY TABLE inside super region: the secondary region (ca-central-1)
+# is outside the super region and must NOT appear in lease_preferences or
+# voter_constraints.
+statement ok
+CREATE TABLE mr2.rbt_in_sr() LOCALITY REGIONAL BY TABLE IN "us-east-1"
+
+query TT
+SHOW ZONE CONFIGURATION FOR TABLE mr2.rbt_in_sr
+----
+TABLE mr2.public.rbt_in_sr  ALTER TABLE mr2.public.rbt_in_sr CONFIGURE ZONE USING
+                               range_min_bytes = 134217728,
+                               range_max_bytes = 536870912,
+                               gc.ttlseconds = 14400,
+                               num_replicas = 5,
+                               num_voters = 5,
+                               constraints = '{+region=us-central-1: 2, +region=us-east-1: 2, +region=us-west-1: 1}',
+                               voter_constraints = '{+region=us-east-1: 2}',
+                               lease_preferences = '[[+region=us-east-1]]'
+
+# Control: REGIONAL BY TABLE outside super region. The secondary region
+# (ca-central-1) SHOULD appear in lease_preferences and voter_constraints.
+statement ok
+CREATE TABLE mr2.rbt_outside_sr() LOCALITY REGIONAL BY TABLE IN "ap-southeast-2"
+
+query TT
+SHOW ZONE CONFIGURATION FOR TABLE mr2.rbt_outside_sr
+----
+TABLE mr2.public.rbt_outside_sr  ALTER TABLE mr2.public.rbt_outside_sr CONFIGURE ZONE USING
+                                   range_min_bytes = 134217728,
+                                   range_max_bytes = 536870912,
+                                   gc.ttlseconds = 14400,
+                                   num_replicas = 7,
+                                   num_voters = 5,
+                                   constraints = '{+region=ap-southeast-2: 1, +region=ca-central-1: 1, +region=us-central-1: 1, +region=us-east-1: 1, +region=us-west-1: 1}',
+                                   voter_constraints = '{+region=ap-southeast-2: 2, +region=ca-central-1: 2}',
+                                   lease_preferences = '[[+region=ap-southeast-2], [+region=ca-central-1]]'
+
+# REGIONAL BY ROW table to test partitions.
+statement ok
+CREATE TABLE mr2.rbr_sr(k INT PRIMARY KEY) LOCALITY REGIONAL BY ROW
+
+# Partition inside super region: no secondary region leak.
+query TT
+SHOW ZONE CONFIGURATION FOR PARTITION "us-east-1" OF TABLE mr2.rbr_sr
+----
+PARTITION "us-east-1" OF TABLE mr2.public.rbr_sr  ALTER PARTITION "us-east-1" OF TABLE mr2.public.rbr_sr CONFIGURE ZONE USING
+                                                     range_min_bytes = 134217728,
+                                                     range_max_bytes = 536870912,
+                                                     gc.ttlseconds = 14400,
+                                                     num_replicas = 5,
+                                                     num_voters = 5,
+                                                     constraints = '{+region=us-central-1: 2, +region=us-east-1: 2, +region=us-west-1: 1}',
+                                                     voter_constraints = '{+region=us-east-1: 2}',
+                                                     lease_preferences = '[[+region=us-east-1]]'
+
+# Partition outside super region: secondary region should be present.
+query TT
+SHOW ZONE CONFIGURATION FOR PARTITION "ap-southeast-2" OF TABLE mr2.rbr_sr
+----
+PARTITION "ap-southeast-2" OF TABLE mr2.public.rbr_sr  ALTER PARTITION "ap-southeast-2" OF TABLE mr2.public.rbr_sr CONFIGURE ZONE USING
+                                                         range_min_bytes = 134217728,
+                                                         range_max_bytes = 536870912,
+                                                         gc.ttlseconds = 14400,
+                                                         num_replicas = 7,
+                                                         num_voters = 5,
+                                                         constraints = '{+region=ap-southeast-2: 1, +region=ca-central-1: 1, +region=us-central-1: 1, +region=us-east-1: 1, +region=us-west-1: 1}',
+                                                         voter_constraints = '{+region=ap-southeast-2: 2, +region=ca-central-1: 2}',
+                                                         lease_preferences = '[[+region=ap-southeast-2], [+region=ca-central-1]]'
+
+statement ok
+SELECT crdb_internal.validate_multi_region_zone_configs()
+
+subtest end
