@@ -9,8 +9,8 @@ go_library(
     importpath = "github.com/cockroachdb/cockroach/pkg/ccl/utilccl",
     visibility = ["//visibility:public"],
     deps = [
-        "//pkg/ccl/utilccl/licenseccl",
         "//pkg/server/license",
+        "//pkg/server/license/licensepb",
         "//pkg/settings",
         "//pkg/settings/cluster",
         "//pkg/sql/pgwire/pgcode",
@@ -35,11 +35,11 @@ go_test(
     deps = [
         "//pkg/base",
         "//pkg/ccl",
-        "//pkg/ccl/utilccl/licenseccl",
         "//pkg/security/securityassets",
         "//pkg/security/securitytest",
         "//pkg/server",
         "//pkg/server/license",
+        "//pkg/server/license/licensepb",
         "//pkg/settings",
         "//pkg/settings/cluster",
         "//pkg/sql",

@@ -5,7 +5,7 @@
 
 syntax = "proto3";
 package cockroach.ccl.utilccl.licenseccl;
-option go_package = "github.com/cockroachdb/cockroach/pkg/ccl/utilccl/licenseccl";
+option go_package = "github.com/cockroachdb/cockroach/pkg/server/license/licensepb";
 
 import "gogoproto/gogo.proto";
 
