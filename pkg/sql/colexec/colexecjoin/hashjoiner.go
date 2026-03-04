@@ -290,6 +290,7 @@ func (hj *hashJoiner) Init(ctx context.Context) {
 
 func (hj *hashJoiner) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	for {
+		hj.ht.CancelChecker.CheckEveryCall()
 		switch hj.state {
 		case hjBuilding:
 			meta := hj.build()
