@@ -2001,7 +2001,6 @@ var (
 		Help:        "Wait time durations for requests that waited",
 		Measurement: "Wait time Duration",
 		Unit:        metric.Unit_NANOSECONDS,
-		Visibility:  metric.Metadata_ESSENTIAL,
 		Category:    metric.Metadata_OVERLOAD,
 		HowToUse:    "This metric shows if admission control is working effectively or potentially overaggressive. This is a latency histogram of how much delay was added to the workload due to throttling. If observing over 100ms waits for over 5 seconds while there was excess capacity available, then the admission control is overly aggressive.",
 	}
@@ -2010,7 +2009,6 @@ var (
 		Help:        "Wait time durations for requests that waited",
 		Measurement: "Wait time Duration",
 		Unit:        metric.Unit_NANOSECONDS,
-		Visibility:  metric.Metadata_ESSENTIAL,
 		Category:    metric.Metadata_OVERLOAD,
 		HowToUse:    "This metric shows if CPU utilization-based admission control feature is working effectively or potentially overaggressive. This is a latency histogram of how much delay was added to the workload due to throttling. If observing over 100ms waits for over 5 seconds while there was excess capacity available, then the admission control is overly aggressive.",
 	}
@@ -2019,7 +2017,6 @@ var (
 		Help:        "Wait time durations for requests that waited",
 		Measurement: "Wait time Duration",
 		Unit:        metric.Unit_NANOSECONDS,
-		Visibility:  metric.Metadata_ESSENTIAL,
 		Category:    metric.Metadata_OVERLOAD,
 		HowToUse:    "This metric shows if I/O utilization-based admission control feature is working effectively or potentially overaggressive. This is a latency histogram of how much delay was added to the workload due to throttling. If observing over 100ms waits for over 5 seconds while there was excess capacity available, then the admission control is overly aggressive.",
 	}
@@ -2062,7 +2059,7 @@ func (m *WorkQueueMetrics) getOrCreate(priority admissionpb.WorkPriority) *workQ
 		// It is not called the first Load so that we don't have to unnecessarily
 		// create the metrics.
 		statPrefix := fmt.Sprintf("%v.%v", m.name, priority.String())
-		val, ok = m.byPriority.LoadOrStore(priority, makeWorkQueueMetricsSingle(statPrefix))
+		val, ok = m.byPriority.LoadOrStore(priority, makeWorkQueueMetricsSingle(statPrefix, false /* essential */))
 		if !ok {
 			m.registry.AddMetricStruct(val)
 		}
@@ -2131,7 +2128,7 @@ func (m *WorkQueueMetrics) recordFastPathAdmission(priority admissionpb.WorkPrio
 func (*WorkQueueMetrics) MetricStruct() {}
 
 func makeWorkQueueMetrics(name string, registry *metric.Registry) *WorkQueueMetrics {
-	totalMetric := makeWorkQueueMetricsSingle(name)
+	totalMetric := makeWorkQueueMetricsSingle(name, true /* essential */)
 	registry.AddMetricStruct(totalMetric)
 	wqm := &WorkQueueMetrics{
 		name:     name,
@@ -2145,12 +2142,15 @@ func makeWorkQueueMetrics(name string, registry *metric.Registry) *WorkQueueMetr
 	return wqm
 }
 
-func makeWorkQueueMetricsSingle(name string) *workQueueMetricsSingle {
+func makeWorkQueueMetricsSingle(name string, essential bool) *workQueueMetricsSingle {
 	wdm := waitDurationsMeta
 	if name == KVWork.String() {
 		wdm = kvWaitDurationsMeta
 	} else if name == fmt.Sprintf("%s-stores", KVWork.String()) {
 		wdm = kvStoresWaitDurationsMeta
+	}
+	if essential {
+		wdm.Visibility = metric.Metadata_ESSENTIAL
 	}
 
 	return &workQueueMetricsSingle{
