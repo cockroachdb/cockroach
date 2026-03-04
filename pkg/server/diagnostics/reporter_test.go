@@ -13,8 +13,8 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	build "github.com/cockroachdb/cockroach/pkg/build"
-	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl"
 	"github.com/cockroachdb/cockroach/pkg/server/diagnostics/diagnosticspb"
+	"github.com/cockroachdb/cockroach/pkg/server/license"
 	"github.com/cockroachdb/cockroach/pkg/server/license/licensepb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -164,9 +164,9 @@ func TestShouldReportDiagnostics(t *testing.T) {
 					ValidUntilUnixSec: t0.AddDate(0, 1, 0).Unix(),
 				}).Encode()
 				require.NoError(t, err)
-				utilccl.EnterpriseLicense.Override(ctx, &st.SV, lic)
+				license.EnterpriseLicense.Override(ctx, &st.SV, lic)
 			} else {
-				utilccl.EnterpriseLicense.Override(ctx, &st.SV, "")
+				license.EnterpriseLicense.Override(ctx, &st.SV, "")
 			}
 			logcrash.DiagnosticsReportingEnabled.Override(ctx, &st.SV, test.diagnostics)
 			require.Equal(t, test.expected, shouldReportDiagnostics(context.Background(), st))
