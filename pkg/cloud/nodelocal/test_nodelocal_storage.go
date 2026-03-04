@@ -7,6 +7,7 @@ package nodelocal
 
 import (
 	"context"
+	"io"
 	"net/url"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
@@ -15,6 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cloud/cloudpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
+	"github.com/cockroachdb/cockroach/pkg/util/ioctx"
 )
 
 // ReplaceNodeLocalForTesting replaces the implementation of of
@@ -65,4 +67,79 @@ func TestingMakeNodelocalStorage(
 		settings:   settings,
 		uri:        es.URI,
 	}
+}
+
+// ReplaceNodeLocalForTestingWithInterceptor is like ReplaceNodeLocalForTesting
+// but calls interceptRead before each ReadFile call. The interceptor receives
+// the basename of the file being read. This can be used to inject blocking or
+// delays for specific files, e.g. to block reads of data SSTs during online
+// restore testing. Size calls are not intercepted so that Pebble can still
+// query external file sizes for disk usage accounting.
+func ReplaceNodeLocalForTestingWithInterceptor(
+	root string, interceptRead func(context.Context, string),
+) func() {
+	makeFn := func(ctx context.Context, conf cloud.EarlyBootExternalStorageContext, es cloudpb.ExternalStorage) (cloud.ExternalStorage, error) {
+		inner := TestingMakeNodelocalStorage(root, conf.Settings, es)
+		return &interceptingStorage{inner: inner, interceptRead: interceptRead}, nil
+	}
+	parserFn := func(uri *url.URL) (cloudpb.ExternalStorage, error) {
+		if !buildutil.CrdbTestBuild {
+			panic("nodelocal test implementation in non-test build")
+		}
+		return cloudpb.ExternalStorage{
+			Provider: cloudpb.ExternalStorageProvider_nodelocal,
+			LocalFileConfig: cloudpb.ExternalStorage_LocalFileConfig{
+				Path: uri.Path,
+			},
+			URI: uri.String(),
+		}, nil
+	}
+	return cloud.ReplaceProviderForTesting(cloudpb.ExternalStorageProvider_nodelocal, cloud.RegisteredProvider{
+		EarlyBootConstructFn: makeFn,
+		EarlyBootParseFn:     parserFn,
+		Schemes:              []string{scheme},
+	})
+}
+
+// interceptingStorage wraps a cloud.ExternalStorage and calls an interceptor
+// before ReadFile operations.
+type interceptingStorage struct {
+	inner         cloud.ExternalStorage
+	interceptRead func(context.Context, string)
+}
+
+var _ cloud.ExternalStorage = &interceptingStorage{}
+
+func (s *interceptingStorage) Close() error { return s.inner.Close() }
+func (s *interceptingStorage) Conf() cloudpb.ExternalStorage {
+	return s.inner.Conf()
+}
+func (s *interceptingStorage) ExternalIOConf() base.ExternalIODirConfig {
+	return s.inner.ExternalIOConf()
+}
+func (s *interceptingStorage) RequiresExternalIOAccounting() bool {
+	return s.inner.RequiresExternalIOAccounting()
+}
+func (s *interceptingStorage) Settings() *cluster.Settings {
+	return s.inner.Settings()
+}
+func (s *interceptingStorage) Writer(ctx context.Context, basename string) (io.WriteCloser, error) {
+	return s.inner.Writer(ctx, basename)
+}
+func (s *interceptingStorage) List(
+	ctx context.Context, prefix string, opts cloud.ListOptions, fn cloud.ListingFn,
+) error {
+	return s.inner.List(ctx, prefix, opts, fn)
+}
+func (s *interceptingStorage) Delete(ctx context.Context, basename string) error {
+	return s.inner.Delete(ctx, basename)
+}
+func (s *interceptingStorage) ReadFile(
+	ctx context.Context, basename string, opts cloud.ReadOptions,
+) (ioctx.ReadCloserCtx, int64, error) {
+	s.interceptRead(ctx, basename)
+	return s.inner.ReadFile(ctx, basename, opts)
+}
+func (s *interceptingStorage) Size(ctx context.Context, basename string) (int64, error) {
+	return s.inner.Size(ctx, basename)
 }
