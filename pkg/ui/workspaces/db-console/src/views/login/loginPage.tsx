@@ -3,10 +3,10 @@
 // Use of this software is governed by the CockroachDB Software License
 // included in the /LICENSE file.
 
-import React from "react";
+import React, { useEffect, useState } from "react";
 import Helmet from "react-helmet";
-import { connect } from "react-redux";
-import { RouteComponentProps, withRouter } from "react-router-dom";
+import { useDispatch, useSelector } from "react-redux";
+import { RouteComponentProps } from "react-router-dom";
 
 import ErrorCircle from "assets/error-circle.svg";
 import {
@@ -32,95 +32,61 @@ export interface LoginPageProps {
   handleLogin: (username: string, password: string) => Promise<any>;
 }
 
-type Props = LoginPageProps & RouteComponentProps;
+type Props = LoginPageProps & Omit<RouteComponentProps, "match">;
 
-interface PasswordLoginState {
-  username?: string;
-  password?: string;
-}
+const PasswordLoginForm: React.FC<LoginPageProps> = ({
+  loginState,
+  handleLogin,
+}) => {
+  const [username, setUsername] = useState("");
+  const [password, setPassword] = useState("");
 
-class PasswordLoginForm extends React.Component<
-  LoginPageProps,
-  PasswordLoginState
-> {
-  constructor(props: LoginPageProps) {
-    super(props);
-    this.state = {
-      username: "",
-      password: "",
-    };
-    // TODO(vilterp): focus username field on mount
-  }
-
-  handleUpdateUsername = (value: string) => {
-    this.setState({
-      username: value,
-    });
-  };
-
-  handleUpdatePassword = (value: string) => {
-    this.setState({
-      password: value,
-    });
-  };
-
-  handleSubmit = (evt: React.FormEvent<any>) => {
-    const { handleLogin } = this.props;
-    const { username, password } = this.state;
+  const handleSubmit = (evt: React.FormEvent<any>) => {
     evt.preventDefault();
-
     handleLogin(username, password);
   };
 
-  render() {
-    const { username, password } = this.state;
-    const { loginState } = this.props;
-
-    return (
-      <form
-        id="loginForm"
-        onSubmit={this.handleSubmit}
-        className="form-internal"
-        method="post"
+  return (
+    <form
+      id="loginForm"
+      onSubmit={handleSubmit}
+      className="form-internal"
+      method="post"
+    >
+      <TextInput
+        name="username"
+        onChange={setUsername}
+        placeholder="Username"
+        label="Username"
+        value={username}
+      />
+      <PasswordInput
+        name="password"
+        onChange={setPassword}
+        placeholder="Password"
+        label="Password"
+        value={password}
+      />
+      <Button
+        buttonType="submit"
+        className="submit-button"
+        disabled={loginState.inProgress}
+        textAlign={"center"}
       >
-        <TextInput
-          name="username"
-          onChange={this.handleUpdateUsername}
-          placeholder="Username"
-          label="Username"
-          value={username}
-        />
-        <PasswordInput
-          name="password"
-          onChange={this.handleUpdatePassword}
-          placeholder="Password"
-          label="Password"
-          value={password}
-        />
-        <Button
-          buttonType="submit"
-          className="submit-button"
-          disabled={loginState.inProgress}
-          textAlign={"center"}
-        >
-          {loginState.inProgress ? "Logging in..." : "Log in"}
-        </Button>
-      </form>
-    );
-  }
-}
+        {loginState.inProgress ? "Logging in..." : "Log in"}
+      </Button>
+    </form>
+  );
+};
 
-export class LoginPage extends React.Component<Props> {
-  constructor(props: Props) {
-    super(props);
-  }
-
-  componentDidUpdate() {
-    const {
-      loginState: { loggedInUser },
-    } = this.props;
-    if (loggedInUser !== null) {
-      const { location, history } = this.props;
+export const LoginPage: React.FC<Props> = ({
+  loginState,
+  handleLogin,
+  location,
+  history,
+}) => {
+  useEffect(() => {
+    if (loginState.loggedInUser !== null) {
       const params = new URLSearchParams(location.search);
       if (params.has("redirectTo")) {
         history.push(decodeURIComponent(params.get("redirectTo")));
@@ -128,10 +94,10 @@ export class LoginPage extends React.Component<Props> {
         history.push("/");
       }
     }
-  }
+  }, [loginState.loggedInUser, location, history]);
 
-  renderError() {
-    const { error } = this.props.loginState;
+  const renderError = () => {
+    const { error } = loginState;
 
     if (!error) {
       return null;
@@ -147,76 +113,80 @@ export class LoginPage extends React.Component<Props> {
         {message}
       </div>
     );
-  }
+  };
 
-  render() {
-    const { loginState } = this.props;
-
-    return (
-      <div className="login-page">
-        <Helmet title="Login" />
-        <div className="login-page__container">
-          <CockroachLabsLockupIcon height={37} />
-          <div className="content">
-            <section className="section login-page__form">
-              <div className="form-container">
-                <Text textType={TextTypes.Heading2}>
-                  Log in to the DB Console
-                </Text>
-                {this.renderError()}
-                <PasswordLoginForm {...this.props} />
-                <OIDCLoginConnected loginState={loginState} />
-                <OIDCGenerateJWTAuthTokenConnected loginState={loginState} />
-              </div>
-            </section>
-            <section className="section login-page__info">
-              <Text textType={TextTypes.Heading3}>
-                A user with a password is required to log in to the DB Console
-                on secure clusters.
+  return (
+    <div className="login-page">
+      <Helmet title="Login" />
+      <div className="login-page__container">
+        <CockroachLabsLockupIcon height={37} />
+        <div className="content">
+          <section className="section login-page__form">
+            <div className="form-container">
+              <Text textType={TextTypes.Heading2}>
+                Log in to the DB Console
               </Text>
-              <Text textType={TextTypes.Heading5}>
-                Create a user with this SQL command:
-              </Text>
-              <pre className="login-note-box__sql-command">
-                <span className="sql-keyword">CREATE USER</span> craig{" "}
-                <span className="sql-keyword">WITH PASSWORD</span>{" "}
-                <span className="sql-string">'cockroach'</span>
-                <span className="sql-keyword">;</span>
-              </pre>
-              <p className="aside">
-                <a
-                  href={docsURL.adminUILoginNoVersion}
-                  className="login-docs-link"
-                  target="_blank"
-                  rel="noreferrer"
-                >
-                  <span className="login-docs-link__text">
-                    Read more about configuring login
-                  </span>
-                </a>
-              </p>
-            </section>
-          </div>
+              {renderError()}
+              <PasswordLoginForm
+                loginState={loginState}
+                handleLogin={handleLogin}
+              />
+              <OIDCLoginConnected loginState={loginState} />
+              <OIDCGenerateJWTAuthTokenConnected loginState={loginState} />
+            </div>
+          </section>
+          <section className="section login-page__info">
+            <Text textType={TextTypes.Heading3}>
+              A user with a password is required to log in to the DB Console on
+              secure clusters.
+            </Text>
+            <Text textType={TextTypes.Heading5}>
+              Create a user with this SQL command:
+            </Text>
+            <pre className="login-note-box__sql-command">
+              <span className="sql-keyword">CREATE USER</span> craig{" "}
+              <span className="sql-keyword">WITH PASSWORD</span>{" "}
+              <span className="sql-string">'cockroach'</span>
+              <span className="sql-keyword">;</span>
+            </pre>
+            <p className="aside">
+              <a
+                href={docsURL.adminUILoginNoVersion}
+                className="login-docs-link"
+                target="_blank"
+                rel="noreferrer"
+              >
+                <span className="login-docs-link__text">
+                  Read more about configuring login
+                </span>
+              </a>
+            </p>
+          </section>
         </div>
       </div>
-    );
-  }
-}
+    </div>
+  );
+};
 
-const LoginPageConnected = withRouter(
-  connect(
-    (state: AdminUIState) => {
-      return {
-        loginState: state.login,
-        location: state.router.location,
-      };
-    },
-    (dispatch: AppDispatch) => ({
-      handleLogin: (username: string, password: string) => {
-        return dispatch(doLogin(username, password));
-      },
-    }),
-  )(LoginPage),
-);
+const LoginPageConnected: React.FC<RouteComponentProps> = ({
+  location,
+  history,
+}) => {
+  const dispatch: AppDispatch = useDispatch();
+  const loginState = useSelector((state: AdminUIState) => state.login);
+
+  const handleLogin = (username: string, password: string) => {
+    return dispatch(doLogin(username, password));
+  };
+
+  return (
+    <LoginPage
+      loginState={loginState}
+      handleLogin={handleLogin}
+      location={location}
+      history={history}
+    />
+  );
+};
 
 export default LoginPageConnected;
