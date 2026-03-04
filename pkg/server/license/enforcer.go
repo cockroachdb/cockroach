@@ -549,6 +549,7 @@ func (e *Enforcer) TestingResetTrialUsage(ctx context.Context) error {
 			return err
 		}
 		e.trialUsageExpiry.Store(0)
+		trialLicenseExpiryTimestamp.Store(0)
 		log.Dev.Infof(ctx, "trial license expiry was reset")
 		return nil
 	})

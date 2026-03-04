@@ -16,9 +16,36 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 )
+
+// LicenseTTLMetadata is the metric metadata for seconds until license expiry.
+var LicenseTTLMetadata = metric.Metadata{
+	// This metric name isn't namespaced for backwards compatibility. The
+	// prior version of this metric was manually inserted into the prometheus
+	// output.
+	Name:        "seconds_until_enterprise_license_expiry",
+	Help:        "Seconds until license expiry (0 if no license present)",
+	Measurement: "Seconds",
+	Unit:        metric.Unit_SECONDS,
+	Visibility:  metric.Metadata_ESSENTIAL,
+	Category:    metric.Metadata_EXPIRATIONS,
+	HowToUse:    "See Description.",
+}
+
+// AdditionalLicenseTTLMetadata is an additional metric for license TTL under
+// a different metric name.
+var AdditionalLicenseTTLMetadata = metric.Metadata{
+	Name:        "seconds_until_license_expiry",
+	Help:        "Seconds until license expiry (0 if no license present)",
+	Measurement: "Seconds",
+	Unit:        metric.Unit_SECONDS,
+	Visibility:  metric.Metadata_ESSENTIAL,
+	Category:    metric.Metadata_EXPIRATIONS,
+	HowToUse:    "See Description.",
+}
 
 // trialLicenseExpiryTimestamp tracks the expiration timestamp of any trial
 // licenses that have been installed on this cluster (past or present).
@@ -135,6 +162,9 @@ func decode(s string) (*licensepb.License, error) {
 func registerCallbackOnLicenseChange(
 	ctx context.Context, st *cluster.Settings, licenseEnforcer *Enforcer,
 ) {
+	if st == nil {
+		return
+	}
 	// refreshFunc is responsible for refreshing the enforcer's state. The
 	// isChange parameter indicates whether the license is actually being
 	// updated, as opposed to merely refreshing the current license.
