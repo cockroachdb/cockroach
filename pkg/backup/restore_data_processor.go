@@ -639,8 +639,12 @@ func (rd *restoreDataProcessor) linkFiles(
 			MVCCStats:               fileStats,
 		}
 
+		linkStart := timeutil.Now()
 		if err := kvDB.LinkExternalSSTable(ctx, restoringSubspan, loc, batchTimestamp); err != nil {
 			return summary, errors.Wrap(err, "linking external SSTable")
+		}
+		if elapsed := timeutil.Since(linkStart); elapsed > 5*time.Second {
+			log.Dev.Infof(ctx, "slow link of file %s span %s took %s", file.Path, restoringSubspan, elapsed)
 		}
 
 		// Call testing knob after each file link, matching the old online restore path.
