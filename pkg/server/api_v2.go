@@ -234,6 +234,10 @@ func registerRoutes(
 		{"dbconsole/insights/statements/", dbconsoleAPI.GetStatementInsights, true, authserver.ViewClusterMetadataRole, true},
 		{"dbconsole/insights/transactions/", dbconsoleAPI.GetTransactionInsights, true, authserver.ViewClusterMetadataRole, true},
 		{"dbconsole/insights/transactions/{txn_execution_id}/", dbconsoleAPI.GetTransactionInsightDetails, true, authserver.ViewClusterMetadataRole, true},
+		{"dbconsole/insights/schema/", dbconsoleAPI.GetSchemaInsights, true, authserver.ViewClusterMetadataRole, true},
+		{"dbconsole/insights/schema/drop-index/", dbconsoleAPI.DropSchemaIndex, true, authserver.RegularRole, true},
+		{"dbconsole/insights/schema/create-index/", dbconsoleAPI.CreateSchemaIndex, true, authserver.RegularRole, true},
+		{"dbconsole/index-details/statements/", dbconsoleAPI.GetStatementsUsingIndex, true, authserver.ViewClusterMetadataRole, true},
 	}
 
 	// For all routes requiring authentication, have the outer mux (a.mux)
