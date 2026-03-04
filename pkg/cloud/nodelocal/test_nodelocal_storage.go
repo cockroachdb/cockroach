@@ -7,7 +7,6 @@ package nodelocal
 
 import (
 	"context"
-	"io"
 	"net/url"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
@@ -80,7 +79,7 @@ func ReplaceNodeLocalForTestingWithInterceptor(
 ) func() {
 	makeFn := func(ctx context.Context, conf cloud.EarlyBootExternalStorageContext, es cloudpb.ExternalStorage) (cloud.ExternalStorage, error) {
 		inner := TestingMakeNodelocalStorage(root, conf.Settings, es)
-		return &interceptingStorage{inner: inner, interceptRead: interceptRead}, nil
+		return &interceptingStorage{ExternalStorage: inner, interceptRead: interceptRead}, nil
 	}
 	parserFn := func(uri *url.URL) (cloudpb.ExternalStorage, error) {
 		if !buildutil.CrdbTestBuild {
@@ -104,42 +103,13 @@ func ReplaceNodeLocalForTestingWithInterceptor(
 // interceptingStorage wraps a cloud.ExternalStorage and calls an interceptor
 // before ReadFile operations.
 type interceptingStorage struct {
-	inner         cloud.ExternalStorage
+	cloud.ExternalStorage
 	interceptRead func(context.Context, string)
 }
 
-var _ cloud.ExternalStorage = &interceptingStorage{}
-
-func (s *interceptingStorage) Close() error { return s.inner.Close() }
-func (s *interceptingStorage) Conf() cloudpb.ExternalStorage {
-	return s.inner.Conf()
-}
-func (s *interceptingStorage) ExternalIOConf() base.ExternalIODirConfig {
-	return s.inner.ExternalIOConf()
-}
-func (s *interceptingStorage) RequiresExternalIOAccounting() bool {
-	return s.inner.RequiresExternalIOAccounting()
-}
-func (s *interceptingStorage) Settings() *cluster.Settings {
-	return s.inner.Settings()
-}
-func (s *interceptingStorage) Writer(ctx context.Context, basename string) (io.WriteCloser, error) {
-	return s.inner.Writer(ctx, basename)
-}
-func (s *interceptingStorage) List(
-	ctx context.Context, prefix string, opts cloud.ListOptions, fn cloud.ListingFn,
-) error {
-	return s.inner.List(ctx, prefix, opts, fn)
-}
-func (s *interceptingStorage) Delete(ctx context.Context, basename string) error {
-	return s.inner.Delete(ctx, basename)
-}
 func (s *interceptingStorage) ReadFile(
 	ctx context.Context, basename string, opts cloud.ReadOptions,
 ) (ioctx.ReadCloserCtx, int64, error) {
 	s.interceptRead(ctx, basename)
-	return s.inner.ReadFile(ctx, basename, opts)
-}
-func (s *interceptingStorage) Size(ctx context.Context, basename string) (int64, error) {
-	return s.inner.Size(ctx, basename)
+	return s.ExternalStorage.ReadFile(ctx, basename, opts)
 }
