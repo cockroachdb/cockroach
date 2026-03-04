@@ -12,6 +12,7 @@ import (
 	"math/rand"
 	"strconv"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"github.com/IBM/sarama"
@@ -477,6 +478,7 @@ func (cmvt *cdcMixedVersionTester) muxRangeFeedSupported(
 
 const v232CV = "23.2"
 const v241CV = "24.1"
+const v254CV = "25.4"
 
 func (cmvt *cdcMixedVersionTester) rangefeedSchedulerSupported(
 	r *rand.Rand, h *mixedversion.Helper,
@@ -614,8 +616,9 @@ func runCDCMixedVersions(ctx context.Context, t test.Test, c cluster.Cluster) {
 	mvt.Run()
 }
 
-// runCDCMixedVersionCheckpointing tests that the new span-level checkpoint
-// code added in 25.2 works correctly in mixed-version states.
+// runCDCMixedVersionCheckpointing tests that changefeed checkpointing works
+// correctly in mixed-version states. This covers both the legacy span-level
+// checkpoint format and the frontier persistence mechanism.
 //
 // Writing the checkpoint is explicitly forced with cluster settings and
 // restoring the checkpoint implicitly happens following each of the rolling
@@ -668,12 +671,37 @@ func runCDCMixedVersionCheckpointing(ctx context.Context, t test.Test, c cluster
 	_ = mvt.Workload("bank", tester.workloadNodes, nil, runWorkloadCmd)
 	_ = mvt.BackgroundFunc("run kafka consumer", tester.runKafkaConsumer)
 
+	// Enable frequent frontier persistence once the cluster is at least
+	// v25.4 (the setting does not exist in older versions).
+	var frontierPersistenceSet atomic.Bool
+	setFrontierPersistence := func(
+		ctx context.Context, l *logger.Logger, r *rand.Rand, h *mixedversion.Helper,
+	) error {
+		if frontierPersistenceSet.Load() {
+			return nil
+		}
+		ok, err := h.ClusterVersionAtLeast(r, v254CV)
+		if err != nil || !ok {
+			return err
+		}
+		l.Printf("setting frontier persistence interval to 5s")
+		if err := h.Exec(r,
+			`SET CLUSTER SETTING changefeed.progress.frontier_persistence.interval = '5s'`,
+		); err != nil {
+			return err
+		}
+		frontierPersistenceSet.Store(true)
+		return nil
+	}
+
 	// Scatter the ranges throughout the test to make it more likely that every
 	// node will participate in the changefeed.
 	mvt.InMixedVersion("scatter ranges", scatter)
+	mvt.InMixedVersion("set frontier persistence", setFrontierPersistence)
 
 	// Validate the changefeed's output both during and after any upgrades.
 	mvt.InMixedVersion("wait and validate", tester.waitAndValidate)
+	mvt.AfterUpgradeFinalized("set frontier persistence", setFrontierPersistence)
 	mvt.AfterUpgradeFinalized("wait and validate", tester.waitAndValidate)
 
 	// Run the test.
