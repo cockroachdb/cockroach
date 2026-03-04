@@ -1002,10 +1002,8 @@ func (g *lockTableGuardImpl) doneActivelyWaitingAtLock() {
 
 // AddReplicatedToResolveAndSignal implements the lockTableGuard interface.
 func (g *lockTableGuardImpl) AddReplicatedToResolveAndSignal(up roachpb.LockUpdate) {
+	g.lt.removeReaderFromKey(g, up.Span.Key)
 	g.toResolve.add(up)
-	g.mu.Lock()
-	defer g.mu.Unlock()
-	g.doneActivelyWaitingAtLock()
 }
 
 func (g *lockTableGuardImpl) txnMeta() *enginepb.TxnMeta {
@@ -5063,6 +5061,31 @@ func stepToNextSpan(g *lockTableGuardImpl) *roachpb.Span {
 // have been pushed above the reader's timestamp.
 func (t *lockTableImpl) batchPushedLockResolution() bool {
 	return BatchPushedLockResolution.Get(&t.settings.SV)
+}
+
+// removeReaderFromKey removes the guard from the waitingReaders list of the
+// keyLocks at the given key, if the guard is present. This is called after a
+// successful push with virtual intent resolution so the guard does not remain
+// as a stale entry in the lock's waiter list.
+func (t *lockTableImpl) removeReaderFromKey(g *lockTableGuardImpl, key roachpb.Key) {
+	t.locks.mu.RLock()
+	iter := t.locks.MakeIter()
+	iter.FirstOverlap(&keyLocks{key: key})
+	if !iter.Valid() {
+		t.locks.mu.RUnlock()
+		return
+	}
+	kl := iter.Cur()
+	t.locks.mu.RUnlock()
+
+	kl.mu.Lock()
+	defer kl.mu.Unlock()
+	for e := kl.waitingReaders.Front(); e != nil; e = e.Next() {
+		if e.Value == g {
+			kl.removeReader(e)
+			return
+		}
+	}
 }
 
 // PushedTransactionUpdated implements the lockTable interface.
