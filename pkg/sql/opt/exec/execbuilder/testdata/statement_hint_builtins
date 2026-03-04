@@ -1603,3 +1603,448 @@ distribution: local
                   spans: FULL SCAN (SOFT LIMIT)
 
 subtest end
+
+subtest routine_with_hint_plan_invalidation
+
+# Test that cached routine body plans are properly invalidated when a matching
+# hint is added or deleted for a routine body statement. The hint cache generation is
+# tracked on opt.Metadata, so CheckDependencies detects when hints change and
+# invalidates the cached plan.
+#
+# We use a prepared statement because chooseValidPreparedMemo explicitly calls
+# IsStale on the cached memo, making the caching behavior deterministic.
+
+# Clean up hints from previous test cases.
+query I
+SELECT information_schema.crdb_delete_statement_hints('SELECT team FROM test.public.drivers WHERE name = _')
+----
+1
+
+statement ok
+SELECT crdb_internal.await_statement_hints_cache()
+
+statement ok
+CREATE FUNCTION ln_stale() RETURNS STRING LANGUAGE SQL STABLE AS $$
+SELECT team FROM drivers WHERE name = 'lando norris';
+$$;
+
+statement ok
+PREPARE p_stale AS SELECT ln_stale()
+
+statement ok
+SET TRACING = "on", cluster;
+
+# Without any hint, the function execution should use drivers_name_idx.
+query T
+EXPLAIN ANALYZE EXECUTE p_stale
+----
+planning time: 10µs
+execution time: 100µs
+distribution: <hidden>
+plan type: generic, reused
+regions: <hidden>
+·
+• root
+│
+├── • values
+│     sql nodes: <hidden>
+│     regions: <hidden>
+│     execution time: 0µs
+│     actual row count: 1
+│     size: 1 column, 1 row
+│
+└── • subquery
+    │ id: @S1
+    │ original sql: <unknown>
+    │ exec mode: one row
+    │
+    └── • scan
+          sql nodes: <hidden>
+          kv nodes: <hidden>
+          regions: <hidden>
+          KV time: 0µs
+          KV rows decoded: 0
+          actual row count: 0
+          missing stats
+          table: drivers@drivers_name_idx
+          spans: [/'lando norris' - /'lando norris']
+          limit: 1
+
+statement ok
+SET tracing = off
+
+query T
+SELECT regexp_replace(split_part(message, ': SELECT', 1), E'\\d+', 'x')
+FROM [SHOW TRACE FOR SESSION]
+WHERE message LIKE '%injected hints%'
+----
+
+statement ok
+SELECT information_schema.crdb_rewrite_inline_hints(
+  'SELECT team FROM test.public.drivers WHERE name = _',
+  'SELECT team FROM test.public.drivers@drivers_pkey WHERE name = _'
+)
+
+statement ok
+SELECT crdb_internal.await_statement_hints_cache()
+
+statement ok
+SET TRACING = "on", cluster;
+
+# With the new hint injected, we should see the function execution now uses
+# drivers_pkey.
+query T
+EXPLAIN ANALYZE EXECUTE p_stale
+----
+planning time: 10µs
+execution time: 100µs
+distribution: <hidden>
+plan type: generic, re-optimized
+regions: <hidden>
+·
+• root
+│
+├── • values
+│     sql nodes: <hidden>
+│     regions: <hidden>
+│     execution time: 0µs
+│     actual row count: 1
+│     size: 1 column, 1 row
+│
+└── • subquery
+    │ id: @S1
+    │ original sql: <unknown>
+    │ exec mode: one row
+    │
+    └── • limit
+        │ count: 1
+        │
+        └── • filter
+            │ sql nodes: <hidden>
+            │ regions: <hidden>
+            │ execution time: 0µs
+            │ actual row count: 0
+            │ filter: name = 'lando norris'
+            │
+            └── • scan
+                  sql nodes: <hidden>
+                  kv nodes: <hidden>
+                  regions: <hidden>
+                  KV time: 0µs
+                  KV rows decoded: 0
+                  actual row count: 0
+                  missing stats
+                  table: drivers@drivers_pkey
+                  spans: FULL SCAN (SOFT LIMIT)
+
+statement ok
+SET tracing = off
+
+query T
+SELECT regexp_replace(split_part(message, ': SELECT', 1), E'\\d+', 'x')
+FROM [SHOW TRACE FOR SESSION]
+WHERE message LIKE '%injected hints%'
+----
+injected hints from external statement hint x
+
+# Re-execute the prepared statement, we should see the same plan, but
+# since we're reusing the cached plan, we should not see another
+# "injected hints" message from the trace.
+statement ok
+SET TRACING = "on", cluster;
+
+query T
+EXPLAIN ANALYZE EXECUTE p_stale
+----
+planning time: 10µs
+execution time: 100µs
+distribution: <hidden>
+plan type: generic, reused
+regions: <hidden>
+·
+• root
+│
+├── • values
+│     sql nodes: <hidden>
+│     regions: <hidden>
+│     execution time: 0µs
+│     actual row count: 1
+│     size: 1 column, 1 row
+│
+└── • subquery
+    │ id: @S1
+    │ original sql: <unknown>
+    │ exec mode: one row
+    │
+    └── • limit
+        │ count: 1
+        │
+        └── • filter
+            │ sql nodes: <hidden>
+            │ regions: <hidden>
+            │ execution time: 0µs
+            │ actual row count: 0
+            │ filter: name = 'lando norris'
+            │
+            └── • scan
+                  sql nodes: <hidden>
+                  kv nodes: <hidden>
+                  regions: <hidden>
+                  KV time: 0µs
+                  KV rows decoded: 0
+                  actual row count: 0
+                  missing stats
+                  table: drivers@drivers_pkey
+                  spans: FULL SCAN (SOFT LIMIT)
+
+statement ok
+SET tracing = off
+
+query empty
+SELECT regexp_replace(split_part(message, ': SELECT', 1), E'\\d+', 'x')
+FROM [SHOW TRACE FOR SESSION]
+WHERE message LIKE '%injected hints%'
+----
+
+# Inject a new hint, we should see the plan changed to using drivers_team.
+statement ok
+CREATE INDEX drivers_team ON drivers (team)
+
+statement ok
+SELECT information_schema.crdb_rewrite_inline_hints(
+  'SELECT team FROM test.public.drivers WHERE name = _',
+  'SELECT team FROM test.public.drivers@drivers_team WHERE name = _'
+)
+
+statement ok
+SELECT crdb_internal.await_statement_hints_cache()
+
+statement ok
+SET TRACING = "on", cluster;
+
+query T
+EXPLAIN ANALYZE EXECUTE p_stale
+----
+planning time: 10µs
+execution time: 100µs
+distribution: <hidden>
+plan type: generic, re-optimized
+regions: <hidden>
+·
+• root
+│
+├── • values
+│     sql nodes: <hidden>
+│     regions: <hidden>
+│     execution time: 0µs
+│     actual row count: 1
+│     size: 1 column, 1 row
+│
+└── • subquery
+    │ id: @S1
+    │ original sql: <unknown>
+    │ exec mode: one row
+    │
+    └── • limit
+        │ count: 1
+        │
+        └── • filter
+            │ sql nodes: <hidden>
+            │ regions: <hidden>
+            │ execution time: 0µs
+            │ actual row count: 0
+            │ filter: name = 'lando norris'
+            │
+            └── • index join (streamer)
+                │ sql nodes: <hidden>
+                │ regions: <hidden>
+                │ KV time: 0µs
+                │ KV rows decoded: 0
+                │ actual row count: 0
+                │ table: drivers@drivers_pkey
+                │
+                └── • scan
+                      sql nodes: <hidden>
+                      kv nodes: <hidden>
+                      regions: <hidden>
+                      KV time: 0µs
+                      KV rows decoded: 0
+                      actual row count: 0
+                      missing stats
+                      table: drivers@drivers_team
+                      spans: FULL SCAN (SOFT LIMIT)
+
+statement ok
+SET tracing = off
+
+query T
+SELECT regexp_replace(split_part(message, ': SELECT', 1), E'\\d+', 'x')
+FROM [SHOW TRACE FOR SESSION]
+WHERE message LIKE '%injected hints%'
+----
+injected hints from external statement hint x
+
+# Add a statement hint that is totally irrelevant to the routine body,
+# but because it advances the hint cache generation, it will trigger
+# the rebuild of routine plan.
+statement ok
+SELECT information_schema.crdb_rewrite_inline_hints(
+  'SELECT team FROM test.public.motogpdrivers WHERE name = _',
+  'SELECT team FROM test.public.motogpdrivers@drivers_team WHERE name = _'
+)
+
+statement ok
+SELECT crdb_internal.await_statement_hints_cache()
+
+statement ok
+SET TRACING = "on", cluster;
+
+statement ok
+EXECUTE p_stale
+
+statement ok
+SET tracing = off
+
+query T
+SELECT regexp_replace(split_part(message, ': SELECT', 1), E'\\d+', 'x')
+FROM [SHOW TRACE FOR SESSION]
+WHERE message LIKE '%injected hints%'
+----
+injected hints from external statement hint x
+
+# Test with removing hints for fingerprint, which should trigger
+# plan invalidation for functions and thus trigger re-injection of
+# statement hint.
+query T
+SELECT
+crdb_internal.pb_to_json('hintpb.StatementHintUnion', hint)->'injectHints'->>'donorSql'
+AS donor_sql FROM system.statement_hints
+WHERE fingerprint LIKE '%SELECT team FROM test.public.drivers WHERE name = _%'
+ORDER BY "created_at" DESC;
+----
+SELECT team FROM test.public.drivers@drivers_team WHERE name = _
+SELECT team FROM test.public.drivers@drivers_pkey WHERE name = _
+
+query I
+SELECT information_schema.crdb_delete_statement_hints(row_id)
+FROM [SHOW STATEMENT HINTS FOR 'SELECT team FROM test.public.drivers WHERE name = _' WITH DETAILS]
+WHERE details->>'donorSql' LIKE '%drivers@drivers_team%';
+----
+1
+
+statement ok
+SELECT crdb_internal.await_statement_hints_cache()
+
+statement ok
+SET TRACING = "on", cluster;
+
+query T
+EXPLAIN ANALYZE EXECUTE p_stale
+----
+planning time: 10µs
+execution time: 100µs
+distribution: <hidden>
+plan type: generic, re-optimized
+regions: <hidden>
+·
+• root
+│
+├── • values
+│     sql nodes: <hidden>
+│     regions: <hidden>
+│     execution time: 0µs
+│     actual row count: 1
+│     size: 1 column, 1 row
+│
+└── • subquery
+    │ id: @S1
+    │ original sql: <unknown>
+    │ exec mode: one row
+    │
+    └── • limit
+        │ count: 1
+        │
+        └── • filter
+            │ sql nodes: <hidden>
+            │ regions: <hidden>
+            │ execution time: 0µs
+            │ actual row count: 0
+            │ filter: name = 'lando norris'
+            │
+            └── • scan
+                  sql nodes: <hidden>
+                  kv nodes: <hidden>
+                  regions: <hidden>
+                  KV time: 0µs
+                  KV rows decoded: 0
+                  actual row count: 0
+                  missing stats
+                  table: drivers@drivers_pkey
+                  spans: FULL SCAN (SOFT LIMIT)
+
+statement ok
+SET tracing = off
+
+query T
+SELECT regexp_replace(split_part(message, ': SELECT', 1), E'\\d+', 'x')
+FROM [SHOW TRACE FOR SESSION]
+WHERE message LIKE '%injected hints%'
+----
+injected hints from external statement hint x
+
+query I
+SELECT information_schema.crdb_delete_statement_hints('SELECT team FROM test.public.drivers WHERE name = _')
+----
+1
+
+statement ok
+SELECT crdb_internal.await_statement_hints_cache()
+
+statement ok
+SET TRACING = "on", cluster;
+
+query T
+EXPLAIN ANALYZE EXECUTE p_stale
+----
+planning time: 10µs
+execution time: 100µs
+distribution: <hidden>
+plan type: generic, re-optimized
+regions: <hidden>
+·
+• root
+│
+├── • values
+│     sql nodes: <hidden>
+│     regions: <hidden>
+│     execution time: 0µs
+│     actual row count: 1
+│     size: 1 column, 1 row
+│
+└── • subquery
+    │ id: @S1
+    │ original sql: <unknown>
+    │ exec mode: one row
+    │
+    └── • scan
+          sql nodes: <hidden>
+          kv nodes: <hidden>
+          regions: <hidden>
+          KV time: 0µs
+          KV rows decoded: 0
+          actual row count: 0
+          missing stats
+          table: drivers@drivers_name_idx
+          spans: [/'lando norris' - /'lando norris']
+          limit: 1
+
+statement ok
+SET tracing = off
+
+query T
+SELECT regexp_replace(split_part(message, ': SELECT', 1), E'\\d+', 'x')
+FROM [SHOW TRACE FOR SESSION]
+WHERE message LIKE '%injected hints%'
+----
+
+subtest end

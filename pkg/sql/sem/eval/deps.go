@@ -515,6 +515,11 @@ type Planner interface {
 	// statement.
 	GetHintIDs() []int64
 
+	// GetHintCacheGeneration returns the current generation of the statement
+	// hints cache. This is used during staleness checking to detect when
+	// hints may have changed for routine body statements.
+	GetHintCacheGeneration() int64
+
 	// LogEvent logs an event to both the system.eventlog table and external
 	// structured logs. This is exposed on the Planner interface to allow builtins
 	// to log events.
