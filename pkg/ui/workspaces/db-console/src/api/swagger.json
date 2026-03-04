@@ -9,6 +9,747 @@
     "host": "localhost:8080",
     "basePath": "/api/v2/dbconsole",
     "paths": {
+        "/cluster-locks": {
+            "get": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "description": "Returns contended cluster locks from",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Contention"
+                ],
+                "summary": "Get cluster locks",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/dbconsole.ClusterLocksResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/dbconsole.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/contention": {
+            "get": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "description": "Returns contention events from",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Contention"
+                ],
+                "summary": "Get contention details",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Filter by waiting transaction ID",
+                        "name": "waiting_txn_id",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Filter by waiting statement ID",
+                        "name": "waiting_stmt_id",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Start time filter (RFC3339)",
+                        "name": "start",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "End time filter (RFC3339)",
+                        "name": "end",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/dbconsole.ContentionResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Invalid parameter",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/dbconsole.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/databases": {
+            "get": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "description": "Returns the list of all databases in the cluster.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Databases"
+                ],
+                "summary": "List databases",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/dbconsole.DatabasesResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/dbconsole.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/events": {
+            "get": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "description": "Returns events from the system event log.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Events"
+                ],
+                "summary": "Get events",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Filter by event type",
+                        "name": "type",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Maximum number of results (default 1000)",
+                        "name": "limit",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Offset for pagination",
+                        "name": "offset",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/dbconsole.EventsResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Invalid parameter",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/dbconsole.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/explain-plan": {
+            "get": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "description": "Decodes a plan gist into a human-readable explain plan.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Plans"
+                ],
+                "summary": "Decode plan gist",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "The plan gist to decode",
+                        "name": "plan_gist",
+                        "in": "query",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/dbconsole.ExplainPlanResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Missing plan_gist parameter",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/dbconsole.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/index-details/statements": {
+            "get": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "description": "Returns statements from",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "IndexDetails"
+                ],
+                "summary": "Get statements using index",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Table name",
+                        "name": "table",
+                        "in": "query",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Index name",
+                        "name": "index",
+                        "in": "query",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Database name",
+                        "name": "database",
+                        "in": "query",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Start time (RFC3339)",
+                        "name": "start",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "End time (RFC3339)",
+                        "name": "end",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/dbconsole.StatementsUsingIndexResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Missing required parameter",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/dbconsole.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/index-recommendations": {
+            "get": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "description": "Returns index recommendations for a statement identified by",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Plans"
+                ],
+                "summary": "Get index recommendations",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Plan gist",
+                        "name": "plan_gist",
+                        "in": "query",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Application name",
+                        "name": "app_name",
+                        "in": "query",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Query text",
+                        "name": "query",
+                        "in": "query",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/dbconsole.IndexRecommendationsResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Missing required parameter",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/dbconsole.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/insights/schema": {
+            "get": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "description": "Returns schema-level insight recommendations including unused",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Insights"
+                ],
+                "summary": "Get schema insights",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/dbconsole.SchemaInsightsResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/dbconsole.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/insights/schema/create-index": {
+            "post": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "description": "Looks up a statement by fingerprint ID, verifies the",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "IndexActions"
+                ],
+                "summary": "Create a schema index from a recommendation",
+                "parameters": [
+                    {
+                        "description": "Recommendation details",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/dbconsole.CreateSchemaIndexRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "ok",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "400": {
+                        "description": "Invalid request",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal server error",
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                }
+            }
+        },
+        "/insights/schema/drop-index": {
+            "post": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "description": "Drops a specific index by constructing a DROP INDEX statement",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "IndexActions"
+                ],
+                "summary": "Drop a schema index",
+                "parameters": [
+                    {
+                        "description": "Index identifiers",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/dbconsole.DropSchemaIndexRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "ok",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "400": {
+                        "description": "Invalid request",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal server error",
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                }
+            }
+        },
+        "/insights/statements": {
+            "get": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "description": "Returns statement execution insights from",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Insights"
+                ],
+                "summary": "Get statement insights",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Start time (RFC3339)",
+                        "name": "start",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "End time (RFC3339)",
+                        "name": "end",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Filter by statement execution ID",
+                        "name": "stmt_execution_id",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Filter by statement fingerprint ID (hex)",
+                        "name": "stmt_fingerprint_id",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/dbconsole.StmtInsightsResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Invalid parameter",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/dbconsole.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/insights/transactions": {
+            "get": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "description": "Returns transaction execution insights from",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Insights"
+                ],
+                "summary": "Get transaction insights",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Start time (RFC3339)",
+                        "name": "start",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "End time (RFC3339)",
+                        "name": "end",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Filter by transaction execution ID",
+                        "name": "txn_execution_id",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Filter by transaction fingerprint ID (hex)",
+                        "name": "txn_fingerprint_id",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/dbconsole.TxnInsightsResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Invalid parameter",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/dbconsole.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/insights/transactions/{txn_execution_id}": {
+            "get": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "description": "Returns comprehensive details for a specific transaction",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Insights"
+                ],
+                "summary": "Get transaction insight details",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Transaction execution ID (UUID)",
+                        "name": "txn_execution_id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Start time (RFC3339)",
+                        "name": "start",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "End time (RFC3339)",
+                        "name": "end",
+                        "in": "query"
+                    },
+                    {
+                        "type": "boolean",
+                        "description": "Exclude statement insights",
+                        "name": "exclude_stmts",
+                        "in": "query"
+                    },
+                    {
+                        "type": "boolean",
+                        "description": "Exclude transaction details",
+                        "name": "exclude_txn",
+                        "in": "query"
+                    },
+                    {
+                        "type": "boolean",
+                        "description": "Exclude contention details",
+                        "name": "exclude_contention",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/dbconsole.TxnInsightDetailsResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Invalid parameter",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/dbconsole.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/jobs/{job_id}/collect-execution-details": {
+            "post": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "description": "Triggers collection of execution details for the specified job.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Jobs"
+                ],
+                "summary": "Collect job execution details",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Job ID",
+                        "name": "job_id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/dbconsole.CollectExecutionDetailsResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Invalid job_id",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/dbconsole.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/nodes": {
             "get": {
                 "security": [
@@ -39,15 +780,356 @@
                     }
                 }
             }
+        },
+        "/schedules": {
+            "get": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "description": "Returns the list of schedules, optionally filtered by status.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Schedules"
+                ],
+                "summary": "List schedules",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Filter by schedule status",
+                        "name": "status",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Maximum number of results",
+                        "name": "limit",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/dbconsole.SchedulesResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Invalid parameter",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/dbconsole.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/schedules/{schedule_id}": {
+            "get": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "description": "Returns details for a specific schedule.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Schedules"
+                ],
+                "summary": "Get schedule",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Schedule ID",
+                        "name": "schedule_id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/dbconsole.ScheduleInfo"
+                        }
+                    },
+                    "400": {
+                        "description": "Invalid schedule_id",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "404": {
+                        "description": "Schedule not found",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/dbconsole.ErrorResponse"
+                        }
+                    }
+                }
+            }
         }
     },
     "definitions": {
+        "dbconsole.ClusterLockInfo": {
+            "type": "object",
+            "properties": {
+                "database_name": {
+                    "description": "DatabaseName is the database containing the locked key.",
+                    "type": "string"
+                },
+                "hold_time": {
+                    "description": "HoldTime is the duration the lock has been held.",
+                    "type": "string"
+                },
+                "index_name": {
+                    "description": "IndexName is the index containing the locked key.",
+                    "type": "string"
+                },
+                "lock_holder_txn_id": {
+                    "description": "LockHolderTxnID is the ID of the transaction holding the lock.",
+                    "type": "string"
+                },
+                "table_name": {
+                    "description": "TableName is the table containing the locked key.",
+                    "type": "string"
+                },
+                "waiters": {
+                    "description": "Waiters is the list of transactions waiting on this lock.",
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/dbconsole.ClusterLockWaiter"
+                    }
+                }
+            }
+        },
+        "dbconsole.ClusterLockWaiter": {
+            "type": "object",
+            "properties": {
+                "txn_id": {
+                    "description": "TxnID is the ID of the waiting transaction.",
+                    "type": "string"
+                },
+                "wait_time": {
+                    "description": "WaitTime is the duration the transaction has been waiting.",
+                    "type": "string"
+                }
+            }
+        },
+        "dbconsole.ClusterLocksResponse": {
+            "type": "object",
+            "properties": {
+                "locks": {
+                    "description": "Locks is the list of contended locks, grouped by lock key.",
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/dbconsole.ClusterLockInfo"
+                    }
+                }
+            }
+        },
+        "dbconsole.CollectExecutionDetailsResponse": {
+            "type": "object",
+            "properties": {
+                "success": {
+                    "description": "Success is true if the collection request was submitted successfully.",
+                    "type": "boolean"
+                }
+            }
+        },
+        "dbconsole.ContentionEvent": {
+            "type": "object",
+            "properties": {
+                "blocking_txn_fingerprint_id": {
+                    "description": "BlockingTxnFingerprintID is the fingerprint ID of the blocking\ntransaction.",
+                    "type": "string"
+                },
+                "blocking_txn_id": {
+                    "description": "BlockingTxnID is the ID of the blocking transaction.",
+                    "type": "string"
+                },
+                "collection_ts": {
+                    "description": "CollectionTS is the timestamp when the event was collected.",
+                    "type": "string"
+                },
+                "contention_duration": {
+                    "description": "ContentionDuration is the duration of the contention event.",
+                    "type": "string"
+                },
+                "contention_type": {
+                    "description": "ContentionType is the type of contention (e.g. LOCK_WAIT).",
+                    "type": "string"
+                },
+                "database_name": {
+                    "description": "DatabaseName is the database where contention occurred.",
+                    "type": "string"
+                },
+                "index_name": {
+                    "description": "IndexName is the index where contention occurred.",
+                    "type": "string"
+                },
+                "key": {
+                    "description": "Key is the contended key.",
+                    "type": "string"
+                },
+                "table_name": {
+                    "description": "TableName is the table where contention occurred.",
+                    "type": "string"
+                },
+                "waiting_stmt_id": {
+                    "description": "WaitingStmtID is the ID of the waiting statement.",
+                    "type": "string"
+                },
+                "waiting_txn_id": {
+                    "description": "WaitingTxnID is the ID of the waiting transaction.",
+                    "type": "string"
+                }
+            }
+        },
+        "dbconsole.ContentionResponse": {
+            "type": "object",
+            "properties": {
+                "contention_events": {
+                    "description": "ContentionEvents is the list of contention events.",
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/dbconsole.ContentionEvent"
+                    }
+                }
+            }
+        },
+        "dbconsole.CreateSchemaIndexRequest": {
+            "type": "object",
+            "properties": {
+                "database": {
+                    "description": "Database is the database context for execution.",
+                    "type": "string"
+                },
+                "fingerprint_id": {
+                    "description": "FingerprintID is the hex-encoded fingerprint ID of the statement.",
+                    "type": "string"
+                },
+                "recommendation": {
+                    "description": "Recommendation is the CREATE INDEX recommendation string, which\nmust match an entry in the statement's index_recommendations array.",
+                    "type": "string"
+                }
+            }
+        },
+        "dbconsole.DatabasesResponse": {
+            "type": "object",
+            "properties": {
+                "databases": {
+                    "description": "Databases is the list of database names.",
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                }
+            }
+        },
+        "dbconsole.DropSchemaIndexRequest": {
+            "type": "object",
+            "properties": {
+                "database": {
+                    "description": "Database is the database containing the table.",
+                    "type": "string"
+                },
+                "index": {
+                    "description": "Index is the index name.",
+                    "type": "string"
+                },
+                "schema": {
+                    "description": "Schema is the schema containing the table (e.g. \"public\").",
+                    "type": "string"
+                },
+                "table": {
+                    "description": "Table is the table name.",
+                    "type": "string"
+                }
+            }
+        },
         "dbconsole.ErrorResponse": {
             "type": "object",
             "properties": {
                 "error": {
                     "description": "Error is the error message.",
                     "type": "string"
+                }
+            }
+        },
+        "dbconsole.EventInfo": {
+            "type": "object",
+            "properties": {
+                "event_type": {
+                    "description": "EventType is the type of event (e.g. \"create_database\").",
+                    "type": "string"
+                },
+                "info": {
+                    "description": "Info is the JSON-encoded event details.",
+                    "type": "string"
+                },
+                "reporting_id": {
+                    "description": "ReportingID is the node ID that reported the event.",
+                    "type": "integer"
+                },
+                "timestamp": {
+                    "description": "Timestamp is the time the event occurred.",
+                    "type": "string"
+                },
+                "unique_id": {
+                    "description": "UniqueID is the unique identifier for this event.",
+                    "type": "array",
+                    "items": {
+                        "type": "integer"
+                    }
+                }
+            }
+        },
+        "dbconsole.EventsResponse": {
+            "type": "object",
+            "properties": {
+                "events": {
+                    "description": "Events is the list of event log entries.",
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/dbconsole.EventInfo"
+                    }
+                }
+            }
+        },
+        "dbconsole.ExplainPlanResponse": {
+            "type": "object",
+            "properties": {
+                "explain_plan": {
+                    "description": "ExplainPlan is the decoded plan gist as a human-readable string.",
+                    "type": "string"
+                }
+            }
+        },
+        "dbconsole.IndexRecommendationsResponse": {
+            "type": "object",
+            "properties": {
+                "recommendations": {
+                    "description": "Recommendations is a list of index recommendation strings (e.g.\n\"CREATE INDEX ...\").",
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
                 }
             }
         },
@@ -112,6 +1194,504 @@
                     "type": "array",
                     "items": {
                         "$ref": "#/definitions/dbconsole.NodeInfo"
+                    }
+                }
+            }
+        },
+        "dbconsole.ScheduleInfo": {
+            "type": "object",
+            "properties": {
+                "command": {
+                    "description": "Command is the schedule command payload.",
+                    "type": "string"
+                },
+                "created": {
+                    "description": "Created is the timestamp when the schedule was created.",
+                    "type": "string"
+                },
+                "id": {
+                    "description": "ID is the unique identifier for the schedule.",
+                    "type": "integer"
+                },
+                "jobs_running": {
+                    "description": "JobsRunning is the number of currently running jobs for this schedule.",
+                    "type": "integer"
+                },
+                "label": {
+                    "description": "Label is the human-readable name of the schedule.",
+                    "type": "string"
+                },
+                "next_run": {
+                    "description": "NextRun is the timestamp of the next scheduled run.",
+                    "type": "string"
+                },
+                "owner": {
+                    "description": "Owner is the user who owns the schedule.",
+                    "type": "string"
+                },
+                "recurrence": {
+                    "description": "Recurrence is the cron-style recurrence pattern.",
+                    "type": "string"
+                },
+                "schedule_status": {
+                    "description": "ScheduleStatus is the current status of the schedule.",
+                    "type": "string"
+                },
+                "state": {
+                    "description": "State is the schedule state.",
+                    "type": "string"
+                }
+            }
+        },
+        "dbconsole.SchedulesResponse": {
+            "type": "object",
+            "properties": {
+                "schedules": {
+                    "description": "Schedules is the list of schedules.",
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/dbconsole.ScheduleInfo"
+                    }
+                }
+            }
+        },
+        "dbconsole.SchemaInsightExecution": {
+            "type": "object",
+            "properties": {
+                "fingerprint_id": {
+                    "description": "FingerprintID is the statement fingerprint ID.",
+                    "type": "string"
+                },
+                "statement": {
+                    "description": "Statement is the full SQL statement text.",
+                    "type": "string"
+                },
+                "summary": {
+                    "description": "Summary is a short summary of the statement.",
+                    "type": "string"
+                }
+            }
+        },
+        "dbconsole.SchemaInsightIndexDetails": {
+            "type": "object",
+            "properties": {
+                "index_name": {
+                    "description": "IndexName is the index name.",
+                    "type": "string"
+                },
+                "schema": {
+                    "description": "Schema is the schema name.",
+                    "type": "string"
+                },
+                "table": {
+                    "description": "Table is the table name.",
+                    "type": "string"
+                }
+            }
+        },
+        "dbconsole.SchemaInsightRecommendation": {
+            "type": "object",
+            "properties": {
+                "database": {
+                    "description": "Database is the database containing the object.",
+                    "type": "string"
+                },
+                "execution": {
+                    "description": "Execution contains execution context for create-index recommendations.",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/dbconsole.SchemaInsightExecution"
+                        }
+                    ]
+                },
+                "index_details": {
+                    "description": "IndexDetails contains index-specific metadata for the recommendation.",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/dbconsole.SchemaInsightIndexDetails"
+                        }
+                    ]
+                },
+                "query": {
+                    "description": "Query is the recommended DDL statement (e.g. \"DROP INDEX ...\").",
+                    "type": "string"
+                },
+                "type": {
+                    "description": "Type is the recommendation type (DropIndex, CreateIndex, ReplaceIndex,\nAlterIndex).",
+                    "type": "string"
+                }
+            }
+        },
+        "dbconsole.SchemaInsightsResponse": {
+            "type": "object",
+            "properties": {
+                "recommendations": {
+                    "description": "Recommendations is the list of schema insight recommendations.",
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/dbconsole.SchemaInsightRecommendation"
+                    }
+                }
+            }
+        },
+        "dbconsole.StatementUsingIndex": {
+            "type": "object",
+            "properties": {
+                "app_name": {
+                    "description": "AppName is the application name that executed the statement.",
+                    "type": "string"
+                },
+                "count": {
+                    "description": "Count is the number of times this statement was executed.",
+                    "type": "integer"
+                },
+                "database": {
+                    "description": "Database is the database the statement was executed in.",
+                    "type": "string"
+                },
+                "fingerprint_id": {
+                    "description": "FingerprintID is the hex-encoded statement fingerprint ID.",
+                    "type": "string"
+                },
+                "implicit_txn": {
+                    "description": "ImplicitTxn indicates whether the statement ran in an implicit\ntransaction.",
+                    "type": "boolean"
+                },
+                "index_recommendations": {
+                    "description": "IndexRecommendations is the list of index recommendations for this\nstatement.",
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "query": {
+                    "description": "Query is the statement SQL text.",
+                    "type": "string"
+                },
+                "query_summary": {
+                    "description": "QuerySummary is a short summary of the statement.",
+                    "type": "string"
+                }
+            }
+        },
+        "dbconsole.StatementsUsingIndexResponse": {
+            "type": "object",
+            "properties": {
+                "statements": {
+                    "description": "Statements is the list of statements using the specified index.",
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/dbconsole.StatementUsingIndex"
+                    }
+                }
+            }
+        },
+        "dbconsole.StmtInsight": {
+            "type": "object",
+            "properties": {
+                "app_name": {
+                    "type": "string"
+                },
+                "causes": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "contention": {
+                    "type": "string"
+                },
+                "contention_events": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/dbconsole.StmtInsightContentionEvent"
+                    }
+                },
+                "cpu_sql_nanos": {
+                    "type": "integer"
+                },
+                "database_name": {
+                    "type": "string"
+                },
+                "end_time": {
+                    "type": "string"
+                },
+                "error_code": {
+                    "type": "string"
+                },
+                "full_scan": {
+                    "type": "boolean"
+                },
+                "implicit_txn": {
+                    "type": "boolean"
+                },
+                "index_recommendations": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "last_retry_reason": {
+                    "type": "string"
+                },
+                "plan_gist": {
+                    "type": "string"
+                },
+                "priority": {
+                    "type": "string"
+                },
+                "problem": {
+                    "type": "string"
+                },
+                "query": {
+                    "type": "string"
+                },
+                "retries": {
+                    "type": "integer"
+                },
+                "rows_read": {
+                    "type": "integer"
+                },
+                "rows_written": {
+                    "type": "integer"
+                },
+                "session_id": {
+                    "type": "string"
+                },
+                "start_time": {
+                    "type": "string"
+                },
+                "status": {
+                    "type": "string"
+                },
+                "stmt_fingerprint_id": {
+                    "type": "string"
+                },
+                "stmt_id": {
+                    "type": "string"
+                },
+                "txn_fingerprint_id": {
+                    "type": "string"
+                },
+                "txn_id": {
+                    "type": "string"
+                },
+                "user_name": {
+                    "type": "string"
+                }
+            }
+        },
+        "dbconsole.StmtInsightContentionEvent": {
+            "type": "object",
+            "properties": {
+                "blocking_txn_id": {
+                    "description": "BlockingTxnID is the ID of the blocking transaction.",
+                    "type": "string"
+                },
+                "contended_key": {
+                    "description": "ContendedKey is the key that was contended.",
+                    "type": "string"
+                },
+                "contention_duration": {
+                    "description": "ContentionDuration is the duration of the contention event.",
+                    "type": "string"
+                },
+                "index_name": {
+                    "description": "IndexName is the index where contention occurred.",
+                    "type": "string"
+                },
+                "table_name": {
+                    "description": "TableName is the table where contention occurred.",
+                    "type": "string"
+                }
+            }
+        },
+        "dbconsole.StmtInsightsResponse": {
+            "type": "object",
+            "properties": {
+                "statements": {
+                    "description": "Statements is the list of statement insights.",
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/dbconsole.StmtInsight"
+                    }
+                }
+            }
+        },
+        "dbconsole.TxnInsight": {
+            "type": "object",
+            "properties": {
+                "app_name": {
+                    "type": "string"
+                },
+                "causes": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "contention": {
+                    "type": "string"
+                },
+                "cpu_sql_nanos": {
+                    "type": "integer"
+                },
+                "end_time": {
+                    "type": "string"
+                },
+                "implicit_txn": {
+                    "type": "boolean"
+                },
+                "last_error_code": {
+                    "type": "string"
+                },
+                "priority": {
+                    "type": "string"
+                },
+                "problems": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "query": {
+                    "type": "string"
+                },
+                "retries": {
+                    "type": "integer"
+                },
+                "rows_read": {
+                    "type": "integer"
+                },
+                "rows_written": {
+                    "type": "integer"
+                },
+                "session_id": {
+                    "type": "string"
+                },
+                "start_time": {
+                    "type": "string"
+                },
+                "status": {
+                    "type": "string"
+                },
+                "stmt_execution_ids": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "txn_fingerprint_id": {
+                    "type": "string"
+                },
+                "txn_id": {
+                    "type": "string"
+                },
+                "user_name": {
+                    "type": "string"
+                }
+            }
+        },
+        "dbconsole.TxnInsightContention": {
+            "type": "object",
+            "properties": {
+                "blocking_txn_id": {
+                    "description": "BlockingTxnID is the ID of the blocking transaction.",
+                    "type": "string"
+                },
+                "blocking_txn_queries": {
+                    "description": "BlockingTxnQueries contains the queries run by the blocking transaction.",
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "contended_key": {
+                    "description": "ContendedKey is the key that was contended.",
+                    "type": "string"
+                },
+                "contention_duration": {
+                    "description": "ContentionDuration is the duration of the contention event.",
+                    "type": "string"
+                },
+                "contention_type": {
+                    "description": "ContentionType is the type of contention.",
+                    "type": "string"
+                },
+                "index_name": {
+                    "description": "IndexName is the index where contention occurred.",
+                    "type": "string"
+                },
+                "table_name": {
+                    "description": "TableName is the table where contention occurred.",
+                    "type": "string"
+                }
+            }
+        },
+        "dbconsole.TxnInsightDetailsErrors": {
+            "type": "object",
+            "properties": {
+                "contention_err": {
+                    "description": "ContentionErr is set if the contention details query failed.",
+                    "type": "string"
+                },
+                "statements_err": {
+                    "description": "StatementsErr is set if the statement insights query failed.",
+                    "type": "string"
+                },
+                "txn_details_err": {
+                    "description": "TxnDetailsErr is set if the transaction details query failed.",
+                    "type": "string"
+                }
+            }
+        },
+        "dbconsole.TxnInsightDetailsResponse": {
+            "type": "object",
+            "properties": {
+                "contention_details": {
+                    "description": "ContentionDetails contains enriched contention events.",
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/dbconsole.TxnInsightContention"
+                    }
+                },
+                "errors": {
+                    "description": "Errors tracks which sub-queries failed.",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/dbconsole.TxnInsightDetailsErrors"
+                        }
+                    ]
+                },
+                "statements": {
+                    "description": "Statements contains the statement insights for this transaction.",
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/dbconsole.StmtInsight"
+                    }
+                },
+                "txn_details": {
+                    "description": "TxnDetails contains the transaction-level insight, if available.",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/dbconsole.TxnInsight"
+                        }
+                    ]
+                },
+                "txn_execution_id": {
+                    "description": "TxnExecutionID is the execution ID being queried.",
+                    "type": "string"
+                }
+            }
+        },
+        "dbconsole.TxnInsightsResponse": {
+            "type": "object",
+            "properties": {
+                "transactions": {
+                    "description": "Transactions is the list of transaction insights.",
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/dbconsole.TxnInsight"
                     }
                 }
             }

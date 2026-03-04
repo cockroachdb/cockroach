@@ -4,6 +4,859 @@
  */
 
 export interface paths {
+    "/cluster-locks": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get cluster locks
+         * @description Returns contended cluster locks from
+         */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["dbconsole.ClusterLocksResponse"];
+                    };
+                };
+                /** @description Internal Server Error */
+                500: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["dbconsole.ErrorResponse"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/contention": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get contention details
+         * @description Returns contention events from
+         */
+        get: {
+            parameters: {
+                query?: {
+                    /** @description Filter by waiting transaction ID */
+                    waiting_txn_id?: string;
+                    /** @description Filter by waiting statement ID */
+                    waiting_stmt_id?: string;
+                    /** @description Start time filter (RFC3339) */
+                    start?: string;
+                    /** @description End time filter (RFC3339) */
+                    end?: string;
+                };
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["dbconsole.ContentionResponse"];
+                    };
+                };
+                /** @description Invalid parameter */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": string;
+                    };
+                };
+                /** @description Internal Server Error */
+                500: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["dbconsole.ErrorResponse"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/databases": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List databases
+         * @description Returns the list of all databases in the cluster.
+         */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["dbconsole.DatabasesResponse"];
+                    };
+                };
+                /** @description Internal Server Error */
+                500: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["dbconsole.ErrorResponse"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/events": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get events
+         * @description Returns events from the system event log.
+         */
+        get: {
+            parameters: {
+                query?: {
+                    /** @description Filter by event type */
+                    type?: string;
+                    /** @description Maximum number of results (default 1000) */
+                    limit?: number;
+                    /** @description Offset for pagination */
+                    offset?: number;
+                };
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["dbconsole.EventsResponse"];
+                    };
+                };
+                /** @description Invalid parameter */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": string;
+                    };
+                };
+                /** @description Internal Server Error */
+                500: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["dbconsole.ErrorResponse"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/explain-plan": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Decode plan gist
+         * @description Decodes a plan gist into a human-readable explain plan.
+         */
+        get: {
+            parameters: {
+                query: {
+                    /** @description The plan gist to decode */
+                    plan_gist: string;
+                };
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["dbconsole.ExplainPlanResponse"];
+                    };
+                };
+                /** @description Missing plan_gist parameter */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": string;
+                    };
+                };
+                /** @description Internal Server Error */
+                500: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["dbconsole.ErrorResponse"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/index-details/statements": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get statements using index
+         * @description Returns statements from
+         */
+        get: {
+            parameters: {
+                query: {
+                    /** @description Table name */
+                    table: string;
+                    /** @description Index name */
+                    index: string;
+                    /** @description Database name */
+                    database: string;
+                    /** @description Start time (RFC3339) */
+                    start?: string;
+                    /** @description End time (RFC3339) */
+                    end?: string;
+                };
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["dbconsole.StatementsUsingIndexResponse"];
+                    };
+                };
+                /** @description Missing required parameter */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": string;
+                    };
+                };
+                /** @description Internal Server Error */
+                500: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["dbconsole.ErrorResponse"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/index-recommendations": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get index recommendations
+         * @description Returns index recommendations for a statement identified by
+         */
+        get: {
+            parameters: {
+                query: {
+                    /** @description Plan gist */
+                    plan_gist: string;
+                    /** @description Application name */
+                    app_name: string;
+                    /** @description Query text */
+                    query: string;
+                };
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["dbconsole.IndexRecommendationsResponse"];
+                    };
+                };
+                /** @description Missing required parameter */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": string;
+                    };
+                };
+                /** @description Internal Server Error */
+                500: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["dbconsole.ErrorResponse"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/insights/schema": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get schema insights
+         * @description Returns schema-level insight recommendations including unused
+         */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["dbconsole.SchemaInsightsResponse"];
+                    };
+                };
+                /** @description Internal Server Error */
+                500: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["dbconsole.ErrorResponse"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/insights/schema/create-index": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Create a schema index from a recommendation
+         * @description Looks up a statement by fingerprint ID, verifies the
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            /** @description Recommendation details */
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["dbconsole.CreateSchemaIndexRequest"];
+                };
+            };
+            responses: {
+                /** @description ok */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": string;
+                    };
+                };
+                /** @description Invalid request */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": string;
+                    };
+                };
+                /** @description Internal server error */
+                500: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": string;
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/insights/schema/drop-index": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Drop a schema index
+         * @description Drops a specific index by constructing a DROP INDEX statement
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            /** @description Index identifiers */
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["dbconsole.DropSchemaIndexRequest"];
+                };
+            };
+            responses: {
+                /** @description ok */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": string;
+                    };
+                };
+                /** @description Invalid request */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": string;
+                    };
+                };
+                /** @description Internal server error */
+                500: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": string;
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/insights/statements": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get statement insights
+         * @description Returns statement execution insights from
+         */
+        get: {
+            parameters: {
+                query?: {
+                    /** @description Start time (RFC3339) */
+                    start?: string;
+                    /** @description End time (RFC3339) */
+                    end?: string;
+                    /** @description Filter by statement execution ID */
+                    stmt_execution_id?: string;
+                    /** @description Filter by statement fingerprint ID (hex) */
+                    stmt_fingerprint_id?: string;
+                };
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["dbconsole.StmtInsightsResponse"];
+                    };
+                };
+                /** @description Invalid parameter */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": string;
+                    };
+                };
+                /** @description Internal Server Error */
+                500: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["dbconsole.ErrorResponse"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/insights/transactions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get transaction insights
+         * @description Returns transaction execution insights from
+         */
+        get: {
+            parameters: {
+                query?: {
+                    /** @description Start time (RFC3339) */
+                    start?: string;
+                    /** @description End time (RFC3339) */
+                    end?: string;
+                    /** @description Filter by transaction execution ID */
+                    txn_execution_id?: string;
+                    /** @description Filter by transaction fingerprint ID (hex) */
+                    txn_fingerprint_id?: string;
+                };
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["dbconsole.TxnInsightsResponse"];
+                    };
+                };
+                /** @description Invalid parameter */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": string;
+                    };
+                };
+                /** @description Internal Server Error */
+                500: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["dbconsole.ErrorResponse"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/insights/transactions/{txn_execution_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get transaction insight details
+         * @description Returns comprehensive details for a specific transaction
+         */
+        get: {
+            parameters: {
+                query?: {
+                    /** @description Start time (RFC3339) */
+                    start?: string;
+                    /** @description End time (RFC3339) */
+                    end?: string;
+                    /** @description Exclude statement insights */
+                    exclude_stmts?: boolean;
+                    /** @description Exclude transaction details */
+                    exclude_txn?: boolean;
+                    /** @description Exclude contention details */
+                    exclude_contention?: boolean;
+                };
+                header?: never;
+                path: {
+                    /** @description Transaction execution ID (UUID) */
+                    txn_execution_id: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["dbconsole.TxnInsightDetailsResponse"];
+                    };
+                };
+                /** @description Invalid parameter */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": string;
+                    };
+                };
+                /** @description Internal Server Error */
+                500: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["dbconsole.ErrorResponse"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/jobs/{job_id}/collect-execution-details": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Collect job execution details
+         * @description Triggers collection of execution details for the specified job.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    /** @description Job ID */
+                    job_id: number;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["dbconsole.CollectExecutionDetailsResponse"];
+                    };
+                };
+                /** @description Invalid job_id */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": string;
+                    };
+                };
+                /** @description Internal Server Error */
+                500: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["dbconsole.ErrorResponse"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/nodes": {
         parameters: {
             query?: never;
@@ -52,13 +905,255 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/schedules": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List schedules
+         * @description Returns the list of schedules, optionally filtered by status.
+         */
+        get: {
+            parameters: {
+                query?: {
+                    /** @description Filter by schedule status */
+                    status?: string;
+                    /** @description Maximum number of results */
+                    limit?: number;
+                };
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["dbconsole.SchedulesResponse"];
+                    };
+                };
+                /** @description Invalid parameter */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": string;
+                    };
+                };
+                /** @description Internal Server Error */
+                500: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["dbconsole.ErrorResponse"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/schedules/{schedule_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get schedule
+         * @description Returns details for a specific schedule.
+         */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    /** @description Schedule ID */
+                    schedule_id: number;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["dbconsole.ScheduleInfo"];
+                    };
+                };
+                /** @description Invalid schedule_id */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": string;
+                    };
+                };
+                /** @description Schedule not found */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": string;
+                    };
+                };
+                /** @description Internal Server Error */
+                500: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["dbconsole.ErrorResponse"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        "dbconsole.ClusterLockInfo": {
+            /** @description DatabaseName is the database containing the locked key. */
+            database_name?: string;
+            /** @description HoldTime is the duration the lock has been held. */
+            hold_time?: string;
+            /** @description IndexName is the index containing the locked key. */
+            index_name?: string;
+            /** @description LockHolderTxnID is the ID of the transaction holding the lock. */
+            lock_holder_txn_id?: string;
+            /** @description TableName is the table containing the locked key. */
+            table_name?: string;
+            /** @description Waiters is the list of transactions waiting on this lock. */
+            waiters?: components["schemas"]["dbconsole.ClusterLockWaiter"][];
+        };
+        "dbconsole.ClusterLockWaiter": {
+            /** @description TxnID is the ID of the waiting transaction. */
+            txn_id?: string;
+            /** @description WaitTime is the duration the transaction has been waiting. */
+            wait_time?: string;
+        };
+        "dbconsole.ClusterLocksResponse": {
+            /** @description Locks is the list of contended locks, grouped by lock key. */
+            locks?: components["schemas"]["dbconsole.ClusterLockInfo"][];
+        };
+        "dbconsole.CollectExecutionDetailsResponse": {
+            /** @description Success is true if the collection request was submitted successfully. */
+            success?: boolean;
+        };
+        "dbconsole.ContentionEvent": {
+            /**
+             * @description BlockingTxnFingerprintID is the fingerprint ID of the blocking
+             *     transaction.
+             */
+            blocking_txn_fingerprint_id?: string;
+            /** @description BlockingTxnID is the ID of the blocking transaction. */
+            blocking_txn_id?: string;
+            /** @description CollectionTS is the timestamp when the event was collected. */
+            collection_ts?: string;
+            /** @description ContentionDuration is the duration of the contention event. */
+            contention_duration?: string;
+            /** @description ContentionType is the type of contention (e.g. LOCK_WAIT). */
+            contention_type?: string;
+            /** @description DatabaseName is the database where contention occurred. */
+            database_name?: string;
+            /** @description IndexName is the index where contention occurred. */
+            index_name?: string;
+            /** @description Key is the contended key. */
+            key?: string;
+            /** @description TableName is the table where contention occurred. */
+            table_name?: string;
+            /** @description WaitingStmtID is the ID of the waiting statement. */
+            waiting_stmt_id?: string;
+            /** @description WaitingTxnID is the ID of the waiting transaction. */
+            waiting_txn_id?: string;
+        };
+        "dbconsole.ContentionResponse": {
+            /** @description ContentionEvents is the list of contention events. */
+            contention_events?: components["schemas"]["dbconsole.ContentionEvent"][];
+        };
+        "dbconsole.CreateSchemaIndexRequest": {
+            /** @description Database is the database context for execution. */
+            database?: string;
+            /** @description FingerprintID is the hex-encoded fingerprint ID of the statement. */
+            fingerprint_id?: string;
+            /**
+             * @description Recommendation is the CREATE INDEX recommendation string, which
+             *     must match an entry in the statement's index_recommendations array.
+             */
+            recommendation?: string;
+        };
+        "dbconsole.DatabasesResponse": {
+            /** @description Databases is the list of database names. */
+            databases?: string[];
+        };
+        "dbconsole.DropSchemaIndexRequest": {
+            /** @description Database is the database containing the table. */
+            database?: string;
+            /** @description Index is the index name. */
+            index?: string;
+            /** @description Schema is the schema containing the table (e.g. "public"). */
+            schema?: string;
+            /** @description Table is the table name. */
+            table?: string;
+        };
         "dbconsole.ErrorResponse": {
             /** @description Error is the error message. */
             error?: string;
+        };
+        "dbconsole.EventInfo": {
+            /** @description EventType is the type of event (e.g. "create_database"). */
+            event_type?: string;
+            /** @description Info is the JSON-encoded event details. */
+            info?: string;
+            /** @description ReportingID is the node ID that reported the event. */
+            reporting_id?: number;
+            /** @description Timestamp is the time the event occurred. */
+            timestamp?: string;
+            /** @description UniqueID is the unique identifier for this event. */
+            unique_id?: number[];
+        };
+        "dbconsole.EventsResponse": {
+            /** @description Events is the list of event log entries. */
+            events?: components["schemas"]["dbconsole.EventInfo"][];
+        };
+        "dbconsole.ExplainPlanResponse": {
+            /** @description ExplainPlan is the decoded plan gist as a human-readable string. */
+            explain_plan?: string;
+        };
+        "dbconsole.IndexRecommendationsResponse": {
+            /**
+             * @description Recommendations is a list of index recommendation strings (e.g.
+             *     "CREATE INDEX ...").
+             */
+            recommendations?: string[];
         };
         "dbconsole.NodeInfo": {
             /**
@@ -102,6 +1197,202 @@ export interface components {
         "dbconsole.NodesResponse": {
             /** @description Nodes contains status information for all nodes in the cluster. */
             nodes?: components["schemas"]["dbconsole.NodeInfo"][];
+        };
+        "dbconsole.ScheduleInfo": {
+            /** @description Command is the schedule command payload. */
+            command?: string;
+            /** @description Created is the timestamp when the schedule was created. */
+            created?: string;
+            /** @description ID is the unique identifier for the schedule. */
+            id?: number;
+            /** @description JobsRunning is the number of currently running jobs for this schedule. */
+            jobs_running?: number;
+            /** @description Label is the human-readable name of the schedule. */
+            label?: string;
+            /** @description NextRun is the timestamp of the next scheduled run. */
+            next_run?: string;
+            /** @description Owner is the user who owns the schedule. */
+            owner?: string;
+            /** @description Recurrence is the cron-style recurrence pattern. */
+            recurrence?: string;
+            /** @description ScheduleStatus is the current status of the schedule. */
+            schedule_status?: string;
+            /** @description State is the schedule state. */
+            state?: string;
+        };
+        "dbconsole.SchedulesResponse": {
+            /** @description Schedules is the list of schedules. */
+            schedules?: components["schemas"]["dbconsole.ScheduleInfo"][];
+        };
+        "dbconsole.SchemaInsightExecution": {
+            /** @description FingerprintID is the statement fingerprint ID. */
+            fingerprint_id?: string;
+            /** @description Statement is the full SQL statement text. */
+            statement?: string;
+            /** @description Summary is a short summary of the statement. */
+            summary?: string;
+        };
+        "dbconsole.SchemaInsightIndexDetails": {
+            /** @description IndexName is the index name. */
+            index_name?: string;
+            /** @description Schema is the schema name. */
+            schema?: string;
+            /** @description Table is the table name. */
+            table?: string;
+        };
+        "dbconsole.SchemaInsightRecommendation": {
+            /** @description Database is the database containing the object. */
+            database?: string;
+            /** @description Execution contains execution context for create-index recommendations. */
+            execution?: components["schemas"]["dbconsole.SchemaInsightExecution"];
+            /** @description IndexDetails contains index-specific metadata for the recommendation. */
+            index_details?: components["schemas"]["dbconsole.SchemaInsightIndexDetails"];
+            /** @description Query is the recommended DDL statement (e.g. "DROP INDEX ..."). */
+            query?: string;
+            /**
+             * @description Type is the recommendation type (DropIndex, CreateIndex, ReplaceIndex,
+             *     AlterIndex).
+             */
+            type?: string;
+        };
+        "dbconsole.SchemaInsightsResponse": {
+            /** @description Recommendations is the list of schema insight recommendations. */
+            recommendations?: components["schemas"]["dbconsole.SchemaInsightRecommendation"][];
+        };
+        "dbconsole.StatementUsingIndex": {
+            /** @description AppName is the application name that executed the statement. */
+            app_name?: string;
+            /** @description Count is the number of times this statement was executed. */
+            count?: number;
+            /** @description Database is the database the statement was executed in. */
+            database?: string;
+            /** @description FingerprintID is the hex-encoded statement fingerprint ID. */
+            fingerprint_id?: string;
+            /**
+             * @description ImplicitTxn indicates whether the statement ran in an implicit
+             *     transaction.
+             */
+            implicit_txn?: boolean;
+            /**
+             * @description IndexRecommendations is the list of index recommendations for this
+             *     statement.
+             */
+            index_recommendations?: string[];
+            /** @description Query is the statement SQL text. */
+            query?: string;
+            /** @description QuerySummary is a short summary of the statement. */
+            query_summary?: string;
+        };
+        "dbconsole.StatementsUsingIndexResponse": {
+            /** @description Statements is the list of statements using the specified index. */
+            statements?: components["schemas"]["dbconsole.StatementUsingIndex"][];
+        };
+        "dbconsole.StmtInsight": {
+            app_name?: string;
+            causes?: string[];
+            contention?: string;
+            contention_events?: components["schemas"]["dbconsole.StmtInsightContentionEvent"][];
+            cpu_sql_nanos?: number;
+            database_name?: string;
+            end_time?: string;
+            error_code?: string;
+            full_scan?: boolean;
+            implicit_txn?: boolean;
+            index_recommendations?: string[];
+            last_retry_reason?: string;
+            plan_gist?: string;
+            priority?: string;
+            problem?: string;
+            query?: string;
+            retries?: number;
+            rows_read?: number;
+            rows_written?: number;
+            session_id?: string;
+            start_time?: string;
+            status?: string;
+            stmt_fingerprint_id?: string;
+            stmt_id?: string;
+            txn_fingerprint_id?: string;
+            txn_id?: string;
+            user_name?: string;
+        };
+        "dbconsole.StmtInsightContentionEvent": {
+            /** @description BlockingTxnID is the ID of the blocking transaction. */
+            blocking_txn_id?: string;
+            /** @description ContendedKey is the key that was contended. */
+            contended_key?: string;
+            /** @description ContentionDuration is the duration of the contention event. */
+            contention_duration?: string;
+            /** @description IndexName is the index where contention occurred. */
+            index_name?: string;
+            /** @description TableName is the table where contention occurred. */
+            table_name?: string;
+        };
+        "dbconsole.StmtInsightsResponse": {
+            /** @description Statements is the list of statement insights. */
+            statements?: components["schemas"]["dbconsole.StmtInsight"][];
+        };
+        "dbconsole.TxnInsight": {
+            app_name?: string;
+            causes?: string[];
+            contention?: string;
+            cpu_sql_nanos?: number;
+            end_time?: string;
+            implicit_txn?: boolean;
+            last_error_code?: string;
+            priority?: string;
+            problems?: string[];
+            query?: string;
+            retries?: number;
+            rows_read?: number;
+            rows_written?: number;
+            session_id?: string;
+            start_time?: string;
+            status?: string;
+            stmt_execution_ids?: string[];
+            txn_fingerprint_id?: string;
+            txn_id?: string;
+            user_name?: string;
+        };
+        "dbconsole.TxnInsightContention": {
+            /** @description BlockingTxnID is the ID of the blocking transaction. */
+            blocking_txn_id?: string;
+            /** @description BlockingTxnQueries contains the queries run by the blocking transaction. */
+            blocking_txn_queries?: string[];
+            /** @description ContendedKey is the key that was contended. */
+            contended_key?: string;
+            /** @description ContentionDuration is the duration of the contention event. */
+            contention_duration?: string;
+            /** @description ContentionType is the type of contention. */
+            contention_type?: string;
+            /** @description IndexName is the index where contention occurred. */
+            index_name?: string;
+            /** @description TableName is the table where contention occurred. */
+            table_name?: string;
+        };
+        "dbconsole.TxnInsightDetailsErrors": {
+            /** @description ContentionErr is set if the contention details query failed. */
+            contention_err?: string;
+            /** @description StatementsErr is set if the statement insights query failed. */
+            statements_err?: string;
+            /** @description TxnDetailsErr is set if the transaction details query failed. */
+            txn_details_err?: string;
+        };
+        "dbconsole.TxnInsightDetailsResponse": {
+            /** @description ContentionDetails contains enriched contention events. */
+            contention_details?: components["schemas"]["dbconsole.TxnInsightContention"][];
+            /** @description Errors tracks which sub-queries failed. */
+            errors?: components["schemas"]["dbconsole.TxnInsightDetailsErrors"];
+            /** @description Statements contains the statement insights for this transaction. */
+            statements?: components["schemas"]["dbconsole.StmtInsight"][];
+            /** @description TxnDetails contains the transaction-level insight, if available. */
+            txn_details?: components["schemas"]["dbconsole.TxnInsight"];
+            /** @description TxnExecutionID is the execution ID being queried. */
+            txn_execution_id?: string;
+        };
+        "dbconsole.TxnInsightsResponse": {
+            /** @description Transactions is the list of transaction insights. */
+            transactions?: components["schemas"]["dbconsole.TxnInsight"][];
         };
     };
     responses: never;
