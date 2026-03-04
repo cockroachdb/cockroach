@@ -22,12 +22,12 @@ import (
 	"time"
 
 	"github.com/alessio/shellescape"
-	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl/licenseccl"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/config"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/roachprodutil"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/ssh"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/vm/gce"
+	"github.com/cockroachdb/cockroach/pkg/server/license/licensepb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
@@ -1542,7 +1542,7 @@ func (c *SyncedCluster) maybeGenerateLicense(l *logger.Logger) string {
 	var res string
 
 	if config.CockroachDevLicense != "" {
-		license, err := licenseccl.Decode(config.CockroachDevLicense)
+		license, err := licensepb.Decode(config.CockroachDevLicense)
 		if err != nil {
 			l.Printf("WARN: (cluster=%q) failed to decode COCKROACH_DEV_LICENSE: %s", c.Name, err)
 		} else if license.ValidUntilUnixSec < timeutil.Now().AddDate(0, 0, 1).Unix() {
@@ -1554,11 +1554,11 @@ func (c *SyncedCluster) maybeGenerateLicense(l *logger.Logger) string {
 		}
 	}
 	if res == "" {
-		res, _ = (&licenseccl.License{
-			Type: licenseccl.License_Enterprise,
+		res, _ = (&licensepb.License{
+			Type: licensepb.License_Enterprise,
 			// OrganizationName needs to be set to preserve backwards compatibility.
 			OrganizationName:  "Cockroach Labs - Production Testing",
-			Environment:       licenseccl.Development,
+			Environment:       licensepb.Development,
 			ValidUntilUnixSec: timeutil.Now().AddDate(0, 1, 0).Unix(),
 		}).Encode()
 		l.Printf("(cluster=%q) generated a fresh license: %v ", c.Name, res)

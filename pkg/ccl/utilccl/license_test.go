@@ -10,7 +10,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl/licenseccl"
+	"github.com/cockroachdb/cockroach/pkg/server/license/licensepb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -31,17 +31,17 @@ func TestLicense(t *testing.T) {
 	licenseID := []byte{0}
 
 	for i, tc := range []struct {
-		licType licenseccl.License_Type
+		licType licensepb.License_Type
 	}{
-		{licenseccl.License_Enterprise},
-		{licenseccl.License_NonCommercial},
-		{licenseccl.License_Evaluation},
-		{licenseccl.License_Free},
-		{licenseccl.License_Trial},
+		{licensepb.License_Enterprise},
+		{licensepb.License_NonCommercial},
+		{licensepb.License_Evaluation},
+		{licensepb.License_Free},
+		{licensepb.License_Trial},
 	} {
 		t.Run("", func(t *testing.T) {
 			for _, ts := range []time.Time{ts, t0, after, wayAfter, before} {
-				s, err := (&licenseccl.License{
+				s, err := (&licensepb.License{
 					ValidUntilUnixSec: ts.Unix(),
 					Type:              tc.licType,
 					OrganizationName:  fmt.Sprintf("tc-%d", i),

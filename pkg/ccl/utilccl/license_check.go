@@ -10,8 +10,8 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl/licenseccl"
 	licenseserver "github.com/cockroachdb/cockroach/pkg/server/license"
+	"github.com/cockroachdb/cockroach/pkg/server/license/licensepb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
@@ -40,7 +40,7 @@ var EnterpriseLicense = settings.RegisterStringSetting(
 				return nil
 			}
 
-			if l.Type == licenseccl.License_Trial && trialLicenseExpiryTimestamp.Load() > 0 &&
+			if l.Type == licensepb.License_Trial && trialLicenseExpiryTimestamp.Load() > 0 &&
 				l.ValidUntilUnixSec != trialLicenseExpiryTimestamp.Load() {
 				return errors.WithHint(errors.Newf("a trial license has previously been installed on this cluster"),
 					"Please install a non-trial license to continue")
@@ -103,14 +103,14 @@ var GetLicenseTTL = func(
 // GetLicense fetches the license from the given settings, using Settings.Cache
 // to cache the decoded license (if any). The returned license must not be
 // modified by the caller.
-func GetLicense(st *cluster.Settings) (*licenseccl.License, error) {
+func GetLicense(st *cluster.Settings) (*licensepb.License, error) {
 	str := EnterpriseLicense.Get(&st.SV)
 	if str == "" {
 		return nil, nil
 	}
 	cacheKey := licenseCacheKey(str)
 	if cachedLicense, ok := st.Cache.Load(cacheKey); ok {
-		return (*cachedLicense).(*licenseccl.License), nil
+		return (*cachedLicense).(*licensepb.License), nil
 	}
 	license, err := decode(str)
 	if err != nil {
@@ -144,8 +144,8 @@ func GetLicenseEnvironment(st *cluster.Settings) (string, error) {
 }
 
 // decode attempts to read a base64 encoded License.
-func decode(s string) (*licenseccl.License, error) {
-	lic, err := licenseccl.Decode(s)
+func decode(s string) (*licensepb.License, error) {
+	lic, err := licensepb.Decode(s)
 	if err != nil {
 		return nil, pgerror.WithCandidateCode(err, pgcode.Syntax)
 	}
@@ -173,11 +173,11 @@ func RegisterCallbackOnLicenseChange(
 		} else {
 			licenseExpiry = timeutil.Unix(lic.ValidUntilUnixSec, 0)
 			switch lic.Type {
-			case licenseccl.License_Free:
+			case licensepb.License_Free:
 				licenseType = licenseserver.LicTypeFree
-			case licenseccl.License_Trial:
+			case licensepb.License_Trial:
 				licenseType = licenseserver.LicTypeTrial
-			case licenseccl.License_Evaluation:
+			case licensepb.License_Evaluation:
 				licenseType = licenseserver.LicTypeEvaluation
 			default:
 				licenseType = licenseserver.LicTypeEnterprise

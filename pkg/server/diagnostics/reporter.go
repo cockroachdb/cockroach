@@ -19,12 +19,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl"
-	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl/licenseccl"
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/diagnostics/diagnosticspb"
+	"github.com/cockroachdb/cockroach/pkg/server/license/licensepb"
 	"github.com/cockroachdb/cockroach/pkg/server/status/statuspb"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings"
@@ -173,7 +173,7 @@ func shouldReportDiagnostics(ctx context.Context, st *cluster.Settings) bool {
 	if license == nil {
 		return false
 	}
-	isLimited := license.Type == licenseccl.License_Free || license.Type == licenseccl.License_Trial
+	isLimited := license.Type == licensepb.License_Free || license.Type == licensepb.License_Trial
 
 	return isLimited
 }
@@ -480,10 +480,10 @@ func (r *Reporter) collectSchemaInfo(ctx context.Context) ([]descpb.TableDescrip
 // buildReportingURL creates a URL to report diagnostics.
 // If an empty updates URL is set (via empty environment variable), returns nil.
 func (r *Reporter) buildReportingURL(
-	report *diagnosticspb.DiagnosticReport, license *licenseccl.License,
+	report *diagnosticspb.DiagnosticReport, license *licensepb.License,
 ) *url.URL {
 	if license == nil {
-		license = &licenseccl.License{}
+		license = &licensepb.License{}
 	}
 
 	clusterInfo := ClusterInfo{

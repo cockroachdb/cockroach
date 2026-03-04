@@ -12,8 +12,8 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl/licenseccl"
 	"github.com/cockroachdb/cockroach/pkg/server/license"
+	"github.com/cockroachdb/cockroach/pkg/server/license/licensepb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
@@ -31,21 +31,21 @@ func TestGetLicenseTypePresent(t *testing.T) {
 
 	ctx := context.Background()
 	for _, tc := range []struct {
-		typ                 licenseccl.License_Type
+		typ                 licensepb.License_Type
 		expectedType        string
-		environment         licenseccl.License_Environment
+		environment         licensepb.License_Environment
 		expectedEnvironment string
 	}{
-		{licenseccl.License_NonCommercial, "NonCommercial", licenseccl.PreProduction, "pre-production"},
-		{licenseccl.License_Enterprise, "Enterprise", licenseccl.Production, "production"},
-		{licenseccl.License_Evaluation, "Evaluation", licenseccl.Development, "development"},
-		{licenseccl.License_Enterprise, "Enterprise", licenseccl.Unspecified, ""},
-		{licenseccl.License_Free, "Free", licenseccl.Development, "development"},
-		{licenseccl.License_Trial, "Trial", licenseccl.PreProduction, "pre-production"},
+		{licensepb.License_NonCommercial, "NonCommercial", licensepb.PreProduction, "pre-production"},
+		{licensepb.License_Enterprise, "Enterprise", licensepb.Production, "production"},
+		{licensepb.License_Evaluation, "Evaluation", licensepb.Development, "development"},
+		{licensepb.License_Enterprise, "Enterprise", licensepb.Unspecified, ""},
+		{licensepb.License_Free, "Free", licensepb.Development, "development"},
+		{licensepb.License_Trial, "Trial", licensepb.PreProduction, "pre-production"},
 	} {
 		st := cluster.MakeTestingClusterSettings()
 		updater := st.MakeUpdater()
-		lic, _ := (&licenseccl.License{
+		lic, _ := (&licensepb.License{
 			Type:              tc.typ,
 			ValidUntilUnixSec: 0,
 			Environment:       tc.environment,
@@ -127,23 +127,23 @@ func TestTimeToEnterpriseLicenseExpiry(t *testing.T) {
 
 	t0 := timeutil.Unix(1603926294, 0)
 
-	lic1M, _ := (&licenseccl.License{
-		Type:              licenseccl.License_Enterprise,
+	lic1M, _ := (&licensepb.License{
+		Type:              licensepb.License_Enterprise,
 		ValidUntilUnixSec: t0.AddDate(0, 1, 0).Unix(),
 	}).Encode()
 
-	lic2M, _ := (&licenseccl.License{
-		Type:              licenseccl.License_Evaluation,
+	lic2M, _ := (&licensepb.License{
+		Type:              licensepb.License_Evaluation,
 		ValidUntilUnixSec: t0.AddDate(0, 2, 0).Unix(),
 	}).Encode()
 
-	lic0M, _ := (&licenseccl.License{
-		Type:              licenseccl.License_Free,
+	lic0M, _ := (&licensepb.License{
+		Type:              licensepb.License_Free,
 		ValidUntilUnixSec: t0.AddDate(0, 0, 0).Unix(),
 	}).Encode()
 
-	licExpired, _ := (&licenseccl.License{
-		Type:              licenseccl.License_Trial,
+	licExpired, _ := (&licensepb.License{
+		Type:              licensepb.License_Trial,
 		ValidUntilUnixSec: t0.AddDate(0, -1, 0).Unix(),
 	}).Encode()
 
@@ -263,7 +263,7 @@ func TestRefreshLicenseEnforcerOnLicenseChange(t *testing.T) {
 				// error if another trial license is installed.
 				l, err := decode(tc.licenses[i])
 				require.NoError(t, err)
-				if l.Type == licenseccl.License_Trial {
+				if l.Type == licensepb.License_Trial {
 					var expiry int64
 					require.Eventually(t, func() bool {
 						expiry = trialLicenseExpiryTimestamp.Load()

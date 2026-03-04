@@ -10,12 +10,12 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl/licenseccl"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/operation"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestflags"
+	"github.com/cockroachdb/cockroach/pkg/server/license/licensepb"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
 
@@ -57,8 +57,8 @@ func runAddExpiredLicenseToTriggerThrottle(
 	}
 
 	// Generate an expired license to trigger throttling once installed.
-	newLicense, err := (&licenseccl.License{
-		Type:              licenseccl.License_Free,
+	newLicense, err := (&licensepb.License{
+		Type:              licensepb.License_Free,
 		ValidUntilUnixSec: timeutil.Unix(771890400, 0).Unix(), // expired on 6/17/94
 	}).Encode()
 	if err != nil {

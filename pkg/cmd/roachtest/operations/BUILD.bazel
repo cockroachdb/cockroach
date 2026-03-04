@@ -31,7 +31,6 @@ go_library(
     importpath = "github.com/cockroachdb/cockroach/pkg/cmd/roachtest/operations",
     visibility = ["//visibility:public"],
     deps = [
-        "//pkg/ccl/utilccl/licenseccl",
         "//pkg/cmd/roachtest/cluster",
         "//pkg/cmd/roachtest/operation",
         "//pkg/cmd/roachtest/operations/changefeeds",
@@ -42,6 +41,7 @@ go_library(
         "//pkg/cmd/roachtest/roachtestutil",
         "//pkg/cmd/roachtest/spec",
         "//pkg/cmd/roachtest/tests",
+        "//pkg/server/license/licensepb",
         "//pkg/sql/catalog/catpb",
         "//pkg/sql/lexbase",
         "//pkg/sql/randgen",
