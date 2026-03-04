@@ -106,7 +106,7 @@ func TestBuildReportingURLNoLicense(t *testing.T) {
 
 	report := &diagnosticspb.DiagnosticReport{
 		Env: diagnosticspb.Environment{
-			LicenseType: "OSS",
+			LicenseType: "None",
 			Build: build.Info{
 				Tag:        "tag",
 				Platform:   "platform",
@@ -126,7 +126,7 @@ func TestBuildReportingURLNoLicense(t *testing.T) {
 	url := r.buildReportingURL(report, nil)
 	logicalClusterUUID := r.LogicalClusterID()
 	storageClusterUUID := r.StorageClusterID()
-	require.Equal(t, fmt.Sprintf(`https://register.cockroachdb.com/api/clusters/report?buildchannel=buildchannel&envchannel=envchannel&environment=&insecure=false&internal=false&license_expiry_seconds=&license_id=&licensetype=OSS&logical_uuid=%s&nodeid=1&organization_id=&platform=platform&sqlid=2&tenantid=%s&uptime=3&uuid=%s&version=tag`, logicalClusterUUID, r.TenantID.String(), storageClusterUUID), url.String())
+	require.Equal(t, fmt.Sprintf(`https://register.cockroachdb.com/api/clusters/report?buildchannel=buildchannel&envchannel=envchannel&environment=&insecure=false&internal=false&license_expiry_seconds=&license_id=&licensetype=None&logical_uuid=%s&nodeid=1&organization_id=&platform=platform&sqlid=2&tenantid=%s&uptime=3&uuid=%s&version=tag`, logicalClusterUUID, r.TenantID.String(), storageClusterUUID), url.String())
 }
 
 func TestShouldReportDiagnostics(t *testing.T) {
