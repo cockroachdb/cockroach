@@ -68,11 +68,11 @@ func TestCategoriseTests(t *testing.T) {
 		mock.ExpectPrepare(regexp.QuoteMeta(PreparedQuery))
 		mock.ExpectQuery(regexp.QuoteMeta(PreparedQuery)).WillReturnError(fmt.Errorf("failed to execute query"))
 		tds, err := CategoriseTests(context.Background(), &SelectTestsReq{
-			ForPastDays: 1,
-			FirstRunOn:  2,
-			LastRunOn:   3,
-			Cloud:       spec.AWS,
-			Suite:       "unit test",
+			forPastDays: 1,
+			firstRunOn:  2,
+			lastRunOn:   3,
+			cloud:       spec.AWS,
+			suite:       "unit test",
 		})
 		require.Nil(t, tds)
 		require.NotNil(t, err)
@@ -98,11 +98,11 @@ func TestCategoriseTests(t *testing.T) {
 		}
 		mock.ExpectQuery(regexp.QuoteMeta(PreparedQuery)).WillReturnRows(rows)
 		tds, err := CategoriseTests(context.Background(), &SelectTestsReq{
-			ForPastDays: 1,
-			FirstRunOn:  2,
-			LastRunOn:   3,
-			Cloud:       spec.AWS,
-			Suite:       "unit test",
+			forPastDays: 1,
+			firstRunOn:  2,
+			lastRunOn:   3,
+			cloud:       spec.AWS,
+			suite:       "unit test",
 		})
 		require.NotNil(t, tds)
 		require.Nil(t, err)
@@ -116,6 +116,58 @@ func TestCategoriseTests(t *testing.T) {
 			require.Equal(t, d[DataLastPreempted] == "yes", td.LastFailureIsPreempt)
 		}
 	})
+	t.Run("first run with no snowflake history", func(t *testing.T) {
+		db, mock, err = sqlmock.New()
+		require.Nil(t, err)
+		mock.ExpectPrepare(regexp.QuoteMeta(PreparedQuery))
+		// Return empty result set (no Snowflake history at all - first run scenario)
+		rows := sqlmock.NewRows(AllRows)
+		mock.ExpectQuery(regexp.QuoteMeta(PreparedQuery)).WillReturnRows(rows)
+
+		// All tests available
+		allTestNames := []string{"acceptance", "backup", "import", "kv", "schemachange",
+			"sqlsmith", "tpcc", "ycsb", "restore", "decommission"}
+		selectPct := 0.35
+		tds, err := CategoriseTests(context.Background(), &SelectTestsReq{
+			forPastDays:  1,
+			firstRunOn:   2,
+			lastRunOn:    3,
+			cloud:        spec.AWS,
+			suite:        "unit test",
+			allTestNames: allTestNames,
+			selectPct:    selectPct,
+		})
+		require.Nil(t, err)
+		require.NotNil(t, tds)
+		// Should have all 10 tests
+		require.Equal(t, len(allTestNames), len(tds))
+
+		// Verify all tests have zero duration and no preemption (no history)
+		for _, td := range tds {
+			require.Equal(t, int64(0), td.AvgDurationInMillis)
+			require.False(t, td.LastFailureIsPreempt)
+		}
+
+		// Verify that all test names are present in the results
+		testNamesInResults := make(map[string]bool)
+		for _, td := range tds {
+			testNamesInResults[td.Name] = true
+		}
+		for _, name := range allTestNames {
+			require.True(t, testNamesInResults[name], "Test %s should be in results", name)
+		}
+
+		// Count selected tests and verify it's approximately the right percentage
+		selectedCount := 0
+		for _, td := range tds {
+			if td.Selected {
+				selectedCount++
+			}
+		}
+		expectedCount := int(float64(len(allTestNames)) * selectPct)
+		require.Equal(t, expectedCount, selectedCount,
+			"Should select approximately %d%% of tests", int(selectPct*100))
+	})
 	t.Run("expect failure due to invalid private key", func(t *testing.T) {
 		SqlConnectorFunc = nil
 		_ = os.Setenv(sfPrivateKey, "invalid")
@@ -128,12 +180,16 @@ func TestCategoriseTests(t *testing.T) {
 }
 
 func TestNewDefaultSelectTestsReq(t *testing.T) {
-	req := NewDefaultSelectTestsReq(spec.Azure, "ut suite")
-	require.Equal(t, spec.Azure, req.Cloud)
-	require.Equal(t, "ut suite", req.Suite)
-	require.Equal(t, defaultForPastDays, req.ForPastDays)
-	require.Equal(t, defaultFirstRunOn, req.FirstRunOn)
-	require.Equal(t, defaultLastRunOn, req.LastRunOn)
+	testNames := []string{"test1", "test2", "test3"}
+	selectPct := 0.35
+	req := NewDefaultSelectTestsReq(spec.Azure, "ut suite", testNames, selectPct)
+	require.Equal(t, spec.Azure, req.cloud)
+	require.Equal(t, "ut suite", req.suite)
+	require.Equal(t, defaultForPastDays, req.forPastDays)
+	require.Equal(t, defaultFirstRunOn, req.firstRunOn)
+	require.Equal(t, defaultLastRunOn, req.lastRunOn)
+	require.Equal(t, testNames, req.allTestNames)
+	require.Equal(t, selectPct, req.selectPct)
 }
 
 func Test_getSFCreds(t *testing.T) {

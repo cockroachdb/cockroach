@@ -13,6 +13,7 @@ import (
 	_ "embed"
 	"encoding/pem"
 	"fmt"
+	"math/rand"
 	"os"
 	"strconv"
 
@@ -65,22 +66,43 @@ type TestDetails struct {
 
 // SelectTestsReq is the request for CategoriseTests
 type SelectTestsReq struct {
-	ForPastDays int // number of days data to consider for test selection
-	FirstRunOn  int // number of days to consider for the first time the test is run
-	LastRunOn   int // number of days to consider for the last time the test is run
+	currentBranch string // the current branch for which the selection is being done
 
-	Cloud spec.Cloud // the cloud where the tests were run
-	Suite string     // the test suite for which the selection is done
+	forPastDays int // number of days data to consider for test selection
+	firstRunOn  int // number of days to consider for the first time the test is run
+	lastRunOn   int // number of days to consider for the last time the test is run
+
+	cloud spec.Cloud // the cloud where the tests were run
+	suite string     // the test suite for which the selection is done
+
+	allTestNames []string // all available test names in the test suite
+	selectPct    float64  // percentage of tests without history to randomly select
 }
 
 // NewDefaultSelectTestsReq returns a new SelectTestsReq with default values populated
-func NewDefaultSelectTestsReq(cloud spec.Cloud, suite string) *SelectTestsReq {
+func NewDefaultSelectTestsReq(
+	cloud spec.Cloud, suite string, allTestNames []string, selectPct float64,
+) *SelectTestsReq {
+	currentBranch := os.Getenv("TC_BUILD_BRANCH")
+	// On non-master branches (e.g., release branches), disable the FirstRunOn
+	// criterion by setting it to 0. This prevents marking all tests as "new"
+	// when a release branch is first created, since they won't have execution
+	// history on that branch yet.
+	firstRunOn := 0
+	if currentBranch == "" || currentBranch == "master" {
+		currentBranch = "master"
+		firstRunOn = defaultFirstRunOn
+	}
+
 	return &SelectTestsReq{
-		ForPastDays: defaultForPastDays,
-		FirstRunOn:  defaultFirstRunOn,
-		LastRunOn:   defaultLastRunOn,
-		Cloud:       cloud,
-		Suite:       suite,
+		currentBranch: currentBranch,
+		forPastDays:   defaultForPastDays,
+		firstRunOn:    firstRunOn,
+		lastRunOn:     defaultLastRunOn,
+		cloud:         cloud,
+		suite:         suite,
+		allTestNames:  allTestNames,
+		selectPct:     selectPct,
 	}
 }
 
@@ -91,6 +113,9 @@ func NewDefaultSelectTestsReq(cloud spec.Cloud, suite string) *SelectTestsReq {
 // 3. the test has not been run for a while
 // It returns all the tests. The selected tests have the value TestDetails.Selected as true
 // The tests are sorted by the last run and is used for further test selection criteria. So, the order should not be modified.
+//
+// For first run scenarios (e.g., new release branch with no Snowflake history),
+// req.SelectPct percentage of tests from req.AllTestNames are randomly selected.
 func CategoriseTests(ctx context.Context, req *SelectTestsReq) ([]*TestDetails, error) {
 	db, err := getConnect(ctx)
 	if err != nil {
@@ -102,15 +127,10 @@ func CategoriseTests(ctx context.Context, req *SelectTestsReq) ([]*TestDetails, 
 		return nil, err
 	}
 	defer func() { _ = statement.Close() }()
-	// get the current branch from the teamcity environment
-	currentBranch := os.Getenv("TC_BUILD_BRANCH")
-	if currentBranch == "" {
-		currentBranch = "master"
-	}
 	// add the parameters in sequence
-	rows, err := statement.QueryContext(ctx, req.ForPastDays*-1, currentBranch,
-		fmt.Sprintf("%%%s - %s%%", suites[req.Suite], req.Cloud),
-		req.FirstRunOn*-1, req.LastRunOn*-1)
+	rows, err := statement.QueryContext(ctx, req.forPastDays*-1, req.currentBranch,
+		fmt.Sprintf("%%%s - %s%%", suites[req.suite], req.cloud),
+		req.firstRunOn*-1, req.lastRunOn*-1)
 	if err != nil {
 		return nil, err
 	}
@@ -148,6 +168,31 @@ func CategoriseTests(ctx context.Context, req *SelectTestsReq) ([]*TestDetails, 
 		}
 		allTestDetails = append(allTestDetails, testDetails)
 	}
+
+	// Handle first run scenario: if Snowflake returned no test history at all
+	// (e.g., new release branch), randomly select a percentage of all available tests.
+	if len(allTestDetails) == 0 && len(req.allTestNames) > 0 {
+		// Shuffle tests for random selection
+		testsCopy := make([]string, len(req.allTestNames))
+		copy(testsCopy, req.allTestNames)
+		rand.Shuffle(len(testsCopy), func(i, j int) {
+			testsCopy[i], testsCopy[j] = testsCopy[j], testsCopy[i]
+		})
+
+		// Calculate how many tests to select
+		numToSelect := int(float64(len(testsCopy)) * req.selectPct)
+
+		// Add all tests to the results, marking first numToSelect as selected
+		for i, testName := range testsCopy {
+			allTestDetails = append(allTestDetails, &TestDetails{
+				Name:                 testName,
+				Selected:             i < numToSelect,
+				AvgDurationInMillis:  0,
+				LastFailureIsPreempt: false,
+			})
+		}
+	}
+
 	return allTestDetails, nil
 }
 

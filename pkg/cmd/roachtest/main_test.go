@@ -169,6 +169,12 @@ func Test_updateSpecForSelectiveTests(t *testing.T) {
 			} else if strings.Contains(s.Name, "skipped") {
 				require.Equal(t, "test spec skip", s.Skip, s.Name)
 				require.Equal(t, "test spec skip test", s.SkipDetails, s.Name)
+			} else if strings.Contains(s.Name, "new_test") {
+				// Tests without Snowflake history may be skipped based on random selection
+				if s.Skip != "" {
+					require.Equal(t, "test selector", s.Skip, s.Name)
+					require.Equal(t, "test skipped because it is stable and selective-tests is set.", s.SkipDetails, s.Name)
+				}
 			} else {
 				require.Empty(t, s.Skip, s.Name)
 			}
