@@ -68,6 +68,6 @@ func APIInternalError(ctx context.Context, err error) error {
 // of the error to the server log, and sends the standard internal error string
 // over the http.ResponseWriter.
 func APIV2InternalError(ctx context.Context, err error, w http.ResponseWriter) {
-	log.Dev.ErrorfDepth(ctx, 1, "%s", err)
+	log.Dev.ErrorfDepth(ctx, 1, "%+v", err)
 	http.Error(w, ErrAPIInternalErrorString, http.StatusInternalServerError)
 }
