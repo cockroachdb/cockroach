@@ -10466,7 +10466,6 @@ layers:
       aggregation: AVG
       derivative: NONE
       how_to_use: This is a latency histogram of wait time in the admission control queue. Non-zero wait times are expected when the corresponding resource is saturated.
-      visibility: ESSENTIAL
     - name: admission.wait_durations.cpu.bulk-normal-pri
       exported_name: admission_wait_durations_cpu_bulk_normal_pri
       description: Wait time durations for requests that waited
@@ -10476,7 +10475,6 @@ layers:
       aggregation: AVG
       derivative: NONE
       how_to_use: This is a latency histogram of wait time in the admission control queue. Non-zero wait times are expected when the corresponding resource is saturated.
-      visibility: ESSENTIAL
     - name: admission.wait_durations.cpu.high-pri
       exported_name: admission_wait_durations_cpu_high_pri
       description: Wait time durations for requests that waited
@@ -10486,7 +10484,6 @@ layers:
       aggregation: AVG
       derivative: NONE
       how_to_use: This is a latency histogram of wait time in the admission control queue. Non-zero wait times are expected when the corresponding resource is saturated.
-      visibility: ESSENTIAL
     - name: admission.wait_durations.cpu.locking-normal-pri
       exported_name: admission_wait_durations_cpu_locking_normal_pri
       description: Wait time durations for requests that waited
@@ -10496,7 +10493,6 @@ layers:
       aggregation: AVG
       derivative: NONE
       how_to_use: This is a latency histogram of wait time in the admission control queue. Non-zero wait times are expected when the corresponding resource is saturated.
-      visibility: ESSENTIAL
     - name: admission.wait_durations.cpu.locking-pri
       exported_name: admission_wait_durations_cpu_locking_pri
       description: Wait time durations for requests that waited
@@ -10506,7 +10502,6 @@ layers:
       aggregation: AVG
       derivative: NONE
       how_to_use: This is a latency histogram of wait time in the admission control queue. Non-zero wait times are expected when the corresponding resource is saturated.
-      visibility: ESSENTIAL
     - name: admission.wait_durations.cpu.low-pri
       exported_name: admission_wait_durations_cpu_low_pri
       description: Wait time durations for requests that waited
@@ -10516,7 +10511,6 @@ layers:
       aggregation: AVG
       derivative: NONE
       how_to_use: This is a latency histogram of wait time in the admission control queue. Non-zero wait times are expected when the corresponding resource is saturated.
-      visibility: ESSENTIAL
     - name: admission.wait_durations.cpu.normal-pri
       exported_name: admission_wait_durations_cpu_normal_pri
       description: Wait time durations for requests that waited
@@ -10526,7 +10520,6 @@ layers:
       aggregation: AVG
       derivative: NONE
       how_to_use: This is a latency histogram of wait time in the admission control queue. Non-zero wait times are expected when the corresponding resource is saturated.
-      visibility: ESSENTIAL
     - name: admission.wait_durations.cpu.user-high-pri
       exported_name: admission_wait_durations_cpu_user_high_pri
       description: Wait time durations for requests that waited
@@ -10536,7 +10529,6 @@ layers:
       aggregation: AVG
       derivative: NONE
       how_to_use: This is a latency histogram of wait time in the admission control queue. Non-zero wait times are expected when the corresponding resource is saturated.
-      visibility: ESSENTIAL
     - name: admission.wait_durations.cpu.user-low-pri
       exported_name: admission_wait_durations_cpu_user_low_pri
       description: Wait time durations for requests that waited
@@ -10546,7 +10538,6 @@ layers:
       aggregation: AVG
       derivative: NONE
       how_to_use: This is a latency histogram of wait time in the admission control queue. Non-zero wait times are expected when the corresponding resource is saturated.
-      visibility: ESSENTIAL
     - name: admission.wait_durations.elastic-cpu
       exported_name: admission_wait_durations_elastic_cpu
       description: Wait time durations for requests that waited
@@ -10566,7 +10557,6 @@ layers:
       aggregation: AVG
       derivative: NONE
       how_to_use: This is a latency histogram of wait time in the admission control queue. Non-zero wait times are expected when the corresponding resource is saturated.
-      visibility: ESSENTIAL
     - name: admission.wait_durations.elastic-cpu.bulk-normal-pri
       exported_name: admission_wait_durations_elastic_cpu_bulk_normal_pri
       description: Wait time durations for requests that waited
@@ -10576,7 +10566,6 @@ layers:
       aggregation: AVG
       derivative: NONE
       how_to_use: This is a latency histogram of wait time in the admission control queue. Non-zero wait times are expected when the corresponding resource is saturated.
-      visibility: ESSENTIAL
     - name: admission.wait_durations.elastic-cpu.high-pri
       exported_name: admission_wait_durations_elastic_cpu_high_pri
       description: Wait time durations for requests that waited
@@ -10586,7 +10575,6 @@ layers:
       aggregation: AVG
       derivative: NONE
       how_to_use: This is a latency histogram of wait time in the admission control queue. Non-zero wait times are expected when the corresponding resource is saturated.
-      visibility: ESSENTIAL
     - name: admission.wait_durations.elastic-cpu.locking-normal-pri
       exported_name: admission_wait_durations_elastic_cpu_locking_normal_pri
       description: Wait time durations for requests that waited
@@ -10596,7 +10584,6 @@ layers:
       aggregation: AVG
       derivative: NONE
       how_to_use: This is a latency histogram of wait time in the admission control queue. Non-zero wait times are expected when the corresponding resource is saturated.
-      visibility: ESSENTIAL
     - name: admission.wait_durations.elastic-cpu.locking-pri
       exported_name: admission_wait_durations_elastic_cpu_locking_pri
       description: Wait time durations for requests that waited
@@ -10606,7 +10593,6 @@ layers:
       aggregation: AVG
       derivative: NONE
       how_to_use: This is a latency histogram of wait time in the admission control queue. Non-zero wait times are expected when the corresponding resource is saturated.
-      visibility: ESSENTIAL
     - name: admission.wait_durations.elastic-cpu.low-pri
       exported_name: admission_wait_durations_elastic_cpu_low_pri
       description: Wait time durations for requests that waited
@@ -10616,7 +10602,6 @@ layers:
       aggregation: AVG
       derivative: NONE
       how_to_use: This is a latency histogram of wait time in the admission control queue. Non-zero wait times are expected when the corresponding resource is saturated.
-      visibility: ESSENTIAL
     - name: admission.wait_durations.elastic-cpu.normal-pri
       exported_name: admission_wait_durations_elastic_cpu_normal_pri
       description: Wait time durations for requests that waited
@@ -10626,7 +10611,6 @@ layers:
       aggregation: AVG
       derivative: NONE
       how_to_use: This is a latency histogram of wait time in the admission control queue. Non-zero wait times are expected when the corresponding resource is saturated.
-      visibility: ESSENTIAL
     - name: admission.wait_durations.elastic-cpu.user-high-pri
       exported_name: admission_wait_durations_elastic_cpu_user_high_pri
       description: Wait time durations for requests that waited
@@ -10636,7 +10620,6 @@ layers:
       aggregation: AVG
       derivative: NONE
       how_to_use: This is a latency histogram of wait time in the admission control queue. Non-zero wait times are expected when the corresponding resource is saturated.
-      visibility: ESSENTIAL
     - name: admission.wait_durations.elastic-cpu.user-low-pri
       exported_name: admission_wait_durations_elastic_cpu_user_low_pri
       description: Wait time durations for requests that waited
@@ -10646,7 +10629,6 @@ layers:
       aggregation: AVG
       derivative: NONE
       how_to_use: This is a latency histogram of wait time in the admission control queue. Non-zero wait times are expected when the corresponding resource is saturated.
-      visibility: ESSENTIAL
     - name: admission.wait_durations.elastic-stores
       exported_name: admission_wait_durations_elastic_stores
       description: Wait time durations for requests that waited
@@ -10666,7 +10648,6 @@ layers:
       aggregation: AVG
       derivative: NONE
       how_to_use: This is a latency histogram of wait time in the admission control queue. Non-zero wait times are expected when the corresponding resource is saturated.
-      visibility: ESSENTIAL
     - name: admission.wait_durations.elastic-stores.bulk-normal-pri
       exported_name: admission_wait_durations_elastic_stores_bulk_normal_pri
       description: Wait time durations for requests that waited
@@ -10676,7 +10657,6 @@ layers:
       aggregation: AVG
       derivative: NONE
       how_to_use: This is a latency histogram of wait time in the admission control queue. Non-zero wait times are expected when the corresponding resource is saturated.
-      visibility: ESSENTIAL
     - name: admission.wait_durations.elastic-stores.high-pri
       exported_name: admission_wait_durations_elastic_stores_high_pri
       description: Wait time durations for requests that waited
@@ -10686,7 +10666,6 @@ layers:
       aggregation: AVG
       derivative: NONE
       how_to_use: This is a latency histogram of wait time in the admission control queue. Non-zero wait times are expected when the corresponding resource is saturated.
-      visibility: ESSENTIAL
     - name: admission.wait_durations.elastic-stores.locking-normal-pri
       exported_name: admission_wait_durations_elastic_stores_locking_normal_pri
       description: Wait time durations for requests that waited
@@ -10696,7 +10675,6 @@ layers:
       aggregation: AVG
       derivative: NONE
       how_to_use: This is a latency histogram of wait time in the admission control queue. Non-zero wait times are expected when the corresponding resource is saturated.
-      visibility: ESSENTIAL
     - name: admission.wait_durations.elastic-stores.locking-pri
       exported_name: admission_wait_durations_elastic_stores_locking_pri
       description: Wait time durations for requests that waited
@@ -10706,7 +10684,6 @@ layers:
       aggregation: AVG
       derivative: NONE
       how_to_use: This is a latency histogram of wait time in the admission control queue. Non-zero wait times are expected when the corresponding resource is saturated.
-      visibility: ESSENTIAL
     - name: admission.wait_durations.elastic-stores.low-pri
       exported_name: admission_wait_durations_elastic_stores_low_pri
       description: Wait time durations for requests that waited
@@ -10716,7 +10693,6 @@ layers:
       aggregation: AVG
       derivative: NONE
       how_to_use: This is a latency histogram of wait time in the admission control queue. Non-zero wait times are expected when the corresponding resource is saturated.
-      visibility: ESSENTIAL
     - name: admission.wait_durations.elastic-stores.normal-pri
       exported_name: admission_wait_durations_elastic_stores_normal_pri
       description: Wait time durations for requests that waited
@@ -10726,7 +10702,6 @@ layers:
       aggregation: AVG
       derivative: NONE
       how_to_use: This is a latency histogram of wait time in the admission control queue. Non-zero wait times are expected when the corresponding resource is saturated.
-      visibility: ESSENTIAL
     - name: admission.wait_durations.elastic-stores.user-high-pri
       exported_name: admission_wait_durations_elastic_stores_user_high_pri
       description: Wait time durations for requests that waited
@@ -10736,7 +10711,6 @@ layers:
       aggregation: AVG
       derivative: NONE
       how_to_use: This is a latency histogram of wait time in the admission control queue. Non-zero wait times are expected when the corresponding resource is saturated.
-      visibility: ESSENTIAL
     - name: admission.wait_durations.elastic-stores.user-low-pri
       exported_name: admission_wait_durations_elastic_stores_user_low_pri
       description: Wait time durations for requests that waited
@@ -10746,7 +10720,6 @@ layers:
       aggregation: AVG
       derivative: NONE
       how_to_use: This is a latency histogram of wait time in the admission control queue. Non-zero wait times are expected when the corresponding resource is saturated.
-      visibility: ESSENTIAL
     - name: admission.wait_durations.kv
       exported_name: admission_wait_durations_kv
       description: Wait time durations for requests that waited
@@ -10776,7 +10749,6 @@ layers:
       aggregation: AVG
       derivative: NONE
       how_to_use: This is a latency histogram of wait time in the admission control queue. Non-zero wait times are expected when the corresponding resource is saturated.
-      visibility: ESSENTIAL
     - name: admission.wait_durations.kv-stores.bulk-normal-pri
       exported_name: admission_wait_durations_kv_stores_bulk_normal_pri
       description: Wait time durations for requests that waited
@@ -10786,7 +10758,6 @@ layers:
       aggregation: AVG
       derivative: NONE
       how_to_use: This is a latency histogram of wait time in the admission control queue. Non-zero wait times are expected when the corresponding resource is saturated.
-      visibility: ESSENTIAL
     - name: admission.wait_durations.kv-stores.high-pri
       exported_name: admission_wait_durations_kv_stores_high_pri
       description: Wait time durations for requests that waited
@@ -10796,7 +10767,6 @@ layers:
       aggregation: AVG
       derivative: NONE
       how_to_use: This is a latency histogram of wait time in the admission control queue. Non-zero wait times are expected when the corresponding resource is saturated.
-      visibility: ESSENTIAL
     - name: admission.wait_durations.kv-stores.locking-normal-pri
       exported_name: admission_wait_durations_kv_stores_locking_normal_pri
       description: Wait time durations for requests that waited
@@ -10806,7 +10776,6 @@ layers:
       aggregation: AVG
       derivative: NONE
       how_to_use: This is a latency histogram of wait time in the admission control queue. Non-zero wait times are expected when the corresponding resource is saturated.
-      visibility: ESSENTIAL
     - name: admission.wait_durations.kv-stores.locking-pri
       exported_name: admission_wait_durations_kv_stores_locking_pri
       description: Wait time durations for requests that waited
@@ -10816,7 +10785,6 @@ layers:
       aggregation: AVG
       derivative: NONE
       how_to_use: This is a latency histogram of wait time in the admission control queue. Non-zero wait times are expected when the corresponding resource is saturated.
-      visibility: ESSENTIAL
     - name: admission.wait_durations.kv-stores.low-pri
       exported_name: admission_wait_durations_kv_stores_low_pri
       description: Wait time durations for requests that waited
@@ -10826,7 +10794,6 @@ layers:
       aggregation: AVG
       derivative: NONE
       how_to_use: This is a latency histogram of wait time in the admission control queue. Non-zero wait times are expected when the corresponding resource is saturated.
-      visibility: ESSENTIAL
     - name: admission.wait_durations.kv-stores.normal-pri
       exported_name: admission_wait_durations_kv_stores_normal_pri
       description: Wait time durations for requests that waited
@@ -10836,7 +10803,6 @@ layers:
       aggregation: AVG
       derivative: NONE
       how_to_use: This is a latency histogram of wait time in the admission control queue. Non-zero wait times are expected when the corresponding resource is saturated.
-      visibility: ESSENTIAL
     - name: admission.wait_durations.kv-stores.user-high-pri
       exported_name: admission_wait_durations_kv_stores_user_high_pri
       description: Wait time durations for requests that waited
@@ -10846,7 +10812,6 @@ layers:
       aggregation: AVG
       derivative: NONE
       how_to_use: This is a latency histogram of wait time in the admission control queue. Non-zero wait times are expected when the corresponding resource is saturated.
-      visibility: ESSENTIAL
     - name: admission.wait_durations.kv-stores.user-low-pri
       exported_name: admission_wait_durations_kv_stores_user_low_pri
       description: Wait time durations for requests that waited
@@ -10856,7 +10821,6 @@ layers:
       aggregation: AVG
       derivative: NONE
       how_to_use: This is a latency histogram of wait time in the admission control queue. Non-zero wait times are expected when the corresponding resource is saturated.
-      visibility: ESSENTIAL
     - name: admission.wait_durations.kv.bulk-low-pri
       exported_name: admission_wait_durations_kv_bulk_low_pri
       description: Wait time durations for requests that waited
@@ -10866,7 +10830,6 @@ layers:
       aggregation: AVG
       derivative: NONE
       how_to_use: This is a latency histogram of wait time in the admission control queue. Non-zero wait times are expected when the corresponding resource is saturated.
-      visibility: ESSENTIAL
     - name: admission.wait_durations.kv.bulk-normal-pri
       exported_name: admission_wait_durations_kv_bulk_normal_pri
       description: Wait time durations for requests that waited
@@ -10876,7 +10839,6 @@ layers:
       aggregation: AVG
       derivative: NONE
       how_to_use: This is a latency histogram of wait time in the admission control queue. Non-zero wait times are expected when the corresponding resource is saturated.
-      visibility: ESSENTIAL
     - name: admission.wait_durations.kv.high-pri
       exported_name: admission_wait_durations_kv_high_pri
       description: Wait time durations for requests that waited
@@ -10886,7 +10848,6 @@ layers:
       aggregation: AVG
       derivative: NONE
       how_to_use: This is a latency histogram of wait time in the admission control queue. Non-zero wait times are expected when the corresponding resource is saturated.
-      visibility: ESSENTIAL
     - name: admission.wait_durations.kv.locking-normal-pri
       exported_name: admission_wait_durations_kv_locking_normal_pri
       description: Wait time durations for requests that waited
@@ -10896,7 +10857,6 @@ layers:
       aggregation: AVG
       derivative: NONE
       how_to_use: This is a latency histogram of wait time in the admission control queue. Non-zero wait times are expected when the corresponding resource is saturated.
-      visibility: ESSENTIAL
     - name: admission.wait_durations.kv.locking-pri
       exported_name: admission_wait_durations_kv_locking_pri
       description: Wait time durations for requests that waited
@@ -10906,7 +10866,6 @@ layers:
       aggregation: AVG
       derivative: NONE
       how_to_use: This is a latency histogram of wait time in the admission control queue. Non-zero wait times are expected when the corresponding resource is saturated.
-      visibility: ESSENTIAL
     - name: admission.wait_durations.kv.low-pri
       exported_name: admission_wait_durations_kv_low_pri
       description: Wait time durations for requests that waited
@@ -10916,7 +10875,6 @@ layers:
       aggregation: AVG
       derivative: NONE
       how_to_use: This is a latency histogram of wait time in the admission control queue. Non-zero wait times are expected when the corresponding resource is saturated.
-      visibility: ESSENTIAL
     - name: admission.wait_durations.kv.normal-pri
       exported_name: admission_wait_durations_kv_normal_pri
       description: Wait time durations for requests that waited
@@ -10926,7 +10884,6 @@ layers:
       aggregation: AVG
       derivative: NONE
       how_to_use: This is a latency histogram of wait time in the admission control queue. Non-zero wait times are expected when the corresponding resource is saturated.
-      visibility: ESSENTIAL
     - name: admission.wait_durations.kv.user-high-pri
       exported_name: admission_wait_durations_kv_user_high_pri
       description: Wait time durations for requests that waited
@@ -10936,7 +10893,6 @@ layers:
       aggregation: AVG
       derivative: NONE
       how_to_use: This is a latency histogram of wait time in the admission control queue. Non-zero wait times are expected when the corresponding resource is saturated.
-      visibility: ESSENTIAL
     - name: admission.wait_durations.kv.user-low-pri
       exported_name: admission_wait_durations_kv_user_low_pri
       description: Wait time durations for requests that waited
@@ -10946,7 +10902,6 @@ layers:
       aggregation: AVG
       derivative: NONE
       how_to_use: This is a latency histogram of wait time in the admission control queue. Non-zero wait times are expected when the corresponding resource is saturated.
-      visibility: ESSENTIAL
     - name: admission.wait_durations.sql-kv-response
       exported_name: admission_wait_durations_sql_kv_response
       description: Wait time durations for requests that waited
@@ -10966,7 +10921,6 @@ layers:
       aggregation: AVG
       derivative: NONE
       how_to_use: This is a latency histogram of wait time in the admission control queue. Non-zero wait times are expected when the corresponding resource is saturated.
-      visibility: ESSENTIAL
     - name: admission.wait_durations.sql-kv-response.bulk-normal-pri
       exported_name: admission_wait_durations_sql_kv_response_bulk_normal_pri
       description: Wait time durations for requests that waited
@@ -10976,7 +10930,6 @@ layers:
       aggregation: AVG
       derivative: NONE
       how_to_use: This is a latency histogram of wait time in the admission control queue. Non-zero wait times are expected when the corresponding resource is saturated.
-      visibility: ESSENTIAL
     - name: admission.wait_durations.sql-kv-response.high-pri
       exported_name: admission_wait_durations_sql_kv_response_high_pri
       description: Wait time durations for requests that waited
@@ -10986,7 +10939,6 @@ layers:
       aggregation: AVG
       derivative: NONE
       how_to_use: This is a latency histogram of wait time in the admission control queue. Non-zero wait times are expected when the corresponding resource is saturated.
-      visibility: ESSENTIAL
     - name: admission.wait_durations.sql-kv-response.locking-normal-pri
       exported_name: admission_wait_durations_sql_kv_response_locking_normal_pri
       description: Wait time durations for requests that waited
@@ -10996,7 +10948,6 @@ layers:
       aggregation: AVG
       derivative: NONE
       how_to_use: This is a latency histogram of wait time in the admission control queue. Non-zero wait times are expected when the corresponding resource is saturated.
-      visibility: ESSENTIAL
     - name: admission.wait_durations.sql-kv-response.locking-pri
       exported_name: admission_wait_durations_sql_kv_response_locking_pri
       description: Wait time durations for requests that waited
@@ -11006,7 +10957,6 @@ layers:
       aggregation: AVG
       derivative: NONE
       how_to_use: This is a latency histogram of wait time in the admission control queue. Non-zero wait times are expected when the corresponding resource is saturated.
-      visibility: ESSENTIAL
     - name: admission.wait_durations.sql-kv-response.low-pri
       exported_name: admission_wait_durations_sql_kv_response_low_pri
       description: Wait time durations for requests that waited
@@ -11016,7 +10966,6 @@ layers:
       aggregation: AVG
       derivative: NONE
       how_to_use: This is a latency histogram of wait time in the admission control queue. Non-zero wait times are expected when the corresponding resource is saturated.
-      visibility: ESSENTIAL
     - name: admission.wait_durations.sql-kv-response.normal-pri
       exported_name: admission_wait_durations_sql_kv_response_normal_pri
       description: Wait time durations for requests that waited
@@ -11026,7 +10975,6 @@ layers:
       aggregation: AVG
       derivative: NONE
       how_to_use: This is a latency histogram of wait time in the admission control queue. Non-zero wait times are expected when the corresponding resource is saturated.
-      visibility: ESSENTIAL
     - name: admission.wait_durations.sql-kv-response.user-high-pri
       exported_name: admission_wait_durations_sql_kv_response_user_high_pri
       description: Wait time durations for requests that waited
@@ -11036,7 +10984,6 @@ layers:
       aggregation: AVG
       derivative: NONE
       how_to_use: This is a latency histogram of wait time in the admission control queue. Non-zero wait times are expected when the corresponding resource is saturated.
-      visibility: ESSENTIAL
     - name: admission.wait_durations.sql-kv-response.user-low-pri
       exported_name: admission_wait_durations_sql_kv_response_user_low_pri
       description: Wait time durations for requests that waited
@@ -11046,7 +10993,6 @@ layers:
       aggregation: AVG
       derivative: NONE
       how_to_use: This is a latency histogram of wait time in the admission control queue. Non-zero wait times are expected when the corresponding resource is saturated.
-      visibility: ESSENTIAL
     - name: admission.wait_durations.sql-sql-response
       exported_name: admission_wait_durations_sql_sql_response
       description: Wait time durations for requests that waited
@@ -11066,7 +11012,6 @@ layers:
       aggregation: AVG
       derivative: NONE
       how_to_use: This is a latency histogram of wait time in the admission control queue. Non-zero wait times are expected when the corresponding resource is saturated.
-      visibility: ESSENTIAL
     - name: admission.wait_durations.sql-sql-response.bulk-normal-pri
       exported_name: admission_wait_durations_sql_sql_response_bulk_normal_pri
       description: Wait time durations for requests that waited
@@ -11076,7 +11021,6 @@ layers:
       aggregation: AVG
       derivative: NONE
       how_to_use: This is a latency histogram of wait time in the admission control queue. Non-zero wait times are expected when the corresponding resource is saturated.
-      visibility: ESSENTIAL
     - name: admission.wait_durations.sql-sql-response.high-pri
       exported_name: admission_wait_durations_sql_sql_response_high_pri
       description: Wait time durations for requests that waited
@@ -11086,7 +11030,6 @@ layers:
       aggregation: AVG
       derivative: NONE
       how_to_use: This is a latency histogram of wait time in the admission control queue. Non-zero wait times are expected when the corresponding resource is saturated.
-      visibility: ESSENTIAL
     - name: admission.wait_durations.sql-sql-response.locking-normal-pri
       exported_name: admission_wait_durations_sql_sql_response_locking_normal_pri
       description: Wait time durations for requests that waited
@@ -11096,7 +11039,6 @@ layers:
       aggregation: AVG
       derivative: NONE
       how_to_use: This is a latency histogram of wait time in the admission control queue. Non-zero wait times are expected when the corresponding resource is saturated.
-      visibility: ESSENTIAL
     - name: admission.wait_durations.sql-sql-response.locking-pri
       exported_name: admission_wait_durations_sql_sql_response_locking_pri
       description: Wait time durations for requests that waited
@@ -11106,7 +11048,6 @@ layers:
       aggregation: AVG
       derivative: NONE
       how_to_use: This is a latency histogram of wait time in the admission control queue. Non-zero wait times are expected when the corresponding resource is saturated.
-      visibility: ESSENTIAL
     - name: admission.wait_durations.sql-sql-response.low-pri
       exported_name: admission_wait_durations_sql_sql_response_low_pri
       description: Wait time durations for requests that waited
@@ -11116,7 +11057,6 @@ layers:
       aggregation: AVG
       derivative: NONE
       how_to_use: This is a latency histogram of wait time in the admission control queue. Non-zero wait times are expected when the corresponding resource is saturated.
-      visibility: ESSENTIAL
     - name: admission.wait_durations.sql-sql-response.normal-pri
       exported_name: admission_wait_durations_sql_sql_response_normal_pri
       description: Wait time durations for requests that waited
@@ -11126,7 +11066,6 @@ layers:
       aggregation: AVG
       derivative: NONE
       how_to_use: This is a latency histogram of wait time in the admission control queue. Non-zero wait times are expected when the corresponding resource is saturated.
-      visibility: ESSENTIAL
     - name: admission.wait_durations.sql-sql-response.user-high-pri
       exported_name: admission_wait_durations_sql_sql_response_user_high_pri
       description: Wait time durations for requests that waited
@@ -11136,7 +11075,6 @@ layers:
       aggregation: AVG
       derivative: NONE
       how_to_use: This is a latency histogram of wait time in the admission control queue. Non-zero wait times are expected when the corresponding resource is saturated.
-      visibility: ESSENTIAL
     - name: admission.wait_durations.sql-sql-response.user-low-pri
       exported_name: admission_wait_durations_sql_sql_response_user_low_pri
       description: Wait time durations for requests that waited
@@ -11146,7 +11084,6 @@ layers:
       aggregation: AVG
       derivative: NONE
       how_to_use: This is a latency histogram of wait time in the admission control queue. Non-zero wait times are expected when the corresponding resource is saturated.
-      visibility: ESSENTIAL
     - name: kvflowcontrol.eval_wait.elastic.duration
       exported_name: kvflowcontrol_eval_wait_elastic_duration
       description: Latency histogram for time elastic requests spent waiting for flow tokens to evaluate
