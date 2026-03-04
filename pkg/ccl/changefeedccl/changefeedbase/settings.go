@@ -369,7 +369,7 @@ var MaxRetryBackoff = settings.RegisterDurationSettingWithExplicitUnit(
 	settings.ApplicationLevel,
 	"changefeed.max_retry_backoff",
 	"the maximum time a changefeed will backoff when retrying after a restart and how long between retries before backoff resets",
-	10*time.Minute, /* defaultValue */
+	30*time.Second, /* defaultValue */
 	settings.DurationInRange(1*time.Second, 1*time.Hour),
 )
 
