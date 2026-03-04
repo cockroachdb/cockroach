@@ -648,6 +648,9 @@ func makeSchemaChangeBulkIngestTest(
 				if _, err := db.Exec("SET CLUSTER SETTING kvadmission.elastic_control_bulk_low_priority.enabled = $1", enableElasticCPUControl); err != nil {
 					t.Fatal(err)
 				}
+				if _, err := db.Exec("SET CLUSTER SETTING bulkio.index_backfill.elastic_control.enabled = $1", enableElasticCPUControl); err != nil {
+					t.Fatal(err)
+				}
 
 				t.L().Printf("Computing table statistics manually")
 				if _, err := db.Exec("CREATE STATISTICS stats from bulkingest.bulkingest"); err != nil {
