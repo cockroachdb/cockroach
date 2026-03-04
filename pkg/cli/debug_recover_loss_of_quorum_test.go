@@ -486,7 +486,7 @@ func TestHalfOnlineLossOfQuorumRecovery(t *testing.T) {
 				},
 				LOQRecovery: &loqrecovery.TestingKnobs{
 					MetadataScanTimeout: 15 * time.Second,
-					ForwardReplicaFilter: func(
+					MaybeInjectError: func(
 						response *serverpb.RecoveryCollectLocalReplicaInfoResponse,
 					) error {
 						// Artificially add an error that would cause the server to retry
