@@ -3,7 +3,7 @@
 // Use of this software is governed by the CockroachDB Software License
 // included in the /LICENSE file.
 
-package utilccl
+package license
 
 import (
 	"fmt"
@@ -26,7 +26,8 @@ func TestLicense(t *testing.T) {
 	wayAfter := ts.Add(time.Hour * 24 * 365 * 200)
 
 	// Generate random, yet deterministic, values for the two byte fields.
-	// The first byte of each will be incremented after each test to ensure variation.
+	// The first byte of each will be incremented after each test to ensure
+	// variation.
 	orgID := []byte{0}
 	licenseID := []byte{0}
 

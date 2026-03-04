@@ -32,13 +32,9 @@ import (
 )
 
 func init() {
-	// Set up license-related hooks from OSS to CCL. The implementation of the
-	// functions we bind is in utilccl, but license checks only work once
-	// utilccl.AllCCLCodeImported is set, above; that's why this hookup is done in
-	// this `ccl` pkg.
-	base.LicenseType = utilccl.GetLicenseType
-	base.GetLicenseTTL = utilccl.GetLicenseTTL
-	license.RegisterCallbackOnLicenseChange = utilccl.RegisterCallbackOnLicenseChange
+	// Set up license-related hooks from OSS to CCL code.
+	base.LicenseType = license.GetLicenseType
+	base.GetLicenseTTL = license.GetLicenseTTL
 }
 
 // TestingEnableEnterprise allows overriding the license check in tests.
