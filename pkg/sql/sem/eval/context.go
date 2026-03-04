@@ -597,6 +597,11 @@ func (o *fakePlannerWithMonitor) GetHintIDs() []int64 {
 	return nil
 }
 
+// GetHintCacheGeneration is part of the eval.Planner interface.
+func (o *fakePlannerWithMonitor) GetHintCacheGeneration() int64 {
+	return 0
+}
+
 type fakeStreamManagerFactory struct {
 	StreamManagerFactory
 }

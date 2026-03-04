@@ -1191,6 +1191,14 @@ func (p *planner) GetHintIDs() []int64 {
 	return p.stmt.HintIDs
 }
 
+// GetHintCacheGeneration is part of the eval.Planner interface.
+func (p *planner) GetHintCacheGeneration() int64 {
+	if hintCache := p.execCfg.StatementHintsCache; hintCache != nil {
+		return hintCache.GetGeneration()
+	}
+	return 0
+}
+
 // ResetLeaseTimestamp is part of Planner interface.
 func (p *planner) ResetLeaseTimestamp(ctx context.Context) {
 	p.Descriptors().ResetLeaseTimestamp(ctx)

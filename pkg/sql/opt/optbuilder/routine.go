@@ -451,6 +451,14 @@ func (b *Builder) buildRoutine(
 		bodyTags = make([]string, len(stmts))
 		bodyASTs = make([]tree.Statement, len(stmts))
 		fmtFlags := tree.FmtHideConstants | tree.FmtFlags(tree.QueryFormattingForFingerprintsMask.Get(&b.evalCtx.Settings.SV))
+		// TODO(janexing): Do we care about locking the hint cache for the
+		// whole for loop here, in case the hint cache generation advances
+		// during iteration? I assume this is benign: because we record the
+		// generation before the loop, any concurrent advance will make the
+		// recorded generation stale, and the staleness check in
+		// CheckDependencies will invalidate the cached plan on the next
+		// execution.
+		b.factory.Metadata().SetHintCacheGeneration(b.evalCtx.Planner.GetHintCacheGeneration())
 		for i := range stmts {
 			hintStmtFingerprint := tree.FormatStatementHideConstants(stmts[i].AST, fmtFlags)
 			maybeHintedStmt := b.catalog.TryRewriteWithStmtHints(b.ctx, hintStmtFingerprint, stmts[i].AST, fmtFlags)

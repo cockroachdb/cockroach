@@ -196,10 +196,27 @@ func TestMetadata(t *testing.T) {
 		}
 	}
 
+	// Verify that hintIDs are copied.
+	md.SetHintIDs([]int64{1, 2, 3})
+	var mdHintCopy opt.Metadata
+	mdHintCopy.CopyFrom(md, f.CopyWithoutAssigningPlaceholders)
+	require.Equal(t, md.TestingHintIDs(), mdHintCopy.TestingHintIDs())
+
+	// Verify that hintCacheGeneration is copied.
+	md.SetHintCacheGeneration(42)
+	var mdGenCopy opt.Metadata
+	mdGenCopy.CopyFrom(md, f.CopyWithoutAssigningPlaceholders)
+	require.Equal(t, int64(42), mdGenCopy.TestingHintCacheGeneration())
+
 	depsUpToDate, err = md.CheckDependencies(context.Background(), &evalCtx, testCat)
 	if err == nil || depsUpToDate {
 		t.Fatalf("expected table privilege to be revoked in metadata copy")
 	}
+
+	// Verify Init resets hintIDs and hintCacheGeneration.
+	md.Init()
+	require.Empty(t, md.TestingHintIDs())
+	require.Equal(t, int64(0), md.TestingHintCacheGeneration())
 
 	panicked := false
 	func() {

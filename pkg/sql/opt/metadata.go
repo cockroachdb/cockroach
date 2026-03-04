@@ -151,6 +151,12 @@ type Metadata struct {
 	// hintIDs are the external statement hints that match this statement.
 	hintIDs []int64
 
+	// hintCacheGeneration is the generation of the statement hints cache at
+	// the time routine body statements were rewritten with hints. If the
+	// cache generation has advanced since the memo was built, the memo is
+	// stale because new or removed hints may affect routine body plans.
+	hintCacheGeneration int64
+
 	digest struct {
 		syncutil.Mutex
 		depDigest cat.DependencyDigest
@@ -257,7 +263,8 @@ func (md *Metadata) CopyFrom(from *Metadata, copyScalarFn func(Expr) Expr) {
 		len(md.sequences) != 0 || len(md.views) != 0 || len(md.userDefinedTypes) != 0 ||
 		len(md.userDefinedTypesSlice) != 0 || len(md.dataSourceDeps) != 0 ||
 		len(md.routineDeps) != 0 || len(md.objectRefsByName) != 0 || len(md.privileges) != 0 ||
-		len(md.builtinRefsByName) != 0 || md.rlsMeta.IsInitialized || len(md.hintIDs) != 0 {
+		len(md.builtinRefsByName) != 0 || md.rlsMeta.IsInitialized || len(md.hintIDs) != 0 ||
+		md.hintCacheGeneration != 0 {
 		panic(errors.AssertionFailedf("CopyFrom requires empty destination"))
 	}
 	md.schemas = append(md.schemas, from.schemas...)
@@ -342,6 +349,7 @@ func (md *Metadata) CopyFrom(from *Metadata, copyScalarFn func(Expr) Expr) {
 	md.rlsMeta = from.rlsMeta.Copy()
 
 	md.hintIDs = append(md.hintIDs, from.hintIDs...)
+	md.hintCacheGeneration = from.hintCacheGeneration
 }
 
 // MDDepName stores either the unresolved DataSourceName or the StableID from
@@ -611,13 +619,33 @@ func (md *Metadata) CheckDependencies(
 		return upToDate, err
 	}
 
-	// Check that external statement hints have not changed.
-	var hintIDs []int64
-	if evalCtx.Planner != nil {
-		hintIDs = evalCtx.Planner.GetHintIDs()
-	}
-	if !slices.Equal(md.hintIDs, hintIDs) {
-		return false, nil
+	// If this statement calls any routines, compare the hint cache
+	// generation at build time against the current generation. Any
+	// generation advance means hints *may* have been added or removed that
+	// affect routine body plans. We only check the version of the hint cache
+	// to avoid looping over all the statements in the routine body.
+	//
+	// TODO(janexing): PLpgSQL routines do not currently set
+	// hintCacheGeneration (only SQL routines do), so PLpgSQL routines with
+	// routineDeps > 0 may trigger unnecessary invalidations when the hint
+	// cache generation advances for unrelated reasons. This should be
+	// revisited when PLpgSQL hint support is added.
+	if len(md.routineDeps) > 0 && evalCtx.Planner != nil {
+		currentGen := evalCtx.Planner.GetHintCacheGeneration()
+		if md.hintCacheGeneration != currentGen {
+			return false, nil
+		}
+	} else {
+		// For statements without invocation of routines, perform a more
+		// fine-grained check that external statement hints have not
+		// changed.
+		var hintIDs []int64
+		if evalCtx.Planner != nil {
+			hintIDs = evalCtx.Planner.GetHintIDs()
+		}
+		if !slices.Equal(md.hintIDs, hintIDs) {
+			return false, nil
+		}
 	}
 
 	// Update the digest after a full dependency check, since our fast
@@ -1322,4 +1350,22 @@ func (md *Metadata) checkRLSDependencies(
 // SetHintIDs copies the given matching hintIDs into the metadata.
 func (md *Metadata) SetHintIDs(hintIDs []int64) {
 	md.hintIDs = append(md.hintIDs, hintIDs...)
+}
+
+// SetHintCacheGeneration records the hint cache generation at the time
+// routine body statements were rewritten with hints. This is used during
+// staleness checking to detect when hints may have changed for routine
+// body statements.
+func (md *Metadata) SetHintCacheGeneration(gen int64) {
+	md.hintCacheGeneration = gen
+}
+
+// TestingHintIDs returns the hintIDs for testing.
+func (md *Metadata) TestingHintIDs() []int64 {
+	return md.hintIDs
+}
+
+// TestingHintCacheGeneration returns the hintCacheGeneration for testing.
+func (md *Metadata) TestingHintCacheGeneration() int64 {
+	return md.hintCacheGeneration
 }
