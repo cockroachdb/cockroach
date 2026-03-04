@@ -307,53 +307,68 @@ func makeExternalSpanSendFunc(
 	batchRequestsIssued *int64,
 	kvCPUTime *int64,
 ) sendFunc {
-	return func(ctx context.Context, ba *kvpb.BatchRequest) (*kvpb.BatchResponse, error) {
+	// Use a background context for the txn lifetime since it outlives any
+	// single request context.
+	bgCtx := context.Background()
+
+	// Create a single read-only transaction with a fixed timestamp for all batch
+	// requests. This avoids the overhead of creating a new Txn per batch. A
+	// read-only txn at a fixed timestamp is safe to reuse. The txn does not need
+	// explicit cleanup via Commit or Rollback — read-only transactions hold no
+	// server-side resources (no transaction record, no intents), so they can
+	// simply be garbage collected.
+	nodeID, _ := db.Context().NodeID.OptionalNodeID()
+	txn := kv.NewTxnWithAdmissionControl(
+		bgCtx, db, nodeID,
+		kvpb.AdmissionHeader_FROM_SQL, admissionpb.NormalPri,
+	)
+	if err := txn.SetFixedTimestamp(bgCtx, ext.AsOf); err != nil {
+		// SetFixedTimestamp should not fail for a new txn. If it does, return
+		// a sendFunc that always errors.
+		return func(
+			ctx context.Context, ba *kvpb.BatchRequest,
+		) (*kvpb.BatchResponse, error) {
+			return nil, err
+		}
+	}
+
+	sf := func(ctx context.Context, ba *kvpb.BatchRequest) (*kvpb.BatchResponse, error) {
 		for _, req := range ba.Requests {
-			// We only allow external row data for a few known types of request.
 			switch r := req.GetInner().(type) {
 			case *kvpb.GetRequest:
 			case *kvpb.ScanRequest:
 			case *kvpb.ReverseScanRequest:
 			default:
-				return nil, errors.AssertionFailedf("request type %T unsupported for external row data", r)
+				return nil, errors.AssertionFailedf(
+					"request type %T unsupported for external row data", r,
+				)
 			}
 		}
-		log.VEventf(ctx, 2, "kv external fetcher: sending a batch with %d requests", len(ba.Requests))
 
-		// Open a new transaction with fixed timestamp set to the external
-		// timestamp. We must do this with txn.Send rather than using
-		// db.NonTransactionalSender to get the 1-to-1 request-response guarantee
-		// required by txnKVFetcher.
-		// TODO(michae2): Explore whether we should keep this transaction open for
-		// the duration of the surrounding transaction.
-		var res *kvpb.BatchResponse
-		err := db.TxnWithAdmissionControl(
-			ctx, ba.AdmissionHeader.Source, admissionpb.WorkPriority(ba.AdmissionHeader.Priority),
-			kv.SteppingDisabled,
-			func(ctx context.Context, txn *kv.Txn) error {
-				if err := txn.SetFixedTimestamp(ctx, ext.AsOf); err != nil {
-					return err
-				}
-				var err *kvpb.Error
-				res, err = txn.Send(ctx, ba)
-				if err != nil {
-					return err.GoError()
-				}
-				return nil
-			})
-		// Note that in some code paths there is no concurrency when using the
-		// sendFunc, but we choose to unconditionally use atomics here since its
-		// overhead should be negligible in the grand scheme of things anyway.
-		atomic.AddInt64(batchRequestsIssued, 1)
-		if err != nil {
-			return nil, err
+		if log.V(2) {
+			log.VEventf(
+				ctx, 2,
+				"kv external fetcher: sending a batch with %d requests",
+				len(ba.Requests),
+			)
 		}
 
+		res, pErr := txn.Send(ctx, ba)
+		// Note that in some code paths there is no concurrency when using
+		// the sendFunc, but we choose to unconditionally use atomics here
+		// since its overhead should be negligible in the grand scheme of
+		// things anyway.
+		atomic.AddInt64(batchRequestsIssued, 1)
+		if pErr != nil {
+			return nil, pErr.GoError()
+		}
 		if res.CPUTime > 0 {
 			atomic.AddInt64(kvCPUTime, res.CPUTime)
 		}
 		return res, nil
 	}
+
+	return sf
 }
 
 type newTxnKVFetcherArgs struct {
