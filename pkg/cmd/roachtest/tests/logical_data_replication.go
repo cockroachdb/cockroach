@@ -231,7 +231,8 @@ func registerLogicalDataReplicationTests(r registry.Registry) {
 			ldrConfig: ldrConfig{
 				createTables: true,
 			},
-			run: TestLDRConflict,
+			requiresDeprecatedWorkload: true,
+			run:                        TestLDRConflict,
 		},
 	}
 
@@ -244,7 +245,7 @@ func registerLogicalDataReplicationTests(r registry.Registry) {
 			Suites:                     registry.Suites(registry.Nightly),
 			Cluster:                    sp.clusterSpec.ToSpec(r),
 			Leases:                     registry.MetamorphicLeases,
-			RequiresDeprecatedWorkload: true, // TODO(jeffswenson): require this only for conflict test.
+			RequiresDeprecatedWorkload: sp.requiresDeprecatedWorkload,
 			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 				rng, seed := randutil.NewPseudoRand()
 				t.L().Printf("random seed is %d", seed)
@@ -779,10 +780,11 @@ func getLogicalDataReplicationJobInfo(db *gosql.DB, jobID int) (jobInfo, error) 
 }
 
 type ldrTestSpec struct {
-	name        string
-	clusterSpec multiClusterSpec
-	run         func(context.Context, test.Test, cluster.Cluster, multiClusterSetup, ldrConfig)
-	ldrConfig   ldrConfig
+	name                       string
+	clusterSpec                multiClusterSpec
+	run                        func(context.Context, test.Test, cluster.Cluster, multiClusterSetup, ldrConfig)
+	ldrConfig                  ldrConfig
+	requiresDeprecatedWorkload bool
 }
 
 type mode int
