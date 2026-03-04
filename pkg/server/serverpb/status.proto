@@ -2284,6 +2284,8 @@ message UploadDebugDataRequest {
   map<string, string> labels = 5;
   // node_ids limits which nodes participate. Empty means all nodes.
   repeated int32 node_ids = 6;
+  bool include_range_info = 7;
+  bool include_goroutine_stacks = 8;
 }
 
 // NodeUploadStatus reports the upload outcome for a single node.
@@ -2312,6 +2314,8 @@ message UploadNodeDebugDataRequest {
   string upload_token = 3;
   bool redact = 4;
   int32 cpu_prof_seconds = 5;
+  bool include_range_info = 6;
+  bool include_goroutine_stacks = 7;
 }
 
 // UploadNodeDebugDataResponse is the per-node upload result.

@@ -70,11 +70,13 @@ func runDebugZipUploadServer(cmd *cobra.Command, args []string) error {
 
 	// Build the RPC request.
 	req := &serverpb.UploadDebugDataRequest{
-		ServerUrl:      uploadServerCtx.serverURL,
-		ApiKey:         uploadServerCtx.apiKey,
-		Redact:         zipCtx.redact,
-		CpuProfSeconds: int32(zipCtx.cpuProfDuration / time.Second),
-		Labels:         labels,
+		ServerUrl:              uploadServerCtx.serverURL,
+		ApiKey:                 uploadServerCtx.apiKey,
+		Redact:                 zipCtx.redact,
+		CpuProfSeconds:         int32(zipCtx.cpuProfDuration / time.Second),
+		Labels:                 labels,
+		IncludeRangeInfo:       zipCtx.includeRangeInfo,
+		IncludeGoroutineStacks: zipCtx.includeStacks,
 	}
 
 	fmt.Fprintf(stderr, "Streaming debug data to %s...\n", uploadServerCtx.serverURL)

@@ -5797,6 +5797,147 @@ show throttling warnings and alerts in DB Console.
 
 
 
+## UploadDebugData
+
+
+
+UploadDebugData initiates a debug data upload session. The
+coordinator creates a session on the upload server, collects
+cluster-wide data, fans out to all nodes, and completes the
+session.
+This RPC does not have a corresponding HTTP endpoint on purpose.
+
+Support status: [reserved](#support-status)
+
+#### Request Parameters
+
+
+
+
+UploadDebugDataRequest is sent from the CLI/SQL to the coordinator
+node to initiate a debug data upload session.
+
+
+| Field | Type | Label | Description | Support status |
+| ----- | ---- | ----- | ----------- | -------------- |
+| server_url | [string](#cockroach.server.serverpb.UploadDebugDataRequest-string) |  |  | [reserved](#support-status) |
+| api_key | [string](#cockroach.server.serverpb.UploadDebugDataRequest-string) |  |  | [reserved](#support-status) |
+| redact | [bool](#cockroach.server.serverpb.UploadDebugDataRequest-bool) |  |  | [reserved](#support-status) |
+| cpu_prof_seconds | [int32](#cockroach.server.serverpb.UploadDebugDataRequest-int32) |  |  | [reserved](#support-status) |
+| labels | [UploadDebugDataRequest.LabelsEntry](#cockroach.server.serverpb.UploadDebugDataRequest-cockroach.server.serverpb.UploadDebugDataRequest.LabelsEntry) | repeated |  | [reserved](#support-status) |
+| node_ids | [int32](#cockroach.server.serverpb.UploadDebugDataRequest-int32) | repeated | node_ids limits which nodes participate. Empty means all nodes. | [reserved](#support-status) |
+
+
+
+
+
+
+<a name="cockroach.server.serverpb.UploadDebugDataRequest-cockroach.server.serverpb.UploadDebugDataRequest.LabelsEntry"></a>
+#### UploadDebugDataRequest.LabelsEntry
+
+
+
+| Field | Type | Label | Description | Support status |
+| ----- | ---- | ----- | ----------- | -------------- |
+| key | [string](#cockroach.server.serverpb.UploadDebugDataRequest-string) |  |  |  |
+| value | [string](#cockroach.server.serverpb.UploadDebugDataRequest-string) |  |  |  |
+
+
+
+
+
+
+#### Response Parameters
+
+
+
+
+UploadDebugDataResponse is the aggregated result of the upload
+across all nodes.
+
+
+| Field | Type | Label | Description | Support status |
+| ----- | ---- | ----- | ----------- | -------------- |
+| session_id | [string](#cockroach.server.serverpb.UploadDebugDataResponse-string) |  |  | [reserved](#support-status) |
+| artifacts_uploaded | [int32](#cockroach.server.serverpb.UploadDebugDataResponse-int32) |  |  | [reserved](#support-status) |
+| nodes_succeeded | [int32](#cockroach.server.serverpb.UploadDebugDataResponse-int32) |  |  | [reserved](#support-status) |
+| nodes_failed | [int32](#cockroach.server.serverpb.UploadDebugDataResponse-int32) |  |  | [reserved](#support-status) |
+| node_statuses | [NodeUploadStatus](#cockroach.server.serverpb.UploadDebugDataResponse-cockroach.server.serverpb.NodeUploadStatus) | repeated |  | [reserved](#support-status) |
+| cloud_path | [string](#cockroach.server.serverpb.UploadDebugDataResponse-string) |  |  | [reserved](#support-status) |
+
+
+
+
+
+
+<a name="cockroach.server.serverpb.UploadDebugDataResponse-cockroach.server.serverpb.NodeUploadStatus"></a>
+#### NodeUploadStatus
+
+NodeUploadStatus reports the upload outcome for a single node.
+
+| Field | Type | Label | Description | Support status |
+| ----- | ---- | ----- | ----------- | -------------- |
+| node_id | [int32](#cockroach.server.serverpb.UploadDebugDataResponse-int32) |  |  | [reserved](#support-status) |
+| artifacts_uploaded | [int32](#cockroach.server.serverpb.UploadDebugDataResponse-int32) |  |  | [reserved](#support-status) |
+| errors | [string](#cockroach.server.serverpb.UploadDebugDataResponse-string) | repeated |  | [reserved](#support-status) |
+
+
+
+
+
+
+## UploadNodeDebugData
+
+
+
+UploadNodeDebugData collects and uploads debug data from a single
+node directly to the upload server.
+This RPC does not have a corresponding HTTP endpoint on purpose.
+
+Support status: [reserved](#support-status)
+
+#### Request Parameters
+
+
+
+
+UploadNodeDebugDataRequest is sent from the coordinator to each
+node via iterateNodes fan-out.
+
+
+| Field | Type | Label | Description | Support status |
+| ----- | ---- | ----- | ----------- | -------------- |
+| server_url | [string](#cockroach.server.serverpb.UploadNodeDebugDataRequest-string) |  |  | [reserved](#support-status) |
+| session_id | [string](#cockroach.server.serverpb.UploadNodeDebugDataRequest-string) |  |  | [reserved](#support-status) |
+| upload_token | [string](#cockroach.server.serverpb.UploadNodeDebugDataRequest-string) |  |  | [reserved](#support-status) |
+| redact | [bool](#cockroach.server.serverpb.UploadNodeDebugDataRequest-bool) |  |  | [reserved](#support-status) |
+| cpu_prof_seconds | [int32](#cockroach.server.serverpb.UploadNodeDebugDataRequest-int32) |  |  | [reserved](#support-status) |
+
+
+
+
+
+
+
+#### Response Parameters
+
+
+
+
+UploadNodeDebugDataResponse is the per-node upload result.
+
+
+| Field | Type | Label | Description | Support status |
+| ----- | ---- | ----- | ----------- | -------------- |
+| artifacts_uploaded | [int32](#cockroach.server.serverpb.UploadNodeDebugDataResponse-int32) |  |  | [reserved](#support-status) |
+| errors | [string](#cockroach.server.serverpb.UploadNodeDebugDataResponse-string) | repeated |  | [reserved](#support-status) |
+
+
+
+
+
+
+
 ## Users
 
 `GET /_admin/v1/users`
