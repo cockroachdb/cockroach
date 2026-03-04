@@ -15,6 +15,7 @@ import (
 
 	_ "github.com/cockroachdb/cockroach/pkg/backup/backupbase" // imported for cluster settings.
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/cloud/nodelocal"
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/keyvisualizer"
@@ -49,6 +50,40 @@ const (
 // bugs in time-bound iterators. We disable this in race builds, which can
 // be too slow.
 var smallEngineBlocks = !util.RaceEnabled && metamorphic.ConstantWithTestBool("small-engine-blocks", false)
+
+var FastRestore = IsOnlineRestoreSupported() && metamorphic.ConstantWithTestBool("fast-restore", true)
+
+// RestoreStmt metamorphically adds the `EXPERIMENTAL COPY` option to a `RESTORE` statement.
+func RestoreStmt(stmt string) string {
+	if !FastRestore {
+		return stmt
+	}
+
+	if strings.Contains(stmt, "WITH OPTIONS (") {
+		idx := strings.LastIndex(stmt, ")")
+		return stmt[:idx] + ", EXPERIMENTAL COPY" + stmt[idx:]
+	}
+
+	if strings.Contains(stmt, "WITH") {
+		stmt += ","
+	} else {
+		stmt += " WITH"
+	}
+	stmt += " EXPERIMENTAL COPY"
+	return stmt
+}
+
+func DisableFastRestoreMetamorphic(t interface {
+	Helper()
+	Cleanup(func())
+}) {
+	t.Helper()
+	if FastRestore {
+		FastRestore = false
+		t.Cleanup(func() { FastRestore = true })
+	}
+}
+
 var externalConnection = metamorphic.ConstantWithTestBool("external-connection", false)
 
 // GetExternalStorageURI metamorphically chooses between baseURI,
@@ -140,6 +175,15 @@ func StartBackupRestoreTestCluster(
 		opts.dataDir, dirCleanupFunc = testutils.TempDir(t)
 	}
 
+	nlCleanupFunc := func() {}
+	if FastRestore {
+		nlCleanupFunc = nodelocal.ReplaceNodeLocalForTesting(opts.dataDir)
+		var tenantzero base.DefaultTestTenantOptions
+		if opts.testClusterArgs.ServerArgs.DefaultTestTenant == tenantzero {
+			opts.testClusterArgs.ServerArgs.DefaultTestTenant = base.TestIsSpecificToStorageLayerAndNeedsASystemTenant
+		}
+	}
+
 	if opts.initFunc == nil {
 		// TODO(ssd): Is anything actually using a custom init
 		// func?
@@ -196,6 +240,7 @@ func StartBackupRestoreTestCluster(
 			CheckForInvalidDescriptors(t, tc.Conns[0])
 		}
 		tc.Stopper().Stop(ctx) // cleans up in memory storage's auxiliary dirs
+		nlCleanupFunc()
 		dirCleanupFunc()
 	}
 }

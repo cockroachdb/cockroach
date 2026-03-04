@@ -62,6 +62,8 @@ func TestOnlineRestoreBasic(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
+	backuptestutils.DisableFastRestoreMetamorphic(t)
+
 	defer nodelocal.ReplaceNodeLocalForTesting(t.TempDir())()
 
 	ctx := context.Background()
@@ -118,6 +120,8 @@ func TestOnlineRestoreBasic(t *testing.T) {
 func TestOnlineRestoreRecovery(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+
+	backuptestutils.DisableFastRestoreMetamorphic(t)
 
 	tmpDir := t.TempDir()
 
@@ -216,6 +220,8 @@ func TestFullClusterOnlineRestoreRecovery(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
+	backuptestutils.DisableFastRestoreMetamorphic(t)
+
 	tmpDir := t.TempDir()
 
 	defer nodelocal.ReplaceNodeLocalForTesting(tmpDir)()
@@ -285,6 +291,9 @@ func corruptBackup(t *testing.T, sqlDB *sqlutils.SQLRunner, ioDir string, uri st
 func TestOnlineRestorePartitioned(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+
+	backuptestutils.DisableFastRestoreMetamorphic(t)
+
 	defer nodelocal.ReplaceNodeLocalForTesting(t.TempDir())()
 
 	srv, sqlDB, _, cleanupFn := backupRestoreTestSetupWithParams(t, 3, 100,
@@ -315,6 +324,9 @@ func TestOnlineRestorePartitioned(t *testing.T) {
 func TestOnlineRestoreLinkCheckpoint(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+
+	backuptestutils.DisableFastRestoreMetamorphic(t)
+
 	defer nodelocal.ReplaceNodeLocalForTesting(t.TempDir())()
 
 	rng, _ := randutil.NewTestRand()
@@ -348,6 +360,9 @@ func TestOnlineRestoreLinkCheckpoint(t *testing.T) {
 func TestOnlineRestoreStatementResult(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+
+	backuptestutils.DisableFastRestoreMetamorphic(t)
+
 	defer nodelocal.ReplaceNodeLocalForTesting(t.TempDir())()
 
 	const numAccounts = 2
@@ -421,6 +436,9 @@ func TestOnlineRestoreStatementResult(t *testing.T) {
 func TestOnlineRestoreWaitForDownload(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+
+	backuptestutils.DisableFastRestoreMetamorphic(t)
+
 	defer nodelocal.ReplaceNodeLocalForTesting(t.TempDir())()
 
 	const numAccounts = 1000
@@ -454,6 +472,8 @@ func waitForLatestDownloadJobToSucceed(t *testing.T, sqlDB *sqlutils.SQLRunner) 
 func TestOnlineRestoreTenant(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+
+	backuptestutils.DisableFastRestoreMetamorphic(t)
 
 	defer nodelocal.ReplaceNodeLocalForTesting(t.TempDir())()
 
@@ -556,6 +576,8 @@ func TestOnlineRestoreErrors(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
+	backuptestutils.DisableFastRestoreMetamorphic(t)
+
 	defer nodelocal.ReplaceNodeLocalForTesting(t.TempDir())()
 
 	_, sqlDB, dir, cleanupFn := backupRestoreTestSetup(t, singleNode, 2, InitManualReplication)
@@ -609,6 +631,8 @@ func TestOnlineRestoreErrors(t *testing.T) {
 func TestOnlineRestoreRetryingDownloadRequests(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+
+	backuptestutils.DisableFastRestoreMetamorphic(t)
 
 	defer nodelocal.ReplaceNodeLocalForTesting(t.TempDir())()
 
@@ -669,6 +693,8 @@ func TestOnlineRestoreDownloadRetryReset(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
+	backuptestutils.DisableFastRestoreMetamorphic(t)
+
 	defer nodelocal.ReplaceNodeLocalForTesting(t.TempDir())()
 
 	var attemptCount int
@@ -724,6 +750,9 @@ func TestOnlineRestoreDownloadRetryReset(t *testing.T) {
 func TestOnlineRestoreFailScatterNonEmptyRanges(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+
+	backuptestutils.DisableFastRestoreMetamorphic(t)
+
 	defer nodelocal.ReplaceNodeLocalForTesting(t.TempDir())()
 
 	// This test first runs online restore and waits for an external SST to be
@@ -884,6 +913,8 @@ func assertOnlineRestoreWithRekeying(
 func TestOnlineRestoreRevisionHistoryLayers(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+
+	backuptestutils.DisableFastRestoreMetamorphic(t)
 
 	defer nodelocal.ReplaceNodeLocalForTesting(t.TempDir())()
 
@@ -1215,6 +1246,8 @@ func TestOnlineRestoreLinkingNonexistentFiles(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
+	backuptestutils.DisableFastRestoreMetamorphic(t)
+
 	tmpDir := t.TempDir()
 	defer nodelocal.ReplaceNodeLocalForTesting(tmpDir)()
 
@@ -1285,6 +1318,8 @@ func TestOnlineRestoreLinkingNonexistentFiles(t *testing.T) {
 func TestOnlineRestoreWithDistFlow(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+
+	backuptestutils.DisableFastRestoreMetamorphic(t)
 
 	defer nodelocal.ReplaceNodeLocalForTesting(t.TempDir())()
 

@@ -18,6 +18,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/backup/backuppb"
+	"github.com/cockroachdb/cockroach/pkg/backup/backuptestutils"
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/cloud/cloudpb"
@@ -665,6 +666,8 @@ func TestBlockConcurrentScheduledCompactions(t *testing.T) {
 func TestBackupCompactionExecLocality(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+
+	backuptestutils.DisableFastRestoreMetamorphic(t)
 
 	skip.UnderRace(t, "too slow")
 

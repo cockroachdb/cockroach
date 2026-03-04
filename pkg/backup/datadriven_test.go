@@ -488,6 +488,12 @@ func (d *datadrivenTestState) getSQLDBForVC(
 //
 //lint:ignore U1000 unused
 func runTestDataDriven(t *testing.T, testFilePathFromWorkspace string) {
+	// TODO(at): data-driven tests create multiple clusters, whose
+	// StartBackupRestoreTestCluster cleanup fns run in parallel. With FastRestore,
+	// each cluster calls ReplaceNodeLocalForTesting, and the concurrent restores
+	// race and leave stale nodelocal state for subsequent tests.
+	backuptestutils.DisableFastRestoreMetamorphic(t)
+
 	// This test uses this mock HTTP server to pass the backup files between tenants.
 	httpAddr, httpServerCleanup := makeInsecureHTTPServer(t)
 	defer httpServerCleanup()

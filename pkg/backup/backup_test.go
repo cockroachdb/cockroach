@@ -449,6 +449,11 @@ func TestBackupRestoreExecLocality(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
+	// TODO(at): OR does not work with per-node ExternalIODir: ReplaceNodeLocalForTesting
+	// routes all nodelocal:// URIs to a single shared dir, breaking the assertions
+	// that check which per-node directory received backup files.
+	backuptestutils.DisableFastRestoreMetamorphic(t)
+
 	skip.UnderRace(t, "too slow")
 
 	const numAccounts = 1000
