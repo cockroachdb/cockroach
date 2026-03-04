@@ -3830,7 +3830,11 @@ func TestLeaseManagerLockedTimestampConcurrent(t *testing.T) {
 		nextObjectToRead := make(chan string)
 		nextObjectToModify := make(chan string)
 		var objectModified atomic.Bool
-
+		// Detect cancellation from either the client or server.
+		isCancellationError := func(err error) bool {
+			return errors.Is(err, context.Canceled) ||
+				sqltestutils.IsClientSideQueryCanceledErr(err)
+		}
 		// Creates tables in the background.
 		createThreads := func(ctx context.Context) (err error) {
 			defer close(nextObjectToRead)
@@ -3839,7 +3843,7 @@ func TestLeaseManagerLockedTimestampConcurrent(t *testing.T) {
 				objectName := fmt.Sprintf("t%d", i)
 				sql := fmt.Sprintf("CREATE TABLE %s(n int PRIMARY KEY)\n", objectName)
 				if _, err := conn.ExecContext(ctx, sql); err != nil {
-					if errors.Is(err, context.Canceled) {
+					if isCancellationError(err) {
 						return nil
 					}
 					panic(err)
@@ -3876,7 +3880,7 @@ func TestLeaseManagerLockedTimestampConcurrent(t *testing.T) {
 					// Repeat usage of the descriptor.
 					sql := fmt.Sprintf("SELECT * FROM %s", objectName)
 					if _, err := conn.ExecContext(ctx, sql); err != nil {
-						if errors.Is(err, context.Canceled) {
+						if isCancellationError(err) {
 							return nil
 						}
 						panic(err)
@@ -3893,7 +3897,7 @@ func TestLeaseManagerLockedTimestampConcurrent(t *testing.T) {
 			for objectName := range nextObjectToModify {
 				sql := fmt.Sprintf("ALTER TABLE %s ADD COLUMN n2 int", objectName)
 				if _, err := conn.ExecContext(ctx, sql); err != nil {
-					if errors.Is(err, context.Canceled) {
+					if isCancellationError(err) {
 						return nil
 					}
 					panic(err)
