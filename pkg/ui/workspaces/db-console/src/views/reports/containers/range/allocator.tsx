@@ -17,13 +17,10 @@ interface AllocatorOutputProps {
   allocator: CachedDataReducerState<protos.cockroach.server.serverpb.AllocatorRangeResponse>;
 }
 
-export default class AllocatorOutput extends React.Component<
-  AllocatorOutputProps,
-  {}
-> {
-  renderContent = () => {
-    const { allocator } = this.props;
-
+export default function AllocatorOutput({
+  allocator,
+}: AllocatorOutputProps): React.ReactElement {
+  const renderContent = () => {
     if (
       allocator &&
       (isEmpty(allocator.data) || isEmpty(allocator.data.dry_run))
@@ -55,40 +52,36 @@ export default class AllocatorOutput extends React.Component<
     );
   };
 
-  render() {
-    const { allocator } = this.props;
-
-    // TODO(couchand): This is a really myopic way to check for this particular
-    // case, but making major changes to the CachedDataReducer or util.api seems
-    // fraught at this point.  We should revisit this soon.
-    if (
-      allocator &&
-      allocator.lastError &&
-      allocator.lastError.message === "Forbidden"
-    ) {
-      return (
-        <div>
-          <h2 className="base-heading">Simulated Allocator Output</h2>
-          {REMOTE_DEBUGGING_ERROR_TEXT}
-        </div>
-      );
-    }
-
-    let fromNodeID = "";
-    if (allocator && !isEmpty(allocator.data)) {
-      fromNodeID = ` (from n${allocator.data.node_id.toString()})`;
-    }
-
+  // TODO(couchand): This is a really myopic way to check for this particular
+  // case, but making major changes to the CachedDataReducer or util.api seems
+  // fraught at this point.  We should revisit this soon.
+  if (
+    allocator &&
+    allocator.lastError &&
+    allocator.lastError.message === "Forbidden"
+  ) {
     return (
       <div>
-        <h2 className="base-heading">Simulated Allocator Output{fromNodeID}</h2>
-        <Loading
-          loading={!allocator || allocator.inFlight}
-          page={"allocator"}
-          error={allocator && allocator.lastError}
-          render={this.renderContent}
-        />
+        <h2 className="base-heading">Simulated Allocator Output</h2>
+        {REMOTE_DEBUGGING_ERROR_TEXT}
       </div>
     );
   }
+
+  let fromNodeID = "";
+  if (allocator && !isEmpty(allocator.data)) {
+    fromNodeID = ` (from n${allocator.data.node_id.toString()})`;
+  }
+
+  return (
+    <div>
+      <h2 className="base-heading">Simulated Allocator Output{fromNodeID}</h2>
+      <Loading
+        loading={!allocator || allocator.inFlight}
+        page={"allocator"}
+        error={allocator && allocator.lastError}
+        render={renderContent}
+      />
+    </div>
+  );
 }
