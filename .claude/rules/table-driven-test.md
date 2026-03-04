@@ -1,8 +1,3 @@
----
-name: table-driven-test
-description: Guidelines for creating clean, well-structured table-driven tests in Go following CockroachDB conventions.
----
-
 # Table-Driven Test Guidelines
 
 Table-driven tests define multiple test cases in a slice of structs, then iterate over them executing the same test logic. This makes it easy to add cases, improves readability, and reduces duplication.
@@ -121,7 +116,7 @@ The name should answer "what scenario is this?" not "what data does this use?"
 
 ## Assertions
 
-For general assertion guidance (`require.*` vs `assert.*`, common patterns), see the `/go-test` skill.
+For general assertion guidance (`require.*` vs `assert.*`, common patterns), see the go-test rule.
 
 **Error handling in test cases:**
 ```go
@@ -204,4 +199,4 @@ entries := entries(
 
 ## Integration Tests
 
-For tests requiring a database server, see the `/integration-test` skill. The table-driven patterns here apply to both unit and integration tests.
+For tests requiring a database server, see the integration-test rule. The table-driven patterns here apply to both unit and integration tests.
