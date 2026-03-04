@@ -133,7 +133,6 @@ func newAPIV2Server(ctx context.Context, opts *apiV2ServerOpts) http.Handler {
 		}
 		dbconsoleAPI := &dbconsole.ApiV2DBConsole{
 			Status:     systemStatus.statusServer,
-			Admin:      systemAdmin.adminServer,
 			InternalDB: opts.sqlServer.internalDB,
 		}
 		registerRoutes(innerMux, authMux, inner, a, dbconsoleAPI)
@@ -222,6 +221,8 @@ func registerRoutes(
 
 		// DB Console BFF endpoints.
 		{"dbconsole/nodes/", dbconsoleAPI.GetNodes, true, authserver.ViewClusterMetadataRole, true},
+		{"dbconsole/jobs/", dbconsoleAPI.GetJobs, true, authserver.ViewClusterMetadataRole, true},
+		{"dbconsole/jobs/{job_id:[0-9]+}/", dbconsoleAPI.GetJob, true, authserver.ViewClusterMetadataRole, true},
 	}
 
 	// For all routes requiring authentication, have the outer mux (a.mux)
