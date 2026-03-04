@@ -5,8 +5,10 @@ go_library(
     srcs = [
         "databases.go",
         "dbconsole.go",
+        "events.go",
         "jobs.go",
         "plans.go",
+        "schedules.go",
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/server/dbconsole",
     visibility = ["//visibility:public"],
@@ -19,6 +21,8 @@ go_library(
         "//pkg/sql/isql",
         "//pkg/sql/sem/tree",
         "//pkg/sql/sessiondata",
+        "//pkg/util/safesql",
+        "@com_github_cockroachdb_errors//:errors",
         "@com_github_gorilla_mux//:mux",
     ],
 )
@@ -28,9 +32,11 @@ go_test(
     srcs = [
         "databases_test.go",
         "dbconsole_test.go",
+        "events_test.go",
         "jobs_test.go",
         "mock_test.go",
         "plans_test.go",
+        "schedules_test.go",
     ],
     embed = [":dbconsole"],
     deps = [
