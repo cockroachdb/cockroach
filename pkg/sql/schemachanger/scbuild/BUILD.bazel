@@ -35,6 +35,7 @@ go_library(
         "//pkg/sql/catalog/tabledesc",
         "//pkg/sql/catalog/typedesc",
         "//pkg/sql/parser",
+        "//pkg/sql/partitioning",
         "//pkg/sql/pgwire/pgcode",
         "//pkg/sql/pgwire/pgerror",
         "//pkg/sql/plpgsql/parser",

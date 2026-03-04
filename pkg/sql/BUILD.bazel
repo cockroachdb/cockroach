@@ -471,6 +471,7 @@ go_library(
         "//pkg/sql/parser",
         "//pkg/sql/parser/statements",
         "//pkg/sql/parserutils",
+        "//pkg/sql/partitioning",
         "//pkg/sql/pgrepl/lsn",
         "//pkg/sql/pgrepl/lsnutil",
         "//pkg/sql/pgrepl/pgrepltree",

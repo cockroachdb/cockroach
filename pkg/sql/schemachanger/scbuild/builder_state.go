@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/partitioning"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	plpgsql "github.com/cockroachdb/cockroach/pkg/sql/plpgsql/parser"
@@ -780,7 +781,7 @@ func (b *builderState) IndexPartitioningDescriptor(
 	)
 	allowImplicitPartitioning := b.evalCtx.SessionData().ImplicitColumnPartitioningEnabled ||
 		tbl.IsLocalityRegionalByRow()
-	_, ret, err := b.createPartCCL(
+	_, ret, err := partitioning.CreatePartitioning(
 		b.ctx,
 		b.clusterSettings,
 		b.evalCtx,

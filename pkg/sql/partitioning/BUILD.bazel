@@ -1,14 +1,13 @@
 load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
-    name = "partitionccl",
-    srcs = ["partition.go"],
-    importpath = "github.com/cockroachdb/cockroach/pkg/ccl/partitionccl",
+    name = "partitioning",
+    srcs = ["partitioning.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/sql/partitioning",
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/config/zonepb",
         "//pkg/settings/cluster",
-        "//pkg/sql",
         "//pkg/sql/catalog",
         "//pkg/sql/catalog/catpb",
         "//pkg/sql/catalog/colinfo",
@@ -17,7 +16,6 @@ go_library(
         "//pkg/sql/pgwire/pgerror",
         "//pkg/sql/rowenc",
         "//pkg/sql/rowenc/valueside",
-        "//pkg/sql/schemachanger/scdeps",
         "//pkg/sql/sem/eval",
         "//pkg/sql/sem/tree",
         "//pkg/sql/sem/volatility",
@@ -29,8 +27,7 @@ go_library(
 )
 
 go_test(
-    name = "partitionccl_test",
-    size = "medium",
+    name = "partitioning_test",
     srcs = [
         "alter_primary_key_test.go",
         "drop_test.go",
@@ -38,12 +35,9 @@ go_test(
         "partition_test.go",
         "zone_test.go",
     ],
-    embed = [":partitionccl"],
     deps = [
         "//pkg/base",
-        "//pkg/ccl",
         "//pkg/ccl/testutilsccl",
-        "//pkg/ccl/utilccl",
         "//pkg/config",
         "//pkg/config/zonepb",
         "//pkg/jobs",

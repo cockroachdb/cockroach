@@ -64,7 +64,6 @@ go_test(
         "//pkg/base",
         "//pkg/ccl/multiregionccl",
         "//pkg/ccl/multiregionccl/multiregionccltestutils",
-        "//pkg/ccl/partitionccl",
         "//pkg/jobs/jobspb",
         "//pkg/security/securityassets",
         "//pkg/security/securitytest",

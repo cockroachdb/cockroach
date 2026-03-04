@@ -100,6 +100,7 @@
 /pkg/sql/pg_catalog.go       @cockroachdb/sql-foundations
 /pkg/sql/show_create*.go     @cockroachdb/sql-foundations
 /pkg/sql/lex/                @cockroachdb/sql-foundations
+/pkg/sql/partitioning/       @cockroachdb/sql-foundations
 /pkg/sql/pgwire/             @cockroachdb/sql-foundations
 /pkg/sql/pgwire/auth.go      @cockroachdb/sql-foundations @cockroachdb/security-engineering @cockroachdb/product-security
 /pkg/sql/pgwire/identmap/    @cockroachdb/sql-foundations @cockroachdb/product-security
@@ -208,9 +209,9 @@
 /pkg/server/debug/                       @cockroachdb/obs-prs @cockroachdb/server-prs
 /pkg/server/decommission*.go             @cockroachdb/kv-prs
 /pkg/server/drain*.go                    @cockroachdb/kv-prs @cockroachdb/sql-foundations
-/pkg/server/dumpstore/                   @cockroachdb/obs-prs 
+/pkg/server/dumpstore/                   @cockroachdb/obs-prs
 /pkg/server/external_storage*.go         @cockroachdb/disaster-recovery
-/pkg/server/fanout*.go                   @cockroachdb/obs-prs 
+/pkg/server/fanout*.go                   @cockroachdb/obs-prs
 /pkg/server/diagnostics/                 @cockroachdb/obs-prs
 /pkg/server/goroutinedumper/             @cockroachdb/obs-prs @cockroachdb/server-prs
 /pkg/server/heapprofiler/                @cockroachdb/obs-prs @cockroachdb/server-prs
@@ -422,7 +423,6 @@
 /pkg/ccl/multitenant/tenantcostclient/ @cockroachdb/sql-queries-prs
 /pkg/ccl/multitenant/tenantcostserver/ @cockroachdb/sql-queries-prs
 /pkg/ccl/oidcccl/            @cockroachdb/product-security
-/pkg/ccl/partitionccl/       @cockroachdb/sql-foundations
 /pkg/ccl/pgcryptoccl/        @cockroachdb/sql-foundations
 /pkg/ccl/plpgsqlccl/         @cockroachdb/sql-queries-prs
 /pkg/ccl/securityccl/        @cockroachdb/security-engineering @cockroachdb/product-security

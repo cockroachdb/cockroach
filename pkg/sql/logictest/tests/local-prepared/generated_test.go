@@ -913,13 +913,6 @@ func TestLogic_partial_txn_commit(
 	runLogicTest(t, "partial_txn_commit")
 }
 
-func TestLogic_partitioning(
-	t *testing.T,
-) {
-	defer leaktest.AfterTest(t)()
-	runLogicTest(t, "partitioning")
-}
-
 func TestLogic_pg_catalog_pg_default_acl(
 	t *testing.T,
 ) {

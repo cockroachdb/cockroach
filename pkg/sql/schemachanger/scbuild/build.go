@@ -294,7 +294,6 @@ type builderState struct {
 	commentGetter            scdecomp.CommentGetter
 	zoneConfigReader         scdecomp.ZoneConfigGetter
 	referenceProviderFactory ReferenceProviderFactory
-	createPartCCL            CreatePartitioningCCLCallback
 	hasAdmin                 bool
 
 	// output contains the schema change targets that have been planned so far.
@@ -345,7 +344,6 @@ func newBuilderState(
 		cr:                       d.CatalogReader(),
 		tr:                       d.TableReader(),
 		auth:                     d.AuthorizationAccessor(),
-		createPartCCL:            d.IndexPartitioningCCLCallback(),
 		output:                   make([]elementState, 0, len(incumbent.Current)),
 		descCache:                make(map[catid.DescID]*cachedDesc),
 		tempSchemas:              make(map[catid.DescID]catalog.SchemaDescriptor),
