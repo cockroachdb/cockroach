@@ -148,11 +148,9 @@ func executeSupportedDDLs(
 	if err != nil {
 		return err
 	}
-	if clusterVersion.AtLeast(clusterversion.V25_3.Version()) {
-		for _, ddl := range v253DDLs {
-			if err := helper.ExecWithGateway(r, nodes, ddl); err != nil {
-				return err
-			}
+	for _, ddl := range v253DDLs {
+		if err := helper.ExecWithGateway(r, nodes, ddl); err != nil {
+			return err
 		}
 	}
 	if clusterVersion.AtLeast(clusterversion.V25_4.Version()) {

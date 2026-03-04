@@ -17,7 +17,6 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/build"
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvnemesis/kvnemesisutil"
@@ -3972,7 +3971,6 @@ func MVCCPredicateDeleteRange(
 ) (*roachpb.Span, error) {
 	// TODO(jeffswenson): delete the range tombstone predicate delete once V25_2
 	// is no longer supported as an upgrade path.
-	_ = clusterversion.V25_2
 
 	if endTime.IsEmpty() {
 		return nil, errors.AssertionFailedf("MVCCPredicateDeleteRange expects non-empty endTime")
@@ -4940,6 +4938,9 @@ type MVCCScanOptions struct {
 	// roachpb.Value whose RawBytes may contain MVCCValueHeader
 	// data.
 	ReturnRawMVCCValues bool
+	// WorkloadID identifies the workload that triggered the scan (e.g.
+	// statement fingerprint ID, job ID). Used for ASH sampling.
+	WorkloadID uint64
 }
 
 func (opts *MVCCScanOptions) validate() error {

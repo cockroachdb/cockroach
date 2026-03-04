@@ -10,7 +10,6 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/cli/cliflags"
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/security/distinguishedname"
 	"github.com/cockroachdb/cockroach/pkg/security/provisioning"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
@@ -250,9 +249,6 @@ func MakeListFromKVOptions(
 			}
 		case PROVISIONSRC:
 			roleOptions[i].Validate = func(settings *cluster.Settings, u username.SQLUsername, s string) error {
-				if !settings.Version.IsActive(ctx, clusterversion.V25_3) {
-					return pgerror.Newf(pgcode.FeatureNotSupported, "PROVISIONSRC role option is only supported after v25.3 upgrade is finalized")
-				}
 				if u.IsRootUser() {
 					return pgerror.Newf(pgcode.InvalidParameterValue, "role %q cannot have a PROVISIONSRC", u)
 				}

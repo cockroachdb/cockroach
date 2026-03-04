@@ -361,8 +361,7 @@ func (m *Manager) WaitForInitialVersion(
 	regions regionliveness.CachedDatabaseRegions,
 	retryOpts retry.Options,
 ) error {
-	if !WaitForInitialVersion.Get(&m.settings.SV) ||
-		!m.storage.settings.Version.IsActive(ctx, clusterversion.V25_1) {
+	if !WaitForInitialVersion.Get(&m.settings.SV) {
 		return nil
 	}
 	wsTracker := startWaitStatsTracker(ctx)

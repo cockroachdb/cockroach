@@ -11,6 +11,7 @@ go_library(
         "//pkg/server/authserver",
         "//pkg/server/serverpb",
         "//pkg/server/srverrors",
+        "//pkg/sql/isql",
     ],
 )
 

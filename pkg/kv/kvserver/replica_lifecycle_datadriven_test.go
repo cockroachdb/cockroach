@@ -39,6 +39,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/cockroach/pkg/util/uint128"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/datadriven"
 	"github.com/cockroachdb/errors"
@@ -103,6 +104,25 @@ import (
 //	context's state; if the replica doesn't exist, or a newer (higher ReplicaID)
 //	replica exists, it is considered destroyed.
 //
+// eval-merge lhs-range-id=<int> rhs-range-id=<int> [verbose]
+// ----
+//
+//	Evaluates a merge of the RHS range into the LHS range. The LHS and RHS
+//	ranges must be adjacent (LHS.EndKey == RHS.StartKey). This constructs a
+//	MergeTrigger, runs the merge trigger evaluation, and stashes the resulting
+//	batch representing the pending raft log command. The batch is NOT committed
+//	until the merge is applied. However, the in-memory range state is updated
+//	to reflect the merge -- the LHS widens to cover the RHS keyspace.
+//	Optionally, we print the evaluated batch if running with the verbose flag.
+//
+// apply-merge range-id=<int>
+// ----
+//
+//	Applies the pending merge for the specified (LHS) range using the stashed
+//	batch that was generated during merge evaluation. This also subsumes the
+//	RHS replica, removing its RangeID-local state from storage and installing
+//	a merge tombstone. The RHS range is removed from the test context.
+//
 // destroy-replica range-id=<int>
 // ----
 //
@@ -124,6 +144,13 @@ import (
 //	not nonsensical. If base-key is provided, it must lie within the range's
 //	boundaries and is used as the base key for generating range data; otherwise
 //	the range's start key is used.
+//
+// add-abortspan-entry range-id=<int> [num-entries=<int>]
+// ----
+//
+//	Adds one or more synthetic abortspan entries to the specified range.
+//	Each entry uses a unique deterministic txn ID. The number of entries
+//	defaults to 1.
 //
 // print-range-state [sort-keys=<bool>]
 // ----
@@ -274,14 +301,7 @@ func TestReplicaLifecycleDataDriven(t *testing.T) {
 				// raft log entry that will be applied as part of split
 				// application.
 				batch := tc.stateStorage.NewBatch()
-				rec := (&batcheval.MockEvalCtx{
-					ClusterSettings:        tc.st,
-					Desc:                   &desc,
-					Clock:                  tc.clock,
-					AbortSpan:              rs.abortspan,
-					LastReplicaGCTimestamp: rs.lastGCTimestamp,
-					RangeLeaseDuration:     tc.rangeLeaseDuration,
-				}).EvalContext()
+				rec := tc.makeEvalCtx(rs, &desc)
 
 				in := batcheval.SplitTriggerHelperInput{
 					LeftLease:      rs.lease,
@@ -365,6 +385,86 @@ func TestReplicaLifecycleDataDriven(t *testing.T) {
 						tc.updateReplicaStateFromStorage(t, ctx, rhsRangeState, stateBatch, raftBatch, false /* justCreated */)
 					}
 				})
+
+			case "eval-merge":
+				lhsRangeID := dd.ScanArg[roachpb.RangeID](t, d, "lhs-range-id")
+				rhsRangeID := dd.ScanArg[roachpb.RangeID](t, d, "rhs-range-id")
+				verbose := d.HasArg("verbose")
+				lhsRS := tc.mustGetRangeState(t, lhsRangeID)
+				rhsRS := tc.mustGetRangeState(t, rhsRangeID)
+				require.True(t,
+					lhsRS.desc.EndKey.Equal(rhsRS.desc.StartKey),
+					"ranges are not adjacent: lhs end key %s != rhs start key %s",
+					lhsRS.desc.EndKey, rhsRS.desc.StartKey,
+				)
+
+				lhsDesc := lhsRS.desc
+				mergedDesc := lhsDesc
+				mergedDesc.EndKey = rhsRS.desc.EndKey
+				// NB: LeftDesc in the MergeTrigger is the *post-merge*
+				// descriptor (with the widened EndKey), matching production
+				// behavior in AdminMerge. The EvalContext's Desc, on the other
+				// hand, is the original pre-merge LHS descriptor; mergeTrigger
+				// validates that the two are consistent (same StartKey,
+				// LeftDesc.EndKey > Desc.EndKey).
+				merge := roachpb.MergeTrigger{
+					LeftDesc:  mergedDesc,
+					RightDesc: rhsRS.desc,
+				}
+
+				batch := tc.stateStorage.NewBatch()
+				rec := tc.makeEvalCtx(lhsRS, &lhsDesc)
+
+				var ms enginepb.MVCCStats
+				_, err := batcheval.TestingMergeTrigger(
+					ctx, rec, batch, &ms, &merge, hlc.Timestamp{},
+				)
+				require.NoError(t, err)
+
+				batchRepr := batch.Repr()
+				tc.merges[lhsRangeID] = pendingMerge{
+					trigger:   merge,
+					batchRepr: batchRepr,
+				}
+				batch.Close()
+
+				if verbose {
+					output, err := print.DecodeWriteBatch(batchRepr)
+					require.NoError(t, err)
+					return strings.ReplaceAll(output, "\n\n", "\n")
+				}
+				return fmt.Sprintf("merged: r%d [%s, %s) + r%d [%s, %s) -> r%d [%s, %s)",
+					lhsDesc.RangeID, lhsDesc.StartKey, lhsDesc.EndKey,
+					rhsRS.desc.RangeID, rhsRS.desc.StartKey, rhsRS.desc.EndKey,
+					mergedDesc.RangeID, mergedDesc.StartKey, mergedDesc.EndKey)
+
+			case "apply-merge":
+				rangeID := dd.ScanArg[roachpb.RangeID](t, d, "range-id")
+				pm, ok := tc.merges[rangeID]
+				require.True(t, ok, "pending merge not found for range-id %d", rangeID)
+				// NB: Delete from the pending merge map before looking up the RHS via
+				// mustGetRangeState, which guards against operating on a subsumed range
+				// by scanning this map.
+				delete(tc.merges, rangeID)
+				merge := pm.trigger
+
+				lhsRS := tc.mustGetRangeState(t, rangeID)
+				rhsRS := tc.mustGetRangeState(t, merge.RightDesc.RangeID)
+				require.NotNil(t, rhsRS.replica, "rhs replica must exist for merge application")
+
+				lhsRS.desc = merge.LeftDesc // update to post-merge descriptor
+				output := tc.mutate(t, func(stateBatch, raftBatch storage.Batch) {
+					require.NoError(t, stateBatch.ApplyBatchRepr(pm.batchRepr, false /* sync */))
+					require.NoError(t, kvstorage.SubsumeReplica(ctx, kvstorage.ReadWriter{
+						State: kvstorage.WrapState(stateBatch),
+						Raft:  kvstorage.WrapRaft(raftBatch),
+					}, kvstorage.DestroyReplicaInfo{
+						FullReplicaID: rhsRS.replica.FullReplicaID,
+						Keys:          rhsRS.desc.RSpan(),
+					}))
+				})
+				delete(tc.ranges, merge.RightDesc.RangeID)
+				return output
 
 			case "destroy-replica":
 				rangeID := dd.ScanArg[roachpb.RangeID](t, d, "range-id")
@@ -460,6 +560,23 @@ func TestReplicaLifecycleDataDriven(t *testing.T) {
 					}
 				})
 
+			case "add-abortspan-entry":
+				rangeID := dd.ScanArg[roachpb.RangeID](t, d, "range-id")
+				numEntries := dd.ScanArgOr(t, d, "num-entries", 1)
+				rs := tc.mustGetRangeState(t, rangeID)
+				return tc.mutate(t, func(stateBatch, _ storage.Batch) {
+					for i := 0; i < numEntries; i++ {
+						txnID := uuid.FromUint128(uint128.FromInts(0, uint64(i+1)))
+						require.NoError(t, rs.abortspan.Put(ctx, stateBatch, nil, /* ms */
+							txnID, &roachpb.AbortSpanEntry{
+								Key:       rs.desc.StartKey.AsRawKey(),
+								Timestamp: hlc.Timestamp{WallTime: 10},
+								Priority:  100,
+							},
+						))
+					}
+				})
+
 			case "print-range-state":
 				var sb strings.Builder
 				if len(tc.ranges) == 0 {
@@ -527,6 +644,12 @@ type pendingSplit struct {
 	raftIndex kvpb.RaftIndex
 }
 
+// pendingMerge represents a merge that has been evaluated but not yet applied.
+type pendingMerge struct {
+	trigger   roachpb.MergeTrigger
+	batchRepr []byte
+}
+
 // testCtx is a single test's context. It tracks the state of all ranges and any
 // intermediate steps when performing replica lifecycle events.
 type testCtx struct {
@@ -537,6 +660,7 @@ type testCtx struct {
 	nextRangeID roachpb.RangeID // monotonically-increasing rangeID
 	ranges      map[roachpb.RangeID]*rangeState
 	splits      map[roachpb.RangeID]pendingSplit
+	merges      map[roachpb.RangeID]pendingMerge
 	// The storage engines correspond to a single store, (n1, s1). The engines
 	// are logically separated into two -- one for the state machine, and one
 	// for Raft.
@@ -559,9 +683,24 @@ func newTestCtx() *testCtx {
 		nextRangeID:  1,
 		ranges:       make(map[roachpb.RangeID]*rangeState),
 		splits:       make(map[roachpb.RangeID]pendingSplit),
+		merges:       make(map[roachpb.RangeID]pendingMerge),
 		stateStorage: storage.NewDefaultInMemForTesting(),
 		raftStorage:  storage.NewDefaultInMemForTesting(),
 	}
+}
+
+// makeEvalCtx constructs a batcheval.EvalContext for the given range.
+func (tc *testCtx) makeEvalCtx(
+	rs *rangeState, desc *roachpb.RangeDescriptor,
+) batcheval.EvalContext {
+	return (&batcheval.MockEvalCtx{
+		ClusterSettings:        tc.st,
+		Desc:                   desc,
+		Clock:                  tc.clock,
+		AbortSpan:              rs.abortspan,
+		LastReplicaGCTimestamp: rs.lastGCTimestamp,
+		RangeLeaseDuration:     tc.rangeLeaseDuration,
+	}).EvalContext()
 }
 
 // close closes the test context's storage engines.
@@ -704,11 +843,24 @@ func newRangeState(desc roachpb.RangeDescriptor) *rangeState {
 	}
 }
 
-// mustGetRangeState returns the range state for the given range ID.
+// mustGetRangeState returns the range state for the given range ID. It fails
+// the test if the range is not found or is the RHS of a pending merge.
 func (tc *testCtx) mustGetRangeState(t *testing.T, rangeID roachpb.RangeID) *rangeState {
 	rs, ok := tc.ranges[rangeID]
 	require.True(t, ok, "range-id %d not found", rangeID)
+	require.False(t, tc.preMergeRHSIsSubsumed(rangeID), "range r%d is subsumed", rangeID)
 	return rs
+}
+
+// preMergeRHSIsSubsumed returns true if the given range is the RHS of a pending
+// merge that has been evaluated but not yet applied.
+func (tc *testCtx) preMergeRHSIsSubsumed(rangeID roachpb.RangeID) bool {
+	for _, pm := range tc.merges {
+		if pm.trigger.RightDesc.RangeID == rangeID {
+			return true
+		}
+	}
+	return false
 }
 
 func (tc *testCtx) updateReplicaStateFromStorage(

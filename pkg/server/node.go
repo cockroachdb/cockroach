@@ -471,9 +471,7 @@ func GetBootstrapSchemaForTest(
 func bootstrapCluster(
 	ctx context.Context, engines Engines, initCfg initServerCfg,
 ) (*initState, error) {
-	// We expect all the stores to be empty at this point, except for
-	// the store cluster version key. Assert so.
-	//
+	// We expect all the stores to be empty at this point.
 	// TODO(jackson): Eventually we should be able to avoid opening the
 	// engines altogether until here.
 	if err := assertEnginesEmpty(engines); err != nil {

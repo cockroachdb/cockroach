@@ -13,7 +13,6 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdcevent"
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/crosscluster"
 	"github.com/cockroachdb/cockroach/pkg/crosscluster/logical/sqlwriter"
 	"github.com/cockroachdb/cockroach/pkg/crosscluster/replicationutils"
@@ -686,16 +685,6 @@ func (lrw *logicalReplicationWriterProcessor) setupBatchHandlers(ctx context.Con
 	}
 
 	writer := sqlclustersettings.LDRWriterType(lrw.spec.WriterType)
-	if writer == "" && !lrw.FlowCtx.Cfg.Settings.Version.IsActive(ctx, clusterversion.V25_2) {
-		var err error
-		writer, err = getWriterType(
-			ctx, lrw.spec.Mode, lrw.FlowCtx.Cfg.Settings,
-		)
-		if err != nil {
-			return err
-		}
-	}
-
 	flowCtx := lrw.FlowCtx
 	lrw.bh = make([]BatchHandler, poolSize)
 	for i := range lrw.bh {

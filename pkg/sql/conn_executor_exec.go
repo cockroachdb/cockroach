@@ -656,6 +656,13 @@ func (ex *connExecutor) execStmtInOpenState(
 	ctx = ih.Setup(ctx, ex, p, &stmt, os.ImplicitTxn.Get(),
 		ex.state.mu.priority, ex.state.mu.autoRetryCounter)
 
+	// Set workload ID for ASH sampling. ih.Setup already computed the
+	// statement fingerprint ID, so reuse it here.
+	p.extendedEvalCtx.WorkloadID = uint64(ih.fingerprintId)
+	if p.txn != nil {
+		p.txn.SetWorkloadID(uint64(ih.fingerprintId))
+	}
+
 	// Note that here we always unconditionally defer a function that takes care
 	// of finishing the instrumentation helper. This is needed since in order to
 	// support plan-gist-matching of the statement diagnostics we might not know
@@ -1727,6 +1734,13 @@ func (ex *connExecutor) execStmtInOpenStateWithPausablePortal(
 	p.semaCtx.Placeholders.Assign(pinfo, vars.stmt.NumPlaceholders)
 	p.extendedEvalCtx.Placeholders = &p.semaCtx.Placeholders
 
+	// Set workload ID for ASH sampling. ih.Setup already computed the
+	// statement fingerprint ID, so reuse it here.
+	p.extendedEvalCtx.WorkloadID = uint64(ih.fingerprintId)
+	if p.txn != nil {
+		p.txn.SetWorkloadID(uint64(ih.fingerprintId))
+	}
+
 	if buildutil.CrdbTestBuild {
 		// Ensure that each statement is formatted regardless of logging
 		// settings.
@@ -2414,6 +2428,36 @@ func (ex *connExecutor) resetTransactionOnSchemaChangeRetry(ctx context.Context)
 	return nil
 }
 
+// getChainTxnModes returns a non-nil chainedTransactionModes if the given
+// statement is a COMMIT AND CHAIN or ROLLBACK AND CHAIN. The returned modes
+// capture the current transaction's isolation level, priority, and read/write
+// mode so they can be applied to the new chained transaction.
+func (ex *connExecutor) getChainTxnModes(ast tree.Statement) *chainedTransactionModes {
+	var chain bool
+	switch s := ast.(type) {
+	case *tree.CommitTransaction:
+		chain = s.Chain
+	case *tree.RollbackTransaction:
+		chain = s.Chain
+	}
+	if !chain {
+		return nil
+	}
+	ex.state.mu.RLock()
+	pri := ex.state.mu.priority
+	isoLevel := ex.state.mu.isolationLevel
+	ex.state.mu.RUnlock()
+	readOnly := tree.ReadWrite
+	if ex.state.readOnly.Load() {
+		readOnly = tree.ReadOnly
+	}
+	return &chainedTransactionModes{
+		pri:      pri,
+		readOnly: readOnly,
+		isoLevel: isoLevel,
+	}
+}
+
 // commitSQLTransaction executes a commit after the execution of a
 // stmt, which can be any statement when executing a statement with an
 // implicit transaction, or a COMMIT statement when using an explicit
@@ -2432,6 +2476,10 @@ func (ex *connExecutor) commitSQLTransaction(
 			return ex.makeErrEvent(retryErr, ast)
 		}
 	}
+
+	// Capture chain modes before commit while the txnState is still alive.
+	chainModes := ex.getChainTxnModes(ast)
+
 	ex.phaseTimes.SetSessionPhaseTime(sessionphase.SessionStartTransactionCommit, crtime.NowMono())
 	if err := commitFn(ctx); err != nil {
 		// For certain retryable errors, we should turn them into client visible
@@ -2450,6 +2498,7 @@ func (ex *connExecutor) commitSQLTransaction(
 	}); err != nil {
 		return ex.makeErrEvent(err, ast)
 	}
+	ex.extraTxnState.chainTxnModes = chainModes
 	return eventTxnFinishCommitted{}, nil
 }
 
@@ -2624,6 +2673,9 @@ func (ex *connExecutor) rollbackSQLTransaction(
 	ex.extraTxnState.idleLatency += ex.statsCollector.PhaseTimes().
 		GetIdleLatency(ex.statsCollector.PreviousPhaseTimes())
 
+	// Capture chain modes before rollback while the txnState is still alive.
+	chainModes := ex.getChainTxnModes(stmt)
+
 	if err := ex.extraTxnState.sqlCursors.closeAll(&ex.planner, cursorCloseForTxnRollback); err != nil {
 		return ex.makeErrEvent(err, stmt)
 	}
@@ -2657,6 +2709,7 @@ func (ex *connExecutor) rollbackSQLTransaction(
 		return ex.makeErrEvent(err, stmt)
 	}
 	// We're done with this txn.
+	ex.extraTxnState.chainTxnModes = chainModes
 	return eventTxnFinishAborted{}, nil
 }
 

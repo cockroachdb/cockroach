@@ -56,7 +56,7 @@ jobs:
           allowed_non_write_users: "*"
           use_vertex: "true"
           claude_args: |
-            --model claude-opus-4-5@20251101
+            --model claude-opus-4-6
             --allowedTools "Read,Grep,Glob,Bash(gh pr diff:*),Bash(gh pr view:*)"
           prompt: |
             REPO: ${{ github.repository }}
@@ -106,7 +106,7 @@ jobs:
           allowed_non_write_users: "*"
           use_vertex: "true"
           claude_args: |
-            --model claude-opus-4-5@20251101
+            --model claude-opus-4-6
             --allowedTools "Read,Grep,Glob,Bash(gh pr diff:*),Bash(gh pr view:*)"
           prompt: |
             REPO: ${{ github.repository }}
@@ -157,7 +157,7 @@ jobs:
           allowed_non_write_users: "*"
           use_vertex: "true"
           claude_args: |
-            --model claude-opus-4-5@20251101
+            --model claude-opus-4-6
             --allowedTools "Read,Grep,Glob,Bash(gh pr diff:*),Bash(gh pr view:*)"
           prompt: |
             REPO: ${{ github.repository }}
@@ -224,7 +224,7 @@ jobs:
           allowed_non_write_users: "*"
           use_vertex: "true"
           claude_args: |
-            --model claude-opus-4-5@20251101
+            --model claude-opus-4-6
             --allowedTools "Read,Grep,Glob,Bash(gh pr diff:*),Bash(gh pr view:*),mcp__github_inline_comment__create_inline_comment,Bash(gh pr comment:*),Bash(gh pr edit:*)"
           prompt: |
             REPO: ${{ github.repository }}

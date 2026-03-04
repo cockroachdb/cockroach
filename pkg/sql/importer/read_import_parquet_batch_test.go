@@ -359,7 +359,7 @@ func TestParquetColumnBatchRealFiles(t *testing.T) {
 		},
 		{
 			filename:     "alltypes_plain.snappy.parquet",
-			expectedRows: 2,
+			expectedRows: 8,
 			expectedCols: 11,
 		},
 	}

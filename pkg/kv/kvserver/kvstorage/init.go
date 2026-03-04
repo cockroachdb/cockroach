@@ -89,13 +89,10 @@ func checkCanInitializeEngine(ctx context.Context, eng storage.Engine) error {
 	} else if !errors.HasType(err, (*NotBootstrappedError)(nil)) {
 		return errors.Wrap(err, "unable to read store ident")
 	}
-	// Engine is not bootstrapped yet (i.e. no StoreIdent). Does it contain a
-	// cluster version, cached settings and nothing else? Note that there is one
-	// cluster version key and many cached settings key, and the cluster version
-	// key precedes the cached settings.
-	//
-	// We use an EngineIterator to ensure that there are no keys that cannot be
-	// parsed as MVCCKeys (e.g. lock table keys) in the engine.
+	// Engine is not bootstrapped yet (i.e. no StoreIdent). It may contain cached
+	// settings, but nothing else. Use EngineIterator to ensure that there are no
+	// keys that cannot be parsed as MVCCKeys (e.g. lock table keys) in the
+	// engine.
 	iter, err := eng.NewEngineIterator(ctx, storage.IterOptions{
 		KeyTypes:   storage.IterKeyTypePointsAndRanges,
 		UpperBound: roachpb.KeyMax,
@@ -133,12 +130,9 @@ func checkCanInitializeEngine(ctx context.Context, eng storage.Engine) error {
 		if k, err = getMVCCKey(); err != nil {
 			return err
 		}
-		// Only allowed to find cluster version and cached cluster settings on an
-		// uninitialized engine.
-		if !k.Key.Equal(keys.DeprecatedStoreClusterVersionKey()) {
-			if _, err := keys.DecodeStoreCachedSettingsKey(k.Key); err != nil {
-				return errors.Errorf("engine cannot be bootstrapped, contains key:\n%s", k.String())
-			}
+		// Only allowed to find cached cluster settings on an uninitialized engine.
+		if _, err := keys.DecodeStoreCachedSettingsKey(k.Key); err != nil {
+			return errors.Errorf("engine cannot be bootstrapped, contains key:\n%s", k.String())
 		}
 		valid, err = iter.NextEngineKey()
 	}

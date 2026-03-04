@@ -27,6 +27,12 @@ type TestingKnobs struct {
 		createTime int64,
 	)
 
+	// WorkQueueAdmitInterceptor, if set, is called at the start of every
+	// WorkQueue.Admit call with the WorkInfo being submitted. Tests can use
+	// this to observe what workload information reaches admission control
+	// (e.g. to verify WorkloadID propagation).
+	WorkQueueAdmitInterceptor func(info WorkInfo)
+
 	// DisableWorkQueueFastPath disables the fast-path in work queues.
 	DisableWorkQueueFastPath bool
 
@@ -50,6 +56,24 @@ type TestingKnobs struct {
 	// DisableCPUTimeTokenSQLBypass disables the functionality which
 	// has SQL work bypass AC, in case CPU time token AC is enabled.
 	DisableCPUTimeTokenSQLBypass bool
+}
+
+// observeOnlyKnobs returns a TestingKnobs that includes only observation
+// hooks (like WorkQueueAdmitInterceptor) without behavioral overrides (like
+// DisableWorkQueueGranting and DisableWorkQueueFastPath). This is used for
+// non-store work queues (regular CPU, elastic CPU) where behavioral knobs
+// intended for store-level flow control tests would interfere with cluster
+// startup and normal operation.
+func (t *TestingKnobs) observeOnlyKnobs() *TestingKnobs {
+	if t == nil {
+		return nil
+	}
+	if t.WorkQueueAdmitInterceptor == nil {
+		return nil
+	}
+	return &TestingKnobs{
+		WorkQueueAdmitInterceptor: t.WorkQueueAdmitInterceptor,
+	}
 }
 
 // ModuleTestingKnobs is part of the base.ModuleTestingKnobs interface.

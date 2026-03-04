@@ -317,19 +317,29 @@ func (node *BeginTransaction) Format(ctx *FmtCtx) {
 }
 
 // CommitTransaction represents a COMMIT statement.
-type CommitTransaction struct{}
+type CommitTransaction struct {
+	Chain bool
+}
 
 // Format implements the NodeFormatter interface.
 func (node *CommitTransaction) Format(ctx *FmtCtx) {
 	ctx.WriteString("COMMIT TRANSACTION")
+	if node.Chain {
+		ctx.WriteString(" AND CHAIN")
+	}
 }
 
 // RollbackTransaction represents a ROLLBACK statement.
-type RollbackTransaction struct{}
+type RollbackTransaction struct {
+	Chain bool
+}
 
 // Format implements the NodeFormatter interface.
 func (node *RollbackTransaction) Format(ctx *FmtCtx) {
 	ctx.WriteString("ROLLBACK TRANSACTION")
+	if node.Chain {
+		ctx.WriteString(" AND CHAIN")
+	}
 }
 
 // Savepoint represents a SAVEPOINT <name> statement.

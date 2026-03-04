@@ -29,7 +29,6 @@ func TestStoreKeyEncodeDecode(t *testing.T) {
 	}{
 		{key: StoreIdentKey(), expSuffix: localStoreIdentSuffix, expDetail: nil},
 		{key: StoreGossipKey(), expSuffix: localStoreGossipSuffix, expDetail: nil},
-		{key: DeprecatedStoreClusterVersionKey(), expSuffix: localStoreClusterVersionSuffix, expDetail: nil},
 		{key: StoreLastUpKey(), expSuffix: localStoreLastUpSuffix, expDetail: nil},
 		{key: StoreHLCUpperBoundKey(), expSuffix: localStoreHLCUpperBoundSuffix, expDetail: nil},
 	}

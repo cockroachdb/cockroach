@@ -891,6 +891,16 @@ func newOpTestSelInput(
 	return ret
 }
 
+type AllocatorHolder interface {
+	SetAllocator(allocator *colmem.Allocator)
+}
+
+var _ AllocatorHolder = &opTestInput{}
+
+func (s *opTestInput) SetAllocator(allocator *colmem.Allocator) {
+	s.allocator = allocator
+}
+
 func (s *opTestInput) Init(context.Context) {
 	if s.typs == nil {
 		if len(s.tuples) == 0 {
