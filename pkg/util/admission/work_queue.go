@@ -2001,7 +2001,6 @@ var (
 		Help:        "Wait time durations for requests that waited",
 		Measurement: "Wait time Duration",
 		Unit:        metric.Unit_NANOSECONDS,
-		Visibility:  metric.Metadata_ESSENTIAL,
 		Category:    metric.Metadata_OVERLOAD,
 		HowToUse:    "This is a latency histogram of wait time in the admission control queue. Non-zero wait times are expected when the corresponding resource is saturated.",
 	}
@@ -2010,7 +2009,6 @@ var (
 		Help:        "Wait time durations for requests that waited",
 		Measurement: "Wait time Duration",
 		Unit:        metric.Unit_NANOSECONDS,
-		Visibility:  metric.Metadata_ESSENTIAL,
 		Category:    metric.Metadata_OVERLOAD,
 		HowToUse:    "This is a latency histogram of wait time in the CPU utilization-based admission control queue. Non-zero wait times are expected when CPU is saturated.",
 	}
@@ -2019,7 +2017,6 @@ var (
 		Help:        "Wait time durations for requests that waited",
 		Measurement: "Wait time Duration",
 		Unit:        metric.Unit_NANOSECONDS,
-		Visibility:  metric.Metadata_ESSENTIAL,
 		Category:    metric.Metadata_OVERLOAD,
 		HowToUse:    "This is a latency histogram of wait time in the I/O utilization-based admission control queue. Non-zero wait times are expected when I/O is saturated.",
 	}
@@ -2062,7 +2059,7 @@ func (m *WorkQueueMetrics) getOrCreate(priority admissionpb.WorkPriority) *workQ
 		// It is not called the first Load so that we don't have to unnecessarily
 		// create the metrics.
 		statPrefix := fmt.Sprintf("%v.%v", m.name, priority.String())
-		val, ok = m.byPriority.LoadOrStore(priority, makeWorkQueueMetricsSingle(statPrefix))
+		val, ok = m.byPriority.LoadOrStore(priority, makeWorkQueueMetricsSingle(statPrefix, false /* essential */))
 		if !ok {
 			m.registry.AddMetricStruct(val)
 		}
@@ -2131,7 +2128,7 @@ func (m *WorkQueueMetrics) recordFastPathAdmission(priority admissionpb.WorkPrio
 func (*WorkQueueMetrics) MetricStruct() {}
 
 func makeWorkQueueMetrics(name string, registry *metric.Registry) *WorkQueueMetrics {
-	totalMetric := makeWorkQueueMetricsSingle(name)
+	totalMetric := makeWorkQueueMetricsSingle(name, true /* essential */)
 	registry.AddMetricStruct(totalMetric)
 	wqm := &WorkQueueMetrics{
 		name:     name,
@@ -2145,12 +2142,15 @@ func makeWorkQueueMetrics(name string, registry *metric.Registry) *WorkQueueMetr
 	return wqm
 }
 
-func makeWorkQueueMetricsSingle(name string) *workQueueMetricsSingle {
+func makeWorkQueueMetricsSingle(name string, essential bool) *workQueueMetricsSingle {
 	wdm := waitDurationsMeta
 	if name == KVWork.String() {
 		wdm = kvWaitDurationsMeta
 	} else if name == fmt.Sprintf("%s-stores", KVWork.String()) {
 		wdm = kvStoresWaitDurationsMeta
+	}
+	if essential {
+		wdm.Visibility = metric.Metadata_ESSENTIAL
 	}
 
 	return &workQueueMetricsSingle{
