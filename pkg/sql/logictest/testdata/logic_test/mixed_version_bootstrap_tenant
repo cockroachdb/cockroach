@@ -38,13 +38,18 @@ GROUP BY 2, 3
 # allowed to differ due to the "lastUpdated" column which is time-dependent.
 #
 # Note: the version KV is volatile due to the "lastUpdated" column.
+# Note: the system database descriptor (/Table/3/1/1/2/1) may differ between
+# versions due to schema evolution of the system database.
 query TTT
 SELECT k, is_present_in, v FROM bootstrapped_tenant_data
-WHERE is_present_in <> 'both' AND k <> '/Table/6/1/"version"/0'
+WHERE is_present_in <> 'both'
+  AND k NOT IN ('/Table/6/1/"version"/0', '/Table/3/1/1/2/1')
 ORDER BY 1, 2
 ----
 
 # This is the same test as above, deliberately expressed as a statement error
 # assertion to prevent accidental rewrites.
 statement error pgcode 22012 division by zero
-SELECT 1/count(*) FROM bootstrapped_tenant_data WHERE is_present_in <> 'both' AND k <> '/Table/6/1/"version"/0'
+SELECT 1/count(*) FROM bootstrapped_tenant_data
+WHERE is_present_in <> 'both'
+  AND k NOT IN ('/Table/6/1/"version"/0', '/Table/3/1/1/2/1')

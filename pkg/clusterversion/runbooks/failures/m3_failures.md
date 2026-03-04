@@ -175,6 +175,16 @@ for that key changed between versions.
 **Anti-pattern:** seeing a key in a CI failure → adding `AND k <> '/Table/N/...'` without
 investigation. This silently hides real regressions.
 
+**Known exclusions** (confirmed safe across M.3 cycles — check the reference PR to verify
+they still apply):
+
+| Key | Reason |
+|-----|--------|
+| `/Table/6/1/"version"/0` | `system.settings` version row — volatile due to `lastUpdated` timestamp |
+| `/Table/3/1/1/2/1` | system database descriptor — differs due to schema evolution between versions |
+
+Use `NOT IN (...)` when excluding multiple keys (cleaner than chained `AND k <> ...`).
+
 ---
 
 ## REPOSITORIES.bzl Issues
