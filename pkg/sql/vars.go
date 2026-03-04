@@ -4506,6 +4506,23 @@ var varGen = map[string]sessionVar{
 		},
 		GlobalDefault: globalFalse,
 	},
+
+	// CockroachDB extension.
+	`optimizer_use_min_row_count_anti_join_fix`: {
+		GetStringVal: makePostgresBoolGetStringValFn(`optimizer_use_min_row_count_anti_join_fix`),
+		Set: func(_ context.Context, m sessionDataMutator, s string) error {
+			b, err := paramparse.ParseBoolVar("optimizer_use_min_row_count_anti_join_fix", s)
+			if err != nil {
+				return err
+			}
+			m.SetOptimizerUseMinRowCountAntiJoinFix(b)
+			return nil
+		},
+		Get: func(evalCtx *extendedEvalContext, _ *kv.Txn) (string, error) {
+			return formatBoolAsPostgresSetting(evalCtx.SessionData().OptimizerUseMinRowCountAntiJoinFix), nil
+		},
+		GlobalDefault: globalFalse,
+	},
 }
 
 func ReplicationModeFromString(s string) (sessiondatapb.ReplicationMode, error) {
