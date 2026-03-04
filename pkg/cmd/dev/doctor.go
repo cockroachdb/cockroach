@@ -650,6 +650,10 @@ func (d *dev) checkDoctorStatus(ctx context.Context) error {
 	if buildutil.CrdbTestBuild {
 		return nil
 	}
+	// In automation mode, assume the environment is correctly configured.
+	if d.os.Getenv("AUTOMATION") != "" {
+		return nil
+	}
 
 	status, err := d.getDoctorStatus(ctx)
 	if err != nil {

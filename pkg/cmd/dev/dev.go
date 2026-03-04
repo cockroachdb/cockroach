@@ -158,7 +158,9 @@ Typical usage:
 			"cache",
 		}
 		skipCacheCheckCommands = append(skipCacheCheckCommands, skipDoctorCheckCommands...)
-		skipCacheCheck := buildutil.CrdbTestBuild || ret.os.Getenv("DEV_NO_REMOTE_CACHE") != ""
+		skipCacheCheck := buildutil.CrdbTestBuild ||
+			ret.os.Getenv("AUTOMATION") != "" ||
+			ret.os.Getenv("DEV_NO_REMOTE_CACHE") != ""
 		for _, skipCacheCheckCommand := range skipCacheCheckCommands {
 			skipCacheCheck = skipCacheCheck || cmd.Name() == skipCacheCheckCommand
 		}
