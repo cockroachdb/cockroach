@@ -19,6 +19,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -40,6 +41,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/bulkmerge"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
@@ -131,6 +133,109 @@ func TestImportDistributedMerge(t *testing.T) {
 	sqlDB.Exec(t, `IMPORT INTO customers (id, name, email) CSV DATA ($1)`, "nodelocal://1/data.csv")
 
 	require.Equal(t, [][]string{{"1", "jeff"}}, sqlDB.QueryStr(t, `SELECT id, name FROM customers`))
+}
+
+// TestImportDistributedMergeDuplicateDetection verifies that IMPORT with
+// distributed merge detects duplicate keys at each phase of the pipeline.
+// These tests cover the fixes for cases 4-6 described in #161447.
+//
+// Case 4 (cross-SST duplicates during intermediate merge) does not apply to
+// IMPORT because it uses MaxIterations=1. That case is tested at the merge
+// level by TestCrossSSTDuplicateHandling in pkg/sql/bulkmerge.
+func TestImportDistributedMergeDuplicateDetection(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	testCases := []struct {
+		name string
+		// csvData is the import data.
+		csvData string
+		// injectMergeDuplicate uses the InjectDuplicateKey testing knob to
+		// simulate a duplicate during the merge phase.
+		injectMergeDuplicate bool
+		// smallBatchSize forces each key into its own SST so that non-adjacent
+		// duplicate PKs land in separate SSTs, testing cross-SST detection.
+		smallBatchSize bool
+		errRegex       string
+	}{
+		{
+			// Within-batch: adjacent duplicates land in the same map-phase SST
+			// batch. The SSTSink's checkDuplicates catches them after sorting.
+			name:     "within-batch duplicate PK",
+			csvData:  "1,a\n1,b",
+			errRegex: "duplicate key",
+		},
+		{
+			// Cross-SST: small batch size forces each key into its own SST file.
+			// Non-adjacent duplicate PKs land in different SSTs. Without
+			// EnforceUniqueness, Pebble's external iterator shadows one copy of
+			// the duplicate key, causing silent data loss. EnforceUniqueness
+			// enables suffixed iterators that expose both copies for detection
+			// by extractKeyAndCheckDuplicate.
+			name:           "cross-SST duplicate PK",
+			csvData:        "1,aaaa\n2,bbbb\n3,cccc\n4,dddd\n1,eeee",
+			smallBatchSize: true,
+			errRegex:       "duplicate key",
+		},
+		{
+			// Injected merge duplicate: InjectDuplicateKey causes the merge
+			// processor to write the same key twice consecutively, exercising
+			// extractKeyAndCheckDuplicate in the merge processing loop.
+			name:                 "merge phase injected duplicate",
+			csvData:              "1,a\n2,b\n3,c\n4,d\n5,e",
+			injectMergeDuplicate: true,
+			errRegex:             "duplicate key",
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			dirname := t.TempDir()
+
+			serverArgs := base.TestServerArgs{
+				ExternalIODir:     dirname,
+				DefaultTestTenant: base.TestNeedsTightIntegrationBetweenAPIsAndTestingKnobs,
+			}
+
+			var injected atomic.Bool
+			if tc.injectMergeDuplicate {
+				serverArgs.Knobs = base.TestingKnobs{
+					DistSQL: &execinfra.TestingKnobs{
+						BulkMergeTestingKnobs: &bulkmerge.TestingKnobs{
+							InjectDuplicateKey: func(iteration, maxIteration int32) bool {
+								return !injected.Swap(true)
+							},
+						},
+					},
+				}
+			}
+
+			s, db, _ := serverutils.StartServer(t, serverArgs)
+			ctx := context.Background()
+			defer s.Stopper().Stop(ctx)
+			sqlDB := sqlutils.MakeSQLRunner(db)
+
+			sqlDB.Exec(t, `SET CLUSTER SETTING bulkio.import.distributed_merge.enabled = true`)
+			if tc.smallBatchSize {
+				sqlDB.Exec(t, `SET CLUSTER SETTING bulkio.sst_writer.batch_size = '1B'`)
+			}
+
+			require.NoError(t, os.WriteFile(
+				filepath.Join(dirname, "data.csv"),
+				[]byte(tc.csvData),
+				os.FileMode(0644),
+			))
+
+			sqlDB.Exec(t, `CREATE TABLE t (id INT PRIMARY KEY, name STRING)`)
+			sqlDB.ExpectErr(t, tc.errRegex,
+				`IMPORT INTO t (id, name) CSV DATA ($1)`, "nodelocal://1/data.csv")
+
+			if tc.injectMergeDuplicate {
+				require.True(t, injected.Load(),
+					"InjectDuplicateKey was not called during merge")
+			}
+		})
+	}
 }
 
 func TestImportData(t *testing.T) {
