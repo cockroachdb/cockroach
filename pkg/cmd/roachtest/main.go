@@ -389,8 +389,14 @@ func updateSpecForSelectiveTests(
 	ctx context.Context, specs []registry.TestSpec, logFunc func(format string, args ...interface{}),
 ) {
 	selectedTestsCount := 0
+	// Build list of all available test names
+	allTestNames := make([]string, len(specs))
+	for i, spec := range specs {
+		allTestNames[i] = spec.Name
+	}
 	allTests, err := testselector.CategoriseTests(ctx,
-		testselector.NewDefaultSelectTestsReq(roachtestflags.Cloud, roachtestflags.Suite))
+		testselector.NewDefaultSelectTestsReq(roachtestflags.Cloud, roachtestflags.Suite,
+			allTestNames, roachtestflags.SuccessfulTestsSelectPct))
 	if err != nil {
 		logFunc("running all tests! error selecting tests: %v\n", err)
 		return

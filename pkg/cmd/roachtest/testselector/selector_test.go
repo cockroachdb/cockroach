@@ -68,11 +68,11 @@ func TestCategoriseTests(t *testing.T) {
 		mock.ExpectPrepare(regexp.QuoteMeta(PreparedQuery))
 		mock.ExpectQuery(regexp.QuoteMeta(PreparedQuery)).WillReturnError(fmt.Errorf("failed to execute query"))
 		tds, err := CategoriseTests(context.Background(), &SelectTestsReq{
-			ForPastDays: 1,
-			FirstRunOn:  2,
-			LastRunOn:   3,
-			Cloud:       spec.AWS,
-			Suite:       "unit test",
+			forPastDays: 1,
+			firstRunOn:  2,
+			lastRunOn:   3,
+			cloud:       spec.AWS,
+			suite:       "unit test",
 		})
 		require.Nil(t, tds)
 		require.NotNil(t, err)
@@ -83,26 +83,26 @@ func TestCategoriseTests(t *testing.T) {
 		mock.ExpectPrepare(regexp.QuoteMeta(PreparedQuery))
 		rows := sqlmock.NewRows(AllRows)
 		data := [][]string{
-			{"t1", "no", "12345", "no"},
-			{"t2", "no", "12345", "no"},
-			{"t3", "no", "12345", "yes"},
-			{"t4", "no", "12345", "no"},
-			{"t5", "yes", "12345", "no"},
-			{"t6", "yes", "12345", "no"},
-			{"t7", "yes", "12345", "no"},
-			{"t8", "yes", "12345", "no"},
-			{"t9", "yes", "12345", "no"},
+			{"t1", "no", "12345", "no", "2026-01-01"},
+			{"t2", "no", "12345", "no", "2026-01-02"},
+			{"t3", "no", "12345", "yes", "2026-01-03"},
+			{"t4", "no", "12345", "no", ""},
+			{"t5", "yes", "12345", "no", "2026-01-05"},
+			{"t6", "yes", "12345", "no", "2026-01-06"},
+			{"t7", "yes", "12345", "no", "2026-01-07"},
+			{"t8", "yes", "12345", "no", "2026-01-08"},
+			{"t9", "yes", "12345", "no", "2026-01-09"},
 		}
 		for _, ds := range data {
 			rows.FromCSVString(strings.Join(ds, ","))
 		}
 		mock.ExpectQuery(regexp.QuoteMeta(PreparedQuery)).WillReturnRows(rows)
 		tds, err := CategoriseTests(context.Background(), &SelectTestsReq{
-			ForPastDays: 1,
-			FirstRunOn:  2,
-			LastRunOn:   3,
-			Cloud:       spec.AWS,
-			Suite:       "unit test",
+			forPastDays: 1,
+			firstRunOn:  2,
+			lastRunOn:   3,
+			cloud:       spec.AWS,
+			suite:       "unit test",
 		})
 		require.NotNil(t, tds)
 		require.Nil(t, err)
@@ -114,7 +114,121 @@ func TestCategoriseTests(t *testing.T) {
 			require.Equal(t, d[DataSelectedIndex] != "no", td.Selected)
 			require.Equal(t, getDuration(d[DataDurationIndex]), td.AvgDurationInMillis)
 			require.Equal(t, d[DataLastPreempted] == "yes", td.LastFailureIsPreempt)
+			if d[DataFirstRunIndex] != "" {
+				require.NotNil(t, td.FirstRun)
+				require.Equal(t, d[DataFirstRunIndex], *td.FirstRun)
+			} else {
+				require.Nil(t, td.FirstRun)
+			}
 		}
+	})
+	t.Run("first run with no snowflake history", func(t *testing.T) {
+		db, mock, err = sqlmock.New()
+		require.Nil(t, err)
+		mock.ExpectPrepare(regexp.QuoteMeta(PreparedQuery))
+		// Return empty result set (no Snowflake history at all - first run scenario)
+		rows := sqlmock.NewRows(AllRows)
+		mock.ExpectQuery(regexp.QuoteMeta(PreparedQuery)).WillReturnRows(rows)
+
+		// All tests available
+		allTestNames := []string{"acceptance", "backup", "import", "kv", "schemachange",
+			"sqlsmith", "tpcc", "ycsb", "restore", "decommission"}
+		selectPct := 0.35
+		tds, err := CategoriseTests(context.Background(), &SelectTestsReq{
+			forPastDays:  1,
+			firstRunOn:   2,
+			lastRunOn:    3,
+			cloud:        spec.AWS,
+			suite:        "unit test",
+			allTestNames: allTestNames,
+			selectPct:    selectPct,
+		})
+		require.Nil(t, err)
+		require.NotNil(t, tds)
+		// Should have all 10 tests
+		require.Equal(t, len(allTestNames), len(tds))
+
+		// Verify all tests have zero duration, no preemption, and no first_run (no history)
+		for _, td := range tds {
+			require.Equal(t, int64(0), td.AvgDurationInMillis)
+			require.False(t, td.LastFailureIsPreempt)
+			require.Nil(t, td.FirstRun)
+		}
+
+		// Verify that all test names are present in the results
+		testNamesInResults := make(map[string]bool)
+		for _, td := range tds {
+			testNamesInResults[td.Name] = true
+		}
+		for _, name := range allTestNames {
+			require.True(t, testNamesInResults[name], "Test %s should be in results", name)
+		}
+
+		// Count selected tests and verify it's approximately the right percentage
+		selectedCount := 0
+		for _, td := range tds {
+			if td.Selected {
+				selectedCount++
+			}
+		}
+		expectedCount := int(float64(len(allTestNames)) * selectPct)
+		require.Equal(t, expectedCount, selectedCount,
+			"Should select approximately %d%% of tests", int(selectPct*100))
+	})
+	t.Run("safety valve triggers when too many never-run tests selected", func(t *testing.T) {
+		db, mock, err = sqlmock.New()
+		require.Nil(t, err)
+		mock.ExpectPrepare(regexp.QuoteMeta(PreparedQuery))
+		rows := sqlmock.NewRows(AllRows)
+		// Create scenario where 8 out of 10 tests have first_run=null and are selected (80%)
+		// This exceeds the 50% threshold, so safety valve should trigger
+		data := [][]string{
+			{"t1", "yes", "0", "no", ""},                // never run, selected
+			{"t2", "yes", "0", "no", ""},                // never run, selected
+			{"t3", "yes", "0", "no", ""},                // never run, selected
+			{"t4", "yes", "0", "no", ""},                // never run, selected
+			{"t5", "yes", "0", "no", ""},                // never run, selected
+			{"t6", "yes", "0", "no", ""},                // never run, selected
+			{"t7", "yes", "0", "no", ""},                // never run, selected
+			{"t8", "yes", "0", "no", ""},                // never run, selected
+			{"t9", "no", "12345", "no", "2026-01-01"},   // has run, not selected
+			{"t10", "yes", "12345", "no", "2026-01-02"}, // has run, selected
+		}
+		for _, ds := range data {
+			rows.FromCSVString(strings.Join(ds, ","))
+		}
+		mock.ExpectQuery(regexp.QuoteMeta(PreparedQuery)).WillReturnRows(rows)
+		tds, err := CategoriseTests(context.Background(), &SelectTestsReq{
+			forPastDays: 1,
+			firstRunOn:  2,
+			lastRunOn:   3,
+			cloud:       spec.AWS,
+			suite:       "unit test",
+		})
+		require.Nil(t, err)
+		require.NotNil(t, tds)
+		require.Equal(t, len(data), len(tds))
+
+		// Count never-run tests that are still selected after safety valve
+		neverRunSelected := 0
+		for _, td := range tds {
+			if td.Selected && td.FirstRun == nil {
+				neverRunSelected++
+			}
+		}
+
+		// Safety valve should have deselected half of the 8 never-run tests (4 deselected)
+		// So we should have 4 never-run selected tests remaining
+		// Total selected = 4 (never-run) + 1 (t10 has run) = 5
+		require.Equal(t, 4, neverRunSelected, "Safety valve should deselect half of never-run tests")
+
+		totalSelected := 0
+		for _, td := range tds {
+			if td.Selected {
+				totalSelected++
+			}
+		}
+		require.Equal(t, 5, totalSelected, "Total selected should be 5 after safety valve")
 	})
 	t.Run("expect failure due to invalid private key", func(t *testing.T) {
 		SqlConnectorFunc = nil
@@ -128,12 +242,35 @@ func TestCategoriseTests(t *testing.T) {
 }
 
 func TestNewDefaultSelectTestsReq(t *testing.T) {
-	req := NewDefaultSelectTestsReq(spec.Azure, "ut suite")
-	require.Equal(t, spec.Azure, req.Cloud)
-	require.Equal(t, "ut suite", req.Suite)
-	require.Equal(t, defaultForPastDays, req.ForPastDays)
-	require.Equal(t, defaultFirstRunOn, req.FirstRunOn)
-	require.Equal(t, defaultLastRunOn, req.LastRunOn)
+	testNames := []string{"test1", "test2", "test3"}
+	selectPct := 0.35
+
+	t.Run("defaults to master branch behavior", func(t *testing.T) {
+		// No TC_BUILD_BRANCH env var set
+		_ = os.Unsetenv("TC_BUILD_BRANCH")
+
+		req := NewDefaultSelectTestsReq(spec.Azure, "ut suite", testNames, selectPct)
+		require.Equal(t, spec.Azure, req.cloud)
+		require.Equal(t, "ut suite", req.suite)
+		require.Equal(t, defaultForPastDays, req.forPastDays)
+		require.Equal(t, defaultFirstRunOn, req.firstRunOn, "master branch should use defaultFirstRunOn")
+		require.Equal(t, defaultLastRunOn, req.lastRunOn)
+		require.Equal(t, testNames, req.allTestNames)
+		require.Equal(t, selectPct, req.selectPct)
+		require.Equal(t, "master", req.currentBranch)
+	})
+
+	t.Run("non-master branch disables firstRunOn", func(t *testing.T) {
+		// Set to a release branch
+		_ = os.Setenv("TC_BUILD_BRANCH", "release-24.3")
+		defer func() { _ = os.Unsetenv("TC_BUILD_BRANCH") }()
+
+		req := NewDefaultSelectTestsReq(spec.GCE, "nightly", testNames, selectPct)
+		require.Equal(t, spec.GCE, req.cloud)
+		require.Equal(t, "nightly", req.suite)
+		require.Equal(t, 0, req.firstRunOn, "non-master branch should disable firstRunOn")
+		require.Equal(t, "release-24.3", req.currentBranch)
+	})
 }
 
 func Test_getSFCreds(t *testing.T) {
