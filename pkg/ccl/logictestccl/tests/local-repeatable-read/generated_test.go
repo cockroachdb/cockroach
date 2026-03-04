@@ -255,6 +255,13 @@ func TestRepeatableReadLogic_and_or(
 	runLogicTest(t, "and_or")
 }
 
+func TestRepeatableReadLogic_annotate(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "annotate")
+}
+
 func TestRepeatableReadLogic_apply_join(
 	t *testing.T,
 ) {

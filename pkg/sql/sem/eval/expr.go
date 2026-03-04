@@ -124,6 +124,12 @@ func (e *evaluator) EvalBinaryExpr(ctx context.Context, expr *tree.BinaryExpr) (
 	return res, err
 }
 
+func (e *evaluator) EvalAnnotateTypeExpr(
+	ctx context.Context, expr *tree.AnnotateTypeExpr,
+) (tree.Datum, error) {
+	return expr.TypedInnerExpr().Eval(ctx, e)
+}
+
 func (e *evaluator) EvalCaseExpr(ctx context.Context, expr *tree.CaseExpr) (tree.Datum, error) {
 	if expr.Expr != nil {
 		// CASE <val> WHEN <expr> THEN ...

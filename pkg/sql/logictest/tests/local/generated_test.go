@@ -251,6 +251,13 @@ func TestLogic_and_or(
 	runLogicTest(t, "and_or")
 }
 
+func TestLogic_annotate(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "annotate")
+}
+
 func TestLogic_apply_join(
 	t *testing.T,
 ) {

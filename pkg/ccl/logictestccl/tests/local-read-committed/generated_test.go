@@ -282,6 +282,13 @@ func TestReadCommittedLogic_and_or(
 	runLogicTest(t, "and_or")
 }
 
+func TestReadCommittedLogic_annotate(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "annotate")
+}
+
 func TestReadCommittedLogic_apply_join(
 	t *testing.T,
 ) {

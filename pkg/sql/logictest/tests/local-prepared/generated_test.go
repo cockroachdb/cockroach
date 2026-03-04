@@ -230,6 +230,13 @@ func TestLogic_apply_join(
 	runLogicTest(t, "apply_join")
 }
 
+func TestLogic_annotate(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "annotate")
+}
+
 func TestLogic_asyncpg(
 	t *testing.T,
 ) {
