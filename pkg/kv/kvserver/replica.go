@@ -45,6 +45,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/spanconfig"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util"
@@ -1483,41 +1484,56 @@ func (r *Replica) GetGCHint() roachpb.GCHint {
 func (r *Replica) ExcludeDataFromBackup(ctx context.Context, sp roachpb.Span) (bool, error) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
-	return entireSpanExcludedFromBackup(ctx, sp, r.mu.conf.ExcludeDataFromBackup, r.mu.confSpan)
+	return entireSpanExcludedFromBackup(
+		ctx, sp, r.mu.conf.ExcludeDataFromBackup, r.store.cfg.SpanConfigSubscriber,
+	)
 }
 
 func excludeReplicaFromBackup(
-	ctx context.Context, rspan roachpb.RSpan, excludeDataFromBackup bool, confSpan roachpb.Span,
+	ctx context.Context,
+	rspan roachpb.RSpan,
+	excludeDataFromBackup bool,
+	confReader spanconfig.StoreReader,
 ) bool {
 	// We ignore the error here to avoid failing requests that
 	// don't need to fail.
-	excluded, _ := entireSpanExcludedFromBackup(ctx, rspan.AsRawSpanWithNoLocals(),
-		excludeDataFromBackup, confSpan)
+	excluded, _ := entireSpanExcludedFromBackup(
+		ctx, rspan.AsRawSpanWithNoLocals(), excludeDataFromBackup, confReader,
+	)
 	return excluded
 }
 
-// entireSpanExcludedFromBackup returns true if this replica
-// has ExcludeDataFromBackup set in its span configuration and that
-// span configuration covers the entire given span.
+// entireSpanExcludedFromBackup returns true if all span configurations
+// covering the given span have ExcludeDataFromBackup set. The
+// excludeDataFromBackup parameter is used as a fast path: if the
+// replica's cached config does not have ExcludeDataFromBackup, we can
+// skip the iteration entirely. When span config coalescing is enabled,
+// a single range may cover multiple span config entries, so we must
+// check all of them rather than relying on a single cached confSpan.
 func entireSpanExcludedFromBackup(
-	ctx context.Context, sp roachpb.Span, excludeDataFromBackup bool, confSpan roachpb.Span,
+	ctx context.Context,
+	sp roachpb.Span,
+	excludeDataFromBackup bool,
+	confReader spanconfig.StoreReader,
 ) (bool, error) {
-	if excludeDataFromBackup {
-		// If ExcludeDataFromBackup is set, we also want to ensure that
-		// we only elide data if the span configuration we currently
-		// have actually contains the requested span.
-		if confSpan.Equal(roachpb.Span{}) {
-			return false, errors.Newf("replica's span configuration bounds not set")
-		}
-		if !confSpan.Contains(sp) {
-			log.KvExec.Warningf(ctx, "ExcludeDataFromBackup set but span %q not contained by span config bounds %q",
-				sp,
-				confSpan)
-
-			return false, nil
-		}
+	if !excludeDataFromBackup {
+		return false, nil
 	}
-	return excludeDataFromBackup, nil
+	if confReader == nil {
+		return false, errors.New("span config reader not available")
+	}
+	excluded := true
+	if err := confReader.ForEachOverlappingSpanConfig(ctx, sp,
+		func(_ roachpb.Span, conf roachpb.SpanConfig) error {
+			if !conf.ExcludeDataFromBackup {
+				excluded = false
+			}
+			return nil
+		},
+	); err != nil {
+		return false, errors.Wrap(err, "looking up span config for backup exclusion")
+	}
+	return excluded, nil
 }
 
 // Version returns the replica version.
@@ -2196,7 +2212,6 @@ func (r *Replica) checkExecutionCanProceedAfterStorageSnapshot(
 	cachedProtectedTS := r.mu.cachedProtectedTS
 	confTTL := r.mu.conf.TTL()
 	desc := r.descRLocked()
-	confSpan := r.mu.confSpan
 	excludeDataFromBackup := r.mu.conf.ExcludeDataFromBackup
 	r.mu.RUnlock()
 
@@ -2226,7 +2241,7 @@ func (r *Replica) checkExecutionCanProceedAfterStorageSnapshot(
 	// https://github.com/cockroachdb/cockroach/issues/55293.
 	return r.checkTSAboveGCThreshold(ctx, ba.EarliestActiveTimestamp(), st, ba.IsAdmin(), rSpan,
 		spanConfExplicitlySet, ignoreStrictEnforcement, gcThreshold, cachedProtectedTS, confTTL,
-		desc, confSpan, excludeDataFromBackup)
+		desc, excludeDataFromBackup)
 }
 
 // checkExecutionCanProceedRWOrAdmin returns an error if a batch request going
@@ -2322,7 +2337,7 @@ func (r *Replica) checkExecutionCanProceedForRangeFeed(
 	} else if err := r.checkTSAboveGCThreshold(ctx, ts, status, false /* isAdmin */, rSpan,
 		r.mu.spanConfigExplicitlySet, r.mu.conf.GCPolicy.IgnoreStrictEnforcement,
 		*r.shMu.state.GCThreshold, r.mu.cachedProtectedTS, r.mu.conf.TTL(), r.descRLocked(),
-		r.mu.confSpan, r.mu.conf.ExcludeDataFromBackup); err != nil {
+		r.mu.conf.ExcludeDataFromBackup); err != nil {
 		return err
 	}
 	return nil
@@ -2360,7 +2375,6 @@ func (r *Replica) checkTSAboveGCThreshold(
 	cachedProtectedTS cachedProtectedTimestampState,
 	confTTL time.Duration,
 	desc *roachpb.RangeDescriptor,
-	confSpan roachpb.Span,
 	excludeDataFromBackup bool,
 ) error {
 	threshold := r.getImpliedGCThreshold(st, isAdmin, spanConfigExplicitlySet,
@@ -2369,12 +2383,14 @@ func (r *Replica) checkTSAboveGCThreshold(
 		return nil
 	}
 	return &kvpb.BatchTimestampBeforeGCError{
-		Timestamp:              ts,
-		Threshold:              threshold,
-		DataExcludedFromBackup: excludeReplicaFromBackup(ctx, rspan, excludeDataFromBackup, confSpan),
-		RangeID:                desc.RangeID,
-		StartKey:               desc.StartKey.AsRawKey(),
-		EndKey:                 desc.EndKey.AsRawKey(),
+		Timestamp: ts,
+		Threshold: threshold,
+		DataExcludedFromBackup: excludeReplicaFromBackup(
+			ctx, rspan, excludeDataFromBackup, r.store.cfg.SpanConfigSubscriber,
+		),
+		RangeID:  desc.RangeID,
+		StartKey: desc.StartKey.AsRawKey(),
+		EndKey:   desc.EndKey.AsRawKey(),
 	}
 }
 
