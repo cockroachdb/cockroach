@@ -221,6 +221,25 @@ func (d *dev) cleanCache(ctx context.Context) error {
 	return os.RemoveAll(filepath.Join(dir, "cache"))
 }
 
+func repositoryCacheDir() (string, error) {
+	cacheDir, err := os.UserCacheDir()
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(cacheDir, "bazel", "repository_cache"), nil
+}
+
+func getRepositoryCacheBazelrcLines() ([]string, error) {
+	dir, err := repositoryCacheDir()
+	if err != nil {
+		return nil, err
+	}
+	return []string{
+		fmt.Sprintf("build --repository_cache=%s", dir),
+		"build --experimental_repository_cache_hardlinks",
+	}, nil
+}
+
 func (d *dev) getCacheBazelrcLine(ctx context.Context) (string, error) {
 	cacheDir, err := bazelRemoteCacheDir()
 	if err != nil {

@@ -539,6 +539,43 @@ slightly slower and introduce a noticeable delay in first-time build setup.`
 		nonRemoteOnly:            true,
 	},
 	{
+		name: "repository_cache",
+		check: func(d *dev, ctx context.Context, cfg doctorConfig) string {
+			lines, err := getRepositoryCacheBazelrcLines()
+			if err != nil {
+				return err.Error()
+			}
+			for _, line := range lines {
+				if !d.checkLinePresenceInBazelRcUser(cfg.workspace, line) {
+					return fmt.Sprintf("Please add the string `%s` to your .bazelrc.user", line)
+				}
+			}
+			return ""
+		},
+		autofix: func(d *dev, ctx context.Context, cfg doctorConfig) error {
+			dir, err := repositoryCacheDir()
+			if err != nil {
+				return err
+			}
+			if err := d.os.MkdirAll(dir); err != nil {
+				return err
+			}
+			lines, err := getRepositoryCacheBazelrcLines()
+			if err != nil {
+				return err
+			}
+			for _, line := range lines {
+				if !d.checkLinePresenceInBazelRcUser(cfg.workspace, line) {
+					if err := d.addLineToBazelRcUser(cfg.workspace, line); err != nil {
+						return err
+					}
+				}
+			}
+			return nil
+		},
+		nonRemoteOnly: true,
+	},
+	{
 		name: "cache_remote",
 		check: func(d *dev, ctx context.Context, cfg doctorConfig) string {
 			if d.checkLinePresenceInBazelRcUser(cfg.workspace, "build --remote_cache=") {
