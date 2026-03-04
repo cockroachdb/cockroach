@@ -30,6 +30,9 @@ func TestMultiRegionRegionlessRestoreNoLicense(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
+	// TODO(at): enable once LinkExternalSSTable is permitted for secondary tenants.
+	backuptestutils.DisableOnlineRestoreForTest(t)
+
 	skip.UnderRace(t, "test is too heavy to run under stress")
 
 	ctx := context.Background()

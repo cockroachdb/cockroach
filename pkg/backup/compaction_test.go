@@ -18,6 +18,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/backup/backuppb"
+	"github.com/cockroachdb/cockroach/pkg/backup/backuptestutils"
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/cloud/cloudpb"
@@ -249,6 +250,9 @@ func TestBackupCompaction(t *testing.T) {
 	})
 
 	t.Run("encrypted backups", func(t *testing.T) {
+		// TODO(at): enable once OR supports encrypted backups.
+		backuptestutils.DisableOnlineRestoreForTest(t)
+
 		bucketNum++
 		collectionURI := []string{fmt.Sprintf("nodelocal://1/backup/%d", bucketNum)}
 		encryptOpts := "WITH encryption_passphrase = 'correct-horse-battery-staple'"
@@ -665,6 +669,9 @@ func TestBlockConcurrentScheduledCompactions(t *testing.T) {
 func TestBackupCompactionExecLocality(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+
+	// TODO(at): restructure test to work with OR metamorphic.
+	backuptestutils.DisableOnlineRestoreForTest(t)
 
 	skip.UnderRace(t, "too slow")
 
@@ -1413,15 +1420,21 @@ func TestToggleCompactionForRestore(t *testing.T) {
 	compactionID := triggerCompaction(t, db, backupStmt, backupPath, start, end)
 	waitForSuccessfulJob(t, tc, compactionID)
 
+	// TODO(at): Consider extracting OR-aware restore result scanning into a
+	// shared test helper in backuptestutils once more callers need this.
 	var compRestoreID, classicRestoreID jobspb.JobID
-	var unused any
-	db.QueryRow(
-		t, restoreQuery(t, "DATABASE data", collectionURI, noAOST, "WITH new_db_name = 'data1'"),
-	).Scan(&compRestoreID, &unused, &unused, &unused)
+	scanRestore := func(id *jobspb.JobID, q string) {
+		if backuptestutils.OnlineRestore {
+			var x1, x2, x3, x4 any
+			db.QueryRow(t, q).Scan(id, &x1, &x2, &x3, &x4)
+		} else {
+			var unused any
+			db.QueryRow(t, q).Scan(id, &unused, &unused, &unused)
+		}
+	}
+	scanRestore(&compRestoreID, restoreQuery(t, "DATABASE data", collectionURI, noAOST, "WITH new_db_name = 'data1'"))
 	db.Exec(t, "SET CLUSTER SETTING restore.compacted_backups.enabled = false")
-	db.QueryRow(
-		t, restoreQuery(t, "DATABASE data", collectionURI, noAOST, "WITH new_db_name = 'data2'"),
-	).Scan(&classicRestoreID, &unused, &unused, &unused)
+	scanRestore(&classicRestoreID, restoreQuery(t, "DATABASE data", collectionURI, noAOST, "WITH new_db_name = 'data2'"))
 
 	require.Equal(t, 2, getNumBackupsInRestore(t, db, compRestoreID))
 	require.Equal(t, 3, getNumBackupsInRestore(t, db, classicRestoreID))
@@ -1640,9 +1653,16 @@ func validateCompactedBackupForTables(
 	tablesList := strings.Join(tables, ", ")
 	db.Exec(t, "DROP TABLE "+tablesList)
 	row := db.QueryRow(t, restoreQuery(t, "TABLE "+tablesList, collectionURI, noAOST, restoreOpts))
+	// TODO(at): Consider extracting OR-aware restore result scanning into a
+	// shared test helper in backuptestutils once more callers need this.
 	var restoreJobID jobspb.JobID
-	var discard *any
-	row.Scan(&restoreJobID, &discard, &discard, &discard)
+	if backuptestutils.OnlineRestore {
+		var x1, x2, x3, x4 any
+		row.Scan(&restoreJobID, &x1, &x2, &x3, &x4)
+	} else {
+		var discard *any
+		row.Scan(&restoreJobID, &discard, &discard, &discard)
+	}
 	for table, originalRows := range rows {
 		restoredRows := db.QueryStr(t, "SELECT * FROM "+table+" ORDER BY PRIMARY KEY "+table)
 		require.Equal(t, originalRows, restoredRows, "table %s", table)

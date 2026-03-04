@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/backup/backuptestutils"
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/cloud"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
@@ -33,6 +34,9 @@ func TestBackupRestore_FlakyStorage(t *testing.T) {
 	// Allow besteffort operations to fail without panicking since fault
 	// injection may cause cleanup/telemetry operations to fail.
 	defer besteffort.TestAllowAllFailures()()
+
+	// TODO(at): restructure test to work with OR metamorphic.
+	backuptestutils.DisableOnlineRestoreForTest(t)
 
 	// Set up a slim test server with flaky storage enabled
 	params := base.TestClusterArgs{

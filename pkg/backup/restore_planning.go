@@ -78,6 +78,11 @@ const (
 	restoreOptForceTenantID             = "virtual_cluster"
 )
 
+// testOnlineRestore is a hook set by backup_test.go to enable OR for all
+// restores in test builds, without importing testonly packages from production
+// code. It returns false in production.
+var testOnlineRestore = func() bool { return false }
+
 // featureRestoreEnabled is used to enable and disable the RESTORE feature.
 var featureRestoreEnabled = settings.RegisterBoolSetting(
 	settings.ApplicationLevel,
@@ -1318,6 +1323,9 @@ func restoreTypeCheck(
 	if !ok {
 		return false, nil, nil
 	}
+	if testOnlineRestore() && !restoreStmt.Options.ExperimentalCopy && !restoreStmt.Options.ExperimentalOnline {
+		restoreStmt.Options.ExperimentalCopy = true
+	}
 	if err := exprutil.TypeCheck(
 		ctx, "RESTORE", p.SemaCtx(),
 		exprutil.StringArrays{
@@ -1361,6 +1369,9 @@ func restorePlanHook(
 	restoreStmt, ok := stmt.(*tree.Restore)
 	if !ok {
 		return nil, nil, false, nil
+	}
+	if testOnlineRestore() && !restoreStmt.Options.ExperimentalCopy && !restoreStmt.Options.ExperimentalOnline {
+		restoreStmt.Options.ExperimentalCopy = true
 	}
 
 	if err := featureflag.CheckEnabled(

@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/backup/backuptestutils"
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/ccl/multiregionccl/multiregionccltestutils"
 	_ "github.com/cockroachdb/cockroach/pkg/cloud/impl" // register cloud storage providers
@@ -34,6 +35,9 @@ import (
 func TestBackupTenantImportingTable(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+
+	// TODO(at): enable once LinkExternalSSTable is permitted for secondary tenants.
+	backuptestutils.DisableOnlineRestoreForTest(t)
 
 	ctx := context.Background()
 	tc := testcluster.StartTestCluster(t, 1,
@@ -134,6 +138,9 @@ func TestTenantBackupMultiRegionDatabases(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	skip.UnderRace(t, "test is too heavy to run under stress")
+
+	// TODO(at): enable once LinkExternalSSTable is permitted for secondary tenants.
+	backuptestutils.DisableOnlineRestoreForTest(t)
 
 	tc, db, cleanup := multiregionccltestutils.TestingCreateMultiRegionCluster(
 		t, 3 /*numServers*/, base.TestingKnobs{},
