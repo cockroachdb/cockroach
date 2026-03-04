@@ -1,0 +1,78 @@
+# This is a regression test for a bug in the capped multiplier model: 
+# computeCPUCapacityWithCap subtracts background CPU when
+# deriving per-store capacity, which mistakenly broke the naive
+# model's invariant:
+#
+#   sum(store loads) / sum(store capacities) = NodeCPURateUsage / NodeCPURateCapacity
+#
+# Setup: single node n1 with two stores.
+# - s1: store CPU load=200, capacity computed by capped model
+# - s2: store CPU load=300, capacity computed by capped model
+# - Physical node CPU: load=800, capacity=2000.
+#   The gap (800 - 500 = 300) is background CPU that the capped model
+#   excluded from store capacities.
+#
+# With the capped model, n1's store values no longer recover the
+# physical node utilization:
+#
+#   sum(store loads) / sum(store capacities) = 500/2000 = 25%
+#   NodeCPURateUsage / NodeCPURateCapacity   = 800/2000 = 40%  (real)
+#
+# MakeStoreLoadMsg addresses this by passing physical node CPU values
+# directly through StoreLoadMsg.NodeCPULoad/NodeCPUCapacity.
+#
+# Without the fix, NodeCPULoad would be derived from store sums:
+#
+#   nodes-cpu-load = 500  (sum of 200+300, but real node CPU = 800)
+#   node utilization = 25%  (but real = 40%)
+#
+# With the fix:
+#
+#   nodes-cpu-load = 800  (physical NodeCPURateUsage)
+#   node utilization = 40%  (correct)
+
+# Register two stores on node 1.
+set-store
+store-id=1 node-id=1
+store-id=2 node-id=1
+----
+
+# Store-level CPU loads: s1=200, s2=300 (sum=500).
+# Physical node CPU: load=800, capacity=2000. The 300 gap (800-500) is
+# background CPU that the capped model excluded from store capacities.
+#
+# node-cpu-load=800 (physical) differs from what summing store loads
+# would give (500).
+make-store-load-msg store-id=1 node-id=1 num-stores=2 cpu-per-second=200 stores-cpu-rate=500 node-cpu-usage=800 node-cpu-capacity=2000
+----
+store-id=1 node-id=1 load=[200,0,0] capacity=[625,9223372036854775807,0] secondary-load=0 load-time=0s node-cpu-load=800 node-cpu-capacity=2000
+
+make-store-load-msg store-id=2 node-id=1 num-stores=2 cpu-per-second=300 stores-cpu-rate=500 node-cpu-usage=800 node-cpu-capacity=2000
+----
+store-id=2 node-id=1 load=[300,0,0] capacity=[625,9223372036854775807,0] secondary-load=0 load-time=0s node-cpu-load=800 node-cpu-capacity=2000
+
+# nodes-cpu-load=800 (physical node value from MakeStoreLoadMsg),
+# not 500 (what store-level summing would give). Node utilization
+# is 40% (800/2000), not 25% (500/2000).
+load-summary
+----
+cluster means: (stores-load [cpu:250ns/s, write-bandwidth:0 B/s, byte-size:0 B]) (stores-capacity [cpu:625ns/s, write-bandwidth:unknown/s, byte-size:0 B])
+(nodes-cpu-load 800) (nodes-cpu-capacity 2000)
+evaluating store s1 for shedding: load summary (store=loadNormal worst=WriteBandwidth cpu=loadLow writes=loadNormal bytes=loadNormal node=loadNormal frac_pending=0.00,0.00(true))evaluating store s2 for shedding: load summary (store=overloadSlow worst=CPURate cpu=overloadSlow writes=loadNormal bytes=loadNormal node=loadNormal frac_pending=0.00,0.00(true))
+
+# Background CPU decreased: physical node CPU drops from 800 to 600.
+# Only s1 sends a new message; s2's store load is unchanged.
+#
+# Without the fix, this would have no effect on nodes-cpu-load
+# because store loads are unchanged (sum stays 500).
+make-store-load-msg store-id=1 node-id=1 num-stores=2 cpu-per-second=200 stores-cpu-rate=500 node-cpu-usage=600 node-cpu-capacity=2000
+----
+store-id=1 node-id=1 load=[200,0,0] capacity=[833,9223372036854775807,0] secondary-load=0 load-time=0s node-cpu-load=600 node-cpu-capacity=2000
+
+# nodes-cpu-load updated to 600 (physical), reflecting decreased
+# background CPU. Without the fix, would still show 500.
+load-summary
+----
+cluster means: (stores-load [cpu:250ns/s, write-bandwidth:0 B/s, byte-size:0 B]) (stores-capacity [cpu:625ns/s, write-bandwidth:unknown/s, byte-size:0 B])
+(nodes-cpu-load 800) (nodes-cpu-capacity 2000)
+evaluating store s1 for shedding: load summary (store=loadNormal worst=WriteBandwidth cpu=loadLow writes=loadNormal bytes=loadNormal node=loadLow frac_pending=0.00,0.00(true))evaluating store s2 for shedding: load summary (store=overloadSlow worst=CPURate cpu=overloadSlow writes=loadNormal bytes=loadNormal node=loadNormal frac_pending=0.00,0.00(true))
