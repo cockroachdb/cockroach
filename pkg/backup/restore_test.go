@@ -377,6 +377,10 @@ func TestRestoreRevisionHistoryWithCompactions(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
+	// TODO(at): refactor test to work with FastRestore
+	// currently uses newTestHelper which bypasses our special test setup.
+	backuptestutils.DisableFastRestoreForTest(t)
+
 	th, cleanup := newTestHelper(t)
 	defer cleanup()
 

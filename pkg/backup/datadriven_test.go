@@ -488,6 +488,10 @@ func (d *datadrivenTestState) getSQLDBForVC(
 //
 //lint:ignore U1000 unused
 func runTestDataDriven(t *testing.T, testFilePathFromWorkspace string) {
+	// TODO(at): data driven tests will need some tweaks to work with OR metamorphic, which will
+	// likely be simplified after fixing some of the other test infra issues.
+	backuptestutils.DisableFastRestoreForTest(t)
+
 	// This test uses this mock HTTP server to pass the backup files between tenants.
 	httpAddr, httpServerCleanup := makeInsecureHTTPServer(t)
 	defer httpServerCleanup()
