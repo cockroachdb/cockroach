@@ -42,6 +42,137 @@
                     }
                 }
             }
+        },
+        "/schedules": {
+            "get": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "description": "Returns schedule information, optionally filtered by status.",
+                "tags": [
+                    "Schedules"
+                ],
+                "summary": "List schedules",
+                "parameters": [
+                    {
+                        "description": "Filter by status (ACTIVE or PAUSED)",
+                        "name": "status",
+                        "in": "query",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    {
+                        "description": "Maximum number of schedules to return",
+                        "name": "limit",
+                        "in": "query",
+                        "schema": {
+                            "type": "integer"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Schedule list",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/dbconsole.SchedulesListResponse"
+                                }
+                            }
+                        }
+                    },
+                    "400": {
+                        "description": "Invalid limit",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/dbconsole.ErrorResponse"
+                                }
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "Internal error",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/dbconsole.ErrorResponse"
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/schedules/{schedule_id}": {
+            "get": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "description": "Returns information for a single schedule by ID.",
+                "tags": [
+                    "Schedules"
+                ],
+                "summary": "Get schedule",
+                "parameters": [
+                    {
+                        "description": "Schedule ID",
+                        "name": "schedule_id",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "integer"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Schedule info",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/dbconsole.ScheduleInfo"
+                                }
+                            }
+                        }
+                    },
+                    "400": {
+                        "description": "Invalid schedule ID",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/dbconsole.ErrorResponse"
+                                }
+                            }
+                        }
+                    },
+                    "404": {
+                        "description": "Schedule not found",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/dbconsole.ErrorResponse"
+                                }
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "Internal error",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/dbconsole.ErrorResponse"
+                                }
+                            }
+                        }
+                    }
+                }
+            }
         }
     },
     "servers": [
@@ -128,6 +259,64 @@
                         "type": "array",
                         "items": {
                             "$ref": "#/components/schemas/dbconsole.NodeInfo"
+                        }
+                    }
+                }
+            },
+            "dbconsole.ScheduleInfo": {
+                "type": "object",
+                "properties": {
+                    "command": {
+                        "description": "Command is the JSON representation of the schedule's execution arguments.",
+                        "type": "string"
+                    },
+                    "created": {
+                        "description": "Created is the schedule creation time in ISO 8601 format.",
+                        "type": "string"
+                    },
+                    "id": {
+                        "description": "ID is the unique identifier for the schedule. Serialized as a string to\navoid JavaScript integer precision loss for values exceeding 2^53.",
+                        "type": "string",
+                        "example": "0"
+                    },
+                    "jobs_running": {
+                        "description": "JobsRunning is the number of currently running jobs for this schedule.",
+                        "type": "integer"
+                    },
+                    "label": {
+                        "description": "Label is the name of the schedule.",
+                        "type": "string"
+                    },
+                    "next_run": {
+                        "description": "NextRun is the next scheduled run time in ISO 8601 format, empty if paused.",
+                        "type": "string"
+                    },
+                    "owner": {
+                        "description": "Owner is the user who owns this schedule.",
+                        "type": "string"
+                    },
+                    "recurrence": {
+                        "description": "Recurrence is the cron expression or NEVER.",
+                        "type": "string"
+                    },
+                    "state": {
+                        "description": "State is the schedule state from the schedule_state protobuf.",
+                        "type": "string"
+                    },
+                    "status": {
+                        "description": "Status is the schedule status (ACTIVE or PAUSED).",
+                        "type": "string"
+                    }
+                }
+            },
+            "dbconsole.SchedulesListResponse": {
+                "type": "object",
+                "properties": {
+                    "schedules": {
+                        "description": "Schedules contains information for all matching schedules.",
+                        "type": "array",
+                        "items": {
+                            "$ref": "#/components/schemas/dbconsole.ScheduleInfo"
                         }
                     }
                 }
