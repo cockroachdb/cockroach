@@ -51,6 +51,10 @@ type dataset interface {
 	// getFingerprint() returns a map containing the expected fingerprint for this
 	// dataset, or 'nil' if the table has not been calibrated yet.
 	getFingerprint() map[string]string
+
+	// formatImportStmt returns the SQL IMPORT statement for this dataset's
+	// format. Each dataset type declares its own format (CSV, AVRO OCF, etc.).
+	formatImportStmt(tableName string, urls []string, detached bool) string
 }
 
 // staticDataset represents a statically created dataset stored in external
@@ -125,6 +129,17 @@ func (tpch *tpchDataset) init(
 	}
 
 	return nil
+}
+
+// formatImportStmt implements the dataset interface for CSV imports.
+func (tpch tpchDataset) formatImportStmt(tableName string, urls []string, detached bool) string {
+	var stmt strings.Builder
+	fmt.Fprintf(&stmt, `IMPORT INTO import_test.%s CSV DATA ('%s') WITH delimiter='|'`,
+		tableName, strings.Join(urls, "', '"))
+	if detached {
+		stmt.WriteString(", detached")
+	}
+	return stmt.String()
 }
 
 // newTPCHDataset() is a convenience function to quickly declare a TPC-H dataset by name.
@@ -677,7 +692,7 @@ func importCancellationRunner(
 			strings.Join(urls, ", ")))
 
 		var jobID jobspb.JobID
-		jobID, err = runRawAsyncImportJob(ctx, conn, ds.getTableName(), urls)
+		jobID, err = runRawAsyncImportJob(ctx, conn, ds, urls)
 		if err != nil && !errors.Is(err, context.DeadlineExceeded) {
 			return err
 		}
@@ -892,7 +907,7 @@ func makeColumnFamilies(ctx context.Context, t test.Test, c cluster.Cluster, rng
 
 // runSyncImportJob() runs an import job and waits for it to complete.
 func runSyncImportJob(ctx context.Context, conn *gosql.DB, ds dataset) error {
-	importStmt := formatImportStmt(ds.getTableName(), ds.getDataURLs(), false)
+	importStmt := ds.formatImportStmt(ds.getTableName(), ds.getDataURLs(), false)
 	_, err := conn.ExecContext(ctx, importStmt)
 	if err != nil {
 		err = errors.Wrapf(err, "%s", importStmt)
@@ -902,14 +917,15 @@ func runSyncImportJob(ctx context.Context, conn *gosql.DB, ds dataset) error {
 
 // runAsyncImportJob() runs an import job and returns the job id immediately.
 func runAsyncImportJob(ctx context.Context, conn *gosql.DB, ds dataset) (jobspb.JobID, error) {
-	return runRawAsyncImportJob(ctx, conn, ds.getTableName(), ds.getDataURLs())
+	return runRawAsyncImportJob(ctx, conn, ds, ds.getDataURLs())
 }
 
-// runRawAsyncImportJob() runs an import job using the table name and files provided.
+// runRawAsyncImportJob() runs an import job using the dataset's format and the
+// files provided.
 func runRawAsyncImportJob(
-	ctx context.Context, conn *gosql.DB, tableName string, urls []string,
+	ctx context.Context, conn *gosql.DB, ds dataset, urls []string,
 ) (jobspb.JobID, error) {
-	importStmt := formatImportStmt(tableName, urls, true)
+	importStmt := ds.formatImportStmt(ds.getTableName(), urls, true)
 
 	var jobID jobspb.JobID
 	err := conn.QueryRowContext(ctx, importStmt).Scan(&jobID)
@@ -918,20 +934,6 @@ func runRawAsyncImportJob(
 	}
 
 	return jobID, err
-}
-
-// formatImportStmt() takes a dataset and formats a SQL import statment for that
-// dataset.
-func formatImportStmt(tableName string, urls []string, detached bool) string {
-	var stmt strings.Builder
-	fmt.Fprintf(&stmt, `IMPORT INTO import_test.%s CSV DATA ('%s') WITH delimiter='|'`,
-		tableName, strings.Join(urls, "', '"))
-
-	if detached {
-		stmt.WriteString(", detached")
-	}
-
-	return stmt.String()
 }
 
 func registerImportTPCC(r registry.Registry) {
