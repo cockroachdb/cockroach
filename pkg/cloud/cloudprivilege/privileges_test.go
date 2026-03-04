@@ -10,8 +10,8 @@ import (
 	"fmt"
 	"testing"
 
+	_ "github.com/cockroachdb/cockroach/pkg/backup" // register BACKUP/RESTORE plan hooks.
 	"github.com/cockroachdb/cockroach/pkg/base"
-	_ "github.com/cockroachdb/cockroach/pkg/ccl" // import CCL to run backup and restore
 	"github.com/cockroachdb/cockroach/pkg/cloud"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -137,7 +137,7 @@ func TestURIRequiresAdminOrPrivilege(t *testing.T) {
 		t.Run(tc.name+"-via-backup", func(t *testing.T) {
 			_, err := testuser.Exec(fmt.Sprintf(`BACKUP TABLE foo INTO '%s'`, tc.uri))
 			if tc.isAPrivilegedOperation {
-				require.True(t, testutils.IsError(err, "only users with the admin role or the EXTERNALIOIMPLICITACCESS system privilege are allowed to access"))
+				require.True(t, testutils.IsError(err, "only users with the admin role or the EXTERNALIOIMPLICITACCESS system privilege are allowed to access"), "unexpected error: %v", err)
 			} else {
 				require.False(t, testutils.IsError(err, "only users with the admin role or the EXTERNALIOIMPLICITACCESS system privilege are allowed to access"))
 			}

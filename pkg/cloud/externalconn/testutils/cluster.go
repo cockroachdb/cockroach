@@ -25,6 +25,9 @@ type Handle struct {
 	t  *testing.T
 	tc *testcluster.TestCluster
 	ts map[roachpb.TenantID]*Tenant
+
+	// Knobs, if set, are propagated to tenants started via InitializeTenant.
+	Knobs base.TestingKnobs
 }
 
 // NewHandle returns a new Handle.
@@ -73,7 +76,8 @@ func (h *Handle) InitializeTenant(ctx context.Context, tenID roachpb.TenantID) {
 		tenantState.userToDB[username.RootUserName().Normalized()] = tenantState.curDB
 	} else {
 		tenantArgs := base.TestTenantArgs{
-			TenantID: tenID,
+			TenantID:     tenID,
+			TestingKnobs: h.Knobs,
 		}
 		var err error
 		tenantState.ApplicationLayerInterface, err = testServer.TenantController().StartTenant(ctx, tenantArgs)

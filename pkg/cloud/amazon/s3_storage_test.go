@@ -616,6 +616,7 @@ func (a awserror) ErrorFault() smithy.ErrorFault {
 }
 
 func TestInterpretAWSCode(t *testing.T) {
+	defer leaktest.AfterTest(t)()
 	{
 		// with code
 		err := types.BucketAlreadyOwnedByYou{}
@@ -848,6 +849,7 @@ func TestReadFileAtReturnsSize(t *testing.T) {
 }
 
 func TestCanceledError(t *testing.T) {
+	defer leaktest.AfterTest(t)()
 	ctx, cancelFunc := context.WithCancel(context.Background())
 	cancelFunc()
 	err := ctx.Err()
@@ -881,12 +883,22 @@ func TestAWSS3ImplicitAuthRequiresNoSharedConfigFiles(t *testing.T) {
 	// so in order to circumvent this and test the case where the shared config
 	// files are not present, we need to set the AWS_CONFIG_FILE and
 	// AWS_SHARED_CREDENTIALS_FILE.
+	origConfigFile, hasConfigFile := os.LookupEnv("AWS_CONFIG_FILE")
+	origCredsFile, hasCredsFile := os.LookupEnv("AWS_SHARED_CREDENTIALS_FILE")
 	require.NoError(t, os.Setenv("AWS_CONFIG_FILE", "/tmp/config"))
 	require.NoError(t, os.Setenv("AWS_SHARED_CREDENTIALS_FILE",
 		"/tmp/credentials"))
 	defer func() {
-		require.NoError(t, os.Unsetenv("AWS_CONFIG_FILE"))
-		require.NoError(t, os.Unsetenv("AWS_SHARED_CREDENTIALS_FILE"))
+		if hasConfigFile {
+			require.NoError(t, os.Setenv("AWS_CONFIG_FILE", origConfigFile))
+		} else {
+			require.NoError(t, os.Unsetenv("AWS_CONFIG_FILE"))
+		}
+		if hasCredsFile {
+			require.NoError(t, os.Setenv("AWS_SHARED_CREDENTIALS_FILE", origCredsFile))
+		} else {
+			require.NoError(t, os.Unsetenv("AWS_SHARED_CREDENTIALS_FILE"))
+		}
 	}()
 
 	s3 := s3Storage{

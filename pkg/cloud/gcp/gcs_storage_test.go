@@ -148,6 +148,7 @@ func TestPutGoogleCloud(t *testing.T) {
 }
 
 func TestGCSAssumeRole(t *testing.T) {
+	defer leaktest.AfterTest(t)()
 	user := username.RootUserName()
 
 	limitedBucket := os.Getenv("GOOGLE_LIMITED_BUCKET")
