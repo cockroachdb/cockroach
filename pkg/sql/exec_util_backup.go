@@ -102,6 +102,12 @@ type BackupRestoreTestingKnobs struct {
 	RestoreSpanConfigConformanceRetryPolicy *retry.Options
 
 	OnCompactionFileAccess *func(processorLocality roachpb.Locality, fileLocality string) error
+
+	// BackupProcessFileOverride, if set, is called for each file entry
+	// produced during backup. It can modify and return the entry, e.g. to
+	// inflate file sizes for testing restore behavior under conditions that
+	// would normally require a very large backup fixture.
+	BackupProcessFileOverride func(backuppb.BackupManifest_File) backuppb.BackupManifest_File
 }
 
 var _ base.ModuleTestingKnobs = &BackupRestoreTestingKnobs{}

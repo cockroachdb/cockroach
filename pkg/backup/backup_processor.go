@@ -652,16 +652,23 @@ func runBackupProcessor(
 						for i, file := range resp.Files {
 							entryCounts := countRows(file.Exported, spec.PKIDs)
 
+							fileMeta := backuppb.BackupManifest_File{
+								Span:                    file.Span,
+								EntryCounts:             entryCounts,
+								LocalityKV:              destLocalityKV,
+								ApproximatePhysicalSize: uint64(len(file.SST)),
+							}
+							if backupKnobs, ok := flowCtx.TestingKnobs().BackupRestoreTestingKnobs.(*sql.BackupRestoreTestingKnobs); ok {
+								if backupKnobs.BackupProcessFileOverride != nil {
+									fileMeta = backupKnobs.BackupProcessFileOverride(fileMeta)
+								}
+							}
+
 							ret := backupsink.ExportedSpan{
 								// BackupManifest_File just happens to contain the exact fields
 								// to store the metadata we need, but there's no actual File
 								// on-disk anywhere yet.
-								Metadata: backuppb.BackupManifest_File{
-									Span:                    file.Span,
-									EntryCounts:             entryCounts,
-									LocalityKV:              destLocalityKV,
-									ApproximatePhysicalSize: uint64(len(file.SST)),
-								},
+								Metadata: fileMeta,
 								DataSST:  file.SST,
 								RevStart: resp.StartTime,
 							}
