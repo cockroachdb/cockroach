@@ -11,6 +11,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"sort"
 	"strings"
 	"time"
 
@@ -20,9 +21,10 @@ import (
 
 // logEntry is the JSONL structure written by the task logger's LogSink.
 type logEntry struct {
-	Timestamp string `json:"ts"`
-	Level     string `json:"level"`
-	Message   string `json:"msg"`
+	Timestamp string            `json:"ts"`
+	Level     string            `json:"level"`
+	Message   string            `json:"msg"`
+	Attrs     map[string]string `json:"attrs,omitempty"`
 }
 
 // streamSSELogs connects to the task logs SSE endpoint and prints log
@@ -98,7 +100,8 @@ func parseSSEField(line string) (string, string) {
 	return field, value
 }
 
-// printLogEntry parses a JSONL log line and prints the message.
+// printLogEntry parses a JSONL log line and prints the message with
+// any structured attributes appended as key=value pairs.
 // Falls back to printing raw data if JSON parsing fails.
 func printLogEntry(data string) {
 	var entry logEntry
@@ -110,5 +113,29 @@ func printLogEntry(data string) {
 	if parsed, parseErr := time.Parse(time.RFC3339Nano, ts); parseErr == nil {
 		ts = parsed.Format("15:04:05")
 	}
-	fmt.Printf("[%s] %s: %s\n", ts, strings.ToUpper(entry.Level), entry.Message)
+	if len(entry.Attrs) > 0 {
+		fmt.Printf("[%s] %s: %s %s\n",
+			ts, strings.ToUpper(entry.Level), entry.Message,
+			formatAttrs(entry.Attrs),
+		)
+	} else {
+		fmt.Printf("[%s] %s: %s\n", ts, strings.ToUpper(entry.Level), entry.Message)
+	}
+}
+
+// formatAttrs formats a map of log attributes as a parenthesized,
+// comma-separated list of key=value pairs, sorted for deterministic output.
+func formatAttrs(attrs map[string]string) string {
+	// Deterministic order: collect keys and sort.
+	keys := make([]string, 0, len(attrs))
+	for k := range attrs {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+
+	parts := make([]string, 0, len(keys))
+	for _, k := range keys {
+		parts = append(parts, k+"="+attrs[k])
+	}
+	return "(" + strings.Join(parts, ", ") + ")"
 }

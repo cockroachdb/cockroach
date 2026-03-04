@@ -199,12 +199,8 @@ func (cr *commandRegistry) buildEnvVarListCmd() *cobra.Command {
 			tw := tabwriter.NewWriter(os.Stdout, 0, 8, 2, ' ', 0)
 			fmt.Fprintf(tw, "KEY\tTYPE\tVALUE\tUPDATED\n")
 			for _, v := range vars {
-				value := v.Value
-				if v.Type == envmodels.VarTypeSecret || v.Type == envmodels.VarTypeSecretFile {
-					value = "********"
-				}
 				fmt.Fprintf(tw, "%s\t%s\t%s\t%s\n",
-					v.Key, v.Type, value,
+					v.Key, v.Type, truncateValue(v.Value, 80),
 					v.UpdatedAt.Format("2006-01-02 15:04"),
 				)
 			}
@@ -246,11 +242,7 @@ func (cr *commandRegistry) buildEnvVarGetCmd() *cobra.Command {
 
 			fmt.Printf("Key:     %s\n", v.Key)
 			fmt.Printf("Type:    %s\n", v.Type)
-			if v.Type == envmodels.VarTypeSecret || v.Type == envmodels.VarTypeSecretFile {
-				fmt.Printf("Value:   ********\n")
-			} else {
-				fmt.Printf("Value:   %s\n", v.Value)
-			}
+			fmt.Printf("Value:   %s\n", v.Value)
 			fmt.Printf("Updated: %s\n", v.UpdatedAt.Format("2006-01-02 15:04:05"))
 			return nil
 		}),
@@ -374,6 +366,14 @@ Examples:
 	cr.addToExcludeFromClusterFlagsMulti(cmd)
 
 	return cmd
+}
+
+// truncateValue shortens s to maxLen characters, appending "..." if truncated.
+func truncateValue(s string, maxLen int) string {
+	if len(s) <= maxLen {
+		return s
+	}
+	return s[:maxLen] + "..."
 }
 
 // buildEnvVarDeleteCmd deletes a variable.
