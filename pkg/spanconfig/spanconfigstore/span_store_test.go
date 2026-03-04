@@ -326,3 +326,69 @@ func TestRandomized(t *testing.T) {
 		}
 	})
 }
+
+// TestComputeSplitKeyExcludeFromBackup verifies that adjacent span config
+// entries with ExcludeDataFromBackup=true are not coalesced, preserving split
+// points at each entry boundary. This prevents issues with
+// entireSpanExcludedFromBackup's containment check when the replica's cached
+// confSpan covers only a single span rather than the full coalesced range.
+func TestComputeSplitKeyExcludeFromBackup(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	ctx := context.Background()
+	conf := spanconfigtestutils.ParseConfig(t, "A")
+
+	t.Run("exclude-from-backup-prevents-coalescing", func(t *testing.T) {
+		store := newSpanConfigStore(cluster.MakeTestingClusterSettings(), &spanconfig.TestingKnobs{
+			StoreIgnoreCoalesceAdjacentExceptions: true,
+		})
+
+		// Create a config with ExcludeDataFromBackup set.
+		excludeConf := conf
+		excludeConf.ExcludeDataFromBackup = true
+
+		// Apply three adjacent entries all with the same config +
+		// ExcludeDataFromBackup.
+		for _, sp := range []string{"[b,d)", "[d,f)", "[f,h)"} {
+			update, err := spanconfig.Addition(
+				spanconfig.MakeTargetFromSpan(spanconfigtestutils.ParseSpan(t, sp)),
+				excludeConf,
+			)
+			require.NoError(t, err)
+			_, _, err = store.apply(ctx, update)
+			require.NoError(t, err)
+		}
+
+		// Despite identical configs, split keys must exist at every boundary
+		// because ExcludeDataFromBackup is set.
+		splitKeys := store.TestingSplitKeys(t, ctx,
+			roachpb.RKey("b"), roachpb.RKey("h"))
+		require.Len(t, splitKeys, 2, "expected split keys at d and f")
+		require.Equal(t, roachpb.RKey("d"), splitKeys[0])
+		require.Equal(t, roachpb.RKey("f"), splitKeys[1])
+	})
+
+	t.Run("without-exclude-from-backup-coalesces", func(t *testing.T) {
+		store := newSpanConfigStore(cluster.MakeTestingClusterSettings(), &spanconfig.TestingKnobs{
+			StoreIgnoreCoalesceAdjacentExceptions: true,
+		})
+
+		// Apply three adjacent entries with the same config but WITHOUT
+		// ExcludeDataFromBackup.
+		for _, sp := range []string{"[b,d)", "[d,f)", "[f,h)"} {
+			update, err := spanconfig.Addition(
+				spanconfig.MakeTargetFromSpan(spanconfigtestutils.ParseSpan(t, sp)),
+				conf,
+			)
+			require.NoError(t, err)
+			_, _, err = store.apply(ctx, update)
+			require.NoError(t, err)
+		}
+
+		// With identical configs and no ExcludeDataFromBackup, adjacent entries
+		// should coalesce (no split keys).
+		splitKeys := store.TestingSplitKeys(t, ctx,
+			roachpb.RKey("b"), roachpb.RKey("h"))
+		require.Empty(t, splitKeys, "expected no split keys due to coalescing")
+	})
+}

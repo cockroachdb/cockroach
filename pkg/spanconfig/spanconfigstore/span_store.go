@@ -134,6 +134,14 @@ func (s *spanConfigStore) computeSplitKey(
 		return roachpb.RKey(match.span.Key), nil
 	}
 
+	// Spans with ExcludeDataFromBackup must not be coalesced with adjacent
+	// ranges. When coalesced, the replica's cached confSpan covers only a single
+	// span rather than the full range, which breaks
+	// entireSpanExcludedFromBackup's containment check.
+	if match.canonical.ExcludeDataFromBackup {
+		return roachpb.RKey(match.span.Key), nil
+	}
+
 	// Use the cached tenant ID for comparisons to avoid repeated decoding.
 	matchTenID := match.tenantID
 
