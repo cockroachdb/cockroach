@@ -270,7 +270,6 @@ go_test(
         "//pkg/ccl/changefeedccl/schemafeed/schematestutils",
         "//pkg/ccl/multiregionccl",
         "//pkg/ccl/multiregionccl/multiregionccltestutils",
-        "//pkg/ccl/utilccl",
         "//pkg/cloud",
         "//pkg/cloud/cloudpb",
         "//pkg/cloud/impl:cloudimpl",

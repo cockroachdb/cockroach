@@ -18,7 +18,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdctest"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedpb"
-	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobstest"
@@ -325,9 +324,6 @@ func TestCreateChangefeedScheduleChecksPermissionsDuringDryRun(t *testing.T) {
 	sysDB.Exec(t, "SET CLUSTER SETTING kv.rangefeed.enabled = true")
 
 	sqlDB := sqlutils.MakeSQLRunner(db)
-	enableEnterprise := utilccl.TestingDisableEnterprise()
-	enableEnterprise()
-
 	sqlDB.Exec(t, `CREATE TABLE table_a (i int)`)
 	sqlDB.Exec(t, `CREATE USER testuser WITH PASSWORD 'test'`)
 

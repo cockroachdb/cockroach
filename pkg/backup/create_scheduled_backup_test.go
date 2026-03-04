@@ -16,7 +16,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/backup/backuppb"
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobstest"
@@ -357,7 +356,6 @@ CREATE TABLE other_db.t1(a int);
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			defer th.clearSchedules(t)
-			defer utilccl.TestingDisableEnterprise()()
 
 			destination := "nodelocal://1/backup/" + tc.name
 			schedules, err := th.createBackupSchedule(t, tc.query, destination)
@@ -696,12 +694,6 @@ func TestSerializesScheduledBackupExecutionArgs(t *testing.T) {
 	for i, tc := range testCases {
 		t.Run(fmt.Sprintf("%s-%s", tc.name, tc.user), func(t *testing.T) {
 			defer th.clearSchedules(t)
-
-			if tc.user == freeUser {
-				defer utilccl.TestingDisableEnterprise()()
-			} else {
-				defer utilccl.TestingEnableEnterprise()()
-			}
 
 			schedules, err := th.createBackupSchedule(t, tc.query, tc.queryArgs...)
 			if len(tc.errMsg) > 0 {
@@ -1348,7 +1340,6 @@ func TestShowCreateScheduleStatement(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			defer utilccl.TestingEnableEnterprise()()
 			defer th.clearSchedules(t)
 
 			destination := "nodelocal://1/" + tc.name

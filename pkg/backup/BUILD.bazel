@@ -235,7 +235,6 @@ go_test(
         "//pkg/ccl/multiregionccl",
         "//pkg/ccl/multiregionccl/multiregionccltestutils",
         "//pkg/ccl/multitenantccl",
-        "//pkg/ccl/utilccl",
         "//pkg/cloud",
         "//pkg/cloud/amazon",
         "//pkg/cloud/azure",
