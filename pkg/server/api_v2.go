@@ -229,6 +229,8 @@ func registerRoutes(
 		{"dbconsole/events/", dbconsoleAPI.GetEvents, true, authserver.ViewClusterMetadataRole, true},
 		{"dbconsole/schedules/", dbconsoleAPI.GetSchedules, true, authserver.RegularRole, true},
 		{"dbconsole/schedules/{schedule_id}/", dbconsoleAPI.GetSchedule, true, authserver.RegularRole, true},
+		{"dbconsole/contention/", dbconsoleAPI.GetContentionDetails, true, authserver.ViewClusterMetadataRole, true},
+		{"dbconsole/cluster-locks/", dbconsoleAPI.GetClusterLocks, true, authserver.ViewClusterMetadataRole, true},
 	}
 
 	// For all routes requiring authentication, have the outer mux (a.mux)

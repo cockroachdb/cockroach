@@ -3,6 +3,7 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 go_library(
     name = "dbconsole",
     srcs = [
+        "contention.go",
         "databases.go",
         "dbconsole.go",
         "events.go",
@@ -30,6 +31,7 @@ go_library(
 go_test(
     name = "dbconsole_test",
     srcs = [
+        "contention_test.go",
         "databases_test.go",
         "dbconsole_test.go",
         "events_test.go",
