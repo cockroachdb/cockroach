@@ -1097,19 +1097,17 @@ func (g *lockTableGuardImpl) isSameTxn(txn *enginepb.TxnMeta) bool {
 	return g.txn != nil && g.txn.ID == txn.ID
 }
 
-// conflictWithHeld locks return true if the given lock conflicts with the
+// conflictsWithHeldLock returns true if the given lock conflicts with the
 // request for this guard.
 //
-// When readOnly is true, the method only checks for conflicts without appending
-// to the guard's toResolve lists. This is used by recomputeWaitQueues, which
-// runs on guards owned by OTHER goroutines, to avoid the data race of mutating
-// toResolve/toResolveUnreplicated concurrently with the guard's own goroutine.
-//
-// When readOnly is false (the normal scan path), locks that can be resolved
-// based on the txn status cache are appended to toResolve and the lock is
-// treated as non-conflicting.
+// callerOwned indicates whether the caller's goroutine owns this guard. When
+// false (e.g. when called from recomputeWaitQueues on another request's guard),
+// the method avoids accessing unsynchronized guard state such as toResolve and
+// toResolveUnreplicated to prevent data races. When true (the normal scan
+// path), locks that can be resolved based on the txn status cache or existing
+// resolve entries are treated as non-conflicting.
 func (g *lockTableGuardImpl) conflictsWithHeldLock(
-	tl *txnLock, key roachpb.Key, readOnly bool,
+	tl *txnLock, key roachpb.Key, callerOwned bool,
 ) bool {
 	lockHolderTxn := tl.getLockHolderTxn()
 	if g.isSameTxn(lockHolderTxn) {
@@ -1122,11 +1120,11 @@ func (g *lockTableGuardImpl) conflictsWithHeldLock(
 		return false // no conflict with a lock held by our own transaction
 	}
 
-	if g.toResolve.contains(lockHolderTxn.ID, key) {
-		return false // No conflict for a lock we are going to resolve.
-	}
+	if callerOwned {
+		if g.toResolve.contains(lockHolderTxn.ID, key) {
+			return false // No conflict for a lock we are going to resolve.
+		}
 
-	if !readOnly {
 		if canResolve, up := g.canResolveKeyForHoldingTransaction(
 			lockHolderTxn, g.curStrength(), key,
 		); canResolve {
@@ -3032,7 +3030,7 @@ func (kl *keyLocks) conflictsWithLockHolders(g *lockTableGuardImpl) bool {
 	}
 
 	for e := kl.holders.Front(); e != nil; e = e.Next() {
-		if g.conflictsWithHeldLock(e.Value, kl.key, false /* readOnly */) {
+		if g.conflictsWithHeldLock(e.Value, kl.key, true /* callerOwned */) {
 			return true
 		}
 	}
@@ -3854,7 +3852,7 @@ func (kl *keyLocks) recomputeWaitQueues(st *cluster.Settings) {
 		reader := e.Value
 		curr := e
 		e = e.Next()
-		if !reader.conflictsWithHeldLock(txnLock, kl.key, true /* readOnly */) {
+		if !reader.conflictsWithHeldLock(txnLock, kl.key, false /* callerOwned */) {
 			kl.removeReader(curr)
 		}
 	}
