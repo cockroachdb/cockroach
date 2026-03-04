@@ -318,8 +318,10 @@ func TestSchemaFeedHandlesCascadeDatabaseDrop(t *testing.T) {
 // It contains an ordered time map of descriptors for a single ID.
 // TODO(yang): Extend this for multiple IDs.
 type testLeaseAcquirer struct {
-	id    descpb.ID
-	descs []*testLeasedDescriptor
+	id             descpb.ID
+	descs          []*testLeasedDescriptor
+	eventsExecuted []bool
+	observers      []lease.Observer
 }
 
 func (t *testLeaseAcquirer) Acquire(
@@ -350,6 +352,41 @@ func (t *testLeaseAcquirer) AcquireFreshestFromStore(ctx context.Context, id des
 
 func (t *testLeaseAcquirer) Codec() keys.SQLCodec {
 	panic("should not be called")
+}
+
+func (t *testLeaseAcquirer) RegisterLeaseObserver(observer lease.Observer) {
+	t.observers = append(t.observers, observer)
+}
+
+func (t *testLeaseAcquirer) UnregisterLeaseObserver(observer lease.Observer) {
+	for i, o := range t.observers {
+		if o == observer {
+			t.observers = append(t.observers[:i], t.observers[i+1:]...)
+			return
+		}
+	}
+}
+
+// advanceTimestamp advances the timestamp forward, and emits any events.
+func (t *testLeaseAcquirer) advanceTimestamp(timestamp hlc.Timestamp) {
+	if t.eventsExecuted == nil {
+		t.eventsExecuted = make([]bool, len(t.descs))
+	}
+	// Determine if a new event should fire.
+	i, _ := slices.BinarySearchFunc(t.descs, timestamp, func(desc *testLeasedDescriptor, timestamp hlc.Timestamp) int {
+		return desc.timestamp.Compare(timestamp)
+	})
+	// Timestamp is already visible
+	if t.eventsExecuted[i] {
+		return
+	}
+	// Otherwise, check if the event would fire.
+	if t.descs[i].timestamp.LessEq(timestamp) {
+		t.eventsExecuted[i] = true
+		for _, observer := range t.observers {
+			observer.OnNewVersion(context.Background(), t.descs[i].Underlying().GetID(), t.descs[i].Underlying().GetVersion(), t.descs[i].timestamp)
+		}
+	}
 }
 
 type testLeasedDescriptor struct {
@@ -422,14 +459,17 @@ func TestPauseOrResumePolling(t *testing.T) {
 	// Use a clock set to time 0, before any test timestamps.
 	clock := hlc.NewClockForTesting(timeutil.NewManualTime(timeutil.Unix(0, 0)))
 
-	sf := schemaFeed{
-		clock: clock,
-		leaseMgr: &testLeaseAcquirer{
-			id:    tableID,
-			descs: tableDescs,
-		},
-		targets: CreateChangefeedTargets(tableID),
+	lm := &testLeaseAcquirer{
+		id:    tableID,
+		descs: tableDescs,
 	}
+	sf := schemaFeed{
+		clock:    clock,
+		leaseMgr: lm,
+		targets:  CreateChangefeedTargets(tableID),
+	}
+	lm.RegisterLeaseObserver(&sf)
+	defer lm.UnregisterLeaseObserver(&sf)
 
 	getFrontier := func() hlc.Timestamp {
 		sf.mu.Lock()
@@ -437,6 +477,7 @@ func TestPauseOrResumePolling(t *testing.T) {
 		return sf.mu.ts.frontier
 	}
 	setFrontier := func(ts hlc.Timestamp) error {
+		lm.advanceTimestamp(ts)
 		sf.mu.Lock()
 		defer sf.mu.Unlock()
 		return sf.mu.ts.advanceFrontier(ts)
@@ -476,10 +517,13 @@ func TestPauseOrResumePolling(t *testing.T) {
 	require.Equal(t, hlc.Timestamp{WallTime: 40}, getFrontier())
 
 	// We expect polling to be paused for time 40 now that the highwater has
-	// caught up to the schema-locked version.
+	// caught up to the schema-locked version. However, polling will be enabled
+	// until the next advance after.
 	require.NoError(t, sf.pauseOrResumePolling(ctx, hlc.Timestamp{WallTime: 40}))
+	require.False(t, sf.pollingPaused())
+	require.NoError(t, sf.pauseOrResumePolling(ctx, hlc.Timestamp{WallTime: 41}))
 	require.True(t, sf.pollingPaused())
-	require.Equal(t, hlc.Timestamp{WallTime: 40}, getFrontier())
+	require.Equal(t, hlc.Timestamp{WallTime: 41}, getFrontier())
 
 	// We expect polling continue to be paused for time 50 and to see the
 	// highwater bumped up.
@@ -495,6 +539,7 @@ func TestPauseOrResumePolling(t *testing.T) {
 
 	// We expect polling to be resumed for time 60 and to not see the highwater
 	// bumped up.
+	lm.advanceTimestamp(hlc.Timestamp{WallTime: 60})
 	require.NoError(t, sf.pauseOrResumePolling(ctx, hlc.Timestamp{WallTime: 60}))
 	require.False(t, sf.pollingPaused())
 	require.Equal(t, hlc.Timestamp{WallTime: 50}, getFrontier())
@@ -518,14 +563,17 @@ func TestPauseOrResumePollingAdvancesToNow(t *testing.T) {
 	manualClock := timeutil.NewManualTime(timeutil.Unix(0, 100))
 	clock := hlc.NewClockForTesting(manualClock)
 
-	sf := schemaFeed{
-		clock: clock,
-		leaseMgr: &testLeaseAcquirer{
-			id:    tableID,
-			descs: tableDescs,
-		},
-		targets: CreateChangefeedTargets(tableID),
+	lm := &testLeaseAcquirer{
+		id:    tableID,
+		descs: tableDescs,
 	}
+	sf := schemaFeed{
+		clock:    clock,
+		leaseMgr: lm,
+		targets:  CreateChangefeedTargets(tableID),
+	}
+	lm.RegisterLeaseObserver(&sf)
+	defer lm.UnregisterLeaseObserver(&sf)
 
 	getFrontier := func() hlc.Timestamp {
 		sf.mu.Lock()
@@ -533,6 +581,7 @@ func TestPauseOrResumePollingAdvancesToNow(t *testing.T) {
 		return sf.mu.ts.frontier
 	}
 	setFrontier := func(ts hlc.Timestamp) error {
+		lm.advanceTimestamp(ts)
 		sf.mu.Lock()
 		defer sf.mu.Unlock()
 		return sf.mu.ts.advanceFrontier(ts)
@@ -542,8 +591,11 @@ func TestPauseOrResumePollingAdvancesToNow(t *testing.T) {
 	require.NoError(t, setFrontier(hlc.Timestamp{WallTime: 10}))
 
 	// Call with a timestamp in the past (20). Since the clock is at 100,
-	// the frontier should advance to 100.
+	// the frontier should advance to 100.However, polling will be enabled
+	// until the next advance after.
 	require.NoError(t, sf.pauseOrResumePolling(ctx, hlc.Timestamp{WallTime: 20}))
+	require.False(t, sf.pollingPaused())
+	require.NoError(t, sf.pauseOrResumePolling(ctx, hlc.Timestamp{WallTime: 21}))
 	require.True(t, sf.pollingPaused())
 	require.Equal(t, int64(100), getFrontier().WallTime)
 

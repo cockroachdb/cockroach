@@ -64,6 +64,8 @@ type leaseAcquirer interface {
 	AcquireFreshestFromStore(ctx context.Context, id descpb.ID) error
 	// TODO(yang): Investigate whether the codec can be stored in the schema feed itself.
 	Codec() keys.SQLCodec
+	RegisterLeaseObserver(observer lease.Observer)
+	UnregisterLeaseObserver(observer lease.Observer)
 }
 
 // SchemaFeed is a stream of events corresponding the relevant set of
@@ -110,6 +112,7 @@ func New(
 	}
 	m.mu.previousTableVersion = make(map[descpb.ID]catalog.TableDescriptor)
 	m.mu.typeDeps = typeDependencyTracker{deps: make(map[descpb.ID][]descpb.ID)}
+	m.mu.heldLeases = make(map[descpb.ID]lease.LeasedDescriptor)
 	return m
 }
 
@@ -167,6 +170,12 @@ type schemaFeed struct {
 		// Polling can be paused if all tables are locked from schema changes because
 		// we know no table events will occur.
 		pollingPaused bool
+
+		// heldLeases tracks leases currently held by the schemafeed.
+		heldLeases map[descpb.ID]lease.LeasedDescriptor
+
+		// heldCountStable indicates if the count is table multiple times.
+		heldCountStable bool
 	}
 }
 
@@ -263,6 +272,18 @@ func (tf *schemaFeed) Run(ctx context.Context) error {
 	if err := tf.init(); err != nil {
 		return err
 	}
+
+	tf.leaseMgr.RegisterLeaseObserver(tf)
+	// Make sure the observer unregisters before trying to release leases.
+	defer func() {
+		tf.mu.Lock()
+		defer tf.mu.Unlock()
+		for _, ld := range tf.mu.heldLeases {
+			ld.Release(ctx)
+		}
+		tf.mu.heldLeases = nil
+	}()
+	defer tf.leaseMgr.UnregisterLeaseObserver(tf)
 
 	// Fetch the table descs as of the initial frontier and prime the table
 	// history with them. This addresses #41694 where we'd skip the rest of a
@@ -508,60 +529,55 @@ func (tf *schemaFeed) pauseOrResumePolling(ctx context.Context, atOrBefore hlc.T
 		advanceTo = now
 	}
 
-	// Always assume we need to resume polling until we've proven otherwise.
-	tf.mu.pollingPaused = false
-
-	if canPausePolling, err := tf.targets.EachTableIDWithBool(func(id descpb.ID) (bool, error) {
-		// Check if target table is schema-locked at the current frontier.
-		ld1, err := tf.leaseMgr.Acquire(ctx, lease.TimestampToReadTimestamp(frontier), id)
-		if err != nil {
-			return false, err
-		}
-		defer ld1.Release(ctx)
-		desc1 := ld1.Underlying().(catalog.TableDescriptor)
-		if !desc1.IsSchemaLocked() {
-			if log.V(2) {
-				log.Changefeed.Infof(ctx, "desc %d not schema-locked at frontier %s", desc1.GetID(), frontier)
+	// Only recompute the state if something has changed.
+	if countsDiffer := len(tf.mu.heldLeases) != tf.targets.NumUniqueTables(); countsDiffer || !tf.mu.heldCountStable {
+		// We require two iterations to flip the pause flag, so ensure
+		// the held leases are stable for two advances.
+		tf.mu.heldCountStable = !countsDiffer
+		// Always assume we need to resume polling until we've proven otherwise.
+		tf.mu.pollingPaused = false
+		tf.maybeInitHeldLeases()
+		if canPausePolling, err := tf.targets.EachTableIDWithBool(func(id descpb.ID) (bool, error) {
+			// Check if a lease is alrady held, if it is then we know the descriptor
+			// version could not have changed.
+			ld1, ok := tf.mu.heldLeases[id]
+			if !ok {
+				// Otherwise, a new version was detected, so acquire it at advanceTo.
+				var err error
+				ld1, err = tf.leaseMgr.Acquire(ctx, lease.TimestampToReadTimestamp(advanceTo), id)
+				if err != nil {
+					return false, err
+				}
+				tf.mu.heldLeases[id] = ld1
+				// This new version could be schema_locked, but we don't know if multiple versions
+				// could show up after, since the lease was released OnNewVersion, so we will poll until
+				// the next timestamp advance.
+				return false, nil
 			}
-			return false, nil
-		}
-
-		if advanceTo.LessEq(frontier) {
-			return true, nil
-		}
-
-		// Check if target table remains at the same version at atOrBefore.
-		ld2, err := tf.leaseMgr.Acquire(ctx, lease.TimestampToReadTimestamp(advanceTo), id)
-		if err != nil {
-			return false, err
-		}
-		defer ld2.Release(ctx)
-		desc2 := ld2.Underlying().(catalog.TableDescriptor)
-		if desc1.GetVersion() != desc2.GetVersion() {
+			// Since we hold the lease already (OnNewVersion hasn't been called
+			// since we last checked), so we know the descriptor version could not
+			// have changed.
+			return ld1.Underlying().(catalog.TableDescriptor).IsSchemaLocked(), nil
+		}); !canPausePolling || err != nil {
+			if errors.Is(err, catalog.ErrDescriptorDropped) {
+				// If a table is dropped and causes Acquire to fail, we mark it as a
+				// terminal error, so that we don't retry, and let the changefeed job
+				// handle this error.
+				return changefeedbase.WithTerminalError(err)
+			}
+			// We swallow any non-terminal errors so that the slow path can be tried
+			// after we resume polling.
 			if log.V(1) {
-				log.Changefeed.Infof(ctx,
-					"desc %d version changed from version %d to %d between frontier %s and atOrBefore %s",
-					desc1.GetID(), desc1.GetVersion(), desc2.GetVersion(), frontier, advanceTo)
+				log.Changefeed.Infof(ctx, "got a non-terminal error while checking if polling can be paused: %s", err)
 			}
-			return false, nil
+			return nil
 		}
-		return true, nil
-	}); !canPausePolling || err != nil {
-		if errors.Is(err, catalog.ErrDescriptorDropped) {
-			// If a table is dropped and causes Acquire to fail, we mark it as a
-			// terminal error, so that we don't retry, and let the changefeed job
-			// handle this error.
-			return changefeedbase.WithTerminalError(err)
-		}
-		// We swallow any non-terminal errors so that the slow path can be tried
-		// after we resume polling.
-		if log.V(1) {
-			log.Changefeed.Infof(ctx, "got a non-terminal error while checking if polling can be paused: %s", err)
-		}
+		tf.mu.pollingPaused = true
+	} else if !tf.mu.pollingPaused {
+		// The state has not changed, no need to rescan descriptors.
 		return nil
 	}
 
-	tf.mu.pollingPaused = true
 	if !frontier.Less(advanceTo) {
 		return nil
 	}
@@ -943,6 +959,37 @@ func (tf *schemaFeed) fetchDescriptorVersions(
 	}
 
 	return descriptors, nil
+}
+
+// OnNewVersion implements lease.Observer, and will enable polling
+// when a new version is detected.
+func (tf *schemaFeed) OnNewVersion(
+	ctx context.Context, id descpb.ID, version descpb.DescriptorVersion, _ hlc.Timestamp,
+) {
+	tf.mu.Lock()
+	defer tf.mu.Unlock()
+	// Determine if the descriptor is target.
+	isTable, _ := tf.targets.EachHavingTableID(id, func(_ changefeedbase.Target) error {
+		return nil
+	})
+	if !isTable {
+		return
+	}
+	// If the target is a table, then we will release any lease
+	// on the old descriptor versions.
+	tf.mu.pollingPaused = false
+	tf.maybeInitHeldLeases()
+	if ld, ok := tf.mu.heldLeases[id]; ok && ld.Underlying().GetVersion() != version {
+		ld.Release(ctx)
+		delete(tf.mu.heldLeases, id)
+	}
+}
+
+// maybeInitHeldLeases sets up the heldLeases map if it is nil.
+func (tf *schemaFeed) maybeInitHeldLeases() {
+	if tf.mu.heldLeases == nil {
+		tf.mu.heldLeases = make(map[descpb.ID]lease.LeasedDescriptor)
+	}
 }
 
 type doNothingSchemaFeed struct{}
