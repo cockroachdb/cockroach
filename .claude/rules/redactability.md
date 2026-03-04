@@ -2,65 +2,46 @@
 globs: ["**/*.go"]
 ---
 
-# Log and Error Redactability
+# Redactability: types in logs and errors
 
-CockroachDB implements redactability to ensure sensitive information (PII,
-confidential data) is automatically removed or marked in log messages and error
-outputs. This enables customers to safely share logs with support teams.
+Not every type needs a `String()` method — but if a type does implement
+`fmt.Stringer` or the `error` interface, its output must be redactable.
+Unredacted strings in logs leak PII in customer-shared diagnostics.
 
-## Core Concepts
+**When to act:** adding a `String()` method, implementing `error`, or
+defining a type that will appear in log or error output.
 
-**Safe vs Unsafe Data:**
-- **Safe data**: Information certainly known to NOT be PII-laden (node IDs, range IDs, error codes)
-- **Unsafe data**: Information potentially PII-laden or confidential (user data, SQL statements, keys)
+**Decision guide:**
+- Type contains only IDs, counts, or other non-PII → implement `SafeValue`:
+  ```go
+  func (t MyType) SafeValue() {}
+  var _ redact.SafeValue = MyType{}
+  ```
+- Type mixes safe and unsafe fields → implement `SafeFormatter`:
+  ```go
+  func (t *MyType) SafeFormat(w redact.SafePrinter, _ rune) {
+      w.Printf("MyType{id: %v, ", redact.Safe(t.ID))
+      w.Printf("name: %v}", t.Name) // unsafe by default
+  }
+  // String implements fmt.Stringer via SafeFormat.
+  func (t *MyType) String() string {
+      return redact.StringWithoutMarkers(t)
+  }
+  ```
+- If implementing `SafeValue`, update the allowlist in
+  `pkg/testutils/lint/passes/redactcheck/redactcheck.go`.
 
-**Redactable Strings:**
-- Unsafe data is enclosed in Unicode markers: `‹unsafe_data›`
-- Safe data appears without markers
-- Log entries show a special indicator: `⋮` (vertical ellipsis)
+Prefer `SafeFormatter` over `SafeValue` — it's more precise and doesn't
+require linter allowlist changes.
 
-## Key Implementation Patterns
-
-**SafeValue Interface** - For types that are always safe:
+**Testing:** nontrivial `SafeFormat` implementations need an `echotest`
+unit test to lock down both the redacted and unredacted output:
 ```go
-type NodeID int32
-func (n NodeID) SafeValue() {}  // always safe to log
-
-// Interface verification pattern.
-var _ redact.SafeValue = NodeID(0)
-```
-
-**SafeFormatter Interface** - For complex types mixing safe/unsafe data:
-```go
-func (s *ComponentStats) SafeFormat(w redact.SafePrinter, _ rune) {
-    w.Printf("ComponentStats{ID: %v", s.Component)
-    // Use w.Printf(), w.SafeString(), w.SafeRune() to mark safe parts.
+func TestMyType_SafeFormat(t *testing.T) {
+    v := MyType{ID: 1, Name: "sensitive"}
+    redacted := string(redact.Sprint(v))
+    echotest.Require(t, redacted, datapathutils.TestDataPath(t, t.Name()))
 }
 ```
-
-## Common APIs
-
-- `redact.Safe(value)` - Mark a value as safe
-- `redact.SafeString(s)` - Mark string literal as safe
-
-## Redactcheck Linter
-
-Prefer using SafeFormatter, which does not require the below check.
-If implementing SafeValue instead:
-
-The linter in `/pkg/testutils/lint/passes/redactcheck/redactcheck.go`:
-- Maintains allowlist of types permitted to implement `SafeValue`
-- Validates `RegisterSafeType` calls
-- Prevents accidental marking of sensitive types as safe
-
-To add a new safe type:
-1. Implement `SafeValue()` method
-2. Add interface verification: `var _ redact.SafeValue = TypeName{}`
-3. Update redactcheck allowlist if needed
-
-## Key Files
-
-- `/pkg/util/log/redact.go` - Core redaction logic
-- `/docs/RFCS/20200427_log_file_redaction.md` - Design RFC
-- `/pkg/testutils/lint/passes/redactcheck/redactcheck.go` - Linter implementation
-- `/pkg/util/log/redact_test.go` - Test examples and patterns
+Run with `-rewrite` to generate the initial testdata file, then inspect
+it to verify markers appear around unsafe fields.
