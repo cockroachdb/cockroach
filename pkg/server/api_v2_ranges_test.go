@@ -9,6 +9,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"testing"
 
@@ -122,7 +123,7 @@ func TestNodeRangesV2(t *testing.T) {
 func TestNodesV2(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	skip.WithIssue(t, 164126)
+	skip.UnderRace(t, "flaky under race, see #164126")
 
 	testCluster := serverutils.StartCluster(t, 3, base.TestClusterArgs{
 		ServerArgs: base.TestServerArgs{
@@ -148,7 +149,11 @@ func TestNodesV2(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, resp)
 
-	require.Equal(t, 200, resp.StatusCode)
+	if resp.StatusCode != 200 {
+		body, _ := io.ReadAll(resp.Body)
+		_ = resp.Body.Close()
+		t.Fatalf("expected status 200 but got %d; response body: %s", resp.StatusCode, body)
+	}
 	require.NoError(t, json.NewDecoder(resp.Body).Decode(&nodesResp))
 	require.NoError(t, resp.Body.Close())
 
