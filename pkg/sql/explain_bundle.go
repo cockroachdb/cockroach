@@ -564,7 +564,8 @@ var stmtBundleIncludeAllFKReferences = settings.RegisterBoolSetting(
 func (c *stmtEnvCollector) getStmtHintRecreateStmts(
 	ctx context.Context, stmt string, sv *settings.Values,
 ) (recreateStmts []string, err error) {
-	fingerprint, err := parserutils.FingerprintStatement(stmt,
+	fingerprint, err := parserutils.FingerprintStatement(
+		parserutils.FingerprintTagStatement, stmt,
 		tree.FmtFlags(tree.QueryFormattingForFingerprintsMask.Get(
 			sv,
 		)))

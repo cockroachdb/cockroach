@@ -28,6 +28,7 @@ go_library(
     deps = [
         "//pkg/sql/lexbase",
         "//pkg/sql/protoreflect",
+        "//pkg/util/errorutil",
         "//pkg/util/json",
         "//pkg/util/protoutil",
         "@com_github_cockroachdb_errors//:errors",

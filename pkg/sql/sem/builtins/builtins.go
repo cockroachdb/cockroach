@@ -9803,7 +9803,6 @@ WHERE object_id = table_descriptor_id
 			},
 		},
 	),
-
 	"crdb_internal.inject_hint": makeBuiltin(
 		tree.FunctionProperties{
 			Category:         builtinconstants.CategorySystemRepair,
@@ -9817,6 +9816,109 @@ WHERE object_id = table_descriptor_id
 			DistsqlBlocklist: true,
 		},
 		rewriteInlineHintsOverload,
+	),
+	"information_schema.crdb_delete_statement_hints": makeBuiltin(
+		tree.FunctionProperties{
+			Category:         builtinconstants.CategorySystemRepair,
+			DistsqlBlocklist: true,
+		},
+		tree.Overload{
+			Types: tree.ParamTypes{
+				{Name: "rowid", Typ: types.Int},
+			},
+			ReturnType: tree.FixedReturnType(types.Int),
+			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
+				// The user must have REPAIRCLUSTER to use this builtin.
+				if err := evalCtx.SessionAccessor.CheckPrivilege(
+					ctx, syntheticprivilege.GlobalPrivilegeObject, privilege.REPAIRCLUSTER,
+				); err != nil {
+					return nil, err
+				}
+				rowIDArg := int64(tree.MustBeDInt(args[0]))
+				rowIDs, fingerprints, rawHintBytes, err := evalCtx.Planner.DeleteStatementHint(ctx, rowIDArg, "" /* statementFingerprint */)
+				if err != nil {
+					return nil, err
+				}
+				for i := range rowIDs {
+					hint, err := hintpb.ParseHintProto(rawHintBytes[i])
+					if err != nil {
+						log.Dev.Warningf(ctx, "could not unmarshal hint for row %d: %v", rowIDs[i], err)
+						continue
+					}
+					switch t := hint.GetValue().(type) {
+					case *hintpb.InjectHints:
+						// Log the statement hint deletion event for every hint we delete.
+						if err := evalCtx.Planner.LogEvent(ctx, &eventpb.DeleteRewriteInlineHints{
+							HintID:               rowIDs[i],
+							StatementFingerprint: fingerprints[i],
+							DonorSql:             t.DonorSQL,
+						}); err != nil {
+							return nil, err
+						}
+					default:
+					}
+				}
+				return tree.NewDInt(tree.DInt(len(rowIDs))), nil
+			},
+			Info: `This function deletes an inline-hints rewrite rule by its row ID. ` +
+				`It returns the number of deleted rows.`,
+			Volatility: volatility.Volatile,
+		},
+		tree.Overload{
+			Types: tree.ParamTypes{
+				{Name: "statement_fingerprint", Typ: types.String},
+			},
+			ReturnType: tree.FixedReturnType(types.Int),
+			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
+				// The user must have REPAIRCLUSTER to use this builtin.
+				if err := evalCtx.SessionAccessor.CheckPrivilege(
+					ctx, syntheticprivilege.GlobalPrivilegeObject, privilege.REPAIRCLUSTER,
+				); err != nil {
+					return nil, err
+				}
+				arg := string(tree.MustBeDString(args[0]))
+				fingerprintFlags := tree.FmtFlags(tree.QueryFormattingForFingerprintsMask.Get(
+					&evalCtx.Settings.SV,
+				))
+				fingerprintArg, err := parserutils.FingerprintStatement(parserutils.FingerprintTagStatementFingerprint, arg, fingerprintFlags)
+				if err != nil {
+					return nil, err
+				}
+				if fingerprintArg != arg {
+					evalCtx.ClientNoticeSender.BufferClientNotice(
+						ctx, pgnotice.Newf("statement fingerprint changed to: %s", fingerprintArg),
+					)
+				}
+				rowIDs, fingerprints, rawHintBytes, err := evalCtx.Planner.DeleteStatementHint(ctx, 0 /* rowID */, fingerprintArg)
+				if err != nil {
+					return nil, err
+				}
+				for i := range rowIDs {
+					hint, err := hintpb.ParseHintProto(rawHintBytes[i])
+					if err != nil {
+						log.Dev.Warningf(ctx, "could not unmarshal hint for row %d: %v", rowIDs[i], err)
+						continue
+					}
+					switch t := hint.GetValue().(type) {
+					case *hintpb.InjectHints:
+						// Log the statement hint deletion event for every hint we delete.
+						if err := evalCtx.Planner.LogEvent(ctx, &eventpb.DeleteRewriteInlineHints{
+							HintID:               rowIDs[i],
+							StatementFingerprint: fingerprints[i],
+							DonorSql:             t.DonorSQL,
+						}); err != nil {
+							return nil, err
+						}
+					default:
+					}
+				}
+				return tree.NewDInt(tree.DInt(len(rowIDs))), nil
+			},
+			Info: `This function deletes all inline-hints rewrite rules matching the ` +
+				`given statement fingerprint. The statement fingerprint argument is ` +
+				`normalized before matching. It returns the number of deleted rows.`,
+			Volatility: volatility.Volatile,
+		},
 	),
 	"crdb_internal.clear_statement_hints_cache": makeBuiltin(
 		tree.FunctionProperties{
@@ -12970,40 +13072,30 @@ var rewriteInlineHintsOverload = tree.Overload{
 		fingerprintFlags := tree.FmtFlags(tree.QueryFormattingForFingerprintsMask.Get(
 			&evalCtx.Settings.SV,
 		))
-		parse := func(arg, which string) (stmt statements.Statement[tree.Statement], fingerprint string, err error) {
-			stmts, err := parserutils.Parse(arg)
+		parse := func(arg string, tag parserutils.FingerprintTag, evalCtx *eval.Context) (stmt statements.Statement[tree.Statement], fingerprint string, err error) {
+			fingerprint, err = parserutils.FingerprintStatement(tag, arg, fingerprintFlags)
 			if err != nil {
-				return stmt, fingerprint, pgerror.Wrapf(
-					err, pgcode.InvalidParameterValue, "could not parse %s", which,
-				)
+				return stmt, fingerprint, err
 			}
-			if len(stmts) != 1 {
-				return stmt, fingerprint, pgerror.Newf(
-					pgcode.InvalidParameterValue, "could not parse %s as a single SQL statement", which,
-				)
-			}
-			stmt = stmts[0]
-			fingerprint = tree.FormatStatementHideConstants(stmt.AST, fingerprintFlags)
 			if fingerprint != arg {
 				evalCtx.ClientNoticeSender.BufferClientNotice(
-					ctx, pgnotice.Newf("%s changed to: %s", which, fingerprint),
+					ctx, pgnotice.Newf("%s changed to: %s", tag, fingerprint),
 				)
-				// Re-parse the statement fingerprint to get an updated AST.
-				stmt, err = parserutils.ParseOne(fingerprint)
-				if err != nil {
-					// Assertion failure is appropriate here, so no error wrapping.
-					return stmt, fingerprint, err
-				}
+			}
+			stmt, err = parserutils.ParseOne(fingerprint)
+			if err != nil {
+				// Assertion failure is appropriate here, so no error wrapping.
+				return stmt, fingerprint, err
 			}
 			return stmt, fingerprint, nil
 		}
 
-		targetStmt, targetSQL, err := parse(targetArg, "statement fingerprint")
+		targetStmt, targetSQL, err := parse(targetArg, parserutils.FingerprintTagStatementFingerprint, evalCtx)
 		if err != nil {
 			return nil, err
 		}
 
-		donorStmt, donorSQL, err := parse(donorArg, "hint donor statement")
+		donorStmt, donorSQL, err := parse(donorArg, parserutils.FingerprintTagHintDonor, evalCtx)
 		if err != nil {
 			return nil, err
 		}
