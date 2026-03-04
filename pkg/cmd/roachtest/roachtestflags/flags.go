@@ -92,8 +92,11 @@ var (
 
 	SuccessfulTestsSelectPct = 0.35
 	_                        = registerRunFlag(&SuccessfulTestsSelectPct, FlagInfo{
-		Name:  "successful-test-select-pct",
-		Usage: `The percent of test that should be selected from the tests that have been running successfully as per test selection. Default is 0.35`,
+		Name: "successful-test-select-pct",
+		Usage: `Percentage (0.0-1.0) of tests to select. Has dual purposes:
+		1. When Snowflake has test history: selects this percentage of stable, successful tests.
+		2. When no history exists (e.g., new release branch): randomly selects this percentage of all tests.
+		Default is 0.35 (35%). See pkg/cmd/roachtest/testselector/README.md for details.`,
 	})
 
 	Username string = os.Getenv("ROACHPROD_USER")

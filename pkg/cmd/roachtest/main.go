@@ -373,24 +373,42 @@ func testsToRun(
 
 // updateSpecForSelectiveTests is responsible for updating the test spec skip and skip details
 // based on the test categorization criteria.
+//
+// Normal Operation (with Snowflake history):
 // The following steps are performed in this function:
 //  1. Queries Snowflake for the test run data.
 //  2. The snowflake data sets "selected=true" based on the following criteria:
-//     a. the test that has failed at least once in last 30 days
+//     a. The test that has failed at least once in the last 30 days
 //     b. the test is newer than 20 days
-//     c. the test has not been run for more than 7 days
-//  2. The rest of the tests returned by snowflake are the successful tests marked as "selected=false".
-//  3. Now, an intersection of the tests that are selected by the build (specs) and tests returned by snowflake
-//     as successful is taken. This is done to select tests on the next criteria of selecting the 35% of
-//     the successful tests.
-//  4. The tests that meet the 35% criteria, are marked as "selected=true"
-//  5. All tests that are marked "selected=true" are considered for the test run.
+//     c. The test has not been run for more than 7 days
+//  3. The rest of the tests returned by snowflake are the successful tests marked as "selected=false".
+//  4. Now, an intersection of the tests that are selected by the build (specs) and tests returned by snowflake
+//     as successful is taken. This is done to select tests on the next criteria of selecting
+//     --successful-test-select-pct percentage of the successful tests.
+//  5. The tests that meet the --successful-test-select-pct criteria are marked as "selected=true"
+//  6. All tests that are marked "selected=true" are considered for the test run.
+//
+// First Run Scenario (new release branch or no Snowflake history):
+// When Snowflake returns no test history (e.g., new release branch):
+//  1. --successful-test-select-pct percentage of all available tests is randomly selected.
+//  2. A safety valve (maxNeverRunSelectedPct) caps never-run test selection to prevent CI overload.
+//  3. Over later runs, skipped tests cycle through selection until all tests have coverage.
+//
+// Note: --successful-test-select-pct serves dual purposes:
+//   - Filters successful tests when Snowflake has history (step 4 above)
+//   - Determines initial random selection when no history exists (first run scenario)
 func updateSpecForSelectiveTests(
 	ctx context.Context, specs []registry.TestSpec, logFunc func(format string, args ...interface{}),
 ) {
 	selectedTestsCount := 0
+	// Build list of all available test names
+	allTestNames := make([]string, len(specs))
+	for i, spec := range specs {
+		allTestNames[i] = spec.Name
+	}
 	allTests, err := testselector.CategoriseTests(ctx,
-		testselector.NewDefaultSelectTestsReq(roachtestflags.Cloud, roachtestflags.Suite))
+		testselector.NewDefaultSelectTestsReq(roachtestflags.Cloud, roachtestflags.Suite,
+			allTestNames, roachtestflags.SuccessfulTestsSelectPct))
 	if err != nil {
 		logFunc("running all tests! error selecting tests: %v\n", err)
 		return
