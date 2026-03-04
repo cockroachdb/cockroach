@@ -23,7 +23,7 @@ var ProbeCount = settings.RegisterIntSetting(
 	settings.ApplicationLevel,
 	"server.sql_tcp_keep_alive.count",
 	"maximum number of probes that will be sent out before a connection is dropped because "+
-		"it's unresponsive (Linux and Darwin only)",
+		"it's unresponsive (Linux and Darwin only). The value 0 is the operating system default.",
 	3,
 	settings.NonNegativeInt,
 	settings.WithPublic,
@@ -34,7 +34,8 @@ var ProbeCount = settings.RegisterIntSetting(
 var ProbeInterval = settings.RegisterDurationSetting(
 	settings.ApplicationLevel,
 	"server.sql_tcp_keep_alive.interval",
-	"time between keep alive probes and idle time before probes are sent out",
+	"time between keep alive probes and idle time before probes are sent out. "+
+		"The value 0 is the operating system default.",
 	time.Second*10,
 	settings.DurationWithMinimum(0),
 	settings.WithPublic,
@@ -47,7 +48,8 @@ var IdleTime = settings.RegisterDurationSetting(
 	"server.sql_tcp_keep_alive.idle",
 	"time with no network activity before sending a TCP keepalive probe "+
 		"(Linux and Darwin only). If 0, the value of "+
-		"server.sql_tcp_keep_alive.interval is used.",
+		"server.sql_tcp_keep_alive.interval is used. "+
+		"The value 0 is the operating system default.",
 	0,
 	settings.DurationWithMinimum(0),
 	settings.WithPublic,
@@ -60,8 +62,8 @@ var UserTimeout = settings.RegisterDurationSetting(
 	"server.sql_tcp_user.timeout",
 	"specifies the maximum amount of time that transmitted data "+
 		"can remain unacknowledged before the underlying TCP connection is forcefully closed. "+
-		"(Linux and Darwin only)",
-	time.Second*30,
+		"(Linux and Darwin only). The value 0 is the operating system default.",
+	0, // Use operating system default.
 	settings.DurationWithMinimum(0),
 	settings.WithPublic,
 )
