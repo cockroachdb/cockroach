@@ -89,9 +89,6 @@ func testPartialPartition(t *testing.T, useProxy bool, numServers int) {
 			require.NoError(t, p.AddPartition(roachpb.NodeID(1), roachpb.NodeID(2)))
 			require.NoError(t, p.AddPartition(roachpb.NodeID(2), roachpb.NodeID(1)))
 			tc := testcluster.StartTestCluster(t, numServers, base.TestClusterArgs{
-				ServerArgs: base.TestServerArgs{
-					DefaultDRPCOption: base.TestDRPCDisabled,
-				},
 				ServerArgsPerNode: func() map[int]base.TestServerArgs {
 					perNode := make(map[int]base.TestServerArgs)
 					for i := 0; i < numServers; i++ {
