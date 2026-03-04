@@ -1,4 +1,9 @@
 #!/usr/bin/env bash
+
+# Copyright 2024 The Cockroach Authors.
+#
+# Use of this software is governed by the CockroachDB Software License
+# included in the /LICENSE file.
 # validate-m2.sh: Pre-push validation for M.2 (Enable Mixed-Cluster Logic Tests).
 #
 # Run this before creating or re-pushing the M.2 PR. Verifies bootstrap data

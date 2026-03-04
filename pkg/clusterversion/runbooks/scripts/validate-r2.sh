@@ -1,4 +1,9 @@
 #!/usr/bin/env bash
+
+# Copyright 2024 The Cockroach Authors.
+#
+# Use of this software is governed by the CockroachDB Software License
+# included in the /LICENSE file.
 # validate-r2.sh: Pre-push validation for R.2 (Mint Release).
 #
 # Run this before creating or re-pushing the R.2 PR to catch the most common

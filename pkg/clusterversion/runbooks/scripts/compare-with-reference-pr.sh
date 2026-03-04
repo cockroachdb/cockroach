@@ -1,4 +1,9 @@
 #!/usr/bin/env bash
+
+# Copyright 2024 The Cockroach Authors.
+#
+# Use of this software is governed by the CockroachDB Software License
+# included in the /LICENSE file.
 # compare-with-reference-pr.sh: Compare current branch changes against a reference PR.
 #
 # Helps catch two classes of problems before pushing:

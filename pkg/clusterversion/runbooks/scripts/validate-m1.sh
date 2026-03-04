@@ -1,4 +1,9 @@
 #!/usr/bin/env bash
+
+# Copyright 2024 The Cockroach Authors.
+#
+# Use of this software is governed by the CockroachDB Software License
+# included in the /LICENSE file.
 # validate-m1.sh: Pre-push validation for M.1 (Bump Current Version).
 #
 # Run this before creating or re-pushing the M.1 PR to catch the most common

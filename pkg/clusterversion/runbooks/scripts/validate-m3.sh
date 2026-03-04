@@ -1,4 +1,9 @@
 #!/usr/bin/env bash
+
+# Copyright 2024 The Cockroach Authors.
+#
+# Use of this software is governed by the CockroachDB Software License
+# included in the /LICENSE file.
 # validate-m3.sh: Pre-push validation for M.3 PR 2 (Enable Upgrade Tests, code changes).
 #
 # Run this before creating or re-pushing the M.3 code PR. Rewrites the

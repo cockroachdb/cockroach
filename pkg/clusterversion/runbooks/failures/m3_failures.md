@@ -152,8 +152,28 @@ grep "cockroach-go-testserver-X.Y" pkg/BUILD.bazel | wc -l
 
 | Error | Fix |
 |-------|-----|
-| `TestLogic_mixed_version_bootstrap_tenant` fails with descriptor diffs | System table descriptors evolve between versions. Exclude differing keys in the test's `WHERE` clause (see full runbook for details) |
+| `TestLogic_mixed_version_bootstrap_tenant` fails with descriptor diffs | See investigation steps below — do NOT blindly add key exclusions. |
 | `TestDeclarativeRules` fails with version mismatch | Forgot to run `validate-m3.sh` — run `./dev test pkg/cli -f=TestDeclarativeRules --rewrite` |
+
+### Investigating `TestLogic_mixed_version_bootstrap_tenant`
+
+The test compares bootstrap data for a tenant created with the old binary vs the new
+binary. It fails when a key has different values in both, meaning the schema/descriptor
+for that key changed between versions.
+
+**Before adding a key exclusion, verify:**
+
+1. **Decode the key** — `/Table/N/...` tells you which system table (e.g. table 3 =
+   `system.users`). Look up the table ID in `pkg/sql/catalog/systemschema/`.
+2. **Check previous M.3 PRs** for similar exclusions and their explanations.
+3. **Understand WHY the key differs.** Legitimate exclusions are for keys that are
+   inherently time-dependent or version-stamped and will *always* differ (e.g.
+   `/Table/6/1/"version"/0` differs because of a `lastUpdated` timestamp column).
+   A key that differs because of a bug or unexpected schema change should NOT be excluded.
+4. **Add a comment** in the test explaining why each exclusion is safe.
+
+**Anti-pattern:** seeing a key in a CI failure → adding `AND k <> '/Table/N/...'` without
+investigation. This silently hides real regressions.
 
 ---
 
