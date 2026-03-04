@@ -222,6 +222,10 @@ func registerRoutes(
 
 		// DB Console BFF endpoints.
 		{"dbconsole/nodes/", dbconsoleAPI.GetNodes, true, authserver.ViewClusterMetadataRole, true},
+		{"dbconsole/databases/", dbconsoleAPI.GetDatabases, true, authserver.RegularRole, true},
+		{"dbconsole/explain-plan/", dbconsoleAPI.GetExplainPlan, true, authserver.RegularRole, true},
+		{"dbconsole/index-recommendations/", dbconsoleAPI.GetIndexRecommendations, true, authserver.RegularRole, true},
+		{"dbconsole/jobs/{job_id}/collect-execution-details/", dbconsoleAPI.CollectJobExecutionDetails, true, authserver.RegularRole, true},
 	}
 
 	// For all routes requiring authentication, have the outer mux (a.mux)
