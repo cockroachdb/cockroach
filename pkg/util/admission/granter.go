@@ -590,15 +590,10 @@ func (t *staleStatTracker) recordChange() {
 }
 
 func (t *staleStatTracker) shouldLog() bool {
-	for _, thresh := range t.thresholds {
-		if t.consecutiveCount == thresh {
-			// Always log if we've just exceeded a threshold
-			return true
-		} else if t.consecutiveCount > thresh {
-			return t.logLimiter.ShouldLog()
-		}
+	if len(t.thresholds) == 0 || t.consecutiveCount < t.thresholds[0] {
+		return false
 	}
-	return false
+	return t.logLimiter.ShouldLog()
 }
 
 // adjustDiskTokenErrorLocked is used to account for extra reads and writes that
