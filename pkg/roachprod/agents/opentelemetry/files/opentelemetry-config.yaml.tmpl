@@ -85,6 +85,10 @@ exporters:
     api:
       key: ${env:DD_API_KEY}
       site: ${env:DD_SITE}
+    metrics:
+      histograms:
+        mode: distributions
+        send_aggregation_metrics: true
 
 service:
   pipelines:
