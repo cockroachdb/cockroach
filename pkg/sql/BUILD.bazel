@@ -354,6 +354,7 @@ go_library(
         "//pkg/multitenant/multitenantcpu",
         "//pkg/multitenant/tenantcapabilities",
         "//pkg/multitenant/tenantcapabilitiespb",
+        "//pkg/obs/ash",
         "//pkg/obs/clustermetrics/utils",
         "//pkg/obs/workloadid",
         "//pkg/repstream",
