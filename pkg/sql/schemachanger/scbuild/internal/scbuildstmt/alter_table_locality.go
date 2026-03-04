@@ -93,6 +93,8 @@ func AlterTableLocality(b BuildCtx, t *tree.AlterTableLocality) {
 	// alter the primary key if needed
 	if isLocalityRegionalByRow(targetLocality) || isLocalityRegionalByRow(currentLocality) {
 		alterPrimaryKeyForRegionalByRowTable(b, tableID, tbl, t, currentLocality, targetLocality)
+		// Post-processing: deflate redundant indexes and rewrite tentative IDs to real IDs
+		finalizePrimaryIndexChanges(b, tbl, t.String())
 	}
 
 	// Update the table zone config
@@ -100,9 +102,6 @@ func AlterTableLocality(b BuildCtx, t *tree.AlterTableLocality) {
 	if err != nil {
 		panic(err)
 	}
-
-	// Post-processing: deflate redundant indexes and rewrite tentative IDs to real IDs
-	finalizePrimaryIndexChanges(b, tbl, t.String())
 
 	// Record this table alteration in the event log
 	b.LogEventForExistingTarget(tbl)

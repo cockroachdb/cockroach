@@ -1836,9 +1836,8 @@ func applyZoneConfigForMultiRegionTableOptionTableAndIndexes(
 
 			var indexIDs []descpb.IndexID
 			b.QueryByID(tableID).FilterIndexName().
-				ForEach(func(status scpb.Status, target scpb.TargetStatus, e *scpb.IndexName) {
-					// Only include indexes that are public or being added
-					if status != scpb.Status_ABSENT || target == scpb.ToPublic {
+				ForEach(func(_ scpb.Status, target scpb.TargetStatus, e *scpb.IndexName) {
+					if isNonDropIndex(target) {
 						indexIDs = append(indexIDs, e.IndexID)
 					}
 				})
@@ -2002,9 +2001,8 @@ var _ regions.MultiRegionTableValidatorData = (*multiRegionTableValidatorData)(n
 func (v *multiRegionTableValidatorData) GetNonDropIndexes() map[uint32]tree.Name {
 	result := make(map[uint32]tree.Name)
 	v.b.QueryByID(v.tableID).FilterIndexName().
-		ForEach(func(status scpb.Status, target scpb.TargetStatus, e *scpb.IndexName) {
-			// Only include indexes that are public or being added
-			if status != scpb.Status_ABSENT || target == scpb.ToPublic {
+		ForEach(func(_ scpb.Status, target scpb.TargetStatus, e *scpb.IndexName) {
+			if isNonDropIndex(target) {
 				result[uint32(e.IndexID)] = tree.Name(e.Name)
 			}
 		})

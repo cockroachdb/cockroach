@@ -410,6 +410,14 @@ func getNonDropColumns(b BuildCtx, tableID catid.DescID) (ret []*scpb.Column) {
 	return ret
 }
 
+// isNonDropIndex returns true if the given target status indicates the index is
+// not being dropped. This mirrors the legacy descriptor's NonDropIndexes
+// semantics: public indexes, indexes being added, and in-progress mutations
+// that are not drops.
+func isNonDropIndex(target scpb.TargetStatus) bool {
+	return target != scpb.ToAbsent
+}
+
 // getColumnIDFromColumnName looks up a column's ID by its name.
 // If no column with this name exists, 0 will be returned.
 func getColumnIDFromColumnName(
