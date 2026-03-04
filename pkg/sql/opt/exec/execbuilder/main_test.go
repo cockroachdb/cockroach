@@ -23,11 +23,10 @@ import (
 func TestMain(m *testing.M) {
 	securityassets.SetLoader(securitytest.EmbeddedAssets)
 	randutil.SeedForTests()
-	serverutils.InitTestServerFactory(server.TestServerFactory)
-	serverutils.InitTestClusterFactory(testcluster.TestClusterFactory)
 	// With DRPC enabled, its cluster setting "rpc.experimental_drpc.enabled"
 	// interferes with some tests hence we disable it here.
-	serverutils.TestingGlobalDRPCOption(base.TestDRPCDisabled)
-
+	serverutils.InitTestServerFactory(server.TestServerFactory,
+		serverutils.WithDRPCOption(base.TestDRPCDisabled))
+	serverutils.InitTestClusterFactory(testcluster.TestClusterFactory)
 	os.Exit(m.Run())
 }
