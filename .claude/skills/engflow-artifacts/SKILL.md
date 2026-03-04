@@ -21,7 +21,8 @@ engflow_auth export mesolite.cluster.engflow.com
 
 ## Quick Reference
 
-The script is at `.claude/skills/engflow-artifacts/engflow_artifacts.py`.
+The script is at `.claude/skills/engflow-artifacts/engflow_artifacts.py` and is
+directly executable (has a shebang). Run it from the repo root:
 
 | Command | Purpose |
 |---------|---------|
@@ -34,17 +35,17 @@ The script is at `.claude/skills/engflow-artifacts/engflow_artifacts.py`.
 ## Typical Investigation Workflow
 
 ```bash
-SCRIPT=.claude/skills/engflow-artifacts/engflow_artifacts.py
+EF=.claude/skills/engflow-artifacts/engflow_artifacts.py
 
 # 1. Find what failed
-python3 $SCRIPT targets daa807a0-3589-40a5-94b5-3440c7490d6a
+./$EF targets daa807a0-3589-40a5-94b5-3440c7490d6a
 
 # 2. List shards for the failed target
-python3 $SCRIPT list daa807a0-3589-40a5-94b5-3440c7490d6a \
+./$EF list daa807a0-3589-40a5-94b5-3440c7490d6a \
   --target '//pkg/sql/ttl:ttl_test'
 
 # 3. Download the failing shard's logs
-python3 $SCRIPT download daa807a0-3589-40a5-94b5-3440c7490d6a \
+./$EF download daa807a0-3589-40a5-94b5-3440c7490d6a \
   --target '//pkg/sql/ttl:ttl_test' --shard 100 --outdir /tmp/engflow-test
 
 # 4. Read the test log

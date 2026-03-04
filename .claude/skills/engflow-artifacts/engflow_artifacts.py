@@ -1,14 +1,15 @@
+#!/usr/bin/env python3
 # Copyright 2026 The Cockroach Authors.
 #
 # Use of this software is governed by the CockroachDB Software License
 # included in the /LICENSE file.
-
-#!/usr/bin/env python3
 """
 EngFlow artifact downloader.
 
-Uses engflow_auth CLI for authentication and curl for downloads.
-No browser needed.
+Authentication (in priority order):
+  1. mTLS certificates: set ENGFLOW_CERT_FILE and ENGFLOW_KEY_FILE env vars
+  2. JWT from env: set ENGFLOW_TOKEN env var
+  3. JWT from CLI: uses engflow_auth export (requires prior login)
 
 Usage:
     # List all targets and their artifacts for an invocation
@@ -40,18 +41,57 @@ CAS_API = f"{ENGFLOW_URL}/api/contentaddressablestorage/v1/instances/default/blo
 GRPC_URL = f"{ENGFLOW_URL}/engflow.resultstore.v1alpha.ResultStore"
 
 
-def get_token():
-    """Get auth token from engflow_auth CLI."""
-    result = subprocess.run(
-        ["engflow_auth", "export", ENGFLOW_HOST],
-        capture_output=True, text=True
-    )
-    if result.returncode != 0:
-        print(f"Error: engflow_auth export failed: {result.stderr}", file=sys.stderr)
-        print("Run: engflow_auth login mesolite.cluster.engflow.com", file=sys.stderr)
-        sys.exit(1)
-    data = json.loads(result.stdout)
-    return data["token"]["access_token"]
+def get_curl_auth_args():
+    """Return curl arguments for EngFlow authentication.
+
+    Tries, in order:
+      1. mTLS — ENGFLOW_CERT_FILE and ENGFLOW_KEY_FILE env vars
+      2. JWT from env — ENGFLOW_TOKEN env var
+      3. JWT from CLI — engflow_auth export (interactive login required)
+    """
+    cert = os.environ.get("ENGFLOW_CERT_FILE")
+    key = os.environ.get("ENGFLOW_KEY_FILE")
+    if cert and key:
+        return ["--cert", cert, "--key", key]
+
+    token = os.environ.get("ENGFLOW_TOKEN")
+    if not token:
+        try:
+            result = subprocess.run(
+                ["engflow_auth", "export", ENGFLOW_HOST],
+                capture_output=True, text=True,
+            )
+        except FileNotFoundError:
+            print("Error: engflow_auth not found on PATH.", file=sys.stderr)
+            print(
+                "Install engflow_auth, or set ENGFLOW_TOKEN, or configure "
+                "ENGFLOW_CERT_FILE and ENGFLOW_KEY_FILE.",
+                file=sys.stderr,
+            )
+            sys.exit(1)
+
+        if result.returncode != 0:
+            print(f"Error: engflow_auth export failed: {result.stderr}", file=sys.stderr)
+            print("Run: engflow_auth login mesolite.cluster.engflow.com", file=sys.stderr)
+            sys.exit(1)
+
+        try:
+            data = json.loads(result.stdout)
+            token = data["token"]["access_token"]
+        except (json.JSONDecodeError, KeyError):
+            print("Error: Failed to parse access token from engflow_auth output.", file=sys.stderr)
+            print(
+                "Try running: engflow_auth login mesolite.cluster.engflow.com "
+                "or set ENGFLOW_TOKEN directly.",
+                file=sys.stderr,
+            )
+            sys.exit(1)
+
+    return [
+        "-H", f"x-engflow-auth-method: jwt-v0",
+        "-H", f"x-engflow-auth-token: {token}",
+        "-H", f"Cookie: x-engflow-auth={token}",
+    ]
 
 
 def encode_varint(val):
@@ -82,7 +122,7 @@ def make_grpc_frame(proto_bytes):
     return struct.pack(">BI", 0, len(proto_bytes)) + proto_bytes
 
 
-def grpc_call(token, method, proto_bytes):
+def grpc_call(auth_args, method, proto_bytes):
     """Make a gRPC-web call via curl and return the response protobuf bytes.
 
     Python's urllib mangles headers in a way that EngFlow's server rejects
@@ -101,11 +141,7 @@ def grpc_call(token, method, proto_bytes):
                 "curl", "-s", "--data-binary", f"@{tmp_path}",
                 "-H", "Content-Type: application/grpc-web+proto",
                 "-H", "x-grpc-web: 1",
-                "-H", f"x-engflow-auth-method: jwt-v0",
-                "-H", f"x-engflow-auth-token: {token}",
-                "-H", f"Cookie: x-engflow-auth={token}",
-                url,
-            ],
+            ] + auth_args + [url],
             capture_output=True,
         )
     finally:
@@ -128,18 +164,11 @@ def grpc_call(token, method, proto_bytes):
     return data[5:5 + payload_len]
 
 
-def download_blob(token, blob_hash, blob_size, outfile):
+def download_blob(auth_args, blob_hash, blob_size, outfile):
     """Download a blob from the CAS API via curl."""
     url = f"{CAS_API}/{blob_hash}/{blob_size}"
     result = subprocess.run(
-        [
-            "curl", "-s",
-            "-H", f"Cookie: x-engflow-auth={token}",
-            "-H", f"x-engflow-auth-method: jwt-v0",
-            "-H", f"x-engflow-auth-token: {token}",
-            "-o", outfile,
-            url,
-        ],
+        ["curl", "-s"] + auth_args + ["-o", outfile, url],
         capture_output=True,
     )
     if result.returncode != 0:
@@ -148,7 +177,7 @@ def download_blob(token, blob_hash, blob_size, outfile):
     return os.path.getsize(outfile)
 
 
-def get_target_labels_by_status(token, instance, invocation_id, status_code):
+def get_target_labels_by_status(auth_args, instance, invocation_id, status_code):
     """Call GetTargetLabelsByStatus and return target labels.
 
     Status codes observed from the EngFlow UI:
@@ -161,19 +190,19 @@ def get_target_labels_by_status(token, instance, invocation_id, status_code):
     proto += encode_bytes_field(3, bytes([status_code]))
     # Field 4 is a varint limit.
     proto += bytes([(4 << 3) | 0]) + encode_varint(100)
-    resp = grpc_call(token, "GetTargetLabelsByStatus", proto)
+    resp = grpc_call(auth_args, "GetTargetLabelsByStatus", proto)
     if not resp:
         return []
     text = resp.decode("latin-1")
     return [s for s in re.findall(r"//[^\x00-\x1f]+", text) if not s.startswith("///")]
 
 
-def get_target(token, instance, invocation_id, target_label):
+def get_target(auth_args, instance, invocation_id, target_label):
     """Call GetTarget and return the raw protobuf response."""
     proto = encode_string_field(1, instance)
     proto += encode_string_field(2, invocation_id)
     proto += encode_string_field(3, target_label)
-    return grpc_call(token, "GetTarget", proto)
+    return grpc_call(auth_args, "GetTarget", proto)
 
 
 def decode_varint(data, pos):
@@ -307,18 +336,18 @@ def parse_invocation_url(url):
 
 def cmd_targets(args):
     """List targets for an invocation, optionally filtered by status."""
-    token = get_token()
+    auth_args = get_curl_auth_args()
     invocation_id = args.invocation_id
 
     if args.all:
         # Try both passed (0x08) and failed (0x09).
         labels = set()
         for code in [0x08, 0x09]:
-            labels.update(get_target_labels_by_status(token, "default", invocation_id, code))
+            labels.update(get_target_labels_by_status(auth_args, "default", invocation_id, code))
         labels = sorted(labels)
         print(f"All targets ({len(labels)}):")
     else:
-        labels = get_target_labels_by_status(token, "default", invocation_id, 0x09)
+        labels = get_target_labels_by_status(auth_args, "default", invocation_id, 0x09)
         if not labels:
             print("No failed targets found. Use --all to list all targets.")
             return
@@ -330,7 +359,7 @@ def cmd_targets(args):
 
 def cmd_list(args):
     """List artifacts for a target."""
-    token = get_token()
+    auth_args = get_curl_auth_args()
 
     if args.url:
         invocation_id, target_label, shard, _, _ = parse_invocation_url(args.url)
@@ -343,7 +372,7 @@ def cmd_list(args):
         target_label = args.target
         shard = args.shard
 
-    proto = get_target(token, "default", invocation_id, target_label)
+    proto = get_target(auth_args, "default", invocation_id, target_label)
     if not proto:
         print("Error: GetTarget returned empty response", file=sys.stderr)
         sys.exit(1)
@@ -366,7 +395,7 @@ def cmd_list(args):
 
 def cmd_download(args):
     """Download artifacts for a target shard."""
-    token = get_token()
+    auth_args = get_curl_auth_args()
 
     if args.url:
         invocation_id, target_label, shard, _, _ = parse_invocation_url(args.url)
@@ -386,7 +415,7 @@ def cmd_download(args):
               file=sys.stderr)
         sys.exit(1)
 
-    proto = get_target(token, "default", invocation_id, target_label)
+    proto = get_target(auth_args, "default", invocation_id, target_label)
     if not proto:
         print("Error: GetTarget returned empty response", file=sys.stderr)
         sys.exit(1)
@@ -410,7 +439,7 @@ def cmd_download(args):
         blob_hash, size = shard_data[name]
         outfile = os.path.join(outdir, name)
         print(f"  Downloading {name} ({size:,} bytes)...")
-        downloaded = download_blob(token, blob_hash, size, outfile)
+        downloaded = download_blob(auth_args, blob_hash, size, outfile)
         print(f"  Saved to {outfile} ({downloaded:,} bytes)")
 
     # Auto-extract outputs.zip
@@ -425,18 +454,18 @@ def cmd_download(args):
 
 def cmd_blob(args):
     """Download a specific blob by hash and size."""
-    token = get_token()
+    auth_args = get_curl_auth_args()
     outfile = args.outfile or f"/tmp/engflow-artifacts/{args.hash[:12]}"
     os.makedirs(os.path.dirname(outfile), exist_ok=True)
 
     print(f"Downloading blob {args.hash}/{args.size}...")
-    downloaded = download_blob(token, args.hash, args.size, outfile)
+    downloaded = download_blob(auth_args, args.hash, args.size, outfile)
     print(f"Saved to {outfile} ({downloaded:,} bytes)")
 
 
 def cmd_url(args):
     """Download artifacts directly from an EngFlow invocation URL."""
-    token = get_token()
+    auth_args = get_curl_auth_args()
     invocation_id, target_label, shard, _, _ = parse_invocation_url(args.url)
 
     if not target_label:
@@ -453,7 +482,7 @@ def cmd_url(args):
     print(f"Shard: {shard}")
     print()
 
-    proto = get_target(token, "default", invocation_id, target_label)
+    proto = get_target(auth_args, "default", invocation_id, target_label)
     if not proto:
         print("Error: GetTarget returned empty response", file=sys.stderr)
         sys.exit(1)
@@ -475,7 +504,7 @@ def cmd_url(args):
         blob_hash, size = shard_data[name]
         outfile = os.path.join(outdir, name)
         print(f"  Downloading {name} ({size:,} bytes)...")
-        downloaded = download_blob(token, blob_hash, size, outfile)
+        downloaded = download_blob(auth_args, blob_hash, size, outfile)
         print(f"  Saved to {outfile} ({downloaded:,} bytes)")
 
     # Auto-extract outputs.zip
