@@ -18,6 +18,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/backup/backuppb"
+	"github.com/cockroachdb/cockroach/pkg/backup/backuptestutils"
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/cloud/cloudpb"
@@ -249,6 +250,9 @@ func TestBackupCompaction(t *testing.T) {
 	})
 
 	t.Run("encrypted backups", func(t *testing.T) {
+		// TODO(at): enable once OR supports encrypted backups.
+		backuptestutils.DisableFastRestoreForTest(t)
+
 		bucketNum++
 		collectionURI := []string{fmt.Sprintf("nodelocal://1/backup/%d", bucketNum)}
 		encryptOpts := "WITH encryption_passphrase = 'correct-horse-battery-staple'"
@@ -665,6 +669,9 @@ func TestBlockConcurrentScheduledCompactions(t *testing.T) {
 func TestBackupCompactionExecLocality(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+
+	// TODO(at): restructure test to work with OR metamorphic.
+	backuptestutils.DisableFastRestoreForTest(t)
 
 	skip.UnderRace(t, "too slow")
 
@@ -1414,14 +1421,17 @@ func TestToggleCompactionForRestore(t *testing.T) {
 	waitForSuccessfulJob(t, tc, compactionID)
 
 	var compRestoreID, classicRestoreID jobspb.JobID
-	var unused any
-	db.QueryRow(
-		t, restoreQuery(t, "DATABASE data", collectionURI, noAOST, "WITH new_db_name = 'data1'"),
-	).Scan(&compRestoreID, &unused, &unused, &unused)
+	scanRestore := func(id *jobspb.JobID, q string) {
+		var unused any
+		if backuptestutils.FastRestore {
+			db.QueryRow(t, q).Scan(id, &unused, &unused, &unused, &unused)
+		} else {
+			db.QueryRow(t, q).Scan(id, &unused, &unused, &unused)
+		}
+	}
+	scanRestore(&compRestoreID, restoreQuery(t, "DATABASE data", collectionURI, noAOST, "WITH new_db_name = 'data1'"))
 	db.Exec(t, "SET CLUSTER SETTING restore.compacted_backups.enabled = false")
-	db.QueryRow(
-		t, restoreQuery(t, "DATABASE data", collectionURI, noAOST, "WITH new_db_name = 'data2'"),
-	).Scan(&classicRestoreID, &unused, &unused, &unused)
+	scanRestore(&classicRestoreID, restoreQuery(t, "DATABASE data", collectionURI, noAOST, "WITH new_db_name = 'data2'"))
 
 	require.Equal(t, 2, getNumBackupsInRestore(t, db, compRestoreID))
 	require.Equal(t, 3, getNumBackupsInRestore(t, db, classicRestoreID))
@@ -1642,7 +1652,11 @@ func validateCompactedBackupForTables(
 	row := db.QueryRow(t, restoreQuery(t, "TABLE "+tablesList, collectionURI, noAOST, restoreOpts))
 	var restoreJobID jobspb.JobID
 	var discard *any
-	row.Scan(&restoreJobID, &discard, &discard, &discard)
+	if backuptestutils.FastRestore {
+		row.Scan(&restoreJobID, &discard, &discard, &discard, &discard)
+	} else {
+		row.Scan(&restoreJobID, &discard, &discard, &discard)
+	}
 	for table, originalRows := range rows {
 		restoredRows := db.QueryStr(t, "SELECT * FROM "+table+" ORDER BY PRIMARY KEY "+table)
 		require.Equal(t, originalRows, restoredRows, "table %s", table)

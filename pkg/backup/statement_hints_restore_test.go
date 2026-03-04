@@ -9,6 +9,7 @@ import (
 	"context"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/backup/backuptestutils"
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
@@ -31,6 +32,9 @@ import (
 func TestStatementHintsRestoreFromOldBackup(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+
+	// TODO(at): restructure test to work with OR metamorphic.
+	backuptestutils.DisableFastRestoreForTest(t)
 
 	ctx := context.Background()
 

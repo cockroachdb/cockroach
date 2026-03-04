@@ -53,6 +53,9 @@ func TestFullClusterBackup(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
+	// TODO(at): enable once LinkExternalSSTable is permitted for secondary tenants.
+	backuptestutils.DisableFastRestoreForTest(t)
+
 	// It is easier to assert state in this test if both the backing up and
 	// restoring cluster are run with the same tenant option. We already have
 	// targeted tests for combinations of backing up and restoring between a
