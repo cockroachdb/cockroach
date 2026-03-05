@@ -2021,6 +2021,10 @@ func (cf *changeFrontier) checkpointJobProgress(
 	return nil
 }
 
+// coordinatorFrontierName is the name used for persisting the coordinator
+// frontier in the job_info table.
+const coordinatorFrontierName = "coordinator"
+
 func (cf *changeFrontier) maybePersistFrontier(ctx context.Context) error {
 	ctx, sp := tracing.ChildSpan(ctx, "changefeed.frontier.maybe_persist_frontier")
 	defer sp.Finish()
@@ -2035,11 +2039,15 @@ func (cf *changeFrontier) maybePersistFrontier(ctx context.Context) error {
 	} else {
 		timer := cf.sliMetrics.Timers.FrontierPersistence.Start()
 		if err := cf.FlowCtx.Cfg.DB.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
-			return jobfrontier.Store(ctx, txn, cf.spec.JobID, "coordinator", cf.frontier)
+			return jobfrontier.Store(ctx, txn, cf.spec.JobID, coordinatorFrontierName, cf.frontier)
 		}); err != nil {
 			return err
 		}
 		cf.frontierPersistenceLimiter.doneSave(timer.End())
+	}
+
+	if log.V(2) {
+		log.Changefeed.Infof(ctx, "change frontier persisted span frontier=%s", cf.frontier)
 	}
 
 	if cf.knobs.AfterPersistFrontier != nil {
