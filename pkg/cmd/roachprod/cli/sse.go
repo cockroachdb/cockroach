@@ -19,6 +19,14 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
+// maxConsecutiveReconnects is the maximum number of reconnection attempts
+// with zero log entries before giving up. Each successful reconnect that
+// returns at least one entry resets the counter.
+const maxConsecutiveReconnects = 10
+
+// reconnectDelay is the pause between SSE reconnection attempts.
+const reconnectDelay = 1 * time.Second
+
 // logEntry is the JSONL structure written by the task logger's LogSink.
 type logEntry struct {
 	Timestamp string            `json:"ts"`
@@ -29,17 +37,63 @@ type logEntry struct {
 
 // streamSSELogs connects to the task logs SSE endpoint and prints log
 // messages to stdout until the stream ends or ctx is cancelled.
+//
+// If the SSE connection drops before the server sends a "done" event
+// (e.g. due to a proxy request-duration limit), the client reconnects
+// from the last received offset and resumes streaming. This makes log
+// tailing resilient to intermediate proxies with strict timeouts.
 func streamSSELogs(ctx context.Context, c *client.Client, taskID string, offset int) error {
-	resp, err := c.StreamTaskLogs(ctx, taskID, offset)
-	if err != nil {
-		return errors.Wrap(err, "open log stream")
+	currentOffset := offset
+	emptyReconnects := 0
+
+	for {
+		resp, err := c.StreamTaskLogs(ctx, taskID, currentOffset)
+		if err != nil {
+			return errors.Wrap(err, "open log stream")
+		}
+
+		entriesRead, completed, streamErr := processSSEStream(ctx, resp.Body)
+		resp.Body.Close()
+		currentOffset += entriesRead
+
+		if streamErr != nil {
+			return streamErr
+		}
+		if completed {
+			return nil
+		}
+
+		// Stream ended without a done event — connection was dropped.
+		// Track consecutive empty reconnects to avoid infinite loops when
+		// the stream repeatedly fails without delivering data.
+		if entriesRead > 0 {
+			emptyReconnects = 0
+		} else {
+			emptyReconnects++
+			if emptyReconnects >= maxConsecutiveReconnects {
+				return errors.New("log stream: too many reconnects without new data")
+			}
+		}
+
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-time.After(reconnectDelay):
+		}
 	}
-	defer resp.Body.Close()
-	return processSSEStream(ctx, resp.Body)
 }
 
-// processSSEStream reads SSE events from reader and prints log entries.
-func processSSEStream(ctx context.Context, reader io.Reader) error {
+// processSSEStream reads SSE events from reader, prints log entries,
+// and returns the number of log entries processed and whether the stream
+// completed normally (via a "done" event).
+//
+// Return semantics:
+//   - completed=true, err=nil: server sent "done" event, stream finished
+//   - completed=false, err=nil: reader hit EOF without "done" (connection drop)
+//   - err != nil: server sent "error" event or scanner failed
+func processSSEStream(
+	ctx context.Context, reader io.Reader,
+) (entriesRead int, completed bool, err error) {
 	scanner := bufio.NewScanner(reader)
 	scanner.Buffer(make([]byte, 64*1024), 1024*1024)
 
@@ -49,7 +103,7 @@ func processSSEStream(ctx context.Context, reader io.Reader) error {
 	for scanner.Scan() {
 		select {
 		case <-ctx.Done():
-			return ctx.Err()
+			return entriesRead, false, ctx.Err()
 		default:
 		}
 
@@ -61,10 +115,11 @@ func processSSEStream(ctx context.Context, reader io.Reader) error {
 				switch currentEvent {
 				case "log":
 					printLogEntry(data)
+					entriesRead++
 				case "done":
-					return nil
+					return entriesRead, true, nil
 				case "error":
-					return errors.Newf("log stream error: %s", data)
+					return entriesRead, false, errors.Newf("log stream error: %s", data)
 				}
 			}
 			currentEvent = ""
@@ -79,10 +134,10 @@ func processSSEStream(ctx context.Context, reader io.Reader) error {
 			dataLines = append(dataLines, value)
 		}
 	}
-	if err := scanner.Err(); err != nil {
-		return errors.Wrap(err, "read SSE stream")
+	if scanErr := scanner.Err(); scanErr != nil {
+		return entriesRead, false, errors.Wrap(scanErr, "read SSE stream")
 	}
-	return nil
+	return entriesRead, false, nil
 }
 
 // parseSSEField splits an SSE line into field name and value. Per the SSE
