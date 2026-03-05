@@ -325,6 +325,8 @@ const (
 	InformationSchemaViewTableUsageTableID
 	InformationSchemaViewsTableID
 	InformationSchemaCrdbIndexUsageStatsiticsTableID
+	InformationSchemaCrdbNodeActiveSessionHistoryTableID
+	InformationSchemaCrdbClusterActiveSessionHistoryTableID
 	PgCatalogID
 	PgCatalogAggregateTableID
 	PgCatalogAmTableID
