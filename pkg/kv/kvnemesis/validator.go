@@ -1028,6 +1028,19 @@ func (v *validator) processOp(op Operation) {
 	case *CrashNodeOperation:
 		execTimestampStrictlyOptional = true
 		v.checkError(op, t.Result)
+	case *MvccGCOperation:
+		execTimestampStrictlyOptional = true
+		if resultHasErrorType(t.Result, (*kvpb.NotLeaseHolderError)(nil)) ||
+			resultHasErrorType(t.Result, (*kvpb.RangeNotFoundError)(nil)) ||
+			resultIsErrorStr(t.Result, `no valid lease`) {
+			// Ignore any transient errors due to not being able to find a leaseholder.
+		} else if resultIsErrorStr(
+			t.Result, `mismatched range suggestion not different from original desc`) {
+			// Ignore this error that occurred due to a GC/split race.
+			// TODO: revisit after https://github.com/cockroachdb/cockroach/issues/165995 is resolved.
+		} else {
+			v.failIfError(op, t.Result)
+		}
 	default:
 		panic(errors.AssertionFailedf(`unknown operation type: %T %v`, t, t))
 	}
@@ -1516,7 +1529,11 @@ func (v *validator) checkError(
 	op Operation, r Result, extraExceptions ...func(err error) bool,
 ) (ambiguous, hadError bool) {
 	sl := []func(error) bool{
-		exceptAmbiguous, exceptOmitted, exceptRetry, exceptDelRangeUsingTombstoneStraddlesRangeBoundary,
+		exceptAmbiguous,
+		exceptOmitted,
+		exceptRetry,
+		exceptDelRangeUsingTombstoneStraddlesRangeBoundary,
+		exceptBatchTimestampBeforeGC,
 	}
 	sl = append(sl, extraExceptions...)
 	return v.failIfError(op, r, sl...)
