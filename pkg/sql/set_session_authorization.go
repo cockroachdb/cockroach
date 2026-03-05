@@ -31,5 +31,5 @@ func (n *setSessionAuthorizationDefaultNode) startExec(params runParams) error {
 	// NOTE: If in the future we do allow the session user to be modified, we
 	// should still track the original logged-user, and use that for the audit
 	// logs written by event_log.
-	return params.p.setRole(params.ctx, false /* local */, params.p.SessionData().SessionUser())
+	return params.p.setRole(params.ctx, setScopeSession, params.p.SessionData().SessionUser())
 }
