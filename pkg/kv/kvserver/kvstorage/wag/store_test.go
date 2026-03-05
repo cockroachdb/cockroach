@@ -45,9 +45,10 @@ func TestWrite(t *testing.T) {
 	}
 
 	id := roachpb.FullReplicaID{RangeID: 123, ReplicaID: 4}
+	rhsID := roachpb.FullReplicaID{RangeID: 567, ReplicaID: 1}
 	write("create", func(w storage.Writer) error { return createReplica(&s, w, id) })
 	write("init", func(w storage.Writer) error { return initReplica(&s, w, id, 10) })
-	write("split", func(w storage.Writer) error { return splitReplica(&s, w, id, 200) })
+	write("split", func(w storage.Writer) error { return splitReplica(&s, w, id, rhsID, 200) })
 
 	// TODO(pav-kv): the trailing \n in DecodeWriteBatch is duplicated with
 	// recursion. Remove it, and let the caller handle new lines.
@@ -61,7 +62,9 @@ func TestWrite(t *testing.T) {
 		count++
 	}
 	require.NoError(t, iter.Error())
-	require.Equal(t, 4, count)
+	// 3 WAG nodes: create, init, split. The split is a single node with two
+	// events (Split + Init) rather than two separate nodes (dep + event).
+	require.Equal(t, 3, count)
 }
 
 type store struct {
@@ -70,49 +73,46 @@ type store struct {
 }
 
 func createReplica(s *store, w storage.Writer, id roachpb.FullReplicaID) error {
-	b := s.eng.NewWriteBatch()
-	defer b.Close()
-	if err := writeStateMachine(b, "state-machine-key", "state"); err != nil {
+	stateBatch := s.eng.NewWriteBatch()
+	defer stateBatch.Close()
+	if err := writeStateMachine(stateBatch, "state-machine-key", "state"); err != nil {
 		return err
 	}
 	return Write(w, s.seq.Next(1), wagpb.Node{
-		Addr:     wagpb.MakeAddr(id, 0),
-		Type:     wagpb.NodeType_NodeCreate,
-		Mutation: wagpb.Mutation{Batch: b.Repr()},
+		Events: []wagpb.Event{
+			{Addr: wagpb.MakeAddr(id, 0), Type: wagpb.EventType_EventCreate},
+		},
+		Mutation: wagpb.Mutation{Batch: stateBatch.Repr()},
 	})
 }
 
 func initReplica(s *store, w storage.Writer, id roachpb.FullReplicaID, index uint64) error {
 	return Write(w, s.seq.Next(1), wagpb.Node{
-		Addr: wagpb.MakeAddr(id, kvpb.RaftIndex(index)),
-		Type: wagpb.NodeType_NodeSnap,
+		Events: []wagpb.Event{
+			{Addr: wagpb.MakeAddr(id, kvpb.RaftIndex(index)), Type: wagpb.EventType_EventInit},
+		},
 		Mutation: wagpb.Mutation{Ingestion: &wagpb.Ingestion{
 			SSTs: []string{"tmp/1.sst", "tmp/2.sst"},
 		}},
 	})
 }
 
-func splitReplica(s *store, w storage.Writer, id roachpb.FullReplicaID, index uint64) error {
-	b := s.eng.NewWriteBatch()
-	defer b.Close()
-	if err := writeStateMachine(b, "lhs-key", "lhs-state"); err != nil {
+func splitReplica(
+	s *store, w storage.Writer, lhsID, rhsID roachpb.FullReplicaID, index uint64,
+) error {
+	stateBatch := s.eng.NewWriteBatch()
+	defer stateBatch.Close()
+	if err := writeStateMachine(stateBatch, "lhs-key", "lhs-state"); err != nil {
 		return err
-	} else if err := writeStateMachine(b, "rhs-key", "rhs-state"); err != nil {
-		return err
-	}
-
-	seq := s.seq.Next(2)
-	if err := Write(w, seq, wagpb.Node{
-		Addr: wagpb.MakeAddr(id, kvpb.RaftIndex(index-1)),
-		Type: wagpb.NodeType_NodeApply,
-	}); err != nil {
+	} else if err := writeStateMachine(stateBatch, "rhs-key", "rhs-state"); err != nil {
 		return err
 	}
-	return Write(w, seq+1, wagpb.Node{
-		Addr:     wagpb.MakeAddr(id, kvpb.RaftIndex(index)),
-		Type:     wagpb.NodeType_NodeSplit,
-		Mutation: wagpb.Mutation{Batch: b.Repr()},
-		Create:   567, // the RHS range ID
+	return Write(w, s.seq.Next(1), wagpb.Node{
+		Events: []wagpb.Event{
+			{Addr: wagpb.MakeAddr(rhsID, kvpb.RaftIndex(index)), Type: wagpb.EventType_EventInit},
+			{Addr: wagpb.MakeAddr(lhsID, kvpb.RaftIndex(index)), Type: wagpb.EventType_EventSplit},
+		},
+		Mutation: wagpb.Mutation{Batch: stateBatch.Repr()},
 	})
 }
 

@@ -78,6 +78,8 @@ enum EventType {
 
 // Event describes a single replica lifecycle event within a WAG node.
 message Event {
+  option (gogoproto.goproto_stringer) = false;
+
   // Addr identifies the range, replica and raft index this event pertains to.
   // The interpretation of the Raft Index depends on the EventType.
   Addr addr = 1 [(gogoproto.nullable) = false];

@@ -117,6 +117,9 @@ func runAnalyzer(pass *analysis.Pass) (interface{}, error) {
 					"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts/ctpb": {
 						"SeqNum": {},
 					},
+					"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvstorage/wag/wagpb": {
+						"EventType": {},
+					},
 					"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/isolation": {
 						"Level": {},
 					},
