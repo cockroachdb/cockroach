@@ -580,16 +580,20 @@ func TestOnlineRestoreErrors(t *testing.T) {
 			t, "nodelocal://1/incremental-backup-with-revs", "incremental-backup-with-revs", sqlDB, rSQLDB,
 		)
 	)
-	t.Run("full backups with revision history are unsupported", func(t *testing.T) {
+	t.Run("full backups with revision history are unsupported without dist flow", func(t *testing.T) {
 		var systemTime string
 		sqlDB.QueryRow(t, "SELECT cluster_logical_timestamp()").Scan(&systemTime)
 		sqlDB.Exec(t, fmt.Sprintf("BACKUP INTO '%s' AS OF SYSTEM TIME '%s' WITH revision_history", fullBackupWithRevs, systemTime))
+		rSQLDB.Exec(t, "SET CLUSTER SETTING backup.restore.online_use_dist_flow.enabled = false")
+		defer rSQLDB.Exec(t, "SET CLUSTER SETTING backup.restore.online_use_dist_flow.enabled = true")
 		rSQLDB.ExpectErr(t, "revision history backup not supported",
 			fmt.Sprintf("RESTORE TABLE data.bank FROM LATEST IN '%s' WITH EXPERIMENTAL DEFERRED COPY", fullBackupWithRevs))
 	})
-	t.Run("incremental backups with revision history are unsupported", func(t *testing.T) {
+	t.Run("incremental backups with revision history are unsupported without dist flow", func(t *testing.T) {
 		sqlDB.Exec(t, fmt.Sprintf("BACKUP INTO '%s' WITH revision_history", incrementalBackupWithRevs))
 		sqlDB.Exec(t, fmt.Sprintf("BACKUP INTO LATEST IN '%s' WITH revision_history", incrementalBackupWithRevs))
+		rSQLDB.Exec(t, "SET CLUSTER SETTING backup.restore.online_use_dist_flow.enabled = false")
+		defer rSQLDB.Exec(t, "SET CLUSTER SETTING backup.restore.online_use_dist_flow.enabled = true")
 		rSQLDB.ExpectErr(t, "revision history backup not supported",
 			fmt.Sprintf("RESTORE TABLE data.bank FROM LATEST IN '%s' WITH EXPERIMENTAL DEFERRED COPY", incrementalBackupWithRevs))
 	})
@@ -789,6 +793,10 @@ func TestOnlineRestoreFailScatterNonEmptyRanges(t *testing.T) {
 		t, singleNode, numAccounts, InitManualReplication, params,
 	)
 	defer cleanupFn()
+
+	// This test relies on the non-dist-flow online restore path's pause/resume
+	// behavior with the AfterAddRemoteSST knob.
+	sqlDB.Exec(t, "SET CLUSTER SETTING backup.restore.online_use_dist_flow.enabled = false")
 
 	externalStorage := backuptestutils.GetExternalStorageURI(t, "nodelocal://1/backup", "backup", sqlDB)
 	sqlDB.Exec(t, fmt.Sprintf("BACKUP INTO '%s'", externalStorage))

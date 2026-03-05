@@ -76,7 +76,7 @@ var onlineRestoreUseDistFlow = settings.RegisterBoolSetting(
 	settings.ApplicationLevel,
 	"backup.restore.online_use_dist_flow.enabled",
 	"if enabled, online restore uses the distributed restore flow with file linking",
-	false,
+	true,
 	settings.WithVisibility(settings.Reserved),
 )
 
@@ -511,6 +511,7 @@ func checkManifestsForOnlineCompat(
 			break
 		}
 	}
+
 	return nil
 }
 

@@ -483,6 +483,18 @@ func (rd *restoreDataProcessor) runRestoreWorkers(
 				// Partition files into linkable and ingestable based on their UseLink flag.
 				linkable, ingestable := partitionFilesByLinkability(entry.Files)
 
+				// Reject ingestable files with range keys during online restore. The
+				// hybrid link+ingest approach does not correctly handle range key
+				// tombstones shadowing linked data.
+				if len(linkable) > 0 {
+					for i := range ingestable {
+						if ingestable[i].HasRangeKeys {
+							return done, errors.Wrapf(permanentRestoreError,
+								"online restore of range keys not supported")
+						}
+					}
+				}
+
 				if log.V(2) {
 					log.Dev.Infof(ctx, "processing restore span entry %d: %d linkable files, %d ingestable files",
 						entry.ProgressIdx, len(linkable), len(ingestable))

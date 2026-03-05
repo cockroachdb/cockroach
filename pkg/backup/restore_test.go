@@ -568,6 +568,9 @@ func TestRestorePausepointSkipsRetries(t *testing.T) {
 	)
 	defer cleanupFn()
 
+	// The restore.before_link pausepoint is only checked in the non-dist-flow
+	// online restore path (sendAddRemoteSSTs).
+	sqlDB.Exec(t, "SET CLUSTER SETTING backup.restore.online_use_dist_flow.enabled = false")
 	sqlDB.Exec(t, "SET CLUSTER SETTING jobs.debug.pausepoints = 'restore.before_link'")
 	sqlDB.Exec(t, "BACKUP DATABASE data INTO 'nodelocal://1/backup'")
 
