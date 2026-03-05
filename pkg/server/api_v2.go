@@ -222,6 +222,8 @@ func registerRoutes(
 
 		// DB Console BFF endpoints.
 		{"dbconsole/nodes/", dbconsoleAPI.GetNodes, true, authserver.ViewClusterMetadataRole, true},
+		{"dbconsole/schedules/", dbconsoleAPI.GetSchedules, true, authserver.ViewClusterMetadataRole, true},
+		{"dbconsole/schedules/{schedule_id:[0-9]+}/", dbconsoleAPI.GetSchedule, true, authserver.ViewClusterMetadataRole, true},
 	}
 
 	// For all routes requiring authentication, have the outer mux (a.mux)
