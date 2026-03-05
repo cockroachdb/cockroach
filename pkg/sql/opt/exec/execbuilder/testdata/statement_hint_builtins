@@ -1516,3 +1516,95 @@ statement hints count: 1
           missing stats
           table: abc@abc_pkey
           spans: [/6 - ]
+
+# Test disable_optimizer_rules as a session setting hint. This exercises the
+# SetWithPlanner path with setScopeStmt, ensuring that the setting is applied
+# only to the statement-level session data and does not leak to the session.
+
+# First, confirm the normal plan uses a constrained index scan.
+query T
+EXPLAIN SELECT * FROM abc WHERE b = 5
+----
+distribution: local
+·
+• index join
+│ table: abc@abc_pkey
+│
+└── • scan
+      missing stats
+      table: abc@abc_b_idx
+      spans: [/5 - /5]
+
+# Create a hint to disable GenerateConstrainedScans for this query.
+statement ok
+SELECT information_schema.crdb_set_session_variable_hint(
+  'SELECT * FROM abc WHERE b = _',
+  'disable_optimizer_rules',
+  'GenerateConstrainedScans'
+)
+
+statement ok
+SELECT crdb_internal.await_statement_hints_cache()
+
+# With the hint applied, the plan should fall back to a full scan + filter.
+query T
+EXPLAIN SELECT * FROM abc WHERE b = 5
+----
+distribution: local
+statement hints count: 1
+·
+• filter
+│ filter: b = 5
+│
+└── • scan
+      missing stats
+      table: abc@abc_pkey
+      spans: FULL SCAN
+
+# The setting does not persist after the hinted statement completes.
+query T
+SHOW disable_optimizer_rules;
+----
+·
+
+# A different query fingerprint is not affected by the hint.
+query T
+EXPLAIN SELECT a FROM abc WHERE b = 5
+----
+distribution: local
+·
+• scan
+  missing stats
+  table: abc@abc_b_idx
+  spans: [/5 - /5]
+
+# If there are multiple session setting hints for the same setting and
+# fingerprint, only the newest one should be applied (de-duplication).
+# Create a second hint for the same fingerprint + setting with a different
+# value. The newer hint should win.
+statement ok
+SELECT information_schema.crdb_set_session_variable_hint(
+  'SELECT * FROM abc WHERE b = _',
+  'disable_optimizer_rules',
+  ''
+)
+
+statement ok
+SELECT crdb_internal.await_statement_hints_cache()
+
+# The newer hint (empty value = no disabled rules) wins over the older one,
+# so the plan should go back to using the constrained index scan.
+# The hint count is still 1 because the older hint is de-duplicated.
+query T
+EXPLAIN SELECT * FROM abc WHERE b = 5
+----
+distribution: local
+statement hints count: 1
+·
+• index join
+│ table: abc@abc_pkey
+│
+└── • scan
+      missing stats
+      table: abc@abc_b_idx
+      spans: [/5 - /5]
