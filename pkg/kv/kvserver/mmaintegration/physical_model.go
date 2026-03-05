@@ -50,30 +50,22 @@ type physicalDimension struct {
 // computePhysicalCPU computes per-store physical CPU load, capacity, and
 // amplification factor from the store descriptor.
 //
-// The computation has three steps:
+// The computation has two steps:
 //
-//  1. Estimate the amplification factor: the ratio of total node CPU caused by
-//     store work to the directly-tracked store CPU (CPUPerSecond). This is
-//     clamped to [1, maxCPUAmplification]. When storesCPURate is 0, the factor
-//     defaults to the cap. For store-level load, this is inconsequential (it
-//     multiplies zero). The factor is also returned as this store's
-//     amplification factor (via ComputeAmplificationFactors) and applied to
-//     per-range loads on this store, but since storesCPURate is the sum of
-//     replica CPU, individual ranges also have ~0 CPU in this case. Ranges
-//     moved to this store carry their load as computed by the source store's
-//     amplification factor.
+//  1. Estimate the amplification factor and immovable CPU. When SQL CPU
+//     metrics are available, node CPU is decomposed into moveable work
+//     (KV + distSQL, scaled by k1) and immovable work (gateway SQL, scaled
+//     by k2). When SQL metrics are unavailable, falls back to a single-ratio
+//     model. See "SQL-aware decomposition" below.
 //
-//  2. Estimate immovable CPU: node CPU usage not attributable to MMA-tracked
-//     work (e.g. SQL gateway, GC, background jobs). This is
-//     max(0, nodeUsage - storesCPU*ampFactor).
-//
-//  3. Compute per-store load and capacity.
+//  2. Compute per-store load and capacity.
 //     Load uses this store's direct replica CPU (CPUPerSecond) amplified by
-//     the factor, plus an even share of immovable CPU. This lets stores with more
-//     KV work report higher load while still accounting for node-level overhead.
-//     Falls back to storesCPU/numStores when CPUPerSecond is unavailable.
-//     Capacity is nodeCap/numStores — a real-world quantity (the store's share
-//     of the node's CPU cores) that remains directly interpretable.
+//     the factor, plus an even share of immovable CPU. This lets stores with
+//     more KV work report higher load while still accounting for node-level
+//     overhead. Falls back to storesCPU/numStores when CPUPerSecond is
+//     unavailable. Capacity is nodeCap/numStores — a real-world quantity (the
+//     store's share of the node's CPU cores) that remains directly
+//     interpretable.
 //
 // Design decisions for the CPU physical model. For simplicity, the examples
 // below assume single-store nodes unless stated otherwise.
@@ -128,6 +120,59 @@ type physicalDimension struct {
 //  4. The alternative (subtracting immovable CPU from capacity) makes the numbers
 //     harder to reason about and, as shown above, can cause MMA to send work
 //     toward already-hot nodes.
+//
+// # SQL-aware decomposition
+//
+// In general, node CPU splits into moveable work (anything that scales with
+// KV ranges) and immovable work (everything else):
+//
+//	nodeUsage = moveable + immovable
+//	moveable  = k1 * (storesCPU + sqlDistCPU)
+//	immovable = k2 * sqlGatewayCPU
+//
+// k1 and k2 are overhead multipliers that scale the tracked CPU sources to
+// account for untracked work (backups, elastic work, GC, CDC, OS overhead,
+// etc.) that could belong to either bucket. With one equation
+// (nodeUsage = k1*trackedMoveable + k2*sqlGatewayCPU) and two unknowns, we
+// cannot solve for k1 and k2 independently — we'd need a second measurement
+// that separates moveable from immovable overhead, which we don't have.
+// Instead, we assume k1 = k2 = k and solve:
+//
+//	k = nodeUsage / totalTracked
+//
+// where totalTracked = storesCPU + sqlDistCPU + sqlGatewayCPU. This is more
+// accurate than the fallback's nodeUsage/storesCPU, which lumps all non-KV
+// CPU into the overhead.
+//
+// Distributed SQL scales proportionally with KV, so it is folded into the
+// amplification factor rather than treated as immovable:
+//
+// trackedMoveable = storesCPU + sqlDistCPU
+//
+//	= storesCPU * (1 + sqlDistCPU/storesCPU)
+//
+// physicalMoveable = trackedMoveable * k
+//
+//	= storesCPU * (1 + sqlDistCPU/storesCPU) * k
+//
+// By definition, physical = storesCPU * ampFactor, so ampFactor = (1 +
+// sqlDistCPU/storesCPU) * k.
+//
+//	ampFactor = (1 + sqlDistCPU/storesCPU) * k
+//	immovable = max(0, nodeUsage - trackedMoveable * k)
+//
+// where trackedMoveable = storesCPU + sqlDistCPU. The cap
+// (maxCPUAmplification) is applied to k — the per-source overhead
+// multiplier — so that the model doesn't attribute more than 3x overhead to
+// any tracked source. ampFactor = (1 + distRatio) * k may exceed the cap
+// when distSQL is significant; that's expected since it reflects real
+// measured distSQL work, not estimation error. When k is clamped, the
+// excess overhead spills into the immovable term. When k is unclamped,
+// immovable = sqlGatewayCPU * k.
+//
+// Fallback: when SQL metrics are zero, the model uses a single ratio
+// (ampFactor = clamp(nodeUsage/storesCPU, 1, cap)) and attributes the
+// residual as immovable, matching the pre-SQL behavior.
 func computePhysicalCPU(desc roachpb.StoreDescriptor) (res physicalDimension) {
 	assertCPUInputs(desc)
 	defer func() { res.capacity = max(minCapacity, res.capacity) }()
@@ -136,18 +181,31 @@ func computePhysicalCPU(desc roachpb.StoreDescriptor) (res physicalDimension) {
 	nodeUsage := max(0, float64(nc.NodeCPURateUsage))
 	nodeCap := max(0, float64(nc.NodeCPURateCapacity))
 	storesCPU := max(0, float64(nc.StoresCPURate))
+	sqlGatewayCPU := max(0, float64(nc.SQLGatewayCPUNanoPerSec))
+	sqlDistCPU := max(0, float64(nc.SQLDistCPUNanoPerSec))
 
-	// Step 1: Estimate the amplification factor.
-	ampFactor := maxCPUAmplification
-	if storesCPU > 0 {
+	// Step 1: Estimate the amplification factor and immovable CPU.
+	//
+	// See "SQL-aware decomposition" above. When SQL metrics are available, k is
+	// derived from the full tracked denominator and capped at
+	// maxCPUAmplification. Gateway SQL and any excess become immovable.
+	var ampFactor, immovable float64
+	hasSQLMetrics := (sqlGatewayCPU + sqlDistCPU) > 0
+	if storesCPU <= 0 {
+		ampFactor = maxCPUAmplification
+		immovable = max(0, nodeUsage)
+	} else if hasSQLMetrics {
+		trackedMoveable := storesCPU + sqlDistCPU
+		totalTracked := trackedMoveable + sqlGatewayCPU
+		k := max(1, min(nodeUsage/totalTracked, maxCPUAmplification))
+		ampFactor = (1 + sqlDistCPU/storesCPU) * k
+		immovable = max(0, nodeUsage-trackedMoveable*k)
+	} else {
 		ampFactor = max(1, min(nodeUsage/storesCPU, maxCPUAmplification))
+		immovable = max(0, nodeUsage-storesCPU*ampFactor)
 	}
 
-	// Step 2: Attribute CPU to MMA-tracked work vs immovable.
-	mmaLoad := storesCPU * ampFactor
-	immovable := max(0, nodeUsage-mmaLoad)
-
-	// Step 3: Compute per-store load and capacity.
+	// Step 2: Compute per-store load and capacity.
 	storeCPU := desc.Capacity.CPUPerSecond
 	if storeCPU <= 0 {
 		// Either because grunning is unsupported on the node's architecture, in
@@ -155,24 +213,6 @@ func computePhysicalCPU(desc roachpb.StoreDescriptor) (res physicalDimension) {
 		// have reported CPU usage, in which case CPUPerSecond is 0.
 		storeCPU = storesCPU / numStores
 	}
-
-	// Summing per-store loads across all stores on a node:
-	//
-	//	sum(load_i) = sum(storeCPU_i * ampFactor + background / N)
-	//	            = ampFactor * sum(storeCPU_i) + background
-	//	            = ampFactor * storesCPU + max(0, nodeUsage - storesCPU*ampFactor)
-	//
-	// When ampFactor = nodeUsage/storesCPU (unclamped interior):
-	//
-	//	= nodeUsage + max(0, nodeUsage - nodeUsage) = nodeUsage.  ✓
-	//
-	// When ampFactor is clamped to 1 (storesCPU > nodeUsage):
-	//
-	//	= storesCPU + max(0, nodeUsage - storesCPU)
-	//	= storesCPU + 0 = storesCPU > nodeUsage.
-	//
-	// The overshoot (storesCPU - nodeUsage) is transient and conservative: stores
-	// appear slightly more loaded than reality until the measurement lag resolves.
 	load := mmaprototype.LoadValue(storeCPU*ampFactor + immovable/numStores)
 	capacity := mmaprototype.LoadValue(nodeCap / numStores)
 	if nodeCap <= 0 {
