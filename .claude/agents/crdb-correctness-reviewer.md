@@ -5,7 +5,7 @@ description: >
   Focuses on concurrency, locking discipline, failure modes, compatibility,
   error handling with cockroachdb/errors, redactability, and silent failures.
   Use when reviewing any non-trivial code change.
-model: opus
+model: inherit
 color: red
 ---
 
