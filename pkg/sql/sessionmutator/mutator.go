@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil/pgdate"
+	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
 )
 
@@ -153,26 +154,55 @@ func (it *SessionDataMutatorIterator) SetSessionDefaultIntSize(size int32) {
 	})
 }
 
-// ApplyOnTopMutator applies the given function on the mutator for the top
-// element on the sessiondata Stack only.
+// ApplyOnTopMutator applies the given function on the top element of the
+// underlying stack (the transaction or session frame). If statement-level
+// session data is also active, the function is applied there too so the
+// current statement sees the change. This is used by SET LOCAL and
+// InternalSession.ModifySession.
 func (it *SessionDataMutatorIterator) ApplyOnTopMutator(
 	applyFunc func(m SessionDataMutator) error,
 ) error {
-	return applyFunc(it.Mutator(true /* applyCallbacks */, it.Sds.Top()))
+	elems := it.Sds.Elems()
+	stackTop := elems[len(elems)-1]
+	if err := applyFunc(it.Mutator(true /* applyCallbacks */, stackTop)); err != nil {
+		return err
+	}
+	if stmtSD := it.Sds.StmtLevel(); stmtSD != nil {
+		return applyFunc(it.Mutator(false /* applyCallbacks */, stmtSD))
+	}
+	return nil
+}
+
+// ApplyOnStmtScopedMutator applies the given function on the statement-level
+// session data only. Returns an error if no statement-level session data is
+// active.
+func (it *SessionDataMutatorIterator) ApplyOnStmtScopedMutator(
+	applyFunc func(m SessionDataMutator) error,
+) error {
+	stmtSD := it.Sds.StmtLevel()
+	if stmtSD == nil {
+		return errors.AssertionFailedf(
+			"ApplyOnStmtScopedMutator called without active statement-level session data")
+	}
+	return applyFunc(it.Mutator(false /* applyCallbacks */, stmtSD))
 }
 
 // ApplyOnEachMutator iterates over each mutator over all SessionData elements
-// in the stack and applies the given function to them.
+// in the stack and applies the given function to them. If statement-level
+// session data is active, the function is applied there too.
 // It is the equivalent of SET SESSION x = y.
 func (it *SessionDataMutatorIterator) ApplyOnEachMutator(applyFunc func(m SessionDataMutator)) {
 	elems := it.Sds.Elems()
 	for i, sd := range elems {
 		applyFunc(it.Mutator(i == 0, sd))
 	}
+	if stmtSD := it.Sds.StmtLevel(); stmtSD != nil {
+		applyFunc(it.Mutator(false /* applyCallbacks */, stmtSD))
+	}
 }
 
-// ApplyOnEachMutatorError is the same as ApplyOnEachMutator, but takes in a function
-// that can return an error, erroring if any of applications error.
+// ApplyOnEachMutatorError is the same as ApplyOnEachMutator, but takes in a
+// function that can return an error, erroring if any of applications error.
 func (it *SessionDataMutatorIterator) ApplyOnEachMutatorError(
 	applyFunc func(m SessionDataMutator) error,
 ) error {
@@ -181,6 +211,9 @@ func (it *SessionDataMutatorIterator) ApplyOnEachMutatorError(
 		if err := applyFunc(it.Mutator(i == 0, sd)); err != nil {
 			return err
 		}
+	}
+	if stmtSD := it.Sds.StmtLevel(); stmtSD != nil {
+		return applyFunc(it.Mutator(false /* applyCallbacks */, stmtSD))
 	}
 	return nil
 }

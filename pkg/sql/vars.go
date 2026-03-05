@@ -68,6 +68,19 @@ type getStringValFn = func(
 	ctx context.Context, evalCtx *extendedEvalContext, values []tree.TypedExpr, kv *kv.Txn,
 ) (string, error)
 
+// setScope controls which session data frames are modified by a SET operation.
+type setScope int
+
+const (
+	// setScopeSession modifies all stack frames (SET SESSION behavior).
+	setScopeSession setScope = iota
+	// setScopeLocal modifies only the top stack frame (SET LOCAL behavior).
+	setScopeLocal
+	// setScopeStmt modifies only the statement-level session data overlay,
+	// used during statement hint application.
+	setScopeStmt
+)
+
 // sessionVar provides a unified interface for performing operations on
 // variables such as the selected database, or desired syntax.
 type sessionVar struct {
@@ -122,12 +135,12 @@ type sessionVar struct {
 	// RuntimeSet is like Set except it can only be used in sessions
 	// that are already running (i.e. not during session
 	// initialization). Currently only used for transaction_isolation.
-	RuntimeSet func(_ context.Context, evalCtx *extendedEvalContext, local bool, s string) error
+	RuntimeSet func(_ context.Context, evalCtx *extendedEvalContext, scope setScope, s string) error
 
 	// SetWithPlanner is like Set except it can only be used in sessions
 	// that are already running and the planner is passed in.
 	// The planner can be used to check privileges before setting.
-	SetWithPlanner func(_ context.Context, p *planner, local bool, s string) error
+	SetWithPlanner func(_ context.Context, p *planner, scope setScope, s string) error
 
 	// GlobalDefault is the string value to use as default for RESET or
 	// during session initialization when no default value was provided
@@ -1862,7 +1875,7 @@ var varGen = map[string]sessionVar{
 			level := tree.FromKVIsoLevel(evalCtx.Txn.IsoLevel())
 			return strings.ToLower(level.String()), nil
 		},
-		RuntimeSet: func(ctx context.Context, evalCtx *extendedEvalContext, local bool, s string) error {
+		RuntimeSet: func(ctx context.Context, evalCtx *extendedEvalContext, scope setScope, s string) error {
 			level, ok := tree.IsolationLevelMap[strings.ToLower(s)]
 			if !ok {
 				var allowedValues = []string{"serializable"}
@@ -2972,7 +2985,7 @@ var varGen = map[string]sessionVar{
 
 	// CockroachDB extension.
 	`disable_optimizer_rules`: {
-		SetWithPlanner: func(ctx context.Context, p *planner, local bool, s string) error {
+		SetWithPlanner: func(ctx context.Context, p *planner, scope setScope, s string) error {
 			var rules []string
 			if s != "" {
 				rulesRaw := strings.Split(s, ",")
@@ -2992,7 +3005,7 @@ var varGen = map[string]sessionVar{
 			}
 			return p.applyOnSessionDataMutators(
 				ctx,
-				local,
+				scope,
 				func(m sessionmutator.SessionDataMutator) error {
 					m.SetDisableOptimizerRules(rules)
 					return nil
@@ -4704,16 +4717,16 @@ func init() {
 	// initialization loop.
 	for _, p := range []struct {
 		name string
-		fn   func(ctx context.Context, p *planner, local bool, s string) error
+		fn   func(ctx context.Context, p *planner, scope setScope, s string) error
 	}{
 		{
 			name: `role`,
-			fn: func(ctx context.Context, p *planner, local bool, s string) error {
+			fn: func(ctx context.Context, p *planner, scope setScope, s string) error {
 				u, err := username.MakeSQLUsernameFromUserInput(s, username.PurposeValidation)
 				if err != nil {
 					return err
 				}
-				return p.setRole(ctx, local, u)
+				return p.setRole(ctx, scope, u)
 			},
 		},
 	} {
@@ -4912,7 +4925,7 @@ func makeBackwardsCompatBoolVar(varName string, displayValue bool) sessionVar {
 	return sessionVar{
 		Hidden:       true,
 		GetStringVal: makePostgresBoolGetStringValFn(varName),
-		SetWithPlanner: func(ctx context.Context, p *planner, local bool, s string) error {
+		SetWithPlanner: func(ctx context.Context, p *planner, scope setScope, s string) error {
 			p.BufferClientNotice(ctx, pgnotice.Newf("%s no longer has any effect", varName))
 			return nil
 		},
@@ -5074,15 +5087,19 @@ func (p *planner) SetSessionVar(ctx context.Context, varName, newVal string, isL
 	// batched instead of performing the computation on each mutator.
 	// It is their responsibility to set LOCAL or SESSION after
 	// doing the computation.
+	scope := setScopeSession
+	if isLocal {
+		scope = setScopeLocal
+	}
 	if v.RuntimeSet != nil {
-		return v.RuntimeSet(ctx, p.ExtendedEvalContext(), isLocal, newVal)
+		return v.RuntimeSet(ctx, p.ExtendedEvalContext(), scope, newVal)
 	}
 	if v.SetWithPlanner != nil {
-		return v.SetWithPlanner(ctx, p, isLocal, newVal)
+		return v.SetWithPlanner(ctx, p, scope, newVal)
 	}
 	return p.applyOnSessionDataMutators(
 		ctx,
-		isLocal,
+		scope,
 		func(m sessionmutator.SessionDataMutator) error {
 			return v.Set(ctx, m, newVal)
 		},

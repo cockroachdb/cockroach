@@ -577,7 +577,7 @@ func (p *planner) BumpPrivilegesTableVersion(ctx context.Context) error {
 	return p.writeVersionBump(ctx, tableDesc.ID)
 }
 
-func (p *planner) setRole(ctx context.Context, local bool, s username.SQLUsername) error {
+func (p *planner) setRole(ctx context.Context, scope setScope, s username.SQLUsername) error {
 	sessionUser := p.SessionData().SessionUser()
 	becomeUser := sessionUser
 	// Check the role exists - if so, populate becomeUser.
@@ -606,7 +606,7 @@ func (p *planner) setRole(ctx context.Context, local bool, s username.SQLUsernam
 
 	return p.applyOnSessionDataMutators(
 		ctx,
-		local,
+		scope,
 		func(m sessionmutator.SessionDataMutator) error {
 			oldIsSuperuser := m.Data.IsSuperuser
 			m.Data.IsSuperuser = willBecomeAdmin
