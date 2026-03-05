@@ -215,10 +215,14 @@ type storeLoad struct {
 // NodeLoad is the load information for a node.
 type NodeLoad struct {
 	NodeID roachpb.NodeID
-	// ReportedCPU and CapacityCPU are simply the sum of what we get for all
-	// stores on this node.
-	ReportedCPU LoadValue
-	CapacityCPU LoadValue
+	// NodeCPULoad and NodeCPUCapacity are the physical node-level CPU values
+	// (NodeCPURateUsage and NodeCPURateCapacity), set directly from
+	// StoreLoadMsg rather than derived from store sums. These are used for
+	// node-level overload detection because the capped multiplier model
+	// breaks the invariant sum(store loads)/sum(store capacities) = cpuUtil
+	// when background CPU exceeds the cap. See computeCPUCapacityWithCap.
+	NodeCPULoad     LoadValue
+	NodeCPUCapacity LoadValue
 }
 
 // The mean store load for a set of stores.
@@ -483,8 +487,8 @@ func computeMeansForStoreSet(
 
 	n = len(scratchNodes)
 	for _, nl := range scratchNodes {
-		means.nodeLoad.loadCPU += nl.ReportedCPU
-		means.nodeLoad.capacityCPU += nl.CapacityCPU
+		means.nodeLoad.loadCPU += nl.NodeCPULoad
+		means.nodeLoad.capacityCPU += nl.NodeCPUCapacity
 	}
 	// NB: capacityCPU can be 0 if all nodes report 0 store CPU capacity.
 	means.nodeLoad.utilCPU =
@@ -749,8 +753,8 @@ var _ = storeLoad{}.reportedLoad
 var _ = storeLoad{}.capacity
 var _ = storeLoad{}.reportedSecondaryLoad
 var _ = NodeLoad{}.NodeID
-var _ = NodeLoad{}.ReportedCPU
-var _ = NodeLoad{}.CapacityCPU
+var _ = NodeLoad{}.NodeCPULoad
+var _ = NodeLoad{}.NodeCPUCapacity
 var _ = CPURate
 var _ = WriteBandwidth
 var _ = ByteSize

@@ -19,12 +19,20 @@ type StoreLoadMsg struct {
 	roachpb.StoreID
 
 	Load LoadVector
-	// Capacity[CPURate] is derived based on considering the aggregate usage
-	// across all stores, and using the utilization observed at the node, to
-	// derive a node level capacity, and then dividing that by the number of
-	// stores.
+	// Capacity[CPURate] is derived using a capped multiplier model that
+	// subtracts background CPU and divides by the multiplier and number of
+	// stores. See computeCPUCapacityWithCap for details.
 	Capacity      LoadVector
 	SecondaryLoad SecondaryLoadVector
+
+	// NodeCPULoad and NodeCPUCapacity carry the physical node-level CPU
+	// values (NodeCPURateUsage and NodeCPURateCapacity in ns/s). These are
+	// needed because the capped multiplier model breaks the invariant
+	// sum(store loads)/sum(store capacities) = NodeCPURateUsage/NodeCPURateCapacity
+	// when background CPU exceeds the cap. Node-level overload detection
+	// uses these values directly instead of summing store-level CPU.
+	NodeCPULoad     LoadValue
+	NodeCPUCapacity LoadValue
 
 	LoadTime time.Time
 }
