@@ -3043,7 +3043,8 @@ WHERE
     'copy_fast_path_enabled',
     'direct_columnar_scans_enabled',
     'multiple_active_portals_enabled',
-    'kv_transaction_buffered_writes_enabled'
+    'kv_transaction_buffered_writes_enabled',
+    'buffered_writes_implicit_txns_enabled'
   )
 ORDER BY name
 ----
@@ -3300,7 +3301,8 @@ WHERE
     'copy_fast_path_enabled',
     'direct_columnar_scans_enabled',
     'multiple_active_portals_enabled',
-    'kv_transaction_buffered_writes_enabled'
+    'kv_transaction_buffered_writes_enabled',
+    'buffered_writes_implicit_txns_enabled'
   )
 ORDER BY name
 ----
@@ -3557,6 +3559,7 @@ autocommit_before_ddl                                            NULL    NULL   
 avoid_buffering                                                  NULL    NULL     NULL     NULL        NULL
 avoid_full_table_scans_in_mutations                              NULL    NULL     NULL     NULL        NULL
 backslash_quote                                                  NULL    NULL     NULL     NULL        NULL
+buffered_writes_implicit_txns_enabled                            NULL    NULL     NULL     NULL        NULL
 buffered_writes_use_locking_on_non_unique_indexes                NULL    NULL     NULL     NULL        NULL
 bypass_pcr_reader_catalog_aost                                   NULL    NULL     NULL     NULL        NULL
 bytea_output                                                     NULL    NULL     NULL     NULL        NULL

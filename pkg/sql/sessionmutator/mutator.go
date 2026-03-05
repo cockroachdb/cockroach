@@ -1164,3 +1164,7 @@ func (m *SessionDataMutator) notifyTCPKeepAliveChange() {
 func (m *SessionDataMutator) SetOptimizerUseMinRowCountAntiJoinFix(val bool) {
 	m.Data.OptimizerUseMinRowCountAntiJoinFix = val
 }
+
+func (m *SessionDataMutator) SetBufferedWritesImplicitTxnsEnabled(val bool) {
+	m.Data.BufferedWritesImplicitTxnsEnabled = val
+}

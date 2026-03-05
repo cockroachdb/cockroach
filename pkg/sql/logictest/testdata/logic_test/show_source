@@ -32,7 +32,8 @@ WHERE
     'copy_fast_path_enabled',
     'direct_columnar_scans_enabled',
     'multiple_active_portals_enabled',
-    'kv_transaction_buffered_writes_enabled'
+    'kv_transaction_buffered_writes_enabled',
+    'buffered_writes_implicit_txns_enabled'
   )
 ORDER BY variable
 ----

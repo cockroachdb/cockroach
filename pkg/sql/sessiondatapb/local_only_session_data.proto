@@ -792,6 +792,10 @@ message LocalOnlySessionData {
   // OptimizerUseMinRowCountAntiJoinFix, when true, causes the
   // optimizer_min_row_count setting to be applied correctly to anti-joins.
   bool optimizer_use_min_row_count_anti_join_fix = 203;
+  // BufferedWritesImplicitTxnsEnabled, if set, will make it so that the
+  // buffered writes feature is used for implicit txns.
+  bool buffered_writes_implicit_txns_enabled = 204;
+
   ///////////////////////////////////////////////////////////////////////////
   // WARNING: consider whether a session parameter you're adding needs to  //
   // be propagated to the remote nodes. If so, that parameter should live  //

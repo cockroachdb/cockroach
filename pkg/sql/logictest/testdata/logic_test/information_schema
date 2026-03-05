@@ -3759,7 +3759,8 @@ WHERE
       'default_transaction_isolation',
       'transaction_isolation',
       'kv_transaction_buffered_writes_enabled',
-      'create_table_with_schema_locked'
+      'create_table_with_schema_locked',
+      'buffered_writes_implicit_txns_enabled'
     )
 ORDER BY variable
 ----

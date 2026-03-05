@@ -3878,11 +3878,11 @@ func (ex *connExecutor) omitInRangefeeds() bool {
 	return ex.sessionData().DisableChangefeedReplication
 }
 
-func (ex *connExecutor) bufferedWritesEnabled(ctx context.Context) bool {
+func (ex *connExecutor) bufferedWritesEnabled(typ txnType) bool {
 	if ex.sessionData() == nil {
 		return false
 	}
-	return ex.sessionData().BufferedWritesEnabled
+	return ex.sessionData().BufferedWritesEnabled && (typ == explicitTxn || ex.sessionData().BufferedWritesImplicitTxnsEnabled)
 }
 
 func (ex *connExecutor) bufferedWritesIsAllowedForIsolationLevel(
@@ -4316,7 +4316,7 @@ func (ex *connExecutor) txnStateTransitionsApplyWrapper(
 				ex.QualityOfService(),
 				chainModes.isoLevel,
 				ex.omitInRangefeeds(),
-				ex.bufferedWritesEnabled(ex.Ctx()),
+				ex.bufferedWritesEnabled(explicitTxn),
 				ex.rng.internal,
 			)
 			chainEvent := eventTxnStart{ImplicitTxn: fsm.False}
