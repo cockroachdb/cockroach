@@ -16,7 +16,7 @@ env:
 
 jobs:
   auto-solve-issue:
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, ubuntu_2404]
     timeout-minutes: 180
     if: github.event.label.name == 'c-autosolve'
     permissions:
@@ -72,6 +72,12 @@ jobs:
           project_id: 'vertex-model-runners'
           service_account: 'ai-review@dev-inf-prod.iam.gserviceaccount.com'
           workload_identity_provider: 'projects/72497726731/locations/global/workloadIdentityPools/ai-review/providers/ai-review'
+
+      - name: Set up EngFlow
+        run: |
+          ./build/github/get-engflow-keys.sh
+          ENGFLOW_ARGS=$(./build/github/engflow-args.sh)
+          echo "build $ENGFLOW_ARGS" > .bazelrc.user
 
       - name: Stage 1 - Assess Issue Feasibility
         id: assess
@@ -178,6 +184,7 @@ jobs:
           CLOUD_ML_REGION: us-east5
           ISSUE_TITLE: ${{ github.event.issue.title }}
           ISSUE_BODY: ${{ github.event.issue.body }}
+          AUTOMATION: "1"
         run: |
           MAX_RETRIES=10
           RETRY_COUNT=0
@@ -215,7 +222,11 @@ jobs:
              - For logic tests: ./dev testlogic --files=<testfile> -v
              Do NOT run broad test suites (e.g. ./dev test pkg/sql or
              ./dev testlogic without --files). Only test the specific
-             packages and files affected by your changes.
+             packages and files affected by your changes. Do NOT run tests
+             under `--stress`.
+             You MUST run tests and they MUST pass before staging changes.
+             If tests fail, fix and re-run. Report FAILED only if you cannot
+             make tests pass.
           6. Stage all changes with git add
 
           When formatting commits and PRs, follow the guidelines in CLAUDE.md.
@@ -568,8 +579,10 @@ jobs:
         run: |
           gh issue edit ${{ github.event.issue.number }} --remove-label "c-autosolve" || true
 
-      - name: Cleanup credentials
+      - name: Cleanup credentials and keys
         if: always()
         run: |
           # Remove credential helper configuration
           git config --local --unset credential.helper || true
+          # Remove EngFlow keys
+          ./build/github/cleanup-engflow-keys.sh
