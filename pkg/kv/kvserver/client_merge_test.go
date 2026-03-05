@@ -4450,14 +4450,6 @@ func TestMergeQueue(t *testing.T) {
 	lhsStartKey := roachpb.RKey(tc.ScratchRange(t))
 	rhsStartKey := lhsStartKey.Next().Next()
 	rhsEndKey := rhsStartKey.Next().Next()
-	lhsSp := roachpb.Span{
-		Key:    lhsStartKey.AsRawKey(),
-		EndKey: rhsStartKey.AsRawKey(),
-	}
-	rhsSp := roachpb.Span{
-		Key:    rhsStartKey.AsRawKey(),
-		EndKey: rhsEndKey.AsRawKey(),
-	}
 
 	for _, k := range []roachpb.RKey{lhsStartKey, rhsStartKey, rhsEndKey} {
 		split(t, k.AsRawKey(), hlc.Timestamp{} /* expirationTime */)
@@ -4472,12 +4464,12 @@ func TestMergeQueue(t *testing.T) {
 		if l := lhs(); l == nil {
 			t.Fatal("left-hand side range not found")
 		} else {
-			l.SetSpanConfig(conf, lhsSp)
+			l.SetSpanConfig(conf)
 		}
 		if r := rhs(); r == nil {
 			t.Fatal("right-hand side range not found")
 		} else {
-			r.SetSpanConfig(conf, rhsSp)
+			r.SetSpanConfig(conf)
 		}
 	}
 
@@ -4520,7 +4512,7 @@ func TestMergeQueue(t *testing.T) {
 		reset(t)
 		conf := conf
 		conf.RangeMinBytes *= 2
-		lhs().SetSpanConfig(conf, lhsSp)
+		lhs().SetSpanConfig(conf)
 		verifyMergedSoon(t, store, lhsStartKey, rhsStartKey)
 	})
 
