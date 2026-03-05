@@ -90,7 +90,7 @@ func (e *Executor) Init(
 	ctx context.Context, l *logger.Logger, workingDir string, envVars map[string]string,
 ) error {
 	args := []string{"init", "-no-color"}
-	_, stderr, _, err := e.run(ctx, l, workingDir, args, envVars)
+	_, stderr, _, err := e.run(ctx, l, workingDir, args, envVars, true)
 	if err != nil {
 		return errors.Wrapf(err, "tofu init: %s", strings.TrimSpace(stderr))
 	}
@@ -119,7 +119,7 @@ func (e *Executor) Plan(
 	args := []string{"plan", "-out=" + planFileName, "-no-color", "-detailed-exitcode"}
 	args = appendVarArgs(args, vars)
 
-	_, stderr, exitCode, err := e.run(ctx, l, workingDir, args, envVars)
+	_, stderr, exitCode, err := e.run(ctx, l, workingDir, args, envVars, true)
 
 	var hasChanges bool
 	switch exitCode {
@@ -133,7 +133,7 @@ func (e *Executor) Plan(
 
 	// Step 2: Run tofu show -json to get the structured plan output.
 	showArgs := []string{"show", "-json", planFileName, "-no-color"}
-	stdout, stderr, _, showErr := e.run(ctx, l, workingDir, showArgs, envVars)
+	stdout, stderr, _, showErr := e.run(ctx, l, workingDir, showArgs, envVars, false)
 	if showErr != nil {
 		return false, nil, errors.Wrapf(showErr, "tofu show: %s", strings.TrimSpace(stderr))
 	}
@@ -165,7 +165,7 @@ func (e *Executor) Apply(
 		args = appendVarArgs(args, vars)
 	}
 
-	_, stderr, _, err := e.run(ctx, l, workingDir, args, envVars)
+	_, stderr, _, err := e.run(ctx, l, workingDir, args, envVars, true)
 	if err != nil {
 		return errors.Wrapf(err, "tofu apply: %s", strings.TrimSpace(stderr))
 	}
@@ -185,7 +185,7 @@ func (e *Executor) Destroy(
 	args := []string{"destroy", "-no-color", "-auto-approve"}
 	args = appendVarArgs(args, vars)
 
-	_, stderr, _, err := e.run(ctx, l, workingDir, args, envVars)
+	_, stderr, _, err := e.run(ctx, l, workingDir, args, envVars, true)
 	if err != nil {
 		return errors.Wrapf(err, "tofu destroy: %s", strings.TrimSpace(stderr))
 	}
@@ -207,7 +207,7 @@ func (e *Executor) Output(
 	ctx context.Context, l *logger.Logger, workingDir string, envVars map[string]string,
 ) (map[string]interface{}, error) {
 	args := []string{"output", "-json", "-no-color"}
-	stdout, stderr, _, err := e.run(ctx, l, workingDir, args, envVars)
+	stdout, stderr, _, err := e.run(ctx, l, workingDir, args, envVars, false)
 	if err != nil {
 		return nil, errors.Wrapf(err, "tofu output: %s", strings.TrimSpace(stderr))
 	}
@@ -259,38 +259,50 @@ func (e *Executor) buildCommand(
 // run executes a tofu command and returns its stdout, stderr, exit code,
 // and any error. The exit code is extracted from *exec.ExitError; if the
 // error is not an ExitError (e.g., binary not found), exitCode is -1.
+//
+// When logStdout is false, stdout is captured in the buffer but not logged
+// through the sink. This is useful for commands like "tofu show -json" and
+// "tofu output -json" whose structured output is already captured and
+// available via API, and would otherwise dump large unformatted JSON into
+// task logs.
 func (e *Executor) run(
 	ctx context.Context,
 	l *logger.Logger,
 	workingDir string,
 	args []string,
 	envVars map[string]string,
+	logStdout bool,
 ) (stdout, stderr string, exitCode int, err error) {
 	cmd := e.buildCommand(ctx, workingDir, args, envVars)
 
 	var stdoutBuf, stderrBuf bytes.Buffer
-	stdoutLW := l.NewLineWriter(slog.LevelInfo, slog.String("source", "tofu"), slog.String("stream", "stdout"))
 	stderrLW := l.NewLineWriter(slog.LevelWarn, slog.String("source", "tofu"), slog.String("stream", "stderr"))
-	defer func() {
-		err := stdoutLW.Close()
-		if err != nil {
-			l.Error("failed to close stdout line writer", slog.Any("error", err))
-		}
-	}()
 	defer func() {
 		err := stderrLW.Close()
 		if err != nil {
 			l.Error("failed to close stderr line writer", slog.Any("error", err))
 		}
 	}()
-	cmd.Stdout = io.MultiWriter(&stdoutBuf, stdoutLW)
+
+	if logStdout {
+		stdoutLW := l.NewLineWriter(slog.LevelInfo, slog.String("source", "tofu"), slog.String("stream", "stdout"))
+		defer func() {
+			err := stdoutLW.Close()
+			if err != nil {
+				l.Error("failed to close stdout line writer", slog.Any("error", err))
+			}
+		}()
+		cmd.Stdout = io.MultiWriter(&stdoutBuf, stdoutLW)
+	} else {
+		cmd.Stdout = &stdoutBuf
+	}
 	cmd.Stderr = io.MultiWriter(&stderrBuf, stderrLW)
 
-	// Log the subcommand being executed but not the full arguments or env
-	// vars, which may contain credentials.
-	if len(args) > 0 {
-		l.Info("executing tofu command", slog.String("subcommand", args[0]))
-	}
+	// Log the command being executed. Environment variables are omitted
+	// because they may contain credentials.
+	l.Info("executing tofu command",
+		slog.String("command", e.binaryPath+" "+strings.Join(args, " ")),
+	)
 
 	err = cmd.Run()
 	stdout = stdoutBuf.String()
