@@ -211,7 +211,24 @@ Examples:
 				fmt.Printf("Task: %s\nStreaming logs...\n\n", resp.TaskID)
 				streamCtx, cancel := context.WithCancel(context.Background())
 				defer cancel()
-				return streamSSELogs(streamCtx, c, resp.TaskID, 0)
+				if err := streamSSELogs(streamCtx, c, resp.TaskID, 0); err != nil {
+					return err
+				}
+			}
+
+			// Print post-creation summary.
+			if resp.Data != nil {
+				fmt.Printf("\nProvisioning: %s (identifier: %s)\n",
+					resp.Data.ID, resp.Data.Identifier)
+
+				outputs, err := c.GetProvisioningOutputs(ctx, l, resp.Data.ID.String())
+				if err != nil {
+					return errors.Wrap(err, "get outputs")
+				}
+				if len(outputs) > 0 {
+					fmt.Println("\nOutputs:")
+					return printJSON(outputs)
+				}
 			}
 
 			return nil
