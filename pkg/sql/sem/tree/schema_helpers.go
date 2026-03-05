@@ -35,22 +35,33 @@ func HasSetOrResetSchemaLocked(n Statement) (hasSchemaLockedChange bool) {
 func IsAllowedLDRSchemaChange(n Statement, virtualColNames []string, kvWriterEnabled bool) bool {
 	switch s := n.(type) {
 	case *CreateIndex:
-		// Don't allow creating an index on a virtual column.
+		if s.Unique {
+			// Disallow creating unique indexes until we understand how users want to
+			// coordinate unique index creation on both sides of LDR.
+			return false
+		}
+		if s.Sharded != nil {
+			// Disallow creating hash-sharded indexes as it creates a virtual computed
+			// column and we require the number of columns of both sides of LDR to be
+			// the same.
+			return false
+		}
+		if !kvWriterEnabled {
+			// All other indexes are supported by sql writer.
+			return true
+		}
+		// Don't allow creating an index on a virtual column for kv writer.
 		for _, col := range s.Columns {
 			if slices.Contains(virtualColNames, string(col.Column)) {
 				return false
 			}
 		}
-		if s.Predicate != nil && !kvWriterEnabled {
-			// The sql writer supports partial indexes.
-			return true
+		if s.Predicate != nil {
+			// Partial indexes not supported in kv writer as they require expr
+			// evaluation.
+			return false
 		}
-		// Disallow unique, partial, or hash-sharded indexes. Having these indexes
-		// on a destination table could cause inserts to fail.
-		// NB: hash-sharded indexes are disallowed since they create an index on a
-		// virtual column. Since it also implicitly creates the virtual column
-		// at the same time, the check above on virtualColNames would not block it.
-		return !s.Unique && s.Predicate == nil && s.Sharded == nil
+		return true
 	case *DropIndex:
 		return true
 	case *AlterIndexVisible:

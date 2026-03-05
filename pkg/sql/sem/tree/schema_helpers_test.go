@@ -19,8 +19,9 @@ func TestIsAllowedLDRSchemaChange(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	for _, tc := range []struct {
-		stmt      string
-		isAllowed bool
+		stmt            string
+		kvWriterEnabled bool
+		isAllowed       bool
 	}{
 		{
 			stmt:      "CREATE INDEX idx ON t (a)",
@@ -44,7 +45,12 @@ func TestIsAllowedLDRSchemaChange(t *testing.T) {
 		},
 		{
 			stmt:      "CREATE INDEX idx ON t (a) WHERE a > 10",
-			isAllowed: false,
+			isAllowed: true,
+		},
+		{
+			stmt:            "CREATE INDEX idx ON t (a) WHERE a > 10",
+			kvWriterEnabled: true,
+			isAllowed:       false,
 		},
 		{
 			stmt:      "DROP INDEX idx",
@@ -118,7 +124,7 @@ func TestIsAllowedLDRSchemaChange(t *testing.T) {
 			}
 			// Tests for virtual column checks are in
 			// TestLogicalReplicationCreationChecks.
-			if got := tree.IsAllowedLDRSchemaChange(stmt.AST, nil /* virtualColNames */, true); got != tc.isAllowed {
+			if got := tree.IsAllowedLDRSchemaChange(stmt.AST, nil /* virtualColNames */, tc.kvWriterEnabled); got != tc.isAllowed {
 				t.Errorf("expected %v, got %v", tc.isAllowed, got)
 			}
 		})
