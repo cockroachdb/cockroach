@@ -127,7 +127,7 @@ func (lv *LoadVector) subtract(other LoadVector) {
 type Amp float64
 
 func (af Amp) SafeFormat(w redact.SafePrinter, _ rune) {
-	w.Printf("%.2f", af)
+	w.Printf("%.2f", redact.SafeFloat(float64(af)))
 }
 
 func (af Amp) String() string {
