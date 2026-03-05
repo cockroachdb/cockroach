@@ -6,8 +6,13 @@
 package mmaintegration
 
 import (
+	"context"
+
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/mmaprototype"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
+	"github.com/cockroachdb/cockroach/pkg/util/grunning"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
 // physicalStore holds the physical load, capacity, and amplification
@@ -124,13 +129,13 @@ type physicalDimension struct {
 //     harder to reason about and, as shown above, can cause MMA to send work
 //     toward already-hot nodes.
 func computePhysicalCPU(desc roachpb.StoreDescriptor) (res physicalDimension) {
+	assertCPUInputs(desc)
 	defer func() { res.capacity = max(minCapacity, res.capacity) }()
-
 	nc := desc.NodeCapacity
 	numStores := max(1, float64(nc.NumStores))
-	nodeUsage := float64(nc.NodeCPURateUsage)
-	nodeCap := float64(nc.NodeCPURateCapacity)
-	storesCPU := float64(nc.StoresCPURate)
+	nodeUsage := max(0, float64(nc.NodeCPURateUsage))
+	nodeCap := max(0, float64(nc.NodeCPURateCapacity))
+	storesCPU := max(0, float64(nc.StoresCPURate))
 
 	// Step 1: Estimate the amplification factor.
 	ampFactor := maxCPUAmplification
@@ -168,8 +173,8 @@ func computePhysicalCPU(desc roachpb.StoreDescriptor) (res physicalDimension) {
 	//
 	// The overshoot (storesCPU - nodeUsage) is transient and conservative: stores
 	// appear slightly more loaded than reality until the measurement lag resolves.
-	load := mmaprototype.LoadValue(max(0, storeCPU*ampFactor+immovable/numStores))
-	capacity := mmaprototype.LoadValue(max(0, nodeCap/numStores))
+	load := mmaprototype.LoadValue(storeCPU*ampFactor + immovable/numStores)
+	capacity := mmaprototype.LoadValue(nodeCap / numStores)
 	if nodeCap <= 0 {
 		capacity = load * 2
 	}
@@ -319,4 +324,35 @@ func MakePhysicalRangeLoad(
 	rl.Load[mmaprototype.WriteBandwidth] = mmaprototype.LoadValue(writeBytesPerSec * float64(amp[mmaprototype.WriteBandwidth]))
 	rl.Load[mmaprototype.ByteSize] = mmaprototype.LoadValue(float64(logicalBytes) * float64(amp[mmaprototype.ByteSize]))
 	return rl
+}
+
+// assertCPUInputs verifies (in test builds only) that the raw NodeCapacity
+// fields used by computePhysicalCPU are non-negative. All fields are int64 in
+// the protobuf, so they can technically be negative but shouldn't be
+// semantically. The caller clamps them with max(0, ...) after this check.
+func assertCPUInputs(desc roachpb.StoreDescriptor) {
+	if !buildutil.CrdbTestBuild {
+		return
+	}
+	nc := desc.NodeCapacity
+	// When !grunning.Supported (only in non-Bazel builds, i.e. plain
+	// `go test`; all production binaries use Bazel), each store sets
+	// CPUPerSecond to -1 and StoresCPURate (the sum across stores) is
+	// -numStores. Skip those checks since the physical model handles
+	// storesCPU <= 0 gracefully.
+	storesCPURateNegative := nc.StoresCPURate < 0 && grunning.Supported
+	storeCPURateNegative := desc.Capacity.CPUPerSecond < 0 && grunning.Supported
+	if nc.NumStores < 0 || storesCPURateNegative || storeCPURateNegative ||
+		nc.NodeCPURateUsage < 0 || nc.NodeCPURateCapacity < 0 ||
+		nc.SQLGatewayCPUNanoPerSec < 0 || nc.SQLDistCPUNanoPerSec < 0 {
+		log.Dev.Fatalf(context.Background(),
+			"computePhysicalCPU: negative NodeCapacity fields "+
+				"(NumStores=%d StoresCPURate=%d NodeCPURateUsage=%d "+
+				"NodeCPURateCapacity=%d SQLGatewayCPU=%d SQLDistCPU=%d "+
+				"grunning.Supported=%t)",
+			nc.NumStores, nc.StoresCPURate, nc.NodeCPURateUsage,
+			nc.NodeCPURateCapacity, nc.SQLGatewayCPUNanoPerSec, nc.SQLDistCPUNanoPerSec,
+			grunning.Supported,
+		)
+	}
 }
