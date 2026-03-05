@@ -17,9 +17,10 @@ type TestingKnobs struct {
 	// behaviors when meta ranges are unavailable.
 	MetadataScanTimeout time.Duration
 
-	// Replica filter for forwarded replica info when collecting fan-out data.
-	// It can be called concurrently, so must be safe for concurrent use.
-	ForwardReplicaFilter func(*serverpb.RecoveryCollectLocalReplicaInfoResponse) error
+	// MaybeInjectError can be used to inject an error after replica info is
+	// received when collecting fan-out data. It can be called concurrently,
+	// so must be safe for concurrent use.
+	MaybeInjectError func(*serverpb.RecoveryCollectLocalReplicaInfoResponse) error
 }
 
 // ModuleTestingKnobs is part of the base.ModuleTestingKnobs interface.
