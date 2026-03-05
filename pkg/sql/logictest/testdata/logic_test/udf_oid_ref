@@ -1,4 +1,3 @@
-# LogicTest: !local-prepared
 # 1074 is the OID of builtin function "string_to_array" with signature
 # "string_to_array(str: string, delimiter: string) -> string[]".
 query T

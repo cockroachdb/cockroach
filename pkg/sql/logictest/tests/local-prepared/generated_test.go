@@ -146,6 +146,13 @@ func TestLogic_alter_default_privileges_with_grant_option(
 	runLogicTest(t, "alter_default_privileges_with_grant_option")
 }
 
+func TestLogic_alter_primary_key(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "alter_primary_key")
+}
+
 func TestLogic_alter_role(
 	t *testing.T,
 ) {
@@ -216,6 +223,13 @@ func TestLogic_and_or(
 	runLogicTest(t, "and_or")
 }
 
+func TestLogic_apply_join(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "apply_join")
+}
+
 func TestLogic_asyncpg(
 	t *testing.T,
 ) {
@@ -279,6 +293,20 @@ func TestLogic_check_constraints(
 	runLogicTest(t, "check_constraints")
 }
 
+func TestLogic_citext(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "citext")
+}
+
+func TestLogic_collatedstring(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "collatedstring")
+}
+
 func TestLogic_collatedstring_constraint(
 	t *testing.T,
 ) {
@@ -298,6 +326,13 @@ func TestLogic_collatedstring_index2(
 ) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "collatedstring_index2")
+}
+
+func TestLogic_collatedstring_normalization(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "collatedstring_normalization")
 }
 
 func TestLogic_collatedstring_nullinindex(
@@ -328,6 +363,13 @@ func TestLogic_composite_types(
 	runLogicTest(t, "composite_types")
 }
 
+func TestLogic_computed(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "computed")
+}
+
 func TestLogic_conditional(
 	t *testing.T,
 ) {
@@ -356,11 +398,32 @@ func TestLogic_crdb_internal_default_privileges(
 	runLogicTest(t, "crdb_internal_default_privileges")
 }
 
+func TestLogic_create_statements(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "create_statements")
+}
+
 func TestLogic_cross_join(
 	t *testing.T,
 ) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "cross_join")
+}
+
+func TestLogic_cursor(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "cursor")
+}
+
+func TestLogic_custom_escape_character(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "custom_escape_character")
 }
 
 func TestLogic_dangerous_statements(
@@ -375,6 +438,13 @@ func TestLogic_database(
 ) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "database")
+}
+
+func TestLogic_decimal(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "decimal")
 }
 
 func TestLogic_default(
@@ -762,6 +832,13 @@ func TestLogic_internal_executor(
 	runLogicTest(t, "internal_executor")
 }
 
+func TestLogic_inverted_filter_geospatial(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "inverted_filter_geospatial")
+}
+
 func TestLogic_join(
 	t *testing.T,
 ) {
@@ -769,11 +846,32 @@ func TestLogic_join(
 	runLogicTest(t, "join")
 }
 
+func TestLogic_jsonb_path_exists(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "jsonb_path_exists")
+}
+
 func TestLogic_jsonb_path_match(
 	t *testing.T,
 ) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "jsonb_path_match")
+}
+
+func TestLogic_jsonb_path_query_array(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "jsonb_path_query_array")
+}
+
+func TestLogic_jsonb_path_query_first(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "jsonb_path_query_first")
 }
 
 func TestLogic_kv_builtin_functions(
@@ -1168,6 +1266,13 @@ func TestLogic_secondary_index_column_families(
 	runLogicTest(t, "secondary_index_column_families")
 }
 
+func TestLogic_select_index(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "select_index")
+}
+
 func TestLogic_select_index_flags(
 	t *testing.T,
 ) {
@@ -1215,6 +1320,13 @@ func TestLogic_serializable_eager_restart(
 ) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "serializable_eager_restart")
+}
+
+func TestLogic_set_local(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "set_local")
 }
 
 func TestLogic_set_schema(
@@ -1574,6 +1686,20 @@ func TestLogic_udf_insert(
 	runLogicTest(t, "udf_insert")
 }
 
+func TestLogic_udf_observability(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "udf_observability")
+}
+
+func TestLogic_udf_oid_ref(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "udf_oid_ref")
+}
+
 func TestLogic_udf_options(
 	t *testing.T,
 ) {
@@ -1754,6 +1880,13 @@ func TestLogic_void(
 ) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "void")
+}
+
+func TestLogic_where(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "where")
 }
 
 func TestLogic_with(
