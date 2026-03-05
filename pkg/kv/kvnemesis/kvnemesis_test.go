@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/apply"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/gc"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvtestutils"
@@ -275,6 +276,24 @@ func (cfg kvnemesisTestCfg) testClusterArgs(
 		}
 	}
 
+	// We need to install the GC TTL in the span config. However, there might be
+	// a preexisting OverrideFallbackConf in the span config testing knob, so we
+	// have to be careful to not overwrite it.
+	if cfg.gcTTLSeconds > 0 {
+		if commonServerArgs.Knobs.SpanConfig == nil {
+			commonServerArgs.Knobs.SpanConfig = &spanconfig.TestingKnobs{}
+		}
+		config := commonServerArgs.Knobs.SpanConfig.(*spanconfig.TestingKnobs)
+		currentFn := config.OverrideFallbackConf
+		config.OverrideFallbackConf = func(config roachpb.SpanConfig) roachpb.SpanConfig {
+			if currentFn != nil {
+				config = currentFn(config)
+			}
+			config.GCPolicy.TTLSeconds = cfg.gcTTLSeconds
+			return config
+		}
+	}
+
 	reg := fs.NewStickyRegistry(fs.UseStrictMemFS)
 	lisReg := listenerutil.NewListenerRegistry()
 	args := base.TestClusterArgs{
@@ -432,6 +451,10 @@ type kvnemesisTestCfg struct {
 	testGeneratorConfig func(*GeneratorConfig)
 
 	mode TestMode
+
+	// If > 0, change the MVCC GC TTL seconds from the default to the given
+	// value in the span config.
+	gcTTLSeconds int32
 }
 
 func defaultTestConfiguration(numNodes int) kvnemesisTestCfg {
@@ -684,6 +707,26 @@ func FuzzKVNemesisSingleNode(f *testing.F) {
 	})
 }
 
+func TestKVNemesisMVCCGC(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	cfg := defaultTestConfiguration(5)
+	cfg.seedOverride = 0
+	cfg.gcTTLSeconds = 5
+	cfg.testGeneratorConfig = func(cfg *GeneratorConfig) {
+		cfg.Ops.MvccGC.MvccGC = 5
+	}
+
+	// Lower the ClearRangeMinKeys so that a ClearRange is issued on every
+	// GC call.
+	cfg.testSettings = func(ctx context.Context, settings *cluster.Settings) {
+		gc.ClearRangeMinKeys.Override(ctx, &settings.SV, 1)
+	}
+
+	testKVNemesisImpl(t, cfg)
+}
+
 func testKVNemesisImpl(t testing.TB, cfg kvnemesisTestCfg) {
 	skip.UnderRace(t)
 
@@ -748,7 +791,14 @@ func testKVNemesisImpl(t testing.TB, cfg kvnemesisTestCfg) {
 
 	logger := newTBridge(t)
 	defer dumpRaftLogsOnFailure(t, logger.ll.dir, tc.Servers)
-	env := &Env{SQLDBs: sqlDBs, Tracker: tr, L: logger, Partitioner: &partitioner, ServerController: tc}
+	env := &Env{
+		SQLDBs:           sqlDBs,
+		Tracker:          tr,
+		L:                logger,
+		Partitioner:      &partitioner,
+		ServerController: tc,
+		MvccGCController: testClusterGCController{tc},
+	}
 	failures, err := RunNemesis(ctx, rng, env, config, cfg.concurrency, cfg.numSteps, cfg.mode, dbs...)
 
 	logMetricsReport(t, tc)
@@ -766,6 +816,7 @@ func logMetricsReport(t testing.TB, tc *testcluster.TestCluster) {
 		"raft.commands.reproposed.unchanged",
 		// Transaction metrics
 		"txn.aborts",
+		"txn.commits",
 		"txn.durations",
 		"txn.restarts.writetooold",
 		"txn.restarts.serializable",
@@ -955,4 +1006,50 @@ func setAndVerifyZoneConfigs(
 
 	// Wait for allocator work to complete
 	require.NoError(t, tc.WaitForFullReplication())
+}
+
+type testClusterGCController struct {
+	tc *testcluster.TestCluster
+}
+
+// MvccGCRangeForKey implements the MvccGCController interface.
+func (c testClusterGCController) MvccGCRangeForKey(key []byte) error {
+	rng, err := c.tc.LookupRange(key)
+	if err != nil {
+		return err
+	}
+
+	// Find the leaseholder for the range and enqueue the corresponding replica
+	// to the MVCC GC queue directly.
+	lease, err := c.tc.FindRangeLeaseHolder(rng, nil /* hint */)
+	if err != nil {
+		return err
+	}
+	srv, err := c.tc.FindMemberServer(lease.StoreID)
+	if err != nil {
+		return err
+	}
+	store, err := srv.StorageLayer().GetStores().(*kvserver.Stores).GetStore(lease.StoreID)
+	if err != nil {
+		return err
+	}
+	repl, err := store.GetReplica(rng.RangeID)
+	if err != nil {
+		return err
+	}
+
+	// Enqueue the replica to the store's queue, and return any queueing errors
+	// first, and then return the processing error.
+	//
+	// NB: we use a fresh context here and not the context that might be
+	// supplied by the applier because the store.Enqueue call requires a context
+	// associated with the store on which it is called. Otherwise, it panics
+	// with an assertion failure in (*Tracer).startSpanGeneric in
+	// `pkg/util/tracing/tracer.go`.
+	ctx := store.AnnotateCtx(context.Background())
+	pErr, qErr := store.Enqueue(ctx, "mvccGC", repl, true /* skipShouldQueue */, false /* async */)
+	if qErr != nil {
+		return qErr
+	}
+	return pErr
 }

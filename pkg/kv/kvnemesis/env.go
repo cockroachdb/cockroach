@@ -33,6 +33,10 @@ type ServerController interface {
 	CrashNode(idx int)
 }
 
+type MvccGCController interface {
+	MvccGCRangeForKey(key []byte) error
+}
+
 // Env manipulates the environment (cluster settings, zone configurations) that
 // the Applier operates in.
 type Env struct {
@@ -41,6 +45,7 @@ type Env struct {
 	L                Logger
 	Partitioner      *rpc.Partitioner
 	ServerController ServerController
+	MvccGCController MvccGCController
 }
 
 func (e *Env) anyNode() *gosql.DB {

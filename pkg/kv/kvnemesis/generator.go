@@ -63,6 +63,7 @@ type OperationConfig struct {
 	ChangeSetting  ChangeSettingConfig
 	ChangeZone     ChangeZoneConfig
 	Fault          FaultConfig
+	MvccGC         MvccGCConfig
 }
 
 // ClosureTxnConfig configures the relative probability of running some
@@ -431,6 +432,13 @@ type FaultConfig struct {
 	// Disk stalls and other faults belong here.
 }
 
+// MvccGCConfig configures the relative probability of generating an MVCC GC
+// operation.
+type MvccGCConfig struct {
+	// MvccGC is an operation that performs MVCC GC on a range.
+	MvccGC int
+}
+
 // newAllOperationsConfig returns a GeneratorConfig that exercises *all*
 // options. You probably want NewDefaultConfig. Most of the time, these will be
 // the same, but having both allows us to merge code for operations that do not
@@ -562,6 +570,9 @@ func newAllOperationsConfig() GeneratorConfig {
 			RestartNode:            1,
 			CrashNode:              1,
 		},
+		MvccGC: MvccGCConfig{
+			MvccGC: 1,
+		},
 	}}
 }
 
@@ -662,6 +673,9 @@ func NewDefaultConfig() GeneratorConfig {
 	config.Ops.Fault.StopNode = 0
 	config.Ops.Fault.RestartNode = 0
 	config.Ops.Fault.CrashNode = 0
+
+	// MVCC GC operations are only enabled in specific test variants.
+	config.Ops.MvccGC.MvccGC = 0
 	return config
 }
 
@@ -967,6 +981,10 @@ func (g *generator) RandStep(rng *rand.Rand) Step {
 		addOpGen(&allowed, crashRandNode, g.Config.Ops.Fault.CrashNode)
 	}
 
+	if len(g.keys) > 0 {
+		addOpGen(&allowed, randMvccGC, g.Config.Ops.MvccGC.MvccGC)
+	}
+
 	return step(g.selectOp(rng, allowed))
 }
 
@@ -983,7 +1001,9 @@ type opGen struct {
 }
 
 func addOpGen(valid *[]opGen, fn opGenFunc, weight int) {
-	*valid = append(*valid, opGen{fn: fn, weight: weight})
+	if weight > 0 {
+		*valid = append(*valid, opGen{fn: fn, weight: weight})
+	}
 }
 
 func (g *generator) selectOp(rng *rand.Rand, contextuallyValid []opGen) Operation {
@@ -1926,6 +1946,11 @@ func crashRandNode(g *generator, rng *rand.Rand) Operation {
 	return crashNode(randNode)
 }
 
+func randMvccGC(g *generator, rng *rand.Rand) Operation {
+	key := randSliceKey(rng, maps.Keys(g.keys))
+	return mvccGC(key)
+}
+
 func isFollowerReadEligibleOp(op Operation) bool {
 	if op.Get != nil && op.Get.FollowerReadEligible {
 		return true
@@ -2577,6 +2602,8 @@ func restartNode(nodeID int) Operation {
 func crashNode(nodeID int) Operation {
 	return Operation{CrashNode: &CrashNodeOperation{NodeId: int32(nodeID)}}
 }
+
+func mvccGC(key string) Operation { return Operation{MvccGC: &MvccGCOperation{Key: []byte(key)}} }
 
 type countingRandSource struct {
 	count atomic.Uint64

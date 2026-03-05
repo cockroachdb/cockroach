@@ -213,6 +213,11 @@ message CrashNodeOperation {
   Result result = 2 [(gogoproto.nullable) = false];
 }
 
+message MvccGCOperation {
+  bytes key = 1;
+  Result result = 2 [(gogoproto.nullable) = false];
+}
+
 message Operation {
   option (gogoproto.goproto_stringer) = false;
   option (gogoproto.onlyone) = true;
@@ -250,6 +255,7 @@ message Operation {
   StopNodeOperation stopNode = 29;
   RestartNodeOperation restartNode = 30;
   CrashNodeOperation crashNode = 31;
+  MvccGCOperation mvccGC = 32;
 }
 
 enum ResultType {
