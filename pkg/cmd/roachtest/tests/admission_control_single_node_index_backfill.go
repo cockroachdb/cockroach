@@ -229,6 +229,17 @@ func runSingleNodeIndexBackfill(
 		t.Fatal(err)
 	}
 
+	// Work around https://github.com/cockroachdb/cockroach/issues/98311.
+	// TPC-E tables use a 300s GC TTL. When admission control delays
+	// AddSSTable requests beyond this TTL, the GC threshold advances past
+	// the batch timestamp and the request fails. Disabling strict
+	// enforcement avoids this.
+	if _, err := db.ExecContext(
+		ctx, "SET CLUSTER SETTING kv.gc_ttl.strict_enforcement.enabled = false;",
+	); err != nil {
+		t.Fatal(err)
+	}
+
 	// Run TPC-E workload, KV0 workload, and index backfill concurrently.
 	workloadDuration := 120 * time.Minute
 	m := c.NewDeprecatedMonitor(ctx, c.CRDBNodes())
