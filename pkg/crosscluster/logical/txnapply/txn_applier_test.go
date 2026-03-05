@@ -36,7 +36,7 @@ type testWriter struct {
 func (w *testWriter) ApplyBatch(
 	ctx context.Context, txns []ldrdecoder.Transaction,
 ) ([]txnwriter.ApplyResult, error) {
-	delay := time.Duration(w.rng.Int63n(int64(10 * time.Microsecond)))
+	delay := time.Duration(w.rng.Int63n(int64(100 * time.Microsecond)))
 	select {
 	case <-time.After(delay):
 	case <-ctx.Done():
