@@ -232,6 +232,7 @@ go_test(
         "pretty_test.go",
         "replace_scalars_test.go",
         "schema_helpers_test.go",
+        "show_users_test.go",
         "table_name_test.go",
         "time_test.go",
         "txn_test.go",
