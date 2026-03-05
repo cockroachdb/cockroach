@@ -1935,6 +1935,7 @@ func WriteBackupMetadata(
 			execCtx.ExecCfg().DistSQLSrv.ExternalStorageFromURI,
 			details,
 			backupManifest.RevisionStartTime,
+			kmsEnv,
 		),
 		"writing backup index metadata",
 	)

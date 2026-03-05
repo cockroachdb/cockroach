@@ -16,15 +16,18 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/backup/backupbase"
 	"github.com/cockroachdb/cockroach/pkg/backup/backupdest"
 	"github.com/cockroachdb/cockroach/pkg/backup/backupinfo"
+	"github.com/cockroachdb/cockroach/pkg/backup/backuppb"
 	"github.com/cockroachdb/cockroach/pkg/backup/backuptestutils"
 	"github.com/cockroachdb/cockroach/pkg/backup/backuputils"
 	"github.com/cockroachdb/cockroach/pkg/cloud"
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/stretchr/testify/require"
 )
 
@@ -361,7 +364,17 @@ func writeEmptyBackupManifest(
 	backupURI, err := backuputils.AppendPath(uri, backupPath)
 	require.NoError(t, err)
 
-	emptyReader := bytes.NewReader(nil)
+	// TODO (kev-cao): We write the cluster version to the manifest due to the
+	// fact that up until 26.4, we will check the full backup's version to
+	// determine whether or not a valid index exists. On 26.4, we can replace
+	// this with an empty reader.
+	manifest := &backuppb.BackupManifest{
+		ClusterVersion: clusterversion.Latest.Version(),
+	}
+	manifestBytes, err := protoutil.Marshal(manifest)
+	require.NoError(t, err)
+	manifestReader := bytes.NewReader(manifestBytes)
+
 	backupStore, err := execCfg.DistSQLSrv.ExternalStorageFromURI(
 		context.Background(), backupURI, username.RootUserName(),
 	)
@@ -369,11 +382,11 @@ func writeEmptyBackupManifest(
 	require.NoError(t, err)
 	require.NoError(
 		t,
-		cloud.WriteFile(context.Background(), backupStore, backupbase.BackupMetadataName, emptyReader),
+		cloud.WriteFile(context.Background(), backupStore, backupbase.BackupMetadataName, manifestReader),
 	)
 	require.NoError(
 		t,
-		cloud.WriteFile(context.Background(), backupStore, backupbase.DeprecatedBackupManifestName, emptyReader),
+		cloud.WriteFile(context.Background(), backupStore, backupbase.DeprecatedBackupManifestName, manifestReader),
 	)
 
 	if !indexed {
@@ -401,6 +414,7 @@ func writeEmptyBackupManifest(
 		backupinfo.WriteBackupIndexMetadata(
 			context.Background(), execCfg, username.RootUserName(),
 			execCfg.DistSQLSrv.ExternalStorageFromURI, backupDetails, hlc.Timestamp{},
+			nil, /* kmsEnv */
 		),
 	)
 }

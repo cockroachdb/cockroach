@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/backup/backuppb"
 	"github.com/cockroachdb/cockroach/pkg/backup/backuputils"
 	"github.com/cockroachdb/cockroach/pkg/cloud"
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/settings"
@@ -33,6 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logcrash"
 	"github.com/cockroachdb/cockroach/pkg/util/metamorphic"
+	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
@@ -60,6 +62,7 @@ func WriteBackupIndexMetadata(
 	makeExternalStorageFromURI cloud.ExternalStorageFromURIFactory,
 	details jobspb.BackupDetails,
 	revisionStartTS hlc.Timestamp,
+	kmsEnv cloud.KMSEnv,
 ) error {
 	indexStore, err := makeExternalStorageFromURI(
 		ctx, details.CollectionURI, user,
@@ -69,8 +72,10 @@ func WriteBackupIndexMetadata(
 	}
 	defer indexStore.Close()
 
+	mem := execCfg.RootMemoryMonitor.MakeBoundAccount()
+	defer mem.Close(ctx)
 	if shouldWrite, err := shouldWriteIndex(
-		ctx, execCfg, indexStore, details,
+		ctx, &mem, execCfg, indexStore, kmsEnv, details,
 	); !shouldWrite {
 		return err
 	}
@@ -122,18 +127,41 @@ func WriteBackupIndexMetadata(
 
 // IndexExists checks if for a given full backup subdirectory there exists a
 // corresponding index in the backup collection. This is used to determine when
-// we should use the index or the legacy path.
-//
-// This works under the assumption that we only ever write an index iff:
-//  1. For an incremental backup, an index exists for its full backup.
-//  2. The backup was taken on a v25.4+ cluster.
+// we should use the index or the legacy path. To simplify the logic, we assume
+// that any chain that was written on a finalized 26.1+ cluster contains an
+// index. Otherwise, we assume there is no index.
 //
 // The store should be rooted at the default collection URI (the one that
 // contains the `metadata/` directory).
 //
-// TODO (kev-cao): v25.4+ backups will always contain an index file. In other
-// words, we can remove these checks in v26.2+.
-func IndexExists(ctx context.Context, store cloud.ExternalStorage, subdir string) (bool, error) {
+// TODO (kev-cao): We can remove this check in 26.4 as all 26.2 clusters will be
+// considered to have indexes, and 26.4 clusters officially only support
+// restoring from 26.2+ backups.
+func IndexExists(
+	ctx context.Context,
+	mem *mon.BoundAccount,
+	store cloud.ExternalStorage,
+	subdir string,
+	enc *jobspb.BackupEncryptionOptions,
+	kmsEnv cloud.KMSEnv,
+) (bool, error) {
+	// Due to the change in backup index paths in v26.1, in a 25.4+26.1/2
+	// mixed-version cluster, it is possible to write to the 26.1+ index path for
+	// a full backup, downgrade the cluster, and then write to the 25.4 path for
+	// an incremental backup. As a result, the at-most one check for an index is
+	// insufficient in this state, so we instead check that the cluster version
+	// recorded for the full backup was at least a 26.1 cluster and avoid the
+	// mixed-version state entirely.
+	fullManifestPath := path.Join(subdir, backupbase.BackupMetadataName)
+	manifest, memSize, err := ReadBackupManifest(ctx, mem, store, fullManifestPath, enc, kmsEnv)
+	defer mem.Shrink(ctx, memSize)
+	if err != nil {
+		return false, errors.Wrapf(err, "reading backup manifest")
+	}
+	if !manifest.ClusterVersion.AtLeast(clusterversion.V26_1.Version()) {
+		return false, nil
+	}
+
 	var indexExists bool
 	indexDir, err := indexSubdir(subdir)
 	if err != nil {
@@ -699,10 +727,15 @@ func parseIndexBasename(basename string) (start time.Time, end time.Time, err er
 // has written an index file. This ensures that if a backup chain exists in the
 // index directory, then every backup in that chain has an index file, ensuring
 // that the index is usable.
+//
+// TODO (kev-cao): This check can be removed in 26.4 and indexes will always be
+// written.
 func shouldWriteIndex(
 	ctx context.Context,
+	mem *mon.BoundAccount,
 	execCfg *sql.ExecutorConfig,
 	store cloud.ExternalStorage,
+	kmsEnv cloud.KMSEnv,
 	details jobspb.BackupDetails,
 ) (bool, error) {
 	// While `incremental_location` has been removed in 26.2, we still need to
@@ -721,7 +754,7 @@ func shouldWriteIndex(
 		return true, nil
 	}
 
-	return IndexExists(ctx, store, details.Destination.Subdir)
+	return IndexExists(ctx, mem, store, details.Destination.Subdir, details.EncryptionOptions, kmsEnv)
 }
 
 // getBackupIndexFilePath returns the path to the backup index file representing

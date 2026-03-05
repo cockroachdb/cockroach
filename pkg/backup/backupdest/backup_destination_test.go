@@ -561,6 +561,7 @@ func writeBackupIndexFromManifest(
 		execCfg.DistSQLSrv.ExternalStorageFromURI,
 		details,
 		manifest.RevisionStartTime,
+		nil, /* kmsEnv */
 	)
 	require.NoError(t, err)
 }

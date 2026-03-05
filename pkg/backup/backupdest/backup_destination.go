@@ -539,7 +539,7 @@ func ResolveBackupManifests(
 		)
 	}
 
-	exists, err := backupinfo.IndexExists(ctx, rootStore, resolvedSubdir)
+	exists, err := backupinfo.IndexExists(ctx, mem, rootStore, resolvedSubdir, encryption, kmsEnv)
 	if err != nil {
 		return nil, nil, nil, 0, err
 	}

@@ -27,9 +27,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cloud"
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -122,10 +124,14 @@ func TestWriteBackupIndexMetadata(t *testing.T) {
 		return externalStorage, nil
 	}
 
-	execCfg := &sql.ExecutorConfig{Settings: st}
+	execCfg := &sql.ExecutorConfig{
+		Settings:          st,
+		RootMemoryMonitor: execinfra.NewTestMemMonitor(ctx, st),
+	}
 	start := hlc.Timestamp{WallTime: 0}
 	end := hlc.Timestamp{WallTime: time.Date(2025, 7, 30, 0, 0, 0, 0, time.UTC).UnixNano()}
 	subdir := "/2025/07/18-143826.00"
+	writeFullMetadata(t, ctx, externalStorage, subdir, clusterversion.Latest.Version())
 
 	details := jobspb.BackupDetails{
 		Destination: jobspb.BackupDetails_Destination{
@@ -139,7 +145,7 @@ func TestWriteBackupIndexMetadata(t *testing.T) {
 	}
 
 	require.NoError(t, WriteBackupIndexMetadata(
-		ctx, execCfg, username.RootUserName(), makeExternalStorage, details, hlc.Timestamp{},
+		ctx, execCfg, username.RootUserName(), makeExternalStorage, details, hlc.Timestamp{}, nil, /* kmsEnv */
 	))
 
 	filepath, err := getBackupIndexFilePath(subdir, start, end)
@@ -220,7 +226,10 @@ func TestListIndexesHandlesInvalidFiles(t *testing.T) {
 		clusterversion.Latest.Version(),
 		true,
 	)
-	execCfg := &sql.ExecutorConfig{Settings: st}
+	execCfg := &sql.ExecutorConfig{
+		Settings:          st,
+		RootMemoryMonitor: execinfra.NewTestMemMonitor(ctx, st),
+	}
 	const collectionURI = "nodelocal://1/backup"
 	dir, dirCleanupFn := testutils.TempDir(t)
 	defer dirCleanupFn()
@@ -244,6 +253,7 @@ func TestListIndexesHandlesInvalidFiles(t *testing.T) {
 	}
 
 	subdir := "/2025/07/18-120000.00"
+	writeFullMetadata(t, ctx, externalStorage, subdir, clusterversion.Latest.Version())
 	// Write 3 valid index files.
 	zeroTime := time.Unix(0, 0).UTC()
 	fullBackupEndTime := time.Date(2025, 7, 18, 12, 0, 0, 0, time.UTC)
@@ -267,7 +277,7 @@ func TestListIndexesHandlesInvalidFiles(t *testing.T) {
 			URI:           collectionURI + subdir,
 		}
 		require.NoError(t, WriteBackupIndexMetadata(
-			ctx, execCfg, username.RootUserName(), makeExternalStorage, details, hlc.Timestamp{},
+			ctx, execCfg, username.RootUserName(), makeExternalStorage, details, hlc.Timestamp{}, nil, /* kmsEnv */
 		))
 	}
 
@@ -354,7 +364,11 @@ func TestDontWriteBackupIndexMetadata(t *testing.T) {
 			cloud.NilMetrics,
 		)
 		require.NoError(t, err)
-		execCfg := &sql.ExecutorConfig{Settings: st}
+		writeFullMetadata(t, ctx, externalStorage, subdir, clusterversion.Latest.Version())
+		execCfg := &sql.ExecutorConfig{
+			Settings:          st,
+			RootMemoryMonitor: execinfra.NewTestMemMonitor(ctx, st),
+		}
 
 		start := hlc.Timestamp{WallTime: 10}
 		end := hlc.Timestamp{WallTime: 20}
@@ -362,7 +376,7 @@ func TestDontWriteBackupIndexMetadata(t *testing.T) {
 		details.EndTime = end
 
 		require.NoError(t, WriteBackupIndexMetadata(
-			ctx, execCfg, username.RootUserName(), makeExternalStorage, details, hlc.Timestamp{},
+			ctx, execCfg, username.RootUserName(), makeExternalStorage, details, hlc.Timestamp{}, nil, /* kmsEnv */
 		))
 
 		filepath, err := getBackupIndexFilePath(subdir, start, end)
@@ -397,17 +411,26 @@ func TestIndexExists(t *testing.T) {
 	const collectionURI = "nodelocal://1/backup"
 	const subdir1 = "/2025/07/18-222500.00"
 	const subdir2 = "/2025/07/19-123456.00"
+	const pre26_1Subdir = "/2025/07/20-120000.00"
+
 	st := cluster.MakeTestingClusterSettingsWithVersions(
 		clusterversion.Latest.Version(),
 		clusterversion.Latest.Version(),
 		true,
 	)
-	execCfg := &sql.ExecutorConfig{Settings: st}
+	execCfg := &sql.ExecutorConfig{
+		Settings:          st,
+		RootMemoryMonitor: execinfra.NewTestMemMonitor(ctx, st),
+	}
+	mem := execCfg.RootMemoryMonitor.MakeBoundAccount()
 
 	zeroTime := time.Unix(0, 0).UTC()
 	fullBackupEndTime := time.Date(2025, 7, 18, 12, 0, 0, 0, time.UTC)
 	incBackup1EndTime := time.Date(2025, 7, 18, 13, 0, 0, 0, time.UTC)
 	incBackup2EndTime := time.Date(2025, 7, 18, 14, 0, 0, 0, time.UTC)
+
+	pre26_1FullBackupEndTime := time.Date(2025, 7, 20, 12, 0, 0, 0, time.UTC)
+	pre26_1IncBackupEndTime := time.Date(2025, 7, 20, 13, 0, 0, 0, time.UTC)
 
 	testcases := []testcase{
 		{
@@ -493,6 +516,20 @@ func TestIndexExists(t *testing.T) {
 			targetSubdir:   subdir2,
 			expectedExists: false,
 		},
+		{
+			name: "indexed full backup on 25.4 version should be ignored",
+			subdirs: []subdir{
+				{
+					name: pre26_1Subdir,
+					backups: []indexTime{
+						{start: zeroTime, end: pre26_1FullBackupEndTime},
+						{start: pre26_1FullBackupEndTime, end: pre26_1IncBackupEndTime},
+					},
+				},
+			},
+			targetSubdir:   pre26_1Subdir,
+			expectedExists: false,
+		},
 	}
 
 	for _, tc := range testcases {
@@ -516,6 +553,9 @@ func TestIndexExists(t *testing.T) {
 			) (cloud.ExternalStorage, error) {
 				return externalStorage, nil
 			}
+			writeFullMetadata(t, ctx, externalStorage, subdir1, clusterversion.Latest.Version())
+			writeFullMetadata(t, ctx, externalStorage, subdir2, clusterversion.Latest.Version())
+			writeFullMetadata(t, ctx, externalStorage, pre26_1Subdir, clusterversion.V25_4.Version())
 
 			// Fill up our external storage with the index files
 			for _, sub := range tc.subdirs {
@@ -533,13 +573,13 @@ func TestIndexExists(t *testing.T) {
 						URI: collectionURI + "/" + sub.name,
 					}
 					require.NoError(t, WriteBackupIndexMetadata(
-						ctx, execCfg, username.RootUserName(), makeExternalStorage, details, hlc.Timestamp{},
+						ctx, execCfg, username.RootUserName(), makeExternalStorage, details, hlc.Timestamp{}, nil, /* kmsEnv */
 					))
 				}
 			}
 
 			exists, err := IndexExists(
-				ctx, externalStorage, tc.targetSubdir,
+				ctx, &mem, externalStorage, tc.targetSubdir, nil /* encryption */, nil, /* kmsEnv */
 			)
 			require.NoError(t, err)
 			require.Equal(t, tc.expectedExists, exists)
@@ -557,7 +597,10 @@ func TestGetBackupTreeIndexMetadata(t *testing.T) {
 		clusterversion.Latest.Version(),
 		true,
 	)
-	execCfg := &sql.ExecutorConfig{Settings: st}
+	execCfg := &sql.ExecutorConfig{
+		Settings:          st,
+		RootMemoryMonitor: execinfra.NewTestMemMonitor(ctx, st),
+	}
 
 	const collectionURI = "nodelocal://1/backup"
 	dir, dirCleanupFn := testutils.TempDir(t)
@@ -660,7 +703,10 @@ func TestListRestorableBackups(t *testing.T) {
 
 	ctx := context.Background()
 	st := cluster.MakeTestingClusterSettings()
-	execCfg := &sql.ExecutorConfig{Settings: st}
+	execCfg := &sql.ExecutorConfig{
+		Settings:          st,
+		RootMemoryMonitor: execinfra.NewTestMemMonitor(ctx, st),
+	}
 	const collectionURI = "nodelocal://1/backup"
 	dir, dirCleanupFn := testutils.TempDir(t)
 	defer dirCleanupFn()
@@ -922,7 +968,10 @@ func TestFindLatestBackup(t *testing.T) {
 
 	ctx := context.Background()
 	st := cluster.MakeTestingClusterSettings()
-	execCfg := &sql.ExecutorConfig{Settings: st}
+	execCfg := &sql.ExecutorConfig{
+		Settings:          st,
+		RootMemoryMonitor: execinfra.NewTestMemMonitor(ctx, st),
+	}
 	const collectionURI = "nodelocal://1/backup"
 	dir, dirCleanupFn := testutils.TempDir(t)
 	defer dirCleanupFn()
@@ -1154,7 +1203,10 @@ func TestResolveBackupIDtoIndex(t *testing.T) {
 
 	ctx := context.Background()
 	st := cluster.MakeTestingClusterSettings()
-	execCfg := &sql.ExecutorConfig{Settings: st}
+	execCfg := &sql.ExecutorConfig{
+		Settings:          st,
+		RootMemoryMonitor: execinfra.NewTestMemMonitor(ctx, st),
+	}
 	const collectionURI = "nodelocal://1/backup"
 	dir, dirCleanupFn := testutils.TempDir(t)
 	defer dirCleanupFn()
@@ -1401,6 +1453,10 @@ func (c fakeBackupChain) writeIndexes(
 			)
 		} else {
 			uri.Path = path.Join(uri.Path, subdir)
+			store, err := storageFactory(ctx, collectionURI, username.RootUserName())
+			require.NoError(t, err)
+			defer store.Close()
+			writeFullMetadata(t, ctx, store, subdir, clusterversion.Latest.Version())
 		}
 
 		isCompacted := idx < len(sorted)-1 && sorted[idx].end == sorted[idx+1].end
@@ -1429,8 +1485,31 @@ func (c fakeBackupChain) writeIndexes(
 			t,
 			WriteBackupIndexMetadata(
 				ctx, execCfg, username.RootUserName(),
-				storageFactory, details, revStartTS,
+				storageFactory, details, revStartTS, nil, /* kmsEnv */
 			),
 		)
 	}
+}
+
+// This can be removed in 26.4 when we no longer need to check the
+// manifest of the full backup when determining whether we need to write
+// the index.
+func writeFullMetadata(
+	t *testing.T,
+	ctx context.Context,
+	store cloud.ExternalStorage,
+	subdir string,
+	version roachpb.Version,
+) {
+	t.Helper()
+	manifest := &backuppb.BackupManifest{
+		ClusterVersion: version,
+	}
+	manifestBytes, err := protoutil.Marshal(manifest)
+	require.NoError(t, err)
+	manifestWriter, err := store.Writer(ctx, path.Join(subdir, backupbase.BackupMetadataName))
+	require.NoError(t, err)
+	defer manifestWriter.Close()
+	_, err = manifestWriter.Write(manifestBytes)
+	require.NoError(t, err)
 }
