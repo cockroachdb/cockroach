@@ -317,6 +317,61 @@ WITH no_initial_scan, min_checkpoint_frequency='1s', resolved, metrics_label='%s
 	})
 }
 
+// TestChangefeedProgressUpdatesWithZeroMinCheckpointFrequency verifies that
+// resolved timestamps are still sent when we set min_checkpoint_frequency='0'.
+// This is a regression test for #164866.
+func TestChangefeedProgressUpdatesWithZeroMinCheckpointFrequency(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
+		sqlDB := sqlutils.MakeSQLRunner(s.DB)
+		sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY)`)
+		sqlDB.Exec(t, `INSERT INTO foo VALUES (1), (2), (3)`)
+
+		foo := feed(t, f, `CREATE CHANGEFEED FOR foo WITH resolved='10ms', min_checkpoint_frequency='0'`)
+		defer closeFeed(t, foo)
+
+		// Drain the initial rows.
+		assertPayloads(t, foo, []string{
+			`foo: [1]->{"after": {"a": 1}}`,
+			`foo: [2]->{"after": {"a": 2}}`,
+			`foo: [3]->{"after": {"a": 3}}`,
+		})
+
+		// Collect a resolved timestamp and verify it's non-empty.
+		var first hlc.Timestamp
+		testutils.SucceedsSoon(t, func() error {
+			ts, _ := expectResolvedTimestamp(t, foo)
+			if ts.IsEmpty() {
+				return errors.New("waiting for non-empty resolved timestamp")
+			}
+			first = ts
+			return nil
+		})
+
+		// Insert more data to push the frontier forward.
+		sqlDB.Exec(t, `INSERT INTO foo VALUES (4), (5)`)
+
+		// Drain the new rows.
+		assertPayloads(t, foo, []string{
+			`foo: [4]->{"after": {"a": 4}}`,
+			`foo: [5]->{"after": {"a": 5}}`,
+		})
+
+		// Wait for a resolved timestamp that is strictly greater than the first.
+		testutils.SucceedsSoon(t, func() error {
+			ts, _ := expectResolvedTimestamp(t, foo)
+			if !first.Less(ts) {
+				return errors.Newf("waiting for resolved timestamp to advance beyond %s", first)
+			}
+			return nil
+		})
+	}
+
+	cdcTest(t, testFn)
+}
+
 // TestCoreChangefeedProgress verifies that core (sinkless) changefeeds
 // save and restore their full span frontier across retries. It creates
 // a changefeed over two tables with one table's resolved timestamps

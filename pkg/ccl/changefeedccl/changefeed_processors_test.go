@@ -65,12 +65,22 @@ func TestSaveRateLimiter(t *testing.T) {
 				}, clock)
 				require.NoError(t, err)
 
-				// A non-positive interval indicates that saving is disabled so we only
+				// A negative interval indicates that saving is disabled so we only
 				// need to test that we can't save at all.
-				if interval <= 0 {
+				if interval < 0 {
 					require.False(t, l.canSave(ctx))
 					clock.Advance(24 * time.Hour)
 					require.False(t, l.canSave(ctx))
+					return
+				}
+
+				// A zero interval means save as often as possible.
+				if interval == 0 {
+					require.True(t, l.canSave(ctx))
+					l.doneSave(0 /* saveDuration */)
+					// With zero interval, we can always save again immediately.
+					require.True(t, l.canSave(ctx))
+					l.doneSave(0 /* saveDuration */)
 					return
 				}
 
