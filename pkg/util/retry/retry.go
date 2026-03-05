@@ -158,6 +158,16 @@ func (r *Retry) NextCh() <-chan time.Time {
 	return time.After(r.retryIn())
 }
 
+// NextBackoff returns the average duration to wait before the next retry attempt
+// without any randomization factor. Use this for logging and testing purposes only.
+func (r *Retry) NextBackoff() time.Duration {
+	backoff := float64(r.opts.InitialBackoff) * math.Pow(r.opts.Multiplier, float64(r.currentAttempt))
+	if maxBackoff := float64(r.opts.MaxBackoff); backoff > maxBackoff {
+		backoff = maxBackoff
+	}
+	return time.Duration(backoff)
+}
+
 // CurrentAttempt returns the current attempt
 func (r *Retry) CurrentAttempt() int {
 	return r.currentAttempt
