@@ -872,6 +872,9 @@ func (s *SQLServerWrapper) PreStart(ctx context.Context) error {
 	); err != nil {
 		return err
 	}
+	if m := ash.GlobalSamplerMetrics(); m != nil {
+		s.sysRegistry.AddMetricStruct(m)
+	}
 
 	var apiInternalServer http.Handler
 	var drpcEnabled = false

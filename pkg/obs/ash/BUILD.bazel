@@ -5,6 +5,7 @@ go_library(
     srcs = [
         "buffer.go",
         "doc.go",
+        "metrics.go",
         "sampler.go",
         "types.go",
         "work_state.go",
@@ -12,6 +13,7 @@ go_library(
     importpath = "github.com/cockroachdb/cockroach/pkg/obs/ash",
     visibility = ["//visibility:public"],
     deps = [
+        "//pkg/base",
         "//pkg/roachpb",
         "//pkg/settings",
         "//pkg/settings/cluster",
@@ -19,11 +21,13 @@ go_library(
         "//pkg/util/cache",
         "//pkg/util/encoding",
         "//pkg/util/log",
+        "//pkg/util/metric",
         "//pkg/util/stop",
         "//pkg/util/syncutil",
         "//pkg/util/timeutil",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_petermattis_goid//:goid",
+        "@com_github_prometheus_client_model//go",
     ],
 )
 
