@@ -11,7 +11,6 @@ import (
 	gosql "database/sql"
 	gojson "encoding/json"
 	"fmt"
-	"maps"
 	"math"
 	"math/rand"
 	"net/url"
@@ -35,6 +34,7 @@ import (
 	_ "github.com/cockroachdb/cockroach/pkg/ccl/multiregionccl" // allow locality-related mutations
 	"github.com/cockroachdb/cockroach/pkg/ccl/multiregionccl/multiregionccltestutils"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
+	"github.com/cockroachdb/cockroach/pkg/jobs/jobfrontier"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -45,6 +45,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
+	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -1068,13 +1069,15 @@ var jobRecordRetryOpts = retry.Options{
 	MaxRetries:     10,
 }
 
-// waitForCheckpoint waits for the specified job to have a non-empty checkpoint
-func waitForCheckpoint(t *testing.T, jf cdctest.EnterpriseTestFeed, jr *jobs.Registry) {
+// waitForCheckpoint waits for the persisted frontier to contain spans above
+// the minimum timestamp, indicating that some spans have advanced ahead of
+// others (i.e. a checkpoint exists).
+func waitForCheckpoint(t *testing.T, jf cdctest.EnterpriseTestFeed, idb isql.DB) {
 	for r := retry.Start(jobRecordRetryOpts); ; {
 		t.Log("waiting for checkpoint")
-		progress := loadProgress(t, jf, jr)
-		if p := progress.GetChangefeed(); p != nil && !p.SpanLevelCheckpoint.IsEmpty() {
-			t.Logf("read checkpoint: %#v", p.SpanLevelCheckpoint)
+		spans := loadCheckpointSpans(t, jf.JobID(), idb)
+		if len(spans) > 0 {
+			t.Logf("read checkpoint: %v", spans)
 			return
 		}
 		if !r.Next() {
@@ -1111,30 +1114,66 @@ func loadProgress(
 	return job.Progress()
 }
 
-// loadCheckpoint loads the span-level checkpoint from the job progress.
-func loadCheckpoint(t *testing.T, progress jobspb.Progress) *jobspb.TimestampSpansMap {
+// loadFrontierSpans loads the frontier checkpoint from the job_info table.
+func loadFrontierSpans(t *testing.T, jobID jobspb.JobID, idb isql.DB) []jobspb.ResolvedSpan {
 	t.Helper()
-	changefeedProgress := progress.GetChangefeed()
-	if changefeedProgress == nil {
+	ctx := context.Background()
+	var spans []jobspb.ResolvedSpan
+	require.NoError(t, idb.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+		var found bool
+		var err error
+		spans, found, err = jobfrontier.GetResolvedSpans(ctx, txn, jobID, coordinatorFrontierName)
+		if err != nil {
+			return err
+		}
+		if !found {
+			spans = nil
+		}
 		return nil
+	}))
+	if len(spans) > 0 {
+		t.Logf("found frontier checkpoint: %v", spans)
 	}
-	spanLevelCheckpoint := changefeedProgress.SpanLevelCheckpoint
-	if spanLevelCheckpoint.IsEmpty() {
-		return nil
-	}
-	t.Logf("found checkpoint: %v", maps.Collect(spanLevelCheckpoint.All()))
-	return spanLevelCheckpoint
+	return spans
 }
 
-// makeSpanGroupFromCheckpoint makes a span group containing all the spans
-// contained in a span-level checkpoint.
-func makeSpanGroupFromCheckpoint(
-	t *testing.T, checkpoint *jobspb.TimestampSpansMap,
-) roachpb.SpanGroup {
+// loadCheckpointSpans loads frontier spans that represent checkpoint progress
+// above the effective highwater (the minimum frontier timestamp). This is
+// analogous to the old span-level checkpoint, which only contained spans
+// ahead of the highwater.
+func loadCheckpointSpans(t *testing.T, jobID jobspb.JobID, idb isql.DB) []jobspb.ResolvedSpan {
+	t.Helper()
+	allSpans := loadFrontierSpans(t, jobID, idb)
+	if len(allSpans) == 0 {
+		return nil
+	}
+	// Find the minimum timestamp across all spans (the effective highwater).
+	minTS := allSpans[0].Timestamp
+	for _, rs := range allSpans[1:] {
+		if rs.Timestamp.Less(minTS) {
+			minTS = rs.Timestamp
+		}
+	}
+	// Return only spans strictly above the minimum.
+	var result []jobspb.ResolvedSpan
+	for _, rs := range allSpans {
+		if minTS.Less(rs.Timestamp) {
+			result = append(result, rs)
+		}
+	}
+	if len(result) > 0 {
+		t.Logf("found checkpoint spans (above min %s): %v", minTS, result)
+	}
+	return result
+}
+
+// makeSpanGroupFromFrontierSpans makes a span group containing all the spans
+// contained in a frontier checkpoint.
+func makeSpanGroupFromFrontierSpans(t *testing.T, spans []jobspb.ResolvedSpan) roachpb.SpanGroup {
 	t.Helper()
 	var spanGroup roachpb.SpanGroup
-	for _, sp := range checkpoint.All() {
-		spanGroup.Add(sp...)
+	for _, rs := range spans {
+		spanGroup.Add(rs.Span)
 	}
 	return spanGroup
 }
