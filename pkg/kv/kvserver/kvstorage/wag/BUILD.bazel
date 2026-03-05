@@ -10,10 +10,8 @@ go_library(
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/keys",
-        "//pkg/kv/kvserver/kvstorage",
         "//pkg/kv/kvserver/kvstorage/wag/wagpb",
         "//pkg/storage",
-        "@com_github_cockroachdb_errors//:errors",
     ],
 )
 
