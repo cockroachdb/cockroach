@@ -20,6 +20,9 @@ WHERE job_type = 'INSPECT'
 ORDER BY id DESC
 LIMIT 1
 
+statement error pq: "last_inspect_job" is not a table
+INSPECT TABLE last_inspect_job;
+
 # Make job adoption faster. This is needed to speed up DETACHED jobs.
 statement ok
 SET CLUSTER SETTING jobs.registry.interval.adopt = '500ms';
