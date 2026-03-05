@@ -10,6 +10,9 @@
 statement ok
 SET kv_transaction_buffered_writes_enabled = true
 
+statement ok
+SET buffered_writes_implicit_txns_enabled = true
+
 # The buffer size can be changed metamoprhically, and if it happens to be too
 # small (around 500B), then some of the txns below might flush the buffer,
 # resulting in different KV requests. To ensure deterministic traces we always
