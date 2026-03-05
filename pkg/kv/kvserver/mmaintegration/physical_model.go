@@ -26,7 +26,7 @@ type physicalStore struct {
 	capacity mmaprototype.LoadVector
 	// amplificationFactors converts logical per-range loads to physical units.
 	// Both CPU and disk amplification factors are capped (see
-	// cpuIndirectOverheadMultiplier, maxDiskSpaceAmplification). When the cap
+	// maxCPUAmplification, maxDiskSpaceAmplification). When the cap
 	// binds, per-range physical loads undercount reality — ranges look smaller
 	// than they are. This affects range selection (which range to move) but not
 	// store selection (which store to shed from), because store-level load comes
@@ -133,9 +133,9 @@ func computePhysicalCPU(desc roachpb.StoreDescriptor) (res physicalDimension) {
 	storesCPU := float64(nc.StoresCPURate)
 
 	// Step 1: Estimate the amplification factor.
-	ampFactor := cpuIndirectOverheadMultiplier
+	ampFactor := maxCPUAmplification
 	if storesCPU > 0 {
-		ampFactor = max(1, min(nodeUsage/storesCPU, cpuIndirectOverheadMultiplier))
+		ampFactor = max(1, min(nodeUsage/storesCPU, maxCPUAmplification))
 	}
 
 	// Step 2: Attribute CPU to MMA-tracked work vs background.

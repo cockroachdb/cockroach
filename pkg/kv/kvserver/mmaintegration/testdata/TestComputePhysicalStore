@@ -36,7 +36,7 @@ amplification-factors: [cpu=2.0000, disk=2.0000, write-bw=1.0000]
 
 # -------------------------------------------------------------------
 # Single store, zero stores-cpu (no tracked replica CPU).
-# CPU amplification defaults to the cap (cpuIndirectOverheadMultiplier = 3).
+# CPU amplification defaults to the cap (maxCPUAmplification = 3).
 # -------------------------------------------------------------------
 compute num-stores=1 stores-cpu=0 node-cpu-usage=4 node-cpu-capacity=16 logical-gib=40 used-gib=80 available-gib=20 write-bytes-per-sec=10000000
 ----
@@ -60,7 +60,7 @@ amplification-factors: [cpu=1.0000, disk=2.0000, write-bw=1.0000]
 
 # -------------------------------------------------------------------
 # Single store, huge implicit multiplier (clamped to cap).
-# implicitMult = 10/1 = 10, clamped to cpuIndirectOverheadMultiplier (3).
+# implicitMult = 10/1 = 10, clamped to maxCPUAmplification (3).
 # mmaLoad = 1*3 = 3, background = 10-3 = 7.
 # load = 1*3 + 7/1 = 10.
 # -------------------------------------------------------------------
