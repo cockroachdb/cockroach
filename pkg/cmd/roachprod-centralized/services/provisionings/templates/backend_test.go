@@ -12,18 +12,25 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/utils/logger"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"golang.org/x/oauth2"
 )
 
 func TestGCSBackend_GenerateTF(t *testing.T) {
-	b := NewGCSBackend(nil, "my-bucket")
-	b.tokenSource = staticTokenSource("test-token-abc")
+	b := NewGCSBackend(nil, "my-bucket", "/path/to/sa-key.json")
 	content, err := b.GenerateTF(context.Background(), "provisionings/abc12345")
 	require.NoError(t, err)
 	assert.Contains(t, content, `backend "gcs"`)
-	assert.Contains(t, content, `bucket       = "my-bucket"`)
-	assert.Contains(t, content, `prefix       = "provisionings/abc12345"`)
-	assert.Contains(t, content, `access_token = "test-token-abc"`)
+	assert.Contains(t, content, `bucket = "my-bucket"`)
+	assert.Contains(t, content, `prefix = "provisionings/abc12345"`)
+	assert.NotContains(t, content, "access_token",
+		"access_token should not be embedded in the backend config")
+}
+
+func TestGCSBackend_EnvOverrides(t *testing.T) {
+	b := NewGCSBackend(nil, "my-bucket", "/path/to/sa-key.json")
+	overrides := b.EnvOverrides()
+	require.NotNil(t, overrides)
+	assert.Equal(t, "/path/to/sa-key.json",
+		overrides["GOOGLE_BACKEND_CREDENTIALS"])
 }
 
 func TestLocalBackend_GenerateTF(t *testing.T) {
@@ -34,22 +41,14 @@ func TestLocalBackend_GenerateTF(t *testing.T) {
 	assert.Contains(t, content, `path = "terraform.tfstate"`)
 }
 
+func TestLocalBackend_EnvOverrides(t *testing.T) {
+	b := NewLocalBackend()
+	overrides := b.EnvOverrides()
+	assert.Nil(t, overrides)
+}
+
 func TestLocalBackend_CleanupState(t *testing.T) {
 	b := NewLocalBackend()
 	err := b.CleanupState(context.Background(), logger.DefaultLogger, "provisioning-test")
 	require.NoError(t, err)
-}
-
-// staticTokenSource returns an oauth2.TokenSource that always returns
-// a token with the given access token string.
-func staticTokenSource(accessToken string) *staticTS {
-	return &staticTS{accessToken: accessToken}
-}
-
-type staticTS struct {
-	accessToken string
-}
-
-func (s *staticTS) Token() (*oauth2.Token, error) {
-	return &oauth2.Token{AccessToken: s.accessToken}, nil
 }

@@ -31,6 +31,12 @@ func (b *LocalBackend) GenerateTF(_ context.Context, _ string) (string, error) {
 `, nil
 }
 
+// EnvOverrides returns nil for local backends — no special environment
+// variables are needed for local state storage.
+func (b *LocalBackend) EnvOverrides() map[string]string {
+	return nil
+}
+
 // CleanupState is a no-op for local backends. The working directory
 // (containing the state file) is managed by the caller.
 func (b *LocalBackend) CleanupState(_ context.Context, _ *logger.Logger, _ string) error {

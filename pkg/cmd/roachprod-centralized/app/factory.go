@@ -352,11 +352,20 @@ func NewServicesFromConfig(
 		// Create the backend for terraform state storage.
 		var provBackend sprovtemplates.Backend
 		if cfg.Provisionings.GCSStateBucket != "" {
+			if cfg.Provisionings.GCSStateSAKeyPath == "" {
+				return nil, errors.New(
+					"provisionings.gcs_state_sa_key_path is required when gcs_state_bucket is set",
+				)
+			}
 			gcsClient, err := storage.NewClient(appCtx)
 			if err != nil {
 				return nil, errors.Wrap(err, "create GCS client for provisioning state backend")
 			}
-			provBackend = sprovtemplates.NewGCSBackend(gcsClient, cfg.Provisionings.GCSStateBucket)
+			provBackend = sprovtemplates.NewGCSBackend(
+				gcsClient,
+				cfg.Provisionings.GCSStateBucket,
+				cfg.Provisionings.GCSStateSAKeyPath,
+			)
 		} else {
 			provBackend = sprovtemplates.NewLocalBackend()
 		}

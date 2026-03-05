@@ -107,6 +107,12 @@ func (s *Service) HandleProvision(
 		}
 	}()
 
+	// Apply backend-specific env overrides AFTER all user/environment
+	// variables to prevent user override of backend auth credentials.
+	for k, v := range s.backend.EnvOverrides() {
+		envVars[k] = v
+	}
+
 	// Step: Init
 	prov.SetState(provmodels.ProvisioningStateInitializing, l)
 	prov.LastStep = "init"
@@ -272,6 +278,12 @@ func (s *Service) HandleDestroy(
 			)
 		}
 	}()
+
+	// Apply backend-specific env overrides AFTER all user/environment
+	// variables to prevent user override of backend auth credentials.
+	for k, v := range s.backend.EnvOverrides() {
+		envVars[k] = v
+	}
 
 	// Step: Init
 	prov.LastStep = "init"
