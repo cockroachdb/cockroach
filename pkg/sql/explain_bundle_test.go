@@ -1285,6 +1285,22 @@ CREATE TABLE users(id UUID DEFAULT gen_random_uuid() PRIMARY KEY, promo_id INT R
 			}, false, /* expectErrors */
 			base, plans, "distsql.html vec.txt vec-v.txt stats-defaultdb.public.table161829.sql",
 		)
+
+		// Test session setting hints appear in the bundle's schema.sql.
+		r.Exec(t, `SELECT information_schema.crdb_session_setting_hint('SELECT * FROM table161829 WHERE y = 10', 'distsql', 'on')`)
+		rows = r.QueryStr(t, "EXPLAIN ANALYZE (DEBUG) SELECT * FROM table161829 WHERE y = 10")
+		checkBundle(
+			t, fmt.Sprint(rows), "table161829", func(name, contents string) error {
+				if name == "schema.sql" {
+					reg := regexp.MustCompile(`crdb_session_setting_hint\(`)
+					if reg.FindString(contents) == "" {
+						return errors.Errorf("could not find crdb_session_setting_hint in schema.sql")
+					}
+				}
+				return nil
+			}, false, /* expectErrors */
+			base, plans, "distsql.html vec.txt vec-v.txt stats-defaultdb.public.table161829.sql",
+		)
 	})
 
 	// TODO(yuzefovich): figure out why this test occasionally fails under

@@ -2872,6 +2872,7 @@ var builtinOidsArray = []string{
 	2917: `daitch_mokotoff(source: string) -> string[]`,
 	2918: `information_schema.crdb_delete_statement_hints(statement_fingerprint: string) -> int`,
 	2919: `information_schema.crdb_delete_statement_hints(rowid: int) -> int`,
+	2920: `information_schema.crdb_session_setting_hint(statement_fingerprint: string, variable_name: string, variable_value: string) -> int`,
 }
 
 var builtinOidsBySignature map[string]oid.Oid
