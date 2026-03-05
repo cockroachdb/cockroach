@@ -74,6 +74,7 @@ var planNodeNames = map[reflect.Type]string{
 	reflect.TypeOf(&alterTableSetLocalityNode{}):               "alter table set locality",
 	reflect.TypeOf(&alterTableSetSchemaNode{}):                 "alter table set schema",
 	reflect.TypeOf(&alterViewSetOptionsNode{}):                 "alter view set options",
+	reflect.TypeOf(&alterViewResetOptionsNode{}):               "alter view reset options",
 	reflect.TypeOf(&alterTenantCapabilityNode{}):               "alter tenant capability",
 	reflect.TypeOf(&alterTenantSetClusterSettingNode{}):        "alter tenant set cluster setting",
 	reflect.TypeOf(&alterTenantServiceNode{}):                  "alter tenant service",

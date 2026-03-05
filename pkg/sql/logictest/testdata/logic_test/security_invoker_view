@@ -1015,7 +1015,7 @@ SET ROLE root;
 subtest end
 
 # ---------------------------------------------------------------------------
-# Part 11: ALTER VIEW SET (security_invoker)
+# Part 11: ALTER VIEW SET/RESET (security_invoker)
 # ---------------------------------------------------------------------------
 subtest alter_view_set_security_invoker
 
@@ -1143,6 +1143,47 @@ SET ROLE root
 statement ok
 ALTER VIEW alter_test_view SET (security_invoker = false)
 
+statement ok
+SET ROLE invoker_user
+
+query IT
+SELECT id, username FROM alter_test_view ORDER BY id
+----
+1  table_owner
+2  view_owner
+3  invoker_user
+4  other
+
+statement ok
+SET ROLE root
+
+# Re-enable security_invoker, then RESET to restore the default (definer).
+statement ok
+ALTER VIEW alter_test_view SET (security_invoker = true)
+
+query TT
+SHOW CREATE VIEW alter_test_view;
+----
+alter_test_view  CREATE VIEW public.alter_test_view (
+                   id,
+                   username
+                 ) WITH (security_invoker = true) AS SELECT id, username FROM sidb.public.base_t;
+
+statement ok
+ALTER VIEW alter_test_view RESET (security_invoker)
+
+# After RESET, security_invoker is false (definer), so SHOW CREATE should
+# not include the WITH clause.
+query TT
+SHOW CREATE VIEW alter_test_view;
+----
+alter_test_view  CREATE VIEW public.alter_test_view (
+                   id,
+                   username
+                 ) AS SELECT id, username FROM sidb.public.base_t;
+
+# Verify the view behaves as definer after RESET: invoker_user can query
+# even without SELECT on the base table.
 statement ok
 SET ROLE invoker_user
 

@@ -537,6 +537,17 @@ func (*AlterViewSetOptions) StatementTag() string { return "ALTER VIEW" }
 
 func (*AlterViewSetOptions) hiddenFromShowQueries() {}
 
+// StatementReturnType implements the Statement interface.
+func (*AlterViewResetOptions) StatementReturnType() StatementReturnType { return DDL }
+
+// StatementType implements the Statement interface.
+func (*AlterViewResetOptions) StatementType() StatementType { return TypeDDL }
+
+// StatementTag returns a short string identifying the type of statement.
+func (*AlterViewResetOptions) StatementTag() string { return "ALTER VIEW" }
+
+func (*AlterViewResetOptions) hiddenFromShowQueries() {}
+
 // StatementType implements the Statement interface.
 func (*AlterTableSetLogged) StatementReturnType() StatementReturnType { return DDL }
 
@@ -2612,6 +2623,7 @@ func (n *AlterTableOwner) String() string                     { return AsString(
 func (n *AlterTableSetLogged) String() string                 { return AsString(n) }
 func (n *AlterTableSetSchema) String() string                 { return AsString(n) }
 func (n *AlterViewSetOptions) String() string                 { return AsString(n) }
+func (n *AlterViewResetOptions) String() string               { return AsString(n) }
 func (n *AlterTenantCapability) String() string               { return AsString(n) }
 func (n *AlterTenantSetClusterSetting) String() string        { return AsString(n) }
 func (n *AlterTenantReset) String() string                    { return AsString(n) }

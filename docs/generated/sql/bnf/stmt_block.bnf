@@ -1776,6 +1776,7 @@ alter_view_stmt ::=
 	| alter_view_set_schema_stmt
 	| alter_view_owner_stmt
 	| alter_view_set_options_stmt
+	| alter_view_reset_options_stmt
 
 alter_sequence_stmt ::=
 	alter_rename_sequence_stmt
@@ -2497,6 +2498,10 @@ alter_view_set_options_stmt ::=
 	| 'ALTER' 'VIEW' 'IF' 'EXISTS' relation_expr 'SET' '(' 'SECURITY_INVOKER' '=' 'FALSE' ')'
 	| 'ALTER' 'VIEW' 'IF' 'EXISTS' relation_expr 'SET' '(' 'SECURITY_INVOKER' '=' 'ICONST' ')'
 	| 'ALTER' 'VIEW' 'IF' 'EXISTS' relation_expr 'SET' '(' 'SECURITY_INVOKER' ')'
+
+alter_view_reset_options_stmt ::=
+	'ALTER' 'VIEW' relation_expr 'RESET' '(' 'SECURITY_INVOKER' ')'
+	| 'ALTER' 'VIEW' 'IF' 'EXISTS' relation_expr 'RESET' '(' 'SECURITY_INVOKER' ')'
 
 alter_rename_sequence_stmt ::=
 	'ALTER' 'SEQUENCE' relation_expr 'RENAME' 'TO' sequence_name

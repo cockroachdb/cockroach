@@ -69,3 +69,19 @@ ALTER VIEW v SET (security_invoker = true)
 ALTER VIEW v SET (security_invoker = true) -- fully parenthesized
 ALTER VIEW v SET (security_invoker = true) -- literals removed
 ALTER VIEW _ SET (security_invoker = true) -- identifiers removed
+
+parse
+ALTER VIEW v RESET (security_invoker)
+----
+ALTER VIEW v RESET (security_invoker)
+ALTER VIEW v RESET (security_invoker) -- fully parenthesized
+ALTER VIEW v RESET (security_invoker) -- literals removed
+ALTER VIEW _ RESET (security_invoker) -- identifiers removed
+
+parse
+ALTER VIEW IF EXISTS v RESET (security_invoker)
+----
+ALTER VIEW IF EXISTS v RESET (security_invoker)
+ALTER VIEW IF EXISTS v RESET (security_invoker) -- fully parenthesized
+ALTER VIEW IF EXISTS v RESET (security_invoker) -- literals removed
+ALTER VIEW IF EXISTS _ RESET (security_invoker) -- identifiers removed

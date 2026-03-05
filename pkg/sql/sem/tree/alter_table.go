@@ -825,6 +825,28 @@ func (node *AlterViewSetOptions) Format(ctx *FmtCtx) {
 	ctx.WriteString(")")
 }
 
+// AlterViewResetOptions represents an ALTER VIEW RESET (...) command.
+type AlterViewResetOptions struct {
+	Name     *UnresolvedObjectName
+	IfExists bool
+}
+
+// TelemetryName returns the telemetry counter to increment
+// when this command is used.
+func (node *AlterViewResetOptions) TelemetryName() string {
+	return "reset_options"
+}
+
+// Format implements the NodeFormatter interface.
+func (node *AlterViewResetOptions) Format(ctx *FmtCtx) {
+	ctx.WriteString("ALTER VIEW ")
+	if node.IfExists {
+		ctx.WriteString("IF EXISTS ")
+	}
+	ctx.FormatNode(node.Name)
+	ctx.WriteString(" RESET (security_invoker)")
+}
+
 // AlterTableAddIdentity represents commands to alter a column to an identity.
 type AlterTableAddIdentity struct {
 	Column        Name
