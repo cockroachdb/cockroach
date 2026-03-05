@@ -29,9 +29,15 @@ jobs:
       - name: Validate required secrets and configuration
         env:
           AUTOSOLVER_PAT: ${{ secrets.AUTOSOLVER_PAT }}
+          AUTOSOLVER_SYNC_PAT: ${{ secrets.AUTOSOLVER_SYNC_PAT }}
         run: |
           if [ -z "${AUTOSOLVER_PAT:-}" ]; then
             echo "::error::AUTOSOLVER_PAT secret is not configured"
+            exit 1
+          fi
+
+          if [ -z "${AUTOSOLVER_SYNC_PAT:-}" ]; then
+            echo "::error::AUTOSOLVER_SYNC_PAT secret is not configured"
             exit 1
           fi
 
@@ -340,6 +346,7 @@ jobs:
         if: steps.implement_result.outputs.implementation == 'SUCCESS'
         env:
           AUTOSOLVER_PAT: ${{ secrets.AUTOSOLVER_PAT }}
+          AUTOSOLVER_SYNC_PAT: ${{ secrets.AUTOSOLVER_SYNC_PAT }}
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           git config user.name "cockroach-teamcity"
@@ -435,10 +442,11 @@ jobs:
           } > "$COMMIT_MSG_FILE"
           git commit -F "$COMMIT_MSG_FILE"
 
-          # Sync the fork's default branch with upstream so the push doesn't
-          # include upstream workflow file changes that the fork hasn't seen yet.
-          # Without this, GitHub rejects the push if the PAT lacks 'workflow' scope.
-          GH_TOKEN="${AUTOSOLVER_PAT}" gh api \
+          # Sync the fork's default branch with upstream. Uses AUTOSOLVER_SYNC_PAT
+          # which has 'workflow' scope, required when upstream has changed workflow
+          # files. This is safe because we've already confirmed above that we
+          # haven't staged any workflow files.
+          GH_TOKEN="${AUTOSOLVER_SYNC_PAT}" gh api \
             "repos/${AUTOSOLVER_FORK_OWNER}/${AUTOSOLVER_FORK_REPO}/merge-upstream" \
             --method POST --field branch=master 2>/dev/null \
             || echo "::warning::Failed to sync fork with upstream (may already be in sync)"
