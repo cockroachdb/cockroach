@@ -21,8 +21,8 @@ import (
 type WorkState struct {
 	// TenantID identifies which tenant this work belongs to.
 	TenantID roachpb.TenantID
-	// WorkloadID identifies the workload (e.g., statement fingerprint).
-	WorkloadID uint64
+	// WorkloadInfo groups workload identity fields.
+	WorkloadInfo WorkloadInfo
 	// WorkEventType categorizes the type of work.
 	WorkEventType WorkEventType
 	// WorkEvent is a more specific identifier for the work event.
@@ -64,11 +64,12 @@ var retiredWorkStates struct {
 //
 // Example usage:
 //
-//	cleanup := ash.SetWorkState(tenantID, stmtFingerprintID, ash.WorkLock, "LockWait")
+//	info := ash.WorkloadInfo{WorkloadID: stmtFingerprintID, AppNameID: appNameID}
+//	cleanup := ash.SetWorkState(tenantID, info, ash.WorkLock, "LockWait")
 //	defer cleanup()
 //	// ... perform work ...
 func SetWorkState(
-	tenantID roachpb.TenantID, workloadID uint64, eventType WorkEventType, event string,
+	tenantID roachpb.TenantID, info WorkloadInfo, eventType WorkEventType, event string,
 ) func() {
 	if !enabled.Load() {
 		return noop
@@ -76,7 +77,7 @@ func SetWorkState(
 	gid := goid.Get()
 	state := workStatePool.Get().(*WorkState)
 	state.TenantID = tenantID
-	state.WorkloadID = workloadID
+	state.WorkloadInfo = info
 	state.WorkEventType = eventType
 	state.WorkEvent = event
 	prev, ok := getWorkState(gid)
