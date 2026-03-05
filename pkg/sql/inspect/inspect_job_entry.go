@@ -113,8 +113,8 @@ func ChecksForTable(
 ) ([]*jobspb.InspectDetails_Check, error) {
 	checks := []*jobspb.InspectDetails_Check{}
 
-	// Skip virtual tables since they don't have physical storage to inspect.
-	if table.IsVirtualTable() {
+	// Skip non-physical tables that don't have physical storage to inspect.
+	if !table.IsPhysicalTable() {
 		return checks, nil
 	}
 
