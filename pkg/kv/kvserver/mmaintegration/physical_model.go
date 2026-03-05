@@ -7,12 +7,15 @@ package mmaintegration
 
 import (
 	"context"
+	"fmt"
+	"math"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/mmaprototype"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/grunning"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/redact"
 )
 
 // physicalStore holds the physical load, capacity, and amplification
@@ -205,6 +208,10 @@ func computePhysicalCPU(desc roachpb.StoreDescriptor) (res physicalDimension) {
 		immovable = max(0, nodeUsage-storesCPU*ampFactor)
 	}
 
+	// Invariant: sum of per-store loads equals nodeUsage, unless measurement lag
+	// causes a transient overshoot (see assertCPULoadInvariant).
+	assertCPULoadInvariant(storesCPU, ampFactor, immovable, nodeUsage, sqlDistCPU, sqlGatewayCPU)
+
 	// Step 2: Compute per-store load and capacity.
 	storeCPU := desc.Capacity.CPUPerSecond
 	if storeCPU <= 0 {
@@ -364,6 +371,84 @@ func MakePhysicalRangeLoad(
 	rl.Load[mmaprototype.WriteBandwidth] = mmaprototype.LoadValue(writeBytesPerSec * float64(amp[mmaprototype.WriteBandwidth]))
 	rl.Load[mmaprototype.ByteSize] = mmaprototype.LoadValue(float64(logicalBytes) * float64(amp[mmaprototype.ByteSize]))
 	return rl
+}
+
+// assertCPULoadInvariant verifies (in test builds only) that the sum of
+// per-store CPU loads is consistent with nodeUsage.
+//
+// Each store's load is storeCPU_i * ampFactor + immovable/numStores. Summing
+// across all stores (sum(storeCPU_i) = storesCPU):
+//
+//	sumLoad = storesCPU * ampFactor + immovable
+//
+// Substituting ampFactor = (1 + sqlDistCPU/storesCPU) * k:
+//
+//	storesCPU * ampFactor = (storesCPU + sqlDistCPU) * k
+//	                      = trackedMoveable * k
+//
+// So sumLoad = trackedMoveable * k + immovable. Since
+// immovable = max(0, nodeUsage - trackedMoveable*k):
+//
+//   - k unclamped (1 ≤ nodeUsage/totalTracked ≤ cap):
+//     k = nodeUsage / totalTracked.
+//     trackedMoveable * k ≤ nodeUsage (since trackedMoveable ≤ totalTracked).
+//     immovable = nodeUsage - trackedMoveable*k ≥ 0.
+//     sum = trackedMoveable*k + (nodeUsage - trackedMoveable*k) = nodeUsage.
+//
+//   - k clamped at cap (nodeUsage/totalTracked > cap):
+//     k = cap. trackedMoveable * cap ≤ totalTracked * cap < nodeUsage.
+//     immovable = nodeUsage - trackedMoveable*cap > 0.
+//     sum = trackedMoveable*cap + (nodeUsage - trackedMoveable*cap) = nodeUsage.
+//
+//   - k floored at 1 (nodeUsage/totalTracked < 1, measurement lag):
+//     k = 1.
+//     If trackedMoveable ≤ nodeUsage (gateway CPU accounts for the gap):
+//     immovable = nodeUsage - trackedMoveable ≥ 0.
+//     sum = trackedMoveable + (nodeUsage - trackedMoveable) = nodeUsage.
+//     If trackedMoveable > nodeUsage:
+//     immovable = max(0, nodeUsage - trackedMoveable) = 0.
+//     sum = trackedMoveable > nodeUsage.
+//     Transient overshoot — stores appear slightly more loaded than
+//     reality until measurements converge.
+func assertCPULoadInvariant(
+	storesCPU, ampFactor, immovable, nodeUsage, sqlDistCPU, sqlGatewayCPU float64,
+) {
+	if !buildutil.CrdbTestBuild {
+		return
+	}
+
+	const floatEps = 1e-6
+	approxEq := func(a, b float64) bool { return math.Abs(a-b) <= floatEps }
+	moveable := storesCPU * ampFactor
+	sumLoad := moveable + immovable
+	ctx := context.Background()
+	state := redact.Safe(fmt.Sprintf(
+		"moveable=%.4f immovable=%.4f sumLoad=%.4f nodeUsage=%.4f "+
+			"storesCPU=%.4f ampFactor=%.4f sqlDistCPU=%.4f sqlGatewayCPU=%.4f",
+		moveable, immovable, sumLoad, nodeUsage,
+		storesCPU, ampFactor, sqlDistCPU, sqlGatewayCPU))
+
+	// immovable must be non-negative (it's clamped with max(0,...) at the call
+	// site, but double-check here).
+	if immovable < 0 {
+		log.Dev.Fatalf(ctx, "CPU load invariant: immovable < 0 (%v)", state)
+	}
+
+	// Measurement lag: tracked moveable CPU (storesCPU + sqlDistCPU) exceeds
+	// measured nodeUsage, so k is floored at 1 and moveable > nodeUsage. In
+	// this case immovable = 0 and sumLoad = moveable > nodeUsage — a transient,
+	// conservative overshoot that resolves as measurements converge.
+	if (storesCPU + sqlDistCPU) > nodeUsage {
+		if !approxEq(immovable, 0) {
+			log.Dev.Fatalf(ctx, "CPU load invariant: measurement lag but immovable != 0 (%v)", state)
+		}
+		return
+	}
+
+	// Normal case: moveable + immovable must equal nodeUsage.
+	if !approxEq(sumLoad, nodeUsage) {
+		log.Dev.Fatalf(ctx, "CPU load invariant: sumLoad != nodeUsage (%v)", state)
+	}
 }
 
 // assertCPUInputs verifies (in test builds only) that the raw NodeCapacity
