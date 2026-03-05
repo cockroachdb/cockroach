@@ -1033,6 +1033,28 @@ func (n *alterDatabasePrimaryRegionNode) switchPrimaryRegion(params runParams) e
 		}
 	}
 
+	// Enforce invariant: if a secondary region is set, the primary and
+	// secondary must be in the same super region (or both outside all
+	// super regions).
+	if updatedRegionConfig.HasSecondaryRegion() {
+		secondaryRegion := updatedRegionConfig.SecondaryRegion()
+		_, secondarySR := multiregion.IsMemberOfSuperRegion(
+			secondaryRegion, updatedRegionConfig)
+
+		if superRegionOfNewPrimaryRegion != secondarySR {
+			return errors.WithHintf(
+				pgerror.Newf(pgcode.InvalidDatabaseDefinition,
+					"cannot change primary region to %s: the primary and "+
+						"secondary regions must be in the same super region",
+					n.n.PrimaryRegion,
+				),
+				"drop the secondary region first using "+
+					"ALTER DATABASE %s DROP SECONDARY REGION",
+				n.n.Name.String(),
+			)
+		}
+	}
+
 	if isNewPrimaryRegionMemberOfASuperRegion {
 		params.p.BufferClientNotice(params.ctx, pgnotice.Newf("all REGIONAL BY TABLE tables without a region explicitly set are now part of the super region %s", superRegionOfNewPrimaryRegion))
 	}
