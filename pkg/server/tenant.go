@@ -872,6 +872,19 @@ func (s *SQLServerWrapper) PreStart(ctx context.Context) error {
 	); err != nil {
 		return err
 	}
+	ash.SetGlobalAppNameResolver(func(
+		ctx context.Context, nodeID roachpb.NodeID,
+	) (map[uint64]string, error) {
+		client, err := s.tenantStatus.dialNode(ctx, nodeID)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := client.AppNameMappings(ctx, &serverpb.AppNameMappingsRequest{})
+		if err != nil {
+			return nil, err
+		}
+		return resp.Mappings, nil
+	})
 
 	var apiInternalServer http.Handler
 	var drpcEnabled = false

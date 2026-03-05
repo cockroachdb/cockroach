@@ -8,6 +8,7 @@ package ash
 import (
 	"context"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -35,10 +36,10 @@ func TestSamplerTakeSample(t *testing.T) {
 	defer enabled.Store(false)
 
 	tenantID := roachpb.MustMakeTenantID(5)
-	cleanup := SetWorkState(tenantID, 42, WorkCPU, "Optimize")
+	cleanup := SetWorkState(tenantID, WorkloadInfo{WorkloadID: 42}, WorkCPU, "Optimize")
 	defer cleanup()
 
-	s.takeSample()
+	s.takeSample(context.Background())
 
 	samples := s.GetSamples(nil)
 	require.Len(t, samples, 1)
@@ -57,6 +58,48 @@ func TestSamplerTakeSample(t *testing.T) {
 	require.Equal(t, encodeStmtFingerprintIDToString(42), sample.WorkloadID)
 }
 
+func TestSamplerAppNameResolution(t *testing.T) {
+	s, stopper := newTestSampler()
+	defer stopper.Stop(context.Background())
+
+	enabled.Store(true)
+	defer enabled.Store(false)
+
+	tenantID := roachpb.MustMakeTenantID(5)
+	appName := "myapp"
+	appID := GetOrStoreAppNameID(appName)
+
+	info := WorkloadInfo{WorkloadID: 42, AppNameID: appID}
+	cleanup := SetWorkState(tenantID, info, WorkCPU, "Optimize")
+	defer cleanup()
+
+	s.takeSample(context.Background())
+
+	samples := s.GetSamples(nil)
+	require.Len(t, samples, 1)
+	require.Equal(t, appName, samples[0].AppName)
+}
+
+func TestSamplerAppNameCacheMiss(t *testing.T) {
+	s, stopper := newTestSampler()
+	defer stopper.Stop(context.Background())
+
+	enabled.Store(true)
+	defer enabled.Store(false)
+
+	tenantID := roachpb.MustMakeTenantID(5)
+	// Use an app name ID without storing it in the cache.
+	info := WorkloadInfo{WorkloadID: 42, AppNameID: 12345}
+	cleanup := SetWorkState(tenantID, info, WorkCPU, "Optimize")
+	defer cleanup()
+
+	s.takeSample(context.Background())
+
+	samples := s.GetSamples(nil)
+	require.Len(t, samples, 1)
+	require.Equal(t, "", samples[0].AppName)
+}
+
 func TestSamplerWorkloadIDCache(t *testing.T) {
 	s, stopper := newTestSampler()
 	defer stopper.Stop(context.Background())
@@ -67,12 +110,12 @@ func TestSamplerWorkloadIDCache(t *testing.T) {
 	tenantID := roachpb.MustMakeTenantID(3)
 
 	// Take two samples with the same workload ID.
-	cleanup := SetWorkState(tenantID, 99, WorkIO, "BatchEval")
-	s.takeSample()
+	cleanup := SetWorkState(tenantID, WorkloadInfo{WorkloadID: 99}, WorkIO, "BatchEval")
+	s.takeSample(context.Background())
 	cleanup()
 
-	cleanup = SetWorkState(tenantID, 99, WorkIO, "BatchEval")
-	s.takeSample()
+	cleanup = SetWorkState(tenantID, WorkloadInfo{WorkloadID: 99}, WorkIO, "BatchEval")
+	s.takeSample(context.Background())
 	cleanup()
 
 	samples := s.GetSamples(nil)
@@ -109,7 +152,7 @@ func TestSamplerMultipleGoroutines(t *testing.T) {
 			defer wg.Done()
 			cleanup := SetWorkState(
 				tenantID,
-				uint64(idx+1),
+				WorkloadInfo{WorkloadID: uint64(idx + 1)},
 				WorkNetwork,
 				"DistSenderRemote",
 			)
@@ -124,7 +167,7 @@ func TestSamplerMultipleGoroutines(t *testing.T) {
 		<-ready
 	}
 
-	s.takeSample()
+	s.takeSample(context.Background())
 
 	// Signal all goroutines to clean up.
 	close(release)
@@ -157,7 +200,7 @@ func TestSamplerStartAndBackgroundSampling(t *testing.T) {
 	require.NoError(t, s.start(ctx))
 
 	tenantID := roachpb.MustMakeTenantID(7)
-	cleanup := SetWorkState(tenantID, 100, WorkCPU, "BackgroundTest")
+	cleanup := SetWorkState(tenantID, WorkloadInfo{WorkloadID: 100}, WorkCPU, "BackgroundTest")
 	defer cleanup()
 
 	testutils.SucceedsSoon(t, func() error {
@@ -203,7 +246,7 @@ func TestSamplerRuntimeSettingChanges(t *testing.T) {
 		require.NoError(t, s.start(ctx))
 
 		tenantID := roachpb.MustMakeTenantID(4)
-		cleanup := SetWorkState(tenantID, 50, WorkIO, "ToggleTest")
+		cleanup := SetWorkState(tenantID, WorkloadInfo{WorkloadID: 50}, WorkIO, "ToggleTest")
 		defer cleanup()
 
 		testutils.SucceedsSoon(t, func() error {
@@ -277,13 +320,202 @@ func TestInitGlobalSampler(t *testing.T) {
 	// Enable and take a sample via the global sampler.
 	Enabled.Override(ctx, &st.SV, true)
 	tenantID := roachpb.MustMakeTenantID(10)
-	cleanup := SetWorkState(tenantID, 200, WorkCPU, "GlobalTest")
+	cleanup := SetWorkState(tenantID, WorkloadInfo{WorkloadID: 200}, WorkCPU, "GlobalTest")
 	defer cleanup()
-	s.takeSample()
+	s.takeSample(context.Background())
 
 	// Package-level GetSamples should return the sample.
 	samples := GetSamples()
 	require.Len(t, samples, 1)
 	require.Equal(t, roachpb.NodeID(42), samples[0].NodeID)
 	require.Equal(t, tenantID, samples[0].TenantID)
+}
+
+func TestSamplerRemoteAppNameResolution(t *testing.T) {
+	s, stopper := newTestSampler()
+	defer stopper.Stop(context.Background())
+
+	enabled.Store(true)
+	defer enabled.Store(false)
+
+	tenantID := roachpb.MustMakeTenantID(5)
+	// Use an app name ID that is NOT in the local cache, with a
+	// gateway node ID pointing to a remote node.
+	const unknownAppID uint64 = 99999
+	const remoteNodeID roachpb.NodeID = 10
+	info := WorkloadInfo{
+		WorkloadID:    42,
+		AppNameID:     unknownAppID,
+		GatewayNodeID: remoteNodeID,
+	}
+	cleanup := SetWorkState(tenantID, info, WorkCPU, "RemoteResolve")
+	defer cleanup()
+
+	// Set a resolver that returns the mapping.
+	s.SetAppNameResolver(func(
+		ctx context.Context, nodeID roachpb.NodeID,
+	) (map[uint64]string, error) {
+		require.Equal(t, remoteNodeID, nodeID)
+		return map[uint64]string{unknownAppID: "remote-app"}, nil
+	})
+
+	s.takeSample(context.Background())
+
+	samples := s.GetSamples(nil)
+	require.Len(t, samples, 1)
+	require.Equal(t, "remote-app", samples[0].AppName)
+}
+
+func TestSamplerDeduplicatesResolverCalls(t *testing.T) {
+	s, stopper := newTestSampler()
+	defer stopper.Stop(context.Background())
+
+	enabled.Store(true)
+	defer enabled.Store(false)
+
+	tenantID := roachpb.MustMakeTenantID(5)
+	const remoteNodeID roachpb.NodeID = 10
+
+	// Two work states with different unknown app name IDs but the
+	// same gateway node ID.
+	ready := make(chan struct{}, 2)
+	release := make(chan struct{})
+	var wg sync.WaitGroup
+	wg.Add(2)
+	for _, appID := range []uint64{77777, 88888} {
+		go func(id uint64) {
+			defer wg.Done()
+			info := WorkloadInfo{
+				WorkloadID:    1,
+				AppNameID:     id,
+				GatewayNodeID: remoteNodeID,
+			}
+			cl := SetWorkState(tenantID, info, WorkCPU, "Dedup")
+			ready <- struct{}{}
+			<-release
+			cl()
+		}(appID)
+	}
+	<-ready
+	<-ready
+
+	var callCount atomic.Int32
+	s.SetAppNameResolver(func(
+		ctx context.Context, nodeID roachpb.NodeID,
+	) (map[uint64]string, error) {
+		callCount.Add(1)
+		return map[uint64]string{
+			77777: "app-a",
+			88888: "app-b",
+		}, nil
+	})
+
+	s.takeSample(context.Background())
+	close(release)
+	wg.Wait()
+
+	// The resolver should have been called exactly once for the
+	// single remote gateway node.
+	require.Equal(t, int32(1), callCount.Load())
+
+	samples := s.GetSamples(nil)
+	require.Len(t, samples, 2)
+	appNames := map[string]struct{}{}
+	for _, sample := range samples {
+		appNames[sample.AppName] = struct{}{}
+	}
+	require.Contains(t, appNames, "app-a")
+	require.Contains(t, appNames, "app-b")
+}
+
+func TestSamplerSkipsLocalNodeResolution(t *testing.T) {
+	s, stopper := newTestSampler()
+	defer stopper.Stop(context.Background())
+
+	enabled.Store(true)
+	defer enabled.Store(false)
+
+	tenantID := roachpb.MustMakeTenantID(5)
+	// Set gateway node ID to the sampler's own node ID (1).
+	info := WorkloadInfo{
+		WorkloadID:    42,
+		AppNameID:     55555,
+		GatewayNodeID: 1, // same as sampler's nodeID
+	}
+	cleanup := SetWorkState(tenantID, info, WorkCPU, "LocalSkip")
+	defer cleanup()
+
+	var called atomic.Bool
+	s.SetAppNameResolver(func(
+		ctx context.Context, nodeID roachpb.NodeID,
+	) (map[uint64]string, error) {
+		called.Store(true)
+		return nil, nil
+	})
+
+	s.takeSample(context.Background())
+
+	// The resolver should NOT have been called for the local node.
+	require.False(t, called.Load())
+
+	samples := s.GetSamples(nil)
+	require.Len(t, samples, 1)
+	// App name stays empty because the local cache miss is not
+	// retried via the resolver for the local node.
+	require.Equal(t, "", samples[0].AppName)
+}
+
+func TestSamplerResolverError(t *testing.T) {
+	s, stopper := newTestSampler()
+	defer stopper.Stop(context.Background())
+
+	enabled.Store(true)
+	defer enabled.Store(false)
+
+	tenantID := roachpb.MustMakeTenantID(5)
+	info := WorkloadInfo{
+		WorkloadID:    42,
+		AppNameID:     66666,
+		GatewayNodeID: 20,
+	}
+	cleanup := SetWorkState(tenantID, info, WorkCPU, "ErrorCase")
+	defer cleanup()
+
+	s.SetAppNameResolver(func(
+		ctx context.Context, nodeID roachpb.NodeID,
+	) (map[uint64]string, error) {
+		return nil, errors.New("connection refused")
+	})
+
+	// Should not panic or crash.
+	s.takeSample(context.Background())
+
+	samples := s.GetSamples(nil)
+	require.Len(t, samples, 1)
+	require.Equal(t, "", samples[0].AppName)
+}
+
+func TestSamplerNilResolver(t *testing.T) {
+	s, stopper := newTestSampler()
+	defer stopper.Stop(context.Background())
+
+	enabled.Store(true)
+	defer enabled.Store(false)
+
+	tenantID := roachpb.MustMakeTenantID(5)
+	// No resolver set — should behave the same as before (empty
+	// app name on cache miss).
+	info := WorkloadInfo{
+		WorkloadID:    42,
+		AppNameID:     44444,
+		GatewayNodeID: 30,
+	}
+	cleanup := SetWorkState(tenantID, info, WorkCPU, "NilResolver")
+	defer cleanup()
+
+	s.takeSample(context.Background())
+
+	samples := s.GetSamples(nil)
+	require.Len(t, samples, 1)
+	require.Equal(t, "", samples[0].AppName)
 }

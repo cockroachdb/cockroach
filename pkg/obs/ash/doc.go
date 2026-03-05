@@ -30,7 +30,8 @@
 // register their current activity. SetWorkState returns a cleanup
 // function that must be deferred:
 //
-//	cleanup := ash.SetWorkState(tenantID, fingerprintID, ash.WorkLock, "LockWait")
+//	info := ash.WorkloadInfo{WorkloadID: fingerprintID, AppNameID: appNameID}
+//	cleanup := ash.SetWorkState(tenantID, info, ash.WorkLock, "LockWait")
 //	defer cleanup()
 //
 // Each call pushes a new WorkState onto a per-goroutine stack (stored

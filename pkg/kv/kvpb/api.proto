@@ -3023,12 +3023,19 @@ message Header {
   bool is_reverse = 38;
 
   // workload_id identifies the workload that triggered this batch (statement
-  // fingerprint ID, job ID, etc.). Used for ASH sampling and profiling.
+  // fingerprint ID, job ID, etc.). Used for ASH sampling.
   uint64 workload_id = 39 [(gogoproto.customname) = "WorkloadID"];
+
+  // app_name_id is the hash of the application name. Used for ASH sampling.
+  // Set when the workload is from SQL execution.
+  // Note(alyshan): This will eventually be replaced by a general
+  // enrichment_id field which will enable the ASH sampler to
+  // enrich samples with more workload context.
+  uint64 app_name_id = 40 [(gogoproto.customname) = "AppNameID"];
 
   reserved 7, 10, 12, 14, 20, 24;
 
-  // Next ID: 40
+  // Next ID: 41
 }
 
 message WriteOptions {
