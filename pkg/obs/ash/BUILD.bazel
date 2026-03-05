@@ -3,6 +3,7 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 go_library(
     name = "ash",
     srcs = [
+        "app_name.go",
         "buffer.go",
         "doc.go",
         "metrics.go",
@@ -17,6 +18,7 @@ go_library(
         "//pkg/roachpb",
         "//pkg/settings",
         "//pkg/settings/cluster",
+        "//pkg/util",
         "//pkg/util/buildutil",
         "//pkg/util/cache",
         "//pkg/util/encoding",

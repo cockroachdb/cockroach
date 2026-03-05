@@ -861,19 +861,40 @@ func (s *SQLServerWrapper) PreStart(ctx context.Context) error {
 		return err
 	}
 
-	// Initialize the process-global ASH sampler. This is a no-op if
-	// already initialized by a topLevelServer; for standalone SQL pods
-	// this is the first initialization point.
-	if err := ash.InitGlobalSampler(
+	// Initialize the process-global ASH sampler. For standalone SQL pods
+	// this is the first (and only) initialization point. For
+	// shared-process secondary tenants, the sampler was already
+	// initialized by topLevelServer.PreStart in server.go, so
+	// InitGlobalSampler is a no-op. We only set the resolver when we
+	// actually created the sampler (standalone SQL pod), since the
+	// app name cache is process-global and the system tenant's resolver
+	// (set in server.go) is sufficient for shared-process tenants.
+	initialized, err := ash.InitGlobalSampler(
 		ctx,
 		roachpb.NodeID(s.sqlServer.SQLInstanceID()),
 		s.ClusterSettings(),
 		s.stopper,
-	); err != nil {
+	)
+	if err != nil {
 		return err
 	}
 	if m := ash.GlobalSamplerMetrics(); m != nil {
 		s.sysRegistry.AddMetricStruct(m)
+	}
+	if initialized {
+		ash.SetGlobalAppNameResolver(func(
+			ctx context.Context, nodeID roachpb.NodeID, ids []uint64,
+		) (map[uint64]string, error) {
+			client, err := s.tenantStatus.dialNode(ctx, nodeID)
+			if err != nil {
+				return nil, err
+			}
+			resp, err := client.AppNameMappings(ctx, &serverpb.AppNameMappingsRequest{Ids: ids})
+			if err != nil {
+				return nil, err
+			}
+			return resp.Mappings, nil
+		})
 	}
 
 	var apiInternalServer http.Handler

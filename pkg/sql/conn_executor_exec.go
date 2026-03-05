@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/isolation"
 	"github.com/cockroachdb/cockroach/pkg/multitenant/multitenantcpu"
+	"github.com/cockroachdb/cockroach/pkg/obs/ash"
 	"github.com/cockroachdb/cockroach/pkg/obs/workloadid"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
@@ -656,11 +657,13 @@ func (ex *connExecutor) execStmtInOpenState(
 	ctx = ih.Setup(ctx, ex, p, &stmt, os.ImplicitTxn.Get(),
 		ex.state.mu.priority, ex.state.mu.autoRetryCounter)
 
-	// Set workload ID for ASH sampling. ih.Setup already computed the
-	// statement fingerprint ID, so reuse it here.
+	// Set workload ID and app name ID for ASH sampling. ih.Setup
+	// already computed the statement fingerprint ID, so reuse it here.
 	p.extendedEvalCtx.WorkloadID = uint64(ih.fingerprintId)
+	appNameID := ash.GetOrStoreAppNameID(p.SessionData().ApplicationName)
+	p.extendedEvalCtx.AppNameID = appNameID
 	if p.txn != nil {
-		p.txn.SetWorkloadID(uint64(ih.fingerprintId))
+		p.txn.SetWorkloadInfo(uint64(ih.fingerprintId), appNameID)
 	}
 
 	// Note that here we always unconditionally defer a function that takes care
@@ -1736,11 +1739,13 @@ func (ex *connExecutor) execStmtInOpenStateWithPausablePortal(
 	p.semaCtx.Placeholders.Assign(pinfo, vars.stmt.NumPlaceholders)
 	p.extendedEvalCtx.Placeholders = &p.semaCtx.Placeholders
 
-	// Set workload ID for ASH sampling. ih.Setup already computed the
-	// statement fingerprint ID, so reuse it here.
+	// Set workload ID and app name ID for ASH sampling. ih.Setup
+	// already computed the statement fingerprint ID, so reuse it here.
 	p.extendedEvalCtx.WorkloadID = uint64(ih.fingerprintId)
+	appNameID2 := ash.GetOrStoreAppNameID(p.SessionData().ApplicationName)
+	p.extendedEvalCtx.AppNameID = appNameID2
 	if p.txn != nil {
-		p.txn.SetWorkloadID(uint64(ih.fingerprintId))
+		p.txn.SetWorkloadInfo(uint64(ih.fingerprintId), appNameID2)
 	}
 
 	if buildutil.CrdbTestBuild {
