@@ -156,7 +156,7 @@ func TestUniquenessCheck(t *testing.T) {
 				data TEXT,
 				PRIMARY KEY (crdb_region)
 				)`,
-			expectError: "index has no `unique_rowid()` or `unordered_unique_rowid()` column",
+			expectError: "uniqueness: check only supported on tables with a unique column",
 		},
 		{
 			name: "multiple_unique_rowid",
@@ -167,7 +167,7 @@ func TestUniquenessCheck(t *testing.T) {
 				data TEXT,
 				PRIMARY KEY (crdb_region, id_a, id_b)
 				)`,
-			expectError: "uniqueness check for indexes with multiple `unique_rowid()`",
+			expectError: "uniqueness: check only supported on tables with a single unique column",
 		},
 		{
 			name: "single_region_no_duplicates",

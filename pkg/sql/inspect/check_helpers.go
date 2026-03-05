@@ -365,9 +365,11 @@ func errorToInternalInspectIssue(
 	}
 }
 
-// findUniqueColIdxs returns the indexes of the unique columns in the index.
-func findUniqueColIdxs(tableDesc catalog.TableDescriptor, index catalog.Index) ([]int, error) {
-	var uniqueColIdxs []int
+// findUniqueRowIDColPositions returns the indices of the unique row ID columns in the index.
+func findUniqueRowIDColPositions(
+	tableDesc catalog.TableDescriptor, index catalog.Index,
+) ([]int, error) {
+	var indices []int
 	for i := 0; i < index.NumKeyColumns(); i++ {
 		colID := index.GetKeyColumnID(i)
 		col, err := catalog.MustFindColumnByID(tableDesc, colID)
@@ -377,12 +379,12 @@ func findUniqueColIdxs(tableDesc catalog.TableDescriptor, index catalog.Index) (
 		if col.HasDefault() {
 			switch col.GetDefaultExpr() {
 			case "unique_rowid()", "unordered_unique_rowid()":
-				uniqueColIdxs = append(uniqueColIdxs, i)
+				indices = append(indices, i)
 			}
 		}
 
 	}
-	return uniqueColIdxs, nil
+	return indices, nil
 }
 
 // getRegionsForTable retrieves the list of regions from an RBR table.

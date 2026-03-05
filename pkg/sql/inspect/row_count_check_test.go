@@ -140,7 +140,7 @@ func TestRowCountCheck(t *testing.T) {
 
 			for _, tc := range matchCases {
 				t.Run(tc.name, func(t *testing.T) {
-					checks, err := ChecksForTable(ctx, &execCfg, nil /* PlanHookState */, tableDesc, &tc.expectedRowCount)
+					checks, err := ChecksForTable(ctx, &execCfg, tableDesc, &tc.expectedRowCount)
 					require.NoError(t, err)
 					require.Len(t, checks, expectedCheckCount)
 
