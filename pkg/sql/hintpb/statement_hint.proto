@@ -15,6 +15,7 @@ message StatementHintUnion {
   option (gogoproto.onlyone) = true;
 
   InjectHints inject_hints = 1;
+  SessionVariableHint session_variable = 2;
 }
 
 // InjectHints applies inline query plan hints (join and index hints) from the
@@ -23,4 +24,13 @@ message StatementHintUnion {
 // addition of inline hints.
 message InjectHints {
   string donor_sql = 1 [(gogoproto.customname) = "DonorSQL"];
+}
+
+// SessionVariableHint applies a single session variable override to a
+// statement. Each hint in system.statement_hints stores one variable override.
+// Multiple hints can exist for the same fingerprint to override multiple
+// variables.
+message SessionVariableHint {
+  string variable_name = 1;
+  string variable_value = 2;
 }
