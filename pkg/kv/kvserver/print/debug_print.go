@@ -480,24 +480,11 @@ func tryWAGKey(kv storage.MVCCKeyValue) (string, error) {
 	}
 
 	var str []byte
-	if len(node.Events) > 0 {
-		for i, e := range node.Events {
-			if i > 0 {
-				str = append(str, ' ')
-			}
-			str = fmt.Appendf(str, "%s", e)
+	for i, e := range node.Events {
+		if i > 0 {
+			str = append(str, ' ')
 		}
-	} else {
-		// TODO(arul): this can go away shortly.
-		str = fmt.Appendf(nil, "%v %s", node.Type, node.Addr)
-		if c, d := node.Create, node.Destroy; c != 0 || len(d) != 0 {
-			if c != 0 {
-				str = fmt.Appendf(str, " create:%d", c)
-			}
-			if len(d) != 0 {
-				str = fmt.Appendf(str, " destroy:%v", d)
-			}
-		}
+		str = fmt.Appendf(str, "%s", e)
 	}
 
 	if b := node.Mutation.Batch; len(b) > 0 {
