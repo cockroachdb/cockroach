@@ -26,9 +26,9 @@ func mmaRangeLoad(
 	loadStats load.ReplicaLoadStats, mvccStats enginepb.MVCCStats, amp mmaprototype.AmpVector,
 ) mmaprototype.RangeLoad {
 	return mmaintegration.MakePhysicalRangeLoad(
-		float64(loadStats.RequestCPUNanosPerSecond),
-		float64(loadStats.RaftCPUNanosPerSecond),
-		float64(loadStats.WriteBytesPerSecond),
+		loadStats.RequestCPUNanosPerSecond,
+		loadStats.RaftCPUNanosPerSecond,
+		loadStats.WriteBytesPerSecond,
 		mvccStats.Total(),
 		amp,
 	)
