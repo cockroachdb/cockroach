@@ -70,6 +70,15 @@ func (s *mapStore) Write(_ context.Context, metrics []cmmetrics.WritableMetric) 
 	return nil
 }
 
+func (s *mapStore) Delete(_ context.Context, metrics []cmmetrics.WritableMetric) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for _, m := range metrics {
+		delete(s.mu.metrics, storeKey(m))
+	}
+	return nil
+}
+
 func (s *mapStore) get(name string) (storedMetric, bool) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -594,5 +603,323 @@ func TestWriter_VecMetrics(t *testing.T) {
 		sv.SetStartTime(map[string]string{"job": "backup"})
 		env.writer.Flush(env.ctx)
 		require.Equal(t, int64(2), env.writerMetrics.MetricsWritten.Count())
+	})
+}
+
+// errorStore wraps a mapStore and allows injecting errors for Delete
+// and/or Write calls.
+type errorStore struct {
+	*mapStore
+	mu struct {
+		syncutil.Mutex
+		writeErr  error
+		deleteErr error
+	}
+}
+
+func newErrorStore() *errorStore {
+	return &errorStore{mapStore: newMapStore()}
+}
+
+func (s *errorStore) setDeleteErr(err error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.mu.deleteErr = err
+}
+
+func (s *errorStore) Write(ctx context.Context, metrics []cmmetrics.WritableMetric) error {
+	s.mu.Lock()
+	err := s.mu.writeErr
+	s.mu.Unlock()
+	if err != nil {
+		return err
+	}
+	return s.mapStore.Write(ctx, metrics)
+}
+
+func (s *errorStore) Delete(ctx context.Context, metrics []cmmetrics.WritableMetric) error {
+	s.mu.Lock()
+	err := s.mu.deleteErr
+	s.mu.Unlock()
+	if err != nil {
+		return err
+	}
+	return s.mapStore.Delete(ctx, metrics)
+}
+
+func TestWriter_Delete(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	defer cmmetrics.TestingAllowNonInitConstruction()()
+
+	t.Run("scalar counter delete", func(t *testing.T) {
+		env := newTestEnv()
+		c := cmmetrics.NewCounter(metric.Metadata{Name: "c"})
+		env.writer.AddMetric(c)
+
+		c.Inc(5)
+		env.writer.Flush(env.ctx)
+		_, ok := env.store.get("c")
+		require.True(t, ok, "counter should be stored after write")
+
+		c.Delete()
+		env.writer.Flush(env.ctx)
+		_, ok = env.store.get("c")
+		require.False(t, ok, "counter should be removed after delete")
+		require.Equal(t, int64(1), env.writerMetrics.MetricsDeleted.Count())
+	})
+
+	t.Run("scalar gauge delete", func(t *testing.T) {
+		env := newTestEnv()
+		g := cmmetrics.NewGauge(metric.Metadata{Name: "g"})
+		env.writer.AddMetric(g)
+
+		g.Update(42)
+		env.writer.Flush(env.ctx)
+		_, ok := env.store.get("g")
+		require.True(t, ok, "gauge should be stored after write")
+
+		g.Delete()
+		env.writer.Flush(env.ctx)
+		_, ok = env.store.get("g")
+		require.False(t, ok, "gauge should be removed after delete")
+		require.Equal(t, int64(1), env.writerMetrics.MetricsDeleted.Count())
+	})
+
+	t.Run("scalar inc then delete before flush", func(t *testing.T) {
+		env := newTestEnv()
+		c := cmmetrics.NewCounter(metric.Metadata{Name: "c"})
+		env.writer.AddMetric(c)
+
+		c.Inc(5)
+		c.Delete()
+		env.writer.Flush(env.ctx)
+
+		// Delete after Inc: deletion wins, value should not be written.
+		_, ok := env.store.get("c")
+		require.False(t, ok, "deleted metric should not be written")
+		require.Equal(t, int64(0), env.writerMetrics.MetricsWritten.Count())
+		require.Equal(t, int64(1), env.writerMetrics.MetricsDeleted.Count())
+	})
+
+	t.Run("scalar delete then inc before flush", func(t *testing.T) {
+		env := newTestEnv()
+		c := cmmetrics.NewCounter(metric.Metadata{Name: "c"})
+		env.writer.AddMetric(c)
+
+		c.Delete()
+		c.Inc(5) // no-op: metric is deleted
+		env.writer.Flush(env.ctx)
+
+		// Inc after Delete is a no-op; the metric is deleted.
+		_, ok := env.store.get("c")
+		require.False(t, ok, "deleted metric should not be written")
+		require.Equal(t, int64(0), env.writerMetrics.MetricsWritten.Count())
+		require.Equal(t, int64(1), env.writerMetrics.MetricsDeleted.Count())
+	})
+
+	t.Run("scalar delete then update gauge", func(t *testing.T) {
+		env := newTestEnv()
+		g := cmmetrics.NewGauge(metric.Metadata{Name: "g"})
+		env.writer.AddMetric(g)
+
+		g.Update(10)
+		env.writer.Flush(env.ctx)
+
+		g.Delete()
+		g.Update(42) // no-op: gauge is deleted
+		env.writer.Flush(env.ctx)
+
+		// Update after Delete is a no-op; the metric is deleted.
+		_, ok := env.store.get("g")
+		require.False(t, ok, "deleted gauge should be removed from store")
+		require.Equal(t, int64(1), env.writerMetrics.MetricsDeleted.Count())
+	})
+
+	t.Run("vec single child delete", func(t *testing.T) {
+		env := newTestEnv()
+		gv := cmmetrics.NewGaugeVec(metric.Metadata{Name: "gv"}, "region")
+		env.writer.AddMetric(gv)
+
+		gv.Update(map[string]string{"region": "us-east"}, 10)
+		gv.Update(map[string]string{"region": "us-west"}, 20)
+		env.writer.Flush(env.ctx)
+		require.Equal(t, 2, env.store.count())
+
+		gv.Delete(map[string]string{"region": "us-east"})
+		env.writer.Flush(env.ctx)
+
+		_, ok := env.store.getByLabels("gv", map[string]string{"region": "us-east"})
+		require.False(t, ok, "deleted child should be removed")
+		_, ok = env.store.getByLabels("gv", map[string]string{"region": "us-west"})
+		require.True(t, ok, "non-deleted child should remain")
+		require.Equal(t, int64(1), env.writerMetrics.MetricsDeleted.Count())
+	})
+
+	t.Run("vec all children deleted", func(t *testing.T) {
+		env := newTestEnv()
+		gv := cmmetrics.NewGaugeVec(metric.Metadata{Name: "gv"}, "region")
+		env.writer.AddMetric(gv)
+
+		gv.Update(map[string]string{"region": "us-east"}, 10)
+		env.writer.Flush(env.ctx)
+		require.Equal(t, 1, env.store.count())
+
+		gv.Delete(map[string]string{"region": "us-east"})
+		env.writer.Flush(env.ctx)
+
+		require.Equal(t, 0, env.store.count())
+		require.Equal(t, int64(1), env.writerMetrics.MetricsDeleted.Count())
+	})
+
+	t.Run("vec delete and re-add same cycle", func(t *testing.T) {
+		env := newTestEnv()
+		gv := cmmetrics.NewGaugeVec(metric.Metadata{Name: "gv"}, "region")
+		env.writer.AddMetric(gv)
+
+		gv.Update(map[string]string{"region": "us-east"}, 10)
+		env.writer.Flush(env.ctx)
+
+		// Delete and re-add with new value in the same cycle.
+		gv.Delete(map[string]string{"region": "us-east"})
+		gv.Update(map[string]string{"region": "us-east"}, 99)
+		env.writer.Flush(env.ctx)
+
+		// UPSERT after DELETE means the new value should survive.
+		stored, ok := env.store.getByLabels("gv", map[string]string{"region": "us-east"})
+		require.True(t, ok, "re-added child should be present")
+		require.Equal(t, int64(99), stored.StoredValue)
+	})
+
+	t.Run("counter vec delete", func(t *testing.T) {
+		env := newTestEnv()
+		cv := cmmetrics.NewCounterVec(metric.Metadata{Name: "cv"}, "method")
+		env.writer.AddMetric(cv)
+
+		cv.Inc(map[string]string{"method": "GET"}, 5)
+		cv.Inc(map[string]string{"method": "POST"}, 3)
+		env.writer.Flush(env.ctx)
+		require.Equal(t, 2, env.store.count())
+
+		cv.Delete(map[string]string{"method": "GET"})
+		env.writer.Flush(env.ctx)
+
+		_, ok := env.store.getByLabels("cv", map[string]string{"method": "GET"})
+		require.False(t, ok, "deleted counter vec child should be removed")
+		_, ok = env.store.getByLabels("cv", map[string]string{"method": "POST"})
+		require.True(t, ok, "non-deleted counter vec child should remain")
+	})
+
+	t.Run("stopwatch vec delete", func(t *testing.T) {
+		env := newTestEnv()
+		sv := cmmetrics.NewWriteStopwatchVec(
+			metric.Metadata{Name: "sv"}, timeutil.DefaultTimeSource{}, "job",
+		)
+		env.writer.AddMetric(sv)
+
+		sv.SetStartTime(map[string]string{"job": "backup"})
+		sv.SetStartTime(map[string]string{"job": "restore"})
+		env.writer.Flush(env.ctx)
+		require.Equal(t, 2, env.store.count())
+
+		sv.Delete(map[string]string{"job": "backup"})
+		env.writer.Flush(env.ctx)
+
+		_, ok := env.store.getByLabels("sv", map[string]string{"job": "backup"})
+		require.False(t, ok, "deleted stopwatch vec child should be removed")
+		_, ok = env.store.getByLabels("sv", map[string]string{"job": "restore"})
+		require.True(t, ok, "non-deleted stopwatch vec child should remain")
+	})
+
+	t.Run("scalar stopwatch delete", func(t *testing.T) {
+		env := newTestEnv()
+		sw := cmmetrics.NewWriteStopwatch(
+			metric.Metadata{Name: "sw"}, timeutil.DefaultTimeSource{},
+		)
+		env.writer.AddMetric(sw)
+
+		sw.SetStartTime()
+		env.writer.Flush(env.ctx)
+		_, ok := env.store.get("sw")
+		require.True(t, ok, "stopwatch should be stored after write")
+
+		sw.Delete()
+		env.writer.Flush(env.ctx)
+		_, ok = env.store.get("sw")
+		require.False(t, ok, "stopwatch should be removed after delete")
+		require.Equal(t, int64(1), env.writerMetrics.MetricsDeleted.Count())
+	})
+
+	t.Run("scalar inc after flushed delete is noop", func(t *testing.T) {
+		env := newTestEnv()
+		c := cmmetrics.NewCounter(metric.Metadata{Name: "c"})
+		env.writer.AddMetric(c)
+
+		c.Inc(5)
+		env.writer.Flush(env.ctx)
+		_, ok := env.store.get("c")
+		require.True(t, ok)
+
+		// Delete and flush — row removed from store, metric
+		// removed from tracked map.
+		c.Delete()
+		env.writer.Flush(env.ctx)
+		_, ok = env.store.get("c")
+		require.False(t, ok)
+
+		// Inc after the delete has been flushed — metric is no
+		// longer tracked and Inc is a no-op.
+		c.Inc(3)
+		env.writer.Flush(env.ctx)
+		_, ok = env.store.get("c")
+		require.False(t, ok, "inc after flushed delete should be a no-op")
+		require.Equal(t, int64(1), env.writerMetrics.MetricsWritten.Count(),
+			"only the original write should be counted")
+	})
+
+	t.Run("delete with failed store", func(t *testing.T) {
+		ctx := context.Background()
+		es := newErrorStore()
+		writerMetrics := NewWriterMetrics()
+		w := NewWriterWithStore(es, writerMetrics)
+
+		c := cmmetrics.NewCounter(metric.Metadata{Name: "c"})
+		w.AddMetric(c)
+		c.Inc(5)
+		w.Flush(ctx)
+
+		// Inject delete error.
+		es.setDeleteErr(errors.New("delete failed"))
+		c.Delete()
+		w.Flush(ctx)
+
+		// Metric should still be in the store because delete failed.
+		_, ok := es.mapStore.get("c")
+		require.True(t, ok, "metric should remain after failed delete")
+		require.Equal(t, int64(0), writerMetrics.MetricsDeleted.Count())
+		require.Equal(t, int64(1), writerMetrics.FlushErrors.Count())
+
+		// Scalar delete is retried because IsDeleted stays set.
+		es.setDeleteErr(nil)
+		w.Flush(ctx)
+		_, ok = es.mapStore.get("c")
+		require.False(t, ok, "metric should be removed after retry")
+		require.Equal(t, int64(1), writerMetrics.MetricsDeleted.Count())
+	})
+
+	t.Run("operational metrics", func(t *testing.T) {
+		env := newTestEnv()
+		gv := cmmetrics.NewGaugeVec(metric.Metadata{Name: "gv"}, "region")
+		env.writer.AddMetric(gv)
+
+		gv.Update(map[string]string{"region": "us-east"}, 10)
+		gv.Update(map[string]string{"region": "us-west"}, 20)
+		env.writer.Flush(env.ctx)
+
+		gv.Delete(map[string]string{"region": "us-east"})
+		gv.Delete(map[string]string{"region": "us-west"})
+		env.writer.Flush(env.ctx)
+
+		require.Equal(t, int64(2), env.writerMetrics.MetricsDeleted.Count())
 	})
 }

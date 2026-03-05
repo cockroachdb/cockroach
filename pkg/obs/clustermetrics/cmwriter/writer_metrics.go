@@ -22,13 +22,19 @@ var (
 	}
 	metaFlushErrors = metric.Metadata{
 		Name:        "obs.clustermetrics.flush.errors",
-		Help:        "Number of cluster metrics flush errors",
+		Help:        "Number of flush errors (write or delete failures)",
 		Measurement: "Errors",
 		Unit:        metric.Unit_COUNT,
 	}
 	metaMetricsWritten = metric.Metadata{
 		Name:        "obs.clustermetrics.flush.metrics_written",
 		Help:        "Number of individual metrics written per flush",
+		Measurement: "Metrics",
+		Unit:        metric.Unit_COUNT,
+	}
+	metaMetricsDeleted = metric.Metadata{
+		Name:        "obs.clustermetrics.flush.metrics_deleted",
+		Help:        "Number of individual metrics deleted per flush",
 		Measurement: "Metrics",
 		Unit:        metric.Unit_COUNT,
 	}
@@ -40,6 +46,7 @@ type WriterMetrics struct {
 	FlushCount     *metric.Counter
 	FlushErrors    *metric.Counter
 	MetricsWritten *metric.Counter
+	MetricsDeleted *metric.Counter
 }
 
 // MetricStruct implements the metric.Struct interface.
@@ -52,5 +59,6 @@ func NewWriterMetrics() *WriterMetrics {
 		FlushCount:     metric.NewCounter(metaFlushCount),
 		FlushErrors:    metric.NewCounter(metaFlushErrors),
 		MetricsWritten: metric.NewCounter(metaMetricsWritten),
+		MetricsDeleted: metric.NewCounter(metaMetricsDeleted),
 	}
 }
