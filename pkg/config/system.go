@@ -328,15 +328,15 @@ func (s *SystemConfig) getZoneConfigForKey(
 	return id, s.DefaultZoneConfig, nil
 }
 
-// GetSpanConfigForKey looks of the span config for the given key and the bounds
-// that span the configuration applies to. It's part of spanconfig.StoreReader
-// interface. Note that it is only usable for the system tenant config.
+// GetSpanConfigForKey looks up the span config for the given key. It's part of
+// the spanconfig.StoreReader interface. Note that it is only usable for the
+// system tenant config.
 func (s *SystemConfig) GetSpanConfigForKey(
 	ctx context.Context, key roachpb.RKey,
-) (roachpb.SpanConfig, roachpb.Span, error) {
+) (roachpb.SpanConfig, error) {
 	id, zone, err := s.getZoneConfigForKey(keys.SystemSQLCodec, key)
 	if err != nil {
-		return roachpb.SpanConfig{}, roachpb.Span{}, err
+		return roachpb.SpanConfig{}, err
 	}
 	spanConfig := zone.AsSpanConfig()
 	if id <= keys.MaxReservedDescID {
@@ -349,8 +349,7 @@ func (s *SystemConfig) GetSpanConfigForKey(
 		// applicable to user tables.
 		spanConfig.GCPolicy.IgnoreStrictEnforcement = true
 	}
-	prefix := keys.SystemSQLCodec.TablePrefix(uint32(id))
-	return spanConfig, roachpb.Span{Key: prefix, EndKey: prefix.PrefixEnd()}, nil
+	return spanConfig, nil
 }
 
 // DecodeKeyIntoZoneIDAndSuffix figures out the zone that the key belongs to.

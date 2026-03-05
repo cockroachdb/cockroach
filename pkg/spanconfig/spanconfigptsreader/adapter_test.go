@@ -97,7 +97,7 @@ func (m *manualSubscriber) ComputeSplitKey(
 
 func (m *manualSubscriber) GetSpanConfigForKey(
 	context.Context, roachpb.RKey,
-) (roachpb.SpanConfig, roachpb.Span, error) {
+) (roachpb.SpanConfig, error) {
 	panic("unimplemented")
 }
 

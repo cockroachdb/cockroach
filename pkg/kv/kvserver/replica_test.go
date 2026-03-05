@@ -15362,7 +15362,7 @@ func (r *backupExclusionStoreReader) ComputeSplitKey(
 
 func (r *backupExclusionStoreReader) GetSpanConfigForKey(
 	context.Context, roachpb.RKey,
-) (roachpb.SpanConfig, roachpb.Span, error) {
+) (roachpb.SpanConfig, error) {
 	panic("unimplemented")
 }
 

@@ -808,14 +808,14 @@ func (w *WrappedKVSubscriber) ComputeSplitKey(
 // GetSpanConfigForKey implements spanconfig.StoreReader.
 func (w *WrappedKVSubscriber) GetSpanConfigForKey(
 	ctx context.Context, key roachpb.RKey,
-) (roachpb.SpanConfig, roachpb.Span, error) {
-	spanConfig, span, err := w.wrapped.GetSpanConfigForKey(ctx, key)
+) (roachpb.SpanConfig, error) {
+	spanConfig, err := w.wrapped.GetSpanConfigForKey(ctx, key)
 	for _, o := range w.overrides {
 		if key.Equal(o.key) {
-			return o.config, span, nil
+			return o.config, nil
 		}
 	}
-	return spanConfig, span, err
+	return spanConfig, err
 }
 
 // NeedsSplit implements spanconfig.StoreReader.
