@@ -134,6 +134,14 @@ var upgrades = []upgradebase.Upgrade{
 		transactionStatisticsComputedColumnsMigration,
 		upgrade.RestoreActionNotRequired("cluster restore does not restore computed columns"),
 	),
+
+	upgrade.NewTenantUpgrade(
+		"add max_execution_latency column to diagnostics requests tables",
+		clusterversion.V26_2_AddMaxExecutionLatencyToStmtDiag.Version(),
+		upgrade.NoPrecondition,
+		addMaxExecutionLatencyToStmtDiagMigration,
+		upgrade.RestoreActionNotRequired("cluster restore does not restore the new column"),
+	),
 	// Note: when starting a new release version, the first upgrade (for
 	// Vxy_zStart) must be a newFirstUpgrade. Keep this comment at the bottom.
 }

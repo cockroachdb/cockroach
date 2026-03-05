@@ -1910,6 +1910,8 @@ message StatementDiagnosticsReport {
     [ (gogoproto.nullable) = false, (gogoproto.stdduration) = true ];
   google.protobuf.Timestamp expires_at = 7
     [ (gogoproto.nullable) = false, (gogoproto.stdtime) = true ];
+  google.protobuf.Duration max_execution_latency = 8
+    [ (gogoproto.nullable) = false, (gogoproto.stdduration) = true ];
   // TODO(yuzefovich): should we populate plan_gist, anti_plan_gist, redacted,
   // and username fields?
 }
@@ -1934,6 +1936,8 @@ message TransactionDiagnosticsReport {
   double sampling_probability = 10;
   bool redacted = 11;
   string username = 12;
+  google.protobuf.Duration max_execution_latency = 13
+    [ (gogoproto.nullable) = false, (gogoproto.stdduration) = true ];
 }
 
 message CreateStatementDiagnosticsReportRequest {
@@ -1994,6 +1998,11 @@ message CreateStatementDiagnosticsReportRequest {
   bool anti_plan_gist = 6;
   // Redacted, when set, indicates that the redacted bundle is requested.
   bool redacted = 7;
+  // MaxExecutionLatency, when non-zero, indicates the maximum execution
+  // latency of a query for which to collect the diagnostics report. Together
+  // with MinExecutionLatency, this defines a latency range for targeted
+  // collection.
+  google.protobuf.Duration max_execution_latency = 8  [ (gogoproto.nullable) = false, (gogoproto.stdduration) = true ];
 }
 
 // createTransactionDiagnosticsReportRequest is a message that captures a
@@ -2005,6 +2014,7 @@ message CreateTransactionDiagnosticsReportRequest {
   google.protobuf.Duration expires_at = 4 [ (gogoproto.nullable) = false, (gogoproto.stdduration) = true ];
   double sampling_probability = 5;
   bool redacted = 6;
+  google.protobuf.Duration max_execution_latency = 7 [ (gogoproto.nullable) = false, (gogoproto.stdduration) = true ];
 }
 
 message CreateStatementDiagnosticsReportResponse {
