@@ -119,6 +119,8 @@ func (lv *LoadVector) subtract(other LoadVector) {
 	}
 }
 
+// Amp is a per-dimension amplification factor that converts logical per-range
+// loads into physical units.
 type Amp float64
 
 func (af Amp) SafeFormat(w redact.SafePrinter, _ rune) {
@@ -129,6 +131,8 @@ func (af Amp) String() string {
 	return redact.StringWithoutMarkers(af)
 }
 
+// AmpVector holds per-dimension amplification factors, one for each
+// LoadDimension.
 type AmpVector [NumLoadDimensions]Amp
 
 // IdentityAmpVector returns an AmpVector where all dimensions have an
