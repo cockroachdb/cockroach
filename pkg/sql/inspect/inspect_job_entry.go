@@ -128,13 +128,21 @@ func ChecksForTable(
 	if execCfg.Settings.Version.IsActive(ctx, clusterversion.V26_2) {
 		if uniqueColIdxs, err := findUniqueColIdxs(table, priIndex); err != nil {
 			return nil, err
-		} else if isRegionalByRow(table) && len(uniqueColIdxs) == 1 {
-			checks = append(checks, &jobspb.InspectDetails_Check{
-				Type:         jobspb.InspectCheckUniqueness,
-				TableID:      table.GetID(),
-				IndexID:      priIndex.GetID(),
-				TableVersion: table.GetVersion(),
-			})
+		} else if isRegionalByRow(table) &&
+			len(uniqueColIdxs) == 1 { // Only one unique column supported.
+			if uniqueColIdxs[0] == 1 || uniquenessCheckComplexKeysEnabled.Get(execCfg.SV()) { // The unique column is after the region column or the (expensive) complex key support is enabled.
+				checks = append(checks, &jobspb.InspectDetails_Check{
+					Type:         jobspb.InspectCheckUniqueness,
+					TableID:      table.GetID(),
+					IndexID:      priIndex.GetID(),
+					TableVersion: table.GetVersion(),
+				})
+			} else {
+				if p != nil {
+					p.BufferClientNotice(ctx, pgnotice.Newf(
+						"skipping uniqueness check on table %q: use `SET CLUSTER SETTING sql.inspect.uniqueness_check.complex_keys.enabled = true;` to enable (expensive) validation of complex keys", table.GetName()))
+				}
+			}
 		}
 	}
 
@@ -219,14 +227,22 @@ func checksByIndexNames(
 			if index.Primary() {
 				if uniqueColIdxs, err := findUniqueColIdxs(table, index); err != nil {
 					return nil, err
-				} else if isRegionalByRow(table) && len(uniqueColIdxs) == 1 {
-					isIndexSupportedForChecks = true
-					checks = append(checks, &jobspb.InspectDetails_Check{
-						Type:         jobspb.InspectCheckUniqueness,
-						TableID:      table.GetID(),
-						IndexID:      index.GetID(),
-						TableVersion: table.GetVersion(),
-					})
+				} else if isRegionalByRow(table) &&
+					len(uniqueColIdxs) == 1 { // Only one unique column supported.
+					if uniqueColIdxs[0] == 1 || uniquenessCheckComplexKeysEnabled.Get(execCfg.SV()) { // The unique column is after the region column or the (expensive) complex key support is enabled.
+						isIndexSupportedForChecks = true
+						checks = append(checks, &jobspb.InspectDetails_Check{
+							Type:         jobspb.InspectCheckUniqueness,
+							TableID:      table.GetID(),
+							IndexID:      index.GetID(),
+							TableVersion: table.GetVersion(),
+						})
+					} else {
+						if p != nil {
+							p.BufferClientNotice(ctx, pgnotice.Newf(
+								"skipping uniqueness check on table %q: use `SET CLUSTER SETTING sql.inspect.uniqueness_check.complex_keys.enabled = true;` to enable (expensive) validation of complex keys", table.GetName()))
+						}
+					}
 				}
 			}
 		}

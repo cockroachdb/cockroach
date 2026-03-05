@@ -14,6 +14,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
@@ -24,6 +25,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
+)
+
+var uniquenessCheckComplexKeysEnabled = settings.RegisterBoolSetting(
+	settings.ApplicationLevel,
+	"sql.inspect.uniqueness_check.complex_keys.enabled",
+	"if true, the uniqueness check is enabled for INSPECT jobs on indexes where the unique column does not immediately follow the region column",
+	false,
 )
 
 type uniquenessCheck struct {
