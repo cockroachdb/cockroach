@@ -825,4 +825,11 @@ func (w *WrappedKVSubscriber) NeedsSplit(
 	return w.wrapped.NeedsSplit(ctx, start, end)
 }
 
+// ForEachOverlappingSpanConfig implements spanconfig.StoreReader.
+func (w *WrappedKVSubscriber) ForEachOverlappingSpanConfig(
+	ctx context.Context, span roachpb.Span, f func(roachpb.Span, roachpb.SpanConfig) error,
+) error {
+	return w.wrapped.ForEachOverlappingSpanConfig(ctx, span, f)
+}
+
 var _ spanconfig.KVSubscriber = &WrappedKVSubscriber{}

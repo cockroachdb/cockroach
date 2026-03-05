@@ -130,6 +130,12 @@ func (m *manualSubscriber) GetSpanConfigForKey(
 	panic("unimplemented")
 }
 
+func (m *manualSubscriber) ForEachOverlappingSpanConfig(
+	context.Context, roachpb.Span, func(roachpb.Span, roachpb.SpanConfig) error,
+) error {
+	panic("unimplemented")
+}
+
 func (m *manualSubscriber) LastUpdated() hlc.Timestamp {
 	return m.updatedTS
 }
