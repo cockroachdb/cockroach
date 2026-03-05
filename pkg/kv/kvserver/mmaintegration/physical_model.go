@@ -16,11 +16,21 @@ import (
 type physicalStore struct {
 	// load is the per-store physical load in each dimension's native unit
 	// (ns/s for CPURate, bytes/s for WriteBandwidth, bytes for ByteSize).
+	// Store load does not have to originate from MMA-tracked range work. For
+	// example, the CPU dimension includes background load (SQL gateway, GC,
+	// etc.), so the sum of per-range CPU loads will generally be less than the
+	// store load.
 	load mmaprototype.LoadVector
 	// capacity is the per-store physical capacity in each dimension's native
 	// unit.
 	capacity mmaprototype.LoadVector
 	// amplificationFactors converts logical per-range loads to physical units.
+	// Both CPU and disk amplification factors are capped (see
+	// cpuIndirectOverheadMultiplier, maxDiskSpaceAmplification). When the cap
+	// binds, per-range physical loads undercount reality — ranges look smaller
+	// than they are. This affects range selection (which range to move) but not
+	// store selection (which store to shed from), because store-level load comes
+	// from direct physical measurements, not from summing amplified range loads.
 	amplificationFactors mmaprototype.AmpVector
 }
 
@@ -39,8 +49,14 @@ type physicalDimension struct {
 //
 //  1. Estimate the amplification factor: the ratio of total node CPU caused by
 //     store work to the directly-tracked store CPU (CPUPerSecond). This is
-//     clamped to [1, cpuIndirectOverheadMultiplier]. When storesCPURate is 0,
-//     the factor defaults to the cap.
+//     clamped to [1, maxCPUAmplification]. When storesCPURate is 0, the factor
+//     defaults to the cap. For store-level load, this is inconsequential (it
+//     multiplies zero). The factor is also returned as this store's
+//     amplification factor (via ComputeAmplificationFactors) and applied to
+//     per-range loads on this store, but since storesCPURate is the sum of
+//     replica CPU, individual ranges also have ~0 CPU in this case. Ranges
+//     moved to this store carry their load as computed by the source store's
+//     amplification factor.
 //
 //  2. Estimate background CPU: node CPU usage not attributable to MMA-tracked
 //     work (e.g. SQL gateway, GC, background jobs). This is
@@ -129,6 +145,9 @@ func computePhysicalCPU(desc roachpb.StoreDescriptor) (res physicalDimension) {
 	// Step 3: Compute per-store load and capacity.
 	storeCPU := desc.Capacity.CPUPerSecond
 	if storeCPU <= 0 {
+		// Either because grunning is unsupported on the node's architecture, in
+		// which case CPUPerSecond is -1, or during early startup before replicas
+		// have reported CPU usage, in which case CPUPerSecond is 0.
 		storeCPU = storesCPU / numStores
 	}
 
@@ -164,7 +183,20 @@ func computePhysicalCPU(desc roachpb.StoreDescriptor) (res physicalDimension) {
 
 // minCapacity is the floor for per-store physical capacity in any dimension.
 // This prevents zero-capacity values that could arise during early node startup
-// or on empty stores.
+// or on empty stores. It is a last-resort guard against a truly zero value, not
+// a load-dependent saturation clamp like the old model's cpuCapacityFloorPerStore.
+//
+// Concretely, 1.0 means 1 ns/s for CPURate and 1 byte for ByteSize.
+//
+// Note: The old capacity model(computeCPUCapacityWithCap) needed a more
+// meaningful floor (cpuCapacityFloorPerStore = 0.1 cores = 1e8 ns/s) because
+// its capacity formula subtracted background load from the node's CPU capacity:
+// capacity = (nodeCap - background) / mult. As background grew, capacity shrank
+// toward zero while store load stayed constant, sending utilization
+// (load/capacity) to infinity. The physical model avoids this by keeping
+// capacity fixed at nodeCap/numStores and folding background into the load side
+// instead, so capacity never shrinks under load pressure and a negligible floor
+// suffices.
 const minCapacity mmaprototype.LoadValue = 1.0
 
 // maxDiskSpaceAmplification caps the ratio of physical disk bytes used to
@@ -172,15 +204,26 @@ const minCapacity mmaprototype.LoadValue = 1.0
 // usage is independent of range data (e.g. WAL, auxiliary files, tombstone
 // bloat). Without this cap, transient LSM bloat could produce extreme
 // amplification factors that massively overcount per-range physical footprint.
+//
+// TODO(wenyihu): revisit this value. 5.0 is a rough guess based on typical LSM
+// amplification (2-4x) with headroom for compaction delays. Validate against
+// production data once the physical model is deployed.
 const maxDiskSpaceAmplification = 5.0
 
 // computePhysicalDisk computes physical disk load, capacity, and space
 // amplification factor from the store capacity in the store descriptor.
 //
 // Both load and capacity are in physical bytes so that load/capacity =
-// Used/(Used+Available) = actual disk utilization. The amplification factor
-// is Used/LogicalBytes, capped at maxDiskSpaceAmplification. Values below 1.0
-// (from compression) are preserved. Defaults to 1.0 for empty/new stores.
+// Used/(Used+Available) = actual disk utilization. Note that capacity is
+// Used+Available, not the total disk Capacity from the descriptor — the gap
+// (Capacity - Available - Used) represents space consumed by the OS,
+// filesystem metadata, and other applications. We exclude it from both sides
+// so that disk utilization reflects only the portion of the disk the store
+// can influence, consistent with SMA's FractionUsed.
+//
+// The amplification factor is Used/LogicalBytes, capped at
+// maxDiskSpaceAmplification. Values below 1.0 (from compression) are
+// preserved. Defaults to 1.0 for empty/new stores.
 func computePhysicalDisk(desc roachpb.StoreDescriptor) (res physicalDimension) {
 	defer func() { res.capacity = max(minCapacity, res.capacity) }()
 
@@ -228,11 +271,14 @@ func computePhysicalWriteBandwidth(desc roachpb.StoreDescriptor) physicalDimensi
 // slightly different points in time. This is acceptable because:
 //  1. The underlying inputs (node CPU EWMA, space amplification) are
 //     slow-moving; the drift between two successive reads is negligible.
-//  2. MMA already tolerates the store-level load not equaling the sum of its
-//     per-range loads: not all ranges report load every cycle, follower
-//     replicas contribute CPU to the store total but don't report range-level
-//     load, and ranges may join or leave between snapshots. A small drift in
-//     amplification factors is negligible compared to these existing gaps.
+//  2. Store-level load != sum of per-range loads for several reasons:
+//     (a) CPU store load includes background load (SQL gateway, GC, etc.)
+//     that doesn't originate from ranges, (b) range load reports arrive
+//     asynchronously, so in any given cycle some ranges have stale or
+//     missing reports, (c) follower replicas contribute CPU to the store
+//     total but don't report range-level load, and (d) ranges may join or
+//     leave between snapshots. A small drift in amplification factors is
+//     negligible compared to these structural gaps.
 //
 // If tighter consistency is ever needed, the result can be returned as a
 // byproduct of MakeStoreLoadMsg and cached alongside the StoreLoadMsg.
