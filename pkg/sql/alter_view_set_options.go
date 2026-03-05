@@ -91,3 +91,69 @@ func (n *alterViewSetOptionsNode) startExec(params runParams) error {
 func (n *alterViewSetOptionsNode) Next(runParams) (bool, error) { return false, nil }
 func (n *alterViewSetOptionsNode) Values() tree.Datums          { return tree.Datums{} }
 func (n *alterViewSetOptionsNode) Close(context.Context)        {}
+
+type alterViewResetOptionsNode struct {
+	zeroInputPlanNode
+	n      *tree.AlterViewResetOptions
+	desc   *tabledesc.Mutable
+	prefix catalog.ResolvedObjectPrefix
+}
+
+// AlterViewResetOptions resets options on a view to their defaults.
+func (p *planner) AlterViewResetOptions(
+	ctx context.Context, n *tree.AlterViewResetOptions,
+) (planNode, error) {
+	if err := checkSchemaChangeEnabled(
+		ctx,
+		p.ExecCfg(),
+		"ALTER VIEW RESET",
+	); err != nil {
+		return nil, err
+	}
+
+	tn := n.Name.ToTableName()
+	prefix, viewDesc, err := p.ResolveMutableTableDescriptor(
+		ctx, &tn, !n.IfExists, tree.ResolveRequireViewDesc)
+	if err != nil {
+		return nil, err
+	}
+	if viewDesc == nil {
+		return newZeroNode(nil /* columns */), nil
+	}
+
+	if err := checkViewMatchesMaterialized(viewDesc, true /* requireView */, false /* wantMaterialized */); err != nil {
+		return nil, err
+	}
+
+	hasOwnership, err := p.HasOwnership(ctx, viewDesc)
+	if err != nil {
+		return nil, err
+	}
+	if !hasOwnership {
+		return nil, pgerror.Newf(pgcode.InsufficientPrivilege,
+			"must be owner of view %s", tree.Name(viewDesc.GetName()))
+	}
+
+	return &alterViewResetOptionsNode{
+		n:      n,
+		desc:   viewDesc,
+		prefix: prefix,
+	}, nil
+}
+
+func (n *alterViewResetOptionsNode) startExec(params runParams) error {
+	telemetry.Inc(sqltelemetry.SchemaChangeAlterCounterWithExtra(
+		"view", n.n.TelemetryName(),
+	))
+
+	n.desc.SecurityInvoker = nil
+
+	return params.p.writeSchemaChange(
+		params.ctx, n.desc, descpb.InvalidMutationID,
+		tree.AsStringWithFQNames(n.n, params.Ann()),
+	)
+}
+
+func (n *alterViewResetOptionsNode) Next(runParams) (bool, error) { return false, nil }
+func (n *alterViewResetOptionsNode) Values() tree.Datums          { return tree.Datums{} }
+func (n *alterViewResetOptionsNode) Close(context.Context)        {}

@@ -1237,6 +1237,7 @@ func (u *sqlSymUnion) filterType() tree.FilterType {
 %type <tree.Statement> alter_view_set_schema_stmt
 %type <tree.Statement> alter_view_owner_stmt
 %type <tree.Statement> alter_view_set_options_stmt
+%type <tree.Statement> alter_view_reset_options_stmt
 
 // ALTER SEQUENCE
 %type <tree.Statement> alter_rename_sequence_stmt
@@ -2110,6 +2111,7 @@ alter_view_stmt:
 | alter_view_set_schema_stmt
 | alter_view_owner_stmt
 | alter_view_set_options_stmt
+| alter_view_reset_options_stmt
 // ALTER VIEW has its error help token here because the ALTER VIEW
 // prefix is spread over multiple non-terminals.
 | ALTER VIEW error // SHOW HELP: ALTER VIEW
@@ -13363,6 +13365,20 @@ alter_view_set_options_stmt:
       Name: $5.unresolvedObjectName(),
       IfExists: true,
       Options: &tree.ViewOptions{SecurityInvoker: true},
+    }
+  }
+alter_view_reset_options_stmt:
+  ALTER VIEW relation_expr RESET '(' SECURITY_INVOKER ')'
+  {
+    $$.val = &tree.AlterViewResetOptions{
+      Name: $3.unresolvedObjectName(),
+    }
+  }
+| ALTER VIEW IF EXISTS relation_expr RESET '(' SECURITY_INVOKER ')'
+  {
+    $$.val = &tree.AlterViewResetOptions{
+      Name: $5.unresolvedObjectName(),
+      IfExists: true,
     }
   }
 
