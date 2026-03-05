@@ -459,7 +459,9 @@ const (
 	PgExtensionGeographyColumnsTableID
 	PgExtensionGeometryColumnsTableID
 	PgExtensionSpatialRefSysTableID
-	MinVirtualID = PgExtensionSpatialRefSysTableID
+	InformationSchemaCrdbNodeActiveSessionHistoryTableID
+	InformationSchemaCrdbClusterActiveSessionHistoryTableID
+	MinVirtualID = InformationSchemaCrdbClusterActiveSessionHistoryTableID
 )
 
 // ConstraintType is used to identify the type of a constraint.
