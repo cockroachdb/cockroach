@@ -100,11 +100,11 @@ type physicalDimension struct {
 //
 //  1. Operators see balanced total CPU across nodes — they don't need to
 //     distinguish KV from non-KV usage to understand the cluster state.
-//  3. If the node has no ranges at all, the shed attempt is a harmless no-op.
-//  4. The inflated store load raises the topK threshold (minLoadFraction *
+//  2. If the node has no ranges at all, the shed attempt is a harmless no-op.
+//  3. The inflated store load raises the topK threshold (minLoadFraction *
 //     adjustedLoad), filtering out tiny ranges that wouldn't meaningfully
 //     reduce load — naturally limiting churn on background-heavy nodes.
-//  5. The alternative (subtracting background from capacity) makes the numbers
+//  4. The alternative (subtracting background from capacity) makes the numbers
 //     harder to reason about and, as shown above, can cause MMA to send work
 //     toward already-hot nodes.
 func computePhysicalCPU(desc roachpb.StoreDescriptor) (res physicalDimension) {
