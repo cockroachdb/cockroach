@@ -179,24 +179,16 @@ func splitPreApply(
 		log.KvExec.Fatalf(ctx, "cannot clear RaftTruncatedState: %v", err)
 	}
 
-	// Stage WAG nodes for the split. The LHS state machine must be caught up to
-	// the entry before the split before it can be replayed.
-	//
-	// NB: raftIndex > 1 is verified by validateAndPrepareSplit, so the
-	// subtraction below is safe.
+	// Stage WAG events for the split. The Split event on the LHS implicitly
+	// carries a dependency on the LHS being caught up to raftIndex-1.
 	//
 	// NB: we don't record an explicit dependency on the RHS's
 	// CreateUninitializedReplica WAG node here. That node is written by
 	// getOrCreateReplica (called upstream via maybeAcquireSplitMergeLock) and
 	// will always precede this split node in the WAG sequence.
-	wagWriter.AddDep(wagpb.Node{
-		Addr: wagpb.MakeAddr(in.lhsID, in.raftIndex-1),
-		Type: wagpb.NodeType_NodeApply,
-	})
-	wagWriter.SetEvent(wagpb.Node{
-		Addr: wagpb.MakeAddr(in.lhsID, in.raftIndex),
-		Type: wagpb.NodeType_NodeSplit,
-	})
+	wagWriter.AddEvent(
+		wagpb.MakeAddr(in.lhsID, in.raftIndex), wagpb.EventType_EventSplit,
+	)
 
 	if in.rhsDestroyed {
 		// The RHS replica has already been removed from the store. To apply the

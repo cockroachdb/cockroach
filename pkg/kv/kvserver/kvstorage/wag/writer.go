@@ -6,15 +6,15 @@
 package wag
 
 import (
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvstorage"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvstorage/wag/wagpb"
+	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/errors"
 )
 
-// Writer prepares WAG nodes encoding a single state machine mutation. Replica
-// lifecycle events (splits, merges, destroys, etc.) use it to add dependencies
-// as they run, stage their event, and flush WAG nodes to the RaftBatch before
-// committing it towards the end of application.
+// Writer prepares a WAG node encoding a single state machine mutation and the
+// replica lifecycle events it encompasses. Callers add events via AddEvent as
+// they run, then call Flush to write the node to the raft engine when the time
+// comes.
 //
 // The zero value is a valid, disabled Writer. Use MakeWriter to create an
 // enabled Writer.
@@ -22,22 +22,10 @@ type Writer struct {
 	// seq allocates WAG sequence numbers using a store-level singleton. A nil
 	// seq indicates that the Writer is disabled.
 	seq *Seq
-	// deps tracks all dependency nodes. These carry a "happens before"
-	// relationship to the event node, but don't carry a mutation themselves.
-	// They are added via AddDep.
-	//
-	// For instance, a split at Raft index I needs a NodeApply at I-1 to
-	// indicate that the state machine must be caught up to that point before
-	// the split can be replayed.
-	deps []wagpb.Node
-	// event is the primary lifecycle event node. Its Mutation.Batch gets
-	// filled in at Flush time, once the State engine's batch has been fully
-	// prepared.
-	//
-	// There's exactly one of these per Writer, and can be set at any point
-	// before Flush is called. A zero-value (Type == NodeEmpty) means
-	// nothing's been staged yet, and is used to uphold this invariant.
-	event wagpb.Node
+	// events accumulates the lifecycle events for this node. Each event
+	// identifies a replica and the type of lifecycle transition it undergoes.
+	// A given RangeID must appear at most once.
+	events []wagpb.Event
 }
 
 // MakeWriter creates a new, enabled Writer.
@@ -51,69 +39,35 @@ func (w *Writer) disabled() bool {
 	return w.seq == nil
 }
 
-// Empty returns true if no WAG nodes have been staged on this Writer.
+// Empty returns true if no events have been staged on this Writer.
 func (w *Writer) Empty() bool {
-	return w.disabled() || w.event.Type == wagpb.NodeType_NodeEmpty
+	return w.disabled() || len(w.events) == 0
 }
 
-// AddDep stages a dependency node that must be satisfied before the event
-// can be replayed. These are written before the event node and don't carry
-// a mutation themselves.
-//
-// TODO(arul): as the code evolves, see if we add any dependencies other than
-// application up until a specific index. If we don't, this method can be
-// specialized to accept a wagpb.Addr instead.
-func (w *Writer) AddDep(node wagpb.Node) {
+// AddEvent stages a lifecycle event. Each event identifies a replica and the
+// type of lifecycle transition (create, split, destroy, etc.). A given RangeID
+// must appear at most once across all events in a Writer.
+func (w *Writer) AddEvent(addr wagpb.Addr, eventType wagpb.EventType) {
 	if w.disabled() {
 		return
 	}
-	w.deps = append(w.deps, node)
+	w.events = append(w.events, wagpb.Event{Addr: addr, Type: eventType})
 }
 
-// SetEvent stages the primary lifecycle event node. May not be called more
-// than once per Writer.
-func (w *Writer) SetEvent(node wagpb.Node) {
-	if w.disabled() {
-		return
-	}
-	if w.event.Type != wagpb.NodeType_NodeEmpty {
-		panic(errors.AssertionFailedf(
-			"WagWriter.SetEvent called twice: existing %s, new %s",
-			w.event.Addr, node.Addr,
-		))
-	}
-	w.event = node
-}
-
-// Flush writes all staged WAG nodes to the raft engine. The event node's
-// Mutation.Batch is populated with stateBatchRepr, which should be the
-// Repr() of the fully prepared State engine batch. No-ops if no event was
-// staged.
-func (w *Writer) Flush(raftBatch kvstorage.RaftWO, stateBatchRepr []byte) error {
-	if w.disabled() {
+// Flush writes the staged WAG node to the raft engine. The node's
+// Mutation.Batch is populated with stateBatchRepr, which should be the Repr()
+// of the fully prepared state engine batch. No-ops if no events were staged.
+func (w *Writer) Flush(raftBatch storage.Writer, stateBatchRepr []byte) error {
+	if w.disabled() || len(w.events) == 0 {
 		return nil
 	}
-	if w.event.Type == wagpb.NodeType_NodeEmpty {
-		if len(w.deps) != 0 {
-			return errors.AssertionFailedf(
-				"WAG dependency nodes staged without an event node",
-			)
-		}
-		return nil
+	node := wagpb.Node{
+		Events:   w.events,
+		Mutation: wagpb.Mutation{Batch: stateBatchRepr},
 	}
-	seq := w.seq.Next(uint64(len(w.deps)) + 1)
-
-	for _, dep := range w.deps {
-		if err := Write(raftBatch, seq, dep); err != nil {
-			return errors.Wrap(err, "writing WAG dependency node")
-		}
-		seq++
+	seq := w.seq.Next(1)
+	if err := Write(raftBatch, seq, node); err != nil {
+		return errors.Wrap(err, "writing WAG node")
 	}
-
-	w.event.Mutation.Batch = stateBatchRepr
-	if err := Write(raftBatch, seq, w.event); err != nil {
-		return errors.Wrap(err, "writing WAG event node")
-	}
-
 	return nil
 }
