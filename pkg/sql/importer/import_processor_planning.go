@@ -400,11 +400,10 @@ func distImport(
 			}
 			return prefix + bulkutil.NewDistMergePaths(job.ID()).MergePath(1), nil
 		}, bulkmerge.MergeOptions{
-			Iteration:      1,
-			MaxIterations:  1,
-			WriteTimestamp: writeTS,
-			// TODO(161447): uniqueness is currently not enforced
-			EnforceUniqueness: false,
+			Iteration:         1,
+			MaxIterations:     1,
+			WriteTimestamp:    writeTS,
+			EnforceUniqueness: true,
 			MemoryMonitor:     execinfrapb.BulkMergeSpec_BULK_MONITOR,
 		})
 

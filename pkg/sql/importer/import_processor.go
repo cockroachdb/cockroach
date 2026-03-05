@@ -383,7 +383,7 @@ func ingestKvs(
 			prefix,
 			writeTS,
 			processorID,
-			false, /*checkDuplicates */
+			true, /*checkDuplicates */
 		)
 		if err != nil {
 			return nil, err
