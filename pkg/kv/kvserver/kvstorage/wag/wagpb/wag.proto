@@ -41,6 +41,8 @@ enum NodeType {
 
 // EventType identifies the type of a replica lifecycle event within a WAG node.
 enum EventType {
+  option (gogoproto.goproto_enum_prefix) = false;
+
   // EventUnknown is the zero value. It should not be used.
   EventUnknown = 0;
   // EventCreate corresponds to the creation of an uninitialized replica. All
@@ -78,6 +80,8 @@ enum EventType {
 
 // Event describes a single replica lifecycle event within a WAG node.
 message Event {
+  option (gogoproto.goproto_stringer) = false;
+
   // Addr identifies the range, replica and raft index this event pertains to.
   // The interpretation of the Raft Index depends on the EventType.
   Addr addr = 1 [(gogoproto.nullable) = false];
