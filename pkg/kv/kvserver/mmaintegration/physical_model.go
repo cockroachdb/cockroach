@@ -7,12 +7,15 @@ package mmaintegration
 
 import (
 	"context"
+	"fmt"
+	"math"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/mmaprototype"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/grunning"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/redact"
 )
 
 // physicalStore holds the physical load, capacity, and amplification
@@ -170,9 +173,10 @@ type physicalDimension struct {
 // excess overhead spills into the immovable term. When k is unclamped,
 // immovable = sqlGatewayCPU * k.
 //
-// Fallback: when SQL metrics are zero, the model uses a single ratio
-// (ampFactor = clamp(nodeUsage/storesCPU, 1, cap)) and attributes the
-// residual as immovable, matching the pre-SQL behavior.
+// When SQL metrics are zero, the formula degenerates to the single-ratio
+// model: sqlDistCPU/storesCPU vanishes so (1+distRatio)*k = k, and
+// totalTracked collapses to storesCPU so k = clamp(nodeUsage/storesCPU,
+// 1, cap). No special case is needed.
 func computePhysicalCPU(desc roachpb.StoreDescriptor) (res physicalDimension) {
 	assertCPUInputs(desc)
 	defer func() { res.capacity = max(minCapacity, res.capacity) }()
@@ -186,24 +190,29 @@ func computePhysicalCPU(desc roachpb.StoreDescriptor) (res physicalDimension) {
 
 	// Step 1: Estimate the amplification factor and immovable CPU.
 	//
-	// See "SQL-aware decomposition" above. When SQL metrics are available, k is
-	// derived from the full tracked denominator and capped at
-	// maxCPUAmplification. Gateway SQL and any excess become immovable.
+	// See "SQL-aware decomposition" above. k is derived from the full tracked
+	// denominator and capped at maxCPUAmplification. Gateway SQL and any
+	// excess become immovable. The clamps provide graceful degradation when
+	// SQL metrics are inaccurate: k is floored at 1 (so ampFactor ≥ 1 even
+	// if SQL metrics hugely overcount), capped at maxCPUAmplification (so k
+	// doesn't blow up if they undercount), and immovable is floored at 0
+	// (absorbing any overcount). As SQL signal weakens toward zero, the
+	// formula continuously approaches the single-ratio model — no explicit
+	// fallback is needed.
 	var ampFactor, immovable float64
-	hasSQLMetrics := (sqlGatewayCPU + sqlDistCPU) > 0
 	if storesCPU <= 0 {
 		ampFactor = maxCPUAmplification
 		immovable = max(0, nodeUsage)
-	} else if hasSQLMetrics {
+	} else {
 		trackedMoveable := storesCPU + sqlDistCPU
 		totalTracked := trackedMoveable + sqlGatewayCPU
 		k := max(1, min(nodeUsage/totalTracked, maxCPUAmplification))
 		ampFactor = (1 + sqlDistCPU/storesCPU) * k
 		immovable = max(0, nodeUsage-trackedMoveable*k)
-	} else {
-		ampFactor = max(1, min(nodeUsage/storesCPU, maxCPUAmplification))
-		immovable = max(0, nodeUsage-storesCPU*ampFactor)
 	}
+
+	// Verify formula consistency (see assertCPULoadInvariant).
+	assertCPULoadInvariant(storesCPU, ampFactor, immovable, nodeUsage, sqlDistCPU, sqlGatewayCPU)
 
 	// Step 2: Compute per-store load and capacity.
 	storeCPU := desc.Capacity.CPUPerSecond
@@ -364,6 +373,69 @@ func MakePhysicalRangeLoad(
 	rl.Load[mmaprototype.WriteBandwidth] = mmaprototype.LoadValue(writeBytesPerSec * float64(amp[mmaprototype.WriteBandwidth]))
 	rl.Load[mmaprototype.ByteSize] = mmaprototype.LoadValue(float64(logicalBytes) * float64(amp[mmaprototype.ByteSize]))
 	return rl
+}
+
+// assertCPULoadInvariant verifies (in test builds only) that the formulas
+// in computePhysicalCPU are internally consistent. This is a mathematical
+// identity check, not a detection of runtime anomalies.
+//
+// Since immovable = max(0, nodeUsage - trackedMoveable*k), summing per-store
+// loads (sumLoad = storesCPU*ampFactor + immovable) yields:
+//
+//   - sumLoad = nodeUsage when trackedMoveable*k ≤ nodeUsage (the common case:
+//     the residual flows into immovable and the two terms add to nodeUsage).
+//   - sumLoad = trackedMoveable*k > nodeUsage when trackedMoveable*k > nodeUsage
+//     (k is floored at 1, immovable is 0, load conservatively overshoots).
+//
+// Both outcomes follow directly from the max(0, ...) clamp. The check guards
+// against future formula changes breaking this identity.
+func assertCPULoadInvariant(
+	storesCPU, ampFactor, immovable, nodeUsage, sqlDistCPU, sqlGatewayCPU float64,
+) {
+	if !buildutil.CrdbTestBuild {
+		return
+	}
+
+	// Relative epsilon comparison. A pure absolute epsilon (math.Abs(a-b) <=
+	// eps) would be too tight for CPU values in ns/s (1e8–1e10), where float64
+	// rounding errors are ~magnitude*2.2e-16 ≈ 1e-6. Scaling by max(1, |a|,
+	// |b|) makes the tolerance relative to the values being compared; the
+	// floor of 1 avoids demanding exact equality near zero.
+	const floatEps = 1e-9
+	approxEq := func(a, b float64) bool {
+		return math.Abs(a-b) <= floatEps*max(1, math.Abs(a), math.Abs(b))
+	}
+	moveable := storesCPU * ampFactor
+	sumLoad := moveable + immovable
+	ctx := context.Background()
+	state := redact.Safe(fmt.Sprintf(
+		"moveable=%.4f immovable=%.4f sumLoad=%.4f nodeUsage=%.4f "+
+			"storesCPU=%.4f ampFactor=%.4f sqlDistCPU=%.4f sqlGatewayCPU=%.4f",
+		moveable, immovable, sumLoad, nodeUsage,
+		storesCPU, ampFactor, sqlDistCPU, sqlGatewayCPU))
+
+	// immovable must be non-negative (it's clamped with max(0,...) at the call
+	// site, but double-check here).
+	if immovable < 0 {
+		log.Dev.Fatalf(ctx, "CPU load invariant: immovable < 0 (%v)", state)
+	}
+
+	// Overshoot case: trackedMoveable > nodeUsage, so immovable was clamped
+	// to 0 and sumLoad > nodeUsage by construction.
+	//
+	// Skip when storesCPU = 0: the main code ignores SQL metrics in that
+	// branch and sets immovable = nodeUsage directly.
+	if storesCPU > 0 && (storesCPU+sqlDistCPU) > nodeUsage {
+		if !approxEq(immovable, 0) {
+			log.Dev.Fatalf(ctx, "CPU load invariant: overshoot but immovable != 0 (%v)", state)
+		}
+		return
+	}
+
+	// Common case: sumLoad must equal nodeUsage.
+	if !approxEq(sumLoad, nodeUsage) {
+		log.Dev.Fatalf(ctx, "CPU load invariant: sumLoad != nodeUsage (%v)", state)
+	}
 }
 
 // assertCPUInputs verifies (in test builds only) that the raw NodeCapacity
