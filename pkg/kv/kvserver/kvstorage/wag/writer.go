@@ -34,9 +34,10 @@ func MakeWriter(seq *Seq) Writer {
 }
 
 // disabled returns true if the Writer is disabled and no WAG nodes should be
-// written.
+// written. A nil Writer is considered disabled, making it safe to call methods
+// on a nil *Writer.
 func (w *Writer) disabled() bool {
-	return w.seq == nil
+	return w == nil || w.seq == nil
 }
 
 // Empty returns true if no events have been staged on this Writer.
