@@ -27,6 +27,9 @@ import (
 // structured that adding additional resource dimensions is easy.
 type LoadDimension uint8
 
+// NumLoadDimensions must be exactly 3. Update SafeFormat methods for
+// LoadVector and AmpVector if a dimension is added or removed.
+var _ [NumLoadDimensions - 3]struct{}
 var _ [3 - NumLoadDimensions]struct{}
 
 const (
