@@ -50,7 +50,7 @@ func DialDRPC(
 		if rpcCtx.ContextOptions.AdvertiseAddr == target && rpcCtx.canLoopbackDial() {
 			transport = loopbackTransport
 		}
-
+		log.Ops.Infof(ctx, "dialing DRPC connection to %s", target)
 		drpcDialOptions, err := rpcCtx.drpcDialOptionsInternal(ctx, target, class, transport)
 		if err != nil {
 			return nil, err
