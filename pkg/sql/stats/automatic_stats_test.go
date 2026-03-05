@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangefeed"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/bootstrap"
@@ -1032,7 +1033,13 @@ func TestRefresherReadOnlyShutdown(t *testing.T) {
 	defer log.Scope(t).Close(t)
 	ctx := context.Background()
 
-	srv := serverutils.StartServerOnly(t, base.TestServerArgs{})
+	srv := serverutils.StartServerOnly(t, base.TestServerArgs{
+		Knobs: base.TestingKnobs{
+			TableStatsKnobs: &TableStatsTestingKnobs{
+				DisablePartialUsingExtremes: true,
+			},
+		},
+	})
 	defer srv.Stopper().Stop(ctx)
 	s := srv.ApplicationLayer()
 	internalDB := s.InternalDB().(descs.DB)
@@ -1260,4 +1267,226 @@ func TestEstimateStaleness(t *testing.T) {
 	if err = checkEstimatedStaleness(1.5); err != nil {
 		t.Fatal(err)
 	}
+}
+
+func TestAddMisestimate(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	span := func(start, end string) roachpb.Span {
+		return roachpb.Span{Key: roachpb.Key(start), EndKey: roachpb.Key(end)}
+	}
+	id := tableIDIndexID{tableID: descpb.ID(1), indexID: descpb.IndexID(1)}
+
+	for _, tc := range []struct {
+		name           string
+		existing       spansWithRowCount
+		newMisestimate misestimate
+		expected       spansWithRowCount
+	}{
+		{
+			name: "add to empty map",
+			newMisestimate: misestimate{
+				spansWithRowCount: spansWithRowCount{
+					Spans:             roachpb.Spans{span("a", "b")},
+					estimatedRowCount: 100,
+				},
+			},
+			expected: spansWithRowCount{
+				Spans:             roachpb.Spans{span("a", "b")},
+				estimatedRowCount: 100,
+			},
+		},
+		{
+			name: "merge adjacent spans",
+			existing: spansWithRowCount{
+				Spans:             roachpb.Spans{span("b", "c"), span("e", "f")},
+				estimatedRowCount: 100,
+			},
+			newMisestimate: misestimate{
+				spansWithRowCount: spansWithRowCount{
+					Spans:             roachpb.Spans{span("a", "b"), span("f", "g")},
+					estimatedRowCount: 50,
+				},
+			},
+			expected: spansWithRowCount{
+				Spans:             roachpb.Spans{span("a", "c"), span("e", "g")},
+				estimatedRowCount: 150,
+			},
+		},
+		{
+			name: "non-adjacent span",
+			existing: spansWithRowCount{
+				Spans:             roachpb.Spans{span("a", "b")},
+				estimatedRowCount: 100,
+			},
+			newMisestimate: misestimate{
+				spansWithRowCount: spansWithRowCount{
+					Spans:             roachpb.Spans{span("d", "e")},
+					estimatedRowCount: 75,
+				},
+			},
+			expected: spansWithRowCount{
+				Spans:             roachpb.Spans{span("a", "b"), span("d", "e")},
+				estimatedRowCount: 175,
+			},
+		},
+		{
+			name: "all spans are duplicates",
+			existing: spansWithRowCount{
+				Spans:             roachpb.Spans{span("a", "b"), span("d", "e")},
+				estimatedRowCount: 100,
+			},
+			newMisestimate: misestimate{
+				spansWithRowCount: spansWithRowCount{
+					Spans:             roachpb.Spans{span("d", "e"), span("a", "b")},
+					estimatedRowCount: 80,
+				},
+			},
+			expected: spansWithRowCount{
+				Spans:             roachpb.Spans{span("a", "b"), span("d", "e")},
+				estimatedRowCount: 100, // row count should not change
+			},
+		},
+		{
+			name: "multiple spans with different properties",
+			existing: spansWithRowCount{
+				Spans: roachpb.Spans{
+					span("a", "b"),
+					span("d", "e"),
+					span("m", "n")},
+				estimatedRowCount: 100,
+			},
+			newMisestimate: misestimate{
+				spansWithRowCount: spansWithRowCount{
+					Spans: roachpb.Spans{
+						span("e", "f"), // adjacent after
+						span("h", "i"), // new
+						span("a", "b"), // duplicate
+						span("l", "m"), // adjacent before
+					},
+					estimatedRowCount: 60,
+				},
+			},
+			expected: spansWithRowCount{
+				Spans: roachpb.Spans{
+					span("a", "b"),
+					span("d", "f"),
+					span("l", "n"),
+					span("h", "i"),
+				},
+				estimatedRowCount: 160,
+			},
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			r := &Refresher{misestimateSpans: make(map[tableIDIndexID]spansWithRowCount)}
+			if tc.existing.Spans != nil {
+				r.misestimateSpans[id] = tc.existing
+			}
+
+			tc.newMisestimate.tableIDIndexID = id
+			r.addMisestimate(tc.newMisestimate)
+
+			result := r.misestimateSpans[id]
+			require.Equal(t, tc.expected.Spans, result.Spans)
+			require.Equal(t, tc.expected.estimatedRowCount, result.estimatedRowCount)
+		})
+	}
+}
+
+// TestFixMisestimatesAutoStats verifies that "fix misestimates" stats are
+// collected automatically in response to scans with significantly incorrect
+// estimated row count.
+func TestFixMisestimatesAutoStats(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	// Speed up the test.
+	defer func(oldRefreshInterval, oldAsOf time.Duration) {
+		DefaultRefreshInterval = oldRefreshInterval
+		DefaultAsOfTime = oldAsOf
+	}(DefaultRefreshInterval, DefaultAsOfTime)
+	DefaultRefreshInterval = time.Second
+	DefaultAsOfTime = 100 * time.Millisecond
+
+	ctx := context.Background()
+	srv, db, _ := serverutils.StartServer(t, base.TestServerArgs{
+		Knobs: base.TestingKnobs{
+			TableStatsKnobs: &TableStatsTestingKnobs{
+				// Disable USING EXTREMES auto partial stats collection so that
+				// it doesn't interfere with "fix misestimates" auto partial
+				// stats.
+				DisablePartialUsingExtremes: true,
+			},
+		},
+	})
+	defer srv.Stopper().Stop(ctx)
+
+	sqlDB := sqlutils.MakeSQLRunner(db)
+	// Disable auto full table stats collection to have more control.
+	sqlDB.Exec(t, `SET CLUSTER SETTING sql.stats.automatic_full_collection.enabled = false;`)
+	sqlDB.Exec(t, `SET CLUSTER SETTING sql.stats.automatic_partial_collection.fix_scan_row_count_misestimate.enabled = true;`)
+
+	// Set up the state where the only present table stats are quite stale.
+	sqlDB.Exec(t, `
+	CREATE TABLE t (k INT PRIMARY KEY);
+	INSERT INTO t SELECT generate_series(1, 1000);
+	ANALYZE t;
+	INSERT INTO t SELECT generate_series(1001, 5000);
+`)
+
+	// Use a query that gets a bad estimate due to stale stats.
+	const query = `SELECT count(*) FROM t WHERE k > 900;`
+
+	// Sanity check that the estimate is, indeed, bad.
+	sqlDB.Exec(t, `SELECT crdb_internal.clear_table_stats_cache();`)
+	output := sqlDB.QueryStr(t, `EXPLAIN `+query)
+	var foundBadEstimate bool
+	for _, line := range output {
+		if strings.Contains(line[0], `estimated row count: 100`) {
+			foundBadEstimate = true
+			break
+		}
+	}
+	require.True(t, foundBadEstimate)
+
+	// Run the query via EXPLAIN ANALYZE to sanity check that the warning is
+	// printed.
+	output = sqlDB.QueryStr(t, `EXPLAIN ANALYZE `+query)
+	const expected = `WARNING: the row count estimate is inaccurate`
+	var foundWarning bool
+	for _, line := range output {
+		if strings.Contains(line[0], expected) {
+			foundWarning = true
+			break
+		}
+	}
+	require.True(t, foundWarning)
+
+	// Now, meat of the test - the query should have asked for "fix
+	// misestimates" stats to be collected, so we check that those are collected
+	// reasonably quickly.
+	testutils.SucceedsSoon(t, func() error {
+		const partialPredicate = `<fix-up stats via index 1 (4,100 rows): /901->`
+		row := sqlDB.QueryRow(t, `SELECT count(*) FROM [SHOW STATISTICS FOR TABLE t] WHERE partial_predicate = $1`, partialPredicate)
+		var partialStatsCount int
+		row.Scan(&partialStatsCount)
+		if partialStatsCount != 1 {
+			return fmt.Errorf("not yet collected")
+		}
+		return nil
+	})
+
+	// Sanity check that "fix misestimates" stats are now used for a better
+	// estimate.
+	sqlDB.Exec(t, `SELECT crdb_internal.clear_table_stats_cache();`)
+	output = sqlDB.QueryStr(t, `EXPLAIN SELECT count(*) FROM t WHERE k > 900;`)
+	var foundGoodEstimate bool
+	for _, line := range output {
+		if strings.Contains(line[0], `estimated row count: 4,102`) {
+			foundGoodEstimate = true
+			break
+		}
+	}
+	require.True(t, foundGoodEstimate)
 }

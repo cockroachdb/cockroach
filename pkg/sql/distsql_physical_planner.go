@@ -3650,7 +3650,8 @@ func (dsp *DistSQLPlanner) createPhysPlanForPlanNode(
 
 			numIndexes := 1
 			if details.UsingExtremes {
-				// Partial stats collections scan a different index for each column.
+				// USING EXTREMES partial stats collections scan a different
+				// index for each column.
 				numIndexes = len(details.ColumnStats)
 			}
 			// If the error has pgcode.ObjectNotInPrerequisiteState, we don't
