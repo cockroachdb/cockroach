@@ -227,6 +227,11 @@ const (
 	// V26_2_DescriptorTxnKeyCleanup cleans up any keys stored in a hidden index
 	// used for tracking all descriptors involved in a txn.
 	V26_2_DescriptorTxnKeyCleanup
+
+	// V26_2_ChangefeedsStopWritingSpanLevelCheckpoint is the version when
+	// changefeeds stop writing span-level checkpoints.
+	V26_2_ChangefeedsStopWritingSpanLevelCheckpoint
+
 	// *************************************************
 	// Step (1) Add new versions above this comment.
 	// Do not add new versions to a patch release.
@@ -286,6 +291,9 @@ var versionTable = [numKeys]roachpb.Version{
 	V26_2_DescriptorTxnKeyGeneration: {Major: 26, Minor: 1, Internal: 14},
 
 	V26_2_DescriptorTxnKeyCleanup: {Major: 26, Minor: 1, Internal: 16},
+
+	V26_2_ChangefeedsStopWritingSpanLevelCheckpoint: {Major: 26, Minor: 1, Internal: 18},
+
 	// *************************************************
 	// Step (2): Add new versions above this comment.
 	// Do not add new versions to a patch release.

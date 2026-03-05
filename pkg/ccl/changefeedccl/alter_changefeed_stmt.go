@@ -7,7 +7,6 @@ package changefeedccl
 
 import (
 	"context"
-	"maps"
 	"net/url"
 	"slices"
 
@@ -16,12 +15,14 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdceval"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedvalidators"
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobfrontier"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobsauth"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
@@ -271,7 +272,7 @@ func alterDatabaseChangefeed(
 	}
 
 	return finalizeAlterChangefeed(
-		ctx, p, job, jobID, jobRecord, newDetails, &newProgress, targets, resultsCh,
+		ctx, p, job, jobID, jobRecord, newDetails, &newProgress, nil, targets, resultsCh,
 	)
 }
 
@@ -315,13 +316,16 @@ func alterTableChangefeed(
 		return err
 	}
 
-	// Compute the new progress based on the table ops.
-	newProgress, err := generateNewProgressForTableOps(
-		p, prevProgress, prevHighWater, resumeTS, primaryIndexIDs, tableOps,
-	)
+	prevResolvedSpans, _, err := jobfrontier.GetAllResolvedSpans(
+		ctx, p.InternalSQLTxn(), jobID)
 	if err != nil {
 		return err
 	}
+
+	// Compute the new progress based on the table ops.
+	newProgress, newResolvedSpans := generateNewProgressForTableOps(
+		ctx, p, prevProgress, prevHighWater, prevResolvedSpans, resumeTS, primaryIndexIDs, tableOps,
+	)
 
 	newChangefeedStmt := &tree.CreateChangefeed{
 		Level:        tree.ChangefeedLevelTable,
@@ -365,7 +369,7 @@ func alterTableChangefeed(
 	newDetails.Opts[changefeedbase.OptInitialScan] = ``
 
 	return finalizeAlterChangefeed(
-		ctx, p, job, jobID, jobRecord, newDetails, &newProgress, targets, resultsCh,
+		ctx, p, job, jobID, jobRecord, newDetails, &newProgress, newResolvedSpans, targets, resultsCh,
 	)
 }
 
@@ -379,6 +383,7 @@ func finalizeAlterChangefeed(
 	jobRecord *jobs.Record,
 	newDetails jobspb.ChangefeedDetails,
 	newProgress *jobspb.Progress,
+	newResolvedSpans []jobspb.ResolvedSpan,
 	targets changefeedbase.Targets,
 	resultsCh chan<- tree.Datums,
 ) error {
@@ -403,6 +408,13 @@ func finalizeAlterChangefeed(
 		ju.UpdatePayload(&newPayload)
 		if newProgress != nil {
 			ju.UpdateProgress(newProgress)
+		}
+		if newResolvedSpans != nil {
+			if err := jobfrontier.StoreResolvedSpans(
+				ctx, txn, jobID, coordinatorFrontierName, newResolvedSpans,
+			); err != nil {
+				return err
+			}
 		}
 		return nil
 	}); err != nil {
@@ -939,25 +951,38 @@ func validateNewTargetsAtResumeTime(
 // generateNewProgressForTableOps computes the new job progress for the
 // given table operations. It modifies the checkpoint to ensure that we
 // don't do any extra initial scans of any targets.
+//
+// TODO(#163256): Once span-level checkpoints are fully deleted, add an
+// early return for empty tableOps. Currently we always rebuild
+// progress so that SLC data is folded into the frontier and cleared.
 func generateNewProgressForTableOps(
+	ctx context.Context,
 	p sql.PlanHookState,
 	prevProgress jobspb.Progress,
 	prevHighWater hlc.Timestamp,
+	prevResolvedSpans []jobspb.ResolvedSpan,
 	resumeTS hlc.Timestamp,
 	primaryIndexIDs map[descpb.ID]descpb.IndexID,
 	tableOps map[descpb.ID]targetOp,
-) (jobspb.Progress, error) {
-	if len(tableOps) == 0 {
-		return prevProgress, nil
-	}
-
+) (jobspb.Progress, []jobspb.ResolvedSpan) {
 	var ptsRecord uuid.UUID
-	var checkpoint *jobspb.TimestampSpansMap
-	if changefeedProgress := prevProgress.GetChangefeed(); changefeedProgress != nil {
+	changefeedProgress := prevProgress.GetChangefeed()
+	if changefeedProgress != nil {
 		// TODO(#142369): We should create a new PTS record instead of just
 		// keeping the old one.
 		ptsRecord = changefeedProgress.ProtectedTimestampRecord
-		checkpoint = changefeedProgress.SpanLevelCheckpoint
+	}
+
+	// Build a combined checkpoint from both the persisted frontier
+	// and the span-level checkpoint.
+	checkpoint := make(checkpointBuilder)
+	for _, rs := range prevResolvedSpans {
+		checkpoint.addSpans([]roachpb.Span{rs.Span}, rs.Timestamp)
+	}
+	if changefeedProgress != nil {
+		for ts, spans := range changefeedProgress.SpanLevelCheckpoint.All() {
+			checkpoint.addSpans(spans, ts)
+		}
 	}
 
 	var alteredSpanIDs, addedWithoutScanSpanIDs, addedWithScanSpanIDs []spanID
@@ -979,21 +1004,21 @@ func generateNewProgressForTableOps(
 	addedWithoutScanSpans := fetchSpansForDescs(p, addedWithoutScanSpanIDs)
 
 	// Remove all altered spans from the checkpoint.
-	checkpoint = removeSpansFromCheckpoint(checkpoint, alteredSpans)
+	checkpoint.removeSpans(alteredSpans)
 
 	// If we're still in an initial scan, all we need to do is add any new
 	// targets that don't need to be scanned to the checkpoint.
 	if prevHighWater.IsEmpty() {
-		checkpoint = addSpansToCheckpoint(checkpoint, addedWithoutScanSpans, resumeTS)
+		checkpoint.addSpans(addedWithoutScanSpans, resumeTS)
 		return jobspb.Progress{
 			Progress: &jobspb.Progress_HighWater{},
 			Details: &jobspb.Progress_Changefeed{
 				Changefeed: &jobspb.ChangefeedProgress{
 					ProtectedTimestampRecord: ptsRecord,
-					SpanLevelCheckpoint:      checkpoint,
+					SpanLevelCheckpoint:      checkpoint.buildTimestampSpansMap(ctx, p.ExecCfg().Settings),
 				},
 			},
-		}, nil
+		}, checkpoint.buildResolvedSpans()
 	}
 
 	// If we're done the initial scan already and don't need to do an initial scan
@@ -1006,10 +1031,10 @@ func generateNewProgressForTableOps(
 			Details: &jobspb.Progress_Changefeed{
 				Changefeed: &jobspb.ChangefeedProgress{
 					ProtectedTimestampRecord: ptsRecord,
-					SpanLevelCheckpoint:      checkpoint,
+					SpanLevelCheckpoint:      checkpoint.buildTimestampSpansMap(ctx, p.ExecCfg().Settings),
 				},
 			},
-		}, nil
+		}, checkpoint.buildResolvedSpans()
 	}
 
 	// Otherwise, we'll need to reset the highwater so that we do an initial scan
@@ -1026,17 +1051,17 @@ func generateNewProgressForTableOps(
 		}
 	}
 	unchangedSpans := fetchSpansForDescs(p, unchangedSpanIDs)
-	checkpoint = addSpansToCheckpoint(checkpoint, unchangedSpans, resumeTS)
-	checkpoint = addSpansToCheckpoint(checkpoint, addedWithoutScanSpans, resumeTS)
+	checkpoint.addSpans(unchangedSpans, resumeTS)
+	checkpoint.addSpans(addedWithoutScanSpans, resumeTS)
 	return jobspb.Progress{
 		Progress: &jobspb.Progress_HighWater{},
 		Details: &jobspb.Progress_Changefeed{
 			Changefeed: &jobspb.ChangefeedProgress{
 				ProtectedTimestampRecord: ptsRecord,
-				SpanLevelCheckpoint:      checkpoint,
+				SpanLevelCheckpoint:      checkpoint.buildTimestampSpansMap(ctx, p.ExecCfg().Settings),
 			},
 		},
-	}, nil
+	}, checkpoint.buildResolvedSpans()
 }
 
 // storeFilterChangeFrontierForDatabaseChangefeed uses the persistent job frontier to ensure that
@@ -1119,40 +1144,55 @@ func storeFilterChangeFrontierForDatabaseChangefeed(
 	return jobfrontier.Store(ctx, p.InternalSQLTxn(), jobID, `alter_changefeed`, frontier)
 }
 
-// addSpansToCheckpoint returns a new checkpoint with the given spans
-// merged in at the given timestamp.
-func addSpansToCheckpoint(
-	checkpoint *jobspb.TimestampSpansMap, spans []roachpb.Span, ts hlc.Timestamp,
-) *jobspb.TimestampSpansMap {
-	checkpointSpansMap := make(map[hlc.Timestamp]roachpb.Spans)
-	if checkpoint != nil {
-		checkpointSpansMap = maps.Collect(checkpoint.All())
+type checkpointBuilder map[hlc.Timestamp]*roachpb.SpanGroup
+
+// addSpans merges the given spans into the map at the given timestamp.
+func (b checkpointBuilder) addSpans(spans []roachpb.Span, ts hlc.Timestamp) {
+	sg := b[ts]
+	if sg == nil {
+		sg = &roachpb.SpanGroup{}
+		b[ts] = sg
 	}
-	var spanGroup roachpb.SpanGroup
-	spanGroup.Add(checkpointSpansMap[ts]...)
-	spanGroup.Add(spans...)
-	checkpointSpansMap[ts] = spanGroup.Slice()
-	return jobspb.NewTimestampSpansMap(checkpointSpansMap)
+	sg.Add(spans...)
 }
 
-// removeSpansFromCheckpoint returns a new checkpoint with the given
-// spans removed from all timestamps.
-func removeSpansFromCheckpoint(
-	checkpoint *jobspb.TimestampSpansMap, spans []roachpb.Span,
-) *jobspb.TimestampSpansMap {
-	if checkpoint == nil || checkpoint.IsEmpty() {
-		return checkpoint
-	}
-	checkpointSpansMap := make(map[hlc.Timestamp]roachpb.Spans)
-	for ts, sp := range checkpoint.All() {
-		var spanGroup roachpb.SpanGroup
-		spanGroup.Add(sp...)
-		spanGroup.Sub(spans...)
-		if remaining := spanGroup.Slice(); len(remaining) > 0 {
-			checkpointSpansMap[ts] = remaining
+// removeSpans removes the given spans from all timestamps in the map.
+func (b checkpointBuilder) removeSpans(spans []roachpb.Span) {
+	for ts, sg := range b {
+		sg.Sub(spans...)
+		if len(sg.Slice()) == 0 {
+			delete(b, ts)
 		}
 	}
-	return jobspb.NewTimestampSpansMap(checkpointSpansMap)
+}
+
+// buildTimestampSpansMap builds a span-level checkpoint from the checkpoint entries.
+// Returns nil if the cluster has stopped writing span-level checkpoints.
+func (b checkpointBuilder) buildTimestampSpansMap(
+	ctx context.Context, settings *cluster.Settings,
+) *jobspb.TimestampSpansMap {
+	if settings.Version.IsActive(ctx, clusterversion.V26_2_ChangefeedsStopWritingSpanLevelCheckpoint) {
+		return nil
+	}
+	result := make(map[hlc.Timestamp]roachpb.Spans, len(b))
+	for ts, sg := range b {
+		result[ts] = sg.Slice()
+	}
+	return jobspb.NewTimestampSpansMap(result)
+}
+
+// buildResolvedSpans returns the checkpoint entries as a flat list of resolved spans.
+func (b checkpointBuilder) buildResolvedSpans() []jobspb.ResolvedSpan {
+	var result []jobspb.ResolvedSpan
+	for ts, sg := range b {
+		for _, sp := range sg.Slice() {
+			result = append(result, jobspb.ResolvedSpan{
+				Span:      sp,
+				Timestamp: ts,
+			})
+		}
+	}
+	return result
 }
 
 type spanID struct {

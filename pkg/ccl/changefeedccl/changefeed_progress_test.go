@@ -16,9 +16,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdctest"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/resolvedspan"
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobfrontier"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/desctestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
@@ -538,4 +540,103 @@ WITH resolved='1ns', min_checkpoint_frequency='1ns'`)
 
 	cdcTest(t, testFn, feedTestForceSink("sinkless"),
 		withAllowChangefeedErr("test injects retryable error"))
+}
+
+// TestRunningChangefeedDoesNotWriteSpanLevelCheckpoint verifies that a
+// changefeed with lagging spans does not write span-level checkpoints
+// once V26_2_ChangefeedsStopWritingSpanLevelCheckpoint is active.
+func TestRunningChangefeedDoesNotWriteSpanLevelCheckpoint(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	clusterversion.SkipWhenMinSupportedVersionIsAtLeast(t, clusterversion.V26_2)
+
+	testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
+		sqlDB := sqlutils.MakeSQLRunner(s.DB)
+		ctx := context.Background()
+
+		knobs := s.TestingKnobs.
+			DistSQL.(*execinfra.TestingKnobs).
+			Changefeed.(*TestingKnobs)
+
+		sqlDB.Exec(t, `CREATE TABLE foo (key INT PRIMARY KEY)`)
+		sqlDB.Exec(t, `INSERT INTO foo (key) SELECT * FROM generate_series(1, 100)`)
+		// Split the table so that ShouldSkipCheckpoint can create lagging
+		// spans by skipping checkpoints on some ranges.
+		sqlDB.Exec(t, `ALTER TABLE foo SPLIT AT VALUES (50)`)
+
+		fooDesc := desctestutils.TestingGetPublicTableDescriptor(
+			s.Server.DB(), s.Server.Codec(), "d", "foo")
+		tableSpan := fooDesc.PrimaryIndexSpan(s.Server.Codec())
+
+		// Aggressive checkpoint and frontier persistence settings.
+		changefeedbase.SpanCheckpointInterval.Override(
+			ctx, &s.Server.ClusterSettings().SV, 10*time.Millisecond)
+		changefeedbase.SpanCheckpointMaxBytes.Override(
+			ctx, &s.Server.ClusterSettings().SV, 100<<20)
+		changefeedbase.SpanCheckpointLagThreshold.Override(
+			ctx, &s.Server.ClusterSettings().SV, 10*time.Millisecond)
+		changefeedbase.FrontierPersistenceInterval.Override(
+			ctx, &s.Server.ClusterSettings().SV, 100*time.Millisecond)
+
+		// Skip every other checkpoint to create lagging spans.
+		var skip int32
+		knobs.FeedKnobs.ShouldSkipCheckpoint = func(c *kvpb.RangeFeedCheckpoint) bool {
+			if c.Span.Equal(tableSpan) {
+				return true
+			}
+			return atomic.AddInt32(&skip, 1)%2 == 0
+		}
+
+		foo := feed(t, f,
+			`CREATE CHANGEFEED FOR foo WITH resolved='50ms', min_checkpoint_frequency='50ms', no_initial_scan`)
+		defer closeFeed(t, foo)
+		jobFeed := foo.(cdctest.EnterpriseTestFeed)
+		registry := s.Server.JobRegistry().(*jobs.Registry)
+
+		// Wait for the frontier to be persisted with multiple timestamps,
+		// indicating checkpoint activity with lagging spans.
+		idb := s.Server.InternalDB().(isql.DB)
+		testutils.SucceedsSoon(t, func() error {
+			var spans []jobspb.ResolvedSpan
+			if err := idb.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+				var found bool
+				var err error
+				spans, found, err = jobfrontier.GetResolvedSpans(ctx, txn, jobFeed.JobID(), coordinatorFrontierName)
+				if err != nil {
+					return err
+				}
+				if !found {
+					return errors.New("frontier not yet persisted")
+				}
+				return nil
+			}); err != nil {
+				return err
+			}
+			tsSet := make(map[hlc.Timestamp]struct{})
+			for _, rs := range spans {
+				if !rs.Timestamp.IsEmpty() {
+					tsSet[rs.Timestamp] = struct{}{}
+				}
+			}
+			if len(tsSet) < 2 {
+				return errors.New("waiting for frontier with multiple timestamps")
+			}
+			return nil
+		})
+
+		// Verify no span-level checkpoint is written over a period of time.
+		require.Never(t, func() bool {
+			job, err := registry.LoadJob(ctx, jobFeed.JobID())
+			if err != nil {
+				return false
+			}
+			progress := job.Progress()
+			cfProgress := progress.GetChangefeed()
+			return cfProgress != nil && !cfProgress.SpanLevelCheckpoint.IsEmpty()
+		}, 5*time.Second, time.Second,
+			"running changefeed should not be writing span-level checkpoint")
+	}
+
+	cdcTest(t, testFn, feedTestEnterpriseSinks, feedTestNoTenants)
 }

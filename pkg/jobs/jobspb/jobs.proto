@@ -1318,9 +1318,8 @@ message ChangefeedProgress {
   // than the overall resolved timestamp and thus allow us to do less work.
   // This is especially useful during backfills or if some spans are lagging.
   //
-  // Invariant: At most one of Checkpoint and SpanLevelCheckpoint should be
-  // non-nil at any time.
-  TimestampSpansMap span_level_checkpoint = 5;
+  // TODO(#163256): Remove (and reserve) this field once MinSupported = 26.2.
+  TimestampSpansMap span_level_checkpoint = 5 [deprecated = true];
 }
 
 // CreateStatsDetails are used for the CreateStats job, which is triggered

@@ -21,9 +21,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/tableset"
 	"github.com/cockroachdb/cockroach/pkg/cloud"
 	"github.com/cockroachdb/cockroach/pkg/cloud/externalconn"
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/docs"
 	"github.com/cockroachdb/cockroach/pkg/featureflag"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
+	"github.com/cockroachdb/cockroach/pkg/jobs/jobfrontier"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
@@ -2072,19 +2074,31 @@ func reconcileJobProgress(
 		}
 	}
 
-	maxBytes := changefeedbase.SpanCheckpointMaxBytes.Get(&execCfg.Settings.SV)
-	cp := checkpoint.Make(
-		sf.Frontier(),
-		result.aggregatorFrontierSpans(),
-		maxBytes,
-		nil, /* metrics */
-	)
+	var cp *jobspb.TimestampSpansMap
+	if !execCfg.Settings.Version.IsActive(ctx, clusterversion.V26_2_ChangefeedsStopWritingSpanLevelCheckpoint) {
+		maxBytes := changefeedbase.SpanCheckpointMaxBytes.Get(&execCfg.Settings.SV)
+		cp = checkpoint.Make(
+			sf.Frontier(),
+			result.aggregatorFrontierSpans(),
+			maxBytes,
+			nil, /* metrics */
+		)
+	}
+
+	var aggregatorResolvedSpans []jobspb.ResolvedSpan
+	for sp, ts := range result.aggregatorFrontierSpans() {
+		aggregatorResolvedSpans = append(aggregatorResolvedSpans, jobspb.ResolvedSpan{
+			Span:      sp,
+			Timestamp: ts,
+		})
+	}
 
 	// Update checkpoint.
 	updateHW := highWater.Less(sf.Frontier())
-	updateSpanCheckpoint := !cp.IsEmpty()
+	updateSpanCheckpoint := cp != nil && !cp.IsEmpty()
+	updatePersistedFrontier := len(aggregatorResolvedSpans) > 0
 
-	if updateHW || updateSpanCheckpoint {
+	if updateHW || updateSpanCheckpoint || updatePersistedFrontier {
 		if updateHW {
 			frontier := sf.Frontier()
 			progress.Progress = &jobspb.Progress_HighWater{HighWater: &frontier}
@@ -2100,7 +2114,31 @@ func reconcileJobProgress(
 					return err
 				}
 				ju.UpdateProgress(&progress)
-				return nil
+				if !updatePersistedFrontier {
+					return nil
+				}
+				frontier, found, err := jobfrontier.Get(
+					ctx, txn, reloadedJob.ID(), coordinatorFrontierName,
+				)
+				if err != nil {
+					return err
+				}
+				if !found {
+					return jobfrontier.StoreResolvedSpans(
+						ctx, txn, reloadedJob.ID(), coordinatorFrontierName, aggregatorResolvedSpans)
+				}
+				// Merge the aggregator resolved spans with the existing persisted
+				// coordinator frontier so we don't lose progress from spans
+				// that weren't reported by an aggregator during shutdown, which may
+				// happen if a node shut down ungracefully.
+				for _, rs := range aggregatorResolvedSpans {
+					if _, err = frontier.Forward(rs.Span, rs.Timestamp); err != nil {
+						return err
+					}
+				}
+				return jobfrontier.Store(
+					ctx, txn, reloadedJob.ID(), coordinatorFrontierName, frontier,
+				)
 			},
 		); err != nil {
 			return jobspb.Progress{}, err

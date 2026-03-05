@@ -23,12 +23,14 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdceval"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdctest"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobfrontier"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/desctestutils"
@@ -2239,6 +2241,8 @@ WITH resolved = '1s', no_initial_scan, min_checkpoint_frequency='1ns'`,
 			context.Background(), &s.Server.ClusterSettings().SV, 1*time.Nanosecond)
 		changefeedbase.SpanCheckpointMaxBytes.Override(
 			context.Background(), &s.Server.ClusterSettings().SV, maxCheckpointSize)
+		changefeedbase.FrontierPersistenceInterval.Override(
+			context.Background(), &s.Server.ClusterSettings().SV, 100*time.Millisecond)
 
 		// backfillTimestamp is used to track the timestamp of the backfill scan.
 		// We only emit checkpoints that are part of the boundary event or part of
@@ -2288,9 +2292,10 @@ WITH resolved = '1s', no_initial_scan, min_checkpoint_frequency='1ns'`,
 		sqlDB.Exec(t, `ALTER TABLE foo ADD COLUMN b STRING DEFAULT 'd'`)
 
 		// Wait for a checkpoint to have been set
+		idb := s.Server.InternalDB().(isql.DB)
 		testutils.SucceedsSoon(t, func() error {
-			progress := loadProgress(t, jobFeed, jobRegistry)
-			if checkpoint := loadCheckpoint(t, progress); checkpoint == nil {
+			checkpointSpans := loadCheckpointSpans(t, jobFeed.JobID(), idb)
+			if len(checkpointSpans) == 0 {
 				return errors.Newf("waiting for checkpoint")
 			}
 			require.NoError(t, jobFeed.FetchTerminalJobErr())
@@ -2410,6 +2415,8 @@ func TestAlterChangefeedAddTargetsDuringBackfill(t *testing.T) {
 			context.Background(), &s.Server.ClusterSettings().SV, 1)
 		changefeedbase.SpanCheckpointMaxBytes.Override(
 			context.Background(), &s.Server.ClusterSettings().SV, maxCheckpointSize)
+		changefeedbase.FrontierPersistenceInterval.Override(
+			context.Background(), &s.Server.ClusterSettings().SV, 100*time.Millisecond)
 
 		registry := s.Server.JobRegistry().(*jobs.Registry)
 		testFeed := feed(t, f, `CREATE CHANGEFEED FOR foo
@@ -2435,9 +2442,10 @@ WITH resolved = '100ms', min_checkpoint_frequency='1ns'`, optOutOfMetamorphicDBL
 		}()
 
 		jobFeed := testFeed.(cdctest.EnterpriseTestFeed)
+		idb := s.Server.InternalDB().(isql.DB)
 
 		// Wait for non-nil checkpoint.
-		waitForCheckpoint(t, jobFeed, registry)
+		waitForCheckpoint(t, jobFeed, idb)
 
 		// Pause the job and read and verify the latest checkpoint information.
 		require.NoError(t, jobFeed.Pause())
@@ -2447,7 +2455,8 @@ WITH resolved = '100ms', min_checkpoint_frequency='1ns'`, optOutOfMetamorphicDBL
 		noHighWater := h == nil || h.IsEmpty()
 		require.True(t, noHighWater)
 
-		checkpoint := makeSpanGroupFromCheckpoint(t, loadCheckpoint(t, progress))
+		cpSpans := loadCheckpointSpans(t, jobFeed.JobID(), idb)
+		checkpoint := makeSpanGroupFromFrontierSpans(t, cpSpans)
 		require.Greater(t, checkpoint.Len(), 0)
 
 		sqlDB.Exec(t, fmt.Sprintf(`ALTER CHANGEFEED %d ADD bar WITH initial_scan`, jobFeed.JobID()))
@@ -2469,9 +2478,8 @@ WITH resolved = '100ms', min_checkpoint_frequency='1ns'`, optOutOfMetamorphicDBL
 		// Wait for highwater to be set, which signifies that the initial scan is complete.
 		waitForHighwater(t, jobFeed, registry)
 
-		// At this point, highwater mark should be set, and previous checkpoint should be gone.
+		// At this point, highwater mark should be set.
 		progress = loadProgress(t, jobFeed, registry)
-		require.Nil(t, loadCheckpoint(t, progress))
 
 		require.NoError(t, jobFeed.Pause())
 
@@ -3094,4 +3102,84 @@ func getNFromSet[K cmp.Ordered](rnd *rand.Rand, s map[K]struct{}, n int) []K {
 		ks[i], ks[j] = ks[j], ks[i]
 	})
 	return ks[:n]
+}
+
+// TestAlterChangefeedDoesNotWriteSpanLevelCheckpoint verifies that
+// ALTER CHANGEFEED does not write a span-level checkpoint (SLC) and
+// instead writes frontier data once
+// V26_2_ChangefeedsStopWritingSpanLevelCheckpoint is active.
+func TestAlterChangefeedDoesNotWriteSpanLevelCheckpoint(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	clusterversion.SkipWhenMinSupportedVersionIsAtLeast(t, clusterversion.V26_2)
+
+	ctx := context.Background()
+	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{
+		Knobs: base.TestingKnobs{
+			Server: &server.TestingKnobs{
+				DisableAutomaticVersionUpgrade: make(chan struct{}),
+				ClusterVersionOverride: clusterversion.
+					V26_2_ChangefeedsStopWritingSpanLevelCheckpoint.Version(),
+			},
+			DistSQL:          &execinfra.TestingKnobs{Changefeed: &TestingKnobs{}},
+			JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
+		},
+		DefaultTestTenant: base.TestControlsTenantsExplicitly,
+		UseDatabase:       "d",
+	})
+	defer s.Stopper().Stop(ctx)
+
+	sqlDB := sqlutils.MakeSQLRunner(db)
+	sqlDB.ExecMultiple(t,
+		`SET CLUSTER SETTING kv.rangefeed.enabled = true`,
+		`CREATE DATABASE d`,
+		`CREATE TABLE foo (a INT PRIMARY KEY)`,
+		`INSERT INTO foo SELECT generate_series(1, 100)`,
+		`CREATE TABLE bar (a INT PRIMARY KEY)`,
+		`INSERT INTO bar SELECT generate_series(1, 100)`,
+	)
+
+	// Create a changefeed for foo.
+	var jobID jobspb.JobID
+	sqlDB.QueryRow(t,
+		`CREATE CHANGEFEED FOR foo INTO 'null://' WITH no_initial_scan, resolved='100ms'`,
+	).Scan(&jobID)
+
+	// Wait for highwater to advance.
+	registry := s.JobRegistry().(*jobs.Registry)
+	testutils.SucceedsSoon(t, func() error {
+		job, err := registry.LoadJob(ctx, jobID)
+		if err != nil {
+			return err
+		}
+		progress := job.Progress()
+		if hw := progress.GetHighWater(); hw != nil && !hw.IsEmpty() {
+			return nil
+		}
+		return errors.New("waiting for highwater")
+	})
+
+	// Alter the changefeed and verify it doesn't write a span-level checkpoint.
+	sqlDB.Exec(t, "PAUSE JOB $1", jobID)
+	waitForJobState(sqlDB, t, jobID, "paused")
+	sqlDB.Exec(t, fmt.Sprintf("ALTER CHANGEFEED %d ADD bar WITH initial_scan", jobID))
+	job, err := registry.LoadJob(ctx, jobID)
+	require.NoError(t, err)
+	progress := job.Progress()
+	require.True(t, progress.GetChangefeed().SpanLevelCheckpoint.IsEmpty(),
+		"ALTER CHANGEFEED should not write span-level checkpoint")
+
+	// Verify frontier data was written by the ALTER.
+	idb := s.InternalDB().(isql.DB)
+	var frontierSpans []jobspb.ResolvedSpan
+	require.NoError(t, idb.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+		var err error
+		frontierSpans, _, err = jobfrontier.GetResolvedSpans(ctx, txn, jobID, coordinatorFrontierName)
+		if err != nil {
+			return err
+		}
+		return nil
+	}))
+	require.NotEmpty(t, frontierSpans, "ALTER CHANGEFEED should write frontier data")
 }
