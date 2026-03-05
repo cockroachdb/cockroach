@@ -160,7 +160,7 @@ Build the JSON payload with this structure:
       "path": "pkg/some/file.go",
       "line": 42,
       "side": "RIGHT",
-      "body": "**suggestion**: The comment should reflect that the key is only used for cleanup.\n\n```suggestion\n// DeprecatedStoreClusterVersionKey is only read during cleanup migration\n// and then deleted. Retained until MinSupported > V26_2.\n```"
+      "body": "/review-crdb: **suggestion**: The comment should reflect that the key is only used for cleanup.\n\n```suggestion\n// DeprecatedStoreClusterVersionKey is only read during cleanup migration\n// and then deleted. Retained until MinSupported > V26_2.\n```"
     }
   ]
 }
@@ -174,7 +174,8 @@ Build the JSON payload with this structure:
   `\n\n---\n*(made with [/review-crdb](https://github.com/cockroachdb/cockroach/blob/master/.claude/skills/review-crdb/SKILL.md))*`
 - **`comments`**: one entry per finding that has a specific file and line. Use
   `line` (the actual line number in the file) and `side: "RIGHT"` (commenting
-  on the new code). Prefix each comment body with the severity. For small,
+  on the new code). Start each comment body with `/review-crdb: ` so the
+  origin is visible during review, followed by the severity. For small,
   concrete fixes, use GitHub's suggested changes syntax — a fenced code block
   with the `suggestion` language tag. GitHub renders this as a diff with an
   "Apply suggestion" button. The content replaces the line(s) the comment is
