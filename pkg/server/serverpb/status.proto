@@ -1203,6 +1203,9 @@ message ASHSample {
   // TenantID identifies which tenant this sample belongs to.
   roachpb.TenantID tenant_id = 7
       [(gogoproto.nullable) = false, (gogoproto.customname) = "TenantID"];
+  // AppName is the application name string. Set when the sample corresponds
+  // to SQL execution.
+  string app_name = 8;
 }
 
 // An error wrapper for ListActiveSessionHistory fan-out.
@@ -1225,6 +1228,20 @@ message ListActiveSessionHistoryResponse {
   // Any errors that occurred during fan-out calls to other nodes.
   repeated ListActiveSessionHistoryError errors = 2
       [ (gogoproto.nullable) = false ];
+}
+
+// Request object for retrieving app name ID to string mappings from
+// a node's local cache.
+message AppNameMappingsRequest {
+  // ids is the set of app name IDs to resolve. Only mappings for
+  // these IDs are returned in the response.
+  repeated uint64 ids = 1;
+}
+
+// Response object for AppNameMappings.
+message AppNameMappingsResponse {
+  // mappings is a map from app name ID to the original app name string.
+  map<uint64, string> mappings = 1;
 }
 
 // Request object for issuing a query cancel request.
@@ -2481,6 +2498,11 @@ service Status {
   // ListLocalActiveSessionHistory retrieves ASH samples on this node.
   rpc ListLocalActiveSessionHistory(ListActiveSessionHistoryRequest)
       returns (ListActiveSessionHistoryResponse) {}
+
+  // AppNameMappings retrieves app name ID to string mappings from
+  // this node's local cache for the requested IDs.
+  rpc AppNameMappings(AppNameMappingsRequest)
+      returns (AppNameMappingsResponse) {}
 
   // CancelQuery cancels a SQL query given its ID.
   rpc CancelQuery(CancelQueryRequest) returns (CancelQueryResponse) {

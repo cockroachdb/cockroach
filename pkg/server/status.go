@@ -3381,6 +3381,7 @@ func (s *statusServer) ListLocalActiveSessionHistory(
 			NodeID:        sample.NodeID,
 			TenantID:      sample.TenantID,
 			WorkloadID:    sample.WorkloadID,
+			AppName:       sample.AppName,
 			WorkEventType: serverpb.WorkEventType(sample.WorkEventType),
 			WorkEvent:     sample.WorkEvent,
 			GoroutineID:   sample.GoroutineID,
@@ -3394,6 +3395,22 @@ func (s *statusServer) ListLocalActiveSessionHistory(
 
 	return &serverpb.ListActiveSessionHistoryResponse{
 		Samples: protoSamples,
+	}, nil
+}
+
+// AppNameMappings returns app name ID to string mappings from this
+// node's local cache for the requested IDs.
+func (s *statusServer) AppNameMappings(
+	ctx context.Context, req *serverpb.AppNameMappingsRequest,
+) (*serverpb.AppNameMappingsResponse, error) {
+	ctx = s.AnnotateCtx(ctx)
+
+	if err := s.privilegeChecker.RequireViewActivityOrViewActivityRedactedPermission(ctx); err != nil {
+		return nil, err
+	}
+
+	return &serverpb.AppNameMappingsResponse{
+		Mappings: ash.GetAppNameMappings(req.Ids),
 	}, nil
 }
 
