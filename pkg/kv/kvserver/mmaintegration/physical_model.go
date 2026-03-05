@@ -268,9 +268,9 @@ func MakePhysicalRangeLoad(
 ) mmaprototype.RangeLoad {
 	var rl mmaprototype.RangeLoad
 	cpuNanos := requestCPUNanos + raftCPUNanos
-	rl.Load[mmaprototype.CPURate] = mmaprototype.LoadValue(float64(cpuNanos) * float64(amp[mmaprototype.CPURate]))
-	rl.RaftCPU = mmaprototype.LoadValue(float64(raftCPUNanos) * float64(amp[mmaprototype.CPURate]))
-	rl.Load[mmaprototype.WriteBandwidth] = mmaprototype.LoadValue(float64(writeBytesPerSec) * float64(amp[mmaprototype.WriteBandwidth]))
+	rl.Load[mmaprototype.CPURate] = mmaprototype.LoadValue(cpuNanos * float64(amp[mmaprototype.CPURate]))
+	rl.RaftCPU = mmaprototype.LoadValue(raftCPUNanos * float64(amp[mmaprototype.CPURate]))
+	rl.Load[mmaprototype.WriteBandwidth] = mmaprototype.LoadValue(writeBytesPerSec * float64(amp[mmaprototype.WriteBandwidth]))
 	rl.Load[mmaprototype.ByteSize] = mmaprototype.LoadValue(float64(logicalBytes) * float64(amp[mmaprototype.ByteSize]))
 	return rl
 }
