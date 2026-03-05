@@ -11,9 +11,11 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
@@ -24,6 +26,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
+)
+
+var uniquenessCheckComplexKeysEnabled = settings.RegisterBoolSetting(
+	settings.ApplicationLevel,
+	"sql.inspect.uniqueness_check.complex_keys.enabled",
+	"if true, the uniqueness check is enabled for INSPECT jobs on indexes where the unique column does not immediately follow the region column",
+	false,
 )
 
 type uniquenessCheck struct {
@@ -402,36 +411,28 @@ func (c *uniquenessCheck) loadCatalogInfo(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	if !isRegionalByRow(tableDesc) {
-		return errors.AssertionFailedf("uniqueness check is only supported for tables with REGIONAL BY ROW locality")
+
+	index, err := findIndexByID(tableDesc, c.indexID)
+	if err != nil {
+		return err
 	}
+
+	reason, uniquePos, err := isSupportedIndexForUniquenessCheck(
+		ctx,
+		index,
+		tableDesc,
+		c.execCfg.Settings.Version.IsActive(ctx, clusterversion.V26_2),
+		true, /* isComplexKeysEnabled */ // The cluster setting gates when the job is specced.
+	)
+	if err != nil {
+		return err
+	} else if reason != "" {
+		return errors.AssertionFailedf("%s", reason)
+	}
+
 	c.tableDesc = tableDesc
-
-	index, err := findIndexByID(c.tableDesc, c.indexID)
-	if err != nil {
-		return err
-	}
-
-	if !index.Primary() {
-		return errors.AssertionFailedf("uniqueness check is only supported for primary indexes")
-	}
-
-	if !index.IsUnique() {
-		return errors.AssertionFailedf("non-unique index shouldn't be unique checked")
-	}
-
-	uniqueColIdxs, err := findUniqueColIdxs(c.tableDesc, index)
-	if err != nil {
-		return err
-	}
-	if len(uniqueColIdxs) == 0 {
-		return errors.AssertionFailedf("index has no `unique_rowid()` or `unordered_unique_rowid()` column to be unique checked")
-	} else if len(uniqueColIdxs) > 1 {
-		return errors.AssertionFailedf("uniqueness check for indexes with multiple `unique_rowid()` or `unordered_unique_rowid()` columns is not supported")
-	}
-
 	c.index = index
-	c.uniqueColIdx = uniqueColIdxs[0]
+	c.uniqueColIdx = uniquePos
 
 	return nil
 }

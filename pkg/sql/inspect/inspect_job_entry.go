@@ -7,6 +7,7 @@ package inspect
 
 import (
 	"context"
+	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
@@ -18,7 +19,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
-	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotice"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/idxtype"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -123,36 +123,12 @@ func ChecksForTable(
 		return checks, nil
 	}
 
-	priIndex := table.GetPrimaryIndex()
-
-	if execCfg.Settings.Version.IsActive(ctx, clusterversion.V26_2) {
-		if uniqueColIdxs, err := findUniqueColIdxs(table, priIndex); err != nil {
+	for _, idx := range table.ActiveIndexes() {
+		checksOnIndex, err := checksForIndex(ctx, execCfg, index{TableDescriptor: table, Index: idx}, false /* errorOnNoSupport */)
+		if err != nil {
 			return nil, err
-		} else if isRegionalByRow(table) && len(uniqueColIdxs) == 1 {
-			checks = append(checks, &jobspb.InspectDetails_Check{
-				Type:         jobspb.InspectCheckUniqueness,
-				TableID:      table.GetID(),
-				IndexID:      priIndex.GetID(),
-				TableVersion: table.GetVersion(),
-			})
 		}
-	}
-
-	for _, index := range table.PublicNonPrimaryIndexes() {
-		if reason := isSupportedIndexForIndexConsistencyCheck(index, table); reason != "" {
-			if p != nil {
-				p.BufferClientNotice(ctx, pgnotice.Newf(
-					"skipping index %q on table %q: not supported for index consistency checking", index.GetName(), table.GetName()))
-			}
-			continue
-		}
-		check := jobspb.InspectDetails_Check{
-			Type:         jobspb.InspectCheckIndexConsistency,
-			TableID:      table.GetID(),
-			IndexID:      index.GetID(),
-			TableVersion: table.GetVersion(),
-		}
-		checks = append(checks, &check)
+		checks = append(checks, checksOnIndex...)
 	}
 
 	if expectedRowCount != nil {
@@ -180,10 +156,6 @@ func checksByIndexNames(
 		descpb.ID
 		descpb.IndexID
 	}
-	type index struct {
-		catalog.TableDescriptor
-		catalog.Index
-	}
 
 	var indexes []index
 	var seenIndexes = make(map[indexKey]struct{})
@@ -201,42 +173,84 @@ func checksByIndexNames(
 	}
 
 	for _, idx := range indexes {
-		index := idx.Index
-		table := idx.TableDescriptor
-
-		var isIndexSupportedForChecks bool
-		if reason := isSupportedIndexForIndexConsistencyCheck(index, table); reason == "" {
-			isIndexSupportedForChecks = true
-			checks = append(checks,
-				&jobspb.InspectDetails_Check{
-					Type:         jobspb.InspectCheckIndexConsistency,
-					TableID:      table.GetID(),
-					IndexID:      index.GetID(),
-					TableVersion: table.GetVersion(),
-				})
-		}
-		if execCfg.Settings.Version.IsActive(ctx, clusterversion.V26_2) {
-			if index.Primary() {
-				if uniqueColIdxs, err := findUniqueColIdxs(table, index); err != nil {
-					return nil, err
-				} else if isRegionalByRow(table) && len(uniqueColIdxs) == 1 {
-					isIndexSupportedForChecks = true
-					checks = append(checks, &jobspb.InspectDetails_Check{
-						Type:         jobspb.InspectCheckUniqueness,
-						TableID:      table.GetID(),
-						IndexID:      index.GetID(),
-						TableVersion: table.GetVersion(),
-					})
-				}
-			}
-		}
-
-		if !isIndexSupportedForChecks {
-			return nil, pgerror.Newf(pgcode.InvalidParameterValue, "index %q on table %q is not supported by INSPECT checks", index.GetName(), table.GetName())
+		if checksForIndex, err := checksForIndex(ctx, execCfg, idx, true /* errorOnNoSupport */); err != nil {
+			return nil, err
+		} else {
+			checks = append(checks, checksForIndex...)
 		}
 	}
 
 	return checks, nil
+}
+
+type index struct {
+	catalog.TableDescriptor
+	catalog.Index
+}
+
+// checkFromIndexFunc defines a function that returns a check for a given index, a
+// string reason for why the index is unsupported, or an error.
+type checkFromIndexFunc func(ctx context.Context, execCfg *sql.ExecutorConfig, idx index) (*jobspb.InspectDetails_Check, string, error)
+
+var checkSpecFactories = []checkFromIndexFunc{
+	func(ctx context.Context, execCfg *sql.ExecutorConfig, idx index) (*jobspb.InspectDetails_Check, string, error) {
+		if reason := isSupportedIndexForIndexConsistencyCheck(idx.Index, idx.TableDescriptor); reason != "" {
+			return nil, reason, nil
+		}
+
+		return &jobspb.InspectDetails_Check{
+			Type:         jobspb.InspectCheckIndexConsistency,
+			TableID:      idx.TableDescriptor.GetID(),
+			IndexID:      idx.Index.GetID(),
+			TableVersion: idx.TableDescriptor.GetVersion(),
+		}, "", nil
+	},
+	func(ctx context.Context, execCfg *sql.ExecutorConfig, idx index) (*jobspb.InspectDetails_Check, string, error) {
+		if reason, _, err := isSupportedIndexForUniquenessCheck(
+			ctx,
+			idx.Index,
+			idx.TableDescriptor,
+			execCfg.Settings.Version.IsActive(ctx, clusterversion.V26_2),
+			uniquenessCheckComplexKeysEnabled.Get(execCfg.SV()),
+		); err != nil {
+			return nil, "", err
+		} else if reason != "" {
+			return nil, reason, nil
+		}
+
+		return &jobspb.InspectDetails_Check{
+			Type:         jobspb.InspectCheckUniqueness,
+			TableID:      idx.TableDescriptor.GetID(),
+			IndexID:      idx.Index.GetID(),
+			TableVersion: idx.TableDescriptor.GetVersion(),
+		}, "", nil
+	},
+}
+
+func checksForIndex(
+	ctx context.Context, execCfg *sql.ExecutorConfig, idx index, errorOnNoSupport bool,
+) ([]*jobspb.InspectDetails_Check, error) {
+	var checksForIndex []*jobspb.InspectDetails_Check
+	var reasons []string
+	for _, specFactory := range checkSpecFactories {
+		check, reason, err := specFactory(ctx, execCfg, idx)
+		if err != nil {
+			return nil, err
+		}
+		if reason != "" {
+			reasons = append(reasons, reason)
+		} else if check != nil {
+			checksForIndex = append(checksForIndex, check)
+		}
+	}
+
+	if len(checksForIndex) == 0 && errorOnNoSupport {
+		return nil, pgerror.Newf(pgcode.InvalidParameterValue,
+			"no supported checks for index %q on table %q (%s)",
+			idx.Index.GetName(), idx.TableDescriptor.GetName(), strings.Join(reasons, "; "))
+	}
+
+	return checksForIndex, nil
 }
 
 // isSupportedIndexForIndexConsistencyCheck returns an empty string if a given
@@ -263,6 +277,13 @@ func isSupportedIndexForIndexConsistencyCheck(
 	if index.IsSharded() {
 		return "hash-sharded index"
 	}
+
+	switch t := index.GetType(); t {
+	// TODO(154860): support inverted indexes
+	case idxtype.INVERTED, idxtype.VECTOR:
+		return t.String()
+	}
+
 	// TODO(154772): support expression indexes
 	if table.IsExpressionIndex(index) {
 		return "expression index"
@@ -278,11 +299,41 @@ func isSupportedIndexForIndexConsistencyCheck(
 		}
 	}
 
-	switch t := index.GetType(); t {
-	// TODO(154860): support inverted indexes
-	case idxtype.INVERTED, idxtype.VECTOR:
-		return t.String()
+	return ""
+}
+
+func isSupportedIndexForUniquenessCheck(
+	ctx context.Context,
+	index catalog.Index,
+	table catalog.TableDescriptor,
+	isActiveV26_2, isComplexKeysEnabled bool,
+) (reason string, uniquePos int, err error) {
+	if !isActiveV26_2 {
+		return "uniqueness: check requires v26.2", 0, nil
 	}
 
-	return ""
+	if !index.Primary() {
+		return "uniqueness: check only valid on primary index", 0, nil
+	}
+
+	uniquePositions, err := findUniqueRowIDColPositions(table, index)
+	if err != nil {
+		return "", 0, err
+	}
+
+	if !isRegionalByRow(table) {
+		return "uniqueness: check only supported on REGIONAL BY ROW tables", 0, nil
+	}
+
+	if len(uniquePositions) == 0 {
+		return "uniqueness: check only supported on tables with a unique column", 0, nil
+	} else if len(uniquePositions) > 1 {
+		return "uniqueness: check only supported on tables with a single unique column", 0, nil
+	}
+
+	if uniquePositions[0] == 1 || isComplexKeysEnabled {
+		return "", uniquePositions[0], nil
+	} else {
+		return "uniqueness: complex key layout requires the cluster setting to opt in to (expensive) validation", 0, nil
+	}
 }
