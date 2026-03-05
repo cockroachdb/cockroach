@@ -1351,7 +1351,20 @@ type netCounters struct {
 
 var mockableMaybeReadProcStatFile = maybeReadProcStatFile
 
-func getSummedNetStats(ctx context.Context) (netCounters, error) {
+func getSummedNetStats(ctx context.Context) (result netCounters, err error) {
+	// Recover from panics in gopsutil. The library has known bugs where it
+	// accesses slice indices without bounds checks when parsing OS command
+	// output (e.g. netstat on darwin). Since this is a metrics sampling path,
+	// returning zero counters is acceptable.
+	// See: https://github.com/cockroachdb/cockroach/issues/164074
+	defer func() {
+		if r := recover(); r != nil {
+			err = errors.Newf("panic in gopsutil: %v", r)
+			log.Ops.Warningf(ctx, "recovered from %s", err)
+			result = netCounters{}
+		}
+	}()
+
 	c, err := net.IOCountersWithContext(ctx, true /* per NIC */)
 	if err != nil {
 		log.Dev.VWarningf(ctx, 1, "error reading network IO counters: %v", err)
