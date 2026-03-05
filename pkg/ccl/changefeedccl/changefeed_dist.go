@@ -255,10 +255,12 @@ func startDistChangefeed(
 	dsp := execCtx.DistSQLPlanner()
 
 	var spanLevelCheckpoint *jobspb.TimestampSpansMap
-	if cfProgress := progress.GetChangefeed(); cfProgress != nil && cfProgress.SpanLevelCheckpoint != nil {
-		spanLevelCheckpoint = cfProgress.SpanLevelCheckpoint
-		if log.V(2) {
-			log.Changefeed.Infof(ctx, "span-level checkpoint: %s", spanLevelCheckpoint)
+	if !execCfg.Settings.Version.IsActive(ctx, clusterversion.V26_2_ChangefeedsStopUsingSpanLevelCheckpoint) {
+		if cfProgress := progress.GetChangefeed(); cfProgress != nil && cfProgress.SpanLevelCheckpoint != nil {
+			spanLevelCheckpoint = cfProgress.SpanLevelCheckpoint
+			if log.V(2) {
+				log.Changefeed.Infof(ctx, "span-level checkpoint: %s", spanLevelCheckpoint)
+			}
 		}
 	}
 	p, planCtx, err := makePlan(execCtx, jobID, details, description, initialHighWater,

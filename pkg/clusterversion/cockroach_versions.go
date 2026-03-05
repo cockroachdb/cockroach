@@ -232,6 +232,10 @@ const (
 	// changefeeds stop writing span-level checkpoints.
 	V26_2_ChangefeedsStopWritingSpanLevelCheckpoint
 
+	// V26_2_ChangefeedsStopUsingSpanLevelCheckpoint is the version when
+	// changefeeds stop reading/writing span-level checkpoints.
+	V26_2_ChangefeedsStopUsingSpanLevelCheckpoint
+
 	// *************************************************
 	// Step (1) Add new versions above this comment.
 	// Do not add new versions to a patch release.
@@ -293,6 +297,8 @@ var versionTable = [numKeys]roachpb.Version{
 	V26_2_DescriptorTxnKeyCleanup: {Major: 26, Minor: 1, Internal: 16},
 
 	V26_2_ChangefeedsStopWritingSpanLevelCheckpoint: {Major: 26, Minor: 1, Internal: 18},
+
+	V26_2_ChangefeedsStopUsingSpanLevelCheckpoint: {Major: 26, Minor: 1, Internal: 20},
 
 	// *************************************************
 	// Step (2): Add new versions above this comment.

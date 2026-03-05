@@ -682,6 +682,12 @@ func (ca *changeAggregator) setupSpansAndFrontier() (spans []roachpb.Span, err e
 
 	// Checkpointed spans are spans that were above the highwater mark, and we
 	// must preserve that information in the frontier for future checkpointing.
+	//
+	// NB: SpanLevelCheckpoint is nil once V26_2_ChangefeedsStopUsingSpanLevelCheckpoint
+	// is active (the version gate is checked in changefeed_dist.go when
+	// populating the spec).
+	//
+	// TODO(#163256): Delete this code once MinSupported = 26.2.
 	if err := checkpoint.Restore(ca.frontier, ca.spec.SpanLevelCheckpoint); err != nil {
 		return nil, errors.Wrapf(err, "failed to restore span-level checkpoint")
 	}
@@ -1564,6 +1570,11 @@ func (cf *changeFrontier) Start(ctx context.Context) {
 		return
 	}
 
+	// NB: SpanLevelCheckpoint is nil once V26_2_ChangefeedsStopUsingSpanLevelCheckpoint
+	// is active (the version gate is checked in changefeed_dist.go when
+	// populating the spec).
+	//
+	// TODO(#163256): Delete this code once MinSupported = 26.2.
 	if err := checkpoint.Restore(cf.frontier, cf.spec.SpanLevelCheckpoint); err != nil {
 		log.Changefeed.Warningf(cf.Ctx(),
 			"moving to draining due to error restoring span-level checkpoint: %v", err)

@@ -979,7 +979,9 @@ func generateNewProgressForTableOps(
 	for _, rs := range prevResolvedSpans {
 		checkpoint.addSpans([]roachpb.Span{rs.Span}, rs.Timestamp)
 	}
-	if changefeedProgress != nil {
+	if !p.ExecCfg().Settings.Version.IsActive(ctx,
+		clusterversion.V26_2_ChangefeedsStopUsingSpanLevelCheckpoint,
+	) && changefeedProgress != nil {
 		for ts, spans := range changefeedProgress.SpanLevelCheckpoint.All() {
 			checkpoint.addSpans(spans, ts)
 		}

@@ -1326,7 +1326,7 @@ const SystemDatabaseName = catconstants.SystemDatabaseName
 // release version).
 //
 // NB: Don't set this to clusterversion.Latest; use a specific version instead.
-var SystemDatabaseSchemaBootstrapVersion = clusterversion.V26_2_DescriptorTxnKeyCleanup.Version()
+var SystemDatabaseSchemaBootstrapVersion = clusterversion.V26_2_ChangefeedsStopUsingSpanLevelCheckpoint.Version()
 
 // MakeSystemDatabaseDesc constructs a copy of the system database
 // descriptor.
