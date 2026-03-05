@@ -20,6 +20,7 @@ var sessionVarDescriptions = map[string]string{
 	"avoid_buffering":                                                 "Indicates that the returned data should not be buffered by conn executor. This is currently used by replication primitives to ensure the data is flushed to the consumer immediately.",
 	"avoid_full_table_scans_in_mutations":                             "Controls whether mutation queries that plan full table scans should be avoided.",
 	"backslash_quote":                                                 "Controls whether backslash can be used as a quote escape character (compatibility setting).",
+	"buffered_writes_implicit_txns_enabled":                           "Controls whether buffered writes are enabled for implicit transactions.",
 	"buffered_writes_use_locking_on_non_unique_indexes":               "Controls whether buffered writes use locking on non-unique indexes.",
 	"bypass_pcr_reader_catalog_aost":                                  "Disables the AOST used by all user queries on the PCR reader catalog.",
 	"bytea_output":                                                    "Controls how to encode byte arrays when converting to string.",

@@ -3878,11 +3878,11 @@ func (ex *connExecutor) omitInRangefeeds() bool {
 	return ex.sessionData().DisableChangefeedReplication
 }
 
-func (ex *connExecutor) bufferedWritesEnabled(ctx context.Context) bool {
+func (ex *connExecutor) bufferedWritesEnabled(typ txnType) bool {
 	if ex.sessionData() == nil {
 		return false
 	}
-	return ex.sessionData().BufferedWritesEnabled
+	return ex.sessionData().BufferedWritesEnabled && (typ == explicitTxn || ex.sessionData().BufferedWritesImplicitTxnsEnabled)
 }
 
 func (ex *connExecutor) bufferedWritesIsAllowedForIsolationLevel(
@@ -4173,8 +4173,18 @@ func (ex *connExecutor) txnStateTransitionsApplyWrapper(
 			if err != nil {
 				return advanceInfo{}, err
 			}
-			if advInfo.txnEvent.eventType == txnUpgradeToExplicit {
-				ex.extraTxnState.txnFinishClosure.implicit = false
+		}
+		if advInfo.txnEvent.eventType == txnUpgradeToExplicit {
+			ex.extraTxnState.txnFinishClosure.implicit = false
+			// Update whether the buffered writes are enabled on the txn since
+			// it was upgraded to the explicit one.
+			if !ex.state.mu.txn.Active() {
+				// In an edge case, when multiple statements are sent via a
+				// single SimpleQuery pgwire message, the txn might have already
+				// issued some BatchRequests. We don't allow enabling buffered
+				// writes on such txn, so we'll keep the buffered writes
+				// enablement unchanged.
+				ex.state.mu.txn.SetBufferedWritesEnabled(ex.bufferedWritesEnabled(explicitTxn))
 			}
 		}
 	case txnStart:
@@ -4316,7 +4326,7 @@ func (ex *connExecutor) txnStateTransitionsApplyWrapper(
 				ex.QualityOfService(),
 				chainModes.isoLevel,
 				ex.omitInRangefeeds(),
-				ex.bufferedWritesEnabled(ex.Ctx()),
+				ex.bufferedWritesEnabled(explicitTxn),
 				ex.rng.internal,
 			)
 			chainEvent := eventTxnStart{ImplicitTxn: fsm.False}
