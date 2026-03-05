@@ -361,6 +361,7 @@ type Batch[B storage.WriteBatch] struct {
 	//
 	// NB: This is needed because generic types cannot be compared to nil.
 	raftInitialized bool
+	closed          bool
 }
 
 // State returns the StateEngine batch.
@@ -428,8 +429,12 @@ func (b *Batch[B]) Commit(syncStateEngine bool) error {
 	return b.state.Commit(syncStateEngine)
 }
 
-// Close closes the batch.
+// Close closes the batch. It is idempotent.
 func (b *Batch[B]) Close() {
+	if b.closed {
+		return
+	}
+	b.closed = true
 	b.state.Close()
 	if b.separated && b.raftInitialized {
 		b.raft.Close()
