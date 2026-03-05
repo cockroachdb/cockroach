@@ -245,14 +245,14 @@ func (e *Engines) SetStoreID(ctx context.Context, id roachpb.StoreID) error {
 	return nil
 }
 
-// NewWriteBatch creates a new write batch to storage. If engines are separated,
-// it consists of two batches, one per engine.
-// TODO(sep-raft-log): generalize this so that the LogEngine batch is lazy.
+// NewWriteBatch creates a new write batch to storage. When engines are
+// separated, the raft engine batch is lazily initialized on first access via
+// Raft().
 func (e *Engines) NewWriteBatch() Batch[storage.WriteBatch] {
 	if e.Separated() {
 		return Batch[storage.WriteBatch]{
 			state:     e.StateEngine().NewWriteBatch(),
-			raft:      e.LogEngine().NewWriteBatch(),
+			logEngine: e.LogEngine(),
 			separated: true,
 		}
 	}
@@ -276,7 +276,7 @@ func (e *Engines) NewBatch() Batch[storage.Batch] {
 	if e.Separated() {
 		return Batch[storage.Batch]{
 			state:     e.StateEngine().NewBatch(),
-			raft:      e.LogEngine().NewWriteBatch(),
+			logEngine: e.LogEngine(),
 			separated: true,
 		}
 	}
@@ -297,9 +297,19 @@ func (e *Engines) NewBatch() Batch[storage.Batch] {
 // Batch is a write batch to storage which is aware whether the log and state
 // machine engines are separated. It supports any wrapper around
 // storage.WriteBatch, in particular a read-write storage.Batch.
+//
+// When engines are separated, the raft engine batch is lazily initialized on
+// the first call to Raft(). This avoids creating a raft batch for operations
+// that only touch the state engine.
 type Batch[B storage.WriteBatch] struct {
-	state     B
-	raft      storage.WriteBatch
+	state B
+	// raft is the LogEngine batch. When engines are not separated, it points to
+	// the same underlying batch as state. When separated, it is lazily
+	// initialized on the first call to Raft().
+	raft storage.WriteBatch
+	// logEngine is a reference to the LogEngine, used for lazy raft batch
+	// creation. Only set when engines are separated.
+	logEngine storage.Engine
 	separated bool
 }
 
@@ -308,8 +318,12 @@ func (b *Batch[B]) State() B {
 	return b.state
 }
 
-// Raft returns the LogEngine writer.
+// Raft returns the LogEngine writer. When engines are separated, the raft
+// batch is lazily created on first access.
 func (b *Batch[B]) Raft() RaftWO {
+	if b.separated && b.raft == nil {
+		b.raft = b.logEngine.NewWriteBatch()
+	}
 	return b.raft
 }
 
@@ -320,16 +334,18 @@ func (b *Batch[B]) CommitAndSync() error {
 	if !b.separated {
 		return b.state.Commit(true /* sync */)
 	}
-	if err := b.raft.Commit(true /* sync */); err != nil {
-		return err
+	if b.raft != nil {
+		if err := b.raft.Commit(true /* sync */); err != nil {
+			return err
+		}
 	}
-	return b.state.Commit(false /* false */)
+	return b.state.Commit(false /* sync */)
 }
 
 // Close closes the batch.
 func (b *Batch[B]) Close() {
 	b.state.Close()
-	if b.separated {
+	if b.separated && b.raft != nil {
 		b.raft.Close()
 	}
 }
