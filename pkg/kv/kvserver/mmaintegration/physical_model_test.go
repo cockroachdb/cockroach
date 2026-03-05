@@ -46,15 +46,25 @@ func TestComputePhysicalStore(t *testing.T) {
 					d.ScanArgs(t, "store-cpu-per-second", &storeCPUCores)
 				}
 
+				var sqlGatewayCPUCores, sqlDistCPUCores float64
+				if d.HasArg("sql-gateway-cpu") {
+					d.ScanArgs(t, "sql-gateway-cpu", &sqlGatewayCPUCores)
+				}
+				if d.HasArg("sql-dist-cpu") {
+					d.ScanArgs(t, "sql-dist-cpu", &sqlDistCPUCores)
+				}
+
 				const nsPerCore = 1e9
 				const gib = 1 << 30
 
 				desc := roachpb.StoreDescriptor{
 					NodeCapacity: roachpb.NodeCapacity{
-						NumStores:           int32(numStores),
-						StoresCPURate:       int64(storesCPUCores * nsPerCore),
-						NodeCPURateUsage:    int64(nodeUsageCores * nsPerCore),
-						NodeCPURateCapacity: int64(nodeCapCores * nsPerCore),
+						NumStores:               int32(numStores),
+						StoresCPURate:           int64(storesCPUCores * nsPerCore),
+						NodeCPURateUsage:        int64(nodeUsageCores * nsPerCore),
+						NodeCPURateCapacity:     int64(nodeCapCores * nsPerCore),
+						SQLGatewayCPUNanoPerSec: int64(sqlGatewayCPUCores * nsPerCore),
+						SQLDistCPUNanoPerSec:    int64(sqlDistCPUCores * nsPerCore),
 					},
 					Capacity: roachpb.StoreCapacity{
 						CPUPerSecond:        storeCPUCores * nsPerCore,
