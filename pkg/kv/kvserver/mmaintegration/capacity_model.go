@@ -69,18 +69,18 @@ func computeStoreByteSizeCapacity(
 	return mmaprototype.LoadValue(float64(logicalBytes) / diskFractionUsed)
 }
 
-// cpuIndirectOverheadMultiplier is the maximum ratio of total CPU caused by
+// maxCPUAmplification is the maximum ratio of total CPU caused by
 // store work to the directly-tracked store CPU. For example, a value of 3
 // means we assume each unit of direct MMA load (replica CPU) can cause up to 2
 // additional units of indirect CPU (RPC handling, compactions, etc.), for a
 // total of 3 units. Any node CPU usage beyond storesCPURate * multiplier is
 // treated as background load unrelated to MMA.
-const cpuIndirectOverheadMultiplier = 3.0
+const maxCPUAmplification = 3.0
 
 // cpuCapacityFloorPerStore is the minimum per-store CPU capacity (in ns/s)
 // returned by computeCPUCapacityWithCap. The capacity formula is:
 //
-//	mult = clamp(nodeCPURateUsage / storesCPURate, 1, cpuIndirectOverheadMultiplier)
+//	mult = clamp(nodeCPURateUsage / storesCPURate, 1, maxCPUAmplification)
 //	backgroundLoad = nodeCPURateUsage - storesCPURate * mult
 //	capacity = (nodeCPURateCapacity - backgroundLoad) / mult
 //
@@ -89,7 +89,7 @@ const cpuIndirectOverheadMultiplier = 3.0
 // (load/capacity) to spike to infinity. The floor prevents this.
 //
 // Example: 16-core node, 1 store, storesCPURate=2, mult clamped to
-// cpuIndirectOverheadMultiplier=3 (implicit mult exceeds cap in all rows):
+// maxCPUAmplification=3 (implicit mult exceeds cap in all rows):
 //
 //	bg = nodeCPURateUsage - storesCPURate*mult
 //	cap = (nodeCPURateCapacity - bg) / mult
@@ -117,7 +117,7 @@ const cpuCapacityFloorPerStore = 0.1 * 1e9 // 0.1 cores in ns/s
 //
 // The formula:
 //
-//  1. clampedMult = clamp(nodeCPURateUsage / storesCPURate, 1, cpuIndirectOverheadMultiplier)
+//  1. clampedMult = clamp(nodeCPURateUsage / storesCPURate, 1, maxCPUAmplification)
 //     When the implicit multiplier is low (<= cap), we assume all non-store
 //     CPU is indirectly caused by store work (e.g. RPC overhead, compactions)
 //     and will scale linearly with MMA's direct load.
@@ -187,7 +187,7 @@ func computeCPUCapacityWithCap(in storeCPURateCapacityInput) (capacity float64) 
 		// use the cap. MMA attributes 0 * cap = 0 of the node usage to itself,
 		// meaning all node usage is "background". MMA gets the remaining idle
 		// capacity, scaled down by the multiplier.
-		mult = cpuIndirectOverheadMultiplier
+		mult = maxCPUAmplification
 	} else {
 		// Compute the implicit multiplier and clamp it to [1, cap].
 		// - Clamping from above prevents pathological behavior when MMA tracks
@@ -196,7 +196,7 @@ func computeCPUCapacityWithCap(in storeCPURateCapacityInput) (capacity float64) 
 		//   node usage (shouldn't happen, but can due to measurement lag).
 		//   Without this, MMA would get unreasonably high capacity.
 		implicitMult := in.nodeCPURateUsage / in.storesCPURate
-		mult = max(1, min(implicitMult, cpuIndirectOverheadMultiplier))
+		mult = max(1, min(implicitMult, maxCPUAmplification))
 	}
 
 	// Background load is the portion of node usage NOT attributed to MMA.
