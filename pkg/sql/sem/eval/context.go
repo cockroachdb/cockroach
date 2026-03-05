@@ -363,6 +363,13 @@ type Context struct {
 
 	// WorkloadID for ASH sampling.
 	WorkloadID uint64
+
+	// AppNameID is the hash of the application name, for ASH
+	// sampling. Set alongside WorkloadID in the connExecutor.
+	// Note(alyshan): This will eventually be replaced by a general
+	// enrichment_id field which will enable the ASH sampler to
+	// enrich samples with more workload context.
+	AppNameID uint64
 }
 
 // RoutineStatementCounters encapsulates metrics for tracking the execution

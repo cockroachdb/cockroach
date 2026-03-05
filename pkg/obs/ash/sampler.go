@@ -59,6 +59,12 @@ var BufferSize = settings.RegisterIntSetting(
 	settings.PositiveInt,
 )
 
+// AppNameResolverFn fetches app name ID-to-string mappings from a
+// remote node. The sampler calls this when local resolution fails and
+// the work state has a non-zero GatewayNodeID that differs from the
+// local node. The returned map is keyed by app name ID.
+type AppNameResolverFn func(ctx context.Context, nodeID roachpb.NodeID) (map[uint64]string, error)
+
 // globalSampler is the process-wide ASH sampler singleton. It is
 // initialized once by InitGlobalSampler and read by GetSamples.
 var globalSampler atomic.Pointer[Sampler]
@@ -74,8 +80,10 @@ var initSamplerOnce sync.Once
 const maxWorkloadIDCacheSize = 10000
 
 type pendingSample struct {
-	gid   int64
-	state WorkState
+	gid           int64
+	state         WorkState
+	workloadIDStr string
+	appName       string
 }
 
 // Sampler periodically samples the active work states and stores ASH data.
@@ -91,6 +99,9 @@ type Sampler struct {
 	// workloadIDCache caches the result of encodeStmtFingerprintIDToString
 	// to avoid repeated allocations for the same workload ID.
 	workloadIDCache *cache.UnorderedCache
+	// resolver, when set, fetches app name mappings from remote nodes
+	// for work states whose app name could not be resolved locally.
+	resolver atomic.Pointer[AppNameResolverFn]
 	// pendingSamples is a reusable slice for collecting work state snapshots
 	// during rangeWorkStates. Reused across samples to avoid per-sample
 	// slice allocation.
@@ -112,6 +123,22 @@ func newSampler(nodeID roachpb.NodeID, st *cluster.Settings, stopper *stop.Stopp
 			},
 		}),
 	}
+}
+
+// SetAppNameResolver sets the callback used to fetch app name
+// mappings from remote nodes when local resolution fails.
+func (s *Sampler) SetAppNameResolver(fn AppNameResolverFn) {
+	s.resolver.Store(&fn)
+}
+
+// SetGlobalAppNameResolver sets the resolver on the global sampler.
+// This is a no-op if the global sampler has not been initialized.
+func SetGlobalAppNameResolver(fn AppNameResolverFn) {
+	s := globalSampler.Load()
+	if s == nil {
+		return
+	}
+	s.SetAppNameResolver(fn)
 }
 
 // start begins the background sampling loop. It must be called at most once.
@@ -151,7 +178,7 @@ func (s *Sampler) run(ctx context.Context) {
 			timer.Read = true
 			timer.Reset(time.Duration(s.interval.Load()))
 			if Enabled.Get(&s.st.SV) {
-				s.takeSample()
+				s.takeSample(ctx)
 			}
 		case <-s.stopper.ShouldQuiesce():
 			return
@@ -162,7 +189,7 @@ func (s *Sampler) run(ctx context.Context) {
 }
 
 // takeSample captures a snapshot of all active work states.
-func (s *Sampler) takeSample() {
+func (s *Sampler) takeSample(ctx context.Context) {
 	sampleTime := timeutil.Now()
 
 	// Collect work states. rangeWorkStates reclaims retired states after
@@ -173,32 +200,109 @@ func (s *Sampler) takeSample() {
 		return true
 	})
 
-	// Process collected samples.
+	// First pass: resolve app names and workload IDs, tracking
+	// indices where local app name resolution fails.
+	var unresolvedIndices []int
 	for i := range s.pendingSamples {
 		ps := &s.pendingSamples[i]
 
 		// Encode the workloadID to a string for the ASHSample.
 		// Note(alyshan): Consider encoding at read time.
-		var workloadIDStr string
-		if ps.state.WorkloadID != 0 {
-			if cached, ok := s.workloadIDCache.Get(ps.state.WorkloadID); ok {
-				workloadIDStr = cached.(string)
+		if ps.state.WorkloadInfo.WorkloadID != 0 {
+			if cached, ok := s.workloadIDCache.Get(ps.state.WorkloadInfo.WorkloadID); ok {
+				ps.workloadIDStr = cached.(string)
 			} else {
-				workloadIDStr = encodeStmtFingerprintIDToString(ps.state.WorkloadID)
-				s.workloadIDCache.Add(ps.state.WorkloadID, workloadIDStr)
+				ps.workloadIDStr = encodeStmtFingerprintIDToString(ps.state.WorkloadInfo.WorkloadID)
+				s.workloadIDCache.Add(ps.state.WorkloadInfo.WorkloadID, ps.workloadIDStr)
 			}
 		}
 
+		// Resolve app name ID to string via the node-local cache.
+		if ps.state.WorkloadInfo.AppNameID != 0 {
+			if name, ok := GetAppName(ps.state.WorkloadInfo.AppNameID); ok {
+				ps.appName = name
+			} else {
+				unresolvedIndices = append(unresolvedIndices, i)
+			}
+		}
+	}
+
+	// If there are unresolved app names, try fetching from remote
+	// gateway nodes. Group by gateway node ID to make at most one
+	// RPC per remote node.
+	if len(unresolvedIndices) > 0 {
+		s.resolveRemoteAppNames(ctx, unresolvedIndices)
+	}
+
+	// Emit samples.
+	for i := range s.pendingSamples {
+		ps := &s.pendingSamples[i]
 		sample := ASHSample{
 			SampleTime:    sampleTime,
 			NodeID:        s.nodeID,
 			TenantID:      ps.state.TenantID,
-			WorkloadID:    workloadIDStr,
+			WorkloadID:    ps.workloadIDStr,
+			AppName:       ps.appName,
 			WorkEventType: ps.state.WorkEventType,
 			WorkEvent:     ps.state.WorkEvent,
 			GoroutineID:   ps.gid,
 		}
 		s.buffer.Add(sample)
+	}
+}
+
+// resolveRemoteAppNames fetches app name mappings from remote gateway
+// nodes for samples that could not be resolved from the local cache.
+// It deduplicates RPCs by gateway node ID and skips the local node
+// (whose cache was already consulted).
+func (s *Sampler) resolveRemoteAppNames(ctx context.Context, unresolvedIndices []int) {
+	resolverPtr := s.resolver.Load()
+	if resolverPtr == nil {
+		return
+	}
+	resolver := *resolverPtr
+
+	// Collect unique gateway node IDs from unresolved samples,
+	// skipping node ID 0 (unknown) and the sampler's own node.
+	gatewayNodes := make(map[roachpb.NodeID]struct{})
+	for _, idx := range unresolvedIndices {
+		gw := s.pendingSamples[idx].state.WorkloadInfo.GatewayNodeID
+		if gw == 0 || gw == s.nodeID {
+			continue
+		}
+		gatewayNodes[gw] = struct{}{}
+	}
+
+	// Fetch mappings from each unique gateway node and store them
+	// in the local cache. Use a short timeout so that slow or
+	// unreachable nodes don't stall the sampling loop for too long.
+	if err := timeutil.RunWithTimeout(
+		ctx, "ash-resolve-app-names", 250*time.Millisecond,
+		func(resolveCtx context.Context) error {
+			for nodeID := range gatewayNodes {
+				mappings, err := resolver(resolveCtx, nodeID)
+				if err != nil {
+					log.Ops.Warningf(
+						ctx, "ASH: failed to fetch app name mappings from n%d: %v",
+						nodeID, err,
+					)
+					continue
+				}
+				for id, name := range mappings {
+					StoreAppNameMapping(id, name)
+				}
+			}
+			return nil
+		},
+	); err != nil {
+		log.Ops.Warningf(ctx, "ASH: timeout resolving app name mappings: %v", err)
+	}
+
+	// Re-resolve the previously-unresolved samples from the
+	// now-populated local cache.
+	for _, idx := range unresolvedIndices {
+		ps := &s.pendingSamples[idx]
+		ps.appName, _ = GetAppName(ps.state.WorkloadInfo.AppNameID)
 	}
 }
 

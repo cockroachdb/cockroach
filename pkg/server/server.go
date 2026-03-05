@@ -1887,6 +1887,19 @@ func (s *topLevelServer) PreStart(ctx context.Context) error {
 	if err := ash.InitGlobalSampler(ctx, state.nodeID, s.st, s.stopper); err != nil {
 		return err
 	}
+	ash.SetGlobalAppNameResolver(func(
+		ctx context.Context, nodeID roachpb.NodeID,
+	) (map[uint64]string, error) {
+		client, err := s.status.dialNode(ctx, nodeID)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := client.AppNameMappings(ctx, &serverpb.AppNameMappingsRequest{})
+		if err != nil {
+			return nil, err
+		}
+		return resp.Mappings, nil
+	})
 
 	// TODO(irfansharif): Now that we have our node ID, we should run another
 	// check here to make sure we've not been decommissioned away (if we're here
