@@ -156,3 +156,125 @@ cpu:             load=10.00 cores  capacity=16.00 cores  amp=3.0000
 disk:            load=80.00 GiB  capacity=100.00 GiB  amp=2.0000
 write-bandwidth: load=9.54 MiB/s  capacity=unknown  amp=1.0000
 amplification-factors: [cpu=3.0000, disk=2.0000, write-bw=1.0000]
+
+# ===================================================================
+# SQL-aware model tests.
+# When sql-gateway-cpu and/or sql-dist-cpu are provided, the model
+# computes a uniform overhead multiplier k over all tracked sources
+# (storesCPU + sqlDistCPU + sqlGatewayCPU), then folds distSQL into
+# ampFactor and treats gateway SQL as background.
+# ===================================================================
+
+# -------------------------------------------------------------------
+# SQL-aware basic: unclamped k.
+# 1 store, storesCPU=2, nodeUsage=6, nodeCap=16.
+# sqlGatewayCPU=1, sqlDistCPU=1. moveableCPU = 3, totalTracked = 4.
+# k = 6/4 = 1.5. ampFactor = (1 + 1/2) * 1.5 = 2.25.
+# background = max(0, 6 - 3*1.5) = 1.5.
+# load = 2*2.25 + 1.5/1 = 6, capacity = 16.
+# -------------------------------------------------------------------
+compute num-stores=1 stores-cpu=2 node-cpu-usage=6 node-cpu-capacity=16 sql-gateway-cpu=1 sql-dist-cpu=1 logical-gib=10 used-gib=20 available-gib=80 write-bytes-per-sec=10000000
+----
+cpu:             load=6.00 cores  capacity=16.00 cores  amp=2.2500
+disk:            load=20.00 GiB  capacity=100.00 GiB  amp=2.0000
+write-bandwidth: load=9.54 MiB/s  capacity=unknown  amp=1.0000
+amplification-factors: [cpu=2.2500, disk=2.0000, write-bw=1.0000]
+
+# -------------------------------------------------------------------
+# SQL-aware gateway-heavy: gateway dominates, k unclamped.
+# 1 store, storesCPU=2, nodeUsage=9, nodeCap=16.
+# sqlGatewayCPU=3, sqlDistCPU=1. moveableCPU = 3, totalTracked = 6.
+# k = 9/6 = 1.5. ampFactor = 1.5 * 1.5 = 2.25.
+# background = max(0, 9 - 3*1.5) = 4.5.
+# load = 2*2.25 + 4.5/1 = 9, capacity = 16.
+# -------------------------------------------------------------------
+compute num-stores=1 stores-cpu=2 node-cpu-usage=9 node-cpu-capacity=16 sql-gateway-cpu=3 sql-dist-cpu=1 logical-gib=10 used-gib=20 available-gib=80 write-bytes-per-sec=10000000
+----
+cpu:             load=9.00 cores  capacity=16.00 cores  amp=2.2500
+disk:            load=20.00 GiB  capacity=100.00 GiB  amp=2.0000
+write-bandwidth: load=9.54 MiB/s  capacity=unknown  amp=1.0000
+amplification-factors: [cpu=2.2500, disk=2.0000, write-bw=1.0000]
+
+# -------------------------------------------------------------------
+# SQL-aware high distSQL: distSQL is 1.5x KV, k unclamped.
+# 1 store, storesCPU=2, nodeUsage=12, nodeCap=16.
+# sqlGatewayCPU=1, sqlDistCPU=3. moveableCPU = 5, totalTracked = 6.
+# k = max(1, min(12/6, 3)) = 2. ampFactor = 2.5*2 = 5.
+# background = max(0, 12 - 5*2) = 2.
+# load = 2*5 + 2/1 = 12, capacity = 16.
+# -------------------------------------------------------------------
+compute num-stores=1 stores-cpu=2 node-cpu-usage=12 node-cpu-capacity=16 sql-gateway-cpu=1 sql-dist-cpu=3 logical-gib=10 used-gib=20 available-gib=80 write-bytes-per-sec=10000000
+----
+cpu:             load=12.00 cores  capacity=16.00 cores  amp=5.0000
+disk:            load=20.00 GiB  capacity=100.00 GiB  amp=2.0000
+write-bandwidth: load=9.54 MiB/s  capacity=unknown  amp=1.0000
+amplification-factors: [cpu=5.0000, disk=2.0000, write-bw=1.0000]
+
+# -------------------------------------------------------------------
+# SQL-aware k clamped at cap: extreme overhead.
+# 1 store, storesCPU=1, nodeUsage=15, nodeCap=16.
+# sqlGatewayCPU=1, sqlDistCPU=1. moveableCPU = 2, totalTracked = 3.
+# k = max(1, min(15/3, 3)) = 3. ampFactor = 2*3 = 6.
+# background = max(0, 15 - 2*3) = 9.
+# load = 1*6 + 9/1 = 15, capacity = 16.
+# -------------------------------------------------------------------
+compute num-stores=1 stores-cpu=1 node-cpu-usage=15 node-cpu-capacity=16 sql-gateway-cpu=1 sql-dist-cpu=1 logical-gib=10 used-gib=20 available-gib=80 write-bytes-per-sec=10000000
+----
+cpu:             load=15.00 cores  capacity=16.00 cores  amp=6.0000
+disk:            load=20.00 GiB  capacity=100.00 GiB  amp=2.0000
+write-bandwidth: load=9.54 MiB/s  capacity=unknown  amp=1.0000
+amplification-factors: [cpu=6.0000, disk=2.0000, write-bw=1.0000]
+
+# -------------------------------------------------------------------
+# SQL-aware multi-store: 4 stores, even split.
+# storesCPU=4, nodeUsage=10, nodeCap=16.
+# sqlGatewayCPU=2, sqlDistCPU=2. moveableCPU = 6, totalTracked = 8.
+# k = 10/8 = 1.25. ampFactor = (1 + 2/4) * 1.25 = 1.875.
+# background = max(0, 10 - 6*1.25) = 2.5.
+# storeCPU = 4/4 = 1. load = 1*1.875 + 2.5/4 = 2.5, capacity = 4.
+# -------------------------------------------------------------------
+compute num-stores=4 stores-cpu=4 node-cpu-usage=10 node-cpu-capacity=16 sql-gateway-cpu=2 sql-dist-cpu=2 logical-gib=10 used-gib=20 available-gib=80 write-bytes-per-sec=10000000
+----
+cpu:             load=2.50 cores  capacity=4.00 cores  amp=1.8750
+disk:            load=20.00 GiB  capacity=100.00 GiB  amp=2.0000
+write-bandwidth: load=9.54 MiB/s  capacity=unknown  amp=1.0000
+amplification-factors: [cpu=1.8750, disk=2.0000, write-bw=1.0000]
+
+# -------------------------------------------------------------------
+# SQL-aware with store-cpu-per-second: hot store on a 4-store node.
+# Same node as above, but this store reports 3 of the 4 KV cores.
+# load = 3*1.875 + 2.5/4 = 6.25, capacity = 4.
+# -------------------------------------------------------------------
+compute num-stores=4 stores-cpu=4 node-cpu-usage=10 node-cpu-capacity=16 store-cpu-per-second=3 sql-gateway-cpu=2 sql-dist-cpu=2 logical-gib=10 used-gib=20 available-gib=80 write-bytes-per-sec=10000000
+----
+cpu:             load=6.25 cores  capacity=4.00 cores  amp=1.8750
+disk:            load=20.00 GiB  capacity=100.00 GiB  amp=2.0000
+write-bandwidth: load=9.54 MiB/s  capacity=unknown  amp=1.0000
+amplification-factors: [cpu=1.8750, disk=2.0000, write-bw=1.0000]
+
+# -------------------------------------------------------------------
+# SQL-aware zero storesCPU: no KV work, all gateway SQL.
+# Falls to storesCPU<=0 branch: ampFactor=cap(3), background=nodeUsage.
+# storeCPU=0, load = 0*3 + 5/1 = 5, capacity = 16.
+# -------------------------------------------------------------------
+compute num-stores=1 stores-cpu=0 node-cpu-usage=5 node-cpu-capacity=16 sql-gateway-cpu=3 sql-dist-cpu=0 logical-gib=10 used-gib=20 available-gib=80 write-bytes-per-sec=10000000
+----
+cpu:             load=5.00 cores  capacity=16.00 cores  amp=3.0000
+disk:            load=20.00 GiB  capacity=100.00 GiB  amp=2.0000
+write-bandwidth: load=9.54 MiB/s  capacity=unknown  amp=1.0000
+amplification-factors: [cpu=3.0000, disk=2.0000, write-bw=1.0000]
+
+# -------------------------------------------------------------------
+# SQL-aware k clamped at 1 (measurement lag): tracked CPU > nodeUsage.
+# 1 store, storesCPU=4, nodeUsage=3, nodeCap=16.
+# sqlGatewayCPU=1, sqlDistCPU=1. moveableCPU = 5, totalTracked = 6.
+# k = max(1, min(3/6, 3)) = 1. ampFactor = 1.25*1 = 1.25.
+# background = max(0, 3 - 5*1) = 0.
+# load = 4*1.25 + 0 = 5 (overshoots nodeUsage; transient, conservative).
+# -------------------------------------------------------------------
+compute num-stores=1 stores-cpu=4 node-cpu-usage=3 node-cpu-capacity=16 sql-gateway-cpu=1 sql-dist-cpu=1 logical-gib=10 used-gib=20 available-gib=80 write-bytes-per-sec=10000000
+----
+cpu:             load=5.00 cores  capacity=16.00 cores  amp=1.2500
+disk:            load=20.00 GiB  capacity=100.00 GiB  amp=2.0000
+write-bandwidth: load=9.54 MiB/s  capacity=unknown  amp=1.0000
+amplification-factors: [cpu=1.2500, disk=2.0000, write-bw=1.0000]
