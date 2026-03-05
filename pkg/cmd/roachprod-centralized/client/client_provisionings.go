@@ -232,6 +232,26 @@ func (c *Client) ExtendProvisioningLifetime(
 	return &response.Data, nil
 }
 
+// RetriggerProvisioning re-triggers a provision task on an existing provisioning.
+// POST /v1/provisionings/:id/retrigger
+func (c *Client) RetriggerProvisioning(
+	ctx context.Context, l *logger.Logger, id string,
+) (*ProvisioningResponse, error) {
+	if !c.IsEnabled() {
+		return nil, ErrDisabled
+	}
+	endpoint := fmt.Sprintf(
+		"%s%s/%s/retrigger", c.config.BaseURL, provtypes.ControllerPath, url.PathEscape(id),
+	)
+	var response ProvisioningResponse
+	if err := c.makeRequest(
+		ctx, l, "POST", endpoint, nil, &response, "retrigger provisioning",
+	); err != nil {
+		return nil, err
+	}
+	return &response, nil
+}
+
 // SetupSSHKeys triggers SSH key setup on a provisioning.
 // POST /v1/provisionings/:id/hooks/ssh-keys-setup
 func (c *Client) SetupSSHKeys(

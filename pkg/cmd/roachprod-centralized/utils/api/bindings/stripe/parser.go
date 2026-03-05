@@ -208,6 +208,14 @@ func (p *QueryParser) parseOperator(operatorStr string) (filtertypes.FilterOpera
 		return filtertypes.OpLike, nil
 	case "not_like":
 		return filtertypes.OpNotLike, nil
+	case "co":
+		return filtertypes.OpContains, nil
+	case "sw":
+		return filtertypes.OpStartsWith, nil
+	case "ew":
+		return filtertypes.OpEndsWith, nil
+	case "pr":
+		return filtertypes.OpPresent, nil
 	default:
 		return "", errors.Newf("unsupported operator: %s", operatorStr)
 	}

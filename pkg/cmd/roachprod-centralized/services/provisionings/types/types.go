@@ -70,6 +70,7 @@ type IService interface {
 	GetProvisioningOutputs(ctx context.Context, l *logger.Logger, principal *auth.Principal, id uuid.UUID) (map[string]interface{}, error)
 	ExtendLifetime(ctx context.Context, l *logger.Logger, principal *auth.Principal, id uuid.UUID) (provmodels.Provisioning, error)
 	SetupSSHKeys(ctx context.Context, l *logger.Logger, principal *auth.Principal, id uuid.UUID) (provmodels.Provisioning, *uuid.UUID, error)
+	RetriggerProvisioning(ctx context.Context, l *logger.Logger, principal *auth.Principal, id uuid.UUID) (provmodels.Provisioning, *uuid.UUID, error)
 }
 
 // IProvisioningTaskHandler is the interface used by task handlers to call

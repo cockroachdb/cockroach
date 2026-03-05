@@ -156,6 +156,17 @@ func NewController(service provtypes.IService) *Controller {
 				},
 			},
 		},
+		&controllers.ControllerHandler{
+			Method: "POST",
+			Path:   types.ControllerPath + "/:id/retrigger",
+			Func:   ctrl.Retrigger,
+			Authorization: &auth.AuthorizationRequirement{
+				AnyOf: []string{
+					provtypes.PermissionUpdateAll,
+					provtypes.PermissionUpdateOwn,
+				},
+			},
+		},
 	}
 	return ctrl
 }
@@ -369,6 +380,29 @@ func (ctrl *Controller) SetupSSHKeys(c *gin.Context) {
 	}
 
 	prov, taskID, err := ctrl.service.SetupSSHKeys(
+		c.Request.Context(),
+		ctrl.GetRequestLogger(c),
+		principal,
+		id,
+	)
+	if err != nil {
+		ctrl.Render(c, types.NewProvisioningResult(nil, nil, err))
+		return
+	}
+	ctrl.Render(c, types.NewProvisioningResult(&prov, taskID, nil))
+}
+
+// Retrigger re-schedules a provision task on an existing provisioning.
+func (ctrl *Controller) Retrigger(c *gin.Context) {
+	principal, _ := controllers.GetPrincipal(c)
+
+	id, err := parseUUID(c.Param("id"))
+	if err != nil {
+		ctrl.Render(c, &controllers.BadRequestResult{Error: err})
+		return
+	}
+
+	prov, taskID, err := ctrl.service.RetriggerProvisioning(
 		c.Request.Context(),
 		ctrl.GetRequestLogger(c),
 		principal,

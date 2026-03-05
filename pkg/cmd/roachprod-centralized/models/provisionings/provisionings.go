@@ -43,7 +43,7 @@ var expectedTransitions = map[ProvisioningState][]ProvisioningState{
 	ProvisioningStateInitializing:  {ProvisioningStatePlanning, ProvisioningStateFailed},
 	ProvisioningStatePlanning:      {ProvisioningStateProvisioning, ProvisioningStateFailed},
 	ProvisioningStateProvisioning:  {ProvisioningStateProvisioned, ProvisioningStateFailed},
-	ProvisioningStateProvisioned:   {ProvisioningStateDestroying},
+	ProvisioningStateProvisioned:   {ProvisioningStateInitializing, ProvisioningStateDestroying},
 	ProvisioningStateFailed:        {ProvisioningStateInitializing, ProvisioningStateDestroying},
 	ProvisioningStateDestroying:    {ProvisioningStateDestroyed, ProvisioningStateDestroyFailed},
 	ProvisioningStateDestroyFailed: {ProvisioningStateDestroying},

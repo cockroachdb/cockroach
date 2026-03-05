@@ -42,6 +42,7 @@ func (cr *commandRegistry) buildProvisioningCmd() *cobra.Command {
 		cr.buildProvExtendCmd(),
 		cr.buildProvTemplatesCmd(),
 		cr.buildProvSetupSSHCmd(),
+		cr.buildProvRetriggerCmd(),
 	)
 	return cmd
 }
@@ -530,6 +531,55 @@ them to ~/.ssh/authorized_keys on each machine.`,
 			}
 
 			fmt.Printf("SSH key setup initiated for provisioning %s.\n", args[0])
+
+			if resp.TaskID != "" {
+				if detachFlag {
+					fmt.Printf("Task: %s (detached)\n", resp.TaskID)
+					return nil
+				}
+				fmt.Printf("Task: %s\nStreaming logs...\n\n", resp.TaskID)
+				ctx, cancel := context.WithCancel(context.Background())
+				defer cancel()
+				return streamSSELogs(ctx, c, resp.TaskID, 0)
+			}
+
+			return nil
+		}),
+	}
+
+	cmd.Flags().BoolVarP(&detachFlag, "detach", "d", false, "do not stream logs")
+	cr.addToExcludeFromBashCompletion(cmd)
+	cr.addToExcludeFromClusterFlagsMulti(cmd)
+
+	return cmd
+}
+
+// buildProvRetriggerCmd re-triggers a provision task on an existing provisioning.
+func (cr *commandRegistry) buildProvRetriggerCmd() *cobra.Command {
+	var detachFlag bool
+
+	cmd := &cobra.Command{
+		Use:   "retrigger <id>",
+		Short: "re-run provisioning (apply + hooks)",
+		Long: `Re-trigger the provisioning flow on an existing provisioning.
+Re-runs tofu init/plan/apply (no-op if infra already matches) and then
+re-runs all post-apply hooks. Useful when a previous attempt failed
+(e.g. due to a hook bug) and the underlying issue has been fixed.
+
+Allowed from states: failed, provisioned.`,
+		Args: cobra.ExactArgs(1),
+		Run: Wrap(func(cmd *cobra.Command, args []string) error {
+			c, l, err := newAuthClient()
+			if err != nil {
+				return errors.Wrap(err, "create API client")
+			}
+
+			resp, err := c.RetriggerProvisioning(context.Background(), l, args[0])
+			if err != nil {
+				return errors.Wrap(err, "retrigger provisioning")
+			}
+
+			fmt.Printf("Provisioning %s retrigger initiated.\n", args[0])
 
 			if resp.TaskID != "" {
 				if detachFlag {

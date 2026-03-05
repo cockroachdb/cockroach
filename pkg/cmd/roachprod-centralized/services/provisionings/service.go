@@ -708,6 +708,62 @@ func (s *Service) SetupSSHKeys(
 	return prov, &taskID, nil
 }
 
+// RetriggerProvisioning re-schedules a provision task on an existing
+// provisioning. This re-runs the full HandleProvision flow: tofu init,
+// plan, apply (no-op if infra already matches), collect outputs, and
+// run post-apply hooks. Useful when a previous attempt failed (e.g. due
+// to a hook bug) and the underlying issue has been fixed.
+//
+// Allowed from states:
+//   - failed: primary use case — retry after fixing the root cause
+//   - provisioned: re-run hooks or refresh outputs
+func (s *Service) RetriggerProvisioning(
+	ctx context.Context, l *logger.Logger, principal *auth.Principal, id uuid.UUID,
+) (provmodels.Provisioning, *uuid.UUID, error) {
+	prov, err := s.getProvisioningWithAccess(ctx, l, principal, id,
+		types.PermissionUpdateAll, types.PermissionUpdateOwn)
+	if err != nil {
+		return provmodels.Provisioning{}, nil, err
+	}
+
+	switch prov.State {
+	case provmodels.ProvisioningStateFailed,
+		provmodels.ProvisioningStateProvisioned:
+		// Allowed — proceed.
+	default:
+		return provmodels.Provisioning{}, nil, types.ErrInvalidState
+	}
+
+	active, err := s.hasActiveTask(ctx, l, prov.ID)
+	if err != nil {
+		return provmodels.Provisioning{}, nil, err
+	}
+	if active {
+		return provmodels.Provisioning{}, nil, types.ErrTaskInProgress
+	}
+
+	// Reset fields so HandleProvision starts fresh.
+	prov.Error = ""
+	prov.LastStep = ""
+	prov.UpdatedAt = timeutil.Now().UTC()
+	if err := s.repo.UpdateProvisioning(ctx, l, prov); err != nil {
+		return provmodels.Provisioning{}, nil, err
+	}
+
+	task, err := ptasks.NewTaskProvision(prov.ID)
+	if err != nil {
+		return provmodels.Provisioning{}, nil, errors.Wrap(err, "create provision task")
+	}
+	if _, err = s.taskService.CreateTask(ctx, l, task); err != nil {
+		return provmodels.Provisioning{}, nil, errors.Wrap(err, "schedule provision task")
+	}
+
+	taskID := task.GetID()
+	prov.PlanOutput = nil
+	prov.Outputs = nil
+	return prov, &taskID, nil
+}
+
 // HandleSetupSSHKeys runs the ssh-keys-setup hook for a provisioning.
 // Called by the task handler, not directly by API callers.
 func (s *Service) HandleSetupSSHKeys(
