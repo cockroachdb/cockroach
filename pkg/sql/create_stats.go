@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemaexpr"
@@ -37,6 +38,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/grpcutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
@@ -137,6 +139,15 @@ var automaticExtremesStatsConcurrencyLimit = settings.RegisterIntSetting(
 	128,
 	settings.WithPublic,
 	settings.IntWithMinimum(1),
+)
+
+var automaticFixMisestimatesStatsConcurrencyLimit = settings.RegisterIntSetting(
+	settings.ApplicationLevel,
+	"sql.stats.fix_misestimates_concurrency_limit",
+	"determines the maximum number of concurrent automatic partial 'fix misestimates' table statistics collection jobs",
+	128,
+	settings.WithPublic,
+	settings.NonNegativeInt,
 )
 
 const nonIndexColHistogramBuckets = 2
@@ -279,6 +290,9 @@ func getAutoStatsKind(details jobspb.CreateStatsDetails) int {
 		if details.UsingExtremes {
 			return 2
 		}
+		if details.UsingSpans {
+			return 3
+		}
 		fallthrough
 	default:
 		if buildutil.CrdbTestBuild {
@@ -313,6 +327,10 @@ var checkFullStatsJobsQuery = fmt.Sprintf(checkStatsJobsQuery, " = 1")
 // conflict with the USING EXTREMES job.
 var checkExtremesStatsJobsQuery = fmt.Sprintf(checkStatsJobsQuery, " IN (1, 2)")
 
+// Both full and "fix misestimates" auto stats collections on the same table
+// conflict with the "fix misestimates" job.
+var checkFixMisestimatesStatsJobsQuery = fmt.Sprintf(checkStatsJobsQuery, " IN (1, 3)")
+
 var checkGlobalStatsJobsQuery = fmt.Sprintf(checkStatsJobsQuery, " = $2")
 
 // checkConcurrencyLimit verifies that starting a new stats job will not exceed
@@ -335,8 +353,13 @@ func (n *createStatsNode) checkConcurrencyLimit(
 		tableLimitQuery = checkFullStatsJobsQuery
 		globalLimit = int(automaticFullStatsConcurrencyLimit.Get(n.p.ExecCfg().SV()))
 	case jobspb.AutoPartialStatsName:
-		tableLimitQuery = checkExtremesStatsJobsQuery
-		globalLimit = int(automaticExtremesStatsConcurrencyLimit.Get(n.p.ExecCfg().SV()))
+		if details.UsingExtremes {
+			tableLimitQuery = checkExtremesStatsJobsQuery
+			globalLimit = int(automaticExtremesStatsConcurrencyLimit.Get(n.p.ExecCfg().SV()))
+		} else if details.UsingSpans {
+			tableLimitQuery = checkFixMisestimatesStatsJobsQuery
+			globalLimit = int(automaticFixMisestimatesStatsConcurrencyLimit.Get(n.p.ExecCfg().SV()))
+		}
 	}
 	kind := getAutoStatsKind(details)
 
@@ -469,8 +492,14 @@ func (n *createStatsNode) makeJobRecord(ctx context.Context) (*jobs.Record, erro
 	if n.Options.UsingExtremes && !n.p.SessionData().EnableCreateStatsUsingExtremes {
 		return nil, errors.Errorf(`creating partial statistics at extremes is disabled`)
 	}
+	if n.Options.UsingSpansOnIndexID != 0 && !n.p.SessionData().Internal {
+		return nil, errors.Errorf(`creating partial statistics USING SPANS is reserved for internal use`)
+	}
 
 	var whereClause string
+	var whereSpans roachpb.Spans
+	var whereIndexID descpb.IndexID
+	var estimatedRowCount uint64
 	if n.Options.Where != nil {
 		if n.whereSpans == nil {
 			return nil, errors.AssertionFailedf(
@@ -479,6 +508,42 @@ func (n *createStatsNode) makeJobRecord(ctx context.Context) (*jobs.Record, erro
 		// Safe to use AsString since whereClause is only used to populate the
 		// predicate in system.table_statistics.
 		whereClause = tree.AsString(n.Options.Where.Expr)
+		whereSpans = n.whereSpans
+		whereIndexID = n.whereIndexID
+	} else if n.Options.UsingSpansOnIndexID != 0 {
+		var spans roachpb.Spans
+		spans, estimatedRowCount, err = n.p.ExecCfg().StatsRefresher.GetSpansForTableIDIndexID(tableDesc.GetID(), n.Options.UsingSpansOnIndexID)
+		if err != nil {
+			return nil, err
+		}
+		if buildutil.CrdbTestBuild {
+			// Verify the spans are ordered since that's required by the
+			// TableReader.
+			for i := 1; i < len(spans); i++ {
+				if spans[i].Key.Compare(spans[i-1].EndKey) < 0 {
+					return nil, errors.AssertionFailedf("unordered spans (%s %s)", spans[i-1], spans[i])
+				}
+			}
+		}
+		whereSpans = spans
+		whereIndexID = descpb.IndexID(n.Options.UsingSpansOnIndexID)
+		var rowCountStr string
+		if estimatedRowCount != 0 {
+			rowCountStr = fmt.Sprintf(" (%s rows)", humanizeutil.Count(estimatedRowCount))
+		}
+		// Omit '/Table/<TableID>' prefix.
+		skip := 2
+		if !n.p.ExecCfg().Codec.ForSystemTenant() {
+			// For secondary tenants also omit '/Tenant/<TenantID>' prefix.
+			skip = 4
+		}
+		// TODO(decide during review): should we have an upper bound on the size
+		// of the prettySpans string?
+		// TODO(discuss during review): if we include pretty spans into the
+		// partialPredicate column in this way, we might need to exclude the
+		// column from the debug.zip.
+		prettySpans := catalogkeys.PrettySpans(nil /* valDirs */, spans, skip)
+		whereClause = fmt.Sprintf(`<fix-up stats via index %d%s: %s>`, whereIndexID, rowCountStr, prettySpans)
 	}
 
 	// ANALYZE requires MAINTAIN or SELECT privilege on the table. In a future
@@ -495,14 +560,17 @@ func (n *createStatsNode) makeJobRecord(ctx context.Context) (*jobs.Record, erro
 	var deleteOtherStats bool
 	if len(n.ColumnNames) == 0 {
 		virtColEnabled := statsOnVirtualCols.Get(n.p.ExecCfg().SV())
-		// Disable multi-column stats and deleting stats if partial statistics at
-		// the extremes are requested.
+		// Disable multi-column stats and deleting stats if partial statistics
+		// USING EXTREMES or USING SPANS are requested. (Partial statistics with
+		// WHERE clause require a single column to be specified - this is
+		// enforced in the optbuilder.)
 		// TODO(#94076): add support for creating multi-column stats.
 		var multiColEnabled bool
-		if !n.Options.UsingExtremes {
+		if !n.Options.UsingExtremes && n.Options.UsingSpansOnIndexID == 0 {
 			multiColEnabled = stats.MultiColumnStatisticsClusterMode.Get(n.p.ExecCfg().SV())
 			deleteOtherStats = true
 		}
+		partialStats := n.Options.UsingExtremes || n.Options.UsingSpansOnIndexID != 0
 		defaultHistogramBuckets := stats.GetDefaultHistogramBuckets(n.p.ExecCfg().SV(), tableDesc)
 		if colStats, err = createStatsDefaultColumns(
 			ctx,
@@ -510,7 +578,7 @@ func (n *createStatsNode) makeJobRecord(ctx context.Context) (*jobs.Record, erro
 			virtColEnabled,
 			multiColEnabled,
 			nonIndexJSONHistograms.Get(n.p.ExecCfg().SV()),
-			n.Options.UsingExtremes,
+			partialStats,
 			defaultHistogramBuckets,
 			n.p.EvalContext(),
 		); err != nil {
@@ -602,19 +670,21 @@ func (n *createStatsNode) makeJobRecord(ctx context.Context) (*jobs.Record, erro
 		Statements:  []string{statement},
 		Username:    n.p.User(),
 		Details: jobspb.CreateStatsDetails{
-			Name:             string(n.Name),
-			FQTableName:      fqTableName,
-			Table:            *tableDesc.TableDesc(),
-			ColumnStats:      colStats,
-			Statement:        eventLogStatement,
-			AsOf:             asOfTimestamp,
-			MaxFractionIdle:  n.Options.Throttling,
-			DeleteOtherStats: deleteOtherStats,
-			UsingExtremes:    n.Options.UsingExtremes,
-			WhereClause:      whereClause,
-			WhereSpans:       n.whereSpans,
-			WhereIndexID:     n.whereIndexID,
-			UseLocksTable:    useLocksTable,
+			Name:              string(n.Name),
+			FQTableName:       fqTableName,
+			Table:             *tableDesc.TableDesc(),
+			ColumnStats:       colStats,
+			Statement:         eventLogStatement,
+			AsOf:              asOfTimestamp,
+			MaxFractionIdle:   n.Options.Throttling,
+			DeleteOtherStats:  deleteOtherStats,
+			UsingExtremes:     n.Options.UsingExtremes,
+			UsingSpans:        n.Options.UsingSpansOnIndexID != 0,
+			WhereClause:       whereClause,
+			WhereSpans:        whereSpans,
+			WhereIndexID:      whereIndexID,
+			UseLocksTable:     useLocksTable,
+			EstimatedRowCount: estimatedRowCount,
 		},
 		Progress: jobspb.CreateStatsProgress{},
 	}, nil
@@ -641,10 +711,10 @@ const maxNonIndexCols = 100
 // If nonIndexJsonHistograms is true, 2-bucket histograms are collected for
 // non-indexed JSON columns.
 //
-// If partialStatsUsingExtremes is true, we only collect statistics on
-// single columns that are prefixes of forward indexes, and skip over
-// partial, sharded, and implicitly partitioned indexes. Partial
-// statistic creation only supports these columns.
+// If partialStats is true, we only collect statistics on single columns that
+// are prefixes of forward indexes, and skip over partial, sharded, and
+// implicitly partitioned indexes. Partial statistic creation only supports
+// these columns.
 //
 // In addition to the index columns, we collect stats on up to maxNonIndexCols
 // other columns from the table. We only collect histograms for index columns,
@@ -652,7 +722,7 @@ const maxNonIndexCols = 100
 func createStatsDefaultColumns(
 	ctx context.Context,
 	desc catalog.TableDescriptor,
-	virtColEnabled, multiColEnabled, nonIndexJSONHistograms, partialStatsUsingExtremes bool,
+	virtColEnabled, multiColEnabled, nonIndexJSONHistograms, partialStats bool,
 	defaultHistogramBuckets uint32,
 	evalCtx *eval.Context,
 ) ([]jobspb.CreateStatsDetails_ColStat, error) {
@@ -764,10 +834,10 @@ func createStatsDefaultColumns(
 		return nil
 	}
 
-	// Only collect statistics on single columns that are prefixes of
-	// forward indexes for USING EXTREMES partial statistics, and skip over
-	// partial, sharded, and implicitly partitioned indexes.
-	if partialStatsUsingExtremes {
+	// Only collect statistics on single columns that are prefixes of forward
+	// indexes for partial statistics, and skip over partial, sharded, and
+	// implicitly partitioned indexes.
+	if partialStats {
 		for _, idx := range desc.ActiveIndexes() {
 			if idx.GetType() != idxtype.FORWARD ||
 				idx.IsPartial() ||
@@ -1054,9 +1124,9 @@ func (r *createStatsResumer) Resume(ctx context.Context, execCtx interface{}) (r
 				if ctx.Err() != nil {
 					return ctx.Err()
 				}
-				// Plan and run partial stats on multiple columns separately since each
-				// partial stat collection will use a different index and have different
-				// plans.
+				// Plan and run USING EXTREMES partial stats on multiple columns
+				// separately since each partial stat collection will use a
+				// different index and have different plans.
 				singleColDetails := protoutil.Clone(&details).(*jobspb.CreateStatsDetails)
 				singleColDetails.ColumnStats = []jobspb.CreateStatsDetails_ColStat{colStat}
 				planCtx := dsp.NewPlanningCtx(ctx, innerEvalCtx, innerP, txn.KV(), FullDistribution)
