@@ -29,3 +29,18 @@ func (a Addr) String() string {
 func (a Addr) SafeFormat(w redact.SafePrinter, _ rune) {
 	w.Printf("r%d/%d:%d", a.RangeID, a.ReplicaID, a.Index)
 }
+
+// SafeValue implements the redact.SafeValue interface.
+func (EventType) SafeValue() {}
+
+var _ redact.SafeValue = EventType(0)
+
+// String implements the fmt.Stringer interface.
+func (e Event) String() string {
+	return redact.StringWithoutMarkers(e)
+}
+
+// SafeFormat implements the redact.SafeFormatter interface.
+func (e Event) SafeFormat(w redact.SafePrinter, _ rune) {
+	w.Printf("(%s,%s)", e.Addr, e.Type)
+}
