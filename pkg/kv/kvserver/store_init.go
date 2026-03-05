@@ -156,8 +156,13 @@ func WriteInitialClusterData(
 		// TODO(#97616): the ranges are written one by one, so it is possible to end
 		// up with a partially initialized store if there is a crash in the middle.
 		// Write through a single batch, or find another way to make this atomic.
+
+		// No WAG nodes are going to be written here, so passing in a nil wag.Seq is
+		// fine.
+		factory := kvstorage.MakeBatchFactory(&eng, nil /* seq */)
+
 		err := func() error {
-			batch := eng.NewBatch()
+			batch := factory.NewBatch()
 			defer batch.Close()
 
 			now := hlc.Timestamp{

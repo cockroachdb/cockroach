@@ -10,6 +10,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvstorage/wag"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/spanset"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
@@ -245,10 +246,10 @@ func (e *Engines) SetStoreID(ctx context.Context, id roachpb.StoreID) error {
 	return nil
 }
 
-// NewWriteBatch creates a new write batch to storage. When engines are
+// newWriteBatch creates a new write batch to storage. When engines are
 // separated, the raft engine batch is lazily initialized on first access via
-// Raft().
-func (e *Engines) NewWriteBatch() Batch[storage.WriteBatch] {
+// Raft(). Callers outside this package should use BatchFactory.
+func (e *Engines) newWriteBatch() Batch[storage.WriteBatch] {
 	if e.Separated() {
 		return Batch[storage.WriteBatch]{
 			state:     e.StateEngine().NewWriteBatch(),
@@ -270,9 +271,10 @@ func (e *Engines) NewWriteBatch() Batch[storage.WriteBatch] {
 	}
 }
 
-// NewBatch is like NewWriteBatch, but the StateEngine batch is a read-write
-// storage.Batch rather than a write-only storage.WriteBatch.
-func (e *Engines) NewBatch() Batch[storage.Batch] {
+// newBatch is like newWriteBatch, but the StateEngine batch is a read-write
+// storage.Batch rather than a write-only storage.WriteBatch. Callers outside
+// this package should use BatchFactory.
+func (e *Engines) newBatch() Batch[storage.Batch] {
 	if e.Separated() {
 		return Batch[storage.Batch]{
 			state:     e.StateEngine().NewBatch(),
@@ -294,6 +296,32 @@ func (e *Engines) NewBatch() Batch[storage.Batch] {
 	}
 }
 
+// BatchFactory is used to create engine separation aware and WAG aware batches.
+type BatchFactory struct {
+	eng *Engines
+	seq *wag.Seq
+}
+
+// MakeBatchFactory creates a BatchFactory for the given engines and WAG
+// sequencer.
+func MakeBatchFactory(eng *Engines, seq *wag.Seq) BatchFactory {
+	return BatchFactory{eng: eng, seq: seq}
+}
+
+// NewWriteBatch creates a new write-only batch with WAG writing enabled.
+func (f *BatchFactory) NewWriteBatch() Batch[storage.WriteBatch] {
+	b := f.eng.newWriteBatch()
+	b.seq = f.seq
+	return b
+}
+
+// NewBatch creates a new read-write batch with WAG writing enabled.
+func (f *BatchFactory) NewBatch() Batch[storage.Batch] {
+	b := f.eng.newBatch()
+	b.seq = f.seq
+	return b
+}
+
 // Batch is a write batch to storage which is aware whether the log and state
 // machine engines are separated. It supports any wrapper around
 // storage.WriteBatch, in particular a read-write storage.Batch.
@@ -305,11 +333,17 @@ type Batch[B storage.WriteBatch] struct {
 	state B
 	// raft is the LogEngine batch. When engines are not separated, it points to
 	// the same underlying batch as state. When separated, it is lazily
-	// initialized on the first call to Raft().
+	// initialized on the first call to Raft() or AddEvent().
 	raft storage.WriteBatch
 	// logEngine is a reference to the LogEngine, used for lazy raft batch
 	// creation. Only set when engines are separated.
 	logEngine storage.Engine
+	// w is the WAG writer for staging lifecycle events. Lazily initialized
+	// alongside the raft batch when engines are separated and seq is non-nil.
+	w wag.Writer
+	// seq is the WAG sequence number allocator. Non-nil only when engines are
+	// separated and the caller opted into WAG writing.
+	seq       *wag.Seq
 	separated bool
 }
 
@@ -319,20 +353,33 @@ func (b *Batch[B]) State() B {
 }
 
 // Raft returns the LogEngine writer. When engines are separated, the raft
-// batch is lazily created on first access.
+// batch and WAG writer are lazily created on first access.
 func (b *Batch[B]) Raft() RaftWO {
-	if b.separated && b.raft == nil {
-		b.raft = b.logEngine.NewWriteBatch()
-	}
+	b.maybeInitRaft()
 	return b.raft
 }
 
+// maybeInitRaft lazily initializes the raft batch and WAG writer when engines
+// are separated.
+func (b *Batch[B]) maybeInitRaft() {
+	if b.separated && b.raft == nil {
+		b.raft = b.logEngine.NewWriteBatch()
+		if b.seq != nil {
+			b.w = wag.MakeWriter(b.seq)
+		}
+	}
+}
+
 // CommitAndSync commits and syncs the batch to storage. When engines are
-// separated, only the LogEngine batch is synced, and the StateEngine part is
-// expected to be replayable from the LogEngine batch.
+// separated, the WAG node is flushed to the raft batch first, then only the
+// LogEngine batch is synced. The StateEngine part is expected to be
+// replayable from the LogEngine batch.
 func (b *Batch[B]) CommitAndSync() error {
 	if !b.separated {
 		return b.state.Commit(true /* sync */)
+	}
+	if err := b.w.Flush(b.Raft(), b.state.Repr()); err != nil {
+		return err
 	}
 	if b.raft != nil {
 		if err := b.raft.Commit(true /* sync */); err != nil {
