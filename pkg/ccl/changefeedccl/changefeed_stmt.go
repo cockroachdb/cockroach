@@ -1803,6 +1803,14 @@ func (b *changefeedResumer) resumeWithRetries(
 	var lastRunStatusUpdate time.Time
 
 	for r := getRetry(ctx, maxBackoff, backoffReset); r.Next(); {
+		// Capture the current highwater before running the flow so we can
+		// detect if the changefeed made forward progress. If it did, the
+		// retry backoff is reset regardless of how long the flow ran.
+		var preFlowHighWater hlc.Timestamp
+		if hw := progress.GetHighWater(); hw != nil {
+			preFlowHighWater = *hw
+		}
+
 		flowErr := maybeUpgradePreProductionReadyExpression(ctx, jobID, details, jobExec)
 
 		if flowErr == nil {
@@ -1971,6 +1979,18 @@ func (b *changefeedResumer) resumeWithRetries(
 			// claim information, and will restart this job somewhere else (though,
 			// it's possible that the job gets restarted on this node).
 			return jobs.MarkAsRetryJobError(err)
+		}
+
+		// Reset retry backoff if the highwater advanced, indicating the
+		// changefeed made meaningful forward progress before the error.
+		if hw := progress.GetHighWater(); hw != nil && preFlowHighWater.Less(*hw) {
+			log.Changefeed.Infof(ctx,
+				"changefeed %d highwater advanced (%s -> %s); resetting retry backoff",
+				jobID, preFlowHighWater, *hw)
+			r.Reset()
+			if knobs != nil && knobs.OnRetryBackoffReset != nil {
+				knobs.OnRetryBackoffReset()
+			}
 		}
 
 		if errors.Is(flowErr, changefeedbase.ErrNodeDraining) {
