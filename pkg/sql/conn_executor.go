@@ -3878,11 +3878,11 @@ func (ex *connExecutor) omitInRangefeeds() bool {
 	return ex.sessionData().DisableChangefeedReplication
 }
 
-func (ex *connExecutor) bufferedWritesEnabled(ctx context.Context) bool {
+func (ex *connExecutor) bufferedWritesEnabled(typ txnType) bool {
 	if ex.sessionData() == nil {
 		return false
 	}
-	return ex.sessionData().BufferedWritesEnabled
+	return ex.sessionData().BufferedWritesEnabled && (typ == explicitTxn || ex.sessionData().BufferedWritesImplicitTxnsEnabled)
 }
 
 func (ex *connExecutor) bufferedWritesIsAllowedForIsolationLevel(
@@ -4173,8 +4173,14 @@ func (ex *connExecutor) txnStateTransitionsApplyWrapper(
 			if err != nil {
 				return advanceInfo{}, err
 			}
-			if advInfo.txnEvent.eventType == txnUpgradeToExplicit {
-				ex.extraTxnState.txnFinishClosure.implicit = false
+		}
+		if advInfo.txnEvent.eventType == txnUpgradeToExplicit {
+			ex.extraTxnState.txnFinishClosure.implicit = false
+			// TODO(yuzefovich): it is suspicious that we don't commit the
+			// implicit txn that has already sent some KV batches, like when we
+			// have multiple statements in a single string sent by the client.
+			if enabled := ex.bufferedWritesEnabled(explicitTxn); enabled && !ex.state.mu.txn.Active() {
+				ex.state.mu.txn.SetBufferedWritesEnabled(enabled)
 			}
 		}
 	case txnStart:
@@ -4316,7 +4322,7 @@ func (ex *connExecutor) txnStateTransitionsApplyWrapper(
 				ex.QualityOfService(),
 				chainModes.isoLevel,
 				ex.omitInRangefeeds(),
-				ex.bufferedWritesEnabled(ex.Ctx()),
+				ex.bufferedWritesEnabled(explicitTxn),
 				ex.rng.internal,
 			)
 			chainEvent := eventTxnStart{ImplicitTxn: fsm.False}

@@ -3845,7 +3845,7 @@ func (ex *connExecutor) execStmtInNoTxnState(
 				ex.QualityOfService(),
 				ex.txnIsolationLevelToKV(ctx, s.Modes.Isolation),
 				ex.omitInRangefeeds(),
-				ex.bufferedWritesEnabled(ctx),
+				ex.bufferedWritesEnabled(explicitTxn),
 				ex.rng.internal,
 			)
 	case *tree.ShowCommitTimestamp:
@@ -3880,7 +3880,7 @@ func (ex *connExecutor) execStmtInNoTxnState(
 				ex.QualityOfService(),
 				ex.txnIsolationLevelToKV(ctx, tree.UnspecifiedIsolation),
 				ex.omitInRangefeeds(),
-				ex.bufferedWritesEnabled(ctx),
+				ex.bufferedWritesEnabled(implicitTxn),
 				ex.rng.internal,
 			)
 	}
@@ -3915,7 +3915,7 @@ func (ex *connExecutor) beginImplicitTxn(
 			qos,
 			ex.txnIsolationLevelToKV(ctx, tree.UnspecifiedIsolation),
 			ex.omitInRangefeeds(),
-			ex.bufferedWritesEnabled(ctx),
+			ex.bufferedWritesEnabled(implicitTxn),
 			ex.rng.internal,
 		)
 }

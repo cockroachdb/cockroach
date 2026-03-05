@@ -34,6 +34,7 @@ SHOW application_name;
 <tr><td><code>avoid_buffering</code></td><td>Indicates that the returned data should not be buffered by conn executor. This is currently used by replication primitives to ensure the data is flushed to the consumer immediately.</td><td><code>off</code></td><td>No</td><td>-</td></tr>
 <tr><td><code>avoid_full_table_scans_in_mutations</code></td><td>Controls whether mutation queries that plan full table scans should be avoided.</td><td><code>on</code></td><td>No</td><td>-</td></tr>
 <tr><td><code>backslash_quote</code></td><td>Controls whether backslash can be used as a quote escape character (compatibility setting).</td><td><code>safe_encoding</code></td><td>No</td><td>-</td></tr>
+<tr><td><code>buffered_writes_implicit_txns_enabled</code></td><td>Controls whether buffered writes are enabled for implicit transactions.</td><td><code>off</code></td><td>No</td><td>-</td></tr>
 <tr><td><code>buffered_writes_use_locking_on_non_unique_indexes</code></td><td>Controls whether buffered writes use locking on non-unique indexes.</td><td><code>off</code></td><td>No</td><td>-</td></tr>
 <tr><td><code>bypass_pcr_reader_catalog_aost</code></td><td>Disables the AOST used by all user queries on the PCR reader catalog.</td><td><code>off</code></td><td>No</td><td>-</td></tr>
 <tr><td><code>bytea_output</code></td><td>Controls how to encode byte arrays when converting to string.</td><td><code>hex</code></td><td>No</td><td>-</td></tr>

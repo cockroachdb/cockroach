@@ -669,6 +669,8 @@ func TestAbortedTxnOnlyRetriedOnce(t *testing.T) {
 	defer srv.Stopper().Stop(context.Background())
 	s := srv.ApplicationLayer()
 	kvcoord.BufferedWritesMaxBufferSize.Override(ctx, &s.ClusterSettings().SV, 2<<10 /* 2KiB */)
+	conn, err := sqlDB.Conn(ctx)
+	require.NoError(t, err)
 
 	{
 		pgURL, cleanup := s.PGUrl(t,
@@ -686,14 +688,15 @@ func TestAbortedTxnOnlyRetriedOnce(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if _, err := sqlDB.Exec(`
+	if _, err := conn.ExecContext(ctx, `
 CREATE DATABASE t;
 CREATE TABLE t.test (k INT PRIMARY KEY, v TEXT);
+SET buffered_writes_implicit_txns_enabled = true;
 `); err != nil {
 		t.Fatal(err)
 	}
 
-	if _, err := sqlDB.Exec(insertStmt); err != nil {
+	if _, err := conn.ExecContext(ctx, insertStmt); err != nil {
 		t.Fatalf("unexpected error: %s", err)
 	}
 
