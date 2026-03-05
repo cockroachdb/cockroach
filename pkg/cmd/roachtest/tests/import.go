@@ -76,23 +76,17 @@ func (sd staticDataset) getCreateTableStmt() string        { return sd.createTab
 func (sd staticDataset) getDataURLs() []string             { return sd.dataURLs }
 func (sd staticDataset) getFingerprint() map[string]string { return sd.fingerprint }
 
-// tpchDataset represents a TPC-H dataset file stored on external storage.
-type tpchDataset struct {
-	staticDataset
-}
-
-// init() implements the dataset interface. We use scale factor 1 for local clusters and scale
-// factor 100 for roachprod clusters.
-func (tpch *tpchDataset) init(
-	ctx context.Context, c cluster.Cluster, l *logger.Logger,
-) (err error) {
-	defer func() {
-		if err != nil {
-			err = errors.Wrapf(err, "initializing %s", tpch.tableName)
-		}
-	}()
+// initTPCHSchemaAndFingerprint loads the CREATE TABLE statement and expected
+// fingerprint for a TPC-H table from GCS. The schema is stored in the CSV
+// fixture bucket since it's shared across all formats. AVRO imports of the
+// same data produce identical SQL table contents, so CSV fingerprints are
+// valid for AVRO validation too.
+func initTPCHSchemaAndFingerprint(
+	ctx context.Context, c cluster.Cluster, l *logger.Logger, sd *staticDataset,
+) error {
 	conn := c.Conn(ctx, l, 1)
 	defer conn.Close()
+
 	baseURL := "gs://cockroach-fixtures-us-east1/tpch-csv/"
 	var scale string
 	if c.IsLocal() {
@@ -101,25 +95,59 @@ func (tpch *tpchDataset) init(
 		scale = "sf-100"
 	}
 
-	tpch.createTableStmt, err = readFileFromFixture(
-		fmt.Sprintf("%s/schema/%s.sql?AUTH=implicit", baseURL, tpch.tableName), conn)
+	var err error
+	sd.createTableStmt, err = readFileFromFixture(
+		fmt.Sprintf("%s/schema/%s.sql?AUTH=implicit", baseURL, sd.tableName), conn)
 	if err != nil {
 		return err
 	}
 
-	fingerprintURL := fmt.Sprintf("%s/%s/%s.fingerprint?AUTH=implicit", baseURL, scale, tpch.tableName)
-	var fingerprint string
-	fingerprint, err = readFileFromFixture(fingerprintURL, conn)
+	fingerprintURL := fmt.Sprintf(
+		"%s/%s/%s.fingerprint?AUTH=implicit", baseURL, scale, sd.tableName)
+	fingerprint, err := readFileFromFixture(fingerprintURL, conn)
 	if err != nil {
-		// It's okay to not have fingerprints here because we may be doing a calibration run.
+		// It's okay to not have fingerprints here because we may be doing
+		// a calibration run.
 		if !strings.Contains(err.Error(), "gcs object does not exist") {
 			return err
 		}
 	} else {
-		err = json.Unmarshal([]byte(fingerprint), &tpch.fingerprint)
+		err = json.Unmarshal([]byte(fingerprint), &sd.fingerprint)
 		if err != nil {
-			return errors.Wrapf(err, "error unmarshalling expected table fingerprint: %s", fingerprint)
+			return errors.Wrapf(err,
+				"error unmarshalling expected table fingerprint: %s", fingerprint)
 		}
+	}
+
+	return nil
+}
+
+// tpchDataset represents a TPC-H CSV dataset file stored on external storage.
+type tpchDataset struct {
+	staticDataset
+}
+
+// init implements the dataset interface. We use scale factor 1 for local
+// clusters and scale factor 100 for roachprod clusters.
+func (tpch *tpchDataset) init(
+	ctx context.Context, c cluster.Cluster, l *logger.Logger,
+) (err error) {
+	defer func() {
+		if err != nil {
+			err = errors.Wrapf(err, "initializing %s", tpch.tableName)
+		}
+	}()
+
+	if err := initTPCHSchemaAndFingerprint(ctx, c, l, &tpch.staticDataset); err != nil {
+		return err
+	}
+
+	baseURL := "gs://cockroach-fixtures-us-east1/tpch-csv/"
+	var scale string
+	if c.IsLocal() {
+		scale = "sf-1"
+	} else {
+		scale = "sf-100"
 	}
 
 	tpch.dataURLs = make([]string, 0, 8)
@@ -142,23 +170,148 @@ func (tpch tpchDataset) formatImportStmt(tableName string, urls []string, detach
 	return stmt.String()
 }
 
-// newTPCHDataset() is a convenience function to quickly declare a TPC-H dataset by name.
 func newTPCHDataset(name string) *tpchDataset {
 	return &tpchDataset{
-		staticDataset: staticDataset{
-			tableName: name,
-		},
+		staticDataset: staticDataset{tableName: name},
 	}
 }
 
-// datasets is the set of all known datasets to test with.
+// avroOCFDataset represents a TPC-H dataset in AVRO Object Container Format.
+// OCF files are self-describing (the schema is embedded), so no separate
+// schema URI is needed at import time.
+type avroOCFDataset struct {
+	staticDataset
+}
+
+func (a *avroOCFDataset) init(
+	ctx context.Context, c cluster.Cluster, l *logger.Logger,
+) (err error) {
+	defer func() {
+		if err != nil {
+			err = errors.Wrapf(err, "initializing avro-ocf/%s", a.tableName)
+		}
+	}()
+
+	if err := initTPCHSchemaAndFingerprint(ctx, c, l, &a.staticDataset); err != nil {
+		return err
+	}
+
+	baseURL := "gs://cockroach-fixtures-us-east1/tpch-avro/"
+	var scale string
+	if c.IsLocal() {
+		scale = "sf-1"
+	} else {
+		scale = "sf-100"
+	}
+
+	a.dataURLs = make([]string, 0, 8)
+	for i := 1; i <= 8; i++ {
+		a.dataURLs = append(a.dataURLs,
+			fmt.Sprintf("%s/%s/%s.%d.ocf?AUTH=implicit", baseURL, scale, a.tableName, i))
+	}
+
+	return nil
+}
+
+func (a avroOCFDataset) formatImportStmt(tableName string, urls []string, detached bool) string {
+	var stmt strings.Builder
+	fmt.Fprintf(&stmt, `IMPORT INTO import_test.%s AVRO DATA ('%s')`,
+		tableName, strings.Join(urls, "', '"))
+	if detached {
+		stmt.WriteString(" WITH detached")
+	}
+	return stmt.String()
+}
+
+func newAvroOCFDataset(name string) *avroOCFDataset {
+	return &avroOCFDataset{
+		staticDataset: staticDataset{tableName: name},
+	}
+}
+
+// avroBinDataset represents a TPC-H dataset as AVRO binary records. Binary
+// records require a separate schema URI at import time since they don't
+// include schema metadata.
+type avroBinDataset struct {
+	staticDataset
+	schemaURL string
+}
+
+func (a *avroBinDataset) init(
+	ctx context.Context, c cluster.Cluster, l *logger.Logger,
+) (err error) {
+	defer func() {
+		if err != nil {
+			err = errors.Wrapf(err, "initializing avro-bin/%s", a.tableName)
+		}
+	}()
+
+	if err := initTPCHSchemaAndFingerprint(ctx, c, l, &a.staticDataset); err != nil {
+		return err
+	}
+
+	baseURL := "gs://cockroach-fixtures-us-east1/tpch-avro/"
+	var scale string
+	if c.IsLocal() {
+		scale = "sf-1"
+	} else {
+		scale = "sf-100"
+	}
+
+	a.schemaURL = fmt.Sprintf(
+		"%s/schema/%s.avsc?AUTH=implicit", baseURL, a.tableName)
+
+	a.dataURLs = make([]string, 0, 8)
+	for i := 1; i <= 8; i++ {
+		a.dataURLs = append(a.dataURLs,
+			fmt.Sprintf("%s/%s/%s.%d.bin?AUTH=implicit", baseURL, scale, a.tableName, i))
+	}
+
+	return nil
+}
+
+func (a avroBinDataset) formatImportStmt(tableName string, urls []string, detached bool) string {
+	var stmt strings.Builder
+	fmt.Fprintf(&stmt,
+		`IMPORT INTO import_test.%s AVRO DATA ('%s') WITH data_as_binary_records, schema_uri='%s'`,
+		tableName, strings.Join(urls, "', '"), a.schemaURL)
+	if detached {
+		stmt.WriteString(", detached")
+	}
+	return stmt.String()
+}
+
+func newAvroBinDataset(name string) *avroBinDataset {
+	return &avroBinDataset{
+		staticDataset: staticDataset{tableName: name},
+	}
+}
+
+// datasets is the set of all known datasets to test with. Random selection
+// functions (allDatasets, anyDataset, etc.) iterate over this map, so adding
+// entries here automatically includes them in random test selection.
 var datasets = map[string]dataset{
+	// CSV datasets
 	"tpch/customer": newTPCHDataset("customer"),
 	"tpch/lineitem": newTPCHDataset("lineitem"),
 	"tpch/orders":   newTPCHDataset("orders"),
 	"tpch/part":     newTPCHDataset("part"),
 	"tpch/partsupp": newTPCHDataset("partsupp"),
 	"tpch/supplier": newTPCHDataset("supplier"),
+	// AVRO OCF datasets
+	"avro-ocf/customer": newAvroOCFDataset("customer"),
+	"avro-ocf/lineitem": newAvroOCFDataset("lineitem"),
+	"avro-ocf/orders":   newAvroOCFDataset("orders"),
+	"avro-ocf/part":     newAvroOCFDataset("part"),
+	"avro-ocf/partsupp": newAvroOCFDataset("partsupp"),
+	"avro-ocf/supplier": newAvroOCFDataset("supplier"),
+	// AVRO binary records datasets
+	"avro-bin/customer": newAvroBinDataset("customer"),
+	"avro-bin/lineitem": newAvroBinDataset("lineitem"),
+	"avro-bin/orders":   newAvroBinDataset("orders"),
+	"avro-bin/part":     newAvroBinDataset("part"),
+	"avro-bin/partsupp": newAvroBinDataset("partsupp"),
+	"avro-bin/supplier": newAvroBinDataset("supplier"),
 }
 
 // readFileFromFixture() reads a URI by routing through the read_file() internal
@@ -204,6 +357,28 @@ func anyThreeDatasets(rng *rand.Rand) []string {
 
 func anyDataset(rng *rand.Rand) []string {
 	return nDatasets(rng, 1)
+}
+
+// anyDatasetWithPrefix returns a random dataset whose key starts with prefix.
+func anyDatasetWithPrefix(rng *rand.Rand, prefix string) []string {
+	var matching []string
+	for name := range datasets {
+		if strings.HasPrefix(name, prefix) {
+			matching = append(matching, name)
+		}
+	}
+	rng.Shuffle(len(matching), func(i, j int) {
+		matching[i], matching[j] = matching[j], matching[i]
+	})
+	return matching[:1]
+}
+
+func anyAvroOCFDataset(rng *rand.Rand) []string {
+	return anyDatasetWithPrefix(rng, "avro-ocf/")
+}
+
+func anyAvroBinDataset(rng *rand.Rand) []string {
+	return anyDatasetWithPrefix(rng, "avro-bin/")
 }
 
 // importTestSpec represents a subtest within the import test.
@@ -336,6 +511,18 @@ var tests = []importTestSpec{
 		nodes:        []int{4},
 		datasetNames: FromFunc(anyDataset),
 		importRunner: importPauseRunner,
+	},
+	// AVRO OCF import test.
+	{
+		subtestName:  "avro-ocf",
+		nodes:        []int{4},
+		datasetNames: FromFunc(anyAvroOCFDataset),
+	},
+	// AVRO binary records import test.
+	{
+		subtestName:  "avro-bin",
+		nodes:        []int{4},
+		datasetNames: FromFunc(anyAvroBinDataset),
 	},
 }
 
