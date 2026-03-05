@@ -252,9 +252,10 @@ func (e *Engines) SetStoreID(ctx context.Context, id roachpb.StoreID) error {
 func (e *Engines) newWriteBatch() Batch[storage.WriteBatch] {
 	if e.Separated() {
 		return Batch[storage.WriteBatch]{
-			state:     e.StateEngine().NewWriteBatch(),
-			logEngine: e.LogEngine(),
-			separated: true,
+			state:        e.StateEngine().NewWriteBatch(),
+			logEngine:    e.LogEngine(),
+			newRaftBatch: func(eng storage.Engine) storage.WriteBatch { return eng.NewWriteBatch() },
+			separated:    true,
 		}
 	}
 	// With a single engine, create one batch, and reference it by both pointers.
@@ -271,15 +272,16 @@ func (e *Engines) newWriteBatch() Batch[storage.WriteBatch] {
 	}
 }
 
-// newBatch is like newWriteBatch, but the StateEngine batch is a read-write
-// storage.Batch rather than a write-only storage.WriteBatch. Callers outside
-// this package should use BatchFactory.
+// newBatch is like newWriteBatch, but the batches are read-write
+// storage.Batches rather than write-only storage.WriteBatches. Callers
+// outside this package should use BatchFactory.
 func (e *Engines) newBatch() Batch[storage.Batch] {
 	if e.Separated() {
 		return Batch[storage.Batch]{
-			state:     e.StateEngine().NewBatch(),
-			logEngine: e.LogEngine(),
-			separated: true,
+			state:        e.StateEngine().NewBatch(),
+			logEngine:    e.LogEngine(),
+			newRaftBatch: func(eng storage.Engine) storage.Batch { return eng.NewBatch() },
+			separated:    true,
 		}
 	}
 	// With a single engine, create one batch, and reference it by both pointers.
@@ -292,7 +294,7 @@ func (e *Engines) newBatch() Batch[storage.Batch] {
 	// are always wrapped, so we don't use conditional type assertions.
 	return Batch[storage.Batch]{
 		state: e.StateEngine().(batchWrapper).WrapBatch(b),
-		raft:  e.LogEngine().(batchWrapper).WrapWriteBatch(b),
+		raft:  e.LogEngine().(batchWrapper).WrapBatch(b),
 	}
 }
 
@@ -323,18 +325,27 @@ func (f *BatchFactory) NewBatch() Batch[storage.Batch] {
 }
 
 // Batch is a write batch to storage which is aware whether the log and state
-// machine engines are separated. It supports any wrapper around
-// storage.WriteBatch, in particular a read-write storage.Batch.
+// machine engines are separated. The generic parameter B constrains both the
+// state and raft batch types — both use the same type, either write-only
+// (storage.WriteBatch) or read-write (storage.Batch).
 //
 // When engines are separated, the raft engine batch is lazily initialized on
 // the first call to Raft(). This avoids creating a raft batch for operations
 // that only touch the state engine.
+//
+// In principle, we could use separate generic parameters for the state and raft
+// batches. For now, we use a single parameter to keep things simple and avoid
+// the combinatorial explosion.
 type Batch[B storage.WriteBatch] struct {
 	state B
 	// raft is the LogEngine batch. When engines are not separated, it points to
 	// the same underlying batch as state. When separated, it is lazily
 	// initialized on the first call to Raft() or WagWriter().
-	raft storage.WriteBatch
+	raft B
+	// newRaftBatch creates a new raft batch from the LogEngine. Stored as a
+	// function because the concrete batch type (storage.Batch vs
+	// storage.WriteBatch) depends on the generic parameter B.
+	newRaftBatch func(storage.Engine) B
 	// logEngine is a reference to the LogEngine, used for lazy raft batch
 	// creation. Only set when engines are separated.
 	logEngine storage.Engine
@@ -345,6 +356,11 @@ type Batch[B storage.WriteBatch] struct {
 	// separated and the caller opted into WAG writing.
 	seq       *wag.Seq
 	separated bool
+	// raftInitialized tracks whether the raft batch has been created. Only
+	// meaningful when engines are separated.
+	//
+	// NB: This is needed because generic types cannot be compared to nil.
+	raftInitialized bool
 }
 
 // State returns the StateEngine batch.
@@ -352,9 +368,9 @@ func (b *Batch[B]) State() B {
 	return b.state
 }
 
-// Raft returns the LogEngine writer. When engines are separated, the raft
+// Raft returns the LogEngine batch. When engines are separated, the raft
 // batch and WAG writer are lazily created on first access.
-func (b *Batch[B]) Raft() RaftWO {
+func (b *Batch[B]) Raft() B {
 	b.maybeInitRaft()
 	return b.raft
 }
@@ -376,8 +392,9 @@ func (b *Batch[B]) WagWriter() *wag.Writer {
 // maybeInitRaft lazily initializes the raft batch and WAG writer when engines
 // are separated.
 func (b *Batch[B]) maybeInitRaft() {
-	if b.separated && b.raft == nil {
-		b.raft = b.logEngine.NewWriteBatch()
+	if b.separated && !b.raftInitialized {
+		b.raft = b.newRaftBatch(b.logEngine)
+		b.raftInitialized = true
 		if b.seq != nil {
 			b.w = wag.MakeWriter(b.seq)
 		}
@@ -403,7 +420,7 @@ func (b *Batch[B]) Commit(syncStateEngine bool) error {
 			return err
 		}
 	}
-	if b.raft != nil {
+	if b.raftInitialized {
 		if err := b.raft.Commit(true /* sync */); err != nil {
 			return err
 		}
@@ -414,7 +431,7 @@ func (b *Batch[B]) Commit(syncStateEngine bool) error {
 // Close closes the batch.
 func (b *Batch[B]) Close() {
 	b.state.Close()
-	if b.separated && b.raft != nil {
+	if b.separated && b.raftInitialized {
 		b.raft.Close()
 	}
 }
