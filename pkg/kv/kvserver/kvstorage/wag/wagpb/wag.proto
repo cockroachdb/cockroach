@@ -10,35 +10,6 @@ option go_package = "github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvstorage/
 import "gogoproto/gogo.proto";
 import "kv/kvserver/kvserverpb/raft.proto";
 
-// NodeType defines the type of the WAG node. It corresponds to a replica
-// lifecycle event, and specifies how the node is addressed and interpreted.
-//
-// TODO(arul): there should no longer be used; remove in a subsequent commit.
-enum NodeType {
-  // NodeEmpty is the "empty" type. Can be used as a nil/no-op indicator. We
-  // just have it so that all "real" types are specified explicitly.
-  NodeEmpty = 0;
-  // NodeCreate corresponds to a creation of an uninitialized replica. All
-  // replicas on a Store go through this transition.
-  NodeCreate = 1;
-  // NodeSnap corresponds to initializing/resetting a replica state machine with
-  // a snapshot. Happens when an uninitialized replica is initialized, or when
-  // an initialized replica is caught up on a later applied state. A NodeSnap
-  // also subsumes replicas (if any) that overlap with this replica in keyspace.
-  NodeSnap = 2;
-  // NodeApply corresponds to applying a replica's raft log up to a specific
-  // committed index.
-  NodeApply = 3;
-  // NodeSplit corresponds to applying a split command on a replica, and
-  // creating the replica of the post-split RHS range.
-  NodeSplit = 4;
-  // NodeMerge corresponds to applying a merge command on this replica and its
-  // immediate RHS neighbour in the keyspace.
-  NodeMerge = 5;
-  // NodeDestroy correspond to destroying the replica and its state machine.
-  NodeDestroy = 6;
-}
-
 // EventType identifies the type of a replica lifecycle event within a WAG node.
 enum EventType {
   option (gogoproto.goproto_enum_prefix) = false;
@@ -124,36 +95,6 @@ message Addr {
 // example, a split node contains an Init event for the newly created RHS and
 // a Split event that both initializes the RHS and narrows the LHS.
 message Node {
-  // Addr is the full address of the node, consisting of RangeID, ReplicaID, and
-  // index into the raft log.
-  //
-  // Deprecated: use events instead.
-  Addr addr = 1 [(gogoproto.nullable) = false];
-  // Type identifies the type of the replica lifecycle event that this node
-  // represents, such as replica creation, destruction, split or merge.
-  //
-  // TODO(arul): get rid of this field.
-  NodeType type = 2;
-  // Mutation contains the mutation that will be applied to the state machine
-  // engine when applying this WAG node.
-  Mutation mutation = 3 [(gogoproto.nullable) = false];
-
-  // Create is the RangeID that this node brings into existence in the state
-  // machine, or 0 if the node does not create new ranges. It is non-zero for
-  // NodeCreate and NodeSplit.
-  //
-  // TODO(arul): get rid of this field.
-  int64 create = 4 [
-    (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.RangeID"];
-  // Destroy contains the RangeIDs that this node removes from the state
-  // machine, because they are known to have been merged.
-  // - For NodeMerge, it contains the ID of the RHS range being merged.
-  // - For NodeSnap, it contains the list of subsumed ranges.
-  //
-  // TODO(arul): get rid of this field
-  repeated int64 destroy = 5 [
-    (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.RangeID"];
-
   // Events contains the replica lifecycle events that this node encompasses.
   // Each event affects a single replica, identified by its Addr. A given
   // RangeID must appear at most once in this list.
@@ -161,7 +102,11 @@ message Node {
   // Each EventType implicitly carries dependency semantics. For example, a
   // Split event at raft index I implies the replica must be caught up to I-1
   // before the split can be replayed.
-  repeated Event events = 6 [(gogoproto.nullable) = false];
+  repeated Event events = 1 [(gogoproto.nullable) = false];
+
+  // Mutation contains the mutation that will be applied to the state machine
+  // engine when applying this WAG node.
+  Mutation mutation = 2 [(gogoproto.nullable) = false];
 }
 
 // Mutation contains a mutation that can be applied to the state machine engine.

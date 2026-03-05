@@ -783,7 +783,7 @@ func assertWAGMutationBatch(t *testing.T, raftRepr, stateRepr []byte) bool {
 			"expected exactly one WAG node with a mutation batch, found multiple")
 		found = true
 		require.Equal(t, stateRepr, node.Mutation.Batch,
-			"WAG mutation batch for %s should match state engine batch", node.Addr)
+			"WAG mutation batch should match state engine batch")
 	}
 	return found
 }
