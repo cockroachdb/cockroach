@@ -333,7 +333,7 @@ type Batch[B storage.WriteBatch] struct {
 	state B
 	// raft is the LogEngine batch. When engines are not separated, it points to
 	// the same underlying batch as state. When separated, it is lazily
-	// initialized on the first call to Raft() or AddEvent().
+	// initialized on the first call to Raft() or WagWriter().
 	raft storage.WriteBatch
 	// logEngine is a reference to the LogEngine, used for lazy raft batch
 	// creation. Only set when engines are separated.
@@ -359,6 +359,20 @@ func (b *Batch[B]) Raft() RaftWO {
 	return b.raft
 }
 
+// WagWriter returns a pointer to the batch's WAG writer. Returns nil when
+// engines are not separated, since WAG is only used with separated engines.
+// The nil *Writer is safe to use — all methods on it are no-ops.
+//
+// When engines are separated, lazily initializes the raft batch and WAG
+// writer if they haven't been created yet.
+func (b *Batch[B]) WagWriter() *wag.Writer {
+	if !b.separated {
+		return nil
+	}
+	b.maybeInitRaft()
+	return &b.w
+}
+
 // maybeInitRaft lazily initializes the raft batch and WAG writer when engines
 // are separated.
 func (b *Batch[B]) maybeInitRaft() {
@@ -370,23 +384,31 @@ func (b *Batch[B]) maybeInitRaft() {
 	}
 }
 
-// CommitAndSync commits and syncs the batch to storage. When engines are
-// separated, the WAG node is flushed to the raft batch first, then only the
-// LogEngine batch is synced. The StateEngine part is expected to be
-// replayable from the LogEngine batch.
-func (b *Batch[B]) CommitAndSync() error {
+// Commit commits the batch to storage. syncStateEngine controls whether the
+// state engine batch is synced or not. When engines are not separated, this
+// controls the sync behavior of the singular batch commit. If they are, it
+// applies only to the state engine batch; the raft engine's batch is always
+// synced.
+//
+// When engines are separated, any staged WAG events are flushed to the raft
+// batch before committing.
+func (b *Batch[B]) Commit(syncStateEngine bool) error {
 	if !b.separated {
-		return b.state.Commit(true /* sync */)
+		return b.state.Commit(syncStateEngine)
 	}
-	if err := b.w.Flush(b.Raft(), b.state.Repr()); err != nil {
-		return err
+	// Avoid eagerly creating a raft batch and computing Repr() when no WAG
+	// events were staged.
+	if !b.w.Empty() {
+		if err := b.w.Flush(b.Raft(), b.state.Repr()); err != nil {
+			return err
+		}
 	}
 	if b.raft != nil {
 		if err := b.raft.Commit(true /* sync */); err != nil {
 			return err
 		}
 	}
-	return b.state.Commit(false /* sync */)
+	return b.state.Commit(syncStateEngine)
 }
 
 // Close closes the batch.
