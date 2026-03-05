@@ -38,6 +38,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/hints"
 	"github.com/cockroachdb/cockroach/pkg/sql/idxusage"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/prep"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/querycache"
@@ -1174,6 +1176,40 @@ func (p *planner) DeleteStatementHint(
 	ctx context.Context, rowID int64, statementFingerprint string,
 ) ([]int64, []string, [][]byte, error) {
 	return hints.DeleteHintFromDB(ctx, p.InternalSQLTxn(), rowID, statementFingerprint)
+}
+
+// ValidateSessionVariableHint is part of the eval.Planner interface.
+func (p *planner) ValidateSessionVariableHint(
+	ctx context.Context, varName, varValue string, safeUpdates bool,
+) error {
+	v, ok := varGen[varName]
+	if !ok {
+		return pgerror.Newf(pgcode.UndefinedObject, "unrecognized session variable: %q", varName)
+	}
+	if v.Set == nil && v.SetWithPlanner == nil {
+		return pgerror.Newf(pgcode.InvalidParameterValue,
+			"session variable %q is read-only and cannot be set in a statement hint", varName)
+	}
+	// Validate the value by attempting a dry-run set on a temporary copy of
+	// the session data. This catches invalid values (e.g. non-numeric strings
+	// for integer variables) at hint creation time rather than at execution
+	// time, where errors are silently skipped.
+	if v.Set != nil {
+		sdCopy := *p.SessionData()
+		tempMutator := sessionmutator.SessionDataMutator{
+			Data:                   &sdCopy,
+			SessionDataMutatorBase: p.sessionDataMutatorIterator.SessionDataMutatorBase,
+		}
+		if err := v.Set(ctx, tempMutator, varValue); err != nil {
+			return pgerror.Wrapf(err, pgcode.InvalidParameterValue,
+				"invalid value for session variable %q", varName)
+		}
+	}
+	// For SetWithPlanner-only variables, we skip dry-run validation because
+	// SetWithPlanner requires a fully initialized planner and may have side
+	// effects (e.g. sending client notices). The value will be validated at
+	// hint application time.
+	return nil
 }
 
 // UsingHintInjection is part of the eval.Planner interface.

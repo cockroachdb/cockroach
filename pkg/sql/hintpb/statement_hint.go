@@ -54,6 +54,9 @@ const (
 	// HintTypeRewriteInlineHints is used for "hint injection" hints that rewrite
 	// the inline hints within the AST of a statement.
 	HintTypeRewriteInlineHints = "REWRITE INLINE HINTS"
+	// HintTypeSessionSetting is used for hints that override a session variable
+	// for the duration of a single statement.
+	HintTypeSessionSetting = "SESSION SETTING"
 )
 
 // HintType returns the string representation of the type of the given hint,
@@ -62,6 +65,8 @@ func (hint *StatementHintUnion) HintType() string {
 	switch hint.GetValue().(type) {
 	case *InjectHints:
 		return HintTypeRewriteInlineHints
+	case *SessionSettingHint:
+		return HintTypeSessionSetting
 	default:
 		return HintTypeEmpty
 	}
@@ -77,6 +82,13 @@ func (h StatementHintUnion) RecreateStmt(stmt string) (string, bool) {
 			lexbase.EscapeSQLString(stmt),
 			lexbase.EscapeSQLString(t.DonorSQL),
 		), true
+	case *SessionSettingHint:
+		return fmt.Sprintf(
+			"SELECT information_schema.crdb_session_setting_hint(%s, %s, %s);",
+			lexbase.EscapeSQLString(stmt),
+			lexbase.EscapeSQLString(t.SettingName),
+			lexbase.EscapeSQLString(t.SettingValue),
+		), true
 	default:
 		return "", false
 	}
@@ -88,6 +100,8 @@ func (h *StatementHintUnion) Details() (json.JSON, error) {
 	var wrapped protoutil.Message
 	switch t := h.GetValue().(type) {
 	case *InjectHints:
+		wrapped = t
+	case *SessionSettingHint:
 		wrapped = t
 	default:
 		return nil, errors.New("unknown hint type")

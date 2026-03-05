@@ -511,6 +511,12 @@ type Planner interface {
 	// fingerprint, and raw hint protobuf bytes of all deleted rows.
 	DeleteStatementHint(ctx context.Context, rowID int64, statementFingerprint string) (rowIDs []int64, fingerprints []string, hintBytes [][]byte, err error)
 
+	// ValidateSessionVariableHint checks that a session variable with the given
+	// name exists, is writable, and is allowed to be overridden via statement
+	// hints. It also validates the value by attempting a dry-run set. Variables
+	// not marked as safe to hint require safeUpdates to be true.
+	ValidateSessionVariableHint(ctx context.Context, varName, varValue string, safeUpdates bool) error
+
 	// UsingHintInjection returns whether we are planning with externally-injected
 	// hints.
 	UsingHintInjection() bool

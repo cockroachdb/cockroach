@@ -770,6 +770,34 @@ An event of type `set_cluster_setting` is recorded when a cluster setting is cha
 | `PlaceholderValues` | The mapping of SQL placeholders to their values, for prepared statements. | yes |
 | `TxnReadTimestamp` | The current read timestamp of the transaction that triggered the event, if in a transaction. | no |
 
+### `set_session_setting_hint`
+
+An event of type `set_session_setting_hint` is recorded when a new session-setting hint is added
+via information_schema.crdb_session_setting_hint.
+
+
+| Field | Description | Sensitive |
+|--|--|--|
+| `StatementFingerprint` | The target statement fingerprint for which the session setting is being overridden. | no |
+| `SettingName` | The name of the session variable being overridden. | no |
+| `SettingValue` | The value of the session variable override. | yes |
+| `HintID` | The hint ID of the newly created statement hint. | no |
+
+
+#### Common fields
+
+| Field | Description | Sensitive |
+|--|--|--|
+| `Timestamp` | The timestamp of the event. Expressed as nanoseconds since the Unix epoch. | no |
+| `EventType` | The type of the event. | no |
+| `Statement` | A normalized copy of the SQL statement that triggered the event. The statement string contains a mix of sensitive and non-sensitive details (it is redactable). | partially |
+| `Tag` | The statement tag. This is separate from the statement string, since the statement string can contain sensitive information. The tag is guaranteed not to. | no |
+| `User` | The user account that triggered the event. The special usernames `root` and `node` are not considered sensitive. | depends |
+| `DescriptorID` | The primary object descriptor affected by the operation. Set to zero for operations that don't affect descriptors. | no |
+| `ApplicationName` | The application name for the session where the event was emitted. This is included in the event to ease filtering of logging output by application. | no |
+| `PlaceholderValues` | The mapping of SQL placeholders to their values, for prepared statements. | yes |
+| `TxnReadTimestamp` | The current read timestamp of the transaction that triggered the event, if in a transaction. | no |
+
 ### `set_tenant_cluster_setting`
 
 An event of type `set_tenant_cluster_setting` is recorded when a cluster setting override

@@ -92,6 +92,9 @@ func (m *RewriteInlineHints) LoggingChannel() logpb.Channel { return logpb.Chann
 func (m *SetClusterSetting) LoggingChannel() logpb.Channel { return logpb.Channel_OPS }
 
 // LoggingChannel implements the EventPayload interface.
+func (m *SetSessionSettingHint) LoggingChannel() logpb.Channel { return logpb.Channel_OPS }
+
+// LoggingChannel implements the EventPayload interface.
 func (m *SetTenantClusterSetting) LoggingChannel() logpb.Channel { return logpb.Channel_OPS }
 
 // LoggingChannel implements the EventPayload interface.
