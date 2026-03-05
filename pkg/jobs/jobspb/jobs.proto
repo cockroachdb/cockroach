@@ -1364,16 +1364,21 @@ message CreateStatsDetails {
   // If true, will collect partial table statistics at extreme values.
   bool using_extremes = 9;
 
+  // If true, will collect partial fix-up table statistics on the WhereSpans.
+  bool using_spans = 14;
+
   // WHERE clause for partial statistics collection. This field is only used
   // to populate the predicate in the system.table_statistics table and to
   // determine if this is a constrained stats collection. The actual constrained
   // scan is done over the spans in the where_spans field.
   string where_clause = 10;
 
-  // Spans over which to collect partial statistics with a WHERE clause.
+  // Spans over which to collect partial statistics with a WHERE clause or with
+  // USING SPANS option. Spans must be ordered.
   repeated roachpb.Span where_spans = 11 [(gogoproto.nullable) = false];
 
-  // The ID of the index used to collect partial statistics with a WHERE clause.
+  // The ID of the index used to collect partial statistics with a WHERE clause
+  // or with USING SPANS option.
   int64 where_index_id = 12 [
     (gogoproto.customname) = "WhereIndexID",
     (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb.IndexID"
@@ -1383,6 +1388,10 @@ message CreateStatsDetails {
   // the system.table_statistics_locks table, so the job doesn't need to check
   // whether there are any other concurrent CreateStats jobs.
   bool use_locks_table = 13;
+
+  // EstimatedRowCount, if set, contains the estimated number of rows that will
+  // be scanned by this stats collection.
+  uint64 estimated_row_count = 15;
 }
 
 message CreateStatsProgress {

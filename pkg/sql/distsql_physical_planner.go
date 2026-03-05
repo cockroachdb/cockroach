@@ -838,7 +838,8 @@ func (r SpanPartitionReason) String() string {
 // those spans.
 type SpanPartition struct {
 	SQLInstanceID base.SQLInstanceID
-	Spans         roachpb.Spans
+	// Spans must be ordered.
+	Spans roachpb.Spans
 
 	haveRangeInfo bool
 	numRanges     int
@@ -3650,7 +3651,8 @@ func (dsp *DistSQLPlanner) createPhysPlanForPlanNode(
 
 			numIndexes := 1
 			if details.UsingExtremes {
-				// Partial stats collections scan a different index for each column.
+				// USING EXTREMES partial stats collections scan a different
+				// index for each column.
 				numIndexes = len(details.ColumnStats)
 			}
 			// If the error has pgcode.ObjectNotInPrerequisiteState, we don't
