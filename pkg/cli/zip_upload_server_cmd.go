@@ -43,6 +43,10 @@ func runDebugZipUploadServer(cmd *cobra.Command, args []string) error {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
+	if uploadServerCtx.fromFile != "" {
+		return runUploadFromZipFile(ctx, uploadServerCtx.fromFile)
+	}
+
 	timeout := 10 * time.Minute
 	if cliCtx.cmdTimeout != 0 {
 		timeout = cliCtx.cmdTimeout

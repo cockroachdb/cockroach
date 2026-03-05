@@ -5826,6 +5826,8 @@ node to initiate a debug data upload session.
 | cpu_prof_seconds | [int32](#cockroach.server.serverpb.UploadDebugDataRequest-int32) |  |  | [reserved](#support-status) |
 | labels | [UploadDebugDataRequest.LabelsEntry](#cockroach.server.serverpb.UploadDebugDataRequest-cockroach.server.serverpb.UploadDebugDataRequest.LabelsEntry) | repeated |  | [reserved](#support-status) |
 | node_ids | [int32](#cockroach.server.serverpb.UploadDebugDataRequest-int32) | repeated | node_ids limits which nodes participate. Empty means all nodes. | [reserved](#support-status) |
+| include_range_info | [bool](#cockroach.server.serverpb.UploadDebugDataRequest-bool) |  |  | [reserved](#support-status) |
+| include_goroutine_stacks | [bool](#cockroach.server.serverpb.UploadDebugDataRequest-bool) |  |  | [reserved](#support-status) |
 
 
 
@@ -5912,6 +5914,8 @@ node via iterateNodes fan-out.
 | upload_token | [string](#cockroach.server.serverpb.UploadNodeDebugDataRequest-string) |  |  | [reserved](#support-status) |
 | redact | [bool](#cockroach.server.serverpb.UploadNodeDebugDataRequest-bool) |  |  | [reserved](#support-status) |
 | cpu_prof_seconds | [int32](#cockroach.server.serverpb.UploadNodeDebugDataRequest-int32) |  |  | [reserved](#support-status) |
+| include_range_info | [bool](#cockroach.server.serverpb.UploadNodeDebugDataRequest-bool) |  |  | [reserved](#support-status) |
+| include_goroutine_stacks | [bool](#cockroach.server.serverpb.UploadNodeDebugDataRequest-bool) |  |  | [reserved](#support-status) |
 
 
 

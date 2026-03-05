@@ -1599,6 +1599,8 @@ func init() {
 		cliflags.UploadServerAPIKey.Usage())
 	f.StringSliceVar(&uploadServerCtx.labels, cliflags.UploadServerLabels.Name, nil,
 		cliflags.UploadServerLabels.Usage())
+	f.StringVar(&uploadServerCtx.fromFile, cliflags.UploadServerFromFile.Name, "",
+		cliflags.UploadServerFromFile.Usage())
 	cliflagcfg.BoolFlag(f, &zipCtx.redact, cliflags.ZipRedact)
 	cliflagcfg.DurationFlag(f, &zipCtx.cpuProfDuration, cliflags.ZipCPUProfileDuration)
 	cliflagcfg.BoolFlag(f, &zipCtx.includeRangeInfo, cliflags.ZipIncludeRangeInfo)

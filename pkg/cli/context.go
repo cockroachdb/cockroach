@@ -417,6 +417,7 @@ type uploadServerContext struct {
 	serverURL string
 	apiKey    string
 	labels    []string
+	fromFile  string
 }
 
 // setUploadServerContextDefaults sets the default values in
@@ -426,6 +427,7 @@ func setUploadServerContextDefaults() {
 	uploadServerCtx.serverURL = ""
 	uploadServerCtx.apiKey = ""
 	uploadServerCtx.labels = nil
+	uploadServerCtx.fromFile = ""
 }
 
 // dumpCtx captures the command-line parameters of the `dump` command.

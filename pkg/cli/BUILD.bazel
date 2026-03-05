@@ -85,6 +85,7 @@ go_library(
         "zip_upload_output.go",
         "zip_upload_server_client.go",
         "zip_upload_server_cmd.go",
+        "zip_upload_server_from_file.go",
         "zip_upload_table_dumps.go",
         ":gen-keytype-stringer",  # keep
     ],

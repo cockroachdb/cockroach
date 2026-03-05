@@ -1929,6 +1929,15 @@ For example: --upload-server-labels="ticket=CRL-12345,env=prod"
 `,
 	}
 
+	UploadServerFromFile = FlagInfo{
+		Name: "from-file",
+		Description: `
+Path to an existing debug.zip file to upload to the upload server.
+When set, the command uploads the zip contents directly without
+connecting to the cluster.
+`,
+	}
+
 	StmtDiagDeleteAll = FlagInfo{
 		Name:        "all",
 		Description: `Delete all bundles.`,
