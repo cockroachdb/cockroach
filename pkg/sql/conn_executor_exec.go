@@ -901,6 +901,7 @@ func (ex *connExecutor) execStmtInOpenState(
 
 	}(ctx, res)
 
+	// Handle transaction control statements.
 	switch s := ast.(type) {
 	case *tree.BeginTransaction:
 		// BEGIN is only allowed if we are in an implicit txn.
@@ -943,8 +944,9 @@ func (ex *connExecutor) execStmtInOpenState(
 	case *tree.ShowCommitTimestamp:
 		ev, payload := ex.execShowCommitTimestampInOpenState(ctx, s, res, canAutoCommit)
 		return ev, payload, nil
+	}
 
-	case *tree.Prepare:
+	if s, ok := ast.(*tree.Prepare); ok {
 		// This is handling the SQL statement "PREPARE". See execPrepare for
 		// handling of the protocol-level command for preparing statements.
 		name := s.Name.String()
@@ -1902,6 +1904,7 @@ func (ex *connExecutor) execStmtInOpenStateWithPausablePortal(
 
 	}(ctx, res)
 
+	// Handle transaction control statements.
 	switch s := vars.ast.(type) {
 	case *tree.BeginTransaction:
 		// BEGIN is only allowed if we are in an implicit txn.
@@ -1944,8 +1947,9 @@ func (ex *connExecutor) execStmtInOpenStateWithPausablePortal(
 	case *tree.ShowCommitTimestamp:
 		ev, payload := ex.execShowCommitTimestampInOpenState(ctx, s, res, canAutoCommit)
 		return ev, payload, nil
+	}
 
-	case *tree.Prepare:
+	if s, ok := vars.ast.(*tree.Prepare); ok {
 		// This is handling the SQL statement "PREPARE". See execPrepare for
 		// handling of the protocol-level command for preparing statements.
 		name := s.Name.String()
