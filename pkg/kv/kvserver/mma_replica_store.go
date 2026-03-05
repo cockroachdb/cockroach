@@ -297,12 +297,12 @@ func (ms *mmaStore) MakeStoreLeaseholderMsg(
 // with the store-level load in StoreLoadMsg.
 func (ms *mmaStore) amplificationFactors() mmaprototype.AmpVector {
 	s := (*Store)(ms)
-	cap := s.storeGossip.CachedCapacity()
-	if cap == (roachpb.StoreCapacity{}) {
+	sc := s.storeGossip.CachedCapacity()
+	if sc == (roachpb.StoreCapacity{}) {
 		return mmaprototype.IdentityAmpVector()
 	}
 	desc := roachpb.StoreDescriptor{
-		Capacity: cap,
+		Capacity: sc,
 	}
 	if nc, err := s.nodeCapacityProvider.GetNodeCapacity(true /* useCached */); err == nil {
 		desc.NodeCapacity = nc
