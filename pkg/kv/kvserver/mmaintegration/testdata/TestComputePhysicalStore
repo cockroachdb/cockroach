@@ -9,7 +9,7 @@
 # -------------------------------------------------------------------
 # Zero-value descriptor: all inputs are zero.
 # CPU: NumStores=0 treated as 1. storesCPU=0 so ampFactor defaults to
-# cap (3). No MMA load, all nodeUsage (0) is background. load=0, cap=0
+# cap (3). No MMA load, all nodeUsage (0) is immovable. load=0, cap=0
 # (floored to minCapacity by the defer).
 # Disk: LogicalBytes=0 and Used=0, so amp defaults to 1.
 # WriteBandwidth: always amp=1, capacity=unknown.
@@ -48,7 +48,7 @@ amplification-factors: [cpu=3.0000, disk=2.0000, write-bw=1.0000]
 # -------------------------------------------------------------------
 # Single store, stores CPU exceeds node CPU (measurement lag).
 # implicitMult = 4/8 = 0.5, clamped to floor of 1.
-# mmaLoad = 8*1 = 8 > nodeUsage=4, so background=0.
+# mmaLoad = 8*1 = 8 > nodeUsage=4, so immovable=0.
 # load = 8*1 = 8 (overshoots nodeUsage; see ampFactor=1 comment in code).
 # -------------------------------------------------------------------
 compute num-stores=1 stores-cpu=8 node-cpu-usage=4 node-cpu-capacity=16 logical-gib=40 used-gib=80 available-gib=20 write-bytes-per-sec=10000000
@@ -61,7 +61,7 @@ amplification-factors: [cpu=1.0000, disk=2.0000, write-bw=1.0000]
 # -------------------------------------------------------------------
 # Single store, huge implicit multiplier (clamped to cap).
 # implicitMult = 10/1 = 10, clamped to maxCPUAmplification (3).
-# mmaLoad = 1*3 = 3, background = 10-3 = 7.
+# mmaLoad = 1*3 = 3, immovable = 10-3 = 7.
 # load = 1*3 + 7/1 = 10.
 # -------------------------------------------------------------------
 compute num-stores=1 stores-cpu=1 node-cpu-usage=10 node-cpu-capacity=16 logical-gib=40 used-gib=80 available-gib=20 write-bytes-per-sec=10000000
@@ -74,7 +74,7 @@ amplification-factors: [cpu=3.0000, disk=2.0000, write-bw=1.0000]
 # -------------------------------------------------------------------
 # Multi-store: 4 stores on the node.
 # implicitMult = 8/4 = 2 (unclamped). mmaLoad = 4*2 = 8 = nodeUsage,
-# so background=0. Each store gets storesCPU/4 * 2 = 2 cores load.
+# so immovable=0. Each store gets storesCPU/4 * 2 = 2 cores load.
 # -------------------------------------------------------------------
 compute num-stores=4 stores-cpu=4 node-cpu-usage=8 node-cpu-capacity=16 logical-gib=40 used-gib=80 available-gib=20 write-bytes-per-sec=10000000
 ----
@@ -119,7 +119,7 @@ amplification-factors: [cpu=2.0000, disk=2.0000, write-bw=1.0000]
 # -------------------------------------------------------------------
 # Per-store CPUPerSecond: store reports 3 cores of direct CPU on a node
 # with 4 stores totaling 8 cores of store CPU, 12 cores node usage, 16 cap.
-# ampFactor = 12/8 = 1.5. mmaLoad = 8*1.5 = 12 = nodeUsage, background=0.
+# ampFactor = 12/8 = 1.5. mmaLoad = 8*1.5 = 12 = nodeUsage, immovable=0.
 # This store's load = 3*1.5 = 4.5, capacity = 16/4 = 4.
 # -------------------------------------------------------------------
 compute num-stores=4 stores-cpu=8 node-cpu-usage=12 node-cpu-capacity=16 store-cpu-per-second=3 logical-gib=40 used-gib=80 available-gib=20 write-bytes-per-sec=10000000
@@ -130,9 +130,9 @@ write-bandwidth: load=9.54 MiB/s  capacity=unknown  amp=1.0000
 amplification-factors: [cpu=1.5000, disk=2.0000, write-bw=1.0000]
 
 # -------------------------------------------------------------------
-# Per-store CPUPerSecond with background: 4 stores, 4 cores total store
+# Per-store CPUPerSecond, ampFactor unclamped: 4 stores, 4 cores total store
 # CPU, 10 cores node usage, 16 cap. ampFactor = min(10/4, 3) = 2.5.
-# mmaLoad = 4*2.5 = 10 = nodeUsage, background=0.
+# mmaLoad = 4*2.5 = 10 = nodeUsage, immovable=0.
 # This hot store reports 3 of the 4 store cores.
 # load = 3*2.5 = 7.5, capacity = 16/4 = 4.
 # -------------------------------------------------------------------
@@ -144,9 +144,9 @@ write-bandwidth: load=9.54 MiB/s  capacity=unknown  amp=1.0000
 amplification-factors: [cpu=2.5000, disk=2.0000, write-bw=1.0000]
 
 # -------------------------------------------------------------------
-# Per-store CPUPerSecond with background exceeding cap: 1 store,
+# Per-store CPUPerSecond with immovable CPU exceeding cap: 1 store,
 # 1 core store CPU, 10 cores node usage, 16 cap.
-# ampFactor = min(10/1, 3) = 3. mmaLoad = 1*3 = 3, background = 7.
+# ampFactor = min(10/1, 3) = 3. mmaLoad = 1*3 = 3, immovable = 7.
 # store reports 1 core. load = 1*3 + 7/1 = 10, capacity = 16.
 # Same as the even-split case since numStores=1 and storeCPU=storesCPU.
 # -------------------------------------------------------------------

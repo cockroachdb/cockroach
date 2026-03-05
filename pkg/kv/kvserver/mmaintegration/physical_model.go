@@ -58,13 +58,13 @@ type physicalDimension struct {
 //     moved to this store carry their load as computed by the source store's
 //     amplification factor.
 //
-//  2. Estimate background CPU: node CPU usage not attributable to MMA-tracked
+//  2. Estimate immovable CPU: node CPU usage not attributable to MMA-tracked
 //     work (e.g. SQL gateway, GC, background jobs). This is
 //     max(0, nodeUsage - storesCPU*ampFactor).
 //
 //  3. Compute per-store load and capacity.
 //     Load uses this store's direct replica CPU (CPUPerSecond) amplified by
-//     the factor, plus an even share of background. This lets stores with more
+//     the factor, plus an even share of immovable CPU. This lets stores with more
 //     KV work report higher load while still accounting for node-level overhead.
 //     Falls back to storesCPU/numStores when CPUPerSecond is unavailable.
 //     Capacity is nodeCap/numStores — a real-world quantity (the store's share
@@ -73,19 +73,19 @@ type physicalDimension struct {
 // Design decisions for the CPU physical model. For simplicity, the examples
 // below assume single-store nodes unless stated otherwise.
 //
-// # Background in load, not capacity
+// # Immovable CPU in load, not capacity
 //
-// Background CPU (max(0, nodeUsage - storesCPU*ampFactor)) is added to each
+// Immovable CPU (max(0, nodeUsage - storesCPU*ampFactor)) is added to each
 // store's load rather than subtracted from capacity. Capacity stays a
 // real-world number (nodeCap/numStores) and nodes running hot from any cause
 // become shed candidates.
 //
-// The alternative — subtracting background from capacity — hides pressure in
-// the denominator:
+// The alternative — subtracting immovable CPU from capacity — hides pressure
+// in the denominator:
 //
 //	Two nodes, 10-core each:
-//	  X: 80% total CPU (60% background + 20% KV).  bg = 6, KV = 2.
-//	  Y: 60% total CPU (all KV).                   bg = 0, KV = 6.
+//	  X: 80% total CPU (60% immovable + 20% KV).  immov = 6, KV = 2.
+//	  Y: 60% total CPU (all KV).                  immov = 0, KV = 6.
 //
 //	  Subtract from capacity:  X = 2/(10-6)  = 50%,  Y = 6/10 = 60%.
 //	  Add to load (chosen):    X = 8/10      = 80%,  Y = 6/10 = 60%.
@@ -111,16 +111,16 @@ type physicalDimension struct {
 // imbalance. Even split preserves differentiation; the node-level overload
 // check (canShedAndAddLoad) prevents over-accepting.
 //
-// Trade-off: a background-heavy node with little KV work still appears loaded
-// and MMA may try to shed from it. We accept this because: with this model,
+// Trade-off: a node with heavy immovable CPU and little KV work still appears
+// loaded and MMA may try to shed from it. We accept this because:
 //
 //  1. Operators see balanced total CPU across nodes — they don't need to
 //     distinguish KV from non-KV usage to understand the cluster state.
 //  2. If the node has no ranges at all, the shed attempt is a harmless no-op.
 //  3. The inflated store load raises the topK threshold (minLoadFraction *
 //     adjustedLoad), filtering out tiny ranges that wouldn't meaningfully
-//     reduce load — naturally limiting churn on background-heavy nodes.
-//  4. The alternative (subtracting background from capacity) makes the numbers
+//     reduce load — naturally limiting churn on immovable-heavy nodes.
+//  4. The alternative (subtracting immovable CPU from capacity) makes the numbers
 //     harder to reason about and, as shown above, can cause MMA to send work
 //     toward already-hot nodes.
 func computePhysicalCPU(desc roachpb.StoreDescriptor) (res physicalDimension) {
@@ -138,9 +138,9 @@ func computePhysicalCPU(desc roachpb.StoreDescriptor) (res physicalDimension) {
 		ampFactor = max(1, min(nodeUsage/storesCPU, maxCPUAmplification))
 	}
 
-	// Step 2: Attribute CPU to MMA-tracked work vs background.
+	// Step 2: Attribute CPU to MMA-tracked work vs immovable.
 	mmaLoad := storesCPU * ampFactor
-	background := max(0, nodeUsage-mmaLoad)
+	immovable := max(0, nodeUsage-mmaLoad)
 
 	// Step 3: Compute per-store load and capacity.
 	storeCPU := desc.Capacity.CPUPerSecond
@@ -155,7 +155,7 @@ func computePhysicalCPU(desc roachpb.StoreDescriptor) (res physicalDimension) {
 	//
 	//	sum(load_i) = sum(storeCPU_i * ampFactor + background / N)
 	//	            = ampFactor * sum(storeCPU_i) + background
-	//	            = ampFactor * storesCPU + max(0, nodeUsage - storesCPU * ampFactor)
+	//	            = ampFactor * storesCPU + max(0, nodeUsage - storesCPU*ampFactor)
 	//
 	// When ampFactor = nodeUsage/storesCPU (unclamped interior):
 	//
@@ -168,7 +168,7 @@ func computePhysicalCPU(desc roachpb.StoreDescriptor) (res physicalDimension) {
 	//
 	// The overshoot (storesCPU - nodeUsage) is transient and conservative: stores
 	// appear slightly more loaded than reality until the measurement lag resolves.
-	load := mmaprototype.LoadValue(max(0, storeCPU*ampFactor+background/numStores))
+	load := mmaprototype.LoadValue(max(0, storeCPU*ampFactor+immovable/numStores))
 	capacity := mmaprototype.LoadValue(max(0, nodeCap/numStores))
 	if nodeCap <= 0 {
 		capacity = load * 2
