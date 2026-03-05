@@ -80,3 +80,33 @@ message DeleteRewriteInlineHints {
   // The donor sql of the deleted inline hint.
   string donor_sql = 5 [(gogoproto.jsontag) = ",omitempty", (gogoproto.moretags) = "redact:\"nonsensitive\""];
 }
+
+// DeleteSessionVariableHint is recorded when a session variable hint is
+// deleted via information_schema.crdb_delete_statement_hints.
+message DeleteSessionVariableHint {
+  CommonEventDetails common = 1 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
+  CommonSQLEventDetails sql = 2 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
+  // The target statement fingerprint for which the session variable hint is being deleted.
+  string statement_fingerprint = 3 [(gogoproto.jsontag) = ",omitempty", (gogoproto.moretags) = "redact:\"nonsensitive\""];
+  // The hint ID of the deleted statement hint.
+  int64 hint_id = 4 [(gogoproto.customname) = "HintID", (gogoproto.jsontag) = ",omitempty"];
+  // The name of the session variable that was overridden.
+  string variable_name = 5 [(gogoproto.jsontag) = ",omitempty", (gogoproto.moretags) = "redact:\"nonsensitive\""];
+  // The value of the session variable override.
+  string variable_value = 6 [(gogoproto.jsontag) = ",omitempty"];
+}
+
+// SetSessionVariableHint is recorded when a new session variable hint is
+// added via information_schema.crdb_set_session_variable_hint.
+message SetSessionVariableHint {
+  CommonEventDetails common = 1 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
+  CommonSQLEventDetails sql = 2 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
+  // The target statement fingerprint for which the session variable is being overridden.
+  string statement_fingerprint = 3 [(gogoproto.jsontag) = ",omitempty", (gogoproto.moretags) = "redact:\"nonsensitive\""];
+  // The name of the session variable being overridden.
+  string variable_name = 4 [(gogoproto.jsontag) = ",omitempty", (gogoproto.moretags) = "redact:\"nonsensitive\""];
+  // The value of the session variable override.
+  string variable_value = 5 [(gogoproto.jsontag) = ",omitempty"];
+  // The hint ID of the newly created statement hint.
+  int64 hint_id = 6 [(gogoproto.customname) = "HintID", (gogoproto.jsontag) = ",omitempty"];
+}
