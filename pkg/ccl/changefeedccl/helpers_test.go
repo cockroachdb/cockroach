@@ -936,7 +936,7 @@ func requireNoFeedsFail(t *testing.T) (fn updateKnobsFn) {
 		`was truncated`,
 		`connection refused`,
 		`connection reset by peer`,
-		`knobs.RaiseRetryableError`,
+		`BeforeCheckpoint`,
 		`test error`,
 		`context canceled`,
 	}

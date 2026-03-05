@@ -11731,7 +11731,7 @@ func TestHighwaterDoesNotRegressOnRetry(t *testing.T) {
 
 		// A flag we toggle on to put the changefeed in a retrying state.
 		var changefeedIsRetrying atomic.Bool
-		knobs.RaiseRetryableError = func() error {
+		knobs.BeforeCheckpoint = func() error {
 			if changefeedIsRetrying.Load() {
 				return errors.New("test retryable error")
 			}
@@ -11814,7 +11814,7 @@ func TestHighwaterDoesNotRegressOnRetry(t *testing.T) {
 		// Check that the following happens soon.
 		//
 		// Step 2: Since `changefeedIsRetrying` is true, the changefeed will now attempt retries in
-		//         via `knobs.RaiseRetryableError`.
+		//         via `knobs.BeforeCheckpoint`.
 		// Step 3: `knobs.LoadJobErr` will result an in error when reading the job record a couple of times, causing
 		//          more retries.
 		// Step 4: Eventually, a dist changefeed is started at a certain highwater timestamp.
@@ -12273,7 +12273,7 @@ func TestChangefeedRetryBackoffLogging(t *testing.T) {
 
 		var errorCount atomic.Int32
 		knobs := s.TestingKnobs.DistSQL.(*execinfra.TestingKnobs).Changefeed.(*TestingKnobs)
-		knobs.RaiseRetryableError = func() error {
+		knobs.BeforeCheckpoint = func() error {
 			if errorCount.Add(1) == 1 {
 				return errors.New("test transient error")
 			}
