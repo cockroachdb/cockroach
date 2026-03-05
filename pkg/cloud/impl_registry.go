@@ -186,7 +186,7 @@ func ExternalStorageConfFromURI(
 ) (cloudpb.ExternalStorage, error) {
 	uri, err := url.Parse(path)
 	if err != nil {
-		return cloudpb.ExternalStorage{}, err
+		return cloudpb.ExternalStorage{}, errors.New("failed to parse external storage URI")
 	}
 	if fn, ok := confParsers[uri.Scheme]; ok {
 		return fn(ExternalStorageURIContext{CurrentUser: user}, uri)
@@ -222,9 +222,17 @@ func ExternalStorageFromURI(
 		// Verify that the Conf() method returns the URI field.
 		returnedConf := es.Conf()
 		if returnedConf.URI != conf.URI {
+			sanitizedURI, sanitizeErr := SanitizeExternalStorageURI(uri, nil)
+			if sanitizeErr != nil {
+				sanitizedURI = "<uri_failed_to_redact>"
+			}
+			sanitizedReturnedURI, sanitizeErr := SanitizeExternalStorageURI(returnedConf.URI, nil)
+			if sanitizeErr != nil {
+				sanitizedReturnedURI = "<uri_failed_to_redact>"
+			}
 			return nil, errors.AssertionFailedf(
 				"ExternalStorage.Conf() did not return the original URI: expected %q, got %q",
-				uri, returnedConf.URI)
+				sanitizedURI, sanitizedReturnedURI)
 		}
 	}
 	return es, nil
@@ -274,7 +282,7 @@ func MakeExternalStorage(
 func EarlyBootExternalStorageConfFromURI(path string) (cloudpb.ExternalStorage, error) {
 	uri, err := url.Parse(path)
 	if err != nil {
-		return cloudpb.ExternalStorage{}, err
+		return cloudpb.ExternalStorage{}, errors.New("failed to parse external storage URI")
 	}
 	if fn, ok := earlyBootConfParsers[uri.Scheme]; ok {
 		return fn(uri)
