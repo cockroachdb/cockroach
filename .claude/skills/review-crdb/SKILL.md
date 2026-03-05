@@ -80,6 +80,14 @@ receives:
 This is faster and gives comprehensive results. Use this unless the user
 requests sequential review.
 
+**Correctness agent**: run in the **foreground** (not background). It reads
+more surrounding context and anecdotally takes longer than the other agents.
+Running it synchronously avoids `TaskOutput` polling timeouts. Launch all
+other agents in the background first, then block on the correctness agent.
+
+**Timeouts**: when polling background agents with `TaskOutput`, always use the
+maximum allowed timeout to avoid premature timeouts on larger diffs.
+
 ### Sequential approach
 
 Run agents one at a time. Useful for interactive review where the user wants to
