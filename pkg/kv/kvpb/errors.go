@@ -720,6 +720,7 @@ func (e *TransactionAbortedError) SafeFormatError(p errors.Printer) (next error)
 
 type retryErrOptions struct {
 	conflictingTxn *enginepb.TxnMeta
+	conflictKey    roachpb.Key
 }
 
 // RetryErrOption is used to annotate optional fields in retry related errors.
@@ -739,6 +740,15 @@ func (f retryErrOptionFunc) apply(o *retryErrOptions) {
 func WithConflictingTxn(txn *enginepb.TxnMeta) RetryErrOption {
 	return retryErrOptionFunc(func(o *retryErrOptions) {
 		o.conflictingTxn = txn
+	})
+}
+
+// WithConflictKey is used to annotate a retry error with the key that the
+// transaction conflicted on. This is distinct from the conflicting transaction's
+// anchor key (TxnMeta.Key), which is used for transaction record placement.
+func WithConflictKey(key roachpb.Key) RetryErrOption {
+	return retryErrOptionFunc(func(o *retryErrOptions) {
+		o.conflictKey = key
 	})
 }
 
@@ -771,6 +781,7 @@ func NewTransactionRetryWithProtoRefreshError(
 		PrevTxnEpoch:    prevTxnEpoch,
 		NextTransaction: nextTxn,
 		ConflictingTxn:  options.conflictingTxn,
+		ConflictKey:     options.conflictKey,
 	}
 }
 
@@ -853,6 +864,7 @@ func NewTransactionRetryError(
 		ExtraMsg:           extraMsg.StripMarkers(),
 		ExtraMsgRedactable: extraMsg,
 		ConflictingTxn:     options.conflictingTxn,
+		ConflictKey:        options.conflictKey,
 	}
 }
 
