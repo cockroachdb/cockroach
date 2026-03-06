@@ -128,6 +128,7 @@ describe("NodeSelector", () => {
     jest.spyOn(api, "useNodeStatuses").mockReturnValue({
       error: null,
       isLoading: true,
+      nodeStatuses: [],
       nodeStatusByID: {
         1: { region: "us-east", stores: [101, 102] },
         2: { region: "us-west", stores: [201] },
@@ -139,6 +140,11 @@ describe("NodeSelector", () => {
         201: 2,
         301: 3,
       } as Record<StoreID, NodeID>,
+      nodeRegionsByID: {
+        "1": "us-east",
+        "2": "us-west",
+        "3": "us-east",
+      },
     });
 
     render(<NodeSelector initialValue={[]} onChange={() => {}} />);
