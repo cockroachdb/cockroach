@@ -66,6 +66,7 @@ func startSampleEnvironment(
 	goroutineDumper *goroutinedumper.GoroutineDumper,
 	sessionRegistry *sql.SessionRegistry,
 	rootMemMonitor *mon.BytesMonitor,
+	execTraceMetadataFn func(ctx context.Context, source string),
 ) error {
 	metricsSampleInterval := base.DefaultMetricsSampleInterval
 	if p, ok := srvCfg.TestingKnobs.Server.(*TestingKnobs); ok && p.EnvironmentSampleInterval != time.Duration(0) {
@@ -132,7 +133,7 @@ func startSampleEnvironment(
 		}
 	}
 
-	simpleFlightRecorder, err := goexectrace.NewFlightRecorder(cfg.st, 10*time.Second, cfg.executionTraceDirName)
+	simpleFlightRecorder, err := goexectrace.NewFlightRecorder(cfg.st, 10*time.Second, cfg.executionTraceDirName, execTraceMetadataFn)
 	if err != nil {
 		log.Dev.Warningf(ctx, "failed to initialize flight recorder: %v", err)
 	} else {

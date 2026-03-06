@@ -25,6 +25,7 @@ go_library(
         "drain.go",
         "drpc_server.go",
         "env_sampler.go",
+        "exectrace_meta.go",
         "external_storage_builder.go",
         "fanout_clients.go",
         "grpc_gateway.go",

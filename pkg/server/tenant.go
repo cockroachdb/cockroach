@@ -513,6 +513,10 @@ func newTenantServer(
 		processCapAuthz = lsi.SameProcessCapabilityAuthorizer
 	}
 
+	// Create the callback for embedding metadata in Go execution traces,
+	// used by the debug server's trace endpoint.
+	execTraceMetadataFn := newExecTraceMetadataFn(baseCfg.IDContainer)
+
 	// Create the debug API server.
 	debugServer := debug.NewServer(
 		baseCfg.AmbientCtx,
@@ -521,6 +525,7 @@ func newTenantServer(
 		sqlServer.execCfg.SQLStatusServer,
 		sqlCfg.TenantID,
 		processCapAuthz,
+		execTraceMetadataFn,
 	)
 
 	return &SQLServerWrapper{
@@ -803,6 +808,7 @@ func (s *SQLServerWrapper) PreStart(ctx context.Context) error {
 			goroutineDumper,
 			s.tenantStatus.sessionRegistry,
 			s.sqlServer.execCfg.RootMemoryMonitor,
+			newExecTraceMetadataFn(s.cfg.IDContainer),
 		); err != nil {
 			return err
 		}

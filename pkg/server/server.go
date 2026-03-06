@@ -1367,6 +1367,10 @@ func NewServer(cfg Config, stopper *stop.Stopper) (serverctl.ServerStartupInterf
 	)
 	drain.serverCtl = sc
 
+	// Create the callback for embedding metadata in Go execution traces,
+	// used by the debug server's trace endpoint.
+	execTraceMetadataFn := newExecTraceMetadataFn(cfg.BaseConfig.IDContainer)
+
 	// Create the debug API server.
 	debugServer := debug.NewServer(
 		cfg.BaseConfig.AmbientCtx,
@@ -1375,6 +1379,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (serverctl.ServerStartupInterf
 		sqlServer.execCfg.SQLStatusServer,
 		roachpb.SystemTenantID,
 		authorizer,
+		execTraceMetadataFn,
 	)
 
 	recoveryServer := loqrecovery.NewServer(
@@ -2041,6 +2046,7 @@ func (s *topLevelServer) PreStart(ctx context.Context) error {
 		s.goroutineDumper,
 		s.status.sessionRegistry,
 		s.sqlServer.execCfg.RootMemoryMonitor,
+		newExecTraceMetadataFn(s.cfg.BaseConfig.IDContainer),
 	); err != nil {
 		return err
 	}
