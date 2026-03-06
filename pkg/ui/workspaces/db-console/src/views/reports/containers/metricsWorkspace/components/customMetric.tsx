@@ -3,10 +3,10 @@
 // Use of this software is governed by the CockroachDB Software License
 // included in the /LICENSE file.
 
+import { NodesSummary } from "@cockroachlabs/cluster-ui";
 import React from "react";
 
 import { MetricsMetadata } from "oss/src/redux/metricMetadata";
-import { NodesSummary } from "oss/src/redux/nodes";
 import { Metric } from "oss/src/views/shared/components/metricQuery";
 import { CustomMetricState } from "src/views/reports/containers/customChart/customMetric";
 

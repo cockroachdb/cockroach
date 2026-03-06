@@ -9,11 +9,45 @@
 // eslint-disable-next-line import/order
 import { stubComponentInModule } from "./test-utils/mockComponent";
 
-stubComponentInModule(
-  "@cockroachlabs/cluster-ui",
-  "DatabasesPageV2",
-  "DatabaseDetailsPageV2",
-);
+// Mock @cockroachlabs/cluster-ui: stub heavy components and SWR-based hooks
+// that cause async updates outside of act().
+jest.doMock("@cockroachlabs/cluster-ui", () => {
+  const orig = jest.requireActual("@cockroachlabs/cluster-ui");
+  const React = require("react");
+  return {
+    ...orig,
+    DatabasesPageV2: (props: Record<string, unknown>) =>
+      React.createElement("div", { "data-testid": "DatabasesPageV2", ...props }),
+    DatabaseDetailsPageV2: (props: Record<string, unknown>) =>
+      React.createElement("div", { "data-testid": "DatabaseDetailsPageV2", ...props }),
+    useNodes: () => ({
+      isLoading: true,
+      error: undefined,
+      nodeStatuses: [],
+      nodeStatusByID: {},
+      storeIDToNodeID: {},
+      nodeRegionsByID: {},
+    }),
+    useNodesSummary: () => ({
+      nodeStatuses: [],
+      nodeIDs: [],
+      nodeStatusByID: {},
+      nodeDisplayNameByID: {},
+      livenessStatusByNodeID: {},
+      livenessByNodeID: {},
+      storeIDsByNodeID: {},
+      isLoading: true,
+      nodesError: undefined,
+      livenessError: undefined,
+    }),
+    useLiveness: () => ({
+      isLoading: true,
+      error: undefined,
+      livenesses: [],
+      statuses: {},
+    }),
+  };
+});
 stubComponentInModule("src/views/cluster/containers/nodeGraphs", "default");
 stubComponentInModule("src/views/cluster/containers/events", "EventPage");
 stubComponentInModule(

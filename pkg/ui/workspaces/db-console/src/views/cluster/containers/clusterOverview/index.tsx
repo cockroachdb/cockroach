@@ -3,18 +3,14 @@
 // Use of this software is governed by the CockroachDB Software License
 // included in the /LICENSE file.
 
-import { util } from "@cockroachlabs/cluster-ui";
+import { useNodesSummary, util } from "@cockroachlabs/cluster-ui";
 import { Skeleton } from "antd";
 import classNames from "classnames";
 import { format } from "d3-format";
-import React, { useEffect } from "react";
+import React, { useMemo } from "react";
 import { Helmet } from "react-helmet";
-import { connect } from "react-redux";
-import { createSelector } from "reselect";
 
-import { refreshNodes, refreshLiveness } from "src/redux/apiReducers";
-import { nodeSumsSelector } from "src/redux/nodes";
-import { AdminUIState } from "src/redux/state";
+import { sumNodeStats } from "src/redux/nodes";
 import EmailSubscription from "src/views/dashboard/emailSubscription";
 import OverviewListAlerts from "src/views/shared/containers/alerts/overviewListAlerts";
 import createChartComponent from "src/views/shared/util/d3-react";
@@ -77,17 +73,6 @@ function renderCapacityUsage(props: CapacityUsageProps) {
     </div>,
   ];
 }
-
-const mapStateToCapacityUsageProps = createSelector(
-  nodeSumsSelector,
-  nodeSums => {
-    const { capacityUsed, capacityUsable } = nodeSums;
-    return {
-      usedCapacity: capacityUsed,
-      usableCapacity: capacityUsable,
-    };
-  },
-);
 
 interface NodeLivenessProps {
   liveNodes: number;
@@ -164,19 +149,6 @@ function renderNodeLiveness(props: NodeLivenessProps) {
   ];
 }
 
-const mapStateToNodeLivenessProps = createSelector(
-  nodeSumsSelector,
-  nodeSums => {
-    const { nodeCounts } = nodeSums;
-    return {
-      liveNodes: nodeCounts.healthy,
-      suspectNodes: nodeCounts.suspect,
-      deadNodes: nodeCounts.dead,
-      drainingNodes: nodeCounts.draining,
-    };
-  },
-);
-
 interface ReplicationStatusProps {
   totalRanges: number;
   underReplicatedRanges: number;
@@ -236,44 +208,31 @@ function renderReplicationStatus(props: ReplicationStatusProps) {
   ];
 }
 
-const mapStateToReplicationStatusProps = createSelector(
-  nodeSumsSelector,
-  nodeSums => {
-    const { totalRanges, underReplicatedRanges, unavailableRanges } = nodeSums;
-    return {
-      totalRanges: totalRanges,
-      underReplicatedRanges: underReplicatedRanges,
-      unavailableRanges: unavailableRanges,
-    };
-  },
-);
+function ClusterSummary(): React.ReactElement {
+  const { nodeStatuses, livenessStatusByNodeID, isLoading } = useNodesSummary();
 
-interface ClusterSummaryStateProps {
-  capacityUsage: CapacityUsageProps;
-  nodeLiveness: NodeLivenessProps;
-  replicationStatus: ReplicationStatusProps;
-  loading: boolean;
-}
-interface ClusterSummaryActionsProps {
-  refreshLiveness: () => void;
-  refreshNodes: () => void;
-}
+  const nodeSums = useMemo(
+    () => sumNodeStats(nodeStatuses, livenessStatusByNodeID),
+    [nodeStatuses, livenessStatusByNodeID],
+  );
 
-type ClusterSummaryProps = ClusterSummaryStateProps &
-  ClusterSummaryActionsProps;
+  const capacityUsage: CapacityUsageProps = {
+    usedCapacity: nodeSums.capacityUsed,
+    usableCapacity: nodeSums.capacityUsable,
+  };
 
-function ClusterSummary({
-  capacityUsage,
-  nodeLiveness,
-  replicationStatus,
-  loading,
-  refreshLiveness: refreshLivenessAction,
-  refreshNodes: refreshNodesAction,
-}: ClusterSummaryProps): React.ReactElement {
-  useEffect(() => {
-    refreshLivenessAction();
-    refreshNodesAction();
-  });
+  const nodeLiveness: NodeLivenessProps = {
+    liveNodes: nodeSums.nodeCounts.healthy,
+    suspectNodes: nodeSums.nodeCounts.suspect,
+    deadNodes: nodeSums.nodeCounts.dead,
+    drainingNodes: nodeSums.nodeCounts.draining,
+  };
+
+  const replicationStatus: ReplicationStatusProps = {
+    totalRanges: nodeSums.totalRanges,
+    underReplicatedRanges: nodeSums.underReplicatedRanges,
+    unavailableRanges: nodeSums.unavailableRanges,
+  };
 
   const children = [
     ...renderCapacityUsage(capacityUsage),
@@ -284,7 +243,7 @@ function ClusterSummary({
   return (
     <section className="cluster-summary">
       <Skeleton
-        loading={loading}
+        loading={isLoading}
         active
         // This styling is necessary because this section is a grid.
         style={{ gridColumn: "1 / span all" }}
@@ -294,25 +253,6 @@ function ClusterSummary({
     </section>
   );
 }
-
-function mapStateToClusterSummaryProps(state: AdminUIState) {
-  return {
-    capacityUsage: mapStateToCapacityUsageProps(state),
-    nodeLiveness: mapStateToNodeLivenessProps(state),
-    replicationStatus: mapStateToReplicationStatusProps(state),
-    loading: !state.cachedData.nodes.data,
-  };
-}
-
-const actions = {
-  refreshLiveness: refreshLiveness,
-  refreshNodes: refreshNodes,
-};
-
-const ClusterSummaryConnected = connect(
-  mapStateToClusterSummaryProps,
-  actions,
-)(ClusterSummary);
 
 /**
  * Renders the main content of the cluster visualization page.
@@ -326,7 +266,7 @@ export default function ClusterOverview({
       <EmailSubscription />
       <OverviewListAlerts />
       <section className="section cluster-overview">
-        <ClusterSummaryConnected />
+        <ClusterSummary />
       </section>
       <section className="cluster-overview--fixed">{children}</section>
     </div>

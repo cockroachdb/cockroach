@@ -4,9 +4,10 @@
 // included in the /LICENSE file.
 
 import { UpOutlined, DownOutlined } from "@ant-design/icons";
+import { useNodesSummary, NodesSummary } from "@cockroachlabs/cluster-ui";
 import { TimeScale } from "@cockroachlabs/cluster-ui/dist/types/timeScaleDropdown";
 import { PayloadAction } from "@reduxjs/toolkit";
-import React, { useState } from "react";
+import React, { useMemo, useState } from "react";
 import { connect } from "react-redux";
 import { withRouter, RouteComponentProps } from "react-router-dom";
 
@@ -22,11 +23,7 @@ import {
   MetricsMetadata,
   metricsMetadataSelector,
 } from "src/redux/metricMetadata";
-import {
-  NodesSummary,
-  nodeOptionsSelector,
-  nodesSummarySelector,
-} from "src/redux/nodes";
+import { getDisplayName } from "src/redux/nodes";
 import { AdminUIState } from "src/redux/state";
 import { tenantDropdownOptions } from "src/redux/tenants";
 import LineGraph from "src/views/cluster/components/linegraph";
@@ -50,10 +47,8 @@ export type GraphContainerOwnProps = {
 } & RouteComponentProps;
 
 export type GraphContainerProps = GraphContainerOwnProps & {
-  nodesSummary: NodesSummary;
   tenantOptions: DropdownOption[];
   metricOptions: DropdownOption[];
-  nodeOptions: DropdownOption[];
   currentTenant: string | null;
   metricsMetadata: MetricsMetadata;
   setMetricsFixedWindow: (tw: TimeWindow) => PayloadAction<TimeWindow>;
@@ -63,10 +58,8 @@ export type GraphContainerProps = GraphContainerOwnProps & {
 const GraphContainer: React.FC<GraphContainerProps> = ({
   graphConfig,
   index,
-  nodesSummary,
   tenantOptions,
   metricOptions,
-  nodeOptions,
   currentTenant,
   history,
   metricsMetadata,
@@ -75,6 +68,58 @@ const GraphContainer: React.FC<GraphContainerProps> = ({
   setMetricsFixedWindow,
   setTimeScale,
 }) => {
+  const {
+    nodeStatuses,
+    nodeIDs,
+    nodeStatusByID,
+    nodeDisplayNameByID,
+    livenessStatusByNodeID,
+    livenessByNodeID,
+    storeIDsByNodeID,
+  } = useNodesSummary();
+
+  const nodesSummary: NodesSummary = useMemo(
+    () => ({
+      nodeStatuses,
+      nodeIDs,
+      nodeStatusByID,
+      nodeDisplayNameByID,
+      livenessStatusByNodeID,
+      livenessByNodeID,
+      storeIDsByNodeID,
+    }),
+    [
+      nodeStatuses,
+      nodeIDs,
+      nodeStatusByID,
+      nodeDisplayNameByID,
+      livenessStatusByNodeID,
+      livenessByNodeID,
+      storeIDsByNodeID,
+    ],
+  );
+
+  const nodeOptions: DropdownOption[] = useMemo(() => {
+    const base: DropdownOption[] = [{ value: "", label: "Cluster" }];
+    if (!nodeStatuses) return base;
+    const options: DropdownOption[] = nodeStatuses
+      .map(ns => ({
+        value: ns.desc.node_id.toString(),
+        label: (nodeDisplayNameByID[ns.desc.node_id] ||
+          getDisplayName(
+            ns,
+            livenessStatusByNodeID[ns.desc.node_id],
+          )) as string,
+      }))
+      .sort((a, b) => {
+        const aDecommissioned = a.label.startsWith("[decommissioned]");
+        const bDecommissioned = b.label.startsWith("[decommissioned]");
+        if (aDecommissioned && !bDecommissioned) return 1;
+        if (!aDecommissioned && bDecommissioned) return -1;
+        return 0;
+      });
+    return base.concat(options);
+  }, [nodeStatuses, nodeDisplayNameByID, livenessStatusByNodeID]);
   const tenants = tenantOptions.slice(1).map(tenant => tenant.value);
   const [isTableCollapsed, setIsTableCollapsed] = useState(false);
 
@@ -213,10 +258,8 @@ const GraphContainer: React.FC<GraphContainerProps> = ({
 };
 
 const mapStateToProps = (state: AdminUIState) => ({
-  nodesSummary: nodesSummarySelector(state),
   tenantOptions: tenantDropdownOptions(state),
   metricOptions: metricOptionsSelector(state),
-  nodeOptions: nodeOptionsSelector(state),
   metricsMetadata: metricsMetadataSelector(state),
   currentTenant: getCookieValue("tenant"),
 });

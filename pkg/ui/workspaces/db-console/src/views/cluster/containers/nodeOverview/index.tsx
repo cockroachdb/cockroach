@@ -3,25 +3,19 @@
 // Use of this software is governed by the CockroachDB Software License
 // included in the /LICENSE file.
 
-import { Button, util, Timestamp } from "@cockroachlabs/cluster-ui";
-import { ArrowLeft } from "@cockroachlabs/icons";
-import find from "lodash/find";
-import map from "lodash/map";
-import React, { useEffect } from "react";
-import { Helmet } from "react-helmet";
-import { connect } from "react-redux";
-import { Link, RouteComponentProps, withRouter } from "react-router-dom";
-import { createSelector } from "reselect";
-
-import { refreshLiveness, refreshNodes } from "src/redux/apiReducers";
 import {
-  livenessNomenclature,
-  LivenessStatus,
-  NodesSummary,
-  nodesSummarySelector,
-  selectNodesSummaryValid,
-} from "src/redux/nodes";
-import { AdminUIState } from "src/redux/state";
+  Button,
+  util,
+  Timestamp,
+  useNodesSummary,
+} from "@cockroachlabs/cluster-ui";
+import { ArrowLeft } from "@cockroachlabs/icons";
+import map from "lodash/map";
+import React from "react";
+import { Helmet } from "react-helmet";
+import { Link, RouteComponentProps, withRouter } from "react-router-dom";
+
+import { livenessNomenclature, LivenessStatus } from "src/redux/nodes";
 import { nodeIDAttr } from "src/util/constants";
 import { INodeStatus, MetricConstants, StatusMetrics } from "src/util/proto";
 import { getMatchParamByName } from "src/util/query";
@@ -83,35 +77,22 @@ function TableRow(props: {
   );
 }
 
-interface NodeOverviewProps extends RouteComponentProps {
-  node: INodeStatus;
-  nodesSummary: NodesSummary;
-  refreshNodes: typeof refreshNodes;
-  refreshLiveness: typeof refreshLiveness;
-  // True if current status results are still valid. Needed so that this
-  // component refreshes status query when it becomes invalid.
-  nodesSummaryValid: boolean;
-}
+type NodeOverviewProps = RouteComponentProps;
 
 /**
  * Renders the Node Overview page.
  */
 export function NodeOverview({
-  node,
-  nodesSummary,
-  refreshNodes: refreshNodesAction,
-  refreshLiveness: refreshLivenessAction,
+  match,
   history,
 }: NodeOverviewProps): React.ReactElement {
-  useEffect(() => {
-    // Refresh nodes status query when mounting and when props change;
-    // this will immediately trigger a new request if previous results
-    // are invalidated.
-    refreshNodesAction();
-    refreshLivenessAction();
-  });
-
+  const nodesSummary = useNodesSummary();
   const { Bytes, Percentage, DATE_FORMAT_24_TZ } = util;
+
+  const nodeId = parseInt(getMatchParamByName(match, nodeIDAttr), 10);
+  const node = nodesSummary.nodeStatuses?.find(
+    ns => ns.desc.node_id === nodeId,
+  );
 
   if (!node) {
     return (
@@ -321,31 +302,4 @@ export function NodeOverview({
   );
 }
 
-export const currentNode = createSelector(
-  (state: AdminUIState, _props: RouteComponentProps): INodeStatus[] =>
-    state.cachedData.nodes.data,
-  (_state: AdminUIState, props: RouteComponentProps): number =>
-    parseInt(getMatchParamByName(props.match, nodeIDAttr), 10),
-  (nodes, id) => {
-    if (!nodes || !id) {
-      return undefined;
-    }
-    return find(nodes, ns => ns.desc.node_id === id);
-  },
-);
-
-export default withRouter(
-  connect(
-    (state: AdminUIState, ownProps: RouteComponentProps) => {
-      return {
-        node: currentNode(state, ownProps),
-        nodesSummary: nodesSummarySelector(state),
-        nodesSummaryValid: selectNodesSummaryValid(state),
-      };
-    },
-    {
-      refreshNodes,
-      refreshLiveness,
-    },
-  )(NodeOverview),
-);
+export default withRouter(NodeOverview);

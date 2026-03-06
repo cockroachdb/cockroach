@@ -4,13 +4,14 @@
 // included in the /LICENSE file.
 
 import { render } from "@testing-library/react";
+import keyBy from "lodash/keyBy";
 import times from "lodash/times";
 import Long from "long";
 import React from "react";
 import { MemoryRouter } from "react-router-dom";
 
 import { cockroach } from "src/js/protos";
-import { livenessByNodeIDSelector, LivenessStatus } from "src/redux/nodes";
+import { LivenessStatus } from "src/redux/nodes";
 import { renderWithProviders } from "src/test-utils/renderWithProviders";
 
 import {
@@ -238,8 +239,6 @@ describe("Nodes Overview page", () => {
               dataSource={overrides.dataSource ?? dataSource}
               nodesCount={overrides.nodesCount ?? nodesCount}
               regionsCount={overrides.regionsCount ?? regionsCount}
-              setSort={jest.fn()}
-              sortSetting={undefined as any}
             />
           </MemoryRouter>,
         ),
@@ -391,8 +390,9 @@ describe("Nodes Overview page", () => {
     };
     const nodeSummary: any = {
       livenessStatusByNodeID: state.cachedData.liveness.data.statuses,
-      livenessByNodeID: livenessByNodeIDSelector.resultFunc(
-        state.cachedData.liveness.data,
+      livenessByNodeID: keyBy(
+        state.cachedData.liveness.data.livenesses,
+        l => l.node_id,
       ),
       nodeIDs: undefined,
       nodeDisplayNameByID: undefined,
@@ -405,11 +405,10 @@ describe("Nodes Overview page", () => {
     describe("decommissionedNodesTableDataSelector", () => {
       it("returns node records with 'decommissioned' status only", () => {
         const expectedDecommissionedNodeIds = [2, 7];
-        const records =
-          decommissionedNodesTableDataSelector.resultFunc(nodeSummary);
+        const records = decommissionedNodesTableDataSelector(nodeSummary);
 
         expect(records.length).toBe(expectedDecommissionedNodeIds.length);
-        records.forEach(record => {
+        records.forEach((record: { nodeId: number }) => {
           expect(
             expectedDecommissionedNodeIds.some(
               nodeId => nodeId === record.nodeId,
@@ -420,17 +419,19 @@ describe("Nodes Overview page", () => {
 
       it("returns correct node name", () => {
         const recordsGroupedByRegion =
-          decommissionedNodesTableDataSelector.resultFunc(nodeSummary);
-        recordsGroupedByRegion.forEach(record => {
-          expect(record.nodeName).toEqual(record.nodeId.toString());
-        });
+          decommissionedNodesTableDataSelector(nodeSummary);
+        recordsGroupedByRegion.forEach(
+          (record: { nodeName: string; nodeId: number }) => {
+            expect(record.nodeName).toEqual(record.nodeId.toString());
+          },
+        );
       });
     });
 
     describe("liveNodesTableDataSelector", () => {
       it("returns node records with all statuses except 'decommissioned' status", () => {
         const expectedLiveNodeIds = [1, 3, 4, 5, 6];
-        const recordsGroupedByRegion = liveNodesTableDataSelector.resultFunc(
+        const recordsGroupedByRegion = liveNodesTableDataSelector(
           partitionedNodes,
           nodeSummary,
         );
@@ -439,7 +440,7 @@ describe("Nodes Overview page", () => {
         expect(recordsGroupedByRegion[0].children.length).toBe(
           expectedLiveNodeIds.length,
         );
-        recordsGroupedByRegion[0].children.forEach(record => {
+        recordsGroupedByRegion[0].children.forEach((record: NodeStatusRow) => {
           expect(
             expectedLiveNodeIds.some(nodeId => nodeId === record.nodeId),
           ).toBe(true);
@@ -447,11 +448,11 @@ describe("Nodes Overview page", () => {
       });
 
       it("returns correct node name", () => {
-        const recordsGroupedByRegion = liveNodesTableDataSelector.resultFunc(
+        const recordsGroupedByRegion = liveNodesTableDataSelector(
           partitionedNodes,
           nodeSummary,
         );
-        recordsGroupedByRegion[0].children.forEach(record => {
+        recordsGroupedByRegion[0].children.forEach((record: NodeStatusRow) => {
           const expectedName = `127.0.0.${record.nodeId}:50945`;
           expect(record.nodeName).toEqual(expectedName);
         });

@@ -3,7 +3,12 @@
 // Use of this software is governed by the CockroachDB Software License
 // included in the /LICENSE file.
 
-import { util, Loading } from "@cockroachlabs/cluster-ui";
+import {
+  util,
+  Loading,
+  useNodesSummary,
+  NodesSummary,
+} from "@cockroachlabs/cluster-ui";
 import * as protos from "@cockroachlabs/crdb-protobuf-client";
 import { cockroach } from "@cockroachlabs/crdb-protobuf-client";
 import { deviation as d3Deviation, mean as d3Mean } from "d3-array";
@@ -24,22 +29,13 @@ import React, { Fragment, useEffect, useState } from "react";
 import { Helmet } from "react-helmet";
 import { connect } from "react-redux";
 import { withRouter, RouteComponentProps } from "react-router-dom";
-import { createSelector } from "reselect";
 
 import { InlineAlert } from "src/components";
 import {
   CachedDataReducerState,
   refreshConnectivity,
-  refreshLiveness,
-  refreshNodes,
 } from "src/redux/apiReducers";
 import { connectivitySelector } from "src/redux/connectivity";
-import {
-  NodesSummary,
-  nodesSummarySelector,
-  selectLivenessRequestStatus,
-  selectNodeRequestStatus,
-} from "src/redux/nodes";
 import { AdminUIState } from "src/redux/state";
 import { trackFilter, trackCollapseNodes } from "src/util/analytics";
 import { getDataFromServer } from "src/util/dataFromServer";
@@ -62,11 +58,7 @@ import IPeer = cockroach.server.serverpb.NetworkConnectivityResponse.IPeer;
 import IDuration = common.IDuration;
 
 interface NetworkOwnProps {
-  nodesSummary: NodesSummary;
-  nodeSummaryErrors: Error[];
   connectivity: CachedDataReducerState<cockroach.server.serverpb.NetworkConnectivityResponse>;
-  refreshNodes: typeof refreshNodes;
-  refreshLiveness: typeof refreshLiveness;
   refreshConnectivity: typeof refreshConnectivity;
 }
 
@@ -147,23 +139,42 @@ export function getValueFromString(
  * Renders the Network Report page.
  */
 export function Network({
-  nodesSummary,
-  nodeSummaryErrors,
   connectivity,
-  refreshNodes: refreshNodesAction,
-  refreshLiveness: refreshLivenessAction,
   refreshConnectivity: refreshConnectivityAction,
   match,
   location,
 }: NetworkProps): React.ReactElement {
+  const {
+    nodeStatuses,
+    nodeIDs,
+    nodeStatusByID,
+    livenessStatusByNodeID,
+    livenessByNodeID,
+    storeIDsByNodeID,
+    nodeDisplayNameByID,
+    isLoading: _nodesLoading,
+    nodesError,
+    livenessError,
+  } = useNodesSummary();
+
+  const nodesSummary: NodesSummary = {
+    nodeStatuses,
+    nodeIDs,
+    nodeStatusByID,
+    nodeDisplayNameByID,
+    livenessStatusByNodeID,
+    livenessByNodeID,
+    storeIDsByNodeID,
+  };
+
+  const nodeSummaryErrors = [nodesError, livenessError].filter(Boolean);
+
   const [collapsed, setCollapsed] = useState(false);
   const [networkFilter, setNetworkFilter] = useState<NetworkFilter | null>(
     null,
   );
 
   useEffect(() => {
-    refreshLivenessAction();
-    refreshNodesAction();
     refreshConnectivityAction();
   });
 
@@ -487,21 +498,11 @@ export function Network({
   );
 }
 
-const nodeSummaryErrors = createSelector(
-  selectNodeRequestStatus,
-  selectLivenessRequestStatus,
-  (nodes, liveness) => [nodes.lastError, liveness.lastError],
-);
-
 const mapStateToProps = (state: AdminUIState) => ({
-  nodesSummary: nodesSummarySelector(state),
-  nodeSummaryErrors: nodeSummaryErrors(state),
   connectivity: connectivitySelector(state),
 });
 
 const mapDispatchToProps = {
-  refreshNodes,
-  refreshLiveness,
   refreshConnectivity,
 };
 

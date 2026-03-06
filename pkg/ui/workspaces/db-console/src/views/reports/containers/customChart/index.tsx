@@ -3,7 +3,12 @@
 // Use of this software is governed by the CockroachDB Software License
 // included in the /LICENSE file.
 
-import { AxisUnits, TimeScale } from "@cockroachlabs/cluster-ui";
+import {
+  AxisUnits,
+  NodesSummary,
+  TimeScale,
+  useNodesSummary,
+} from "@cockroachlabs/cluster-ui";
 import flatMap from "lodash/flatMap";
 import flow from "lodash/flow";
 import isEmpty from "lodash/isEmpty";
@@ -20,7 +25,6 @@ import TimeScaleDropdown from "oss/src/views/cluster/containers/timeScaleDropdow
 import { PayloadAction } from "src/interfaces/action";
 import {
   refreshMetricMetadata,
-  refreshNodes,
   refreshTenantsList,
 } from "src/redux/apiReducers";
 import { getCookieValue } from "src/redux/cookies";
@@ -28,7 +32,6 @@ import {
   MetricsMetadata,
   metricsMetadataSelector,
 } from "src/redux/metricMetadata";
-import { nodesSummarySelector, NodesSummary } from "src/redux/nodes";
 import { AdminUIState } from "src/redux/state";
 import { tenantDropdownOptions } from "src/redux/tenants";
 import {
@@ -57,9 +60,6 @@ import {
 import "./customChart.scss";
 
 export interface CustomChartProps {
-  refreshNodes: typeof refreshNodes;
-  nodesQueryValid: boolean;
-  nodesSummary: NodesSummary;
   refreshMetricMetadata: typeof refreshMetricMetadata;
   refreshTenantsList: typeof refreshTenantsList;
   metricsMetadata: MetricsMetadata;
@@ -106,9 +106,6 @@ export const getSources = (
 };
 
 export function CustomChart({
-  refreshNodes: refreshNodesAction,
-  nodesQueryValid,
-  nodesSummary,
   refreshMetricMetadata: refreshMetricMetadataAction,
   refreshTenantsList: refreshTenantsListAction,
   metricsMetadata,
@@ -120,6 +117,7 @@ export function CustomChart({
   location,
   history,
 }: CustomChartProps & RouteComponentProps): React.ReactElement {
+  const nodesSummary = useNodesSummary();
   // Dropdown options computed from cluster node statuses.
   const nodeOptions = useMemo((): DropdownOption[] => {
     const base = [{ value: "", label: "Cluster" }];
@@ -151,13 +149,6 @@ export function CustomChart({
       };
     });
   }, [metricsMetadata]);
-
-  // Refresh nodes on every render if the query is stale.
-  useEffect(() => {
-    if (!nodesQueryValid) {
-      refreshNodesAction();
-    }
-  });
 
   // Fetch metric metadata and tenants list once on mount.
   useEffect(() => {
@@ -405,8 +396,6 @@ export function CustomChart({
 }
 
 const mapStateToProps = (state: AdminUIState) => ({
-  nodesSummary: nodesSummarySelector(state),
-  nodesQueryValid: state.cachedData.nodes.valid,
   metricsMetadata: metricsMetadataSelector(state),
   timeScale: selectTimeScale(state),
   tenantOptions: tenantDropdownOptions(state),
@@ -414,7 +403,6 @@ const mapStateToProps = (state: AdminUIState) => ({
 });
 
 const mapDispatchToProps = {
-  refreshNodes,
   refreshMetricMetadata,
   refreshTenantsList,
   setMetricsFixedWindow: setMetricsFixedWindow,

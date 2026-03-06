@@ -12,103 +12,113 @@ import { MemoryRouter } from "react-router-dom";
 
 import { Network } from "./index";
 
+const mockNodesSummaryData = {
+  nodeStatuses: [
+    {
+      desc: {
+        node_id: 1,
+        address: { address_field: "localhost:26257" },
+        locality: {
+          tiers: [
+            { key: "region", value: "us-east-1" },
+            { key: "zone", value: "a" },
+          ],
+        },
+      },
+      updated_at: Long.fromNumber(1000),
+    },
+    {
+      desc: {
+        node_id: 2,
+        address: { address_field: "localhost:26258" },
+        locality: {
+          tiers: [
+            { key: "region", value: "us-east-1" },
+            { key: "zone", value: "b" },
+          ],
+        },
+      },
+      updated_at: Long.fromNumber(1000),
+    },
+  ] as any[],
+  nodeStatusByID: {
+    "1": {
+      desc: {
+        node_id: 1,
+        address: { address_field: "localhost:26257" },
+        locality: {
+          tiers: [
+            { key: "region", value: "us-east-1" },
+            { key: "zone", value: "a" },
+          ],
+        },
+      },
+      updated_at: Long.fromNumber(1000),
+    },
+    "2": {
+      desc: {
+        node_id: 2,
+        address: { address_field: "localhost:26258" },
+        locality: {
+          tiers: [
+            { key: "region", value: "us-east-1" },
+            { key: "zone", value: "b" },
+          ],
+        },
+      },
+      updated_at: Long.fromNumber(1000),
+    },
+  },
+  nodeIDs: ["1", "2"],
+  nodeDisplayNameByID: {
+    "1": "node-1",
+    "2": "node-2",
+  },
+  storeIDsByNodeID: {
+    "1": ["1"],
+    "2": ["2"],
+  },
+  livenessByNodeID: {
+    "1": {
+      nodeId: 1,
+      epoch: Long.fromNumber(1),
+      expiration: Long.fromNumber(1000),
+      draining: false,
+      membership:
+        protos.cockroach.kv.kvserver.liveness.livenesspb.MembershipStatus
+          .ACTIVE,
+    } as protos.cockroach.kv.kvserver.liveness.livenesspb.ILiveness,
+    "2": {
+      nodeId: 2,
+      epoch: Long.fromNumber(1),
+      expiration: Long.fromNumber(1000),
+      draining: false,
+      membership:
+        protos.cockroach.kv.kvserver.liveness.livenesspb.MembershipStatus
+          .ACTIVE,
+    } as protos.cockroach.kv.kvserver.liveness.livenesspb.ILiveness,
+  },
+  livenessStatusByNodeID: {
+    "1": protos.cockroach.kv.kvserver.liveness.livenesspb.NodeLivenessStatus
+      .NODE_STATUS_LIVE,
+    "2": protos.cockroach.kv.kvserver.liveness.livenesspb.NodeLivenessStatus
+      .NODE_STATUS_LIVE,
+  },
+  isLoading: false,
+  nodesError: null as Error | null,
+  livenessError: null as Error | null,
+};
+
+jest.mock("@cockroachlabs/cluster-ui", () => {
+  const actual = jest.requireActual("@cockroachlabs/cluster-ui");
+  return {
+    ...actual,
+    useNodesSummary: () => mockNodesSummaryData,
+  };
+});
+
 describe("Network", () => {
   const defaultProps = {
-    nodesSummary: {
-      nodeStatuses: [
-        {
-          desc: {
-            node_id: 1,
-            address: { address_field: "localhost:26257" },
-            locality: {
-              tiers: [
-                { key: "region", value: "us-east-1" },
-                { key: "zone", value: "a" },
-              ],
-            },
-          },
-          updated_at: Long.fromNumber(1000),
-        },
-        {
-          desc: {
-            node_id: 2,
-            address: { address_field: "localhost:26258" },
-            locality: {
-              tiers: [
-                { key: "region", value: "us-east-1" },
-                { key: "zone", value: "b" },
-              ],
-            },
-          },
-          updated_at: Long.fromNumber(1000),
-        },
-      ] as any[],
-      nodeStatusByID: {
-        "1": {
-          desc: {
-            node_id: 1,
-            address: { address_field: "localhost:26257" },
-            locality: {
-              tiers: [
-                { key: "region", value: "us-east-1" },
-                { key: "zone", value: "a" },
-              ],
-            },
-          },
-          updated_at: Long.fromNumber(1000),
-        },
-        "2": {
-          desc: {
-            node_id: 2,
-            address: { address_field: "localhost:26258" },
-            locality: {
-              tiers: [
-                { key: "region", value: "us-east-1" },
-                { key: "zone", value: "b" },
-              ],
-            },
-          },
-          updated_at: Long.fromNumber(1000),
-        },
-      },
-      nodeIDs: ["1", "2"],
-      nodeDisplayNameByID: {
-        "1": "node-1",
-        "2": "node-2",
-      },
-      storeIDsByNodeID: {
-        "1": ["1"],
-        "2": ["2"],
-      },
-      nodeLastError: null as Error | null,
-      livenessByNodeID: {
-        "1": {
-          nodeId: 1,
-          epoch: Long.fromNumber(1),
-          expiration: Long.fromNumber(1000),
-          draining: false,
-          membership:
-            protos.cockroach.kv.kvserver.liveness.livenesspb.MembershipStatus
-              .ACTIVE,
-        } as protos.cockroach.kv.kvserver.liveness.livenesspb.ILiveness,
-        "2": {
-          nodeId: 2,
-          epoch: Long.fromNumber(1),
-          expiration: Long.fromNumber(1000),
-          draining: false,
-          membership:
-            protos.cockroach.kv.kvserver.liveness.livenesspb.MembershipStatus
-              .ACTIVE,
-        } as protos.cockroach.kv.kvserver.liveness.livenesspb.ILiveness,
-      },
-      livenessStatusByNodeID: {
-        "1": protos.cockroach.kv.kvserver.liveness.livenesspb.NodeLivenessStatus
-          .NODE_STATUS_LIVE,
-        "2": protos.cockroach.kv.kvserver.liveness.livenesspb.NodeLivenessStatus
-          .NODE_STATUS_LIVE,
-      },
-    },
-    nodeSummaryErrors: [] as Error[],
     connectivity: {
       data: {
         connections: {
@@ -129,8 +139,6 @@ describe("Network", () => {
       valid: true,
       unauthorized: false,
     },
-    refreshNodes: jest.fn(),
-    refreshLiveness: jest.fn(),
     refreshConnectivity: jest.fn(),
     match: {
       params: {},
@@ -169,43 +177,37 @@ describe("Network", () => {
       </MemoryRouter>,
     );
 
-    expect(defaultProps.refreshNodes).toHaveBeenCalled();
-    expect(defaultProps.refreshLiveness).toHaveBeenCalled();
     expect(defaultProps.refreshConnectivity).toHaveBeenCalled();
   });
 
   it("displays message for single node cluster", () => {
+    // Temporarily override the mock data for single node
+    const originalNodeStatuses = mockNodesSummaryData.nodeStatuses;
+    const originalNodeStatusByID = mockNodesSummaryData.nodeStatusByID;
+    const originalNodeIDs = mockNodesSummaryData.nodeIDs;
+    const originalNodeDisplayNameByID =
+      mockNodesSummaryData.nodeDisplayNameByID;
+    const originalStoreIDsByNodeID = mockNodesSummaryData.storeIDsByNodeID;
+    const originalLivenessByNodeID = mockNodesSummaryData.livenessByNodeID;
+    const originalLivenessStatusByNodeID =
+      mockNodesSummaryData.livenessStatusByNodeID;
+
+    mockNodesSummaryData.nodeStatuses = [originalNodeStatuses[0]];
+    mockNodesSummaryData.nodeStatusByID = {
+      "1": originalNodeStatusByID["1"],
+    } as any;
+    mockNodesSummaryData.nodeIDs = ["1"];
+    mockNodesSummaryData.nodeDisplayNameByID = { "1": "node-1" } as any;
+    mockNodesSummaryData.storeIDsByNodeID = { "1": ["1"] } as any;
+    mockNodesSummaryData.livenessByNodeID = {
+      "1": originalLivenessByNodeID["1"],
+    } as any;
+    mockNodesSummaryData.livenessStatusByNodeID = {
+      "1": originalLivenessStatusByNodeID["1"],
+    } as any;
+
     const propsWithSingleNode = {
       ...defaultProps,
-      nodesSummary: {
-        nodeStatuses: [defaultProps.nodesSummary.nodeStatuses[0]],
-        nodeStatusByID: {
-          "1": defaultProps.nodesSummary.nodeStatusByID["1"],
-        },
-        nodeIDs: ["1"],
-        nodeDisplayNameByID: {
-          "1": "node-1",
-        },
-        storeIDsByNodeID: {
-          "1": ["1"],
-        },
-        nodeLastError: null as Error | null,
-        livenessByNodeID: {
-          "1": {
-            nodeId: 1,
-            epoch: Long.fromNumber(1),
-            expiration: Long.fromNumber(1000),
-            draining: false,
-            membership:
-              protos.cockroach.kv.kvserver.liveness.livenesspb.MembershipStatus
-                .ACTIVE,
-          } as protos.cockroach.kv.kvserver.liveness.livenesspb.ILiveness,
-        },
-        livenessStatusByNodeID: {
-          "1": protos.cockroach.kv.kvserver.liveness.livenesspb
-            .NodeLivenessStatus.NODE_STATUS_LIVE,
-        },
-      },
       connectivity: {
         data: {
           connections: {},
@@ -228,6 +230,16 @@ describe("Network", () => {
         "Cannot show latency chart for cluster with less than 2 nodes.",
       ),
     ).toBeTruthy();
+
+    // Restore original mock data
+    mockNodesSummaryData.nodeStatuses = originalNodeStatuses;
+    mockNodesSummaryData.nodeStatusByID = originalNodeStatusByID;
+    mockNodesSummaryData.nodeIDs = originalNodeIDs;
+    mockNodesSummaryData.nodeDisplayNameByID = originalNodeDisplayNameByID;
+    mockNodesSummaryData.storeIDsByNodeID = originalStoreIDsByNodeID;
+    mockNodesSummaryData.livenessByNodeID = originalLivenessByNodeID;
+    mockNodesSummaryData.livenessStatusByNodeID =
+      originalLivenessStatusByNodeID;
   });
 
   it("handles peers with null latency", () => {

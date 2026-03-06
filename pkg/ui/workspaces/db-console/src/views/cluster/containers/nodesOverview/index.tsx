@@ -7,9 +7,9 @@ import {
   Badge,
   BadgeProps,
   ColumnsConfig,
-  SortSetting,
   Table,
   Timestamp,
+  useNodesSummary,
   util,
 } from "@cockroachlabs/cluster-ui";
 import capitalize from "lodash/capitalize";
@@ -24,24 +24,13 @@ import orderBy from "lodash/orderBy";
 import sum from "lodash/sum";
 import take from "lodash/take";
 import moment, { Moment } from "moment-timezone";
-import React, { useEffect } from "react";
-import { connect } from "react-redux";
+import React, { useMemo } from "react";
 import { Link } from "react-router-dom";
-import { createSelector } from "reselect";
 
 import { Text, TextTypes, Tooltip } from "src/components";
 import { cockroach } from "src/js/protos";
-import { refreshLiveness, refreshNodes } from "src/redux/apiReducers";
 import { LocalityTier } from "src/redux/localities";
-import { LocalSetting } from "src/redux/localsettings";
-import {
-  LivenessStatus,
-  nodeCapacityStats,
-  nodesSummarySelector,
-  partitionedStatuses,
-  selectNodesSummaryValid,
-} from "src/redux/nodes";
-import { AdminUIState } from "src/redux/state";
+import { LivenessStatus, nodeCapacityStats } from "src/redux/nodes";
 import { FixLong } from "src/util/fixLong";
 import { getNodeLocalityTiers } from "src/util/localities";
 import { INodeStatus, MetricConstants } from "src/util/proto";
@@ -63,16 +52,6 @@ import {
 
 import MembershipStatus = cockroach.kv.kvserver.liveness.livenesspb.MembershipStatus;
 import ILiveness = cockroach.kv.kvserver.liveness.livenesspb.ILiveness;
-
-const liveNodesSortSetting = new LocalSetting<AdminUIState, SortSetting>(
-  "nodes/live_sort_setting",
-  s => s.localSettings,
-);
-
-const decommissionedNodesSortSetting = new LocalSetting<
-  AdminUIState,
-  SortSetting
->("nodes/decommissioned_sort_setting", s => s.localSettings);
 
 // AggregatedNodeStatus indexes have to be greater than LivenessStatus indexes
 // for correct sorting in the table.
@@ -121,22 +100,13 @@ interface DecommissionedNodeStatusRow {
   decommissionedDate: Moment;
 }
 
-/**
- * NodeCategoryListProps are the properties shared by both LiveNodeList and
- * NotLiveNodeList.
- */
-interface NodeCategoryListProps {
-  sortSetting: SortSetting;
-  setSort: typeof liveNodesSortSetting.set;
-}
-
-interface LiveNodeListProps extends NodeCategoryListProps {
+interface LiveNodeListProps {
   dataSource: NodeStatusRow[];
   nodesCount: number;
   regionsCount: number;
 }
 
-interface DecommissionedNodeListProps extends NodeCategoryListProps {
+interface DecommissionedNodeListProps {
   dataSource: DecommissionedNodeStatusRow[];
   isCollapsible: boolean;
 }
@@ -523,242 +493,229 @@ function DecommissionedNodeList({
   );
 }
 
-export const liveNodesTableDataSelector = createSelector(
-  partitionedStatuses,
-  nodesSummarySelector,
-  (statuses, nodesSummary) => {
-    const liveStatuses = statuses.live || [];
-
-    // Do not display aggregated category and # of nodes column
-    // when `withLocalitiesSetup` is false.
-    // const withLocalitiesSetup = liveStatuses.some(getNodeRegion);
-
-    // `data` can be represented as nested or flat structure.
-    // In case cluster is geo partitioned or at least one locality is specified:
-    // - nodes are grouped by region
-    // - top level record contains aggregated information about nodes in current region
-    // In case cluster is setup without localities:
-    // - it represents a flat structure.
-    const data = flow(
-      (statuses: INodeStatus[]) =>
-        groupBy(statuses, s =>
-          s.desc.locality.tiers.map(tier => tier.value).join("."),
-        ),
-      statusesByTiers =>
-        map(
-          statusesByTiers,
-          (nodesPerRegion: INodeStatus[], regionKey: string): NodeStatusRow => {
-            const nestedRows = nodesPerRegion.map((ns, idx): NodeStatusRow => {
-              const { used: usedCapacity, usable: availableCapacity } =
-                nodeCapacityStats(ns);
-              return {
-                key: `${regionKey}-${idx}`,
-                nodeId: ns.desc.node_id,
-                nodeName: ns.desc.address.address_field,
-                uptime: moment
-                  .duration(util.LongToMoment(ns.started_at).diff(moment()))
-                  .humanize(),
-                replicas: ns.metrics[MetricConstants.replicas],
-                usedCapacity,
-                availableCapacity,
-                usedMemory: ns.metrics[MetricConstants.rss],
-                availableMemory: FixLong(ns.total_system_memory).toNumber(),
-                numCpus: ns.num_cpus,
-                numVcpus: ns.num_vcpus,
-                version: ns.build_info.tag,
-                status:
-                  nodesSummary.livenessStatusByNodeID[ns.desc.node_id] ||
-                  LivenessStatus.NODE_STATUS_LIVE,
-              };
-            });
-
-            // Grouped buckets with node statuses contain at least one element.
-            // The list of tires and lower level location are the same for every
-            // element in the group because grouping is made by string composed
-            // from location values.
-            const firstNodeInGroup = nodesPerRegion[0];
-            const tiers = getNodeLocalityTiers(firstNodeInGroup);
-            const lastTier = last(tiers);
-
-            const getLocalityStatus = () => {
-              const nodesByStatus = groupBy(
-                nestedRows,
-                (row: NodeStatusRow) => row.status,
-              );
-
-              // Return DEAD status if at least one node is dead;
-              if (!isEmpty(nodesByStatus[LivenessStatus.NODE_STATUS_DEAD])) {
-                return AggregatedNodeStatus.DEAD;
-              }
-
-              // Return WARNING status if at least one node is decommissioning or suspected;
-              if (
-                !isEmpty(
-                  nodesByStatus[LivenessStatus.NODE_STATUS_DECOMMISSIONING],
-                ) ||
-                !isEmpty(nodesByStatus[LivenessStatus.NODE_STATUS_UNKNOWN]) ||
-                !isEmpty(nodesByStatus[LivenessStatus.NODE_STATUS_UNAVAILABLE])
-              ) {
-                return AggregatedNodeStatus.WARNING;
-              }
-
-              return AggregatedNodeStatus.LIVE;
-            };
-
-            return {
-              key: `${regionKey}`,
-              region: lastTier?.value,
-              tiers,
-              nodesCount: nodesPerRegion.length,
-              replicas: sum(nestedRows.map(nr => nr.replicas)),
-              usedCapacity: sum(nestedRows.map(nr => nr.usedCapacity)),
-              availableCapacity: sum(
-                nestedRows.map(nr => nr.availableCapacity),
-              ),
-              usedMemory: sum(nestedRows.map(nr => nr.usedMemory)),
-              availableMemory: sum(nestedRows.map(nr => nr.availableMemory)),
-              numCpus: sum(nestedRows.map(nr => nr.numCpus)),
-              numVcpus: sum(nestedRows.map(nr => nr.numVcpus)),
-              status: getLocalityStatus(),
-              children: nestedRows,
-            };
-          },
-        ),
-    )(liveStatuses);
-
-    return data;
-  },
-);
-
-export const decommissionedNodesTableDataSelector = createSelector(
-  nodesSummarySelector,
-  (nodesSummary): DecommissionedNodeStatusRow[] => {
-    const getDecommissionedTime = (nodeId: number) => {
-      const liveness = nodesSummary.livenessByNodeID[nodeId];
-      if (!liveness) {
-        return undefined;
-      }
-      const deadTime = liveness.expiration.wall_time;
-      return util.LongToMoment(deadTime);
-    };
-
-    const decommissionedNodes = Object.values(
-      nodesSummary.livenessByNodeID,
-    ).filter(liveness => {
-      return liveness?.membership === MembershipStatus.DECOMMISSIONED;
-    });
-
-    // DecommissionedNodeList displays 5 most recent nodes.
-    const data = flow(
-      (nodes: ILiveness[]) =>
-        orderBy(
-          nodes,
-          [liveness => getDecommissionedTime(liveness.node_id)],
-          ["desc"],
-        ),
-      nodes => take(nodes, 5),
-      nodes =>
-        map(nodes, (liveness, idx: number) => {
-          const { node_id } = liveness;
-          return {
-            key: `${idx}`,
-            nodeId: node_id,
-            nodeName: `${node_id}`,
-            status: nodesSummary.livenessStatusByNodeID[node_id],
-            decommissionedDate: getDecommissionedTime(node_id),
-          };
-        }),
-    )(decommissionedNodes);
-    return data;
-  },
-);
-
 /**
- * LiveNodesConnected is a redux-connected HOC of LiveNodeList.
+ * computePartitionedStatuses partitions node statuses into "live" and
+ * "decommissioned" groups based on their liveness status.
  */
-const NodesConnected = connect(
-  (state: AdminUIState) => {
-    const liveNodes = partitionedStatuses(state).live || [];
-    const data = liveNodesTableDataSelector(state);
-    return {
-      sortSetting: liveNodesSortSetting.selector(state),
-      dataSource: data,
-      nodesCount: liveNodes.length,
-      regionsCount: data.length,
-    };
-  },
-  {
-    setSort: liveNodesSortSetting.set,
-  },
-)(NodeList);
-
-/**
- * DecommissionedNodesConnected is a redux-connected HOC of NotLiveNodeList.
- */
-const DecommissionedNodesConnected = connect(
-  (state: AdminUIState) => {
-    return {
-      sortSetting: decommissionedNodesSortSetting.selector(state),
-      dataSource: decommissionedNodesTableDataSelector(state),
-      isCollapsible: true,
-    };
-  },
-  {
-    setSort: decommissionedNodesSortSetting.set,
-  },
-)(DecommissionedNodeList);
-
-/**
- * NodesMainProps is the type of the props object that must be passed to
- * NodesMain component.
- */
-interface NodesMainProps {
-  // Call if the nodes statuses are stale and need to be refreshed.
-  refreshNodes: typeof refreshNodes;
-  // Call if the liveness statuses are stale and need to be refreshed.
-  refreshLiveness: typeof refreshLiveness;
-  // True if current status results are still valid. Needed so that this
-  // component refreshes status query when it becomes invalid.
-  nodesSummaryValid: boolean;
+function computePartitionedStatuses(
+  nodeStatuses: INodeStatus[],
+  livenessStatusByNodeID: Record<string | number, LivenessStatus>,
+): Record<string, INodeStatus[]> {
+  return groupBy(nodeStatuses, ns => {
+    switch (livenessStatusByNodeID[ns.desc.node_id]) {
+      case LivenessStatus.NODE_STATUS_LIVE:
+      case LivenessStatus.NODE_STATUS_DECOMMISSIONING:
+        return "live";
+      case LivenessStatus.NODE_STATUS_DECOMMISSIONED:
+        return "decommissioned";
+      default:
+        // TODO (koorosh): "live" has to be renamed to some partition which
+        // represent all except "partitioned" nodes.
+        return "live";
+    }
+  });
 }
 
 /**
- * Renders the main content of the nodes page, which is primarily a data table
- * of all nodes.
+ * computeLiveNodesTableData builds the table data for live nodes, grouped
+ * by locality region. Exported for testing.
  */
-function NodesMain({
-  refreshNodes: refreshNodesAction,
-  refreshLiveness: refreshLivenessAction,
-}: NodesMainProps): React.ReactElement {
-  useEffect(() => {
-    // Refresh nodes status query when mounting and when props change;
-    // this will immediately trigger a new request if previous results
-    // are invalidated.
-    refreshNodesAction();
-    refreshLivenessAction();
+const computeLiveNodesTableData = (
+  statuses: Record<string, INodeStatus[]>,
+  nodesSummary: {
+    livenessStatusByNodeID: Record<string | number, LivenessStatus>;
+  },
+): NodeStatusRow[] => {
+  const liveStatuses = statuses.live || [];
+
+  // `data` can be represented as nested or flat structure.
+  // In case cluster is geo partitioned or at least one locality is specified:
+  // - nodes are grouped by region
+  // - top level record contains aggregated information about nodes in current region
+  // In case cluster is setup without localities:
+  // - it represents a flat structure.
+  const data = flow(
+    (statuses: INodeStatus[]) =>
+      groupBy(statuses, s =>
+        s.desc.locality.tiers.map(tier => tier.value).join("."),
+      ),
+    statusesByTiers =>
+      map(
+        statusesByTiers,
+        (nodesPerRegion: INodeStatus[], regionKey: string): NodeStatusRow => {
+          const nestedRows = nodesPerRegion.map((ns, idx): NodeStatusRow => {
+            const { used: usedCapacity, usable: availableCapacity } =
+              nodeCapacityStats(ns);
+            return {
+              key: `${regionKey}-${idx}`,
+              nodeId: ns.desc.node_id,
+              nodeName: ns.desc.address.address_field,
+              uptime: moment
+                .duration(util.LongToMoment(ns.started_at).diff(moment()))
+                .humanize(),
+              replicas: ns.metrics[MetricConstants.replicas],
+              usedCapacity,
+              availableCapacity,
+              usedMemory: ns.metrics[MetricConstants.rss],
+              availableMemory: FixLong(ns.total_system_memory).toNumber(),
+              numCpus: ns.num_cpus,
+              numVcpus: ns.num_vcpus,
+              version: ns.build_info.tag,
+              status:
+                nodesSummary.livenessStatusByNodeID[ns.desc.node_id] ||
+                LivenessStatus.NODE_STATUS_LIVE,
+            };
+          });
+
+          // Grouped buckets with node statuses contain at least one element.
+          // The list of tires and lower level location are the same for every
+          // element in the group because grouping is made by string composed
+          // from location values.
+          const firstNodeInGroup = nodesPerRegion[0];
+          const tiers = getNodeLocalityTiers(firstNodeInGroup);
+          const lastTier = last(tiers);
+
+          const getLocalityStatus = () => {
+            const nodesByStatus = groupBy(
+              nestedRows,
+              (row: NodeStatusRow) => row.status,
+            );
+
+            // Return DEAD status if at least one node is dead;
+            if (!isEmpty(nodesByStatus[LivenessStatus.NODE_STATUS_DEAD])) {
+              return AggregatedNodeStatus.DEAD;
+            }
+
+            // Return WARNING status if at least one node is decommissioning or suspected;
+            if (
+              !isEmpty(
+                nodesByStatus[LivenessStatus.NODE_STATUS_DECOMMISSIONING],
+              ) ||
+              !isEmpty(nodesByStatus[LivenessStatus.NODE_STATUS_UNKNOWN]) ||
+              !isEmpty(nodesByStatus[LivenessStatus.NODE_STATUS_UNAVAILABLE])
+            ) {
+              return AggregatedNodeStatus.WARNING;
+            }
+
+            return AggregatedNodeStatus.LIVE;
+          };
+
+          return {
+            key: `${regionKey}`,
+            region: lastTier?.value,
+            tiers,
+            nodesCount: nodesPerRegion.length,
+            replicas: sum(nestedRows.map(nr => nr.replicas)),
+            usedCapacity: sum(nestedRows.map(nr => nr.usedCapacity)),
+            availableCapacity: sum(nestedRows.map(nr => nr.availableCapacity)),
+            usedMemory: sum(nestedRows.map(nr => nr.usedMemory)),
+            availableMemory: sum(nestedRows.map(nr => nr.availableMemory)),
+            numCpus: sum(nestedRows.map(nr => nr.numCpus)),
+            numVcpus: sum(nestedRows.map(nr => nr.numVcpus)),
+            status: getLocalityStatus(),
+            children: nestedRows,
+          };
+        },
+      ),
+  )(liveStatuses);
+
+  return data;
+};
+
+export { computeLiveNodesTableData as liveNodesTableDataSelector };
+
+/**
+ * computeDecommissionedNodesTableData builds the table data for recently
+ * decommissioned nodes. Exported for testing.
+ */
+const computeDecommissionedNodesTableData = (nodesSummary: {
+  livenessStatusByNodeID: Record<string | number, LivenessStatus>;
+  livenessByNodeID: Record<string | number, ILiveness>;
+}): DecommissionedNodeStatusRow[] => {
+  const getDecommissionedTime = (nodeId: number) => {
+    const liveness = nodesSummary.livenessByNodeID[nodeId];
+    if (!liveness) {
+      return undefined;
+    }
+    const deadTime = liveness.expiration.wall_time;
+    return util.LongToMoment(deadTime);
+  };
+
+  const decommissionedNodes = Object.values(
+    nodesSummary.livenessByNodeID,
+  ).filter(liveness => {
+    return liveness?.membership === MembershipStatus.DECOMMISSIONED;
   });
+
+  // DecommissionedNodeList displays 5 most recent nodes.
+  const data = flow(
+    (nodes: ILiveness[]) =>
+      orderBy(
+        nodes,
+        [liveness => getDecommissionedTime(liveness.node_id)],
+        ["desc"],
+      ),
+    nodes => take(nodes, 5),
+    nodes =>
+      map(nodes, (liveness, idx: number) => {
+        const { node_id } = liveness;
+        return {
+          key: `${idx}`,
+          nodeId: node_id,
+          nodeName: `${node_id}`,
+          status: nodesSummary.livenessStatusByNodeID[node_id],
+          decommissionedDate: getDecommissionedTime(node_id),
+        };
+      }),
+  )(decommissionedNodes);
+  return data;
+};
+
+export { computeDecommissionedNodesTableData as decommissionedNodesTableDataSelector };
+
+/**
+ * Renders the main content of the nodes page, which is primarily a data table
+ * of all nodes. Uses the useNodesSummary hook to fetch and manage node and
+ * liveness data.
+ */
+function NodesMain(): React.ReactElement {
+  const { nodeStatuses, livenessStatusByNodeID, livenessByNodeID } =
+    useNodesSummary();
+
+  const partitioned = useMemo(
+    () => computePartitionedStatuses(nodeStatuses, livenessStatusByNodeID),
+    [nodeStatuses, livenessStatusByNodeID],
+  );
+
+  const liveTableData = useMemo(
+    () => computeLiveNodesTableData(partitioned, { livenessStatusByNodeID }),
+    [partitioned, livenessStatusByNodeID],
+  );
+
+  const decommissionedTableData = useMemo(
+    () =>
+      computeDecommissionedNodesTableData({
+        livenessStatusByNodeID,
+        livenessByNodeID,
+      }),
+    [livenessStatusByNodeID, livenessByNodeID],
+  );
+
+  const liveNodes = partitioned.live || [];
 
   return (
     <div className="nodes-overview">
-      <NodesConnected />
-      <DecommissionedNodesConnected />
+      <NodeList
+        dataSource={liveTableData}
+        nodesCount={liveNodes.length}
+        regionsCount={liveTableData.length}
+      />
+      <DecommissionedNodeList
+        dataSource={decommissionedTableData}
+        isCollapsible={true}
+      />
     </div>
   );
 }
 
-/**
- * NodesMainConnected is a redux-connected HOC of NodesMain.
- */
-const NodesMainConnected = connect(
-  (state: AdminUIState) => {
-    return {
-      nodesSummaryValid: selectNodesSummaryValid(state),
-    };
-  },
-  {
-    refreshNodes,
-    refreshLiveness,
-  },
-)(NodesMain);
-
-export { NodesMainConnected as NodesOverview };
+export { NodesMain as NodesOverview };

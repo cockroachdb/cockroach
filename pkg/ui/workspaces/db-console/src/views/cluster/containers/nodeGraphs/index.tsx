@@ -3,24 +3,18 @@
 // Use of this software is governed by the CockroachDB Software License
 // included in the /LICENSE file.
 
-import { Anchor, TimeScale } from "@cockroachlabs/cluster-ui";
+import { Anchor, TimeScale, useNodesSummary } from "@cockroachlabs/cluster-ui";
 import has from "lodash/has";
 import map from "lodash/map";
 import moment from "moment-timezone";
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { Helmet } from "react-helmet";
 import { connect } from "react-redux";
 import { withRouter, RouteComponentProps } from "react-router-dom";
-import { createSelector } from "reselect";
 
 import { InlineAlert } from "src/components";
 import { PayloadAction } from "src/interfaces/action";
-import {
-  refreshNodes,
-  refreshLiveness,
-  refreshSettings,
-  refreshTenantsList,
-} from "src/redux/apiReducers";
+import { refreshSettings, refreshTenantsList } from "src/redux/apiReducers";
 import {
   selectResolution10sStorageTTL,
   selectResolution30mStorageTTL,
@@ -32,15 +26,7 @@ import {
   hoverOn,
   hoverOff,
 } from "src/redux/hover";
-import {
-  LivenessStatus,
-  nodeDisplayNameByIDSelector,
-  livenessStatusByNodeIDSelector,
-  nodeIDsSelector,
-  nodeIDsStringifiedSelector,
-  selectStoreIDsByNodeID,
-  nodeDisplayNameByIDSelectorWithoutAddress,
-} from "src/redux/nodes";
+import { getDisplayName, LivenessStatus } from "src/redux/nodes";
 import { AdminUIState } from "src/redux/state";
 import {
   containsApplicationTenants,
@@ -180,21 +166,11 @@ type MapStateToProps = {
   resolution10sStorageTTL: moment.Duration;
   resolution30mStorageTTL: moment.Duration;
   timeScale: TimeScale;
-  nodeDropdownOptions: ReturnType<
-    typeof nodeDropdownOptionsSelector.resultFunc
-  >;
-  nodeIds: string[];
-  storeIDsByNodeID: ReturnType<typeof selectStoreIDsByNodeID.resultFunc>;
-  nodeDisplayNameByID: ReturnType<
-    typeof nodeDisplayNameByIDSelector.resultFunc
-  >;
   tenantOptions: DropdownOption[];
   currentTenant: string | null;
 };
 
 type MapDispatchToProps = {
-  refreshNodes: typeof refreshNodes;
-  refreshLiveness: typeof refreshLiveness;
   refreshNodeSettings: typeof refreshSettings;
   refreshTenantsList: typeof refreshTenantsList;
   hoverOn: typeof hoverOn;
@@ -219,14 +195,8 @@ export function NodeGraphs({
   resolution10sStorageTTL,
   resolution30mStorageTTL,
   timeScale,
-  nodeDropdownOptions,
-  nodeIds,
-  storeIDsByNodeID,
-  nodeDisplayNameByID,
   tenantOptions,
   currentTenant,
-  refreshNodes: refreshNodesAction,
-  refreshLiveness: refreshLivenessAction,
   refreshNodeSettings: refreshNodeSettingsAction,
   refreshTenantsList: refreshTenantsListAction,
   setMetricsFixedWindow: setMetricsFixedWindowAction,
@@ -235,12 +205,48 @@ export function NodeGraphs({
   const [showLowResolutionAlert, setShowLowResolutionAlert] = useState(false);
   const [showDeletedDataAlert, setShowDeletedDataAlert] = useState(false);
 
-  // Refresh nodes and liveness data on every render so stale data triggers
-  // a re-fetch (these calls short-circuit internally when data is fresh).
-  useEffect(() => {
-    refreshNodesAction();
-    refreshLivenessAction();
-  });
+  const {
+    nodeIDs: nodeIds,
+    nodeStatusByID,
+    nodeDisplayNameByID: nodeDisplayNameByIDWithAddress,
+    livenessStatusByNodeID,
+    storeIDsByNodeID,
+  } = useNodesSummary();
+
+  // Compute display names without address for graph dashboard labels.
+  const nodeDisplayNameByID = useMemo(() => {
+    const result: Record<string, string> = {};
+    for (const id of nodeIds) {
+      const ns = nodeStatusByID[id];
+      if (ns) {
+        result[id] = getDisplayName(
+          ns,
+          livenessStatusByNodeID[id],
+          false /* includeAddress */,
+        );
+      } else {
+        result[id] = `n${id}`;
+      }
+    }
+    return result;
+  }, [nodeIds, nodeStatusByID, livenessStatusByNodeID]);
+
+  // Compute dropdown options from hook data, filtering out decommissioned nodes.
+  const nodeDropdownOptions: DropdownOption[] = useMemo(() => {
+    const base: DropdownOption[] = [{ value: "", label: "Cluster" }];
+    return base.concat(
+      nodeIds
+        .filter(
+          id =>
+            livenessStatusByNodeID[id] !==
+            LivenessStatus.NODE_STATUS_DECOMMISSIONED,
+        )
+        .map(id => ({
+          value: id,
+          label: nodeDisplayNameByIDWithAddress[id] ?? `n${id}`,
+        })),
+    );
+  }, [nodeIds, nodeDisplayNameByIDWithAddress, livenessStatusByNodeID]);
 
   // Settings and tenants list only need to be fetched once on mount —
   // they don't change frequently.
@@ -498,47 +504,16 @@ export function NodeGraphs({
   );
 }
 
-/**
- * Selector to compute node dropdown options from the current node summary
- * collection.
- */
-const nodeDropdownOptionsSelector = createSelector(
-  nodeIDsSelector,
-  state => nodeDisplayNameByIDSelector(state),
-  livenessStatusByNodeIDSelector,
-  (nodeIds, nodeDisplayNameByID, livenessStatusByNodeID): DropdownOption[] => {
-    const base = [{ value: "", label: "Cluster" }];
-    return base.concat(
-      nodeIds
-        .filter(
-          id =>
-            livenessStatusByNodeID[id] !==
-            LivenessStatus.NODE_STATUS_DECOMMISSIONED,
-        )
-        .map(id => ({
-          value: id.toString(),
-          label: nodeDisplayNameByID[id],
-        })),
-    );
-  },
-);
-
 const mapStateToProps = (state: AdminUIState): MapStateToProps => ({
   hoverState: hoverStateSelector(state),
   resolution10sStorageTTL: selectResolution10sStorageTTL(state),
   resolution30mStorageTTL: selectResolution30mStorageTTL(state),
   timeScale: selectTimeScale(state),
-  nodeIds: nodeIDsStringifiedSelector(state),
-  storeIDsByNodeID: selectStoreIDsByNodeID(state),
-  nodeDropdownOptions: nodeDropdownOptionsSelector(state),
-  nodeDisplayNameByID: nodeDisplayNameByIDSelectorWithoutAddress(state),
   tenantOptions: tenantDropdownOptions(state),
   currentTenant: getCookieValue("tenant"),
 });
 
 const mapDispatchToProps: MapDispatchToProps = {
-  refreshNodes,
-  refreshLiveness,
   refreshNodeSettings: refreshSettings,
   refreshTenantsList,
   hoverOn,

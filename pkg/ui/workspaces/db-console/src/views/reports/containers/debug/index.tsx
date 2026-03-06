@@ -3,15 +3,15 @@
 // Use of this software is governed by the CockroachDB Software License
 // included in the /LICENSE file.
 
+import { useNodes } from "@cockroachlabs/cluster-ui";
 import isNil from "lodash/isNil";
 import React, { useEffect, useState } from "react";
 import { Helmet } from "react-helmet";
 import { connect, useSelector } from "react-redux";
 
 import { InlineAlert } from "src/components";
-import { refreshNodes, refreshUserSQLRoles } from "src/redux/apiReducers";
+import { refreshUserSQLRoles } from "src/redux/apiReducers";
 import { getCookieValue, setCookie } from "src/redux/cookies";
-import { nodeIDsStringifiedSelector } from "src/redux/nodes";
 import { AdminUIState, featureFlagSelector } from "src/redux/state";
 import { selectHasViewActivityRedactedRole } from "src/redux/user";
 import { getDataFromServer } from "src/util/dataFromServer";
@@ -123,23 +123,18 @@ function DebugPanelLink(props: {
   );
 }
 
-// NodeIDSelector is a standalone component that displays a list of nodeIDs and allows for
-// their selection using a standard `<select>` component. If this component is used outside
-// of the Advanced Debug page, it should be styled appropriately. In order to make use of
-// this component and its "connected" version below (which retrieves and manages the nodeIDs
-// in the cluster automatically via redux) you will need to pass it the selected nodeID and
-// a function for mutating the nodeID (typical outputs of the `setState` hook) as props.
-function NodeIDSelector(props: {
+// NodeIDSelectorConnected displays a list of nodeIDs and allows for their
+// selection using a standard `<select>` component. It fetches node data
+// automatically via the useNodes hook.
+function NodeIDSelectorConnected(props: {
   nodeID: string;
   setNodeID: (nodeID: string) => void;
-  nodeIDs: string[];
-  refreshNodes: typeof refreshNodes;
 }) {
-  const { nodeID, setNodeID, nodeIDs, refreshNodes } = props;
-
-  useEffect(() => {
-    refreshNodes();
-  }, [props, refreshNodes]);
+  const { nodeID, setNodeID } = props;
+  const { nodeStatuses } = useNodes();
+  const nodeIDs = nodeStatuses
+    .map(ns => ns.desc?.node_id?.toString())
+    .filter(Boolean);
 
   return (
     <select
@@ -158,17 +153,6 @@ function NodeIDSelector(props: {
     </select>
   );
 }
-
-const NodeIDSelectorConnected = connect(
-  (state: AdminUIState) => {
-    return {
-      nodeIDs: nodeIDsStringifiedSelector(state),
-    };
-  },
-  {
-    refreshNodes,
-  },
-)(NodeIDSelector);
 
 interface ProxyToNodeSelectorProps {
   nodeID: string;

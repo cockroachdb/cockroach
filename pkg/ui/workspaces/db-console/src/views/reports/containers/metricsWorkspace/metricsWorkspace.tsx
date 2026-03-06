@@ -16,7 +16,6 @@ import TimeScaleDropdown from "oss/src/views/cluster/containers/timeScaleDropdow
 import { Button } from "src/components/button";
 import {
   refreshMetricMetadata,
-  refreshNodes,
   refreshTenantsList,
 } from "src/redux/apiReducers";
 import {
@@ -35,14 +34,12 @@ import "./metricsWorkspace.scss";
 type Props = {
   timeScale: TimeScale;
   setTimeScale: (timeScale: TimeScale) => void;
-  refreshNodes: typeof refreshNodes;
   refreshMetricMetadata: typeof refreshMetricMetadata;
   refreshTenantsList: typeof refreshTenantsList;
 };
 const MetricsWorkspace = ({
   timeScale,
   setTimeScale,
-  refreshNodes,
   refreshMetricMetadata,
   refreshTenantsList,
 }: Props) => {
@@ -52,10 +49,9 @@ const MetricsWorkspace = ({
   const [loadError, setLoadError] = useState<string | null>(null);
 
   useEffect(() => {
-    refreshNodes();
     refreshMetricMetadata();
     refreshTenantsList();
-  }, [refreshNodes, refreshMetricMetadata, refreshTenantsList]);
+  }, [refreshMetricMetadata, refreshTenantsList]);
 
   const handleCreateNewDashboard = () => {
     const name = `Dashboard ${dashboardCount.current}`;
@@ -220,7 +216,6 @@ const mapStateToProps = (state: AdminUIState) => ({
 const mapDispatchToProps = {
   setMetricsFixedWindow: setMetricsFixedWindow,
   setTimeScale: setTimeScale,
-  refreshNodes,
   refreshMetricMetadata,
   refreshTenantsList,
 };

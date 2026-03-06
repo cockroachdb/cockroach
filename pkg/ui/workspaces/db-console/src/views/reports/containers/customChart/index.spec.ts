@@ -3,9 +3,10 @@
 // Use of this software is governed by the CockroachDB Software License
 // included in the /LICENSE file.
 
+import { NodesSummary } from "@cockroachlabs/cluster-ui";
+
 import * as protos from "src/js/protos";
 import { MetricsMetadata } from "src/redux/metricMetadata";
-import { NodesSummary } from "src/redux/nodes";
 import { INodeStatus } from "src/util/proto";
 import { CustomMetricState } from "src/views/reports/containers/customChart/customMetric";
 import { getSources } from "src/views/reports/containers/customChart/index";
@@ -184,7 +185,6 @@ class testNodesSummaryBuilder {
       livenessStatusByNodeID: {},
       livenessByNodeID: {},
       storeIDsByNodeID: this.storeIDsByNodeID,
-      nodeLastError: undefined,
     };
   }
 }

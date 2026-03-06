@@ -3,58 +3,31 @@
 // Use of this software is governed by the CockroachDB Software License
 // included in the /LICENSE file.
 
-import { Loading } from "@cockroachlabs/cluster-ui";
+import { Loading, useNodesSummary } from "@cockroachlabs/cluster-ui";
 import isNil from "lodash/isNil";
-import React, { useEffect } from "react";
+import React, { useEffect, useMemo } from "react";
 import { connect } from "react-redux";
 import { useHistory } from "react-router-dom";
-import { createSelector } from "reselect";
 
-import { cockroach } from "src/js/protos";
-import {
-  refreshNodes,
-  refreshLiveness,
-  refreshLocations,
-} from "src/redux/apiReducers";
-import {
-  selectLocalityTree,
-  LocalityTier,
-  LocalityTree,
-} from "src/redux/localities";
+import { refreshLocations } from "src/redux/apiReducers";
+import { buildLocalityTree, LocalityTier } from "src/redux/localities";
 import {
   selectLocationsRequestStatus,
   selectLocationTree,
   LocationTree,
 } from "src/redux/locations";
-import {
-  nodesSummarySelector,
-  NodesSummary,
-  selectNodeRequestStatus,
-  selectLivenessRequestStatus,
-  livenessStatusByNodeIDSelector,
-  LivenessStatus,
-  livenessByNodeIDSelector,
-} from "src/redux/nodes";
+import { LivenessStatus } from "src/redux/nodes";
 import { AdminUIState } from "src/redux/state";
 import { CLUSTERVIZ_ROOT } from "src/routes/visualization";
 import { getLocality } from "src/util/localities";
 
 import { NodeCanvas } from "./nodeCanvas";
 
-type Liveness = cockroach.kv.kvserver.liveness.livenesspb.ILiveness;
-
-interface NodeCanvasContainerProps {
-  nodesSummary: NodesSummary;
-  localityTree: LocalityTree;
+interface NodeCanvasContainerReduxProps {
   locationTree: LocationTree;
-  livenessStatuses: { [id: string]: LivenessStatus };
-  livenesses: { [id: string]: Liveness };
-  dataExists: boolean;
-  dataIsValid: boolean;
-  dataErrors: Error[];
-  refreshNodes: typeof refreshNodes;
-  refreshLiveness: any;
-  refreshLocations: any;
+  locationsLoading: boolean;
+  locationsError: Error | null;
+  refreshLocations: typeof refreshLocations;
 }
 
 export interface NodeCanvasContainerOwnProps {
@@ -62,85 +35,75 @@ export interface NodeCanvasContainerOwnProps {
 }
 
 const NodeCanvasContainer: React.FC<
-  NodeCanvasContainerProps & NodeCanvasContainerOwnProps
+  NodeCanvasContainerReduxProps & NodeCanvasContainerOwnProps
 > = props => {
   const history = useHistory();
+  const {
+    nodeStatuses,
+    livenessStatusByNodeID,
+    livenessByNodeID,
+    isLoading: nodesLivenessLoading,
+    nodesError,
+    livenessError,
+  } = useNodesSummary();
 
+  const { refreshLocations: refreshLocationsAction } = props;
   useEffect(() => {
-    props.refreshNodes();
-    props.refreshLiveness();
-    props.refreshLocations();
-  }, [
-    props.refreshNodes,
-    props.refreshLiveness,
-    props.refreshLocations,
-    props,
-  ]);
+    refreshLocationsAction();
+  }, [refreshLocationsAction]);
 
-  const currentLocality = getLocality(props.localityTree, props.tiers);
-  if (props.dataIsValid && isNil(currentLocality)) {
+  // Filter out decommissioned nodes and build the locality tree, matching the
+  // behavior of the former selectLocalityTree / selectCommissionedNodeStatuses
+  // selectors.
+  const localityTree = useMemo(
+    () =>
+      buildLocalityTree(
+        nodeStatuses?.filter(ns => {
+          const status = livenessStatusByNodeID[`${ns.desc.node_id}`];
+          return (
+            isNil(status) ||
+            status !== LivenessStatus.NODE_STATUS_DECOMMISSIONED
+          );
+        }),
+      ),
+    [nodeStatuses, livenessStatusByNodeID],
+  );
+
+  const dataExists = !nodesLivenessLoading && !props.locationsLoading;
+  const dataErrors = [nodesError, livenessError, props.locationsError].filter(
+    Boolean,
+  );
+
+  const currentLocality = getLocality(localityTree, props.tiers);
+  if (dataExists && isNil(currentLocality)) {
     history.replace(CLUSTERVIZ_ROOT);
   }
 
   return (
     <Loading
-      loading={!props.dataExists}
+      loading={!dataExists}
       page={"node canvas container"}
-      error={props.dataErrors}
+      error={dataErrors}
       render={() => (
         <NodeCanvas
           localityTree={currentLocality}
           locationTree={props.locationTree}
           tiers={props.tiers}
-          livenessStatuses={props.livenessStatuses}
-          livenesses={props.livenesses}
+          livenessStatuses={livenessStatusByNodeID}
+          livenesses={livenessByNodeID}
         />
       )}
     />
   );
 };
 
-const selectDataExists = createSelector(
-  selectNodeRequestStatus,
-  selectLocationsRequestStatus,
-  selectLivenessRequestStatus,
-  (nodes, locations, liveness) =>
-    !!nodes.data && !!locations.data && !!liveness.data,
-);
-
-const selectDataIsValid = createSelector(
-  selectNodeRequestStatus,
-  selectLocationsRequestStatus,
-  selectLivenessRequestStatus,
-  (nodes, locations, liveness) =>
-    nodes.valid && locations.valid && liveness.valid,
-);
-
-const dataErrors = createSelector(
-  selectNodeRequestStatus,
-  selectLocationsRequestStatus,
-  selectLivenessRequestStatus,
-  (nodes, locations, liveness) => [
-    nodes.lastError,
-    locations.lastError,
-    liveness.lastError,
-  ],
-);
-
 export default connect(
-  (state: AdminUIState, _ownProps: NodeCanvasContainerOwnProps) => ({
-    nodesSummary: nodesSummarySelector(state),
-    localityTree: selectLocalityTree(state),
+  (state: AdminUIState) => ({
     locationTree: selectLocationTree(state),
-    livenessStatuses: livenessStatusByNodeIDSelector(state),
-    livenesses: livenessByNodeIDSelector(state),
-    dataIsValid: selectDataIsValid(state),
-    dataExists: selectDataExists(state),
-    dataErrors: dataErrors(state),
+    locationsLoading: !selectLocationsRequestStatus(state).data,
+    locationsError: selectLocationsRequestStatus(state).lastError,
   }),
   {
-    refreshNodes,
-    refreshLiveness,
     refreshLocations,
   },
 )(NodeCanvasContainer);

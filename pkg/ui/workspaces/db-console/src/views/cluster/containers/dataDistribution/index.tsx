@@ -3,11 +3,11 @@
 // Use of this software is governed by the CockroachDB Software License
 // included in the /LICENSE file.
 
-import { Loading } from "@cockroachlabs/cluster-ui";
+import { Loading, useNodesSummary } from "@cockroachlabs/cluster-ui";
 import forEach from "lodash/forEach";
 import map from "lodash/map";
 import sortBy from "lodash/sortBy";
-import React, { useEffect } from "react";
+import React, { useEffect, useMemo } from "react";
 import Helmet from "react-helmet";
 import { connect } from "react-redux";
 import { RouteComponentProps, withRouter } from "react-router-dom";
@@ -17,15 +17,10 @@ import { InfoTooltip } from "src/components/infoTooltip";
 import { cockroach } from "src/js/protos";
 import {
   refreshDataDistribution,
-  refreshNodes,
-  refreshLiveness,
   CachedDataReducerState,
 } from "src/redux/apiReducers";
-import { LocalityTree, selectLocalityTree } from "src/redux/localities";
-import {
-  selectLivenessRequestStatus,
-  selectNodeRequestStatus,
-} from "src/redux/nodes";
+import { buildLocalityTree, LocalityTree } from "src/redux/localities";
+import { LivenessStatus } from "src/redux/nodes";
 import { AdminUIState } from "src/redux/state";
 import * as docsURL from "src/util/docs";
 import { FixLong } from "src/util/fixLong";
@@ -151,29 +146,40 @@ function DataDistribution({
 
 interface DataDistributionPageProps {
   dataDistribution: CachedDataReducerState<DataDistributionResponse>;
-  localityTree: LocalityTree;
-  localityTreeErrors: Error[];
   sortedZoneConfigs: ZoneConfig$Properties[];
   refreshDataDistribution: typeof refreshDataDistribution;
-  refreshNodes: typeof refreshNodes;
-  refreshLiveness: typeof refreshLiveness;
 }
 
 export function DataDistributionPage({
   dataDistribution,
-  localityTree,
-  localityTreeErrors,
   sortedZoneConfigs: sortedZoneConfigsProp,
   refreshDataDistribution: refreshDataDistributionAction,
-  refreshNodes: refreshNodesAction,
-  refreshLiveness: refreshLivenessAction,
   history,
 }: DataDistributionPageProps & RouteComponentProps): React.ReactElement {
+  const {
+    nodeStatuses,
+    livenessStatusByNodeID,
+    isLoading: nodesLoading,
+    nodesError,
+    livenessError,
+  } = useNodesSummary();
+
+  const localityTree = useMemo(() => {
+    const commissionedNodes = nodeStatuses.filter(node => {
+      const status = livenessStatusByNodeID[`${node.desc.node_id}`];
+      return status !== LivenessStatus.NODE_STATUS_DECOMMISSIONED;
+    });
+    return buildLocalityTree(commissionedNodes);
+  }, [nodeStatuses, livenessStatusByNodeID]);
+
+  const localityTreeErrors = useMemo(
+    () => [nodesError, livenessError].filter(Boolean),
+    [nodesError, livenessError],
+  );
+
   useEffect(() => {
     refreshDataDistributionAction();
-    refreshNodesAction();
-    refreshLivenessAction();
-  });
+  }, [refreshDataDistributionAction]);
 
   return (
     <div>
@@ -190,7 +196,7 @@ export function DataDistributionPage({
       </section>
       <section className="section">
         <Loading
-          loading={!dataDistribution.data || !localityTree}
+          loading={!dataDistribution.data || nodesLoading}
           page={"data distribution"}
           error={[dataDistribution.lastError, ...localityTreeErrors]}
           render={() => (
@@ -216,24 +222,14 @@ const sortedZoneConfigs = createSelector(
   },
 );
 
-const localityTreeErrors = createSelector(
-  selectNodeRequestStatus,
-  selectLivenessRequestStatus,
-  (nodes, liveness) => [nodes.lastError, liveness.lastError],
-);
-
 const DataDistributionPageConnected = withRouter(
   connect(
-    (state: AdminUIState, _: RouteComponentProps) => ({
+    (state: AdminUIState) => ({
       dataDistribution: state.cachedData.dataDistribution,
       sortedZoneConfigs: sortedZoneConfigs(state),
-      localityTree: selectLocalityTree(state),
-      localityTreeErrors: localityTreeErrors(state),
     }),
     {
       refreshDataDistribution,
-      refreshNodes,
-      refreshLiveness,
     },
   )(DataDistributionPage),
 );

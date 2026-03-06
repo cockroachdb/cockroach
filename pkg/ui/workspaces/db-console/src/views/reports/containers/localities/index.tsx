@@ -3,26 +3,26 @@
 // Use of this software is governed by the CockroachDB Software License
 // included in the /LICENSE file.
 
-import { Loading } from "@cockroachlabs/cluster-ui";
+import { Loading, useNodesSummary } from "@cockroachlabs/cluster-ui";
 import isNil from "lodash/isNil";
-import React, { useEffect } from "react";
+import React, { useEffect, useMemo } from "react";
 import { Helmet } from "react-helmet";
 import { connect } from "react-redux";
 import { RouteComponentProps, withRouter } from "react-router-dom";
 
-import { refreshLocations, refreshNodes } from "src/redux/apiReducers";
+import { refreshLocations } from "src/redux/apiReducers";
 import { CachedDataReducerState } from "src/redux/cachedDataReducer";
 import {
+  buildLocalityTree,
   LocalityTier,
   LocalityTree,
-  selectLocalityTree,
 } from "src/redux/localities";
 import {
   LocationTree,
   selectLocationsRequestStatus,
   selectLocationTree,
 } from "src/redux/locations";
-import { selectNodeRequestStatus } from "src/redux/nodes";
+import { LivenessStatus } from "src/redux/nodes";
 import { AdminUIState } from "src/redux/state";
 import { getNodeLocalityTiers } from "src/util/localities";
 import { findMostSpecificLocation, hasLocation } from "src/util/locations";
@@ -98,27 +98,34 @@ function renderLocalityTree(locations: LocationTree, tree: LocalityTree) {
 }
 
 interface LocalitiesProps {
-  localityTree: LocalityTree;
-  localityStatus: CachedDataReducerState<any>;
   locationTree: LocationTree;
   locationStatus: CachedDataReducerState<any>;
   refreshLocations: typeof refreshLocations;
-  refreshNodes: typeof refreshNodes;
 }
 
 export function Localities({
-  localityTree,
-  localityStatus,
   locationTree,
   locationStatus,
   refreshLocations: refreshLocationsAction,
-  refreshNodes: refreshNodesAction,
   history,
 }: LocalitiesProps & RouteComponentProps): React.ReactElement {
+  const {
+    nodeStatuses,
+    livenessStatusByNodeID,
+    isLoading: nodesLoading,
+  } = useNodesSummary();
+
+  const localityTree = useMemo(() => {
+    const commissionedNodes = nodeStatuses.filter(node => {
+      const status = livenessStatusByNodeID[`${node.desc.node_id}`];
+      return status !== LivenessStatus.NODE_STATUS_DECOMMISSIONED;
+    });
+    return buildLocalityTree(commissionedNodes);
+  }, [nodeStatuses, livenessStatusByNodeID]);
+
   useEffect(() => {
     refreshLocationsAction();
-    refreshNodesAction();
-  }, [refreshLocationsAction, refreshNodesAction]);
+  }, [refreshLocationsAction]);
 
   return (
     <div>
@@ -128,9 +135,9 @@ export function Localities({
         <h1 className="base-heading">Localities</h1>
       </section>
       <Loading
-        loading={!localityStatus.data || !locationStatus.data}
+        loading={nodesLoading || !locationStatus.data}
         page={"localities"}
-        error={[localityStatus.lastError, locationStatus.lastError]}
+        error={[locationStatus.lastError]}
         render={() => (
           <section className="section">
             <table className="locality-table">
@@ -150,17 +157,13 @@ export function Localities({
   );
 }
 
-const mapStateToProps = (state: AdminUIState, _: RouteComponentProps) => ({
-  // RootState contains declaration for whole state
-  localityTree: selectLocalityTree(state),
-  localityStatus: selectNodeRequestStatus(state),
+const mapStateToProps = (state: AdminUIState) => ({
   locationTree: selectLocationTree(state),
   locationStatus: selectLocationsRequestStatus(state),
 });
 
 const mapDispatchToProps = {
   refreshLocations,
-  refreshNodes,
 };
 
 export default withRouter(

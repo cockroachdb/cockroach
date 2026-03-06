@@ -13,6 +13,7 @@ import {
   TimezoneContext,
   SortSetting,
   ISortedTablePagination,
+  useNodes,
 } from "@cockroachlabs/cluster-ui";
 import classNames from "classnames/bind";
 import React, { useRef, useMemo, useEffect, useContext, useState } from "react";
@@ -32,7 +33,6 @@ import {
   lastErrorSelector,
   lastSetAtSelector,
 } from "src/redux/hotRanges";
-import { selectNodeLocalities } from "src/redux/localities";
 import { performanceBestPracticesHotSpots } from "src/util/docs";
 import { HotRangesFilter } from "src/views/hotRanges/hotRangesFilter";
 import useFilters, { filterRanges } from "src/views/hotRanges/useFilters";
@@ -64,7 +64,19 @@ const HotRangesPage = () => {
   const lastError = useSelector(lastErrorSelector);
   const lastSetAt = useSelector(lastSetAtSelector);
   const isLoading = useSelector(isLoadingSelector);
-  const nodeIdToLocalityMap = useSelector(selectNodeLocalities);
+  const { nodeStatuses } = useNodes();
+  const nodeIdToLocalityMap = useMemo(
+    () =>
+      new Map(
+        (nodeStatuses ?? []).map(n => {
+          const locality = (n.desc?.locality?.tiers || [])
+            .map(t => `${t.key}=${t.value}`)
+            .join(", ");
+          return [n.desc.node_id, locality];
+        }),
+      ),
+    [nodeStatuses],
+  );
   const timezone = useContext(TimezoneContext);
 
   const { filters, applyFilters } = useFilters();
