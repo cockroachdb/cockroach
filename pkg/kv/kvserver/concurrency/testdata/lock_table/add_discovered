@@ -295,3 +295,111 @@ dequeue r=req5
 num=1
  lock: "a"
   holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, ts: 12.000000000,0, info: repl [Intent]
+
+# -------------------------------------------------------------
+# When a lock is re-discovered at a higher timestamp (e.g.,
+# because the intent was rewritten after the transaction was
+# pushed), discoveredLock must call recomputeWaitQueues to
+# release waiting readers whose read timestamps fall below
+# the updated intent timestamp.
+#
+# Setup: txn2 discovers txn1's intent on "a" at ts=10
+#        txn3 (reader at ts=15) waits on the intent
+#
+# Test:  txn1 is pushed to ts=20
+#        txn4 discovers the intent at ts=20
+#        txn3 should stop waiting because ts=20 > ts=15
+# -------------------------------------------------------------
+
+new-lock-table maxlocks=10000
+----
+
+new-txn txn=txn1 ts=10 epoch=0
+----
+
+new-txn txn=txn2 ts=25 epoch=0
+----
+
+new-txn txn=txn3 ts=15 epoch=0
+----
+
+new-txn txn=txn4 ts=25 epoch=0
+----
+
+# txn4's request scans the lock table before any locks exist. In a real system,
+# this could happen after a lease transfer clears the in-memory lock table while
+# txn1's replicated intent still exists in MVCC.
+new-request r=req1 txn=txn4 ts=25 spans=none@a
+----
+
+scan r=req1
+----
+start-waiting: false
+
+# txn2's request also scans before any locks exist.
+new-request r=req2 txn=txn2 ts=25 spans=none@a
+----
+
+scan r=req2
+----
+start-waiting: false
+
+# txn2 discovers txn1's intent on "a" at ts=10 during evaluation. This adds
+# the intent to the lock table.
+add-discovered r=req2 k=a txn=txn1
+----
+num=1
+ lock: "a"
+  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, ts: 10.000000000,0, info: repl [Intent]
+
+dequeue r=req2
+----
+num=1
+ lock: "a"
+  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, ts: 10.000000000,0, info: repl [Intent]
+
+# txn3 (reader at ts=15) scans and waits on the intent at ts=10 (10 ≤ 15).
+new-request r=req3 txn=txn3 ts=15 spans=none@a
+----
+
+scan r=req3
+----
+start-waiting: true
+
+guard-state r=req3
+----
+new: state=waitFor txn=txn1 key="a" held=true guard-strength=None
+
+# --------------------------------
+# Setup complete, test starts here
+# --------------------------------
+
+# Simulate txn1 being pushed to ts=20.
+update-txn-not-observed txn=txn1 ts=20 epoch=0
+----
+
+# txn4 discovers the intent from txn1, now at ts=20. This advances the lock
+# table's tracked intent timestamp from 10 to 20.
+add-discovered r=req1 k=a txn=txn1
+----
+num=1
+ lock: "a"
+  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, ts: 20.000000000,0, info: repl [Intent]
+
+# txn3 (reader at ts=15) should be released because the intent at ts=20 no
+# longer conflicts with a read at ts=15.
+guard-state r=req3
+----
+new: state=doneWaiting
+
+dequeue r=req1
+----
+num=1
+ lock: "a"
+  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, ts: 20.000000000,0, info: repl [Intent]
+
+dequeue r=req3
+----
+num=1
+ lock: "a"
+  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, ts: 20.000000000,0, info: repl [Intent]

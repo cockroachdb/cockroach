@@ -3376,7 +3376,7 @@ func (kl *keyLocks) acquireLock(
 	//
 	// TODO(arul): Replace the call to releaseLockingRequestsFromTxn with
 	// recomputeWaitQueue, and push the responsibility of re-ordering the wait
-	// queue into there. Ditto for the call in addDiscoveredLock.
+	// queue into there. Ditto for the call in discoveredLock.
 	kl.releaseLockingRequestsFromTxn(&acq.Txn)
 
 	// Sanity check that there aren't any waiting readers on this lock. There
@@ -3485,17 +3485,14 @@ func (kl *keyLocks) discoveredLock(
 	}
 
 	var tl *txnLock
+	var writeTSAdvanced bool
 	if kl.isLockedBy(foundLock.Txn.ID) {
 		e := kl.heldBy[foundLock.Txn.ID]
 		tl = e.Value
 
-		beforeTs := tl.writeTS()
-
+		beforeWriteTS := tl.writeTS()
 		tl.replicatedInfo.acquire(foundLock.Strength, foundLock.Txn.WriteTimestamp)
-
-		if beforeTs.Less(tl.writeTS()) {
-			kl.recomputeWaitQueues(st)
-		}
+		writeTSAdvanced = beforeWriteTS.Less(tl.writeTS())
 		// TODO(arul): If the discovered lock indicates a newer epoch than what's
 		// being tracked, should we clear out unreplicatedLockInfo here?
 	} else {
@@ -3550,8 +3547,16 @@ func (kl *keyLocks) discoveredLock(
 	// If there are waiting requests from the same txn, they no longer need to wait.
 	kl.releaseLockingRequestsFromTxn(&foundLock.Txn)
 
-	// Active waiters need to be told about who they are waiting for.
-	kl.informActiveWaiters()
+	if writeTSAdvanced {
+		// The lock holder's write timestamp advanced, which may allow some waiting
+		// readers to proceed (their read timestamps may now fall below the intent's
+		// timestamp). Recompute wait queues to release them; this also calls
+		// informActiveWaiters for remaining waiters.
+		kl.recomputeWaitQueues(st)
+	} else {
+		// Active waiters need to be told about who they are waiting for.
+		kl.informActiveWaiters()
+	}
 	return nil
 }
 
