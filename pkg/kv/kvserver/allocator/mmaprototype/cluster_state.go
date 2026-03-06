@@ -2639,7 +2639,13 @@ func (cs *clusterState) loadSummaryForAllStores(ctx context.Context) string {
 		clusterMeans.storeLoad.load, clusterMeans.storeLoad.capacity)
 	buf.Printf("(nodes-cpu-load %v) (nodes-cpu-capacity %v)\n",
 		clusterMeans.nodeLoad.loadCPU, clusterMeans.nodeLoad.capacityCPU)
-	for storeID, ss := range cs.stores {
+	storeIDs := make([]roachpb.StoreID, 0, len(cs.stores))
+	for storeID := range cs.stores {
+		storeIDs = append(storeIDs, storeID)
+	}
+	slices.Sort(storeIDs)
+	for _, storeID := range storeIDs {
+		ss := cs.stores[storeID]
 		sls := cs.meansMemo.getStoreLoadSummary(ctx, clusterMeans, storeID, ss.loadSeqNum)
 		buf.Printf("evaluating store s%v for shedding: load summary %v", storeID, sls)
 	}
