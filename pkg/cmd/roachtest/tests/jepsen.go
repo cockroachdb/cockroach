@@ -373,7 +373,12 @@ func runJepsen(ctx context.Context, t test.Test, c cluster.Cluster, testName, ne
 		// extra debugging help.
 		run(c, ctx, controller, "pkill -QUIT java")
 		time.Sleep(10 * time.Second)
-		run(c, ctx, controller, "pkill java")
+		if err := runE(c, ctx, controller, "pkill java"); err != nil {
+			// pkill exits 1 when no matching process is found.
+			// This is expected if the JVM already exited after
+			// the SIGQUIT above.
+			t.L().Printf("pkill java: %s", err)
+		}
 		t.L().Printf("timed out")
 		testErr = fmt.Errorf("timed out")
 	}
