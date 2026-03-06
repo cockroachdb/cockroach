@@ -1,3 +1,9 @@
+---
+paths:
+  - "**/*_test.go"
+  - "pkg/testutils/**"
+---
+
 # Table-Driven Test Guidelines
 
 Table-driven tests define multiple test cases in a slice of structs, then iterate over them executing the same test logic. This makes it easy to add cases, improves readability, and reduces duplication.

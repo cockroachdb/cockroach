@@ -1,5 +1,7 @@
 ---
-globs: ["**/*.go", "**/*.proto"]
+paths:
+  - "**/*.go"
+  - "**/*.proto"
 ---
 
 # CockroachDB Commenting Standards

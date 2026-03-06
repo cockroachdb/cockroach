@@ -1,3 +1,9 @@
+---
+paths:
+  - "**/*_test.go"
+  - "pkg/testutils/**"
+---
+
 # General Test Guidelines
 
 Common testing advice that applies to all Go tests in CockroachDB, whether unit tests, table-driven tests, or integration tests.

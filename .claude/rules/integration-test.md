@@ -1,3 +1,9 @@
+---
+paths:
+  - "**/*_test.go"
+  - "pkg/testutils/**"
+---
+
 # Integration Test Guidelines
 
 Integration tests use `testserver`, a fully functional CockroachDB server with
