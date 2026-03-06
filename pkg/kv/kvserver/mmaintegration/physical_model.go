@@ -235,6 +235,14 @@ func computePhysicalCPU(desc roachpb.StoreDescriptor) (res physicalDimension) {
 	}
 }
 
+// maxCPUAmplification is the maximum ratio of total CPU caused by
+// store work to the directly-tracked store CPU. For example, a value of 3
+// means we assume each unit of direct MMA load (replica CPU) can cause up to 2
+// additional units of indirect CPU (RPC handling, compactions, etc.), for a
+// total of 3 units. Any node CPU usage beyond storesCPURate * multiplier is
+// treated as background load unrelated to MMA.
+const maxCPUAmplification = 3.0
+
 // minCapacity is the floor for per-store physical capacity in any dimension.
 // This prevents zero-capacity values that could arise during early node startup
 // or on empty stores. It is a last-resort guard against a truly zero value, not
