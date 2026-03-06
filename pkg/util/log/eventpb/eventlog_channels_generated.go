@@ -5,6 +5,9 @@ package eventpb
 import "github.com/cockroachdb/cockroach/pkg/util/log/logpb"
 
 // LoggingChannel implements the EventPayload interface.
+func (m *AshWorkloadSummary) LoggingChannel() logpb.Channel { return logpb.Channel_OPS }
+
+// LoggingChannel implements the EventPayload interface.
 func (m *AlterChangefeed) LoggingChannel() logpb.Channel { return logpb.Channel_CHANGEFEED }
 
 // LoggingChannel implements the EventPayload interface.

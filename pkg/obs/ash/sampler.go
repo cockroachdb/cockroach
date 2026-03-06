@@ -8,6 +8,7 @@ package ash
 import (
 	"context"
 	"encoding/hex"
+	"sort"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -18,6 +19,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/cache"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
+	"github.com/cockroachdb/cockroach/pkg/util/log/logpb"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
@@ -59,6 +62,28 @@ var BufferSize = settings.RegisterIntSetting(
 	settings.PositiveInt,
 )
 
+// LogInterval controls how often the top-N workload summary is
+// logged to the OPS channel. Each summary reports the most
+// frequently sampled (WorkEventType, WorkEvent, WorkloadID)
+// combinations in the ring buffer since the last report.
+var LogInterval = settings.RegisterDurationSetting(
+	settings.SystemVisible,
+	"obs.ash.log_interval",
+	"interval between periodic ASH top-N workload summary logs",
+	10*time.Minute,
+	settings.PositiveDuration,
+)
+
+// LogTopN controls the maximum number of workload entries included
+// in each periodic summary.
+var LogTopN = settings.RegisterIntSetting(
+	settings.SystemVisible,
+	"obs.ash.log_top_n",
+	"maximum number of entries in periodic ASH workload summary",
+	10,
+	settings.PositiveInt,
+)
+
 // AppNameResolverFn fetches app name ID-to-string mappings from a
 // remote node. The sampler calls this when local resolution fails and
 // the work state has a non-zero GatewayNodeID that differs from the
@@ -87,6 +112,13 @@ type pendingSample struct {
 	appName       string
 }
 
+// workloadKey groups samples for the periodic top-N summary.
+type workloadKey struct {
+	WorkEventType WorkEventType
+	WorkEvent     string
+	WorkloadID    string
+}
+
 // Sampler periodically samples the active work states and stores ASH data.
 type Sampler struct {
 	nodeID  roachpb.NodeID
@@ -108,6 +140,8 @@ type Sampler struct {
 	// during rangeWorkStates. Reused across samples to avoid per-sample
 	// slice allocation.
 	pendingSamples []pendingSample
+	// lastLogTime records when the last summary was logged.
+	lastLogTime time.Time
 }
 
 // newSampler creates a new ASH sampler.
@@ -163,6 +197,7 @@ func (s *Sampler) start(ctx context.Context) error {
 	SampleInterval.SetOnChange(&s.st.SV, func(ctx context.Context) {
 		s.interval.Store(int64(SampleInterval.Get(&s.st.SV)))
 	})
+	s.lastLogTime = timeutil.Now()
 
 	log.Ops.Info(ctx, "starting ASH sampler")
 	return s.stopper.RunAsyncTask(ctx, "ash-sampler", func(ctx context.Context) {
@@ -259,6 +294,78 @@ func (s *Sampler) takeSample(ctx context.Context) {
 		s.buffer.Add(sample)
 	}
 	s.metrics.SamplesCollected.Inc(int64(len(s.pendingSamples)))
+
+	s.maybeLogSummary(ctx)
+}
+
+// workloadCount pairs a workload key with its sample count for sorting.
+type workloadCount struct {
+	key   workloadKey
+	count int
+}
+
+// maybeLogSummary emits a top-N workload summary as structured events
+// to the OPS log if enough time has elapsed since the last report.
+// It scans the ring buffer for samples newer than lastLogTime and
+// aggregates them by workload key.
+func (s *Sampler) maybeLogSummary(ctx context.Context) {
+	logInterval := LogInterval.Get(&s.st.SV)
+	if timeutil.Since(s.lastLogTime) < logInterval {
+		return
+	}
+
+	cutoff := s.lastLogTime
+	windowDuration := timeutil.Since(cutoff)
+
+	// Scan the ring buffer newest-to-oldest and count samples since
+	// the last report, stopping as soon as we hit a sample at or
+	// before the cutoff.
+	counts := make(map[workloadKey]int)
+	totalSamples := 0
+	s.buffer.RangeReverse(func(sample ASHSample) bool {
+		if !sample.SampleTime.After(cutoff) {
+			return false
+		}
+		key := workloadKey{
+			WorkEventType: sample.WorkEventType,
+			WorkEvent:     sample.WorkEvent,
+			WorkloadID:    sample.WorkloadID,
+		}
+		counts[key]++
+		totalSamples++
+		return true
+	})
+
+	s.lastLogTime = timeutil.Now()
+
+	if totalSamples == 0 {
+		return
+	}
+
+	// Collect and sort entries by count descending.
+	entries := make([]workloadCount, 0, len(counts))
+	for k, c := range counts {
+		entries = append(entries, workloadCount{key: k, count: c})
+	}
+	sort.Slice(entries, func(i, j int) bool {
+		return entries[i].count > entries[j].count
+	})
+	topN := int(LogTopN.Get(&s.st.SV))
+	if len(entries) > topN {
+		entries = entries[:topN]
+	}
+
+	// Emit one structured event per top-N entry.
+	for _, e := range entries {
+		event := &eventpb.AshWorkloadSummary{
+			WindowDurationNanos: windowDuration.Nanoseconds(),
+			WorkEventType:       e.key.WorkEventType.String(),
+			WorkEvent:           e.key.WorkEvent,
+			WorkloadID:          e.key.WorkloadID,
+			SampleCount:         int64(e.count),
+		}
+		log.StructuredEvent(ctx, logpb.Severity_INFO, event)
+	}
 }
 
 // resolveRemoteAppNames fetches app name mappings from remote gateway
