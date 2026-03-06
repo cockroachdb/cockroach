@@ -129,6 +129,9 @@ func runAnalyzer(pass *analysis.Pass) (interface{}, error) {
 					"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb": {
 						"SnapshotRequest_Type": {},
 					},
+					"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvstorage/wag/wagpb": {
+						"EventType": {},
+					},
 					"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb": {
 						"MembershipStatus": {},
 					},
