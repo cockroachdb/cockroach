@@ -321,7 +321,11 @@ func (ds *ServerImpl) setupFlow(
 			// Update the Txn field early (before f.SetTxn() below) since some
 			// processors capture the field in their constructor (see #41992).
 			localEvalCtx.Txn = leafTxn
-			if localEvalCtx.CatalogBuiltins != nil {
+			if localState.goroutineOwnsPlanner() && localEvalCtx.CatalogBuiltins != nil {
+				// We only update the txn of the CatalogBuiltins on the main
+				// goroutine - for other concurrent goroutines we'll allocate a
+				// new CatalogBuiltins (in newFlowContext) which will be
+				// initialized with the right txn right away.
 				localEvalCtx.CatalogBuiltins.SetTxn(leafTxn)
 			}
 		} else {
@@ -550,8 +554,7 @@ func (ds *ServerImpl) newFlowContext(
 	// main goroutine - in this case we might have multiple goroutines using the
 	// collection concurrently, so we choose to create a fresh one. The parallel
 	// check running on the main goroutine can keep on using the planner's one.
-	reuseCollection := localState.ParallelCheckMainGoroutine || // on main goroutine
-		localState.GetConcurrency()&ConcurrencyParallelChecks == 0 // not a parallel check
+	reuseCollection := localState.goroutineOwnsPlanner()
 	if localState.IsLocal && localState.Collection != nil && reuseCollection {
 		// If we were passed a descs.Collection to use, then take it. In this
 		// case, the caller will handle releasing the used descriptors, so we
@@ -673,6 +676,13 @@ func (l LocalState) GetConcurrency() ConcurrencyKind {
 // this method only after IsLocal and all concurrency kinds have been set.
 func (l LocalState) MustUseLeafTxn() bool {
 	return !l.IsLocal || l.concurrency != 0
+}
+
+// goroutineOwnsPlanner returns true when called from the main connExecutor
+// goroutine that owns the planner (and, thus, can modify it at will).
+func (l LocalState) goroutineOwnsPlanner() bool {
+	return l.ParallelCheckMainGoroutine || // on main goroutine
+		l.GetConcurrency()&ConcurrencyParallelChecks == 0 // not a parallel check
 }
 
 // SetupLocalSyncFlow sets up a synchronous flow on the current (planning) node,
