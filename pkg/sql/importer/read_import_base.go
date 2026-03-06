@@ -123,11 +123,12 @@ func runImport(
 	// at the end is one row containing an encoded BulkOpSummary.
 	var summary *kvpb.BulkOpSummary
 	group.GoCtx(func(ctx context.Context) error {
-		summary, err = ingestKvs(ctx, flowCtx, spec, processorID, table.Desc.Name, progCh, kvCh)
-		return err
+		var ingestErr error
+		summary, ingestErr = ingestKvs(ctx, flowCtx, spec, processorID, table.Desc.Name, progCh, kvCh)
+		return ingestErr
 	})
 
-	if err = group.Wait(); err != nil {
+	if err := group.Wait(); err != nil {
 		return nil, err
 	}
 
