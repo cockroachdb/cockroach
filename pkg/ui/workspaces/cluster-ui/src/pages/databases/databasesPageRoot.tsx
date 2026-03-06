@@ -8,7 +8,7 @@ import React, { useContext, useMemo } from "react";
 import { Redirect } from "react-router";
 import { Link } from "react-router-dom";
 
-import { useNodeStatuses } from "src/api";
+import { useNodes } from "src/api";
 import { useClusterSettings } from "src/api/clusterSettingsApi";
 import {
   DatabaseMetadataRequest,
@@ -152,7 +152,7 @@ export const DatabasesPageV2 = () => {
   const { data, error, isLoading, refreshDatabases } = useDatabaseMetadata(
     createDatabaseMetadataRequestFromParams(params),
   );
-  const nodesResp = useNodeStatuses();
+  const nodesResp = useNodes();
   const { settingValues, isLoading: settingsLoading } = useClusterSettings({
     names: [AUTO_STATS_ENABLED_CS],
   });

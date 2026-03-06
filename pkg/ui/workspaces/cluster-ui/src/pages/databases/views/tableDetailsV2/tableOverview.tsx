@@ -6,7 +6,7 @@
 import { Col, Row } from "antd";
 import React, { useContext } from "react";
 
-import { useNodeStatuses } from "src/api";
+import { useNodes } from "src/api";
 import { TableDetails } from "src/api/databases/getTableMetadataApi";
 import { LiveDataPercent } from "src/components/liveDataPercent/liveDataPercent";
 import { TableMetadataLastUpdatedTooltip } from "src/components/tooltipMessages/tableMetadataLastUpdatedTooltip";
@@ -33,7 +33,7 @@ export const TableOverview: React.FC<TableOverviewProps> = ({
     nodeStatusByID,
     storeIDToNodeID,
     isLoading: nodesLoading,
-  } = useNodeStatuses();
+  } = useNodes();
 
   const regionsToNodes = mapStoreIDsToNodeRegions(
     tableDetails.metadata.storeIds,

@@ -7,7 +7,7 @@ import { Divider, Select } from "antd";
 import classNames from "classnames";
 import React, { useEffect, useMemo, useState } from "react";
 
-import { useNodeStatuses } from "src/api";
+import { useNodes } from "src/api";
 import { NodeStatus } from "src/api/nodesApi";
 import { Button } from "src/button";
 import { applyBtn } from "src/queryFilter/filterClasses";
@@ -34,7 +34,7 @@ export const NodeSelector: React.FC<NodeSelectorProps> = ({
   allWarning,
 }) => {
   const [dropdownOpen, setDropdownOpen] = useState(false);
-  const { nodeStatusByID } = useNodeStatuses();
+  const { nodeStatusByID } = useNodes();
 
   // A note on the difference between selectedNodes and appliedNodes.
   // This component has two sets of nodes which can be thought of as

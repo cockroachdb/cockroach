@@ -7,7 +7,7 @@ import { Row } from "antd";
 import React, { useContext, useMemo } from "react";
 import { Link } from "react-router-dom";
 
-import { useNodeStatuses } from "src/api";
+import { useNodes } from "src/api";
 import {
   ListTableMetadataRequest,
   TableSortOption,
@@ -234,7 +234,7 @@ export const TablesPageV2 = () => {
   const { data, error, isLoading, refreshTables } = useTableMetadata(
     createTableMetadataRequestFromParams(dbID, params),
   );
-  const nodesResp = useNodeStatuses();
+  const nodesResp = useNodes();
 
   const tableList = data?.results;
   const tableData = useMemo(
