@@ -125,9 +125,9 @@ type metricsEtc struct {
 
 // These constants are semi-arbitrary.
 
-// Don't start moving ranges from a cpu overloaded remote store, to give it
-// some time to shed its leases.
-const remoteStoreLeaseSheddingGraceDuration = 2 * time.Minute
+// Grace period before remote stores intervene with replica moves on an
+// overloaded store, giving it time to shed its own leases.
+const leaseSheddingGraceDuration = 2 * time.Minute
 const overloadGracePeriod = time.Minute
 
 func (a *allocatorState) InitMetricsForLocalStore(
