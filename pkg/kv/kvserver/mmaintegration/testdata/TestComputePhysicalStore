@@ -130,7 +130,7 @@ write-bandwidth: load=9.54 MiB/s  capacity=unknown  amp=1.0000
 amplification-factors: [cpu=1.5000, disk=2.0000, write-bw=1.0000]
 
 # -------------------------------------------------------------------
-# Per-store CPUPerSecond with immovable CPU: 4 stores, 4 cores total store
+# Per-store CPUPerSecond, ampFactor unclamped: 4 stores, 4 cores total store
 # CPU, 10 cores node usage, 16 cap. ampFactor = min(10/4, 3) = 2.5.
 # mmaLoad = 4*2.5 = 10 = nodeUsage, immovable=0.
 # This hot store reports 3 of the 4 store cores.
