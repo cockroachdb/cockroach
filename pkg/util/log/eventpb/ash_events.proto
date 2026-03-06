@@ -1,0 +1,41 @@
+// Copyright 2026 The Cockroach Authors.
+//
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
+
+syntax = "proto3";
+package cockroach.util.log.eventpb;
+option go_package = "github.com/cockroachdb/cockroach/pkg/util/log/eventpb";
+
+import "gogoproto/gogo.proto";
+import "util/log/logpb/event.proto";
+
+// Category: ASH events
+// Channel: OPS
+//
+// Events in this category pertain to Active Session History (ASH)
+// sampling diagnostics.
+
+// Notes to CockroachDB maintainers: refer to doc.go at the package
+// level for more details. Beware that JSON compatibility rules apply
+// here, not protobuf.
+// *Really look at doc.go before modifying this file.*
+
+// AshWorkloadSummary is emitted periodically with a top-N summary of
+// the most frequently sampled workloads in the Active Session History
+// (ASH) buffer. One event is emitted per top-N entry.
+//
+// Reserved and subject to change without notice.
+message AshWorkloadSummary {
+  CommonEventDetails common = 1 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
+  // The duration of the reporting window in nanoseconds.
+  int64 window_duration_nanos = 2 [(gogoproto.jsontag) = ",omitempty"];
+  // The work event type (e.g. CPU, IO, LOCK).
+  string work_event_type = 3 [(gogoproto.jsontag) = ",omitempty", (gogoproto.moretags) = "redact:\"nonsensitive\""];
+  // The specific event name within the event type.
+  string work_event = 4 [(gogoproto.jsontag) = ",omitempty", (gogoproto.moretags) = "redact:\"nonsensitive\""];
+  // The workload identifier (ex/ statement fingerprint).
+  string workload_id = 5 [(gogoproto.customname) = "WorkloadID", (gogoproto.jsontag) = ",omitempty", (gogoproto.moretags) = "redact:\"nonsensitive\""];
+  // The number of samples for this workload entry in the reporting window.
+  int64 sample_count = 6 [(gogoproto.jsontag) = ",omitempty"];
+}

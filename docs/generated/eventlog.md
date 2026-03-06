@@ -21,6 +21,39 @@ provided the `redactable` functionality is enabled on the logging sink.
 
 Events not documented on this page will have an unstructured format in log messages.
 
+## ASH events
+
+Events in this category pertain to Active Session History (ASH)
+sampling diagnostics.
+
+Events in this category are logged to the `OPS` channel.
+
+
+### `ash_workload_summary`
+
+An event of type `ash_workload_summary` is emitted periodically with a top-N summary of
+the most frequently sampled workloads in the Active Session History
+(ASH) buffer. One event is emitted per top-N entry.
+
+Reserved and subject to change without notice.
+
+
+| Field | Description | Sensitive |
+|--|--|--|
+| `WindowDurationNanos` | The duration of the reporting window in nanoseconds. | no |
+| `WorkEventType` | The work event type (e.g. CPU, IO, LOCK). | no |
+| `WorkEvent` | The specific event name within the event type. | no |
+| `WorkloadID` | The workload identifier (ex/ statement fingerprint). | no |
+| `SampleCount` | The number of samples for this workload entry in the reporting window. | no |
+
+
+#### Common fields
+
+| Field | Description | Sensitive |
+|--|--|--|
+| `Timestamp` | The timestamp of the event. Expressed as nanoseconds since the Unix epoch. | no |
+| `EventType` | The type of the event. | no |
+
 ## Changefeed telemetry events
 
 Events in this category pertain to changefeed usage and metrics.
