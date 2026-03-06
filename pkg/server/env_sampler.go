@@ -92,6 +92,7 @@ func startSampleEnvironment(
 	var statsProfiler *profiler.StatsProfiler
 	var queryProfiler *profiler.ActiveQueryProfiler
 	var cpuProfiler *profiler.CPUProfiler
+	var ashReportProfiler *profiler.ASHReportProfiler
 	if cfg.heapProfileDirName != "" {
 		hasValidDumpDir := true
 		if err := os.MkdirAll(cfg.heapProfileDirName, 0755); err != nil {
@@ -130,6 +131,10 @@ func startSampleEnvironment(
 			if err != nil {
 				log.Dev.Warningf(ctx, "failed to start cpu profiler worker: %v", err)
 			}
+			ashReportProfiler, err = profiler.NewASHReportProfiler(ctx, cfg.heapProfileDirName, cfg.st)
+			if err != nil {
+				log.Dev.Warningf(ctx, "failed to start ASH report profiler: %v", err)
+			}
 		}
 	}
 
@@ -166,7 +171,11 @@ func startSampleEnvironment(
 					}
 
 					if goroutineDumper != nil {
-						goroutineDumper.MaybeDump(ctx, cfg.st, cfg.runtime.Goroutines.Value())
+						if goroutineDumper.MaybeDump(ctx, cfg.st, cfg.runtime.Goroutines.Value()) {
+							if ashReportProfiler != nil {
+								ashReportProfiler.WriteReport(ctx, profiler.TriggerGoroutineDump)
+							}
+						}
 					}
 					if heapProfiler != nil {
 						heapProfiler.MaybeTakeProfile(ctx, cfg.runtime.GoAllocBytes.Value())
@@ -178,7 +187,11 @@ func startSampleEnvironment(
 						queryProfiler.MaybeDumpQueries(ctx, cfg.sessionRegistry, cfg.st)
 					}
 					if cpuProfiler != nil {
-						cpuProfiler.MaybeTakeProfile(ctx, int64(cfg.runtime.CPUCombinedPercentNorm.Value()*100))
+						if cpuProfiler.MaybeTakeProfile(ctx, int64(cfg.runtime.CPUCombinedPercentNorm.Value()*100)) {
+							if ashReportProfiler != nil {
+								ashReportProfiler.WriteReport(ctx, profiler.TriggerCPUProfile)
+							}
+						}
 					}
 				}
 			}

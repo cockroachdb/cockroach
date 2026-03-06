@@ -7,101 +7,117 @@ package ash
 
 import (
 	"bytes"
-	"encoding/json"
+	"fmt"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
 
-	"github.com/stretchr/testify/require"
+	"github.com/cockroachdb/datadriven"
 )
 
-func TestWriteTextReport(t *testing.T) {
-	generated := time.Date(2026, 3, 5, 12, 34, 56, 789000000, time.UTC)
-	lookback := 60 * time.Second
+func TestReport(t *testing.T) {
+	datadriven.RunTest(t, "testdata/report", func(t *testing.T, d *datadriven.TestData) string {
+		generated, lookback := parseReportArgs(t, d)
+		entries := parseEntries(t, d.Input)
 
-	t.Run("with entries", func(t *testing.T) {
-		entries := []AggregatedASH{
-			{WorkEventType: WorkCPU, WorkEvent: "ReplicaSend", WorkloadID: "00000000000002a", Count: 523},
-			{WorkEventType: WorkLock, WorkEvent: "LockWait", WorkloadID: "000000000000001a", Count: 312},
-			{WorkEventType: WorkIO, WorkEvent: "StorageEval", WorkloadID: "0000000000000003", Count: 201},
+		var buf bytes.Buffer
+		var err error
+		switch d.Cmd {
+		case "text-report":
+			err = WriteTextReport(&buf, entries, generated, lookback)
+		case "json-report":
+			err = WriteJSONReport(&buf, entries, generated, lookback)
+		default:
+			return fmt.Sprintf("unknown command: %s", d.Cmd)
 		}
 
-		var buf bytes.Buffer
-		err := WriteTextReport(&buf, entries, generated, lookback)
-		require.NoError(t, err)
+		if err != nil {
+			return fmt.Sprintf("error: %v", err)
+		}
 
-		output := buf.String()
-		require.Contains(t, output, "ASH Aggregated Report")
-		require.Contains(t, output, "Generated: 2026-03-05T12:34:56.789Z")
-		require.Contains(t, output, "Lookback:  1m0s")
-		require.Contains(t, output, "Samples:   1036")
-		require.Contains(t, output, "COUNT")
-		require.Contains(t, output, "WORK_EVENT_TYPE")
-		require.Contains(t, output, "523")
-		require.Contains(t, output, "ReplicaSend")
-		require.Contains(t, output, "312")
-		require.Contains(t, output, "LockWait")
-		require.Contains(t, output, "201")
-		require.Contains(t, output, "StorageEval")
-	})
-
-	t.Run("empty entries", func(t *testing.T) {
-		var buf bytes.Buffer
-		err := WriteTextReport(&buf, nil, generated, lookback)
-		require.NoError(t, err)
-
-		output := buf.String()
-		require.Contains(t, output, "ASH Aggregated Report")
-		require.Contains(t, output, "Samples:   0")
-		require.Contains(t, output, "No samples in window.")
+		// Replace blank lines with "." for datadriven compatibility.
+		lines := strings.Split(strings.TrimRight(buf.String(), "\n"), "\n")
+		for i, line := range lines {
+			if line == "" {
+				lines[i] = "."
+			}
+		}
+		return strings.Join(lines, "\n")
 	})
 }
 
-func TestWriteJSONReport(t *testing.T) {
-	generated := time.Date(2026, 3, 5, 12, 34, 56, 789000000, time.UTC)
-	lookback := 60 * time.Second
-
-	t.Run("with entries", func(t *testing.T) {
-		entries := []AggregatedASH{
-			{WorkEventType: WorkCPU, WorkEvent: "ReplicaSend", WorkloadID: "aaa", Count: 100},
-			{WorkEventType: WorkIO, WorkEvent: "StorageEval", WorkloadID: "bbb", Count: 50},
+func parseReportArgs(t *testing.T, d *datadriven.TestData) (time.Time, time.Duration) {
+	t.Helper()
+	var generated time.Time
+	var lookback time.Duration
+	for _, arg := range d.CmdArgs {
+		switch arg.Key {
+		case "generated":
+			var err error
+			generated, err = time.Parse(time.RFC3339Nano, arg.Vals[0])
+			if err != nil {
+				t.Fatalf("parsing generated: %v", err)
+			}
+		case "lookback":
+			var err error
+			lookback, err = time.ParseDuration(arg.Vals[0])
+			if err != nil {
+				t.Fatalf("parsing lookback: %v", err)
+			}
 		}
+	}
+	return generated, lookback
+}
 
-		var buf bytes.Buffer
-		err := WriteJSONReport(&buf, entries, generated, lookback)
-		require.NoError(t, err)
+func parseEntries(t *testing.T, input string) []AggregatedASH {
+	t.Helper()
+	if strings.TrimSpace(input) == "" {
+		return nil
+	}
+	var entries []AggregatedASH
+	for _, line := range strings.Split(input, "\n") {
+		line = strings.TrimSpace(line)
+		if line == "" || strings.HasPrefix(line, "#") {
+			continue
+		}
+		fields := strings.Fields(line)
+		if len(fields) != 4 {
+			t.Fatalf("expected 4 fields (TYPE EVENT WORKLOAD_ID COUNT), got %d: %q", len(fields), line)
+		}
+		count, err := strconv.ParseInt(fields[3], 10, 64)
+		if err != nil {
+			t.Fatalf("parsing count %q: %v", fields[3], err)
+		}
+		entries = append(entries, AggregatedASH{
+			WorkEventType: parseWorkEventType(t, fields[0]),
+			WorkEvent:     fields[1],
+			WorkloadID:    fields[2],
+			Count:         count,
+		})
+	}
+	return entries
+}
 
-		// Verify it's valid JSON.
-		var report jsonReport
-		err = json.NewDecoder(strings.NewReader(buf.String())).Decode(&report)
-		require.NoError(t, err)
-
-		require.Equal(t, "2026-03-05T12:34:56.789Z", report.Generated)
-		require.Equal(t, float64(60), report.LookbackSecs)
-		require.Equal(t, int64(150), report.TotalSamples)
-		require.Len(t, report.Groups, 2)
-
-		require.Equal(t, "CPU", report.Groups[0].WorkEventType)
-		require.Equal(t, "ReplicaSend", report.Groups[0].WorkEvent)
-		require.Equal(t, "aaa", report.Groups[0].WorkloadID)
-		require.Equal(t, int64(100), report.Groups[0].Count)
-
-		require.Equal(t, "IO", report.Groups[1].WorkEventType)
-		require.Equal(t, "StorageEval", report.Groups[1].WorkEvent)
-		require.Equal(t, "bbb", report.Groups[1].WorkloadID)
-		require.Equal(t, int64(50), report.Groups[1].Count)
-	})
-
-	t.Run("empty entries", func(t *testing.T) {
-		var buf bytes.Buffer
-		err := WriteJSONReport(&buf, nil, generated, lookback)
-		require.NoError(t, err)
-
-		var report jsonReport
-		err = json.NewDecoder(strings.NewReader(buf.String())).Decode(&report)
-		require.NoError(t, err)
-
-		require.Equal(t, int64(0), report.TotalSamples)
-		require.Empty(t, report.Groups)
-	})
+func parseWorkEventType(t *testing.T, s string) WorkEventType {
+	t.Helper()
+	switch s {
+	case "CPU":
+		return WorkCPU
+	case "ADMISSION":
+		return WorkAdmission
+	case "IO":
+		return WorkIO
+	case "NETWORK":
+		return WorkNetwork
+	case "LOCK":
+		return WorkLock
+	case "OTHER":
+		return WorkOther
+	case "UNKNOWN":
+		return WorkUnknown
+	default:
+		t.Fatalf("unknown WorkEventType: %s", s)
+		return WorkUnknown
+	}
 }

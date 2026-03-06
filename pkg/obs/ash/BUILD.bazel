@@ -46,6 +46,7 @@ go_test(
         "sampler_test.go",
         "work_state_test.go",
     ],
+    data = glob(["testdata/**"]),
     embed = [":ash"],
     deps = [
         "//pkg/roachpb",
@@ -56,6 +57,7 @@ go_test(
         "//pkg/util/log/logtestutils",
         "//pkg/util/stop",
         "//pkg/util/timeutil",
+        "@com_github_cockroachdb_datadriven//:datadriven",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_petermattis_goid//:goid",
         "@com_github_stretchr_testify//require",
