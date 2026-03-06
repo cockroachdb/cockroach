@@ -1069,7 +1069,6 @@ func (og *operationGenerator) createIndex(ctx context.Context, tx pgx.Tx) (*opSt
 	// If there are extra columns not used in the index, randomly use them
 	// as stored columns.
 	stmt := makeOpStmt(OpStmtDDL)
-	duplicateStore := false
 	isStoringVirtualComputed := false
 	regionColStored := false
 	columnNames = columnNames[len(def.Columns):]
@@ -1091,18 +1090,6 @@ func (og *operationGenerator) createIndex(ctx context.Context, tx pgx.Tx) (*opSt
 				}
 				if isVirtualComputed {
 					isStoringVirtualComputed = true
-				}
-			}
-
-			// If the column is already used in the primary key, then attempting to store
-			// it using an index will produce a pgcode.DuplicateColumn error.
-			if !duplicateStore {
-				colUsedInPrimaryIdx, err := og.colIsPrimaryKey(ctx, tx, tableName, columnNames[i].name)
-				if err != nil {
-					return nil, err
-				}
-				if colUsedInPrimaryIdx {
-					duplicateStore = true
 				}
 			}
 		}
@@ -1151,7 +1138,6 @@ func (og *operationGenerator) createIndex(ctx context.Context, tx pgx.Tx) (*opSt
 			// Inverted indexes cannot be unique.
 			{code: pgcode.InvalidSQLStatementName, condition: def.Unique && def.Type == idxtype.INVERTED},
 			{code: pgcode.InvalidSQLStatementName, condition: def.Type == idxtype.INVERTED && len(def.Storing) > 0},
-			{code: pgcode.DuplicateColumn, condition: duplicateStore},
 			{code: pgcode.FeatureNotSupported, condition: nonIndexableType},
 			{code: pgcode.FeatureNotSupported, condition: regionColStored},
 			{code: pgcode.FeatureNotSupported, condition: duplicateRegionColumn},
