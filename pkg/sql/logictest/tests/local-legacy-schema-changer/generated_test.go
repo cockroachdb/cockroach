@@ -153,6 +153,13 @@ func TestLogic_alter_primary_key(
 	runLogicTest(t, "alter_primary_key")
 }
 
+func TestLogic_alter_primary_key_regressions(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "alter_primary_key_regressions")
+}
+
 func TestLogic_alter_role(
 	t *testing.T,
 ) {
