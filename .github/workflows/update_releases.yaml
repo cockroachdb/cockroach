@@ -48,7 +48,7 @@ jobs:
           $(bazel info bazel-bin)/pkg/cmd/release/release_/release update-releases-file
           git diff
       - name: Update pkg/testutils/release/cockroach_releases.yaml on ${{ matrix.branch }}
-        uses: peter-evans/create-pull-request@v5
+        uses: peter-evans/create-pull-request@4e1beaa7521e8b457b572c090b25bd3db56bf1c5 # v5
         with:
           base: "${{ matrix.branch }}"
           branch: "crdb-releases-yaml-update-${{ matrix.branch }}"
