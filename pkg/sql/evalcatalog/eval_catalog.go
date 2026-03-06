@@ -54,3 +54,8 @@ func (ec *Builtins) Init(
 	ec.dc = descriptors
 	ec.authzAccessor = authzAccessor
 }
+
+// SetTxn updates the kv.Txn used by the Builtins.
+func (ec *Builtins) SetTxn(txn *kv.Txn) {
+	ec.txn = txn
+}
