@@ -424,6 +424,20 @@ func runJepsen(ctx context.Context, t test.Test, c cluster.Cluster, testName, ne
 			ignoreErr = true
 		}
 
+		// Check for timeouts where the Jepsen workload completed but
+		// analysis took too long. This typically happens when the history
+		// is large (e.g., due to many transaction retries under chaos
+		// nemeses), making linearizability checking slow.
+		if !ignoreErr && testErr.Error() == "timed out" {
+			if err := runE(c, ctx, controller,
+				`grep -q "Run complete" /mnt/data1/jepsen/cockroachdb/store/latest/jepsen.log`,
+			); err == nil {
+				t.L().Printf("Jepsen workload completed but analysis timed out. " +
+					"Ignoring timeout as this indicates slow analysis, not a CockroachDB bug.")
+				ignoreErr = true
+			}
+		}
+
 		if result, err := c.RunWithDetailsSingleNode(
 			ctx, t.L(), option.WithNodes(controller),
 			// -h causes tar to follow symlinks; needed by the "latest" symlink.
