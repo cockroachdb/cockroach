@@ -283,6 +283,78 @@ func TestRingBufferResizeInvalid(t *testing.T) {
 	require.Equal(t, 1, rb.Len())
 }
 
+func TestRingBufferRangeReverse(t *testing.T) {
+	t.Run("empty buffer", func(t *testing.T) {
+		rb := NewRingBuffer(5)
+		var visited []int64
+		rb.RangeReverse(func(s ASHSample) bool {
+			visited = append(visited, s.GoroutineID)
+			return true
+		})
+		require.Empty(t, visited)
+	})
+
+	t.Run("partial fill", func(t *testing.T) {
+		rb := NewRingBuffer(5)
+		for i := 1; i <= 3; i++ {
+			rb.Add(makeSample(i))
+		}
+		var visited []int64
+		rb.RangeReverse(func(s ASHSample) bool {
+			visited = append(visited, s.GoroutineID)
+			return true
+		})
+		// Newest to oldest.
+		require.Equal(t, []int64{3, 2, 1}, visited)
+	})
+
+	t.Run("full buffer with wraparound", func(t *testing.T) {
+		rb := NewRingBuffer(3)
+		for i := 1; i <= 5; i++ {
+			rb.Add(makeSample(i))
+		}
+		var visited []int64
+		rb.RangeReverse(func(s ASHSample) bool {
+			visited = append(visited, s.GoroutineID)
+			return true
+		})
+		// Newest to oldest: 5, 4, 3.
+		require.Equal(t, []int64{5, 4, 3}, visited)
+	})
+
+	t.Run("early termination", func(t *testing.T) {
+		rb := NewRingBuffer(5)
+		for i := 1; i <= 5; i++ {
+			rb.Add(makeSample(i))
+		}
+		var visited []int64
+		rb.RangeReverse(func(s ASHSample) bool {
+			visited = append(visited, s.GoroutineID)
+			return len(visited) < 2
+		})
+		// Stops after 2 newest samples.
+		require.Equal(t, []int64{5, 4}, visited)
+	})
+
+	t.Run("reverse of GetAll order", func(t *testing.T) {
+		rb := NewRingBuffer(4)
+		for i := 1; i <= 7; i++ {
+			rb.Add(makeSample(i))
+		}
+		var reverseIDs []int64
+		rb.RangeReverse(func(s ASHSample) bool {
+			reverseIDs = append(reverseIDs, s.GoroutineID)
+			return true
+		})
+		getAllIDs := sampleIDs(rb.GetAll(nil))
+		// RangeReverse should produce the reverse of GetAll.
+		for i, j := 0, len(getAllIDs)-1; i < j; i, j = i+1, j-1 {
+			getAllIDs[i], getAllIDs[j] = getAllIDs[j], getAllIDs[i]
+		}
+		require.Equal(t, getAllIDs, reverseIDs)
+	})
+}
+
 // makeRange returns a slice of ints from start to end inclusive.
 func makeRange(start, end int) []int {
 	r := make([]int, 0, end-start+1)
