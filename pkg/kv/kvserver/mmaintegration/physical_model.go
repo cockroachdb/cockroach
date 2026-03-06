@@ -417,8 +417,10 @@ func assertCPULoadInvariant(
 		return
 	}
 
-	const floatEps = 1e-6
-	approxEq := func(a, b float64) bool { return math.Abs(a-b) <= floatEps }
+	const floatEps = 1e-9
+	approxEq := func(a, b float64) bool {
+		return math.Abs(a-b) <= floatEps*max(1, math.Abs(a), math.Abs(b))
+	}
 	moveable := storesCPU * ampFactor
 	sumLoad := moveable + immovable
 	ctx := context.Background()
