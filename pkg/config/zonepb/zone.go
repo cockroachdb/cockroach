@@ -845,6 +845,38 @@ func (z *ZoneConfig) DiffWithZone(
 					}
 				}
 			}
+			if len(z.Constraints) != len(other.Constraints) {
+				expected, err := json.Marshal(other.Constraints)
+				if err != nil {
+					return false, DiffWithZoneMismatch{}, err
+				}
+				actual, err := json.Marshal(z.Constraints)
+				if err != nil {
+					return false, DiffWithZoneMismatch{}, err
+				}
+				return false, DiffWithZoneMismatch{
+					Field:    "constraints",
+					Expected: string(expected),
+					Actual:   string(actual),
+				}, nil
+			}
+			for i := range z.Constraints {
+				if len(z.Constraints[i].Constraints) != len(other.Constraints[i].Constraints) {
+					expected, err := json.Marshal(other.Constraints)
+					if err != nil {
+						return false, DiffWithZoneMismatch{}, err
+					}
+					actual, err := json.Marshal(z.Constraints)
+					if err != nil {
+						return false, DiffWithZoneMismatch{}, err
+					}
+					return false, DiffWithZoneMismatch{
+						Field:    "constraints",
+						Expected: string(expected),
+						Actual:   string(actual),
+					}, nil
+				}
+			}
 		case "voter_constraints":
 			if other.VoterConstraints == nil && z.VoterConstraints == nil {
 				continue
@@ -887,6 +919,38 @@ func (z *ZoneConfig) DiffWithZone(
 					}
 				}
 			}
+			if len(z.VoterConstraints) != len(other.VoterConstraints) {
+				expected, err := json.Marshal(other.VoterConstraints)
+				if err != nil {
+					return false, DiffWithZoneMismatch{}, err
+				}
+				actual, err := json.Marshal(z.VoterConstraints)
+				if err != nil {
+					return false, DiffWithZoneMismatch{}, err
+				}
+				return false, DiffWithZoneMismatch{
+					Field:    "voter_constraints",
+					Expected: string(expected),
+					Actual:   string(actual),
+				}, nil
+			}
+			for i := range z.VoterConstraints {
+				if len(z.VoterConstraints[i].Constraints) != len(other.VoterConstraints[i].Constraints) {
+					expected, err := json.Marshal(other.VoterConstraints)
+					if err != nil {
+						return false, DiffWithZoneMismatch{}, err
+					}
+					actual, err := json.Marshal(z.VoterConstraints)
+					if err != nil {
+						return false, DiffWithZoneMismatch{}, err
+					}
+					return false, DiffWithZoneMismatch{
+						Field:    "voter_constraints",
+						Expected: string(expected),
+						Actual:   string(actual),
+					}, nil
+				}
+			}
 		case "lease_preferences":
 			if other.LeasePreferences == nil && z.LeasePreferences == nil {
 				continue
@@ -927,6 +991,38 @@ func (z *ZoneConfig) DiffWithZone(
 							Actual:   string(actual),
 						}, nil
 					}
+				}
+			}
+			if len(z.LeasePreferences) != len(other.LeasePreferences) {
+				expected, err := json.Marshal(other.LeasePreferences)
+				if err != nil {
+					return false, DiffWithZoneMismatch{}, err
+				}
+				actual, err := json.Marshal(z.LeasePreferences)
+				if err != nil {
+					return false, DiffWithZoneMismatch{}, err
+				}
+				return false, DiffWithZoneMismatch{
+					Field:    "lease_preferences",
+					Expected: string(expected),
+					Actual:   string(actual),
+				}, nil
+			}
+			for i := range z.LeasePreferences {
+				if len(z.LeasePreferences[i].Constraints) != len(other.LeasePreferences[i].Constraints) {
+					expected, err := json.Marshal(other.LeasePreferences)
+					if err != nil {
+						return false, DiffWithZoneMismatch{}, err
+					}
+					actual, err := json.Marshal(z.LeasePreferences)
+					if err != nil {
+						return false, DiffWithZoneMismatch{}, err
+					}
+					return false, DiffWithZoneMismatch{
+						Field:    "lease_preferences",
+						Expected: string(expected),
+						Actual:   string(actual),
+					}, nil
 				}
 			}
 		default:
