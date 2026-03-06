@@ -3,13 +3,14 @@
 // Use of this software is governed by the CockroachDB Software License
 // included in the /LICENSE file.
 
-package externalconn_test
+package cloudprivilege_test
 
 import (
 	"os"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	_ "github.com/cockroachdb/cockroach/pkg/cloud/impl"
 	"github.com/cockroachdb/cockroach/pkg/security/securityassets"
 	"github.com/cockroachdb/cockroach/pkg/security/securitytest"
 	"github.com/cockroachdb/cockroach/pkg/server"
@@ -27,4 +28,4 @@ func TestMain(m *testing.M) {
 	os.Exit(m.Run())
 }
 
-//go:generate ../../../util/leaktest/add-leaktest.sh *_test.go
+//go:generate ../../util/leaktest/add-leaktest.sh *_test.go

@@ -128,6 +128,7 @@ func TestEncryptDecryptGCS(t *testing.T) {
 }
 
 func TestKMSAssumeRoleGCP(t *testing.T) {
+	defer leaktest.AfterTest(t)()
 	envVars := []string{
 		"GOOGLE_CREDENTIALS_JSON",
 		"GOOGLE_APPLICATION_CREDENTIALS",
@@ -229,6 +230,7 @@ func TestGCSKMSDisallowImplicitCredentials(t *testing.T) {
 }
 
 func TestGCPKMSInaccessibleError(t *testing.T) {
+	defer leaktest.AfterTest(t)()
 	envVars := []string{
 		"GOOGLE_CREDENTIALS_JSON",
 		"GOOGLE_APPLICATION_CREDENTIALS",

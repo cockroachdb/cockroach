@@ -7,18 +7,12 @@ package azure
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"net/url"
-	"os"
 	"testing"
 
-	az "github.com/Azure/go-autorest/autorest/azure"
 	"github.com/cockroachdb/cockroach/pkg/base"
-	_ "github.com/cockroachdb/cockroach/pkg/ccl"
-	"github.com/cockroachdb/cockroach/pkg/cloud/azure"
 	"github.com/cockroachdb/cockroach/pkg/cloud/cloudtestutils"
-	_ "github.com/cockroachdb/cockroach/pkg/cloud/externalconn/providers" // import External Connection providers.
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
@@ -27,32 +21,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
-func (a azureConfig) URI(file string, testID uint64) string {
+func (a *azureConfig) ecURI(file string, testID uint64) string {
 	return fmt.Sprintf("azure-storage://%s/%s-%d?%s=%s&%s=%s&%s=%s",
 		a.bucket, file, testID,
-		azure.AzureAccountKeyParam, url.QueryEscape(a.key),
-		azure.AzureAccountNameParam, url.QueryEscape(a.account),
-		azure.AzureEnvironmentKeyParam, url.QueryEscape(a.environment))
-}
-
-type azureConfig struct {
-	account, key, bucket, environment string
-}
-
-func getAzureConfig() (azureConfig, error) {
-	cfg := azureConfig{
-		account:     os.Getenv("AZURE_ACCOUNT_NAME"),
-		key:         os.Getenv("AZURE_ACCOUNT_KEY"),
-		bucket:      os.Getenv("AZURE_CONTAINER"),
-		environment: az.PublicCloud.Name,
-	}
-	if cfg.account == "" || cfg.key == "" || cfg.bucket == "" {
-		return azureConfig{}, errors.New("AZURE_ACCOUNT_NAME, AZURE_ACCOUNT_KEY, AZURE_CONTAINER must all be set")
-	}
-	if v, ok := os.LookupEnv(azure.AzureEnvironmentKeyParam); ok {
-		cfg.environment = v
-	}
-	return cfg, nil
+		AzureAccountKeyParam, url.QueryEscape(a.key),
+		AzureAccountNameParam, url.QueryEscape(a.account),
+		AzureEnvironmentKeyParam, url.QueryEscape(a.environment))
 }
 
 func TestExternalConnections(t *testing.T) {
@@ -95,6 +69,6 @@ func TestExternalConnections(t *testing.T) {
 
 	testID := cloudtestutils.NewTestID()
 	ecName := "azure-ec"
-	createExternalConnection(ecName, cfg.URI("backup-ec", testID))
+	createExternalConnection(ecName, cfg.ecURI("backup-ec", testID))
 	backupAndRestoreFromExternalConnection(ecName)
 }

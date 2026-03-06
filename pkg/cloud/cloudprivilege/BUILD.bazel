@@ -1,36 +1,30 @@
 load("@io_bazel_rules_go//go:def.bzl", "go_test")
 
 go_test(
-    name = "externalconn_test",
+    name = "cloudprivilege_test",
     srcs = [
-        "datadriven_test.go",
         "main_test.go",
+        "privileges_test.go",
     ],
-    data = glob(["testdata/**"]),
     exec_properties = {
         "dockerNetwork": "standard",
-    },
+    },  # keep
     deps = [
         "//pkg/backup",
         "//pkg/base",
-        "//pkg/ccl/changefeedccl",
-        "//pkg/cloud/externalconn",
-        "//pkg/cloud/externalconn/providers",
-        "//pkg/cloud/externalconn/testutils",
-        "//pkg/jobs",
-        "//pkg/roachpb",
+        "//pkg/cloud",
+        "//pkg/cloud/impl:cloudimpl",
         "//pkg/security/securityassets",
         "//pkg/security/securitytest",
+        "//pkg/security/username",
         "//pkg/server",
         "//pkg/testutils",
-        "//pkg/testutils/datapathutils",
         "//pkg/testutils/serverutils",
         "//pkg/testutils/sqlutils",
         "//pkg/testutils/testcluster",
         "//pkg/util/leaktest",
         "//pkg/util/log",
         "//pkg/util/randutil",
-        "@com_github_cockroachdb_datadriven//:datadriven",
         "@com_github_stretchr_testify//require",
     ],
 )

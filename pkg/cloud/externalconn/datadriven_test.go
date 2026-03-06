@@ -63,6 +63,9 @@ func TestDataDriven(t *testing.T) {
 		defer tc.Stopper().Stop(ctx)
 
 		externalConnTestCluster := ectestutils.NewHandle(t, tc)
+		externalConnTestCluster.Knobs = base.TestingKnobs{
+			ExternalConnection: ecTestingKnobs,
+		}
 		defer externalConnTestCluster.Cleanup()
 
 		externalConnTestCluster.InitializeTenant(ctx, roachpb.SystemTenantID)

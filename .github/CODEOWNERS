@@ -279,7 +279,6 @@
 /pkg/revert/          @cockroachdb/disaster-recovery
 /pkg/storage/encryption.go           @cockroachdb/disaster-recovery
 /pkg/storage/external_sst_reader.go  @cockroachdb/disaster-recovery
-/pkg/ccl/cloudccl/           @cockroachdb/disaster-recovery
 /pkg/cloud/                  @cockroachdb/disaster-recovery
 /pkg/sql/distsql_plan_bulk*  @cockroachdb/disaster-recovery
 /pkg/sql/catalog/externalcatalog            @cockroachdb/disaster-recovery

@@ -15,12 +15,9 @@ import (
 
 	"github.com/aws/aws-sdk-go-v2/config"
 	"github.com/cockroachdb/cockroach/pkg/base"
-	_ "github.com/cockroachdb/cockroach/pkg/ccl"
 	"github.com/cockroachdb/cockroach/pkg/cloud"
-	"github.com/cockroachdb/cockroach/pkg/cloud/amazon"
 	"github.com/cockroachdb/cockroach/pkg/cloud/cloudpb"
 	"github.com/cockroachdb/cockroach/pkg/cloud/cloudtestutils"
-	_ "github.com/cockroachdb/cockroach/pkg/cloud/externalconn/providers" // import External Connection providers.
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
@@ -105,7 +102,7 @@ func TestS3ExternalConnection(t *testing.T) {
 	})
 
 	t.Run("auth-specified", func(t *testing.T) {
-		s3URI := amazon.S3URI(bucket, fmt.Sprintf("backup-ec-test-default-%d", testID),
+		s3URI := S3URI(bucket, fmt.Sprintf("backup-ec-test-default-%d", testID),
 			&cloudpb.ExternalStorage_S3{
 				AccessKey: creds.AccessKeyID,
 				Secret:    creds.SecretAccessKey,
@@ -134,7 +131,7 @@ func TestS3ExternalConnection(t *testing.T) {
 				"refer to https://docs.aws.com/cli/latest/userguide/cli-configure-role.html: %s", err)
 		}
 
-		s3URI := amazon.S3URI(bucket, fmt.Sprintf("backup-ec-test-sse-256-%d", testID), &cloudpb.ExternalStorage_S3{
+		s3URI := S3URI(bucket, fmt.Sprintf("backup-ec-test-sse-256-%d", testID), &cloudpb.ExternalStorage_S3{
 			Region:        "us-east-1",
 			Auth:          cloud.AuthParamImplicit,
 			ServerEncMode: "AES256",
@@ -147,7 +144,7 @@ func TestS3ExternalConnection(t *testing.T) {
 		if v == "" {
 			skip.IgnoreLint(t, "AWS_KMS_KEY_ARN env var must be set")
 		}
-		s3KMSURI := amazon.S3URI(bucket, fmt.Sprintf("backup-ec-test-sse-kms-%d", testID), &cloudpb.ExternalStorage_S3{
+		s3KMSURI := S3URI(bucket, fmt.Sprintf("backup-ec-test-sse-kms-%d", testID), &cloudpb.ExternalStorage_S3{
 			Region:        "us-east-1",
 			Auth:          cloud.AuthParamImplicit,
 			ServerEncMode: "aws:kms",
@@ -174,7 +171,7 @@ func TestS3ExternalConnection(t *testing.T) {
 		}
 
 		// Unsupported server side encryption option.
-		invalidS3URI := amazon.S3URI(bucket, fmt.Sprintf("backup-ec-test-sse-256-%d", testID), &cloudpb.ExternalStorage_S3{
+		invalidS3URI := S3URI(bucket, fmt.Sprintf("backup-ec-test-sse-256-%d", testID), &cloudpb.ExternalStorage_S3{
 			Region:        "us-east-1",
 			Auth:          cloud.AuthParamImplicit,
 			ServerEncMode: "unsupported-algorithm",
@@ -183,7 +180,7 @@ func TestS3ExternalConnection(t *testing.T) {
 			"unsupported server encryption mode unsupported-algorithm. Supported values are `aws:kms` and `AES256",
 			fmt.Sprintf(`BACKUP DATABASE foo INTO '%s'`, invalidS3URI))
 
-		invalidS3URI = amazon.S3URI(bucket, fmt.Sprintf("backup-ec-test-sse-256-%d", testID), &cloudpb.ExternalStorage_S3{
+		invalidS3URI = S3URI(bucket, fmt.Sprintf("backup-ec-test-sse-256-%d", testID), &cloudpb.ExternalStorage_S3{
 			Region:        "us-east-1",
 			Auth:          cloud.AuthParamImplicit,
 			ServerEncMode: "aws:kms",
@@ -238,8 +235,8 @@ func TestAWSKMSExternalConnection(t *testing.T) {
 
 	q := make(url.Values)
 	expect := map[string]string{
-		"AWS_ACCESS_KEY_ID":     amazon.AWSAccessKeyParam,
-		"AWS_SECRET_ACCESS_KEY": amazon.AWSSecretParam,
+		"AWS_ACCESS_KEY_ID":     AWSAccessKeyParam,
+		"AWS_SECRET_ACCESS_KEY": AWSSecretParam,
 	}
 	for env, param := range expect {
 		v := os.Getenv(env)
@@ -253,7 +250,7 @@ func TestAWSKMSExternalConnection(t *testing.T) {
 	if kmsRegion == "" {
 		skip.IgnoreLint(t, "AWS_KMS_REGION env var must be set")
 	}
-	q.Add(amazon.KMSRegionParam, kmsRegion)
+	q.Add(KMSRegionParam, kmsRegion)
 
 	// Get AWS Key identifier from env variable.
 	keyID := os.Getenv("AWS_KMS_KEY_ARN")
@@ -277,7 +274,7 @@ func TestAWSKMSExternalConnection(t *testing.T) {
 		// Set the AUTH to implicit.
 		params := make(url.Values)
 		params.Add(cloud.AuthParam, cloud.AuthParamImplicit)
-		params.Add(amazon.KMSRegionParam, kmsRegion)
+		params.Add(KMSRegionParam, kmsRegion)
 
 		kmsURI := fmt.Sprintf("aws-kms:///%s?%s", keyID, params.Encode())
 		createExternalConnection("auth-implicit-kms", kmsURI)
@@ -350,9 +347,9 @@ func TestAWSKMSExternalConnectionAssumeRole(t *testing.T) {
 
 	q := make(url.Values)
 	expect := map[string]string{
-		"AWS_ACCESS_KEY_ID":     amazon.AWSAccessKeyParam,
-		"AWS_SECRET_ACCESS_KEY": amazon.AWSSecretParam,
-		"AWS_ASSUME_ROLE":       amazon.AssumeRoleParam,
+		"AWS_ACCESS_KEY_ID":     AWSAccessKeyParam,
+		"AWS_SECRET_ACCESS_KEY": AWSSecretParam,
+		"AWS_ASSUME_ROLE":       AssumeRoleParam,
 	}
 	for env, param := range expect {
 		v := os.Getenv(env)
@@ -366,7 +363,7 @@ func TestAWSKMSExternalConnectionAssumeRole(t *testing.T) {
 	if kmsRegion == "" {
 		skip.IgnoreLint(t, "AWS_KMS_REGION env var must be set")
 	}
-	q.Add(amazon.KMSRegionParam, kmsRegion)
+	q.Add(KMSRegionParam, kmsRegion)
 	q.Set(cloud.AuthParam, cloud.AuthParamSpecified)
 
 	// Get AWS Key identifier from env variable.
@@ -404,8 +401,8 @@ func TestAWSKMSExternalConnectionAssumeRole(t *testing.T) {
 		// Create params for implicit user.
 		params := make(url.Values)
 		params.Add(cloud.AuthParam, cloud.AuthParamImplicit)
-		params.Add(amazon.AssumeRoleParam, q.Get(amazon.AssumeRoleParam))
-		params.Add(amazon.KMSRegionParam, kmsRegion)
+		params.Add(AssumeRoleParam, q.Get(AssumeRoleParam))
+		params.Add(KMSRegionParam, kmsRegion)
 
 		uri := fmt.Sprintf("aws-kms:///%s?%s", keyID, params.Encode())
 		createExternalConnection("auth-assume-role-implicit", uri)
@@ -426,14 +423,14 @@ func TestAWSKMSExternalConnectionAssumeRole(t *testing.T) {
 		// to access the KMS.
 		for i, role := range roleChain {
 			i := i
-			q.Set(amazon.AssumeRoleParam, role)
+			q.Set(AssumeRoleParam, role)
 			disallowedKMSURI := fmt.Sprintf("aws-kms:///%s?%s", keyID, q.Encode())
 			disallowedECName := fmt.Sprintf("auth-assume-role-chaining-disallowed-%d", i)
 			disallowedCreateExternalConnection(disallowedECName, disallowedKMSURI)
 		}
 
 		// Finally, check that the chain of roles can be used to access the KMS.
-		q.Set(amazon.AssumeRoleParam, roleChainStr)
+		q.Set(AssumeRoleParam, roleChainStr)
 		uri := fmt.Sprintf("aws-kms:///%s?%s", keyID, q.Encode())
 		createExternalConnection("auth-assume-role-chaining", uri)
 		backupAndRestoreFromExternalConnection(backupExternalConnectionName, "auth-assume-role-chaining")
