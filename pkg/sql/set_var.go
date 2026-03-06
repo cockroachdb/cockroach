@@ -161,11 +161,12 @@ func (n *setVarNode) startExec(params runParams) error {
 }
 
 // applyOnSessionDataMutators applies the given function on the relevant
-// sessionmutator.SessionDataMutators.
+// sessionmutator.SessionDataMutators based on the scope.
 func (p *planner) applyOnSessionDataMutators(
-	ctx context.Context, local bool, applyFunc func(m sessionmutator.SessionDataMutator) error,
+	ctx context.Context, scope setScope, applyFunc func(m sessionmutator.SessionDataMutator) error,
 ) error {
-	if local {
+	switch scope {
+	case setScopeLocal:
 		// We don't allocate a new SessionData object on implicit transactions.
 		// This no-ops in postgres with a warning, so copy accordingly.
 		if p.extendedEvalCtx.TxnImplicit {
@@ -179,8 +180,11 @@ func (p *planner) applyOnSessionDataMutators(
 			return nil
 		}
 		return p.sessionDataMutatorIterator.ApplyOnTopMutator(applyFunc)
+	case setScopeStmt:
+		return p.sessionDataMutatorIterator.ApplyOnStmtScopedMutator(applyFunc)
+	default:
+		return p.sessionDataMutatorIterator.ApplyOnEachMutatorError(applyFunc)
 	}
-	return p.sessionDataMutatorIterator.ApplyOnEachMutatorError(applyFunc)
 }
 
 // getSessionVarDefaultString retrieves a string suitable to pass to a

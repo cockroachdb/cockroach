@@ -1304,7 +1304,7 @@ query TT
 SELECT fingerprint, hint_type
 FROM [SHOW STATEMENT HINTS FOR 'SELECT * FROM abc JOIN (SELECT i FROM ROWS FROM (generate_series(_, _)) AS g (i)) ON b = i']
 ----
-SELECT * FROM abc JOIN (SELECT i FROM ROWS FROM (generate_series(_, _)) AS g (i)) ON b = i  rewrite_inline_hints
+SELECT * FROM abc JOIN (SELECT i FROM ROWS FROM (generate_series(_, _)) AS g (i)) ON b = i  REWRITE INLINE HINTS
 
 statement ok
 SELECT crdb_internal.await_statement_hints_cache()
