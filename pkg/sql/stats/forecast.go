@@ -14,6 +14,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -77,6 +78,122 @@ var maxDecrease = settings.RegisterFloatSetting(
 )
 
 // TODO(michae2): Consider whether we need a corresponding maxIncrease.
+
+// ForecastStatus holds diagnostic information about why a forecast was or was
+// not produced for a particular column set.
+type ForecastStatus struct {
+	ColumnIDs       []descpb.ColumnID
+	LatestCreated   time.Time
+	ForecastAt      time.Time
+	RowCountR2      *float64
+	NullCountR2     *float64
+	DistinctCountR2 *float64
+	AvgSizeR2       *float64
+	HistogramR2     *float64
+	ForecastError   error
+	HistogramError  error
+}
+
+// ForecastTableStatisticsStatus returns per-column-set diagnostic information
+// about forecast generation. For each column set in the observed statistics, it
+// reports whether the forecast succeeded or failed, and if the histogram
+// prediction failed separately from the overall forecast.
+func ForecastTableStatisticsStatus(
+	ctx context.Context, st *cluster.Settings, observed []*TableStatistic,
+) []ForecastStatus {
+	// Group observed statistics by column set, tracking which ones are skipped.
+	type colGroup struct {
+		columnIDs  []descpb.ColumnID
+		stats      []*TableStatistic
+		skipReason error
+	}
+	var groups []colGroup
+	groupIndex := make(map[string]int)
+
+	for _, stat := range observed {
+		colKey := MakeSortedColStatKey(stat.ColumnIDs)
+		idx, ok := groupIndex[colKey]
+		if !ok {
+			idx = len(groups)
+			groupIndex[colKey] = idx
+			groups = append(groups, colGroup{columnIDs: stat.ColumnIDs})
+		}
+		g := &groups[idx]
+		if stat.IsPartial() {
+			if g.skipReason == nil {
+				g.skipReason = errors.New("partial statistics skipped")
+			}
+			continue
+		}
+		if stat.HistogramData != nil && stat.HistogramData.ColumnType != nil &&
+			stat.HistogramData.ColumnType.Family() == types.BytesFamily {
+			if g.skipReason == nil {
+				g.skipReason = errors.New("inverted/BYTES histogram skipped")
+			}
+			continue
+		}
+		g.stats = append(g.stats, stat)
+	}
+
+	if len(groups) == 0 {
+		return nil
+	}
+	avgRefresh := avgFullRefreshTime(observed)
+
+	results := make([]ForecastStatus, 0, len(groups))
+	for _, g := range groups {
+		status := ForecastStatus{ColumnIDs: g.columnIDs}
+
+		if g.skipReason != nil && len(g.stats) == 0 {
+			status.ForecastError = g.skipReason
+			results = append(results, status)
+			continue
+		}
+		if len(g.stats) == 0 {
+			status.ForecastError = errors.New("no suitable observations")
+			results = append(results, status)
+			continue
+		}
+
+		latest := g.stats[0].CreatedAt
+		at := latest.Add(avgRefresh)
+		status.LatestCreated = latest
+		status.ForecastAt = at
+
+		var histErr error
+		// Initialize R² values to NaN to distinguish "not computed" from a
+		// computed value of 0.
+		r2 := [5]float64{
+			math.NaN(), math.NaN(), math.NaN(), math.NaN(), math.NaN(),
+		}
+		_, err := forecastColumnStatisticsWithHistErr(
+			ctx, st, g.stats, at, minGoodnessOfFit.Get(&st.SV), &histErr, &r2,
+		)
+		if err != nil {
+			status.ForecastError = err
+		} else if histErr != nil {
+			status.HistogramError = histErr
+		}
+
+		// Populate R² values. Each R² is non-nil when the corresponding
+		// regression was computed (i.e. there were enough observations and,
+		// for distinct/avg_size, non-empty observations).
+		for i, ptr := range []*(*float64){
+			&status.RowCountR2,
+			&status.NullCountR2,
+			&status.DistinctCountR2,
+			&status.AvgSizeR2,
+			&status.HistogramR2,
+		} {
+			if !math.IsNaN(r2[i]) {
+				v := r2[i]
+				*ptr = &v
+			}
+		}
+		results = append(results, status)
+	}
+	return results
+}
 
 // ForecastTableStatistics produces zero or more statistics forecasts based on
 // the given observed statistics. The observed statistics must be ordered by
@@ -180,6 +297,23 @@ func forecastColumnStatistics(
 	observed []*TableStatistic,
 	at time.Time,
 	minRequiredFit float64,
+	r2Out *[5]float64,
+) (forecast *TableStatistic, err error) {
+	return forecastColumnStatisticsWithHistErr(
+		ctx, st, observed, at, minRequiredFit, nil, r2Out,
+	)
+}
+
+// forecastColumnStatisticsWithHistErr is like forecastColumnStatistics but
+// optionally captures the histogram prediction error in histErr rather than
+// silently falling back to the latest observed histogram.
+func forecastColumnStatisticsWithHistErr(
+	ctx context.Context,
+	st *cluster.Settings,
+	observed []*TableStatistic,
+	at time.Time,
+	minRequiredFit float64,
+	histErr *error,
 	r2Out *[5]float64,
 ) (forecast *TableStatistic, err error) {
 	if len(observed) < int(minObservationsForForecast.Get(&st.SV)) {
@@ -364,6 +498,9 @@ func forecastColumnStatistics(
 				ctx, 3, "forecast for table %v columns %v: could not predict histogram due to: %v",
 				tableID, columnIDs, err,
 			)
+			if histErr != nil {
+				*histErr = err
+			}
 			hist.buckets = append([]cat.HistogramBucket{}, observed[0].nonNullHistogram().buckets...)
 		}
 

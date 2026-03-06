@@ -636,6 +636,159 @@ func TestForecastColumnStatistics(t *testing.T) {
 	}
 }
 
+// TestForecastTableStatisticsStatus verifies that ForecastTableStatisticsStatus
+// returns appropriate error diagnostics for various scenarios.
+func TestForecastTableStatisticsStatus(t *testing.T) {
+	ctx := context.Background()
+	st := cluster.MakeTestingClusterSettings()
+
+	makeStats := func(
+		columnIDs descpb.ColumnIDs, stats ...*testStat,
+	) []*TableStatistic {
+		result := make([]*TableStatistic, len(stats))
+		for i, ts := range stats {
+			// Store in CreatedAt descending order.
+			result[len(result)-i-1] = ts.toTableStatistic(
+				ctx, "test", 1, columnIDs, 0, 0, st,
+			)
+		}
+		return result
+	}
+
+	t.Run("not enough observations", func(t *testing.T) {
+		observed := makeStats(
+			descpb.ColumnIDs{1},
+			&testStat{at: 1, row: 1, dist: 1, null: 0, size: 1},
+			&testStat{at: 2, row: 2, dist: 2, null: 0, size: 1},
+		)
+		statuses := ForecastTableStatisticsStatus(ctx, st, observed)
+		if len(statuses) != 1 {
+			t.Fatalf("expected 1 status, got %d", len(statuses))
+		}
+		if statuses[0].ForecastError == nil {
+			t.Error("expected forecast error for too few observations")
+		}
+		if statuses[0].HistogramError != nil {
+			t.Errorf("unexpected histogram error: %v", statuses[0].HistogramError)
+		}
+	})
+
+	t.Run("successful forecast", func(t *testing.T) {
+		observed := makeStats(
+			descpb.ColumnIDs{1},
+			&testStat{at: 1, row: 10, dist: 5, null: 0, size: 1},
+			&testStat{at: 2, row: 20, dist: 10, null: 0, size: 1},
+			&testStat{at: 3, row: 30, dist: 15, null: 0, size: 1},
+		)
+		statuses := ForecastTableStatisticsStatus(ctx, st, observed)
+		if len(statuses) != 1 {
+			t.Fatalf("expected 1 status, got %d", len(statuses))
+		}
+		if statuses[0].ForecastError != nil {
+			t.Errorf("unexpected forecast error: %v", statuses[0].ForecastError)
+		}
+		if statuses[0].HistogramError != nil {
+			t.Errorf("unexpected histogram error: %v", statuses[0].HistogramError)
+		}
+	})
+
+	t.Run("bad fit", func(t *testing.T) {
+		observed := makeStats(
+			descpb.ColumnIDs{1},
+			&testStat{at: 1, row: 7, dist: 1, null: 1, size: 1},
+			&testStat{at: 2, row: 9, dist: 2, null: 2, size: 2},
+			&testStat{at: 3, row: 5, dist: 3, null: 3, size: 3},
+		)
+		statuses := ForecastTableStatisticsStatus(ctx, st, observed)
+		if len(statuses) != 1 {
+			t.Fatalf("expected 1 status, got %d", len(statuses))
+		}
+		if statuses[0].ForecastError == nil {
+			t.Error("expected forecast error for bad fit")
+		}
+	})
+
+	t.Run("partial statistics skipped", func(t *testing.T) {
+		observed := makeStats(
+			descpb.ColumnIDs{1},
+			&testStat{at: 1, row: 10, dist: 5, null: 0, size: 1},
+			&testStat{at: 2, row: 20, dist: 10, null: 0, size: 1},
+			&testStat{at: 3, row: 30, dist: 15, null: 0, size: 1},
+		)
+		// Make all stats partial.
+		for _, s := range observed {
+			s.PartialPredicate = "x > 0"
+		}
+		statuses := ForecastTableStatisticsStatus(ctx, st, observed)
+		if len(statuses) != 1 {
+			t.Fatalf("expected 1 status, got %d", len(statuses))
+		}
+		if statuses[0].ForecastError == nil {
+			t.Error("expected forecast error for partial statistics")
+		}
+	})
+
+	t.Run("histogram bad fit", func(t *testing.T) {
+		// Set minGoodnessOfFit to 1.0 so histogram prediction fails for
+		// imperfect fits.
+		minGoodnessOfFit.Override(ctx, &st.SV, 1.0)
+		defer minGoodnessOfFit.Override(ctx, &st.SV, 0.95)
+		observed := makeStats(
+			descpb.ColumnIDs{1},
+			&testStat{
+				at: 1, row: 10, dist: 2, null: 0, size: 1,
+				hist: testHistogram{{5, 0, 0, 50}, {5, 0, 0, 100}},
+			},
+			&testStat{
+				at: 2, row: 20, dist: 2, null: 0, size: 1,
+				hist: testHistogram{{10, 0, 0, 50}, {10, 0, 0, 200}},
+			},
+			&testStat{
+				at: 3, row: 30, dist: 2, null: 0, size: 1,
+				hist: testHistogram{{15, 0, 0, 50}, {15, 0, 0, 301}},
+			},
+		)
+		statuses := ForecastTableStatisticsStatus(ctx, st, observed)
+		if len(statuses) != 1 {
+			t.Fatalf("expected 1 status, got %d", len(statuses))
+		}
+		if statuses[0].ForecastError != nil {
+			t.Errorf("unexpected forecast error: %v", statuses[0].ForecastError)
+		}
+		if statuses[0].HistogramError == nil {
+			t.Error("expected histogram error for bad fit histogram")
+		}
+	})
+
+	t.Run("multiple column sets", func(t *testing.T) {
+		col1Stats := makeStats(
+			descpb.ColumnIDs{1},
+			&testStat{at: 1, row: 10, dist: 5, null: 0, size: 1},
+			&testStat{at: 2, row: 20, dist: 10, null: 0, size: 1},
+			&testStat{at: 3, row: 30, dist: 15, null: 0, size: 1},
+		)
+		col2Stats := makeStats(
+			descpb.ColumnIDs{2},
+			&testStat{at: 1, row: 7, dist: 1, null: 1, size: 1},
+			&testStat{at: 2, row: 9, dist: 2, null: 2, size: 2},
+			&testStat{at: 3, row: 5, dist: 3, null: 3, size: 3},
+		)
+		observed := append(col1Stats, col2Stats...)
+		statuses := ForecastTableStatisticsStatus(ctx, st, observed)
+		if len(statuses) != 2 {
+			t.Fatalf("expected 2 statuses, got %d", len(statuses))
+		}
+		// Column 1 should succeed.
+		if statuses[0].ForecastError != nil {
+			t.Errorf("unexpected forecast error for col 1: %v", statuses[0].ForecastError)
+		}
+		// Column 2 should fail (bad fit).
+		if statuses[1].ForecastError == nil {
+			t.Error("expected forecast error for col 2 (bad fit)")
+		}
+	})
+}
+
 type testStat struct {
 	at, row, dist, null, size uint64
 	hist                      testHistogram
