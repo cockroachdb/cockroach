@@ -438,7 +438,11 @@ func assertCPULoadInvariant(
 	// measured nodeUsage, so k is floored at 1 and moveable > nodeUsage. In
 	// this case immovable = 0 and sumLoad = moveable > nodeUsage — a transient,
 	// conservative overshoot that resolves as measurements converge.
-	if (storesCPU + sqlDistCPU) > nodeUsage {
+	//
+	// Guard with storesCPU > 0: when storesCPU = 0 the main code ignores SQL
+	// metrics and sets immovable = nodeUsage, so the decomposition invariant
+	// doesn't apply.
+	if storesCPU > 0 && (storesCPU+sqlDistCPU) > nodeUsage {
 		if !approxEq(immovable, 0) {
 			log.Dev.Fatalf(ctx, "CPU load invariant: measurement lag but immovable != 0 (%v)", state)
 		}
