@@ -44,6 +44,14 @@ type importCheckpointTracker struct {
 	// numFiles is the total number of input files, used to compute the
 	// overall fraction completed.
 	numFiles int
+
+	// mergePhase is the completed distributed merge iteration to record.
+	// When non-zero, Persist writes DistributedMergePhase to the job
+	// progress. Set by SetMergeIterationResult or SetMergeComplete.
+	mergePhase int32
+	// clearManifests signals that the manifest job info key should be
+	// cleared (written as nil). Set after the final merge iteration.
+	clearManifests bool
 }
 
 func newImportCheckpointTracker(
@@ -80,6 +88,29 @@ func (t *importCheckpointTracker) RecordProcessorUpdate(
 	t.bulkSummary.Add(progress.BulkSummary)
 }
 
+// SetMergeIterationResult replaces the manifest buffer with the output of
+// a completed non-final merge iteration and records the phase number.
+// The next call to Persist writes both atomically.
+func (t *importCheckpointTracker) SetMergeIterationResult(
+	manifests []jobspb.BulkSSTManifest, phase int32,
+) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	t.manifestBuf = backfill.NewSSTManifestBuffer(manifests)
+	t.manifestBuf.MarkDirty()
+	t.mergePhase = phase
+	t.clearManifests = false
+}
+
+// SetMergeComplete records the final merge iteration phase and signals
+// that the manifest job info key should be cleared on the next Persist.
+func (t *importCheckpointTracker) SetMergeComplete(phase int32) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	t.mergePhase = phase
+	t.clearManifests = true
+}
+
 // checkpointSnapshot is the data captured under the mutex for a single
 // checkpoint attempt.
 type checkpointSnapshot struct {
@@ -88,6 +119,8 @@ type checkpointSnapshot struct {
 	bulkSummary       kvpb.BulkOpSummary
 	manifestData      []byte
 	hasDirtyManifests bool
+	mergePhase        int32
+	clearManifests    bool
 }
 
 // snapshot captures the current progress state under the mutex and returns
@@ -101,6 +134,9 @@ func (t *importCheckpointTracker) snapshot() (checkpointSnapshot, error) {
 		fractionProgress: append([]float32(nil), t.fractionProgress...),
 		bulkSummary:      t.bulkSummary.DeepCopy(),
 	}
+
+	snap.mergePhase = t.mergePhase
+	snap.clearManifests = t.clearManifests
 
 	snap.hasDirtyManifests = t.manifestBuf != nil && t.manifestBuf.Dirty()
 	if snap.hasDirtyManifests {
@@ -154,12 +190,22 @@ func (t *importCheckpointTracker) Persist(ctx context.Context, job *jobs.Job) er
 		}
 		prog.Summary = snap.bulkSummary
 
-		if len(snap.manifestData) > 0 {
+		if snap.clearManifests {
+			if err := jobs.WriteChunkedFileToJobInfo(
+				ctx, importSSTManifestsInfoKey, nil, txn, job.ID(),
+			); err != nil {
+				return errors.Wrap(err, "clearing SST manifests from job info")
+			}
+		} else if len(snap.manifestData) > 0 {
 			if err := jobs.WriteChunkedFileToJobInfo(
 				ctx, importSSTManifestsInfoKey, snap.manifestData, txn, job.ID(),
 			); err != nil {
 				return errors.Wrap(err, "writing SST manifests to job info")
 			}
+		}
+
+		if snap.mergePhase > 0 {
+			prog.DistributedMergePhase = snap.mergePhase
 		}
 
 		fractionCompleted := overall / float32(numFiles)
