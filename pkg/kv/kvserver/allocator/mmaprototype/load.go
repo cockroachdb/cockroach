@@ -27,6 +27,11 @@ import (
 // structured that adding additional resource dimensions is easy.
 type LoadDimension uint8
 
+// NumLoadDimensions must be exactly 3. Update SafeFormat methods for
+// LoadVector and AmpVector if a dimension is added or removed.
+var _ [NumLoadDimensions - 3]struct{}
+var _ [3 - NumLoadDimensions]struct{}
+
 const (
 	// CPURate is in nanos per second.
 	CPURate LoadDimension = iota
@@ -115,6 +120,45 @@ func (lv *LoadVector) subtract(other LoadVector) {
 	for i := range other {
 		(*lv)[i] -= other[i]
 	}
+}
+
+// Amp is a per-dimension amplification factor that converts logical per-range
+// loads into physical units.
+type Amp float64
+
+func (af Amp) SafeFormat(w redact.SafePrinter, _ rune) {
+	w.Printf("%.2f", redact.SafeFloat(float64(af)))
+}
+
+func (af Amp) String() string {
+	return redact.StringWithoutMarkers(af)
+}
+
+// AmpVector holds per-dimension amplification factors, one for each
+// LoadDimension.
+type AmpVector [NumLoadDimensions]Amp
+
+// IdentityAmpVector returns an AmpVector where all dimensions have an
+// amplification factor of 1.0 (no conversion).
+func IdentityAmpVector() AmpVector {
+	var av AmpVector
+	for i := range av {
+		av[i] = 1.0
+	}
+	return av
+}
+
+func (av AmpVector) String() string {
+	return redact.StringWithoutMarkers(av)
+}
+
+func (av AmpVector) SafeFormat(w redact.SafePrinter, _ rune) {
+	w.Printf(
+		"[cpu:%v, write-bandwidth:%v, byte-size:%v]",
+		av[CPURate],
+		av[WriteBandwidth],
+		av[ByteSize],
+	)
 }
 
 // A resource can have a capacity, which is also expressed using LoadValue.
