@@ -201,7 +201,7 @@ func (g *Gauge) IsDeleted() bool {
 	return g.deleted.Load()
 }
 
-// WriteStopwatch wraps a metric.Gauge to record the unix-second
+// WriteStopwatch wraps a metric.Gauge to record the unix-nanosecond
 // timestamp at which Start() was called. The stored value is the
 // timestamp itself, not elapsed time. Dirty tracking ensures that
 // only updated stopwatches are flushed to storage.
@@ -236,11 +236,11 @@ func (s *WriteStopwatch) SetStartTime() {
 	if s.deleted.Load() {
 		return
 	}
-	s.Gauge.Update(s.timeSource.Now().Unix())
+	s.Gauge.Update(s.timeSource.Now().UnixNano())
 	s.dirty.Store(true)
 }
 
-// Value returns the stored unix timestamp (seconds), or 0 if not started.
+// Value returns the stored unix timestamp (nanoseconds), or 0 if not started.
 func (s *WriteStopwatch) Value() int64 {
 	return s.Gauge.Value()
 }

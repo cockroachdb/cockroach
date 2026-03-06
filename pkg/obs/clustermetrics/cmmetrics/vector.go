@@ -189,7 +189,7 @@ func (v *CounterVec) CollectDeleted() []WritableMetric {
 }
 
 // WriteStopwatchVec wraps metric.GaugeVec for labeled stopwatch
-// metrics. Each child records a unix-second timestamp set via
+// metrics. Each child records a unix-nanosecond timestamp set via
 // SetStartTime. All children present at flush time are written;
 // Reset clears all children so only values set since the last
 // flush are emitted.
@@ -219,7 +219,7 @@ func NewWriteStopwatchVec(
 // SetStartTime records the current time as the start time for the
 // given label set.
 func (v *WriteStopwatchVec) SetStartTime(labels map[string]string) {
-	v.GaugeVec.Update(labels, v.timeSource.Now().Unix())
+	v.GaugeVec.Update(labels, v.timeSource.Now().UnixNano())
 }
 
 // Each calls f for every child stopwatch.
