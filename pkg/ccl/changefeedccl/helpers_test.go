@@ -277,12 +277,20 @@ func assertPayloadsBase(
 		timeout += time.Duration(math.Log(float64(len(expected)))) * time.Minute
 	}
 
-	require.NoError(t,
-		withTimeout(f, timeout,
-			func(ctx context.Context) (err error) {
-				return assertPayloadsBaseErr(ctx, f, expected, stripTs, perKeyOrdered, nil, envelopeType)
-			},
-		))
+	err := withTimeout(f, timeout,
+		func(ctx context.Context) (err error) {
+			return assertPayloadsBaseErr(ctx, f, expected, stripTs, perKeyOrdered, nil, envelopeType)
+		},
+	)
+	if err != nil {
+		var timeoutErr *timeutil.TimeoutError
+		if errors.As(err, &timeoutErr) {
+			dumpFile := testutils.WriteGoroutineDump()
+			t.Fatalf("assertPayloads timed out after %s: %s\n\ngoroutine dump: %s",
+				timeout, err, dumpFile)
+		}
+		require.NoError(t, err)
+	}
 }
 
 func enrichedMessageToWrappedMessage(m cdctest.TestFeedMessage) (cdctest.TestFeedMessage, error) {
