@@ -128,8 +128,8 @@ rebalance-stores store-id=1
 [mmaid=1] cannot add load from n3s3 to n3s4 for r1 due to target_summary(overloadSlow)>=loadNoChange,target-node(overloadSlow)>target-store(loadNormal): delta([cpu:10ns/s, write-bandwidth:10 MB/s, byte-size:0 B]) targetSLS[(store=loadNormal worst=ByteSize cpu=loadLow writes=loadLow bytes=loadNormal node=overloadSlow frac_pending=0.00,0.00(true))] srcSLS[(store=overloadSlow worst=WriteBandwidth cpu=loadLow writes=overloadSlow bytes=loadNormal node=loadNormal frac_pending=0.00,0.00(true))]
 [mmaid=1] rebalancing pass summary [local=s1]:
 	overloaded:
-		lease-grace: [s2]
-		short: [s1, s3]
+		lease-grace: [s1, s2]
+		short: [s3]
 	failure: [{s1, total: 2, no-cand:1, no-cand-load:1}, {s3, total: 1, no-cand-to-accept-load:1}]
 	no-ranges-evaluated: [s2]
 pending(0)

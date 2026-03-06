@@ -354,8 +354,7 @@ rebalance-stores store-id=1 max-range-move-count=999 fraction-pending-decrease-t
 [mmaid=1] skipping remote store s3: in lease shedding grace period
 [mmaid=1] rebalancing pass summary [local=s1]:
 	overloaded:
-		lease-grace: [s2, s3]
-		short: [s1]
+		lease-grace: [s1, s2, s3]
 	failure: [{s1, total: 6, no-cand-to-accept-load:5, not-overloaded:1}]
 	no-ranges-evaluated: [s2, s3]
 pending(0)

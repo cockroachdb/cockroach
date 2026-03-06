@@ -345,8 +345,11 @@ func makeLoadAndCapacityMetrics() *loadAndCapacityMetrics {
 type overloadKind uint8
 
 const (
-	// overloadedWaitingForLeaseShedding represents when the remote store is
-	// still in the grace period for shedding its own leases.
+	// overloadedWaitingForLeaseShedding represents when the store is still in
+	// the grace period for shedding its own leases. NB: this applies to both
+	// local and remote stores. For remote stores, MMA skips shedding during
+	// this period. For the local store, MMA proceeds with shedding and the
+	// lease_grace metrics track whether that self-shedding succeeds.
 	overloadedWaitingForLeaseShedding overloadKind = iota
 	// overloadedShortDuration corresponds to ignoreLoadNoChangeAndHigher.
 	overloadedShortDuration
@@ -491,16 +494,13 @@ type reasonCount struct {
 }
 
 var (
-	// NB: mma.overloaded_store.lease_grace.success should always be 0, but we
-	// declare the metric to avoid making assumptions about rebalancing
-	// behavior.
 	metaOverloadedStoreLeaseGraceSuccess = metric.Metadata{
 		Name: "mma.overloaded_store.lease_grace.success",
 		Help: "Number of overloaded stores in the lease shedding grace period (first 2 min of " +
 			"overload) where at least one lease or replica was successfully moved away during " +
-			"this store's MMA rebalancing pass. During this grace period, MMA holds off on " +
-			"replica moves to give the overloaded store time to shed its own leases. This " +
-			"metric should normally be 0 since MMA skips shedding during the grace period.",
+			"this store's MMA rebalancing pass. During this grace period, remote stores wait " +
+			"for the overloaded store to shed its own leases before intervening with replica " +
+			"moves. This metric tracks whether the local store's self-shedding is effective.",
 		Measurement: "Stores",
 		Unit:        metric.Unit_COUNT,
 		LabeledName: "mma.overloaded_store",
@@ -510,9 +510,10 @@ var (
 	metaOverloadedStoreLeaseGraceFailure = metric.Metadata{
 		Name: "mma.overloaded_store.lease_grace.failure",
 		Help: "Number of overloaded stores in the lease shedding grace period (first 2 min of " +
-			"overload) where all shedding attempts failed during this store's MMA rebalancing " +
-			"pass. During this grace period, MMA holds off on replica moves to give the " +
-			"overloaded store time to shed its own leases.",
+			"overload) where the local store failed to shed any leases or replicas during " +
+			"this store's MMA rebalancing pass. During this grace period, remote stores wait " +
+			"for the overloaded store to shed its own leases before intervening. A non-zero " +
+			"value indicates the overloaded store is struggling to self-shed.",
 		Measurement: "Stores",
 		Unit:        metric.Unit_COUNT,
 		LabeledName: "mma.overloaded_store",

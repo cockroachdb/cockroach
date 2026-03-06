@@ -133,7 +133,7 @@ rebalance-stores store-id=1 fraction-pending-decrease-threshold=10.0 max-lease-t
 [mmaid=1] skipping replica transfers for s1 to try more leases next time
 [mmaid=1] rebalancing pass summary [local=s1]:
 	overloaded:
-		short: [s1]
+		lease-grace: [s1]
 	success: [s1]
 pending(4)
 change-id=1 store-id=1 node-id=1 range-id=4 load-delta=[cpu:-230ns/s, write-bandwidth:0 B/s, byte-size:0 B] start=0s gc=1m0s
