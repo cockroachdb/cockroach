@@ -1,26 +1,136 @@
-subtest disallow_udf_in_table
+subtest udf_computed_column_limitations
+
+# The following tests document UDF patterns that work when the optimizer
+# handles the computed column (e.g. CREATE TABLE, INSERT with optimizer)
+# but fail during schema change backfill (ALTER TABLE ADD COLUMN) and
+# IMPORT INTO. Those code paths use eval.Expr which cannot evaluate
+# SQL-bodied functions directly. We inline single-expression SQL UDF
+# bodies, but certain patterns cannot be inlined.
+
+# UDFs with OUT parameters cannot be inlined during backfill.
+# Note: CREATE TABLE with this UDF works (the optimizer handles it).
+statement ok
+CREATE FUNCTION cc_udf_out(x INT, OUT result INT) RETURNS INT IMMUTABLE LANGUAGE SQL AS $$ SELECT x + 1 $$;
 
 statement ok
-CREATE FUNCTION test_tbl_f() RETURNS INT IMMUTABLE LANGUAGE SQL AS $$ SELECT 1 $$;
+CREATE TABLE cc_udf_out_t (a INT PRIMARY KEY);
 
 statement ok
-CREATE TABLE test_tbl_t (a INT PRIMARY KEY, b INT);
+INSERT INTO cc_udf_out_t VALUES (1);
 
-# Insert a row to verify that backfills that use UDFs are blocked without internal errors.
+statement error pgcode 0A000 unimplemented: user-defined functions with OUT or INOUT parameters in computed columns cannot be evaluated in this context
+ALTER TABLE cc_udf_out_t ADD COLUMN b INT AS (cc_udf_out(a)) STORED;
+
+# Multi-statement UDFs cannot be inlined during backfill.
+# Note: CREATE TABLE with this UDF works (the optimizer handles it).
 statement ok
-INSERT INTO test_tbl_t VALUES (1, 1);
+CREATE FUNCTION cc_udf_multi_stmt(x INT) RETURNS INT IMMUTABLE LANGUAGE SQL AS $$
+  SELECT x + 1;
+  SELECT x + 2
+$$;
 
-statement error pgcode 0A000 unimplemented: cannot evaluate function in this context
-ALTER TABLE test_tbl_t ADD COLUMN c int AS (test_tbl_f()) stored;
+# The optimizer can evaluate multi-statement UDFs in computed columns.
+statement ok
+CREATE TABLE cc_udf_multi_stmt_create_t (a INT PRIMARY KEY, b INT AS (cc_udf_multi_stmt(a)) STORED);
 
-statement error pgcode 0A000 unimplemented: cannot evaluate function in this context
-ALTER TABLE test_tbl_t ADD COLUMN c int DEFAULT (test_tbl_f());
+statement ok
+INSERT INTO cc_udf_multi_stmt_create_t VALUES (1);
 
-statement error pgcode 0A000 unimplemented: cannot evaluate function in this context
-CREATE INDEX t_idx_partial ON test_tbl_t(b) WHERE test_tbl_f() > 0;
+query II
+SELECT * FROM cc_udf_multi_stmt_create_t
+----
+1  3
 
-statement error pgcode 0A000 unimplemented: cannot evaluate function in this context
-CREATE INDEX idx_b ON test_tbl_t (test_tbl_f());
+# But backfill (ALTER TABLE ADD COLUMN) cannot inline them.
+statement ok
+CREATE TABLE cc_udf_multi_stmt_t (a INT PRIMARY KEY);
+
+statement ok
+INSERT INTO cc_udf_multi_stmt_t VALUES (1);
+
+statement error pgcode 0A000 unimplemented: multi-statement user-defined functions in computed columns cannot be evaluated in this context
+ALTER TABLE cc_udf_multi_stmt_t ADD COLUMN b INT AS (cc_udf_multi_stmt(a)) STORED;
+
+# PL/pgSQL UDFs cannot be inlined during backfill.
+# Note: CREATE TABLE with this UDF works (the optimizer handles it).
+statement ok
+CREATE FUNCTION cc_udf_plpgsql(x INT) RETURNS INT IMMUTABLE LANGUAGE PLpgSQL AS $$
+  BEGIN
+    RETURN x + 1;
+  END
+$$;
+
+# The optimizer can evaluate PL/pgSQL UDFs in computed columns.
+statement ok
+CREATE TABLE cc_udf_plpgsql_create_t (a INT PRIMARY KEY, b INT AS (cc_udf_plpgsql(a)) STORED);
+
+statement ok
+INSERT INTO cc_udf_plpgsql_create_t VALUES (1);
+
+query II
+SELECT * FROM cc_udf_plpgsql_create_t
+----
+1  2
+
+# But backfill (ALTER TABLE ADD COLUMN) cannot inline them.
+statement ok
+CREATE TABLE cc_udf_plpgsql_t (a INT PRIMARY KEY);
+
+statement ok
+INSERT INTO cc_udf_plpgsql_t VALUES (1);
+
+statement error pgcode 0A000 unimplemented: PL/pgSQL user-defined functions in computed columns cannot be evaluated in this context
+ALTER TABLE cc_udf_plpgsql_t ADD COLUMN b INT AS (cc_udf_plpgsql(a)) STORED;
+
+# Nested UDF calls (a UDF whose body calls another UDF) cannot be
+# resolved during backfill. The DistSQLFunctionResolver used during
+# backfill resolves UDFs by OID only; inlined body expressions
+# reference functions by name, which only resolves builtins.
+statement ok
+CREATE FUNCTION cc_udf_inner(x INT) RETURNS INT IMMUTABLE LANGUAGE SQL AS $$ SELECT x * 10 $$;
+
+statement ok
+CREATE FUNCTION cc_udf_outer(x INT) RETURNS INT IMMUTABLE LANGUAGE SQL AS $$ SELECT cc_udf_inner(x) + 1 $$;
+
+statement ok
+CREATE TABLE cc_udf_nested_t (a INT PRIMARY KEY);
+
+statement ok
+INSERT INTO cc_udf_nested_t VALUES (1);
+
+statement error cc_udf_inner not found
+ALTER TABLE cc_udf_nested_t ADD COLUMN b INT AS (cc_udf_outer(a)) STORED;
+
+# Scalar subqueries in UDF body cannot be evaluated during backfill.
+# The Subquery node requires optimizer infrastructure to execute.
+statement ok
+CREATE FUNCTION cc_udf_subquery(x INT) RETURNS INT IMMUTABLE LANGUAGE SQL AS $$
+  SELECT x + (SELECT 100)
+$$;
+
+statement ok
+CREATE TABLE cc_udf_subquery_t (a INT PRIMARY KEY);
+
+statement ok
+INSERT INTO cc_udf_subquery_t VALUES (1);
+
+statement error pgcode 0A000 unimplemented: user-defined functions with subqueries in computed columns cannot be evaluated in this context
+ALTER TABLE cc_udf_subquery_t ADD COLUMN b INT AS (cc_udf_subquery(a)) STORED;
+
+# CTEs in UDF body cannot be evaluated during backfill.
+statement ok
+CREATE FUNCTION cc_udf_cte(x INT) RETURNS INT IMMUTABLE LANGUAGE SQL AS $$
+  WITH t AS (SELECT x + 10 AS v) SELECT v FROM t
+$$;
+
+statement ok
+CREATE TABLE cc_udf_cte_t (a INT PRIMARY KEY);
+
+statement ok
+INSERT INTO cc_udf_cte_t VALUES (1);
+
+statement error pgcode 0A000 unimplemented: user-defined functions with CTEs in computed columns cannot be evaluated in this context
+ALTER TABLE cc_udf_cte_t ADD COLUMN b INT AS (cc_udf_cte(a)) STORED;
 
 subtest end
 

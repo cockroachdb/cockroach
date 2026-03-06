@@ -323,8 +323,8 @@ func MakeComputedExprs(
 			continue
 		}
 
-		// Collect all column IDs that are referenced in the partial index
-		// predicate expression.
+		// Collect all column IDs that are referenced in the computed
+		// column expression.
 		colIDs, err := ExtractColumnIDs(tableDesc, exprs[compExprIdx])
 		if err != nil {
 			return nil, refColIDs, err
@@ -337,6 +337,16 @@ func MakeComputedExprs(
 		}
 
 		typedExpr, err := tree.TypeCheck(ctx, expr, semaCtx, col.GetType())
+		if err != nil {
+			return nil, catalog.TableColSet{}, err
+		}
+
+		// Inline any UDF calls so that the expression can be evaluated
+		// by eval.Expr. Contexts that bypass the optimizer (IMPORT,
+		// backfill) cannot evaluate functions with SQL bodies directly.
+		// This must happen before the assignment cast so the cast
+		// operates on the resolved expression, not a FuncExpr wrapper.
+		typedExpr, err = inlineUDFCalls(ctx, typedExpr, semaCtx)
 		if err != nil {
 			return nil, catalog.TableColSet{}, err
 		}
@@ -356,4 +366,188 @@ func MakeComputedExprs(
 		nr.addColumn(col)
 	}
 	return computedExprs, refColIDs, nil
+}
+
+// inlineUDFCalls walks a TypedExpr tree and replaces FuncExpr nodes that
+// reference user-defined functions (those with SQL bodies) with the inlined
+// body expression. This is necessary because eval.Expr cannot evaluate
+// functions with SQL bodies — that capability is only available through
+// the optimizer. Contexts that evaluate computed column expressions without
+// the optimizer (IMPORT, schema change backfill) rely on this inlining.
+//
+// Only single-statement SQL-language UDFs can be inlined. Multi-statement
+// or PL/pgSQL functions will produce an error.
+func inlineUDFCalls(
+	ctx context.Context, expr tree.TypedExpr, semaCtx *tree.SemaContext,
+) (tree.TypedExpr, error) {
+	newExpr, err := tree.SimpleVisit(expr, func(e tree.Expr) (recurse bool, newExpr tree.Expr, err error) {
+		funcExpr, ok := e.(*tree.FuncExpr)
+		if !ok {
+			return true, e, nil
+		}
+		fn := funcExpr.ResolvedOverload()
+		if fn == nil || fn.Body == "" {
+			return true, e, nil
+		}
+		if fn.Language != tree.RoutineLangSQL {
+			return false, nil, unimplemented.Newf(
+				"computed_column_plpgsql_udf",
+				"PL/pgSQL user-defined functions in computed columns "+
+					"cannot be evaluated in this context",
+			)
+		}
+
+		// Parse the function body.
+		stmts, err := parserutils.Parse(fn.Body)
+		if err != nil {
+			return false, nil, errors.Wrap(err, "parsing UDF body for inlining")
+		}
+		if len(stmts) != 1 {
+			return false, nil, unimplemented.Newf(
+				"computed_column_multi_stmt_udf",
+				"multi-statement user-defined functions in computed columns "+
+					"cannot be evaluated in this context",
+			)
+		}
+
+		// Extract the result expression from the SELECT statement.
+		sel, ok := stmts[0].AST.(*tree.Select)
+		if !ok {
+			return false, nil, errors.Newf(
+				"expected SELECT in UDF body, got %T", stmts[0].AST,
+			)
+		}
+		if sel.With != nil {
+			return false, nil, unimplemented.Newf(
+				"computed_column_cte_udf",
+				"user-defined functions with CTEs in computed columns "+
+					"cannot be evaluated in this context",
+			)
+		}
+		selClause, ok := sel.Select.(*tree.SelectClause)
+		if !ok || len(selClause.Exprs) != 1 {
+			return false, nil, errors.Newf(
+				"expected single-expression SELECT in UDF body",
+			)
+		}
+		if len(selClause.From.Tables) > 0 {
+			return false, nil, unimplemented.Newf(
+				"computed_column_from_udf",
+				"user-defined functions with FROM clauses in computed columns "+
+					"cannot be evaluated in this context",
+			)
+		}
+		bodyExpr := selClause.Exprs[0].Expr
+
+		// Build a mapping from named parameters to the actual argument
+		// expressions from the call site. Unnamed parameters (those
+		// with empty names) are only referenceable via ordinal $1/$2
+		// placeholders, so they are excluded from this map.
+		paramMap := make(map[string]tree.Expr, len(fn.RoutineParams))
+		for i, p := range fn.RoutineParams {
+			if tree.IsOutParamClass(p.Class) {
+				return false, nil, unimplemented.Newf(
+					"computed_column_out_param_udf",
+					"user-defined functions with OUT or INOUT parameters "+
+						"in computed columns cannot be evaluated in this context",
+				)
+			}
+			if p.Name != "" && i < len(funcExpr.Exprs) {
+				paramMap[string(p.Name)] = funcExpr.Exprs[i]
+			}
+		}
+
+		// Substitute parameter references in the body. Named
+		// parameters appear as UnresolvedName or ColumnItem nodes;
+		// unnamed parameters use ordinal placeholders ($1, $2, etc.).
+		inlined, err := tree.SimpleVisit(
+			bodyExpr,
+			func(inner tree.Expr) (bool, tree.Expr, error) {
+				// Named param in parsed-but-unresolved body (e.g. "x" in SELECT x + 1).
+				if name, ok := inner.(*tree.UnresolvedName); ok &&
+					name.NumParts == 1 {
+					if arg, exists := paramMap[name.Parts[0]]; exists {
+						return false, arg, nil
+					}
+				}
+				// Named param after name resolution has converted it to a ColumnItem.
+				if ci, ok := inner.(*tree.ColumnItem); ok {
+					if arg, exists := paramMap[string(ci.ColumnName)]; exists {
+						return false, arg, nil
+					}
+				}
+				// Ordinal placeholder for unnamed params (e.g. $1, $2).
+				if ph, ok := inner.(*tree.Placeholder); ok {
+					idx := int(ph.Idx)
+					if idx < len(funcExpr.Exprs) {
+						return false, funcExpr.Exprs[idx], nil
+					}
+				}
+				return true, inner, nil
+			},
+		)
+		if err != nil {
+			return false, nil, err
+		}
+
+		// Verify the inlined body contains no constructs that cannot
+		// be evaluated outside the optimizer.
+		if _, err := tree.SimpleVisit(inlined, func(inner tree.Expr) (bool, tree.Expr, error) {
+			if _, ok := inner.(*tree.Subquery); ok {
+				return false, inner, unimplemented.Newf(
+					"computed_column_subquery_udf",
+					"user-defined functions with subqueries in computed columns "+
+						"cannot be evaluated in this context",
+				)
+			}
+			// Check for unreplaced parameter references. These
+			// indicate a parameter substitution bug or an
+			// unsupported reference pattern.
+			if ph, ok := inner.(*tree.Placeholder); ok {
+				return false, inner, errors.Newf(
+					"unresolved parameter reference $%d in inlined UDF body", ph.Idx+1,
+				)
+			}
+			return true, inner, nil
+		}); err != nil {
+			return false, nil, err
+		}
+
+		// For strict functions (RETURNS NULL ON NULL INPUT), wrap the
+		// inlined body to return NULL when any argument is NULL,
+		// preserving the function's null-handling semantics.
+		if !fn.CalledOnNullInput && len(funcExpr.Exprs) > 0 {
+			var nullCheck tree.TypedExpr
+			for i, arg := range funcExpr.Exprs {
+				isNull := &tree.IsNullExpr{Expr: arg}
+				if i == 0 {
+					nullCheck = isNull
+				} else {
+					nullCheck = tree.NewTypedOrExpr(nullCheck, isNull)
+				}
+			}
+			inlined = &tree.CaseExpr{
+				Whens: []*tree.When{{
+					Cond: nullCheck,
+					Val:  tree.DNull,
+				}},
+				Else: inlined,
+			}
+		}
+
+		// Type-check the inlined expression against the function's
+		// return type.
+		typedInlined, err := tree.TypeCheck(
+			ctx, inlined, semaCtx, funcExpr.ResolvedType(),
+		)
+		if err != nil {
+			return false, nil, errors.Wrap(err, "type-checking inlined UDF body")
+		}
+
+		return false, typedInlined, nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	return newExpr.(tree.TypedExpr), nil
 }
