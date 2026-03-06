@@ -519,7 +519,6 @@ func TestSuperRegionConstraintConformanceZoneSurvival(t *testing.T) {
 
 	skip.UnderShort(t)
 	skip.UnderDuress(t)
-
 	// The topology uses 4 regions across 8 nodes (2 per region):
 	//
 	//   - Super region "americas": {us-east-1, us-central-1, us-west-1}
@@ -704,4 +703,71 @@ func TestSuperRegionConstraintConformanceZoneSurvival(t *testing.T) {
 		}
 		return nil
 	})
+}
+
+// TestSuperRegionWithNumReplicasExtension verifies that creating an RBR table
+// with super regions succeeds when the user has set num_replicas via a zone
+// config extension to a value lower than the default.
+func TestSuperRegionWithNumReplicasExtension(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	skip.UnderShort(t)
+	skip.UnderDuress(t)
+
+	regionNames := []string{
+		"us-east-1", "us-east-2", "eu-west-1",
+	}
+	_, sqlDB, cleanup :=
+		multiregionccltestutils.TestingCreateMultiRegionClusterWithRegionList(
+			t,
+			regionNames,
+			3, /* serversPerRegion */
+			base.TestingKnobs{},
+		)
+	defer cleanup()
+
+	tdb := sqlutils.MakeSQLRunner(sqlDB)
+
+	// Create a 3-region database with zone survival (default).
+	tdb.Exec(t, `CREATE DATABASE testdb PRIMARY REGION "us-east-1"
+		REGIONS "us-east-2", "eu-west-1"`)
+
+	// Set num_replicas = 3 via Regional zone config extension.
+	tdb.Exec(t, `ALTER DATABASE testdb ALTER LOCALITY REGIONAL
+		CONFIGURE ZONE USING num_replicas = 3`)
+
+	// Create super regions.
+	tdb.Exec(t, `SET enable_super_regions = 'on'`)
+	tdb.Exec(t, `ALTER DATABASE testdb ADD SUPER REGION "us"
+		VALUES "us-east-1", "us-east-2"`)
+	tdb.Exec(t, `ALTER DATABASE testdb ADD SUPER REGION "eu"
+		VALUES "eu-west-1"`)
+
+	// Create an RBR table — this previously failed with:
+	// "the number of replicas specified in constraints (4) cannot be greater
+	// than the number of replicas configured for the zone (3)"
+	tdb.Exec(t, `CREATE TABLE testdb.rbr(k INT PRIMARY KEY, v INT)
+		LOCALITY REGIONAL BY ROW`)
+
+	// Insert rows into each region and verify they work.
+	tdb.Exec(t, `INSERT INTO testdb.rbr(crdb_region, k, v) VALUES
+		('us-east-1', 1, 10), ('us-east-2', 2, 20), ('eu-west-1', 3, 30)`)
+
+	var count int
+	tdb.QueryRow(t, `SELECT count(*) FROM testdb.rbr`).Scan(&count)
+	require.Equal(t, 3, count)
+
+	// Verify zone configs show correct constraints — constraints total
+	// should not exceed num_replicas.
+	for _, region := range []string{"us-east-1", "us-east-2"} {
+		var target, rawSQL string
+		tdb.QueryRow(t, fmt.Sprintf(
+			`SHOW ZONE CONFIGURATION FOR PARTITION "%s" OF TABLE testdb.rbr`,
+			region)).Scan(&target, &rawSQL)
+		require.Contains(t, rawSQL, "num_replicas = 3",
+			"partition %s should have num_replicas = 3", region)
+		require.Contains(t, rawSQL, region,
+			"partition %s should reference its home region in constraints", region)
+	}
 }

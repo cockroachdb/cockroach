@@ -2771,6 +2771,135 @@ func TestZoneConfigForMultiRegionPartition(t *testing.T) {
 				},
 			},
 		},
+		{
+			desc:   "2-region super region, zone survival, Regional extension num_replicas=3",
+			region: "region_a",
+			regionConfig: multiregion.MakeRegionConfig(
+				catpb.RegionNames{"region_a", "region_b", "region_c"},
+				"region_a",
+				descpb.SurvivalGoal_ZONE_FAILURE,
+				descpb.InvalidID,
+				descpb.DataPlacement_DEFAULT,
+				[]descpb.SuperRegion{{
+					SuperRegionName: "sr1",
+					Regions:         []catpb.RegionName{"region_a", "region_b"},
+				}},
+				descpb.ZoneConfigExtensions{
+					Regional: &zonepb.ZoneConfig{
+						NumReplicas:               proto.Int32(3),
+						InheritedConstraints:      true,
+						InheritedLeasePreferences: true,
+					},
+				},
+			),
+			expected: zonepb.ZoneConfig{
+				NumReplicas: proto.Int32(3),
+				NumVoters:   proto.Int32(3),
+				Constraints: []zonepb.ConstraintsConjunction{
+					{NumReplicas: 3, Constraints: []zonepb.Constraint{
+						{Type: zonepb.Constraint_REQUIRED, Key: "region", Value: "region_a"},
+					}},
+				},
+				NullVoterConstraintsIsEmpty: true,
+				VoterConstraints: []zonepb.ConstraintsConjunction{
+					{Constraints: []zonepb.Constraint{
+						{Type: zonepb.Constraint_REQUIRED, Key: "region", Value: "region_a"},
+					}},
+				},
+				LeasePreferences: []zonepb.LeasePreference{
+					{Constraints: []zonepb.Constraint{
+						{Type: zonepb.Constraint_REQUIRED, Key: "region", Value: "region_a"},
+					}},
+				},
+			},
+		},
+		{
+			desc:   "3-region super region, zone survival, Regional extension num_replicas=3",
+			region: "region_a",
+			regionConfig: multiregion.MakeRegionConfig(
+				catpb.RegionNames{"region_a", "region_b", "region_c"},
+				"region_a",
+				descpb.SurvivalGoal_ZONE_FAILURE,
+				descpb.InvalidID,
+				descpb.DataPlacement_DEFAULT,
+				[]descpb.SuperRegion{{
+					SuperRegionName: "sr1",
+					Regions:         []catpb.RegionName{"region_a", "region_b", "region_c"},
+				}},
+				descpb.ZoneConfigExtensions{
+					Regional: &zonepb.ZoneConfig{
+						NumReplicas:               proto.Int32(3),
+						InheritedConstraints:      true,
+						InheritedLeasePreferences: true,
+					},
+				},
+			),
+			expected: zonepb.ZoneConfig{
+				NumReplicas: proto.Int32(3),
+				NumVoters:   proto.Int32(3),
+				Constraints: []zonepb.ConstraintsConjunction{
+					{NumReplicas: 3, Constraints: []zonepb.Constraint{
+						{Type: zonepb.Constraint_REQUIRED, Key: "region", Value: "region_a"},
+					}},
+				},
+				NullVoterConstraintsIsEmpty: true,
+				VoterConstraints: []zonepb.ConstraintsConjunction{
+					{Constraints: []zonepb.Constraint{
+						{Type: zonepb.Constraint_REQUIRED, Key: "region", Value: "region_a"},
+					}},
+				},
+				LeasePreferences: []zonepb.LeasePreference{
+					{Constraints: []zonepb.Constraint{
+						{Type: zonepb.Constraint_REQUIRED, Key: "region", Value: "region_a"},
+					}},
+				},
+			},
+		},
+		{
+			desc:   "2-region super region, zone survival, Regional extension num_replicas=4 (matches default)",
+			region: "region_a",
+			regionConfig: multiregion.MakeRegionConfig(
+				catpb.RegionNames{"region_a", "region_b", "region_c"},
+				"region_a",
+				descpb.SurvivalGoal_ZONE_FAILURE,
+				descpb.InvalidID,
+				descpb.DataPlacement_DEFAULT,
+				[]descpb.SuperRegion{{
+					SuperRegionName: "sr1",
+					Regions:         []catpb.RegionName{"region_a", "region_b"},
+				}},
+				descpb.ZoneConfigExtensions{
+					Regional: &zonepb.ZoneConfig{
+						NumReplicas:               proto.Int32(4),
+						InheritedConstraints:      true,
+						InheritedLeasePreferences: true,
+					},
+				},
+			),
+			expected: zonepb.ZoneConfig{
+				NumReplicas: proto.Int32(4),
+				NumVoters:   proto.Int32(3),
+				Constraints: []zonepb.ConstraintsConjunction{
+					{NumReplicas: 3, Constraints: []zonepb.Constraint{
+						{Type: zonepb.Constraint_REQUIRED, Key: "region", Value: "region_a"},
+					}},
+					{NumReplicas: 1, Constraints: []zonepb.Constraint{
+						{Type: zonepb.Constraint_REQUIRED, Key: "region", Value: "region_b"},
+					}},
+				},
+				NullVoterConstraintsIsEmpty: true,
+				VoterConstraints: []zonepb.ConstraintsConjunction{
+					{Constraints: []zonepb.Constraint{
+						{Type: zonepb.Constraint_REQUIRED, Key: "region", Value: "region_a"},
+					}},
+				},
+				LeasePreferences: []zonepb.LeasePreference{
+					{Constraints: []zonepb.Constraint{
+						{Type: zonepb.Constraint_REQUIRED, Key: "region", Value: "region_a"},
+					}},
+				},
+			},
+		},
 	}
 	testCases = append(testCases, superRegionTestCases...)
 
