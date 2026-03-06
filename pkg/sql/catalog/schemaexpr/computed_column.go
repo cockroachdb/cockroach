@@ -341,6 +341,16 @@ func MakeComputedExprs(
 			return nil, catalog.TableColSet{}, err
 		}
 
+		// Inline any UDF calls so that the expression can be evaluated
+		// by eval.Expr. Contexts that bypass the optimizer (IMPORT,
+		// backfill) cannot evaluate functions with SQL bodies directly.
+		// This must happen before the assignment cast so the cast
+		// operates on the resolved expression, not a FuncExpr wrapper.
+		typedExpr, err = inlineUDFCalls(ctx, typedExpr, semaCtx)
+		if err != nil {
+			return nil, catalog.TableColSet{}, err
+		}
+
 		// If the expression has a type that is not identical to the
 		// column's type, wrap the computed column expression in an assignment cast.
 		typedExpr, err = wrapWithAssignmentCast(ctx, typedExpr, col, semaCtx)
@@ -356,4 +366,133 @@ func MakeComputedExprs(
 		nr.addColumn(col)
 	}
 	return computedExprs, refColIDs, nil
+}
+
+// inlineUDFCalls walks a TypedExpr tree and replaces FuncExpr nodes that
+// reference user-defined functions (those with SQL bodies) with the inlined
+// body expression. This is necessary because eval.Expr cannot evaluate
+// functions with SQL bodies — that capability is only available through
+// the optimizer. Contexts that evaluate computed column expressions without
+// the optimizer (IMPORT, schema change backfill) rely on this inlining.
+//
+// Only single-statement SQL-language UDFs can be inlined. Multi-statement
+// or PL/pgSQL functions will produce an error.
+func inlineUDFCalls(
+	ctx context.Context, expr tree.TypedExpr, semaCtx *tree.SemaContext,
+) (tree.TypedExpr, error) {
+	newExpr, err := tree.SimpleVisit(expr, func(e tree.Expr) (bool, tree.Expr, error) {
+		funcExpr, ok := e.(*tree.FuncExpr)
+		if !ok {
+			return true, e, nil
+		}
+		fn := funcExpr.ResolvedOverload()
+		if fn == nil || fn.Body == "" {
+			return true, e, nil
+		}
+		if fn.Language != tree.RoutineLangSQL {
+			return false, nil, unimplemented.Newf(
+				"computed_column_plpgsql_udf",
+				"PL/pgSQL user-defined functions in computed columns "+
+					"cannot be evaluated in this context",
+			)
+		}
+
+		// Parse the function body.
+		stmts, err := parserutils.Parse(fn.Body)
+		if err != nil {
+			return false, nil, errors.Wrap(err, "parsing UDF body for inlining")
+		}
+		if len(stmts) != 1 {
+			return false, nil, unimplemented.Newf(
+				"computed_column_multi_stmt_udf",
+				"multi-statement user-defined functions in computed columns "+
+					"cannot be evaluated in this context",
+			)
+		}
+
+		// Extract the result expression from the SELECT statement.
+		sel, ok := stmts[0].AST.(*tree.Select)
+		if !ok {
+			return false, nil, errors.Newf(
+				"expected SELECT in UDF body, got %T", stmts[0].AST,
+			)
+		}
+		selClause, ok := sel.Select.(*tree.SelectClause)
+		if !ok || len(selClause.Exprs) != 1 {
+			return false, nil, errors.Newf(
+				"expected single-expression SELECT in UDF body",
+			)
+		}
+		bodyExpr := selClause.Exprs[0].Expr
+
+		// Build a mapping from parameter names to the actual argument
+		// expressions from the call site. The body references parameters
+		// by name (e.g. "x"), and we replace those with the
+		// already-typed argument expressions (e.g. IndexedVar).
+		paramMap := make(map[string]tree.Expr, len(fn.RoutineParams))
+		for i, p := range fn.RoutineParams {
+			if i < len(funcExpr.Exprs) {
+				paramMap[string(p.Name)] = funcExpr.Exprs[i]
+			}
+		}
+
+		// Substitute parameter references in the body.
+		inlined, err := tree.SimpleVisit(
+			bodyExpr,
+			func(inner tree.Expr) (bool, tree.Expr, error) {
+				if name, ok := inner.(*tree.UnresolvedName); ok &&
+					name.NumParts == 1 {
+					if arg, exists := paramMap[name.Parts[0]]; exists {
+						return false, arg, nil
+					}
+				}
+				if ci, ok := inner.(*tree.ColumnItem); ok {
+					if arg, exists := paramMap[string(ci.ColumnName)]; exists {
+						return false, arg, nil
+					}
+				}
+				return true, inner, nil
+			},
+		)
+		if err != nil {
+			return false, nil, err
+		}
+
+		// For strict functions (RETURNS NULL ON NULL INPUT), wrap the
+		// inlined body to return NULL when any argument is NULL,
+		// preserving the function's null-handling semantics.
+		if !fn.CalledOnNullInput && len(funcExpr.Exprs) > 0 {
+			var nullCheck tree.TypedExpr
+			for i, arg := range funcExpr.Exprs {
+				isNull := &tree.IsNullExpr{Expr: arg}
+				if i == 0 {
+					nullCheck = isNull
+				} else {
+					nullCheck = tree.NewTypedOrExpr(nullCheck, isNull)
+				}
+			}
+			inlined = &tree.CaseExpr{
+				Whens: []*tree.When{{
+					Cond: nullCheck,
+					Val:  tree.DNull,
+				}},
+				Else: inlined,
+			}
+		}
+
+		// Type-check the inlined expression against the function's
+		// return type.
+		typedInlined, err := tree.TypeCheck(
+			ctx, inlined, semaCtx, funcExpr.ResolvedType(),
+		)
+		if err != nil {
+			return false, nil, errors.Wrap(err, "type-checking inlined UDF body")
+		}
+
+		return false, typedInlined, nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	return newExpr.(tree.TypedExpr), nil
 }

@@ -1252,6 +1252,41 @@ END
 	}
 }
 
+// TestImportIntoComputedColumnWithUDF verifies that IMPORT INTO works when
+// the destination table has computed columns defined using user-defined
+// functions. Regression test for #157195.
+func TestImportIntoComputedColumnWithUDF(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	ctx := context.Background()
+	baseDir, cleanup := testutils.TempDir(t)
+	defer cleanup()
+	tc := serverutils.StartCluster(
+		t, 1, base.TestClusterArgs{ServerArgs: base.TestServerArgs{ExternalIODir: baseDir}})
+	defer tc.Stopper().Stop(ctx)
+	conn := tc.ServerConn(0)
+	sqlDB := sqlutils.MakeSQLRunner(conn)
+
+	// Helper that writes CSV data and runs IMPORT INTO.
+	importCSV := func(t *testing.T, table, intoCols, csvData string) {
+		t.Helper()
+		f, err := os.CreateTemp(baseDir, "data")
+		require.NoError(t, err)
+		_, err = f.Write([]byte(csvData))
+		require.NoError(t, err)
+		require.NoError(t, f.Close())
+		sqlDB.Exec(t, fmt.Sprintf(
+			`IMPORT INTO %s (%s) CSV DATA ($1)`, table, intoCols,
+		), fmt.Sprintf("nodelocal://1/%s", filepath.Base(f.Name())))
+	}
+
+	sqlDB.Exec(t, `CREATE FUNCTION double_val(x INT) RETURNS INT IMMUTABLE LANGUAGE SQL AS $$ SELECT x * 2 $$`)
+	sqlDB.Exec(t, `CREATE TABLE t (a INT, b INT AS (double_val(a)) STORED)`)
+	importCSV(t, "t", "a", "1\n2\n3\n")
+	sqlDB.CheckQueryResults(t, `SELECT a, b FROM t ORDER BY a`,
+		[][]string{{"1", "2"}, {"2", "4"}, {"3", "6"}})
+}
+
 func TestImportRowLimit(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
