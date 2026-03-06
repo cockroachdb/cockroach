@@ -15467,7 +15467,7 @@ layers:
     - name: mma.overloaded_store.lease_grace.failure
       exported_name: mma_overloaded_store_lease_grace_failure
       labeled_name: 'mma.overloaded_store{type: lease_grace, result: failure}'
-      description: Number of overloaded stores in the lease shedding grace period (first 2 min of overload) where all shedding attempts failed during this store's MMA rebalancing pass. During this grace period, MMA holds off on replica moves to give the overloaded store time to shed its own leases.
+      description: Number of overloaded stores in the lease shedding grace period (first 2 min of overload) where the local store failed to shed any leases or replicas during this store's MMA rebalancing pass. During this grace period, remote stores wait for the overloaded store to shed its own leases before intervening. A non-zero value indicates the overloaded store is struggling to self-shed.
       y_axis_label: Stores
       type: GAUGE
       unit: COUNT
@@ -15476,7 +15476,7 @@ layers:
     - name: mma.overloaded_store.lease_grace.success
       exported_name: mma_overloaded_store_lease_grace_success
       labeled_name: 'mma.overloaded_store{type: lease_grace, result: success}'
-      description: Number of overloaded stores in the lease shedding grace period (first 2 min of overload) where at least one lease or replica was successfully moved away during this store's MMA rebalancing pass. During this grace period, MMA holds off on replica moves to give the overloaded store time to shed its own leases. This metric should normally be 0 since MMA skips shedding during the grace period.
+      description: Number of overloaded stores in the lease shedding grace period (first 2 min of overload) where at least one lease or replica was successfully moved away during this store's MMA rebalancing pass. During this grace period, remote stores wait for the overloaded store to shed its own leases before intervening with replica moves. This metric tracks whether the local store's self-shedding is effective.
       y_axis_label: Stores
       type: GAUGE
       unit: COUNT
