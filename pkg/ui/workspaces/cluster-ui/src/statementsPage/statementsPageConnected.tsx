@@ -25,10 +25,6 @@ import {
   SqlStatsSortType,
 } from "../api";
 import {
-  actions as nodesActions,
-  nodeRegionsByIDSelector,
-} from "../store/nodes";
-import {
   selectIsTenant,
   selectHasViewActivityRedactedRole,
   selectHasAdminRole,
@@ -93,7 +89,6 @@ export const ConnectedStatementsPage = withRouter(
         isTenant: selectIsTenant(state),
         hasViewActivityRedactedRole: selectHasViewActivityRedactedRole(state),
         hasAdminRole: selectHasAdminRole(state),
-        nodeRegions: nodeRegionsByIDSelector(state),
         search: selectSearch(state),
         sortSetting: selectSortSetting(state),
         limit: selectStmtsPageLimit(state),
@@ -122,7 +117,6 @@ export const ConnectedStatementsPage = withRouter(
         },
         refreshStatementDiagnosticsRequests: () =>
           dispatch(statementDiagnosticsActions.refresh()),
-        refreshNodes: () => dispatch(nodesActions.refresh()),
         refreshUserSQLRoles: () =>
           dispatch(uiConfigActions.refreshUserSQLRoles()),
         resetSQLStats: () => dispatch(sqlStatsActions.reset()),

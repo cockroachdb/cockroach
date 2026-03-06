@@ -16,9 +16,7 @@ import { statementInsightsSaga } from "./insights/statementInsights";
 import { transactionInsightsSaga } from "./insights/transactionInsights/transactionInsights.sagas";
 import { jobSaga } from "./jobDetails";
 import { jobsSaga } from "./jobs";
-import { livenessSaga } from "./liveness";
 import { localStorageSaga } from "./localStorage";
-import { nodesSaga } from "./nodes";
 import { notifificationsSaga } from "./notifications";
 import { sessionsSaga } from "./sessions";
 import { sqlStatsSaga } from "./sqlStats";
@@ -32,8 +30,6 @@ export function* sagas(cacheInvalidationPeriod?: number): SagaIterator {
   yield all([
     fork(localStorageSaga),
     fork(statementsDiagnosticsSagas, cacheInvalidationPeriod),
-    fork(nodesSaga, cacheInvalidationPeriod),
-    fork(livenessSaga, cacheInvalidationPeriod),
     fork(transactionInsightsSaga),
     fork(transactionInsightDetailsSaga),
     fork(statementInsightsSaga),

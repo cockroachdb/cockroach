@@ -12,10 +12,6 @@ import { actions as indexStatsActions } from "src/store/indexStats/indexStats.re
 
 import { AppState, uiConfigActions } from "../store";
 import { actions as analyticsActions } from "../store/analytics";
-import {
-  actions as nodesActions,
-  nodeRegionsByIDSelector,
-} from "../store/nodes";
 import { actions as sqlStatsActions } from "../store/sqlStats";
 import {
   selectHasAdminRole,
@@ -71,7 +67,6 @@ const mapStateToProps = (
     hasViewActivityRedactedRole: selectHasViewActivityRedactedRole(state),
     indexName,
     isTenant: selectIsTenant(state),
-    nodeRegions: nodeRegionsByIDSelector(state),
     tableName,
     timeScale: selectTimeScale(state),
     details: {
@@ -114,7 +109,6 @@ const mapDispatchToProps = (dispatch: Dispatch): IndexDetailPageActions => ({
       }),
     );
   },
-  refreshNodes: () => dispatch(nodesActions.refresh()),
   refreshUserSQLRoles: () => dispatch(uiConfigActions.refreshUserSQLRoles()),
   onTimeScaleChange: (ts: TimeScale) => {
     dispatch(

@@ -21,10 +21,6 @@ import { selectRequestTime } from "src/transactionsPage/transactionsPage.selecto
 import { TxnInsightsRequest } from "../api";
 import { actions as analyticsActions } from "../store/analytics";
 import {
-  nodeRegionsByIDSelector,
-  actions as nodesActions,
-} from "../store/nodes";
-import {
   selectIsTenant,
   selectHasViewActivityRedactedRole,
   selectHasAdminRole,
@@ -51,7 +47,6 @@ const mapStateToProps = (
   return {
     timeScale: selectTimeScale(state),
     isTenant: selectIsTenant(state),
-    nodeRegions: nodeRegionsByIDSelector(state),
     txnStatsResp: state?.adminUI?.transactions,
     transactionFingerprintId: getMatchParamByName(
       props.match,
@@ -71,7 +66,6 @@ const mapDispatchToProps = (
 ): TransactionDetailsDispatchProps => ({
   refreshData: (req?: StatementsRequest) =>
     dispatch(txnStatsActions.refresh(req)),
-  refreshNodes: () => dispatch(nodesActions.refresh()),
   refreshUserSQLRoles: () => dispatch(uiConfigActions.refreshUserSQLRoles()),
   onTimeScaleChange: (ts: TimeScale) => {
     dispatch(

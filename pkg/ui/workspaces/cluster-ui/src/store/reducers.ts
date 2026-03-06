@@ -44,9 +44,7 @@ import {
   JobProfilerExecutionDetailFilesState,
   reducer as executionDetailFiles,
 } from "./jobs/jobProfiler.reducer";
-import { LivenessState, reducer as liveness } from "./liveness";
 import { LocalStorageState, reducer as localStorage } from "./localStorage";
-import { NodesState, reducer as nodes } from "./nodes";
 import { rootActions } from "./rootActions";
 import { reducer as sessions, SessionsState } from "./sessions";
 import { reducer as sqlStats, SQLStatsState } from "./sqlStats";
@@ -68,8 +66,6 @@ import { reducer as uiConfig, UIConfigState } from "./uiConfig";
 export type AdminUiState = {
   statementDiagnostics: StatementDiagnosticsState;
   localStorage: LocalStorageState;
-  nodes: NodesState;
-  liveness: LivenessState;
   sessions: SessionsState;
   terminateQuery: TerminateQueryState;
   uiConfig: UIConfigState;
@@ -96,8 +92,6 @@ export type AppState = {
 export const reducers = combineReducers<AdminUiState>({
   localStorage,
   statementDiagnostics,
-  nodes,
-  liveness,
   sessions,
   txnInsightDetails,
   stmtInsights,

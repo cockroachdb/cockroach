@@ -11,8 +11,6 @@ import {
 } from "@cockroachlabs/cluster-ui";
 import isEmpty from "lodash/isEmpty";
 import isNil from "lodash/isNil";
-import map from "lodash/map";
-import sortby from "lodash/sortBy";
 import Long from "long";
 import moment from "moment-timezone";
 import { RouteComponentProps } from "react-router";
@@ -24,7 +22,6 @@ import { VersionList } from "src/interfaces/cockroachlabs";
 import * as protos from "src/js/protos";
 import * as api from "src/util/api";
 import { versionCheck } from "src/util/cockroachlabsAPI";
-import { INodeStatus, RollupStoreMetrics } from "src/util/proto";
 
 import {
   CachedDataReducer,
@@ -66,31 +63,6 @@ export const healthReducerObj = new CachedDataReducer(
   moment.duration(2, "s"),
 );
 export const refreshHealth = healthReducerObj.refresh;
-
-function rollupStoreMetrics(
-  res: api.NodesResponseExternalMessage,
-): INodeStatus[] {
-  return map(res.nodes, node => {
-    RollupStoreMetrics(node);
-    return node;
-  });
-}
-
-export const nodesReducerObj = new CachedDataReducer(
-  (req: api.NodesRequestMessage, timeout?: moment.Duration) =>
-    api
-      .getNodesUI(req, timeout)
-      .then(rollupStoreMetrics)
-      .then(nodeStatuses => {
-        nodeStatuses.forEach(ns => {
-          ns.store_statuses = sortby(ns.store_statuses, ss => ss.desc.store_id);
-        });
-        return nodeStatuses;
-      }),
-  "nodes",
-  moment.duration(10, "s"),
-);
-export const refreshNodes = nodesReducerObj.refresh;
 
 const raftReducerObj = new CachedDataReducer(
   api.raftDebug,
@@ -159,13 +131,6 @@ const logsReducerObj = new CachedDataReducer(
   moment.duration(10, "s"),
 );
 export const refreshLogs = logsReducerObj.refresh;
-
-export const livenessReducerObj = new CachedDataReducer(
-  api.getLiveness,
-  "liveness",
-  moment.duration(10, "s"),
-);
-export const refreshLiveness = livenessReducerObj.refresh;
 
 export const jobsKey = (
   status: string,
@@ -533,7 +498,6 @@ export interface APIReducersState {
     clusterUiApi.SqlApiResponse<clusterUiApi.EventsResponse>
   >;
   health: HealthState;
-  nodes: CachedDataReducerState<INodeStatus[]>;
   raft: CachedDataReducerState<api.RaftDebugResponseMessage>;
   version: CachedDataReducerState<VersionList>;
   locations: CachedDataReducerState<api.LocationsResponseMessage>;
@@ -541,7 +505,6 @@ export interface APIReducersState {
   indexStats: KeyedCachedDataReducerState<api.IndexStatsResponseMessage>;
   nonTableStats: CachedDataReducerState<api.NonTableStatsResponseMessage>;
   logs: CachedDataReducerState<api.LogEntriesResponseMessage>;
-  liveness: CachedDataReducerState<api.LivenessResponseMessage>;
   jobProfiler: KeyedCachedDataReducerState<api.ListJobProfilerExecutionDetailsResponseMessage>;
   jobs: KeyedCachedDataReducerState<api.JobsResponseMessage>;
   job: KeyedCachedDataReducerState<api.JobResponseMessage>;
@@ -592,7 +555,6 @@ export const apiReducersReducer = combineReducers<APIReducersState>({
   [clusterReducerObj.actionNamespace]: clusterReducerObj.reducer,
   [eventsReducerObj.actionNamespace]: eventsReducerObj.reducer,
   [healthReducerObj.actionNamespace]: healthReducerObj.reducer,
-  [nodesReducerObj.actionNamespace]: nodesReducerObj.reducer,
   [raftReducerObj.actionNamespace]: raftReducerObj.reducer,
   [versionReducerObj.actionNamespace]: versionReducerObj.reducer,
   [locationsReducerObj.actionNamespace]: locationsReducerObj.reducer,
@@ -600,7 +562,6 @@ export const apiReducersReducer = combineReducers<APIReducersState>({
   [indexStatsReducerObj.actionNamespace]: indexStatsReducerObj.reducer,
   [nonTableStatsReducerObj.actionNamespace]: nonTableStatsReducerObj.reducer,
   [logsReducerObj.actionNamespace]: logsReducerObj.reducer,
-  [livenessReducerObj.actionNamespace]: livenessReducerObj.reducer,
   [jobProfilerReducerObj.actionNamespace]: jobProfilerReducerObj.reducer,
   [jobsReducerObj.actionNamespace]: jobsReducerObj.reducer,
   [jobReducerObj.actionNamespace]: jobReducerObj.reducer,

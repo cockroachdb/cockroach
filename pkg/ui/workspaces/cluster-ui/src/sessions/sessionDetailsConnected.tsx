@@ -7,12 +7,7 @@ import { connect } from "react-redux";
 import { RouteComponentProps, withRouter } from "react-router-dom";
 
 import { analyticsActions, AppState } from "src/store";
-import { actions as nodesLivenessActions } from "src/store/liveness";
 import { actions as localStorageActions } from "src/store/localStorage";
-import {
-  actions as nodesActions,
-  nodeDisplayNameByIDSelector,
-} from "src/store/nodes";
 import {
   actions as sessionsActions,
   selectSession,
@@ -28,9 +23,6 @@ import { SessionDetails } from ".";
 export const SessionDetailsPageConnected = withRouter(
   connect(
     (state: AppState, props: RouteComponentProps) => ({
-      nodeNames: selectIsTenant(state)
-        ? {}
-        : nodeDisplayNameByIDSelector(state),
       session: selectSession(state, props),
       sessionError: state.adminUI?.sessions.lastError,
       uiConfig: selectSessionDetailsUiConfig(state),
@@ -40,8 +32,6 @@ export const SessionDetailsPageConnected = withRouter(
       refreshSessions: sessionsActions.refresh,
       cancelSession: terminateQueryActions.terminateSession,
       cancelQuery: terminateQueryActions.terminateQuery,
-      refreshNodes: nodesActions.refresh,
-      refreshNodesLiveness: nodesLivenessActions.refresh,
       setTimeScale: (ts: TimeScale) =>
         localStorageActions.updateTimeScale({
           value: ts,

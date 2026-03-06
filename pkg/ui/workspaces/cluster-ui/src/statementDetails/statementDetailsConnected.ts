@@ -29,11 +29,6 @@ import {
 import { getMatchParamByName, statementAttr } from "src/util";
 
 import { AppState, uiConfigActions } from "../store";
-import { actions as nodeLivenessActions } from "../store/liveness";
-import {
-  nodeRegionsByIDSelector,
-  actions as nodesActions,
-} from "../store/nodes";
 import {
   selectIsTenant,
   selectHasViewActivityRedactedRole,
@@ -64,7 +59,6 @@ const mapStateToProps = (state: AppState, props: RouteComponentProps) => {
     statementsError: lastError,
     lastUpdated: lastUpdated,
     timeScale: selectTimeScale(state),
-    nodeRegions: nodeRegionsByIDSelector(state),
     diagnosticsReports: selectHasViewActivityRedactedRole(state)
       ? []
       : selectDiagnosticsReportsByStatementFingerprint(
@@ -90,8 +84,6 @@ const mapDispatchToProps = (
     dispatch(sqlDetailsStatsActions.refresh(req)),
   refreshStatementDiagnosticsRequests: () =>
     dispatch(statementDiagnosticsActions.refresh()),
-  refreshNodes: () => dispatch(nodesActions.refresh()),
-  refreshNodesLiveness: () => dispatch(nodeLivenessActions.refresh()),
   refreshUserSQLRoles: () => dispatch(uiConfigActions.refreshUserSQLRoles()),
   refreshStatementFingerprintInsights: (req: StmtInsightsReq) =>
     dispatch(statementFingerprintInsightActions.refresh(req)),
