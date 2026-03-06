@@ -373,14 +373,18 @@ func (e *scheduledBackupExecutor) backupSucceeded(
 	}
 
 	// If this schedule is designated as maintaining the "LastBackup" metric used
-	// for monitoring an RPO SLA, update that metric.
+	// for monitoring an RPO SLA, update that metric. We only update RpoMetric for
+	// non-tenant schedules because a host cluster backing up both itself and its
+	// tenants would have the metric clobbered by multiple schedules otherwise.
+	// See: https://github.com/cockroachdb/cockroach/issues/165125
 	if args.UpdatesLastBackupMetric {
-		e.metrics.RpoMetric.Update(details.(jobspb.BackupDetails).EndTime.GoTime().Unix())
 		if details.(jobspb.BackupDetails).SpecificTenantIds != nil {
 			for _, tenantID := range details.(jobspb.BackupDetails).SpecificTenantIds {
 				e.metrics.RpoTenantMetric.Update(map[string]string{"tenant_id": tenantID.String()},
 					details.(jobspb.BackupDetails).EndTime.GoTime().Unix())
 			}
+		} else {
+			e.metrics.RpoMetric.Update(details.(jobspb.BackupDetails).EndTime.GoTime().Unix())
 		}
 	}
 
