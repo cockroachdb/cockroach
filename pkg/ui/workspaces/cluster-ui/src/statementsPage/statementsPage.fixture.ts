@@ -347,12 +347,6 @@ const statementsPagePropsFixture: StatementsPageProps = {
     params: {},
   },
   databases: ["defaultdb", "foo", "system"],
-  nodeRegions: {
-    "1": "gcp-us-east1",
-    "2": "gcp-us-east1",
-    "3": "gcp-us-west1",
-    "4": "gcp-europe-west1",
-  },
   sortSetting: {
     ascending: false,
     columnTitle: "executionCount",
@@ -390,7 +384,6 @@ const statementsPagePropsFixture: StatementsPageProps = {
   refreshStatementDiagnosticsRequests: noop,
   refreshStatements: noop,
   refreshUserSQLRoles: noop,
-  refreshNodes: noop,
   resetSQLStats: noop,
   onTimeScaleChange: noop,
   onActivateStatementDiagnostics: noop,

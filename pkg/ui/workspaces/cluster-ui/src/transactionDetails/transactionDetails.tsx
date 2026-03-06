@@ -52,6 +52,7 @@ import {
   StatementsRequest,
   TxnInsightsRequest,
 } from "../api";
+import { useNodes } from "../api/nodesApi";
 import { formatTwoPlaces } from "../barCharts";
 import { Button } from "../button";
 import { CockroachCloudContext } from "../contexts";
@@ -116,7 +117,6 @@ export interface TransactionDetailsStateProps {
   reqSortSetting: SqlStatsSortType;
   isTenant: UIConfigState["isTenant"];
   hasViewActivityRedactedRole?: UIConfigState["hasViewActivityRedactedRole"];
-  nodeRegions: { [nodeId: string]: string };
   transactionFingerprintId: string;
   transactionInsights: TxnInsightEvent[];
   hasAdminRole?: UIConfigState["hasAdminRole"];
@@ -126,7 +126,6 @@ export interface TransactionDetailsStateProps {
 
 export interface TransactionDetailsDispatchProps {
   refreshData: (req?: StatementsRequest) => void;
-  refreshNodes: () => void;
   refreshUserSQLRoles: () => void;
   refreshTransactionInsights: (req: TxnInsightsRequest) => void;
   onTimeScaleChange: (ts: TimeScale) => void;
@@ -140,20 +139,20 @@ export type TransactionDetailsProps = TransactionDetailsStateProps &
 export function TransactionDetails(
   props: TransactionDetailsProps,
 ): React.ReactElement {
+  const { nodeRegionsByID: nodeRegions } = useNodes();
+
   const {
     timeScale,
     limit,
     reqSortSetting,
     isTenant,
     hasViewActivityRedactedRole,
-    nodeRegions,
     transactionFingerprintId,
     transactionInsights,
     hasAdminRole,
     txnStatsResp,
     requestTime,
     refreshData,
-    refreshNodes,
     refreshUserSQLRoles,
     refreshTransactionInsights,
     onTimeScaleChange,
@@ -214,15 +213,11 @@ export function TransactionDetails(
   // while preserving "run once on mount" semantics.
   const txnStatsRespRef = useRef(txnStatsResp);
   const refreshUserSQLRolesRef = useRef(refreshUserSQLRoles);
-  const isTenantRef = useRef(isTenant);
-  const refreshNodesRef = useRef(refreshNodes);
   const timeScaleRef = useRef(timeScale);
 
   // Keep refs up to date on each render
   txnStatsRespRef.current = txnStatsResp;
   refreshUserSQLRolesRef.current = refreshUserSQLRoles;
-  isTenantRef.current = isTenant;
-  refreshNodesRef.current = refreshNodes;
   timeScaleRef.current = timeScale;
 
   const changeTimeScale = useCallback(
@@ -294,9 +289,6 @@ export function TransactionDetails(
       doRefreshDataRef.current();
     }
     refreshUserSQLRolesRef.current();
-    if (!isTenantRef.current) {
-      refreshNodesRef.current();
-    }
 
     // Validate timeScale and update if needed
     const ts = getValidOption(timeScaleRef.current, timeScale1hMinOptions);
@@ -314,10 +306,6 @@ export function TransactionDetails(
   const prevTimeScaleRef = React.useRef(timeScale);
 
   useEffect(() => {
-    if (!isTenant) {
-      refreshNodes();
-    }
-
     // Check if we need to update txnDetails
     if (
       prevTransactionFingerprintIdRef.current !== transactionFingerprintId ||
@@ -338,8 +326,6 @@ export function TransactionDetails(
     prevLocationSearchRef.current = location?.search;
     prevTimeScaleRef.current = timeScale;
   }, [
-    isTenant,
-    refreshNodes,
     transactionFingerprintId,
     txnStatsResp,
     location?.search,

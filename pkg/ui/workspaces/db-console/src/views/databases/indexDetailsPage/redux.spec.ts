@@ -139,7 +139,7 @@ describe("Index Details Page", function () {
         tableName: "TABLE",
         indexName: "INDEX",
         isTenant: false,
-        nodeRegions: {},
+
         hasAdminRole: undefined,
         hasViewActivityRedactedRole: undefined,
         timeScale: timeScale,
@@ -195,7 +195,7 @@ describe("Index Details Page", function () {
       tableName: "TABLE",
       indexName: "INDEX",
       isTenant: false,
-      nodeRegions: {},
+
       timeScale: timeScale,
       hasAdminRole: undefined,
       hasViewActivityRedactedRole: undefined,

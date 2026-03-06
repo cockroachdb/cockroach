@@ -11,13 +11,8 @@ import {
 import { RouteComponentProps } from "react-router";
 
 import { cockroach } from "src/js/protos";
-import {
-  refreshIndexStats,
-  refreshNodes,
-  refreshUserSQLRoles,
-} from "src/redux/apiReducers";
+import { refreshIndexStats, refreshUserSQLRoles } from "src/redux/apiReducers";
 import { resetIndexUsageStatsAction } from "src/redux/indexUsageStats";
-import { nodeRegionsByIDSelector } from "src/redux/nodes";
 import { AdminUIState } from "src/redux/state";
 import { setGlobalTimeScaleAction } from "src/redux/statements";
 import { selectTimeScale } from "src/redux/timeScale";
@@ -45,7 +40,6 @@ export const mapStateToProps = (
   const index = getMatchParamByName(props.match, indexNameAttr);
   const indexStats = state.cachedData.indexStats;
   const hasViewActivityRedactedRole = selectHasViewActivityRedactedRole(state);
-  const nodeRegions = nodeRegionsByIDSelector(state);
   const hasAdminRole = selectHasAdminRole(state);
   const timeScale = selectTimeScale(state);
   const stats = indexStats[util.generateTableID(database, table)];
@@ -75,7 +69,6 @@ export const mapStateToProps = (
     isTenant: false,
     hasViewActivityRedactedRole: hasViewActivityRedactedRole,
     hasAdminRole: hasAdminRole,
-    nodeRegions: nodeRegions,
     timeScale: timeScale,
     details: {
       loading: !!stats?.inFlight,
@@ -100,7 +93,6 @@ export const mapDispatchToProps = {
     return refreshIndexStats(new TableIndexStatsRequest({ database, table }));
   },
   resetIndexUsageStats: resetIndexUsageStatsAction,
-  refreshNodes,
   refreshUserSQLRoles,
   onTimeScaleChange: setGlobalTimeScaleAction,
 };

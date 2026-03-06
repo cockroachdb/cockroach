@@ -57,6 +57,7 @@ import {
   StatementDiagnosticsReport,
   StmtInsightsReq,
 } from "../api";
+import { useNodes } from "../api/nodesApi";
 import { CockroachCloudContext } from "../contexts";
 import { Delayed } from "../delayed";
 import { AxisUnits } from "../graphs";
@@ -133,8 +134,6 @@ export interface StatementDetailsDispatchProps {
   refreshStatementDetails: (req: StatementDetailsRequest) => void;
   refreshStatementDiagnosticsRequests: () => void;
   refreshUserSQLRoles: () => void;
-  refreshNodes: () => void;
-  refreshNodesLiveness: () => void;
   refreshStatementFingerprintInsights: (req: StmtInsightsReq) => void;
   createStatementDiagnosticsReport: (
     insertStmtDiagnosticsRequest: InsertStmtDiagnosticRequest,
@@ -161,7 +160,6 @@ export interface StatementDetailsStateProps {
   statementsError: Error | null;
   lastUpdated: moment.Moment | null;
   timeScale: TimeScale;
-  nodeRegions: { [nodeId: string]: string };
   diagnosticsReports: StatementDiagnosticsReport[];
   uiConfig?: UIConfigState["pages"]["statementDetails"];
   isTenant?: UIConfigState["isTenant"];
@@ -228,6 +226,8 @@ function renderTransactionType(implicitTxn: boolean) {
 export function StatementDetails(
   props: StatementDetailsProps,
 ): React.ReactElement {
+  const { nodeRegionsByID: nodeRegions } = useNodes();
+
   const {
     history,
     location,
@@ -237,7 +237,6 @@ export function StatementDetails(
     statementsError,
     lastUpdated,
     timeScale,
-    nodeRegions,
     diagnosticsReports,
     uiConfig,
     isTenant,
@@ -248,8 +247,6 @@ export function StatementDetails(
     refreshStatementDetails,
     refreshStatementDiagnosticsRequests,
     refreshUserSQLRoles,
-    refreshNodes,
-    refreshNodesLiveness,
     refreshStatementFingerprintInsights,
     createStatementDiagnosticsReport,
     dismissStatementDiagnosticsAlertMessage,
@@ -270,9 +267,6 @@ export function StatementDetails(
   const timeScaleRef = useRef(timeScale);
   const lastUpdatedRef = useRef(lastUpdated);
   const refreshUserSQLRolesRef = useRef(refreshUserSQLRoles);
-  const isTenantRef = useRef(isTenant);
-  const refreshNodesRef = useRef(refreshNodes);
-  const refreshNodesLivenessRef = useRef(refreshNodesLiveness);
   const hasViewActivityRedactedRoleRef = useRef(hasViewActivityRedactedRole);
   const refreshStatementDiagnosticsRequestsRef = useRef(
     refreshStatementDiagnosticsRequests,
@@ -282,9 +276,6 @@ export function StatementDetails(
   timeScaleRef.current = timeScale;
   lastUpdatedRef.current = lastUpdated;
   refreshUserSQLRolesRef.current = refreshUserSQLRoles;
-  isTenantRef.current = isTenant;
-  refreshNodesRef.current = refreshNodes;
-  refreshNodesLivenessRef.current = refreshNodesLiveness;
   hasViewActivityRedactedRoleRef.current = hasViewActivityRedactedRole;
   refreshStatementDiagnosticsRequestsRef.current =
     refreshStatementDiagnosticsRequests;
@@ -408,10 +399,6 @@ export function StatementDetails(
       );
     }
     refreshUserSQLRolesRef.current();
-    if (!isTenantRef.current) {
-      refreshNodesRef.current();
-      refreshNodesLivenessRef.current();
-    }
     if (!hasViewActivityRedactedRoleRef.current) {
       refreshStatementDiagnosticsRequestsRef.current();
     }
@@ -433,10 +420,6 @@ export function StatementDetails(
       refreshStatementDetailsInternal();
     }
 
-    if (!isTenant) {
-      refreshNodes();
-      refreshNodesLiveness();
-    }
     if (!hasViewActivityRedactedRole) {
       refreshStatementDiagnosticsRequests();
     }
@@ -451,9 +434,6 @@ export function StatementDetails(
     location,
     handleResize,
     refreshStatementDetailsInternal,
-    isTenant,
-    refreshNodes,
-    refreshNodesLiveness,
     hasViewActivityRedactedRole,
     refreshStatementDiagnosticsRequests,
   ]);

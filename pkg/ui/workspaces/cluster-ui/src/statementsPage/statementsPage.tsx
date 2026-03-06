@@ -53,6 +53,7 @@ import {
   SqlStatsResponse,
   StatementDiagnosticsResponse,
 } from "../api";
+import { useNodes } from "../api/nodesApi";
 import ColumnsSelector from "../columnsSelector/columnsSelector";
 import { commonStyles } from "../common";
 import { SelectOption } from "../multiSelectCheckbox/multiSelectCheckbox";
@@ -109,7 +110,6 @@ export interface StatementsPageDispatchProps {
   refreshDatabases: (timeout?: moment.Duration) => void;
   refreshStatements: (req: StatementsRequest) => void;
   refreshStatementDiagnosticsRequests: () => void;
-  refreshNodes: () => void;
   refreshUserSQLRoles: () => void;
   resetSQLStats: () => void;
   dismissAlertMessage: () => void;
@@ -143,7 +143,6 @@ export interface StatementsPageStateProps {
   reqSortSetting: SqlStatsSortType;
   databases: string[];
   columns: string[];
-  nodeRegions: { [key: string]: string };
   sortSetting: SortSetting;
   filters: Filters;
   search: string;
@@ -185,6 +184,8 @@ function stmtsRequestFromParams(params: RequestParams): StatementsRequest {
 }
 
 export function StatementsPage(props: StatementsPageProps): React.ReactElement {
+  const { nodeRegionsByID: nodeRegions } = useNodes();
+
   const {
     history,
     search,
@@ -196,7 +197,6 @@ export function StatementsPage(props: StatementsPageProps): React.ReactElement {
     refreshDatabases,
     refreshStatements,
     refreshStatementDiagnosticsRequests,
-    refreshNodes,
     refreshUserSQLRoles,
     resetSQLStats: resetSQLStatsAction,
     dismissAlertMessage,
@@ -217,7 +217,6 @@ export function StatementsPage(props: StatementsPageProps): React.ReactElement {
     limit: propsLimit,
     reqSortSetting: propsReqSortSetting,
     databases,
-    nodeRegions,
     isTenant,
     hasViewActivityRedactedRole,
     hasAdminRole,
@@ -236,7 +235,6 @@ export function StatementsPage(props: StatementsPageProps): React.ReactElement {
   const statementsResponseRef = useRef(statementsResponse);
   const refreshUserSQLRolesRef = useRef(refreshUserSQLRoles);
   const isTenantRef = useRef(isTenant);
-  const refreshNodesRef = useRef(refreshNodes);
   const hasViewActivityRedactedRoleRef = useRef(hasViewActivityRedactedRole);
   const refreshStatementDiagnosticsRequestsRef = useRef(
     refreshStatementDiagnosticsRequests,
@@ -248,7 +246,6 @@ export function StatementsPage(props: StatementsPageProps): React.ReactElement {
   statementsResponseRef.current = statementsResponse;
   refreshUserSQLRolesRef.current = refreshUserSQLRoles;
   isTenantRef.current = isTenant;
-  refreshNodesRef.current = refreshNodes;
   hasViewActivityRedactedRoleRef.current = hasViewActivityRedactedRole;
   refreshStatementDiagnosticsRequestsRef.current =
     refreshStatementDiagnosticsRequests;
@@ -576,9 +573,6 @@ export function StatementsPage(props: StatementsPageProps): React.ReactElement {
     }
 
     refreshUserSQLRolesRef.current();
-    if (!isTenantRef.current) {
-      refreshNodesRef.current();
-    }
     if (!hasViewActivityRedactedRoleRef.current) {
       refreshStatementDiagnosticsRequestsRef.current();
     }
@@ -587,16 +581,11 @@ export function StatementsPage(props: StatementsPageProps): React.ReactElement {
   // componentDidUpdate - update query params and refresh data
   useEffect(() => {
     updateQueryParams();
-    if (!isTenant) {
-      refreshNodes();
-    }
     if (!hasViewActivityRedactedRole) {
       refreshStatementDiagnosticsRequests();
     }
   }, [
     updateQueryParams,
-    isTenant,
-    refreshNodes,
     hasViewActivityRedactedRole,
     refreshStatementDiagnosticsRequests,
   ]);

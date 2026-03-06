@@ -23,9 +23,6 @@ const history = createMemoryHistory({ initialEntries: ["/sessions"] });
 
 const sessionDetailsPropsBase: SessionDetailsProps = {
   id: "blah",
-  nodeNames: {
-    1: "localhost",
-  },
   sessionError: null,
   session: null,
   history,
@@ -45,8 +42,6 @@ const sessionDetailsPropsBase: SessionDetailsProps = {
   refreshSessions: () => {},
   cancelSession: (_req: CancelSessionRequestMessage) => {},
   cancelQuery: (_req: CancelQueryRequestMessage) => {},
-  refreshNodes: () => {},
-  refreshNodesLiveness: () => {},
   uiConfig: {
     showGatewayNodeLink: true,
   },

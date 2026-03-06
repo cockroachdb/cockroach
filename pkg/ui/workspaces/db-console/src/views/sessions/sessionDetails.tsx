@@ -8,13 +8,7 @@ import { connect } from "react-redux";
 import { RouteComponentProps, withRouter } from "react-router-dom";
 import { createSelector } from "reselect";
 
-import {
-  CachedDataReducerState,
-  refreshLiveness,
-  refreshNodes,
-  refreshSessions,
-} from "src/redux/apiReducers";
-import { nodeDisplayNameByIDSelectorWithoutAddress } from "src/redux/nodes";
+import { CachedDataReducerState, refreshSessions } from "src/redux/apiReducers";
 import {
   terminateQueryAction,
   terminateSessionAction,
@@ -49,7 +43,6 @@ export const selectSession = createSelector(
 const SessionDetailsPageConnected = withRouter(
   connect(
     (state: AdminUIState, props: RouteComponentProps) => ({
-      nodeNames: nodeDisplayNameByIDSelectorWithoutAddress(state),
       session: selectSession(state, props),
       sessionError: state.cachedData.sessions.lastError,
     }),
@@ -57,8 +50,6 @@ const SessionDetailsPageConnected = withRouter(
       refreshSessions,
       cancelSession: terminateSessionAction,
       cancelQuery: terminateQueryAction,
-      refreshNodes: refreshNodes,
-      refreshNodesLiveness: refreshLiveness,
       setTimeScale,
     },
   )(SessionDetails),

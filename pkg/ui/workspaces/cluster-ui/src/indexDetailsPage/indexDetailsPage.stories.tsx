@@ -17,7 +17,6 @@ const withData: IndexDetailsPageProps = {
   tableName: randomName(),
   indexName: randomName(),
   isTenant: false,
-  nodeRegions: {},
   timeScale: null,
   details: {
     databaseID: 1,
@@ -41,7 +40,6 @@ const withData: IndexDetailsPageProps = {
   },
   refreshIndexStats: () => {},
   resetIndexUsageStats: () => {},
-  refreshNodes: () => {},
   refreshUserSQLRoles: () => {},
   onTimeScaleChange: () => {},
 };

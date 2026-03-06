@@ -28,6 +28,7 @@ import { DurationToMomentDuration, TimestampToMoment } from "src/util/convert";
 import { Bytes, DATE_FORMAT_24_TZ, Count } from "src/util/format";
 import { getMatchParamByName } from "src/util/query";
 
+import { useNodesSummary } from "../api/nodesSummaryApi";
 import { Button } from "../button";
 import { CircleFilled } from "../icon";
 import { Loading } from "../loading";
@@ -55,12 +56,9 @@ const statementsPageCx = classNames.bind(statementsPageStyles);
 
 export interface OwnProps {
   id?: string;
-  nodeNames: { [nodeId: string]: string };
   session: SessionInfo;
   sessionError: Error | null;
   refreshSessions: (req?: SessionsRequest) => void;
-  refreshNodes: () => void;
-  refreshNodesLiveness: () => void;
   cancelSession: (payload: ICancelSessionRequest) => void;
   cancelQuery: (payload: ICancelQueryRequest) => void;
   uiConfig?: UIConfigState["pages"]["sessionDetails"];
@@ -93,19 +91,18 @@ export const MemoryUsageItem: React.FC<{
 );
 
 export function SessionDetails(props: SessionDetailsProps): React.ReactElement {
+  const { nodeDisplayNameByID: nodeNames } = useNodesSummary();
+
   const {
     history,
     match,
     session: sessionInfo,
     sessionError,
     refreshSessions,
-    refreshNodes,
-    refreshNodesLiveness,
     cancelSession,
     cancelQuery,
     uiConfig,
     isTenant,
-    nodeNames,
     onBackButtonClick,
     onTerminateSessionClick,
     onTerminateStatementClick,
@@ -117,23 +114,13 @@ export function SessionDetails(props: SessionDetailsProps): React.ReactElement {
 
   // Refs to hold latest values for mount effect, avoiding stale closures
   // while preserving "run once on mount" semantics.
-  const isTenantRef = useRef(isTenant);
-  const refreshNodesRef = useRef(refreshNodes);
-  const refreshNodesLivenessRef = useRef(refreshNodesLiveness);
   const refreshSessionsRef = useRef(refreshSessions);
 
   // Keep refs up to date on each render
-  isTenantRef.current = isTenant;
-  refreshNodesRef.current = refreshNodes;
-  refreshNodesLivenessRef.current = refreshNodesLiveness;
   refreshSessionsRef.current = refreshSessions;
 
   // componentDidMount
   useEffect(() => {
-    if (!isTenantRef.current) {
-      refreshNodesRef.current();
-      refreshNodesLivenessRef.current();
-    }
     refreshSessionsRef.current();
   }, []);
 

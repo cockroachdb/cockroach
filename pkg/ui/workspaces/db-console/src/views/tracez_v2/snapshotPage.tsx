@@ -15,7 +15,6 @@ import { RouteComponentProps, withRouter } from "react-router-dom";
 
 import {
   rawTraceKey,
-  refreshNodes,
   refreshRawTrace,
   refreshSnapshot,
   refreshSnapshots,
@@ -35,7 +34,6 @@ const mapStateToProps = (
   state: AdminUIState,
   props: RouteComponentProps,
 ): SnapshotPageStateProps => {
-  const nodesState = state.cachedData.nodes;
   const nodeID = getMatchParamByName(props.match, "nodeID");
 
   const snapshotsState = state.cachedData.snapshots[nodeID];
@@ -63,8 +61,6 @@ const mapStateToProps = (
   return {
     sort: sortSetting.selector(state),
 
-    nodes: nodesState ? nodesState.data : null,
-
     snapshots: snapshotsState ? snapshotsState.data : null,
     snapshotsLoading: snapshotsState ? snapshotsState.inFlight : false,
     snapshotsError: snapshotsState ? snapshotsState.lastError : null,
@@ -84,7 +80,6 @@ const mapStateToProps = (
 
 const mapDispatchToProps = {
   setSort: sortSetting.set,
-  refreshNodes,
   refreshSnapshots,
   refreshSnapshot,
   refreshRawTrace,

@@ -24,7 +24,6 @@ describe("IndexDetailsPage", () => {
     databaseName: "DATABASE",
     tableName: "TABLE",
     indexName: "INDEX",
-    nodeRegions: {},
     hasAdminRole: undefined,
     hasViewActivityRedactedRole: undefined,
     timeScale: {
@@ -51,42 +50,6 @@ describe("IndexDetailsPage", () => {
     onTimeScaleChange: () => {},
     refreshIndexStats: () => {},
   };
-
-  it("should call refreshNodes if isTenant is false", () => {
-    const mockCallback = jest.fn(() => {});
-    act(() => {
-      render(
-        <MemoryRouter initialEntries={["/"]}>
-          <Switch>
-            <Route path="/">
-              <IndexDetailsPage {...props} refreshNodes={mockCallback} />
-            </Route>
-          </Switch>
-        </MemoryRouter>,
-      );
-    });
-    expect(mockCallback).toHaveBeenCalled();
-  });
-
-  it("should not call refreshNodes if isTenant is true", () => {
-    const mockCallback = jest.fn(() => {});
-    act(() => {
-      render(
-        <MemoryRouter initialEntries={["/"]}>
-          <Switch>
-            <Route path="/">
-              <IndexDetailsPage
-                {...props}
-                refreshNodes={mockCallback}
-                isTenant={true}
-              />
-            </Route>
-          </Switch>
-        </MemoryRouter>,
-      );
-    });
-    expect(mockCallback).not.toHaveBeenCalled();
-  });
 
   it("should render bread crumbs", () => {
     let container: HTMLElement;

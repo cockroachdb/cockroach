@@ -18,7 +18,6 @@ import {
   data,
   filters,
   lastUpdated,
-  nodeRegions,
   requestTime,
   routeProps,
   sortSetting,
@@ -60,13 +59,11 @@ storiesOf("Transactions Page", module)
         columns={columns}
         timeScale={timeScale}
         filters={filters}
-        nodeRegions={nodeRegions}
         hasAdminRole={true}
         oldestDataAvailable={timestamp}
         onFilterChange={noop}
         onSortingChange={noop}
         refreshData={noop}
-        refreshNodes={noop}
         refreshUserSQLRoles={noop}
         resetSQLStats={noop}
         search={""}
@@ -93,13 +90,11 @@ storiesOf("Transactions Page", module)
         txnsResp={resp}
         timeScale={timeScale}
         filters={filters}
-        nodeRegions={nodeRegions}
         hasAdminRole={true}
         oldestDataAvailable={timestamp}
         onFilterChange={noop}
         onSortingChange={noop}
         refreshData={noop}
-        refreshNodes={noop}
         refreshUserSQLRoles={noop}
         resetSQLStats={noop}
         search={""}
@@ -133,13 +128,11 @@ storiesOf("Transactions Page", module)
         timeScale={timeScale}
         filters={filters}
         history={history}
-        nodeRegions={nodeRegions}
         hasAdminRole={true}
         oldestDataAvailable={timestamp}
         onFilterChange={noop}
         onSortingChange={noop}
         refreshData={noop}
-        refreshNodes={noop}
         refreshUserSQLRoles={noop}
         resetSQLStats={noop}
         search={""}
@@ -166,13 +159,11 @@ storiesOf("Transactions Page", module)
         txnsResp={resp}
         timeScale={timeScale}
         filters={filters}
-        nodeRegions={nodeRegions}
         hasAdminRole={true}
         oldestDataAvailable={timestamp}
         onFilterChange={noop}
         onSortingChange={noop}
         refreshData={noop}
-        refreshNodes={noop}
         refreshUserSQLRoles={noop}
         resetSQLStats={noop}
         search={""}
@@ -199,13 +190,11 @@ storiesOf("Transactions Page", module)
         txnsResp={resp}
         timeScale={timeScale}
         filters={filters}
-        nodeRegions={nodeRegions}
         hasAdminRole={true}
         oldestDataAvailable={timestamp}
         onFilterChange={noop}
         onSortingChange={noop}
         refreshData={noop}
-        refreshNodes={noop}
         refreshUserSQLRoles={noop}
         resetSQLStats={noop}
         search={""}

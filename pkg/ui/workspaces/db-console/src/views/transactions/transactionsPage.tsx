@@ -23,12 +23,10 @@ import { createSelector } from "reselect";
 import { trackApplySearchCriteriaAction } from "src/redux/analyticsActions";
 import {
   createSelectorForCachedDataField,
-  refreshNodes,
   refreshTxns,
   refreshUserSQLRoles,
 } from "src/redux/apiReducers";
 import { LocalSetting } from "src/redux/localsettings";
-import { nodeRegionsByIDSelector } from "src/redux/nodes";
 import { resetSQLStatsAction } from "src/redux/sqlStats";
 import { AdminUIState } from "src/redux/state";
 import { setGlobalTimeScaleAction } from "src/redux/statements";
@@ -108,7 +106,6 @@ export const selectTxns =
 
 const fingerprintsPageActions = {
   refreshData: refreshTxns,
-  refreshNodes,
   refreshUserSQLRoles,
   resetSQLStats: resetSQLStatsAction,
   onTimeScaleChange: setGlobalTimeScaleAction,
@@ -163,7 +160,6 @@ const TransactionsPageConnected = withRouter(
         timeScale: selectTimeScale(state),
         filters: filtersLocalSetting.selector(state),
         lastReset: selectLastReset(state),
-        nodeRegions: nodeRegionsByIDSelector(state),
         search: searchLocalSetting.selector(state),
         sortSetting: sortSettingLocalSetting.selector(state),
         hasAdminRole: selectHasAdminRole(state),

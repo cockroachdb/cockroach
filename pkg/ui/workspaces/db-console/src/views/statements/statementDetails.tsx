@@ -24,14 +24,11 @@ import {
   trackStatementDetailsSubnavSelectionAction,
 } from "src/redux/analyticsActions";
 import {
-  refreshLiveness,
-  refreshNodes,
   refreshStatementDiagnosticsRequests,
   refreshStatementDetails,
   refreshUserSQLRoles,
   refreshStatementFingerprintInsights,
 } from "src/redux/apiReducers";
-import { nodeRegionsByIDSelector } from "src/redux/nodes";
 import { AdminUIState, AppDispatch } from "src/redux/state";
 import {
   cancelStatementDiagnosticsReportAction,
@@ -122,7 +119,6 @@ const mapStateToProps = (
     statementsError: lastError,
     lastUpdated: lastUpdated,
     timeScale: selectTimeScale(state),
-    nodeRegions: nodeRegionsByIDSelector(state),
     diagnosticsReports: selectDiagnosticsReportsByStatementFingerprint(
       state,
       statementFingerprint,
@@ -169,8 +165,6 @@ const mapDispatchToProps: StatementDetailsDispatchProps = {
       );
     };
   },
-  refreshNodes: refreshNodes,
-  refreshNodesLiveness: refreshLiveness,
   refreshUserSQLRoles: refreshUserSQLRoles,
   refreshStatementFingerprintInsights: (req: clusterUiApi.StmtInsightsReq) =>
     refreshStatementFingerprintInsights(req),

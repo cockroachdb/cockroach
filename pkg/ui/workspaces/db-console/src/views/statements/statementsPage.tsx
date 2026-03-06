@@ -31,7 +31,6 @@ import {
   trackStatementsPaginationAction,
 } from "src/redux/analyticsActions";
 import {
-  refreshNodes,
   refreshDatabases,
   refreshStatementDiagnosticsRequests,
   refreshStatements,
@@ -40,7 +39,6 @@ import {
 } from "src/redux/apiReducers";
 import { CachedDataReducerState } from "src/redux/cachedDataReducer";
 import { LocalSetting } from "src/redux/localsettings";
-import { nodeRegionsByIDSelector } from "src/redux/nodes";
 import { resetSQLStatsAction } from "src/redux/sqlStats";
 import { AdminUIState, AppDispatch } from "src/redux/state";
 import {
@@ -134,7 +132,6 @@ const fingerprintsPageActions = {
   refreshDatabases: refreshDatabases,
   onTimeScaleChange: setGlobalTimeScaleAction,
   refreshStatementDiagnosticsRequests,
-  refreshNodes,
   refreshUserSQLRoles,
   resetSQLStats: resetSQLStatsAction,
   dismissAlertMessage: () => {
@@ -231,7 +228,6 @@ export default withRouter(
         databases: selectDatabases(state),
         timeScale: selectTimeScale(state),
         filters: filtersLocalSetting.selector(state),
-        nodeRegions: nodeRegionsByIDSelector(state),
         search: searchLocalSetting.selector(state),
         sortSetting: sortSettingLocalSetting.selector(state),
         requestTime: requestTimeLocalSetting.selector(state),

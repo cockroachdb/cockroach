@@ -29,6 +29,7 @@ import {
   StatementsListRequestFromDetails,
   StatementsUsingIndexRequest,
 } from "../api/indexDetailsApi";
+import { useNodes } from "../api/nodesApi";
 import { commonStyles } from "../common";
 import { Pagination } from "../pagination";
 import {
@@ -109,7 +110,6 @@ export interface IndexDetailsPageData {
   isTenant: UIConfigState["isTenant"];
   hasViewActivityRedactedRole?: UIConfigState["hasViewActivityRedactedRole"];
   hasAdminRole?: UIConfigState["hasAdminRole"];
-  nodeRegions: { [nodeId: string]: string };
   timeScale: TimeScale;
 }
 
@@ -136,7 +136,6 @@ interface IndexRecommendation {
 export interface IndexDetailPageActions {
   refreshIndexStats?: (database: string, table: string) => void;
   resetIndexUsageStats?: (database: string, table: string) => void;
-  refreshNodes?: () => void;
   refreshUserSQLRoles: () => void;
   onTimeScaleChange: (ts: TimeScale) => void;
 }
@@ -147,6 +146,8 @@ export type IndexDetailsPageProps = IndexDetailsPageData &
 export function IndexDetailsPage(
   props: IndexDetailsPageProps,
 ): React.ReactElement {
+  const { nodeRegionsByID: nodeRegions } = useNodes();
+
   const {
     databaseName,
     tableName,
@@ -155,11 +156,9 @@ export function IndexDetailsPage(
     isTenant,
     hasViewActivityRedactedRole,
     hasAdminRole,
-    nodeRegions,
     timeScale,
     refreshIndexStats,
     resetIndexUsageStats,
-    refreshNodes,
     refreshUserSQLRoles,
     onTimeScaleChange,
   } = props;
@@ -186,16 +185,11 @@ export function IndexDetailsPage(
 
   const refresh = useCallback(() => {
     refreshUserSQLRoles();
-    if (refreshNodes != null && !isTenant) {
-      refreshNodes();
-    }
     if (!details.loaded && !details.loading) {
       refreshIndexStats?.(databaseName, tableName);
     }
   }, [
     refreshUserSQLRoles,
-    refreshNodes,
-    isTenant,
     details.loaded,
     details.loading,
     refreshIndexStats,

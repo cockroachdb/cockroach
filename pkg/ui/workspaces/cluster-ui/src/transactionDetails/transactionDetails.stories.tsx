@@ -11,7 +11,6 @@ import React from "react";
 import { MemoryRouter } from "react-router-dom";
 
 import {
-  nodeRegions,
   requestTime,
   routeProps,
   timeScale,
@@ -33,14 +32,12 @@ storiesOf("Transactions Details", module)
       {...routeProps}
       timeScale={timeScale}
       transactionFingerprintId={transactionFingerprintId.toString()}
-      nodeRegions={nodeRegions}
       isTenant={false}
       hasViewActivityRedactedRole={false}
       transactionInsights={undefined}
       refreshData={noop}
       refreshUserSQLRoles={noop}
       onTimeScaleChange={noop}
-      refreshNodes={noop}
       refreshTransactionInsights={noop}
       limit={100}
       reqSortSetting={StatsSortOptions.SERVICE_LAT}
@@ -60,14 +57,12 @@ storiesOf("Transactions Details", module)
       {...routeProps}
       timeScale={timeScale}
       transactionFingerprintId={transactionFingerprintId.toString()}
-      nodeRegions={nodeRegions}
       isTenant={false}
       hasViewActivityRedactedRole={false}
       transactionInsights={undefined}
       refreshData={noop}
       refreshUserSQLRoles={noop}
       onTimeScaleChange={noop}
-      refreshNodes={noop}
       refreshTransactionInsights={noop}
       limit={100}
       reqSortSetting={StatsSortOptions.SERVICE_LAT}
@@ -87,14 +82,12 @@ storiesOf("Transactions Details", module)
       {...routeProps}
       timeScale={timeScale}
       transactionFingerprintId={undefined}
-      nodeRegions={nodeRegions}
       isTenant={false}
       hasViewActivityRedactedRole={false}
       transactionInsights={undefined}
       refreshData={noop}
       refreshUserSQLRoles={noop}
       onTimeScaleChange={noop}
-      refreshNodes={noop}
       refreshTransactionInsights={noop}
       limit={100}
       reqSortSetting={StatsSortOptions.SERVICE_LAT}
@@ -115,14 +108,12 @@ storiesOf("Transactions Details", module)
         {...routeProps}
         timeScale={timeScale}
         transactionFingerprintId={transactionFingerprintId.toString()}
-        nodeRegions={nodeRegions}
         isTenant={false}
         hasViewActivityRedactedRole={false}
         transactionInsights={undefined}
         refreshData={noop}
         refreshUserSQLRoles={noop}
         onTimeScaleChange={noop}
-        refreshNodes={noop}
         refreshTransactionInsights={noop}
         limit={100}
         reqSortSetting={StatsSortOptions.SERVICE_LAT}

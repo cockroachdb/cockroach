@@ -40,7 +40,6 @@ const getMockSnapshotPageProps = (): SnapshotPageProps => {
     },
     rawTrace: undefined,
     rawTraceLoading: false,
-    refreshNodes: () => void {},
     refreshRawTrace: () => void {},
     refreshSnapshot: (_req: { nodeID: string; snapshotID: number }): void => {},
     refreshSnapshots: (_id: string): void => {},

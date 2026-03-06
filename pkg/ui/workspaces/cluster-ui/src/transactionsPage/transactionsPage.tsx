@@ -30,6 +30,7 @@ import {
 } from "src/util/sqlActivityConstants";
 
 import { RequestState } from "../api";
+import { useNodes } from "../api/nodesApi";
 import ColumnsSelector from "../columnsSelector/columnsSelector";
 import { isSelectedColumn } from "../columnsSelector/utils";
 import { commonStyles } from "../common";
@@ -96,7 +97,6 @@ export interface TransactionsPageStateProps {
   reqSortSetting: SqlStatsSortType;
   filters: Filters;
   isTenant?: UIConfigState["isTenant"];
-  nodeRegions: { [nodeId: string]: string };
   search: string;
   sortSetting: SortSetting;
   hasAdminRole?: UIConfigState["hasAdminRole"];
@@ -106,7 +106,6 @@ export interface TransactionsPageStateProps {
 
 export interface TransactionsPageDispatchProps {
   refreshData: (req: StatementsRequest) => void;
-  refreshNodes: () => void;
   refreshUserSQLRoles: () => void;
   resetSQLStats: () => void;
   onTimeScaleChange?: (ts: TimeScale) => void;
@@ -147,6 +146,8 @@ function stmtsRequestFromParams(params: RequestParams): StatementsRequest {
 export function TransactionsPage(
   props: TransactionsPageProps,
 ): React.ReactElement {
+  const { nodeRegionsByID: nodeRegions } = useNodes();
+
   const {
     columns: userSelectedColumnsToShow,
     txnsResp,
@@ -155,14 +156,12 @@ export function TransactionsPage(
     reqSortSetting: propsReqSortSetting,
     filters: propsFilters,
     isTenant,
-    nodeRegions,
     search,
     sortSetting,
     hasAdminRole,
     requestTime,
     oldestDataAvailable,
     refreshData,
-    refreshNodes,
     refreshUserSQLRoles,
     resetSQLStats,
     onTimeScaleChange,
@@ -210,7 +209,6 @@ export function TransactionsPage(
   const onRequestTimeChangeRef = useRef(onRequestTimeChange);
   const txnsRespRef = useRef(txnsResp);
   const isTenantRef = useRef(isTenant);
-  const refreshNodesRef = useRef(refreshNodes);
   const refreshUserSQLRolesRef = useRef(refreshUserSQLRoles);
 
   // Keep refs up to date on each render
@@ -223,7 +221,6 @@ export function TransactionsPage(
   onRequestTimeChangeRef.current = onRequestTimeChange;
   txnsRespRef.current = txnsResp;
   isTenantRef.current = isTenant;
-  refreshNodesRef.current = refreshNodes;
   refreshUserSQLRolesRef.current = refreshUserSQLRoles;
 
   // Initialize search from query string
@@ -283,10 +280,6 @@ export function TransactionsPage(
       refreshDataFromStateRef.current();
     }
 
-    if (!isTenantRef.current) {
-      refreshNodesRef.current();
-    }
-
     refreshUserSQLRolesRef.current();
   }, []);
 
@@ -317,10 +310,7 @@ export function TransactionsPage(
   // componentDidUpdate equivalent
   useEffect(() => {
     updateQueryParams();
-    if (!isTenant) {
-      refreshNodes();
-    }
-  }, [updateQueryParams, isTenant, refreshNodes]);
+  }, [updateQueryParams]);
 
   const onChangeSortSetting = useCallback(
     (ss: SortSetting): void => {

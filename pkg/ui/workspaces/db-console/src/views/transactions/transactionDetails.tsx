@@ -13,12 +13,10 @@ import { RouteComponentProps } from "react-router";
 import { withRouter } from "react-router-dom";
 
 import {
-  refreshNodes,
   refreshTxns,
   refreshTxnInsights,
   refreshUserSQLRoles,
 } from "src/redux/apiReducers";
-import { nodeRegionsByIDSelector } from "src/redux/nodes";
 import { AdminUIState } from "src/redux/state";
 import { setGlobalTimeScaleAction } from "src/redux/statements";
 import { selectTimeScale } from "src/redux/timeScale";
@@ -47,7 +45,6 @@ export default withRouter(
       return {
         timeScale: selectTimeScale(state),
         isTenant: false,
-        nodeRegions: nodeRegionsByIDSelector(state),
         txnStatsResp: selectTxns(state),
         transactionFingerprintId: getMatchParamByName(
           props.match,
@@ -62,7 +59,6 @@ export default withRouter(
     },
     {
       refreshData: refreshTxns,
-      refreshNodes,
       refreshUserSQLRoles,
       onTimeScaleChange: setGlobalTimeScaleAction,
       refreshTransactionInsights: refreshTxnInsights,

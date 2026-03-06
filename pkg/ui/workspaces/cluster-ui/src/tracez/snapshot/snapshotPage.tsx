@@ -5,11 +5,11 @@
 
 import { join } from "path";
 
-import { cockroach } from "@cockroachlabs/crdb-protobuf-client";
 import Long from "long";
 import React, { useCallback, useEffect } from "react";
 import { RouteComponentProps } from "react-router-dom";
 
+import { useNodes } from "src/api/nodesApi";
 import {
   ListTracingSnapshotsResponse,
   GetTracingSnapshotResponse,
@@ -39,8 +39,6 @@ export const ROUTE_PREFIX = "/debug/tracez/";
 export interface SnapshotPageStateProps {
   sort: SortSetting;
 
-  nodes?: cockroach.server.status.statuspb.INodeStatus[];
-
   snapshots?: ListTracingSnapshotsResponse;
   snapshotsLoading: boolean;
   snapshotsError?: Error;
@@ -65,7 +63,6 @@ export interface SnapshotPageDispatchProps {
   setSort: (value: SortSetting) => void;
   refreshSnapshots: (id: string) => void;
   refreshSnapshot: (req: { nodeID: string; snapshotID: number }) => void;
-  refreshNodes: () => void;
   refreshRawTrace: (req: {
     nodeID: string;
     snapshotID: number;
@@ -84,15 +81,13 @@ export type SnapshotPageProps = SnapshotPageStateProps &
   RouteComponentProps<UrlParams>;
 
 export const SnapshotPage: React.FC<SnapshotPageProps> = props => {
+  const { nodeStatuses: nodes } = useNodes();
   const {
     history,
     match,
 
     sort,
     setSort,
-
-    nodes,
-    refreshNodes,
 
     snapshots,
     snapshotsLoading,
@@ -130,10 +125,6 @@ export const SnapshotPage: React.FC<SnapshotPageProps> = props => {
     join(ROUTE_PREFIX, "node/:nodeID/snapshot/:snapshotID/span/:spanID/raw");
 
   // Load initial data.
-  useEffect(() => {
-    refreshNodes();
-  }, [refreshNodes]);
-
   useEffect(() => {
     refreshSnapshots(nodeID);
     // Reload the snapshots when transitioning to a new snapshot ID.

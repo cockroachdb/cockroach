@@ -854,17 +854,9 @@ export const getStatementDetailsPropsFixture = (
     statementFingerprintID: "4705782015019656142",
     statementDetails: withData ? statementDetailsData : statementDetailsNoData,
     statementsError: null,
-    nodeRegions: {
-      "1": "gcp-us-east1",
-      "2": "gcp-us-east1",
-      "3": "gcp-us-west1",
-      "4": "gcp-europe-west1",
-    },
     requestTime: moment.utc("2021.12.12"),
     refreshStatementDetails: noop,
     refreshStatementDiagnosticsRequests: noop,
-    refreshNodes: noop,
-    refreshNodesLiveness: noop,
     refreshUserSQLRoles: noop,
     refreshStatementFingerprintInsights: noop,
     diagnosticsReports: [

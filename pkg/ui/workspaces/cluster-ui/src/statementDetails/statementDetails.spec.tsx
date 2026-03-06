@@ -55,8 +55,6 @@ describe("StatementDetails page", () => {
 
     it("switches to the Diagnostics tab and triggers the activation modal", () => {
       const onTabChangeSpy = jest.fn();
-      const refreshNodesClickSpy = sandbox.spy();
-      const refreshNodesLivenessClickSpy = sandbox.spy();
       const refreshStatementDiagnosticsRequestsClickSpy = sandbox.spy();
       const onDiagnosticsActivateClickSpy = sandbox.spy();
 
@@ -66,8 +64,6 @@ describe("StatementDetails page", () => {
             {...statementDetailsProps}
             onTabChanged={onTabChangeSpy}
             createStatementDiagnosticsReport={onDiagnosticsActivateClickSpy}
-            refreshNodes={refreshNodesClickSpy}
-            refreshNodesLiveness={refreshNodesLivenessClickSpy}
             refreshStatementDiagnosticsRequests={
               refreshStatementDiagnosticsRequestsClickSpy
             }
@@ -87,10 +83,6 @@ describe("StatementDetails page", () => {
         statementDetailsProps.statementDetails.statement.metadata.query,
       );
 
-      // Expect calls to refresh page information on load and update events. Node
-      // and liveness refreshes should not happen for tenants.
-      expect(refreshNodesClickSpy.callCount).toBe(isTenant ? 0 : 3);
-      expect(refreshNodesLivenessClickSpy.callCount).toBe(isTenant ? 0 : 3);
       expect(refreshStatementDiagnosticsRequestsClickSpy.calledThrice).toBe(
         true,
       );
