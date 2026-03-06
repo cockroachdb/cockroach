@@ -43,13 +43,7 @@ import (
 	gogotypes "github.com/gogo/protobuf/types"
 )
 
-var csvOutputTypes = []*types.T{
-	types.Bytes,
-	types.Bytes,
-}
-
-var distributedMergeOutputTypes = []*types.T{
-	types.Bytes,
+var importProcessorOutputTypes = []*types.T{
 	types.Bytes,
 	types.Bytes,
 }
@@ -143,11 +137,7 @@ func newReadImportDataProcessor(
 		processorID: processorID,
 		progCh:      make(chan execinfrapb.RemoteProducerMetadata_BulkProcessorProgress),
 	}
-	outputTypes := csvOutputTypes
-	if spec.UseDistributedMerge {
-		outputTypes = distributedMergeOutputTypes
-	}
-	if err := idp.Init(ctx, idp, post, outputTypes, flowCtx, processorID, nil, /* memMonitor */
+	if err := idp.Init(ctx, idp, post, importProcessorOutputTypes, flowCtx, processorID, nil, /* memMonitor */
 		execinfra.ProcStateOpts{
 			// This processor doesn't have any inputs to drain.
 			InputsToDrain: nil,
