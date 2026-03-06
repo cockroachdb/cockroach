@@ -83,10 +83,11 @@ func TestColumnConversions(t *testing.T) {
 		},
 
 		"VARBIT": {
-			"INT":    ColumnConversionGeneral,
-			"STRING": ColumnConversionGeneral,
-			"BYTES":  ColumnConversionImpossible,
-			"BIT(4)": ColumnConversionValidate,
+			"INT":      ColumnConversionGeneral,
+			"STRING":   ColumnConversionGeneral,
+			"BYTES":    ColumnConversionImpossible,
+			"BIT(4)":   ColumnConversionValidate,
+			"BIT(100)": ColumnConversionValidate,
 		},
 		"BIT(4)": {
 			"BIT(2)": ColumnConversionValidate,
@@ -94,8 +95,9 @@ func TestColumnConversions(t *testing.T) {
 		},
 
 		"STRING": {
-			"BIT":   ColumnConversionGeneral,
-			"BYTES": ColumnConversionValidate,
+			"BIT":         ColumnConversionGeneral,
+			"BYTES":       ColumnConversionValidate,
+			"STRING(100)": ColumnConversionValidate,
 		},
 		"STRING(5)": {
 			"BYTES": ColumnConversionValidate,
@@ -453,7 +455,17 @@ func TestVirtualColumnConversions(t *testing.T) {
 		{"BIT(4)", "BIT(1)", ColumnConversionValidate},
 		{"BIT(4)", "BIT(0)", ColumnConversionTrivial},
 		{"VARCHAR(10)", "CHAR(5)", ColumnConversionValidate},
+		{"VARCHAR(10)", "VARCHAR(20)", ColumnConversionTrivial},
+		{"VARCHAR(10)", "VARCHAR(5)", ColumnConversionValidate},
+		{"VARCHAR(10)", "TEXT", ColumnConversionTrivial},
 		{"CHAR(15)", "TEXT", ColumnConversionTrivial},
+		// Unbounded string to bounded requires validation since existing data
+		// may exceed the new limit.
+		{"TEXT", "VARCHAR(100)", ColumnConversionValidate},
+		{"TEXT", "VARCHAR(10)", ColumnConversionValidate},
+		// Unbounded bit to bounded requires validation.
+		{"VARBIT", "BIT(100)", ColumnConversionValidate},
+		{"VARBIT", "BIT(10)", ColumnConversionValidate},
 		{"TIMESTAMP(6)", "TIMESTAMP(4)", ColumnConversionTrivial},
 		{"TIMESTAMP(4)", "TIMESTAMP(6)", ColumnConversionTrivial},
 		{"TIMESTAMP(4)", "TIMESTAMPTZ(2)", ColumnConversionTrivial},
