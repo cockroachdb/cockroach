@@ -3,8 +3,10 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 go_library(
     name = "ash",
     srcs = [
+        "aggregate.go",
         "buffer.go",
         "doc.go",
+        "report.go",
         "sampler.go",
         "types.go",
         "work_state.go",
@@ -30,7 +32,9 @@ go_library(
 go_test(
     name = "ash_test",
     srcs = [
+        "aggregate_test.go",
         "buffer_test.go",
+        "report_test.go",
         "sampler_test.go",
         "work_state_test.go",
     ],
