@@ -156,6 +156,22 @@ func (m *migrationServer) SyncAllEngines(
 	defer span.Finish()
 	ctx = logtags.AddTag(ctx, opName, nil)
 
+	sync := func(eng kvstorage.Engines) error {
+		// Flush the state machine engine first. Use the Flush method since it does
+		// not support WAL / incremental syncs.
+		if eng.Separated() {
+			if err := eng.StateEngine().Flush(); err != nil {
+				return err
+			}
+		}
+		// Sync the LogEngine second, to ensure that the state machine engine
+		// doesn't run in front of it. Latest updates are captured by the LogEngine,
+		// before they are written to the state machine.
+		//
+		// NB: if engines are not separated, this syncs the entire engine.
+		return storage.WriteSyncNoop(eng.LogEngine())
+	}
+
 	if err := m.server.stopper.RunTaskWithErr(ctx, opName, func(
 		ctx context.Context,
 	) error {
@@ -164,9 +180,7 @@ func (m *migrationServer) SyncAllEngines(
 		m.server.node.waitForAdditionalStoreInit()
 
 		for _, eng := range m.server.engines {
-			// TODO(sep-raft-log): figure out whether StateEngine needs a sync, or we
-			// can only sync LogEngine here.
-			if err := storage.WriteSyncNoop(eng.TODOEngine()); err != nil {
+			if err := sync(eng); err != nil {
 				return err
 			}
 		}
