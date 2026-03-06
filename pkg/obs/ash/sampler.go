@@ -237,6 +237,14 @@ func encodeStmtFingerprintIDToString(id uint64) string {
 	return hex.EncodeToString(encodeUint64ToBytes(id))
 }
 
+// GetGlobalSampler returns the process-wide ASH sampler, or nil if it
+// has not been initialized. Callers that need to pass a reusable
+// buffer to GetSamples should use this instead of the package-level
+// GetSamples function.
+func GetGlobalSampler() *Sampler {
+	return globalSampler.Load()
+}
+
 // GetSamples returns all samples from the global ASH sampler. Returns
 // nil if the global sampler has not been initialized.
 func GetSamples() []ASHSample {

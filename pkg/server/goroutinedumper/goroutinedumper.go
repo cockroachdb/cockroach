@@ -92,9 +92,11 @@ type GoroutineDumper struct {
 }
 
 // MaybeDump takes a goroutine dump only when at least one heuristic in
-// GoroutineDumper is true.
+// GoroutineDumper is true. Returns true if a dump was successfully taken.
 // At most one dump is taken in a call of this function.
-func (gd *GoroutineDumper) MaybeDump(ctx context.Context, st *cluster.Settings, goroutines int64) {
+func (gd *GoroutineDumper) MaybeDump(
+	ctx context.Context, st *cluster.Settings, goroutines int64,
+) bool {
 	gd.goroutines = goroutines
 	if gd.goroutinesThreshold != numGoroutinesThreshold.Get(&st.SV) {
 		gd.goroutinesThreshold = numGoroutinesThreshold.Get(&st.SV)
@@ -110,9 +112,10 @@ func (gd *GoroutineDumper) MaybeDump(ctx context.Context, st *cluster.Settings, 
 			}
 			gd.maxGoroutinesDumped = goroutines
 			gd.gcDumps(ctx, now)
-			break
+			return true
 		}
 	}
+	return false
 }
 
 // DumpNow requests a goroutine dump on demand.

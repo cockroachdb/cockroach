@@ -81,16 +81,18 @@ func (o *profiler) now() time.Time {
 	return timeutil.Now()
 }
 
-// args is optional and will be passed as is into takeProfileFn.
+// maybeTakeProfile takes a profile if the threshold exceeds the high water
+// mark. Returns true if a profile was successfully taken. args is optional
+// and will be passed as is into takeProfileFn.
 func (o *profiler) maybeTakeProfile(
 	ctx context.Context,
 	thresholdValue int64,
 	takeProfileFn func(ctx context.Context, path string, args ...interface{}) bool,
 	args ...interface{},
-) {
+) bool {
 	if o.resetInterval() == 0 {
 		// Instruction to disable.
-		return
+		return false
 	}
 
 	now := o.now()
@@ -106,14 +108,14 @@ func (o *profiler) maybeTakeProfile(
 		hook(takeProfile)
 	}
 	if !takeProfile {
-		return
+		return false
 	}
 
 	o.highWaterMark = thresholdValue
 	o.lastProfileTime = now
 
 	if o.knobs.dontWriteProfiles {
-		return
+		return false
 	}
 	success := takeProfileFn(ctx, o.store.makeNewFileName(now, thresholdValue), args...)
 	if success {
@@ -122,4 +124,5 @@ func (o *profiler) maybeTakeProfile(
 		// from a previous crash.
 		o.store.gcProfiles(ctx, now)
 	}
+	return success
 }
