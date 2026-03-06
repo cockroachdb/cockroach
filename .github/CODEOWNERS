@@ -588,9 +588,22 @@
 /pkg/rpc/auth_tenant.go      @cockroachdb/server-prs @cockroachdb/security-engineering
 /pkg/scheduledjobs/          @cockroachdb/jobs-prs @cockroachdb/disaster-recovery
 /pkg/security/               @cockroachdb/security-engineering
+/pkg/security/auth*.go       @cockroachdb/security-engineering @cockroachdb/product-security
+/pkg/security/cert_settings.go @cockroachdb/security-engineering @cockroachdb/product-security
+/pkg/security/certs.go       @cockroachdb/security-engineering @cockroachdb/product-security
+/pkg/security/certs_rotation_test.go @cockroachdb/security-engineering @cockroachdb/product-security
+/pkg/security/certificate_loader*.go @cockroachdb/security-engineering @cockroachdb/product-security
+/pkg/security/certificate_manager*.go @cockroachdb/security-engineering @cockroachdb/product-security
+/pkg/security/password.go    @cockroachdb/security-engineering @cockroachdb/product-security
+/pkg/security/tls_ciphersuites.go @cockroachdb/security-engineering @cockroachdb/product-security
+/pkg/security/tls_test.go    @cockroachdb/security-engineering @cockroachdb/product-security
+/pkg/security/x509.go        @cockroachdb/security-engineering @cockroachdb/product-security
 /pkg/security/clientsecopts/ @cockroachdb/sql-foundations @cockroachdb/security-engineering @cockroachdb/product-security
 /pkg/security/distinguishedname/ @cockroachdb/security-engineering @cockroachdb/product-security
+/pkg/security/jwthelper/     @cockroachdb/security-engineering @cockroachdb/product-security
+/pkg/security/password/      @cockroachdb/security-engineering @cockroachdb/product-security
 /pkg/security/provisioning/  @cockroachdb/security-engineering @cockroachdb/product-security
+/pkg/security/username/      @cockroachdb/security-engineering @cockroachdb/product-security
 #!/pkg/settings/             @cockroachdb/unowned
 /pkg/spanconfig/                         @cockroachdb/kv-prs @cockroachdb/sql-foundations @cockroachdb/kv-distribution
 /pkg/spanconfig/spanconfigbounds/        @cockroachdb/sql-foundations
