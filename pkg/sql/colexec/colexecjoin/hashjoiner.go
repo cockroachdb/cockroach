@@ -289,6 +289,7 @@ func (hj *hashJoiner) Init(ctx context.Context) {
 
 func (hj *hashJoiner) Next() coldata.Batch {
 	for {
+		hj.ht.CancelChecker.CheckEveryCall()
 		switch hj.state {
 		case hjBuilding:
 			hj.build()
