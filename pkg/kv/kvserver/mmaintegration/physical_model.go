@@ -154,7 +154,7 @@ type physicalDimension struct {
 //
 //	= storesCPU * (1 + sqlDistCPU/storesCPU)
 //
-// physical by trackedMoveable = trackedMoveable * k
+// physicalMoveable = trackedMoveable * k
 //
 //	= storesCPU * (1 + sqlDistCPU/storesCPU) * k
 //
