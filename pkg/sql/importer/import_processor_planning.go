@@ -9,12 +9,14 @@ import (
 	"context"
 	"fmt"
 	"math/rand"
+	"sync"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobsprofiler"
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
@@ -32,6 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
@@ -193,34 +196,41 @@ func distImport(
 
 	var res kvpb.BulkOpSummary
 
+	// Check if we're resuming from a completed merge iteration. If so, skip
+	// the map phase entirely — runImportMergeIterations reads its own
+	// checkpointed manifests and determines the start iteration from the job
+	// progress.
+	importProgress := job.Progress().Details.(*jobspb.Progress_Import).Import
+	mergePhase := 0
+	if importProgress != nil {
+		mergePhase = int(importProgress.DistributedMergePhase)
+	}
+	if useDistributedMerge && mergePhase >= 1 {
+		execCfg := execCtx.ExecCfg()
+		schemaSpans := tabledesc.NewBuilder(table.Desc).BuildImmutableTable().AllIndexSpans(execCfg.Codec)
+		if err := runImportMergeIterations(
+			ctx, execCtx, job, checkpoint, nil, schemaSpans, walltime, addStoragePrefix,
+		); err != nil {
+			return kvpb.BulkOpSummary{}, err
+		}
+		return res, nil
+	}
+
 	// Restore SST metadata checkpointed from prior attempts. On the first
 	// attempt these are empty. On retries, they contain manifests from files
 	// written in previous attempts, ensuring already-written SSTs are not lost.
 	processorOutput := make([]bulksst.SSTFiles, 0)
 	var resumeManifests []jobspb.BulkSSTManifest
 	if useDistributedMerge {
-		if err := execCtx.ExecCfg().InternalDB.Txn(ctx, func(
-			ctx context.Context, txn isql.Txn,
-		) error {
-			data, err := jobs.ReadChunkedFileToJobInfo(
-				ctx, importSSTManifestsInfoKey, txn, job.ID(),
-			)
-			if err != nil {
-				return err
-			}
-			if len(data) > 0 {
-				var stored jobspb.BulkSSTManifests
-				if err := protoutil.Unmarshal(data, &stored); err != nil {
-					return errors.Wrap(err, "unmarshaling SST manifests from job info")
-				}
-				resumeManifests = stored.Manifests
-				processorOutput = append(
-					processorOutput, bulksst.ManifestsToSSTFiles(resumeManifests),
-				)
-			}
-			return nil
-		}); err != nil {
+		var err error
+		resumeManifests, err = readImportMergeManifests(ctx, execCtx, job)
+		if err != nil {
 			return kvpb.BulkOpSummary{}, err
+		}
+		if len(resumeManifests) > 0 {
+			processorOutput = append(
+				processorOutput, bulksst.ManifestsToSSTFiles(resumeManifests),
+			)
 		}
 		checkpoint.manifestBuf = backfill.NewSSTManifestBuffer(resumeManifests)
 	}
@@ -286,13 +296,19 @@ func distImport(
 	)
 	defer recv.Release()
 
-	replanChecker, cancelReplanner := sql.PhysicalPlanChangeChecker(
+	replanChecker, cancelReplannerRaw := sql.PhysicalPlanChangeChecker(
 		ctx, p, makePlan, execCtx,
 		sql.ReplanOnChangedFraction(func() float64 { return replanThreshold.Get(&execCtx.ExecCfg().Settings.SV) }),
 		func() time.Duration { return replanFrequency.Get(&execCtx.ExecCfg().Settings.SV) },
 	)
+	// Wrap cancelReplanner in a Once since it closes an internal channel
+	// that panics on double-close. We call it both before entering the
+	// merge phase and via defer.
+	var cancelReplannerOnce sync.Once
+	cancelReplanner := func() { cancelReplannerOnce.Do(cancelReplannerRaw) }
 
 	stopProgress := make(chan struct{})
+	var stopProgressOnce sync.Once
 
 	g := ctxgroup.WithContext(ctx)
 	g.GoCtx(func(ctx context.Context) error {
@@ -316,7 +332,7 @@ func distImport(
 
 	g.GoCtx(func(ctx context.Context) error {
 		defer cancelReplanner()
-		defer close(stopProgress)
+		defer stopProgressOnce.Do(func() { close(stopProgress) })
 
 		if testingKnobs.beforeRunDSP != nil {
 			if err := testingKnobs.beforeRunDSP(); err != nil {
@@ -337,6 +353,20 @@ func distImport(
 			return nil
 		}
 
+		// Stop the map-phase checkpoint ticker and replanner before entering
+		// the merge phase. The ticker writes map-phase manifests to the same
+		// job info key that merge iteration checkpoints use; letting it
+		// continue would risk overwriting merge output manifests with stale
+		// map-phase data, causing data loss on resume.
+		stopProgressOnce.Do(func() { close(stopProgress) })
+		cancelReplanner()
+
+		// Flush any remaining map-phase progress so manifests accumulated
+		// since the last tick are persisted before we overwrite the key.
+		if err := checkpoint.Persist(ctx, job); err != nil {
+			return err
+		}
+
 		// TODO(jeffswenson): this isn't complete. We don't actually want to
 		// generate splits for each index. What we want to do is generate splits
 		// for each span config produced by the table that does not coalesce. For
@@ -347,28 +377,9 @@ func distImport(
 		// that has data for multiple ranges. At the very least that will handle
 		// the case where KV decides to run splits we were not expecting.
 		schemaSpans := tabledesc.NewBuilder(table.Desc).BuildImmutableTable().AllIndexSpans(execCfg.Codec)
-		inputSSTs, spans, err := bulksst.CombineFileInfo(processorOutput, schemaSpans)
-		if err != nil {
-			return err
-		}
-
-		writeTS := &hlc.Timestamp{WallTime: walltime}
-		_, err = bulkmerge.Merge(ctx, execCtx, inputSSTs, spans, func(instanceID base.SQLInstanceID) (string, error) {
-			// Record the storage prefix before any SSTs are written
-			prefix := fmt.Sprintf("nodelocal://%d/", instanceID)
-			if err := addStoragePrefix(ctx, prefix); err != nil {
-				return "", err
-			}
-			return prefix + bulkutil.NewDistMergePaths(job.ID()).MergePath(1), nil
-		}, bulkmerge.MergeOptions{
-			Iteration:         1,
-			MaxIterations:     1,
-			WriteTimestamp:    writeTS,
-			EnforceUniqueness: true,
-			MemoryMonitor:     execinfrapb.BulkMergeSpec_BULK_MONITOR,
-		})
-
-		return err
+		return runImportMergeIterations(
+			ctx, execCtx, job, checkpoint, processorOutput, schemaSpans, walltime, addStoragePrefix,
+		)
 	})
 
 	g.GoCtx(replanChecker)
@@ -378,6 +389,202 @@ func distImport(
 	}
 
 	return res, nil
+}
+
+// runImportMergeIterations runs the distributed merge loop for import. It reads
+// DistributedMergePhase from the job progress to determine which iteration to
+// start from. When resuming from a completed iteration (phase >= 1), it reads
+// the checkpointed manifests from the job info key instead of using
+// processorOutput.
+//
+// The merge runs 2 iterations: a local merge (iteration 1) has each node merge
+// its local SSTs first, reducing network traffic. The final merge (iteration 2)
+// merges cross-node and writes directly to KV.
+//
+// After non-final iterations, the output manifests are checkpointed to the job
+// info key along with the completed phase number. This allows the job to resume
+// from a completed iteration without re-running the map phase or earlier
+// iterations.
+func runImportMergeIterations(
+	ctx context.Context,
+	execCtx sql.JobExecContext,
+	job *jobs.Job,
+	checkpoint *importCheckpointTracker,
+	processorOutput []bulksst.SSTFiles,
+	schemaSpans []roachpb.Span,
+	walltime int64,
+	addStoragePrefix func(ctx context.Context, prefix string) error,
+) error {
+	progress := job.Progress()
+	importProg := progress.GetImport()
+	mergePhase := 0
+	if importProg != nil {
+		mergePhase = int(importProg.DistributedMergePhase)
+	}
+	startIteration := mergePhase + 1
+
+	// On resume from a completed merge iteration, read the checkpointed
+	// manifests from the job info key instead of using processor output.
+	sstFiles := processorOutput
+	if mergePhase >= 1 {
+		manifests, err := readImportMergeManifests(ctx, execCtx, job)
+		if err != nil {
+			return err
+		}
+		if len(manifests) == 0 {
+			return errors.AssertionFailedf(
+				"distributed merge phase %d but no checkpointed manifests", mergePhase)
+		}
+		sstFiles = []bulksst.SSTFiles{bulksst.ManifestsToSSTFiles(manifests)}
+	}
+
+	inputSSTs, spans, err := bulksst.CombineFileInfo(sstFiles, schemaSpans)
+	if err != nil {
+		return err
+	}
+
+	// Run 2 merge iterations: a local merge (iteration 1) followed by a final
+	// cross-node merge (iteration 2). The local merge reduces network traffic by
+	// having each node merge its local SSTs first.
+	const maxIterations = 2
+	currentSSTs := inputSSTs
+	for iteration := startIteration; iteration <= maxIterations; iteration++ {
+		// Clean up leftover SSTs from a previous interrupted attempt of this
+		// non-final iteration, preventing orphaned files from wasting storage.
+		progress := job.Progress()
+		prog := progress.GetImport()
+		var storagePrefixes []string
+		if prog != nil {
+			storagePrefixes = prog.SSTStoragePrefixes
+		}
+		cleanupImportRedoIterationSSTs(ctx, execCtx, job.ID(), iteration, maxIterations, storagePrefixes)
+
+		var writeTS *hlc.Timestamp
+		if iteration == maxIterations {
+			writeTS = &hlc.Timestamp{WallTime: walltime}
+		}
+
+		merged, err := bulkmerge.Merge(
+			ctx, execCtx, currentSSTs, spans,
+			func(instanceID base.SQLInstanceID) (string, error) {
+				// Record the storage prefix before any SSTs are written.
+				prefix := fmt.Sprintf("nodelocal://%d/", instanceID)
+				if err := addStoragePrefix(ctx, prefix); err != nil {
+					return "", err
+				}
+				return prefix + bulkutil.NewDistMergePaths(job.ID()).MergePath(iteration), nil
+			},
+			bulkmerge.MergeOptions{
+				Iteration:         iteration,
+				MaxIterations:     maxIterations,
+				WriteTimestamp:    writeTS,
+				EnforceUniqueness: true,
+				MemoryMonitor:     execinfrapb.BulkMergeSpec_BULK_MONITOR,
+			},
+		)
+		if err != nil {
+			return err
+		}
+
+		// Checkpoint via the tracker so manifest serialization uses the
+		// same codepath as map-phase checkpoints.
+		if iteration < maxIterations {
+			manifests := mergeOutputToManifests(merged)
+			checkpoint.SetMergeIterationResult(manifests, int32(iteration))
+		} else {
+			checkpoint.SetMergeComplete(int32(iteration))
+		}
+		if err := checkpoint.Persist(ctx, job); err != nil {
+			return err
+		}
+
+		currentSSTs = merged
+	}
+
+	return nil
+}
+
+// readImportMergeManifests reads SST manifests from the job info key. Returns
+// nil if no manifests are stored.
+func readImportMergeManifests(
+	ctx context.Context, execCtx sql.JobExecContext, job *jobs.Job,
+) ([]jobspb.BulkSSTManifest, error) {
+	var manifests []jobspb.BulkSSTManifest
+	if err := execCtx.ExecCfg().InternalDB.Txn(ctx, func(
+		ctx context.Context, txn isql.Txn,
+	) error {
+		data, err := jobs.ReadChunkedFileToJobInfo(
+			ctx, importSSTManifestsInfoKey, txn, job.ID(),
+		)
+		if err != nil {
+			return err
+		}
+		if len(data) > 0 {
+			var stored jobspb.BulkSSTManifests
+			if err := protoutil.Unmarshal(data, &stored); err != nil {
+				return errors.Wrap(err, "unmarshaling SST manifests from job info")
+			}
+			manifests = stored.Manifests
+		}
+		return nil
+	}); err != nil {
+		return nil, err
+	}
+	return manifests, nil
+}
+
+// mergeOutputToManifests converts BulkMergeSpec_SST output from a merge
+// iteration into BulkSSTManifest records suitable for checkpointing.
+func mergeOutputToManifests(merged []execinfrapb.BulkMergeSpec_SST) []jobspb.BulkSSTManifest {
+	manifests := make([]jobspb.BulkSSTManifest, 0, len(merged))
+	for _, sst := range merged {
+		span := roachpb.Span{
+			Key:    append(roachpb.Key(nil), sst.StartKey...),
+			EndKey: append(roachpb.Key(nil), sst.EndKey...),
+		}
+		manifests = append(manifests, jobspb.BulkSSTManifest{
+			URI:      sst.URI,
+			Span:     &span,
+			KeyCount: sst.KeyCount,
+			// Populate RowSample so CombineFileInfo can split schema spans on
+			// resume. StartKey is a row prefix (family suffix stripped by
+			// SSTWriter.Flush), but CombineFileInfo passes samples through
+			// keys.EnsureSafeSplitKey which expects a full key including the column
+			// family suffix. Re-appending family 0 makes the key valid.
+			RowSample: keys.MakeFamilyKey(append(roachpb.Key(nil), sst.StartKey...), 0),
+		})
+	}
+	return manifests
+}
+
+// cleanupImportRedoIterationSSTs removes leftover output SSTs from a previous
+// attempt of a non-final merge iteration. Best-effort: errors are logged as
+// warnings rather than failing the job.
+func cleanupImportRedoIterationSSTs(
+	ctx context.Context,
+	execCtx sql.JobExecContext,
+	jobID jobspb.JobID,
+	iteration int,
+	maxIterations int,
+	storagePrefixes []string,
+) {
+	if iteration >= maxIterations || len(storagePrefixes) == 0 {
+		return
+	}
+	outputSubdir := bulkutil.NewDistMergePaths(jobID).MergeSubdir(iteration)
+	cleaner := bulkutil.NewBulkJobCleaner(
+		execCtx.ExecCfg().DistSQLSrv.ExternalStorageFromURI, username.NodeUserName(),
+	)
+	defer func() {
+		if err := cleaner.Close(); err != nil {
+			log.Dev.Warningf(ctx, "error closing cleaner after SST cleanup: %v", err)
+		}
+	}()
+	if err := cleaner.CleanupJobSubdirectory(
+		ctx, jobID, storagePrefixes, outputSubdir,
+	); err != nil {
+		log.Dev.Warningf(ctx, "failed to clean up SSTs in %s before redo: %v", outputSubdir, err)
+	}
 }
 
 func getLastImportSummary(job *jobs.Job) kvpb.BulkOpSummary {
