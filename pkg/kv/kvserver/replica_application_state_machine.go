@@ -166,6 +166,10 @@ func (sm *replicaStateMachine) NewBatch() apply.Batch {
 	*b.state.Stats = *r.shMu.state.Stats
 	b.closedTimestampSetter = r.mu.closedTimestampSetter
 	r.mu.RUnlock()
+	// Ignore the current ForceFlushIndex. It will be written only if it gets
+	// updated to a non-zero value by a command in this batch.
+	b.state.ForceFlushIndex = roachpb.ForceFlushIndex{}
+
 	if r.store.EnginesSeparated() {
 		b.wagWriter = wag.MakeWriter(&r.store.wagSeq)
 	}
