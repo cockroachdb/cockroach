@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
+	rperrors "github.com/cockroachdb/cockroach/pkg/roachprod/errors"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 )
 
@@ -428,6 +429,20 @@ func runJepsen(ctx context.Context, t test.Test, c cluster.Cluster, testName, ne
 		if ignoreErr {
 			t.Skip("recognized known error", testErr.Error())
 		}
+
+		// Check for timeouts where the Jepsen workload completed but analysis took too long.
+		// This typically happens when the history is large (e.g., due to many transaction retries
+		// under chaos nemeses), making linearizability checking slow.
+		// We still capture the logs above, but we want to classify this as a transient failure
+		// and not a test failure, since it's a known flake.
+		if testErr.Error() == "timed out" {
+			if err := runE(c, ctx, controller,
+				`grep -q "Run complete" /mnt/data1/jepsen/cockroachdb/store/latest/jepsen.log`,
+			); err == nil {
+				t.Fatal(rperrors.TransientFailure(testErr, "jepsen workload completed, but analysis timed out"))
+			}
+		}
+
 		t.Fatal(testErr)
 	} else {
 		collectFiles := []string{
