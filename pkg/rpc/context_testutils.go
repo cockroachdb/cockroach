@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	"google.golang.org/grpc"
+	"storj.io/drpc"
 	"storj.io/drpc/drpcclient"
 )
 
@@ -132,8 +133,30 @@ func (d disablingClientStream) RecvMsg(m interface{}) error {
 	return d.ClientStream.RecvMsg(m)
 }
 
+// Embed the partitionCheck function into the stream and check it when we are
+// sending or receiving a message. It is same as disablingClientStream but for
+// DRPC.
+type disablingDRPCStream struct {
+	drpc.Stream
+	partitionCheck func() error
+}
+
+func (d *disablingDRPCStream) MsgSend(msg drpc.Message, enc drpc.Encoding) error {
+	if err := d.partitionCheck(); err != nil {
+		return err
+	}
+	return d.Stream.MsgSend(msg, enc)
+}
+
+func (d *disablingDRPCStream) MsgRecv(msg drpc.Message, enc drpc.Encoding) error {
+	if err := d.partitionCheck(); err != nil {
+		return err
+	}
+	return d.Stream.MsgRecv(msg, enc)
+}
+
 // Partitioner is used to create partial partitions between nodes at the GRPC
-// layer. It uses StreamInterceptors to fail requests to nodes that are not
+// and DRPC layer. It uses interceptors to fail requests to nodes that are not
 // connected. Node addresses need to be registered before enabling the
 // partition, but partitions can be added and removed at any point (before or
 // after starting the cluster or enabling the partition).
@@ -270,6 +293,28 @@ func (p *Partitioner) RegisterTestingKnobs(id roachpb.NodeID, knobs *ContextTest
 				}
 				return &disablingClientStream{
 					ClientStream:   cs,
+					partitionCheck: func() error { return isPartitioned(target) },
+				}, nil
+			}
+		}
+	knobs.UnaryClientInterceptorDRPC =
+		func(target string, class rpcbase.ConnectionClass) drpcclient.UnaryClientInterceptor {
+			return func(ctx context.Context, rpc string, enc drpc.Encoding, in, out drpc.Message, cc *drpcclient.ClientConn, next drpcclient.UnaryInvoker) error {
+				if err := isPartitioned(target); err != nil {
+					return err
+				}
+				return next(ctx, rpc, enc, in, out, cc)
+			}
+		}
+	knobs.StreamClientInterceptorDRPC =
+		func(target string, class rpcbase.ConnectionClass) drpcclient.StreamClientInterceptor {
+			return func(ctx context.Context, rpc string, enc drpc.Encoding, cc *drpcclient.ClientConn, streamer drpcclient.Streamer) (drpc.Stream, error) {
+				stream, err := streamer(ctx, rpc, enc, cc)
+				if err != nil {
+					return nil, err
+				}
+				return &disablingDRPCStream{
+					Stream:         stream,
 					partitionCheck: func() error { return isPartitioned(target) },
 				}, nil
 			}
