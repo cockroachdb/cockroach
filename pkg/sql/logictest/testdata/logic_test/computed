@@ -1531,3 +1531,275 @@ statement ok
 DROP TABLE test_virtual
 
 subtest end
+
+
+subtest udf_computed_column
+
+# Test that computed columns can reference user-defined functions.
+# UDF calls are inlined during expression evaluation for contexts
+# that bypass the optimizer (backfill, IMPORT). The inlining handles
+# single-expression SQL UDFs containing the same scalar expression
+# constructs allowed in non-UDF computed columns: arithmetic, string
+# operations, type casts, CASE/COALESCE, immutable builtin calls,
+# and array constructors. See the udf_unsupported test file for
+# patterns that are not yet supported.
+
+statement ok
+CREATE FUNCTION cc_udf_const() RETURNS INT IMMUTABLE LANGUAGE SQL AS $$ SELECT 1 $$;
+
+statement ok
+CREATE TABLE cc_udf_t (a INT PRIMARY KEY, b INT);
+
+statement ok
+INSERT INTO cc_udf_t VALUES (1, 10), (2, 20), (3, 30);
+
+# Adding a computed column with a UDF triggers a backfill.
+statement ok
+ALTER TABLE cc_udf_t ADD COLUMN c INT AS (cc_udf_const()) STORED;
+
+query III rowsort
+SELECT * FROM cc_udf_t
+----
+1  10  1
+2  20  1
+3  30  1
+
+# UDFs with parameters.
+statement ok
+CREATE FUNCTION cc_udf_double(x INT) RETURNS INT IMMUTABLE LANGUAGE SQL AS $$ SELECT x * 2 $$;
+
+statement ok
+CREATE TABLE cc_udf_param_t (a INT PRIMARY KEY);
+
+statement ok
+INSERT INTO cc_udf_param_t VALUES (1), (2), (3), (4), (5);
+
+statement ok
+ALTER TABLE cc_udf_param_t ADD COLUMN b INT AS (cc_udf_double(a)) STORED;
+
+query II rowsort
+SELECT * FROM cc_udf_param_t
+----
+1  2
+2  4
+3  6
+4  8
+5  10
+
+# Strict UDFs (RETURNS NULL ON NULL INPUT) on a nullable column.
+# Rows with NULL input should produce NULL output.
+statement ok
+CREATE FUNCTION cc_udf_strict(x INT) RETURNS INT IMMUTABLE RETURNS NULL ON NULL INPUT LANGUAGE SQL AS $$ SELECT CASE WHEN x IS NULL THEN -1 ELSE x + 100 END $$;
+
+statement ok
+CREATE TABLE cc_udf_strict_t (a INT PRIMARY KEY, b INT);
+
+statement ok
+INSERT INTO cc_udf_strict_t VALUES (1, 10), (2, NULL), (3, 30), (4, NULL);
+
+statement ok
+ALTER TABLE cc_udf_strict_t ADD COLUMN c INT AS (cc_udf_strict(b)) STORED;
+
+query III rowsort
+SELECT * FROM cc_udf_strict_t
+----
+1  10    110
+2  NULL  NULL
+3  30    130
+4  NULL  NULL
+
+# UDFs in expression indexes are supported via expression inlining.
+statement ok
+CREATE INDEX cc_udf_idx ON cc_udf_t (cc_udf_const());
+
+# UDFs with ordinal parameter references ($1, $2).
+statement ok
+CREATE FUNCTION cc_udf_ordinal(INT) RETURNS INT IMMUTABLE LANGUAGE SQL AS $$ SELECT $1 * 3 $$;
+
+statement ok
+CREATE TABLE cc_udf_ordinal_t (a INT PRIMARY KEY);
+
+statement ok
+INSERT INTO cc_udf_ordinal_t VALUES (1), (2), (3);
+
+statement ok
+ALTER TABLE cc_udf_ordinal_t ADD COLUMN b INT AS (cc_udf_ordinal(a)) STORED;
+
+query II rowsort
+SELECT * FROM cc_udf_ordinal_t
+----
+1  3
+2  6
+3  9
+
+# UDFs with multiple unnamed parameters (all referenced via $N).
+statement ok
+CREATE FUNCTION cc_udf_multi_unnamed(INT, INT) RETURNS INT IMMUTABLE LANGUAGE SQL AS $$
+  SELECT $1 + $2
+$$;
+
+statement ok
+CREATE TABLE cc_udf_multi_unnamed_t (a INT PRIMARY KEY, b INT);
+
+statement ok
+INSERT INTO cc_udf_multi_unnamed_t VALUES (1, 10), (2, 20);
+
+statement ok
+ALTER TABLE cc_udf_multi_unnamed_t ADD COLUMN c INT AS (cc_udf_multi_unnamed(a, b)) STORED;
+
+query III rowsort
+SELECT * FROM cc_udf_multi_unnamed_t
+----
+1  10  11
+2  20  22
+
+# UDFs with mixed named and ordinal references. CockroachDB stores
+# the body as written, so named params use names and unnamed use $N.
+statement ok
+CREATE FUNCTION cc_udf_mixed(x INT, INT) RETURNS INT IMMUTABLE LANGUAGE SQL AS $$ SELECT x + $2 $$;
+
+statement ok
+CREATE TABLE cc_udf_mixed_t (a INT PRIMARY KEY, b INT);
+
+statement ok
+INSERT INTO cc_udf_mixed_t VALUES (1, 10), (2, 20);
+
+statement ok
+ALTER TABLE cc_udf_mixed_t ADD COLUMN c INT AS (cc_udf_mixed(a, b)) STORED;
+
+query III rowsort
+SELECT * FROM cc_udf_mixed_t
+----
+1  10  11
+2  20  22
+
+# UDFs with CASE expressions and multiple branches.
+statement ok
+CREATE FUNCTION cc_udf_case(x INT) RETURNS INT IMMUTABLE LANGUAGE SQL AS $$
+  SELECT CASE WHEN x > 0 THEN x * 2 WHEN x < 0 THEN x * -1 ELSE 0 END
+$$;
+
+statement ok
+CREATE TABLE cc_udf_case_t (a INT PRIMARY KEY);
+
+statement ok
+INSERT INTO cc_udf_case_t VALUES (-5), (0), (10);
+
+statement ok
+ALTER TABLE cc_udf_case_t ADD COLUMN b INT AS (cc_udf_case(a)) STORED;
+
+query II rowsort
+SELECT * FROM cc_udf_case_t
+----
+-5  5
+0   0
+10  20
+
+# UDFs calling immutable builtins.
+statement ok
+CREATE FUNCTION cc_udf_builtins(x INT) RETURNS INT IMMUTABLE LANGUAGE SQL AS $$
+  SELECT abs(x) + length('hello')
+$$;
+
+statement ok
+CREATE TABLE cc_udf_builtins_t (a INT PRIMARY KEY);
+
+statement ok
+INSERT INTO cc_udf_builtins_t VALUES (-3);
+
+statement ok
+ALTER TABLE cc_udf_builtins_t ADD COLUMN b INT AS (cc_udf_builtins(a)) STORED;
+
+query II
+SELECT * FROM cc_udf_builtins_t
+----
+-3  8
+
+# UDFs with type casts and string concatenation.
+statement ok
+CREATE FUNCTION cc_udf_casts(x INT) RETURNS TEXT IMMUTABLE LANGUAGE SQL AS $$
+  SELECT x::TEXT || '_suffix'
+$$;
+
+statement ok
+CREATE TABLE cc_udf_casts_t (a INT PRIMARY KEY);
+
+statement ok
+INSERT INTO cc_udf_casts_t VALUES (42);
+
+statement ok
+ALTER TABLE cc_udf_casts_t ADD COLUMN b TEXT AS (cc_udf_casts(a)) STORED;
+
+query IT
+SELECT * FROM cc_udf_casts_t
+----
+42  42_suffix
+
+# UDFs with COALESCE and NULLIF.
+statement ok
+CREATE FUNCTION cc_udf_coalesce(x INT) RETURNS INT IMMUTABLE LANGUAGE SQL AS $$
+  SELECT coalesce(nullif(x, 0), -1)
+$$;
+
+statement ok
+CREATE TABLE cc_udf_coalesce_t (a INT PRIMARY KEY);
+
+statement ok
+INSERT INTO cc_udf_coalesce_t VALUES (0), (5);
+
+statement ok
+ALTER TABLE cc_udf_coalesce_t ADD COLUMN b INT AS (cc_udf_coalesce(a)) STORED;
+
+query II rowsort
+SELECT * FROM cc_udf_coalesce_t
+----
+0   -1
+5   5
+
+# UDFs with multiple parameters.
+statement ok
+CREATE FUNCTION cc_udf_multi(a INT, b INT, c TEXT) RETURNS TEXT IMMUTABLE LANGUAGE SQL AS $$
+  SELECT CASE
+    WHEN a > b THEN c || '_a_wins'
+    WHEN b > a THEN c || '_b_wins'
+    ELSE c || '_tie'
+  END
+$$;
+
+statement ok
+CREATE TABLE cc_udf_multi_t (x INT PRIMARY KEY, y INT, label TEXT);
+
+statement ok
+INSERT INTO cc_udf_multi_t VALUES (1, 2, 'game1'), (5, 3, 'game2'), (4, 4, 'game3');
+
+statement ok
+ALTER TABLE cc_udf_multi_t ADD COLUMN result TEXT AS (cc_udf_multi(x, y, label)) STORED;
+
+query IITT rowsort
+SELECT * FROM cc_udf_multi_t
+----
+1  2  game1  game1_b_wins
+4  4  game3  game3_tie
+5  3  game2  game2_a_wins
+
+# UDFs with array constructors.
+statement ok
+CREATE FUNCTION cc_udf_array(x INT) RETURNS INT[] IMMUTABLE LANGUAGE SQL AS $$
+  SELECT ARRAY[x, x+1, x+2]
+$$;
+
+statement ok
+CREATE TABLE cc_udf_array_t (a INT PRIMARY KEY);
+
+statement ok
+INSERT INTO cc_udf_array_t VALUES (1);
+
+statement ok
+ALTER TABLE cc_udf_array_t ADD COLUMN b INT[] AS (cc_udf_array(a)) STORED;
+
+query IT
+SELECT * FROM cc_udf_array_t
+----
+1  {1,2,3}
+
+subtest end
