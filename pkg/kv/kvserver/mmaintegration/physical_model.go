@@ -149,7 +149,7 @@ type physicalDimension struct {
 //
 // Distributed SQL scales proportionally with KV, so it is folded into the
 // amplification factor rather than treated as immovable:
-
+//
 // trackedMoveable = storesCPU + sqlDistCPU
 //
 //	= storesCPU * (1 + sqlDistCPU/storesCPU)
