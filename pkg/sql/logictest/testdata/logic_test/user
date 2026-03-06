@@ -253,6 +253,72 @@ CREATE user IF NOT EXISTS testuser
 
 subtest end
 
+subtest show_users_provisioning_filters
+
+user root
+
+# Create users with provisioning source for filter testing.
+statement ok
+CREATE USER prov_user1 PROVISIONSRC 'ldap:ldap.example.com'
+
+statement ok
+CREATE USER prov_user2 PROVISIONSRC 'ldap:ldap.example.com'
+
+statement ok
+CREATE USER prov_user3 PROVISIONSRC 'oidc:okta.example.com'
+
+# SHOW USERS WITH SOURCE filters to only users with matching PROVISIONSRC.
+query TTT colnames,rowsort
+select username, options, member_of from [SHOW USERS WITH SOURCE = 'ldap:ldap.example.com']
+----
+username    options                                member_of
+prov_user1  {PROVISIONSRC=ldap:ldap.example.com}   {}
+prov_user2  {PROVISIONSRC=ldap:ldap.example.com}   {}
+
+query TTT colnames,rowsort
+select username, options, member_of from [SHOW USERS WITH SOURCE = 'oidc:okta.example.com']
+----
+username    options                                member_of
+prov_user3  {PROVISIONSRC=oidc:okta.example.com}   {}
+
+# No users with this source.
+query TTT colnames
+select username, options, member_of from [SHOW USERS WITH SOURCE = 'nonexistent']
+----
+username  options  member_of
+
+# SHOW USERS WITH LIMIT restricts the number of returned rows.
+query TTT colnames
+select username, options, member_of from [SHOW USERS WITH SOURCE = 'ldap:ldap.example.com' LIMIT 1]
+----
+username    options                                member_of
+prov_user1  {PROVISIONSRC=ldap:ldap.example.com}   {}
+
+# SHOW USERS LIMIT (without WITH) limits from all users.
+query T nosort
+select username from [SHOW USERS LIMIT 2]
+----
+admin
+foo
+
+# SHOW USERS notice is still emitted with the extended form.
+query T noticetrace
+SHOW USERS WITH SOURCE = 'ldap:ldap.example.com'
+----
+NOTICE: estimated_last_login_time is computed on a best effort basis; it is not guaranteed to capture every login event
+
+# Clean up provisioned users.
+statement ok
+DROP USER prov_user1
+
+statement ok
+DROP USER prov_user2
+
+statement ok
+DROP USER prov_user3
+
+subtest end
+
 subtest validate_estimated_last_login_time
 
 user testuser2
