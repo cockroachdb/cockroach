@@ -1057,6 +1057,16 @@ func (r *importResumer) cleanupTempStorage(ctx context.Context, execCfg *sql.Exe
 	if !details.UseDistributedMerge {
 		return
 	}
+
+	// Clean up SST manifest job info keys.
+	besteffort.Warning(ctx, "import-manifest-cleanup", func(ctx context.Context) error {
+		return execCfg.InternalDB.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+			return jobs.InfoStorageForJob(txn, r.job.ID()).DeleteRange(
+				ctx, importSSTManifestsInfoKey, importSSTManifestsInfoKey+"~", 0,
+			)
+		})
+	})
+
 	progress := r.job.Progress()
 	importProgress := progress.GetImport()
 	if importProgress == nil {
