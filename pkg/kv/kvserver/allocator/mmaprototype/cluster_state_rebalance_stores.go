@@ -389,7 +389,7 @@ func (re *rebalanceEnv) rebalanceStore(
 	// during this period. For the local store, MMA proceeds with shedding and
 	// the lease_grace metrics track whether that self-shedding succeeds.
 	withinLeaseSheddingGracePeriod := store.dimSummary[CPURate] >= overloadSlow &&
-		overloadDur < remoteStoreLeaseSheddingGraceDuration
+		overloadDur < leaseSheddingGraceDuration
 	re.passObs.storeOverloaded(ss.StoreID, withinLeaseSheddingGracePeriod, iLevel)
 	defer func() {
 		re.passObs.finishStore()
@@ -447,7 +447,7 @@ func (re *rebalanceEnv) rebalanceReplicas(
 	ignoreLevel ignoreLevel,
 ) {
 	if store.StoreID != localStoreID && store.dimSummary[CPURate] >= overloadSlow &&
-		re.now.Sub(ss.overloadStartTime) < remoteStoreLeaseSheddingGraceDuration {
+		re.now.Sub(ss.overloadStartTime) < leaseSheddingGraceDuration {
 		log.KvDistribution.VEventf(ctx, 2, "skipping remote store s%d: in lease shedding grace period", store.StoreID)
 		return
 	}
