@@ -728,6 +728,7 @@ via information_schema.crdb_rewrite_inline_hints or crdb_internal.inject_hint.
 | `StatementFingerprint` | The target statement fingerprint for which inline hints are being rewritten. | no |
 | `DonorSQL` | The donor statement providing the inline hints. | no |
 | `HintID` | The hint ID of the newly created statement hint. | no |
+| `Database` | The database to which the hint is scoped, if any. | no |
 
 
 #### Common fields

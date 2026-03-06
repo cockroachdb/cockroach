@@ -1164,9 +1164,14 @@ func (p *planner) ProcessVectorIndexFixups(
 
 // InsertStatementHint is part of the eval.Planner interface.
 func (p *planner) InsertStatementHint(
-	ctx context.Context, statementFingerprint string, hint hintpb.StatementHintUnion,
+	ctx context.Context,
+	statementFingerprint string,
+	hint hintpb.StatementHintUnion,
+	optDatabase string,
 ) (int64, error) {
-	return hints.InsertHintIntoDB(ctx, p.execCfg.Settings, p.InternalSQLTxn(), statementFingerprint, hint)
+	return hints.InsertHintIntoDB(
+		ctx, p.execCfg.Settings, p.InternalSQLTxn(), statementFingerprint, hint, optDatabase,
+	)
 }
 
 // DeleteStatementHint is part of the eval.Planner interface.

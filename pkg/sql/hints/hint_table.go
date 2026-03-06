@@ -161,13 +161,16 @@ func parseHint(
 }
 
 // InsertHintIntoDB inserts a statement hint into the system.statement_hints
-// table. It returns the hint ID of the newly inserted hint if successful.
+// table. It returns the hint ID of the newly inserted hint if successful. If
+// optDatabase is non-empty and the cluster version supports it, the hint is
+// scoped to the given database.
 func InsertHintIntoDB(
 	ctx context.Context,
 	settings *cluster.Settings,
 	txn isql.Txn,
 	fingerprint string,
 	hint hintpb.StatementHintUnion,
+	optDatabase string,
 ) (int64, error) {
 	const opName = "insert-statement-hint"
 	hintBytes, err := hintpb.ToBytes(hint)
@@ -180,8 +183,13 @@ func InsertHintIntoDB(
 	var insertStmt string
 	var args []interface{}
 	if settings.Version.IsActive(ctx, clusterversion.V26_2_StatementHintsTypeNameEnabledColumnsAdded) {
-		insertStmt = `INSERT INTO system.statement_hints ("fingerprint", "hint", "hint_type", "enabled") VALUES ($1, $2, $3, $4) RETURNING "row_id"`
-		args = []interface{}{fingerprint, hintBytes, hint.HintType(), true}
+		if optDatabase != "" {
+			insertStmt = `INSERT INTO system.statement_hints ("fingerprint", "hint", "hint_type", "enabled", "database") VALUES ($1, $2, $3, $4, $5) RETURNING "row_id"`
+			args = []interface{}{fingerprint, hintBytes, hint.HintType(), true, optDatabase}
+		} else {
+			insertStmt = `INSERT INTO system.statement_hints ("fingerprint", "hint", "hint_type", "enabled") VALUES ($1, $2, $3, $4) RETURNING "row_id"`
+			args = []interface{}{fingerprint, hintBytes, hint.HintType(), true}
+		}
 	} else {
 		insertStmt = `INSERT INTO system.statement_hints ("fingerprint", "hint") VALUES ($1, $2) RETURNING "row_id"`
 		args = []interface{}{fingerprint, hintBytes}
@@ -247,12 +255,11 @@ func DeleteHintFromDB(
 		}
 		rowIDs = append(rowIDs, int64(tree.MustBeDInt(row[0])))
 		fingerprints = append(fingerprints, string(tree.MustBeDString(row[1])))
-		rawBytes, ok := row[2].(*tree.DBytes)
-		if !ok {
-			return nil, nil, nil, errors.AssertionFailedf("expected hint to be bytes, got %T", row[2])
-		}
-		hintBytes = append(hintBytes, []byte(*rawBytes))
+		hintBytes = append(hintBytes, []byte(tree.MustBeDBytes(row[2])))
 	}
+	// TODO(michae2,drewk): Consider calling
+	// StatementHintsCache.handleIncrementalUpdate here to eagerly update the
+	// local node's cache.
 	return rowIDs, fingerprints, hintBytes, nil
 }
 
