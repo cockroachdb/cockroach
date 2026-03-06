@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
+	"github.com/go-openapi/jsonpointer"
 	"github.com/lestrrat-go/jwx/v2/jwk"
 	"github.com/lestrrat-go/jwx/v2/jws"
 	"github.com/lestrrat-go/jwx/v2/jwt"
@@ -250,6 +251,36 @@ func (authenticator *jwtAuthenticator) RetrieveIdentity(
 	return authenticator.retrieveIdentityLocked(user, tokenBytes, identMap)
 }
 
+// lookupIdentityClaim looks up the claim specified by claimNameOrJsonPointer
+// in the token. The claimNameOrJsonPointer can be either a simple claim name
+// (e.g. "sub") or a JSON Pointer per RFC 6901 (e.g. "/user/name"). The
+// returned bool follows map-lookup semantics: false means the claim was not
+// found (or the pointer could not be resolved).
+func lookupIdentityClaim(
+	token jwt.Token, claimNameOrJsonPointer string,
+) (interface{}, bool, error) {
+	// Case (a): simple claim name (does not start with "/").
+	if !strings.HasPrefix(claimNameOrJsonPointer, "/") {
+		value, ok := token.Get(claimNameOrJsonPointer)
+		return value, ok, nil
+	}
+	// Case (b): JSON Pointer (RFC 6901), e.g. "/user/name".
+	ptr, err := jsonpointer.New(claimNameOrJsonPointer)
+	if err != nil {
+		return nil, false, err
+	}
+	// Convert the token to a generic map so the pointer can traverse it.
+	allClaims, err := token.AsMap(context.Background())
+	if err != nil {
+		return nil, false, err
+	}
+	value, _, err := ptr.Get(allClaims)
+	if err != nil {
+		return nil, false, err
+	}
+	return value, true, nil
+}
+
 // retrieveIdentityLocked contains the core principal-to-user mapping
 // logic. The caller must already hold a.mu; this helper therefore
 // performs no locking or config reloads and must never call anything
@@ -273,7 +304,12 @@ func (authenticator *jwtAuthenticator) retrieveIdentityLocked(
 	if authenticator.mu.conf.claim == "" || authenticator.mu.conf.claim == "sub" {
 		tokenPrincipals = []string{unverifiedToken.Subject()}
 	} else {
-		claimValue, ok := unverifiedToken.Get(authenticator.mu.conf.claim)
+		claimValue, ok, err := lookupIdentityClaim(unverifiedToken, authenticator.mu.conf.claim)
+		if err != nil {
+			return user, errors.WithDetailf(
+				errors.Newf("JWT authentication: failed to extract claim"),
+				"failed to extract claim %s: %v", authenticator.mu.conf.claim, err)
+		}
 		if !ok {
 			return user, errors.WithDetailf(
 				errors.Newf("JWT authentication: missing claim"),
