@@ -1,4 +1,4 @@
-load("@io_bazel_rules_go//go:def.bzl", "go_library")
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
     name = "delegate",
@@ -71,5 +71,19 @@ go_library(
         "//pkg/util/errorutil/unimplemented",
         "//pkg/util/intsets",
         "@com_github_cockroachdb_errors//:errors",
+    ],
+)
+
+go_test(
+    name = "delegate_test",
+    srcs = ["show_roles_test.go"],
+    embed = [":delegate"],
+    deps = [
+        "//pkg/sql/faketreeeval",
+        "//pkg/sql/sem/eval",
+        "//pkg/sql/sem/tree",
+        "//pkg/util/leaktest",
+        "//pkg/util/log",
+        "@com_github_stretchr_testify//require",
     ],
 )
