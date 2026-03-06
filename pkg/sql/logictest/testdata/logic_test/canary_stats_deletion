@@ -96,3 +96,782 @@ NULL             {a}           5000       false
 NULL             {b}           5000       false
 
 subtest end
+
+subtest auto_stats
+
+statement ok
+ALTER TABLE t SET (sql_stats_canary_window = '10s');
+
+statement ok
+ALTER TABLE t INJECT STATISTICS '[
+    {
+        "avg_size": 4,
+        "columns": ["a"],
+        "created_at": "2018-01-01 1:00:00.00000+00:00",
+        "distinct_count": 100,
+        "name": "__auto__",
+        "null_count": 0,
+        "row_count": 1000
+    },
+    {
+        "avg_size": 4,
+        "columns": ["a"],
+        "created_at": "2018-01-01 2:00:00.00000+00:00",
+        "distinct_count": 200,
+        "name": "__auto__",
+        "null_count": 0,
+        "row_count": 2000
+    },
+    {
+        "avg_size": 4,
+        "columns": ["a"],
+        "created_at": "2018-01-01 3:00:00.00000+00:00",
+        "distinct_count": 300,
+        "name": "__auto__",
+        "null_count": 0,
+        "row_count": 3000
+    },
+    {
+        "avg_size": 4,
+        "columns": ["a"],
+        "created_at": "2018-01-01 4:00:00.00000+00:00",
+        "distinct_count": 400,
+        "name": "__auto__",
+        "null_count": 0,
+        "row_count": 4000
+    },
+    {
+        "avg_size": 4,
+        "columns": ["a"],
+        "created_at": "2018-01-01 5:00:00.00000+00:00",
+        "distinct_count": 500,
+        "name": "__auto__",
+        "null_count": 0,
+        "row_count": 5000
+    }
+]';
+
+query TTIB colnames
+SELECT statistics_name, column_names, row_count, delay_delete
+FROM [SHOW STATISTICS FOR TABLE t] ORDER BY created DESC, statistics_name, column_names
+----
+statistics_name  column_names  row_count  delay_delete
+__auto__         {a}           5000       false
+__auto__         {a}           4000       false
+__auto__         {a}           3000       false
+__auto__         {a}           2000       false
+__auto__         {a}           1000       false
+
+statement ok
+ALTER TABLE t PUSH STATISTICS '[
+    {
+        "avg_size": 4,
+        "columns": ["a"],
+        "created_at": "2018-01-01 6:00:00.00000+00:00",
+        "distinct_count": 600,
+        "name": "__auto__",
+        "null_count": 0,
+        "row_count": 6000
+    }
+]'
+
+query TTIB colnames
+SELECT statistics_name, column_names, row_count, delay_delete
+FROM [SHOW STATISTICS FOR TABLE t] ORDER BY created DESC, statistics_name, column_names
+----
+statistics_name  column_names  row_count  delay_delete
+__auto__         {a}           6000       false
+__auto__         {a}           5000       false
+__auto__         {a}           4000       false
+__auto__         {a}           3000       false
+__auto__         {a}           2000       false
+__auto__         {a}           1000       true
+
+statement ok
+ALTER TABLE t PUSH STATISTICS '[
+    {
+        "avg_size": 4,
+        "columns": ["a"],
+        "created_at": "2018-01-01 7:00:00.00000+00:00",
+        "distinct_count": 700,
+        "name": "manual",
+        "null_count": 0,
+        "row_count": 7000
+    }
+]'
+
+query TTIB colnames
+SELECT statistics_name, column_names, row_count, delay_delete
+FROM [SHOW STATISTICS FOR TABLE t] ORDER BY created DESC, statistics_name, column_names
+----
+statistics_name  column_names  row_count  delay_delete
+manual           {a}           7000       false
+__auto__         {a}           6000       false
+__auto__         {a}           5000       false
+__auto__         {a}           4000       false
+__auto__         {a}           3000       false
+__auto__         {a}           2000       true
+
+statement ok
+ALTER TABLE t PUSH STATISTICS '[
+    {
+        "avg_size": 4,
+        "columns": ["a"],
+        "created_at": "2018-01-01 8:00:00.00000+00:00",
+        "distinct_count": 800,
+        "name": "__auto__",
+        "null_count": 0,
+        "row_count": 8000
+    }
+]'
+
+query TTIB colnames
+SELECT statistics_name, column_names, row_count, delay_delete
+FROM [SHOW STATISTICS FOR TABLE t] ORDER BY created DESC, statistics_name, column_names
+----
+statistics_name  column_names  row_count  delay_delete
+__auto__         {a}           8000       false
+manual           {a}           7000       true
+__auto__         {a}           6000       false
+__auto__         {a}           5000       false
+__auto__         {a}           4000       false
+__auto__         {a}           3000       false
+
+statement ok
+ALTER TABLE t PUSH STATISTICS '[
+    {
+        "avg_size": 4,
+        "columns": ["a"],
+        "created_at": "2018-01-01 9:00:00.00000+00:00",
+        "distinct_count": 900,
+        "name": "__auto__",
+        "null_count": 0,
+        "row_count": 9000
+    }
+]'
+
+query TTIB colnames
+SELECT statistics_name, column_names, row_count, delay_delete
+FROM [SHOW STATISTICS FOR TABLE t] ORDER BY created DESC, statistics_name, column_names
+----
+statistics_name  column_names  row_count  delay_delete
+__auto__         {a}           9000       false
+__auto__         {a}           8000       false
+__auto__         {a}           6000       false
+__auto__         {a}           5000       false
+__auto__         {a}           4000       false
+__auto__         {a}           3000       true
+
+subtest end
+
+subtest partial_stats
+
+statement ok
+ALTER TABLE t INJECT STATISTICS '[
+  {
+    "avg_size": 1,
+    "columns": [
+      "a"
+    ],
+    "created_at": "1988-08-05 00:00:00.000000",
+    "distinct_count": 3,
+    "histo_buckets": [
+      {
+        "distinct_range": 0,
+        "num_eq": 1,
+        "num_range": 0,
+        "upper_bound": "0"
+      },
+      {
+        "distinct_range": 0,
+        "num_eq": 1,
+        "num_range": 0,
+        "upper_bound": "1"
+      },
+      {
+        "distinct_range": 0,
+        "num_eq": 1,
+        "num_range": 0,
+        "upper_bound": "2"
+      }
+    ],
+    "histo_col_type": "INT8",
+    "histo_version": 2,
+    "name": "__auto__",
+    "null_count": 0,
+    "row_count": 3
+  },
+  {
+    "avg_size": 1,
+    "columns": [
+      "a"
+    ],
+    "created_at": "1988-08-06 00:00:00.000000",
+    "distinct_count": 3,
+    "histo_buckets": [
+      {
+        "distinct_range": 0,
+        "num_eq": 2,
+        "num_range": 0,
+        "upper_bound": "0"
+      },
+      {
+        "distinct_range": 0,
+        "num_eq": 2,
+        "num_range": 0,
+        "upper_bound": "1"
+      },
+      {
+        "distinct_range": 0,
+        "num_eq": 2,
+        "num_range": 0,
+        "upper_bound": "2"
+      }
+    ],
+    "histo_col_type": "INT8",
+    "histo_version": 2,
+    "name": "__auto__",
+    "null_count": 0,
+    "row_count": 6
+  },
+  {
+    "avg_size": 1,
+    "columns": [
+      "a"
+    ],
+    "created_at": "1988-08-07 00:00:00.000000",
+    "distinct_count": 3,
+    "histo_buckets": [
+      {
+        "distinct_range": 0,
+        "num_eq": 3,
+        "num_range": 0,
+        "upper_bound": "0"
+      },
+      {
+        "distinct_range": 0,
+        "num_eq": 3,
+        "num_range": 0,
+        "upper_bound": "1"
+      },
+      {
+        "distinct_range": 0,
+        "num_eq": 3,
+        "num_range": 0,
+        "upper_bound": "2"
+      }
+    ],
+    "histo_col_type": "INT8",
+    "histo_version": 2,
+    "name": "__auto__",
+    "null_count": 0,
+    "row_count": 9
+  },
+  {
+    "avg_size": 1,
+    "columns": [
+      "a"
+    ],
+    "created_at": "1988-08-08 00:00:00.000000",
+    "distinct_count": 3,
+    "histo_buckets": [
+      {
+        "distinct_range": 0,
+        "num_eq": 4,
+        "num_range": 0,
+        "upper_bound": "0"
+      },
+      {
+        "distinct_range": 0,
+        "num_eq": 4,
+        "num_range": 0,
+        "upper_bound": "1"
+      },
+      {
+        "distinct_range": 0,
+        "num_eq": 4,
+        "num_range": 0,
+        "upper_bound": "2"
+      }
+    ],
+    "histo_col_type": "INT8",
+    "histo_version": 2,
+    "name": "__auto__",
+    "null_count": 0,
+    "row_count": 12
+  }
+]'
+
+statement ok
+ALTER TABLE t PUSH STATISTICS '[
+  {
+    "avg_size": 1,
+    "columns": [
+      "a"
+    ],
+    "created_at": "1988-08-08 00:01:00.000000",
+    "distinct_count": 3,
+    "histo_buckets": [
+      {
+        "distinct_range": 0,
+        "num_eq": 5,
+        "num_range": 0,
+        "upper_bound": "1"
+      },
+      {
+        "distinct_range": 0,
+        "num_eq": 5,
+        "num_range": 0,
+        "upper_bound": "2"
+      }
+    ],
+    "histo_col_type": "INT8",
+    "histo_version": 2,
+    "name": "partial1",
+    "null_count": 0,
+    "row_count": 10,
+    "partial_predicate": "a >= 1::INT8"
+  }
+]'
+
+statement ok
+ALTER TABLE t PUSH STATISTICS '[
+  {
+    "avg_size": 1,
+    "columns": [
+      "a"
+    ],
+    "created_at": "1988-08-08 00:02:00.000000",
+    "distinct_count": 3,
+    "histo_buckets": [
+      {
+        "distinct_range": 0,
+        "num_eq": 10,
+        "num_range": 0,
+        "upper_bound": "1"
+      },
+      {
+        "distinct_range": 0,
+        "num_eq": 10,
+        "num_range": 0,
+        "upper_bound": "2"
+      }
+    ],
+    "histo_col_type": "INT8",
+    "histo_version": 2,
+    "name": "partial2",
+    "null_count": 0,
+    "row_count": 20,
+    "partial_predicate": "a >= 1::INT8"
+  }
+]'
+
+query TTIB colnames
+SELECT statistics_name, column_names, row_count, delay_delete
+FROM [SHOW STATISTICS FOR TABLE t WITH MERGE] ORDER BY created DESC, statistics_name, column_names
+----
+statistics_name  column_names  row_count  delay_delete
+__merged__       {a}           24         false
+partial2         {a}           20         false
+partial1         {a}           10         false
+__auto__         {a}           12         false
+__auto__         {a}           9          false
+__auto__         {a}           6          false
+__auto__         {a}           3          false
+
+statement ok
+ALTER TABLE t PUSH STATISTICS '[{
+    "avg_size": 1,
+    "columns": [
+     "a"
+    ],
+    "created_at": "1988-08-09 00:00:00.000000",
+    "distinct_count": 3,
+    "histo_buckets": [
+     {
+       "distinct_range": 0,
+       "num_eq": 6,
+       "num_range": 0,
+       "upper_bound": "0"
+     },
+     {
+       "distinct_range": 0,
+       "num_eq": 6,
+       "num_range": 0,
+       "upper_bound": "1"
+     },
+     {
+       "distinct_range": 0,
+       "num_eq": 6,
+       "num_range": 0,
+       "upper_bound": "2"
+     }
+    ],
+    "histo_col_type": "INT8",
+    "histo_version": 2,
+    "name": "__auto__",
+    "null_count": 0,
+    "row_count": 18
+}]'
+
+query TTIB colnames
+SELECT statistics_name, column_names, row_count, delay_delete
+FROM [SHOW STATISTICS FOR TABLE t WITH MERGE] ORDER BY created DESC, statistics_name, column_names
+----
+statistics_name  column_names  row_count  delay_delete
+__auto__         {a}           18         false
+partial2         {a}           20         true
+partial1         {a}           10         true
+__auto__         {a}           12         false
+__auto__         {a}           9          false
+__auto__         {a}           6          false
+__auto__         {a}           3          false
+
+subtest end
+
+subtest partial_stats_using_extremes
+
+statement ok
+ALTER TABLE t INJECT STATISTICS '[
+  {
+    "id": 1,
+    "avg_size": 1,
+    "columns": [
+      "a"
+    ],
+    "created_at": "1988-08-05 00:00:00.000000",
+    "distinct_count": 3,
+    "histo_buckets": [
+      {
+        "distinct_range": 0,
+        "num_eq": 1,
+        "num_range": 0,
+        "upper_bound": "0"
+      },
+      {
+        "distinct_range": 0,
+        "num_eq": 1,
+        "num_range": 0,
+        "upper_bound": "1"
+      },
+      {
+        "distinct_range": 0,
+        "num_eq": 1,
+        "num_range": 0,
+        "upper_bound": "2"
+      }
+    ],
+    "histo_col_type": "INT8",
+    "histo_version": 2,
+    "name": "__auto__",
+    "null_count": 0,
+    "row_count": 3
+  },
+  {
+    "id": 2,
+    "avg_size": 1,
+    "columns": [
+      "a"
+    ],
+    "created_at": "1988-08-06 00:00:00.000000",
+    "distinct_count": 3,
+    "histo_buckets": [
+      {
+        "distinct_range": 0,
+        "num_eq": 2,
+        "num_range": 0,
+        "upper_bound": "0"
+      },
+      {
+        "distinct_range": 0,
+        "num_eq": 2,
+        "num_range": 0,
+        "upper_bound": "1"
+      },
+      {
+        "distinct_range": 0,
+        "num_eq": 2,
+        "num_range": 0,
+        "upper_bound": "2"
+      }
+    ],
+    "histo_col_type": "INT8",
+    "histo_version": 2,
+    "name": "__auto__",
+    "null_count": 0,
+    "row_count": 6
+  },
+  {
+    "id": 3,
+    "avg_size": 1,
+    "columns": [
+      "a"
+    ],
+    "created_at": "1988-08-07 00:00:00.000000",
+    "distinct_count": 3,
+    "histo_buckets": [
+      {
+        "distinct_range": 0,
+        "num_eq": 3,
+        "num_range": 0,
+        "upper_bound": "0"
+      },
+      {
+        "distinct_range": 0,
+        "num_eq": 3,
+        "num_range": 0,
+        "upper_bound": "1"
+      },
+      {
+        "distinct_range": 0,
+        "num_eq": 3,
+        "num_range": 0,
+        "upper_bound": "2"
+      }
+    ],
+    "histo_col_type": "INT8",
+    "histo_version": 2,
+    "name": "__auto__",
+    "null_count": 0,
+    "row_count": 9
+  },
+  {
+    "id": 4,
+    "avg_size": 1,
+    "columns": [
+      "a"
+    ],
+    "created_at": "1988-08-08 00:00:00.000000",
+    "distinct_count": 3,
+    "histo_buckets": [
+      {
+        "distinct_range": 0,
+        "num_eq": 4,
+        "num_range": 0,
+        "upper_bound": "0"
+      },
+      {
+        "distinct_range": 0,
+        "num_eq": 4,
+        "num_range": 0,
+        "upper_bound": "1"
+      },
+      {
+        "distinct_range": 0,
+        "num_eq": 4,
+        "num_range": 0,
+        "upper_bound": "2"
+      }
+    ],
+    "histo_col_type": "INT8",
+    "histo_version": 2,
+    "name": "__auto__",
+    "null_count": 0,
+    "row_count": 12
+  }
+]'
+
+# Push partial statistics with full_statistic_id set, simulating USING EXTREMES.
+# These reference the full statistics by ID.
+statement ok
+ALTER TABLE t PUSH STATISTICS '[
+  {
+    "id": 5,
+    "avg_size": 4,
+    "columns": ["a"],
+    "created_at": "1988-08-08 01:00:00.000000",
+    "distinct_count": 2,
+    "name": "using_extreme_1",
+    "null_count": 0,
+    "row_count": 8,
+    "partial_predicate": "(a < 0:::INT8) OR ((a > 2:::INT8) OR (a IS NULL))",
+    "full_statistic_id": 4,
+    "histo_buckets": [
+      {
+        "distinct_range": 0,
+        "num_eq": 4,
+        "num_range": 0,
+        "upper_bound": "3"
+      },
+      {
+        "distinct_range": 0,
+        "num_eq": 4,
+        "num_range": 0,
+        "upper_bound": "4"
+      }
+    ],
+    "histo_col_type": "INT8",
+    "histo_version": 2
+  }
+]'
+
+query TIITTIB colnames
+SELECT statistics_name, histogram_id, full_histogram_id, column_names, partial_predicate, row_count, delay_delete
+FROM [SHOW STATISTICS FOR TABLE t WITH MERGE] ORDER BY created DESC, statistics_name, column_names
+----
+statistics_name  histogram_id  full_histogram_id  column_names  partial_predicate                                  row_count  delay_delete
+__merged__       0             NULL               {a}           NULL                                               20         false
+using_extreme_1  5             4                  {a}           (a < 0:::INT8) OR ((a > 2:::INT8) OR (a IS NULL))  8          false
+__auto__         4             NULL               {a}           NULL                                               12         false
+__auto__         3             NULL               {a}           NULL                                               9          false
+__auto__         2             NULL               {a}           NULL                                               6          false
+__auto__         1             NULL               {a}           NULL                                               3          false
+
+statement ok
+ALTER TABLE t PUSH STATISTICS '[
+  {
+    "id": 6,
+    "avg_size": 4,
+    "columns": ["a"],
+    "created_at": "1988-08-08 01:01:00.000000",
+    "distinct_count": 2,
+    "name": "using_extreme_2",
+    "null_count": 0,
+    "row_count": 10,
+    "partial_predicate": "(a < 0:::INT8) OR ((a > 2:::INT8) OR (a IS NULL))",
+    "full_statistic_id": 4,
+    "histo_buckets": [
+      {
+        "distinct_range": 0,
+        "num_eq": 5,
+        "num_range": 0,
+        "upper_bound": "3"
+      },
+      {
+        "distinct_range": 0,
+        "num_eq": 5,
+        "num_range": 0,
+        "upper_bound": "4"
+      }
+    ],
+    "histo_col_type": "INT8",
+    "histo_version": 2
+  }
+]'
+
+query TIITTIB colnames
+SELECT statistics_name, histogram_id, full_histogram_id, column_names, partial_predicate, row_count, delay_delete
+FROM [SHOW STATISTICS FOR TABLE t WITH MERGE] ORDER BY created DESC, statistics_name, column_names
+----
+statistics_name  histogram_id  full_histogram_id  column_names  partial_predicate                                  row_count  delay_delete
+__merged__       0             NULL               {a}           NULL                                               22         false
+using_extreme_2  6             4                  {a}           (a < 0:::INT8) OR ((a > 2:::INT8) OR (a IS NULL))  10         false
+using_extreme_1  5             4                  {a}           (a < 0:::INT8) OR ((a > 2:::INT8) OR (a IS NULL))  8          false
+__auto__         4             NULL               {a}           NULL                                               12         false
+__auto__         3             NULL               {a}           NULL                                               9          false
+__auto__         2             NULL               {a}           NULL                                               6          false
+__auto__         1             NULL               {a}           NULL                                               3          false
+
+statement ok
+ALTER TABLE t PUSH STATISTICS '[
+  {
+    "id": 7,
+    "avg_size": 1,
+    "columns": [
+      "a"
+    ],
+    "created_at": "1988-08-09 00:00:00.000000",
+    "distinct_count": 5,
+    "histo_buckets": [
+      {
+        "distinct_range": 0,
+        "num_eq": 6,
+        "num_range": 0,
+        "upper_bound": "0"
+      },
+      {
+        "distinct_range": 0,
+        "num_eq": 6,
+        "num_range": 0,
+        "upper_bound": "1"
+      },
+      {
+        "distinct_range": 0,
+        "num_eq": 6,
+        "num_range": 0,
+        "upper_bound": "2"
+      },
+      {
+        "distinct_range": 0,
+        "num_eq": 6,
+        "num_range": 0,
+        "upper_bound": "3"
+      },
+      {
+        "distinct_range": 0,
+        "num_eq": 6,
+        "num_range": 0,
+        "upper_bound": "4"
+      }
+    ],
+    "histo_col_type": "INT8",
+    "histo_version": 2,
+    "name": "__auto__",
+    "null_count": 0,
+    "row_count": 30
+  }
+]'
+
+query TIITTIB colnames
+SELECT statistics_name, histogram_id, full_histogram_id, column_names, partial_predicate, row_count, delay_delete
+FROM [SHOW STATISTICS FOR TABLE t WITH MERGE] ORDER BY created DESC, statistics_name, column_names
+----
+statistics_name  histogram_id  full_histogram_id  column_names  partial_predicate                                  row_count  delay_delete
+__auto__         7             NULL               {a}           NULL                                               30         false
+using_extreme_2  6             4                  {a}           (a < 0:::INT8) OR ((a > 2:::INT8) OR (a IS NULL))  10         true
+using_extreme_1  5             4                  {a}           (a < 0:::INT8) OR ((a > 2:::INT8) OR (a IS NULL))  8          true
+__auto__         4             NULL               {a}           NULL                                               12         false
+__auto__         3             NULL               {a}           NULL                                               9          false
+__auto__         2             NULL               {a}           NULL                                               6          false
+__auto__         1             NULL               {a}           NULL                                               3          false
+
+# Interleaving USING EXTREME partial stats.
+statement ok
+ALTER TABLE t PUSH STATISTICS '[
+  {
+    "id": 8,
+    "avg_size": 4,
+    "columns": ["a"],
+    "created_at": "1988-08-09 01:00:00.000000",
+    "distinct_count": 2,
+    "name": "using_extreme_3",
+    "null_count": 0,
+    "row_count": 10,
+    "partial_predicate": "(a < 0:::INT8) OR ((a > 2:::INT8) OR (a IS NULL))",
+    "full_statistic_id": 5,
+    "histo_buckets": [
+      {
+        "distinct_range": 0,
+        "num_eq": 7,
+        "num_range": 0,
+        "upper_bound": "3"
+      },
+      {
+        "distinct_range": 0,
+        "num_eq": 7,
+        "num_range": 0,
+        "upper_bound": "4"
+      }
+    ],
+    "histo_col_type": "INT8",
+    "histo_version": 2
+  }
+]'
+
+# Since using_extreme_3 is bound to full stats 5, which is not the latest
+# full stats, it is ignored and not merged with any full stats.
+query TIITTIB colnames
+SELECT statistics_name, histogram_id, full_histogram_id, column_names, partial_predicate, row_count, delay_delete
+FROM [SHOW STATISTICS FOR TABLE t WITH MERGE] ORDER BY created DESC, statistics_name, column_names
+----
+statistics_name  histogram_id  full_histogram_id  column_names  partial_predicate                                  row_count  delay_delete
+using_extreme_3  8             5                  {a}           (a < 0:::INT8) OR ((a > 2:::INT8) OR (a IS NULL))  10         false
+__auto__         7             NULL               {a}           NULL                                               30         false
+using_extreme_2  6             4                  {a}           (a < 0:::INT8) OR ((a > 2:::INT8) OR (a IS NULL))  10         true
+using_extreme_1  5             4                  {a}           (a < 0:::INT8) OR ((a > 2:::INT8) OR (a IS NULL))  8          true
+__auto__         4             NULL               {a}           NULL                                               12         false
+__auto__         3             NULL               {a}           NULL                                               9          false
+__auto__         2             NULL               {a}           NULL                                               6          false
+__auto__         1             NULL               {a}           NULL                                               3          false
+
+subtest end

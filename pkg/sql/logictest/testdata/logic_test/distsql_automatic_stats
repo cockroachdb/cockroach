@@ -163,7 +163,6 @@ __auto__         {c}           0          0
 __auto__         {d}           0          0
 __auto__         {rowid}       0          0
 
-
 # Test user-defined schemas.
 
 # Disable automatic stats

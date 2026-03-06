@@ -43,6 +43,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/vecpb"
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 	"github.com/lib/pq/oid"
@@ -692,7 +693,15 @@ func (oc *optCatalog) dataSourceForTable(
 			typeResolver = &r
 		}
 		var err error
-		tableStats, err = oc.planner.execCfg.TableStatsCache.GetTableStats(ctx, desc, typeResolver)
+		var stable bool
+		var statsCanaryWindow time.Duration
+		var statsAsOf hlc.Timestamp
+		if desc.TableDesc() != nil && oc.planner != nil && oc.planner.EvalContext() != nil {
+			stable = desc.TableDesc().StatsCanaryWindow > 0 && !oc.planner.EvalContext().UseCanaryStats
+			statsCanaryWindow = desc.TableDesc().StatsCanaryWindow
+			statsAsOf = oc.planner.EvalContext().SessionData().StatsAsOf
+		}
+		tableStats, err = oc.planner.execCfg.TableStatsCache.GetTableStatsMaybeStable(ctx, desc, typeResolver, stable, statsCanaryWindow, statsAsOf)
 		if err != nil {
 			// Ignore any error. We still want to be able to run queries even if we lose
 			// access to the statistics table.

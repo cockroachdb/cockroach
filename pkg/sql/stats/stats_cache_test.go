@@ -11,6 +11,7 @@ import (
 	"math/rand"
 	"reflect"
 	"sort"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -30,9 +31,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
+	"github.com/cockroachdb/datadriven"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 )
@@ -111,7 +114,7 @@ func checkStatsForTable(
 
 	// Perform the lookup and refresh, and confirm the
 	// returned stats match the expected values.
-	statsList, err := sc.getTableStatsFromCache(ctx, tableID, nil /* forecast */, nil /* udtCols */, nil /* typeResolver */)
+	statsList, err := sc.getTableStatsFromCache(ctx, tableID, nil /* forecast */, nil /* udtCols */, nil /* typeResolver */, false /* stable */, 0 /* canaryWindowSize */, hlc.Timestamp{} /* statsAsOf */)
 	if err != nil {
 		t.Fatalf("error retrieving stats: %s", err)
 	}
@@ -345,7 +348,7 @@ func TestCacheUserDefinedTypes(t *testing.T) {
 	tbl := desctestutils.TestingGetPublicTableDescriptor(kvDB, s.Codec(), "t", "tt")
 	// Get stats for our table. We are ensuring here that the access to the stats
 	// for tt properly hydrates the user defined type t before access.
-	stats, err := sc.GetTableStats(ctx, tbl, nil /* typeResolver */)
+	stats, err := sc.GetFreshTableStats(ctx, tbl, nil /* typeResolver */)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -358,9 +361,9 @@ func TestCacheUserDefinedTypes(t *testing.T) {
 	sqlRunner.Exec(t, `DROP TYPE t;`)
 	// Purge the cache.
 	sc.InvalidateTableStats(ctx, tbl.GetID())
-	// Verify that GetTableStats ignores the statistic on the now unknown type and
+	// Verify that GetFreshTableStats ignores the statistic on the now unknown type and
 	// returns the rest.
-	stats, err = sc.GetTableStats(ctx, tbl, nil /* typeResolver */)
+	stats, err = sc.GetFreshTableStats(ctx, tbl, nil /* typeResolver */)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -404,12 +407,12 @@ func TestCacheWait(t *testing.T) {
 
 		id := tableIDs[rand.Intn(len(tableIDs))]
 		sc.InvalidateTableStats(ctx, id)
-		// Run GetTableStats multiple times in parallel.
+		// Run GetFreshTableStats multiple times in parallel.
 		var wg sync.WaitGroup
 		for n := 0; n < 10; n++ {
 			wg.Add(1)
 			go func() {
-				stats, err := sc.getTableStatsFromCache(ctx, id, nil /* forecast */, nil /* udtCols */, nil /* typeResolver */)
+				stats, err := sc.getTableStatsFromCache(ctx, id, nil /* forecast */, nil /* udtCols */, nil /* typeResolver */, false /* stable */, 0 /* canaryWindowSize */, hlc.Timestamp{} /* statsAsOf */)
 				if err != nil {
 					t.Error(err)
 				} else if !checkStats(stats, expectedStats[id]) {
@@ -458,7 +461,7 @@ func TestCacheAutoRefresh(t *testing.T) {
 	tableDesc := desctestutils.TestingGetPublicTableDescriptor(s.DB(), s.Codec(), "test", "t")
 
 	expectNStats := func(n int) error {
-		stats, err := sc.GetTableStats(ctx, tableDesc, nil /* typeResolver */)
+		stats, err := sc.GetFreshTableStats(ctx, tableDesc, nil /* typeResolver */)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -835,4 +838,63 @@ func TestDecodeHistogramBucketsEnum(t *testing.T) {
 			)
 		})
 	}
+}
+
+// TestCanaryDualCache tests the dual cache mechanism that maintains
+// separate fresh and stable statistics caches. The stable cache
+// preserves older stats during canary windows to ensure query plan
+// stability. Uses data-driven testing to validate complex scenarios
+// including stats retention policies, delayed deletion, and partial
+// stats merging.
+func TestCanaryDualCache(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	srv, sqlDB, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
+	defer srv.Stopper().Stop(ctx)
+	s := srv.ApplicationLayer()
+	sqlRunner := sqlutils.MakeSQLRunner(sqlDB)
+
+	db := s.InternalDB().(descs.DB)
+	sc := NewTableStatisticsCache(10 /* cacheSize */, s.ClusterSettings(), db, s.AppStopper())
+	require.NoError(t, sc.Start(ctx, s.Codec(), s.RangeFeedFactory().(*rangefeed.Factory), s.SystemTableIDResolver().(catalog.SystemTableIDResolver)))
+
+	datadriven.RunTest(t, "testdata/dual_cache", func(t *testing.T, d *datadriven.TestData) string {
+		switch d.Cmd {
+		case "exec":
+			sqlRunner.Exec(t, d.Input)
+			return ""
+		case "stats-cache":
+			tableName := "test"
+			forecast := false
+			if d.HasArg("table") {
+				d.ScanArgs(t, "table", &tableName)
+			}
+			if d.HasArg("forecast") {
+				forecast = true
+			}
+
+			tbl := desctestutils.TestingGetPublicTableDescriptor(kvDB, s.Codec(), "defaultdb", tableName)
+			stats, stableStats, _, _, _, err := sc.getTableStatsFromDB(ctx, tbl.GetID(), forecast, s.ClusterSettings(), nil)
+			if err != nil {
+				return fmt.Sprintf("error: %v", err)
+			}
+			var result strings.Builder
+
+			formatStats := func(label string, statsCache []*TableStatistic) {
+				result.WriteString(fmt.Sprintf("%s stats (count=%d):\n", label, len(statsCache)))
+				for _, stat := range statsCache {
+					result.WriteString(fmt.Sprintf("created_at=%s, name=%q, row_count=%d, distinct_count=%d, null_count=%d, delayed_delete=%t\n",
+						stat.CreatedAt.Format("2006-01-02 15:04:05"), stat.Name, stat.RowCount, stat.DistinctCount, stat.NullCount, stat.DelayDelete))
+				}
+			}
+
+			formatStats("fresh", stats)
+			formatStats("stable", stableStats)
+			return result.String()
+		default:
+			return fmt.Sprintf("unknown command: %s", d.Cmd)
+		}
+	})
 }

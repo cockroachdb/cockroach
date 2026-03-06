@@ -70,7 +70,7 @@ func (is *indexSplitAndScatter) getSplitPointsWithStats(
 		return nil, nil
 	}
 	// Fetch the current statistics for this table.
-	tableStats, err := is.statsCache.GetTableStats(ctx, table, nil)
+	tableStats, err := is.statsCache.GetFreshTableStats(ctx, table, nil /* typeResolver */)
 	if err != nil {
 		return nil, err
 	}
