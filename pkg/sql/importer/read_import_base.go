@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
@@ -87,11 +88,24 @@ func runImport(
 
 	evalCtx := flowCtx.NewEvalCtx()
 	evalCtx.Regions = makeImportRegionOperator(spec.DatabasePrimaryRegion)
-	semaCtx := tree.MakeSemaContext(importResolver)
-	conv, err := makeInputConverter(ctx, &semaCtx, spec, evalCtx, kvCh, seqChunkProvider, flowCtx.Cfg.DB.KV())
-	if err != nil {
+
+	// Build the input converter within a transaction so that user-defined
+	// functions referenced in computed column expressions can be resolved.
+	// This mirrors the pattern used by ColumnBackfiller.InitForDistributedUse.
+	var conv inputConverter
+	if err := flowCtx.Cfg.DB.DescsTxn(ctx, func(ctx context.Context, txn descs.Txn) error {
+		semaCtx := tree.MakeSemaContext(importResolver)
+		semaCtx.FunctionResolver = descs.NewDistSQLFunctionResolver(txn.Descriptors(), txn.KV())
+		var err error
+		conv, err = makeInputConverter(ctx, &semaCtx, spec, evalCtx, kvCh, seqChunkProvider, flowCtx.Cfg.DB.KV())
+		return err
+	}); err != nil {
 		return nil, err
 	}
+	// Release leases on any accessed descriptors now that type metadata
+	// is resolved. We do this so that leases are not held for the entire
+	// import process.
+	flowCtx.Descriptors.ReleaseAll(ctx)
 
 	// This group holds the go routines that are responsible for producing KV
 	// batches and ingesting produced KVs.
@@ -122,6 +136,7 @@ func runImport(
 	// Ingest the KVs that the producer group emitted to the chan and the row result
 	// at the end is one row containing an encoded BulkOpSummary.
 	var summary *kvpb.BulkOpSummary
+	var err error
 	group.GoCtx(func(ctx context.Context) error {
 		summary, err = ingestKvs(ctx, flowCtx, spec, processorID, table.Desc.Name, progCh, kvCh)
 		return err
