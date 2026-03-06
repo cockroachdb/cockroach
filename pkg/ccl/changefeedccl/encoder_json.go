@@ -16,9 +16,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdcevent"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/kcjsonschema"
-	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins/builtinsregistry"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/volatility"
@@ -847,8 +847,9 @@ func init() {
 		Volatility: volatility.Volatile,
 	}
 
-	utilccl.RegisterCCLBuiltin("crdb_internal.to_json_as_changefeed_with_flags",
-		`Encodes a tuple the way a changefeed would output it if it were inserted as a row or emitted by a changefeed expression, and returns the raw bytes.
-		Flags such as 'diff' modify the encoding as though specified in the WITH portion of a changefeed.`,
-		overload)
+	builtinsregistry.Register(
+		"crdb_internal.to_json_as_changefeed_with_flags",
+		&tree.FunctionProperties{Category: "CCL-only internal function"},
+		[]tree.Overload{overload},
+	)
 }

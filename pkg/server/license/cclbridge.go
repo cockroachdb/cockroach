@@ -5,21 +5,7 @@
 
 package license
 
-import (
-	"context"
-
-	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
-	"github.com/cockroachdb/redact"
-)
-
-// This file serves as a bridge to the license code in the CCL packages.
-// Directly importing CCL is not possible, so this file maps functions
-// and types from that package to something usable in this package.
-
-// RegisterCallbackOnLicenseChange is a pointer to a function that will register
-// a callback when the license changes. This is initially empty here. When
-// initializing the ccl package, this variable will be set to a valid function.
-var RegisterCallbackOnLicenseChange = func(context.Context, *cluster.Settings, *Enforcer) {}
+import "github.com/cockroachdb/redact"
 
 // LicType is the type to define the license type, as needed by the license
 // enforcer.

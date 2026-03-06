@@ -12,9 +12,9 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl/licenseccl"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/diagnostics/diagnosticspb"
+	"github.com/cockroachdb/cockroach/pkg/server/license/licensepb"
 	"github.com/cockroachdb/cockroach/pkg/server/status"
 	"github.com/cockroachdb/cockroach/pkg/util/cloudinfo"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
@@ -79,7 +79,7 @@ type ClusterInfo struct {
 	TenantID         roachpb.TenantID
 	IsInsecure       bool
 	IsInternal       bool
-	License          *licenseccl.License
+	License          *licensepb.License
 }
 
 // addInfoToURL sets query parameters on the URL used to report diagnostics. If

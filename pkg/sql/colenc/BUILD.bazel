@@ -55,7 +55,6 @@ go_test(
         ":colenc",
         "//pkg/base",
         "//pkg/ccl",
-        "//pkg/ccl/utilccl",
         "//pkg/cli/clisqlclient",
         "//pkg/col/coldata",
         "//pkg/col/coldataext",

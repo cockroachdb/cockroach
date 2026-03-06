@@ -18,13 +18,13 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/build"
-	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl"
-	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl/licenseccl"
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/diagnostics/diagnosticspb"
+	"github.com/cockroachdb/cockroach/pkg/server/license"
+	"github.com/cockroachdb/cockroach/pkg/server/license/licensepb"
 	"github.com/cockroachdb/cockroach/pkg/server/status/statuspb"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings"
@@ -164,7 +164,7 @@ func shouldReportDiagnostics(ctx context.Context, st *cluster.Settings) bool {
 		return true
 	}
 
-	license, err := utilccl.GetLicense(st)
+	license, err := license.GetLicense(st)
 	// If we cannot fetch the license, we do not send the report.
 	if err != nil {
 		log.Dev.Errorf(ctx, "error fetching license in shouldReportDiagnostics: %s", err)
@@ -173,7 +173,7 @@ func shouldReportDiagnostics(ctx context.Context, st *cluster.Settings) bool {
 	if license == nil {
 		return false
 	}
-	isLimited := license.Type == licenseccl.License_Free || license.Type == licenseccl.License_Trial
+	isLimited := license.Type == licensepb.License_Free || license.Type == licensepb.License_Trial
 
 	return isLimited
 }
@@ -228,7 +228,7 @@ func (r *Reporter) ReportDiagnostics(ctx context.Context) {
 
 	report := r.CreateReport(ctx, telemetry.ResetCounts)
 
-	license, err := utilccl.GetLicense(r.Settings)
+	license, err := license.GetLicense(r.Settings)
 	if err != nil {
 		if log.V(2) {
 			log.Dev.Warningf(ctx, "failed to retrieve license while reporting diagnostics: %v", err)
@@ -480,10 +480,10 @@ func (r *Reporter) collectSchemaInfo(ctx context.Context) ([]descpb.TableDescrip
 // buildReportingURL creates a URL to report diagnostics.
 // If an empty updates URL is set (via empty environment variable), returns nil.
 func (r *Reporter) buildReportingURL(
-	report *diagnosticspb.DiagnosticReport, license *licenseccl.License,
+	report *diagnosticspb.DiagnosticReport, license *licensepb.License,
 ) *url.URL {
 	if license == nil {
-		license = &licenseccl.License{}
+		license = &licensepb.License{}
 	}
 
 	clusterInfo := ClusterInfo{
@@ -503,7 +503,7 @@ func (r *Reporter) buildReportingURL(
 }
 
 func getLicenseType(ctx context.Context, settings *cluster.Settings) string {
-	licenseType, err := base.LicenseType(settings)
+	licenseType, err := license.GetLicenseType(settings)
 	if err != nil {
 		log.Dev.Errorf(ctx, "error retrieving license type: %s", err)
 		return ""

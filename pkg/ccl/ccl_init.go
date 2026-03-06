@@ -10,7 +10,6 @@ package ccl
 
 import (
 	_ "github.com/cockroachdb/cockroach/pkg/backup"
-	"github.com/cockroachdb/cockroach/pkg/base"
 	_ "github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl"
 	_ "github.com/cockroachdb/cockroach/pkg/ccl/gssapiccl"
 	_ "github.com/cockroachdb/cockroach/pkg/ccl/jwtauthccl"
@@ -18,7 +17,6 @@ import (
 	_ "github.com/cockroachdb/cockroach/pkg/ccl/multiregionccl"
 	_ "github.com/cockroachdb/cockroach/pkg/ccl/multitenantccl"
 	_ "github.com/cockroachdb/cockroach/pkg/ccl/oidcccl"
-	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl"
 	_ "github.com/cockroachdb/cockroach/pkg/ccl/workloadccl"
 	_ "github.com/cockroachdb/cockroach/pkg/ccl/workloadccl/cliccl" // registers fixtures command
 	// TODO(ssd): Many test packages require this implicitly but have failed to
@@ -28,25 +26,22 @@ import (
 	_ "github.com/cockroachdb/cockroach/pkg/crosscluster/logical"
 	_ "github.com/cockroachdb/cockroach/pkg/crosscluster/physical"
 	_ "github.com/cockroachdb/cockroach/pkg/crosscluster/producer"
-	"github.com/cockroachdb/cockroach/pkg/server/license"
 )
 
-func init() {
-	// Set up license-related hooks from OSS to CCL. The implementation of the
-	// functions we bind is in utilccl, but license checks only work once
-	// utilccl.AllCCLCodeImported is set, above; that's why this hookup is done in
-	// this `ccl` pkg.
-	base.LicenseType = utilccl.GetLicenseType
-	base.GetLicenseTTL = utilccl.GetLicenseTTL
-	license.RegisterCallbackOnLicenseChange = utilccl.RegisterCallbackOnLicenseChange
-}
-
-// TestingEnableEnterprise allows overriding the license check in tests.
+// TestingEnableEnterprise is a no-op. It was deprecated when the core license
+// was removed. We no longer distinguish between features enabled only for
+// enterprise. All features are enabled, and if a license policy is violated,
+// we throttle connections. Callers can safely remove any reference to this
+// function.
+//
+// Deprecated
 func TestingEnableEnterprise() func() {
-	return utilccl.TestingEnableEnterprise()
+	return func() {}
 }
 
-// TestingDisableEnterprise allows re-enabling the license check in tests.
+// TestingDisableEnterprise is a no-op. See TestingEnableEnterprise.
+//
+// Deprecated
 func TestingDisableEnterprise() func() {
-	return utilccl.TestingDisableEnterprise()
+	return func() {}
 }

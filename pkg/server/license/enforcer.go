@@ -204,10 +204,10 @@ func (e *Enforcer) Start(ctx context.Context, st *cluster.Settings, opts ...Opti
 	// ccl package.
 	e.RefreshForLicenseChange(ctx, LicTypeNone, time.Time{})
 
-	// Add a hook into the license setting so that we refresh our state whenever
-	// the license changes. This will also update the state for the current
-	// license if not in test.
-	RegisterCallbackOnLicenseChange(ctx, st, e)
+	// Register a callback so that we refresh our state whenever the license
+	// changes. This will also update the state for the current license if not
+	// in test.
+	registerCallbackOnLicenseChange(ctx, st, e)
 
 	// This should be the final step after all error checks are completed.
 	e.isDisabled.Store(false)
@@ -549,9 +549,16 @@ func (e *Enforcer) TestingResetTrialUsage(ctx context.Context) error {
 			return err
 		}
 		e.trialUsageExpiry.Store(0)
+		trialLicenseExpiryTimestamp.Store(0)
 		log.Dev.Infof(ctx, "trial license expiry was reset")
 		return nil
 	})
+}
+
+// TestingGetTrialUsageExpiry returns the trial usage expiry timestamp for
+// testing purposes.
+func (e *Enforcer) TestingGetTrialUsageExpiry() int64 {
+	return e.trialUsageExpiry.Load()
 }
 
 // TestingMaybeFailIfThrottled is a helper that runs MaybeFailIfThrottled in a separate goroutine.
