@@ -741,3 +741,83 @@ statement ok
 SELECT crdb_internal.validate_multi_region_zone_configs()
 
 subtest end
+
+# Verify ALTER PRIMARY REGION is blocked when it would break the
+# primary/secondary super region invariant.
+subtest alter_primary_region_super_region_secondary
+
+statement ok
+CREATE DATABASE pr_sr_test PRIMARY REGION "us-east-1"
+    REGIONS "us-west-1", "us-central-1", "ca-central-1", "ap-southeast-2"
+
+statement ok
+SET enable_super_regions = 'on'
+
+statement ok
+ALTER DATABASE pr_sr_test ADD SUPER REGION "usa"
+    VALUES "us-east-1", "us-west-1", "us-central-1"
+
+statement ok
+ALTER DATABASE pr_sr_test ADD SUPER REGION "other"
+    VALUES "ca-central-1", "ap-southeast-2"
+
+statement ok
+ALTER DATABASE pr_sr_test SET SECONDARY REGION "us-west-1"
+
+statement ok
+SET alter_primary_region_super_region_override = 'on'
+
+# Case 1: Cross-SR move (usa -> other) should fail.
+statement error pq: cannot change primary region to ca-central-1: the primary and secondary regions must be in the same super region
+ALTER DATABASE pr_sr_test SET PRIMARY REGION "ca-central-1"
+
+# Case 2: Within-SR move (us-east-1 -> us-central-1, both in "usa") should succeed.
+statement ok
+ALTER DATABASE pr_sr_test SET PRIMARY REGION "us-central-1"
+
+# Case 3: Escape hatch — drop secondary, move cross-SR, re-establish.
+statement ok
+ALTER DATABASE pr_sr_test DROP SECONDARY REGION
+
+statement ok
+ALTER DATABASE pr_sr_test SET PRIMARY REGION "ca-central-1"
+
+statement ok
+ALTER DATABASE pr_sr_test SET SECONDARY REGION "ap-southeast-2"
+
+# Case 4: Cross-SR move back (other -> usa) should fail.
+statement error pq: cannot change primary region to us-east-1: the primary and secondary regions must be in the same super region
+ALTER DATABASE pr_sr_test SET PRIMARY REGION "us-east-1"
+
+# Case 5: Fix by dropping secondary first, then move.
+statement ok
+ALTER DATABASE pr_sr_test DROP SECONDARY REGION
+
+statement ok
+ALTER DATABASE pr_sr_test SET PRIMARY REGION "us-east-1"
+
+statement ok
+ALTER DATABASE pr_sr_test SET SECONDARY REGION "us-west-1"
+
+# State: P=us-east-1, S=us-west-1, SR "usa"={us-east-1, us-west-1, us-central-1}.
+
+# Case 6: ALTER SUPER REGION dropping the secondary region should fail.
+statement error pq: the secondary region must be in the same super region as the current primary region
+ALTER DATABASE pr_sr_test ALTER SUPER REGION "usa" VALUES "us-east-1", "us-central-1"
+
+# Case 7: ALTER SUPER REGION dropping the primary region should fail.
+statement error pq: the secondary region must be in the same super region as the current primary region
+ALTER DATABASE pr_sr_test ALTER SUPER REGION "usa" VALUES "us-west-1", "us-central-1"
+
+# Case 8: ALTER SUPER REGION dropping both primary and secondary should succeed.
+statement ok
+ALTER DATABASE pr_sr_test ALTER SUPER REGION "usa" VALUES "us-central-1"
+
+# Case 9: ALTER SUPER REGION adding back both primary and secondary should succeed.
+statement ok
+ALTER DATABASE pr_sr_test ALTER SUPER REGION "usa" VALUES "us-east-1", "us-west-1", "us-central-1"
+
+statement ok
+DROP DATABASE pr_sr_test
+
+subtest end
