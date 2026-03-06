@@ -22,12 +22,13 @@ func TestDistributeReplicasAcrossRegions(t *testing.T) {
 	}
 
 	tests := []struct {
-		name           string
-		numReplicas    int32
-		regions        catpb.RegionNames
-		affinityRegion catpb.RegionName
-		expected       []zonepb.ConstraintsConjunction
-		expectErr      string
+		name                string
+		numReplicas         int32
+		regions             catpb.RegionNames
+		affinityRegion      catpb.RegionName
+		minAffinityReplicas int32
+		expected            []zonepb.ConstraintsConjunction
+		expectErr           string
 	}{{
 		name:           "even distribution",
 		numReplicas:    6,
@@ -93,11 +94,54 @@ func TestDistributeReplicasAcrossRegions(t *testing.T) {
 		regions:        catpb.RegionNames{"us-east", "us-west"},
 		affinityRegion: "eu-west",
 		expectErr:      "affinity region eu-west must be a member of the region set",
+	}, {
+		name:                "minAffinity reserves replicas for home region",
+		numReplicas:         5,
+		regions:             catpb.RegionNames{"us-east", "us-west", "eu-west"},
+		affinityRegion:      "us-east",
+		minAffinityReplicas: 3,
+		expected: []zonepb.ConstraintsConjunction{
+			mkConstraint("us-east", 3),
+			mkConstraint("us-west", 1),
+			mkConstraint("eu-west", 1),
+		},
+	}, {
+		name:                "minAffinity equals numReplicas, all to home",
+		numReplicas:         3,
+		regions:             catpb.RegionNames{"us-east", "us-west", "eu-west"},
+		affinityRegion:      "us-east",
+		minAffinityReplicas: 3,
+		expected: []zonepb.ConstraintsConjunction{
+			mkConstraint("us-east", 3),
+		},
+	}, {
+		name:                "minAffinity exceeds numReplicas, clamped",
+		numReplicas:         3,
+		regions:             catpb.RegionNames{"us-east", "us-west", "eu-west"},
+		affinityRegion:      "us-east",
+		minAffinityReplicas: 5,
+		expected: []zonepb.ConstraintsConjunction{
+			mkConstraint("us-east", 3),
+		},
+	}, {
+		name:                "minAffinity with uneven remainder across other regions",
+		numReplicas:         7,
+		regions:             catpb.RegionNames{"us-east", "us-west", "eu-west", "ap-south"},
+		affinityRegion:      "us-east",
+		minAffinityReplicas: 3,
+		expected: []zonepb.ConstraintsConjunction{
+			mkConstraint("us-east", 3),
+			mkConstraint("us-west", 2),
+			mkConstraint("eu-west", 1),
+			mkConstraint("ap-south", 1),
+		},
 	}}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result, err := distributeReplicasAcrossRegions(tt.numReplicas, tt.regions, tt.affinityRegion)
+			result, err := distributeReplicasAcrossRegions(
+				tt.numReplicas, tt.regions, tt.affinityRegion, tt.minAffinityReplicas,
+			)
 			if tt.expectErr != "" {
 				require.ErrorContains(t, err, tt.expectErr)
 				return
