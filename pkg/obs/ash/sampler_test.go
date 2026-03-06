@@ -7,6 +7,7 @@ package ash
 
 import (
 	"context"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -14,7 +15,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/log/logtestutils"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 )
@@ -38,7 +42,7 @@ func TestSamplerTakeSample(t *testing.T) {
 	cleanup := SetWorkState(tenantID, 42, WorkCPU, "Optimize")
 	defer cleanup()
 
-	s.takeSample()
+	s.takeSample(context.Background())
 
 	samples := s.GetSamples(nil)
 	require.Len(t, samples, 1)
@@ -68,11 +72,11 @@ func TestSamplerWorkloadIDCache(t *testing.T) {
 
 	// Take two samples with the same workload ID.
 	cleanup := SetWorkState(tenantID, 99, WorkIO, "BatchEval")
-	s.takeSample()
+	s.takeSample(context.Background())
 	cleanup()
 
 	cleanup = SetWorkState(tenantID, 99, WorkIO, "BatchEval")
-	s.takeSample()
+	s.takeSample(context.Background())
 	cleanup()
 
 	samples := s.GetSamples(nil)
@@ -124,7 +128,7 @@ func TestSamplerMultipleGoroutines(t *testing.T) {
 		<-ready
 	}
 
-	s.takeSample()
+	s.takeSample(context.Background())
 
 	// Signal all goroutines to clean up.
 	close(release)
@@ -279,11 +283,109 @@ func TestInitGlobalSampler(t *testing.T) {
 	tenantID := roachpb.MustMakeTenantID(10)
 	cleanup := SetWorkState(tenantID, 200, WorkCPU, "GlobalTest")
 	defer cleanup()
-	s.takeSample()
+	s.takeSample(context.Background())
 
 	// Package-level GetSamples should return the sample.
 	samples := GetSamples()
 	require.Len(t, samples, 1)
 	require.Equal(t, roachpb.NodeID(42), samples[0].NodeID)
 	require.Equal(t, tenantID, samples[0].TenantID)
+}
+
+func TestSamplerLogSummary(t *testing.T) {
+	defer log.ScopeWithoutShowLogs(t).Close(t)
+
+	// newSummaryTestSampler returns a sampler with lastLogTime far
+	// enough in the past that the summary fires on the next call.
+	newSummaryTestSampler := func() (*Sampler, *stop.Stopper) {
+		s, stopper := newTestSampler()
+		s.lastLogTime = timeutil.Now().Add(-time.Hour)
+		return s, stopper
+	}
+
+	t.Run("emits summary and resets counters", func(t *testing.T) {
+		s, stopper := newSummaryTestSampler()
+		defer stopper.Stop(context.Background())
+
+		enabled.Store(true)
+		defer enabled.Store(false)
+
+		ctx := context.Background()
+		spy := logtestutils.NewLogSpy(t, logtestutils.MatchesF("ASH summary"))
+		defer log.InterceptWith(ctx, spy)()
+
+		// Register a work state and take several samples. The first
+		// takeSample fires a summary (lastLogTime is 1h old), so
+		// subsequent samples accumulate fresh counters.
+		tenantID := roachpb.MustMakeTenantID(1)
+		cleanup := SetWorkState(tenantID, 42, WorkCPU, "Optimize")
+		defer cleanup()
+
+		for range 5 {
+			s.takeSample(ctx)
+		}
+		require.Equal(t, 4, s.totalSamples)
+
+		// Push lastLogTime back and flush the remaining counters.
+		s.lastLogTime = timeutil.Now().Add(-time.Hour)
+		s.maybeLogSummary(ctx)
+
+		require.Equal(t, 0, s.totalSamples)
+		require.Empty(t, s.tickSamples)
+
+		// Verify the log messages were emitted with expected content.
+		entries := spy.ReadAll()
+		require.NotEmpty(t, entries, "expected at least one ASH summary log")
+		lastMsg := entries[len(entries)-1].Message
+		require.Contains(t, lastMsg, "ASH summary")
+		require.Contains(t, lastMsg, "CPU")
+		require.Contains(t, lastMsg, "Optimize")
+	})
+
+	t.Run("top-N ordering", func(t *testing.T) {
+		s, stopper := newSummaryTestSampler()
+		defer stopper.Stop(context.Background())
+
+		ctx := context.Background()
+		spy := logtestutils.NewLogSpy(t, logtestutils.MatchesF("ASH summary"))
+		defer log.InterceptWith(ctx, spy)()
+
+		// Populate counters directly to test ordering.
+		s.tickSamples[workloadKey{WorkCPU, "Optimize", "aaa"}] = 100
+		s.tickSamples[workloadKey{WorkLock, "LockWait", "bbb"}] = 50
+		s.tickSamples[workloadKey{WorkIO, "BatchEval", "ccc"}] = 200
+		s.totalSamples = 350
+
+		s.maybeLogSummary(ctx)
+
+		require.Equal(t, 0, s.totalSamples)
+		require.Empty(t, s.tickSamples)
+
+		entries := spy.ReadAll()
+		require.Len(t, entries, 1)
+
+		// IO (200) should appear before CPU (100) and LOCK (50).
+		msg := entries[0].Message
+		ioIdx := strings.Index(msg, "IO")
+		cpuIdx := strings.Index(msg, "CPU")
+		lockIdx := strings.Index(msg, "LOCK")
+		require.Greater(t, cpuIdx, ioIdx, "IO should appear before CPU")
+		require.Greater(t, lockIdx, cpuIdx, "CPU should appear before LOCK")
+	})
+
+	t.Run("skips empty window", func(t *testing.T) {
+		s, stopper := newSummaryTestSampler()
+		defer stopper.Stop(context.Background())
+
+		ctx := context.Background()
+		spy := logtestutils.NewLogSpy(t, logtestutils.MatchesF("ASH summary"))
+		defer log.InterceptWith(ctx, spy)()
+
+		s.maybeLogSummary(ctx)
+
+		require.Empty(t, spy.ReadAll(),
+			"no summary should be logged when there are zero samples")
+		// lastLogTime should still be updated so we don't accumulate.
+		require.True(t, timeutil.Since(s.lastLogTime) < time.Second)
+	})
 }

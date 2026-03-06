@@ -8,6 +8,9 @@ package ash
 import (
 	"context"
 	"encoding/hex"
+	"fmt"
+	"sort"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -59,6 +62,16 @@ var BufferSize = settings.RegisterIntSetting(
 	settings.PositiveInt,
 )
 
+// logSummaryInterval is the interval between periodic top-N workload
+// summaries logged to the OPS channel. Each summary reports the most
+// frequently sampled (WorkEventType, WorkEvent, WorkloadID) combinations
+// since the last report.
+const logSummaryInterval = 60 * time.Second
+
+// logSummaryTopN is the maximum number of workload entries included in
+// each periodic summary.
+const logSummaryTopN = 10
+
 // globalSampler is the process-wide ASH sampler singleton. It is
 // initialized once by InitGlobalSampler and read by GetSamples.
 var globalSampler atomic.Pointer[Sampler]
@@ -78,6 +91,13 @@ type pendingSample struct {
 	state WorkState
 }
 
+// workloadKey groups samples for the periodic top-N summary.
+type workloadKey struct {
+	WorkEventType WorkEventType
+	WorkEvent     string
+	WorkloadID    string
+}
+
 // Sampler periodically samples the active work states and stores ASH data.
 type Sampler struct {
 	nodeID  roachpb.NodeID
@@ -95,6 +115,13 @@ type Sampler struct {
 	// during rangeWorkStates. Reused across samples to avoid per-sample
 	// slice allocation.
 	pendingSamples []pendingSample
+	// tickSamples tracks per-workload sample counts since the last
+	// periodic log summary was emitted.
+	tickSamples map[workloadKey]int
+	// totalSamples counts total samples since the last log summary.
+	totalSamples int
+	// lastLogTime records when the last summary was logged.
+	lastLogTime time.Time
 }
 
 // newSampler creates a new ASH sampler.
@@ -111,6 +138,7 @@ func newSampler(nodeID roachpb.NodeID, st *cluster.Settings, stopper *stop.Stopp
 				return size > maxWorkloadIDCacheSize
 			},
 		}),
+		tickSamples: make(map[workloadKey]int),
 	}
 }
 
@@ -133,6 +161,7 @@ func (s *Sampler) start(ctx context.Context) error {
 	SampleInterval.SetOnChange(&s.st.SV, func(ctx context.Context) {
 		s.interval.Store(int64(SampleInterval.Get(&s.st.SV)))
 	})
+	s.lastLogTime = timeutil.Now()
 
 	log.Ops.Info(ctx, "starting ASH sampler")
 	return s.stopper.RunAsyncTask(ctx, "ash-sampler", func(ctx context.Context) {
@@ -151,7 +180,7 @@ func (s *Sampler) run(ctx context.Context) {
 			timer.Read = true
 			timer.Reset(time.Duration(s.interval.Load()))
 			if Enabled.Get(&s.st.SV) {
-				s.takeSample()
+				s.takeSample(ctx)
 			}
 		case <-s.stopper.ShouldQuiesce():
 			return
@@ -161,8 +190,9 @@ func (s *Sampler) run(ctx context.Context) {
 	}
 }
 
-// takeSample captures a snapshot of all active work states.
-func (s *Sampler) takeSample() {
+// takeSample captures a snapshot of all active work states and updates
+// the per-workload counters used by the periodic log summary.
+func (s *Sampler) takeSample(ctx context.Context) {
 	sampleTime := timeutil.Now()
 
 	// Collect work states. rangeWorkStates reclaims retired states after
@@ -199,7 +229,65 @@ func (s *Sampler) takeSample() {
 			GoroutineID:   ps.gid,
 		}
 		s.buffer.Add(sample)
+
+		// Update per-workload counters for the periodic summary.
+		key := workloadKey{
+			WorkEventType: sample.WorkEventType,
+			WorkEvent:     sample.WorkEvent,
+			WorkloadID:    sample.WorkloadID,
+		}
+		s.tickSamples[key]++
+		s.totalSamples++
 	}
+
+	s.maybeLogSummary(ctx)
+}
+
+// workloadCount pairs a workload key with its sample count for sorting.
+type workloadCount struct {
+	key   workloadKey
+	count int
+}
+
+// maybeLogSummary emits a top-N workload summary to the OPS log if
+// enough time has elapsed since the last report.
+func (s *Sampler) maybeLogSummary(ctx context.Context) {
+	if timeutil.Since(s.lastLogTime) < logSummaryInterval {
+		return
+	}
+	if s.totalSamples == 0 {
+		s.lastLogTime = timeutil.Now()
+		return
+	}
+
+	// Collect and sort entries by count descending.
+	entries := make([]workloadCount, 0, len(s.tickSamples))
+	for k, c := range s.tickSamples {
+		entries = append(entries, workloadCount{key: k, count: c})
+	}
+	sort.Slice(entries, func(i, j int) bool {
+		return entries[i].count > entries[j].count
+	})
+	if len(entries) > logSummaryTopN {
+		entries = entries[:logSummaryTopN]
+	}
+
+	// Build the summary message.
+	var buf strings.Builder
+	fmt.Fprintf(&buf, "ASH summary (last %s, %d samples):",
+		logSummaryInterval, s.totalSamples)
+	for _, e := range entries {
+		fmt.Fprintf(&buf, "\n  count=%-5d type=%-9s event=%-20s workload=%s",
+			e.count, e.key.WorkEventType, e.key.WorkEvent, e.key.WorkloadID)
+	}
+	log.Ops.Infof(ctx, "%s", buf.String())
+
+	// Reset counters.
+	for k := range s.tickSamples {
+		delete(s.tickSamples, k)
+	}
+	s.totalSamples = 0
+	s.lastLogTime = timeutil.Now()
 }
 
 // GetSamples returns all samples currently in the Sampler's buffer.
