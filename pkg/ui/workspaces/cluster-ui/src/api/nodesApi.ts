@@ -7,13 +7,26 @@ import { cockroach } from "@cockroachlabs/crdb-protobuf-client";
 import { useContext, useMemo } from "react";
 
 import { fetchData } from "src/api";
-import { getRegionFromLocality } from "src/store/nodes";
 
 import { ClusterDetailsContext } from "../contexts";
 import { NodeID, StoreID } from "../types/clusterTypes";
 import { useSwrWithClusterId } from "../util";
 
+type INodeStatus = cockroach.server.status.statuspb.INodeStatus;
+type ILocality = cockroach.roachpb.ILocality;
+
+function getRegionFromLocality(locality: ILocality): string {
+  for (let i = 0; i < locality.tiers.length; i++) {
+    if (locality.tiers[i].key === "region") return locality.tiers[i].value;
+  }
+  return "";
+}
+
 const NODES_PATH = "_status/nodes_ui";
+
+// SWR key for nodes data. Exported so other hooks (e.g. useNodesSummary)
+// can share the same cache entry via SWR deduplication.
+export const NODES_SWR_KEY = "nodesUI";
 
 export const getNodes =
   (): Promise<cockroach.server.serverpb.NodesResponse> => {
@@ -26,10 +39,10 @@ export type NodeStatus = {
   stores: StoreID[];
 };
 
-export const useNodeStatuses = () => {
+export const useNodes = () => {
   const { isTenant } = useContext(ClusterDetailsContext);
   const { data, isLoading, error } = useSwrWithClusterId(
-    "nodesUI",
+    NODES_SWR_KEY,
     !isTenant ? getNodes : null,
     {
       revalidateOnFocus: false,
@@ -37,11 +50,14 @@ export const useNodeStatuses = () => {
     },
   );
 
-  const { storeIDToNodeID, nodeStatusByID } = useMemo(() => {
+  const nodeStatuses: INodeStatus[] = data?.nodes ?? [];
+
+  const { storeIDToNodeID, nodeStatusByID, nodeRegionsByID } = useMemo(() => {
     const nodeStatusByID: Record<NodeID, NodeStatus> = {};
     const storeIDToNodeID: Record<StoreID, NodeID> = {};
+    const nodeRegionsByID: Record<string, string> = {};
     if (!data) {
-      return { nodeStatusByID, storeIDToNodeID };
+      return { nodeStatusByID, storeIDToNodeID, nodeRegionsByID };
     }
     data.nodes?.forEach(ns => {
       ns.store_statuses?.forEach(store => {
@@ -50,20 +66,27 @@ export const useNodeStatuses = () => {
       });
 
       const id = ns.desc.node_id as NodeID;
+      const region = getRegionFromLocality(ns.desc.locality);
       nodeStatusByID[id] = {
         id,
-        region: getRegionFromLocality(ns.desc.locality),
+        region,
         stores: ns.store_statuses?.map(s => s.desc.store_id as StoreID),
       };
+      nodeRegionsByID[id.toString()] = region;
     });
 
-    return { nodeStatusByID, storeIDToNodeID };
+    return { nodeStatusByID, storeIDToNodeID, nodeRegionsByID };
   }, [data]);
 
   return {
     isLoading,
     error,
+    nodeStatuses,
     nodeStatusByID,
     storeIDToNodeID,
+    nodeRegionsByID,
   };
 };
+
+/** @deprecated Use useNodes instead. */
+export const useNodeStatuses = useNodes;
