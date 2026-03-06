@@ -91,9 +91,9 @@ exp,benchmark
 9-12,Jobs/resume_job
 3,Jobs/show_job
 3-5,Jobs/show_jobs
-10,MultiRegionVirtualTableQueries/select_from_crdb_internal.zones_(10_tables)
-10,MultiRegionVirtualTableQueries/select_from_crdb_internal.zones_(100_tables)
-10,MultiRegionVirtualTableQueries/select_from_crdb_internal.zones_(50_tables)
+11-13,MultiRegionVirtualTableQueries/select_from_crdb_internal.zones_(100_tables)
+11-13,MultiRegionVirtualTableQueries/select_from_crdb_internal.zones_(10_tables)
+11-13,MultiRegionVirtualTableQueries/select_from_crdb_internal.zones_(50_tables)
 3,ORMQueries/activerecord_type_introspection_query
 3-4,ORMQueries/asyncpg_types
 5,ORMQueries/column_descriptions_json_agg

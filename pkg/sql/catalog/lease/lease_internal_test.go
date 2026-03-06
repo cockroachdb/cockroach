@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
@@ -1533,27 +1534,31 @@ func TestGetDescriptorsFromStoreForIntervalCPULimiterPagination(t *testing.T) {
 
 	ctx := context.Background()
 	var numRequests int
+	var sqlCodec atomic.Pointer[keys.SQLCodec]
 	srv, db, kvDB := serverutils.StartServer(t, base.TestServerArgs{
-		Knobs: base.TestingKnobs{Store: &kvserver.StoreTestingKnobs{
-			TestingRequestFilter: func(ctx context.Context, request *kvpb.BatchRequest) *kvpb.Error {
-				for _, ru := range request.Requests {
-					if _, ok := ru.GetInner().(*kvpb.ExportRequest); ok {
-						numRequests++
-						h := admission.ElasticCPUWorkHandleFromContext(ctx)
-						if h == nil {
-							t.Fatalf("expected context to have CPU work handle")
+		Knobs: base.TestingKnobs{
+			Store: &kvserver.StoreTestingKnobs{
+				TestingRequestFilter: func(ctx context.Context, request *kvpb.BatchRequest) *kvpb.Error {
+					for _, ru := range request.Requests {
+						if export, ok := ru.GetInner().(*kvpb.ExportRequest); ok && TestIsLeasingTxnExportRequest(sqlCodec.Load(), request, export) {
+							numRequests++
+							h := admission.ElasticCPUWorkHandleFromContext(ctx)
+							if h == nil {
+								t.Fatalf("expected context to have CPU work handle")
+							}
+							h.TestingOverrideOverLimit(func() (bool, time.Duration) {
+								return true, 0
+							})
 						}
-						h.TestingOverrideOverLimit(func() (bool, time.Duration) {
-							return true, 0
-						})
 					}
-				}
-				return nil
-			},
-		}},
+					return nil
+				},
+			}},
 	})
 	defer srv.Stopper().Stop(ctx)
 	s := srv.ApplicationLayer()
+	codec := s.Codec()
+	sqlCodec.Store(&codec)
 
 	sqlDB := sqlutils.MakeSQLRunner(db)
 	beforeCreate := hlc.Timestamp{WallTime: timeutil.Now().UnixNano()}
@@ -1567,7 +1572,7 @@ func TestGetDescriptorsFromStoreForIntervalCPULimiterPagination(t *testing.T) {
 		beforeCreate, afterCreate, false /*isOffline */)
 	require.NoError(t, err)
 	require.Len(t, descs, 3)
-	require.Equal(t, numRequests, 1)
+	require.Equal(t, 1, numRequests)
 }
 
 // TestLeaseCountDetailSessionBased will test out the extra debugging info that
