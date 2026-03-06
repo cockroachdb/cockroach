@@ -1063,6 +1063,15 @@ func (r *importResumer) cleanupTempStorage(ctx context.Context, execCfg *sql.Exe
 		return
 	}
 
+	// Clean up SST manifest job info keys.
+	if err := execCfg.InternalDB.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+		return jobs.InfoStorageForJob(txn, r.job.ID()).DeleteRange(
+			ctx, importSSTManifestsInfoKey, importSSTManifestsInfoKey+"~", 0,
+		)
+	}); err != nil {
+		log.Dev.Warningf(ctx, "job %d: cleaning up SST manifest job info keys: %v", r.job.ID(), err)
+	}
+
 	prefixes := importProgress.SSTStoragePrefixes
 	if len(prefixes) == 0 {
 		return

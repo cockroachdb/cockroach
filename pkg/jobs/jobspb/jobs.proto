@@ -794,10 +794,7 @@ message ImportProgress {
   // up job-scoped files on completion or cancellation.
   repeated string sst_storage_prefixes = 8 [(gogoproto.customname) = "SSTStoragePrefixes"];
 
-  // CompletedMapWork stores SST file metadata from processors that have
-  // finished during the map phase of distributed merge so that the files
-  // are not lost on retry.
-  repeated BulkSSTManifest completed_map_work = 9 [(gogoproto.nullable) = false];
+  reserved 9;
 }
 
 // TypeSchemaChangeDetails is the job detail information for a type schema change job.
@@ -917,6 +914,12 @@ message BackfillProgress {
   // MergeIterationCompletedTasks contains the task IDs that have been
   // completed in the current merge iteration.
   repeated int64 merge_iteration_completed_tasks = 10;
+}
+
+// BulkSSTManifests is a wrapper around a list of BulkSSTManifest messages,
+// used for serialization when storing manifests in job info keys.
+message BulkSSTManifests {
+  repeated BulkSSTManifest manifests = 1 [(gogoproto.nullable) = false];
 }
 
 // BulkSSTManifest describes an SST produced by bulk operations (backfill, import).
