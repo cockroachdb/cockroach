@@ -24,6 +24,13 @@ import (
 func MakeStoreLeaseholderMsgFromState(
 	s state.State, storeID state.StoreID,
 ) mmaprototype.StoreLeaseholderMsg {
+	// Compute amplification factors once for all ranges on this store, matching
+	// the real kvserver which derives these from the store descriptor.
+	amp := mmaprototype.IdentityAmpVector()
+	if descs := s.StoreDescriptors(true /* cached */, storeID); len(descs) > 0 {
+		amp = kvmmaintegration.ComputeAmplificationFactors(descs[0])
+	}
+
 	var rangeMessages []mmaprototype.RangeMsg
 	for _, replica := range s.Replicas(storeID) {
 		if !replica.HoldsLease() {
@@ -76,14 +83,12 @@ func MakeStoreLeaseholderMsgFromState(
 		}
 
 		load := s.RangeUsageInfo(rng.RangeID(), replica.StoreID())
-		// TODO(wenyihu6): compute real amplification factors from the
-		// simulated store descriptor instead of using the identity (1.0).
 		rl := kvmmaintegration.MakePhysicalRangeLoad(
 			load.RequestCPUNanosPerSecond,
 			load.RaftCPUNanosPerSecond,
 			load.WriteBytesPerSecond,
 			load.LogicalBytes,
-			mmaprototype.IdentityAmpVector(),
+			amp,
 		)
 
 		rangeMsg := mmaprototype.RangeMsg{
