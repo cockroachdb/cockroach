@@ -1,4 +1,4 @@
-// Copyright 2024 The Cockroach Authors.
+// Copyright 2026 The Cockroach Authors.
 //
 // Use of this software is governed by the CockroachDB Software License
 // included in the /LICENSE file.
@@ -38,23 +38,23 @@ func TestShowUsersFormat(t *testing.T) {
 			expected: "SHOW USERS WITH SOURCE = 'ldap:ldap.example.com'",
 		},
 		{
-			name: "last access older than only",
+			name: "last login before only",
 			node: &tree.ShowUsers{
 				Options: &tree.ShowUsersOptions{
-					LastAccessOlderThan: tree.NewStrVal("2024-01-01"),
+					LastLoginBefore: tree.NewStrVal("2024-01-01"),
 				},
 			},
-			expected: "SHOW USERS WITH LAST ACCESS TIME OLDER THAN '2024-01-01'",
+			expected: "SHOW USERS WITH LAST LOGIN BEFORE '2024-01-01'",
 		},
 		{
 			name: "both options",
 			node: &tree.ShowUsers{
 				Options: &tree.ShowUsersOptions{
-					Source:              tree.NewStrVal("ldap:ldap.example.com"),
-					LastAccessOlderThan: tree.NewStrVal("2024-01-01"),
+					Source:          tree.NewStrVal("ldap:ldap.example.com"),
+					LastLoginBefore: tree.NewStrVal("2024-01-01"),
 				},
 			},
-			expected: "SHOW USERS WITH SOURCE = 'ldap:ldap.example.com', LAST ACCESS TIME OLDER THAN '2024-01-01'",
+			expected: "SHOW USERS WITH SOURCE = 'ldap:ldap.example.com', LAST LOGIN BEFORE '2024-01-01'",
 		},
 		{
 			name: "source with limit",
@@ -97,12 +97,12 @@ func TestShowUsersOptionsCombineWith(t *testing.T) {
 	t.Run("merge disjoint options", func(t *testing.T) {
 		a := &tree.ShowUsersOptions{Source: tree.NewStrVal("ldap:x")}
 		b := &tree.ShowUsersOptions{
-			LastAccessOlderThan: tree.NewStrVal("2024-01-01"),
+			LastLoginBefore: tree.NewStrVal("2024-01-01"),
 		}
 		err := a.CombineWith(b)
 		require.NoError(t, err)
 		require.NotNil(t, a.Source)
-		require.NotNil(t, a.LastAccessOlderThan)
+		require.NotNil(t, a.LastLoginBefore)
 	})
 
 	t.Run("duplicate source", func(t *testing.T) {
@@ -112,16 +112,16 @@ func TestShowUsersOptionsCombineWith(t *testing.T) {
 		require.ErrorContains(t, err, "SOURCE option specified multiple times")
 	})
 
-	t.Run("duplicate last access older than", func(t *testing.T) {
+	t.Run("duplicate last login before", func(t *testing.T) {
 		a := &tree.ShowUsersOptions{
-			LastAccessOlderThan: tree.NewStrVal("2024-01-01"),
+			LastLoginBefore: tree.NewStrVal("2024-01-01"),
 		}
 		b := &tree.ShowUsersOptions{
-			LastAccessOlderThan: tree.NewStrVal("2025-01-01"),
+			LastLoginBefore: tree.NewStrVal("2025-01-01"),
 		}
 		err := a.CombineWith(b)
 		require.ErrorContains(t, err,
-			"LAST ACCESS TIME OLDER THAN option specified multiple times")
+			"LAST LOGIN BEFORE option specified multiple times")
 	})
 }
 
@@ -134,6 +134,6 @@ func TestShowUsersOptionsIsDefault(t *testing.T) {
 		tree.ShowUsersOptions{Source: tree.NewStrVal("x")}.IsDefault())
 	require.False(t,
 		tree.ShowUsersOptions{
-			LastAccessOlderThan: tree.NewStrVal("2024-01-01"),
+			LastLoginBefore: tree.NewStrVal("2024-01-01"),
 		}.IsDefault())
 }

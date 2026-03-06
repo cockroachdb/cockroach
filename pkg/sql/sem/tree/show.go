@@ -1010,8 +1010,11 @@ func (node *ShowSavepointStatus) Format(ctx *FmtCtx) {
 
 // ShowUsersOptions describes options for the SHOW USERS statement.
 type ShowUsersOptions struct {
-	Source              Expr // SOURCE = 'ldap:...'
-	LastAccessOlderThan Expr // LAST ACCESS TIME OLDER THAN <timestamp>
+	// Source filters users by their PROVISIONSRC role option value.
+	Source Expr
+	// LastLoginBefore filters users whose estimated last login is before
+	// this timestamp.
+	LastLoginBefore Expr
 }
 
 // Format implements the NodeFormatter interface.
@@ -1029,10 +1032,10 @@ func (s *ShowUsersOptions) Format(ctx *FmtCtx) {
 		ctx.WriteString("SOURCE = ")
 		ctx.FormatNode(s.Source)
 	}
-	if s.LastAccessOlderThan != nil {
+	if s.LastLoginBefore != nil {
 		maybeAddSep()
-		ctx.WriteString("LAST ACCESS TIME OLDER THAN ")
-		ctx.FormatNode(s.LastAccessOlderThan)
+		ctx.WriteString("LAST LOGIN BEFORE ")
+		ctx.FormatNode(s.LastLoginBefore)
 	}
 }
 
@@ -1047,21 +1050,21 @@ func (s *ShowUsersOptions) CombineWith(other *ShowUsersOptions) error {
 		s.Source = other.Source
 	}
 
-	if s.LastAccessOlderThan != nil {
-		if other.LastAccessOlderThan != nil {
+	if s.LastLoginBefore != nil {
+		if other.LastLoginBefore != nil {
 			return errors.New(
-				"LAST ACCESS TIME OLDER THAN option specified multiple times",
+				"LAST LOGIN BEFORE option specified multiple times",
 			)
 		}
 	} else {
-		s.LastAccessOlderThan = other.LastAccessOlderThan
+		s.LastLoginBefore = other.LastLoginBefore
 	}
 	return nil
 }
 
 // IsDefault returns true if this options struct has the default (zero) value.
 func (s ShowUsersOptions) IsDefault() bool {
-	return s.Source == nil && s.LastAccessOlderThan == nil
+	return s.Source == nil && s.LastLoginBefore == nil
 }
 
 var _ NodeFormatter = &ShowUsersOptions{}
