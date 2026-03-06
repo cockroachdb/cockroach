@@ -9,16 +9,13 @@ import moment from "moment-timezone";
 import { Store } from "redux";
 
 import * as protos from "src/js/protos";
-import { cockroach } from "src/js/protos";
-import { versionsSelector } from "src/redux/nodes";
 import { API_PREFIX } from "src/util/api";
 import fetchMock from "src/util/fetch-mock";
 
 import {
   AlertLevel,
   alertDataSync,
-  staggeredVersionWarningSelector,
-  staggeredVersionDismissedSetting,
+  computeStaggeredVersionWarning,
   newVersionNotificationSelector,
   newVersionDismissedLocalSetting,
   disconnectedAlertSelector,
@@ -29,9 +26,7 @@ import {
   clusterPreserveDowngradeOptionOvertimeSelector,
 } from "./alerts";
 import {
-  livenessReducerObj,
   versionReducerObj,
-  nodesReducerObj,
   clusterReducerObj,
   healthReducerObj,
   settingsReducerObj,
@@ -44,8 +39,6 @@ import {
   setUIDataKey,
   isInFlight,
 } from "./uiData";
-
-import MembershipStatus = cockroach.kv.kvserver.liveness.livenesspb.MembershipStatus;
 
 describe("alerts", function () {
   let store: Store<AdminUIState>;
@@ -64,192 +57,33 @@ describe("alerts", function () {
   });
 
   describe("selectors", function () {
-    describe("versions", function () {
-      it("tolerates missing liveness data", function () {
-        dispatch(
-          nodesReducerObj.receiveData([
-            {
-              build_info: {
-                tag: "0.1",
-              },
-            },
-            {
-              build_info: {
-                tag: "0.2",
-              },
-            },
-          ]),
-        );
-        const versions = versionsSelector(state());
-        expect(versions).toEqual(["0.1", "0.2"]);
+    describe("version mismatch warning (pure function)", function () {
+      it("returns undefined when dismissed", function () {
+        const versionsMap = new Map([
+          ["0.1", 1],
+          ["0.2", 1],
+        ]);
+        const result = computeStaggeredVersionWarning(versionsMap, true);
+        expect(result).toBeUndefined();
       });
 
-      it("ignores decommissioning/decommissioned nodes", function () {
-        dispatch(
-          nodesReducerObj.receiveData([
-            {
-              desc: {
-                node_id: 1,
-              },
-              build_info: {
-                tag: "0.1",
-              },
-            },
-            {
-              desc: {
-                node_id: 2,
-              },
-              build_info: {
-                tag: "0.2",
-              },
-            },
-            {
-              desc: {
-                node_id: 3,
-              },
-              build_info: {
-                tag: "0.3",
-              },
-            },
-          ]),
-        );
-
-        dispatch(
-          livenessReducerObj.receiveData(
-            new protos.cockroach.server.serverpb.LivenessResponse({
-              livenesses: [
-                {
-                  node_id: 1,
-                  membership: MembershipStatus.ACTIVE,
-                },
-                {
-                  node_id: 2,
-                  membership: MembershipStatus.DECOMMISSIONING,
-                },
-                {
-                  node_id: 3,
-                  membership: MembershipStatus.DECOMMISSIONED,
-                },
-              ],
-            }),
-          ),
-        );
-
-        const versions = versionsSelector(state());
-        expect(versions).toEqual(["0.1"]);
-      });
-    });
-
-    describe("version mismatch warning", function () {
-      it("requires versions to be loaded before displaying", function () {
-        const numAlert = staggeredVersionWarningSelector(state());
-        expect(numAlert).toBeUndefined();
+      it("returns undefined when less than 2 versions", function () {
+        const versionsMap = new Map([["0.1", 2]]);
+        const result = computeStaggeredVersionWarning(versionsMap, false);
+        expect(result).toBeUndefined();
       });
 
-      it("does not display when versions match", function () {
-        dispatch(
-          nodesReducerObj.receiveData([
-            {
-              build_info: {
-                tag: "0.1",
-              },
-            },
-            {
-              build_info: {
-                tag: "0.1",
-              },
-            },
-          ]),
-        );
-        const numAlert = staggeredVersionWarningSelector(state());
-        expect(numAlert).toBeUndefined();
-      });
-
-      it("displays when mismatch detected and not dismissed", function () {
-        dispatch(
-          nodesReducerObj.receiveData([
-            {
-              // `desc` intentionally omitted (must not affect outcome).
-              build_info: {
-                tag: "0.1",
-              },
-            },
-            {
-              desc: {
-                node_id: 1,
-              },
-              build_info: {
-                tag: "0.2",
-              },
-            },
-          ]),
-        );
-        const numAlert = staggeredVersionWarningSelector(state());
-        expect(typeof numAlert).toBe("object");
-        expect(numAlert.level).toEqual(AlertLevel.WARNING);
-        expect(numAlert.title).toEqual(
+      it("returns alert when mismatch detected and not dismissed", function () {
+        const versionsMap = new Map([
+          ["0.1", 1],
+          ["0.2", 1],
+        ]);
+        const result = computeStaggeredVersionWarning(versionsMap, false);
+        expect(result).toBeDefined();
+        expect(result.level).toEqual(AlertLevel.WARNING);
+        expect(result.title).toEqual(
           "Multiple versions of CockroachDB are running on this cluster.",
         );
-      });
-
-      it("does not display if dismissed locally", function () {
-        dispatch(
-          nodesReducerObj.receiveData([
-            {
-              build_info: {
-                tag: "0.1",
-              },
-            },
-            {
-              build_info: {
-                tag: "0.2",
-              },
-            },
-          ]),
-        );
-        dispatch(staggeredVersionDismissedSetting.set(true));
-        const numAlert = staggeredVersionWarningSelector(state());
-        expect(numAlert).toBeUndefined();
-      });
-
-      it("dismisses by setting local dismissal", function () {
-        dispatch(
-          nodesReducerObj.receiveData([
-            {
-              build_info: {
-                tag: "0.1",
-              },
-            },
-            {
-              build_info: {
-                tag: "0.2",
-              },
-            },
-          ]),
-        );
-        const numAlert = staggeredVersionWarningSelector(state());
-        numAlert.dismiss(dispatch, state);
-        expect(staggeredVersionDismissedSetting.selector(state())).toBe(true);
-      });
-
-      it("num alert dismisses by setting local dismissal", function () {
-        dispatch(
-          nodesReducerObj.receiveData([
-            {
-              build_info: {
-                tag: "0.1",
-              },
-            },
-            {
-              build_info: {
-                tag: "0.2",
-              },
-            },
-          ]),
-        );
-        const numAlert = staggeredVersionWarningSelector(state());
-        numAlert.dismiss(dispatch, state);
-        expect(staggeredVersionDismissedSetting.selector(state())).toBe(true);
       });
     });
 
@@ -541,58 +375,7 @@ describe("alerts", function () {
       sync();
       expect(isInFlight(state(), VERSION_DISMISSED_KEY)).toBe(true);
       expect(state().cachedData.cluster.inFlight).toBe(true);
-      expect(state().cachedData.nodes.inFlight).toBe(true);
-      expect(state().cachedData.version.inFlight).toBe(false);
       expect(state().cachedData.health.inFlight).toBe(true);
-    });
-
-    it("dispatches request for version data when cluster ID and nodes are available", function () {
-      dispatch(
-        nodesReducerObj.receiveData([
-          {
-            build_info: {
-              tag: "0.1",
-            },
-          },
-        ]),
-      );
-      dispatch(
-        clusterReducerObj.receiveData(
-          new protos.cockroach.server.serverpb.ClusterResponse({
-            cluster_id: "my-cluster",
-          }),
-        ),
-      );
-
-      sync();
-      expect(state().cachedData.version.inFlight).toBe(true);
-    });
-
-    it("does not request version data when version is staggered", function () {
-      dispatch(
-        nodesReducerObj.receiveData([
-          {
-            build_info: {
-              tag: "0.1",
-            },
-          },
-          {
-            build_info: {
-              tag: "0.2",
-            },
-          },
-        ]),
-      );
-      dispatch(
-        clusterReducerObj.receiveData(
-          new protos.cockroach.server.serverpb.ClusterResponse({
-            cluster_id: "my-cluster",
-          }),
-        ),
-      );
-
-      sync();
-      expect(state().cachedData.version.inFlight).toBe(false);
     });
 
     it("refreshes health function whenever the last health response is no longer valid.", function () {
@@ -607,15 +390,6 @@ describe("alerts", function () {
     });
 
     it("does not do anything when all data is available.", function () {
-      dispatch(
-        nodesReducerObj.receiveData([
-          {
-            build_info: {
-              tag: "0.1",
-            },
-          },
-        ]),
-      );
       dispatch(
         clusterReducerObj.receiveData(
           new protos.cockroach.server.serverpb.ClusterResponse({

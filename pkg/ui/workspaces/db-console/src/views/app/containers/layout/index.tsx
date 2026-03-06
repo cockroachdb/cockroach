@@ -3,8 +3,8 @@
 // Use of this software is governed by the CockroachDB Software License
 // included in the /LICENSE file.
 
-import { Badge } from "@cockroachlabs/cluster-ui";
-import React, { useEffect, useRef } from "react";
+import { Badge, useNodesSummary } from "@cockroachlabs/cluster-ui";
+import React, { useEffect, useMemo, useRef } from "react";
 import { Helmet } from "react-helmet";
 import { useSelector } from "react-redux";
 import { useLocation } from "react-router-dom";
@@ -20,14 +20,18 @@ import {
 } from "src/components";
 import {
   clusterIdSelector,
-  clusterNameSelector,
-  clusterVersionLabelSelector,
+  getClusterName,
+  getClusterVersionLabel,
+  getVersions,
+  validateNodes,
 } from "src/redux/nodes";
 import { AdminUIState } from "src/redux/state";
 import { getDataFromServer } from "src/util/dataFromServer";
 import ErrorBoundary from "src/views/app/components/errorMessage/errorBoundary";
 import NavigationBar from "src/views/app/components/layoutSidebar";
 import LoginIndicator from "src/views/app/components/loginIndicator";
+import VersionCheckSync from "src/views/app/components/versionCheckSync";
+import VersionSyncToAnalytics from "src/views/app/components/versionSyncToAnalytics";
 import AlertBanner from "src/views/app/containers/alertBanner";
 import TimeWindowManager from "src/views/app/containers/metricsTimeManager";
 import RequireLogin from "src/views/login/requireLogin";
@@ -50,12 +54,16 @@ interface LayoutProps {
  * Individual pages provide their content via react-router.
  */
 function Layout({ children }: LayoutProps): React.ReactElement {
-  const clusterName = useSelector((state: AdminUIState) =>
-    clusterNameSelector(state),
+  const { nodeStatuses, livenessStatusByNodeID, livenessByNodeID } =
+    useNodesSummary();
+  const clusterName = useMemo(
+    () => getClusterName(nodeStatuses, livenessStatusByNodeID),
+    [nodeStatuses, livenessStatusByNodeID],
   );
-  const clusterVersion = useSelector((state: AdminUIState) =>
-    clusterVersionLabelSelector(state),
-  );
+  const clusterVersion = useMemo(() => {
+    const validated = validateNodes(nodeStatuses, livenessByNodeID);
+    return getClusterVersionLabel(getVersions(validated));
+  }, [nodeStatuses, livenessByNodeID]);
   const clusterId = useSelector((state: AdminUIState) =>
     clusterIdSelector(state),
   );
@@ -82,6 +90,8 @@ function Layout({ children }: LayoutProps): React.ReactElement {
         defaultTitle="Cockroach Console"
       />
       <TimeWindowManager />
+      <VersionCheckSync />
+      <VersionSyncToAnalytics />
       <AlertBanner />
       <div className="layout-panel">
         <div className="layout-panel__header">

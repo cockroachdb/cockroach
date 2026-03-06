@@ -3,14 +3,12 @@
 // Use of this software is governed by the CockroachDB Software License
 // included in the /LICENSE file.
 
+import { useNodes } from "@cockroachlabs/cluster-ui";
 import React from "react";
-import { useSelector } from "react-redux";
 import { Link, useLocation } from "react-router-dom";
 
 import { SideNavigation } from "src/components";
 import "./navigation-bar.scss";
-import { isSingleNodeCluster as isSingleNodeClusterSelector } from "src/redux/nodes";
-import { AdminUIState } from "src/redux/state";
 
 interface RouteParam {
   path: string;
@@ -28,9 +26,8 @@ interface RouteParam {
  * the page which is currently active will be highlighted.
  */
 function Sidebar(): React.ReactElement {
-  const singleNode = useSelector((state: AdminUIState) =>
-    isSingleNodeClusterSelector(state),
-  );
+  const { nodeStatuses } = useNodes();
+  const singleNode = nodeStatuses?.length === 1;
   const location = useLocation();
 
   const routes: RouteParam[] = [

@@ -11,7 +11,6 @@ import { Store } from "redux";
 
 import * as protos from "src/js/protos";
 import { history } from "src/redux/history";
-import { versionsSelector } from "src/redux/nodes";
 import { AdminUIState } from "src/redux/state";
 import { COCKROACHLABS_ADDR } from "src/util/cockroachlabsAPI";
 
@@ -114,6 +113,12 @@ export class AnalyticsSync {
   private identifyEventSent = false;
 
   /**
+   * versions holds the current node versions, set externally via
+   * setVersions() from a React component using the useNodesSummary hook.
+   */
+  private versions: string[] = [];
+
+  /**
    * Construct a new AnalyticsSync object.
    * @param analyticsService Underlying interface to push to the analytics service.
    * @param deprecatedStore The redux store for the Admin UI. [DEPRECATED]
@@ -126,6 +131,13 @@ export class AnalyticsSync {
     private deprecatedStore: Store<AdminUIState>,
     private redactions: PageTrackRedaction[],
   ) {}
+
+  /**
+   * setVersions updates the cached node versions used by identify().
+   */
+  setVersions(versions: string[]) {
+    this.versions = versions;
+  }
 
   /**
    * page should be called whenever the user moves to a new page in the
@@ -182,8 +194,7 @@ export class AnalyticsSync {
     }
 
     // Do nothing if version information is not yet available.
-    const state = this.deprecatedStore.getState();
-    const versions = versionsSelector(state);
+    const versions = this.versions;
     if (isEmpty(versions)) {
       return;
     }

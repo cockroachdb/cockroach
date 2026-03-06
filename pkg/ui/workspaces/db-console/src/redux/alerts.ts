@@ -11,34 +11,19 @@
 import filter from "lodash/filter";
 import has from "lodash/has";
 import isEmpty from "lodash/isEmpty";
-import isNil from "lodash/isNil";
 import without from "lodash/without";
 import moment from "moment-timezone";
 import { Store, Dispatch, Action, AnyAction } from "redux";
 import { ThunkAction } from "redux-thunk";
 import { createSelector } from "reselect";
 
-import {
-  singleVersionSelector,
-  numNodesByVersionsTagSelector,
-  numNodesByVersionsSelector,
-} from "src/redux/nodes";
 import * as docsURL from "src/util/docs";
 import { longToInt } from "src/util/fixLong";
 
 import { getDataFromServer } from "../util/dataFromServer";
 
-import {
-  refreshCluster,
-  refreshNodes,
-  refreshVersion,
-  refreshHealth,
-  refreshSettings,
-} from "./apiReducers";
-import {
-  selectClusterSettings,
-  selectClusterSettingVersion,
-} from "./clusterSettings";
+import { refreshCluster, refreshHealth, refreshSettings } from "./apiReducers";
+import { selectClusterSettings } from "./clusterSettings";
 import { LocalSetting } from "./localsettings";
 import { AdminUIState, AppDispatch } from "./state";
 import {
@@ -143,39 +128,38 @@ export const staggeredVersionDismissedSetting = new LocalSetting(
 );
 
 /**
- * Warning when multiple versions of CockroachDB are detected on the cluster.
- * This excludes decommissioned nodes.
+ * computeStaggeredVersionWarning returns a warning alert when multiple
+ * versions of CockroachDB are detected on the cluster.
  */
-export const staggeredVersionWarningSelector = createSelector(
-  numNodesByVersionsTagSelector,
-  staggeredVersionDismissedSetting.selector,
-  (versionsMap, versionMismatchDismissed): Alert => {
-    if (versionMismatchDismissed) {
-      return undefined;
-    }
-    if (!versionsMap || versionsMap.size < 2) {
-      return undefined;
-    }
-    const versionsText = Array.from(versionsMap)
-      .map(([k, v]) => (v === 1 ? `1 node on ${k}` : `${v} nodes on ${k}`))
-      .join(", ")
-      .concat(". ");
-    return {
-      level: AlertLevel.WARNING,
-      title: "Multiple versions of CockroachDB are running on this cluster.",
-      text:
-        "Listed versions: " +
-        versionsText +
-        `You can see a list of all nodes and their versions below.
+export function computeStaggeredVersionWarning(
+  versionsTagMap: Map<string, number>,
+  dismissed: boolean,
+): Alert | undefined {
+  if (dismissed) {
+    return undefined;
+  }
+  if (!versionsTagMap || versionsTagMap.size < 2) {
+    return undefined;
+  }
+  const versionsText = Array.from(versionsTagMap)
+    .map(([k, v]) => (v === 1 ? `1 node on ${k}` : `${v} nodes on ${k}`))
+    .join(", ")
+    .concat(". ");
+  return {
+    level: AlertLevel.WARNING,
+    title: "Multiple versions of CockroachDB are running on this cluster.",
+    text:
+      "Listed versions: " +
+      versionsText +
+      `You can see a list of all nodes and their versions below.
         This may be part of a normal rolling upgrade process, but should be investigated
         if unexpected.`,
-      dismiss: (dispatch: AppDispatch) => {
-        dispatch(staggeredVersionDismissedSetting.set(true));
-        return Promise.resolve();
-      },
-    };
-  },
-);
+    dismiss: (dispatch: AppDispatch) => {
+      dispatch(staggeredVersionDismissedSetting.set(true));
+      return Promise.resolve();
+    },
+  };
+}
 
 // A boolean that indicates whether the server has yet been checked for a
 // persistent dismissal of this notification.
@@ -578,58 +562,53 @@ export const upgradeNotFinalizedDismissedSetting = new LocalSetting(
 );
 
 /**
- * Warning when all the nodes are running on the new version, but the cluster is not finalized.
+ * computeUpgradeNotFinalizedWarning returns a warning when all the nodes are
+ * running on the new version, but the cluster is not finalized.
  */
-export const upgradeNotFinalizedWarningSelector = createSelector(
-  selectClusterSettings,
-  numNodesByVersionsSelector,
-  selectClusterSettingVersion,
-  upgradeNotFinalizedDismissedSetting.selector,
-  (
-    settings,
-    versionsMap,
-    clusterVersion,
-    upgradeNotFinalizedDismissed,
-  ): Alert => {
-    if (upgradeNotFinalizedDismissed || !settings) {
-      return undefined;
-    }
-    // Don't show this warning if nodes are on different versions, since there is
-    // already an alert for that (staggeredVersionWarningSelector).
-    if (!versionsMap || versionsMap.size !== 1 || !clusterVersion) {
-      return undefined;
-    }
-    // Don't show this warning if cluster.preserve_downgrade_option is set,
-    // because it's expected for the upgrade not be finalized on that case and there is
-    // an alert for that (clusterPreserveDowngradeOptionOvertimeSelector)
-    const clusterPreserveDowngradeOption =
-      settings["cluster.preserve_downgrade_option"];
-    const value = clusterPreserveDowngradeOption?.value;
-    const lastUpdated = clusterPreserveDowngradeOption?.last_updated;
-    if (value && lastUpdated) {
-      return undefined;
-    }
+export function computeUpgradeNotFinalizedWarning(
+  settings: Record<string, any>,
+  versionsMap: Map<string, number>,
+  clusterVersion: string,
+  dismissed: boolean,
+): Alert | undefined {
+  if (dismissed || !settings) {
+    return undefined;
+  }
+  // Don't show this warning if nodes are on different versions, since there is
+  // already an alert for that (computeStaggeredVersionWarning).
+  if (!versionsMap || versionsMap.size !== 1 || !clusterVersion) {
+    return undefined;
+  }
+  // Don't show this warning if cluster.preserve_downgrade_option is set,
+  // because it's expected for the upgrade not be finalized on that case and there is
+  // an alert for that (clusterPreserveDowngradeOptionOvertimeSelector)
+  const clusterPreserveDowngradeOption =
+    settings["cluster.preserve_downgrade_option"];
+  const value = clusterPreserveDowngradeOption?.value;
+  const lastUpdated = clusterPreserveDowngradeOption?.last_updated;
+  if (value && lastUpdated) {
+    return undefined;
+  }
 
-    const nodesVersion = versionsMap.keys().next().value;
-    // Prod: node version is 23.1 and cluster version is 23.1.
-    // Dev: node version is 23.1 and cluster version is 23.1-2.
-    if (clusterVersion.startsWith(nodesVersion)) {
-      return undefined;
-    }
+  const nodesVersion = versionsMap.keys().next().value;
+  // Prod: node version is 23.1 and cluster version is 23.1.
+  // Dev: node version is 23.1 and cluster version is 23.1-2.
+  if (clusterVersion.startsWith(nodesVersion)) {
+    return undefined;
+  }
 
-    return {
-      level: AlertLevel.WARNING,
-      title: "Upgrade not finalized.",
-      text: `All nodes are running on version ${nodesVersion}, but the cluster is on version ${clusterVersion}. 
+  return {
+    level: AlertLevel.WARNING,
+    title: "Upgrade not finalized.",
+    text: `All nodes are running on version ${nodesVersion}, but the cluster is on version ${clusterVersion}.
       Features might not be available in this state.`,
-      link: docsURL.upgradeTroubleshooting,
-      dismiss: (dispatch: AppDispatch) => {
-        dispatch(upgradeNotFinalizedDismissedSetting.set(true));
-        return Promise.resolve();
-      },
-    };
-  },
-);
+    link: docsURL.upgradeTroubleshooting,
+    dismiss: (dispatch: AppDispatch) => {
+      dispatch(upgradeNotFinalizedDismissedSetting.set(true));
+      return Promise.resolve();
+    },
+  };
+}
 
 /**
  * Selector which returns an array of all active alerts which should be
@@ -638,7 +617,6 @@ export const upgradeNotFinalizedWarningSelector = createSelector(
  */
 export const panelAlertsSelector = createSelector(
   newVersionNotificationSelector,
-  staggeredVersionWarningSelector,
   (...alerts: Alert[]): Alert[] => {
     return without(alerts, null, undefined);
   },
@@ -708,9 +686,7 @@ export const licenseUpdateDismissedLocalSetting = new LocalSetting(
  */
 
 export const overviewListAlertsSelector = createSelector(
-  staggeredVersionWarningSelector,
   clusterPreserveDowngradeOptionOvertimeSelector,
-  upgradeNotFinalizedWarningSelector,
   (...alerts: Alert[]): Alert[] => {
     return without(alerts, null, undefined);
   },
@@ -804,32 +780,10 @@ export function alertDataSync(store: Store<AdminUIState>) {
       dispatch(refreshCluster());
     }
 
-    // Load Nodes initially if it has not yet been loaded.
-    const nodes = state.cachedData.nodes;
-    if (nodes && !nodes.data && !nodes.inFlight && !nodes.valid) {
-      dispatch(refreshNodes());
-    }
-
     // Load settings if not loaded
     const settings = state.cachedData.settings;
     if (settings && !settings.data && !settings.inFlight && !settings.valid) {
       dispatch(refreshSettings());
-    }
-
-    // Load potential new versions from CockroachDB cluster. This is the
-    // complicating factor of this function, since the call requires the cluster
-    // ID and node statuses being loaded first and thus cannot simply run at
-    // startup.
-    const currentVersion = singleVersionSelector(state);
-    if (isNil(newerVersionsSelector(state))) {
-      if (cluster.data && cluster.data.cluster_id && currentVersion) {
-        dispatch(
-          refreshVersion({
-            clusterID: cluster.data.cluster_id,
-            buildtag: currentVersion,
-          }),
-        );
-      }
     }
   };
 }

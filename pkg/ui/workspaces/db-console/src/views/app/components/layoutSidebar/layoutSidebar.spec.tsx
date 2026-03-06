@@ -9,15 +9,15 @@ import { MemoryRouter } from "react-router-dom";
 
 import Sidebar from "./index";
 
-const mockUseSelector = jest.fn();
-jest.mock("react-redux", () => ({
-  ...jest.requireActual("react-redux"),
-  useSelector: (...args: any[]) => mockUseSelector(...args),
+const mockUseNodes = jest.fn();
+jest.mock("@cockroachlabs/cluster-ui", () => ({
+  ...jest.requireActual("@cockroachlabs/cluster-ui"),
+  useNodes: () => mockUseNodes(),
 }));
 
 describe("LayoutSidebar", () => {
   beforeEach(() => {
-    mockUseSelector.mockReset();
+    mockUseNodes.mockReset();
   });
 
   const renderSidebar = () =>
@@ -28,13 +28,20 @@ describe("LayoutSidebar", () => {
     );
 
   it("does not show Network link for single node cluster", () => {
-    mockUseSelector.mockReturnValue(true);
+    mockUseNodes.mockReturnValue({
+      nodeStatuses: [{ desc: { node_id: 1 } }],
+    });
     renderSidebar();
     expect(screen.queryByText("Network")).toBeNull();
   });
 
   it("shows Network link for multi node cluster", () => {
-    mockUseSelector.mockReturnValue(false);
+    mockUseNodes.mockReturnValue({
+      nodeStatuses: [
+        { desc: { node_id: 1 } },
+        { desc: { node_id: 2 } },
+      ],
+    });
     renderSidebar();
     expect(screen.getByText("Network")).toBeTruthy();
   });

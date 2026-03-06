@@ -11,7 +11,7 @@ import { Store } from "redux";
 import * as protos from "src/js/protos";
 
 import { AnalyticsSync, defaultRedactions } from "./analytics";
-import { clusterReducerObj, nodesReducerObj } from "./apiReducers";
+import { clusterReducerObj } from "./apiReducers";
 import { history } from "./history";
 import { AdminUIState, createAdminUIStore } from "./state";
 
@@ -248,21 +248,9 @@ describe("analytics listener", function () {
       identifySpy.mockReset();
     });
 
-    const setVersionData = function () {
-      store.dispatch(
-        nodesReducerObj.receiveData([
-          {
-            build_info: {
-              tag: "0.1",
-            },
-          },
-        ]),
-      );
-    };
-
     it("does nothing if cluster info is not available", function () {
       const sync = new AnalyticsSync(analytics, store, []);
-      setVersionData();
+      sync.setVersions(["0.1"]);
 
       sync.identify();
 
@@ -281,7 +269,7 @@ describe("analytics listener", function () {
     it("does nothing if reporting is not explicitly enabled", function () {
       const sync = new AnalyticsSync(analytics, store, []);
       setClusterData(store, false, true);
-      setVersionData();
+      sync.setVersions(["0.1"]);
 
       sync.identify();
 
@@ -289,12 +277,11 @@ describe("analytics listener", function () {
     });
 
     it("sends the correct value of clusterID, version and enterprise", function () {
-      setVersionData();
-
       each([false, true], enterpriseSetting => {
         identifySpy.mockReset();
         setClusterData(store, true, enterpriseSetting);
         const sync = new AnalyticsSync(analytics, store, []);
+        sync.setVersions(["0.1"]);
         sync.identify();
 
         expect(identifySpy).toHaveBeenCalledTimes(1);
@@ -312,7 +299,7 @@ describe("analytics listener", function () {
     it("only reports once", function () {
       const sync = new AnalyticsSync(analytics, store, []);
       setClusterData(store, true, true);
-      setVersionData();
+      sync.setVersions(["0.1"]);
 
       sync.identify();
       sync.identify();
