@@ -21,7 +21,6 @@ import (
 	"time"
 
 	"github.com/DataDog/datadog-api-client-go/v2/api/datadog"
-	"github.com/DataDog/datadog-api-client-go/v2/api/datadogV1"
 	"github.com/cockroachdb/cockroach/pkg/cmd/bazci/githubpost/issues"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestflags"
@@ -45,9 +44,9 @@ type ddEventType int
 
 const (
 	eventOpStarted ddEventType = iota
-	eventOpRan
-	eventOpFinishedCleanup
-	eventOpError
+	eventOpCompleted
+	eventCleanupCompleted
+	eventDepCheckFailed
 )
 
 // runTests is the main function for the run and bench commands.
@@ -425,61 +424,6 @@ func redirectCRDBLogger(ctx context.Context, path string) *logger.Logger {
 	}
 	shout(ctx, l, os.Stdout, "fallback runner logs in: %s", path)
 	return l
-}
-
-// maybeEmitDatadogEvent sends an event to Datadog if the passed in ctx has the
-// necessary values to communicate with Datadog.
-func maybeEmitDatadogEvent(
-	ctx context.Context,
-	datadogEventsAPI *datadogV1.EventsApi,
-	opSpec *registry.OperationSpec,
-	clusterName string,
-	eventType ddEventType,
-	operationID uint64,
-	datadogTags []string,
-) {
-	// The passed in context is not configured to communicate with Datadog.
-	_, hasAPIKeys := ctx.Value(datadog.ContextAPIKeys).(map[string]datadog.APIKey)
-	_, hasServerVariables := ctx.Value(datadog.ContextServerVariables).(map[string]string)
-	if !hasAPIKeys || !hasServerVariables {
-		return
-	}
-
-	status := "started"
-	alertType := datadogV1.EVENTALERTTYPE_INFO
-
-	switch eventType {
-	case eventOpStarted:
-		status = "started"
-		alertType = datadogV1.EVENTALERTTYPE_INFO
-	case eventOpRan:
-		status = "finished running; waiting for cleanup"
-		alertType = datadogV1.EVENTALERTTYPE_SUCCESS
-	case eventOpFinishedCleanup:
-		status = "cleaned up its state"
-		alertType = datadogV1.EVENTALERTTYPE_INFO
-	case eventOpError:
-		status = "ran with an error"
-		alertType = datadogV1.EVENTALERTTYPE_ERROR
-	}
-
-	title := fmt.Sprintf("op %s %s", opSpec.Name, status)
-	hostname, _ := os.Hostname()
-
-	// We're within a best effort function so we ignore return values.
-	_, _, _ = datadogEventsAPI.CreateEvent(ctx, datadogV1.EventCreateRequest{
-		AggregationKey: datadog.PtrString(fmt.Sprintf("operation-%d", operationID)),
-		AlertType:      &alertType,
-		DateHappened:   datadog.PtrInt64(timeutil.Now().Unix()),
-		Host:           &hostname,
-		SourceTypeName: datadog.PtrString("roachtest"),
-		Tags: append(datadogTags,
-			fmt.Sprintf("operation-name:%s", opSpec.Name),
-			fmt.Sprintf("operation-status:%s", status),
-		),
-		Text:  fmt.Sprintf("cluster: %s\n", clusterName),
-		Title: title,
-	})
 }
 
 // newDatadogContext adds values to the passed in ctx to configure it to
