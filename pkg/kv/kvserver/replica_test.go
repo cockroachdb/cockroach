@@ -57,6 +57,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/spanconfig"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/storage/fs"
@@ -15331,5 +15332,164 @@ func TestLeaderlessWatcherInit(t *testing.T) {
 		// Channel is closed, which is expected
 	default:
 		t.Fatalf("expected LeaderlessWatcher channel to be closed")
+	}
+}
+
+// backupExclusionStoreReader is a minimal spanconfig.StoreReader for testing
+// entireSpanExcludedFromBackup. It maps contiguous span config entries to their
+// configs. ForEachOverlappingSpanConfig iterates entries that overlap the given
+// span, invoking the callback for each.
+type backupExclusionStoreReader struct {
+	entries []struct {
+		span roachpb.Span
+		conf roachpb.SpanConfig
+	}
+}
+
+var _ spanconfig.StoreReader = &backupExclusionStoreReader{}
+
+func (r *backupExclusionStoreReader) NeedsSplit(
+	context.Context, roachpb.RKey, roachpb.RKey,
+) (bool, error) {
+	panic("unimplemented")
+}
+
+func (r *backupExclusionStoreReader) ComputeSplitKey(
+	context.Context, roachpb.RKey, roachpb.RKey,
+) (roachpb.RKey, error) {
+	panic("unimplemented")
+}
+
+func (r *backupExclusionStoreReader) GetSpanConfigForKey(
+	context.Context, roachpb.RKey,
+) (roachpb.SpanConfig, roachpb.Span, error) {
+	panic("unimplemented")
+}
+
+func (r *backupExclusionStoreReader) ForEachOverlappingSpanConfig(
+	_ context.Context, span roachpb.Span, f func(roachpb.Span, roachpb.SpanConfig) error,
+) error {
+	for _, e := range r.entries {
+		if e.span.Overlaps(span) {
+			if err := f(e.span, e.conf); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
+func TestEntireSpanExcludedFromBackup(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+
+	excluded := roachpb.SpanConfig{ExcludeDataFromBackup: true}
+	notExcluded := roachpb.SpanConfig{ExcludeDataFromBackup: false}
+
+	mkSpan := func(start, end string) roachpb.Span {
+		return roachpb.Span{Key: roachpb.Key(start), EndKey: roachpb.Key(end)}
+	}
+
+	for _, tc := range []struct {
+		name     string
+		sp       roachpb.Span
+		excluded bool // cached ExcludeDataFromBackup from replica config
+		reader   spanconfig.StoreReader
+		want     bool
+		wantErr  string
+	}{
+		{
+			name:     "fast path: cached config not excluded",
+			sp:       mkSpan("a", "z"),
+			excluded: false,
+			reader:   nil,
+			want:     false,
+		},
+		{
+			name:     "nil reader",
+			sp:       mkSpan("a", "z"),
+			excluded: true,
+			reader:   nil,
+			want:     false,
+			wantErr:  "span config reader not available",
+		},
+		{
+			name:     "single span config covers entire request",
+			sp:       mkSpan("b", "d"),
+			excluded: true,
+			reader: &backupExclusionStoreReader{entries: []struct {
+				span roachpb.Span
+				conf roachpb.SpanConfig
+			}{
+				{span: mkSpan("a", "z"), conf: excluded},
+			}},
+			want: true,
+		},
+		{
+			name:     "multiple span configs all excluded",
+			sp:       mkSpan("a", "d"),
+			excluded: true,
+			reader: &backupExclusionStoreReader{entries: []struct {
+				span roachpb.Span
+				conf roachpb.SpanConfig
+			}{
+				{span: mkSpan("a", "b"), conf: excluded},
+				{span: mkSpan("b", "c"), conf: excluded},
+				{span: mkSpan("c", "d"), conf: excluded},
+			}},
+			want: true,
+		},
+		{
+			name:     "multiple span configs one not excluded",
+			sp:       mkSpan("a", "d"),
+			excluded: true,
+			reader: &backupExclusionStoreReader{entries: []struct {
+				span roachpb.Span
+				conf roachpb.SpanConfig
+			}{
+				{span: mkSpan("a", "b"), conf: excluded},
+				{span: mkSpan("b", "c"), conf: notExcluded},
+				{span: mkSpan("c", "d"), conf: excluded},
+			}},
+			want: false,
+		},
+		{
+			name:     "request span subset of multiple configs all excluded",
+			sp:       mkSpan("b", "e"),
+			excluded: true,
+			reader: &backupExclusionStoreReader{entries: []struct {
+				span roachpb.Span
+				conf roachpb.SpanConfig
+			}{
+				{span: mkSpan("a", "c"), conf: excluded},
+				{span: mkSpan("c", "f"), conf: excluded},
+			}},
+			want: true,
+		},
+		{
+			name:     "last config not excluded",
+			sp:       mkSpan("b", "e"),
+			excluded: true,
+			reader: &backupExclusionStoreReader{entries: []struct {
+				span roachpb.Span
+				conf roachpb.SpanConfig
+			}{
+				{span: mkSpan("a", "c"), conf: excluded},
+				{span: mkSpan("c", "f"), conf: notExcluded},
+			}},
+			want: false,
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			got, err := entireSpanExcludedFromBackup(ctx, tc.sp, tc.excluded, tc.reader)
+			if tc.wantErr != "" {
+				require.ErrorContains(t, err, tc.wantErr)
+			} else {
+				require.NoError(t, err)
+			}
+			require.Equal(t, tc.want, got)
+		})
 	}
 }

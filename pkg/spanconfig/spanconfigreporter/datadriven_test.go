@@ -280,6 +280,13 @@ func (s *mockCluster) GetSpanConfigForKey(
 	return s.store.GetSpanConfigForKey(ctx, key)
 }
 
+// ForEachOverlappingSpanConfig implements spanconfig.StoreReader.
+func (s *mockCluster) ForEachOverlappingSpanConfig(
+	ctx context.Context, span roachpb.Span, f func(roachpb.Span, roachpb.SpanConfig) error,
+) error {
+	return s.store.ForEachOverlappingSpanConfig(ctx, span, f)
+}
+
 func (s *mockCluster) addNode(desc roachpb.NodeDescriptor) {
 	_, found := s.nodes[desc.NodeID]
 	require.Falsef(s.t, found, "attempting to re-add n%d", desc.NodeID)
