@@ -51,7 +51,7 @@ type replicaAppBatch struct {
 	//
 	// NB: This is currently only non-nil in tests, as that's the only scenario
 	// where we run with separated engines.
-	raftBatch storage.Batch
+	raftBatch storage.WriteBatch
 	// state is this batch's view of the replica's state. It is copied from
 	// under the Replica.mu when the batch is initialized and is updated in
 	// stageTrivialReplicatedEvalResult.
@@ -198,7 +198,7 @@ func (b *replicaAppBatch) Stage(
 func (b *replicaAppBatch) ReadWriter() kvstorage.ReadWriter {
 	return kvstorage.ReadWriter{
 		State: kvstorage.WrapState(b.batch),
-		Raft:  kvstorage.WrapRaft(b.RaftBatch()),
+		Raft:  b.RaftRW(),
 	}
 }
 
@@ -351,7 +351,7 @@ func (b *replicaAppBatch) runPostAddTriggersReplicaOnly(
 			log.KvExec.Fatalf(ctx, "unable to validate split: %s", err)
 		}
 
-		splitPreApply(ctx, kvstorage.StateRW(b.batch), kvstorage.WrapRaft(b.RaftBatch()), &b.wagWriter, in)
+		splitPreApply(ctx, kvstorage.StateRW(b.batch), b.RaftRW(), &b.wagWriter, in)
 
 		// The rangefeed processor will no longer be provided logical ops for
 		// its entire range, so it needs to be shut down and all registrations
@@ -866,16 +866,25 @@ func (b *replicaAppBatch) Close() {
 }
 
 // RaftBatch returns a batch from the Raft engine.
-func (b *replicaAppBatch) RaftBatch() storage.Batch {
+func (b *replicaAppBatch) RaftBatch() storage.WriteBatch {
 	if !b.r.store.internalEngines.Separated() {
 		// We're not running with separated engines; simply return the batch
 		// that was created for the one and only engine.
 		return b.batch
 	}
 	if b.raftBatch == nil {
-		b.raftBatch = b.r.store.LogEngine().NewBatch()
+		b.raftBatch = b.r.store.LogEngine().NewWriteBatch()
 	}
 	return b.raftBatch
+}
+
+// RaftRW returns a read/write accessor to the LogEngine. Reads from the engine,
+// writes to the RaftBatch.
+func (b *replicaAppBatch) RaftRW() kvstorage.Raft {
+	return kvstorage.Raft{
+		RO: b.r.LogEngine(),
+		WO: b.RaftBatch(),
+	}
 }
 
 // Assert that the current command is not writing under the closed timestamp.
