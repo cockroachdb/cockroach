@@ -158,7 +158,7 @@ type physicalDimension struct {
 //
 //	= storesCPU * (1 + sqlDistCPU/storesCPU) * k
 //
-// By definition, physical = storesCPU * ampFactor, so ampsFactor = (1 +
+// By definition, physical = storesCPU * ampFactor, so ampFactor = (1 +
 // sqlDistCPU/storesCPU) * k.
 //
 //	ampFactor = (1 + sqlDistCPU/storesCPU) * k
