@@ -88,6 +88,18 @@ other agents in the background first, then block on the correctness agent.
 **Timeouts**: when polling background agents with `TaskOutput`, always use the
 maximum allowed timeout to avoid premature timeouts on larger diffs.
 
+### Handling agent failures
+
+If an agent fails (API error, timeout, or returns empty output):
+
+1. **Retry once**. Transient API errors are common — a single retry usually
+   succeeds.
+2. **If the retry also fails**, report the aspect as "not reviewed" in the
+   summary under **Aspects skipped**, with a brief reason (e.g., "correctness:
+   agent hit API errors on both attempts").
+3. **Don't silently drop an aspect.** The user should always know which aspects
+   were reviewed and which weren't.
+
 ### Sequential approach
 
 Run agents one at a time. Useful for interactive review where the user wants to

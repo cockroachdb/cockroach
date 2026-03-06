@@ -83,12 +83,17 @@ Check that error paths don't leak resources:
 - Does catching here prevent proper cleanup or transaction rollback?
 - Are errors from goroutines properly collected and surfaced to the caller?
 
-### Redactability of error output
+### Redactability
 
 Review against `.claude/rules/redactability.md`:
 
-- If the diff adds or modifies types with `Error()` methods, or types that
-  appear in error output: is the output redactable?
+- If the diff adds or modifies types with `String()`, `Error()`, or
+  `SafeFormat()` methods, or types that appear in log/error output: is the
+  output redactable?
+- Types with only safe fields (IDs, counts) should implement `SafeValue`.
+- Types mixing safe and unsafe fields should implement `SafeFormatter`.
+- New `SafeValue` implementations need an allowlist update in
+  `pkg/testutils/lint/passes/redactcheck/redactcheck.go`.
 - Are `errors.Newf` / `errors.Wrapf` format arguments safe for redaction?
   Use `redact.Safe()` for values that are safe to include in diagnostics.
 

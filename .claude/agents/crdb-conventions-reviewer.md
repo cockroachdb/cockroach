@@ -75,6 +75,19 @@ comments as **blocking**, not nits.
 
 Don't nitpick formatting — `crlfmt` handles that.
 
+## Confidence scoring
+
+Rate each finding 0–100:
+
+- **91–100**: Factually wrong comment or seriously misleading code
+- **80–90**: Clear convention violation in new/changed code
+- **51–79**: Minor style issue or borderline case
+- **0–50**: Nitpick or subjective preference
+
+**Only report findings with confidence >= 70.** Convention findings are
+inherently lower-severity, so use a slightly lower bar than correctness
+reviews — but still be selective. Flag only clear violations in new code.
+
 ## Output format
 
 For each finding:

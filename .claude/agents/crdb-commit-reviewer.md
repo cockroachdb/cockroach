@@ -56,7 +56,12 @@ Check:
 - Does the title use imperative mood and name the package?
 - Is the title under ~70 characters?
 - Does the body explain motivation and context, not just restate the diff?
-- Is the release note present and appropriate?
+- Is a release note present on at least the final commit or the PR description?
+  Individual commits in a multi-commit PR don't each need a release note —
+  one at the PR level is sufficient.
+
+**Epic lines** (`Epic: ...`) are a PR-level concern only. Do not flag individual
+commits for missing Epic lines.
 
 ### PR description
 
