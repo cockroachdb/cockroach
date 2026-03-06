@@ -604,16 +604,13 @@ func (b *replicaAppBatch) stageTrivialReplicatedEvalResult(
 	deltaStats := res.Delta.ToStats()
 	b.state.Stats.Add(deltaStats)
 
-	if res.DoTimelyApplicationToAllReplicas && !b.changeRemovesReplica {
-		// Update in-memory and persistent state. A later command accumulated in
-		// this batch may update these again. Also, a later command may set
-		// changeRemovesReplica to true and wipe out the state in the batch. These
-		// are all safe.
+	if res.DoTimelyApplicationToAllReplicas {
+		// Update the pending ForceFlushIndex of this batch. Writing is deferred to
+		// addAppliedStateKeyToBatch, following the same pattern as AppliedState
+		// fields (RaftAppliedIndex, LeaseAppliedIndex). This allows multiple
+		// commands in the same batch to update ForceFlushIndex, with only the final
+		// value being written.
 		b.state.ForceFlushIndex = roachpb.ForceFlushIndex{Index: cmd.Entry.Index}
-		if err := b.r.raftMu.stateLoader.SetForceFlushIndex(
-			ctx, b.batch, b.state.Stats, &b.state.ForceFlushIndex); err != nil {
-			return err
-		}
 	}
 	return nil
 }
@@ -766,6 +763,16 @@ func (b *replicaAppBatch) ApplyToStateMachine(ctx context.Context) error {
 // batch's Pebble batch. This records the highest raft and lease index that have
 // been applied as of this batch. It also records the Range's MVCC stats.
 func (b *replicaAppBatch) addAppliedStateKeyToBatch(ctx context.Context) error {
+	// Write the ForceFlushIndex if it was staged during this batch. This index is
+	// stored in a separate RangeForceFlushKey but follows the same deferred-write
+	// pattern as RangeAppliedState.
+	if b.state.ForceFlushIndex != b.r.shMu.state.ForceFlushIndex {
+		// NB: update the MVCC stats to keep them accurate.
+		if err := b.r.raftMu.stateLoader.SetForceFlushIndex(
+			ctx, b.batch, b.state.Stats, &b.state.ForceFlushIndex); err != nil {
+			return err
+		}
+	}
 	// Set the range applied state, which includes the last applied raft and lease
 	// index along with the MVCC stats, all in one key.
 	b.asAlloc = b.state.ToRangeAppliedState()
