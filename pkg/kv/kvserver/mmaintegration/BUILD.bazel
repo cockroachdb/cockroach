@@ -5,7 +5,6 @@ go_library(
     srcs = [
         "allocator_op.go",
         "allocator_sync.go",
-        "capacity_model.go",
         "mma_conversion.go",
         "physical_model.go",
         "store_load_msg.go",
@@ -36,7 +35,7 @@ go_library(
 go_test(
     name = "mmaintegration_test",
     srcs = [
-        "capacity_model_test.go",
+        "deprecated_logical_model_test.go",
         "legacy_model_test.go",
         "mma_conversion_test.go",
         "physical_model_test.go",
