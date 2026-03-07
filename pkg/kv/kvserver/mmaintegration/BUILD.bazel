@@ -23,10 +23,13 @@ go_library(
         "//pkg/kv/kvserver/kvserverbase",
         "//pkg/roachpb",
         "//pkg/settings/cluster",
+        "//pkg/util/buildutil",
+        "//pkg/util/grunning",
         "//pkg/util/log",
         "//pkg/util/syncutil",
         "//pkg/util/timeutil",
         "@com_github_cockroachdb_errors//:errors",
+        "@com_github_cockroachdb_redact//:redact",
     ],
 )
 
