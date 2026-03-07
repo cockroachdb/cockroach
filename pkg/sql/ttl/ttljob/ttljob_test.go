@@ -130,8 +130,6 @@ func newRowLevelTTLTestJobTestHelper(
 			Settings:          makeSettings(),
 			Knobs:             baseTestingKnobs,
 			InsecureWebAccess: true,
-			// TODO(server): re-enable DRPC once flakiness is addressed, see #158387.
-			DefaultDRPCOption: base.TestDRPCDisabled,
 		},
 	})
 	th.testCluster = testCluster
