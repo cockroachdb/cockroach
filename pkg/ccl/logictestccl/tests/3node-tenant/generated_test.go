@@ -207,6 +207,13 @@ func TestTenantLogic_alter_primary_key(
 	runLogicTest(t, "alter_primary_key")
 }
 
+func TestTenantLogic_alter_primary_key_regressions(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "alter_primary_key_regressions")
+}
+
 func TestTenantLogic_alter_role(
 	t *testing.T,
 ) {
