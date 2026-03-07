@@ -618,7 +618,7 @@ func TestForecastColumnStatistics(t *testing.T) {
 			)
 			at := testStatTime(tc.at)
 
-			forecast, err := forecastColumnStatistics(ctx, st, observed, at, 1)
+			forecast, err := forecastColumnStatistics(ctx, st, observed, at, 1, nil)
 			if err != nil {
 				if !tc.err {
 					t.Errorf("test case %d unexpected forecastColumnStatistics err: %v", i, err)

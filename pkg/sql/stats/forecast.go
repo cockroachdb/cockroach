@@ -142,6 +142,7 @@ func ForecastTableStatistics(
 
 		forecast, err := forecastColumnStatistics(
 			ctx, st, observedByCols[colKey], at, minGoodnessOfFit.Get(&st.SV),
+			nil, /* r2Out */
 		)
 		if err != nil {
 			log.VEventf(
@@ -179,6 +180,7 @@ func forecastColumnStatistics(
 	observed []*TableStatistic,
 	at time.Time,
 	minRequiredFit float64,
+	r2Out *[5]float64,
 ) (forecast *TableStatistic, err error) {
 	if len(observed) < int(minObservationsForForecast.Get(&st.SV)) {
 		return nil, errors.New("not enough observations to forecast statistics")
@@ -215,15 +217,20 @@ func forecastColumnStatistics(
 		}
 	}
 
-	// predict tries to predict the value of the given statistic at forecast time.
-	predict := func(name redact.SafeString, y, createdAts []float64) (float64, error) {
+	// predict tries to predict the value of the given statistic at forecast
+	// time. It returns the predicted value, the R² goodness-of-fit, and an error
+	// if the R² is below the minimum required fit. It always returns the R² even
+	// when the fit is bad.
+	predict := func(
+		name redact.SafeString, y, createdAts []float64,
+	) (float64, float64, error) {
 		yₙ, r2 := float64SimpleLinearRegression(createdAts, y, forecastAt)
 		log.VEventf(
 			ctx, 3, "forecast for table %v columns %v predicted %s %v R² %v",
 			tableID, columnIDs, name, yₙ, r2,
 		)
 		if r2 < minRequiredFit {
-			return yₙ, errors.Newf(
+			return yₙ, r2, errors.Newf(
 				"predicted %v R² %v below min required R² %v", name, r2, minRequiredFit,
 			)
 		}
@@ -235,32 +242,67 @@ func forecastColumnStatistics(
 		lowerBound := math.Round(slices.Min(y) * maxDecrease.Get(&st.SV))
 		lowerBound = math.Max(0, lowerBound)
 		if yₙ < lowerBound {
-			return lowerBound, nil
+			return lowerBound, r2, nil
 		}
 		if yₙ > math.MaxInt64 {
-			return math.MaxInt64, nil
+			return math.MaxInt64, r2, nil
 		}
-		return math.Round(yₙ), nil
+		return math.Round(yₙ), r2, nil
 	}
 
-	rowCount, err := predict("RowCount", rowCounts, createdAts)
-	if err != nil {
-		return nil, err
-	}
-	nullCount, err := predict("NullCount", nullCounts, createdAts)
-	if err != nil {
-		return nil, err
-	}
+	// Predict all four stat values, collecting R² and errors for each. We
+	// always compute all four R² values (when possible) before checking for
+	// errors, so that callers requesting R² diagnostics get a complete picture.
+	rowCount, rowR2, rowErr := predict("RowCount", rowCounts, createdAts)
+	nullCount, nullR2, nullErr := predict("NullCount", nullCounts, createdAts)
 	var distinctCount, avgSize float64
+	var distR2, avgR2 float64
+	var distErr, avgErr error
 	if len(nonEmptyCreatedAts) > 0 {
-		distinctCount, err = predict("DistinctCount", distinctCounts, nonEmptyCreatedAts)
-		if err != nil {
-			return nil, err
+		distinctCount, distR2, distErr = predict(
+			"DistinctCount", distinctCounts, nonEmptyCreatedAts,
+		)
+		avgSize, avgR2, avgErr = predict("AvgSize", avgSizes, nonEmptyCreatedAts)
+	}
+
+	if r2Out != nil {
+		r2Out[0] = rowR2
+		r2Out[1] = nullR2
+		r2Out[2] = distR2
+		r2Out[3] = avgR2
+	}
+
+	// Find the first stat prediction error, if any.
+	var statErr error
+	for _, e := range []error{rowErr, nullErr, distErr, avgErr} {
+		if e != nil {
+			statErr = e
+			break
 		}
-		avgSize, err = predict("AvgSize", avgSizes, nonEmptyCreatedAts)
-		if err != nil {
-			return nil, err
+	}
+
+	if statErr != nil {
+		// When r2Out is non-nil, still attempt histogram prediction for
+		// diagnostics even though the stat-level forecast failed.
+		if r2Out != nil &&
+			observed[0].HistogramData != nil && observed[0].HistogramData.ColumnType != nil {
+			nonNullRowCount := float64(observed[0].RowCount - observed[0].NullCount)
+			if rowErr == nil && nullErr == nil {
+				nonNullRowCount = rowCount - nullCount
+				if nonNullRowCount < 0 {
+					nonNullRowCount = 0
+				}
+			}
+			if nonNullRowCount >= 1 {
+				// We only care about the R² written to r2Out[4], not the
+				// histogram or error.
+				_, _ = predictHistogram(
+					ctx, st, observed, forecastAt, minRequiredFit, nonNullRowCount,
+					&r2Out[4],
+				)
+			}
 		}
+		return nil, statErr
 	}
 
 	// Adjust predicted statistics for consistency.
@@ -308,7 +350,13 @@ func forecastColumnStatistics(
 	// histogram. NOTE: If any of the observed histograms were for inverted
 	// indexes this will produce an incorrect histogram.
 	if observed[0].HistogramData != nil && observed[0].HistogramData.ColumnType != nil {
-		hist, err := predictHistogram(ctx, st, observed, forecastAt, minRequiredFit, nonNullRowCount)
+		var histR2Out *float64
+		if r2Out != nil {
+			histR2Out = &r2Out[4]
+		}
+		hist, err := predictHistogram(
+			ctx, st, observed, forecastAt, minRequiredFit, nonNullRowCount, histR2Out,
+		)
 		if err != nil {
 			// If we did not successfully predict a histogram then copy the latest
 			// histogram so we can adjust it.
@@ -362,6 +410,7 @@ func predictHistogram(
 	forecastAt float64,
 	minRequiredFit float64,
 	nonNullRowCount float64,
+	r2Out *float64,
 ) (histogram, error) {
 	if observed[0].HistogramData == nil || observed[0].HistogramData.ColumnType == nil {
 		return histogram{}, errors.New("latest observed stat missing histogram")
@@ -410,6 +459,9 @@ func predictHistogram(
 	// Construct a linear regression model of quantile functions over time, and
 	// use it to predict a quantile function at the given time.
 	yₙ, r2 := quantileSimpleLinearRegression(createdAts, quantiles, forecastAt)
+	if r2Out != nil {
+		*r2Out = r2
+	}
 	if yₙ.isInvalid() {
 		return histogram{}, errors.Newf("predicted histogram contains overflow values")
 	}
