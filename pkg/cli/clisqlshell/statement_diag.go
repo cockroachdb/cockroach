@@ -40,7 +40,7 @@ func (c *cliState) handleStatementDiag(
 		}
 		id, err := strconv.ParseInt(args[0], 10, 64)
 		if err != nil {
-			return c.cliError(errState, errors.Wrapf(err, "%q is not a valid bundle ID", args[1]))
+			return c.cliError(errState, errors.Wrapf(err, "%q is not a valid bundle ID", args[0]))
 		}
 		var filename string
 		if len(args) > 1 {
