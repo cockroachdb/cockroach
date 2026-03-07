@@ -20,6 +20,9 @@ const (
 	// LocalityLevelRow implies a table's rows are
 	// homed depending on values within the row.
 	LocalityLevelRow
+	// LocalityLevelSuperRegion is used to set zone config extensions
+	// at the super region level.
+	LocalityLevelSuperRegion
 )
 
 const (

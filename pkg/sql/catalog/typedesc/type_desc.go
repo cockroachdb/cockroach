@@ -729,7 +729,7 @@ func validateMultiRegion(
 	})
 
 	zoneCfgExtensions := desc.TypeDesc().RegionConfig.ZoneConfigExtensions
-	multiregion.ValidateZoneConfigExtensions(regionNames, zoneCfgExtensions, func(err error) {
+	multiregion.ValidateZoneConfigExtensions(regionNames, zoneCfgExtensions, superRegions, func(err error) {
 		vea.Report(err)
 	})
 }

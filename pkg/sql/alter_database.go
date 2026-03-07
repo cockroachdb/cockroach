@@ -11,6 +11,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
@@ -1747,6 +1748,9 @@ func (n *alterDatabaseDropSuperRegion) startExec(params runParams) error {
 		return errors.Newf("super region %s not found", n.n.SuperRegionName)
 	}
 
+	// Clean up any associated zone config extension.
+	delete(typeDesc.RegionConfig.ZoneConfigExtensions.SuperRegion, string(n.n.SuperRegionName))
+
 	if err := params.p.writeTypeSchemaChange(params.ctx, typeDesc, tree.AsStringWithFQNames(n.n, params.Ann())); err != nil {
 		return err
 	}
@@ -1759,7 +1763,25 @@ func (n *alterDatabaseDropSuperRegion) startExec(params runParams) error {
 		return err
 	}
 
-	return nil
+	// Regenerate the database zone config. If the primary region was a member
+	// of the dropped super region, the super region's zone config extension may
+	// have modified the database-level zone config (for fields in
+	// MultiRegionZoneConfigFields). Regenerating ensures those fields revert.
+	updatedRegionConfig, err := SynthesizeRegionConfig(
+		params.ctx, params.p.txn, n.desc.ID, params.p.Descriptors(),
+	)
+	if err != nil {
+		return err
+	}
+	return ApplyZoneConfigFromDatabaseRegionConfig(
+		params.ctx,
+		n.desc.ID,
+		updatedRegionConfig,
+		params.p.InternalSQLTxn(),
+		params.p.execCfg,
+		true, /* validateLocalities */
+		params.extendedEvalCtx.Tracing.KVTracingEnabled(),
+	)
 }
 
 func removeSuperRegion(
@@ -1772,7 +1794,6 @@ func removeSuperRegion(
 			break
 		}
 	}
-
 	return dropped
 }
 
@@ -1866,7 +1887,10 @@ func (n *alterDatabaseAlterSuperRegion) startExec(params runParams) error {
 		}
 	}
 
-	// Remove the old super region.
+	// Remove the old super region entry from SuperRegions. The zone config
+	// extension in ZoneConfigExtensions.SuperRegion is keyed by name and is
+	// preserved; addSuperRegion will re-register the membership with the
+	// new regions.
 	dropped := removeSuperRegion(typeDesc.RegionConfig, n.n.SuperRegionName)
 	if !dropped {
 		return errors.WithHint(pgerror.Newf(pgcode.UndefinedObject,
@@ -1874,7 +1898,21 @@ func (n *alterDatabaseAlterSuperRegion) startExec(params runParams) error {
 			"super region must be added before it can be altered")
 	}
 
-	// Validate that adding the super region with the new regions is valid.
+	// If the super region has a zone config extension with constraints
+	// referencing specific regions, validate that those regions are still
+	// members under the new membership.
+	if ext, ok := typeDesc.RegionConfig.ZoneConfigExtensions.SuperRegion[string(n.n.SuperRegionName)]; ok {
+		newRegions := nameToRegionName(n.n.Regions)
+		if err := multiregion.ValidateSuperRegionConstraintContainment(
+			ext, string(n.n.SuperRegionName), newRegions,
+		); err != nil {
+			return errors.WithHintf(err,
+				"update or remove the zone config extension before altering the super region membership")
+		}
+	}
+
+	// Add the super region back with the new regions. The zone config extension
+	// is still present and will apply to the updated membership.
 	return params.p.addSuperRegion(params.ctx, n.desc, typeDesc, n.n.Regions, n.n.SuperRegionName, tree.AsStringWithFQNames(n.n, params.Ann()))
 
 }
@@ -1953,9 +1991,29 @@ func (p *planner) addSuperRegion(
 	}
 
 	// Update all regional and regional by row tables.
-	return p.refreshZoneConfigsForTables(
+	if err := p.refreshZoneConfigsForTables(ctx, desc); err != nil {
+		return err
+	}
+
+	// Regenerate the database zone config. If the primary region is a member
+	// of this super region, the super region's zone config extension may
+	// modify the database-level zone config (for fields in
+	// MultiRegionZoneConfigFields). This mirrors the regeneration done by
+	// DROP SUPER REGION.
+	updatedRegionConfig, err := SynthesizeRegionConfig(
+		ctx, p.txn, desc.ID, p.Descriptors(),
+	)
+	if err != nil {
+		return err
+	}
+	return ApplyZoneConfigFromDatabaseRegionConfig(
 		ctx,
-		desc,
+		desc.ID,
+		updatedRegionConfig,
+		p.InternalSQLTxn(),
+		p.execCfg,
+		true, /* validateLocalities */
+		p.extendedEvalCtx.Tracing.KVTracingEnabled(),
 	)
 }
 
@@ -2272,6 +2330,13 @@ func (p *planner) AlterDatabaseSetZoneConfigExtension(
 	ctx context.Context, n *tree.AlterDatabaseSetZoneConfigExtension,
 ) (planNode, error) {
 
+	if n.LocalityLevel == tree.LocalityLevelSuperRegion {
+		if !p.ExecCfg().Settings.Version.IsActive(ctx, clusterversion.V26_3) {
+			return nil, pgerror.Newf(pgcode.FeatureNotSupported,
+				"super region zone config extensions are not supported until the cluster upgrade is finalized")
+		}
+	}
+
 	if err := checkSchemaChangeEnabled(
 		ctx,
 		p.ExecCfg(),
@@ -2353,7 +2418,7 @@ func (n *alterDatabaseSetZoneConfigExtensionNode) startExec(params runParams) er
 			typeDesc.GetKind(), typeDesc.GetName(), typeDesc.GetID())
 	}
 
-	// Verify that the region is present in the database, if necessary.
+	// Verify that the region or super region is present in the database, if necessary.
 	if n.n.LocalityLevel == tree.LocalityLevelTable && n.n.RegionName != "" {
 		var found bool
 		_ = regionsDesc.ForEachPublicRegion(func(name catpb.RegionName) error {
@@ -2368,6 +2433,23 @@ func (n *alterDatabaseSetZoneConfigExtensionNode) startExec(params runParams) er
 				pgcode.UndefinedObject,
 				"region %q has not been added to the database",
 				n.n.RegionName,
+			)
+		}
+	}
+	if n.n.LocalityLevel == tree.LocalityLevelSuperRegion {
+		var found bool
+		_ = regionsDesc.ForEachSuperRegion(func(name string) error {
+			if name == string(n.n.SuperRegionName) {
+				found = true
+				return iterutil.StopIteration()
+			}
+			return nil
+		})
+		if !found {
+			return pgerror.Newf(
+				pgcode.UndefinedObject,
+				"super region %q has not been added to the database",
+				n.n.SuperRegionName,
 			)
 		}
 	}
@@ -2391,6 +2473,9 @@ func (n *alterDatabaseSetZoneConfigExtensionNode) startExec(params runParams) er
 			} else {
 				typeDesc.RegionConfig.ZoneConfigExtensions.Regional = nil
 			}
+		case tree.LocalityLevelSuperRegion:
+			delete(typeDesc.RegionConfig.ZoneConfigExtensions.SuperRegion,
+				string(n.n.SuperRegionName))
 		default:
 			return errors.AssertionFailedf("unexpected locality level %v", n.n.LocalityLevel)
 		}
@@ -2460,6 +2545,36 @@ func (n *alterDatabaseSetZoneConfigExtensionNode) startExec(params runParams) er
 			} else {
 				typeDesc.RegionConfig.ZoneConfigExtensions.Regional = newZone
 			}
+		case tree.LocalityLevelSuperRegion:
+			if newZone.LeasePreferences != nil {
+				return pgerror.Newf(pgcode.InvalidParameterValue,
+					"SUPER REGION zone config extensions are not allowed to set lease_preferences")
+			}
+			// Validate that any constraints or voter_constraints only reference
+			// regions within the super region.
+			var memberRegions catpb.RegionNames
+			if err := regionsDesc.ForEachRegionInSuperRegion(
+				string(n.n.SuperRegionName),
+				func(region catpb.RegionName) error {
+					memberRegions = append(memberRegions, region)
+					return nil
+				},
+			); err != nil {
+				return err
+			}
+			if len(memberRegions) == 0 {
+				return errors.AssertionFailedf(
+					"super region %q exists but has no member regions", n.n.SuperRegionName)
+			}
+			if err := multiregion.ValidateSuperRegionConstraintContainment(
+				*newZone, string(n.n.SuperRegionName), memberRegions,
+			); err != nil {
+				return err
+			}
+			if typeDesc.RegionConfig.ZoneConfigExtensions.SuperRegion == nil {
+				typeDesc.RegionConfig.ZoneConfigExtensions.SuperRegion = make(map[string]zonepb.ZoneConfig)
+			}
+			typeDesc.RegionConfig.ZoneConfigExtensions.SuperRegion[string(n.n.SuperRegionName)] = *newZone
 		default:
 			return errors.AssertionFailedf("unexpected locality level %v", n.n.LocalityLevel)
 		}

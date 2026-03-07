@@ -2411,6 +2411,20 @@ alter_database_set_zone_config_extension_stmt:
       },
     }
   }
+| ALTER DATABASE database_name ALTER LOCALITY SUPER REGION region_name set_zone_config
+  {
+    s := $9.setZoneConfig()
+    $$.val = &tree.AlterDatabaseSetZoneConfigExtension{
+      DatabaseName:    tree.Name($3),
+      LocalityLevel:   tree.LocalityLevelSuperRegion,
+      SuperRegionName: tree.Name($8),
+      ZoneConfigSettings: tree.ZoneConfigSettings {
+        SetDefault:    s.SetDefault,
+        YAMLConfig:    s.YAMLConfig,
+        Options:       s.Options,
+      },
+    }
+  }
 
 // %Help: ALTER RANGE - change the parameters of a range
 // %Category: DDL

@@ -1,11 +1,13 @@
-# LogicTest: multiregion-9node-3region-3azs multiregion-9node-3region-3azs-tenant
+# LogicTest: multiregion-15node-5region-3azs
 
 query TTTTT rowsort
 SHOW REGIONS
 ----
 ap-southeast-2  {ap-az1,ap-az2,ap-az3}  {}  {}  {}
 ca-central-1    {ca-az1,ca-az2,ca-az3}  {}  {}  {}
+us-central-1    {usc-az1,usc-az2,usc-az3}  {}  {}  {}
 us-east-1       {us-az1,us-az2,us-az3}  {}  {}  {}
+us-west-1       {usw-az1,usw-az2,usw-az3}  {}  {}  {}
 
 statement ok
 SELECT crdb_internal.validate_multi_region_zone_configs()
@@ -387,3 +389,1119 @@ DATABASE "mr-zone-survival"  ALTER DATABASE "mr-zone-survival" CONFIGURE ZONE US
 statement error pq: cannot set num_replicas below 3 \(num_voters required for survival goal ZONE_FAILURE\), got 2
 ALTER DATABASE "mr-zone-survival" ALTER LOCALITY REGIONAL CONFIGURE ZONE USING
   num_replicas = 2
+
+subtest super_region_zone_config_extensions
+
+statement ok
+CREATE DATABASE "mr-sr-zone-configs"
+  primary region "ca-central-1"
+  regions "ap-southeast-2", "us-east-1"
+
+statement ok
+use "mr-sr-zone-configs"
+
+# Add super region covering 2 of 3 regions.
+statement ok
+ALTER DATABASE "mr-sr-zone-configs" ADD SUPER REGION "us-ca" VALUES "us-east-1", "ca-central-1"
+
+# Create tables with different localities.
+statement ok
+CREATE TABLE tbl_member (pk INT PRIMARY KEY) LOCALITY REGIONAL BY TABLE IN "ca-central-1"
+
+statement ok
+CREATE TABLE tbl_nonmember (pk INT PRIMARY KEY) LOCALITY REGIONAL BY TABLE IN "ap-southeast-2"
+
+statement ok
+CREATE TABLE tbl_rbr (pk INT PRIMARY KEY) LOCALITY REGIONAL BY ROW
+
+statement ok
+CREATE TABLE tbl_global (pk INT PRIMARY KEY) LOCALITY GLOBAL
+
+# Set super region zone config extension.
+statement ok
+ALTER DATABASE "mr-sr-zone-configs" ALTER LOCALITY SUPER REGION "us-ca" CONFIGURE ZONE USING num_voters = 4
+
+# The database zone config should reflect the super region extension because
+# the primary region (ca-central-1) is a member of the super region.
+query TT
+SHOW ZONE CONFIGURATION FOR DATABASE "mr-sr-zone-configs"
+----
+DATABASE "mr-sr-zone-configs"  ALTER DATABASE "mr-sr-zone-configs" CONFIGURE ZONE USING
+                                 range_min_bytes = 134217728,
+                                 range_max_bytes = 536870912,
+                                 gc.ttlseconds = 14400,
+                                 num_replicas = 5,
+                                 num_voters = 4,
+                                 constraints = '{+region=ap-southeast-2: 1, +region=ca-central-1: 1, +region=us-east-1: 1}',
+                                 voter_constraints = '[+region=ca-central-1]',
+                                 lease_preferences = '[[+region=ca-central-1]]'
+
+# GLOBAL table should NOT inherit the super region extension. It gets its own
+# zone config with the default num_voters=3 for SURVIVE ZONE FAILURE.
+query TT
+SHOW ZONE CONFIGURATION FOR TABLE tbl_global
+----
+TABLE tbl_global  ALTER TABLE tbl_global CONFIGURE ZONE USING
+                    range_min_bytes = 134217728,
+                    range_max_bytes = 536870912,
+                    gc.ttlseconds = 14400,
+                    global_reads = true,
+                    num_replicas = 5,
+                    num_voters = 3,
+                    constraints = '{+region=ap-southeast-2: 1, +region=ca-central-1: 1, +region=us-east-1: 1}',
+                    voter_constraints = '[+region=ca-central-1]',
+                    lease_preferences = '[[+region=ca-central-1]]'
+
+# When both a GLOBAL extension and a super region extension exist, the GLOBAL
+# table should use the GLOBAL extension only, without super region contamination.
+statement ok
+ALTER DATABASE "mr-sr-zone-configs" ALTER LOCALITY GLOBAL CONFIGURE ZONE USING num_replicas = 6
+
+query TT
+SHOW ZONE CONFIGURATION FOR TABLE tbl_global
+----
+TABLE tbl_global  ALTER TABLE tbl_global CONFIGURE ZONE USING
+                    range_min_bytes = 134217728,
+                    range_max_bytes = 536870912,
+                    gc.ttlseconds = 14400,
+                    global_reads = true,
+                    num_replicas = 6,
+                    num_voters = 3,
+                    constraints = '{+region=ap-southeast-2: 1, +region=ca-central-1: 1, +region=us-east-1: 1}',
+                    voter_constraints = '[+region=ca-central-1]',
+                    lease_preferences = '[[+region=ca-central-1]]'
+
+statement ok
+ALTER DATABASE "mr-sr-zone-configs" ALTER LOCALITY GLOBAL CONFIGURE ZONE DISCARD
+
+# Super region extensions apply to both REGIONAL BY TABLE and REGIONAL BY ROW
+# tables for fields in MultiRegionZoneConfigFields (like num_voters).
+query TT
+SHOW ZONE CONFIGURATION FOR TABLE tbl_member
+----
+TABLE tbl_member  ALTER TABLE tbl_member CONFIGURE ZONE USING
+                    range_min_bytes = 134217728,
+                    range_max_bytes = 536870912,
+                    gc.ttlseconds = 14400,
+                    num_replicas = 4,
+                    num_voters = 4,
+                    constraints = '{+region=ca-central-1: 3, +region=us-east-1: 1}',
+                    voter_constraints = '[+region=ca-central-1]',
+                    lease_preferences = '[[+region=ca-central-1]]'
+
+# Table in non-member region should NOT get the extension.
+query TT
+SHOW ZONE CONFIGURATION FOR TABLE tbl_nonmember
+----
+TABLE tbl_nonmember  ALTER TABLE tbl_nonmember CONFIGURE ZONE USING
+                       range_min_bytes = 134217728,
+                       range_max_bytes = 536870912,
+                       gc.ttlseconds = 14400,
+                       num_replicas = 5,
+                       num_voters = 3,
+                       constraints = '{+region=ap-southeast-2: 1, +region=ca-central-1: 1, +region=us-east-1: 1}',
+                       voter_constraints = '[+region=ap-southeast-2]',
+                       lease_preferences = '[[+region=ap-southeast-2]]'
+
+# RBR table partitions in member regions get the extension.
+query TT
+SHOW ZONE CONFIGURATION FOR PARTITION "ca-central-1" OF TABLE tbl_rbr
+----
+PARTITION "ca-central-1" OF TABLE tbl_rbr  ALTER PARTITION "ca-central-1" OF TABLE tbl_rbr CONFIGURE ZONE USING
+                                             range_min_bytes = 134217728,
+                                             range_max_bytes = 536870912,
+                                             gc.ttlseconds = 14400,
+                                             num_replicas = 4,
+                                             num_voters = 4,
+                                             constraints = '{+region=ca-central-1: 3, +region=us-east-1: 1}',
+                                             voter_constraints = '[+region=ca-central-1]',
+                                             lease_preferences = '[[+region=ca-central-1]]'
+
+query TT
+SHOW ZONE CONFIGURATION FOR PARTITION "us-east-1" OF TABLE tbl_rbr
+----
+PARTITION "us-east-1" OF TABLE tbl_rbr  ALTER PARTITION "us-east-1" OF TABLE tbl_rbr CONFIGURE ZONE USING
+                                          range_min_bytes = 134217728,
+                                          range_max_bytes = 536870912,
+                                          gc.ttlseconds = 14400,
+                                          num_replicas = 4,
+                                          num_voters = 4,
+                                          constraints = '{+region=ca-central-1: 1, +region=us-east-1: 3}',
+                                          voter_constraints = '[+region=us-east-1]',
+                                          lease_preferences = '[[+region=us-east-1]]'
+
+# RBR table partition in non-member region does NOT get the extension.
+query TT
+SHOW ZONE CONFIGURATION FOR PARTITION "ap-southeast-2" OF TABLE tbl_rbr
+----
+PARTITION "ap-southeast-2" OF TABLE tbl_rbr  ALTER PARTITION "ap-southeast-2" OF TABLE tbl_rbr CONFIGURE ZONE USING
+                                               range_min_bytes = 134217728,
+                                               range_max_bytes = 536870912,
+                                               gc.ttlseconds = 14400,
+                                               num_replicas = 5,
+                                               num_voters = 3,
+                                               constraints = '{+region=ap-southeast-2: 1, +region=ca-central-1: 1, +region=us-east-1: 1}',
+                                               voter_constraints = '[+region=ap-southeast-2]',
+                                               lease_preferences = '[[+region=ap-southeast-2]]'
+
+# Hierarchy ordering: regional -> super_region -> regional_in.
+# Set regional extension (applied first). The hierarchy is best observed on
+# REGIONAL BY ROW partitions where all three layers take effect.
+statement ok
+ALTER DATABASE "mr-sr-zone-configs" ALTER LOCALITY REGIONAL CONFIGURE ZONE USING num_replicas = 9
+
+# REGIONAL extension (num_replicas) applies to both REGIONAL BY TABLE and RBR tables.
+# SUPER REGION extension (num_voters) also applies to member REGIONAL BY TABLE tables.
+query TT
+SHOW ZONE CONFIGURATION FOR TABLE tbl_member
+----
+TABLE tbl_member  ALTER TABLE tbl_member CONFIGURE ZONE USING
+                    range_min_bytes = 134217728,
+                    range_max_bytes = 536870912,
+                    gc.ttlseconds = 14400,
+                    num_replicas = 9,
+                    num_voters = 4,
+                    constraints = '{+region=ca-central-1: 3, +region=us-east-1: 6}',
+                    voter_constraints = '[+region=ca-central-1]',
+                    lease_preferences = '[[+region=ca-central-1]]'
+
+query TT
+SHOW ZONE CONFIGURATION FOR TABLE tbl_nonmember
+----
+TABLE tbl_nonmember  ALTER TABLE tbl_nonmember CONFIGURE ZONE USING
+                       range_min_bytes = 134217728,
+                       range_max_bytes = 536870912,
+                       gc.ttlseconds = 14400,
+                       num_replicas = 9,
+                       num_voters = 3,
+                       constraints = '{+region=ap-southeast-2: 1, +region=ca-central-1: 1, +region=us-east-1: 1}',
+                       voter_constraints = '[+region=ap-southeast-2]',
+                       lease_preferences = '[[+region=ap-southeast-2]]'
+
+# Add regional_in extension (applied last). The final config reflects all three layers.
+statement ok
+ALTER DATABASE "mr-sr-zone-configs" ALTER LOCALITY REGIONAL IN "ca-central-1" CONFIGURE ZONE USING
+  lease_preferences = '[[+region=ca-central-1], [+region=us-east-1]]'
+
+# The ca-central-1 RBR partition shows all three layers:
+# - REGIONAL: num_replicas = 9
+# - SUPER REGION: num_voters = 4
+# - REGIONAL IN: lease_preferences overridden.
+query TT
+SHOW ZONE CONFIGURATION FOR PARTITION "ca-central-1" OF TABLE tbl_rbr
+----
+PARTITION "ca-central-1" OF TABLE tbl_rbr  ALTER PARTITION "ca-central-1" OF TABLE tbl_rbr CONFIGURE ZONE USING
+                                             range_min_bytes = 134217728,
+                                             range_max_bytes = 536870912,
+                                             gc.ttlseconds = 14400,
+                                             num_replicas = 9,
+                                             num_voters = 4,
+                                             constraints = '{+region=ca-central-1: 3, +region=us-east-1: 6}',
+                                             voter_constraints = '[+region=ca-central-1]',
+                                             lease_preferences = '[[+region=ca-central-1], [+region=us-east-1]]'
+
+# The REGIONAL BY TABLE table gets all three layers: REGIONAL, SUPER REGION,
+# and REGIONAL IN.
+query TT
+SHOW ZONE CONFIGURATION FOR TABLE tbl_member
+----
+TABLE tbl_member  ALTER TABLE tbl_member CONFIGURE ZONE USING
+                    range_min_bytes = 134217728,
+                    range_max_bytes = 536870912,
+                    gc.ttlseconds = 14400,
+                    num_replicas = 9,
+                    num_voters = 4,
+                    constraints = '{+region=ca-central-1: 3, +region=us-east-1: 6}',
+                    voter_constraints = '[+region=ca-central-1]',
+                    lease_preferences = '[[+region=ca-central-1], [+region=us-east-1]]'
+
+# DISCARD super region extension.
+statement ok
+ALTER DATABASE "mr-sr-zone-configs" ALTER LOCALITY SUPER REGION "us-ca" CONFIGURE ZONE DISCARD
+
+# The partition's num_voters reverts to the default. The super region itself still
+# exists so constraints stay limited to member regions.
+query TT
+SHOW ZONE CONFIGURATION FOR PARTITION "ca-central-1" OF TABLE tbl_rbr
+----
+PARTITION "ca-central-1" OF TABLE tbl_rbr  ALTER PARTITION "ca-central-1" OF TABLE tbl_rbr CONFIGURE ZONE USING
+                                             range_min_bytes = 134217728,
+                                             range_max_bytes = 536870912,
+                                             gc.ttlseconds = 14400,
+                                             num_replicas = 9,
+                                             num_voters = 3,
+                                             constraints = '{+region=ca-central-1: 3, +region=us-east-1: 6}',
+                                             voter_constraints = '[+region=ca-central-1]',
+                                             lease_preferences = '[[+region=ca-central-1], [+region=us-east-1]]'
+
+# REGIONAL BY TABLE table's num_voters also reverts to default after DISCARD.
+query TT
+SHOW ZONE CONFIGURATION FOR TABLE tbl_member
+----
+TABLE tbl_member  ALTER TABLE tbl_member CONFIGURE ZONE USING
+                    range_min_bytes = 134217728,
+                    range_max_bytes = 536870912,
+                    gc.ttlseconds = 14400,
+                    num_replicas = 9,
+                    num_voters = 3,
+                    constraints = '{+region=ca-central-1: 3, +region=us-east-1: 6}',
+                    voter_constraints = '[+region=ca-central-1]',
+                    lease_preferences = '[[+region=ca-central-1], [+region=us-east-1]]'
+
+# GLOBAL table remains unaffected by the super region DISCARD. The REGIONAL
+# extension (num_replicas=9) still prevents inheritance, so it keeps its own
+# zone config with default num_voters=3 and num_replicas=5.
+query TT
+SHOW ZONE CONFIGURATION FOR TABLE tbl_global
+----
+TABLE tbl_global  ALTER TABLE tbl_global CONFIGURE ZONE USING
+                    range_min_bytes = 134217728,
+                    range_max_bytes = 536870912,
+                    gc.ttlseconds = 14400,
+                    global_reads = true,
+                    num_replicas = 5,
+                    num_voters = 3,
+                    constraints = '{+region=ap-southeast-2: 1, +region=ca-central-1: 1, +region=us-east-1: 1}',
+                    voter_constraints = '[+region=ca-central-1]',
+                    lease_preferences = '[[+region=ca-central-1]]'
+
+# Error: non-existent super region.
+statement error pq: super region "nonexistent" has not been added to the database
+ALTER DATABASE "mr-sr-zone-configs" ALTER LOCALITY SUPER REGION "nonexistent" CONFIGURE ZONE USING num_voters = 4
+
+# Error: lease_preferences are not allowed on super region extensions.
+statement error pq: SUPER REGION zone config extensions are not allowed to set lease_preferences
+ALTER DATABASE "mr-sr-zone-configs" ALTER LOCALITY SUPER REGION "us-ca" CONFIGURE ZONE USING
+  lease_preferences = '[[+region=ca-central-1]]'
+
+# Error: constraints referencing a region outside the super region.
+statement error pq: constraints on super region "us-ca" zone config extension references region "ap-southeast-2" which is not a member of the super region
+ALTER DATABASE "mr-sr-zone-configs" ALTER LOCALITY SUPER REGION "us-ca" CONFIGURE ZONE USING
+  constraints = '{+region=ap-southeast-2: 1, +region=ca-central-1: 1}'
+
+# Error: voter_constraints referencing a region outside the super region.
+statement error pq: voter_constraints on super region "us-ca" zone config extension references region "ap-southeast-2" which is not a member of the super region
+ALTER DATABASE "mr-sr-zone-configs" ALTER LOCALITY SUPER REGION "us-ca" CONFIGURE ZONE USING
+  voter_constraints = '{+region=ap-southeast-2: 1}'
+
+# Drop super region cleanup: re-add the extension, then drop the super region.
+statement ok
+ALTER DATABASE "mr-sr-zone-configs" ALTER LOCALITY SUPER REGION "us-ca" CONFIGURE ZONE USING num_voters = 4
+
+# Verify the extension is back on the RBR partition.
+query TT
+SHOW ZONE CONFIGURATION FOR PARTITION "ca-central-1" OF TABLE tbl_rbr
+----
+PARTITION "ca-central-1" OF TABLE tbl_rbr  ALTER PARTITION "ca-central-1" OF TABLE tbl_rbr CONFIGURE ZONE USING
+                                             range_min_bytes = 134217728,
+                                             range_max_bytes = 536870912,
+                                             gc.ttlseconds = 14400,
+                                             num_replicas = 9,
+                                             num_voters = 4,
+                                             constraints = '{+region=ca-central-1: 3, +region=us-east-1: 6}',
+                                             voter_constraints = '[+region=ca-central-1]',
+                                             lease_preferences = '[[+region=ca-central-1], [+region=us-east-1]]'
+
+# Drop the super region. This removes both the super region and its zone config extension.
+statement ok
+ALTER DATABASE "mr-sr-zone-configs" DROP SUPER REGION "us-ca"
+
+# Database zone config reverts: the super region extension no longer applies.
+query TT
+SHOW ZONE CONFIGURATION FOR DATABASE "mr-sr-zone-configs"
+----
+DATABASE "mr-sr-zone-configs"  ALTER DATABASE "mr-sr-zone-configs" CONFIGURE ZONE USING
+                                 range_min_bytes = 134217728,
+                                 range_max_bytes = 536870912,
+                                 gc.ttlseconds = 14400,
+                                 num_replicas = 9,
+                                 num_voters = 3,
+                                 constraints = '{+region=ap-southeast-2: 1, +region=ca-central-1: 1, +region=us-east-1: 1}',
+                                 voter_constraints = '[+region=ca-central-1]',
+                                 lease_preferences = '[[+region=ca-central-1], [+region=us-east-1]]'
+
+# RBR partition reverts: num_voters back to default, constraints span all regions.
+query TT
+SHOW ZONE CONFIGURATION FOR PARTITION "ca-central-1" OF TABLE tbl_rbr
+----
+PARTITION "ca-central-1" OF TABLE tbl_rbr  ALTER PARTITION "ca-central-1" OF TABLE tbl_rbr CONFIGURE ZONE USING
+                                             range_min_bytes = 134217728,
+                                             range_max_bytes = 536870912,
+                                             gc.ttlseconds = 14400,
+                                             num_replicas = 9,
+                                             num_voters = 3,
+                                             constraints = '{+region=ap-southeast-2: 1, +region=ca-central-1: 1, +region=us-east-1: 1}',
+                                             voter_constraints = '[+region=ca-central-1]',
+                                             lease_preferences = '[[+region=ca-central-1], [+region=us-east-1]]'
+
+# REGIONAL BY TABLE table also reverts: constraints span all regions again.
+query TT
+SHOW ZONE CONFIGURATION FOR TABLE tbl_member
+----
+TABLE tbl_member  ALTER TABLE tbl_member CONFIGURE ZONE USING
+                    range_min_bytes = 134217728,
+                    range_max_bytes = 536870912,
+                    gc.ttlseconds = 14400,
+                    num_replicas = 9,
+                    num_voters = 3,
+                    constraints = '{+region=ap-southeast-2: 1, +region=ca-central-1: 1, +region=us-east-1: 1}',
+                    voter_constraints = '[+region=ca-central-1]',
+                    lease_preferences = '[[+region=ca-central-1], [+region=us-east-1]]'
+
+statement ok
+SELECT crdb_internal.validate_multi_region_zone_configs()
+
+subtest super_region_extensions_survive_region_failure
+
+statement ok
+CREATE DATABASE "mr-sr-region-failure"
+  PRIMARY REGION "ca-central-1"
+  REGIONS "ap-southeast-2", "us-east-1"
+  SURVIVE REGION FAILURE
+
+statement ok
+USE "mr-sr-region-failure"
+
+# Super region must have all 3 regions to satisfy SURVIVE REGION FAILURE.
+statement ok
+ALTER DATABASE "mr-sr-region-failure" ADD SUPER REGION "all" VALUES "ca-central-1", "ap-southeast-2", "us-east-1"
+
+statement ok
+CREATE TABLE tbl_member (pk INT PRIMARY KEY) LOCALITY REGIONAL BY TABLE IN "ca-central-1"
+
+statement ok
+CREATE TABLE tbl_rbr (pk INT PRIMARY KEY) LOCALITY REGIONAL BY ROW
+
+# Setting num_voters below 5 should fail (REGION_FAILURE requires >= 5 voters).
+statement error pq: cannot set num_voters below 5 \(num_voters required for survival goal REGION_FAILURE\), got 4
+ALTER DATABASE "mr-sr-region-failure" ALTER LOCALITY SUPER REGION "all" CONFIGURE ZONE USING num_voters = 4
+
+statement error pq: cannot set num_voters below 5 \(num_voters required for survival goal REGION_FAILURE\), got 3
+ALTER DATABASE "mr-sr-region-failure" ALTER LOCALITY SUPER REGION "all" CONFIGURE ZONE USING num_voters = 3
+
+# Setting num_replicas below 5 should also fail.
+statement error pq: cannot set num_replicas below 5 \(num_voters required for survival goal REGION_FAILURE\), got 4
+ALTER DATABASE "mr-sr-region-failure" ALTER LOCALITY SUPER REGION "all" CONFIGURE ZONE USING num_replicas = 4
+
+# Setting num_voters = 7 with num_replicas = 7 should work (above minimum).
+statement ok
+ALTER DATABASE "mr-sr-region-failure" ALTER LOCALITY SUPER REGION "all" CONFIGURE ZONE USING num_voters = 7, num_replicas = 7
+
+# Verify extension is applied to REGIONAL BY TABLE member.
+query TT
+SHOW ZONE CONFIGURATION FOR TABLE tbl_member
+----
+TABLE tbl_member  ALTER TABLE tbl_member CONFIGURE ZONE USING
+                    range_min_bytes = 134217728,
+                    range_max_bytes = 536870912,
+                    gc.ttlseconds = 14400,
+                    num_replicas = 7,
+                    num_voters = 7,
+                    constraints = '{+region=ap-southeast-2: 2, +region=ca-central-1: 3, +region=us-east-1: 2}',
+                    voter_constraints = '{+region=ca-central-1: 2}',
+                    lease_preferences = '[[+region=ca-central-1]]'
+
+# Verify RBR partitions get the extension.
+query TT
+SHOW ZONE CONFIGURATION FOR PARTITION "ca-central-1" OF TABLE tbl_rbr
+----
+PARTITION "ca-central-1" OF TABLE tbl_rbr  ALTER PARTITION "ca-central-1" OF TABLE tbl_rbr CONFIGURE ZONE USING
+                                             range_min_bytes = 134217728,
+                                             range_max_bytes = 536870912,
+                                             gc.ttlseconds = 14400,
+                                             num_replicas = 7,
+                                             num_voters = 7,
+                                             constraints = '{+region=ap-southeast-2: 2, +region=ca-central-1: 3, +region=us-east-1: 2}',
+                                             voter_constraints = '{+region=ca-central-1: 2}',
+                                             lease_preferences = '[[+region=ca-central-1]]'
+
+query TT
+SHOW ZONE CONFIGURATION FOR PARTITION "us-east-1" OF TABLE tbl_rbr
+----
+PARTITION "us-east-1" OF TABLE tbl_rbr  ALTER PARTITION "us-east-1" OF TABLE tbl_rbr CONFIGURE ZONE USING
+                                          range_min_bytes = 134217728,
+                                          range_max_bytes = 536870912,
+                                          gc.ttlseconds = 14400,
+                                          num_replicas = 7,
+                                          num_voters = 7,
+                                          constraints = '{+region=ap-southeast-2: 2, +region=ca-central-1: 2, +region=us-east-1: 3}',
+                                          voter_constraints = '{+region=us-east-1: 2}',
+                                          lease_preferences = '[[+region=us-east-1]]'
+
+# DISCARD and verify revert to default (num_voters = 5 for REGION_FAILURE).
+statement ok
+ALTER DATABASE "mr-sr-region-failure" ALTER LOCALITY SUPER REGION "all" CONFIGURE ZONE DISCARD
+
+query TT
+SHOW ZONE CONFIGURATION FOR TABLE tbl_member
+----
+TABLE tbl_member  ALTER TABLE tbl_member CONFIGURE ZONE USING
+                    range_min_bytes = 134217728,
+                    range_max_bytes = 536870912,
+                    gc.ttlseconds = 14400,
+                    num_replicas = 5,
+                    num_voters = 5,
+                    constraints = '{+region=ap-southeast-2: 2, +region=ca-central-1: 2, +region=us-east-1: 1}',
+                    voter_constraints = '{+region=ca-central-1: 2}',
+                    lease_preferences = '[[+region=ca-central-1]]'
+
+statement ok
+SELECT crdb_internal.validate_multi_region_zone_configs()
+
+subtest super_region_discard_no_extension
+
+statement ok
+CREATE DATABASE "mr-sr-no-ext"
+  PRIMARY REGION "ca-central-1"
+  REGIONS "ap-southeast-2", "us-east-1"
+
+statement ok
+USE "mr-sr-no-ext"
+
+statement ok
+ALTER DATABASE "mr-sr-no-ext" ADD SUPER REGION "test-sr" VALUES "us-east-1", "ca-central-1"
+
+statement ok
+CREATE TABLE tbl_member (pk INT PRIMARY KEY) LOCALITY REGIONAL BY TABLE IN "ca-central-1"
+
+# Capture zone config before DISCARD (no extension is set).
+query TT
+SHOW ZONE CONFIGURATION FOR TABLE tbl_member
+----
+TABLE tbl_member  ALTER TABLE tbl_member CONFIGURE ZONE USING
+                    range_min_bytes = 134217728,
+                    range_max_bytes = 536870912,
+                    gc.ttlseconds = 14400,
+                    num_replicas = 4,
+                    num_voters = 3,
+                    constraints = '{+region=ca-central-1: 3, +region=us-east-1: 1}',
+                    voter_constraints = '[+region=ca-central-1]',
+                    lease_preferences = '[[+region=ca-central-1]]'
+
+# DISCARD with no extension set should succeed (no-op).
+statement ok
+ALTER DATABASE "mr-sr-no-ext" ALTER LOCALITY SUPER REGION "test-sr" CONFIGURE ZONE DISCARD
+
+# Zone config should be unchanged after the no-op DISCARD.
+query TT
+SHOW ZONE CONFIGURATION FOR TABLE tbl_member
+----
+TABLE tbl_member  ALTER TABLE tbl_member CONFIGURE ZONE USING
+                    range_min_bytes = 134217728,
+                    range_max_bytes = 536870912,
+                    gc.ttlseconds = 14400,
+                    num_replicas = 4,
+                    num_voters = 3,
+                    constraints = '{+region=ca-central-1: 3, +region=us-east-1: 1}',
+                    voter_constraints = '[+region=ca-central-1]',
+                    lease_preferences = '[[+region=ca-central-1]]'
+
+statement ok
+SELECT crdb_internal.validate_multi_region_zone_configs()
+
+subtest multiple_super_regions_separate_extensions
+
+statement ok
+CREATE DATABASE "mr-multi-sr"
+  PRIMARY REGION "us-east-1"
+  REGIONS "ca-central-1", "ap-southeast-2", "us-west-1", "us-central-1"
+
+statement ok
+USE "mr-multi-sr"
+
+# Create 2 non-overlapping super regions. ap-southeast-2 is outside both.
+statement ok
+ALTER DATABASE "mr-multi-sr" ADD SUPER REGION "sr1" VALUES "us-east-1", "ca-central-1"
+
+statement ok
+ALTER DATABASE "mr-multi-sr" ADD SUPER REGION "sr2" VALUES "us-west-1", "us-central-1"
+
+# Create tables in each super region and one outside.
+statement ok
+CREATE TABLE tbl_sr1 (pk INT PRIMARY KEY) LOCALITY REGIONAL BY TABLE IN "us-east-1"
+
+statement ok
+CREATE TABLE tbl_sr2 (pk INT PRIMARY KEY) LOCALITY REGIONAL BY TABLE IN "us-west-1"
+
+statement ok
+CREATE TABLE tbl_none (pk INT PRIMARY KEY) LOCALITY REGIONAL BY TABLE IN "ap-southeast-2"
+
+statement ok
+CREATE TABLE tbl_rbr (pk INT PRIMARY KEY) LOCALITY REGIONAL BY ROW
+
+# ---------- Phase 1: Set extension on sr1 only ----------
+
+statement ok
+ALTER DATABASE "mr-multi-sr" ALTER LOCALITY SUPER REGION "sr1" CONFIGURE ZONE USING num_voters = 4
+
+# sr1 member table gets num_voters = 4.
+query TT
+SHOW ZONE CONFIGURATION FOR TABLE tbl_sr1
+----
+TABLE tbl_sr1  ALTER TABLE tbl_sr1 CONFIGURE ZONE USING
+                 range_min_bytes = 134217728,
+                 range_max_bytes = 536870912,
+                 gc.ttlseconds = 14400,
+                 num_replicas = 4,
+                 num_voters = 4,
+                 constraints = '{+region=ca-central-1: 1, +region=us-east-1: 3}',
+                 voter_constraints = '[+region=us-east-1]',
+                 lease_preferences = '[[+region=us-east-1]]'
+
+# sr2 member table keeps default num_voters = 3.
+query TT
+SHOW ZONE CONFIGURATION FOR TABLE tbl_sr2
+----
+TABLE tbl_sr2  ALTER TABLE tbl_sr2 CONFIGURE ZONE USING
+                 range_min_bytes = 134217728,
+                 range_max_bytes = 536870912,
+                 gc.ttlseconds = 14400,
+                 num_replicas = 4,
+                 num_voters = 3,
+                 constraints = '{+region=us-central-1: 1, +region=us-west-1: 3}',
+                 voter_constraints = '[+region=us-west-1]',
+                 lease_preferences = '[[+region=us-west-1]]'
+
+# Non-member table keeps default num_voters = 3.
+query TT
+SHOW ZONE CONFIGURATION FOR TABLE tbl_none
+----
+TABLE tbl_none  ALTER TABLE tbl_none CONFIGURE ZONE USING
+                  range_min_bytes = 134217728,
+                  range_max_bytes = 536870912,
+                  gc.ttlseconds = 14400,
+                  num_replicas = 7,
+                  num_voters = 3,
+                  constraints = '{+region=ap-southeast-2: 1, +region=ca-central-1: 1, +region=us-central-1: 1, +region=us-east-1: 1, +region=us-west-1: 1}',
+                  voter_constraints = '[+region=ap-southeast-2]',
+                  lease_preferences = '[[+region=ap-southeast-2]]'
+
+# RBR partitions: sr1 members get num_voters = 4.
+query TT
+SHOW ZONE CONFIGURATION FOR PARTITION "us-east-1" OF TABLE tbl_rbr
+----
+PARTITION "us-east-1" OF TABLE tbl_rbr  ALTER PARTITION "us-east-1" OF TABLE tbl_rbr CONFIGURE ZONE USING
+                                          range_min_bytes = 134217728,
+                                          range_max_bytes = 536870912,
+                                          gc.ttlseconds = 14400,
+                                          num_replicas = 4,
+                                          num_voters = 4,
+                                          constraints = '{+region=ca-central-1: 1, +region=us-east-1: 3}',
+                                          voter_constraints = '[+region=us-east-1]',
+                                          lease_preferences = '[[+region=us-east-1]]'
+
+query TT
+SHOW ZONE CONFIGURATION FOR PARTITION "ca-central-1" OF TABLE tbl_rbr
+----
+PARTITION "ca-central-1" OF TABLE tbl_rbr  ALTER PARTITION "ca-central-1" OF TABLE tbl_rbr CONFIGURE ZONE USING
+                                             range_min_bytes = 134217728,
+                                             range_max_bytes = 536870912,
+                                             gc.ttlseconds = 14400,
+                                             num_replicas = 4,
+                                             num_voters = 4,
+                                             constraints = '{+region=ca-central-1: 3, +region=us-east-1: 1}',
+                                             voter_constraints = '[+region=ca-central-1]',
+                                             lease_preferences = '[[+region=ca-central-1]]'
+
+# RBR partitions: sr2 members keep num_voters = 3.
+query TT
+SHOW ZONE CONFIGURATION FOR PARTITION "us-west-1" OF TABLE tbl_rbr
+----
+PARTITION "us-west-1" OF TABLE tbl_rbr  ALTER PARTITION "us-west-1" OF TABLE tbl_rbr CONFIGURE ZONE USING
+                                          range_min_bytes = 134217728,
+                                          range_max_bytes = 536870912,
+                                          gc.ttlseconds = 14400,
+                                          num_replicas = 4,
+                                          num_voters = 3,
+                                          constraints = '{+region=us-central-1: 1, +region=us-west-1: 3}',
+                                          voter_constraints = '[+region=us-west-1]',
+                                          lease_preferences = '[[+region=us-west-1]]'
+
+query TT
+SHOW ZONE CONFIGURATION FOR PARTITION "us-central-1" OF TABLE tbl_rbr
+----
+PARTITION "us-central-1" OF TABLE tbl_rbr  ALTER PARTITION "us-central-1" OF TABLE tbl_rbr CONFIGURE ZONE USING
+                                             range_min_bytes = 134217728,
+                                             range_max_bytes = 536870912,
+                                             gc.ttlseconds = 14400,
+                                             num_replicas = 4,
+                                             num_voters = 3,
+                                             constraints = '{+region=us-central-1: 3, +region=us-west-1: 1}',
+                                             voter_constraints = '[+region=us-central-1]',
+                                             lease_preferences = '[[+region=us-central-1]]'
+
+# RBR partition outside both SRs keeps num_voters = 3.
+query TT
+SHOW ZONE CONFIGURATION FOR PARTITION "ap-southeast-2" OF TABLE tbl_rbr
+----
+PARTITION "ap-southeast-2" OF TABLE tbl_rbr  ALTER PARTITION "ap-southeast-2" OF TABLE tbl_rbr CONFIGURE ZONE USING
+                                               range_min_bytes = 134217728,
+                                               range_max_bytes = 536870912,
+                                               gc.ttlseconds = 14400,
+                                               num_replicas = 7,
+                                               num_voters = 3,
+                                               constraints = '{+region=ap-southeast-2: 1, +region=ca-central-1: 1, +region=us-central-1: 1, +region=us-east-1: 1, +region=us-west-1: 1}',
+                                               voter_constraints = '[+region=ap-southeast-2]',
+                                               lease_preferences = '[[+region=ap-southeast-2]]'
+
+# ---------- Phase 2: Set extension on sr2 ----------
+
+statement ok
+ALTER DATABASE "mr-multi-sr" ALTER LOCALITY SUPER REGION "sr2" CONFIGURE ZONE USING num_voters = 4
+
+# sr1 table is unchanged.
+query TT
+SHOW ZONE CONFIGURATION FOR TABLE tbl_sr1
+----
+TABLE tbl_sr1  ALTER TABLE tbl_sr1 CONFIGURE ZONE USING
+                 range_min_bytes = 134217728,
+                 range_max_bytes = 536870912,
+                 gc.ttlseconds = 14400,
+                 num_replicas = 4,
+                 num_voters = 4,
+                 constraints = '{+region=ca-central-1: 1, +region=us-east-1: 3}',
+                 voter_constraints = '[+region=us-east-1]',
+                 lease_preferences = '[[+region=us-east-1]]'
+
+# sr2 table now gets num_voters = 4.
+query TT
+SHOW ZONE CONFIGURATION FOR TABLE tbl_sr2
+----
+TABLE tbl_sr2  ALTER TABLE tbl_sr2 CONFIGURE ZONE USING
+                 range_min_bytes = 134217728,
+                 range_max_bytes = 536870912,
+                 gc.ttlseconds = 14400,
+                 num_replicas = 4,
+                 num_voters = 4,
+                 constraints = '{+region=us-central-1: 1, +region=us-west-1: 3}',
+                 voter_constraints = '[+region=us-west-1]',
+                 lease_preferences = '[[+region=us-west-1]]'
+
+# Non-member still default.
+query TT
+SHOW ZONE CONFIGURATION FOR TABLE tbl_none
+----
+TABLE tbl_none  ALTER TABLE tbl_none CONFIGURE ZONE USING
+                  range_min_bytes = 134217728,
+                  range_max_bytes = 536870912,
+                  gc.ttlseconds = 14400,
+                  num_replicas = 7,
+                  num_voters = 3,
+                  constraints = '{+region=ap-southeast-2: 1, +region=ca-central-1: 1, +region=us-central-1: 1, +region=us-east-1: 1, +region=us-west-1: 1}',
+                  voter_constraints = '[+region=ap-southeast-2]',
+                  lease_preferences = '[[+region=ap-southeast-2]]'
+
+# ---------- Phase 3: DISCARD sr1 extension only ----------
+
+statement ok
+ALTER DATABASE "mr-multi-sr" ALTER LOCALITY SUPER REGION "sr1" CONFIGURE ZONE DISCARD
+
+# sr1 table reverts to default num_voters = 3.
+query TT
+SHOW ZONE CONFIGURATION FOR TABLE tbl_sr1
+----
+TABLE tbl_sr1  ALTER TABLE tbl_sr1 CONFIGURE ZONE USING
+                 range_min_bytes = 134217728,
+                 range_max_bytes = 536870912,
+                 gc.ttlseconds = 14400,
+                 num_replicas = 4,
+                 num_voters = 3,
+                 constraints = '{+region=ca-central-1: 1, +region=us-east-1: 3}',
+                 voter_constraints = '[+region=us-east-1]',
+                 lease_preferences = '[[+region=us-east-1]]'
+
+# sr2 table is unchanged at num_voters = 4.
+query TT
+SHOW ZONE CONFIGURATION FOR TABLE tbl_sr2
+----
+TABLE tbl_sr2  ALTER TABLE tbl_sr2 CONFIGURE ZONE USING
+                 range_min_bytes = 134217728,
+                 range_max_bytes = 536870912,
+                 gc.ttlseconds = 14400,
+                 num_replicas = 4,
+                 num_voters = 4,
+                 constraints = '{+region=us-central-1: 1, +region=us-west-1: 3}',
+                 voter_constraints = '[+region=us-west-1]',
+                 lease_preferences = '[[+region=us-west-1]]'
+
+# sr1 RBR partition reverts.
+query TT
+SHOW ZONE CONFIGURATION FOR PARTITION "us-east-1" OF TABLE tbl_rbr
+----
+PARTITION "us-east-1" OF TABLE tbl_rbr  ALTER PARTITION "us-east-1" OF TABLE tbl_rbr CONFIGURE ZONE USING
+                                          range_min_bytes = 134217728,
+                                          range_max_bytes = 536870912,
+                                          gc.ttlseconds = 14400,
+                                          num_replicas = 4,
+                                          num_voters = 3,
+                                          constraints = '{+region=ca-central-1: 1, +region=us-east-1: 3}',
+                                          voter_constraints = '[+region=us-east-1]',
+                                          lease_preferences = '[[+region=us-east-1]]'
+
+# sr2 RBR partition unchanged.
+query TT
+SHOW ZONE CONFIGURATION FOR PARTITION "us-west-1" OF TABLE tbl_rbr
+----
+PARTITION "us-west-1" OF TABLE tbl_rbr  ALTER PARTITION "us-west-1" OF TABLE tbl_rbr CONFIGURE ZONE USING
+                                          range_min_bytes = 134217728,
+                                          range_max_bytes = 536870912,
+                                          gc.ttlseconds = 14400,
+                                          num_replicas = 4,
+                                          num_voters = 4,
+                                          constraints = '{+region=us-central-1: 1, +region=us-west-1: 3}',
+                                          voter_constraints = '[+region=us-west-1]',
+                                          lease_preferences = '[[+region=us-west-1]]'
+
+# ---------- Phase 4: DROP sr1 entirely ----------
+
+statement ok
+ALTER DATABASE "mr-multi-sr" DROP SUPER REGION "sr1"
+
+# sr1 table now spans all regions (no super region constraint).
+query TT
+SHOW ZONE CONFIGURATION FOR TABLE tbl_sr1
+----
+TABLE tbl_sr1  ALTER TABLE tbl_sr1 CONFIGURE ZONE USING
+                 range_min_bytes = 134217728,
+                 range_max_bytes = 536870912,
+                 gc.ttlseconds = 14400,
+                 num_replicas = 7,
+                 num_voters = 3,
+                 constraints = '{+region=ap-southeast-2: 1, +region=ca-central-1: 1, +region=us-central-1: 1, +region=us-east-1: 1, +region=us-west-1: 1}',
+                 voter_constraints = '[+region=us-east-1]',
+                 lease_preferences = '[[+region=us-east-1]]'
+
+# sr2 table is still confined to its super region.
+query TT
+SHOW ZONE CONFIGURATION FOR TABLE tbl_sr2
+----
+TABLE tbl_sr2  ALTER TABLE tbl_sr2 CONFIGURE ZONE USING
+                 range_min_bytes = 134217728,
+                 range_max_bytes = 536870912,
+                 gc.ttlseconds = 14400,
+                 num_replicas = 4,
+                 num_voters = 4,
+                 constraints = '{+region=us-central-1: 1, +region=us-west-1: 3}',
+                 voter_constraints = '[+region=us-west-1]',
+                 lease_preferences = '[[+region=us-west-1]]'
+
+# Validate all zone configs are coherent.
+statement ok
+SELECT crdb_internal.validate_multi_region_zone_configs()
+
+subtest super_region_readd_after_discard
+
+statement ok
+CREATE DATABASE "mr-sr-readd"
+  PRIMARY REGION "ca-central-1"
+  REGIONS "ap-southeast-2", "us-east-1"
+
+statement ok
+USE "mr-sr-readd"
+
+statement ok
+ALTER DATABASE "mr-sr-readd" ADD SUPER REGION "sr" VALUES "us-east-1", "ca-central-1"
+
+statement ok
+CREATE TABLE tbl (pk INT PRIMARY KEY) LOCALITY REGIONAL BY TABLE IN "ca-central-1"
+
+# Set extension.
+statement ok
+ALTER DATABASE "mr-sr-readd" ALTER LOCALITY SUPER REGION "sr" CONFIGURE ZONE USING num_voters = 4
+
+query TT
+SHOW ZONE CONFIGURATION FOR TABLE tbl
+----
+TABLE tbl  ALTER TABLE tbl CONFIGURE ZONE USING
+             range_min_bytes = 134217728,
+             range_max_bytes = 536870912,
+             gc.ttlseconds = 14400,
+             num_replicas = 4,
+             num_voters = 4,
+             constraints = '{+region=ca-central-1: 3, +region=us-east-1: 1}',
+             voter_constraints = '[+region=ca-central-1]',
+             lease_preferences = '[[+region=ca-central-1]]'
+
+# Discard the extension.
+statement ok
+ALTER DATABASE "mr-sr-readd" ALTER LOCALITY SUPER REGION "sr" CONFIGURE ZONE DISCARD
+
+query TT
+SHOW ZONE CONFIGURATION FOR TABLE tbl
+----
+TABLE tbl  ALTER TABLE tbl CONFIGURE ZONE USING
+             range_min_bytes = 134217728,
+             range_max_bytes = 536870912,
+             gc.ttlseconds = 14400,
+             num_replicas = 4,
+             num_voters = 3,
+             constraints = '{+region=ca-central-1: 3, +region=us-east-1: 1}',
+             voter_constraints = '[+region=ca-central-1]',
+             lease_preferences = '[[+region=ca-central-1]]'
+
+# Re-add with a different value.
+statement ok
+ALTER DATABASE "mr-sr-readd" ALTER LOCALITY SUPER REGION "sr" CONFIGURE ZONE USING num_replicas = 5
+
+# Verify the new value applies (num_replicas changed, num_voters back to default).
+query TT
+SHOW ZONE CONFIGURATION FOR TABLE tbl
+----
+TABLE tbl  ALTER TABLE tbl CONFIGURE ZONE USING
+             range_min_bytes = 134217728,
+             range_max_bytes = 536870912,
+             gc.ttlseconds = 14400,
+             num_replicas = 5,
+             num_voters = 3,
+             constraints = '{+region=ca-central-1: 3, +region=us-east-1: 2}',
+             voter_constraints = '[+region=ca-central-1]',
+             lease_preferences = '[[+region=ca-central-1]]'
+
+statement ok
+SELECT crdb_internal.validate_multi_region_zone_configs()
+
+subtest super_region_alter_preserves_extension
+
+statement ok
+CREATE DATABASE "mr-sr-alter"
+  PRIMARY REGION "ca-central-1"
+  REGIONS "ap-southeast-2", "us-east-1", "us-west-1", "us-central-1"
+
+statement ok
+USE "mr-sr-alter"
+
+statement ok
+ALTER DATABASE "mr-sr-alter" ADD SUPER REGION "sr" VALUES "us-east-1", "ca-central-1"
+
+statement ok
+CREATE TABLE tbl_east (pk INT PRIMARY KEY) LOCALITY REGIONAL BY TABLE IN "us-east-1"
+
+statement ok
+CREATE TABLE tbl_west (pk INT PRIMARY KEY) LOCALITY REGIONAL BY TABLE IN "us-west-1"
+
+# Set a zone config extension on the super region.
+statement ok
+ALTER DATABASE "mr-sr-alter" ALTER LOCALITY SUPER REGION "sr" CONFIGURE ZONE USING num_voters = 4
+
+# Verify extension applies to a member table.
+query TT
+SHOW ZONE CONFIGURATION FOR TABLE tbl_east
+----
+TABLE tbl_east  ALTER TABLE tbl_east CONFIGURE ZONE USING
+                  range_min_bytes = 134217728,
+                  range_max_bytes = 536870912,
+                  gc.ttlseconds = 14400,
+                  num_replicas = 4,
+                  num_voters = 4,
+                  constraints = '{+region=ca-central-1: 1, +region=us-east-1: 3}',
+                  voter_constraints = '[+region=us-east-1]',
+                  lease_preferences = '[[+region=us-east-1]]'
+
+# us-west-1 is not in the super region, so no extension.
+query TT
+SHOW ZONE CONFIGURATION FOR TABLE tbl_west
+----
+TABLE tbl_west  ALTER TABLE tbl_west CONFIGURE ZONE USING
+                  range_min_bytes = 134217728,
+                  range_max_bytes = 536870912,
+                  gc.ttlseconds = 14400,
+                  num_replicas = 7,
+                  num_voters = 3,
+                  constraints = '{+region=ap-southeast-2: 1, +region=ca-central-1: 1, +region=us-central-1: 1, +region=us-east-1: 1, +region=us-west-1: 1}',
+                  voter_constraints = '[+region=us-west-1]',
+                  lease_preferences = '[[+region=us-west-1]]'
+
+# ALTER SUPER REGION to swap us-east-1 for us-west-1. The extension should
+# survive the remove-then-add cycle.
+statement ok
+ALTER DATABASE "mr-sr-alter" ALTER SUPER REGION "sr" VALUES "us-west-1", "ca-central-1"
+
+# us-west-1 is now a member and should get the extension.
+query TT
+SHOW ZONE CONFIGURATION FOR TABLE tbl_west
+----
+TABLE tbl_west  ALTER TABLE tbl_west CONFIGURE ZONE USING
+                  range_min_bytes = 134217728,
+                  range_max_bytes = 536870912,
+                  gc.ttlseconds = 14400,
+                  num_replicas = 4,
+                  num_voters = 4,
+                  constraints = '{+region=ca-central-1: 1, +region=us-west-1: 3}',
+                  voter_constraints = '[+region=us-west-1]',
+                  lease_preferences = '[[+region=us-west-1]]'
+
+# us-east-1 is no longer a member, so the extension should not apply.
+query TT
+SHOW ZONE CONFIGURATION FOR TABLE tbl_east
+----
+TABLE tbl_east  ALTER TABLE tbl_east CONFIGURE ZONE USING
+                  range_min_bytes = 134217728,
+                  range_max_bytes = 536870912,
+                  gc.ttlseconds = 14400,
+                  num_replicas = 7,
+                  num_voters = 3,
+                  constraints = '{+region=ap-southeast-2: 1, +region=ca-central-1: 1, +region=us-central-1: 1, +region=us-east-1: 1, +region=us-west-1: 1}',
+                  voter_constraints = '[+region=us-east-1]',
+                  lease_preferences = '[[+region=us-east-1]]'
+
+# The database zone config should reflect the extension because the primary
+# region (ca-central-1) is still a member of the super region.
+query TT
+SHOW ZONE CONFIGURATION FOR DATABASE "mr-sr-alter"
+----
+DATABASE "mr-sr-alter"  ALTER DATABASE "mr-sr-alter" CONFIGURE ZONE USING
+                          range_min_bytes = 134217728,
+                          range_max_bytes = 536870912,
+                          gc.ttlseconds = 14400,
+                          num_replicas = 7,
+                          num_voters = 4,
+                          constraints = '{+region=ap-southeast-2: 1, +region=ca-central-1: 1, +region=us-central-1: 1, +region=us-east-1: 1, +region=us-west-1: 1}',
+                          voter_constraints = '[+region=ca-central-1]',
+                          lease_preferences = '[[+region=ca-central-1]]'
+
+# ALTER SUPER REGION to remove the primary region (ca-central-1). The database
+# zone config must be regenerated so the extension no longer applies to it.
+statement ok
+ALTER DATABASE "mr-sr-alter" ALTER SUPER REGION "sr" VALUES "us-west-1", "us-east-1"
+
+# Database zone config should revert: the primary region is no longer in the
+# super region, so the extension's num_voters override should not apply.
+query TT
+SHOW ZONE CONFIGURATION FOR DATABASE "mr-sr-alter"
+----
+DATABASE "mr-sr-alter"  ALTER DATABASE "mr-sr-alter" CONFIGURE ZONE USING
+                          range_min_bytes = 134217728,
+                          range_max_bytes = 536870912,
+                          gc.ttlseconds = 14400,
+                          num_replicas = 7,
+                          num_voters = 3,
+                          constraints = '{+region=ap-southeast-2: 1, +region=ca-central-1: 1, +region=us-central-1: 1, +region=us-east-1: 1, +region=us-west-1: 1}',
+                          voter_constraints = '[+region=ca-central-1]',
+                          lease_preferences = '[[+region=ca-central-1]]'
+
+statement ok
+SELECT crdb_internal.validate_multi_region_zone_configs()
+
+subtest super_region_voter_constraints_extension
+
+statement ok
+CREATE DATABASE "mr-sr-voter"
+  PRIMARY REGION "ca-central-1"
+  REGIONS "ap-southeast-2", "us-east-1"
+
+statement ok
+USE "mr-sr-voter"
+
+statement ok
+ALTER DATABASE "mr-sr-voter" ADD SUPER REGION "sr" VALUES "us-east-1", "ca-central-1"
+
+statement ok
+CREATE TABLE tbl_member (pk INT PRIMARY KEY) LOCALITY REGIONAL BY TABLE IN "ca-central-1"
+
+statement ok
+CREATE TABLE tbl_rbr (pk INT PRIMARY KEY) LOCALITY REGIONAL BY ROW
+
+# Set voter_constraints on the super region extension.
+statement ok
+ALTER DATABASE "mr-sr-voter" ALTER LOCALITY SUPER REGION "sr" CONFIGURE ZONE USING
+  voter_constraints = '{+region=ca-central-1: 2}'
+
+# Member table gets the overridden voter_constraints.
+query TT
+SHOW ZONE CONFIGURATION FOR TABLE tbl_member
+----
+TABLE tbl_member  ALTER TABLE tbl_member CONFIGURE ZONE USING
+                    range_min_bytes = 134217728,
+                    range_max_bytes = 536870912,
+                    gc.ttlseconds = 14400,
+                    num_replicas = 4,
+                    num_voters = 3,
+                    constraints = '{+region=ca-central-1: 3, +region=us-east-1: 1}',
+                    voter_constraints = '{+region=ca-central-1: 2}',
+                    lease_preferences = '[[+region=ca-central-1]]'
+
+# RBR member partition also gets the voter_constraints override.
+query TT
+SHOW ZONE CONFIGURATION FOR PARTITION "ca-central-1" OF TABLE tbl_rbr
+----
+PARTITION "ca-central-1" OF TABLE tbl_rbr  ALTER PARTITION "ca-central-1" OF TABLE tbl_rbr CONFIGURE ZONE USING
+                                             range_min_bytes = 134217728,
+                                             range_max_bytes = 536870912,
+                                             gc.ttlseconds = 14400,
+                                             num_replicas = 4,
+                                             num_voters = 3,
+                                             constraints = '{+region=ca-central-1: 3, +region=us-east-1: 1}',
+                                             voter_constraints = '{+region=ca-central-1: 2}',
+                                             lease_preferences = '[[+region=ca-central-1]]'
+
+# Non-member RBR partition should NOT get the voter_constraints override.
+query TT
+SHOW ZONE CONFIGURATION FOR PARTITION "ap-southeast-2" OF TABLE tbl_rbr
+----
+PARTITION "ap-southeast-2" OF TABLE tbl_rbr  ALTER PARTITION "ap-southeast-2" OF TABLE tbl_rbr CONFIGURE ZONE USING
+                                               range_min_bytes = 134217728,
+                                               range_max_bytes = 536870912,
+                                               gc.ttlseconds = 14400,
+                                               num_replicas = 5,
+                                               num_voters = 3,
+                                               constraints = '{+region=ap-southeast-2: 1, +region=ca-central-1: 1, +region=us-east-1: 1}',
+                                               voter_constraints = '[+region=ap-southeast-2]',
+                                               lease_preferences = '[[+region=ap-southeast-2]]'
+
+statement ok
+SELECT crdb_internal.validate_multi_region_zone_configs()
+
+subtest super_region_extension_num_replicas_only
+
+statement ok
+CREATE DATABASE "mr-sr-replicas"
+  PRIMARY REGION "ca-central-1"
+  REGIONS "ap-southeast-2", "us-east-1"
+
+statement ok
+USE "mr-sr-replicas"
+
+statement ok
+ALTER DATABASE "mr-sr-replicas" ADD SUPER REGION "sr" VALUES "us-east-1", "ca-central-1"
+
+statement ok
+CREATE TABLE tbl_member (pk INT PRIMARY KEY) LOCALITY REGIONAL BY TABLE IN "ca-central-1"
+
+statement ok
+CREATE TABLE tbl_nonmember (pk INT PRIMARY KEY) LOCALITY REGIONAL BY TABLE IN "ap-southeast-2"
+
+# Set only num_replicas on the super region extension.
+statement ok
+ALTER DATABASE "mr-sr-replicas" ALTER LOCALITY SUPER REGION "sr" CONFIGURE ZONE USING num_replicas = 6
+
+# Member table gets num_replicas = 6 but default num_voters = 3.
+query TT
+SHOW ZONE CONFIGURATION FOR TABLE tbl_member
+----
+TABLE tbl_member  ALTER TABLE tbl_member CONFIGURE ZONE USING
+                    range_min_bytes = 134217728,
+                    range_max_bytes = 536870912,
+                    gc.ttlseconds = 14400,
+                    num_replicas = 6,
+                    num_voters = 3,
+                    constraints = '{+region=ca-central-1: 3, +region=us-east-1: 3}',
+                    voter_constraints = '[+region=ca-central-1]',
+                    lease_preferences = '[[+region=ca-central-1]]'
+
+# Non-member table is not in the super region, so the super region extension
+# does not apply. It inherits num_replicas and constraints from the database.
+query TT
+SHOW ZONE CONFIGURATION FOR TABLE tbl_nonmember
+----
+TABLE tbl_nonmember  ALTER TABLE tbl_nonmember CONFIGURE ZONE USING
+                       range_min_bytes = 134217728,
+                       range_max_bytes = 536870912,
+                       gc.ttlseconds = 14400,
+                       num_replicas = 5,
+                       num_voters = 3,
+                       constraints = '{+region=ap-southeast-2: 1, +region=ca-central-1: 1, +region=us-east-1: 1}',
+                       voter_constraints = '[+region=ap-southeast-2]',
+                       lease_preferences = '[[+region=ap-southeast-2]]'
+
+statement ok
+SELECT crdb_internal.validate_multi_region_zone_configs()
