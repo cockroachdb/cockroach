@@ -3,6 +3,7 @@ name: review-crdb
 description: >
   Review code changes or PRs for quality, correctness, and reviewability.
   Use when asked to "review", "check", "provide feedback", or "post a review".
+  Dispatches specialized agents in parallel for thorough analysis.
 ---
 
 # Code Review
@@ -11,7 +12,7 @@ Review the change and provide structured, actionable feedback.
 
 The primary goal is **correctness**. This is a distributed database — read the
 code with a critical eye for concurrency issues, locking discipline, failure
-modes, and architectural soundness. The specific aspects below are a checklist
+modes, and architectural soundness. The specialized agents below are a checklist
 of common patterns to verify, but they're secondary to understanding whether the
 code is actually correct.
 
@@ -42,88 +43,109 @@ before checking out.
 
 ## Review aspects
 
-Each aspect has an authoritative source. Load that source and review against it.
-Not every aspect applies to every change — scan the diff, determine which apply,
-and skip the rest.
+Each aspect is handled by a specialized agent in `.claude/agents/`. Not every
+aspect applies to every change — scan the diff, determine which apply, and skip
+the rest.
 
-| Aspect | Source | Applies when |
-|--------|--------|--------------|
-| Redactability | `.claude/rules/redactability.md` (auto-loaded) | Diff adds/modifies types with `String()`, `Error()`, or log output |
-| Error handling | `.claude/rules/error-handling.md` (auto-loaded) | Diff creates or wraps errors |
-| Comments | `.claude/rules/commenting-standards.md` (auto-loaded) | Always — but focus on new/changed code |
-| Go conventions | `.claude/rules/go-conventions.md` (auto-loaded) | Always — but focus on new/changed code |
-| Commit structure | `commit-arc` skill (see below) | Change is non-trivial (whether or not it's already split into commits) |
-| Red/green testing | `commit-arc` skill (see below) | Behavioral fix/improvement alongside test changes |
-| PR/commit description | `commit-helper` skill (auto-loaded) | Reviewing a PR or branch with commit messages |
+| Aspect | Agent | Applies when |
+|--------|-------|--------------|
+| Correctness & safety | `crdb-correctness-reviewer` | Always for non-trivial changes |
+| Error handling | `crdb-error-reviewer` | Code touches error paths, retry logic, or resource cleanup |
+| Go conventions & comments | `crdb-conventions-reviewer` | Always — focuses on new/changed code |
+| Test coverage | `crdb-test-reviewer` | Test files changed, or new behavior without tests |
+| Commit structure & PR description | `crdb-commit-reviewer` | Reviewing a branch/PR with commits |
+| Type design | `crdb-type-reviewer` | New structs/interfaces added or significantly modified |
+| Simplification | `crdb-simplifier` | After other aspects pass — polish step |
 
-**Rules** (`.claude/rules/`) are auto-loaded into context. Review the diff
-against them directly — don't re-state their contents, just apply them.
+### Selecting aspects
 
-**The `commit-arc` skill** covers commit structure and red/green testing in
-depth. It's a user-level skill, not installed project-wide. If the
-`commit-arc` skill is loaded (check whether it appears in the available skills
-list), review commit structure and red/green testing against its guidance.
-Otherwise, still review commit structure using basic principles (self-contained
-commits, mechanical/semantic separation, progressive ordering, whether a large
-single commit should be split) and note in your review: "The `commit-arc` skill
-was not available — consider installing it via `roachdev claude` for richer
-commit-structure guidance at development time."
+The user can request specific aspects:
 
-An important goal is to make the change pleasant to review by a human. A single commit
-that mixes a refactor, a bug fix, and a test update is harder to review than
-three focused commits — flag this even (especially) when the author hasn't
-split their work yet.
+- `/review-crdb` — run all applicable aspects (default)
+- `/review-crdb correctness tests` — run only those two
+- `/review-crdb simplify` — run only the simplifier
 
-### PR and commit descriptions
+Valid aspect names: `correctness`, `errors`, `conventions`, `tests`, `commits`,
+`types`, `simplify`, `all`.
 
-The PR description (and commit messages for multi-commit PRs) should orient the
-reviewer. The bar scales with the complexity of the change:
+## Dispatching agents
 
-- **Small, obvious changes** (typo fixes, one-line bug fixes, mechanical
-  refactors): a brief description is fine. Don't demand an essay for a one-liner.
-- **Non-trivial changes**: the description should give the reviewer a high-level
-  understanding of *what* the change achieves and *why*, so they can review the
-  code with the right mental model. Flag descriptions that are missing this
-  context, are misleading about what the code actually does, or that would leave
-  a reviewer guessing about the motivation.
-- **Multi-commit PRs**: the PR body should explain how the commits fit together
-  and give the reviewer a roadmap for reading them in order.
+### Parallel approach (default)
 
-When posting to GitHub, brief directional feedback on the PR description is fine
-in the review body (e.g., "the description doesn't mention the compatibility
-implications" or "consider explaining why the refactor was necessary"). But
-don't paste a rewritten description into the review — if a full rewrite is
-warranted, suggest it to the user in conversation and let them update the
-message themselves.
+Launch all applicable agents simultaneously using the Agent tool. Each agent
+receives:
+- The diff (or file list) to review
+- Instructions to save its output as structured findings
 
-### Beyond the sources
+This is faster and gives comprehensive results. Use this unless the user
+requests sequential review.
 
-The sources above cover specific patterns. Also watch for:
+**Correctness agent**: run in the **foreground** (not background). It reads
+more surrounding context and anecdotally takes longer than the other agents.
+Running it synchronously avoids `TaskOutput` polling timeouts. Launch all
+other agents in the background first, then block on the correctness agent.
 
-- **Compatibility**: does the change affect RPCs, persisted formats, or shared
-  state? If so, is cluster-version gating considered?
-- **Unnecessary complexity**: could the change be simpler? Is anything
-  over-engineered for the problem at hand?
+**Timeouts**: when polling background agents with `TaskOutput`, always use the
+maximum allowed timeout to avoid premature timeouts on larger diffs.
 
-Don't nitpick formatting — `crlfmt` handles that.
+### Handling agent failures
 
-## Output format
+If an agent fails (API error, timeout, or returns empty output):
 
-Keep the review concise. Only report findings that need action or that highlight
-a genuinely noteworthy pattern. Don't list aspects where you found no issues —
-the "aspects skipped" section already covers what wasn't checked and why.
+1. **Retry once**. Transient API errors are common — a single retry usually
+   succeeds.
+2. **If the retry also fails**, report the aspect as "not reviewed" in the
+   summary under **Aspects skipped**, with a brief reason (e.g., "correctness:
+   agent hit API errors on both attempts").
+3. **Don't silently drop an aspect.** The user should always know which aspects
+   were reviewed and which weren't.
 
-1. **Summary**: one or two sentences on what the change does and overall
-   assessment (looks good / needs work / has blocking issues).
-2. **Findings**: grouped by aspect. For each finding:
-   - File and line (or commit, for structure issues).
-   - The problem and why it matters.
-   - Suggested fix when possible.
-   - Severity: **blocking** (must fix), **suggestion** (should fix), or
-     **nit** (take it or leave it).
-3. **Aspects skipped**: which aspects didn't apply, briefly. Only list if there
-   are non-obvious skips worth explaining.
-4. **Missing sources**: only list if a rule or skill was unavailable.
+### Sequential approach
+
+Run agents one at a time. Useful for interactive review where the user wants to
+discuss findings as they come in. The user can request this with "review
+sequentially" or similar phrasing.
+
+### Agent input
+
+When dispatching each agent, provide:
+1. The diff output (or instructions on how to get it)
+2. The list of changed files
+3. Any relevant context about what the change does (from PR description, commit
+   messages, or user explanation)
+
+## Aggregating results
+
+After all agents complete, produce a unified summary. Keep it concise — only
+report findings that need action or highlight a genuinely noteworthy pattern.
+Don't include empty sections for aspects where no issues were found.
+
+```markdown
+# Review Summary
+
+## Blocking Issues (must fix)
+- [agent]: issue description [file:line]
+
+## Suggestions (should fix)
+- [agent]: issue description [file:line]
+
+## Nits (take it or leave it)
+- [agent]: observation [file:line]
+
+## Strengths
+- What's well-done in this change
+
+## Aspects skipped
+- [aspect]: why it didn't apply
+
+## Next steps
+1. Fix blocking issues first
+2. Address suggestions
+3. Re-run `/review-crdb` on the affected aspects to verify fixes
+```
+
+Deduplicate findings across agents. If two agents flag the same issue, keep the
+more specific one.
 
 ## Posting reviews on PRs
 
@@ -150,7 +172,7 @@ Build the JSON payload with this structure:
       "path": "pkg/some/file.go",
       "line": 42,
       "side": "RIGHT",
-      "body": "**suggestion**: The comment should reflect that the key is only used for cleanup.\n\n```suggestion\n// DeprecatedStoreClusterVersionKey is only read during cleanup migration\n// and then deleted. Retained until MinSupported > V26_2.\n```"
+      "body": "/review-crdb(suggestion): The comment should reflect that the key is only used for cleanup.\n\n```suggestion\n// DeprecatedStoreClusterVersionKey is only read during cleanup migration\n// and then deleted. Retained until MinSupported > V26_2.\n```"
     }
   ]
 }
@@ -164,7 +186,9 @@ Build the JSON payload with this structure:
   `\n\n---\n*(made with [/review-crdb](https://github.com/cockroachdb/cockroach/blob/master/.claude/skills/review-crdb/SKILL.md))*`
 - **`comments`**: one entry per finding that has a specific file and line. Use
   `line` (the actual line number in the file) and `side: "RIGHT"` (commenting
-  on the new code). Prefix each comment body with the severity. For small,
+  on the new code). Start each comment body with `/review-crdb(<severity>): `
+  where severity is `blocking`, `suggestion`, or `nit`. This makes the
+  origin and severity immediately visible during review. For small,
   concrete fixes, use GitHub's suggested changes syntax — a fenced code block
   with the `suggestion` language tag. GitHub renders this as a diff with an
   "Apply suggestion" button. The content replaces the line(s) the comment is
