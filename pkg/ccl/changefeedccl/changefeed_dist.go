@@ -247,7 +247,6 @@ func startDistChangefeed(
 	if log.ExpensiveLogEnabled(ctx, 2) {
 		log.Changefeed.Infof(ctx, "tracked spans: %s", trackedSpans)
 	}
-	result.trackedSpans = trackedSpans
 
 	// Changefeed flows handle transactional consistency themselves.
 	var noTxn *kv.Txn
@@ -282,12 +281,6 @@ func startDistChangefeed(
 		resultRows := sql.NewMetadataCallbackWriter(
 			makeChangefeedResultWriter(resultsCh, cancel),
 			func(ctx context.Context, meta *execinfrapb.ProducerMetadata) error {
-				if meta.Changefeed != nil {
-					if meta.Changefeed.DrainInfo != nil {
-						result.drainingNodes = append(result.drainingNodes, meta.Changefeed.DrainInfo.NodeID)
-					}
-					result.aggregatorFrontier = append(result.aggregatorFrontier, meta.Changefeed.Checkpoint...)
-				}
 				if meta.AggregatorEvents != nil && onTracingEvent != nil {
 					onTracingEvent(ctx, meta.AggregatorEvents)
 				}
@@ -471,13 +464,6 @@ func makePlan(
 			)
 		}
 
-		if haveKnobs && maybeCfKnobs.FilterDrainingNodes != nil && len(prevResult.drainingNodes) > 0 {
-			spanPartitions, err = maybeCfKnobs.FilterDrainingNodes(spanPartitions, prevResult.drainingNodes)
-			if err != nil {
-				return nil, nil, err
-			}
-		}
-
 		if haveKnobs && maybeCfKnobs.SpanPartitionsCallback != nil {
 			maybeCfKnobs.SpanPartitionsCallback(spanPartitions)
 		}
@@ -638,15 +624,7 @@ func (w *changefeedResultWriter) SetRowsAffected(ctx context.Context, n int) {
 }
 func (w *changefeedResultWriter) SetError(err error) {
 	w.err = err
-	switch {
-	case errors.Is(err, changefeedbase.ErrNodeDraining):
-		// Let drain signal proceed w/out cancellation.
-		// We want to make sure change frontier processor gets a chance
-		// to send out cancellation to the aggregator so that everything
-		// transitions to "drain metadata" stage.
-	default:
-		w.cancel()
-	}
+	w.cancel()
 }
 
 func (w *changefeedResultWriter) Err() error {

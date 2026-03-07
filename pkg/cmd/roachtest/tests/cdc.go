@@ -1086,7 +1086,6 @@ type cdcCheckpointType int
 
 const (
 	cdcNormalCheckpoint cdcCheckpointType = iota
-	cdcShutdownCheckpoint
 	cdcFrontierPersistence
 )
 
@@ -1157,19 +1156,11 @@ func runCDCInitialScanRollingRestart(
 	case cdcNormalCheckpoint:
 		setupStmts = append(setupStmts,
 			`SET CLUSTER SETTING changefeed.span_checkpoint.interval = '5s'`,
-			`SET CLUSTER SETTING changefeed.shutdown_checkpoint.enabled = 'false'`,
-			`SET CLUSTER SETTING changefeed.progress.frontier_persistence.interval = '10m'`,
-		)
-	case cdcShutdownCheckpoint:
-		setupStmts = append(setupStmts,
-			`SET CLUSTER SETTING changefeed.span_checkpoint.interval = '0'`,
-			`SET CLUSTER SETTING changefeed.shutdown_checkpoint.enabled = 'true'`,
 			`SET CLUSTER SETTING changefeed.progress.frontier_persistence.interval = '10m'`,
 		)
 	case cdcFrontierPersistence:
 		setupStmts = append(setupStmts,
 			`SET CLUSTER SETTING changefeed.span_checkpoint.interval = '0'`,
-			`SET CLUSTER SETTING changefeed.shutdown_checkpoint.enabled = 'false'`,
 			`SET CLUSTER SETTING changefeed.progress.frontier_persistence.interval = '5s'`,
 		)
 	}
@@ -1377,7 +1368,6 @@ func runCDCFineGrainedCheckpointingBenchmark(
 	setupStmts := []string{
 		`CREATE TABLE foo (id INT PRIMARY KEY, val INT)`,
 		`SET CLUSTER SETTING changefeed.span_checkpoint.interval = '1s'`,
-		`SET CLUSTER SETTING changefeed.shutdown_checkpoint.enabled = 'false'`,
 		`SET CLUSTER SETTING changefeed.frontier_highwater_lag_checkpoint_threshold = '100ms'`,
 		`SET CLUSTER SETTING changefeed.frontier_checkpoint_frequency = '1s'`,
 		// We do not set timestamp quantization here since it is off by default
@@ -2168,17 +2158,6 @@ CONFIGURE ZONE USING
 		Timeout:          30 * time.Minute,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runCDCInitialScanRollingRestart(ctx, t, c, cdcNormalCheckpoint)
-		},
-	})
-	r.Add(registry.TestSpec{
-		Name:             "cdc/initial-scan-rolling-restart/shutdown-checkpoint",
-		Owner:            registry.OwnerCDC,
-		Cluster:          r.MakeClusterSpec(4),
-		CompatibleClouds: registry.OnlyGCE,
-		Suites:           registry.Suites(registry.Nightly),
-		Timeout:          30 * time.Minute,
-		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
-			runCDCInitialScanRollingRestart(ctx, t, c, cdcShutdownCheckpoint)
 		},
 	})
 	r.Add(registry.TestSpec{
