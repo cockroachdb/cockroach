@@ -1,0 +1,228 @@
+# LogicTest: weak-iso-level-configs
+
+# This test mirrors select_for_share but with write buffering enabled, which
+# changes lock durability from Replicated to Unreplicated for weak isolation
+# transactions and affects lock visibility in crdb_internal.cluster_locks.
+
+statement ok
+SET CLUSTER SETTING sql.txn.write_buffering_for_weak_isolation.enabled = true;
+
+statement ok
+SET CLUSTER SETTING kv.transaction.write_buffering.transformations.get.enabled = true;
+
+statement ok
+SET CLUSTER SETTING kv.transaction.write_buffering.transformations.scans.enabled = true;
+
+statement ok
+SET kv_transaction_buffered_writes_enabled = true;
+
+statement ok
+CREATE TABLE t(a INT PRIMARY KEY);
+INSERT INTO t VALUES(1);
+GRANT ALL ON t TO testuser;
+CREATE USER testuser2 WITH VIEWACTIVITY;
+GRANT SYSTEM MODIFYCLUSTERSETTING TO testuser;
+GRANT ALL ON t TO testuser2;
+
+user testuser
+
+statement ok
+SET kv_transaction_buffered_writes_enabled = true;
+
+statement ok
+BEGIN
+
+query I
+SELECT * FROM t WHERE a = 1 FOR SHARE;
+----
+1
+
+# Start another transaction to show multiple transactions can acquire SHARED
+# locks at the same time.
+
+user root
+
+statement ok
+BEGIN
+
+query I
+SELECT * FROM t  WHERE a = 1 FOR SHARE;
+----
+1
+
+user testuser2
+
+statement ok
+SET kv_transaction_buffered_writes_enabled = true;
+
+statement async writeReq count 1
+UPDATE t SET a = 2 WHERE a = 1
+
+onlyif config local-read-committed
+query TTTTTTTBB colnames,retry,rowsort
+SELECT database_name, schema_name, table_name, lock_key_pretty, lock_strength, durability, replace(isolation_level, ' ', '_') AS isolation_level, granted, contended FROM crdb_internal.cluster_locks
+----
+database_name  schema_name  table_name  lock_key_pretty   lock_strength  durability    isolation_level  granted  contended
+test           public       t           /Table/106/1/1/0  Shared         Unreplicated  READ_COMMITTED   true     true
+test           public       t           /Table/106/1/1/0  Exclusive      Unreplicated  READ_COMMITTED   false    true
+test           public       t           /Table/106/1/1/0  Shared         Unreplicated  READ_COMMITTED   true     true
+
+onlyif config local-repeatable-read
+query TTTTTTTBB colnames,retry,rowsort
+SELECT database_name, schema_name, table_name, lock_key_pretty, lock_strength, durability, replace(isolation_level, ' ', '_') AS isolation_level, granted, contended FROM crdb_internal.cluster_locks
+----
+database_name  schema_name  table_name  lock_key_pretty   lock_strength  durability    isolation_level  granted  contended
+test           public       t           /Table/106/1/1/0  Shared         Unreplicated  REPEATABLE_READ  true     true
+test           public       t           /Table/106/1/1/0  Exclusive      Unreplicated  REPEATABLE_READ  false    true
+test           public       t           /Table/106/1/1/0  Shared         Unreplicated  REPEATABLE_READ  true     true
+
+# Commit the first transaction and rollback the second.
+
+user testuser
+
+statement ok
+COMMIT
+
+user root
+
+statement ok
+ROLLBACK
+
+user testuser2
+
+# Now that both the transactions that issued shared lock reads have been
+# finalized, the write should be able to proceed.
+
+awaitstatement writeReq
+
+query I
+SELECT * FROM t;
+----
+2
+
+# Test that FOR SHARE acquires locks visible in cluster_locks with write
+# buffering (Unreplicated durability makes them always visible).
+
+user testuser
+
+statement ok
+BEGIN
+
+query I
+SELECT * FROM t WHERE a = 2 FOR SHARE
+----
+2
+
+user testuser2
+
+onlyif config local-read-committed
+query TTTTTTTBB colnames,retry,rowsort
+SELECT database_name, schema_name, table_name, lock_key_pretty, lock_strength, durability, replace(isolation_level, ' ', '_') AS isolation_level, granted, contended FROM crdb_internal.cluster_locks
+----
+database_name  schema_name  table_name  lock_key_pretty   lock_strength  durability    isolation_level  granted  contended
+test           public       t           /Table/106/1/2/0  Shared         Unreplicated  READ_COMMITTED   true     false
+
+onlyif config local-repeatable-read
+query TTTTTTTBB colnames,retry,rowsort
+SELECT database_name, schema_name, table_name, lock_key_pretty, lock_strength, durability, replace(isolation_level, ' ', '_') AS isolation_level, granted, contended FROM crdb_internal.cluster_locks
+----
+database_name  schema_name  table_name  lock_key_pretty   lock_strength  durability    isolation_level  granted  contended
+test           public       t           /Table/106/1/2/0  Shared         Unreplicated  REPEATABLE_READ  true     false
+
+statement ok
+BEGIN
+
+query I
+SELECT * FROM t FOR SHARE SKIP LOCKED
+----
+2
+
+user root
+
+onlyif config local-read-committed
+query TTTTTTTBB colnames,retry,rowsort
+SELECT database_name, schema_name, table_name, lock_key_pretty, lock_strength, durability, replace(isolation_level, ' ', '_') AS isolation_level, granted, contended FROM crdb_internal.cluster_locks
+----
+database_name  schema_name  table_name  lock_key_pretty   lock_strength  durability    isolation_level  granted  contended
+test           public       t           /Table/106/1/2/0  Shared         Unreplicated  READ_COMMITTED   true     false
+test           public       t           /Table/106/1/2/0  Shared         Unreplicated  READ_COMMITTED   true     false
+
+onlyif config local-repeatable-read
+query TTTTTTTBB colnames,retry,rowsort
+SELECT database_name, schema_name, table_name, lock_key_pretty, lock_strength, durability, replace(isolation_level, ' ', '_') AS isolation_level, granted, contended FROM crdb_internal.cluster_locks
+----
+database_name  schema_name  table_name  lock_key_pretty   lock_strength  durability    isolation_level  granted  contended
+test           public       t           /Table/106/1/2/0  Shared         Unreplicated  REPEATABLE_READ  true     false
+test           public       t           /Table/106/1/2/0  Shared         Unreplicated  REPEATABLE_READ  true     false
+
+statement ok
+BEGIN
+
+query I
+SELECT * FROM t FOR UPDATE SKIP LOCKED
+----
+
+statement ok
+COMMIT
+
+# Complete the open transactions.
+user testuser
+
+statement ok
+COMMIT
+
+user testuser2
+
+statement ok
+COMMIT
+
+# Ensure FOR SHARE SKIP LOCKED works correctly with replicated locks.
+
+statement ok
+DROP TABLE IF EXISTS t;
+CREATE TABLE t(a INT PRIMARY KEY);
+INSERT INTO t VALUES(1), (2);
+GRANT ALL ON t TO testuser;
+
+user testuser
+
+query I
+BEGIN;
+SELECT * FROM t WHERE a = 1 FOR SHARE;
+----
+1
+
+user root
+
+# Locks:
+# 1: Shared
+# 2: None
+
+query I
+BEGIN;
+SELECT * FROM t FOR UPDATE SKIP LOCKED
+----
+2
+
+user testuser2
+
+# Locks:
+# 1: Shared
+# 2: Exclusive
+
+query I
+BEGIN;
+SELECT * FROM t FOR SHARE SKIP LOCKED;
+COMMIT;
+----
+1
+
+user root
+
+statement ok
+COMMIT
+
+user testuser
+
+statement ok
+COMMIT
