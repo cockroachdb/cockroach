@@ -593,6 +593,8 @@ go_test(
         "@com_github_raduberinde_btreemap//:btreemap",
         "@com_github_stretchr_testify//assert",
         "@com_github_stretchr_testify//require",
+        "@io_storj_drpc//:drpc",
+        "@io_storj_drpc//drpcclient",
         "@org_golang_google_grpc//:grpc",
         "@org_golang_google_grpc//metadata",
         "@org_golang_x_exp//maps",

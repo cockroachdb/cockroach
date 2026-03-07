@@ -120,7 +120,7 @@ func (rpcCtx *Context) drpcDialOptsCommon(
 
 	unaryInterceptors := rpcCtx.clientUnaryInterceptorsDRPC
 	if rpcCtx.Knobs.UnaryClientInterceptorDRPC != nil {
-		interceptor := rpcCtx.Knobs.UnaryClientInterceptorDRPC(target, rpcbase.DefaultClass)
+		interceptor := rpcCtx.Knobs.UnaryClientInterceptorDRPC(target, class)
 		if interceptor != nil {
 			unaryInterceptors = append(unaryInterceptors, interceptor)
 		}
@@ -129,7 +129,7 @@ func (rpcCtx *Context) drpcDialOptsCommon(
 
 	streamInterceptors := rpcCtx.clientStreamInterceptorsDRPC
 	if rpcCtx.Knobs.StreamClientInterceptorDRPC != nil {
-		interceptor := rpcCtx.Knobs.StreamClientInterceptorDRPC(target, rpcbase.DefaultClass)
+		interceptor := rpcCtx.Knobs.StreamClientInterceptorDRPC(target, class)
 		if interceptor != nil {
 			streamInterceptors = append(streamInterceptors, interceptor)
 		}
