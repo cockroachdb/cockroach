@@ -75,10 +75,6 @@ type changeAggregator struct {
 	spec   execinfrapb.ChangeAggregatorSpec
 	memAcc mon.BoundAccount
 
-	// checkForNodeDrain is a callback that returns an error
-	// if this node is being drained.
-	checkForNodeDrain func() error
-
 	// cancel cancels the context passed to all resources created while starting
 	// this aggregator.
 	cancel func()
@@ -97,9 +93,6 @@ type changeAggregator struct {
 	// resolvedSpanBuf contains resolved span updates to send to changeFrontier.
 	// If sink is a bufferSink, it must be emptied before these are sent.
 	resolvedSpanBuf encDatumRowBuffer
-	// lastPush records the time when we last pushed data to the coordinator.
-	lastPush time.Time
-
 	// recentKVCount contains the number of emits since the last time a resolved
 	// span was forwarded to the frontier
 	recentKVCount uint64
@@ -169,40 +162,6 @@ func (o *changeAggregatorLowerBoundOracle) inclusiveLowerBoundTS() hlc.Timestamp
 var _ execinfra.Processor = &changeAggregator{}
 var _ execinfra.RowSource = &changeAggregator{}
 
-var aggregatorEmitsShutdownCheckpoint = settings.RegisterBoolSetting(
-	settings.ApplicationLevel,
-	"changefeed.shutdown_checkpoint.enabled",
-	"upon shutdown aggregator attempts to emit an up-to-date checkpoint",
-	false,
-)
-
-type drainWatcher <-chan struct{}
-
-func (w drainWatcher) checkForNodeDrain() error {
-	select {
-	case <-w:
-		return changefeedbase.ErrNodeDraining
-	default:
-		return nil
-	}
-}
-
-func (w drainWatcher) enabled() bool {
-	return w != nil
-}
-
-func makeDrainWatcher(flowCtx *execinfra.FlowCtx) (w drainWatcher, _ func()) {
-	if !aggregatorEmitsShutdownCheckpoint.Get(&flowCtx.Cfg.Settings.SV) {
-		// Drain watcher disabled
-		return nil, func() {}
-	}
-
-	if cfKnobs, ok := flowCtx.TestingKnobs().Changefeed.(*TestingKnobs); ok && cfKnobs != nil && cfKnobs.OnDrain != nil {
-		return cfKnobs.OnDrain(), func() {}
-	}
-	return flowCtx.Cfg.JobRegistry.OnDrain()
-}
-
 func newChangeAggregatorProcessor(
 	ctx context.Context,
 	flowCtx *execinfra.FlowCtx,
@@ -210,19 +169,15 @@ func newChangeAggregatorProcessor(
 	spec execinfrapb.ChangeAggregatorSpec,
 	post *execinfrapb.PostProcessSpec,
 ) (_ execinfra.Processor, retErr error) {
-	// Setup monitoring for this node drain.
-	drainWatcher, drainDone := makeDrainWatcher(flowCtx)
 	memMonitor := execinfra.NewMonitor(ctx, flowCtx.Mon, mon.MakeName("changeagg-mem"))
 	ca := &changeAggregator{
-		spec:              spec,
-		memAcc:            memMonitor.MakeBoundAccount(),
-		checkForNodeDrain: drainWatcher.checkForNodeDrain,
+		spec:   spec,
+		memAcc: memMonitor.MakeBoundAccount(),
 	}
 
 	defer func() {
 		if retErr != nil {
 			ca.close()
-			drainDone()
 		}
 	}()
 
@@ -236,19 +191,6 @@ func newChangeAggregatorProcessor(
 		memMonitor,
 		execinfra.ProcStateOpts{
 			TrailingMetaCallback: func() (producerMeta []execinfrapb.ProducerMetadata) {
-				defer drainDone()
-
-				if drainWatcher.enabled() {
-					var meta execinfrapb.ChangefeedMeta
-					if err := drainWatcher.checkForNodeDrain(); err != nil {
-						// This node is draining.  Indicate so in the trailing metadata.
-						nodeID, _ := flowCtx.Cfg.NodeID.OptionalNodeID()
-						meta.DrainInfo = &execinfrapb.ChangefeedMeta_DrainInfo{NodeID: nodeID}
-					}
-					ca.computeTrailingMetadata(&meta)
-					producerMeta = []execinfrapb.ProducerMetadata{{Changefeed: &meta}}
-				}
-
 				if ca.agg != nil {
 					meta := bulkutil.ConstructTracingAggregatorProducerMeta(ctx,
 						ca.FlowCtx.NodeID.SQLInstanceID(), ca.FlowCtx.ID, ca.agg)
@@ -493,10 +435,6 @@ func (ca *changeAggregator) Start(ctx context.Context) {
 		ca.cancel()
 		return
 	}
-
-	// Init heartbeat timer.
-	ca.lastPush = timeutil.Now()
-
 	// Generate expensive checkpoint only after we ran for a while.
 	ca.lastSpanFlush = timeutil.Now()
 }
@@ -742,14 +680,6 @@ func (ca *changeAggregator) close() {
 	ca.InternalClose()
 }
 
-var aggregatorHeartbeatFrequency = settings.RegisterDurationSetting(
-	settings.ApplicationLevel,
-	"changefeed.aggregator.heartbeat",
-	"changefeed aggregator will emit a heartbeat message to the coordinator with this frequency; 0 disables. "+
-		"The setting value should be <=1/2 of server.shutdown.jobs.timeout period",
-	4*time.Second,
-)
-
 var aggregatorFlushJitter = settings.RegisterFloatSetting(
 	settings.ApplicationLevel,
 	"changefeed.aggregator.flush_jitter",
@@ -762,40 +692,11 @@ var aggregatorFlushJitter = settings.RegisterFloatSetting(
 
 // Next is part of the RowSource interface.
 func (ca *changeAggregator) Next() (rowenc.EncDatumRow, *execinfrapb.ProducerMetadata) {
-	shouldEmitHeartBeat := func() bool {
-		freq := aggregatorHeartbeatFrequency.Get(&ca.FlowCtx.Cfg.Settings.SV)
-		return freq > 0 && timeutil.Since(ca.lastPush) > freq
-	}
-
 	for ca.State == execinfra.StateRunning {
 		if !ca.changedRowBuf.IsEmpty() {
-			ca.lastPush = timeutil.Now()
 			return ca.ProcessRowHelper(ca.changedRowBuf.Pop()), nil
 		} else if !ca.resolvedSpanBuf.IsEmpty() {
-			ca.lastPush = timeutil.Now()
 			return ca.ProcessRowHelper(ca.resolvedSpanBuf.Pop()), nil
-		} else if shouldEmitHeartBeat() {
-			// heartbeat is simply an attempt to push a row into process row helper.
-			// This mechanism allows coordinator to propagate shutdown information to
-			// all aggregators -- that is, inability to write to this channel will
-			// trigger aggregator to transition away from StateRunning.
-			ca.lastPush = timeutil.Now()
-			return nil, &execinfrapb.ProducerMetadata{
-				Changefeed: &execinfrapb.ChangefeedMeta{Heartbeat: true},
-			}
-		}
-
-		// As the last gasp before shutdown, transmit an up-to-date frontier
-		// information to the coordinator. We expect to get this signal via the
-		// polling below before the drain actually occurs and starts tearing
-		// things down.
-		if err := ca.checkForNodeDrain(); err != nil {
-			// NB: we do not invoke ca.cancel here -- just merely moving
-			// to drain state so that the trailing metadata callback
-			// has a chance to produce shutdown checkpoint.
-			log.Changefeed.Warningf(ca.Ctx(), "moving to draining due to error while checking for node drain: %v", err)
-			ca.MoveToDraining(err)
-			break
 		}
 
 		select {
@@ -831,35 +732,6 @@ func (ca *changeAggregator) Next() (rowenc.EncDatumRow, *execinfrapb.ProducerMet
 	}
 
 	return nil, ca.DrainHelper()
-}
-
-func (ca *changeAggregator) computeTrailingMetadata(meta *execinfrapb.ChangefeedMeta) {
-	if ca.eventConsumer == nil || ca.sink == nil {
-		// Shutdown may be called even if Start didn't succeed.
-		return
-	}
-
-	// Before emitting trailing metadata, we must flush any buffered events.
-	// Note: we are not flushing KV feed -- blocking buffer may still have buffered
-	// elements; but we are not interested in flushing potentially large number of events;
-	// all we want to ensure is that any previously observed event (such as resolved timestamp)
-	// has been fully processed.
-	if err := ca.flushBufferedEvents(ca.Ctx()); err != nil {
-		// This method may be invoked during shutdown when the context already canceled.
-		// Regardless for the cause of this error, there is nothing we can do with it anyway.
-		// All we want to ensure is that if any error occurs we still return correct checkpoint,
-		// which in this case is nothing.
-		return
-	}
-
-	// Build out the list of frontier spans.
-	for sp, ts := range ca.frontier.Entries() {
-		meta.Checkpoint = append(meta.Checkpoint,
-			execinfrapb.ChangefeedMeta_FrontierSpan{
-				Span:      sp,
-				Timestamp: ts,
-			})
-	}
 }
 
 // tick is the workhorse behind Next(). It retrieves the next event from
@@ -1191,29 +1063,10 @@ type jobState struct {
 // execution. It is returned by startDistChangefeed and consumed by the
 // retry loops in coreChangefeed and resumeWithRetries.
 type flowResult struct {
-	// trackedSpans is the set of spans watched by the changefeed.
-	trackedSpans roachpb.Spans
-	// aggregatorFrontier contains frontier spans emitted by aggregators
-	// during shutdown via trailing metadata.
-	aggregatorFrontier []execinfrapb.ChangefeedMeta_FrontierSpan
-	// drainingNodes is the list of nodes that are draining.
-	drainingNodes []roachpb.NodeID
 	// coreProgress is the in-memory progress at the end of the flow. This
 	// is only populated for core changefeeds (jobID == 0) where there is
 	// no job record to reload progress from.
 	coreProgress *coreProgress
-}
-
-// aggregatorFrontierSpans returns an iterator over the spans in the aggregator
-// frontier collected during shutdown.
-func (r *flowResult) aggregatorFrontierSpans() iter.Seq2[roachpb.Span, hlc.Timestamp] {
-	return func(yield func(roachpb.Span, hlc.Timestamp) bool) {
-		for _, entry := range r.aggregatorFrontier {
-			if !yield(entry.Span, entry.Timestamp) {
-				return
-			}
-		}
-	}
 }
 
 // coreProgress is changefeed progress stored in memory for core changefeeds.
@@ -1745,14 +1598,6 @@ func (cf *changeFrontier) Next() (rowenc.EncDatumRow, *execinfrapb.ProducerMetad
 			if meta.Err != nil {
 				log.Changefeed.Warningf(cf.Ctx(), "moving to draining after getting error from aggregator: %v", meta.Err)
 				cf.MoveToDraining(nil /* err */)
-			}
-			if meta.Changefeed != nil && meta.Changefeed.DrainInfo != nil {
-				// Seeing changefeed drain info metadata from the aggregator means
-				// that the aggregator exited due to node shutdown.  Transition to
-				// draining so that the remaining aggregators will shut down and
-				// transmit their up-to-date frontier.
-				log.Changefeed.Warningf(cf.Ctx(), "moving to draining due to aggregator shutdown: %s", meta.Changefeed)
-				cf.MoveToDraining(changefeedbase.ErrNodeDraining)
 			}
 			return nil, meta
 		}

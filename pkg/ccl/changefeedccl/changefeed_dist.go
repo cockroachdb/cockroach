@@ -247,7 +247,6 @@ func startDistChangefeed(
 	if log.ExpensiveLogEnabled(ctx, 2) {
 		log.Changefeed.Infof(ctx, "tracked spans: %s", trackedSpans)
 	}
-	result.trackedSpans = trackedSpans
 
 	// Changefeed flows handle transactional consistency themselves.
 	var noTxn *kv.Txn
@@ -280,14 +279,8 @@ func startDistChangefeed(
 		defer cancel()
 
 		resultRows := sql.NewMetadataCallbackWriter(
-			makeChangefeedResultWriter(resultsCh, cancel),
+			newChangefeedResultWriter(resultsCh, cancel),
 			func(ctx context.Context, meta *execinfrapb.ProducerMetadata) error {
-				if meta.Changefeed != nil {
-					if meta.Changefeed.DrainInfo != nil {
-						result.drainingNodes = append(result.drainingNodes, meta.Changefeed.DrainInfo.NodeID)
-					}
-					result.aggregatorFrontier = append(result.aggregatorFrontier, meta.Changefeed.Checkpoint...)
-				}
 				if meta.AggregatorEvents != nil && onTracingEvent != nil {
 					onTracingEvent(ctx, meta.AggregatorEvents)
 				}
@@ -471,13 +464,6 @@ func makePlan(
 			)
 		}
 
-		if haveKnobs && maybeCfKnobs.FilterDrainingNodes != nil && len(prevResult.drainingNodes) > 0 {
-			spanPartitions, err = maybeCfKnobs.FilterDrainingNodes(spanPartitions, prevResult.drainingNodes)
-			if err != nil {
-				return nil, nil, err
-			}
-		}
-
 		if haveKnobs && maybeCfKnobs.SpanPartitionsCallback != nil {
 			maybeCfKnobs.SpanPartitionsCallback(spanPartitions)
 		}
@@ -615,7 +601,7 @@ type changefeedResultWriter struct {
 	cancel       context.CancelFunc
 }
 
-func makeChangefeedResultWriter(
+func newChangefeedResultWriter(
 	rowsCh chan<- tree.Datums, cancel context.CancelFunc,
 ) *changefeedResultWriter {
 	return &changefeedResultWriter{rowsCh: rowsCh, cancel: cancel}
@@ -638,15 +624,24 @@ func (w *changefeedResultWriter) SetRowsAffected(ctx context.Context, n int) {
 }
 func (w *changefeedResultWriter) SetError(err error) {
 	w.err = err
-	switch {
-	case errors.Is(err, changefeedbase.ErrNodeDraining):
-		// Let drain signal proceed w/out cancellation.
-		// We want to make sure change frontier processor gets a chance
-		// to send out cancellation to the aggregator so that everything
-		// transitions to "drain metadata" stage.
-	default:
-		w.cancel()
-	}
+	// In theory, we shouldn't need to cancel the changefeed flow context
+	// since any error from either a change aggregator or the change frontier
+	// itself will cause the frontier to move to draining. Any remaining
+	// aggregators should then notice that on their next push to the frontier
+	// and move to draining. However, it might be a while before the aggregator
+	// needs to push again (e.g. the conditions for sending resolved spans
+	// to the frontier haven't been met yet) or the aggregator could become stuck
+	// (e.g. waiting for a KV event, sink backpressure, admission control).
+	// The now-removed aggregator heartbeat mechanism helped with the former
+	// since it forced a periodic push to the frontier, but it wouldn't help
+	// in the latter since it can only push a heartbeat if it isn't stuck.
+	// Thus, we cancel the changefeed flow context here so that all remaining
+	// aggregators observe a context cancellation and subsequently begin draining.
+	//
+	// NB: When this hard cancellation fires, the trailing metadata callback for
+	// any remaining processors (including the frontier) will either not be called
+	// or their already-generated trailing metadata will be discarded.
+	w.cancel()
 }
 
 func (w *changefeedResultWriter) Err() error {
