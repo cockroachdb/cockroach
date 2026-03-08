@@ -1,0 +1,40 @@
+statement ok
+CREATE DOMAIN pos_int AS INT
+
+statement ok
+DROP TYPE pos_int
+
+statement ok
+CREATE DOMAIN pos_int AS INT8
+
+statement ok
+CREATE DOMAIN my_text AS TEXT
+
+# Verify domain types appear in pg_type.
+query T
+SELECT typname FROM pg_type WHERE typname = 'pos_int'
+----
+pos_int
+
+# Domain types with constraints (parsing only -- enforcement is Phase 3).
+statement ok
+CREATE DOMAIN small_int AS INT DEFAULT 0 NOT NULL CHECK (VALUE > 0)
+
+# Drop with CASCADE.
+statement ok
+DROP TYPE small_int CASCADE
+
+# Drop domain using DROP DOMAIN syntax.
+statement ok
+DROP DOMAIN my_text
+
+# DROP DOMAIN IF EXISTS on nonexistent domain.
+statement ok
+DROP DOMAIN IF EXISTS nonexistent_domain
+
+# CREATE DOMAIN with named constraints.
+statement ok
+CREATE DOMAIN bounded_int AS INT CONSTRAINT positive CHECK (VALUE > 0) CONSTRAINT small CHECK (VALUE < 100)
+
+statement ok
+DROP TYPE bounded_int

@@ -340,6 +340,11 @@ func (v *tableImplicitRecordType) AsTableImplicitRecordTypeDescriptor() catalog.
 	return v
 }
 
+// AsDomainTypeDescriptor implements the catalog.TypeDescriptor interface.
+func (v *tableImplicitRecordType) AsDomainTypeDescriptor() catalog.DomainTypeDescriptor {
+	return nil
+}
+
 // UnderlyingTableDescriptor implements the
 // catalog.TableImplicitRecordTypeDescriptor interface.
 func (v *tableImplicitRecordType) UnderlyingTableDescriptor() catalog.TableDescriptor {

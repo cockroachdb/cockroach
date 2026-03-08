@@ -310,6 +310,9 @@ type UserDefinedTypeMetadata struct {
 	// EnumData is non-nil iff the metadata is for an ENUM type.
 	EnumData *EnumMetadata
 
+	// DomainData is non-nil iff the metadata is for a DOMAIN type.
+	DomainData *DomainMetadata
+
 	// Version is the descriptor version of the descriptor used to construct
 	// this version of the type metadata.
 	Version uint32
@@ -334,6 +337,27 @@ type EnumMetadata struct {
 	// TODO (rohany): For small enums, having a map would be slower
 	//  than just an array. Investigate at what point the tradeoff
 	//  should occur, if at all.
+}
+
+// DomainMetadata is metadata about a DOMAIN type needed for evaluation.
+type DomainMetadata struct {
+	// BaseType is the underlying type this domain constrains.
+	BaseType *T
+	// NotNull is true if the domain has a NOT NULL constraint.
+	NotNull bool
+	// DefaultExpr is the default expression for the domain, serialized as
+	// a string. Empty if no default is specified.
+	DefaultExpr string
+	// CheckConstraints is the list of CHECK constraints on this domain.
+	CheckConstraints []DomainCheckConstraint
+}
+
+// DomainCheckConstraint is a single CHECK constraint on a domain type.
+type DomainCheckConstraint struct {
+	// Name is the name of the CHECK constraint.
+	Name string
+	// Expr is the CHECK expression, serialized as a string.
+	Expr string
 }
 
 func (e *EnumMetadata) debugString() string {
@@ -1380,6 +1404,21 @@ func NewCompositeType(typeOID, arrayTypeOID oid.Oid, contents []*T, labels []str
 			ArrayTypeOID: arrayTypeOID,
 		},
 	}}
+}
+
+// MakeDomain constructs a new instance of a domain type that wraps the given
+// base type. The domain uses the base type's Family but has its own OID
+// pointing to the domain's type descriptor. This allows existing operators and
+// functions to work on domain values without special-casing.
+func MakeDomain(baseType *T, typeOID, arrayTypeOID oid.Oid) *T {
+	// Copy the internal type from the base type to inherit Family, Width,
+	// Precision, etc.
+	it := baseType.InternalType
+	it.Oid = typeOID
+	it.UDTMetadata = &PersistentUserDefinedTypeMetadata{
+		ArrayTypeOID: arrayTypeOID,
+	}
+	return &T{InternalType: it}
 }
 
 // Family specifies a group of types that are compatible with one another. Types

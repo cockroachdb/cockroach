@@ -930,9 +930,13 @@ func TypeDescs(
 		typ.ReferencingDescriptorIDs = newRefs
 
 		switch t := typ.Kind; t {
-		case descpb.TypeDescriptor_ENUM, descpb.TypeDescriptor_COMPOSITE, descpb.TypeDescriptor_MULTIREGION_ENUM:
+		case descpb.TypeDescriptor_ENUM, descpb.TypeDescriptor_COMPOSITE,
+			descpb.TypeDescriptor_MULTIREGION_ENUM, descpb.TypeDescriptor_DOMAIN:
 			if rw, ok := descriptorRewrites[typ.ArrayTypeID]; ok {
 				typ.ArrayTypeID = rw.ID
+			}
+			if t == descpb.TypeDescriptor_DOMAIN && typ.Domain != nil && typ.Domain.BaseType != nil {
+				RewriteIDsInTypesT(typ.Domain.BaseType, descriptorRewrites)
 			}
 		case descpb.TypeDescriptor_ALIAS:
 			// We need to rewrite any ID's present in the aliased types.T.

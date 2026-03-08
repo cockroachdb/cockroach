@@ -243,6 +243,12 @@ func CreateUserDefinedArrayTypeDesc(
 			labels[i] = e.ElementLabel
 		}
 		elemTyp = types.NewCompositeType(catid.TypeIDToOID(typDesc.GetID()), catid.TypeIDToOID(id), contents, labels)
+	case descpb.TypeDescriptor_DOMAIN:
+		elemTyp = types.MakeDomain(
+			typDesc.Domain.BaseType,
+			catid.TypeIDToOID(typDesc.GetID()),
+			catid.TypeIDToOID(id),
+		)
 	default:
 		return nil, errors.AssertionFailedf("cannot make array type for kind %s", t.String())
 	}
@@ -324,6 +330,8 @@ func (p *planner) createUserDefinedType(params runParams, n *createTypeNode) err
 		return params.p.createCompositeWithID(
 			params, id, n.n.CompositeTypeList, n.dbDesc, n.typeName,
 		)
+	case tree.Domain:
+		return params.p.createDomainWithID(params, id, n.n, n.dbDesc, n.typeName)
 	}
 	return unimplemented.NewWithIssue(25123, "CREATE TYPE")
 }
@@ -526,6 +534,81 @@ func (p *planner) createCompositeWithID(
 		return err
 	}
 	return nil
+}
+
+func (p *planner) createDomainWithID(
+	params runParams,
+	id descpb.ID,
+	n *tree.CreateType,
+	dbDesc catalog.DatabaseDescriptor,
+	typeName *tree.TypeName,
+) error {
+	schema, err := getCreateTypeParams(params.ctx, p, typeName, dbDesc)
+	if err != nil {
+		return err
+	}
+
+	// Resolve the base type.
+	baseType, err := tree.ResolveType(params.ctx, n.DomainType, params.p.semaCtx.TypeResolver)
+	if err != nil {
+		return err
+	}
+	if err = tree.CheckUnsupportedType(params.ctx, &params.p.semaCtx, baseType); err != nil {
+		return err
+	}
+
+	// Build CHECK constraints, serializing expressions as strings.
+	checks := make(
+		[]descpb.TypeDescriptor_Domain_CheckConstraint, len(n.DomainConstraints),
+	)
+	for i, c := range n.DomainConstraints {
+		name := string(c.Name)
+		if name == "" {
+			name = fmt.Sprintf("%s_check", typeName.Type())
+			if i > 0 {
+				name = fmt.Sprintf("%s_check%d", typeName.Type(), i+1)
+			}
+		}
+		checks[i] = descpb.TypeDescriptor_Domain_CheckConstraint{
+			Name: name,
+			Expr: tree.Serialize(c.Expr),
+		}
+	}
+
+	// Serialize default expression if present.
+	var defaultExpr string
+	if n.DomainDefault != nil {
+		defaultExpr = tree.Serialize(n.DomainDefault)
+	}
+
+	privs, err := catprivilege.CreatePrivilegesFromDefaultPrivileges(
+		dbDesc.GetDefaultPrivilegeDescriptor(),
+		schema.GetDefaultPrivilegeDescriptor(),
+		dbDesc.GetID(),
+		params.SessionData().User(),
+		privilege.Types,
+	)
+	if err != nil {
+		return err
+	}
+
+	typeDesc := typedesc.NewBuilder(&descpb.TypeDescriptor{
+		Name:           typeName.Type(),
+		ID:             id,
+		ParentID:       dbDesc.GetID(),
+		ParentSchemaID: schema.GetID(),
+		Kind:           descpb.TypeDescriptor_DOMAIN,
+		Domain: &descpb.TypeDescriptor_Domain{
+			BaseType:         baseType,
+			NotNull:          n.DomainNotNull,
+			DefaultExpr:      defaultExpr,
+			CheckConstraints: checks,
+		},
+		Version:    1,
+		Privileges: privs,
+	}).BuildCreatedMutableType()
+
+	return p.finishCreateType(params.ctx, params.EvalContext(), typeName, typeDesc, dbDesc, schema)
 }
 
 func (p *planner) finishCreateType(

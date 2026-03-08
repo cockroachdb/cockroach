@@ -215,6 +215,9 @@ func (w *walkCtx) walkType(typ catalog.TypeDescriptor) {
 				Name:            comp.GetElementLabel(i),
 			})
 		}
+	} else if typ.AsDomainTypeDescriptor() != nil {
+		// Domain types are not yet supported in the declarative schema changer.
+		// Fall through to emit standard elements (SchemaChild, ObjectParent, etc).
 	} else {
 		panic(errors.AssertionFailedf("unsupported type kind %q", typ.GetKind()))
 	}

@@ -154,4 +154,20 @@ func ensureTypeMetadataIsHydrated(
 			}
 		}
 	}
+	if d := maybeDesc.AsDomainTypeDescriptor(); d != nil {
+		n := d.NumCheckConstraints()
+		checks := make([]types.DomainCheckConstraint, n)
+		for i := 0; i < n; i++ {
+			checks[i] = types.DomainCheckConstraint{
+				Name: d.GetCheckConstraintName(i),
+				Expr: d.GetCheckConstraintExpr(i),
+			}
+		}
+		tm.DomainData = &types.DomainMetadata{
+			BaseType:         d.GetBaseType(),
+			NotNull:          d.IsNotNull(),
+			DefaultExpr:      d.GetDefaultExpr(),
+			CheckConstraints: checks,
+		}
+	}
 }
