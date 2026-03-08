@@ -1639,7 +1639,8 @@ message TypeDescriptor {
     TABLE_IMPLICIT_RECORD_TYPE = 3;
     // Represents a user-defined composite type.
     COMPOSITE = 4;
-    // Add more entries as we support more user defined types.
+    // Represents a user-defined domain type (a base type with constraints).
+    DOMAIN = 5;
   }
   optional Kind kind = 5 [(gogoproto.nullable) = false];
 
@@ -1735,12 +1736,40 @@ message TypeDescriptor {
   // Composite is the list of fields if this is a composite type.
   optional Composite composite = 18;
 
+  // Domain describes a domain type, which is a base type with optional
+  // constraints (CHECK, NOT NULL) and a default expression.
+  message Domain {
+    option (gogoproto.equal) = true;
+
+    // BaseType is the underlying type this domain is built on.
+    optional sql.sem.types.T base_type = 1;
+    // NotNull is true if the domain has a NOT NULL constraint.
+    optional bool not_null = 2 [(gogoproto.nullable) = false];
+    // DefaultExpr is the default expression for the domain, serialized as a
+    // string. Empty if no default is specified.
+    optional string default_expr = 3 [(gogoproto.nullable) = false];
+
+    // CheckConstraint represents a single CHECK constraint on the domain.
+    message CheckConstraint {
+      option (gogoproto.equal) = true;
+      // Name is the constraint name. May be auto-generated.
+      optional string name = 1 [(gogoproto.nullable) = false];
+      // Expr is the CHECK expression, serialized as a string.
+      optional string expr = 2 [(gogoproto.nullable) = false];
+    }
+    // CheckConstraints is the list of CHECK constraints on this domain.
+    repeated CheckConstraint check_constraints = 4 [(gogoproto.nullable) = false];
+  }
+
+  // Domain is the domain definition if this is a domain type.
+  optional Domain domain = 21;
+
   // ReplicatedPCRVersion tracks the original version from the source tenant
   // that this descriptor was created from.
   optional uint32 replicated_pcr_version = 20 [(gogoproto.nullable) = false,
     (gogoproto.customname) = "ReplicatedPCRVersion", (gogoproto.casttype) = "DescriptorVersion"];
 
-  // Next field is 19.
+  // Next field is 22.
 }
 
 // SchemaDescriptor represents a physical schema and is stored in a structured

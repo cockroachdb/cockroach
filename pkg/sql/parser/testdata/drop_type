@@ -53,3 +53,19 @@ DROP TYPE IF EXISTS db.sc.a, sc.a RESTRICT
 DROP TYPE IF EXISTS db.sc.a, sc.a RESTRICT -- fully parenthesized
 DROP TYPE IF EXISTS db.sc.a, sc.a RESTRICT -- literals removed
 DROP TYPE IF EXISTS _._._, _._ RESTRICT -- identifiers removed
+
+parse
+DROP DOMAIN a
+----
+DROP TYPE a -- normalized!
+DROP TYPE a -- fully parenthesized
+DROP TYPE a -- literals removed
+DROP TYPE _ -- identifiers removed
+
+parse
+DROP DOMAIN IF EXISTS a CASCADE
+----
+DROP TYPE IF EXISTS a CASCADE -- normalized!
+DROP TYPE IF EXISTS a CASCADE -- fully parenthesized
+DROP TYPE IF EXISTS a CASCADE -- literals removed
+DROP TYPE IF EXISTS _ CASCADE -- identifiers removed

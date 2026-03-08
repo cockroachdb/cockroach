@@ -64,6 +64,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/idxusage"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/parserutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotice"
@@ -3171,6 +3172,8 @@ func writeCreateTypeDescRow(
 			typeList[i].Label = tree.Name(c.GetElementLabel(i))
 		}
 		typeVariety = tree.Composite
+	} else if d := typeDesc.AsDomainTypeDescriptor(); d != nil {
+		typeVariety = tree.Domain
 	} else {
 		return false, errors.AssertionFailedf("unknown type descriptor kind %s", typeDesc.GetKind())
 	}
@@ -3184,6 +3187,33 @@ func writeCreateTypeDescRow(
 		TypeName:          name,
 		CompositeTypeList: typeList,
 		EnumLabels:        enumLabels,
+	}
+	if d := typeDesc.AsDomainTypeDescriptor(); d != nil {
+		baseType := d.GetBaseType()
+		if err := typedesc.EnsureTypeIsHydrated(
+			ctx, baseType, resolver.(catalog.TypeDescriptorResolver),
+		); err != nil {
+			return false, err
+		}
+		node.DomainType = baseType
+		node.DomainNotNull = d.IsNotNull()
+		if defExpr := d.GetDefaultExpr(); defExpr != "" {
+			parsedExpr, err := parserutils.ParseExpr(defExpr)
+			if err != nil {
+				return false, err
+			}
+			node.DomainDefault = parsedExpr
+		}
+		for i := 0; i < d.NumCheckConstraints(); i++ {
+			parsedExpr, err := parserutils.ParseExpr(d.GetCheckConstraintExpr(i))
+			if err != nil {
+				return false, err
+			}
+			node.DomainConstraints = append(node.DomainConstraints, tree.DomainConstraintDef{
+				Name: tree.Name(d.GetCheckConstraintName(i)),
+				Expr: parsedExpr,
+			})
+		}
 	}
 
 	createStatement := tree.AsString(node)

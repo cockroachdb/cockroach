@@ -101,3 +101,35 @@ CREATE TYPE foo AS (a INT8[], b STRING[]) -- normalized!
 CREATE TYPE foo AS (a INT8[], b STRING[]) -- fully parenthesized
 CREATE TYPE foo AS (a INT8[], b STRING[]) -- literals removed
 CREATE TYPE _ AS (_ INT8[], _ STRING[]) -- identifiers removed
+
+parse
+CREATE DOMAIN pos_int AS INT
+----
+CREATE DOMAIN pos_int AS INT8 -- normalized!
+CREATE DOMAIN pos_int AS INT8 -- fully parenthesized
+CREATE DOMAIN pos_int AS INT8 -- literals removed
+CREATE DOMAIN _ AS INT8 -- identifiers removed
+
+parse
+CREATE DOMAIN us_postal_code AS TEXT CHECK (VALUE ~ '^\d{5}$')
+----
+CREATE DOMAIN us_postal_code AS STRING CHECK (value ~ e'^\\d{5}$') -- normalized!
+CREATE DOMAIN us_postal_code AS STRING CHECK (((value) ~ (e'^\\d{5}$'))) -- fully parenthesized
+CREATE DOMAIN us_postal_code AS STRING CHECK (value ~ '_') -- literals removed
+CREATE DOMAIN _ AS STRING CHECK (_ ~ e'^\\d{5}$') -- identifiers removed
+
+parse
+CREATE DOMAIN pos_int AS INT DEFAULT 0 NOT NULL CHECK (VALUE > 0)
+----
+CREATE DOMAIN pos_int AS INT8 DEFAULT 0 NOT NULL CHECK (value > 0) -- normalized!
+CREATE DOMAIN pos_int AS INT8 DEFAULT (0) NOT NULL CHECK (((value) > (0))) -- fully parenthesized
+CREATE DOMAIN pos_int AS INT8 DEFAULT _ NOT NULL CHECK (value > _) -- literals removed
+CREATE DOMAIN _ AS INT8 DEFAULT 0 NOT NULL CHECK (_ > 0) -- identifiers removed
+
+parse
+CREATE DOMAIN d AS INT CONSTRAINT pos CHECK (VALUE > 0) CONSTRAINT small CHECK (VALUE < 100)
+----
+CREATE DOMAIN d AS INT8 CONSTRAINT pos CHECK (value > 0) CONSTRAINT small CHECK (value < 100) -- normalized!
+CREATE DOMAIN d AS INT8 CONSTRAINT pos CHECK (((value) > (0))) CONSTRAINT small CHECK (((value) < (100))) -- fully parenthesized
+CREATE DOMAIN d AS INT8 CONSTRAINT pos CHECK (value > _) CONSTRAINT small CHECK (value < _) -- literals removed
+CREATE DOMAIN _ AS INT8 CONSTRAINT _ CHECK (_ > 0) CONSTRAINT _ CHECK (_ < 100) -- identifiers removed
