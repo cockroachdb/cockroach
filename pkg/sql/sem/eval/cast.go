@@ -97,6 +97,18 @@ func PerformAssignmentCast(
 func performCast(
 	ctx context.Context, evalCtx *Context, d tree.Datum, t *types.T, truncateWidth bool,
 ) (tree.Datum, error) {
+	// For domain types, cast to the base type first, then validate constraints.
+	if t.TypeMeta.DomainData != nil {
+		d, err := performCastWithoutPrecisionTruncation(ctx, evalCtx, d, t, truncateWidth)
+		if err != nil {
+			return nil, err
+		}
+		d, err = tree.AdjustValueToType(t, d)
+		if err != nil {
+			return nil, err
+		}
+		return d, ValidateDomainConstraints(ctx, evalCtx, d, t)
+	}
 	d, err := performCastWithoutPrecisionTruncation(ctx, evalCtx, d, t, truncateWidth)
 	if err != nil {
 		return nil, err

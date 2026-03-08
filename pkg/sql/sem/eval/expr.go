@@ -176,8 +176,15 @@ func (e *evaluator) EvalCastExpr(ctx context.Context, expr *tree.CastExpr) (tree
 		return nil, err
 	}
 
-	// NULL cast to anything is NULL.
+	// NULL cast to anything is NULL, but domain NOT NULL constraints must
+	// still be checked.
 	if d == tree.DNull {
+		t := expr.ResolvedType()
+		if t.TypeMeta.DomainData != nil {
+			if err := ValidateDomainConstraints(ctx, e.ctx(), d, t); err != nil {
+				return nil, err
+			}
+		}
 		return d, nil
 	}
 	d = UnwrapDatum(ctx, e.ctx(), d)

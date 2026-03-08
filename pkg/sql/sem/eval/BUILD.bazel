@@ -17,6 +17,7 @@ go_library(
         "context.go",
         "deps.go",
         "doc.go",
+        "domain.go",
         "expr.go",
         "generators.go",
         "indexed_vars.go",

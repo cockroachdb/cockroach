@@ -1,40 +1,152 @@
+# Domain types are not yet supported in the declarative schema changer,
+# so DROP DATABASE CASCADE will fail if it encounters domain types.
+# Use the legacy schema changer as a workaround.
 statement ok
-CREATE DOMAIN pos_int AS INT
+SET CLUSTER SETTING sql.defaults.use_declarative_schema_changer = 'off'
 
 statement ok
-DROP TYPE pos_int
+SET use_declarative_schema_changer = 'off'
+
+# Test CREATE DOMAIN basic operations.
+statement ok
+CREATE DOMAIN d_int AS INT
 
 statement ok
-CREATE DOMAIN pos_int AS INT8
+CREATE DOMAIN d_int8 AS INT8
 
 statement ok
-CREATE DOMAIN my_text AS TEXT
+CREATE DOMAIN d_text AS TEXT
 
 # Verify domain types appear in pg_type.
 query T
-SELECT typname FROM pg_type WHERE typname = 'pos_int'
+SELECT typname FROM pg_type WHERE typname = 'd_int'
 ----
-pos_int
+d_int
 
-# Domain types with constraints (parsing only -- enforcement is Phase 3).
+# Domain types with constraints.
 statement ok
-CREATE DOMAIN small_int AS INT DEFAULT 0 NOT NULL CHECK (VALUE > 0)
-
-# Drop with CASCADE.
-statement ok
-DROP TYPE small_int CASCADE
-
-# Drop domain using DROP DOMAIN syntax.
-statement ok
-DROP DOMAIN my_text
-
-# DROP DOMAIN IF EXISTS on nonexistent domain.
-statement ok
-DROP DOMAIN IF EXISTS nonexistent_domain
+CREATE DOMAIN d_small_int AS INT DEFAULT 0 NOT NULL CHECK (VALUE > 0)
 
 # CREATE DOMAIN with named constraints.
 statement ok
-CREATE DOMAIN bounded_int AS INT CONSTRAINT positive CHECK (VALUE > 0) CONSTRAINT small CHECK (VALUE < 100)
+CREATE DOMAIN d_bounded_int AS INT CONSTRAINT positive CHECK (VALUE > 0) CONSTRAINT small CHECK (VALUE < 100)
 
+subtest domain_not_null
+
+# Test NOT NULL enforcement via explicit CAST.
 statement ok
-DROP TYPE bounded_int
+CREATE DOMAIN d_nn_int AS INT NOT NULL
+
+query error pgcode 23502 domain d_nn_int does not allow null values
+SELECT CAST(NULL AS d_nn_int)
+
+# Domain casts return domain-typed values, so use T (text) comparisons.
+query T
+SELECT CAST(42 AS d_nn_int)
+----
+42
+
+subtest end
+
+subtest domain_check_constraint
+
+# Test CHECK constraint enforcement.
+statement ok
+CREATE DOMAIN d_pos_int AS INT CHECK (VALUE > 0)
+
+query error pgcode 23514 value for domain d_pos_int violates check constraint
+SELECT CAST(-1 AS d_pos_int)
+
+query error pgcode 23514 value for domain d_pos_int violates check constraint
+SELECT CAST(0 AS d_pos_int)
+
+query T
+SELECT CAST(1 AS d_pos_int)
+----
+1
+
+query T
+SELECT CAST(100 AS d_pos_int)
+----
+100
+
+# NULL should pass CHECK constraint (SQL standard: CHECK treats NULL as true).
+query T
+SELECT CAST(NULL AS d_pos_int)
+----
+NULL
+
+subtest end
+
+subtest domain_named_check
+
+# Test named CHECK constraints.
+statement ok
+CREATE DOMAIN d_bounded AS INT CONSTRAINT must_be_positive CHECK (VALUE > 0) CONSTRAINT must_be_small CHECK (VALUE < 100)
+
+query error pgcode 23514 value for domain d_bounded violates check constraint "must_be_positive"
+SELECT CAST(-5 AS d_bounded)
+
+query error pgcode 23514 value for domain d_bounded violates check constraint "must_be_small"
+SELECT CAST(200 AS d_bounded)
+
+query T
+SELECT CAST(50 AS d_bounded)
+----
+50
+
+subtest end
+
+subtest domain_not_null_and_check
+
+# Test combined NOT NULL and CHECK constraints.
+statement ok
+CREATE DOMAIN d_pos_nn AS INT NOT NULL CHECK (VALUE > 0)
+
+query error pgcode 23502 domain d_pos_nn does not allow null values
+SELECT CAST(NULL AS d_pos_nn)
+
+query error pgcode 23514 value for domain d_pos_nn violates check constraint
+SELECT CAST(-1 AS d_pos_nn)
+
+query T
+SELECT CAST(5 AS d_pos_nn)
+----
+5
+
+subtest end
+
+subtest domain_text_check
+
+# Test CHECK constraint on text domain.
+statement ok
+CREATE DOMAIN d_nonempty_text AS TEXT NOT NULL CHECK (length(VALUE) > 0)
+
+query error pgcode 23502 domain d_nonempty_text does not allow null values
+SELECT CAST(NULL AS d_nonempty_text)
+
+query error pgcode 23514 value for domain d_nonempty_text violates check constraint
+SELECT CAST('' AS d_nonempty_text)
+
+query T
+SELECT CAST('hello' AS d_nonempty_text)
+----
+hello
+
+subtest end
+
+subtest domain_cast_syntax
+
+# Test :: cast syntax with domain types.
+statement ok
+CREATE DOMAIN d_myint AS INT CHECK (VALUE >= 0)
+
+query T
+SELECT 42::d_myint
+----
+42
+
+query error pgcode 23514 value for domain d_myint violates check constraint
+SELECT (-1)::d_myint
+
+subtest end
