@@ -2928,10 +2928,6 @@ func TestReportUnreachableRemoveRace(t *testing.T) {
 	ctx := context.Background()
 	tc := testcluster.StartTestCluster(t, 3,
 		base.TestClusterArgs{
-			ServerArgs: base.TestServerArgs{
-				// TODO(server): enabled DRPC once serverutils adds support for DRPC.
-				DefaultDRPCOption: base.TestDRPCDisabled,
-			},
 			ReplicationMode: base.ReplicationManual,
 		})
 	defer tc.Stopper().Stop(ctx)
