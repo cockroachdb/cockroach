@@ -184,7 +184,6 @@ sql.auth.change_own_password.enabled	boolean	false	controls whether a user is al
 sql.auth.grant_option_for_owner.enabled	boolean	true	determines whether the GRANT OPTION for privileges is implicitly given to the owner of an object	application
 sql.auth.grant_option_inheritance.enabled	boolean	true	determines whether the GRANT OPTION for privileges is inherited through role membership	application
 sql.auth.public_schema_create_privilege.enabled	boolean	true	determines whether to grant all users the CREATE privileges on the public schema when it is created	application
-sql.auth.skip_underlying_view_privilege_checks.enabled	boolean	false	determines whether to skip privilege checks on tables underlying views. When enabled, users with SELECT privileges on a view can query it regardless of their privileges on the underlying tables, and row-level security policies are evaluated as the invoking user rather than the view owner. This restores pre-v26.2 behavior.	application
 sql.catalog.allow_leased_descriptors.enabled	boolean	true	if true, catalog views (crdb_internal, information_schema, pg_catalog) can use leased descriptors for improved performance	application
 sql.closed_session_cache.capacity	integer	1000	the maximum number of sessions in the cache	application
 sql.closed_session_cache.time_to_live	integer	3600	the maximum time to live, in seconds	application
@@ -293,6 +292,9 @@ sql.defaults.statement_timeout	duration	0s	"default value for the statement_time
 This cluster setting is being kept to preserve backwards-compatibility.
 This session variable default should now be configured using ALTER ROLE... SET: https://www.cockroachlabs.com/docs/stable/alter-role.html"	application
 sql.defaults.stub_catalog_tables.enabled	boolean	true	"default value for stub_catalog_tables session setting
+This cluster setting is being kept to preserve backwards-compatibility.
+This session variable default should now be configured using ALTER ROLE... SET: https://www.cockroachlabs.com/docs/stable/alter-role.html"	application
+sql.defaults.super_regions.enabled	boolean	false	"default value for enable_super_regions; allows for the usage of super regions
 This cluster setting is being kept to preserve backwards-compatibility.
 This session variable default should now be configured using ALTER ROLE... SET: https://www.cockroachlabs.com/docs/stable/alter-role.html"	application
 sql.defaults.transaction_rows_read_err	integer	0	"the limit for the number of rows read by a SQL transaction which - once exceeded - will fail the transaction (or will trigger a logging event to SQL_INTERNAL_PERF for internal transactions); use 0 to disable
@@ -432,4 +434,4 @@ trace.zipkin.collector	string		the address of a Zipkin instance to receive trace
 ui.database_locality_metadata.enabled	boolean	true	if enabled shows extended locality data about databases and tables in DB Console which can be expensive to compute	application
 ui.default_timezone	string		the default timezone used to format timestamps in the ui	application
 ui.display_timezone	enumeration	etc/utc	the timezone used to format timestamps in the ui. This setting is deprecatedand will be removed in a future version. Use the 'ui.default_timezone' setting instead. 'ui.default_timezone' takes precedence over this setting. [etc/utc = 0, america/new_york = 1]	application
-version	version	1000026.1-upgrading-to-1000026.2-step-020	set the active cluster version in the format '<major>.<minor>'	application
+version	version	1000026.1-upgrading-to-1000026.2-step-018	set the active cluster version in the format '<major>.<minor>'	application

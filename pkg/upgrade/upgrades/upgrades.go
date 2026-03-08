@@ -78,6 +78,13 @@ var upgrades = []upgradebase.Upgrade{
 		tableStatisticsDelayDeleteColumnMigration,
 		upgrade.RestoreActionNotRequired("cluster restore does not restore the new column"),
 	),
+	upgrade.NewTenantUpgrade(
+		"add request_id column/index to system.statement_diagnostics",
+		clusterversion.V26_2_StmtDiagnosticsRequestID.Version(),
+		upgrade.NoPrecondition,
+		stmtDiagnosticsAddRequestIDColumnAndIndex,
+		upgrade.RestoreActionNotRequired("cluster restore does not restore this table"),
+	),
 
 	upgrade.NewTenantUpgrade(
 		"create cluster_metrics table",

@@ -228,6 +228,7 @@ const (
 	// used for tracking all descriptors involved in a txn.
 	V26_2_DescriptorTxnKeyCleanup
 
+
 	// V26_2_AddStatementStatisticsComputedColumns adds new computed columns and
 	// a covering index to the system.statement_statistics table to support
 	// efficient aggregation queries.
@@ -237,6 +238,10 @@ const (
 	// and a covering index to the system.transaction_statistics table to support
 	// efficient aggregation queries.
 	V26_2_AddTransactionStatisticsComputedColumns
+
+	// V26_2_StmtDiagnosticsRequestID adds request_id column to
+	// system.statement_diagnostics for multi-bundle support.
+	V26_2_StmtDiagnosticsRequestID
 	// *************************************************
 	// Step (1) Add new versions above this comment.
 	// Do not add new versions to a patch release.
@@ -300,9 +305,10 @@ var versionTable = [numKeys]roachpb.Version{
 	V26_2_AddStatementStatisticsComputedColumns: {Major: 26, Minor: 1, Internal: 18},
 
 	V26_2_AddTransactionStatisticsComputedColumns: {Major: 26, Minor: 1, Internal: 20},
+
+	V26_2_StmtDiagnosticsRequestID: {Major: 26, Minor: 1, Internal: 22},
 	// *************************************************
 	// Step (2): Add new versions above this comment.
-	// Do not add new versions to a patch release.
 	// *************************************************
 }
 
