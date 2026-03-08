@@ -153,6 +153,11 @@ DatabaseZoneConfig :  DatabaseID
 DatabaseZoneConfig :  ZoneConfig
 DatabaseZoneConfig :  SeqNum
 
+object DomainType
+
+DomainType :  TypeID
+DomainType :  ArrayTypeID
+
 object EnumType
 
 EnumType :  TypeID
@@ -656,6 +661,7 @@ Database <|-- Namespace
 Schema <|-- Namespace
 AliasType <|-- Namespace
 EnumType <|-- Namespace
+DomainType <|-- Namespace
 Table <|-- Owner
 View <|-- Owner
 Sequence <|-- Owner
@@ -663,6 +669,7 @@ Database <|-- Owner
 Schema <|-- Owner
 AliasType <|-- Owner
 EnumType <|-- Owner
+DomainType <|-- Owner
 TablePartitioning <|-- PartitionZoneConfig
 Table <|-- Policy
 Policy <|-- PolicyDeps
@@ -677,6 +684,7 @@ Table <|-- RowLevelSecurityForced
 Table <|-- RowLevelTTL
 AliasType <|-- SchemaChild
 EnumType <|-- SchemaChild
+DomainType <|-- SchemaChild
 Table <|-- SchemaChild
 View <|-- SchemaChild
 Sequence <|-- SchemaChild
@@ -715,7 +723,7 @@ Trigger <|-- TriggerName
 Trigger <|-- TriggerTiming
 Trigger <|-- TriggerTransition
 Trigger <|-- TriggerWhen
-CompositeType,EnumType <|-- TypeComment
+CompositeType,EnumType,DomainType <|-- TypeComment
 Table <|-- UniqueWithoutIndexConstraint
 Table <|-- UniqueWithoutIndexConstraintUnvalidated
 Table <|-- UserPrivileges
@@ -725,4 +733,5 @@ Database <|-- UserPrivileges
 Schema <|-- UserPrivileges
 AliasType <|-- UserPrivileges
 EnumType <|-- UserPrivileges
+DomainType <|-- UserPrivileges
 @enduml

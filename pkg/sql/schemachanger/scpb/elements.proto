@@ -64,6 +64,7 @@ message ElementProto {
     AliasType alias_type = 7;
     CompositeType composite_type = 8;
     Function function = 9;
+    DomainType domain_type = 10;
 
     // Zero-level elements.
     // These elements do not own a corresponding descriptor in the catalog,
@@ -132,9 +133,9 @@ message ElementProto {
     ConstraintComment constraint_comment = 52 [(gogoproto.moretags) = "parent:\"PrimaryIndex, SecondaryIndex, UniqueWithoutIndexConstraint, CheckConstraint, ForeignKeyConstraint\""];
 
     // Common elements.
-    Namespace namespace = 60 [(gogoproto.moretags) = "parent:\"Table, View, Sequence, Database, Schema, AliasType, EnumType\""];
-    Owner owner = 61 [(gogoproto.moretags) = "parent:\"Table, View, Sequence, Database, Schema, AliasType, EnumType\""];
-    UserPrivileges user_privileges = 62 [(gogoproto.moretags) = "parent:\"Table, View, Sequence, Database, Schema, AliasType, EnumType\""];
+    Namespace namespace = 60 [(gogoproto.moretags) = "parent:\"Table, View, Sequence, Database, Schema, AliasType, EnumType, DomainType\""];
+    Owner owner = 61 [(gogoproto.moretags) = "parent:\"Table, View, Sequence, Database, Schema, AliasType, EnumType, DomainType\""];
+    UserPrivileges user_privileges = 62 [(gogoproto.moretags) = "parent:\"Table, View, Sequence, Database, Schema, AliasType, EnumType, DomainType\""];
 
     // Database elements.
     DatabaseRegionConfig database_region_config = 80 [(gogoproto.moretags) = "parent:\"Database\""];
@@ -148,7 +149,7 @@ message ElementProto {
     SchemaComment schema_comment = 91 [(gogoproto.moretags) = "parent:\"Schema\""];
 
     // SchemaChild elements.
-    SchemaChild schema_child = 100 [(gogoproto.moretags) = "parent:\"AliasType, EnumType, Table, View, Sequence\""];
+    SchemaChild schema_child = 100 [(gogoproto.moretags) = "parent:\"AliasType, EnumType, DomainType, Table, View, Sequence\""];
 
     // Enum type elements.
     EnumTypeValue enum_type_value = 120 [(gogoproto.moretags) = "parent:\"EnumType\""];
@@ -167,7 +168,7 @@ message ElementProto {
     FunctionParams function_params = 166 [(gogoproto.moretags) = "parent:\"Function\""];
 
     // Type elements.
-    TypeComment type_comment = 180 [(gogoproto.moretags) = "parent:\"CompositeType,EnumType\""];
+    TypeComment type_comment = 180 [(gogoproto.moretags) = "parent:\"CompositeType,EnumType,DomainType\""];
 
     // Trigger elements.
     TriggerName trigger_name = 200 [(gogoproto.moretags) = "parent:\"Trigger\""];
@@ -694,6 +695,11 @@ message AliasType {
 }
 
 message CompositeType {
+  uint32 type_id = 1 [(gogoproto.customname) = "TypeID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.DescID"];
+  uint32 array_type_id = 2 [(gogoproto.customname) = "ArrayTypeID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.DescID"];
+}
+
+message DomainType {
   uint32 type_id = 1 [(gogoproto.customname) = "TypeID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.DescID"];
   uint32 array_type_id = 2 [(gogoproto.customname) = "ArrayTypeID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.DescID"];
 }

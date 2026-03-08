@@ -935,6 +935,43 @@ func (c *ElementCollection[E]) FilterDatabaseZoneConfig() *ElementCollection[*Da
 	return (*ElementCollection[*DatabaseZoneConfig])(ret)
 }
 
+func (e DomainType) element() {}
+
+// Element implements ElementGetter.
+func (e * ElementProto_DomainType) Element() Element {
+	return e.DomainType
+}
+
+// ForEachDomainType iterates over elements of type DomainType.
+// Deprecated
+func ForEachDomainType(
+	c *ElementCollection[Element], fn func(current Status, target TargetStatus, e *DomainType),
+) {
+  c.FilterDomainType().ForEach(fn)
+}
+
+// FindDomainType finds the first element of type DomainType.
+// Deprecated
+func FindDomainType(
+	c *ElementCollection[Element],
+) (current Status, target TargetStatus, element *DomainType) {
+	if tc := c.FilterDomainType(); !tc.IsEmpty() {
+		var e Element
+		current, target, e = tc.Get(0)
+		element = e.(*DomainType)
+	}
+	return current, target, element
+}
+
+// DomainTypeElements filters elements of type DomainType.
+func (c *ElementCollection[E]) FilterDomainType() *ElementCollection[*DomainType] {
+	ret := c.genericFilter(func(_ Status, _ TargetStatus, e Element) bool {
+		_, ok := e.(*DomainType)
+		return ok
+	})
+	return (*ElementCollection[*DomainType])(ret)
+}
+
 func (e EnumType) element() {}
 
 // Element implements ElementGetter.
@@ -3543,6 +3580,8 @@ func (e* ElementProto) SetElement(element Element) {
 			e.ElementOneOf = &ElementProto_DatabaseRoleSetting{ DatabaseRoleSetting: t}
 		case *DatabaseZoneConfig:
 			e.ElementOneOf = &ElementProto_DatabaseZoneConfig{ DatabaseZoneConfig: t}
+		case *DomainType:
+			e.ElementOneOf = &ElementProto_DomainType{ DomainType: t}
 		case *EnumType:
 			e.ElementOneOf = &ElementProto_EnumType{ EnumType: t}
 		case *EnumTypeValue:
@@ -3712,6 +3751,7 @@ func GetElementOneOfProtos() []interface{} {
 	((*ElementProto_DatabaseRegionConfig)(nil)),
 	((*ElementProto_DatabaseRoleSetting)(nil)),
 	((*ElementProto_DatabaseZoneConfig)(nil)),
+	((*ElementProto_DomainType)(nil)),
 	((*ElementProto_EnumType)(nil)),
 	((*ElementProto_EnumTypeValue)(nil)),
 	((*ElementProto_ForeignKeyConstraint)(nil)),
@@ -3813,6 +3853,7 @@ func GetElementTypes() []interface{} {
 	((*DatabaseRegionConfig)(nil)),
 	((*DatabaseRoleSetting)(nil)),
 	((*DatabaseZoneConfig)(nil)),
+	((*DomainType)(nil)),
 	((*EnumType)(nil)),
 	((*EnumTypeValue)(nil)),
 	((*ForeignKeyConstraint)(nil)),
