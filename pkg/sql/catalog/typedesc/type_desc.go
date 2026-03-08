@@ -502,6 +502,12 @@ func (desc *immutable) ValidateSelf(vea catalog.ValidationErrorAccumulator) {
 		if desc.Composite == nil {
 			vea.Report(errors.AssertionFailedf("COMPOSITE type desc has nil composite type"))
 		}
+	case descpb.TypeDescriptor_DOMAIN:
+		if desc.Domain == nil {
+			vea.Report(errors.AssertionFailedf("DOMAIN type desc has nil domain"))
+		} else if desc.Domain.BaseType == nil {
+			vea.Report(errors.AssertionFailedf("DOMAIN type desc has nil base type"))
+		}
 	case descpb.TypeDescriptor_TABLE_IMPLICIT_RECORD_TYPE:
 		vea.Report(errors.AssertionFailedf("invalid type descriptor: kind %s should never be serialized or validated", desc.Kind.String()))
 	default:
@@ -771,6 +777,12 @@ func (desc *immutable) AsTypesT() *types.T {
 			contents,
 			labels,
 		)
+	case descpb.TypeDescriptor_DOMAIN:
+		return types.MakeDomain(
+			desc.Domain.BaseType.CopyForHydrate(),
+			catid.TypeIDToOID(desc.GetID()),
+			catid.TypeIDToOID(desc.ArrayTypeID),
+		)
 	}
 	panic(errors.AssertionFailedf("unsupported descriptor kind %s", desc.Kind.String()))
 }
@@ -908,6 +920,12 @@ func (desc *immutable) ForEachUDTDependentForHydration(fn func(t *types.T) error
 			return iterutil.Map(err)
 		}
 	}
+	if desc.Domain != nil && desc.Domain.BaseType != nil &&
+		catid.IsOIDUserDefined(desc.Domain.BaseType.Oid()) {
+		if err := fn(desc.Domain.BaseType); err != nil {
+			return iterutil.Map(err)
+		}
+	}
 	if desc.Composite == nil {
 		return nil
 	}
@@ -925,6 +943,10 @@ func (desc *immutable) ForEachUDTDependentForHydration(fn func(t *types.T) error
 // MaybeRequiresTypeHydration implements the catalog.Descriptor interface.
 func (desc *immutable) MaybeRequiresTypeHydration() bool {
 	if desc.Alias != nil && catid.IsOIDUserDefined(desc.Alias.Oid()) {
+		return true
+	}
+	if desc.Domain != nil && desc.Domain.BaseType != nil &&
+		catid.IsOIDUserDefined(desc.Domain.BaseType.Oid()) {
 		return true
 	}
 	if desc.Composite == nil {
@@ -950,6 +972,12 @@ func (desc *immutable) GetIDClosure() (ret catalog.DescriptorIDSet) {
 	case descpb.TypeDescriptor_COMPOSITE:
 		for _, e := range desc.Composite.Elements {
 			GetTypeDescriptorClosure(e.ElementType).ForEach(ret.Add)
+		}
+	case descpb.TypeDescriptor_DOMAIN:
+		// Domain depends on its base type and has an array type.
+		ret.Add(desc.ArrayTypeID)
+		if desc.Domain != nil && desc.Domain.BaseType != nil {
+			GetTypeDescriptorClosure(desc.Domain.BaseType).ForEach(ret.Add)
 		}
 	default:
 		// Otherwise, take the array type ID.
@@ -1029,6 +1057,44 @@ func (desc *immutable) AsCompositeTypeDescriptor() catalog.CompositeTypeDescript
 // interface.
 func (desc *immutable) AsTableImplicitRecordTypeDescriptor() catalog.TableImplicitRecordTypeDescriptor {
 	return nil
+}
+
+// AsDomainTypeDescriptor implements the catalog.TypeDescriptor interface.
+func (desc *immutable) AsDomainTypeDescriptor() catalog.DomainTypeDescriptor {
+	if desc.Kind == descpb.TypeDescriptor_DOMAIN {
+		return desc
+	}
+	return nil
+}
+
+// GetBaseType implements the catalog.DomainTypeDescriptor interface.
+func (desc *immutable) GetBaseType() *types.T {
+	return desc.Domain.BaseType
+}
+
+// IsNotNull implements the catalog.DomainTypeDescriptor interface.
+func (desc *immutable) IsNotNull() bool {
+	return desc.Domain.NotNull
+}
+
+// GetDefaultExpr implements the catalog.DomainTypeDescriptor interface.
+func (desc *immutable) GetDefaultExpr() string {
+	return desc.Domain.DefaultExpr
+}
+
+// NumCheckConstraints implements the catalog.DomainTypeDescriptor interface.
+func (desc *immutable) NumCheckConstraints() int {
+	return len(desc.Domain.CheckConstraints)
+}
+
+// GetCheckConstraintName implements the catalog.DomainTypeDescriptor interface.
+func (desc *immutable) GetCheckConstraintName(idx int) string {
+	return desc.Domain.CheckConstraints[idx].Name
+}
+
+// GetCheckConstraintExpr implements the catalog.DomainTypeDescriptor interface.
+func (desc *immutable) GetCheckConstraintExpr(idx int) string {
+	return desc.Domain.CheckConstraints[idx].Expr
 }
 
 // Aliased implements the catalog.AliasTypeDescriptor interface.

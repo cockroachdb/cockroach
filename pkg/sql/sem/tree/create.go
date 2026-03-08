@@ -364,6 +364,12 @@ type CompositeTypeElem struct {
 	Type  ResolvableTypeReference
 }
 
+// DomainConstraintDef defines a CHECK constraint on a DOMAIN type.
+type DomainConstraintDef struct {
+	Name Name
+	Expr Expr
+}
+
 // CreateType represents a CREATE TYPE statement.
 type CreateType struct {
 	TypeName *UnresolvedObjectName
@@ -375,13 +381,47 @@ type CreateType struct {
 	CompositeTypeList []CompositeTypeElem
 	// IfNotExists is true if IF NOT EXISTS was requested.
 	IfNotExists bool
+	// DomainType is the base type for a DOMAIN.
+	DomainType ResolvableTypeReference
+	// DomainDefault is the DEFAULT expression for a DOMAIN.
+	DomainDefault Expr
+	// DomainNotNull is true if the DOMAIN has a NOT NULL constraint.
+	DomainNotNull bool
+	// DomainConstraints is the list of CHECK constraints for a DOMAIN.
+	DomainConstraints []DomainConstraintDef
 }
 
 var _ Statement = &CreateType{}
 
 // Format implements the NodeFormatter interface.
 func (node *CreateType) Format(ctx *FmtCtx) {
-	ctx.WriteString("CREATE TYPE ")
+	switch node.Variety {
+	case Domain:
+		ctx.WriteString("CREATE DOMAIN ")
+		ctx.FormatNode(node.TypeName)
+		ctx.WriteString(" AS ")
+		ctx.FormatTypeReference(node.DomainType)
+		if node.DomainDefault != nil {
+			ctx.WriteString(" DEFAULT ")
+			ctx.FormatNode(node.DomainDefault)
+		}
+		if node.DomainNotNull {
+			ctx.WriteString(" NOT NULL")
+		}
+		for i := range node.DomainConstraints {
+			c := &node.DomainConstraints[i]
+			if c.Name != "" {
+				ctx.WriteString(" CONSTRAINT ")
+				ctx.FormatNode(&c.Name)
+			}
+			ctx.WriteString(" CHECK (")
+			ctx.FormatNode(c.Expr)
+			ctx.WriteString(")")
+		}
+		return
+	default:
+		ctx.WriteString("CREATE TYPE ")
+	}
 	if node.IfNotExists {
 		ctx.WriteString("IF NOT EXISTS ")
 	}
