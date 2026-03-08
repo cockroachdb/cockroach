@@ -3122,7 +3122,7 @@ func (s *Store) AllocateRangeID(ctx context.Context) (roachpb.RangeID, error) {
 
 // Attrs returns the attributes of the underlying store.
 func (s *Store) Attrs() roachpb.Attributes {
-	return s.TODOEngine().Attrs()
+	return s.LogEngine().Attrs()
 }
 
 // Properties returns the properties of the underlying store.

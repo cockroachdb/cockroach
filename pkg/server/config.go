@@ -805,6 +805,8 @@ func (cfg *Config) CreateEngines(ctx context.Context) (Engines, error) {
 	for i, spec := range cfg.Stores.Specs {
 		log.Eventf(ctx, "initializing %+v", spec)
 
+		// TODO(sep-raft-log): store Attributes only in the LogEngine or the
+		// overarching kvstorage.Engines.
 		storageConfigOpts := []storage.ConfigOption{
 			walFailoverConfig,
 			storage.Attributes(roachpb.Attributes{Attrs: spec.Attributes}),
