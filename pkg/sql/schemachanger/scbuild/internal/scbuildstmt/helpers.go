@@ -103,7 +103,7 @@ func undroppedElements(b BuildCtx, id catid.DescID) ElementResultSet {
 			// target states by the decomposition logic.
 			switch e.(type) {
 			case *scpb.Database, *scpb.Schema, *scpb.Table, *scpb.Sequence, *scpb.View, *scpb.EnumType, *scpb.AliasType,
-				*scpb.CompositeType:
+				*scpb.CompositeType, *scpb.DomainType:
 				panic(errors.Wrapf(pgerror.Newf(pgcode.ObjectNotInPrerequisiteState,
 					"object state is %s instead of PUBLIC, cannot be targeted by DROP", current),
 					"%s", errMsgPrefix(b, id)))
@@ -138,7 +138,7 @@ func errMsgPrefix(b BuildCtx, id catid.DescID) string {
 			typ = "sequence"
 		case *scpb.View:
 			typ = "view"
-		case *scpb.EnumType, *scpb.AliasType, *scpb.CompositeType:
+		case *scpb.EnumType, *scpb.AliasType, *scpb.CompositeType, *scpb.DomainType:
 			typ = "type"
 		case *scpb.Namespace:
 			// Set the name either from the first encountered Namespace element, or
@@ -188,7 +188,7 @@ func dropCascadeDescriptor(b BuildCtx, id catid.DescID) {
 			if t.IsTemporary {
 				panic(scerrors.NotImplementedErrorf(nil, "dropping a temporary view"))
 			}
-		case *scpb.EnumType, *scpb.AliasType, *scpb.CompositeType:
+		case *scpb.EnumType, *scpb.AliasType, *scpb.CompositeType, *scpb.DomainType:
 			break
 		default:
 			return
@@ -209,6 +209,8 @@ func dropCascadeDescriptor(b BuildCtx, id catid.DescID) {
 		case *scpb.EnumType:
 			dropCascadeDescriptor(next, t.ArrayTypeID)
 		case *scpb.CompositeType:
+			dropCascadeDescriptor(next, t.ArrayTypeID)
+		case *scpb.DomainType:
 			dropCascadeDescriptor(next, t.ArrayTypeID)
 		case *scpb.SequenceOwner:
 			dropCascadeDescriptor(next, t.SequenceID)
@@ -231,6 +233,8 @@ func dropCascadeDescriptor(b BuildCtx, id catid.DescID) {
 		case *scpb.EnumType:
 			dropCascadeDescriptor(next, t.TypeID)
 		case *scpb.CompositeType:
+			dropCascadeDescriptor(next, t.TypeID)
+		case *scpb.DomainType:
 			dropCascadeDescriptor(next, t.TypeID)
 		case *scpb.FunctionBody:
 			dropCascadeDescriptor(next, t.FunctionID)

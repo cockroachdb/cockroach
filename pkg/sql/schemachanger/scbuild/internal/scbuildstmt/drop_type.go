@@ -38,6 +38,9 @@ func DropType(b BuildCtx, n *tree.DropType) {
 		} else if _, _, composite := scpb.FindCompositeType(elts); composite != nil {
 			typeID, arrayTypeID = composite.TypeID, composite.ArrayTypeID
 			typ = composite
+		} else if _, _, domain := scpb.FindDomainType(elts); domain != nil {
+			typeID, arrayTypeID = domain.TypeID, domain.ArrayTypeID
+			typ = domain
 		} else {
 			continue
 		}

@@ -410,6 +410,14 @@ func (pb payloadBuilder) build(b buildCtx) logpb.EventPayload {
 				TypeName: fullyQualifiedName(b, e),
 			}
 		}
+	case *scpb.DomainType:
+		if pb.TargetStatus == scpb.Status_PUBLIC {
+			return nil
+		} else {
+			return &eventpb.DropType{
+				TypeName: fullyQualifiedName(b, e),
+			}
+		}
 	case *scpb.SecondaryIndex:
 		if pb.TargetStatus == scpb.Status_PUBLIC {
 			return &eventpb.CreateIndex{
