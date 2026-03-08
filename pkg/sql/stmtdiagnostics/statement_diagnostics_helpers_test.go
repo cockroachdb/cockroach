@@ -37,5 +37,18 @@ func (r *Registry) InsertRequestInternal(
 	return int64(id), err
 }
 
+// TestingExpireRequest immediately expires a request in the in-memory registry
+// by setting its expiresAt to a past time. This allows tests to
+// deterministically trigger expiration without relying on wall clock timing.
+func (r *Registry) TestingExpireRequest(requestID int64) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	id := RequestID(requestID)
+	if req, ok := r.mu.requestFingerprints[id]; ok {
+		req.expiresAt = time.Now().Add(-time.Second)
+		r.mu.requestFingerprints[id] = req
+	}
+}
+
 // PollingInterval is exposed to override in tests.
 var PollingInterval = pollingInterval
