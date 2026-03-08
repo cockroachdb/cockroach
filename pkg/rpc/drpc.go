@@ -354,6 +354,8 @@ func NewDRPCServer(_ context.Context, rpcCtx *Context, opts ...ServerOption) (DR
 			// Enable grpc compabitility for metadata
 			GRPCMetadataCompatMode: true,
 		},
+		TLSConfig:         o.tlsConfig,
+		TLSCipherRestrict: o.tlsCipherRestrict,
 	})
 	d.Mux = mux
 
