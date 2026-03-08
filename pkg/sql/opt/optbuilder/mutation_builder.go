@@ -2007,20 +2007,29 @@ func (mb *mutationBuilder) parseDefaultExpr(colID opt.ColumnID) tree.Expr {
 	col := mb.tab.Column(ord)
 	exprStr := col.DefaultExprStr()
 
-	// If no default expression, return NULL or a default value.
+	// If no default expression, fall back to domain default or return NULL.
 	if exprStr == "" {
-		if col.IsMutation() && !col.IsNullable() {
-			// Synthesize default value for NOT NULL mutation column so that it can be
-			// set when in the write-only state. This is only used when no other value
-			// is possible (no default value available, NULL not allowed).
-			datum, err := tree.NewDefaultDatum(&mb.b.evalCtx.CollationEnv, col.DatumType())
-			if err != nil {
-				panic(err)
+		colType := col.DatumType()
+		if colType.TypeMeta.DomainData != nil &&
+			colType.TypeMeta.DomainData.DefaultExpr != "" {
+			// Use the domain type's default expression.
+			exprStr = colType.TypeMeta.DomainData.DefaultExpr
+		} else {
+			if col.IsMutation() && !col.IsNullable() {
+				// Synthesize default value for NOT NULL mutation column so that it can
+				// be set when in the write-only state. This is only used when no other
+				// value is possible (no default value available, NULL not allowed).
+				datum, err := tree.NewDefaultDatum(
+					&mb.b.evalCtx.CollationEnv, colType,
+				)
+				if err != nil {
+					panic(err)
+				}
+				return datum
 			}
-			return datum
-		}
 
-		return tree.DNull
+			return tree.DNull
+		}
 	}
 
 	return mb.parseColExpr(

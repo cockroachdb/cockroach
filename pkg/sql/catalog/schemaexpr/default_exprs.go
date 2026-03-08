@@ -15,9 +15,24 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 )
 
+// colDefaultExpr returns the default expression string for a column. If the
+// column has an explicit default, that is returned. Otherwise, if the column's
+// type is a domain with a default expression, the domain's default is returned.
+// Returns "" if neither exists.
+func colDefaultExpr(col catalog.Column) string {
+	if col.HasDefault() {
+		return col.GetDefaultExpr()
+	}
+	colType := col.GetType()
+	if colType.TypeMeta.DomainData != nil {
+		return colType.TypeMeta.DomainData.DefaultExpr
+	}
+	return ""
+}
+
 // MakeDefaultExprs returns a slice of the default expressions for the slice
 // of input column descriptors, or nil if none of the input column descriptors
-// have default expressions.
+// have default expressions (including domain defaults).
 // The length of the result slice matches the length of the input column descriptors.
 // For every column that has no default expression, a NULL expression is reported
 // as default.
@@ -33,7 +48,7 @@ func MakeDefaultExprs(
 	// defaults map as the defaults are all NULL.
 	haveDefaults := false
 	for _, col := range cols {
-		if col.HasDefault() {
+		if colDefaultExpr(col) != "" {
 			haveDefaults = true
 			break
 		}
@@ -46,8 +61,8 @@ func MakeDefaultExprs(
 	defaultExprs := make([]tree.TypedExpr, 0, len(cols))
 	exprStrings := make([]string, 0, len(cols))
 	for _, col := range cols {
-		if col.HasDefault() {
-			exprStrings = append(exprStrings, col.GetDefaultExpr())
+		if s := colDefaultExpr(col); s != "" {
+			exprStrings = append(exprStrings, s)
 		}
 	}
 	exprs, err := parserutils.ParseExprs(exprStrings)
@@ -57,7 +72,7 @@ func MakeDefaultExprs(
 
 	defExprIdx := 0
 	for _, col := range cols {
-		if !col.HasDefault() {
+		if colDefaultExpr(col) == "" {
 			defaultExprs = append(defaultExprs, tree.DNull)
 			continue
 		}

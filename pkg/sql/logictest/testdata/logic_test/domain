@@ -150,3 +150,248 @@ query error pgcode 23514 value for domain d_myint violates check constraint
 SELECT (-1)::d_myint
 
 subtest end
+
+# =============================================================================
+# Table column tests: INSERT, UPDATE, DEFAULT, NOT NULL with domain types.
+# =============================================================================
+
+subtest table_insert_check
+
+# Test CHECK constraint enforcement on INSERT.
+statement ok
+CREATE DOMAIN d_tbl_pos AS INT CHECK (VALUE > 0)
+
+statement ok
+CREATE TABLE t_pos (a d_tbl_pos)
+
+statement ok
+INSERT INTO t_pos VALUES (1)
+
+statement ok
+INSERT INTO t_pos VALUES (42)
+
+statement error pgcode 23514 value for domain d_tbl_pos violates check constraint
+INSERT INTO t_pos VALUES (-1)
+
+statement error pgcode 23514 value for domain d_tbl_pos violates check constraint
+INSERT INTO t_pos VALUES (0)
+
+# NULL passes CHECK constraint (SQL standard).
+statement ok
+INSERT INTO t_pos VALUES (NULL)
+
+query T rowsort
+SELECT a FROM t_pos
+----
+1
+42
+NULL
+
+subtest end
+
+subtest table_insert_not_null
+
+# Test domain NOT NULL enforcement on INSERT.
+statement ok
+CREATE DOMAIN d_tbl_nn AS INT NOT NULL
+
+statement ok
+CREATE TABLE t_nn (a d_tbl_nn)
+
+statement ok
+INSERT INTO t_nn VALUES (42)
+
+statement error pgcode 23502 domain d_tbl_nn does not allow null values
+INSERT INTO t_nn VALUES (NULL)
+
+# DEFAULT VALUES with no default expression should also fail NOT NULL.
+statement error pgcode 23502 domain d_tbl_nn does not allow null values
+INSERT INTO t_nn DEFAULT VALUES
+
+query T
+SELECT a FROM t_nn
+----
+42
+
+subtest end
+
+subtest table_insert_not_null_and_check
+
+# Test combined NOT NULL and CHECK constraints on table columns.
+statement ok
+CREATE DOMAIN d_tbl_pos_nn AS INT NOT NULL CHECK (VALUE > 0)
+
+statement ok
+CREATE TABLE t_pos_nn (a d_tbl_pos_nn)
+
+statement ok
+INSERT INTO t_pos_nn VALUES (5)
+
+statement error pgcode 23502 domain d_tbl_pos_nn does not allow null values
+INSERT INTO t_pos_nn VALUES (NULL)
+
+statement error pgcode 23514 value for domain d_tbl_pos_nn violates check constraint
+INSERT INTO t_pos_nn VALUES (-1)
+
+query T
+SELECT a FROM t_pos_nn
+----
+5
+
+subtest end
+
+subtest table_domain_default
+
+# Test domain DEFAULT expression on table columns.
+statement ok
+CREATE DOMAIN d_tbl_def AS INT DEFAULT 42
+
+statement ok
+CREATE TABLE t_def (a d_tbl_def)
+
+statement ok
+INSERT INTO t_def DEFAULT VALUES
+
+statement ok
+INSERT INTO t_def (a) VALUES (DEFAULT)
+
+statement ok
+INSERT INTO t_def VALUES (10)
+
+query T rowsort
+SELECT a FROM t_def
+----
+42
+42
+10
+
+subtest end
+
+subtest table_column_default_overrides_domain
+
+# Column-level default should override domain default.
+statement ok
+CREATE DOMAIN d_tbl_def2 AS INT DEFAULT 42
+
+statement ok
+CREATE TABLE t_col_def (a d_tbl_def2 DEFAULT 100)
+
+statement ok
+INSERT INTO t_col_def DEFAULT VALUES
+
+query T
+SELECT a FROM t_col_def
+----
+100
+
+subtest end
+
+subtest table_domain_default_with_not_null
+
+# Test domain with both DEFAULT and NOT NULL on table columns.
+statement ok
+CREATE DOMAIN d_tbl_def_nn AS INT NOT NULL DEFAULT 0
+
+statement ok
+CREATE TABLE t_def_nn (a d_tbl_def_nn)
+
+# DEFAULT VALUES should use the domain default (0), satisfying NOT NULL.
+statement ok
+INSERT INTO t_def_nn DEFAULT VALUES
+
+# Explicit NULL should still fail.
+statement error pgcode 23502 domain d_tbl_def_nn does not allow null values
+INSERT INTO t_def_nn VALUES (NULL)
+
+query T
+SELECT a FROM t_def_nn
+----
+0
+
+subtest end
+
+subtest table_update_check
+
+# Test domain CHECK constraint enforcement on UPDATE.
+statement ok
+CREATE DOMAIN d_tbl_upd AS INT CHECK (VALUE > 0)
+
+statement ok
+CREATE TABLE t_upd (id INT PRIMARY KEY, val d_tbl_upd)
+
+statement ok
+INSERT INTO t_upd VALUES (1, 10)
+
+statement ok
+UPDATE t_upd SET val = 20 WHERE id = 1
+
+statement error pgcode 23514 value for domain d_tbl_upd violates check constraint
+UPDATE t_upd SET val = -1 WHERE id = 1
+
+query IT
+SELECT id, val FROM t_upd
+----
+1  20
+
+subtest end
+
+subtest table_update_not_null
+
+# Test domain NOT NULL enforcement on UPDATE.
+statement ok
+CREATE DOMAIN d_tbl_upd_nn AS INT NOT NULL
+
+statement ok
+CREATE TABLE t_upd_nn (id INT PRIMARY KEY, val d_tbl_upd_nn)
+
+statement ok
+INSERT INTO t_upd_nn VALUES (1, 10)
+
+statement error pgcode 23502 domain d_tbl_upd_nn does not allow null values
+UPDATE t_upd_nn SET val = NULL WHERE id = 1
+
+query IT
+SELECT id, val FROM t_upd_nn
+----
+1  10
+
+subtest end
+
+subtest table_multi_domain_columns
+
+# Test table with multiple domain-typed columns.
+statement ok
+CREATE DOMAIN d_tbl_name AS TEXT NOT NULL CHECK (length(VALUE) > 0)
+
+statement ok
+CREATE DOMAIN d_tbl_age AS INT CHECK (VALUE >= 0 AND VALUE <= 150)
+
+statement ok
+CREATE TABLE t_person (name d_tbl_name, age d_tbl_age)
+
+statement ok
+INSERT INTO t_person VALUES ('Alice', 30)
+
+statement error pgcode 23502 domain d_tbl_name does not allow null values
+INSERT INTO t_person VALUES (NULL, 30)
+
+statement error pgcode 23514 value for domain d_tbl_name violates check constraint
+INSERT INTO t_person VALUES ('', 30)
+
+statement error pgcode 23514 value for domain d_tbl_age violates check constraint
+INSERT INTO t_person VALUES ('Bob', -1)
+
+statement error pgcode 23514 value for domain d_tbl_age violates check constraint
+INSERT INTO t_person VALUES ('Bob', 200)
+
+# NULL age is allowed (no NOT NULL on d_tbl_age).
+statement ok
+INSERT INTO t_person VALUES ('Charlie', NULL)
+
+query TT rowsort
+SELECT name, age FROM t_person
+----
+Alice    30
+Charlie  NULL
+
+subtest end
