@@ -11,6 +11,8 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowcontainer"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -325,8 +327,21 @@ func enforceNotNullConstraints(row tree.Datums, cols []catalog.Column) error {
 			len(row), len(cols))
 	}
 	for i, col := range cols {
-		if !col.IsNullable() && row[i] == tree.DNull {
-			return sqlerrors.NewNonNullViolationError(col.GetName())
+		if row[i] == tree.DNull {
+			if !col.IsNullable() {
+				return sqlerrors.NewNonNullViolationError(col.GetName())
+			}
+			// Check domain NOT NULL constraint separately from column NOT NULL.
+			// Per PostgreSQL, domain NOT NULL is enforced through the domain's
+			// constraint, not the column's nullable flag.
+			colType := col.GetType()
+			if colType.TypeMeta.DomainData != nil && colType.TypeMeta.DomainData.NotNull {
+				return pgerror.Newf(
+					pgcode.NotNullViolation,
+					"domain %s does not allow null values",
+					colType.TypeMeta.Name.Basename(),
+				)
+			}
 		}
 	}
 	return nil
