@@ -362,6 +362,10 @@ type DomainCheckConstraint struct {
 	Name string
 	// Expr is the CHECK expression, serialized as a string.
 	Expr string
+	// ParsedExpr is the cached parsed expression tree from hydration.
+	// Typed as any to avoid an import cycle with tree. At runtime this
+	// holds a tree.Expr obtained via parserutils.ParseExpr.
+	ParsedExpr any
 }
 
 func (e *EnumMetadata) debugString() string {
