@@ -99,7 +99,8 @@ func performCast(
 ) (tree.Datum, error) {
 	// For domain types, cast to the base type first, then validate constraints.
 	if t.TypeMeta.DomainData != nil {
-		d, err := performCastWithoutPrecisionTruncation(ctx, evalCtx, d, t, truncateWidth)
+		var err error
+		d, err = performCastWithoutPrecisionTruncation(ctx, evalCtx, d, t, truncateWidth)
 		if err != nil {
 			return nil, err
 		}
