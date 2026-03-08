@@ -11,6 +11,7 @@ import (
 	"math/rand"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/multitenant"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -63,13 +64,27 @@ var bundleChunkSize = settings.RegisterByteSizeSetting(
 // TODO(irfansharif): Longer term we should rip this out in favor of keeping a
 // bounded set of bundles around per-request/fingerprint. See #82896 for more
 // details.
+//
+// Deprecated: Continuous collection is now the default behavior when a request
+// has both sampling_probability and expires_at set. This setting is kept for
+// backward compatibility but will be removed in a future version.
 var collectUntilExpiration = settings.RegisterBoolSetting(
 	settings.ApplicationLevel,
 	"sql.stmt_diagnostics.collect_continuously.enabled",
-	"collect diagnostic bundles continuously until request expiration (to be "+
-		"used with care, only has an effect if the diagnostic request has an "+
-		"expiration and a sampling probability set)",
-	false)
+	"deprecated: continuous collection is now the default behavior when "+
+		"sampling_probability and expires_at are set; this setting will be "+
+		"removed in a future version",
+	true)
+
+// maxBundlesPerRequest is the maximum number of diagnostic bundles to collect
+// per continuous request. Enforced at bundle insertion time via COUNT.
+var maxBundlesPerRequest = settings.RegisterIntSetting(
+	settings.ApplicationLevel,
+	"sql.stmt_diagnostics.max_bundles_per_request",
+	"maximum number of diagnostic bundles to collect per continuous request",
+	10,
+	settings.PositiveInt,
+)
 
 // Registry maintains a view on the statement fingerprints
 // on which data is to be collected (i.e. system.statement_diagnostics_requests)
@@ -131,12 +146,12 @@ func (r *Request) isConditional() bool {
 	return r.minExecutionLatency != 0
 }
 
-// continueCollecting returns true if we want to continue collecting bundles for
-// this request.
+// continueCollecting returns true if this request collects multiple bundles
+// rather than completing after the first one.
 func (r *Request) continueCollecting(st *cluster.Settings) bool {
-	return collectUntilExpiration.Get(&st.SV) && // continuous collection must be enabled
-		r.samplingProbability != 0 && !r.expiresAt.IsZero() && // conditions for continuous collection must be set
-		!r.isExpired(timeutil.Now()) // the request must not have expired yet
+	return collectUntilExpiration.Get(&st.SV) &&
+		r.samplingProbability != 0 && !r.expiresAt.IsZero() &&
+		!r.isExpired(timeutil.Now())
 }
 
 // NewRegistry constructs a new Registry.
@@ -315,7 +330,7 @@ func (r *Registry) insertRequestInternal(
 
 		now := timeutil.Now()
 		insertColumns := "statement_fingerprint, requested_at"
-		qargs := make([]interface{}, 2, 9)
+		qargs := make([]interface{}, 2, 10)
 		qargs[0] = stmtFingerprint // statement_fingerprint
 		qargs[1] = now             // requested_at
 		if planGist != "" {
@@ -569,10 +584,15 @@ func (r *Registry) innerInsertStatementDiagnostics(
 	ctx context.Context, diagnostic StmtDiagnostic, txn isql.Txn, txnDiagnosticId CollectedInstanceID,
 ) (CollectedInstanceID, error) {
 	var diagID CollectedInstanceID
+	requestIDColumnAvailable := r.st.Version.IsActive(ctx, clusterversion.V26_2_StmtDiagnosticsRequestID)
+	isContinuous := diagnostic.req.continueCollecting(r.st)
+
 	if diagnostic.requestID != 0 {
+		// Check if the request is still pending (not yet completed).
 		row, err := txn.QueryRowEx(ctx, "stmt-diag-check-completed", txn.KV(),
 			sessiondata.NodeUserSessionDataOverride,
-			"SELECT count(1) FROM system.statement_diagnostics_requests WHERE id = $1 AND completed = false",
+			"SELECT count(1) FROM system.statement_diagnostics_requests "+
+				"WHERE id = $1 AND completed = false",
 			diagnostic.requestID)
 		if err != nil {
 			return diagID, err
@@ -582,9 +602,6 @@ func (r *Registry) innerInsertStatementDiagnostics(
 		}
 		cnt := int(*row[0].(*tree.DInt))
 		if cnt == 0 {
-			// Someone else already marked the request as completed. We've traced for nothing.
-			// This can only happen once per node, per request since we're going to
-			// remove the request from the registry.
 			return diagID, nil
 		}
 	}
@@ -605,10 +622,18 @@ func (r *Registry) innerInsertStatementDiagnostics(
 	insertCols := "statement_fingerprint, statement, collected_at, bundle_chunks, error"
 	insertVals := "$1, $2, $3, $4, $5"
 	vals := []interface{}{diagnostic.stmtFingerprint, diagnostic.stmt, collectionTime, bundleChunksVal, errorVal}
+	paramIdx := 6
 	if txnDiagnosticId != 0 {
 		insertCols += ", transaction_diagnostics_id"
-		insertVals += ", $6"
+		insertVals += fmt.Sprintf(", $%d", paramIdx)
 		vals = append(vals, txnDiagnosticId)
+		paramIdx++
+	}
+	// Include request_id to link this bundle to the originating request.
+	if diagnostic.requestID != 0 && requestIDColumnAvailable {
+		insertCols += ", request_id"
+		insertVals += fmt.Sprintf(", $%d", paramIdx)
+		vals = append(vals, diagnostic.requestID)
 	}
 	// Insert the collection metadata into system.statement_diagnostics.
 	row, err := txn.QueryRowEx(
@@ -628,30 +653,48 @@ func (r *Registry) innerInsertStatementDiagnostics(
 	diagID = CollectedInstanceID(*row[0].(*tree.DInt))
 
 	if diagnostic.requestID != 0 {
-		// Link the request from system.statement_diagnostics_request to the
-		// diagnostic ID we just collected, marking it as completed if we're
-		// able.
-		shouldMarkCompleted := true
-		if collectUntilExpiration.Get(&r.st.SV) {
-			// Two other conditions need to hold true for us to continue
-			// capturing future traces, i.e. not mark this request as
-			// completed.
-			// - Requests need to be of the sampling sort (also implies
-			//   there's a latency threshold) -- a crude measure to prevent
-			//   against unbounded collection;
-			// - Requests need to have an expiration set -- same reason as
-			// above.
-			if diagnostic.req.samplingProbability > 0 && !diagnostic.req.expiresAt.IsZero() {
-				shouldMarkCompleted = false
+		if isContinuous && requestIDColumnAvailable {
+			// For continuous requests, count existing bundles for this
+			// request and compare against the cluster setting to decide
+			// whether to mark the request as completed.
+			row, err := txn.QueryRowEx(ctx, "stmt-diag-count-bundles", txn.KV(),
+				sessiondata.NodeUserSessionDataOverride,
+				`SELECT count(*) FROM system.statement_diagnostics
+				 WHERE request_id = $1`,
+				diagnostic.requestID)
+			if err != nil {
+				return diagID, err
 			}
-		}
-		_, err := txn.ExecEx(ctx, "stmt-diag-mark-completed", txn.KV(),
-			sessiondata.NodeUserSessionDataOverride,
-			"UPDATE system.statement_diagnostics_requests "+
-				"SET completed = $1, statement_diagnostics_id = $2 WHERE id = $3",
-			shouldMarkCompleted, diagID, diagnostic.requestID)
-		if err != nil {
-			return diagID, err
+			shouldComplete := false
+			if row != nil {
+				bundleCount := int(*row[0].(*tree.DInt))
+				maxBundles := int(maxBundlesPerRequest.Get(&r.st.SV))
+				shouldComplete = bundleCount >= maxBundles
+			}
+			_, err = txn.ExecEx(ctx, "stmt-diag-mark-completed", txn.KV(),
+				sessiondata.NodeUserSessionDataOverride,
+				"UPDATE system.statement_diagnostics_requests "+
+					"SET statement_diagnostics_id = $1, completed = $2 WHERE id = $3",
+				diagID, shouldComplete, diagnostic.requestID)
+			if err != nil {
+				return diagID, err
+			}
+		} else {
+			// Non-continuous or pre-migration: mark completed immediately.
+			// During mixed-version rolling upgrades, continuous requests
+			// collect without limit enforcement until the migration
+			// completes and request_id becomes available for COUNT-based
+			// limiting. Pre-migration bundles have NULL request_id, so
+			// the post-migration counter effectively resets to 0.
+			shouldMarkCompleted := !isContinuous
+			_, err := txn.ExecEx(ctx, "stmt-diag-mark-completed", txn.KV(),
+				sessiondata.NodeUserSessionDataOverride,
+				"UPDATE system.statement_diagnostics_requests "+
+					"SET completed = $1, statement_diagnostics_id = $2 WHERE id = $3",
+				shouldMarkCompleted, diagID, diagnostic.requestID)
+			if err != nil {
+				return diagID, err
+			}
 		}
 	} else if txnDiagnosticId == 0 {
 		// Insert a completed request into system.statement_diagnostics_request.
@@ -685,7 +728,8 @@ func (r *Registry) pollStmtRequests(ctx context.Context) error {
 
 		it, err := r.db.Executor().QueryIteratorEx(ctx, "stmt-diag-poll", nil, /* txn */
 			sessiondata.NodeUserSessionDataOverride,
-			`SELECT id, statement_fingerprint, min_execution_latency, expires_at, sampling_probability, plan_gist, anti_plan_gist, redacted, username
+			`SELECT id, statement_fingerprint, min_execution_latency, expires_at,
+				sampling_probability, plan_gist, anti_plan_gist, redacted, username
 				FROM system.statement_diagnostics_requests
 				WHERE completed = false AND (expires_at IS NULL OR expires_at > now())`,
 		)
@@ -750,8 +794,13 @@ func (r *Registry) pollStmtRequests(ctx context.Context) error {
 		if u, ok := row[8].(*tree.DString); ok {
 			username = string(*u)
 		}
+
 		ids.Add(int(id))
-		r.addRequestInternalLocked(ctx, id, stmtFingerprint, planGist, antiPlanGist, samplingProbability, minExecutionLatency, expiresAt, redacted, username)
+		r.addRequestInternalLocked(
+			ctx, id, stmtFingerprint, planGist, antiPlanGist,
+			samplingProbability, minExecutionLatency, expiresAt,
+			redacted, username,
+		)
 	}
 
 	// Remove all other requests.

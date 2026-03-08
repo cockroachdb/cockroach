@@ -1413,7 +1413,7 @@ const SystemDatabaseName = catconstants.SystemDatabaseName
 //
 // NB: Don't set this to clusterversion.Latest; use a specific version instead.
 var SystemDatabaseSchemaBootstrapVersion = clusterversion.V26_2_StmtDiagnosticsRequestID.Version()
->>>>>>> 87f085b2b7f (stmtdiagnostics: add request_id schema migration)
+
 // MakeSystemDatabaseDesc constructs a copy of the system database
 // descriptor.
 func MakeSystemDatabaseDesc() catalog.DatabaseDescriptor {
