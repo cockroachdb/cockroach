@@ -156,7 +156,7 @@ func checkTableNameConflicts(
 		}
 
 		// Object exists, throw duplicate name error with fully qualified name.
-		if !ers.FilterCompositeType().IsEmpty() || !ers.FilterEnumType().IsEmpty() {
+		if !ers.FilterCompositeType().IsEmpty() || !ers.FilterEnumType().IsEmpty() || !ers.FilterDomainType().IsEmpty() {
 			panic(sqlerrors.NewTypeAlreadyExistsError(newName.String()))
 		}
 		panic(sqlerrors.NewRelationAlreadyExistsError(newName.String()))
