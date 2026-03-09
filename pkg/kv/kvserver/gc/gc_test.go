@@ -2381,6 +2381,7 @@ func TestInfoSafeFormat(t *testing.T) {
 		TransactionSpanGCStaging:      1,
 		TransactionSpanGCPending:      2,
 		TransactionSpanGCPrepared:     3,
+		TransactionSpanGCRefreshing:   4,
 		AbortSpanTotal:                10,
 		AbortSpanConsidered:           7,
 		AbortSpanGCNum:                5,

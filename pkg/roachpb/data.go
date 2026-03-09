@@ -1428,6 +1428,10 @@ func (t *Transaction) Update(o *Transaction) {
 			if o.Status != PENDING {
 				t.Status = o.Status
 			}
+		case REFRESHING:
+			if o.Status != PENDING {
+				t.Status = o.Status
+			}
 		case ABORTED:
 			if o.Status == COMMITTED {
 				log.Dev.Warningf(ctx, "updating ABORTED txn %s with COMMITTED txn %s", t.String(), o.String())

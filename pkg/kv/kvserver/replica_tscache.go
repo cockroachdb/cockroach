@@ -7,7 +7,9 @@ package kvserver
 
 import (
 	"context"
+	"encoding/binary"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
@@ -16,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings"
+	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -161,24 +164,53 @@ func (r *Replica) updateTimestampCache(
 
 		switch t := req.(type) {
 		case *kvpb.EndTxnRequest:
-			// EndTxn requests record a tombstone in the timestamp cache to ensure
-			// replays and concurrent requests aren't able to recreate the transaction
-			// record.
-			//
-			// It inserts the timestamp of the final batch in the transaction. This
-			// timestamp must necessarily be equal to or greater than the
-			// transaction's MinTimestamp, which is consulted in CanCreateTxnRecord.
-			key := transactionTombstoneMarker(start, txnID)
-			addToTSCache(key, nil, ts, txnID)
-			// Additionally, EndTxn requests that release local replicated locks for
-			// committed transactions bump the timestamp cache over those lock spans
-			// to the commit timestamp of the transaction to ensure that the released
-			// locks continue to provide protection against writes underneath the
-			// transaction's commit timestamp.
-			for _, sp := range resp.(*kvpb.EndTxnResponse).ReplicatedLocalLocksReleasedOnCommit {
-				addToTSCache(sp.Key, sp.EndKey, br.Txn.WriteTimestamp, txnID)
+			if pErr == nil {
+				// EndTxn requests record a tombstone in the timestamp cache to ensure
+				// replays and concurrent requests aren't able to recreate the transaction
+				// record.
+				//
+				// It inserts the timestamp of the final batch in the transaction. This
+				// timestamp must necessarily be equal to or greater than the
+				// transaction's MinTimestamp, which is consulted in CanCreateTxnRecord.
+				key := transactionTombstoneMarker(start, txnID)
+				addToTSCache(key, nil, ts, txnID)
+				// Additionally, EndTxn requests that release local replicated locks for
+				// committed transactions bump the timestamp cache over those lock spans
+				// to the commit timestamp of the transaction to ensure that the released
+				// locks continue to provide protection against writes underneath the
+				// transaction's commit timestamp.
+				for _, sp := range resp.(*kvpb.EndTxnResponse).ReplicatedLocalLocksReleasedOnCommit {
+					addToTSCache(sp.Key, sp.EndKey, br.Txn.WriteTimestamp, txnID)
+				}
+			} else if t.UseRefreshingStatus && t.Commit &&
+				r.ClusterSettings().Version.IsActive(ctx, clusterversion.V26_2) {
+				// EndTxn(commit=true) returned a refreshable error and the client
+				// requested refreshing protection. Add a refreshing marker so that
+				// concurrent pushers see the transaction as unpushable during the
+				// refresh window. The marker value encodes the epoch so that a
+				// heartbeat with a newer epoch can cancel it.
+				errIsRefreshable, _ := kvpb.TransactionRefreshTimestamp(pErr)
+				if errIsRefreshable {
+					errTxn := pErr.GetTxn()
+					key := transactionRefreshingMarker(start, txnID)
+					addToTSCache(key, nil, ts, refreshingMarkerValue(errTxn.Epoch))
+					// Signal to the client that a marker was placed by setting the
+					// txn status to REFRESHING on the error.
+					clone := errTxn.Clone()
+					clone.Status = roachpb.REFRESHING
+					pErr.SetTxn(clone)
+				}
 			}
 		case *kvpb.HeartbeatTxnRequest:
+			// If this heartbeat is at a newer epoch than an existing refreshing
+			// marker, cancel the marker. This happens when a refresh fails, the
+			// transaction restarts at a new epoch, and the heartbeater sends an
+			// immediate heartbeat.
+			refreshKey := transactionRefreshingMarker(start, txnID)
+			_, markerVal := r.store.tsCache.GetMax(ctx, refreshKey, nil)
+			if markerVal != uuid.Nil && refreshingMarkerEpoch(markerVal) < ba.Txn.Epoch {
+				addToTSCache(refreshKey, nil, ts, uuid.Nil)
+			}
 			// HeartbeatTxn requests record a tombstone entry when the record is
 			// initially written. This is used when considering potential 1PC
 			// evaluation, avoiding checking for a transaction record on disk.
@@ -237,6 +269,10 @@ func (r *Replica) updateTimestampCache(
 				// Prepared transactions are not allowed to be pushed, regardless of the
 				// push type. So this must have been a no-op push where the PushTo
 				// timestamp was already below the prepared transaction's timestamp.
+				continue
+			case roachpb.REFRESHING:
+				// REFRESHING transactions cannot be pushed while refreshing their read
+				// spans. So this must have been a no-op push.
 				continue
 			default:
 				log.KvExec.Fatalf(ctx, "unexpected transaction status: %v", pushee.Status)
@@ -683,12 +719,25 @@ func (r *Replica) MinTxnCommitTS(
 	return minCommitTS
 }
 
+// IsTransactionRefreshing returns true if a refreshing marker exists in the
+// timestamp cache for the given transaction, indicating that the transaction is
+// currently refreshing its read spans and should not be pushed. The marker is
+// canceled (set to uuid.Nil) when a heartbeat arrives with a newer epoch.
+func (r *Replica) IsTransactionRefreshing(
+	ctx context.Context, txnKey roachpb.Key, txnID uuid.UUID,
+) bool {
+	key := transactionRefreshingMarker(txnKey, txnID)
+	_, val := r.store.tsCache.GetMax(ctx, key, nil)
+	return val != uuid.Nil
+}
+
 // Pseudo range local key suffixes used to construct "marker" keys for use
 // with the timestamp cache. These must not collide with a real range local
 // key suffix defined in pkg/keys/constants.go.
 var (
-	localTxnTombstoneMarkerSuffix = roachpb.RKey("tmbs")
-	localTxnPushMarkerSuffix      = roachpb.RKey("push")
+	localTxnTombstoneMarkerSuffix  = roachpb.RKey("tmbs")
+	localTxnPushMarkerSuffix       = roachpb.RKey("push")
+	localTxnRefreshingMarkerSuffix = roachpb.RKey("rfsh")
 )
 
 // transactionTombstoneMarker returns the key used as a marker indicating that a
@@ -708,6 +757,36 @@ func transactionTombstoneMarker(key roachpb.Key, txnID uuid.UUID) roachpb.Key {
 // in case the push happens before there's a transaction record.
 func transactionPushMarker(key roachpb.Key, txnID uuid.UUID) roachpb.Key {
 	return keys.MakeRangeKey(keys.MustAddr(key), localTxnPushMarkerSuffix, txnID.GetBytes())
+}
+
+// transactionRefreshingMarker returns the key used as a marker indicating that
+// a transaction is currently refreshing its read spans after being pushed at
+// commit time. While this marker is present, concurrent pushers should not push
+// the transaction, preventing starvation by high-priority pushers during the
+// refresh window.
+//
+// The marker's tscache value encodes the epoch via refreshingMarkerValue. A
+// heartbeat arriving with a newer epoch cancels the marker by writing uuid.Nil.
+func transactionRefreshingMarker(key roachpb.Key, txnID uuid.UUID) roachpb.Key {
+	return keys.MakeRangeKey(keys.MustAddr(key), localTxnRefreshingMarkerSuffix, txnID.GetBytes())
+}
+
+// refreshingMarkerValue encodes a transaction epoch into a UUID for use as a
+// tscache value in the refreshing marker. Byte 4 is set to 0x01 so that epoch
+// 0 produces a non-nil UUID, distinguishing it from uuid.Nil (which means "no
+// marker").
+func refreshingMarkerValue(epoch enginepb.TxnEpoch) uuid.UUID {
+	var val uuid.UUID
+	binary.BigEndian.PutUint32(val[:4], uint32(epoch))
+	val[4] = 0x01 // sentinel
+	return val
+}
+
+// refreshingMarkerEpoch extracts the epoch from a refreshing marker tscache
+// value produced by refreshingMarkerValue. The caller must check that val !=
+// uuid.Nil before calling this.
+func refreshingMarkerEpoch(val uuid.UUID) enginepb.TxnEpoch {
+	return enginepb.TxnEpoch(binary.BigEndian.Uint32(val[:4]))
 }
 
 // GetCurrentReadSummary returns a new ReadSummary reflecting all reads served

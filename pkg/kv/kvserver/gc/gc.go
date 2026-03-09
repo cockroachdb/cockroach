@@ -223,9 +223,9 @@ type Info struct {
 	TransactionSpanTotal int
 	// Summary of transactions which were found GCable (assuming that
 	// potentially necessary intent resolutions did not fail).
-	TransactionSpanGCAborted, TransactionSpanGCCommitted int
-	TransactionSpanGCStaging, TransactionSpanGCPending   int
-	TransactionSpanGCPrepared                            int
+	TransactionSpanGCAborted, TransactionSpanGCCommitted   int
+	TransactionSpanGCStaging, TransactionSpanGCPending     int
+	TransactionSpanGCPrepared, TransactionSpanGCRefreshing int
 	// AbortSpanTotal is the total number of transactions present in the AbortSpan.
 	AbortSpanTotal int
 	// AbortSpanConsidered is the number of AbortSpan entries old enough to be
@@ -287,11 +287,12 @@ func (info Info) SafeFormat(w redact.SafePrinter, _ rune) {
 	if info.TransactionSpanTotal > 0 {
 		w.Printf(", txnSpanTotal=%d, txnSpanGCAborted=%d, "+
 			"txnSpanGCCommitted=%d, txnSpanGCStaging=%d, "+
-			"txnSpanGCPending=%d, txnSpanGCPrepared=%d",
+			"txnSpanGCPending=%d, txnSpanGCPrepared=%d, "+
+			"txnSpanGCRefreshing=%d",
 			info.TransactionSpanTotal,
 			info.TransactionSpanGCAborted, info.TransactionSpanGCCommitted,
 			info.TransactionSpanGCStaging, info.TransactionSpanGCPending,
-			info.TransactionSpanGCPrepared)
+			info.TransactionSpanGCPrepared, info.TransactionSpanGCRefreshing)
 	}
 	if info.AbortSpanTotal > 0 {
 		w.Printf(", abortSpanTotal=%d, abortSpanConsidered=%d, "+
@@ -1272,6 +1273,8 @@ func processLocalKeyRange(
 			info.TransactionSpanGCAborted++
 		case roachpb.COMMITTED:
 			info.TransactionSpanGCCommitted++
+		case roachpb.REFRESHING:
+			info.TransactionSpanGCRefreshing++
 		default:
 			panic(fmt.Sprintf("invalid transaction state: %s", txn))
 		}
