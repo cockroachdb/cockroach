@@ -497,7 +497,7 @@ func (r *testRunner) Run(
 				!tests[i].Suites.Contains(registry.Weekly) &&
 				!tests[i].IsLastFailurePreempt() &&
 				rand.Float64() <= 0.75 {
-				lopt.l.PrintfCtx(ctx, "using spot VMs to run test %s", tests[i].Name)
+				lopt.runnerL.PrintfCtx(ctx, "using spot VMs to run test %s", tests[i].Name)
 				tests[i].Cluster.UseSpotVMs = true
 			}
 		}
@@ -512,9 +512,8 @@ func (r *testRunner) Run(
 	errs := &workerErrors{}
 
 	qp := quotapool.NewIntPool("cloud cpu", uint64(clustersOpt.cpuQuota))
-	l := lopt.l
 	runID = generateRunID(clustersOpt)
-	shout(ctx, l, lopt.stdout, "%s: %s", VmLabelTestRunID, runID)
+	shout(ctx, lopt.runnerL, lopt.stdout, "%s: %s", VmLabelTestRunID, runID)
 	var wg sync.WaitGroup
 
 	for i := 0; i < parallelism; i++ {
@@ -525,10 +524,10 @@ func (r *testRunner) Run(
 
 			name := fmt.Sprintf("w%d", i)
 			formattedPrefix := fmt.Sprintf("[%s] ", name)
-			childLogger, err := l.ChildLogger(name, logger.LogPrefix(formattedPrefix))
+			workerL, err := lopt.runnerL.ChildLogger(name, logger.LogPrefix(formattedPrefix))
 			if err != nil {
-				l.ErrorfCtx(ctx, "unable to create logger %s: %s", name, err)
-				childLogger = l
+				lopt.runnerL.ErrorfCtx(ctx, "unable to create logger %s: %s", name, err)
+				workerL = lopt.runnerL
 			}
 
 			err = r.runWorker(
@@ -538,7 +537,7 @@ func (r *testRunner) Run(
 				clustersOpt,
 				lopt,
 				topt,
-				childLogger,
+				workerL,
 				n*count,
 				github,
 			)
@@ -546,7 +545,7 @@ func (r *testRunner) Run(
 			if err != nil {
 				// A worker returned an error. Let's shut down.
 				msg := fmt.Sprintf("Worker %d returned with error. Quiescing. Error: %v", i, err)
-				shout(ctx, childLogger, lopt.stdout, msg)
+				shout(ctx, workerL, lopt.stdout, msg)
 				errs.AddErr(err)
 				// Stop the stopper. This will cause all workers to not pick up more
 				// tests after finishing the currently running one. We add one to the
@@ -569,28 +568,28 @@ func (r *testRunner) Run(
 	// Wait for all the workers to finish.
 	wg.Wait()
 	shutdownStart := timeutil.Now()
-	r.cr.destroyAllClusters(ctx, l)
+	r.cr.destroyAllClusters(ctx, lopt.runnerL)
 
 	if errs.Err() != nil {
-		shout(ctx, l, lopt.stdout, "FAIL (err: %s)", errs.Err())
+		shout(ctx, lopt.runnerL, lopt.stdout, "FAIL (err: %s)", errs.Err())
 		return errs.Err()
 	}
 	passFailLine := r.generateReport()
-	shout(ctx, l, lopt.stdout, passFailLine)
+	shout(ctx, lopt.runnerL, lopt.stdout, passFailLine)
 
 	// For the errors that don't short-circuit the pipeline run, return a joined
 	// error and leave case handling to the caller
 	var err error
 	if r.numGithubPostErrs > 0 {
-		shout(ctx, l, lopt.stdout, "%d errors occurred while posting to github", r.numGithubPostErrs)
+		shout(ctx, lopt.runnerL, lopt.stdout, "%d errors occurred while posting to github", r.numGithubPostErrs)
 		err = errors.Join(err, errGithubPostFailed)
 	}
 	if r.numClusterErrs > 0 {
-		shout(ctx, l, lopt.stdout, "%d clusters could not be created", r.numClusterErrs)
+		shout(ctx, lopt.runnerL, lopt.stdout, "%d clusters could not be created", r.numClusterErrs)
 		err = errors.Join(err, errSomeClusterProvisioningFailed)
 	}
 	if len(r.status.fail) > 0 {
-		shout(ctx, l, lopt.stdout, "%d tests failed", len(r.status.fail))
+		shout(ctx, lopt.runnerL, lopt.stdout, "%d tests failed", len(r.status.fail))
 		err = errors.Join(err, errTestsFailed)
 	}
 	if err != nil {
@@ -659,8 +658,8 @@ func (r *testRunner) allocateOrAttachToCluster(
 	existingClusterName := clustersOpt.clusterName
 	if existingClusterName != "" {
 		// Logs for attaching to a cluster go to a dedicated log file.
-		logPath := filepath.Join(lopt.artifactsDir, runnerLogsDir, "cluster-create", existingClusterName+".log")
-		clusterL, err := logger.RootLogger(logPath, lopt.tee)
+		logPath := filepath.Join(lopt.artifactsDir, runnerLogsDir, clusterCreateDir, existingClusterName+".log")
+		clusterL, err := logger.RootLogger(logPath, logger.NoTee)
 		if err != nil {
 			return nil, nil, err
 		}
@@ -671,11 +670,13 @@ func (r *testRunner) allocateOrAttachToCluster(
 		// TODO(srosenberg): we need to think about validation here. Attaching to an incompatible cluster, e.g.,
 		// using arm64 AMI with amd64 binary, would result in obscure errors. The test runner ensures compatibility
 		// during cluster reuse, whereas attachment via CLI (e.g., via roachprod) does not.
-		lopt.l.PrintfCtx(ctx, "Attaching to existing cluster %s for test %s", existingClusterName, t.Name)
+		shout(ctx, lopt.runnerL, lopt.stdout, "Attaching to existing cluster %s for test %s (logs: %s)",
+			existingClusterName, t.Name,
+			filepath.Join(runnerLogsDir, clusterCreateDir, existingClusterName+".log"))
 		if c, err := attachToExistingCluster(ctx, existingClusterName, clusterL, t.Cluster, opt, r.cr); err != nil {
 			// If the cluster is not found, we fall through to create a new cluster. Otherwise, we bail out.
 			if errors.Is(err, errClusterNotFound) {
-				lopt.l.PrintfCtx(ctx, "Error attaching to existing cluster %s: %s", existingClusterName, err)
+				lopt.runnerL.PrintfCtx(ctx, "Error attaching to existing cluster %s: %s", existingClusterName, err)
 			} else {
 				return nil, nil, err
 			}
@@ -685,12 +686,12 @@ func (r *testRunner) allocateOrAttachToCluster(
 			return c, nil, nil
 		}
 		// Fall through to create new cluster with name override.
-		lopt.l.PrintfCtx(
+		lopt.runnerL.PrintfCtx(
 			ctx, "Creating new cluster with custom name %q for test %s: %s (arch=%q)",
 			clustersOpt.clusterName, t.Name, t.Cluster, arch,
 		)
 	} else {
-		lopt.l.PrintfCtx(ctx, "Creating new cluster for test %s: %s (arch=%q)", t.Name, t.Cluster, arch)
+		lopt.runnerL.PrintfCtx(ctx, "Creating new cluster for test %s: %s (arch=%q)", t.Name, t.Cluster, arch)
 	}
 
 	var clusterOS string
@@ -708,7 +709,7 @@ func (r *testRunner) allocateOrAttachToCluster(
 		arch:         arch,
 		os:           clusterOS,
 	}
-	return clusterFactory.newCluster(ctx, cfg, wStatus.SetStatus, lopt.tee)
+	return clusterFactory.newCluster(ctx, cfg, wStatus.SetStatus)
 }
 
 // runWorker runs tests in a loop until work is exhausted.
@@ -742,13 +743,13 @@ func (r *testRunner) runWorker(
 	clustersOpt clustersOpt,
 	lopt loggingOpt,
 	topt testOpts,
-	l *logger.Logger,
+	workerL *logger.Logger,
 	maxTotalFailures int,
 	github GithubPoster,
 ) error {
 	stdout := lopt.stdout
 
-	wStatus := r.addWorker(ctx, l, name)
+	wStatus := r.addWorker(ctx, workerL, name)
 	defer func() {
 		r.removeWorker(ctx, name)
 	}()
@@ -765,15 +766,15 @@ func (r *testRunner) runWorker(
 		wStatus.SetCluster(nil)
 
 		if c == nil {
-			l.PrintfCtx(ctx, "Worker exiting; no cluster to destroy.")
+			workerL.PrintfCtx(ctx, "Worker exiting; no cluster to destroy.")
 			return
 		}
 		doDestroy := ctx.Err() == nil
 		if doDestroy {
-			l.PrintfCtx(ctx, "Worker exiting; destroying cluster.")
-			c.Destroy(context.Background(), closeLogger, l)
+			workerL.PrintfCtx(ctx, "Worker exiting; destroying cluster.")
+			c.Destroy(context.Background(), closeLogger, workerL)
 		} else {
-			l.PrintfCtx(ctx, "Worker exiting with canceled ctx. Not destroying cluster.")
+			workerL.PrintfCtx(ctx, "Worker exiting with canceled ctx. Not destroying cluster.")
 		}
 	}()
 
@@ -782,7 +783,7 @@ func (r *testRunner) runWorker(
 		// Release any quota, in case we exit from the loop from an error path.
 		if alloc != nil {
 			if alloc.Acquired() > 0 {
-				l.PrintfCtx(ctx, "Releasing quota for %s CPUs", alloc.String())
+				workerL.PrintfCtx(ctx, "Releasing quota for %s CPUs", alloc.String())
 			}
 			qp.Release(alloc)
 		}
@@ -795,7 +796,7 @@ func (r *testRunner) runWorker(
 	for {
 		select {
 		case <-interrupt:
-			l.ErrorfCtx(ctx, "worker detected interruption")
+			workerL.ErrorfCtx(ctx, "worker detected interruption")
 			return errors.Errorf("interrupted")
 		default:
 			if ctx.Err() != nil {
@@ -817,20 +818,20 @@ func (r *testRunner) runWorker(
 		testToRun := testToRunRes{noWork: true}
 		if c != nil {
 			// Try to reuse cluster.
-			testToRun = work.selectTestForCluster(ctx, l, c.spec, r.cr, roachtestflags.Cloud)
+			testToRun = work.selectTestForCluster(ctx, workerL, c.spec, r.cr, roachtestflags.Cloud)
 			if !testToRun.noWork {
 				// We found a test to run on this cluster. Wipe the cluster.
-				if err := c.WipeForReuse(ctx, l, testToRun.spec.Cluster); err != nil {
+				if err := c.WipeForReuse(ctx, workerL, testToRun.spec.Cluster); err != nil {
 					// We do not count reuse attempt error toward clusterCreateErr. If
 					// either the Wipe or Extend failed, then destroy the cluster and attempt
 					// to create a fresh cluster for the selected test.
-					shout(ctx, l, stdout, "Unable to reuse cluster: %s due to: %s. Will attempt to create a fresh one",
+					shout(ctx, workerL, stdout, "Unable to reuse cluster: %s due to: %s. Will attempt to create a fresh one",
 						c.Name(), err)
 					// We don't release the quota allocation - the new cluster will be
 					// identical.
 					testToRun.canReuseCluster = false
 					// We use a context that can't be canceled for the Destroy().
-					c.Destroy(context.Background(), closeLogger, l)
+					c.Destroy(context.Background(), closeLogger, workerL)
 					wStatus.SetCluster(nil)
 					c = nil
 				}
@@ -844,8 +845,8 @@ func (r *testRunner) runWorker(
 				wStatus.SetStatus("destroying cluster")
 				// We failed to find a test that can take advantage of this cluster. So
 				// we're going to release it, which will deallocate its resources.
-				l.PrintfCtx(ctx, "No tests that can reuse cluster %s found. Destroying.", c)
-				r.destroyClusterAsync(clusterDestroyWg, c, l)
+				workerL.PrintfCtx(ctx, "No tests that can reuse cluster %s found. Destroying.", c)
+				r.destroyClusterAsync(clusterDestroyWg, c, workerL)
 				wStatus.SetCluster(nil)
 				c = nil
 			}
@@ -854,19 +855,19 @@ func (r *testRunner) runWorker(
 			// associated quota allocation.
 			if alloc != nil {
 				if alloc.Acquired() > 0 {
-					l.PrintfCtx(ctx, "Releasing quota for %s CPUs", alloc.String())
+					workerL.PrintfCtx(ctx, "Releasing quota for %s CPUs", alloc.String())
 				}
 				qp.Release(alloc)
 				alloc = nil
 			}
 
 			var err error
-			testToRun, alloc, err = work.selectTest(ctx, qp, l)
+			testToRun, alloc, err = work.selectTest(ctx, qp, workerL)
 			if err != nil {
 				return err
 			}
 			if testToRun.noWork {
-				shout(ctx, l, stdout, "No work remaining; runWorker is bailing out...")
+				shout(ctx, workerL, stdout, "No work remaining; runWorker is bailing out...")
 				return nil
 			}
 		}
@@ -885,7 +886,7 @@ func (r *testRunner) runWorker(
 			// somehow determine the capabilities at runtime.
 			arch = c.arch
 		} else {
-			arch = archForTest(ctx, l, testToRun.spec)
+			arch = archForTest(ctx, workerL, testToRun.spec)
 			if c != nil {
 				// Switch architecture of local cluster (see above).
 				c.arch = arch
@@ -898,7 +899,7 @@ func (r *testRunner) runWorker(
 		// (in RoachprodOpts). All the code below using arch is incorrect in this
 		// case.
 		if err := VerifyLibraries(testToRun.spec.NativeLibs, arch); err != nil {
-			shout(ctx, l, stdout, "Library verification failed: %s", err)
+			shout(ctx, workerL, stdout, "Library verification failed: %s", err)
 			return err
 		}
 
@@ -920,16 +921,21 @@ func (r *testRunner) runWorker(
 
 			if clusterCreateErr != nil {
 				atomic.AddInt32(&r.numClusterErrs, 1)
-				shout(ctx, l, stdout, "Unable to create (or reuse) cluster for test %s due to: %s.",
+				shout(ctx, workerL, stdout, "Unable to create (or reuse) cluster for test %s: %s",
 					testToRun.spec.Name, clusterCreateErr)
+				if c != nil {
+					shout(ctx, workerL, stdout, "Cluster logs: %s", filepath.Join(runnerLogsDir, clusterCreateDir, c.Name()+".log"))
+				}
 			} else {
 				if c.arch != arch {
 					// N.B. this can happen if requested machine type is not feasible/available.
-					l.PrintfCtx(ctx, "WARN: cluster arch for test differs %s: %s (cluster arch=%q, specified arch=%q)",
+					workerL.PrintfCtx(ctx, "WARN: cluster arch for test differs %s: %s (cluster arch=%q, specified arch=%q)",
 						testToRun.spec.Name, c.Name(), c.arch, arch)
 					arch = c.arch
 				}
-				l.PrintfCtx(ctx, "Created new cluster for test %s: %s (arch=%q)", testToRun.spec.Name, c.Name(), arch)
+				shout(ctx, workerL, stdout, "Cluster %s created for test %s (arch=%q, logs: %s)",
+					c.Name(), testToRun.spec.Name, arch,
+					filepath.Join(runnerLogsDir, clusterCreateDir, c.Name()+".log"))
 			}
 		}
 
@@ -937,7 +943,7 @@ func (r *testRunner) runWorker(
 		// cleaned up. Do it now instead of at the end as the test may be interrupted
 		// with ctrl c before we get there.
 		if c != nil && clustersOpt.debugMode == DebugKeepAlways {
-			c.Save(ctx, "cluster saved since --debug-always set", l)
+			c.Save(ctx, "cluster saved since --debug-always set", workerL)
 		}
 
 		wStatus.SetCluster(c)
@@ -1002,10 +1008,10 @@ func (r *testRunner) runWorker(
 			// but not in runTests() so keeping the invocation of getTestParameters()
 			// the same in both spots
 			params := getTestParameters(t, issueInfo.cluster, issueInfo.vmCreateOpts)
-			logTestParameters(l, params)
-			if _, githubErr := github.MaybePost(t, issueInfo, l, t.failureMsg(), params); githubErr != nil {
+			logTestParameters(workerL, params)
+			if _, githubErr := github.MaybePost(t, issueInfo, workerL, t.failureMsg(), params); githubErr != nil {
 				atomic.AddInt32(&r.numGithubPostErrs, 1)
-				shout(ctx, l, stdout, "failed to post issue: %s", githubErr)
+				shout(ctx, workerL, stdout, "failed to post issue: %s", githubErr)
 			}
 		}
 
@@ -1015,19 +1021,34 @@ func (r *testRunner) runWorker(
 			handleClusterCreationFailure(clusterCreateErr)
 		} else {
 			// Now run the test.
-			l.PrintfCtx(ctx, "Starting test: %s:%d on cluster=%s (arch=%q)", testToRun.spec.Name, testToRun.runNum, c.Name(), arch)
+			workerL.PrintfCtx(ctx, "Starting test: %s:%d on cluster=%s (arch=%q)", testToRun.spec.Name, testToRun.runNum, c.Name(), arch)
 
 			c.setTest(t)
 
+			// Create a test-level cluster setup logger with NoTee to pass
+			// into cluster setup methods to reduce noise in stdout when
+			// TeeToStdout is set (when parallelism is 1).
+			setupLogPath := filepath.Join(testArtifactsDir, "cluster_setup.log")
+			clusterSetupL, setupLogErr := logger.RootLogger(setupLogPath, logger.NoTee)
+			if setupLogErr != nil {
+				// Fall back to the worker logger if we can't create cluster_setup.log.
+				clusterSetupL = workerL
+			}
+
+			shout(ctx, workerL, stdout, "Setting up cluster %s for test %s", c.Name(), testToRun.spec.Name)
+
 			var setupErr error
 			if c.spec.NodeCount > 0 { // skip during tests
-				setupErr = c.PutCockroach(ctx, l, t)
+				setupErr = c.PutCockroach(ctx, clusterSetupL, t)
 			}
 			if setupErr == nil {
-				setupErr = c.PutLibraries(ctx, "./lib", t.spec.NativeLibs)
+				setupErr = c.PutLibraries(ctx, clusterSetupL, "./lib", t.spec.NativeLibs)
 			}
 			if setupErr == nil {
-				setupErr = c.PutDeprecatedWorkload(ctx, l, t)
+				setupErr = c.PutDeprecatedWorkload(ctx, clusterSetupL, t)
+			}
+			if clusterSetupL != workerL {
+				clusterSetupL.Close()
 			}
 
 			if setupErr != nil {
@@ -1035,8 +1056,11 @@ func (r *testRunner) runWorker(
 				// initial files), we treat the error just like a cluster
 				// creation failure: the error is reported as an
 				// infrastructure flake, and we continue with the next test.
+				shout(ctx, workerL, stdout, "Cluster setup failed for test %s (setup logs: %s): %s",
+					testToRun.spec.Name, setupLogPath, setupErr)
 				handleClusterCreationFailure(setupErr)
 			} else {
+				shout(ctx, workerL, stdout, "Cluster %s ready for test %s.", c.Name(), testToRun.spec.Name)
 				// Tell the cluster that, from now on, it will be run "on behalf of this
 				// test".
 				c.status("running test")
@@ -1137,7 +1161,7 @@ func (r *testRunner) runWorker(
 			msg = "test failed: %s (run %d)"
 		}
 		msg = fmt.Sprintf(msg, t.Name(), testToRun.runNum)
-		l.PrintfCtx(ctx, msg)
+		workerL.PrintfCtx(ctx, msg)
 
 		testL.Close()
 		if t.Failed() {
@@ -1148,7 +1172,7 @@ func (r *testRunner) runWorker(
 					// Save the cluster for future debugging.
 					// We already marked the cluster as a saved cluster above in the case
 					// of DebugKeepAlways, but update it with the failureMsg.
-					c.Save(ctx, failureMsg, l)
+					c.Save(ctx, failureMsg, workerL)
 
 					// Continue with a fresh cluster.
 					c = nil
@@ -1156,8 +1180,8 @@ func (r *testRunner) runWorker(
 					if !c.saved() {
 						// On any test failure or error, we destroy the cluster. We could be
 						// more selective, but this sounds safer.
-						l.PrintfCtx(ctx, "destroying cluster %s because: %s", c, failureMsg)
-						c.Destroy(context.Background(), closeLogger, l)
+						workerL.PrintfCtx(ctx, "destroying cluster %s because: %s", c, failureMsg)
+						c.Destroy(context.Background(), closeLogger, workerL)
 					}
 					c = nil
 				}

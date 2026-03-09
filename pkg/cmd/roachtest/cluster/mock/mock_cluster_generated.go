@@ -702,17 +702,17 @@ func (mr *MockClusterMockRecorder) PutE(arg0, arg1, arg2, arg3 interface{}, arg4
 }
 
 // PutLibraries mocks base method.
-func (m *MockCluster) PutLibraries(arg0 context.Context, arg1 string, arg2 []string) error {
+func (m *MockCluster) PutLibraries(arg0 context.Context, arg1 *logger.Logger, arg2 string, arg3 []string) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "PutLibraries", arg0, arg1, arg2)
+	ret := m.ctrl.Call(m, "PutLibraries", arg0, arg1, arg2, arg3)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // PutLibraries indicates an expected call of PutLibraries.
-func (mr *MockClusterMockRecorder) PutLibraries(arg0, arg1, arg2 interface{}) *gomock.Call {
+func (mr *MockClusterMockRecorder) PutLibraries(arg0, arg1, arg2, arg3 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "PutLibraries", reflect.TypeOf((*MockCluster)(nil).PutLibraries), arg0, arg1, arg2)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "PutLibraries", reflect.TypeOf((*MockCluster)(nil).PutLibraries), arg0, arg1, arg2, arg3)
 }
 
 // PutString mocks base method.
