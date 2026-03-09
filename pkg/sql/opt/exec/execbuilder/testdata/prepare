@@ -267,6 +267,226 @@ regions: <hidden>
 statement ok
 RESET plan_cache_mode
 
+# Regression test for #164666. InlineConstVar should treat placeholder
+# expressions as constants, so that correlated subquery references can
+# have placeholder inlined placeholder correlation is in the
+# same conjunction.
+subtest regression-164666
+
+statement ok
+CREATE TABLE t164666_t1 (
+  k1 INT8 NOT NULL,
+  k2 INT8 NOT NULL,
+  a1 STRING NULL,
+  fk1 INT8 NULL,
+  CONSTRAINT pk_t164666_t1 PRIMARY KEY (k1 ASC),
+  INDEX ix_t164666_t1_k2 (k2 ASC)
+);
+
+statement ok
+CREATE TABLE t164666_t2 (
+  k3 INT8 NOT NULL,
+  a2 STRING NULL,
+  CONSTRAINT pk_t164666_t2 PRIMARY KEY (k3 ASC)
+);
+
+statement ok
+CREATE TABLE t164666_t3 (
+  k4 INT8 NOT NULL,
+  fk2 STRING NOT NULL DEFAULT '',
+  k2 INT8 NULL,
+  k1 INT8 NULL,
+  b1 BOOL NULL,
+  CONSTRAINT pk_t164666_t3 PRIMARY KEY (k4 ASC),
+  INDEX ix_t164666_t3_k2 (k2 ASC)
+);
+
+statement ok
+CREATE TABLE t164666_t4 (
+  fk2 STRING NOT NULL,
+  a3 STRING NULL,
+  CONSTRAINT pk_t164666_t4 PRIMARY KEY (fk2 ASC)
+);
+
+statement ok
+PREPARE p164666 AS SELECT t164666_t1.k1
+FROM t164666_t1
+INNER JOIN t164666_t2 ON t164666_t1.fk1 = t164666_t2.k3
+WHERE t164666_t1.k2 = $1
+AND (
+  t164666_t2.a2 = 'abc'
+  OR EXISTS(
+    SELECT 1
+    FROM t164666_t3
+    INNER JOIN t164666_t4 ON t164666_t3.fk2 = t164666_t4.fk2
+    WHERE t164666_t1.k1 = t164666_t3.k1
+    AND t164666_t3.k2 = t164666_t1.k2
+  )
+);
+
+# The plan should not contain full scans on t164666_t3. The equality on
+# the semi join should only be (k1), not (k1, k2), because t164666_t1.k2 = $1
+# was inlined into the subquery.
+query T
+EXPLAIN ANALYZE EXECUTE p164666(12345);
+----
+planning time: 10µs
+execution time: 100µs
+distribution: <hidden>
+plan type: custom
+regions: <hidden>
+·
+• filter
+│ sql nodes: <hidden>
+│ regions: <hidden>
+│ execution time: 0µs
+│ actual row count: 0
+│ filter: (any_not_null = 'abc') OR (any_not_null IS NOT NULL)
+│
+└── • group (hash)
+    │ sql nodes: <hidden>
+    │ regions: <hidden>
+    │ execution time: 0µs
+    │ actual row count: 0
+    │ group by: k1
+    │
+    └── • hash join (right outer)
+        │ sql nodes: <hidden>
+        │ regions: <hidden>
+        │ execution time: 0µs
+        │ actual row count: 0
+        │ equality: (k1) = (k1)
+        │ right cols are key
+        │
+        ├── • lookup join (streamer)
+        │   │ sql nodes: <hidden>
+        │   │ regions: <hidden>
+        │   │ KV time: 0µs
+        │   │ KV rows decoded: 0
+        │   │ execution time: 0µs
+        │   │ actual row count: 0
+        │   │ table: t164666_t4@pk_t164666_t4
+        │   │ equality: (fk2) = (fk2)
+        │   │ equality cols are key
+        │   │
+        │   └── • index join (streamer)
+        │       │ sql nodes: <hidden>
+        │       │ regions: <hidden>
+        │       │ KV time: 0µs
+        │       │ KV rows decoded: 0
+        │       │ actual row count: 0
+        │       │ table: t164666_t3@pk_t164666_t3
+        │       │
+        │       └── • scan
+        │             sql nodes: <hidden>
+        │             regions: <hidden>
+        │             KV time: 0µs
+        │             KV rows decoded: 0
+        │             actual row count: 0
+        │             missing stats
+        │             table: t164666_t3@ix_t164666_t3_k2
+        │             spans: [/12345 - /12345]
+        │
+        └── • lookup join (streamer)
+            │ sql nodes: <hidden>
+            │ regions: <hidden>
+            │ KV time: 0µs
+            │ KV rows decoded: 0
+            │ execution time: 0µs
+            │ actual row count: 0
+            │ table: t164666_t2@pk_t164666_t2
+            │ equality: (fk1) = (k3)
+            │ equality cols are key
+            │
+            └── • index join (streamer)
+                │ sql nodes: <hidden>
+                │ regions: <hidden>
+                │ KV time: 0µs
+                │ KV rows decoded: 0
+                │ actual row count: 0
+                │ table: t164666_t1@pk_t164666_t1
+                │
+                └── • scan
+                      sql nodes: <hidden>
+                      kv nodes: <hidden>
+                      regions: <hidden>
+                      KV time: 0µs
+                      KV rows decoded: 0
+                      actual row count: 0
+                      missing stats
+                      table: t164666_t1@ix_t164666_t1_k2
+                      spans: [/12345 - /12345]
+
+# Regression test: when the EXISTS subquery's only outer column reference
+# is the placeholder-mapped column, inlining would make the subquery fully
+# uncorrelated. This would prevent the parameterized scan optimization
+# from firing on the outer query. Verify that the placeholder is NOT
+# inlined into the subquery in this case.
+statement ok
+PREPARE p164666_no_uncorrelate AS SELECT t164666_t1.k1
+FROM t164666_t1
+WHERE t164666_t1.k1 = $1
+AND EXISTS(
+  SELECT 1
+  FROM t164666_t3
+  WHERE t164666_t3.k1 = t164666_t1.k1
+);
+
+# The plan should use a constrained scan on t1 (via the placeholder),
+# not a full table scan. The subquery should remain correlated so
+# that the parameterized scan optimization can fire on the outer query.
+query T
+EXPLAIN ANALYZE EXECUTE p164666_no_uncorrelate(1);
+----
+planning time: 10µs
+execution time: 100µs
+distribution: <hidden>
+plan type: custom
+regions: <hidden>
+·
+• merge join
+│ sql nodes: <hidden>
+│ regions: <hidden>
+│ execution time: 0µs
+│ actual row count: 0
+│ equality: (k1) = (k1)
+│ left cols are key
+│ right cols are key
+│
+├── • scan
+│     sql nodes: <hidden>
+│     kv nodes: <hidden>
+│     regions: <hidden>
+│     KV time: 0µs
+│     KV rows decoded: 0
+│     actual row count: 0
+│     missing stats
+│     table: t164666_t1@pk_t164666_t1
+│     spans: [/1 - /1]
+│
+└── • limit
+    │ count: 1
+    │
+    └── • filter
+        │ sql nodes: <hidden>
+        │ regions: <hidden>
+        │ execution time: 0µs
+        │ actual row count: 0
+        │ filter: k1 = 1
+        │
+        └── • scan
+              sql nodes: <hidden>
+              kv nodes: <hidden>
+              regions: <hidden>
+              KV time: 0µs
+              KV rows decoded: 0
+              actual row count: 0
+              missing stats
+              table: t164666_t3@pk_t164666_t3
+              spans: FULL SCAN (SOFT LIMIT)
+
+subtest end
+
 subtest prepare-enum-update
 
 statement ok

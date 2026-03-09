@@ -291,17 +291,28 @@ func (c *CustomFuncs) inlineProjections(e opt.Expr, projections memo.Projections
 	return replace(e)
 }
 
+// extractVarEqualsConst extracts a (variable = const) or (variable =
+// placeholder) equality from a filter condition. Placeholder
+// expressions are treated like constants because they are bound to a
+// single value at execution time.
 func (c *CustomFuncs) extractVarEqualsConst(
 	e opt.Expr,
-) (ok bool, left *memo.VariableExpr, right *memo.ConstExpr) {
+) (ok bool, left *memo.VariableExpr, right opt.ScalarExpr) {
 	if eq, ok := e.(*memo.EqExpr); ok {
 		if l, ok := eq.Left.(*memo.VariableExpr); ok {
-			if r, ok := eq.Right.(*memo.ConstExpr); ok {
-				return true, l, r
+			switch eq.Right.(type) {
+			case *memo.ConstExpr, *memo.PlaceholderExpr:
+				return true, l, eq.Right
 			}
 		}
 	}
 	return false, nil, nil
+}
+
+// isPlaceholder returns true if the expression is a PlaceholderExpr.
+func isPlaceholder(e opt.ScalarExpr) bool {
+	_, ok := e.(*memo.PlaceholderExpr)
+	return ok
 }
 
 // CanInlineConstVar returns true if there is an opportunity in the filters to
@@ -316,9 +327,12 @@ func (c *CustomFuncs) CanInlineConstVar(f memo.FiltersExpr) bool {
 	// usedIndices tracks the set of filter indices we've used to infer constant
 	// values, so we don't inline into them.
 	var usedIndices intsets.Fast
-	// fixedCols is the set of columns that the filters restrict to be a constant
-	// value.
-	var fixedCols opt.ColSet
+	// constCols is the set of columns mapped to true constants (ConstExpr).
+	// These can be inlined unconditionally at any scope.
+	var constCols opt.ColSet
+	// placeholderCols is the set of columns mapped to placeholders. These
+	// are only inlined into correlated subqueries that remain correlated.
+	var placeholderCols opt.ColSet
 	for i := range f {
 		if ok, l, e := c.extractVarEqualsConst(f[i].Condition); ok {
 			colType := c.mem.Metadata().ColumnMeta(l.Col).Type
@@ -327,11 +341,15 @@ func (c *CustomFuncs) CanInlineConstVar(f memo.FiltersExpr) bool {
 				// to composite-ness.
 				continue
 			}
-			if !e.Typ.Equivalent(colType) {
+			if !e.DataType().Equivalent(colType) {
 				continue
 			}
-			if !fixedCols.Contains(l.Col) {
-				fixedCols.Add(l.Col)
+			if !constCols.Contains(l.Col) && !placeholderCols.Contains(l.Col) {
+				if isPlaceholder(e) {
+					placeholderCols.Add(l.Col)
+				} else {
+					constCols.Add(l.Col)
+				}
 				usedIndices.Add(i)
 			}
 		}
@@ -340,7 +358,42 @@ func (c *CustomFuncs) CanInlineConstVar(f memo.FiltersExpr) bool {
 		if usedIndices.Contains(i) {
 			continue
 		}
-		if f[i].ScalarProps().OuterCols.Intersects(fixedCols) {
+		outerCols := f[i].ScalarProps().OuterCols
+		// Constant columns can always be inlined at any scope level.
+		if outerCols.Intersects(constCols) {
+			return true
+		}
+		// Placeholder columns can only be inlined into correlated subqueries
+		// that would remain correlated after inlining. Check whether this
+		// filter item contains such a subquery.
+		if outerCols.Intersects(placeholderCols) {
+			if c.hasQualifyingSubquery(f[i].Condition, placeholderCols) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// hasQualifyingSubquery walks the expression tree and returns true if it
+// contains a subquery (Exists, Subquery, Any) whose outer column references
+// intersect placeholderCols AND whose outer columns would not be entirely
+// consumed by placeholder inlining (i.e., the subquery would remain
+// correlated after inlining).
+func (c *CustomFuncs) hasQualifyingSubquery(e opt.Expr, placeholderCols opt.ColSet) bool {
+	switch e.(type) {
+	case *memo.SubqueryExpr, *memo.ExistsExpr, *memo.AnyExpr:
+		subqueryOuterCols := c.OuterCols(e)
+		if subqueryOuterCols.Intersects(placeholderCols) &&
+			!subqueryOuterCols.Difference(placeholderCols).Empty() {
+			return true
+		}
+		// Don't recurse into this subquery — we only care about top-level
+		// subqueries in the filter item.
+		return false
+	}
+	for i, n := 0, e.ChildCount(); i < n; i++ {
+		if c.hasQualifyingSubquery(e.Child(i), placeholderCols) {
 			return true
 		}
 	}
@@ -348,6 +401,26 @@ func (c *CustomFuncs) CanInlineConstVar(f memo.FiltersExpr) bool {
 }
 
 // InlineConstVar performs the inlining detected by CanInlineConstVar.
+//
+// For constant values (ConstExpr), variables are replaced unconditionally
+// at all scopes. For placeholder values (PlaceholderExpr), we are more
+// careful to avoid disrupting the optimizer's parameterized scan/lookup
+// optimizations:
+//
+//  1. Placeholders are NOT inlined at the same scope level (i.e., into
+//     sibling filter items). Doing so can break join correlations. For
+//     example, if we have "t1.k = $1 AND t1.k = t2.a", inlining t1.k
+//     to $1 in the second filter would produce "$1 = t2.a", turning a
+//     correlated lookup into a cross join.
+//
+//  2. Placeholders ARE inlined across subquery boundaries (into EXISTS,
+//     Subquery, Any expressions), but ONLY when the subquery would
+//     remain correlated after the inlining. If inlining would remove
+//     all outer column references from a subquery (making it fully
+//     uncorrelated), we skip the inlining. Making a subquery
+//     uncorrelated changes the decorrelation strategy and can prevent
+//     the parameterized scan optimization from firing on the outer
+//     query, degrading e.g. a PK point lookup to a full table scan.
 func (c *CustomFuncs) InlineConstVar(f memo.FiltersExpr) memo.FiltersExpr {
 	// usedIndices tracks the set of filter indices we've used to infer constant
 	// values, so we don't inline into them.
@@ -358,31 +431,47 @@ func (c *CustomFuncs) InlineConstVar(f memo.FiltersExpr) memo.FiltersExpr {
 	// vals maps columns which are restricted to be constant to the value they
 	// are restricted to.
 	vals := make(map[opt.ColumnID]opt.ScalarExpr)
+	// placeholderCols tracks the subset of fixedCols where the mapped value is
+	// a PlaceholderExpr rather than a ConstExpr. These columns receive
+	// restricted inlining (only into correlated subqueries that stay
+	// correlated).
+	var placeholderCols opt.ColSet
 	for i := range f {
 		if ok, v, e := c.extractVarEqualsConst(f[i].Condition); ok {
 			colType := c.mem.Metadata().ColumnMeta(v.Col).Type
 			if colinfo.CanHaveCompositeKeyEncoding(colType) {
 				continue
 			}
-			if !e.Typ.Equivalent(colType) {
+			if !e.DataType().Equivalent(colType) {
 				continue
 			}
 			if _, ok := vals[v.Col]; !ok {
 				vals[v.Col] = e
 				fixedCols.Add(v.Col)
 				usedIndices.Add(i)
+				if isPlaceholder(e) {
+					placeholderCols.Add(v.Col)
+				}
 			}
 		}
 	}
 
-	var replace ReplaceFunc
-	replace = func(nd opt.Expr) opt.Expr {
+	// replaceConst only inlines constant (non-placeholder) values. It is
+	// used at the top scope level where placeholder inlining is not desired.
+	var replaceConst ReplaceFunc
+	replaceConst = func(nd opt.Expr) opt.Expr {
 		if t, ok := nd.(*memo.VariableExpr); ok {
-			if e, ok := vals[t.Col]; ok {
+			if e, ok := vals[t.Col]; ok && !isPlaceholder(e) {
 				return e
 			}
 		}
-		return c.f.Replace(nd, replace)
+		// When we encounter a subquery boundary, switch to replaceInSubquery
+		// which also inlines placeholders (if the subquery stays correlated).
+		switch nd := nd.(type) {
+		case *memo.SubqueryExpr, *memo.ExistsExpr, *memo.AnyExpr:
+			return c.maybeInlineIntoSubquery(nd, vals, placeholderCols)
+		}
+		return c.f.Replace(nd, replaceConst)
 	}
 
 	result := make(memo.FiltersExpr, len(f))
@@ -393,11 +482,45 @@ func (c *CustomFuncs) InlineConstVar(f memo.FiltersExpr) memo.FiltersExpr {
 		if usedIndices.Contains(i) || !inliningNeeded {
 			result[i] = f[i]
 		} else {
-			newCondition := replace(f[i].Condition).(opt.ScalarExpr)
+			newCondition := replaceConst(f[i].Condition).(opt.ScalarExpr)
 			result[i] = c.f.ConstructFiltersItem(newCondition)
 		}
 	}
 	return result
+}
+
+// maybeInlineIntoSubquery decides whether to inline placeholder values
+// into a subquery expression (Exists, Subquery, Any). We only do so
+// when the subquery would remain correlated after inlining — i.e.,
+// when its outer column references are not entirely consumed by
+// the placeholder-mapped columns.
+//
+// If the subquery would become fully uncorrelated, we skip the
+// placeholder inlining to preserve the correlated plan structure
+// that the parameterized scan optimization relies on.
+func (c *CustomFuncs) maybeInlineIntoSubquery(
+	nd opt.Expr, vals map[opt.ColumnID]opt.ScalarExpr, placeholderCols opt.ColSet,
+) opt.Expr {
+	subqueryOuterCols := c.OuterCols(nd)
+	// Check whether the subquery would remain correlated after inlining
+	// all placeholder-mapped columns. If removing those columns from the
+	// subquery's outer column set leaves it empty, the subquery would
+	// become fully uncorrelated; skip placeholder inlining in that case.
+	remainingOuterCols := subqueryOuterCols.Difference(placeholderCols)
+	allowPlaceholders := !remainingOuterCols.Empty()
+
+	var replaceInSubquery ReplaceFunc
+	replaceInSubquery = func(nd opt.Expr) opt.Expr {
+		if t, ok := nd.(*memo.VariableExpr); ok {
+			if e, ok := vals[t.Col]; ok {
+				if !isPlaceholder(e) || allowPlaceholders {
+					return e
+				}
+			}
+		}
+		return c.f.Replace(nd, replaceInSubquery)
+	}
+	return replaceInSubquery(nd)
 }
 
 // IsInlinableUDF returns true if the given UDF can be inlined as a subquery,
