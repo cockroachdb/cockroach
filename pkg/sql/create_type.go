@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
@@ -543,6 +544,11 @@ func (p *planner) createDomainWithID(
 	dbDesc catalog.DatabaseDescriptor,
 	typeName *tree.TypeName,
 ) error {
+	if !params.EvalContext().Settings.Version.IsActive(params.ctx, clusterversion.V26_3) {
+		return pgerror.Newf(pgcode.FeatureNotSupported,
+			"CREATE DOMAIN requires all nodes to be upgraded to %v",
+			clusterversion.V26_3.Version())
+	}
 	schema, err := getCreateTypeParams(params.ctx, p, typeName, dbDesc)
 	if err != nil {
 		return err
@@ -555,6 +561,10 @@ func (p *planner) createDomainWithID(
 	}
 	if err = tree.CheckUnsupportedType(params.ctx, &params.p.semaCtx, baseType); err != nil {
 		return err
+	}
+	// Reject domain-of-domain. Full nested domain support is tracked in #165347.
+	if baseType.TypeMeta.DomainData != nil {
+		return unimplemented.NewWithIssue(165347, "domain of domain is not yet supported")
 	}
 
 	// Build CHECK constraints. Each expression is validated by substituting

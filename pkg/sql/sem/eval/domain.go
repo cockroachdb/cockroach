@@ -82,7 +82,11 @@ func evalDomainCheckConstraint(
 		return err
 	}
 
-	// Type-check the expression as a boolean.
+	// Type-check the expression as a boolean. The nil resolver means UDT
+	// references in CHECK expressions would fail here, but this is acceptable
+	// because CHECK expressions are validated with the real resolver at CREATE
+	// DOMAIN time — any UDT references are resolved eagerly during that
+	// type-check, so they won't appear as unresolved names at eval time.
 	semaCtx := tree.MakeSemaContext(nil /* resolver */)
 	typedExpr, err := tree.TypeCheck(ctx, expr, &semaCtx, types.Bool)
 	if err != nil {
