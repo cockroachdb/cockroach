@@ -286,11 +286,19 @@ func (t *group) Wait() {
 
 // WaitE implements the ErrorGroup interface.
 func (t *group) WaitE() error {
-	var err error
-	t.groupMu.Lock()
-	defer t.groupMu.Unlock()
-	err = t.ctxGroup.Wait()
-	for _, g := range t.groupMu.groups {
+	// Wait for all tasks in this group's ctxGroup first, without holding
+	// groupMu. Holding the lock across ctxGroup.Wait() would deadlock if a
+	// running task calls NewGroup (which also needs groupMu).
+	err := t.ctxGroup.Wait()
+
+	// Take a snapshot of subgroups under the lock, then wait on each without
+	// the lock held.
+	subgroups := func() []*group {
+		t.groupMu.Lock()
+		defer t.groupMu.Unlock()
+		return append([]*group(nil), t.groupMu.groups...)
+	}()
+	for _, g := range subgroups {
 		err = errors.CombineErrors(g.WaitE(), err)
 	}
 	return err
