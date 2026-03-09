@@ -1662,8 +1662,12 @@ func (og *operationGenerator) createView(ctx context.Context, tx pgx.Tx) (*opStm
 	})
 	// Descriptor ID generator may be temporarily unavailable, so
 	// allow uncategorized errors temporarily.
-	opStmt.sql = fmt.Sprintf(`CREATE VIEW %s AS %s`,
-		destViewName, selectStatement.String())
+	securityInvokerClause, err := og.randSecurityInvokerClause(ctx, tx)
+	if err != nil {
+		return nil, err
+	}
+	opStmt.sql = fmt.Sprintf(`CREATE VIEW %s%s AS %s`,
+		destViewName, securityInvokerClause, selectStatement.String())
 	return opStmt, nil
 }
 
@@ -2499,6 +2503,66 @@ func (og *operationGenerator) renameView(ctx context.Context, tx pgx.Tx) (*opStm
 	})
 
 	stmt.sql = fmt.Sprintf(`ALTER VIEW %s RENAME TO %s`, srcViewName, destViewName)
+	return stmt, nil
+}
+
+func (og *operationGenerator) alterViewSetViewOption(
+	ctx context.Context, tx pgx.Tx,
+) (*opStmt, error) {
+	viewName, err := og.randView(ctx, tx, og.pctExisting(true), "")
+	if err != nil {
+		return nil, err
+	}
+	viewExists, err := og.viewExists(ctx, tx, viewName)
+	if err != nil {
+		return nil, err
+	}
+	notSupported, err := isClusterVersionLessThan(
+		ctx, tx, clusterversion.V26_2.Version(),
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	stmt := makeOpStmt(OpStmtDDL)
+	stmt.expectedExecErrors.addAll(codesWithConditions{
+		{code: pgcode.UndefinedTable, condition: !viewExists},
+		{code: pgcode.Syntax, condition: notSupported},
+		{code: pgcode.FeatureNotSupported, condition: notSupported},
+	})
+	value := "true"
+	if og.params.rng.Intn(2) == 0 {
+		value = "false"
+	}
+	stmt.sql = fmt.Sprintf(`ALTER VIEW %s SET (security_invoker = %s)`, viewName, value)
+	return stmt, nil
+}
+
+func (og *operationGenerator) alterViewResetViewOption(
+	ctx context.Context, tx pgx.Tx,
+) (*opStmt, error) {
+	viewName, err := og.randView(ctx, tx, og.pctExisting(true), "")
+	if err != nil {
+		return nil, err
+	}
+	viewExists, err := og.viewExists(ctx, tx, viewName)
+	if err != nil {
+		return nil, err
+	}
+	notSupported, err := isClusterVersionLessThan(
+		ctx, tx, clusterversion.V26_2.Version(),
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	stmt := makeOpStmt(OpStmtDDL)
+	stmt.expectedExecErrors.addAll(codesWithConditions{
+		{code: pgcode.UndefinedTable, condition: !viewExists},
+		{code: pgcode.Syntax, condition: notSupported},
+		{code: pgcode.FeatureNotSupported, condition: notSupported},
+	})
+	stmt.sql = fmt.Sprintf(`ALTER VIEW %s RESET (security_invoker)`, viewName)
 	return stmt, nil
 }
 
@@ -3792,6 +3856,35 @@ func (og *operationGenerator) randReferenceActions(
 		acts.Update = tree.NoAction
 	}
 	return acts
+}
+
+// randSecurityInvokerClause randomly returns a WITH (security_invoker) clause
+// for use in CREATE VIEW statements. It returns one of:
+// - " WITH (security_invoker = true)"
+// - " WITH (security_invoker = false)"
+// - "" (no clause)
+// The security_invoker option is only available in v26.2+, so an empty string
+// is always returned on older versions.
+func (og *operationGenerator) randSecurityInvokerClause(
+	ctx context.Context, tx pgx.Tx,
+) (string, error) {
+	notSupported, err := isClusterVersionLessThan(
+		ctx, tx, clusterversion.V26_2.Version(),
+	)
+	if err != nil {
+		return "", err
+	}
+	if notSupported {
+		return "", nil
+	}
+	switch og.params.rng.Intn(3) {
+	case 0:
+		return " WITH (security_invoker = true)", nil
+	case 1:
+		return " WITH (security_invoker = false)", nil
+	default:
+		return "", nil
+	}
 }
 
 // randParentColumnForFkRelation fetches a column and table to use as the parent in a single-column foreign key relation.
