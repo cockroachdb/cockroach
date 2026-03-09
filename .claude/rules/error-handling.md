@@ -1,5 +1,6 @@
 ---
-globs: ["**/*.go"]
+paths:
+  - "**/*.go"
 ---
 
 # CockroachDB Error Handling

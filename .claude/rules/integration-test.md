@@ -1,6 +1,7 @@
 ---
-name: integration-test
-description: Guidelines for writing integration tests with CockroachDB test servers, including when to use them and how to use sqlutils.
+paths:
+  - "**/*_test.go"
+  - "pkg/testutils/**"
 ---
 
 # Integration Test Guidelines
@@ -183,7 +184,7 @@ When test cases modify schema (ALTER TABLE, ADD COLUMN), each needs its own tabl
 
 ## Combining with Table-Driven Tests
 
-Use the `/table-driven-test` skill for structuring test cases. The key pattern: set up the server once, then use table-driven structure for the test cases.
+Use the table-driven-test rule for structuring test cases and the go-test rule for assertion patterns and debugging test failures. The key pattern: set up the server once, then use table-driven structure for the test cases.
 
 ```go
 func TestDatabaseOperations(t *testing.T) {

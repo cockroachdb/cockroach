@@ -1,6 +1,7 @@
 ---
-name: table-driven-test
-description: Guidelines for creating clean, well-structured table-driven tests in Go following CockroachDB conventions.
+paths:
+  - "**/*_test.go"
+  - "pkg/testutils/**"
 ---
 
 # Table-Driven Test Guidelines
@@ -121,34 +122,7 @@ The name should answer "what scenario is this?" not "what data does this use?"
 
 ## Assertions
 
-Use `require.*` (stops on failure) for most checks. Use `assert.*` (continues on failure) only when you want to see multiple failures.
-
-**Common patterns:**
-```go
-// Errors
-require.NoError(t, err)
-require.Error(t, err)
-require.ErrorContains(t, err, "not found")
-
-// Equality
-require.Equal(t, expected, actual)  // shows both values on failure
-require.True(t, result == expected) // don't do this - hides values
-
-// Collections
-require.Len(t, slice, expectedLen)
-require.Contains(t, slice, element)
-```
-
-**Avoid redundant nil checks:** Don't use `require.NotNil` before an assertion that will already fail on nil (like `require.Equal` or `require.Contains`). The subsequent assertion provides a clearer failure message anyway.
-
-```go
-// Bad: redundant nil check
-require.NotNil(t, result)
-require.Equal(t, expectedVal, result.Field)
-
-// Good: Equal already fails clearly if result is nil
-require.Equal(t, expectedVal, result.Field)
-```
+For general assertion guidance (`require.*` vs `assert.*`, common patterns), see the go-test rule.
 
 **Error handling in test cases:**
 ```go
@@ -231,4 +205,4 @@ entries := entries(
 
 ## Integration Tests
 
-For tests requiring a database server, see the `/integration-test` skill. The table-driven patterns here apply to both unit and integration tests.
+For tests requiring a database server, see the integration-test rule. The table-driven patterns here apply to both unit and integration tests.

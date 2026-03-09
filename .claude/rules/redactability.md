@@ -1,5 +1,6 @@
 ---
-globs: ["**/*.go"]
+paths:
+  - "**/*.go"
 ---
 
 # Redactability: types in logs and errors
