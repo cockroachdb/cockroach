@@ -573,7 +573,9 @@ func NewServer(cfg Config, stopper *stop.Stopper) (serverctl.ServerStartupInterf
 				log.Ops.Warningf(ctx, "writing last up timestamp: %v", err)
 			}
 		},
-		Cache: livenessCache,
+		Cache:                 livenessCache,
+		Settings:              st,
+		HeartbeatTraceDumpDir: cfg.HeartbeatTraceDirName,
 	})
 
 	nodeRegistry.AddMetricStruct(nodeLiveness.Metrics())

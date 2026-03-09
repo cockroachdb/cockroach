@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	diskStorage "github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/grpcutil"
@@ -33,6 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil/singleflight"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
 )
@@ -89,6 +91,24 @@ var TimeAfterStoreSuspectInStoreLiveness = settings.RegisterDurationSetting(
 		" A suspect store is typically treated the same as an unavailable store.",
 	30*time.Second,
 	settings.DurationInRange(minTimeUntilNodeSuspect, maxTimeAfterNodeSuspect),
+)
+
+// SlowHeartbeatThreshold controls the duration above which a heartbeat is
+// considered slow and a warning is logged.
+var SlowHeartbeatThreshold = settings.RegisterDurationSetting(
+	settings.SystemOnly,
+	"server.liveness_heartbeat.slow_threshold",
+	"threshold above which a liveness heartbeat is considered slow",
+	time.Second,
+)
+
+// SlowHeartbeatTraceDumpEnabled controls whether verbose traces are dumped to
+// disk when a slow heartbeat is detected.
+var SlowHeartbeatTraceDumpEnabled = settings.RegisterBoolSetting(
+	settings.SystemOnly,
+	"server.liveness_heartbeat.trace_dump.enabled",
+	"whether to dump verbose traces for slow heartbeats to disk",
+	false,
 )
 
 var (
@@ -293,6 +313,14 @@ type NodeLiveness struct {
 	// when a local disks is stalled.
 	engines []kvstorage.Engines
 
+	// settings is used to read cluster settings for slow heartbeat thresholds
+	// and trace dump configuration.
+	settings *cluster.Settings
+
+	// heartbeatTraceDumper writes verbose traces to disk for slow heartbeats.
+	// Nil if trace dumping is not configured (e.g. no dump directory).
+	heartbeatTraceDumper *heartbeatTraceDumper
+
 	// Set to true once Start is called. RegisterCallback can not be called after
 	// Start is called.
 	started atomic.Bool
@@ -332,6 +360,8 @@ type NodeLivenessOptions struct {
 	Engines               []kvstorage.Engines
 	OnSelfHeartbeat       HeartbeatCallback
 	Cache                 *Cache
+	Settings              *cluster.Settings
+	HeartbeatTraceDumpDir string
 }
 
 // NewNodeLiveness returns a new instance of NodeLiveness configured
@@ -353,6 +383,12 @@ func NewNodeLiveness(opts NodeLivenessOptions) *NodeLiveness {
 		engines:               opts.Engines,
 		onSelfHeartbeat:       opts.OnSelfHeartbeat,
 		cache:                 opts.Cache,
+		settings:              opts.Settings,
+	}
+	if opts.HeartbeatTraceDumpDir != "" && opts.Settings != nil {
+		nl.heartbeatTraceDumper = newHeartbeatTraceDumper(
+			opts.HeartbeatTraceDumpDir, opts.Settings,
+		)
 	}
 	nl.metrics = Metrics{
 		LiveNodes:          metric.NewFunctionalGauge(metaLiveNodes, nl.numLiveNodes),
@@ -764,14 +800,25 @@ func (nl *NodeLiveness) notifyIsAliveCallbacks(fns []IsLiveCallback) {
 func (nl *NodeLiveness) heartbeatInternal(
 	ctx context.Context, oldLiveness livenesspb.Liveness, incrementEpoch bool,
 ) (err error) {
-	ctx, sp := tracing.EnsureChildSpan(ctx, nl.ambientCtx.Tracer, "liveness heartbeat")
-	defer sp.Finish()
+	ctx, sp := tracing.EnsureChildSpan(ctx, nl.ambientCtx.Tracer, "liveness heartbeat",
+		tracing.WithRecording(tracingpb.RecordingVerbose))
 	defer func(start time.Time) {
 		dur := timeutil.Since(start)
 		nl.metrics.HeartbeatLatency.RecordValue(dur.Nanoseconds())
-		if dur > time.Second {
-			log.KvExec.Warningf(ctx, "slow heartbeat took %s; err=%v", dur, err)
+		threshold := time.Second
+		if nl.settings != nil {
+			threshold = SlowHeartbeatThreshold.Get(&nl.settings.SV)
 		}
+		if dur > threshold {
+			log.KvExec.Warningf(ctx, "slow heartbeat took %s; err=%v", dur, err)
+			if nl.heartbeatTraceDumper != nil &&
+				SlowHeartbeatTraceDumpEnabled.Get(&nl.settings.SV) {
+				rec := sp.FinishAndGetConfiguredRecording()
+				nl.heartbeatTraceDumper.dump(ctx, dur, rec)
+				return
+			}
+		}
+		sp.Finish()
 	}(timeutil.Now())
 
 	// Collect a clock reading from before we begin queuing on the heartbeat

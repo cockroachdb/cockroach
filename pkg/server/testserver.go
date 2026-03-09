@@ -308,6 +308,9 @@ func makeTestConfigFromParams(params base.TestServerArgs) Config {
 			if cfg.InflightTraceDirName == "" {
 				cfg.InflightTraceDirName = filepath.Join(storeSpec.Path, "logs", base.InflightTraceDir)
 			}
+			if cfg.HeartbeatTraceDirName == "" {
+				cfg.HeartbeatTraceDirName = filepath.Join(storeSpec.Path, "logs", base.HeartbeatTraceDumpDir)
+			}
 			if cfg.CPUProfileDirName == "" {
 				cfg.CPUProfileDirName = filepath.Join(storeSpec.Path, "logs", base.CPUProfileDir)
 			}
