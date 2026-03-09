@@ -78,13 +78,27 @@ func (g *mockLockTableGuard) CurState() (waitingState, error) {
 	return s, nil
 }
 func (g *mockLockTableGuard) ResolveBeforeScanning() []roachpb.LockUpdate {
+	if g.virtuallyResolveIntents {
+		return nil
+	}
 	return g.toResolve
 }
 func (g *mockLockTableGuard) IntentsToResolveVirtually() []roachpb.LockUpdate {
-	return g.toResolve
+	if g.virtuallyResolveIntents {
+		return g.toResolve
+	}
+	return nil
 }
 func (g *mockLockTableGuard) VirtuallyResolvesIntents() bool {
 	return g.virtuallyResolveIntents
+}
+func (g *mockLockTableGuard) AddReplicatedToResolveAndSignal(up roachpb.LockUpdate) {
+	g.toResolve = append(g.toResolve, up)
+	// Use non-blocking send, matching the real lockTableGuardImpl.notify().
+	select {
+	case g.signal <- struct{}{}:
+	default:
+	}
 }
 func (g *mockLockTableGuard) CheckOptimisticNoConflicts(*lockspanset.LockSpanSet) (ok bool) {
 	return true
@@ -421,10 +435,10 @@ func TestLockTableWaiterSkipsResolveWithVIR(t *testing.T) {
 	) (*roachpb.Transaction, bool, *Error) {
 		resp := &roachpb.Transaction{TxnMeta: *pusheeArg, Status: roachpb.ABORTED}
 		w.lt.(*mockLockTable).txnFinalizedFn = func(txn *roachpb.Transaction) {}
-		// With VIR, the physical resolve should be skipped. Transition
-		// directly to doneWaiting.
+		// With VIR, AddReplicatedToResolveAndSignal will be called after
+		// pushTxn returns, which handles signaling the guard. Transition
+		// to doneWaiting so the next CurState returns doneWaiting.
 		g.state = waitingState{kind: doneWaiting}
-		g.notify()
 		return resp, false, nil
 	}
 	ir.resolveIntent = func(context.Context, roachpb.LockUpdate, intentresolver.ResolveOptions) *Error {

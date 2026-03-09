@@ -1,5 +1,11 @@
+# Tests for the interaction between pushed transactions (PushedTransactionUpdated)
+# and virtual intent resolution. PushedTransactionUpdated populates the
+# txnStatusCache but does not directly wake waiting readers. VIR-enabled readers
+# pick up the pushed txn from the cache on their next scan and proceed to
+# resolve intents virtually during evaluation.
+
 # ---------------------------------------------------------------------------
-# Test 1: Basic wake — pending pushed txn wakes reader on replicated lock.
+# Test 1: Basic — pending pushed txn. VIR reader picks up cache on rescan.
 # ---------------------------------------------------------------------------
 
 new-lock-table maxlocks=10000
@@ -31,11 +37,10 @@ num=1
  lock: "a"
   holder: txn: 00000000-0000-0000-0000-000000000002 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: repl [Intent]
 
-# Enable virtual intent resolution.
 set-virtual-intent-resolution ok=true
 ----
 
-# Reader waits on the replicated lock.
+# VIR reader waits on the replicated lock.
 new-request r=req2 txn=txn1 ts=10,1 spans=none@a
 ----
 
@@ -47,11 +52,20 @@ guard-state r=req2
 ----
 new: state=waitFor txn=txn2 key="a" held=true guard-strength=None
 
-# Push txn2 above the reader's timestamp.
+# Push txn2 above the reader's timestamp. This only populates the cache.
 pushed-txn-updated txn=txn2 status=pending ts=11,1
 ----
 
-# Reader should be woken with the intent to resolve.
+# Reader stays waiting; pushed-txn-updated does not wake it.
+guard-state r=req2
+----
+old: state=waitFor txn=txn2 key="a" held=true guard-strength=None
+
+# On rescan, the reader picks up the pushed txn from the cache and proceeds.
+scan r=req2
+----
+start-waiting: false
+
 guard-state r=req2
 ----
 new: state=doneWaiting
@@ -65,7 +79,7 @@ num=1
   holder: txn: 00000000-0000-0000-0000-000000000002 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: repl [Intent]
 
 # ---------------------------------------------------------------------------
-# Test 2: Finalized txn (committed) wakes reader.
+# Test 2: Committed txn — VIR reader picks up finalized status on rescan.
 # ---------------------------------------------------------------------------
 
 new-lock-table maxlocks=10000
@@ -115,6 +129,14 @@ pushed-txn-updated txn=txn2 status=committed
 
 guard-state r=req2
 ----
+old: state=waitFor txn=txn2 key="a" held=true guard-strength=None
+
+scan r=req2
+----
+start-waiting: false
+
+guard-state r=req2
+----
 new: state=doneWaiting
 Intents to resolve:
  key="a" txn=00000000-0000-0000-0000-000000000002 epoch=0 ts=10.000000000,1 status=COMMITTED
@@ -126,7 +148,7 @@ num=1
   holder: txn: 00000000-0000-0000-0000-000000000002 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: repl [Intent] [holder finalized: committed]
 
 # ---------------------------------------------------------------------------
-# Test 3: Finalized txn (aborted) wakes reader.
+# Test 3: Aborted txn — VIR reader picks up finalized status on rescan.
 # ---------------------------------------------------------------------------
 
 new-lock-table maxlocks=10000
@@ -176,6 +198,14 @@ pushed-txn-updated txn=txn2 status=aborted
 
 guard-state r=req2
 ----
+old: state=waitFor txn=txn2 key="a" held=true guard-strength=None
+
+scan r=req2
+----
+start-waiting: false
+
+guard-state r=req2
+----
 new: state=doneWaiting
 Intents to resolve:
  key="a" txn=00000000-0000-0000-0000-000000000002 epoch=0 ts=10.000000000,1 status=ABORTED
@@ -187,8 +217,9 @@ num=1
   holder: txn: 00000000-0000-0000-0000-000000000002 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: repl [Intent] [holder finalized: aborted]
 
 # ---------------------------------------------------------------------------
-# Test 4: Reader timestamp too high — NOT woken.
-# Reader at ts=12, txn2 pushed to ts=11.
+# Test 4: Push insufficient — txn2 pushed to ts=11, but VIR reader is at
+# ts=12. The pushed timestamp is still below the reader's, so the cache
+# doesn't help and the reader stays waiting even on rescan.
 # ---------------------------------------------------------------------------
 
 new-lock-table maxlocks=10000
@@ -237,18 +268,13 @@ new: state=waitFor txn=txn2 key="a" held=true guard-strength=None
 pushed-txn-updated txn=txn2 status=pending ts=11,1
 ----
 
-# Reader should NOT be woken.
 guard-state r=req2
 ----
 old: state=waitFor txn=txn2 key="a" held=true guard-strength=None
 
-print
-----
-num=1
- lock: "a"
-  holder: txn: 00000000-0000-0000-0000-000000000002 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: repl [Intent]
-   waiting readers:
-    req: 2, txn: 00000000-0000-0000-0000-000000000001
+# The reader stays waiting. In the real system, eventually the reader's own
+# push timer fires and pushLockTxn discovers the push is insufficient. It
+# would NOT rescan via ScanAndEnqueue while still actively waiting.
 
 dequeue r=req2
 ----
@@ -257,293 +283,10 @@ num=1
   holder: txn: 00000000-0000-0000-0000-000000000002 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: repl [Intent]
 
 # ---------------------------------------------------------------------------
-# Test 5: Reader without virtuallyResolveIntents — NOT woken.
-# ---------------------------------------------------------------------------
-
-new-lock-table maxlocks=10000
-----
-
-new-txn txn=txn1 ts=10,1 epoch=0
-----
-
-new-txn txn=txn2 ts=10,1 epoch=0
-----
-
-new-request r=req1 txn=txn1 ts=10,1 spans=none@a
-----
-
-scan r=req1
-----
-start-waiting: false
-
-add-discovered r=req1 k=a txn=txn2
-----
-num=1
- lock: "a"
-  holder: txn: 00000000-0000-0000-0000-000000000002 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: repl [Intent]
-
-dequeue r=req1
-----
-num=1
- lock: "a"
-  holder: txn: 00000000-0000-0000-0000-000000000002 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: repl [Intent]
-
-# Explicitly disable virtual intent resolution.
-set-virtual-intent-resolution ok=false
-----
-
-new-request r=req2 txn=txn1 ts=10,1 spans=none@a
-----
-
-scan r=req2
-----
-start-waiting: true
-
-guard-state r=req2
-----
-new: state=waitFor txn=txn2 key="a" held=true guard-strength=None
-
-pushed-txn-updated txn=txn2 status=pending ts=11,1
-----
-
-# Reader should NOT be woken.
-guard-state r=req2
-----
-old: state=waitFor txn=txn2 key="a" held=true guard-strength=None
-
-print
-----
-num=1
- lock: "a"
-  holder: txn: 00000000-0000-0000-0000-000000000002 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: repl [Intent]
-   waiting readers:
-    req: 2, txn: 00000000-0000-0000-0000-000000000001
-
-dequeue r=req2
-----
-num=1
- lock: "a"
-  holder: txn: 00000000-0000-0000-0000-000000000002 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: repl [Intent]
-
-# ---------------------------------------------------------------------------
-# Test 6: Multiple readers on same lock — mix of eligible/ineligible.
-# One with virtuallyResolveIntents=true, one without. Only the eligible
-# one is woken.
-# ---------------------------------------------------------------------------
-
-new-lock-table maxlocks=10000
-----
-
-new-txn txn=txn1 ts=10,1 epoch=0
-----
-
-new-txn txn=txn2 ts=10,1 epoch=0
-----
-
-new-txn txn=txn3 ts=10,1 epoch=0
-----
-
-new-request r=req1 txn=txn1 ts=10,1 spans=none@a
-----
-
-scan r=req1
-----
-start-waiting: false
-
-add-discovered r=req1 k=a txn=txn2
-----
-num=1
- lock: "a"
-  holder: txn: 00000000-0000-0000-0000-000000000002 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: repl [Intent]
-
-dequeue r=req1
-----
-num=1
- lock: "a"
-  holder: txn: 00000000-0000-0000-0000-000000000002 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: repl [Intent]
-
-# req2 created WITHOUT virtual intent resolution.
-set-virtual-intent-resolution ok=false
-----
-
-new-request r=req2 txn=txn1 ts=10,1 spans=none@a
-----
-
-scan r=req2
-----
-start-waiting: true
-
-# req3 created WITH virtual intent resolution.
-set-virtual-intent-resolution ok=true
-----
-
-new-request r=req3 txn=txn3 ts=10,1 spans=none@a
-----
-
-scan r=req3
-----
-start-waiting: true
-
-print
-----
-num=1
- lock: "a"
-  holder: txn: 00000000-0000-0000-0000-000000000002 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: repl [Intent]
-   waiting readers:
-    req: 3, txn: 00000000-0000-0000-0000-000000000003
-    req: 2, txn: 00000000-0000-0000-0000-000000000001
-
-pushed-txn-updated txn=txn2 status=pending ts=11,1
-----
-
-# req2 should remain waiting; req3 should be woken.
-guard-state r=req2
-----
-new: state=waitFor txn=txn2 key="a" held=true guard-strength=None
-
-guard-state r=req3
-----
-new: state=doneWaiting
-Intents to resolve:
- key="a" txn=00000000-0000-0000-0000-000000000002 epoch=0 ts=11.000000000,1 status=PENDING
-
-print
-----
-num=1
- lock: "a"
-  holder: txn: 00000000-0000-0000-0000-000000000002 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: repl [Intent]
-   waiting readers:
-    req: 2, txn: 00000000-0000-0000-0000-000000000001
-
-dequeue r=req2
-----
-num=1
- lock: "a"
-  holder: txn: 00000000-0000-0000-0000-000000000002 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: repl [Intent]
-
-dequeue r=req3
-----
-num=1
- lock: "a"
-  holder: txn: 00000000-0000-0000-0000-000000000002 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: repl [Intent]
-
-# ---------------------------------------------------------------------------
-# Test 7: Multiple locks held by same txn — readers on different keys.
-# Replicated locks on "a" and "b" both held by txn2.
-# ---------------------------------------------------------------------------
-
-new-lock-table maxlocks=10000
-----
-
-new-txn txn=txn1 ts=10,1 epoch=0
-----
-
-new-txn txn=txn2 ts=10,1 epoch=0
-----
-
-new-txn txn=txn3 ts=10,1 epoch=0
-----
-
-new-request r=req1 txn=txn1 ts=10,1 spans=none@a,c
-----
-
-scan r=req1
-----
-start-waiting: false
-
-add-discovered r=req1 k=a txn=txn2
-----
-num=1
- lock: "a"
-  holder: txn: 00000000-0000-0000-0000-000000000002 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: repl [Intent]
-
-add-discovered r=req1 k=b txn=txn2
-----
-num=2
- lock: "a"
-  holder: txn: 00000000-0000-0000-0000-000000000002 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: repl [Intent]
- lock: "b"
-  holder: txn: 00000000-0000-0000-0000-000000000002 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: repl [Intent]
-
-dequeue r=req1
-----
-num=2
- lock: "a"
-  holder: txn: 00000000-0000-0000-0000-000000000002 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: repl [Intent]
- lock: "b"
-  holder: txn: 00000000-0000-0000-0000-000000000002 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: repl [Intent]
-
-set-virtual-intent-resolution ok=true
-----
-
-new-request r=req2 txn=txn1 ts=10,1 spans=none@a
-----
-
-scan r=req2
-----
-start-waiting: true
-
-new-request r=req3 txn=txn3 ts=10,1 spans=none@b
-----
-
-scan r=req3
-----
-start-waiting: true
-
-print
-----
-num=2
- lock: "a"
-  holder: txn: 00000000-0000-0000-0000-000000000002 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: repl [Intent]
-   waiting readers:
-    req: 2, txn: 00000000-0000-0000-0000-000000000001
- lock: "b"
-  holder: txn: 00000000-0000-0000-0000-000000000002 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: repl [Intent]
-   waiting readers:
-    req: 3, txn: 00000000-0000-0000-0000-000000000003
-
-pushed-txn-updated txn=txn2 status=pending ts=11,1
-----
-
-guard-state r=req2
-----
-new: state=doneWaiting
-Intents to resolve:
- key="a" txn=00000000-0000-0000-0000-000000000002 epoch=0 ts=11.000000000,1 status=PENDING
-
-guard-state r=req3
-----
-new: state=doneWaiting
-Intents to resolve:
- key="b" txn=00000000-0000-0000-0000-000000000002 epoch=0 ts=11.000000000,1 status=PENDING
-
-print
-----
-num=2
- lock: "a"
-  holder: txn: 00000000-0000-0000-0000-000000000002 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: repl [Intent]
- lock: "b"
-  holder: txn: 00000000-0000-0000-0000-000000000002 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: repl [Intent]
-
-dequeue r=req2
-----
-num=2
- lock: "a"
-  holder: txn: 00000000-0000-0000-0000-000000000002 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: repl [Intent]
- lock: "b"
-  holder: txn: 00000000-0000-0000-0000-000000000002 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: repl [Intent]
-
-dequeue r=req3
-----
-num=2
- lock: "a"
-  holder: txn: 00000000-0000-0000-0000-000000000002 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: repl [Intent]
- lock: "b"
-  holder: txn: 00000000-0000-0000-0000-000000000002 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: repl [Intent]
-
-# ---------------------------------------------------------------------------
-# Test 8: Locking requests unaffected.
-# A locking request (exclusive) waits on a lock. Push should not disturb it.
+# Test 5: Locking request unaffected by push.
+# A locking request (Intent strength) waits on a lock. The cache-based
+# resolution only applies to non-locking readers (strength=None), so
+# the locking request stays waiting.
 # ---------------------------------------------------------------------------
 
 new-lock-table maxlocks=10000
@@ -592,7 +335,7 @@ new: state=waitFor txn=txn2 key="a" held=true guard-strength=Intent
 pushed-txn-updated txn=txn2 status=pending ts=11,1
 ----
 
-# Locking request should NOT be affected.
+# Locking request is not affected by the push.
 guard-state r=req2
 ----
 old: state=waitFor txn=txn2 key="a" held=true guard-strength=Intent
@@ -612,8 +355,8 @@ num=1
   holder: txn: 00000000-0000-0000-0000-000000000002 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: repl [Intent]
 
 # ---------------------------------------------------------------------------
-# Test 9: Mixed replicated+unreplicated lock — reader IS woken.
-# Lock held both replicated (intent) and unreplicated (exclusive).
+# Test 6: Mixed replicated+unreplicated lock — VIR reader proceeds on
+# rescan via cache (replicated component present).
 # ---------------------------------------------------------------------------
 
 new-lock-table maxlocks=10000
@@ -682,18 +425,30 @@ new: state=waitFor txn=txn2 key="a" held=true guard-strength=None
 pushed-txn-updated txn=txn2 status=pending ts=11,1
 ----
 
-# Reader IS woken (replicated component present).
+guard-state r=req3
+----
+old: state=waitFor txn=txn2 key="a" held=true guard-strength=None
+
+# On rescan, cache hit — reader proceeds.
+scan r=req3
+----
+start-waiting: false
+
 guard-state r=req3
 ----
 new: state=doneWaiting
 Intents to resolve:
  key="a" txn=00000000-0000-0000-0000-000000000002 epoch=0 ts=11.000000000,1 status=PENDING
 
+# The guard is still tracked in waitingReaders from the first scan;
+# ScanAndEnqueue does not remove it. Dequeue cleans it up.
 print
 ----
 num=1
  lock: "a"
   holder: txn: 00000000-0000-0000-0000-000000000002 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: repl [Intent], unrepl [(str: Exclusive seq: 0)]
+   waiting readers:
+    req: 3, txn: 00000000-0000-0000-0000-000000000001
 
 dequeue r=req3
 ----
@@ -702,10 +457,9 @@ num=1
   holder: txn: 00000000-0000-0000-0000-000000000002 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: repl [Intent], unrepl [(str: Exclusive seq: 0)]
 
 # ---------------------------------------------------------------------------
-# Test 10: After wake, scan encounters second lock by same txn.
+# Test 7: Multi-lock span — VIR reader picks up all locks from same txn.
 # Two replicated locks by txn2 on "a" and "b". Reader spans both.
-# After push, reader is woken at "a". On rescan, it encounters "b" and
-# the txnStatusCache handles it, adding it to toResolve as well.
+# After push populates cache, reader rescans and picks up BOTH locks.
 # ---------------------------------------------------------------------------
 
 new-lock-table maxlocks=10000
@@ -764,7 +518,15 @@ new: state=waitFor txn=txn2 key="a" held=true guard-strength=None
 pushed-txn-updated txn=txn2 status=pending ts=11,1
 ----
 
-# Reader should be doneWaiting with BOTH intents in toResolve.
+guard-state r=req2
+----
+old: state=waitFor txn=txn2 key="a" held=true guard-strength=None
+
+# On rescan, reader picks up BOTH intents from the cache.
+scan r=req2
+----
+start-waiting: false
+
 guard-state r=req2
 ----
 new: state=doneWaiting

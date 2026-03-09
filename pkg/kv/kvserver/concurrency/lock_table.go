@@ -1000,6 +1000,20 @@ func (g *lockTableGuardImpl) doneActivelyWaitingAtLock() {
 	g.notify()
 }
 
+// AddReplicatedToResolveAndSignal implements the lockTableGuard interface.
+func (g *lockTableGuardImpl) AddReplicatedToResolveAndSignal(up roachpb.LockUpdate) {
+	g.lt.removeReaderFromKey(g, up.Span.Key)
+	g.toResolve.add(up)
+	// removeReaderFromKey notifies the guard when it successfully removes
+	// us from the waiting readers list. If we weren't found (e.g. because
+	// another goroutine already removed us), that goroutine would have
+	// already notified us. We notify defensively here to ensure the guard
+	// always makes progress, even if the above reasoning is violated.
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	g.doneActivelyWaitingAtLock()
+}
+
 func (g *lockTableGuardImpl) txnMeta() *enginepb.TxnMeta {
 	if g.txn == nil {
 		return nil
@@ -1089,14 +1103,17 @@ func (g *lockTableGuardImpl) isSameTxn(txn *enginepb.TxnMeta) bool {
 	return g.txn != nil && g.txn.ID == txn.ID
 }
 
-// conflictWithHeld locks return true if the given lock conflicts with the
+// conflictsWithHeldLock returns true if the given lock conflicts with the
 // request for this guard.
 //
-// The resolveMustBeVirtual indicates whether locks which can be resolved based
-// on the txn status cache should only be considered when the request is
-// configured for a virtual resolution.
+// callerOwned indicates whether the caller's goroutine owns this guard. When
+// false (e.g. when called from recomputeWaitQueues on another request's guard),
+// the method avoids accessing unsynchronized guard state such as toResolve and
+// toResolveUnreplicated to prevent data races. When true (the normal scan
+// path), locks that can be resolved based on the txn status cache or existing
+// resolve entries are treated as non-conflicting.
 func (g *lockTableGuardImpl) conflictsWithHeldLock(
-	tl *txnLock, key roachpb.Key, resolveMustBeVirtual bool,
+	tl *txnLock, key roachpb.Key, callerOwned bool,
 ) bool {
 	lockHolderTxn := tl.getLockHolderTxn()
 	if g.isSameTxn(lockHolderTxn) {
@@ -1109,16 +1126,14 @@ func (g *lockTableGuardImpl) conflictsWithHeldLock(
 		return false // no conflict with a lock held by our own transaction
 	}
 
-	if g.toResolve.contains(lockHolderTxn.ID, key) {
-		return false // No conflict for a lock we are going to resolve.
-	}
+	if callerOwned {
+		if g.toResolve.contains(lockHolderTxn.ID, key) {
+			return false // No conflict for a lock we are going to resolve.
+		}
 
-	if canResolve, up := g.canResolveKeyForHoldingTransaction(lockHolderTxn, g.curStrength(), key); canResolve {
-		// We share this code with a couple of contexts. For now, we want to avoid waking up
-		// readers who are not going to virtually resolve their intents.
-		//
-		// TODO(ssd): Should we just wake up everyone?
-		if (resolveMustBeVirtual && g.virtuallyResolveIntents) || !resolveMustBeVirtual {
+		if canResolve, up := g.canResolveKeyForHoldingTransaction(
+			lockHolderTxn, g.curStrength(), key,
+		); canResolve {
 			if !tl.isHeldReplicated() {
 				// Only held unreplicated. Accumulate it as an unreplicated lock to
 				// resolve, in case any other waiting readers can benefit from the
@@ -3021,7 +3036,7 @@ func (kl *keyLocks) conflictsWithLockHolders(g *lockTableGuardImpl) bool {
 	}
 
 	for e := kl.holders.Front(); e != nil; e = e.Next() {
-		if g.conflictsWithHeldLock(e.Value, kl.key, false) {
+		if g.conflictsWithHeldLock(e.Value, kl.key, true /* callerOwned */) {
 			return true
 		}
 	}
@@ -3843,7 +3858,7 @@ func (kl *keyLocks) recomputeWaitQueues(st *cluster.Settings) {
 		reader := e.Value
 		curr := e
 		e = e.Next()
-		if !reader.conflictsWithHeldLock(txnLock, kl.key, true /* only allow virtual resolve */) {
+		if !reader.conflictsWithHeldLock(txnLock, kl.key, false /* callerOwned */) {
 			kl.removeReader(curr)
 		}
 	}
@@ -5056,39 +5071,34 @@ func (t *lockTableImpl) batchPushedLockResolution() bool {
 	return BatchPushedLockResolution.Get(&t.settings.SV)
 }
 
+// removeReaderFromKey removes the guard from the waitingReaders list of the
+// keyLocks at the given key, if the guard is present. This is called after a
+// successful push with virtual intent resolution so the guard does not remain
+// as a stale entry in the lock's waiter list.
+func (t *lockTableImpl) removeReaderFromKey(g *lockTableGuardImpl, key roachpb.Key) {
+	t.locks.mu.RLock()
+	defer t.locks.mu.RUnlock()
+	iter := t.locks.MakeIter()
+	iter.FirstOverlap(&keyLocks{key: key})
+	if !iter.Valid() {
+		return
+	}
+	kl := iter.Cur()
+	kl.mu.Lock()
+	defer kl.mu.Unlock()
+	for e := kl.waitingReaders.Front(); e != nil; e = e.Next() {
+		if e.Value == g {
+			kl.removeReader(e)
+			return
+		}
+	}
+}
+
 // PushedTransactionUpdated implements the lockTable interface.
 func (t *lockTableImpl) PushedTransactionUpdated(
 	txn *roachpb.Transaction, clockObs roachpb.ObservedTimestamp,
 ) {
 	t.txnStatusCache.add(txn, clockObs)
-	t.maybeWakeReadersForPushedTxn(txn, clockObs)
-}
-
-// maybeWakeReadersForPushedTxn iterates over all locks in the lock table and
-// wakes waiting readers that can virtually resolve replicated locks held by the
-// pushed transaction. For each eligible reader, a LockUpdate is added to its
-// toResolve slice and the reader is removed from the lock's wait queue.
-//
-// TODO(ssd): Currently this is scanning the entire lock table and recomputing
-// the queue for any lock held by the pushed txn. We may want to only wake the
-// queue for the specific key that led to us pushing in the first place.
-func (t *lockTableImpl) maybeWakeReadersForPushedTxn(
-	txn *roachpb.Transaction, clockObs roachpb.ObservedTimestamp,
-) {
-	t.locks.mu.RLock()
-	defer t.locks.mu.RUnlock()
-	iter := t.locks.MakeIter()
-	for iter.First(); iter.Valid(); iter.Next() {
-		kl := iter.Cur()
-		kl.mu.Lock()
-
-		if !kl.isLockedBy(txn.ID) {
-			kl.mu.Unlock()
-			continue
-		}
-		kl.recomputeWaitQueues(t.settings)
-		kl.mu.Unlock()
-	}
 }
 
 // Enable implements the lockTable interface.
