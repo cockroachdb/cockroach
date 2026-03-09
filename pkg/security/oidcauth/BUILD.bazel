@@ -1,7 +1,7 @@
 load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
-    name = "oidcccl",
+    name = "oidcauth",
     srcs = [
         "authentication_oidc.go",
         "authorization_oidc.go",
@@ -9,7 +9,7 @@ go_library(
         "settings.go",
         "state.go",
     ],
-    importpath = "github.com/cockroachdb/cockroach/pkg/ccl/oidcccl",
+    importpath = "github.com/cockroachdb/cockroach/pkg/security/oidcauth",
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/roachpb",
@@ -40,8 +40,7 @@ go_library(
 )
 
 go_test(
-    name = "oidcccl_test",
-    size = "small",
+    name = "oidcauth_test",
     srcs = [
         "authentication_oidc_test.go",
         "authorization_oidc_test.go",
@@ -49,7 +48,7 @@ go_test(
         "settings_test.go",
     ],
     data = glob(["testdata/**"]),
-    embed = [":oidcccl"],
+    embed = [":oidcauth"],
     deps = [
         "//pkg/base",
         "//pkg/ccl",

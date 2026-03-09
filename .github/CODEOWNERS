@@ -419,7 +419,6 @@
 /pkg/ccl/multitenantccl/     @cockroachdb/server-prs
 /pkg/ccl/multitenant/tenantcostclient/ @cockroachdb/sql-queries-prs
 /pkg/ccl/multitenant/tenantcostserver/ @cockroachdb/sql-queries-prs
-/pkg/ccl/oidcccl/            @cockroachdb/product-security
 /pkg/ccl/pgcryptoccl/        @cockroachdb/sql-foundations
 /pkg/ccl/plpgsqlccl/         @cockroachdb/sql-queries-prs
 /pkg/ccl/securityccl/        @cockroachdb/security-engineering @cockroachdb/product-security
@@ -601,6 +600,7 @@
 /pkg/security/jwtauth/       @cockroachdb/cloud-identity @cockroachdb/product-security
 /pkg/security/jwthelper/     @cockroachdb/security-engineering @cockroachdb/product-security
 /pkg/security/ldapauth/      @cockroachdb/security-engineering @cockroachdb/product-security
+/pkg/security/oidcauth/      @cockroachdb/product-security
 /pkg/security/password/      @cockroachdb/security-engineering @cockroachdb/product-security
 /pkg/security/provisioning/  @cockroachdb/security-engineering @cockroachdb/product-security
 /pkg/security/username/      @cockroachdb/security-engineering @cockroachdb/product-security

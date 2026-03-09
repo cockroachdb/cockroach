@@ -95,7 +95,7 @@ type OIDC interface {
 	ui.OIDCUI
 }
 
-// ConfigureOIDC is a hook for the `oidcccl` library to add OIDC login support. It's called during
+// ConfigureOIDC is a hook for the `oidcauth` library to add OIDC login support. It's called during
 // server startup to initialize a client for OIDC support.
 var ConfigureOIDC = func(
 	ctx context.Context,

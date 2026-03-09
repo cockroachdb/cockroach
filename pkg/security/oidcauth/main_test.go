@@ -3,7 +3,7 @@
 // Use of this software is governed by the CockroachDB Software License
 // included in the /LICENSE file.
 
-package oidcccl_test
+package oidcauth_test
 
 import (
 	"os"
