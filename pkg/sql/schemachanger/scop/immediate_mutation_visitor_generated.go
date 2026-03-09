@@ -184,6 +184,7 @@ type ImmediateMutationVisitor interface {
 	MarkRecreatedIndexesAsVisible(context.Context, MarkRecreatedIndexesAsVisible) error
 	MarkRecreatedIndexAsVisible(context.Context, MarkRecreatedIndexAsVisible) error
 	SetTableSchemaLocked(context.Context, SetTableSchemaLocked) error
+	SetTableRBRUsingConstraint(context.Context, SetTableRBRUsingConstraint) error
 	SetTableStorageParam(context.Context, SetTableStorageParam) error
 	ResetTableStorageParam(context.Context, ResetTableStorageParam) error
 	UpsertRowLevelTTL(context.Context, UpsertRowLevelTTL) error
@@ -1022,6 +1023,11 @@ func (op MarkRecreatedIndexAsVisible) Visit(ctx context.Context, v ImmediateMuta
 // Visit is part of the ImmediateMutationOp interface.
 func (op SetTableSchemaLocked) Visit(ctx context.Context, v ImmediateMutationVisitor) error {
 	return v.SetTableSchemaLocked(ctx, op)
+}
+
+// Visit is part of the ImmediateMutationOp interface.
+func (op SetTableRBRUsingConstraint) Visit(ctx context.Context, v ImmediateMutationVisitor) error {
+	return v.SetTableRBRUsingConstraint(ctx, op)
 }
 
 // Visit is part of the ImmediateMutationOp interface.

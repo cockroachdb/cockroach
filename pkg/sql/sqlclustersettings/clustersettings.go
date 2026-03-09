@@ -114,6 +114,18 @@ func RequireSystemTenantOrClusterSetting(
 		"Feature flag: %s", setting.Name())
 }
 
+// InferRegionUsingConstraintEnabled is used to enable and disable setting a
+// foreign key constraint for looking up the region column in a REGIONAL BY ROW
+// table.
+var InferRegionUsingConstraintEnabled = settings.RegisterBoolSetting(
+	settings.ApplicationLevel,
+	"feature.infer_rbr_region_col_using_constraint.enabled",
+	"set to true to enable looking up the region column via a foreign key constraint in a "+
+		"REGIONAL BY ROW table, false to disable; default is false",
+	false,
+	settings.WithPublic,
+)
+
 // CachedSequencesCacheSizeSetting is the default cache size used when
 // SessionNormalizationMode is SerialUsesCachedSQLSequences or
 // SerialUsesCachedNodeSQLSequences.
