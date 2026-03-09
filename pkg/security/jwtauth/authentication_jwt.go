@@ -16,7 +16,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
-	"github.com/cockroachdb/cockroach/pkg/sql/pgwire"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/identmap"
 	"github.com/cockroachdb/cockroach/pkg/util/httputil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -41,6 +40,46 @@ var (
 	loginSuccessUseCounter = telemetry.GetCounterOnce(loginSuccessCounterName)
 	enableUseCounter       = telemetry.GetCounterOnce(enableCounterName)
 )
+
+// JWTVerifier is an interface for JWT login support. It validates whether a
+// given JWT token is a proper credential for a given user to log in.
+type JWTVerifier interface {
+	ValidateJWTLogin(_ context.Context, _ *cluster.Settings,
+		_ username.SQLUsername,
+		_ []byte,
+		_ *identmap.Conf,
+	) (detailedErrorMsg redact.RedactableString, authError error)
+
+	// RetrieveIdentity retrieves the user identity from the JWT.
+	//
+	// If a user identity is provided as input, it matches it against the token
+	// principals. In case of a match, it returns the matched user and no
+	// error. Otherwise, it returns the input user along with the error.
+	//
+	// If a user identity is not provided as input, and there is a single token
+	// principal to match against, it returns this user identity and no error.
+	// If there are multiple matches, then it returns an error.
+	RetrieveIdentity(
+		_ context.Context, st *cluster.Settings, _ username.SQLUsername, _ []byte, _ *identmap.Conf,
+	) (retrievedUser username.SQLUsername, authError error)
+
+	ExtractGroups(ctx context.Context, st *cluster.Settings, token []byte) ([]string, error)
+
+	// VerifyAndExtractIssuer is a combined minimal check used by the
+	// provisioner:
+	//   - verifies signature with the configured key set
+	//   - confirms the `iss` claim is configured
+	//   - returns the verified issuer string
+	//
+	//   issuer       – verified `iss` string (empty on failure)
+	//   detailedErr  – redactable diagnostics for LogAuthFailed
+	//   authErr      – high-level error shown to the client
+	VerifyAndExtractIssuer(
+		_ context.Context,
+		_ *cluster.Settings,
+		_ []byte,
+	) (issuer string, detailedErr redact.RedactableString, authErr error)
+}
 
 // jwtAuthenticator is an object that is used to validate JWTs that are used as part of
 // the CRDB SSO login flow.
@@ -226,7 +265,7 @@ func (authenticator *jwtAuthenticator) ValidateJWTLogin(
 	return "", nil
 }
 
-// RetrieveIdentity implements pgwire.JWTVerifier.
+// RetrieveIdentity implements JWTVerifier.
 //
 // It reloads the authenticator’s configuration from the passed
 // *cluster.Settings then delegates to retrieveIdentityLocked
@@ -513,14 +552,15 @@ var getHttpResponse = func(
 	return body, nil
 }
 
-// ConfigureJWTAuth initializes and returns a jwtAuthenticator. It also sets up listeners so
-// that the jwtAuthenticator's config is updated when the cluster settings values change.
-var ConfigureJWTAuth = func(
+// ConfigureJWTAuth initializes and returns a jwtAuthenticator. It also sets up
+// listeners so that the jwtAuthenticator's config is updated when the cluster
+// settings values change.
+func ConfigureJWTAuth(
 	serverCtx context.Context,
 	ambientCtx log.AmbientContext,
 	st *cluster.Settings,
 	clusterUUID uuid.UUID,
-) pgwire.JWTVerifier {
+) JWTVerifier {
 	authenticator := jwtAuthenticator{}
 	authenticator.clusterUUID = clusterUUID
 	authenticator.reloadConfig(serverCtx, st)
@@ -546,8 +586,4 @@ var ConfigureJWTAuth = func(
 		authenticator.reloadConfig(ambientCtx.AnnotateCtx(ctx), st)
 	})
 	return &authenticator
-}
-
-func init() {
-	pgwire.ConfigureJWTAuth = ConfigureJWTAuth
 }
