@@ -153,6 +153,12 @@ func (c *rowCountCheck) CheckSpan(
 		return err
 	}
 
+	// An empty predicate means the span has no rows so no further counting is
+	// necessary.
+	if predicate == "" {
+		return nil
+	}
+
 	rowCount, err := c.computeRowCount(ctx, predicate, queryArgs)
 	if err != nil {
 		return err
