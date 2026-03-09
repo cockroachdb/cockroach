@@ -760,13 +760,13 @@ var costScansWithDefaultColSize = settings.RegisterBoolSetting(
 	false,
 	settings.WithPublic)
 
-var enableSuperRegions = settings.RegisterBoolSetting(
+var _ = settings.RegisterBoolSetting(
 	settings.ApplicationLevel,
 	"sql.defaults.super_regions.enabled",
 	"default value for enable_super_regions; "+
 		"allows for the usage of super regions",
 	false,
-	settings.WithPublic)
+	settings.Retired)
 
 var overrideAlterPrimaryRegionInSuperRegion = settings.RegisterBoolSetting(
 	settings.ApplicationLevel,

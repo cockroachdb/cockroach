@@ -1,8 +1,5 @@
 # LogicTest: multiregion-15node-5region-3azs
 
-statement ok
-SET enable_super_regions = 'on'
-
 # Basic cases, backup / restore database with super regions.
 
 statement ok
