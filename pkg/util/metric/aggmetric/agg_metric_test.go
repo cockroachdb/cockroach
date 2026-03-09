@@ -395,7 +395,7 @@ func TestMetricKey(t *testing.T) {
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			require.Equal(t, tc.expectedHashValue, metricKey(tc.labelValues...))
+			require.Equal(t, tc.expectedHashValue, metricKey(tc.labelValues))
 		})
 	}
 }
@@ -597,7 +597,7 @@ func TestHighCardinalityMetricsWithOptions(t *testing.T) {
 
 		// Verify that old entries were evicted
 		for i := 0; i < 3; i++ {
-			metricKey := metric.LabelSliceCacheKey(metricKey("db1", strconv.Itoa(i)))
+			metricKey := metric.LabelSliceCacheKey(metricKey([]string{"db1", strconv.Itoa(i)}))
 			_, ok := labelSliceCache.Get(metricKey)
 			require.False(t, ok, "old entry should have been evicted")
 		}
@@ -668,7 +668,7 @@ func TestHighCardinalityMetricsWithOptions(t *testing.T) {
 
 		// Verify all entries are still present (shouldn't evict with default settings)
 		for i := 0; i < 10; i++ {
-			metricKey := metric.LabelSliceCacheKey(metricKey("db1", strconv.Itoa(i)))
+			metricKey := metric.LabelSliceCacheKey(metricKey([]string{"db1", strconv.Itoa(i)}))
 			labelSliceValue, ok := labelSliceCache.Get(metricKey)
 			require.True(t, ok, "entry should still be present with default settings")
 			require.Equal(t, int64(3), labelSliceValue.Counter.Load())

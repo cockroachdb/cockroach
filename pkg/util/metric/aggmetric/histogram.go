@@ -271,7 +271,7 @@ func (sh *SQLHistogram) apply(applyFn func(childMetric ChildMetric)) {
 // Histogram and record against it. RecordValue records value in parent metrics
 // irrespective of labelConfig.
 func (sh *SQLHistogram) RecordValue(v int64, db, app string) {
-	childMetric, isChildMetricEnabled := sh.getChildByLabelConfig(sh.createChildHistogram, db, app)
+	childMetric, isChildMetricEnabled := sh.getOrAddChildByLabelConfig(sh.createChildHistogram, db, app)
 	sh.ticker.RLock()
 	defer sh.ticker.RUnlock()
 
@@ -444,7 +444,7 @@ func (h *HighCardinalityHistogram) GetOrAddChild(
 	}
 
 	// Create a LabelSliceCacheKey from the labelVals.
-	key := metric.LabelSliceCacheKey(metricKey(labelVals...))
+	key := metric.LabelSliceCacheKey(metricKey(labelVals))
 
 	child := h.getOrAddWithLabelSliceCache(h.GetMetadata().Name, h.createHighCardinalityChildHistogram, h.labelSliceCache, labelVals...)
 

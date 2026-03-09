@@ -261,7 +261,7 @@ func (c *SQLCounter) Count() int64 {
 func (c *SQLCounter) Inc(i int64, db, app string) {
 	c.g.Inc(i)
 
-	childMetric, isChildMetricEnabled := c.getChildByLabelConfig(c.createChildCounter, db, app)
+	childMetric, isChildMetricEnabled := c.getOrAddChildByLabelConfig(c.createChildCounter, db, app)
 	if !isChildMetricEnabled {
 		return
 	}
@@ -375,7 +375,7 @@ func (c *HighCardinalityCounter) GetOrAddChild(labelVals ...string) *HighCardina
 	}
 
 	// Create a LabelSliceCacheKey from the tenantID.
-	key := metric.LabelSliceCacheKey(metricKey(labelVals...))
+	key := metric.LabelSliceCacheKey(metricKey(labelVals))
 
 	child := c.getOrAddWithLabelSliceCache(c.GetMetadata().Name, c.createHighCardinalityChildCounter, c.labelSliceCache, labelVals...)
 

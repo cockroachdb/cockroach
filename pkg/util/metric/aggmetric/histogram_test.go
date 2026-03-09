@@ -129,7 +129,7 @@ func TestHighCardinalityHistogram(t *testing.T) {
 	echotest.Require(t, writePrometheusMetrics(t), datapathutils.TestDataPath(t, testFile))
 
 	for i := 0; i < cacheSize+5; i++ {
-		metricKey := metric.LabelSliceCacheKey(metricKey("1", strconv.Itoa(i)))
+		metricKey := metric.LabelSliceCacheKey(metricKey([]string{"1", strconv.Itoa(i)}))
 		labelSliceValue, ok := labelSliceCache.Get(metricKey)
 		require.True(t, ok, "missing labelSliceValue in label slice cache")
 		require.Equal(t, int64(1), labelSliceValue.Counter.Load(), "the value should be 1")
@@ -148,13 +148,13 @@ func TestHighCardinalityHistogram(t *testing.T) {
 	echotest.Require(t, writePrometheusMetrics(t), datapathutils.TestDataPath(t, testFile))
 
 	for i := 0; i < 5; i++ {
-		metricKey := metric.LabelSliceCacheKey(metricKey("1", strconv.Itoa(i)))
+		metricKey := metric.LabelSliceCacheKey(metricKey([]string{"1", strconv.Itoa(i)}))
 		_, ok := labelSliceCache.Get(metricKey)
 		require.False(t, ok, "labelSliceValue should not be present.")
 	}
 
 	for i := 10; i < 15; i++ {
-		metricKey := metric.LabelSliceCacheKey(metricKey("1", strconv.Itoa(i)))
+		metricKey := metric.LabelSliceCacheKey(metricKey([]string{"1", strconv.Itoa(i)}))
 		labelSliceValue, ok := labelSliceCache.Get(metricKey)
 		require.True(t, ok, "missing labelSliceValue in label slice cache")
 		require.Equal(t, int64(1), labelSliceValue.Counter.Load(), "the value should be 1")
@@ -162,7 +162,7 @@ func TestHighCardinalityHistogram(t *testing.T) {
 	}
 
 	for i := 10; i < 15; i++ {
-		metricKey := metric.LabelSliceCacheKey(metricKey("2", strconv.Itoa(i)))
+		metricKey := metric.LabelSliceCacheKey(metricKey([]string{"2", strconv.Itoa(i)}))
 		labelSliceValue, ok := labelSliceCache.Get(metricKey)
 		require.True(t, ok, "missing labelSliceValue in label slice cache")
 		require.Equal(t, int64(1), labelSliceValue.Counter.Load(), "the value should be 1")
