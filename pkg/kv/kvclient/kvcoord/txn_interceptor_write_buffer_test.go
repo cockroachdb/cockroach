@@ -2745,6 +2745,9 @@ func TestTxnWriteBufferHasBufferedAllPrecedingWritesSplitFlush(t *testing.T) {
 // SendLocked and flushBufferAndSendBatch. The test varies the state of the
 // buffer, the size of the keys and values, the fraction of reads in the batch,
 // as well as the fraction of  reads served from the buffer.
+// Use a fixed iteration count instead of the default time-based target,
+// as the benchmark may time out with the time-based approach.
+// benchmark-ci: benchtime=10000x
 // TODO(mira): Should we test more cases?
 //   - Batches with requests other than Get and Put. Notably, CPut.
 //   - Batches that exercise error paths.
@@ -2894,7 +2897,9 @@ func BenchmarkTxnWriteBuffer(b *testing.B) {
 
 							b.ResetTimer()
 							for i := 0; i < b.N; i++ {
+								b.StopTimer()
 								twb := makeBuffer(kvSize, &txn, readsFromPrevBatch)
+								b.StartTimer()
 								_, pErr := twb.SendLocked(ctx, ba)
 								if pErr != nil {
 									b.Fatal(pErr)
