@@ -101,8 +101,14 @@ func (p *planner) DropType(ctx context.Context, n *tree.DropType) (planNode, err
 		if err != nil {
 			return nil, err
 		}
-		// Ensure that we can drop the array type as well.
-		if err := p.canDropTypeDesc(ctx, mutArrayDesc, n.DropBehavior); err != nil {
+		// Ensure that we can drop the array type as well. Exclude
+		// back-references from the type being dropped, since the type and
+		// its array type are always dropped together as a pair. Domain
+		// types add a back-reference from their array type during
+		// creation (via addBackRefsFromAllTypesInType), so without this
+		// exclusion the array type's back-reference to the domain would
+		// prevent dropping.
+		if err := p.canDropTypeDescExcluding(ctx, mutArrayDesc, n.DropBehavior, typeDesc.ID); err != nil {
 			return nil, err
 		}
 		// Record these descriptors for deletion.
@@ -115,20 +121,38 @@ func (p *planner) DropType(ctx context.Context, n *tree.DropType) (planNode, err
 func (p *planner) canDropTypeDesc(
 	ctx context.Context, desc *typedesc.Mutable, behavior tree.DropBehavior,
 ) error {
+	return p.canDropTypeDescExcluding(ctx, desc, behavior, descpb.InvalidID)
+}
+
+// canDropTypeDescExcluding checks whether the type can be dropped, ignoring
+// back-references from excludeID. This is used when dropping a type and its
+// companion array type together — the array type may have a back-reference
+// from the main type that should not block the drop.
+func (p *planner) canDropTypeDescExcluding(
+	ctx context.Context, desc *typedesc.Mutable, behavior tree.DropBehavior, excludeID descpb.ID,
+) error {
 	if err := p.canModifyType(ctx, desc); err != nil {
 		return err
 	}
-	if len(desc.ReferencingDescriptorIDs) > 0 && behavior != tree.DropCascade {
-		dependentNames, err := p.getFullyQualifiedNamesFromIDs(ctx, desc.ReferencingDescriptorIDs)
-		if err != nil {
-			return errors.Wrapf(err, "type %q has dependent objects", desc.Name)
+	if behavior != tree.DropCascade {
+		var refs []descpb.ID
+		for _, id := range desc.ReferencingDescriptorIDs {
+			if id != excludeID {
+				refs = append(refs, id)
+			}
 		}
-		return pgerror.Newf(
-			pgcode.DependentObjectsStillExist,
-			"cannot drop type %q because other objects (%v) still depend on it",
-			desc.Name,
-			dependentNames,
-		)
+		if len(refs) > 0 {
+			dependentNames, err := p.getFullyQualifiedNamesFromIDs(ctx, refs)
+			if err != nil {
+				return errors.Wrapf(err, "type %q has dependent objects", desc.Name)
+			}
+			return pgerror.Newf(
+				pgcode.DependentObjectsStillExist,
+				"cannot drop type %q because other objects (%v) still depend on it",
+				desc.Name,
+				dependentNames,
+			)
+		}
 	}
 	return nil
 }

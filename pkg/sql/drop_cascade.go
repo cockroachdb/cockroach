@@ -292,6 +292,18 @@ func (d *dropCascadeState) canDropType(
 		if _, exists := d.toDeleteByID[id]; exists {
 			continue
 		}
+		// Also skip types being dropped (e.g., a domain type that added a
+		// back-reference to its companion array type during creation).
+		droppingType := false
+		for _, t := range d.typesToDelete {
+			if t.ID == id {
+				droppingType = true
+				break
+			}
+		}
+		if droppingType {
+			continue
+		}
 		referencedButNotDropping = append(referencedButNotDropping, id)
 	}
 	if len(referencedButNotDropping) == 0 {

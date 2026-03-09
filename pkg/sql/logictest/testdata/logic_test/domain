@@ -410,3 +410,14 @@ query error pgcode 23514 value for domain d_recreate violates check constraint
 SELECT (-1)::d_recreate
 
 subtest end
+
+subtest domain_of_domain
+
+# Test that CREATE DOMAIN with a domain base type is rejected (#165347).
+statement ok
+CREATE DOMAIN d_base_for_nested AS INT CHECK (VALUE > 0)
+
+statement error pgcode 0A000 unimplemented: domain of domain is not yet supported
+CREATE DOMAIN d_nested AS d_base_for_nested
+
+subtest end
