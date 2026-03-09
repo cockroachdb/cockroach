@@ -9997,6 +9997,30 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
   - name: UNSET
     metrics:
+    - name: ash.sampler.take_sample.latency
+      exported_name: ash_sampler_take_sample_latency
+      description: Latency of ASH sample collection ticks
+      y_axis_label: Latency
+      type: HISTOGRAM
+      unit: NANOSECONDS
+      aggregation: AVG
+      derivative: NONE
+    - name: ash.samples.collected
+      exported_name: ash_samples_collected
+      description: Total number of ASH samples collected
+      y_axis_label: Samples
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+    - name: ash.work_states.active
+      exported_name: ash_work_states_active
+      description: Number of goroutines with an active ASH work state
+      y_axis_label: Goroutines
+      type: GAUGE
+      unit: COUNT
+      aggregation: AVG
+      derivative: NONE
     - name: build.timestamp
       exported_name: build_timestamp
       description: Build information

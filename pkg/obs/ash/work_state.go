@@ -7,6 +7,7 @@ package ash
 
 import (
 	"sync"
+	"sync/atomic"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
@@ -39,6 +40,13 @@ var workStatePool = sync.Pool{
 // activeWorkStates maps goroutine IDs to their work state.
 // This is a global map that the sampler reads from periodically.
 var activeWorkStates syncutil.Map[int64, WorkState]
+
+// activeWorkStatesCount tracks the number of goroutines with an
+// active work state. It is incremented when a goroutine is first
+// registered in activeWorkStates and decremented when it is fully
+// removed. Nested (stacked) states do not change the count because
+// the map key already exists.
+var activeWorkStatesCount atomic.Int64
 
 // maxRetiredWorkStates caps the retired list to prevent unbounded growth
 // during bursts between sampler drain ticks. This value is based on an
@@ -84,6 +92,7 @@ func SetWorkState(
 		state.prev = prev
 	} else {
 		state.prev = nil
+		activeWorkStatesCount.Add(1)
 	}
 	activeWorkStates.Store(gid, state)
 
@@ -131,6 +140,7 @@ func _clearWorkState(gid int64) {
 		activeWorkStates.Store(gid, prev)
 	} else {
 		activeWorkStates.Delete(gid)
+		activeWorkStatesCount.Add(-1)
 	}
 	retireWorkState(state)
 }

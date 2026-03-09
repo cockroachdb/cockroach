@@ -254,6 +254,75 @@ func TestSamplerRuntimeSettingChanges(t *testing.T) {
 	})
 }
 
+func TestSamplerMetrics(t *testing.T) {
+	s, stopper := newTestSampler()
+	defer stopper.Stop(context.Background())
+
+	enabled.Store(true)
+	defer enabled.Store(false)
+
+	tenantID := roachpb.MustMakeTenantID(2)
+	const numGoroutines = 5
+
+	// Each goroutine registers its work state, then waits for a signal
+	// to clean up.
+	ready := make(chan struct{}, numGoroutines)
+	release := make(chan struct{})
+	var wg sync.WaitGroup
+	wg.Add(numGoroutines)
+
+	for i := range numGoroutines {
+		go func(idx int) {
+			defer wg.Done()
+			cleanup := SetWorkState(
+				tenantID,
+				uint64(idx+1),
+				WorkNetwork,
+				"MetricsTest",
+			)
+			ready <- struct{}{}
+			<-release
+			cleanup()
+		}(i)
+	}
+
+	// Wait for all goroutines to have registered their state.
+	for range numGoroutines {
+		<-ready
+	}
+
+	// Verify the active work states gauge reflects the registered goroutines.
+	require.Equal(t, int64(numGoroutines), s.metrics.ActiveWorkStates.Value())
+
+	// Take a sample and verify latency and counter metrics.
+	s.takeSample()
+	count, _ := s.metrics.TakeSampleLatency.CumulativeSnapshot().Total()
+	require.Equal(t, int64(1), count, "expected one latency sample after one takeSample call")
+	require.Equal(
+		t, int64(numGoroutines), s.metrics.SamplesCollected.Count(),
+		"expected samples collected to equal number of active goroutines",
+	)
+
+	// Signal all goroutines to clean up and verify the gauge drops to zero.
+	close(release)
+	wg.Wait()
+	require.Equal(t, int64(0), s.metrics.ActiveWorkStates.Value())
+
+	// Test nested (stacked) work states: a single goroutine calling
+	// SetWorkState twice should only count as 1 active work state.
+	cleanup1 := SetWorkState(tenantID, 1, WorkCPU, "Outer")
+	require.Equal(t, int64(1), s.metrics.ActiveWorkStates.Value())
+	cleanup2 := SetWorkState(tenantID, 2, WorkIO, "Inner")
+	require.Equal(t, int64(1), s.metrics.ActiveWorkStates.Value(),
+		"nested SetWorkState should not increase the active count")
+	cleanup2()
+	require.Equal(t, int64(1), s.metrics.ActiveWorkStates.Value(),
+		"popping to outer state should keep the active count at 1")
+	cleanup1()
+	require.Equal(t, int64(0), s.metrics.ActiveWorkStates.Value(),
+		"clearing the last state should drop the active count to 0")
+}
+
 func TestInitGlobalSampler(t *testing.T) {
 	// Save and restore globalSampler. initSamplerOnce is consumed
 	// by this test; no other test in the package calls InitGlobalSampler.
@@ -266,11 +335,19 @@ func TestInitGlobalSampler(t *testing.T) {
 	st := cluster.MakeTestingClusterSettings()
 	ctx := context.Background()
 
-	require.NoError(t, InitGlobalSampler(ctx, 42, st, stopper))
+	err := InitGlobalSampler(ctx, 42, st, stopper)
+	require.NoError(t, err)
 	require.NotNil(t, globalSampler.Load())
+	metrics := GlobalSamplerMetrics()
+	require.NotNil(t, metrics, "first call should produce non-nil metrics")
 
-	// Second call is a no-op (sync.Once).
-	require.NoError(t, InitGlobalSampler(ctx, 99, st, stopper))
+	// Second call is a no-op (sync.Once); GlobalSamplerMetrics still
+	// returns the same non-nil metrics.
+	err = InitGlobalSampler(ctx, 99, st, stopper)
+	require.NoError(t, err)
+	metrics2 := GlobalSamplerMetrics()
+	require.NotNil(t, metrics2, "metrics should remain available after second init")
+	require.True(t, metrics == metrics2, "metrics pointer should be identical")
 	s := globalSampler.Load()
 	require.Equal(t, roachpb.NodeID(42), s.nodeID)
 

@@ -85,6 +85,7 @@ type Sampler struct {
 	buffer  *RingBuffer
 	stopper *stop.Stopper
 	started bool
+	metrics Metrics
 	// interval caches the sample interval so the timer loop can read it
 	// without locking, while the SetOnChange callback updates it.
 	interval atomic.Int64
@@ -105,6 +106,7 @@ func newSampler(nodeID roachpb.NodeID, st *cluster.Settings, stopper *stop.Stopp
 		st:      st,
 		buffer:  NewRingBuffer(bufSize),
 		stopper: stopper,
+		metrics: makeMetrics(),
 		workloadIDCache: cache.NewUnorderedCache(cache.Config{
 			Policy: cache.CacheLRU,
 			ShouldEvict: func(size int, key, value interface{}) bool {
@@ -163,7 +165,13 @@ func (s *Sampler) run(ctx context.Context) {
 
 // takeSample captures a snapshot of all active work states.
 func (s *Sampler) takeSample() {
-	sampleTime := timeutil.Now()
+	start := timeutil.Now()
+	defer func() {
+		elapsed := timeutil.Since(start)
+		s.metrics.TakeSampleLatency.RecordValue(elapsed.Nanoseconds())
+	}()
+
+	sampleTime := start
 
 	// Collect work states. rangeWorkStates reclaims retired states after
 	// iteration so pooled objects can be reused.
@@ -200,6 +208,7 @@ func (s *Sampler) takeSample() {
 		}
 		s.buffer.Add(sample)
 	}
+	s.metrics.SamplesCollected.Inc(int64(len(s.pendingSamples)))
 }
 
 // GetSamples returns all samples currently in the Sampler's buffer.
@@ -209,8 +218,10 @@ func (s *Sampler) GetSamples(result []ASHSample) []ASHSample {
 
 // InitGlobalSampler creates and starts the process-wide ASH sampler.
 // It is idempotent: only the first call creates the sampler; subsequent
-// calls are no-ops. This should be called during process-level server
-// initialization (not per-tenant), after the node ID is known.
+// calls are no-ops. Callers should use GlobalSamplerMetrics() to obtain
+// the metrics and register them with sysRegistry. This should be called
+// during process-level server initialization (not per-tenant), after
+// the node ID is known.
 func InitGlobalSampler(
 	ctx context.Context, nodeID roachpb.NodeID, st *cluster.Settings, stopper *stop.Stopper,
 ) error {
@@ -223,6 +234,15 @@ func InitGlobalSampler(
 		}
 	})
 	return initErr
+}
+
+// GlobalSamplerMetrics returns the Metrics for the process-wide ASH
+// sampler, or nil if the sampler has not been initialized yet.
+func GlobalSamplerMetrics() *Metrics {
+	if s := globalSampler.Load(); s != nil {
+		return &s.metrics
+	}
+	return nil
 }
 
 // encodeUint64ToBytes returns the []byte representation of a uint64 value.

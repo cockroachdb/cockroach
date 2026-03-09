@@ -1888,6 +1888,9 @@ func (s *topLevelServer) PreStart(ctx context.Context) error {
 	if err := ash.InitGlobalSampler(ctx, state.nodeID, s.st, s.stopper); err != nil {
 		return err
 	}
+	if m := ash.GlobalSamplerMetrics(); m != nil {
+		s.sysRegistry.AddMetricStruct(m)
+	}
 
 	// TODO(irfansharif): Now that we have our node ID, we should run another
 	// check here to make sure we've not been decommissioned away (if we're here
