@@ -633,6 +633,7 @@ func (r *restoreResumer) sendDownloadWorker(
 }
 
 var useCopy = envutil.EnvOrDefaultBool("COCKROACH_DOWNLOAD_COPY", true)
+var skipDownload = envutil.EnvOrDefaultBool("COCKROACH_SKIP_DOWNLOAD", false)
 
 func sendDownloadSpan(ctx context.Context, execCtx sql.JobExecContext, spans roachpb.Spans) error {
 	ctx, sp := tracing.ChildSpan(ctx, "backup.sendDownloadSpan")
@@ -880,6 +881,11 @@ func (r *restoreResumer) doDownloadFiles(ctx context.Context, execCtx sql.JobExe
 
 	if err := execCtx.ExecCfg().JobRegistry.CheckPausepoint("restore.before_download"); err != nil {
 		return err
+	}
+
+	if skipDownload {
+		log.Infof(ctx, "skipping download phase due to COCKROACH_SKIP_DOWNLOAD env var")
+		return r.cleanupAfterDownload(ctx, details)
 	}
 
 	grp := ctxgroup.WithContext(ctx)
