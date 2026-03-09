@@ -32,7 +32,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/physicalplan"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
@@ -141,20 +140,16 @@ func distImport(
 			corePlacement[i].SQLInstanceID = sqlInstanceIDs[i%len(sqlInstanceIDs)]
 			corePlacement[i].Core.ReadImport = inputSpecs[i]
 		}
-		outputTypes := []*types.T{types.Bytes, types.Bytes}
-		if useDistributedMerge {
-			outputTypes = []*types.T{types.Bytes, types.Bytes, types.Bytes}
-		}
 		p.AddNoInputStage(
 			corePlacement,
 			execinfrapb.PostProcessSpec{},
 			// The direct-ingest readers will emit a binary encoded BulkOpSummary.
-			outputTypes,
+			importProcessorOutputTypes,
 			execinfrapb.Ordering{},
 			nil, /* finalizeLastStageCb */
 		)
 		// Map the output directly back.
-		colMap := make([]int, len(outputTypes))
+		colMap := make([]int, len(importProcessorOutputTypes))
 		for i := range colMap {
 			colMap[i] = i
 		}
