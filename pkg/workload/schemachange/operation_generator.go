@@ -1082,14 +1082,22 @@ func (og *operationGenerator) createIndex(ctx context.Context, tx pgx.Tx) (*opSt
 				regionColStored = true
 			}
 
-			// Virtual computed columns are not allowed to be indexed
+			// Virtual computed columns are not allowed to be indexed, but
+			// PK columns are silently dropped from STORING by the DSC
+			// before the virtual column check, so skip the check for PK cols.
 			if columnNames[i].generated && !isStoringVirtualComputed {
-				isVirtualComputed, err := og.columnIsVirtualComputed(ctx, tx, tableName, columnNames[i].name)
+				colIsPK, err := og.colIsPrimaryKey(ctx, tx, tableName, columnNames[i].name)
 				if err != nil {
 					return nil, err
 				}
-				if isVirtualComputed {
-					isStoringVirtualComputed = true
+				if !colIsPK {
+					isVirtualComputed, err := og.columnIsVirtualComputed(ctx, tx, tableName, columnNames[i].name)
+					if err != nil {
+						return nil, err
+					}
+					if isVirtualComputed {
+						isStoringVirtualComputed = true
+					}
 				}
 			}
 		}
