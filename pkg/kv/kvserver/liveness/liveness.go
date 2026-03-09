@@ -35,6 +35,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
+	"github.com/cockroachdb/crlib/crtime"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
 )
@@ -802,8 +803,8 @@ func (nl *NodeLiveness) heartbeatInternal(
 ) (err error) {
 	ctx, sp := tracing.EnsureChildSpan(ctx, nl.ambientCtx.Tracer, "liveness heartbeat",
 		tracing.WithRecording(tracingpb.RecordingVerbose))
-	defer func(start time.Time) {
-		dur := timeutil.Since(start)
+	defer func(start crtime.Mono) {
+		dur := start.Elapsed()
 		nl.metrics.HeartbeatLatency.RecordValue(dur.Nanoseconds())
 		threshold := time.Second
 		if nl.settings != nil {
@@ -819,7 +820,7 @@ func (nl *NodeLiveness) heartbeatInternal(
 			}
 		}
 		sp.Finish()
-	}(timeutil.Now())
+	}(crtime.NowMono())
 
 	// Collect a clock reading from before we begin queuing on the heartbeat
 	// semaphore. This method (attempts to, see [*]) guarantees that, if
