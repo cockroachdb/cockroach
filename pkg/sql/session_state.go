@@ -165,6 +165,7 @@ func (p *planner) DeserializeSessionState(
 			ctx, parserStmt, id,
 			tree.FmtFlags(tree.QueryFormattingForFingerprintsMask.Get(&evalCtx.Settings.SV)),
 			evalCtx.ExecCfg.StatementHintsCache,
+			evalCtx.SessionData().Database,
 		)
 
 		var placeholderTypes tree.PlaceholderTypes

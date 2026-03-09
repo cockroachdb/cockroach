@@ -1527,6 +1527,9 @@ SELECT information_schema.crdb_rewrite_inline_hints(
   'test'
 )
 
+statement ok
+SELECT crdb_internal.await_statement_hints_cache()
+
 # Verify the database column is set in system.statement_hints.
 query TTT
 SELECT database, '|', fingerprint
@@ -1535,12 +1538,67 @@ WHERE row_id = $db_hint_id
 ----
 test  |  SELECT x FROM xy WHERE x = _
 
+# In the "test" database, the hint should apply.
+statement ok
+USE test
+
+query T
+EXPLAIN SELECT x FROM xy WHERE x = 5
+----
+distribution: local
+statement hints count: 1
+·
+• filter
+│ filter: x = 5
+│
+└── • scan
+      missing stats
+      table: xy@xy_y_idx
+      spans: FULL SCAN
+
+# Switch to a different database.
+statement ok
+USE defaultdb
+
+statement ok
+CREATE TABLE xy (x INT PRIMARY KEY, y INT, INDEX (y));
+
+# The hint should NOT apply in a different database.
+query T
+EXPLAIN SELECT x FROM xy WHERE x = 5
+----
+distribution: local
+·
+• scan
+  missing stats
+  table: xy@xy_pkey
+  spans: [/5 - /5]
+
+# The hint should NOT apply in a different database, even when referencing the
+# original table with a fully-qualified name.
+query T
+EXPLAIN SELECT x FROM test.public.xy WHERE x = 5
+----
+distribution: local
+·
+• scan
+  missing stats
+  table: xy@xy_pkey
+  spans: [/5 - /5]
+
+# Switch back to the test database.
+statement ok
+USE test
+
 # Insert a hint without specifying a database using the 2-arg overload.
 let $no_db_hint_id
 SELECT information_schema.crdb_rewrite_inline_hints(
   'SELECT x FROM xy WHERE x = _',
   'SELECT x FROM xy@xy_y_idx WHERE x = _'
 )
+
+statement ok
+SELECT crdb_internal.await_statement_hints_cache()
 
 # Verify the database column is NULL for the 2-arg overload.
 query TTT
@@ -1550,6 +1608,27 @@ WHERE row_id = $no_db_hint_id
 ----
 NULL  |  SELECT x FROM xy WHERE x = _
 
+# Now the hint should apply in any database.
+statement ok
+USE defaultdb
+
+query T
+EXPLAIN SELECT x FROM xy WHERE x = 5
+----
+distribution: local
+statement hints count: 1
+·
+• filter
+│ filter: x = 5
+│
+└── • scan
+      missing stats
+      table: xy@xy_y_idx
+      spans: FULL SCAN
+
+statement ok
+USE test
+
 # Also test the 3-arg overload of crdb_internal.inject_hint.
 let $inject_db_hint_id
 SELECT crdb_internal.inject_hint(
@@ -1557,6 +1636,9 @@ SELECT crdb_internal.inject_hint(
   'SELECT y FROM xy@xy_y_idx WHERE y = _',
   'mydb'
 )
+
+statement ok
+SELECT crdb_internal.await_statement_hints_cache()
 
 query TTT
 SELECT database, '|', fingerprint

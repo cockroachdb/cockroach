@@ -499,11 +499,11 @@ func TestHintCacheGeneration(t *testing.T) {
 	generationAfterDeleteAll := getGenerationAssertNoChange()
 
 	// Query for hints (cache access) should NOT increment generation.
-	hc.MaybeGetStatementHints(ctx, fingerprint2, fingerprintFlags)
+	hc.MaybeGetStatementHints(ctx, fingerprint2, fingerprintFlags, "" /* currentDB */)
 	getGenerationAssertNoChange()
 
 	// Accessing a non-existent fingerprint should also NOT increment generation.
-	hc.MaybeGetStatementHints(ctx, "SELECT nonexistent FROM t", fingerprintFlags)
+	hc.MaybeGetStatementHints(ctx, "SELECT nonexistent FROM t", fingerprintFlags, "" /* currentDB */)
 	getGenerationAssertNoChange()
 
 	// Delete all remaining hints.
@@ -538,7 +538,7 @@ func waitForUpdateOnFingerprintHash(
 		if hasHints := hc.TestingHashHasHints(hash); (expected > 0) != hasHints {
 			return errors.Errorf("expected hash %d with hasHints=%t, got hasHints=%t", hash, expected > 0, hasHints)
 		}
-		hints, ids := hc.MaybeGetStatementHints(ctx, fingerprint, fingerprintFlags)
+		hints, ids := hc.MaybeGetStatementHints(ctx, fingerprint, fingerprintFlags, "" /* currentDB */)
 		if len(hints) != expected {
 			return errors.Errorf("expected %d hints for fingerprint %q, got %d", expected, fingerprint, len(hints))
 		}
@@ -556,7 +556,7 @@ func requireHintsCount(
 	fingerprintFlags tree.FmtFlags,
 	expectedCount int,
 ) {
-	hints, ids := hc.MaybeGetStatementHints(ctx, fingerprint, fingerprintFlags)
+	hints, ids := hc.MaybeGetStatementHints(ctx, fingerprint, fingerprintFlags, "" /* currentDB */)
 	require.Len(t, hints, expectedCount)
 	require.Len(t, ids, expectedCount)
 	checkIDOrder(t, ids)
