@@ -1208,6 +1208,15 @@ func (p *planner) DeleteStatementHint(
 	return hints.DeleteHintFromDB(ctx, p.InternalSQLTxn(), rowID, statementFingerprint)
 }
 
+// SetStatementHintEnabled is part of the eval.Planner interface.
+func (p *planner) SetStatementHintEnabled(
+	ctx context.Context, rowID int64, statementFingerprint string, enabled bool,
+) (int64, error) {
+	return hints.SetHintEnabledInDB(
+		ctx, p.execCfg.Settings, p.InternalSQLTxn(), rowID, statementFingerprint, enabled,
+	)
+}
+
 // ValidateSessionVariableHint is part of the eval.Planner interface.
 func (p *planner) ValidateSessionVariableHint(
 	ctx context.Context, varName, varValue string, safeUpdates bool,

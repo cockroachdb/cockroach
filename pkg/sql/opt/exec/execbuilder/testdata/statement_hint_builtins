@@ -1647,6 +1647,94 @@ WHERE row_id = $inject_db_hint_id
 ----
 mydb  |  SELECT y FROM xy WHERE y = _
 
+# Test enabling and disabling hints via crdb_enable_statement_hints.
+
+statement ok
+USE test
+
+# Baseline plan without hints: uses abc_pkey for a point lookup.
+query T
+EXPLAIN SELECT a, b FROM abc WHERE a = 5
+----
+distribution: local
+·
+• scan
+  missing stats
+  table: abc@abc_pkey
+  spans: [/5 - /5]
+
+# Create a rewrite hint that forces abc_b_idx (a visibly different plan).
+let $enable_hint_id
+SELECT information_schema.crdb_rewrite_inline_hints(
+  'SELECT a, b FROM abc WHERE a = _',
+  'SELECT a, b FROM abc@abc_b_idx WHERE a = _'
+)
+
+statement ok
+SELECT crdb_internal.await_statement_hints_cache()
+
+# With the hint active, the plan should use abc_b_idx.
+query T
+EXPLAIN SELECT a, b FROM abc WHERE a = 5
+----
+distribution: local
+statement hints count: 1
+·
+• filter
+│ filter: a = 5
+│
+└── • scan
+      missing stats
+      table: abc@abc_b_idx
+      spans: FULL SCAN
+
+# Disable the hint.
+statement ok
+SELECT information_schema.crdb_enable_statement_hints(false, $enable_hint_id)
+
+statement ok
+SELECT crdb_internal.await_statement_hints_cache()
+
+# With the hint disabled, the plan should revert to abc_pkey.
+query T
+EXPLAIN SELECT a, b FROM abc WHERE a = 5
+----
+distribution: local
+·
+• scan
+  missing stats
+  table: abc@abc_pkey
+  spans: [/5 - /5]
+
+# Re-enable the hint.
+statement ok
+SELECT information_schema.crdb_enable_statement_hints(true, $enable_hint_id)
+
+statement ok
+SELECT crdb_internal.await_statement_hints_cache()
+
+# With the hint re-enabled, the plan should use abc_b_idx again.
+query T
+EXPLAIN SELECT a, b FROM abc WHERE a = 5
+----
+distribution: local
+statement hints count: 1
+·
+• filter
+│ filter: a = 5
+│
+└── • scan
+      missing stats
+      table: abc@abc_b_idx
+      spans: FULL SCAN
+
+# Clean up.
+statement ok
+SELECT information_schema.crdb_delete_statement_hints($enable_hint_id)
+
+statement ok
+SELECT crdb_internal.await_statement_hints_cache()
+
 # Test disable_optimizer_rules as a session setting hint. This exercises the
 # SetWithPlanner path with setScopeStmt, ensuring that the setting is applied
 # only to the statement-level session data and does not leak to the session.
