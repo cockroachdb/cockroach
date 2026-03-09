@@ -55,7 +55,8 @@ func runSQLOperation(
 		createStmt := createSQL(name)
 
 		o.Status(fmt.Sprintf("creating %s %s", objectType, name))
-		if _, err := conn.ExecContext(ctx, createStmt); err != nil {
+		_, err := conn.ExecContext(ctx, createStmt)
+		if err != nil {
 			o.Fatal(err)
 		}
 

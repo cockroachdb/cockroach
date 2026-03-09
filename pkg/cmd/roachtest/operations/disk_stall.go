@@ -44,7 +44,12 @@ func (cl *cleanupDiskStall) Cleanup(ctx context.Context, o operation.Operation, 
 
 func runDiskStall(
 	ctx context.Context, o operation.Operation, c cluster.Cluster,
-) registry.OperationCleanup {
+) (cleanup registry.OperationCleanup) {
+	defer func() {
+		if r := recover(); r != nil {
+			o.Errorf("error during disk stall: %v", r)
+		}
+	}()
 	rng, _ := randutil.NewPseudoRand()
 
 	nodes := c.All()
@@ -53,13 +58,16 @@ func runDiskStall(
 	// of the operation.
 	ds := roachtestutil.MakeDmsetupDiskStaller(o, c, true /* disableStateValidation */)
 
-	o.Status(fmt.Sprintf("stalling disk on node %d", nid))
-	ds.Stall(ctx, c.Node(nid))
-
-	return &cleanupDiskStall{
+	// Assign cleanup handler early, before stalling the disk.
+	cleanup = &cleanupDiskStall{
 		nodes:   c.Node(nid),
 		staller: ds,
 	}
+
+	o.Status(fmt.Sprintf("stalling disk on node %d", nid))
+	ds.Stall(ctx, c.Node(nid))
+
+	return cleanup
 }
 
 func registerDiskStall(r registry.Registry) {

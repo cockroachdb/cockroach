@@ -179,10 +179,10 @@ func runAddRLSPolicy(
 		}
 
 		_, err = conn.ExecContext(ctx, fmt.Sprintf(`
-			CREATE POLICY %s ON %s.%s 
-			FOR %s 
-			TO %s 
-			%s 
+			CREATE POLICY %s ON %s.%s
+			FOR %s
+			TO %s
+			%s
 			%s
 		`, policyName, dbName, tableName, operation, user, using, withCheck))
 		if err != nil {
