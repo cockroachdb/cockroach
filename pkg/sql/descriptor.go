@@ -183,6 +183,7 @@ func (p *planner) createDatabase(
 			database.SuperRegion.Regions,
 			database.SuperRegion.Name,
 			tree.AsStringWithFQNames(database, p.Ann()),
+			nil,
 		); err != nil {
 			return nil, false, err
 		}

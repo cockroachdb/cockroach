@@ -11,6 +11,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
@@ -1372,6 +1373,11 @@ func (p *planner) alterDatabaseSurvivalGoal(
 			return err
 		}
 		for _, sr := range superRegions {
+			// Only validate super regions that would inherit the new database
+			// goal. Super regions with explicit survival goals are unaffected.
+			if sr.HasSurvivalGoal {
+				continue
+			}
 			if err := multiregion.CanSatisfySurvivalGoal(descpb.SurvivalGoal_REGION_FAILURE, len(sr.Regions)); err != nil {
 				return errors.Wrapf(err, "super region %s only has %d region(s)", sr.SuperRegionName, len(sr.Regions))
 			}
@@ -1666,7 +1672,15 @@ func (n *alterDatabaseAddSuperRegion) startExec(params runParams) error {
 	if err != nil {
 		return err
 	}
-	return params.p.addSuperRegion(params.ctx, n.desc, typeDesc, n.n.Regions, n.n.SuperRegionName, tree.AsStringWithFQNames(n.n, params.Ann()))
+	return params.p.addSuperRegion(
+		params.ctx,
+		n.desc,
+		typeDesc,
+		n.n.Regions,
+		n.n.SuperRegionName,
+		tree.AsStringWithFQNames(n.n, params.Ann()),
+		nil,
+	)
 }
 
 // addSuperRegion adds the super region in sorted order based on the
@@ -1741,7 +1755,7 @@ func (n *alterDatabaseDropSuperRegion) startExec(params runParams) error {
 		return err
 	}
 
-	dropped := removeSuperRegion(typeDesc.RegionConfig, n.n.SuperRegionName)
+	_, dropped := removeSuperRegion(typeDesc.RegionConfig, n.n.SuperRegionName)
 
 	if !dropped {
 		return errors.Newf("super region %s not found", n.n.SuperRegionName)
@@ -1764,16 +1778,17 @@ func (n *alterDatabaseDropSuperRegion) startExec(params runParams) error {
 
 func removeSuperRegion(
 	r *descpb.TypeDescriptor_RegionConfig, superRegionName tree.Name,
-) (dropped bool) {
+) (removed descpb.SuperRegion, dropped bool) {
 	for i, superRegion := range r.SuperRegions {
 		if superRegion.SuperRegionName == string(superRegionName) {
+			removed = superRegion
 			r.SuperRegions = append(r.SuperRegions[:i], r.SuperRegions[i+1:]...)
 			dropped = true
 			break
 		}
 	}
 
-	return dropped
+	return removed, dropped
 }
 
 func (n *alterDatabaseDropSuperRegion) Next(runParams) (bool, error) { return false, nil }
@@ -1867,7 +1882,7 @@ func (n *alterDatabaseAlterSuperRegion) startExec(params runParams) error {
 	}
 
 	// Remove the old super region.
-	dropped := removeSuperRegion(typeDesc.RegionConfig, n.n.SuperRegionName)
+	oldSuperRegion, dropped := removeSuperRegion(typeDesc.RegionConfig, n.n.SuperRegionName)
 	if !dropped {
 		return errors.WithHint(pgerror.Newf(pgcode.UndefinedObject,
 			"super region %q of database %q does not exist", n.n.SuperRegionName, n.n.DatabaseName),
@@ -1875,7 +1890,15 @@ func (n *alterDatabaseAlterSuperRegion) startExec(params runParams) error {
 	}
 
 	// Validate that adding the super region with the new regions is valid.
-	return params.p.addSuperRegion(params.ctx, n.desc, typeDesc, n.n.Regions, n.n.SuperRegionName, tree.AsStringWithFQNames(n.n, params.Ann()))
+	return params.p.addSuperRegion(
+		params.ctx,
+		n.desc,
+		typeDesc,
+		n.n.Regions,
+		n.n.SuperRegionName,
+		tree.AsStringWithFQNames(n.n, params.Ann()),
+		&oldSuperRegion,
+	)
 
 }
 
@@ -1886,6 +1909,7 @@ func (p *planner) addSuperRegion(
 	regionList []tree.Name,
 	superRegionName tree.Name,
 	op string,
+	preservedSuperRegion *descpb.SuperRegion,
 ) error {
 	regionsDesc := typeDesc.AsRegionEnumTypeDescriptor()
 	if regionsDesc == nil {
@@ -1919,7 +1943,11 @@ func (p *planner) addSuperRegion(
 		regions[i] = catpb.RegionName(region)
 	}
 
-	if err := multiregion.CanSatisfySurvivalGoal(desc.RegionConfig.SurvivalGoal, len(regionList)); err != nil {
+	effectiveSurvivalGoal := desc.RegionConfig.SurvivalGoal
+	if preservedSuperRegion != nil && preservedSuperRegion.HasSurvivalGoal {
+		effectiveSurvivalGoal = preservedSuperRegion.SurvivalGoal
+	}
+	if err := multiregion.CanSatisfySurvivalGoal(effectiveSurvivalGoal, len(regionList)); err != nil {
 		return errors.Wrapf(err, "super region %s only has %d region(s)", superRegionName, len(regionList))
 	}
 
@@ -1943,10 +1971,15 @@ func (p *planner) addSuperRegion(
 		return err
 	}
 
-	addSuperRegion(typeDesc.RegionConfig, descpb.SuperRegion{
+	newSuperRegion := descpb.SuperRegion{
 		SuperRegionName: string(superRegionName),
 		Regions:         regions,
-	})
+	}
+	if preservedSuperRegion != nil {
+		newSuperRegion.HasSurvivalGoal = preservedSuperRegion.HasSurvivalGoal
+		newSuperRegion.SurvivalGoal = preservedSuperRegion.SurvivalGoal
+	}
+	addSuperRegion(typeDesc.RegionConfig, newSuperRegion)
 
 	if err := p.writeTypeSchemaChange(ctx, typeDesc, op); err != nil {
 		return err
@@ -1957,6 +1990,136 @@ func (p *planner) addSuperRegion(
 		ctx,
 		desc,
 	)
+}
+
+type alterDatabaseAlterSuperRegionSurvivalGoalNode struct {
+	zeroInputPlanNode
+	n    *tree.AlterDatabaseAlterSuperRegionSurvivalGoal
+	desc *dbdesc.Mutable
+}
+
+func (n *alterDatabaseAlterSuperRegionSurvivalGoalNode) Next(runParams) (bool, error) {
+	return false, nil
+}
+func (n *alterDatabaseAlterSuperRegionSurvivalGoalNode) Values() tree.Datums {
+	return tree.Datums{}
+}
+func (n *alterDatabaseAlterSuperRegionSurvivalGoalNode) Close(context.Context) {}
+
+// AlterDatabaseAlterSuperRegionSurvivalGoal transforms a
+// tree.AlterDatabaseAlterSuperRegionSurvivalGoal into a plan node.
+func (p *planner) AlterDatabaseAlterSuperRegionSurvivalGoal(
+	ctx context.Context, n *tree.AlterDatabaseAlterSuperRegionSurvivalGoal,
+) (planNode, error) {
+	if err := checkSchemaChangeEnabled(
+		ctx,
+		p.ExecCfg(),
+		"ALTER DATABASE",
+	); err != nil {
+		return nil, err
+	}
+
+	dbDesc, err := p.Descriptors().MutableByName(p.txn).Database(ctx, string(n.DatabaseName))
+	if err != nil {
+		return nil, err
+	}
+	if err := p.checkPrivilegesForMultiRegionOp(ctx, dbDesc); err != nil {
+		return nil, err
+	}
+
+	return &alterDatabaseAlterSuperRegionSurvivalGoalNode{n: n, desc: dbDesc}, nil
+}
+
+func (n *alterDatabaseAlterSuperRegionSurvivalGoalNode) startExec(params runParams) error {
+	if !n.desc.IsMultiRegion() {
+		return errors.WithHintf(
+			pgerror.New(pgcode.InvalidName,
+				"database must be multi-region to support super regions",
+			),
+			"you must first add a primary region to the database using "+
+				"ALTER DATABASE %s PRIMARY REGION <region_name>",
+			n.n.DatabaseName.String(),
+		)
+	}
+
+	if !params.p.EvalContext().Settings.Version.IsActive(params.ctx, clusterversion.V26_3) {
+		return pgerror.Newf(pgcode.FeatureNotSupported,
+			"all nodes must be upgraded to a version that supports per-super-region "+
+				"survival goals before using this feature")
+	}
+
+	typeID, err := n.desc.MultiRegionEnumID()
+	if err != nil {
+		return err
+	}
+	typeDesc, err := params.p.Descriptors().MutableByID(params.p.txn).Type(params.ctx, typeID)
+	if err != nil {
+		return err
+	}
+
+	// Find the super region.
+	var found bool
+	var srIdx int
+	for i, sr := range typeDesc.RegionConfig.SuperRegions {
+		if sr.SuperRegionName == string(n.n.SuperRegionName) {
+			found = true
+			srIdx = i
+			break
+		}
+	}
+	if !found {
+		return errors.WithHint(pgerror.Newf(pgcode.UndefinedObject,
+			"super region %q of database %q does not exist", n.n.SuperRegionName, n.n.DatabaseName),
+			"super region must be added before its survival goal can be altered")
+	}
+
+	sr := &typeDesc.RegionConfig.SuperRegions[srIdx]
+
+	if n.n.SurvivalGoal == tree.SurvivalGoalDefault {
+		// Reset to inherit from database. Validate that the database-level
+		// goal can be satisfied by this super region's number of regions.
+		if err := multiregion.CanSatisfySurvivalGoal(
+			n.desc.RegionConfig.SurvivalGoal, len(sr.Regions),
+		); err != nil {
+			return errors.Wrapf(err, "super region %s only has %d region(s)",
+				n.n.SuperRegionName, len(sr.Regions))
+		}
+		sr.HasSurvivalGoal = false
+		sr.SurvivalGoal = descpb.SurvivalGoal_ZONE_FAILURE
+	} else {
+		goal, err := TranslateSurvivalGoal(n.n.SurvivalGoal)
+		if err != nil {
+			return err
+		}
+
+		if goal == descpb.SurvivalGoal_REGION_FAILURE &&
+			n.desc.RegionConfig.Placement == descpb.DataPlacement_RESTRICTED {
+			return errors.WithDetailf(
+				pgerror.New(pgcode.InvalidParameterValue,
+					"a region-survivable super region cannot exist in a database "+
+						"with a restricted placement policy"),
+				"PLACEMENT RESTRICTED may only be used with SURVIVE ZONE FAILURE",
+			)
+		}
+
+		if err := multiregion.CanSatisfySurvivalGoal(goal, len(sr.Regions)); err != nil {
+			return errors.Wrapf(err, "super region %s only has %d region(s)",
+				n.n.SuperRegionName, len(sr.Regions))
+		}
+
+		sr.HasSurvivalGoal = true
+		sr.SurvivalGoal = goal
+	}
+
+	if err := params.p.writeTypeSchemaChange(
+		params.ctx, typeDesc,
+		tree.AsStringWithFQNames(n.n, params.Ann()),
+	); err != nil {
+		return err
+	}
+
+	// Update all regional and regional by row tables.
+	return params.p.refreshZoneConfigsForTables(params.ctx, n.desc)
 }
 
 type alterDatabaseSecondaryRegion struct {

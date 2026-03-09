@@ -1080,6 +1080,27 @@ func (desc *immutable) ForEachSuperRegion(f func(superRegionName string) error) 
 	return nil
 }
 
+// GetSuperRegionSurvivalGoal implements the catalog.RegionEnumTypeDescriptor
+// interface.
+func (desc *immutable) GetSuperRegionSurvivalGoal(superRegion string) (string, bool) {
+	for _, s := range desc.RegionConfig.SuperRegions {
+		if s.SuperRegionName == superRegion {
+			if !s.HasSurvivalGoal {
+				return "", false
+			}
+			switch s.SurvivalGoal {
+			case descpb.SurvivalGoal_ZONE_FAILURE:
+				return "zone", true
+			case descpb.SurvivalGoal_REGION_FAILURE:
+				return "region", true
+			default:
+				return "", false
+			}
+		}
+	}
+	return "", false
+}
+
 // SetDeclarativeSchemaChangerState is part of the catalog.MutableDescriptor
 // interface.
 func (desc *Mutable) SetDeclarativeSchemaChangerState(state *scpb.DescriptorState) {

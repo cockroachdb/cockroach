@@ -1010,6 +1010,12 @@ type RegionEnumTypeDescriptor interface {
 		superRegion string,
 		f func(region catpb.RegionName) error,
 	) error
+
+	// GetSuperRegionSurvivalGoal returns the survival goal string ("zone" or
+	// "region") for the named super region if it has an explicit goal, along
+	// with a boolean indicating whether an explicit goal was set. If the super
+	// region inherits the database-level goal, the bool is false.
+	GetSuperRegionSurvivalGoal(superRegion string) (string, bool)
 }
 
 // AliasTypeDescriptor is the TypeDescriptor subtype for alias types.

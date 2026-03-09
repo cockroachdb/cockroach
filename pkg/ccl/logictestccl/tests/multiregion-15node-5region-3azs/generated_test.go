@@ -99,3 +99,10 @@ func TestCCLLogic_super_regions_cluster_settings(
 	defer leaktest.AfterTest(t)()
 	runCCLLogicTest(t, "super_regions_cluster_settings")
 }
+
+func TestCCLLogic_super_regions_survival_goal(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runCCLLogicTest(t, "super_regions_survival_goal")
+}

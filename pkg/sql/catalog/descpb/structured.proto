@@ -1538,6 +1538,13 @@ message SuperRegion {
 
   optional string super_region_name = 1 [(gogoproto.nullable)=false];
   repeated string regions = 2 [(gogoproto.casttype)="github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb.RegionName"];
+  // Overrides the database-level survival goal for this super region.
+  // Only meaningful when has_survival_goal is true.
+  optional SurvivalGoal survival_goal = 3 [(gogoproto.nullable)=false];
+  // When true, survival_goal is an explicit override. When false (default),
+  // the super region inherits the database-level survival goal. Needed because
+  // SurvivalGoal's zero value (ZONE_FAILURE) is also a valid explicit setting.
+  optional bool has_survival_goal = 4 [(gogoproto.nullable)=false];
 }
 
 // ZoneConfigExtensions represents per-locality zone configurations that

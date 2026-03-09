@@ -64,6 +64,14 @@ func (r *RegionConfig) WithRegions(regions catpb.RegionNames) RegionConfig {
 	return cpy
 }
 
+// WithSurvivalGoal returns a copy of the RegionConfig with the given survival
+// goal.
+func (r *RegionConfig) WithSurvivalGoal(goal descpb.SurvivalGoal) RegionConfig {
+	cpy := *r
+	cpy.survivalGoal = goal
+	return cpy
+}
+
 // WithPrimaryRegion returns a copy of the RegionConfig with the provided
 // primary region.
 func (r *RegionConfig) WithPrimaryRegion(primaryRegion catpb.RegionName) RegionConfig {
@@ -115,6 +123,23 @@ func (r *RegionConfig) GetSuperRegionRegionsForRegion(
 	}
 
 	return nil, false
+}
+
+// EffectiveSurvivalGoalForRegion returns the survival goal that applies to a
+// given region. If the region belongs to a super region with an explicit goal,
+// that goal is returned; otherwise, the database-level goal is returned.
+func (r *RegionConfig) EffectiveSurvivalGoalForRegion(region catpb.RegionName) descpb.SurvivalGoal {
+	for _, sr := range r.superRegions {
+		for _, member := range sr.Regions {
+			if member == region {
+				if sr.HasSurvivalGoal {
+					return sr.SurvivalGoal
+				}
+				return r.survivalGoal
+			}
+		}
+	}
+	return r.survivalGoal
 }
 
 // IsValidRegionNameString implements the tree.DatabaseRegionConfig interface.
@@ -448,7 +473,11 @@ func ValidateSuperRegions(
 			errorHandler(err)
 		}
 
-		if err := CanSatisfySurvivalGoal(survivalGoal, len(superRegion.Regions)); err != nil {
+		effectiveGoal := survivalGoal
+		if superRegion.HasSurvivalGoal {
+			effectiveGoal = superRegion.SurvivalGoal
+		}
+		if err := CanSatisfySurvivalGoal(effectiveGoal, len(superRegion.Regions)); err != nil {
 			err := errors.HandleAsAssertionFailure(errors.Wrapf(err, "super region %s only has %d regions", superRegion.SuperRegionName, len(superRegion.Regions)))
 			errorHandler(err)
 		}

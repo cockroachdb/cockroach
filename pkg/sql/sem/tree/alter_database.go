@@ -176,6 +176,30 @@ func (node *AlterDatabaseAlterSuperRegion) Format(ctx *FmtCtx) {
 	}
 }
 
+// AlterDatabaseAlterSuperRegionSurvivalGoal represents an
+// ALTER DATABASE ALTER SUPER REGION ... SURVIVE ... statement.
+type AlterDatabaseAlterSuperRegionSurvivalGoal struct {
+	DatabaseName    Name
+	SuperRegionName Name
+	SurvivalGoal    SurvivalGoal // SurvivalGoalDefault means "inherit from database".
+}
+
+var _ Statement = &AlterDatabaseAlterSuperRegionSurvivalGoal{}
+
+// Format implements the NodeFormatter interface.
+func (node *AlterDatabaseAlterSuperRegionSurvivalGoal) Format(ctx *FmtCtx) {
+	ctx.WriteString("ALTER DATABASE ")
+	ctx.FormatNode(&node.DatabaseName)
+	ctx.WriteString(" ALTER SUPER REGION ")
+	ctx.FormatNode(&node.SuperRegionName)
+	ctx.WriteByte(' ')
+	if node.SurvivalGoal == SurvivalGoalDefault {
+		ctx.WriteString("SURVIVE DEFAULT")
+	} else {
+		node.SurvivalGoal.Format(ctx)
+	}
+}
+
 // AlterDatabaseSecondaryRegion represents a
 // ALTER DATABASE SET SECONDARY REGION ... statement.
 type AlterDatabaseSecondaryRegion struct {

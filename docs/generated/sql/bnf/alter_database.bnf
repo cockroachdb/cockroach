@@ -25,6 +25,11 @@ alter_database_stmt ::=
 	| 'ALTER' 'DATABASE' database_name 'RESET' session_var
 	| 'ALTER' 'DATABASE' database_name 'ADD' 'SUPER' 'REGION' region_name 'VALUES' region_name_list
 	| 'ALTER' 'DATABASE' database_name 'ALTER' 'SUPER' 'REGION' region_name 'VALUES' region_name_list
+	| 'ALTER' 'DATABASE' database_name 'ALTER' 'SUPER' 'REGION' region_name 'SURVIVE' '=' 'REGION' 'FAILURE'
+	| 'ALTER' 'DATABASE' database_name 'ALTER' 'SUPER' 'REGION' region_name 'SURVIVE'  'REGION' 'FAILURE'
+	| 'ALTER' 'DATABASE' database_name 'ALTER' 'SUPER' 'REGION' region_name 'SURVIVE' '=' 'ZONE' 'FAILURE'
+	| 'ALTER' 'DATABASE' database_name 'ALTER' 'SUPER' 'REGION' region_name 'SURVIVE'  'ZONE' 'FAILURE'
+	| 'ALTER' 'DATABASE' database_name 'ALTER' 'SUPER' 'REGION' region_name 'SURVIVE' 'DEFAULT'
 	| 'ALTER' 'DATABASE' database_name 'DROP' 'SUPER' 'REGION' region_name
 	| 'ALTER' 'DATABASE' database_name 'SET' 'SECONDARY' 'REGION' '=' region_name
 	| 'ALTER' 'DATABASE' database_name 'SET' 'SECONDARY' 'REGION'  region_name

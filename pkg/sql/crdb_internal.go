@@ -456,7 +456,8 @@ CREATE TABLE crdb_internal.super_regions (
 	id INT NOT NULL,
 	database_name STRING NOT NULL,
   super_region_name STRING NOT NULL,
-	regions STRING[]
+	regions STRING[],
+	survival_goal STRING
 )`,
 	populate: func(ctx context.Context, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
 		return forEachDatabaseDesc(ctx, p, nil /* all databases */, true, /* requiresPrivileges */
@@ -486,11 +487,17 @@ CREATE TABLE crdb_internal.super_regions (
 					}); err != nil {
 						return err
 					}
+					survivalGoalDatum := tree.DNull
+					goalStr, hasGoal := regionDesc.GetSuperRegionSurvivalGoal(superRegion)
+					if hasGoal {
+						survivalGoalDatum = tree.NewDString(goalStr)
+					}
 					return addRow(
 						tree.NewDInt(tree.DInt(db.GetID())), // id
 						tree.NewDString(db.GetName()),       // database_name
 						tree.NewDString(superRegion),        // super_region_name
 						regionList,                          // regions
+						survivalGoalDatum,                   // survival_goal
 					)
 				})
 			})
